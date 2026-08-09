@@ -36,12 +36,20 @@ import {
   REGEN_HP_PER_SECOND_ASYMPTOTE,
 } from '../src/systems/PlayerTickSystem';
 import {
+  MAX_MOB_LEVEL,
   MAX_ROOM_SPAWN_COUNT,
   earnedLevelFloor,
   partyLevelOf,
+  recommendedPartyLevelFor,
+  regionLevelBand,
   resolveBossLevel,
   resolveSpawnLevel,
 } from '../src/levels/spawner';
+import {
+  WAYFINDER_GRACE_FRAMES,
+  WAYFINDER_PULSE_PERIOD_FRAMES,
+  WAYFINDER_PULSE_VISIBLE_FRAMES,
+} from '../src/systems/StairwellSystem';
 import { Goblin, GOBLIN_MAX_SPEED } from '../src/creatures/Goblin';
 import { BallOfSwine } from '../src/creatures/BallOfSwine';
 import { makeSepsis } from '../src/core/StatusEffect';
@@ -76,10 +84,8 @@ import { level3 } from '../src/levels/level3';
 import type { LevelDef, MobLevelRange } from '../src/levels/types';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 
-/** Deepest level anything in the game can be spawned at; see `MAX_MOB_LEVEL`. */
-const MAX_LEVEL = 20;
 /**
- * Levels probed past {@link MAX_LEVEL} for the shape checks. A curve that is
+ * Levels probed past {@link MAX_MOB_LEVEL} for the shape checks. A curve that is
  * well behaved to 20 and blows up at 40 is a curve with a bug in it, not a
  * curve that happens to be used inside its safe range.
  */
@@ -123,6 +129,20 @@ const BOSS_TEST_LEVEL = 7;
 const EPSILON = 1e-9;
 
 const LEVEL_DEFS: readonly LevelDef[] = [level1, level2, level3];
+
+/**
+ * The bands every band-shaped sweep is run over: an unauthored one, a tight one,
+ * a wide one, one starting well above level 1, and one with a floor but no
+ * ceiling. Shared so a sweep added later cannot quietly probe a gentler set than
+ * the ones already here.
+ */
+const BAND_SAMPLES: readonly MobLevelRange[] = [
+  {},
+  { minLevel: 1, maxLevel: 2 },
+  { minLevel: 3, maxLevel: 7 },
+  { minLevel: 6, maxLevel: 10 },
+  { minLevel: 5 },
+];
 
 let failures = 0;
 
@@ -354,18 +374,10 @@ section('spawn counts');
 
 section('level bands');
 {
-  const BANDS: readonly MobLevelRange[] = [
-    {},
-    { minLevel: 1, maxLevel: 2 },
-    { minLevel: 3, maxLevel: 7 },
-    { minLevel: 6, maxLevel: 10 },
-    { minLevel: 5 },
-  ];
-
   let staysInBand = true;
   let bossStaysInBand = true;
   let growsWithParty = true;
-  for (const band of BANDS) {
+  for (const band of BAND_SAMPLES) {
     const min = band.minLevel ?? 1;
     const max = band.maxLevel ?? min;
     let previousBossLevel = 0;
@@ -385,7 +397,7 @@ section('level bands');
   // The reward for levelling. Only the *floor* of the roll is party-relative —
   // the band's own ceiling is what caps the rest, and that is what stops a
   // revisited floor 1 turning into floor 2.
-  const wideBand: MobLevelRange = { minLevel: 1, maxLevel: MAX_LEVEL };
+  const wideBand: MobLevelRange = { minLevel: 1, maxLevel: MAX_MOB_LEVEL };
   let partyStaysAhead = true;
   for (let partyLevel = 2; partyLevel <= MAX_PROBED_PARTY_LEVEL; partyLevel++) {
     if (earnedLevelFloor(wideBand, partyLevel, DIFFICULTY_PROFILES.normal) >= partyLevel) {
@@ -685,17 +697,10 @@ section('difficulty profiles');
   // Band safety: no profile may let a party of any level roll outside a rule's
   // own band — the invariant that keeps a floor's identity whatever the
   // difficulty toggle says.
-  const bandSafetyBands: readonly MobLevelRange[] = [
-    {},
-    { minLevel: 1, maxLevel: 2 },
-    { minLevel: 3, maxLevel: 7 },
-    { minLevel: 6, maxLevel: 10 },
-    { minLevel: 5 },
-  ];
   let everyProfileStaysInBand = true;
   for (const difficulty of ALL_DIFFICULTIES) {
     const profile = DIFFICULTY_PROFILES[difficulty];
-    for (const band of bandSafetyBands) {
+    for (const band of BAND_SAMPLES) {
       const min = band.minLevel ?? 1;
       const max = band.maxLevel ?? min;
       for (let partyLevel = 1; partyLevel <= MAX_PROFILE_PROBED_PARTY_LEVEL; partyLevel++) {
@@ -820,6 +825,214 @@ section('progression regions');
     if (point.region !== expected) tagsMatchGeometry = false;
   }
   check(tagsMatchGeometry, 'each room’s region matches the gauntlet whose bounds contain it');
+}
+
+// ── Region level bonuses ─────────────────────────────────────────────────────
+
+/** A shipped band as a region actually spawns it, with the floor and region it came from. */
+interface BonusedBand {
+  label: string;
+  authored: MobLevelRange;
+  bonus: number;
+  effective: MobLevelRange;
+}
+
+/**
+ * Every band a shipped floor really shifts, one entry per region that shifts it.
+ *
+ * Read off `roomMobs` and their escorts because those are what `spawnForLevel`
+ * puts through `regionLevelBand`; hallway rules carry no region and are left
+ * alone by design, so including them would invent bonuses the game never
+ * applies.
+ */
+function shippedBonusedBands(): BonusedBand[] {
+  const bands: BonusedBand[] = [];
+  for (const def of LEVEL_DEFS) {
+    const bonuses = def.progression?.regionLevelBonus;
+    if (bonuses === undefined) continue;
+    for (const [region, bonus] of bonuses.entries()) {
+      for (const rule of def.roomMobs) {
+        for (const band of [rule, ...(rule.escorts ?? [])]) {
+          bands.push({
+            label: `${def.id} region ${region} ${band.type}`,
+            authored: band,
+            bonus,
+            effective: regionLevelBand(band, bonus),
+          });
+        }
+      }
+    }
+  }
+  return bands;
+}
+
+section('region level bonuses');
+{
+  let bonusArraysCoverTheirRegions = true;
+  let bonusArraysAreNonNegative = true;
+  for (const def of LEVEL_DEFS) {
+    const bonuses = def.progression?.regionLevelBonus;
+    if (bonuses === undefined) continue;
+    const gauntlets = def.progression?.gauntlets.length ?? 0;
+    // One entry per gauntlet plus one for the free-roam region past the last of
+    // them, exactly as the spawn-count bonuses are shaped. A short array
+    // silently leaves the deepest region — the stretch this axis exists for —
+    // at its authored band.
+    if (bonuses.length !== gauntlets + 1) bonusArraysCoverTheirRegions = false;
+    if (bonuses.some((bonus) => bonus < 0)) bonusArraysAreNonNegative = false;
+  }
+  check(bonusArraysCoverTheirRegions, 'every region level bonus array covers exactly its regions');
+  check(bonusArraysAreNonNegative, 'every region level bonus is non-negative');
+
+  const bonusedBands = shippedBonusedBands();
+  // Without this the three checks below would all pass on a floor set that had
+  // lost its bonuses entirely, reporting green while measuring nothing.
+  check(bonusedBands.length > 0, 'some shipped floor actually carries a region level bonus');
+  check(
+    bonusedBands.some((entry) => entry.bonus > 0),
+    'at least one of those regions shifts its bands by more than zero',
+  );
+
+  let staysUnderTheCap = true;
+  let neverWeakensABand = true;
+  let keepsItsWidth = true;
+  for (const { authored, bonus, effective } of bonusedBands) {
+    const authoredMin = authored.minLevel ?? 1;
+    const authoredMax = authored.maxLevel ?? authoredMin;
+    const effectiveMin = effective.minLevel ?? 1;
+    const effectiveMax = effective.maxLevel ?? effectiveMin;
+    if (effectiveMin > MAX_MOB_LEVEL || effectiveMax > MAX_MOB_LEVEL) staysUnderTheCap = false;
+    if (effectiveMin < authoredMin || effectiveMax < authoredMax) neverWeakensABand = false;
+    // A bonus says "this stretch is a level harder", not "this stretch can
+    // contain anything" — the spread only ever narrows, and only where the cap
+    // eats the top of it.
+    const authoredWidth = authoredMax - authoredMin;
+    const effectiveWidth = effectiveMax - effectiveMin;
+    const capClippedTheTop = authoredMax + bonus > MAX_MOB_LEVEL;
+    if (capClippedTheTop ? effectiveWidth > authoredWidth : effectiveWidth !== authoredWidth) {
+      keepsItsWidth = false;
+    }
+    if (capClippedTheTop && effectiveMax !== MAX_MOB_LEVEL) staysUnderTheCap = false;
+  }
+  check(staysUnderTheCap, 'no region bonus pushes a shipped band past the mob level cap');
+  check(neverWeakensABand, 'a region bonus only ever moves a band upward');
+  check(keepsItsWidth, 'a region bonus shifts a band rather than widening it');
+
+  // The cap again, driven well past anything shipped: the arithmetic has to hold
+  // for a bonus a future floor might author, not only for the small ones today's
+  // floors use.
+  const PROBED_BONUS_LIMIT = MAX_MOB_LEVEL * 2;
+  let capHoldsForAnyBonus = true;
+  for (const band of BAND_SAMPLES) {
+    for (let bonus = 0; bonus <= PROBED_BONUS_LIMIT; bonus++) {
+      const shifted = regionLevelBand(band, bonus);
+      const min = shifted.minLevel ?? 1;
+      const max = shifted.maxLevel ?? min;
+      if (min > MAX_MOB_LEVEL || max > MAX_MOB_LEVEL) capHoldsForAnyBonus = false;
+      if (max < min) capHoldsForAnyBonus = false;
+    }
+  }
+  check(capHoldsForAnyBonus, `no bonus up to ${PROBED_BONUS_LIMIT} escapes the mob level cap`);
+
+  // The guarantee the whole level axis rests on, restated for a shifted band:
+  // raising the band must not raise what the party has *earned* past the party
+  // itself. Checked on Crawler, the profile the ratio is calibrated on and the
+  // same one the open-band version of this check above uses.
+  let bonusedFloorStaysUnderTheParty = true;
+  let sawAProbedLevel = false;
+  for (const { effective } of bonusedBands) {
+    const min = effective.minLevel ?? 1;
+    for (let partyLevel = min + 1; partyLevel <= MAX_PROBED_PARTY_LEVEL; partyLevel++) {
+      sawAProbedLevel = true;
+      if (earnedLevelFloor(effective, partyLevel, DIFFICULTY_PROFILES.normal) >= partyLevel) {
+        bonusedFloorStaysUnderTheParty = false;
+      }
+    }
+  }
+  check(sawAProbedLevel, 'the bonused-band sweep actually had party levels to probe');
+  check(
+    bonusedFloorStaysUnderTheParty,
+    'a bonused band’s earned floor still sits below the party’s own level',
+  );
+}
+
+// ── The recommended party level ──────────────────────────────────────────────
+
+/** Ambient band ceiling floor 2 is authored at, and the advice it must produce. */
+const FLOOR_2_RECOMMENDED_PARTY_LEVEL = 8;
+
+/** A floor whose only ambient spawn is one band, used to drive the advice curve. */
+function floorWithAmbientCeiling(ceiling: number): LevelDef {
+  return {
+    ...level2,
+    roomMobs: [{ type: 'goblin', chance: 1, minLevel: 1, maxLevel: ceiling }],
+    hallwayMobs: [],
+    campSpawns: {},
+  };
+}
+
+section('recommended party level');
+{
+  const normal = DIFFICULTY_PROFILES.normal;
+  check(
+    recommendedPartyLevelFor(level2, normal) === FLOOR_2_RECOMMENDED_PARTY_LEVEL,
+    `floor 2 is advertised as a level-${FLOOR_2_RECOMMENDED_PARTY_LEVEL} floor on Crawler`,
+  );
+
+  let monotone = true;
+  let everRises = false;
+  let alwaysMinimal = true;
+  let previous = 0;
+  for (let ceiling = 1; ceiling <= MAX_MOB_LEVEL; ceiling++) {
+    const recommended = recommendedPartyLevelFor(floorWithAmbientCeiling(ceiling), normal);
+    if (recommended < previous) monotone = false;
+    if (recommended > previous) everRises = true;
+    // The advice is defined as the *smallest* qualifying level, so the level
+    // below it must not qualify — otherwise a rounding change could quietly
+    // start recommending a level or two of grinding nobody needs.
+    const reaches = Math.round(recommended * normal.ambientLevelRatio) >= ceiling;
+    const oneBelowReaches = Math.round((recommended - 1) * normal.ambientLevelRatio) >= ceiling;
+    if (!reaches || (recommended > 1 && oneBelowReaches)) alwaysMinimal = false;
+    previous = recommended;
+  }
+  check(monotone, 'a higher band ceiling never lowers the recommended level');
+  check(everRises, 'the recommendation actually responds to the ceiling at all');
+  check(alwaysMinimal, 'the recommendation is the lowest level that reaches the ceiling');
+
+  // Advice that ignored the difficulty toggle would send a Nightmare crawler
+  // down on Crawler's numbers against mobs rolled from a steeper ratio.
+  check(
+    recommendedPartyLevelFor(level2, DIFFICULTY_PROFILES.hard) <
+      recommendedPartyLevelFor(level2, normal) &&
+      recommendedPartyLevelFor(level2, normal) <
+        recommendedPartyLevelFor(level2, DIFFICULTY_PROFILES.easy),
+    'a gentler ambient ratio asks for a higher party level before descending',
+  );
+}
+
+// ── The Wayfinder fail-safe ──────────────────────────────────────────────────
+
+section('wayfinder');
+{
+  check(
+    WAYFINDER_GRACE_FRAMES > 0 &&
+      WAYFINDER_PULSE_PERIOD_FRAMES > 0 &&
+      WAYFINDER_PULSE_VISIBLE_FRAMES > 0,
+    'every Wayfinder timing is a positive number of frames',
+  );
+  // A pulse at least as long as its own period is not a pulse: the arrow would
+  // never go away, turning the bounded fail-safe into the always-on GPS the
+  // design rules out.
+  check(
+    WAYFINDER_PULSE_VISIBLE_FRAMES < WAYFINDER_PULSE_PERIOD_FRAMES,
+    'the Wayfinder arrow is off for more of each period than it is on',
+  );
+  // The grace is the "you have genuinely hunted" evidence the pulse waits for.
+  // Shorter than a single pulse period it would fire almost immediately.
+  check(
+    WAYFINDER_GRACE_FRAMES > WAYFINDER_PULSE_PERIOD_FRAMES,
+    'the hunt gets longer than one pulse period before the fail-safe starts',
+  );
 }
 
 console.log(failures === 0 ? '\nAll difficulty checks passed.' : `\n${failures} check(s) FAILED.`);

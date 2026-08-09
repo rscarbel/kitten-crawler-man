@@ -1,13 +1,16 @@
 import type { GameSystem, SystemContext } from './GameSystem';
 import { difficultyStats } from '../core/DifficultyStats';
+import type { StairwellHuntCheckpoint } from '../core/DifficultyStats';
 
 /**
  * Feeds the per-frame half of {@link difficultyStats}: damage the party actually
- * took, and where each room fight left its health.
+ * took, where each room fight left its health, and the stairwell-hunt clock's
+ * tick.
  *
- * The event-driven half (potions, dodges, deaths, boss kills) is wired in
- * `DungeonScene.wireEventBus` beside the existing `GameStats` lines — there is
- * no reason for this system to hold a bus just to forward four events.
+ * The event-driven half (potions, dodges, deaths, boss kills, hunt clock
+ * start/stop) is wired in `DungeonScene.wireEventBus` beside the existing
+ * `GameStats` lines — there is no reason for this system to hold a bus just to
+ * forward a handful of events.
  */
 
 /**
@@ -26,11 +29,12 @@ const MIN_COUNTED_FIGHT_FRAMES = 60;
 
 const FRAMES_PER_SECOND = 60;
 
-/** A point-in-time copy of the fight currently being measured. */
+/** A point-in-time copy of the fight currently being measured, and of the stairwell-hunt clock. */
 export interface DifficultyTelemetryCheckpoint {
   engagedFrames: number;
   idleFrames: number;
   inFight: boolean;
+  stairwellHunt: StairwellHuntCheckpoint;
 }
 
 export class DifficultyTelemetrySystem implements GameSystem {
@@ -49,19 +53,23 @@ export class DifficultyTelemetrySystem implements GameSystem {
   private inFight = false;
 
   /**
-   * Snapshots the in-progress fight only. `difficultyStats` is deliberately left
-   * alone: the fights already recorded there are real data about how the floor
-   * plays, and a death is the strongest datum of all.
+   * Snapshots the in-progress fight, plus the one part of `difficultyStats` a
+   * checkpoint rewinds. Everything else recorded there stays: those fights are
+   * real data about how the floor plays, and a death is the strongest datum of
+   * all.
    *
    * The fight the player died in, though, was never finished — without this,
    * `inFight` stays true across the restore and the next room's engagement is
-   * measured from a frame count accumulated before the player respawned.
+   * measured from a frame count accumulated before the player respawned. The
+   * stairwell-hunt clock rides along for the same reason, and this system
+   * carries it because this system is what ticks it.
    */
   captureCheckpoint(): DifficultyTelemetryCheckpoint {
     return {
       engagedFrames: this.engagedFrames,
       idleFrames: this.idleFrames,
       inFight: this.inFight,
+      stairwellHunt: difficultyStats.captureStairwellHunt(),
     };
   }
 
@@ -69,6 +77,7 @@ export class DifficultyTelemetrySystem implements GameSystem {
     this.engagedFrames = snapshot.engagedFrames;
     this.idleFrames = snapshot.idleFrames;
     this.inFight = snapshot.inFight;
+    difficultyStats.restoreStairwellHunt(snapshot.stairwellHunt);
   }
 
   update(ctx: SystemContext): void {
@@ -77,6 +86,7 @@ export class DifficultyTelemetrySystem implements GameSystem {
     ctx.human.pendingDamageTaken = 0;
     ctx.cat.pendingDamageTaken = 0;
 
+    difficultyStats.tickStairwellHunt();
     this.trackFight(ctx);
   }
 

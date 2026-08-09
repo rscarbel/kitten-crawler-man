@@ -216,6 +216,91 @@ export function earnedLevelFloor(
 }
 
 /**
+ * A spawn rule's band shifted up by its progression region's level bonus, held
+ * under {@link MAX_MOB_LEVEL}.
+ *
+ * Both ends move together so the band keeps its width: a region bonus is meant
+ * to say "this stretch of the floor is a level harder", not to widen the spread
+ * of what a room can contain. Exported so `scripts/verify-difficulty.ts` can
+ * assert the cap against the real arithmetic.
+ */
+export function regionLevelBand(band: MobLevelRange, bonus: number): MobLevelRange {
+  if (bonus <= 0) return band;
+  const min = band.minLevel ?? 1;
+  const max = band.maxLevel ?? min;
+  return {
+    minLevel: Math.min(min + bonus, MAX_MOB_LEVEL),
+    maxLevel: Math.min(max + bonus, MAX_MOB_LEVEL),
+  };
+}
+
+/** The `regionLevelBonus` earned for a region, or none if the floor authors no bonuses at all. */
+function regionLevelBonusFor(def: LevelDef, region: number): number {
+  return (def.progression?.regionLevelBonus ?? [])[region] ?? 0;
+}
+
+/**
+ * Ceiling on the search {@link recommendedPartyLevelFor} runs.
+ *
+ * No band can top {@link MAX_MOB_LEVEL}, and even the gentlest shipped ambient
+ * ratio reaches that ceiling well inside this many party levels — so reaching
+ * the cap means the ratio itself is degenerate (zero or negative), not that the
+ * answer is genuinely this high.
+ */
+const MAX_RECOMMENDED_PARTY_LEVEL = 60;
+
+/**
+ * The highest level any *ambient* spawn on a floor can reach: room rules and
+ * their escorts, hallway rules, and camp rosters.
+ *
+ * Boss rooms and `extraSpawns` are deliberately excluded. Those are authored
+ * spikes standing behind their own doors — a floor is not "too strong for you"
+ * because its boss out-levels you, it is too strong when the rooms between the
+ * stairs and that door do.
+ *
+ * Bands are read as authored, without any `regionLevelBonus`. The advice is
+ * about *arriving* on a floor, and a region bonus is earned by clearing that
+ * floor's own gauntlets — folding it in would greet a crawler leaving the
+ * tutorial with the level floor 1 ends at rather than the one it opens with.
+ */
+function ambientBandCeiling(def: LevelDef): number {
+  let ceiling = 1;
+  const consider = (band: MobLevelRange): void => {
+    ceiling = Math.max(ceiling, band.maxLevel ?? band.minLevel ?? 1);
+  };
+  for (const rule of def.roomMobs) {
+    consider(rule);
+    for (const escort of rule.escorts ?? []) consider(escort);
+  }
+  for (const rule of def.hallwayMobs) consider(rule);
+  for (const roster of Object.values(def.campSpawns ?? {})) {
+    for (const rule of roster) consider(rule);
+  }
+  return ceiling;
+}
+
+/**
+ * The party level a floor is worth arriving at: the first level at which
+ * {@link earnedLevelFloor} reaches the floor's ambient band ceiling — the point
+ * where the floor will show its strongest ordinary self and the party can take
+ * it.
+ *
+ * Computed from the floor's own bands and the live ambient ratio rather than
+ * stored on the `LevelDef`, so retuning a band — or moving the difficulty
+ * toggle — retunes the advice with no second copy of the number to forget.
+ *
+ * This is the *floor* of comfortable, not a requirement: descending under it is
+ * a legal choice the stairwell menu warns about and never blocks.
+ */
+export function recommendedPartyLevelFor(def: LevelDef, profile: DifficultyProfile): number {
+  const ceiling = ambientBandCeiling(def);
+  for (let level = 1; level < MAX_RECOMMENDED_PARTY_LEVEL; level++) {
+    if (Math.round(level * profile.ambientLevelRatio) >= ceiling) return level;
+  }
+  return MAX_RECOMMENDED_PARTY_LEVEL;
+}
+
+/**
  * A boss's level: the party-relative point in its band, not a roll around it.
  *
  * Unrolled deliberately — a boss is an authored encounter, and two runs meeting
@@ -508,6 +593,7 @@ export function spawnForLevel(
   if (def.roomMobs.length > 0) {
     const regionBonuses = def.progression?.regionSpawnBonus ?? [];
     for (const { x, y, w, h, region } of map.mobSpawnPoints) {
+      const levelBonus = regionLevelBonusFor(def, region);
       const rule = pickRule(def.roomMobs);
       const min = rule.minCount ?? 1;
       const max = rule.maxCount ?? 1;
@@ -531,7 +617,9 @@ export function spawnForLevel(
         const tile = findWalkableSpawnTile(map, { minTX, minTY, maxTX, maxTY });
         if (tile === null) return;
         const mob = createMob(type, tile.x, tile.y, map);
-        mob.applyMobLevel(resolveSpawnLevel(band, partyLevel, profile));
+        mob.applyMobLevel(
+          resolveSpawnLevel(regionLevelBand(band, levelBonus), partyLevel, profile),
+        );
         mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
         mobs.push(mob);
       };
@@ -583,6 +671,7 @@ export function spawnTreasureRoomMobs(
   // fixed count at the top of their band — a second, additive mechanism on top
   // of that is how a chest ends up behind eleven bodies.
   for (const room of treasureRooms) {
+    const levelBonus = regionLevelBonusFor(def, room.region);
     const { x, y, w, h } = room.bounds;
     const minTX = x + ROOM_BOUNDARY_INSET;
     const minTY = y + ROOM_BOUNDARY_INSET;
@@ -594,7 +683,8 @@ export function spawnTreasureRoomMobs(
       const tile = findWalkableSpawnTile(map, { minTX, minTY, maxTX, maxTY });
       if (tile === null) continue;
       const mob = createMob(rule.type, tile.x, tile.y, map);
-      const maxLevel = rule.maxLevel ?? rule.minLevel ?? 1;
+      const band = regionLevelBand(rule, levelBonus);
+      const maxLevel = band.maxLevel ?? band.minLevel ?? 1;
       mob.applyMobLevel(Math.min(maxLevel + TREASURE_ROOM_LEVEL_BOOST, MAX_MOB_LEVEL));
       mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
       mobs.push(mob);

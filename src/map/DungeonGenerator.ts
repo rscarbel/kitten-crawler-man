@@ -64,6 +64,7 @@ import {
   SCATTER_SAFE_ROOM_SEPARATION,
   STAIRWELL_MIN_SEPARATION,
   STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT,
+  STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT,
   BEYOND_STAIRWELL_MIN_SEPARATION,
   type InvariantFailure,
 } from './progressionValidation';
@@ -111,6 +112,8 @@ export interface QuestRoomData {
 export interface TreasureRoomData {
   bounds: { x: number; y: number; w: number; h: number };
   centre: { x: number; y: number };
+  /** Which progression region this room sits in. See {@link MobSpawnPoint.region}. */
+  region: number;
 }
 
 export interface SpiderLabRoomData {
@@ -159,6 +162,22 @@ export interface ProgressionLayoutData {
    * validator does not reject the result.
    */
   stairwellSpacingWaived: boolean;
+  /**
+   * The stairwell tiles that were seated from the banded candidate pool, so the
+   * validator knows which individual stairwells the distance ceiling governs.
+   *
+   * The ceiling exists to pull stairs off the perimeter of the free region, but
+   * the band cannot always sustain a floor's whole requested set: floor 1 asks
+   * for more stairwells than the ring can hold `STAIRWELL_MIN_SEPARATION` apart,
+   * so the rest come from the widened pool, which guarantees only the minimum
+   * distance. Recorded per tile rather than as one floor-wide flag because a
+   * flag meaning "every stair came from the band" is false on exactly the floor
+   * the band was built for, which leaves the ceiling enforcing nothing there.
+   *
+   * Keyed by tile rather than by index into `stairwellTiles`, which is filtered
+   * after placement on an arena floor.
+   */
+  bandedStairwellTiles: Point[];
 }
 
 /**
@@ -548,6 +567,64 @@ function pickVignette(zone: Zone, room: Room): Vignette | null {
     if (pick <= 0) return v;
   }
   return eligible[eligible.length - 1] ?? null;
+}
+
+/**
+ * How the first stairwell is chosen when nothing is seated yet.
+ *
+ * `random` suits a pool the distance ceiling governs: callers sort by distance
+ * from the boss exit, so seeding from that end and then maximising isolation
+ * reproduces the perimeter bias the ceiling exists to remove.
+ *
+ * `farthest` takes the head of that same sort — the candidate farthest from the
+ * exit — for a pool no ceiling governs, where distance from the exit is the
+ * geometry the floor was built around rather than a bias to be corrected.
+ */
+type StairwellSeedStrategy = 'random' | 'farthest';
+
+/**
+ * Seats up to `count` stairwells over a candidate pool by farthest-point
+ * sampling: each addition goes to whichever candidate is currently most isolated
+ * from the ones already seated, so the set spreads across the pool instead of
+ * packing into whichever end the caller's sort happens to visit first.
+ *
+ * `alreadySeated` lets a caller widen the pool and carry on from a partial set
+ * rather than start over, so a narrower first pool keeps the placements it won.
+ *
+ * @returns every seated tile, `alreadySeated` included. Fewer than `count` when
+ * no remaining candidate sits at least `minSeparation` from everything seated.
+ */
+function seatStairwellsByIsolation(
+  candidates: readonly Point[],
+  count: number,
+  minSeparation: number,
+  seedStrategy: StairwellSeedStrategy,
+  alreadySeated: readonly Point[] = [],
+): Point[] {
+  if (candidates.length === 0) return [...alreadySeated];
+  const FARTHEST_CANDIDATE_INDEX = 0;
+  const seedIndex =
+    seedStrategy === 'random'
+      ? Math.floor(Math.random() * candidates.length)
+      : FARTHEST_CANDIDATE_INDEX;
+  const seated: Point[] = alreadySeated.length > 0 ? [...alreadySeated] : [candidates[seedIndex]];
+  while (seated.length < count) {
+    let bestCandidate: Point | null = null;
+    let bestIsolation = 0;
+    for (const candidate of candidates) {
+      let isolation = Infinity;
+      for (const chosen of seated) {
+        isolation = Math.min(isolation, Math.hypot(candidate.x - chosen.x, candidate.y - chosen.y));
+      }
+      if (isolation > bestIsolation) {
+        bestIsolation = isolation;
+        bestCandidate = candidate;
+      }
+    }
+    if (bestCandidate === null || bestIsolation < minSeparation) break;
+    seated.push(bestCandidate);
+  }
+  return seated;
 }
 
 function stampVignette(
@@ -1684,6 +1761,7 @@ function buildDungeon(
       attempts: mapAttempt,
       // Filled in once stairwells have been sited, further down the pipeline.
       stairwellSpacingWaived: false,
+      bandedStairwellTiles: [],
     };
   } else {
     const safeRoomStart = 1;
@@ -2124,34 +2202,62 @@ function buildDungeon(
     const byDistanceFromExit = stairwellRoomPool
       .map((r) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) }))
       .sort((a, b) => distanceToRect(b, exitBounds) - distanceToRect(a, exitBounds));
-    const candidates = byDistanceFromExit.filter(
+    const beyondMinDistance = byDistanceFromExit.filter(
       (centre) => distanceToRect(centre, exitBounds) >= STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT,
     );
-    // Farthest-point sampling rather than "first candidate that clears the rule":
-    // taking whichever room is currently most isolated pushes the set apart
-    // across the whole free region, instead of packing them into the far edge
-    // that the distance-from-exit sort happens to visit first.
-    if (candidates.length > 0) {
-      stairwellTiles.push(candidates[0]);
-      while (stairwellTiles.length < stairwellCount) {
-        let bestCandidate: Point | null = null;
-        let bestIsolation = 0;
-        for (const candidate of candidates) {
-          let isolation = Infinity;
-          for (const chosen of stairwellTiles) {
-            isolation = Math.min(
-              isolation,
-              Math.hypot(candidate.x - chosen.x, candidate.y - chosen.y),
-            );
-          }
-          if (isolation > bestIsolation) {
-            bestIsolation = isolation;
-            bestCandidate = candidate;
-          }
-        }
-        if (bestCandidate === null || bestIsolation < stairwellSeparation) break;
-        stairwellTiles.push(bestCandidate);
-      }
+    // The ceiling is what keeps the stairs off the perimeter: "as far from the
+    // exit as possible" is maximised at the map's corners, which is precisely the
+    // sweep a player never makes. The pocket behind an arena is not perimeter to
+    // begin with — its distance from the exit is the arena's geometry, not a
+    // choice — so the ceiling only governs a free-region pool.
+    const bandGovernsPool = !hasArena;
+    // With no ceiling to counteract, the farthest room from the exit is the
+    // placement the floor was tuned around, so an arena floor seeds from it
+    // rather than from anywhere in the pool.
+    const seedStrategy: StairwellSeedStrategy = bandGovernsPool ? 'random' : 'farthest';
+    const insideBand = beyondMinDistance.filter(
+      (centre) => distanceToRect(centre, exitBounds) <= STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT,
+    );
+    const bandHoldsEnoughRooms = bandGovernsPool && insideBand.length >= stairwellCount;
+    const seatedInsideBand = bandHoldsEnoughRooms
+      ? seatStairwellsByIsolation(insideBand, stairwellCount, stairwellSeparation, seedStrategy)
+      : [];
+    // A band holding enough rooms by count can still be too cramped to hold them
+    // `stairwellSeparation` apart, and a shortfall there is invisible to the
+    // validator, which only rejects a floor with no stairs at all. Widening to
+    // every room past the minimum distance is the same yielding a band too thin
+    // to begin with already does — the stairs are worth more than the ceiling.
+    const bandSustainsFullSet = seatedInsideBand.length >= stairwellCount;
+    const widenedFromBand = bandSustainsFullSet
+      ? seatedInsideBand
+      : seatStairwellsByIsolation(
+          beyondMinDistance,
+          stairwellCount,
+          stairwellSeparation,
+          seedStrategy,
+          seatedInsideBand,
+        );
+    // Keeping the banded picks can itself box out the wider pool: a set clustered
+    // near the exit leaves the rest of the floor less room to spread into. So a
+    // set still short of the count is raced against one seeded from the wide pool
+    // alone, and the fuller of the two takes the floor.
+    const widenedAlone =
+      widenedFromBand.length < stairwellCount
+        ? seatStairwellsByIsolation(
+            beyondMinDistance,
+            stairwellCount,
+            stairwellSeparation,
+            seedStrategy,
+          )
+        : [];
+    const wideSetWins = widenedAlone.length > widenedFromBand.length;
+    const seatedStairwells = wideSetWins ? widenedAlone : widenedFromBand;
+    // The wide-pool set is seeded from scratch, so none of its picks owe their
+    // position to the band even where one happens to land inside it.
+    const seatedFromBandedPool = wideSetWins ? [] : seatedInsideBand;
+    stairwellTiles.push(...seatedStairwells);
+    if (progressionLayout !== undefined) {
+      progressionLayout.bandedStairwellTiles = [...seatedFromBandedPool];
     }
     // A floor with no way down is unplayable, so the spacing rules yield rather
     // than the stairs: the farthest room in the pool takes one even when it sits
@@ -2405,6 +2511,7 @@ function buildDungeon(
     return {
       bounds: { x: r.x, y: r.y, w: r.w, h: r.h },
       centre: { x: cx, y: cy },
+      region: progressionRegionOf(r, progressionLayout),
     };
   });
 

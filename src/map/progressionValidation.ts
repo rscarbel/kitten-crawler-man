@@ -33,6 +33,15 @@ export const STAIRWELL_MIN_SEPARATION = 45;
 export const BEYOND_STAIRWELL_MIN_SEPARATION = 20;
 /** Stairwell distance from the last gateway boss room's bounds (I4). */
 export const STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT = 35;
+/**
+ * Stairwell distance ceiling from the last gateway boss room's bounds (I4).
+ *
+ * The minimum keeps the stairs out of sight of the boss door; this ceiling keeps
+ * them off the map's perimeter, where maximising distance from the exit parks
+ * them by construction. Between the two lies the ring a player actually sweeps
+ * first, so the post-gauntlet stretch stays a hunt instead of a grid search.
+ */
+export const STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT = 90;
 /** Pairwise scatter-safe-room distance, and their distance from gateway safe rooms (I5). */
 export const SCATTER_SAFE_ROOM_SEPARATION = 30;
 
@@ -221,6 +230,10 @@ function countDoorways(grid: TileContent[][], bounds: Rect): number {
 
 // ── Invariants ────────────────────────────────────────────────────────────────
 
+function isSameTile(a: Point, b: Point): boolean {
+  return a.x === b.x && a.y === b.y;
+}
+
 function stairwellFootprint(tile: Point): Rect {
   return { x: tile.x, y: tile.y, w: 1, h: 1 };
 }
@@ -387,6 +400,21 @@ export function validateProgression(
       fail(
         'I4',
         `stairwell ${i} is ${distFromExit.toFixed(1)} tiles from the last boss room (min ${STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT})`,
+      );
+    }
+    // The ceiling governs a stairwell that came from the banded pool. The rest
+    // came from the widened fallback, which only ever guaranteed the minimum:
+    // the band is too thin to hold a whole floor's set at the required spacing,
+    // so demanding the ceiling of those stairwells would reject every map.
+    const cameFromBand = layout.bandedStairwellTiles.some((banded) => isSameTile(banded, tile));
+    if (
+      cameFromBand &&
+      !layout.stairwellSpacingWaived &&
+      distFromExit > STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT
+    ) {
+      fail(
+        'I4',
+        `stairwell ${i} is ${distFromExit.toFixed(1)} tiles from the last boss room (max ${STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT})`,
       );
     }
     for (let j = i + 1; j < stairwellTiles.length; j++) {

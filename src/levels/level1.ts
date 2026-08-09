@@ -79,6 +79,21 @@ const POST_HOARDER_SPAWN_BONUS = 1;
 const POST_JUICER_SPAWN_BONUS = 2;
 
 /**
+ * Levels added to each room band as the floor is cleared.
+ *
+ * A crawler reaches the Hoarder around level 3 and leaves the Juicer around 7,
+ * but a goblin band of 1–2 tops out against a level-3 party — so the whole back
+ * half of the floor, the longest stretch of it, was fought against the same
+ * level-2 goblin the first room offered. Two steps of one level put the last
+ * region within reach of the numbers floor 2 opens with instead of a seven-fold
+ * jump at the stairs. The opening stretch keeps its band for the same reason it
+ * keeps its spawn count: it is a first-time crawler's first dungeon.
+ */
+const PRE_HOARDER_LEVEL_BONUS = 0;
+const POST_HOARDER_LEVEL_BONUS = 1;
+const POST_JUICER_LEVEL_BONUS = 2;
+
+/**
  * Where floor 1's XP starts drying up. A crawler who clears both gauntlets
  * lands around level 10, so everything past that is grinding a floor whose
  * mobs the party has already outgrown.
@@ -185,6 +200,7 @@ export const level1: LevelDef = {
     ],
     scatterSafeRooms: LEVEL1_SCATTER_SAFE_ROOMS,
     regionSpawnBonus: [PRE_HOARDER_SPAWN_BONUS, POST_HOARDER_SPAWN_BONUS, POST_JUICER_SPAWN_BONUS],
+    regionLevelBonus: [PRE_HOARDER_LEVEL_BONUS, POST_HOARDER_LEVEL_BONUS, POST_JUICER_LEVEL_BONUS],
   },
   hasCollapseTimer: true,
   hasTreasureRoomGuards: true,

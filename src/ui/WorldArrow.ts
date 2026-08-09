@@ -45,11 +45,39 @@ export function drawArrowAbovePlayer(
 ): void {
   const playerCenterX = playerWorldX + TILE_SIZE / 2;
   const playerCenterY = playerWorldY + TILE_SIZE / 2;
+  const angle = Math.atan2(targetWorldY - playerCenterY, targetWorldX - playerCenterX);
+  drawBearingArrowAbovePlayer(
+    ctx,
+    playerWorldX,
+    playerWorldY,
+    angle,
+    camX,
+    camY,
+    color,
+    outlineColor,
+  );
+}
 
-  const dx = targetWorldX - playerCenterX;
-  const dy = targetWorldY - playerCenterY;
-  const angle = Math.atan2(dy, dx);
-
+/**
+ * The same arrow, aimed by bearing rather than by target.
+ *
+ * Exists for indicators that deliberately do not point at an exact position —
+ * a bearing rounded to a compass direction has no target point to hand a
+ * position-taking helper, and inventing one just to be un-invented by
+ * `Math.atan2` would be a lie about what the caller knows.
+ *
+ * @param bearingRadians - Screen-space angle, 0 = east, growing clockwise (canvas y is down)
+ */
+export function drawBearingArrowAbovePlayer(
+  ctx: CanvasRenderingContext2D,
+  playerWorldX: number,
+  playerWorldY: number,
+  bearingRadians: number,
+  camX: number,
+  camY: number,
+  color: string,
+  outlineColor = '#000',
+): void {
   const bounce = Math.sin(Date.now() * ARROW_BOUNCE_FREQUENCY) * ARROW_BOUNCE_AMPLITUDE;
   const screenX = playerWorldX - camX + TILE_SIZE / 2;
   const screenY = playerWorldY - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
@@ -57,7 +85,7 @@ export function drawArrowAbovePlayer(
 
   ctx.save();
   ctx.translate(screenX, screenY);
-  ctx.rotate(angle);
+  ctx.rotate(bearingRadians);
   ctx.fillStyle = color;
   ctx.strokeStyle = outlineColor;
   ctx.lineWidth = ARROW_LINE_WIDTH;

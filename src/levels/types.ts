@@ -189,6 +189,23 @@ export interface ProgressionDef {
    * `MAX_ROOM_SPAWN_COUNT` however generous a bonus and a roll combine to be.
    */
   regionSpawnBonus?: number[];
+  /**
+   * Levels added to a room rule's *band* — floor and ceiling both — before the
+   * spawn level is rolled, indexed the same way as {@link regionSpawnBonus}.
+   * Missing entries mean no bonus.
+   *
+   * The count axis alone could not fix a floor going flat: a spawn rolls
+   * somewhere between what the party has earned and its band's ceiling, so once
+   * the party out-earns that ceiling every later room is the same fight with
+   * more bodies in it. Shifting the band is what lets the last stretch of a
+   * floor step up toward the numbers the next floor opens with.
+   *
+   * Applies to a room's own rule, to its escorts so the room stays internally
+   * coherent, and to treasure-room guards so a chest is never softer than the
+   * hallway outside it. Hallway spawns have no region to key off and are left
+   * as ambience.
+   */
+  regionLevelBonus?: number[];
 }
 
 /** Data-only description of a dungeon level. No game-logic dependencies. */

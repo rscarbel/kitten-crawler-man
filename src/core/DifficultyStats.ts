@@ -57,9 +57,30 @@ export interface SegmentTally {
   readonly hpRemainingSum: number;
   /** Summed seconds each counted fight lasted, for the time-to-kill target. */
   readonly fightSecondsSum: number;
+  /** Times the party used a stairwell menu to descend while this segment was open. */
+  readonly descents: number;
+  /**
+   * Descents where the party's level was below the next floor's recommended
+   * level. See {@link DifficultyStats.recordDescend}.
+   */
+  readonly descendedUnderleveled: number;
+  /** Summed (recommended − party) level gap over just the underlevelled descents. */
+  readonly descendedLevelDeltaSum: number;
 }
 
 type MutableTally = { -readonly [K in keyof SegmentTally]: SegmentTally[K] };
+
+/** One floor's stairwell hunt while it is still being timed. */
+interface OpenHunt {
+  floorNumber: number;
+  frames: number;
+}
+
+/** A point-in-time copy of the stairwell-hunt clock and of the hunts already measured. */
+export interface StairwellHuntCheckpoint {
+  readonly openHunt: OpenHunt | null;
+  readonly huntFramesByFloor: ReadonlyArray<readonly [number, number]>;
+}
 
 function emptyTally(difficulty: Difficulty): MutableTally {
   return {
@@ -71,6 +92,9 @@ function emptyTally(difficulty: Difficulty): MutableTally {
     roomFights: 0,
     hpRemainingSum: 0,
     fightSecondsSum: 0,
+    descents: 0,
+    descendedUnderleveled: 0,
+    descendedLevelDeltaSum: 0,
   };
 }
 
@@ -91,6 +115,11 @@ export class DifficultyStats {
   private floorNumber = FIRST_FLOOR;
   private hoarderDefeated = false;
   private juicerDefeated = false;
+
+  /** Completed stairwell-hunt lengths, in frames, keyed by floor number. */
+  private readonly huntFramesByFloor = new Map<number, number>();
+  /** The hunt clock in progress, if the floor's last gauntlet boss has died but no stairwell has been found yet. */
+  private openHunt: OpenHunt | null = null;
 
   /**
    * Which stretch of the run subsequent records belong to.
@@ -163,6 +192,88 @@ export class DifficultyStats {
   }
 
   /**
+   * Opens the stairwell-hunt clock for the current floor. Called when the
+   * floor's last gauntlet boss dies. A no-op if a hunt is already open, so a
+   * floor whose last gauntlet boss somehow reports defeated twice can't
+   * restart the clock partway through the hunt.
+   */
+  startStairwellHunt(): void {
+    if (this.openHunt !== null) return;
+    this.openHunt = { floorNumber: this.floorNumber, frames: 0 };
+  }
+
+  /**
+   * Advances the open hunt clock by one frame. Cheap and safe to call every
+   * gameplay frame regardless of whether a hunt is open.
+   */
+  tickStairwellHunt(): void {
+    if (this.openHunt !== null) this.openHunt.frames++;
+  }
+
+  /**
+   * Closes the stairwell-hunt clock on the floor's first stairwell find. A
+   * no-op if no hunt is open — a floor with no gauntlet, or a stairwell found
+   * before any boss died, never started one.
+   */
+  finishStairwellHunt(): void {
+    if (this.openHunt === null) return;
+    this.huntFramesByFloor.set(this.openHunt.floorNumber, this.openHunt.frames);
+    this.openHunt = null;
+  }
+
+  /**
+   * The hunt clock, and only the hunt clock, as a checkpoint can put it back.
+   *
+   * The rest of this object is deliberately not snapshotted: the damage and the
+   * fights it counts happened, and a death is the strongest datum of all. The
+   * hunt clock is the exception because it measures a *stretch of the floor*
+   * rather than an event, and a checkpoint restore rewinds that stretch — the
+   * gauntlet boss goes back to alive and has to be re-killed. Left running, the
+   * clock would bill the death, the respawn and the re-fight to a hunt the
+   * player had not yet started, and the re-kill cannot fix it because reopening
+   * an already-open hunt is a no-op.
+   *
+   * Kept in step with `StairwellSystem`'s Wayfinder clock, which the same boss
+   * kill arms and which rewinds the same way: the two are meant to describe the
+   * same hunt.
+   */
+  captureStairwellHunt(): StairwellHuntCheckpoint {
+    return {
+      openHunt: this.openHunt === null ? null : { ...this.openHunt },
+      huntFramesByFloor: [...this.huntFramesByFloor],
+    };
+  }
+
+  restoreStairwellHunt(snapshot: StairwellHuntCheckpoint): void {
+    this.openHunt = snapshot.openHunt === null ? null : { ...snapshot.openHunt };
+    this.huntFramesByFloor.clear();
+    for (const [floorNumber, frames] of snapshot.huntFramesByFloor) {
+      this.huntFramesByFloor.set(floorNumber, frames);
+    }
+  }
+
+  /** Frames from the last gauntlet boss's death to the first stairwell found, or null if not yet measured. */
+  stairwellHuntFramesFor(floorNumber: number): number | null {
+    return this.huntFramesByFloor.get(floorNumber) ?? null;
+  }
+
+  /**
+   * One stairwell descent, for the current segment's tally.
+   *
+   * `recommendedLevel` is null until a floor exposes its own recommended
+   * party level; passing null always counts the descent without judging it,
+   * so a caller that gains a real recommended level later needs no change
+   * here beyond passing it.
+   */
+  recordDescend(partyLevel: number, recommendedLevel: number | null): void {
+    const tally = this.current();
+    tally.descents++;
+    if (recommendedLevel === null || partyLevel >= recommendedLevel) return;
+    tally.descendedUnderleveled++;
+    tally.descendedLevelDeltaSum += recommendedLevel - partyLevel;
+  }
+
+  /**
    * Starts a fresh run's counters.
    *
    * The boss flags matter as much as the tallies: they latch, so a second
@@ -175,6 +286,8 @@ export class DifficultyStats {
     this.hoarderDefeated = false;
     this.juicerDefeated = false;
     this.floorNumber = FIRST_FLOOR;
+    this.huntFramesByFloor.clear();
+    this.openHunt = null;
   }
 }
 

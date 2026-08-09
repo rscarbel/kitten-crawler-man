@@ -19,6 +19,7 @@ import {
   createMob,
   spawnTreasureRoomMobs,
   partyLevelOf,
+  recommendedPartyLevelFor,
 } from '../levels/spawner';
 import { activeDifficultyProfile, applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
@@ -41,7 +42,7 @@ import {
   type JournalProgress,
 } from '../core/JournalProgress';
 import { TownGuideSystem } from '../systems/TownGuideSystem';
-import { drawArrowAbovePlayer } from '../ui/WorldArrow';
+import { drawArrowAbovePlayer, drawBearingArrowAbovePlayer } from '../ui/WorldArrow';
 import {
   collectTrackerEntries,
   isOutstanding,
@@ -595,6 +596,10 @@ const TILE_CENTRE_FRACTION = 0.5;
 const PINNED_ARROW_SUPPRESS_TILES = 4;
 /** Gold, matching the pinned Journal row it belongs to. */
 const PINNED_ARROW_COLOR = '#facc15';
+/** Gold, as the `!reveal` cheat arrow has always been. */
+const STAIRWELL_ARROW_COLOR = '#facc15';
+/** The stairwell's own violet, so the fail-safe reads as the hole's draft rather than as a quest marker. */
+const WAYFINDER_ARROW_COLOR = '#c084fc';
 
 function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDrop } {
   const humanItems: LootDrop['items'] = [];
@@ -757,6 +762,16 @@ export class DungeonScene extends GameplayScene {
   private readonly godModeState: GodModeState;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private difficultyTelemetry = new DifficultyTelemetrySystem();
+  /**
+   * Whether the floor has already been told where its stairwell is.
+   *
+   * Latches for the life of the scene, and pointedly is *not* part of the world
+   * checkpoint: a restore puts the gauntlet boss back on its feet, so the same
+   * kill can be earned twice, and rewinding this would let the line play twice
+   * in one run. The floor only opens once no matter how many times the player
+   * dies proving it.
+   */
+  private stairwellHintAnnounced = false;
   private readonly mongoSystem: MongoSystem;
   private readonly mongoPetState: MongoPetState;
   private readonly mercenarySystem: MercenarySystem;
@@ -1229,70 +1244,81 @@ export class DungeonScene extends GameplayScene {
       this.companion.setPassive(this.human.isActive);
       this.inactive().autoTarget = null;
     };
-    this.stairwell = new StairwellSystem(this.gameMap, levelDef, () => {
-      if (!levelDef.nextLevelId) return;
+    const partyLevel = (): number => partyLevelOf(this.human.level, this.cat.level);
+    this.stairwell = new StairwellSystem(
+      this.gameMap,
+      levelDef,
+      () => {
+        if (!levelDef.nextLevelId) return;
+        const nextDef = getLevelDef(levelDef.nextLevelId);
 
-      // Night Vision trains on floors survived while leading, not on kills — it
-      // is a passive, so a whole floor is the only honest unit of use. Credited
-      // before the save below, or closing the browser on the celebration screen
-      // would lose the floor's progress.
-      if (this.cat.isActive) this.cat.skills.recordUse('night_vision');
-
-      // Save progress immediately so the floor is recorded as complete even if
-      // the player closes the browser during the celebration screen.
-      this.onSaveProgress?.({
-        humanSnap: revivedSnapshot(snapPlayer(this.human)),
-        catSnap: revivedSnapshot(snapPlayer(this.cat)),
-        levelId: levelDef.nextLevelId,
-        abilityStates: this.abilityManager.serializeStates(),
-        mongoUnlocked: this.mongoSystem.unlocked,
-        // The system's accessor, not the stored value: both of these saves can
-        // fire with Mongo still out, and the stored value is only written back
-        // when he despawns — so a safe room entered with a 5/130 raptor at the
-        // player's heel was recording 130.
-        mongoPetHp: this.mongoSystem.hp,
-        mongoPetResting: this.mongoSystem.restingUntilFull,
-      });
-
-      this.bus.emit('levelComplete', {});
-
-      // Drain now: the celebration screen stops `updateGameplay`, and the queue
-      // does not survive into the next scene, so a level-up earned on the last
-      // step of the floor would otherwise never be announced.
-      this.systemNotices.drainFor(this.human, this.cat);
-
-      const nextDef = getLevelDef(levelDef.nextLevelId);
-      this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
-        // Dismiss Mongo and any hired merc before floor transition
-        this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-        this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-        // This is the one genuine floor change among DungeonScene's four
-        // `sceneManager.replace` sites, so it's the only one that runs the
-        // sprite eviction pass — building enter/exit rebuild the scene around
-        // the same floor identity and must never evict. Keyed on the *new*
-        // floor's required keys, not the old floor's: anything the two
-        // floors share (core, dungeon_common, ...) simply isn't touched.
-        releaseSpritesExcept(requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups));
-        this.sceneManager.replace(
-          new DungeonScene(nextDef, this.input, this.sceneManager, {
-            // Taking the stairs regroups the party: a companion carried down
-            // still knocked out would time out on arrival with no way to reach them.
-            humanSnap: revivedSnapshot(snapPlayer(this.human)),
-            catSnap: revivedSnapshot(snapPlayer(this.cat)),
-            humanAchievements: this.humanAchievements,
-            catAchievements: this.catAchievements,
-            mongoUnlocked: this.mongoSystem.unlocked,
-            mongoPetState: this.mongoPetState,
-            abilityManager: this._cleanAbilityManager(),
-            saveProgress: this.onSaveProgress,
-            audio: this.audio ?? undefined,
-            onResetGame: this.onResetGameCallback ?? undefined,
-            godModeState: this.godModeState,
-            companionStance: this.companionStance,
-          }),
+        difficultyStats.recordDescend(
+          partyLevel(),
+          recommendedPartyLevelFor(nextDef, activeDifficultyProfile()),
         );
-      });
-    });
+
+        // Night Vision trains on floors survived while leading, not on kills — it
+        // is a passive, so a whole floor is the only honest unit of use. Credited
+        // before the save below, or closing the browser on the celebration screen
+        // would lose the floor's progress.
+        if (this.cat.isActive) this.cat.skills.recordUse('night_vision');
+
+        // Save progress immediately so the floor is recorded as complete even if
+        // the player closes the browser during the celebration screen.
+        this.onSaveProgress?.({
+          humanSnap: revivedSnapshot(snapPlayer(this.human)),
+          catSnap: revivedSnapshot(snapPlayer(this.cat)),
+          levelId: levelDef.nextLevelId,
+          abilityStates: this.abilityManager.serializeStates(),
+          mongoUnlocked: this.mongoSystem.unlocked,
+          // The system's accessor, not the stored value: both of these saves can
+          // fire with Mongo still out, and the stored value is only written back
+          // when he despawns — so a safe room entered with a 5/130 raptor at the
+          // player's heel was recording 130.
+          mongoPetHp: this.mongoSystem.hp,
+          mongoPetResting: this.mongoSystem.restingUntilFull,
+        });
+
+        this.bus.emit('levelComplete', {});
+
+        // Drain now: the celebration screen stops `updateGameplay`, and the queue
+        // does not survive into the next scene, so a level-up earned on the last
+        // step of the floor would otherwise never be announced.
+        this.systemNotices.drainFor(this.human, this.cat);
+
+        this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
+          // Dismiss Mongo and any hired merc before floor transition
+          this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+          this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+          // This is the one genuine floor change among DungeonScene's four
+          // `sceneManager.replace` sites, so it's the only one that runs the
+          // sprite eviction pass — building enter/exit rebuild the scene around
+          // the same floor identity and must never evict. Keyed on the *new*
+          // floor's required keys, not the old floor's: anything the two
+          // floors share (core, dungeon_common, ...) simply isn't touched.
+          releaseSpritesExcept(requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups));
+          this.sceneManager.replace(
+            new DungeonScene(nextDef, this.input, this.sceneManager, {
+              // Taking the stairs regroups the party: a companion carried down
+              // still knocked out would time out on arrival with no way to reach them.
+              humanSnap: revivedSnapshot(snapPlayer(this.human)),
+              catSnap: revivedSnapshot(snapPlayer(this.cat)),
+              humanAchievements: this.humanAchievements,
+              catAchievements: this.catAchievements,
+              mongoUnlocked: this.mongoSystem.unlocked,
+              mongoPetState: this.mongoPetState,
+              abilityManager: this._cleanAbilityManager(),
+              saveProgress: this.onSaveProgress,
+              audio: this.audio ?? undefined,
+              onResetGame: this.onResetGameCallback ?? undefined,
+              godModeState: this.godModeState,
+              companionStance: this.companionStance,
+            }),
+          );
+        });
+      },
+      partyLevel,
+    );
 
     if (levelDef.isOverworld) {
       this.building = new BuildingSystem(this.gameMap, (entry) => {
@@ -1729,6 +1755,14 @@ export class DungeonScene extends GameplayScene {
     defeated.length = 0;
   }
 
+  /** Fires once, the frame the floor's last gauntlet boss dies. */
+  private static readonly STAIRWELL_HINT_ANNOUNCEMENT =
+    'The floor shudders. Something has opened below — your map remembers where.';
+
+  /** Fires once, the first time the Wayfinder fail-safe shows its arrow. */
+  private static readonly WAYFINDER_ANNOUNCEMENT =
+    'Your whiskers catch a draft… something below is breathing.';
+
   private wireEventBus(): void {
     const bus = this.bus;
 
@@ -1747,6 +1781,32 @@ export class DungeonScene extends GameplayScene {
     bus.on('healingPotionUsed', () => difficultyStats.recordPotionUsed());
     bus.on('playerDodged', () => difficultyStats.recordDodge());
     bus.on('bossDefeated', (e) => difficultyStats.noteBossDefeated(e.bossType));
+
+    // The stairwell hunt is measured from the *last* gauntlet boss, not any
+    // named one, so floor 2's single-boss gauntlet and floor 1's two-boss one
+    // both fall out of the same lookup.
+    const gauntlets = this.levelDef.progression?.gauntlets;
+    const lastGauntletBossType = gauntlets ? gauntlets[gauntlets.length - 1]?.bossType : undefined;
+    bus.on('bossDefeated', (e) => {
+      if (e.bossType !== lastGauntletBossType) return;
+      difficultyStats.startStairwellHunt();
+      this.stairwell.armWayfinder();
+
+      const bossTX = Math.floor((e.mob.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+      const bossTY = Math.floor((e.mob.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+      const nearestStairwell = this.stairwell.nearestStairwellTile({ x: bossTX, y: bossTY });
+      if (nearestStairwell !== undefined) {
+        this.miniMap.revealStairwellNeighborhood(nearestStairwell);
+        if (!this.stairwellHintAnnounced) {
+          this.stairwellHintAnnounced = true;
+          this.menus.announce(DungeonScene.STAIRWELL_HINT_ANNOUNCEMENT);
+        }
+      }
+    });
+    bus.on('stairwellFound', () => {
+      difficultyStats.finishStairwellHunt();
+      this.stairwell.retireWayfinder();
+    });
 
     // ── mobKilled: corpse marker, achievements, loot, grub spawns ──
     bus.on('mobKilled', (e) => {
@@ -2462,58 +2522,49 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
+  /** The `!reveal` cheat: an exact, unquantized bearing to the nearest stairwell. */
   private renderStairwellRevealArrow(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
   ): void {
     if (!this._revealStairwell) return;
-    const stairs = this.gameMap.stairwellTiles;
-    if (stairs.length === 0) return;
-
     const player = this.active();
-    const px = player.x + TILE_SIZE / 2;
-    const py = player.y + TILE_SIZE / 2;
+    const target = this.stairwell.nearestStairwellCenter(player);
+    if (target === null) return;
 
-    let nearest = stairs[0];
-    let nearestDist = Infinity;
-    for (const s of stairs) {
-      const sx = (s.x + 1) * TILE_SIZE;
-      const sy = (s.y + 1) * TILE_SIZE;
-      const d = Math.hypot(px - sx, py - sy);
-      if (d < nearestDist) {
-        nearestDist = d;
-        nearest = s;
-      }
-    }
+    drawArrowAbovePlayer(
+      ctx,
+      player.x,
+      player.y,
+      target.x,
+      target.y,
+      camX,
+      camY,
+      STAIRWELL_ARROW_COLOR,
+    );
+  }
 
-    const targetX = (nearest.x + 1) * TILE_SIZE;
-    const targetY = (nearest.y + 1) * TILE_SIZE;
-    const dx = targetX - px;
-    const dy = targetY - py;
-    const angle = Math.atan2(dy, dx);
+  /**
+   * The Wayfinder fail-safe: an intermittent, compass-rounded bearing for a
+   * crawler who has hunted well past the point where the breadcrumbs were
+   * supposed to work. Deliberately a coarser thing than the cheat above — it
+   * narrows the search to an eighth of the map and then goes away again.
+   */
+  private renderWayfinderArrow(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const player = this.active();
+    const bearing = this.stairwell.wayfinderBearing(player);
+    if (bearing === null) return;
 
-    const t = Date.now();
-    const bounce = Math.sin(t * ARROW_BOUNCE_FREQUENCY) * ARROW_BOUNCE_AMPLITUDE;
-    const len = ARROW_LENGTH_PIXELS;
-    const arrowX = player.x - camX + TILE_SIZE / 2;
-    const arrowY = player.y - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
-
-    ctx.save();
-    ctx.translate(arrowX, arrowY);
-    ctx.rotate(angle);
-    ctx.fillStyle = '#facc15';
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = ARROW_LINE_WIDTH;
-    ctx.beginPath();
-    ctx.moveTo(len, 0);
-    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, -len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
-    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_CENTER, 0);
-    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+    drawBearingArrowAbovePlayer(
+      ctx,
+      player.x,
+      player.y,
+      bearing,
+      camX,
+      camY,
+      WAYFINDER_ARROW_COLOR,
+    );
   }
 
   private renderSpiderLabArrow(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -4295,6 +4346,7 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
       this.renderKnockedOutUI(ctx, camX, camY);
       this.renderStairwellRevealArrow(ctx, camX, camY);
+      this.renderWayfinderArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
       this.bounty?.renderArrow(ctx, this.active(), camX, camY);
       this.renderPinnedObjectiveArrow(ctx, camX, camY);
@@ -4787,6 +4839,11 @@ export class DungeonScene extends GameplayScene {
     const ctx = this.buildSystemContext();
 
     this.safeRoom.update(ctx);
+    this.stairwell.update(ctx);
+    if (this.stairwell.wayfinderAnnouncePending) {
+      this.stairwell.wayfinderAnnouncePending = false;
+      this.menus.announce(DungeonScene.WAYFINDER_ANNOUNCEMENT);
+    }
     this.bopca.update(ctx);
     this.combat.floatingText.update(ctx);
     this.systemNotices.update(ctx);

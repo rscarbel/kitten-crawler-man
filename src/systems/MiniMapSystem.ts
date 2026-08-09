@@ -101,6 +101,8 @@ const MINIMAP_MARGIN = 8;
 const MINIMAP_HINT_FONT_SIZE = 10;
 /** Extra tiles revealed around boss room bounds. */
 const BOSS_REVEAL_EXTRA_TILES = 15;
+/** Fog radius revealed around the nearest stairwell once the floor's last gauntlet boss dies. */
+const STAIRWELL_REVEAL_RADIUS_TILES = 8;
 /** Corpse marker arm length (pixels). */
 const CORPSE_MARKER_ARM = 2;
 /** Corpse marker TTL in frames. */
@@ -258,13 +260,13 @@ export class MiniMapSystem implements GameSystem {
     this._tileCacheCtx.fillRect(tileX, tileY, 1, 1);
   }
 
-  revealBossNeighborhood(bounds: { x: number; y: number; w: number; h: number }): void {
+  /** Shared clamp/loop/fog-set/fill body behind every neighborhood reveal. */
+  private revealNeighborhood(bounds: { x: number; y: number; w: number; h: number }): void {
     const mapSize = this.gameMap.structure.length;
-    const extra = BOSS_REVEAL_EXTRA_TILES;
-    const x1 = Math.max(0, bounds.x - extra);
-    const y1 = Math.max(0, bounds.y - extra);
-    const x2 = Math.min(mapSize - 1, bounds.x + bounds.w + extra);
-    const y2 = Math.min(mapSize - 1, bounds.y + bounds.h + extra);
+    const x1 = Math.max(0, bounds.x);
+    const y1 = Math.max(0, bounds.y);
+    const x2 = Math.min(mapSize - 1, bounds.x + bounds.w);
+    const y2 = Math.min(mapSize - 1, bounds.y + bounds.h);
     const cctx = this._tileCacheCtx;
     for (let ty = y1; ty <= y2; ty++) {
       for (let tx = x1; tx <= x2; tx++) {
@@ -277,6 +279,26 @@ export class MiniMapSystem implements GameSystem {
         }
       }
     }
+  }
+
+  revealBossNeighborhood(bounds: { x: number; y: number; w: number; h: number }): void {
+    const extra = BOSS_REVEAL_EXTRA_TILES;
+    this.revealNeighborhood({
+      x: bounds.x - extra,
+      y: bounds.y - extra,
+      w: bounds.w + extra * 2,
+      h: bounds.h + extra * 2,
+    });
+  }
+
+  /**
+   * The post-boss map hint: reveal a `STAIRWELL_REVEAL_RADIUS_TILES`-tile pool
+   * of fog around a stairwell, so the minimap's white-square pass (in
+   * `render()`) can show it without the player having walked anywhere near it.
+   */
+  revealStairwellNeighborhood(tile: { x: number; y: number }): void {
+    const r = STAIRWELL_REVEAL_RADIUS_TILES;
+    this.revealNeighborhood({ x: tile.x - r, y: tile.y - r, w: r * 2, h: r * 2 });
   }
 
   addCorpseMarker(x: number, y: number): void {
