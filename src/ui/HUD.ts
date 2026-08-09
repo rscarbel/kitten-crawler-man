@@ -8,8 +8,13 @@ import { drawBox, drawProgressBar } from './Box';
 import { viewportWidth } from '../core/Viewport';
 import { statusBadge } from '../sprites/status/statusEffectVisuals';
 
-type HudRect = { x: number; y: number; w: number; h: number };
-type HudResult = { toggleRect: HudRect; notifRect: HudRect; hudPanelBottom: number };
+export type HudRect = { x: number; y: number; w: number; h: number };
+type HudResult = {
+  toggleRect: HudRect;
+  notifRect: HudRect;
+  hudPanelBottom: number;
+  hudRect: HudRect;
+};
 
 const HIDDEN_RECT: HudRect = { x: -9999, y: 0, w: 0, h: 0 };
 
@@ -219,6 +224,7 @@ export function drawHUD(
 
   const notifRect = renderNotification(ctx, human, cat, pulseRef);
   const hudPanelBottom = panelTopY + panelHeight;
+  const hudRect: HudRect = { x: PANEL_START_X, y: panelTopY, w: PANEL_WIDTH, h: panelHeight };
 
   if (platform.showHudCollapseToggle) {
     // Collapse toggle — small "▲" button at top-right of panel
@@ -239,9 +245,9 @@ export function drawHUD(
       color: '#94a3b8',
       align: 'center',
     });
-    return { toggleRect, notifRect, hudPanelBottom };
+    return { toggleRect, notifRect, hudPanelBottom, hudRect };
   }
-  return { toggleRect: HIDDEN_RECT, notifRect, hudPanelBottom };
+  return { toggleRect: HIDDEN_RECT, notifRect, hudPanelBottom, hudRect };
 }
 
 /** Compact single-row HUD for mobile collapsed state. Does not render the skill badge. */
@@ -344,7 +350,8 @@ function drawHUDCollapsed(
 
   // Skill badge is rendered separately by the caller so it can be positioned
   // below any boss UI that stacks below this bar.
-  return { toggleRect, notifRect: HIDDEN_RECT, hudPanelBottom: y + BAR_H };
+  const hudRect: HudRect = { x, y, w: BAR_W + TOGGLE_BTN_W, h: BAR_H };
+  return { toggleRect, notifRect: HIDDEN_RECT, hudPanelBottom: y + BAR_H, hudRect };
 }
 
 /**

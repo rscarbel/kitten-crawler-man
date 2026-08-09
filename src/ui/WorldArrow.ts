@@ -16,6 +16,33 @@ const ARROW_LINE_WIDTH = 1.5;
 /** Tiles above the player's tile origin where the arrow is drawn. */
 const ARROW_VERTICAL_OFFSET_TILES = 1.5;
 
+/** Gap kept between an arrow pushed clear of an avoid rect and that rect's edge. */
+const ARROW_AVOID_RECT_CLEARANCE = 6;
+
+/** Half-width of the arrow's on-screen footprint, for the avoid-rect overlap test. */
+const ARROW_FOOTPRINT_HALF_WIDTH = ARROW_LENGTH_PIXELS + ARROW_BOUNCE_AMPLITUDE;
+
+/** A screen-space rect the arrow must not be drawn inside, e.g. the HUD panel. */
+export type ArrowAvoidRect = { x: number; y: number; w: number; h: number };
+
+/**
+ * Pushes the arrow's screen Y below `avoidRect` when it would otherwise land
+ * inside it — the arrow tracks the active player, who can be scrolled into the
+ * HUD's screen corner when the camera clamps at a map edge.
+ */
+function clampArrowScreenY(
+  screenX: number,
+  screenY: number,
+  avoidRect: ArrowAvoidRect | undefined,
+): number {
+  if (avoidRect === undefined) return screenY;
+  const overlapsHorizontally =
+    screenX + ARROW_FOOTPRINT_HALF_WIDTH > avoidRect.x &&
+    screenX - ARROW_FOOTPRINT_HALF_WIDTH < avoidRect.x + avoidRect.w;
+  if (!overlapsHorizontally) return screenY;
+  return Math.max(screenY, avoidRect.y + avoidRect.h + ARROW_AVOID_RECT_CLEARANCE);
+}
+
 /**
  * Draws a directional arrow above the active player pointing toward a world-space target.
  *
@@ -30,7 +57,8 @@ const ARROW_VERTICAL_OFFSET_TILES = 1.5;
  * @param camX - Camera scroll X
  * @param camY - Camera scroll Y
  * @param color - Arrow fill color (e.g. '#facc15')
- * @param outlineColor - Arrow stroke color (e.g. '#000')
+ * @param options.outlineColor - Arrow stroke color (e.g. '#000')
+ * @param options.avoidRect - Screen rect (e.g. the HUD panel) the arrow must not overlap
  */
 export function drawArrowAbovePlayer(
   ctx: CanvasRenderingContext2D,
@@ -41,21 +69,12 @@ export function drawArrowAbovePlayer(
   camX: number,
   camY: number,
   color: string,
-  outlineColor = '#000',
+  options?: { outlineColor?: string; avoidRect?: ArrowAvoidRect },
 ): void {
   const playerCenterX = playerWorldX + TILE_SIZE / 2;
   const playerCenterY = playerWorldY + TILE_SIZE / 2;
   const angle = Math.atan2(targetWorldY - playerCenterY, targetWorldX - playerCenterX);
-  drawBearingArrowAbovePlayer(
-    ctx,
-    playerWorldX,
-    playerWorldY,
-    angle,
-    camX,
-    camY,
-    color,
-    outlineColor,
-  );
+  drawBearingArrowAbovePlayer(ctx, playerWorldX, playerWorldY, angle, camX, camY, color, options);
 }
 
 /**
@@ -67,6 +86,8 @@ export function drawArrowAbovePlayer(
  * `Math.atan2` would be a lie about what the caller knows.
  *
  * @param bearingRadians - Screen-space angle, 0 = east, growing clockwise (canvas y is down)
+ * @param options.outlineColor - Arrow stroke color (e.g. '#000')
+ * @param options.avoidRect - Screen rect (e.g. the HUD panel) the arrow must not overlap
  */
 export function drawBearingArrowAbovePlayer(
   ctx: CanvasRenderingContext2D,
@@ -76,18 +97,19 @@ export function drawBearingArrowAbovePlayer(
   camX: number,
   camY: number,
   color: string,
-  outlineColor = '#000',
+  options?: { outlineColor?: string; avoidRect?: ArrowAvoidRect },
 ): void {
   const bounce = Math.sin(Date.now() * ARROW_BOUNCE_FREQUENCY) * ARROW_BOUNCE_AMPLITUDE;
   const screenX = playerWorldX - camX + TILE_SIZE / 2;
-  const screenY = playerWorldY - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
+  const rawScreenY = playerWorldY - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
+  const screenY = clampArrowScreenY(screenX, rawScreenY, options?.avoidRect);
   const len = ARROW_LENGTH_PIXELS;
 
   ctx.save();
   ctx.translate(screenX, screenY);
   ctx.rotate(bearingRadians);
   ctx.fillStyle = color;
-  ctx.strokeStyle = outlineColor;
+  ctx.strokeStyle = options?.outlineColor ?? '#000';
   ctx.lineWidth = ARROW_LINE_WIDTH;
   ctx.beginPath();
   ctx.moveTo(len, 0);

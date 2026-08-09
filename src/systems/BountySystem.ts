@@ -31,6 +31,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
 import type { BountyNoticeState } from './townNotices';
 import type { TrackerEntry } from './questTracker';
+import type { ArrowAvoidRect } from '../ui/WorldArrow';
 import { drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
@@ -575,6 +576,7 @@ export class BountySystem implements GameSystem {
     activePlayer: HumanPlayer | CatPlayer,
     camX: number,
     camY: number,
+    hudRect: ArrowAvoidRect,
   ): void {
     const target = this.arrowTargetWorld();
     if (target === null) return;
@@ -592,6 +594,9 @@ export class BountySystem implements GameSystem {
       camX,
       camY,
       color,
+      {
+        avoidRect: hudRect,
+      },
     );
   }
 

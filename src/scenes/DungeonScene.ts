@@ -2542,6 +2542,9 @@ export class DungeonScene extends GameplayScene {
       camX,
       camY,
       STAIRWELL_ARROW_COLOR,
+      {
+        avoidRect: this._hudRect,
+      },
     );
   }
 
@@ -2564,6 +2567,9 @@ export class DungeonScene extends GameplayScene {
       camX,
       camY,
       WAYFINDER_ARROW_COLOR,
+      {
+        avoidRect: this._hudRect,
+      },
     );
   }
 
@@ -2677,7 +2683,19 @@ export class DungeonScene extends GameplayScene {
       TILE_SIZE;
     if (distanceTiles < PINNED_ARROW_SUPPRESS_TILES) return;
 
-    drawArrowAbovePlayer(ctx, player.x, player.y, targetX, targetY, camX, camY, PINNED_ARROW_COLOR);
+    drawArrowAbovePlayer(
+      ctx,
+      player.x,
+      player.y,
+      targetX,
+      targetY,
+      camX,
+      camY,
+      PINNED_ARROW_COLOR,
+      {
+        avoidRect: this._hudRect,
+      },
+    );
   }
 
   private triggerCompanionFollow(): void {
@@ -4326,6 +4344,7 @@ export class DungeonScene extends GameplayScene {
     // it is stacked below the boss UI box further down in this method.
     const hudResult = drawHUD(ctx, this.human, this.cat, this.notifPulse, this._hudCollapsed);
     this._hudToggleRect = hudResult.toggleRect;
+    this._hudRect = hudResult.hudRect;
     if (!platform.isMobile) {
       this._hudSkillBannerRect = hudResult.notifRect;
     }
@@ -4348,7 +4367,7 @@ export class DungeonScene extends GameplayScene {
       this.renderStairwellRevealArrow(ctx, camX, camY);
       this.renderWayfinderArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
-      this.bounty?.renderArrow(ctx, this.active(), camX, camY);
+      this.bounty?.renderArrow(ctx, this.active(), camX, camY, this._hudRect);
       this.renderPinnedObjectiveArrow(ctx, camX, camY);
     }
 
