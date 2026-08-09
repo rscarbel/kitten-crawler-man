@@ -65,7 +65,7 @@ function applyLoadout(player: Player, loadout: PlaytestLoadout): void {
   }
 
   player.level = loadout.level;
-  player.xp = loadout.xp;
+  player.xp = Math.round(loadout.xpProgress * player.xpNeededForNextLevel);
   player.coins = loadout.coins;
   player.unspentPoints = 0;
   player.skills.restoreStates(skillStatesFor(loadout.skillLevels));

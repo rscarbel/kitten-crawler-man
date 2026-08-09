@@ -34,8 +34,13 @@ export interface PlaytestStack {
 /** One crawler's state at the moment the preset hands them the controls. */
 export interface PlaytestLoadout {
   readonly level: number;
-  /** XP already banked toward the next level, not a lifetime total. */
-  readonly xp: number;
+  /**
+   * Fraction (0-1) of the way banked toward the next level, not a lifetime
+   * total. Converted to an absolute XP amount against the starting level's
+   * own requirement, so every preset levels up after the same proportional
+   * amount of further XP regardless of how high `level` is.
+   */
+  readonly xpProgress: number;
   readonly coins: number;
   /** Stat values before equipment. Omitted stats keep the species default. */
   readonly baseStats: Partial<Record<StatName, number>>;
@@ -68,7 +73,7 @@ const HOARDER: PlaytestPreset = {
   abilityLevels: { smush: 3, magic_missile: 3, protective_shell: 3 },
   human: {
     level: 4,
-    xp: 32,
+    xpProgress: 0.5,
     coins: 270,
     baseStats: { strength: 4, constitution: 3, dexterity: 2 },
     explosivesHandling: 1,
@@ -83,7 +88,7 @@ const HOARDER: PlaytestPreset = {
   },
   cat: {
     level: 4,
-    xp: 32,
+    xpProgress: 0.5,
     coins: 270,
     baseStats: { strength: 1, intelligence: 4, constitution: 2, dexterity: 11 },
     skillLevels: {},
@@ -104,7 +109,7 @@ const JUICER: PlaytestPreset = {
   abilityLevels: { smush: 4, magic_missile: 4, protective_shell: 3 },
   human: {
     level: 11,
-    xp: 55,
+    xpProgress: 0.5,
     coins: 630,
     baseStats: { strength: 7, constitution: 10, dexterity: 2 },
     explosivesHandling: 1,
@@ -122,7 +127,7 @@ const JUICER: PlaytestPreset = {
   },
   cat: {
     level: 7,
-    xp: 55,
+    xpProgress: 0.5,
     coins: 630,
     baseStats: { strength: 2, intelligence: 6, constitution: 2, dexterity: 14 },
     skillLevels: { cockroach: 1 },
@@ -143,13 +148,14 @@ const LEVEL2: PlaytestPreset = {
   abilityLevels: { smush: 5, magic_missile: 6, protective_shell: 3 },
   human: {
     level: 12,
-    xp: 70,
+    xpProgress: 0.5,
     coins: 1173,
     baseStats: { strength: 8, constitution: 10, dexterity: 2 },
     explosivesHandling: 1,
     skillLevels: { pugilism: 2 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
+      { id: 'slingshot', quantity: 1 },
       { id: 'health_potion', quantity: 22 },
       { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'goblin_dynamite', quantity: 10 },
@@ -157,6 +163,10 @@ const LEVEL2: PlaytestPreset = {
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 4 },
       { id: 'trollskin_shirt', quantity: 1, equipped: true },
+      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
+      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
+      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
+      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'gym_treadmill', quantity: 2 },
       { id: 'jugg_juice', quantity: 1 },
@@ -165,7 +175,7 @@ const LEVEL2: PlaytestPreset = {
   },
   cat: {
     level: 13,
-    xp: 70,
+    xpProgress: 0.5,
     coins: 1173,
     baseStats: { strength: 2, intelligence: 17, constitution: 2, dexterity: 20 },
     skillLevels: { cockroach: 1 },
@@ -178,6 +188,9 @@ const LEVEL2: PlaytestPreset = {
       { id: 'goblin_dynamite', quantity: 7 },
       { id: 'gym_bench_press', quantity: 1 },
       { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
+      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
+      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
+      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
     ],
   },
 };
@@ -190,13 +203,14 @@ const KRAKAREN: PlaytestPreset = {
   abilityLevels: { smush: 6, magic_missile: 6, protective_shell: 3 },
   human: {
     level: 17,
-    xp: 100,
+    xpProgress: 0.5,
     coins: 1488,
     baseStats: { strength: 12, constitution: 11, dexterity: 2 },
     explosivesHandling: 1,
     skillLevels: { pugilism: 2 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
+      { id: 'slingshot', quantity: 1 },
       { id: 'health_potion', quantity: 31 },
       { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'goblin_dynamite', quantity: 10 },
@@ -206,13 +220,17 @@ const KRAKAREN: PlaytestPreset = {
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 5 },
       { id: 'trollskin_shirt', quantity: 1, equipped: true },
+      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
+      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
+      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
+      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
   },
   cat: {
     level: 15,
-    xp: 100,
+    xpProgress: 0.5,
     coins: 1488,
     baseStats: { strength: 2, intelligence: 19, constitution: 2, dexterity: 22 },
     skillLevels: { cockroach: 1 },
@@ -225,6 +243,9 @@ const KRAKAREN: PlaytestPreset = {
       { id: 'goblin_dynamite', quantity: 7 },
       { id: 'gym_bench_press', quantity: 1 },
       { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
+      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
+      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
+      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
     ],
   },
 };
@@ -237,13 +258,14 @@ const SPIDER: PlaytestPreset = {
   abilityLevels: { smush: 6, magic_missile: 6, protective_shell: 3 },
   human: {
     level: 20,
-    xp: 100,
+    xpProgress: 0.5,
     coins: 1903,
     baseStats: { strength: 12, constitution: 14, dexterity: 2 },
     explosivesHandling: 1,
     skillLevels: { pugilism: 4 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
+      { id: 'slingshot', quantity: 1 },
       { id: 'health_potion', quantity: 34 },
       { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'goblin_dynamite', quantity: 14 },
@@ -253,13 +275,17 @@ const SPIDER: PlaytestPreset = {
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 5 },
       { id: 'trollskin_shirt', quantity: 1, equipped: true },
+      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
+      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
+      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
+      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
   },
   cat: {
     level: 20,
-    xp: 100,
+    xpProgress: 0.5,
     coins: 1903,
     baseStats: { strength: 5, intelligence: 21, constitution: 2, dexterity: 22 },
     skillLevels: { cockroach: 1, iron_stomach: 1, night_vision: 1 },
@@ -271,6 +297,9 @@ const SPIDER: PlaytestPreset = {
     bag: [
       { id: 'goblin_dynamite', quantity: 7 },
       { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
+      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
+      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
+      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 1 },
     ],
   },
@@ -284,13 +313,14 @@ const LEVEL3: PlaytestPreset = {
   abilityLevels: { smush: 7, magic_missile: 6, protective_shell: 3 },
   human: {
     level: 28,
-    xp: 120,
+    xpProgress: 0.5,
     coins: 2327,
     baseStats: { strength: 12, constitution: 16, dexterity: 6 },
     explosivesHandling: 3,
     skillLevels: { pugilism: 5 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
+      { id: 'slingshot', quantity: 1 },
       { id: 'health_potion', quantity: 38 },
       { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'goblin_dynamite', quantity: 18 },
@@ -300,13 +330,17 @@ const LEVEL3: PlaytestPreset = {
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 5 },
       { id: 'trollskin_shirt', quantity: 1, equipped: true },
+      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
+      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
+      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
+      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
   },
   cat: {
     level: 28,
-    xp: 120,
+    xpProgress: 0.5,
     coins: 2327,
     baseStats: { strength: 5, intelligence: 28, constitution: 2, dexterity: 34 },
     skillLevels: { cockroach: 1, iron_stomach: 1, night_vision: 1 },
@@ -318,6 +352,9 @@ const LEVEL3: PlaytestPreset = {
     bag: [
       { id: 'goblin_dynamite', quantity: 7 },
       { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
+      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
+      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
+      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 1 },
     ],
   },
@@ -340,19 +377,24 @@ const SWINE: PlaytestPreset = {
   abilityLevels: { smush: 7, magic_missile: 7, protective_shell: 4 },
   human: {
     level: 18,
-    xp: 120,
+    xpProgress: 0.5,
     coins: 1620,
     baseStats: { strength: 13, constitution: 12, dexterity: 3 },
     explosivesHandling: 1,
     skillLevels: { pugilism: 3 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
+      { id: 'slingshot', quantity: 1 },
       { id: 'health_potion', quantity: 30 },
       { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 4 },
     ],
     bag: [
       { id: 'trollskin_shirt', quantity: 1, equipped: true },
+      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
+      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
+      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
+      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
       { id: 'gym_treadmill', quantity: 4 },
       { id: 'gym_dumbbell', quantity: 4 },
       { id: 'goblin_dynamite', quantity: 8 },
@@ -362,7 +404,7 @@ const SWINE: PlaytestPreset = {
   },
   cat: {
     level: 19,
-    xp: 120,
+    xpProgress: 0.5,
     coins: 1620,
     baseStats: { strength: 3, intelligence: 20, constitution: 2, dexterity: 24 },
     skillLevels: { cockroach: 1 },
@@ -374,6 +416,9 @@ const SWINE: PlaytestPreset = {
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 6 },
       { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
+      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
+      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
+      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 4 },
     ],
   },
@@ -392,7 +437,7 @@ const GEAR: PlaytestPreset = {
   abilityLevels: { smush: 7, magic_missile: 6, protective_shell: 3 },
   human: {
     level: 28,
-    xp: 120,
+    xpProgress: 0.5,
     coins: 2327,
     baseStats: { strength: 12, constitution: 16, dexterity: 6 },
     explosivesHandling: 3,
@@ -415,7 +460,7 @@ const GEAR: PlaytestPreset = {
   },
   cat: {
     level: 28,
-    xp: 120,
+    xpProgress: 0.5,
     coins: 2327,
     baseStats: { strength: 5, intelligence: 28, constitution: 2, dexterity: 34 },
     skillLevels: { cockroach: 1, iron_stomach: 1, night_vision: 1 },
