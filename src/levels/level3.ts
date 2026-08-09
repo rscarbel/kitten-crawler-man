@@ -54,6 +54,16 @@ const SKYF_12_Y = -4;
  * The town has a large tower and many smaller buildings that can be entered.
  */
 /**
+ * The stairwell menu's recommended arrival level for floor 3, shown instead
+ * of the value the ambient mob bands below would otherwise imply. Raising
+ * that implied number the honest way means raising every ambient mob's level
+ * cap — nearly doubling them — which is a much bigger difficulty change than
+ * the advice text alone was meant to make, so the advice is decoupled here
+ * via `recommendedLevelOverride` instead.
+ */
+const FLOOR3_RECOMMENDED_LEVEL = 24;
+
+/**
  * Sky fowl level range. They spawned at level 1 until the difficulty pass — a
  * floor-3 creature no tougher than a floor-1 rat, on a floor whose weakest
  * regular is level 5.
@@ -90,6 +100,7 @@ export const level3: LevelDef = {
   floorNumber: 3,
   music: 'bg_level_1',
   mapSize: 280,
+  recommendedLevelOverride: FLOOR3_RECOMMENDED_LEVEL,
   // Deliberately does NOT include the bounty/circus/quill/murder-mystery
   // groups: none of those systems is named anywhere in this def (they key off
   // map features like `gameMap.circusCentre`, not `LevelDef`), so a naive

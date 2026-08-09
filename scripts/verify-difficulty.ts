@@ -959,7 +959,7 @@ section('region level bonuses');
 // ── The recommended party level ──────────────────────────────────────────────
 
 /** Ambient band ceiling floor 2 is authored at, and the advice it must produce. */
-const FLOOR_2_RECOMMENDED_PARTY_LEVEL = 8;
+const FLOOR_2_RECOMMENDED_PARTY_LEVEL = 10;
 
 /** A floor whose only ambient spawn is one band, used to drive the advice curve. */
 function floorWithAmbientCeiling(ceiling: number): LevelDef {
@@ -1007,6 +1007,18 @@ section('recommended party level');
       recommendedPartyLevelFor(level2, normal) <
         recommendedPartyLevelFor(level2, DIFFICULTY_PROFILES.easy),
     'a gentler ambient ratio asks for a higher party level before descending',
+  );
+
+  // Floor 3's advice is an authored `recommendedLevelOverride` rather than a
+  // read of its ambient bands, so it must ignore the difficulty toggle
+  // entirely instead of sliding with it like floor 2's does.
+  check(
+    recommendedPartyLevelFor(level3, DIFFICULTY_PROFILES.easy) ===
+      level3.recommendedLevelOverride &&
+      recommendedPartyLevelFor(level3, normal) === level3.recommendedLevelOverride &&
+      recommendedPartyLevelFor(level3, DIFFICULTY_PROFILES.hard) ===
+        level3.recommendedLevelOverride,
+    `floor 3's recommended level (${level3.recommendedLevelOverride}) is fixed regardless of difficulty`,
   );
 }
 

@@ -8,7 +8,7 @@
 
 import type { InventoryItem } from '../core/ItemDefs';
 import { describeItemEffects } from './itemEffectLines';
-import { drawText } from './TextBox';
+import { drawText, wrapText } from './TextBox';
 import { drawBox, BOX_PRESETS } from './Box';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -87,7 +87,17 @@ export function drawItemTooltip(
 ): void {
   const lines = itemTooltipLines(item, footer);
   const width = TOOLTIP_WIDTH;
-  const height = lines.length * TOOLTIP_LINE_HEIGHT + TOOLTIP_PAD;
+  const titleMaxWidth = width - TOOLTIP_TEXT_INDENT * 2;
+
+  // A source-material item name can run long enough to need its own wrap,
+  // separate from the char-count wrap the description below already uses.
+  ctx.save();
+  ctx.font = `bold ${TOOLTIP_TITLE_SIZE}px monospace`;
+  const titleLines = wrapText(ctx, lines[0] ?? '', titleMaxWidth);
+  ctx.restore();
+  const bodyLines = lines.slice(1);
+
+  const height = (titleLines.length + bodyLines.length) * TOOLTIP_LINE_HEIGHT + TOOLTIP_PAD;
   const x = Math.min(mx + TOOLTIP_X_OFFSET, viewportWidth() - width - TOOLTIP_SCREEN_MARGIN);
   const clampedY = Math.min(my - height / 2, viewportHeight() - height - TOOLTIP_SCREEN_MARGIN);
   const y = Math.max(clampedY, TOOLTIP_MIN_Y);
@@ -106,22 +116,26 @@ export function drawItemTooltip(
   );
   ctx.clip();
 
-  drawText(ctx, lines[0] ?? '', {
-    x: x + TOOLTIP_TEXT_INDENT,
-    y: y + TOOLTIP_LINE_HEIGHT - TOOLTIP_TITLE_BASELINE_LIFT,
-    size: TOOLTIP_TITLE_SIZE,
-    bold: true,
-    color: TITLE_COLOR,
-  });
+  let lineIndex = 0;
+  for (const titleLine of titleLines) {
+    drawText(ctx, titleLine, {
+      x: x + TOOLTIP_TEXT_INDENT,
+      y: y + TOOLTIP_LINE_HEIGHT * (lineIndex + 1) - TOOLTIP_TITLE_BASELINE_LIFT,
+      size: TOOLTIP_TITLE_SIZE,
+      bold: true,
+      color: TITLE_COLOR,
+    });
+    lineIndex++;
+  }
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i] ?? '';
+  for (const line of bodyLines) {
     drawText(ctx, line, {
       x: x + TOOLTIP_TEXT_INDENT,
-      y: y + TOOLTIP_LINE_HEIGHT * (i + 1) - TOOLTIP_TITLE_BASELINE_LIFT,
+      y: y + TOOLTIP_LINE_HEIGHT * (lineIndex + 1) - TOOLTIP_TITLE_BASELINE_LIFT,
       size: TOOLTIP_BODY_SIZE,
       color: bodyLineColor(line),
     });
+    lineIndex++;
   }
   ctx.restore();
 }

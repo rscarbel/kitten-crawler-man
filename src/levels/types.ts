@@ -260,6 +260,15 @@ export interface LevelDef {
   /** Override the auto-calculated stairwell count (default: 1 per 50 regular rooms). */
   numStairwells?: number;
   /**
+   * Overrides the stairwell menu's "Recommended level" advice for descending
+   * onto this floor, in place of the value `recommendedPartyLevelFor` derives
+   * from the floor's own ambient mob bands. Set this when the number the
+   * bands imply isn't the number worth advertising — raising it the honest
+   * way means raising every ambient mob's level cap, which is a much bigger
+   * difficulty change than the advice text alone.
+   */
+  recommendedLevelOverride?: number;
+  /**
    * Scales the stairwell count so a floor can stay room-count-driven while still
    * being easier or harder to find a way down on (default 1). Applied after
    * `numStairwells`, so a floor may set either or both.

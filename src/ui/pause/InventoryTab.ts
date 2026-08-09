@@ -34,6 +34,8 @@ const BUTTON_X_OFFSET = 12;
 const BUTTON_WIDTH_MARGIN = 24;
 const BUTTON_HEIGHT = 30;
 const BUTTON_Y_SPACING = 38;
+/** Gap between the Equipment button and the Inventory button beneath it. */
+const EQUIPMENT_BUTTON_Y_SPACING = 34;
 
 // Tab layout
 const TITLE_Y = 22;
@@ -59,6 +61,8 @@ function renderPlayerSection(
   bw: number,
   manageLabel: string,
   onManage: () => void,
+  equipmentLabel: string,
+  onManageEquipment: () => void,
 ): number {
   let y = startY;
   const indentX = bx + SECTION_INDENT_X;
@@ -153,6 +157,17 @@ function renderPlayerSection(
     y,
     width: bw - BUTTON_WIDTH_MARGIN,
     height: BUTTON_HEIGHT,
+    label: equipmentLabel,
+    ...BUTTON_PRESETS.primary,
+    action: onManageEquipment,
+  });
+  y += EQUIPMENT_BUTTON_Y_SPACING;
+
+  addButton(ctx, buttons, {
+    x: bx + BUTTON_X_OFFSET,
+    y,
+    width: bw - BUTTON_WIDTH_MARGIN,
+    height: BUTTON_HEIGHT,
     label: manageLabel,
     ...BUTTON_PRESETS.primary,
     action: onManage,
@@ -173,6 +188,8 @@ export function renderInventoryTab(
   setTab: (tab: PauseTab) => void,
   onManageHuman: () => void,
   onManageCat: () => void,
+  onManageHumanEquipment: () => void,
+  onManageCatEquipment: () => void,
 ): void {
   drawText(ctx, 'INVENTORY', {
     x: bx + bw / 2,
@@ -196,6 +213,8 @@ export function renderInventoryTab(
     bw,
     'Manage Human Inventory',
     onManageHuman,
+    'Manage Human Equipment',
+    onManageHumanEquipment,
   );
 
   y += SECTIONS_SPACING;
@@ -211,6 +230,8 @@ export function renderInventoryTab(
     bw,
     'Manage Cat Inventory',
     onManageCat,
+    'Manage Cat Equipment',
+    onManageCatEquipment,
   );
 
   addButton(ctx, buttons, {
@@ -225,5 +246,8 @@ export function renderInventoryTab(
   });
 }
 
+/** Base height estimate before the two Equipment buttons were added: title + two player sections + back. */
+const BASE_INVENTORY_TAB_BOX_H = 530;
+
 /** Conservative height estimate for the inventory tab modal: title + two player sections + back. */
-export const INVENTORY_TAB_BOX_H = 530;
+export const INVENTORY_TAB_BOX_H = BASE_INVENTORY_TAB_BOX_H + EQUIPMENT_BUTTON_Y_SPACING * 2;

@@ -736,11 +736,9 @@ export class StairwellSystem implements GameSystem {
     const descendX = centreX - buttonsW / 2;
     const stayX = descendX + STAIRWELL_MENU_BUTTON_WIDTH + STAIRWELL_MENU_BUTTON_GAP;
 
-    // Descend leads the ring so the first Tab lands on it, but Stay is the
-    // primary: a crawler mashing the attack key onto a stairwell tile must not
-    // leave the floor by accident. Being underlevelled changes neither — the
-    // advice above is a nudge, and the button it warns about stays exactly as
-    // reachable as it was.
+    // Descend leads the ring so the first Tab lands on it, and it's the
+    // primary too: a bare accept-key press on a stairwell tile should send
+    // the crawler down rather than dismiss the menu.
     beginMenuFocus('stairwell');
     addButton(ctx, this.menuButtons, {
       x: descendX,
@@ -750,6 +748,7 @@ export class StairwellSystem implements GameSystem {
       label: 'Descend',
       ...BUTTON_PRESETS.award,
       labelSize: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
+      primaryAction: true,
       action: () => this.onDescend(),
     });
     addButton(ctx, this.menuButtons, {
@@ -760,7 +759,6 @@ export class StairwellSystem implements GameSystem {
       label: 'Stay',
       ...BUTTON_PRESETS.primary,
       labelSize: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
-      primaryAction: true,
       action: () => this.closeMenu(),
     });
     endMenuFocus();

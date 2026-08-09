@@ -600,6 +600,8 @@ export const BUTTON_PRESETS = {
    * one thing on the screen the dimmed bag is currently answering.
    */
   equipSlotFiltering: { fill: '#1e3a5f', border: '#facc15', borderWidth: 2, radius: 2 },
+  /** A sub-slot the piece of gear in hand — dragged from the bag or off another slot — actually fits. */
+  equipSlotDragTarget: { fill: '#0f2e1a', border: '#4ade80', borderWidth: 2, radius: 2 },
   /** A bag cell holding something this screen has no use for. */
   bagCell: { fill: '#1e293b', border: '#334155', borderWidth: 1, radius: 2 },
   /** A bag cell holding gear that can go on right now. */

@@ -70,6 +70,44 @@ const RUBBLE_PATCH_RX_EXTRA = 3;
 const RUBBLE_CHUNK_MIN_SIZE = 3;
 const RUBBLE_CHUNK_SIZE_VARIANCE = 4;
 
+/**
+ * Long-bone geometry (the femur/tibia shape), sized well under a tile so a
+ * pile of them reads as scattered debris next to the player rather than
+ * looming slabs. Two colors — a pale shaft and a darker joint cap — sell the
+ * knobby bone-end silhouette better than a flat rectangle does.
+ */
+const BONE_SHAFT_COLOR = '#d8d0b8';
+const BONE_SHAFT_SHADOW_COLOR = '#a89c7c';
+const BONE_JOINT_COLOR = '#c8c0a4';
+const BONE_OUTLINE_COLOR = '#6b6350';
+const BONE_SHADOW_COLOR = 'rgba(20,16,8,0.28)';
+const BONE_OUTLINE_WIDTH = 0.75;
+
+const BONE1_HALF_LENGTH = 6;
+const BONE1_SHAFT_HALF_WIDTH = 1.1;
+const BONE1_JOINT_RADIUS = 2.2;
+const BONE1_SHADOW_RX = 6.5;
+const BONE1_SHADOW_RY = 2.2;
+
+const BONE2_HALF_LENGTH = 4.5;
+const BONE2_SHAFT_HALF_WIDTH = 0.85;
+const BONE2_JOINT_RADIUS = 1.6;
+const BONE2_SHADOW_RX = 4.8;
+const BONE2_SHADOW_RY = 1.7;
+
+const BONE3_SHAFT_LENGTH = 5;
+const BONE3_SHAFT_HALF_WIDTH = 0.65;
+const BONE3_JOINT_RADIUS = 1;
+
+/**
+ * How far a knuckle's twin lobes sit off the bone's own axis, and how big each
+ * lobe is, relative to `jointRadius`. Two smaller offset lobes per end read as
+ * a flared epiphysis; one centered circle per end reads as a ball-and-stick
+ * joint instead.
+ */
+const BONE_KNUCKLE_LOBE_OFFSET_FRAC = 0.55;
+const BONE_KNUCKLE_LOBE_RADIUS_FRAC = 0.72;
+
 /** Playback rate and frame count of the main tower's glow overlay. */
 const MAIN_TOWER_GLOW_FPS = 4;
 const MAIN_TOWER_GLOW_FRAMES = 4;
@@ -1032,6 +1070,58 @@ function drawCliffLedge(
   );
 }
 
+/**
+ * A single scattered bone: a ground shadow, a shaft with a darker underside
+ * stripe, and two rounded joint caps, all outlined so the shape reads clearly
+ * against the floor tile beneath it instead of blending into a pale blob.
+ */
+function drawLongBone(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  angle: number,
+  halfLength: number,
+  shaftHalfWidth: number,
+  jointRadius: number,
+  shadowRx: number,
+  shadowRy: number,
+): void {
+  ctx.save();
+  ctx.fillStyle = BONE_SHADOW_COLOR;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + jointRadius * 0.6, shadowRx, shadowRy, angle, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  ctx.lineWidth = BONE_OUTLINE_WIDTH;
+  ctx.strokeStyle = BONE_OUTLINE_COLOR;
+
+  ctx.fillStyle = BONE_SHAFT_COLOR;
+  ctx.fillRect(-halfLength, -shaftHalfWidth, halfLength * 2, shaftHalfWidth * 2);
+  ctx.strokeRect(-halfLength, -shaftHalfWidth, halfLength * 2, shaftHalfWidth * 2);
+
+  ctx.fillStyle = BONE_SHAFT_SHADOW_COLOR;
+  ctx.fillRect(-halfLength, shaftHalfWidth * 0.15, halfLength * 2, shaftHalfWidth * 0.5);
+
+  // Two smaller lobes per end, offset off-axis, flare wider than the shaft and
+  // read as a knuckle; a single centered circle just reads as a ball on a stick.
+  const lobeOffset = jointRadius * BONE_KNUCKLE_LOBE_OFFSET_FRAC;
+  const lobeRadius = jointRadius * BONE_KNUCKLE_LOBE_RADIUS_FRAC;
+  for (const endX of [-halfLength, halfLength]) {
+    ctx.fillStyle = BONE_JOINT_COLOR;
+    for (const lobeSide of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(endX, lobeSide * lobeOffset, lobeRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
 export function drawDecorationTile(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -1193,55 +1283,53 @@ export function drawDecorationTile(
       // Deterministic layout per tile position
       const bh1 = (tx * 37 + ty * 23) % 97;
       const bh2 = (tx * 61 + ty * 47) % 89;
-      // Long bone 1 (femur/tibia shape — rounded ends, shaft)
-      const b1x = sx + 5 + (bh1 % (ts - 22));
-      const b1y = sy + 8 + (bh2 % (ts - 20));
+
+      const b1x = sx + 6 + (bh1 % (ts - 12));
+      const b1y = sy + 8 + (bh2 % (ts - 14));
       const b1a = (bh1 % 6) * 0.5;
-      ctx.save();
-      ctx.translate(b1x + 9, b1y + 4);
-      ctx.rotate(b1a);
-      ctx.fillStyle = '#d8d0b8';
-      ctx.fillRect(-9, -2, 18, 4); // shaft
-      ctx.beginPath();
-      ctx.arc(-9, 0, 4, 0, Math.PI * 2);
-      ctx.fill(); // knob left
-      ctx.beginPath();
-      ctx.arc(9, 0, 3.5, 0, Math.PI * 2);
-      ctx.fill(); // knob right
-      ctx.fillStyle = '#c0b8a0';
-      ctx.fillRect(-8, -1, 16, 1); // highlight
-      ctx.restore();
-      // Long bone 2 (rotated opposite)
-      const b2x = sx + 8 + (bh2 % (ts - 24));
-      const b2y = sy + 12 + (bh1 % (ts - 24));
+      drawLongBone(
+        ctx,
+        b1x,
+        b1y,
+        b1a,
+        BONE1_HALF_LENGTH,
+        BONE1_SHAFT_HALF_WIDTH,
+        BONE1_JOINT_RADIUS,
+        BONE1_SHADOW_RX,
+        BONE1_SHADOW_RY,
+      );
+
+      // Second, smaller bone, rotated opposite so the pile doesn't read as one repeated tile.
+      const b2x = sx + 10 + (bh2 % (ts - 12));
+      const b2y = sy + 16 + (bh1 % (ts - 18));
       const b2a = b1a + 1.1;
-      ctx.save();
-      ctx.translate(b2x + 8, b2y + 3);
-      ctx.rotate(b2a);
-      ctx.fillStyle = '#ccc4a8';
-      ctx.fillRect(-7, -2, 14, 3);
-      ctx.beginPath();
-      ctx.arc(-7, 0, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(7, 0, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      drawLongBone(
+        ctx,
+        b2x,
+        b2y,
+        b2a,
+        BONE2_HALF_LENGTH,
+        BONE2_SHAFT_HALF_WIDTH,
+        BONE2_JOINT_RADIUS,
+        BONE2_SHADOW_RX,
+        BONE2_SHADOW_RY,
+      );
+
       // Small bone fragment / rib shard
-      const b3x = sx + 10 + (bh1 % (ts - 20));
-      const b3y = sy + 6 + (bh2 % (ts - 18));
-      ctx.save();
-      ctx.translate(b3x, b3y);
-      ctx.rotate(bh2 * 0.15);
-      ctx.fillStyle = '#e0d8c0';
-      ctx.fillRect(0, -1, 10, 2);
-      ctx.beginPath();
-      ctx.arc(0, 0, 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(10, 0, 1.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      const b3x = sx + 14 + (bh1 % (ts - 20));
+      const b3y = sy + 22 + (bh2 % (ts - 24));
+      const b3a = bh2 * 0.15;
+      drawLongBone(
+        ctx,
+        b3x,
+        b3y,
+        b3a,
+        BONE3_SHAFT_LENGTH / 2,
+        BONE3_SHAFT_HALF_WIDTH,
+        BONE3_JOINT_RADIUS,
+        BONE3_SHAFT_LENGTH * 0.7,
+        BONE2_SHADOW_RY * 0.6,
+      );
       return true;
     }
 

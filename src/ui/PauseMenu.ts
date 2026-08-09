@@ -563,6 +563,14 @@ export class PauseMenu {
           setTabWithSound,
           this.onManageHumanInventory ?? (() => setTabWithSound('main')),
           this.onManageCatInventory ?? (() => setTabWithSound('main')),
+          () => {
+            this.equipment.selectCrawler('human');
+            setTabWithSound('equipment');
+          },
+          () => {
+            this.equipment.selectCrawler('cat');
+            setTabWithSound('equipment');
+          },
         );
         break;
       case 'equipment':

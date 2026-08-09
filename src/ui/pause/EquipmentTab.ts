@@ -27,6 +27,7 @@ import { ALL_STATS, type StatName } from '../../Player';
 import { type ButtonRect, type PauseTab } from './types';
 import { addButton, drawButton, BUTTON_PRESETS } from '../Button';
 import { drawText, TEXT_PRESETS } from '../TextBox';
+import { drawBox, BOX_PRESETS } from '../Box';
 import { InventoryPanel } from '../InventoryPanel';
 import { SearchField } from '../SearchField';
 import { drawItemTooltip } from '../ItemTooltip';
@@ -41,6 +42,7 @@ import {
   type EquipSlotInfo,
 } from '../equipmentLayout';
 import { pointInRect } from '../../utils';
+import { viewportWidth, viewportHeight } from '../../core/Viewport';
 
 /** Modal size this tab asks `PauseMenu` for: wide enough for two columns. */
 export const EQUIPMENT_TAB_BOX_W = 620;
@@ -59,8 +61,12 @@ const CONTENT_TOP_Y = 68;
 
 const EQUIPMENT_SLOT_SIZE = 46;
 const EQUIPMENT_SLOT_GAP = 3;
-/** Below this a cell cannot hold a legible icon, so the doll overflows instead of shrinking further. */
-const EQUIPMENT_SLOT_MIN_SIZE = 22;
+/**
+ * Below this a cell cannot hold both an icon and a readable two-line sub-slot
+ * label, so a narrow doll wraps a row (Hands/Feet, five sub-slots each) onto a
+ * second line instead of shrinking every cell past this floor.
+ */
+const EQUIPMENT_SLOT_MIN_SIZE = 34;
 /** The widest row the doll ever needs: Hands and Feet each carry five sub-slots. */
 const DOLL_MAX_CELLS_PER_ROW = 5;
 /** Share of the modal the doll column may take before the bag would be squeezed. */
@@ -78,10 +84,13 @@ const SECTION_LABEL_COLOR = '#64748b';
 const SECTION_LABEL_Y_FRACTION = 0.5;
 const SECTION_LABEL_BASELINE_LIFT = 5;
 
-const SUBSLOT_LABEL_SIZE = 7;
-const SUBSLOT_LABEL_BOTTOM_INSET = 9;
-/** Sub-slot names longer than this are cut so they cannot spill out of a cell. */
-const SUBSLOT_LABEL_MAX_CHARS = 8;
+const SUBSLOT_LABEL_SIZE = 8;
+const SUBSLOT_LABEL_LINE_HEIGHT = 9;
+/** Reserved even for a label that only needs one line, so the block's bottom edge never moves. */
+const SUBSLOT_LABEL_LINES = 2;
+const SUBSLOT_LABEL_BLOCK_H = SUBSLOT_LABEL_LINE_HEIGHT * SUBSLOT_LABEL_LINES;
+const SUBSLOT_LABEL_BOTTOM_PAD = 2;
+const SUBSLOT_LABEL_SIDE_PAD = 2;
 
 /** Icons leave the cell's rim visible, so the border still reads as a slot. */
 const ICON_INSET = 4;
@@ -100,8 +109,11 @@ const NO_BONUSES_LINE = 'No stat bonuses worn.';
 
 const NAV_ROW_GAP = 8;
 const NAV_ROW_H = 22;
-const NAV_BUTTON_W = 58;
+const NAV_BUTTON_GAP = 6;
 const NAV_LABEL_SIZE = 10;
+/** Gap between the Prev/Next row and the "page X / Y" line beneath it. */
+const PAGE_LABEL_GAP = 4;
+const PAGE_LABEL_LINE_H = 12;
 
 const HINT_GAP = 8;
 const HINT_SIZE = 9;
@@ -120,6 +132,34 @@ const ALREADY_WORN_REFUSAL = "That's already being worn.";
 
 /** Pointer travel past which a press is a drag, so the click behind it is not a second action. */
 const DRAG_SLOP_PX = 6;
+
+/**
+ * The circle-and-bar "no" laid over a doll sub-slot that refuses the piece of
+ * gear currently in hand — the same mark `InventoryPanel` lays over hotbar
+ * slots that refuse a dragged item, so the two drags read as one language.
+ */
+const DENY_MARK_RADIUS_FRACTION = 0.3;
+const DENY_MARK_COLOR = '#ef4444';
+const DENY_MARK_ALPHA = 0.8;
+const DENY_MARK_BAR_WIDTH = 4;
+const DENY_MARK_RIGHT_ANGLE_RADIANS = Math.PI / 2;
+/** The bar lies on the square slot's diagonal — half a right angle. */
+const DENY_MARK_BAR_ANGLE = DENY_MARK_RIGHT_ANGLE_RADIANS / 2;
+
+/** How long a still press on a bag item takes to open its context menu instead of a drag/tap. */
+const BAG_LONG_PRESS_MS = 500;
+
+const CONTEXT_MENU_WIDTH = 140;
+const CONTEXT_MENU_OPTION_H = 30;
+const CONTEXT_MENU_PAD = 4;
+const CONTEXT_MENU_LABEL_SIZE = 12;
+/** Keeps the popup from drawing off the right/bottom edge of the viewport. */
+const CONTEXT_MENU_SCREEN_MARGIN = 8;
+
+const CONTEXT_OPTION_EQUIP = 'Equip';
+const CONTEXT_OPTION_UNEQUIP = 'Unequip';
+const CONTEXT_OPTION_DESCRIPTION = 'Description';
+const CONTEXT_OPTION_CANCEL = 'Cancel';
 
 /** The dragged item follows the cursor at this size, centred on it. */
 const DRAG_GHOST_SIZE = 40;
@@ -197,12 +237,6 @@ function asPercent(fraction: number): number {
   return Math.round(fraction * PERCENT);
 }
 
-function truncateSubSlotLabel(subSlot: string): string {
-  return subSlot.length > SUBSLOT_LABEL_MAX_CHARS
-    ? subSlot.substring(0, SUBSLOT_LABEL_MAX_CHARS)
-    : subSlot;
-}
-
 /**
  * The worn-gear summary under the doll: real totals from the equipment
  * aggregators rather than a merge of per-item lines, because two items that each
@@ -278,6 +312,14 @@ export class EquipmentTabController {
    */
   private owner: HumanPlayer | CatPlayer | null = null;
 
+  /** Fires while a bag press holds still long enough, opening its context menu. */
+  private pressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** A bag item's popup menu — equip/unequip, description, cancel. */
+  private contextMenu: { slotIdx: number; item: InventoryItem; x: number; y: number } | null = null;
+  /** The item a "Description" choice pinned open, shown until the next click. */
+  private descriptionItem: InventoryItem | null = null;
+
   /**
    * Drop every scrap of tab state and release the keyboard.
    *
@@ -296,6 +338,9 @@ export class EquipmentTabController {
     this.refusalFramesLeft = 0;
     this.suppressNextClick = false;
     this.layout = null;
+    this.clearPressTimer();
+    this.contextMenu = null;
+    this.descriptionItem = null;
   }
 
   /**
@@ -303,6 +348,11 @@ export class EquipmentTabController {
    * before it means "close the menu". Returns true when it consumed the press.
    */
   dismissEscape(): boolean {
+    if (this.contextMenu !== null || this.descriptionItem !== null) {
+      this.contextMenu = null;
+      this.descriptionItem = null;
+      return true;
+    }
     if (this.drag !== null) {
       this.drag = null;
       return true;
@@ -379,6 +429,8 @@ export class EquipmentTabController {
 
     this.renderHover(ctx, inventory);
     this.renderDragGhost(ctx);
+    this.renderContextMenu(ctx, buttons, inventory);
+    this.renderDescriptionTooltip(ctx);
   }
 
   private renderCrawlerToggles(
@@ -438,15 +490,29 @@ export class EquipmentTabController {
       });
     }
 
+    // While a piece of gear is in hand — lifted from the bag or off another
+    // slot — every sub-slot answers "can this take it?" instead of its usual
+    // worn/empty/filtered look, the same way the hotbar marks the slots a
+    // dragged item cannot join.
+    const draggedItem = this.drag?.item ?? null;
+
     for (const info of slotInfos) {
       const liftedByDrag = this.drag?.origin === 'slot' && this.drag.key === info.key;
       const worn = liftedByDrag ? null : inventory.getEquippedItem(info.key);
+      const isDragTarget =
+        draggedItem !== null && this.slotFitRefusal(draggedItem, info.key) === null;
       const preset =
-        this.filterKey === info.key
-          ? BUTTON_PRESETS.equipSlotFiltering
-          : worn !== null
-            ? BUTTON_PRESETS.equipSlotFilled
-            : BUTTON_PRESETS.equipSlotEmpty;
+        draggedItem !== null
+          ? isDragTarget
+            ? BUTTON_PRESETS.equipSlotDragTarget
+            : worn !== null
+              ? BUTTON_PRESETS.equipSlotFilled
+              : BUTTON_PRESETS.equipSlotEmpty
+          : this.filterKey === info.key
+            ? BUTTON_PRESETS.equipSlotFiltering
+            : worn !== null
+              ? BUTTON_PRESETS.equipSlotFilled
+              : BUTTON_PRESETS.equipSlotEmpty;
 
       addButton(ctx, buttons, {
         x: info.x,
@@ -469,13 +535,22 @@ export class EquipmentTabController {
         );
       }
 
-      drawText(ctx, truncateSubSlotLabel(info.subSlot), {
-        x: info.x + slotSize / 2,
-        y: info.y + slotSize - SUBSLOT_LABEL_BOTTOM_INSET,
+      // Word-wrapped rather than truncated, so a name like "Knee Pads" or "Toe
+      // Ring 1" breaks onto a second line instead of spilling past the cell's
+      // edge into whatever sits beside it.
+      drawText(ctx, info.subSlot, {
+        x: info.x + SUBSLOT_LABEL_SIDE_PAD,
+        y: info.y + slotSize - SUBSLOT_LABEL_BLOCK_H - SUBSLOT_LABEL_BOTTOM_PAD,
         ...TEXT_PRESETS.label,
         size: SUBSLOT_LABEL_SIZE,
+        lineHeight: SUBSLOT_LABEL_LINE_HEIGHT,
+        width: slotSize - SUBSLOT_LABEL_SIDE_PAD * 2,
         align: 'center',
       });
+
+      if (draggedItem !== null && !isDragTarget) {
+        this.renderDenyMark(ctx, { x: info.x, y: info.y, w: slotSize, h: slotSize });
+      }
     }
 
     return { slotInfos, slotSize };
@@ -547,11 +622,12 @@ export class EquipmentTabController {
     const startX = bagX + Math.floor((bagW - gridW) / 2);
     const startY = boxY + CONTENT_TOP_Y;
 
+    const wearableSlots = this.wearableBagSlotIndices(inventory);
     const bagCells: BagCell[] = [];
     const pageStart = this.page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
-      const slotIdx = pageStart + i;
-      if (slotIdx >= inventory.bag.slots.length) break;
+      if (pageStart + i >= wearableSlots.length) break;
+      const slotIdx = wearableSlots[pageStart + i];
       const x = startX + (i % BAG_COLS) * (bagCellSize + BAG_CELL_GAP);
       const y = startY + Math.floor(i / BAG_COLS) * (bagCellSize + BAG_CELL_GAP);
       bagCells.push({ slotIdx, x, y });
@@ -559,6 +635,12 @@ export class EquipmentTabController {
       const liftedByDrag = this.drag?.origin === 'bag' && this.drag.slotIdx === slotIdx;
       const item = liftedByDrag ? null : inventory.bag.slots[slotIdx];
       const eligible = item !== null && this.bagItemIsEligible(item, inventory);
+      // A search mismatch means the item isn't meant to be found right now, so
+      // it stays inert. Everything else that's merely refused (already worn,
+      // wrong wearer, doesn't fit the slot being filtered on) still taps —
+      // `equipFromBag` answers with a refusal message instead of silently
+      // doing nothing, which is what made those cells feel unresponsive.
+      const tappable = item !== null && this.matchesSearch(item);
 
       const cell = {
         x,
@@ -572,8 +654,9 @@ export class EquipmentTabController {
       // focus ring — `addButton` registers its action either way. So a cell
       // nobody can act on is never registered at all, which is what lets a click
       // on it fall through to the panel's own "nothing was hit" handling and
-      // close the sub-slot filter.
-      if (eligible) {
+      // close the sub-slot filter. A cell under an open context menu is inert
+      // the same way, so a click past the menu's edge cannot also equip.
+      if (tappable && this.contextMenu === null) {
         addButton(ctx, buttons, {
           ...cell,
           action: () => this.equipFromBag(slotIdx, this.filterKey, inventory),
@@ -611,8 +694,11 @@ export class EquipmentTabController {
   ): void {
     const navY =
       boxY + CONTENT_TOP_Y + BAG_ROWS * bagCellSize + (BAG_ROWS - 1) * BAG_CELL_GAP + NAV_ROW_GAP;
-    const pages = pageCount(inventory.bag.slots.length);
-    const navButtonW = Math.min(NAV_BUTTON_W, Math.floor(bagW / 2));
+    const pages = pageCount(this.wearableBagSlotIndices(inventory).length);
+    // Prev/Next split the full row between them, and the page count sits on its
+    // own line beneath — a label squeezed into the gap between two buttons
+    // outgrows that gap on a narrow bag column and overlaps one of them.
+    const navButtonW = Math.max(1, Math.floor((bagW - NAV_BUTTON_GAP) / 2));
 
     addButton(ctx, buttons, {
       x: bagX,
@@ -642,9 +728,10 @@ export class EquipmentTabController {
       },
     });
 
+    const pageLabelY = navY + NAV_ROW_H + PAGE_LABEL_GAP;
     drawText(ctx, `${this.page + 1} / ${pages}`, {
       x: bagX + bagW / 2,
-      y: navY + (NAV_ROW_H - NAV_LABEL_SIZE) / 2,
+      y: pageLabelY,
       size: NAV_LABEL_SIZE,
       color: '#64748b',
       align: 'center',
@@ -657,7 +744,7 @@ export class EquipmentTabController {
         : `Showing what fits ${keySubSlot(filterKey)}. Click that slot again to stop.`;
     drawText(ctx, hint, {
       x: bagX,
-      y: navY + NAV_ROW_H + HINT_GAP,
+      y: pageLabelY + PAGE_LABEL_LINE_H + HINT_GAP,
       ...TEXT_PRESETS.controls,
       size: HINT_SIZE,
       width: bagW,
@@ -665,7 +752,7 @@ export class EquipmentTabController {
   }
 
   private renderHover(ctx: CanvasRenderingContext2D, inventory: Inventory): void {
-    if (this.drag !== null) return;
+    if (this.drag !== null || this.contextMenu !== null || this.descriptionItem !== null) return;
 
     const hoverKey = this.hoverKey;
     if (hoverKey !== null) {
@@ -697,6 +784,35 @@ export class EquipmentTabController {
       DRAG_GHOST_SIZE,
       1,
     );
+    ctx.restore();
+  }
+
+  /** The circle-and-bar "no" laid over a doll slot that refuses the drag. */
+  private renderDenyMark(
+    ctx: CanvasRenderingContext2D,
+    slot: { x: number; y: number; w: number; h: number },
+  ): void {
+    const centerX = slot.x + slot.w / 2;
+    const centerY = slot.y + slot.h / 2;
+    const radius = Math.min(slot.w, slot.h) * DENY_MARK_RADIUS_FRACTION;
+
+    ctx.save();
+    ctx.globalAlpha = DENY_MARK_ALPHA;
+    ctx.strokeStyle = DENY_MARK_COLOR;
+    ctx.lineWidth = DENY_MARK_BAR_WIDTH;
+    ctx.lineCap = 'round';
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const barDx = Math.cos(DENY_MARK_BAR_ANGLE) * radius;
+    const barDy = Math.sin(DENY_MARK_BAR_ANGLE) * radius;
+    ctx.beginPath();
+    ctx.moveTo(centerX - barDx, centerY + barDy);
+    ctx.lineTo(centerX + barDx, centerY - barDy);
+    ctx.stroke();
+
     ctx.restore();
   }
 
@@ -743,6 +859,7 @@ export class EquipmentTabController {
       startY: my,
       moved: false,
     };
+    this.startPressTimer(cell.slotIdx, item, mx, my);
   }
 
   handleMouseMove(mx: number, my: number): void {
@@ -755,7 +872,10 @@ export class EquipmentTabController {
     if (drag !== null) {
       drag.mx = mx;
       drag.my = my;
-      if (Math.hypot(mx - drag.startX, my - drag.startY) > DRAG_SLOP_PX) drag.moved = true;
+      if (Math.hypot(mx - drag.startX, my - drag.startY) > DRAG_SLOP_PX) {
+        drag.moved = true;
+        this.clearPressTimer();
+      }
       return;
     }
 
@@ -765,6 +885,7 @@ export class EquipmentTabController {
   }
 
   handleMouseUp(mx: number, my: number, human: HumanPlayer, cat: CatPlayer): void {
+    this.clearPressTimer();
     const drag = this.drag;
     this.drag = null;
     if (drag === null) return;
@@ -811,6 +932,11 @@ export class EquipmentTabController {
    * not also see it.
    */
   handleClickBefore(mx: number, my: number): boolean {
+    // A pinned description is "shown until the next click" — cleared here so
+    // any click reaching this tab dismisses it, not only one that misses
+    // every button. A click that also lands on a button still acts normally;
+    // this only stops the tooltip from outliving the click that follows it.
+    this.descriptionItem = null;
     if (this.suppressNextClick) {
       this.suppressNextClick = false;
       return true;
@@ -836,11 +962,102 @@ export class EquipmentTabController {
   /** Nothing on the tab took the click, so the filter the bag is showing is over. */
   handleClickMissed(): void {
     this.filterKey = null;
+    this.contextMenu = null;
+    this.descriptionItem = null;
+  }
+
+  // ── Bag item context menu ────────────────────────────────────────────────
+
+  /** Arms a timer that opens the pressed bag item's context menu if the press holds still. */
+  private startPressTimer(slotIdx: number, item: InventoryItem, x: number, y: number): void {
+    this.clearPressTimer();
+    this.pressTimer = setTimeout(() => {
+      this.pressTimer = null;
+      this.drag = null;
+      this.suppressNextClick = true;
+      this.contextMenu = { slotIdx, item, x, y };
+    }, BAG_LONG_PRESS_MS);
+  }
+
+  private clearPressTimer(): void {
+    if (this.pressTimer !== null) {
+      clearTimeout(this.pressTimer);
+      this.pressTimer = null;
+    }
+  }
+
+  private renderContextMenu(
+    ctx: CanvasRenderingContext2D,
+    buttons: ButtonRect[],
+    inventory: Inventory,
+  ): void {
+    const menu = this.contextMenu;
+    if (menu === null) return;
+
+    const equipped = inventory.isSlotEquipped(menu.slotIdx);
+    const options = [
+      equipped ? CONTEXT_OPTION_UNEQUIP : CONTEXT_OPTION_EQUIP,
+      CONTEXT_OPTION_DESCRIPTION,
+      CONTEXT_OPTION_CANCEL,
+    ];
+    const menuH = options.length * CONTEXT_MENU_OPTION_H + CONTEXT_MENU_PAD * 2;
+    const x = Math.min(menu.x, viewportWidth() - CONTEXT_MENU_WIDTH - CONTEXT_MENU_SCREEN_MARGIN);
+    const y = Math.min(menu.y, viewportHeight() - menuH - CONTEXT_MENU_SCREEN_MARGIN);
+
+    drawBox(ctx, { x, y, width: CONTEXT_MENU_WIDTH, height: menuH, ...BOX_PRESETS.tooltip });
+
+    options.forEach((label, i) => {
+      addButton(ctx, buttons, {
+        x: x + CONTEXT_MENU_PAD,
+        y: y + CONTEXT_MENU_PAD + i * CONTEXT_MENU_OPTION_H,
+        width: CONTEXT_MENU_WIDTH - CONTEXT_MENU_PAD * 2,
+        height: CONTEXT_MENU_OPTION_H,
+        label,
+        labelSize: CONTEXT_MENU_LABEL_SIZE,
+        ...BUTTON_PRESETS.primary,
+        action: () => this.handleContextMenuOption(label, menu, inventory),
+      });
+    });
+  }
+
+  private handleContextMenuOption(
+    label: string,
+    menu: { slotIdx: number; item: InventoryItem; x: number; y: number },
+    inventory: Inventory,
+  ): void {
+    this.contextMenu = null;
+    switch (label) {
+      case CONTEXT_OPTION_EQUIP:
+        this.equipFromBag(menu.slotIdx, null, inventory);
+        return;
+      case CONTEXT_OPTION_UNEQUIP:
+        inventory.unequipById(menu.item.id);
+        this.owner?.onEquipmentChanged();
+        return;
+      case CONTEXT_OPTION_DESCRIPTION:
+        this.descriptionItem = menu.item;
+        return;
+      default:
+        return;
+    }
+  }
+
+  private renderDescriptionTooltip(ctx: CanvasRenderingContext2D): void {
+    const item = this.descriptionItem;
+    if (item === null) return;
+    drawItemTooltip(ctx, item, this.pointerX, this.pointerY, null);
   }
 
   // ── Equip / unequip ────────────────────────────────────────────────────────
 
-  private selectCrawler(kind: CrawlerKind): void {
+  /**
+   * Switches the doll and bag to `kind`'s gear, dropping any in-flight drag or
+   * filter — the same reset a click on the crawler toggle does. Exposed so a
+   * caller can land on this tab already pointed at a specific crawler (the
+   * Inventory tab's "Manage X Equipment" buttons) instead of always opening on
+   * whichever side was selected last.
+   */
+  selectCrawler(kind: CrawlerKind): void {
     this.side = kind;
     this.page = 0;
     this.filterKey = null;
@@ -925,6 +1142,15 @@ export class EquipmentTabController {
 
   private selectedPlayer(human: HumanPlayer, cat: CatPlayer): HumanPlayer | CatPlayer {
     return this.side === 'human' ? human : cat;
+  }
+
+  /** Bag slot indices holding a wearable item, in bag order — everything else never shows here. */
+  private wearableBagSlotIndices(inventory: Inventory): number[] {
+    const indices: number[] = [];
+    inventory.bag.slots.forEach((item, slotIdx) => {
+      if (item !== null && isWearable(item)) indices.push(slotIdx);
+    });
+    return indices;
   }
 
   private matchesSearch(item: InventoryItem): boolean {

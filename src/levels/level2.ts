@@ -30,11 +30,19 @@ const LEVEL2_XP_HALF_MULTIPLIER = 0.5;
 const LEVEL2_XP_THIRD_MULTIPLIER = 0.3;
 const LEVEL2_XP_FIFTH_MULTIPLIER = 0.2;
 
+/**
+ * Level band shared by every ordinary floor-2 mob — troglodytes, llamas,
+ * goblins and their archer escorts, in rooms and hallways alike. Tuned so
+ * the floor's ambient ceiling lands the recommended arrival level at 10.
+ */
+const AMBIENT_MIN_LEVEL = 4;
+const AMBIENT_MAX_LEVEL = 7;
+
 /** Goblin archers per goblin room, and the band they spawn in. */
 const ARCHER_MIN_PER_ROOM = 1;
 const ARCHER_MAX_PER_ROOM = 2;
-const ARCHER_MIN_LEVEL = 3;
-const ARCHER_MAX_LEVEL = 6;
+const ARCHER_MIN_LEVEL = AMBIENT_MIN_LEVEL;
+const ARCHER_MAX_LEVEL = AMBIENT_MAX_LEVEL;
 
 /**
  * Boss level bands. Both bosses spawned at base stats before this — a Krakaren
@@ -80,24 +88,24 @@ export const level2: LevelDef = {
       chance: 0.4,
       minCount: 1,
       maxCount: 3,
-      minLevel: 3,
-      maxLevel: 6,
+      minLevel: AMBIENT_MIN_LEVEL,
+      maxLevel: AMBIENT_MAX_LEVEL,
     },
     {
       type: 'llama',
       chance: 0.35,
       minCount: 1,
       maxCount: 3,
-      minLevel: 3,
-      maxLevel: 6,
+      minLevel: AMBIENT_MIN_LEVEL,
+      maxLevel: AMBIENT_MAX_LEVEL,
     },
     {
       type: 'goblin',
       chance: 0.25,
       minCount: 3,
       maxCount: 5,
-      minLevel: 3,
-      maxLevel: 6,
+      minLevel: AMBIENT_MIN_LEVEL,
+      maxLevel: AMBIENT_MAX_LEVEL,
       // Floor 2's goblin rooms always carry archers, and up to two of them: by
       // here the player has met one and knows what it does, so the question the
       // room asks is whether they can reach it through the melee line.
@@ -113,9 +121,9 @@ export const level2: LevelDef = {
     },
   ],
   hallwayMobs: [
-    { type: 'troglodyte', chance: 0.3, minLevel: 3, maxLevel: 6 },
-    { type: 'goblin', chance: 0.3, minLevel: 3, maxLevel: 6 },
-    { type: 'rat', chance: 0.3, minLevel: 3, maxLevel: 6 },
+    { type: 'troglodyte', chance: 0.3, minLevel: AMBIENT_MIN_LEVEL, maxLevel: AMBIENT_MAX_LEVEL },
+    { type: 'goblin', chance: 0.3, minLevel: AMBIENT_MIN_LEVEL, maxLevel: AMBIENT_MAX_LEVEL },
+    { type: 'rat', chance: 0.3, minLevel: AMBIENT_MIN_LEVEL, maxLevel: AMBIENT_MAX_LEVEL },
   ],
   bossRooms: [
     { type: 'krakaren_clone', minLevel: KRAKAREN_MIN_LEVEL, maxLevel: KRAKAREN_MAX_LEVEL },

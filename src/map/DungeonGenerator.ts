@@ -2492,8 +2492,13 @@ function buildDungeon(
   const MIN_ROOM_SIZE = 7;
   const treasureRoomTarget = Math.max(1, Math.round(regularRooms.length * TREASURE_ROOM_RATIO));
 
+  // A treasure chest and a stairwell in the same room let a player grab both
+  // without exploring — exclude any room a stairwell already occupies.
   const eligibleRegularRooms = regularRooms.filter(
-    (r) => r.w >= MIN_ROOM_SIZE && r.h >= MIN_ROOM_SIZE,
+    (r) =>
+      r.w >= MIN_ROOM_SIZE &&
+      r.h >= MIN_ROOM_SIZE &&
+      !stairwellTiles.some((s) => s.x >= r.x && s.x < r.x + r.w && s.y >= r.y && s.y < r.y + r.h),
   );
   // Fisher-Yates shuffle for a uniform distribution
   const shuffledEligible = [...eligibleRegularRooms];

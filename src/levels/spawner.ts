@@ -293,6 +293,7 @@ function ambientBandCeiling(def: LevelDef): number {
  * a legal choice the stairwell menu warns about and never blocks.
  */
 export function recommendedPartyLevelFor(def: LevelDef, profile: DifficultyProfile): number {
+  if (def.recommendedLevelOverride !== undefined) return def.recommendedLevelOverride;
   const ceiling = ambientBandCeiling(def);
   for (let level = 1; level < MAX_RECOMMENDED_PARTY_LEVEL; level++) {
     if (Math.round(level * profile.ambientLevelRatio) >= ceiling) return level;

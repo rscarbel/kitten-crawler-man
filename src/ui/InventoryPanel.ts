@@ -16,7 +16,7 @@ import { drawWoodPileSprite } from '../sprites/questNPCSprite';
 import { InventoryInteraction } from './InventoryInteraction';
 import { SearchField } from './SearchField';
 import { drawCooldownOverlay } from './CooldownOverlay';
-import { drawText } from './TextBox';
+import { drawText, measureTextBox } from './TextBox';
 import { pointInRect } from '../utils';
 import { drawBox, drawDivider, BOX_PRESETS } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
@@ -810,11 +810,19 @@ export class InventoryPanel {
     const pad = INFO_POPUP_PAD;
 
     const descText = item.description ?? 'No description available.';
+    const textW = popW - pad * 2;
 
-    // Estimate popup height: title line + divider space + description lines + hint
+    // Estimate popup height: title lines + divider space + description lines + hint
     // Use a rough line estimate for pre-draw sizing (similar to original)
+    const titleLines = measureTextBox(ctx, item.name, {
+      size: INFO_POPUP_TITLE_SIZE,
+      bold: true,
+      width: textW,
+      lineHeight: lineH,
+    }).lineCount;
     const approxDescLines = Math.ceil(descText.length / INFO_POPUP_DESC_CHARS_PER_LINE) || 1;
-    const popH = pad + lineH + pad * INFO_POPUP_PAD_HALF + approxDescLines * lineH + pad;
+    const popH =
+      pad + titleLines * lineH + pad * INFO_POPUP_PAD_HALF + approxDescLines * lineH + pad;
     const px = Math.floor((viewportWidth() - popW) / 2);
     const py = Math.floor((viewportHeight() - popH) / 2);
 
@@ -828,19 +836,22 @@ export class InventoryPanel {
       borderWidth: 1.5,
     });
 
-    // Title: baseline_y = py+pad+lineH-3, size=11 → top_y = baseline_y - 9
+    // Title: baseline_y = py+pad+lineH-3, size=11 → top_y = baseline_y - 9; wraps onto
+    // as many lines as it needs, so a long enchanted-gear name never spills past the box.
     drawText(ctx, item.name, {
       x: px + pad,
       y: py + pad + lineH - INFO_TITLE_BOTTOM_OFFSET - INFO_POPUP_TITLE_CORRECTION,
       bold: true,
       size: INFO_POPUP_TITLE_SIZE,
       color: '#e2e8f0',
+      width: textW,
+      lineHeight: lineH,
     });
 
     // Divider
     drawDivider(ctx, {
       x: px + INFO_DIVIDER_OFFSET_X,
-      y: py + pad + lineH + 2,
+      y: py + pad + titleLines * lineH + 2,
       length: popW - INFO_DIVIDER_MARGIN_X,
       color: '#1e293b',
     });
@@ -852,12 +863,12 @@ export class InventoryPanel {
       y:
         py +
         pad * INFO_POPUP_PAD_TIMES_1_5 +
-        lineH * 2 -
+        lineH * (titleLines + 1) -
         INFO_POPUP_DESC_BASELINE_OFFSET -
         INFO_POPUP_DESC_BASELINE_CORRECTION,
       size: INFO_POPUP_DESC_SIZE,
       color: '#94a3b8',
-      width: popW - pad * 2,
+      width: textW,
       lineHeight: lineH,
     });
 

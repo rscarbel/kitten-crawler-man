@@ -47,16 +47,16 @@ const SILVER_SHADE = '#7d838e';
 const SLATE = '#6c7280';
 const SLATE_LIGHT = '#9aa1ad';
 const WHITE_GLINT = '#ffffff';
-const TEAL = '#2f8f7a';
-const TEAL_SHADE = '#1c5a4c';
-const TEAL_LIGHT = '#63c4ac';
-const STRAP = '#5a4632';
+const FLUFF_WHITE = '#ffffff';
+/** A faint fae-lavender tint on the alternating ruffle petals, so the collar reads as fluff, not paper. */
+const FLUFF_LIGHT = '#f2eefa';
+const FLUFF_SHADE = '#ddd6ea';
+const FLUFF_SHADE_DARK = '#b9aecb';
 const GOLD = '#d9a441';
 const GOLD_SHADE = '#966c22';
 const GEM = '#4fd0e0';
-const SKIN = '#c99a72';
-const SKIN_SHADE = '#9a7050';
 const BRASS = '#e2b13c';
+const BRASS_SHADE = '#9c7420';
 const STINK = '#8fd44a';
 const LEATHER_DARK = '#3c2f26';
 const LEATHER_MID = '#5d4736';
@@ -106,27 +106,31 @@ const TALISMAN_GLINT_X = 0.32;
 const TALISMAN_GLINT_Y = 0.42;
 const TALISMAN_GLINT_R = 0.03;
 
-const CRUPPER_LEFT = 0.14;
-const CRUPPER_RIGHT = 0.86;
-const CRUPPER_TOP = 0.16;
-const CRUPPER_BOTTOM = 0.66;
-const CRUPPER_CORNER = 0.16;
-const CRUPPER_SCALE_ROWS = 3;
-const CRUPPER_SCALE_COLS = 4;
-const CRUPPER_SCALE_R = 0.075;
-const CRUPPER_SCALE_TOP = 0.26;
-const CRUPPER_ROW_SPACING = 0.14;
-const CRUPPER_SHINE_INSET = 0.08;
-/** The shine is a short arc over the shoulder of the guard, not a full sweep. */
-const CRUPPER_SHINE_START_TURNS = -0.125;
-const CRUPPER_SHINE_END_TURNS = 0.083;
-const CRUPPER_SHINE_START_ANGLE = FULL_CIRCLE * CRUPPER_SHINE_START_TURNS;
-const CRUPPER_SHINE_END_ANGLE = FULL_CIRCLE * CRUPPER_SHINE_END_TURNS;
-const CRUPPER_SHINE_RADIUS_FRACTION = 0.5;
-const CRUPPER_STRAP_WIDTH = 0.08;
-const CRUPPER_STRAP_BOTTOM = 0.88;
-const CRUPPER_STRAP_LEFT_X = 0.26;
-const CRUPPER_STRAP_RIGHT_X = 0.66;
+// A quadruped's crupper is a ring worn around the haunches, so the icon is drawn
+// as a fluffy annulus (band + hole) rather than the flat rectangular scale-mail
+// plate an earlier version used — the hole is what sells "goes around a body".
+const CRUPPER_CY = 0.54;
+const CRUPPER_HOLE_R = 0.19;
+const CRUPPER_BAND_OUTER_R = 0.3;
+const CRUPPER_RUFFLE_ORBIT_R = 0.33;
+const CRUPPER_RUFFLE_R = 0.1;
+const CRUPPER_RUFFLE_COUNT = 12;
+/** A darker crescent along the lower band reads as volume without a gradient. */
+const CRUPPER_SHADE_MID_R = (CRUPPER_BAND_OUTER_R + CRUPPER_HOLE_R) / 2;
+const CRUPPER_SHADE_WIDTH = CRUPPER_BAND_OUTER_R - CRUPPER_HOLE_R;
+const CRUPPER_SHADE_START_TURNS = 0.1;
+const CRUPPER_SHADE_END_TURNS = 0.4;
+const CRUPPER_SHADE_START_ANGLE = FULL_CIRCLE * CRUPPER_SHADE_START_TURNS;
+const CRUPPER_SHADE_END_ANGLE = FULL_CIRCLE * CRUPPER_SHADE_END_TURNS;
+const CRUPPER_SHINE_X_OFFSET = -0.12;
+const CRUPPER_SHINE_Y_OFFSET = -0.16;
+const CRUPPER_SHINE_R = 0.045;
+/** The bow sits on the band's bottom edge, at the midpoint radius between hole and outer rim. */
+const CRUPPER_BOW_Y_OFFSET = CRUPPER_SHADE_MID_R;
+const CRUPPER_BOW_R = 0.045;
+const CRUPPER_BOW_TAIL_LENGTH = 0.09;
+const CRUPPER_BOW_NOTCH_FRACTION = 0.6;
+const CRUPPER_BOW_TAIL_SPREAD = 0.045;
 
 const BRACELET_CY = 0.5;
 const BRACELET_RX = 0.3;
@@ -138,24 +142,20 @@ const BRACELET_GEM_X = 0.5;
 const BRACELET_GEM_Y = 0.3;
 const BRACELET_GEM_R = 0.055;
 
-const FOOT_HEEL_X = 0.24;
-const FOOT_HEEL_Y = 0.74;
-const FOOT_ARCH_Y = 0.46;
-const FOOT_BALL_X = 0.66;
-const FOOT_TOE_X = 0.82;
-const FOOT_TOE_Y = 0.62;
-const FOOT_SOLE_Y = 0.82;
-const TOE_RING_CX = 0.74;
-const TOE_RING_CY = 0.7;
-const TOE_RING_RX = 0.075;
-const TOE_RING_RY = 0.055;
-const TOE_RING_WIDTH = 0.04;
+const TOE_RING_CX = 0.5;
+const TOE_RING_CY = 0.58;
+const TOE_RING_OUTER_R = 0.24;
+const TOE_RING_BAND = 0.06;
+const TOE_RING_SHINE_START_TURNS = -0.2;
+const TOE_RING_SHINE_END_TURNS = 0.05;
+const TOE_RING_SHINE_START_ANGLE = FULL_CIRCLE * TOE_RING_SHINE_START_TURNS;
+const TOE_RING_SHINE_END_ANGLE = FULL_CIRCLE * TOE_RING_SHINE_END_TURNS;
 const STINK_WISP_COUNT = 3;
-const STINK_WISP_X = 0.6;
-const STINK_WISP_TOP = 0.14;
-const STINK_WISP_SPACING = 0.11;
-const STINK_WISP_R = 0.035;
-const STINK_WISP_STAGGER = 0.08;
+const STINK_WISP_X = 0.5;
+const STINK_WISP_TOP = 0.1;
+const STINK_WISP_SPACING = 0.09;
+const STINK_WISP_R = 0.04;
+const STINK_WISP_STAGGER = 0.1;
 
 const KNEEPAD_LEFT_CX = 0.29;
 const KNEEPAD_RIGHT_CX = 0.71;
@@ -171,25 +171,45 @@ const KNEEPAD_SPIKE_HALF_WIDTH = 0.045;
 const KNEEPAD_SPIKE_SPREAD_TURNS = 0.62;
 const KNEEPAD_SPIKE_SPREAD = Math.PI * KNEEPAD_SPIKE_SPREAD_TURNS;
 
-const FIST_LEFT = 0.2;
-const FIST_RIGHT = 0.78;
-const FIST_TOP = 0.24;
-const FIST_BOTTOM = 0.7;
-const FIST_CORNER = 0.12;
-const FIST_CUFF_TOP = 0.7;
-const FIST_CUFF_BOTTOM = 0.86;
-const FIST_CUFF_INSET = 0.06;
-const FIST_KNUCKLE_COUNT = 4;
-const FIST_KNUCKLE_Y = 0.32;
-const FIST_SPIKE_HEIGHT = 0.12;
-const FIST_SPIKE_HALF_WIDTH = 0.04;
-const FIST_FINGER_LINE_TOP = 0.4;
-const FIST_FINGER_LINE_BOTTOM = 0.66;
-const FIST_RIVET_R = 0.028;
-const FIST_RIVET_Y = 0.78;
-const FIST_RIVET_COUNT = 3;
-/** Centres a knuckle spike within its share of the fist's width. */
-const FIST_KNUCKLE_SLOT_CENTER = 0.5;
+const GAUNTLET_PALM_LEFT = 0.22;
+const GAUNTLET_PALM_RIGHT = 0.78;
+const GAUNTLET_PALM_TOP = 0.46;
+const GAUNTLET_PALM_BOTTOM = 0.7;
+const GAUNTLET_PALM_CORNER = 0.05;
+
+const GAUNTLET_CUFF_LEFT = 0.14;
+const GAUNTLET_CUFF_RIGHT = 0.86;
+const GAUNTLET_CUFF_TOP = 0.7;
+const GAUNTLET_CUFF_BOTTOM = 0.88;
+const GAUNTLET_CUFF_CORNER = 0.03;
+const GAUNTLET_CUFF_RIVET_R = 0.026;
+const GAUNTLET_CUFF_RIVET_Y = 0.79;
+const GAUNTLET_CUFF_RIVET_COUNT = 3;
+
+const GAUNTLET_FINGER_COUNT = 4;
+const GAUNTLET_FINGER_GAP = 0.02;
+const GAUNTLET_FINGER_CORNER = 0.03;
+// Tip height per finger (index → pinky), shortest-to-longest-to-shortest so the
+// silhouette reads as a hand rather than four identical bars.
+const GAUNTLET_FINGER_TIP_Y_INDEX = 0.22;
+const GAUNTLET_FINGER_TIP_Y_MIDDLE = 0.14;
+const GAUNTLET_FINGER_TIP_Y_RING = 0.16;
+const GAUNTLET_FINGER_TIP_Y_PINKY = 0.26;
+const GAUNTLET_FINGER_TIP_YS = [
+  GAUNTLET_FINGER_TIP_Y_INDEX,
+  GAUNTLET_FINGER_TIP_Y_MIDDLE,
+  GAUNTLET_FINGER_TIP_Y_RING,
+  GAUNTLET_FINGER_TIP_Y_PINKY,
+] as const;
+const GAUNTLET_KNUCKLE_R = 0.028;
+const GAUNTLET_KNUCKLE_INSET = 0.06;
+
+const GAUNTLET_THUMB_PIVOT_X = 0.19;
+const GAUNTLET_THUMB_PIVOT_Y = 0.6;
+const GAUNTLET_THUMB_LENGTH = 0.22;
+const GAUNTLET_THUMB_WIDTH = 0.12;
+/** Radians off vertical; negative rotates the thumb out to the palm's left side. */
+const GAUNTLET_THUMB_ANGLE = -0.95;
 
 const SLING_HANDLE_BOTTOM = 0.9;
 const SLING_HANDLE_TOP = 0.56;
@@ -370,63 +390,64 @@ function drawFaeScaleCrupper(
   y: number,
   size: number,
 ): void {
-  const left = x + size * CRUPPER_LEFT;
-  const right = x + size * CRUPPER_RIGHT;
-  const top = y + size * CRUPPER_TOP;
-  const bottom = y + size * CRUPPER_BOTTOM;
-  const corner = size * CRUPPER_CORNER;
+  const cx = x + size * ICON_CX;
+  const cy = y + size * CRUPPER_CY;
+  const holeR = size * CRUPPER_HOLE_R;
+  const bandOuterR = size * CRUPPER_BAND_OUTER_R;
 
-  for (const strapX of [CRUPPER_STRAP_LEFT_X, CRUPPER_STRAP_RIGHT_X]) {
-    ctx.fillStyle = STRAP;
-    ctx.fillRect(
-      x + size * strapX,
-      bottom - corner,
-      size * CRUPPER_STRAP_WIDTH,
-      y + size * CRUPPER_STRAP_BOTTOM - (bottom - corner),
-    );
+  // Base band: two circles in one path so the even-odd rule punches the hole
+  // a quadruped's body passes through, rather than filling a solid disc.
+  ctx.fillStyle = FLUFF_SHADE;
+  ctx.beginPath();
+  ctx.arc(cx, cy, bandOuterR, 0, FULL_CIRCLE);
+  ctx.arc(cx, cy, holeR, 0, FULL_CIRCLE);
+  ctx.fill('evenodd');
+
+  // A darker crescent along the lower band reads as volume without a gradient.
+  ctx.strokeStyle = FLUFF_SHADE_DARK;
+  ctx.lineWidth = size * CRUPPER_SHADE_WIDTH;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * CRUPPER_SHADE_MID_R, CRUPPER_SHADE_START_ANGLE, CRUPPER_SHADE_END_ANGLE);
+  ctx.stroke();
+
+  // Ruffle petals ring the outer edge — the fluffy, fancy-clothing read.
+  for (let i = 0; i < CRUPPER_RUFFLE_COUNT; i++) {
+    const angle = (i / CRUPPER_RUFFLE_COUNT) * FULL_CIRCLE;
+    const px = cx + Math.cos(angle) * size * CRUPPER_RUFFLE_ORBIT_R;
+    const py = cy + Math.sin(angle) * size * CRUPPER_RUFFLE_ORBIT_R;
+    ctx.fillStyle = i % 2 === 0 ? FLUFF_WHITE : FLUFF_LIGHT;
+    ctx.beginPath();
+    ctx.arc(px, py, size * CRUPPER_RUFFLE_R, 0, FULL_CIRCLE);
+    ctx.fill();
   }
 
-  ctx.fillStyle = TEAL_SHADE;
+  // A small gold bow, because a scale crupper meant to look pretty needs one
+  // piece of finery that isn't fabric.
+  const bowY = cy + size * CRUPPER_BOW_Y_OFFSET;
+  ctx.fillStyle = GOLD;
   ctx.beginPath();
-  ctx.moveTo(left + corner, top);
-  ctx.lineTo(right - corner, top);
-  ctx.quadraticCurveTo(right, top, right, top + corner);
-  ctx.lineTo(right, bottom - corner);
-  ctx.quadraticCurveTo(right, bottom, right - corner, bottom);
-  ctx.lineTo(left + corner, bottom);
-  ctx.quadraticCurveTo(left, bottom, left, bottom - corner);
-  ctx.lineTo(left, top + corner);
-  ctx.quadraticCurveTo(left, top, left + corner, top);
+  ctx.moveTo(cx, bowY);
+  ctx.lineTo(cx - size * CRUPPER_BOW_TAIL_SPREAD, bowY + size * CRUPPER_BOW_TAIL_LENGTH);
+  ctx.lineTo(cx, bowY + size * CRUPPER_BOW_TAIL_LENGTH * CRUPPER_BOW_NOTCH_FRACTION);
+  ctx.lineTo(cx + size * CRUPPER_BOW_TAIL_SPREAD, bowY + size * CRUPPER_BOW_TAIL_LENGTH);
   ctx.closePath();
   ctx.fill();
-
-  // Overlapping half-discs are the scale read; a flat fill would be a saddle.
-  ctx.save();
-  ctx.clip();
-  const scaleSpan = (right - left) / CRUPPER_SCALE_COLS;
-  for (let row = 0; row < CRUPPER_SCALE_ROWS; row++) {
-    const scaleY = y + size * (CRUPPER_SCALE_TOP + row * CRUPPER_ROW_SPACING);
-    const rowOffset = row % 2 === 0 ? 0 : scaleSpan / 2;
-    ctx.fillStyle = row % 2 === 0 ? TEAL : TEAL_LIGHT;
-    for (let col = 0; col <= CRUPPER_SCALE_COLS; col++) {
-      ctx.beginPath();
-      ctx.arc(left + rowOffset + col * scaleSpan, scaleY, size * CRUPPER_SCALE_R, Math.PI, 0);
-      ctx.fill();
-    }
-  }
+  ctx.fillStyle = GOLD_SHADE;
+  ctx.beginPath();
+  ctx.arc(cx, bowY, size * CRUPPER_BOW_R, 0, FULL_CIRCLE);
+  ctx.fill();
 
   ctx.strokeStyle = WHITE_GLINT;
   ctx.lineWidth = OUTLINE_WIDTH;
   ctx.beginPath();
   ctx.arc(
-    left + size * CRUPPER_SHINE_INSET,
-    top + size * CRUPPER_SHINE_INSET,
-    (right - left) * CRUPPER_SHINE_RADIUS_FRACTION,
-    CRUPPER_SHINE_START_ANGLE,
-    CRUPPER_SHINE_END_ANGLE,
+    cx + size * CRUPPER_SHINE_X_OFFSET,
+    cy + size * CRUPPER_SHINE_Y_OFFSET,
+    size * CRUPPER_SHINE_R,
+    0,
+    FULL_CIRCLE,
   );
   ctx.stroke();
-  ctx.restore();
 }
 
 function drawBracelet(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
@@ -470,39 +491,35 @@ function drawBracelet(ctx: CanvasRenderingContext2D, x: number, y: number, size:
 }
 
 function drawToeRing(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
-  ctx.fillStyle = SKIN;
+  const cx = x + size * TOE_RING_CX;
+  const cy = y + size * TOE_RING_CY;
+  const outerR = size * TOE_RING_OUTER_R;
+  const innerR = outerR - size * TOE_RING_BAND;
+
+  // Both circles go into one path so the even-odd rule punches the band's
+  // hole, the same technique the bracelet icon uses.
+  ctx.fillStyle = BRASS;
   ctx.beginPath();
-  ctx.moveTo(x + size * FOOT_HEEL_X, y + size * FOOT_HEEL_Y);
-  ctx.quadraticCurveTo(
-    x + size * FOOT_HEEL_X,
-    y + size * FOOT_ARCH_Y,
-    x + size * FOOT_BALL_X,
-    y + size * FOOT_ARCH_Y,
-  );
-  ctx.lineTo(x + size * FOOT_TOE_X, y + size * FOOT_TOE_Y);
-  ctx.lineTo(x + size * FOOT_TOE_X, y + size * FOOT_SOLE_Y);
-  ctx.lineTo(x + size * FOOT_HEEL_X, y + size * FOOT_SOLE_Y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = SKIN_SHADE;
+  ctx.arc(cx, cy, outerR, 0, FULL_CIRCLE);
+  ctx.arc(cx, cy, innerR, 0, FULL_CIRCLE);
+  ctx.fill('evenodd');
+
+  ctx.strokeStyle = BRASS_SHADE;
   ctx.lineWidth = OUTLINE_WIDTH;
-  ctx.stroke();
-
-  ctx.strokeStyle = BRASS;
-  ctx.lineWidth = size * TOE_RING_WIDTH;
   ctx.beginPath();
-  ctx.ellipse(
-    x + size * TOE_RING_CX,
-    y + size * TOE_RING_CY,
-    size * TOE_RING_RX,
-    size * TOE_RING_RY,
-    0,
-    0,
-    FULL_CIRCLE,
-  );
+  ctx.arc(cx, cy, outerR, 0, FULL_CIRCLE);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, FULL_CIRCLE);
   ctx.stroke();
 
-  // The skunk is the joke the item is named for; without the wisps this is a foot.
+  ctx.strokeStyle = WHITE_GLINT;
+  ctx.lineWidth = OUTLINE_WIDTH;
+  ctx.beginPath();
+  ctx.arc(cx, cy, (outerR + innerR) / 2, TOE_RING_SHINE_START_ANGLE, TOE_RING_SHINE_END_ANGLE);
+  ctx.stroke();
+
+  // The skunk is the joke the item is named for; without the wisps this is a plain ring.
   ctx.fillStyle = STINK;
   for (let wisp = 0; wisp < STINK_WISP_COUNT; wisp++) {
     const wispX = x + size * (STINK_WISP_X + (wisp % 2 === 0 ? 0 : STINK_WISP_STAGGER));
@@ -559,65 +576,116 @@ function drawKneepads(ctx: CanvasRenderingContext2D, x: number, y: number, size:
 }
 
 function drawWarGauntlet(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
-  const left = x + size * FIST_LEFT;
-  const right = x + size * FIST_RIGHT;
-  const top = y + size * FIST_TOP;
-  const bottom = y + size * FIST_BOTTOM;
-  const corner = size * FIST_CORNER;
-  const knuckleSpan = (right - left) / FIST_KNUCKLE_COUNT;
+  const palmLeft = x + size * GAUNTLET_PALM_LEFT;
+  const palmRight = x + size * GAUNTLET_PALM_RIGHT;
+  const palmTop = y + size * GAUNTLET_PALM_TOP;
+  const palmBottom = y + size * GAUNTLET_PALM_BOTTOM;
+  const palmCorner = size * GAUNTLET_PALM_CORNER;
 
-  ctx.fillStyle = STEEL;
-  for (let knuckle = 0; knuckle < FIST_KNUCKLE_COUNT; knuckle++) {
-    const spikeCx = left + knuckleSpan * (knuckle + FIST_KNUCKLE_SLOT_CENTER);
-    const spikeBaseY = y + size * FIST_KNUCKLE_Y;
+  const cuffLeft = x + size * GAUNTLET_CUFF_LEFT;
+  const cuffRight = x + size * GAUNTLET_CUFF_RIGHT;
+  const cuffTop = y + size * GAUNTLET_CUFF_TOP;
+  const cuffBottom = y + size * GAUNTLET_CUFF_BOTTOM;
+  const cuffCorner = size * GAUNTLET_CUFF_CORNER;
+
+  // Cuff first: it sits behind the palm at the wrist, flared wider than the hand.
+  ctx.fillStyle = ORC_STEEL_LIGHT;
+  ctx.beginPath();
+  ctx.moveTo(cuffLeft, cuffTop);
+  ctx.lineTo(cuffRight, cuffTop);
+  ctx.lineTo(cuffRight, cuffBottom - cuffCorner);
+  ctx.quadraticCurveTo(cuffRight, cuffBottom, cuffRight - cuffCorner, cuffBottom);
+  ctx.lineTo(cuffLeft + cuffCorner, cuffBottom);
+  ctx.quadraticCurveTo(cuffLeft, cuffBottom, cuffLeft, cuffBottom - cuffCorner);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = ORC_STEEL;
+  ctx.lineWidth = OUTLINE_WIDTH;
+  ctx.stroke();
+
+  ctx.fillStyle = RIVET;
+  for (let rivet = 0; rivet < GAUNTLET_CUFF_RIVET_COUNT; rivet++) {
+    const rivetX =
+      cuffLeft + ((cuffRight - cuffLeft) * (rivet + 1)) / (GAUNTLET_CUFF_RIVET_COUNT + 1);
     ctx.beginPath();
-    ctx.moveTo(spikeCx - size * FIST_SPIKE_HALF_WIDTH, spikeBaseY);
-    ctx.lineTo(spikeCx, spikeBaseY - size * FIST_SPIKE_HEIGHT);
-    ctx.lineTo(spikeCx + size * FIST_SPIKE_HALF_WIDTH, spikeBaseY);
-    ctx.closePath();
+    ctx.arc(rivetX, y + size * GAUNTLET_CUFF_RIVET_Y, size * GAUNTLET_CUFF_RIVET_R, 0, FULL_CIRCLE);
     ctx.fill();
   }
 
+  // Palm block, drawn before the fingers so their base seam sits flush against it.
   ctx.fillStyle = ORC_STEEL;
   ctx.beginPath();
-  ctx.moveTo(left + corner, top);
-  ctx.lineTo(right - corner, top);
-  ctx.quadraticCurveTo(right, top, right, top + corner);
-  ctx.lineTo(right, bottom);
-  ctx.lineTo(left, bottom);
-  ctx.lineTo(left, top + corner);
-  ctx.quadraticCurveTo(left, top, left + corner, top);
+  ctx.moveTo(palmLeft + palmCorner, palmTop);
+  ctx.lineTo(palmRight - palmCorner, palmTop);
+  ctx.quadraticCurveTo(palmRight, palmTop, palmRight, palmTop + palmCorner);
+  ctx.lineTo(palmRight, palmBottom);
+  ctx.lineTo(palmLeft, palmBottom);
+  ctx.lineTo(palmLeft, palmTop + palmCorner);
+  ctx.quadraticCurveTo(palmLeft, palmTop, palmLeft + palmCorner, palmTop);
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = ORC_STEEL_LIGHT;
   ctx.lineWidth = OUTLINE_WIDTH;
   ctx.stroke();
 
-  // Finger divisions: a plain block reads as a brick rather than a closed fist.
-  ctx.strokeStyle = ORC_STEEL_LIGHT;
-  ctx.beginPath();
-  for (let finger = 1; finger < FIST_KNUCKLE_COUNT; finger++) {
-    const lineX = left + knuckleSpan * finger;
-    ctx.moveTo(lineX, y + size * FIST_FINGER_LINE_TOP);
-    ctx.lineTo(lineX, y + size * FIST_FINGER_LINE_BOTTOM);
-  }
-  ctx.stroke();
+  // Fingers: separate tapered, rounded-tip plates fanning up from the palm,
+  // each with a knuckle rivet, so the silhouette reads as an articulated
+  // glove instead of a spiked brick.
+  const fingerGap = size * GAUNTLET_FINGER_GAP;
+  const fingerWidth =
+    (palmRight - palmLeft - fingerGap * (GAUNTLET_FINGER_COUNT - 1)) / GAUNTLET_FINGER_COUNT;
+  const fingerCorner = size * GAUNTLET_FINGER_CORNER;
 
-  ctx.fillStyle = ORC_STEEL_LIGHT;
-  ctx.fillRect(
-    left - size * FIST_CUFF_INSET,
-    y + size * FIST_CUFF_TOP,
-    right - left + size * FIST_CUFF_INSET * 2,
-    size * (FIST_CUFF_BOTTOM - FIST_CUFF_TOP),
-  );
+  for (let finger = 0; finger < GAUNTLET_FINGER_COUNT; finger++) {
+    const fingerLeft = palmLeft + finger * (fingerWidth + fingerGap);
+    const fingerRight = fingerLeft + fingerWidth;
+    const tipY = y + size * GAUNTLET_FINGER_TIP_YS[finger % GAUNTLET_FINGER_TIP_YS.length];
 
-  ctx.fillStyle = RIVET;
-  for (let rivet = 0; rivet < FIST_RIVET_COUNT; rivet++) {
-    const rivetX = left + ((right - left) * (rivet + 1)) / (FIST_RIVET_COUNT + 1);
+    ctx.fillStyle = STEEL;
     ctx.beginPath();
-    ctx.arc(rivetX, y + size * FIST_RIVET_Y, size * FIST_RIVET_R, 0, FULL_CIRCLE);
+    ctx.moveTo(fingerLeft, palmTop);
+    ctx.lineTo(fingerLeft, tipY + fingerCorner);
+    ctx.quadraticCurveTo(fingerLeft, tipY, fingerLeft + fingerCorner, tipY);
+    ctx.lineTo(fingerRight - fingerCorner, tipY);
+    ctx.quadraticCurveTo(fingerRight, tipY, fingerRight, tipY + fingerCorner);
+    ctx.lineTo(fingerRight, palmTop);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = ORC_STEEL_LIGHT;
+    ctx.lineWidth = OUTLINE_WIDTH;
+    ctx.stroke();
+
+    ctx.fillStyle = RIVET;
+    ctx.beginPath();
+    ctx.arc(
+      (fingerLeft + fingerRight) / 2,
+      tipY + size * GAUNTLET_KNUCKLE_INSET,
+      size * GAUNTLET_KNUCKLE_R,
+      0,
+      FULL_CIRCLE,
+    );
     ctx.fill();
   }
+
+  // Thumb: a single angled plate rotated out from the palm's left edge.
+  ctx.save();
+  ctx.translate(x + size * GAUNTLET_THUMB_PIVOT_X, y + size * GAUNTLET_THUMB_PIVOT_Y);
+  ctx.rotate(GAUNTLET_THUMB_ANGLE);
+  const thumbHalfWidth = (size * GAUNTLET_THUMB_WIDTH) / 2;
+  const thumbLength = size * GAUNTLET_THUMB_LENGTH;
+  ctx.fillStyle = STEEL;
+  ctx.beginPath();
+  ctx.moveTo(-thumbHalfWidth, 0);
+  ctx.lineTo(-thumbHalfWidth, -thumbLength + thumbHalfWidth);
+  ctx.quadraticCurveTo(-thumbHalfWidth, -thumbLength, 0, -thumbLength);
+  ctx.quadraticCurveTo(thumbHalfWidth, -thumbLength, thumbHalfWidth, -thumbLength + thumbHalfWidth);
+  ctx.lineTo(thumbHalfWidth, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = ORC_STEEL_LIGHT;
+  ctx.lineWidth = OUTLINE_WIDTH;
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawSlingshot(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
