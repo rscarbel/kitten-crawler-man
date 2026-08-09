@@ -42,7 +42,7 @@ const SLAM_INTERVAL_ENRAGED = 300; // 5 seconds
 const SLAM_SHADOW_FRAMES = 90; // 1.5 second warning shadow
 const SLAM_IMPACT_FRAMES = 20; // visual impact duration
 const SLAM_KILL_RADIUS_TILE_MULTIPLIER = 1.5;
-const SLAM_KILL_RADIUS_PX = TILE_SIZE * SLAM_KILL_RADIUS_TILE_MULTIPLIER;
+export const SLAM_KILL_RADIUS_PX = TILE_SIZE * SLAM_KILL_RADIUS_TILE_MULTIPLIER;
 const SLAM_DAMAGE = 9999; // instant kill
 
 /**

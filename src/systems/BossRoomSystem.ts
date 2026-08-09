@@ -19,6 +19,7 @@ import {
   KrakarenClone,
   MAX_GUARD_TENTACLES,
   KRAKAREN_VISUAL_SCALE,
+  SLAM_KILL_RADIUS_PX,
 } from '../creatures/KrakarenClone';
 import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
 import { hasRoomToMove } from '../map/findWalkableTile';
@@ -165,6 +166,14 @@ const PROJECTILE_HIT_RADIUS = TILE_SIZE * PROJECTILE_HIT_RADIUS_FRACTION;
  */
 const POOLS_TANGENT_MULTIPLIER = 2;
 const PUDDLE_CROWDING_RADIUS = ACID_PUDDLE_RADIUS * POOLS_TANGENT_MULTIPLIER;
+/**
+ * How far past the slam's actual kill radius a companion treats as "still
+ * standing in it" — clears the ring with room to spare instead of tracking
+ * its exact edge, so a frame of drift into the AOE while it's fleeing doesn't
+ * turn the escape vector back on and stall it at the boundary.
+ */
+const SLAM_HAZARD_MARGIN_PX = TILE_SIZE;
+const SLAM_HAZARD_RADIUS_PX = SLAM_KILL_RADIUS_PX + SLAM_HAZARD_MARGIN_PX;
 /**
  * No acid forms this close to a living Hoarder, so a bolus landing at the edge
  * of the bubble still cannot burn back into the ring a melee attacker stands in.
@@ -587,25 +596,40 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   }
 
   /**
-   * If the given pixel position is inside an active acid puddle, returns the unit
-   * escape vector pointing away from the nearest puddle centre. Returns null when
-   * the position is not in any hazard.
+   * If the given pixel position is inside an active acid puddle or a charging
+   * Krakaren slam, returns the unit escape vector pointing away from the
+   * nearest hazard's centre. Returns null when the position is safe.
    */
   getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
     const cx = x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
     const cy = y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
     let closestDist = Infinity;
-    let closestPuddle: AcidPuddle | null = null;
+    let closestX = 0;
+    let closestY = 0;
+    let found = false;
     for (const p of this.acidPuddles) {
       const dist = Math.hypot(cx - p.x, cy - p.y);
       if (dist < ACID_PUDDLE_RADIUS && dist < closestDist) {
         closestDist = dist;
-        closestPuddle = p;
+        closestX = p.x;
+        closestY = p.y;
+        found = true;
       }
     }
-    if (!closestPuddle) return null;
-    const ex = cx - closestPuddle.x;
-    const ey = cy - closestPuddle.y;
+    for (const boss of this.liveKrakarens) {
+      const shadow = boss.slamShadow;
+      if (!shadow) continue;
+      const dist = Math.hypot(cx - shadow.x, cy - shadow.y);
+      if (dist < SLAM_HAZARD_RADIUS_PX && dist < closestDist) {
+        closestDist = dist;
+        closestX = shadow.x;
+        closestY = shadow.y;
+        found = true;
+      }
+    }
+    if (!found) return null;
+    const ex = cx - closestX;
+    const ey = cy - closestY;
     const len = Math.hypot(ex, ey);
     if (len === 0) {
       const angle = Math.random() * Math.PI * 2;

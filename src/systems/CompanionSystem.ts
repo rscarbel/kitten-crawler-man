@@ -125,6 +125,15 @@ const CAT_BRAWL_MAX_CROWD = 1;
 /** The crowd is counted a little beyond claw reach, so she reads a swarm closing rather than one already on her. */
 const CAT_BRAWL_CROWD_RADIUS_MULTIPLIER = 2;
 
+/**
+ * How much health the human companion needs before he'll keep pressing a
+ * fight. Below this and his potion still on cooldown, he has no way to
+ * recover mid-fight, so standing his ground just means dying to the next hit.
+ * Matches the threshold `PlayerTickSystem`'s auto-potion already tried and
+ * failed at — the retreat only kicks in once that attempt is on cooldown.
+ */
+const HUMAN_RETREAT_HP_FRACTION = 0.5;
+
 /** Floor on how often a goal-tile change may trigger a fresh companion path. */
 const MIN_REPATH_GAP_FRAMES = 8;
 /** Sentinel goal tile for a freshly created path cache — no real tile is negative. */
@@ -743,6 +752,60 @@ export class CompanionSystem implements GameSystem {
     return true;
   }
 
+  /**
+   * Move the human companion away from whatever he's fighting when he's too
+   * hurt to keep trading blows and has no potion to fall back on. Returns
+   * true if he's retreating.
+   *
+   * The cat has an HP-gated brawl check of her own ({@link catMayTradeBlows});
+   * the human had none, which is how he stood in Krakaren's face at low HP
+   * with nothing left to heal with instead of buying time to recover.
+   */
+  private fleeIfHumanImperiled(human: HumanPlayer, mobGrid: SpatialGrid<Mob>): boolean {
+    if (human.hp >= human.maxHp * HUMAN_RETREAT_HP_FRACTION) return false;
+    if (human.potionCooldownFrames <= 0) return false;
+    const threat = human.autoTarget?.isAlive
+      ? human.autoTarget
+      : this.nearestThreatTo(human, mobGrid);
+    if (!threat) return false;
+    const dx = human.x - threat.x;
+    const dy = human.y - threat.y;
+    const n = normalize(dx, dy);
+    this.entityMoveWithCollision(
+      human,
+      n.x * FOLLOWER_SPEED * RECALL_CHASE_SPEED,
+      n.y * FOLLOWER_SPEED * RECALL_CHASE_SPEED,
+    );
+    human.isMoving = true;
+    return true;
+  }
+
+  /** Nearest living hostile within engage range, for a companion with no `autoTarget` to flee from. */
+  private nearestThreatTo(
+    companion: HumanPlayer | CatPlayer,
+    mobGrid: SpatialGrid<Mob>,
+  ): Mob | null {
+    this._proximityQuery.clear();
+    const nearby = mobGrid.queryCircle(
+      companion.x,
+      companion.y,
+      HUMAN_ENGAGE_RANGE,
+      this._proximityQuery,
+    );
+    let closest: Mob | null = null;
+    let closestDistSq = HUMAN_ENGAGE_RANGE * HUMAN_ENGAGE_RANGE;
+    for (const m of nearby) {
+      if (!m.isAlive || !m.isHostile || m.avoidInstead) continue;
+      const dx = m.x - companion.x;
+      const dy = m.y - companion.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq >= closestDistSq) continue;
+      closestDistSq = distSq;
+      closest = m;
+    }
+    return closest;
+  }
+
   private updateFollower(
     human: HumanPlayer,
     cat: CatPlayer,
@@ -772,6 +835,7 @@ export class CompanionSystem implements GameSystem {
     const companion = human.isActive ? cat : human;
     if (this.fleeFromAvoidMobs(companion, mobGrid, TILE_SIZE * FLEE_RADIUS_MULTIPLIER)) return;
     if (this.fleeFromHazards(companion)) return;
+    if (!human.isActive && this.fleeIfHumanImperiled(human, mobGrid)) return;
 
     const stance = human.isActive ? this.catStance : this.humanStance;
 
