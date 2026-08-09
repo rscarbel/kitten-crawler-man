@@ -7,6 +7,7 @@ import {
   drawQuestMarker,
   questMarkerColorFor,
   QUEST_MARKER_GOLD,
+  QUEST_MARKER_GREEN,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
 import { drawQuestBeacon } from '../sprites/questBeacon';
@@ -35,12 +36,9 @@ export class GumGum extends Mob {
 
   /**
    * Whether she has something to say, set by `MurderMysteryQuestSystem` each
-   * frame from its phase.
-   *
-   * Her glyph is drawn by the system in the overlay pass while her beacon is
-   * drawn here in the Y-sorted one, so the state they share has to live
-   * somewhere both can read — otherwise a column of light stands over an elf
-   * with nothing left to tell you.
+   * frame from its phase. Her beacon and her glyph both branch on this and on
+   * nothing else, so the two can never disagree about whether she has anything
+   * left to tell you.
    */
   markerType: QuestMarkerState = 'none';
 
@@ -72,25 +70,35 @@ export class GumGum extends Mob {
     // Beacon first, so the column stands behind her rather than across her.
     const markerColor = questMarkerColorFor(this.markerType);
     if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, box.sx, box.sy, box.s, camX, camY, performance.now(), markerColor);
+      // Her own tile, not her enlarged sprite box: `tileSize` is the unit the
+      // beacon measures its near-fade in, so handing it the 1.8× box scales that
+      // radius too and blanks the column over the last four tiles — precisely
+      // the approach where the player is looking for her.
+      drawQuestBeacon(
+        ctx,
+        this.x - camX,
+        this.y - camY,
+        tileSize,
+        camX,
+        camY,
+        performance.now(),
+        markerColor,
+      );
     }
     drawGumGumSprite(ctx, box.sx, box.sy, box.s, this.walkFrame, this.isMoving, this.facingX);
-  }
-
-  /**
-   * Draws the "talk to me" marker above GumGum's head. Called by
-   * MurderMysteryQuestSystem only while the murder quest is unstarted, so the
-   * marker disappears the moment the hook dialog is heard.
-   */
-  renderQuestMarker(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ): void {
-    if (!this.isAlive) return;
-    const box = this.spriteBox(camX, camY, tileSize);
-    drawQuestMarker(ctx, box.sx, box.sy, box.s, '!', QUEST_MARKER_GOLD);
+    // `drawQuestMarker` sizes the glyph and its lift off screen as a fraction
+    // of whatever box it is given, so her enlarged sprite box bloated the
+    // glyph itself — the same mistake her beacon call above was fixed to
+    // avoid. But her plain tile position is not her head either: her sprite
+    // grows upward from a fixed feet line, so `box.sy` (not `this.y`) is
+    // where her actual head starts. `scaleHumanoidBox` keeps every box
+    // horizontally centred on the same point regardless of scale, so passing
+    // plain `this.x` alongside a plain `tileSize` still centres correctly.
+    if (this.markerType === 'exclamation') {
+      drawQuestMarker(ctx, this.x - camX, box.sy, tileSize, '!', QUEST_MARKER_GOLD);
+    } else if (this.markerType === 'question') {
+      drawQuestMarker(ctx, this.x - camX, box.sy, tileSize, '?', QUEST_MARKER_GREEN);
+    }
   }
 
   private spriteBox(camX: number, camY: number, tileSize: number) {

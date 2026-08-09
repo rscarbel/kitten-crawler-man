@@ -20,8 +20,8 @@ const SHADY = 'Shady';
  * has actually changed, and Normal is identity.
  */
 const DIFFICULTY_PAYOUT_LINES: Partial<Record<Difficulty, string>> = {
-  easy: 'Kitten rates — the purse is lighter.',
-  hard: 'Nightmare rates — the purse is heavier.',
+  easy: 'Kitten rates: the purse is lighter.',
+  hard: 'Nightmare rates: the purse is heavier.',
 };
 
 /**
@@ -50,8 +50,7 @@ export function buildBountyOfferDialog(
     {
       title: SHADY,
       lines: [
-        '...Psst. Down here. Don’t look at me, look at the board.',
-        'Good. You’re a quick one.',
+        '...Psst. Down here. Don’t look at me, look at the board. Good. You’re a quick one.',
         'I have work. The kind nobody signs their name to.',
       ],
       button: 'Go on',
@@ -59,18 +58,14 @@ export function buildBountyOfferDialog(
     {
       title: SHADY,
       lines: [
-        `Word is ${name} ${typeLabel} has been seen out past the tree line.`,
-        'Been making a mess. Somebody upstairs would like it to stop',
-        'being a mess. That’s all either of us needs to know.',
+        `Word is ${name} ${typeLabel} has been seen out past the tree line. Been making a mess. Somebody upstairs would like it to stop being a mess. That’s all either of us needs to know.`,
       ],
       button: 'And the pay?',
     },
     {
       title: SHADY,
       lines: [
-        'Coin. Good coin. Whatever it was carrying, you keep.',
-        'Kill it, come back, don’t tell anyone we spoke.',
-        'Off you go.',
+        'Coin. Good coin. Whatever it was carrying, you keep. Kill it, come back, don’t tell anyone we spoke. Off you go.',
         ...(payoutLine === undefined ? [] : [payoutLine]),
       ],
       button: 'Take the job',
@@ -85,9 +80,7 @@ export function buildBountyActiveDialog(name: string): DialogPage[] {
     {
       title: SHADY,
       lines: [
-        `You know who you’re looking for. ${name}. Out there.`,
-        'I don’t hold hands and I don’t give directions.',
-        'Go and be useful.',
+        `You know who you’re looking for. ${name}. Out there. I don’t hold hands and I don’t give directions. Go and be useful.`,
       ],
       button: 'Leave him to it',
     },
@@ -100,17 +93,15 @@ export function buildBountyPayoutDialog(name: string, coins: number): DialogPage
     {
       title: SHADY,
       lines: [
-        `${name}. Dead. Huh.`,
-        'Didn’t think you had it in you. No offence — I don’t think',
-        'anyone has it in them, and I’m usually right.',
+        `${name}. Dead. Huh. Didn’t think you had it in you. No offence. I don’t think anyone has it in them, and I’m usually right.`,
       ],
       button: 'The pay',
     },
     {
       title: SHADY,
       lines: [
-        `${coins} coins. Count them somewhere else.`,
-        'Come back when the ache wears off. There’s always another one.',
+        `${coins} coins. Count them somewhere else. Come back when the ache wears off. There’s always another one.`,
+        // The echo is the joke; it only lands on a line of its own.
         'There’s always another one.',
       ],
       button: 'Take the coin',

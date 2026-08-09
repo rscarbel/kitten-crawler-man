@@ -36,10 +36,11 @@ const OK_BUTTON_Y_OFFSET = 50;
 // Animation timing
 const POWER_UP_FRAMES = 60;
 
-/** The only thing that differs between an ability grant and a skill grant. */
+/** The only thing that differs between an ability, a skill and an item grant. */
 const REWARD_HEADINGS: Record<GrantedRewardKind, string> = {
   ability: 'New Ability!',
   skill: 'New Skill!',
+  item: 'New Item!',
 };
 
 type Phase = 'idle' | 'power_up' | 'done';

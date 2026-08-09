@@ -332,6 +332,21 @@ export class MurderMysteryQuestSystem implements GameSystem {
   }
 
   /**
+   * The completion banner, which a press dismisses early. It rides over live
+   * play rather than pausing it, so it is not part of `isDialogOpen`.
+   */
+  get isOutcomeOverlayShowing(): boolean {
+    return this.completeOverlayTimer > 0;
+  }
+
+  /** Space/tap on the banner: dismiss early rather than wait out the timer. */
+  advanceOutcomeOverlay(): boolean {
+    if (this.completeOverlayTimer <= 0) return false;
+    this.completeOverlayTimer = 0;
+    return true;
+  }
+
+  /**
    * Snapshots the mystery so a death inside a safe room rewinds every beat the
    * player completed after checking in.
    *
@@ -605,10 +620,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
   }
 
   handleClick(mx: number, my: number): boolean {
-    if (this.completeOverlayTimer > 0) {
-      this.completeOverlayTimer = 0;
-      return true;
-    }
+    if (this.advanceOutcomeOverlay()) return true;
     return this.dialog.handleClick(mx, my);
   }
 
@@ -784,7 +796,6 @@ export class MurderMysteryQuestSystem implements GameSystem {
     if (this.dialog.isOpen) return;
 
     if (this.phase === 'gumgum_waiting' && this.gumgum && this.gumgumTile) {
-      this.gumgum.renderQuestMarker(ctx, camX, camY, TILE_SIZE);
       if (this.distToTile(active, this.gumgumTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
         drawInteractionPrompt(ctx, this.gumgum.x - camX, this.gumgum.y - camY, TILE_SIZE, 'Talk');
       }

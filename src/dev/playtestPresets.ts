@@ -479,6 +479,62 @@ const GEAR: PlaytestPreset = {
   },
 };
 
+/**
+ * The Anchor questline with all three shards already collected, so the assembly
+ * at Madame Voss can be played without walking the errand first.
+ *
+ * The shards are split across the two crawlers on purpose: the party carries two
+ * inventories, and every shard check has to sum both. A preset that stacked all
+ * three on the human would let a one-bag bug through.
+ */
+const ANCHOR_SHARDS: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'anchor-shards',
+  description: 'Third floor town, all three Anchor shards in hand (split across both crawlers)',
+  human: {
+    ...LEVEL3.human,
+    bag: [
+      ...LEVEL3.human.bag,
+      { id: 'anchor_shard_tinker', quantity: 1 },
+      { id: 'anchor_shard_hilda', quantity: 1 },
+    ],
+  },
+  cat: {
+    ...LEVEL3.cat,
+    bag: [...LEVEL3.cat.bag, { id: 'anchor_shard_temple', quantity: 1 }],
+  },
+};
+
+/**
+ * The far side of the questline: the stone assembled and on both hotbars, which
+ * is where it lands on assembly. For testing the recall itself, not the errand.
+ *
+ * The human's row is written out rather than appended to `LEVEL3`'s: these
+ * entries fill hotbar slots from zero, and a eighth one would land in the
+ * reserved quest slot, where the next quest item picked up would overwrite it.
+ */
+const ANCHOR_STONE: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'anchor-stone',
+  description: "Third floor town, Wayfinder's Anchor already assembled on both hotbars",
+  human: {
+    ...LEVEL3.human,
+    hotbar: [
+      { id: 'smush_tome', quantity: 1 },
+      { id: 'slingshot', quantity: 1 },
+      { id: 'health_potion', quantity: 38 },
+      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
+      { id: 'goblin_dynamite', quantity: 18 },
+      { id: 'gym_bench_press', quantity: 2 },
+      { id: 'wayfinders_anchor', quantity: 1 },
+    ],
+  },
+  cat: {
+    ...LEVEL3.cat,
+    hotbar: [...LEVEL3.cat.hotbar, { id: 'wayfinders_anchor', quantity: 1 }],
+  },
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   HOARDER,
   JUICER,
@@ -488,6 +544,8 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   SPIDER,
   LEVEL3,
   GEAR,
+  ANCHOR_SHARDS,
+  ANCHOR_STONE,
 ];
 
 export function getPlaytestPreset(id: string): PlaytestPreset | null {

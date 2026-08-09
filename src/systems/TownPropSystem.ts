@@ -184,6 +184,17 @@ export class TownPropSystem implements GameSystem {
   }
 
   /**
+   * Madame Voss's tile, or null where the plaza had no room for her.
+   *
+   * Exposed because she is the only quest giver in town who is a prop rather
+   * than a creature: a questline that wants to hang a marker over her, or point
+   * a Journal row at her, has nowhere else to read the position from.
+   */
+  get fortuneTellerTile(): TileXY | null {
+    return this.fortuneTile;
+  }
+
+  /**
    * Space-key handler for the scene's interaction chain. Opens the board or heals
    * at the nearest fountain/well/bench in reach. Returns whether the press was used.
    */

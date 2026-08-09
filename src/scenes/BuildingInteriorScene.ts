@@ -35,6 +35,7 @@ import {
   CLUB_MUSIC_TRACKS,
   DEFAULT_BUILDING_MUSIC_TRACKS,
   TAVERN_MUSIC_TRACKS,
+  TEMPLE_MUSIC_TRACKS,
   TOWER_MUSIC_TRACKS,
   type SoundId,
 } from '../audio/sounds';
@@ -64,7 +65,7 @@ import {
 } from '../systems/CompanionSystem';
 import { createMercenaryRoster, type MercenaryRoster } from '../core/MercenaryRoster';
 import { createGodModeState, type GodModeState } from '../core/GodMode';
-import { isWearable, type ItemId } from '../core/ItemDefs';
+import { isWearable, type InventoryItem, type ItemId } from '../core/ItemDefs';
 import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
 import { InteriorReadableSystem } from '../systems/InteriorReadableSystem';
@@ -121,11 +122,13 @@ import {
 import { CitizenDialog } from '../ui/CitizenDialog';
 import { FortuneTellerPanel, HEDGE_WITCH } from '../ui/FortuneTellerPanel';
 import { ReadablePanel } from '../ui/ReadablePanel';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { drawInteractionPrompt, setInteractionPromptsSuppressed } from '../ui/InteractionPrompt';
 import { SpellSystem } from '../systems/SpellSystem';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import { CombatKit } from '../systems/kits/CombatKit';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
+import { AnchorInteriorSystem, SKY_TEMPLE_NAME } from '../systems/AnchorInteriorSystem';
+import { createAnchorQuestProgress, type AnchorQuestProgress } from '../core/AnchorQuestProgress';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { HOTBAR_REFUSAL_MESSAGE } from '../ui/InventoryInteraction';
 import { ChatKit } from '../systems/kits/ChatKit';
@@ -411,6 +414,9 @@ export class BuildingInteriorScene extends GameplayScene {
    * instead would reset each visit, which is exactly the bug it exists to fix.
    */
   private readonly townMemory: TownMemory;
+  private readonly anchorQuestProgress: AnchorQuestProgress;
+  /** The anchor questline's business in this room; null in every other room. */
+  private readonly anchorInterior: AnchorInteriorSystem | null;
   // Talk surface for ambient occupants; null when there are no occupants or no audio.
   private readonly citizenDialog: CitizenDialog | null;
   /** Occupant the open conversation belongs to; used to notice the player walking off. */
@@ -500,6 +506,14 @@ export class BuildingInteriorScene extends GameplayScene {
     private readonly mongoPetLevel?: () => number,
     /** The run's tallies, so the Stats tab reads the same numbers indoors. */
     gameStats?: GameStats,
+    /**
+     * "The Anchor is Broken", two of whose three shards are earned indoors.
+     *
+     * By reference like `townMemory`, and for the same reason: this scene is
+     * rebuilt on every door entry, so Hilda's mended furniture and the temple's
+     * remaining vermin have nowhere else to survive the trip back outside.
+     */
+    anchorQuestProgress?: AnchorQuestProgress,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
@@ -509,6 +523,7 @@ export class BuildingInteriorScene extends GameplayScene {
     void this.audio?.preload(sfxGroupsForBuildingEntry(entry));
     this.abilityManager = abilityManager ?? new AbilityManager();
     this.townMemory = townMemory ?? createTownMemory();
+    this.anchorQuestProgress = anchorQuestProgress ?? createAnchorQuestProgress();
     this.gameStats = gameStats ?? new GameStats();
     this.humanAchievements = humanAchievements ?? new AchievementManager();
     this.catAchievements = catAchievements ?? new AchievementManager();
@@ -675,6 +690,21 @@ export class BuildingInteriorScene extends GameplayScene {
     this.initEntryEncounter(this.circus?.progress);
     this.populateHostileRooms();
 
+    // Before the occupants are placed, because breaking Hilda's shelf takes it
+    // out of the furniture an occupant may anchor to — a citizen standing at a
+    // heap of boards is a citizen standing at nothing.
+    const ground = this.floors[GROUND_FLOOR_INDEX].world;
+    this.anchorInterior = AnchorInteriorSystem.forBuilding(
+      entry.name,
+      GROUND_FLOOR_INDEX,
+      this.anchorQuestProgress,
+      ground.gameMap,
+      () => [this.human, this.cat],
+      (mob) => ground.roster.add(mob),
+      (message) => this.menus.hotbarToast.show(message),
+      this.audio,
+    );
+
     // Ambient occupants only where no live encounter owns the room; the tower's
     // confrontation can start after entry, so towers are excluded outright.
     this.occupants =
@@ -831,6 +861,15 @@ export class BuildingInteriorScene extends GameplayScene {
         // One claim over five stations — shop, casino, guild, VIP lounge, quest
         // dialog — so the club answers for whichever of them is drawn.
         focusContext: this.club?.focusContext ?? null,
+      },
+      // Ahead of both service surfaces it can intercept: while the anchor
+      // questline has something to say, its box is the one that is drawn.
+      {
+        isOpen: this.anchorInterior?.isDialogOpen === true,
+        space: { kind: 'advance', advance: () => this.anchorInterior?.advanceDialog() },
+        locksKeyboard: true,
+        haltsWorld: true,
+        focusContext: 'quest-dialog',
       },
       modal(servicePanel?.isOpen === true, 'priced-menu'),
       modal(readingPanel?.isOpen === true, 'fortune-teller'),
@@ -1069,13 +1108,15 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * The soundtrack this interior owns: a rotating playlist in the club and the
-   * taverns, the tower's own theme, and a shared default in every other room.
-   * Null where an entry encounter already started its own battle music.
+   * taverns, the tower's own theme, the temple's own theme, and a shared
+   * default in every other room. Null where an entry encounter already
+   * started its own battle music.
    */
   private interiorMusicTracks(): ReadonlyArray<SoundId> | null {
     if (this.encounter !== null) return null;
     if (this.entry.type === 'club') return CLUB_MUSIC_TRACKS;
     if (this.entry.type === 'tower') return TOWER_MUSIC_TRACKS;
+    if (this.entry.name === SKY_TEMPLE_NAME) return TEMPLE_MUSIC_TRACKS;
     if (TAVERN_BUILDING_NAMES.has(this.entry.name)) return TAVERN_MUSIC_TRACKS;
     return DEFAULT_BUILDING_MUSIC_TRACKS;
   }
@@ -1210,8 +1251,12 @@ export class BuildingInteriorScene extends GameplayScene {
         if (this.canOpenFollowerMenu()) this.followerMenu.open();
       },
       toggleMiniMap: () => this.mobileHUD.toggleMiniMap(),
-      // No `toggleQuestTracker`, `mongoSummon` or `buildAction`: the journal,
-      // the pet and the barrier menu all belong to systems the overworld owns.
+      // Indoors this is Old Hilda's hammer rather than the dungeon's barricades,
+      // but it is the same key doing the same thing: spending boards on a
+      // broken thing you are standing at.
+      buildAction: () => this.triggerAnchorRepair(),
+      // No `toggleQuestTracker` or `mongoSummon`: the journal and the pet both
+      // belong to systems the overworld owns.
       openChat: () => this.openChat(),
       hotbarActivation: (idx) => activateHotbarSlot(this.hotbarHost(), idx),
       dynamiteRelease: (idx) => releaseChargedDynamite(this.hotbarHost(), idx),
@@ -1232,7 +1277,21 @@ export class BuildingInteriorScene extends GameplayScene {
       abilityManager: this.abilityManager,
       spells: this.combat.spells,
       dynamite: this.destruction.dynamite,
+      trySceneSlot: (slot) => this.trySceneHotbarSlot(slot),
     };
+  }
+
+  /**
+   * The Wayfinder's Anchor has no `RecallSystem` indoors — that system is
+   * `DungeonScene`-owned — so without this the press would fall through the
+   * whole hotbar chain and do nothing at all, a silent refusal no other item
+   * in this game gives.
+   */
+  private trySceneHotbarSlot(slot: InventoryItem): boolean {
+    if (slot.id !== 'wayfinders_anchor') return false;
+    this.audio?.play('error_taking_action');
+    this.menus.hotbarToast.show('The stone needs open sky to find its way.');
+    return true;
   }
 
   onExit(): void {
@@ -1425,6 +1484,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.club.tickOpenModals(this.active());
       return;
     }
+    if (this.anchorInterior?.isDialogOpen === true) {
+      if (this.consumeModalClose()) this.anchorInterior.dismissDialog();
+      return;
+    }
     if (this.servicePanel?.isOpen === true) {
       this.servicePanel.update();
       if (this.consumeModalClose()) this.servicePanel.close();
@@ -1568,6 +1631,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.shop?.update();
     this.club?.update(this.active(), this.presentCompanion()[0] ?? null);
     this.occupants?.update();
+    this.applyAnchorQuestMarkers();
+    this.anchorInterior?.update();
     this.ambientSound?.updateListener(player.x, player.y);
     if (this.shop?.purchasePending) {
       this.shop.purchasePending = false;
@@ -1736,6 +1801,10 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.club?.modalOpen) {
       this.club.handleClick(mx, my, this.active());
+      return;
+    }
+    if (this.anchorInterior?.isDialogOpen === true) {
+      this.anchorInterior.handleClick(mx, my);
       return;
     }
     if (this.servicePanel?.isOpen === true) {
@@ -1915,6 +1984,28 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
+   * Hangs the anchor questline's glyph over Hilda or Deacon Aviel.
+   *
+   * The questline answers `null` for everybody it has no business with, so this
+   * can never wipe a marker some other system put on a citizen — a marker is
+   * only ever written by whoever claims that citizen.
+   */
+  private applyAnchorQuestMarkers(): void {
+    const quest = this.anchorInterior;
+    if (quest === null || this.occupants === null) return;
+    for (const person of this.occupants.people) {
+      if (person.residentId === null) continue;
+      const marker = quest.markerFor(person.residentId);
+      if (marker !== null) person.markerType = marker;
+    }
+  }
+
+  /** The `R` press indoors: Old Hilda's repairs, and nothing else so far. */
+  private triggerAnchorRepair(): void {
+    this.anchorInterior?.tryRepair(this.active());
+  }
+
+  /**
    * Opens a conversation with the nearest ambient occupant in range — or the
    * building's service menu, when that occupant is the one who sells here.
    * Returns whether something opened, so the caller can consume the triggering
@@ -1938,6 +2029,16 @@ export class BuildingInteriorScene extends GameplayScene {
     const service = interiorServiceForRole(this.entry.name, target.role);
     const sellsHere = service !== undefined;
     const turn = this.turnFor(target);
+
+    // The anchor questline outranks even a resident's own untold lore — Hilda
+    // and Aviel are otherwise still finishing their first-meeting flavor lines
+    // (`hasUntoldLore`) for several visits after the quest goes active, and a
+    // player who has just been asked to fetch boards or clear rats should not
+    // have to sit through small talk to hear the thing they actually came for.
+    if (resident !== null && this.anchorInterior?.tryOpenDialog(resident.id, player) === true) {
+      this.noteTalk(target, inDanger);
+      return true;
+    }
 
     if (sellsHere && !this.hasUntoldLore(target)) {
       this.openService(turn, resident, target.role);
@@ -2073,6 +2174,16 @@ export class BuildingInteriorScene extends GameplayScene {
   private openService(turn: number, resident: ResidentDef | null, role: TownRole): void {
     const service = interiorServiceForRole(this.entry.name, role);
     if (service === undefined) return;
+    // The anchor questline gets the counter first, exactly as it gets Madame
+    // Voss's Consult prompt first out on the plaza: while it has something to
+    // say, Hilda reads no cards and Aviel sells no blessings.
+    if (
+      resident !== null &&
+      this.anchorInterior?.tryOpenDialog(resident.id, this.active()) === true
+    ) {
+      this.beginModalGrace();
+      return;
+    }
     if (service.surface === 'reading') {
       if (this.readingPanel === null) return;
       this.readingPanel.openWith(this.townDialogContext(), HEDGE_WITCH);
@@ -2391,6 +2502,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // last frame's hit-rects and resolves hover/press for this one.
     setButtonAudio(this.audio);
     setButtonMouseState(this._mouseX, this._mouseY, this._mouseDown);
+    // Any overlay at all, not only the world-halting ones: a shop-floor
+    // conversation leaves the player free to walk, and the prompt that opened it
+    // must not go on hovering over the person now talking.
+    setInteractionPromptsSuppressed(focusedOverlay(this.overlayClaims) !== null);
 
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
@@ -2426,6 +2541,9 @@ export class BuildingInteriorScene extends GameplayScene {
     const destruction = this.destruction;
     destruction.renderGround(ctx, camX, camY);
     combat.renderGround(ctx, camX, camY);
+    // Under the figures: the highlight rings sit on the floor around the broken
+    // furniture, and a crawler standing at one must not be drawn beneath it.
+    this.anchorInterior?.renderObjects(ctx, camX, camY, this.active());
     this.renderSortedEntities(ctx, camX, camY, [
       // The same test the dungeon's render pass uses: a corpse that still draws
       // keeps its place in the sort until it expires.
@@ -2564,6 +2682,12 @@ export class BuildingInteriorScene extends GameplayScene {
     this.servicePanel?.render(ctx, this.active());
     this.readingPanel?.render(ctx, this.active());
     this.readablePanel.render(ctx);
+    // Last of this group, because it outranks all three above it in
+    // `overlayClaims` and the focus ring goes to whoever declares it last. They
+    // are mutually exclusive in practice — the questline takes the counter
+    // before either service surface opens — but the two orders still have to
+    // agree, or the audit is measuring a coincidence.
+    this.anchorInterior?.renderUI(ctx);
 
     this.activeEncounter?.renderUI(ctx);
     this.soulCrystal.renderUI(ctx);
@@ -2967,7 +3091,11 @@ export class BuildingInteriorScene extends GameplayScene {
       !this.readablePanel.isOpen
     ) {
       const active = this.active();
-      if (!this.tryTalkToOccupant(active) && !this.tryReadNearby(active)) {
+      // The prompt already reads "Tap to repair" on mobile (`AnchorInteriorSystem
+      // .renderObjects`), but nothing routed the tap there — a phone player could
+      // never earn Hilda's shard, since `buildAction` is bound to the `R` key.
+      const repaired = this.anchorInterior?.tryRepair(active) ?? false;
+      if (!repaired && !this.tryTalkToOccupant(active) && !this.tryReadNearby(active)) {
         this.attackTowardTap(active, tapScreenX, tapScreenY);
       }
     }

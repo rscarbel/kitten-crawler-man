@@ -666,6 +666,19 @@ export abstract class Player {
   }
 
   /**
+   * Frames since the last blow landed, saturating at {@link REGEN_SUPPRESS_FRAMES}.
+   *
+   * Exists for the things that need "was I hit in the last N frames?" for an N
+   * of their own choosing rather than regeneration's — a channelled ability
+   * comparing this against how far into its own cast it is, for instance.
+   * {@link isRegenSuppressed} cannot answer that: it is regeneration's window,
+   * and it is deliberately false inside a safe room.
+   */
+  get framesSinceLastDamage(): number {
+    return this.framesSinceDamaged;
+  }
+
+  /**
    * Cockroach: the crawler walks away from a fatal blow at 1 HP, then the skill
    * goes cold for a few minutes.
    *

@@ -23,7 +23,12 @@ import { drawText, TEXT_PRESETS } from '../TextBox';
 import { drawScrollbar } from '../Box';
 import { addButton, drawButton, BUTTON_PRESETS } from '../Button';
 import { type ButtonRect, type PauseTab } from './types';
-import { isOutstanding, type TrackerEntry, type TrackerStatus } from '../../systems/questTracker';
+import {
+  isOutstanding,
+  pinMatchesEntry,
+  type TrackerEntry,
+  type TrackerStatus,
+} from '../../systems/questTracker';
 import type { JournalProgress } from '../../core/JournalProgress';
 
 /** What the tab needs from the world to draw a bearing on each row. */
@@ -153,13 +158,26 @@ function canPin(entry: TrackerEntry): boolean {
 }
 
 /**
+ * Whether this row is the one the pin currently resolves to.
+ *
+ * Not straight equality, because a pin set when a quest started names the quest
+ * rather than the step: the anchor questline then re-keys its row per shard, and
+ * an `===` test would leave the gold frame and the 📌 off a row the arrow is in
+ * fact pointing at.
+ */
+function isPinnedRow(progress: JournalProgress, entry: TrackerEntry): boolean {
+  const pinnedId = progress.pinnedTrackerId;
+  return pinnedId !== null && pinMatchesEntry(pinnedId, entry);
+}
+
+/**
  * Un-pinning is tested *first*, because a quest can stop being pinnable while it
  * is the pinned one: the murder mystery drops its tower tile the moment the boss
  * dies, and a bounty has no target while Shady is off the map. Refusing the tap
  * would strand the pin on a quest the player could then never clear.
  */
 function togglePin(progress: JournalProgress, entry: TrackerEntry): void {
-  if (progress.pinnedTrackerId === entry.id) {
+  if (isPinnedRow(progress, entry)) {
     progress.pinnedTrackerId = null;
     return;
   }
@@ -182,7 +200,7 @@ function renderRow(
   band: { top: number; bottom: number },
   jc: JournalTabContext,
 ): void {
-  const isPinned = entry.id === jc.progress.pinnedTrackerId;
+  const isPinned = isPinnedRow(jc.progress, entry);
   const rowStyle = isPinned ? BUTTON_PRESETS.trackerRowPinned : BUTTON_PRESETS.trackerRow;
   const rowButton = {
     x: rowX,

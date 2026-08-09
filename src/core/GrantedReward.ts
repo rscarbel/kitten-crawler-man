@@ -3,7 +3,7 @@
  * animation, layout and dismissal are identical, which is why an ability tome
  * and a skill book share one dialog rather than owning two near-copies.
  */
-export type GrantedRewardKind = 'ability' | 'skill';
+export type GrantedRewardKind = 'ability' | 'skill' | 'item';
 
 /**
  * Represents a single reward shown in the RewardGrantedDialog after

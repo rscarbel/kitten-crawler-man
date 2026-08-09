@@ -18,7 +18,7 @@ import { STALL_WIDTH_TILES, stallRippleStep, stallVariantIndex } from '../../spr
 import { drawTownSheetFrame } from '../../sprites/townSheetProp';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import { tileKey } from '../tileKey';
-import { buildVendorMenu, createVendorPurchase } from './vendorMenu';
+import { buildVendorMenu, createVendorPurchase, type VendorGateCheck } from './vendorMenu';
 import { MARKET_VENDORS, type VendorDef } from './vendorDefs';
 import type { MarketStock } from './MarketStock';
 import type { AudioManager } from '../../audio/AudioManager';
@@ -92,8 +92,22 @@ export class MarketSystem implements GameSystem {
     // An accessor, not the manager itself: the market is built before the scene's
     // audio field is assigned, so the sound source is resolved lazily at use time.
     private readonly getAudio: () => AudioManager | null,
+    /**
+     * Whether a quest-gated line is on the counter. The market can see neither
+     * the questlines nor the party's bags, so the scene answers this.
+     */
+    private readonly isGateOpen: VendorGateCheck,
   ) {
     this.placeStalls();
+  }
+
+  /**
+   * The west counter tile of a named vendor's stall, for a questline that wants
+   * to point the Journal's chevron at it. Null before the stalls are placed, or
+   * where the plaza had no room for that vendor.
+   */
+  stallTileFor(vendorId: string): { x: number; y: number } | null {
+    return this.stalls.find((stall) => stall.def.id === vendorId)?.tiles[0] ?? null;
   }
 
   /** Renderable stalls for the scene's Y-sorted entity pass. */
@@ -135,7 +149,7 @@ export class MarketSystem implements GameSystem {
     const visits = stall.visits;
     stall.visits++;
     this.onBrowse({
-      buildMenu: () => buildVendorMenu(stall.def, this.stock, visits),
+      buildMenu: () => buildVendorMenu(stall.def, this.stock, visits, this.isGateOpen),
       purchase: createVendorPurchase(stall.def, this.stock, this.getAudio),
       onBlocked: () => this.getAudio()?.play('error_taking_action'),
     });

@@ -6,7 +6,7 @@
  */
 
 import { consumeStock, remainingFor, type MarketStock } from './MarketStock';
-import type { VendorDef, VendorStockLine } from './vendorDefs';
+import type { VendorDef, VendorLineGate, VendorStockLine } from './vendorDefs';
 import type { Player } from '../../Player';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../../ui/PricedMenuPanel';
@@ -24,22 +24,43 @@ function vendorBark(def: VendorDef, visits: number): string {
   return def.barks[((visits % count) + count) % count];
 }
 
+/**
+ * Answers whether a gated line is on the counter right now. Supplied by the
+ * scene, which is the only thing that can see the questlines and the party's
+ * bags. An ungated line never asks.
+ */
+export type VendorGateCheck = (gate: VendorLineGate) => boolean;
+
 /** This vendor's current offer. Rebuilt after every purchase so sold-out rows go dead. */
-export function buildVendorMenu(def: VendorDef, stock: MarketStock, visits: number): PricedMenu {
+export function buildVendorMenu(
+  def: VendorDef,
+  stock: MarketStock,
+  visits: number,
+  isGateOpen: VendorGateCheck,
+): PricedMenu {
   return {
     title: def.stallName,
     bark: vendorBark(def, visits),
     byline: def.vendorName,
-    options: def.items.map((line) => {
-      const option: PricedOption = {
-        key: line.id,
-        label: line.label,
-        price: line.price,
-        desc: line.desc,
-      };
-      if (remainingFor(stock, def.id, line) === 0) option.unavailable = SOLD_OUT_LABEL;
-      return option;
-    }),
+    // A closed gate drops the row entirely rather than disabling it — see
+    // `VendorLineGate`. Because the panel rebuilds its rows after every
+    // purchase, the shard's row vanishes the moment it is bought.
+    options: def.items
+      .filter((line) => line.gate === undefined || isGateOpen(line.gate))
+      .map((line) => {
+        const option: PricedOption = {
+          key: line.id,
+          label: line.label,
+          price: line.price,
+          desc: line.desc,
+          // A gate is always a questline's condition — that is what `VendorLineGate`
+          // is for — so a gated line is exactly the row that earns the panel's
+          // quest treatment and its accept key.
+          isQuestItem: line.gate !== undefined,
+        };
+        if (remainingFor(stock, def.id, line) === 0) option.unavailable = SOLD_OUT_LABEL;
+        return option;
+      }),
   };
 }
 

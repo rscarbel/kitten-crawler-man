@@ -1232,7 +1232,8 @@ export class AudioManager {
         e.questId === 'defend_goblin_mother' ||
         e.questId === 'grotesque_spider' ||
         e.questId === 'the_show_must_go_on' ||
-        e.questId === 'krasue_murders'
+        e.questId === 'krasue_murders' ||
+        e.questId === 'anchor_shards'
       ) {
         this.play('quest_complete');
       }

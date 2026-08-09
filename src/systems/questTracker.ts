@@ -21,10 +21,19 @@
  * no `QuestManager` to take it from and would otherwise be importing a type from
  * a class they never touch.
  */
+import type { ObjectiveBeaconFootprint } from '../ui/ObjectiveBeacon';
+
 export type TrackerStatus = 'available' | 'active' | 'completed' | 'failed';
 
-/** A tile the Journal can point the player at. */
-export interface TrackerTarget {
+/**
+ * A tile the Journal can point the player at, and how big the thing on it is.
+ *
+ * The footprint is inherited from the beacon's own type rather than restated, so
+ * a source describing a three-tile doorway cannot describe it in terms the
+ * beacon does not read. A source that omits it marks one tile, as every source
+ * used to.
+ */
+export interface TrackerTarget extends ObjectiveBeaconFootprint {
   readonly x: number;
   readonly y: number;
 }
@@ -67,21 +76,66 @@ export function isOutstanding(status: TrackerStatus): boolean {
 }
 
 /**
+ * What separates a quest's own id from the step within it, in a tracker id.
+ *
+ * The anchor questline is the one that splits: accepted, it stops emitting a
+ * single `anchor_shards` row and starts emitting one row per outstanding shard.
+ * A pin naming only the quest therefore has to survive the step changing under
+ * it, which is the difference between a pin that outlives one shard and a pin
+ * that goes dead the moment the player picks one up.
+ */
+const TRACKER_STEP_SEPARATOR = ':';
+
+/** Whether a pinned id names this entry — either exactly, or as its quest prefix. */
+export function pinMatchesEntry(pinnedId: string, entry: TrackerEntry): boolean {
+  return entry.id === pinnedId || entry.id.startsWith(`${pinnedId}${TRACKER_STEP_SEPARATOR}`);
+}
+
+/** Whether an entry is somewhere the player can actually be sent right now. */
+function isFollowable(entry: TrackerEntry): boolean {
+  return entry.target !== undefined && isOutstanding(entry.status);
+}
+
+/**
  * The entry the world arrow should point at, or null.
  *
  * Resolved against the entries handed in rather than remembered, so a pin on a
  * quest that has since finished — or that this floor does not have — simply
  * stops pointing rather than pointing somewhere stale.
+ *
+ * An unset pin resolves to nothing, deliberately: it is only ever set when a
+ * quest is *accepted* (see the `questStarted` handler), so no pin means no
+ * quest has been taken yet, and the world arrow and objective beacon should
+ * say exactly that rather than picking one for the player. A quest that has
+ * something to offer but has not been accepted advertises itself through
+ * {@link availableTargets} instead, which carries no implication that
+ * anything is under way.
  */
 export function resolvePinnedEntry(
   pinnedId: string | null,
   entries: ReadonlyArray<TrackerEntry>,
 ): TrackerEntry | null {
   if (pinnedId === null) return null;
-  const pinned = entries.find((entry) => entry.id === pinnedId);
-  if (pinned?.target === undefined) return null;
-  if (!isOutstanding(pinned.status)) return null;
-  return pinned;
+  const pinned = entries.find((entry) => pinMatchesEntry(pinnedId, entry) && isFollowable(entry));
+  return pinned ?? null;
+}
+
+/**
+ * Every quest still on offer, unaccepted — the "point of interest" layer.
+ *
+ * Independent of the pin: a quest giver with something to offer keeps
+ * advertising it whether or not the player has taken any quest at all, which
+ * is a different statement from "this is what you are currently doing".
+ */
+export function availableTargets(
+  entries: ReadonlyArray<TrackerEntry>,
+): ReadonlyArray<TrackerTarget> {
+  const targets: TrackerTarget[] = [];
+  for (const entry of entries) {
+    if (entry.status !== 'available' || entry.target === undefined) continue;
+    targets.push(entry.target);
+  }
+  return targets;
 }
 
 /**

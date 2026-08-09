@@ -61,6 +61,7 @@ const SOUND_IDS_TUPLE = [
   'clown_horn',
   'clown_laughing_1',
   'clown_laughing_2',
+  'charging_up_1',
   'coin_pouch',
   'confusing_fog',
   'cooldown_crisp',
@@ -202,6 +203,8 @@ const SOUND_IDS_TUPLE = [
   'tavern_music_1',
   'tavern_music_2',
   'tech_machinery_running',
+  'teleport',
+  'temple_music',
   'town_music_1',
   'town_music_2',
   'treasure_chest_reward',
@@ -288,6 +291,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   clown_horn: './src/audio/enemies/clown/clown_horn.mp3',
   clown_laughing_1: './src/audio/enemies/clown/clowns_laughing_1.mp3',
   clown_laughing_2: './src/audio/enemies/clown/clowns_laughing_2.mp3',
+  charging_up_1: './src/audio/effects/charging_up_1.mp3',
   coin_pouch: './src/audio/effects/coin_pouch.mp3',
   confusing_fog: './src/audio/effects/scroll_of_confusing_fog.mp3',
   cooldown_crisp: './src/audio/effects/cooldown_crisp_effect.mp3',
@@ -442,6 +446,8 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   tavern_music_1: './src/audio/background_music/tavern_music_1.mp3',
   tavern_music_2: './src/audio/background_music/tavern_music_2.mp3',
   tech_machinery_running: './src/audio/bosses/grotesque_spider/tech_machinery_running.mp3',
+  teleport: './src/audio/effects/teleport.mp3',
+  temple_music: './src/audio/background_music/temple_music.mp3',
   town_music_1: './src/audio/background_music/town_music_1.mp3',
   town_music_2: './src/audio/background_music/town_music_2.mp3',
   treasure_chest_reward: './src/audio/events/treasure-chest-reward.mp3',
@@ -479,6 +485,9 @@ export const TOWER_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['big_tower_music'];
 /** Fallback interior music for buildings with no soundtrack of their own. */
 export const DEFAULT_BUILDING_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['building_default_music_1'];
 
+/** The Temple of the Sky's own theme, playing while the party is inside. */
+export const TEMPLE_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['temple_music'];
+
 /**
  * Every `background_music/` and `ambient/` id. These are long, streamed via
  * `MediaElementAudioSourceNode` rather than decoded into a resident
@@ -508,6 +517,7 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'forest_path',
   'tavern_music_1',
   'tavern_music_2',
+  'temple_music',
   'town_music_1',
   'town_music_2',
   'tutorial_island',

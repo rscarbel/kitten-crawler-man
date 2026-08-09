@@ -56,6 +56,9 @@ import {
   PIGMENT_SHELF,
   INK_BENCH,
   GRINDING_SLAB,
+  BROKEN_TABLE,
+  BROKEN_CHAIR,
+  BROKEN_BOOKSHELF,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -136,6 +139,12 @@ const NON_FLOOR_TYPES = new Set<number>([
   FIREPLACE,
   BARREL,
   CHAIR,
+  // Old Hilda's wrecked furniture is written by the same bare tile assignment as
+  // the intact pieces above, so it needs the same probe exclusion or the floor
+  // beneath a splintered chair goes unpainted.
+  BROKEN_TABLE,
+  BROKEN_CHAIR,
+  BROKEN_BOOKSHELF,
   BARREL_SIDE,
   CRATE,
   BRAZIER,

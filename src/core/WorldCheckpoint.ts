@@ -15,6 +15,7 @@ import type { MercenaryCheckpoint } from '../systems/MercenarySystem';
 import type { MiniMapCheckpoint } from '../systems/MiniMapSystem';
 import type { MongoCheckpoint } from '../systems/MongoSystem';
 import type { MurderMysteryQuestCheckpoint } from '../systems/MurderMysteryQuestSystem';
+import type { RecallCheckpoint } from '../systems/RecallSystem';
 import type { SafeRoomCheckpoint } from '../systems/SafeRoomSystem';
 import type { SpiderQuestCheckpoint } from '../systems/SpiderQuestSystem';
 import type { StairwellCheckpoint } from '../systems/StairwellSystem';
@@ -23,6 +24,7 @@ import type { TreeCheckpoint } from '../systems/TreeSystem';
 import type { MarketStockCheckpoint } from '../systems/market/MarketStock';
 import type { BountyProgressCheckpoint } from './BountyProgress';
 import type { CircusQuestProgressCheckpoint } from './CircusQuestProgress';
+import type { AnchorQuestProgressCheckpoint } from './AnchorQuestProgress';
 import type { ClubMembershipCheckpoint } from './ClubMembership';
 import type { TownMemoryCheckpoint } from './TownMemory';
 import type { GameStatsSnapshot } from './GameStats';
@@ -57,6 +59,11 @@ export interface WorldCheckpoint {
   safeRoom: SafeRoomCheckpoint;
   miniMap: MiniMapCheckpoint;
   stairwell: StairwellCheckpoint;
+  /**
+   * The Wayfinder's Anchor's cooldown alone. The live channel and the trail
+   * anchor are dropped by the restore rather than captured — see `RecallSystem`.
+   */
+  recall: RecallCheckpoint;
   treasureChests: TreasureChestCheckpoint;
   bopca: BopcaCheckpoint;
   difficultyTelemetry: DifficultyTelemetryCheckpoint;
@@ -80,6 +87,7 @@ export interface WorldCheckpoint {
    * the goods bought.
    */
   circusQuestProgress: CircusQuestProgressCheckpoint;
+  anchorQuestProgress: AnchorQuestProgressCheckpoint;
   murderQuestProgress: MurderQuestProgressCheckpoint;
   journal: JournalProgressCheckpoint;
   bountyProgress: BountyProgressCheckpoint;

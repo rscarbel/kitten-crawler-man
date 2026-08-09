@@ -107,6 +107,16 @@ const COUNTER_TOP_Y = -0.5;
 const COUNTER_LEG_TOP_Y = 0.34;
 const APRON_BOTTOM_Y = 0.62;
 
+/**
+ * How far the canopy ridge — the cart's highest ink — stands above the
+ * footprint's north edge.
+ *
+ * Exported so anything aiming a marker at a stall can clear its roofline rather
+ * than guess at one: a highlight sized to the footprint alone ends up inside the
+ * canopy, which is the one place it cannot be seen.
+ */
+export const STALL_CANOPY_HEIGHT_TILES = -CANOPY_RIDGE_Y;
+
 // Contact shadow, so the cart sits on the ground instead of floating over it.
 const SHADOW_RX_FRACTION = 0.46; // of the full stall width
 const SHADOW_RY_FRACTION = 0.15;

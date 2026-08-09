@@ -17,12 +17,12 @@ import type { TownDialogContext } from './townDialog';
 const GENERAL_FORTUNES: ReadonlyArray<string> = [
   'A coin spent today returns threefold in a fortnight. Or so the cards say.',
   'Great danger walks beside great reward. You court both, I think.',
-  'The crossed blades reversed — an old rival will offer an unlikely hand.',
+  'The crossed blades, reversed. An old rival will offer an unlikely hand.',
   'I see a long road, a warm hearth at its end, and mud in between.',
   'Beware the third door you open. Or was it the second? The mists are thick today.',
   'A creature of many legs guards something you will want. Tread lightly.',
   'You will laugh before nightfall. At what, even the cards decline to say.',
-  'Fortune favors the bold — and occasionally the merely lucky. Which are you?',
+  'Fortune favors the bold, and occasionally the merely lucky. Which are you?',
   'The moon shows me coins. Yours, leaving your purse. Toward me, perhaps.',
   'A small kindness you forget will be remembered by one you never meet again.',
 ];
@@ -36,7 +36,7 @@ const REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
   {
     when: (ctx) => ctx.doomsday === 'containment' || ctx.doomsday === 'escape',
     lines: [
-      'The tower burns in my vision — its heart beats far too fast. Still it, or we are all cinders.',
+      'The tower burns in my vision. Its heart beats far too fast. Still it, or we are all cinders.',
       'No cards tonight. Only the smell of smoke and the ticking of a clock. RUN, if you have any sense.',
     ],
   },

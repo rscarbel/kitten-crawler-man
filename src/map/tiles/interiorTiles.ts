@@ -34,6 +34,9 @@ import {
   PIGMENT_SHELF,
   INK_BENCH,
   GRINDING_SLAB,
+  BROKEN_TABLE,
+  BROKEN_CHAIR,
+  BROKEN_BOOKSHELF,
   propSpriteState,
 } from '../tileTypes';
 import {
@@ -122,6 +125,38 @@ function drawFloorBeneath(
   if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
     drawSpecialFloorTile(ctx, structure, floorType, sx, sy, ts, tx, ty);
   }
+}
+
+/**
+ * One length of timber lying on the floor, rotated about its own centre, with a
+ * pale raw break at the far end.
+ *
+ * The break is what makes a plank read as *snapped* rather than as a board
+ * someone put down: at 32 px the silhouette alone is a brown smudge either way,
+ * and the light end-grain is the only cue that survives the size.
+ */
+function drawFallenPlank(
+  ctx: CanvasRenderingContext2D,
+  centreX: number,
+  centreY: number,
+  length: number,
+  thickness: number,
+  angleRadians: number,
+  fill: string,
+): void {
+  ctx.save();
+  ctx.translate(centreX, centreY);
+  ctx.rotate(angleRadians);
+  const halfLength = length / 2;
+  const halfThickness = thickness / 2;
+  ctx.fillStyle = WRECK_SHADOW;
+  ctx.fillRect(-halfLength, -halfThickness + thickness * WRECK_SHADOW_DROP, length, thickness);
+  ctx.fillStyle = fill;
+  ctx.fillRect(-halfLength, -halfThickness, length, thickness);
+  ctx.fillStyle = WRECK_SPLINTER;
+  const splinter = length * WRECK_SPLINTER_FRACTION;
+  ctx.fillRect(halfLength - splinter, -halfThickness, splinter, thickness);
+  ctx.restore();
 }
 
 export function drawInteriorTile(
@@ -419,6 +454,139 @@ export function drawInteriorTile(
       const legH = ts - (legTop - sy) - 2;
       ctx.fillRect(sx + chInset, legTop, 2, legH);
       ctx.fillRect(sx + ts - chInset - 2, legTop, 2, legH);
+      return true;
+    }
+
+    /*
+     * The three wrecks. All of their art stays inside the tile they block, so a
+     * repaired piece appears exactly where the rubble was and no wreck overhangs
+     * floor the player is standing on.
+     */
+
+    case BROKEN_TABLE: {
+      drawFloorBeneath(ctx, structure, sx, sy, ts, tx, ty);
+      const cx = sx + ts / 2;
+      const cy = sy + ts / 2;
+      drawFallenPlank(
+        ctx,
+        cx + ts * BROKEN_TABLE_NEAR_PLANK_DX,
+        cy + ts * BROKEN_TABLE_NEAR_PLANK_DY,
+        ts * BROKEN_TABLE_NEAR_PLANK_LENGTH,
+        ts * BROKEN_TABLE_PLANK_THICKNESS,
+        BROKEN_TABLE_NEAR_PLANK_ANGLE,
+        WRECK_WOOD,
+      );
+      drawFallenPlank(
+        ctx,
+        cx + ts * BROKEN_TABLE_FAR_PLANK_DX,
+        cy + ts * BROKEN_TABLE_FAR_PLANK_DY,
+        ts * BROKEN_TABLE_FAR_PLANK_LENGTH,
+        ts * BROKEN_TABLE_PLANK_THICKNESS,
+        BROKEN_TABLE_FAR_PLANK_ANGLE,
+        WRECK_WOOD_MID,
+      );
+      drawFallenPlank(
+        ctx,
+        cx + ts * BROKEN_TABLE_LEG_DX,
+        cy + ts * BROKEN_TABLE_LEG_DY,
+        ts * BROKEN_TABLE_LEG_LENGTH,
+        ts * BROKEN_TABLE_LEG_THICKNESS,
+        BROKEN_TABLE_LEG_ANGLE,
+        WRECK_DARK_WOOD,
+      );
+      return true;
+    }
+
+    case BROKEN_CHAIR: {
+      drawFloorBeneath(ctx, structure, sx, sy, ts, tx, ty);
+      const cx = sx + ts / 2;
+      const cy = sy + ts / 2;
+      // The seat is a panel rather than a plank: it is the one piece still in
+      // one piece, and drawing it with a broken end would say otherwise.
+      ctx.save();
+      ctx.translate(cx, cy + ts * BROKEN_CHAIR_SEAT_DY);
+      ctx.rotate(BROKEN_CHAIR_SEAT_ANGLE);
+      const seatW = ts * BROKEN_CHAIR_SEAT_WIDTH;
+      const seatH = ts * BROKEN_CHAIR_SEAT_HEIGHT;
+      ctx.fillStyle = WRECK_SHADOW;
+      ctx.fillRect(-seatW / 2, -seatH / 2 + seatH * WRECK_SHADOW_DROP, seatW, seatH);
+      ctx.fillStyle = WRECK_WOOD;
+      ctx.fillRect(-seatW / 2, -seatH / 2, seatW, seatH);
+      ctx.fillStyle = WRECK_WOOD_MID;
+      ctx.fillRect(-seatW / 2, -seatH / 2, seatW, seatH * BROKEN_CHAIR_SEAT_EDGE);
+      ctx.restore();
+      drawFallenPlank(
+        ctx,
+        cx + ts * BROKEN_CHAIR_SLAT_DX,
+        cy + ts * BROKEN_CHAIR_SLAT_DY,
+        ts * BROKEN_CHAIR_SLAT_LENGTH,
+        ts * BROKEN_CHAIR_SLAT_THICKNESS,
+        BROKEN_CHAIR_SLAT_ANGLE,
+        WRECK_WOOD_MID,
+      );
+      drawFallenPlank(
+        ctx,
+        cx + ts * BROKEN_CHAIR_LEG_DX,
+        cy + ts * BROKEN_CHAIR_LEG_DY,
+        ts * BROKEN_CHAIR_LEG_LENGTH,
+        ts * BROKEN_CHAIR_LEG_THICKNESS,
+        BROKEN_CHAIR_LEG_ANGLE,
+        WRECK_DARK_WOOD,
+      );
+      return true;
+    }
+
+    case BROKEN_BOOKSHELF: {
+      // Unlike the intact shelf — a sprite in the decoration overlay, whose
+      // ground the base pass lays for it — this heap is drawn flat here, so it
+      // has to paint its own floor.
+      drawFloorBeneath(ctx, structure, sx, sy, ts, tx, ty);
+      const cx = sx + ts / 2;
+      const cy = sy + ts / 2;
+      const backX = sx + ts * BROKEN_SHELF_BACK_INSET;
+      const backY = sy + ts * BROKEN_SHELF_BACK_TOP;
+      const backW = ts - ts * BROKEN_SHELF_BACK_INSET * 2;
+      const backH = ts * BROKEN_SHELF_BACK_HEIGHT;
+      ctx.fillStyle = WRECK_SHADOW;
+      ctx.fillRect(backX, backY + backH * WRECK_SHADOW_DROP, backW, backH);
+      ctx.fillStyle = WRECK_DARK_WOOD;
+      ctx.fillRect(backX, backY, backW, backH);
+      ctx.fillStyle = WRECK_SPLINTER;
+      ctx.fillRect(
+        backX + backW * BROKEN_SHELF_TEAR_START,
+        backY,
+        backW * BROKEN_SHELF_TEAR_WIDTH,
+        backH,
+      );
+      drawFallenPlank(
+        ctx,
+        cx + ts * BROKEN_SHELF_UPPER_BOARD_DX,
+        cy + ts * BROKEN_SHELF_UPPER_BOARD_DY,
+        ts * BROKEN_SHELF_UPPER_BOARD_LENGTH,
+        ts * BROKEN_SHELF_BOARD_THICKNESS,
+        BROKEN_SHELF_UPPER_BOARD_ANGLE,
+        WRECK_WOOD,
+      );
+      drawFallenPlank(
+        ctx,
+        cx + ts * BROKEN_SHELF_LOWER_BOARD_DX,
+        cy + ts * BROKEN_SHELF_LOWER_BOARD_DY,
+        ts * BROKEN_SHELF_LOWER_BOARD_LENGTH,
+        ts * BROKEN_SHELF_BOARD_THICKNESS,
+        BROKEN_SHELF_LOWER_BOARD_ANGLE,
+        WRECK_WOOD_MID,
+      );
+      // Spilled books: the only saturated colour in the tile, and what tells a
+      // heap of boards apart from a heap of boards that used to be a shelf.
+      SPILLED_BOOKS.forEach((book, index) => {
+        ctx.fillStyle = SPILLED_BOOK_COLORS[index % SPILLED_BOOK_COLORS.length];
+        ctx.fillRect(
+          sx + ts * book.x,
+          sy + ts * book.y,
+          ts * SPILLED_BOOK_WIDTH,
+          ts * SPILLED_BOOK_HEIGHT,
+        );
+      });
       return true;
     }
 
@@ -927,6 +1095,83 @@ const BOARD_TOP_FRACTION = 0.06;
 const BOARD_HEIGHT_FRACTION = 0.62;
 const MUSTER_SHEET_COLUMNS = 3;
 const MUSTER_SHEET_ROWS = 2;
+
+/*
+ * Broken furniture. Every offset and length below is a fraction of the tile, and
+ * every one is chosen so the drawn art stays inside the tile the piece blocks —
+ * a splinter hanging over the neighbouring floor would let the player stand
+ * inside the wreck.
+ *
+ * The palette is the intact furniture's own, one shade apiece, so a repaired
+ * piece is recognisably the same object mended rather than a different object.
+ */
+const WRECK_DARK_WOOD = '#5a3a1a';
+const WRECK_WOOD = '#8B5E3C';
+const WRECK_WOOD_MID = '#7a5030';
+/** Raw end-grain at a break — the pale flash that reads as "snapped" at 32 px. */
+const WRECK_SPLINTER = '#c9a06a';
+const WRECK_SHADOW = 'rgba(0,0,0,0.22)';
+/** How far a piece's contact shadow sits below it, as a fraction of its own thickness. */
+const WRECK_SHADOW_DROP = 0.55;
+/** Share of a plank's length given over to its broken end. */
+const WRECK_SPLINTER_FRACTION = 0.12;
+
+const BROKEN_TABLE_PLANK_THICKNESS = 0.18;
+const BROKEN_TABLE_NEAR_PLANK_DX = -0.14;
+const BROKEN_TABLE_NEAR_PLANK_DY = 0.06;
+const BROKEN_TABLE_NEAR_PLANK_LENGTH = 0.72;
+const BROKEN_TABLE_NEAR_PLANK_ANGLE = -0.18;
+const BROKEN_TABLE_FAR_PLANK_DX = 0.16;
+const BROKEN_TABLE_FAR_PLANK_DY = -0.14;
+const BROKEN_TABLE_FAR_PLANK_LENGTH = 0.62;
+const BROKEN_TABLE_FAR_PLANK_ANGLE = 0.3;
+const BROKEN_TABLE_LEG_DX = -0.28;
+const BROKEN_TABLE_LEG_DY = -0.2;
+const BROKEN_TABLE_LEG_LENGTH = 0.32;
+const BROKEN_TABLE_LEG_THICKNESS = 0.1;
+const BROKEN_TABLE_LEG_ANGLE = 1.15;
+
+const BROKEN_CHAIR_SEAT_DY = 0.12;
+const BROKEN_CHAIR_SEAT_ANGLE = 0.35;
+const BROKEN_CHAIR_SEAT_WIDTH = 0.44;
+const BROKEN_CHAIR_SEAT_HEIGHT = 0.3;
+/** Share of the seat's height lit as its front lip, so it reads as tipped over. */
+const BROKEN_CHAIR_SEAT_EDGE = 0.28;
+const BROKEN_CHAIR_SLAT_DX = 0.16;
+const BROKEN_CHAIR_SLAT_DY = -0.22;
+const BROKEN_CHAIR_SLAT_LENGTH = 0.34;
+const BROKEN_CHAIR_SLAT_THICKNESS = 0.08;
+const BROKEN_CHAIR_SLAT_ANGLE = -0.55;
+const BROKEN_CHAIR_LEG_DX = -0.24;
+const BROKEN_CHAIR_LEG_DY = -0.12;
+const BROKEN_CHAIR_LEG_LENGTH = 0.26;
+const BROKEN_CHAIR_LEG_THICKNESS = 0.07;
+const BROKEN_CHAIR_LEG_ANGLE = 0.95;
+
+const BROKEN_SHELF_BACK_INSET = 0.1;
+const BROKEN_SHELF_BACK_TOP = 0.08;
+const BROKEN_SHELF_BACK_HEIGHT = 0.3;
+/** Where along the back panel a shelf board tore out, and how wide the scar is. */
+const BROKEN_SHELF_TEAR_START = 0.42;
+const BROKEN_SHELF_TEAR_WIDTH = 0.1;
+const BROKEN_SHELF_BOARD_THICKNESS = 0.11;
+const BROKEN_SHELF_UPPER_BOARD_DX = -0.06;
+const BROKEN_SHELF_UPPER_BOARD_DY = 0.18;
+const BROKEN_SHELF_UPPER_BOARD_LENGTH = 0.72;
+const BROKEN_SHELF_UPPER_BOARD_ANGLE = -0.12;
+const BROKEN_SHELF_LOWER_BOARD_DX = 0.08;
+const BROKEN_SHELF_LOWER_BOARD_DY = 0.34;
+const BROKEN_SHELF_LOWER_BOARD_LENGTH = 0.56;
+const BROKEN_SHELF_LOWER_BOARD_ANGLE = 0.16;
+const SPILLED_BOOK_WIDTH = 0.13;
+const SPILLED_BOOK_HEIGHT = 0.09;
+const SPILLED_BOOK_COLORS: ReadonlyArray<string> = ['#8c2f2a', '#2f5a44', '#3a4a7a'];
+/** Tile-fraction corners of the fallen books, tucked between the boards. */
+const SPILLED_BOOKS: ReadonlyArray<{ readonly x: number; readonly y: number }> = [
+  { x: 0.16, y: 0.5 },
+  { x: 0.66, y: 0.44 },
+  { x: 0.38, y: 0.74 },
+];
 
 const MAP_TABLE_LEG_INSET_FRACTION = 0.15;
 const MAP_TABLE_TOP_FRACTION = 0.2;

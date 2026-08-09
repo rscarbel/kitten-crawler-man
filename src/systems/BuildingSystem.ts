@@ -32,7 +32,7 @@ const SINGLE_TILE_DOORWAY_WIDTH = 1;
  * width but no start column would otherwise silently open a span beginning at
  * the map's west edge.
  */
-function doorwaySpan(entry: BuildingEntry): { readonly x0: number; readonly width: number } {
+export function doorwaySpan(entry: BuildingEntry): { readonly x0: number; readonly width: number } {
   if (entry.doorwayX0 === undefined || entry.doorwayWidth === undefined) {
     return { x0: entry.doorTile.x, width: SINGLE_TILE_DOORWAY_WIDTH };
   }

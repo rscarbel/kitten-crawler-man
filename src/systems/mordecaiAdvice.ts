@@ -131,7 +131,10 @@ export type AdviceObjectiveId =
   | 'ball_of_swine_distant'
   | 'the_circus'
   | 'krasue_murders'
-  | 'shady_bounties';
+  | 'shady_bounties'
+  | 'anchor_offer'
+  | 'anchor_stone'
+  | 'speed_fizz_tip';
 
 interface AdviceText {
   readonly pages: ReadonlyArray<string>;
@@ -221,6 +224,21 @@ const ADVICE_TEXT = {
       'The coin is real, though, and the marks are out where nobody minds the noise. It is honest work by the standards of this place.',
     ],
     bearing: 'He loiters {direction} of here.',
+  },
+  anchor_offer: {
+    pages: [
+      "There is a fortune teller in the plaza who claims to know how to get you home faster than your own two feet. Worth hearing out, if you're tired of the walk.",
+    ],
+    bearing: 'Her table is {direction} of here.',
+  },
+  anchor_stone: {
+    pages: [
+      'That stone Madame Voss put together for you is not for show. Use it out in the city and it drags the whole party back to the town square. Use it in the square and it drags you right back to where you were standing. A minute to catch its breath in between.',
+    ],
+  },
+  speed_fizz_tip: {
+    pages: ['The tinker sells Speed Fizz — twice your speed for 25 seconds.'],
+    bearing: 'His stall is {direction} of here.',
   },
 } as const satisfies Record<AdviceObjectiveId, AdviceText>;
 

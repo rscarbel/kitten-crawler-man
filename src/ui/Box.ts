@@ -236,6 +236,14 @@ export const PROGRESS_PRESETS = {
   mana: { fill: '#3b82f6', background: 'rgba(0,0,0,0.5)', radius: 2 },
   xp: { fill: '#facc15', background: 'rgba(0,0,0,0.5)', radius: 2 },
   stamina: { fill: '#4ade80', background: 'rgba(0,0,0,0.5)', radius: 2 },
+  /** A channelled fast travel — sky blue, so it reads as neither health nor threat. */
+  recall: {
+    fill: '#38bdf8',
+    background: 'rgba(0,0,0,0.6)',
+    border: '#0ea5e9',
+    borderWidth: 1,
+    radius: 2,
+  },
   boss: {
     fill: '#a855f7',
     background: 'rgba(0,0,0,0.7)',

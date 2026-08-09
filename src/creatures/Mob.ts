@@ -180,7 +180,7 @@ const ALERT_DURATION_FRAMES = 300;
 const STUCK_FLIP_FRAMES = 50;
 
 /** Speed multiplier while mob is slowed. */
-const MOB_SLOWED_SPEED_FRACTION = 0.35;
+export const MOB_SLOWED_SPEED_FRACTION = 0.35;
 
 /** Lifetime of a hit-applied slow — one frame, refreshed by each new impact. */
 const HIT_SLOW_FRAMES = 1;

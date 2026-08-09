@@ -43,11 +43,14 @@ import {
 } from '../core/JournalProgress';
 import { TownGuideSystem } from '../systems/TownGuideSystem';
 import { drawArrowAbovePlayer, drawBearingArrowAbovePlayer } from '../ui/WorldArrow';
+import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
 import {
+  availableTargets,
   collectTrackerEntries,
   isOutstanding,
   resolvePinnedEntry,
   type TrackerEntry,
+  type TrackerTarget,
 } from '../systems/questTracker';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
@@ -92,6 +95,11 @@ import {
   type CompanionStanceState,
 } from '../systems/CompanionSystem';
 import { StairwellSystem } from '../systems/StairwellSystem';
+import {
+  RECALL_COOLDOWN_FRAMES,
+  RecallSystem,
+  type RecallSceneRebuildState,
+} from '../systems/RecallSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import type { Townsperson } from '../creatures/Townsperson';
@@ -116,7 +124,7 @@ import { CitizenDialog } from '../ui/CitizenDialog';
 import { NoticeBoardPanel } from '../ui/NoticeBoardPanel';
 import { PricedMenuPanel } from '../ui/PricedMenuPanel';
 import { FortuneTellerPanel } from '../ui/FortuneTellerPanel';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { drawInteractionPrompt, setInteractionPromptsSuppressed } from '../ui/InteractionPrompt';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
@@ -190,6 +198,12 @@ import {
   type MurderQuestProgress,
 } from '../core/MurderQuestProgress';
 import {
+  captureAnchorQuestProgress,
+  createAnchorQuestProgress,
+  restoreAnchorQuestProgress,
+  type AnchorQuestProgress,
+} from '../core/AnchorQuestProgress';
+import {
   captureBountyProgress,
   createBountyProgress,
   restoreBountyProgress,
@@ -197,7 +211,7 @@ import {
 } from '../core/BountyProgress';
 import { BountySystem } from '../systems/BountySystem';
 import { findBountyDef } from '../systems/bountyDefs';
-import { hasRoomToMove } from '../map/findWalkableTile';
+import { findNearbyWalkableTile, hasRoomToMove } from '../map/findWalkableTile';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
@@ -206,6 +220,13 @@ import { DEFEND_QUEST_ID, DefendQuestSystem } from '../systems/DefendQuestSystem
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
 import { CircusQuestSystem, CIRCUS_QUEST_ID } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
+import { AnchorQuestSystem } from '../systems/AnchorQuestSystem';
+import {
+  propBeaconTarget,
+  stallBeaconTarget,
+  doorwayBeaconTarget,
+} from '../systems/objectiveBeaconTargets';
+import { TINKER_VENDOR_ID } from '../systems/market/vendorDefs';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import {
   captureClubMembership,
@@ -310,6 +331,12 @@ export interface DungeonSceneOptions {
    * alongside `existingMap` — its fog array is sized to that map's structure.
    */
   existingMiniMap?: MiniMapSystem;
+  /**
+   * The Wayfinder's Anchor's cooldown and trail anchor, carried across a
+   * building-exit rebuild — only meaningful alongside `existingMap`, since the
+   * anchor tile it names is only still real ground on the same map instance.
+   */
+  existingRecallState?: RecallSceneRebuildState;
   /** Carry achievement managers across floor transitions. */
   humanAchievements?: AchievementManager;
   catAchievements?: AchievementManager;
@@ -344,6 +371,8 @@ export interface DungeonSceneOptions {
   circusQuestProgress?: CircusQuestProgress;
   /** Murder-mystery questline state, threaded by reference across building/scene transitions. */
   murderQuestProgress?: MurderQuestProgress;
+  /** Wayfinder's Anchor questline state, threaded by reference across building/scene transitions. */
+  anchorQuestProgress?: AnchorQuestProgress;
   /** Journal state that must survive a door: guide visits and the pinned objective. */
   journalProgress?: JournalProgress;
   /** Bounty-board state, threaded by reference across building/scene transitions. */
@@ -396,6 +425,12 @@ const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
 const BOUNTY_WARP_STANDOFF_TILES = 4;
 /** Widest ring `!bounty go` will search for somewhere walkable to land. */
 const BOUNTY_WARP_SEARCH_TILES = 20;
+/** A recall lands *on* its destination where it can, so the ring search starts there. */
+const RECALL_WARP_STANDOFF_TILES = 0;
+/** Widest ring the Wayfinder's Anchor will search for somewhere to set the party down. */
+const RECALL_WARP_SEARCH_TILES = 24;
+/** How far from the human the companion may be nudged when a warp lands. */
+const WARP_COMPANION_SEARCH_TILES = 6;
 /** Distance-attenuated ambience tuning for the overworld town. */
 const FOUNTAIN_AMBIENT_RADIUS_TILES = 10;
 const FOUNTAIN_AMBIENT_VOLUME = 0.5;
@@ -748,6 +783,8 @@ export class DungeonScene extends GameplayScene {
   /** Null on every map but the overworld, which is the only one with rivers. */
   private water: WaterAnimationSystem | null;
   private stairwell: StairwellSystem;
+  /** The Wayfinder's Anchor: channel, cooldown and trail anchor. */
+  private readonly recall: RecallSystem;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
   private townProps: TownPropSystem | null = null;
@@ -776,6 +813,7 @@ export class DungeonScene extends GameplayScene {
   private spiderQuest!: SpiderQuestSystem;
   private circusQuest!: CircusQuestSystem;
   private murderQuest!: MurderMysteryQuestSystem;
+  private anchorQuest!: AnchorQuestSystem;
   private doomsdayEscape!: DoomsdayEscapeSystem;
   private overworldMusic: OverworldMusicSystem | null = null;
   private ambientSound: AmbientSoundSystem | null = null;
@@ -788,6 +826,7 @@ export class DungeonScene extends GameplayScene {
   private riverAmbientEmitter: AmbientEmitter | null = null;
   private readonly circusQuestProgress: CircusQuestProgress;
   private readonly murderQuestProgress: MurderQuestProgress;
+  private readonly anchorQuestProgress: AnchorQuestProgress;
   private readonly journalProgress: JournalProgress;
   private readonly bountyProgress: BountyProgress;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
@@ -1170,6 +1209,7 @@ export class DungeonScene extends GameplayScene {
     });
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
+    this.anchorQuestProgress = options?.anchorQuestProgress ?? createAnchorQuestProgress();
     this.journalProgress = options?.journalProgress ?? createJournalProgress();
     this.bountyProgress = options?.bountyProgress ?? createBountyProgress();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
@@ -1369,6 +1409,22 @@ export class DungeonScene extends GameplayScene {
       partyLevel,
     );
 
+    this.recall = new RecallSystem(
+      this.gameMap,
+      levelDef,
+      this.bus,
+      () => this.bossRoom.anyLocked,
+      (player, rangePx) => this.hasNearbyEnemy(player, rangePx),
+      (tile) => this.warpPartyForRecall(tile),
+      (message) => this.menus.hotbarToast.show(message),
+      this.audio,
+    );
+    // Only meaningful on the same map instance the anchor tile was recorded
+    // against — a building-exit rebuild, never a floor change or a death.
+    if (options?.existingMap !== undefined && options.existingRecallState !== undefined) {
+      this.recall.restoreFromSceneRebuild(options.existingRecallState);
+    }
+
     if (levelDef.isOverworld) {
       this.building = new BuildingSystem(this.gameMap, (entry) => {
         // Spawn one tile south of the door so the player exits outside and
@@ -1426,6 +1482,7 @@ export class DungeonScene extends GameplayScene {
                   checkpoint: undefined,
                   existingMap: this.gameMap,
                   existingMiniMap: this.miniMap,
+                  existingRecallState: this.recall.captureForSceneRebuild(),
                   humanAchievements: this.humanAchievements,
                   catAchievements: this.catAchievements,
                   mongoUnlocked: this.mongoSystem.unlocked,
@@ -1436,6 +1493,7 @@ export class DungeonScene extends GameplayScene {
                   onResetGame: this.onResetGameCallback ?? undefined,
                   circusQuestProgress: this.circusQuestProgress,
                   murderQuestProgress: this.murderQuestProgress,
+                  anchorQuestProgress: this.anchorQuestProgress,
                   journalProgress: this.journalProgress,
                   bountyProgress: this.bountyProgress,
                   doomsdayQuestProgress: this.doomsdayQuestProgress,
@@ -1465,6 +1523,7 @@ export class DungeonScene extends GameplayScene {
             this.mongoPetState,
             () => this.abilityManager.getLevel('mongo'),
             this.gameStats,
+            this.anchorQuestProgress,
           ),
         );
       });
@@ -1480,6 +1539,9 @@ export class DungeonScene extends GameplayScene {
         (browse) => this.openMarketStall(browse),
         () => this.marketPanel?.isOpen === true,
         () => this.audio,
+        // Resolved lazily: the quest system is built after the market, and a
+        // stall is only ever browsed long after both exist.
+        (gate) => this.anchorQuest.isVendorLineOffered(gate),
       );
       this.townProps = new TownPropSystem(
         this.gameMap,
@@ -1665,6 +1727,21 @@ export class DungeonScene extends GameplayScene {
       (mob) => this.world.roster.add(mob),
       this.murderQuestProgress,
       this.overworldMusic,
+      this.audio,
+    );
+    // Reads the plaza's fortune tile and the tinker's counter through accessors
+    // rather than holding either system: both are null on floors with no town.
+    this.anchorQuest = new AnchorQuestSystem(
+      this.bus,
+      this.anchorQuestProgress,
+      () => [this.human, this.cat],
+      () => propBeaconTarget(this.townProps?.fortuneTellerTile ?? null),
+      () => stallBeaconTarget(this.market?.stallTileFor(TINKER_VENDOR_ID) ?? null),
+      (buildingName) =>
+        doorwayBeaconTarget(
+          this.gameMap.buildingEntries.find((entry) => entry.name === buildingName) ?? null,
+        ),
+      (message) => this.menus.announce(message),
       this.audio,
     );
     this.doomsdayEscape = new DoomsdayEscapeSystem(this.gameMap, this.doomsdayQuestProgress);
@@ -1952,6 +2029,9 @@ export class DungeonScene extends GameplayScene {
       difficultyStats.finishStairwellHunt();
       this.stairwell.retireWayfinder();
     });
+    bus.on('fastTravelUsed', () => {
+      this.anchorQuestProgress.recallEverUsed = true;
+    });
 
     // ── mobKilled: corpse marker, achievements, loot, grub spawns ──
     bus.on('mobKilled', (e) => {
@@ -2217,6 +2297,18 @@ export class DungeonScene extends GameplayScene {
       }
     });
 
+    // Whatever the player just picked up is what they mean to do next, so the
+    // Journal opens already showing it and the world arrow already points at it,
+    // rather than waiting for a pin the player has to know exists.
+    //
+    // The quest's own id, not the id of whichever step is being tracked right
+    // now: the anchor questline re-keys its entry per shard, and a pin on one
+    // shard's row would die the moment that shard was found. `pinMatchesEntry`
+    // is what lets the shorter id keep resolving.
+    bus.on('questStarted', (e) => {
+      this.journalProgress.pinnedTrackerId = e.questId;
+    });
+
     bus.on('questCompleted', (e) => {
       if (e.questId === 'defend_goblin_mother') {
         const def = this.defendQuest.questManager.getDef(e.questId);
@@ -2328,6 +2420,7 @@ export class DungeonScene extends GameplayScene {
         if (this.bounty?.dismissDialog() === true) return true;
         if (this.circusQuest.dismissDialog()) return true;
         if (this.murderQuest.dismissDialog()) return true;
+        if (this.anchorQuest.dismissDialog()) return true;
         if (this.noticeBoard?.isOpen === true) {
           this.noticeBoard.close();
           return true;
@@ -2831,6 +2924,68 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
+  /** The tile the pinned Journal entry points at, or null when nothing is pinned. */
+  private get pinnedObjectiveTile(): TrackerTarget | null {
+    const pinned = resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries);
+    return pinned?.target ?? null;
+  }
+
+  /**
+   * A standing column of light on the pinned objective's own tile.
+   *
+   * The counterpart to the arrow below, and deliberately the opposite trade: the
+   * arrow gives a bearing from anywhere and goes quiet up close, where a
+   * direction is no longer the question. This is only ever drawn when the tile
+   * is on screen, and answers the question that replaces it — which of the
+   * things now in front of the player is the one.
+   */
+  private renderPinnedObjectiveBeacon(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
+    const target = this.pinnedObjectiveTile;
+    if (target === null) return;
+    drawObjectiveBeacon(
+      ctx,
+      target.x * TILE_SIZE - camX,
+      target.y * TILE_SIZE - camY,
+      TILE_SIZE,
+      PINNED_ARROW_COLOR,
+      performance.now(),
+      target,
+    );
+  }
+
+  /**
+   * A beacon over every quest still on offer, unaccepted — Madame Voss's table
+   * included, before the player has ever spoken to her.
+   *
+   * Independent of the pin on purpose: nothing here implies a quest is under
+   * way, only that one could be started. `resolvePinnedEntry` no longer falls
+   * back to picking one of these for the player — that read as the floor
+   * starting with a quest already active — so this is the only thing that
+   * still points at a quest giver before their quest is accepted.
+   */
+  private renderAvailableQuestBeacons(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
+    const now = performance.now();
+    for (const target of availableTargets(this._trackerEntries)) {
+      drawObjectiveBeacon(
+        ctx,
+        target.x * TILE_SIZE - camX,
+        target.y * TILE_SIZE - camY,
+        TILE_SIZE,
+        PINNED_ARROW_COLOR,
+        now,
+        target,
+      );
+    }
+  }
+
   /**
    * The world arrow for whichever Journal entry the player pinned.
    *
@@ -2843,9 +2998,8 @@ export class DungeonScene extends GameplayScene {
     camX: number,
     camY: number,
   ): void {
-    const pinned = resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries);
-    const target = pinned?.target;
-    if (target === undefined) return;
+    const target = this.pinnedObjectiveTile;
+    if (target === null) return;
 
     const player = this.active();
     const targetX = (target.x + TILE_CENTRE_FRACTION) * TILE_SIZE;
@@ -3000,32 +3154,89 @@ export class DungeonScene extends GameplayScene {
     }
     const markTileX = Math.floor(mark.x / TILE_SIZE);
     const markTileY = Math.floor(mark.y / TILE_SIZE);
-    const landing = this.findWarpLandingTile(markTileX, markTileY);
+    const landing = this.findWarpLandingTile(
+      markTileX,
+      markTileY,
+      BOUNTY_WARP_STANDOFF_TILES,
+      BOUNTY_WARP_SEARCH_TILES,
+    );
     if (landing === null) {
       this.audio?.play('error');
       return;
     }
-    this.human.x = landing.x * TILE_SIZE;
-    this.human.y = landing.y * TILE_SIZE;
-    this.cat.x = this.human.x;
-    this.cat.y = this.human.y;
+    this.placePartyAtTile(landing);
     this.chat.showBubble('🎯 WARPED TO MARK');
   }
 
   /**
-   * Nearest walkable tile at least {@link BOUNTY_WARP_STANDOFF_TILES} out from
-   * the mark, so the party lands in aggro range rather than inside the boss.
+   * The Wayfinder's Anchor's half of the warp: everything that has to happen to
+   * the world, in the order the shipped teleports establish.
+   *
+   * The landing search runs *before* the dismissal, unlike the building-entry
+   * precedent it copies: a dismissal on a warp that then finds nowhere to land
+   * would cost the player their pet for a trip they never took.
+   *
+   * @returns whether the party actually moved.
+   */
+  private warpPartyForRecall(tile: { x: number; y: number }): boolean {
+    const landing = this.findWarpLandingTile(
+      tile.x,
+      tile.y,
+      RECALL_WARP_STANDOFF_TILES,
+      RECALL_WARP_SEARCH_TILES,
+    );
+    if (landing === null) return false;
+
+    // Neither can follow a warp, and their own dismissal is what keeps `mobs`
+    // and `mobGrid` in step — the party is moved, they are removed.
+    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.placePartyAtTile(landing);
+    return true;
+  }
+
+  /**
+   * Sets both crawlers down on a landing tile: the human on it, the companion on
+   * the nearest tile beside it that will hold them.
+   *
+   * Shared by every warp that is not a checkpoint respawn, so the cheat and the
+   * stone cannot drift apart on where a party ends up.
+   */
+  private placePartyAtTile(landing: { x: number; y: number }): void {
+    this.human.x = landing.x * TILE_SIZE;
+    this.human.y = landing.y * TILE_SIZE;
+    const companionTile = findNearbyWalkableTile(
+      this.gameMap,
+      landing.x + 1,
+      landing.y,
+      WARP_COMPANION_SEARCH_TILES,
+    );
+    // Stacked on the human rather than nowhere: the companion is dragged along
+    // by every shipped warp, and CompanionSystem gives up past its path budget.
+    this.cat.x = (companionTile?.x ?? landing.x) * TILE_SIZE;
+    this.cat.y = (companionTile?.y ?? landing.y) * TILE_SIZE;
+  }
+
+  /**
+   * Nearest tile with room to stand at least `standoffTiles` out from a target.
+   *
+   * The standoff is what keeps `!bounty go` from dropping the party inside the
+   * boss; a recall passes zero, because landing on the town square is the point.
+   * `hasRoomToMove` rather than `isWalkable`: a one-tile gap between two trunks
+   * passes every walkability test and traps whoever lands in it.
    */
   private findWarpLandingTile(
-    markTileX: number,
-    markTileY: number,
+    targetTileX: number,
+    targetTileY: number,
+    standoffTiles: number,
+    searchTiles: number,
   ): { x: number; y: number } | null {
-    for (let radius = BOUNTY_WARP_STANDOFF_TILES; radius <= BOUNTY_WARP_SEARCH_TILES; radius++) {
+    for (let radius = standoffTiles; radius <= searchTiles; radius++) {
       for (let dy = -radius; dy <= radius; dy++) {
         for (let dx = -radius; dx <= radius; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-          const tileX = markTileX + dx;
-          const tileY = markTileY + dy;
+          const tileX = targetTileX + dx;
+          const tileY = targetTileY + dy;
           if (hasRoomToMove(this.gameMap, tileX, tileY)) return { x: tileX, y: tileY };
         }
       }
@@ -3195,6 +3406,7 @@ export class DungeonScene extends GameplayScene {
       safeRoom: this.safeRoom.captureCheckpoint(),
       miniMap: this.miniMap.captureCheckpoint(),
       stairwell: this.stairwell.captureCheckpoint(),
+      recall: this.recall.captureCheckpoint(),
       treasureChests: this.treasureChests.captureCheckpoint(),
       destruction: this.destruction.captureCheckpoint(),
       bopca: this.bopca.captureCheckpoint(),
@@ -3213,6 +3425,7 @@ export class DungeonScene extends GameplayScene {
 
       circusQuestProgress: captureCircusQuestProgress(this.circusQuestProgress),
       murderQuestProgress: captureMurderQuestProgress(this.murderQuestProgress),
+      anchorQuestProgress: captureAnchorQuestProgress(this.anchorQuestProgress),
       journal: captureJournalProgress(this.journalProgress),
       bountyProgress: captureBountyProgress(this.bountyProgress),
       clubMembership: captureClubMembership(this.clubMembership),
@@ -3246,6 +3459,7 @@ export class DungeonScene extends GameplayScene {
     this.safeRoom.restoreCheckpoint(world.safeRoom);
     this.miniMap.restoreCheckpoint(world.miniMap);
     this.stairwell.restoreCheckpoint(world.stairwell);
+    this.recall.restoreCheckpoint(world.recall);
     this.treasureChests.restoreCheckpoint(world.treasureChests);
     this.destruction.restoreCheckpoint(world.destruction);
     this.bopca.restoreCheckpoint(world.bopca);
@@ -3273,6 +3487,7 @@ export class DungeonScene extends GameplayScene {
 
     restoreCircusQuestProgress(this.circusQuestProgress, world.circusQuestProgress);
     restoreMurderQuestProgress(this.murderQuestProgress, world.murderQuestProgress);
+    restoreAnchorQuestProgress(this.anchorQuestProgress, world.anchorQuestProgress);
     restoreJournalProgress(this.journalProgress, world.journal);
     // Paired with the bounty system above: the re-stage reads the mark's type,
     // name and site from this record, so an un-restored cursor would re-stage
@@ -3384,6 +3599,7 @@ export class DungeonScene extends GameplayScene {
         // lethal countdown for free by simply dying to anything else.
         circusQuestProgress: this.circusQuestProgress,
         murderQuestProgress: this.murderQuestProgress,
+        anchorQuestProgress: this.anchorQuestProgress,
         // Carried through a death restart with the questlines it belongs to: the
         // Town Guide is a record of where the player has been, and dying does not
         // un-visit the shop.
@@ -3452,6 +3668,10 @@ export class DungeonScene extends GameplayScene {
 
   /** Opens the fortune teller's panel, seeded with the current quest state. */
   private openFortuneTeller(): void {
+    // While the Anchor questline still has business with Madame Voss, consulting
+    // her opens that conversation. The card reading is what she gives you when
+    // it does not.
+    if (this.anchorQuest.tryOpenDialog(this.active())) return;
     if (this.fortuneTeller === null) return;
     this.fortuneTeller.openWith(this.townDialogContext());
     this.audio?.play('menu_open');
@@ -3617,12 +3837,22 @@ export class DungeonScene extends GameplayScene {
         focusContext: 'defend-quest',
       },
       floatingDialog(this.defendQuest.isOutcomeOverlayShowing, () => this.advanceDefendQuestPage()),
+      floatingDialog(this.circusQuest.isOutcomeOverlayShowing, () =>
+        this.dismissOutcomeOverlay(this.circusQuest.advanceOutcomeOverlay()),
+      ),
+      floatingDialog(this.murderQuest.isOutcomeOverlayShowing, () =>
+        this.dismissOutcomeOverlay(this.murderQuest.advanceOutcomeOverlay()),
+      ),
+      floatingDialog(this.anchorQuest.isOutcomeOverlayShowing, () =>
+        this.dismissOutcomeOverlay(this.anchorQuest.advanceOutcomeOverlay()),
+      ),
       // The quest systems below own their own window listener for Space, so the
       // claim here only has to keep the press away from the world behind them.
       modal(this.spiderQuest.isDialogOpen, 'spider-quest'),
       modal(this.bounty?.isDialogOpen === true, 'quest-dialog'),
       modal(this.circusQuest.isDialogOpen, 'quest-dialog'),
       modal(this.murderQuest.isDialogOpen, 'quest-dialog'),
+      modal(this.anchorQuest.isDialogOpen, 'quest-dialog'),
       floatingDialog(this.safeRoom.mordecaiDialogOpen, () => this.safeRoom.advanceMordecaiDialog()),
       // Not world-halting for the same reason: `update`'s sleep branch is the
       // only thing that ticks the sleep down, and the only thing that ever ends
@@ -3670,6 +3900,11 @@ export class DungeonScene extends GameplayScene {
 
   private advanceDefendQuestPage(): void {
     if (this.defendQuest.advancePage()) this.audio?.play('menu_click');
+  }
+
+  /** Shared feedback for the space-dismisses-the-banner-early claims below. */
+  private dismissOutcomeOverlay(dismissed: boolean): void {
+    if (dismissed) this.audio?.play('menu_click');
   }
 
   /** The overlay that currently owns input, or null when play has the floor. */
@@ -3816,9 +4051,18 @@ export class DungeonScene extends GameplayScene {
         // stops: Mordecai's advice is quest-shaped — a page of prose and a
         // bearing about something worth doing — and "there is a shop" is a
         // signpost, not a story. The Journal carries those; he does not.
-        return [this.circusObjective(), this.murderQuestObjective(), this.bountyObjective()].filter(
-          (objective): objective is AdviceSlot => objective !== null,
-        );
+        //
+        // The Anchor's offer leads the list: accepting it is what makes every
+        // later trip on this floor shorter, so he raises it before the other
+        // three errands rather than after them.
+        return [
+          this.anchorOfferObjective(),
+          this.circusObjective(),
+          this.murderQuestObjective(),
+          this.bountyObjective(),
+          this.anchorStoneObjective(),
+          this.speedFizzObjective(),
+        ].filter((objective): objective is AdviceSlot => objective !== null);
       default:
         return [];
     }
@@ -3903,6 +4147,49 @@ export class DungeonScene extends GameplayScene {
       this.arena.phase2Active,
       this.gameMap.arenaExteriors[0]?.centre ?? null,
     );
+  }
+
+  /** Points at Madame Voss; complete once the party has taken up the errand. */
+  private anchorOfferObjective(): AdviceObjective {
+    return adviceObjective(
+      'anchor_offer',
+      this.anchorQuestProgress.status !== 'available',
+      this.townProps?.fortuneTellerTile ?? null,
+    );
+  }
+
+  /**
+   * Restates what the assembled stone does, or null before it exists — a
+   * player with no stone has nothing to use it on.
+   *
+   * No target: the objective is "use the item you are carrying", not "walk
+   * somewhere", so there is nothing for a bearing to point at.
+   */
+  private anchorStoneObjective(): AdviceObjective | null {
+    if (this.anchorQuestProgress.status !== 'completed') return null;
+    return adviceObjective('anchor_stone', this.anchorQuestProgress.recallEverUsed, null);
+  }
+
+  /** Points at the tinker's stall; complete once a Speed Fizz has been bought or drunk. */
+  private speedFizzObjective(): AdviceObjective {
+    return adviceObjective(
+      'speed_fizz_tip',
+      this.anchorQuestProgress.speedFizzDiscovered,
+      this.market?.stallTileFor(TINKER_VENDOR_ID) ?? this.gameMap.townSquareCentre ?? null,
+    );
+  }
+
+  /**
+   * Latches `speedFizzDiscovered` once either crawler is holding or drinking a
+   * fizz. Neither signal alone survives the whole story — a bought fizz gets
+   * drunk, a drunk fizz's status expires — so this is read every frame and only
+   * ever flips the flag on, never off.
+   */
+  private updateSpeedFizzDiscovery(): void {
+    if (this.anchorQuestProgress.speedFizzDiscovered) return;
+    const owns = (player: HumanPlayer | CatPlayer): boolean =>
+      player.inventory.countOf('speed_fizz') > 0 || player.hasStatus('speed_fizz');
+    if (owns(this.human) || owns(this.cat)) this.anchorQuestProgress.speedFizzDiscovered = true;
   }
 
   private triggerSpaceAction(tapScreenX?: number, tapScreenY?: number): void {
@@ -4035,6 +4322,12 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.tryBuildBarrier(this.active());
       return true;
     }
+    // A press while the stone is already channelling gives it up, so the same
+    // key both starts and abandons the trip.
+    if (slot.id === 'wayfinders_anchor') {
+      this.recall.toggle(this.active());
+      return true;
+    }
     return false;
   }
 
@@ -4081,6 +4374,7 @@ export class DungeonScene extends GameplayScene {
     if (this.bounty?.handleClick(mx, my) === true) return;
     if (this.circusQuest.handleClick(mx, my)) return;
     if (this.murderQuest.handleClick(mx, my)) return;
+    if (this.anchorQuest.handleClick(mx, my)) return;
     // Only the dialog's own box is consumed: a conversation does not halt the
     // world, so the bag can be open underneath it and its slots must stay live.
     if (this.citizenDialog?.handleClick(mx, my) === true) return;
@@ -4435,6 +4729,10 @@ export class DungeonScene extends GameplayScene {
   render(ctx: CanvasRenderingContext2D): void {
     setButtonAudio(this.audio);
     setButtonMouseState(this._mouseX, this._mouseY, this._mouseDown);
+    // Any overlay at all, not only the world-halting ones: a street conversation
+    // lets the player keep walking, and a "SPACE — Talk" cap still hovering over
+    // the citizen they are already talking to is the loudest of these.
+    setInteractionPromptsSuppressed(this.focusedOverlay !== null || this.gameOver);
     const { x: camX, y: camY } = this.camera();
 
     const rc: RenderContext = {
@@ -4568,7 +4866,10 @@ export class DungeonScene extends GameplayScene {
       this.renderWayfinderArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
       this.bounty?.renderArrow(ctx, this.active(), camX, camY, this._hudRect);
+      this.renderAvailableQuestBeacons(ctx, camX, camY);
+      this.renderPinnedObjectiveBeacon(ctx, camX, camY);
       this.renderPinnedObjectiveArrow(ctx, camX, camY);
+      this.recall.render(ctx, this.active(), camX, camY, this._hudRect);
     }
 
     if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
@@ -4657,6 +4958,12 @@ export class DungeonScene extends GameplayScene {
         current: this.human.smushCooldown,
         max: Math.max(1, this.human.getSmushCooldownMax()),
       });
+      // Keyed by item id rather than ability id — the stone is a plain item that
+      // happens to have a cooldown; `renderSlot` falls back to the id for it.
+      this.menus.inventoryPanel.abilityCooldowns.set('wayfinders_anchor', {
+        current: this.recall.cooldownRemainingFrames,
+        max: RECALL_COOLDOWN_FRAMES,
+      });
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.menus.inventoryPanel.mmSize = mmSz;
 
@@ -4700,6 +5007,7 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.renderUI(ctx, mobileQuestTopY);
       this.circusQuest.renderUI(ctx);
       this.murderQuest.renderUI(ctx);
+      this.anchorQuest.renderUI(ctx);
       this.doomsdayEscape.renderUI(ctx);
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
@@ -4945,6 +5253,7 @@ export class DungeonScene extends GameplayScene {
     markers.push(...this.defendQuest.questMarkers);
     markers.push(...this.circusQuest.questMarkers);
     markers.push(...this.murderQuest.questMarkers);
+    markers.push(...this.anchorQuest.questMarkers);
     if (this.bounty !== null) markers.push(...this.bounty.questMarkers);
     const pinned = resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries);
     // The pinned objective gets a marker of its own on top of whatever its own
@@ -4968,6 +5277,7 @@ export class DungeonScene extends GameplayScene {
         this.spiderQuest,
         this.circusQuest,
         this.murderQuest,
+        this.anchorQuest,
         this.bounty,
         this.townGuide,
       ]),
@@ -5070,6 +5380,9 @@ export class DungeonScene extends GameplayScene {
     const ctx = this.buildSystemContext();
 
     this.safeRoom.update(ctx);
+    // Straight after the context is built, so the move-cancel it watches for is
+    // this frame's movement rather than the previous frame's.
+    this.recall.update(ctx);
     this.stairwell.update(ctx);
     if (this.stairwell.wayfinderAnnouncePending) {
       this.stairwell.wayfinderAnnouncePending = false;
@@ -5121,6 +5434,8 @@ export class DungeonScene extends GameplayScene {
     }
     this.circusQuest.update(ctx);
     this.murderQuest.update(ctx);
+    this.anchorQuest.update();
+    this.updateSpeedFizzDiscovery();
     this.doomsdayEscape.update(ctx);
     if (this.doomsdayEscape.floorEscapedPending) {
       this.doomsdayEscape.floorEscapedPending = false;
@@ -5541,6 +5856,7 @@ export class DungeonScene extends GameplayScene {
         this.defendQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
+        this.anchorQuest.isDialogOpen ||
         this.citizenDialog?.isOpen === true ||
         this.chat.isOpen,
     };
@@ -5736,6 +6052,7 @@ export class DungeonScene extends GameplayScene {
         this.spiderQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
+        this.anchorQuest.isDialogOpen ||
         this.citizenDialog?.isOpen === true ||
         // Town modals (notice board / market stall / fortune teller) are handled
         // by the early full-screen-modal gate at the top of this loop.

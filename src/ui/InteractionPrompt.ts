@@ -18,11 +18,32 @@ const HIGHLIGHT_OFFSET_X = 1;
 const HIGHLIGHT_OFFSET_Y = 2;
 const HIGHLIGHT_LINE_OFFSET = 1;
 
+let _promptsSuppressed = false;
+
+/**
+ * Silences every floating prompt for the frame.
+ *
+ * Prompts are drawn from two dozen systems that each know only about their own
+ * object, so none of them can tell whether a dialog is already covering the
+ * screen — and a per-system list of dialog flags goes stale the moment a new
+ * dialog system is added. A scene instead answers the question once per frame
+ * from its `overlayClaims`, the same way `setButtonMouseState` feeds hover state
+ * to every button from one call.
+ *
+ * Call it at the top of every scene render that draws prompts: the flag is
+ * module state, so a scene that never sets it inherits the last scene's answer.
+ */
+export function setInteractionPromptsSuppressed(suppressed: boolean): void {
+  _promptsSuppressed = suppressed;
+}
+
 /**
  * Draws a floating interaction prompt above an object in world-space.
  *
  * Renders a small rounded "SPACE" key icon (or "TAP" on mobile) with an
  * optional action label, bobbing gently to draw the player's eye.
+ *
+ * Does nothing while {@link setInteractionPromptsSuppressed} is set for the frame.
  *
  * @param ctx      Canvas context (world-space, already camera-offset)
  * @param sx       Screen-x of the object's top-left corner
@@ -39,6 +60,7 @@ export function drawInteractionPrompt(
   label?: string,
   keyOverride?: string,
 ): void {
+  if (_promptsSuppressed) return;
   const keyText =
     keyOverride ?? (platform.isMobile ? 'TAP' : keybindings.labelFor('attack').toUpperCase());
   const bob = Math.sin(performance.now() / BOB_PERIOD) * BOB_AMPLITUDE;

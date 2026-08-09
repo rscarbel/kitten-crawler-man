@@ -18,11 +18,24 @@ export type StallStyle = 'produce_cart' | 'tinker_bench' | 'butcher_block' | 'cl
 /** Drives the little goods drawn on the counter, so a stall looks like what it sells. */
 export type GoodsMotif = 'produce' | 'bottles' | 'meat' | 'trinkets';
 
+/**
+ * A condition outside the market that decides whether a line is on the counter
+ * at all — as opposed to `stock`, which is about how many are left.
+ *
+ * A gated line is *absent* rather than greyed out: a row reading "Anchor Shard —
+ * unavailable" to a player who has never heard of the Anchor is a puzzle piece
+ * with no puzzle. The scene answers the condition, since the market has no way
+ * to know what the party is carrying or which quests are live.
+ */
+export type VendorLineGate = 'anchor_shard';
+
 export interface VendorStockLine {
   id: ItemId;
   label: string;
   price: number;
   desc: string;
+  /** When set, the line only appears while the scene says this gate is open. */
+  gate?: VendorLineGate;
   /**
    * Units available per restock. Omit for an unlimited line — every line ships
    * unlimited today; the counting plumbing exists for future rare goods, not to
@@ -54,6 +67,8 @@ const HEALTH_POTION_PRICE = 5;
 const SPEED_FIZZ_PRICE = 12;
 const COOLDOWN_CRISP_PRICE = 15;
 const JUGG_JUICE_PRICE = 22;
+/** The tinker priced the Anchor's first shard as scrap, and never revised it. */
+export const ANCHOR_SHARD_PRICE_COINS = 20;
 
 // The stalls flank the plaza on its west and east sides, on the centre row. Each
 // is two tiles wide from its `DX`, with the vendor standing on the row behind it.
@@ -100,8 +115,11 @@ const GREENGROCER: VendorDef = {
   placement: { dx: WEST_STALL_DX, dy: STALL_ROW_DY },
 };
 
+/** Stable key for the tinker's stall, so a questline can point at it by name. */
+export const TINKER_VENDOR_ID = 'tinker';
+
 const TINKER: VendorDef = {
-  id: 'tinker',
+  id: TINKER_VENDOR_ID,
   vendorName: 'Orlo Pemberwick',
   stallName: "Tinker's Stall",
   role: 'merchant',
@@ -113,7 +131,18 @@ const TINKER: VendorDef = {
     'Everything corked, nothing cursed. Mostly.',
     'You keep buying, I keep brewing. Fair trade.',
   ],
+  // The shard leads the counter while its gate is open: the panel draws rows in
+  // this order and hands its accept key to the first buyable quest row, so a
+  // player sent here for the shard can open the stall and take it without
+  // walking past the potions.
   items: [
+    {
+      id: 'anchor_shard_tinker',
+      label: 'Anchor Shard',
+      price: ANCHOR_SHARD_PRICE_COINS,
+      desc: 'Odd grey wedge. Voss wants it',
+      gate: 'anchor_shard',
+    },
     {
       id: 'health_potion',
       label: 'Health Potion',

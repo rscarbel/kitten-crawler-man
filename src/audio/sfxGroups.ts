@@ -62,6 +62,10 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'cat_revived',
     'cat_scratch',
     'cat_splash',
+    // The Wayfinder's Anchor's channel start / completion — usable from any
+    // scene the item can be carried into, same reasoning as `confusing_fog`
+    // and `speed_fizz` just below.
+    'charging_up_1',
     'chest_locked',
     'chest_unlocked_in_treasure_room',
     'coin_pouch',
@@ -123,6 +127,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'splat_2',
     'splat_3',
     'stat_boost',
+    'teleport',
     'treasure_chest_reward',
     'troglodyte_tongue',
     'typing_click',

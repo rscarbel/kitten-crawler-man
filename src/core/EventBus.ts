@@ -17,6 +17,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import type { GrantedReward } from './GrantedReward';
 import type { DishId } from '../systems/bopcaDialog';
+import type { RecallMode } from '../systems/RecallSystem';
 import type { SkillId } from './SkillManager';
 
 /**
@@ -123,6 +124,13 @@ export interface GameEvents {
 
   /** A mission objective was completed (e.g. goblin child returned to mother). */
   objectiveComplete: { objectiveId: string };
+
+  /**
+   * The Wayfinder's Anchor completed a warp. `mode` says which way it pulled —
+   * `recall` to the town square, `return` back out to the trail anchor — and the
+   * tile is where the party was set down.
+   */
+  fastTravelUsed: { mode: RecallMode; tileX: number; tileY: number };
 
   /** An award screen was dismissed and contains ability or special unlocks to announce. */
   rewardGranted: { rewards: GrantedReward[] };

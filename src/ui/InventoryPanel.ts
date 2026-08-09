@@ -2,7 +2,14 @@ import type { Inventory } from '../core/Inventory';
 import { drawSkillBookIcon } from './icons/skillBookIcon';
 import { drawIssueKitIcon, isIssueKitItem } from './icons/issueKitIcon';
 import { drawEnchantedGearIcon, isEnchantedGearItem } from './icons/enchantedGearIcons';
-import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX, itemCanHotlist } from '../core/ItemDefs';
+import { drawAnchorStoneIcon, drawAnchorShardIcon } from './icons/anchorStoneIcon';
+import {
+  HOTBAR_COUNT,
+  SLOTS_PER_PAGE,
+  QUEST_SLOT_IDX,
+  itemCanHotlist,
+  isAnchorShardId,
+} from '../core/ItemDefs';
 import type { InventoryItem, ItemId } from '../core/ItemDefs';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { platform } from '../core/Platform';
@@ -1301,8 +1308,11 @@ export class InventoryPanel {
     }
 
     // Ability cooldown overlay on hotbar
-    if (isHotbar && item?.abilityId) {
-      const cd = this.abilityCooldowns.get(item.abilityId);
+    // Keyed by ability first, item id second, so a plain item with a cooldown of
+    // its own — the Wayfinder's Anchor — wears the same overlay as an ability.
+    const cooldownKey = item?.abilityId ?? item?.id;
+    if (isHotbar && cooldownKey !== undefined) {
+      const cd = this.abilityCooldowns.get(cooldownKey);
       if (cd) {
         drawCooldownOverlay(ctx, {
           x,
@@ -1321,9 +1331,8 @@ export class InventoryPanel {
   /**
    * The per-item procedural icon, drawn into a square of `size` at (x, y).
    *
-   * Static because it reads nothing off the panel: any surface that shows a bag
-   * slot — the pause menu's Equipment tab among them — needs the same picture,
-   * and a second hand-drawn copy would drift the moment an item is added.
+   * Kept as a static alias of {@link drawItemIcon}, which owns the drawing:
+   * several surfaces outside this module already call it by this name.
    */
   static renderItemIcon(
     ctx: CanvasRenderingContext2D,
@@ -1333,625 +1342,7 @@ export class InventoryPanel {
     size: number,
     alpha: number,
   ): void {
-    ctx.save();
-    ctx.globalAlpha = ctx.globalAlpha * alpha;
-
-    if (item.skillId !== undefined) {
-      drawSkillBookIcon(ctx, x, y, size, item.skillId);
-      ctx.restore();
-      return;
-    }
-
-    if (isIssueKitItem(item.id)) {
-      drawIssueKitIcon(ctx, x, y, size, item.id);
-      ctx.restore();
-      return;
-    }
-
-    if (isEnchantedGearItem(item.id)) {
-      drawEnchantedGearIcon(ctx, x, y, size, item.id);
-      ctx.restore();
-      return;
-    }
-
-    if (item.id === 'health_potion') {
-      const cx = x + size * HP_POTION_CX;
-      const cy = y + size * HP_POTION_CY;
-      const r = size * HP_POTION_R;
-      // Flask body
-      ctx.fillStyle = '#c0392b';
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
-      // Liquid fill
-      ctx.fillStyle = '#ef4444';
-      ctx.beginPath();
-      ctx.arc(cx, cy + r * HP_POTION_LIQUID_OFFSET, r * HP_POTION_LIQUID_SCALE, 0, Math.PI * 2);
-      ctx.fill();
-      // Flask neck
-      ctx.fillStyle = '#7f1d1d';
-      ctx.fillRect(
-        cx - size * HP_POTION_NECK_X,
-        y + size * HP_POTION_NECK_Y,
-        size * HP_POTION_NECK_W,
-        size * HP_POTION_NECK_H,
-      );
-      // Cork stopper
-      ctx.fillStyle = '#92400e';
-      ctx.fillRect(
-        cx - size * HP_POTION_CORK_X,
-        y + size * HP_POTION_CORK_Y,
-        size * HP_POTION_CORK_W,
-        size * HP_POTION_CORK_H,
-      );
-      // Shine highlight
-      const SHINE_ALPHA = 0.45;
-      ctx.fillStyle = `rgba(255,255,255,${SHINE_ALPHA})`;
-      ctx.beginPath();
-      ctx.ellipse(
-        cx - r * HP_POTION_SHINE_OFFSET,
-        cy - r * HP_POTION_SHINE_OFFSET,
-        r * HP_POTION_SHINE_RX,
-        r * HP_POTION_SHINE_RY,
-        HP_POTION_SHINE_ROT,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
-
-    if (item.id === 'scroll_of_confusing_fog') {
-      const cx = x + size * SCROLL_CX;
-      const cy = y + size * SCROLL_CY;
-      const sw = size * SCROLL_W;
-      const sh = size * SCROLL_H;
-      // Parchment body
-      ctx.fillStyle = '#d4b483';
-      ctx.fillRect(cx - sw / 2, cy - sh / 2, sw, sh);
-      ctx.strokeStyle = '#8b6914';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
-      // Rolled top and bottom edges
-      ctx.fillStyle = '#c49a40';
-      ctx.fillRect(
-        cx - sw / 2 - SCROLL_ROLL_OFFSET,
-        cy - sh / 2 - SCROLL_ROLL_PAD,
-        sw + SCROLL_ROLL_H,
-        SCROLL_ROLL_H,
-      );
-      ctx.fillRect(
-        cx - sw / 2 - SCROLL_ROLL_OFFSET,
-        cy + sh / 2 - SCROLL_ROLL_BOTTOM,
-        sw + SCROLL_ROLL_H,
-        SCROLL_ROLL_H,
-      );
-      // Fog squiggle lines
-      ctx.strokeStyle = '#1e3a5f';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let row = 0; row < SCROLL_SQUIGGLE_ROWS; row++) {
-        const ly = cy - sh / 2 + SCROLL_SQUIGGLE_START_Y + row * SCROLL_SQUIGGLE_ROW_H;
-        ctx.moveTo(cx - sw * SCROLL_SQUIGGLE_INNER, ly);
-        ctx.bezierCurveTo(
-          cx - sw * SCROLL_SQUIGGLE_CTRL,
-          ly - SCROLL_SQUIGGLE_AMP,
-          cx + sw * SCROLL_SQUIGGLE_CTRL,
-          ly + SCROLL_SQUIGGLE_AMP,
-          cx + sw * SCROLL_SQUIGGLE_INNER,
-          ly,
-        );
-      }
-      ctx.stroke();
-      // Green fog tint glow
-      const SCROLL_GLOW_ALPHA = 0.28;
-      ctx.fillStyle = `rgba(60,200,140,${SCROLL_GLOW_ALPHA})`;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, sw * SCROLL_GLOW_W, sh * SCROLL_GLOW_H, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    if (item.id === 'magic_missile_tome') {
-      drawSpriteKey(ctx, 'magic_missile_icon', 'standard', 0, x, y, size);
-    }
-
-    if (item.id === 'smush_tome') {
-      drawSpriteKey(ctx, 'smush_icon', 'standard', 0, x, y, size);
-    }
-
-    if (item.id === 'enchanted_bigboi_boxers') {
-      const cx = x + size * BOXERS_CX;
-      const cy = y + size * BOXERS_CY;
-      // Waistband — white/light grey
-      ctx.fillStyle = '#eeeeee';
-      ctx.fillRect(
-        x + size * BOXERS_WAIST_X,
-        y + size * BOXERS_WAIST_Y,
-        size * BOXERS_WAIST_W,
-        size * BOXERS_WAIST_H,
-      );
-      // Left leg — near-white
-      ctx.fillStyle = '#f5f5f5';
-      ctx.beginPath();
-      ctx.moveTo(cx - size * BOXERS_LEG_INNER_X, y + size * BOXERS_LEG_INNER_VERT);
-      ctx.lineTo(cx - size * BOXERS_LEG_OUTER_X, y + size * BOXERS_LEG_BOTTOM);
-      ctx.lineTo(cx - size * BOXERS_LEG_CENTER, y + size * BOXERS_LEG_BOTTOM);
-      ctx.lineTo(cx, y + size * BOXERS_LEG_INNER_VERT);
-      ctx.closePath();
-      ctx.fill();
-      // Right leg
-      ctx.beginPath();
-      ctx.moveTo(cx + size * BOXERS_LEG_INNER_X, y + size * BOXERS_LEG_INNER_VERT);
-      ctx.lineTo(cx + size * BOXERS_LEG_OUTER_X, y + size * BOXERS_LEG_BOTTOM);
-      ctx.lineTo(cx + size * BOXERS_LEG_CENTER, y + size * BOXERS_LEG_BOTTOM);
-      ctx.lineTo(cx, y + size * BOXERS_LEG_INNER_VERT);
-      ctx.closePath();
-      ctx.fill();
-      // Red hearts pattern — sprite icon text, leave as ctx.fillText
-      ctx.fillStyle = '#ef4444';
-      ctx.font = `bold ${Math.floor(size * BOXERS_HEART_FONT)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText('♥', cx - size * BOXERS_HEART_OFFSET, cy - size * BOXERS_HEART_Y_OFFSET);
-      ctx.fillText('♥', cx + size * BOXERS_HEART_OFFSET, cy - size * BOXERS_HEART_Y_OFFSET);
-      ctx.fillText('♥', cx, cy + size * BOXERS_HEART_Y_OFFSET);
-      ctx.textAlign = 'left';
-      // Red border glow
-      ctx.strokeStyle = '#f87171';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
-    }
-
-    if (item.id === 'trollskin_shirt') {
-      const cx = x + size * SHIRT_CX;
-      const cy = y + size * SHIRT_CY;
-      // Shirt body — mossy green (trollskin)
-      ctx.fillStyle = '#4a7c59';
-      ctx.beginPath();
-      ctx.moveTo(cx - size * SHIRT_BODY_X, cy - size * SHIRT_BODY_TOP);
-      ctx.lineTo(cx + size * SHIRT_BODY_X, cy - size * SHIRT_BODY_TOP);
-      ctx.lineTo(cx + size * SHIRT_BODY_SIDE, cy + size * SHIRT_BODY_BOTTOM);
-      ctx.lineTo(cx - size * SHIRT_BODY_SIDE, cy + size * SHIRT_BODY_BOTTOM);
-      ctx.closePath();
-      ctx.fill();
-      // Sleeves
-      ctx.fillStyle = '#3d6b4a';
-      // Left sleeve
-      ctx.beginPath();
-      ctx.moveTo(cx - size * SHIRT_SLEEVE_X1, cy - size * SHIRT_SLEEVE_Y_TOP);
-      ctx.lineTo(cx - size * SHIRT_SLEEVE_X2, cy + size * SHIRT_SLEEVE_Y1);
-      ctx.lineTo(cx - size * SHIRT_SLEEVE_X3, cy + size * SHIRT_SLEEVE_Y2);
-      ctx.lineTo(cx - size * SHIRT_SLEEVE_X4, cy - size * SHIRT_SLEEVE_Y3);
-      ctx.closePath();
-      ctx.fill();
-      // Right sleeve
-      ctx.beginPath();
-      ctx.moveTo(cx + size * SHIRT_SLEEVE_X1, cy - size * SHIRT_SLEEVE_Y_TOP);
-      ctx.lineTo(cx + size * SHIRT_SLEEVE_X2, cy + size * SHIRT_SLEEVE_Y1);
-      ctx.lineTo(cx + size * SHIRT_SLEEVE_X3, cy + size * SHIRT_SLEEVE_Y2);
-      ctx.lineTo(cx + size * SHIRT_SLEEVE_X4, cy - size * SHIRT_SLEEVE_Y3);
-      ctx.closePath();
-      ctx.fill();
-      // Collar
-      ctx.fillStyle = '#2d5a3a';
-      ctx.beginPath();
-      ctx.ellipse(
-        cx,
-        cy - size * SHIRT_COLLAR_Y,
-        size * SHIRT_COLLAR_RX,
-        size * SHIRT_COLLAR_RY,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      // Enchantment rune — golden fist symbol (sprite icon text, leave as ctx.fillText)
-      ctx.fillStyle = '#ffd700';
-      ctx.font = `bold ${Math.floor(size * SHIRT_RUNE_FONT)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText('\u{270A}', cx, cy + size * SHIRT_RUNE_Y);
-      ctx.textAlign = 'left';
-      // Golden border glow
-      ctx.strokeStyle = '#ffd700';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
-    }
-
-    if (item.id === 'enchanted_crown_sepsis_whore') {
-      const cx = x + size * CROWN_CX;
-      const cy = y + size * CROWN_CY;
-      // Crown base band — deep purple
-      ctx.fillStyle = '#581c87';
-      ctx.beginPath();
-      ctx.ellipse(
-        cx,
-        cy + size * CROWN_BASE_Y,
-        size * CROWN_BASE_RX,
-        size * CROWN_BASE_RY,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      // Crown body — royal purple
-      ctx.fillStyle = '#7c3aed';
-      ctx.beginPath();
-      ctx.moveTo(cx - size * CROWN_BODY_X1, cy + size * CROWN_BODY_Y1);
-      ctx.lineTo(cx - size * CROWN_INNER_X1, cy - size * CROWN_INNER_Y1);
-      ctx.lineTo(cx - size * CROWN_INNER_X2, cy - size * CROWN_INNER_Y2);
-      ctx.lineTo(cx, cy - size * CROWN_TIP_Y);
-      ctx.lineTo(cx + size * CROWN_INNER_X2, cy - size * CROWN_INNER_Y2);
-      ctx.lineTo(cx + size * CROWN_INNER_X1, cy - size * CROWN_INNER_Y1);
-      ctx.lineTo(cx + size * CROWN_BODY_X1, cy + size * CROWN_BODY_Y1);
-      ctx.closePath();
-      ctx.fill();
-      // Crown rim highlight
-      const CROWN_RIM_LINE_W = 1.5;
-      ctx.strokeStyle = '#a78bfa';
-      ctx.lineWidth = CROWN_RIM_LINE_W;
-      ctx.stroke();
-      // Gems — sickly green (sepsis theme)
-      ctx.fillStyle = '#bef264';
-      ctx.shadowColor = '#65a30d';
-      const CROWN_GEM_BLUR = 4;
-      ctx.shadowBlur = CROWN_GEM_BLUR;
-      ctx.beginPath();
-      ctx.arc(cx, cy - size * CROWN_GEM_CENTER_Y, size * CROWN_GEM_CENTER_R, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#a3e635';
-      ctx.beginPath();
-      ctx.arc(
-        cx - size * CROWN_GEM_SIDE_X,
-        cy - size * CROWN_GEM_SIDE_Y,
-        size * CROWN_GEM_SIDE_R,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(
-        cx + size * CROWN_GEM_SIDE_X,
-        cy - size * CROWN_GEM_SIDE_Y,
-        size * CROWN_GEM_SIDE_R,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      // Purple border glow
-      ctx.strokeStyle = '#a78bfa';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
-    }
-
-    if (item.id === 'quest_wood_board') {
-      drawWoodPileSprite(ctx, x, y, size, false);
-    }
-
-    if (item.id === 'doomsday_scenario') {
-      const caseX = x + size * DOOMSDAY_CASE_INSET;
-      const caseY = y + size * DOOMSDAY_CASE_TOP;
-      const caseW = size - size * DOOMSDAY_CASE_INSET * 2;
-      const caseH = size * DOOMSDAY_CASE_BOTTOM - size * DOOMSDAY_CASE_TOP;
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.18)';
-      ctx.fillRect(caseX, caseY, caseW, caseH);
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(caseX, caseY, caseW, caseH);
-
-      const cx = x + size * DOOMSDAY_CRYSTAL_CX;
-      const cy = y + size * DOOMSDAY_CRYSTAL_CY;
-      const hw = size * DOOMSDAY_CRYSTAL_W;
-      const hh = size * DOOMSDAY_CRYSTAL_H;
-      ctx.fillStyle = '#a855f7';
-      ctx.shadowColor = '#f43f5e';
-      ctx.shadowBlur = DOOMSDAY_CRYSTAL_GLOW_BLUR;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - hh);
-      ctx.lineTo(cx + hw, cy);
-      ctx.lineTo(cx, cy + hh);
-      ctx.lineTo(cx - hw, cy);
-      ctx.closePath();
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-
-    if (item.id === 'speed_fizz') {
-      drawRoundFlask(
-        ctx,
-        x,
-        y,
-        size,
-        ROUND_FLASK_CY,
-        ROUND_FLASK_NECK_Y,
-        ROUND_FLASK_CORK_Y,
-        '#0284c7',
-        '#38bdf8',
-        '#075985',
-        '#92400e',
-      );
-      const bx = x + size * SPEED_FIZZ_BOLT_CX;
-      const by = y + size * SPEED_FIZZ_BOLT_CY;
-      const bs = size * SPEED_FIZZ_BOLT_SCALE;
-      ctx.fillStyle = '#fef08a';
-      ctx.beginPath();
-      ctx.moveTo(bx + bs, by - bs * BOLT_TIP_Y);
-      ctx.lineTo(bx - bs * BOLT_NOTCH_X, by - bs * BOLT_NOTCH_Y);
-      ctx.lineTo(bx + bs * BOLT_INNER_X, by - bs * BOLT_NOTCH_Y);
-      ctx.lineTo(bx - bs, by + bs * BOLT_TIP_Y);
-      ctx.lineTo(bx + bs * BOLT_NOTCH_X, by + bs * BOLT_NOTCH_Y);
-      ctx.lineTo(bx - bs * BOLT_INNER_X, by + bs * BOLT_NOTCH_Y);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    if (item.id === 'jugg_juice') {
-      const cx = x + size * FLASK_CX;
-      const cy = y + size * JUGG_CY;
-      const rx = size * JUGG_RX;
-      const ry = size * JUGG_RY;
-      ctx.fillStyle = '#c2410c';
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fb923c';
-      ctx.beginPath();
-      ctx.ellipse(
-        cx,
-        cy + ry * POTION_LIQUID_Y_SHIFT,
-        rx * JUGG_LIQUID_RX_SCALE,
-        ry * POTION_LIQUID_R_SCALE,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.fillStyle = '#7c2d12';
-      ctx.fillRect(
-        cx - size * JUGG_NECK_X,
-        y + size * JUGG_NECK_Y,
-        size * JUGG_NECK_W,
-        size * JUGG_NECK_H,
-      );
-      ctx.fillStyle = '#92400e';
-      ctx.fillRect(
-        cx - size * JUGG_CORK_X,
-        y + size * JUGG_CORK_Y,
-        size * JUGG_CORK_W,
-        size * FLASK_CORK_H,
-      );
-      const hx = cx;
-      const hy = y + size * JUGG_HEART_Y;
-      const hs = size * JUGG_HEART_SIZE;
-      ctx.fillStyle = '#fda4af';
-      ctx.beginPath();
-      ctx.moveTo(hx, hy + hs * HEART_APEX_Y);
-      ctx.bezierCurveTo(
-        hx,
-        hy - hs * HEART_TOP_CTRL,
-        hx - hs,
-        hy - hs * HEART_TOP_CTRL,
-        hx - hs,
-        hy,
-      );
-      ctx.bezierCurveTo(hx - hs, hy + hs * HEART_MID_Y, hx, hy + hs, hx, hy + hs * HEART_BOTTOM);
-      ctx.bezierCurveTo(hx, hy + hs, hx + hs, hy + hs * HEART_MID_Y, hx + hs, hy);
-      ctx.bezierCurveTo(
-        hx + hs,
-        hy - hs * HEART_TOP_CTRL,
-        hx,
-        hy - hs * HEART_TOP_CTRL,
-        hx,
-        hy + hs * HEART_APEX_Y,
-      );
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,255,255,${POTION_SHINE_ALPHA})`;
-      ctx.beginPath();
-      ctx.ellipse(
-        cx - rx * JUGG_SHINE_OFFSET,
-        cy - ry * JUGG_SHINE_OFFSET,
-        rx * FLASK_SHINE_RX,
-        ry * FLASK_SHINE_RY,
-        FLASK_SHINE_ROT,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
-
-    if (item.id === 'cooldown_crisp') {
-      const { cx, cy } = drawRoundFlask(
-        ctx,
-        x,
-        y,
-        size,
-        COOL_CRISP_CY,
-        COOL_CRISP_NECK_Y,
-        COOL_CRISP_CORK_Y,
-        '#059669',
-        '#34d399',
-        '#065f46',
-        '#92400e',
-      );
-      const clockR = size * COOL_CRISP_CLOCK_R;
-      ctx.fillStyle = '#d1fae5';
-      ctx.beginPath();
-      ctx.arc(cx, cy, clockR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#059669';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      const longR = size * COOL_CRISP_HAND_LONG;
-      const shortR = size * COOL_CRISP_HAND_SHORT;
-      ctx.strokeStyle = '#064e3b';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(-Math.PI / 2) * longR, cy + Math.sin(-Math.PI / 2) * longR);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(
-        cx + Math.cos(Math.PI / CLOCK_HOUR_ANGLE_DIVS) * shortR,
-        cy + Math.sin(Math.PI / CLOCK_HOUR_ANGLE_DIVS) * shortR,
-      );
-      ctx.stroke();
-    }
-
-    if (item.id === 'stat_boost_potion') {
-      const { cx, cy, r } = drawRoundFlask(
-        ctx,
-        x,
-        y,
-        size,
-        ROUND_FLASK_CY,
-        ROUND_FLASK_NECK_Y,
-        ROUND_FLASK_CORK_Y,
-        '#7e22ce',
-        '#c084fc',
-        '#581c87',
-        '#d97706',
-      );
-      const outerR = size * STAT_BOOST_STAR_R_OUTER;
-      const innerR = size * STAT_BOOST_STAR_R_INNER;
-      const starCY = cy + r * STAR_CY_SHIFT;
-      ctx.fillStyle = '#fde68a';
-      ctx.beginPath();
-      for (let i = 0; i < STAT_BOOST_STAR_POINTS * 2; i++) {
-        const angle = (i * Math.PI) / STAT_BOOST_STAR_POINTS - Math.PI / 2;
-        const rad = i % 2 === 0 ? outerR : innerR;
-        const px = cx + Math.cos(angle) * rad;
-        const py = starCY + Math.sin(angle) * rad;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    if (item.id === 'dirty_shirley') {
-      const cx = x + size * DIRTY_SHIRLEY_CX;
-      const glassTopY = y + size * DIRTY_SHIRLEY_GLASS_TOP_Y;
-      const glassBottomY = y + size * DIRTY_SHIRLEY_GLASS_BOTTOM_Y;
-      const glassLeftX = cx - size * DIRTY_SHIRLEY_GLASS_HALF_W;
-      const glassRightX = cx + size * DIRTY_SHIRLEY_GLASS_HALF_W;
-
-      // Faint glass body under the liquid so the tumbler's walls read past the fill line
-      ctx.fillStyle = 'rgba(255,255,255,0.08)';
-      ctx.fillRect(glassLeftX, glassTopY, glassRightX - glassLeftX, glassBottomY - glassTopY);
-
-      const liquidTopY = y + size * DIRTY_SHIRLEY_LIQUID_TOP_Y;
-      const liquidLeftX = glassLeftX + size * DIRTY_SHIRLEY_LIQUID_INSET;
-      const liquidRightX = glassRightX - size * DIRTY_SHIRLEY_LIQUID_INSET;
-
-      // Deep grenadine red settles at the bottom, lighter ginger-ale fizz rises to the top
-      const liquidGradient = ctx.createLinearGradient(0, liquidTopY, 0, glassBottomY);
-      liquidGradient.addColorStop(0, '#fda4af');
-      liquidGradient.addColorStop(1, '#7f1d3d');
-      ctx.fillStyle = liquidGradient;
-      ctx.fillRect(liquidLeftX, liquidTopY, liquidRightX - liquidLeftX, glassBottomY - liquidTopY);
-
-      // Rim ellipse reads as the glass's top opening
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.ellipse(
-        cx,
-        glassTopY,
-        size * DIRTY_SHIRLEY_GLASS_HALF_W,
-        size * DIRTY_SHIRLEY_RIM_RY,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.stroke();
-
-      // A pale stripe down one side sells the glass over the liquid
-      ctx.fillStyle = `rgba(255,255,255,${DIRTY_SHIRLEY_HIGHLIGHT_ALPHA})`;
-      ctx.fillRect(
-        glassLeftX + size * DIRTY_SHIRLEY_HIGHLIGHT_X_OFFSET,
-        glassTopY,
-        size * DIRTY_SHIRLEY_HIGHLIGHT_W,
-        glassBottomY - glassTopY,
-      );
-
-      // A few fizz bubbles rising through the liquid
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      const bubbleFracs: Array<[number, number]> = [
-        [DIRTY_SHIRLEY_BUBBLE_1_X, DIRTY_SHIRLEY_BUBBLE_1_Y],
-        [DIRTY_SHIRLEY_BUBBLE_2_X, DIRTY_SHIRLEY_BUBBLE_2_Y],
-        [DIRTY_SHIRLEY_BUBBLE_3_X, DIRTY_SHIRLEY_BUBBLE_3_Y],
-      ];
-      for (const [bxFrac, byFrac] of bubbleFracs) {
-        ctx.beginPath();
-        ctx.arc(
-          x + size * bxFrac,
-          y + size * byFrac,
-          size * DIRTY_SHIRLEY_BUBBLE_R,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-
-      // Maraschino cherry perched on the rim, with a thin curved stem
-      const cherryX = cx + size * DIRTY_SHIRLEY_CHERRY_X_OFFSET;
-      const cherryY = glassTopY + size * DIRTY_SHIRLEY_CHERRY_Y_OFFSET;
-      const cherryR = size * DIRTY_SHIRLEY_CHERRY_R;
-
-      ctx.strokeStyle = '#4d7c0f';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(cherryX, cherryY - cherryR);
-      ctx.quadraticCurveTo(
-        cherryX + size * DIRTY_SHIRLEY_STEM_CTRL_X_OFFSET,
-        cherryY + size * DIRTY_SHIRLEY_STEM_CTRL_Y_OFFSET,
-        cherryX + size * DIRTY_SHIRLEY_STEM_END_X_OFFSET,
-        cherryY + size * DIRTY_SHIRLEY_STEM_END_Y_OFFSET,
-      );
-      ctx.stroke();
-
-      ctx.fillStyle = '#7f1d3d';
-      ctx.beginPath();
-      ctx.arc(cherryX, cherryY, cherryR, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.beginPath();
-      ctx.arc(
-        cherryX + size * DIRTY_SHIRLEY_CHERRY_SHINE_X_OFFSET,
-        cherryY + size * DIRTY_SHIRLEY_CHERRY_SHINE_Y_OFFSET,
-        size * DIRTY_SHIRLEY_CHERRY_SHINE_R,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
-
-    if (item.id === 'goblin_dynamite') {
-      drawDynamiteInventoryIcon(ctx, x, y, size);
-    } else if (item.id === 'gym_dumbbell') {
-      drawDumbbellInventoryIcon(ctx, x, y, size);
-    } else if (item.id === 'gym_bench_press') {
-      drawBenchPressInventoryIcon(ctx, x, y, size);
-    } else if (item.id === 'gym_treadmill') {
-      drawTreadmillInventoryIcon(ctx, x, y, size);
-    }
-
-    // Quantity badge (bottom-right) — sprite icon text, leave as ctx.fillText
-    // Uses textAlign='right' where x is the RIGHT edge; dynamic font size
-    if (item.quantity > 1) {
-      const fontSize = Math.max(QTY_BADGE_MIN_FONT, Math.floor(size * QTY_BADGE_FONT_SCALE));
-      ctx.font = `bold ${fontSize}px monospace`;
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'right';
-      ctx.fillText(
-        item.quantity.toString(),
-        x + size - QTY_BADGE_MARGIN,
-        y + size - QTY_BADGE_MARGIN,
-      );
-      ctx.textAlign = 'left';
-    }
-
-    ctx.restore();
+    drawItemIcon(ctx, item, x, y, size, alpha);
   }
 
   // Interaction
@@ -2035,4 +1426,641 @@ export class InventoryPanel {
       this.page,
     );
   }
+}
+
+/**
+ * The per-item procedural icon, drawn into a square of `size` at (x, y).
+ *
+ * A free function rather than a method because it reads nothing off the panel:
+ * every surface that shows an item needs the same picture, and a second
+ * hand-drawn copy would drift the moment an icon changes.
+ *
+ * @param alpha Multiplied into the context own alpha, for drag ghosts.
+ */
+export function drawItemIcon(
+  ctx: CanvasRenderingContext2D,
+  item: InventoryItem,
+  x: number,
+  y: number,
+  size: number,
+  alpha = 1,
+): void {
+  ctx.save();
+  ctx.globalAlpha = ctx.globalAlpha * alpha;
+
+  if (item.skillId !== undefined) {
+    drawSkillBookIcon(ctx, x, y, size, item.skillId);
+    ctx.restore();
+    return;
+  }
+
+  if (isIssueKitItem(item.id)) {
+    drawIssueKitIcon(ctx, x, y, size, item.id);
+    ctx.restore();
+    return;
+  }
+
+  if (isEnchantedGearItem(item.id)) {
+    drawEnchantedGearIcon(ctx, x, y, size, item.id);
+    ctx.restore();
+    return;
+  }
+
+  if (item.id === 'wayfinders_anchor') {
+    drawAnchorStoneIcon(ctx, x, y, size);
+    ctx.restore();
+    return;
+  }
+
+  if (isAnchorShardId(item.id)) {
+    drawAnchorShardIcon(ctx, x, y, size);
+    ctx.restore();
+    return;
+  }
+
+  if (item.id === 'health_potion') {
+    const cx = x + size * HP_POTION_CX;
+    const cy = y + size * HP_POTION_CY;
+    const r = size * HP_POTION_R;
+    // Flask body
+    ctx.fillStyle = '#c0392b';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Liquid fill
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(cx, cy + r * HP_POTION_LIQUID_OFFSET, r * HP_POTION_LIQUID_SCALE, 0, Math.PI * 2);
+    ctx.fill();
+    // Flask neck
+    ctx.fillStyle = '#7f1d1d';
+    ctx.fillRect(
+      cx - size * HP_POTION_NECK_X,
+      y + size * HP_POTION_NECK_Y,
+      size * HP_POTION_NECK_W,
+      size * HP_POTION_NECK_H,
+    );
+    // Cork stopper
+    ctx.fillStyle = '#92400e';
+    ctx.fillRect(
+      cx - size * HP_POTION_CORK_X,
+      y + size * HP_POTION_CORK_Y,
+      size * HP_POTION_CORK_W,
+      size * HP_POTION_CORK_H,
+    );
+    // Shine highlight
+    const SHINE_ALPHA = 0.45;
+    ctx.fillStyle = `rgba(255,255,255,${SHINE_ALPHA})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      cx - r * HP_POTION_SHINE_OFFSET,
+      cy - r * HP_POTION_SHINE_OFFSET,
+      r * HP_POTION_SHINE_RX,
+      r * HP_POTION_SHINE_RY,
+      HP_POTION_SHINE_ROT,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+
+  if (item.id === 'scroll_of_confusing_fog') {
+    const cx = x + size * SCROLL_CX;
+    const cy = y + size * SCROLL_CY;
+    const sw = size * SCROLL_W;
+    const sh = size * SCROLL_H;
+    // Parchment body
+    ctx.fillStyle = '#d4b483';
+    ctx.fillRect(cx - sw / 2, cy - sh / 2, sw, sh);
+    ctx.strokeStyle = '#8b6914';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
+    // Rolled top and bottom edges
+    ctx.fillStyle = '#c49a40';
+    ctx.fillRect(
+      cx - sw / 2 - SCROLL_ROLL_OFFSET,
+      cy - sh / 2 - SCROLL_ROLL_PAD,
+      sw + SCROLL_ROLL_H,
+      SCROLL_ROLL_H,
+    );
+    ctx.fillRect(
+      cx - sw / 2 - SCROLL_ROLL_OFFSET,
+      cy + sh / 2 - SCROLL_ROLL_BOTTOM,
+      sw + SCROLL_ROLL_H,
+      SCROLL_ROLL_H,
+    );
+    // Fog squiggle lines
+    ctx.strokeStyle = '#1e3a5f';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let row = 0; row < SCROLL_SQUIGGLE_ROWS; row++) {
+      const ly = cy - sh / 2 + SCROLL_SQUIGGLE_START_Y + row * SCROLL_SQUIGGLE_ROW_H;
+      ctx.moveTo(cx - sw * SCROLL_SQUIGGLE_INNER, ly);
+      ctx.bezierCurveTo(
+        cx - sw * SCROLL_SQUIGGLE_CTRL,
+        ly - SCROLL_SQUIGGLE_AMP,
+        cx + sw * SCROLL_SQUIGGLE_CTRL,
+        ly + SCROLL_SQUIGGLE_AMP,
+        cx + sw * SCROLL_SQUIGGLE_INNER,
+        ly,
+      );
+    }
+    ctx.stroke();
+    // Green fog tint glow
+    const SCROLL_GLOW_ALPHA = 0.28;
+    ctx.fillStyle = `rgba(60,200,140,${SCROLL_GLOW_ALPHA})`;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, sw * SCROLL_GLOW_W, sh * SCROLL_GLOW_H, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (item.id === 'magic_missile_tome') {
+    drawSpriteKey(ctx, 'magic_missile_icon', 'standard', 0, x, y, size);
+  }
+
+  if (item.id === 'smush_tome') {
+    drawSpriteKey(ctx, 'smush_icon', 'standard', 0, x, y, size);
+  }
+
+  if (item.id === 'enchanted_bigboi_boxers') {
+    const cx = x + size * BOXERS_CX;
+    const cy = y + size * BOXERS_CY;
+    // Waistband — white/light grey
+    ctx.fillStyle = '#eeeeee';
+    ctx.fillRect(
+      x + size * BOXERS_WAIST_X,
+      y + size * BOXERS_WAIST_Y,
+      size * BOXERS_WAIST_W,
+      size * BOXERS_WAIST_H,
+    );
+    // Left leg — near-white
+    ctx.fillStyle = '#f5f5f5';
+    ctx.beginPath();
+    ctx.moveTo(cx - size * BOXERS_LEG_INNER_X, y + size * BOXERS_LEG_INNER_VERT);
+    ctx.lineTo(cx - size * BOXERS_LEG_OUTER_X, y + size * BOXERS_LEG_BOTTOM);
+    ctx.lineTo(cx - size * BOXERS_LEG_CENTER, y + size * BOXERS_LEG_BOTTOM);
+    ctx.lineTo(cx, y + size * BOXERS_LEG_INNER_VERT);
+    ctx.closePath();
+    ctx.fill();
+    // Right leg
+    ctx.beginPath();
+    ctx.moveTo(cx + size * BOXERS_LEG_INNER_X, y + size * BOXERS_LEG_INNER_VERT);
+    ctx.lineTo(cx + size * BOXERS_LEG_OUTER_X, y + size * BOXERS_LEG_BOTTOM);
+    ctx.lineTo(cx + size * BOXERS_LEG_CENTER, y + size * BOXERS_LEG_BOTTOM);
+    ctx.lineTo(cx, y + size * BOXERS_LEG_INNER_VERT);
+    ctx.closePath();
+    ctx.fill();
+    // Red hearts pattern — sprite icon text, leave as ctx.fillText
+    ctx.fillStyle = '#ef4444';
+    ctx.font = `bold ${Math.floor(size * BOXERS_HEART_FONT)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('♥', cx - size * BOXERS_HEART_OFFSET, cy - size * BOXERS_HEART_Y_OFFSET);
+    ctx.fillText('♥', cx + size * BOXERS_HEART_OFFSET, cy - size * BOXERS_HEART_Y_OFFSET);
+    ctx.fillText('♥', cx, cy + size * BOXERS_HEART_Y_OFFSET);
+    ctx.textAlign = 'left';
+    // Red border glow
+    ctx.strokeStyle = '#f87171';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+  }
+
+  if (item.id === 'trollskin_shirt') {
+    const cx = x + size * SHIRT_CX;
+    const cy = y + size * SHIRT_CY;
+    // Shirt body — mossy green (trollskin)
+    ctx.fillStyle = '#4a7c59';
+    ctx.beginPath();
+    ctx.moveTo(cx - size * SHIRT_BODY_X, cy - size * SHIRT_BODY_TOP);
+    ctx.lineTo(cx + size * SHIRT_BODY_X, cy - size * SHIRT_BODY_TOP);
+    ctx.lineTo(cx + size * SHIRT_BODY_SIDE, cy + size * SHIRT_BODY_BOTTOM);
+    ctx.lineTo(cx - size * SHIRT_BODY_SIDE, cy + size * SHIRT_BODY_BOTTOM);
+    ctx.closePath();
+    ctx.fill();
+    // Sleeves
+    ctx.fillStyle = '#3d6b4a';
+    // Left sleeve
+    ctx.beginPath();
+    ctx.moveTo(cx - size * SHIRT_SLEEVE_X1, cy - size * SHIRT_SLEEVE_Y_TOP);
+    ctx.lineTo(cx - size * SHIRT_SLEEVE_X2, cy + size * SHIRT_SLEEVE_Y1);
+    ctx.lineTo(cx - size * SHIRT_SLEEVE_X3, cy + size * SHIRT_SLEEVE_Y2);
+    ctx.lineTo(cx - size * SHIRT_SLEEVE_X4, cy - size * SHIRT_SLEEVE_Y3);
+    ctx.closePath();
+    ctx.fill();
+    // Right sleeve
+    ctx.beginPath();
+    ctx.moveTo(cx + size * SHIRT_SLEEVE_X1, cy - size * SHIRT_SLEEVE_Y_TOP);
+    ctx.lineTo(cx + size * SHIRT_SLEEVE_X2, cy + size * SHIRT_SLEEVE_Y1);
+    ctx.lineTo(cx + size * SHIRT_SLEEVE_X3, cy + size * SHIRT_SLEEVE_Y2);
+    ctx.lineTo(cx + size * SHIRT_SLEEVE_X4, cy - size * SHIRT_SLEEVE_Y3);
+    ctx.closePath();
+    ctx.fill();
+    // Collar
+    ctx.fillStyle = '#2d5a3a';
+    ctx.beginPath();
+    ctx.ellipse(
+      cx,
+      cy - size * SHIRT_COLLAR_Y,
+      size * SHIRT_COLLAR_RX,
+      size * SHIRT_COLLAR_RY,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    // Enchantment rune — golden fist symbol (sprite icon text, leave as ctx.fillText)
+    ctx.fillStyle = '#ffd700';
+    ctx.font = `bold ${Math.floor(size * SHIRT_RUNE_FONT)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('\u{270A}', cx, cy + size * SHIRT_RUNE_Y);
+    ctx.textAlign = 'left';
+    // Golden border glow
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+  }
+
+  if (item.id === 'enchanted_crown_sepsis_whore') {
+    const cx = x + size * CROWN_CX;
+    const cy = y + size * CROWN_CY;
+    // Crown base band — deep purple
+    ctx.fillStyle = '#581c87';
+    ctx.beginPath();
+    ctx.ellipse(
+      cx,
+      cy + size * CROWN_BASE_Y,
+      size * CROWN_BASE_RX,
+      size * CROWN_BASE_RY,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    // Crown body — royal purple
+    ctx.fillStyle = '#7c3aed';
+    ctx.beginPath();
+    ctx.moveTo(cx - size * CROWN_BODY_X1, cy + size * CROWN_BODY_Y1);
+    ctx.lineTo(cx - size * CROWN_INNER_X1, cy - size * CROWN_INNER_Y1);
+    ctx.lineTo(cx - size * CROWN_INNER_X2, cy - size * CROWN_INNER_Y2);
+    ctx.lineTo(cx, cy - size * CROWN_TIP_Y);
+    ctx.lineTo(cx + size * CROWN_INNER_X2, cy - size * CROWN_INNER_Y2);
+    ctx.lineTo(cx + size * CROWN_INNER_X1, cy - size * CROWN_INNER_Y1);
+    ctx.lineTo(cx + size * CROWN_BODY_X1, cy + size * CROWN_BODY_Y1);
+    ctx.closePath();
+    ctx.fill();
+    // Crown rim highlight
+    const CROWN_RIM_LINE_W = 1.5;
+    ctx.strokeStyle = '#a78bfa';
+    ctx.lineWidth = CROWN_RIM_LINE_W;
+    ctx.stroke();
+    // Gems — sickly green (sepsis theme)
+    ctx.fillStyle = '#bef264';
+    ctx.shadowColor = '#65a30d';
+    const CROWN_GEM_BLUR = 4;
+    ctx.shadowBlur = CROWN_GEM_BLUR;
+    ctx.beginPath();
+    ctx.arc(cx, cy - size * CROWN_GEM_CENTER_Y, size * CROWN_GEM_CENTER_R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#a3e635';
+    ctx.beginPath();
+    ctx.arc(
+      cx - size * CROWN_GEM_SIDE_X,
+      cy - size * CROWN_GEM_SIDE_Y,
+      size * CROWN_GEM_SIDE_R,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(
+      cx + size * CROWN_GEM_SIDE_X,
+      cy - size * CROWN_GEM_SIDE_Y,
+      size * CROWN_GEM_SIDE_R,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Purple border glow
+    ctx.strokeStyle = '#a78bfa';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+  }
+
+  if (item.id === 'quest_wood_board') {
+    drawWoodPileSprite(ctx, x, y, size, false);
+  }
+
+  if (item.id === 'doomsday_scenario') {
+    const caseX = x + size * DOOMSDAY_CASE_INSET;
+    const caseY = y + size * DOOMSDAY_CASE_TOP;
+    const caseW = size - size * DOOMSDAY_CASE_INSET * 2;
+    const caseH = size * DOOMSDAY_CASE_BOTTOM - size * DOOMSDAY_CASE_TOP;
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.18)';
+    ctx.fillRect(caseX, caseY, caseW, caseH);
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(caseX, caseY, caseW, caseH);
+
+    const cx = x + size * DOOMSDAY_CRYSTAL_CX;
+    const cy = y + size * DOOMSDAY_CRYSTAL_CY;
+    const hw = size * DOOMSDAY_CRYSTAL_W;
+    const hh = size * DOOMSDAY_CRYSTAL_H;
+    ctx.fillStyle = '#a855f7';
+    ctx.shadowColor = '#f43f5e';
+    ctx.shadowBlur = DOOMSDAY_CRYSTAL_GLOW_BLUR;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - hh);
+    ctx.lineTo(cx + hw, cy);
+    ctx.lineTo(cx, cy + hh);
+    ctx.lineTo(cx - hw, cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  if (item.id === 'speed_fizz') {
+    drawRoundFlask(
+      ctx,
+      x,
+      y,
+      size,
+      ROUND_FLASK_CY,
+      ROUND_FLASK_NECK_Y,
+      ROUND_FLASK_CORK_Y,
+      '#0284c7',
+      '#38bdf8',
+      '#075985',
+      '#92400e',
+    );
+    const bx = x + size * SPEED_FIZZ_BOLT_CX;
+    const by = y + size * SPEED_FIZZ_BOLT_CY;
+    const bs = size * SPEED_FIZZ_BOLT_SCALE;
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath();
+    ctx.moveTo(bx + bs, by - bs * BOLT_TIP_Y);
+    ctx.lineTo(bx - bs * BOLT_NOTCH_X, by - bs * BOLT_NOTCH_Y);
+    ctx.lineTo(bx + bs * BOLT_INNER_X, by - bs * BOLT_NOTCH_Y);
+    ctx.lineTo(bx - bs, by + bs * BOLT_TIP_Y);
+    ctx.lineTo(bx + bs * BOLT_NOTCH_X, by + bs * BOLT_NOTCH_Y);
+    ctx.lineTo(bx - bs * BOLT_INNER_X, by + bs * BOLT_NOTCH_Y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (item.id === 'jugg_juice') {
+    const cx = x + size * FLASK_CX;
+    const cy = y + size * JUGG_CY;
+    const rx = size * JUGG_RX;
+    const ry = size * JUGG_RY;
+    ctx.fillStyle = '#c2410c';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fb923c';
+    ctx.beginPath();
+    ctx.ellipse(
+      cx,
+      cy + ry * POTION_LIQUID_Y_SHIFT,
+      rx * JUGG_LIQUID_RX_SCALE,
+      ry * POTION_LIQUID_R_SCALE,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.fillStyle = '#7c2d12';
+    ctx.fillRect(
+      cx - size * JUGG_NECK_X,
+      y + size * JUGG_NECK_Y,
+      size * JUGG_NECK_W,
+      size * JUGG_NECK_H,
+    );
+    ctx.fillStyle = '#92400e';
+    ctx.fillRect(
+      cx - size * JUGG_CORK_X,
+      y + size * JUGG_CORK_Y,
+      size * JUGG_CORK_W,
+      size * FLASK_CORK_H,
+    );
+    const hx = cx;
+    const hy = y + size * JUGG_HEART_Y;
+    const hs = size * JUGG_HEART_SIZE;
+    ctx.fillStyle = '#fda4af';
+    ctx.beginPath();
+    ctx.moveTo(hx, hy + hs * HEART_APEX_Y);
+    ctx.bezierCurveTo(hx, hy - hs * HEART_TOP_CTRL, hx - hs, hy - hs * HEART_TOP_CTRL, hx - hs, hy);
+    ctx.bezierCurveTo(hx - hs, hy + hs * HEART_MID_Y, hx, hy + hs, hx, hy + hs * HEART_BOTTOM);
+    ctx.bezierCurveTo(hx, hy + hs, hx + hs, hy + hs * HEART_MID_Y, hx + hs, hy);
+    ctx.bezierCurveTo(
+      hx + hs,
+      hy - hs * HEART_TOP_CTRL,
+      hx,
+      hy - hs * HEART_TOP_CTRL,
+      hx,
+      hy + hs * HEART_APEX_Y,
+    );
+    ctx.fill();
+    ctx.fillStyle = `rgba(255,255,255,${POTION_SHINE_ALPHA})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      cx - rx * JUGG_SHINE_OFFSET,
+      cy - ry * JUGG_SHINE_OFFSET,
+      rx * FLASK_SHINE_RX,
+      ry * FLASK_SHINE_RY,
+      FLASK_SHINE_ROT,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+
+  if (item.id === 'cooldown_crisp') {
+    const { cx, cy } = drawRoundFlask(
+      ctx,
+      x,
+      y,
+      size,
+      COOL_CRISP_CY,
+      COOL_CRISP_NECK_Y,
+      COOL_CRISP_CORK_Y,
+      '#059669',
+      '#34d399',
+      '#065f46',
+      '#92400e',
+    );
+    const clockR = size * COOL_CRISP_CLOCK_R;
+    ctx.fillStyle = '#d1fae5';
+    ctx.beginPath();
+    ctx.arc(cx, cy, clockR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    const longR = size * COOL_CRISP_HAND_LONG;
+    const shortR = size * COOL_CRISP_HAND_SHORT;
+    ctx.strokeStyle = '#064e3b';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(-Math.PI / 2) * longR, cy + Math.sin(-Math.PI / 2) * longR);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(
+      cx + Math.cos(Math.PI / CLOCK_HOUR_ANGLE_DIVS) * shortR,
+      cy + Math.sin(Math.PI / CLOCK_HOUR_ANGLE_DIVS) * shortR,
+    );
+    ctx.stroke();
+  }
+
+  if (item.id === 'stat_boost_potion') {
+    const { cx, cy, r } = drawRoundFlask(
+      ctx,
+      x,
+      y,
+      size,
+      ROUND_FLASK_CY,
+      ROUND_FLASK_NECK_Y,
+      ROUND_FLASK_CORK_Y,
+      '#7e22ce',
+      '#c084fc',
+      '#581c87',
+      '#d97706',
+    );
+    const outerR = size * STAT_BOOST_STAR_R_OUTER;
+    const innerR = size * STAT_BOOST_STAR_R_INNER;
+    const starCY = cy + r * STAR_CY_SHIFT;
+    ctx.fillStyle = '#fde68a';
+    ctx.beginPath();
+    for (let i = 0; i < STAT_BOOST_STAR_POINTS * 2; i++) {
+      const angle = (i * Math.PI) / STAT_BOOST_STAR_POINTS - Math.PI / 2;
+      const rad = i % 2 === 0 ? outerR : innerR;
+      const px = cx + Math.cos(angle) * rad;
+      const py = starCY + Math.sin(angle) * rad;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (item.id === 'dirty_shirley') {
+    const cx = x + size * DIRTY_SHIRLEY_CX;
+    const glassTopY = y + size * DIRTY_SHIRLEY_GLASS_TOP_Y;
+    const glassBottomY = y + size * DIRTY_SHIRLEY_GLASS_BOTTOM_Y;
+    const glassLeftX = cx - size * DIRTY_SHIRLEY_GLASS_HALF_W;
+    const glassRightX = cx + size * DIRTY_SHIRLEY_GLASS_HALF_W;
+
+    // Faint glass body under the liquid so the tumbler's walls read past the fill line
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(glassLeftX, glassTopY, glassRightX - glassLeftX, glassBottomY - glassTopY);
+
+    const liquidTopY = y + size * DIRTY_SHIRLEY_LIQUID_TOP_Y;
+    const liquidLeftX = glassLeftX + size * DIRTY_SHIRLEY_LIQUID_INSET;
+    const liquidRightX = glassRightX - size * DIRTY_SHIRLEY_LIQUID_INSET;
+
+    // Deep grenadine red settles at the bottom, lighter ginger-ale fizz rises to the top
+    const liquidGradient = ctx.createLinearGradient(0, liquidTopY, 0, glassBottomY);
+    liquidGradient.addColorStop(0, '#fda4af');
+    liquidGradient.addColorStop(1, '#7f1d3d');
+    ctx.fillStyle = liquidGradient;
+    ctx.fillRect(liquidLeftX, liquidTopY, liquidRightX - liquidLeftX, glassBottomY - liquidTopY);
+
+    // Rim ellipse reads as the glass's top opening
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(
+      cx,
+      glassTopY,
+      size * DIRTY_SHIRLEY_GLASS_HALF_W,
+      size * DIRTY_SHIRLEY_RIM_RY,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+
+    // A pale stripe down one side sells the glass over the liquid
+    ctx.fillStyle = `rgba(255,255,255,${DIRTY_SHIRLEY_HIGHLIGHT_ALPHA})`;
+    ctx.fillRect(
+      glassLeftX + size * DIRTY_SHIRLEY_HIGHLIGHT_X_OFFSET,
+      glassTopY,
+      size * DIRTY_SHIRLEY_HIGHLIGHT_W,
+      glassBottomY - glassTopY,
+    );
+
+    // A few fizz bubbles rising through the liquid
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    const bubbleFracs: Array<[number, number]> = [
+      [DIRTY_SHIRLEY_BUBBLE_1_X, DIRTY_SHIRLEY_BUBBLE_1_Y],
+      [DIRTY_SHIRLEY_BUBBLE_2_X, DIRTY_SHIRLEY_BUBBLE_2_Y],
+      [DIRTY_SHIRLEY_BUBBLE_3_X, DIRTY_SHIRLEY_BUBBLE_3_Y],
+    ];
+    for (const [bxFrac, byFrac] of bubbleFracs) {
+      ctx.beginPath();
+      ctx.arc(x + size * bxFrac, y + size * byFrac, size * DIRTY_SHIRLEY_BUBBLE_R, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Maraschino cherry perched on the rim, with a thin curved stem
+    const cherryX = cx + size * DIRTY_SHIRLEY_CHERRY_X_OFFSET;
+    const cherryY = glassTopY + size * DIRTY_SHIRLEY_CHERRY_Y_OFFSET;
+    const cherryR = size * DIRTY_SHIRLEY_CHERRY_R;
+
+    ctx.strokeStyle = '#4d7c0f';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cherryX, cherryY - cherryR);
+    ctx.quadraticCurveTo(
+      cherryX + size * DIRTY_SHIRLEY_STEM_CTRL_X_OFFSET,
+      cherryY + size * DIRTY_SHIRLEY_STEM_CTRL_Y_OFFSET,
+      cherryX + size * DIRTY_SHIRLEY_STEM_END_X_OFFSET,
+      cherryY + size * DIRTY_SHIRLEY_STEM_END_Y_OFFSET,
+    );
+    ctx.stroke();
+
+    ctx.fillStyle = '#7f1d3d';
+    ctx.beginPath();
+    ctx.arc(cherryX, cherryY, cherryR, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    ctx.arc(
+      cherryX + size * DIRTY_SHIRLEY_CHERRY_SHINE_X_OFFSET,
+      cherryY + size * DIRTY_SHIRLEY_CHERRY_SHINE_Y_OFFSET,
+      size * DIRTY_SHIRLEY_CHERRY_SHINE_R,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+
+  if (item.id === 'goblin_dynamite') {
+    drawDynamiteInventoryIcon(ctx, x, y, size);
+  } else if (item.id === 'gym_dumbbell') {
+    drawDumbbellInventoryIcon(ctx, x, y, size);
+  } else if (item.id === 'gym_bench_press') {
+    drawBenchPressInventoryIcon(ctx, x, y, size);
+  } else if (item.id === 'gym_treadmill') {
+    drawTreadmillInventoryIcon(ctx, x, y, size);
+  }
+
+  // Quantity badge (bottom-right) — sprite icon text, leave as ctx.fillText
+  // Uses textAlign='right' where x is the RIGHT edge; dynamic font size
+  if (item.quantity > 1) {
+    const fontSize = Math.max(QTY_BADGE_MIN_FONT, Math.floor(size * QTY_BADGE_FONT_SCALE));
+    ctx.font = `bold ${fontSize}px monospace`;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'right';
+    ctx.fillText(
+      item.quantity.toString(),
+      x + size - QTY_BADGE_MARGIN,
+      y + size - QTY_BADGE_MARGIN,
+    );
+    ctx.textAlign = 'left';
+  }
+
+  ctx.restore();
 }

@@ -189,18 +189,22 @@ export class InventoryInteraction {
     // The item's own action leads: it is what the player opened the menu for,
     // and putting it anywhere but first would sit Drop next to the common action.
     const lead = leadOptionFor(item);
+    // Undroppable items (permanent quest gear like the Wayfinder's Anchor, the
+    // ability tomes) can still be repositioned freely — only the option to
+    // discard them into the world is missing.
+    const drop = item.canDrop === false ? [] : ['Drop'];
     if (source === 'hotbar') {
       if (item.type === 'armor') {
         const label = isEquipped ? 'Unequip' : 'Equip';
-        return [...lead, label, 'Move to Bag', 'Description', 'Drop'];
+        return [...lead, label, 'Move to Bag', 'Description', ...drop];
       }
-      return [...lead, 'Move to Bag', 'Description', 'Drop'];
+      return [...lead, 'Move to Bag', 'Description', ...drop];
     }
     if (item.type === 'armor') {
       const label = isEquipped ? 'Unequip' : 'Equip';
-      return [...lead, label, 'Description', 'Drop'];
+      return [...lead, label, 'Description', ...drop];
     }
-    return [...lead, 'Description', 'Drop'];
+    return [...lead, 'Description', ...drop];
   }
 
   /**
@@ -406,7 +410,10 @@ export class InventoryInteraction {
       const r = hotbarSlotRect(i);
       if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
-        if (item && item.canDrop !== false) {
+        // Undroppable is not the same as unmovable: the Wayfinder's Anchor and
+        // the ability tomes can't be discarded, but a player still needs to be
+        // able to rearrange the hotbar around them like any other item.
+        if (item) {
           this.drag = { source: 'hotbar', idx: i, item, mx, my };
           return;
         }
@@ -476,10 +483,11 @@ export class InventoryInteraction {
     page: number,
   ): void {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
+      if (i === QUEST_SLOT_IDX) continue; // Quest slot has no menu — it can't be moved or dropped.
       const r = hotbarSlotRect(i);
       if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
-        if (item && item.canDrop !== false) {
+        if (item) {
           const isEquipped = inventory.hasEquipped(item.id);
           const origin = this.clampMenuOrigin(mx, my, item, 'hotbar', isEquipped);
           this.contextMenu = {

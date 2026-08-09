@@ -19,6 +19,14 @@ import { HUMANOID_NPC_SCALE, scaleHumanoidBox } from '../sprites/humanoidScale';
 import type { Facing } from '../sprites/person/skeleton';
 import { stepWander, type WanderParams, type WanderState, type WanderStep } from './townWander';
 import type { ResidentId } from '../systems/townResidents';
+import type { NPCMarkerType } from './QuestNPC';
+import {
+  drawQuestMarker,
+  questMarkerColorFor,
+  QUEST_MARKER_GOLD,
+  QUEST_MARKER_GREEN,
+} from '../sprites/questNPCSprite';
+import { drawQuestBeacon } from '../sprites/questBeacon';
 
 /**
  * Draw size of a citizen in pixels before the humanoid scale-up — full-tile
@@ -105,6 +113,14 @@ export class Townsperson implements WanderState {
   conversationCount = 0;
   /** True while this citizen is mid-conversation — holds them in place facing the player. */
   frozen = false;
+  /**
+   * Overhead quest glyph. `'none'` for the whole strolling crowd — only a
+   * citizen a questline has business with is ever given one, and the questline
+   * that gave it is what sets it back to `'none'`.
+   *
+   * Follows the shipped convention: `'exclamation'` offers, `'question'` turns in.
+   */
+  markerType: NPCMarkerType = 'none';
 
   private readonly wander: WanderParams;
 
@@ -181,6 +197,15 @@ export class Townsperson implements WanderState {
       this.cycleDistanceDrawSize = box.s;
       this.cycleDistance = walkCycleDistance(this.appearance, box.s);
     }
+    // Beacon first, so the column stands behind the figure rather than across
+    // it. Both it and the glyph below branch on `markerType` and nothing else,
+    // so the two can never disagree about whether this citizen has something
+    // to say.
+    const markerColor = questMarkerColorFor(this.markerType);
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, box.sx, box.sy, box.s, camX, camY, performance.now(), markerColor);
+    }
+
     drawPersonCached(
       ctx,
       box.sx,
@@ -191,5 +216,11 @@ export class Townsperson implements WanderState {
       this.facing,
       this.moving,
     );
+
+    if (this.markerType === 'exclamation') {
+      drawQuestMarker(ctx, box.sx, box.sy, box.s, '!', QUEST_MARKER_GOLD);
+    } else if (this.markerType === 'question') {
+      drawQuestMarker(ctx, box.sx, box.sy, box.s, '?', QUEST_MARKER_GREEN);
+    }
   }
 }

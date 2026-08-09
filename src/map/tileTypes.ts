@@ -399,6 +399,27 @@ export const INK_BENCH = 105;
 /** A stone slab with a muller, a soot pot and a pestle, for grinding pigment. */
 export const GRINDING_SLAB = 106;
 
+/*
+ * Furniture a hedge-witch cannot afford to replace: the splintered counterparts
+ * of `TABLE`, `CHAIR` and `BOOKSHELF`, standing on the same tiles and blocking
+ * them the same way. Each is repaired back into its intact type in place, so the
+ * pair must agree about footprint — a wreck that took less room than the piece
+ * it replaced would let the player stand where the repair is about to appear.
+ *
+ * All three are knee-height rubble, so — like `TABLE` and `CHAIR`, and unlike
+ * the intact `BOOKSHELF` — they are drawn flat in the base pass and belong to
+ * neither decoration registry. Nothing walks behind a heap of boards.
+ */
+
+/** A worktable dropped onto its own broken legs, top split in two. */
+export const BROKEN_TABLE = 107;
+
+/** A chair on its side, back snapped off, one leg loose beside it. */
+export const BROKEN_CHAIR = 108;
+
+/** A shelf collapsed forward, its boards down and its books spilled. */
+export const BROKEN_BOOKSHELF = 109;
+
 /**
  * Every ground a town building's interior can be floored in.
  *
@@ -422,7 +443,7 @@ export const INTERIOR_FLOOR_TYPES: ReadonlySet<number> = new Set([
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 107;
+export const TILE_TYPE_COUNT = 110;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

@@ -904,6 +904,20 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   },
 ];
 
+/**
+ * The sprite a named building is drawn from, which is the only route from a
+ * building's name to its size: the plan states no width or height, and the
+ * `BuildingEntry` the rest of the game holds records only the door.
+ *
+ * Undefined for the two entrances that are not sprite buildings — the tower,
+ * whose art is mostly transparent overhang, and the tile-built Big Top — so a
+ * caller sizing itself against a facade is told to fall back rather than handed
+ * a rectangle that means something else.
+ */
+export function plannedBuildingSpriteKey(name: string): string | undefined {
+  return PLANNED_BUILDINGS.find((building) => building.name === name)?.spriteKey;
+}
+
 // ── Yards, gardens and planted strips ────────────────────────────────────────
 
 /**

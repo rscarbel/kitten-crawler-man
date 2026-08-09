@@ -15,8 +15,28 @@ import {
   playButtonSound,
   BUTTON_PRESETS,
 } from './Button';
-import { drawModal, BOX_PRESETS } from './Box';
+import { drawBox, drawModal, BOX_PRESETS } from './Box';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { drawItemIcon } from './InventoryPanel';
+import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
+
+/**
+ * What a page is offering, previewed on the page that asks the player to agree
+ * to the work.
+ *
+ * A quest that states its reward only on completion asks the player to take an
+ * errand on faith. The strip is deliberately plain-language — what the thing
+ * *does*, not what it is called — because "Wayfinder's Anchor" tells a
+ * first-time player nothing about whether the walk is worth it.
+ */
+export interface DialogReward {
+  /** Drawn with the same icon the inventory uses — never a second drawing. */
+  itemId: ItemId;
+  displayName: string;
+  /** One or two lines, in plain language, of what the item actually does. */
+  lines: ReadonlyArray<string>;
+  xp: number;
+}
 
 /** One page of quest dialog: a speaker/heading, body lines, and a button label. */
 export interface DialogPage {
@@ -33,6 +53,12 @@ export interface DialogPage {
    * player knows they have.
    */
   declineButton?: string;
+  /**
+   * Reward preview strip, drawn between the body and the buttons. Set it on the
+   * page that asks for a commitment — usually an offer's last page, beside
+   * {@link DialogPage.declineButton}.
+   */
+  reward?: DialogReward;
 }
 
 const DIALOG_WIDTH = 460;
@@ -52,6 +78,26 @@ const DIALOG_BTN_Y_FROM_BOTTOM = 42;
 const DIALOG_BTN_GAP = 12;
 const DIALOG_BTN_LABEL_SIZE = 12;
 const DIALOG_PAGE_COUNTER_SIZE = 10;
+
+// Reward strip. Its height is measured, not assumed, so a two-line description
+// pushes the buttons down instead of printing over them.
+const REWARD_STRIP_TOP_GAP = 12;
+const REWARD_STRIP_PAD = 9;
+const REWARD_ICON_SIZE = 36;
+const REWARD_ICON_TEXT_GAP = 10;
+const REWARD_HEADING_SIZE = 9;
+const REWARD_HEADING_HEIGHT = 13;
+const REWARD_NAME_SIZE = 12;
+const REWARD_NAME_HEIGHT = 16;
+const REWARD_LINE_SIZE = 10;
+const REWARD_LINE_SPACING = 13;
+const REWARD_XP_SIZE = 10;
+const REWARD_XP_HEIGHT = 14;
+const REWARD_HEADING_COLOR = 'rgba(148,163,184,0.9)';
+const REWARD_NAME_COLOR = '#facc15';
+const REWARD_LINE_COLOR = '#cbd5e1';
+const REWARD_XP_COLOR = '#4ade80';
+const REWARD_HEADING_TEXT = 'REWARD';
 
 export class QuestDialog {
   private pages: ReadonlyArray<DialogPage> = [];
@@ -139,6 +185,96 @@ export class QuestDialog {
     return true;
   }
 
+  /** Width available to the strip's text column, once the icon has taken its share. */
+  private rewardTextWidth(stripWidth: number): number {
+    return stripWidth - REWARD_STRIP_PAD * 2 - REWARD_ICON_SIZE - REWARD_ICON_TEXT_GAP;
+  }
+
+  /**
+   * Measured rather than fixed: the description wraps, and the strip has to grow
+   * with it or the buttons below end up drawn over the last line.
+   */
+  private rewardStripHeight(
+    ctx: CanvasRenderingContext2D,
+    reward: DialogReward,
+    stripWidth: number,
+  ): number {
+    const { lineCount } = measureTextBox(ctx, reward.lines.join('\n'), {
+      width: this.rewardTextWidth(stripWidth),
+      size: REWARD_LINE_SIZE,
+      lineHeight: REWARD_LINE_SPACING,
+    });
+    const textHeight =
+      REWARD_HEADING_HEIGHT +
+      REWARD_NAME_HEIGHT +
+      lineCount * REWARD_LINE_SPACING +
+      REWARD_XP_HEIGHT;
+    return REWARD_STRIP_PAD * 2 + Math.max(REWARD_ICON_SIZE, textHeight);
+  }
+
+  /** The reward preview: the item's own icon, its name, what it does, and the XP. */
+  private drawRewardStrip(
+    ctx: CanvasRenderingContext2D,
+    reward: DialogReward,
+    x: number,
+    y: number,
+    stripWidth: number,
+  ): void {
+    const height = this.rewardStripHeight(ctx, reward, stripWidth);
+    drawBox(ctx, { x, y, width: stripWidth, height, ...BOX_PRESETS.panel });
+
+    const innerX = x + REWARD_STRIP_PAD;
+    const innerY = y + REWARD_STRIP_PAD;
+    // The inventory's own icon, so the thing the player is shown here is exactly
+    // the thing they will later hunt for on the hotbar.
+    drawItemIcon(
+      ctx,
+      { ...ITEM_DEF[reward.itemId], quantity: 1 },
+      innerX,
+      innerY,
+      REWARD_ICON_SIZE,
+    );
+
+    const textX = innerX + REWARD_ICON_SIZE + REWARD_ICON_TEXT_GAP;
+    const textWidth = this.rewardTextWidth(stripWidth);
+
+    drawText(ctx, REWARD_HEADING_TEXT, {
+      x: textX,
+      y: innerY,
+      size: REWARD_HEADING_SIZE,
+      bold: true,
+      color: REWARD_HEADING_COLOR,
+    });
+    drawText(ctx, reward.displayName, {
+      x: textX,
+      y: innerY + REWARD_HEADING_HEIGHT,
+      size: REWARD_NAME_SIZE,
+      bold: true,
+      color: REWARD_NAME_COLOR,
+    });
+    const linesY = innerY + REWARD_HEADING_HEIGHT + REWARD_NAME_HEIGHT;
+    drawText(ctx, reward.lines.join('\n'), {
+      x: textX,
+      y: linesY,
+      width: textWidth,
+      lineHeight: REWARD_LINE_SPACING,
+      size: REWARD_LINE_SIZE,
+      color: REWARD_LINE_COLOR,
+    });
+    const { lineCount } = measureTextBox(ctx, reward.lines.join('\n'), {
+      width: textWidth,
+      size: REWARD_LINE_SIZE,
+      lineHeight: REWARD_LINE_SPACING,
+    });
+    drawText(ctx, `+${reward.xp} XP`, {
+      x: textX,
+      y: linesY + lineCount * REWARD_LINE_SPACING,
+      size: REWARD_XP_SIZE,
+      bold: true,
+      color: REWARD_XP_COLOR,
+    });
+  }
+
   render(ctx: CanvasRenderingContext2D): void {
     if (!this.isOpen) return;
     const page = this.pages[this.pageIndex];
@@ -153,7 +289,16 @@ export class QuestDialog {
       size: DIALOG_LINE_SIZE,
       lineHeight: DIALOG_LINE_SPACING,
     });
-    const dh = DIALOG_BASE_HEIGHT + lineCount * DIALOG_LINE_SPACING + DIALOG_BUTTON_AREA_HEIGHT;
+    const reward = page.reward;
+    const rewardHeight =
+      reward === undefined
+        ? 0
+        : REWARD_STRIP_TOP_GAP + this.rewardStripHeight(ctx, reward, contentWidth);
+    const dh =
+      DIALOG_BASE_HEIGHT +
+      lineCount * DIALOG_LINE_SPACING +
+      rewardHeight +
+      DIALOG_BUTTON_AREA_HEIGHT;
 
     const box = drawModal(ctx, {
       canvasWidth: viewportWidth(),
@@ -188,6 +333,16 @@ export class QuestDialog {
         color: 'rgba(200,200,200,0.6)',
         align: 'right',
       });
+    }
+
+    if (reward !== undefined) {
+      this.drawRewardStrip(
+        ctx,
+        reward,
+        box.x + DIALOG_PAD_X,
+        box.y + DIALOG_LINE_START_Y + lineCount * DIALOG_LINE_SPACING + REWARD_STRIP_TOP_GAP,
+        contentWidth,
+      );
     }
 
     const btnY = box.y + dh - DIALOG_BTN_Y_FROM_BOTTOM;

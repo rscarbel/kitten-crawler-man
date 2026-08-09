@@ -36,7 +36,11 @@ export type ItemId =
   | 'splatter_skunk_toe_ring'
   | 'shade_gnoll_kneepads'
   | 'grull_war_gauntlet'
-  | 'slingshot';
+  | 'slingshot'
+  | 'wayfinders_anchor'
+  | 'anchor_shard_tinker'
+  | 'anchor_shard_hilda'
+  | 'anchor_shard_temple';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -339,7 +343,55 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     isQuestItem: true,
     description:
       'Wooden boards scavenged from the wood pile. Place near floor grates to build ' +
-      'barriers against Bugaboos. Only the Human can build or repair. Costs 4 boards.',
+      'barriers against Bugaboos. Only the Human can build or repair. Costs 4 boards. ' +
+      'Old Hilda takes the same boards for her broken furniture, at 2 a mend.',
+  },
+  wayfinders_anchor: {
+    id: 'wayfinders_anchor',
+    name: "Wayfinder's Anchor",
+    stackable: false,
+    canHotlist: true,
+    canDrop: false,
+    type: 'consumable',
+    description:
+      'Three shards of a seer’s stone, welded back into one and humming like a struck bell. ' +
+      'Out in the Over City it pulls the whole party back to the town square, and remembers where ' +
+      'it took you from. Used in the square, it puts you back on that spot. One minute between ' +
+      'trips. It stays dead underground, during a boss fight, and with anything hostile close by.',
+  },
+  // The three shards are ordinary undroppable bag items rather than `isQuestItem`
+  // ones: the quest flag routes an item into the single reserved hotbar slot, and
+  // a second quest item there overwrites the first. Three of them at once would
+  // silently eat each other.
+  anchor_shard_tinker: {
+    id: 'anchor_shard_tinker',
+    name: 'Anchor Shard (Scrap)',
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    description:
+      'A wedge of grey stone the tinker had priced as scrap, still warm to the touch. ' +
+      'Madame Voss can weld it to its brothers.',
+  },
+  anchor_shard_hilda: {
+    id: 'anchor_shard_hilda',
+    name: 'Anchor Shard (Hearth)',
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    description:
+      'Old Hilda kept this one under a chair leg for thirty years. It gave it up gladly. ' +
+      'Madame Voss can weld it to its brothers.',
+  },
+  anchor_shard_temple: {
+    id: 'anchor_shard_temple',
+    name: 'Anchor Shard (Altar)',
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    description:
+      'Chipped from the Temple of the Sky’s altar stone, and cold no matter how long you hold it. ' +
+      'Madame Voss can weld it to its brothers.',
   },
   smush_tome: {
     id: 'smush_tome',
@@ -610,6 +662,28 @@ export function itemFitsSubSlot(
 
 export function isItemId(s: string): s is ItemId {
   return s in ITEM_DEF;
+}
+
+/**
+ * The three pieces the Wayfinder's Anchor is welded from, in the order the
+ * questline hands them out.
+ *
+ * One list rather than three literals repeated per caller: the icon switch, the
+ * assembly transaction and the Journal all have to agree on what "all three"
+ * means, and a fourth shard would otherwise have to be remembered in each.
+ */
+export const ANCHOR_SHARD_IDS = [
+  'anchor_shard_tinker',
+  'anchor_shard_hilda',
+  'anchor_shard_temple',
+] as const satisfies readonly ItemId[];
+
+export type AnchorShardId = (typeof ANCHOR_SHARD_IDS)[number];
+
+/** Whether an item is one of the Anchor's shards — they share a single icon. */
+export function isAnchorShardId(id: ItemId): id is AnchorShardId {
+  const shardIds: readonly ItemId[] = ANCHOR_SHARD_IDS;
+  return shardIds.includes(id);
 }
 
 /**

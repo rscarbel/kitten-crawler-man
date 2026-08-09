@@ -60,6 +60,9 @@ import {
   CLIFF,
   CAMPFIRE,
   GOBLIN_TENT,
+  BROKEN_TABLE,
+  BROKEN_CHAIR,
+  BROKEN_BOOKSHELF,
 } from './tileTypes';
 
 /** Tile types that cannot be walked on. Everything not listed here is walkable. */
@@ -152,6 +155,11 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   CLIFF,
   CAMPFIRE,
   GOBLIN_TENT,
+  // Broken furniture blocks exactly what the intact piece blocked. A wreck the
+  // player could walk onto would put them inside the repair the moment it lands.
+  BROKEN_TABLE,
+  BROKEN_CHAIR,
+  BROKEN_BOOKSHELF,
 ];
 
 /**
