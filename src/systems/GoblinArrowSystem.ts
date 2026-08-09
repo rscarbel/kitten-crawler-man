@@ -181,7 +181,10 @@ export class GoblinArrowSystem implements GameSystem {
         const cx = target.x + TILE_SIZE * CENTER_OFFSET;
         const cy = target.y + TILE_SIZE * CENTER_OFFSET;
         if (Math.hypot(arrow.x - cx, arrow.y - cy) >= hitRadius) continue;
-        const connected = target.takeDamage(arrow.damage, arrow.source);
+        // A fully resisted hit must not reach `takeDamage`: a zero-damage arrow
+        // still flashes the crawler's hit-react and suppresses regen.
+        const resistedDamage = target.resistedDamage(arrow.damage, 'piercing');
+        const connected = resistedDamage > 0 && target.takeDamage(resistedDamage, arrow.source);
         if (connected) arrow.owner.noteStruckPlayer(target);
         struck = true;
         // A body hit leaves no shaft, so `land` never runs for it — the cue has

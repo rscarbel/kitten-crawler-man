@@ -206,8 +206,16 @@ export class AbilityManager {
   }
 
   getLevel(id: AbilityId): number {
-    const realLevel = this.states.get(id)?.level ?? 1;
-    return Math.max(realLevel, this.godModeMinLevel);
+    return Math.max(this.getRealLevel(id), this.godModeMinLevel);
+  }
+
+  /**
+   * The stored level, ignoring the god-mode floor — what the player actually
+   * earned. Anything that pays out for reaching a level has to read this, or a
+   * cheat hands out the reward.
+   */
+  getRealLevel(id: AbilityId): number {
+    return this.states.get(id)?.level ?? 1;
   }
 
   /** Override the effective level floor for all abilities (god mode). Pass 0 to clear. */

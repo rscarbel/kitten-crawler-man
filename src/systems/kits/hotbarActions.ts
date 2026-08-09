@@ -95,6 +95,14 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
     return;
   }
 
+  // A weapon is wielded rather than spent: the slot toggles it in and out of
+  // hand, and the attack key does the shooting.
+  if (slot.id === 'slingshot' && pm.human.isActive) {
+    pm.human.toggleSlingshotWield();
+    audio?.play('menu_click');
+    return;
+  }
+
   if (slot.skillId !== undefined) {
     // The bar belongs to the active crawler, so they are the reader even when
     // the panel is showing the companion's bag.

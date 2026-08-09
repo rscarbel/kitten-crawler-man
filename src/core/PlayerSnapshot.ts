@@ -62,6 +62,16 @@ export interface PlayerSnapshot {
   tattooStat: StatName | null;
   /** Skill taught by the Quiet Needle's brass mark. Absent on saves predating it. */
   skillTattoo?: SkillId | null;
+  /** The Juicer's Desperado Pass ink. Absent on saves predating it. */
+  desperadoPassTattoo?: boolean;
+  /** The weapon the human has in hand. Absent on saves predating wielding, and on the cat. */
+  wieldedWeaponId?: ItemId | null;
+  /**
+   * Frames left before the slingshot can fire again. Absent on saves predating
+   * it, and on the cat. Without this, every scene transition zeroed the human's
+   * cooldown and granted a free instant shot on arrival.
+   */
+  slingshotCooldown?: number;
   /** Stat points bought on the garrison's sand. Absent on saves predating the drill yard. */
   drillTraining?: number;
   /** Active buffs and DoTs, so a drink or a poison survives a building round-trip. */
@@ -126,6 +136,7 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     equippedEntries: p.inventory.equipment.entries(),
     tattooStat: p.tattooStat,
     skillTattoo: p.skillTattoo,
+    desperadoPassTattoo: p.hasDesperadoPassTattoo,
     drillTraining: p.drillTraining,
     // The applier is dropped rather than copied: a snapshot is how a crawler
     // crosses into another scene, and that scene builds its own crawlers, so a
@@ -142,6 +153,8 @@ export function snapPlayer(p: Player): PlayerSnapshot {
   };
   if (p instanceof HumanPlayer) {
     snap.explosivesHandling = p.explosivesHandling;
+    snap.wieldedWeaponId = p.wieldedWeaponId;
+    snap.slingshotCooldown = p.slingshotCooldown;
   }
   return snap;
 }
@@ -253,6 +266,7 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.facingY = finiteOr(snap.facingY, p.facingY);
   p.tattooStat = snap.tattooStat;
   p.skillTattoo = snap.skillTattoo ?? null;
+  p.hasDesperadoPassTattoo = snap.desperadoPassTattoo ?? false;
   p.drillTraining = Math.max(0, finiteOr(snap.drillTraining, 0));
   p.isActive = snap.isActive ?? p.isActive;
   p.isKnockedOut = snap.isKnockedOut ?? false;
@@ -262,8 +276,12 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   const readyAt = snap.cockroachReadyAt;
   p.cockroachReadyAt =
     readyAt !== null && readyAt !== undefined && Number.isFinite(readyAt) ? readyAt : null;
-  if (p instanceof HumanPlayer && snap.explosivesHandling !== undefined) {
-    p.explosivesHandling = Math.max(1, finiteOr(snap.explosivesHandling, p.explosivesHandling));
+  if (p instanceof HumanPlayer) {
+    if (snap.explosivesHandling !== undefined) {
+      p.explosivesHandling = Math.max(1, finiteOr(snap.explosivesHandling, p.explosivesHandling));
+    }
+    p.wieldedWeaponId = snap.wieldedWeaponId ?? null;
+    p.slingshotCooldown = Math.max(0, finiteOr(snap.slingshotCooldown, 0));
   }
 
   // Copied rather than aliased: a checkpoint snapshot is restored again on

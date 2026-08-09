@@ -39,6 +39,8 @@ const SKILL_COVERS: Record<SkillId, CoverPalette> = {
   pugilism: { cover: '#7f1d1d', spine: '#450a0a' },
   iron_stomach: { cover: '#3f6212', spine: '#1f3006' },
   night_vision: { cover: '#1e3a8a', spine: '#0d1b45' },
+  iron_punch: { cover: '#3f4854', spine: '#1c2129' },
+  powerful_strike: { cover: '#92400e', spine: '#4a1f04' },
 };
 
 /** Draws a closed book, cover facing the viewer, into a square icon region. */

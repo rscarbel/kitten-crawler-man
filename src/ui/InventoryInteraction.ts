@@ -1,5 +1,5 @@
 import type { Inventory } from '../core/Inventory';
-import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
+import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX, itemCanHotlist } from '../core/ItemDefs';
 import type { InventoryItem, ItemId } from '../core/ItemDefs';
 import type { SkillId } from '../core/SkillManager';
 import { pointInRect } from '../utils';
@@ -59,6 +59,14 @@ function pageCount(slotCount: number): number {
   return Math.max(1, Math.ceil(slotCount / SLOTS_PER_PAGE));
 }
 
+/**
+ * What a host says when the hotbar refuses a piece of gear. Shared so both
+ * scenes name the same screen — the Equipment panel is where the item actually
+ * does something, and a refusal that doesn't say so is just a dead end.
+ */
+export const HOTBAR_REFUSAL_MESSAGE =
+  "That can't go on the hotbar — equip it from the Equipment screen.";
+
 export interface DragState {
   source: 'inv' | 'hotbar';
   idx: number;
@@ -91,6 +99,29 @@ export class InventoryInteraction {
   drag: DragState | null = null;
   contextMenu: ContextMenu | null = null;
   contextMenuHover = -1;
+
+  /**
+   * Fired when a drag of gear with no hotbar action is released over a hotbar
+   * slot. The swap already refuses on its own, so the host uses this purely to
+   * say so — without it the item just springs home and the refusal is silent.
+   */
+  onBlockedHotbarDrop: (() => void) | null = null;
+
+  /**
+   * Offered every click that reached the open panel's own surface, after the
+   * dialogs, the context menu and the nav bar have all declined it and before
+   * the panel swallows it as background. Returns true when the host's own header
+   * widget took the click.
+   */
+  claimPanelSurfaceClick: ((mx: number, my: number) => boolean) | null = null;
+
+  /**
+   * Asked before a bag slot answers a press of any kind — a drag, a right-click
+   * menu. A host that is filtering its slots answers false for an item the
+   * filter has faded out: an item the player cannot see is not one they can have
+   * meant to act on, whichever button they used.
+   */
+  canInteractWithBagSlot: ((item: InventoryItem) => boolean) | null = null;
 
   /** Set by context-menu "Equip" selection; DungeonScene reads and clears this. */
   pendingEquipSlot: number | null = null;
@@ -340,6 +371,10 @@ export class InventoryInteraction {
       }
     }
 
+    if (this.claimPanelSurfaceClick?.(mx, my) === true) {
+      return true;
+    }
+
     if (pointInRect(mx, my, p)) {
       return true;
     }
@@ -388,11 +423,22 @@ export class InventoryInteraction {
       if (pointInRect(mx, my, r)) {
         const item = inventory.bag.slots[slotIdx];
         if (item) {
+          if (!this.bagSlotIsInteractive(item)) return;
           this.drag = { source: 'inv', idx: slotIdx, item, mx, my };
           return;
         }
       }
     }
+  }
+
+  /**
+   * True when no host filter is refusing this slot's item. Public so a scene's
+   * own click routing (the gear-panel equip path, which never goes through
+   * `handleMouseDown`) can honor the same search filter as drag and the
+   * context menu.
+   */
+  bagSlotIsInteractive(item: InventoryItem): boolean {
+    return this.canInteractWithBagSlot === null || this.canInteractWithBagSlot(item);
   }
 
   /**
@@ -459,6 +505,7 @@ export class InventoryInteraction {
       if (pointInRect(mx, my, r)) {
         const item = inventory.bag.slots[slotIdx];
         if (item) {
+          if (!this.bagSlotIsInteractive(item)) return;
           const isEquipped = inventory.isSlotEquipped(slotIdx);
           const origin = this.clampMenuOrigin(mx, my, item, 'inv', isEquipped);
           this.contextMenu = {
@@ -525,18 +572,27 @@ export class InventoryInteraction {
       if (i === QUEST_SLOT_IDX) continue; // Can't drop onto quest slot
       const r = hotbarSlotRect(i);
       if (pointInRect(mx, my, r)) {
-        if (src.source === 'hotbar') {
-          // Released on the slot it came from: a plain left click, not a drag.
-          // Skill books answer that with the read prompt; everything else is a
-          // no-op swap, which is what dropping an item back where it was means.
-          if (src.idx === i) {
-            this.requestSkillBookRead(src.item);
-          } else {
-            inventory.swapHotbar(src.idx, i);
-          }
-        } else {
-          inventory.swapInvToHotbar(src.idx, i);
+        // Released on the slot it came from: a plain left click, not a drag.
+        // Skill books answer that with the read prompt; everything else is a
+        // no-op swap, which is what dropping an item back where it was means.
+        // Checked ahead of the hotlist guard so legacy gear parked in a slot
+        // answers a click with silence rather than a refusal it didn't ask for.
+        if (src.source === 'hotbar' && src.idx === i) {
+          this.requestSkillBookRead(src.item);
+          return;
         }
+        // A hotbar→hotbar drag is a reorder, not a new placement: the item is
+        // already on the hotbar, so the hotlist restriction — which exists to
+        // stop new gear from entering — has nothing to say about it.
+        if (src.source === 'hotbar') {
+          inventory.swapHotbar(src.idx, i);
+          return;
+        }
+        if (!itemCanHotlist(src.item.id)) {
+          this.onBlockedHotbarDrop?.();
+          return;
+        }
+        inventory.swapInvToHotbar(src.idx, i);
         return;
       }
     }

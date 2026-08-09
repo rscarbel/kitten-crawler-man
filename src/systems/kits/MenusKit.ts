@@ -17,7 +17,7 @@ import type { GameStats } from '../../core/GameStats';
 import type { InventoryItem, ItemId } from '../../core/ItemDefs';
 import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../../core/timedPotions';
 import type { CatPlayer } from '../../creatures/CatPlayer';
-import type { HumanPlayer } from '../../creatures/HumanPlayer';
+import { HumanPlayer } from '../../creatures/HumanPlayer';
 import { GearPanel } from '../../ui/GearPanel';
 import { HotbarToast } from '../../ui/HotbarToast';
 import { InventoryPanel } from '../../ui/InventoryPanel';
@@ -45,13 +45,6 @@ function slotContentsAt(
 ): InventoryItem | null {
   const container = source === 'hotbar' ? holder.inventory.actionBar : holder.inventory.bag;
   return container.slots[slotIdx];
-}
-
-/** Armour with both halves of an equip address — the only thing that can be worn. */
-function isWearable(
-  item: InventoryItem | null,
-): item is InventoryItem & { equipSlot: string; equipSubSlot: string } {
-  return item?.type === 'armor' && item.equipSlot !== undefined && item.equipSubSlot !== undefined;
 }
 
 /** A cue waiting out its beat behind the gulp that earned it. */
@@ -207,12 +200,31 @@ export class MenusKit {
    */
   cancelInventoryDragForOverlay(): void {
     this.inventoryPanel.interaction.cancelDrag();
+    // Same reasoning for the search field: it would otherwise keep eating keys
+    // the overlay in front of it is the one asking for.
+    this.inventoryPanel.blurSearch();
     this.onOverlayRaised?.();
+  }
+
+  /** Gives the keyboard back to the game, for a surface that now outranks the bag. */
+  blurInventorySearch(): void {
+    this.inventoryPanel.blurSearch();
+  }
+
+  /** The scene-entry guard: any click not aimed at the search field releases it. */
+  blurInventorySearchUnlessClicked(mx: number, my: number): void {
+    this.inventoryPanel.blurSearchUnlessClicked(mx, my);
   }
 
   /** Whose pack the bag is showing: an override picked from the pause menu, or the active crawler. */
   inventoryPlayer(): HumanPlayer | CatPlayer {
     return this.inventoryOverridePlayer ?? this.world.pm.active();
+  }
+
+  /** The weapon the bag's owner is holding, for the hotbar's in-hand badge. */
+  inventoryWieldedWeaponId(): ItemId | null {
+    const holder = this.inventoryPlayer();
+    return holder instanceof HumanPlayer ? holder.wieldedWeaponId : null;
   }
 
   /**
@@ -283,8 +295,7 @@ export class MenusKit {
     this.queuedRead = null;
     // The click that queued this also left a drag half-started on the slot
     // underneath the prompt about to cover it.
-    interaction.cancelDrag();
-    this.onOverlayRaised?.();
+    this.cancelInventoryDragForOverlay();
     promptSkillBookRead(this.skillBookFlowHost(), queued.reader, queued.request);
     // A refused read never opens the prompt, so there is nothing to pin.
     this.skillBookReader = this.skillBookPrompt.isOpen ? queued.reader : null;
@@ -442,9 +453,15 @@ export class MenusKit {
       const source = interaction.pendingEquipSource;
       interaction.pendingEquipSlot = null;
       interaction.pendingEquipSource = null;
-      if (isWearable(slotContentsAt(holder, source, equipSlot))) {
-        if (source === 'hotbar') holder.inventory.equipHotbarSlot(equipSlot);
-        else holder.inventory.equip(equipSlot);
+      // A refusal — wrong wearer, or the same id already worn elsewhere — must
+      // not announce a change that never happened.
+      if (source === 'hotbar') {
+        if (holder.inventory.canEquipHotbarSlot(equipSlot)) {
+          holder.inventory.equipHotbarSlot(equipSlot);
+          holder.onEquipmentChanged();
+        }
+      } else if (holder.inventory.canEquipSlot(equipSlot)) {
+        holder.inventory.equip(equipSlot);
         holder.onEquipmentChanged();
       }
     }
@@ -455,8 +472,7 @@ export class MenusKit {
       interaction.pendingUnequipSlot = null;
       interaction.pendingUnequipSource = null;
       const item = slotContentsAt(holder, source, unequipSlot);
-      if (isWearable(item)) {
-        holder.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
+      if (item !== null && holder.inventory.unequipById(item.id) !== null) {
         holder.onEquipmentChanged();
       }
     }
@@ -480,17 +496,11 @@ export class MenusKit {
     dropLoot?: (id: ItemId, quantity: number) => void,
   ): void {
     if (dropLoot === undefined) return;
-    if (holder.inventory.hasEquipped(id)) {
-      const worn =
-        holder.inventory.bag.slots.find((slot) => slot?.id === id) ??
-        holder.inventory.actionBar.slots.find((slot) => slot?.id === id) ??
-        null;
-      if (isWearable(worn)) {
-        holder.inventory.unequip(`${worn.equipSlot}:${worn.equipSubSlot}`);
-        holder.onEquipmentChanged();
-      }
-    }
+    if (holder.inventory.unequipById(id) !== null) holder.onEquipmentChanged();
     holder.inventory.removeItems(id, quantity);
+    // A weapon thrown on the floor is out of hand, for the same reason worn gear
+    // is taken off: it would otherwise keep firing from where it landed.
+    holder.onInventoryChanged();
     dropLoot(id, quantity);
     this.world.audio?.play('menu_drop_item');
   }

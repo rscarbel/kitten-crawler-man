@@ -588,6 +588,22 @@ export const BUTTON_PRESETS = {
     borderWidth: 1.5,
     radius: 3,
   },
+  /**
+   * A bare equipment sub-slot on the paper doll. Recessed and quiet — an empty
+   * slot is a place, not an offer.
+   */
+  equipSlotEmpty: { fill: '#1e293b', border: '#334155', borderWidth: 1, radius: 2 },
+  /** An equipment sub-slot with something worn in it. */
+  equipSlotFilled: { fill: '#0f1a2e', border: '#3b82f6', borderWidth: 1.5, radius: 2 },
+  /**
+   * The slot the player clicked to ask "what fits here?". Gold because it is the
+   * one thing on the screen the dimmed bag is currently answering.
+   */
+  equipSlotFiltering: { fill: '#1e3a5f', border: '#facc15', borderWidth: 2, radius: 2 },
+  /** A bag cell holding something this screen has no use for. */
+  bagCell: { fill: '#1e293b', border: '#334155', borderWidth: 1, radius: 2 },
+  /** A bag cell holding gear that can go on right now. */
+  bagCellEligible: { fill: '#0f2318', border: '#4ade80', borderWidth: 1.5, radius: 2 },
   /** A bound key chip: quiet, reads as a keycap rather than an action. */
   keyChip: {
     fill: '#0f172a',

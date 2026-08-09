@@ -79,9 +79,13 @@ export interface ChestLootSplit {
   catLoot: LootDrop;
   /** Override display names for specific item IDs (keyed by item id string). */
   displayLabels?: Record<string, string>;
+  /** Extra display-only lines appended to the human column (not real inventory items). */
+  customHumanEntries?: string[];
   /** Extra display-only lines appended to the cat column (not real inventory items). */
   customCatEntries?: string[];
 }
+
+const LOOT_ENTRY_COLOR = '#e2e8f0';
 
 export class ChestRewardDialog {
   private _isOpen = false;
@@ -381,11 +385,26 @@ export class ChestRewardDialog {
         width: colW,
         align: 'center',
         size: LOOT_ITEM_SIZE,
-        color: '#e2e8f0',
+        color: LOOT_ENTRY_COLOR,
       });
       leftY += totalHeight;
     }
-    if (split.humanLoot.coins === 0 && split.humanLoot.items.length === 0) {
+    for (const label of split.customHumanEntries ?? []) {
+      const { totalHeight } = drawText(ctx, label, {
+        x: leftColX,
+        y: leftY,
+        width: colW,
+        align: 'center',
+        size: LOOT_ITEM_SIZE,
+        color: LOOT_ENTRY_COLOR,
+      });
+      leftY += totalHeight;
+    }
+    const humanIsEmpty =
+      split.humanLoot.coins === 0 &&
+      split.humanLoot.items.length === 0 &&
+      (split.customHumanEntries?.length ?? 0) === 0;
+    if (humanIsEmpty) {
       drawText(ctx, '(empty)', {
         x: leftColX,
         y: leftY,
@@ -416,7 +435,7 @@ export class ChestRewardDialog {
         width: colW,
         align: 'center',
         size: LOOT_ITEM_SIZE,
-        color: '#e2e8f0',
+        color: LOOT_ENTRY_COLOR,
       });
       rightY += totalHeight;
     }
@@ -427,7 +446,7 @@ export class ChestRewardDialog {
         width: colW,
         align: 'center',
         size: LOOT_ITEM_SIZE,
-        color: '#e2e8f0',
+        color: LOOT_ENTRY_COLOR,
       });
       rightY += totalHeight;
     }

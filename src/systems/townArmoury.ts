@@ -23,6 +23,7 @@ const HELM_PRICE = 40;
 const BRACERS_PRICE = 55;
 const GAMBESON_PRICE = 60;
 const BOOTS_PRICE = 70;
+const BRACELET_PRICE = 150;
 
 interface IssuePiece {
   readonly key: string;
@@ -71,6 +72,14 @@ const ISSUE_KIT: ReadonlyArray<IssuePiece> = [
     price: BOOTS_PRICE,
     desc: 'Hobnailed and already broken in. +1 Dexterity',
     issued: 'Hobnails bite on wet stone. They also announce you. Decide which of those you want.',
+  },
+  {
+    key: 'bracelet',
+    item: 'bracelet_of_dex',
+    label: 'Bracelet of +2 DEX',
+    price: BRACELET_PRICE,
+    desc: 'An agility boosting accessory equipped on the front leg. +2 Dexterity',
+    issued: "Not sized for a human wrist. I don't ask who it's for, I just sell it.",
   },
 ];
 

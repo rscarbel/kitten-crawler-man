@@ -1096,6 +1096,10 @@ export class BallOfSwine extends Mob {
     const centreY = this.y + TILE_SIZE * TILE_CENTER_OFFSET;
     const range = TRAMPLE_RANGE_TILES * TILE_SIZE;
     for (const target of targets) {
+      // Re-checked every iteration, not just entered with: reflect gear sends a
+      // share of the trample back, and a ball killed by the first crawler it
+      // rolls over must not go on to trample the rest.
+      if (!this.isAlive) return;
       if (!target.isAlive || this.trampleCooldowns.has(target)) continue;
       const targetX = target.x + TILE_SIZE * TILE_CENTER_OFFSET;
       const targetY = target.y + TILE_SIZE * TILE_CENTER_OFFSET;
@@ -1110,6 +1114,15 @@ export class BallOfSwine extends Mob {
       // stacking level scaling on that makes one pass an outright kill.
       // Momentum sets it while rolling; a wallowing ball has none left, so its thrash
       // is priced off `severity` instead.
+      // Gear that cancels momentum stops the roll dead instead of absorbing it:
+      // the ball loses exactly what a square wall slam costs it, and the pass
+      // that would have flattened the wearer does nothing at all.
+      if (!(target instanceof Mob) && target.inventory.equipment.getCancelsMomentum()) {
+        this.spendMomentum(SLAM_MOMENTUM_LOSS_MAX);
+        this.trampleCooldowns.set(target, TRAMPLE_COOLDOWN);
+        continue;
+      }
+
       const weight = this.phase === 'wallowing' ? severity : this.momentum * severity;
       const damage = Math.ceil(target.maxHp * TRAMPLE_HP_FRACTION * weight) + TRAMPLE_FLAT_DAMAGE;
       // `targets` is not only the two crawlers: `MobUpdateLoop` folds in the scene's
@@ -1118,8 +1131,12 @@ export class BallOfSwine extends Mob {
       // `takeDamage` dies unattributed — the trample has an owner, and
       // `takeDamageFrom` is what puts it in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
-      else if (target.takeDamage(damage, trampleDamageSource(this.mobType)))
+      else if (target.takeDamage(damage, trampleDamageSource(this.mobType))) {
         this.noteStruckPlayer(target);
+        // A boulder rolling over someone is contact, so reflect gear bites into
+        // it exactly as it does into a swing.
+        this.reflectMeleeDamage(target, damage);
+      }
       this.attackSoundPending = true;
       this.trampleCooldowns.set(target, TRAMPLE_COOLDOWN);
     }

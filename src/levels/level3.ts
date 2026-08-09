@@ -114,6 +114,7 @@ export const level3: LevelDef = {
   ],
   bossRooms: [],
   isOverworld: true,
+  slingshotDrops: true,
   campSpawns: {
     goblin: [
       {

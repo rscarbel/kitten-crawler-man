@@ -179,7 +179,7 @@ export class CircusLemur extends Mob {
         const cx = t.x + this.tileSize * CENTER_OFFSET;
         const cy = t.y + this.tileSize * CENTER_OFFSET;
         if (Math.hypot(knife.x - cx, knife.y - cy) < this.tileSize * KNIFE_HIT_RADIUS_RATIO) {
-          this.dealDamage(t, KNIFE_DAMAGE);
+          this.dealRangedDamage(t, KNIFE_DAMAGE);
           hit = true;
           break;
         }

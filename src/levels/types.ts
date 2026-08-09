@@ -280,6 +280,8 @@ export interface LevelDef {
   hasArena?: boolean;
   /** Whether this level has a spider lab room with the Grotesque Spider quest. */
   hasSpiderLab?: boolean;
+  /** Whether mobs on this floor may roll the rare Slingshot world drop. */
+  slingshotDrops?: boolean;
   /** Position-relative spawn rules evaluated at level construction time. */
   extraSpawns?: ExtraSpawnRule[];
   /**

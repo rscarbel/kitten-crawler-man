@@ -268,7 +268,7 @@ export class Troglodyte extends Mob {
               continue;
             }
 
-            const connected = this.dealDamage(t, TONGUE_DAMAGE);
+            const connected = this.dealRangedDamage(t, TONGUE_DAMAGE);
             if (connected && Math.random() < POISON_CHANCE) {
               t.applyStatus(makePoison());
             }

@@ -1,5 +1,5 @@
 import type { StatName } from '../Player';
-import type { SkillId } from './SkillManager';
+import type { CrawlerKind, SkillId } from './SkillManager';
 
 export type ItemId =
   | 'health_potion'
@@ -28,9 +28,33 @@ export type ItemId =
   | 'skill_book_cat_reflexes'
   | 'skill_book_pugilism'
   | 'skill_book_iron_stomach'
-  | 'skill_book_night_vision';
+  | 'skill_book_night_vision'
+  | 'nightgaunt_cloak'
+  | 'slate_butterfly_talisman'
+  | 'fae_scale_crupper'
+  | 'bracelet_of_dex'
+  | 'splatter_skunk_toe_ring'
+  | 'shade_gnoll_kneepads'
+  | 'grull_war_gauntlet'
+  | 'slingshot';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
+
+/**
+ * Damage channels an item can protect against.
+ *
+ * `'ice'` has no damage source in the game yet: any future ice attack must
+ * consult `Player.resists('ice')` at the point it damages a crawler, or the
+ * resistance silently does nothing.
+ */
+export type ResistanceType = 'poison' | 'ice' | 'piercing';
+
+/** Every damage channel gear can resist, for surfaces that summarise all of them. */
+export const ALL_RESISTANCE_TYPES = [
+  'poison',
+  'ice',
+  'piercing',
+] as const satisfies readonly ResistanceType[];
 
 export interface InventoryItem {
   id: ItemId;
@@ -39,7 +63,7 @@ export interface InventoryItem {
   stackable: boolean;
   /** Only items with an action (e.g. potion, ability) may be placed in the hotbar. */
   canHotlist: boolean;
-  type?: 'consumable' | 'armor';
+  type?: 'consumable' | 'armor' | 'weapon';
   equipSlot?: EquipSlot;
   equipSubSlot?: string;
   description?: string;
@@ -63,7 +87,41 @@ export interface InventoryItem {
   canDrop?: boolean;
   /** Multiplier applied to the player's HP regen rate while this item is equipped. Stacks multiplicatively with other sources. */
   regenMultiplier?: number;
+  /** Damage channels this item resists while equipped. */
+  resistances?: ResistanceType[];
+  /** Fraction of incoming mob melee damage reflected back at the attacker while equipped. */
+  damageReflectPct?: number;
+  /** While equipped, momentum-based attacks (e.g. the Ball of Swine's trample) are cancelled on contact. */
+  cancelsMomentum?: boolean;
+  /** Effective skill-level bonus granted while equipped; stacks with the trained level, capped at the skill's max. */
+  skillLevelBonus?: Partial<Record<SkillId, number>>;
+  /** Stat bonus that applies only to melee damage computation, not to the general stat. */
+  meleeOnlyStatBonus?: Partial<Record<StatName, number>>;
+  /** Chance per successful melee hit to stun the target while equipped. */
+  stunOnHitChance?: number;
+  /** Which crawler can equip this item; omitted means either. */
+  wearer?: CrawlerKind;
 }
+
+/**
+ * Armour carrying both halves of an equip address — the only shape of item that
+ * can actually be worn.
+ */
+export type WearableItem = InventoryItem & {
+  type: 'armor';
+  equipSlot: EquipSlot;
+  equipSubSlot: string;
+};
+
+/** Narrows an item to the wearable shape {@link WearableItem} describes. */
+export function isWearable(item: InventoryItem | null | undefined): item is WearableItem {
+  return item?.type === 'armor' && item.equipSlot !== undefined && item.equipSubSlot !== undefined;
+}
+
+/** Fraction of a melee blow the shade gnoll kneepads throw back at whoever landed it. */
+export const KNEEPADS_DAMAGE_REFLECT_PCT = 0.1;
+/** Chance per landed melee hit that the Grull war gauntlet stuns its target. */
+export const GAUNTLET_STUN_CHANCE = 0.02;
 
 export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   scroll_of_confusing_fog: {
@@ -177,7 +235,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     id: 'trollskin_shirt',
     name: 'Enchanted Trollskin Shirt of Pummeling',
     stackable: false,
-    canHotlist: true,
+    canHotlist: false,
     type: 'armor',
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
@@ -192,7 +250,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     id: 'enchanted_crown_sepsis_whore',
     name: 'Enchanted Crown of the Sepsis Whore',
     stackable: false,
-    canHotlist: true,
+    canHotlist: false,
     type: 'armor',
     equipSlot: 'Head',
     equipSubSlot: 'Hat',
@@ -211,7 +269,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     id: 'issue_kettle_helm',
     name: 'Issue Kettle Helm',
     stackable: false,
-    canHotlist: true,
+    canHotlist: false,
     type: 'armor',
     equipSlot: 'Head',
     equipSubSlot: 'Hat',
@@ -225,7 +283,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     id: 'padded_gambeson',
     name: 'Padded Gambeson',
     stackable: false,
-    canHotlist: true,
+    canHotlist: false,
     type: 'armor',
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
@@ -238,7 +296,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     id: 'riveted_bracers',
     name: 'Riveted Bracers',
     stackable: false,
-    canHotlist: true,
+    canHotlist: false,
     type: 'armor',
     equipSlot: 'Hands',
     equipSubSlot: 'Gloves',
@@ -251,7 +309,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     id: 'marching_boots',
     name: 'Marching Boots',
     stackable: false,
-    canHotlist: true,
+    canHotlist: false,
     type: 'armor',
     equipSlot: 'Feet',
     equipSubSlot: 'Shoes',
@@ -380,6 +438,137 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
       'A soul crystal on the verge of levelling a city, sealed inside an enchanted glass ' +
       'display case and stuffed into your inventory. Not a weapon. Not yet, anyway.',
   },
+  nightgaunt_cloak: {
+    id: 'nightgaunt_cloak',
+    name: 'Enchanted Nightgaunt Cloak of Stoutness',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Torso',
+    equipSubSlot: 'Back',
+    wearer: 'human',
+    statBonus: { constitution: 4 },
+    resistances: ['poison', 'ice', 'piercing'],
+    description:
+      'The wearer of this cloak gains +4 to Constitution and becomes resistant to poison and ' +
+      'ice-based attacks. In addition, the cloak adds Anti-Piercing resistance to all worn armor. ' +
+      'It also makes you look like a dollar store Batman.',
+  },
+  slate_butterfly_talisman: {
+    id: 'slate_butterfly_talisman',
+    name: 'Talisman of the Slate Butterfly',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Head',
+    equipSubSlot: 'Neck',
+    wearer: 'cat',
+    statBonus: { dexterity: 4, intelligence: 1 },
+    // The fairy-pacification clause is fiction with no consumer: nothing winged
+    // and fae exists to be pacified yet. Any fairy creature added later owes it
+    // an implementation — its `Mob.acquireTarget` `accept` predicate must refuse
+    // a wearer of this talisman, and its `noticeTarget` / `forceAggro` paths must
+    // guard on the same thing, or an aggro channel that bypasses targeting will
+    // make the charm silently a lie.
+    description:
+      'The Talisman of the Slate Butterfly is a small silver butterfly charm on a small silver ' +
+      'ring, so it can be attached to collars or other jewelry. It jingles when it moves. Adds +4 ' +
+      'to the Dexterity Skill. Adds +1 to Intelligence. Winged fairies will no longer be ' +
+      'automatically hostile toward you.',
+  },
+  fae_scale_crupper: {
+    id: 'fae_scale_crupper',
+    name: 'Enchanted Fae Scale Quadruped Crupper of the Fleet',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Torso',
+    equipSubSlot: 'Jacket',
+    wearer: 'cat',
+    statBonus: { dexterity: 2 },
+    description:
+      'Light and flexible, this scale armor is made from Fae Steel. While not as strong as Elven ' +
+      "mail or even good Orcish steel, it's the strongest alloy that fairy folk can wear. It's " +
+      "not the best protection, but it'll make your ass look oh so pretty.",
+  },
+  bracelet_of_dex: {
+    id: 'bracelet_of_dex',
+    name: 'Bracelet of +2 DEX',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Hands',
+    equipSubSlot: 'Gloves',
+    wearer: 'cat',
+    statBonus: { dexterity: 2 },
+    description: 'An agility boosting accessory equipped on the front leg.',
+  },
+  splatter_skunk_toe_ring: {
+    id: 'splatter_skunk_toe_ring',
+    name: 'Enchanted Toe Ring of the Splatter Skunk',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Feet',
+    equipSubSlot: 'Toe Ring',
+    wearer: 'human',
+    statBonus: { strength: 3 },
+    skillLevelBonus: { pugilism: 3 },
+    description:
+      "Imbues wearer with +3 Strength and gives +3 to the Pugilism Skill. Also, it's a toe ring. " +
+      "It's probably uncomfortable and it makes you look like one of those hippie assholes who " +
+      'sit around in a field juggling and hula-hooping all day.',
+  },
+  shade_gnoll_kneepads: {
+    id: 'shade_gnoll_kneepads',
+    name: 'Enchanted Spiked Kneepads of the Shade Gnoll Riot Forces',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Legs',
+    equipSubSlot: 'Knee Pads',
+    wearer: 'human',
+    damageReflectPct: KNEEPADS_DAMAGE_REFLECT_PCT,
+    cancelsMomentum: true,
+    description:
+      'Adds 10% Damage Reflect to all equipped armor. Cancels all Momentum-based attacks. Made of ' +
+      'skin and fur and the spiky things from the back of Thorn Cadavers, these kneepads are both ' +
+      "good protection and they're stylish. Stylish, that is, if your knees are cosplaying as " +
+      'hedgehogs.',
+  },
+  grull_war_gauntlet: {
+    id: 'grull_war_gauntlet',
+    name: 'Enchanted War Gauntlet of the Exalted Grull',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Hands',
+    equipSubSlot: 'Gloves',
+    wearer: 'human',
+    statBonus: { dexterity: 1 },
+    meleeOnlyStatBonus: { strength: 3 },
+    skillLevelBonus: { iron_punch: 2, powerful_strike: 1 },
+    stunOnHitChance: GAUNTLET_STUN_CHANCE,
+    description:
+      'A wrist bracer that transforms into a spiked war gauntlet made of orcish steel when the ' +
+      'hand is shaped into a fist. Grants +3 Strength (in fist mode only), +1 Dexterity, +2 skill ' +
+      'levels to the Iron Punch skill, +1 skill level to the Powerful Strike skill, and a 2% ' +
+      'chance to Stun an enemy on a successful hit.',
+  },
+  slingshot: {
+    id: 'slingshot',
+    name: 'Slingshot & Rocks',
+    stackable: false,
+    canHotlist: true,
+    type: 'weapon',
+    wearer: 'human',
+    description:
+      'Slingshots are small, handheld, hand-powered projectile weapons typically made with a ' +
+      'Y-shaped frame with an elastic strip tied to the ends of each prong. On Earth, slingshots ' +
+      'are common toys but have also been used as military weapons by guerilla forces. During the ' +
+      "Siege of Marawi in 2017, the Philippine Army's elite Scout Rangers used slingshots to hurl " +
+      'grenades at opposing forces.',
+  },
 };
 
 export const SLOT_COUNT = 32;
@@ -397,6 +586,40 @@ export const EQUIP_SUBSLOTS: Record<EquipSlot, string[]> = {
   Feet: ['Shoes', 'Toe Ring 1', 'Toe Ring 2', 'Toe Ring 3', 'Toe Ring 4'],
 };
 
+const SUBSLOT_INDEX_SUFFIX = / \d+$/;
+
+/** Strips a trailing slot index so 'Ring 3' and 'Ring' share the family 'Ring'. */
+export function subSlotFamily(subSlot: string): string {
+  return subSlot.replace(SUBSLOT_INDEX_SUFFIX, '');
+}
+
+/**
+ * True when an item declaring `equipSubSlot` belongs in the named sub-slot.
+ *
+ * Items that fit several interchangeable slots declare the family name
+ * ('Ring'), so the comparison is family-to-family; single-slot items are
+ * unaffected because a name without an index is its own family.
+ */
+export function itemFitsSubSlot(
+  item: Pick<InventoryItem, 'equipSubSlot'>,
+  subSlot: string,
+): boolean {
+  if (!item.equipSubSlot) return false;
+  return subSlotFamily(item.equipSubSlot) === subSlotFamily(subSlot);
+}
+
 export function isItemId(s: string): s is ItemId {
   return s in ITEM_DEF;
+}
+
+/**
+ * Whether an item is allowed to occupy a hotbar slot.
+ *
+ * Always ask this rather than reading `canHotlist` off an inventory instance:
+ * bag and hotbar entries are spread copies of the def taken when the item was
+ * picked up, so an item sitting in an old save still carries whatever the flag
+ * was that day. The def is the only current answer.
+ */
+export function itemCanHotlist(id: ItemId): boolean {
+  return ITEM_DEF[id].canHotlist;
 }

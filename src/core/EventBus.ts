@@ -39,6 +39,13 @@ export interface GameEvents {
     topDamageDealer: HumanPlayer | CatPlayer | null;
   };
 
+  /**
+   * One area-of-effect resolution emptied several mobs' health at once. Counted
+   * at the damage site, because by the time `mobKilled` fires the kills have
+   * already been split into one event each.
+   */
+  multiKill: { killer: HumanPlayer; count: number };
+
   /** A player entered a safe room (fires on each entry). */
   safeRoomEntered: Record<string, never>;
 
@@ -107,6 +114,9 @@ export interface GameEvents {
 
   /** A magic missile struck a mob. */
   missileImpact: Record<string, never>;
+
+  /** A slingshot stone struck something. */
+  slingshotImpact: Record<string, never>;
 
   /** Player descended to the next floor via a stairwell. */
   levelComplete: Record<string, never>;

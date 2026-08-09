@@ -65,7 +65,7 @@ export class DestructionKit {
       floorNumber,
       options.breakableProps ?? ALL_BREAKABLE_PROPS,
     );
-    this.dynamite = new DynamiteSystem(world.gameMap, this.destructibles, options.trees);
+    this.dynamite = new DynamiteSystem(world.gameMap, this.destructibles, options.trees, world.bus);
   }
 
   update(ctx: SystemContext): void {

@@ -654,7 +654,7 @@ export class DarkKnight extends Mob {
         this.spells.addBlockXp(SLAM_BLOCK_XP);
         continue;
       }
-      this.dealPreScaledDamage(
+      this.dealPreScaledRangedDamage(
         target,
         this.groundAttackDamage(target, SLAM_HP_FRACTION, SLAM_BONUS_DAMAGE),
         'slam',
@@ -673,7 +673,7 @@ export class DarkKnight extends Mob {
         this.spells.addBlockXp(SWEEP_BLOCK_XP);
         continue;
       }
-      this.dealPreScaledDamage(
+      this.dealPreScaledRangedDamage(
         target,
         this.groundAttackDamage(target, SWEEP_HP_FRACTION, SWEEP_BONUS_DAMAGE),
         'sweep',
@@ -702,13 +702,17 @@ export class DarkKnight extends Mob {
     // reach when the fist started moving, which is when an unavoidable attack
     // becomes unavoidable.
     if (Math.hypot(target.x - this.x, target.y - this.y) > this.punchResolveRangePx()) return;
-    const connected = target.takeDamage(this.scaledDamage(PUNCH_DAMAGE), {
+    const damage = this.scaledDamage(PUNCH_DAMAGE);
+    const connected = target.takeDamage(damage, {
       kind: 'mob',
       mobType: this.mobType,
       attackType: 'gauntlet',
       undodgeable: true,
     });
-    if (connected) this.noteStruckPlayer(target);
+    if (connected) {
+      this.noteStruckPlayer(target);
+      this.reflectMeleeDamage(target, damage);
+    }
   }
 
   private punchResolveRangePx(): number {

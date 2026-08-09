@@ -71,6 +71,20 @@ const SKILL_PALETTES: Record<SkillId, EmblemPalette> = {
     mark: '#bfdbfe',
     accent: '#ffffff',
   },
+  iron_punch: {
+    glow: '#334155',
+    field: '#0b1119',
+    rim: '#94a3b8',
+    mark: '#e2e8f0',
+    accent: '#ffffff',
+  },
+  powerful_strike: {
+    glow: '#92400e',
+    field: '#2a1203',
+    rim: '#fbbf24',
+    mark: '#fde68a',
+    accent: '#ffffff',
+  },
 };
 
 function drawBackdrop(
@@ -422,6 +436,130 @@ function drawNightVisionEmblem(
   ctx.fill();
 }
 
+// ── Iron Punch: the pugilist's fist, plated and spiked ─────────────────────
+
+/** How far the gauntlet plate overhangs the bare fist on each side. */
+const PLATE_OVERHANG = 0.03;
+const GAUNTLET_SPIKE_HEIGHT = 0.08;
+const GAUNTLET_SPIKE_HALF_W = 0.03;
+const GAUNTLET_BAND_TOP = 0.02;
+const GAUNTLET_BAND_HEIGHT = 0.05;
+
+function drawIronPunchEmblem(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  palette: EmblemPalette,
+): void {
+  ctx.fillStyle = palette.rim;
+  ctx.fillRect(
+    cx - size * WRIST_HALF_W,
+    cy + size * FIST_BOTTOM - size * FIST_CORNER,
+    size * WRIST_HALF_W * 2,
+    size * (WRIST_BOTTOM - FIST_BOTTOM) + size * FIST_CORNER,
+  );
+
+  const plateHalfW = size * (FIST_HALF_W + PLATE_OVERHANG);
+
+  // Spikes go down first so the plate's own edge cuts their bases off cleanly.
+  ctx.fillStyle = palette.accent;
+  for (let i = 0; i < KNUCKLE_COUNT; i++) {
+    const t = (i + KNUCKLE_SLOT_CENTER) / KNUCKLE_COUNT;
+    const spikeCx = cx - plateHalfW + t * plateHalfW * 2;
+    const baseY = cy + size * FIST_TOP + size * FIST_CORNER;
+    ctx.beginPath();
+    ctx.moveTo(spikeCx - size * GAUNTLET_SPIKE_HALF_W, baseY);
+    ctx.lineTo(spikeCx, baseY - size * GAUNTLET_SPIKE_HEIGHT);
+    ctx.lineTo(spikeCx + size * GAUNTLET_SPIKE_HALF_W, baseY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.fillStyle = palette.mark;
+  ctx.beginPath();
+  ctx.roundRect(
+    cx - plateHalfW,
+    cy + size * FIST_TOP + size * FIST_CORNER,
+    plateHalfW * 2,
+    size * (FIST_BOTTOM - FIST_TOP) - size * FIST_CORNER,
+    size * FIST_CORNER,
+  );
+  ctx.fill();
+
+  ctx.fillStyle = palette.rim;
+  ctx.fillRect(
+    cx - plateHalfW,
+    cy + size * GAUNTLET_BAND_TOP,
+    plateHalfW * 2,
+    size * GAUNTLET_BAND_HEIGHT,
+  );
+}
+
+// ── Powerful Strike: a fist landing inside a burst ──────────────────────────
+
+const BURST_SPIKE_COUNT = 8;
+const BURST_INNER_RADIUS = 0.16;
+const BURST_OUTER_RADIUS = 0.42;
+const BURST_HALF_ANGLE = Math.PI / BURST_SPIKE_COUNT / 2;
+const STRIKE_FIST_SCALE = 0.7;
+
+function drawPowerfulStrikeEmblem(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  palette: EmblemPalette,
+): void {
+  ctx.fillStyle = palette.rim;
+  ctx.beginPath();
+  for (let spike = 0; spike < BURST_SPIKE_COUNT; spike++) {
+    const angle = (spike / BURST_SPIKE_COUNT) * TWO_PI;
+    ctx.moveTo(
+      cx + Math.cos(angle - BURST_HALF_ANGLE) * size * BURST_INNER_RADIUS,
+      cy + Math.sin(angle - BURST_HALF_ANGLE) * size * BURST_INNER_RADIUS,
+    );
+    ctx.lineTo(
+      cx + Math.cos(angle) * size * BURST_OUTER_RADIUS,
+      cy + Math.sin(angle) * size * BURST_OUTER_RADIUS,
+    );
+    ctx.lineTo(
+      cx + Math.cos(angle + BURST_HALF_ANGLE) * size * BURST_INNER_RADIUS,
+      cy + Math.sin(angle + BURST_HALF_ANGLE) * size * BURST_INNER_RADIUS,
+    );
+    ctx.closePath();
+  }
+  ctx.fill();
+
+  // Shrunk so the burst still reads as surrounding the blow rather than as a
+  // frame the fist happens to touch.
+  const fistHalfW = size * FIST_HALF_W * STRIKE_FIST_SCALE;
+  ctx.fillStyle = palette.mark;
+  ctx.beginPath();
+  ctx.roundRect(
+    cx - fistHalfW,
+    cy + size * FIST_TOP * STRIKE_FIST_SCALE,
+    fistHalfW * 2,
+    size * (FIST_BOTTOM - FIST_TOP) * STRIKE_FIST_SCALE,
+    size * FIST_CORNER,
+  );
+  ctx.fill();
+
+  ctx.fillStyle = palette.accent;
+  for (let i = 0; i < KNUCKLE_COUNT; i++) {
+    const t = (i + KNUCKLE_SLOT_CENTER) / KNUCKLE_COUNT;
+    ctx.beginPath();
+    ctx.arc(
+      cx - fistHalfW + t * fistHalfW * 2,
+      cy + size * KNUCKLE_Y * STRIKE_FIST_SCALE,
+      size * KNUCKLE_RADIUS * STRIKE_FIST_SCALE,
+      0,
+      TWO_PI,
+    );
+    ctx.fill();
+  }
+}
+
 type EmblemRenderer = (
   ctx: CanvasRenderingContext2D,
   cx: number,
@@ -436,6 +574,8 @@ const SKILL_EMBLEMS: Record<SkillId, EmblemRenderer> = {
   pugilism: drawPugilismEmblem,
   iron_stomach: drawIronStomachEmblem,
   night_vision: drawNightVisionEmblem,
+  iron_punch: drawIronPunchEmblem,
+  powerful_strike: drawPowerfulStrikeEmblem,
 };
 
 /** Draws a skill's emblem into a square icon region. */

@@ -18,11 +18,18 @@ import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
 import { diminishedXpShare, type XpDiminishingTier } from '../levels/xpDiminishing';
+import {
+  POWERFUL_STRIKE_CHANCE_PER_LEVEL,
+  POWERFUL_STRIKE_DAMAGE_MULTIPLIER,
+} from '../core/SkillManager';
+import { SLINGSHOT_HIT_RADIUS_FRACTION } from '../sprites/slingshotSprite';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
 /** Sepsis proc chance per hit when enchanted crown is equipped. */
 const SEPSIS_PROC_CHANCE = 0.15;
+/** How long a gear-procced melee stun holds a mob, in ticks (1.5 s at 60 fps). */
+const GAUNTLET_STUN_TICKS = 90;
 /** Melee hit cone: targets within this range ignore the facing-dot check. */
 export const MELEE_POINT_BLANK_RANGE = TILE_SIZE * 1;
 /** Fraction of total kill XP awarded to the top damage dealer. */
@@ -116,7 +123,14 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       if (!human.zeroDamage) {
-        mob.takeDamageFrom(damage, human, 'melee');
+        // Rolled here rather than inside `getMeleeDamage` so that stays
+        // deterministic: the companion AI reads it to budget its own DPS, and a
+        // random doubling would make that estimate flap frame to frame.
+        const powerfulStrikeChance =
+          POWERFUL_STRIKE_CHANCE_PER_LEVEL * human.effectiveSkillLevel('powerful_strike');
+        const strikeMultiplier =
+          Math.random() < powerfulStrikeChance ? POWERFUL_STRIKE_DAMAGE_MULTIPLIER : 1;
+        mob.takeDamageFrom(Math.round(damage * strikeMultiplier), human, 'melee');
         ctx.hitLanded = true;
         humanHit = true;
         if (
@@ -124,6 +138,15 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
           Math.random() < SEPSIS_PROC_CHANCE
         ) {
           mob.applyStatus(makeSepsis(human));
+        }
+        // Bosses are exempt here even though smush's own boss stun is not: smush's
+        // is capped at a low chance and gated behind a high ability level, while
+        // this is a flat per-swing gear proc that stacks with attack speed — left
+        // unchecked it can hold a boss in a permanent stun loop, which stops being
+        // a fight.
+        const stunChance = human.inventory.equipment.getStunOnHitChance();
+        if (stunChance > 0 && !mob.isBoss && Math.random() < stunChance) {
+          mob.applyStatus(makeStun(GAUNTLET_STUN_TICKS));
         }
       }
     }
@@ -203,6 +226,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
      * and a stomp that only splintered a crate is not a fight starting.
      */
     let smushConnected = false;
+    let smushKills = 0;
 
     // Query both rings in one pass using the outer radius
     const nearSmush = mobGrid.queryCircle(hc.x, hc.y, outerRadius + TILE_SIZE);
@@ -216,7 +240,12 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         const mult = isInner ? stats.damageMultiplier : stats.outerDamageMultiplier;
         const bossMult = mob.isBoss ? stats.bossDamageMultiplier : 1.0;
         const damage = Math.max(1, Math.round(baseDamage * mult * bossMult));
+        // Death resolves synchronously inside `takeDamageFrom`, so the health
+        // either side of the call is what says whether this stomp did it. The
+        // `justDied` flag cannot answer: it stays latched for a whole frame.
+        const wasAlive = mob.hp > 0;
         mob.takeDamageFrom(damage, human, 'smush');
+        if (wasAlive && mob.hp <= 0) smushKills++;
         ctx.hitLanded = true;
         smushConnected = true;
         totalSmushDamage += damage;
@@ -256,6 +285,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     if (stats.healOnHit && totalSmushDamage > 0 && Math.random() < SMUSH_HEAL_CHANCE) {
       const healAmt = Math.round(totalSmushDamage * SMUSH_HEAL_FRACTION);
       human.hp = Math.min(human.hp + healAmt, human.maxHp);
+    }
+
+    if (smushKills > 0) {
+      ctx.bus.emit('multiKill', { killer: human, count: smushKills });
     }
 
     if (smushConnected) {
@@ -368,6 +401,61 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
           missile.state = 'exploding';
           break;
         }
+      }
+    }
+  }
+
+  // ── Slingshot stones ──
+  if (!inSafeRoom(human)) {
+    const rockHitRadius = TILE_SIZE * SLINGSHOT_HIT_RADIUS_FRACTION;
+
+    for (const rock of human.getRocks()) {
+      if (rock.state !== 'flying' || rock.hit) continue;
+      const damage = human.getSlingshotDamage();
+
+      // Props first, then trees, then mobs — the same order the missiles use, so
+      // a stone flying into a crate cracks the wood rather than sailing through
+      // it to whatever is stood behind.
+      if (
+        !human.zeroDamage &&
+        (ctx.destructibles?.tryProjectileHit(rock.x, rock.y, rockHitRadius, damage, human) ?? false)
+      ) {
+        ctx.hitLanded = true;
+        ctx.bus.emit('slingshotImpact', {});
+        rock.hit = true;
+        rock.state = 'done';
+        continue;
+      }
+
+      const rockTrees = ctx.trees;
+      if (
+        rockTrees !== undefined &&
+        !human.zeroDamage &&
+        rockTrees.tryProjectileHit(rock.x, rock.y, rockHitRadius, damage, human)
+      ) {
+        ctx.hitLanded = true;
+        ctx.bus.emit('slingshotImpact', {});
+        rock.hit = true;
+        rock.state = 'done';
+        continue;
+      }
+
+      const nearRock = mobGrid.queryCircle(rock.x, rock.y, rockHitRadius + TILE_SIZE);
+      for (const mob of nearRock) {
+        // A stone passes clean through anything it cannot hurt, for the same
+        // reason a missile does: a shot aimed correctly must not be spent on an
+        // ally who wandered into the line.
+        if (!mob.isAlive || !mob.takesPlayerDamage('slingshot')) continue;
+        const mc = centerOf(mob);
+        if (Math.hypot(rock.x - mc.x, rock.y - mc.y) >= rockHitRadius) continue;
+        if (!human.zeroDamage) {
+          mob.takeDamageFrom(damage, human, 'slingshot');
+          ctx.hitLanded = true;
+          ctx.bus.emit('slingshotImpact', {});
+        }
+        rock.hit = true;
+        rock.state = 'done';
+        break;
       }
     }
   }

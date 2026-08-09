@@ -15,6 +15,12 @@ import {
   JOURNAL_FOOTER_H,
 } from './pause/JournalTab';
 import { renderInventoryTab, INVENTORY_TAB_BOX_H } from './pause/InventoryTab';
+import {
+  renderEquipmentTab,
+  EquipmentTabController,
+  EQUIPMENT_TAB_BOX_W,
+  EQUIPMENT_TAB_BOX_H,
+} from './pause/EquipmentTab';
 import { renderStatsTab } from './pause/StatsTab';
 import { renderSpendTab } from './pause/SpendTab';
 import { renderSkillsTab } from './pause/SkillsTab';
@@ -92,6 +98,13 @@ export class PauseMenu {
   private touchScrollStartY: number | null = null;
 
   /**
+   * The Equipment tab's drag, filter, page, crawler choice and search field.
+   * Held here rather than inside the tab module because every route off the tab
+   * — a tab switch, closing the menu, Escape — has to reset all of it at once.
+   */
+  private readonly equipment = new EquipmentTabController();
+
+  /**
    * Supplied by the owning scene each frame it wants a Journal, and left null on
    * the floors that have none. Null is also what hides the Quest Journal entry
    * from the Game tab, so there is one condition rather than two that can
@@ -141,18 +154,21 @@ export class PauseMenu {
   open(): void {
     this._isOpen = true;
     this.tab = 'main';
+    this.equipment.reset();
     this._applyAudioPause();
   }
 
   openToInventory(): void {
     this._isOpen = true;
     this.tab = 'inventory';
+    this.equipment.reset();
     this._applyAudioPause();
   }
 
   openToSpend(): void {
     this._isOpen = true;
     this.tab = 'spend';
+    this.equipment.reset();
     this._applyAudioPause();
   }
 
@@ -161,6 +177,7 @@ export class PauseMenu {
     this._isOpen = true;
     this.tab = 'journal';
     this.journalScrollY = 0;
+    this.equipment.reset();
     this._applyAudioPause();
   }
 
@@ -169,6 +186,10 @@ export class PauseMenu {
     this._showResetConfirm = false;
     this._showBindingsRestoreConfirm = false;
     resetControlsTab();
+    // Before anything else: the Equipment tab's search field holds the keyboard
+    // through the capture-phase listener, and a menu that has left the screen
+    // must not still be eating the keys the world is waiting for.
+    this.equipment.reset();
     this._applyAudioResume();
   }
 
@@ -179,11 +200,16 @@ export class PauseMenu {
    */
   toggle(): void {
     if (this._isOpen) {
+      // Escape backs out of the Equipment tab's own modes before it means
+      // "close the menu": a player who opened a slot's filter expects the first
+      // press to undo that, not to throw away the whole screen.
+      if (this.tab === 'equipment' && this.equipment.dismissEscape()) return;
       this.close();
       return;
     }
     this._isOpen = true;
     this.tab = 'main';
+    this.equipment.reset();
     this._applyAudioPause();
   }
 
@@ -238,8 +264,19 @@ export class PauseMenu {
     }
   }
 
-  touchScrollStart(y: number): void {
+  /**
+   * A finger landing on the menu.
+   *
+   * The Equipment tab takes the same x and y as a mouse press instead of a
+   * scroll anchor: it is the one tab whose content drags rather than scrolls,
+   * and a scroll path running alongside the drag would fight it for the finger.
+   */
+  touchScrollStart(x: number, y: number, human: HumanPlayer, cat: CatPlayer): void {
     if (!this._isOpen) return;
+    if (this.tab === 'equipment') {
+      this.handleMouseDown(x, y, human, cat);
+      return;
+    }
     if (this.tab === 'abilities') {
       abilitiesTabTouchStart(y);
     } else if (
@@ -253,8 +290,12 @@ export class PauseMenu {
     }
   }
 
-  touchScrollMove(y: number): void {
+  touchScrollMove(x: number, y: number): void {
     if (!this._isOpen) return;
+    if (this.tab === 'equipment') {
+      this.handleMouseMove(x, y);
+      return;
+    }
     if (this.tab === 'abilities') {
       abilitiesTabTouchMove(y);
     } else if (this.touchScrollStartY !== null) {
@@ -278,12 +319,45 @@ export class PauseMenu {
     }
   }
 
-  touchScrollEnd(): void {
+  touchScrollEnd(x: number, y: number, human: HumanPlayer, cat: CatPlayer): void {
     if (!this._isOpen) return;
+    if (this.tab === 'equipment') {
+      this.handleMouseUp(x, y, human, cat);
+      return;
+    }
     if (this.tab === 'abilities') {
       abilitiesTabTouchEnd();
     }
     this.touchScrollStartY = null;
+  }
+
+  /**
+   * Called by a scene when a touch release resolved without a click of its own,
+   * so the Equipment tab's held-back click has nothing left to suppress.
+   */
+  clearSuppressedClick(): void {
+    this.equipment.clearSuppressedClick();
+  }
+
+  // ── Pointer routing for the Equipment tab ──────────────────────────────────
+  //
+  // The other tabs are answered entirely by `handleClick` walking the button
+  // list. Equipment is the only one that also needs the press and the release,
+  // because a drag is three events rather than one.
+
+  handleMouseDown(mx: number, my: number, human: HumanPlayer, cat: CatPlayer): void {
+    if (!this._isOpen || this.tab !== 'equipment') return;
+    this.equipment.handleMouseDown(mx, my, human, cat);
+  }
+
+  handleMouseMove(mx: number, my: number): void {
+    if (!this._isOpen || this.tab !== 'equipment') return;
+    this.equipment.handleMouseMove(mx, my);
+  }
+
+  handleMouseUp(mx: number, my: number, human: HumanPlayer, cat: CatPlayer): void {
+    if (!this._isOpen || this.tab !== 'equipment') return;
+    this.equipment.handleMouseUp(mx, my, human, cat);
   }
 
   private _lastStatsBoxH = STATS_BOX_H;
@@ -352,7 +426,12 @@ export class PauseMenu {
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.68 });
 
-    const boxW = Math.min(MODAL_BOX_WIDTH, cw - MODAL_PADDING);
+    this.equipment.audio = this.audio;
+
+    // The only tab that asks for a wider box than the rest: a paper doll and a
+    // bag side by side do not fit in a column sized for a stack of buttons.
+    const idealBoxW = this.tab === 'equipment' ? EQUIPMENT_TAB_BOX_W : MODAL_BOX_WIDTH;
+    const boxW = Math.min(idealBoxW, cw - MODAL_PADDING);
     const hasQuestJournal = this.journalContext !== null;
     const mainBoxH =
       this.tab === 'main'
@@ -375,9 +454,11 @@ export class PauseMenu {
                   ? SETTINGS_BOX_H
                   : this.tab === 'inventory'
                     ? INVENTORY_TAB_BOX_H
-                    : this.tab === 'controls'
-                      ? CONTROLS_BOX_H
-                      : mainBoxH;
+                    : this.tab === 'equipment'
+                      ? EQUIPMENT_TAB_BOX_H
+                      : this.tab === 'controls'
+                        ? CONTROLS_BOX_H
+                        : mainBoxH;
     const boxH = Math.min(rawBoxH, ch - MODAL_PADDING);
     if (this.tab === 'stats') this._lastStatsBoxH = boxH;
     if (this.tab === 'spend') this._lastSpendBoxH = boxH;
@@ -400,6 +481,10 @@ export class PauseMenu {
       if (t !== 'skills') this.skillsScrollY = 0;
       if (t !== 'journal') this.journalScrollY = 0;
       if (t !== 'abilities') resetAbilitiesTab();
+      // Leaving the tab drops the drag and the filter, and hands the keyboard
+      // back: the search field's capture outlives the panel that drew it, so
+      // nothing else would release it.
+      if (t !== 'equipment') this.equipment.reset();
       if (t !== 'settings') this._showResetConfirm = false;
       if (t !== 'controls') {
         this.controlsScrollY = 0;
@@ -478,6 +563,20 @@ export class PauseMenu {
           setTabWithSound,
           this.onManageHumanInventory ?? (() => setTabWithSound('main')),
           this.onManageCatInventory ?? (() => setTabWithSound('main')),
+        );
+        break;
+      case 'equipment':
+        renderEquipmentTab(
+          ctx,
+          this.equipment,
+          this.buttons,
+          boxX,
+          boxY,
+          boxW,
+          boxH,
+          human,
+          cat,
+          setTabWithSound,
         );
         break;
       case 'stats':
@@ -616,6 +715,10 @@ export class PauseMenu {
 
   handleClick(mx: number, my: number): boolean {
     if (!this._isOpen) return false;
+    // The Equipment tab's search field is not a button, and the click that
+    // finished a drag is not a click — both have to be settled before the
+    // button list gets a look.
+    if (this.tab === 'equipment' && this.equipment.handleClickBefore(mx, my)) return true;
     // Back to front, because `buttons` is in draw order and later controls are
     // painted over earlier ones. Where a short viewport makes two overlap, the
     // one the player can actually see is the one that must take the click.
@@ -631,6 +734,9 @@ export class PauseMenu {
         return true;
       }
     }
+    // Empty space inside the menu still answers for the Equipment tab: clicking
+    // off the doll is how a player stops asking what fits a slot.
+    if (this.tab === 'equipment') this.equipment.handleClickMissed();
     return true;
   }
 }

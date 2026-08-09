@@ -75,6 +75,14 @@ const GREETING_LINES: ReadonlyArray<string> = [
 ];
 
 const GREETING_TITLE = '🔪  The Desperado Club  🔪';
+
+/** The Sledge reading a Desperado Pass tattoo off a crawler who earned it from the Juicer. */
+const TATTOO_GREETING_LINES: ReadonlyArray<string> = [
+  'A seven-foot slab of tuxedoed granite blocks the doorway — then clocks the ink on your skin.',
+  '"That\'s a Desperado Pass. Earned, not bought. Welcome to the Desperado Club."',
+  '"Two house rules: no fighting inside — the club is neutral ground, always. And spend well."',
+];
+
 const SLEDGE_WELCOME = '"Back again? Good. Enjoy yourself — and mind the rules."';
 
 // Bar drinks — the club's buff consumables, priced as premium members' pours.
@@ -208,6 +216,7 @@ export class DesperadoClubSystem {
     private readonly membership: ClubMembership,
     roster: MercenaryRoster,
     private readonly audio: AudioManager | null,
+    hasPassTattoo: boolean,
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
   ) {
@@ -220,6 +229,11 @@ export class DesperadoClubSystem {
     this.vip = new ClubVipLoungeSystem(audio);
     if (membership.hasDesperadoPass) {
       this.unlockAchievement('desperado_member');
+    } else if (hasPassTattoo) {
+      // The tattoo is the pass; the door only has to read it, so membership is
+      // granted here rather than waiting on the dialog the way the giveaway does.
+      membership.hasDesperadoPass = true;
+      this.openTattooGreeting();
     } else {
       this.openGreeting();
     }
@@ -345,6 +359,23 @@ export class DesperadoClubSystem {
       () => {
         if (this.membership.hasDesperadoPass) return;
         this.membership.hasDesperadoPass = true;
+        this.unlockAchievement('desperado_member');
+        this.audio?.play('achievement_awarded');
+      },
+    );
+  }
+
+  /** The Sledge waving through a crawler wearing the Juicer's ink. */
+  private openTattooGreeting(): void {
+    this.dialog.open(
+      [
+        {
+          title: GREETING_TITLE,
+          lines: TATTOO_GREETING_LINES,
+          button: 'Enter the Club',
+        },
+      ],
+      () => {
         this.unlockAchievement('desperado_member');
         this.audio?.play('achievement_awarded');
       },

@@ -39,12 +39,29 @@ import {
 import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import type { AbilityManager } from '../core/AbilityManager';
 import { getSmushStats } from '../abilities/smush';
-import { ITEM_DEF } from '../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
+import type { GameMap } from '../map/GameMap';
+import {
+  drawSlingshotRocks,
+  drawSlingshotWield,
+  SLINGSHOT_BASE_DAMAGE,
+  SLINGSHOT_COOLDOWN_FRAMES,
+  SLINGSHOT_RANGE_TILES,
+  SLINGSHOT_SPEED,
+  SLINGSHOT_STRENGTH_FRACTION,
+  type SlingshotRock,
+} from '../sprites/slingshotSprite';
 import type { CrawlerKind } from '../core/SkillManager';
 
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
 const HUMAN_CRAWLER_KIND: CrawlerKind = 'human';
-import { PUGILISM_DAMAGE_PER_LEVEL } from '../core/SkillManager';
+
+/** Damage a punch does before strength, gear, skills or status are counted. */
+const BARE_FIST_DAMAGE = 1;
+import {
+  IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL,
+  PUGILISM_DAMAGE_PER_LEVEL,
+} from '../core/SkillManager';
 
 /** Short label the level-up flash shows for Explosives Handling. */
 const EXPLOSIVES_HANDLING_CODE = 'EXP';
@@ -100,6 +117,26 @@ export class HumanPlayer extends Player {
 
   /** The mob the human will automatically fight when not player-controlled. */
   autoTarget: Mob | null = null;
+
+  /**
+   * The weapon held in hand, or null for bare fists. Only the human wields —
+   * the cat's ranged attack is a spell, not a thing she picks up.
+   */
+  wieldedWeaponId: ItemId | null = null;
+
+  /** Set when a stone actually leaves the sling, so the scene can sound it. */
+  pendingSlingshotFireSound = false;
+
+  /** Set when a stone expires against a wall, so the scene can sound that impact too. */
+  pendingSlingshotWallImpactSound = false;
+
+  /**
+   * Public rather than private like the rest of the slingshot's internals: a
+   * scene-transition snapshot has to carry it across, or every doorway grants
+   * a free instant shot on arrival.
+   */
+  slingshotCooldown = 0;
+  private rocks: SlingshotRock[] = [];
 
   /** Species HP floor: 8 + CON 1 × 2 = 10 starting max HP. */
   private static readonly HUMAN_BASE_HP_OFFSET = 8;
@@ -195,12 +232,129 @@ export class HumanPlayer extends Player {
   }
 
   getMeleeDamage(): number {
-    const pugilismBonus = PUGILISM_DAMAGE_PER_LEVEL * this.skills.getLevel('pugilism');
-    return 1 + this.strength + this.statusMeleeDamageBonus + pugilismBonus;
+    const pugilismBonus = PUGILISM_DAMAGE_PER_LEVEL * this.effectiveSkillLevel('pugilism');
+    const meleeOnlyStrength = this.inventory.equipment.getMeleeOnlyStatBonus('strength');
+    const flatDamage =
+      BARE_FIST_DAMAGE +
+      this.strength +
+      meleeOnlyStrength +
+      this.statusMeleeDamageBonus +
+      pugilismBonus;
+    // Iron Punch is a technique of the gauntlet, not of the hand: without one
+    // worn the banked levels are inert, however they were granted.
+    const ironPunchMultiplier = this.inventory.hasEquipped('grull_war_gauntlet')
+      ? 1 + IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL * this.effectiveSkillLevel('iron_punch')
+      : 1;
+    return flatDamage * ironPunchMultiplier;
+  }
+
+  /** True while the slingshot is in hand, which redirects the attack key. */
+  get isWieldingSlingshot(): boolean {
+    return this.wieldedWeaponId === 'slingshot';
+  }
+
+  /**
+   * Takes the slingshot out or puts it away, reporting whether it is now held.
+   */
+  toggleSlingshotWield(): boolean {
+    this.wieldedWeaponId = this.isWieldingSlingshot ? null : 'slingshot';
+    return this.isWieldingSlingshot;
+  }
+
+  /**
+   * Drops the wielded weapon if whatever changed the inventory carried it off —
+   * a drop, an AI `remove_item`, a tutorial reset that clears slots directly.
+   * Without this a stripped slingshot keeps firing from an empty hand, because
+   * `wieldedWeaponId` only ever names an item and never checks it is still held.
+   */
+  override onInventoryChanged(): void {
+    if (this.wieldedWeaponId !== null && this.inventory.countOf(this.wieldedWeaponId) === 0) {
+      this.wieldedWeaponId = null;
+    }
+  }
+
+  /** What a single stone does on impact — deliberately below a bare fist's reach-for-reach worth. */
+  getSlingshotDamage(): number {
+    return SLINGSHOT_BASE_DAMAGE + Math.floor(this.strength * SLINGSHOT_STRENGTH_FRACTION);
+  }
+
+  /** Stones still in the air, for the combat resolver to land. */
+  getRocks(): SlingshotRock[] {
+    return this.rocks;
+  }
+
+  /**
+   * Flings a stone along the way he is facing, reporting whether one left the
+   * sling. No homing and no splash: the slingshot is aim, and nothing else.
+   */
+  triggerSlingshot(): boolean {
+    if (this.slingshotCooldown > 0) return false;
+
+    const angle = Math.atan2(this.facingY, this.facingX);
+    this.rocks.push({
+      x: this.x + this.tileSize * HumanPlayer.SPRITE_HORIZONTAL_OFFSET,
+      y: this.y + this.tileSize * HumanPlayer.SPRITE_VERTICAL_OFFSET,
+      vx: Math.cos(angle) * SLINGSHOT_SPEED,
+      vy: Math.sin(angle) * SLINGSHOT_SPEED,
+      distTraveled: 0,
+      maxDist: this.tileSize * SLINGSHOT_RANGE_TILES,
+      state: 'flying',
+      hit: false,
+    });
+    this.slingshotCooldown = SLINGSHOT_COOLDOWN_FRAMES;
+    this.pendingSlingshotFireSound = true;
+    return true;
+  }
+
+  /**
+   * Advances every stone in the air and drops the spent ones.
+   *
+   * Takes the map rather than holding one, so a stone is always tested against
+   * the walls of the scene that is currently ticking it.
+   */
+  updateRocks(map: GameMap): void {
+    this.slingshotCooldown = this.tickCooldown(this.slingshotCooldown);
+
+    for (const rock of this.rocks) {
+      if (rock.state !== 'flying') continue;
+
+      const nextX = rock.x + rock.vx;
+      const nextY = rock.y + rock.vy;
+      const tx = Math.floor(nextX / this.tileSize);
+      const ty = Math.floor(nextY / this.tileSize);
+      if (!map.isWalkable(tx, ty)) {
+        rock.state = 'done';
+        this.pendingSlingshotWallImpactSound = true;
+        continue;
+      }
+      rock.x = nextX;
+      rock.y = nextY;
+      rock.distTraveled += Math.hypot(rock.vx, rock.vy);
+      if (rock.distTraveled >= rock.maxDist) rock.state = 'done';
+    }
+
+    this.rocks = this.rocks.filter((rock) => rock.state === 'flying');
+  }
+
+  /**
+   * Drops the stones he has in the air, and nothing else — a party walking off
+   * a floor leaves them behind, but the cooldown they cost is not refunded by a
+   * staircase.
+   */
+  clearAirborneAttacks(): void {
+    this.rocks = [];
   }
 
   triggerAttack() {
     if (this.attackTimer > 0 || this.smushTimer > 0) return;
+    // A weapon in hand takes the attack key: bare fists are what the punch and
+    // the kick animate, and he cannot swing what he is holding a sling with.
+    // Checked after the windup guard above so a sling shot respects the same
+    // lock a mid-smush melee swing would.
+    if (this.isWieldingSlingshot) {
+      this.triggerSlingshot();
+      return;
+    }
     if (Math.abs(this.facingY) > HumanPlayer.FACING_Y_THRESHOLD) {
       this.attackPhase = this.facingY < 0 ? 'punch_up' : 'kick_down';
     } else {
@@ -254,6 +408,10 @@ export class HumanPlayer extends Player {
     this.smushCooldown = 0;
     this.autoAttackCooldown = 0;
     this.autoTarget = null;
+    this.clearAirborneAttacks();
+    this.slingshotCooldown = 0;
+    this.pendingSlingshotFireSound = false;
+    this.pendingSlingshotWallImpactSound = false;
   }
 
   /**
@@ -319,6 +477,11 @@ export class HumanPlayer extends Player {
       facingX: this.facingX,
       facingY: this.facingY,
     });
+
+    if (this.isWieldingSlingshot) {
+      drawSlingshotWield(ctx, sx, sy, s, this.facingX, this.facingY);
+    }
+    drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
 
     this.renderHealthBar(ctx, sx, sy - HumanPlayer.HEALTH_BAR_Y_OFFSET);
     this.renderKnockedOutOverlay(ctx, sx, sy);

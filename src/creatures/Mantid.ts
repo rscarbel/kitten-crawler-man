@@ -452,6 +452,10 @@ export class Mantid extends Mob {
   /** One flurry tick: everything alive inside the melee disc takes a hit. */
   private strikeEveryoneInReach(targets: Player[]): void {
     for (const target of targets) {
+      // Re-checked every iteration, not just entered with: reflect gear sends a
+      // share of the hit back, and a mantid killed by the first crawler in the
+      // flurry must not go on to strike the rest.
+      if (!this.isAlive) return;
       if (!target.isAlive) continue;
       if (this.distanceTo(target) > this.flurryRadiusPx) continue;
       const shell = this.spells;

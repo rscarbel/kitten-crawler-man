@@ -340,7 +340,7 @@ export class KrakarenTentacle extends Mob {
       const dx = target.x + this.tileSize * CENTER_OFFSET - this.strikePointX;
       const dy = target.y + this.tileSize * CENTER_OFFSET - this.strikePointY;
       if (Math.hypot(dx, dy) > TENTACLE_STRIKE_HIT_RADIUS_PX) continue;
-      this.dealPreScaledDamage(target, TENTACLE_STRIKE_DAMAGE, 'tentacle_strike');
+      this.dealPreScaledRangedDamage(target, TENTACLE_STRIKE_DAMAGE, 'tentacle_strike');
     }
   }
 

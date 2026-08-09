@@ -457,7 +457,7 @@ export class Juicer extends Mob {
         this.spells.addBlockXp(BLOCK_XP);
         continue;
       }
-      this.dealDamage(target, PUNCH_DAMAGE, GROUND_PUNCH_ATTACK_TYPE);
+      this.dealRangedDamage(target, PUNCH_DAMAGE, GROUND_PUNCH_ATTACK_TYPE);
       target.damageFlash = DAMAGE_FLASH_PUNCH;
       // Radially away from the crater. `applyKnockback` normalises, so a target
       // standing exactly on the point is simply not shoved anywhere.
@@ -730,7 +730,7 @@ export class Juicer extends Mob {
           this.activeThrow = null;
           return;
         }
-        this.dealDamage(t, THROW_DAMAGE);
+        this.dealRangedDamage(t, THROW_DAMAGE);
         t.damageFlash = DAMAGE_FLASH_DUMBBELL;
         // Shoved along the weight's own flight rather than away from him: it
         // has bounced off walls by now, and being knocked back towards the
@@ -755,8 +755,8 @@ export class Juicer extends Mob {
 
   protected rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
-    // Guaranteed crown drop
     items.push({ id: 'enchanted_crown_sepsis_whore', quantity: 1 });
+    items.push({ id: 'fae_scale_crupper', quantity: 1 });
     return items;
   }
 

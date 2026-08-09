@@ -336,6 +336,10 @@ export class SmallSpider extends Mob {
 
   private _strikeOnLanding(targets: Player[]): void {
     for (const target of targets) {
+      // Re-checked every iteration, not just entered with: reflect gear sends a
+      // share of the pounce back, and a spider killed by the first crawler it
+      // lands on must not go on to strike the rest.
+      if (!this.isAlive) return;
       if (!target.isAlive) continue;
       if (Math.hypot(target.x - this.x, target.y - this.y) > HIT_RANGE_PX) continue;
       if (

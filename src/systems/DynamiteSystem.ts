@@ -13,6 +13,7 @@ import {
   drawDynamiteThrowPath,
 } from '../sprites/dynamiteSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { EventBus } from '../core/EventBus';
 
 // Goblin Dynamite constants
 export const DYN_MAX_CHARGE = 120; // 2 s at 60 fps → full throw
@@ -77,6 +78,8 @@ export class DynamiteSystem implements GameSystem {
      * which is the only map that grows trees.
      */
     private readonly trees: () => TreeSystem | null = () => null,
+    /** Absent in scenes that run no event bus; the blast then simply goes unreported. */
+    private readonly bus: EventBus | null = null,
   ) {}
 
   /** Drops any thrown/charging dynamite — used on a checkpoint respawn. */
@@ -178,14 +181,23 @@ export class DynamiteSystem implements GameSystem {
     const damage = DYN_DAMAGE + (explosivesLevel - 1) * DYN_DAMAGE_PER_LEVEL;
     const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + ts);
     if (!human.zeroDamage) {
+      let blastKills = 0;
       for (const mob of nearBlast) {
         // Allies included, which is the point of the type: a blast is the one
         // player-sourced damage that ignores friendly-fire immunity, exactly as
         // it already ignores the pair who lit it.
         if (!mob.isAlive || !mob.takesPlayerDamage('explosion')) continue;
         if (Math.hypot(mob.x + HALF_TILE - cx, mob.y + HALF_TILE - cy) <= DYN_RADIUS) {
+          // Death resolves synchronously inside `takeDamageFrom`, so the health
+          // either side of the call is what says whether this blast did it. The
+          // `justDied` flag cannot answer: it stays latched for a whole frame.
+          const wasAlive = mob.hp > 0;
           mob.takeDamageFrom(damage, human, 'explosion');
+          if (wasAlive && mob.hp <= 0) blastKills++;
         }
+      }
+      if (blastKills > 0) {
+        this.bus?.emit('multiKill', { killer: human, count: blastKills });
       }
     }
     void mobs;

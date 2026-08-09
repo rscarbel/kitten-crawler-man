@@ -27,6 +27,9 @@ import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/PlayerSnapshot';
 
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
 const CAT_CRAWLER_KIND: CrawlerKind = 'cat';
+
+/** Damage a claw swipe does before strength, gear or status are counted. */
+const BARE_CLAW_DAMAGE = 1;
 import { CAT_REFLEXES_DODGE_BONUS_PER_LEVEL } from '../core/SkillManager';
 
 /** Degrees in π radians, for the one place this class works in degrees. */
@@ -230,7 +233,7 @@ export class CatPlayer extends Player {
   }
 
   getMeleeDamage(): number {
-    return 1 + this.strength + this.statusMeleeDamageBonus;
+    return BARE_CLAW_DAMAGE + this.strength + this.statusMeleeDamageBonus;
   }
 
   getMeleeRange(): number {

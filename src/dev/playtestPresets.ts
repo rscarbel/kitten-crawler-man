@@ -379,6 +379,61 @@ const SWINE: PlaytestPreset = {
   },
 };
 
+/**
+ * Third floor town with both crawlers already carrying the full source-material
+ * gear set, so every new piece — plus the slingshot — can be equipped, compared
+ * in the Equipment tab, and tooltip-checked in one boot without farming drops.
+ */
+const GEAR: PlaytestPreset = {
+  id: 'gear',
+  description: 'Third floor town, both crawlers kitted in the new source-material gear',
+  levelId: 'level3',
+  spawn: { kind: 'mapStart' },
+  abilityLevels: { smush: 7, magic_missile: 6, protective_shell: 3 },
+  human: {
+    level: 28,
+    xp: 120,
+    coins: 2327,
+    baseStats: { strength: 12, constitution: 16, dexterity: 6 },
+    explosivesHandling: 3,
+    skillLevels: { pugilism: 5 },
+    hotbar: [
+      { id: 'smush_tome', quantity: 1 },
+      { id: 'slingshot', quantity: 1 },
+      { id: 'health_potion', quantity: 38 },
+      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
+      { id: 'goblin_dynamite', quantity: 18 },
+    ],
+    bag: [
+      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
+      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
+      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
+      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
+      { id: 'trollskin_shirt', quantity: 1 },
+      { id: 'scroll_of_confusing_fog', quantity: 5 },
+    ],
+  },
+  cat: {
+    level: 28,
+    xp: 120,
+    coins: 2327,
+    baseStats: { strength: 5, intelligence: 28, constitution: 2, dexterity: 34 },
+    skillLevels: { cockroach: 1, iron_stomach: 1, night_vision: 1 },
+    hotbar: [
+      { id: 'magic_missile_tome', quantity: 1 },
+      { id: 'health_potion', quantity: 34 },
+      { id: 'scroll_of_confusing_fog', quantity: 8 },
+    ],
+    bag: [
+      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
+      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
+      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
+      { id: 'enchanted_crown_sepsis_whore', quantity: 1 },
+      { id: 'goblin_dynamite', quantity: 7 },
+    ],
+  },
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   HOARDER,
   JUICER,
@@ -387,6 +442,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   SWINE,
   SPIDER,
   LEVEL3,
+  GEAR,
 ];
 
 export function getPlaytestPreset(id: string): PlaytestPreset | null {

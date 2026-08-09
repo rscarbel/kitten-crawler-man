@@ -1,4 +1,5 @@
 import { randomInt } from '../utils';
+import type { ItemId } from './ItemDefs';
 
 const BRONZE_ADVENTURER_POTION_MIN = 1;
 const BRONZE_ADVENTURER_POTION_MAX = 2;
@@ -31,7 +32,12 @@ export type AchievementId =
   | 'merc_hired'
   | 'casino_jackpot'
   | 'club_bodyguards'
-  | 'ask_for_it_dirty';
+  | 'ask_for_it_dirty'
+  | 'no_pants'
+  | 'first_hundred'
+  | 'podophilia'
+  | 'crowd_control'
+  | 'big_brawler';
 
 export type BoxTier = 'Bronze' | 'Silver' | 'Gold' | 'Legendary' | 'Celestial';
 export type BoxCategory = 'Adventurer' | 'Boss' | 'Spicy' | 'Tutorial';
@@ -52,6 +58,12 @@ export interface AchievementDef {
   playerType: PlayerTarget;
   /** Loot box granted on unlock; omit for achievements with no box reward. */
   lootBox?: { tier: BoxTier; category: BoxCategory };
+  /**
+   * Specific item granted when this achievement's loot box is opened, on top of
+   * that box's shared tier/category contents. Delivered to the box owner's
+   * inventory rather than always to the human.
+   */
+  itemReward?: { id: ItemId; quantity: number };
 }
 
 export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
@@ -145,6 +157,46 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     playerType: 'both',
     lootBox: { tier: 'Bronze', category: 'Spicy' },
   },
+  no_pants: {
+    id: 'no_pants',
+    name: "Why Aren't You Wearing Pants?",
+    description: 'Entered the dungeon without wearing any pants.',
+    playerType: 'human',
+    lootBox: { tier: 'Bronze', category: 'Spicy' },
+    itemReward: { id: 'nightgaunt_cloak', quantity: 1 },
+  },
+  first_hundred: {
+    id: 'first_hundred',
+    name: 'First Hundred',
+    description: 'One of the first 100 crawlers to level Magic Missile to level three.',
+    playerType: 'cat',
+    lootBox: { tier: 'Bronze', category: 'Adventurer' },
+    itemReward: { id: 'slate_butterfly_talisman', quantity: 1 },
+  },
+  podophilia: {
+    id: 'podophilia',
+    name: 'Podophilia',
+    description: 'Killed a goblin with Smush.',
+    playerType: 'human',
+    lootBox: { tier: 'Bronze', category: 'Spicy' },
+    itemReward: { id: 'splatter_skunk_toe_ring', quantity: 1 },
+  },
+  crowd_control: {
+    id: 'crowd_control',
+    name: 'Crowd Control',
+    description: 'Killed 10 enemies in a single attack.',
+    playerType: 'human',
+    lootBox: { tier: 'Silver', category: 'Spicy' },
+    itemReward: { id: 'shade_gnoll_kneepads', quantity: 1 },
+  },
+  big_brawler: {
+    id: 'big_brawler',
+    name: 'Big Brawler',
+    description: 'Killed a roided-out mutant troglodyte and his minions.',
+    playerType: 'human',
+    lootBox: { tier: 'Silver', category: 'Boss' },
+    itemReward: { id: 'grull_war_gauntlet', quantity: 1 },
+  },
 };
 
 /** Contents granted when a loot box is opened. */
@@ -153,6 +205,12 @@ export interface BoxContents {
   coins: number;
   /** Optional extra item id and quantity. */
   bonus?: { id: string; quantity: number };
+  /**
+   * An achievement's own item reward, granted in addition to `bonus`. Distinct
+   * from `bonus` because it goes to the box owner's inventory rather than
+   * always to the human, and both can be present on the same box.
+   */
+  itemReward?: { id: ItemId; quantity: number };
   /**
    * When present, overrides the default reward-line rendering in LootBoxOpener.
    * Use for boxes whose actual item grants are handled outside the normal path

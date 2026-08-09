@@ -338,6 +338,12 @@ export function triggerPlayerAttack(
   if (human.isActive) {
     snapFacingToNearestMob(human, TILE_SIZE * HUMAN_ATTACK_RANGE_TILES, mobGrid, gameMap);
     human.triggerAttack();
+    if (human.pendingSlingshotFireSound) {
+      human.pendingSlingshotFireSound = false;
+      // [STAND-IN] The bow release, the library's closest launch cue, until a
+      // sling snap is sourced.
+      audio?.play('shooting_an_arrow');
+    }
   } else {
     snapFacingToNearestMob(cat, TILE_SIZE * CAT_ATTACK_RANGE_TILES, mobGrid, gameMap);
     const hasMissileTome = cat.inventory.actionBar.slots.some(

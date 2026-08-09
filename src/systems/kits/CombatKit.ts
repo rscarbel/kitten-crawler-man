@@ -165,6 +165,11 @@ export class CombatKit {
   updatePlayerAttacks(): void {
     const { human, cat } = this.world.pm;
     human.updateAttack();
+    human.updateRocks(this.world.gameMap);
+    if (human.pendingSlingshotWallImpactSound) {
+      human.pendingSlingshotWallImpactSound = false;
+      this.world.bus.emit('slingshotImpact', {});
+    }
     cat.updateAttack();
     cat.updateMissiles(this.world.roster.grid);
   }
@@ -316,10 +321,12 @@ export class CombatKit {
     // A damage number frozen mid-fade is a number the player reads on the way
     // back in, minutes after the hit it belonged to.
     this.floatingText.dispose();
-    // The cat's missiles as well as the mobs' shots: hers belong to her rather
-    // than to the roster, so they cross the threshold with her and would then be
-    // steered against the new floor's grid from the old floor's coordinates.
+    // The crawlers' own shots as well as the mobs': a missile or a stone belongs
+    // to the crawler rather than to the roster, so it crosses the threshold with
+    // them and would then be resolved against the new floor's grid and walls
+    // from the old floor's coordinates.
     this.world.pm.cat.clearAirborneAttacks();
+    this.world.pm.human.clearAirborneAttacks();
     for (const mob of this.world.roster.mobs) mob.clearAirborneAttacks();
     // Note what is *not* dropped: the gore. Blood stays where it fell, because a
     // room the party comes back to should still look like the room they left.

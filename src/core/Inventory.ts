@@ -1,18 +1,19 @@
 import { ItemBag } from './ItemBag';
 import { Hotbar } from './Hotbar';
 import { EquipmentManager, type StatBonuses } from './EquipmentManager';
-import { SLOT_COUNT, HOTBAR_COUNT, QUEST_SLOT_IDX, ITEM_DEF } from './ItemDefs';
+import { SLOT_COUNT, HOTBAR_COUNT, QUEST_SLOT_IDX, ITEM_DEF, itemCanHotlist } from './ItemDefs';
 import type { InventoryItem, ItemId } from './ItemDefs';
+import type { CrawlerKind } from './SkillManager';
 
 export class Inventory {
   readonly bag: ItemBag;
   readonly actionBar: Hotbar;
   readonly equipment: EquipmentManager;
 
-  constructor() {
+  constructor(ownerKind: CrawlerKind | null = null) {
     this.bag = new ItemBag(SLOT_COUNT);
     this.actionBar = new Hotbar(HOTBAR_COUNT);
-    this.equipment = new EquipmentManager((id) => this.findItemById(id));
+    this.equipment = new EquipmentManager((id) => this.findItemById(id), ownerKind);
   }
 
   // ── Item storage (delegates to bag + actionBar) ──
@@ -27,6 +28,17 @@ export class Inventory {
     if (this.actionBar.stackInto(id, quantity)) return;
     if (this.bag.stackInto(id, quantity)) return;
     this.bag.addToEmpty(id, quantity);
+  }
+
+  /**
+   * Whether {@link addItem} would actually store this item. `addItem` drops
+   * silently when there is nowhere to put the thing, so any caller that cannot
+   * afford to lose the item has to ask first.
+   */
+  hasRoomFor(id: ItemId): boolean {
+    if (ITEM_DEF[id].isQuestItem) return true;
+    if (ITEM_DEF[id].stackable && this.findItemById(id) !== null) return true;
+    return this.bag.slots.includes(null);
   }
 
   /** Place a quest item directly into the reserved quest slot. */
@@ -103,7 +115,7 @@ export class Inventory {
     // Block swapping into the quest slot
     if (hotbarIdx === QUEST_SLOT_IDX) return;
     const inv = this.bag.slots[slotIdx];
-    if (inv && !inv.canHotlist) return;
+    if (inv && !itemCanHotlist(inv.id)) return;
     const hot = this.actionBar.slots[hotbarIdx];
     this.actionBar.slots[hotbarIdx] = inv;
     this.bag.slots[slotIdx] = hot;
@@ -112,9 +124,14 @@ export class Inventory {
   swapHotbarToInv(hotbarIdx: number, slotIdx: number): void {
     // Block swapping out of the quest slot
     if (hotbarIdx === QUEST_SLOT_IDX) return;
+    // No itemCanHotlist guard here: the player is dragging OUT of the hotbar,
+    // and grandfathered gear that predates the hotlist restriction must stay
+    // freely movable off the hotbar even when the bag slot it lands on is
+    // occupied by another non-hotlistable item swapping back in as a side
+    // effect. Only the deliberate bag→hotbar direction (swapInvToHotbar)
+    // refuses.
     const hot = this.actionBar.slots[hotbarIdx];
     const inv = this.bag.slots[slotIdx];
-    if (inv && !inv.canHotlist) return;
     this.bag.slots[slotIdx] = hot;
     this.actionBar.slots[hotbarIdx] = inv;
   }
@@ -139,12 +156,17 @@ export class Inventory {
   /**
    * Equip the item at `slotIdx` in the bag. Records the item's ID in the
    * equipped map so it stays equipped regardless of physical location.
+   *
+   * `targetKey` names the `"Slot:SubSlot"` the player aimed at, for a screen
+   * where they can point at one ring finger rather than any of them; it is
+   * honoured only when the item actually fits there.
+   *
    * Returns the previously equipped item in that sub-slot (or null).
    */
-  equip(slotIdx: number): InventoryItem | null {
+  equip(slotIdx: number, targetKey?: string): InventoryItem | null {
     const item = this.bag.slots[slotIdx];
     if (!item) return null;
-    return this.equipment.equip(item);
+    return this.equipment.equip(item, targetKey);
   }
 
   /**
@@ -168,6 +190,28 @@ export class Inventory {
   /** Unequip the item in the given sub-slot key. Returns the unequipped item. */
   unequip(key: string): InventoryItem | null {
     return this.equipment.unequip(key);
+  }
+
+  /**
+   * Take off whichever slot is holding `itemId`. Returns the item removed, or
+   * null when it was not worn.
+   */
+  unequipById(itemId: ItemId): InventoryItem | null {
+    return this.equipment.unequipById(itemId);
+  }
+
+  /** Whether {@link equip} on this bag slot would actually put the item on. */
+  canEquipSlot(slotIdx: number): boolean {
+    const item = this.bag.slots[slotIdx];
+    if (!item) return false;
+    return this.equipment.canEquip(item);
+  }
+
+  /** Whether {@link equipHotbarSlot} would actually put the item on. */
+  canEquipHotbarSlot(hotbarIdx: number): boolean {
+    const item = this.actionBar.slots[hotbarIdx];
+    if (!item) return false;
+    return this.equipment.canEquip(item);
   }
 
   /** Get the item currently equipped in a sub-slot key ("Slot:SubSlot"). */

@@ -133,6 +133,7 @@ export const level2: LevelDef = {
   },
   hasArena: true,
   hasSpiderLab: true,
+  slingshotDrops: true,
   hasCollapseTimer: true,
   hasTreasureRoomGuards: true,
   nextLevelId: 'level3',

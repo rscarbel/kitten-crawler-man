@@ -1,19 +1,26 @@
 import type { Inventory } from '../core/Inventory';
-import { EQUIP_SUBSLOTS } from '../core/ItemDefs';
-import type { EquipSlot, InventoryItem } from '../core/ItemDefs';
+import type { InventoryItem } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
 import { pointInRect } from '../utils';
 import { drawText } from './TextBox';
-import { drawBox, drawDivider, BOX_PRESETS } from './Box';
+import { drawBox, drawDivider } from './Box';
 import { drawButton } from './Button';
+import { drawItemTooltip } from './ItemTooltip';
+import {
+  buildEquipSlotInfos,
+  equipSectionTopY,
+  equipSlotKeyAt,
+  EQUIP_PANEL_PAD,
+  EQUIP_SLOT_ORDER,
+  type EquipSlotInfo,
+} from './equipmentLayout';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Layout constants
 const SLOT_SIZE = 46;
 const SLOT_GAP = 3;
-const PANEL_PAD = 12;
+const PANEL_PAD = EQUIP_PANEL_PAD;
 const HEADER_H = 40;
-const SECTION_LABEL_W = 52;
 
 // Toggle button positioning
 const TOGGLE_BTN_X_OFFSET = 252;
@@ -60,33 +67,10 @@ const SECTION_NAME_SIZE = 9;
 const DIVIDER_X_OFFSET = 4;
 const DIVIDER_WIDTH_OFFSET = 8;
 
-// Tooltip
-const TOOLTIP_WIDTH = 230;
-const TOOLTIP_LINE_HEIGHT = 14;
-const TOOLTIP_PAD = 12;
-const TOOLTIP_X_OFFSET = 10;
-const TOOLTIP_Y_OFFSET = 4;
-const TOOLTIP_MARGIN = 4;
-const TOOLTIP_MARGIN_SMALL = 2;
-const TOOLTIP_TEXT_INDENT = 6;
-const TOOLTIP_TITLE_Y_OFFSET = 8;
-const TOOLTIP_TITLE_SIZE = 10;
-const TOOLTIP_BODY_Y_OFFSET = 8;
-const TOOLTIP_BODY_SIZE = 10;
-const DESC_WRAP_CHARS = 34;
-const SECTION_PAD = 8;
 const ITEM_NAME_LINE_HEIGHT_FRAC = 0.15;
 
-const SLOT_ORDER: EquipSlot[] = ['Head', 'Torso', 'Legs', 'Hands', 'Feet'];
-
-/** Screen rect for a single equipment sub-slot given the panel origin and position. */
-interface SlotInfo {
-  key: string;
-  slot: EquipSlot;
-  subSlot: string;
-  x: number;
-  y: number;
-}
+/** What a click on the hovered slot will do, shown as the tooltip's last line. */
+const TOOLTIP_UNEQUIP_FOOTER = '[Click] Unequip';
 
 export interface GearClickResult {
   consumed: boolean;
@@ -186,71 +170,34 @@ export class GearPanel {
       color: '#1e293b',
     });
 
-    // Render sections
-    let currentY = p.y + HEADER_H + PANEL_PAD;
+    const infos = this.slotInfos(p);
     let tooltipItem: InventoryItem | null = null;
-    let tooltipSubSlot = '';
 
-    for (const slotName of SLOT_ORDER) {
-      const subSlots = EQUIP_SUBSLOTS[slotName];
-      const slotsInfos = this.buildSlotInfos(slotName, subSlots, p.x, currentY, p.w);
-
-      // Section label
+    for (const slotName of EQUIP_SLOT_ORDER) {
+      const sectionTop = equipSectionTopY(infos, slotName, p.y + HEADER_H + PANEL_PAD);
       drawText(ctx, slotName.toUpperCase(), {
         x: p.x + PANEL_PAD,
-        y: currentY + SLOT_SIZE * SLOT_LABEL_Y_FRAC + SLOT_LABEL_Y_OFFSET - SLOT_LABEL_SIZE,
+        y: sectionTop + SLOT_SIZE * SLOT_LABEL_Y_FRAC + SLOT_LABEL_Y_OFFSET - SLOT_LABEL_SIZE,
         size: SECTION_NAME_SIZE,
         bold: true,
         color: '#64748b',
       });
-
-      // Find max row used
-      let maxY = currentY;
-      for (const si of slotsInfos) {
-        const item = inventory.getEquippedItem(si.key);
-        const isHovered = si.key === this.hoveredKey;
-        this.renderEquipSlot(ctx, si.x, si.y, item, si.subSlot, isHovered);
-        if (item && si.key === this.hoveredKey) {
-          tooltipItem = item;
-          tooltipSubSlot = si.subSlot;
-        }
-        maxY = Math.max(maxY, si.y + SLOT_SIZE);
-      }
-      currentY = maxY + SECTION_PAD;
     }
 
-    // Tooltip
+    for (const si of infos) {
+      const item = inventory.getEquippedItem(si.key);
+      const isHovered = si.key === this.hoveredKey;
+      this.renderEquipSlot(ctx, si.x, si.y, item, si.subSlot, isHovered);
+      if (item && isHovered) tooltipItem = item;
+    }
+
     if (tooltipItem) {
-      this.renderTooltip(ctx, tooltipItem, tooltipSubSlot);
+      drawItemTooltip(ctx, tooltipItem, this.tooltipMx, this.tooltipMy, TOOLTIP_UNEQUIP_FOOTER);
     }
   }
 
-  /** Build screen positions for each sub-slot in a section. */
-  private buildSlotInfos(
-    slotName: EquipSlot,
-    subSlots: string[],
-    panelX: number,
-    startY: number,
-    panelW: number,
-  ): SlotInfo[] {
-    const infos: SlotInfo[] = [];
-    const startX = panelX + PANEL_PAD + SECTION_LABEL_W;
-    const maxPerRow = Math.floor(
-      (panelW - PANEL_PAD * 2 - SECTION_LABEL_W) / (SLOT_SIZE + SLOT_GAP),
-    );
-
-    for (let i = 0; i < subSlots.length; i++) {
-      const col = i % maxPerRow;
-      const row = Math.floor(i / maxPerRow);
-      infos.push({
-        key: `${slotName}:${subSlots[i]}`,
-        slot: slotName,
-        subSlot: subSlots[i],
-        x: startX + col * (SLOT_SIZE + SLOT_GAP),
-        y: startY + row * (SLOT_SIZE + SLOT_GAP),
-      });
-    }
-    return infos;
+  private slotInfos(p: { x: number; y: number; w: number; h: number }): EquipSlotInfo[] {
+    return buildEquipSlotInfos(p.x, p.y + HEADER_H + PANEL_PAD, p.w, SLOT_SIZE, SLOT_GAP);
   }
 
   private renderEquipSlot(
@@ -316,97 +263,14 @@ export class GearPanel {
     ctx.restore();
   }
 
-  private renderTooltip(
-    ctx: CanvasRenderingContext2D,
-    item: InventoryItem,
-    _subSlot: string,
-  ): void {
-    const lines: string[] = [item.name];
-    if (item.statBonus) {
-      const b = item.statBonus;
-      if (b.constitution) lines.push(`+${b.constitution} Constitution`);
-      if (b.strength) lines.push(`+${b.strength} Strength`);
-      if (b.intelligence) lines.push(`+${b.intelligence} Intelligence`);
-      if (b.dexterity) lines.push(`+${b.dexterity} Dexterity`);
-    }
-    lines.push('');
-    if (item.description) {
-      // Word-wrap description at ~34 chars to fit inside the tooltip box
-      const words = item.description.split(' ');
-      let cur = '';
-      for (const w of words) {
-        if ((cur + ' ' + w).trim().length <= DESC_WRAP_CHARS) {
-          cur = (cur + ' ' + w).trim();
-        } else {
-          lines.push(cur);
-          cur = w;
-        }
-      }
-      if (cur) lines.push(cur);
-    }
-    lines.push('');
-    lines.push('[Click] Unequip');
-
-    const tw = TOOLTIP_WIDTH;
-    const lineH = TOOLTIP_LINE_HEIGHT;
-    const th = lines.length * lineH + TOOLTIP_PAD;
-    const tx = Math.min(this.tooltipMx + TOOLTIP_X_OFFSET, viewportWidth() - tw - TOOLTIP_MARGIN);
-    let ty = Math.min(this.tooltipMy - th / 2, viewportHeight() - th - TOOLTIP_MARGIN);
-    ty = Math.max(ty, TOOLTIP_Y_OFFSET);
-
-    ctx.save();
-    drawBox(ctx, { x: tx, y: ty, width: tw, height: th, ...BOX_PRESETS.tooltip });
-
-    // Clip all text to the tooltip box so nothing overflows
-    ctx.beginPath();
-    ctx.rect(
-      tx + TOOLTIP_MARGIN_SMALL,
-      ty + TOOLTIP_MARGIN_SMALL,
-      tw - TOOLTIP_MARGIN_SMALL * 2,
-      th - TOOLTIP_MARGIN_SMALL * 2,
-    );
-    ctx.clip();
-
-    // Title line
-    drawText(ctx, lines[0] ?? '', {
-      x: tx + TOOLTIP_TEXT_INDENT,
-      y: ty + TOOLTIP_LINE_HEIGHT - TOOLTIP_TITLE_Y_OFFSET,
-      size: TOOLTIP_TITLE_SIZE,
-      bold: true,
-      color: '#e2e8f0',
-    });
-
-    // Body lines (each with per-line color)
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i] ?? '';
-      let lineColor: string;
-      if (line.startsWith('+')) {
-        lineColor = '#4ade80';
-      } else if (line.startsWith('Ability:')) {
-        lineColor = '#c084fc';
-      } else if (line.startsWith('[Click]')) {
-        lineColor = '#64748b';
-      } else {
-        lineColor = '#94a3b8';
-      }
-      drawText(ctx, line, {
-        x: tx + TOOLTIP_TEXT_INDENT,
-        y: ty + TOOLTIP_LINE_HEIGHT + i * lineH - TOOLTIP_BODY_Y_OFFSET,
-        size: TOOLTIP_BODY_SIZE,
-        color: lineColor,
-      });
-    }
-    ctx.restore();
-  }
-
   // Interaction
 
-  handleMouseMove(mx: number, my: number, inventory: Inventory): void {
+  handleMouseMove(mx: number, my: number): void {
     if (!this.isOpen) return;
     this.tooltipMx = mx;
     this.tooltipMy = my;
     const p = this.panelRect();
-    this.hoveredKey = this.slotKeyAt(mx, my, p, inventory);
+    this.hoveredKey = this.slotKeyAt(mx, my, p);
   }
 
   handleClick(mx: number, my: number, inventory: Inventory): GearClickResult | null {
@@ -427,7 +291,7 @@ export class GearPanel {
     }
 
     // Check equipped slot click → unequip
-    const key = this.slotKeyAt(mx, my, p, inventory);
+    const key = this.slotKeyAt(mx, my, p);
     if (key) {
       const item = inventory.getEquippedItem(key);
       if (item) {
@@ -449,21 +313,7 @@ export class GearPanel {
     mx: number,
     my: number,
     p: { x: number; y: number; w: number; h: number },
-    _inventory: Inventory,
   ): string | null {
-    let currentY = p.y + HEADER_H + PANEL_PAD;
-    for (const slotName of SLOT_ORDER) {
-      const subSlots = EQUIP_SUBSLOTS[slotName];
-      const infos = this.buildSlotInfos(slotName, subSlots, p.x, currentY, p.w);
-      let maxY = currentY;
-      for (const si of infos) {
-        if (mx >= si.x && mx <= si.x + SLOT_SIZE && my >= si.y && my <= si.y + SLOT_SIZE) {
-          return si.key;
-        }
-        maxY = Math.max(maxY, si.y + SLOT_SIZE);
-      }
-      currentY = maxY + SECTION_PAD;
-    }
-    return null;
+    return equipSlotKeyAt(mx, my, this.slotInfos(p), SLOT_SIZE);
   }
 }

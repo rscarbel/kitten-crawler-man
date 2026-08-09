@@ -23,8 +23,8 @@ const FIRST_BUTTON_Y = 52;
 const BUTTON_SPACING = 50;
 /** Gap between the last button and the bottom of the modal. */
 const BOTTOM_MARGIN = 12;
-/** Stats, Abilities, Achievements, Skills, Back. */
-const BUTTON_COUNT_NO_JOURNAL = 5;
+/** Equipment, Stats, Abilities, Achievements, Skills, Back. */
+const BUTTON_COUNT_NO_JOURNAL = 6;
 /** Plus the Quest Journal button, which only the town floors onward have. */
 const BUTTON_COUNT_WITH_JOURNAL = BUTTON_COUNT_NO_JOURNAL + 1;
 /** Buttons stay legible even when the pitch is compressed to fit a short window. */
@@ -85,6 +85,17 @@ export function renderGameTab(
     });
     bY += spacing;
   }
+
+  addButton(ctx, buttons, {
+    x: bX,
+    y: bY,
+    width: bW,
+    height: bH,
+    label: 'Equipment',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('equipment'),
+  });
+  bY += spacing;
 
   addButton(ctx, buttons, {
     x: bX,

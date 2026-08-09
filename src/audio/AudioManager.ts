@@ -1176,6 +1176,12 @@ export class AudioManager {
       this.play('cat_missile_impact');
     });
 
+    // [STAND-IN] The arrow's landing thud, the library's closest "small hard
+    // thing hits something", until a stone impact is sourced.
+    bus.on('slingshotImpact', () => {
+      this.play('arrow_impact');
+    });
+
     bus.on('combatStarted', (e) => {
       if (e.mobType === 'Goblin' && Math.random() < GOBLIN_ENCOUNTER_CHANCE) {
         this.play('goblin_found_you');

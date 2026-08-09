@@ -64,7 +64,7 @@ import {
 } from '../systems/CompanionSystem';
 import { createMercenaryRoster, type MercenaryRoster } from '../core/MercenaryRoster';
 import { createGodModeState, type GodModeState } from '../core/GodMode';
-import type { ItemId } from '../core/ItemDefs';
+import { isWearable, type ItemId } from '../core/ItemDefs';
 import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
 import { InteriorReadableSystem } from '../systems/InteriorReadableSystem';
@@ -127,6 +127,7 @@ import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import { CombatKit } from '../systems/kits/CombatKit';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
 import { MenusKit } from '../systems/kits/MenusKit';
+import { HOTBAR_REFUSAL_MESSAGE } from '../ui/InventoryInteraction';
 import { ChatKit } from '../systems/kits/ChatKit';
 import {
   activateHotbarSlot,
@@ -598,6 +599,7 @@ export class BuildingInteriorScene extends GameplayScene {
             this.clubMembership,
             this.mercenaryRoster,
             this.audio,
+            this.human.hasDesperadoPassTattoo || this.cat.hasDesperadoPassTattoo,
             this.humanAchievements,
             this.catAchievements,
           )
@@ -652,6 +654,10 @@ export class BuildingInteriorScene extends GameplayScene {
       onOverlayRaised: () => this.mobileHUD.clearInvLongPress(),
       onPotionDrunk: (id) => this.noteDrinkAchievement(id),
     });
+    this.menus.inventoryPanel.interaction.onBlockedHotbarDrop = () => {
+      this.audio?.play('error');
+      this.menus.announce(HOTBAR_REFUSAL_MESSAGE);
+    };
     this.mobileHUD = new MobileHUDSystem(this.menus.inventoryPanel, this.menus.gearPanel);
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.hotbarToast);
     this.chat = new ChatKit({
@@ -1650,6 +1656,9 @@ export class BuildingInteriorScene extends GameplayScene {
   private raiseDeathScreen(): void {
     if (this.gameOver) return;
     this.gameOver = true;
+    // A death arrives from the fight, not from a key or a click, so nothing else
+    // here has taken the keyboard off a bag left open behind it.
+    this.menus.cancelInventoryDragForOverlay();
     this.combat.deathScreen.activate(
       this.activeEncounter?.defeatMessage ?? INTERIOR_DEFEAT_MESSAGE,
     );
@@ -1670,6 +1679,10 @@ export class BuildingInteriorScene extends GameplayScene {
 
   handleClick(mx: number, my: number): void {
     notifyButtonClick(mx, my);
+    // Before the routing chain below, because most of its branches return long
+    // before the bag is offered the click: a field left focused by a press that
+    // opened a counter or the pause menu would go on eating that overlay's keys.
+    this.menus.blurInventorySearchUnlessClicked(mx, my);
     // Ranked above the death screen, matching both the claim registry and the
     // draw order: the award stack is painted on top of it, so a press aimed at
     // an OK button there must not reach the screen underneath.
@@ -1760,9 +1773,18 @@ export class BuildingInteriorScene extends GameplayScene {
         invPlayer.inventory,
       );
       const item = slotIdx === null ? null : invPlayer.inventory.bag.slots[slotIdx];
-      if (slotIdx !== null && item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
-        invPlayer.inventory.equip(slotIdx);
-        invPlayer.onEquipmentChanged();
+      if (
+        slotIdx !== null &&
+        isWearable(item) &&
+        this.menus.inventoryPanel.interaction.bagSlotIsInteractive(item)
+      ) {
+        // The click is spent either way — it was aimed at armour — but a refusal
+        // (wrong wearer, same id already worn) changes nothing, and announcing
+        // a change that never happened is a lie to every listener.
+        if (invPlayer.inventory.canEquipSlot(slotIdx)) {
+          invPlayer.inventory.equip(slotIdx);
+          invPlayer.onEquipmentChanged();
+        }
         return;
       }
     }
@@ -1819,6 +1841,13 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseX = mx;
     this._mouseY = my;
     this._mouseDown = true;
+    // Delegated rather than swallowed: the pause menu's Equipment tab drags gear
+    // between the bag and the doll, and a drag is a press and a release, not a
+    // click. Every other tab ignores these.
+    if (this.pauseMenu.isOpen) {
+      this.pauseMenu.handleMouseDown(mx, my, this.human, this.cat);
+      return;
+    }
     if (this.isOverlayBlockingPointer) return;
     this.mobileHUD.handleMouseDown(mx, my, this.inventoryPlayer().inventory);
   }
@@ -1826,14 +1855,22 @@ export class BuildingInteriorScene extends GameplayScene {
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
-    this.mobileHUD.handleMouseMove(mx, my, this.inventoryPlayer().inventory);
-    this.menus.gearPanel.handleMouseMove(mx, my, this.active().inventory);
+    if (this.pauseMenu.isOpen) {
+      this.pauseMenu.handleMouseMove(mx, my);
+      return;
+    }
+    this.mobileHUD.handleMouseMove(mx, my);
+    this.menus.gearPanel.handleMouseMove(mx, my);
   }
 
   handleMouseUp(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
     this._mouseDown = false;
+    if (this.pauseMenu.isOpen) {
+      this.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
+      return;
+    }
     if (this.isOverlayBlockingPointer) return;
     this.mobileHUD.handleMouseUp(mx, my, this.inventoryPlayer().inventory);
   }
@@ -2471,7 +2508,13 @@ export class BuildingInteriorScene extends GameplayScene {
         current: this.human.smushCooldown,
         max: Math.max(1, this.human.getSmushCooldownMax()),
       });
-      this.mobileHUD.renderPanels(ctx, invPlayer.inventory, invName, invPlayer.coins);
+      this.mobileHUD.renderPanels(
+        ctx,
+        invPlayer.inventory,
+        invName,
+        invPlayer.coins,
+        this.menus.inventoryWieldedWeaponId(),
+      );
       if (platform.isMobile) {
         const extraButtons: MobileHUDButton[] = [
           {
@@ -2568,6 +2611,12 @@ export class BuildingInteriorScene extends GameplayScene {
     // Last, once every surface has drawn: the ring belongs to whoever declared
     // it last, so this is the only point at which the frame's answer to "who
     // owns the keyboard" is final.
+    //
+    // The bag declares no claim of its own, so every claim in that list outranks
+    // it. Checked per frame rather than at each overlay's open, because a room
+    // raises them from the interact chain, the mobile tap path and a death the
+    // player never touched a button for.
+    if (keyboardSuppressed(this.overlayClaims)) this.menus.blurInventorySearch();
     auditOverlayFocus(this.overlayClaims, menuFocusContextId());
   }
 
@@ -2710,6 +2759,14 @@ export class BuildingInteriorScene extends GameplayScene {
       // second hand-maintained list, so a panel added to one is never missing
       // from the other.
       if (worldHalted(this.overlayClaims)) {
+        // The Equipment tab is the one halting surface a finger can drag across
+        // rather than only tap, so it takes the press now and the release from
+        // the drag branch in `handleTouchEnd`, which already ends with a click.
+        if (this.pauseMenu.isOpen && this.pauseMenu.currentTab === 'equipment') {
+          this.handleMouseDown(x, y);
+          this.mobileHUD.inventoryDragTouchId ??= touch.identifier;
+          continue;
+        }
         this.handleClick(x, y);
         continue;
       }
@@ -2818,7 +2875,10 @@ export class BuildingInteriorScene extends GameplayScene {
         const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y);
         // A second finger can land on the bar in the same frame an overlay goes
         // up; its release must resolve the overlay, not fire the slot beneath.
-        if (hi >= 0 && !this.isOverlayBlockingPointer) {
+        // The pause menu is named separately because it covers the bar without
+        // being a pointer-blocking overlay: the hotbar is not drawn under it, so
+        // a release over where it used to be must go to the menu instead.
+        if (hi >= 0 && !this.isOverlayBlockingPointer && !this.pauseMenu.isOpen) {
           activateHotbarSlot(this.hotbarHost(), hi);
         } else {
           this.handleClick(x, y);

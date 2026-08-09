@@ -15,6 +15,8 @@ const UNLOCK_LINES: Record<SkillId, string> = {
   pugilism: 'Skill unlocked: Pugilism',
   iron_stomach: 'Skill unlocked: Iron Stomach',
   night_vision: 'Skill unlocked: Night Vision',
+  iron_punch: 'Skill unlocked: Iron Punch',
+  powerful_strike: 'Skill unlocked: Powerful Strike',
 };
 
 const COCKROACH_RECHARGED_LINE = 'Cockroach ready';
@@ -127,4 +129,6 @@ const TRIGGER_LINES: Record<SkillId, string> = {
   pugilism: 'Pugilism engaged.',
   iron_stomach: 'Iron Stomach engaged.',
   night_vision: 'Night Vision engaged.',
+  iron_punch: 'Iron Punch engaged.',
+  powerful_strike: 'Powerful Strike — double damage',
 };

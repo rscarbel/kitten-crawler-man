@@ -491,6 +491,7 @@ export function spawnExtraMobs(
       const mob = createMob(rule.type, origin.x + dx, origin.y + dy, map);
       mob.applyMobLevel(levelForMob(mob, rule, partyLevel, profile));
       mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+      mob.allowSlingshotDrop = def.slingshotDrops === true;
       if (rule.setup) {
         SPAWN_SETUP[rule.setup]?.(mob, map, origin);
       }
@@ -545,6 +546,7 @@ function spawnCampResidents(
         const mob = createMob(rule.type, tile.x, tile.y, map);
         mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel, profile));
         mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+        mob.allowSlingshotDrop = def.slingshotDrops === true;
         // Its own spawn tile, **not** the camp's centre. The centre is a
         // `CAMPFIRE` — solid — and `followTargetAStar` would be asked to path to
         // a tile nothing can stand on, which is a resident that never walks home
@@ -621,6 +623,7 @@ export function spawnForLevel(
           resolveSpawnLevel(regionLevelBand(band, levelBonus), partyLevel, profile),
         );
         mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+        mob.allowSlingshotDrop = def.slingshotDrops === true;
         mobs.push(mob);
       };
       for (let i = 0; i < count; i++) spawnInRoom(rule, rule.type);
@@ -634,6 +637,7 @@ export function spawnForLevel(
       const mob = createMob(rule.type, x, y, map);
       mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel, profile));
       mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+      mob.allowSlingshotDrop = def.slingshotDrops === true;
       mobs.push(mob);
     }
   }
@@ -648,6 +652,7 @@ export function spawnForLevel(
     const boss = createMob(bossEntry.type, brData.centre.x, brData.centre.y, map);
     boss.applyMobLevel(resolveBossLevel(bossEntry, partyLevel, profile));
     boss.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+    boss.allowSlingshotDrop = def.slingshotDrops === true;
     mobs.push(boss);
   }
 
@@ -687,6 +692,7 @@ export function spawnTreasureRoomMobs(
       const maxLevel = band.maxLevel ?? band.minLevel ?? 1;
       mob.applyMobLevel(Math.min(maxLevel + TREASURE_ROOM_LEVEL_BOOST, MAX_MOB_LEVEL));
       mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+      mob.allowSlingshotDrop = def.slingshotDrops === true;
       mobs.push(mob);
     }
   }

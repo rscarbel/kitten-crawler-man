@@ -188,7 +188,13 @@ export class SkeletonProjectileSystem implements GameSystem {
         const cx = target.x + TILE_SIZE * CENTER_OFFSET;
         const cy = target.y + TILE_SIZE * CENTER_OFFSET;
         if (Math.hypot(projectile.x - cx, projectile.y - cy) >= hitRadius) continue;
-        const connected = target.takeDamage(projectile.damage, projectile.source);
+        // Only the bolt itself pierces; the burst below is a splash, which a
+        // piercing resistance has no purchase on.
+        // A fully resisted hit must not reach `takeDamage`: a zero-damage bolt
+        // still flashes the crawler's hit-react and suppresses regen.
+        const resistedDamage = target.resistedDamage(projectile.damage, 'piercing');
+        const connected =
+          resistedDamage > 0 && target.takeDamage(resistedDamage, projectile.source);
         if (connected) projectile.owner.noteStruckPlayer(target);
         struck = target;
         break;

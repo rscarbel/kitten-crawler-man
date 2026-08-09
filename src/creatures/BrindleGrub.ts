@@ -303,7 +303,7 @@ export class BrindleGrub extends Mob {
             // Mark mob to retaliate against this Vespa
             t.retaliateMob = this;
           } else {
-            this.dealDamage(t, VESPA_SPIT_DAMAGE, 'spit');
+            this.dealRangedDamage(t, VESPA_SPIT_DAMAGE, 'spit');
           }
           spit.hit = true;
           break;

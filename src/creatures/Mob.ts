@@ -16,13 +16,23 @@ import { drawText } from '../ui/TextBox';
  * immunity — can key off what actually landed. `null` is harm an attacker owns
  * but swung nothing for: a damage-over-time tick they applied.
  */
-export type PlayerDamageType = 'melee' | 'missile' | 'shell' | 'smush' | 'explosion';
+export type PlayerDamageType = 'melee' | 'missile' | 'shell' | 'smush' | 'explosion' | 'slingshot';
 
 /**
  * The one damage type that ignores friendly-fire immunity, so the rule lives in
  * a single place rather than as a string literal repeated at every blast site.
  */
 const EXPLOSION_DAMAGE_TYPE = 'explosion' satisfies PlayerDamageType;
+
+/**
+ * How one of this mob's blows reached its victim.
+ *
+ * Only `'contact'` — the mob's own body, teeth or weapon touching the target —
+ * can be sent back by reflect gear. A bolt, a thrown weight, a spit, a reaching
+ * tongue or a shockwave that resolves over an area has nothing for the victim's
+ * armour to bite into, so it does not reflect.
+ */
+export type MobBlowDelivery = 'contact' | 'ranged';
 
 /** Stagger range for initial wander timer so mobs don't change direction together. */
 const WANDER_TIMER_STAGGER_MAX = 119;
@@ -220,6 +230,8 @@ const JUGG_JUICE_DROP_CHANCE = 0.005;
 const COOLDOWN_CRISP_DROP_CHANCE = 0.003;
 /** Stat Boost Potion drop chance from mobs (extremely rare — primary source is chests). */
 const STAT_BOOST_DROP_CHANCE = 0.001;
+/** Slingshot world-drop chance, on floors that enable it, per eligible mob kill. */
+const SLINGSHOT_DROP_CHANCE = 0.005;
 
 /** Aggro indicator font size. */
 const AGGRO_INDICATOR_FONT_SIZE = 18;
@@ -632,6 +644,9 @@ export abstract class Mob extends Player {
    */
   mass = 1;
 
+  /** Set by the spawner from `LevelDef.slingshotDrops`; gates the rare world-drop roll. */
+  allowSlingshotDrop = false;
+
   /**
    * When set to a live Mob, this mob will chase and attack it as a priority target.
    * Used so that Brindled Vespa acid hits cause enemy mobs to retaliate.
@@ -974,16 +989,57 @@ export abstract class Mob extends Player {
    *   should gate the status on this, so a dodged hit doesn't still poison.
    */
   protected dealDamage(target: Player, baseDamage: number, attackType?: string): boolean {
+    return this.deliverBlow(target, this.scaledDamage(baseDamage), attackType, 'contact');
+  }
+
+  /**
+   * Level-scaled damage from a blow that never touched the victim: a projectile,
+   * a spit, a thrown weight, a reach or an area effect.
+   *
+   * Identical to {@link dealDamage} in every respect but one — reflect gear has
+   * nothing to send back down, so it doesn't.
+   */
+  protected dealRangedDamage(target: Player, baseDamage: number, attackType?: string): boolean {
+    return this.deliverBlow(target, this.scaledDamage(baseDamage), attackType, 'ranged');
+  }
+
+  /**
+   * The single route every `deal*Damage` helper resolves through, so the sound,
+   * the engagement flag and the reflect rule cannot drift apart between them.
+   */
+  private deliverBlow(
+    target: Player,
+    damage: number,
+    attackType: string | undefined,
+    delivery: MobBlowDelivery,
+  ): boolean {
     // The swing still lands audibly and visibly; only the harm is withheld.
     if (this.harmless) {
       this.attackSoundPending = true;
       return false;
     }
     const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
-    const connected = target.takeDamage(this.scaledDamage(baseDamage), source);
-    if (connected) this.noteStruckPlayer(target);
+    const connected = target.takeDamage(damage, source);
+    if (connected) {
+      this.noteStruckPlayer(target);
+      if (delivery === 'contact') this.reflectMeleeDamage(target, damage);
+    }
     this.attackSoundPending = true;
     return connected;
+  }
+
+  /**
+   * Send a share of a landed blow back at this mob when the victim's gear
+   * reflects it.
+   *
+   * Routed through `takeDamageFrom` with the crawler as the attacker so a kill
+   * by reflection credits them — otherwise thorns-style gear would quietly cost
+   * the player the XP and loot of everything it killed.
+   */
+  protected reflectMeleeDamage(target: Player, damage: number): void {
+    const pct = target.inventory.equipment.getDamageReflectPct();
+    if (pct <= 0) return;
+    this.takeDamageFrom(Math.max(1, Math.ceil(damage * pct)), target, 'melee');
   }
 
   /**
@@ -1000,15 +1056,21 @@ export abstract class Mob extends Player {
    * `harmless` early-out and the attack sound.
    */
   protected dealPreScaledDamage(target: Player, damage: number, attackType?: string): boolean {
-    if (this.harmless) {
-      this.attackSoundPending = true;
-      return false;
-    }
-    const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
-    const connected = target.takeDamage(damage, source);
-    if (connected) this.noteStruckPlayer(target);
-    this.attackSoundPending = true;
-    return connected;
+    return this.deliverBlow(target, damage, attackType, 'contact');
+  }
+
+  /**
+   * Already-sized damage from a blow that never touched the victim.
+   *
+   * {@link dealPreScaledDamage} and {@link dealRangedDamage} in one: for the
+   * area attacks priced as a share of the victim's own max HP.
+   */
+  protected dealPreScaledRangedDamage(
+    target: Player,
+    damage: number,
+    attackType?: string,
+  ): boolean {
+    return this.deliverBlow(target, damage, attackType, 'ranged');
   }
 
   /**
@@ -1660,7 +1722,14 @@ export abstract class Mob extends Player {
       items.push({ id: 'cooldown_crisp', quantity: 1 });
     if (Math.random() < STAT_BOOST_DROP_CHANCE)
       items.push({ id: 'stat_boost_potion', quantity: 1 });
+    if (this.allowSlingshotDrop && this.slingshotEligible && Math.random() < SLINGSHOT_DROP_CHANCE)
+      items.push({ id: 'slingshot', quantity: 1 });
     return items;
+  }
+
+  /** Whether this mob may roll the rare Slingshot world drop. */
+  protected get slingshotEligible(): boolean {
+    return true;
   }
 
   /** Extends Player.tickTimers to also decrement the health bar visibility timer. */

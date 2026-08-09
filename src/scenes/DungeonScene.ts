@@ -124,6 +124,8 @@ import { ArenaSystem } from '../systems/ArenaSystem';
 import { TreasureChestSystem } from '../systems/TreasureChestSystem';
 import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
 import { BallOfSwine } from '../creatures/BallOfSwine';
+import { Goblin } from '../creatures/Goblin';
+import { GoblinArcher } from '../creatures/GoblinArcher';
 
 import {
   snapPlayer,
@@ -233,7 +235,8 @@ import { GameplayScene } from './GameplayScene';
 import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
 import { TutorialMap, TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
 import { TutorialInventoryInteraction } from '../ui/TutorialInventoryInteraction';
-import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
+import { HOTBAR_REFUSAL_MESSAGE } from '../ui/InventoryInteraction';
+import { ITEM_DEF, isWearable, type ItemId } from '../core/ItemDefs';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { SmallSpider } from '../creatures/SmallSpider';
 import {
@@ -416,8 +419,25 @@ const CITY_CROWD_AMBIENT_VOLUME = 0.35;
 /** Shown via `HotbarToast` on safe-room entry, once a checkpoint is actually captured. */
 const PROGRESS_SAVED_TOAST_TEXT = 'Progress Saved...';
 
-const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);
-const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
+/** Toast shown the moment the Juicer falls and both crawlers take the ink. */
+const DESPERADO_TATTOO_NOTICE = 'New tattoo: the Desperado Pass. The Club will know you.';
+/** Its line in the Juicer chest's reward columns — an award, not an inventory item. */
+const DESPERADO_TATTOO_REWARD_LABEL = 'Desperado Pass Tattoo (both crawlers)';
+
+const FORCED_TO_HUMAN = new Set<string>([
+  'trollskin_shirt',
+  'nightgaunt_cloak',
+  'splatter_skunk_toe_ring',
+  'shade_gnoll_kneepads',
+  'grull_war_gauntlet',
+  'slingshot',
+]);
+const FORCED_TO_CAT = new Set<string>([
+  'enchanted_crown_sepsis_whore',
+  'fae_scale_crupper',
+  'slate_butterfly_talisman',
+  'bracelet_of_dex',
+]);
 
 /**
  * Which crawler must receive this item, or null when either may have it.
@@ -516,6 +536,24 @@ const MAX_CONCURRENT_ON_KILL_SPAWNS = 12;
  */
 const ON_KILL_SPAWN_CAP_RADIUS_TILES = 12;
 const ON_KILL_SPAWN_CAP_RADIUS = ON_KILL_SPAWN_CAP_RADIUS_TILES * TILE_SIZE;
+
+/** Magic Missile level that earns the cat the slate butterfly talisman. */
+const MAGIC_MISSILE_TALISMAN_LEVEL = 3;
+
+/** Kills one attack has to land at once to earn the crowd-control award. */
+const MULTIKILL_ACHIEVEMENT_THRESHOLD = 10;
+
+/**
+ * How far around the Juicer's room a troglodyte still counts as one of his
+ * guards. His minions are the gateway troglodytes standing outside the door,
+ * not in-room spawns, so the radius has to reach past the room itself while
+ * staying clear of the floor's ordinary troglodyte population.
+ */
+const BIG_BRAWLER_GUARD_RADIUS_TILES = 20;
+const BIG_BRAWLER_GUARD_RADIUS = BIG_BRAWLER_GUARD_RADIUS_TILES * TILE_SIZE;
+
+/** Spawn-table key of the mobs that guard the Juicer's gateway. */
+const TROGLODYTE_SPAWN_KEY = 'troglodyte';
 
 // Health and revival system
 const KNOCKDOWN_FRAMES = 5400;
@@ -823,6 +861,8 @@ export class DungeonScene extends GameplayScene {
   private readonly touch = new MobileTouchState();
   private krakarenKilled = false;
   private krakarenBossRoomIdx = -1;
+  private juicerKilled = false;
+  private juicerBossRoomIdx = -1;
   private woodBreakSoundIdx = 0;
   private combatCooldownFrames = 0;
   private humanHealthLow = false;
@@ -1058,6 +1098,10 @@ export class DungeonScene extends GameplayScene {
         if (id === 'health_potion') this.tutorial?.onPotionUsed();
       },
     });
+    this.menus.inventoryPanel.interaction.onBlockedHotbarDrop = () => {
+      this.audio?.play('error');
+      this.menus.announce(HOTBAR_REFUSAL_MESSAGE);
+    };
     this.chat = new ChatKit({
       world: this.world,
       abilityManager: this.abilityManager,
@@ -1105,6 +1149,11 @@ export class DungeonScene extends GameplayScene {
       bossRoom: this.bossRoom,
     };
     this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
+    // Anchored to the room he spawns into rather than to where his corpse ends
+    // up: a knockback onto a doorway or boundary tile can land his death
+    // position outside every tracked boss room, which would otherwise pin
+    // this at -1 and make the Big Brawler gauntlet permanently unclearable.
+    this.juicerBossRoomIdx = levelDef.bossRooms?.findIndex((b) => b.type === 'juicer') ?? -1;
     this.arenaRoom = new ArenaRoomSystem(this.gameMap.arenaExteriors[0]);
     this.barriers = new BarrierSystem(this.gameMap);
     this.defendQuest = new DefendQuestSystem(this.gameMap, this.bus, (mob) =>
@@ -1486,6 +1535,17 @@ export class DungeonScene extends GameplayScene {
       this.cat,
       this.audio,
     );
+    // Boss-style so the pile never fades: an achievement pays out once, and a
+    // reward that expired on the floor could not be earned a second time.
+    this.achievementUI.onRewardOverflow = (player, id, quantity) => {
+      this.destruction.loot.addLoot(
+        player.x + TILE_SIZE * TILE_CENTER_OFFSET,
+        player.y + TILE_SIZE * TILE_CENTER_OFFSET,
+        { coins: 0, items: [{ id, quantity }] },
+        player,
+        true,
+      );
+    };
 
     if (tutorialController !== null) {
       const tut = tutorialController;
@@ -1526,6 +1586,9 @@ export class DungeonScene extends GameplayScene {
       options?.floorEntryAbilityManager ?? this.abilityManager.clone();
     this.abilityManager.onLevelUp = (id, newLevel) => {
       if (id === 'mongo') this.mongoSystem.onPetLevelUp();
+      if (id === 'magic_missile' && newLevel >= MAGIC_MISSILE_TALISMAN_LEVEL) {
+        this.unlockFirstHundred();
+      }
       const def = this.abilityManager.getDef(id);
       if (def === null) return;
       this.menus.cancelInventoryDragForOverlay();
@@ -1695,6 +1758,20 @@ export class DungeonScene extends GameplayScene {
         return;
       }
 
+      if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.juicerBossRoomIdx) {
+        const baseSplit = chest.loot !== null ? splitChestLoot(chest.loot) : null;
+        this._grantChestLootSplit(baseSplit);
+        this.tutorial?.onChestOpened();
+        const juicerSplit: ChestLootSplit = {
+          humanLoot: baseSplit?.humanLoot ?? { coins: 0, items: [] },
+          catLoot: baseSplit?.catLoot ?? { coins: 0, items: [] },
+          customHumanEntries: [DESPERADO_TATTOO_REWARD_LABEL],
+        };
+        this.chestRewardDialog.open(chest, juicerSplit);
+        this.audio?.play('opening_treasure_chest');
+        return;
+      }
+
       const split = chest.loot !== null ? splitChestLoot(chest.loot) : null;
       this._grantChestLootSplit(split);
       this.tutorial?.onChestOpened();
@@ -1710,7 +1787,75 @@ export class DungeonScene extends GameplayScene {
     });
 
     this.wireEventBus();
+    this.checkFloorEntryAchievements();
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
+  }
+
+  /**
+   * One-shot awards decided by the state the party arrives in rather than by
+   * anything they do on the floor. Runs after the bus is wired so the unlock is
+   * heard, and the retroactive Magic Missile check is here because a resumed
+   * save restores ability levels silently — `onLevelUp` never fires for a level
+   * the crawler reached in an earlier session.
+   */
+  private checkFloorEntryAchievements(): void {
+    if (this.tutorial !== null) return;
+    if (this.human.inventory.equipment.getEquippedItem('Legs:Pants') === null) {
+      if (this.humanAchievements.tryUnlock('no_pants')) {
+        this.bus.emit('achievementUnlocked', { achievementId: 'no_pants', player: 'Human' });
+      }
+    }
+    if (this.abilityManager.getRealLevel('magic_missile') >= MAGIC_MISSILE_TALISMAN_LEVEL) {
+      this.unlockFirstHundred();
+    }
+  }
+
+  private unlockFirstHundred(): void {
+    if (this.tutorial !== null) return;
+    if (this.catAchievements.tryUnlock('first_hundred')) {
+      this.bus.emit('achievementUnlocked', { achievementId: 'first_hundred', player: 'Cat' });
+    }
+  }
+
+  /**
+   * Whether the Juicer is dead and none of his gateway guards are still
+   * standing — the pair of conditions the Big Brawler award needs, which can
+   * complete in either order.
+   */
+  private juicerGauntletFullyCleared(): boolean {
+    if (!this.juicerKilled) return false;
+    // -1 on a level with no Juicer gauntlet, which leaves no centre to measure
+    // his guards against.
+    if (this.juicerBossRoomIdx < 0) return false;
+    const room = this.gameMap.bossRooms[this.juicerBossRoomIdx];
+    const guards = this.countLivingMobsOfTypeNear(
+      TROGLODYTE_SPAWN_KEY,
+      room.centre.x * TILE_SIZE,
+      room.centre.y * TILE_SIZE,
+      BIG_BRAWLER_GUARD_RADIUS,
+    );
+    return guards === 0;
+  }
+
+  private tryUnlockBigBrawler(): void {
+    if (this.tutorial !== null) return;
+    if (!this.juicerGauntletFullyCleared()) return;
+    if (this.humanAchievements.tryUnlock('big_brawler')) {
+      this.bus.emit('achievementUnlocked', { achievementId: 'big_brawler', player: 'Human' });
+    }
+  }
+
+  /** Which boss room holds the given world-pixel position, or -1 if none does. */
+  private bossRoomIndexContaining(x: number, y: number): number {
+    const tileX = Math.round(x / TILE_SIZE);
+    const tileY = Math.round(y / TILE_SIZE);
+    return this.gameMap.bossRooms.findIndex(
+      (br) =>
+        tileX >= br.bounds.x &&
+        tileX < br.bounds.x + br.bounds.w &&
+        tileY >= br.bounds.y &&
+        tileY < br.bounds.y + br.bounds.h,
+    );
   }
 
   /**
@@ -1854,6 +1999,23 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
+      // The archer is a goblin to the player even though it descends from `Mob`
+      // rather than from `Goblin`, so it is named alongside it.
+      if (
+        this.tutorial === null &&
+        killer === this.human &&
+        mob.killType === 'smush' &&
+        (mob instanceof Goblin || mob instanceof GoblinArcher)
+      ) {
+        if (this.humanAchievements.tryUnlock('podophilia')) {
+          bus.emit('achievementUnlocked', { achievementId: 'podophilia', player: 'Human' });
+        }
+      }
+
+      if (mob.spawnTypeKey === TROGLODYTE_SPAWN_KEY) {
+        this.tryUnlockBigBrawler();
+      }
+
       if (mob.droppedLoot && topDamageDealer) {
         if (mob.isBoss) {
           // Boss loot goes into the boss chest, not the floor
@@ -1973,15 +2135,25 @@ export class DungeonScene extends GameplayScene {
 
       if (e.bossType === 'krakaren_clone' && !this.krakarenKilled) {
         this.krakarenKilled = true;
-        const mobTileX = Math.round(e.mob.x / TILE_SIZE);
-        const mobTileY = Math.round(e.mob.y / TILE_SIZE);
-        this.krakarenBossRoomIdx = this.gameMap.bossRooms.findIndex(
-          (br) =>
-            mobTileX >= br.bounds.x &&
-            mobTileX < br.bounds.x + br.bounds.w &&
-            mobTileY >= br.bounds.y &&
-            mobTileY < br.bounds.y + br.bounds.h,
-        );
+        this.krakarenBossRoomIdx = this.bossRoomIndexContaining(e.mob.x, e.mob.y);
+      }
+
+      if (e.bossType === 'juicer' && !this.juicerKilled) {
+        this.juicerKilled = true;
+        this.human.hasDesperadoPassTattoo = true;
+        this.cat.hasDesperadoPassTattoo = true;
+        // Announced here as well as on the chest, so a player who walks past the
+        // chest still learns the Club will now let them in.
+        this.human.queueSystemNotice(DESPERADO_TATTOO_NOTICE);
+        this.tryUnlockBigBrawler();
+      }
+    });
+
+    bus.on('multiKill', (e) => {
+      if (this.tutorial !== null) return;
+      if (e.count < MULTIKILL_ACHIEVEMENT_THRESHOLD) return;
+      if (this.humanAchievements.tryUnlock('crowd_control')) {
+        bus.emit('achievementUnlocked', { achievementId: 'crowd_control', player: 'Human' });
       }
     });
 
@@ -3051,6 +3223,8 @@ export class DungeonScene extends GameplayScene {
 
       krakarenKilled: this.krakarenKilled,
       krakarenBossRoomIdx: this.krakarenBossRoomIdx,
+      juicerKilled: this.juicerKilled,
+      juicerBossRoomIdx: this.juicerBossRoomIdx,
     };
   }
 
@@ -3115,6 +3289,8 @@ export class DungeonScene extends GameplayScene {
 
     this.krakarenKilled = world.krakarenKilled;
     this.krakarenBossRoomIdx = world.krakarenBossRoomIdx;
+    this.juicerKilled = world.juicerKilled;
+    this.juicerBossRoomIdx = world.juicerBossRoomIdx;
   }
 
   /**
@@ -3864,6 +4040,10 @@ export class DungeonScene extends GameplayScene {
 
   handleClick(mx: number, my: number, eventTimeStampMs: number): void {
     notifyButtonClick(mx, my);
+    // Before the routing chain below, because most of its branches return long
+    // before the bag is offered the click: a field left focused by a press that
+    // opened the journal or the market would go on eating that overlay's keys.
+    this.menus.blurInventorySearchUnlessClicked(mx, my);
     if (this.tutorial?.showNearGoblinDialog === true) {
       this.tutorial.dismissNearGoblinDialog();
       return;
@@ -4021,9 +4201,14 @@ export class DungeonScene extends GameplayScene {
       );
       if (slotIdx !== null) {
         const item = invPlayer.inventory.bag.slots[slotIdx];
-        if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
-          invPlayer.inventory.equip(slotIdx);
-          invPlayer.onEquipmentChanged();
+        if (isWearable(item) && this.menus.inventoryPanel.interaction.bagSlotIsInteractive(item)) {
+          // The click is spent either way — it was aimed at armour — but a
+          // refusal (wrong wearer, same id already worn) changes nothing, and
+          // announcing a change that never happened is a lie to every listener.
+          if (invPlayer.inventory.canEquipSlot(slotIdx)) {
+            invPlayer.inventory.equip(slotIdx);
+            invPlayer.onEquipmentChanged();
+          }
           return;
         }
       }
@@ -4095,7 +4280,14 @@ export class DungeonScene extends GameplayScene {
 
   handleMouseDown(mx: number, my: number): void {
     this._mouseDown = true;
-    if (this.gameOver || this.menus.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
+    // Delegated rather than swallowed: the pause menu's Equipment tab drags gear
+    // between the bag and the doll, and a drag is a press and a release, not a
+    // click. Every other tab ignores these.
+    if (this.menus.pauseMenu.isOpen) {
+      this.menus.pauseMenu.handleMouseDown(mx, my, this.human, this.cat);
+      return;
+    }
+    if (this.gameOver || this.isOverlayBlockingPointer) return;
     if (this.miniMap.isExpanded && pointInRect(mx, my, this.touch.miniMapRect)) {
       this._miniMapDragging = true;
       this._miniMapDragLastX = mx;
@@ -4108,19 +4300,27 @@ export class DungeonScene extends GameplayScene {
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
+    if (this.menus.pauseMenu.isOpen) {
+      this.menus.pauseMenu.handleMouseMove(mx, my);
+      return;
+    }
     if (this._miniMapDragging) {
       this.miniMap.pan(mx - this._miniMapDragLastX, my - this._miniMapDragLastY);
       this._miniMapDragLastX = mx;
       this._miniMapDragLastY = my;
     }
     this.menus.inventoryPanel.handleMouseMove(mx, my);
-    this.menus.gearPanel.handleMouseMove(mx, my, this.active().inventory);
+    this.menus.gearPanel.handleMouseMove(mx, my);
   }
 
   handleMouseUp(mx: number, my: number): void {
     this._mouseDown = false;
     this._miniMapDragging = false;
-    if (this.gameOver || this.menus.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
+    if (this.menus.pauseMenu.isOpen) {
+      this.menus.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
+      return;
+    }
+    if (this.gameOver || this.isOverlayBlockingPointer) return;
     this.menus.inventoryPanel.handleMouseUp(mx, my, this.menus.inventoryPlayer().inventory);
   }
 
@@ -4486,7 +4686,13 @@ export class DungeonScene extends GameplayScene {
       else if (this.tutorial === null || this.tutorial.showFollowerButton)
         UIRenderer.renderFollowerButton(ctx, this.touch, this.companion, this.human.isActive);
 
-      this.menus.inventoryPanel.render(ctx, invPlayer.inventory, invName, invPlayer.coins);
+      this.menus.inventoryPanel.render(
+        ctx,
+        invPlayer.inventory,
+        invName,
+        invPlayer.coins,
+        this.menus.inventoryWieldedWeaponId(),
+      );
       const activeName = this.human.isActive ? 'Human' : 'Cat';
       this.menus.gearPanel.render(ctx, active.inventory, activeName);
       this.destruction.dynamite.renderChargeBar(ctx, viewportWidth(), viewportHeight());
@@ -4723,6 +4929,12 @@ export class DungeonScene extends GameplayScene {
     // Last, once every surface has drawn: the ring belongs to whoever declared
     // it last, so this is the only point at which the frame's answer to "who
     // owns the keyboard" is final.
+    //
+    // The bag declares no claim of its own, so every claim in that list outranks
+    // it. Checked per frame rather than at each overlay's open, because the
+    // floor raises them from event handlers, the mobile tap path and a death the
+    // player never touched a button for.
+    if (keyboardSuppressed(this.overlayClaims)) this.menus.blurInventorySearch();
     auditOverlayFocus(this.overlayClaims, menuFocusContextId());
   }
 
@@ -5185,6 +5397,9 @@ export class DungeonScene extends GameplayScene {
       )
     ) {
       this.gameOver = true;
+      // A death arrives from the fight, not from a key or a click, so nothing
+      // else here has taken the keyboard off a bag left open behind it.
+      this.menus.cancelInventoryDragForOverlay();
       difficultyStats.recordDeath();
       this.barriers.cancelConstruct();
       const deathCause = resolveDeathCause(
@@ -5531,7 +5746,7 @@ export class DungeonScene extends GameplayScene {
           if (this.touch.pauseScrollTouchId === null) {
             this.touch.pauseScrollTouchId = touch.identifier;
             this.touch.pauseScrollTapStart = { x, y, time: Date.now() };
-            this.menus.pauseMenu.touchScrollStart(y);
+            this.menus.pauseMenu.touchScrollStart(x, y, this.human, this.cat);
           }
         } else {
           this.handleClick(x, y, e.timeStamp);
@@ -5568,7 +5783,7 @@ export class DungeonScene extends GameplayScene {
         this.touch.moveTouchId = touch.identifier;
         this.touch.moveTarget = { x, y };
         this.touch.tapStart = { x, y, time: Date.now() };
-        this.menus.pauseMenu.touchScrollStart(y);
+        this.menus.pauseMenu.touchScrollStart(x, y, this.human, this.cat);
       }
     }
   }
@@ -5600,11 +5815,11 @@ export class DungeonScene extends GameplayScene {
 
       if (touch.identifier === this.touch.moveTouchId) {
         this.touch.moveTarget = { x, y };
-        this.menus.pauseMenu.touchScrollMove(y);
+        this.menus.pauseMenu.touchScrollMove(x, y);
       }
 
       if (touch.identifier === this.touch.pauseScrollTouchId) {
-        this.menus.pauseMenu.touchScrollMove(y);
+        this.menus.pauseMenu.touchScrollMove(x, y);
       }
     }
   }
@@ -5622,15 +5837,20 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (touch.identifier === this.touch.pauseScrollTouchId) {
-        this.menus.pauseMenu.touchScrollEnd();
+        this.menus.pauseMenu.touchScrollEnd(x, y, this.human, this.cat);
         this.touch.pauseScrollTouchId = null;
         const tapStart = this.touch.pauseScrollTapStart;
         this.touch.pauseScrollTapStart = null;
         if (tapStart !== null) {
           const elapsed = Date.now() - tapStart.time;
           const moved = Math.hypot(x - tapStart.x, y - tapStart.y);
-          if (elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE) {
+          const wasTap = elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE;
+          if (wasTap) {
             this.handleClick(x, y, e.timeStamp);
+          } else {
+            // A drag ends here and nowhere else: no click follows it, so the
+            // menu's held-back click would sit waiting and eat the next tap.
+            this.menus.pauseMenu.clearSuppressedClick();
           }
         }
         continue;
@@ -5725,7 +5945,7 @@ export class DungeonScene extends GameplayScene {
             }
           }
         }
-        this.menus.pauseMenu.touchScrollEnd();
+        this.menus.pauseMenu.touchScrollEnd(x, y, this.human, this.cat);
         this.touch.moveTouchId = null;
         this.touch.moveTarget = null;
         this.touch.tapStart = null;

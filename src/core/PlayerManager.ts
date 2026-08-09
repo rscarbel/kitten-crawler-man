@@ -39,6 +39,10 @@ export class PlayerManager {
   switchActive(): void {
     this.human.isActive = !this.human.isActive;
     this.cat.isActive = !this.cat.isActive;
+    // The companion AI prices its attacks off `getMeleeDamage` and closes to
+    // reach, so a follower still holding the sling would walk into melee range
+    // and swing a weapon it cannot swing. He puts it away when he stops driving.
+    if (!this.human.isActive) this.human.wieldedWeaponId = null;
   }
 
   /** True if both party members are alive. */

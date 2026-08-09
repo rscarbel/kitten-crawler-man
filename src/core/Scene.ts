@@ -12,6 +12,7 @@ import {
   handleRebindCaptureKey,
   isRebindCaptureActive,
 } from '../ui/pause/rebindCapture';
+import { activeSearchField, endSearchCapture } from '../ui/SearchField';
 import { beginPersonFrame } from '../sprites/person/personFrameCache';
 import { perfMonitor } from './PerfMonitor';
 import { renderQuality } from './RenderQuality';
@@ -129,6 +130,16 @@ export class SceneManager {
   /** The menu {@link keysHeldWhenMenuOpened} was snapshotted for. */
   private lastMenuFocusContext: string | null = null;
 
+  /**
+   * The keys that were already down when the currently-focused search field
+   * gained focus. Their auto-repeats are leftovers from walking, not typing —
+   * without this, holding W into a click on the search field types "wwww…".
+   */
+  private readonly keysHeldWhenSearchFocused = new Set<string>();
+
+  /** The `SearchField.focusToken()` {@link keysHeldWhenSearchFocused} was snapshotted for. */
+  private lastSearchFocusToken: number | null = null;
+
   /** `performance.now()` of the last focus step, for the auto-repeat throttle. */
   private lastFocusStepAtMs = Number.NEGATIVE_INFINITY;
 
@@ -162,6 +173,7 @@ export class SceneManager {
       (e) => {
         this.heldKeys.delete(e.key);
         this.keysHeldWhenMenuOpened.delete(e.key);
+        this.keysHeldWhenSearchFocused.delete(e.key);
       },
       { capture: true },
     );
@@ -171,6 +183,7 @@ export class SceneManager {
     window.addEventListener('blur', () => {
       this.heldKeys.clear();
       this.keysHeldWhenMenuOpened.clear();
+      this.keysHeldWhenSearchFocused.clear();
     });
 
     const getPos = (e: MouseEvent) => {
@@ -267,7 +280,8 @@ export class SceneManager {
    * dismiss chains, which are the only way out of some of these menus.
    */
   private handleMenuNavigation(e: KeyboardEvent): void {
-    const pressPredatesMenu = this.trackHeldKey(e);
+    const { predatesMenu: pressPredatesMenu, predatesSearchFocus: pressPredatesSearchFocus } =
+      this.trackHeldKey(e);
 
     if (isTypingIntoTextField()) return;
 
@@ -276,6 +290,34 @@ export class SceneManager {
       e.stopPropagation();
       if (e.key === 'Escape') cancelRebindCapture();
       else if (!e.repeat) handleRebindCaptureKey(e.key);
+      return;
+    }
+
+    // A focused search field owns every key while it has capture, auto-repeats
+    // included — holding Backspace has to erase more than one character. This is
+    // also what keeps hotbar slots 1-8 and WASD out of a typed query: both live
+    // on window listeners behind this capture-phase one.
+    const searchField = activeSearchField();
+    if (searchField !== null) {
+      // A chord is aimed at the browser or the OS, never at the field: Cmd+R
+      // means reload, not the letter R. preventDefault is skipped so the
+      // browser's own action still fires, but stopPropagation still runs —
+      // otherwise the same keydown falls through to the window-level gameplay
+      // handlers (hotbar, WASD) and Cmd+1 both switches a tab and activates
+      // hotbar slot 1.
+      const isModifierChord = e.ctrlKey || e.metaKey || e.altKey;
+      if (isModifierChord) {
+        e.stopPropagation();
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      // An auto-repeat from a key held since before the click that focused this
+      // field — e.g. walking with W held, then clicking search — is movement
+      // input the field never asked for, not a keystroke; typing it would spell
+      // "wwww…" into the query.
+      if (pressPredatesSearchFocus) return;
+      searchField.handleCapturedKey(e.key);
       return;
     }
 
@@ -331,7 +373,10 @@ export class SceneManager {
    * The snapshot is taken *before* the press joins the held set, so a key struck
    * after the menu appeared is never caught by it.
    */
-  private trackHeldKey(e: KeyboardEvent): boolean {
+  private trackHeldKey(e: KeyboardEvent): {
+    predatesMenu: boolean;
+    predatesSearchFocus: boolean;
+  } {
     const contextId = menuFocusContextId();
     if (contextId !== this.lastMenuFocusContext) {
       this.lastMenuFocusContext = contextId;
@@ -339,8 +384,17 @@ export class SceneManager {
       for (const key of this.heldKeys) this.keysHeldWhenMenuOpened.add(key);
     }
     const predatesMenu = this.keysHeldWhenMenuOpened.has(e.key);
+
+    const searchFocusToken = activeSearchField()?.focusToken() ?? null;
+    if (searchFocusToken !== this.lastSearchFocusToken) {
+      this.lastSearchFocusToken = searchFocusToken;
+      this.keysHeldWhenSearchFocused.clear();
+      for (const key of this.heldKeys) this.keysHeldWhenSearchFocused.add(key);
+    }
+    const predatesSearchFocus = this.keysHeldWhenSearchFocused.has(e.key);
+
     this.heldKeys.add(e.key);
-    return predatesMenu;
+    return { predatesMenu, predatesSearchFocus };
   }
 
   /**
@@ -414,9 +468,11 @@ export class SceneManager {
     // The outgoing scene's ring outlives its last render otherwise, and a key
     // pressed before the incoming scene draws would synthesize a click at
     // coordinates belonging to a menu that is no longer on screen. An armed
-    // rebind chip would likewise eat the first key of the new scene.
+    // rebind chip would likewise eat the first key of the new scene, as would a
+    // search field left focused by the panel the outgoing scene tore down.
     clearMenuFocus();
     cancelRebindCapture();
+    endSearchCapture();
     this.current = scene;
     scene.onEnter?.();
   }

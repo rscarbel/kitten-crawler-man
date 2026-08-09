@@ -347,10 +347,25 @@ export class RockGolemBoss extends RockGolem {
     const cx = this.x + this.tileSize * CENTER_OFFSET;
     const cy = this.y + this.tileSize * CENTER_OFFSET;
     for (const target of targets) {
+      // Re-checked every iteration, not just entered with: reflect gear sends a
+      // share of the boulder back, and a boss killed by the first crawler it
+      // flattens must not go on to flatten the second.
+      if (!this.isAlive) return;
       if (!target.isAlive || this.rollHitCooldowns.has(target)) continue;
       const tx = target.x + this.tileSize * CENTER_OFFSET;
       const ty = target.y + this.tileSize * CENTER_OFFSET;
       if (Math.hypot(tx - cx, ty - cy) > this.rollContactRangePx) continue;
+
+      // Gear that cancels momentum stops the roll dead rather than absorbing it:
+      // the pass that would have flattened the wearer does nothing at all, and
+      // the boulder loses the rest of its charge on the spot.
+      if (!(target instanceof Mob) && target.inventory.equipment.getCancelsMomentum()) {
+        this.rollHitCooldowns.set(target, ROLL_HIT_COOLDOWN);
+        this.passesLeft = 0;
+        this.aim = null;
+        this.finishRoll();
+        return;
+      }
       // Half their maximum health plus a flat bite: brutal, but survivable from
       // full — a rolling boulder that one-shots is a coin flip, not a fight.
       //
@@ -366,8 +381,12 @@ export class RockGolemBoss extends RockGolem {
       // plain `takeDamage` dies unattributed — the boulder has a thrower, and
       // `takeDamageFrom` is what puts him in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
-      else if (target.takeDamage(damage, rollDamageSource(this.mobType)))
+      else if (target.takeDamage(damage, rollDamageSource(this.mobType))) {
         this.noteStruckPlayer(target);
+        // A boulder rolling over someone is contact, so reflect gear bites into
+        // it exactly as it does into a swing.
+        this.reflectMeleeDamage(target, damage);
+      }
       this.attackSoundPending = true;
       this.rollHitCooldowns.set(target, ROLL_HIT_COOLDOWN);
     }

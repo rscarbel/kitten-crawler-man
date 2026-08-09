@@ -1,8 +1,9 @@
 import type { Inventory } from '../core/Inventory';
 import { drawSkillBookIcon } from './icons/skillBookIcon';
 import { drawIssueKitIcon, isIssueKitItem } from './icons/issueKitIcon';
-import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
-import type { InventoryItem } from '../core/ItemDefs';
+import { drawEnchantedGearIcon, isEnchantedGearItem } from './icons/enchantedGearIcons';
+import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX, itemCanHotlist } from '../core/ItemDefs';
+import type { InventoryItem, ItemId } from '../core/ItemDefs';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { platform } from '../core/Platform';
 import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
@@ -13,6 +14,7 @@ import {
 } from '../sprites/gymEquipmentSprite';
 import { drawWoodPileSprite } from '../sprites/questNPCSprite';
 import { InventoryInteraction } from './InventoryInteraction';
+import { SearchField } from './SearchField';
 import { drawCooldownOverlay } from './CooldownOverlay';
 import { drawText } from './TextBox';
 import { pointInRect } from '../utils';
@@ -26,8 +28,15 @@ const SLOT_GAP = 4;
 const COLS = 4;
 const ROWS_PER_PAGE = 4; // 4×4 = 16 slots per page
 const PANEL_PAD = 12;
-const HEADER_H = 40;
 const NAV_H = 28;
+
+// Header: a title/coins line, then the search field on its own line. The field
+// gets the full inner width because the title line has none to spare — a bag
+// four slots wide leaves under 40px between "Mordecai Inventory" and the coins.
+const SEARCH_FIELD_Y = 30;
+const SEARCH_FIELD_H = 20;
+const SEARCH_FIELD_BOTTOM_PAD = 6;
+const HEADER_H = SEARCH_FIELD_Y + SEARCH_FIELD_H + SEARCH_FIELD_BOTTOM_PAD;
 
 const HOTBAR_SLOT_SIZE = 52;
 const HOTBAR_GAP = 4;
@@ -94,6 +103,15 @@ const PANEL_CLOSE_Y = 8;
 const HOTBAR_STRIP_PAD = 6;
 const HOTBAR_STRIP_EXTRA_H = 18;
 
+// Prohibition mark laid over every hotbar slot while un-hotlistable gear is dragged
+const HOTBAR_DENY_RADIUS_FRACTION = 0.3;
+const HOTBAR_DENY_COLOR = '#ef4444';
+const HOTBAR_DENY_ALPHA = 0.8;
+const HOTBAR_DENY_BAR_WIDTH = 4;
+const RIGHT_ANGLE_RADIANS = Math.PI / 2;
+/** The bar lies on the square slot's diagonal — half a right angle. */
+const HOTBAR_DENY_BAR_ANGLE = RIGHT_ANGLE_RADIANS / 2;
+
 // Slot label
 const SLOT_LABEL_BELOW_OFFSET = 4;
 const SLOT_LABEL_SIZE = 9;
@@ -103,6 +121,13 @@ const SLOT_BADGE_LETTER_OPACITY = 0.55;
 
 // Drag icon opacity
 const DRAG_ICON_ALPHA = 0.75;
+
+/**
+ * What a slot fades to when it is not really available: the slot an item was
+ * lifted out of, and — while the search field holds a query — a slot the query
+ * does not match.
+ */
+const SLOT_DIMMED_ALPHA = 0.25;
 
 // Default minimap size when not yet updated by scene
 const DEFAULT_MM_SIZE = 240;
@@ -445,8 +470,60 @@ export class InventoryPanel {
   /** Interaction handler — owns drag, context menu, and pending action state. */
   readonly interaction: InventoryInteraction;
 
+  /** Header filter. Dims non-matching slots rather than hiding them. */
+  private readonly search = new SearchField();
+
   constructor(interaction: InventoryInteraction = new InventoryInteraction()) {
     this.interaction = interaction;
+    this.interaction.claimPanelSurfaceClick = (mx, my) => {
+      if (!this.hitsSearchField(mx, my)) return false;
+      this.search.focus();
+      return true;
+    };
+    this.interaction.canInteractWithBagSlot = (item) => this.matchesSearch(item);
+  }
+
+  private hitsSearchField(mx: number, my: number): boolean {
+    return this.isOpen && this.search.hits(mx, my);
+  }
+
+  /**
+   * True when the item passes the current filter. An empty query matches
+   * everything; the id is matched alongside the name so a shorthand the player
+   * knows the item by finds it even when the display name never says it.
+   */
+  private matchesSearch(item: InventoryItem): boolean {
+    const query = this.search.normalizedQuery();
+    if (query.length === 0) return true;
+    return item.name.toLowerCase().includes(query) || item.id.toLowerCase().includes(query);
+  }
+
+  /**
+   * Drops the query and the keyboard capture with it. Called on every route the
+   * panel leaves the screen by: a stale capture would eat the world's keys with
+   * nothing on screen to show for it.
+   */
+  private resetSearch(): void {
+    this.search.blur();
+    this.search.clear();
+  }
+
+  /**
+   * Releases the keyboard without discarding what was typed — for an overlay
+   * that took the screen out from under a panel the player is coming back to.
+   */
+  blurSearch(): void {
+    this.search.blur();
+  }
+
+  /**
+   * The keyboard goes back to the game on any click the field did not receive,
+   * wherever in a scene's routing chain that click ends up being answered. The
+   * field re-takes capture from `claimPanelSurfaceClick` when the click was its
+   * own, so calling this first costs a focused field nothing.
+   */
+  blurSearchUnlessClicked(mx: number, my: number): void {
+    if (!this.hitsSearchField(mx, my)) this.search.blur();
   }
 
   private get drag() {
@@ -482,6 +559,7 @@ export class InventoryPanel {
   toggle(): void {
     if (this.isOpen) {
       this.isOpen = false;
+      this.resetSearch();
       this.returnToMenuCallback = null;
       this.onClose?.();
     } else {
@@ -642,16 +720,17 @@ export class InventoryPanel {
     inventory: Inventory,
     playerName: string,
     coins: number,
+    wieldedWeaponId: ItemId | null = null,
   ): void {
     this.renderToggleButton(ctx);
-    this.renderHotbar(ctx, inventory);
+    this.renderHotbar(ctx, inventory, wieldedWeaponId);
     if (this.isOpen) {
       this.renderPanel(ctx, inventory, playerName, coins);
     }
     // Dragged item floats on top of everything
     if (this.drag) {
       const s = SLOT_SIZE;
-      this.renderItemIcon(
+      InventoryPanel.renderItemIcon(
         ctx,
         this.drag.item,
         this.drag.mx - s / 2,
@@ -915,7 +994,15 @@ export class InventoryPanel {
     });
   }
 
-  private renderHotbar(ctx: CanvasRenderingContext2D, inventory: Inventory): void {
+  /**
+   * @param wieldedWeaponId The weapon the bar's owner is holding, which reads on
+   *   the bar exactly like worn gear — it is in hand and it is not being spent.
+   */
+  private renderHotbar(
+    ctx: CanvasRenderingContext2D,
+    inventory: Inventory,
+    wieldedWeaponId: ItemId | null,
+  ): void {
     const hb = this.hotbarRect();
     // Background strip
     drawBox(ctx, {
@@ -925,6 +1012,9 @@ export class InventoryPanel {
       height: hb.h + HOTBAR_STRIP_EXTRA_H,
       fill: 'rgba(0,0,0,0.65)',
     });
+
+    const draggedItem = this.drag?.item ?? null;
+    const deniesEverySlot = draggedItem !== null && !itemCanHotlist(draggedItem.id);
 
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = this.hotbarSlotRect(i);
@@ -938,7 +1028,8 @@ export class InventoryPanel {
         hotbarItem,
         isDragged,
         true,
-        hotbarItem !== null && inventory.hasEquipped(hotbarItem.id),
+        hotbarItem !== null &&
+          (inventory.hasEquipped(hotbarItem.id) || hotbarItem.id === wieldedWeaponId),
       );
 
       // Separator line before quest slot
@@ -962,7 +1053,41 @@ export class InventoryPanel {
         color: keyColor,
         align: 'center',
       });
+
+      // The quest slot never accepts a drop of anything — dragging any item
+      // there is a no-op, not a hotlist-specific refusal — so it's excluded
+      // here rather than marked as though it were a normal denied target.
+      if (deniesEverySlot && i !== QUEST_SLOT_IDX) this.renderDenyMark(ctx, r);
     }
+  }
+
+  /** The circle-and-bar "no" laid over a hotbar slot that refuses the drag. */
+  private renderDenyMark(
+    ctx: CanvasRenderingContext2D,
+    slot: { x: number; y: number; w: number; h: number },
+  ): void {
+    const centerX = slot.x + slot.w / 2;
+    const centerY = slot.y + slot.h / 2;
+    const radius = Math.min(slot.w, slot.h) * HOTBAR_DENY_RADIUS_FRACTION;
+
+    ctx.save();
+    ctx.globalAlpha = HOTBAR_DENY_ALPHA;
+    ctx.strokeStyle = HOTBAR_DENY_COLOR;
+    ctx.lineWidth = HOTBAR_DENY_BAR_WIDTH;
+    ctx.lineCap = 'round';
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const barDx = Math.cos(HOTBAR_DENY_BAR_ANGLE) * radius;
+    const barDy = Math.sin(HOTBAR_DENY_BAR_ANGLE) * radius;
+    ctx.beginPath();
+    ctx.moveTo(centerX - barDx, centerY + barDy);
+    ctx.lineTo(centerX + barDx, centerY - barDy);
+    ctx.stroke();
+
+    ctx.restore();
   }
 
   private renderPanel(
@@ -1035,6 +1160,14 @@ export class InventoryPanel {
       });
     }
 
+    this.search.render(
+      ctx,
+      p.x + PANEL_PAD,
+      p.y + SEARCH_FIELD_Y,
+      p.w - PANEL_PAD * 2,
+      SEARCH_FIELD_H,
+    );
+
     // Divider
     drawDivider(ctx, {
       x: p.x + INFO_DIVIDER_OFFSET_X,
@@ -1049,6 +1182,7 @@ export class InventoryPanel {
       const slotIdx = pageStart + i;
       const item = slotIdx < inventory.bag.slots.length ? inventory.bag.slots[slotIdx] : null;
       const isDragged = this.drag?.source === 'inv' && this.drag.idx === slotIdx;
+      const filteredOut = item !== null && !this.matchesSearch(item);
       const r = this.invSlotRect(i, p);
       this.renderSlot(
         ctx,
@@ -1056,7 +1190,7 @@ export class InventoryPanel {
         r.y,
         r.w,
         item,
-        isDragged,
+        isDragged || filteredOut,
         false,
         inventory.isSlotEquipped(slotIdx),
       );
@@ -1105,7 +1239,7 @@ export class InventoryPanel {
     isEquipped = false,
   ): void {
     ctx.save();
-    if (dimmed) ctx.globalAlpha = 0.25;
+    if (dimmed) ctx.globalAlpha = SLOT_DIMMED_ALPHA;
 
     const isQuestItem = isHotbar && item?.isQuestItem;
     ctx.fillStyle = isQuestItem ? '#1a2940' : isHotbar ? '#0f172a' : '#1e293b';
@@ -1121,10 +1255,10 @@ export class InventoryPanel {
     ctx.strokeRect(x, y, size, size);
 
     if (item && !dimmed) {
-      this.renderItemIcon(ctx, item, x, y, size, 1);
+      InventoryPanel.renderItemIcon(ctx, item, x, y, size, 1);
     } else if (item && dimmed) {
-      ctx.globalAlpha = 0.25;
-      this.renderItemIcon(ctx, item, x, y, size, 1);
+      ctx.globalAlpha = SLOT_DIMMED_ALPHA;
+      InventoryPanel.renderItemIcon(ctx, item, x, y, size, 1);
     }
 
     // Equipped icon badge (top-left corner)
@@ -1173,7 +1307,14 @@ export class InventoryPanel {
     ctx.restore();
   }
 
-  private renderItemIcon(
+  /**
+   * The per-item procedural icon, drawn into a square of `size` at (x, y).
+   *
+   * Static because it reads nothing off the panel: any surface that shows a bag
+   * slot — the pause menu's Equipment tab among them — needs the same picture,
+   * and a second hand-drawn copy would drift the moment an item is added.
+   */
+  static renderItemIcon(
     ctx: CanvasRenderingContext2D,
     item: InventoryItem,
     x: number,
@@ -1192,6 +1333,12 @@ export class InventoryPanel {
 
     if (isIssueKitItem(item.id)) {
       drawIssueKitIcon(ctx, x, y, size, item.id);
+      ctx.restore();
+      return;
+    }
+
+    if (isEnchantedGearItem(item.id)) {
+      drawEnchantedGearIcon(ctx, x, y, size, item.id);
       ctx.restore();
       return;
     }
@@ -1801,6 +1948,10 @@ export class InventoryPanel {
   handleClick(mx: number, my: number, inventory: Inventory): boolean {
     const p = this.panelRect();
 
+    // Repeated from the scene's own entry guard, for the callers that reach the
+    // panel without going through one.
+    this.blurSearchUnlessClicked(mx, my);
+
     return this.interaction.handleClick(
       mx,
       my,
@@ -1815,6 +1966,7 @@ export class InventoryPanel {
       },
       (o) => {
         if (!o) {
+          this.resetSearch();
           if (this.returnToMenuCallback !== null) {
             const cb = this.returnToMenuCallback;
             this.returnToMenuCallback = null;

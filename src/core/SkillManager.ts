@@ -18,7 +18,14 @@ export const SKILL_USES_GROWTH_RATE = 1.6;
 /** Ceiling shared by the whole initial roster. */
 export const SKILL_MAX_LEVEL = 5;
 
-export type SkillId = 'cockroach' | 'cat_reflexes' | 'pugilism' | 'iron_stomach' | 'night_vision';
+export type SkillId =
+  | 'cockroach'
+  | 'cat_reflexes'
+  | 'pugilism'
+  | 'iron_stomach'
+  | 'night_vision'
+  | 'iron_punch'
+  | 'powerful_strike';
 
 /** The two playable crawlers, for skill eligibility. */
 export type CrawlerKind = 'cat' | 'human';
@@ -80,6 +87,14 @@ export const PUGILISM_DAMAGE_PER_LEVEL = 1;
 /** Fraction shaved off the potion cooldown per Iron Stomach level. */
 export const IRON_STOMACH_COOLDOWN_REDUCTION_PER_LEVEL = 0.1;
 
+/** Fraction added to human melee damage per Iron Punch level, while a war gauntlet is worn. */
+export const IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL = 0.1;
+
+/** Chance per Powerful Strike level that a melee hit lands for double. */
+export const POWERFUL_STRIKE_CHANCE_PER_LEVEL = 0.04;
+/** What a Powerful Strike multiplies the blow by when it fires. */
+export const POWERFUL_STRIKE_DAMAGE_MULTIPLIER = 2;
+
 /** Extra fog radius Night Vision grants at level 1. */
 export const NIGHT_VISION_BONUS_TILES = 8;
 /** Each level past the first widens the view by one more tile. */
@@ -122,6 +137,24 @@ const SKILL_DEFS: Record<SkillId, SkillDef> = {
     name: 'Pugilism',
     flavor: 'Formalised hitting. The paperwork is the fist.',
     describeEffect: (level) => `+${PUGILISM_DAMAGE_PER_LEVEL * level} melee damage.`,
+    maxLevel: SKILL_MAX_LEVEL,
+    eligibleFor: 'human',
+  },
+  iron_punch: {
+    id: 'iron_punch',
+    name: 'Iron Punch',
+    flavor: 'The gauntlet knows the technique. You are the delivery mechanism.',
+    describeEffect: (level) =>
+      `+${Math.round(IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL * level * PERCENT)}% melee damage while a war gauntlet is worn.`,
+    maxLevel: SKILL_MAX_LEVEL,
+    eligibleFor: 'human',
+  },
+  powerful_strike: {
+    id: 'powerful_strike',
+    name: 'Powerful Strike',
+    flavor: 'Every so often the whole arm agrees with itself.',
+    describeEffect: (level) =>
+      `${Math.round(POWERFUL_STRIKE_CHANCE_PER_LEVEL * level * PERCENT)}% chance for a melee hit to land double damage.`,
     maxLevel: SKILL_MAX_LEVEL,
     eligibleFor: 'human',
   },

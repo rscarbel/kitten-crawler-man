@@ -2,6 +2,7 @@ export type PauseTab =
   | 'main'
   | 'inventory'
   | 'game'
+  | 'equipment'
   | 'journal'
   | 'stats'
   | 'spend'

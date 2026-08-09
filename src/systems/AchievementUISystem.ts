@@ -4,8 +4,10 @@
  * icon, loot box icon, and the loot-box-opener lifecycle.
  */
 
-import type { AchievementManager } from '../core/AchievementManager';
+import type { AchievementManager, BoxContents, LootBox } from '../core/AchievementManager';
 import type { AchievementDef } from '../core/AchievementManager';
+import { ACHIEVEMENT_DEFS, getBoxContents } from '../core/AchievementManager';
+import type { ItemId } from '../core/ItemDefs';
 import { AchievementNotification } from '../ui/AchievementNotification';
 import { LootBoxOpener } from '../ui/LootBoxOpener';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -38,6 +40,15 @@ export class AchievementUISystem {
    * state immediately after the normal loot box opener finishes.
    */
   onAllBoxesOpened: (() => void) | null = null;
+
+  /**
+   * Called with an achievement item reward the winner's bag has no space for.
+   * The scene drops it at their feet instead; without this the reward would be
+   * swallowed by `Inventory.addItem` and the achievement could never pay out
+   * again.
+   */
+  onRewardOverflow:
+    ((player: HumanPlayer | CatPlayer, id: ItemId, quantity: number) => void) | null = null;
 
   constructor(
     private readonly humanAchievements: AchievementManager,
@@ -196,12 +207,16 @@ export class AchievementUISystem {
     this.lootBoxOpener.startQueue(
       boxes,
       playerName,
+      (box) => this.contentsFor(box),
       (box, contents) => {
         mgr.openBox(box.id);
         if (contents.potions) target.inventory.addItem('health_potion', contents.potions);
         target.coins += contents.coins;
         if (contents.bonus && isItemId(contents.bonus.id)) {
           this.human.inventory.addItem(contents.bonus.id, contents.bonus.quantity);
+        }
+        if (contents.itemReward) {
+          this.grantItemReward(target, contents.itemReward.id, contents.itemReward.quantity);
         }
       },
       () => {
@@ -219,6 +234,26 @@ export class AchievementUISystem {
         this.audio?.play('opening_reward_box');
       },
     );
+  }
+
+  /**
+   * What a box holds: its shared tier/category contents, plus the granting
+   * achievement's own item reward (if any) as a separate addition so the
+   * reveal shows both the shared bonus and the achievement-specific item.
+   */
+  private contentsFor(box: LootBox): BoxContents {
+    const base = getBoxContents(box.tier, box.category);
+    const itemReward = ACHIEVEMENT_DEFS[box.fromAchievement].itemReward;
+    if (itemReward === undefined) return base;
+    return { ...base, itemReward: { id: itemReward.id, quantity: itemReward.quantity } };
+  }
+
+  private grantItemReward(target: HumanPlayer | CatPlayer, id: ItemId, quantity: number): void {
+    if (target.inventory.hasRoomFor(id)) {
+      target.inventory.addItem(id, quantity);
+      return;
+    }
+    this.onRewardOverflow?.(target, id, quantity);
   }
 
   // ── Rendering ──

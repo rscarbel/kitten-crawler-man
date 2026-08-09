@@ -1,5 +1,5 @@
 import type { LootBox, BoxContents } from '../core/AchievementManager';
-import { getBoxContents } from '../core/AchievementManager';
+import { ITEM_DEF, isItemId } from '../core/ItemDefs';
 import { randomFromArray, randomInt } from '../utils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawBox, drawDivider, drawProgressBar } from './Box';
@@ -159,6 +159,7 @@ export class LootBoxOpener {
   private contents: BoxContents | null = null;
   private rewardGranted = false;
   private playerName = '';
+  private getContents: ((box: LootBox) => BoxContents) | null = null;
 
   private onBoxOpened: ((box: LootBox, contents: BoxContents) => void) | null = null;
   private onAllDone: (() => void) | null = null;
@@ -196,6 +197,9 @@ export class LootBoxOpener {
    * opening them one by one automatically.
    *
    * @param boxes         Boxes to open (will be shallow-copied and sorted).
+   * @param getContents   Resolves what a box holds. Supplied by the caller so a
+   *                      box can carry rewards the shared tier/category table
+   *                      knows nothing about.
    * @param onBoxOpened   Called once per box when its reveal finishes.
    *                      Caller should grant rewards and remove the box from
    *                      the AchievementManager at this point.
@@ -204,11 +208,13 @@ export class LootBoxOpener {
   startQueue(
     boxes: LootBox[],
     playerName: string,
+    getContents: (box: LootBox) => BoxContents,
     onBoxOpened: (box: LootBox, contents: BoxContents) => void,
     onAllDone: () => void,
     onEachBoxOpening?: () => void,
   ): void {
     if (boxes.length === 0) return;
+    this.getContents = getContents;
     this.queue = [...boxes].sort((a, b) => (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0)); // ascending rarity
     this.queueIndex = 0;
     this.playerName = playerName;
@@ -420,7 +426,7 @@ export class LootBoxOpener {
 
   private loadCurrent(): void {
     this.box = this.queue[this.queueIndex];
-    this.contents = getBoxContents(this.box.tier, this.box.category);
+    this.contents = this.getContents?.(this.box) ?? null;
     this.phase = 'shaking';
     this.frame = 0;
     this.nextTimer = 0;
@@ -611,7 +617,10 @@ export class LootBoxOpener {
     // Count distinct reward lines so we can shrink text when there are 3+
     const potionCount = this.contents.potions ?? 0;
     const itemCount =
-      (potionCount > 0 ? 1 : 0) + (this.contents.coins > 0 ? 1 : 0) + (this.contents.bonus ? 1 : 0);
+      (potionCount > 0 ? 1 : 0) +
+      (this.contents.coins > 0 ? 1 : 0) +
+      (this.contents.bonus ? 1 : 0) +
+      (this.contents.itemReward ? 1 : 0);
     const itemFontSize =
       itemCount >= CONTENT_FONT_SMALL_THRESHOLD ? CONTENT_FONT_SMALL : CONTENT_FONT_NORMAL;
     const lineStep =
@@ -640,9 +649,24 @@ export class LootBoxOpener {
       y += lineStep;
     }
     if (this.contents.bonus) {
-      const name = this.contents.bonus.id.replace(/_/g, ' ');
+      const bonusId = this.contents.bonus.id;
+      const name = isItemId(bonusId) ? ITEM_DEF[bonusId].name : bonusId.replace(/_/g, ' ');
+      // The shared tier/category bonus always goes to the human, regardless of
+      // which player's box granted it.
       const bonusRecipient = this.playerName !== 'Human' ? ' → Human' : '';
       drawText(ctx, `+${this.contents.bonus.quantity} ${name}${bonusRecipient}`, {
+        x: leftX,
+        y: y - CONTENT_ITEM_Y_OFFSET,
+        size: itemFontSize,
+        color: '#fb923c',
+        align: 'center',
+        width: maxW,
+      });
+      y += lineStep;
+    }
+    if (this.contents.itemReward) {
+      const { id, quantity } = this.contents.itemReward;
+      drawText(ctx, `+${quantity} ${ITEM_DEF[id].name}`, {
         x: leftX,
         y: y - CONTENT_ITEM_Y_OFFSET,
         size: itemFontSize,

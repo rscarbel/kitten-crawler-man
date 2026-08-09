@@ -8,6 +8,7 @@ import {
   WHETSTONE_MELEE_DAMAGE_BONUS,
 } from './core/StatusEffect';
 import { Inventory } from './core/Inventory';
+import type { ResistanceType } from './core/ItemDefs';
 import { normalize } from './utils';
 import { drawText } from './ui/TextBox';
 import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
@@ -18,6 +19,7 @@ import {
   cockroachRechargeMs,
   COCKROACH_IFRAME_FRAMES,
   IRON_STOMACH_COOLDOWN_REDUCTION_PER_LEVEL,
+  getSkillDef,
   type CrawlerKind,
   type SkillId,
 } from './core/SkillManager';
@@ -164,6 +166,15 @@ const SEPSIS_TICK_INTERVAL = 120;
 const MAGIC_BURN_TICK_INTERVAL = 60;
 const ELECTRIFIED_TICK_INTERVAL = 60;
 const SPIT_VENOM_TICK_INTERVAL = 40;
+
+/** Damage every status effect deals per tick of its own interval. */
+const STATUS_TICK_DAMAGE = 1;
+
+/** Share of a damage number that survives a matching resistance. */
+export const RESISTED_DAMAGE_FRACTION = 0.5;
+
+/** The status effects a poison resistance blunts. */
+const POISON_RESISTED_EFFECTS: ReadonlySet<string> = new Set(['poison', 'spit_venom', 'sepsis']);
 
 /**
  * Default wading depth, used by every mob. Half a tile puts the surface at about
@@ -314,8 +325,14 @@ export abstract class Player {
    * a mob writes one nobody reads, exactly as it does with {@link pendingDodges}.
    */
   pendingDamageTaken = 0;
-  /** Shared inventory for this player (separate from the other player's). */
-  readonly inventory = new Inventory();
+  /**
+   * Shared inventory for this player (separate from the other player's).
+   *
+   * Built in the constructor rather than as a field initializer because the
+   * equipment manager needs the crawler kind to enforce wearer-restricted gear,
+   * and a field initializer cannot see the constructor's config.
+   */
+  readonly inventory: Inventory;
   /** Trained skills. Starts empty — every skill has to be found in the dungeon. */
   readonly skills: SkillManager;
   /**
@@ -345,6 +362,11 @@ export abstract class Player {
    * tattoo can coexist — but never two of either.
    */
   skillTattoo: SkillId | null = null;
+  /**
+   * Earned by defeating the Juicer; the Desperado Club recognizes it at the
+   * door. Permanent, one per crawler.
+   */
+  hasDesperadoPassTattoo = false;
   /**
    * Permanent stat points bought on the garrison's drill sand so far, across
    * every stat. Capped by the drill yard itself; tracked on the crawler and
@@ -427,6 +449,7 @@ export abstract class Player {
       ...config.baseStats,
     };
     this.skills = new SkillManager(config.crawlerKind ?? null);
+    this.inventory = new Inventory(config.crawlerKind ?? null);
     this._maxHpOverride = config.maxHp ?? null;
     this.hp = this.maxHp;
     this._maxHpAtLastSync = this.maxHp;
@@ -562,6 +585,16 @@ export abstract class Player {
   onEquipmentChanged(): void {
     this.syncHpToMaxHp();
   }
+
+  /**
+   * Called after this player's inventory contents changed by any path other
+   * than the dedicated wield/unwield toggle — a drop, an AI-driven removal, a
+   * tutorial reset. No-op by default; overridden where a player can hold
+   * something in hand that a bag/hotbar mutation can silently empty out from
+   * under it.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-empty-function -- base no-op; only HumanPlayer has anything in hand to lose.
+  onInventoryChanged(): void {}
 
   /** Raise or clear the god-mode flat bonus applied to every stat. Pass 0 to clear. */
   setGodModeStatBonus(bonus: number): void {
@@ -987,32 +1020,26 @@ export abstract class Player {
     for (const effect of this.statusEffects) {
       const elapsed = effect.totalTicks - effect.ticksRemaining;
       if (effect.type === 'burn' && elapsed > 0 && elapsed % BURN_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'burn', applier: effect.applier });
-        this.effectDamageSoundPending = true;
+        this.applyStatusTickDamage(effect);
       }
       if (effect.type === 'poison' && elapsed > 0 && elapsed % POISON_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'poison', applier: effect.applier });
-        this.effectDamageSoundPending = true;
+        this.applyStatusTickDamage(effect);
       }
       if (effect.type === 'sepsis' && elapsed > 0 && elapsed % SEPSIS_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'sepsis', applier: effect.applier });
-        this.effectDamageSoundPending = true;
+        this.applyStatusTickDamage(effect);
       }
       if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % MAGIC_BURN_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'magic_burn', applier: effect.applier });
-        this.effectDamageSoundPending = true;
+        this.applyStatusTickDamage(effect);
       }
       if (
         effect.type === 'electrified' &&
         elapsed > 0 &&
         elapsed % ELECTRIFIED_TICK_INTERVAL === 0
       ) {
-        this.takeDamage(1, { kind: 'status', effectType: 'electrified', applier: effect.applier });
-        this.effectDamageSoundPending = true;
+        this.applyStatusTickDamage(effect);
       }
       if (effect.type === 'spit_venom' && elapsed > 0 && elapsed % SPIT_VENOM_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'spit_venom', applier: effect.applier });
-        this.effectDamageSoundPending = true;
+        this.applyStatusTickDamage(effect);
       }
       effect.ticksRemaining--;
       const justExpired = effect.ticksRemaining < 0;
@@ -1147,6 +1174,47 @@ export abstract class Player {
     this.knockbackDistancePx = 0;
     this.knockbackTotalFrames = 0;
     this.knockbackFramesRemaining = 0;
+  }
+
+  /** True when worn gear protects this crawler against the given damage channel. */
+  resists(type: ResistanceType): boolean {
+    return this.inventory.equipment.hasResistance(type);
+  }
+
+  /**
+   * The damage a blow of the given channel still does after resistances.
+   *
+   * Rounded down rather than up so a resistance is worth something against the
+   * smallest hits too — a one-point tick resisted is a tick that does nothing.
+   */
+  resistedDamage(amount: number, type: ResistanceType): number {
+    if (!this.resists(type)) return amount;
+    return Math.max(0, Math.floor(amount * RESISTED_DAMAGE_FRACTION));
+  }
+
+  /**
+   * A skill's level as the game should read it: what the crawler trained, lifted
+   * by worn gear, never past what the skill itself can reach.
+   */
+  effectiveSkillLevel(id: SkillId): number {
+    const granted = this.inventory.equipment.getSkillLevelBonus(id);
+    return Math.min(getSkillDef(id).maxLevel, this.skills.getLevel(id) + granted);
+  }
+
+  private applyStatusTickDamage(effect: StatusEffect): void {
+    const resisted = POISON_RESISTED_EFFECTS.has(effect.type) && this.resists('poison');
+    const damage = resisted
+      ? Math.max(0, Math.floor(STATUS_TICK_DAMAGE * RESISTED_DAMAGE_FRACTION))
+      : STATUS_TICK_DAMAGE;
+    // A fully resisted tick must not reach `takeDamage`: a zero-damage hit still
+    // flashes the crawler and suppresses regen, which reads as taking harm.
+    if (damage <= 0) return;
+    this.takeDamage(damage, {
+      kind: 'status',
+      effectType: effect.type,
+      applier: effect.applier,
+    });
+    this.effectDamageSoundPending = true;
   }
 
   /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers.

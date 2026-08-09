@@ -21,6 +21,7 @@ import { AudioManager } from './audio/AudioManager';
 import { CORE_SFX_IDS } from './audio/sfxGroups';
 import { showLoadingScreen } from './ui/LoadingScreen';
 import { difficultyStats } from './core/DifficultyStats';
+import { setSearchCaptureHeldKeyRelease } from './ui/SearchField';
 
 declare const __AI_ENABLED__: boolean;
 
@@ -46,6 +47,7 @@ function resumedAbilityManager(states: GameProgress['abilityStates']): AbilityMa
 }
 
 const input = new InputManager();
+setSearchCaptureHeldKeyRelease(() => input.clear());
 const audio = new AudioManager();
 // Only the universal group (menu/UI + generic player-combat cues) decodes at
 // boot now; per-floor and per-interior SFX preload additively as the player

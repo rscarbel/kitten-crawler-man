@@ -52,6 +52,14 @@ const VALID_ITEM_IDS = new Set<string>([
   'gym_dumbbell',
   'gym_bench_press',
   'gym_treadmill',
+  'nightgaunt_cloak',
+  'slate_butterfly_talisman',
+  'fae_scale_crupper',
+  'bracelet_of_dex',
+  'splatter_skunk_toe_ring',
+  'shade_gnoll_kneepads',
+  'grull_war_gauntlet',
+  'slingshot',
 ]);
 
 function resolvePlayer(ctx: AISceneContext, target: unknown): HumanPlayer | CatPlayer {
@@ -60,13 +68,7 @@ function resolvePlayer(ctx: AISceneContext, target: unknown): HumanPlayer | CatP
 
 /** Unequip `itemId` if the player is wearing it, so it can be removed cleanly. */
 function unequipIfWorn(player: HumanPlayer | CatPlayer, itemId: ItemId): void {
-  if (!player.inventory.hasEquipped(itemId)) return;
-  const worn =
-    player.inventory.bag.slots.find((s) => s?.id === itemId) ??
-    player.inventory.actionBar.slots.find((s) => s?.id === itemId) ??
-    null;
-  if (!worn?.equipSlot || !worn.equipSubSlot) return;
-  player.inventory.unequip(`${worn.equipSlot}:${worn.equipSubSlot}`);
+  if (player.inventory.unequipById(itemId) === null) return;
   player.onEquipmentChanged();
 }
 
@@ -171,6 +173,7 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
       // to unequip it, making the bonus permanent.
       unequipIfWorn(player, itemId);
       player.inventory.removeItems(itemId, qty);
+      player.onInventoryChanged();
       break;
     }
 

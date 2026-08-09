@@ -3,6 +3,7 @@ import type { InventoryPanel } from '../ui/InventoryPanel';
 import type { GearPanel } from '../ui/GearPanel';
 import { TILE_SIZE } from '../core/constants';
 import type { Inventory } from '../core/Inventory';
+import type { ItemId } from '../core/ItemDefs';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem } from './GameSystem';
 import { pointInRect } from '../utils';
@@ -230,8 +231,9 @@ export class MobileHUDSystem implements GameSystem {
     inventory: Inventory,
     playerName: string,
     coins: number,
+    wieldedWeaponId: ItemId | null = null,
   ): void {
-    this.inventoryPanel.render(ctx, inventory, playerName, coins);
+    this.inventoryPanel.render(ctx, inventory, playerName, coins, wieldedWeaponId);
     this.gearPanel.render(ctx, inventory, playerName);
   }
 
@@ -430,9 +432,9 @@ export class MobileHUDSystem implements GameSystem {
     this.inventoryPanel.handleMouseDown(mx, my, inventory);
   }
 
-  handleMouseMove(mx: number, my: number, inventory: Inventory): void {
+  handleMouseMove(mx: number, my: number): void {
     this.inventoryPanel.handleMouseMove(mx, my);
-    this.gearPanel.handleMouseMove(mx, my, inventory);
+    this.gearPanel.handleMouseMove(mx, my);
   }
 
   handleMouseUp(mx: number, my: number, inventory: Inventory): void {

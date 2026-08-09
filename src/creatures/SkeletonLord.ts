@@ -518,20 +518,20 @@ export class SkeletonLord extends Mob {
         this.spells.addBlockXp(HANDS_BLOCK_XP);
         continue;
       }
-      // `takeDamage` rather than `dealDamage`, which is the one place in this
-      // class that route is wrong. `dealDamage` multiplies its argument by the
-      // mob-level damage scale, and this argument is *already* a fraction of the
-      // victim's own health — level-independent by construction. Scaled again at
-      // the bounty cap of level 20 it comes to nearly twice the target's maximum
-      // HP, so a single cone would be an unconditional kill on any build.
-      const connected = target.takeDamage(
-        Math.ceil(target.maxHp * HANDS_HP_FRACTION) + HANDS_BONUS_DAMAGE,
-        { kind: 'mob', mobType: this.mobType, attackType: 'grasping_hands' },
-      );
+      // `dealPreScaledRangedDamage` rather than `dealDamage`, which is the one
+      // route in this class that would be wrong here. `dealDamage` multiplies its
+      // argument by the mob-level damage scale, and this argument is *already* a
+      // fraction of the victim's own health — level-independent by construction.
+      // Scaled again at the bounty cap of level 20 it comes to nearly twice the
+      // target's maximum HP, so a single cone would be an unconditional kill on
+      // any build. It is also an area shockwave with no single point of contact
+      // for the victim's armour to bite into, so it uses the ranged delivery and
+      // does not reflect.
+      const handsDamage = Math.ceil(target.maxHp * HANDS_HP_FRACTION) + HANDS_BONUS_DAMAGE;
+      const connected = this.dealPreScaledRangedDamage(target, handsDamage, 'grasping_hands');
       // Gated on the hit landing: a dodge that avoids the damage but still roots
       // the player in the middle of the cone is worse than no dodge at all.
       if (connected) {
-        this.noteStruckPlayer(target);
         target.applyStatus(makeStuck(HANDS_STUCK_FRAMES));
       }
     }

@@ -59,7 +59,7 @@ export class CityElfCultist extends Mob {
     if (this.castAnimTimer > 0) this.castAnimTimer--;
 
     this.bolts = advanceSoulBolts(this.bolts, this.map, this.tileSize, targets, (t) =>
-      this.dealDamage(t, BOLT_DAMAGE),
+      this.dealRangedDamage(t, BOLT_DAMAGE),
     );
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
