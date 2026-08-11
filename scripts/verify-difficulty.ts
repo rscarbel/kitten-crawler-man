@@ -69,6 +69,7 @@ import { FatClown, CLOWN_MAX_SPEED as FAT_CLOWN_MAX_SPEED } from '../src/creatur
 import { Mantid, MANTID_MAX_SPEED } from '../src/creatures/Mantid';
 import { MantisCrony, MANTIS_MAX_SPEED } from '../src/creatures/MantisCrony';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
+import { TheLich, HANDS_WINDUP_FRAMES, LICH_MAX_SPEED } from '../src/creatures/TheLich';
 import {
   DIFFICULTY_PROFILES,
   NORMAL_AMBIENT_LEVEL_RATIO,
@@ -242,6 +243,12 @@ section('telegraphs');
   }
   check(archerLockIsEnough, "both of the goblin archer's shots lock their aim for long enough");
   check(archerTracksFirst, 'each archer shot tracks its target before it commits');
+
+  check(
+    HANDS_WINDUP_FRAMES >= MIN_LOCKED_TELEGRAPH_FRAMES,
+    "the Lich's grasping-hands windup stays locked for at least " +
+      `${MIN_LOCKED_TELEGRAPH_FRAMES} frames`,
+  );
 
   // The release has to land *inside* the animation. If a retune ever pushed it
   // to or past the last frame the timer would run to zero without matching, and
@@ -547,6 +554,7 @@ const SPEED_CAPPED_MOBS: ReadonlyArray<{ name: string; make: () => Mob; cap: num
   { name: 'FatClown', make: () => new FatClown(0, 0, TILE_SIZE), cap: FAT_CLOWN_MAX_SPEED },
   { name: 'Mantid', make: () => new Mantid(0, 0, TILE_SIZE), cap: MANTID_MAX_SPEED },
   { name: 'MantisCrony', make: () => new MantisCrony(0, 0, TILE_SIZE), cap: MANTIS_MAX_SPEED },
+  { name: 'TheLich', make: () => new TheLich(0, 0, TILE_SIZE), cap: LICH_MAX_SPEED },
 ];
 
 /** Base speed for {@link SpeedCapTestMob} — high enough that level 20 clearly exceeds its cap. */

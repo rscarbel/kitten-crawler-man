@@ -14,7 +14,7 @@
  * inside `GameMap.generateInterior` — re-arrange a room and the occupants follow
  * the furniture.
  *
- * Never constructed for a live quest-encounter interior (Big Top boss, cult
+ * Never constructed for a live quest-encounter interior (the Big Top maze, cult
  * hideout, tower confrontation): the scene passes `null` occupants whenever its
  * combat stack is active, mirroring the gate `initEntryEncounter` uses.
  */

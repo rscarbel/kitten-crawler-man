@@ -1,5 +1,5 @@
 /**
- * Places the reinforcements the Skeleton Lord calls up, and holds the ceiling on
+ * Places the reinforcements a skeleton caster calls up, and holds the ceiling on
  * how many of them can exist.
  *
  * The Hoarder pattern: the boss queues requests and a system drains them, so the
@@ -19,20 +19,33 @@
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { SkeletonLord } from '../creatures/SkeletonLord';
+import { TheLich } from '../creatures/TheLich';
 import { SkeletonWarrior } from '../creatures/SkeletonWarrior';
 import { SkeletonArcher } from '../creatures/SkeletonArcher';
 import { RisingSkeleton } from '../creatures/RisingSkeleton';
 import { TILE_SIZE } from '../core/constants';
+import { hasRoomToMove } from '../map/findWalkableTile';
 import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 /**
- * Living escorts allowed at once.
+ * Living escorts the Skeleton Lord is allowed at once.
  *
  * Two waves' worth plus the three he starts with. Past that the party is fighting
  * a crowd rather than a boss, and the lord himself becomes unreachable behind it.
+ *
+ * It is his number rather than the system's because the ceiling is a property of
+ * the ground the fight happens on: the Lich holds the same escort inside a single
+ * tower room and carries a far lower one of its own.
  */
-const ESCORT_CAP = 9;
+const SKELETON_LORD_ESCORT_CAP = 9;
+
+/** Anything that queues reinforcements for this system to place. */
+type SkeletonSummoner = SkeletonLord | TheLich;
+
+function escortCapOf(summoner: SkeletonSummoner): number {
+  return summoner instanceof TheLich ? summoner.escortCap : SKELETON_LORD_ESCORT_CAP;
+}
 
 /** Rings of tiles searched outward from the lord for somewhere to put a summon. */
 const MIN_SPAWN_RADIUS_TILES = 2;
@@ -71,35 +84,43 @@ export class SkeletonSummonSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
-    const lords = ctx.roster.mobs.filter(
-      (mob): mob is SkeletonLord => mob instanceof SkeletonLord && mob.isAlive,
+    const summoners = ctx.roster.mobs.filter(
+      (mob): mob is SkeletonSummoner =>
+        (mob instanceof SkeletonLord || mob instanceof TheLich) && mob.isAlive,
     );
-    if (lords.length === 0) return;
+    if (summoners.length === 0) return;
 
     const escortRadiusPx = TILE_SIZE * ESCORT_RADIUS_TILES;
     const skeletons = ctx.roster.mobs.filter(
       (mob): mob is RisingSkeleton => mob instanceof RisingSkeleton && mob.isAlive,
     );
 
-    for (const lord of lords) {
+    for (const summoner of summoners) {
+      const cap = escortCapOf(summoner);
       let living = 0;
       for (const skeleton of skeletons) {
-        if (Math.hypot(skeleton.x - lord.x, skeleton.y - lord.y) <= escortRadiusPx) living++;
+        if (Math.hypot(skeleton.x - summoner.x, skeleton.y - summoner.y) <= escortRadiusPx)
+          living++;
       }
-      for (const request of lord.takePendingSummons()) {
+      for (const request of summoner.takePendingSummons()) {
         // A rising skeleton is already alive and already counted, so the cap can
         // never be double-booked by a wave that has not finished climbing out.
-        if (living >= ESCORT_CAP) continue;
+        if (living >= cap) continue;
         const tile = this.findSpawnTile(request.originX, request.originY);
         if (tile === null) continue;
-        this.raise(request.kind, tile.x, tile.y, lord);
+        this.raise(request.kind, tile.x, tile.y, summoner);
         living++;
       }
-      lord.escortAtCap = living >= ESCORT_CAP;
+      summoner.escortAtCap = living >= cap;
     }
   }
 
-  private raise(kind: 'sword' | 'archer', tileX: number, tileY: number, lord: SkeletonLord): void {
+  private raise(
+    kind: 'sword' | 'archer',
+    tileX: number,
+    tileY: number,
+    summoner: SkeletonSummoner,
+  ): void {
     const risen =
       kind === 'sword'
         ? new SkeletonWarrior(tileX, tileY, TILE_SIZE)
@@ -107,7 +128,7 @@ export class SkeletonSummonSystem implements GameSystem {
     risen.setMap(this.gameMap);
     // The flags BountySystem would have applied at issue time. Summons never
     // pass through it, so they are applied here — exactly once each.
-    risen.applyMobLevel(lord.mobLevel);
+    risen.applyMobLevel(summoner.mobLevel);
     applyActiveDifficultyRewards(risen);
     risen.ignoresTownSafeZone = true;
     // Deliberately unleashed: they climb out into a fight that is already
@@ -119,16 +140,21 @@ export class SkeletonSummonSystem implements GameSystem {
   }
 
   /**
-   * Finds open ground near the lord to raise something on.
+   * Finds open ground near the summoner to raise something on.
    *
    * Searched outward from a minimum radius rather than from zero: a warrior that
-   * climbs out on top of the lord blocks the very shot he was buying time for,
+   * climbs out on top of the caster blocks the very shot it was buying time for,
    * and the two immediately shove each other apart, which looks like a bug.
+   *
+   * Placement demands room to move rather than mere walkability: a one-tile
+   * pocket between a desk and a wall passes `isWalkable` and traps whatever
+   * rises in it for the rest of the fight.
    */
   private findSpawnTile(originX: number, originY: number): { x: number; y: number } | null {
     const centreTileX = Math.floor(originX / TILE_SIZE);
     const centreTileY = Math.floor(originY / TILE_SIZE);
-    const candidates: Array<{ x: number; y: number }> = [];
+    const roomy: Array<{ x: number; y: number }> = [];
+    const cramped: Array<{ x: number; y: number }> = [];
     for (let radius = MIN_SPAWN_RADIUS_TILES; radius <= MAX_SPAWN_RADIUS_TILES; radius++) {
       for (let dy = -radius; dy <= radius; dy++) {
         for (let dx = -radius; dx <= radius; dx++) {
@@ -136,15 +162,18 @@ export class SkeletonSummonSystem implements GameSystem {
           const tileX = centreTileX + dx;
           const tileY = centreTileY + dy;
           if (!this.gameMap.isWalkable(tileX, tileY)) continue;
-          candidates.push({ x: tileX, y: tileY });
+          if (hasRoomToMove(this.gameMap, tileX, tileY)) roomy.push({ x: tileX, y: tileY });
+          else cramped.push({ x: tileX, y: tileY });
         }
       }
       // Picked at random from the whole ring rather than taking the first hit,
-      // so a wave does not always come up on the lord's western side.
-      if (candidates.length > 0) {
-        return candidates[Math.floor(Math.random() * candidates.length)];
-      }
+      // so a wave does not always come up on the caster's western side.
+      if (roomy.length > 0) return roomy[Math.floor(Math.random() * roomy.length)];
     }
+    // Nowhere with elbow room inside the search: a cramped tile still beats
+    // swallowing the summon outright, and indoors — where a room is furniture
+    // wall to wall — it is often the only kind there is.
+    if (cramped.length > 0) return cramped[Math.floor(Math.random() * cramped.length)];
     return null;
   }
 }

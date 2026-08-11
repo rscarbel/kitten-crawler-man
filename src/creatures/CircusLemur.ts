@@ -19,7 +19,8 @@ const LEMUR_SPEED = 2.6;
  * further speed, but the circus's already-faster feel is unchanged.
  */
 export const LEMUR_MAX_SPEED = LEMUR_SPEED;
-const AGGRO_RANGE_TILES = 7;
+/** How far a circus lemur notices from. Exported for the bounty troupe's regression gate. */
+export const CIRCUS_LEMUR_AGGRO_RANGE_TILES = 7;
 const MELEE_RANGE_TILES = 0.9;
 /** Frames between nip attacks (~0.67 s at 60 fps) — fast, weak swarm bites. */
 const MELEE_COOLDOWN = 40;
@@ -92,7 +93,7 @@ export class CircusLemur extends Mob {
 
     this.updateKnives(targets);
 
-    const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
+    const aggroRangePx = this.tileSize * CIRCUS_LEMUR_AGGRO_RANGE_TILES;
     const meleeRangePx = this.tileSize * MELEE_RANGE_TILES;
     const knifeRangePx = this.tileSize * KNIFE_RANGE_TILES;
     const nearest = this.acquireTarget(targets, aggroRangePx);

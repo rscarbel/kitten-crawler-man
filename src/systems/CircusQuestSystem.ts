@@ -7,8 +7,9 @@
  *   fuel it) → she tells the story of Signet the Bastard and Grimaldi, takes
  *   Mongo as collateral, and sends you after Heather the Bear → her blood
  *   fuels the Ink Marauder ritual → tattoo-army assault clears the sideshow
- *   waves → the Big Top unlocks (BigTopBossSystem fights Grimaldi indoors)
- *   → return to Signet for the resolution.
+ *   waves → the Big Top unlocks (BigTopMazeSystem runs the trap maze indoors,
+ *   which ends with Grimaldi cured rather than killed) → the party is set down
+ *   at the tent door and the resolution plays itself.
  *
  * Cross-scene state lives in CircusQuestProgress; every stage is
  * entry-idempotent so building round-trips reconstruct cleanly.
@@ -25,6 +26,8 @@ import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Player } from '../Player';
 import { QuestManager, type QuestStatus } from '../core/QuestManager';
+import { partyLevelOf } from '../levels/spawner';
+import { questMobLevel } from './questMobLevel';
 import type { TrackerEntry } from './questTracker';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { OverworldMusicSystem } from './OverworldMusicSystem';
@@ -60,6 +63,12 @@ export const CIRCUS_QUEST_ID = 'the_show_must_go_on';
 /** How far a scripted spawn may be nudged to find a walkable tile. */
 const SPAWN_SEARCH_RADIUS_TILES = 6;
 /**
+ * The level the wave tables are tuned at — base stats, no scaling. Every wave
+ * mob is a floor-3 troupe member whose fight is authored by its own kit rather
+ * than by a level, so the only thing that lifts it is the party floor.
+ */
+const WAVE_AUTHORED_LEVEL = 1;
+/**
  * Wave spawns stay this far inside the circus boundary. The outermost ring of
  * the grounds abuts the wilderness, where forest can leave a walkable tile
  * fenced in by trees — an enemy there is unreachable and the wave never ends.
@@ -83,6 +92,42 @@ const BLOOD_FUELED_SUMMON_FRAMES = 300;
 /** Lifespan of the single marauder that fizzles when the first ritual fails. */
 const FIZZLE_MARAUDER_LIFESPAN_FRAMES = 80;
 const BATTLE_MUSIC_FADE_IN_MS = 1000;
+/** The bottle Signet hands over before the Big Top, which its last act is performed with. */
+const BIGTOP_POTION_ITEM_ID = 'health_potion';
+const BIGTOP_POTION_QUANTITY = 1;
+/**
+ * How far a wave mob's own A* searches may reach.
+ *
+ * A wave hunts the player anywhere on the grounds, so the route it needs is the
+ * full circus diameter plus whatever detour the five small tents force — well
+ * past the map-wide default, at which distance `findPath` returns nothing and
+ * the straight-line fallback walks the mob into the tent it meant to go round.
+ * Set per instance so no other mob on floor 3 pays for it.
+ */
+const CIRCUS_WAVE_PATH_BUDGET_TILES = 40;
+/**
+ * How long a wave mob may make no real progress before it is rescued.
+ *
+ * Measured in pixels travelled rather than off `isMoving`, which means "tried to
+ * walk" — a mob shaving along a tent wall reports moving every frame of the
+ * minute it spends going nowhere.
+ */
+const WAVE_STALL_WINDOW_FRAMES = 45;
+/** Travel over that window which still counts as standing still. */
+const WAVE_STALL_TRAVEL_PX = 2;
+/**
+ * Stalls survived by a repath alone before the mob is picked up and put down
+ * again. One repath fixes a stale route; a mob that re-stalls immediately is
+ * wedged on geometry no route can undo.
+ */
+const WAVE_STALL_REPATHS_BEFORE_LIFT = 2;
+/**
+ * Inside this range of the player, standing still is fighting rather than
+ * wedging — a mob at its attack distance is supposed to stop.
+ */
+const WAVE_STALL_MIN_DISTANCE_TILES = 3;
+/** How far toward the player a lifted mob is set down. */
+const WAVE_STALL_LIFT_STEP_TILES = 2;
 
 type CircusQuestPhase =
   | 'awaiting_intro'
@@ -104,6 +149,16 @@ const BIGTOP_DOOR_PHASES: ReadonlySet<CircusQuestPhase> = new Set([
   'bigtop_ready',
   'awaiting_resolution',
 ]);
+
+/** Where a wave mob stood when its progress was last measured, and how it fared. */
+interface WaveStallWatch {
+  x: number;
+  y: number;
+  /** Frames since the last measurement. */
+  frames: number;
+  /** Consecutive stalls this mob has been repathed out of without moving since. */
+  repaths: number;
+}
 
 interface WaveSpawn {
   dx: number;
@@ -175,8 +230,13 @@ export class CircusQuestSystem implements GameSystem {
   private signet: Signet | null = null;
   private heather: HeatherTheBear | null = null;
 
+  /** Whether the closing conversation has already opened itself. */
+  private resolutionAutoOpened = false;
+
   private waveIndex = 0;
   private waveMobs: Mob[] = [];
+  /** Per-wave-mob displacement history, read by `rescueStalledMob`. */
+  private readonly stallWatch = new Map<Mob, WaveStallWatch>();
 
   private readonly dialog: QuestDialog;
 
@@ -185,6 +245,13 @@ export class CircusQuestSystem implements GameSystem {
   private completeOverlayTimer = 0;
   /** Latest frame context — lets dialog callbacks reach the live mob list (e.g. Mongo dismissal). */
   private lastCtx: SystemContext | null = null;
+  /**
+   * The party level scripted spawns are levelled against. Seeded from the
+   * constructor's player because stage re-entry spawns mobs before the first
+   * `update`, then kept current from the frame context, which is the only place
+   * the parked crawler's level is visible.
+   */
+  private partyLevel: number;
 
   constructor(
     private readonly gameMap: GameMap,
@@ -202,7 +269,10 @@ export class CircusQuestSystem implements GameSystem {
       name: 'The Show Must Go On',
       type: 'story',
       rewards: {
-        xp: 1000,
+        // Folds in the 800 the tent's boss used to pay: the finale is a rescue
+        // now, and nothing in there is killed, so the questline has to carry
+        // that XP itself or floor-three progression quietly drops by a boss.
+        xp: 1800,
         lootBoxItems: [
           { id: 'health_potion', minQty: 3, maxQty: 6 },
           { id: 'stat_boost_potion', minQty: 1, maxQty: 2 },
@@ -221,6 +291,7 @@ export class CircusQuestSystem implements GameSystem {
     }
     this.bigTopDoorTile =
       gameMap.buildingEntries.find((b) => b.name === 'Big Top')?.doorTile ?? null;
+    this.partyLevel = initialActivePlayer.level;
 
     if (this.circusCentre) this.enterStageFromProgress(initialActivePlayer);
   }
@@ -269,13 +340,16 @@ export class CircusQuestSystem implements GameSystem {
         this.questManager.startQuest(CIRCUS_QUEST_ID);
         this.spawnSignetAtBigTopDoor();
         break;
-      case 'grimaldi_slain':
+      case 'grimaldi_redeemed':
         this.phase = 'awaiting_resolution';
         this.questManager.startQuest(CIRCUS_QUEST_ID);
         this.spawnSignetAtBigTopDoor();
         break;
       case 'complete':
         this.phase = 'complete';
+        // She keeps her post-quest post outside the Big Top rather than
+        // vanishing the first time a building visit rebuilds the scene.
+        this.spawnSignetAtBigTopDoor();
         break;
     }
   }
@@ -390,11 +464,13 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   private spawnHeather(origin: { x: number; y: number }): void {
-    const tile = this.findSpawnTile(origin.x + HEATHER_SPAWN_OFFSET_TILES, origin.y);
+    // Arena-constrained like a wave mob: outside the grounds the offset can drop
+    // her into forest, where a walkable tile fenced in by trunks strands her.
+    const tile = this.findArenaSpawnTile(origin.x + HEATHER_SPAWN_OFFSET_TILES, origin.y);
     if (!tile) return;
     const heather = new HeatherTheBear(tile.x, tile.y, TILE_SIZE);
     heather.setMap(this.gameMap);
-    heather.applyMobLevel(HEATHER_LEVEL);
+    heather.applyMobLevel(questMobLevel(HEATHER_LEVEL, this.partyLevel));
     applyActiveDifficultyRewards(heather);
     this.heather = heather;
     this.addMob(heather);
@@ -413,10 +489,20 @@ export class CircusQuestSystem implements GameSystem {
       if (!tile) continue;
       const mob = make(tile.x, tile.y);
       mob.setMap(this.gameMap);
+      // Waves are authored at base stats, so their whole level comes from the
+      // party floor — without it the circus is a level-1 encounter no matter
+      // when the player walks into it.
+      mob.applyMobLevel(questMobLevel(WAVE_AUTHORED_LEVEL, this.partyLevel));
+      applyActiveDifficultyRewards(mob);
       mob.forceAggro = true;
+      // Instance-scoped, never on the class: `StiltClown`, `FatClown` and
+      // `CircusLemur` are the Evil Clown bounty's troupe as well, and a wider
+      // route budget out in the wilderness is not what that fight was tuned on.
+      mob.pathDistanceBudgetTiles = CIRCUS_WAVE_PATH_BUDGET_TILES;
       this.addMob(mob);
       this.waveMobs.push(mob);
     }
+    this.stallWatch.clear();
   }
 
   /** Mold lions come out of the circus toward Signet's casting. */
@@ -440,11 +526,115 @@ export class CircusQuestSystem implements GameSystem {
    *   `MOB_MAX_PATH_DISTANCE_TILES` no route can be found at all, so a mob
    *   stranded out there never returns and the wave never clears.
    */
-  private keepWaveMobsEngaged(mobGrid: SpatialGrid<Mob>): void {
+  private keepWaveMobsEngaged(mobGrid: SpatialGrid<Mob>, active: Player): void {
     for (const mob of this.waveMobs) {
       if (!mob.isAlive) continue;
       mob.forceAggro = true;
       this.holdMobOnGrounds(mob, mobGrid);
+      this.rescueStalledMob(mob, mobGrid, active);
+    }
+    this.forgetDeadStallWatches();
+  }
+
+  /**
+   * Frees a wave mob that has stopped making ground on the player.
+   *
+   * A mob shaving along a tent wall takes a successful sidestep every frame, so
+   * neither `isMoving` nor the mob's own stuck counters ever fire — only real
+   * displacement measured over a window can tell the difference between hunting
+   * and grinding. The first remedy is a fresh route from where it actually
+   * stands; a mob that re-stalls straight afterwards is wedged on geometry no
+   * route undoes, and gets carried a couple of tiles toward its quarry.
+   */
+  private rescueStalledMob(mob: Mob, mobGrid: SpatialGrid<Mob>, active: Player): void {
+    const distanceToPlayer = Math.hypot(active.x - mob.x, active.y - mob.y);
+    if (distanceToPlayer <= TILE_SIZE * WAVE_STALL_MIN_DISTANCE_TILES) {
+      // Standing at its attack distance is the mob doing its job.
+      this.stallWatch.delete(mob);
+      return;
+    }
+    // A mob that can see its quarry is not wedged behind a tent — it is winding
+    // up, throwing, or being crowded by the pack in front of it. This is what
+    // the rescue must not touch: the knife-throwing lemurs stand perfectly still
+    // to aim, and picking one of those up and putting it two tiles closer is the
+    // encounter shoving the player rather than the mob getting unstuck.
+    const halfTile = TILE_SIZE / 2;
+    if (
+      this.gameMap.hasLineOfSight(
+        mob.x + halfTile,
+        mob.y + halfTile,
+        active.x + halfTile,
+        active.y + halfTile,
+      )
+    ) {
+      this.stallWatch.delete(mob);
+      return;
+    }
+
+    const watch = this.stallWatch.get(mob);
+    if (watch === undefined) {
+      this.stallWatch.set(mob, { x: mob.x, y: mob.y, frames: 0, repaths: 0 });
+      return;
+    }
+
+    watch.frames++;
+    if (watch.frames < WAVE_STALL_WINDOW_FRAMES) return;
+
+    const travelled = Math.hypot(mob.x - watch.x, mob.y - watch.y);
+    watch.frames = 0;
+    watch.x = mob.x;
+    watch.y = mob.y;
+    if (travelled >= WAVE_STALL_TRAVEL_PX) {
+      watch.repaths = 0;
+      return;
+    }
+
+    watch.repaths++;
+    if (watch.repaths <= WAVE_STALL_REPATHS_BEFORE_LIFT) {
+      mob.forceRepath();
+      return;
+    }
+    watch.repaths = 0;
+    this.liftMobTowardPlayer(mob, mobGrid, active);
+  }
+
+  /** Sets a wedged mob down on open ground a couple of tiles nearer its quarry. */
+  private liftMobTowardPlayer(mob: Mob, mobGrid: SpatialGrid<Mob>, active: Player): void {
+    const toPlayerX = active.x - mob.x;
+    const toPlayerY = active.y - mob.y;
+    const distance = Math.hypot(toPlayerX, toPlayerY);
+    if (distance === 0) return;
+    const stepTiles = WAVE_STALL_LIFT_STEP_TILES;
+    const targetTileX = Math.round(
+      (mob.x + (toPlayerX / distance) * stepTiles * TILE_SIZE) / TILE_SIZE,
+    );
+    const targetTileY = Math.round(
+      (mob.y + (toPlayerY / distance) * stepTiles * TILE_SIZE) / TILE_SIZE,
+    );
+    const tile = this.findArenaSpawnTile(targetTileX, targetTileY);
+    if (!tile) return;
+
+    const preMoveX = mob.x;
+    const preMoveY = mob.y;
+    mob.x = tile.x * TILE_SIZE;
+    mob.y = tile.y * TILE_SIZE;
+    // Without the grid move the mob's hit-test entry stays in the cell it left,
+    // so every swing at it afterwards passes through empty air.
+    mobGrid.move(mob, preMoveX, preMoveY);
+    mob.forceRepath();
+  }
+
+  /**
+   * Drops watches for wave mobs that have died.
+   *
+   * The map keys on the mob rather than living beside `waveMobs` because a wave
+   * is replaced wholesale on the next spawn and a checkpoint restore swaps the
+   * list out from under it — an index-aligned array would silently start
+   * describing a different creature.
+   */
+  private forgetDeadStallWatches(): void {
+    for (const mob of this.stallWatch.keys()) {
+      if (!mob.isAlive) this.stallWatch.delete(mob);
     }
   }
 
@@ -525,6 +715,9 @@ export class CircusQuestSystem implements GameSystem {
     this.phase = snapshot.phase;
     this.waveIndex = snapshot.waveIndex;
     this.waveMobs = [...snapshot.waveMobs];
+    // The rewind teleports every survivor back to its spawn tile, so every
+    // recorded position describes ground the mob is no longer standing on.
+    this.stallWatch.clear();
     this.signet = snapshot.signet;
     this.heather = snapshot.heather;
 
@@ -643,17 +836,15 @@ export class CircusQuestSystem implements GameSystem {
           {
             ...base,
             status: 'active',
-            objective: 'Take the ring under the Big Top',
-            hint: 'The Tsarina waits at the tent door.',
+            objective: 'Brave the Big Top',
+            hint: 'The tent is trapped end to end, and the two of you go in by different flaps.',
             target: this.bigTopDoorTile ?? atSignet,
           },
         ];
       case 'awaiting_resolution':
-        return [
-          { ...base, status: 'active', objective: 'Settle up with the Tsarina', target: atSignet },
-        ];
+        return [{ ...base, status: 'active', objective: 'Return to Signet', target: atSignet }];
       case 'complete':
-        return [{ ...base, status: 'completed', objective: 'The show went on' }];
+        return [{ ...base, status: 'completed', objective: 'The show is over' }];
     }
   }
 
@@ -698,7 +889,7 @@ export class CircusQuestSystem implements GameSystem {
         this.dialog.open(HEATHER_RETURN_DIALOG, () => this.startAssault());
         return true;
       case 'bigtop_ready':
-        this.dialog.open(BIGTOP_READY_DIALOG, () => undefined);
+        this.dialog.open(BIGTOP_READY_DIALOG, () => this.giveBigTopPotion(active));
         return true;
       case 'awaiting_resolution':
         this.dialog.open(buildResolutionDialog(this.progress.mongoKidnapped), () =>
@@ -711,6 +902,20 @@ export class CircusQuestSystem implements GameSystem {
       case 'complete':
         return false;
     }
+  }
+
+  /**
+   * Hands over the bottle her briefing promises.
+   *
+   * The tent's last act is performed with a health potion, and the quest must
+   * not be able to dead-end on an empty pack — so the potion that ends it is
+   * given rather than assumed. Once per run: her briefing can be replayed as
+   * often as the player walks back to her.
+   */
+  private giveBigTopPotion(active: Player): void {
+    if (this.progress.bigTopPotionGiven) return;
+    this.progress.bigTopPotionGiven = true;
+    active.inventory.addItem(BIGTOP_POTION_ITEM_ID, BIGTOP_POTION_QUANTITY);
   }
 
   /** Space-key interaction: opens Signet's dialog for the current stage when in range. */
@@ -794,6 +999,7 @@ export class CircusQuestSystem implements GameSystem {
 
   update(ctx: SystemContext): void {
     this.lastCtx = ctx;
+    this.partyLevel = partyLevelOf(ctx.human.level, ctx.cat.level);
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
     if (this.bannerTimer > 0) this.bannerTimer--;
 
@@ -817,18 +1023,38 @@ export class CircusQuestSystem implements GameSystem {
         this.clampToCircus(ctx.cat);
         this.updateAssault(ctx);
         break;
+      case 'awaiting_resolution':
+        this.autoOpenResolution(ctx.active);
+        break;
       case 'awaiting_intro':
       case 'awaiting_ritual_failed':
       case 'awaiting_heather_return':
       case 'bigtop_ready':
-      case 'awaiting_resolution':
       case 'complete':
         break;
     }
   }
 
+  /**
+   * Opens the closing conversation without a walk-up.
+   *
+   * The party is put down at the tent door by the cure itself, mid-cut, and
+   * Signet has been standing there the whole time assuming they went in to kill
+   * her father — making the player walk two tiles to be told otherwise would put
+   * a pause in the one beat of the questline that must not have one.
+   *
+   * Once only. Escape closes the box without finishing the quest, and reopening
+   * it every frame after would be a modal the player cannot get out of; from
+   * there the ordinary walk-up-and-talk still finishes it.
+   */
+  private autoOpenResolution(active: Player): void {
+    if (this.resolutionAutoOpened || this.dialog.isOpen) return;
+    this.resolutionAutoOpened = true;
+    this.openDialogForCurrentPhase(active);
+  }
+
   private updateRitualDefense(ctx: SystemContext): void {
-    this.keepWaveMobsEngaged(ctx.roster.grid);
+    this.keepWaveMobsEngaged(ctx.roster.grid, ctx.active);
     if (this.waveMobs.some((m) => m.isAlive)) return;
 
     if (this.waveIndex + 1 < RITUAL_WAVES.length) {
@@ -865,7 +1091,7 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   private updateAssault(ctx: SystemContext): void {
-    this.keepWaveMobsEngaged(ctx.roster.grid);
+    this.keepWaveMobsEngaged(ctx.roster.grid, ctx.active);
     if (this.waveMobs.some((m) => m.isAlive)) return;
 
     this.bus.emit('objectiveComplete', { objectiveId: 'circus_sideshow_cleared' });

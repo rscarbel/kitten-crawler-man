@@ -3,7 +3,7 @@ import type { SpriteKey } from './SpriteLoader';
 
 /**
  * A `LevelDef` does not list everything that can appear on its floor.
- * `BountySystem`, `CircusQuestSystem`, `BigTopBossSystem`,
+ * `BountySystem`, `CircusQuestSystem`, `BigTopMazeSystem`,
  * `QuillConfrontationSystem`, `MurderMysteryQuestSystem`, `SpiderQuestSystem`,
  * `SkeletonSummonSystem`, `MongoSystem` and `MercenarySystem` all construct
  * creatures no `LevelDef.roomMobs` / `hallwayMobs` / `extraSpawns` /
@@ -78,8 +78,8 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     requiredGroups: ['bounty_skeleton_lord'],
   },
 
-  // CircusQuestSystem (src/systems/CircusQuestSystem.ts) and BigTopBossSystem
-  // (src/systems/BigTopBossSystem.ts) — both level 3 only (circus tents and
+  // CircusQuestSystem (src/systems/CircusQuestSystem.ts) and BigTopMazeSystem
+  // (src/systems/BigTopMazeSystem.ts) — both level 3 only (circus tents and
   // the Big Top interior only exist on the overworld map). Nearly every
   // creature in this chain is procedural; only the stilt/fat clowns have art.
   {
@@ -99,15 +99,7 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
   {
     id: 'quest:big_top',
     levelIds: LEVEL3,
-    mobTypes: [
-      'ringmaster_grimaldi',
-      'vine_tendril',
-      'circus_lemur',
-      'stilt_clown',
-      'fat_clown',
-      'mold_lion',
-      'signet',
-    ],
+    mobTypes: ['circus_lemur', 'stilt_clown', 'fat_clown', 'mold_lion', 'signet'],
     requiredGroups: ['quest_circus'],
   },
 
@@ -120,6 +112,17 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     levelIds: LEVEL3,
     mobTypes: ['miss_quill', 'remex', 'city_elf_cultist'],
     requiredGroups: [],
+  },
+
+  // The second half of the tower confrontation, which is not procedural: the
+  // Lich has a baked sheet of its own and raises the skeleton escort, so the
+  // whole set has to be resident before the reveal ends — the fight starts on
+  // the frame the last dialog page closes, with nowhere to load anything.
+  {
+    id: 'quest:murder_lich',
+    levelIds: LEVEL3,
+    mobTypes: ['the_lich', 'skeleton_sword', 'skeleton_archer'],
+    requiredGroups: ['murder_lich'],
   },
 
   // MurderMysteryQuestSystem (src/systems/MurderMysteryQuestSystem.ts) —

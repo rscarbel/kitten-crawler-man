@@ -121,6 +121,11 @@ const PARKED_TILE = 1;
 const SPAWN_SEARCH_RADIUS = 4;
 /** Three, strung back along the crossing the party has to make. */
 const EXPECTED_STAIR_GUARDS = 3;
+/**
+ * The party these gates place their guards for. Low enough that the quest's own
+ * authored level wins, so what is measured stays placement rather than tuning.
+ */
+const GATE_PARTY_LEVEL = 1;
 /** The storeys the cult holds — mirrored from the content table under test. */
 const FIRST_GUARDED_TOWER_FLOOR = 1;
 const SECOND_GUARDED_TOWER_FLOOR = 2;
@@ -699,6 +704,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
       map: towerFloor,
       memory,
       murderQuest: quiet,
+      partyLevel: GATE_PARTY_LEVEL,
     };
     const held: InteriorHostileContext = { ...base, murderQuest: confronting };
 
@@ -799,6 +805,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
     map: cleared,
     memory,
     murderQuest: confronting,
+    partyLevel: GATE_PARTY_LEVEL,
   };
   const stage = makeStage(cleared, PARKED_TILE, PARKED_TILE);
   const guards = interiorHostilesFor(clearedContext);

@@ -47,6 +47,22 @@ import { interiorServiceBuildings, interiorServicesFor } from '../src/systems/to
 import { readableBuildings, readablesFor } from '../src/systems/townReadables';
 import { STAT_BOON_BONUSES } from '../src/core/StatusEffect';
 import { statusVisual } from '../src/sprites/status/statusEffectVisuals';
+import { EventBus } from '../src/core/EventBus';
+import { createMurderQuestProgress } from '../src/core/MurderQuestProgress';
+import { createDoomsdayProgress } from '../src/core/DoomsdayProgress';
+import { QuillConfrontationSystem } from '../src/systems/QuillConfrontationSystem';
+import { MISS_QUILL_CAST_RANGE_TILES } from '../src/creatures/MissQuill';
+import { CITY_ELF_CULTIST_AGGRO_RANGE_TILES } from '../src/creatures/CityElfCultist';
+import { QUEST_BANNER_FRAMES } from '../src/ui/QuestBanners';
+import { MobUpdateLoop } from '../src/systems/MobUpdateLoop';
+import { MobRoster } from '../src/systems/kits/SceneWorld';
+import { SpellSystem } from '../src/systems/SpellSystem';
+import { HumanPlayer } from '../src/creatures/HumanPlayer';
+import { CatPlayer } from '../src/creatures/CatPlayer';
+import { MIN_STAT_VALUE } from '../src/Player';
+import { partyLevelOf } from '../src/levels/spawner';
+import type { Mob } from '../src/creatures/Mob';
+import type { SystemContext } from '../src/systems/GameSystem';
 
 /** Any size that produces the full plan; nothing here reads the wilderness. */
 const PLAN_SIZE = 220;
@@ -96,6 +112,23 @@ const ALPHA_OFFSET = 3;
  * antialiased pixel at a sprite's edge.
  */
 const MIN_TILE_COVERAGE = 0.99;
+
+/** The magistrate's office, and the only storey the Quill confrontation spawns on. */
+const TOWER_CONFRONTATION_FLOOR = TOWER_FLOOR_COUNT - 1;
+/**
+ * How far past its own threat range the confrontation has to spawn from the tile
+ * the party climbs in on.
+ *
+ * Nothing in the room has a windup — every caster in it can loose its first bolt
+ * on the frame it acquires a target — and a companion locked to the game's
+ * minimum constitution dies to any one of those bolts, which turns the whole
+ * party out of the tower before the fight is visible. So the arrival tile is not
+ * allowed to be merely outside the ranges: it has to be outside them by more
+ * than the encounter's own guards can drift while they idle.
+ */
+const ARRIVAL_SAFETY_MARGIN_TILES = 2;
+/** How long the party is left standing on the landing, doing nothing at all. */
+const ARRIVAL_VIGIL_FRAMES = 60 * 20;
 
 let failures = 0;
 
@@ -566,6 +599,97 @@ for (const [name, kind] of buildings) {
     hasResident || hasService || hasReadable,
     `"${name}" offers a resident, a service or something to read`,
   );
+}
+
+console.log('\nThe tower confrontation opens on safe ground');
+{
+  const map = buildInterior(towerName, plan.tower.kind, TOWER_CONFRONTATION_FLOOR);
+  const stair = map._interiorStairDownTiles[0];
+  check(stair !== undefined, 'the office has the stair the party climbs in on');
+
+  // Mirrors how `BuildingInteriorScene` places an ascending party: both crawlers
+  // side by side, one row below the stair they arrived on.
+  const arrivalRow = stair.y + 1;
+  const human = new HumanPlayer(stair.x, arrivalRow, TILE_SIZE);
+  const cat = new CatPlayer(stair.x + 1, arrivalRow, TILE_SIZE);
+  human.isActive = true;
+  cat.isActive = false;
+  // The build this fight is hardest on, and the one it was reported broken from:
+  // a crawler holding the game's minimum constitution has a health pool smaller
+  // than a single soul bolt.
+  cat.setBaseStat('constitution', MIN_STAT_VALUE);
+
+  const roster = new MobRoster(map, new SpellSystem());
+  const spawned: Mob[] = [];
+  const progress = createMurderQuestProgress();
+  progress.stage = 'confrontation';
+  const confrontation = new QuillConfrontationSystem(
+    map,
+    new EventBus(),
+    (mob) => {
+      spawned.push(mob);
+      roster.add(mob);
+    },
+    progress,
+    null,
+    createDoomsdayProgress(),
+    partyLevelOf(human.level, cat.level),
+  );
+
+  check(spawned.length > 0, 'the confrontation puts its culprits in the room');
+
+  const threatRangeTiles = Math.max(
+    MISS_QUILL_CAST_RANGE_TILES,
+    CITY_ELF_CULTIST_AGGRO_RANGE_TILES,
+  );
+  const requiredTiles = threatRangeTiles + ARRIVAL_SAFETY_MARGIN_TILES;
+  for (const mob of spawned) {
+    const nearestCrawlerTiles =
+      Math.min(
+        Math.hypot(mob.x - human.x, mob.y - human.y),
+        Math.hypot(mob.x - cat.x, mob.y - cat.y),
+      ) / TILE_SIZE;
+    check(
+      nearestCrawlerTiles >= requiredTiles,
+      `${mob.displayName} spawns ${nearestCrawlerTiles.toFixed(1)} tiles from the landing (needs ${requiredTiles})`,
+    );
+  }
+
+  check(
+    spawned.every((mob) => mob.aiHeld),
+    'the room is frozen while its own intro banner is on screen',
+  );
+
+  const context: SystemContext = {
+    human,
+    cat,
+    active: human,
+    inactive: cat,
+    activeIsMoving: false,
+    roster,
+    gameMap: map,
+  };
+  const mobLoop = new MobUpdateLoop();
+  const humanStartHp = human.hp;
+  const catStartHp = cat.hp;
+  let releasedAtFrame = -1;
+  for (let frame = 0; frame < ARRIVAL_VIGIL_FRAMES; frame++) {
+    confrontation.update(context);
+    mobLoop.update(context);
+    for (const mob of roster.mobs) mob.tickTimers();
+    if (releasedAtFrame < 0 && spawned.every((mob) => !mob.aiHeld)) releasedAtFrame = frame;
+  }
+  mobLoop.dispose();
+
+  check(
+    releasedAtFrame >= 0 && releasedAtFrame <= QUEST_BANNER_FRAMES,
+    `the room wakes up when the banner clears (woke at frame ${releasedAtFrame})`,
+  );
+  // The party never moved and never swung: whatever happened to them here, they
+  // had no way to answer, which is the whole complaint the offsets exist to fix.
+  check(human.hp === humanStartHp, 'a party that stands still on the landing is not shot at');
+  check(cat.hp === catStartHp, 'nor is the companion beside them');
+  check(cat.isAlive, 'so the companion is still standing, and the party is not turned out');
 }
 
 if (failures > 0) {

@@ -15,6 +15,7 @@ import {
   SKELETON_LORD_BODY_PART_KEY,
   SKELETON_SWORD_BODY_PART_KEY,
 } from '../sprites/skeletonSprite';
+import { LICH_BODY_PART_KEY } from '../sprites/lichSprite';
 import {
   MANTID_BODY_PART_KEY,
   MANTID_GORE_PARTS,
@@ -111,6 +112,9 @@ const SKELETON_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
   [SKELETON_LORD_BODY_PART_KEY, { spriteKey: 'skeleton_lord', parts: SKELETON_GORE_PARTS }],
   [SKELETON_SWORD_BODY_PART_KEY, { spriteKey: 'skeleton_sword', parts: SKELETON_GORE_PARTS }],
   [SKELETON_ARCHER_BODY_PART_KEY, { spriteKey: 'skeleton_archer', parts: SKELETON_GORE_PARTS }],
+  // The Lich comes apart into the same bones: whatever the robes were hiding,
+  // it was a skeleton, and its sheet bakes the identical gore row.
+  [LICH_BODY_PART_KEY, { spriteKey: 'the_lich', parts: SKELETON_GORE_PARTS }],
 ];
 
 /**

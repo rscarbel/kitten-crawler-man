@@ -25,4 +25,16 @@ export class InputManager {
   clear(): void {
     this.keys.clear();
   }
+
+  /**
+   * Releases a single key, leaving every other held key untouched.
+   *
+   * Debouncing one action (an interact press consumed for the frame) must not
+   * read as the player having let go of an unrelated key they are still
+   * physically holding — a movement key cleared this way stops the crawler
+   * dead until it is released and pressed again.
+   */
+  release(key: string): void {
+    this.keys.delete(normalizeKey(key));
+  }
 }

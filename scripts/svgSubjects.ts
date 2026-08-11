@@ -341,20 +341,39 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'ringmaster-grimaldi',
+    name: 'grimaldi-vine',
     views: async () => {
-      const { drawRingmasterGrimaldiSprite } =
-        await import('../src/sprites/ringmasterGrimaldiSprite.js');
+      const { drawGrimaldiVineSprite } = await import('../src/sprites/grimaldiVineSprite.js');
       return [
-        { name: 'idle', paint: ({ dom, unit }) => drawRingmasterGrimaldiSprite(dom, 0, 0, unit) },
         {
-          name: 'attack',
+          name: 'poisoned',
           paint: ({ dom, unit }) =>
-            drawRingmasterGrimaldiSprite(dom, 0, 0, unit, 0, false, false, ATTACK_MIDPOINT),
+            drawGrimaldiVineSprite(dom, 0, 0, unit, 0, {
+              poison: 1,
+              sag: 1,
+              cure: 0,
+              hitFlash: false,
+            }),
         },
         {
-          name: 'invulnerable',
-          paint: ({ dom, unit }) => drawRingmasterGrimaldiSprite(dom, 0, 0, unit, 0, true),
+          name: 'refused-blow',
+          paint: ({ dom, unit }) =>
+            drawGrimaldiVineSprite(dom, 0, 0, unit, 0, {
+              poison: 1,
+              sag: 1,
+              cure: 0,
+              hitFlash: true,
+            }),
+        },
+        {
+          name: 'cured',
+          paint: ({ dom, unit }) =>
+            drawGrimaldiVineSprite(dom, 0, 0, unit, 0, {
+              poison: 1,
+              sag: 1,
+              cure: 1,
+              hitFlash: false,
+            }),
         },
       ];
     },

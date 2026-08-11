@@ -24,6 +24,7 @@
 import { dangerLine, isTownInDanger, type TownDialogContext } from './townDialog';
 import { rotateLine } from './townServiceUtil';
 import type { TownRole } from '../sprites/person/PersonAppearance';
+import { isCircusResolvedStage } from '../core/CircusQuestProgress';
 
 export type ResidentId =
   | 'old_hilda'
@@ -63,7 +64,7 @@ export interface ResidentDef {
 }
 
 function circusResolved(ctx: TownDialogContext): boolean {
-  return ctx.circus === 'grimaldi_slain' || ctx.circus === 'complete';
+  return isCircusResolvedStage(ctx.circus);
 }
 
 function circusUnderway(ctx: TownDialogContext): boolean {
@@ -71,7 +72,7 @@ function circusUnderway(ctx: TownDialogContext): boolean {
 }
 
 function murderResolved(ctx: TownDialogContext): boolean {
-  return ctx.murder === 'quill_slain' || ctx.murder === 'complete';
+  return ctx.murder === 'lich_slain' || ctx.murder === 'complete';
 }
 
 function murderOpen(ctx: TownDialogContext): boolean {
@@ -79,7 +80,8 @@ function murderOpen(ctx: TownDialogContext): boolean {
     ctx.murder === 'body_waiting' ||
     ctx.murder === 'investigation' ||
     ctx.murder === 'cult_hideout' ||
-    ctx.murder === 'confrontation'
+    ctx.murder === 'confrontation' ||
+    ctx.murder === 'quill_slain'
   );
 }
 

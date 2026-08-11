@@ -78,6 +78,13 @@ const DIALOG_BTN_Y_FROM_BOTTOM = 42;
 const DIALOG_BTN_GAP = 12;
 const DIALOG_BTN_LABEL_SIZE = 12;
 const DIALOG_PAGE_COUNTER_SIZE = 10;
+/**
+ * Gap kept between the panel's foot and the bottom of the viewport.
+ *
+ * Enough to clear the mobile hotbar's row of buttons, which is the tallest
+ * furniture anything sits on down there.
+ */
+const DIALOG_BOTTOM_MARGIN = 96;
 
 // Reward strip. Its height is measured, not assumed, so a two-line description
 // pushes the buttons down instead of printing over them.
@@ -98,6 +105,25 @@ const REWARD_NAME_COLOR = '#facc15';
 const REWARD_LINE_COLOR = '#cbd5e1';
 const REWARD_XP_COLOR = '#4ade80';
 const REWARD_HEADING_TEXT = 'REWARD';
+
+/**
+ * How far below centre the panel sits.
+ *
+ * A quest dialog is a conversation, and the people having it are standing on
+ * screen — the camera holds the active crawler dead centre, which is exactly
+ * where a centred modal lands. Every closing scene in the game was therefore
+ * played out behind its own dialogue. Anchoring the box near the foot of the
+ * viewport leaves the party, and whoever they are talking to, in clear view.
+ *
+ * Clamped so a panel too tall for the viewport is never pushed *up* past centre
+ * instead: on a short screen the buttons are the part that has to stay reachable,
+ * and they are at the bottom.
+ */
+function lowerThirdOffset(boxHeight: number): number {
+  const centredY = viewportHeight() / 2 - boxHeight / 2;
+  const loweredY = viewportHeight() - DIALOG_BOTTOM_MARGIN - boxHeight;
+  return Math.max(0, loweredY - centredY);
+}
 
 export class QuestDialog {
   private pages: ReadonlyArray<DialogPage> = [];
@@ -208,7 +234,7 @@ export class QuestDialog {
       REWARD_HEADING_HEIGHT +
       REWARD_NAME_HEIGHT +
       lineCount * REWARD_LINE_SPACING +
-      REWARD_XP_HEIGHT;
+      (reward.xp > 0 ? REWARD_XP_HEIGHT : 0);
     return REWARD_STRIP_PAD * 2 + Math.max(REWARD_ICON_SIZE, textHeight);
   }
 
@@ -266,13 +292,17 @@ export class QuestDialog {
       size: REWARD_LINE_SIZE,
       lineHeight: REWARD_LINE_SPACING,
     });
-    drawText(ctx, `+${reward.xp} XP`, {
-      x: textX,
-      y: linesY + lineCount * REWARD_LINE_SPACING,
-      size: REWARD_XP_SIZE,
-      bold: true,
-      color: REWARD_XP_COLOR,
-    });
+    // Omitted rather than printed as zero: a reward that is only an item still
+    // wants the strip, and "+0 XP" under it reads as a bug rather than as none.
+    if (reward.xp > 0) {
+      drawText(ctx, `+${reward.xp} XP`, {
+        x: textX,
+        y: linesY + lineCount * REWARD_LINE_SPACING,
+        size: REWARD_XP_SIZE,
+        bold: true,
+        color: REWARD_XP_COLOR,
+      });
+    }
   }
 
   render(ctx: CanvasRenderingContext2D): void {
@@ -305,6 +335,7 @@ export class QuestDialog {
       canvasHeight: viewportHeight(),
       width: dw,
       height: dh,
+      offsetY: lowerThirdOffset(dh),
       ...BOX_PRESETS.modal,
     });
 

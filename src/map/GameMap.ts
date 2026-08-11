@@ -1,4 +1,14 @@
 import {
+  BIG_TOP_MAZE_ROWS,
+  MAZE_CAT_SPAWN_CHAR,
+  MAZE_EXIT_TILES,
+  MAZE_FLOOR_CHAR,
+  MAZE_HUMAN_SPAWN_CHAR,
+  MAZE_HUMAN_SPAWN_TILE,
+  MAZE_POLE_CHAR,
+  MAZE_WALL_CHAR,
+} from './bigTopMazeLayout';
+import {
   type TileContent,
   FloorTypeValue,
   TREE,
@@ -15,6 +25,7 @@ import {
   WELL,
   STAIRS_UP,
   STAIRS_DOWN,
+  TOWER_STAIR_SPAN,
   TABLE,
   BOOKSHELF,
   BED,
@@ -111,6 +122,33 @@ const STORE_INTERIOR_W = 20;
 const STORE_INTERIOR_H = 12;
 const HOUSE_INTERIOR_W = 18;
 const HOUSE_INTERIOR_H = 14;
+/**
+ * Which shape an interior is built in.
+ *
+ * Only the Big Top has more than one, and only for the length of the circus
+ * questline's final act — every other room is `'default'` forever.
+ */
+export type InteriorVariant = 'default' | 'bigtop_maze';
+
+/** The tile the maze layout's legend character stands for. */
+function mazeTileTypeFor(legend: string): number {
+  switch (legend) {
+    case MAZE_WALL_CHAR:
+      return INTERIOR_WALL;
+    case MAZE_POLE_CHAR:
+      return TENT_POLE;
+    case MAZE_FLOOR_CHAR:
+    case MAZE_HUMAN_SPAWN_CHAR:
+    case MAZE_CAT_SPAWN_CHAR:
+      return SAWDUST_FLOOR;
+    default:
+      // Gates, barricades and the grates the counterweights hang behind. All of
+      // them start as wall; only a gate or barricade ever stops being one, and
+      // `BigTopMazeSystem` is what opens it.
+      return INTERIOR_WALL;
+  }
+}
+
 /** The big top interior is a boss arena — much larger than any other interior. */
 const BIGTOP_INTERIOR_W = 34;
 const BIGTOP_INTERIOR_H = 26;
@@ -723,7 +761,12 @@ export class GameMap {
     towerFloor = 0,
     buildingName = '',
     hasSafeRoom = false,
+    variant: InteriorVariant = 'default',
   ): void {
+    if (variant === 'bigtop_maze') {
+      this.generateBigTopMaze();
+      return;
+    }
     const isTower = buildingType === 'tower';
     const isStore = buildingType === 'store';
     const isClub = buildingType === 'club';
@@ -1993,27 +2036,40 @@ export class GameMap {
     this._interiorStairUpTiles = [];
     this._interiorStairDownTiles = [];
     if (isTower) {
-      // Stairs up: upper-right area (2 tiles wide)
+      // Stairs up: upper-right area; stairs down: upper-left. Each is a square
+      // block of TOWER_STAIR_SPAN tiles a side, which is what the spiral art needs
+      // to read as a staircase rather than a step pattern on a floor tile.
       const upX = w - TOWER_STAIR_UP_X_OFFSET;
-      const upY = TOWER_STAIR_ROW;
-      // Stairs down: upper-left area (2 tiles wide)
       const dnX = TOWER_STAIR_DOWN_COL;
-      const dnY = TOWER_STAIR_ROW;
+      const stairRow = TOWER_STAIR_ROW;
+
+      const fillStairBlock = (
+        originX: number,
+        originY: number,
+        type: number,
+      ): Array<{ x: number; y: number }> => {
+        const tiles: Array<{ x: number; y: number }> = [];
+        for (let dy = 0; dy < TOWER_STAIR_SPAN; dy++) {
+          for (let dx = 0; dx < TOWER_STAIR_SPAN; dx++) {
+            // `placeProp`, not a bare type write: it records the floor the stair
+            // replaced, and the stair is drawn as an overlay over that floor.
+            placeProp(grid[originY + dy][originX + dx], type);
+            tiles.push({ x: originX + dx, y: originY + dy });
+          }
+        }
+        return tiles;
+      };
 
       const hasUp = towerFloor < TOWER_TOP_FLOOR;
       const hasDown = towerFloor > 0;
 
-      if (hasUp) {
-        grid[upY][upX].type = STAIRS_UP;
-        this._interiorStairUpTiles = [{ x: upX, y: upY }];
-      }
-      if (hasDown) {
-        grid[dnY][dnX].type = STAIRS_DOWN;
-        this._interiorStairDownTiles = [{ x: dnX, y: dnY }];
-      }
+      if (hasUp) this._interiorStairUpTiles = fillStairBlock(upX, stairRow, STAIRS_UP);
+      if (hasDown) this._interiorStairDownTiles = fillStairBlock(dnX, stairRow, STAIRS_DOWN);
 
       // ── Tower floor furniture (20×16, carpet) ──
-      // Avoid stair tiles at (upX=15,upY=2) and (dnX=3,dnY=2)
+      // Both stair blocks occupy rows TOWER_STAIR_ROW and the one below it; the
+      // furniture on every floor is placed clear of those two rows at the stair
+      // columns, so nothing here overwrites a staircase.
       // TOWER_ENTRANCE_ROW_INSET: h - this value = second-to-last interior row (barrel/entrance row)
       const TOWER_ENTRANCE_ROW_INSET = 3;
       const towerFireplaceCol1 = 9;
@@ -2189,6 +2245,40 @@ export class GameMap {
     } else {
       this.safeRooms = [];
     }
+  }
+
+  /**
+   * The Big Top as it stands during the final act: an authored trap maze with
+   * two flaps, two sealed halves, and one chamber at the tent pole.
+   *
+   * Built from the layout table rather than by the ring-arena branch above
+   * because the vent choreography is timed against exact corridor lengths — a
+   * layout that drifted by a tile would quietly make one of them unsurvivable.
+   */
+  private generateBigTopMaze(): void {
+    const grid: TileContent[][] = BIG_TOP_MAZE_ROWS.map((row, y) =>
+      Array.from({ length: row.length }, (_unused, x) => ({
+        tileId: `${x}#${y}`,
+        type: mazeTileTypeFor(row[x]),
+      })),
+    );
+
+    for (const exit of MAZE_EXIT_TILES) grid[exit.y][exit.x].type = FloorTypeValue.road;
+
+    this.structure = grid;
+    this.rebuildBlockedMasks();
+    this.startTile = { x: MAZE_HUMAN_SPAWN_TILE.x, y: MAZE_HUMAN_SPAWN_TILE.y };
+    this.setStairwellTiles([]);
+    this.buildingEntries = [];
+    this.bossRooms = [];
+    this.mobSpawnPoints = [];
+    this.hallwaySpawnPoints = [];
+    this.safeRooms = [];
+    this._interiorExitTiles = MAZE_EXIT_TILES.map((tile) => ({ x: tile.x, y: tile.y }));
+    this._interiorStairUpTiles = [];
+    this._interiorStairDownTiles = [];
+    // No performance ring in the maze; the pole is furniture the layout owns.
+    this._bigtopRingCentre = null;
   }
 
   /** Exit tile positions populated by generateInterior — used by BuildingInteriorScene. */

@@ -12,7 +12,8 @@ const CLOWN_SPEED = 0.7;
 /** A levelled clown's walk is capped at this fraction of the player's. */
 const CLOWN_MAX_SPEED_RATIO = 0.8;
 export const CLOWN_MAX_SPEED = PLAYER_SPEED * CLOWN_MAX_SPEED_RATIO;
-const AGGRO_RANGE_TILES = 6;
+/** How far a fat clown notices from. Exported for the bounty troupe's regression gate. */
+export const FAT_CLOWN_AGGRO_RANGE_TILES = 6;
 const ATTACK_RANGE_TILES = 1.2;
 const ATTACK_DAMAGE = 10;
 /** Frames between slams (~1.8 s at 60 fps). */
@@ -80,7 +81,7 @@ export class FatClown extends Mob {
     if (this.attackCooldown > 0) this.attackCooldown--;
     if (this.attackAnimTimer > 0) this.attackAnimTimer--;
 
-    const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
+    const aggroRangePx = this.tileSize * FAT_CLOWN_AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
     const nearest = this.acquireTarget(targets, aggroRangePx);
 

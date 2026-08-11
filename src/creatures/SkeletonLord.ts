@@ -186,6 +186,17 @@ export class SkeletonLord extends Mob {
   private castTimer = 0;
   private handsTimer = 0;
   private eruptionTimer = 0;
+  /**
+   * The wave's own heading and world origin, taken the frame the hands come up.
+   *
+   * `lockedFacing` cannot carry this: the eruption outlives its own recovery
+   * window, so the next cast overwrites the lock while these hands are still
+   * rising and the wave would swing onto the new heading mid-animation. Once
+   * cast, the wave is committed to the line it started on.
+   */
+  private eruptionFacingAngle = 0;
+  private eruptionOriginX = 0;
+  private eruptionOriginY = 0;
   private summonTimer = 0;
   private recoveryTimer = 0;
   private boltCooldown = 0;
@@ -496,6 +507,9 @@ export class SkeletonLord extends Mob {
     const originX = this.x + this.tileSize * CENTER_OFFSET;
     const originY = this.y + this.tileSize * CENTER_OFFSET;
     const facingAngle = Math.atan2(this.lockedFacingY, this.lockedFacingX);
+    this.eruptionFacingAngle = facingAngle;
+    this.eruptionOriginX = originX;
+    this.eruptionOriginY = originY;
 
     // `dealDamage` would have checked this; going round it to avoid its level
     // scaling means checking it here instead, or a harmless lord still lands the
@@ -632,9 +646,13 @@ export class SkeletonLord extends Mob {
     sy: number,
     tileSize: number,
   ): void {
-    const originX = sx + tileSize * CENTER_OFFSET;
-    const originY = sy + tileSize * CENTER_OFFSET;
-    const facingAngle = Math.atan2(this.lockedFacingY, this.lockedFacingX);
+    // Drawn from where the wave began rather than from where he now stands: a
+    // knockback mid-eruption would otherwise drag the whole cone along with him.
+    const cameraOffsetX = sx - this.x;
+    const cameraOffsetY = sy - this.y;
+    const originX = this.eruptionOriginX + cameraOffsetX;
+    const originY = this.eruptionOriginY + cameraOffsetY;
+    const facingAngle = this.eruptionFacingAngle;
     const elapsed = HANDS_ERUPTION_FRAMES - this.eruptionTimer;
     const progress = elapsed / HANDS_ERUPTION_FRAMES;
 

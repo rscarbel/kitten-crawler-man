@@ -126,6 +126,42 @@ export function drawDangerCircle(
 }
 
 /**
+ * A square ground warning covering one map tile, given its top-left corner.
+ *
+ * The third shape in the language, for hazards that live on the grid rather than
+ * in a radius around a caster — the Big Top's floor vents. The inner radius the
+ * fill and stripes are drawn against is the tile's half-diagonal, so the stripes
+ * reach the corners rather than stopping short of them.
+ */
+export function drawDangerTile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  fade: number,
+  palette: DangerPalette = DANGER_CONE_PALETTE,
+): void {
+  const now = performance.now();
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  const coverRadius = size * Math.SQRT1_2 * 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, size, size);
+  ctx.clip();
+  paintHazardFill(ctx, cx, cy, coverRadius, fade, palette, now);
+  ctx.restore();
+
+  ctx.save();
+  beginDangerOutline(ctx, fade, palette, now);
+  ctx.beginPath();
+  ctx.rect(x, y, size, size);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
  * A pie-slice ground warning: a cone of half-angle `halfAngleRad` either side of
  * `facingAngle`, radiating from (cx, cy).
  */

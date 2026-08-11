@@ -21,7 +21,7 @@ export const HOOK_DIALOG: ReadonlyArray<DialogPage> = [
   {
     title: GUMGUM,
     lines: [
-      'People are going missing off the night streets. My friends. They turn up after, but only from the shoulders down. The Watch won’t come. Nobody comes for us. Meet me behind the Sunken Stump after dark. Please.',
+      'People are going missing off the night streets. My friends. They turn up after, but only from the shoulders down. The Watch won’t come. Nobody comes for us. Meet me in the alley beside the Desperado Club after dark. Please.',
     ],
     button: 'Continue',
   },
@@ -38,7 +38,7 @@ export const BODY_FOUND_DIALOG: ReadonlyArray<DialogPage> = [
   {
     title: 'The Alley',
     lines: [
-      'GumGum lies crumpled behind the pub, a day cold at least. Whatever she saw, someone made certain she’d never tell it. The body ends at the shoulders. There is no head.',
+      'GumGum lies crumpled in the alley beside the Desperado Club, a day cold at least. Whatever she saw, someone made certain she’d never tell it. The body ends at the shoulders. There is no head.',
     ],
     button: 'Continue',
   },
@@ -67,7 +67,9 @@ export const HOME_CLUE_DIALOG: ReadonlyArray<DialogPage> = [
   {
     title: 'Old Hilda’s Cottage',
     lines: [
-      'Hilda’s door hangs open. Her bed is unslept-in, her mirror draped with a sheet. On the table, a note in prim, perfect penmanship: "Evening lessons. Come alone." It is unsigned.',
+      'Claw furrows rake the paving outside Hilda’s cottage, ending in a pool and a few torn scraps of unfamiliar cloth — a visitor’s shawl, by the weave, nothing from Hilda’s own wardrobe. Whatever waited by her gate did not carry its catch far before it stopped to feed.',
+      '',
+      'Her door stands latched from the inside, untouched — whoever came calling never reached it. Tucked under the knocker, a note in prim, perfect penmanship. "Evening lessons. Come alone." It is unsigned.',
     ],
     button: 'Noted',
   },
@@ -77,7 +79,9 @@ export const ROOST_CLUE_DIALOG: ReadonlyArray<DialogPage> = [
   {
     title: 'The Tower Plaza',
     lines: [
-      'Beneath the magistrate’s tower, moulted skyfowl feathers are arranged in a careful ring. A shrine. Elf-made candles, fresh wax. Someone down here worships the "angels" above... and Magistrate Featherfall suspects nothing at all.',
+      'Beneath the magistrate’s tower, moulted skyfowl feathers were arranged in a careful ring. A shrine — elf-made candles, fresh wax. Something burst through it since: the feathers are flung wide, blood is thrown in an arc up the tower stone, and a loop of gut lies where the candles stood.',
+      '',
+      'Someone down here worships the "angels" above... and Magistrate Featherfall suspects nothing at all.',
     ],
     button: 'Noted',
   },
@@ -110,5 +114,48 @@ export const HIDEOUT_CLEARED_DIALOG: ReadonlyArray<DialogPage> = [
       'The letter from the Barracks names the schoolteacher. Miss Quill. Her "capacitor" waits at the top of the magistrate’s tower. Climb it, and end the murders.',
     ],
     button: 'To the tower',
+  },
+];
+
+/**
+ * The optional look at the magistrate before the room explains itself. Written
+ * so it costs the player nothing to skip: it says what is in front of them and
+ * asks the question the reveal answers, rather than carrying anything the quest
+ * depends on.
+ */
+export const FEATHERFALL_EXAMINE_DIALOG: ReadonlyArray<DialogPage> = [
+  {
+    title: 'Carl',
+    lines: [
+      'The magistrate hasn’t moved since we came up the stairs. He hasn’t moved in a long time — the ink in that well is a solid brick and his sash is grey with dust.',
+      '',
+      '"He’s been dead for weeks. Then who has been signing the magistrate’s letters?"',
+    ],
+    button: 'Back away',
+  },
+];
+
+/**
+ * The reveal, one page per speaker. The middle voice is not attributed on
+ * purpose — the party cannot see the thing talking yet, and naming it in the
+ * title would hand them the answer a beat before the room does.
+ */
+export const LICH_REVEAL_DIALOG: ReadonlyArray<DialogPage> = [
+  {
+    title: 'Carl',
+    lines: ['"The magistrate... he’s a corpse. He’s been dead this whole time."'],
+    button: 'Continue',
+  },
+  {
+    title: 'A voice from everywhere',
+    lines: [
+      '"Dead? The magistrate keeps his appointments. He signs his letters. He suspects nothing. I have seen to it."',
+    ],
+    button: 'Continue',
+  },
+  {
+    title: 'Donut',
+    lines: ['"Carl. The dead thing at the desk is the *nice* part of this room."'],
+    button: 'Ready weapons',
   },
 ];

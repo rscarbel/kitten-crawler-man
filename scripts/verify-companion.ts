@@ -18,6 +18,7 @@ import { createCanvas } from 'canvas';
 
 import { TILE_SIZE, COMPANION_LEASH_PX } from '../src/core/constants';
 import { GameMap } from '../src/map/GameMap';
+import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Mob } from '../src/creatures/Mob';
@@ -123,6 +124,40 @@ const CHASER_START_TILES = 5;
  * largest a generated dungeon reliably offers — at nine, no map has one.
  */
 const OPEN_GROUND_RADIUS_TILES = 8;
+
+/** The building a tower interior is generated for; nothing here reads the name but the generator wants one. */
+const INTERIOR_BUILDING_NAME = 'Verification Tower';
+/** Storeys of that tower the interior checks use: one to fight on, one to climb to. */
+const INTERIOR_GROUND_FLOOR = 0;
+const INTERIOR_UPPER_FLOOR = 1;
+/**
+ * Where a staged interior combatant stands: past the tile the party occupies, and
+ * well inside the cat's acquisition range in a room only a few tiles across.
+ */
+const INTERIOR_NEIGHBOUR_MIN_TILES = 2;
+const INTERIOR_NEIGHBOUR_MAX_TILES = 4;
+
+/**
+ * A hand-built floor plan, split by one sealed wall column, for proving
+ * `setMap` re-seeds the map `CompanionSystem` actually collides against —
+ * rather than just the position it drops the companion at.
+ *
+ * Companion positions are absolute pixels, so a cat closing distance on the
+ * human after `update()` is true whichever `GameMap` is behind it — the whole
+ * floor could still be the one `setMap` was supposed to leave. Two floors that
+ * differ only in whether one tile blocks movement turn that into something a
+ * distance check can't paper over: only the correct map ever stops her at the
+ * wall, and only the wrong one ever lets her walk through where it stood.
+ *
+ * Bounded on every side, not just at the partition, so a map that survived
+ * the bug can't be told apart from one that got A* to route around it.
+ */
+const PARTITION_FLOOR_SIZE = 16;
+const PARTITION_WALL_TILE_X = 8;
+const PARTITION_CAT_TILE = { x: 6, y: 8 };
+const PARTITION_HUMAN_TILE = { x: 10, y: 8 };
+/** Comfortably enough steps at `FOLLOWER_SPEED` to close on — or be stopped at — the wall. */
+const PARTITION_FOLLOW_FRAMES = 90;
 
 /**
  * A dungeon that actually generated a boss room, and one with clear floor to
@@ -257,6 +292,77 @@ function findOpenGround(map: GameMap): { x: number; y: number } | null {
         }
       }
       if (clear) return { x, y };
+    }
+  }
+  return null;
+}
+
+/** One storey of a tower interior, in the state the scene generates it. */
+function makeInterior(floor: number): GameMap {
+  const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+  map.generateInterior('tower', floor, INTERIOR_BUILDING_NAME, false);
+  return map;
+}
+
+function makePartitionFloorTile(x: number, y: number, type: number): TileContent {
+  return { tileId: `${x}#${y}`, type };
+}
+
+/**
+ * A `PARTITION_FLOOR_SIZE`-square room, walled on every edge, with an
+ * unbroken wall column at `PARTITION_WALL_TILE_X` when `withWall` is true.
+ * With the wall, the two halves have no route between them at all — not even
+ * through the pathfinder — so nothing short of the real map switch can carry
+ * a companion from one side to the other.
+ */
+function makePartitionFloor(withWall: boolean): GameMap {
+  const grid: TileContent[][] = Array.from({ length: PARTITION_FLOOR_SIZE }, (_, y) =>
+    Array.from({ length: PARTITION_FLOOR_SIZE }, (_, x) => {
+      const isBorder =
+        x === 0 || y === 0 || x === PARTITION_FLOOR_SIZE - 1 || y === PARTITION_FLOOR_SIZE - 1;
+      const isPartition = withWall && x === PARTITION_WALL_TILE_X;
+      const type = isBorder || isPartition ? FloorTypeValue.wall : FloorTypeValue.tile_floor;
+      return makePartitionFloorTile(x, y, type);
+    }),
+  );
+  return new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: grid });
+}
+
+/**
+ * Somewhere in the same room to stand, a couple of tiles off `from`.
+ *
+ * An interior is a handful of tiles across and full of furniture, so the
+ * dungeon's clear-floor search finds nothing here — this asks only for a tile
+ * that is walkable and in plain sight of the party, which is all a follow or an
+ * acquisition needs.
+ */
+function nearbyWalkable(
+  map: GameMap,
+  from: { x: number; y: number },
+): { x: number; y: number } | null {
+  const centre = TILE_SIZE * 0.5;
+  for (
+    let radius = INTERIOR_NEIGHBOUR_MIN_TILES;
+    radius <= INTERIOR_NEIGHBOUR_MAX_TILES;
+    radius++
+  ) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const tile = { x: from.x + dx, y: from.y + dy };
+        if (!map.isWalkable(tile.x, tile.y)) continue;
+        if (
+          !map.hasLineOfSight(
+            from.x * TILE_SIZE + centre,
+            from.y * TILE_SIZE + centre,
+            tile.x * TILE_SIZE + centre,
+            tile.y * TILE_SIZE + centre,
+          )
+        ) {
+          continue;
+        }
+        return tile;
+      }
     }
   }
   return null;
@@ -982,6 +1088,105 @@ console.log('\nA crowd is not a duel, and she does not stand in one');
 
     check(party.cat.isAlive, `she kites a swarm instead of trading with it (${party.cat.hp} HP)`);
   }
+}
+
+console.log('\nA companion fights indoors, and forgets the target it left');
+{
+  const groundFloor = makeInterior(INTERIOR_GROUND_FLOOR);
+  const upperFloor = makeInterior(INTERIOR_UPPER_FLOOR);
+  const groundStart = groundFloor.startTile;
+  const cultistTile = nearbyWalkable(groundFloor, groundStart);
+  const party = makeParty(groundFloor);
+  const companion = new CompanionSystem(groundFloor, groundStart.x, groundStart.y);
+
+  // An empty room is the common case indoors: most buildings hold nothing at
+  // all, and a companion drive that only survives a populated roster would take
+  // every shop in town down with it.
+  runCompanion(companion, party, SETTLE_FRAMES);
+  check(party.cat.autoTarget === null, 'an empty room gives the companion nothing to do');
+
+  if (cultistTile === null) {
+    check(false, 'a generated interior offered floor to stage a fight on');
+  } else {
+    const cultist = addMob(party, 'city_elf_cultist', cultistTile.x, cultistTile.y);
+    cultist.currentTarget = party.human;
+    runCompanion(companion, party, SETTLE_FRAMES);
+    // The whole point of the interior context: it carries no boss room, and the
+    // veto has to read that as "nothing to veto" rather than as a reason to sit
+    // the fight out.
+    check(
+      party.cat.autoTarget === cultist,
+      'with no boss room in the context she answers what is attacking the human',
+    );
+
+    const upperStart = upperFloor.startTile;
+    party.human.x = upperStart.x * TILE_SIZE;
+    party.human.y = upperStart.y * TILE_SIZE;
+    party.cat.x = upperStart.x * TILE_SIZE;
+    party.cat.y = upperStart.y * TILE_SIZE;
+    companion.setMap(upperFloor, party.human, party.cat);
+    check(
+      party.cat.autoTarget === null,
+      'and drops it at the stairs, a storey away from anything she could reach',
+    );
+  }
+}
+
+console.log('\nsetMap re-seeds the map she collides with, not just where she stands');
+{
+  // A cat closing distance on the human after `update()` is true on whichever
+  // `GameMap` `CompanionSystem` is holding — companion positions are absolute
+  // pixels, so that alone can't tell a re-seeded map from a stale one. Putting
+  // a sealed wall between them on the map `setMap` switches to, and nothing
+  // between them on the map it starts with, makes the two cases diverge: only
+  // a companion actually colliding against the new floor stops at the wall.
+  const party = makeParty(makePartitionFloor(false));
+  const companion = new CompanionSystem(party.map, PARTITION_CAT_TILE.x, PARTITION_CAT_TILE.y);
+  const partitioned = makePartitionFloor(true);
+
+  party.human.x = PARTITION_HUMAN_TILE.x * TILE_SIZE;
+  party.human.y = PARTITION_HUMAN_TILE.y * TILE_SIZE;
+  party.cat.x = PARTITION_CAT_TILE.x * TILE_SIZE;
+  party.cat.y = PARTITION_CAT_TILE.y * TILE_SIZE;
+  companion.setMap(partitioned, party.human, party.cat);
+
+  runCompanion(companion, party, PARTITION_FOLLOW_FRAMES);
+  check(
+    party.cat.x / TILE_SIZE < PARTITION_WALL_TILE_X,
+    `she is stopped by the new floor's own wall instead of walking through where it stands on the old floor's open plan (cat at tile ${(party.cat.x / TILE_SIZE).toFixed(1)})`,
+  );
+}
+
+console.log('\nsetMap also drops the ban a floor change did not earn');
+{
+  // The same ban check as the leash tests above, but proving `targetBans`
+  // itself gets cleared rather than merely outlasted: reacquiring within
+  // `SETTLE_FRAMES` is only possible if the ban is gone, since the ban itself
+  // runs for `EXPECTED_TARGET_BAN_FRAMES`.
+  const map = new GameMap(MAP_OPTIONS);
+  const party = makeParty(map);
+  const companion = new CompanionSystem(map, map.startTile.x, map.startTile.y);
+  const quarry = addMob(party, 'goblin', map.startTile.x + 2, map.startTile.y);
+  quarry.currentTarget = party.human;
+
+  runCompanion(companion, party, SETTLE_FRAMES);
+  party.cat.x = party.human.x + BEYOND_LEASH_PX;
+  party.cat.y = party.human.y;
+  companion.update(makeContext(party));
+  party.cat.x = party.human.x;
+  party.cat.y = party.human.y;
+  runCompanion(companion, party, SETTLE_FRAMES);
+  check(
+    party.cat.autoTarget === null,
+    'stretching the leash bans the quarry before the floor changes',
+  );
+
+  companion.setMap(map, party.human, party.cat);
+  runCompanion(companion, party, SETTLE_FRAMES);
+  check(
+    party.cat.autoTarget === quarry,
+    'and setMap clears the ban rather than making her wait out the full ban window',
+  );
 }
 
 console.log('\nA boss chest that cannot be filled says so');

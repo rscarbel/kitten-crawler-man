@@ -89,14 +89,14 @@ function circusNotice(ctx: TownNoticeContext): Notice | null {
     case 'bigtop_ready':
       return {
         title,
-        body: 'The Big Top stands open. Ringmaster Grimaldi awaits within.',
+        body: 'The Big Top stands open. Whatever Grimaldi has become waits at its centre.',
         tone: 'active',
       };
-    case 'grimaldi_slain':
+    case 'grimaldi_redeemed':
     case 'complete':
       return {
         title,
-        body: 'Justice was done at the circus. The troupe walk free, and the ringmaster answers for his cruelty.',
+        body: 'The vine under the Big Top remembers its own name again. The troupe walk free, and nobody had to die for it.',
         tone: 'done',
       };
   }
@@ -142,6 +142,12 @@ function murderNotice(ctx: TownNoticeContext): Notice | null {
         tone: 'active',
       };
     case 'quill_slain':
+      return {
+        title,
+        body: 'Miss Quill has fallen — but something far worse rose in her place. The tower is not safe yet.',
+        tone: 'danger',
+      };
+    case 'lich_slain':
     case 'complete':
       return {
         title,

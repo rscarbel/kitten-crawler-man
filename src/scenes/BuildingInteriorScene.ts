@@ -2,7 +2,7 @@ import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { keybindings } from '../core/Keybindings';
 import { TILE_SIZE } from '../core/constants';
-import { GameMap, TOWER_FLOOR_COUNT, TOWER_INTERIOR_W } from '../map/GameMap';
+import { GameMap, TOWER_FLOOR_COUNT, TOWER_INTERIOR_W, type InteriorVariant } from '../map/GameMap';
 import { BRAZIER, FIREPLACE } from '../map/tileTypes';
 import { PlayerManager } from '../core/PlayerManager';
 import type { BuildingEntry } from '../systems/BuildingSystem';
@@ -15,6 +15,7 @@ import { ShopSystem } from '../systems/ShopSystem';
 import { MobileHUDSystem } from '../systems/MobileHUDSystem';
 import type { MobileHUDButton } from '../systems/MobileHUDSystem';
 import { platform } from '../core/Platform';
+import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
 import {
   readMovement,
@@ -22,11 +23,13 @@ import {
   triggerPlayerAttack,
   KNOCKOUT_TIMEOUT_FRAMES,
 } from '../systems/GameLoopPhases';
+import { renderKnockedOutUI, updateKnockoutState } from '../systems/KnockoutRevive';
 import { GameplayScene } from './GameplayScene';
 import { pointInRect } from '../utils';
 import { AchievementManager } from '../core/AchievementManager';
 import { GameStats } from '../core/GameStats';
 import type { PauseMenu } from '../ui/PauseMenu';
+import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { AbilityManager } from '../core/AbilityManager';
@@ -48,13 +51,19 @@ import { addButton, beginMenuFocus, endMenuFocus, menuFocusContextId } from '../
 import type { ButtonRect } from '../ui/pause/types';
 import { EventBus } from '../core/EventBus';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
+import { causeFromDamageSource } from '../systems/DeathCauseSystem';
+import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { resolveSkillBookPrompt } from '../systems/skillBookUse';
 import type { Mob } from '../creatures/Mob';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CONVERSATION_WALK_AWAY_TILES } from '../creatures/townInteraction';
-import type { CircusQuestProgress } from '../core/CircusQuestProgress';
+import {
+  BIG_TOP_BUILDING_NAME,
+  isCircusResolvedStage,
+  type CircusQuestProgress,
+} from '../core/CircusQuestProgress';
 import { adviceObjective, MordecaiAdvisor, type AdviceSnapshot } from '../systems/mordecaiAdvice';
-import type { MurderQuestProgress } from '../core/MurderQuestProgress';
+import type { MurderQuestProgress, MurderQuestStage } from '../core/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
 import { FollowerMenu } from '../systems/FollowerMenu';
@@ -124,9 +133,13 @@ import { FortuneTellerPanel, HEDGE_WITCH } from '../ui/FortuneTellerPanel';
 import { ReadablePanel } from '../ui/ReadablePanel';
 import { drawInteractionPrompt, setInteractionPromptsSuppressed } from '../ui/InteractionPrompt';
 import { SpellSystem } from '../systems/SpellSystem';
+import { MAZE_CAT_SPAWN_TILE, MAZE_HUMAN_SPAWN_TILE } from '../map/bigTopMazeLayout';
+import { findNearbyWalkableTile } from '../map/findWalkableTile';
+import { GrimaldiVine } from '../creatures/GrimaldiVine';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import { CombatKit } from '../systems/kits/CombatKit';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
+import { partyLevelOf } from '../levels/spawner';
 import { AnchorInteriorSystem, SKY_TEMPLE_NAME } from '../systems/AnchorInteriorSystem';
 import { createAnchorQuestProgress, type AnchorQuestProgress } from '../core/AnchorQuestProgress';
 import { MenusKit } from '../systems/kits/MenusKit';
@@ -148,10 +161,12 @@ import {
   type OverlayInputClaim,
 } from '../systems/kits/OverlayClaims';
 import { DestructionKit } from '../systems/kits/DestructionKit';
-import { BigTopBossSystem } from '../systems/BigTopBossSystem';
+import { BigTopMazeSystem } from '../systems/BigTopMazeSystem';
 import { CultHideoutSystem } from '../systems/CultHideoutSystem';
 import { QuillConfrontationSystem } from '../systems/QuillConfrontationSystem';
 import { SoulCrystalSystem } from '../systems/SoulCrystalSystem';
+import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
+import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
 import type { SystemContext } from '../systems/GameSystem';
 import type { InteriorFigure } from '../core/InteriorFigure';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -178,10 +193,9 @@ const READ_PROMPT_LABEL = 'Read';
  * Frames a freshly-opened interior modal ignores the interact key entirely.
  *
  * The same key opens these panels and closes them, and `InputManager` only
- * tracks whether a key is currently *down*. `input.clear()` empties that set, so
- * a key the player is physically still holding reads as released — until the
- * browser's auto-repeat puts it back and the panel shuts itself the moment it
- * appeared.
+ * tracks whether a key is currently *down*. Opening a panel releases the key
+ * that opened it, so a still-held key reads as released — until the browser's
+ * auto-repeat puts it back and the panel shuts itself the moment it appeared.
  *
  * The window has to outlast that repeat delay, which is an OS setting and can be
  * as long as a second, so this is deliberately generous: a player who just
@@ -211,8 +225,8 @@ const TAVERN_BUILDING_NAMES: ReadonlySet<string> = new Set([
 
 const MAX_TOWER_FLOOR_INDEX = TOWER_FLOOR_COUNT - 1;
 const DEFAULT_MAP_FALLBACK_WIDTH = 18;
-const COMPANION_FOLLOW_OVERRIDE_RATIO = 0.8;
-const COMPANION_FOLLOW_NORMAL_RATIO = 1.5;
+/** The companion cat's missile is a constant patter in a fight; held under the swings it covers. */
+const CAT_MISSILE_VOLUME = 0.5;
 const RECENT_EVENTS_LIMIT = 5;
 const TILE_CENTER_RATIO = 0.5;
 const SAFE_ROOM_PULSE_BASE = 0.6;
@@ -257,13 +271,41 @@ const INTERIOR_REVIVE_HP_FRACTION = 0.5;
 const GROUND_FLOOR_INDEX = 0;
 /** The Quill confrontation happens in the magistrate's office on the tower's top floor. */
 const TOWER_CONFRONTATION_FLOOR = 3;
+/**
+ * Quest stages that put the magistrate's office on screen.
+ *
+ * Wider than the stage that starts the Quill fight: the room owns Featherfall's
+ * body as much as it owns the fights, and it has to be standing there before
+ * the first of them, between the two, and after the last — including on a
+ * revisit once the questline is closed.
+ */
+const TOWER_CONFRONTATION_STAGES: ReadonlyArray<MurderQuestStage> = [
+  'confrontation',
+  'quill_slain',
+  'lich_slain',
+  'complete',
+];
 /** Fade-in for an interior's own music when the building is entered. */
 const INTERIOR_MUSIC_FADE_IN_MS = 800;
+/**
+ * A dozen vents can light in the same second, so the whoosh is held well under
+ * the cues the player actually has to react to.
+ */
+const VENT_IGNITION_VOLUME = 0.35;
+/** The cured vine's own tile hugs the south face of the pole cluster he wraps. */
+const CURED_GRIMALDI_POLE_SOUTH_OFFSET = 1;
+const CURED_GRIMALDI_SEARCH_RADIUS_TILES = 4;
 
-/** A quest encounter that runs inside a building (Big Top boss, cult hideout, tower fight). */
+/** A quest encounter that runs inside a building (the Big Top maze, cult hideout, tower fight). */
 interface InteriorEncounter {
   update(ctx: SystemContext): void;
   renderUI(ctx: CanvasRenderingContext2D): void;
+  /**
+   * World-space furniture the encounter owns — props that belong to the room
+   * rather than to any creature in it, drawn under the figures so a crawler
+   * crossing the room passes in front of them.
+   */
+  renderWorld?(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void;
   /** Death-screen message when the players fall during this encounter. */
   readonly defeatMessage: string;
 }
@@ -280,6 +322,13 @@ interface InteriorFloor {
   readonly world: SceneWorld;
   readonly combat: CombatKit;
   readonly destruction: DestructionKit;
+  /**
+   * A caster's shots and its raised escort, per storey for the same reason the
+   * roster is: both are bound to one map at construction, and a bolt in flight
+   * on the floor below is not something the floor above should be advancing.
+   */
+  readonly skeletonShots: SkeletonProjectileSystem;
+  readonly skeletonSummons: SkeletonSummonSystem;
 }
 
 /**
@@ -305,6 +354,22 @@ export interface BuildingInteriorCircusContext {
 
 /** Every enterable building stands on the level-3 overworld. */
 const OVERWORLD_FLOOR_NUMBER = 3;
+
+/**
+ * Which shape this room is built in.
+ *
+ * The Big Top is the only building with more than one, and only for the length
+ * of the circus questline's final act: at `bigtop_ready` the tent is the trap
+ * maze, and at every other enterable stage it is the calm ring the questline
+ * leaves behind.
+ */
+function interiorVariantFor(
+  buildingName: string,
+  circusProgress: CircusQuestProgress | undefined,
+): InteriorVariant {
+  const isMaze = buildingName === BIG_TOP_BUILDING_NAME && circusProgress?.stage === 'bigtop_ready';
+  return isMaze ? 'bigtop_maze' : 'default';
+}
 
 export class BuildingInteriorScene extends GameplayScene {
   private map: GameMap;
@@ -367,9 +432,6 @@ export class BuildingInteriorScene extends GameplayScene {
   // Shared mobile HUD (buttons, touch state) — the panels it draws are the kit's.
   private readonly mobileHUD: MobileHUDSystem;
 
-  // Companion follow override (recall) — set when the player picks "Follow me".
-  private isFollowOverride = false;
-
   // Companion command state + menu, mirrored from the overworld so movement mode
   // and combat stance carry into buildings. The stance is threaded by reference
   // so passive/aggressive chosen here persists back out to the overworld.
@@ -396,6 +458,24 @@ export class BuildingInteriorScene extends GameplayScene {
   /** The quest fight running in this building, if any, and the floor it holds. */
   private encounter: InteriorEncounter | null = null;
   private encounterFloor = 0;
+  /**
+   * The tower fight, held by its own type as well as by `encounter`.
+   *
+   * It is the one encounter with a conversation in it — the body at the desk
+   * and the reveal that follows — so the overlay list, the Escape chain and the
+   * Space chain all have to be able to ask it questions no other encounter
+   * answers.
+   */
+  private towerConfrontation: QuillConfrontationSystem | null = null;
+  /**
+   * The Big Top's trap maze, held by its own type as well as by `encounter`.
+   *
+   * Like the tower's confrontation it has a conversation in it, and more besides
+   * — a camera the script takes over, a follow command it refuses, and a door it
+   * sends the party out through — so the overlay list, the Space chain and the
+   * render pass all ask it questions no other encounter answers.
+   */
+  private bigTopMaze: BigTopMazeSystem | null = null;
   /** Storeys still holding hostiles that were not put there by a quest encounter. */
   private readonly hostileRoomFloors = new Set<number>();
   // Ambient occupants (null in encounter interiors, towers, the club, and unpopulated buildings)
@@ -433,7 +513,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private modalGraceFrames = 0;
   /**
    * Whether the interact key has been observed genuinely released since the open
-   * modal appeared. Nothing calls `input.clear()` while one of these panels is
+   * modal appeared. Nothing releases it while one of these panels is
    * up, so inside that window "not held" really does mean the key came up —
    * which makes this the edge trigger `isHeld` cannot be on its own.
    */
@@ -444,7 +524,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * whole interaction chain rather than a single panel's close.
    *
    * Re-armed from the key *events*, never from the held-key set: a panel that
-   * closes calls `input.clear()`, which the polled set cannot tell apart from a
+   * closes releases the key, which the polled set cannot tell apart from a
    * finger coming off the key — and reading it that way is what let a held press
    * re-open the panel it had just shut, half a second later, on the first
    * auto-repeat. Both the release and the start of the next non-repeat press
@@ -535,6 +615,10 @@ export class BuildingInteriorScene extends GameplayScene {
     this.companionStance = companionStance ?? createCompanionStanceState();
 
     const isTower = entry.type === 'tower';
+    // Read once and reused below: the room's shape and where the two crawlers are
+    // put down have to be the same decision, or the maze gets built and then
+    // entered through the ring's single door.
+    const variant = interiorVariantFor(entry.name, this.circus?.progress);
 
     // prebuiltStructure skips dungeon generation entirely (mapSize 0 would
     // crash the generator); generateInterior() builds the real room next.
@@ -551,7 +635,7 @@ export class BuildingInteriorScene extends GameplayScene {
     } else {
       // Build single interior map
       this.map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-      this.map.generateInterior(entry.type, 0, entry.name, entry.hasSafeRoom === true);
+      this.map.generateInterior(entry.type, 0, entry.name, entry.hasSafeRoom === true, variant);
     }
 
     this.mapW = this.map.structure[0]?.length ?? DEFAULT_MAP_FALLBACK_WIDTH;
@@ -581,13 +665,21 @@ export class BuildingInteriorScene extends GameplayScene {
     restorePlayer(this.cat, catSnap);
     // Re-position after restore (restore doesn't set x/y).
     this.pm.setPositions(sx, sy);
+    // The maze is two people walking two sealed halves, so they come in through
+    // two flaps. After `setPositions`, which puts both on one tile.
+    if (variant === 'bigtop_maze') {
+      this.human.x = MAZE_HUMAN_SPAWN_TILE.x * TILE_SIZE;
+      this.human.y = MAZE_HUMAN_SPAWN_TILE.y * TILE_SIZE;
+      this.cat.x = MAZE_CAT_SPAWN_TILE.x * TILE_SIZE;
+      this.cat.y = MAZE_CAT_SPAWN_TILE.y * TILE_SIZE;
+    }
 
     this.audio?.wireEvents(this.bus);
 
-    // Companion command state holder + menu, sharing the overworld stance so
-    // movement mode and combat stance are consistent everywhere. Used only as a
-    // state store here (buildings drive the follow directly via
-    // applyCompanionFollow), so its combat/pathing update is never ticked.
+    // The same companion drive the overworld runs, sharing the overworld stance
+    // so movement mode and combat stance are consistent everywhere. It owns the
+    // companion's feet as well as its hands: a second mover on the same body
+    // fights this one for every step.
     this.companion = new CompanionSystem(this.map, sx, sy, this.companionStance);
     this.wireFollowerMenu();
 
@@ -649,6 +741,8 @@ export class BuildingInteriorScene extends GameplayScene {
       this.floors.push({
         world,
         destruction: new DestructionKit(world, OVERWORLD_FLOOR_NUMBER),
+        skeletonShots: new SkeletonProjectileSystem(floorMap),
+        skeletonSummons: new SkeletonSummonSystem(floorMap, (mob) => world.roster.add(mob)),
         combat: new CombatKit({
           world,
           abilityManager: this.abilityManager,
@@ -789,6 +883,16 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.floors[this.currentFloor].destruction;
   }
 
+  /** That floor's soul bolts and bone arrows. */
+  private get skeletonShots(): SkeletonProjectileSystem {
+    return this.floors[this.currentFloor].skeletonShots;
+  }
+
+  /** That floor's raised skeletons. */
+  private get skeletonSummons(): SkeletonSummonSystem {
+    return this.floors[this.currentFloor].skeletonSummons;
+  }
+
   /** The quest fight, but only while the player is on the floor holding it. */
   private get activeEncounter(): InteriorEncounter | null {
     return this.currentFloor === this.encounterFloor ? this.encounter : null;
@@ -861,6 +965,27 @@ export class BuildingInteriorScene extends GameplayScene {
         // One claim over five stations — shop, casino, guild, VIP lounge, quest
         // dialog — so the club answers for whichever of them is drawn.
         focusContext: this.club?.focusContext ?? null,
+      },
+      // The tower's own conversation: the magistrate's body, and the reveal
+      // that ends with a boss in the room. Ahead of the ambient surfaces below
+      // for the same reason the anchor questline is — a quest box is always the
+      // one being read.
+      {
+        isOpen:
+          this.currentFloor === TOWER_CONFRONTATION_FLOOR &&
+          this.towerConfrontation?.isDialogOpen === true,
+        space: { kind: 'advance', advance: () => this.towerConfrontation?.advanceDialog() },
+        locksKeyboard: true,
+        haltsWorld: true,
+        focusContext: 'quest-dialog',
+      },
+      // The tent's own conversation, at the moment the potion lands on the vine.
+      {
+        isOpen: this.bigTopMaze?.isDialogOpen === true,
+        space: { kind: 'advance', advance: () => this.bigTopMaze?.advanceDialog() },
+        locksKeyboard: true,
+        haltsWorld: true,
+        focusContext: 'quest-dialog',
       },
       // Ahead of both service surfaces it can intercept: while the anchor
       // questline has something to say, its box is the one that is drawn.
@@ -977,6 +1102,11 @@ export class BuildingInteriorScene extends GameplayScene {
    * system it already has. Adding a fight to a room that never had one is a
    * table entry in `interiorHostiles`, and nothing else.
    */
+  /** What every scripted interior enemy is levelled against. */
+  private get partyLevel(): number {
+    return partyLevelOf(this.human.level, this.cat.level);
+  }
+
   private populateHostileRooms(): void {
     this.floors.forEach((floor, floorIndex) => {
       const hostiles = interiorHostilesFor({
@@ -986,6 +1116,7 @@ export class BuildingInteriorScene extends GameplayScene {
         map: floor.world.gameMap,
         memory: this.townMemory,
         murderQuest: this.murderQuestProgress,
+        partyLevel: this.partyLevel,
       });
       for (const hostile of hostiles) floor.world.roster.add(hostile);
       if (hostiles.length > 0) this.hostileRoomFloors.add(floorIndex);
@@ -1007,15 +1138,34 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * Encounters that are live from the moment the building is entered: the
-   * Big Top's Grimaldi fight and the Blackwood Lodge cult hideout. The
-   * tower's Quill confrontation is created later, on reaching the top floor.
+   * Big Top's trap maze and the Blackwood Lodge cult hideout. The tower's Quill
+   * confrontation is created later, on reaching the top floor.
    */
   private initEntryEncounter(circusProgress: CircusQuestProgress | undefined): void {
-    if (this.entry.name === 'Big Top' && circusProgress?.stage === 'bigtop_ready') {
-      this.startEncounter(
-        GROUND_FLOOR_INDEX,
-        (bus, addMob) => new BigTopBossSystem(this.map, bus, addMob, circusProgress, this.audio),
-      );
+    if (this.entry.name === BIG_TOP_BUILDING_NAME && circusProgress?.stage === 'bigtop_ready') {
+      this.startEncounter(GROUND_FLOOR_INDEX, (bus, addMob) => {
+        const maze = new BigTopMazeSystem(this.map, bus, addMob, circusProgress, this.audio);
+        this.bigTopMaze = maze;
+        // The maze's fire is ground the companion has to be steered out of, the
+        // same as a gas cloud or a boss's puddle.
+        this.companion.registerHazardSource(maze);
+        // Both parked, not just whoever is standing in for the companion right
+        // now: each crawler walks their own half, and the moment the player uses
+        // the switch key — which is the whole mechanic — the other stance would
+        // still be on follow and would march that crawler into a corridor nobody
+        // is steering them through.
+        this.companion.anchorBoth(this.human, this.cat);
+        return maze;
+      });
+      return;
+    }
+
+    if (
+      this.entry.name === BIG_TOP_BUILDING_NAME &&
+      circusProgress !== undefined &&
+      isCircusResolvedStage(circusProgress.stage)
+    ) {
+      this.placeCuredGrimaldi();
       return;
     }
 
@@ -1023,9 +1173,34 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.entry.name === 'Blackwood Lodge' && murderProgress?.stage === 'cult_hideout') {
       this.startEncounter(
         GROUND_FLOOR_INDEX,
-        (bus, addMob) => new CultHideoutSystem(this.map, bus, addMob, murderProgress),
+        (bus, addMob) =>
+          new CultHideoutSystem(this.map, bus, addMob, murderProgress, this.partyLevel),
       );
     }
+  }
+
+  /**
+   * The vine as the questline leaves him: still wrapped around the tent pole,
+   * cured, in the ordinary ring the tent goes back to being.
+   *
+   * Not an encounter — nothing in the room is live any more — so he joins the
+   * ground floor's roster the way any other furniture-shaped creature would, and
+   * the room keeps its occupants, its readables and its own music.
+   */
+  private placeCuredGrimaldi(): void {
+    const pole = this.map.bigtopRingCentre;
+    if (pole === null) return;
+    const tile = findNearbyWalkableTile(
+      this.map,
+      pole.x,
+      pole.y + CURED_GRIMALDI_POLE_SOUTH_OFFSET,
+      CURED_GRIMALDI_SEARCH_RADIUS_TILES,
+    );
+    if (tile === null) return;
+    const grimaldi = new GrimaldiVine(tile.x, tile.y, TILE_SIZE);
+    grimaldi.setMap(this.map);
+    grimaldi.cureAmount = 1;
+    this.floors[GROUND_FLOOR_INDEX].world.roster.add(grimaldi);
   }
 
   /**
@@ -1050,21 +1225,23 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.encounter !== null) return;
     if (this.entry.type !== 'tower' || this.currentFloor !== TOWER_CONFRONTATION_FLOOR) return;
     const murderProgress = this.murderQuestProgress;
-    if (murderProgress?.stage !== 'confrontation') return;
+    if (murderProgress === undefined) return;
+    if (!TOWER_CONFRONTATION_STAGES.includes(murderProgress.stage)) return;
 
     const floorMap = this.map;
-    this.startEncounter(
-      TOWER_CONFRONTATION_FLOOR,
-      (bus, addMob) =>
-        new QuillConfrontationSystem(
-          floorMap,
-          bus,
-          addMob,
-          murderProgress,
-          this.audio,
-          this.doomsdayProgress,
-        ),
-    );
+    this.startEncounter(TOWER_CONFRONTATION_FLOOR, (bus, addMob) => {
+      const confrontation = new QuillConfrontationSystem(
+        floorMap,
+        bus,
+        addMob,
+        murderProgress,
+        this.audio,
+        this.doomsdayProgress,
+        this.partyLevel,
+      );
+      this.towerConfrontation = confrontation;
+      return confrontation;
+    });
   }
 
   private changeFloor(newFloor: number): void {
@@ -1078,6 +1255,10 @@ export class BuildingInteriorScene extends GameplayScene {
     const departing = this.floors[this.currentFloor];
     departing.combat.leaveFloor();
     departing.destruction.resetForCheckpoint();
+    // A bolt already loosed belongs to the storey it was fired on, and the rise
+    // cue belongs to skeletons the player is walking away from.
+    departing.skeletonShots.resetForCheckpoint();
+    departing.skeletonSummons.resetForCheckpoint();
     this.currentFloor = newFloor;
     this.map = this.towerFloors[newFloor];
     this.mapW = this.map.structure[0]?.length ?? TOWER_INTERIOR_W;
@@ -1088,11 +1269,20 @@ export class BuildingInteriorScene extends GameplayScene {
     // if ascending, place at the down-stairs; if descending, place at the up-stairs
     const spawnTiles = goingUp ? this.map._interiorStairDownTiles : this.map._interiorStairUpTiles;
     const spawn = spawnTiles[0] ?? this.map.startTile;
-    const spawnY = spawn.y + 1; // one tile below the stair so the menu doesn't re-trigger
-    this.human.x = spawn.x * TILE_SIZE;
+    // Clear of the *whole* stair block, not one tile below its first tile: a
+    // staircase spans several rows, so landing one row down would still be on it
+    // and would re-open the menu the arrival just came through.
+    const stairBottomRow = spawnTiles.reduce((lowest, tile) => Math.max(lowest, tile.y), spawn.y);
+    const spawnY = stairBottomRow + 1;
+    const spawnX = spawnTiles.reduce((leftmost, tile) => Math.min(leftmost, tile.x), spawn.x);
+    this.human.x = spawnX * TILE_SIZE;
     this.human.y = spawnY * TILE_SIZE;
-    this.cat.x = (spawn.x + 1) * TILE_SIZE;
+    this.cat.x = (spawnX + 1) * TILE_SIZE;
     this.cat.y = spawnY * TILE_SIZE;
+    // After both crawlers have been placed, so the companion's re-seeded anchors
+    // and its leash both read the landing they actually arrived on rather than
+    // the storey they left.
+    this.companion.setMap(this.map, this.human, this.cat);
 
     // Reset menu states
     this.onExitTile = false;
@@ -1161,6 +1351,8 @@ export class BuildingInteriorScene extends GameplayScene {
           return true;
         }
         if (this.bopca?.dismissDialog() === true) return true;
+        if (this.bigTopMaze?.dismissDialog() === true) return true;
+        if (this.towerConfrontation?.dismissDialog() === true) return true;
         if (this.safeRoom?.mordecaiDialogOpen === true) {
           this.safeRoom.mordecaiDialogOpen = false;
           return true;
@@ -1248,6 +1440,10 @@ export class BuildingInteriorScene extends GameplayScene {
       toggleGear: () => this.menus.toggleGear(),
       // Closing is `dismissFollowerMenu`'s job, which the handler tries first.
       companionFollow: () => {
+        if (this.followDisabled) {
+          this.audio?.play('error');
+          return;
+        }
         if (this.canOpenFollowerMenu()) this.followerMenu.open();
       },
       toggleMiniMap: () => this.mobileHUD.toggleMiniMap(),
@@ -1331,7 +1527,19 @@ export class BuildingInteriorScene extends GameplayScene {
    * too — a conversation the player can walk out of should not block a command.
    */
   private canOpenFollowerMenu(): boolean {
+    if (this.followDisabled) return false;
     return !worldHalted(this.overlayClaims) && this.citizenDialog?.isOpen !== true;
+  }
+
+  /**
+   * Whether this room refuses the follow command outright.
+   *
+   * The Big Top's maze is the only one that does: it is two people solving one
+   * room from opposite sides, and a companion trailing the active crawler would
+   * walk into a corridor nobody is steering them through.
+   */
+  private get followDisabled(): boolean {
+    return this.bigTopMaze?.followDisabled === true;
   }
 
   /** Hook the shared follower menu to the companion's commands (same set as the overworld). */
@@ -1339,7 +1547,6 @@ export class BuildingInteriorScene extends GameplayScene {
     this.followerMenu.onFollowMe = () => {
       this.audio?.play('menu_click');
       this.companion.setFollowMe(this.human.isActive);
-      this.isFollowOverride = true;
     };
     this.followerMenu.onDoNotMove = () => {
       this.audio?.play('menu_click');
@@ -1356,12 +1563,19 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
+   * True while the companion lies knocked out somewhere in this building — as
+   * opposed to having gone down outside before the party came in, which is the
+   * case `companionLeftBehind` describes.
+   */
+  private companionDownIndoors = false;
+
+  /**
    * True when the companion went down outside and was left lying there. They are
    * not in this building at all: they don't follow, don't render, and can't be
    * switched to — only walking back out reaches them.
    */
   private get companionLeftBehind(): boolean {
-    return this.inactive().isKnockedOut;
+    return this.inactive().isKnockedOut && !this.companionDownIndoors;
   }
 
   /** The companion as a render-list fragment — empty when they were left outside. */
@@ -1369,13 +1583,34 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.companionLeftBehind ? [] : [this.inactive()];
   }
 
-  /** Hands control to the companion, unless they're lying knocked out outside. */
+  /** Hands control to the companion, unless they're lying knocked out — outside or in here. */
   private trySwitchActive(): void {
-    if (this.companionLeftBehind) {
+    // Guarded here rather than only at the keyboard poll, because the mobile HUD
+    // reaches this by a different road: a script that is driving both bodies
+    // must not have one swapped out from under it by either of them.
+    if (this.bigTopMaze?.playerLocked === true) return;
+    if (this.inactive().isKnockedOut) {
       this.audio?.play('error');
       return;
     }
+    this.audio?.play('menu_change_follower');
+    const wasHumanActive = this.human.isActive;
     this.pm.switchActive();
+    // The crawler who just stopped being driven is now standing somewhere new,
+    // and an anchored stance has to be told so. Without this its anchor is still
+    // wherever it was set — which indoors is the door they came in by — and the
+    // follow drive walks them all the way back to it, through whatever is
+    // between. Harmless in a shop, where nothing is anchored; ruinous under the
+    // Big Top, where the room anchors both crawlers and the ground burns.
+    const parked = wasHumanActive ? this.human : this.cat;
+    // Parked where they stand, unless the room says that spot is about to be on
+    // fire — an anchor inside a trap corridor is a crawler walking back into it
+    // every time the follow drive goes out.
+    const restingSpot = this.bigTopMaze?.restingSpotFor(parked) ?? parked;
+    this.companion.notifyBecameCompanion(restingSpot, wasHumanActive);
+    this.human.autoTarget = null;
+    this.cat.autoTarget = null;
+    this.companion.isFollowOverride = false;
   }
 
   /**
@@ -1384,11 +1619,37 @@ export class BuildingInteriorScene extends GameplayScene {
    * game over as soon as the scene hands control back.
    */
   private tickCompanionLeftBehind(): boolean {
+    if (!this.companionLeftBehind) return false;
     const companion = this.inactive();
-    if (!companion.isKnockedOut) return false;
     companion.isMoving = false;
     companion.knockedOutFrames++;
     return companion.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES;
+  }
+
+  /**
+   * The same downed-teammate flow the overworld runs, for a companion who drops
+   * inside the building: knocked out where they fell, revived by standing over
+   * them, and a bleed-out ending the run. This scene used to hand the death
+   * straight out the front door instead, which teleported the player outside
+   * mid-visit.
+   */
+  private updateCompanionKnockout(): void {
+    if (this.companionLeftBehind) return;
+    const inactive = this.inactive();
+    // Latched before the state machine flips `isKnockedOut`, so
+    // `companionLeftBehind` never mistakes this body for one lying outside.
+    if (!inactive.isAlive && !inactive.isKnockedOut) this.companionDownIndoors = true;
+    updateKnockoutState({
+      active: this.active(),
+      inactive,
+      inactiveIsHuman: inactive === this.human,
+      audio: this.audio,
+    });
+    if (!inactive.isKnockedOut) {
+      this.companionDownIndoors = false;
+      return;
+    }
+    if (inactive.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) this.raiseDeathScreen();
   }
 
   update(): void {
@@ -1434,14 +1695,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.raiseDeathScreen();
       return;
     }
-    // The companion is a different case, and deliberately not a defeat: nothing
-    // in here knocks a crawler down or offers the proximity revive the overworld
-    // does, so handing the death straight out is what gets them that window
-    // instead of ending the run on the likeliest outcome of a hard fight. A
-    // companion who bled out on the doorstep while the party was indoors takes
-    // the same route, for the same reason.
-    const companionDown = !this.inactive().isAlive && !this.inactive().isKnockedOut;
-    if (companionDown || reviveDeadlineExpired) {
+    // A companion who bled out on the doorstep while the party was indoors is
+    // the overworld's defeat to declare: hand it out and let the scene behind
+    // turn it into a game over.
+    if (reviveDeadlineExpired) {
       this.doExit();
       return;
     }
@@ -1482,6 +1739,14 @@ export class BuildingInteriorScene extends GameplayScene {
       // to keep ticking through its own panel — the same reason the Bopca's cook
       // timer runs through her dialog above.
       this.club.tickOpenModals(this.active());
+      return;
+    }
+    if (this.bigTopMaze?.isDialogOpen === true) {
+      // Ticked rather than merely halted, for the same reason the blackjack
+      // table and the Bopca's cook timer are: the box is one beat of a script
+      // that is holding both crawlers still, and the script is what closes it.
+      // A bare `return` here strands the party locked in place forever.
+      this.bigTopMaze.update(this.buildSystemContext());
       return;
     }
     if (this.anchorInterior?.isDialogOpen === true) {
@@ -1528,35 +1793,34 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     const player = this.active();
+    // A cutscene drives both bodies itself. Every input below is withheld for
+    // its whole run, movement included, or the player walks Carl out of the
+    // scripted walk-up he is halfway through.
+    const scriptOwnsParty = this.bigTopMaze?.playerLocked === true;
 
     // Movement via shared GameLoopPhases
-    const move = readMovement(
-      this.input,
-      this.mobileHUD.moveTarget,
-      this.mobileHUD.tapStart,
-      player,
-      this.computeCamera(this.map),
-    );
-    // Interiors are small enough that the south wall is always on screen, so a
-    // crawler with their feet planted on it is the first thing you notice.
-    applyMovement(player, move, this.map, 'sole');
-    const followDist = this.isFollowOverride
-      ? TILE_SIZE * COMPANION_FOLLOW_OVERRIDE_RATIO
-      : TILE_SIZE * COMPANION_FOLLOW_NORMAL_RATIO;
-    // "Do not move" holds the companion in place; otherwise it trails the player.
-    if (this.companionLeftBehind) {
-      this.inactive().isMoving = false;
-    } else if (this.companion.getMovementMode(this.human.isActive) === 'follow') {
-      this.applyCompanionFollow(this.map, followDist);
-    } else {
-      this.inactive().isMoving = false;
+    if (!scriptOwnsParty) {
+      const move = readMovement(
+        this.input,
+        this.mobileHUD.moveTarget,
+        this.mobileHUD.tapStart,
+        player,
+        this.computeCamera(this.map),
+      );
+      // Interiors are small enough that the south wall is always on screen, so a
+      // crawler with their feet planted on it is the first thing you notice.
+      applyMovement(player, move, this.map, 'sole');
     }
 
     // Held back mid-conversation to match the street: swapping characters would
     // hand the walk-away check a body standing several tiles back, closing the
     // box on a player who never moved.
-    if (!conversationOpen && keybindings.isHeld(this.input, 'switchCharacter')) {
-      this.input.clear();
+    if (
+      !conversationOpen &&
+      !scriptOwnsParty &&
+      keybindings.isHeld(this.input, 'switchCharacter')
+    ) {
+      keybindings.release(this.input, 'switchCharacter');
       this.trySwitchActive();
     }
 
@@ -1579,15 +1843,23 @@ export class BuildingInteriorScene extends GameplayScene {
     // acting, so an unrelated press can still fall through to talking to an
     // ambient occupant sharing the room.
     if (this.bopca !== null && interactPressed() && this.bopca.tryInteract(player)) {
-      this.input.clear();
+      keybindings.release(this.input, 'attack');
+    }
+
+    if (
+      interactPressed() &&
+      this.currentFloor === TOWER_CONFRONTATION_FLOOR &&
+      this.towerConfrontation?.tryExamine(player) === true
+    ) {
+      keybindings.release(this.input, 'attack');
     }
 
     if (this.safeRoom && interactPressed()) {
       if (this.safeRoom.isNearBed(player)) {
-        this.input.clear();
+        keybindings.release(this.input, 'attack');
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(player)) {
-        this.input.clear();
+        keybindings.release(this.input, 'attack');
         this.talkToMordecai();
       }
     }
@@ -1596,7 +1868,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // job, through the same edge-triggered helper every other interior panel
     // uses — the key that opens one is the key that shuts it.
     if (this.shop !== null && interactPressed() && this.shop.isNearShopkeeper(player)) {
-      this.input.clear();
+      keybindings.release(this.input, 'attack');
       this.shop.shopOpen = true;
       this.beginModalGrace();
     }
@@ -1605,12 +1877,19 @@ export class BuildingInteriorScene extends GameplayScene {
     // Only consume when a station actually answered, so a press beside an
     // ambient occupant still reaches the conversation below.
     if (this.club !== null && interactPressed() && this.club.handleInteract(player)) {
-      this.input.clear();
+      keybindings.release(this.input, 'attack');
+    }
+
+    // The tent's one interaction: the potion over the vine. Ahead of the swing
+    // below, because the whole point of the room is that a swing is the wrong
+    // answer here.
+    if (interactPressed() && this.bigTopMaze?.tryInteract(this.buildSystemContext()) === true) {
+      keybindings.release(this.input, 'attack');
     }
 
     // Ambient occupants: talk to the nearest one with Space
     if (interactPressed() && this.tryTalkToOccupant(player)) {
-      this.input.clear();
+      keybindings.release(this.input, 'attack');
     }
 
     // Readables sit on furniture the occupants stand beside, so this runs after
@@ -1656,12 +1935,57 @@ export class BuildingInteriorScene extends GameplayScene {
     // Last claim on the interact key: every interaction above clears the input
     // when it consumes the press, so a swing only happens where there was
     // nothing to talk to, buy from or read.
-    if (!openedReadable && interactPressed()) {
-      this.input.clear();
+    if (!openedReadable && !scriptOwnsParty && interactPressed()) {
+      keybindings.release(this.input, 'attack');
       triggerPlayerAttack(this.human, this.cat, this.world.roster.grid, this.map, this.audio);
     }
 
     this.updateCombat();
+    this.updateCompanionKnockout();
+
+    // Last, so the frame that ends the tent's cutscene finishes before the scene
+    // that replaces this one is built out of the party it was still moving.
+    if (this.bigTopMaze?.exitPending === true) {
+      this.bigTopMaze.exitPending = false;
+      this.doExit();
+    }
+  }
+
+  /** The tent's own cues, played from the flags its script sets. */
+  private drainMazeAudioCues(): void {
+    const maze = this.bigTopMaze;
+    const audio = this.audio;
+    if (maze === null || audio === null) return;
+    if (maze.gateSoundPending) {
+      maze.gateSoundPending = false;
+      audio.play('gate_opening');
+    }
+    if (maze.braceSoundPending) {
+      maze.braceSoundPending = false;
+      audio.play('wood_breaking_1');
+    }
+    if (maze.ventIgnitionSoundPending) {
+      maze.ventIgnitionSoundPending = false;
+      audio.play('llama_fireball', { volume: VENT_IGNITION_VOLUME });
+    }
+    if (maze.burnoutSoundPending) {
+      maze.burnoutSoundPending = false;
+      // [STAND-IN] The llama's fireball burst is the library's closest thing to
+      // a body going up, until a scorch-and-drop cue is sourced.
+      audio.play('llama_fireball_explosion');
+    }
+    if (maze.pourSoundPending) {
+      maze.pourSoundPending = false;
+      audio.play('healing_potion');
+    }
+    if (maze.vineGroanSoundPending) {
+      maze.vineGroanSoundPending = false;
+      audio.play('grimaldi_vine_taking_damage');
+    }
+    if (maze.cureSoundPending) {
+      maze.cureSoundPending = false;
+      audio.play('reviving_tone');
+    }
   }
 
   /**
@@ -1669,10 +1993,20 @@ export class BuildingInteriorScene extends GameplayScene {
    * quest fight lives. With an empty roster every step below is a no-op over
    * empty arrays, which is what makes universal combat free.
    */
-  private updateCombat(): void {
-    const combat = this.combat;
+  /**
+   * The per-frame shared state every system on this storey reads.
+   *
+   * Built on demand rather than kept as a field because half of it — who is
+   * active, whether they are moving — is only true for the frame it is asked
+   * on, and a cached copy would be answering last frame's question.
+   *
+   * `bossRoom` is deliberately absent: an interior has none, and the
+   * companion's boss-room veto answers "no room, no veto" — which is right,
+   * since a quest fight indoors only exists once it has started.
+   */
+  private buildSystemContext(): SystemContext {
     const active = this.active();
-    const ctx: SystemContext = {
+    return {
       human: this.human,
       cat: this.cat,
       active,
@@ -1681,12 +2015,40 @@ export class BuildingInteriorScene extends GameplayScene {
       roster: this.world.roster,
       gameMap: this.map,
     };
+  }
+
+  private updateCombat(): void {
+    const combat = this.combat;
+    const ctx = this.buildSystemContext();
+    const active = ctx.active;
 
     const destruction = this.destruction;
+
+    // Ahead of the swings it decides on.
+    this.companion.update(ctx);
+    if (this.cat.pendingAutoFireSound) {
+      this.cat.pendingAutoFireSound = false;
+      this.audio?.play('cat_missile_fire', { volume: CAT_MISSILE_VOLUME });
+    }
 
     combat.updatePlayerAttacks();
     combat.updateMobs(ctx);
     this.activeEncounter?.update(ctx);
+    // Beside the update that sets it, and ahead of next frame's companion pass:
+    // a burnout moves both crawlers itself, but the anchors are the scene's to
+    // fix, and an anchored companion still pointing at a corridor walks straight
+    // back into the fire that just took them.
+    if (this.bigTopMaze?.partyResetPending === true) {
+      this.bigTopMaze.partyResetPending = false;
+      this.companion.anchorBoth(this.human, this.cat);
+      // The party is no longer standing where the offer was made. A burnout can
+      // land on the same frame the active crawler steps onto an exit mat — the
+      // parked one is what burned — and the menu that opened would then be a
+      // question about a doorway two tiles from anybody, stacked over the box
+      // explaining why they moved.
+      this.exitMenuOpen = false;
+    }
+    this.drainMazeAudioCues();
     combat.drainMobAudioCues(this.audio);
 
     combat.resolvePlayerAttacks({ destructibles: destruction.destructibles });
@@ -1701,6 +2063,11 @@ export class BuildingInteriorScene extends GameplayScene {
       combat.playerTick.tickAutoPotion(this.human, this.cat);
     }
     combat.updatePostCombat(this.audio);
+    // Summons first, so a skeleton raised this frame is already in the roster the
+    // projectile system walks — a wave and the bolts covering it land on one tick.
+    this.skeletonSummons.update(ctx);
+    this.skeletonShots.update(ctx);
+    this.drainCasterAudioCues();
     destruction.update(ctx);
     if (destruction.drainAudioCues(this.audio)) {
       // A hearth or brazier that has just been smashed is floor now, and the
@@ -1710,6 +2077,31 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     if (!active.isAlive) this.raiseDeathScreen();
+  }
+
+  /**
+   * The cues a caster's shots and summons leave behind.
+   *
+   * Drained here rather than with the rest of the mob audio because both outlive
+   * the caster: a bolt that lands after the thing that fired it died has no mob
+   * left to carry the flag, and the rise belongs to the skeletons coming out of
+   * the floor rather than to whoever called them.
+   */
+  private drainCasterAudioCues(): void {
+    if (this.skeletonShots.burstSoundPending) {
+      this.skeletonShots.burstSoundPending = false;
+      this.audio?.play('magic_ball_impact');
+    }
+    // A bone shaft does not go off, so it is a separate cue from the burst above
+    // — the same frame can end one of each.
+    if (this.skeletonShots.arrowImpactSoundPending) {
+      this.skeletonShots.arrowImpactSoundPending = false;
+      this.audio?.play('arrow_impact');
+    }
+    if (this.skeletonSummons.riseSoundPending) {
+      this.skeletonSummons.riseSoundPending = false;
+      this.audio?.play('bones_rattling');
+    }
   }
 
   /**
@@ -1724,9 +2116,31 @@ export class BuildingInteriorScene extends GameplayScene {
     // A death arrives from the fight, not from a key or a click, so nothing else
     // here has taken the keyboard off a bag left open behind it.
     this.menus.cancelInventoryDragForOverlay();
-    this.combat.deathScreen.activate(
-      this.activeEncounter?.defeatMessage ?? INTERIOR_DEFEAT_MESSAGE,
-    );
+    this.combat.deathScreen.activate(this.deathScreenMessage());
+  }
+
+  /**
+   * What the death screen says.
+   *
+   * An encounter's own `defeatMessage` is the room's voice, and it is the right
+   * answer for a fight the room staged — but not for a hazard that names itself,
+   * which is one specific way to die with one specific thing to say about it. A
+   * crawler can walk in already burning or poisoned and go down to that rather
+   * than to anything in the room. So a named hazard wins; anything else falls
+   * back to the room, and then to the building.
+   */
+  private deathScreenMessage(): string {
+    const fallen =
+      this.human.isActive && !this.human.isAlive
+        ? this.human
+        : this.cat.isActive && !this.cat.isAlive
+          ? this.cat
+          : null;
+    const source = fallen?.lastDamageSource ?? null;
+    if (source !== null && source.kind === 'environmental') {
+      return pickDeathExplanation(causeFromDamageSource(source));
+    }
+    return this.activeEncounter?.defeatMessage ?? INTERIOR_DEFEAT_MESSAGE;
   }
 
   /**
@@ -1801,6 +2215,14 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.club?.modalOpen) {
       this.club.handleClick(mx, my, this.active());
+      return;
+    }
+    if (this.bigTopMaze?.isDialogOpen === true) {
+      this.bigTopMaze.handleClick(mx, my);
+      return;
+    }
+    if (this.towerConfrontation?.isDialogOpen === true) {
+      this.towerConfrontation.handleClick(mx, my);
       return;
     }
     if (this.anchorInterior?.isDialogOpen === true) {
@@ -2130,7 +2552,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (!this.modalCloseArmed) return false;
     this.modalCloseArmed = false;
-    this.input.clear();
+    keybindings.release(this.input, 'attack');
     // Disarmed for the same reason a consumed overlay press is: this press is
     // spent, and without saying so the browser's next auto-repeat would hand the
     // same hold to the interaction chain, which would re-open the panel that
@@ -2200,8 +2622,8 @@ export class BuildingInteriorScene extends GameplayScene {
   /**
    * Starts the window in which a newly-opened modal ignores the interact key.
    * Every path that opens one goes through here, including the ones whose caller
-   * already calls `input.clear()` — that clear is exactly the protection this
-   * mechanism exists because it does not provide.
+   * already released the interact key — that release is exactly the protection
+   * this mechanism exists because it does not provide.
    */
   private beginModalGrace(): void {
     this.modalGraceFrames = MODAL_REOPEN_GRACE_FRAMES;
@@ -2365,7 +2787,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private circusAdviceSnapshot(): AdviceSnapshot {
     const stage = this.circus?.progress.stage;
-    const complete = stage === 'grimaldi_slain' || stage === 'complete';
+    const complete = stage === 'grimaldi_redeemed' || stage === 'complete';
     return {
       floorNumber: OVERWORLD_FLOOR_NUMBER,
       bearingOrigin: this.entry.doorTile,
@@ -2495,6 +2917,14 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.mobileHUD.inventoryPanel.hotbarBandHeight();
   }
 
+  /**
+   * The cure under the Big Top is the one thing that happens in a town interior
+   * the party is not driving, so it is the one thing the camera leaves them for.
+   */
+  protected override cameraFocus(): { x: number; y: number } {
+    return this.bigTopMaze?.cameraTargetOverride ?? super.cameraFocus();
+  }
+
   render(ctx: CanvasRenderingContext2D): void {
     const { x: camX, y: camY } = this.computeCamera(this.map);
 
@@ -2544,6 +2974,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Under the figures: the highlight rings sit on the floor around the broken
     // furniture, and a crawler standing at one must not be drawn beneath it.
     this.anchorInterior?.renderObjects(ctx, camX, camY, this.active());
+    this.activeEncounter?.renderWorld?.(ctx, camX, camY, this.active());
     this.renderSortedEntities(ctx, camX, camY, [
       // The same test the dungeon's render pass uses: a corpse that still draws
       // keeps its place in the sort until it expires.
@@ -2555,7 +2986,13 @@ export class BuildingInteriorScene extends GameplayScene {
       ...(this.club?.sortedRenderables() ?? []),
     ]);
     combat.renderEffects(ctx, camX, camY, this.cat);
+    // Over the creatures, so a shot never disappears behind the one it passes.
+    this.skeletonShots.render(ctx, camX, camY);
     destruction.renderEffects(ctx, camX, camY, this.human);
+    // Over the crawlers, so a column standing between the camera and one of them
+    // still reads as fire they are inside rather than fire they are behind.
+    this.bigTopMaze?.renderEffects(ctx, camX, camY);
+    this.bigTopMaze?.renderPrompts(ctx, camX, camY, this.buildSystemContext());
     destruction.renderLoot(ctx, camX, camY, this.active());
     // A room hosting a live fight is not offering conversation.
     if (this.activeEncounter === null) this.renderCitizenPrompt(ctx, camX, camY);
@@ -2584,6 +3021,17 @@ export class BuildingInteriorScene extends GameplayScene {
     this.towerStairs?.renderStairHints(ctx, camX, camY);
 
     this.renderHUD(ctx);
+
+    if (!this.gameOver && !this.pauseMenu.isOpen && this.companionDownIndoors) {
+      renderKnockedOutUI(
+        ctx,
+        camX,
+        camY,
+        this.active(),
+        this.inactive(),
+        this.mobileHUD.miniMapSize,
+      );
+    }
 
     // Interior label
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -2634,14 +3082,19 @@ export class BuildingInteriorScene extends GameplayScene {
         this.menus.inventoryWieldedWeaponId(),
       );
       if (platform.isMobile) {
-        const extraButtons: MobileHUDButton[] = [
-          {
-            id: 'follow',
-            icon: '↩',
-            label: 'Follow',
-            active: this.companion.getMovementMode(this.human.isActive) === 'anchored',
-          },
-        ];
+        // Hidden rather than merely inert where the room refuses the command:
+        // a button that answers every press with an error sound is a control the
+        // player keeps trying.
+        const extraButtons: MobileHUDButton[] = this.followDisabled
+          ? []
+          : [
+              {
+                id: 'follow',
+                icon: '↩',
+                label: 'Follow',
+                active: this.companion.getMovementMode(this.human.isActive) === 'anchored',
+              },
+            ];
         this.mobileHUD.renderButtons(
           ctx,
           this.human.isActive,
@@ -2701,6 +3154,17 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.destruction.dynamite.renderChargeBar(ctx, viewportWidth(), viewportHeight());
     this.menus.hotbarToast.render(ctx, this.mobileHUD.inventoryPanel.hotbarBandHeight());
+
+    if (platform.showEntityTooltip && !this.gameOver && !this.pauseMenu.isOpen) {
+      UIRenderer.renderEntityTooltip(
+        ctx,
+        camX,
+        camY,
+        this._mouseX,
+        this._mouseY,
+        this.world.roster.grid,
+      );
+    }
 
     if (this.pauseMenu.isOpen) {
       // The full argument list, not the stripped three: without the achievement
@@ -3059,6 +3523,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // taken the screen — the release belongs to whatever that is, and `update`
     // is not running the world underneath it anyway.
     if (worldHalted(this.overlayClaims)) return;
+    // The keyboard's swing is withheld for the whole cure sequence; the tap has
+    // to be too, or a stray finger spins Carl round mid-scripted walk-up and
+    // swings at the vine he is there to save.
+    if (this.bigTopMaze?.playerLocked === true) return;
     if (this.bopca !== null && !bopcaWasOpen) {
       this.bopca.tryInteract(this.active());
     }
@@ -3073,6 +3541,9 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.shop?.isNearShopkeeper(this.active()) === true) {
       this.shop.shopOpen = true;
       this.beginModalGrace();
+    }
+    if (this.currentFloor === TOWER_CONFRONTATION_FLOOR) {
+      this.towerConfrontation?.tryExamine(this.active());
     }
     this.club?.handleInteract(this.active());
     // Talk to a nearby occupant only when nothing else claimed the tap: no
@@ -3095,7 +3566,12 @@ export class BuildingInteriorScene extends GameplayScene {
       // .renderObjects`), but nothing routed the tap there — a phone player could
       // never earn Hilda's shard, since `buildAction` is bound to the `R` key.
       const repaired = this.anchorInterior?.tryRepair(active) ?? false;
-      if (!repaired && !this.tryTalkToOccupant(active) && !this.tryReadNearby(active)) {
+      // The same trap, and a worse one: the Big Top's prompt reads "Tap to pour"
+      // on a phone, and the pour is the *only* way out of the finale. Without
+      // this the tap falls through to the swing below and Carl beats on a vine
+      // that cannot be hurt, forever.
+      const poured = this.bigTopMaze?.tryInteract(this.buildSystemContext()) ?? false;
+      if (!repaired && !poured && !this.tryTalkToOccupant(active) && !this.tryReadNearby(active)) {
         this.attackTowardTap(active, tapScreenX, tapScreenY);
       }
     }

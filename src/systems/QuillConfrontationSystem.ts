@@ -1,12 +1,16 @@
 /**
  * QuillConfrontationSystem — the finale of "The Krasue Murders", fought in
- * the magistrate's office at the top of the Town Center Tower. Miss Quill is
- * untouchable while Remex, her husband-turned-soul-capacitor, still stands;
- * she answers every intrusion with soul bolts and summoned krasue. Owned by
- * BuildingInteriorScene (top floor only); quest state crosses scenes via
- * MurderQuestProgress.
+ * the magistrate's office at the top of the Town Center Tower.
  *
- * Her death immediately destabilizes the city's soul crystal (Carl's
+ * Two fights, one room. Miss Quill is untouchable while Remex, her
+ * husband-turned-soul-capacitor, still stands; she answers every intrusion with
+ * soul bolts and summoned krasue. When she and her guards are down the room
+ * gives up the thing it has been hiding: Magistrate Featherfall has been a
+ * corpse at his own desk for weeks, and the Lich that has been signing his
+ * letters stops pretending. Owned by BuildingInteriorScene (top floor only);
+ * quest state crosses scenes via MurderQuestProgress.
+ *
+ * The end of the confrontation destabilizes the city's soul crystal (Carl's
  * Doomsday Scenario): this system only fires that one-time reveal — writing
  * the crystal's position and a containment deadline into DoomsdayProgress —
  * and hands off to SoulCrystalSystem, which ticks independently of this
@@ -17,21 +21,32 @@
 import { TILE_SIZE } from '../core/constants';
 import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { TOWN_MUSIC_TRACKS } from '../audio/sounds';
+import { prewarmGroups } from '../core/SpriteLoader';
+import { SYSTEM_ASSET_REQUIREMENTS } from '../core/systemAssetRequirements';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
+import type { Player } from '../Player';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import type { DoomsdayProgress } from '../core/DoomsdayProgress';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { MissQuill } from '../creatures/MissQuill';
 import { Remex } from '../creatures/Remex';
 import { CityElfCultist } from '../creatures/CityElfCultist';
+import { TheLich } from '../creatures/TheLich';
+import { drawSkyFowlCorpse } from '../sprites/skyFowlSprite';
+import { drawSoulBurst } from '../sprites/skeletonEffectsSprite';
+import { drawRadialGlow } from '../sprites/radialGlow';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { QuestDialog } from '../ui/QuestDialog';
+import { FEATHERFALL_EXAMINE_DIALOG, LICH_REVEAL_DIALOG } from './murderQuestDialogs';
 import { drawText } from '../ui/TextBox';
-import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
+import { drawOverlay, drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { questMobLevel } from './questMobLevel';
 
 const SPAWN_SEARCH_RADIUS_TILES = 6;
 /**
@@ -39,14 +54,52 @@ const SPAWN_SEARCH_RADIUS_TILES = 6;
  * player climbs in by. The gap is deliberate: every offset here has to keep the
  * whole party outside its own aggro/cast range of the arrival tile, or the
  * fight opens with a soul bolt already in the air over the intro banner.
+ *
+ * "Outside" has to mean outside by a margin rather than by inches. The widest
+ * range in the room reaches eight tiles and both crawlers arrive on the landing
+ * together, so the tile a guard stands on is measured against the nearer of the
+ * two — and the whole party is one bolt from the ejection that a companion's
+ * death triggers, whatever the difficulty. `scripts/verify-interiors.ts` holds
+ * these offsets to that margin.
  */
-const QUILL_OFFSET = { dx: 0, dy: 3 };
-const REMEX_OFFSET = { dx: 4, dy: 3 };
+const QUILL_OFFSET = { dx: 0, dy: 5 };
+const REMEX_OFFSET = { dx: 4, dy: 5 };
 const GUARD_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
-  { dx: -3, dy: 3 },
-  { dx: 3, dy: 3 },
+  { dx: -3, dy: 5 },
+  { dx: 3, dy: 5 },
 ];
 const GUARD_LEVEL = 7;
+/**
+ * How far a guard may drift from the spot the encounter posted it on.
+ *
+ * They are the only thing in the room that moves before the party is seen, and
+ * the offsets above are only safe for as long as they stay where they were put.
+ * Wide enough to still read as a restless congregation, narrow enough that the
+ * margin the offsets buy cannot be walked away.
+ */
+const GUARD_POST_LEASH_TILES = 1.5;
+/**
+ * The Lich's spawn level — far below its own guards', deliberately.
+ *
+ * Levelling multiplies health in place at 30% a level, so the number that reads
+ * as "a serious boss" on a cultist is a health bar three times the size on
+ * something that already has one. Its base health is tuned for this fight and
+ * the level is here for the damage and the coins: three lands it beside Miss
+ * Quill's own bar rather than well past it, and what makes the second half of
+ * this room hard is its cooldowns and its escort, not its hit points.
+ *
+ * A floor, not a fixed level: a party that arrives well past it is lifted to
+ * the quest floor, since three against a late party is not a fight at all.
+ */
+const LICH_LEVEL = 3;
+
+/** The magistrate's desk stands against the north wall, opposite the fight. */
+const CORPSE_OFFSET = { dx: 0, dy: -4 };
+/** The Lich steps out of the wall beside the desk, not out of the corpse. */
+const LICH_OFFSET = { dx: 2, dy: -3 };
+
+/** How close the party must stand to read the body. */
+const EXAMINE_RANGE_TILES = 2.5;
 
 const BOSS_BAR_WIDTH = 320;
 const BOSS_BAR_HEIGHT = 14;
@@ -77,15 +130,63 @@ const CONTAINMENT_MINUTES = 7;
 /** Time to reach and contain the crystal before it levels the city. */
 const CONTAINMENT_DURATION_MS = CONTAINMENT_MINUTES * MS_PER_MINUTE;
 
-export class QuillConfrontationSystem implements GameSystem {
-  /** Shown by BuildingInteriorScene if the players fall here. */
-  readonly defeatMessage = 'Miss Quill filed your souls under K.';
+/**
+ * The beat between the last culprit falling and the reveal's first line.
+ *
+ * Long enough for the room to go quiet and the light to close on the desk,
+ * short enough that it reads as a held breath rather than as the game having
+ * stopped responding. Nothing hostile is alive during it, so the world is left
+ * running: a delay that halted the world would need its own tick above the halt
+ * to ever expire.
+ */
+const REVEAL_HOLD_FRAMES = 50;
+/** How far the room dims while the light is on the corpse. */
+const REVEAL_DIM_ALPHA = 0.62;
+const REVEAL_DIM_COLOR = '#04060a';
+/** Frames the dim takes to arrive, so the room falls dark rather than blinking. */
+const REVEAL_DIM_FADE_FRAMES = 24;
+const REVEAL_SPOTLIGHT_RADIUS_TILES = 3.4;
+/** A flat bright centre, so the light reads as a pool rather than a point. */
+const REVEAL_SPOTLIGHT_CORE_FRACTION = 0.3;
+const REVEAL_SPOTLIGHT_RGB = '236, 226, 190';
+const REVEAL_SPOTLIGHT_ALPHA = 0.3;
 
+/** Frames of gathering witch-light before the Lich is solid enough to fight. */
+const MATERIALISE_FRAMES = 46;
+/** Soul-bursts stacked over the arrival, each a little larger than the last. */
+const MATERIALISE_BURST_COUNT = 3;
+const MATERIALISE_BURST_SCALE_STEP = 0.45;
+const CENTER_OFFSET = 0.5;
+
+/**
+ * Where the encounter is in its two-fight arc.
+ *
+ * Rebuilt from `MurderQuestProgress` on construction rather than always
+ * starting at the beginning: the party can die to the Lich, be turned out of
+ * the tower and climb back up, and replaying Quill — or the reveal of something
+ * they have already seen — would be the game forgetting what they did.
+ */
+type ConfrontationPhase =
+  'quill_fight' | 'reveal_hold' | 'reveal' | 'materialising' | 'lich_fight' | 'done';
+
+export class QuillConfrontationSystem implements GameSystem {
   private quill: MissQuill | null = null;
   private remex: Remex | null = null;
-  private bannerTimer = QUEST_BANNER_FRAMES;
+  private guards: Mob[] = [];
+  private lich: TheLich | null = null;
+
+  private phase: ConfrontationPhase;
+  private bannerTimer = 0;
   private victoryTimer = 0;
-  private victoryHandled = false;
+  private revealHoldTimer = 0;
+  private materialiseTimer = 0;
+  private dimTimer = 0;
+  private heldForBanner = false;
+  private readonly dialog: QuestDialog;
+
+  private readonly corpseTile: { x: number; y: number };
+  private readonly lichTile: { x: number; y: number };
+  private corpseExamined = false;
 
   constructor(
     private readonly map: GameMap,
@@ -94,20 +195,50 @@ export class QuillConfrontationSystem implements GameSystem {
     private readonly progress: MurderQuestProgress,
     private readonly audio: AudioManager | null,
     private readonly doomsdayProgress: DoomsdayProgress,
+    private readonly partyLevel: number,
   ) {
-    this.spawnEncounter();
-    this.bus.emit('bossFightInitiated', { bossType: 'miss_quill', music: 'caller' });
-    this.audio?.playMusic('boss_music_3', { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
+    this.dialog = new QuestDialog(this.audio);
+    const centreY = Math.floor(this.map.structure.length / 2);
+    const centreX = Math.floor((this.map.structure[0]?.length ?? 0) / 2);
+    this.corpseTile = this.findSpawnTile(
+      centreX + CORPSE_OFFSET.dx,
+      centreY + CORPSE_OFFSET.dy,
+    ) ?? {
+      x: centreX + CORPSE_OFFSET.dx,
+      y: centreY + CORPSE_OFFSET.dy,
+    };
+    this.lichTile = this.findSpawnTile(centreX + LICH_OFFSET.dx, centreY + LICH_OFFSET.dy) ?? {
+      x: centreX + LICH_OFFSET.dx,
+      y: centreY + LICH_OFFSET.dy,
+    };
+
+    this.phase = phaseFor(this.progress);
+    if (this.phase === 'quill_fight') {
+      this.spawnEncounter(centreX, centreY);
+      this.bannerTimer = QUEST_BANNER_FRAMES;
+      this.holdRoomForBanner();
+      this.bus.emit('bossFightInitiated', { bossType: 'miss_quill', music: 'caller' });
+      this.audio?.playMusic('boss_music_3', { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
+    } else if (this.phase === 'lich_fight') {
+      this.beginLichFight();
+    }
+  }
+
+  /**
+   * Shown by BuildingInteriorScene if the players fall here. Whose room it is
+   * depends on which of the two fights killed them.
+   */
+  get defeatMessage(): string {
+    return this.lich !== null
+      ? 'The magistrate’s office kept its appointment.'
+      : 'Miss Quill filed your souls under K.';
   }
 
   private findSpawnTile(tileX: number, tileY: number): { x: number; y: number } | null {
     return findNearbyWalkableTile(this.map, tileX, tileY, SPAWN_SEARCH_RADIUS_TILES);
   }
 
-  private spawnEncounter(): void {
-    const centreY = Math.floor(this.map.structure.length / 2);
-    const centreX = Math.floor((this.map.structure[0]?.length ?? 0) / 2);
-
+  private spawnEncounter(centreX: number, centreY: number): void {
     const remexTile = this.findSpawnTile(centreX + REMEX_OFFSET.dx, centreY + REMEX_OFFSET.dy);
     if (remexTile) {
       const remex = new Remex(remexTile.x, remexTile.y, TILE_SIZE);
@@ -120,6 +251,7 @@ export class QuillConfrontationSystem implements GameSystem {
     if (quillTile) {
       const quill = new MissQuill(quillTile.x, quillTile.y, TILE_SIZE, this.addMob);
       quill.setMap(this.map);
+      quill.summonPartyLevel = this.partyLevel;
       if (this.remex) quill.setCapacitor(this.remex);
       this.addMob(quill);
       this.quill = quill;
@@ -130,117 +262,401 @@ export class QuillConfrontationSystem implements GameSystem {
       if (!tile) continue;
       const guard = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
       guard.setMap(this.map);
-      guard.applyMobLevel(GUARD_LEVEL);
+      guard.applyMobLevel(questMobLevel(GUARD_LEVEL, this.partyLevel));
       applyActiveDifficultyRewards(guard);
+      guard.homePoint = { x: guard.x, y: guard.y };
+      guard.leashRadiusTiles = GUARD_POST_LEASH_TILES;
       this.addMob(guard);
+      this.guards.push(guard);
     }
   }
 
+  /** Everything this system has put in the room and still owns. */
+  private encounterMobs(): Mob[] {
+    const mobs: Mob[] = [...this.guards];
+    if (this.quill !== null) mobs.push(this.quill);
+    if (this.remex !== null) mobs.push(this.remex);
+    if (this.lich !== null) mobs.push(this.lich);
+    return mobs;
+  }
+
+  /**
+   * Freezes the room for the length of its own intro banner.
+   *
+   * The party arrives and the encounter is built in the same frame, so without
+   * this the fight is already running underneath the card announcing it — and a
+   * companion is one bolt from the death that turns the whole party out of the
+   * tower. Released by `update` when the banner's last frame plays.
+   */
+  private holdRoomForBanner(): void {
+    this.heldForBanner = true;
+    for (const mob of this.encounterMobs()) mob.aiHeld = true;
+  }
+
+  private releaseRoom(): void {
+    this.heldForBanner = false;
+    for (const mob of this.encounterMobs()) mob.aiHeld = false;
+  }
+
+  // ── The examine interaction and the reveal dialog ──────────────────────────
+
+  get isDialogOpen(): boolean {
+    return this.dialog.isOpen;
+  }
+
+  advanceDialog(): boolean {
+    return this.dialog.advance();
+  }
+
+  /**
+   * Escape closes the examination but never the reveal: the reveal's last page
+   * is what puts the Lich in the room, and a dismissal there would strand the
+   * encounter with a fight that never starts.
+   */
+  dismissDialog(): boolean {
+    if (this.phase !== 'quill_fight') return false;
+    return this.dialog.dismiss();
+  }
+
+  handleClick(mx: number, my: number): boolean {
+    return this.dialog.handleClick(mx, my);
+  }
+
+  /** Space on the body: one page of what the party can now see. Optional. */
+  tryExamine(active: Player): boolean {
+    if (this.dialog.isOpen) return false;
+    if (!this.corpseExaminable) return false;
+    if (this.distanceToCorpse(active) > TILE_SIZE * EXAMINE_RANGE_TILES) return false;
+    this.dialog.open(FEATHERFALL_EXAMINE_DIALOG, () => {
+      this.corpseExamined = true;
+    });
+    return true;
+  }
+
+  /**
+   * The body is worth remarking on once, and only while the room still claims
+   * otherwise. After the reveal the party knows exactly what they are looking
+   * at, and a prompt offering to explain it again is noise in a boss fight.
+   */
+  private get corpseExaminable(): boolean {
+    return this.phase === 'quill_fight' && !this.corpseExamined;
+  }
+
+  private distanceToCorpse(active: Player): number {
+    return Math.hypot(
+      this.corpseTile.x * TILE_SIZE - active.x,
+      this.corpseTile.y * TILE_SIZE - active.y,
+    );
+  }
+
+  // ── Frame update ──────────────────────────────────────────────────────────
+
   update(_ctx: SystemContext): void {
     if (this.bannerTimer > 0) this.bannerTimer--;
+    if (this.heldForBanner && this.bannerTimer <= 0) this.releaseRoom();
     if (this.victoryTimer > 0) this.victoryTimer--;
+    if (this.dimTimer < REVEAL_DIM_FADE_FRAMES && this.roomIsDimmed) this.dimTimer++;
+
+    switch (this.phase) {
+      case 'quill_fight':
+        if (this.culpritsDown()) this.beginRevealHold();
+        break;
+      case 'reveal_hold':
+        this.revealHoldTimer--;
+        if (this.revealHoldTimer <= 0) this.openReveal();
+        break;
+      case 'reveal':
+        break;
+      case 'materialising':
+        this.materialiseTimer--;
+        if (this.materialiseTimer <= 0) this.beginLichFight();
+        break;
+      case 'lich_fight':
+        if (this.lich !== null && !this.lich.isAlive) this.finishConfrontation(this.lich);
+        break;
+      case 'done':
+        break;
+    }
+  }
+
+  /** Every mortal culprit in the room, so the reveal waits for the last of them. */
+  private culpritsDown(): boolean {
+    const quill = this.quill;
+    if (quill === null) return false;
+    if (quill.isAlive) return false;
+    if (this.remex?.isAlive === true) return false;
+    return this.guards.every((guard) => !guard.isAlive);
+  }
+
+  private beginRevealHold(): void {
+    this.phase = 'reveal_hold';
+    this.revealHoldTimer = REVEAL_HOLD_FRAMES;
+    this.progress.stage = 'quill_slain';
 
     const quill = this.quill;
-    if (!quill) return;
-
-    if (!quill.isAlive && !this.victoryHandled) {
-      this.victoryHandled = true;
-      this.progress.stage = 'quill_slain';
-      this.victoryTimer = VICTORY_BANNER_FRAMES;
-      // `music: 'caller'` because what follows this fight is the town's own
-      // rotating playlist, which no boss-type table in `AudioManager` can name.
+    if (quill !== null) {
+      // `music: 'caller'` because what follows this fight is not the town's
+      // playlist yet — the room's second boss is about to claim the speakers.
       this.bus.emit('bossDefeated', { bossType: 'miss_quill', mob: quill, music: 'caller' });
-      this.audio?.playMusicPlaylist(TOWN_MUSIC_TRACKS, { fadeInMs: VICTORY_MUSIC_FADE_IN_MS });
-
+      // Where the crystal is, recorded the moment she drops. It goes on the
+      // cross-scene record rather than on this system because the party can die
+      // to what comes next and climb the tower again, and this system is rebuilt
+      // from scratch when they do — with nothing left in the room that knows
+      // where she fell.
       this.doomsdayProgress.crystalTile = { x: quill.x, y: quill.y };
-      this.doomsdayProgress.stage = 'containment';
-      this.doomsdayProgress.deadlineAt = Date.now() + CONTAINMENT_DURATION_MS;
-      this.audio?.play('rumble');
+    }
+    this.audio?.stopMusic();
+  }
+
+  private openReveal(): void {
+    this.phase = 'reveal';
+    // Kicked off here, not at `beginLichFight`, so the Lich's sheets have the
+    // whole reveal dialog plus the materialise hold to land — the fight
+    // starts the instant the last dialog page closes, with nowhere left to
+    // load anything.
+    //
+    // `typeof Image` guards this the same way `BountySystem.stageEncounter`
+    // does: `scripts/verify-assets.ts` and friends can exercise this system
+    // under plain Node, with no `Image`/`document`.
+    const assetReq = SYSTEM_ASSET_REQUIREMENTS.find((req) => req.id === 'quest:murder_lich');
+    if (assetReq !== undefined && typeof Image !== 'undefined') {
+      void prewarmGroups(assetReq.requiredGroups);
+    }
+    this.dialog.open(LICH_REVEAL_DIALOG, () => this.beginMaterialise());
+  }
+
+  private beginMaterialise(): void {
+    this.phase = 'materialising';
+    this.materialiseTimer = MATERIALISE_FRAMES;
+    this.audio?.play('skeleton_lord_chant');
+  }
+
+  private beginLichFight(): void {
+    this.phase = 'lich_fight';
+    const lich = new TheLich(this.lichTile.x, this.lichTile.y, TILE_SIZE);
+    lich.setMap(this.map);
+    lich.applyMobLevel(questMobLevel(LICH_LEVEL, this.partyLevel));
+    applyActiveDifficultyRewards(lich);
+    this.addMob(lich);
+    this.lich = lich;
+    this.bannerTimer = QUEST_BANNER_FRAMES;
+    this.holdRoomForBanner();
+    this.bus.emit('bossFightInitiated', { bossType: 'the_lich', music: 'caller' });
+    this.audio?.playMusic('boss_music_2', { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
+  }
+
+  private finishConfrontation(lich: TheLich): void {
+    this.phase = 'done';
+    this.progress.stage = 'lich_slain';
+    this.victoryTimer = VICTORY_BANNER_FRAMES;
+    // The chant is long enough to still be playing on the frame that kills it —
+    // a victory that keeps talking over its own death stinger reads as a bug,
+    // not a boss. Its other voice cues are one-shots short enough this never
+    // catches them mid-line, but stopping is cheap and correct either way.
+    this.audio?.stopSound('skeleton_lord_chant');
+    this.audio?.stopSound('dead_hand_wave');
+    this.audio?.stopSound('magic_ball_launch');
+    this.bus.emit('bossDefeated', { bossType: 'the_lich', mob: lich, music: 'caller' });
+    this.bus.emit('objectiveComplete', { objectiveId: 'krasue_lich_destroyed' });
+    this.audio?.playMusicPlaylist(TOWN_MUSIC_TRACKS, { fadeInMs: VICTORY_MUSIC_FADE_IN_MS });
+
+    // The crystal is Miss Quill's and it destabilized when she died, but the
+    // countdown it starts is wall-clock and the Lich stood between the party and
+    // the stairs. Starting the clock at her death would have spent most of the
+    // containment window on a fight there was no way to skip.
+    //
+    // Falls back to where the Lich fell only if her position was never recorded,
+    // which means the room was rebuilt straight into this fight after a defeat —
+    // the finale must not be strandable by having died once.
+    this.doomsdayProgress.crystalTile ??= { x: lich.x, y: lich.y };
+    this.doomsdayProgress.stage = 'containment';
+    this.doomsdayProgress.deadlineAt = Date.now() + CONTAINMENT_DURATION_MS;
+    this.audio?.play('rumble');
+  }
+
+  // ── Rendering ─────────────────────────────────────────────────────────────
+
+  private get roomIsDimmed(): boolean {
+    return (
+      this.phase === 'reveal_hold' || this.phase === 'reveal' || this.phase === 'materialising'
+    );
+  }
+
+  /**
+   * The office's own furniture: the magistrate at his desk, and whatever light
+   * is on him. Drawn under the figures so anything crossing the room passes in
+   * front of the desk rather than behind it.
+   */
+  renderWorld(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
+    const corpseX = this.corpseTile.x * TILE_SIZE - camX;
+    const corpseY = this.corpseTile.y * TILE_SIZE - camY;
+
+    if (this.roomIsDimmed) {
+      const fade = this.dimTimer / REVEAL_DIM_FADE_FRAMES;
+      drawOverlay(ctx, {
+        canvasWidth: viewportWidth(),
+        canvasHeight: viewportHeight(),
+        color: REVEAL_DIM_COLOR,
+        alpha: REVEAL_DIM_ALPHA * fade,
+      });
+      drawRadialGlow(
+        ctx,
+        corpseX + TILE_SIZE * CENTER_OFFSET,
+        corpseY + TILE_SIZE * CENTER_OFFSET,
+        TILE_SIZE * REVEAL_SPOTLIGHT_RADIUS_TILES,
+        [
+          { offset: 0, color: `rgba(${REVEAL_SPOTLIGHT_RGB}, ${REVEAL_SPOTLIGHT_ALPHA})` },
+          { offset: 1, color: `rgba(${REVEAL_SPOTLIGHT_RGB}, 0)` },
+        ],
+        REVEAL_SPOTLIGHT_CORE_FRACTION,
+      );
+    }
+
+    drawSkyFowlCorpse(ctx, corpseX, corpseY, TILE_SIZE);
+
+    if (this.phase === 'materialising') {
+      const progress = 1 - this.materialiseTimer / MATERIALISE_FRAMES;
+      const lichX = this.lichTile.x * TILE_SIZE - camX + TILE_SIZE * CENTER_OFFSET;
+      const lichY = this.lichTile.y * TILE_SIZE - camY + TILE_SIZE * CENTER_OFFSET;
+      for (let burst = 0; burst < MATERIALISE_BURST_COUNT; burst++) {
+        const scale = TILE_SIZE * (1 + burst * MATERIALISE_BURST_SCALE_STEP);
+        drawSoulBurst(ctx, lichX, lichY, scale, progress);
+      }
+    }
+
+    if (
+      this.corpseExaminable &&
+      !this.dialog.isOpen &&
+      this.distanceToCorpse(active) <= TILE_SIZE * EXAMINE_RANGE_TILES
+    ) {
+      drawInteractionPrompt(ctx, corpseX, corpseY, TILE_SIZE, 'Examine');
     }
   }
 
   renderUI(ctx: CanvasRenderingContext2D): void {
-    const quill = this.quill;
-    if (!quill) return;
-
-    if (quill.isAlive) {
-      const barX = viewportWidth() / 2 - BOSS_BAR_WIDTH / 2;
-      drawText(ctx, quill.displayName, {
-        x: viewportWidth() / 2,
-        y: BOSS_BAR_LABEL_Y,
-        size: BOSS_BAR_LABEL_SIZE,
-        bold: true,
-        color: '#f47c7c',
-        align: 'center',
-      });
-      drawProgressBar(ctx, {
-        x: barX,
-        y: BOSS_BAR_Y,
-        width: BOSS_BAR_WIDTH,
-        height: BOSS_BAR_HEIGHT,
-        value: quill.hp / quill.maxHp,
-        ...PROGRESS_PRESETS.hp,
-      });
-
-      const remexAlive = this.remex?.isAlive ?? false;
-      drawText(
-        ctx,
-        remexAlive
-          ? 'Destroy Remex — his stored souls shield her'
-          : 'The shield is broken — Miss Quill is exposed!',
-        {
-          x: viewportWidth() / 2,
-          y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
-          size: OBJECTIVE_SIZE,
-          bold: true,
-          color: remexAlive ? '#e8d060' : '#a8f070',
-          align: 'center',
-        },
-      );
-
-      if (this.bannerTimer > 0) {
-        drawQuestBanner(
-          ctx,
-          'MISS QUILL — THE HEADMISTRESS',
-          this.bannerTimer,
-          '#f47c7c',
-          '#6a2a2a',
-        );
-        const alpha =
-          this.bannerTimer < BANNER_FADE_FRAMES ? this.bannerTimer / BANNER_FADE_FRAMES : 1;
-        drawText(ctx, 'Every krasue in the city was her handiwork', {
-          x: viewportWidth() / 2,
-          y: BANNER_SUBTITLE_Y,
-          size: BANNER_SUBTITLE_SIZE,
-          color: '#f4c7c7',
-          align: 'center',
-          alpha,
-        });
-      }
-    }
-
-    if (this.victoryTimer > 0) {
-      const alpha =
-        this.victoryTimer < BANNER_FADE_FRAMES ? this.victoryTimer / BANNER_FADE_FRAMES : 1;
-      drawText(ctx, 'THE HEADMISTRESS FALLS', {
-        x: viewportWidth() / 2,
-        y: viewportHeight() / 2 - VICTORY_TITLE_Y_OFFSET,
-        size: VICTORY_TITLE_SIZE,
-        bold: true,
-        color: '#4ade80',
-        align: 'center',
-        alpha,
-        glow: '#4ade80',
-        glowBlur: VICTORY_GLOW_BLUR,
-      });
-      drawText(ctx, 'The murders are over. Return to the streets below.', {
-        x: viewportWidth() / 2,
-        y: viewportHeight() / 2 + VICTORY_SUBTITLE_Y_OFFSET,
-        size: VICTORY_SUBTITLE_SIZE,
-        color: '#d4edaa',
-        align: 'center',
-        alpha,
-      });
-    }
+    this.renderBossBar(ctx);
+    this.renderBanner(ctx);
+    this.renderVictory(ctx);
+    this.dialog.render(ctx);
   }
+
+  private renderBossBar(ctx: CanvasRenderingContext2D): void {
+    const boss: MissQuill | TheLich | null =
+      this.phase === 'quill_fight' ? this.quill : this.phase === 'lich_fight' ? this.lich : null;
+    if (boss?.isAlive !== true) return;
+
+    const barX = viewportWidth() / 2 - BOSS_BAR_WIDTH / 2;
+    drawText(ctx, boss.displayName, {
+      x: viewportWidth() / 2,
+      y: BOSS_BAR_LABEL_Y,
+      size: BOSS_BAR_LABEL_SIZE,
+      bold: true,
+      color: '#f47c7c',
+      align: 'center',
+    });
+    drawProgressBar(ctx, {
+      x: barX,
+      y: BOSS_BAR_Y,
+      width: BOSS_BAR_WIDTH,
+      height: BOSS_BAR_HEIGHT,
+      value: boss.hp / boss.maxHp,
+      ...PROGRESS_PRESETS.hp,
+    });
+
+    if (this.phase === 'lich_fight') {
+      drawText(ctx, 'It has been keeping the magistrate’s appointments. End it.', {
+        x: viewportWidth() / 2,
+        y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
+        size: OBJECTIVE_SIZE,
+        bold: true,
+        color: '#a8f070',
+        align: 'center',
+      });
+      return;
+    }
+
+    const remexAlive = this.remex?.isAlive ?? false;
+    drawText(
+      ctx,
+      remexAlive
+        ? 'Destroy Remex — his stored souls shield her'
+        : 'The shield is broken — Miss Quill is exposed!',
+      {
+        x: viewportWidth() / 2,
+        y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
+        size: OBJECTIVE_SIZE,
+        bold: true,
+        color: remexAlive ? '#e8d060' : '#a8f070',
+        align: 'center',
+      },
+    );
+  }
+
+  private renderBanner(ctx: CanvasRenderingContext2D): void {
+    if (this.bannerTimer <= 0) return;
+    const isLich = this.phase === 'lich_fight';
+    drawQuestBanner(
+      ctx,
+      isLich ? 'THE LICH — MAGISTRATE IN ALL BUT BODY' : 'MISS QUILL — THE HEADMISTRESS',
+      this.bannerTimer,
+      isLich ? '#9ade63' : '#f47c7c',
+      isLich ? '#1d3a14' : '#6a2a2a',
+    );
+    const alpha = this.bannerTimer < BANNER_FADE_FRAMES ? this.bannerTimer / BANNER_FADE_FRAMES : 1;
+    drawText(
+      ctx,
+      isLich
+        ? 'Featherfall has been dead for weeks. This signed his letters.'
+        : 'Every krasue in the city was her handiwork',
+      {
+        x: viewportWidth() / 2,
+        y: BANNER_SUBTITLE_Y,
+        size: BANNER_SUBTITLE_SIZE,
+        color: isLich ? '#d4edaa' : '#f4c7c7',
+        align: 'center',
+        alpha,
+      },
+    );
+  }
+
+  private renderVictory(ctx: CanvasRenderingContext2D): void {
+    // Only the end of the whole confrontation arms this timer: Quill's death is
+    // a turn in the room, not the end of it, and a card telling the player the
+    // murders are over while the thing behind them is still forming would be
+    // the game lying to them.
+    if (this.victoryTimer <= 0) return;
+    const alpha =
+      this.victoryTimer < BANNER_FADE_FRAMES ? this.victoryTimer / BANNER_FADE_FRAMES : 1;
+    drawText(ctx, 'THE MAGISTRACY IS EMPTY', {
+      x: viewportWidth() / 2,
+      y: viewportHeight() / 2 - VICTORY_TITLE_Y_OFFSET,
+      size: VICTORY_TITLE_SIZE,
+      bold: true,
+      color: '#4ade80',
+      align: 'center',
+      alpha,
+      glow: '#4ade80',
+      glowBlur: VICTORY_GLOW_BLUR,
+    });
+    drawText(ctx, 'The murders are over. Return to the streets below.', {
+      x: viewportWidth() / 2,
+      y: viewportHeight() / 2 + VICTORY_SUBTITLE_Y_OFFSET,
+      size: VICTORY_SUBTITLE_SIZE,
+      color: '#d4edaa',
+      align: 'center',
+      alpha,
+    });
+  }
+}
+
+/**
+ * Which fight the room owes the party, rebuilt from cross-scene quest state.
+ *
+ * `'quill_slain'` means they have already seen the reveal and lost to what came
+ * out of it, so the room opens straight into the Lich.
+ */
+function phaseFor(progress: MurderQuestProgress): ConfrontationPhase {
+  if (progress.stage === 'confrontation') return 'quill_fight';
+  if (progress.stage === 'quill_slain') return 'lich_fight';
+  return 'done';
 }

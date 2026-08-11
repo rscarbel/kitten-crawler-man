@@ -12,6 +12,7 @@
  * about the curse, the ruins and the thing humming under the tower.
  */
 
+import { isCircusResolvedStage } from '../core/CircusQuestProgress';
 import type { TownDialogContext } from './townDialog';
 
 const GENERAL_FORTUNES: ReadonlyArray<string> = [
@@ -68,8 +69,8 @@ const REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
   },
   {
     when: (ctx) =>
-      (ctx.circus === 'complete' || ctx.circus === 'grimaldi_slain') &&
-      (ctx.murder === 'complete' || ctx.murder === 'quill_slain'),
+      isCircusResolvedStage(ctx.circus) &&
+      (ctx.murder === 'complete' || ctx.murder === 'lich_slain'),
     lines: ['Two shadows lifted, and your hand behind both. Fortune knows your face now.'],
   },
 ];
@@ -154,11 +155,11 @@ const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
       ctx.circus === 'bigtop_ready',
     lines: [
       'The vine under that tent is not keeping them alive. It is keeping them from finishing dying.',
-      'Kill the root, not the family. If you cannot tell which is which, wait until you can.',
+      'You will want to swing at it. Do not. What is under that bark was somebody once, and still answers to it.',
     ],
   },
   {
-    when: (ctx) => ctx.circus === 'grimaldi_slain' || ctx.circus === 'complete',
+    when: (ctx) => isCircusResolvedStage(ctx.circus),
     lines: [
       'The lights are out over the Big Top. I had forgotten what that side of the sky looked like.',
     ],

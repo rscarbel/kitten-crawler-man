@@ -25,6 +25,11 @@ import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
 import { getLevelDef } from '../levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from '../core/CircusQuestProgress';
+import {
+  createMurderQuestProgress,
+  type MurderQuestProgress,
+  type MurderQuestStage,
+} from '../core/MurderQuestProgress';
 import { perfMonitor } from '../core/PerfMonitor';
 import { drawPerfOverlay } from './perfOverlay';
 import { drawDifficultyOverlay } from './difficultyOverlay';
@@ -51,16 +56,56 @@ const CIRCUS_STAGES: ReadonlyArray<CircusQuestStage> = [
   'heather_hunt',
   'assault',
   'bigtop_ready',
-  'grimaldi_slain',
+  'grimaldi_redeemed',
   'complete',
 ];
+
+const MURDER_STAGES: ReadonlyArray<MurderQuestStage> = [
+  'not_started',
+  'body_waiting',
+  'investigation',
+  'night_attack',
+  'cult_hideout',
+  'confrontation',
+  'quill_slain',
+  'lich_slain',
+  'complete',
+];
+
+/**
+ * Builds seeded Krasue Murders progress from a `?murder=<stage>` value, or null
+ * when the parameter is absent or names no stage.
+ */
+function parseMurderQuestProgress(stageParam: string | null): MurderQuestProgress | null {
+  if (stageParam === null) return null;
+  const stage = MURDER_STAGES.find((s) => s === stageParam);
+  if (stage === undefined) return null;
+
+  const progress = createMurderQuestProgress();
+  progress.stage = stage;
+
+  const stageIndex = MURDER_STAGES.indexOf(stage);
+  // No stage from the night attack on is reachable without all three clues, so a
+  // seeded drop-in has to carry them or the investigation dialogs contradict the
+  // stage they were seeded into.
+  if (stageIndex >= MURDER_STAGES.indexOf('night_attack')) {
+    progress.wellClueFound = true;
+    progress.homeClueFound = true;
+    progress.roostClueFound = true;
+  }
+  if (stageIndex >= MURDER_STAGES.indexOf('confrontation')) progress.quillNamed = true;
+
+  return progress;
+}
 
 /**
  * Replaces the opening scene when a dev-only parameter asks for one.
  *
  * `?playtest=spider` opens a named preset — a floor, a spawn landmark and a
  * fully kitted party. `?level=level3&quest=bigtop_ready` opens a bare floor,
- * optionally seeding circus-quest state. The rest are art preview harnesses.
+ * optionally seeding circus-quest state; `?level=level3&murder=cult_hideout`
+ * does the same for the Krasue Murders questline. The rest are art preview
+ * harnesses.
  *
  * Returns true when it took over, meaning the caller must not boot normally.
  */
@@ -173,6 +218,11 @@ export function devBootScene(
     return true;
   }
 
+  if (params.get('lich') !== null) {
+    sceneManager.replace(new SkeletonPreviewScene('lich'));
+    return true;
+  }
+
   if (params.get('status') !== null) {
     sceneManager.replace(new StatusPreviewScene());
     return true;
@@ -202,6 +252,11 @@ export function devBootScene(
     sceneManager.replace(new TownMapScene());
     return true;
   }
+
+  // Seeded ahead of the preset branch so `?playtest=<id>&murder=<stage>` drops a
+  // kitted party straight into a questline beat.
+  const seededMurderProgress = parseMurderQuestProgress(params.get('murder'));
+  if (seededMurderProgress !== null) options.murderQuestProgress = seededMurderProgress;
 
   const playtestId = params.get('playtest');
   if (playtestId !== null) {

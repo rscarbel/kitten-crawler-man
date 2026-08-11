@@ -11,7 +11,7 @@ const REMEX_SPEED = 0;
  * Remex — Miss Quill's husband, willingly transformed into a living soul
  * capacitor. The static objective of the tower confrontation: while he
  * stands, his stored souls shield Quill from all harm. He never moves or
- * attacks (pattern: VineTendril).
+ * attacks — a stationary, always-targetable objective.
  */
 export class Remex extends Mob {
   readonly xpValue = 120;

@@ -103,6 +103,9 @@
     "scripts/generate-skeleton-sprites.ts",
     "scripts/generate-skeleton-effects-sprites.ts",
     "scripts/render-skeletons.ts",
+    "scripts/lichArt.ts",
+    "scripts/generate-lich-sprites.ts",
+    "scripts/render-lich.ts",
     "scripts/render-skeleton-effects.ts",
     "scripts/rockGolemArt.ts",
     "scripts/generate-rock-golem-sprites.ts",
@@ -184,6 +187,7 @@
     "scripts/generate-building-sprites.ts",
     "scripts/render-buildings.ts",
     "scripts/verify-building-gates.ts",
+    "scripts/verify-bigtop-maze.ts",
     "scripts/snapshot-building-footprints.ts"
   ]
 }

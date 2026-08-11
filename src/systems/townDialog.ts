@@ -18,7 +18,7 @@
  * systems supply the context and drive the `CitizenDialog` surface.
  */
 
-import type { CircusQuestStage } from '../core/CircusQuestProgress';
+import { isCircusResolvedStage, type CircusQuestStage } from '../core/CircusQuestProgress';
 import type { MurderQuestStage } from '../core/MurderQuestProgress';
 import type { DoomsdayStage } from '../core/DoomsdayProgress';
 import type { TownRole } from '../sprites/person/PersonAppearance';
@@ -294,15 +294,20 @@ function isCircusActive(stage: CircusQuestStage): boolean {
 }
 
 function isCircusResolved(stage: CircusQuestStage): boolean {
-  return stage === 'grimaldi_slain' || stage === 'complete';
+  return isCircusResolvedStage(stage);
 }
 
 function isMurderActive(stage: MurderQuestStage): boolean {
-  return stage === 'night_attack' || stage === 'cult_hideout' || stage === 'confrontation';
+  return (
+    stage === 'night_attack' ||
+    stage === 'cult_hideout' ||
+    stage === 'confrontation' ||
+    stage === 'quill_slain'
+  );
 }
 
 function isMurderResolved(stage: MurderQuestStage): boolean {
-  return stage === 'quill_slain' || stage === 'complete';
+  return stage === 'lich_slain' || stage === 'complete';
 }
 
 /** True when the town is actively imperilled and every citizen should be panicking. */

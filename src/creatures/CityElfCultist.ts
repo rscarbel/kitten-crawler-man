@@ -6,9 +6,24 @@ import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from '
 const CULTIST_HP = 22;
 const CULTIST_SPEED = 1.15;
 
-const AGGRO_RANGE_TILES = 8;
+/**
+ * How far a cultist notices from. Exported for the same reason Miss Quill's cast
+ * range is: the tower confrontation's spawn offsets are only correct relative to
+ * this number, and a gate holding them to a copy of it would go green the day it
+ * moved.
+ */
+export const CITY_ELF_CULTIST_AGGRO_RANGE_TILES = 8;
 /** Cultists keep their distance and cast from afar. */
 const CAST_RANGE_TILES = 5.5;
+/**
+ * Below this the cultist backs off rather than standing its ground — without a
+ * floor under the cast band, a player who simply walks up gets an enemy that
+ * plants its feet and eats hits, which is the opposite of "keeps its distance".
+ */
+const CAST_RANGE_MIN_TILES = 3;
+/** How long one retreat lasts, and how long before the next one can start. */
+const RETREAT_MAX_FRAMES = 70;
+const RETREAT_COOLDOWN_FRAMES = 150;
 /** Frames between soul-bolt casts (~2.3 s at 60 fps). */
 const CAST_COOLDOWN = 140;
 const CAST_ANIM_FRAMES = 24;
@@ -39,6 +54,8 @@ export class CityElfCultist extends Mob {
   private castCooldown = 0;
   private castAnimTimer = 0;
   private isAggro = false;
+  private retreatFrames = 0;
+  private retreatCooldown = 0;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, CULTIST_HP, CULTIST_SPEED);
@@ -50,6 +67,8 @@ export class CityElfCultist extends Mob {
     this.castCooldown = 0;
     this.castAnimTimer = 0;
     this.isAggro = false;
+    this.retreatFrames = 0;
+    this.retreatCooldown = 0;
   }
 
   updateAI(targets: Player[]): void {
@@ -57,21 +76,28 @@ export class CityElfCultist extends Mob {
 
     if (this.castCooldown > 0) this.castCooldown--;
     if (this.castAnimTimer > 0) this.castAnimTimer--;
+    if (this.retreatCooldown > 0) this.retreatCooldown--;
 
     this.bolts = advanceSoulBolts(this.bolts, this.map, this.tileSize, targets, (t) =>
       this.dealRangedDamage(t, BOLT_DAMAGE),
     );
 
-    const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
+    const aggroRangePx = this.tileSize * CITY_ELF_CULTIST_AGGRO_RANGE_TILES;
     const castRangePx = this.tileSize * CAST_RANGE_TILES;
+    const castRangeMinPx = this.tileSize * CAST_RANGE_MIN_TILES;
     const nearest = this.acquireTarget(targets, aggroRangePx);
 
     this.currentTarget = nearest;
 
     if (!nearest) {
       this.isAggro = false;
+      this.retreatFrames = 0;
       this.clearAStarPath();
-      this.doWander();
+      // A cultist posted by an encounter carries a `homePoint` and a leash, and
+      // only this path consults them: an idle drift of a tile or two is nothing
+      // in a hideout and is the whole margin in a room where the party's
+      // arrival tile sits just outside this aggro range.
+      this.returnHomeOrWander();
       return;
     }
     this.isAggro = true;
@@ -88,7 +114,21 @@ export class CityElfCultist extends Mob {
       this.lastKnownTargetY = nearest.y;
     }
 
-    if (!hasLOS) {
+    const isCrowded = hasLOS && nearestDist < castRangeMinPx;
+    if (isCrowded && this.retreatFrames === 0 && this.retreatCooldown === 0) {
+      this.retreatFrames = RETREAT_MAX_FRAMES;
+      this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;
+    }
+
+    if (this.retreatFrames > 0) {
+      this.retreatFrames--;
+      if (nearestDist >= castRangeMinPx) {
+        this.retreatFrames = 0;
+        this.isMoving = false;
+      } else {
+        this.backAwayFrom(nearest);
+      }
+    } else if (!hasLOS) {
       this.followTargetAStar(
         this.lastKnownTargetX,
         this.lastKnownTargetY,
@@ -113,6 +153,23 @@ export class CityElfCultist extends Mob {
       this.castAnimTimer = CAST_ANIM_FRAMES;
       this.projectileSoundPending = true;
     }
+  }
+
+  /**
+   * Retreats directly away from a target that has closed inside the cast band.
+   *
+   * Straight-line rather than pathfound, same as the goblin archer's kite: a
+   * cultist that A*s its way backwards around a corner spends the whole
+   * retreat facing its own path and never casts.
+   */
+  private backAwayFrom(target: Player): void {
+    const dx = this.x - target.x;
+    const dy = this.y - target.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) return;
+    this.moveWithCollision((dx / distance) * this.speed, (dy / distance) * this.speed);
+    this.isMoving = true;
+    this.facingX = target.x >= this.x ? 1 : -1;
   }
 
   protected override drawSelf(

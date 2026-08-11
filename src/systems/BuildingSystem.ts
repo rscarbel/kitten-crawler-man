@@ -26,6 +26,20 @@ export type BuildingEntry = {
 const SINGLE_TILE_DOORWAY_WIDTH = 1;
 
 /**
+ * A door the scene is holding shut, and what to say when the player tries it.
+ *
+ * Supplied by the scene rather than decided here so `BuildingSystem` never has
+ * to know which questline is at which stage: it owns doorways, and the quest
+ * that seals one owns the reason.
+ */
+export interface BuildingEntryGate {
+  /** The refusal to show for this entry, or null when the door is open. */
+  blockedMessage(entry: BuildingEntry): string | null;
+  /** Runs once per doorway visit when a sealed door is stepped on. */
+  onRefused(message: string): void;
+}
+
+/**
  * The span of tiles an entrance opens on, as `[x0, x0 + width)` at `doorTile.y`.
  *
  * Both fields are read together and both default together: an entry carrying a
@@ -106,8 +120,11 @@ const MENU_BTN_GAP = 8;
 export class BuildingSystem implements GameSystem {
   private onDoor = false;
   private _menuOpen = false;
-  private dismissed = false;
   private activeDoorIdx = NO_DOOR_HERE;
+  /** The entry the player stood on last frame, so stepping between two is noticed. */
+  private doorUnderfoot = NO_DOOR_HERE;
+  /** Whether that door was sealed last frame, so a door opening under them is noticed. */
+  private sealedHere = false;
 
   /** Doorway tile → index in `gameMap.buildingEntries`, so the per-frame on-door
    * test is one lookup rather than a scan of every entrance in town. Every tile
@@ -117,6 +134,7 @@ export class BuildingSystem implements GameSystem {
   constructor(
     private readonly gameMap: GameMap,
     private readonly onEnterBuilding: (entry: BuildingEntry) => void,
+    private readonly entryGate: BuildingEntryGate | null = null,
   ) {
     const byDoorTile = new Map<number, number>();
     gameMap.buildingEntries.forEach((entry, index) => {
@@ -135,9 +153,15 @@ export class BuildingSystem implements GameSystem {
     return this._menuOpen;
   }
 
+  /**
+   * Leave: shut the menu and leave it shut.
+   *
+   * Nothing else is needed to keep it that way — `detect` only acts when the
+   * door under the player changes or changes its mind, and standing still on a
+   * door the player just refused is neither.
+   */
   closeMenu(): void {
     this._menuOpen = false;
-    this.dismissed = true;
   }
 
   update(ctx: SystemContext): void {
@@ -157,13 +181,46 @@ export class BuildingSystem implements GameSystem {
     this.onDoor = idx !== NO_DOOR_HERE;
 
     if (!this.onDoor) {
-      this.dismissed = false;
       this._menuOpen = false;
       this.activeDoorIdx = NO_DOOR_HERE;
-    } else if (!wasOn && !this.dismissed) {
-      this.activeDoorIdx = idx;
-      this._menuOpen = true;
+      this.doorUnderfoot = NO_DOOR_HERE;
+      this.sealedHere = false;
+      return;
     }
+
+    const refusal = this.blockedMessageFor(entries[idx]);
+    const sealed = refusal !== null;
+    // Two doorways can share an edge, and stepping straight from one onto the
+    // next never lifts the player off door ground — so "did I just arrive" has
+    // to be about *which* door, not merely about being on one.
+    const arrived = !wasOn || idx !== this.doorUnderfoot;
+    // A quest can unseal a door under the player's own feet: the wave that opens
+    // the Big Top can die while they are standing on its mat. That is worth
+    // asking again about, and it is the only thing besides arriving that is.
+    const answerChanged = !arrived && sealed !== this.sealedHere;
+    this.doorUnderfoot = idx;
+    this.sealedHere = sealed;
+
+    // Past here the player has either walked onto a door or had one change its
+    // mind under them. Nothing else re-opens a menu they already answered.
+    if (!arrived && !answerChanged) return;
+
+    if (sealed) {
+      // One refusal per arrival, for the same reason the menu opens once: the
+      // gate above only lets a genuine change through. And a door that seals
+      // while its own menu is up takes the menu with it.
+      this._menuOpen = false;
+      this.activeDoorIdx = NO_DOOR_HERE;
+      this.entryGate?.onRefused(refusal);
+      return;
+    }
+    this.activeDoorIdx = idx;
+    this._menuOpen = true;
+  }
+
+  private blockedMessageFor(entry: BuildingEntry | undefined): string | null {
+    if (entry === undefined) return null;
+    return this.entryGate?.blockedMessage(entry) ?? null;
   }
 
   handleClick(mx: number, my: number): boolean {
@@ -185,8 +242,7 @@ export class BuildingSystem implements GameSystem {
       my >= rects.stay.y &&
       my <= rects.stay.y + rects.stay.h
     ) {
-      this._menuOpen = false;
-      this.dismissed = true;
+      this.closeMenu();
       return true;
     }
     return false;
@@ -198,6 +254,10 @@ export class BuildingSystem implements GameSystem {
     const pulse =
       DOOR_HINT_PULSE_BASE + Math.sin(Date.now() / DOOR_HINT_PULSE_PERIOD) * DOOR_HINT_PULSE_RANGE;
     for (const entry of this.gameMap.buildingEntries) {
+      // A sealed door does not advertise itself: the arrow and the name are an
+      // invitation, and pointing the player at a door that refuses them is worse
+      // than saying nothing.
+      if (this.blockedMessageFor(entry) !== null) continue;
       const { x0, width } = doorwaySpan(entry);
       // Centred on the whole opening rather than on `doorTile`: on a four-tile
       // front those are two tiles apart, and an arrow that does not sit over the

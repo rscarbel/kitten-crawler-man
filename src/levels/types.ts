@@ -62,11 +62,11 @@ export interface MobSpawnRule extends MobLevelRange {
     | 'evil_clown'
     | 'mold_lion'
     | 'terror_the_clown'
-    | 'ringmaster_grimaldi'
     | 'city_elf_cultist'
     | 'skeleton_sword'
     | 'skeleton_archer'
     | 'skeleton_lord'
+    | 'the_lich'
     | 'goblin_archer';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights

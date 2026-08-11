@@ -15,6 +15,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import { applyDrunkWalkWobble } from '../core/DrunkEffect';
 import { frameTime } from '../utils';
 import { SkeletonLord } from '../creatures/SkeletonLord';
+import { TheLich } from '../creatures/TheLich';
 import { DarkKnight } from '../creatures/DarkKnight';
 import { Juicer } from '../creatures/Juicer';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
@@ -346,10 +347,7 @@ export function triggerPlayerAttack(
     }
   } else {
     snapFacingToNearestMob(cat, TILE_SIZE * CAT_ATTACK_RANGE_TILES, mobGrid, gameMap);
-    const hasMissileTome = cat.inventory.actionBar.slots.some(
-      (s) => s?.abilityId === 'magic_missile',
-    );
-    if (hasMissileTome && cat.triggerMissile()) {
+    if (cat.isMissileSlotted && cat.triggerMissile()) {
       audio?.play('cat_missile_fire');
     } else {
       cat.triggerAttack();
@@ -453,6 +451,7 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
       // archetypes have nothing to throw.
       if (mob.audioTag === 'goblin') audio?.play('shooting_an_arrow');
       if (mob.audioTag === 'skeleton_lord') audio?.play('magic_ball_launch');
+      if (mob.audioTag === 'the_lich') audio?.play('magic_ball_launch');
       if (mob.audioTag === 'evil_clown') audio?.play('juicer_throw');
       if (mob.audioTag === 'rock_golem') audio?.play('rock_golem_grunt');
     }
@@ -477,6 +476,12 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'skeleton_lord':
           mob.damageSoundPending = false;
           audio?.playRandom(['wood_breaking_1', 'wood_breaking_2']);
+          break;
+        // Robes over a skeleton, so a hit on it is bones knocking together
+        // rather than the dry snap the two above stand in for.
+        case 'the_lich':
+          mob.damageSoundPending = false;
+          audio?.play('bones_rattling');
           break;
         // The golem uses this flag for the dazed groan after a barrier
         // interrupts its roll, not for taking a hit.
@@ -527,11 +532,19 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
               : 'dead_hand_wave',
           );
           break;
+        // The Lich carries the same two specials on the same single flag.
+        case 'the_lich':
+          audio?.play(
+            mob instanceof TheLich && mob.lastSpecial === 'summon'
+              ? 'skeleton_lord_chant'
+              : 'dead_hand_wave',
+          );
+          break;
       }
     }
     playMantidHiss(mob, audio);
     playSwineSpinup(mob, audio);
-    playLordCastWindup(mob, audio);
+    playCastWindup(mob, audio);
     playDarkKnightCues(mob, audio);
     playJuicerCues(mob, audio);
     playKrakarenCloneCues(mob, audio);
@@ -622,11 +635,12 @@ function playSwineSpinup(mob: Mob, audio: AudioManager | null): void {
 }
 
 /**
- * The Skeleton Lord's cast wind-up — a full second of gathering before the
+ * A soul-bolt caster's cast wind-up — a full second of gathering before the
  * bolts leave, which `projectileSoundPending` covers separately.
  */
-function playLordCastWindup(mob: Mob, audio: AudioManager | null): void {
-  if (!(mob instanceof SkeletonLord) || !mob.castWindupSoundPending) return;
+function playCastWindup(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof SkeletonLord) && !(mob instanceof TheLich)) return;
+  if (!mob.castWindupSoundPending) return;
   mob.castWindupSoundPending = false;
   audio?.play('prepare_for_magic_strike');
 }

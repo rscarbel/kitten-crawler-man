@@ -265,6 +265,19 @@ class Keybindings {
     return false;
   }
 
+  /**
+   * Releases every key bound to the action, leaving unrelated keys held.
+   *
+   * Debouncing a single action must not read as "let go of everything held" —
+   * `InputManager.clear()` would drop a movement key the player is still
+   * physically pressing, stopping them dead until they release and re-press it.
+   */
+  release(input: InputManager, action: GameAction): void {
+    for (const key of this.keysFor(action)) {
+      input.release(key);
+    }
+  }
+
   /** True when the action has no key at all — the Controls screen flags this. */
   isUnbound(action: GameAction): boolean {
     return this.keysFor(action).length === 0;

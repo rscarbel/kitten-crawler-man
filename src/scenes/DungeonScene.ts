@@ -100,7 +100,7 @@ import {
   RecallSystem,
   type RecallSceneRebuildState,
 } from '../systems/RecallSystem';
-import { BuildingSystem } from '../systems/BuildingSystem';
+import { BuildingSystem, type BuildingEntry } from '../systems/BuildingSystem';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CONVERSATION_WALK_AWAY_TILES } from '../creatures/townInteraction';
@@ -140,7 +140,6 @@ import {
   restorePlayer,
   revivedSnapshot,
   checkpointSnapshot,
-  REVIVE_HP_FRACTION,
   type PlayerSnapshot,
 } from '../core/PlayerSnapshot';
 import type { LevelCheckpoint } from '../core/LevelCheckpoint';
@@ -186,8 +185,11 @@ import { OverworldMusicSystem } from '../systems/OverworldMusicSystem';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
 import { drunkCameraOffset } from '../core/DrunkEffect';
 import {
+  BIG_TOP_BUILDING_NAME,
+  BIG_TOP_SEALED_MESSAGE,
   captureCircusQuestProgress,
   createCircusQuestProgress,
+  isBigTopSealed,
   restoreCircusQuestProgress,
   type CircusQuestProgress,
 } from '../core/CircusQuestProgress';
@@ -279,8 +281,8 @@ import { GameStats } from '../core/GameStats';
 import { difficultyStats } from '../core/DifficultyStats';
 import type { AudioManager } from '../audio/AudioManager';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
-import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
+import { drawText } from '../ui/TextBox';
+import { renderKnockedOutUI, updateKnockoutState } from '../systems/KnockoutRevive';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { renderQuality } from '../core/RenderQuality';
 import {
@@ -590,28 +592,9 @@ const BIG_BRAWLER_GUARD_RADIUS = BIG_BRAWLER_GUARD_RADIUS_TILES * TILE_SIZE;
 /** Spawn-table key of the mobs that guard the Juicer's gateway. */
 const TROGLODYTE_SPAWN_KEY = 'troglodyte';
 
-// Health and revival system
-const KNOCKDOWN_FRAMES = 5400;
-const CRITICAL_HP_WARNING_SECONDS = 10;
-
-// Health status pulsing
-const HEALTH_PULSE_BASE = 0.75;
-const HEALTH_PULSE_AMPLITUDE = 0.25;
-const HEALTH_PULSE_FREQUENCY = 0.006;
-
 // UI positioning and sizing
-const UI_SIDEBAR_WIDTH = 16;
-const REVIVE_BANNER_MARGIN = 16;
 const MINIMAP_MARGIN = 8;
 const MOBILE_UI_SPACING = 4;
-const REVIVE_TEXT_VERTICAL_OFFSET = 3;
-const HEALTH_INDICATOR_SIZE = 15;
-const HEALTH_INDICATOR_SIZE_DESKTOP = 22;
-const KNOCKDOWN_UI_Y_MOBILE = 62;
-const KNOCKDOWN_UI_Y_DESKTOP = 70;
-const IDLE_TEXT_SIZE = 28;
-const IDLE_TEXT_BOUNCE_AMPLITUDE = 4;
-const IDLE_TEXT_BOUNCE_FREQUENCY = 0.005;
 
 // UI button positioning (Mongo/Gear/Bag etc)
 const SUMMON_BUTTON_X = 10;
@@ -652,8 +635,7 @@ const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 
-// Revive arrow positioning and animation
-const ARROW_HEIGHT_ABOVE_PLAYER = 28;
+// Spider-lab arrow geometry
 const ARROW_LENGTH_MULTIPLIER_BASE2 = 0.45;
 const ARROW_LENGTH_MULTIPLIER_HEIGHT = 0.5;
 const ARROW_LENGTH_MULTIPLIER_CENTER = 0.1;
@@ -1426,107 +1408,117 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (levelDef.isOverworld) {
-      this.building = new BuildingSystem(this.gameMap, (entry) => {
-        // Spawn one tile south of the door so the player exits outside and
-        // doesn't immediately re-trigger the "Enter building?" prompt.
-        const returnTile = {
-          x: entry.doorTile.x,
-          y: entry.doorTile.y + 1,
-        };
-        // Neither Mongo nor a hired merc can follow indoors — dismiss so they
-        // aren't stranded in a stale mob list (the merc respawns from the
-        // roster when the player returns to the overworld).
-        this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-        this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-        this.musicPersistsAcrossExit = true;
-        const humanSnap = snapPlayer(this.human);
-        const catSnap = snapPlayer(this.cat);
-        // Where a downed companion is left lying while the player is indoors.
-        const downedCompanion = this.inactive();
-        const downedCompanionAt = downedCompanion.isKnockedOut
-          ? { x: downedCompanion.x, y: downedCompanion.y }
-          : undefined;
-        this.sceneManager.replace(
-          new BuildingInteriorScene(
-            entry,
-            humanSnap,
-            catSnap,
-            this.input,
-            this.sceneManager,
-            (hSnap, cSnap, defeated) => {
-              // Losing an interior encounter sends the party home to the level's
-              // start tile instead of dumping them back on the doorstep.
-              const exitTile = defeated ? this.gameMap.startTile : returnTile;
-              this.sceneManager.replace(
-                new DungeonScene(levelDef, this.input, this.sceneManager, {
-                  spawnAt: exitTile,
-                  humanSnap: hSnap,
-                  catSnap: cSnap,
-                  knockedOutCompanionAt: downedCompanionAt,
-                  // Entering a building is a detour, not a new floor — the death
-                  // checkpoint has to stay pinned to where this floor began.
-                  floorEntryHumanSnap: this.floorEntryHumanSnap,
-                  floorEntryCatSnap: this.floorEntryCatSnap,
-                  floorEntryHumanAchievements: this.floorEntryHumanAchievements,
-                  floorEntryCatAchievements: this.floorEntryCatAchievements,
-                  floorEntryAbilityManager: this.floorEntryAbilityManager,
-                  // Deliberately NOT threaded, though the scene rebuilt here keeps
-                  // the same map: a checkpoint now describes the *population* too,
-                  // and every mob and player reference in it belongs to the scene
-                  // this line is destroying. Restoring one on the far side would
-                  // revive corpses nothing can see and pay floor loot into a
-                  // detached crawler. Unreachable either way today — the overworld
-                  // is the only level with buildings and it generates no safe
-                  // rooms — so the cost of dropping it is currently zero, and the
-                  // fallback (a floor restart) is merely harsh rather than broken.
-                  checkpoint: undefined,
-                  existingMap: this.gameMap,
-                  existingMiniMap: this.miniMap,
-                  existingRecallState: this.recall.captureForSceneRebuild(),
-                  humanAchievements: this.humanAchievements,
-                  catAchievements: this.catAchievements,
-                  mongoUnlocked: this.mongoSystem.unlocked,
-                  mongoPetState: this.mongoPetState,
-                  abilityManager: this._cleanAbilityManager(),
-                  saveProgress: this.onSaveProgress,
-                  audio: this.audio ?? undefined,
-                  onResetGame: this.onResetGameCallback ?? undefined,
-                  circusQuestProgress: this.circusQuestProgress,
-                  murderQuestProgress: this.murderQuestProgress,
-                  anchorQuestProgress: this.anchorQuestProgress,
-                  journalProgress: this.journalProgress,
-                  bountyProgress: this.bountyProgress,
-                  doomsdayQuestProgress: this.doomsdayQuestProgress,
-                  clubMembership: this.clubMembership,
-                  townMemory: this.townMemory,
-                  marketStock: this.marketStock,
-                  mercenaryRoster: this.mercenaryRoster,
-                  godModeState: this.godModeState,
-                  companionStance: this.companionStance,
-                  gameStats: this.gameStats,
-                  skipIntro: true,
-                }),
-              );
-            },
-            this.humanAchievements,
-            this.catAchievements,
-            this.audio ?? undefined,
-            this.abilityManager,
-            { progress: this.circusQuestProgress, overworldCentre: this.gameMap.circusCentre },
-            this.murderQuestProgress,
-            this.doomsdayQuestProgress,
-            this.clubMembership,
-            this.townMemory,
-            this.mercenaryRoster,
-            this.godModeState,
-            this.companionStance,
-            this.mongoPetState,
-            () => this.abilityManager.getLevel('mongo'),
-            this.gameStats,
-            this.anchorQuestProgress,
-          ),
-        );
-      });
+      this.building = new BuildingSystem(
+        this.gameMap,
+        (entry) => {
+          // Spawn one tile south of the door so the player exits outside and
+          // doesn't immediately re-trigger the "Enter building?" prompt.
+          const returnTile = {
+            x: entry.doorTile.x,
+            y: entry.doorTile.y + 1,
+          };
+          // Neither Mongo nor a hired merc can follow indoors — dismiss so they
+          // aren't stranded in a stale mob list (the merc respawns from the
+          // roster when the player returns to the overworld).
+          this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+          this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+          this.musicPersistsAcrossExit = true;
+          const humanSnap = snapPlayer(this.human);
+          const catSnap = snapPlayer(this.cat);
+          // Where a downed companion is left lying while the player is indoors.
+          const downedCompanion = this.inactive();
+          const downedCompanionAt = downedCompanion.isKnockedOut
+            ? { x: downedCompanion.x, y: downedCompanion.y }
+            : undefined;
+          this.sceneManager.replace(
+            new BuildingInteriorScene(
+              entry,
+              humanSnap,
+              catSnap,
+              this.input,
+              this.sceneManager,
+              (hSnap, cSnap, defeated) => {
+                // Losing an interior encounter sends the party home to the level's
+                // start tile instead of dumping them back on the doorstep.
+                const exitTile = defeated ? this.gameMap.startTile : returnTile;
+                this.sceneManager.replace(
+                  new DungeonScene(levelDef, this.input, this.sceneManager, {
+                    spawnAt: exitTile,
+                    humanSnap: hSnap,
+                    catSnap: cSnap,
+                    knockedOutCompanionAt: downedCompanionAt,
+                    // Entering a building is a detour, not a new floor — the death
+                    // checkpoint has to stay pinned to where this floor began.
+                    floorEntryHumanSnap: this.floorEntryHumanSnap,
+                    floorEntryCatSnap: this.floorEntryCatSnap,
+                    floorEntryHumanAchievements: this.floorEntryHumanAchievements,
+                    floorEntryCatAchievements: this.floorEntryCatAchievements,
+                    floorEntryAbilityManager: this.floorEntryAbilityManager,
+                    // Deliberately NOT threaded, though the scene rebuilt here keeps
+                    // the same map: a checkpoint now describes the *population* too,
+                    // and every mob and player reference in it belongs to the scene
+                    // this line is destroying. Restoring one on the far side would
+                    // revive corpses nothing can see and pay floor loot into a
+                    // detached crawler. Unreachable either way today — the overworld
+                    // is the only level with buildings and it generates no safe
+                    // rooms — so the cost of dropping it is currently zero, and the
+                    // fallback (a floor restart) is merely harsh rather than broken.
+                    checkpoint: undefined,
+                    existingMap: this.gameMap,
+                    existingMiniMap: this.miniMap,
+                    existingRecallState: this.recall.captureForSceneRebuild(),
+                    humanAchievements: this.humanAchievements,
+                    catAchievements: this.catAchievements,
+                    mongoUnlocked: this.mongoSystem.unlocked,
+                    mongoPetState: this.mongoPetState,
+                    abilityManager: this._cleanAbilityManager(),
+                    saveProgress: this.onSaveProgress,
+                    audio: this.audio ?? undefined,
+                    onResetGame: this.onResetGameCallback ?? undefined,
+                    circusQuestProgress: this.circusQuestProgress,
+                    murderQuestProgress: this.murderQuestProgress,
+                    anchorQuestProgress: this.anchorQuestProgress,
+                    journalProgress: this.journalProgress,
+                    bountyProgress: this.bountyProgress,
+                    doomsdayQuestProgress: this.doomsdayQuestProgress,
+                    clubMembership: this.clubMembership,
+                    townMemory: this.townMemory,
+                    marketStock: this.marketStock,
+                    mercenaryRoster: this.mercenaryRoster,
+                    godModeState: this.godModeState,
+                    companionStance: this.companionStance,
+                    gameStats: this.gameStats,
+                    skipIntro: true,
+                  }),
+                );
+              },
+              this.humanAchievements,
+              this.catAchievements,
+              this.audio ?? undefined,
+              this.abilityManager,
+              { progress: this.circusQuestProgress, overworldCentre: this.gameMap.circusCentre },
+              this.murderQuestProgress,
+              this.doomsdayQuestProgress,
+              this.clubMembership,
+              this.townMemory,
+              this.mercenaryRoster,
+              this.godModeState,
+              this.companionStance,
+              this.mongoPetState,
+              () => this.abilityManager.getLevel('mongo'),
+              this.gameStats,
+              this.anchorQuestProgress,
+            ),
+          );
+        },
+        {
+          blockedMessage: (entry) => this.sealedBuildingMessage(entry),
+          onRefused: (message) => {
+            this.audio?.play('error');
+            this.menus.hotbarToast.show(message);
+          },
+        },
+      );
       this.noticeBoard = new NoticeBoardPanel();
       this.marketPanel = new PricedMenuPanel();
       this.fortuneTeller = new FortuneTellerPanel();
@@ -2624,167 +2616,6 @@ export class DungeonScene extends GameplayScene {
     this.cat.autoTarget = null;
     this.human.autoTarget = null;
     this.companion.isFollowOverride = false;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-magic-numbers
-  private readonly REVIVE_RANGE_PX = TILE_SIZE * 0.8;
-  private readonly REVIVE_FRAMES = 300; // 5 seconds @ 60fps
-
-  /**
-   * Detects when the inactive companion drops to 0 HP and transitions them into
-   * the knocked-out state. Ticks the revival timer and progress while they're down.
-   */
-  private updateKnockoutState(): void {
-    const inactive = this.inactive();
-
-    // Companion just died → enter knocked-out state
-    if (!inactive.isAlive && !inactive.isKnockedOut) {
-      inactive.isKnockedOut = true;
-      inactive.knockedOutFrames = 0;
-      inactive.reviveProgress = 0;
-      inactive.clearStatusEffects();
-      inactive.clearKnockback();
-      this.audio?.play(inactive === this.human ? 'human_knocked_out' : 'cat_knocked_out');
-    }
-
-    if (!inactive.isKnockedOut) return;
-
-    // Being down is defined by having no HP, so anything that puts HP back —
-    // a night's sleep bought while they lay outside, a lingering regen effect —
-    // brings them round without the usual proximity revive.
-    if (inactive.hp > 0) {
-      this.finishRevival(inactive);
-      return;
-    }
-
-    inactive.knockedOutFrames++;
-
-    const active = this.active();
-    const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
-
-    if (dist <= this.REVIVE_RANGE_PX) {
-      if (inactive.reviveProgress === 0) {
-        this.audio?.play('reviving_tone');
-      }
-      inactive.reviveProgress++;
-      if (inactive.reviveProgress >= this.REVIVE_FRAMES) {
-        this.finishRevival(inactive);
-      }
-    } else {
-      inactive.reviveProgress = 0;
-    }
-  }
-
-  /** Clears the downed state and puts the crawler back on their feet with a sliver of HP. */
-  private finishRevival(player: HumanPlayer | CatPlayer): void {
-    player.isKnockedOut = false;
-    player.knockedOutFrames = 0;
-    player.reviveProgress = 0;
-    player.hp = Math.max(player.hp, Math.ceil(player.maxHp * REVIVE_HP_FRACTION));
-    this.audio?.play(player === this.human ? 'human_revived' : 'cat_revived');
-  }
-
-  /** Renders the knocked-out warning banner, directional arrow, and revival progress bar. */
-  private renderKnockedOutUI(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const inactive = this.inactive();
-    if (!inactive.isKnockedOut) return;
-
-    const active = this.active();
-    const t = Date.now();
-    const pulse = HEALTH_PULSE_BASE + HEALTH_PULSE_AMPLITUDE * Math.sin(t * HEALTH_PULSE_FREQUENCY);
-
-    // On mobile, the minimap occupies the top-right corner — keep the banner in the
-    // available space to its left so the text doesn't slide behind it.
-    const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-    const availW = platform.isMobile ? viewportWidth() - mmSz - UI_SIDEBAR_WIDTH : viewportWidth();
-    const cx = availW / 2;
-    const bannerSize = platform.isMobile ? HEALTH_INDICATOR_SIZE : HEALTH_INDICATOR_SIZE_DESKTOP;
-
-    // "Revive your teammate!" banner
-    drawText(ctx, 'Revive your teammate!', {
-      x: cx,
-      y: 44,
-      align: 'center',
-      ...TEXT_PRESETS.danger,
-      size: bannerSize,
-      outline: true,
-      alpha: pulse,
-      width: availW - REVIVE_BANNER_MARGIN,
-    });
-
-    // Countdown timer
-    const secondsLeft = Math.max(
-      0,
-      Math.ceil((KNOCKDOWN_FRAMES - inactive.knockedOutFrames) / FRAMES_PER_SECOND),
-    );
-    drawText(ctx, `${secondsLeft}s`, {
-      x: cx,
-      y: platform.isMobile ? KNOCKDOWN_UI_Y_MOBILE : KNOCKDOWN_UI_Y_DESKTOP,
-      align: 'center',
-      ...TEXT_PRESETS.danger,
-      size: HEALTH_INDICATOR_SIZE,
-      color: secondsLeft <= CRITICAL_HP_WARNING_SECONDS ? '#ef4444' : '#fbbf24',
-      outline: true,
-      alpha: pulse,
-    });
-
-    const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
-
-    if (dist > this.REVIVE_RANGE_PX) {
-      // Arrow above the active player pointing toward the downed companion
-      const dx = inactive.x - active.x;
-      const dy = inactive.y - active.y;
-      const angle = Math.atan2(dy, dx);
-      const bounce = Math.sin(t * IDLE_TEXT_BOUNCE_FREQUENCY) * IDLE_TEXT_BOUNCE_AMPLITUDE;
-      const len = IDLE_TEXT_SIZE;
-
-      // Screen position: centre of active player's tile, above the sprite
-      const arrowX = active.x - camX + TILE_SIZE / 2;
-      const arrowY = active.y - camY - ARROW_HEIGHT_ABOVE_PLAYER + bounce;
-
-      ctx.save();
-      ctx.translate(arrowX, arrowY);
-      ctx.rotate(angle);
-      ctx.fillStyle = '#facc15';
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = ARROW_LINE_WIDTH;
-      ctx.beginPath();
-      ctx.moveTo(len, 0);
-      ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, -len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
-      ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_CENTER, 0);
-      ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    } else if (inactive.reviveProgress > 0) {
-      const barW = 160;
-      const barH = 18;
-      const barX = cx - barW / 2;
-      const barY = 96;
-
-      drawProgressBar(ctx, {
-        x: barX,
-        y: barY,
-        width: barW,
-        height: barH,
-        value: inactive.reviveProgress / this.REVIVE_FRAMES,
-        ...PROGRESS_PRESETS.stamina,
-        border: '#ffffff',
-        borderWidth: 1,
-        radius: 2,
-      });
-
-      drawText(ctx, 'REVIVING', {
-        x: cx,
-        y: barY + REVIVE_TEXT_VERTICAL_OFFSET,
-        align: 'center',
-        size: 11,
-        bold: true,
-        color: '#fff',
-        outline: true,
-      });
-    }
   }
 
   /** The `!reveal` cheat: an exact, unquantized bearing to the nearest stairwell. */
@@ -4792,6 +4623,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.renderPipeline.renderEntities(ctx, rc);
+    this.murderQuest.renderWellClueOverlay(ctx, camX, camY, this.active());
     this.spiderQuest.renderTableForeground(ctx, camX, camY, this.active());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
     this.bossRoom.renderProjectiles(ctx, camX, camY);
@@ -4861,7 +4693,8 @@ export class DungeonScene extends GameplayScene {
     this.syncJournalContext();
 
     if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
-      this.renderKnockedOutUI(ctx, camX, camY);
+      const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
+      renderKnockedOutUI(ctx, camX, camY, this.active(), this.inactive(), mmSize);
       this.renderStairwellRevealArrow(ctx, camX, camY);
       this.renderWayfinderArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
@@ -5244,6 +5077,18 @@ export class DungeonScene extends GameplayScene {
     // player never touched a button for.
     if (keyboardSuppressed(this.overlayClaims)) this.menus.blurInventorySearch();
     auditOverlayFocus(this.overlayClaims, menuFocusContextId());
+  }
+
+  /**
+   * The refusal a doorway answers with, or null when it opens normally.
+   *
+   * The only door in town a quest holds shut. `BuildingSystem` asks rather than
+   * decides, so the tent's reason for being closed stays with the questline that
+   * closes it.
+   */
+  private sealedBuildingMessage(entry: BuildingEntry): string | null {
+    if (entry.name !== BIG_TOP_BUILDING_NAME) return null;
+    return isBigTopSealed(this.circusQuestProgress.stage) ? BIG_TOP_SEALED_MESSAGE : null;
   }
 
   /** Gathers every quest's minimap markers into one reused array. */
@@ -5700,7 +5545,12 @@ export class DungeonScene extends GameplayScene {
     }
     this.building?.detect(this.active());
 
-    this.updateKnockoutState();
+    updateKnockoutState({
+      active: this.active(),
+      inactive: this.inactive(),
+      inactiveIsHuman: this.inactive() === this.human,
+      audio: this.audio,
+    });
 
     if (
       !this.gameOver &&

@@ -19,6 +19,7 @@ import { roomKey, type TownMemory } from '../core/TownMemory';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { CityElfCultist } from '../creatures/CityElfCultist';
 import { CULT_HIDEOUT_CULTIST_LEVEL } from './CultHideoutSystem';
+import { questMobLevel } from './questMobLevel';
 import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
@@ -73,6 +74,8 @@ export interface InteriorHostileContext {
   readonly memory: TownMemory;
   /** Absent in a scene with no murder questline threaded through it. */
   readonly murderQuest: MurderQuestProgress | undefined;
+  /** The stronger crawler's level, which the guards are levelled against. */
+  readonly partyLevel: number;
 }
 
 /**
@@ -91,7 +94,7 @@ export function interiorHostilesFor(ctx: InteriorHostileContext): Mob[] {
   }));
   return distinctSpawnTiles(ctx.map, wanted, SPAWN_SEARCH_RADIUS_TILES).map((tile) => {
     const guard = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
-    guard.applyMobLevel(STAIR_GUARD_LEVEL);
+    guard.applyMobLevel(questMobLevel(STAIR_GUARD_LEVEL, ctx.partyLevel));
     applyActiveDifficultyRewards(guard);
     // No boss room exists indoors, so nothing else would ever wake them, and a
     // guard that has to be walked up to is not a guard.

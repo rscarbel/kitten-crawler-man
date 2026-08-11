@@ -12,7 +12,15 @@ const CLOWN_SPEED = 0.9;
 /** A levelled clown's walk is capped at this fraction of the player's. */
 const CLOWN_MAX_SPEED_RATIO = 0.8;
 export const CLOWN_MAX_SPEED = PLAYER_SPEED * CLOWN_MAX_SPEED_RATIO;
-const AGGRO_RANGE_TILES = 8;
+/**
+ * How far a stilt clown notices from.
+ *
+ * Exported so `scripts/verify-bounty.ts` can assert the Evil Clown troupe's
+ * reach against the real number rather than a copy of it — the circus
+ * questline widens its own instances' pursuit, and this is the check that the
+ * widening never reached the class.
+ */
+export const STILT_CLOWN_AGGRO_RANGE_TILES = 8;
 /** Long reach — the stilt clown's signature "Slender Man" lunge. */
 const ATTACK_RANGE_TILES = 2.2;
 const ATTACK_DAMAGE = 7;
@@ -76,7 +84,7 @@ export class StiltClown extends Mob {
 
     if (this.attackCooldown > 0) this.attackCooldown--;
 
-    const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
+    const aggroRangePx = this.tileSize * STILT_CLOWN_AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
     const nearest = this.acquireTarget(targets, aggroRangePx);
 

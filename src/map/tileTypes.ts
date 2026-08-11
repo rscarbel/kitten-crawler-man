@@ -55,6 +55,16 @@ export const ROOF_CIRCUS_PURPLE = 29;
 export const STAIRS_UP = 30;
 /** Tile type for interior stairs going down — walkable trigger tile. */
 export const STAIRS_DOWN = 31;
+/**
+ * Tile span of one tower staircase on each axis, so a stair is a square block of
+ * `TOWER_STAIR_SPAN²` tiles rather than a single tile.
+ *
+ * Stated here beside the tile types because two unrelated files must agree on it:
+ * `GameMap` writes the block into the grid, and the tile renderer reconstructs the
+ * block from any one of its tiles in order to draw one staircase across all of
+ * them. If those two ever disagreed the art would be sliced.
+ */
+export const TOWER_STAIR_SPAN = 2;
 /** Tile type for a wooden table — not walkable. */
 export const TABLE = 32;
 /**

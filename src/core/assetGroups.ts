@@ -27,6 +27,7 @@ export type AssetGroup =
   | 'bounty_evil_clown'
   | 'bounty_mantid'
   | 'bounty_skeleton_lord'
+  | 'murder_lich'
   | 'bounty_dark_knight'
   | 'bounty_rock_golem'
   | 'quest_circus';
@@ -35,8 +36,8 @@ export type AssetGroup =
  * Every creature/effect/environment sheet a group covers.
  *
  * Roughly half of `src/sprites/*` (Krasue, CircusLemur, MoldLion,
- * RingmasterGrimaldi, MissQuill, Remex, Signet, GumGum, HeatherTheBear,
- * RuinsGhoul, Cockroach, VineTendril, InkMarauder, CityElfCultist, all
+ * MissQuill, Remex, Signet, GumGum, HeatherTheBear,
+ * RuinsGhoul, Cockroach, GrimaldiVine, InkMarauder, CityElfCultist, all
  * townsfolk) is procedural canvas drawing with no manifest entry at all — those
  * creatures cost nothing sprite-wise and deliberately have no key anywhere in
  * this file. See `MOB_SPRITE_KEYS` below for the canonical "does this mob type
@@ -270,6 +271,15 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   bounty_evil_clown: ['evil_clown', 'stilt_clown', 'fat_clown'],
   bounty_mantid: ['mantid', 'mantis'],
   bounty_skeleton_lord: ['skeleton_lord', 'skeleton_sword', 'skeleton_archer'],
+  murder_lich: [
+    'the_lich',
+    'skeleton_sword',
+    'skeleton_archer',
+    'skeleton_soul_bolt',
+    'skeleton_soul_burst',
+    'skeleton_grasping_hands',
+    'skeleton_bone_arrow',
+  ],
   bounty_dark_knight: [
     'dark_knight',
     'goblin_axe',
@@ -279,10 +289,10 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   ],
   bounty_rock_golem: ['rock_golem_boss', 'rock_golem'],
 
-  // The circus quest chain (`CircusQuestSystem` + `BigTopBossSystem`, both
+  // The circus quest chain (`CircusQuestSystem` + `BigTopMazeSystem`, both
   // level 3 only): only the stilt/fat clowns have sheets — MoldLion,
   // CircusLemur, TerrorTheClown, Signet, HeatherTheBear, InkMarauder,
-  // RingmasterGrimaldi and VineTendril are all procedural.
+  // GrimaldiVine and MazeBlockTarget are all procedural.
   quest_circus: ['stilt_clown', 'fat_clown'],
 };
 
@@ -351,11 +361,11 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   evil_clown: ['evil_clown'],
   mold_lion: [],
   terror_the_clown: [],
-  ringmaster_grimaldi: [],
   city_elf_cultist: [],
   skeleton_sword: ['skeleton_sword'],
   skeleton_archer: ['skeleton_archer'],
   skeleton_lord: ['skeleton_lord'],
+  the_lich: ['the_lich'],
   sky_fowl: [
     'sky_fowl_body',
     'sky_fowl_hat_mask',
@@ -368,12 +378,11 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   // comment, never via `createMob`.
   /** `bountyDefs.ts`'s `DARK_KNIGHT_DEF`. */
   dark_knight: ['dark_knight'],
-  /** `HeatherTheBear`, `Signet`, `MissQuill`, `Remex`, `VineTendril`, `GumGum` — all procedural. */
+  /** `HeatherTheBear`, `Signet`, `MissQuill`, `Remex`, `GrimaldiVine`, `GumGum` — all procedural. */
   heather_the_bear: [],
   signet: [],
   miss_quill: [],
   remex: [],
-  vine_tendril: [],
   gum_gum: [],
   /** `MongoSystem` — a persistent companion, not a spawn-table mob. */
   mongo: ['mongo_juvenile', 'mongo_adolescent', 'mongo_adult'],

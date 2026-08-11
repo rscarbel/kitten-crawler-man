@@ -1,5 +1,4 @@
 import type { TileContent } from '../tileTypes';
-import { drawText } from '../../ui/TextBox';
 import {
   STAIRS_UP,
   STAIRS_DOWN,
@@ -61,6 +60,7 @@ import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey } from '../../core/SpriteRenderer';
+import { drawTowerStaircaseTile } from '../../sprites/towerStaircase';
 import { frameTime } from '../../utils';
 
 /** Dispatches one furnishing to its own art, over ground already painted. */
@@ -159,6 +159,29 @@ function drawFallenPlank(
   ctx.restore();
 }
 
+/**
+ * The top-left tile and tile span of the stair block that `(tx, ty)` belongs to.
+ *
+ * Measured from the grid rather than read from a constant, so the renderer needs
+ * no knowledge of where a staircase was placed or how big it was made — only that
+ * a contiguous run of same-typed stair tiles is one staircase. The tutorial map's
+ * single-tile stairwell and the tower's larger blocks both come out right.
+ */
+function stairBlockBounds(
+  structure: TileContent[][],
+  type: number,
+  tx: number,
+  ty: number,
+): { x: number; y: number; span: number } {
+  let x = tx;
+  let y = ty;
+  while (structure[y]?.[x - 1]?.type === type) x--;
+  while (structure[y - 1]?.[x]?.type === type) y--;
+  let span = 1;
+  while (structure[y]?.[x + span]?.type === type && structure[y + span]?.[x]?.type === type) span++;
+  return { x, y, span };
+}
+
 export function drawInteriorTile(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -170,47 +193,14 @@ export function drawInteriorTile(
   ty: number,
 ): boolean {
   switch (type) {
-    // Interior stairs — carpet base with stone steps and directional arrow
+    // Interior stairs — one spiral staircase spread across its whole tile block
     case STAIRS_UP:
     case STAIRS_DOWN: {
-      const isUp = type === STAIRS_UP;
-      // Carpet base (matches tower carpet floor type 7)
-      ctx.fillStyle = '#5a2d2d';
-      ctx.fillRect(sx, sy, ts, ts);
-      ctx.fillStyle = '#4a1e1e';
-      ctx.fillRect(sx + 1, sy + 1, ts - 2, ts - 2);
-
-      // Draw 4 stone steps
-      const stepCount = 4;
-      const stepH = Math.floor((ts - 4) / stepCount);
-      for (let i = 0; i < stepCount; i++) {
-        const idx = isUp ? stepCount - 1 - i : i;
-        const brightness = 140 - idx * 25;
-        ctx.fillStyle = `rgb(${brightness}, ${brightness - 10}, ${brightness - 20})`;
-        const stepY = sy + 2 + i * stepH;
-        const inset = idx * 3;
-        ctx.fillRect(sx + 2 + inset, stepY, ts - 4 - inset * 2, stepH - 1);
-        // Step edge highlight
-        ctx.fillStyle = `rgba(255,255,255,0.12)`;
-        ctx.fillRect(sx + 2 + inset, stepY, ts - 4 - inset * 2, 1);
-      }
-
-      // Pulsing amber glow border
-      const stairPulse = 0.5 + Math.sin((frameTime * 1000) / 600) * 0.3;
-      ctx.strokeStyle = `rgba(220, 170, 50, ${stairPulse})`;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(sx + 1, sy + 1, ts - 2, ts - 2);
-
-      // Directional arrow
-      const arrowSize = Math.floor(ts * 0.5);
-      drawText(ctx, isUp ? '\u25B2' : '\u25BC', {
-        x: sx + ts / 2,
-        y: sy + ts * 0.65 - Math.round(arrowSize * 0.8),
-        bold: true,
-        size: arrowSize,
-        color: `rgba(255, 230, 140, ${stairPulse + 0.2})`,
-        align: 'center',
-      });
+      // The room's own floor first: the stair is masonry standing in the tower,
+      // so its tiles must be the same stone as every tile around them.
+      drawFloorBeneath(ctx, structure, sx, sy, ts, tx, ty);
+      const stair = stairBlockBounds(structure, type, tx, ty);
+      drawTowerStaircaseTile(ctx, type === STAIRS_UP, stair, sx, sy, ts, tx, ty);
       return true;
     }
 

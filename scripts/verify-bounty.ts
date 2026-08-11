@@ -19,7 +19,10 @@
  * Run: npx tsx scripts/verify-bounty.ts
  */
 import { generateOverworld } from '../src/map/OverworldGenerator';
-import { GameMap } from '../src/map/GameMap';
+import { GameMap, MOB_MAX_PATH_DISTANCE_TILES } from '../src/map/GameMap';
+import { StiltClown, STILT_CLOWN_AGGRO_RANGE_TILES } from '../src/creatures/StiltClown';
+import { FatClown, FAT_CLOWN_AGGRO_RANGE_TILES } from '../src/creatures/FatClown';
+import { CircusLemur, CIRCUS_LEMUR_AGGRO_RANGE_TILES } from '../src/creatures/CircusLemur';
 import { TILE_SIZE } from '../src/core/constants';
 import {
   advanceBountyType,
@@ -573,6 +576,63 @@ console.log('\nKilling the mark, then rebuilding the scene before collecting…'
   );
   check(human.coins === coinsBefore + paid, 'the coins land on the player after the round-trip');
   second.dispose();
+}
+
+// The Evil Clown's escort is three circus classes reused verbatim, and the
+// circus questline widens its *own* wave instances' pursuit so they can hunt
+// across the whole fairground. That widening is instance-scoped by construction
+// — a per-mob path budget and a per-mob `forceAggro` — and this is what proves
+// it never leaked onto the class: a troupe member built anywhere but the circus
+// still notices at its own documented reach, still needs line of sight, and
+// still searches on the map-wide route budget.
+console.log('\nChecking the clown troupe outside the circus questline…');
+{
+  const map = new GameMap({ mapSize: MAP_SIZE, mapType: 'overworld' });
+  const start = map.startTile;
+  const troupe: ReadonlyArray<{ mob: Mob; label: string; aggroRangeTiles: number }> = [
+    {
+      mob: new StiltClown(start.x, start.y, TILE_SIZE),
+      label: 'StiltClown',
+      aggroRangeTiles: STILT_CLOWN_AGGRO_RANGE_TILES,
+    },
+    {
+      mob: new FatClown(start.x, start.y, TILE_SIZE),
+      label: 'FatClown',
+      aggroRangeTiles: FAT_CLOWN_AGGRO_RANGE_TILES,
+    },
+    {
+      mob: new CircusLemur(start.x, start.y, TILE_SIZE),
+      label: 'CircusLemur',
+      aggroRangeTiles: CIRCUS_LEMUR_AGGRO_RANGE_TILES,
+    },
+  ];
+  const expectedAggroRanges: Readonly<Record<string, number>> = {
+    StiltClown: 8,
+    FatClown: 6,
+    CircusLemur: 7,
+  };
+  for (const { mob, label, aggroRangeTiles } of troupe) {
+    check(!mob.forceAggro, `${label}: a fresh instance does not force aggro`);
+    check(
+      mob.pathDistanceBudgetTiles === MOB_MAX_PATH_DISTANCE_TILES,
+      `${label}: searches on the map-wide route budget (${mob.pathDistanceBudgetTiles} vs ${MOB_MAX_PATH_DISTANCE_TILES})`,
+    );
+    check(
+      aggroRangeTiles === expectedAggroRanges[label],
+      `${label}: notices at ${aggroRangeTiles} tiles (documented ${expectedAggroRanges[label]})`,
+    );
+  }
+  const evilClown = BOUNTY_DEFS.find((def) => def.id === 'evil_clown') ?? null;
+  check(evilClown !== null, 'the Evil Clown bounty is still registered');
+  if (evilClown !== null) {
+    const { boss, minions } = evilClown.spawn(start.x, start.y, map, ENCOUNTER_TEST_LEVEL);
+    check(
+      [boss, ...minions].every(
+        (mob) => !mob.forceAggro && mob.pathDistanceBudgetTiles === MOB_MAX_PATH_DISTANCE_TILES,
+      ),
+      'the staged Evil Clown encounter keeps stock aggro and route budgets',
+    );
+  }
 }
 
 console.log(failures === 0 ? '\nAll bounty checks passed.' : `\n${failures} check(s) FAILED.`);

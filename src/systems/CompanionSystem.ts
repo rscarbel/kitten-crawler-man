@@ -203,7 +203,7 @@ export class CompanionSystem implements GameSystem {
   private readonly hazardSources: GroundHazardSource[] = [];
 
   constructor(
-    private readonly gameMap: GameMap,
+    private gameMap: GameMap,
     startTileX: number,
     startTileY: number,
     stanceState: CompanionStanceState = createCompanionStanceState(),
@@ -213,6 +213,36 @@ export class CompanionSystem implements GameSystem {
     this.stanceState = stanceState;
     this.humanStance.combatStance = stanceState.human;
     this.catStance.combatStance = stanceState.cat;
+  }
+
+  /**
+   * Moves the companion onto a different map — a tower storey, reached by its
+   * stairwell — and drops everything that only meant something on the last one.
+   *
+   * Every cached thing here is expressed in the departing map's terms: a path is
+   * a list of its tiles, an anchor is a spot on its floor, a ban and a target
+   * name mobs that belong to a roster this system will never be handed again.
+   * Carried across, the companion walks a route through a wall towards an enemy
+   * that is a storey below, and a target it can never reach is a target it never
+   * drops.
+   *
+   * The recall override goes with them for the same reason the movement anchors
+   * do: the stairs already put the party back together, so a recall that was in
+   * flight when they took them has nothing left to do.
+   */
+  setMap(gameMap: GameMap, human: HumanPlayer, cat: CatPlayer): void {
+    this.gameMap = gameMap;
+    this.companionPaths.clear();
+    this.targetBans.clear();
+    this._followOverride = false;
+    human.autoTarget = null;
+    cat.autoTarget = null;
+    this.humanStance.anchorX = human.x;
+    this.humanStance.anchorY = human.y;
+    this.catStance.anchorX = cat.x;
+    this.catStance.anchorY = cat.y;
+    this.catWanderTargetX = cat.x;
+    this.catWanderTargetY = cat.y;
   }
 
   get isFollowOverride(): boolean {
@@ -252,6 +282,26 @@ export class CompanionSystem implements GameSystem {
     stance.movementMode = 'anchored';
     stance.anchorX = companion.x;
     stance.anchorY = companion.y;
+    this._followOverride = false;
+  }
+
+  /**
+   * Anchors *both* crawlers where they stand, whichever one is active.
+   *
+   * `setDoNotMove` writes one stance — the companion's — because a command given
+   * in the field is about the crawler standing there being told to wait. A room
+   * that parks the whole party is a different thing: the stance the switch will
+   * later hand the follow drive is the one nobody has written yet, so it is
+   * still `'follow'`, and the first press of the switch key sends the crawler
+   * who *was* active walking off after the one who now is.
+   */
+  anchorBoth(human: { x: number; y: number }, cat: { x: number; y: number }): void {
+    this.humanStance.movementMode = 'anchored';
+    this.humanStance.anchorX = human.x;
+    this.humanStance.anchorY = human.y;
+    this.catStance.movementMode = 'anchored';
+    this.catStance.anchorX = cat.x;
+    this.catStance.anchorY = cat.y;
     this._followOverride = false;
   }
 

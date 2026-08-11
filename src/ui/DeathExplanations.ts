@@ -53,11 +53,12 @@ export type DeathCause =
   | 'skeletonLordHands'
   | 'skeletonWarrior'
   | 'skeletonArcher'
+  | 'theLich'
+  | 'theLichHands'
   | 'rockGolem'
   | 'rockGolemRoll'
   | 'rockGolemRock'
   | 'mantis'
-  | 'ringmasterGrimaldi'
   | 'moldLion'
   | 'cityElfCultist'
   | 'heatherTheBear'
@@ -161,6 +162,16 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'The ground opened in a cone and every hand in it wanted you.',
     'You saw the red wedge and stood in it. They held you while they finished.',
     'Dragged down by hands that came up through the dirt. Out of the cone was the answer.',
+  ],
+  theLich: [
+    'A green bolt out of the magistrate’s own office. It filed you where it filed him.',
+    'The Lich killed you at arm’s length, which is how it has run this town for weeks.',
+    'You died in a room with a corpse at the desk. Now there are two.',
+  ],
+  theLichHands: [
+    'The office floor opened in a wedge and every hand in it had a grip on you.',
+    'The red cone was the notice. You did not file a response, so the hands did.',
+    'Held down by the dead while the thing in the robes watched. Out of the cone was the answer.',
   ],
   skeletonWarrior: [
     'A skeleton with a notched sword and nothing to lose finished you.',
@@ -343,11 +354,6 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     "You took Terror's mallet head-on. Try not to be there when it swings.",
     "Terror the Clown finished you off. Grimaldi's favorite is not for beginners.",
   ],
-  ringmasterGrimaldi: [
-    'Grimaldi the Pestiferous Vine crushed you against the big top pole.',
-    'What is left of Redstone Grimaldi wrapped you up and squeezed.',
-    'The Ringmaster killed you. He is a vine now, and he is still running the show.',
-  ],
   moldLion: [
     'A Mold Lion mauled you. Its mane is fungus, and now so are you.',
     'You were killed by a lion made mostly of toxic mold. Unlucky.',
@@ -365,7 +371,7 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   ],
   missQuill: [
     'Miss Quill put a soul bolt through you without losing her composure.',
-    'The town schoolteacher killed you. Every krasue in the city was her work too.',
+    'The sky fowl schoolteacher killed you. Every krasue in the city was her work too.',
     'Miss Quill finished the lesson. Interrupt her casting next time.',
   ],
   explosiveFriendlyFire: [

@@ -258,7 +258,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'wood_breaking_2',
   ],
 
-  /** `CircusQuestSystem` + `BigTopBossSystem` (Grimaldi, Heather the Bear, the clown troupe). */
+  /** `CircusQuestSystem` + `BigTopMazeSystem` (Grimaldi, Heather the Bear, the clown troupe). */
   circusQuest: [
     'bear_big_attack',
     'bear_growl_1',
@@ -273,6 +273,11 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'grimaldi_plant_moving_2',
     'grimaldi_plant_moving_3',
     'grimaldi_vine_taking_damage',
+    // The Big Top maze's floor vents. Borrowed from the lava llama's fireball,
+    // which is why it also lives in the level-1 and level-2 groups — a floor-3
+    // boot that never loaded those would otherwise light a tent full of silent
+    // fire.
+    'llama_fireball',
   ],
 
   /** `MurderMysteryQuestSystem`, `CultHideoutSystem` and the tower's `QuillConfrontationSystem`. */

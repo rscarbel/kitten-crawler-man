@@ -325,6 +325,17 @@ export class CatPlayer extends Player {
     }
   }
 
+  /**
+   * True while the attack key throws a missile rather than swiping.
+   *
+   * The *bar* rather than the tome, because the bar is what the attack key
+   * reads: a player who drags Magic Missile out of it is a player whose Space is
+   * a claw, however many tomes are in the pack.
+   */
+  get isMissileSlotted(): boolean {
+    return this.inventory.actionBar.slots.some((slot) => slot?.abilityId === 'magic_missile');
+  }
+
   /** Primary Space action: claw swipe (melee). */
   triggerAttack() {
     if (this.attackTimer > 0) return;

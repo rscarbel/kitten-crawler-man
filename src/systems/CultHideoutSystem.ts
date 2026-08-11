@@ -18,6 +18,7 @@ import { CityElfCultist } from '../creatures/CityElfCultist';
 import { drawText } from '../ui/TextBox';
 import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { questMobLevel } from './questMobLevel';
 
 const SPAWN_SEARCH_RADIUS_TILES = 5;
 /** The congregation, spread through the barracks hall (offsets from room centre). */
@@ -51,6 +52,7 @@ export class CultHideoutSystem implements GameSystem {
     private readonly bus: EventBus,
     private readonly addMob: (mob: Mob) => void,
     private readonly progress: MurderQuestProgress,
+    private readonly partyLevel: number,
   ) {
     this.spawnCultists();
   }
@@ -68,7 +70,7 @@ export class CultHideoutSystem implements GameSystem {
       if (!tile) continue;
       const cultist = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
       cultist.setMap(this.map);
-      cultist.applyMobLevel(CULT_HIDEOUT_CULTIST_LEVEL);
+      cultist.applyMobLevel(questMobLevel(CULT_HIDEOUT_CULTIST_LEVEL, this.partyLevel));
       applyActiveDifficultyRewards(cultist);
       this.addMob(cultist);
       this.cultists.push(cultist);

@@ -32,6 +32,7 @@ import {
   drawSkeletonLordSprite,
   drawSkeletonWarriorSprite,
 } from '../sprites/skeletonSprite';
+import { LICH_BODY_PART_KEY, drawTheLichSprite } from '../sprites/lichSprite';
 import {
   drawBoneArrow,
   drawGraspingHands,
@@ -99,7 +100,7 @@ const ARCHER_ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'rise', label: 'rise', shotFrames: SKELETON_RISE_FRAMES },
 ];
 
-type VariantId = 'lord' | 'sword' | 'archer';
+type VariantId = 'lord' | 'sword' | 'archer' | 'lich';
 
 interface VariantSpec {
   readonly id: VariantId;
@@ -109,6 +110,9 @@ interface VariantSpec {
   /** Tiles tall the art is, so the preview cells can hold it. */
   readonly heightTiles: number;
 }
+
+/** Matches LICH_HEIGHT_TILES in `scripts/generate-lich-sprites.ts`. */
+const LICH_HEIGHT_TILES = 2.68;
 
 const VARIANTS: ReadonlyArray<VariantSpec> = [
   {
@@ -131,6 +135,17 @@ const VARIANTS: ReadonlyArray<VariantSpec> = [
     rows: ARCHER_ROWS,
     bodyPartKey: SKELETON_ARCHER_BODY_PART_KEY,
     heightTiles: 1.5,
+  },
+  // The Lich shares the lord's row vocabulary exactly, which is the point of it
+  // sharing his rig — so it shares his row table here rather than declaring an
+  // identical one, and a row added to one creature cannot go missing from the
+  // other's preview.
+  {
+    id: 'lich',
+    label: 'the lich',
+    rows: LORD_ROWS,
+    bodyPartKey: LICH_BODY_PART_KEY,
+    heightTiles: LICH_HEIGHT_TILES,
   },
 ];
 
@@ -195,7 +210,21 @@ export class SkeletonPreviewScene extends Scene {
     action?: () => void;
   }> = [];
 
-  private variantIndex = 0;
+  private variantIndex: number;
+
+  /**
+   * `?skeletons` opens on the lord; `?lich` opens on the Lich. Same scene either
+   * way — the two creatures are reviewed against each other on purpose, because
+   * they share a rig and the question is whether they read as different things.
+   */
+  constructor(startVariant: VariantId = 'lord') {
+    super();
+    this.variantIndex = Math.max(
+      0,
+      VARIANTS.findIndex((variant) => variant.id === startVariant),
+    );
+  }
+
   private zoomIndex = ZOOM_LEVELS.indexOf(ZOOM_DOUBLE);
   private speedIndex = SPEED_LEVELS.length - 1;
   private backdropIndex = 0;
@@ -317,13 +346,15 @@ export class SkeletonPreviewScene extends Scene {
     };
     const progress = this.shotProgress(row);
 
-    if (this.variant.id === 'lord') {
-      drawSkeletonLordSprite(ctx, x, y, tile, {
+    if (this.variant.id === 'lord' || this.variant.id === 'lich') {
+      const casterState = {
         ...motion,
         castProgress: row.kind === 'attack' ? progress : null,
         handsProgress: row.kind === 'hands' ? progress : null,
         summonProgress: row.kind === 'summon' ? progress : null,
-      });
+      };
+      if (this.variant.id === 'lich') drawTheLichSprite(ctx, x, y, tile, casterState);
+      else drawSkeletonLordSprite(ctx, x, y, tile, casterState);
       return;
     }
     const warriorState = {
@@ -413,7 +444,7 @@ export class SkeletonPreviewScene extends Scene {
   }
 
   private renderHeader(ctx: CanvasRenderingContext2D, width: number): void {
-    drawText(ctx, 'skeleton preview — ?skeletons', {
+    drawText(ctx, 'skeleton & lich preview — ?skeletons', {
       x: MARGIN,
       y: MARGIN + TITLE_SIZE,
       size: TITLE_SIZE,

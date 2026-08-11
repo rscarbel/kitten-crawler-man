@@ -1093,7 +1093,7 @@ export class AudioManager {
     bus.on('mobKilled', (e) => {
       // A skeleton has no meat to make a splat. The lord gets his own send-off
       // and the rank and file collapse into a heap of bones.
-      if (e.mob.audioTag === 'skeleton_lord') {
+      if (e.mob.audioTag === 'skeleton_lord' || e.mob.audioTag === 'the_lich') {
         this.play('skeleton_lord_death');
         return;
       }

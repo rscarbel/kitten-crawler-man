@@ -1,6 +1,6 @@
 /**
- * Owns everything the Skeleton Lord's encounter puts in the air: his soul bolts
- * and his archers' bone arrows.
+ * Owns everything a skeleton caster puts in the air: the Skeleton Lord's and
+ * the Lich's soul bolts, and the archers' bone arrows.
  *
  * It is a system rather than state on the creatures for one reason, the same one
  * `LavaBallSystem` exists for. A mob stops being updated and stops being drawn
@@ -20,6 +20,7 @@ import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { SkeletonArcher } from '../creatures/SkeletonArcher';
+import { TheLich } from '../creatures/TheLich';
 import { TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawSoulBolt, drawSoulBurst, drawBoneArrow } from '../sprites/skeletonEffectsSprite';
@@ -134,7 +135,9 @@ export class SkeletonProjectileSystem implements GameSystem {
    */
   private collectShots(mobs: readonly Mob[]): void {
     for (const mob of mobs) {
-      if (!(mob instanceof SkeletonLord) && !(mob instanceof SkeletonArcher)) continue;
+      const isCaster =
+        mob instanceof SkeletonLord || mob instanceof SkeletonArcher || mob instanceof TheLich;
+      if (!isCaster) continue;
       for (const shot of mob.takePendingShots()) this.launch(shot, mob);
     }
   }

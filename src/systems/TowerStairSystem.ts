@@ -145,30 +145,43 @@ export class TowerStairSystem implements GameSystem {
       STAIR_PULSE_CENTER + Math.sin(Date.now() / STAIR_PULSE_SPEED) * STAIR_PULSE_AMPLITUDE;
     const hintSize = Math.floor(TILE_SIZE * STAIR_HINT_SIZE_RATIO);
 
-    for (const t of this.map._interiorStairUpTiles) {
-      const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
-      const sy = t.y * TILE_SIZE - camY;
-      drawText(ctx, '▲ Up', {
-        x: sx,
-        y: sy - STAIR_HINT_Y_OFFSET - Math.round(hintSize * STAIR_HINT_Y_SCALE),
-        size: hintSize,
-        bold: true,
-        color: `rgba(255, 220, 80, ${pulse})`,
-        align: 'center',
-      });
-    }
-    for (const t of this.map._interiorStairDownTiles) {
-      const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
-      const sy = t.y * TILE_SIZE - camY;
-      drawText(ctx, '▼ Down', {
-        x: sx,
-        y: sy - STAIR_HINT_Y_OFFSET - Math.round(hintSize * STAIR_HINT_Y_SCALE),
-        size: hintSize,
-        bold: true,
-        color: `rgba(255, 220, 80, ${pulse})`,
-        align: 'center',
-      });
-    }
+    // One label per staircase, not per tile: a staircase is a block of tiles, and
+    // labelling each of them stacks four copies of the same word on one landing.
+    this.drawBlockHint(ctx, this.map._interiorStairUpTiles, '▲ Up', hintSize, pulse, camX, camY);
+    this.drawBlockHint(
+      ctx,
+      this.map._interiorStairDownTiles,
+      '▼ Down',
+      hintSize,
+      pulse,
+      camX,
+      camY,
+    );
+  }
+
+  private drawBlockHint(
+    ctx: CanvasRenderingContext2D,
+    tiles: ReadonlyArray<{ x: number; y: number }>,
+    label: string,
+    hintSize: number,
+    pulse: number,
+    camX: number,
+    camY: number,
+  ): void {
+    if (tiles.length === 0) return;
+    const minTileX = Math.min(...tiles.map((t) => t.x));
+    const maxTileX = Math.max(...tiles.map((t) => t.x));
+    const minTileY = Math.min(...tiles.map((t) => t.y));
+    const centreX = ((minTileX + maxTileX + 1) / 2) * TILE_SIZE - camX;
+    const topY = minTileY * TILE_SIZE - camY;
+    drawText(ctx, label, {
+      x: centreX,
+      y: topY - STAIR_HINT_Y_OFFSET - Math.round(hintSize * STAIR_HINT_Y_SCALE),
+      size: hintSize,
+      bold: true,
+      color: `rgba(255, 220, 80, ${pulse})`,
+      align: 'center',
+    });
   }
 
   renderMenu(ctx: CanvasRenderingContext2D): void {
@@ -218,7 +231,7 @@ export class TowerStairSystem implements GameSystem {
       align: 'center',
     });
 
-    drawText(ctx, '(Esc or Stay to remain on this floor)', {
+    drawText(ctx, '(Space to go, Esc or Stay to remain on this floor)', {
       x: cw / 2,
       y: panelY + MENU_HINT_Y_OFFSET - MENU_HINT_Y_ADJUST,
       size: MENU_HINT_SIZE,
@@ -228,8 +241,10 @@ export class TowerStairSystem implements GameSystem {
 
     const rects = this.menuRects();
 
-    // The travel button leads the ring so one Tab reaches it, but Stay is the
-    // primary: standing on a step is not consent to change floors.
+    // The travel button leads the ring and carries the ring's primary slot, so
+    // Space with nothing yet focused goes there — stepping onto a stair and
+    // hitting Space is "go", not "stay", the way every other panel's default
+    // action is the one that does something rather than the one that backs out.
     beginMenuFocus('tower-stairs');
     addButton(ctx, this.menuButtons, {
       x: rects.action.x,
@@ -243,6 +258,7 @@ export class TowerStairSystem implements GameSystem {
       radius: 0,
       labelSize: MENU_ACTION_TEXT_SIZE,
       labelColor: MENU_ACTION_TEXT_COLOR,
+      primaryAction: true,
       action: isUp ? () => this.onAscend() : () => this.onDescend(),
     });
     addButton(ctx, this.menuButtons, {
@@ -257,7 +273,6 @@ export class TowerStairSystem implements GameSystem {
       radius: 0,
       labelSize: MENU_ACTION_TEXT_SIZE,
       labelColor: MENU_STAY_TEXT_COLOR,
-      primaryAction: true,
       action: () => this.closeMenu(),
     });
     endMenuFocus();

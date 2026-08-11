@@ -44,16 +44,22 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   SkeletonLord: 'skeletonLord',
   SkeletonWarrior: 'skeletonWarrior',
   SkeletonArcher: 'skeletonArcher',
+  TheLich: 'theLich',
   RockGolem: 'rockGolem',
   RockGolemBoss: 'rockGolem',
-  RingmasterGrimaldi: 'ringmasterGrimaldi',
   MoldLion: 'moldLion',
   CityElfCultist: 'cityElfCultist',
   HeatherTheBear: 'heatherTheBear',
   MissQuill: 'missQuill',
 };
 
-function causeFromDamageSource(source: DamageSource): DeathCause {
+/**
+ * The bespoke death this blow was. Exported because an interior raises its own
+ * death screen: `resolveDeathCause` reads a *floor's* state — its collapse
+ * timer, its revive deadline — and a building has neither, so a room that wants
+ * one specific hazard to speak for itself asks about the blow directly.
+ */
+export function causeFromDamageSource(source: DamageSource): DeathCause {
   if (source.kind === 'dynamite') return 'explosiveFriendlyFire';
   if (source.kind === 'doomsday') return 'doomsdayExplosion';
   // Standing hazards. Without this the contact damage — which is what actually
@@ -112,6 +118,9 @@ function causeFromDamageSource(source: DamageSource): DeathCause {
   // The cone is a red shape on the ground the player was given time to leave;
   // the bolts are not. Telling both deaths the same way loses the lesson.
   if (mobType === 'SkeletonLord' && attackType === 'grasping_hands') return 'skeletonLordHands';
+  // Same distinction for the Lich: the cone was drawn on the floor and the bolt
+  // was not, and one death is a lesson while the other is a fight.
+  if (mobType === 'TheLich' && attackType === 'grasping_hands') return 'theLichHands';
 
   // Being run over and being gassed teach opposite lessons — one is "you were in its
   // line", the other "you were standing where it was about to hit" — and the trample

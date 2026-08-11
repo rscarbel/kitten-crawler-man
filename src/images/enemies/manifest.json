@@ -2284,5 +2284,102 @@
         "frameCount": 1
       }
     }
+  },
+  "the_lich": {
+    "path": "enemies/the_lich.png",
+    "frameWidth": 136,
+    "frameHeight": 224,
+    "tileX": 36,
+    "tileY": 173,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 12
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 12
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 12
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "cast": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "cast_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "cast_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "hands_cast": {
+        "row": 9,
+        "frameCount": 10
+      },
+      "hands_cast_side": {
+        "row": 10,
+        "frameCount": 10
+      },
+      "hands_cast_away": {
+        "row": 11,
+        "frameCount": 10
+      },
+      "summon": {
+        "row": 12,
+        "frameCount": 10
+      },
+      "gore_skull": {
+        "row": 13,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_ribcage": {
+        "row": 13,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_pelvis": {
+        "row": 13,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_femur": {
+        "row": 13,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_tibia": {
+        "row": 13,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_forearm": {
+        "row": 13,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_hand": {
+        "row": 13,
+        "colOffset": 6,
+        "frameCount": 1
+      }
+    }
   }
 }

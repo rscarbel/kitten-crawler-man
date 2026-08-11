@@ -124,7 +124,10 @@ export class MobUpdateLoop implements GameSystem {
       const ox = mob.x;
       const oy = mob.y;
 
-      if (mob.isConfused) {
+      if (mob.aiHeld) {
+        mob.currentTarget = null;
+        mob.isMoving = false;
+      } else if (mob.isConfused) {
         mob.currentTarget = null;
         mob.doWander();
       } else {
@@ -212,7 +215,7 @@ export class MobUpdateLoop implements GameSystem {
     for (const player of this.players) {
       if (!player.isAlive) continue;
       for (const mob of this.separationMobs) {
-        if (!mob.isAlive) continue;
+        if (!mob.isAlive || !mob.displacesPlayers) continue;
         const dx = player.x - mob.x;
         const dy = player.y - mob.y;
         const distSq = dx * dx + dy * dy;

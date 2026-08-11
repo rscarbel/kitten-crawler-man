@@ -347,7 +347,7 @@ export class TownLifeSystem implements GameSystem {
     return radius * radius;
   }
 
-  /** Enumerate every walkable, non-door tile inside `radius` that `accept` allows. */
+  /** Enumerate every tile inside `radius` that citizens may stand on and `accept` allows. */
   private gatherTiles(radius: number, accept: (tx: number, ty: number) => boolean): TileXY[] {
     if (radius <= 0) return [];
     const minX = this.centre.x - radius;
@@ -357,14 +357,47 @@ export class TownLifeSystem implements GameSystem {
     const tiles: TileXY[] = [];
     for (let ty = minY; ty <= maxY; ty++) {
       for (let tx = minX; tx <= maxX; tx++) {
-        if (this.doorTiles.has(tileCoordKey(tx, ty))) continue;
+        if (!this.isCitizenGround(tx, ty)) continue;
         if (!this.withinRadius(tx, ty, radius)) continue;
-        if (!this.gameMap.isWalkable(tx, ty)) continue;
         if (!accept(tx, ty)) continue;
         tiles.push({ x: tx, y: ty });
       }
     }
     return tiles;
+  }
+
+  /**
+   * The one test for "a citizen belongs on this tile": walkable, not a building's
+   * own doorway, and inside the town wall.
+   *
+   * The wall clause is what none of the radius gates can express. Every cohort is
+   * bounded by a circle around the plaza, and the town is a rectangle inside a
+   * wall ring whose corners sit further out than the district radius reaches —
+   * while the four gate mouths are `COBBLE_STREET` and the highways beyond them
+   * are road, both of which pass `isPaved`. So the street cohort could gather
+   * tiles on the aprons and out on the open highway, and townsfolk spawned and
+   * wandered outside the walls.
+   */
+  private isCitizenGround(tx: number, ty: number): boolean {
+    if (this.doorTiles.has(tileCoordKey(tx, ty))) return false;
+    if (!this.isInsideTownWall(tx, ty)) return false;
+    return this.gameMap.isWalkable(tx, ty);
+  }
+
+  /**
+   * True when the tile lies strictly within the wall ring. Maps with no town plan
+   * — anything that isn't the overworld — have no wall to be inside of, so they
+   * admit everything and keep their old behaviour.
+   */
+  private isInsideTownWall(tx: number, ty: number): boolean {
+    const interior = this.gameMap.townPlan?.interior;
+    if (interior === undefined) return true;
+    return (
+      tx >= interior.x &&
+      ty >= interior.y &&
+      tx < interior.x + interior.w &&
+      ty < interior.y + interior.h
+    );
   }
 
   /** True when tile (tx, ty) lies inside `radius` tiles of the town centre. */
@@ -535,15 +568,14 @@ export class TownLifeSystem implements GameSystem {
     }
   }
 
-  /** Walkable, non-door tiles inside an anchor's bubble. */
+  /** Standable tiles inside an anchor's bubble. */
   private gatherAnchorTiles(fixture: TileXY, radiusTiles: number): TileXY[] {
     const tiles: TileXY[] = [];
     const radius = TILE_SIZE * radiusTiles;
     for (let ty = fixture.y - radiusTiles; ty <= fixture.y + radiusTiles; ty++) {
       for (let tx = fixture.x - radiusTiles; tx <= fixture.x + radiusTiles; tx++) {
-        if (this.doorTiles.has(tileCoordKey(tx, ty))) continue;
+        if (!this.isCitizenGround(tx, ty)) continue;
         if (!withinTiles(tx * TILE_SIZE, ty * TILE_SIZE, fixture, radius)) continue;
-        if (!this.gameMap.isWalkable(tx, ty)) continue;
         tiles.push({ x: tx, y: ty });
       }
     }
@@ -571,14 +603,13 @@ export class TownLifeSystem implements GameSystem {
     this.seedCount++;
   }
 
-  /** Walkable, non-door tiles on a building's doorstep — where its loiterers live. */
+  /** Standable tiles on a building's doorstep — where its loiterers live. */
   private gatherFrontageTiles(door: TileXY): TileXY[] {
     const tiles: TileXY[] = [];
     for (let ty = door.y - FRONTAGE_RADIUS_TILES; ty <= door.y + FRONTAGE_RADIUS_TILES; ty++) {
       for (let tx = door.x - FRONTAGE_RADIUS_TILES; tx <= door.x + FRONTAGE_RADIUS_TILES; tx++) {
-        if (this.doorTiles.has(tileCoordKey(tx, ty))) continue;
+        if (!this.isCitizenGround(tx, ty)) continue;
         if (!near(tx * TILE_SIZE, ty * TILE_SIZE, door)) continue;
-        if (!this.gameMap.isWalkable(tx, ty)) continue;
         tiles.push({ x: tx, y: ty });
       }
     }
@@ -616,12 +647,11 @@ export class TownLifeSystem implements GameSystem {
     return best;
   }
 
-  /** Base walkability gate for wander: a walkable tile that isn't a building's doorway. */
+  /** Base walkability gate for wander — the same rule the spawn passes gather by. */
   private isWalkableSpot(worldX: number, worldY: number): boolean {
     const tx = Math.floor((worldX + CENTER_OFFSET) / TILE_SIZE);
     const ty = Math.floor((worldY + CENTER_OFFSET) / TILE_SIZE);
-    if (this.doorTiles.has(tileCoordKey(tx, ty))) return false;
-    return this.gameMap.isWalkable(tx, ty);
+    return this.isCitizenGround(tx, ty);
   }
 
   /** Walkability gate that also confines a cohort to its zone. */

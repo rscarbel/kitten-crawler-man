@@ -32,6 +32,7 @@
     "verify:kits": "tsx scripts/verify-kits.ts",
     "verify:menus": "tsx scripts/verify-menus.ts",
     "verify:buildings": "tsx scripts/verify-building-gates.ts",
+    "verify:bigtop": "tsx scripts/verify-bigtop-maze.ts",
     "gen:townscape": "tsx scripts/generate-townscape-sprites.ts",
     "gen:over-city": "tsx scripts/generate-over-city-sprites.ts",
     "gen:buildings": "tsx scripts/generate-building-sprites.ts",
@@ -51,6 +52,7 @@
     "gen:dark-knight": "tsx scripts/generate-dark-knight-sprite.ts",
     "gen:mantid": "tsx scripts/generate-mantid-sprite.ts",
     "gen:skeletons": "tsx scripts/generate-skeleton-sprites.ts",
+    "gen:lich": "tsx scripts/generate-lich-sprites.ts",
     "gen:skeleton-effects": "tsx scripts/generate-skeleton-effects-sprites.ts",
     "gen:lava-ball": "tsx scripts/generate-lava-ball-sprites.ts",
     "gen:clown-gas": "tsx scripts/generate-clown-gas-sprites.ts",
@@ -71,7 +73,8 @@
     "gen:vespa-spit": "tsx scripts/generate-vespa-spit-sprites.ts",
     "gen:keyboard-hero-chart": "tsx scripts/generate-keyboard-hero-chart.ts",
     "render:townsfolk": "tsx scripts/render-townsfolk.ts",
-    "render:buildings": "tsx scripts/render-buildings.ts"
+    "render:buildings": "tsx scripts/render-buildings.ts",
+    "render:lich": "tsx scripts/render-lich.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

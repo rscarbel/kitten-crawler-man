@@ -1,11 +1,11 @@
 import { Player } from '../Player';
 import type { DamageSource } from '../Player';
 import type { StatusEffect } from '../core/StatusEffect';
-import type { GameMap } from '../map/GameMap';
+import { MOB_MAX_PATH_DISTANCE_TILES, type GameMap } from '../map/GameMap';
 import { verticalCollisionOffset } from '../map/collisionAnchors';
 import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
-import { AGGRO_PERSIST_MULTIPLIER, WADE_SPEED_FACTOR } from '../core/constants';
+import { AGGRO_PERSIST_MULTIPLIER, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../core/constants';
 import { tryConsumePathfind } from './pathfindBudget';
 import { alertPackAround } from './packAlert';
 import { drawText } from '../ui/TextBox';
@@ -41,6 +41,15 @@ const WANDER_TIMER_STAGGER_MAX = 119;
 const MOB_LEVEL_HP_SCALE = 0.3;
 /** Per-level speed scaling multiplier increment (+8% per level above 1). */
 const MOB_LEVEL_SPEED_SCALE = 0.08;
+/**
+ * The fraction of the player's own speed that levelling alone may take a mob to.
+ *
+ * Under one, so retreating always remains an option the player actually has: a
+ * fight they cannot walk out of is the one shape of difficulty that no amount of
+ * skill answers. Creatures authored faster than this keep their own speed — see
+ * {@link Mob.levelledSpeedCap} — the bound is on what levelling adds.
+ */
+const LEVELLED_SPEED_PLAYER_RATIO = 0.9;
 /** Per-level coin scaling multiplier increment (+25% per level above 1). */
 const MOB_LEVEL_COIN_SCALE = 0.25;
 /** Per-level XP scaling multiplier increment (+25% per level above 1). */
@@ -644,6 +653,22 @@ export abstract class Mob extends Player {
    */
   mass = 1;
 
+  /**
+   * Whether walking into this mob shoves a crawler back out of it.
+   *
+   * True for anything with a body. False for the prop-shaped mobs that exist
+   * only to be hit — a counterweight hung on a grate, a timber driven through a
+   * wall — because separation is not a soft nudge: it pushes the crawler a full
+   * `SEPARATION_RADIUS`, which is one whole tile, and a rooted prop cannot give
+   * any of that ground back (`applySeparation` caps a mob's own displacement
+   * against its walk speed, and a prop's is zero). One standing in a one-tile
+   * corridor is therefore a wall, and a puzzle prop is often standing in exactly
+   * the doorway it guards.
+   */
+  get displacesPlayers(): boolean {
+    return true;
+  }
+
   /** Set by the spawner from `LevelDef.slingshotDrops`; gates the rare world-drop roll. */
   allowSlingshotDrop = false;
 
@@ -656,6 +681,31 @@ export abstract class Mob extends Player {
 
   /** When true (set by DungeonScene for locked boss rooms), ignores aggro range. */
   forceAggro = false;
+
+  /**
+   * True while a scripted encounter has put this mob in the room but has not
+   * yet handed it the fight — the beat a party spends reading an intro banner
+   * before they have control.
+   *
+   * A held mob runs no AI at all, rather than being handed an empty target
+   * list: with no target a caster wanders, and wandering is exactly how one
+   * posted safely outside its own aggro range of the party's arrival tile
+   * closes that range before the player can answer for it.
+   */
+  aiHeld = false;
+
+  /**
+   * How far this one mob's A* searches may reach, in tiles.
+   *
+   * The map-wide default keeps routine pathfinding cheap, but a scripted
+   * encounter that guarantees pursuit across a whole arena needs a route long
+   * enough to detour around the scenery in it: past the budget `findPath`
+   * returns nothing at all, and the straight-line fallback walks into the wall
+   * it was supposed to go around. Raised per instance rather than globally
+   * because the global constant is what bounds the cost of every other mob on
+   * the floor.
+   */
+  pathDistanceBudgetTiles = MOB_MAX_PATH_DISTANCE_TILES;
 
   /** Difficulty level of this mob instance (1 = base). Set by applyMobLevel(). */
   mobLevel = 1;
@@ -827,6 +877,7 @@ export abstract class Mob extends Player {
   constructor(tileX: number, tileY: number, tileSize: number, maxHp: number, speed: number) {
     super(tileX, tileY, tileSize, { maxHp });
     this.speed = speed;
+    this._authoredSpeed = speed;
     this.spawnX = tileX * tileSize;
     this.spawnY = tileY * tileSize;
     this.lastKnownTargetX = this.spawnX;
@@ -853,27 +904,43 @@ export abstract class Mob extends Player {
   private _levelHpMultiplier = 1;
 
   /**
-   * Ceiling on this mob's post-level walk speed, or `null` for uncapped.
+   * The walk speed this mob was authored at, before any level scaling.
+   *
+   * Kept so {@link levelledSpeedCap} can tell "this creature is meant to be
+   * fast" apart from "levelling made this creature fast" — the default ceiling
+   * bounds the second without touching the first.
+   */
+  private _authoredSpeed = 0;
+
+  /**
+   * Ceiling on this mob's post-level walk speed.
    *
    * The unbounded per-level speed multiplier meeting a bounty's full-party-level
    * escorts is what let a level-20 goblin outrun the player at 141% of their
-   * speed. Override this in a subclass to make a creature's walk speed obey a
-   * fixed ceiling regardless of how high it levels — both {@link applyMobLevel}
-   * and {@link setBaseSpeed} consult it so an enrage, evolution or checkpoint
-   * reset cannot climb back over the cap.
+   * speed. The default holds every creature to
+   * {@link LEVELLED_SPEED_PLAYER_RATIO} of the player's speed, or to its own
+   * authored speed if it was already written faster than that — so levelling can
+   * never turn a mob into something the player cannot walk away from, while a
+   * creature deliberately authored quick (a lemur, a spider) keeps the speed its
+   * designer gave it.
+   *
+   * Both {@link applyMobLevel} and {@link setBaseSpeed} consult it, so an
+   * enrage, an evolution or a checkpoint reset cannot climb back over it.
+   * Override in a subclass for a tighter ceiling, or for one of the few
+   * creatures whose whole identity is outrunning the player.
    */
-  protected get levelledSpeedCap(): number | null {
-    return null;
+  protected get levelledSpeedCap(): number {
+    return Math.max(this._authoredSpeed, PLAYER_SPEED * LEVELLED_SPEED_PLAYER_RATIO);
   }
 
   /** Re-author this mob's speed from a base constant, keeping its level scaling. */
   protected setBaseSpeed(baseSpeed: number): void {
+    this._authoredSpeed = baseSpeed;
     this.speed = this.clampToSpeedCap(baseSpeed * this._levelSpeedMultiplier);
   }
 
   private clampToSpeedCap(speed: number): number {
-    const cap = this.levelledSpeedCap;
-    return cap === null ? speed : Math.min(speed, cap);
+    return Math.min(speed, this.levelledSpeedCap);
   }
 
   /**
@@ -1118,6 +1185,20 @@ export abstract class Mob extends Player {
     return this.astarLastSearchFailed;
   }
 
+  /**
+   * Throws away the cached route so the next AI tick searches from where the mob
+   * actually stands.
+   *
+   * Public because the mob itself cannot tell that it is wedged: the stuck
+   * counters inside `followTargetCollide` only see one blocked step, while a mob
+   * grinding against a tent corner takes a *successful* sidestep every frame and
+   * arrives nowhere. Whoever is measuring real displacement over time is the one
+   * that knows, and it is never the mob.
+   */
+  forceRepath(): void {
+    this.clearAStarPath();
+  }
+
   /** Clears the cached A* path so it is recomputed on the next followTargetAStar call. */
   protected clearAStarPath() {
     this.astarPath = [];
@@ -1170,7 +1251,13 @@ export abstract class Mob extends Player {
       if (mustSearch || tryConsumePathfind()) {
         const myTileX = Math.floor((this.x + ts * MOB_TILE_CENTER) / ts);
         const myTileY = Math.floor((this.y + ts * MOB_TILE_CENTER) / ts);
-        const foundPath = this.map.findPath(myTileX, myTileY, goalTileX, goalTileY);
+        const foundPath = this.map.findPath(
+          myTileX,
+          myTileY,
+          goalTileX,
+          goalTileY,
+          this.pathDistanceBudgetTiles,
+        );
         this.astarPath = foundPath;
         // Drop the first waypoint — that's the tile we're already on
         if (this.astarPath.length > 0) this.astarPath.shift();
