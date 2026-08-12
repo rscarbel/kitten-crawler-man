@@ -20,6 +20,8 @@
 
 import type { CanvasRenderingContext2D as Ctx } from 'canvas';
 
+import { SOUL_CORE, SOUL_DEEP, SOUL_MID, SOUL_SHADOW } from '../src/sprites/soulPalette.js';
+
 export const TWO_PI = Math.PI * 2;
 const HALF_PI = Math.PI / 2;
 /** Radii below this are degenerate; canvas rejects a negative arc or gradient. */
@@ -69,11 +71,9 @@ type Rgb = readonly [number, number, number];
 
 // ── The palette ──────────────────────────────────────────────────────────────
 
-/** Witch-light green, from the near-white heart out to the sick shadow. */
-const SOUL_CORE: Rgb = [234, 255, 228];
-const SOUL_MID: Rgb = [102, 224, 90];
-const SOUL_DEEP: Rgb = [31, 122, 53];
-const SOUL_SHADOW: Rgb = [8, 48, 26];
+// Witch-light green comes from `src/sprites/soulPalette.ts` rather than from
+// here: the Lich's falling orbs are drawn live in the browser out of the same
+// four values, and a second copy of them drifts on the first tweak.
 
 /** Dry cortical bone, lit and shadowed. */
 const BONE_LIT: Rgb = [239, 230, 207];

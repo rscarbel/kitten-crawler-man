@@ -28,7 +28,7 @@ export interface TownDialogContext {
   circus: CircusQuestStage;
   murder: MurderQuestStage;
   doomsday: DoomsdayStage;
-  /** The ringmaster's daughter has fallen in the ruins. */
+  /** The circus's dancing bear has fallen in the ruins. */
   heatherSlain: boolean;
   /** The hideout letter has named Miss Quill as the killer. */
   quillNamed: boolean;
@@ -195,6 +195,12 @@ function gossipLine(ctx: TownDialogContext): string | null {
     return 'The killings have stopped. Folk sleep easier now — we owe you.';
   }
   if (isMurderActive(ctx.murder)) {
+    // The schoolteacher is the answer the street has, and only up to the point
+    // where the party learns she was not the whole of it. After the tower
+    // reveal, a townsperson still closing the case at Quill contradicts what
+    // the player has just been shown — so past that beat they go back to
+    // knowing only that the killing has not stopped.
+    if (ctx.murder === 'quill_slain') return 'It isn’t over, is it. It doesn’t feel over.';
     return ctx.quillNamed
       ? 'They say it was Miss Quill all along. Who could’ve guessed?'
       : 'Lock your doors. Someone’s been killing in the night.';
@@ -207,7 +213,7 @@ function gossipLine(ctx: TownDialogContext): string | null {
   }
   if (isCircusActive(ctx.circus)) {
     return ctx.heatherSlain
-      ? 'They say the ringmaster’s daughter fell in the ruins. Grim business.'
+      ? 'They say the dancing bear fell in the ruins. Grim business.'
       : 'Strange lights over the old Big Top of late. Gives me chills.';
   }
   return null;

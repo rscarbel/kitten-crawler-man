@@ -24,6 +24,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import { QuestManager, type QuestStatus } from '../core/QuestManager';
+import type { ItemId } from '../core/ItemDefs';
 import { partyLevelOf } from '../levels/spawner';
 import { questMobLevel } from './questMobLevel';
 import type { TrackerEntry, TrackerTarget } from './questTracker';
@@ -52,12 +53,15 @@ import {
   WELL_CLUE_DIALOG,
   HOME_CLUE_DIALOG,
   ROOST_CLUE_DIALOG,
-  NIGHT_FALLS_DIALOG,
+  TAUNT_AND_NIGHTFALL_DIALOG,
   AFTERMATH_DIALOG,
   HIDEOUT_CLEARED_DIALOG,
 } from './murderQuestDialogs';
 
 export const MURDER_QUEST_ID = 'krasue_murders';
+
+/** The two papers tucked in GumGum's coat, handed over when the alley scene closes. */
+const ALLEY_EVIDENCE: ReadonlyArray<ItemId> = ['magistrates_writ', 'unreadable_letter'];
 
 /** How far a scripted spawn may be nudged to find a walkable tile. */
 const SPAWN_SEARCH_RADIUS_TILES = 6;
@@ -767,7 +771,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
             ...base,
             status: 'active',
             objective: `Follow the trail — ${found} of ${this.clues.length} clues found`,
-            hint: 'The well, a home and a roost. Ask the town what it has seen.',
+            hint: 'The well, Hilda’s door, and the plaza under the tower. The letter in your pack stays warm.',
             target: this.clueBeaconTarget(outstanding[0]),
           },
         ];
@@ -802,6 +806,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
             ...base,
             status: 'active',
             objective: 'Take it to the tower',
+            hint: 'Miss Quill’s “capacitor” waits at the top of the magistrate’s tower. So does whatever signs Featherfall’s letters.',
             target: doorwayBeaconTarget(this.towerEntry) ?? undefined,
           },
         ];
@@ -911,6 +916,31 @@ export class MurderMysteryQuestSystem implements GameSystem {
       this.progress.stage = 'investigation';
       this.questManager.startQuest(MURDER_QUEST_ID);
       this.bus.emit('questStarted', { questId: MURDER_QUEST_ID });
+      // The dialog strip only ever previews these — Carl pockets the writ and the
+      // letter off the body here, in code, or neither ever reaches the bag.
+      this.progress.evidenceOwed = [...ALLEY_EVIDENCE];
+    });
+  }
+
+  /**
+   * Hands over the papers off GumGum's body, retrying until the bag has room.
+   *
+   * `addItem` on a full bag returns nothing and drops the item. These two are granted once,
+   * behind a stage advance that never runs again, and the investigation's own
+   * hint talks about the letter being in the player's pack — so losing them
+   * would leave the quest describing evidence that does not exist. Retried every
+   * frame instead, which costs nothing and resolves itself the moment the player
+   * frees a slot. The outstanding list lives on the cross-scene progress record,
+   * so walking through a door mid-retry does not end the attempt.
+   */
+  private grantOwedEvidence(ctx: SystemContext): void {
+    const owed = this.progress.evidenceOwed;
+    if (owed.length === 0) return;
+    const bag = ctx.human.inventory;
+    this.progress.evidenceOwed = owed.filter((id) => {
+      if (!bag.hasRoomFor(id)) return true;
+      bag.addItem(id, 1);
+      return false;
     });
   }
 
@@ -1029,6 +1059,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
 
   update(ctx: SystemContext): void {
     this.lastCtx = ctx;
+    this.grantOwedEvidence(ctx);
     this.partyLevel = partyLevelOf(ctx.human.level, ctx.cat.level);
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
     if (this.bannerTimer > 0) this.bannerTimer--;
@@ -1096,7 +1127,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
         // Opens once the last clue's dialog closes, and re-offers after an
         // Esc dismissal — otherwise the quest would strand here forever.
         if (this.allCluesFound() && !this.dialog.isOpen) {
-          this.dialog.open(NIGHT_FALLS_DIALOG, () => this.beginNightAttack());
+          this.dialog.open(TAUNT_AND_NIGHTFALL_DIALOG, () => this.beginNightAttack());
         }
         break;
       case 'gumgum_waiting':

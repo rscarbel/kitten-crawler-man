@@ -116,7 +116,7 @@ export type DamageSource =
        * an untagged source means; a second hazard reporting "a burning tree"
        * on the death screen is the failure this discriminates away.
        */
-      readonly hazard?: 'burningTree' | 'lavaFlames' | 'clownGas';
+      readonly hazard?: 'burningTree' | 'lavaFlames' | 'clownGas' | 'lichFirewall' | 'lichOrb';
     }
   | { readonly kind: 'doomsday' };
 

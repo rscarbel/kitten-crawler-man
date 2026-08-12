@@ -41,6 +41,7 @@ import {
 import {
   LICH_ARM_LENGTH,
   LICH_CLOTH,
+  LICH_CROUCH_DROP,
   LICH_FIGURE_HEIGHT,
   LICH_OUTLINE,
   LICH_RIM_EDGE,
@@ -603,6 +604,91 @@ function summonFront(progress: number): SkeletonPose {
   };
 }
 
+// ── Dazed ────────────────────────────────────────────────────────────────────
+
+/**
+ * The vulnerability window: the Lich is spent and back on the floor.
+ *
+ * Every other row is a creature that hovers, stands tall and glares. This one
+ * has to say "reachable" from across the room and in a glance, so it inverts all
+ * three at once — the hover stops and the feet are planted, the body sinks, and
+ * the witch-light that is the whole face gutters down to an ember. What sells it
+ * head-on is mostly the height: a figure two thirds of the height the player has
+ * been chasing for two phases reads as broken before any detail resolves.
+ *
+ * Baked camera-facing only. It is a held, symmetrical pose, and the fight parks
+ * the creature at the room centre in front of the party to play it.
+ */
+const DAZE_FRAMES = 10;
+/**
+ * A full crouch, plus a sag past it.
+ *
+ * The crouch alone only takes {@link LICH_CROUCH_DROP} out of the hip height,
+ * which at a 32 px tile is three pixels — a difference that is obvious beside
+ * the idle row and invisible without it, and the player never sees the two side
+ * by side. The rest of the drop is a positive bob, which sinks the whole rig
+ * without asking the legs to fold further than they can.
+ */
+const DAZE_CROUCH = 1;
+const DAZE_SAG = 0.18;
+/** Total drop of the body, which the hanging hands have to follow down. */
+const DAZE_SINK = DAZE_CROUCH * LICH_CROUCH_DROP + DAZE_SAG;
+/** Head-on roll of the cowl; a hood that has slid off true reads as a dropped head. */
+const DAZE_HEAD_ROLL = deg(21);
+/** How far the woozy loll carries the roll either side of that. */
+const DAZE_LOLL = deg(5);
+/** Dead arms hang wider than live ones — nothing is holding them in. */
+const DAZE_HAND_SPREAD = 0.29;
+/** Slack travel left in the arms, so they swing rather than sit. */
+const DAZE_HAND_DRIFT = 0.02;
+const DAZE_SHOULDER_SAG = deg(4);
+/**
+ * Guttering hood-fire: an ember that flares and dies rather than pulsing.
+ *
+ * Two cycles across the loop is the fastest this may run. Past one oscillation
+ * per two frames the flicker aliases against the playback rate and the ember
+ * either freezes or strobes, and a strobing light reads as a hazard rather than
+ * as an exhausted one.
+ */
+const DAZE_GLOW_FLOOR = 0.06;
+const DAZE_GLOW_REACH = 0.16;
+const DAZE_GUTTER_CYCLES = 2;
+/** The jaw hangs open and barely moves — a slack jaw, not a chant. */
+const DAZE_JAW_OPEN = 0.55;
+const DAZE_JAW_TREMBLE = 0.06;
+/** The hem has pooled on the floor rather than being held out by anything. */
+const DAZE_ROBE_FLARE = 0.14;
+
+function dazedFront(phase: number): SkeletonPose {
+  const angle = phase * TWO_PI;
+  const breath = Math.sin(angle);
+  const gutter = 0.5 + 0.5 * Math.sin(angle * DAZE_GUTTER_CYCLES);
+  const handY = HAND_HANG_Y + DAZE_SINK + DAZE_HAND_DRIFT * breath;
+  return {
+    ...lichRestingPose(),
+    crouch: DAZE_CROUCH,
+    bob: DAZE_SAG,
+    // Planted, not hovering: the feet are the tell that it can be walked up to.
+    ...facingStance(),
+    leftHand: pt(-DAZE_HAND_SPREAD, handY),
+    rightHand: pt(DAZE_HAND_SPREAD, handY - DAZE_HAND_DRIFT * breath * 2),
+    // Curled, not clawed. An open claw is a threat whatever the rest is doing.
+    leftClaw: 0.12,
+    rightClaw: 0.08,
+    leftForeshorten: 1,
+    rightForeshorten: 1,
+    elbowFlare: 1,
+    lean: DAZE_SHOULDER_SAG * breath,
+    headTilt: DAZE_HEAD_ROLL + DAZE_LOLL * breath,
+    headTurn: 0.1 * breath,
+    jaw: DAZE_JAW_OPEN + DAZE_JAW_TREMBLE * gutter,
+    robeFlare: DAZE_ROBE_FLARE,
+    robeSway: 0.15 * breath,
+    glow: DAZE_GLOW_FLOOR + DAZE_GLOW_REACH * gutter,
+    time: phase,
+  };
+}
+
 // ── Row manifest ─────────────────────────────────────────────────────────────
 
 export type RowKind = 'loop' | 'oneShot' | 'gore';
@@ -725,6 +811,13 @@ function lichRows(): RowSpec[] {
       kind: 'oneShot',
       view: 'front',
       pose: (f) => summonFront(shotProgress(f, SUMMON_FRAMES)),
+    },
+    {
+      name: 'dazed',
+      frameCount: DAZE_FRAMES,
+      kind: 'loop',
+      view: 'front',
+      pose: (f) => dazedFront(cyclePhase(f, DAZE_FRAMES)),
     },
     GORE_ROW,
   ];

@@ -44,6 +44,19 @@ const BAKE_DEVICE_PIXEL_RATIO = 2;
  * blit existing sprites bake the real art rather than nothing.
  */
 export async function loadGameSpritesInNode(): Promise<void> {
+  installCanvasGlobals();
+  await loadSprites(IMAGE_BASE);
+}
+
+/**
+ * The shims alone, for a harness that draws but loads no sheets.
+ *
+ * A runtime painter that only allocates scratch surfaces — the flame stamps are
+ * the case — needs `document.createElement('canvas')` to exist and nothing
+ * else. Preloading the manifest for it would cost the whole sprite budget to
+ * bake a handful of gradients.
+ */
+export function installCanvasGlobals(): void {
   const globals: CanvasGlobals = globalThis;
   globals.Image = Image;
   globals.document = {
@@ -53,5 +66,4 @@ export async function loadGameSpritesInNode(): Promise<void> {
     },
   };
   globals.window = { devicePixelRatio: BAKE_DEVICE_PIXEL_RATIO };
-  await loadSprites(IMAGE_BASE);
 }

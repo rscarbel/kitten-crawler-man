@@ -837,7 +837,7 @@ export class CircusQuestSystem implements GameSystem {
             ...base,
             status: 'active',
             objective: 'Brave the Big Top',
-            hint: 'The tent is trapped end to end, and the two of you go in by different flaps.',
+            hint: 'The tent runs its dead show in three acts, and the two of you go in by different flaps.',
             target: this.bigTopDoorTile ?? atSignet,
           },
         ];
@@ -1040,7 +1040,7 @@ export class CircusQuestSystem implements GameSystem {
    *
    * The party is put down at the tent door by the cure itself, mid-cut, and
    * Signet has been standing there the whole time assuming they went in to kill
-   * her father — making the player walk two tiles to be told otherwise would put
+   * her husband — making the player walk two tiles to be told otherwise would put
    * a pause in the one beat of the questline that must not have one.
    *
    * Once only. Escape closes the box without finishing the quest, and reopening

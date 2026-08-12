@@ -66,6 +66,8 @@ export type DeathCause =
   | 'burningTree'
   | 'lavaFlames'
   | 'clownGas'
+  | 'lichFirewall'
+  | 'lichOrb'
   | 'explosiveFriendlyFire'
   | 'doomsdayExplosion'
   | 'unknown';
@@ -207,6 +209,16 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'A bottle broke at your feet and the green got into you before you moved.',
     'The clown threw a vial. You did not get out from under it.',
     'Killed by the glass, not the clown. He was still juggling when you dropped.',
+  ],
+  lichFirewall: [
+    'The wall of fire crossed the office and you were not in the gap.',
+    'There was one way through it. You were standing everywhere else.',
+    'The magistrate’s office burned you down. The paperwork is presumably in order.',
+  ],
+  lichOrb: [
+    'A green light landed on the floor you were standing on. You had been warned.',
+    'The circle was on the ground for a reason. You were still inside it.',
+    'The Lich rained soul-fire on the office and one of them found you.',
   ],
   clownGas: [
     "You stood in the clown's gas until your lungs gave out.",
@@ -371,7 +383,7 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   ],
   missQuill: [
     'Miss Quill put a soul bolt through you without losing her composure.',
-    'The sky fowl schoolteacher killed you. Every krasue in the city was her work too.',
+    'The sky fowl schoolteacher killed you. Every krasue in the city passed through her hands first.',
     'Miss Quill finished the lesson. Interrupt her casting next time.',
   ],
   explosiveFriendlyFire: [

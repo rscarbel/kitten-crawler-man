@@ -49,7 +49,13 @@ const REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
     ],
   },
   {
-    when: (ctx) => ctx.murder === 'confrontation' || ctx.quillNamed,
+    // The stage alone, not `quillNamed`. That flag latches when the letter
+    // naming the schoolteacher is read on the street, and only a checkpoint
+    // rewind clears it, so keeping
+    // it in the test is what left a fortune urging the player after a woman they
+    // have already killed — every stage it adds beyond `confrontation` is a
+    // stage where she is dead.
+    when: (ctx) => ctx.murder === 'confrontation',
     lines: ['The knife has a name at last. Cut the thread before it wraps the whole town.'],
   },
   {
@@ -131,7 +137,7 @@ const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
     ],
   },
   {
-    when: (ctx) => ctx.murder === 'confrontation' || ctx.quillNamed,
+    when: (ctx) => ctx.murder === 'confrontation',
     lines: [
       'She has a name now, and a name is a handle. Take hold of it before she puts it down.',
       'The one doing the killing is not the one who wants the killing done. Do not stop at the knife.',

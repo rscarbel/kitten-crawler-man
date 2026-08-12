@@ -33,6 +33,8 @@
     "verify:menus": "tsx scripts/verify-menus.ts",
     "verify:buildings": "tsx scripts/verify-building-gates.ts",
     "verify:bigtop": "tsx scripts/verify-bigtop-maze.ts",
+    "render:bigtop": "tsx scripts/render-bigtop-maze.ts",
+    "verify:lich": "tsx scripts/verify-lich.ts",
     "gen:townscape": "tsx scripts/generate-townscape-sprites.ts",
     "gen:over-city": "tsx scripts/generate-over-city-sprites.ts",
     "gen:buildings": "tsx scripts/generate-building-sprites.ts",

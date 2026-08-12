@@ -10,6 +10,8 @@
  * is what survives the rebuild to make that possible, since the live `Krasue`
  * instances themselves do not.
  */
+import type { ItemId } from './ItemDefs';
+
 export type MurderQuestStage =
   | 'not_started'
   | 'body_waiting'
@@ -30,6 +32,27 @@ export interface MurderQuestProgress {
   /** True once the hideout letter naming Miss Quill has been shown to the player. */
   quillNamed: boolean;
   /**
+   * True once the party has walked into the magistrate's office and heard Miss
+   * Quill turn them away.
+   *
+   * The scene is worth exactly one viewing: it opens the fight, and a party that
+   * died to that fight and climbed back up has already met her. Kept here rather
+   * than on the confrontation system because that system is rebuilt from nothing
+   * every time the tower is re-entered, which is precisely the case it exists to
+   * answer.
+   */
+  officeSceneSeen: boolean;
+  /**
+   * Papers taken off GumGum's body that have not reached a bag yet.
+   *
+   * Cross-scene for the same reason `officeSceneSeen` is: the grant happens once,
+   * behind a stage advance that never runs again, and a full pack at that moment
+   * would otherwise lose both items the instant the player stepped through a
+   * door and the quest system was rebuilt — while the investigation's own hint
+   * goes on describing a letter in a pack that never got one.
+   */
+  evidenceOwed: ItemId[];
+  /**
    * How many of the night-attack swarm have already fallen. A scene rebuild
    * (including a death respawn) loses the live `Krasue` instances, so this is
    * what lets the resumed fight spawn only the krasue still owed rather than
@@ -45,6 +68,8 @@ export function createMurderQuestProgress(): MurderQuestProgress {
     homeClueFound: false,
     roostClueFound: false,
     quillNamed: false,
+    officeSceneSeen: false,
+    evidenceOwed: [],
     swarmKrasueDefeated: 0,
   };
 }
@@ -55,6 +80,8 @@ export interface MurderQuestProgressCheckpoint {
   readonly homeClueFound: boolean;
   readonly roostClueFound: boolean;
   readonly quillNamed: boolean;
+  readonly officeSceneSeen: boolean;
+  readonly evidenceOwed: ReadonlyArray<ItemId>;
   readonly swarmKrasueDefeated: number;
 }
 
@@ -68,6 +95,8 @@ export function captureMurderQuestProgress(
     homeClueFound: progress.homeClueFound,
     roostClueFound: progress.roostClueFound,
     quillNamed: progress.quillNamed,
+    officeSceneSeen: progress.officeSceneSeen,
+    evidenceOwed: [...progress.evidenceOwed],
     swarmKrasueDefeated: progress.swarmKrasueDefeated,
   };
 }
@@ -85,5 +114,7 @@ export function restoreMurderQuestProgress(
   progress.homeClueFound = snapshot.homeClueFound;
   progress.roostClueFound = snapshot.roostClueFound;
   progress.quillNamed = snapshot.quillNamed;
+  progress.officeSceneSeen = snapshot.officeSceneSeen;
+  progress.evidenceOwed = [...snapshot.evidenceOwed];
   progress.swarmKrasueDefeated = snapshot.swarmKrasueDefeated;
 }

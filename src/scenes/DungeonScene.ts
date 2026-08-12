@@ -2527,6 +2527,9 @@ export class DungeonScene extends GameplayScene {
     }
     this.spiderQuest.dispose();
     this.bounty?.dispose();
+    // Drops any standing order along with the hazard sources that were meant to
+    // steer around it. Both name systems this scene is taking with it.
+    this.companion.dispose();
     // Drops the pack-alert grid among other things. It is a module-level handle,
     // so a scene that exited without this leaves its whole mob roster — and
     // through it its `GameMap` — reachable for the rest of the page's life.
@@ -3279,6 +3282,10 @@ export class DungeonScene extends GameplayScene {
    * is independent and listed in the same order as the capture above.
    */
   private restoreWorldCheckpoint(world: WorldCheckpoint): void {
+    // Before the systems that might re-issue one: a rewind puts the party back
+    // before the fight that gave the companion its standing order, and nothing
+    // in `CompanionSystem` revokes an order on its own.
+    this.companion.clearDirective();
     this.gameMap.restoreCheckpoint(world.gameMap);
     this.gameStats.restore(world.gameStats);
 
@@ -4693,7 +4700,9 @@ export class DungeonScene extends GameplayScene {
     this.syncJournalContext();
 
     if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
-      const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
+      const mmSize = this.miniMap.isExpanded
+        ? this.miniMap.EXPANDED_SIZE
+        : this.miniMap.NORMAL_SIZE;
       renderKnockedOutUI(ctx, camX, camY, this.active(), this.inactive(), mmSize);
       this.renderStairwellRevealArrow(ctx, camX, camY);
       this.renderWayfinderArrow(ctx, camX, camY);

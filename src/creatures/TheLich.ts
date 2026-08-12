@@ -34,8 +34,59 @@ import type { SkeletonSummonRequest } from './SkeletonLord';
  * that has been running the magistracy behind her is the real fight in the
  * room, and a shorter bar than the fight the player just finished would read
  * as an anticlimax rather than the reveal it is.
+ *
+ * The pool is sized for a fight in four parts rather than one: the opening
+ * phase alone spends the 40% that used to be the whole encounter, and the three
+ * that follow are what the rest pays for. A number this large would be a slog
+ * on the old single-phase kit and is not one here, because what changes between
+ * phases is what the player is being asked to do, not how long they do it for.
  */
-const LICH_HP = 190;
+const LICH_HP = 475;
+
+/**
+ * The battle system driving the Lich's phases, while one owns the fight.
+ *
+ * The Lich knows nothing about phases; it asks three questions of whoever is
+ * running the encounter: may I be hurt, are you moving me, and am I spent. Held as an interface rather than an import of
+ * `LichBattleSystem` so the creature keeps no dependency on the system that
+ * choreographs it — the ordinary fight, with no driver attached, is exactly the
+ * fight it was before.
+ */
+export interface LichBattleDriver {
+  /**
+   * Whether the fight refuses damage this frame. Attacker-blind on purpose: it
+   * is asked from the status-tick route as well as the swung one, and the
+   * proximity rule the firewall phase needs is a fact about where the party is
+   * standing, which the driver can see for itself.
+   */
+  blocksDamage(): boolean;
+  /** Whether the driver is moving the body itself, so its own AI must stand down. */
+  drivesMovement(): boolean;
+  /** Whether to draw the spent, grounded pose. */
+  isDazed(): boolean;
+}
+
+/**
+ * The grasping-hands wave, as the ground it is about to cover.
+ *
+ * Published so a companion's AI can read the same cone the player is being
+ * shown, rather than a second description of it that could drift.
+ */
+export interface HandsCone {
+  readonly originX: number;
+  readonly originY: number;
+  readonly facingAngle: number;
+  readonly rangePx: number;
+  readonly halfAngle: number;
+}
+
+/** Whether a point is inside the cone. The test the eruption itself uses. */
+export function handsConeCovers(cone: HandsCone, x: number, y: number): boolean {
+  const dx = x - cone.originX;
+  const dy = y - cone.originY;
+  if (Math.hypot(dx, dy) > cone.rangePx) return false;
+  return Math.abs(normaliseAngle(Math.atan2(dy, dx) - cone.facingAngle)) <= cone.halfAngle;
+}
 /** Marginally quicker than the Skeleton Lord: the office is small and it kites. */
 const LICH_SPEED = 0.85;
 const AGGRO_RANGE_TILES = 15;
@@ -159,6 +210,11 @@ type LichState = 'idle' | 'cast' | 'hands' | 'summon' | 'cooldown';
 /** Frames of enforced quiet after any attack, so two never chain back to back. */
 const RECOVERY_FRAMES = 40;
 
+/** Frames the "hit while immune" flash plays — feedback that damage was refused. */
+const BLOCKED_HIT_FLASH_FRAMES = 8;
+/** Frames the health bar stays up after a refused hit, so the reason is visible. */
+const BLOCKED_HIT_HEALTHBAR_FRAMES = 180;
+
 /** Shared empty results so the common nothing-queued path allocates nothing. */
 const NO_SHOTS: readonly SkeletonShot[] = [];
 const NO_SUMMONS: readonly SkeletonSummonRequest[] = [];
@@ -205,6 +261,17 @@ export class TheLich extends Mob {
   /** Set on the frame a cast begins, a full second before the bolts leave. */
   castWindupSoundPending = false;
 
+  /**
+   * The encounter's phase driver, or null for a Lich fought without one.
+   *
+   * Null is a supported state, not a transitional one: with no driver this is
+   * the single-phase caster it has always been, which is what lets the creature
+   * be spawned by anything that does not want the choreography.
+   */
+  battleDriver: LichBattleDriver | null = null;
+
+  private blockedHitFlashTimer = 0;
+
   private state: LichState = 'idle';
   private castTimer = 0;
   private handsTimer = 0;
@@ -245,6 +312,29 @@ export class TheLich extends Mob {
     this.preferredMinPx = tileSize * PREFERRED_MIN_TILES;
     this.preferredMaxPx = tileSize * PREFERRED_MAX_TILES;
     this.handsRangePx = tileSize * HANDS_RANGE_TILES;
+  }
+
+  /**
+   * The cone while it is still only a mark on the floor, or null.
+   *
+   * Null once the hands are up, and that is the point: the damage lands on the
+   * single frame of the eruption, so ground the wave has already swept is ground
+   * nobody needs to run from any more. Anything that flees it afterwards is
+   * fleeing an animation.
+   */
+  get telegraphedHandsCone(): HandsCone | null {
+    // A dead caster's hands never arrive: `updateAI` is what erupts them and it
+    // does not run for a corpse. Without this the cone a killing blow
+    // interrupted stays on the books for as long as anything keeps reading it.
+    if (!this.isAlive) return null;
+    if (this.handsTimer <= 0 || this.harmless) return null;
+    return {
+      originX: this.x + this.tileSize * CENTER_OFFSET,
+      originY: this.y + this.tileSize * CENTER_OFFSET,
+      facingAngle: Math.atan2(this.lockedFacingY, this.lockedFacingX),
+      rangePx: this.handsRangePx,
+      halfAngle: HANDS_HALF_ANGLE,
+    };
   }
 
   override clearAirborneAttacks(): void {
@@ -288,6 +378,16 @@ export class TheLich extends Mob {
     this.pendingSummons = [];
     this.escortAtCap = false;
     this.castWindupSoundPending = false;
+    this.blockedHitFlashTimer = 0;
+  }
+
+  protected override get isDamageImmune(): boolean {
+    return this.battleDriver?.blocksDamage() === true;
+  }
+
+  protected override onDamageBlocked(): void {
+    this.blockedHitFlashTimer = BLOCKED_HIT_FLASH_FRAMES;
+    this.healthBarTimer = BLOCKED_HIT_HEALTHBAR_FRAMES;
   }
 
   override takeDamageFrom(
@@ -318,6 +418,16 @@ export class TheLich extends Mob {
 
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
+    if (this.blockedHitFlashTimer > 0) this.blockedHitFlashTimer--;
+
+    // A phase the driver steers — the firewall's wall anchor, the tantrum's
+    // float, the daze — owns this body outright. Its own kit is abandoned
+    // rather than paused: a half-finished cast resumed three phases later would
+    // release bolts from a telegraph nobody saw.
+    if (this.battleDriver?.drivesMovement() === true) {
+      this.standDown();
+      return;
+    }
 
     if (this.boltCooldown > 0) this.boltCooldown--;
     if (this.handsCooldown > 0) this.handsCooldown--;
@@ -419,6 +529,32 @@ export class TheLich extends Mob {
       }
       if (this.summonTimer <= 0) this.enterCooldown();
     }
+  }
+
+  /**
+   * Drops every attack in progress and stops walking, leaving the body where a
+   * driver put it. Cooldowns are cleared too, so the phase that hands control
+   * back opens with the full kit rather than with three timers still expiring.
+   */
+  private standDown(): void {
+    this.state = 'idle';
+    this.castTimer = 0;
+    this.handsTimer = 0;
+    this.summonTimer = 0;
+    this.recoveryTimer = 0;
+    this.eruptionTimer = 0;
+    // Its own clocks do not run while a driver holds the body, so they are
+    // cleared rather than frozen: a phase that hands control back to three
+    // half-expired cooldowns opens with the Lich standing still, which reads as
+    // the fight forgetting to resume.
+    this.boltCooldown = 0;
+    this.handsCooldown = 0;
+    this.summonCooldown = 0;
+    this.isMoving = false;
+    this.isAggro = false;
+    this.currentTarget = null;
+    this.clearAStarPath();
+    this.clearAirborneAttacks();
   }
 
   private enterCooldown(): void {
@@ -539,18 +675,22 @@ export class TheLich extends Mob {
     // one attack in its kit that can kill outright.
     if (this.harmless) return;
 
+    // The same cone the telegraph published, so what the player saw on the
+    // ground — and what the companion's AI was running out of — is exactly what
+    // catches them.
+    const cone: HandsCone = {
+      originX,
+      originY,
+      facingAngle,
+      rangePx: this.handsRangePx,
+      halfAngle: HANDS_HALF_ANGLE,
+    };
+
     for (const target of targets) {
       if (!target.isAlive) continue;
       const cx = target.x + this.tileSize * CENTER_OFFSET;
       const cy = target.y + this.tileSize * CENTER_OFFSET;
-      const dx = cx - originX;
-      const dy = cy - originY;
-      const distance = Math.hypot(dx, dy);
-      if (distance > this.handsRangePx) continue;
-      // Angular test against the same facing the cone was drawn from, so what
-      // the player saw on the ground is exactly what catches them.
-      const offset = Math.abs(normaliseAngle(Math.atan2(dy, dx) - facingAngle));
-      if (offset > HANDS_HALF_ANGLE) continue;
+      if (!handsConeCovers(cone, cx, cy)) continue;
       if (this.spells?.isPointInsideShell(cx, cy)) {
         this.spells.addBlockXp(HANDS_BLOCK_XP);
         continue;
@@ -607,6 +747,10 @@ export class TheLich extends Mob {
 
     if (this.isAggro) this.renderAggroIndicator(ctx, sx, sy, tileSize);
 
+    ctx.save();
+    // The same tell Miss Quill's capacitor shield uses, so a refused hit reads
+    // as a mechanic in both halves of this room rather than as a missed swing.
+    if (this.blockedHitFlashTimer > 0) ctx.filter = 'brightness(3)';
     drawTheLichSprite(ctx, sx, sy, tileSize, {
       walkFrame: this.walkFrame,
       isMoving: this.isMoving,
@@ -615,7 +759,9 @@ export class TheLich extends Mob {
       castProgress: this.castTimer > 0 ? 1 - this.castTimer / SOUL_BOLT_CAST_FRAMES : null,
       handsProgress: this.handsTimer > 0 ? 1 - this.handsTimer / HANDS_WINDUP_FRAMES : null,
       summonProgress: this.summonTimer > 0 ? 1 - this.summonTimer / SUMMON_ANIM_FRAMES : null,
+      isDazed: this.battleDriver?.isDazed() === true,
     });
+    ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);
   }

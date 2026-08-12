@@ -9,6 +9,7 @@
   "include": [
     "scripts/verify-progression.ts",
     "scripts/verify-menus.ts",
+    "scripts/verify-lich.ts",
     "scripts/generate-spider-sprite.ts",
     "scripts/render-spider.ts",
     "scripts/catArt.ts",
@@ -187,6 +188,7 @@
     "scripts/generate-building-sprites.ts",
     "scripts/render-buildings.ts",
     "scripts/verify-building-gates.ts",
+    "scripts/render-bigtop-maze.ts",
     "scripts/verify-bigtop-maze.ts",
     "scripts/snapshot-building-footprints.ts"
   ]

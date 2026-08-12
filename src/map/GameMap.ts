@@ -142,9 +142,10 @@ function mazeTileTypeFor(legend: string): number {
     case MAZE_CAT_SPAWN_CHAR:
       return SAWDUST_FLOOR;
     default:
-      // Gates, barricades and the grates the counterweights hang behind. All of
-      // them start as wall; only a gate or barricade ever stops being one, and
-      // `BigTopMazeSystem` is what opens it.
+      // Gates, barricades, curtains, exit doors, the grates the counterweights
+      // hang behind, the limelight projectors and the stars set in the dividing
+      // wall. All of them start as wall; only a gate, a curtain or a door ever
+      // stops being one, and `BigTopMazeSystem` is what opens it.
       return INTERIOR_WALL;
   }
 }

@@ -52,6 +52,21 @@ type CharStance = {
   anchorY: number;
 };
 
+/**
+ * A battle-scoped order to stand somewhere: where to stand, and whether to hold
+ * fire while standing there.
+ *
+ * Coordinates are top-left world pixels — the same frame as `Player.x` /
+ * `Player.y`, as the movement anchors this system keeps, and as the hazard
+ * escape vectors it queries. A caller holding a tile multiplies by `TILE_SIZE`.
+ */
+export interface CompanionDirective {
+  x: number;
+  y: number;
+  /** Whether the companion also stops attacking, so a safe spot stays a safe spot. */
+  hold: boolean;
+}
+
 const ANCHOR_CHASE_TILES = 3;
 const ANCHOR_CHASE_RANGE = TILE_SIZE * ANCHOR_CHASE_TILES;
 /** Orbit radius for human companion evasion — just inside melee range so attacks still land. */
@@ -62,6 +77,14 @@ const HUMAN_EVADE_ANGLE_SPEED = 0.04;
 
 // Magic number constants
 const TILE_CENTER_OFFSET = 0.5;
+/** The four ways out of a wedge, for {@link CompanionSystem.unwedge}. */
+const CARDINAL_DIRECTIONS = [
+  { dx: 1, dy: 0 },
+  { dx: -1, dy: 0 },
+  { dx: 0, dy: 1 },
+  { dx: 0, dy: -1 },
+] as const;
+
 const COLLISION_BOX_RIGHT_FRACTION = 0.72;
 const COLLISION_BOX_LEFT_FRACTION = 0.28;
 const COLLISION_BOX_BOTTOM_FRACTION = 0.8;
@@ -134,6 +157,13 @@ const CAT_BRAWL_CROWD_RADIUS_MULTIPLIER = 2;
  */
 const HUMAN_RETREAT_HP_FRACTION = 0.5;
 
+/**
+ * How fast a directed companion walks to the spot it was ordered to. The spot a
+ * fight names is one the fight moves around the room, so at plain follow speed
+ * the companion spends the phase arriving where the safe spot used to be.
+ */
+const DIRECTIVE_SPEED_MULTIPLIER = 1.5;
+
 /** Floor on how often a goal-tile change may trigger a fresh companion path. */
 const MIN_REPATH_GAP_FRAMES = 8;
 /** Sentinel goal tile for a freshly created path cache — no real tile is negative. */
@@ -173,6 +203,14 @@ export class CompanionSystem implements GameSystem {
 
   /** Cross-scene combat-stance store; combat stance mirrors into it so it persists. */
   private readonly stanceState: CompanionStanceState;
+
+  /**
+   * The standing order in force, or null when the companion is answering to its
+   * own stance. Deliberately not part of {@link CompanionStanceState}: a
+   * directive belongs to one fight on one map, and anything that outlives that
+   * fight is a companion that never follows the player again.
+   */
+  private directive: CompanionDirective | null = null;
 
   /** Reused result set for companion proximity queries. */
   private readonly _proximityQuery = new Set<Mob>();
@@ -228,13 +266,21 @@ export class CompanionSystem implements GameSystem {
    *
    * The recall override goes with them for the same reason the movement anchors
    * do: the stairs already put the party back together, so a recall that was in
-   * flight when they took them has nothing left to do.
+   * flight when they took them has nothing left to do. So does any standing
+   * order: the tile it names is a tile on the floor they just left.
    */
   setMap(gameMap: GameMap, human: HumanPlayer, cat: CatPlayer): void {
     this.gameMap = gameMap;
     this.companionPaths.clear();
     this.targetBans.clear();
     this._followOverride = false;
+    this.clearDirective();
+    // A storey change invalidates a hazard the same way it invalidates a
+    // standing order: the fire and the impact circles belong to the room the
+    // party just left, and a source left registered keeps answering — at the
+    // old floor's coordinates — for every frame spent on the new one. An
+    // encounter that is still live re-registers from its own update.
+    this.hazardSources.length = 0;
     human.autoTarget = null;
     cat.autoTarget = null;
     this.humanStance.anchorX = human.x;
@@ -327,6 +373,14 @@ export class CompanionSystem implements GameSystem {
    * Called when a character switches from active to companion.
    * If they were anchored, their anchor updates to wherever they ended up,
    * so any movement made while the player controlled them is preserved.
+   *
+   * A standing order does not survive the switch. It was issued about the
+   * crawler that was standing in the fight, and a switch hands the drive to the
+   * other one — who is where the player left them, and who would then be walked
+   * to a spot chosen for somebody else and held there, mute, until the fight
+   * that issued it thought to speak again. A fight that still wants a companion
+   * parked re-issues the order on its next frame, which costs it nothing; a
+   * fight that has moved on cannot be made to take an order back.
    */
   notifyBecameCompanion(char: { x: number; y: number }, charIsHuman: boolean): void {
     const stance = charIsHuman ? this.humanStance : this.catStance;
@@ -334,6 +388,63 @@ export class CompanionSystem implements GameSystem {
       stance.anchorX = char.x;
       stance.anchorY = char.y;
     }
+    this.clearDirective();
+  }
+
+  /**
+   * Orders the companion to stand at a world position until told otherwise,
+   * overriding both the follow drive and an anchored stance, and — when `hold`
+   * is set — its attacks along with them.
+   *
+   * A battle-scoped override rather than a stance, which is the whole design:
+   * nothing here is written into {@link CompanionStanceState}, so whatever the
+   * player chose before the fight is exactly what {@link clearDirective} gives
+   * back. The fight that issues an order owns it, and is expected to re-issue it
+   * whenever the safe spot moves.
+   *
+   * Three things outrank it, all of them so that an order cannot become a death
+   * sentence: a mob the companion is meant to run from, damaging ground under
+   * its feet, and a knockout. Ground is the interesting one — the escape vector
+   * goes null the moment the companion is clear of the hazard, so stepping out
+   * of live damage costs the order one frame and the walk back resumes on the
+   * next.
+   *
+   * An unreachable or unwalkable spot is safe to ask for in the sense that
+   * matters — it cannot strand the companion, because only
+   * {@link clearDirective} or a teardown ends an order. It does not look tidy,
+   * though: the companion presses as close as its pathing takes it and then
+   * keeps walking against whatever is in the way, so a caller that can compute a
+   * walkable tile should, rather than leaving a crawler treading a wall.
+   */
+  setDirective(directive: CompanionDirective): void {
+    // A battle order supersedes a standing recall. The recall clears itself only
+    // once the companion reaches the caster, and the directive branch returns
+    // above the code that checks — so a "follow me" pressed during a directed
+    // phase would sit latched and take over the moment the directive lifted,
+    // which is exactly when the next phase's hazards are going down.
+    this._followOverride = false;
+    this.directive = { x: directive.x, y: directive.y, hold: directive.hold };
+  }
+
+  /** Drops any standing order; the companion resumes its own stance immediately. */
+  clearDirective(): void {
+    this.directive = null;
+  }
+
+  /**
+   * Drops everything keyed to the scene being torn down.
+   *
+   * The standing order most of all. Every other field here is a cache that the
+   * next frame would rebuild, while an order that outlives the fight that gave
+   * it is a companion rooted on a tile in a battle that no longer exists — and
+   * nothing in this system ever revokes an order on its own.
+   */
+  dispose(): void {
+    this.clearDirective();
+    this.companionPaths.clear();
+    this.targetBans.clear();
+    this.hazardSources.length = 0;
+    this._followOverride = false;
   }
 
   /** Update both companion AI (auto-target) and companion follower movement. */
@@ -420,6 +531,16 @@ export class CompanionSystem implements GameSystem {
     bossRoom: BossRoomSystem | undefined,
     chaseBlocked: boolean,
   ): void {
+    // A held companion has been sent somewhere survivable and told to stay
+    // there. Letting it keep a target undoes the order twice over: the follower
+    // branch walks a companion towards whatever it is fighting, and the cat's
+    // own missile is what tells the room where she is standing.
+    if (this.directive?.hold === true) {
+      const heldCompanion = human.isActive ? cat : human;
+      heldCompanion.autoTarget = null;
+      return;
+    }
+
     // Whether a mob sits in a boss room whose fight has not started, in which
     // case the companion must leave it alone.
     //
@@ -785,21 +906,65 @@ export class CompanionSystem implements GameSystem {
     this.hazardSources.push(source);
   }
 
+  /** Where a hazard source says a body at these coordinates should go, if any. */
+  private hazardEscapeAt(x: number, y: number): { dx: number; dy: number } | null {
+    for (const source of this.hazardSources) {
+      const escape = source.getHazardEscapeVector(x, y);
+      if (escape) return escape;
+    }
+    return null;
+  }
+
+  /** Whether a body is standing on ground some hazard has marked. */
+  private standsOnHazard(entity: { readonly x: number; readonly y: number }): boolean {
+    return this.hazardEscapeAt(entity.x, entity.y) !== null;
+  }
+
   /** Move the companion out of any active hazard zone (acid puddles, gas, ...). Returns true if fleeing. */
   private fleeFromHazards(companion: HumanPlayer | CatPlayer): boolean {
-    let escape: { dx: number; dy: number } | null = null;
-    for (const source of this.hazardSources) {
-      escape = source.getHazardEscapeVector(companion.x, companion.y);
-      if (escape) break;
-    }
+    const escape = this.hazardEscapeAt(companion.x, companion.y);
     if (!escape) return false;
-    this.entityMoveWithCollision(
-      companion,
-      escape.dx * FOLLOWER_SPEED * RECALL_CHASE_SPEED,
-      escape.dy * FOLLOWER_SPEED * RECALL_CHASE_SPEED,
-    );
+    const speed = FOLLOWER_SPEED * RECALL_CHASE_SPEED;
+    const startX = companion.x;
+    const startY = companion.y;
+    this.entityMoveWithCollision(companion, escape.dx * speed, escape.dy * speed);
+    if (companion.x === startX && companion.y === startY) {
+      this.unwedge(companion, escape, speed);
+    }
     companion.isMoving = true;
     return true;
+  }
+
+  /**
+   * Last resort when a companion that has been told to run cannot move at all.
+   *
+   * Being told to run and not moving is not a stalemate the next frame resolves;
+   * it is permanent. A hazard source answers on tiles, while movement is a
+   * collision box that can straddle two of them — and a shove out of a mob
+   * ignores collision entirely, so a companion can end up with part of its box
+   * inside a wall. From there every move whose leading edge stays in the wall's
+   * column is refused, including the one it is being told to make, and it stands
+   * in the fire until something kills it.
+   *
+   * Tried in order of how well they match the order it was given, so it leaves
+   * as near as the walls allow to the way it was sent. Only the four cardinals:
+   * a diagonal is what it already failed at, and both of its components are
+   * tried here anyway.
+   */
+  private unwedge(
+    companion: HumanPlayer | CatPlayer,
+    escape: { dx: number; dy: number },
+    speed: number,
+  ): void {
+    const preferred = [...CARDINAL_DIRECTIONS].sort(
+      (a, b) => b.dx * escape.dx + b.dy * escape.dy - (a.dx * escape.dx + a.dy * escape.dy),
+    );
+    for (const direction of preferred) {
+      const beforeX = companion.x;
+      const beforeY = companion.y;
+      this.entityMoveWithCollision(companion, direction.dx * speed, direction.dy * speed);
+      if (companion.x !== beforeX || companion.y !== beforeY) return;
+    }
   }
 
   /**
@@ -862,9 +1027,39 @@ export class CompanionSystem implements GameSystem {
     mobGrid: SpatialGrid<Mob>,
     chaseBlocked: boolean,
   ): void {
+    const companion = human.isActive ? cat : human;
+
+    if (this.directive !== null) {
+      const directive = this.directive;
+      // The two things that outrank a standing order, in the order the rest of
+      // this method already ranks them. Both are momentary — a mob walks past,
+      // an escape vector goes null once the companion is clear of the ground it
+      // names — so the walk back to the ordered spot resumes of its own accord
+      // on the next frame, without the fight having to notice or re-issue.
+      if (this.fleeFromAvoidMobs(companion, mobGrid, TILE_SIZE * FLEE_RADIUS_MULTIPLIER)) return;
+      if (this.fleeFromHazards(companion)) return;
+      this.companionFollow(
+        companion,
+        directive.x,
+        directive.y,
+        FOLLOWER_SPEED * DIRECTIVE_SPEED_MULTIPLIER,
+        TILE_SIZE * ANCHOR_CLOSE_DISTANCE,
+      );
+      return;
+    }
+
+    // If any avoidInstead mob is nearby, flee from it — takes priority over all other movement.
+    //
+    // Above the recall, not below it: "follow me" is a request to close the
+    // distance, never a request to sprint through fire to do it. Ranked the
+    // other way, a recall pressed on a floor with a live hazard ran the
+    // companion across it at chase speed with avoidance switched off, and the
+    // recall only clears once they arrive — so it kept doing so until they did.
+    if (this.fleeFromAvoidMobs(companion, mobGrid, TILE_SIZE * FLEE_RADIUS_MULTIPLIER)) return;
+    if (this.fleeFromHazards(companion)) return;
+
     if (this._followOverride) {
       const caster = human.isActive ? human : cat;
-      const companion = human.isActive ? cat : human;
       const dist = Math.hypot(companion.x - caster.x, companion.y - caster.y);
       if (dist <= TILE_SIZE) {
         this._followOverride = false;
@@ -881,10 +1076,6 @@ export class CompanionSystem implements GameSystem {
       return;
     }
 
-    // If any avoidInstead mob is nearby, flee from it — takes priority over all other movement.
-    const companion = human.isActive ? cat : human;
-    if (this.fleeFromAvoidMobs(companion, mobGrid, TILE_SIZE * FLEE_RADIUS_MULTIPLIER)) return;
-    if (this.fleeFromHazards(companion)) return;
     if (!human.isActive && this.fleeIfHumanImperiled(human, mobGrid)) return;
 
     const stance = human.isActive ? this.catStance : this.humanStance;
@@ -1307,7 +1498,27 @@ export class CompanionSystem implements GameSystem {
       }
     }
 
+    // Nothing may walk a companion onto ground a hazard has marked. Fleeing is
+    // only half the rule: without this the flee and the follow take turns — the
+    // flee steps her clear of a warned circle, the follow drive walks her
+    // straight back to the edge of it, and the orb lands on whichever of those
+    // two frames the follow happened to win. Both rules were individually
+    // correct and she died to the coin toss between them.
+    //
+    // A step is refused rather than clipped, because the ground being refused is
+    // a tile and a partial step lands on the same one. Only a step that *enters*
+    // it: when she is already standing in marked ground the flee above owns her,
+    // and a guard here would pin her inside it.
+    const wasOnMarkedGround = this.standsOnHazard(entity);
+    const beforeX = entity.x;
+    const beforeY = entity.y;
     this.entityMoveWithCollision(entity, moveNx * step, moveNy * step);
+    if (!wasOnMarkedGround && this.standsOnHazard(entity)) {
+      entity.x = beforeX;
+      entity.y = beforeY;
+      entity.isMoving = false;
+      return;
+    }
     entity.isMoving = true;
     // A crawler mid-swing keeps the facing that swing committed to. The step
     // still happens — the kite has to keep moving — but re-aiming at it would

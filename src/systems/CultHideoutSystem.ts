@@ -99,7 +99,7 @@ export class CultHideoutSystem implements GameSystem {
 
     const remaining = this.cultists.filter((c) => c.isAlive).length;
     const objective = this.cleared
-      ? "A letter names Miss Quill — the magistrate's tower, top floor."
+      ? 'The letter names Miss Quill, and it bears the magistrate’s seal. The tower, top floor.'
       : `Cleanse the cult — ${remaining} remaining`;
     drawText(ctx, objective, {
       x: viewportWidth() / 2,

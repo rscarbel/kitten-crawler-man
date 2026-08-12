@@ -601,6 +601,23 @@ for (const [name, kind] of buildings) {
   );
 }
 
+/** Everything `QuillConfrontationSystem` is contracted to put in the office. */
+const EXPECTED_CONFRONTATION_MOBS: ReadonlyArray<string> = [
+  'Miss Quill',
+  'Remex, the Living Capacitor',
+];
+const CITY_ELF_CULTIST_NAME = 'City Elf Cultist';
+/** Quill, Remex and two guards. */
+const EXPECTED_CONFRONTATION_MOB_COUNT = 4;
+/**
+ * How far a guard may be allowed to drift from its post.
+ *
+ * The arrival-safety margin below is only true while they stay put, so the
+ * leash is asserted as a number rather than inferred from whether anybody
+ * happened to get shot.
+ */
+const MAX_GUARD_LEASH_TILES = 2;
+
 console.log('\nThe tower confrontation opens on safe ground');
 {
   const map = buildInterior(towerName, plan.tower.kind, TOWER_CONFRONTATION_FLOOR);
@@ -623,6 +640,11 @@ console.log('\nThe tower confrontation opens on safe ground');
   const spawned: Mob[] = [];
   const progress = createMurderQuestProgress();
   progress.stage = 'confrontation';
+  // The re-entry path: a party that already met Miss Quill and died to her walks
+  // back into the fight itself. The arrival-safety contract below belongs to the
+  // frame the *fight* opens on, and this is the shortest way to reach it. The
+  // first-arrival path, with the office scene in front of it, gets its own block.
+  progress.officeSceneSeen = true;
   const confrontation = new QuillConfrontationSystem(
     map,
     new EventBus(),
@@ -636,7 +658,41 @@ console.log('\nThe tower confrontation opens on safe ground');
     partyLevelOf(human.level, cat.level),
   );
 
-  check(spawned.length > 0, 'the confrontation puts its culprits in the room');
+  // By name and by count, not merely "something spawned": `spawnEncounter` skips
+  // silently when a tile lookup misses, and a run missing Miss Quill herself
+  // would otherwise print three distance lines instead of four and exit 0.
+  const spawnedNames = spawned.map((mob) => mob.displayName);
+  for (const expected of EXPECTED_CONFRONTATION_MOBS) {
+    check(
+      spawnedNames.includes(expected),
+      `the confrontation puts ${expected} in the room (spawned: ${spawnedNames.join(', ')})`,
+    );
+  }
+  check(
+    spawned.length === EXPECTED_CONFRONTATION_MOB_COUNT,
+    `the confrontation fills the room with all ${EXPECTED_CONFRONTATION_MOB_COUNT} of its culprits (found ${spawned.length})`,
+  );
+
+  // The offsets are only safe for as long as the guards stay on them, and the
+  // wander that would carry them off is random — so the posts are asserted
+  // directly rather than left to a health check downstream of 1200 frames of
+  // RNG, which caught a removed leash on barely half its runs.
+  const guards = spawned.filter((mob) => mob.displayName === CITY_ELF_CULTIST_NAME);
+  for (const guard of guards) {
+    // Present *and* on the guard's own tile: an unset home point is `undefined`
+    // rather than null, so a bare null check passes for a guard that was never
+    // posted at all.
+    const home = guard.homePoint;
+    check(
+      home !== undefined && home !== null && home.x === guard.x && home.y === guard.y,
+      'each guard is posted to a home point on the tile the encounter put it on',
+    );
+    const leash = guard.leashRadiusTiles;
+    check(
+      leash !== undefined && leash <= MAX_GUARD_LEASH_TILES,
+      `each guard is leashed within ${MAX_GUARD_LEASH_TILES} tiles of its post (found ${leash ?? Infinity})`,
+    );
+  }
 
   const threatRangeTiles = Math.max(
     MISS_QUILL_CAST_RANGE_TILES,
@@ -690,6 +746,95 @@ console.log('\nThe tower confrontation opens on safe ground');
   check(human.hp === humanStartHp, 'a party that stands still on the landing is not shot at');
   check(cat.hp === catStartHp, 'nor is the companion beside them');
   check(cat.isAlive, 'so the companion is still standing, and the party is not turned out');
+}
+
+console.log('\nThe office scene holds the room until it is read');
+{
+  const map = buildInterior(towerName, plan.tower.kind, TOWER_CONFRONTATION_FLOOR);
+  const stair = map._interiorStairDownTiles[0];
+  check(stair !== undefined, 'the office has the stair the party climbs in on');
+
+  const arrivalRow = stair.y + 1;
+  const human = new HumanPlayer(stair.x, arrivalRow, TILE_SIZE);
+  const cat = new CatPlayer(stair.x + 1, arrivalRow, TILE_SIZE);
+  human.isActive = true;
+  cat.isActive = false;
+
+  const roster = new MobRoster(map, new SpellSystem());
+  const spawned: Mob[] = [];
+  const progress = createMurderQuestProgress();
+  progress.stage = 'confrontation';
+  const confrontation = new QuillConfrontationSystem(
+    map,
+    new EventBus(),
+    (mob) => {
+      spawned.push(mob);
+      roster.add(mob);
+    },
+    progress,
+    null,
+    createDoomsdayProgress(),
+    partyLevelOf(human.level, cat.level),
+  );
+
+  check(confrontation.isDialogOpen, 'arriving fresh opens the office scene');
+  check(spawned.length > 0, 'the room is already dressed behind the scene');
+  check(
+    spawned.every((mob) => mob.aiHeld),
+    'nothing in the room moves while the scene plays',
+  );
+
+  const context: SystemContext = {
+    human,
+    cat,
+    active: human,
+    inactive: cat,
+    activeIsMoving: false,
+    roster,
+    gameMap: map,
+  };
+
+  // Well past the banner clock: the hold belongs to the scene, not to a timer,
+  // so a player who walks away mid-conversation must not come back to a fight
+  // that started without them.
+  for (let frame = 0; frame < QUEST_BANNER_FRAMES * 2; frame++) confrontation.update(context);
+  check(
+    spawned.every((mob) => mob.aiHeld),
+    'the room stays frozen for as long as the scene is on screen',
+  );
+  check(!progress.officeSceneSeen, 'the scene is not marked seen until it has been read through');
+
+  // Escape must not strand the room half-held: the scene's last page is what
+  // releases the fight, so there is no other way out of it.
+  check(!confrontation.dismissDialog(), 'the office scene refuses to be dismissed');
+  check(confrontation.isDialogOpen, 'and is still on screen after the attempt');
+
+  let pagesTurned = 0;
+  const PAGE_TURN_CEILING = 32;
+  while (confrontation.isDialogOpen && pagesTurned < PAGE_TURN_CEILING) {
+    confrontation.advanceDialog();
+    pagesTurned++;
+  }
+  check(!confrontation.isDialogOpen, 'the scene closes when its pages run out');
+  check(pagesTurned > 1, 'the scene is more than one page, so turning it is really reading it');
+  check(
+    progress.officeSceneSeen,
+    'reading it through marks it seen, so a death does not replay it',
+  );
+
+  const mobLoop = new MobUpdateLoop();
+  let releasedAtFrame = -1;
+  for (let frame = 0; frame < ARRIVAL_VIGIL_FRAMES; frame++) {
+    confrontation.update(context);
+    mobLoop.update(context);
+    for (const mob of roster.mobs) mob.tickTimers();
+    if (releasedAtFrame < 0 && spawned.every((mob) => !mob.aiHeld)) releasedAtFrame = frame;
+  }
+  mobLoop.dispose();
+  check(
+    releasedAtFrame >= 0 && releasedAtFrame <= QUEST_BANNER_FRAMES,
+    `the fight opens once the scene closes (woke at frame ${releasedAtFrame})`,
+  );
 }
 
 if (failures > 0) {

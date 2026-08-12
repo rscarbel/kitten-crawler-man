@@ -51,6 +51,12 @@ export class MissQuill extends Mob {
   readonly xpValue = 600;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
+  /**
+   * Without this her soul bolts are silent: `projectileSoundPending` is drained
+   * by a tag lookup, and an untagged mob matches no arm of it. She has queued
+   * that flag on every volley since she was written and never made a sound.
+   */
+  override readonly audioTag = 'miss_quill';
   displayName = 'Miss Quill';
   description =
     'The sky fowl schoolteacher, prim to the last button — every krasue in the city was her handiwork.';

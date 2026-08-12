@@ -138,7 +138,7 @@ function murderNotice(ctx: TownNoticeContext): Notice | null {
     case 'confrontation':
       return {
         title,
-        body: 'The killer has a name at last. End the Krasue murders for good.',
+        body: 'The killer has a name at last, and the name has a patron. End the Krasue murders for good.',
         tone: 'active',
       };
     case 'quill_slain':

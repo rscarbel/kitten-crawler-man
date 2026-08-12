@@ -452,6 +452,10 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
       if (mob.audioTag === 'goblin') audio?.play('shooting_an_arrow');
       if (mob.audioTag === 'skeleton_lord') audio?.play('magic_ball_launch');
       if (mob.audioTag === 'the_lich') audio?.play('magic_ball_launch');
+      // The same cue the Lich's own bolts use: hers are the same soul-fire, and
+      // the room's second half is meant to sound like a continuation of its
+      // first.
+      if (mob.audioTag === 'miss_quill') audio?.play('magic_ball_launch');
       if (mob.audioTag === 'evil_clown') audio?.play('juicer_throw');
       if (mob.audioTag === 'rock_golem') audio?.play('rock_golem_grunt');
     }

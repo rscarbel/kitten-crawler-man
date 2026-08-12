@@ -41,7 +41,13 @@ import { drawSoulBurst } from '../sprites/skeletonEffectsSprite';
 import { drawRadialGlow } from '../sprites/radialGlow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { QuestDialog } from '../ui/QuestDialog';
-import { FEATHERFALL_EXAMINE_DIALOG, LICH_REVEAL_DIALOG } from './murderQuestDialogs';
+import {
+  FEATHERFALL_EXAMINE_DIALOG,
+  LICH_REVEAL_DIALOG,
+  QUILL_OFFICE_DIALOG,
+  VICTORY_DIALOG,
+} from './murderQuestDialogs';
+import { LichBattleSystem, type CompanionDirector } from './LichBattleSystem';
 import { drawText } from '../ui/TextBox';
 import { drawOverlay, drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
@@ -167,7 +173,44 @@ const CENTER_OFFSET = 0.5;
  * they have already seen — would be the game forgetting what they did.
  */
 type ConfrontationPhase =
-  'quill_fight' | 'reveal_hold' | 'reveal' | 'materialising' | 'lich_fight' | 'done';
+  | 'office_scene'
+  | 'quill_fight'
+  | 'reveal_hold'
+  | 'reveal'
+  | 'materialising'
+  | 'lich_fight'
+  | 'victory_scene'
+  | 'done';
+
+/** The card raised over a phase change, held so one renderer serves them all. */
+interface BannerCard {
+  readonly title: string;
+  readonly subtitle: string;
+  readonly color: string;
+  readonly shadow: string;
+  readonly subtitleColor: string;
+}
+
+const QUILL_BANNER: BannerCard = {
+  title: 'MISS QUILL — THE HEADMISTRESS',
+  subtitle: 'Every krasue in the city was her handiwork',
+  color: '#f47c7c',
+  shadow: '#6a2a2a',
+  subtitleColor: '#f4c7c7',
+};
+
+const LICH_BANNER: BannerCard = {
+  title: 'THE LICH — MAGISTRATE IN ALL BUT BODY',
+  subtitle: 'Featherfall has been dead for weeks. This signed his letters.',
+  color: '#9ade63',
+  shadow: '#1d3a14',
+  subtitleColor: '#d4edaa',
+};
+
+/** A phase card raised by the Lich battle, in the Lich's own colours. */
+function lichPhaseBanner(title: string, subtitle: string): BannerCard {
+  return { ...LICH_BANNER, title, subtitle };
+}
 
 export class QuillConfrontationSystem implements GameSystem {
   private quill: MissQuill | null = null;
@@ -176,6 +219,16 @@ export class QuillConfrontationSystem implements GameSystem {
   private lich: TheLich | null = null;
 
   private phase: ConfrontationPhase;
+  private battle: LichBattleSystem | null = null;
+  private banner: BannerCard = QUILL_BANNER;
+  /**
+   * A monotonic frame counter, handed to the battle's flame animation.
+   *
+   * Its own counter rather than wall-clock time so the fire animates at the
+   * rate the fight is being simulated at, which is what keeps it from strobing
+   * when the loop is catching up.
+   */
+  private frameCount = 0;
   private bannerTimer = 0;
   private victoryTimer = 0;
   private revealHoldTimer = 0;
@@ -196,6 +249,12 @@ export class QuillConfrontationSystem implements GameSystem {
     private readonly audio: AudioManager | null,
     private readonly doomsdayProgress: DoomsdayProgress,
     private readonly partyLevel: number,
+    /**
+     * The scene's companion drive, so the Lich's phases can park it out of the
+     * fire. Optional: a harness that exercises this encounter without a scene
+     * has no companion, and the fight has to work without one.
+     */
+    private readonly companion: CompanionDirector | null = null,
   ) {
     this.dialog = new QuestDialog(this.audio);
     const centreY = Math.floor(this.map.structure.length / 2);
@@ -213,15 +272,39 @@ export class QuillConfrontationSystem implements GameSystem {
     };
 
     this.phase = phaseFor(this.progress);
-    if (this.phase === 'quill_fight') {
+    if (this.phase === 'office_scene') {
+      // The room is built and frozen behind the scene, so Quill is standing at
+      // her station while she speaks and the fight is already in place when the
+      // last page closes — the alternative is a beat of empty office between the
+      // dialog and the boss.
       this.spawnEncounter(centreX, centreY);
-      this.bannerTimer = QUEST_BANNER_FRAMES;
       this.holdRoomForBanner();
-      this.bus.emit('bossFightInitiated', { bossType: 'miss_quill', music: 'caller' });
-      this.audio?.playMusic('boss_music_3', { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
+      this.dialog.open(QUILL_OFFICE_DIALOG, () => this.beginQuillFight());
+    } else if (this.phase === 'quill_fight') {
+      this.spawnEncounter(centreX, centreY);
+      this.openQuillFight();
     } else if (this.phase === 'lich_fight') {
       this.beginLichFight();
     }
+  }
+
+  /** The banner and the music that open Miss Quill's half of the room. */
+  private openQuillFight(): void {
+    this.showBanner(QUILL_BANNER);
+    this.holdRoomForBanner();
+    this.bus.emit('bossFightInitiated', { bossType: 'miss_quill', music: 'caller' });
+    this.audio?.playMusic('boss_music_3', { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
+  }
+
+  private beginQuillFight(): void {
+    this.progress.officeSceneSeen = true;
+    this.phase = 'quill_fight';
+    this.openQuillFight();
+  }
+
+  private showBanner(card: BannerCard): void {
+    this.banner = card;
+    this.bannerTimer = QUEST_BANNER_FRAMES;
   }
 
   /**
@@ -309,13 +392,38 @@ export class QuillConfrontationSystem implements GameSystem {
   }
 
   /**
-   * Escape closes the examination but never the reveal: the reveal's last page
-   * is what puts the Lich in the room, and a dismissal there would strand the
-   * encounter with a fight that never starts.
+   * Escape closes the examination and nothing else.
+   *
+   * Every other dialog this system opens is load-bearing: the office scene ends
+   * by releasing a boss fight into a held room, the reveal ends by putting the
+   * Lich in it, and the victory scene ends by arming the containment clock. A
+   * dismissal at any of those strands the encounter halfway through a beat that
+   * has no other exit.
    */
   dismissDialog(): boolean {
     if (this.phase !== 'quill_fight') return false;
     return this.dialog.dismiss();
+  }
+
+  /**
+   * True while a scripted beat owns both crawlers' bodies. The scene withholds
+   * movement and attack input for its whole run.
+   */
+  get playerLocked(): boolean {
+    return this.battle?.playerLocked === true;
+  }
+
+  /**
+   * The Lich fight, once one is running, for reading rather than driving.
+   *
+   * `scripts/verify-lich.ts` plays the whole encounter through this: the phase
+   * it is in and the escape vector out of whatever it has on the floor are the
+   * two things a harness needs to fight it, and they are the two things a real
+   * player and a real companion read too. Null before the reveal and after the
+   * Lich falls.
+   */
+  get lichBattle(): LichBattleSystem | null {
+    return this.battle;
   }
 
   handleClick(mx: number, my: number): boolean {
@@ -351,13 +459,20 @@ export class QuillConfrontationSystem implements GameSystem {
 
   // ── Frame update ──────────────────────────────────────────────────────────
 
-  update(_ctx: SystemContext): void {
+  update(ctx: SystemContext): void {
+    this.frameCount++;
     if (this.bannerTimer > 0) this.bannerTimer--;
-    if (this.heldForBanner && this.bannerTimer <= 0) this.releaseRoom();
+    // The office scene holds the room itself and releases it when the fight
+    // opens, so the banner countdown must not let go of it on the way.
+    if (this.heldForBanner && this.bannerTimer <= 0 && this.phase !== 'office_scene') {
+      this.releaseRoom();
+    }
     if (this.victoryTimer > 0) this.victoryTimer--;
     if (this.dimTimer < REVEAL_DIM_FADE_FRAMES && this.roomIsDimmed) this.dimTimer++;
 
     switch (this.phase) {
+      case 'office_scene':
+        break;
       case 'quill_fight':
         if (this.culpritsDown()) this.beginRevealHold();
         break;
@@ -372,7 +487,18 @@ export class QuillConfrontationSystem implements GameSystem {
         if (this.materialiseTimer <= 0) this.beginLichFight();
         break;
       case 'lich_fight':
-        if (this.lich !== null && !this.lich.isAlive) this.finishConfrontation(this.lich);
+        // Both halves held while one of its own barks is on screen. The scene
+        // halts the world for that too, but a system must not depend on somebody
+        // else's early return to know its phases are paused — and the death
+        // check in particular would replace the open bark with the victory
+        // dialog, throwing away the callback that raises the phase's banner and
+        // starts its slide.
+        if (!this.dialog.isOpen) {
+          this.battle?.update(ctx);
+          if (this.lich !== null && !this.lich.isAlive) this.beginVictoryScene(this.lich);
+        }
+        break;
+      case 'victory_scene':
         break;
       case 'done':
         break;
@@ -439,10 +565,31 @@ export class QuillConfrontationSystem implements GameSystem {
     applyActiveDifficultyRewards(lich);
     this.addMob(lich);
     this.lich = lich;
-    this.bannerTimer = QUEST_BANNER_FRAMES;
+    this.battle = new LichBattleSystem(this.map, lich, this.audio, this.companion, {
+      openBark: (pages, onClosed) => this.dialog.open(pages, onClosed),
+      showBanner: (title, subtitle) => this.showBanner(lichPhaseBanner(title, subtitle)),
+    });
+    this.showBanner(LICH_BANNER);
     this.holdRoomForBanner();
     this.bus.emit('bossFightInitiated', { bossType: 'the_lich', music: 'caller' });
     this.audio?.playMusic('boss_music_2', { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
+  }
+
+  /**
+   * The Lich is down; the room gets its last word before the floor starts
+   * shaking.
+   *
+   * The Doomsday chain is armed only when this closes, and not a frame earlier:
+   * the containment deadline is wall-clock, so arming it under a dialog the
+   * player is still reading would spend part of the window on the reading.
+   */
+  private beginVictoryScene(lich: TheLich): void {
+    this.phase = 'victory_scene';
+    // Everything the fight had in the air goes now, so nothing is still falling
+    // over an office the party has already won.
+    this.battle?.dispose();
+    this.battle = null;
+    this.dialog.open(VICTORY_DIALOG, () => this.finishConfrontation(lich));
   }
 
   private finishConfrontation(lich: TheLich): void {
@@ -456,6 +603,14 @@ export class QuillConfrontationSystem implements GameSystem {
     this.audio?.stopSound('skeleton_lord_chant');
     this.audio?.stopSound('dead_hand_wave');
     this.audio?.stopSound('magic_ball_launch');
+    // The phase cues, on the same principle: a wave igniting or an orb landing
+    // on the frame the fight ends would keep the fire crackling under the
+    // victory card.
+    this.audio?.stopSound('magic_ball_impact');
+    this.audio?.stopSound('llama_fireball');
+    this.audio?.stopSound('deep_rumbling');
+    this.audio?.stopSound('powering_off');
+    this.audio?.stopSound('charging_up_1');
     this.bus.emit('bossDefeated', { bossType: 'the_lich', mob: lich, music: 'caller' });
     this.bus.emit('objectiveComplete', { objectiveId: 'krasue_lich_destroyed' });
     this.audio?.playMusicPlaylist(TOWN_MUSIC_TRACKS, { fadeInMs: VICTORY_MUSIC_FADE_IN_MS });
@@ -472,6 +627,21 @@ export class QuillConfrontationSystem implements GameSystem {
     this.doomsdayProgress.stage = 'containment';
     this.doomsdayProgress.deadlineAt = Date.now() + CONTAINMENT_DURATION_MS;
     this.audio?.play('rumble');
+  }
+
+  /** The party left the top floor; see `LichBattleSystem.leaveFloor`. */
+  leaveFloor(ctx: SystemContext): void {
+    this.battle?.leaveFloor(ctx);
+  }
+
+  /**
+   * Scene teardown. The battle's hazards and its hold on the Lich's body go
+   * with it — a driver still attached to a creature that outlives this system
+   * would answer every question with a phase that no longer exists.
+   */
+  dispose(): void {
+    this.battle?.dispose();
+    this.battle = null;
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -531,10 +701,24 @@ export class QuillConfrontationSystem implements GameSystem {
     ) {
       drawInteractionPrompt(ctx, corpseX, corpseY, TILE_SIZE, 'Examine');
     }
+
+    // Last in this pass, so a wave's telegraph and an orb's warning circle land
+    // on top of the office's own floor paint rather than under it.
+    this.battle?.renderWorld(ctx, camX, camY);
+  }
+
+  /**
+   * The fight's hazards, drawn after the sorted pass — see
+   * `LichBattleSystem.renderEffects` for why they belong over the crawlers
+   * rather than under them.
+   */
+  renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    this.battle?.renderEffects(ctx, camX, camY, this.frameCount);
   }
 
   renderUI(ctx: CanvasRenderingContext2D): void {
     this.renderBossBar(ctx);
+    this.battle?.renderUI(ctx);
     this.renderBanner(ctx);
     this.renderVictory(ctx);
     this.dialog.render(ctx);
@@ -564,14 +748,17 @@ export class QuillConfrontationSystem implements GameSystem {
     });
 
     if (this.phase === 'lich_fight') {
-      drawText(ctx, 'It has been keeping the magistrate’s appointments. End it.', {
-        x: viewportWidth() / 2,
-        y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
-        size: OBJECTIVE_SIZE,
-        bold: true,
-        color: '#a8f070',
-        align: 'center',
-      });
+      const objective = this.battle?.objectiveLine;
+      if (objective !== undefined) {
+        drawText(ctx, objective, {
+          x: viewportWidth() / 2,
+          y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
+          size: OBJECTIVE_SIZE,
+          bold: true,
+          color: '#a8f070',
+          align: 'center',
+        });
+      }
       return;
     }
 
@@ -594,29 +781,17 @@ export class QuillConfrontationSystem implements GameSystem {
 
   private renderBanner(ctx: CanvasRenderingContext2D): void {
     if (this.bannerTimer <= 0) return;
-    const isLich = this.phase === 'lich_fight';
-    drawQuestBanner(
-      ctx,
-      isLich ? 'THE LICH — MAGISTRATE IN ALL BUT BODY' : 'MISS QUILL — THE HEADMISTRESS',
-      this.bannerTimer,
-      isLich ? '#9ade63' : '#f47c7c',
-      isLich ? '#1d3a14' : '#6a2a2a',
-    );
+    const card = this.banner;
+    drawQuestBanner(ctx, card.title, this.bannerTimer, card.color, card.shadow);
     const alpha = this.bannerTimer < BANNER_FADE_FRAMES ? this.bannerTimer / BANNER_FADE_FRAMES : 1;
-    drawText(
-      ctx,
-      isLich
-        ? 'Featherfall has been dead for weeks. This signed his letters.'
-        : 'Every krasue in the city was her handiwork',
-      {
-        x: viewportWidth() / 2,
-        y: BANNER_SUBTITLE_Y,
-        size: BANNER_SUBTITLE_SIZE,
-        color: isLich ? '#d4edaa' : '#f4c7c7',
-        align: 'center',
-        alpha,
-      },
-    );
+    drawText(ctx, card.subtitle, {
+      x: viewportWidth() / 2,
+      y: BANNER_SUBTITLE_Y,
+      size: BANNER_SUBTITLE_SIZE,
+      color: card.subtitleColor,
+      align: 'center',
+      alpha,
+    });
   }
 
   private renderVictory(ctx: CanvasRenderingContext2D): void {
@@ -656,7 +831,9 @@ export class QuillConfrontationSystem implements GameSystem {
  * out of it, so the room opens straight into the Lich.
  */
 function phaseFor(progress: MurderQuestProgress): ConfrontationPhase {
-  if (progress.stage === 'confrontation') return 'quill_fight';
+  if (progress.stage === 'confrontation') {
+    return progress.officeSceneSeen ? 'quill_fight' : 'office_scene';
+  }
   if (progress.stage === 'quill_slain') return 'lich_fight';
   return 'done';
 }

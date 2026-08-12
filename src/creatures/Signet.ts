@@ -106,7 +106,7 @@ export class Signet extends Mob {
   protected coinDropMin = 0;
   protected coinDropMax = 0;
   displayName = 'Tsarina Signet';
-  description = "Grimaldi's daughter, a Summoner covered in living tattoos.";
+  description = "Grimaldi's wife, a Summoner covered in living tattoos.";
 
   /** Set true by CircusQuestSystem once the sideshows/big-top combat phases begin. */
   allyModeActive = false;

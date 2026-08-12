@@ -1258,6 +1258,15 @@ export function drawLichSide(ctx: Ctx, pose: SkeletonPose): void {
   paintFigure(ctx, pose, 'side');
 }
 
+/**
+ * How far a full crouch sinks the hips, in tile units.
+ *
+ * Exported because a pose that sinks the body has to sink the hand targets with
+ * it: the hands are absolute, so a crouch that leaves them where they were pulls
+ * both arms straight and the figure hangs off its own shoulders.
+ */
+export const LICH_CROUCH_DROP = CROUCH_DROP;
+
 /** The wool the robe is made of, for the torn scraps on the gore row. */
 export const LICH_CLOTH = CLOTH;
 /** The outline colour those scraps are drawn against. */

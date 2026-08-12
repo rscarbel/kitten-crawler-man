@@ -40,7 +40,9 @@ export type ItemId =
   | 'wayfinders_anchor'
   | 'anchor_shard_tinker'
   | 'anchor_shard_hilda'
-  | 'anchor_shard_temple';
+  | 'anchor_shard_temple'
+  | 'magistrates_writ'
+  | 'unreadable_letter';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -392,6 +394,29 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     description:
       'Chipped from the Temple of the Sky’s altar stone, and cold no matter how long you hold it. ' +
       'Madame Voss can weld it to its brothers.',
+  },
+  // Same reasoning as the anchor shards above: two `isQuestItem` items would
+  // fight over the single reserved quest slot, and the Krasue murder mystery
+  // hands the party both the writ and the letter at once.
+  magistrates_writ: {
+    id: 'magistrates_writ',
+    name: "Magistrate's Writ",
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    description:
+      "'The bearer acts on my authority and is not to be detained.' Signed, Magistrate " +
+      'Featherfall. The ink is barely dry. The magistrate has not been seen in weeks.',
+  },
+  unreadable_letter: {
+    id: 'unreadable_letter',
+    name: 'The Unreadable Letter',
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    description:
+      'Squiggles and triangles in a brown ink you are choosing not to think about. Mordecai ' +
+      'called it necro-script and told you to burn it. It is warm.',
   },
   smush_tome: {
     id: 'smush_tome',

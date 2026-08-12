@@ -4,6 +4,10 @@ import { drawIssueKitIcon, isIssueKitItem } from './icons/issueKitIcon';
 import { drawEnchantedGearIcon, isEnchantedGearItem } from './icons/enchantedGearIcons';
 import { drawAnchorStoneIcon, drawAnchorShardIcon } from './icons/anchorStoneIcon';
 import {
+  drawMagistratesWritIcon,
+  drawUnreadableLetterIcon,
+} from './icons/murderMysteryLetterIcons';
+import {
   HOTBAR_COUNT,
   SLOTS_PER_PAGE,
   QUEST_SLOT_IDX,
@@ -1474,6 +1478,18 @@ export function drawItemIcon(
 
   if (isAnchorShardId(item.id)) {
     drawAnchorShardIcon(ctx, x, y, size);
+    ctx.restore();
+    return;
+  }
+
+  if (item.id === 'magistrates_writ') {
+    drawMagistratesWritIcon(ctx, x, y, size);
+    ctx.restore();
+    return;
+  }
+
+  if (item.id === 'unreadable_letter') {
+    drawUnreadableLetterIcon(ctx, x, y, size);
     ctx.restore();
     return;
   }

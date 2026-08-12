@@ -47,7 +47,7 @@ The third floor is **the Over City** — the first floor of the "Volcano" storyl
 
 | Character              | Role                                                                  |
 | ---------------------- | --------------------------------------------------------------------- |
-| Tsarina Signet         | Elite quest-giver/ally; summoner; Grimaldi's daughter                 |
+| Tsarina Signet         | Elite quest-giver/ally; summoner; Grimaldi's wife                     |
 | Ringmaster Grimaldi    | City Boss — Pestiferous Vine                                          |
 | Miss Quill / Remex     | Hidden villains of the murder mystery                                 |
 | Magistrate Featherfall | Skyfowl magistrate being usurped                                      |

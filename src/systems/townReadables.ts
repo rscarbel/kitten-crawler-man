@@ -92,7 +92,7 @@ const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map
         body: [
           "ONE NIGHT ONLY. GRIMALDI'S TRAVELLING CIRCUS. Eleven wagons, forty performers, and the finest tumbling family on any road.",
           'FEATURING: the Stilt-Men. The Lemurs of the Southern Reach. Heather, the Dancing Bear (do not feed her). Terror the Clown, for the brave only.',
-          "AND: the Ringmaster's own daughter, in her first season before the crowd.",
+          'AND: Tsarina Signet, princess of the high wire, in her first season before the crowd.',
           'Someone has written across the bottom in carpenter\'s pencil: "Paid same day, every time. Asked after my knees. — B.C."',
         ],
       },

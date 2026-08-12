@@ -2345,38 +2345,42 @@
         "row": 12,
         "frameCount": 10
       },
-      "gore_skull": {
+      "dazed": {
         "row": 13,
+        "frameCount": 10
+      },
+      "gore_skull": {
+        "row": 14,
         "colOffset": 0,
         "frameCount": 1
       },
       "gore_ribcage": {
-        "row": 13,
+        "row": 14,
         "colOffset": 1,
         "frameCount": 1
       },
       "gore_pelvis": {
-        "row": 13,
+        "row": 14,
         "colOffset": 2,
         "frameCount": 1
       },
       "gore_femur": {
-        "row": 13,
+        "row": 14,
         "colOffset": 3,
         "frameCount": 1
       },
       "gore_tibia": {
-        "row": 13,
+        "row": 14,
         "colOffset": 4,
         "frameCount": 1
       },
       "gore_forearm": {
-        "row": 13,
+        "row": 14,
         "colOffset": 5,
         "frameCount": 1
       },
       "gore_hand": {
-        "row": 13,
+        "row": 14,
         "colOffset": 6,
         "frameCount": 1
       }

@@ -287,11 +287,6 @@ const TOWER_CONFRONTATION_STAGES: ReadonlyArray<MurderQuestStage> = [
 ];
 /** Fade-in for an interior's own music when the building is entered. */
 const INTERIOR_MUSIC_FADE_IN_MS = 800;
-/**
- * A dozen vents can light in the same second, so the whoosh is held well under
- * the cues the player actually has to react to.
- */
-const VENT_IGNITION_VOLUME = 0.35;
 /** The cured vine's own tile hugs the south face of the pole cluster he wraps. */
 const CURED_GRIMALDI_POLE_SOUTH_OFFSET = 1;
 const CURED_GRIMALDI_SEARCH_RADIUS_TILES = 4;
@@ -306,6 +301,24 @@ interface InteriorEncounter {
    * crossing the room passes in front of them.
    */
   renderWorld?(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void;
+  /**
+   * World-space hazards the encounter owns, drawn *after* the sorted pass — a
+   * wall of fire is something a crawler stands inside, not behind.
+   */
+  renderEffects?(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
+  /**
+   * The party has walked off the storey this encounter lives on. Anything the
+   * encounter is holding that only its own update can release — a scripted
+   * slide, an input lock — has to be let go of here, because that update stops
+   * running the moment the floor changes.
+   */
+  leaveFloor?(ctx: SystemContext): void;
+  /**
+   * Teardown for anything the encounter owns that outlives its own mobs — a
+   * boss phase driver holding the creature's body, hazards it published to the
+   * companion, waves and orbs still in the air.
+   */
+  dispose?(): void;
   /** Death-screen message when the players fall during this encounter. */
   readonly defeatMessage: string;
 }
@@ -719,6 +732,7 @@ export class BuildingInteriorScene extends GameplayScene {
         0,
         () => this.changeFloor(this.currentFloor + 1),
         () => this.changeFloor(this.currentFloor - 1),
+        () => this.ascentEntersTowerFinale(),
       );
     }
 
@@ -1148,6 +1162,11 @@ export class BuildingInteriorScene extends GameplayScene {
         this.bigTopMaze = maze;
         // The maze's fire is ground the companion has to be steered out of, the
         // same as a gas cloud or a boss's puddle.
+        //
+        // Registered once, which is only safe because the Big Top is a single
+        // storey: a storey change clears the companion's hazard list, and an
+        // encounter in a building with stairs has to re-register from its own
+        // update the way the tower's Lich fight does.
         this.companion.registerHazardSource(maze);
         // Both parked, not just whoever is standing in for the companion right
         // now: each crawler walks their own half, and the moment the player uses
@@ -1218,6 +1237,22 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
+   * Whether climbing from the storey the party is standing on walks straight
+   * into the murder quest's final battle.
+   *
+   * Only the two stages that still owe a fight qualify: `lich_slain` and
+   * `complete` are also tower-confrontation stages, but the office is empty by
+   * then and asking a returning player whether they are ready would be the game
+   * threatening them with nothing.
+   */
+  private ascentEntersTowerFinale(): boolean {
+    if (this.entry.type !== 'tower') return false;
+    if (this.currentFloor + 1 !== TOWER_CONFRONTATION_FLOOR) return false;
+    const stage = this.murderQuestProgress?.stage;
+    return stage === 'confrontation' || stage === 'quill_slain';
+  }
+
+  /**
    * The Quill confrontation spawns the first time the players reach the
    * tower's top floor while the murder quest is at its confrontation stage.
    */
@@ -1238,6 +1273,7 @@ export class BuildingInteriorScene extends GameplayScene {
         this.audio,
         this.doomsdayProgress,
         this.partyLevel,
+        this.companion,
       );
       this.towerConfrontation = confrontation;
       return confrontation;
@@ -1259,6 +1295,9 @@ export class BuildingInteriorScene extends GameplayScene {
     // cue belongs to skeletons the player is walking away from.
     departing.skeletonShots.resetForCheckpoint();
     departing.skeletonSummons.resetForCheckpoint();
+    // Before `currentFloor` moves, while `activeEncounter` still resolves to the
+    // encounter being walked away from.
+    this.activeEncounter?.leaveFloor?.(this.buildSystemContext());
     this.currentFloor = newFloor;
     this.map = this.towerFloors[newFloor];
     this.mapW = this.map.structure[0]?.length ?? TOWER_INTERIOR_W;
@@ -1501,6 +1540,13 @@ export class BuildingInteriorScene extends GameplayScene {
     this.menus.dispose();
     this.ambientSound?.dispose();
     this.bopca?.dispose();
+    // Ahead of the companion's own teardown, because a quest fight's cleanup
+    // withdraws the orders and hazards it gave the companion, and it should be
+    // able to do that against a companion that still exists.
+    this.encounter?.dispose?.();
+    // Drops any standing order along with the hazard sources that were meant to
+    // steer around it. Both name systems this scene is taking with it.
+    this.companion.dispose();
     // Every floor's kit, not just the live one: each holds its own mob loop, and
     // the pack-alert grid that loop publishes is a module-level handle. An
     // interior that exited without this leaves its mobs — and through them its
@@ -1583,12 +1629,25 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.companionLeftBehind ? [] : [this.inactive()];
   }
 
+  /**
+   * True while a scripted beat is driving both crawlers' bodies.
+   *
+   * One accessor rather than a condition repeated at each site: the keyboard
+   * poll, the switch key and the touch swing are three roads to the same
+   * question, and when the tower fight added a second script only the first of
+   * them learned about it — leaving a tap able to swap bodies mid-slide, out
+   * from under the code writing their positions.
+   */
+  private get scriptOwnsParty(): boolean {
+    return this.bigTopMaze?.playerLocked === true || this.towerConfrontation?.playerLocked === true;
+  }
+
   /** Hands control to the companion, unless they're lying knocked out — outside or in here. */
   private trySwitchActive(): void {
     // Guarded here rather than only at the keyboard poll, because the mobile HUD
     // reaches this by a different road: a script that is driving both bodies
     // must not have one swapped out from under it by either of them.
-    if (this.bigTopMaze?.playerLocked === true) return;
+    if (this.scriptOwnsParty) return;
     if (this.inactive().isKnockedOut) {
       this.audio?.play('error');
       return;
@@ -1741,12 +1800,30 @@ export class BuildingInteriorScene extends GameplayScene {
       this.club.tickOpenModals(this.active());
       return;
     }
+    // The tower's own conversation: the office scene, the reveal, the Lich's
+    // phase barks and the victory page. Its claim has always promised
+    // `haltsWorld: true`, and this return is what makes that true — without it
+    // the room kept fighting behind the box, which meant a boss phase advancing
+    // and orbs landing on a party that was reading. A bare return is safe here
+    // where it is not for the maze: nothing inside the confrontation is waiting
+    // on a timer while its dialog is up. Every one of those pages is closed by
+    // the player, and closing it is what starts the next beat.
+    if (
+      this.currentFloor === TOWER_CONFRONTATION_FLOOR &&
+      this.towerConfrontation?.isDialogOpen === true
+    ) {
+      return;
+    }
     if (this.bigTopMaze?.isDialogOpen === true) {
       // Ticked rather than merely halted, for the same reason the blackjack
       // table and the Bopca's cook timer are: the box is one beat of a script
       // that is holding both crawlers still, and the script is what closes it.
       // A bare `return` here strands the party locked in place forever.
       this.bigTopMaze.update(this.buildSystemContext());
+      // And its cues are drained here rather than left for the frame the box
+      // closes: a barrier that opened on the same frame a reset notice came up
+      // would otherwise be heard several seconds later, over nothing.
+      this.drainMazeAudioCues();
       return;
     }
     if (this.anchorInterior?.isDialogOpen === true) {
@@ -1796,7 +1873,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // A cutscene drives both bodies itself. Every input below is withheld for
     // its whole run, movement included, or the player walks Carl out of the
     // scripted walk-up he is halfway through.
-    const scriptOwnsParty = this.bigTopMaze?.playerLocked === true;
+    const scriptOwnsParty = this.scriptOwnsParty;
 
     // Movement via shared GameLoopPhases
     if (!scriptOwnsParty) {
@@ -1951,40 +2028,19 @@ export class BuildingInteriorScene extends GameplayScene {
     }
   }
 
-  /** The tent's own cues, played from the flags its script sets. */
+  /**
+   * The tent's own cues, played in the order its script raised them.
+   *
+   * Drained whether or not there is anything to play it on. A muted run — the
+   * headless gate is one — still raises a cue every time a vent lights, and a
+   * queue nobody empties grows for the length of the session.
+   */
   private drainMazeAudioCues(): void {
     const maze = this.bigTopMaze;
+    if (maze === null) return;
     const audio = this.audio;
-    if (maze === null || audio === null) return;
-    if (maze.gateSoundPending) {
-      maze.gateSoundPending = false;
-      audio.play('gate_opening');
-    }
-    if (maze.braceSoundPending) {
-      maze.braceSoundPending = false;
-      audio.play('wood_breaking_1');
-    }
-    if (maze.ventIgnitionSoundPending) {
-      maze.ventIgnitionSoundPending = false;
-      audio.play('llama_fireball', { volume: VENT_IGNITION_VOLUME });
-    }
-    if (maze.burnoutSoundPending) {
-      maze.burnoutSoundPending = false;
-      // [STAND-IN] The llama's fireball burst is the library's closest thing to
-      // a body going up, until a scorch-and-drop cue is sourced.
-      audio.play('llama_fireball_explosion');
-    }
-    if (maze.pourSoundPending) {
-      maze.pourSoundPending = false;
-      audio.play('healing_potion');
-    }
-    if (maze.vineGroanSoundPending) {
-      maze.vineGroanSoundPending = false;
-      audio.play('grimaldi_vine_taking_damage');
-    }
-    if (maze.cureSoundPending) {
-      maze.cureSoundPending = false;
-      audio.play('reviving_tone');
+    for (const cue of maze.drainSounds()) {
+      audio?.play(cue.id, cue.volume === undefined ? undefined : { volume: cue.volume });
     }
   }
 
@@ -2991,7 +3047,11 @@ export class BuildingInteriorScene extends GameplayScene {
     destruction.renderEffects(ctx, camX, camY, this.human);
     // Over the crawlers, so a column standing between the camera and one of them
     // still reads as fire they are inside rather than fire they are behind.
-    this.bigTopMaze?.renderEffects(ctx, camX, camY);
+    // Through `activeEncounter` rather than named directly, so an encounter's
+    // hazards are gated on its own storey the way its ground paint already is —
+    // otherwise a party that walks downstairs mid-fight watches the fire keep
+    // burning over the room below at the floor above's coordinates.
+    this.activeEncounter?.renderEffects?.(ctx, camX, camY);
     this.bigTopMaze?.renderPrompts(ctx, camX, camY, this.buildSystemContext());
     destruction.renderLoot(ctx, camX, camY, this.active());
     // A room hosting a live fight is not offering conversation.
@@ -3523,10 +3583,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // taken the screen — the release belongs to whatever that is, and `update`
     // is not running the world underneath it anyway.
     if (worldHalted(this.overlayClaims)) return;
-    // The keyboard's swing is withheld for the whole cure sequence; the tap has
-    // to be too, or a stray finger spins Carl round mid-scripted walk-up and
-    // swings at the vine he is there to save.
-    if (this.bigTopMaze?.playerLocked === true) return;
+    // The keyboard's swing is withheld for the whole of a scripted beat; the tap
+    // has to be too, or a stray finger spins Carl round mid-walk-up and swings
+    // at the vine he is there to save.
+    if (this.scriptOwnsParty) return;
     if (this.bopca !== null && !bopcaWasOpen) {
       this.bopca.tryInteract(this.active());
     }

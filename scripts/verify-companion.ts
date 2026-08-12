@@ -33,6 +33,7 @@ import { TreasureChestSystem } from '../src/systems/TreasureChestSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../src/systems/GameSystem';
+import type { GroundHazardSource } from '../src/systems/GroundHazardSource';
 
 /**
  * The one browser global the minimap reaches for when `OffscreenCanvas` is
@@ -125,6 +126,26 @@ const CHASER_START_TILES = 5;
  */
 const OPEN_GROUND_RADIUS_TILES = 8;
 
+/** How far from the party a staged directive posts the companion, in tiles. */
+const DIRECTIVE_TILES_AWAY = 4;
+/**
+ * Frames a directed companion is given to cross those tiles. At `FOLLOWER_SPEED`
+ * the walk is about thirty; the rest is slack for a step around a mob.
+ */
+const DIRECTIVE_WALK_FRAMES = 120;
+/**
+ * How close counts as standing on the ordered spot. The directive stops at the
+ * anchor's own close distance — half a tile — and a companion may be a step past
+ * that on the frame the count runs out.
+ */
+const DIRECTIVE_ARRIVAL_TILES = 0.75;
+/** How close counts as rejoined: the follow drive's own stopping distance, plus a step. */
+const FOLLOW_REJOIN_TILES = 2;
+/** Long enough for a rat to close on a held companion and for several missile cooldowns to lapse. */
+const DIRECTIVE_HOLD_FRAMES = 600;
+/** Radius of the staged hazard laid over the ordered spot. */
+const STAGED_HAZARD_RADIUS_TILES = 2;
+
 /** The building a tower interior is generated for; nothing here reads the name but the generator wants one. */
 const INTERIOR_BUILDING_NAME = 'Verification Tower';
 /** Storeys of that tower the interior checks use: one to fight on, one to climb to. */
@@ -158,6 +179,17 @@ const PARTITION_CAT_TILE = { x: 6, y: 8 };
 const PARTITION_HUMAN_TILE = { x: 10, y: 8 };
 /** Comfortably enough steps at `FOLLOWER_SPEED` to close on — or be stopped at — the wall. */
 const PARTITION_FOLLOW_FRAMES = 90;
+
+/** How near the companion must get to the hazard to prove she was really trying. */
+const FOLLOW_APPROACH_TILES = STAGED_HAZARD_RADIUS_TILES + 1;
+const NOTCH_FLOOR_SIZE = 12;
+const NOTCH_WALL_ROW = 5;
+const NOTCH_WALL_COL = 6;
+/** How far into the wall row the wedged body's collision box reaches. */
+const WEDGE_STRADDLE_FRACTION = 0.5;
+const WEDGE_ESCAPE_FRAMES = 60;
+/** Far enough that it cannot be a rounding wobble against the wall. */
+const WEDGE_ESCAPE_TILES = 0.5;
 
 /**
  * A dungeon that actually generated a boss room, and one with clear floor to
@@ -1186,6 +1218,454 @@ console.log('\nsetMap also drops the ban a floor change did not earn');
   check(
     party.cat.autoTarget === quarry,
     'and setMap clears the ban rather than making her wait out the full ban window',
+  );
+}
+
+interface DirectiveStage {
+  party: Party;
+  companion: CompanionSystem;
+  /** The spot a fight orders the companion to stand on, in top-left world pixels. */
+  post: { x: number; y: number };
+}
+
+/**
+ * The party standing together on clear floor, with a spot a few tiles east for a
+ * fight to send the companion to.
+ *
+ * Clear floor on both counts: the walk has to be about the order rather than
+ * about the pathfinder, and the control runs below need the cat able to see and
+ * shoot what she is standing next to.
+ */
+function stageDirective(): DirectiveStage | null {
+  const staged = makeOpenGroundMap();
+  if (staged === null) return null;
+  const { map, ground } = staged;
+  const party = makeParty(map);
+  const companion = new CompanionSystem(map, ground.x, ground.y);
+  party.human.x = ground.x * TILE_SIZE;
+  party.human.y = ground.y * TILE_SIZE;
+  party.cat.x = party.human.x;
+  party.cat.y = party.human.y;
+  return {
+    party,
+    companion,
+    post: { x: (ground.x + DIRECTIVE_TILES_AWAY) * TILE_SIZE, y: ground.y * TILE_SIZE },
+  };
+}
+
+/** What a held companion did while something chewed on her, and how close it got. */
+interface HeldFightResult {
+  cast: boolean;
+  swiped: boolean;
+  acquired: boolean;
+  closestPx: number;
+}
+
+/**
+ * A rat sent after the companion cat while the fight either holds her or leaves
+ * her to it. `directed` is the whole variable: everything else about the two
+ * runs is identical, so a suppression check that passes for the wrong reason —
+ * a rat that never arrives, a cat with nothing to shoot — fails the control run
+ * as well and says so.
+ */
+function runHeldFight(stage: DirectiveStage, directed: boolean): HeldFightResult {
+  const { party, companion, post } = stage;
+  // Started on the spot rather than walked to it, in both runs. A rat spawned a
+  // few tiles beyond the post is out of AI range of a cat still standing beside
+  // the player, so a control that let her walk there first would measure a rat
+  // that never woke up rather than a cat that chose not to shoot.
+  party.cat.x = post.x;
+  party.cat.y = post.y;
+  if (directed) companion.setDirective({ x: post.x, y: post.y, hold: true });
+  const chaser = addMob(
+    party,
+    'rat',
+    Math.round(post.x / TILE_SIZE) + CHASER_START_TILES,
+    Math.round(post.y / TILE_SIZE),
+  );
+  chaser.currentTarget = party.cat;
+
+  const result: HeldFightResult = {
+    cast: false,
+    swiped: false,
+    acquired: false,
+    closestPx: Infinity,
+  };
+  for (let frame = 0; frame < DIRECTIVE_HOLD_FRAMES; frame++) {
+    // Both crawlers topped up: what is under test is whether she answers the
+    // rat, not whether she outlives it.
+    party.human.hp = party.human.maxHp;
+    party.cat.hp = party.cat.maxHp;
+    runFightFrame(companion, party);
+    if (party.cat.getMissiles().length > 0) result.cast = true;
+    if (party.cat.isSwinging) result.swiped = true;
+    if (party.cat.autoTarget !== null) result.acquired = true;
+    result.closestPx = Math.min(
+      result.closestPx,
+      Math.hypot(chaser.x - party.cat.x, chaser.y - party.cat.y),
+    );
+  }
+  return result;
+}
+
+/**
+ * Damaging ground the harness can switch off, standing in for a boss's orb
+ * warnings: it answers the same one-method interface the companion queries, and
+ * nothing else about it matters.
+ */
+class StagedHazard implements GroundHazardSource {
+  active = true;
+  constructor(
+    private readonly centreX: number,
+    private readonly centreY: number,
+  ) {}
+
+  getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
+    if (!this.active) return null;
+    const dx = x - this.centreX;
+    const dy = y - this.centreY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > TILE_SIZE * STAGED_HAZARD_RADIUS_TILES) return null;
+    if (dist === 0) return { dx: 1, dy: 0 };
+    return { dx: dx / dist, dy: dy / dist };
+  }
+}
+
+/**
+ * A room with a notch: one wall tile with floor under it and floor beside it.
+ *
+ * Reproduces the shape a companion gets wedged in. A body whose collision box
+ * straddles two rows can end up with its top half inside the notch's wall, and
+ * from there every sideways move is refused — the leading edge stays in the
+ * wall's own column until the move completes, so the move never completes.
+ * Only a step *down*, out of the straddle, frees it.
+ */
+function makeNotchFloor(): GameMap {
+  const grid: TileContent[][] = Array.from({ length: NOTCH_FLOOR_SIZE }, (_, y) =>
+    Array.from({ length: NOTCH_FLOOR_SIZE }, (_, x) => {
+      const isBorder =
+        x === 0 || y === 0 || x === NOTCH_FLOOR_SIZE - 1 || y === NOTCH_FLOOR_SIZE - 1;
+      const isNotch = y === NOTCH_WALL_ROW && x >= NOTCH_WALL_COL;
+      const type = isBorder || isNotch ? FloorTypeValue.wall : FloorTypeValue.tile_floor;
+      return makePartitionFloorTile(x, y, type);
+    }),
+  );
+  return new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: grid });
+}
+
+console.log('\nThe follow drive stops at the edge of marked ground rather than walking through it');
+{
+  const stage = stageDirective();
+  if (stage === null) {
+    check(false, 'a generated dungeon offered open floor to stage a directive on');
+  } else {
+    const { party, post } = stage;
+    // The hazard sits on the player, which is the one place the follow drive is
+    // always pulling her towards. No directive and no recall: this is the plain
+    // "catch up with the party" walk, the one every floor in the game runs.
+    const companion = new CompanionSystem(party.map, party.human.x, party.human.y);
+    companion.registerHazardSource(new StagedHazard(party.human.x, party.human.y));
+    party.cat.x = post.x;
+    party.cat.y = post.y;
+
+    let closestTiles = Number.POSITIVE_INFINITY;
+    for (let frame = 0; frame < DIRECTIVE_HOLD_FRAMES; frame++) {
+      companion.update(makeContext(party));
+      closestTiles = Math.min(closestTiles, distanceTiles(party.cat, party.human));
+    }
+    // Both halves matter. Fleeing marked ground and walking back into it are
+    // individually correct rules that, run against each other, take turns — and
+    // the thing that lands takes whichever frame the follow drive won.
+    check(
+      closestTiles > STAGED_HAZARD_RADIUS_TILES,
+      `she never crosses into the hazard around the player (closest ${closestTiles.toFixed(2)} tiles, radius ${STAGED_HAZARD_RADIUS_TILES})`,
+    );
+    check(
+      closestTiles < FOLLOW_APPROACH_TILES,
+      `and she does close on it rather than standing still somewhere else (closest ${closestTiles.toFixed(2)} tiles)`,
+    );
+  }
+}
+
+console.log('\nA companion wedged into a wall can still get out of a hazard');
+{
+  const map = makeNotchFloor();
+  const party = makeParty(map);
+  // Straddling the notch: her box's top half is inside the wall row, her bottom
+  // half on the floor below it. A shove out of a mob ignores collision, so this
+  // is a position the game really puts her in — and once there, the sideways
+  // step her escape vector asks for is refused every frame forever.
+  const wedgedX = NOTCH_WALL_COL * TILE_SIZE;
+  const wedgedY = (NOTCH_WALL_ROW + 1) * TILE_SIZE - TILE_SIZE * WEDGE_STRADDLE_FRACTION;
+  party.cat.x = wedgedX;
+  party.cat.y = wedgedY;
+  party.human.x = wedgedX;
+  party.human.y = wedgedY;
+
+  const companion = new CompanionSystem(map, wedgedX, wedgedY);
+  // Centred below and to the east, so the way out it is told to take is up and
+  // to the west — into the notch's wall on both axes.
+  companion.registerHazardSource(new StagedHazard(wedgedX + TILE_SIZE, wedgedY + TILE_SIZE));
+  runCompanion(companion, party, WEDGE_ESCAPE_FRAMES);
+  const travelled = Math.hypot(party.cat.x - wedgedX, party.cat.y - wedgedY) / TILE_SIZE;
+  check(
+    travelled > WEDGE_ESCAPE_TILES,
+    `she works her way out of the wedge instead of standing in it (moved ${travelled.toFixed(2)} tiles)`,
+  );
+}
+
+console.log('\nA directive parks the companion, and dropping it hands her straight back');
+{
+  const stage = stageDirective();
+  if (stage === null) {
+    check(false, 'a generated dungeon offered open floor to stage a directive on');
+  } else {
+    const { party, companion, post } = stage;
+    companion.setDirective({ x: post.x, y: post.y, hold: true });
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, post) <= DIRECTIVE_ARRIVAL_TILES,
+      `she walks to the ordered spot and holds it (${distanceTiles(party.cat, post).toFixed(2)} tiles off)`,
+    );
+    check(
+      distanceTiles(party.cat, party.human) > FOLLOW_REJOIN_TILES,
+      'which means leaving the player, since the order outranks the follow drive',
+    );
+
+    companion.clearDirective();
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, party.human) <= FOLLOW_REJOIN_TILES,
+      `and clearing it puts her back at the player's side (${distanceTiles(party.cat, party.human).toFixed(2)} tiles)`,
+    );
+  }
+}
+
+console.log('\nAn anchored stance loses to a directive, and gets itself back afterwards');
+{
+  const stage = stageDirective();
+  if (stage === null) {
+    check(false, 'a generated dungeon offered open floor to stage a directive on');
+  } else {
+    const { party, companion, post } = stage;
+    // The other half of the override. A player who parked the companion before
+    // the fight started must not be able to leave her standing in the fire.
+    companion.setDoNotMove(party.cat, true);
+    const anchor = { x: party.cat.x, y: party.cat.y };
+    companion.setDirective({ x: post.x, y: post.y, hold: true });
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, post) <= DIRECTIVE_ARRIVAL_TILES,
+      'an anchored companion still goes where the fight sends her',
+    );
+
+    // The stance itself is untouched — the directive is a battle-scoped
+    // override, not a command the player never gave.
+    companion.clearDirective();
+    check(
+      companion.getMovementMode(true) === 'anchored',
+      'and the stance she was left in survives the whole thing',
+    );
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, anchor) <= DIRECTIVE_ARRIVAL_TILES,
+      'so she returns to the anchor rather than to the player',
+    );
+  }
+}
+
+console.log('\nA held companion does not fight, and the same staging proves she would have');
+{
+  const held = stageDirective();
+  const loose = stageDirective();
+  if (held === null || loose === null) {
+    check(false, 'a generated dungeon offered open floor to stage a directive fight on');
+  } else {
+    const directed = runHeldFight(held, true);
+    const control = runHeldFight(loose, false);
+
+    check(
+      control.acquired && control.cast,
+      `left to herself she engages the rat (${control.closestPx.toFixed(0)}px, cast ${control.cast})`,
+    );
+    check(
+      directed.closestPx <= CAT_MELEE_REACH_PX,
+      `the rat reaches the held cat all the same (${directed.closestPx.toFixed(0)}px)`,
+    );
+    check(!directed.acquired, 'and she never takes a target while held');
+    check(!directed.cast && !directed.swiped, 'nor fires a missile or throws a claw');
+    check(
+      distanceTiles(held.party.cat, held.post) <= DIRECTIVE_ARRIVAL_TILES,
+      'she is still standing on the spot she was sent to when it is over',
+    );
+  }
+}
+
+console.log('\nLive damage outranks the order, and the order resumes once it lifts');
+{
+  const stage = stageDirective();
+  if (stage === null) {
+    check(false, 'a generated dungeon offered open floor to stage a directive on');
+  } else {
+    const { party, companion, post } = stage;
+    // The interaction the fight that issues directives depends on: it is also a
+    // hazard source, and an order to stand somewhere must never hold a companion
+    // inside its own damage.
+    const hazard = new StagedHazard(post.x, post.y);
+    companion.registerHazardSource(hazard);
+    companion.setDirective({ x: post.x, y: post.y, hold: true });
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, post) > DIRECTIVE_ARRIVAL_TILES,
+      `she refuses to stand in the hazard (${distanceTiles(party.cat, post).toFixed(2)} tiles out)`,
+    );
+
+    hazard.active = false;
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, post) <= DIRECTIVE_ARRIVAL_TILES,
+      'and returns to the ordered spot the moment the ground is safe, unprompted',
+    );
+  }
+}
+
+console.log('\nA recall never marches the companion through fire to obey it');
+{
+  const stage = stageDirective();
+  if (stage === null) {
+    check(false, 'a generated dungeon offered open floor to stage a recall on');
+  } else {
+    const { party, companion, post } = stage;
+    // "Follow me" is a request to close the distance, never a request to cross
+    // burning ground doing it — and the recall clears itself only on arrival, so
+    // ranked above hazard avoidance it kept walking her through until she got
+    // there. The hazard is laid over the caster, which is the shape that makes
+    // the two orders genuinely disagree.
+    const hazard = new StagedHazard(party.human.x, party.human.y);
+    companion.registerHazardSource(hazard);
+    party.cat.x = post.x;
+    party.cat.y = post.y;
+    companion.setFollowMe(true);
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, party.human) > STAGED_HAZARD_RADIUS_TILES,
+      `she stays out of the fire under a standing recall (${distanceTiles(party.cat, party.human).toFixed(2)} tiles out)`,
+    );
+
+    hazard.active = false;
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, party.human) <= STAGED_HAZARD_RADIUS_TILES,
+      'and closes the moment the ground is safe, with the recall still standing',
+    );
+  }
+}
+
+console.log('\nA battle order supersedes a standing recall');
+{
+  const stage = stageDirective();
+  if (stage === null) {
+    check(false, 'a generated dungeon offered open floor to stage an order on');
+  } else {
+    const { party, companion, post } = stage;
+    // A recall latches until the companion arrives, and the directive branch
+    // returns above the code that checks — so an un-cleared recall would sit
+    // waiting and seize the companion the moment the fight lifted its order,
+    // which is exactly when the next phase's hazards go down.
+    companion.setFollowMe(true);
+    check(companion.isFollowOverride, 'the recall latches when it is given');
+    companion.setDirective({ x: post.x, y: post.y, hold: true });
+    check(!companion.isFollowOverride, 'and the order drops it rather than queueing behind it');
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, post) <= DIRECTIVE_ARRIVAL_TILES,
+      'so the order is what she obeys while it stands',
+    );
+  }
+}
+
+console.log('\nA directive belongs to the crawler it was issued about');
+{
+  const stage = stageDirective();
+  if (stage === null) {
+    check(false, 'a generated dungeon offered open floor to stage a directive on');
+  } else {
+    const { party, companion, post } = stage;
+    companion.setDirective({ x: post.x, y: post.y, hold: true });
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(distanceTiles(party.cat, post) <= DIRECTIVE_ARRIVAL_TILES, 'the cat takes up her post');
+
+    // The player switches to the cat. The human is the companion now, standing
+    // where the party started — and the spot the fight named was chosen for
+    // somebody else, so carrying the order over would march him across the room
+    // and mute him there.
+    party.human.isActive = false;
+    party.cat.isActive = true;
+    companion.notifyBecameCompanion(party.human, true);
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.human, post) > FOLLOW_REJOIN_TILES,
+      `the switch drops the order rather than handing it to the other crawler (${distanceTiles(party.human, post).toFixed(2)} tiles off it)`,
+    );
+    check(
+      distanceTiles(party.human, party.cat) <= FOLLOW_REJOIN_TILES + PARTY_STANDOFF_TILES,
+      'and he answers the follow drive instead',
+    );
+  }
+}
+
+console.log('\nA teardown cannot leave an order standing');
+{
+  const stage = stageDirective();
+  if (stage === null) {
+    check(false, 'a generated dungeon offered open floor to stage a directive on');
+  } else {
+    const { party, companion, post } = stage;
+    companion.setDirective({ x: post.x, y: post.y, hold: true });
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(distanceTiles(party.cat, post) <= DIRECTIVE_ARRIVAL_TILES, 'the cat takes up her post');
+
+    // A scene torn down mid-fight is the save-ruining case: nothing in
+    // `CompanionSystem` revokes an order on its own, so a companion left holding
+    // one would never follow the player again.
+    companion.dispose();
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, party.human) <= FOLLOW_REJOIN_TILES,
+      'and dispose releases her back to the party',
+    );
+  }
+}
+
+console.log('\nA directive nobody can walk to is still a directive nobody is stuck on');
+{
+  // Aimed straight at a wall tile. The pathfinder has no route to it at all, so
+  // the companion presses as close as she gets and stops — what must not happen
+  // is a companion that cannot be released afterwards.
+  const map = makePartitionFloor(true);
+  const party = makeParty(map);
+  const companion = new CompanionSystem(map, PARTITION_CAT_TILE.x, PARTITION_CAT_TILE.y);
+  party.human.x = PARTITION_CAT_TILE.x * TILE_SIZE;
+  party.human.y = PARTITION_CAT_TILE.y * TILE_SIZE;
+  party.cat.x = party.human.x;
+  party.cat.y = party.human.y;
+
+  companion.setDirective({
+    x: PARTITION_WALL_TILE_X * TILE_SIZE,
+    y: PARTITION_CAT_TILE.y * TILE_SIZE,
+    hold: true,
+  });
+  runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+  const catTileX = Math.floor((party.cat.x + TILE_SIZE / 2) / TILE_SIZE);
+  const catTileY = Math.floor((party.cat.y + TILE_SIZE / 2) / TILE_SIZE);
+  check(map.isWalkable(catTileX, catTileY), 'an unwalkable order does not walk her into the wall');
+
+  companion.clearDirective();
+  party.human.x = (PARTITION_CAT_TILE.x - DIRECTIVE_TILES_AWAY) * TILE_SIZE;
+  runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+  check(
+    distanceTiles(party.cat, party.human) <= FOLLOW_REJOIN_TILES,
+    'and she follows the player again the moment it is dropped',
   );
 }
 

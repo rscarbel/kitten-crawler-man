@@ -273,15 +273,46 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'grimaldi_plant_moving_2',
     'grimaldi_plant_moving_3',
     'grimaldi_vine_taking_damage',
-    // The Big Top maze's floor vents. Borrowed from the lava llama's fireball,
-    // which is why it also lives in the level-1 and level-2 groups — a floor-3
-    // boot that never loaded those would otherwise light a tent full of silent
-    // fire.
+    // The Big Top maze's show-bell.
+    'massive_metal_hit',
+    // The Big Top maze's floor vents, and the scorch a failed act ends on. Both
+    // borrowed from the lava llama, which is why they also live in the level-1
+    // and level-2 groups — a floor-3 boot that never loaded those would
+    // otherwise light a tent full of silent fire.
     'llama_fireball',
+    'llama_fireball_explosion',
   ],
 
-  /** `MurderMysteryQuestSystem`, `CultHideoutSystem` and the tower's `QuillConfrontationSystem`. */
-  murderMysteryQuest: ['krasue_attack', 'rumble'],
+  /**
+   * `MurderMysteryQuestSystem`, `CultHideoutSystem` and the tower's
+   * `QuillConfrontationSystem` — including every cue the systems of the finale
+   * play directly.
+   *
+   * Listed here even where a cue also lives in `bounty` or `circusQuest`, which
+   * floor 3 happens to load as well: leaning on that makes this fight's audio
+   * correct only for as long as an unrelated group keeps a sound it borrowed,
+   * and `AudioManager.play` returns silently on a buffer that never loaded, so
+   * the failure is a beat that simply does not happen. Two of these were silent
+   * on floor 3 for exactly that reason, one of them the cue that announces the
+   * strike window.
+   *
+   * The Lich's *creature* cues — its damage grunt, its death, its cast wind-up,
+   * and its raised skeletons' swings — are played by the shared mob-audio drain
+   * rather than from here, and still come from `bounty`. `verify:lich` checks
+   * what these systems play; it does not reach that drain.
+   */
+  murderMysteryQuest: [
+    'krasue_attack',
+    'rumble',
+    'skeleton_lord_chant',
+    'dead_hand_wave',
+    'magic_ball_launch',
+    'magic_ball_impact',
+    'llama_fireball',
+    'deep_rumbling',
+    'powering_off',
+    'charging_up_1',
+  ],
 
   /**
    * `MercenarySystem`/`MercenaryGuildSystem` escorts, who are hired in town and

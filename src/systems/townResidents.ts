@@ -394,7 +394,10 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
           'The dome held. Half the town was under it. Whatever you did up there, it reached down here.',
         ];
       }
-      if (ctx.murder === 'cult_hideout' || ctx.murder === 'confrontation' || ctx.quillNamed) {
+      if (
+        !murderResolved(ctx) &&
+        (ctx.murder === 'cult_hideout' || ctx.murder === 'confrontation' || ctx.quillNamed)
+      ) {
         return [
           'So it was the elves after all, and worse than I feared. I warned the wrong people, in the wrong tone, for three years.',
           'When you find whoever taught them that a watcher wants blood — that is the one to end. The rest are just parishioners.',
@@ -503,6 +506,11 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
           'I am not letting rooms after dark this week. Not to anyone. Say what you like about the coin.',
         ];
       }
+      // Doomsday first. Its stage is armed on the same frame the murders close,
+      // so ranked below them its line could never be reached.
+      if (ctx.doomsday === 'complete') {
+        return ['The Sleeping Cat is still standing. So is everything else. Stew is free today.'];
+      }
       if (murderResolved(ctx)) {
         return [
           'Full house tonight, first time in a month. You did that. Sit down and I will make sure you never see a bill in here.',
@@ -512,9 +520,6 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
         return [
           'Two of the circus folk took a room. They slept nineteen hours and asked whether the war was over. I said near enough.',
         ];
-      }
-      if (ctx.doomsday === 'complete') {
-        return ['The Sleeping Cat is still standing. So is everything else. Stew is free today.'];
       }
       return null;
     },
@@ -552,15 +557,25 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
       ],
     ],
     reactive: (ctx) => {
+      // Resolved first. `quillNamed` latches when the letter naming the
+      // schoolteacher is read on the street, and only a checkpoint rewind clears it, so testing it above the
+      // resolved branch left him urging the party to go after a woman whose body
+      // is upstairs — and made the line below it unreachable for the rest of the
+      // game.
+      if (murderResolved(ctx)) {
+        return [
+          'The clerks are back and the seating chart is nearly right again. That is my measure of a town at peace.',
+        ];
+      }
+      if (ctx.murder === 'quill_slain') {
+        return [
+          'Word is she is dead. Word is it did not stop. I have kept a room empty for a magistrate who has not come down those stairs in a long while.',
+        ];
+      }
       if (ctx.quillNamed || ctx.murder === 'confrontation') {
         return [
           'Quill. She sat at the guild corner twice and drank nothing both times. I remember it because nobody does that.',
           'If you are going after her, do it while the clerks are still frightened of her. Afterwards they will all have been suspicious of her from the start.',
-        ];
-      }
-      if (murderResolved(ctx)) {
-        return [
-          'The clerks are back and the seating chart is nearly right again. That is my measure of a town at peace.',
         ];
       }
       if (murderOpen(ctx)) {
@@ -621,13 +636,13 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
           'Try the alley behind here. Whatever it is, it uses the alley — I have had the back door bolted for a fortnight.',
         ];
       }
+      if (ctx.doomsday === 'complete') {
+        return ['Whole city nearly went and the Stump did not lose a single glass. Cursed place.'];
+      }
       if (murderResolved(ctx)) {
         return [
           'You went and did it. For my lot, who nobody was counting. Your money is no good in the Stump, and I say that to nobody.',
         ];
-      }
-      if (ctx.doomsday === 'complete') {
-        return ['Whole city nearly went and the Stump did not lose a single glass. Cursed place.'];
       }
       return null;
     },
@@ -671,15 +686,15 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
           'Whatever is written on those walls, read it before you burn it. That is the whole of my request.',
         ];
       }
-      if (ctx.quillNamed) {
-        return [
-          'A name at last, and it came out of my cellar. Six years of reports marked resolved by an office that never sent anyone — and now I know which office.',
-        ];
-      }
       if (murderResolved(ctx)) {
         return [
           'They have finally sent me a second pair of boots for this post. That is what a win looks like at my rank.',
           'What we found in the cellar went to the temple, not the magistracy. Deacon Aviel insisted. So did I.',
+        ];
+      }
+      if (ctx.quillNamed) {
+        return [
+          'A name at last, and it came out of my cellar. Six years of reports marked resolved by an office that never sent anyone — and now I know which office.',
         ];
       }
       if (murderOpen(ctx)) {
@@ -806,13 +821,13 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
           'Whoever bought out my lamps six weeks ago did it in old coin and would not sign the book. Make of that what you like.',
         ];
       }
-      if (murderResolved(ctx)) {
-        return ['Nobody has bought a candle in bulk since. I check. I will always check now.'];
-      }
       if (ctx.doomsday === 'complete') {
         return [
           'Sold out of everything in an hour that night and gave most of it away. The shopkeep has decided to be proud of me about it.',
         ];
+      }
+      if (murderResolved(ctx)) {
+        return ['Nobody has bought a candle in bulk since. I check. I will always check now.'];
       }
       return null;
     },

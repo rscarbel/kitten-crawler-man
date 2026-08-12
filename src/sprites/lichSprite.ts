@@ -24,6 +24,14 @@ import { getSpriteDefByKey } from '../core/SpriteLoader';
 
 /** Loop speed for the idle, which is driven by the clock rather than a timer. */
 const IDLE_FPS = 5;
+const MS_PER_SECOND = 1000;
+
+const DAZED_STATE = 'dazed' as const;
+/**
+ * Slower than the idle. The daze row is the same body barely moving, and the
+ * whole point of it is that the creature looks like it has stopped working.
+ */
+const DAZED_FPS = 3;
 
 const LICH_KEY = 'the_lich' as const;
 
@@ -83,6 +91,12 @@ export interface TheLichSpriteState {
   readonly handsProgress?: number | null;
   /** 0 to 1 across the summon; null when not summoning. */
   readonly summonProgress?: number | null;
+  /**
+   * The spent, grounded vulnerability window. Outranks every other flag: a Lich
+   * that is dazed is by definition not mid-cast, and a row that lost to a stale
+   * progress value would hide the one moment the player is being told to attack.
+   */
+  readonly isDazed?: boolean;
 }
 
 function drawOneShot(
@@ -122,6 +136,22 @@ export function drawTheLichSprite(
   const { facingX = 1, facingY = 0, walkFrame = 0, isMoving = false } = state;
   const view = viewFor(facingX, facingY);
   const flipX = flipFor(view, facingX);
+
+  if (state.isDazed === true) {
+    // Baked camera-facing only, and drawn unmirrored whichever way the creature
+    // is turned: the fight parks it at the room centre in front of the party for
+    // this, and a slump seen from behind is a robe with nothing happening.
+    drawSpriteKey(
+      ctx,
+      LICH_KEY,
+      DAZED_STATE,
+      timeFrameIndex(performance.now() / MS_PER_SECOND, DAZED_FPS, frameCountOf(DAZED_STATE)),
+      sx,
+      sy,
+      tileSize,
+    );
+    return;
+  }
 
   const summon = state.summonProgress;
   if (summon !== null && summon !== undefined) {
@@ -164,7 +194,7 @@ export function drawTheLichSprite(
   // resets to 0 the moment a mob stops, which would freeze every stationary
   // Lich on the same frame of its loop.
   const idle = lichState('idle', view);
-  const nowSeconds = performance.now() / 1000;
+  const nowSeconds = performance.now() / MS_PER_SECOND;
   drawSpriteKey(
     ctx,
     LICH_KEY,
