@@ -19,7 +19,12 @@ import { GameMap } from '../src/map/GameMap';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { BuildingSystem } from '../src/systems/BuildingSystem';
-import { BigTopMazeSystem, HAZARD_ESCAPE_RADIUS_TILES } from '../src/systems/BigTopMazeSystem';
+import {
+  bigTopWallAt,
+  buildBigTopDressing,
+  BigTopMazeSystem,
+  HAZARD_ESCAPE_RADIUS_TILES,
+} from '../src/systems/BigTopMazeSystem';
 import { MazeBlockTarget } from '../src/creatures/MazeBlockTarget';
 import { MazeBellTarget } from '../src/creatures/MazeBellTarget';
 import { MazeMirrorTarget } from '../src/creatures/MazeMirrorTarget';
@@ -620,6 +625,37 @@ console.log('\nChecking every barrier is a north–south doorway…');
       `${id} at ${key}: has a jamb either side of it`,
     );
   }
+}
+
+// The strides that hang cage fronts, bleachers, arch posts and panes of glass
+// walk a lane counting tiles; they know nothing about the doorways and shafts
+// cut through the wall they are walking. Three of them landed a barred cage on
+// the alcove pockets the act's own hint tells the player to duck into.
+console.log('\nChecking no dressing is hung over ground the party walks…');
+{
+  const everyBarrierOpen = new Set(EVERY_BARRIER);
+  // The game's own predicate, not a copy of it: a gate that restated the rule
+  // would keep passing while the system handed the builder a broken one.
+  const dressing = buildBigTopDressing(bigTopWallAt(map));
+  const wallHung: ReadonlyArray<string> = ['bleacher', 'cage', 'mirrorGlass', 'archPost'];
+  const trespassing = dressing.filter(
+    (piece) =>
+      wallHung.includes(piece.kind) && passable(piece.tile.x, piece.tile.y, everyBarrierOpen),
+  );
+  check(
+    trespassing.length === 0,
+    `no wall-hung dressing stands on walkable ground (${trespassing
+      .map((piece) => `${piece.kind} at ${tileKey(piece.tile)}`)
+      .join(', ')})`,
+  );
+  check(
+    dressing.some((piece) => piece.kind === 'cage'),
+    `and the menagerie still has its cage fronts (${dressing.filter((piece) => piece.kind === 'cage').length})`,
+  );
+  check(
+    dressing.some((piece) => piece.kind === 'bleacher'),
+    'and the bleachers are still seated',
+  );
 }
 
 function passable(x: number, y: number, opened: ReadonlySet<string>): boolean {

@@ -83,6 +83,7 @@ import {
   BIGTOP_ENTRY_SUBTITLE,
   BURNOUT_FLASH_FRAMES,
   isInFinalChamber,
+  isMazeBarrierTile,
   MAZE_BELLS,
   MAZE_BLOCKS,
   MAZE_CORRIDORS,
@@ -375,7 +376,6 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
   /** The act the party is in. Only ever moves forward, and only through a curtain. */
   private currentSectionId: MazeSectionId = MAZE_SECTIONS[0].id;
 
-  /** Which curtain rooms have already been used, so a card plays exactly once. */
   private readonly dressing: ReadonlyArray<Dressing>;
   private readonly actBoards: ReadonlyArray<ActBoard>;
 
@@ -452,7 +452,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     this.interludeDialog = new QuestDialog(audio);
     this.hotBeamTiles = this.computeHotSpans();
     this.hotBeamKeys = new Set(this.hotBeamTiles.map((tile) => tileKeyOf(tile.x, tile.y)));
-    this.dressing = buildDressing();
+    this.dressing = buildBigTopDressing(bigTopWallAt(this.map));
     this.actBoards = buildActBoards();
     this.spawnFurniture();
     // Deliberately no `bossFightInitiated`: the tent is not scored as a boss
@@ -1805,9 +1805,9 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     if (section === 'finale') {
       const ctx = this.lastContext;
       if (ctx === null || !this.bothInChamber(ctx)) {
-        return { line: 'The chamber is open. Bring both of you to the pole.', done: true };
+        return { line: 'The chamber is open. Bring both of you to the pole.', done: false };
       }
-      return { line: 'Carl has the potion. Pour it over him.', done: true };
+      return { line: 'Carl has the potion. Pour it over him.', done: false };
     }
 
     if (section === 'mirrors') {
@@ -1942,14 +1942,40 @@ const BLOCK_THING_NAMES: Readonly<Record<MazeBlock['kind'], string>> = {
 };
 
 /**
+ * Where the tent may hang something on the wall, for a given map.
+ *
+ * Exported and shared with the maze's gate rather than restated there. The
+ * predicate is the whole rule — a gate that wrote its own copy of it would go
+ * on passing while the game supplied a broken one, which is the failure the
+ * check exists to catch.
+ *
+ * A barrier is wall until it is opened, and anything hung on one would survive
+ * the opening, so a barrier counts as floor from the start. Safe to evaluate
+ * once at construction: `openTile` is the only thing that ever makes a tile of
+ * this map walkable, and it only ever writes barriers.
+ */
+export function bigTopWallAt(map: GameMap): (tileX: number, tileY: number) => boolean {
+  return (tileX, tileY) => !map.isWalkable(tileX, tileY) && !isMazeBarrierTile(tileX, tileY);
+}
+
+/**
  * The trail, worked out once from the same tables the traps are authored in.
  *
  * A ring-mat runner down every route the party is meant to walk, footlights
  * along it, striped posts either side of each curtain, and the act's own
  * dressing on the walls that bound it. All of it is paint: nothing here changes
- * where anybody can stand.
+ * where anybody can stand — which is exactly why the wall-hung half of it has to
+ * be told where the walls are, and is asserted by the maze's own gate.
+ *
+ * Exported for that gate. A cage front, a bleacher or a pane of glass on ground
+ * the party has to walk is the same failure the opened-door art was written to
+ * fix: floor that reads as barred. The strides that place them run along a lane
+ * counting tiles, and a stride knows nothing about the doorways and connecting
+ * shafts cut through the wall it is walking.
  */
-function buildDressing(): ReadonlyArray<Dressing> {
+export function buildBigTopDressing(
+  isWall: (tileX: number, tileY: number) => boolean,
+): ReadonlyArray<Dressing> {
   const pieces: Dressing[] = [];
   const seenRunner = new Set<string>();
   let runnerIndex = 0;
@@ -1963,6 +1989,12 @@ function buildDressing(): ReadonlyArray<Dressing> {
       pieces.push({ tile, kind: 'footlight', owner, seed: runnerIndex });
     }
     runnerIndex++;
+  };
+
+  /** Wall-hung dressing, refused wherever the wall turns out to be a way through. */
+  const hangOnWall = (tile: MazeTile, kind: DressingKind, owner: MazeHalf, seed: number): void => {
+    if (!isWall(tile.x, tile.y)) return;
+    pieces.push({ tile, kind, owner, seed });
   };
 
   for (const corridor of MAZE_CORRIDORS) {
@@ -1984,14 +2016,15 @@ function buildDressing(): ReadonlyArray<Dressing> {
       [curtain.catBarrier, 'cat'],
     ] as const) {
       addRunner(barrier, owner);
-      pieces.push({ tile: { x: barrier.x - 1, y: barrier.y }, kind: 'archPost', owner, seed: 0 });
-      pieces.push({ tile: { x: barrier.x + 1, y: barrier.y }, kind: 'archPost', owner, seed: 1 });
+      hangOnWall({ x: barrier.x - 1, y: barrier.y }, 'archPost', owner, 0);
+      hangOnWall({ x: barrier.x + 1, y: barrier.y }, 'archPost', owner, 1);
     }
   }
 
-  // A cage front hung on a doorway is the doorway wearing the wall's own art,
-  // which is exactly how a menagerie gate the party had already opened went on
-  // reading as barred. Nothing decorative may stand on a barrier or beside one.
+  // A doorway needs a clear tile of wall either side of it to read as a doorway.
+  // The cage fronts are near-identical to a shut cage gate by design, and one
+  // hung against a jamb puts that art within a tile of the opening — which is
+  // half of how an opened gate went on reading as barred in the first place.
   const doorwayColumns = new Set(
     MAZE_BLOCKS.filter((block) => block.section === 'menagerie').flatMap((block) => [
       block.barrierTile.x - 1,
@@ -2004,16 +2037,11 @@ function buildDressing(): ReadonlyArray<Dressing> {
     for (let x = lane.x0; x <= lane.x1; x++) {
       const alongLane = x - lane.x0;
       if (alongLane % BLEACHER_STRIDE === 0) {
-        pieces.push({
-          tile: { x, y: MENAGERIE_BLEACHER_ROW },
-          kind: 'bleacher',
-          owner: lane.half,
-          seed: x,
-        });
+        hangOnWall({ x, y: MENAGERIE_BLEACHER_ROW }, 'bleacher', lane.half, x);
       }
       if (alongLane % CAGE_STRIDE !== 0 || doorwayColumns.has(x)) continue;
       for (const y of MENAGERIE_CAGE_ROWS) {
-        pieces.push({ tile: { x, y }, kind: 'cage', owner: lane.half, seed: x * y });
+        hangOnWall({ x, y }, 'cage', lane.half, x * y);
       }
     }
   }
@@ -2021,12 +2049,12 @@ function buildDressing(): ReadonlyArray<Dressing> {
   const dividerColumn = MAZE_STARS[0].tile.x;
   for (const column of MIRROR_HALL_GLASS_COLUMNS) {
     for (let y = MIRROR_HALL_ROWS.y0; y <= MIRROR_HALL_ROWS.y1; y += MIRROR_GLASS_STRIDE) {
-      pieces.push({
-        tile: { x: column, y },
-        kind: 'mirrorGlass',
-        owner: column < dividerColumn ? 'human' : 'cat',
-        seed: column * y,
-      });
+      hangOnWall(
+        { x: column, y },
+        'mirrorGlass',
+        column < dividerColumn ? 'human' : 'cat',
+        column * y,
+      );
     }
   }
 

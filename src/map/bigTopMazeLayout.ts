@@ -1057,6 +1057,27 @@ export const MAZE_BLOCKS: ReadonlyArray<MazeBlock> = [
   },
 ];
 
+/**
+ * Whether a tile is one the maze can open, and therefore never wall for good.
+ *
+ * Anything hung on one — a cage front, an arch post — would outlive the opening
+ * and go on saying "barred" over ground the party is meant to walk through.
+ */
+export function isMazeBarrierTile(tileX: number, tileY: number): boolean {
+  if (MAZE_BLOCKS.some((block) => block.barrierTile.x === tileX && block.barrierTile.y === tileY))
+    return true;
+  if (
+    MAZE_CURTAINS.some(
+      (curtain) =>
+        (curtain.humanBarrier.x === tileX && curtain.humanBarrier.y === tileY) ||
+        (curtain.catBarrier.x === tileX && curtain.catBarrier.y === tileY),
+    )
+  ) {
+    return true;
+  }
+  return MAZE_STARS.some((star) => star.opens.some((tile) => tile.x === tileX && tile.y === tileY));
+}
+
 // ── Act III: the hall of mirrors ──────────────────────────────────────────────
 
 export type BeamDirection = 'north' | 'south' | 'east' | 'west';
