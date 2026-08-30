@@ -34,6 +34,10 @@ const DEFAULT_SHADOW_BLUR_PX = 4;
 const DEFAULT_BORDER_WIDTH = 1.5;
 const MIN_LINE_HEIGHT = 14;
 const LINE_HEIGHT_MULTIPLIER = 1.4;
+/** Where the strike rule sits between a line's top and the next line's top. */
+const STRIKETHROUGH_CENTER_RATIO = 0.52;
+const STRIKETHROUGH_THICKNESS_RATIO = 0.09;
+const STRIKETHROUGH_MIN_THICKNESS = 1;
 
 /** All options accepted by drawText. Only x and y are required. */
 export interface TextOptions {
@@ -78,6 +82,13 @@ export interface TextOptions {
   shadowOffset?: { readonly x: number; readonly y: number };
   /** Drop shadow blur radius in px. Default: 4 */
   shadowBlurPx?: number;
+  /**
+   * Rule struck through the middle of each line — for advice a reader has
+   * already outgrown.
+   *   true           → rule in the text's own color
+   *   '#rrggbb'/rgba → custom rule color
+   */
+  strikethrough?: boolean | string;
   /** Horizontal alignment. Default: 'left' */
   align?: 'left' | 'center' | 'right';
   /**
@@ -251,6 +262,7 @@ export function drawText(
     shadow = false,
     shadowOffset = { x: DEFAULT_SHADOW_OFFSET_X, y: DEFAULT_SHADOW_OFFSET_Y },
     shadowBlurPx = DEFAULT_SHADOW_BLUR_PX,
+    strikethrough = false,
     align = 'left',
     width,
     padding = 0,
@@ -344,6 +356,31 @@ export function drawText(
 
     ctx.fillStyle = color;
     ctx.fillText(line, lineX, ly);
+
+    if (strikethrough && line !== '') {
+      const ruleWidth = ctx.measureText(line).width;
+      const ruleLeft =
+        ctx.textAlign === 'center'
+          ? lineX - ruleWidth / 2
+          : ctx.textAlign === 'right'
+            ? lineX - ruleWidth
+            : lineX;
+      const ruleThickness = Math.max(
+        STRIKETHROUGH_MIN_THICKNESS,
+        Math.round(size * STRIKETHROUGH_THICKNESS_RATIO),
+      );
+      const ruleY = ly + size * STRIKETHROUGH_CENTER_RATIO;
+
+      ctx.save();
+      // The rule is a solid mark of its own; a glow or drop shadow inherited
+      // from the fill pass would smear it into a band.
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.fillStyle = typeof strikethrough === 'string' ? strikethrough : color;
+      ctx.fillRect(ruleLeft, ruleY, ruleWidth, ruleThickness);
+      ctx.restore();
+    }
   }
 
   ctx.restore();

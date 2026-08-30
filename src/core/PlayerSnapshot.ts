@@ -297,6 +297,10 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
     const slot = snap.inventoryHotbar[i];
     p.inventory.actionBar.slots[i] = slot === null ? null : { ...slot };
   }
+  // Snapshots are copied slot-for-slot, so a save written before stacks were
+  // kept unified still carries a split one. Folding here catches every restore
+  // path at once rather than at each of the scenes that call this.
+  p.inventory.consolidateStacks();
   // Equipment first: the stat getters — and therefore max HP — read from it.
   p.inventory.equipment.replaceAll(snap.equippedEntries);
 

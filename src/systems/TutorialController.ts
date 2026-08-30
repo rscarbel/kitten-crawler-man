@@ -3,7 +3,6 @@ import { getSmushStats } from '../abilities/smush';
 import { TutorialGoblin } from '../creatures/TutorialGoblin';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import { ITEM_DEF } from '../core/ItemDefs';
 import {
   TUTORIAL_GATE_G1,
   TUTORIAL_GATE_G2,
@@ -84,6 +83,11 @@ const STATE_ORDER: ReadonlyArray<TutorialState> = [
 // ── Timing constants
 
 const TUTORIAL_SMUSH_LEVEL = 1;
+/** Just enough to teach the drink, on a cat who starts the tutorial at 1 HP. */
+const TUTORIAL_STARTING_POTIONS = 2;
+const TUTORIAL_POTION_HOTBAR_SLOT = 0;
+/** The stock each crawler leaves the tutorial with. */
+const TUTORIAL_REWARD_POTIONS = 10;
 const CAMERA_PAN_DURATION_FRAMES = 180;
 const MOVEMENT_DETECT_TILES = 2;
 const MOVEMENT_DETECT_PX = MOVEMENT_DETECT_TILES * TILE_SIZE;
@@ -692,9 +696,8 @@ export class TutorialController {
     // Cat starts at exactly 1 HP so the health potion tutorial step is meaningful
     cat.hp = 1;
 
-    cat.inventory.addItem(ITEM_DEF.health_potion.id, 2);
-
-    cat.inventory.swapInvToHotbar(0, 0);
+    cat.inventory.addItem('health_potion', TUTORIAL_STARTING_POTIONS);
+    cat.inventory.placeOnHotbar('health_potion', TUTORIAL_POTION_HOTBAR_SLOT);
   }
 
   dismissNearGoblinDialog(): void {
@@ -940,8 +943,8 @@ export class TutorialController {
 
   /** Called by DungeonScene after the cat's treasure-chest reward dialog is dismissed. */
   onCatRewardDialogDismissed(cat: CatPlayer): void {
-    cat.inventory.bag.slots[0] = { ...ITEM_DEF.magic_missile_tome, quantity: 1 };
-    cat.inventory.bag.slots[1] = { ...ITEM_DEF.health_potion, quantity: 10 };
+    cat.inventory.addItem('magic_missile_tome', 1);
+    cat.inventory.addItem('health_potion', TUTORIAL_REWARD_POTIONS);
     this._catMenuGuideStep = 'drag_missile';
     this.advance('CAT_OPENED_TREASURE_BOX');
   }
@@ -1164,12 +1167,14 @@ export class TutorialController {
 
   /**
    * Puts tutorial items into the human's BAG (not hotbar) so the player must
-   * manually move them to the action bar during the inventory guide.
+   * manually move them to the action bar during the inventory guide. The bag is
+   * empty at this point in the tutorial, so `addItem` lands them there — and it
+   * stacks rather than overwriting, which a direct slot write would not.
    */
   private giveHumanTutorialItems(human: HumanPlayer): void {
-    human.inventory.bag.slots[0] = { ...ITEM_DEF.smush_tome, quantity: 1 };
-    human.inventory.bag.slots[1] = { ...ITEM_DEF.health_potion, quantity: 10 };
-    human.inventory.bag.slots[2] = { ...ITEM_DEF.enchanted_bigboi_boxers, quantity: 1 };
+    human.inventory.addItem('smush_tome', 1);
+    human.inventory.addItem('health_potion', TUTORIAL_REWARD_POTIONS);
+    human.inventory.addItem('enchanted_bigboi_boxers', 1);
   }
 
   // ── Camera pan helpers ────────────────────────────────────────────────────

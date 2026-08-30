@@ -631,6 +631,8 @@ const DUNGEON_FLOOR_TWO = 2;
 const OVERWORLD_FLOOR_THREE = 3;
 const GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES = 12;
 const COMBAT_COOLDOWN_FRAMES = 300;
+/** The cat's reward for her first tutorial kill. */
+const FIRST_BLOOD_POTION_REWARD = 10;
 const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
 const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
@@ -1324,10 +1326,15 @@ export class DungeonScene extends GameplayScene {
         if (!levelDef.nextLevelId) return;
         const nextDef = getLevelDef(levelDef.nextLevelId);
 
-        difficultyStats.recordDescend(
-          partyLevel(),
-          recommendedPartyLevelFor(nextDef, activeDifficultyProfile()),
-        );
+        // A floor that suppresses its descent advice is not progression, so the
+        // gap it would record is not a difficulty signal: the tutorial's party
+        // cannot reach the level the next floor's mob bands imply, and booking
+        // that as underlevelled is the telemetry lying to itself.
+        const recommendedLevel =
+          levelDef.suppressDescentAdvice === true
+            ? null
+            : recommendedPartyLevelFor(nextDef, activeDifficultyProfile());
+        difficultyStats.recordDescend(partyLevel(), recommendedLevel);
 
         // Night Vision trains on floors survived while leading, not on kills — it
         // is a passive, so a whole floor is the only honest unit of use. Credited
@@ -2053,10 +2060,7 @@ export class DungeonScene extends GameplayScene {
       if (killer === this.cat && this.catAchievements.tryUnlock('first_blood')) {
         bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Cat' });
         if (this.tutorial !== null) {
-          const emptySlot = this.cat.inventory.bag.slots.findIndex((s) => s === null);
-          if (emptySlot >= 0) {
-            this.cat.inventory.bag.slots[emptySlot] = { ...ITEM_DEF.health_potion, quantity: 10 };
-          }
+          this.cat.inventory.addItem('health_potion', FIRST_BLOOD_POTION_REWARD);
         }
       }
 
@@ -4267,7 +4271,10 @@ export class DungeonScene extends GameplayScene {
       if (this.menus.tryOpenSpendScreen(mx, my, this._hudSkillBannerRect)) return;
     }
 
-    if (this.safeRoom.mordecaiDialogOpen) {
+    // His own box only: the conversation floats over a live floor, so a press
+    // anywhere else is the world's — and on a phone it is the move order the
+    // player needs to walk away from him with.
+    if (this.safeRoom.mordecaiDialogContains(mx, my)) {
       this.safeRoom.advanceMordecaiDialog();
       return;
     }
@@ -5911,7 +5918,10 @@ export class DungeonScene extends GameplayScene {
         this.stairwell.menuOpen ||
         this.gameOver ||
         this.menus.pauseMenu.isOpen ||
-        this.safeRoom.mordecaiDialogOpen ||
+        // Mordecai's dialog is deliberately absent: it is a floating claim the
+        // player is meant to walk out of, and walking is tap-to-move, so routing
+        // its touches straight to `handleClick` left a phone player unable to
+        // end the conversation at all. A tap on his box still advances it there.
         this.bopca.isDialogOpen ||
         this.spiderQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
@@ -6109,8 +6119,18 @@ export class DungeonScene extends GameplayScene {
               );
               this.bus.emit('dynamiteUsed', { player: 'Human' });
             } else {
+              // Captured before `handleClick`, which may turn the last page of
+              // Mordecai's dialog and close it: without this the same tap falls
+              // through to `triggerSpaceAction` and starts the conversation
+              // again, which is the close-then-reopen trap.
+              const mordecaiDialogWasOpen = this.safeRoom.mordecaiDialogOpen;
               this.handleClick(x, y, e.timeStamp);
-              if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
+              if (
+                !mordecaiDialogWasOpen &&
+                !this.menus.pauseMenu.isOpen &&
+                !this.safeRoom.isSleeping &&
+                !this.gameOver
+              ) {
                 const cam = this.camera();
                 const grateHandled = this.defendQuest.tryMobileTapOnGrate(
                   x,

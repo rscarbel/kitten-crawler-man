@@ -40,7 +40,7 @@ import {
 import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import type { AbilityManager } from '../core/AbilityManager';
 import { getSmushStats } from '../abilities/smush';
-import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/ItemDefs';
 import type { GameMap } from '../map/GameMap';
 import {
   drawSlingshotRocks,
@@ -143,7 +143,9 @@ export class HumanPlayer extends Player {
   private static readonly HUMAN_BASE_HP_OFFSET = 8;
   /** An ordinary human is not especially nimble. */
   private static readonly HUMAN_STARTING_DEXTERITY = 2;
-  private static readonly STARTING_POTIONS = 10;
+  /** His spell and his healing sit under the first two number keys. */
+  private static readonly TOME_HOTBAR_SLOT = 0;
+  private static readonly POTION_HOTBAR_SLOT = 1;
   private static readonly FACING_Y_THRESHOLD = 0.5;
   private static readonly MELEE_RANGE_MULTIPLIER = 1.95;
   private static readonly ACTIVE_SPHERE_RADIUS = 4;
@@ -196,14 +198,11 @@ export class HumanPlayer extends Player {
     this.inventory.addItem('enchanted_bigboi_boxers', 1);
     this.inventory.equipByItemId('enchanted_bigboi_boxers');
     this.syncHpToMaxHp();
-    // Pre-equip Smush tome in hotbar slot 0
-    this.inventory.actionBar.slots[0] = { ...ITEM_DEF.smush_tome, quantity: 1 };
-    // Move starting potions from bag to hotbar slot 1 for quick access
-    this.inventory.removeItems('health_potion', HumanPlayer.STARTING_POTIONS);
-    this.inventory.actionBar.slots[1] = {
-      ...ITEM_DEF.health_potion,
-      quantity: HumanPlayer.STARTING_POTIONS,
-    };
+    this.inventory.addItem('smush_tome', 1);
+    this.inventory.placeOnHotbar('smush_tome', HumanPlayer.TOME_HOTBAR_SLOT);
+    // The base player already granted the starting potions; moving that one
+    // stack keeps it a single stack, where re-granting it here would not.
+    this.inventory.placeOnHotbar('health_potion', HumanPlayer.POTION_HOTBAR_SLOT);
   }
 
   setAbilityManager(manager: AbilityManager): void {

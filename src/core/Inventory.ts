@@ -57,6 +57,83 @@ export class Inventory {
     }
   }
 
+  /**
+   * Move the held stack of `id` onto `hotbarIdx`, wherever it currently sits.
+   * Grants must still go through {@link addItem} — this only relocates what is
+   * already held, so a stackable item can never be split into a second stack by
+   * a caller that wants it on the bar.
+   *
+   * @returns false when the item is not held, or the bar refused it.
+   */
+  placeOnHotbar(id: ItemId, hotbarIdx: number): boolean {
+    if (hotbarIdx === QUEST_SLOT_IDX) return false;
+    if (this.actionBar.slots[hotbarIdx]?.id === id) return true;
+
+    const barIdx = this.actionBar.slots.findIndex((s) => s?.id === id);
+    if (barIdx !== -1) {
+      this.swapHotbar(barIdx, hotbarIdx);
+    } else {
+      const bagIdx = this.bag.slots.findIndex((s) => s?.id === id);
+      if (bagIdx === -1) return false;
+      this.swapInvToHotbar(bagIdx, hotbarIdx);
+    }
+    return this.actionBar.slots[hotbarIdx]?.id === id;
+  }
+
+  /**
+   * Fold every duplicate stack of a stackable item into the first slot holding
+   * it, so an id occupies exactly one slot across the hotbar and the bag.
+   *
+   * Saves written before stacks were kept unique still carry split stacks, and
+   * the player has no manual way to rejoin them, so a restore has to repair
+   * them on the way in.
+   */
+  consolidateStacks(): void {
+    const firstHome = new Map<ItemId, { slots: (InventoryItem | null)[]; index: number }>();
+    for (const slots of [this.actionBar.slots, this.bag.slots]) {
+      for (let i = 0; i < slots.length; i++) {
+        const item = slots[i];
+        if (!item || !ITEM_DEF[item.id].stackable) continue;
+        // Quest items are stackable but live in the reserved slot that
+        // addToQuestSlot owns; folding them by position could empty it.
+        if (ITEM_DEF[item.id].isQuestItem) continue;
+
+        const home = firstHome.get(item.id);
+        if (home === undefined) {
+          firstHome.set(item.id, { slots, index: i });
+          continue;
+        }
+        const kept = home.slots[home.index];
+        if (!kept) continue;
+        home.slots[home.index] = { ...kept, quantity: kept.quantity + item.quantity };
+        slots[i] = null;
+      }
+    }
+  }
+
+  /**
+   * Pour the source slot into the destination when both hold the same stackable
+   * item, leaving the source empty. Returns false when the two cannot combine,
+   * in which case the caller should fall back to swapping them.
+   */
+  private mergeStacks(
+    from: (InventoryItem | null)[],
+    fromIdx: number,
+    to: (InventoryItem | null)[],
+    toIdx: number,
+  ): boolean {
+    // A slot dropped back onto itself would double its own count and then null
+    // the slot out, so the identity case has to be refused before anything else.
+    if (from === to && fromIdx === toIdx) return false;
+    const source = from[fromIdx];
+    const dest = to[toIdx];
+    if (!source || !dest) return false;
+    if (source.id !== dest.id || !ITEM_DEF[source.id].stackable) return false;
+    to[toIdx] = { ...dest, quantity: dest.quantity + source.quantity };
+    from[fromIdx] = null;
+    return true;
+  }
+
   /** Clear the reserved quest slot (call when quest ends). */
   clearQuestSlot(): void {
     this.actionBar.slots[QUEST_SLOT_IDX] = null;
@@ -102,12 +179,14 @@ export class Inventory {
   // ── Slot management ──
 
   swapSlots(a: number, b: number): void {
+    if (this.mergeStacks(this.bag.slots, a, this.bag.slots, b)) return;
     this.bag.swap(a, b);
   }
 
   swapHotbar(a: number, b: number): void {
     // Block swapping into or out of the quest slot
     if (a === QUEST_SLOT_IDX || b === QUEST_SLOT_IDX) return;
+    if (this.mergeStacks(this.actionBar.slots, a, this.actionBar.slots, b)) return;
     this.actionBar.swap(a, b);
   }
 
@@ -116,6 +195,7 @@ export class Inventory {
     if (hotbarIdx === QUEST_SLOT_IDX) return;
     const inv = this.bag.slots[slotIdx];
     if (inv && !itemCanHotlist(inv.id)) return;
+    if (this.mergeStacks(this.bag.slots, slotIdx, this.actionBar.slots, hotbarIdx)) return;
     const hot = this.actionBar.slots[hotbarIdx];
     this.actionBar.slots[hotbarIdx] = inv;
     this.bag.slots[slotIdx] = hot;
@@ -130,6 +210,7 @@ export class Inventory {
     // occupied by another non-hotlistable item swapping back in as a side
     // effect. Only the deliberate bag→hotbar direction (swapInvToHotbar)
     // refuses.
+    if (this.mergeStacks(this.actionBar.slots, hotbarIdx, this.bag.slots, slotIdx)) return;
     const hot = this.actionBar.slots[hotbarIdx];
     const inv = this.bag.slots[slotIdx];
     this.bag.slots[slotIdx] = hot;
@@ -139,6 +220,11 @@ export class Inventory {
   moveHotbarToFirstEmptySlot(hotbarIdx: number): boolean {
     const item = this.actionBar.slots[hotbarIdx];
     if (!item) return false;
+    // A bag stack of the same thing is a better home than an empty slot: two
+    // stacks of one id is a state the player cannot undo by hand.
+    const sameStackIdx = this.bag.slots.findIndex((s) => s?.id === item.id);
+    if (this.mergeStacks(this.actionBar.slots, hotbarIdx, this.bag.slots, sameStackIdx))
+      return true;
     const emptyIdx = this.bag.slots.indexOf(null);
     if (emptyIdx === -1) return false;
     this.bag.slots[emptyIdx] = item;

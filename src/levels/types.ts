@@ -269,6 +269,16 @@ export interface LevelDef {
    */
   recommendedLevelOverride?: number;
   /**
+   * Suppresses the stairwell menu's "Recommended level" advice entirely — no
+   * number, and no underlevelled warning.
+   *
+   * For a floor that exists to teach rather than to gate: the tutorial's party
+   * cannot reach the level its successor's mob bands imply, so advertising that
+   * number could only ever tell a new crawler they are behind before they have
+   * had a chance to be anything else.
+   */
+  suppressDescentAdvice?: true;
+  /**
    * Scales the stairwell count so a floor can stay room-count-driven while still
    * being easier or harder to find a way down on (default 1). Applied after
    * `numStairwells`, so a floor may set either or both.

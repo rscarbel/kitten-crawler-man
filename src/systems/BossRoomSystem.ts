@@ -345,6 +345,65 @@ const BOSS_LABEL_BASELINE_FRACTION = 0.65;
 const BOSS_LABEL_SIZE = 10;
 const BOSS_LABEL_ASCENT_OFFSET = 8;
 
+/** Alarm red the bar wears while the boss is enraged. */
+const BOSS_ENRAGED_COLOR = '#ef4444';
+/** Slate grey: the corpse is no longer a threat, so it stops shouting in red. */
+const BOSS_DECEASED_COLOR = '#94a3b8';
+const BOSS_MIDLINE_LIVE_STROKE = 'rgba(239,68,68,0.6)';
+const BOSS_MIDLINE_DECEASED_STROKE = 'rgba(148,163,184,0.6)';
+const BOSS_DEFEATED_TEXT = 'DEFEATED';
+const BOSS_DEFEATED_TEXT_COLOR = '#4ade80';
+
+interface BossBarStyle {
+  readonly nameText: string;
+  /** Name text and health-fill colour. */
+  readonly color: string;
+  /** Container and bar outlines, which stay the boss's own colour while it lives. */
+  readonly chromeColor: string;
+  readonly midlineStroke: string;
+}
+
+/**
+ * The single place the boss bar decides what a boss is called and what colour
+ * it reads as, so the desktop and mobile bars cannot drift apart.
+ *
+ * Deceased outranks enraged because `Mob.isEnraged` is a latch that is never
+ * cleared on death — a boss killed mid-rage would otherwise keep screaming from
+ * the top of the screen forever.
+ */
+function bossBarStyle(
+  meta: { displayName: string; color: string },
+  isEnraged: boolean,
+  isDeceased: boolean,
+  flankEnragedName: boolean,
+): BossBarStyle {
+  if (isDeceased) {
+    return {
+      nameText: `${meta.displayName} [DECEASED]`,
+      color: BOSS_DECEASED_COLOR,
+      chromeColor: BOSS_DECEASED_COLOR,
+      midlineStroke: BOSS_MIDLINE_DECEASED_STROKE,
+    };
+  }
+  if (isEnraged) {
+    const enragedName = flankEnragedName
+      ? `⚠ ${meta.displayName} [ENRAGED] ⚠`
+      : `${meta.displayName} [ENRAGED]`;
+    return {
+      nameText: enragedName,
+      color: BOSS_ENRAGED_COLOR,
+      chromeColor: meta.color,
+      midlineStroke: BOSS_MIDLINE_LIVE_STROKE,
+    };
+  }
+  return {
+    nameText: meta.displayName,
+    color: meta.color,
+    chromeColor: meta.color,
+    midlineStroke: BOSS_MIDLINE_LIVE_STROKE,
+  };
+}
+
 // Boss HUD layout constants (mobile)
 const MOBILE_BOX_MARGIN = 8;
 const MOBILE_BOX_GAP = 8;
@@ -1824,6 +1883,12 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     if (!boss) return null;
 
     const isEnraged = boss.isEnraged ?? false;
+    // The mobs array keeps corpses, so this find still returns a dead boss. The
+    // room flag covers the frames between the killing blow and the defeat being
+    // recorded, and `isAlive` covers a boss like the Ball of Swine that stays
+    // alive through a post-death burst phase.
+    const isDeceased = !boss.isAlive || relevantState.defeated;
+    const barStyle = bossBarStyle(meta, isEnraged, isDeceased, true);
     const hpFrac = Math.max(0, boss.hp / boss.maxHp);
 
     if (mobileTopY !== undefined) {
@@ -1833,6 +1898,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         relevantState,
         meta,
         isEnraged,
+        isDeceased,
         hpFrac,
         mobileTopY,
       );
@@ -1858,7 +1924,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       barW + BOSS_CONTAINER_PAD_X * 2,
       containerH,
     );
-    ctx.strokeStyle = meta.color;
+    ctx.strokeStyle = barStyle.chromeColor;
     ctx.lineWidth = 1;
     ctx.strokeRect(
       barX - BOSS_CONTAINER_PAD_X,
@@ -1867,30 +1933,29 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       containerH,
     );
 
-    const nameText = isEnraged ? `⚠ ${meta.displayName} [ENRAGED] ⚠` : meta.displayName;
-    drawText(ctx, nameText, {
+    drawText(ctx, barStyle.nameText, {
       x: viewportWidth() / 2,
       y: barY - BOSS_NAME_Y_OFFSET,
       size: 11,
       bold: true,
-      color: isEnraged ? '#ef4444' : meta.color,
+      color: barStyle.color,
       align: 'center',
     });
 
     ctx.fillStyle = '#0a0a12';
     ctx.fillRect(barX, barY, barW, barH);
 
-    ctx.fillStyle = isEnraged ? '#ef4444' : meta.color;
+    ctx.fillStyle = barStyle.color;
     ctx.fillRect(barX, barY, barW * hpFrac, barH);
 
-    ctx.strokeStyle = 'rgba(239,68,68,0.6)';
+    ctx.strokeStyle = barStyle.midlineStroke;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(barX + barW * BOSS_MIDLINE_FRACTION, barY);
     ctx.lineTo(barX + barW * BOSS_MIDLINE_FRACTION, barY + barH);
     ctx.stroke();
 
-    ctx.strokeStyle = meta.color;
+    ctx.strokeStyle = barStyle.chromeColor;
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barW, barH);
 
@@ -1905,12 +1970,12 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     });
 
     if (relevantState.defeated) {
-      drawText(ctx, 'DEFEATED', {
+      drawText(ctx, BOSS_DEFEATED_TEXT, {
         x: viewportWidth() / 2,
         y: barY + barH + BOSS_DEFEATED_TEXT_Y,
         size: 12,
         bold: true,
-        color: '#4ade80',
+        color: BOSS_DEFEATED_TEXT_COLOR,
         align: 'center',
       });
     }
@@ -1938,9 +2003,11 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     state: BossRoomState,
     meta: { displayName: string; color: string },
     isEnraged: boolean,
+    isDeceased: boolean,
     hpFrac: number,
     topY: number,
   ): number {
+    const barStyle = bossBarStyle(meta, isEnraged, isDeceased, false);
     const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
     const BOX_X = MOBILE_BOX_MARGIN;
     // Leave MOBILE_BOX_GAP px between the box's right edge and the minimap's left edge.
@@ -1960,39 +2027,36 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
     ctx.fillRect(BOX_X, topY, boxW, boxH);
-    ctx.strokeStyle = meta.color;
+    ctx.strokeStyle = barStyle.chromeColor;
     ctx.lineWidth = 1;
     ctx.strokeRect(BOX_X, topY, boxW, boxH);
     ctx.restore();
 
-    // Boss name — no flanking ⚠ symbols; enraged state shown via red colour
     const nameY = topY + PAD_V;
-    const nameText = isEnraged ? `${meta.displayName} [ENRAGED]` : meta.displayName;
-    drawText(ctx, nameText, {
+    drawText(ctx, barStyle.nameText, {
       x: innerX + innerW / 2,
       y: nameY,
       size: MOBILE_NAME_SIZE,
       bold: true,
-      color: isEnraged ? '#ef4444' : meta.color,
+      color: barStyle.color,
       align: 'center',
     });
 
-    // HP bar
     const barY = nameY + NAME_H + GAP;
     ctx.save();
     ctx.fillStyle = '#0a0a12';
     ctx.fillRect(innerX, barY, innerW, BAR_H);
-    ctx.fillStyle = isEnraged ? '#ef4444' : meta.color;
+    ctx.fillStyle = barStyle.color;
     ctx.fillRect(innerX, barY, innerW * hpFrac, BAR_H);
 
-    ctx.strokeStyle = 'rgba(239,68,68,0.6)';
+    ctx.strokeStyle = barStyle.midlineStroke;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(innerX + innerW * BOSS_MIDLINE_FRACTION, barY);
     ctx.lineTo(innerX + innerW * BOSS_MIDLINE_FRACTION, barY + BAR_H);
     ctx.stroke();
 
-    ctx.strokeStyle = meta.color;
+    ctx.strokeStyle = barStyle.chromeColor;
     ctx.lineWidth = 1;
     ctx.strokeRect(innerX, barY, innerW, BAR_H);
     ctx.restore();
@@ -2005,16 +2069,15 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       align: 'center',
     });
 
-    // Sub-text (DEFEATED or entry countdown)
     if (hasSubText) {
       const subY = barY + BAR_H + GAP;
       if (state.defeated) {
-        drawText(ctx, 'DEFEATED', {
+        drawText(ctx, BOSS_DEFEATED_TEXT, {
           x: BOX_X + boxW / 2,
           y: subY,
           size: MOBILE_SUBTEXT_SIZE,
           bold: true,
-          color: '#4ade80',
+          color: BOSS_DEFEATED_TEXT_COLOR,
           align: 'center',
         });
       } else if (state.locked && state.entryWindowTimer > 0) {

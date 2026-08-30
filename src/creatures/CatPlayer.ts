@@ -28,7 +28,6 @@ import { normalize } from '../utils';
 import type { AbilityManager } from '../core/AbilityManager';
 import { getMagicMissileStats } from '../abilities/magicMissile';
 import { TILE_SIZE } from '../core/constants';
-import { ITEM_DEF } from '../core/ItemDefs';
 import type { CrawlerKind } from '../core/SkillManager';
 import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/PlayerSnapshot';
 
@@ -88,7 +87,9 @@ export class CatPlayer extends Player {
   static readonly CAT_BASE_CONSTITUTION = 2;
   /** The pet biscuit's head start: she is very hard to hit. */
   private static readonly CAT_STARTING_DEXTERITY = 8;
-  private static readonly STARTING_POTIONS = 10;
+  /** Her spell and her healing sit under the first two number keys. */
+  private static readonly TOME_HOTBAR_SLOT = 0;
+  private static readonly POTION_HOTBAR_SLOT = 1;
   private static readonly MELEE_RANGE_MULTIPLIER = 1.6;
   /**
    * How long the companion AI waits between claw swipes.
@@ -170,14 +171,11 @@ export class CatPlayer extends Player {
     // her standing and walking rows are queued now rather than paid for as
     // cache misses on the scene's first frame.
     prewarmCatSprite();
-    // Initialize Magic Missile tome in hotbar slot 0
-    this.inventory.actionBar.slots[0] = { ...ITEM_DEF.magic_missile_tome, quantity: 1 };
-    // Move starting potions from bag to hotbar slot 1 for quick access
-    this.inventory.removeItems('health_potion', CatPlayer.STARTING_POTIONS);
-    this.inventory.actionBar.slots[1] = {
-      ...ITEM_DEF.health_potion,
-      quantity: CatPlayer.STARTING_POTIONS,
-    };
+    this.inventory.addItem('magic_missile_tome', 1);
+    this.inventory.placeOnHotbar('magic_missile_tome', CatPlayer.TOME_HOTBAR_SLOT);
+    // The base player already granted the starting potions; moving that one
+    // stack keeps it a single stack, where re-granting it here would not.
+    this.inventory.placeOnHotbar('health_potion', CatPlayer.POTION_HOTBAR_SLOT);
   }
 
   getMissileDamage(): number {

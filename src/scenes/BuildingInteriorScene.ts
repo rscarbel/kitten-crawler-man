@@ -959,13 +959,14 @@ export class BuildingInteriorScene extends GameplayScene {
       {
         isOpen: this.safeRoom?.mordecaiDialogOpen === true,
         space: { kind: 'advance', advance: () => this.safeRoom?.advanceMordecaiDialog() },
-        // Locked, unlike the dungeon's copy of this claim: out there the world
-        // keeps running under his box, and in here `update` stops dead on it.
-        // An unlocked keyboard over a frozen room drinks potions nothing is
-        // ticking down.
-        locksKeyboard: true,
-        haltsWorld: true,
-        // Advance-anywhere: one speaker line, no buttons to reach.
+        // Floating, matching the dungeon's copy of this claim, because the
+        // conversation ends *because* the player walked out of the safe room. A
+        // halting claim froze the room under his box, so the distance that is
+        // supposed to close it could never change and the box outlived the
+        // conversation forever.
+        locksKeyboard: false,
+        haltsWorld: false,
+        // Advance-anywhere for the keyboard: one speaker line, no buttons.
         focusContext: null,
       },
       // A timed fade with no buttons; the sleep ends itself.
@@ -1653,6 +1654,11 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     this.audio?.play('menu_change_follower');
+    // The new body is standing somewhere else, so the walk-away check would read
+    // a distance the player never walked. Ending the conversation outright is
+    // what the dungeon does, and the mobile Switch button reaches this same
+    // method, so both roads agree.
+    if (this.safeRoom !== null) this.safeRoom.mordecaiDialogOpen = false;
     const wasHumanActive = this.human.isActive;
     this.pm.switchActive();
     // The crawler who just stopped being driven is now standing somewhere new,
@@ -1776,17 +1782,13 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.followerMenu.isOpen) return;
     if (this.exitMenuOpen) return;
     if (this.towerStairs?.menuOpen) return;
-    // The three dialogs below advance from the claim registry, on the key event
+    // The dialogs below advance from the claim registry, on the key event
     // rather than from the held-key set: a polled advance on top of the handler's
     // would turn one press into two pages.
     if (this.bopca?.isDialogOpen === true) {
       // The cook timer has to keep running through the conversation — the dish
       // is meant to land while the player is still reading the order line.
       this.bopca.tick(this.human, this.cat, this.active(), this.inactive());
-      return;
-    }
-    if (this.safeRoom?.mordecaiDialogOpen) {
-      this.safeRoom.tickDialog();
       return;
     }
     if (this.shop?.shopOpen === true) {
@@ -1848,6 +1850,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // Deliberately does not return: the player has to be able to walk while the
     // box is up, because walking off is what dismisses it.
     this.dismissCitizenDialogIfWalkedAway();
+    // Mordecai's conversation is the same shape, and ticked here for the same
+    // reason: the frame that moves the player is the frame that measures how far
+    // they have walked from him.
+    const talkingSafeRoom = this.safeRoom?.mordecaiDialogOpen === true ? this.safeRoom : null;
+    talkingSafeRoom?.tickDialog(this.active());
     if (this.resolvePendingServiceTalk()) return;
     const conversationOpen = this.citizenDialog?.isOpen === true;
     if (conversationOpen) this.citizenDialog.update();
@@ -1889,9 +1896,9 @@ export class BuildingInteriorScene extends GameplayScene {
       applyMovement(player, move, this.map, 'sole');
     }
 
-    // Held back mid-conversation to match the street: swapping characters would
-    // hand the walk-away check a body standing several tiles back, closing the
-    // box on a player who never moved.
+    // A citizen conversation blocks the swap outright rather than surviving it:
+    // its walk-away check has no way to be told the body changed, unlike
+    // Mordecai's, which trySwitchActive closes on the way through.
     if (
       !conversationOpen &&
       !scriptOwnsParty &&
@@ -2297,6 +2304,13 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (this.bopca?.handleClick(mx, my) === true) {
+      return;
+    }
+    // His own box only, for the reason the citizen dialog below gives: his
+    // conversation floats over a live room, and on a phone a press on open
+    // ground is the move order the player leaves the room with.
+    if (this.safeRoom?.mordecaiDialogContains(mx, my) === true) {
+      this.safeRoom.advanceMordecaiDialog();
       return;
     }
     // Only the dialog's own box is consumed: a conversation does not halt the
@@ -3541,7 +3555,9 @@ export class BuildingInteriorScene extends GameplayScene {
           // Capture before handleClick, which may advance/close an open dialog —
           // guarding the talk trigger below against reopening a fresh one in the
           // same tap (the close-then-reopen trap).
+          const mordecaiWasOpen = this.safeRoom?.mordecaiDialogOpen === true;
           const dialogWasOpen =
+            mordecaiWasOpen ||
             this.citizenDialog?.isOpen === true ||
             this.servicePanel?.isOpen === true ||
             this.readingPanel?.isOpen === true ||
@@ -3553,7 +3569,7 @@ export class BuildingInteriorScene extends GameplayScene {
           const overlayClaimedTap = this.isOverlayBlockingPointer;
           this.handleClick(x, y);
           if (!overlayClaimedTap) {
-            this.triggerTapInteractions(dialogWasOpen, bopcaWasOpen, x, y);
+            this.triggerTapInteractions(dialogWasOpen, bopcaWasOpen, mordecaiWasOpen, x, y);
           }
         }
         this.mobileHUD.clearMovement();
@@ -3565,10 +3581,14 @@ export class BuildingInteriorScene extends GameplayScene {
    * The space-equivalent actions a world tap performs, once `handleClick` has
    * had its chance at it.
    *
-   * @param dialogWasOpen Whether a citizen dialog or service panel was already
-   *   up before `handleClick` ran — that call would have advanced or closed it,
-   *   and reopening one in the same tap is the close-then-reopen trap.
+   * @param dialogWasOpen Whether a citizen dialog, service panel or Mordecai's
+   *   own box was already up before `handleClick` ran — that call would have
+   *   advanced or closed it, and reopening one in the same tap is the
+   *   close-then-reopen trap.
    * @param bopcaWasOpen The same guard for the Bopca's own conversation.
+   * @param mordecaiWasOpen The same guard for Mordecai's, which needs its own
+   *   flag because the safe room's sleep and talk triggers below run whether or
+   *   not any other dialog was up.
    * @param tapScreenX Where the finger landed, so a swing that reaches nothing
    *   to interact with is still aimed the way the player pointed it.
    * @param tapScreenY See `tapScreenX`.
@@ -3576,6 +3596,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private triggerTapInteractions(
     dialogWasOpen: boolean,
     bopcaWasOpen: boolean,
+    mordecaiWasOpen: boolean,
     tapScreenX: number,
     tapScreenY: number,
   ): void {
@@ -3590,7 +3611,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.bopca !== null && !bopcaWasOpen) {
       this.bopca.tryInteract(this.active());
     }
-    if (this.safeRoom) {
+    if (this.safeRoom !== null && !mordecaiWasOpen) {
       const player = this.active();
       if (this.safeRoom.isNearBed(player)) {
         this.safeRoom.startSleep();

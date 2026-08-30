@@ -7,6 +7,7 @@ import { recommendedPartyLevelFor } from '../levels/spawner';
 import { activeDifficultyProfile } from '../core/difficultyProfiles';
 import type { DifficultyProfile } from '../core/difficultyProfiles';
 import { drawText, measureTextBox, TEXT_PRESETS } from '../ui/TextBox';
+import type { TextOptions } from '../ui/TextBox';
 import { drawModal, drawOverlay, BOX_PRESETS } from '../ui/Box';
 import { addButton, beginMenuFocus, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import type { ButtonRect } from '../ui/pause/types';
@@ -27,9 +28,21 @@ const STAIRWELL_ICON_Y_ADJUST = 0.8;
 const STAIRWELL_OFFSCREEN_MARGIN = 2; // measured in stairwell-widths
 
 // Stairwell draft (ambient dust motes that drift toward an open stairwell)
-const STAIRWELL_DRAFT_RADIUS_TILES = 14;
+const STAIRWELL_DRAFT_RADIUS_TILES = 42;
 const STAIRWELL_DRAFT_RADIUS_PX = STAIRWELL_DRAFT_RADIUS_TILES * TILE_SIZE;
-const STAIRWELL_DRAFT_MOTES_MAX = 24;
+/**
+ * Motes per tile of draft radius.
+ *
+ * A pool is a stream: motes recycle at the outer edge and travel inward at a
+ * constant speed, so in the steady state they spread evenly *along the radius*
+ * rather than over the area. Density therefore scales with radius, not with
+ * radius squared — holding this ratio fixed is what keeps the near-field look
+ * of the draft unchanged as the field grows.
+ */
+const STAIRWELL_DRAFT_MOTES_PER_RADIUS_TILE = 1.75;
+const STAIRWELL_DRAFT_MOTES_MAX = Math.round(
+  STAIRWELL_DRAFT_RADIUS_TILES * STAIRWELL_DRAFT_MOTES_PER_RADIUS_TILE,
+);
 /** Well under the player's move speed so the draft reads as ambient, not as something to chase. */
 const STAIRWELL_DRAFT_MOTE_SPEED = 0.4;
 const STAIRWELL_DRAFT_MOTE_ALPHA_MAX = 0.5;
@@ -44,6 +57,57 @@ const STAIRWELL_DRAFT_FADE_ZONE_PX = TILE_SIZE * STAIRWELL_DRAFT_FADE_ZONE_TILES
 const STAIRWELL_DRAFT_MOTE_COLOR_RGB = '216, 200, 235'; // pale violet dust, echoing the stairwell glow
 /** Render's own wider cull margin, since motes live well outside the sprite's own footprint. */
 const STAIRWELL_DRAFT_CULL_MARGIN_PX = STAIRWELL_DRAFT_RADIUS_PX;
+const ALPHA_CHANNEL_STEPS = 256;
+/** Below one step of an 8-bit alpha channel a mote cannot resolve to a pixel at all. */
+const STAIRWELL_DRAFT_MIN_VISIBLE_ALPHA = 1 / (ALPHA_CHANNEL_STEPS - 1);
+/** Inside this range of a stairwell the draft is at full strength, as it always was. */
+const STAIRWELL_DRAFT_FULL_STRENGTH_RADIUS_TILES = 14;
+const STAIRWELL_DRAFT_FULL_STRENGTH_RADIUS_PX =
+  STAIRWELL_DRAFT_FULL_STRENGTH_RADIUS_TILES * TILE_SIZE;
+/**
+ * What the draft's alpha falls to at the very edge of its range. Small enough
+ * to read as a hint of movement at the corner of the eye rather than as dust,
+ * but deliberately not zero: the fade has to bottom out at something visible,
+ * or the extra range buys nothing.
+ */
+const STAIRWELL_DRAFT_FAR_STRENGTH_FACTOR = 0.12;
+/**
+ * How often the "which stairwells does this player's draft cover, and how
+ * strongly" decision is re-taken (1 s at the fixed 60 fps timestep). The answer
+ * turns over on the scale of a player walking tens of tiles, so re-deriving it
+ * every frame — over every stairwell on the floor — is work spent to learn the
+ * same thing sixty times. Motes still step every frame; only the selection is
+ * throttled.
+ */
+const STAIRWELL_DRAFT_SELECTION_INTERVAL_FRAMES = 60;
+/**
+ * How much of the gap to a pool's newly selected strength is closed each frame,
+ * as an exponential approach.
+ *
+ * The selection is throttled, but its *result* must not be: strength multiplies
+ * every mote in a pool at once, so applying a new value the frame it is chosen
+ * makes the whole field brighten or dim in one step, once a second — a pulse,
+ * and precisely the popping the wide draft radius exists to avoid.
+ *
+ * The time constant has to sit comfortably inside
+ * `STAIRWELL_DRAFT_SELECTION_INTERVAL_FRAMES`: a third of a second means a
+ * step has visibly finished before the next decision arrives, so the draft
+ * never lags far enough behind the player to be wrong about where they are.
+ */
+const STAIRWELL_DRAFT_STRENGTH_SETTLE_FRAMES = 20;
+const STAIRWELL_DRAFT_STRENGTH_APPROACH_PER_FRAME = 1 / STAIRWELL_DRAFT_STRENGTH_SETTLE_FRAMES;
+/**
+ * A single-frame move further than this is not a walk. Nothing in the game
+ * covers two tiles in a frame — the fastest follower speed is a few pixels, and
+ * even a separation shove tops out around a tile — so a jump this large means
+ * the player was placed somewhere new: fast travel, a respawn, a checkpoint
+ * restore, a scene hand-off. The throttled pool selection still describes where
+ * they *were*, and has to be re-taken now rather than up to a second later.
+ */
+const STAIRWELL_DRAFT_TELEPORT_JUMP_TILES = 2;
+const STAIRWELL_DRAFT_TELEPORT_JUMP_PX = STAIRWELL_DRAFT_TELEPORT_JUMP_TILES * TILE_SIZE;
+const STAIRWELL_DRAFT_TELEPORT_JUMP_PX_SQ =
+  STAIRWELL_DRAFT_TELEPORT_JUMP_PX * STAIRWELL_DRAFT_TELEPORT_JUMP_PX;
 
 // Wayfinder fail-safe (a last-resort bearing for a crawler the breadcrumbs failed)
 /** Frames of fruitless hunting after the last gauntlet boss before the pulse starts (90 s at 60 fps). */
@@ -55,6 +119,29 @@ export const WAYFINDER_PULSE_VISIBLE_FRAMES = 90;
 /** A nudge, not a route: the bearing is rounded to N/NE/E/SE/S/SW/W/NW. */
 const WAYFINDER_COMPASS_SECTORS = 8;
 const WAYFINDER_COMPASS_SECTOR_RADIANS = (Math.PI * 2) / WAYFINDER_COMPASS_SECTORS;
+
+const STAIRWELL_FOOTPRINT_HALF_PX = (TILE_SIZE * STAIRWELL_SCALE) / 2;
+
+function footprintCenterX(tileX: number): number {
+  return tileX * TILE_SIZE + STAIRWELL_FOOTPRINT_HALF_PX;
+}
+
+function footprintCenterY(tileY: number): number {
+  return tileY * TILE_SIZE + STAIRWELL_FOOTPRINT_HALF_PX;
+}
+
+/**
+ * How strongly a stairwell's draft draws for a player this far from it: full
+ * strength close in, then a smooth ramp down to a faint but non-zero floor at
+ * the edge of the draft's range. Smooth rather than stepped so a draft never
+ * announces itself by popping on — the far edge is meant to be something the
+ * player notices before they know why.
+ */
+function draftStrengthAtPlayerDistance(distPx: number): number {
+  const fadeSpanPx = STAIRWELL_DRAFT_RADIUS_PX - STAIRWELL_DRAFT_FULL_STRENGTH_RADIUS_PX;
+  const fadeProgress = clamp((distPx - STAIRWELL_DRAFT_FULL_STRENGTH_RADIUS_PX) / fadeSpanPx, 0, 1);
+  return 1 - fadeProgress * (1 - STAIRWELL_DRAFT_FAR_STRENGTH_FACTOR);
+}
 
 /**
  * The centre bearing of the compass sector an angle falls in.
@@ -107,6 +194,16 @@ const STAIRWELL_MENU_PROMPT_TEXT_COLOR = '#94a3b8';
 const STAIRWELL_MENU_HINT_TEXT_COLOR = '#64748b';
 /** The consequence-line amber every modal in the game warns in. */
 const STAIRWELL_MENU_WARNING_COLOR = '#fbbf24';
+/** Marks the recommended-level line as advice the party has not met yet. */
+const STAIRWELL_MENU_RECOMMENDED_WARNING_PREFIX = '⚠ ';
+/**
+ * A hint of a halo behind the red, so the line catches the eye without the
+ * bloom a full-strength glow puts on a 12px string.
+ */
+const STAIRWELL_MENU_RECOMMENDED_GLOW_BLUR = 4;
+const STAIRWELL_MENU_RECOMMENDED_GLOW_COLOR = '#ffffff';
+/** The advice is not merely met but comfortably cleared. */
+const STAIRWELL_MENU_RECOMMENDED_ABOVE_COLOR = '#4ade80';
 
 /** A point-in-time copy of the descend prompt's state, and of the Wayfinder's. */
 export interface StairwellCheckpoint {
@@ -132,12 +229,56 @@ interface DraftPool {
   centerX: number;
   centerY: number;
   motes: DraftMote[];
+  /**
+   * How strongly this pool draws right now — what render multiplies mote alpha
+   * by. Chases `targetStrength` a fraction of the remaining gap per frame so a
+   * throttled selection never lands as a visible step.
+   */
+  strength: number;
+  /** The strength the last selection pass chose for the player's distance. */
+  targetStrength: number;
+  /** The selection pass that last claimed this pool; an older one means it is out of range. */
+  selectionPass: number;
+}
+
+/** How the party's level sits against the next floor's recommendation. */
+type PartyStanding = 'below' | 'met' | 'above';
+
+type RecommendedLineStyle = Pick<
+  TextOptions,
+  'size' | 'bold' | 'color' | 'glow' | 'glowBlur' | 'strikethrough'
+>;
+
+/**
+ * How the recommended-level line is dressed for a given standing.
+ *
+ * The struck-through variants say the same thing the colour does twice over:
+ * this is advice you have already satisfied, and the number is here for
+ * reference rather than as something to act on.
+ */
+function recommendedLineStyle(standing: PartyStanding): RecommendedLineStyle {
+  switch (standing) {
+    case 'below':
+      return {
+        ...TEXT_PRESETS.danger,
+        glow: STAIRWELL_MENU_RECOMMENDED_GLOW_COLOR,
+        glowBlur: STAIRWELL_MENU_RECOMMENDED_GLOW_BLUR,
+      };
+    case 'met':
+      return { ...TEXT_PRESETS.value, strikethrough: true };
+    case 'above':
+      return {
+        ...TEXT_PRESETS.value,
+        color: STAIRWELL_MENU_RECOMMENDED_ABOVE_COLOR,
+        strikethrough: true,
+      };
+  }
 }
 
 interface DescentAdvice {
   party: number;
   recommended: number;
-  underlevelled: boolean;
+  standing: PartyStanding;
 }
 
 export class StairwellSystem implements GameSystem {
@@ -150,10 +291,26 @@ export class StairwellSystem implements GameSystem {
    * One entry per stairwell currently near the player, keyed by footprint tile
    * (`x,y`). Ambient VFX, not game state: it needs no checkpoint capture,
    * because every frame re-derives which stairwells are active from the
-   * player's live position and drops the rest, so a checkpoint restore
-   * self-corrects on its very next update.
+   * player's position and drops the rest — and any jump in that position forces
+   * that re-derivation immediately — so a checkpoint restore self-corrects on
+   * its very next update.
    */
   private draftPools = new Map<string, DraftPool>();
+  /**
+   * Counts up to `STAIRWELL_DRAFT_SELECTION_INTERVAL_FRAMES`; a selection pass
+   * runs when it reaches it. Starts at the interval so the very first update
+   * selects rather than leaving the floor draftless for a second.
+   */
+  private draftSelectionFrames = STAIRWELL_DRAFT_SELECTION_INTERVAL_FRAMES;
+  /** Bumped per selection pass, so a pool the pass didn't claim can be recognised without a Set. */
+  private draftSelectionPass = 0;
+  /**
+   * Where the active crawler stood at the last draft update, so a teleport can
+   * be recognised as the jump it is. Null until the first update, and after a
+   * checkpoint restore, where there is no previous position to compare against.
+   */
+  private lastDraftPlayerX: number | null = null;
+  private lastDraftPlayerY: number | null = null;
 
   private wayfinderFrames: number | null = null;
   private wayfinderRetired = false;
@@ -215,8 +372,15 @@ export class StairwellSystem implements GameSystem {
    * the player time, so rewinding its clock would punish the death twice, and
    * dropping the retired latch would put the arrow back on a floor whose
    * stairwell has already been found.
+   *
+   * The draft's pool selection is not snapshotted — it is ambient VFX — but it
+   * is *invalidated* here: a restore puts the crawler back at a checkpoint that
+   * can be a whole floor away, and the throttled selection would otherwise keep
+   * stepping the old position's pools for up to a second, leaving the stairwell
+   * they respawned beside with no motes at all.
    */
   restoreCheckpoint(snapshot: StairwellCheckpoint): void {
+    this.forceDraftReselect();
     this.dismissed = snapshot.dismissed;
     this.onStairwell = snapshot.onStairwell;
     this._menuOpen = snapshot.menuOpen;
@@ -338,17 +502,16 @@ export class StairwellSystem implements GameSystem {
 
   /** The stairwell's footprint centre in world pixels, matching where `renderStairwells` draws it. */
   private footprintCenter(tile: { x: number; y: number }): { x: number; y: number } {
-    const footprintSizePx = TILE_SIZE * STAIRWELL_SCALE;
-    return {
-      x: tile.x * TILE_SIZE + footprintSizePx / 2,
-      y: tile.y * TILE_SIZE + footprintSizePx / 2,
-    };
+    return { x: footprintCenterX(tile.x), y: footprintCenterY(tile.y) };
   }
 
   /**
-   * Maintains one draft pool per nearby stairwell. A stairwell only gets a
-   * pool while the player is within the draft radius of it, so an idle floor
-   * with several stairwells never simulates motes for the ones nobody is near.
+   * Steps every live draft pool, and — on the throttled selection interval —
+   * re-decides which stairwells have one and how strongly each draws.
+   *
+   * A stairwell only gets a pool while the player is within the draft radius of
+   * it, so an idle floor with several stairwells never simulates motes for the
+   * ones nobody is near.
    */
   private updateDraftMotes(active: { x: number; y: number }): void {
     if (!this.levelDef.nextLevelId) {
@@ -356,32 +519,89 @@ export class StairwellSystem implements GameSystem {
       return;
     }
 
-    const liveKeys = new Set<string>();
-    for (const tile of this.gameMap.stairwellTiles) {
-      const key = `${tile.x},${tile.y}`;
-      const center = this.footprintCenter(tile);
-      const dx = center.x - active.x;
-      const dy = center.y - active.y;
-      if (dx * dx + dy * dy > STAIRWELL_DRAFT_RADIUS_PX * STAIRWELL_DRAFT_RADIUS_PX) continue;
+    if (this.playerJumped(active)) this.forceDraftReselect();
+    this.lastDraftPlayerX = active.x;
+    this.lastDraftPlayerY = active.y;
 
-      liveKeys.add(key);
-      let pool = this.draftPools.get(key);
-      if (!pool) {
-        pool = { centerX: center.x, centerY: center.y, motes: [] };
-        this.draftPools.set(key, pool);
-      } else {
-        pool.centerX = center.x;
-        pool.centerY = center.y;
-      }
-      this.stepDraftPool(pool);
+    this.draftSelectionFrames++;
+    if (this.draftSelectionFrames >= STAIRWELL_DRAFT_SELECTION_INTERVAL_FRAMES) {
+      this.draftSelectionFrames = 0;
+      this.selectDraftPools(active);
     }
 
-    for (const key of this.draftPools.keys()) {
-      if (!liveKeys.has(key)) this.draftPools.delete(key);
+    for (const pool of this.draftPools.values()) this.stepDraftPool(pool);
+  }
+
+  /**
+   * Whether the active crawler was placed somewhere new since the last draft
+   * update, rather than having walked there.
+   *
+   * This is how the draft catches every teleport it cannot be told about
+   * directly — fast travel, a Wayfinder jump, a respawn — without any of those
+   * callers having to know the draft exists.
+   */
+  private playerJumped(active: { x: number; y: number }): boolean {
+    const previousX = this.lastDraftPlayerX;
+    const previousY = this.lastDraftPlayerY;
+    if (previousX === null || previousY === null) return false;
+    const dx = active.x - previousX;
+    const dy = active.y - previousY;
+    return dx * dx + dy * dy > STAIRWELL_DRAFT_TELEPORT_JUMP_PX_SQ;
+  }
+
+  /**
+   * Makes the next `update` re-take the pool selection instead of waiting out
+   * the rest of the throttle interval.
+   */
+  private forceDraftReselect(): void {
+    this.draftSelectionFrames = STAIRWELL_DRAFT_SELECTION_INTERVAL_FRAMES;
+    this.lastDraftPlayerX = null;
+    this.lastDraftPlayerY = null;
+  }
+
+  private selectDraftPools(active: { x: number; y: number }): void {
+    this.draftSelectionPass++;
+    const pass = this.draftSelectionPass;
+
+    for (const tile of this.gameMap.stairwellTiles) {
+      const centerX = footprintCenterX(tile.x);
+      const centerY = footprintCenterY(tile.y);
+      const dx = centerX - active.x;
+      const dy = centerY - active.y;
+      const distToPlayerSq = dx * dx + dy * dy;
+      if (distToPlayerSq > STAIRWELL_DRAFT_RADIUS_PX * STAIRWELL_DRAFT_RADIUS_PX) continue;
+
+      const targetStrength = draftStrengthAtPlayerDistance(Math.sqrt(distToPlayerSq));
+      const key = `${tile.x},${tile.y}`;
+      const pool = this.draftPools.get(key);
+      if (pool === undefined) {
+        // A pool born already at its target: walking into range should reveal a
+        // draft that has always been blowing, not one that fades up as you arrive.
+        this.draftPools.set(key, {
+          centerX,
+          centerY,
+          motes: [],
+          strength: targetStrength,
+          targetStrength,
+          selectionPass: pass,
+        });
+      } else {
+        pool.centerX = centerX;
+        pool.centerY = centerY;
+        pool.targetStrength = targetStrength;
+        pool.selectionPass = pass;
+      }
+    }
+
+    for (const [key, pool] of this.draftPools) {
+      if (pool.selectionPass !== pass) this.draftPools.delete(key);
     }
   }
 
   private stepDraftPool(pool: DraftPool): void {
+    pool.strength +=
+      (pool.targetStrength - pool.strength) * STAIRWELL_DRAFT_STRENGTH_APPROACH_PER_FRAME;
+
     for (let i = pool.motes.length - 1; i >= 0; i--) {
       const mote = pool.motes[i];
       const dx = pool.centerX - mote.x;
@@ -397,7 +617,9 @@ export class StairwellSystem implements GameSystem {
     }
 
     while (pool.motes.length < STAIRWELL_DRAFT_MOTES_MAX) {
-      pool.motes.push(this.spawnDraftMote(pool, true));
+      const mote = { x: 0, y: 0, radiusPx: 0, distToCenter: 0 };
+      this.placeDraftMote(mote, pool, true);
+      pool.motes.push(mote);
     }
   }
 
@@ -406,27 +628,21 @@ export class StairwellSystem implements GameSystem {
    * all at once; a recycled mote always restarts at the outer edge so the
    * inward flow reads as continuous rather than as motes teleporting inward.
    */
-  private spawnDraftMote(pool: DraftPool, scatterAcrossRadius: boolean): DraftMote {
+  private placeDraftMote(mote: DraftMote, pool: DraftPool, scatterAcrossRadius: boolean): void {
     const angle = Math.random() * Math.PI * 2;
     const dist = scatterAcrossRadius
       ? Math.random() * STAIRWELL_DRAFT_RADIUS_PX
       : STAIRWELL_DRAFT_RADIUS_PX;
-    return {
-      x: pool.centerX + Math.cos(angle) * dist,
-      y: pool.centerY + Math.sin(angle) * dist,
-      radiusPx:
-        STAIRWELL_DRAFT_MOTE_RADIUS_MIN_PX +
-        Math.random() * (STAIRWELL_DRAFT_MOTE_RADIUS_MAX_PX - STAIRWELL_DRAFT_MOTE_RADIUS_MIN_PX),
-      distToCenter: dist,
-    };
+    mote.x = pool.centerX + Math.cos(angle) * dist;
+    mote.y = pool.centerY + Math.sin(angle) * dist;
+    mote.radiusPx =
+      STAIRWELL_DRAFT_MOTE_RADIUS_MIN_PX +
+      Math.random() * (STAIRWELL_DRAFT_MOTE_RADIUS_MAX_PX - STAIRWELL_DRAFT_MOTE_RADIUS_MIN_PX);
+    mote.distToCenter = dist;
   }
 
   private respawnDraftMote(mote: DraftMote, pool: DraftPool): void {
-    const fresh = this.spawnDraftMote(pool, false);
-    mote.x = fresh.x;
-    mote.y = fresh.y;
-    mote.radiusPx = fresh.radiusPx;
-    mote.distToCenter = fresh.distToCenter;
+    this.placeDraftMote(mote, pool, false);
   }
 
   /** Called each gameplay frame. Detects stairwell entry and opens/closes the menu. */
@@ -510,10 +726,15 @@ export class StairwellSystem implements GameSystem {
   }
 
   /**
-   * Motes live within `STAIRWELL_DRAFT_RADIUS_PX` of a stairwell, well outside
-   * the sprite's own footprint, so this uses its own wider cull rather than
-   * the tighter one above — otherwise a stairwell just off the edge of the
-   * screen would still need its motes drawn as they drift into view.
+   * Motes are drawn on their own screen position, never on the stairwell's: a
+   * field this wide is mostly off screen whenever its stairwell is on it, and
+   * — the case that matters — is mostly *on* screen for a player standing at
+   * the field's edge with the stairwell far behind the camera. Culling the
+   * whole pool on the stairwell's position would blink out motes the player is
+   * standing next to.
+   *
+   * The pool-level test is only a cheap way to skip a field that cannot reach
+   * the screen at all, so its margin has to cover the full mote spread.
    */
   private renderDraftMotes(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const viewW = viewportWidth();
@@ -530,6 +751,16 @@ export class StairwellSystem implements GameSystem {
         continue;
 
       for (const mote of pool.motes) {
+        const screenX = mote.x - camX;
+        const screenY = mote.y - camY;
+        if (
+          screenX + mote.radiusPx < 0 ||
+          screenX - mote.radiusPx > viewW ||
+          screenY + mote.radiusPx < 0 ||
+          screenY - mote.radiusPx > viewH
+        )
+          continue;
+
         const fadeIn = clamp(
           (STAIRWELL_DRAFT_RADIUS_PX - mote.distToCenter) / STAIRWELL_DRAFT_FADE_ZONE_PX,
           0,
@@ -540,12 +771,12 @@ export class StairwellSystem implements GameSystem {
           0,
           1,
         );
-        const alpha = STAIRWELL_DRAFT_MOTE_ALPHA_MAX * Math.min(fadeIn, fadeOut);
-        if (alpha <= 0) continue;
+        const alpha = STAIRWELL_DRAFT_MOTE_ALPHA_MAX * Math.min(fadeIn, fadeOut) * pool.strength;
+        if (alpha < STAIRWELL_DRAFT_MIN_VISIBLE_ALPHA) continue;
 
         ctx.beginPath();
         ctx.fillStyle = `rgba(${STAIRWELL_DRAFT_MOTE_COLOR_RGB}, ${alpha})`;
-        ctx.arc(mote.x - camX, mote.y - camY, mote.radiusPx, 0, Math.PI * 2);
+        ctx.arc(screenX, screenY, mote.radiusPx, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -555,11 +786,13 @@ export class StairwellSystem implements GameSystem {
    * The next floor's level, and how the party measures against it.
    *
    * Null on a floor with nowhere to descend to — which the menu never renders
-   * on, but the type says so rather than the reader having to know that.
+   * on, but the type says so rather than the reader having to know that — and
+   * on a floor that opts out of the advice altogether.
    */
   private descentAdvice(): DescentAdvice | null {
     const nextId = this.levelDef.nextLevelId;
     if (!nextId) return null;
+    if (this.levelDef.suppressDescentAdvice === true) return null;
     const party = this.partyLevel();
     const profile = activeDifficultyProfile();
 
@@ -574,7 +807,9 @@ export class StairwellSystem implements GameSystem {
     }
 
     const recommended = recommendedPartyLevelFor(getLevelDef(nextId), profile);
-    const result = { party, recommended, underlevelled: party < recommended };
+    const standing: PartyStanding =
+      party < recommended ? 'below' : party === recommended ? 'met' : 'above';
+    const result = { party, recommended, standing };
     this.descentAdviceCache = { nextId, party, profile, result };
     return result;
   }
@@ -595,7 +830,7 @@ export class StairwellSystem implements GameSystem {
     const advice = this.descentAdvice();
 
     const warningText =
-      advice?.underlevelled === true
+      advice?.standing === 'below'
         ? `The foes below fight like a level-${advice.recommended} party. You are level ` +
           `${advice.party} — this floor still has strength to give.`
         : '';
@@ -688,8 +923,10 @@ export class StairwellSystem implements GameSystem {
     }
 
     if (advice !== null) {
-      const recommendedStyle = advice.underlevelled ? TEXT_PRESETS.danger : TEXT_PRESETS.value;
-      const recommendedText = `Recommended level: ${advice.recommended}`;
+      const recommendedStyle = recommendedLineStyle(advice.standing);
+      const recommendedPrefix =
+        advice.standing === 'below' ? STAIRWELL_MENU_RECOMMENDED_WARNING_PREFIX : '';
+      const recommendedText = `${recommendedPrefix}Recommended level: ${advice.recommended}`;
       const recommendedY = panelY + STAIRWELL_MENU_RECOMMENDED_Y_OFFSET;
       const recommendedHeight = measureTextBox(ctx, recommendedText, {
         size: recommendedStyle.size,

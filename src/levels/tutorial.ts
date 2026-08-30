@@ -27,4 +27,5 @@ export const tutorialLevel: LevelDef = {
   roomMobs: [],
   hallwayMobs: [],
   nextLevelId: 'level1',
+  suppressDescentAdvice: true,
 };
