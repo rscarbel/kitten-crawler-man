@@ -55,6 +55,20 @@ export default tseslint.config(
     },
   },
   {
+    // `scripts/` sits outside the root tsconfig's `include`, so the project
+    // service finds no project for a harness and types every DOM symbol in it as
+    // unresolved. `tsconfig.scripts.json` is the project those files are
+    // typechecked under, and it is the one the linter has to read them through.
+    files: ['scripts/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: './tsconfig.scripts.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
     // Pixel-art sprite and tile drawing functions are coordinate-heavy by nature.
     // The numbers there are art geometry, not semantic game constants.
     files: ['src/sprites/**/*.ts', 'src/map/tiles/**/*.ts'],

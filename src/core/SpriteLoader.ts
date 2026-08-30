@@ -1,11 +1,6 @@
-import bossesManifest from '../images/bosses/manifest.json';
-import charactersManifest from '../images/characters/manifest.json';
 import effectsManifest from '../images/effects/manifest.json';
-import enemiesManifest from '../images/enemies/manifest.json';
 import environmentBuildingsManifest from '../images/environment/buildings/manifest.json';
-import environmentCircusManifest from '../images/environment/circus/manifest.json';
 import environmentClubManifest from '../images/environment/club/manifest.json';
-import environmentNatureManifest from '../images/environment/nature/manifest.json';
 import environmentPropsManifest from '../images/environment/props/manifest.json';
 import environmentTilesetsManifest from '../images/environment/tilesets/manifest.json';
 import environmentTownscapeManifest from '../images/environment/townscape/manifest.json';
@@ -13,8 +8,6 @@ import environmentTreesManifest from '../images/environment/trees/manifest.json'
 import environmentRocksManifest from '../images/environment/rocks/manifest.json';
 import environmentCampManifest from '../images/environment/camp/manifest.json';
 import environmentOverCityManifest from '../images/environment/towns/over_city/manifest.json';
-import environmentWallsRoofsManifest from '../images/environment/walls_roofs/manifest.json';
-import npcsManifest from '../images/npcs/manifest.json';
 import interfacesManifest from '../images/interfaces/manifest.json';
 import grotesqueSpiderManifest from '../images/bosses/grotesque_spider/manifest.json';
 import { TILE_SIZE } from './constants';
@@ -23,9 +16,7 @@ import { settings } from './Settings';
 
 const environmentManifest = {
   ...environmentBuildingsManifest,
-  ...environmentCircusManifest,
   ...environmentClubManifest,
-  ...environmentNatureManifest,
   ...environmentPropsManifest,
   ...environmentTilesetsManifest,
   // The town's street furniture. Both belong in the environment subset because
@@ -34,7 +25,8 @@ const environmentManifest = {
   ...environmentTownscapeManifest,
   ...environmentOverCityManifest,
   // The forest. Its own directory because `writeSheets` replaces a directory's
-  // whole manifest, and `nature/` also holds assets no tree generator writes.
+  // whole manifest, so a generator must not share one with anything it does
+  // not write.
   ...environmentTreesManifest,
   // The wilderness's boulders. Their own directory for the same reason the trees
   // have one: `writeSheets` replaces a directory's whole manifest.
@@ -42,17 +34,12 @@ const environmentManifest = {
   // The goblin camp's tents and its fire, in their own directory for the same
   // reason: `writeSheets` replaces a directory's whole manifest.
   ...environmentCampManifest,
-  ...environmentWallsRoofsManifest,
 } as const;
 
 const manifestJson = {
-  ...bossesManifest,
   ...grotesqueSpiderManifest,
-  ...charactersManifest,
   ...effectsManifest,
-  ...enemiesManifest,
   ...environmentManifest,
-  ...npcsManifest,
   ...interfacesManifest,
 } as const;
 
@@ -117,6 +104,15 @@ export type SpriteKey = keyof typeof manifestJson;
 export type SpriteStates = {
   [K in SpriteKey]: keyof (typeof manifestJson)[K]['states'] & string;
 };
+
+/**
+ * Every key the composed manifest declares. `verify:assets` walks this to prove
+ * each one is reachable from some `ASSET_GROUPS` entry — a sheet nothing
+ * preloads still ships and still decodes, it just pops in on first draw.
+ */
+export function getManifestKeys(): readonly SpriteKey[] {
+  return Object.keys(manifestJson).filter(isSpriteKey);
+}
 
 /**
  * Runtime sprite data: loaded image + dimensions from the manifest.
@@ -194,8 +190,13 @@ const DOWNSCALE_FACTOR = 0.5;
  * display's own pixel ratio. Must NEVER be true at DPR ≥ 2: those sheets are
  * baked 1:1 for a Retina display, and halving them there is a visible quality
  * regression, not an invisible memory win.
+ *
+ * Exported because the figure frame cache has to answer it identically: a
+ * painted creature's cells are the sheet cells, so a display that gets half-size
+ * sheets must get half-density bakes or the two paths disagree about how many
+ * source pixels a tile is worth.
  */
-function shouldDownscaleForLowEndDevice(): boolean {
+export function shouldDownscaleForLowEndDevice(): boolean {
   if (Math.round(window.devicePixelRatio) >= 2) return false;
   return settings.quality === 'performance' || Math.round(window.devicePixelRatio) <= 1;
 }
@@ -392,6 +393,38 @@ function getScratchCtx(): CanvasRenderingContext2D | null {
 }
 
 /**
+ * How long a single sheet's decode may hold up a prewarm before it is given up
+ * on. Generous against a real decode, which is milliseconds.
+ */
+const DECODE_DEADLINE_MS = 2000;
+
+/**
+ * `img.decode()`, but it always settles.
+ *
+ * Chrome does not merely delay decoding in a background tab — it defers the
+ * promise indefinitely, and never rejects it. `prewarmGroups` awaits every
+ * sheet's decode before the boot screen gives way, so a game opened into a
+ * background tab (a middle-click, a restored session) would sit on its loading
+ * screen for as long as nobody looked at it. The upload is an optimisation; the
+ * boot is not, so the optimisation gets a deadline and the boot proceeds.
+ *
+ * A sheet abandoned here still draws correctly — it just pays its texture
+ * upload on the first frame that draws it, which is what happened before the
+ * prewarm existed at all.
+ */
+async function withDecodeDeadline(decoding: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, DECODE_DEADLINE_MS);
+  });
+  try {
+    await Promise.race([decoding, deadline]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
  * Forces the browser to actually upload a loaded image as a GPU texture,
  * rather than leaving that for whatever frame first `drawImage()`s it.
  *
@@ -408,7 +441,7 @@ function getScratchCtx(): CanvasRenderingContext2D | null {
 async function forceGpuUpload(img: HTMLImageElement | HTMLCanvasElement): Promise<void> {
   if (img instanceof HTMLImageElement) {
     try {
-      await img.decode();
+      await withDecodeDeadline(img.decode());
     } catch {
       // A decode failure here just skips the pre-warm — the sprite falls back
       // to hitching on its first real draw, exactly as it would have before

@@ -1,10 +1,7 @@
-import {
-  drawSpriteKey,
-  progressFrameIndex,
-  timeFrameIndex,
-  walkFrameIndex,
-} from '../core/SpriteRenderer';
-import type { SpriteKey, SpriteStates } from '../core/SpriteLoader';
+import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import type { FigureDef } from './figure/figureDef';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { GOBLIN_FIGURES, GOBLIN_GORE_STATES, goblinRowFrameCount } from './art/goblinFigure';
 
 export type GoblinWeapon = 'sword' | 'axe' | 'mace' | 'warhammer';
 export type GoblinAttackKind = 'light' | 'heavy';
@@ -21,7 +18,7 @@ export type GoblinAttackKind = 'light' | 'heavy';
 export type GoblinArchetype = GoblinWeapon | 'bow';
 
 /**
- * One sheet per archetype, with the weapon baked in.
+ * One figure per archetype, with the weapon painted into the body.
  *
  * The old base-plus-overlay split only worked while the body animation was
  * weapon-independent, which is exactly what this rework destroys: a two-handed
@@ -29,21 +26,14 @@ export type GoblinArchetype = GoblinWeapon | 'bow';
  * sword stab need three different bodies, and a shared body layer cannot express
  * any of them.
  */
-const SHEET_KEYS: Record<GoblinArchetype, SpriteKey> = {
-  sword: 'goblin_sword',
-  axe: 'goblin_axe',
-  mace: 'goblin_mace',
-  warhammer: 'goblin_warhammer',
-  bow: 'goblin_bow',
-};
-
 /**
- * All four sheets share one state union, so indexing it needs no cast. Naming
+ * All five figures share one state union, so indexing it needs no cast. Naming
  * the rows by *weight* rather than by move keeps that true while still meaning
  * something: in every archetype the light attack is the faster, shorter-reach,
  * lower-commitment one and the heavy is the telegraphed haymaker.
  */
-type GoblinState = SpriteStates['goblin_axe'];
+export type GoblinState =
+  'walk' | 'idle' | 'idle_break' | 'attack_light' | 'attack_heavy' | 'flinch';
 
 export interface GoblinAttackTiming {
   /** Frames the sprite row holds — must equal the generator's frameCount. */
@@ -238,10 +228,10 @@ function attackSpriteFrames(archetype: GoblinArchetype, kind: GoblinAttackKind):
   return GOBLIN_ATTACKS[archetype][kind].spriteFrames;
 }
 
-const WALK_FRAMES = 12;
-const IDLE_FRAMES = 12;
-const IDLE_BREAK_FRAMES = 18;
-const FLINCH_FRAMES = 5;
+const WALK_FRAMES = goblinRowFrameCount('walk');
+const IDLE_FRAMES = goblinRowFrameCount('idle');
+const IDLE_BREAK_FRAMES = goblinRowFrameCount('idle_break');
+const FLINCH_FRAMES = goblinRowFrameCount('flinch');
 /** Breathing speed of the always-on idle loop. */
 const IDLE_FPS = 8;
 const IDLE_BREAK_FPS = 14;
@@ -372,11 +362,11 @@ export interface GoblinSpriteState {
   readonly frame: number;
 }
 
-/** Draw one goblin frame. Every sheet faces +X, so the runtime mirrors it. */
+/** Draw one goblin frame. Every figure faces +X, so the runtime mirrors it. */
 export function drawGoblinSprite(ctx: CanvasRenderingContext2D, sprite: GoblinSpriteState): void {
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    SHEET_KEYS[sprite.archetype],
+    GOBLIN_FIGURES[sprite.archetype],
     sprite.state,
     sprite.frame,
     sprite.x,
@@ -389,28 +379,82 @@ export function drawGoblinSprite(ctx: CanvasRenderingContext2D, sprite: GoblinSp
 /**
  * The nine pieces a goblin comes apart into, in the order they spawn.
  *
- * The single source of truth: `scripts/goblinGore.ts` paints them in this order
- * and `BodyPartGoreSystem` spawns them in it, so a rename in one place is a
- * compile error rather than a body part that silently stops appearing.
+ * One list, taken from the figure that paints them, so `BodyPartGoreSystem`
+ * cannot ask for a piece by a name the art has renamed — which would be a body
+ * part that silently stops appearing.
  */
-export const GOBLIN_GORE_PARTS: ReadonlyArray<string> = [
-  'gore_head',
-  'gore_torso',
-  'gore_arm_near',
-  'gore_arm_far',
-  'gore_leg_near',
-  'gore_leg_far',
-  'gore_ribchunk',
-  'gore_entrails',
-  'gore_jaw',
-];
+export const GOBLIN_GORE_PARTS: ReadonlyArray<string> = GOBLIN_GORE_STATES;
 
-/** The sheet an archetype's frames come from. */
-export function goblinSheetKey(archetype: GoblinArchetype): SpriteKey {
-  return SHEET_KEYS[archetype];
+/** The figure an archetype's frames are painted from. */
+export function goblinFigure(archetype: GoblinArchetype): FigureDef {
+  return GOBLIN_FIGURES[archetype];
 }
 
-/** The gore sheet a dead goblin's flying pieces come from. */
+/** The gore art a dead goblin's flying pieces come from. */
 export function goblinBodyPartKey(archetype: GoblinArchetype): string {
   return `goblin_${archetype}`;
+}
+
+/**
+ * Every animation row a goblin can be drawn in, in the order `resolve`
+ * prioritises them.
+ *
+ * The art gates feed this to `missingStateFailures`: `drawFigureCached` returns
+ * silently on a state the figure does not paint, so a row name only the runtime
+ * knows is an invisible goblin and no log line.
+ */
+export const GOBLIN_STATES: ReadonlyArray<GoblinState> = [
+  'attack_light',
+  'attack_heavy',
+  'flinch',
+  'walk',
+  'idle_break',
+  'idle',
+];
+
+/**
+ * The rows warmed when a goblin's spawn is scheduled.
+ *
+ * A body that has just arrived stands and walks, and nothing else: an
+ * `idle_break` is four seconds away at the earliest and an attack needs the
+ * player inside reach. Those two rows are what the frame the pack lands on
+ * draws.
+ */
+const SPAWN_WARMED_STATES: ReadonlyArray<GoblinState> = ['idle', 'walk'];
+
+/**
+ * The rows warmed when a goblin notices the player.
+ *
+ * `npm run bench:figure-paint` puts a goblin cell just over the threshold the
+ * direct-paint fallback is affordable below, so every row its AI can enter has
+ * to be warm before it enters it. Engagement is the telegraph the combat rows
+ * have: an idle break is the one row with no cue at all, so it warms here too
+ * rather than waiting for a flourish that starts on the frame it plays.
+ */
+const ENGAGED_WARMED_STATES: ReadonlyArray<GoblinState> = [
+  'attack_light',
+  'attack_heavy',
+  'flinch',
+  'idle_break',
+];
+
+/**
+ * Warms the rows a goblin about to exist will draw.
+ *
+ * Called where a spawn is *scheduled* rather than where the mob first renders:
+ * ten arriving on one frame is ten cold rows if the first request for them is
+ * the frame they appear on.
+ */
+export function prewarmGoblin(archetype: GoblinArchetype): void {
+  const figure = GOBLIN_FIGURES[archetype];
+  for (const state of SPAWN_WARMED_STATES) prewarmFigureState(figure, state);
+}
+
+/** Warms the combat rows, from the moment a goblin has a target to use them on. */
+export function prewarmGoblinCombat(archetype: GoblinArchetype): void {
+  const figure = GOBLIN_FIGURES[archetype];
+  for (const state of ENGAGED_WARMED_STATES) prewarmFigureState(figure, state);
+  // Severed pieces are all drawn on the one frame a body comes apart, with no
+  // telegraph of their own; noticing the player is the only warning there is.
+  for (const part of GOBLIN_GORE_PARTS) prewarmFigureState(figure, part);
 }

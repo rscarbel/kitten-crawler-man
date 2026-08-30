@@ -98,11 +98,17 @@ export function drawSprite(
  * widest pose and its anchor marks where that creature's feet stand, so either
  * one would draw a severed limb most of a tile away from the position physics
  * gave it and swing it around an off-piece pivot as it tumbles.
+ *
+ * `frame` selects the pose within the row and is clamped the way `drawSprite`
+ * clamps it. Most callers pass 0 because a tumbling piece is a single cell, but
+ * the figure path this sits beside honours the argument, and a sheet that
+ * silently ignored it would draw a different frame than its painted twin.
  */
 export function drawSpriteRotatedCenter(
   ctx: CanvasRenderingContext2D,
   def: SpriteDef,
   stateDef: SpriteStateDef,
+  frame: number,
   sx: number,
   sy: number,
   angle: number,
@@ -110,8 +116,9 @@ export function drawSpriteRotatedCenter(
   alpha: number,
 ): void {
   const { img, frameWidth, frameHeight, tileScale } = def;
-  const { srcX, srcY } = frameOrigin(stateDef, frameWidth, frameHeight, 0);
-  const ink = getFrameInkBounds(def, stateDef, 0);
+  const clampedFrame = Math.max(0, Math.min(Math.floor(frame), stateDef.frameCount - 1));
+  const { srcX, srcY } = frameOrigin(stateDef, frameWidth, frameHeight, clampedFrame);
+  const ink = getFrameInkBounds(def, stateDef, clampedFrame);
   const scale = tileSize / tileScale;
   const dw = frameWidth * scale;
   const dh = frameHeight * scale;

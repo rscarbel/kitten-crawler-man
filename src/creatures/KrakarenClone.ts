@@ -9,8 +9,11 @@ import {
   krakarenOverheadLiftTiles,
   KRAKAREN_BODY_PART_KEY,
   KRAKAREN_ENRAGED_FILTER,
+  prewarmKrakarenPoseForFacing,
+  prewarmKrakarenSlam,
   type KrakarenSlamPhase,
 } from '../sprites/krakarenSprite';
+import { prewarmKrakarenTentacle } from '../sprites/krakarenTentacleSprite';
 import { SLAM_RISE_SHARE, SLAM_LOOM_SHARE, SLAM_DIVE_SHARE } from '../sprites/krakarenAttackTiming';
 import type { KrakarenTentacle } from './KrakarenTentacle';
 
@@ -87,6 +90,15 @@ const TENTACLE_GUARD_DAMAGE_SCALE = 0.25;
 export const MAX_GUARD_TENTACLES = 2;
 
 const GUARD_SPAWN_INTERVAL_BASE = 600;
+/**
+ * How far ahead of a guard tentacle erupting its art is warmed.
+ *
+ * The spawn itself is decided and executed on one frame, so the countdown is
+ * the only place that knows a tentacle is coming before it is there. A second
+ * and a half is longer than the whole `emerge` row and comfortably longer than
+ * the cache needs to admit it a cell at a time.
+ */
+const GUARD_SPAWN_PREWARM_LEAD_FRAMES = 90;
 const GUARD_SPAWN_INTERVAL_ENRAGED = 420;
 
 /**
@@ -433,6 +445,9 @@ export class KrakarenClone extends Mob {
 
     if (nearest?.isAlive === true) {
       this.guardSpawnTimer--;
+      if (this.guardSpawnTimer === GUARD_SPAWN_PREWARM_LEAD_FRAMES && !this.guardTentacleAtCap) {
+        prewarmKrakarenTentacle();
+      }
       if (this.guardSpawnTimer <= 0) {
         this.guardSpawnTimer = this.isEnraged
           ? GUARD_SPAWN_INTERVAL_ENRAGED
@@ -506,6 +521,9 @@ export class KrakarenClone extends Mob {
     this.state = 'melee_windup';
     this.meleeWindupTimer = MELEE_WINDUP_FRAMES;
     this.facingLocked = true;
+    // The windup is the lash's only lead, and facing is frozen for all of it,
+    // so the view the swing will be drawn in is already decided here.
+    prewarmKrakarenPoseForFacing('swipe', this.facingX, this.facingY);
   }
 
   private doMeleeWindup(): void {
@@ -611,6 +629,10 @@ export class KrakarenClone extends Mob {
     this.slamActive = true;
     this.slamRiseSoundPending = true;
     this.state = 'slam_charging';
+    // The telegraph is a second and a half of warning, and it is the only lead
+    // either the braced body or the risen tentacle ever gets.
+    prewarmKrakarenPoseForFacing('channel', this.facingX, this.facingY);
+    prewarmKrakarenSlam();
 
     const interval = this.isEnraged ? SLAM_INTERVAL_ENRAGED : SLAM_INTERVAL_BASE;
     this.slamTimer = interval;

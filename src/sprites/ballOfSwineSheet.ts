@@ -3,15 +3,15 @@
  * long each row is, how long each pose plays for, and how big the creature is.
  *
  * Three parties have to agree about it: the choreography in
- * `scripts/generate-ball-of-swine-sprite.ts`, the rows
+ * `src/sprites/art/ballOfSwineFigure.ts`, the rows
  * `src/sprites/ballOfSwineSprite.ts` plays, and the phase lengths
  * `src/creatures/BallOfSwine.ts` runs the fight on. The row lengths used to be
  * bare literals at the three draw call sites, so the first frame-count change
  * would have played half a row and repeated the rest.
  *
- * This module deliberately imports nothing: it is pulled in by an offline
- * node-canvas generator as well as by the browser bundle, and anything it
- * touched would have to work in both.
+ * This module deliberately imports nothing: the offline harness pulls it in as
+ * well as the browser bundle, and anything it touched would have to work in
+ * both.
  */
 
 /**

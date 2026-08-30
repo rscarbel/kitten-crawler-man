@@ -17,7 +17,6 @@
  */
 
 import { createCanvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { TILE_SIZE } from '../src/core/constants.js';
@@ -45,20 +44,8 @@ import {
   WALK_PHASE_BUCKETS,
 } from '../src/sprites/person/personFrameCache.js';
 import { buildSkeleton, FOOT_BASE_FRAC, type Facing } from '../src/sprites/person/skeleton.js';
-
-/**
- * node-canvas's 2D context implements every call the person renderer makes, but
- * it is a structurally distinct type — it lacks `filter`, `createConicGradient`
- * and a handful of others the game never touches. The two are bridged once here
- * rather than at each draw site, which is exactly what `src/core/canvasSurface`
- * does for `OffscreenCanvas`.
- */
-type NodeContext = ReturnType<ReturnType<typeof createCanvas>['getContext']>;
-
-function asGameContext(ctx: NodeContext): CanvasRenderingContext2D {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-  return ctx as unknown as CanvasRenderingContext2D;
-}
+import { asGameContext } from './nodeGameContext.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 /** Length of the `--` prefix plus the `=` separator around a flag name. */
 const FLAG_SYNTAX_LENGTH = 3;
@@ -187,7 +174,7 @@ function renderSheet(scale: number, outPath: string, only: string): void {
     }
   });
 
-  writeFileSync(outPath, canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
 }
 
 // ── Gates ────────────────────────────────────────────────────────────────────
@@ -662,7 +649,7 @@ function report(line: string): void {
 // ── Entry ────────────────────────────────────────────────────────────────────
 
 const scale = parseScale();
-const outPath = resolve(parseFlag('out', 'townsfolk-review.png'));
+const outPath = resolve(parseFlag('out', `${PREVIEW_DIR}/townsfolk-review.png`));
 const people = gateAppearances();
 
 gateBobPhase(people);

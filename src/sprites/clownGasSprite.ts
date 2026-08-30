@@ -1,31 +1,46 @@
-import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import { getSpriteDefByKey, type SpriteKey, type SpriteStates } from '../core/SpriteLoader';
+import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import {
+  CLOWN_GAS_FIGURE,
+  CLOWN_SHATTER_FIGURE,
+  CLOWN_VIAL_FIGURE,
+  GAS_FRAMES,
+  GAS_STATE,
+  SHATTER_FRAMES,
+  SHATTER_STATE,
+  VIAL_FRAMES,
+  VIAL_STATE,
+} from './art/clownGasFigure';
 
 /**
- * Draw wrappers for the three sheets the Evil Clown's gas vials are made of.
+ * Draw wrappers for the three figures the Evil Clown's gas vials are made of.
  *
- * Baked by `npm run gen:clown-gas` from `scripts/clownGasArt.ts`.
+ * Painted by `clownGasArt.ts`; review them with `npm run render:clowns`.
  */
 
-/** Frames per second the game loop runs at; the sheets are timed against it. */
+/** Frames per second the game loop runs at; the rows are timed against it. */
 const FRAMES_PER_SECOND = 60;
-
-/**
- * How many frames a sheet's only row holds, read from the sheet the game loaded.
- *
- * Not a hand-copied table: `drawSprite` *clamps* the frame index, so a sheet
- * that got shorter in a rebake would silently freeze on its last frame rather
- * than throw, and there would be nothing to notice until someone watched that
- * one effect.
- */
-function frameCountOf<K extends SpriteKey>(key: K, state: SpriteStates[K]): number {
-  return getSpriteDefByKey(key)?.states.get(state)?.frameCount ?? 1;
-}
 
 /** Tumble speed of the thrown bottle. */
 const VIAL_FPS = 12;
 /** Billow speed of the cloud — slow, so it reads as heavy vapour, not fire. */
 const GAS_FPS = 6;
+
+/**
+ * Warms all three rows together, on the telegraph that precedes the first
+ * throw.
+ *
+ * One call rather than three hooks because the three play in sequence with no
+ * gap wide enough to bake in: the bottle is in the air for a few frames, the
+ * shatter is one beat, and the cloud is already billowing behind it. The cloud
+ * in particular is the most expensive thing this conversion paints, so it is
+ * never allowed to reach the direct-paint fallback.
+ */
+export function prewarmClownGasRows(): void {
+  prewarmFigureState(CLOWN_VIAL_FIGURE, VIAL_STATE);
+  prewarmFigureState(CLOWN_SHATTER_FIGURE, SHATTER_STATE);
+  prewarmFigureState(CLOWN_GAS_FIGURE, GAS_STATE);
+}
 
 /**
  * The bottle in flight, drawn about its own centre.
@@ -43,11 +58,11 @@ export function drawClownVial(
   heightPx: number,
 ): void {
   const seconds = ageFrames / FRAMES_PER_SECOND;
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    'evil_clown_vial',
-    'fly',
-    timeFrameIndex(seconds, VIAL_FPS, frameCountOf('evil_clown_vial', 'fly')),
+    CLOWN_VIAL_FIGURE,
+    VIAL_STATE,
+    timeFrameIndex(seconds, VIAL_FPS, VIAL_FRAMES),
     sx,
     sy - heightPx,
     tileSize,
@@ -65,11 +80,11 @@ export function drawClownVialShatter(
   tileSize: number,
   progress: number,
 ): void {
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    'evil_clown_shatter',
-    'shatter',
-    progressFrameIndex(progress, frameCountOf('evil_clown_shatter', 'shatter')),
+    CLOWN_SHATTER_FIGURE,
+    SHATTER_STATE,
+    progressFrameIndex(progress, SHATTER_FRAMES),
     sx,
     sy,
     tileSize,
@@ -93,7 +108,6 @@ export function drawClownGas(
   alpha: number,
 ): void {
   const seconds = ageFrames / FRAMES_PER_SECOND;
-  const gasFrames = frameCountOf('evil_clown_gas', 'billow');
-  const frame = (timeFrameIndex(seconds, GAS_FPS, gasFrames) + seed) % gasFrames;
-  drawSpriteKey(ctx, 'evil_clown_gas', 'billow', frame, sx, sy, tileSize, { alpha });
+  const frame = (timeFrameIndex(seconds, GAS_FPS, GAS_FRAMES) + seed) % GAS_FRAMES;
+  drawFigureCached(ctx, CLOWN_GAS_FIGURE, GAS_STATE, frame, sx, sy, tileSize, { alpha });
 }

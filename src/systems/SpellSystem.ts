@@ -8,8 +8,26 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { getProtectiveShellStats, type ProtectiveShellStats } from '../abilities/protectiveShell';
 import { normalize } from '../utils';
 import { drawText } from '../ui/TextBox';
-import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import type { SpriteStates } from '../core/SpriteLoader';
+import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import {
+  drawFigureCached,
+  prewarmFigureState,
+  IDLE_FRAMES_BEFORE_RELEASE,
+} from '../sprites/figure/figureFrameCache';
+import { figureFrameCount } from '../sprites/figure/figureDef';
+import {
+  MINI_SHELL_STATE,
+  PROTECTIVE_SHELL_FIGURE,
+  PROTECTIVE_SHELL_MINI_FIGURE,
+  PROTECTIVE_SHELL_SHOCKWAVE_FIGURE,
+  SHELL_ACTIVE_STATE,
+  SHELL_APPEAR_FULL_POWER_STATE,
+  SHELL_APPEAR_STATE,
+  SHELL_EXPIRE_STATE,
+  SHELL_FULL_POWER_STATE,
+  SHOCKWAVE_STATE,
+  shellTileSizeFor,
+} from '../sprites/art/protectiveShellFigure';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface ActiveShell {
@@ -98,11 +116,24 @@ const SHELL_EXPAND_BUFFER = 2;
 const SHOCKWAVE_FADE_IN_FRAMES = 30;
 const SHELL_FADE_OUT_FRAMES = 60;
 const SHELL_APPEAR_FRAMES = 30;
-const SPRITE_FRAME_COUNT = 8;
-const PROTECTIVE_SHELL_FRAME_WIDTH = 400;
-const PROTECTIVE_SHELL_FRAME_CALC_MULT = 64;
-const MINI_SHELL_FRAME_WIDTH = 192;
 const MINI_SHELL_FADE_OUT_FRAMES = 30;
+/**
+ * How far ahead of the fade the expiry rows are warmed.
+ *
+ * The cast itself warms them too, but the figure cache releases a row that has
+ * gone `IDLE_FRAMES_BEFORE_RELEASE` rendered frames without being drawn, and a
+ * high-level shell outlasts that — so a shell that has run its whole duration
+ * would meet the fade cold.
+ *
+ * Clamped to that window rather than merely written to sit under it: a lead
+ * longer than the window is warming the cache sweeps away again before the fade
+ * ever plays it, so the two numbers cannot be allowed to drift apart silently.
+ */
+const SHELL_EXPIRY_PREWARM_LEAD_TARGET_FRAMES = 120;
+const SHELL_EXPIRY_PREWARM_LEAD_FRAMES = Math.min(
+  SHELL_EXPIRY_PREWARM_LEAD_TARGET_FRAMES,
+  IDLE_FRAMES_BEFORE_RELEASE,
+);
 const MINI_SHELL_ALPHA_MULT = 0.7;
 const CHAIN_LIGHTNING_STEPS = 5;
 const CHAIN_LIGHTNING_JITTER_RANGE = 8;
@@ -110,7 +141,6 @@ const CHAIN_LIGHTNING_ALPHA_FULL = 0.9;
 const CHAIN_LIGHTNING_CORE_ALPHA = 0.5;
 const CHAIN_LIGHTNING_CORE_WIDTH = 1;
 const CHAIN_LIGHTNING_WIDTH = 2;
-const SHOCKWAVE_FRAME_WIDTH = 480;
 const SHOCKWAVE_ALPHA_MULT = 0.7;
 const FOG_CACHE_SIZE_FACTOR = 2;
 const FOG_FADE_IN_FRAMES = 40;
@@ -300,6 +330,33 @@ export class SpellSystem implements GameSystem {
     this.chainLightningBolts.push({ fromX, fromY, toX, toY, framesLeft: CHAIN_LIGHTNING_FRAMES });
   }
 
+  /**
+   * Warms every row the cast about to happen will draw.
+   *
+   * The shell is the one figure here that paints past the fallback threshold —
+   * a 400×400 cell of stacked haloes — and a cast is a keypress with no
+   * telegraph of its own, so the cast is the earliest moment that knows.
+   */
+  private prewarmShellCast(stats: ProtectiveShellStats): void {
+    prewarmFigureState(
+      PROTECTIVE_SHELL_FIGURE,
+      stats.isFullPower ? SHELL_APPEAR_FULL_POWER_STATE : SHELL_APPEAR_STATE,
+    );
+    prewarmFigureState(
+      PROTECTIVE_SHELL_FIGURE,
+      stats.isFullPower ? SHELL_FULL_POWER_STATE : SHELL_ACTIVE_STATE,
+    );
+    if (stats.miniShieldEnabled) {
+      prewarmFigureState(PROTECTIVE_SHELL_MINI_FIGURE, MINI_SHELL_STATE);
+    }
+    this.prewarmShellExpiry(stats.isFullPower);
+  }
+
+  private prewarmShellExpiry(isFullPower: boolean): void {
+    prewarmFigureState(PROTECTIVE_SHELL_FIGURE, SHELL_EXPIRE_STATE);
+    if (isFullPower) prewarmFigureState(PROTECTIVE_SHELL_SHOCKWAVE_FIGURE, SHOCKWAVE_STATE);
+  }
+
   /** Add an expanding shockwave ring for visual effect. */
   addShockwaveRipple(x: number, y: number, radiusPx: number): void {
     this.shockwaveRipples.push({
@@ -342,6 +399,7 @@ export class SpellSystem implements GameSystem {
       touchedMobIds: new Set<Mob>(),
     };
 
+    this.prewarmShellCast(stats);
     this._shellCooldown = stats.cooldownFrames;
     this._shellCooldownMax = stats.cooldownFrames;
     this.shellOwner = human;
@@ -466,6 +524,11 @@ export class SpellSystem implements GameSystem {
           (e) => e.type !== 'magic_burn' && e.type !== 'electrified',
         );
       }
+
+      const enteringExpiry =
+        shell.framesRemaining <= SHELL_EXPIRY_PREWARM_LEAD_FRAMES &&
+        shell.framesRemaining + 1 > SHELL_EXPIRY_PREWARM_LEAD_FRAMES;
+      if (enteringExpiry) this.prewarmShellExpiry(stats.isFullPower);
 
       if (shell.framesRemaining <= 0) {
         cat.clearRegenModifier('shell');
@@ -640,26 +703,28 @@ export class SpellSystem implements GameSystem {
     const appearing = totalFrames - framesRemaining < SHELL_APPEAR_FRAMES;
     const expiring = framesRemaining < SHELL_FADE_OUT_FRAMES;
 
-    let state: SpriteStates['protective_shell'];
+    let state: string;
     let frame: number;
     if (appearing) {
-      state = isFullPower ? 'appear_full_power' : 'appear';
+      state = isFullPower ? SHELL_APPEAR_FULL_POWER_STATE : SHELL_APPEAR_STATE;
       frame = progressFrameIndex(
         (totalFrames - framesRemaining) / SHELL_APPEAR_FRAMES,
-        SPRITE_FRAME_COUNT,
+        figureFrameCount(PROTECTIVE_SHELL_FIGURE, state),
       );
     } else if (expiring) {
-      state = 'expire';
-      frame = progressFrameIndex(1 - framesRemaining / SHELL_FADE_OUT_FRAMES, SPRITE_FRAME_COUNT);
+      state = SHELL_EXPIRE_STATE;
+      frame = progressFrameIndex(
+        1 - framesRemaining / SHELL_FADE_OUT_FRAMES,
+        figureFrameCount(PROTECTIVE_SHELL_FIGURE, state),
+      );
     } else {
-      state = isFullPower ? 'full_power' : 'active';
-      frame = timeFrameIndex(elapsed, SPRITE_FRAME_COUNT, SPRITE_FRAME_COUNT);
+      state = isFullPower ? SHELL_FULL_POWER_STATE : SHELL_ACTIVE_STATE;
+      const cycleFrames = figureFrameCount(PROTECTIVE_SHELL_FIGURE, state);
+      frame = timeFrameIndex(elapsed, cycleFrames, cycleFrames);
     }
 
-    // tileSize chosen so frameWidth * (tileSize/tileScale) = radiusPx * 2
-    // protective_shell: frameWidth=400, tileScale=32 → tileSize = radiusPx * 64 / 400
-    const tileSize = (radiusPx * PROTECTIVE_SHELL_FRAME_CALC_MULT) / PROTECTIVE_SHELL_FRAME_WIDTH;
-    drawSpriteKey(ctx, 'protective_shell', state, frame, sx, sy, tileSize, { alpha });
+    const tileSize = shellTileSizeFor(PROTECTIVE_SHELL_FIGURE, radiusPx);
+    drawFigureCached(ctx, PROTECTIVE_SHELL_FIGURE, state, frame, sx, sy, tileSize, { alpha });
 
     const secs = Math.ceil(framesRemaining / FOG_DURATION_FRAME_MULTIPLIER);
     const timerColor = isFullPower ? '#fbbf24' : '#93c5fd';
@@ -688,11 +753,13 @@ export class SpellSystem implements GameSystem {
     const elapsed = (MINI_SHELL_FRAMES - framesRemaining) / FOG_DURATION_FRAME_MULTIPLIER;
     const fadeOut = Math.min(1, framesRemaining / MINI_SHELL_FADE_OUT_FRAMES);
     const alpha = fadeOut * MINI_SHELL_ALPHA_MULT;
-    const frame = timeFrameIndex(elapsed, SPRITE_FRAME_COUNT, SPRITE_FRAME_COUNT);
+    const cycleFrames = figureFrameCount(PROTECTIVE_SHELL_MINI_FIGURE, MINI_SHELL_STATE);
+    const frame = timeFrameIndex(elapsed, cycleFrames, cycleFrames);
 
-    // protective_shell_mini: frameWidth=192, tileScale=32 → tileSize = radiusPx * 64 / 192
-    const tileSize = (radiusPx * PROTECTIVE_SHELL_FRAME_CALC_MULT) / MINI_SHELL_FRAME_WIDTH;
-    drawSpriteKey(ctx, 'protective_shell_mini', 'active', frame, sx, sy, tileSize, { alpha });
+    const tileSize = shellTileSizeFor(PROTECTIVE_SHELL_MINI_FIGURE, radiusPx);
+    drawFigureCached(ctx, PROTECTIVE_SHELL_MINI_FIGURE, MINI_SHELL_STATE, frame, sx, sy, tileSize, {
+      alpha,
+    });
   }
 
   renderChainLightning(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -740,14 +807,22 @@ export class SpellSystem implements GameSystem {
       const sy = ripple.y - camY;
       const alpha = (ripple.framesLeft / ripple.totalFrames) * SHOCKWAVE_ALPHA_MULT;
       const progress = 1 - ripple.framesLeft / ripple.totalFrames;
-      const frame = progressFrameIndex(progress, SPRITE_FRAME_COUNT);
+      const frame = progressFrameIndex(
+        progress,
+        figureFrameCount(PROTECTIVE_SHELL_SHOCKWAVE_FIGURE, SHOCKWAVE_STATE),
+      );
 
-      // protective_shell_shockwave: frameWidth=480, tileScale=32 → tileSize = currentRadius * 64 / 480
-      const tileSize =
-        (ripple.currentRadius * PROTECTIVE_SHELL_FRAME_CALC_MULT) / SHOCKWAVE_FRAME_WIDTH;
-      drawSpriteKey(ctx, 'protective_shell_shockwave', 'expand', frame, sx, sy, tileSize, {
-        alpha,
-      });
+      const tileSize = shellTileSizeFor(PROTECTIVE_SHELL_SHOCKWAVE_FIGURE, ripple.currentRadius);
+      drawFigureCached(
+        ctx,
+        PROTECTIVE_SHELL_SHOCKWAVE_FIGURE,
+        SHOCKWAVE_STATE,
+        frame,
+        sx,
+        sy,
+        tileSize,
+        { alpha },
+      );
     }
   }
 

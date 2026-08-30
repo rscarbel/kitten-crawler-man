@@ -1,38 +1,57 @@
 /**
- * Headless review harness for the clown sprite sheets.
+ * The clown family's review harness.
  *
- * The browser harness cannot drive this project (a hidden tab never clears the
- * level-intro banner and never runs `requestAnimationFrame`), so the art has to
- * be judgeable from a still. This slices each clown sheet into a labelled
- * contact sheet: every animation row at review scale, plus a strip of the same
- * frames blitted at the in-game tile size, where the silhouette is all that
- * survives.
+ * Art has to be judged as an image, by something that only looks at the image:
+ * every defect that has ever mattered on a figure in this project was invisible
+ * to typecheck, to lint and to reading the drawing code. Each contact sheet is
+ * painted from the figure the way the runtime cache bakes it — supersampled and
+ * downsampled — so what a reviewer looks at is what the game blits, and the art
+ * gates run as part of the render so one command answers both "does it still
+ * hold together" and "what does it look like".
  *
- *   npx tsx scripts/render-clowns.ts --clown=fat --out=fat-review.png --scale=2
+ * The gates run **first**, before any contact sheet is allocated: a contact
+ * sheet is a tens-of-megapixel allocation, and measuring art on the far side of
+ * one has produced phantom failures before.
  *
- * Regenerate the sheets with `npx tsx scripts/generate-clown-sprites.ts`.
+ *   npm run render:clowns
+ *   npx tsx scripts/render-clowns.ts --clown=evil --scale=4
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import manifest from '../src/images/enemies/manifest.json';
+import { createCanvas } from 'canvas';
 
-// Geometry is read from the manifest rather than restated here: a harness that
-// silently slices the wrong rectangles is worse than no harness at all.
-const CLOWNS = {
-  fat: manifest.fat_clown,
-  stilt: manifest.stilt_clown,
-  terror: manifest.terror_clown,
-  evil: manifest.evil_clown,
+import { bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { clownGateFailures } from './gates-clowns.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import type { FigureDef } from '../src/sprites/figure/figureDef.js';
+import {
+  EVIL_CLOWN_FIGURE,
+  FAT_CLOWN_FIGURE,
+  STILT_CLOWN_FIGURE,
+  TERROR_CLOWN_FIGURE,
+} from '../src/sprites/art/clownFigure.js';
+import {
+  CLOWN_GAS_FIGURE,
+  CLOWN_SHATTER_FIGURE,
+  CLOWN_VIAL_FIGURE,
+} from '../src/sprites/art/clownGasFigure.js';
+
+const SUBJECTS: Readonly<Record<string, FigureDef>> = {
+  fat: FAT_CLOWN_FIGURE,
+  stilt: STILT_CLOWN_FIGURE,
+  terror: TERROR_CLOWN_FIGURE,
+  evil: EVIL_CLOWN_FIGURE,
+  vial: CLOWN_VIAL_FIGURE,
+  shatter: CLOWN_SHATTER_FIGURE,
+  gas: CLOWN_GAS_FIGURE,
 };
 
-type ClownName = keyof typeof CLOWNS;
-
-/** Matches TILE_SIZE in src/core/constants.ts; the sheets are drawn at 2× that. */
+/** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
 
 const DEFAULT_SCALE = 2;
+const MIN_SCALE = 0.25;
+const MAX_SCALE = 10;
 const LABEL_HEIGHT = 22;
 const PADDING = 8;
 const BACKDROP = '#3b3b40';
@@ -41,83 +60,63 @@ const GRID_LINE = 'rgba(255,255,255,0.12)';
 const LABEL_COLOR = '#e8e2d8';
 const LABEL_FONT = '14px sans-serif';
 
-interface SheetGeometry {
-  readonly path: string;
-  readonly frameWidth: number;
-  readonly frameHeight: number;
-  readonly tileX: number;
-  readonly tileY: number;
-  readonly tileScale: number;
-  readonly states: Readonly<
-    Record<
-      string,
-      { readonly row: number; readonly frameCount: number; readonly colOffset?: number }
-    >
-  >;
-}
-
-interface RowSpec {
-  readonly name: string;
-  readonly row: number;
-  readonly frameCount: number;
-  /** First column this state occupies. Gore pieces share one row by column. */
-  readonly colOffset: number;
-}
-
-function rowsOf(sheet: SheetGeometry): readonly RowSpec[] {
-  return Object.entries(sheet.states)
-    .map(([name, state]) => ({
-      name,
-      row: state.row,
-      frameCount: state.frameCount,
-      colOffset: state.colOffset ?? 0,
-    }))
-    .sort((a, b) => a.row - b.row || a.colOffset - b.colOffset);
-}
-
 function parseFlag(name: string, fallback: string): string {
   const prefix = `--${name}=`;
   const match = process.argv.find((arg) => arg.startsWith(prefix));
   return match === undefined ? fallback : match.slice(prefix.length);
 }
 
-function isClownName(value: string): value is ClownName {
-  return value in CLOWNS;
+/** A bad number here silently produces a blank or NaN-sized contact sheet. */
+function parseScale(): number {
+  const raw = parseFlag('scale', String(DEFAULT_SCALE));
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < MIN_SCALE || value > MAX_SCALE) {
+    throw new Error(`--scale=${raw} is not a number in [${MIN_SCALE}, ${MAX_SCALE}]`);
+  }
+  return value;
 }
 
-function drawContactSheet(sheet: SheetGeometry, image: Image, scale: number): Buffer {
-  const rows = rowsOf(sheet);
-  const cellW = sheet.frameWidth * scale;
-  const cellH = sheet.frameHeight * scale;
-  const maxCols = Math.max(...rows.map((row) => row.frameCount));
-  const inGameScale = IN_GAME_TILE / sheet.tileScale;
-  const inGameW = sheet.frameWidth * inGameScale;
-  const inGameH = sheet.frameHeight * inGameScale;
+function frameCountOf(def: FigureDef, state: string): number {
+  const declared = def.states.get(state);
+  if (declared === undefined) throw new Error(`${def.id} declares no state "${state}"`);
+  return declared.frames;
+}
+
+function drawContactSheet(def: FigureDef, scale: number): Buffer {
+  const states = [...def.states.keys()];
+  const sheet = bakeFigureSheet(def, states).canvas;
+  const cellW = def.frameWidth * scale;
+  const cellH = def.frameHeight * scale;
+  const maxCols = Math.max(...states.map((state) => frameCountOf(def, state)));
+  const inGameScale = IN_GAME_TILE / def.tileScale;
+  const inGameW = def.frameWidth * inGameScale;
+  const inGameH = def.frameHeight * inGameScale;
 
   const width = PADDING + maxCols * (cellW + PADDING);
   const height =
-    PADDING + rows.length * (cellH + LABEL_HEIGHT + PADDING) + (inGameH + LABEL_HEIGHT + PADDING);
+    PADDING + states.length * (cellH + LABEL_HEIGHT + PADDING) + (inGameH + LABEL_HEIGHT + PADDING);
 
-  const canvas = createCanvas(width, height);
+  const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = BACKDROP;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.font = LABEL_FONT;
 
   let y = PADDING;
-  for (const spec of rows) {
+  states.forEach((state, row) => {
+    const frames = frameCountOf(def, state);
     ctx.fillStyle = LABEL_COLOR;
-    ctx.fillText(`${spec.name} — ${spec.frameCount} frames`, PADDING, y + LABEL_HEIGHT - PADDING);
+    ctx.fillText(`${state} — ${frames} frames`, PADDING, y + LABEL_HEIGHT - PADDING);
     y += LABEL_HEIGHT;
 
-    for (let col = 0; col < spec.frameCount; col++) {
-      const x = PADDING + col * (cellW + PADDING);
+    for (let frame = 0; frame < frames; frame++) {
+      const x = PADDING + frame * (cellW + PADDING);
       ctx.drawImage(
-        image,
-        (spec.colOffset + col) * sheet.frameWidth,
-        spec.row * sheet.frameHeight,
-        sheet.frameWidth,
-        sheet.frameHeight,
+        sheet,
+        frame * def.frameWidth,
+        row * def.frameHeight,
+        def.frameWidth,
+        def.frameHeight,
         x,
         y,
         cellW,
@@ -125,30 +124,30 @@ function drawContactSheet(sheet: SheetGeometry, image: Image, scale: number): Bu
       );
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
-      // The tile box shows where the mob's collision tile sits inside the frame,
+      // The tile box shows where the mob's collision tile sits inside the cell,
       // so overhang and foot placement can be judged against it.
       ctx.strokeStyle = TILE_GUIDE;
       ctx.strokeRect(
-        x + sheet.tileX * scale,
-        y + sheet.tileY * scale,
-        sheet.tileScale * scale,
-        sheet.tileScale * scale,
+        x + def.tileX * scale,
+        y + def.tileY * scale,
+        def.tileScale * scale,
+        def.tileScale * scale,
       );
     }
     y += cellH + PADDING;
-  }
+  });
 
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText(`in-game size (${IN_GAME_TILE}px tile)`, PADDING, y + LABEL_HEIGHT - PADDING);
   y += LABEL_HEIGHT;
-  rows.forEach((spec, i) => {
-    const x = PADDING + i * (inGameW + PADDING);
+  states.forEach((state, row) => {
+    const x = PADDING + row * (inGameW + PADDING);
     ctx.drawImage(
-      image,
-      spec.colOffset * sheet.frameWidth,
-      spec.row * sheet.frameHeight,
-      sheet.frameWidth,
-      sheet.frameHeight,
+      sheet,
+      0,
+      row * def.frameHeight,
+      def.frameWidth,
+      def.frameHeight,
       x,
       y,
       inGameW,
@@ -159,23 +158,34 @@ function drawContactSheet(sheet: SheetGeometry, image: Image, scale: number): Bu
   return canvas.toBuffer('image/png');
 }
 
-async function main(): Promise<void> {
-  const requested = parseFlag('clown', 'fat');
-  if (!isClownName(requested)) {
+function subjectsRequested(): ReadonlyArray<readonly [string, FigureDef]> {
+  const requested = parseFlag('clown', 'all');
+  if (requested === 'all') return Object.entries(SUBJECTS);
+  const def = SUBJECTS[requested];
+  if (def === undefined) {
     throw new Error(
-      `Unknown clown "${requested}" — expected one of ${Object.keys(CLOWNS).join(', ')}`,
+      `--clown=${requested} is not one of ${Object.keys(SUBJECTS).join(', ')} (or "all")`,
     );
   }
-  const sheet: SheetGeometry = CLOWNS[requested];
-  const outPath = parseFlag('out', `${requested}-clown-review.png`);
-  const scale = Number(parseFlag('scale', String(DEFAULT_SCALE)));
-  if (!Number.isFinite(scale) || scale <= 0) {
-    throw new Error(`--scale must be a positive number, got "${parseFlag('scale', '')}"`);
-  }
-  const image = await loadImage(resolve(`src/images/${sheet.path}`));
-
-  writeFileSync(resolve(outPath), drawContactSheet(sheet, image, scale));
-  console.log(`Wrote ${outPath} (${requested}, scale ${scale}×)`);
+  return [[requested, def]];
 }
 
-void main();
+function main(): void {
+  // Gates before the contact sheets, never after: measuring art on the far side
+  // of a tens-of-megapixel allocation has produced phantom failures before.
+  console.log('Clown art gates:');
+  reportFigureGates('clowns', clownGateFailures());
+
+  const scale = parseScale();
+  const subjects = subjectsRequested();
+  for (const [name, def] of subjects) {
+    // `--out` names one file, so it only applies when one subject was asked
+    // for; otherwise every sheet would be written over the same path.
+    const defaultOut = `${PREVIEW_DIR}/${name}-clown-review.png`;
+    const outPath = subjects.length === 1 ? parseFlag('out', defaultOut) : defaultOut;
+    const written = writePreviewPng(outPath, drawContactSheet(def, scale));
+    console.log(`Wrote ${written} (${def.id}, scale ${scale}×)`);
+  }
+}
+
+main();

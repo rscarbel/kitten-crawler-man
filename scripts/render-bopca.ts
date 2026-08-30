@@ -16,7 +16,9 @@
  */
 
 import { createCanvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
+
+import { asGameContext } from './nodeGameContext.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 const { drawBopcaSprite, bopcaPaletteForSeed } = await import('../src/sprites/bopcaSprite');
 type BopcaState = Parameters<typeof drawBopcaSprite>[4]['state'];
@@ -65,7 +67,7 @@ const LABEL_COLOR = '#e2e8f0';
 const LABEL_FONT = 'bold 13px sans-serif';
 
 const DEFAULT_SCALE = 2;
-const DEFAULT_OUT = 'bopca.png';
+const DEFAULT_OUT = `${PREVIEW_DIR}/bopca.png`;
 const DEFAULT_FRAME = 0;
 
 const PREVIEW_DISH: DishVisual = {
@@ -141,7 +143,7 @@ function drawCell(
       const tileX = runLeft + column * ts;
       if (column === 0 || column === LAST_COLUMN) {
         drawCounterFrontFace(
-          ctx,
+          asGameContext(ctx),
           tileX,
           frontRowTop - ts,
           ts,
@@ -149,7 +151,7 @@ function drawCell(
         );
       }
       drawCounterFrontFace(
-        ctx,
+        asGameContext(ctx),
         tileX,
         frontRowTop,
         ts,
@@ -169,7 +171,7 @@ function drawCell(
       ctx.fillRect(tileX, rowTop, ts, ts);
     }
     drawCounterBackTile(
-      ctx,
+      asGameContext(ctx),
       tileX,
       frontRowTop - ts * 2,
       ts,
@@ -180,20 +182,26 @@ function drawCell(
   drawCounterFronts();
 
   const bopcaCentreX = runLeft + (GALLEY_COLUMN + TILE_CENTRE_FRACTION) * ts;
-  drawBopcaSprite(ctx, bopcaCentreX, frontRowTop + ts * BOPCA_FEET_COUNTER_FRACTION, ts, {
-    state,
-    animFrames: frame,
-    lookX: Math.sin(frame * LOOK_CYCLE_RATE),
-    lookY: Math.sin(frame * LOOK_CYCLE_RATE * LOOK_VERTICAL_RATE_RATIO),
-    palette: bopcaPaletteForSeed(seed),
-    blinking: frame % BLINK_INTERVAL_FRAMES < BLINK_DURATION_FRAMES,
-  });
+  drawBopcaSprite(
+    asGameContext(ctx),
+    bopcaCentreX,
+    frontRowTop + ts * BOPCA_FEET_COUNTER_FRACTION,
+    ts,
+    {
+      state,
+      animFrames: frame,
+      lookX: Math.sin(frame * LOOK_CYCLE_RATE),
+      lookY: Math.sin(frame * LOOK_CYCLE_RATE * LOOK_VERTICAL_RATE_RATIO),
+      palette: bopcaPaletteForSeed(seed),
+      blinking: frame % BLINK_INTERVAL_FRAMES < BLINK_DURATION_FRAMES,
+    },
+  );
 
   drawCounterFronts();
 
   if (state === 'serving') {
     drawServedDish(
-      ctx,
+      asGameContext(ctx),
       runLeft + (GALLEY_COLUMN + DISH_COLUMN_OFFSET_FROM_BOPCA) * ts,
       frontRowTop,
       ts,
@@ -278,5 +286,5 @@ for (let variant = 0; variant < PALETTE_VARIANT_COUNT; variant++) {
   );
 }
 
-writeFileSync(outPath, canvas.toBuffer('image/png'));
-process.stdout.write(`wrote ${outPath} (${sheetWidth * scale}x${sheetHeight * scale})\n`);
+const resolvedOutPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+process.stdout.write(`wrote ${resolvedOutPath} (${sheetWidth * scale}x${sheetHeight * scale})\n`);

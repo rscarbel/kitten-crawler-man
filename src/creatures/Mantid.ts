@@ -5,6 +5,7 @@ import {
   drawMantidSprite,
   mantidCullMarginTiles,
   mantidOverheadLiftTiles,
+  prewarmMantidCombat,
 } from '../sprites/mantidSprite';
 import { drawQuestMarker, QUEST_MARKER_GOLD } from '../sprites/questNPCSprite';
 import { maybeDropSkillBook } from './skillBookDrop';
@@ -117,14 +118,6 @@ const COIN_DROP_MIN = 120;
 const COIN_DROP_MAX = 220;
 /** A boss's mass: he is barely moved by anything shoving him. */
 const MASS = 8;
-/**
- * Lift and cull margin used before the sheet has loaded; the live values are
- * measured from the manifest so a rebake that resizes his cell cannot silently
- * shear him at the screen edge or detach the marker from his head.
- */
-const FALLBACK_ART_HEIGHT_TILES = 2;
-const FALLBACK_CULL_MARGIN_TILES = 3;
-
 /** How close the stalk stops, as a fraction of the strike's own reach. */
 const PURSUIT_STOP_RATIO = 0.85;
 const CENTER_OFFSET = 0.5;
@@ -194,7 +187,7 @@ export class Mantid extends Mob {
    * clips them off at the screen edge.
    */
   override get cullMarginTiles(): number {
-    return mantidCullMarginTiles('mantid', IMMUNE_LABEL_RISE_TILES, FALLBACK_CULL_MARGIN_TILES);
+    return mantidCullMarginTiles('mantid', IMMUNE_LABEL_RISE_TILES);
   }
 
   /**
@@ -304,6 +297,10 @@ export class Mantid extends Mob {
 
     const nearest = this.acquireTarget(targets, this.aggroRangePx);
     this.currentTarget = nearest;
+    // Warmed on the engagement rather than on each telegraph: he paints well
+    // past the millisecond a direct fallback costs, and the rage pause is over
+    // in a second — a row baked when it starts is a row baked too late.
+    if (!this.isAggro && nearest !== null) prewarmMantidCombat('mantid');
     this.isAggro = nearest !== null;
 
     switch (this.state) {
@@ -561,7 +558,7 @@ export class Mantid extends Mob {
     // Both the aggro tell and the rage marker go *after* the sprite and a full
     // art-height above the tile. `renderAggroIndicator` draws a few pixels above
     // the tile top, which on this creature is buried under two tiles of mantis.
-    const overheadY = sy - tileSize * mantidOverheadLiftTiles('mantid', FALLBACK_ART_HEIGHT_TILES);
+    const overheadY = sy - tileSize * mantidOverheadLiftTiles('mantid');
     if (this.isAggro && this.state !== 'rage_pause') {
       this.renderAggroIndicator(ctx, sx, overheadY, tileSize);
     }

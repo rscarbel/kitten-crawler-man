@@ -54,33 +54,53 @@ export interface SvgSubject {
   readonly views: (frame: number) => Promise<readonly SvgView[]>;
 }
 
+/** Either context the recorder answers to; both hand back the same recorder. */
+type SubjectContext = NodeCanvasContext | CanvasRenderingContext2D;
+
+/** For art modules under `src/`, which are typed against the browser's context. */
+function domContextOf(targets: SvgTargets): CanvasRenderingContext2D {
+  return targets.dom;
+}
+
 /**
  * The offline art modules paint in a unit-tall space with the feet near the
  * origin, so they need the tile scale applied before the figure exists.
  */
-function inUnitSpace(targets: SvgTargets, paint: (ctx: NodeCanvasContext) => void): void {
-  targets.node.save();
-  targets.node.scale(targets.unit, targets.unit);
-  paint(targets.node);
-  targets.node.restore();
+function inUnitSpace<C extends SubjectContext>(
+  ctx: C,
+  unit: number,
+  paint: (ctx: C) => void,
+): void {
+  ctx.save();
+  ctx.scale(unit, unit);
+  paint(ctx);
+  ctx.restore();
 }
 
 /**
  * Turns a sprite-sheet row table into views — one per row, so every animation
  * the sheet bakes is also exportable as vector art.
+ *
+ * `contextOf` picks which of the two context types the row's painters are typed
+ * against; a figure whose art has moved into `src/sprites/art/` takes the DOM
+ * one, and everything still under `scripts/` takes node-canvas's.
  */
-function sheetViews<Pose>(
+function sheetViews<Pose, C extends SubjectContext>(
   rows: ReadonlyArray<{
     readonly name: string;
     readonly view: 'front' | 'side' | 'back';
     readonly pose: (frame: number) => Pose;
   }>,
-  painters: Record<'front' | 'side' | 'back', (ctx: NodeCanvasContext, pose: Pose) => void>,
+  painters: Record<'front' | 'side' | 'back', (ctx: C, pose: Pose) => void>,
   frame: number,
+  contextOf: (targets: SvgTargets) => C,
 ): readonly SvgView[] {
   return rows.map((row) => ({
     name: row.name,
-    paint: (targets) => inUnitSpace(targets, (ctx) => painters[row.view](ctx, row.pose(frame))),
+    paint: (targets) =>
+      inUnitSpace(contextOf(targets), targets.unit, (ctx) =>
+        painters[row.view](ctx, row.pose(frame)),
+      ),
   }));
 }
 
@@ -141,21 +161,29 @@ export const SUBJECTS: readonly SvgSubject[] = [
   {
     name: 'carl',
     views: async (frame) => {
-      const { drawCarlFront, drawCarlBack, drawCarlSide } = await import('./carlArt.js');
-      const { ROWS } = await import('./generate-human-sprite.js');
+      const { drawCarlFront, drawCarlBack, drawCarlSide } =
+        await import('../src/sprites/art/carlArt.js');
+      const { HUMAN_ROWS } = await import('../src/sprites/art/humanFigure.js');
       return sheetViews(
-        ROWS,
+        HUMAN_ROWS,
         { front: drawCarlFront, back: drawCarlBack, side: drawCarlSide },
         frame,
+        domContextOf,
       );
     },
   },
   {
     name: 'donut',
     views: async (frame) => {
-      const { drawCatFront, drawCatBack, drawCatSide } = await import('./catArt.js');
-      const { ROWS } = await import('./generate-cat-sprite.js');
-      return sheetViews(ROWS, { front: drawCatFront, back: drawCatBack, side: drawCatSide }, frame);
+      const { drawCatFront, drawCatBack, drawCatSide } =
+        await import('../src/sprites/art/catArt.js');
+      const { CAT_ROWS } = await import('../src/sprites/art/catFigure.js');
+      return sheetViews(
+        CAT_ROWS,
+        { front: drawCatFront, back: drawCatBack, side: drawCatSide },
+        frame,
+        domContextOf,
+      );
     },
   },
   {
@@ -610,12 +638,13 @@ export const SUBJECTS: readonly SvgSubject[] = [
     name: 'bugaboo',
     views: async (frame) => {
       const { drawBugabooFront, drawBugabooBack, drawBugabooSide } =
-        await import('./bugabooArt.js');
-      const { ROWS } = await import('./generate-bugaboo-sprite.js');
+        await import('../src/sprites/art/bugabooArt.js');
+      const { BUGABOO_ROWS } = await import('../src/sprites/art/bugabooFigure.js');
       return sheetViews(
-        ROWS,
+        BUGABOO_ROWS,
         { front: drawBugabooFront, back: drawBugabooBack, side: drawBugabooSide },
         frame,
+        domContextOf,
       );
     },
   },

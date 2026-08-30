@@ -13,9 +13,9 @@
  */
 
 import { createCanvas, type Canvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
 
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
@@ -26,7 +26,7 @@ import type { BuildingKind } from '../src/map/town/townPlan.js';
 const DEFAULT_KIND = 'store';
 const DEFAULT_SCALE = 2;
 const DEFAULT_TOWER_FLOOR = 0;
-const DEFAULT_OUT = 'interior.png';
+const DEFAULT_OUT = `${PREVIEW_DIR}/interior.png`;
 /** Length of the `--name=` prefix an argument's value starts after. */
 const ARG_PREFIX_LENGTH = '--='.length;
 
@@ -92,5 +92,5 @@ const gameCtx = ctx as unknown as CanvasRenderingContext2D;
 renderCanvas(gameCtx, map.structure, TILE_SIZE, 0, 0, viewW, viewH);
 renderDecorationsOverlay(gameCtx, map.structure, TILE_SIZE, 0, 0, viewW, viewH);
 
-writeFileSync(outPath, canvas.toBuffer('image/png'));
+writePreviewPng(outPath, canvas.toBuffer('image/png'));
 console.log(`${outPath}: ${buildingName || kind} — ${tilesW}x${tilesH} tiles at ${scale}x`);

@@ -4,7 +4,7 @@
  * The legs are solved by **inverse kinematics to a foot target**: `gait.ts`
  * decides where each foot is in ground space, and the knee is whatever angle
  * puts the ankle there. That is the same structure the player character's
- * generator uses (`scripts/generate-human-sprite.ts`), and it is the reason his
+ * choreography uses (`src/sprites/art/humanFigure.ts`), and it is the reason his
  * walk is the only convincing one in the game — you cannot plant a foot whose
  * position you do not control. Driving the legs forward from the hip instead,
  * as this file used to, makes the planted foot slide backward at a rate with no

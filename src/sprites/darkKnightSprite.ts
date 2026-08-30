@@ -1,48 +1,83 @@
+import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached } from './figure/figureFrameCache';
 import {
-  drawSpriteKey,
-  walkFrameIndex,
-  progressFrameIndex,
-  timeFrameIndex,
-} from '../core/SpriteRenderer';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
+  DARK_KNIGHT_FIGURE,
+  IDLE_FRAMES,
+  PUNCH_FRAMES,
+  PUNCH_IMPACT_FRAME,
+  SLAM_FRAMES,
+  SLAM_IMPACT_FRAME,
+  SWEEP_FRAMES,
+  SWEEP_IMPACT_FRAME,
+  WALK_FRAMES,
+} from './art/darkKnightFigure';
 
-type DarkKnightState = SpriteStates['dark_knight'];
-
-/** Which of the sheet's three viewpoints a facing vector selects. */
+/** Which of the figure's three viewpoints a facing vector selects. */
 type DarkKnightView = 'front' | 'side' | 'away';
 
-/** The attacks that have their own rows on the sheet. */
+/** The attacks that have their own rows. */
 export type DarkKnightAttack = 'slam' | 'sweep' | 'punch';
 
 /**
- * Frame counts and impact frames, mirrored from
- * `scripts/generate-dark-knight-sprite.ts`.
- *
- * They are duplicated rather than imported because the runtime's `rootDir` is
- * `src/` and cannot reach `scripts/`. The generator prints its own table on
- * every bake so a drift is visible, and {@link darkKnightAttackFrames} reads
- * the *loaded sheet* rather than this table wherever a count is what matters.
+ * Every pose name the figure paints. Written out rather than derived, because
+ * `stateFor` builds its names by template literal and both draw paths answer a
+ * name the figure does not declare by returning without drawing anything.
+ */
+export type DarkKnightState =
+  | 'walk'
+  | 'walk_side'
+  | 'walk_away'
+  | 'idle'
+  | 'idle_side'
+  | 'idle_away'
+  | 'slam'
+  | 'slam_side'
+  | 'slam_away'
+  | 'sweep'
+  | 'sweep_side'
+  | 'sweep_away'
+  | 'punch'
+  | 'punch_side'
+  | 'punch_away';
+
+/**
+ * The frame each attack lands on, taken from the choreography that paints it
+ * rather than hand-copied beside it — the runtime and the art are one module
+ * graph now, so there is nothing left to drift.
  */
 export const DARK_KNIGHT_ATTACK_IMPACT_FRAME: Readonly<Record<DarkKnightAttack, number>> = {
-  slam: 9,
-  sweep: 13,
-  punch: 4,
+  slam: SLAM_IMPACT_FRAME,
+  sweep: SWEEP_IMPACT_FRAME,
+  punch: PUNCH_IMPACT_FRAME,
 };
 
 /**
- * How many frames a row actually holds, read from the sheet the game loaded.
- *
- * Not a hand-copied table: `drawSprite` *clamps* the frame index, so a row that
- * got shorter in a rebake would silently freeze on its last frame rather than
- * throw. There is nothing to notice until someone watches that one animation.
+ * Exhaustive by construction: a state added to the figure but not to this map
+ * is a compile error, which is safer than reading the count off the figure —
+ * the draw call *clamps* the frame index, so a row that got shorter would
+ * silently freeze on its last frame instead of failing.
  */
-function frameCountOf(state: DarkKnightState): number {
-  return getSpriteDefByKey('dark_knight')?.states.get(state)?.frameCount ?? 1;
-}
+const FRAME_COUNT: Record<DarkKnightState, number> = {
+  walk: WALK_FRAMES,
+  walk_side: WALK_FRAMES,
+  walk_away: WALK_FRAMES,
+  idle: IDLE_FRAMES,
+  idle_side: IDLE_FRAMES,
+  idle_away: IDLE_FRAMES,
+  slam: SLAM_FRAMES,
+  slam_side: SLAM_FRAMES,
+  slam_away: SLAM_FRAMES,
+  sweep: SWEEP_FRAMES,
+  sweep_side: SWEEP_FRAMES,
+  sweep_away: SWEEP_FRAMES,
+  punch: PUNCH_FRAMES,
+  punch_side: PUNCH_FRAMES,
+  punch_away: PUNCH_FRAMES,
+};
 
 /** Frames in an attack's profile row — the length its timers are sized from. */
 export function darkKnightAttackFrames(attack: DarkKnightAttack): number {
-  return frameCountOf(`${attack}_side`);
+  return FRAME_COUNT[`${attack}_side`];
 }
 
 /**
@@ -54,31 +89,30 @@ export function darkKnightAttackFrames(attack: DarkKnightAttack): number {
  */
 const FRAME_MIDPOINT = 0.5;
 
-export function darkKnightImpactProgress(attack: DarkKnightAttack): number {
-  const frames = darkKnightAttackFrames(attack);
-  const raw = (DARK_KNIGHT_ATTACK_IMPACT_FRAME[attack] + FRAME_MIDPOINT) / frames;
-  // Clamped short of 1. The impact frame above is hand-copied from the
-  // generator while the frame count is read from the *loaded* sheet, so a
-  // re-bake that shortened a row — or a sheet that failed to load, where the
-  // count falls back to 1 — would put the impact past the end of its own row.
-  // Nothing throws when that happens: the creature's execute phase interpolates
-  // `impact + elapsed * (1 - impact)` with a negative span and plays the attack
-  // backwards over a single frame, which is far harder to notice than a crash.
-  return Math.min(raw, MAX_IMPACT_PROGRESS);
-}
-
 /** The furthest through a row an impact may be declared. */
 const MAX_IMPACT_PROGRESS = 0.9;
 
+export function darkKnightImpactProgress(attack: DarkKnightAttack): number {
+  const frames = darkKnightAttackFrames(attack);
+  const raw = (DARK_KNIGHT_ATTACK_IMPACT_FRAME[attack] + FRAME_MIDPOINT) / frames;
+  // Clamped short of 1: a shortened row would otherwise put the impact past its
+  // own end, and nothing throws when that happens — the creature's execute
+  // phase interpolates `impact + elapsed * (1 - impact)` with a negative span
+  // and plays the attack backwards over a single frame, which is far harder to
+  // notice than a crash.
+  return Math.min(raw, MAX_IMPACT_PROGRESS);
+}
+
 /** Loop speed for the idle, which is driven by the clock rather than by a timer. */
 const IDLE_FPS = 5;
+const MILLISECONDS_PER_SECOND = 1000;
 
 /**
  * The seven pieces a Dark Knight comes apart into, in the order they spawn.
  *
- * The single source of truth for the runtime side: `scripts/darkKnightGore.ts`
- * paints them in this order and `BodyPartGoreSystem` spawns them in it, so a
- * rename in one place is a missing body part rather than a silent no-op.
+ * The single source of truth for the runtime side: `darkKnightGore.ts` paints
+ * them in this order and `BodyPartGoreSystem` spawns them in it, so a rename in
+ * one place is a missing body part rather than a silent no-op.
  */
 export const DARK_KNIGHT_GORE_PARTS: ReadonlyArray<string> = [
   'gore_helm',
@@ -92,6 +126,22 @@ export const DARK_KNIGHT_GORE_PARTS: ReadonlyArray<string> = [
 
 /** The `BodyPartGoreSystem` registry key a dead knight's flying pieces come from. */
 export const DARK_KNIGHT_BODY_PART_KEY = 'dark_knight';
+
+/**
+ * The three views of a row, warmed together rather than the one he currently
+ * faces: a wind-up lasts long enough for the player to walk around him, and the
+ * frames the cache has to have ready are whichever view he is in when the blow
+ * lands.
+ */
+export const DARK_KNIGHT_WALK_STATES: ReadonlyArray<DarkKnightState> = [
+  'walk',
+  'walk_side',
+  'walk_away',
+];
+
+export function darkKnightAttackStates(attack: DarkKnightAttack): ReadonlyArray<DarkKnightState> {
+  return [attack, `${attack}_side`, `${attack}_away`];
+}
 
 /** Everything the sprite needs to pick a pose. All fields are optional. */
 export interface DarkKnightSpriteState {
@@ -111,7 +161,7 @@ function viewFor(facingX: number, facingY: number): DarkKnightView {
   return facingY < 0 ? 'away' : 'front';
 }
 
-/** The animation families on the sheet; each has a row per view. */
+/** The animation families the figure paints; each has a row per view. */
 type AnimationBase = 'walk' | 'idle' | DarkKnightAttack;
 
 function stateFor(base: AnimationBase, view: DarkKnightView): DarkKnightState {
@@ -148,11 +198,11 @@ export function drawDarkKnightSprite(
 
   if (attack !== null && attackProgress !== null) {
     const key = stateFor(attack, view);
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      'dark_knight',
+      DARK_KNIGHT_FIGURE,
       key,
-      progressFrameIndex(attackProgress, frameCountOf(key)),
+      progressFrameIndex(attackProgress, FRAME_COUNT[key]),
       sx,
       sy,
       s,
@@ -163,17 +213,15 @@ export function drawDarkKnightSprite(
 
   if (isMoving) {
     const key = stateFor('walk', view);
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      'dark_knight',
+      DARK_KNIGHT_FIGURE,
       key,
-      walkFrameIndex(walkFrame, frameCountOf(key)),
+      walkFrameIndex(walkFrame, FRAME_COUNT[key]),
       sx,
       sy,
       s,
-      {
-        flipX,
-      },
+      { flipX },
     );
     return;
   }
@@ -181,17 +229,15 @@ export function drawDarkKnightSprite(
   // Clock-driven, not `walkFrame`-driven: `walkFrame` resets to 0 the moment a
   // mob stops, which would freeze the idle on its first frame.
   const key = stateFor('idle', view);
-  const nowSeconds = performance.now() / 1000;
-  drawSpriteKey(
+  const nowSeconds = performance.now() / MILLISECONDS_PER_SECOND;
+  drawFigureCached(
     ctx,
-    'dark_knight',
+    DARK_KNIGHT_FIGURE,
     key,
-    timeFrameIndex(nowSeconds, IDLE_FPS, frameCountOf(key)),
+    timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]),
     sx,
     sy,
     s,
-    {
-      flipX,
-    },
+    { flipX },
   );
 }

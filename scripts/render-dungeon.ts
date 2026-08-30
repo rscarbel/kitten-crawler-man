@@ -20,9 +20,9 @@
  */
 
 import { createCanvas, type Canvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
 
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
@@ -39,7 +39,7 @@ const DEFAULT_LEVEL = 1;
 const DEFAULT_VIEW_TILES_W = 56;
 const DEFAULT_VIEW_TILES_H = 32;
 const DEFAULT_SCALE = 1;
-const DEFAULT_OUT = 'dungeon.png';
+const DEFAULT_OUT = `${PREVIEW_DIR}/dungeon.png`;
 
 /** Length of the `--name=` prefix an argument's value starts after. */
 const ARG_PREFIX_LENGTH = '--='.length;
@@ -113,7 +113,7 @@ const gameCtx = ctx as unknown as CanvasRenderingContext2D;
 renderCanvas(gameCtx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
 renderDecorationsOverlay(gameCtx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
 
-writeFileSync(outPath, canvas.toBuffer('image/png'));
+writePreviewPng(outPath, canvas.toBuffer('image/png'));
 console.log(
   `${outPath}: ${levelDef.name} (${levelDef.groundTheme ?? DEFAULT_DUNGEON_FLOOR_THEME}), ` +
     `${viewTilesW}x${viewTilesH} tiles at ${scale}x from (${viewTileX}, ${viewTileY})`,

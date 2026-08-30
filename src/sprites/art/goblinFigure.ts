@@ -1,0 +1,1858 @@
+/**
+ * The five goblins, as painted figures: the choreography, the cell geometry,
+ * and the `FigureDef` the runtime cache and the review harness both draw
+ * through.
+ *
+ * This module is choreography and assembly only: the anatomy lives in
+ * `goblinArt.ts`, the weapons in `goblinWeapons.ts` and the wounds in
+ * `goblinGore.ts`. What is here is *where the hands and feet go on each frame*
+ * and where a pose or a severed piece sits inside its cell.
+ *
+ * Poses are authored as foot and hand **targets**; the rig solves the knees and
+ * elbows. That is the single reason a limb stays welded to the body through a
+ * 180° swing, and it is why a planted foot can be asserted rather than eyeballed.
+ *
+ * Every figure is drawn facing +X; the runtime mirrors it for the other facing.
+ *
+ * The art invariants live in `scripts/gates-goblins.ts`, which the review
+ * harness runs: `npm run render:goblins`.
+ */
+
+import {
+  ARCHETYPE_SCALE,
+  GOBLIN_ARCHETYPES,
+  GOBLIN_STYLES,
+  along,
+  clamp01,
+  deg,
+  drawGoblin,
+  easeIn,
+  easeInOut,
+  easeOut,
+  hump,
+  lerp,
+  pt,
+  restingPose,
+  seededNoise,
+  shoulderHeight,
+  type GoblinArchetype,
+  type GoblinPose,
+  type GoblinProp,
+  type GoblinStyle,
+  type Pt,
+} from './goblinArt';
+import { WEAPON_FACTORIES, bowStringPull, setBowDraw, type BowDraw } from './goblinWeapons';
+import { gorePieces, type GorePiece } from './goblinGore';
+import { type FigureDef, figureStates } from '../figure/figureDef';
+
+/** Tile size the art is drawn at; the runtime scales by tileSize / TILE_SCALE. */
+export const TILE_SCALE = 64;
+
+const FULL_CYCLE = Math.PI * 2;
+
+// ── Row manifest ─────────────────────────────────────────────────────────────
+
+export type RowKind = 'loop' | 'oneShot';
+
+export interface RowSpec {
+  readonly name: string;
+  readonly frameCount: number;
+  readonly kind: RowKind;
+}
+
+/**
+ * Uniform across all five figures, so the sword's states and the war hammer's
+ * are the same names and the runtime needs no per-weapon state mapping — and
+ * therefore no casts.
+ */
+export const ROWS: readonly RowSpec[] = [
+  { name: 'walk', frameCount: 12, kind: 'loop' },
+  { name: 'idle', frameCount: 12, kind: 'loop' },
+  { name: 'idle_break', frameCount: 18, kind: 'oneShot' },
+  { name: 'attack_light', frameCount: 14, kind: 'oneShot' },
+  { name: 'attack_heavy', frameCount: 18, kind: 'oneShot' },
+  { name: 'flinch', frameCount: 5, kind: 'oneShot' },
+];
+
+/**
+ * Sprite frame each attack connects on. `GOBLIN_ATTACKS` in
+ * `src/sprites/goblinSprite.ts` carries the same numbers and an art gate
+ * asserts the two match — if one moves, both move.
+ */
+export const IMPACT_FRAMES: Record<GoblinArchetype, { light: number; heavy: number }> = {
+  sword: { light: 6, heavy: 8 },
+  axe: { light: 6, heavy: 9 },
+  mace: { light: 7, heavy: 8 },
+  warhammer: { light: 7, heavy: 10 },
+  // The frame the string is released on, not a frame anything is struck on.
+  bow: { light: 10, heavy: 13 },
+};
+
+/**
+ * Loops sample the cycle evenly; one-shots sample the middle of each frame.
+ *
+ * Exported because the pixels cannot say how much of a cycle a row covers: a
+ * gait's pose distance saturates, so a row running one and a half turns wraps
+ * by about as much as it steps and reads as an ordinary loop. The loop gate
+ * asserts the coverage on this mapping, where the defect is unambiguous.
+ */
+export function cyclePhase(frame: number, frameCount: number): number {
+  return frame / frameCount;
+}
+
+/**
+ * One-shots sample `(frame + 0.5) / frameCount`. Using `frameCount − 1` for a
+ * loop double-draws the seam and makes every cycle hitch once; using it for a
+ * one-shot puts the last frame at exactly 1.0 and loses the recovery.
+ */
+function shotProgress(frame: number, frameCount: number): number {
+  return (frame + 0.5) / frameCount;
+}
+
+function rowByName(name: string): RowSpec {
+  const found = ROWS.find((row) => row.name === name);
+  if (found === undefined) throw new Error(`no row named ${name}`);
+  return found;
+}
+
+/** Frames one animation row holds. Throws on a row the figures do not paint. */
+export function goblinRowFrameCount(name: string): number {
+  return rowByName(name).frameCount;
+}
+
+/** Progress at which an attack's impact frame lands. */
+function impactProgress(archetype: GoblinArchetype, kind: 'light' | 'heavy'): number {
+  const row = rowByName(kind === 'light' ? 'attack_light' : 'attack_heavy');
+  return shotProgress(IMPACT_FRAMES[archetype][kind], row.frameCount);
+}
+
+// ── Walk ─────────────────────────────────────────────────────────────────────
+
+/** Fraction of a stride a foot spends planted. High: goblins scuttle. */
+const CONTACT_FRACTION = 0.62;
+/** Two footfalls per cycle, so the pelvis rises twice as fast as it strides. */
+const BOB_PER_CYCLE = 2;
+/** Ears trail the head by this fraction of a cycle. */
+const EAR_LAG_PHASE = 2 / 12;
+
+interface GaitConfig {
+  /** Half the distance between the forward and rear extremes of a stride. */
+  readonly stride: number;
+  readonly lift: number;
+  readonly bob: number;
+  readonly sway: number;
+  readonly leanSwing: number;
+  /** Forward/back travel of the free hand as it counter-swings the legs. */
+  readonly armSwing: number;
+  /** The weapon arm swings less: the weapon's mass damps it. */
+  readonly weaponArmDamping: number;
+  /** Knees splay outward; this is how far the foot tracks outside the hip. */
+  readonly splay: number;
+  /** A bird-like forward-and-back head bob, not an up-and-down one. */
+  readonly headLead: number;
+}
+
+/** Where a foot sits at `phase` (0–1) of its own stride cycle. */
+function footTarget(phase: number, config: GaitConfig): Pt {
+  const wrapped = phase - Math.floor(phase);
+  const x =
+    wrapped < CONTACT_FRACTION
+      ? lerp(config.stride, -config.stride, wrapped / CONTACT_FRACTION)
+      : lerp(
+          -config.stride,
+          config.stride,
+          easeInOut((wrapped - CONTACT_FRACTION) / (1 - CONTACT_FRACTION)),
+        );
+  const swing = (wrapped - CONTACT_FRACTION) / (1 - CONTACT_FRACTION);
+  const y = wrapped < CONTACT_FRACTION ? 0 : -config.lift * Math.sin(swing * Math.PI);
+  return { x, y };
+}
+
+const GAITS: Record<GoblinArchetype, GaitConfig> = {
+  sword: {
+    stride: 0.32,
+    lift: 0.13,
+    bob: 0.055,
+    sway: 0.042,
+    leanSwing: deg(3),
+    armSwing: 0.24,
+    weaponArmDamping: 0.45,
+    splay: 0.03,
+    headLead: 0.035,
+  },
+  axe: {
+    stride: 0.26,
+    lift: 0.105,
+    bob: 0.062,
+    sway: 0.046,
+    leanSwing: deg(3.5),
+    armSwing: 0.2,
+    weaponArmDamping: 0.3,
+    splay: 0.045,
+    headLead: 0.03,
+  },
+  mace: {
+    stride: 0.23,
+    lift: 0.095,
+    bob: 0.078,
+    sway: 0.063,
+    leanSwing: deg(4),
+    armSwing: 0.19,
+    weaponArmDamping: 0.5,
+    splay: 0.055,
+    headLead: 0.026,
+  },
+  warhammer: {
+    stride: 0.25,
+    lift: 0.088,
+    bob: 0.086,
+    sway: 0.075,
+    leanSwing: deg(3),
+    armSwing: 0.15,
+    weaponArmDamping: 0.2,
+    splay: 0.06,
+    headLead: 0.02,
+  },
+  // The longest stride in the set: this one is not scuttling in to swing at
+  // anybody, it is repositioning. The bob is what a blind review found missing —
+  // at 0.042 the head sat at a constant height for all twelve frames and the
+  // whole walk read as a figure on a conveyor. A stride needs the hips to rise
+  // and fall, or nothing about it lands.
+  bow: {
+    stride: 0.42,
+    lift: 0.15,
+    bob: 0.1,
+    sway: 0.05,
+    leanSwing: deg(3),
+    armSwing: 0.3,
+    weaponArmDamping: 0.6,
+    splay: 0.022,
+    headLead: 0.045,
+  },
+};
+
+/**
+ * Where an armed goblin's weapon hand sits at rest.
+ *
+ * Not the unarmed resting hand: that one hangs at full length beside the knee,
+ * and a weapon held there points along the ground with both arms stretched out
+ * in front, which reads as pushing a lawnmower. A carried weapon is held in
+ * close to the hip and a little higher, so the haft crosses the body and the
+ * head rests on the floor at a believable angle.
+ */
+interface CarryConfig {
+  /** How far out from the spine the weapon hand rides, in hip half-widths. */
+  readonly hipFraction: number;
+  /** How high it rides, as a fraction of the goblin's own shoulder height. */
+  readonly heightFraction: number;
+  /**
+   * A carry angle stated outright, instead of solved for ground clearance.
+   *
+   * {@link carryAngle} answers "how steeply can this hang without the head going
+   * through the floor", which is the right question for a weapon with a head.
+   * A bow has none — both its ends are tips — and the solve puts it right up
+   * against `MAX_CARRY_ANGLE`, where `asin` is nearly vertical: the idle's own
+   * breathing bob then swings the stave several degrees a frame and gate G8
+   * reports the spacing cliff. Stating the angle removes the derivative along
+   * with the cliff.
+   */
+  readonly angle?: number;
+}
+
+/**
+ * Where each archetype's weapon hand sits at rest.
+ *
+ * Per-archetype rather than one shared pair, and the axe is the reason. The
+ * height ends up in {@link carryAngle}, which solves for the steepest angle
+ * that still keeps the weapon's tip off the floor — so a low hand on a long
+ * weapon *forces* a near-horizontal haft. At the shared 0.46 the axe hung 14°
+ * off level, and a broad bit hanging off a horizontal stick at ankle height is
+ * a spade however the head itself is drawn: three blind silhouette reviews
+ * running named it shovel, spade, boot and bucket, and two redraws of the head
+ * moved none of them. The head was never the variable.
+ *
+ * The two numbers have to move together on a two-handed weapon, which cost a
+ * round on its own. Raising the hand alone pulled the butt grip in under the
+ * far shoulder, and the off arm — which has only 0.72 of the near arm's length
+ * — folded to a third of its span and threw its elbow up behind the shoulder,
+ * reading as an arm on upside down. G14 is blind to that: the fist is still on
+ * the haft, it is the elbow that is wrong. Carrying further *out* as well as up
+ * keeps the off arm's span past half its reach, which is where it bends like an
+ * arm.
+ *
+ * Note the trap in the other direction: `GoblinProp.headHalfHeight` feeds the
+ * same solve, so making the bit *taller* to read better lowers the carry angle
+ * and undoes this.
+ */
+/** How steeply a slung bow hangs from the fist. Near vertical; see {@link CarryConfig.angle}. */
+const BOW_CARRY_ANGLE = deg(62);
+
+const CARRIES: Record<GoblinArchetype, CarryConfig> = {
+  sword: { hipFraction: 1.25, heightFraction: 0.46 },
+  axe: { hipFraction: 1.6, heightFraction: 0.62 },
+  mace: { hipFraction: 1.25, heightFraction: 0.46 },
+  warhammer: { hipFraction: 1.25, heightFraction: 0.46 },
+  // Held high and *well clear of the body*, and the hip fraction is the load
+  // bearing half of that. The height sets the carry angle (see `carryAngle`),
+  // and near-vertical is what makes a hanging bow read as a bow rather than as
+  // the tail a blind silhouette review named it. But a near-vertical stave
+  // carried at the hip lies straight down the middle of the torso — the same
+  // review's next look called it an ironing board. The stave is 0.5 tiles either
+  // side of the fist, so the fist has to sit further out than the shoulder is
+  // wide before the bow becomes a separate shape in pure black.
+  bow: { hipFraction: 3.6, heightFraction: 0.62, angle: BOW_CARRY_ANGLE },
+};
+
+function carryHand(archetype: GoblinArchetype, style: GoblinStyle): Pt {
+  const carry = CARRIES[archetype];
+  return {
+    x: style.proportions.hipHalfWidth * carry.hipFraction,
+    y: -shoulderHeight(style.proportions) * carry.heightFraction,
+  };
+}
+
+/**
+ * The steepest a carried weapon may hang. Every resting and walking frame hangs
+ * the weapon at whatever angle {@link carryAngle} returns, and this is the limit
+ * past which the blade would swing tens of degrees between neighbouring frames.
+ */
+const MAX_CARRY_ANGLE = deg(70);
+
+/**
+ * How far a carried weapon's tip is held clear of the floor, in tile units.
+ *
+ * The carry angle used to put the tip exactly on the ground plane, which reads
+ * nicely at review scale and fails the silhouette test outright: the axe head
+ * and the mace head landed in among the feet, merged with them and with the
+ * ground shadow, and both archetypes became a hunched blob with a lump at the
+ * bottom. The weapon has to sit against empty background to be nameable.
+ */
+const CARRY_GROUND_CLEARANCE = 0.1;
+
+/**
+ * The steepest a weapon may point downward before its tip is through the floor.
+ *
+ * A goblin's weapon is over half its own height, so a swing driven down from
+ * chest height buries the head in the ground long before the authored follow
+ * angle is reached — the war hammer's finished 18 px below its own feet, which
+ * at 32 px reads as a grey puddle under the sprite rather than as a weapon.
+ * Capping the angle instead of retuning each swing's keyframes means a retimed
+ * attack cannot reintroduce it, and the cap bites smoothly: both the hand height
+ * and the authored angle vary continuously, so the tip decelerates into the
+ * floor and skids along it, which is what a slam looks like anyway.
+ */
+function groundLandingAngle(prop: GoblinProp, handY: number): number {
+  return Math.asin(clamp01((-handY - groundDrop(prop)) / prop.tipDistance));
+}
+
+/** Clearance plus however far the weapon's own head hangs below its axis. */
+function groundDrop(prop: GoblinProp): number {
+  return CARRY_GROUND_CLEARANCE + prop.headHalfHeight;
+}
+
+/** The carry angle for one archetype: its stated one, or the solved one. */
+function carryAngleFor(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  handY: number,
+): number {
+  return CARRIES[archetype].angle ?? carryAngle(style, prop, handY);
+}
+
+function carryAngle(style: GoblinStyle, prop: GoblinProp, handY: number): number {
+  // Capped short of vertical because `asin` is near-vertical as its argument
+  // approaches 1: a hand raised to within a few percent of the weapon's own
+  // length would otherwise swing the blade tens of degrees in a single frame,
+  // which gate G8 reports as a cliff and a player sees as a snap.
+  const dropToClearance = -handY - groundDrop(prop);
+  const reachRatio = Math.min(
+    clamp01(dropToClearance / prop.tipDistance),
+    Math.sin(MAX_CARRY_ANGLE),
+  );
+  return Math.asin(reachRatio);
+}
+
+/** Put the off hand on a two-handed haft, or leave it where the pose wants it. */
+function gripFarHand(prop: GoblinProp, nearHand: Pt, weaponAngle: number, fallback: Pt): Pt {
+  if (prop.offGripDistance === null) return fallback;
+  return along(nearHand, weaponAngle, prop.offGripDistance);
+}
+
+function walkPose(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  phase: number,
+): GoblinPose {
+  const rest = restingPose(style);
+  const gait = GAITS[archetype];
+  const swingAngle = phase * FULL_CYCLE;
+  const armPhase = Math.sin(swingAngle);
+  const near = footTarget(phase, gait);
+  const far = footTarget(phase + 0.5, gait);
+
+  // A walking goblin carries its weapon clear of the floor; only a standing one
+  // rests the head on it. Without this lift the axe ploughs a furrow.
+  const WALK_CARRY_LIFT = 0.12;
+  /**
+   * The carried weapon rises and falls with the hips, twice per stride.
+   *
+   * Small on purpose: the hand is already swinging fore-and-aft on a once-per
+   * -stride sine, and a large second-harmonic bob on top of it makes the tip
+   * lurch where the two are in phase — which gate G8 reports as a cliff.
+   */
+  const WEAPON_BOB = 0.022;
+  const carry = carryHand(archetype, style);
+  const nearHand: Pt = {
+    x: carry.x - armPhase * gait.armSwing * gait.weaponArmDamping,
+    y:
+      carry.y -
+      WALK_CARRY_LIFT -
+      Math.abs(armPhase) * gait.armSwing * 0.18 -
+      WEAPON_BOB * Math.cos(swingAngle * BOB_PER_CYCLE),
+  };
+  const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y);
+  const freeHand: Pt = {
+    x: rest.farHand.x + armPhase * gait.armSwing,
+    y: rest.farHand.y - Math.abs(armPhase) * gait.armSwing * 0.22,
+  };
+
+  return {
+    ...rest,
+    bob: -gait.bob * (0.5 - 0.5 * Math.cos(swingAngle * BOB_PER_CYCLE)),
+    sway: gait.sway * Math.sin(swingAngle),
+    lean: gait.leanSwing * Math.sin(swingAngle * BOB_PER_CYCLE),
+    // Knees splay outward, which is what makes the gait bandy rather than a march.
+    nearFoot: { x: near.x + gait.splay, y: near.y },
+    farFoot: { x: far.x - gait.splay, y: far.y },
+    nearHand,
+    farHand: gripFarHand(prop, nearHand, weaponAngle, freeHand),
+    weaponAngle,
+    headLead: gait.headLead * Math.sin(swingAngle * BOB_PER_CYCLE + Math.PI / 3),
+    earLag: deg(-14) * Math.sin((phase - EAR_LAG_PHASE) * FULL_CYCLE * BOB_PER_CYCLE),
+    headTilt: -armPhase * deg(2.5),
+    eyeOpen: 1,
+  };
+}
+
+// ── Idle ─────────────────────────────────────────────────────────────────────
+
+interface IdleConfig {
+  readonly breathDepth: number;
+  readonly bob: number;
+  /** A slow weight shift from one foot to the other, once per loop. */
+  readonly weightShift: number;
+  readonly headRoll: number;
+  /** Frame of the loop the two-frame blink starts on. */
+  readonly blinkFrame: number;
+  /** Frame the ear twitch starts on; deliberately not the blink's. */
+  readonly twitchFrame: number;
+}
+
+const IDLES: Record<GoblinArchetype, IdleConfig> = {
+  sword: {
+    breathDepth: 0.075,
+    bob: 0.055,
+    weightShift: 0.085,
+    headRoll: deg(4),
+    blinkFrame: 3,
+    twitchFrame: 8,
+  },
+  axe: {
+    breathDepth: 0.09,
+    bob: 0.05,
+    weightShift: 0.07,
+    headRoll: deg(3),
+    blinkFrame: 7,
+    twitchFrame: 2,
+  },
+  mace: {
+    breathDepth: 0.12,
+    bob: 0.065,
+    weightShift: 0.1,
+    headRoll: deg(5),
+    blinkFrame: 5,
+    twitchFrame: 10,
+  },
+  warhammer: {
+    breathDepth: 0.115,
+    bob: 0.075,
+    weightShift: 0.06,
+    headRoll: deg(2),
+    blinkFrame: 9,
+    twitchFrame: 4,
+  },
+  // Deeper than it looks it should be. At 0.07/0.045 the idle moved about two
+  // pixels across its whole loop and read as a still frame; the archer is the
+  // one goblin a player stands and watches, so its idle has to breathe.
+  bow: {
+    breathDepth: 0.16,
+    bob: 0.105,
+    weightShift: 0.15,
+    headRoll: deg(9),
+    blinkFrame: 1,
+    twitchFrame: 6,
+  },
+};
+
+/** A blink is two frames of a twelve-frame loop; any longer reads as a doze. */
+/** The head's fore-and-aft drift, as a multiple of the idle bob. */
+const IDLE_HEAD_LEAD = 1.4;
+/** The head rolls twice per breath, so the two never lock into one motion. */
+const HEAD_ROLL_PER_CYCLE = 2;
+const BLINK_FRAMES = 2;
+const TWITCH_FRAMES = 3;
+
+function windowedAt(frame: number, start: number, length: number, frameCount: number): number {
+  const since = (frame - start + frameCount) % frameCount;
+  return since < length ? hump((since + 0.5) / length) : 0;
+}
+
+function idlePose(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  frame: number,
+  frameCount: number,
+): GoblinPose {
+  const rest = restingPose(style);
+  const config = IDLES[archetype];
+  const phase = cyclePhase(frame, frameCount);
+  const breath = Math.sin(phase * FULL_CYCLE);
+  /**
+   * The weight shift, phased so it is **zero at frame 0**.
+   *
+   * Every one-shot row ends by handing back to idle frame 0, so any field that
+   * is non-zero there is a pop on every swing, blink and flinch — which is
+   * exactly what gate G6 measures. A raw `sin(θ − π/2)` sits at −1 on frame 0.
+   * Offsetting it makes the goblin lean onto one foot and back rather than
+   * rocking between them, which is what a bored scavenger does anyway.
+   */
+  const shift = (Math.sin(phase * FULL_CYCLE - Math.PI / 2) + 1) / 2;
+  const blink = windowedAt(frame, config.blinkFrame, BLINK_FRAMES, frameCount);
+  const twitch = windowedAt(frame, config.twitchFrame, TWITCH_FRAMES, frameCount);
+
+  const carry = carryHand(archetype, style);
+  const nearHand: Pt = { x: carry.x, y: carry.y - config.bob * breath };
+  const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y);
+
+  return {
+    ...rest,
+    bob: config.bob * breath,
+    sway: config.weightShift * shift,
+    torsoSquash: 1 + config.breathDepth * breath,
+    nearHand,
+    farHand: gripFarHand(prop, nearHand, weaponAngle, {
+      x: rest.farHand.x,
+      y: rest.farHand.y + config.bob * breath * 0.6,
+    }),
+    weaponAngle,
+    // The head leads and trails the breath rather than only rolling, so an idle
+    // goblin looks like it is looking around rather than like a still frame.
+    headTilt: config.headRoll * Math.sin(phase * FULL_CYCLE * HEAD_ROLL_PER_CYCLE),
+    // Phased to be zero at frame 0, because every one-shot row hands back to
+    // idle frame 0 and a non-zero value there is a pop on every single swing.
+    headLead: config.bob * IDLE_HEAD_LEAD * Math.sin(phase * FULL_CYCLE),
+    lean: deg(-2) * breath,
+    earLag: deg(-18) * twitch,
+    eyeOpen: 1 - blink,
+  };
+}
+
+// ── Idle break ───────────────────────────────────────────────────────────────
+
+/**
+ * A 0→1→0 envelope whose ends are flat.
+ *
+ * A raw `hump` has its steepest slope at t=0, so a flourish built on one leaves
+ * the idle pose at full speed and the first two frames jump — which is what gate
+ * G8 measures as a cliff in the tip-spacing chart. Easing the input first flattens
+ * both ends, so the break grows out of the idle and settles back into it.
+ */
+function smoothHump(t: number): number {
+  return hump(easeInOut(t));
+}
+
+/**
+ * The occasional flourish that gives each archetype its personality. Every one
+ * starts and ends on the idle pose, so it can be dropped on top of the loop.
+ */
+function idleBreakPose(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  progress: number,
+): GoblinPose {
+  const rest = restingPose(style);
+  const base = idlePose(archetype, style, prop, 0, rowByName('idle').frameCount);
+  const carry = carryHand(archetype, style);
+  // A single 0→1→0 hump, so the break always returns to where idle frame 0 is.
+  const swell = smoothHump(progress);
+  const armLength = style.proportions.upperArmLength + style.proportions.forearmLength;
+
+  switch (archetype) {
+    case 'sword': {
+      // Raises the blade to thumb the edge and levels the point forward in one
+      // continuous gesture, then lowers it.
+      //
+      // The first cut split this into two beats with a gap between them, and the
+      // gap was the defect: the blade stalled for a frame and then leapt, which
+      // is a spacing cliff rather than a pause. One envelope cannot stall.
+      const raise = smoothHump(progress);
+      const LEVELLED_ANGLE = deg(-6);
+      const nearHand: Pt = {
+        x: lerp(carry.x, carry.x + armLength * 0.3, raise),
+        y: lerp(carry.y, -shoulderHeight(style.proportions) * 0.82, raise),
+      };
+      return {
+        ...base,
+        nearHand,
+        weaponAngle: lerp(carryAngleFor(archetype, style, prop, nearHand.y), LEVELLED_ANGLE, raise),
+        farHand: {
+          x: rest.farHand.x - 0.05 * raise,
+          y: rest.farHand.y - armLength * 0.16 * raise,
+        },
+        lean: deg(-4) * raise,
+        headTilt: deg(-8) * raise,
+        headLead: 0.03 * raise,
+        mouthOpen: raise * 0.7,
+        eyeOpen: 1,
+      };
+    }
+    case 'axe': {
+      // Hefts the axe up and lets it drop back into the palm, twice.
+      const HEFTS = 2;
+      const heft = smoothHump((progress * HEFTS) % 1) * swell;
+      const nearHand: Pt = {
+        x: carry.x + 0.09 * heft,
+        y: carry.y - armLength * 0.52 * heft,
+      };
+      const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y) - deg(26) * heft;
+      return {
+        ...base,
+        bob: -0.02 * heft,
+        nearHand,
+        weaponAngle,
+        farHand: gripFarHand(prop, nearHand, weaponAngle, rest.farHand),
+        headTilt: deg(8) * heft,
+        lean: deg(-7) * heft,
+      };
+    }
+    case 'mace': {
+      // A lazy one-handed twirl beside the hip.
+      // Across the whole row, not 85% of it: clamping the twirl early parks the
+      // head for the last three frames while the hand keeps moving, which is a
+      // stall followed by a jump rather than a wind-down.
+      const twirl = easeInOut(progress) * FULL_CYCLE;
+      const nearHand: Pt = {
+        x: carry.x + 0.05 * swell,
+        y: carry.y - 0.06 * swell,
+      };
+      return {
+        ...base,
+        nearHand,
+        weaponAngle: carryAngleFor(archetype, style, prop, nearHand.y) - twirl,
+        propBehind: Math.sin(twirl) < -0.2,
+        headTilt: deg(6) * swell,
+        mouthOpen: 0.3 * swell,
+      };
+    }
+    case 'warhammer': {
+      // Shoulder roll, neck crack, spits.
+      const roll = smoothHump(clamp01(progress / 0.45));
+      const crack = smoothHump(clamp01((progress - 0.4) / 0.3));
+      const spit = smoothHump(clamp01((progress - 0.7) / 0.3));
+      const nearHand: Pt = {
+        x: carry.x + 0.07 * roll,
+        y: carry.y - 0.12 * roll,
+      };
+      const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y);
+      return {
+        ...base,
+        torsoSquash: base.torsoSquash + 0.11 * roll,
+        lean: deg(-11) * roll + deg(14) * spit,
+        bob: base.bob - 0.05 * roll,
+        nearHand,
+        weaponAngle,
+        farHand: gripFarHand(prop, nearHand, weaponAngle, rest.farHand),
+        headTilt: deg(-26) * crack + deg(20) * spit,
+        headLead: 0.11 * spit - 0.05 * crack,
+        mouthOpen: spit,
+        earLag: deg(-22) * crack,
+      };
+    }
+    case 'bow': {
+      // Checks the string, then scans the room over one shoulder. Neither beat
+      // raises the bow: the flourish has to be unmistakably *not* an aim, or an
+      // idling archer reads as one about to shoot and the telegraph loses its
+      // meaning.
+      // Both envelopes span the whole row rather than a leading slice of it.
+      // Compressed into the first 40% the pluck left the idle pose at speed and
+      // the opening frames jumped — the same spacing cliff the sword's break was
+      // rewritten to avoid, and gate G4 measures it.
+      const pluck = smoothHump(progress);
+      const scan = Math.sin(progress * Math.PI * SCAN_SWEEPS) * swell;
+      const nearHand: Pt = {
+        x: carry.x + 0.05 * pluck,
+        y: carry.y - armLength * 0.18 * pluck,
+      };
+      const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y) - deg(12) * pluck;
+      return {
+        ...base,
+        nearHand,
+        weaponAngle,
+        farHand: {
+          x: rest.farHand.x + 0.12 * pluck,
+          y: rest.farHand.y - armLength * 0.34 * pluck,
+        },
+        lean: deg(-3) * pluck,
+        headTilt: deg(-14) * pluck + deg(18) * scan,
+        headLead: 0.04 * pluck - 0.03 * scan,
+        earLag: deg(24) * scan,
+        eyeOpen: 1,
+      };
+    }
+  }
+}
+
+// ── Attacks ──────────────────────────────────────────────────────────────────
+
+/**
+ * One swing, described as the four beats every weapon strike shares.
+ *
+ * Hand positions are in figure space. Angles are the weapon's own axis. Each
+ * beat is eased differently on purpose: the wind is `easeInOut` so it settles,
+ * the drive is `easeIn` so it accelerates into the hit, and the follow-through
+ * is `easeOut` so it decays. A linear sweep across the row is what the old
+ * goblin did, and it is exactly why that attack read as a robot arm.
+ */
+interface SwingSpec {
+  /** Progress at which the wind is fully loaded. */
+  readonly windEnd: number;
+  /** Progress the weapon connects on — always derived from the timing table. */
+  readonly impactAt: number;
+  /** Progress the follow-through has fully played out. */
+  readonly followEnd: number;
+  readonly windHand: Pt;
+  readonly impactHand: Pt;
+  readonly followHand: Pt;
+  readonly windAngle: number;
+  readonly impactAngle: number;
+  readonly followAngle: number;
+  readonly windLean: number;
+  readonly impactLean: number;
+  readonly followLean: number;
+  readonly windSway: number;
+  readonly impactSway: number;
+  /** How far the lead foot steps, and over what part of the drive. */
+  readonly step: number;
+  readonly stepFrom: number;
+  readonly stepTo: number;
+  /** Rear foot slides back by this much during the wind, then holds. */
+  readonly rearBrace: number;
+  /** Progress range over which the prop is drawn behind the body. */
+  readonly behindFrom: number;
+  readonly behindTo: number;
+  readonly windSquash: number;
+  readonly impactSquash: number;
+  /** Whether the free hand counterweights or grips the haft. */
+  readonly freeHandWind: Pt;
+  readonly freeHandImpact: Pt;
+}
+
+/** A foot that moves only while it is off the ground; G7 asserts exactly this. */
+function steppingFoot(
+  base: number,
+  distance: number,
+  from: number,
+  to: number,
+  progress: number,
+  lift: number,
+): Pt {
+  if (progress <= from) return { x: base, y: 0 };
+  if (progress >= to) return { x: base + distance, y: 0 };
+  const t = (progress - from) / (to - from);
+  return { x: base + distance * easeInOut(t), y: -lift * Math.sin(t * Math.PI) };
+}
+
+const STEP_LIFT = 0.05;
+
+/** Head sweeps the archer's idle break makes while it looks the room over. */
+const SCAN_SWEEPS = 2;
+
+/**
+ * Elevation past which a weapon is over the goblin's own skull. Angles run 0
+ * forward and negative upward.
+ */
+const OVERHEAD_FROM = deg(-45);
+/** Past here the weapon has swung all the way over and is descending in front. */
+const OVERHEAD_TO = deg(-235);
+
+function pointsOverhead(weaponAngle: number): boolean {
+  return weaponAngle < OVERHEAD_FROM && weaponAngle > OVERHEAD_TO;
+}
+
+function swingPose(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  spec: SwingSpec,
+  progress: number,
+): GoblinPose {
+  const rest = restingPose(style);
+  const carry = carryHand(archetype, style);
+  const restAngle = carryAngleFor(archetype, style, prop, carry.y);
+
+  const wind = easeInOut(clamp01(progress / spec.windEnd));
+  const drive = easeIn(clamp01((progress - spec.windEnd) / (spec.impactAt - spec.windEnd)));
+  const follow = easeOut(clamp01((progress - spec.impactAt) / (spec.followEnd - spec.impactAt)));
+  /**
+   * Where the recovery starts, as a fraction of the way from impact to the end
+   * of the follow-through.
+   *
+   * Not zero and not one. Back to back, `follow`'s ease-out and `recover`'s
+   * ease-in are both flat at the boundary, so the weapon stalls for a frame and
+   * then leaps. Overlapping them by half, which was the first fix, cancelled
+   * most of the follow-through instead: the recovery was already hauling back
+   * while the swing was still travelling, and the tip barely moved past the hit.
+   * A late overlap keeps something moving at every frame *and* lets the strike
+   * carry well past contact before it is undone.
+   */
+  const RECOVERY_OVERLAP = 0.82;
+  const recoverStart = lerp(spec.impactAt, spec.followEnd, RECOVERY_OVERLAP);
+  const recover = easeInOut(clamp01((progress - recoverStart) / (1 - recoverStart)));
+
+  /** Chain four keyed values through the four beats. */
+  const stage = (base: number, atWind: number, atImpact: number, atFollow: number): number => {
+    const wound = lerp(base, atWind, wind);
+    const driven = lerp(wound, atImpact, drive);
+    const followed = lerp(driven, atFollow, follow);
+    return lerp(followed, base, recover);
+  };
+  const stagePt = (base: Pt, atWind: Pt, atImpact: Pt, atFollow: Pt): Pt => ({
+    x: stage(base.x, atWind.x, atImpact.x, atFollow.x),
+    y: stage(base.y, atWind.y, atImpact.y, atFollow.y),
+  });
+
+  const nearHand = stagePt(carry, spec.windHand, spec.impactHand, spec.followHand);
+  const swungAngle = stage(restAngle, spec.windAngle, spec.impactAngle, spec.followAngle);
+  const weaponAngle = Math.min(swungAngle, groundLandingAngle(prop, nearHand.y));
+  const freeHand = stagePt(rest.farHand, spec.freeHandWind, spec.freeHandImpact, rest.farHand);
+
+  const stanceNear = rest.nearFoot.x;
+  const stanceFar = rest.farFoot.x;
+
+  return {
+    ...rest,
+    lean: stage(0, spec.windLean, spec.impactLean, spec.followLean),
+    sway: stage(0, spec.windSway, spec.impactSway, spec.impactSway * 0.5),
+    torsoSquash: stage(1, spec.windSquash, spec.impactSquash, 1.02),
+    bob: stage(0, -0.02, 0.02, 0.01),
+    nearFoot: steppingFoot(stanceNear, spec.step, spec.stepFrom, spec.stepTo, progress, STEP_LIFT),
+    farFoot: steppingFoot(stanceFar, spec.rearBrace, 0, spec.windEnd, progress, STEP_LIFT * 0.4),
+    nearHand,
+    farHand: gripFarHand(prop, nearHand, weaponAngle, freeHand),
+    weaponAngle,
+    // Never behind while the weapon is overhead. The authored window says when a
+    // wound-up weapon is tucked behind the hip, but it runs on past the point
+    // the swing lifts the weapon over the skull — and a weapon drawn behind the
+    // body there is occluded by the head, which severs the haft and leaves the
+    // blade sitting on the scalp like a bucket.
+    propBehind:
+      progress >= spec.behindFrom && progress < spec.behindTo && !pointsOverhead(weaponAngle),
+    // Head, ears and jaw all lag the torso: nothing arrives at its extreme on
+    // the same frame as the body does.
+    headTilt: stage(0, deg(-12), deg(14), deg(8)),
+    headLead: stage(0, -0.02, 0.05, 0.02),
+    earLag: stage(0, deg(16), deg(-26), deg(-8)),
+    mouthOpen: Math.max(wind * 0.4, drive * (1 - follow * 0.5)),
+    eyeOpen: 1,
+  };
+}
+
+/** Progress at which the stab's anticipation is fully loaded. */
+const THRUST_WIND_END = 0.32;
+
+/**
+ * The sword's stab, which cannot be a swing: the blade translates along its own
+ * axis and must not rotate, or the "thrust" reads as a slap.
+ */
+function thrustPose(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  progress: number,
+  impactAt: number,
+): GoblinPose {
+  const rest = restingPose(style);
+  const carry = carryHand(archetype, style);
+  const p = style.proportions;
+  const armLength = p.upperArmLength + p.forearmLength;
+  const shoulderY = -shoulderHeight(p);
+  const WIND_END = THRUST_WIND_END;
+  /**
+   * The recovery gets the back 42% of the row — six frames.
+   *
+   * An earlier cut at 0.68 left only four recovery frames, and a `easeInOut`
+   * over four frames has a middle step nearly four times its end steps: the
+   * blade snapped back to guard instead of retracting. Six frames keeps the
+   * steepest step inside 1.9× its neighbours, which is what gate G8 measures.
+   */
+  const SETTLE_END = 0.58;
+  const LEVELLED_ANGLE = deg(-3);
+  const LUNGE = 0.5;
+  const OVERSHOOT = 1.06;
+  const PULL_BACK = 0.85;
+
+  const wind = easeInOut(clamp01(progress / WIND_END));
+  const driveRaw = clamp01((progress - WIND_END) / (impactAt - WIND_END));
+  const drive = easeIn(driveRaw);
+  const settle = easeInOut(clamp01((progress - impactAt) / (SETTLE_END - impactAt)));
+  const recover = easeInOut(clamp01((progress - SETTLE_END) / (1 - SETTLE_END)));
+
+  const drawnBackX = p.hipHalfWidth * 0.2 - armLength * 0.22;
+  const drawnBackY = shoulderY + armLength * 0.4;
+  const extendedX = armLength * 1.02;
+  const extendedY = shoulderY + armLength * 0.34;
+
+  // The reach overshoots by 6% on the impact frame and pulls back 15% after it,
+  // which is what sells a thrust as an impact rather than as an extension.
+  const reach = drive * (progress < impactAt ? 1 : OVERSHOOT) * (1 - settle * (1 - PULL_BACK));
+  const nearHand: Pt = {
+    x: lerp(lerp(carry.x, drawnBackX, wind), extendedX, reach) * (1 - recover) + carry.x * recover,
+    y: lerp(lerp(carry.y, drawnBackY, wind), extendedY, reach) * (1 - recover) + carry.y * recover,
+  };
+
+  return {
+    ...rest,
+    lean: (deg(-8) * wind + deg(18) * drive) * (1 - recover),
+    sway: (-0.04 * wind + 0.09 * drive) * (1 - recover),
+    torsoSquash: 1 + 0.03 * wind - 0.02 * drive,
+    nearFoot: steppingFoot(rest.nearFoot.x, LUNGE, WIND_END, impactAt, progress, STEP_LIFT * 0.8),
+    // The rear foot must leave the ground to brace back, or it is dragging
+    // rather than stepping — which is exactly what gate G7 measures.
+    farFoot: steppingFoot(rest.farFoot.x, -0.1, 0, WIND_END, progress, STEP_LIFT * 0.35),
+    nearHand,
+    // Off hand thrown back and out for balance.
+    farHand: {
+      x: rest.farHand.x - 0.14 * drive * (1 - recover),
+      y: rest.farHand.y - armLength * 0.3 * drive * (1 - recover),
+    },
+    weaponAngle: lerp(
+      carryAngleFor(archetype, style, prop, nearHand.y),
+      LEVELLED_ANGLE,
+      Math.max(wind, drive),
+    ),
+    headTilt: (deg(-6) * wind + deg(9) * drive) * (1 - recover),
+    headLead: 0.05 * drive * (1 - recover),
+    earLag: (deg(12) * wind - deg(20) * drive) * (1 - recover),
+    mouthOpen: Math.max(wind * 0.3, drive),
+    eyeOpen: 1,
+  };
+}
+
+// ── Bow ──────────────────────────────────────────────────────────────────────
+//
+// The archer's two rows are not swings and not a thrust: nothing travels through
+// an arc and nothing connects. What the frames have to sell is a *draw* — the
+// stave coming up to vertical, the string bending back to a point, and the
+// whole thing snapping flat again on release — because that string is the
+// player's only warning that a shot is coming.
+
+/** The stave stands vertical when aimed, which points the arrow along +X. */
+const BOW_AIM_ANGLE = deg(-90);
+/**
+ * Progress by which the bow has finished coming up to aim.
+ *
+ * Half the row, which is much of it — and it has to be. The bow hand travels
+ * from the hip to full extension, which at 14 frames is a long way; compressed
+ * into the opening quarter it covered that distance in three frames and gate G4
+ * reported the first of them as a hitch, correctly. Raising and drawing overlap
+ * anyway, which is how the motion actually works.
+ */
+const BOW_RAISE_END = 0.5;
+/** Progress the string starts moving at. */
+const BOW_DRAW_START = 0.12;
+/**
+ * Where the draw finishes, as a fraction of the way to release.
+ *
+ * Short of 1 on purpose: the frames between full draw and the loose are the
+ * hold, and a hold is what makes a telegraph readable. A draw that arrives
+ * exactly on the release frame is a string that snaps back the instant it
+ * reaches tension, which at 14 frames the eye never resolves at all.
+ *
+ * 0.72 rather than 0.82 because the shorter row is what sets the floor: at 0.82
+ * the 14-frame hurried shot reached full draw on the single frame before its
+ * loose, which is not a hold. Gate G16 asserts both rows hold for at least
+ * `MIN_DRAW_HOLD_FRAMES`.
+ */
+const BOW_DRAW_END_FRACTION = 0.72;
+/** How far the snap shot pulls, against the aimed shot's full draw. */
+const BOW_SNAP_DRAW = 0.68;
+/**
+ * How far in front of the shoulder the bow fist is held, in arm lengths.
+ *
+ * Nearly straight, which is both correct form and what puts the two fists far
+ * enough apart to read as a draw: at 0.62 the bow arm was bent and the draw hand
+ * landed in front of the far shoulder rather than back at the jaw, so both arms
+ * pointed forward and the string had nowhere to go.
+ */
+const BOW_HAND_REACH_FRACTION = 0.82;
+/** How high the bow fist is held, as a fraction of shoulder height. */
+const BOW_HAND_HEIGHT_FRACTION = 0.92;
+/** Progress span after release over which the loose's recoil plays out. */
+const BOW_SNAP_BACK_SPAN = 0.18;
+/**
+ * How far *before* the release the recoil window opens, in progress.
+ *
+ * A hump whose window starts exactly at the release evaluates to zero on the
+ * release frame — the one frame the recoil exists to sell — and peaks two frames
+ * later, so the loose reads as a pause followed by a flinch. Roughly half a
+ * frame of lead puts the bloom on the frame the arrow leaves.
+ */
+const BOW_SNAP_BACK_LEAD = 0.03;
+/**
+ * How far the loose throws each hand back, in tile units — the bow hand a
+ * little, the draw hand rather more, since that is the one the string was
+ * pulling against.
+ */
+const BOW_HAND_RECOIL = 0.05;
+const BOW_DRAW_HAND_RECOIL = 0.09;
+
+/**
+ * The bow's shape on one frame of a named shot row.
+ *
+ * Exported for gate G16, which measures the baked draw rather than trusting the
+ * table it came from.
+ */
+export function bowDrawAt(kind: 'light' | 'heavy', frame: number, frameCount: number): BowDraw {
+  return bowShotDraw(kind, shotProgress(frame, frameCount), impactProgress('bow', kind));
+}
+
+/** The bow's shape on one frame of one shot row. */
+function bowShotDraw(kind: 'light' | 'heavy', progress: number, impactAt: number): BowDraw {
+  // Past the release the arrow is gone and the string is flat — the frames that
+  // follow are recovery, and a string still bent through them would read as a
+  // shot that never left.
+  if (progress >= impactAt) return { amount: 0, nocked: false };
+  const maxDraw = kind === 'light' ? BOW_SNAP_DRAW : 1;
+  const drawEnd = impactAt * BOW_DRAW_END_FRACTION;
+  const pulled = easeInOut(clamp01((progress - BOW_DRAW_START) / (drawEnd - BOW_DRAW_START)));
+  return { amount: maxDraw * pulled, nocked: true };
+}
+
+/** Where the string's nocking point sits in figure space at a given draw. */
+export function nockPoint(bowHand: Pt, weaponAngle: number, drawAmount: number): Pt {
+  const pull = bowStringPull(drawAmount);
+  return {
+    x: bowHand.x - pull * Math.sin(weaponAngle),
+    y: bowHand.y + pull * Math.cos(weaponAngle),
+  };
+}
+
+function bowShotPose(
+  style: GoblinStyle,
+  prop: GoblinProp,
+  kind: 'light' | 'heavy',
+  progress: number,
+  impactAt: number,
+): GoblinPose {
+  const rest = restingPose(style);
+  const p = style.proportions;
+  const carry = carryHand('bow', style);
+  const restAngle = carryAngleFor('bow', style, prop, carry.y);
+  const armLength = p.upperArmLength + p.forearmLength;
+
+  const raised = easeInOut(clamp01(progress / BOW_RAISE_END));
+  const lowered = easeInOut(clamp01((progress - impactAt) / (1 - impactAt)));
+  const aiming = raised * (1 - lowered);
+  // A short bloom on the frames straight after the loose: the bow arm kicks back
+  // and the draw hand flies off the string. Without it the release is a single
+  // frame in which the string simply stops being bent, and reads as a dropped
+  // frame rather than as a shot.
+  const loosed = hump(
+    clamp01((progress - impactAt + BOW_SNAP_BACK_LEAD) / (BOW_SNAP_BACK_SPAN + BOW_SNAP_BACK_LEAD)),
+  );
+
+  const aimHand: Pt = {
+    x: p.shoulderHalfWidth + armLength * BOW_HAND_REACH_FRACTION,
+    y: -shoulderHeight(p) * BOW_HAND_HEIGHT_FRACTION,
+  };
+  const nearHand: Pt = {
+    x: lerp(carry.x, aimHand.x, aiming) - BOW_HAND_RECOIL * loosed,
+    y: lerp(carry.y, aimHand.y, aiming),
+  };
+  const weaponAngle = lerp(restAngle, BOW_AIM_ANGLE, aiming);
+
+  const draw = bowShotDraw(kind, progress, impactAt);
+  // The *hand* does not follow the string's snap to zero. The string is released
+  // and flat from the release frame on, but the fist it left is still back at
+  // the jaw and travels further back from there under the recoil — placing it at
+  // the resting nock instead teleports it onto the riser for exactly one frame,
+  // which lands on the frame the arrow spawns.
+  const releasedDraw = kind === 'light' ? BOW_SNAP_DRAW : 1;
+  const handDraw = progress >= impactAt ? releasedDraw : draw.amount;
+  const nock = nockPoint(nearHand, weaponAngle, handDraw);
+  const drawHand: Pt = {
+    x: lerp(rest.farHand.x, nock.x, aiming) - BOW_DRAW_HAND_RECOIL * loosed,
+    y: lerp(rest.farHand.y, nock.y, aiming),
+  };
+
+  // The stance opens as the bow comes up and closes again as it comes down: an
+  // archer that draws with its feet where it was walking reads as a mannequin
+  // holding a bow.
+  const BRACE_STEP = 0.09;
+  return {
+    ...rest,
+    lean: deg(-5) * aiming - deg(7) * loosed,
+    sway: -0.03 * aiming,
+    torsoSquash: 1 - 0.04 * aiming + 0.05 * loosed,
+    bob: -0.015 * aiming,
+    nearFoot: steppingFoot(
+      rest.nearFoot.x,
+      BRACE_STEP,
+      0,
+      BOW_RAISE_END,
+      progress,
+      STEP_LIFT * 0.5,
+    ),
+    farFoot: steppingFoot(rest.farFoot.x, -BRACE_STEP, 0, BOW_RAISE_END, progress, STEP_LIFT * 0.5),
+    nearHand,
+    farHand: drawHand,
+    weaponAngle,
+    propBehind: false,
+    headTilt: deg(6) * aiming + deg(-10) * loosed,
+    headLead: 0.035 * aiming,
+    earLag: deg(-14) * aiming + deg(30) * loosed,
+    mouthOpen: 0.25 * draw.amount + 0.6 * loosed,
+    // Narrowed while sighting down the arrow, wide open on the loose.
+    eyeOpen: 1 - 0.4 * aiming * (1 - loosed),
+  };
+}
+
+/** Melee archetypes: every one whose attack rows are a swing or a thrust. */
+type MeleeArchetype = Exclude<GoblinArchetype, 'bow'>;
+
+function isMeleeArchetype(archetype: GoblinArchetype): archetype is MeleeArchetype {
+  return archetype !== 'bow';
+}
+
+const SWING_SPECS: Record<MeleeArchetype, { light: SwingSpec | null; heavy: SwingSpec }> = {
+  sword: {
+    // The light attack is the stab, which `thrustPose` handles instead.
+    light: null,
+    heavy: {
+      // Diagonal slash: blade swept up over the far shoulder, cut through ~150°.
+      windEnd: 0.3,
+      impactAt: 0,
+      followEnd: 0.72,
+      windHand: pt(-0.16, -1.02),
+      impactHand: pt(0.44, -0.62),
+      followHand: pt(0.46, -0.1),
+      windAngle: deg(-152),
+      impactAngle: deg(6),
+      followAngle: deg(64),
+      windLean: deg(-16),
+      impactLean: deg(20),
+      followLean: deg(26),
+      windSway: -0.07,
+      impactSway: 0.09,
+      step: 0.26,
+      stepFrom: 0.3,
+      stepTo: 0.5,
+      rearBrace: -0.16,
+      behindFrom: 0,
+      behindTo: 0.24,
+      windSquash: 1.04,
+      impactSquash: 0.95,
+      freeHandWind: pt(-0.26, -0.72),
+      freeHandImpact: pt(-0.34, -0.5),
+    },
+  },
+  axe: {
+    heavy: {
+      /**
+       * Overhead chop: haft past vertical, driven down hips-first onto a target
+       * at waist height, and rebounding off it.
+       *
+       * The hand stays high through the strike, and both of this swing's
+       * defects came from it not doing so. Driving it down to 0.46 put it near
+       * the goblin's own knee, and from there {@link groundLandingAngle} — which
+       * is a hard floor, not a suggestion — clamped the authored 58° and 88° to
+       * 16° and 0°: the blade did not chop, it lay down flat and stayed there
+       * for the rest of the row. Authoring under the clamp instead is what buys
+       * a chop that visibly descends.
+       *
+       * The follow keys are the **rebound**, not more of the swing. `follow` is
+       * eased out, so it moves fastest in the frames immediately after impact,
+       * which is exactly where a bite-and-kick-back belongs; the arms recover
+       * ahead of the body, so the lean is still forward while the blade is
+       * already coming up.
+       */
+      windEnd: 0.38,
+      impactAt: 0,
+      followEnd: 0.62,
+      windHand: pt(-0.16, -1.12),
+      impactHand: pt(0.46, -0.76),
+      followHand: pt(0.46, -0.72),
+      windAngle: deg(-104),
+      impactAngle: deg(38),
+      followAngle: deg(12),
+      windLean: deg(-20),
+      impactLean: deg(34),
+      followLean: deg(40),
+      windSway: -0.06,
+      impactSway: 0.08,
+      step: 0.28,
+      stepFrom: 0.38,
+      stepTo: 0.54,
+      rearBrace: -0.18,
+      behindFrom: 0,
+      behindTo: 0.3,
+      windSquash: 1.06,
+      impactSquash: 0.92,
+      freeHandWind: pt(-0.2, -0.9),
+      freeHandImpact: pt(0.24, -0.62),
+    },
+    light: {
+      // Hooking cleave: waist-height sweep from the far side that over-rotates
+      // the shoulder, so the recovery is a stagger.
+      windEnd: 0.3,
+      impactAt: 0,
+      followEnd: 0.7,
+      windHand: pt(-0.3, -0.62),
+      impactHand: pt(0.46, -0.52),
+      followHand: pt(0.54, -0.3),
+      windAngle: deg(-168),
+      impactAngle: deg(-12),
+      followAngle: deg(72),
+      windLean: deg(-13),
+      impactLean: deg(16),
+      followLean: deg(30),
+      windSway: -0.06,
+      impactSway: 0.07,
+      step: 0.14,
+      stepFrom: 0.52,
+      stepTo: 0.74,
+      rearBrace: -0.06,
+      behindFrom: 0,
+      behindTo: 0.22,
+      windSquash: 1.03,
+      impactSquash: 0.97,
+      freeHandWind: pt(-0.24, -0.56),
+      freeHandImpact: pt(0.18, -0.46),
+    },
+  },
+  mace: {
+    light: {
+      // Full 360° orbit around the body; the head passes behind the goblin for
+      // the back half of the arc or it paints over its own face.
+      windEnd: 0.26,
+      impactAt: 0,
+      followEnd: 0.74,
+      windHand: pt(-0.18, -0.78),
+      impactHand: pt(0.4, -0.56),
+      followHand: pt(0.08, -0.28),
+      windAngle: deg(-190),
+      impactAngle: deg(20),
+      followAngle: deg(150),
+      windLean: deg(-10),
+      impactLean: deg(15),
+      followLean: deg(-6),
+      windSway: -0.05,
+      impactSway: 0.07,
+      step: 0.1,
+      stepFrom: 0.6,
+      stepTo: 0.8,
+      rearBrace: -0.05,
+      behindFrom: 0,
+      behindTo: 0.34,
+      windSquash: 1.02,
+      impactSquash: 0.98,
+      freeHandWind: pt(-0.22, -0.6),
+      freeHandImpact: pt(-0.3, -0.52),
+    },
+    heavy: {
+      // Straight up on a stiff arm with a small hop, then down a short fast arc
+      // that buckles the knees on landing.
+      windEnd: 0.36,
+      impactAt: 0,
+      followEnd: 0.62,
+      windHand: pt(0.14, -1.16),
+      impactHand: pt(0.4, -0.4),
+      followHand: pt(0.28, -0.14),
+      windAngle: deg(-88),
+      impactAngle: deg(74),
+      followAngle: deg(96),
+      windLean: deg(-14),
+      impactLean: deg(28),
+      followLean: deg(22),
+      windSway: -0.03,
+      impactSway: 0.05,
+      step: 0.22,
+      stepFrom: 0.36,
+      stepTo: 0.52,
+      rearBrace: -0.16,
+      behindFrom: 0,
+      behindTo: 0.2,
+      windSquash: 1.05,
+      impactSquash: 0.88,
+      freeHandWind: pt(-0.2, -0.72),
+      freeHandImpact: pt(-0.24, -0.4),
+    },
+  },
+  warhammer: {
+    light: {
+      // Two-handed horizontal sweep at chest height; the mass carries the goblin
+      // round so it finishes with its back partly turned.
+      windEnd: 0.32,
+      impactAt: 0,
+      followEnd: 0.72,
+      windHand: pt(-0.34, -0.78),
+      impactHand: pt(0.4, -0.76),
+      followHand: pt(0.56, -0.46),
+      windAngle: deg(-186),
+      impactAngle: deg(-6),
+      followAngle: deg(84),
+      windLean: deg(-14),
+      impactLean: deg(14),
+      followLean: deg(34),
+      windSway: -0.08,
+      impactSway: 0.1,
+      step: 0.16,
+      stepFrom: 0.56,
+      stepTo: 0.8,
+      rearBrace: -0.1,
+      behindFrom: 0,
+      behindTo: 0.26,
+      windSquash: 1.03,
+      impactSquash: 0.96,
+      freeHandWind: pt(-0.3, -0.7),
+      freeHandImpact: pt(0.1, -0.68),
+    },
+    heavy: {
+      // The slowest, most telegraphed animation in the goblin set: the wind eats
+      // the first 0.42 of the row so a player can actually react to it.
+      windEnd: 0.42,
+      impactAt: 0,
+      followEnd: 0.72,
+      windHand: pt(-0.22, -1.3),
+      impactHand: pt(0.5, -0.62),
+      followHand: pt(0.32, -0.16),
+      windAngle: deg(-98),
+      impactAngle: deg(66),
+      followAngle: deg(92),
+      windLean: deg(-26),
+      impactLean: deg(30),
+      followLean: deg(46),
+      windSway: -0.1,
+      impactSway: 0.12,
+      step: 0.34,
+      stepFrom: 0.42,
+      stepTo: 0.6,
+      rearBrace: -0.24,
+      behindFrom: 0,
+      behindTo: 0.36,
+      windSquash: 1.08,
+      impactSquash: 0.88,
+      freeHandWind: pt(-0.26, -1.02),
+      freeHandImpact: pt(0.26, -0.4),
+    },
+  },
+};
+
+/**
+ * Frames over which an attack is *supposed* to accelerate: from the end of its
+ * wind through to just past impact.
+ *
+ * Gates G4 and G8 skip this window. That is not a loophole — it is the whole
+ * point of the animation. A strike that spaced its frames evenly through the
+ * drive would have no anticipation and no impact, which is precisely the "linear
+ * sweep, reads as a robot arm" failure this rework exists to fix. The smear
+ * crescent is drawn over the same frames, so what the gates exempt is exactly
+ * what the art covers.
+ */
+export function accelerationWindow(
+  archetype: GoblinArchetype,
+  kind: 'light' | 'heavy',
+): { readonly from: number; readonly to: number } {
+  const row = rowByName(kind === 'light' ? 'attack_light' : 'attack_heavy');
+  // The bow's whole row is a draw and a release, so the window that the spacing
+  // gates skip is the draw itself — the string has to accelerate off the hold.
+  const spec = isMeleeArchetype(archetype) ? SWING_SPECS[archetype][kind] : null;
+  const windEnd = spec === null ? THRUST_WIND_END : spec.windEnd;
+  const FOLLOW_THROUGH_FRAMES = 2;
+  return {
+    from: Math.floor(windEnd * row.frameCount),
+    to: IMPACT_FRAMES[archetype][kind] + FOLLOW_THROUGH_FRAMES,
+  };
+}
+
+function attackPose(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  kind: 'light' | 'heavy',
+  progress: number,
+): GoblinPose {
+  const impactAt = impactProgress(archetype, kind);
+  if (!isMeleeArchetype(archetype)) return bowShotPose(style, prop, kind, progress, impactAt);
+  const spec = SWING_SPECS[archetype][kind];
+  if (spec === null) return thrustPose(archetype, style, prop, progress, impactAt);
+  return swingPose(archetype, style, prop, { ...spec, impactAt }, progress);
+}
+
+// ── Flinch ───────────────────────────────────────────────────────────────────
+
+/**
+ * Five frames, and disproportionately effective: without it a hit that does not
+ * kill produces no reaction at all and the goblin reads as unhittable.
+ */
+function flinchPose(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  progress: number,
+): GoblinPose {
+  const rest = restingPose(style);
+  const carry = carryHand(archetype, style);
+  const snap = smoothHump(clamp01(progress / 0.5));
+  const settle = easeInOut(clamp01((progress - 0.4) / 0.6));
+  const recoil = snap * (1 - settle * 0.4);
+  const armLength = style.proportions.upperArmLength + style.proportions.forearmLength;
+  const nearHand: Pt = {
+    x: carry.x - 0.11 * recoil,
+    y: carry.y + armLength * 0.1 * recoil,
+  };
+  const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y) + deg(14) * recoil;
+
+  return {
+    ...rest,
+    lean: deg(-26) * recoil,
+    bob: 0.04 * recoil,
+    sway: -0.09 * recoil,
+    torsoSquash: 1 - 0.09 * recoil,
+    nearFoot: rest.nearFoot,
+    farFoot: steppingFoot(rest.farFoot.x, -0.08, 0, 0.5, progress, 0.02),
+    nearHand,
+    farHand: gripFarHand(prop, nearHand, weaponAngle, {
+      x: rest.farHand.x - 0.05 * recoil,
+      y: rest.farHand.y - 0.04 * recoil,
+    }),
+    weaponAngle,
+    headTilt: deg(-34) * recoil,
+    headLead: -0.09 * recoil,
+    earLag: deg(38) * recoil,
+    mouthOpen: recoil,
+    eyeOpen: 1 - recoil * 0.75,
+  };
+}
+
+// ── Impact smear ─────────────────────────────────────────────────────────────
+
+/**
+ * A tapering crescent along the weapon's arc, drawn on the frames either side of
+ * impact. This is what buys perceived smoothness at 14–18 frames: without it the
+ * strike frames are simply far apart and the eye sees a jump.
+ */
+const SMEAR_ALPHA = 0.28;
+const SMEAR_SWEEP = deg(52);
+const SMEAR_SEGMENTS = 7;
+
+function drawImpactSmear(
+  ctx: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+  unit: number,
+  style: GoblinStyle,
+  pose: GoblinPose,
+  prop: GoblinProp,
+  strength: number,
+): void {
+  if (strength <= 0 || pose.weaponAngle === null) return;
+  ctx.save();
+  ctx.translate(originX, originY);
+  ctx.scale(unit, unit);
+  ctx.globalAlpha = SMEAR_ALPHA * strength;
+
+  const hand = pose.nearHand;
+  const from = pose.weaponAngle - SMEAR_SWEEP;
+  ctx.fillStyle = style.palette.iron.light;
+  ctx.beginPath();
+  for (let i = 0; i <= SMEAR_SEGMENTS; i++) {
+    const t = i / SMEAR_SEGMENTS;
+    const at = along(hand, lerp(from, pose.weaponAngle, t), prop.tipDistance);
+    if (i === 0) ctx.moveTo(at.x, at.y);
+    else ctx.lineTo(at.x, at.y);
+  }
+  for (let i = SMEAR_SEGMENTS; i >= 0; i--) {
+    const t = i / SMEAR_SEGMENTS;
+    // Tip-heavy: the crescent narrows toward the hand, which is where the
+    // weapon is barely moving.
+    const inner = lerp(prop.tipDistance * 0.35, prop.tipDistance * 0.86, t);
+    const at = along(hand, lerp(from, pose.weaponAngle, t), inner);
+    ctx.lineTo(at.x, at.y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Frames either side of impact that carry a smear, and how strongly. */
+function smearStrength(archetype: GoblinArchetype, row: RowSpec, frame: number): number {
+  if (row.name !== 'attack_light' && row.name !== 'attack_heavy') return 0;
+  const kind = row.name === 'attack_light' ? 'light' : 'heavy';
+  // The sword's stab does not rotate, so a crescent would be a lie. Neither does
+  // anything the bow does: an arc smear across a draw is a swing that never
+  // happened.
+  if (archetype === 'sword' && kind === 'light') return 0;
+  if (archetype === 'bow') return 0;
+  const distance = Math.abs(frame - IMPACT_FRAMES[archetype][kind]);
+  const SMEAR_REACH = 2;
+  if (distance > SMEAR_REACH) return 0;
+  const FALLOFF = [1, 0.6, 0.3];
+  return FALLOFF[distance];
+}
+// ── Frame production ─────────────────────────────────────────────────────────
+
+/**
+ * The seed every weapon and every wound is grown from.
+ *
+ * One number for the whole family, offset per archetype by its name's length,
+ * so the axe's haft grain and the mace's flange nicks are different pieces of
+ * the same deterministic noise field rather than two independent rolls.
+ */
+const GORE_SEED = 90210;
+
+/**
+ * One construction path for an archetype's weapon, so the geometry the gates
+ * assert against is the same object the frames were painted with rather than a
+ * second one built from the same table.
+ */
+function weaponFor(archetype: GoblinArchetype): GoblinProp {
+  const style = GOBLIN_STYLES[archetype];
+  return WEAPON_FACTORIES[archetype](style.palette, seededNoise(GORE_SEED + archetype.length));
+}
+
+/** No bow shape at all, which is what every non-bow archetype's painter ignores. */
+const NO_BOW_DRAW: BowDraw = { amount: 0, nocked: false };
+
+/**
+ * How far this frame's string is pulled.
+ *
+ * Derived from the same progress the pose is, rather than carried on the pose:
+ * a bow's draw is a property of the *weapon*, and putting it on `GoblinPose`
+ * would give every other archetype a field it can only ever leave at zero.
+ */
+function bowDrawFor(archetype: GoblinArchetype, row: RowSpec, frame: number): BowDraw {
+  if (isMeleeArchetype(archetype)) return NO_BOW_DRAW;
+  if (row.name !== 'attack_light' && row.name !== 'attack_heavy') return NO_BOW_DRAW;
+  const kind = row.name === 'attack_light' ? 'light' : 'heavy';
+  return bowDrawAt(kind, frame, row.frameCount);
+}
+
+function poseFor(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  row: RowSpec,
+  frame: number,
+): GoblinPose {
+  switch (row.name) {
+    case 'walk':
+      return walkPose(archetype, style, prop, cyclePhase(frame, row.frameCount));
+    case 'idle':
+      return idlePose(archetype, style, prop, frame, row.frameCount);
+    case 'idle_break':
+      return idleBreakPose(archetype, style, prop, shotProgress(frame, row.frameCount));
+    case 'attack_light':
+      return attackPose(archetype, style, prop, 'light', shotProgress(frame, row.frameCount));
+    case 'attack_heavy':
+      return attackPose(archetype, style, prop, 'heavy', shotProgress(frame, row.frameCount));
+    case 'flinch':
+      return flinchPose(archetype, style, prop, shotProgress(frame, row.frameCount));
+    default:
+      throw new Error(`no pose for row ${row.name}`);
+  }
+}
+
+// ── Cell geometry ────────────────────────────────────────────────────────────
+
+/**
+ * Where the goblin's own tile sits inside its cell, and how big that cell is.
+ *
+ * These four numbers per archetype were measured by the bake this figure
+ * replaces — the widest pose plus padding, quantised, and wide enough that a
+ * spinning gore piece clears the corners — and `scripts/parity-figure-sheet.ts`
+ * is what proved the painter still fills exactly that cell. The gates re-check
+ * that nothing paints against the edge, which is what would say a pose has
+ * outgrown them.
+ *
+ * They differ per archetype because a war hammer hauled overhead is a much
+ * taller thing than a mace held at the hip.
+ */
+interface CellGeometry {
+  readonly frameWidth: number;
+  readonly frameHeight: number;
+  readonly tileX: number;
+  readonly tileY: number;
+}
+
+const GEOMETRY: Record<GoblinArchetype, CellGeometry> = {
+  sword: { frameWidth: 128, frameHeight: 80, tileX: 32, tileY: 1 },
+  axe: { frameWidth: 112, frameHeight: 88, tileX: 24, tileY: 11 },
+  mace: { frameWidth: 80, frameHeight: 80, tileX: 8, tileY: 5 },
+  warhammer: { frameWidth: 112, frameHeight: 96, tileX: 24, tileY: 18 },
+  bow: { frameWidth: 112, frameHeight: 80, tileX: 24, tileY: 3 },
+};
+
+/** The cell row the soles stand on: the bottom of the creature's own tile. */
+function groundYOf(archetype: GoblinArchetype): number {
+  return GEOMETRY[archetype].tileY + TILE_SCALE;
+}
+
+// ── Gore placement ───────────────────────────────────────────────────────────
+
+/**
+ * The nine pieces a goblin comes apart into, in the order `BodyPartGoreSystem`
+ * spawns them. Each is a one-frame state of its own.
+ */
+export const GOBLIN_GORE_STATES: readonly string[] = [
+  'gore_head',
+  'gore_torso',
+  'gore_arm_near',
+  'gore_arm_far',
+  'gore_leg_near',
+  'gore_leg_far',
+  'gore_ribchunk',
+  'gore_entrails',
+  'gore_jaw',
+];
+
+/**
+ * How far each severed piece is nudged so that its ink, not its authoring
+ * origin, sits at the centre of the cell.
+ *
+ * `BodyPartGoreSystem` spins a piece about the centre of its own visible
+ * pixels, so a piece drawn off-centre in its cell orbits rather than tumbles.
+ * The offsets are in tile units, applied before the archetype's own figure
+ * scale, and they were measured from the painted ink of each piece. Measuring
+ * is something only an offline pass can do, so the numbers are frozen here and
+ * `scripts/gates-goblins.ts` re-measures the *effect* — that the ink lands on
+ * the cell centre — on every render.
+ *
+ * Per archetype, not shared: the five builds are different sizes and their
+ * pieces are cut from different bodies, so their ink centres do not agree.
+ */
+export const GORE_RECENTRE: Readonly<Record<GoblinArchetype, ReadonlyMap<string, Pt>>> = {
+  sword: new Map([
+    ['gore_head', pt(0.1171875, -0.03125)],
+    ['gore_torso', pt(0.0078125, 0.0078125)],
+    ['gore_arm_near', pt(0.1015625, 0.0078125)],
+    ['gore_arm_far', pt(0.1015625, -0.015625)],
+    ['gore_leg_near', pt(0.125, 0)],
+    ['gore_leg_far', pt(0.0546875, 0.0078125)],
+    ['gore_ribchunk', pt(0, 0.0234375)],
+    ['gore_entrails', pt(0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.0078125, 0.0078125)],
+  ]),
+  axe: new Map([
+    ['gore_head', pt(0.09375, -0.0390625)],
+    ['gore_torso', pt(0.0078125, 0)],
+    ['gore_arm_near', pt(0.125, 0.0078125)],
+    ['gore_arm_far', pt(0.125, -0.015625)],
+    ['gore_leg_near', pt(0.140625, 0.0078125)],
+    ['gore_leg_far', pt(0.0703125, 0.0078125)],
+    ['gore_ribchunk', pt(0, 0.03125)],
+    ['gore_entrails', pt(0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.0078125, 0.015625)],
+  ]),
+  mace: new Map([
+    ['gore_head', pt(0.0703125, -0.0390625)],
+    ['gore_torso', pt(0, 0.0078125)],
+    ['gore_arm_near', pt(0.109375, 0.0078125)],
+    ['gore_arm_far', pt(0.109375, -0.015625)],
+    ['gore_leg_near', pt(0.125, 0)],
+    ['gore_leg_far', pt(0.0546875, 0.0078125)],
+    ['gore_ribchunk', pt(0, 0.0234375)],
+    ['gore_entrails', pt(0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.0078125, 0.0078125)],
+  ]),
+  warhammer: new Map([
+    ['gore_head', pt(0.0625, -0.0390625)],
+    ['gore_torso', pt(0, 0)],
+    ['gore_arm_near', pt(0.125, 0.015625)],
+    ['gore_arm_far', pt(0.1328125, -0.0078125)],
+    ['gore_leg_near', pt(0.15625, 0.0078125)],
+    ['gore_leg_far', pt(0.078125, 0.015625)],
+    ['gore_ribchunk', pt(-0.0078125, 0.03125)],
+    ['gore_entrails', pt(0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.0078125, 0.0078125)],
+  ]),
+  bow: new Map([
+    ['gore_head', pt(0.1171875, -0.0390625)],
+    ['gore_torso', pt(0, 0)],
+    ['gore_arm_near', pt(0.1171875, -0.0078125)],
+    ['gore_arm_far', pt(0.1171875, -0.03125)],
+    ['gore_leg_near', pt(0.1484375, -0.015625)],
+    ['gore_leg_far', pt(0.0546875, 0)],
+    ['gore_ribchunk', pt(0, 0.0234375)],
+    ['gore_entrails', pt(0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.0078125, 0.0078125)],
+  ]),
+};
+
+function goreRecentreOf(archetype: GoblinArchetype, state: string): Pt {
+  const offset = GORE_RECENTRE[archetype].get(state);
+  if (offset === undefined) {
+    throw new Error(`no gore recentring offset for goblin_${archetype} "${state}"`);
+  }
+  return offset;
+}
+
+/**
+ * The weapon and the wound set per archetype, built once.
+ *
+ * Both are grown from a seeded noise field, so rebuilding them per painted
+ * frame would produce identical art at real cost; the cache paints a cell for
+ * every frame of every row of five figures.
+ */
+const WEAPONS: Record<GoblinArchetype, GoblinProp> = {
+  sword: weaponFor('sword'),
+  axe: weaponFor('axe'),
+  mace: weaponFor('mace'),
+  warhammer: weaponFor('warhammer'),
+  bow: weaponFor('bow'),
+};
+
+const GORE_PIECES: Record<GoblinArchetype, readonly GorePiece[]> = {
+  sword: gorePieces(GOBLIN_STYLES.sword),
+  axe: gorePieces(GOBLIN_STYLES.axe),
+  mace: gorePieces(GOBLIN_STYLES.mace),
+  warhammer: gorePieces(GOBLIN_STYLES.warhammer),
+  bow: gorePieces(GOBLIN_STYLES.bow),
+};
+
+/** The weapon an archetype's frames are painted with, for the arc gates. */
+export function goblinWeapon(archetype: GoblinArchetype): GoblinProp {
+  return WEAPONS[archetype];
+}
+
+/** The pose one frame of one animation row resolves to, for the pose gates. */
+export function goblinPose(archetype: GoblinArchetype, row: RowSpec, frame: number): GoblinPose {
+  return poseFor(archetype, GOBLIN_STYLES[archetype], WEAPONS[archetype], row, frame);
+}
+
+/** Where the weapon's tip sits on a frame, in figure units, or null if unarmed. */
+export function goblinWeaponTip(pose: GoblinPose, archetype: GoblinArchetype): Pt | null {
+  if (pose.weaponAngle === null) return null;
+  return along(pose.nearHand, pose.weaponAngle, WEAPONS[archetype].tipDistance);
+}
+
+function poseRowOf(state: string): RowSpec | undefined {
+  return ROWS.find((row) => row.name === state);
+}
+
+function gorePieceOf(archetype: GoblinArchetype, state: string): GorePiece {
+  const piece = GORE_PIECES[archetype].find((candidate) => candidate.state === state);
+  if (piece === undefined) throw new Error(`no gore piece for goblin_${archetype} "${state}"`);
+  return piece;
+}
+
+/**
+ * Paints one cell of one goblin, in the cell's own pixels.
+ *
+ * An animation frame is anchored at the ground line under the cell's centre,
+ * which is what ties the art to the tile the goblin stands on. A gore piece is
+ * anchored at the cell's centre instead, because the only thing that reads its
+ * cell is the spin the gore field applies about that point.
+ */
+function paintGoblinFrame(
+  archetype: GoblinArchetype,
+  ctx: CanvasRenderingContext2D,
+  state: string,
+  frame: number,
+): void {
+  const style = GOBLIN_STYLES[archetype];
+  const geometry = GEOMETRY[archetype];
+  const drawScale = ARCHETYPE_SCALE[archetype];
+  const centreX = geometry.frameWidth / 2;
+  const row = poseRowOf(state);
+
+  if (row === undefined) {
+    const piece = gorePieceOf(archetype, state);
+    const recentre = goreRecentreOf(archetype, state);
+    ctx.save();
+    ctx.translate(
+      centreX + recentre.x * TILE_SCALE,
+      geometry.frameHeight / 2 + recentre.y * TILE_SCALE,
+    );
+    ctx.scale(TILE_SCALE * drawScale, TILE_SCALE * drawScale);
+    piece.paint(ctx, style);
+    ctx.restore();
+    return;
+  }
+
+  const prop = WEAPONS[archetype];
+  const pose = poseFor(archetype, style, prop, row, frame);
+  const groundY = groundYOf(archetype);
+  const figureUnit = TILE_SCALE * drawScale;
+  // Published immediately before the figure is painted, because the bow is the
+  // one prop whose geometry is not fixed and the painter has no other way to
+  // learn how far this frame's string is pulled.
+  setBowDraw(bowDrawFor(archetype, row, frame));
+  drawImpactSmear(
+    ctx,
+    centreX,
+    groundY,
+    figureUnit,
+    style,
+    pose,
+    prop,
+    smearStrength(archetype, row, frame),
+  );
+  drawGoblin(ctx, centreX, groundY, figureUnit, style, pose, prop);
+}
+
+/** Every state a goblin figure declares: the animation rows, then the pieces. */
+function goblinStateFrames(): Record<string, number> {
+  const frames: Record<string, number> = {};
+  for (const row of ROWS) frames[row.name] = row.frameCount;
+  for (const state of GOBLIN_GORE_STATES) frames[state] = 1;
+  return frames;
+}
+
+function goblinFigureOf(archetype: GoblinArchetype): FigureDef {
+  const geometry = GEOMETRY[archetype];
+  return {
+    id: `goblin_${archetype}`,
+    frameWidth: geometry.frameWidth,
+    frameHeight: geometry.frameHeight,
+    tileX: geometry.tileX,
+    tileY: geometry.tileY,
+    tileScale: TILE_SCALE,
+    states: figureStates(goblinStateFrames()),
+    paintFrame: (ctx, state, frame) => {
+      paintGoblinFrame(archetype, ctx, state, frame);
+    },
+  };
+}
+
+export const GOBLIN_SWORD_FIGURE: FigureDef = goblinFigureOf('sword');
+export const GOBLIN_AXE_FIGURE: FigureDef = goblinFigureOf('axe');
+export const GOBLIN_MACE_FIGURE: FigureDef = goblinFigureOf('mace');
+export const GOBLIN_WARHAMMER_FIGURE: FigureDef = goblinFigureOf('warhammer');
+export const GOBLIN_BOW_FIGURE: FigureDef = goblinFigureOf('bow');
+
+/** Every goblin figure by archetype — the five sheets this family replaced. */
+export const GOBLIN_FIGURES: Record<GoblinArchetype, FigureDef> = {
+  sword: GOBLIN_SWORD_FIGURE,
+  axe: GOBLIN_AXE_FIGURE,
+  mace: GOBLIN_MACE_FIGURE,
+  warhammer: GOBLIN_WARHAMMER_FIGURE,
+  bow: GOBLIN_BOW_FIGURE,
+};
+
+export { ARCHETYPE_SCALE, GOBLIN_ARCHETYPES, GOBLIN_STYLES };
+export type { GoblinArchetype };

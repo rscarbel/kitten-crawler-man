@@ -1,16 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * Review harness for the Troglodyte sheets.
+ * The Troglodyte review harness.
  *
  * Art has to be reviewed as an image, by something that only looks at the
  * image: every defect that has ever mattered on a figure in this project was
  * invisible to `typecheck`, `lint` and reading the drawing code, and visible
  * within seconds in a render. This is how that render gets made.
  *
- * It bakes in memory rather than reading the PNG off disk, so a pose change can
- * be reviewed before its manifest entry has been pasted in.
+ * The contact sheet is painted from `TROGLODYTE_FIGURE` and
+ * `TROGLODYTE_TONGUE_FIGURE` the way the runtime cache bakes them, and the art
+ * gates run as part of the render, so one command answers both "does it still
+ * hold together" and "what does it look like".
  *
- *   npx tsx scripts/render-troglodyte.ts --out=trog-review.png --scale=2
+ *   npm run render:troglodyte
  *   npx tsx scripts/render-troglodyte.ts --row=lash_side --scale=5
  *   npx tsx scripts/render-troglodyte.ts --mode=parts --part=head --scale=4
  *   npx tsx scripts/render-troglodyte.ts --mode=gore
@@ -19,19 +21,21 @@
  *   npx tsx scripts/render-troglodyte.ts --mode=delta --row=walk_side
  */
 
-import { createCanvas, loadImage, type Canvas, type CanvasRenderingContext2D as Ctx } from 'canvas';
-import { writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { createCanvas, type Canvas, type CanvasRenderingContext2D as Ctx } from 'canvas';
 
+import { bakeFigureSheet, type FigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { troglodyteGateFailures } from './gates-troglodyte.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import {
   GORE_STATES,
-  ROWS,
   TILE_SCALE,
   TONGUE_FRAMES,
-  bake,
-  bakeTongue,
-  type BakedSheet,
-} from './generate-troglodyte-sprite';
+  TONGUE_STATE,
+  TROGLODYTE_FIGURE,
+  TROGLODYTE_ROWS,
+  TROGLODYTE_TONGUE_FIGURE,
+} from '../src/sprites/art/troglodyteFigure.js';
 
 const MODES = ['sheet', 'parts', 'gore', 'tongue', 'onion', 'delta'] as const;
 type Mode = (typeof MODES)[number];
@@ -55,6 +59,11 @@ const MAX_FRAME_INDEX = 63;
 /** Half a line of type, for nudging a two-line row label apart. */
 const LABEL_HALF_LEADING = 8;
 const DELTA_BACKDROP = '#0b0d0c';
+const IN_GAME_STRIP_FRAMES = 4;
+const ANCHOR_MARK_RADIUS = 4;
+const STRIP_LABEL_HEIGHT = 20;
+const STRIP_LABEL_BASELINE = 10;
+const TONGUE_STRIP_SPACING = 0.5;
 
 /**
  * Crops as fractions of the cell, one per body part.
@@ -62,11 +71,6 @@ const DELTA_BACKDROP = '#0b0d0c';
  * A whole-figure contact sheet hides exactly the defects that matter most at
  * these sizes — the head and the hands are where a review always finds the
  * most, and on this creature the head is nearly the whole read.
- *
- * Fractions rather than pixel boxes because the cell is *measured* at bake
- * time: written as pixels against one bake's geometry, `feet` ran past the
- * bottom of the frame the moment a pose grew, and every crop then carried six
- * pixels of the next row's head.
  */
 interface Crop {
   readonly x: number;
@@ -83,9 +87,9 @@ const PARTS: Record<string, Crop> = {
   feet: { x: 0.1, y: 0.75, w: 0.8, h: 0.25 },
 };
 
-/** A crop resolved against the cell the bake actually produced. */
-function cropPixels(crop: Crop, sheet: BakedSheet): Crop {
-  const { frameWidth, frameHeight } = sheet.geometry;
+/** A crop resolved against the figure's declared cell. */
+function cropPixels(crop: Crop): Crop {
+  const { frameWidth, frameHeight } = TROGLODYTE_FIGURE;
   return {
     x: Math.round(crop.x * frameWidth),
     y: Math.round(crop.y * frameHeight),
@@ -139,7 +143,7 @@ function parseArgs(argv: readonly string[]): Options {
   if (!(part in PARTS)) {
     throw new Error(`--part=${part} is not one of ${Object.keys(PARTS).join(', ')}`);
   }
-  return { mode, out: out ?? `trog-${mode}.png`, scale, row, frame, part };
+  return { mode, out: out ?? `${PREVIEW_DIR}/trog-${mode}.png`, scale, row, frame, part };
 }
 
 function label(ctx: Ctx, text: string, x: number, y: number, font = LABEL_FONT): void {
@@ -150,31 +154,35 @@ function label(ctx: Ctx, text: string, x: number, y: number, font = LABEL_FONT):
 }
 
 /** The animation rows, filtered by `--row` if one was named. */
-function chosenRows(options: Options): typeof ROWS {
-  const animation = ROWS.filter((spec) => spec.kind !== 'gore');
-  if (options.row === null) return animation;
-  const named = animation.filter((spec) => spec.name === options.row);
+function chosenRows(options: Options): typeof TROGLODYTE_ROWS {
+  if (options.row === null) return TROGLODYTE_ROWS;
+  const named = TROGLODYTE_ROWS.filter((spec) => spec.name === options.row);
   if (named.length === 0) {
     throw new Error(
-      `--row=${options.row} is not an animation row; try ${animation.map((r) => r.name).join(', ')}`,
+      `--row=${options.row} is not an animation row; try ` +
+        TROGLODYTE_ROWS.map((spec) => spec.name).join(', '),
     );
   }
   return named;
 }
 
+/** The cells of the named states, laid out one state per sheet row. */
+function bakedRows(states: readonly string[]): FigureSheet {
+  return bakeFigureSheet(TROGLODYTE_FIGURE, [...states]);
+}
+
 function blitCell(
   ctx: Ctx,
-  sheet: BakedSheet,
-  image: Canvas,
+  sheet: FigureSheet,
   column: number,
   rowIndex: number,
   x: number,
   y: number,
   scale: number,
 ): void {
-  const { frameWidth, frameHeight } = sheet.geometry;
+  const { frameWidth, frameHeight } = sheet;
   ctx.drawImage(
-    image,
+    sheet.canvas,
     column * frameWidth,
     rowIndex * frameHeight,
     frameWidth,
@@ -186,10 +194,11 @@ function blitCell(
   );
 }
 
-function renderSheetPanel(sheet: BakedSheet, image: Canvas, options: Options): Canvas {
-  const { frameWidth, frameHeight, tileX, tileY } = sheet.geometry;
+function renderSheetPanel(options: Options): Canvas {
   const rows = chosenRows(options);
-  const rowIndexOf = new Map(ROWS.map((spec, index) => [spec.name, index]));
+  const sheet = bakedRows(rows.map((spec) => spec.name));
+  const { frameWidth, frameHeight } = sheet;
+  const { tileX, tileY } = TROGLODYTE_FIGURE;
   const cellW = frameWidth * options.scale;
   const cellH = frameHeight * options.scale;
   const columns = Math.max(...rows.map((spec) => (options.frame === null ? spec.frameCount : 1)));
@@ -207,11 +216,9 @@ function renderSheetPanel(sheet: BakedSheet, image: Canvas, options: Options): C
   ctx.fillStyle = BACKDROP;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  rows.forEach((spec, i) => {
-    const rowIndex = rowIndexOf.get(spec.name);
-    if (rowIndex === undefined) throw new Error(`row "${spec.name}" is not in ROWS`);
-    const y = PANEL_PAD + i * (cellH + ROW_GAP);
-    label(ctx, `${spec.name}`, PANEL_PAD, y + cellH / 2 - LABEL_HALF_LEADING);
+  rows.forEach((spec, rowIndex) => {
+    const y = PANEL_PAD + rowIndex * (cellH + ROW_GAP);
+    label(ctx, spec.name, PANEL_PAD, y + cellH / 2 - LABEL_HALF_LEADING);
     label(
       ctx,
       `${spec.frameCount}f ${spec.view}`,
@@ -226,7 +233,7 @@ function renderSheetPanel(sheet: BakedSheet, image: Canvas, options: Options): C
         : [Math.min(options.frame, spec.frameCount - 1)];
     frames.forEach((frame, column) => {
       const x = LABEL_GUTTER + column * cellW;
-      blitCell(ctx, sheet, image, frame, rowIndex, x, y, options.scale);
+      blitCell(ctx, sheet, frame, rowIndex, x, y, options.scale);
       ctx.strokeStyle = GRID_INK;
       ctx.lineWidth = 1;
       ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
@@ -242,7 +249,7 @@ function renderSheetPanel(sheet: BakedSheet, image: Canvas, options: Options): C
     });
   });
 
-  // A silhouette that reads at 4x and dissolves at 32 px is a failure, and this
+  // A silhouette that reads at 4× and dissolves at 32 px is a failure, and this
   // strip is the only place that gets caught before it ships.
   const stripY = PANEL_PAD + rows.length * (cellH + ROW_GAP);
   label(
@@ -251,18 +258,15 @@ function renderSheetPanel(sheet: BakedSheet, image: Canvas, options: Options): C
     PANEL_PAD,
     stripY + STRIP_LABEL_BASELINE,
   );
-  rows.forEach((spec, i) => {
-    const rowIndex = rowIndexOf.get(spec.name);
-    if (rowIndex === undefined) return;
+  rows.forEach((spec, rowIndex) => {
     const frames = Math.min(spec.frameCount, IN_GAME_STRIP_FRAMES);
     for (let frame = 0; frame < frames; frame++) {
       blitCell(
         ctx,
         sheet,
-        image,
         frame,
         rowIndex,
-        LABEL_GUTTER + (i * IN_GAME_STRIP_FRAMES + frame) * frameWidth * inGameScale,
+        LABEL_GUTTER + (rowIndex * IN_GAME_STRIP_FRAMES + frame) * frameWidth * inGameScale,
         stripY + PANEL_PAD,
         inGameScale,
       );
@@ -272,13 +276,11 @@ function renderSheetPanel(sheet: BakedSheet, image: Canvas, options: Options): C
   return canvas;
 }
 
-const IN_GAME_STRIP_FRAMES = 4;
-
-function renderPartsPanel(sheet: BakedSheet, image: Canvas, options: Options): Canvas {
-  const crop = cropPixels(PARTS[options.part], sheet);
-  const { frameWidth, frameHeight } = sheet.geometry;
+function renderPartsPanel(options: Options): Canvas {
+  const crop = cropPixels(PARTS[options.part]);
   const rows = chosenRows(options);
-  const rowIndexOf = new Map(ROWS.map((spec, index) => [spec.name, index]));
+  const sheet = bakedRows(rows.map((spec) => spec.name));
+  const { frameWidth, frameHeight } = sheet;
   const cellW = crop.w * options.scale;
   const cellH = crop.h * options.scale;
   const columns = Math.max(...rows.map((spec) => spec.frameCount));
@@ -291,14 +293,12 @@ function renderPartsPanel(sheet: BakedSheet, image: Canvas, options: Options): C
   ctx.fillStyle = BACKDROP;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  rows.forEach((spec, i) => {
-    const rowIndex = rowIndexOf.get(spec.name);
-    if (rowIndex === undefined) return;
-    const y = PANEL_PAD + i * (cellH + ROW_GAP);
+  rows.forEach((spec, rowIndex) => {
+    const y = PANEL_PAD + rowIndex * (cellH + ROW_GAP);
     label(ctx, `${spec.name} · ${options.part}`, PANEL_PAD, y + cellH / 2);
     for (let frame = 0; frame < spec.frameCount; frame++) {
       ctx.drawImage(
-        image,
+        sheet.canvas,
         frame * frameWidth + crop.x,
         rowIndex * frameHeight + crop.y,
         crop.w,
@@ -314,8 +314,9 @@ function renderPartsPanel(sheet: BakedSheet, image: Canvas, options: Options): C
 }
 
 /**
- * The gore row at three sizes, ending at the one it actually renders at: big
- * enough to judge the drawing, the sheet's own size, and the size a player sees.
+ * The severed pieces at three sizes, ending at the one they actually render at:
+ * big enough to judge the drawing, the cell's own size, and the size a player
+ * sees.
  */
 const GORE_INSPECT_SCALE = 4;
 const GORE_SHEET_SCALE = 1;
@@ -329,10 +330,11 @@ const GORE_BAND_STRIDE = ROW_GAP * 3;
 /** Where the "at in-game size" caption sits under its band. */
 const GORE_CAPTION_DROP = ROW_GAP * 2;
 
-function renderGorePanel(sheet: BakedSheet, image: Canvas): Canvas {
-  const { frameWidth, frameHeight } = sheet.geometry;
-  const goreRow = ROWS.findIndex((spec) => spec.kind === 'gore');
-  if (goreRow < 0) throw new Error('no gore row in ROWS');
+function renderGorePanel(): Canvas {
+  // One state per piece, so the gore "row" is a column walk over the sheet's
+  // own rows rather than over one row's frames.
+  const sheet = bakedRows(GORE_STATES);
+  const { frameWidth, frameHeight } = sheet;
   const pieces = GORE_STATES.length;
 
   const widest = Math.max(...GORE_REVIEW_SCALES) * frameWidth;
@@ -350,7 +352,7 @@ function renderGorePanel(sheet: BakedSheet, image: Canvas): Canvas {
   let y = PANEL_PAD;
   for (const scale of GORE_REVIEW_SCALES) {
     for (let piece = 0; piece < pieces; piece++) {
-      blitCell(ctx, sheet, image, piece, goreRow, PANEL_PAD + piece * widest, y, scale);
+      blitCell(ctx, sheet, 0, piece, PANEL_PAD + piece * widest, y, scale);
       if (scale === Math.max(...GORE_REVIEW_SCALES)) {
         label(
           ctx,
@@ -375,8 +377,10 @@ function renderGorePanel(sheet: BakedSheet, image: Canvas): Canvas {
   return canvas;
 }
 
-function renderTonguePanel(tongue: BakedSheet, image: Canvas, options: Options): Canvas {
-  const { frameWidth, frameHeight, tileX, tileY } = tongue.geometry;
+function renderTonguePanel(options: Options): Canvas {
+  const sheet = bakeFigureSheet(TROGLODYTE_TONGUE_FIGURE, [TONGUE_STATE]);
+  const { frameWidth, frameHeight } = sheet;
+  const { tileX, tileY } = TROGLODYTE_TONGUE_FIGURE;
   const cellH = frameHeight * options.scale;
   const inGameScale = IN_GAME_TILE / TILE_SCALE;
 
@@ -394,18 +398,8 @@ function renderTonguePanel(tongue: BakedSheet, image: Canvas, options: Options):
   for (let frame = 0; frame < TONGUE_FRAMES; frame++) {
     const y = PANEL_PAD + frame * (cellH + ROW_GAP);
     label(ctx, `extend ${frame}`, PANEL_PAD, y + cellH / 2, CAPTION_FONT);
-    ctx.drawImage(
-      image,
-      frame * frameWidth,
-      0,
-      frameWidth,
-      frameHeight,
-      LABEL_GUTTER,
-      y,
-      frameWidth * options.scale,
-      cellH,
-    );
-    // The mouth anchor: everything about this sheet is wrong if the root of
+    blitCell(ctx, sheet, frame, 0, LABEL_GUTTER, y, options.scale);
+    // The mouth anchor: everything about this figure is wrong if the root of
     // the tongue is not exactly here.
     ctx.strokeStyle = TILE_GUIDE;
     ctx.beginPath();
@@ -422,36 +416,28 @@ function renderTonguePanel(tongue: BakedSheet, image: Canvas, options: Options):
   const stripY = PANEL_PAD + TONGUE_FRAMES * (cellH + ROW_GAP);
   label(ctx, `at ${IN_GAME_TILE}px`, PANEL_PAD, stripY + STRIP_LABEL_BASELINE, CAPTION_FONT);
   for (let frame = 0; frame < TONGUE_FRAMES; frame++) {
-    ctx.drawImage(
-      image,
-      frame * frameWidth,
+    blitCell(
+      ctx,
+      sheet,
+      frame,
       0,
-      frameWidth,
-      frameHeight,
       LABEL_GUTTER,
       stripY + STRIP_LABEL_HEIGHT + frame * stripStep,
-      frameWidth * inGameScale,
-      frameHeight * inGameScale,
+      inGameScale,
     );
   }
   return canvas;
 }
 
-const ANCHOR_MARK_RADIUS = 4;
-const STRIP_LABEL_HEIGHT = 20;
-const STRIP_LABEL_BASELINE = 10;
-const TONGUE_STRIP_SPACING = 0.5;
-
 /**
  * Consecutive frames overlaid at low alpha. A snap or a pop shows as a doubled
  * edge; a smooth motion shows as an even smear.
  */
-function renderOnionPanel(sheet: BakedSheet, image: Canvas, options: Options): Canvas {
-  const { frameWidth, frameHeight } = sheet.geometry;
+function renderOnionPanel(options: Options): Canvas {
   const rows = chosenRows(options);
-  const rowIndexOf = new Map(ROWS.map((spec, index) => [spec.name, index]));
-  const cellW = frameWidth * options.scale;
-  const cellH = frameHeight * options.scale;
+  const sheet = bakedRows(rows.map((spec) => spec.name));
+  const cellW = sheet.frameWidth * options.scale;
+  const cellH = sheet.frameHeight * options.scale;
 
   const canvas = createCanvas(
     Math.ceil(LABEL_GUTTER + cellW + PANEL_PAD * 2),
@@ -461,15 +447,13 @@ function renderOnionPanel(sheet: BakedSheet, image: Canvas, options: Options): C
   ctx.fillStyle = BACKDROP;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  rows.forEach((spec, i) => {
-    const rowIndex = rowIndexOf.get(spec.name);
-    if (rowIndex === undefined) return;
-    const y = PANEL_PAD + i * (cellH + ROW_GAP);
+  rows.forEach((spec, rowIndex) => {
+    const y = PANEL_PAD + rowIndex * (cellH + ROW_GAP);
     label(ctx, `${spec.name} onion`, PANEL_PAD, y + cellH / 2, CAPTION_FONT);
     ctx.save();
     ctx.globalAlpha = 1 / spec.frameCount;
     for (let frame = 0; frame < spec.frameCount; frame++) {
-      blitCell(ctx, sheet, image, frame, rowIndex, LABEL_GUTTER, y, options.scale);
+      blitCell(ctx, sheet, frame, rowIndex, LABEL_GUTTER, y, options.scale);
     }
     ctx.restore();
   });
@@ -480,12 +464,11 @@ function renderOnionPanel(sheet: BakedSheet, image: Canvas, options: Options): C
  * Per-frame difference against the previous frame, which locates *where* a
  * continuity problem is rather than only that there is one.
  */
-function renderDeltaPanel(sheet: BakedSheet, image: Canvas, options: Options): Canvas {
-  const { frameWidth, frameHeight } = sheet.geometry;
+function renderDeltaPanel(options: Options): Canvas {
   const rows = chosenRows(options);
-  const rowIndexOf = new Map(ROWS.map((spec, index) => [spec.name, index]));
-  const cellW = frameWidth * options.scale;
-  const cellH = frameHeight * options.scale;
+  const sheet = bakedRows(rows.map((spec) => spec.name));
+  const cellW = sheet.frameWidth * options.scale;
+  const cellH = sheet.frameHeight * options.scale;
   const columns = Math.max(...rows.map((spec) => spec.frameCount));
 
   const canvas = createCanvas(
@@ -496,53 +479,44 @@ function renderDeltaPanel(sheet: BakedSheet, image: Canvas, options: Options): C
   ctx.fillStyle = DELTA_BACKDROP;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  rows.forEach((spec, i) => {
-    const rowIndex = rowIndexOf.get(spec.name);
-    if (rowIndex === undefined) return;
-    const y = PANEL_PAD + i * (cellH + ROW_GAP);
+  rows.forEach((spec, rowIndex) => {
+    const y = PANEL_PAD + rowIndex * (cellH + ROW_GAP);
     label(ctx, `${spec.name} delta`, PANEL_PAD, y + cellH / 2, CAPTION_FONT);
     for (let frame = 0; frame < spec.frameCount; frame++) {
       const previous = (frame - 1 + spec.frameCount) % spec.frameCount;
       const x = LABEL_GUTTER + frame * cellW;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      blitCell(ctx, sheet, image, frame, rowIndex, x, y, options.scale);
+      blitCell(ctx, sheet, frame, rowIndex, x, y, options.scale);
       ctx.globalCompositeOperation = 'difference';
-      blitCell(ctx, sheet, image, previous, rowIndex, x, y, options.scale);
+      blitCell(ctx, sheet, previous, rowIndex, x, y, options.scale);
       ctx.restore();
     }
   });
   return canvas;
 }
 
-/** The baked PNG, decoded back into something the panels can blit from. */
-async function decode(sheet: BakedSheet): Promise<Canvas> {
-  const image = await loadImage(sheet.buffer);
-  const canvas = createCanvas(image.width, image.height);
-  canvas.getContext('2d').drawImage(image, 0, 0);
-  return canvas;
-}
-
-async function main(): Promise<void> {
+function main(): void {
   const options = parseArgs(process.argv.slice(2));
 
-  let panel: Canvas;
-  if (options.mode === 'tongue') {
-    const tongue = bakeTongue();
-    panel = renderTonguePanel(tongue, await decode(tongue), options);
-  } else {
-    const body = bake();
-    const image = await decode(body);
-    if (options.mode === 'gore') panel = renderGorePanel(body, image);
-    else if (options.mode === 'parts') panel = renderPartsPanel(body, image, options);
-    else if (options.mode === 'onion') panel = renderOnionPanel(body, image, options);
-    else if (options.mode === 'delta') panel = renderDeltaPanel(body, image, options);
-    else panel = renderSheetPanel(body, image, options);
-  }
+  // Ahead of the contact sheet rather than after it. The sheet is a
+  // many-megapixel allocation, and measuring art on the other side of one is
+  // what made a sibling figure's centroid gate report a seam at twice its true
+  // width every so often — a red gate on art nobody touched, which is the one
+  // thing that teaches an agent to loosen a threshold.
+  console.log('Gating the troglodyte figure…');
+  reportFigureGates('troglodyte', troglodyteGateFailures());
 
-  const outPath = resolve(options.out);
-  writeFileSync(outPath, panel.toBuffer('image/png'));
+  let panel: Canvas;
+  if (options.mode === 'tongue') panel = renderTonguePanel(options);
+  else if (options.mode === 'gore') panel = renderGorePanel();
+  else if (options.mode === 'parts') panel = renderPartsPanel(options);
+  else if (options.mode === 'onion') panel = renderOnionPanel(options);
+  else if (options.mode === 'delta') panel = renderDeltaPanel(options);
+  else panel = renderSheetPanel(options);
+
+  const outPath = writePreviewPng(options.out, panel.toBuffer('image/png'));
   console.log(`  → ${outPath}  (${panel.width}×${panel.height})`);
 }
 
-void main();
+main();

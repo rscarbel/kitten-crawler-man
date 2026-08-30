@@ -29,23 +29,103 @@
  *   npx tsx scripts/render-goblins.ts --variant=warhammer --mode=parts --part=head --scale=6
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createCanvas, type Canvas } from 'canvas';
 import {
-  COLS_PER_ROW,
   GOBLIN_ARCHETYPES,
+  GOBLIN_FIGURES,
+  GOBLIN_GORE_STATES,
   GOBLIN_STYLES,
   IMPACT_FRAMES,
   ROWS,
   TILE_SCALE,
-  arcTracePath,
-  rowOffsets,
-  sheetPath,
+  goblinPose,
+  goblinWeaponTip,
   type GoblinArchetype,
   type RowSpec,
-} from './generate-goblin-sprites';
-import { ARCHETYPE_SCALE, figureHeight } from './goblinArt';
+} from '../src/sprites/art/goblinFigure.js';
+import { ARCHETYPE_SCALE, figureHeight } from '../src/sprites/art/goblinArt.js';
+import { bakeFigureCell } from './figureSheet.js';
+import { goblinGateFailures } from './gates-goblins.js';
+import { reportFigureGates } from './figureGates.js';
+import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+
+// A painter that composes on its own scratch surface reaches
+// `document.createElement('canvas')`, which Node does not have.
+installCanvasGlobals();
+
+/**
+ * Columns a long row wraps at on the review sheet.
+ *
+ * The layout the deleted PNG used, kept because every panel below indexes into
+ * it and because ten columns is what fits a war hammer's 18-frame haul on a
+ * screen. Nothing but this harness reads it any more.
+ */
+const COLS_PER_ROW = 10;
+
+/** The physical review-sheet row each state's frames start on. */
+function rowOffsets(): Map<string, number> {
+  const offsets = new Map<string, number>();
+  let physicalRow = 0;
+  for (const row of ROWS) {
+    offsets.set(row.name, physicalRow);
+    physicalRow += Math.ceil(row.frameCount / COLS_PER_ROW);
+  }
+  offsets.set(GORE_ROW_NAME, physicalRow);
+  return offsets;
+}
+
+/** The pseudo-row the nine one-frame gore states are laid out on. */
+const GORE_ROW_NAME = 'gore';
+
+/**
+ * The gore pieces as one review row.
+ *
+ * They are nine separate one-frame states in the figure — that is what
+ * `BodyPartGoreSystem` asks for — but a reviewer wants them side by side, so
+ * the harness lays them out as a row of its own.
+ */
+const GORE_ROW: RowSpec = {
+  name: GORE_ROW_NAME,
+  frameCount: GOBLIN_GORE_STATES.length,
+  kind: 'oneShot',
+};
+
+/** The state one cell of a review row is painted from. */
+function stateOf(row: RowSpec, frame: number): string {
+  return row.name === GORE_ROW_NAME ? GOBLIN_GORE_STATES[frame] : row.name;
+}
+
+/**
+ * The review sheet, painted from the figure rather than loaded from a PNG.
+ *
+ * Laid out exactly as the deleted sheet was — one physical row per state, wrapped
+ * at `COLS_PER_ROW` — so every panel below still addresses a cell by (row,
+ * frame). Each cell is baked supersampled and downsampled, the way the runtime
+ * cache bakes it, so what a reviewer looks at is what the game blits.
+ */
+function bakeReviewSheet(archetype: GoblinArchetype): Canvas {
+  const def = GOBLIN_FIGURES[archetype];
+  const offsets = rowOffsets();
+  const physicalRows = [...ROWS, GORE_ROW].reduce(
+    (total, row) => total + Math.ceil(row.frameCount / COLS_PER_ROW),
+    0,
+  );
+  const sheet = createCanvas(COLS_PER_ROW * def.frameWidth, physicalRows * def.frameHeight);
+  const ctx = sheet.getContext('2d');
+  for (const row of [...ROWS, GORE_ROW]) {
+    const start = offsets.get(row.name);
+    if (start === undefined) throw new Error(`no review-sheet offset for ${row.name}`);
+    for (let frame = 0; frame < row.frameCount; frame++) {
+      ctx.drawImage(
+        bakeFigureCell(def, stateOf(row, frame), row.name === GORE_ROW_NAME ? 0 : frame),
+        (frame % COLS_PER_ROW) * def.frameWidth,
+        (start + Math.floor(frame / COLS_PER_ROW)) * def.frameHeight,
+      );
+    }
+  }
+  return sheet;
+}
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
 const IN_GAME_TILE = 32;
@@ -116,31 +196,10 @@ interface Geometry {
   readonly tileY: number;
 }
 
-/**
- * Frame geometry is measured at bake time and lives only in the manifest, so the
- * harness reads it back rather than guessing. Gate G13 has already asserted the
- * manifest matches what was baked, which is what makes that safe.
- */
+/** The cell the figure declares — the same four numbers the runtime places it by. */
 function geometryOf(archetype: GoblinArchetype): Geometry {
-  const raw: unknown = JSON.parse(
-    readFileSync(resolve('src/images/enemies/manifest.json'), 'utf8'),
-  );
-  if (typeof raw !== 'object' || raw === null) throw new Error('manifest is not an object');
-  const parsed: Record<string, unknown> = { ...raw };
-  const entry: unknown = parsed[`goblin_${archetype}`];
-  if (typeof entry !== 'object' || entry === null) throw new Error(`no goblin_${archetype} entry`);
-  const record: Record<string, unknown> = { ...entry };
-  const read = (field: string): number => {
-    const value = record[field];
-    if (typeof value !== 'number') throw new Error(`goblin_${archetype}.${field} is not a number`);
-    return value;
-  };
-  return {
-    frameWidth: read('frameWidth'),
-    frameHeight: read('frameHeight'),
-    tileX: read('tileX'),
-    tileY: read('tileY'),
-  };
+  const { frameWidth, frameHeight, tileX, tileY } = GOBLIN_FIGURES[archetype];
+  return { frameWidth, frameHeight, tileX, tileY };
 }
 
 interface FrameSource {
@@ -175,7 +234,7 @@ function drawnHeight(archetype: GoblinArchetype): number {
 
 function drawSheetPanels(
   archetype: GoblinArchetype,
-  sheet: Image,
+  sheet: Canvas,
   geometry: Geometry,
   rows: readonly RowSpec[],
   scale: number,
@@ -307,15 +366,15 @@ function drawSheetPanels(
     }
   }
 
-  writeFileSync(resolve(out), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${out} (${canvas.width}×${canvas.height}px)`);
+  const writtenPath = writePreviewPng(out, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${canvas.width}×${canvas.height}px)`);
 }
 
 // ── Panel 4: part crops ──────────────────────────────────────────────────────
 
 function drawPartPanel(
   archetype: GoblinArchetype,
-  sheet: Image,
+  sheet: Canvas,
   geometry: Geometry,
   rows: readonly RowSpec[],
   partName: string,
@@ -376,8 +435,8 @@ function drawPartPanel(
     }
     y += Math.ceil(row.frameCount / COLS_PER_ROW) * (cellH + PADDING);
   }
-  writeFileSync(resolve(out), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${out} (${canvas.width}×${canvas.height}px)`);
+  const writtenPath = writePreviewPng(out, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${canvas.width}×${canvas.height}px)`);
 }
 
 // ── Panel 5: onion skin ──────────────────────────────────────────────────────
@@ -386,7 +445,7 @@ const ONION_ALPHA = 0.22;
 
 function drawOnionPanel(
   archetype: GoblinArchetype,
-  sheet: Image,
+  sheet: Canvas,
   geometry: Geometry,
   rows: readonly RowSpec[],
   scale: number,
@@ -424,8 +483,8 @@ function drawOnionPanel(
     ctx.fillText(row.name, x + 4, top + cellH + LABEL_HEIGHT - PADDING);
   });
 
-  writeFileSync(resolve(out), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${out} (${canvas.width}×${canvas.height}px)`);
+  const writtenPath = writePreviewPng(out, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${canvas.width}×${canvas.height}px)`);
 }
 
 // ── Panel 6: arc trace ───────────────────────────────────────────────────────
@@ -435,23 +494,26 @@ interface TracePoint {
   readonly y: number;
 }
 
-function readArcTrace(archetype: GoblinArchetype): Record<string, readonly TracePoint[]> {
-  const parsed: unknown = JSON.parse(readFileSync(resolve(arcTracePath(archetype)), 'utf8'));
-  if (typeof parsed !== 'object' || parsed === null) throw new Error('arc trace is not an object');
-  const out: Record<string, readonly TracePoint[]> = {};
-  for (const [key, value] of Object.entries({ ...parsed })) {
-    if (!Array.isArray(value)) continue;
+/**
+ * The weapon tip per frame, per row.
+ *
+ * Computed from the choreography rather than read back from a dumped JSON file.
+ * The dump existed because the trace was produced inside a bake and the harness
+ * could only see what the bake wrote down; the harness now calls the same pose
+ * functions the figure paints from, so there is nothing left to drift.
+ */
+function arcTraceOf(archetype: GoblinArchetype): Record<string, readonly TracePoint[]> {
+  const trace: Record<string, readonly TracePoint[]> = {};
+  for (const row of ROWS) {
     const points: TracePoint[] = [];
-    for (const entry of value) {
-      if (typeof entry !== 'object' || entry === null) continue;
-      const record: Record<string, unknown> = { ...entry };
-      if (typeof record.x === 'number' && typeof record.y === 'number') {
-        points.push({ x: record.x, y: record.y });
-      }
+    for (let frame = 0; frame < row.frameCount; frame++) {
+      const tip = goblinWeaponTip(goblinPose(archetype, row, frame), archetype);
+      if (tip === null) break;
+      points.push({ x: tip.x, y: tip.y });
     }
-    out[key] = points;
+    trace[row.name] = points;
   }
-  return out;
+  return trace;
 }
 
 const ARC_PANEL = 320;
@@ -459,7 +521,7 @@ const ARC_CHART_HEIGHT = 120;
 const ARC_DOT_RADIUS = 3;
 
 function drawArcPanel(archetype: GoblinArchetype, rows: readonly RowSpec[], out: string): void {
-  const trace = readArcTrace(archetype);
+  const trace = arcTraceOf(archetype);
   const shown = rows.filter((row) => (trace[row.name] ?? []).length > 1);
   if (shown.length === 0) throw new Error('no arc trace for the requested rows');
 
@@ -531,8 +593,8 @@ function drawArcPanel(archetype: GoblinArchetype, rows: readonly RowSpec[], out:
     });
   });
 
-  writeFileSync(resolve(out), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${out} (${canvas.width}×${canvas.height}px)`);
+  const writtenPath = writePreviewPng(out, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${canvas.width}×${canvas.height}px)`);
 }
 
 // ── Panel 7: delta chart ─────────────────────────────────────────────────────
@@ -543,7 +605,7 @@ const G4_SPIKE_RATIO = 2.5;
 
 function drawDeltaPanel(
   archetype: GoblinArchetype,
-  sheet: Image,
+  sheet: Canvas,
   geometry: Geometry,
   rows: readonly RowSpec[],
   out: string,
@@ -626,8 +688,8 @@ function drawDeltaPanel(
     ctx.stroke();
   });
 
-  writeFileSync(resolve(out), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${out} (${canvas.width}×${canvas.height}px)`);
+  const writtenPath = writePreviewPng(out, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${canvas.width}×${canvas.height}px)`);
 }
 
 // ── Panel 8: gore strip ──────────────────────────────────────────────────────
@@ -645,12 +707,11 @@ const GORE_REVIEW_SCALES: ReadonlyArray<number> = [4, 1, 0.5];
 
 function drawGorePanel(
   archetype: GoblinArchetype,
-  sheet: Image,
+  sheet: Canvas,
   geometry: Geometry,
   out: string,
 ): void {
-  const row = ROWS.find((candidate) => candidate.kind === 'gore');
-  if (row === undefined) throw new Error('no gore row');
+  const row = GORE_ROW;
   // Cropped to a centred square rather than shown as a whole cell: gore is
   // centred on the cell centre by construction, and the cell itself is sized by
   // a war hammer hauled overhead, so most of it is empty air.
@@ -696,14 +757,14 @@ function drawGorePanel(
     }
     y += drawn + PADDING;
   }
-  writeFileSync(resolve(out), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${out} (${canvas.width}×${canvas.height}px)`);
+  const writtenPath = writePreviewPng(out, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${canvas.width}×${canvas.height}px)`);
 }
 
 // ── Entry ────────────────────────────────────────────────────────────────────
 
 function parseVariant(): GoblinArchetype {
-  const raw = parseFlag('variant', 'axe');
+  const raw = parseFlag('variant', '');
   const found = GOBLIN_ARCHETYPES.find((archetype) => archetype === raw);
   if (found === undefined) {
     throw new Error(`--variant must be one of ${GOBLIN_ARCHETYPES.join('|')}`);
@@ -719,14 +780,10 @@ function parseMode(): Mode {
   return found;
 }
 
-async function main(): Promise<void> {
-  const archetype = parseVariant();
-  const mode = parseMode();
-  const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
-  const only = parseFlag('row', '');
+function renderVariant(archetype: GoblinArchetype, mode: Mode, scale: number, only: string): void {
   const rows = only === '' ? ROWS : ROWS.filter((row) => row.name === only);
   if (rows.length === 0) throw new Error(`No row named "${only}"`);
-  const out = parseFlag('out', `goblin-${archetype}-${mode}.png`);
+  const out = parseFlag('out', `${PREVIEW_DIR}/goblin-${archetype}-${mode}.png`);
 
   if (mode === 'arc') {
     drawArcPanel(archetype, rows, out);
@@ -734,7 +791,7 @@ async function main(): Promise<void> {
   }
 
   const geometry = geometryOf(archetype);
-  const sheet = await loadImage(resolve(sheetPath(archetype)));
+  const sheet = bakeReviewSheet(archetype);
   switch (mode) {
     case 'sheet':
       drawSheetPanels(archetype, sheet, geometry, rows, scale, out);
@@ -754,11 +811,25 @@ async function main(): Promise<void> {
   }
 }
 
+function main(): void {
+  // Gates first, before any contact sheet is baked. A contact sheet is a
+  // tens-of-megapixel allocation, and measuring art on the far side of one has
+  // already made a centroid gate report a seam at twice its true width.
+  if (!reportFigureGates('goblins', goblinGateFailures())) return;
+
+  const mode = parseMode();
+  const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
+  const only = parseFlag('row', '');
+  // With no `--variant` every build is rendered: five figures share one
+  // choreography, and a review that only ever looked at the axe would never see
+  // the war hammer outgrow its cell.
+  const requested = parseFlag('variant', '');
+  const variants = requested === '' ? GOBLIN_ARCHETYPES : [parseVariant()];
+  for (const archetype of variants) renderVariant(archetype, mode, scale, only);
+}
+
 /**
  * No re-exports from this module: it runs `main()` on import, so anything that
  * imported it for a helper would bake a review sheet as a side effect.
  */
-void main().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main();

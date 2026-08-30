@@ -10,6 +10,7 @@ import {
   GoblinAnimator,
   drawGoblinSprite,
   goblinBodyPartKey,
+  prewarmGoblinCombat,
   type GoblinAttackKind,
   type GoblinWeapon,
 } from '../sprites/goblinSprite';
@@ -118,6 +119,22 @@ export class Goblin extends Mob {
     this.attackRangePx = tileSize * GOBLIN_ATTACKS[weapon].light.reachTiles;
     this.attackDamage = GOBLIN_ATTACKS[weapon].light.damage;
     this.previousHp = this.hp;
+  }
+
+  /**
+   * Warms the rows a fight draws, on the frame this goblin first notices a
+   * target.
+   *
+   * A goblin cell measures just over the threshold the direct-paint fallback is
+   * affordable below, so a swing, a flinch or a body coming apart would each
+   * cost a paint on the frame it starts. Aggro range is several tiles outside
+   * attack range, which is the lead that buys — and a prewarm of a row that is
+   * already warm is nearly free, so re-noticing the same player costs nothing.
+   */
+  private beginEngagement(): void {
+    if (this.isAggro) return;
+    this.isAggro = true;
+    prewarmGoblinCombat(this.weapon);
   }
 
   protected override get levelledSpeedCap(): number {
@@ -255,7 +272,7 @@ export class Goblin extends Mob {
       return;
     }
 
-    this.isAggro = true;
+    this.beginEngagement();
     this.updateLastKnown(nearest);
     // A stand-and-fight goblin never walks, so this is the only thing that ever
     // points it at anything. Held still mid-swing: an arc that flips direction
@@ -289,7 +306,7 @@ export class Goblin extends Mob {
       return;
     }
 
-    this.isAggro = true;
+    this.beginEngagement();
     const nearestDist = this.distanceTo(nearest);
 
     // Track last known position while we have LOS (enables navigation around corners)

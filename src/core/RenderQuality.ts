@@ -20,6 +20,7 @@ import {
   settings,
   type QualityPreset,
 } from './Settings';
+import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { flushPersonFrameCache } from '../sprites/person/personFrameCache';
 
 const MS_PER_SECOND = 1000;
@@ -294,6 +295,7 @@ class RenderQualityController {
     // Baked cells are density-specific; keeping them would leave every citizen
     // resampled for the rest of the session.
     flushPersonFrameCache();
+    flushFigureFrameCache();
   }
 }
 

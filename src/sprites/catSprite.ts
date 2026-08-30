@@ -1,10 +1,19 @@
+import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { figureFrameCount } from './figure/figureDef';
 import {
-  drawSpriteKey,
-  walkFrameIndex,
-  progressFrameIndex,
-  timeFrameIndex,
-} from '../core/SpriteRenderer';
-import type { SpriteStates } from '../core/SpriteLoader';
+  ACTION_FRAMES,
+  BREAK_FRAMES,
+  CAT_FIGURE,
+  DANCE_FRAMES,
+  IDLE_FRAMES,
+  KO_FRAMES,
+  WALK_FRAMES,
+} from './art/catFigure';
+import {
+  MAGIC_MISSILE_EXPLOSION_FIGURE,
+  MAGIC_MISSILE_PROJECTILE_FIGURE,
+} from './art/magicMissileFigure';
 import { getMagicMissileVisualTier, type MagicMissileVisualTier } from '../abilities/magicMissile';
 
 export interface Missile {
@@ -23,7 +32,31 @@ export interface Missile {
   isSubMissile: boolean;
 }
 
-type CatState = SpriteStates['cat'];
+/**
+ * Every row `drawCatSprite` can ask the figure for. Written out rather than
+ * derived from the figure, because the draw call *clamps* a frame index and
+ * skips a state it cannot find: read off the figure, a row that lost its frames
+ * or its name would freeze or vanish instead of failing. `scripts/gates-cat.ts`
+ * holds this union and the figure's own states equal.
+ */
+type CatState =
+  | 'walk'
+  | 'walk_side'
+  | 'walk_away'
+  | 'idle'
+  | 'idle_side'
+  | 'idle_away'
+  | 'look_around'
+  | 'groom_paw'
+  | 'groom_flank'
+  | 'swipe'
+  | 'swipe_side'
+  | 'swipe_away'
+  | 'cast'
+  | 'cast_side'
+  | 'cast_away'
+  | 'knocked_out'
+  | 'dance';
 
 /** Which way the sheet's three viewpoints are chosen from a facing vector. */
 type CatView = 'front' | 'side' | 'away';
@@ -69,25 +102,67 @@ const MOVEMENT_INTERRUPT_GRACE: Partial<Record<CatOneShot, number>> = { dance: 3
 const IDLE_BREAK_MIN_DELAY = 240;
 const IDLE_BREAK_RANDOM_DELAY = 420;
 
+/**
+ * Frames per row, taken from the choreography that paints them, so the two
+ * cannot drift. Exhaustive by construction: a state added to `CatState` without
+ * a count here is a compile error.
+ */
 const FRAME_COUNT: Record<CatState, number> = {
-  walk: 8,
-  walk_side: 8,
-  walk_away: 8,
-  idle: 8,
-  idle_side: 8,
-  idle_away: 8,
-  look_around: 12,
-  groom_paw: 12,
-  groom_flank: 12,
-  swipe: 8,
-  swipe_side: 8,
-  swipe_away: 8,
-  cast: 8,
-  cast_side: 8,
-  cast_away: 8,
-  knocked_out: 8,
-  dance: 12,
+  walk: WALK_FRAMES,
+  walk_side: WALK_FRAMES,
+  walk_away: WALK_FRAMES,
+  idle: IDLE_FRAMES,
+  idle_side: IDLE_FRAMES,
+  idle_away: IDLE_FRAMES,
+  look_around: BREAK_FRAMES,
+  groom_paw: BREAK_FRAMES,
+  groom_flank: BREAK_FRAMES,
+  swipe: ACTION_FRAMES,
+  swipe_side: ACTION_FRAMES,
+  swipe_away: ACTION_FRAMES,
+  cast: ACTION_FRAMES,
+  cast_side: ACTION_FRAMES,
+  cast_away: ACTION_FRAMES,
+  knocked_out: KO_FRAMES,
+  dance: DANCE_FRAMES,
 };
+
+/**
+ * Every row she can be drawn in, standing and walking first.
+ *
+ * All of them, not just the ones she spends her life in. Her fur engine lays
+ * down several hundred individual hair strokes per frame, which makes her by
+ * some way the most expensive painter in the game — an order of magnitude past
+ * the cost at which painting a frame on demand fits inside a frame's slack — so
+ * a row that is not warm when she needs it is a dropped frame, not a slightly
+ * soft one. The order is the order the queue drains in, so the rows she is
+ * drawn in continuously are ready first and the ones she reaches for on a swipe,
+ * a cast or a knockout follow behind them.
+ */
+const PREWARMED_ROWS: ReadonlyArray<CatState> = [
+  'idle',
+  'idle_side',
+  'idle_away',
+  'walk',
+  'walk_side',
+  'walk_away',
+  'swipe',
+  'swipe_side',
+  'swipe_away',
+  'cast',
+  'cast_side',
+  'cast_away',
+  'knocked_out',
+  'dance',
+  'look_around',
+  'groom_paw',
+  'groom_flank',
+];
+
+/** Queues every row Donut can be drawn in for baking. Call once per scene. */
+export function prewarmCatSprite(): void {
+  for (const state of PREWARMED_ROWS) prewarmFigureState(CAT_FIGURE, state);
+}
 
 /** Loop speeds for the animations that are driven by the clock, not by a timer. */
 const IDLE_FPS = 6;
@@ -219,7 +294,7 @@ export function drawCatSprite(
     // The downed pose is profile art whichever way she was facing, so it takes
     // the mirror on its own rather than through the view rule above.
     const frame = timeFrameIndex(nowSeconds, KNOCKED_OUT_FPS, FRAME_COUNT.knocked_out);
-    drawSpriteKey(ctx, 'cat', 'knocked_out', frame, sx, sy, s, { flipX: facesLeft });
+    drawFigureCached(ctx, CAT_FIGURE, 'knocked_out', frame, sx, sy, s, { flipX: facesLeft });
     return;
   }
 
@@ -228,9 +303,9 @@ export function drawCatSprite(
     // actions have a pose per viewpoint.
     const directional = oneShot.action === 'swipe' || oneShot.action === 'cast';
     const key: CatState = directional ? directionalState(oneShot.action, view) : oneShot.action;
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      'cat',
+      CAT_FIGURE,
       key,
       progressFrameIndex(oneShot.progress, FRAME_COUNT[key]),
       sx,
@@ -245,16 +320,16 @@ export function drawCatSprite(
 
   if (isMoving) {
     const key = directionalState('walk', view);
-    drawSpriteKey(ctx, 'cat', key, walkFrameIndex(walkFrame, FRAME_COUNT[key]), sx, sy, s, {
+    drawFigureCached(ctx, CAT_FIGURE, key, walkFrameIndex(walkFrame, FRAME_COUNT[key]), sx, sy, s, {
       flipX,
     });
     return;
   }
 
   const key = directionalState('idle', view);
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    'cat',
+    CAT_FIGURE,
     key,
     timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]),
     sx,
@@ -266,12 +341,34 @@ export function drawCatSprite(
   );
 }
 
-/** Frames baked per row by `scripts/generate-magic-missile-sprites.ts`. */
-const MISSILE_PROJECTILE_FRAMES = 8;
-const MISSILE_EXPLOSION_FRAMES = 10;
-
-/** Both missile sheets share one set of row names. */
+/** Both missile figures share one set of row names. */
 type MissileSpriteVariant = MagicMissileVisualTier | 'sub_missile';
+
+/**
+ * The level-10 shrapnel's row. It is not a tier — the shards carry an ability
+ * level of 1 so they cannot chain — so it is named here rather than derived
+ * from a level.
+ */
+export const SUB_MISSILE_VARIANT = 'sub_missile';
+
+/**
+ * Warms the rows a bolt just launched will draw.
+ *
+ * A cast is a keypress with no telegraph of its own, so this is the earliest
+ * moment anything knows a missile is coming. The bolt itself is drawn on the
+ * very next frame and falls back to a direct paint until its row lands; the
+ * impact is the row the lead actually buys, because it is a whole flight away
+ * and is the more expensive of the two to bake. A level-10 cat's shrapnel is
+ * warmed at the same moment for the same reason: its rows are two events away.
+ */
+export function prewarmMagicMissileCast(level: number, spawnsSubMissiles: boolean): void {
+  const tier = getMagicMissileVisualTier(level);
+  prewarmFigureState(MAGIC_MISSILE_PROJECTILE_FIGURE, tier);
+  prewarmFigureState(MAGIC_MISSILE_EXPLOSION_FIGURE, tier);
+  if (!spawnsSubMissiles) return;
+  prewarmFigureState(MAGIC_MISSILE_PROJECTILE_FIGURE, SUB_MISSILE_VARIANT);
+  prewarmFigureState(MAGIC_MISSILE_EXPLOSION_FIGURE, SUB_MISSILE_VARIANT);
+}
 
 /**
  * How fast each tier's bolt cycles its loop. The higher tiers spin faster on
@@ -301,20 +398,29 @@ export function drawMissiles(
     const my = m.y - camY;
     // Sub-missiles carry an ability level of 1 so they cannot chain into more
     // sub-missiles, so their level says nothing about how they should look —
-    // both sheets give them a row of their own.
+    // both figures give them a row of their own.
     const variant: MissileSpriteVariant = m.isSubMissile
-      ? 'sub_missile'
+      ? SUB_MISSILE_VARIANT
       : getMagicMissileVisualTier(m.abilityLevel);
 
     if (m.state === 'flying') {
       const rotation = Math.atan2(m.vy, m.vx);
-      const frame = timeFrameIndex(now, MISSILE_ANIM_FPS[variant], MISSILE_PROJECTILE_FRAMES);
-      drawSpriteKey(ctx, 'magic_missile_projectile', variant, frame, mx, my, s, { rotation });
+      const frame = timeFrameIndex(
+        now,
+        MISSILE_ANIM_FPS[variant],
+        figureFrameCount(MAGIC_MISSILE_PROJECTILE_FIGURE, variant),
+      );
+      drawFigureCached(ctx, MAGIC_MISSILE_PROJECTILE_FIGURE, variant, frame, mx, my, s, {
+        rotation,
+      });
     } else {
       // Explosion — centered on the missile position.
       const progress = 1 - m.explodeTimer / EXPLODE_FRAMES;
-      const frame = progressFrameIndex(progress, MISSILE_EXPLOSION_FRAMES);
-      drawSpriteKey(ctx, 'magic_missile_explosion', variant, frame, mx, my, s);
+      const frame = progressFrameIndex(
+        progress,
+        figureFrameCount(MAGIC_MISSILE_EXPLOSION_FIGURE, variant),
+      );
+      drawFigureCached(ctx, MAGIC_MISSILE_EXPLOSION_FIGURE, variant, frame, mx, my, s);
     }
   }
 }

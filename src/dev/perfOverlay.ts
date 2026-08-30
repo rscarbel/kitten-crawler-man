@@ -11,6 +11,7 @@
 
 import { PERF_TIMERS, perfMonitor } from '../core/PerfMonitor';
 import { viewportWidth } from '../core/Viewport';
+import { BYTES_PER_MEGABYTE, getFigureCacheStats } from '../sprites/figure/figureCacheStats';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 
@@ -24,6 +25,14 @@ const VALUE_COLUMN_OFFSET = 96;
 /** Tenths of a millisecond is too coarse for a pass that costs well under one. */
 const MS_DECIMALS = 2;
 const FPS_DECIMALS = 1;
+const MEGABYTE_DECIMALS = 1;
+const PERCENT = 100;
+
+/**
+ * A hit rate below this means the figure cache is paying to paint rather than
+ * to blit — the one number the procedural-creature trade turns on.
+ */
+const FIGURE_HIT_RATE_WARNING = 90;
 
 /** Below this the frame is missing its budget badly enough to call out in red. */
 const FPS_WARNING_THRESHOLD = 50;
@@ -36,6 +45,35 @@ interface PerfRow {
 
 function formatMs(ms: number): string {
   return `${ms.toFixed(MS_DECIMALS)} ms`;
+}
+
+/**
+ * The figure cache's rows, or none at all when nothing painted has been drawn
+ * yet — three empty rows in a scene of baked art would read as a fault.
+ */
+function figureCacheRows(neutral: string): PerfRow[] {
+  const stats = getFigureCacheStats();
+  const lookups = stats.hits + stats.misses;
+  if (lookups === 0 && stats.bytes === 0) return [];
+  const hitRate = lookups === 0 ? PERCENT : (stats.hits / lookups) * PERCENT;
+  return [
+    {
+      label: 'fig hit%',
+      value: hitRate.toFixed(0),
+      color:
+        hitRate < FIGURE_HIT_RATE_WARNING ? TEXT_PRESETS.danger.color : TEXT_PRESETS.value.color,
+    },
+    {
+      label: 'fig MB/rows',
+      value: `${(stats.bytes / BYTES_PER_MEGABYTE).toFixed(MEGABYTE_DECIMALS)}/${stats.rows}`,
+      color: neutral,
+    },
+    {
+      label: 'fig bake/dir',
+      value: `${stats.bakes + stats.prewarmBakes}/${stats.directDraws}`,
+      color: stats.directDraws > 0 ? TEXT_PRESETS.danger.color : neutral,
+    },
+  ];
 }
 
 function buildRows(): PerfRow[] {
@@ -61,13 +99,21 @@ function buildRows(): PerfRow[] {
       value: Math.round(perfMonitor.perFrame('separationChecks')).toString(),
       color: neutral,
     },
+    ...figureCacheRows(neutral),
   ];
+}
+
+declare global {
+  var __perfRows: Record<string, string> | undefined;
 }
 
 export function drawPerfOverlay(ctx: CanvasRenderingContext2D): void {
   if (!perfMonitor.enabled) return;
 
   const rows = buildRows();
+  // Also published, not only drawn: this readout is the instrument for the
+  // frame cache, and browser automation cannot read a canvas.
+  globalThis.__perfRows = Object.fromEntries(rows.map((row) => [row.label, row.value]));
   const { inner } = drawBox(ctx, {
     x: viewportWidth() - PANEL_WIDTH - PANEL_MARGIN,
     y: PANEL_MARGIN,

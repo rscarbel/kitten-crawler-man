@@ -1,6 +1,7 @@
 import type { SceneManager } from '../core/Scene';
 import type { InputManager } from '../core/InputManager';
 import { DungeonScene, type DungeonSceneOptions } from '../scenes/DungeonScene';
+import { PaintBenchScene } from '../scenes/PaintBenchScene';
 import { PersonPreviewScene } from '../scenes/PersonPreviewScene';
 import { TilePreviewScene } from '../scenes/TilePreviewScene';
 import { BopcaPreviewScene } from '../scenes/BopcaPreviewScene';
@@ -31,6 +32,7 @@ import {
   type MurderQuestStage,
 } from '../core/MurderQuestProgress';
 import { perfMonitor } from '../core/PerfMonitor';
+import { setFigureCacheStatsRecording } from '../sprites/figure/figureCacheStats';
 import { drawPerfOverlay } from './perfOverlay';
 import { drawDifficultyOverlay } from './difficultyOverlay';
 import { getPlaytestPreset } from './playtestPresets';
@@ -99,6 +101,42 @@ function parseMurderQuestProgress(stageParam: string | null): MurderQuestProgres
 }
 
 /**
+ * Frames the loop is allowed to run per second once it is driven off timers.
+ * Fast enough that a fight plays out in real time, slow enough that a tab
+ * nobody is watching does not spin a core.
+ */
+const UNTHROTTLED_FRAME_INTERVAL_MS = 16;
+
+/**
+ * Runs the game loop off `setTimeout` instead of `requestAnimationFrame`.
+ *
+ * Chrome stops servicing `requestAnimationFrame` entirely in a tab it considers
+ * hidden, which is correct for a game — a background tab should not burn a core
+ * — and fatal for browser automation, which frequently cannot bring a tab to
+ * the front. Without this the loop never runs a single frame, so nothing can be
+ * driven or measured in the real game.
+ *
+ * Reached only via `?unthrottled` on localhost, and only from this file, which a
+ * release build resolves away entirely. It has to be installed before the
+ * `SceneManager` constructor arms the first frame, which is why `game.ts` calls
+ * it rather than `devBootScene`.
+ */
+export function installDevLoopFallback(): void {
+  const isLocalDev =
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (!isLocalDev) return;
+  if (new URLSearchParams(window.location.search).get('unthrottled') === null) return;
+
+  const scheduleOnAnimationFrame = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = (callback: FrameRequestCallback): number => {
+    if (document.visibilityState !== 'hidden') return scheduleOnAnimationFrame(callback);
+    return window.setTimeout(() => {
+      callback(performance.now());
+    }, UNTHROTTLED_FRAME_INTERVAL_MS);
+  };
+}
+
+/**
  * Replaces the opening scene when a dev-only parameter asks for one.
  *
  * `?playtest=spider` opens a named preset — a floor, a spawn landmark and a
@@ -127,6 +165,7 @@ export function devBootScene(
   const overlays: Array<(ctx: CanvasRenderingContext2D) => void> = [];
   if (params.get('perf') !== null) {
     perfMonitor.enable();
+    setFigureCacheStatsRecording(true);
     overlays.push(drawPerfOverlay);
   }
   if (params.get('difficulty') !== null) {
@@ -136,6 +175,11 @@ export function devBootScene(
     sceneManager.setFrameOverlay((ctx) => {
       for (const overlay of overlays) overlay(ctx);
     });
+  }
+
+  if (params.get('paintbench') !== null) {
+    sceneManager.replace(new PaintBenchScene());
+    return true;
   }
 
   if (params.get('people') !== null) {

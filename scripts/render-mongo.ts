@@ -1,31 +1,34 @@
 /**
- * Headless review harness for Mongo's three growth-stage sheets.
+ * Mongo's review harness. Art has to be judged as an image, by something that
+ * only looks at the image — the browser cannot reliably answer "does this read
+ * as a velociraptor" from a still, and every defect that has ever mattered on a
+ * figure in this project was invisible to `typecheck`, `lint` and a code read.
  *
- * The browser harness cannot reliably answer "does this read as a velociraptor"
- * from a still, so the art has to be judgeable offline. This bakes in memory —
- * so it works before the manifest has been pasted, and before the gates pass —
- * and lays out every animation row at review scale plus a strip of the same
- * frames blitted at the in-game tile size, which is the size the silhouette
- * actually has to survive.
+ * The contact sheet is painted from the three growth-stage figures the way the
+ * runtime cache bakes them, and the art gates run as part of the render, so one
+ * command answers both "does it still hold together" and "what does it look
+ * like".
  *
- *   npx tsx scripts/render-mongo.ts --stage=adult --out=mongo-adult.png --scale=2
+ *   npm run render:mongo
+ *   npx tsx scripts/render-mongo.ts --stage=adult --scale=2
  *   npx tsx scripts/render-mongo.ts --stage=adult --row=pounce_side --scale=5
- *   npx tsx scripts/render-mongo.ts --mode=stages --out=mongo-stages.png
+ *   npx tsx scripts/render-mongo.ts --mode=stages
  *   npx tsx scripts/render-mongo.ts --stage=adult --mode=onion --row=walk_side
- *
- * Regenerate the sheets themselves with `npm run gen:mongo`.
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createCanvas, type Canvas } from 'canvas';
 
-// Row order and frame counts come straight from the generator, so a new row
+import { bakeFigureSheet, type FigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { mongoGateFailures } from './gates-mongo.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import type { FigureDef } from '../src/sprites/figure/figureDef.js';
+// The row order and frame counts come straight from the figure, so a new row
 // cannot desync the only review path this art has.
-import { ROWS, TILE_SCALE, bake, type SheetGeometry } from './generate-mongo-sprites.js';
-import { MONGO_STAGE_ORDER, type MongoStage } from './mongoArt.js';
+import { MONGO_FIGURES, MONGO_ROWS, TILE_SCALE } from '../src/sprites/art/mongoFigure.js';
+import { GROUND_Y, MONGO_STAGE_ORDER, type MongoStage } from '../src/sprites/art/mongoArt.js';
 
-/** Matches TILE_SIZE in src/core/constants.ts; the sheets are drawn at 2× that. */
+/** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
 
 const DEFAULT_SCALE = 2;
@@ -40,6 +43,12 @@ const GROUND_GUIDE = 'rgba(255,200,120,0.4)';
 const LABEL_COLOR = '#e8e2d8';
 const LABEL_FONT = '14px sans-serif';
 const ONION_ALPHA = 0.34;
+
+/** Where the ground line falls inside the logical tile, measured from its top. */
+const GROUND_OFFSET_IN_TILE = 0.5 + GROUND_Y;
+
+type Mode = 'sheet' | 'onion' | 'stages';
+const MODES: ReadonlyArray<Mode> = ['sheet', 'onion', 'stages'];
 
 function parseFlag(name: string, fallback: string): string {
   const prefix = `--${name}=`;
@@ -57,6 +66,13 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
   return value;
 }
 
+function parseMode(): Mode {
+  const raw = parseFlag('mode', 'sheet');
+  const found = MODES.find((mode) => mode === raw);
+  if (found === undefined) throw new Error(`--mode=${raw} is not one of ${MODES.join(', ')}`);
+  return found;
+}
+
 function parseStage(): MongoStage {
   const raw = parseFlag('stage', 'adult');
   const found = MONGO_STAGE_ORDER.find((stage) => stage === raw);
@@ -66,20 +82,17 @@ function parseStage(): MongoStage {
   return found;
 }
 
-interface Sheet {
-  readonly image: Image;
-  readonly geometry: SheetGeometry;
-  readonly stage: MongoStage;
+function rowsFiltered(only: string): typeof MONGO_ROWS {
+  const rows = only === '' ? MONGO_ROWS : MONGO_ROWS.filter((row) => row.name === only);
+  if (rows.length === 0) throw new Error(`No row named "${only}"`);
+  return rows;
 }
 
-async function loadStage(stage: MongoStage): Promise<Sheet> {
-  const baked = bake(stage);
-  return { image: await loadImage(baked.buffer), geometry: baked.geometry, stage };
-}
+type SheetContext = ReturnType<Canvas['getContext']>;
 
 function blit(
-  ctx: ReturnType<ReturnType<typeof createCanvas>['getContext']>,
-  sheet: Sheet,
+  ctx: SheetContext,
+  baked: FigureSheet,
   rowIndex: number,
   frame: number,
   x: number,
@@ -88,11 +101,11 @@ function blit(
   h: number,
 ): void {
   ctx.drawImage(
-    sheet.image,
-    frame * sheet.geometry.frameWidth,
-    rowIndex * sheet.geometry.frameHeight,
-    sheet.geometry.frameWidth,
-    sheet.geometry.frameHeight,
+    baked.canvas,
+    frame * baked.frameWidth,
+    rowIndex * baked.frameHeight,
+    baked.frameWidth,
+    baked.frameHeight,
     x,
     y,
     w,
@@ -100,15 +113,24 @@ function blit(
   );
 }
 
-function renderSheetPanel(sheet: Sheet, outPath: string, scale: number, only: string): void {
-  const rows = only === '' ? ROWS : ROWS.filter((row) => row.name === only);
-  if (rows.length === 0) throw new Error(`No row named "${only}"`);
+function renderSheetPanel(
+  def: FigureDef,
+  stage: MongoStage,
+  outPath: string,
+  scale: number,
+  only: string,
+): void {
+  const rows = rowsFiltered(only);
+  const baked = bakeFigureSheet(
+    def,
+    rows.map((row) => row.name),
+  );
 
-  const cellW = sheet.geometry.frameWidth * scale;
-  const cellH = sheet.geometry.frameHeight * scale;
+  const cellW = baked.frameWidth * scale;
+  const cellH = baked.frameHeight * scale;
   const maxCols = Math.max(...rows.map((row) => row.frameCount));
-  const inGameW = (sheet.geometry.frameWidth * IN_GAME_TILE) / TILE_SCALE;
-  const inGameH = (sheet.geometry.frameHeight * IN_GAME_TILE) / TILE_SCALE;
+  const inGameW = (baked.frameWidth * IN_GAME_TILE) / TILE_SCALE;
+  const inGameH = (baked.frameHeight * IN_GAME_TILE) / TILE_SCALE;
 
   const stripWidth = PADDING + rows.length * (inGameW + PADDING);
   const width = Math.max(PADDING + maxCols * (cellW + PADDING), stripWidth);
@@ -122,63 +144,68 @@ function renderSheetPanel(sheet: Sheet, outPath: string, scale: number, only: st
   ctx.font = LABEL_FONT;
 
   let y = PADDING;
-  for (const spec of rows) {
-    const sheetRow = ROWS.findIndex((row) => row.name === spec.name);
+  rows.forEach((spec, sheetRow) => {
     ctx.fillStyle = LABEL_COLOR;
-    ctx.fillText(`${spec.name} — ${spec.frameCount} frames`, PADDING, y + LABEL_HEIGHT - PADDING);
+    ctx.fillText(
+      `${spec.name} — ${spec.frameCount} frames, ${spec.view}, ${spec.kind}`,
+      PADDING,
+      y + LABEL_HEIGHT - PADDING,
+    );
     y += LABEL_HEIGHT;
 
     for (let frame = 0; frame < spec.frameCount; frame++) {
       const x = PADDING + frame * (cellW + PADDING);
-      blit(ctx, sheet, sheetRow, frame, x, y, cellW, cellH);
+      blit(ctx, baked, sheetRow, frame, x, y, cellW, cellH);
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
       ctx.strokeStyle = TILE_GUIDE;
       ctx.strokeRect(
-        x + sheet.geometry.tileX * scale,
-        y + sheet.geometry.tileY * scale,
+        x + def.tileX * scale,
+        y + def.tileY * scale,
         TILE_SCALE * scale,
         TILE_SCALE * scale,
       );
       // The declared ground line: every stance foot should sit on it.
       ctx.strokeStyle = GROUND_GUIDE;
       ctx.beginPath();
-      const groundY = y + (sheet.geometry.tileY + TILE_SCALE * GROUND_OFFSET_IN_TILE) * scale;
+      const groundY = y + (def.tileY + TILE_SCALE * GROUND_OFFSET_IN_TILE) * scale;
       ctx.moveTo(x, groundY);
       ctx.lineTo(x + cellW, groundY);
       ctx.stroke();
     }
     y += cellH + PADDING;
-  }
+  });
 
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText(`in-game size (${IN_GAME_TILE}px tile)`, PADDING, y + LABEL_HEIGHT - PADDING);
   y += LABEL_HEIGHT;
-  for (let i = 0; i < rows.length; i++) {
-    const sheetRow = ROWS.findIndex((row) => row.name === rows[i].name);
-    blit(ctx, sheet, sheetRow, 0, PADDING + i * (inGameW + PADDING), y, inGameW, inGameH);
-  }
+  rows.forEach((_spec, sheetRow) => {
+    blit(ctx, baked, sheetRow, 0, PADDING + sheetRow * (inGameW + PADDING), y, inGameW, inGameH);
+  });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, ${sheet.stage}, ${scale}×)`);
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, ${stage}, ${scale}×)`);
 }
-
-/**
- * Where the ground line falls inside the logical tile, matching `GROUND_Y` in
- * `mongoArt.ts` measured from the tile's top edge.
- */
-const GROUND_OFFSET_IN_TILE = 0.9;
 
 /**
  * Consecutive frames overlaid at low alpha: a snap or a pop shows as a doubled
  * edge, which is the one thing a side-by-side contact sheet cannot show.
  */
-function renderOnionPanel(sheet: Sheet, outPath: string, scale: number, only: string): void {
-  const rows = only === '' ? ROWS : ROWS.filter((row) => row.name === only);
-  if (rows.length === 0) throw new Error(`No row named "${only}"`);
+function renderOnionPanel(
+  def: FigureDef,
+  stage: MongoStage,
+  outPath: string,
+  scale: number,
+  only: string,
+): void {
+  const rows = rowsFiltered(only);
+  const baked = bakeFigureSheet(
+    def,
+    rows.map((row) => row.name),
+  );
 
-  const cellW = sheet.geometry.frameWidth * scale;
-  const cellH = sheet.geometry.frameHeight * scale;
+  const cellW = baked.frameWidth * scale;
+  const cellH = baked.frameHeight * scale;
   const canvas = createCanvas(
     Math.ceil(PADDING * 2 + cellW),
     Math.ceil(PADDING + rows.length * (cellH + LABEL_HEIGHT + PADDING)),
@@ -189,24 +216,23 @@ function renderOnionPanel(sheet: Sheet, outPath: string, scale: number, only: st
   ctx.font = LABEL_FONT;
 
   let y = PADDING;
-  for (const spec of rows) {
-    const sheetRow = ROWS.findIndex((row) => row.name === spec.name);
+  rows.forEach((spec, sheetRow) => {
     ctx.fillStyle = LABEL_COLOR;
     ctx.fillText(`${spec.name} — all frames overlaid`, PADDING, y + LABEL_HEIGHT - PADDING);
     y += LABEL_HEIGHT;
     ctx.save();
     ctx.globalAlpha = ONION_ALPHA;
     for (let frame = 0; frame < spec.frameCount; frame++) {
-      blit(ctx, sheet, sheetRow, frame, PADDING, y, cellW, cellH);
+      blit(ctx, baked, sheetRow, frame, PADDING, y, cellW, cellH);
     }
     ctx.restore();
     ctx.strokeStyle = GRID_LINE;
     ctx.strokeRect(PADDING, y, cellW, cellH);
     y += cellH + PADDING;
-  }
+  });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, onion, ${sheet.stage})`);
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, onion, ${stage})`);
 }
 
 /**
@@ -214,19 +240,23 @@ function renderOnionPanel(sheet: Sheet, outPath: string, scale: number, only: st
  * in-game tile size. This is the panel the growth read is judged from: juvenile
  * endearing, adult menacing, and all three obviously the same animal.
  */
-async function renderStagesPanel(outPath: string, scale: number): Promise<void> {
-  const sheets = await Promise.all(MONGO_STAGE_ORDER.map((stage) => loadStage(stage)));
-  const compared = ['idle_side', 'walk_side', 'bite_side'] as const;
+const COMPARED_ROWS: readonly string[] = ['idle_side', 'walk_side', 'bite_side'];
 
-  const cellWidths = sheets.map((sheet) => sheet.geometry.frameWidth * scale);
-  const cellHeights = sheets.map((sheet) => sheet.geometry.frameHeight * scale);
-  const rowHeight = Math.max(...cellHeights) + LABEL_HEIGHT + PADDING;
+function renderStagesPanel(outPath: string, scale: number): void {
+  const baked = MONGO_STAGE_ORDER.map((stage) =>
+    bakeFigureSheet(MONGO_FIGURES[stage], [...COMPARED_ROWS]),
+  );
+
+  const cellWidths = baked.map((sheet) => sheet.frameWidth * scale);
+  const cellHeights = baked.map((sheet) => sheet.frameHeight * scale);
+  const tallestCell = Math.max(...cellHeights);
+  const rowHeight = tallestCell + LABEL_HEIGHT + PADDING;
   const width = PADDING + cellWidths.reduce((total, w) => total + w + PADDING, 0);
   const inGameHeight =
-    Math.max(...sheets.map((s) => (s.geometry.frameHeight * IN_GAME_TILE) / TILE_SCALE)) +
+    Math.max(...baked.map((sheet) => (sheet.frameHeight * IN_GAME_TILE) / TILE_SCALE)) +
     LABEL_HEIGHT +
     PADDING;
-  const height = PADDING + compared.length * rowHeight + inGameHeight;
+  const height = PADDING + COMPARED_ROWS.length * rowHeight + inGameHeight;
 
   const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
   const ctx = canvas.getContext('2d');
@@ -235,59 +265,67 @@ async function renderStagesPanel(outPath: string, scale: number): Promise<void> 
   ctx.font = LABEL_FONT;
 
   let y = PADDING;
-  for (const rowName of compared) {
-    const sheetRow = ROWS.findIndex((row) => row.name === rowName);
+  COMPARED_ROWS.forEach((rowName, sheetRow) => {
     ctx.fillStyle = LABEL_COLOR;
     ctx.fillText(`${rowName} — juvenile / adolescent / adult`, PADDING, y + LABEL_HEIGHT - PADDING);
     y += LABEL_HEIGHT;
     let x = PADDING;
-    sheets.forEach((sheet, index) => {
+    baked.forEach((sheet, index) => {
       const cellW = cellWidths[index];
       const cellH = cellHeights[index];
       // Bottom-aligned on one shared baseline, which is what makes the size
       // difference between the stages legible at a glance.
-      const top = y + Math.max(...cellHeights) - cellH;
+      const top = y + tallestCell - cellH;
       blit(ctx, sheet, sheetRow, 0, x, top, cellW, cellH);
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, top, cellW, cellH);
       x += cellW + PADDING;
     });
-    y += Math.max(...cellHeights) + PADDING;
-  }
+    y += tallestCell + PADDING;
+  });
 
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText(`in-game size (${IN_GAME_TILE}px tile)`, PADDING, y + LABEL_HEIGHT - PADDING);
   y += LABEL_HEIGHT;
   let x = PADDING;
-  const idleRow = ROWS.findIndex((row) => row.name === 'idle_side');
-  for (const sheet of sheets) {
-    const w = (sheet.geometry.frameWidth * IN_GAME_TILE) / TILE_SCALE;
-    const h = (sheet.geometry.frameHeight * IN_GAME_TILE) / TILE_SCALE;
+  const idleRow = COMPARED_ROWS.indexOf('idle_side');
+  for (const sheet of baked) {
+    const w = (sheet.frameWidth * IN_GAME_TILE) / TILE_SCALE;
+    const h = (sheet.frameHeight * IN_GAME_TILE) / TILE_SCALE;
     blit(ctx, sheet, idleRow, 0, x, y, w, h);
     x += w + PADDING;
   }
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, stage comparison)`);
 }
 
-async function main(): Promise<void> {
-  const mode = parseFlag('mode', 'sheet');
+function main(): void {
+  const mode = parseMode();
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
-  const outPath = parseFlag('out', `mongo-${mode}.png`);
+  const outPath = parseFlag('out', `${PREVIEW_DIR}/mongo-${mode}.png`);
+
+  // Ahead of the contact sheet rather than after it. A contact sheet is a
+  // tens-of-megapixel allocation, and measuring the art on the far side of one
+  // has made a centroid gate report a seam at twice its true width — a red gate
+  // on art nobody touched is the one thing that teaches an agent to loosen a
+  // threshold.
+  console.log('Gating the mongo figures…');
+  reportFigureGates('mongo', mongoGateFailures());
 
   if (mode === 'stages') {
-    await renderStagesPanel(outPath, scale);
+    renderStagesPanel(outPath, scale);
     return;
   }
 
-  const sheet = await loadStage(parseStage());
+  const stage = parseStage();
+  const def = MONGO_FIGURES[stage];
   const only = parseFlag('row', '');
   if (mode === 'onion') {
-    renderOnionPanel(sheet, outPath, scale, only);
+    renderOnionPanel(def, stage, outPath, scale, only);
     return;
   }
-  renderSheetPanel(sheet, outPath, scale, only);
+  renderSheetPanel(def, stage, outPath, scale, only);
 }
 
-void main();
+main();

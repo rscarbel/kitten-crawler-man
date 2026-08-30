@@ -9,6 +9,8 @@ import {
   MongoAnimator,
   drawMongoSprite,
   mongoActionDuration,
+  prewarmMongoCombat,
+  prewarmMongoWalk,
   type MongoAction,
 } from '../sprites/mongoSprite';
 import {
@@ -519,6 +521,10 @@ export class Mongo extends Mob {
     this.hp = Math.max(1, Math.min(stats.maxHp, Math.round(startingHp)));
     this.gaitSampleX = this.x;
     this.gaitSampleY = this.y;
+    // He is summoned several frames before anybody looks at him, and the first
+    // thing he does is run to the cat, so his walk row is warmed here rather
+    // than being three cold misses on the frame he first appears.
+    prewarmMongoWalk(stats.stage);
   }
 
   /** Mongo is an ally — never hostile to players. */
@@ -641,6 +647,9 @@ export class Mongo extends Mob {
     const fraction = this.maxHp > 0 ? this.hp / this.maxHp : 1;
     this.petLevel = level;
     this.stats = getMongoStats(level);
+    // A growth spurt moves him onto a different figure with cells of its own,
+    // so the row he is most likely mid-way through is cold again.
+    prewarmMongoWalk(this.stats.stage);
     this.setFixedMaxHp(this.stats.maxHp);
     this.speed = this.stats.speed;
     this.hp = Math.max(1, Math.min(this.maxHp, Math.ceil(fraction * this.maxHp)));
@@ -958,6 +967,9 @@ export class Mongo extends Mob {
       if (chosen !== null) {
         this.lastKnownTargetX = chosen.x;
         this.lastKnownTargetY = chosen.y;
+        // Picking a fight is the last moment before his attack rows are needed,
+        // and painting one live costs more than a frame has to spare.
+        prewarmMongoCombat(this.stats.stage);
       }
     }
     this.target = chosen;

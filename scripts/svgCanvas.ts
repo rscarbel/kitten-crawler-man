@@ -949,7 +949,7 @@ export function asDomContext(recorder: SvgRecorder): CanvasRenderingContext2D {
 
 /**
  * Hands the recorder to code written against node-canvas's context type — the
- * offline art modules in `scripts/` (`carlArt`, `catArt`, `clownArt`, …).
+ * offline art modules (`carlArt`, `catArt`, `clownArt`, …).
  *
  * A real 1×1 node-canvas context supplies the type; the proxy means not one of
  * its calls ever reaches it.

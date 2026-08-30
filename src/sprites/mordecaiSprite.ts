@@ -1,4 +1,4 @@
-import { drawRatKinSprite } from './ratKinSprite';
+import { drawRatKinSprite, prewarmRatKinSprite } from './ratKinSprite';
 import { drawIncubusSprite } from './incubusSprite';
 import { bugabooHeadClearanceTiles, drawBugabooSprite } from './bugabooSprite';
 
@@ -16,7 +16,7 @@ export interface MordecaiSpriteState {
   readonly walkTime: number;
   /**
    * Walk-cycle angle in radians, advanced by the ground he has actually covered
-   * rather than by elapsed frames. The Rat Kin and the Bugaboo are baked sheets
+   * rather than by elapsed frames. The Rat Kin and the Bugaboo are frame-indexed
    * whose stance foot is planted, so anything else skates.
    */
   readonly walkPhase: number;
@@ -47,6 +47,20 @@ export function mordecaiOverheadLift(levelId: string, tileSize: number): number 
   const headClearanceTiles = levelId === 'level2' ? bugabooHeadClearanceTiles() : 0;
   const excessTiles = headClearanceTiles - TILE_ANCHORED_UI_CLEARANCE_TILES;
   return Math.max(0, excessTiles * tileSize);
+}
+
+/**
+ * Warms the cached rows of whichever Mordecai variant this level draws, at the
+ * moment his room is built rather than on his first frame.
+ *
+ * Branches on the same level IDs {@link drawMordecaiForLevel} does, so a level
+ * cannot be warmed for a shape it never draws. The Incubus and the Bugaboo are
+ * not painted through the figure cache here, so only the Rat Kin has anything
+ * to warm.
+ */
+export function prewarmMordecaiForLevel(levelId: string): void {
+  if (levelId === 'level3' || levelId === 'level2') return;
+  prewarmRatKinSprite();
 }
 
 /**

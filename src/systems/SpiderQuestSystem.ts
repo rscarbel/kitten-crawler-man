@@ -21,15 +21,19 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { EventBus } from '../core/EventBus';
 import { SmallSpider } from '../creatures/SmallSpider';
+import { prewarmSmallSpider } from '../sprites/spiderSprite';
 import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
 import { getSpriteDefByKey, getSpriteDef } from '../core/SpriteLoader';
-import type { SpriteDef } from '../core/SpriteLoader';
 import { lifeMachineSacSplitFrame } from '../sprites/lifeMachineTiming';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { KeyboardHeroSystem, type KeyboardHeroCheckpoint } from './KeyboardHeroSystem';
 import { MAX_PLAYABLE_GAP_MS } from './keyboardHeroGeometry';
 import { SPIT_SPEED_PX, SPIT_ANIM_CYCLE_FRAMES } from '../creatures/GrotesqueSpider';
 import { drawSpitProjectile } from '../sprites/grotesqueSpiderSpitSprite';
+import { prewarmGrotesqueSpiderLocomotion } from '../sprites/grotesqueSpiderSprite';
+import { LIFE_MACHINE_FIGURE, lifeMachineStateName } from '../sprites/art/lifeMachineFigure';
+import { figureFrameCount } from '../sprites/figure/figureDef';
+import { drawFigureCached } from '../sprites/figure/figureFrameCache';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export const SPIDER_QUEST_ID = 'grotesque_spider';
@@ -162,7 +166,6 @@ const LIGHTANIM_DELAY = 8;
 const LIGHTANIM_FRAME_COUNT = 3;
 /** Ticks per frame for the states that loop rather than play out once. */
 const LIFE_MACHINE_LOOP_DELAY = 10;
-const LIFE_MACHINE_DRAW_HEIGHT = 3.0;
 const SCIENTIST_DRAW_HEIGHT = 1.5;
 const SCIENTIST_WALK_DIST_THRESHOLD = 2;
 const SCIENTIST_WALK_SPEED = 0.6;
@@ -332,7 +335,12 @@ interface LifeMachineStateDef {
   readonly playback: LifeMachinePlayback;
 }
 
-const LIFE_MACHINE_STATES: Readonly<Record<LifeMachineState, LifeMachineStateDef>> = {
+/**
+ * Exported so the art gate that checks every row name the machine can ask for
+ * reads those names from here, where they are chosen, rather than restating
+ * them: both draw paths return silently on a row nobody paints.
+ */
+export const LIFE_MACHINE_STATES: Readonly<Record<LifeMachineState, LifeMachineStateDef>> = {
   idle: { spriteState: 'life_machine_idle', duration: IDLE_FRAMES, playback: 'loop' },
   warming: { spriteState: 'life_machine_warming', duration: WARMING_FRAMES, playback: 'once' },
   hot: { spriteState: 'life_machine_hot', duration: HOT_FRAMES, playback: 'once' },
@@ -1419,7 +1427,13 @@ export class SpiderQuestSystem implements GameSystem {
     machine.state = state;
     machine.stateElapsed = 0;
     machine.spiderlingReleased = false;
-    if (state === 'warming') machine.poweringOnSoundPending = true;
+    if (state === 'warming') {
+      machine.poweringOnSoundPending = true;
+      // The whole print cycle — warming, hot, printing, dispensing — runs
+      // between here and the frame a spiderling tears out of its sac, which is
+      // the longest lead any spawn site in the lab can offer.
+      prewarmSmallSpider();
+    }
   }
 
   /**
@@ -1725,6 +1739,10 @@ export class SpiderQuestSystem implements GameSystem {
       spider.setMap(this.gameMap);
       this._grotesqueSpider = spider;
       this.addMob(spider);
+      // The fight starts the moment this cutscene ends, and her locomotion
+      // cells are the largest in the game; warming them here spends the
+      // cutscene's frames on what the first seconds of the fight will blit.
+      prewarmGrotesqueSpiderLocomotion();
 
       // Aim at scientist and start spit windup so the sprite animation begins immediately
       const dxToSci = this.scientistX - (spiderWorldX + TILE_SIZE / 2);
@@ -1859,11 +1877,10 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.drawImage(def.img, srcX, srcY, def.frameWidth, def.frameHeight, sx, sy, drawW, drawH);
   }
 
-  /** Frames in a state's sprite row, or null if the sheet has not loaded yet. */
+  /** Frames in a state's row, or null if the figure declares no such row. */
   private _lifeMachineFrameCount(state: LifeMachineState): number | null {
-    const def = this._getSpriteDef('life_machine');
-    if (def === undefined) return null;
-    return def.states.get(LIFE_MACHINE_STATES[state].spriteState)?.frameCount ?? null;
+    const frames = figureFrameCount(LIFE_MACHINE_FIGURE, LIFE_MACHINE_STATES[state].spriteState);
+    return frames === 0 ? null : frames;
   }
 
   /**
@@ -1881,31 +1898,22 @@ export class SpiderQuestSystem implements GameSystem {
     return Math.floor(machine.stateElapsed / LIFE_MACHINE_LOOP_DELAY) % frameCount;
   }
 
-  /** Blits one row of the life machine sheet at an explicit frame index. */
+  /**
+   * Draws one row of the life machine at an explicit frame index.
+   *
+   * The index is wrapped rather than clamped: the lamp chase runs off its own
+   * free-running counter, which is longer than the three frames it cycles.
+   */
   private _drawLifeMachineRow(
     ctx: CanvasRenderingContext2D,
-    def: SpriteDef,
     stateName: string,
     frameIndex: number,
     sx: number,
     sy: number,
-    drawW: number,
-    drawH: number,
   ): void {
-    const state = def.states.get(stateName);
-    if (state === undefined) return;
-    const column = (state.colOffset ?? 0) + (frameIndex % state.frameCount);
-    ctx.drawImage(
-      def.img,
-      column * def.frameWidth,
-      state.row * def.frameHeight,
-      def.frameWidth,
-      def.frameHeight,
-      sx,
-      sy,
-      drawW,
-      drawH,
-    );
+    const frames = figureFrameCount(LIFE_MACHINE_FIGURE, stateName);
+    if (frames === 0) return;
+    drawFigureCached(ctx, LIFE_MACHINE_FIGURE, stateName, frameIndex % frames, sx, sy, TILE_SIZE);
   }
 
   private _renderLifeMachines(
@@ -1915,13 +1923,6 @@ export class SpiderQuestSystem implements GameSystem {
     active: Player | undefined,
     foreground: boolean,
   ): void {
-    const def = this._getSpriteDef('life_machine');
-    if (def === undefined) return;
-
-    const drawH = TILE_SIZE * LIFE_MACHINE_DRAW_HEIGHT;
-    const aspect = def.frameWidth / def.frameHeight;
-    const drawW = drawH * aspect;
-
     for (const machine of this.lifeMachines) {
       const machineBaseY = machine.tileY * TILE_SIZE;
       const playerIsNorth = active !== undefined && active.y < machineBaseY;
@@ -1929,23 +1930,26 @@ export class SpiderQuestSystem implements GameSystem {
       // Foreground pass: render machines the player is behind (player north of base).
       if (foreground ? !playerIsNorth : playerIsNorth) continue;
 
-      const worldX = machine.tileX * TILE_SIZE;
-      const worldY = machine.tileY * TILE_SIZE;
-      const sx = worldX - camX - (drawW - TILE_SIZE) * TILE_CENTER_OFFSET_PX;
-      const sy = worldY - camY - (drawH - TILE_SIZE);
+      // The figure anchors its own art to the tile it stands on, so the tile's
+      // top-left is the whole placement; the machine's height above it is the
+      // figure's business.
+      const sx = machine.tileX * TILE_SIZE - camX;
+      const sy = machine.tileY * TILE_SIZE - camY;
 
       const stateName = LIFE_MACHINE_STATES[machine.state].spriteState;
-      const bodyState = def.states.get(stateName);
-      if (bodyState === undefined) continue;
-      const frameIndex = this._lifeMachineFrame(machine, bodyState.frameCount);
-      this._drawLifeMachineRow(ctx, def, stateName, frameIndex, sx, sy, drawW, drawH);
+      const bodyFrames = figureFrameCount(LIFE_MACHINE_FIGURE, stateName);
+      if (bodyFrames === 0) continue;
+      const frameIndex = this._lifeMachineFrame(machine, bodyFrames);
+      this._drawLifeMachineRow(ctx, stateName, frameIndex, sx, sy);
 
       // Lamps are a separate row composited over the body, so a shut-down
       // machine only differs from a running one by which colour is lit.
-      const lampState = this._hackingDone ? 'life_machine_red_lights' : 'life_machine_green_lights';
+      const lampState = this._hackingDone
+        ? lifeMachineStateName('red_lights')
+        : lifeMachineStateName('green_lights');
       ctx.save();
       ctx.globalAlpha = LIFE_MACHINE_LIGHT_OPACITY;
-      this._drawLifeMachineRow(ctx, def, lampState, machine.lightAnimFrame, sx, sy, drawW, drawH);
+      this._drawLifeMachineRow(ctx, lampState, machine.lightAnimFrame, sx, sy);
       ctx.restore();
     }
   }

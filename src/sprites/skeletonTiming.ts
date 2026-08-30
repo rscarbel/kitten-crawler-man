@@ -4,7 +4,7 @@
  *
  * Each of these numbers is a *contract* between an animation row and the code
  * that fires something on one of its frames. Declared twice — once in
- * `scripts/generate-skeleton-sprites.ts` as the frame the pose peaks on, once in
+ * `src/sprites/art/skeletonFigure.ts` as the frame the pose peaks on, once in
  * `src/creatures/*.ts` as the frame the projectile is queued on — they would
  * agree only until the next time either was tuned, and the failure is silent:
  * the bolt simply leaves before the hand thrusts, or after it has already

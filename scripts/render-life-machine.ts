@@ -1,32 +1,39 @@
 /**
- * Headless review harness for the life machine sprite sheet.
+ * Headless review harness for the life machines — the floor-2 spider lab's
+ * egg-sac bio-printers.
  *
- * The machines only ever appear deep inside the floor-2 lab, so the art has to
- * be judgeable offline. This slices the baked sheet into a labelled contact
- * sheet: every row at review scale, then the same frames blitted at the size
- * the game actually draws them (three tiles tall on a 32px tile) with the lamp
+ * The machines only ever appear deep inside the lab, so the art has to be
+ * judgeable offline. Every row is painted from `LIFE_MACHINE_FIGURE` the way
+ * the runtime cache bakes it, then the same frames are blitted at the size the
+ * game actually draws them (three tiles tall on a 32px tile) with the lamp
  * overlay composited on, because that last strip is the only honest answer to
- * "can a player tell what this machine is doing?"
+ * "can a player tell what this machine is doing?". The art gates run first.
  *
- *   npx tsx scripts/render-life-machine.ts --out=life-machine.png --scale=2
+ *   npm run render:life-machine
  *   npx tsx scripts/render-life-machine.ts --row=printing --scale=4
- *
- * Regenerate the sheet itself with `npm run gen:life-machine`.
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createCanvas, type Canvas } from 'canvas';
 
-import { ROWS, SHEET_PATH } from './generate-life-machine-sprite.js';
-import { FRAME_H, FRAME_W, TILE_SCALE } from './lifeMachineArt.js';
+import { bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { lifeMachineGateFailures } from './gates-spider.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import {
+  LIFE_MACHINE_FIGURE,
+  LIFE_MACHINE_ROWS,
+  lifeMachineStateName,
+} from '../src/sprites/art/lifeMachineFigure.js';
+
+const FRAME_W = LIFE_MACHINE_FIGURE.frameWidth;
+const FRAME_H = LIFE_MACHINE_FIGURE.frameHeight;
+const TILE_SCALE = LIFE_MACHINE_FIGURE.tileScale;
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
 const IN_GAME_TILE = 32;
-/** Matches LIFE_MACHINE_DRAW_HEIGHT in src/systems/SpiderQuestSystem.ts. */
-const IN_GAME_DRAW_TILES = 3;
-const IN_GAME_H = IN_GAME_TILE * IN_GAME_DRAW_TILES;
-const IN_GAME_W = IN_GAME_H * (FRAME_W / FRAME_H);
+/** The figure is three tiles tall by construction, and drawn at its own scale. */
+const IN_GAME_H = FRAME_H * (IN_GAME_TILE / TILE_SCALE);
+const IN_GAME_W = FRAME_W * (IN_GAME_TILE / TILE_SCALE);
 
 const DEFAULT_SCALE = 2;
 const MIN_SCALE = 0.25;
@@ -40,9 +47,13 @@ const TILE_GUIDE = 'rgba(120,220,255,0.35)';
 const LABEL_COLOR = '#e8e2d8';
 const LABEL_FONT = '14px sans-serif';
 const IN_GAME_STRIP_GAP = 6;
+const IN_GAME_LABEL_BASELINE = 14;
 
 const LAMP_ROW_NAMES: readonly string[] = ['green_lights', 'red_lights'];
-const BODY_ROWS = ROWS.filter((row) => !LAMP_ROW_NAMES.includes(row.name));
+const BODY_ROWS = LIFE_MACHINE_ROWS.filter((row) => !LAMP_ROW_NAMES.includes(row.name));
+
+/** Every row, in declaration order, as one baked contact sheet. */
+const SHEET_STATES = LIFE_MACHINE_ROWS.map((row) => lifeMachineStateName(row.name));
 
 function parseFlag(name: string, fallback: string): string {
   const prefix = `--${name}=`;
@@ -61,7 +72,7 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
 }
 
 function rowIndexOf(name: string): number {
-  const index = ROWS.findIndex((row) => row.name === name);
+  const index = LIFE_MACHINE_ROWS.findIndex((row) => row.name === name);
   if (index < 0) throw new Error(`no such row: ${name}`);
   return index;
 }
@@ -73,7 +84,7 @@ interface Cell {
 }
 
 function buildRows(only: string): ReadonlyArray<readonly Cell[]> {
-  const rows = only === '' ? ROWS : ROWS.filter((row) => row.name === only);
+  const rows = only === '' ? LIFE_MACHINE_ROWS : LIFE_MACHINE_ROWS.filter((r) => r.name === only);
   if (rows.length === 0) throw new Error(`no such row: ${only}`);
   return rows.map((row) => {
     const rowIndex = rowIndexOf(row.name);
@@ -90,15 +101,15 @@ function buildRows(only: string): ReadonlyArray<readonly Cell[]> {
  * the lamps lit, on a floor-coloured backdrop.
  */
 function drawInGameStrip(
-  ctx: ReturnType<ReturnType<typeof createCanvas>['getContext']>,
-  sheet: Image,
+  ctx: ReturnType<Canvas['getContext']>,
+  sheet: Canvas,
   originX: number,
   originY: number,
 ): void {
   const lampRowIndex = rowIndexOf('green_lights');
   const offlineRowIndex = rowIndexOf('offline');
   const redRowIndex = rowIndexOf('red_lights');
-  const lampFrameCount = ROWS[lampRowIndex].frameCount;
+  const lampFrameCount = LIFE_MACHINE_ROWS[lampRowIndex].frameCount;
 
   BODY_ROWS.forEach((row, index) => {
     const rowIndex = rowIndexOf(row.name);
@@ -119,6 +130,8 @@ function drawInGameStrip(
       IN_GAME_H,
     );
 
+    // A shut-down machine is the only one that shows red, so it is the one the
+    // red row is composited onto here.
     const lampSource = rowIndex === offlineRowIndex ? redRowIndex : lampRowIndex;
     ctx.drawImage(
       sheet,
@@ -143,16 +156,22 @@ function drawInGameStrip(
 
     ctx.fillStyle = LABEL_COLOR;
     ctx.font = LABEL_FONT;
-    ctx.fillText(row.name, x, originY + IN_GAME_H + 14);
+    ctx.fillText(row.name, x, originY + IN_GAME_H + IN_GAME_LABEL_BASELINE);
   });
 }
 
-async function main(): Promise<void> {
+function main(): void {
+  // Ahead of the contact sheet rather than after it: a sheet is a
+  // multi-megapixel allocation, and measuring art on the far side of one is how
+  // a gate goes red on art nobody touched.
+  console.log('Gating the life machine…');
+  reportFigureGates('life machine', lifeMachineGateFailures());
+
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
   const only = parseFlag('row', '');
-  const outPath = parseFlag('out', 'life-machine-review.png');
+  const outPath = parseFlag('out', `${PREVIEW_DIR}/life-machine-review.png`);
 
-  const sheet = await loadImage(resolve(SHEET_PATH));
+  const sheet = bakeFigureSheet(LIFE_MACHINE_FIGURE, SHEET_STATES).canvas;
   const rows = buildRows(only);
 
   const cellW = FRAME_W * scale;
@@ -191,21 +210,21 @@ async function main(): Promise<void> {
       ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
       ctx.strokeStyle = TILE_GUIDE;
       ctx.strokeRect(
-        x + ((FRAME_W - TILE_SCALE) / 2) * scale + 0.5,
-        y + (FRAME_H - TILE_SCALE) * scale + 0.5,
+        x + LIFE_MACHINE_FIGURE.tileX * scale + 0.5,
+        y + LIFE_MACHINE_FIGURE.tileY * scale + 0.5,
         TILE_SCALE * scale - 1,
         TILE_SCALE * scale - 1,
       );
       ctx.fillStyle = LABEL_COLOR;
       ctx.font = LABEL_FONT;
-      ctx.fillText(cell.label, x, y + cellH + 15);
+      ctx.fillText(cell.label, x, y + cellH + LABEL_HEIGHT - PADDING + 1);
     });
   });
 
   drawInGameStrip(ctx, sheet, PADDING, gridH + PADDING);
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(`→ ${outPath} (${canvasW}×${canvasH})`);
 }
 
-void main();
+main();

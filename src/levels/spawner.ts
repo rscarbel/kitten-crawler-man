@@ -2,7 +2,7 @@ import { type GameMap } from '../map/GameMap';
 import { type Mob } from '../creatures/Mob';
 import type { TreasureRoomData } from '../map/DungeonGenerator';
 import { Goblin } from '../creatures/Goblin';
-import type { GoblinWeapon } from '../sprites/goblinSprite';
+import { prewarmGoblin, type GoblinWeapon } from '../sprites/goblinSprite';
 import { Llama } from '../creatures/Llama';
 import { RockGolem } from '../creatures/RockGolem';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
@@ -18,6 +18,15 @@ import { Cockroach } from '../creatures/Cockroach';
 import { Juicer } from '../creatures/Juicer';
 import { Troglodyte } from '../creatures/Troglodyte';
 import { Tuskling } from '../creatures/Tuskling';
+import { prewarmTuskling } from '../sprites/tusklingSprite';
+import { prewarmSkyFowl } from '../sprites/skyFowlSprite';
+import { prewarmLlama } from '../sprites/llamaSprite';
+import { prewarmBrindleGrub } from '../sprites/brindleGrubSprite';
+import { prewarmSmallSpider } from '../sprites/spiderSprite';
+import { prewarmBugaboo } from '../sprites/bugabooSprite';
+import { prewarmCockroach } from '../sprites/cockroachSprite';
+import { prewarmRat } from '../sprites/ratSprite';
+import { prewarmTroglodyte } from '../sprites/troglodyteSprite';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { SkyFowl } from '../creatures/SkyFowl';
 import { KrakarenClone } from '../creatures/KrakarenClone';
@@ -408,6 +417,59 @@ registerMob('goblin', (x, y) => {
   return new Goblin(x, y, TILE_SIZE, pickGoblinWeapon());
 });
 
+/**
+ * Warms every melee goblin's standing and walking rows.
+ *
+ * All four rather than the one this body happens to roll, because `GOBLIN_VARIANTS`
+ * is rolled per body and a room or a camp fields several: whichever weapon this
+ * goblin drew, its neighbours are drawing the others on the same frame. The four
+ * warms are two rows each and a row already warm costs nothing, so the coverage
+ * is worth more than the precision.
+ */
+function prewarmGoblinBand(): void {
+  for (const variant of GOBLIN_VARIANTS) prewarmGoblin(variant.weapon);
+}
+
+function prewarmGoblinArcher(): void {
+  prewarmGoblin('bow');
+}
+
+/** Warms the palette this particular town bird turned out to be wearing. */
+function prewarmSpawnedSkyFowl(mob: Mob): void {
+  if (mob instanceof SkyFowl) prewarmSkyFowl(mob.paletteIndex);
+}
+
+/**
+ * Rows warmed the moment a spawn of a painted creature is *scheduled*.
+ *
+ * A pack's cells are shared across every instance of it, so the cost of a wave
+ * is one row per state however many bodies arrive — but that row is cold until
+ * somebody asks for it, and a wave asks for it on the frame it appears. Every
+ * spawn path runs through `createMob`, which is the earliest moment the game
+ * knows a creature is coming, so the warming starts here and the cache drains
+ * it a few cells per frame under its own budget.
+ *
+ * A map rather than a record so that a type with no painted figure is an
+ * ordinary lookup miss rather than an index the linter has to be argued with.
+ *
+ * The hook is handed the mob it is warming for, because a creature whose art
+ * varies per instance — the Sky Fowl wears one of eight palettes, each its own
+ * figure — cannot be warmed without knowing which one arrived.
+ */
+const MOB_PREWARM: ReadonlyMap<string, (mob: Mob) => void> = new Map([
+  ['tuskling', prewarmTuskling],
+  ['goblin', prewarmGoblinBand],
+  ['goblin_archer', prewarmGoblinArcher],
+  ['cockroach', prewarmCockroach],
+  ['rat', prewarmRat],
+  ['troglodyte', prewarmTroglodyte],
+  ['small_spider', prewarmSmallSpider],
+  ['bugaboo', prewarmBugaboo],
+  ['llama', prewarmLlama],
+  ['brindle_grub', prewarmBrindleGrub],
+  ['sky_fowl', prewarmSpawnedSkyFowl],
+]);
+
 // An unknown mob type otherwise falls back to a Goblin with zero console output —
 // a typo'd spawn-rule type silently spawns the wrong creature forever. Logged
 // once per type so a floor full of the same typo doesn't spam every spawn.
@@ -423,6 +485,7 @@ export function createMob(type: string, tileX: number, tileY: number, map: GameM
   if (!resolvedFactory) throw new Error(`Unknown mob type: ${type}`);
   const mob = resolvedFactory(tileX, tileY);
   mob.setMap(map);
+  MOB_PREWARM.get(type)?.(mob);
   // The key that was *asked for*, which for a typo'd rule is not the key of the
   // Goblin that came back. That is the right answer for the one question this
   // field exists to serve — how many of a rule's own spawns are alive — and the

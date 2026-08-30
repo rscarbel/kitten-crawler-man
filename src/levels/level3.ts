@@ -107,11 +107,6 @@ export const level3: LevelDef = {
   // "union every group named in this level's own fields" pass would silently
   // drop their sprite coverage. Their coverage is unioned in by level id from
   // `SYSTEM_ASSET_REQUIREMENTS` instead — see `scripts/verify-assets.ts`.
-  // `dungeon_common` covers the goblin weapon-variant sheets — the permanent
-  // `campSpawns.goblin` roster below depends on them directly, and that must
-  // not ride on `bounty_dark_knight`'s escort-goblin coverage coincidentally
-  // overlapping (a future edit to the Dark Knight's own requiredGroups could
-  // silently drop it otherwise).
   spriteGroups: ['core', 'town', 'overworld', 'dungeon_common'],
   roomMobs: [],
   hallwayMobs: [

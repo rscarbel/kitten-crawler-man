@@ -2,16 +2,16 @@
  * The one place the Lava Llama's spit timing is written down.
  *
  * Four things have to agree about when the ball leaves the mouth: the pose
- * choreography in `scripts/generate-llama-sprite.ts`, the countdown in
+ * choreography in `src/sprites/art/llamaFigure.ts`, the countdown in
  * `src/creatures/Llama.ts`, the frame the `?llama` harness marks as the
  * release, and the sprite state `src/sprites/llamaSprite.ts` picks. They used
  * to agree by three hand-copied copies of the same number, which is a contract
  * that holds until the first time someone retunes the animation — and then
  * fails silently, with the llama firing on a pose where its mouth is shut.
  *
- * This module deliberately imports nothing. It is pulled in by an offline
- * node-canvas generator as well as by the browser bundle, and anything it
- * touched would have to work in both.
+ * This module deliberately imports nothing. It is pulled in by the offline art
+ * gates as well as by the browser bundle, and anything it touched would have to
+ * work in both.
  */
 
 /** Game frames the spit animation runs for. */

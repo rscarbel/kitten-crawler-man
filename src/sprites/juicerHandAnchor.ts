@@ -9,16 +9,15 @@
  *
  * It imports nothing, because two very different things need it:
  * `juicerSprite.ts` positions the overlay from it, and
- * `scripts/generate-juicer-sprite.gates.ts` checks it against the rig on
- * every bake (`gateHandAnchors`, modelled on the Troglodyte's
- * `gateMouthAnchors`). A generator cannot import the sprite module — that
- * would drag the whole `SpriteLoader` and its browser globals into a Node
- * process — so without a module like this one the numbers get copied, and a
- * redraw then silently moves the arm while the dumbbell keeps floating where
- * the hand used to be.
+ * `scripts/gates-juicer.ts` checks it against the rig painted by
+ * `src/sprites/art/juicerFigure.ts` on every render (`gateHandAnchors`). A
+ * node-side harness cannot import the sprite module — that would drag the whole
+ * `SpriteLoader` and its browser globals into a Node process — so without a
+ * module like this one the numbers get copied, and a redraw then silently moves
+ * the arm while the dumbbell keeps floating where the hand used to be.
  *
- * The values below are starting points; the gate recomputes them from the
- * baked rig on every run and fails the bake when the two drift apart.
+ * The values below are measurements; the gate recomputes them from the rig on
+ * every run and fails when the two drift apart.
  */
 
 /** Which of the sheet's three viewpoints a facing vector selects. */

@@ -1,9 +1,9 @@
 import { Player, type StatName, type StatusFigureBox } from '../Player';
 
 /**
- * Donut's ink, measured off `src/images/characters/cat.png` against the
- * manifest's tile anchor. He is roughly tile-shaped but sits low and to the
- * right of it, and a status painted on the tile would float off his back.
+ * Donut's ink, measured off the painted `CAT_FIGURE` cell against its own tile
+ * anchor. He is roughly tile-shaped but sits low and to the right of it, and a
+ * status painted on the tile would float off his back.
  */
 const CAT_STATUS_FIGURE_BOX: StatusFigureBox = {
   centerX: 0.63,
@@ -14,7 +14,14 @@ const CAT_STATUS_FIGURE_BOX: StatusFigureBox = {
 import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
-import { CAT_SWIPE_FRAMES, CatAnimator, drawCatSprite, drawMissiles } from '../sprites/catSprite';
+import {
+  CAT_SWIPE_FRAMES,
+  CatAnimator,
+  drawCatSprite,
+  drawMissiles,
+  prewarmCatSprite,
+  prewarmMagicMissileCast,
+} from '../sprites/catSprite';
 import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import type { GameMap } from '../map/GameMap';
 import { normalize } from '../utils';
@@ -159,6 +166,10 @@ export class CatPlayer extends Player {
       },
       crawlerKind: CAT_CRAWLER_KIND,
     });
+    // She is drawn on essentially every frame of the scene she is built for, so
+    // her standing and walking rows are queued now rather than paid for as
+    // cache misses on the scene's first frame.
+    prewarmCatSprite();
     // Initialize Magic Missile tome in hotbar slot 0
     this.inventory.actionBar.slots[0] = { ...ITEM_DEF.magic_missile_tome, quantity: 1 };
     // Move starting potions from bag to hotbar slot 1 for quick access
@@ -322,6 +333,7 @@ export class CatPlayer extends Player {
 
     if (!isSubMissile) {
       this.abilityManager?.addUsageXp('magic_missile');
+      prewarmMagicMissileCast(level, stats.hasSubMissiles);
     }
   }
 

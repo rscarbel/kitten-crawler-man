@@ -1,7 +1,11 @@
 import { Mob } from './Mob';
 import type { Player } from './../Player';
 import type { LootDrop } from './Mob';
-import { drawShadySprite, SCRATCH_DURATION_FRAMES } from '../sprites/shadySprite';
+import {
+  drawShadySprite,
+  SCRATCH_DURATION_FRAMES,
+  SHADY_HEAD_ABOVE_TILE_TILES,
+} from '../sprites/shadySprite';
 import {
   drawQuestMarker,
   questMarkerColorFor,
@@ -22,16 +26,6 @@ const SCRATCH_GAP_MAX_FRAMES = 720;
 
 /** Seconds of phase offset a second Shady would be desynced by. */
 const LOOP_OFFSET_SPREAD_SECONDS = 4;
-
-/**
- * How far his hood's crown stands above the top of his own tile, in tiles.
- *
- * His sheet is 1.44 tiles of art anchored with the soles near the tile's floor,
- * so everything hung off the tile origin — the quest marker most of all — lands
- * somewhere around his chest unless it is lifted by this. Measured off the bake,
- * not guessed: `npm run gen:shady` prints the anchor the gate checks.
- */
-const HEAD_ABOVE_TILE_TILES = 0.78;
 
 /** Which glyph floats over him, or none. Driven by `BountyProgress.phase`. */
 export type ShadyMarker = QuestMarkerState;
@@ -143,7 +137,7 @@ export class Shady extends Mob {
   renderMarker(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive || this.markerType === 'none') return;
     const box = this.spriteBox(camX, camY, tileSize);
-    const markerY = box.sy - tileSize * HEAD_ABOVE_TILE_TILES;
+    const markerY = box.sy - tileSize * SHADY_HEAD_ABOVE_TILE_TILES;
     if (this.markerType === 'exclamation') {
       drawQuestMarker(ctx, box.sx, markerY, box.s, '!', QUEST_MARKER_GOLD);
       return;
@@ -156,7 +150,7 @@ export class Shady extends Mob {
    * through `scaleHumanoidBox`.
    *
    * Those figures are painted to fill a single tile and have to be enlarged to
-   * stand beside the player without looking dwarfed. Shady's sheet already
+   * stand beside the player without looking dwarfed. Shady's art already
    * encodes his height — 1.42 tiles against Carl's 1.46 — so scaling him again
    * would multiply the two and stand him head and shoulders over the party.
    */

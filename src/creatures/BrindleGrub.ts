@@ -3,11 +3,18 @@ import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import { randomInt, normalize } from '../utils';
-import { drawBrindleGrubSprite, drawCowTailedGrubSprite } from '../sprites/brindleGrubSprite';
+import {
+  drawBrindleGrubSprite,
+  drawCowTailedGrubSprite,
+  prewarmCowTailedGrub,
+} from '../sprites/brindleGrubSprite';
 import {
   BRINDLED_VESPA_BODY_PART_KEY,
   drawAcidSpit,
   drawBrindledVespaSprite,
+  prewarmBrindledVespa,
+  prewarmBrindledVespaGore,
+  prewarmVespaSpit,
 } from '../sprites/brindledVespaSprite';
 
 const STAGE1_HP = 4;
@@ -34,10 +41,10 @@ const VESPA_SPIT_TTL = 220;
 const VESPA_HIT_FADE = 5; // TTL decrease per frame once hit
 /**
  * How long the Vespa rears back before the acid actually launches. Exactly
- * double the `spit_windup` row's frame count baked by
- * `scripts/generate-brindled-vespa-sprite.ts` — each baked frame is held for
- * two game ticks — tuned to read as a wasp rearing back rather than a hitch
- * in the fight's pacing.
+ * double the `spit_windup` row's frame count in
+ * `src/sprites/art/brindledVespaFigure.ts` — each painted frame is held for two
+ * game ticks — tuned to read as a wasp rearing back rather than a hitch in the
+ * fight's pacing.
  */
 const VESPA_SPIT_WINDUP_FRAMES = 18;
 const XP_STAGE3 = 22;
@@ -52,12 +59,22 @@ const STAGE2_FOLLOW_STOP_RANGE_RATIO = 0.8;
 const STAGE2_BITE_DAMAGE = 1;
 const STAGE2_BITE_COOLDOWN = 80;
 /**
- * Exactly double the `attack*` row length baked by
- * `scripts/generate-brindle-grub-sprite.ts` — each baked frame is held for
- * two game ticks.
+ * Exactly double the `attack*` row length in `src/sprites/art/grubFigure.ts` —
+ * each painted frame is held for two game ticks.
  */
 const STAGE2_BITE_ANIM_FRAMES = 14;
 const VESPA_FOLLOW_STOP_RANGE_RATIO = 0.8;
+
+/**
+ * How long before an evolution the next stage's rows are warmed.
+ *
+ * An evolution is a spawn with a clock on it: the animal changes into a whole
+ * different build between one frame and the next, and the first thing that asks
+ * for that build is the frame it is drawn on. A second of lead is what turns a
+ * cold row into a warm one, and it is bounded well inside the cache's own idle
+ * release window so the warming is not thrown away before it is used.
+ */
+const EVOLUTION_PREWARM_LEAD_FRAMES = 60;
 
 const STAGE_LARVA = 1;
 const STAGE1_NAME = 'Brindle Grub';
@@ -93,6 +110,14 @@ export class BrindleGrub extends Mob {
   private spitWindupTimer = 0;
   /** >0 while the cow-tailed grub's bite-strike animation is playing. */
   private biteAnimTimer = 0;
+  /**
+   * Whether this Vespa has already warmed the eight pieces it comes apart into.
+   *
+   * They are drawn once, all of them, on the frame a body comes apart, with no
+   * telegraph of their own — so the warming hangs off the one thing that does
+   * precede them, which is the hornet noticing something to fight.
+   */
+  private hasWarmedGore = false;
 
   /** Active acid-spit projectiles (Vespa stage only). */
   readonly spits: AcidSpit[] = [];
@@ -196,10 +221,17 @@ export class BrindleGrub extends Mob {
   tickEvolve(): void {
     if (!this.isAlive || this.stage >= STAGE_VESPA) return;
     this.evolveTimer--;
+    if (this.evolveTimer === EVOLUTION_PREWARM_LEAD_FRAMES) this.prewarmNextStage();
     if (this.evolveTimer <= 0) {
       if (this.stage === STAGE_LARVA) this.evolveToStage2();
       else this.evolveToStage3();
     }
+  }
+
+  /** Warms the build this grub is about to turn into, a second before it does. */
+  private prewarmNextStage(): void {
+    if (this.stage === STAGE_LARVA) prewarmCowTailedGrub();
+    else prewarmBrindledVespa();
   }
 
   updateAI(playerTargets: Player[]): void {
@@ -341,6 +373,10 @@ export class BrindleGrub extends Mob {
       }
     }
     this.currentTarget = nearest;
+    if (nearest !== null && !this.hasWarmedGore) {
+      this.hasWarmedGore = true;
+      prewarmBrindledVespaGore();
+    }
 
     if (!nearest) {
       this.doWander();
@@ -374,6 +410,7 @@ export class BrindleGrub extends Mob {
       this._faceToward(nearest);
       this.spitWindupTimer = VESPA_SPIT_WINDUP_FRAMES;
       this.spitCooldown = VESPA_SPIT_COOLDOWN;
+      prewarmVespaSpit();
     }
   }
 

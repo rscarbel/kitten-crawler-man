@@ -3,8 +3,14 @@ import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import { MAX_MOB_CULL_MARGIN_TILES, PLAYER_SPEED } from '../core/constants';
 import { makeStuck } from '../core/StatusEffect';
 import { drawDangerCone } from '../sprites/dangerTelegraph';
-import { LICH_BODY_PART_KEY, drawTheLichSprite } from '../sprites/lichSprite';
-import { drawGraspingHands } from '../sprites/skeletonEffectsSprite';
+import {
+  LICH_BODY_PART_KEY,
+  drawTheLichSprite,
+  prewarmLichAttack,
+  type LichAttack,
+} from '../sprites/lichSprite';
+import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
+import { drawGraspingHands, prewarmGraspingHands } from '../sprites/skeletonEffectsSprite';
 import { SOUL_BOLT_CAST_FRAMES, soulBoltReleaseFrame } from '../sprites/skeletonTiming';
 import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
 import type { SkeletonSummonRequest } from './SkeletonLord';
@@ -206,6 +212,20 @@ const SUMMON_ARCHER_COUNT = 1;
 export const LICH_ESCORT_CAP = 5;
 
 type LichState = 'idle' | 'cast' | 'hands' | 'summon' | 'cooldown';
+
+/** The states that commit to an attack, each of which has its own drawn rows. */
+type LichAttackState = Extract<LichState, 'cast' | 'hands' | 'summon'>;
+
+/**
+ * The drawn row each attack plays. The creature's `hands` is the sprite's
+ * `hands_cast`, and nothing else in the two vocabularies differs — which is
+ * exactly why the mapping is written down rather than assumed.
+ */
+const LICH_ATTACK_ROWS: Readonly<Record<LichAttackState, LichAttack>> = {
+  cast: 'cast',
+  hands: 'hands_cast',
+  summon: 'summon',
+};
 
 /** Frames of enforced quiet after any attack, so two never chain back to back. */
 const RECOVERY_FRAMES = 40;
@@ -471,6 +491,7 @@ export class TheLich extends Mob {
     if (this.handsCooldown === 0 && distance <= this.handsRangePx) {
       this.beginAttack('hands', target);
       this.handsTimer = HANDS_WINDUP_FRAMES;
+      prewarmGraspingHands();
       this.handsCooldown = HANDS_COOLDOWN_FRAMES;
       return true;
     }
@@ -491,8 +512,13 @@ export class TheLich extends Mob {
     return false;
   }
 
-  private beginAttack(state: LichState, target: Player): void {
+  private beginAttack(state: LichAttackState, target: Player): void {
     this.state = state;
+    prewarmLichAttack(LICH_ATTACK_ROWS[state]);
+    // The escort's own rows, warmed from the cast rather than from the moment
+    // the bodies are created: a summon lands a wave of them on one frame, and
+    // by then there is no time left to paint anything.
+    if (state === 'summon') prewarmSkeletonEscortSprites();
     this.isMoving = false;
     this.faceToward(target);
     // Frozen here, once. A cone that keeps tracking is not a telegraph — the

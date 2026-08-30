@@ -2,10 +2,12 @@ import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
 import {
+  GOLEM_MERCENARY_TEMPLATE,
   MERCENARY_TEMPLATES,
   getMercenaryTemplate,
   type MercenaryTemplateId,
 } from '../core/mercenaryTemplates';
+import { prewarmRockGolemApproach } from '../sprites/rockGolemSprite';
 import { drawText } from '../ui/TextBox';
 import {
   drawModal,
@@ -140,6 +142,9 @@ export class MercenaryGuildSystem {
       return;
     }
     player.coins -= template.price;
+    // Warmed on the signature rather than on the first frame the merc is drawn:
+    // the bruiser is a rock golem, and it walks out of the club already moving.
+    if (template.id === GOLEM_MERCENARY_TEMPLATE) prewarmRockGolemApproach('rock_golem');
     this.roster.active = { id: template.id, name: template.name };
     this.hirePending = true;
     this.feedbackMsg = `${template.name} signs on. Meet them outside.`;

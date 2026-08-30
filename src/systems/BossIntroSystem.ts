@@ -6,6 +6,7 @@ import {
   drawKrakarenSprite,
   krakarenArtHeightTiles,
   krakarenArtTopTiles,
+  prewarmKrakarenBody,
 } from '../sprites/krakarenSprite';
 import { ballOfSwinePortrait, drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
 import { BOS_BODY_RADIUS_TILES } from '../sprites/ballOfSwineSheet';
@@ -163,6 +164,9 @@ const BOSS_PANEL_BACKGROUNDS: Partial<Record<string, string>> = {
   grotesque_spider: 'rgba(96,74,66,0.95)',
 };
 
+/** The `bossRooms[].type` the Krakaren Clone is spawned under. */
+const KRAKAREN_BOSS_TYPE = 'krakaren_clone';
+
 export class BossIntroSystem implements GameSystem {
   private static readonly INTRO_TITLE = 'B-B-B-B-BOSS BATTLE!';
   private static readonly INTRO_FRAMES_PER_CHAR = 7;
@@ -177,6 +181,10 @@ export class BossIntroSystem implements GameSystem {
 
   trigger(bossType: string, bossName: string, bossColor: string): void {
     this.state = { bossType, bossName, bossColor, frame: 0, phase: 'letters' };
+    // The intro is seven seconds during which she is drawn only as a portrait,
+    // which is more lead than anything else in her fight can offer the one
+    // figure whose cells cost milliseconds rather than microseconds to paint.
+    if (bossType === KRAKAREN_BOSS_TYPE) prewarmKrakarenBody();
   }
 
   /** Dismisses an in-progress intro without playing it out — used on a checkpoint respawn. */
@@ -375,7 +383,7 @@ export class BossIntroSystem implements GameSystem {
           facingY: JUICER_INTRO_FACING_Y,
           idleFrame: JUICER_INTRO_IDLE_FRAME,
         });
-      } else if (intro.bossType === 'krakaren_clone') {
+      } else if (intro.bossType === KRAKAREN_BOSS_TYPE) {
         const kS =
           KRAKAREN_SPRITE_SIZE / krakarenArtHeightTiles(KRAKAREN_FALLBACK_ART_HEIGHT_TILES);
         const kY =

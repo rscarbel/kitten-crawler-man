@@ -7,7 +7,11 @@ within seconds in a render.
 
 ## The blind review loop
 
-1. Render a contact sheet: `npx tsx scripts/render-<name>.ts --out=review.png --scale=2`.
+1. Render a contact sheet: `npm run render:<name>`, or
+   `npx tsx scripts/render-<name>.ts --scale=2` for a flag. It goes to
+   `preview/`, and the harness runs the art gates before it bakes anything.
+   `npm run review:index` gathers every image in `preview/` into
+   `preview/index.html`, which is how a human scans a batch of them.
 2. Hand **only the PNG** to a fresh agent, with a target description (for Carl,
    the Dungeon Crawler Carl cover) and no access to the source. Ask for
    **numeric** findings: pixel measurements, ratios, and target values — not
@@ -24,15 +28,10 @@ than the dungeon floor it stands on, and a barrel silhouette.
 
 A whole-figure contact sheet hides exactly the defects that matter most at these
 sizes. `render-human.ts --part=head|torso|hands|legs|feet` crops one body part
-across all frames, in frame pixels:
-
-```
-head:  { x: 62, y: 62,  w: 68,  h: 68 }
-torso: { x: 40, y: 60,  w: 112, h: 80 }
-hands: { x: 32, y: 90,  w: 128, h: 60 }
-legs:  { x: 40, y: 120, w: 112, h: 72 }
-feet:  { x: 40, y: 150, w: 112, h: 42 }
-```
+across all frames. Express the window as **fractions of the frame**, not in
+pixels, so the table survives the figure re-deriving its own cell size — see the
+`PARTS` tables in `render-human.ts` and `render-juicer.ts`, the latter of which
+adds `arms` and `tail`.
 
 Any new figure's harness gets its own equivalent table. The hands and the face
 are where the review always finds the most.
@@ -40,7 +39,7 @@ are where the review always finds the most.
 ## Judge at in-game size too
 
 The harness must blit the same frames at the real tile size (`TILE_SIZE = 32`;
-sheets are drawn at 2×). A silhouette that reads at 4× and dissolves at 32 px is
+figures are painted at `tileScale: 64`). A silhouette that reads at 4× and dissolves at 32 px is
 a failure — and this strip is where "detail does not rescue a wrong outline"
 gets caught before it ships.
 
@@ -57,8 +56,8 @@ they are the _right_ shapes.
 
 ## Diagnostic harness modes worth having
 
-From `render-goblins.ts` — these are build-tooling patterns, independent of that
-figure's (unconvincing) motion:
+From `render-goblins.ts` and `render-juicer.ts` — these are build-tooling
+patterns, independent of the goblins' (unconvincing) motion:
 
 - **onion** — consecutive frames overlaid at low alpha. Shows a snap or a pop as
   a doubled edge.
@@ -70,12 +69,31 @@ figure's (unconvincing) motion:
 
 ## In-motion checks a still cannot cover
 
-Add a `?<name>` preview scene in `game.ts`'s `devBootScene`. Browser automation
-_can_ drive this game (rAF, keyboard, synthetic canvas mouse events all work),
-but rAF stalls to ~1 fps when the window is occluded — so **anything about
-timing or feel needs a human**. Flag these explicitly rather than claiming them:
+Add a `?<name>` preview scene in `src/dev/devBoot.ts`. Browser automation _can_
+drive this game (rAF, keyboard, synthetic canvas mouse events all work), but a
+backgrounded tab freezes rAF entirely, so the loop does not run and every
+frame-cost reading is a fiction — so **anything about timing or feel needs a
+human**. Unregister the service worker first; it serves a stale bundle. Flag
+these explicitly rather than claiming them:
 
 - gait speed and whether the figure floats or plants
 - health-bar and aggro-marker placement on the new anchor
 - several instances of the same figure not breathing in lockstep
 - death/gore tumble
+
+What the browser _is_ worth doing, on the `?<name>` route with `?perf`:
+confirming the figure renders through the frame cache at all, and reading the
+figure-cache rows (hit %, MB/rows, bakes/direct-draws) as a sanity check.
+`?paintbench` is where the per-cell paint cost that decides the prewarm regime
+lives — the offline benches are node-canvas's software rasteriser and are a
+magnitude, not a ranking.
+
+## Where a picture is the only answer
+
+A number is not enough whenever the figure cannot be compared pixel-for-pixel
+against something known good. Produce a side-by-side of the two cells for every
+state, an amplified per-pixel difference for any row that is not identical, and
+the figure at in-game tile size next to its reference. A defect invisible at 4×
+is often obvious at 1×, and the reverse. If the figure is parameterised — a
+palette, a variant — review more than one: a change can look right in the
+default and wrong in every other.

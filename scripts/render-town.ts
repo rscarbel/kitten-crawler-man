@@ -23,8 +23,9 @@
  * caller can re-roll the wilderness outside the walls.
  */
 
-import { createCanvas, loadImage, type Canvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
+import { createCanvas, type Canvas } from 'canvas';
+
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 /**
  * Everything below imports the game's own modules, which are written against
@@ -72,6 +73,7 @@ const { loadSprites } = await import('../src/core/SpriteLoader');
 const { GameMap } = await import('../src/map/GameMap');
 const { renderCanvas, renderDecorationsOverlay } = await import('../src/map/TileRenderer');
 const { MarketSystem } = await import('../src/systems/market/MarketSystem');
+const { createMarketStock } = await import('../src/systems/market/MarketStock');
 const { TownPropSystem } = await import('../src/systems/TownPropSystem');
 const { TownDecorSystem } = await import('../src/systems/TownDecorSystem');
 const { createTownPlan } = await import('../src/map/town/townPlan');
@@ -80,7 +82,7 @@ const MAP_SIZE = 280;
 /** Matches `RenderPipeline.ENTITY_SORT_Y_OFFSET`: a prop sorts by its foot. */
 const ENTITY_SORT_Y_OFFSET = TILE_SIZE;
 const DEFAULT_SCALE = 1;
-const DEFAULT_OUT = 'town.png';
+const DEFAULT_OUT = `${PREVIEW_DIR}/town.png`;
 
 function intArg(name: string, fallback: number): number {
   const raw = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -111,10 +113,11 @@ const gameMap = new GameMap({ mapSize: MAP_SIZE, tileHeight: TILE_SIZE, mapType:
 // stall tiles first so the other props steer clear of them.
 const market = new MarketSystem(
   gameMap,
-  [],
+  createMarketStock(),
   () => undefined,
   () => false,
   () => null,
+  () => true,
 );
 const townProps = new TownPropSystem(
   gameMap,
@@ -149,7 +152,7 @@ for (const prop of [...props].sort(
   prop.render(gameCtx, camX, camY, TILE_SIZE);
 }
 
-writeFileSync(outPath, canvas.toBuffer('image/png'));
+const written = writePreviewPng(outPath, canvas.toBuffer('image/png'));
 console.log(
-  `${outPath}: ${viewTilesW}x${viewTilesH} tiles at ${scale}x from (${viewTileX}, ${viewTileY}), ${props.length} props`,
+  `${written}: ${viewTilesW}x${viewTilesH} tiles at ${scale}x from (${viewTileX}, ${viewTileY}), ${props.length} props`,
 );

@@ -1,10 +1,14 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import {
+  FAT_CLOWN_ATTACK_STATES,
+  FAT_CLOWN_LOCOMOTION_STATES,
   drawFatClownSprite,
+  prewarmFatClownStates,
   type FatClownAnimation,
   IDLE_LOOP_SECONDS,
 } from '../sprites/fatClownSprite';
+import { SLAM_WINDUP_END } from '../sprites/art/clownFigure';
 import { PLAYER_SPEED } from '../core/constants';
 
 const CLOWN_HP = 30;
@@ -21,10 +25,10 @@ const ATTACK_COOLDOWN = 110;
 /** Frames the slam animation plays. */
 const ATTACK_ANIM_FRAMES = 30;
 /**
- * Point in the slam row where the shoulder drives through — matches
- * `SLAM_WINDUP_END` in scripts/generate-clown-sprites.ts.
+ * Point in the slam row where the shoulder drives through, taken from the
+ * choreography that paints it rather than copied beside it.
  */
-const IMPACT_ANIM_PROGRESS = 0.35;
+const IMPACT_ANIM_PROGRESS = SLAM_WINDUP_END;
 /** The countdown value {@link ATTACK_ANIM_FRAMES} reaches at that moment. */
 const IMPACT_TIMER_FRAME = Math.round(ATTACK_ANIM_FRAMES * (1 - IMPACT_ANIM_PROGRESS));
 const COIN_DROP_MIN = 1;
@@ -66,6 +70,9 @@ export class FatClown extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, CLOWN_HP, CLOWN_SPEED);
+    // Warmed at construction, which is the moment a spawn is scheduled: these
+    // two arrive in pairs and start walking on the frame they appear.
+    prewarmFatClownStates(FAT_CLOWN_LOCOMOTION_STATES);
   }
 
   override resetToSpawn(): void {
@@ -126,6 +133,7 @@ export class FatClown extends Mob {
     ) {
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
+      prewarmFatClownStates(FAT_CLOWN_ATTACK_STATES);
     }
 
     // The slam only connects once the shoulder has actually swung through, so

@@ -1,12 +1,16 @@
 import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import type { Player } from '../Player';
-import { drawGrotesqueSpiderSprite } from '../sprites/grotesqueSpiderSprite';
+import {
+  drawGrotesqueSpiderSprite,
+  prewarmGrotesqueSpiderAttack,
+} from '../sprites/grotesqueSpiderSprite';
 import type { GrotesqueSpiderState } from '../sprites/grotesqueSpiderSprite';
 import {
   drawSpitProjectile,
   drawSpitTrapSplat,
   drawSpitTrapIdle,
+  prewarmSpitEffects,
 } from '../sprites/grotesqueSpiderSpitSprite';
 import { drawDangerCircle, drawDangerCone } from '../sprites/dangerTelegraph';
 import { makeStuck, makeSpitVenom } from '../core/StatusEffect';
@@ -132,8 +136,22 @@ const SHELL_BLOCK_XP = 8;
 const SPIT_DAMAGE_MIN = 8;
 const SPIT_DAMAGE_MAX = 12;
 const SPIT_HIT_RADIUS_FRACTION = 0.75;
-const TRAP_HIT_RADIUS_FRACTION = 0.9;
+/**
+ * How far from a puddle's centre it still grabs a player, in tiles.
+ *
+ * Exported so the art gate that checks the puddle is visible out to here reads
+ * the radius from the rule rather than restating it: widening the grab without
+ * widening the art is a hazard with no tell.
+ */
+export const TRAP_HIT_RADIUS_FRACTION = 0.9;
 const SPIT_ANIM_CYCLE = SPIT_ANIM_CYCLE_FRAMES;
+
+/** The row each attack plays, read by both the pose lookup and the prewarm. */
+const ATTACK_SPRITE_STATES: Readonly<Record<'spit' | 'screech' | 'slam', GrotesqueSpiderState>> = {
+  spit: 'attack_spit',
+  screech: 'attack_screech',
+  slam: 'attack_slam',
+};
 
 // Roam behavior constants
 const ROAM_TIMER_MIN = 300;
@@ -269,19 +287,10 @@ export class GrotesqueSpider extends Mob {
   }
 
   private get spriteState(): GrotesqueSpiderState {
-    switch (this.state) {
-      case 'spit':
-        return 'attack_spit';
-      case 'screech':
-        return 'attack_screech';
-      case 'slam':
-        return 'attack_slam';
-      case 'pursuing':
-        return 'walk';
-      case 'idle':
-      case 'cooldown':
-        return this.isMoving ? 'walk' : 'idle';
-    }
+    const attack = this.activeAttack;
+    if (attack !== null) return ATTACK_SPRITE_STATES[attack];
+    if (this.state === 'pursuing') return 'walk';
+    return this.isMoving ? 'walk' : 'idle';
   }
 
   updateAI(targets: Player[]): void {
@@ -456,8 +465,21 @@ export class GrotesqueSpider extends Mob {
     return available[Math.floor(Math.random() * available.length)] ?? null;
   }
 
+  /**
+   * Warms the rows this attack is about to play, at the moment it telegraphs.
+   *
+   * Her cells are the largest in the game, so a row baked on the frame it is
+   * first drawn on is a row baked while the player is being lunged at. The
+   * wind-up is a second or more of warning, which is the room the cache needs.
+   */
+  private prewarmAttackArt(attack: 'spit' | 'screech' | 'slam'): void {
+    prewarmGrotesqueSpiderAttack(ATTACK_SPRITE_STATES[attack]);
+    if (attack === 'spit') prewarmSpitEffects();
+  }
+
   private startAttack(attack: 'spit' | 'screech' | 'slam', target: Player): void {
     this.state = attack;
+    this.prewarmAttackArt(attack);
     this.attackPhase = 'windup';
     this.pursuitTimer = 0;
     this.slamFacingLocked = false;
@@ -834,6 +856,7 @@ export class GrotesqueSpider extends Mob {
    */
   prepareCutsceneSpit(facingX: number, facingY: number): void {
     this.state = 'spit';
+    this.prewarmAttackArt('spit');
     this.attackPhase = 'windup';
     this.windupTimer = SPIT_WINDUP;
     this.windupTotal = SPIT_WINDUP;

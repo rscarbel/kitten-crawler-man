@@ -2,16 +2,16 @@
  * The one place the Juicer's animation timing is written down.
  *
  * Four things have to agree about when his attacks connect: the pose
- * choreography in `scripts/generate-juicer-sprite.ts`, the release/impact
- * countdowns in `src/creatures/Juicer.ts`, the frame the bake gates assert is
- * the peak of each one-shot, and the row lengths `src/sprites/juicerSprite.ts`
- * plays. Separate hand-copied constants are a contract that holds until the
- * first retune and then fails silently, with the damage landing on a frame
- * where the body has not moved.
+ * choreography in `src/sprites/art/juicerFigure.ts`, the release/impact
+ * countdowns in `src/creatures/Juicer.ts`, the frame the art gates in
+ * `scripts/gates-juicer.ts` assert is the peak of each one-shot, and the row
+ * lengths `src/sprites/juicerSprite.ts` plays. Separate hand-copied constants
+ * are a contract that holds until the first retune and then fails silently,
+ * with the damage landing on a frame where the body has not moved.
  *
  * This module deliberately imports nothing: it is pulled in by an offline
- * node-canvas generator as well as by the browser bundle, and anything it
- * touched would have to work in both.
+ * node-canvas harness as well as by the browser bundle, and anything it touched
+ * would have to work in both.
  */
 
 /** Sprite frames in the idle rows. */
@@ -82,7 +82,7 @@ export function juicerImpactFrame(spriteFrames: number, impactProgress: number):
  *
  * Exported rather than re-derived, because there is more than one plausible
  * formula for it — `floor(p·F)` and `round(p·(F−1))` agree at `p = 0.5` and
- * part company everywhere else. The bake gates assert the pose peaks on this
+ * part company everywhere else. The art gates assert the pose peaks on this
  * frame and the runtime draws this frame; if they each did their own
  * arithmetic the two would silently describe different moments the first
  * time an impact was retuned, which is the failure this module exists to

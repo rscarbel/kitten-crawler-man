@@ -1,11 +1,7 @@
 import { drawText } from '../ui/TextBox';
-import { getSpriteDef } from '../core/SpriteLoader';
-import {
-  drawSprite,
-  drawSpriteKey,
-  progressFrameIndex,
-  walkFrameIndex,
-} from '../core/SpriteRenderer';
+import { progressFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { BALL_OF_SWINE_FIGURE } from './art/ballOfSwineFigure';
 import {
   BOS_BURST_FRAMES,
   BOS_ROLL_FRAMES,
@@ -50,12 +46,12 @@ const TILE_CENTER_OFFSET = 0.5;
  *
  * Three layers, in this order and for this reason: the ground shadow, then the
  * body, then the fixed key light. The body is the only layer that turns — the
- * sheet's roll frames are painted with no directional light in them, so that
- * rotating them to a heading streams the surface the right way without carrying a
+ * roll frames are painted with no directional light in them, so that rotating
+ * them to a heading streams the surface the right way without carrying a
  * highlight and a shadow around the arena with it.
  *
  * `sx`/`sy` are the ball's *tile top-left* in screen space, as for every other
- * creature. The sheet anchors on the frame centre because that is the rotation
+ * creature. The figure anchors on the cell centre because that is the rotation
  * pivot, so the half-tile to the middle is added here rather than at every call
  * site.
  */
@@ -69,9 +65,9 @@ export function drawBallOfSwineSprite(
   const pivotX = sx + ts * TILE_CENTER_OFFSET;
   const pivotY = sy + ts * TILE_CENTER_OFFSET;
 
-  drawSpriteKey(ctx, 'ball_of_swine', 'shadow', 0, pivotX, pivotY, ts);
+  drawFigureCached(ctx, BALL_OF_SWINE_FIGURE, 'shadow', 0, pivotX, pivotY, ts);
   drawBody(ctx, pivotX, pivotY, ts, draw);
-  drawSpriteKey(ctx, 'ball_of_swine', 'shade', 0, pivotX, pivotY, ts);
+  drawFigureCached(ctx, BALL_OF_SWINE_FIGURE, 'shade', 0, pivotX, pivotY, ts);
 }
 
 function drawBody(
@@ -82,19 +78,8 @@ function drawBody(
   draw: BallOfSwineDraw,
 ): void {
   const frame = frameFor(draw);
-  if (!ROTATED_POSES.has(draw.pose)) {
-    drawSpriteKey(ctx, 'ball_of_swine', draw.pose, frame, pivotX, pivotY, ts);
-    return;
-  }
-
-  // The rotated path needs `drawSprite`, because only the low-level entry point
-  // takes a rotation, and it takes the sprite and state definitions rather than
-  // the key. A missing sheet is a no-op everywhere else in the renderer, so it is
-  // one here too rather than a throw at draw time.
-  const def = getSpriteDef('ball_of_swine');
-  const stateDef = def?.states.get(draw.pose);
-  if (def === undefined || stateDef === undefined) return;
-  drawSprite(ctx, def, stateDef, frame, pivotX, pivotY, ts, { rotation: draw.heading });
+  const rotation = ROTATED_POSES.has(draw.pose) ? draw.heading : undefined;
+  drawFigureCached(ctx, BALL_OF_SWINE_FIGURE, draw.pose, frame, pivotX, pivotY, ts, { rotation });
 }
 
 function frameFor(draw: BallOfSwineDraw): number {
@@ -109,6 +94,35 @@ function frameFor(draw: BallOfSwineDraw): number {
       return progressFrameIndex(draw.progress, ONE_SHOT_FRAMES[draw.pose]);
   }
 }
+
+/**
+ * The states the fight is about to need, warmed ahead of needing them.
+ *
+ * This figure's cells are the largest in the fleet, so a cold miss is the most
+ * expensive one there is: every call here is made at a moment the fight has
+ * already committed to the state that follows, which is frames of warning the
+ * cache can spend a cell at a time.
+ */
+export function prewarmBallOfSwineLocomotion(): void {
+  for (const state of LOCOMOTION_STATES) prewarmFigureState(BALL_OF_SWINE_FIGURE, state);
+}
+
+/** The telegraph and the impact it always ends in, warmed as the wind-up starts. */
+export function prewarmBallOfSwineCharge(): void {
+  for (const state of CHARGE_STATES) prewarmFigureState(BALL_OF_SWINE_FIGURE, state);
+}
+
+/** The vulnerable heave and the death it can lead to, warmed as it goes down. */
+export function prewarmBallOfSwineWallow(): void {
+  for (const state of WALLOW_STATES) prewarmFigureState(BALL_OF_SWINE_FIGURE, state);
+}
+
+const LOCOMOTION_STATES: readonly BallOfSwineLayer[] = ['roll', 'shadow', 'shade'];
+const CHARGE_STATES: readonly BallOfSwineLayer[] = ['spinup', 'slam'];
+const WALLOW_STATES: readonly BallOfSwineLayer[] = ['wallow', 'burst'];
+
+/** Every state the figure paints: the five poses plus the two unrotated overlays. */
+type BallOfSwineLayer = BallOfSwinePose | 'shade' | 'shadow';
 
 /** Pulses of the vulnerability label across one wallow window. */
 const WARNING_PULSES_PER_WINDOW = 9;

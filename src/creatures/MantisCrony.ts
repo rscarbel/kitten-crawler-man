@@ -6,6 +6,7 @@ import {
   drawMantidSprite,
   mantidCullMarginTiles,
   mantidOverheadLiftTiles,
+  prewarmMantidCombat,
 } from '../sprites/mantidSprite';
 
 /**
@@ -51,14 +52,6 @@ const COIN_DROP_MAX = 11;
 const XP_VALUE = 22;
 /** Heavier than a rat, lighter than anything armoured — it is a big insect. */
 const MASS = 1.2;
-/**
- * Lift and cull margin used before the sheet has loaded; the live values are
- * measured from the manifest, so a rebake that resizes the cell cannot silently
- * clip the art at the screen edge or detach the aggro tell from its head.
- */
-const FALLBACK_ART_HEIGHT_TILES = 0.6;
-const FALLBACK_CULL_MARGIN_TILES = 1;
-
 /** How close the pursuit stops, as a fraction of the strike's own reach. */
 const PURSUIT_STOP_RATIO = 0.85;
 
@@ -74,7 +67,7 @@ export class MantisCrony extends Mob {
 
   /** Nothing rides above her art, so the margin is the art's own overhang. */
   override get cullMarginTiles(): number {
-    return mantidCullMarginTiles('mantis', 0, FALLBACK_CULL_MARGIN_TILES);
+    return mantidCullMarginTiles('mantis', 0);
   }
 
   /** Counts down through the wind-up and then the recovery; 0 when not striking. */
@@ -141,6 +134,10 @@ export class MantisCrony extends Mob {
       return;
     }
 
+    // Warmed on the engagement rather than on the strike: the crony paints well
+    // past the millisecond a direct fallback costs, and the wind-up is too short
+    // to bake a cold row inside.
+    if (!this.isAggro) prewarmMantidCombat('mantis');
     this.isAggro = true;
     this.updateLastKnown(nearest);
     const distance = this.distanceTo(nearest);
@@ -206,7 +203,7 @@ export class MantisCrony extends Mob {
     // Both the aggro tell and the health bar clear the art for the same reason:
     // `renderHealthBar` paints a few pixels above the *tile*, which on art that
     // overhangs it lands across the animal's own thorax.
-    const overheadY = sy - tileSize * mantidOverheadLiftTiles('mantis', FALLBACK_ART_HEIGHT_TILES);
+    const overheadY = sy - tileSize * mantidOverheadLiftTiles('mantis');
     if (this.isAggro) this.renderAggroIndicator(ctx, sx, overheadY, tileSize);
     this.renderMobHealthBar(ctx, sx, overheadY);
   }

@@ -1,3 +1,4 @@
+import { prewarmSkeletonEscortSprites, prewarmSkeletonLordSprite } from '../sprites/skeletonSprite';
 import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
 import { hasRoomToMove } from '../map/findWalkableTile';
@@ -7,6 +8,8 @@ import { FatClown } from '../creatures/FatClown';
 import { CircusLemur } from '../creatures/CircusLemur';
 import { Mantid } from '../creatures/Mantid';
 import { MantisCrony } from '../creatures/MantisCrony';
+import { prewarmMantidApproach } from '../sprites/mantidSprite';
+import { prewarmRockGolemApproach } from '../sprites/rockGolemSprite';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { SkeletonWarrior } from '../creatures/SkeletonWarrior';
 import { SkeletonArcher } from '../creatures/SkeletonArcher';
@@ -14,7 +17,7 @@ import { DarkKnight } from '../creatures/DarkKnight';
 import { Goblin } from '../creatures/Goblin';
 import { RockGolem } from '../creatures/RockGolem';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
-import type { GoblinWeapon } from '../sprites/goblinSprite';
+import { prewarmGoblin, type GoblinWeapon } from '../sprites/goblinSprite';
 import { TILE_SIZE } from '../core/constants';
 
 /** The mobs a bounty encounter puts on the map: one named target plus its escort. */
@@ -134,6 +137,11 @@ const MANTID_DEF: BountyDef = {
   typeLabel: 'the Mantid',
   names: ['Slice', 'Scythe', 'Snips', 'Thresher', 'Sickle', 'Mandible', 'Vesper', 'Cleaver'],
   spawn(siteTileX, siteTileY, map) {
+    // Warmed here rather than on the first render: the two cronies walk in
+    // together, and the boss's own cell is the biggest bake in the encounter.
+    prewarmMantidApproach('mantid');
+    prewarmMantidApproach('mantis');
+
     const boss = new Mantid(siteTileX, siteTileY, TILE_SIZE);
     boss.setMap(map);
 
@@ -184,6 +192,11 @@ const SKELETON_LORD_DEF: BountyDef = {
     'Phalanx',
   ],
   spawn(siteTileX, siteTileY, map) {
+    // Warmed here rather than on the first draw: the mark and three escorts are
+    // created on one frame, every one of them costs over a millisecond a cell to
+    // paint, and the encounter is placed well before the player walks into it.
+    prewarmSkeletonLordSprite();
+    prewarmSkeletonEscortSprites();
     const boss = new SkeletonLord(siteTileX, siteTileY, TILE_SIZE);
     boss.setMap(map);
 
@@ -341,6 +354,11 @@ const DARK_KNIGHT_DEF: BountyDef = {
     const boss = new DarkKnight(siteTileX, siteTileY, TILE_SIZE);
     boss.setMap(map);
 
+    // Warmed before the ten bodies are built rather than on the frame they first
+    // render: this is the densest goblin spawn in the game, and every one of them
+    // asks for the same two rows at once.
+    for (const weapon of GOBLIN_WEAPONS) prewarmGoblin(weapon);
+
     const escort: Mob[] = [];
     // The knight's own tile is claimed up front so no goblin is placed inside him.
     const claimed = new Set<string>([tileKey(siteTileX, siteTileY)]);
@@ -382,6 +400,11 @@ const ROCK_GOLEM_DEF: BountyDef = {
   typeLabel: 'the Rock Golem',
   names: ['Rubble', 'Crag', 'Basalt', 'Cobble', 'Scree', 'Shale', 'Granite', 'Knapper'],
   spawn(siteTileX, siteTileY, map) {
+    // Warmed here rather than on the first render: both bodies walk in from the
+    // bounty site the moment the player crests the ridge.
+    prewarmRockGolemApproach('rock_golem_boss');
+    prewarmRockGolemApproach('rock_golem');
+
     const boss = new RockGolemBoss(siteTileX, siteTileY, TILE_SIZE);
     boss.setMap(map);
     const claimed = new Set<string>([tileKey(siteTileX, siteTileY)]);

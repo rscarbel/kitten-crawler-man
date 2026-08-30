@@ -23,7 +23,7 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawText } from '../ui/TextBox';
 import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
 import { drawWithSilhouetteLayers } from '../core/silhouetteComposite';
-import { drawHumanSprite } from '../sprites/humanSprite';
+import { drawHumanSprite, prewarmHumanSprite } from '../sprites/humanSprite';
 import { HUMAN_STATUS_FIGURE_BOX } from '../creatures/HumanPlayer';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
 import type { StatusEffect } from '../core/StatusEffect';
@@ -116,6 +116,12 @@ export class StatusPreviewScene extends Scene {
   private walking = false;
   private expiring = false;
   private buttons: { x: number; y: number; w: number; h: number; action?: () => void }[] = [];
+
+  // Carl is the whole subject of this scene and there is no player object to
+  // have warmed his rows, so the scene warms them itself.
+  override onEnter(): void {
+    prewarmHumanSprite();
+  }
 
   update(): void {
     this.frame++;

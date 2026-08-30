@@ -2,15 +2,15 @@
  * The one place the Tuskling's animation timing is written down.
  *
  * Four things have to agree about when its tusks connect: the pose choreography
- * in `scripts/generate-tuskling-sprite.ts`, the impact countdown in
- * `src/creatures/Tuskling.ts`, the frame the bake gate asserts is the peak of
+ * in `src/sprites/art/tusklingFigure.ts`, the impact countdown in
+ * `src/creatures/Tuskling.ts`, the frame the art gate asserts is the peak of
  * the hook, and the row length `src/sprites/tusklingSprite.ts` plays. Separate
  * hand-copied constants are a contract that holds until the first retune and
  * then fails silently, with the damage landing on a frame where the head has
  * not moved.
  *
- * This module deliberately imports nothing: it is pulled in by an offline
- * node-canvas generator as well as by the browser bundle, and anything it
+ * This module deliberately imports nothing: it is pulled in by the offline
+ * gates and review harness as well as by the browser bundle, and anything it
  * touched would have to work in both.
  */
 
@@ -75,7 +75,7 @@ export function tusklingImpactFrame(spriteFrames: number, impactProgress: number
  *
  * Exported rather than re-derived, because there is more than one plausible
  * formula for it — `floor(p·F)` and `round(p·(F−1))` agree at `p = 0.5` and
- * part company everywhere else. The bake gate asserts the pose peaks on this
+ * part company everywhere else. The art gate asserts the pose peaks on this
  * frame and the runtime draws this frame; if they each did their own arithmetic
  * the two would silently describe different moments the first time the impact
  * was retuned, which is the failure this module exists to prevent.

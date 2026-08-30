@@ -22,13 +22,13 @@ import { drawText } from '../ui/TextBox';
 import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
 import { GameMap } from '../map/GameMap';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
-import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { MANTID_SLASH_TOTAL_FRAMES } from '../creatures/Mantid';
 import { MANTIS_SLASH_TOTAL_FRAMES } from '../creatures/MantisCrony';
 import {
   MANTID_BODY_PART_KEY,
   MANTIS_BODY_PART_KEY,
   drawMantidSprite,
+  mantidFrameCount,
   type MantidAction,
   type MantidSheet,
 } from '../sprites/mantidSprite';
@@ -66,9 +66,9 @@ const ROWS: ReadonlyArray<RowSpec> = [
 
 const SHEETS: ReadonlyArray<MantidSheet> = ['mantid', 'mantis'];
 
-/** How many frames a row actually holds, from the sheet the game loaded. */
+/** How many frames a row actually holds, from the figure that paints it. */
 function frameCountOf(sheet: MantidSheet, state: string): number {
-  return getSpriteDefByKey(sheet)?.states.get(state)?.frameCount ?? 1;
+  return Math.max(1, mantidFrameCount(sheet, state));
 }
 
 /** 1× is what a player sees; 3× is where a femoral spine becomes visible at all. */

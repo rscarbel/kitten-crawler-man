@@ -20,52 +20,29 @@ export type AssetGroup =
   | 'floor1_tileset'
   | 'floor2_tileset'
   | 'boss_hoarder'
-  | 'boss_juicer'
-  | 'boss_krakaren'
-  | 'boss_ball_of_swine'
-  | 'boss_grotesque_spider'
-  | 'bounty_evil_clown'
-  | 'bounty_mantid'
-  | 'bounty_skeleton_lord'
-  | 'murder_lich'
-  | 'bounty_dark_knight'
-  | 'bounty_rock_golem'
-  | 'quest_circus';
+  | 'boss_grotesque_spider';
 
 /**
  * Every creature/effect/environment sheet a group covers.
  *
  * Roughly half of `src/sprites/*` (Krasue, CircusLemur, MoldLion,
  * MissQuill, Remex, Signet, GumGum, HeatherTheBear,
- * RuinsGhoul, Cockroach, GrimaldiVine, InkMarauder, CityElfCultist, all
+ * RuinsGhoul, GrimaldiVine, InkMarauder, CityElfCultist, all
  * townsfolk) is procedural canvas drawing with no manifest entry at all — those
  * creatures cost nothing sprite-wise and deliberately have no key anywhere in
  * this file. See `MOB_SPRITE_KEYS` below for the canonical "does this mob type
  * need a sheet" answer that `verify:assets` actually checks against.
  */
 export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = {
-  // Needed on every floor: the two player characters, the persistent Mongo
-  // pet companion (unlockable from level 1 onward), the mercenary "bruiser"
-  // template (which draws from the rock golem sheet — see Mercenary.ts),
-  // Mordecai (rat_kin, present in every safe room on every dungeon floor),
-  // player-cast effects usable anywhere, and the generic props/masks that
-  // appear in both dungeon rooms and the town.
+  // Needed on every floor: the mercenary "bruiser" template (which draws from
+  // the rock golem sheet — see Mercenary.ts), player-cast effects usable
+  // anywhere, and the generic props/masks that appear in both dungeon rooms and
+  // the town. The two player characters are painted rather than baked and hold
+  // no key here.
   core: [
-    'human',
-    'cat',
-    'rat_kin',
-    'mongo_juvenile',
-    'mongo_adolescent',
-    'mongo_adult',
-    'rock_golem',
     'blood_particle',
     'blood_puddle',
-    'magic_missile_projectile',
-    'magic_missile_explosion',
     'magic_missile_icon',
-    'protective_shell',
-    'protective_shell_mini',
-    'protective_shell_shockwave',
     'smush_icon',
     'treasure_chests',
     'stairwell',
@@ -84,8 +61,8 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'find-the-stairwell',
   ],
 
-  // Level 3's town: buildings, the desperado club interior, street furniture
-  // and Shady the bounty giver.
+  // Level 3's town: buildings, the desperado club interior and street
+  // furniture.
   town: [
     'barracks',
     'blackwood_lodge',
@@ -103,15 +80,6 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'sleeping_cat_inn',
     'sunken_stump',
     'temple',
-    'circus_tent_blue',
-    'circus_tent_purple',
-    'circus_tent_red',
-    'roof_circus_blue',
-    'roof_circus_purple',
-    'roof_circus_red',
-    'wall_circus_blue',
-    'wall_circus_purple',
-    'wall_circus_red',
     'club_bar_counter',
     'club_bar_stool',
     'club_casino_table',
@@ -138,22 +106,11 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'town_notice_board',
     'over_city_fortune_teller',
     'over_city_signpost',
-    'roof_green',
-    'roof_red',
-    'roof_slate',
-    'roof_thatch',
-    'wall_cottage',
-    'wall_merchant',
-    'wall_metal',
-    'wall_stone',
-    'wall_tower',
-    'shady',
     'ground_overworld',
     'modern_decorations',
   ],
 
-  // Level 3's wilderness: trees, boulders, camps, ground scatter, the sky
-  // fowl flock, and the ambient nature dressing.
+  // Level 3's wilderness: trees, boulders and the goblin camps.
   overworld: [
     'tree_birch_a',
     'tree_birch_b',
@@ -189,73 +146,24 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'goblin_tent_b',
     'goblin_tent_c',
     'goblin_tent_d',
-    'dirt_patch',
-    'grassy_weed',
-    'sky_fowl_body',
-    'sky_fowl_hat_mask',
-    'sky_fowl_pants_mask',
-    'sky_fowl_trim_mask',
-    'sky_fowl_vest_mask',
-    // The troglodyte den camp's residents (`level3.ts`'s `campSpawns.troglodyte`).
-    // Also used by level 2 (`dungeon_common`) — duplicated here rather than
-    // pulling all of `dungeon_common`'s dungeon tilesets onto the overworld.
-    'troglodyte',
-    'troglodyte_tongue',
   ],
 
   // Shared by every dungeon floor (tutorial, level 1, level 2): the generic
   // dungeon/interior ground, and the mob types that show up in more than one
-  // floor's spawn tables (goblin's four weapon variants, llama, rat,
-  // troglodyte). Floor-specific tile *palettes* are their own groups below,
+  // floor's spawn tables.
+  // Floor-specific tile *palettes* are their own groups below,
   // since floor 1 and floor 2 share these five tile types but not their look
   // (`src/map/dungeon/floorTheme.ts`).
-  dungeon_common: [
-    'ground_dungeon',
-    'ground_interior',
-    'goblin_axe',
-    'goblin_mace',
-    'goblin_sword',
-    'goblin_warhammer',
-    'goblin_bow',
-    'llama',
-    'rat',
-    'troglodyte',
-    'troglodyte_tongue',
-    'tuskling',
-    // The defend quest's grate-crawlers, and the shape Mordecai wears on the
-    // floor they appear on.
-    'bugaboo',
-  ],
+  dungeon_common: ['ground_dungeon', 'ground_interior'],
 
   floor1_tileset: ['ground_floor1'],
   floor2_tileset: ['ground_floor2'],
 
-  boss_hoarder: [
-    'hoarder',
-    'hoarder_vomit_arc',
-    'hoarder_vomit_puddle',
-    'hoarders_room',
-    'cockroach',
-  ],
-  boss_juicer: ['juicer'],
-  // Includes brindle_grub: level 2's onMobKilledSpawns rule reactively spawns
-  // it whenever any mob dies on the floor, not only near the Krakaren Clone —
-  // grouped with him because his gauntlet is level 2's only other bespoke
-  // group, not because the two are otherwise related.
-  boss_krakaren: ['krakaren', 'krakaren_tentacle', 'krakaren_slam', 'brindle_grub'],
-  boss_ball_of_swine: ['ball_of_swine'],
-  // Level 2's spider lab: the boss itself, its small-spider adds (spawned by
-  // `SpiderQuestSystem`, not a spawn-table rule), and the lab dressing/minigame
-  // art that only exists because the boss does.
+  boss_hoarder: ['hoarders_room'],
+  // Level 2's spider lab: the dressing and minigame art that only exists
+  // because the boss does. The boss herself, her spit, the life machines and
+  // the small-spider adds are all painted.
   boss_grotesque_spider: [
-    'grotesque_spider_base',
-    'grotesque_spider_screech',
-    'grotesque_spider_slam',
-    'grotesque_spider_spit',
-    'grotesque_spider_spit_projectile',
-    'grotesque_spider_spit_trap',
-    'spider',
-    'life_machine',
     'lab_tables',
     'scientist',
     'spider-egg',
@@ -263,37 +171,6 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'keyboard_hero_buttons',
     'keyboard_hero_playing_field',
   ],
-
-  // Bounty encounters (level 3 only — `BountySystem` is only constructed in
-  // the town branch of `DungeonScene`'s constructor). Each entry is the named
-  // mark plus its escort's sheets; every no-sheet escort member (CircusLemur
-  // for the clown troupe) is omitted per the note above.
-  bounty_evil_clown: ['evil_clown', 'stilt_clown', 'fat_clown'],
-  bounty_mantid: ['mantid', 'mantis'],
-  bounty_skeleton_lord: ['skeleton_lord', 'skeleton_sword', 'skeleton_archer'],
-  murder_lich: [
-    'the_lich',
-    'skeleton_sword',
-    'skeleton_archer',
-    'skeleton_soul_bolt',
-    'skeleton_soul_burst',
-    'skeleton_grasping_hands',
-    'skeleton_bone_arrow',
-  ],
-  bounty_dark_knight: [
-    'dark_knight',
-    'goblin_axe',
-    'goblin_mace',
-    'goblin_sword',
-    'goblin_warhammer',
-  ],
-  bounty_rock_golem: ['rock_golem_boss', 'rock_golem'],
-
-  // The circus quest chain (`CircusQuestSystem` + `BigTopMazeSystem`, both
-  // level 3 only): only the stilt/fat clowns have sheets — MoldLion,
-  // CircusLemur, TerrorTheClown, Signet, HeatherTheBear, InkMarauder,
-  // GrimaldiVine and MazeBlockTarget are all procedural.
-  quest_circus: ['stilt_clown', 'fat_clown'],
 };
 
 /**
@@ -309,42 +186,26 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
  * An empty array means the creature is procedural canvas art (see the note on
  * `ASSET_GROUPS` above) and needs no group at all.
  *
- * `goblin` needs all four weapon sheets rather than one: `pickGoblinWeapon()`
- * in `src/levels/spawner.ts` rolls the weapon at spawn time, so any floor that
- * can spawn a goblin can produce any of the four.
  */
 export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
-  goblin: ['goblin_axe', 'goblin_mace', 'goblin_sword', 'goblin_warhammer'],
-  goblin_archer: ['goblin_bow'],
-  llama: ['llama'],
-  rock_golem: ['rock_golem'],
-  rock_golem_boss: ['rock_golem_boss'],
-  mantid: ['mantid'],
-  mantis: ['mantis'],
-  rat: ['rat'],
-  the_hoarder: [
-    'hoarder',
-    'hoarder_vomit_arc',
-    'hoarder_vomit_puddle',
-    'hoarders_room',
-    'cockroach',
-  ],
-  cockroach: ['cockroach'],
-  juicer: ['juicer'],
-  troglodyte: ['troglodyte', 'troglodyte_tongue'],
-  tuskling: ['tuskling'],
-  ball_of_swine: ['ball_of_swine'],
-  krakaren_clone: ['krakaren', 'krakaren_tentacle', 'krakaren_slam'],
-  brindle_grub: ['brindle_grub'],
-  bugaboo: ['bugaboo'],
+  goblin: [],
+  goblin_archer: [],
+  llama: [],
+  rock_golem: [],
+  rock_golem_boss: [],
+  mantid: [],
+  mantis: [],
+  rat: [],
+  the_hoarder: ['hoarders_room'],
+  cockroach: [],
+  juicer: [],
+  troglodyte: [],
+  tuskling: [],
+  ball_of_swine: [],
+  krakaren_clone: [],
+  brindle_grub: [],
+  bugaboo: [],
   grotesque_spider: [
-    'grotesque_spider_base',
-    'grotesque_spider_screech',
-    'grotesque_spider_slam',
-    'grotesque_spider_spit',
-    'grotesque_spider_spit_projectile',
-    'grotesque_spider_spit_trap',
-    'life_machine',
     'lab_tables',
     'scientist',
     'spider-egg',
@@ -352,40 +213,35 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
     'keyboard_hero_buttons',
     'keyboard_hero_playing_field',
   ],
-  small_spider: ['spider'],
+  small_spider: [],
   ruins_ghoul: [],
   krasue: [],
   circus_lemur: [],
-  stilt_clown: ['stilt_clown'],
-  fat_clown: ['fat_clown'],
-  evil_clown: ['evil_clown'],
+  stilt_clown: [],
+  fat_clown: [],
+  evil_clown: [],
   mold_lion: [],
   terror_the_clown: [],
   city_elf_cultist: [],
-  skeleton_sword: ['skeleton_sword'],
-  skeleton_archer: ['skeleton_archer'],
-  skeleton_lord: ['skeleton_lord'],
-  the_lich: ['the_lich'],
-  sky_fowl: [
-    'sky_fowl_body',
-    'sky_fowl_hat_mask',
-    'sky_fowl_pants_mask',
-    'sky_fowl_trim_mask',
-    'sky_fowl_vest_mask',
-  ],
+  skeleton_sword: [],
+  skeleton_archer: [],
+  skeleton_lord: [],
+  the_lich: [],
+  /** Painted by `skyFowlSprite.ts`, one figure per clothing palette. */
+  sky_fowl: [],
 
   // Not in MOB_REGISTRY — constructed directly by the systems named in each
   // comment, never via `createMob`.
-  /** `bountyDefs.ts`'s `DARK_KNIGHT_DEF`. */
-  dark_knight: ['dark_knight'],
+  /** `bountyDefs.ts`'s `DARK_KNIGHT_DEF` — painted, not baked. */
+  dark_knight: [],
   /** `HeatherTheBear`, `Signet`, `MissQuill`, `Remex`, `GrimaldiVine`, `GumGum` — all procedural. */
   heather_the_bear: [],
   signet: [],
   miss_quill: [],
   remex: [],
   gum_gum: [],
-  /** `MongoSystem` — a persistent companion, not a spawn-table mob. */
-  mongo: ['mongo_juvenile', 'mongo_adolescent', 'mongo_adult'],
+  /** `MongoSystem` — a persistent companion, not a spawn-table mob; painted. */
+  mongo: [],
   /** `MercenarySystem`'s "bruiser" template (`Mercenary.ts`, draws via `drawRockGolemSprite`). */
-  mercenary_bruiser: ['rock_golem'],
+  mercenary_bruiser: [],
 };

@@ -136,8 +136,14 @@ const BURN_CHANCE = 0.15;
 const BOLT_MAX_AGE = 300;
 
 const BURST_FRAMES = 26;
-/** Radius the burst itself damages within, in tiles. Small — it is a *mini* blast. */
-const BURST_RADIUS_TILES = 0.8;
+/**
+ * Radius the burst itself damages within, in tiles. Small — it is a *mini*
+ * blast. Exported because the explosion art is drawn against it: a blast
+ * painted well inside this hides damage it deals, and one painted far outside
+ * it promises damage it does not. `scripts/gates-lava-ball.ts` measures the
+ * painted reach against this number.
+ */
+export const BURST_RADIUS_TILES = 0.8;
 const BURST_DAMAGE = 1;
 
 /** Frames a fire patch burns for. Long enough to deny ground, short enough to wait out. */
@@ -145,7 +151,12 @@ const FLAME_FRAMES = 330;
 /** Frames the patch spends fading in as it catches, and out as it dies. */
 const FLAME_RISE_FRAMES = 20;
 const FLAME_FADE_FRAMES = 60;
-const FLAME_RADIUS_TILES = 0.55;
+/**
+ * Radius a fire patch burns anything standing in, in tiles. Exported for the
+ * same reason as the burst's: the patch's painted footprint is what tells the
+ * player where the floor is on fire.
+ */
+export const FLAME_RADIUS_TILES = 0.55;
 const FLAME_CONTACT_DAMAGE = 1;
 /** Frames between ticks of contact damage while standing in a patch. */
 const FLAME_DAMAGE_INTERVAL = 30;

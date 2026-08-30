@@ -19,18 +19,18 @@
  */
 
 import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import manifest from '../src/images/environment/trees/manifest.json';
 import { mulberry32 } from '../src/sprites/person/rng.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { OVERWORLD_MAP_SIZE_TILES } from './townSheets.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
 const IN_GAME_TILE = 32;
 
 const DEFAULT_SCALE = 2;
-const DEFAULT_CONTACT_OUT = 'trees.png';
-const DEFAULT_FOREST_OUT = 'tree-forest.png';
+const DEFAULT_CONTACT_OUT = `${PREVIEW_DIR}/trees.png`;
+const DEFAULT_FOREST_OUT = `${PREVIEW_DIR}/tree-forest.png`;
 const LABEL_HEIGHT = 20;
 const PADDING = 6;
 const BACKDROP = '#3b3b40';
@@ -334,8 +334,8 @@ async function main(): Promise<void> {
   const forest = hasFlag('forest');
   const outPath = parseFlag('out', forest ? DEFAULT_FOREST_OUT : DEFAULT_CONTACT_OUT);
   const buffer = forest ? await drawForest(scale) : await drawContactSheet(scale);
-  writeFileSync(resolve(outPath), buffer);
-  console.log(`Wrote ${outPath} (${forest ? 'forest' : 'contact sheet'}, scale ${scale}×)`);
+  const resolvedOutPath = writePreviewPng(outPath, buffer);
+  console.log(`Wrote ${resolvedOutPath} (${forest ? 'forest' : 'contact sheet'}, scale ${scale}×)`);
 }
 
 void main();

@@ -18,11 +18,10 @@
  * player leaves this floor, or the tower, before containing the crystal).
  */
 
+import { prewarmLichLocomotion } from '../sprites/lichSprite';
 import { TILE_SIZE } from '../core/constants';
 import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { TOWN_MUSIC_TRACKS } from '../audio/sounds';
-import { prewarmGroups } from '../core/SpriteLoader';
-import { SYSTEM_ASSET_REQUIREMENTS } from '../core/systemAssetRequirements';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
@@ -37,7 +36,7 @@ import { Remex } from '../creatures/Remex';
 import { CityElfCultist } from '../creatures/CityElfCultist';
 import { TheLich } from '../creatures/TheLich';
 import { drawSkyFowlCorpse } from '../sprites/skyFowlSprite';
-import { drawSoulBurst } from '../sprites/skeletonEffectsSprite';
+import { drawSoulBurst, prewarmLichFightEffects } from '../sprites/skeletonEffectsSprite';
 import { drawRadialGlow } from '../sprites/radialGlow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { QuestDialog } from '../ui/QuestDialog';
@@ -536,18 +535,11 @@ export class QuillConfrontationSystem implements GameSystem {
 
   private openReveal(): void {
     this.phase = 'reveal';
-    // Kicked off here, not at `beginLichFight`, so the Lich's sheets have the
-    // whole reveal dialog plus the materialise hold to land — the fight
-    // starts the instant the last dialog page closes, with nowhere left to
-    // load anything.
-    //
-    // `typeof Image` guards this the same way `BountySystem.stageEncounter`
-    // does: `scripts/verify-assets.ts` and friends can exercise this system
-    // under plain Node, with no `Image`/`document`.
-    const assetReq = SYSTEM_ASSET_REQUIREMENTS.find((req) => req.id === 'quest:murder_lich');
-    if (assetReq !== undefined && typeof Image !== 'undefined') {
-      void prewarmGroups(assetReq.requiredGroups);
-    }
+    // Kicked off here, not at `beginLichFight`, so the fight's effects have the
+    // whole reveal dialog plus the materialise hold to bake in — the fight
+    // starts the instant the last dialog page closes, with nowhere left to warm
+    // anything, and the materialising burst is drawn before that even.
+    prewarmLichFightEffects();
     this.dialog.open(LICH_REVEAL_DIALOG, () => this.beginMaterialise());
   }
 
@@ -559,6 +551,10 @@ export class QuillConfrontationSystem implements GameSystem {
 
   private beginLichFight(): void {
     this.phase = 'lich_fight';
+    // Painted, not blitted: the walk and idle rows have to be in the frame
+    // cache before the first one is asked for, or the frame the banner clears
+    // on pays for painting them.
+    prewarmLichLocomotion();
     const lich = new TheLich(this.lichTile.x, this.lichTile.y, TILE_SIZE);
     lich.setMap(this.map);
     lich.applyMobLevel(questMobLevel(LICH_LEVEL, this.partyLevel));

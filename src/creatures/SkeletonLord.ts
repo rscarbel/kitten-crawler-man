@@ -4,7 +4,11 @@ import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
 import { makeStuck } from '../core/StatusEffect';
 import { drawDangerCone } from '../sprites/dangerTelegraph';
 import { SKELETON_LORD_BODY_PART_KEY, drawSkeletonLordSprite } from '../sprites/skeletonSprite';
-import { drawGraspingHands } from '../sprites/skeletonEffectsSprite';
+import {
+  drawGraspingHands,
+  prewarmGraspingHands,
+  prewarmSoulBoltCast,
+} from '../sprites/skeletonEffectsSprite';
 import { SOUL_BOLT_CAST_FRAMES, soulBoltReleaseFrame } from '../sprites/skeletonTiming';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
@@ -339,6 +343,7 @@ export class SkeletonLord extends Mob {
       this.beginAttack('hands', target);
       this.handsTimer = HANDS_WINDUP_FRAMES;
       this.handsCooldown = HANDS_COOLDOWN_FRAMES;
+      prewarmGraspingHands();
       return true;
     }
     if (this.boltCooldown === 0 && this.hasLOS(target)) {
@@ -346,6 +351,7 @@ export class SkeletonLord extends Mob {
       this.castTimer = SOUL_BOLT_CAST_FRAMES;
       this.boltCooldown = SOUL_BOLT_COOLDOWN_FRAMES;
       this.castWindupSoundPending = true;
+      prewarmSoulBoltCast();
       return true;
     }
     if (this.summonCooldown === 0 && !this.escortAtCap) {

@@ -1,7 +1,11 @@
 import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
-import { TUSKLING_BODY_PART_KEY, drawTusklingSprite } from '../sprites/tusklingSprite';
+import {
+  TUSKLING_BODY_PART_KEY,
+  drawTusklingSprite,
+  prewarmTusklingGore,
+} from '../sprites/tusklingSprite';
 import {
   TUSKLING_CHARGE_FRAMES,
   TUSKLING_CHARGE_FRAME_HOLD,
@@ -165,6 +169,10 @@ export class Tuskling extends Mob {
         this.chargeWindup = 0;
         if (nearest) {
           this.state = 'stalking';
+          // The eight severed pieces are drawn once, all at once, on the frame
+          // it comes apart, and nothing telegraphs that. Noticing a crawler is
+          // the only warning there is that this creature's fight has started.
+          prewarmTusklingGore();
         } else {
           this.doWander();
         }

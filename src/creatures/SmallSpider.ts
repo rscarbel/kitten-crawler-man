@@ -2,6 +2,7 @@ import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import {
   drawSpiderSprite,
+  prewarmSmallSpiderCombat,
   type SpiderAnimation,
   type SpiderDeathStyle,
 } from '../sprites/spiderSprite';
@@ -211,6 +212,10 @@ export class SmallSpider extends Mob {
     switch (this.state) {
       case 'idle': {
         if (nearest) {
+          // Noticing a crawler is the only lead the crouch, the leap and the
+          // death rows ever get: the wind-up is twenty-odd frames away and a
+          // killing blow has no telegraph at all.
+          prewarmSmallSpiderCombat();
           this.state = 'pursuing';
         } else {
           this.doWander();

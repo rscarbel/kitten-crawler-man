@@ -3,7 +3,11 @@
  * that only looks at the image — every defect that has ever mattered on a
  * figure in this project was invisible to `typecheck`, `lint` and a code read.
  *
- *   npx tsx scripts/render-juicer.ts --out=juicer-review.png --scale=2
+ * The contact sheet is painted from `JUICER_FIGURE` the way the runtime cache
+ * bakes it, and the art gates run as part of the render, so one command answers
+ * both "does it still hold together" and "what does it look like".
+ *
+ *   npm run render:juicer
  *   npx tsx scripts/render-juicer.ts --row=sprint_side --scale=4
  *   npx tsx scripts/render-juicer.ts --part=head --scale=6
  *   npx tsx scripts/render-juicer.ts --row=walk_side --mode=onion --scale=3
@@ -11,16 +15,22 @@
  *   npx tsx scripts/render-juicer.ts --row=throw_side --mode=arc --scale=3
  *   npx tsx scripts/render-juicer.ts --mode=gore --scale=4
  *   npx tsx scripts/render-juicer.ts --frame=5 --row=throw_side --scale=8
- *   npx tsx scripts/render-juicer.ts --fresh    (review the bake, not the file)
  */
 
-import { type Image, createCanvas, loadImage } from 'canvas';
-import { writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { type Canvas, createCanvas } from 'canvas';
 
-import { type BakedSheet, ROWS, SHEET_PATH, TILE_SCALE, bake } from './generate-juicer-sprite.js';
+import { bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { juicerGateFailures } from './gates-juicer.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import {
+  GORE_STATES,
+  JUICER_FIGURE,
+  JUICER_ROWS,
+  TILE_SCALE,
+} from '../src/sprites/art/juicerFigure.js';
 
-/** Matches TILE_SIZE in src/core/constants.ts; the sheet is drawn at 2× that. */
+/** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
 const DEFAULT_SCALE = 1.5;
 const MIN_SCALE = 0.25;
@@ -37,6 +47,7 @@ const ONION_ALPHA = 0.4;
 const ARC_DOT_RADIUS = 2.5;
 const ARC_COLOR = 'rgba(255,120,60,0.9)';
 const NO_FRAME = -1;
+const MAX_FRAME_FLAG = 64;
 
 type Mode = 'sheet' | 'parts' | 'gore' | 'onion' | 'delta' | 'arc';
 const MODES: ReadonlyArray<Mode> = ['sheet', 'parts', 'gore', 'onion', 'delta', 'arc'];
@@ -49,8 +60,8 @@ interface PartWindow {
 }
 
 /**
- * Fractions of the frame rather than pixels, so the table survives the
- * generator re-deriving its own cell size.
+ * Fractions of the frame rather than pixels, so the table survives the figure
+ * re-deriving its own cell size.
  */
 const PARTS: Record<string, PartWindow> = {
   head: { x: 0.3, y: 0.02, w: 0.4, h: 0.24 },
@@ -85,48 +96,57 @@ function parseMode(): Mode {
   return found;
 }
 
-async function loadSheet(fresh: BakedSheet | null): Promise<Image> {
-  if (fresh !== null) return loadImage(fresh.buffer);
-  return loadImage(resolve(SHEET_PATH));
+const POSE_STATES: readonly string[] = JUICER_ROWS.map((row) => row.name);
+const ALL_STATES: readonly string[] = [...POSE_STATES, ...GORE_STATES];
+
+/** How a row is captioned: a pose row says how it moves, a gore piece says so. */
+function labelOf(state: string): string {
+  const row = JUICER_ROWS.find((candidate) => candidate.name === state);
+  if (row === undefined) return `${state} — 1 frame, gore piece`;
+  return `${row.name} — ${row.frameCount} frames, ${row.view}, ${row.kind}`;
 }
 
-async function main(): Promise<void> {
-  const outPath = parseFlag('out', 'juicer-review.png');
+function frameCountOf(state: string): number {
+  const declared = JUICER_FIGURE.states.get(state);
+  if (declared === undefined) throw new Error(`the juicer declares no state "${state}"`);
+  return declared.frames;
+}
+
+function main(): void {
+  const outPath = parseFlag('out', `${PREVIEW_DIR}/juicer-review.png`);
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
   const mode = parseMode();
   const rowFilter = parseFlag('row', '');
   const partName = parseFlag('part', mode === 'parts' ? 'head' : '');
-  const frameFilter = Math.round(parseNumberFlag('frame', NO_FRAME, NO_FRAME, 64));
+  const frameFilter = Math.round(parseNumberFlag('frame', NO_FRAME, NO_FRAME, MAX_FRAME_FLAG));
 
   const part = partName === '' ? null : PARTS[partName];
   if (partName !== '' && part === undefined) {
     throw new Error(`--part=${partName} is not one of ${Object.keys(PARTS).join(', ')}`);
   }
 
-  const goreOnly = mode === 'gore';
-  const rows = goreOnly
-    ? ROWS.filter((row) => row.kind === 'gore')
-    : rowFilter === ''
-      ? [...ROWS]
-      : ROWS.filter((row) => row.name === rowFilter);
-  if (rows.length === 0) {
-    throw new Error(`--row=${rowFilter} is not one of ${ROWS.map((row) => row.name).join(', ')}`);
+  const states =
+    mode === 'gore'
+      ? [...GORE_STATES]
+      : rowFilter === ''
+        ? [...ALL_STATES]
+        : ALL_STATES.filter((state) => state === rowFilter);
+  if (states.length === 0) {
+    throw new Error(`--row=${rowFilter} is not one of ${ALL_STATES.join(', ')}`);
   }
 
-  const baked = bake();
-  const sheet = await loadSheet(process.argv.includes('--fresh') ? baked : null);
-  const geometry = baked.geometry;
-  const columns = Math.max(...ROWS.map((row) => row.frameCount));
-  const frameW = Math.round(sheet.width / columns);
-  const frameH = Math.round(sheet.height / ROWS.length);
-  const geometryMatchesSheet = geometry.frameWidth === frameW && geometry.frameHeight === frameH;
-  if (!geometryMatchesSheet) {
-    console.warn(
-      `${SHEET_PATH} is ${frameW}×${frameH} per cell but the current bake makes ` +
-        `${geometry.frameWidth}×${geometry.frameHeight} — the tile guide is omitted. ` +
-        `Pass --fresh to review the bake instead of the file.`,
-    );
-  }
+  // Ahead of the contact sheet rather than after it. The sheet is a thirty
+  // megapixel allocation, and measuring the art on the other side of it made
+  // the centroid gate report a seam twice its true width every so often — a
+  // red gate on art that had not changed, which is the one thing that teaches
+  // an agent to loosen a threshold.
+  console.log('Gating the juicer figure…');
+  reportFigureGates('juicer', juicerGateFailures());
+
+  const baked = bakeFigureSheet(JUICER_FIGURE, states);
+  const sheet = baked.canvas;
+  const frameW = baked.frameWidth;
+  const frameH = baked.frameHeight;
 
   const cropped = part !== null && part !== undefined;
   const srcW = cropped ? Math.round(part.w * frameW) : frameW;
@@ -141,14 +161,14 @@ async function main(): Promise<void> {
       ? Array.from({ length: frameCount }, (_unused, i) => i)
       : [Math.min(frameCount - 1, Math.max(0, frameFilter))];
 
-  const maxCols = Math.max(...rows.map((row) => columnsOf(row.frameCount).length));
+  const maxCols = Math.max(...states.map((state) => columnsOf(frameCountOf(state)).length));
   const inGameScale = IN_GAME_TILE / TILE_SCALE;
   const inGameW = frameW * inGameScale;
   const inGameH = frameH * inGameScale;
-  const stripWidth = PADDING + rows.length * (inGameW + PADDING);
+  const stripWidth = PADDING + states.length * (inGameW + PADDING);
   const width = Math.max(PADDING + maxCols * (cellW + PADDING), stripWidth);
   const height =
-    PADDING + rows.length * (cellH + LABEL_HEIGHT + PADDING) + (inGameH + LABEL_HEIGHT + PADDING);
+    PADDING + states.length * (cellH + LABEL_HEIGHT + PADDING) + (inGameH + LABEL_HEIGHT + PADDING);
 
   const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
   const ctx = canvas.getContext('2d');
@@ -157,18 +177,17 @@ async function main(): Promise<void> {
   ctx.font = LABEL_FONT;
 
   let y = PADDING;
-  for (const spec of rows) {
-    const sheetRow = ROWS.findIndex((row) => row.name === spec.name);
+  states.forEach((state, sheetRow) => {
+    const frameCount = frameCountOf(state);
     ctx.fillStyle = LABEL_COLOR;
     ctx.fillText(
-      `${spec.name} — ${spec.frameCount} frames, ${spec.view}, ${spec.kind}` +
-        (cropped ? `  [${partName}]` : ''),
+      labelOf(state) + (cropped ? `  [${partName}]` : ''),
       PADDING,
       y + LABEL_HEIGHT - PADDING,
     );
     y += LABEL_HEIGHT;
 
-    const cols = columnsOf(spec.frameCount);
+    const cols = columnsOf(frameCount);
     cols.forEach((col, slot) => {
       const x = PADDING + slot * (cellW + PADDING);
       const blit = (frame: number, alpha: number): void => {
@@ -196,19 +215,19 @@ async function main(): Promise<void> {
         ctx.clip();
         blit(col, 1);
         ctx.globalCompositeOperation = 'difference';
-        blit((col + spec.frameCount - 1) % spec.frameCount, 1);
+        blit((col + frameCount - 1) % frameCount, 1);
         ctx.restore();
       } else {
-        if (mode === 'onion') blit((col + spec.frameCount - 1) % spec.frameCount, ONION_ALPHA);
+        if (mode === 'onion') blit((col + frameCount - 1) % frameCount, ONION_ALPHA);
         blit(col, 1);
       }
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
-      if (!cropped && geometryMatchesSheet) {
+      if (!cropped) {
         ctx.strokeStyle = TILE_GUIDE;
         ctx.strokeRect(
-          x + geometry.tileX * scale,
-          y + geometry.tileY * scale,
+          x + JUICER_FIGURE.tileX * scale,
+          y + JUICER_FIGURE.tileY * scale,
           TILE_SCALE * scale,
           TILE_SCALE * scale,
         );
@@ -218,11 +237,10 @@ async function main(): Promise<void> {
     if (mode === 'arc') {
       // Every frame's ink centroid, laid over the row's first cell: a believable
       // swing traces a smooth arc, and a cornered one is a rig bug.
-      const originX = PADDING;
-      drawArc(ctx, sheet, sheetRow, spec.frameCount, frameW, frameH, originX, y, scale);
+      drawArc(ctx, sheet, sheetRow, frameCount, frameW, frameH, PADDING, y, scale);
     }
     y += cellH + PADDING;
-  }
+  });
 
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText(
@@ -233,22 +251,21 @@ async function main(): Promise<void> {
   y += LABEL_HEIGHT;
   ctx.fillStyle = DUNGEON_FLOOR;
   ctx.fillRect(0, y, canvas.width, inGameH);
-  for (let i = 0; i < rows.length; i++) {
-    const sheetRow = ROWS.findIndex((row) => row.name === rows[i].name);
+  states.forEach((_state, sheetRow) => {
     ctx.drawImage(
       sheet,
       0,
       sheetRow * frameH,
       frameW,
       frameH,
-      PADDING + i * (inGameW + PADDING),
+      PADDING + sheetRow * (inGameW + PADDING),
       y,
       inGameW,
       inGameH,
     );
-  }
+  });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(
     `Wrote ${outPath} (${canvas.width}×${canvas.height}px, scale ${scale}×, mode ${mode})`,
   );
@@ -260,8 +277,8 @@ const ALPHA_OFFSET = 3;
 
 /** Traces each frame's ink centroid across a row, drawn over the first cell. */
 function drawArc(
-  ctx: ReturnType<ReturnType<typeof createCanvas>['getContext']>,
-  sheet: Image,
+  ctx: ReturnType<Canvas['getContext']>,
+  sheet: Canvas,
   sheetRow: number,
   frameCount: number,
   frameW: number,
@@ -311,4 +328,4 @@ function drawArc(
   }
 }
 
-void main();
+main();

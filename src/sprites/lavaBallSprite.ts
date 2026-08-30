@@ -1,17 +1,40 @@
-import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import {
+  BOLT_FRAMES,
+  BURST_FRAMES,
+  FLAME_FRAMES,
+  LLAMA_LAVA_BOLT_FIGURE,
+  LLAMA_LAVA_BURST_FIGURE,
+  LLAMA_LAVA_FLAME_FIGURE,
+} from './art/lavaBallFigure';
 
 /**
- * Draw wrappers for the three sheets a Lava Llama's spit is made of.
+ * Draw wrappers for the three effects a Lava Llama's spit is made of.
  *
- * Baked by `npm run gen:lava-ball` from `scripts/lavaBallArt.ts`.
+ * Painted at runtime from `src/sprites/art/lavaBallArt.ts` through the figure
+ * cache; reviewed with `npm run render:lava-ball`.
  */
 
-/** Frames per second the game loop runs at; the sheets are timed against it. */
+/** Frames per second the game loop runs at; the art is timed against it. */
 const FRAMES_PER_SECOND = 60;
 
-const BOLT_FRAMES = 8;
-const BURST_FRAMES = 10;
-const FLAME_FRAMES = 8;
+const BOLT_STATE = 'fly';
+const BURST_STATE = 'burst';
+const FLAME_STATE = 'burn';
+
+/**
+ * Warms all three rows the moment the llama starts its wind-up.
+ *
+ * The ball leaves the mouth partway through that animation and the burst and
+ * the fire patch follow it, so the wind-up is lead for every one of them — and
+ * it is the only telegraph any of them gets.
+ */
+export function prewarmLavaSpit(): void {
+  prewarmFigureState(LLAMA_LAVA_BOLT_FIGURE, BOLT_STATE);
+  prewarmFigureState(LLAMA_LAVA_BURST_FIGURE, BURST_STATE);
+  prewarmFigureState(LLAMA_LAVA_FLAME_FIGURE, FLAME_STATE);
+}
 
 /** Loop speed of the churn on the ball's crust. */
 const BOLT_FPS = 14;
@@ -21,7 +44,7 @@ const FLAME_FPS = 10;
 /**
  * The ball in flight.
  *
- * `heading` is the direction of travel in radians; the sheet is drawn pointing
+ * `heading` is the direction of travel in radians; the art is drawn pointing
  * along +X and the runtime rotates it, so the ember trail always streams out
  * behind the ball rather than sitting at a fixed screen angle.
  *
@@ -37,10 +60,10 @@ export function drawLavaBolt(
   ageFrames: number,
 ): void {
   const seconds = ageFrames / FRAMES_PER_SECOND;
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    'llama_lava_bolt',
-    'fly',
+    LLAMA_LAVA_BOLT_FIGURE,
+    BOLT_STATE,
     timeFrameIndex(seconds, BOLT_FPS, BOLT_FRAMES),
     sx,
     sy,
@@ -60,15 +83,14 @@ export function drawLavaBurst(
   tileSize: number,
   progress: number,
 ): void {
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    'llama_lava_burst',
-    'burst',
+    LLAMA_LAVA_BURST_FIGURE,
+    BURST_STATE,
     progressFrameIndex(progress, BURST_FRAMES),
     sx,
     sy,
     tileSize,
-    {},
   );
 }
 
@@ -89,5 +111,5 @@ export function drawLavaFlame(
 ): void {
   const seconds = ageFrames / FRAMES_PER_SECOND;
   const frame = (timeFrameIndex(seconds, FLAME_FPS, FLAME_FRAMES) + seed) % FLAME_FRAMES;
-  drawSpriteKey(ctx, 'llama_lava_flame', 'burn', frame, sx, sy, tileSize, { alpha });
+  drawFigureCached(ctx, LLAMA_LAVA_FLAME_FIGURE, FLAME_STATE, frame, sx, sy, tileSize, { alpha });
 }

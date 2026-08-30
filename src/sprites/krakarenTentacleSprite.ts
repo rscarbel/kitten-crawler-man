@@ -1,5 +1,5 @@
 /**
- * Draws a Krakaren guard tentacle from its baked sheet (`krakaren_tentacle`).
+ * Draws a Krakaren guard tentacle through the figure cache.
  *
  * The guard tentacle is a killable mob rather than scenery, so it gets the same
  * facing/mirroring treatment as its parent for the one row where direction is
@@ -7,17 +7,29 @@
  * under all read the same from every side, so those rows are single-view.
  */
 
-import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
-
-type KrakarenTentacleSheetState = SpriteStates['krakaren_tentacle'];
+import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { figureFrameCount } from './figure/figureDef';
+import { KRAKAREN_TENTACLE_FIGURE } from './art/krakarenFigure';
 
 /** Which of the three drawn viewpoints a facing resolves to. */
 export type KrakarenTentacleView = 'front' | 'side' | 'away';
 
-const SHEET_KEY = 'krakaren_tentacle';
+/** Every pose state a guard tentacle can be drawn in. */
+export type KrakarenTentacleState =
+  'emerge' | 'idle' | 'strike' | 'strike_side' | 'strike_away' | 'retreat';
 
-/** The sheet's severed pieces, in the order the bake lays them into the gore row. */
+/** Those states in the order they play, which is also what a spawn warms. */
+export const KRAKAREN_TENTACLE_STATES: readonly KrakarenTentacleState[] = [
+  'emerge',
+  'idle',
+  'strike',
+  'strike_side',
+  'strike_away',
+  'retreat',
+];
+
+/** The severed pieces, in the order `BodyPartGoreSystem` spawns them. */
 export const KRAKAREN_TENTACLE_GORE_PARTS: ReadonlyArray<string> = [
   'gore_tip',
   'gore_mid',
@@ -33,12 +45,12 @@ const MILLISECONDS_PER_SECOND = 1000;
 const IDLE_FPS = 7;
 
 /**
- * Read off the sheet rather than hand-tabled, because `drawSprite` *clamps* the
- * frame index: a row that got shorter in a rebake would silently freeze on its
- * last frame instead of failing.
+ * Read off the figure rather than hand-tabled, because the draw path *clamps*
+ * the frame index: a state that lost frames would silently freeze on its last
+ * one instead of failing.
  */
-function frameCountOf(state: KrakarenTentacleSheetState): number {
-  return getSpriteDefByKey(SHEET_KEY)?.states.get(state)?.frameCount ?? 1;
+function frameCountOf(state: KrakarenTentacleState): number {
+  return figureFrameCount(KRAKAREN_TENTACLE_FIGURE, state);
 }
 
 /** Views split on whichever axis it is striking hardest along; a tie reads as profile. */
@@ -47,27 +59,42 @@ function viewFor(facingX: number, facingY: number): KrakarenTentacleView {
   return facingY < 0 ? 'away' : 'front';
 }
 
-function strikeStateFor(view: KrakarenTentacleView): KrakarenTentacleSheetState {
+function strikeStateFor(view: KrakarenTentacleView): KrakarenTentacleState {
   if (view === 'side') return 'strike_side';
   if (view === 'away') return 'strike_away';
   return 'strike';
 }
 
-/** Clearance between the top of the baked art and an overhead health bar, in tiles. */
+/** Clearance between the top of the painted art and an overhead health bar, in tiles. */
 const OVERHEAD_CLEARANCE_TILES = 0.2;
 
 /**
  * How far above its tile origin to hang a health bar so it clears the art.
  *
- * Measured off the loaded manifest rather than copied, because a rebake that
- * resizes the cell moves it — and a stale copy fails silently, as a bar drawn
- * across the tentacle's own mouths. Not cached: a missing def only means the
- * sheet has not finished loading yet.
+ * Read off the figure's own declared geometry rather than copied, because
+ * resizing the cell moves it — and a stale copy fails silently, as a bar drawn
+ * across the tentacle's own mouths.
  */
-export function krakarenTentacleOverheadLiftTiles(fallbackTiles: number): number {
-  const def = getSpriteDefByKey(SHEET_KEY);
-  if (def === undefined) return fallbackTiles;
-  return def.tileY / def.tileScale + OVERHEAD_CLEARANCE_TILES;
+export function krakarenTentacleOverheadLiftTiles(_fallbackTiles: number): number {
+  return (
+    KRAKAREN_TENTACLE_FIGURE.tileY / KRAKAREN_TENTACLE_FIGURE.tileScale + OVERHEAD_CLEARANCE_TILES
+  );
+}
+
+/**
+ * Warms every state a guard tentacle can be drawn in, plus its severed pieces.
+ *
+ * Wired where the spawn is scheduled rather than where the body is built: the
+ * boss room commits to a tentacle before it erupts, and its `emerge` row is the
+ * first thing drawn.
+ */
+export function prewarmKrakarenTentacle(): void {
+  for (const state of KRAKAREN_TENTACLE_STATES) {
+    prewarmFigureState(KRAKAREN_TENTACLE_FIGURE, state);
+  }
+  for (const part of KRAKAREN_TENTACLE_GORE_PARTS) {
+    prewarmFigureState(KRAKAREN_TENTACLE_FIGURE, part);
+  }
 }
 
 /** Everything the guard tentacle sprite needs to pick a pose. All fields optional. */
@@ -111,9 +138,9 @@ export function drawKrakarenTentacleSprite(
   } = state;
 
   if (retreatProgress !== null) {
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      SHEET_KEY,
+      KRAKAREN_TENTACLE_FIGURE,
       'retreat',
       progressFrameIndex(retreatProgress, frameCountOf('retreat')),
       sx,
@@ -124,9 +151,9 @@ export function drawKrakarenTentacleSprite(
   }
 
   if (emergeProgress !== null) {
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      SHEET_KEY,
+      KRAKAREN_TENTACLE_FIGURE,
       'emerge',
       progressFrameIndex(emergeProgress, frameCountOf('emerge')),
       sx,
@@ -139,9 +166,9 @@ export function drawKrakarenTentacleSprite(
   if (strikeProgress !== null) {
     const view = viewFor(facingX, facingY);
     const key = strikeStateFor(view);
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      SHEET_KEY,
+      KRAKAREN_TENTACLE_FIGURE,
       key,
       progressFrameIndex(strikeProgress, frameCountOf(key)),
       sx,
@@ -153,9 +180,9 @@ export function drawKrakarenTentacleSprite(
   }
 
   const nowSeconds = performance.now() / MILLISECONDS_PER_SECOND + loopOffsetSeconds;
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    SHEET_KEY,
+    KRAKAREN_TENTACLE_FIGURE,
     'idle',
     idleFrame ?? timeFrameIndex(nowSeconds, IDLE_FPS, frameCountOf('idle')),
     sx,

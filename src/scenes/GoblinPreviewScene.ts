@@ -27,13 +27,12 @@ import {
   GOBLIN_ATTACKS,
   drawGoblinSprite,
   goblinBodyPartKey,
-  goblinSheetKey,
+  goblinFigure,
   GOBLIN_BOW_SHOTS,
   type GoblinArchetype,
+  type GoblinState,
 } from '../sprites/goblinSprite';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
-
-type GoblinState = SpriteStates['goblin_axe'];
+import { figureFrameCount } from '../sprites/figure/figureDef';
 
 const ARCHETYPES: ReadonlyArray<GoblinArchetype> = ['sword', 'axe', 'mace', 'warhammer', 'bow'];
 
@@ -67,9 +66,9 @@ interface RowSpec {
 
 /**
  * The rows to show and how fast to play them. Frame counts are deliberately
- * absent: they are read from the loaded manifest at draw time, because a hand
- * -copied count here would silently desync from the sheet the moment a row's
- * length changed.
+ * absent: they are read from the figure at draw time, because a hand-copied
+ * count here would silently desync from the art the moment a row's length
+ * changed.
  */
 const ROWS: ReadonlyArray<RowSpec> = [
   { state: 'walk', fps: 10 },
@@ -80,10 +79,9 @@ const ROWS: ReadonlyArray<RowSpec> = [
   { state: 'flinch', fps: 12 },
 ];
 
-/** How many frames a row actually holds, from the sheet the game loaded. */
+/** How many frames a row actually holds, from the figure that paints it. */
 function frameCountOf(weapon: GoblinArchetype, state: GoblinState): number {
-  const def = getSpriteDefByKey(goblinSheetKey(weapon));
-  return def?.states.get(state)?.frameCount ?? 1;
+  return figureFrameCount(goblinFigure(weapon), state);
 }
 
 /** 1× is what a player sees; 4× is where an ear notch becomes visible at all. */

@@ -30,8 +30,15 @@ export interface FrameInkBounds {
   readonly radius: number;
 }
 
-/** Alpha at or below which a pixel is treated as empty rather than as ink. */
-const EMPTY_ALPHA_CUTOFF = 8;
+/**
+ * Alpha at or below which a pixel is treated as empty rather than as ink.
+ *
+ * Exported so the figure cache's ink measurement and the offline figure gates
+ * decide "is this ink" the same way. A gate that draws the line one step from
+ * where the runtime draws it measures a different sprite than the one that
+ * ships.
+ */
+export const EMPTY_ALPHA_CUTOFF = 8;
 const RGBA_STRIDE = 4;
 const ALPHA_CHANNEL_OFFSET = 3;
 /** Half of a pixel, so a bounding box spans whole pixels rather than their corners. */

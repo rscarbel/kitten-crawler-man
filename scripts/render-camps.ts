@@ -14,15 +14,15 @@
  */
 
 import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import manifest from '../src/images/environment/camp/manifest.json';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
 const IN_GAME_TILE = 32;
 
 const DEFAULT_SCALE = 3;
-const DEFAULT_OUT = 'camps.png';
+const DEFAULT_OUT = `${PREVIEW_DIR}/camps.png`;
 const LABEL_HEIGHT = 20;
 const PADDING = 6;
 const BACKDROP = '#3b3b40';
@@ -147,5 +147,5 @@ sheets.forEach(([key, geometry], index) => {
   );
 });
 
-writeFileSync(outPath, canvas.toBuffer('image/png'));
-console.log(`${outPath}: ${sheets.length} camp sheet(s) at ${scale}x`);
+const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+console.log(`${writtenPath}: ${sheets.length} camp sheet(s) at ${scale}x`);

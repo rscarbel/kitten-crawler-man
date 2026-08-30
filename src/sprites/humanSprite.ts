@@ -1,32 +1,56 @@
+import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import {
-  drawSpriteKey,
-  walkFrameIndex,
-  progressFrameIndex,
-  timeFrameIndex,
-} from '../core/SpriteRenderer';
-import type { SpriteStates } from '../core/SpriteLoader';
+  ATTACK_FRAMES,
+  GROUND_OFFSET_IN_TILE,
+  HUMAN_FIGURE,
+  HUMAN_SCALE,
+  IDLE_FRAMES,
+  SMUSH_FRAMES,
+  SMUSH_IMPACT_FRAME as FIGURE_SMUSH_IMPACT_FRAME,
+  SMUSH_STANCE,
+  WALK_FRAMES,
+} from './art/humanFigure';
 
 export type HumanAttackPhase = 'punch_side' | 'kick_side' | 'punch_up' | 'kick_down' | null;
 
-type HumanState = SpriteStates['human'];
+/**
+ * Every row `drawHumanSprite` can ask the figure for. Written out rather than
+ * derived from the figure, because the draw call *clamps* a frame index and
+ * skips a state it cannot find: read off the figure, a row that lost its frames
+ * or its name would freeze or vanish instead of failing. `scripts/gates-human.ts`
+ * holds this union and the figure's own states equal.
+ */
+type HumanState =
+  | 'idle'
+  | 'idle_side'
+  | 'idle_away'
+  | 'walk'
+  | 'walk_side'
+  | 'walk_away'
+  | 'punch_side'
+  | 'kick_side'
+  | 'punch_up'
+  | 'kick_down'
+  | 'smush';
 
 /**
- * Frames per row of the `human` sheet, which `scripts/generate-human-sprite.ts`
- * bakes. Keyed on the manifest-derived state union, so a row renamed or added
- * there is a compile error here rather than a silently wrong frame index.
+ * Frames per row, taken from the choreography that paints them, so the two
+ * cannot drift. Exhaustive by construction: a state added to `HumanState`
+ * without a count here is a compile error.
  */
 const FRAME_COUNT: Record<HumanState, number> = {
-  idle: 8,
-  idle_side: 8,
-  idle_away: 8,
-  walk: 16,
-  walk_side: 16,
-  walk_away: 16,
-  punch_side: 8,
-  kick_side: 8,
-  punch_up: 8,
-  kick_down: 8,
-  smush: 12,
+  idle: IDLE_FRAMES,
+  idle_side: IDLE_FRAMES,
+  idle_away: IDLE_FRAMES,
+  walk: WALK_FRAMES,
+  walk_side: WALK_FRAMES,
+  walk_away: WALK_FRAMES,
+  punch_side: ATTACK_FRAMES,
+  kick_side: ATTACK_FRAMES,
+  punch_up: ATTACK_FRAMES,
+  kick_down: ATTACK_FRAMES,
+  smush: SMUSH_FRAMES,
 };
 
 export const SMUSH_FRAME_COUNT = FRAME_COUNT.smush;
@@ -34,22 +58,44 @@ export const SMUSH_FRAME_COUNT = FRAME_COUNT.smush;
 /**
  * The frame of the smush row on which the sole meets the floor. `HumanPlayer`
  * derives the frame its blast is spawned on from this, so the stamp and the
- * explosion cannot drift apart. `scripts/generate-human-sprite.ts` declares the
- * same value; the runtime cannot import from `scripts/`.
+ * explosion cannot drift apart.
  */
-export const SMUSH_IMPACT_FRAME = 4;
+export const SMUSH_IMPACT_FRAME = FIGURE_SMUSH_IMPACT_FRAME;
 
 /**
  * Where the stamping heel lands, in tile fractions from the sprite's own tile
  * origin — the blast belongs under his foot, not at his waist.
  *
- * The generator puts the sheet's ground line at 0.9 of the tile and stands the
- * stamping foot `SMUSH_STANCE` (0.19) out to his right, scaled by `HUMAN_SCALE`
- * (0.72). The runtime cannot import from `scripts/`, so those are duplicated
- * here; the generator prints its geometry on every bake so a drift is visible.
+ * Derived from the choreography rather than copied out of it: the stamping foot
+ * stands `SMUSH_STANCE` out to his right in the anatomy's own units, which the
+ * cell paints at `HUMAN_SCALE` of a tile, and the ground line sits
+ * `GROUND_OFFSET_IN_TILE` down the tile. `scripts/gates-human.ts` re-measures
+ * both against the painted pose on the impact frame.
  */
-export const SMUSH_STAMP_X = 0.5 + 0.19 * 0.72;
-export const SMUSH_STAMP_Y = 0.9;
+const TILE_CENTRE_FRACTION = 0.5;
+export const SMUSH_STAMP_X = TILE_CENTRE_FRACTION + SMUSH_STANCE * HUMAN_SCALE;
+export const SMUSH_STAMP_Y = GROUND_OFFSET_IN_TILE;
+
+/**
+ * The rows he is drawn in for almost every frame of the game.
+ *
+ * Warmed at scene start rather than left to the first miss: he is on screen
+ * continuously, so a cold idle or walk row is a direct paint on the very first
+ * frame of a scene, which is the frame least able to afford one.
+ */
+const ALWAYS_DRAWN_ROWS: ReadonlyArray<HumanState> = [
+  'idle',
+  'idle_side',
+  'idle_away',
+  'walk',
+  'walk_side',
+  'walk_away',
+];
+
+/** Queues Carl's standing and walking rows for baking. Call once per scene. */
+export function prewarmHumanSprite(): void {
+  for (const state of ALWAYS_DRAWN_ROWS) prewarmFigureState(HUMAN_FIGURE, state);
+}
 
 /** Below this the facing is treated as head-on rather than sideways. */
 const SIDEWAYS_THRESHOLD = 0.5;
@@ -107,14 +153,15 @@ export function drawHumanSprite(
 
   if (smushTimer > 0) {
     const progress = 1 - smushTimer / smushFrames;
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      'human',
+      HUMAN_FIGURE,
       'smush',
       progressFrameIndex(progress, FRAME_COUNT.smush),
       sx,
       sy,
       s,
+      {},
     );
     return;
   }
@@ -124,7 +171,7 @@ export function drawHumanSprite(
     const frame = progressFrameIndex(progress, FRAME_COUNT[attackPhase]);
     // Only the two sideways strikes are drawn in profile, so only they mirror.
     const mirrored = attackPhase === 'punch_side' || attackPhase === 'kick_side';
-    drawSpriteKey(ctx, 'human', attackPhase, frame, sx, sy, s, mirrored ? { flipX } : {});
+    drawFigureCached(ctx, HUMAN_FIGURE, attackPhase, frame, sx, sy, s, mirrored ? { flipX } : {});
     return;
   }
 
@@ -135,11 +182,11 @@ export function drawHumanSprite(
     // per lap. Pace the walk with `walkFrameSpeed` on the player instead.
     const frame = walkFrameIndex(walkFrame, FRAME_COUNT.walk);
     if (facingAway) {
-      drawSpriteKey(ctx, 'human', 'walk_away', frame, sx, sy, s);
+      drawFigureCached(ctx, HUMAN_FIGURE, 'walk_away', frame, sx, sy, s, {});
     } else if (facingSideways) {
-      drawSpriteKey(ctx, 'human', 'walk_side', frame, sx, sy, s, { flipX });
+      drawFigureCached(ctx, HUMAN_FIGURE, 'walk_side', frame, sx, sy, s, { flipX });
     } else {
-      drawSpriteKey(ctx, 'human', 'walk', frame, sx, sy, s);
+      drawFigureCached(ctx, HUMAN_FIGURE, 'walk', frame, sx, sy, s, {});
     }
     return;
   }
@@ -147,10 +194,10 @@ export function drawHumanSprite(
   // `walkFrame` is pinned to 0 while standing, so idle cannot ride on it.
   const idleFrame = timeFrameIndex(performance.now() / 1000, IDLE_FPS, FRAME_COUNT.idle);
   if (facingAway) {
-    drawSpriteKey(ctx, 'human', 'idle_away', idleFrame, sx, sy, s);
+    drawFigureCached(ctx, HUMAN_FIGURE, 'idle_away', idleFrame, sx, sy, s, {});
   } else if (facingSideways) {
-    drawSpriteKey(ctx, 'human', 'idle_side', idleFrame, sx, sy, s, { flipX });
+    drawFigureCached(ctx, HUMAN_FIGURE, 'idle_side', idleFrame, sx, sy, s, { flipX });
   } else {
-    drawSpriteKey(ctx, 'human', 'idle', idleFrame, sx, sy, s);
+    drawFigureCached(ctx, HUMAN_FIGURE, 'idle', idleFrame, sx, sy, s, {});
   }
 }

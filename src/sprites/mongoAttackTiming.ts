@@ -2,16 +2,16 @@
  * The one place Mongo's attack timing is written down.
  *
  * Four things have to agree about when each of his blows lands: the pose
- * choreography in `scripts/generate-mongo-sprites.ts`, the pending-impact
+ * choreography in `src/sprites/art/mongoFigure.ts`, the pending-impact
  * countdown in `src/creatures/Mongo.ts`, the frame the `?mongo` harness marks
  * as the strike, and the row length `src/sprites/mongoSprite.ts` plays. Three
  * hand-copied copies of the same number is a contract that holds until the
  * first retune of the animation — and then fails silently, with the raptor
  * biting on a frame where his jaws are shut.
  *
- * This module deliberately imports nothing. It is pulled in by an offline
- * node-canvas generator as well as by the browser bundle, and anything it
- * touched would have to work in both.
+ * This module deliberately imports nothing. The offline gates pull it in as
+ * well as the browser bundle, and anything it touched would have to work in
+ * both.
  */
 
 /** Sprite frames in the bite row. */

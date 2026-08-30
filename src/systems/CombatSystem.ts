@@ -38,6 +38,16 @@ const XP_TOP_DEALER_FRACTION = 0.85;
 const MISSILE_SPLASH_LEVEL = 5;
 /** Splash damage as a fraction of direct missile damage. */
 const MISSILE_SPLASH_DAMAGE_FRACTION = 0.4;
+
+/**
+ * How far the level-5 splash reaches from the point of impact, in tiles.
+ *
+ * Exported because the explosion art is drawn against it: a blast painted wider
+ * than this promises damage it does not deal, and one painted much narrower
+ * hides damage it does. `scripts/gates-magic-missile.ts` measures the painted
+ * reach against this number.
+ */
+export const MISSILE_SPLASH_RADIUS_TILES = 1.5;
 /** Minimum missile level to spawn sub-missiles on impact. */
 const MISSILE_SUB_MISSILE_LEVEL = 10;
 /** Minimum missile level to slow bosses. */
@@ -299,7 +309,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
   if (!inSafeRoom(cat)) {
     const missileLevel = cat.getMagicMissileLevel();
     const hitRadius = TILE_SIZE * MISSILE_HIT_RADIUS_FRACTION;
-    const splashRadius = TILE_SIZE + HALF_TILE; // AoE splash radius at level 5+
+    const splashRadius = TILE_SIZE * MISSILE_SPLASH_RADIUS_TILES;
 
     for (const missile of cat.getMissiles()) {
       if (missile.state !== 'flying' || missile.hit) continue;

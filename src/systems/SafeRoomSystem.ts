@@ -12,7 +12,11 @@ import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import { drawMordecaiForLevel, mordecaiOverheadLift } from '../sprites/mordecaiSprite';
+import {
+  drawMordecaiForLevel,
+  mordecaiOverheadLift,
+  prewarmMordecaiForLevel,
+} from '../sprites/mordecaiSprite';
 import { RAT_KIN_TILES_PER_WALK_CYCLE } from '../sprites/ratKinSprite';
 import { MordecaiWanderer } from './mordecaiWander';
 import { drawSafeRoomBed, restedPulse } from '../sprites/safeRoomBed';
@@ -110,7 +114,7 @@ export class SafeRoomSystem implements GameSystem {
 
   // Magic number constants
   /**
-   * Pixels of floor one full walk cycle of the sprite sheet covers. The sheet's
+   * Pixels of floor one full walk cycle of his art covers. The choreography's
    * stance foot is planted, so the cycle has to advance with the distance he
    * travels or he skates along his own path.
    */
@@ -158,6 +162,10 @@ export class SafeRoomSystem implements GameSystem {
         ? new DialogBox(audio, { speakerName: 'Mordecai', revealMode: 'sentence' })
         : null;
     this.entries = [];
+
+    // Warmed as the room is built rather than on his first draw: he is standing
+    // in it the frame it exists, and the player can walk in from any side.
+    prewarmMordecaiForLevel(levelId);
 
     const decorPlans = planSafeRoomDecor(gameMap);
     // Everything the room has already spoken for. He may amble across his own

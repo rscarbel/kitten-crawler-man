@@ -6,7 +6,7 @@ import { PostSignupScene } from './scenes/PostSignupScene';
 import { tutorialLevel, getLevelDef } from './levels/index';
 import { aiAdapter } from './ai/AIAdapter';
 import { revivedSnapshot } from './core/PlayerSnapshot';
-import { devBootScene } from './dev/devBoot';
+import { devBootScene, installDevLoopFallback } from './dev/devBoot';
 import { AbilityManager } from './core/AbilityManager';
 import { MAGIC_MISSILE_DEF } from './abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from './abilities/protectiveShell';
@@ -57,6 +57,8 @@ void audio.preload(CORE_SFX_IDS);
 
 // Created before any sprite has loaded so the loading screen below has a
 // canvas to draw on immediately.
+// Before the manager, because its constructor arms the first frame.
+installDevLoopFallback();
 const sceneManager = new SceneManager();
 const loadingScreen = showLoadingScreen(sceneManager.ctx);
 

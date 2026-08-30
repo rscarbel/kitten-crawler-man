@@ -21,6 +21,7 @@
 
 import { mkdirSync } from 'node:fs';
 
+import { asGameContext } from './nodeGameContext.js';
 import { drawFortuneTeller } from '../src/sprites/townFixtures.js';
 import { drawSignpost } from '../src/sprites/townWayfinding.js';
 import { PLANNED_SIGNPOSTS } from '../src/systems/townDecorPlan.js';
@@ -72,7 +73,7 @@ function signpostSheet(): SheetSpec {
       {
         state: 'idle',
         frames: PLANNED_SIGNPOSTS.map((planned) => (ctx, originX, originY) => {
-          drawSignpost(ctx, originX, originY, TILE_SCALE, planned.arms);
+          drawSignpost(asGameContext(ctx), originX, originY, TILE_SCALE, planned.arms);
         }),
       },
     ],
@@ -97,7 +98,7 @@ function fortuneTellerSheet(): SheetSpec {
         state: 'idle',
         frames: [
           (ctx, originX, originY) => {
-            drawFortuneTeller(ctx, originX, originY, TILE_SCALE);
+            drawFortuneTeller(asGameContext(ctx), originX, originY, TILE_SCALE);
           },
         ],
       },

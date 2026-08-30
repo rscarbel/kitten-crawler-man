@@ -1,7 +1,13 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
-import { LLAMA_BODY_PART_KEY, drawLlamaSprite } from '../sprites/llamaSprite';
+import {
+  LLAMA_BODY_PART_KEY,
+  drawLlamaSprite,
+  prewarmLlamaGore,
+  prewarmLlamaSpit,
+} from '../sprites/llamaSprite';
 import { LLAMA_SPIT_FRAMES, llamaSpitReleaseFrame } from '../sprites/llamaSpitTiming';
+import { prewarmLavaSpit } from '../sprites/lavaBallSprite';
 import type { LavaSpit } from '../systems/LavaBallSystem';
 
 const LLAMA_HP = 10;
@@ -91,6 +97,16 @@ export class Llama extends Mob {
   /** Frames left in the current backpedal, and the wait before another may start. */
   private retreatFrames = 0;
   private retreatCooldown = 0;
+  /**
+   * Whether this llama has already warmed the rows a fight needs.
+   *
+   * The spit rows and the eight severed pieces are both requested with no
+   * warning of their own — the wind-up draws its first frame the frame it
+   * starts, and a body comes apart into all eight pieces at once — so they are
+   * warmed off the one thing that does precede them: noticing a target, which
+   * happens a whole approach before either is drawn.
+   */
+  private hasWarmedForCombat = false;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, LLAMA_HP, LLAMA_SPEED);
@@ -137,6 +153,11 @@ export class Llama extends Mob {
 
     const nearest = this.acquireTarget(targets, this.aggroRangePx);
     this.currentTarget = nearest;
+    if (nearest !== null && !this.hasWarmedForCombat) {
+      this.hasWarmedForCombat = true;
+      prewarmLlamaSpit();
+      prewarmLlamaGore();
+    }
 
     // The wind-up runs to completion whatever happens to the target: it is the
     // player's warning that a shot is coming, and a llama that abandons it
@@ -244,6 +265,7 @@ export class Llama extends Mob {
       this.spitAnimTimer = LLAMA_SPIT_FRAMES;
       this.strafeFrames = 0;
       this.isMoving = false;
+      prewarmLavaSpit();
     }
   }
 

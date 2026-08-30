@@ -18,10 +18,9 @@
  */
 
 import { createCanvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { drawFireWave } from '../src/sprites/fireWaveSprite.js';
 import { drawLichOrb } from '../src/sprites/lichOrbSprite.js';
 
@@ -61,7 +60,7 @@ const zoom = Math.min(
   MAX_ZOOM,
   Math.max(MIN_ZOOM, Number.isFinite(requestedZoom) ? requestedZoom : DEFAULT_ZOOM),
 );
-const outPath = resolve(parseFlag('out', 'lich-hazards.png'));
+const outPath = parseFlag('out', `${PREVIEW_DIR}/lich-hazards.png`);
 
 const HAZARDS = ['wave', 'orb'] as const;
 type Hazard = (typeof HAZARDS)[number];
@@ -135,5 +134,7 @@ ctx.fillText(
   stripHeight * zoom + LABEL_HEIGHT,
 );
 
-writeFileSync(outPath, canvas.toBuffer('image/png'));
-console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, ${zoom}× nearest-neighbour)`);
+const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+console.log(
+  `Wrote ${writtenPath} (${canvas.width}×${canvas.height}px, ${zoom}× nearest-neighbour)`,
+);

@@ -8,6 +8,7 @@ import { drawRockGolemSprite, type GolemAttack } from '../sprites/rockGolemSprit
 import { GOLEM_ATTACK_TIMING, FRAMES_PER_SHEET_FRAME } from './RockGolem';
 import type { GolemRockThrow } from '../systems/RockThrowSystem';
 import {
+  GOLEM_MERCENARY_TEMPLATE,
   getMercenaryTemplate,
   type MercenaryTemplateId,
   type MercenaryTemplate,
@@ -69,7 +70,7 @@ const TEMPLATE_SPRITE: Record<Exclude<MercenaryTemplateId, 'bruiser'>, ClubNpcVa
  * and moving that under the golem hierarchy would be a far larger change than
  * driving three animation rows from here.
  */
-const GOLEM_TEMPLATE = 'bruiser' as const;
+const GOLEM_TEMPLATE = GOLEM_MERCENARY_TEMPLATE;
 
 /** Audio tags `playMobAudioCues` switches on. */
 const MERCENARY_AUDIO_TAG = 'mercenary';

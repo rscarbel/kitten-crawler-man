@@ -4,8 +4,9 @@ Every entry here was found by looking at a rendered figure, not by reading code.
 They are ordered roughly by how much time each one cost.
 
 **Numbers here are illustrative of _scale_, not authoritative.** Where a value
-appears, the named constant beside it is the source of truth — grep `carlArt.ts`
-or `generate-human-sprite.ts` for the name before relying on a figure. Five
+appears, the named constant beside it is the source of truth — grep
+`src/sprites/art/carlArt.ts` or `src/sprites/art/humanFigure.ts` for the name
+before relying on a figure. Five
 values in the first draft of this file were already stale. The _reasoning_ is
 what carries; the digits drift.
 
@@ -265,7 +266,7 @@ against, or cited as "how it's done here".
   `walkFrame` at 2π, and a **non-integer** multiple of an already-wrapped phase
   does not wrap with it: at rate 1.3 the cycle jumped from frame 4 straight back
   to 0 once per lap — a glitch frame in every direction that no amount of staring
-  at the sheet finds, because the sheet is fine. Integer rates hide the bug.
+  at a contact sheet finds, because the art is fine. Integer rates hide the bug.
 - _(from the goblin rig — a caution, not a model)_ **A swing cap silently
   discards authored angles.** A ground-clearance clamp on
   a chop returned 16° from an authored 58° at impact, so the swing lay flat and
@@ -273,19 +274,23 @@ against, or cited as "how it's done here".
   _under_ the clamp.
 - **The rebound is the follow keyframes, not a fifth beat.** `follow` is eased
   out, so it moves fastest in the frames right after impact.
-- **An effect whose size is a gameplay value does not belong in the sheet.**
+- **An effect whose size is a gameplay value does not belong in a cached cell.**
   Carl's Smush blast is drawn live because the wave has to stop exactly on the
-  damage radius, which grows with ability level.
+  damage radius, which grows with ability level; a cell keyed on
+  `(state, frame)` cannot vary with it.
 
 ## Anchoring and wiring {#anchor}
 
 - **A redraw moves the tile anchor**, so health-bar and active-marker offsets
-  must move with it. Measure off the sheet: Carl's standing rows top out 40 px
-  above the tile anchor against ~32 px on the old art.
-- **Frame geometry is measured at bake time, not authored.** Have the generator
-  print the exact manifest entry; the gate then _verifies_ rather than rewrites
-  it. After a pose change: re-run with the manifest gate skipped, paste the
-  printed entries, re-run clean.
+  must move with it. Measure off painted cells: Carl's standing rows top out
+  40 px above the tile anchor against ~32 px on the old art.
+- **Frame geometry is measured, not authored — and nothing can measure ink at
+  runtime.** Measure it once offline, freeze it as a named constant in the
+  figure module (`frameWidth`, `frameHeight`, `tileX`, `tileY`, a head clearance,
+  a gore recentring offset), and write a gate that paints the art again,
+  re-measures, and fails when the two part company. A frozen measurement with no
+  gate behind it goes quietly wrong on the next redraw with every other gate
+  green.
 - **Vertical wall tests are anchored by direction** (`src/map/collisionAnchors.ts`).
   Walking south the feet lead, so the test drops to the sole (0.95); every other
   direction tests the centre. Any new bipedal mob must use these or it stands

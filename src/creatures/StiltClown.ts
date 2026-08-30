@@ -1,7 +1,10 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import {
+  STILT_CLOWN_ATTACK_STATES,
+  STILT_CLOWN_LOCOMOTION_STATES,
   drawStiltClownSprite,
+  prewarmStiltClownStates,
   type StiltClownAnimation,
   IDLE_LOOP_SECONDS,
 } from '../sprites/stiltClownSprite';
@@ -69,6 +72,9 @@ export class StiltClown extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, CLOWN_HP, CLOWN_SPEED);
+    // Warmed at construction, which is the moment a spawn is scheduled: these
+    // two arrive in pairs and start walking on the frame they appear.
+    prewarmStiltClownStates(STILT_CLOWN_LOCOMOTION_STATES);
   }
 
   override resetToSpawn(): void {
@@ -137,6 +143,7 @@ export class StiltClown extends Mob {
     ) {
       this.windupTimer = WINDUP_FRAMES;
       this.attackCooldown = ATTACK_COOLDOWN;
+      prewarmStiltClownStates(STILT_CLOWN_ATTACK_STATES);
     }
 
     if (this.windupTimer > 0) {

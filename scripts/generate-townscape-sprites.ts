@@ -34,6 +34,7 @@
 
 import { mkdirSync } from 'node:fs';
 
+import { asGameContext } from './nodeGameContext.js';
 import {
   SHOP_SIGN_EMBLEMS,
   createTownPlan,
@@ -209,7 +210,14 @@ function shopSignSheet(): SheetSpec {
     rows: Array.from({ length: SIGN_SWAY_STEPS }, (_unused, step) => ({
       state: `sway_${step}`,
       frames: SHOP_SIGN_EMBLEMS.map((emblem: ShopSignEmblem) => (ctx, originX, originY) => {
-        drawShopSign(ctx, originX, originY, TILE_SCALE, emblem, shopSignSwayForStep(step));
+        drawShopSign(
+          asGameContext(ctx),
+          originX,
+          originY,
+          TILE_SCALE,
+          emblem,
+          shopSignSwayForStep(step),
+        );
       }),
     })),
   };
@@ -227,7 +235,7 @@ function streetLampSheet(): SheetSpec {
       {
         state: 'idle',
         frames: Array.from({ length: LAMP_FLICKER_STEPS }, (_unused, step) => (ctx, ox, oy) => {
-          drawStreetLamp(ctx, ox, oy, TILE_SCALE, streetLampFlickerForStep(step));
+          drawStreetLamp(asGameContext(ctx), ox, oy, TILE_SCALE, streetLampFlickerForStep(step));
         }),
       },
     ],
@@ -246,7 +254,7 @@ function townClutterSheet(): SheetSpec {
       {
         state: 'idle',
         frames: TOWN_CLUTTER_KINDS.map((kind) => (ctx, ox, oy) => {
-          drawTownClutter(ctx, ox, oy, TILE_SCALE, kind);
+          drawTownClutter(asGameContext(ctx), ox, oy, TILE_SCALE, kind);
         }),
       },
     ],
@@ -282,7 +290,7 @@ function gateArchSheets(): SheetSpec[] {
           state: 'idle',
           frames: [
             (ctx, ox, oy) => {
-              drawGateArch(ctx, ox, oy, TILE_SCALE, spanTiles, axis);
+              drawGateArch(asGameContext(ctx), ox, oy, TILE_SCALE, spanTiles, axis);
             },
           ],
         },
@@ -307,7 +315,7 @@ function buntingSheets(): SheetSpec[] {
         // the placement's business, and baking only the pairing in use today
         // would break the moment a span moved.
         frames: Array.from({ length: BUNTING_PHASE_COUNT }, (_unused, phase) => (ctx, ox, oy) => {
-          drawBunting(ctx, ox, oy, TILE_SCALE, spanTiles, phase);
+          drawBunting(asGameContext(ctx), ox, oy, TILE_SCALE, spanTiles, phase);
         }),
       },
     ],
@@ -326,7 +334,14 @@ function laundryLineSheets(): SheetSpec[] {
       {
         state: 'idle',
         frames: Array.from({ length: LAUNDRY_SWAY_STEPS }, (_unused, step) => (ctx, ox, oy) => {
-          drawLaundryLine(ctx, ox, oy, TILE_SCALE, spanTiles, laundryLineFrameForStep(step));
+          drawLaundryLine(
+            asGameContext(ctx),
+            ox,
+            oy,
+            TILE_SCALE,
+            spanTiles,
+            laundryLineFrameForStep(step),
+          );
         }),
       },
     ],
@@ -363,7 +378,7 @@ function marketStallSheets(): SheetSpec[] {
         {
           state: 'idle',
           frames: STALL_VARIANTS.map((variant) => (ctx, ox, oy) => {
-            drawStallBack(ctx, ox, oy, TILE_SCALE, variant.style, variant.motif);
+            drawStallBack(asGameContext(ctx), ox, oy, TILE_SCALE, variant.style, variant.motif);
           }),
         },
       ],
@@ -376,7 +391,7 @@ function marketStallSheets(): SheetSpec[] {
         {
           state: 'idle',
           frames: STALL_VARIANTS.map((variant) => (ctx, ox, oy) => {
-            drawStallFront(ctx, ox, oy, TILE_SCALE, variant.style, variant.motif);
+            drawStallFront(asGameContext(ctx), ox, oy, TILE_SCALE, variant.style, variant.motif);
           }),
         },
       ],
@@ -388,7 +403,14 @@ function marketStallSheets(): SheetSpec[] {
       rows: Array.from({ length: STALL_RIPPLE_STEPS }, (_unused, step) => ({
         state: `ripple_${step}`,
         frames: STALL_VARIANTS.map((variant) => (ctx, ox, oy) => {
-          drawStallCanopy(ctx, ox, oy, TILE_SCALE, variant.style, stallPhaseForStep(step));
+          drawStallCanopy(
+            asGameContext(ctx),
+            ox,
+            oy,
+            TILE_SCALE,
+            variant.style,
+            stallPhaseForStep(step),
+          );
         }),
       })),
     },
@@ -408,7 +430,7 @@ function noticeBoardSheet(): SheetSpec {
         state: 'idle',
         frames: [
           (ctx, ox, oy) => {
-            drawNoticeBoard(ctx, ox, oy, TILE_SCALE);
+            drawNoticeBoard(asGameContext(ctx), ox, oy, TILE_SCALE);
           },
         ],
       },
@@ -429,7 +451,7 @@ function benchSheet(): SheetSpec {
         state: 'idle',
         frames: [
           (ctx, ox, oy) => {
-            drawBench(ctx, ox, oy, TILE_SCALE);
+            drawBench(asGameContext(ctx), ox, oy, TILE_SCALE);
           },
         ],
       },

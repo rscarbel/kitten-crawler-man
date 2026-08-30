@@ -1,11 +1,8 @@
 import { drawDumbbellHeld } from './gymEquipmentSprite';
 import { drawText } from '../ui/TextBox';
-import {
-  drawSpriteKey,
-  progressFrameIndex,
-  timeFrameIndex,
-  walkFrameIndex,
-} from '../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached } from './figure/figureFrameCache';
+import { JUICER_FIGURE } from './art/juicerFigure';
 import {
   JUICER_IDLE_FRAMES,
   JUICER_PUNCH_FRAMES,
@@ -23,7 +20,7 @@ import {
 } from './juicerHandAnchor';
 
 /**
- * The three views the sheet carries. The profile is mirrored for the other
+ * The three views the figure paints. The profile is mirrored for the other
  * direction; mirroring a head-on view would swap his eyes and his lifting
  * gloves onto the wrong sides every time he turned around.
  */
@@ -49,9 +46,9 @@ type JuicerState =
   | 'punch_away';
 
 /**
- * Exhaustive by construction: a row added to the manifest but not to this map
- * is a compile error, which is safer than reading the count off the sheet —
- * `drawSprite` *clamps* the frame index, so a row that got shorter would
+ * Exhaustive by construction: a state added to the figure but not to this map
+ * is a compile error, which is safer than reading the count off the figure —
+ * the draw call *clamps* the frame index, so a row that got shorter would
  * silently freeze on its last frame instead of failing.
  */
 const FRAME_COUNT: Record<JuicerState, number> = {
@@ -73,9 +70,9 @@ const FRAME_COUNT: Record<JuicerState, number> = {
 };
 
 /**
- * The severed pieces, in the order the bake lays them into the gore row.
+ * The severed pieces, in the order the figure paints them.
  * `BodyPartGoreSystem` silently skips a state it cannot find, so this list and
- * `GORE_STATES` in the generator are held equal by a bake gate.
+ * `GORE_STATES` in the figure are held equal by an art gate.
  */
 export const JUICER_GORE_PARTS: ReadonlyArray<string> = [
   'gore_head',
@@ -93,11 +90,11 @@ export const JUICER_BODY_PART_KEY = 'juicer';
 /**
  * How far above his tile's top edge his standing art reaches, in tiles.
  *
- * Measured off the baked sheet: the manifest anchors his tile 100 sheet px
- * down each 176 px frame at a tile scale of 64, and the idle row's ink starts
- * 7 px down, which puts the top of his head 93/64 of a tile above the tile he
- * stands on. Anything written over him — the health bar, the taunt bubble, the
- * septic label — is lifted by this or it is painted across his chest.
+ * Measured off the painted cell: the figure anchors his tile 100 px down each
+ * 176 px cell at a tile scale of 64, and the idle row's ink starts 7 px down,
+ * which puts the top of his head 93/64 of a tile above the tile he stands on.
+ * Anything written over him — the health bar, the taunt bubble, the septic
+ * label — is lifted by this or it is painted across his chest.
  */
 export const JUICER_HEAD_CLEARANCE_TILES = 1.45;
 
@@ -180,7 +177,7 @@ function stateFor(base: JuicerBase, view: JuicerView): JuicerState {
 
 /**
  * The dumbbell, drawn at a hand anchor rather than baked into the row: he is
- * empty-handed for part of every fight, and one sheet cannot carry a
+ * empty-handed for part of every fight, and one animation row cannot carry a
  * conditional prop.
  */
 function drawHeldDumbbell(
@@ -235,7 +232,7 @@ function paintBody(
   };
 
   if (carryDrawsFirst) paintDumbbell();
-  drawSpriteKey(ctx, 'juicer', key, frame, sx, sy, tileSize, { flipX });
+  drawFigureCached(ctx, JUICER_FIGURE, key, frame, sx, sy, tileSize, { flipX });
   if (!carryDrawsFirst) paintDumbbell();
 }
 

@@ -599,8 +599,8 @@ export abstract class Mob extends Player {
   /**
    * Called exactly once, the frame a mob dies (from `resolveKills`, alongside
    * `justDied`). No-op by default — override it to release any per-instance
-   * resource a mob baked for itself and will never draw again once dead (e.g.
-   * `SkyFowl`'s per-instance clothing canvas). A dead mob can otherwise sit in
+   * resource a mob baked for itself and will never draw again once dead. A dead
+   * mob can otherwise sit in
    * `this.mobs` for the rest of the scene's life (see `restoreFromCheckpoint`'s
    * "the dead are never spliced out" note in `DungeonScene`), so freeing on
    * death rather than on removal from the array is what actually bounds this.

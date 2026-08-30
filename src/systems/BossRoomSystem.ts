@@ -7,6 +7,9 @@ import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import { POINT_BLANK_TILES, TheHoarder } from '../creatures/TheHoarder';
 import { Cockroach } from '../creatures/Cockroach';
+import { prewarmCockroach } from '../sprites/cockroachSprite';
+import { prewarmHoarderVomit } from '../sprites/hoarderSprite';
+import { prewarmHoarderBile } from '../sprites/hoarderBileSprite';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
@@ -27,7 +30,9 @@ import {
   drawSlamShadow,
   drawSlamImpact,
   drawKrakarenSlamTentacle,
+  prewarmKrakarenGore,
 } from '../sprites/krakarenSprite';
+import { prewarmKrakarenTentacle } from '../sprites/krakarenTentacleSprite';
 import { viewportWidth } from '../core/Viewport';
 
 interface VomitProjectile {
@@ -767,6 +772,27 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         if (!this.enteredRooms.has(i)) {
           this.enteredRooms.add(i);
           this.newlyLockedBossType = this.bossTypes[i] ?? 'the_hoarder';
+        }
+        // Sealing the room is the moment with real lead on the swarm: the
+        // Hoarder's first purge is five seconds of fighting away, and she is
+        // the only thing in the game that makes a cockroach. Her heave and its
+        // acid are warmed here for the same reason and not at her own telegraph,
+        // which is eighty frames against the several hundred milliseconds those
+        // rows cost to paint; her first bolus is three and a half seconds out,
+        // which is lead enough and short enough that the idle sweep cannot take
+        // the rows back before she throws.
+        if (boss instanceof TheHoarder) {
+          prewarmCockroach();
+          prewarmHoarderVomit();
+          prewarmHoarderBile();
+        }
+        // Her body is the most expensive thing in the fleet to paint, and her
+        // severed pieces are all drawn on the single frame she comes apart with
+        // no telegraph of their own. Sealing the room is the last moment with
+        // real lead on either.
+        if (boss instanceof KrakarenClone) {
+          prewarmKrakarenGore();
+          prewarmKrakarenTentacle();
         }
       }
 

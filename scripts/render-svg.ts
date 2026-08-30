@@ -25,12 +25,13 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { SvgRecorder, asDomContext, asNodeCanvasContext } from './svgCanvas.js';
 import type { Box } from './svgCanvas.js';
 import { SUBJECTS, SUBJECT_UNIT, findSubject } from './svgSubjects.js';
+import { PREVIEW_DIR } from './previewOut.js';
 import type { SvgSubject, SvgView } from './svgSubjects.js';
 
 /** Breathing room around the figure, as a fraction of its longest side. */
 const MARGIN_FRACTION = 0.02;
 const DEFAULT_HEIGHT_PX = 900;
-const DEFAULT_OUT_DIR = 'svg';
+const DEFAULT_OUT_DIR = `${PREVIEW_DIR}/svg`;
 const DEFAULT_FRAME = 0;
 
 interface Options {

@@ -19,6 +19,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import { Bugaboo } from '../creatures/Bugaboo';
+import { prewarmBugaboo } from '../sprites/bugabooSprite';
 import { QuestNPC } from '../creatures/QuestNPC';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { QuestManager } from '../core/QuestManager';
@@ -729,6 +730,11 @@ export class DefendQuestSystem implements GameSystem {
       this.phase = 'defending';
       this.defenseTimer = DEFENSE_TIMER_FRAMES;
       this.spawnTimer = FIRST_WAVE_DELAY_FRAMES;
+      // Every wave is scheduled before it lands, and this is the first of them.
+      // A cold Bugaboo row costs a full-cell paint on the frame a body arrives,
+      // so the delay the quest already puts between committing to a wave and
+      // spawning it is the lead the cache is warmed during.
+      prewarmBugaboo();
     }
   }
 
@@ -741,6 +747,10 @@ export class DefendQuestSystem implements GameSystem {
     if (this.spawnTimer <= 0) {
       this.spawnWave();
       this.spawnTimer = randomInt(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_MAX - 1);
+      // The next wave is now committed to, three to five seconds out. Warming a
+      // row that is already warm is nearly free, so this fires every wave
+      // rather than tracking which rows the last one left behind.
+      prewarmBugaboo();
     }
 
     this.questMobs = this.questMobs.filter((m) => m.isAlive);

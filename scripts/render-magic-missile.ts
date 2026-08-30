@@ -1,39 +1,33 @@
 #!/usr/bin/env tsx
 /**
- * Headless review harness for the Magic Missile art.
+ * The Magic Missile review harness.
  *
- * The baked sheets are transparent and almost entirely additive light, so
- * opening the PNGs directly shows pale smudges on white and says nothing about
- * how they read in a dungeon. This lays every frame of every tier over a dark
- * dungeon-ish floor at the size the game draws them, one contact sheet per
- * subject, which is the only way to judge the effect without a browser.
+ * The art is transparent and almost entirely additive light, so looking at a
+ * cell on white shows a pale smudge and says nothing about how it reads in a
+ * dungeon. This lays every frame of every band over a dark dungeon-ish floor,
+ * one contact sheet per figure, which is the only way to judge the effect
+ * without a browser.
  *
+ * The gates run first, before the contact sheet is allocated: a sheet this size
+ * is a tens-of-megapixel allocation, and measuring the art on the far side of
+ * one has produced spurious failures on other figures.
+ *
+ *   npm run render:magic-missile
  *   npx tsx scripts/render-magic-missile.ts --out=missiles.png
  */
 
 import { createCanvas } from 'canvas';
-import type { CanvasRenderingContext2D as NodeCtx } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
+import { bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { magicMissileGateFailures } from './gates-magic-missile.js';
+import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import {
-  type ExplosionVariant,
-  EXPLOSION_FRAME_COUNT,
-  EXPLOSION_FRAME_SIZE,
-  EXPLOSION_TILE_OFFSET,
-  MISSILE_TIERS,
-  PROJECTILE_FRAME_COUNT,
-  PROJECTILE_FRAME_HEIGHT,
-  PROJECTILE_FRAME_WIDTH,
-  PROJECTILE_TILE_X,
-  PROJECTILE_TILE_Y,
-  drawMagicMissileExplosion,
-  drawMagicMissileProjectile,
-  type ProjectileVariant,
-} from './magicMissileArt.js';
-
-const PROJECTILE_ROWS: ReadonlyArray<ProjectileVariant> = [...MISSILE_TIERS, 'sub_missile'];
-const EXPLOSION_ROWS: ReadonlyArray<ExplosionVariant> = [...MISSILE_TIERS, 'sub_missile'];
+  MAGIC_MISSILE_EXPLOSION_FIGURE,
+  MAGIC_MISSILE_PROJECTILE_FIGURE,
+} from '../src/sprites/art/magicMissileFigure.js';
 
 const LABEL_HEIGHT = 22;
 const LABEL_FONT = '14px sans-serif';
@@ -49,15 +43,36 @@ function parseFlag(name: string, fallback: string): string {
   return match === undefined ? fallback : match.slice(prefix.length);
 }
 
-const projectileBandHeight = LABEL_HEIGHT + PROJECTILE_FRAME_HEIGHT;
-const explosionBandHeight = LABEL_HEIGHT + EXPLOSION_FRAME_SIZE;
+// A painter composing on a scratch surface reaches `document.createElement`.
+installCanvasGlobals();
+
+reportFigureGates('magic missile', magicMissileGateFailures());
+
+interface Section {
+  readonly def: FigureDef;
+  readonly caption: string;
+}
+
+const SECTIONS: readonly Section[] = [
+  { def: MAGIC_MISSILE_PROJECTILE_FIGURE, caption: 'projectile' },
+  { def: MAGIC_MISSILE_EXPLOSION_FIGURE, caption: 'impact' },
+];
+
+function bandHeight(def: FigureDef): number {
+  return LABEL_HEIGHT + def.frameHeight;
+}
+
+function widestFrameCount(def: FigureDef): number {
+  let widest = 0;
+  for (const [, declared] of def.states) widest = Math.max(widest, declared.frames);
+  return widest;
+}
+
 const width = Math.max(
-  PROJECTILE_FRAME_COUNT * PROJECTILE_FRAME_WIDTH,
-  EXPLOSION_FRAME_COUNT * EXPLOSION_FRAME_SIZE,
+  ...SECTIONS.map((section) => widestFrameCount(section.def) * section.def.frameWidth),
 );
-const projectileSectionHeight = PROJECTILE_ROWS.length * projectileBandHeight;
-const explosionSectionHeight = EXPLOSION_ROWS.length * explosionBandHeight;
-const height = projectileSectionHeight + SECTION_GAP + explosionSectionHeight;
+const sectionHeights = SECTIONS.map((section) => section.def.states.size * bandHeight(section.def));
+const height = sectionHeights.reduce((total, own) => total + own, 0) + SECTION_GAP;
 
 const canvas = createCanvas(width, height);
 const ctx = canvas.getContext('2d');
@@ -75,57 +90,19 @@ function label(text: string, x: number, y: number): void {
   ctx.fillText(text, x + 6, y + LABEL_HEIGHT - 6);
 }
 
-function inCell(
-  cellX: number,
-  cellY: number,
-  cellWidth: number,
-  cellHeight: number,
-  paint: (target: NodeCtx) => void,
-): void {
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(cellX, cellY, cellWidth, cellHeight);
-  ctx.clip();
-  paint(ctx);
-  ctx.restore();
-}
-
-PROJECTILE_ROWS.forEach((variant, row) => {
-  const bandTop = row * projectileBandHeight;
-  label(`${variant} — projectile`, 0, bandTop);
-  for (let frame = 0; frame < PROJECTILE_FRAME_COUNT; frame++) {
-    const cellX = frame * PROJECTILE_FRAME_WIDTH;
-    const cellY = bandTop + LABEL_HEIGHT;
-    inCell(cellX, cellY, PROJECTILE_FRAME_WIDTH, PROJECTILE_FRAME_HEIGHT, (target) =>
-      drawMagicMissileProjectile(
-        target,
-        cellX + PROJECTILE_TILE_X,
-        cellY + PROJECTILE_TILE_Y,
-        variant,
-        frame,
-      ),
-    );
+let sectionTop = 0;
+SECTIONS.forEach((section, index) => {
+  const { def } = section;
+  let row = 0;
+  for (const [state] of def.states) {
+    const bandTop = sectionTop + row * bandHeight(def);
+    label(`${state} — ${section.caption}`, 0, bandTop);
+    ctx.drawImage(bakeFigureSheet(def, [state]).canvas, 0, bandTop + LABEL_HEIGHT);
+    row++;
   }
+  sectionTop += sectionHeights[index] + SECTION_GAP;
 });
 
-EXPLOSION_ROWS.forEach((variant, row) => {
-  const bandTop = projectileSectionHeight + SECTION_GAP + row * explosionBandHeight;
-  label(`${variant} — impact`, 0, bandTop);
-  for (let frame = 0; frame < EXPLOSION_FRAME_COUNT; frame++) {
-    const cellX = frame * EXPLOSION_FRAME_SIZE;
-    const cellY = bandTop + LABEL_HEIGHT;
-    inCell(cellX, cellY, EXPLOSION_FRAME_SIZE, EXPLOSION_FRAME_SIZE, (target) =>
-      drawMagicMissileExplosion(
-        target,
-        cellX + EXPLOSION_TILE_OFFSET,
-        cellY + EXPLOSION_TILE_OFFSET,
-        variant,
-        frame,
-      ),
-    );
-  }
-});
-
-const outPath = resolve(parseFlag('out', 'magic-missile.png'));
-writeFileSync(outPath, canvas.toBuffer('image/png'));
-console.log(`Wrote ${outPath} (${width}×${height}px)`);
+const outPath = parseFlag('out', `${PREVIEW_DIR}/magic-missile-review.png`);
+const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+console.log(`Wrote ${writtenPath} (${width}×${height}px)`);

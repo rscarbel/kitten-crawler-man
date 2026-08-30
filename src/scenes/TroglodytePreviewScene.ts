@@ -22,9 +22,10 @@ import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from 
 import { TROGLODYTE_BODY_PART_KEY, drawTroglodyteSprite } from '../sprites/troglodyteSprite';
 import { GameMap } from '../map/GameMap';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
+import { TROGLODYTE_FIGURE } from '../sprites/art/troglodyteFigure';
+import { figureFrameCount } from '../sprites/figure/figureDef';
 
-type TrogState = SpriteStates['troglodyte'];
+type TrogState = 'idle_side' | 'walk_side' | 'gape_side' | 'lash_side';
 
 /** A facing vector per column, chosen so the wrapper picks each viewpoint. */
 interface ViewSpec {
@@ -44,7 +45,7 @@ type RowKind = 'idle' | 'walk' | 'gape' | 'lash';
 
 interface RowSpec {
   readonly kind: RowKind;
-  /** Which sheet state the profile column plays, for the frame-count lookup. */
+  /** Which painted state the profile column plays, for the frame-count lookup. */
   readonly probeState: TrogState;
   /**
    * How many *game* frames the row spans. The one-shots use the same counts
@@ -67,10 +68,9 @@ const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'lash', probeState: 'lash_side', gameFrames: STRIKE_GAME_FRAMES },
 ];
 
-/** How many frames a row actually holds, from the sheet the game loaded. */
+/** How many frames a row actually holds, from the figure the game paints. */
 function frameCountOf(state: TrogState): number {
-  const def = getSpriteDefByKey('troglodyte');
-  return def?.states.get(state)?.frameCount ?? 1;
+  return figureFrameCount(TROGLODYTE_FIGURE, state);
 }
 
 /** 1× is what a player sees; 4× is where a hinged jaw becomes visible at all. */

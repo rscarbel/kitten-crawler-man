@@ -1,30 +1,29 @@
 /**
- * Headless review harness for the rat sprite sheet.
+ * Headless review harness for the rat.
  *
  * The browser harness cannot reliably answer "does this look right" from a
- * still, so the art has to be judgeable offline. This slices
- * `src/images/enemies/rat.png` into a labelled contact sheet: every animation
- * row at review scale, plus a strip of the same frames blitted at the in-game
+ * still, so the art has to be judgeable offline. This paints every animation row
+ * from `RAT_FIGURE` the way the runtime cache bakes it and lays it out as a
+ * labelled contact sheet, plus a strip of the same frames blitted at the in-game
  * tile size so the silhouette can be checked at the size players actually see.
+ * The art gates run first, before the sheet is allocated.
  *
- *   npx tsx scripts/render-rat.ts --out=rat-review.png --scale=2
- *   npx tsx scripts/render-rat.ts --out=rat-bite.png --row=bite_side --scale=5
- *   npx tsx scripts/render-rat.ts --out=rat-gore.png --mode=gore
- *
- * Regenerate the sheet itself with `npm run gen:rat`.
+ *   npm run render:rat
+ *   npx tsx scripts/render-rat.ts --row=bite_side --scale=5
+ *   npx tsx scripts/render-rat.ts --mode=gore
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createCanvas, type Canvas } from 'canvas';
 
-// The row order and frame counts come straight from the generator, so a new row
-// cannot desync the only review path this art has.
-import { GORE_STATES, ROWS, SHEET_PATH, TILE_SCALE, bake } from './generate-rat-sprite.js';
+import { bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { ratGateFailures } from './gates-rat.js';
+import { GORE_STATES, RAT_FIGURE, ROWS, TILE_SCALE } from '../src/sprites/art/ratFigure.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
-/** Matches TILE_SIZE in src/core/constants.ts; the sheet is drawn at 2× that. */
+/** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
-/** What `drawSpriteRotatedCenter` scales a gore piece by in play. */
+/** What `drawArtSourceRotatedCenter` scales a gore piece by in play. */
 const GORE_RENDER_SCALE = IN_GAME_TILE / TILE_SCALE;
 
 const DEFAULT_SCALE = 2;
@@ -39,7 +38,28 @@ const LABEL_COLOR = '#e8e2d8';
 const LABEL_FONT = '14px sans-serif';
 
 /** The three sizes a gore piece has to survive, largest first. */
-const GORE_REVIEW_SCALES: readonly number[] = [4, 1, GORE_RENDER_SCALE];
+const GORE_INSPECT_SCALE = 4;
+const GORE_SHEET_SCALE = 1;
+const GORE_REVIEW_SCALES: readonly number[] = [
+  GORE_INSPECT_SCALE,
+  GORE_SHEET_SCALE,
+  GORE_RENDER_SCALE,
+];
+
+const { frameWidth, frameHeight, tileX, tileY } = RAT_FIGURE;
+
+/** Every row of the contact sheet: the pose rows, then one row per gore piece. */
+const POSE_STATES: readonly string[] = ROWS.map((row) => row.name);
+const SHEET_STATES: readonly string[] = [...POSE_STATES, ...GORE_STATES];
+const SHEET_ROW_OF: ReadonlyMap<string, number> = new Map(
+  SHEET_STATES.map((state, index) => [state, index]),
+);
+
+function sheetRowOf(state: string): number {
+  const index = SHEET_ROW_OF.get(state);
+  if (index === undefined) throw new Error(`the rat paints no state "${state}"`);
+  return index;
+}
 
 function parseFlag(name: string, fallback: string): string {
   const prefix = `--${name}=`;
@@ -57,28 +77,18 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
   return value;
 }
 
-interface Geometry {
-  readonly frameWidth: number;
-  readonly frameHeight: number;
-  readonly tileX: number;
-  readonly tileY: number;
-}
-
 /**
- * Draws the gore row at the three sizes that matter. The bottom strip is the
+ * Draws the gore pieces at the three sizes that matter. The bottom strip is the
  * exit criterion: name all eight pieces from it, or the set has failed.
  */
-function renderGorePanel(sheet: Image, geometry: Geometry, outPath: string): void {
-  const goreRow = ROWS.findIndex((row) => row.kind === 'gore');
-  if (goreRow < 0) throw new Error('the generator has no gore row');
-  const pieceCount = ROWS[goreRow].frameCount;
-
-  const widths = GORE_REVIEW_SCALES.map((scale) => geometry.frameWidth * scale);
+function renderGorePanel(sheet: Canvas, outPath: string): void {
+  const pieceCount = GORE_STATES.length;
+  const widths = GORE_REVIEW_SCALES.map((scale) => frameWidth * scale);
   const width = PADDING + Math.max(...widths.map((w) => pieceCount * (w + PADDING)));
   const height =
     PADDING +
     GORE_REVIEW_SCALES.reduce(
-      (total, scale) => total + geometry.frameHeight * scale + LABEL_HEIGHT + PADDING,
+      (total, scale) => total + frameHeight * scale + LABEL_HEIGHT + PADDING,
       0,
     );
 
@@ -90,8 +100,8 @@ function renderGorePanel(sheet: Image, geometry: Geometry, outPath: string): voi
 
   let y = PADDING;
   for (const scale of GORE_REVIEW_SCALES) {
-    const cellW = geometry.frameWidth * scale;
-    const cellH = geometry.frameHeight * scale;
+    const cellW = frameWidth * scale;
+    const cellH = frameHeight * scale;
     ctx.fillStyle = LABEL_COLOR;
     const caption =
       scale === GORE_RENDER_SCALE
@@ -100,14 +110,14 @@ function renderGorePanel(sheet: Image, geometry: Geometry, outPath: string): voi
     ctx.fillText(caption, PADDING, y + LABEL_HEIGHT - PADDING);
     y += LABEL_HEIGHT;
 
-    for (let piece = 0; piece < pieceCount; piece++) {
+    GORE_STATES.forEach((state, piece) => {
       const x = PADDING + piece * (cellW + PADDING);
       ctx.drawImage(
         sheet,
-        piece * geometry.frameWidth,
-        goreRow * geometry.frameHeight,
-        geometry.frameWidth,
-        geometry.frameHeight,
+        0,
+        sheetRowOf(state) * frameHeight,
+        frameWidth,
+        frameHeight,
         x,
         y,
         cellW,
@@ -115,21 +125,20 @@ function renderGorePanel(sheet: Image, geometry: Geometry, outPath: string): voi
       );
       if (scale === Math.max(...GORE_REVIEW_SCALES)) {
         ctx.fillStyle = LABEL_COLOR;
-        ctx.fillText(GORE_STATES[piece] ?? '?', x, y + cellH + LABEL_HEIGHT - PADDING);
+        ctx.fillText(state, x, y + cellH + LABEL_HEIGHT - PADDING);
       }
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
-    }
+    });
     y += cellH + PADDING;
   }
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, gore panel)`);
+  const written = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${written} (${canvas.width}×${canvas.height}px, gore panel)`);
 }
 
 function renderSheetPanel(
-  sheet: Image,
-  geometry: Geometry,
+  sheet: Canvas,
   outPath: string,
   scale: number,
   only: string,
@@ -142,11 +151,11 @@ function renderSheetPanel(
   const framesPerRow = (row: (typeof ROWS)[number]): number =>
     onlyFrame === '' ? row.frameCount : 1;
 
-  const cellW = geometry.frameWidth * scale;
-  const cellH = geometry.frameHeight * scale;
+  const cellW = frameWidth * scale;
+  const cellH = frameHeight * scale;
   const maxCols = Math.max(...rows.map(framesPerRow));
-  const inGameW = geometry.frameWidth * (IN_GAME_TILE / TILE_SCALE);
-  const inGameH = geometry.frameHeight * (IN_GAME_TILE / TILE_SCALE);
+  const inGameW = frameWidth * (IN_GAME_TILE / TILE_SCALE);
+  const inGameH = frameHeight * (IN_GAME_TILE / TILE_SCALE);
 
   // With --frame the grid is one cell wide, but the in-game strip below it still
   // holds one thumbnail per row, and that is what sets the width.
@@ -163,12 +172,12 @@ function renderSheetPanel(
 
   let y = PADDING;
   for (const spec of rows) {
-    const sheetRow = ROWS.findIndex((row) => row.name === spec.name);
+    const row = sheetRowOf(spec.name);
     ctx.fillStyle = LABEL_COLOR;
     const shown = framesPerRow(spec);
     const label =
       onlyFrame === ''
-        ? `${spec.name} — ${spec.frameCount} frames`
+        ? `${spec.name} — ${spec.frameCount} frames, ${spec.view}, ${spec.kind}`
         : `${spec.name} — frame ${firstFrame} of ${spec.frameCount}`;
     ctx.fillText(label, PADDING, y + LABEL_HEIGHT - PADDING);
     y += LABEL_HEIGHT;
@@ -178,10 +187,10 @@ function renderSheetPanel(
       const x = PADDING + i * (cellW + PADDING);
       ctx.drawImage(
         sheet,
-        col * geometry.frameWidth,
-        sheetRow * geometry.frameHeight,
-        geometry.frameWidth,
-        geometry.frameHeight,
+        col * frameWidth,
+        row * frameHeight,
+        frameWidth,
+        frameHeight,
         x,
         y,
         cellW,
@@ -190,12 +199,7 @@ function renderSheetPanel(
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
       ctx.strokeStyle = TILE_GUIDE;
-      ctx.strokeRect(
-        x + geometry.tileX * scale,
-        y + geometry.tileY * scale,
-        TILE_SCALE * scale,
-        TILE_SCALE * scale,
-      );
+      ctx.strokeRect(x + tileX * scale, y + tileY * scale, TILE_SCALE * scale, TILE_SCALE * scale);
     }
     y += cellH + PADDING;
   }
@@ -203,39 +207,44 @@ function renderSheetPanel(
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText(`in-game size (${IN_GAME_TILE}px tile)`, PADDING, y + LABEL_HEIGHT - PADDING);
   y += LABEL_HEIGHT;
-  for (let i = 0; i < rows.length; i++) {
-    const sheetRow = ROWS.findIndex((row) => row.name === rows[i].name);
+  rows.forEach((spec, i) => {
     ctx.drawImage(
       sheet,
-      firstFrame * geometry.frameWidth,
-      sheetRow * geometry.frameHeight,
-      geometry.frameWidth,
-      geometry.frameHeight,
+      firstFrame * frameWidth,
+      sheetRowOf(spec.name) * frameHeight,
+      frameWidth,
+      frameHeight,
       PADDING + i * (inGameW + PADDING),
       y,
       inGameW,
       inGameH,
     );
-  }
+  });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, scale ${scale}×)`);
+  const written = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${written} (${canvas.width}×${canvas.height}px, scale ${scale}×)`);
 }
 
-async function main(): Promise<void> {
+function main(): void {
   const mode = parseFlag('mode', 'sheet');
-  const outPath = parseFlag('out', `rat-${mode}.png`);
-  const sheet = await loadImage(resolve(SHEET_PATH));
-  // Re-derives the cell size from the generator rather than the manifest, so the
-  // harness still works on a bake whose manifest entry has not been pasted yet.
-  const geometry = bake().geometry;
+  const outPath = parseFlag('out', `${PREVIEW_DIR}/rat-${mode}.png`);
+
+  // Ahead of the contact sheet rather than after it. The sheet is a
+  // many-megapixel allocation, and measuring art on the other side of one is
+  // what made a sibling figure's centroid gate report a seam at twice its true
+  // width every so often — a red gate on art nobody touched, which is the one
+  // thing that teaches an agent to loosen a threshold.
+  console.log('Gating the rat figure…');
+  reportFigureGates('rat', ratGateFailures());
+
+  const sheet = bakeFigureSheet(RAT_FIGURE, [...SHEET_STATES]).canvas;
 
   if (mode === 'gore') {
-    renderGorePanel(sheet, geometry, outPath);
+    renderGorePanel(sheet, outPath);
     return;
   }
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
-  renderSheetPanel(sheet, geometry, outPath, scale, parseFlag('row', ''), parseFlag('frame', ''));
+  renderSheetPanel(sheet, outPath, scale, parseFlag('row', ''), parseFlag('frame', ''));
 }
 
-void main();
+main();

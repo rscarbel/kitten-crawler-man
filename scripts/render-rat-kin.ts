@@ -9,27 +9,31 @@
  * strip of the same frames blitted at the real tile size so the silhouette is
  * judged at the size players actually see.
  *
- *   npx tsx scripts/render-rat-kin.ts --out=review.png --scale=3
+ *   npm run render:rat-kin
  *   npx tsx scripts/render-rat-kin.ts --out=head.png --part=head --scale=6
  *   npx tsx scripts/render-rat-kin.ts --out=onion.png --mode=onion --row=walk
  *
- * Regenerate the sheet itself with `npm run gen:rat-kin`.
+ * The contact sheet is painted from `RAT_KIN_FIGURE` the way the runtime cache
+ * bakes it, and the art gates run as part of the render — the gates first, so
+ * nothing is measured on the far side of a multi-megapixel allocation.
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createCanvas, type Canvas } from 'canvas';
 
-// The row order and frame counts come straight from the generator, so a new row
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import { bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { ratKinGateFailures } from './gates-rat-kin.js';
+
+// The row order and frame counts come straight from the figure, so a new row
 // cannot desync the only review path this art has.
 import { TILE_SIZE } from '../src/core/constants.js';
 import {
   GROUND_OFFSET_IN_TILE,
-  ROWS,
+  RAT_KIN_FIGURE,
+  RAT_KIN_ROWS as ROWS,
   TILE_SCALE,
-  bake,
-  type SheetGeometry,
-} from './generate-rat-kin-sprite.js';
+} from '../src/sprites/art/ratKinFigure.js';
 
 /**
  * Windows onto one body part, as fractions of the frame, so a reviewer can judge
@@ -94,24 +98,21 @@ function parseMode(): Mode {
   throw new Error(`--mode=${raw} is not one of contact, onion, delta`);
 }
 
-/**
- * Bakes into memory rather than reading the PNG off disk, so the harness reviews
- * what the current source produces even when the gates refused to write it —
- * which is exactly the moment a picture is most useful. It also means the tile
- * guide is drawn from the geometry the bake measured rather than from a guess.
- */
-async function loadSheet(): Promise<{ image: Image; geometry: SheetGeometry }> {
-  const sheet = bake();
-  return { image: await loadImage(sheet.buffer), geometry: sheet.geometry };
-}
-
-async function main(): Promise<void> {
-  const outPath = parseFlag('out', 'rat-kin-review.png');
+function main(): void {
+  const outPath = parseFlag('out', `${PREVIEW_DIR}/rat-kin-review.png`);
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
   const only = parseFlag('row', '');
   const mode = parseMode();
-  const { image, geometry } = await loadSheet();
-  const { frameWidth, frameHeight, tileX, tileY } = geometry;
+
+  // Ahead of the contact sheet rather than after it: the sheet is a large
+  // allocation, and measuring the art on the far side of one is how a gate
+  // starts reporting a fault in art nobody touched.
+  console.log('Gating the rat_kin figure…');
+  reportFigureGates('rat_kin', ratKinGateFailures());
+
+  const baked = bakeFigureSheet(RAT_KIN_FIGURE);
+  const image: Canvas = baked.canvas;
+  const { frameWidth, frameHeight, tileX, tileY } = RAT_KIN_FIGURE;
 
   const rows = only === '' ? ROWS : ROWS.filter((row) => row.name === only);
   if (rows.length === 0) throw new Error(`No row named "${only}"`);
@@ -237,11 +238,8 @@ async function main(): Promise<void> {
     );
   });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(`Wrote ${outPath} (${width}×${height}px, scale ${scale}×)`);
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+main();

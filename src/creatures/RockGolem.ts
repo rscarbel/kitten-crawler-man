@@ -1,3 +1,4 @@
+import { prewarmGolemRock } from '../sprites/golemRockSprite';
 import type { Player } from '../Player';
 import { Mob } from './Mob';
 import {
@@ -303,6 +304,10 @@ export class RockGolem extends Mob {
     if (attack !== 'throw') this.lastMelee = attack;
     // The throw's noise belongs to the release frame, not the wind-up.
     if (attack !== 'throw') this.attackSoundPending = true;
+    // The boulder and its burst are warmed off the wind-up, which is the only
+    // notice either of them gets: the rock is spawned on the release frame and
+    // it shatters a beat later.
+    if (attack === 'throw') prewarmGolemRock();
   }
 
   /** Where the boulder leaves the golem, offset toward whichever way it faces. */

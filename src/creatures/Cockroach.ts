@@ -9,6 +9,7 @@ import {
   COCKROACH_BITE_FRAMES,
   COCKROACH_BITE_IMPACT_FRAME,
   drawCockroachSprite,
+  prewarmCockroachCombat,
 } from '../sprites/cockroachSprite';
 
 const COCKROACH_HP = 4;
@@ -132,6 +133,13 @@ export class Cockroach extends Mob {
   /** Wobble phase, advanced per frame so no two roaches weave in step. */
   private skitterPhase = Math.random() * Math.PI * 2;
 
+  /**
+   * Whether this roach has ever noticed a crawler, which is when its combat rows
+   * are warmed. The lunge has no telegraph of its own and the severed pieces
+   * have less than that, so noticing is the only lead either of them gets.
+   */
+  private hasEngaged = false;
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, COCKROACH_HP, COCKROACH_SPEED);
     this.rollBearing();
@@ -205,6 +213,10 @@ export class Cockroach extends Mob {
     const nearest = this.acquireTarget(targets, AGGRO_RANGE_PX);
 
     this.currentTarget = nearest;
+    if (nearest !== null && !this.hasEngaged) {
+      this.hasEngaged = true;
+      prewarmCockroachCombat();
+    }
     if (this.attackCooldown > 0) this.attackCooldown--;
     this.skitterPhase += SKITTER_TURN_RATE;
 

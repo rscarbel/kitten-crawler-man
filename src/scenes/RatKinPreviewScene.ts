@@ -1,5 +1,5 @@
 /**
- * Localhost-only harness for eyeballing Mordecai's Rat Kin sheet in motion.
+ * Localhost-only harness for eyeballing Mordecai's Rat Kin art in motion.
  *
  * A contact sheet cannot show gait speed, whether he floats or plants, or
  * whether the loop seam pops — so this walks him back and forth across the

@@ -10,6 +10,15 @@
 
 export type MercenaryTemplateId = 'bruiser' | 'enforcer' | 'berserker';
 
+/**
+ * The one template that is a rock golem rather than a club NPC.
+ *
+ * Named here rather than inside `Mercenary` because the hire panel needs it
+ * too: signing this contract is what warms the golem's rows, and a hire panel
+ * that string-matched `'bruiser'` on its own is a second copy of the same fact.
+ */
+export const GOLEM_MERCENARY_TEMPLATE = 'bruiser' as const;
+
 export interface MercenaryTemplate {
   id: MercenaryTemplateId;
   /** Default name a hire walks around under. */

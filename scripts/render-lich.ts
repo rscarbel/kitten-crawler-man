@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Headless review harness for The Lich's sprite sheet.
+ * Headless review harness for The Lich.
  *
  * A still cannot answer "does this move well", but it is the only thing that can
  * answer the question this art lives or dies on: does a near-black figure still
@@ -8,29 +8,36 @@
  * drawn twice — once at review scale over a light backdrop, and once at the size
  * it actually renders over the dim tower stone it is actually fought on.
  *
- *   npx tsx scripts/render-lich.ts --out=lich.png --scale=2
+ * The art gates run first, before a contact sheet is baked: a sheet is a
+ * tens-of-megapixel allocation, and a gate that measures on the far side of one
+ * is a gate that reports seams nobody drew.
+ *
+ *   npm run render:lich
  *   npx tsx scripts/render-lich.ts --row=cast_side --scale=5
  *   npx tsx scripts/render-lich.ts --mode=parts --part=head --scale=4
  *   npx tsx scripts/render-lich.ts --mode=gore
- *
- * Regenerate the sheet itself with `npm run gen:lich`.
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { type Canvas, createCanvas } from 'canvas';
 
-// Row order, frame counts and cell geometry come straight from the generator, so
-// a new row cannot desync the only review path this art has.
+// Row order, frame counts and cell geometry come straight from the figure, so a
+// new row cannot desync the only review path this art has.
+import { bakeFigureCell, bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { lichGateFailures } from './gates-lich.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import {
-  LICH_SHEET,
+  GORE_STATES,
+  LICH_FIGURE,
+  LICH_ROWS,
   TILE_SCALE,
-  bakeSheet,
-  sheetPathFor,
   type RowSpec,
-  type SheetGeometry,
-} from './generate-lich-sprites.js';
-import { SKELETON_GORE_STATES } from './skeletonGore.js';
+} from '../src/sprites/art/lichFigure.js';
+
+const { frameWidth, frameHeight, tileX, tileY } = LICH_FIGURE;
+
+/** The animation rows, in the order the figure declares them. */
+const ANIMATION_STATES: string[] = LICH_ROWS.map((row) => row.name);
 
 /** Matches TILE_SIZE in src/core/constants.ts; the sheet is drawn at 2× that. */
 const IN_GAME_TILE = 32;
@@ -92,26 +99,32 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
 }
 
 function rowIndexOf(name: string): number {
-  const index = LICH_SHEET.rows.findIndex((row) => row.name === name);
+  const index = ANIMATION_STATES.indexOf(name);
   if (index < 0) throw new Error(`the_lich has no row named "${name}"`);
   return index;
+}
+
+function rowNamed(name: string): RowSpec {
+  const row = LICH_ROWS.find((candidate) => candidate.name === name);
+  if (row === undefined) throw new Error(`the_lich has no row named "${name}"`);
+  return row;
 }
 
 /**
  * The loose bones at the three sizes that matter. The bottom strip is the exit
  * criterion: name all seven from it, or the set has failed.
  */
-function renderGorePanel(sheet: Image, geometry: SheetGeometry, outPath: string): void {
-  const goreRow = LICH_SHEET.rows.findIndex((row) => row.kind === 'gore');
-  if (goreRow < 0) throw new Error('the_lich has no gore row');
-  const pieceCount = LICH_SHEET.rows[goreRow].frameCount;
+function renderGorePanel(outPath: string): void {
+  const pieceCount = GORE_STATES.length;
+  if (pieceCount === 0) throw new Error('the_lich paints no loose bones');
+  const cells = GORE_STATES.map((state) => bakeFigureCell(LICH_FIGURE, state, 0));
 
-  const widths = GORE_REVIEW_SCALES.map((scale) => geometry.frameWidth * scale);
+  const widths = GORE_REVIEW_SCALES.map((scale) => frameWidth * scale);
   const width = PADDING + Math.max(...widths.map((w) => pieceCount * (w + PADDING)));
   const height =
     PADDING +
     GORE_REVIEW_SCALES.reduce(
-      (total, scale) => total + geometry.frameHeight * scale + LABEL_HEIGHT + PADDING,
+      (total, scale) => total + frameHeight * scale + LABEL_HEIGHT + PADDING,
       0,
     );
 
@@ -123,8 +136,8 @@ function renderGorePanel(sheet: Image, geometry: SheetGeometry, outPath: string)
 
   let y = PADDING;
   for (const scale of GORE_REVIEW_SCALES) {
-    const cellW = geometry.frameWidth * scale;
-    const cellH = geometry.frameHeight * scale;
+    const cellW = frameWidth * scale;
+    const cellH = frameHeight * scale;
     ctx.fillStyle = LABEL_COLOR;
     const caption =
       scale === GORE_RENDER_SCALE
@@ -135,20 +148,10 @@ function renderGorePanel(sheet: Image, geometry: SheetGeometry, outPath: string)
 
     for (let piece = 0; piece < pieceCount; piece++) {
       const x = PADDING + piece * (cellW + PADDING);
-      ctx.drawImage(
-        sheet,
-        piece * geometry.frameWidth,
-        goreRow * geometry.frameHeight,
-        geometry.frameWidth,
-        geometry.frameHeight,
-        x,
-        y,
-        cellW,
-        cellH,
-      );
+      ctx.drawImage(cells[piece], 0, 0, frameWidth, frameHeight, x, y, cellW, cellH);
       if (scale === Math.max(...GORE_REVIEW_SCALES)) {
         ctx.fillStyle = LABEL_COLOR;
-        ctx.fillText(SKELETON_GORE_STATES[piece] ?? '?', x, y + cellH + LABEL_HEIGHT - PADDING);
+        ctx.fillText(GORE_STATES[piece] ?? '?', x, y + cellH + LABEL_HEIGHT - PADDING);
       }
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
@@ -156,14 +159,13 @@ function renderGorePanel(sheet: Image, geometry: SheetGeometry, outPath: string)
     y += cellH + PADDING;
   }
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, the_lich bones)`);
+  const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${canvas.width}×${canvas.height}px, the_lich bones)`);
 }
 
 /** One body part cropped across every frame of one row. */
 function renderPartsPanel(
-  sheet: Image,
-  geometry: SheetGeometry,
+  sheet: Canvas,
   outPath: string,
   scale: number,
   partName: string,
@@ -173,7 +175,7 @@ function renderPartsPanel(
   if (crop === undefined) {
     throw new Error(`--part=${partName} is not one of ${Object.keys(PART_CROPS).join(' | ')}`);
   }
-  const row = LICH_SHEET.rows[rowIndexOf(rowName)];
+  const row = rowNamed(rowName);
   const cellW = crop.w * scale;
   const cellH = crop.h * scale;
   const canvas = createCanvas(
@@ -194,8 +196,8 @@ function renderPartsPanel(
   for (let frame = 0; frame < row.frameCount; frame++) {
     ctx.drawImage(
       sheet,
-      frame * geometry.frameWidth + crop.x,
-      rowIndexOf(rowName) * geometry.frameHeight + crop.y,
+      frame * frameWidth + crop.x,
+      rowIndexOf(rowName) * frameHeight + crop.y,
       crop.w,
       crop.h,
       PADDING + frame * (cellW + PADDING),
@@ -204,31 +206,31 @@ function renderPartsPanel(
       cellH,
     );
   }
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, ${partName} of ${rowName})`);
+  const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(
+    `Wrote ${writtenPath} (${canvas.width}×${canvas.height}px, ${partName} of ${rowName})`,
+  );
 }
 
 function renderSheetPanel(
-  sheet: Image,
-  geometry: SheetGeometry,
+  sheet: Canvas,
   outPath: string,
   scale: number,
   only: string,
   onlyFrame: string,
 ): void {
-  const animationRows = LICH_SHEET.rows.filter((row) => row.kind !== 'gore');
   const rows: readonly RowSpec[] =
-    only === '' ? animationRows : LICH_SHEET.rows.filter((row) => row.name === only);
+    only === '' ? LICH_ROWS : LICH_ROWS.filter((row) => row.name === only);
   if (rows.length === 0) throw new Error(`the_lich has no row named "${only}"`);
   const longestRow = Math.max(...rows.map((row) => row.frameCount));
   const firstFrame = onlyFrame === '' ? 0 : parseNumberFlag('frame', 0, 0, longestRow - 1);
   const framesPerRow = (row: RowSpec): number => (onlyFrame === '' ? row.frameCount : 1);
 
-  const cellW = geometry.frameWidth * scale;
-  const cellH = geometry.frameHeight * scale;
+  const cellW = frameWidth * scale;
+  const cellH = frameHeight * scale;
   const maxCols = Math.max(...rows.map(framesPerRow));
-  const inGameW = geometry.frameWidth * (IN_GAME_TILE / TILE_SCALE);
-  const inGameH = geometry.frameHeight * (IN_GAME_TILE / TILE_SCALE);
+  const inGameW = frameWidth * (IN_GAME_TILE / TILE_SCALE);
+  const inGameH = frameHeight * (IN_GAME_TILE / TILE_SCALE);
 
   const stripWidth = PADDING + rows.length * (inGameW + PADDING);
   const width = Math.max(PADDING + maxCols * (cellW + PADDING), stripWidth);
@@ -266,10 +268,10 @@ function renderSheetPanel(
       const x = PADDING + i * (cellW + PADDING);
       ctx.drawImage(
         sheet,
-        col * geometry.frameWidth,
-        sheetRow * geometry.frameHeight,
-        geometry.frameWidth,
-        geometry.frameHeight,
+        col * frameWidth,
+        sheetRow * frameHeight,
+        frameWidth,
+        frameHeight,
         x,
         y,
         cellW,
@@ -278,12 +280,7 @@ function renderSheetPanel(
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
       ctx.strokeStyle = TILE_GUIDE;
-      ctx.strokeRect(
-        x + geometry.tileX * scale,
-        y + geometry.tileY * scale,
-        TILE_SCALE * scale,
-        TILE_SCALE * scale,
-      );
+      ctx.strokeRect(x + tileX * scale, y + tileY * scale, TILE_SCALE * scale, TILE_SCALE * scale);
     }
     y += cellH + PADDING;
   }
@@ -305,10 +302,10 @@ function renderSheetPanel(
     for (let i = 0; i < rows.length; i++) {
       ctx.drawImage(
         sheet,
-        firstFrame * geometry.frameWidth,
-        rowIndexOf(rows[i].name) * geometry.frameHeight,
-        geometry.frameWidth,
-        geometry.frameHeight,
+        firstFrame * frameWidth,
+        rowIndexOf(rows[i].name) * frameHeight,
+        frameWidth,
+        frameHeight,
         PADDING + i * (inGameW + PADDING),
         y,
         inGameW,
@@ -318,35 +315,30 @@ function renderSheetPanel(
     y += inGameH + PADDING;
   }
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, scale ${scale}×)`);
+  const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${canvas.width}×${canvas.height}px, scale ${scale}×)`);
 }
 
-async function main(): Promise<void> {
+function main(): void {
   const mode = parseFlag('mode', 'sheet');
-  const outPath = parseFlag('out', `lich-${mode}.png`);
-  const sheet = await loadImage(resolve(sheetPathFor(LICH_SHEET.key)));
-  // Re-derives the cell size from the generator rather than the manifest, so the
-  // harness still works on a bake whose manifest entry has not been pasted yet.
-  const geometry = bakeSheet(LICH_SHEET).geometry;
+  const outPath = parseFlag('out', `${PREVIEW_DIR}/lich-${mode}.png`);
+
+  // Gates before the contact sheet, always. A sheet is a tens-of-megapixel
+  // allocation, and measuring the art on the far side of one is how a gate
+  // starts reporting defects nobody drew.
+  reportFigureGates('the_lich', lichGateFailures());
 
   if (mode === 'gore') {
-    renderGorePanel(sheet, geometry, outPath);
+    renderGorePanel(outPath);
     return;
   }
+  const sheet = bakeFigureSheet(LICH_FIGURE, ANIMATION_STATES).canvas;
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
   if (mode === 'parts') {
-    renderPartsPanel(
-      sheet,
-      geometry,
-      outPath,
-      scale,
-      parseFlag('part', 'head'),
-      parseFlag('row', 'idle'),
-    );
+    renderPartsPanel(sheet, outPath, scale, parseFlag('part', 'head'), parseFlag('row', 'idle'));
     return;
   }
-  renderSheetPanel(sheet, geometry, outPath, scale, parseFlag('row', ''), parseFlag('frame', ''));
+  renderSheetPanel(sheet, outPath, scale, parseFlag('row', ''), parseFlag('frame', ''));
 }
 
-void main();
+main();

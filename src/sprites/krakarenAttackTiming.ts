@@ -2,19 +2,19 @@
  * The one place the Krakaren Clone's animation timing is written down.
  *
  * Several things have to agree about when tentacles connect and when the
- * ground-slam telegraph hands off between rise/loom/dive: the bake
- * choreographies in `scripts/generate-krakaren-sprite.ts`, the countdown and
+ * ground-slam telegraph hands off between rise/loom/dive: the pose
+ * choreographies in `src/sprites/art/krakarenFigure.ts`, the countdown and
  * impact logic in `src/creatures/KrakarenClone.ts` and
- * `src/creatures/KrakarenTentacle.ts`, the bake gates' peak-frame checks in
- * `scripts/generate-krakaren-sprite.gates.ts`, and the runtime row selection
- * in `src/sprites/krakarenSprite.ts` / `src/sprites/krakarenTentacleSprite.ts`.
+ * `src/creatures/KrakarenTentacle.ts`, the peak-frame checks in
+ * `scripts/gates-krakaren.ts`, and the runtime row selection in
+ * `src/sprites/krakarenSprite.ts` / `src/sprites/krakarenTentacleSprite.ts`.
  * Separate hand-copied constants are a contract that holds until the first
  * retune and then fails silently, with damage landing on a frame where the
  * art has not moved.
  *
- * This module deliberately imports nothing: it is pulled in by an offline
- * node-canvas generator as well as by the browser bundle, and anything it
- * touched would have to work in both.
+ * This module deliberately imports nothing: the offline gates and harnesses
+ * pull it in as well as the browser bundle, and anything it touched would have
+ * to work in both.
  */
 
 /** Sprite frames in the body idle rows (`idle`, `idle_side`, `idle_away`). */

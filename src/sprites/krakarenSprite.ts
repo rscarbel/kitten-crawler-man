@@ -1,24 +1,45 @@
 /**
- * Draws the Krakaren Clone boss from her baked sheet (`krakaren`), plus the two
+ * Draws the Krakaren Clone boss through the figure cache, plus the two
  * ground-slam floor decals that stay runtime-drawn.
  *
- * The decals are not part of the sheet on purpose: their radius is the slam's
+ * The decals are not painted into a cell on purpose: their radius is the slam's
  * actual kill radius, and what the player sees sweep the floor has to be
- * exactly what kills them. A baked burst could drift from that number without
+ * exactly what kills them. A cached burst could drift from that number without
  * anything failing.
  */
 
-import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
-
-type KrakarenSheetState = SpriteStates['krakaren'];
+import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { figureFrameCount } from './figure/figureDef';
+import { KRAKAREN_FIGURE, KRAKAREN_SLAM_FIGURE } from './art/krakarenFigure';
 
 /** Which of the three drawn viewpoints a facing resolves to. */
 export type KrakarenView = 'front' | 'side' | 'away';
 
 type KrakarenBase = 'idle' | 'swipe' | 'channel';
 
-const SHEET_KEY = 'krakaren';
+/** The pose states her body paints, as the runtime names them. */
+export type KrakarenPoseState = KrakarenBase | `${KrakarenBase}_side` | `${KrakarenBase}_away`;
+
+/**
+ * Every pose state her AI can enter, in the order a prewarm should warm them.
+ *
+ * Her body is the one figure in the fleet whose cells cost milliseconds rather
+ * than microseconds to paint, so a state that reaches the draw call cold pays
+ * for itself in that frame. The list is what the intro warms and what
+ * `scripts/gates-krakaren.ts` checks she actually paints.
+ */
+export const KRAKAREN_POSE_STATES: readonly KrakarenPoseState[] = [
+  'idle',
+  'idle_side',
+  'idle_away',
+  'swipe',
+  'swipe_side',
+  'swipe_away',
+  'channel',
+  'channel_side',
+  'channel_away',
+];
 
 /** The sheet's severed pieces, in the order the bake lays them into the gore row. */
 export const KRAKAREN_GORE_PARTS: ReadonlyArray<string> = [
@@ -48,12 +69,12 @@ const IDLE_FPS = 6;
 const CHANNEL_FPS = 10;
 
 /**
- * Read off the sheet rather than hand-tabled, because `drawSprite` *clamps* the
- * frame index: a row that got shorter in a rebake would silently freeze on its
- * last frame instead of failing.
+ * Read off the figure rather than hand-tabled, because the draw path *clamps*
+ * the frame index: a state that lost frames would silently freeze on its last
+ * one instead of failing.
  */
-function frameCountOf(state: KrakarenSheetState): number {
-  return getSpriteDefByKey(SHEET_KEY)?.states.get(state)?.frameCount ?? 1;
+function frameCountOf(state: KrakarenPoseState): number {
+  return figureFrameCount(KRAKAREN_FIGURE, state);
 }
 
 /** Views split on whichever axis she is facing hardest along; a tie reads as profile. */
@@ -62,7 +83,7 @@ function viewFor(facingX: number, facingY: number): KrakarenView {
   return facingY < 0 ? 'away' : 'front';
 }
 
-function stateFor(base: KrakarenBase, view: KrakarenView): KrakarenSheetState {
+function stateFor(base: KrakarenBase, view: KrakarenView): KrakarenPoseState {
   if (view === 'side') return `${base}_side`;
   if (view === 'away') return `${base}_away`;
   return base;
@@ -110,9 +131,9 @@ export function drawKrakarenSprite(
 
   if (swipeProgress !== null) {
     const key = stateFor('swipe', view);
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      SHEET_KEY,
+      KRAKAREN_FIGURE,
       key,
       progressFrameIndex(swipeProgress, frameCountOf(key)),
       sx,
@@ -128,9 +149,9 @@ export function drawKrakarenSprite(
   if (isChanneling) {
     const key = stateFor('channel', view);
     const count = frameCountOf(key);
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      SHEET_KEY,
+      KRAKAREN_FIGURE,
       key,
       idleFrame ?? timeFrameIndex(nowSeconds, CHANNEL_FPS, count),
       sx,
@@ -143,9 +164,9 @@ export function drawKrakarenSprite(
 
   const key = stateFor('idle', view);
   const count = frameCountOf(key);
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    SHEET_KEY,
+    KRAKAREN_FIGURE,
     key,
     idleFrame ?? timeFrameIndex(nowSeconds, IDLE_FPS, count),
     sx,
@@ -155,55 +176,78 @@ export function drawKrakarenSprite(
   );
 }
 
+/**
+ * Warms every pose her body can be drawn in.
+ *
+ * Her cells cost milliseconds to paint rather than microseconds, so a state
+ * reaching the draw call cold spends that whole cost inside one frame. The
+ * cache spreads the work at one cell per frame under its own budget, which is
+ * why this wants the longest lead available: the boss intro, before she is on
+ * screen at all.
+ */
+export function prewarmKrakarenBody(): void {
+  for (const state of KRAKAREN_POSE_STATES) prewarmFigureState(KRAKAREN_FIGURE, state);
+}
+
+/**
+ * Warms the one pose the next draw will actually ask for.
+ *
+ * The intro's blanket warm is a convenience and not the coverage: rows the
+ * fight has not played for the cache's idle window are released, so the attack
+ * she is about to throw may well be cold by the time she throws it. This is the
+ * hook with real lead — a windup or a telegraph names its state before a single
+ * frame of it is drawn, and facing is locked across both.
+ */
+export function prewarmKrakarenPoseForFacing(
+  base: 'idle' | 'swipe' | 'channel',
+  facingX: number,
+  facingY: number,
+): void {
+  prewarmFigureState(KRAKAREN_FIGURE, stateFor(base, viewFor(facingX, facingY)));
+}
+
+/**
+ * Warms her severed pieces.
+ *
+ * All seven are drawn on the single frame she comes apart, with no telegraph of
+ * their own, so the moment worth warming from is the one where she can still
+ * die — she has engaged and the player is hitting her.
+ */
+export function prewarmKrakarenGore(): void {
+  for (const part of KRAKAREN_GORE_PARTS) prewarmFigureState(KRAKAREN_FIGURE, part);
+}
+
+/** Warms the four beats of a ground slam, from the telegraph that starts one. */
+export function prewarmKrakarenSlam(): void {
+  for (const phase of KRAKAREN_SLAM_PHASES) prewarmFigureState(KRAKAREN_SLAM_FIGURE, phase);
+}
+
 /** Clear air left between the top of her art and anything hung over her head. */
 const KRAKAREN_OVERHEAD_CLEARANCE_TILES = 0.2;
 
-interface KrakarenArtExtent {
-  /** Tiles the art rises above the tile she is anchored to. */
-  readonly topTiles: number;
-  /** Total height of a cell in tiles. */
-  readonly heightTiles: number;
-}
-
-/** Cached: the manifest never changes after load and these are read per frame. */
-let cachedArtExtent: KrakarenArtExtent | null = null;
-
 /**
- * How far the baked cell reaches around her tile.
+ * How far her painted cell reaches around her tile.
  *
- * Measured off the loaded manifest rather than copied, because every one of
- * these numbers moves whenever a rebake resizes the cell — and a stale copy
+ * Read off the figure's own declared geometry rather than copied, because every
+ * one of these numbers moves whenever the cell is resized — and a stale copy
  * fails silently, as a health bar drawn across her mantle.
- *
- * Deliberately not cached on a miss: a missing def only means the sheet has not
- * finished loading, and caching that would pin her to the fallbacks all session.
  */
-function artExtentOf(): KrakarenArtExtent | null {
-  if (cachedArtExtent !== null) return cachedArtExtent;
-  const def = getSpriteDefByKey(SHEET_KEY);
-  if (def === undefined) return null;
-  cachedArtExtent = {
-    topTiles: def.tileY / def.tileScale,
-    heightTiles: def.frameHeight / def.tileScale,
-  };
-  return cachedArtExtent;
-}
+const KRAKAREN_ART_TOP_TILES = KRAKAREN_FIGURE.tileY / KRAKAREN_FIGURE.tileScale;
+const KRAKAREN_ART_HEIGHT_TILES = KRAKAREN_FIGURE.frameHeight / KRAKAREN_FIGURE.tileScale;
 
 /** Tiles her art rises above her tile origin. */
-export function krakarenArtTopTiles(fallbackTiles: number): number {
-  return artExtentOf()?.topTiles ?? fallbackTiles;
+export function krakarenArtTopTiles(_fallbackTiles: number): number {
+  return KRAKAREN_ART_TOP_TILES;
 }
 
 /** Height of one baked cell in tiles — the divisor for sizing a portrait. */
-export function krakarenArtHeightTiles(fallbackTiles: number): number {
-  return artExtentOf()?.heightTiles ?? fallbackTiles;
+export function krakarenArtHeightTiles(_fallbackTiles: number): number {
+  return KRAKAREN_ART_HEIGHT_TILES;
 }
 
 /** How far above her tile origin to hang a health bar so it clears the mantle. */
-export function krakarenOverheadLiftTiles(fallbackTiles: number): number {
-  const extent = artExtentOf();
-  if (extent === null) return fallbackTiles;
-  return extent.topTiles + KRAKAREN_OVERHEAD_CLEARANCE_TILES;
+export function krakarenOverheadLiftTiles(_fallbackTiles: number): number {
+  return KRAKAREN_ART_TOP_TILES + KRAKAREN_OVERHEAD_CLEARANCE_TILES;
 }
 
 const ENRAGE_GLOW_BASE_ALPHA = 0.25;
@@ -387,19 +431,18 @@ export function drawSlamImpact(
   ctx.restore();
 }
 
-const SLAM_SHEET_KEY = 'krakaren_slam';
-
-type KrakarenSlamSheetState = SpriteStates['krakaren_slam'];
-
 /**
- * The four beats of a ground slam, which are exactly the slam sheet's rows: the
- * tentacle rises beside her, looms, dives back under, and smashes up through
- * the marked ground.
+ * The four beats of a ground slam, which are exactly the slam figure's states:
+ * the tentacle rises beside her, looms, dives back under, and smashes up
+ * through the marked ground.
  */
-export type KrakarenSlamPhase = KrakarenSlamSheetState;
+export type KrakarenSlamPhase = 'rise' | 'loom' | 'dive' | 'smash';
 
-function slamFrameCountOf(state: KrakarenSlamSheetState): number {
-  return getSpriteDefByKey(SLAM_SHEET_KEY)?.states.get(state)?.frameCount ?? 1;
+/** Every slam beat, in the order they play; the prewarm and the gates read it. */
+export const KRAKAREN_SLAM_PHASES: readonly KrakarenSlamPhase[] = ['rise', 'loom', 'dive', 'smash'];
+
+function slamFrameCountOf(state: KrakarenSlamPhase): number {
+  return figureFrameCount(KRAKAREN_SLAM_FIGURE, state);
 }
 
 /**
@@ -470,5 +513,8 @@ export function drawKrakarenSlamTentacle(
       ? smashFrameIndex(progress, frameCount)
       : progressFrameIndex(progress, frameCount);
   const alpha = phase === 'smash' ? smashAlpha(progress) : 1;
-  drawSpriteKey(ctx, SLAM_SHEET_KEY, phase, frame, sx, sy, tileSize, { flipX: mirrored, alpha });
+  drawFigureCached(ctx, KRAKAREN_SLAM_FIGURE, phase, frame, sx, sy, tileSize, {
+    flipX: mirrored,
+    alpha,
+  });
 }

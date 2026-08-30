@@ -24,11 +24,11 @@ import {
   RAT_BITE_FRAMES,
   RAT_BITE_IMPACT_PROGRESS,
   RAT_BODY_PART_KEY,
+  type RatState,
   drawRatSprite,
 } from '../sprites/ratSprite';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
-
-type RatState = SpriteStates['rat'];
+import { RAT_FIGURE } from '../sprites/art/ratFigure';
+import { figureFrameCount } from '../sprites/figure/figureDef';
 
 /** A facing vector per column, chosen so `drawRatSprite` picks each viewpoint. */
 interface ViewSpec {
@@ -55,9 +55,9 @@ interface RowSpec {
 
 /**
  * The rows to show and how fast to play them. Frame counts are deliberately
- * absent: they are read from the loaded manifest at draw time, because a
- * hand-copied count here would silently desync from the sheet the moment a
- * row's length changed.
+ * absent: they are read from the figure at draw time, because a hand-copied
+ * count here would silently desync from the art the moment a row's length
+ * changed.
  */
 const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'walk', probeState: 'walk_side', fps: 14 },
@@ -65,10 +65,9 @@ const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'bite', probeState: 'bite_side', fps: 14 },
 ];
 
-/** How many frames a row actually holds, from the sheet the game loaded. */
+/** How many frames a row actually holds, straight off the figure that paints it. */
 function frameCountOf(state: RatState): number {
-  const def = getSpriteDefByKey('rat');
-  return def?.states.get(state)?.frameCount ?? 1;
+  return figureFrameCount(RAT_FIGURE, state);
 }
 
 /** 1× is what a player sees; 4× is where an incisor becomes visible at all. */

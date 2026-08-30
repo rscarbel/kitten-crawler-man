@@ -1,10 +1,6 @@
-import {
-  drawSpriteKey,
-  walkFrameIndex,
-  progressFrameIndex,
-  timeFrameIndex,
-} from '../core/SpriteRenderer';
-import type { SpriteStates } from '../core/SpriteLoader';
+import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { MONGO_FIGURES } from './art/mongoFigure';
 import {
   MONGO_BITE_FRAMES,
   MONGO_COLLAPSE_FRAMES,
@@ -16,28 +12,37 @@ import {
 /**
  * Mongo's runtime sprite wrapper.
  *
- * He is three sheets rather than one — `mongo_juvenile`, `mongo_adolescent` and
- * `mongo_adult` — chosen by his pet level, and every sheet carries the same
- * sixteen rows, so growing up is a sheet swap and nothing else.
+ * He is three figures rather than one — one per growth stage, chosen by his pet
+ * level — and every one of them paints the same sixteen rows, so growing up is
+ * a figure swap and nothing else.
  */
 export type MongoStage = 'juvenile' | 'adolescent' | 'adult';
 
 /** Which of the sheet's three viewpoints a facing vector selects. */
 type MongoView = 'front' | 'side' | 'away';
 
-type MongoSheetKey = 'mongo_juvenile' | 'mongo_adolescent' | 'mongo_adult';
-
-const SHEET_KEY: Record<MongoStage, MongoSheetKey> = {
-  juvenile: 'mongo_juvenile',
-  adolescent: 'mongo_adolescent',
-  adult: 'mongo_adult',
-};
-
 /**
- * The three sheets are baked from one row table, so their state names and frame
- * counts are identical and one map serves all of them.
+ * The three figures paint one row table, so their state names and frame counts
+ * are identical and one map serves all of them. Written out rather than derived
+ * so that a row the figure stops painting is a compile error here.
  */
-type MongoState = SpriteStates['mongo_adult'];
+type MongoState =
+  | 'idle'
+  | 'idle_side'
+  | 'idle_away'
+  | 'walk'
+  | 'walk_side'
+  | 'walk_away'
+  | 'bite'
+  | 'bite_side'
+  | 'bite_away'
+  | 'slash'
+  | 'slash_side'
+  | 'slash_away'
+  | 'pounce'
+  | 'pounce_side'
+  | 'pounce_away'
+  | 'collapse';
 
 /** Sprite frames in one full stride of any walk row. */
 export const MONGO_WALK_FRAMES = 8;
@@ -185,6 +190,50 @@ export class MongoAnimator {
   }
 }
 
+/**
+ * The rows Mongo is about to need, warmed a few frames ahead of needing them.
+ *
+ * His painter costs well over the threshold a direct fallback paint is
+ * affordable at, so every state his AI can enter is warmed from the moment it
+ * becomes reachable rather than being paid for as a hitch on the frame it is
+ * first drawn. There are two such moments and they are the two functions here:
+ * he arrives on the floor, and he picks a fight.
+ *
+ * All three views each time, because he turns.
+ */
+export function prewarmMongoWalk(stage: MongoStage): void {
+  const figure = MONGO_FIGURES[stage];
+  for (const state of ARRIVAL_STATES) prewarmFigureState(figure, state);
+}
+
+/** The attack rows, warmed when he first commits to a target. */
+export function prewarmMongoCombat(stage: MongoStage): void {
+  const figure = MONGO_FIGURES[stage];
+  for (const state of COMBAT_STATES) prewarmFigureState(figure, state);
+}
+
+const ARRIVAL_STATES: readonly MongoState[] = [
+  'walk',
+  'walk_side',
+  'walk_away',
+  'idle',
+  'idle_side',
+  'idle_away',
+];
+
+const COMBAT_STATES: readonly MongoState[] = [
+  'bite',
+  'bite_side',
+  'bite_away',
+  'slash',
+  'slash_side',
+  'slash_away',
+  'pounce',
+  'pounce_side',
+  'pounce_away',
+  'collapse',
+];
+
 /** Views split on whichever axis Mongo is facing hardest along. */
 function viewFor(facingX: number, facingY: number): MongoView {
   if (Math.abs(facingY) <= Math.abs(facingX)) return 'side';
@@ -246,7 +295,7 @@ export function drawMongoSprite(
     actionProgress = 0,
     alpha,
   } = state;
-  const sheet = SHEET_KEY[stage];
+  const figure = MONGO_FIGURES[stage];
   const view = viewFor(facingX, facingY);
   // Only the profile art is mirrored: flipping the head-on views would put his
   // eyes and feet on the wrong sides every time he turned around.
@@ -254,12 +303,12 @@ export function drawMongoSprite(
   const opts = { flipX, alpha };
 
   if (action === 'collapse') {
-    // Only ever baked in profile — he collapses once, at zero HP, and a second
-    // and third view of a moment that plays for half a second is not worth the
-    // sheet space it would cost on all three stages.
-    drawSpriteKey(
+    // Only ever painted in profile — he collapses once, at zero HP, and a
+    // second and third view of a moment that plays for half a second is not
+    // worth choreographing on all three stages.
+    drawFigureCached(
       ctx,
-      sheet,
+      figure,
       'collapse',
       progressFrameIndex(actionProgress, FRAME_COUNT.collapse),
       sx,
@@ -272,9 +321,9 @@ export function drawMongoSprite(
 
   if (action !== null) {
     const key = stateFor(action, view);
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      sheet,
+      figure,
       key,
       progressFrameIndex(actionProgress, FRAME_COUNT[key]),
       sx,
@@ -287,9 +336,9 @@ export function drawMongoSprite(
 
   if (isMoving) {
     const key = stateFor('walk', view);
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      sheet,
+      figure,
       key,
       walkFrameIndex(walkFrame, FRAME_COUNT[key]),
       sx,
@@ -302,9 +351,9 @@ export function drawMongoSprite(
 
   const key = stateFor('idle', view);
   const nowSeconds = performance.now() / MILLISECONDS_PER_SECOND;
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    sheet,
+    figure,
     key,
     state.idleFrame ?? timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]),
     sx,
@@ -325,5 +374,5 @@ export function drawMongoIcon(
   cy: number,
   size: number,
 ): void {
-  drawSpriteKey(ctx, SHEET_KEY[stage], 'idle_side', 0, cx - size / 2, cy - size / 2, size);
+  drawFigureCached(ctx, MONGO_FIGURES[stage], 'idle_side', 0, cx - size / 2, cy - size / 2, size);
 }

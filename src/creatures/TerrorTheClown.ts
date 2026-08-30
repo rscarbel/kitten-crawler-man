@@ -1,7 +1,10 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import {
+  TERROR_CLOWN_LOCOMOTION_STATES,
   drawTerrorTheClownSprite,
+  prewarmTerrorClownStates,
+  terrorClownAttackStates,
   type TerrorTheClownAnimation,
   IDLE_LOOP_SECONDS,
 } from '../sprites/terrorTheClownSprite';
@@ -64,6 +67,10 @@ export class TerrorTheClown extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, TERROR_HP, TERROR_SPEED);
+    // Warmed at construction, which is the moment the circus schedules his
+    // wave: both palettes, because enrage swaps to a different set of cells
+    // mid-fight rather than tinting the ones already warm.
+    prewarmTerrorClownStates(TERROR_CLOWN_LOCOMOTION_STATES);
   }
 
   override resetToSpawn(): void {
@@ -133,6 +140,7 @@ export class TerrorTheClown extends Mob {
     ) {
       this.windupDuration = this.windupFrames();
       this.windupTimer = this.windupDuration;
+      prewarmTerrorClownStates(terrorClownAttackStates(this.isEnraged));
       this.attackCooldown = this.isEnraged
         ? Math.round(ATTACK_COOLDOWN * ENRAGE_COOLDOWN_MULTIPLIER)
         : ATTACK_COOLDOWN;

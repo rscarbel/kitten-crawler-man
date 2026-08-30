@@ -5,6 +5,11 @@ resident memory scales with what a floor can actually show rather than with the 
 size of the game. Four pieces make that work, and each imposes an obligation on anyone
 adding a creature, a sheet or a sound.
 
+Creatures no longer take part in any of it. Every character, creature and
+creature-owned effect is painted by TypeScript at runtime and cached as bitmap cells;
+the sheets below are ground tilesets, town and environment art, props and a handful of
+icons. See "Creatures are painted, not loaded".
+
 ## Sprite metadata stays eager; only pixels are lazy
 
 `SpriteLoader` builds its derived lookup maps synchronously at import time from the
@@ -61,6 +66,57 @@ decoded into `buffers`. Everything else is a sound effect, preloaded per context
 across groups on purpose — several bounty cues are stand-ins borrowed from a floor boss's
 sample, so both owners preload them, and `preload` de-dupes against `buffers`.
 
+## Creatures are painted, not loaded
+
+There is no creature sheet on disk. Each figure's art lives in `src/sprites/art/` as a
+painter plus a `FigureDef` — cell size, the tile anchor, and one entry per animation
+state — and `src/sprites/figure/figureFrameCache.ts` bakes a `(figure, state, frame)`
+into an offscreen cell the first time it is asked for and blits it thereafter. The
+steady-state cost per draw is the `drawImage` the sheet path already paid; what changes
+is that the resident set is the rows actually being played rather than every row a floor
+could show.
+
+Four decisions carry that, and each is load-bearing:
+
+- **Rows, not sheets, are the unit of memory.** Admission, eviction and the idle sweep
+  all work on one animation row of one figure, because a fight is a walk row and an
+  attack row, not a sheet.
+- **Cells are shared across instances.** Mobs animate on discrete frame indices, so
+  eight tusklings blit the same eight cells; a pack costs what one of it costs. A figure
+  whose appearance varies per instance cannot key on `(state, frame)` alone — where the
+  variation is a closed set, each variant takes its own `FigureId` (the sky fowl's eight
+  clothing palettes are the case).
+- **A refusal paints rather than blanks.** The painter is present at runtime, so a cell
+  the byte ceiling or the per-frame millisecond budget will not admit is drawn straight
+  into the frame. Full means slower, never invisible. The fallback composes through an
+  offscreen surface so a caller's `filter`, `globalAlpha` and shadow apply to a finished
+  image exactly as they do to a blit.
+- **The bake budget is milliseconds, not cell count.** Cell area spans two orders of
+  magnitude across the fleet, so a cell count would let one figure spike a frame and hold
+  another back for nothing.
+
+Cells are baked supersampled and downsampled into place, matching what the deleted
+offline generators did, so a cached cell is the sheet cell it replaced.
+
+**Prewarm is the pack rule.** A painter over roughly 1 ms per cell cannot be absorbed by
+the fallback, so every path that schedules such a creature calls `prewarmFigureState`
+when the spawn is _scheduled_ — the level spawner's `MOB_PREWARM` map, a wave scheduler,
+a boss intro, an attack telegraph — not when the mob first renders. Two things decide
+where that hook goes: the lead must exceed
+`rows x frames x bake_ms / PREWARM_BAKE_BUDGET_MS`, and it must sit inside the cache's
+idle-release window or the warming is thrown away before it is used.
+
+The cache is flushed when the render quality changes (cells are density-specific) and at
+the stairs transition, beside `releaseSpritesExcept`, for the same reason sheets are
+evicted there.
+
+**Obligations when adding or changing a figure:** its states are declared in its
+`FigureDef` and nowhere else; its painter must be deterministic in `(state, frame)`
+alone — no randomness, no clock, no module state, and nothing that advances a counter at
+paint time — must stay inside its declared cell, must not read caller `ctx` state, and
+must not call back into the cache. `scripts/gates-<x>.ts` holds its art gates and
+`npm run render:<x>` runs them and writes a contact sheet to `preview/`.
+
 ## Resolution is not the lever
 
 Most sheets are authored at `tileScale: 64` while `TILE_SIZE` is 32, which looks like a
@@ -89,4 +145,11 @@ one is raster or GPU upload.
 
 `npm run verify:assets` is the build-time gate: it proves every mob a floor can produce
 has its sprite keys declared, so a creature can never reach a floor whose groups do not
-carry its sheet.
+carry its sheet — and that every manifest key belongs to some group, so a sheet cannot
+sit in the union with nothing loading it and pop in on first draw.
+
+`npx tsx scripts/report-asset-residency.ts` prints disk and decoded bytes per asset
+group, which is the number that matters: a PNG is compressed on disk and four bytes per
+pixel once decoded. `npm run gates:figure-cache` covers the frame cache's own behaviour,
+including a cached-versus-direct pixel comparison — the one thing that proves the
+fallback path draws what the blit draws.

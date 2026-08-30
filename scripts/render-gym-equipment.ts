@@ -12,9 +12,9 @@
  */
 
 import { createCanvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
+import { asGameContext } from './nodeGameContext.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import {
   drawBenchPressFloor,
@@ -70,7 +70,7 @@ function parseFlag(name: string, fallback: string): string {
   return match === undefined ? fallback : match.slice(name.length + FLAG_SYNTAX_LENGTH);
 }
 
-const outPath = resolve(parseFlag('out', 'gym-equipment-review.png'));
+const outPath = parseFlag('out', `${PREVIEW_DIR}/gym-equipment-review.png`);
 const scale = Number(parseFlag('scale', '6'));
 
 const sheetWidth = CELL_PX * SUBJECTS.length;
@@ -108,7 +108,7 @@ SUBJECTS.forEach((subject, column) => {
     TILE_SIZE - HAIRLINE_STROKE_PX,
   );
 
-  subject.floor(ctx, tileLeft, tileTop, TILE_SIZE);
+  subject.floor(asGameContext(ctx), tileLeft, tileTop, TILE_SIZE);
 
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText(subject.label, cellLeft + LABEL_LEFT_PAD, CELL_PX);
@@ -124,7 +124,7 @@ SUBJECTS.forEach((subject, column) => {
     INVENTORY_SLOT_PX - HAIRLINE_STROKE_PX,
     INVENTORY_SLOT_PX - HAIRLINE_STROKE_PX,
   );
-  subject.icon(ctx, slotLeft, slotTop, INVENTORY_SLOT_PX);
+  subject.icon(asGameContext(ctx), slotLeft, slotTop, INVENTORY_SLOT_PX);
 
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText(
@@ -134,5 +134,5 @@ SUBJECTS.forEach((subject, column) => {
   );
 });
 
-writeFileSync(outPath, canvas.toBuffer('image/png'));
-console.log(`wrote ${outPath} (${sheetWidth}x${sheetHeight} @${scale}x)`);
+const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+console.log(`wrote ${writtenPath} (${sheetWidth}x${sheetHeight} @${scale}x)`);

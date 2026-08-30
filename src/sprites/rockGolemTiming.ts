@@ -1,14 +1,14 @@
 /**
  * Frame counts and impact timings for the rock golem's attack rows.
  *
- * The offline generator (`scripts/generate-rock-golem-sprites.ts`) and the
- * runtime creature (`src/creatures/RockGolem.ts`) both read these. Copying the
- * numbers into either side instead is how a slam ends up dealing its damage on a
- * frame where the fists are still overhead: the animation and the hit stop
- * describing the same event, and nothing in the type system notices.
+ * The choreography (`src/sprites/art/rockGolemFigure.ts`) and the runtime
+ * creature (`src/creatures/RockGolem.ts`) both read these. Copying the numbers
+ * into either side instead is how a slam ends up dealing its damage on a frame
+ * where the fists are still overhead: the animation and the hit stop describing
+ * the same event, and nothing in the type system notices.
  *
- * This module deliberately imports nothing — the node-canvas generator loads it
- * directly, so it must not pull in any browser-only code.
+ * This module deliberately imports nothing — the offline gates load it directly,
+ * so it must not pull in any browser-only code.
  */
 
 export const GOLEM_SLAM_FRAMES = 10;

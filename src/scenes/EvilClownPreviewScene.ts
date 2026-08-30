@@ -24,15 +24,14 @@ import { drawText } from '../ui/TextBox';
 import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
 import {
   EVIL_CLOWN_BODY_PART_KEY,
+  EVIL_CLOWN_FRAME_COUNT,
   drawEvilClownSprite,
   type EvilClownAnimation,
+  type EvilClownState,
 } from '../sprites/evilClownSprite';
 import { drawClownGas, drawClownVial, drawClownVialShatter } from '../sprites/clownGasSprite';
 import { GameMap } from '../map/GameMap';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
-
-type EvilClownState = SpriteStates['evil_clown'];
 
 /** A facing vector per column, chosen so `drawEvilClownSprite` picks each view. */
 interface ViewSpec {
@@ -59,9 +58,8 @@ interface RowSpec {
 
 /**
  * The rows to show and how fast to play them. Frame counts are deliberately
- * absent: they are read from the loaded manifest at draw time, because a
- * hand-copied count here would silently desync from the sheet the moment a
- * row's length changed.
+ * absent: they are read from the figure's own table, because a hand-copied
+ * count here would silently desync the moment a row's length changed.
  */
 const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'walk', probeState: 'walk_side', fps: 10 },
@@ -71,9 +69,9 @@ const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'juggle_walk', probeState: 'juggle_walk_side', fps: 10 },
 ];
 
-/** How many frames a row actually holds, from the sheet the game loaded. */
+/** How many frames a row actually holds, from the figure that paints it. */
 function frameCountOf(state: EvilClownState): number {
-  return getSpriteDefByKey('evil_clown')?.states.get(state)?.frameCount ?? 1;
+  return EVIL_CLOWN_FRAME_COUNT[state];
 }
 
 /** 1× is what a player sees; 3× is where the grin becomes legible at all. */

@@ -24,9 +24,8 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawText } from '../ui/TextBox';
 import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
 import { BUGABOO_BREACH_FPS, BUGABOO_IDLE_FPS, drawBugabooSprite } from '../sprites/bugabooSprite';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
-
-type BugabooState = SpriteStates['bugaboo'];
+import { BUGABOO_FIGURE } from '../sprites/art/bugabooFigure';
+import { figureFrameCount } from '../sprites/figure/figureDef';
 
 /** A facing vector per column, chosen so the wrapper picks each viewpoint. */
 interface ViewSpec {
@@ -46,8 +45,8 @@ type RowKind = 'idle' | 'walk' | 'swipe' | 'breach' | 'emerge';
 
 interface RowSpec {
   readonly kind: RowKind;
-  /** Which sheet state the profile column plays, for the frame-count readout. */
-  readonly probeState: BugabooState;
+  /** Which figure state the profile column plays, for the frame-count readout. */
+  readonly probeState: string;
   /**
    * How many *game* ticks the row spans, for a row the mob drives from a timer.
    * These are the counts `Bugaboo` itself uses, so the pacing seen here is the
@@ -79,9 +78,9 @@ const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'emerge', probeState: 'emerge', gameFrames: BUGABOO_EMERGE_FRAMES },
 ];
 
-/** How many frames a row actually holds, from the sheet the game loaded. */
-function frameCountOf(state: BugabooState): number {
-  return getSpriteDefByKey('bugaboo')?.states.get(state)?.frameCount ?? 1;
+/** How many frames a row actually holds, from the figure the game paints. */
+function frameCountOf(state: string): number {
+  return figureFrameCount(BUGABOO_FIGURE, state);
 }
 
 /** How many game ticks one pass of a row takes at the speed the game plays it. */

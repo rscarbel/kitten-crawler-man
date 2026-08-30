@@ -2,9 +2,9 @@
 /**
  * Scratch harness for eyeballing generated tiles outside the game.
  *
- *   npx tsx scripts/tilegen-debug.ts materials   -> /tmp/tilegen_materials.png
- *   npx tsx scripts/tilegen-debug.ts transitions -> /tmp/tilegen_transitions.png
- *   npx tsx scripts/tilegen-debug.ts blob        -> /tmp/tilegen_blob.png
+ *   npx tsx scripts/tilegen-debug.ts materials   -> preview/tilegen_materials.png
+ *   npx tsx scripts/tilegen-debug.ts transitions -> preview/tilegen_transitions.png
+ *   npx tsx scripts/tilegen-debug.ts blob        -> preview/tilegen_blob.png
  *
  * The in-game `?tiles` route is the reviewable version; this exists so a seam can
  * be checked without a browser.
@@ -15,9 +15,9 @@
  * half a tile off where the game puts them. Use `?tiles` to judge placement.
  */
 import { createCanvas, type CanvasRenderingContext2D as NodeCtx } from 'canvas';
-import { writeFileSync } from 'fs';
 import { Surface, TILE_PX } from './tilegen/raster.js';
 import { MATERIALS, getMaterial, paintPatch } from './tilegen/materials.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { slicePatch } from './tilegen/sheet.js';
 import {
   buildCornerMask,
@@ -86,8 +86,11 @@ function renderMaterials(): void {
     ctx.fillText(material.label, originX + 4, originY - 5);
   });
 
-  writeFileSync('/tmp/tilegen_materials.png', canvas.toBuffer('image/png'));
-  console.log('wrote /tmp/tilegen_materials.png');
+  const outPath = writePreviewPng(
+    `${PREVIEW_DIR}/tilegen_materials.png`,
+    canvas.toBuffer('image/png'),
+  );
+  console.log(`wrote ${outPath}`);
 }
 
 /** All 16 corner combinations of one transition, laid out 4x4. */
@@ -127,8 +130,11 @@ function renderTransitions(): void {
     ctx.fillText(`${baseId} -> ${overId}`, originX + 4, 13);
   });
 
-  writeFileSync('/tmp/tilegen_transitions.png', canvas.toBuffer('image/png'));
-  console.log('wrote /tmp/tilegen_transitions.png');
+  const outPath = writePreviewPng(
+    `${PREVIEW_DIR}/tilegen_transitions.png`,
+    canvas.toBuffer('image/png'),
+  );
+  console.log(`wrote ${outPath}`);
 }
 
 /**
@@ -182,8 +188,8 @@ function renderBlob(): void {
       drawSurface(ctx, composed, tx * TILE_PX, ty * TILE_PX);
     }
   }
-  writeFileSync('/tmp/tilegen_blob.png', canvas.toBuffer('image/png'));
-  console.log('wrote /tmp/tilegen_blob.png');
+  const outPath = writePreviewPng(`${PREVIEW_DIR}/tilegen_blob.png`, canvas.toBuffer('image/png'));
+  console.log(`wrote ${outPath}`);
 }
 
 const mode = process.argv[2] ?? 'materials';

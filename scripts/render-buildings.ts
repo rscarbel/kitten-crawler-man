@@ -28,7 +28,7 @@
  */
 
 import { createCanvas, loadImage, type Canvas } from 'canvas';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
 import { TILE_SIZE } from '../src/core/constants.js';
@@ -42,6 +42,7 @@ import {
 } from './buildinggen/bake.js';
 import { GateResults } from './buildinggen/gates.js';
 import { BUILDING_TILE_SCALE, type BuildingSpec } from './buildinggen/spec.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 /**
  * node-canvas's `Image`, named off `loadImage` rather than imported, so the
@@ -293,7 +294,7 @@ function renderSheet(groups: ReadonlyArray<Group>, scale: number, outPath: strin
     top += group.height + GROUP_GAP;
   }
 
-  writeFileSync(outPath, canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
 }
 
 // ── the replaced art ───────────────────────────────────────────────────────
@@ -333,7 +334,7 @@ async function loadComparison(
 // ── entry ──────────────────────────────────────────────────────────────────
 
 const scale = parseScale();
-const outPath = resolve(parseFlag('out') ?? 'buildings-review.png');
+const outPath = resolve(parseFlag('out') ?? `${PREVIEW_DIR}/buildings-review.png`);
 const wantsComparison = hasFlag('compare');
 const fixture = readFixture();
 const specs = selectedSpecs();

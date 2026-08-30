@@ -12,7 +12,9 @@
  */
 
 import { createCanvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
+
+import { asGameContext } from './nodeGameContext.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 import type { InkMarauderForm, InkMarauderPose } from '../src/sprites/inkMarauderSprite';
 
@@ -26,7 +28,7 @@ const {
 const DEFAULT_REVIEW_TILE_SIZE = 90;
 const IN_GAME_TILE_SIZE = 32;
 const DEFAULT_SCALE = 2;
-const DEFAULT_OUT = 'summons.png';
+const DEFAULT_OUT = `${PREVIEW_DIR}/summons.png`;
 
 const CELL_PAD = 12;
 const LABEL_BAND = 18;
@@ -101,7 +103,7 @@ function drawCell(
   label: string,
 ): void {
   const originX = tileLeftInCell(cellLeft, tileSize);
-  drawInkMarauderSprite(ctx, originX, originY, tileSize, pose);
+  drawInkMarauderSprite(asGameContext(ctx), originX, originY, tileSize, pose);
 
   ctx.save();
   ctx.strokeStyle = 'rgba(226, 232, 240, 0.25)';
@@ -177,5 +179,5 @@ for (const form of FORMS) {
   rowTop += gameCellHeight + SECTION_GAP;
 }
 
-writeFileSync(outPath, canvas.toBuffer('image/png'));
+writePreviewPng(outPath, canvas.toBuffer('image/png'));
 process.stdout.write(`wrote ${outPath} (${sheetWidth * scale}x${sheetHeight * scale})\n`);

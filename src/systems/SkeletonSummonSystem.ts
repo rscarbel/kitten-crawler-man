@@ -22,6 +22,7 @@ import { SkeletonLord } from '../creatures/SkeletonLord';
 import { TheLich } from '../creatures/TheLich';
 import { SkeletonWarrior } from '../creatures/SkeletonWarrior';
 import { SkeletonArcher } from '../creatures/SkeletonArcher';
+import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
 import { RisingSkeleton } from '../creatures/RisingSkeleton';
 import { TILE_SIZE } from '../core/constants';
 import { hasRoomToMove } from '../map/findWalkableTile';
@@ -102,7 +103,12 @@ export class SkeletonSummonSystem implements GameSystem {
         if (Math.hypot(skeleton.x - summoner.x, skeleton.y - summoner.y) <= escortRadiusPx)
           living++;
       }
-      for (const request of summoner.takePendingSummons()) {
+      const pending = summoner.takePendingSummons();
+      // Every summoner's wave, not just the Lich's: the Skeleton Lord raises
+      // his own escort through this loop and the bodies are all created on one
+      // frame, so the rows have to be admitted before the first of them draws.
+      if (pending.length > 0) prewarmSkeletonEscortSprites();
+      for (const request of pending) {
         // A rising skeleton is already alive and already counted, so the cap can
         // never be double-booked by a wave that has not finished climbing out.
         if (living >= cap) continue;

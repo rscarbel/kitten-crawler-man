@@ -6,11 +6,15 @@ import { drawDangerCircle } from '../sprites/dangerTelegraph';
 import { maybeDropSkillBook } from './skillBookDrop';
 import {
   DARK_KNIGHT_BODY_PART_KEY,
+  DARK_KNIGHT_WALK_STATES,
   darkKnightAttackFrames,
+  darkKnightAttackStates,
   darkKnightImpactProgress,
   drawDarkKnightSprite,
   type DarkKnightAttack,
 } from '../sprites/darkKnightSprite';
+import { DARK_KNIGHT_FIGURE } from '../sprites/art/darkKnightFigure';
+import { prewarmFigureState } from '../sprites/figure/figureFrameCache';
 
 const KNIGHT_HP = 900;
 const KNIGHT_SPEED = 1.05;
@@ -246,6 +250,16 @@ export function darkKnightTelegraphFade(windupProgress: number): number | null {
  * decorative — and that the punch is deliberately undodgeable, so it has no
  * telegraph and no windup to match.
  */
+/**
+ * Asks the frame cache for a row's three views together rather than the one he
+ * currently faces: a wind-up lasts long enough for the player to walk around
+ * him, and the frames the cache has to have ready are whichever view he is in
+ * when the blow lands.
+ */
+function prewarmRows(states: ReadonlyArray<string>): void {
+  for (const state of states) prewarmFigureState(DARK_KNIGHT_FIGURE, state);
+}
+
 export class DarkKnight extends Mob {
   readonly xpValue = KNIGHT_XP_VALUE;
   protected coinDropMin = COIN_DROP_MIN;
@@ -313,6 +327,10 @@ export class DarkKnight extends Mob {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, KNIGHT_HP, KNIGHT_SPEED);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;
+    // He is constructed when the bounty is staged, which is frames — usually
+    // seconds — before the party walks into his site, so the row he spends the
+    // approach in is warm by the time anyone sees him take a step.
+    prewarmRows(DARK_KNIGHT_WALK_STATES);
   }
 
   override get cullMarginTiles(): number {
@@ -546,6 +564,10 @@ export class DarkKnight extends Mob {
 
   private beginAttack(attack: DarkKnightAttack, target: Player): void {
     const timing = attackTiming(attack);
+    // At the telegraph, not at the first frame that draws it: the wind-up is
+    // the whole warning the player gets, and a row baking during it is a row
+    // baking while the circle is already on the floor.
+    prewarmRows(darkKnightAttackStates(attack));
     this.state = attack;
     // Always 'windup'. An attack begun in 'execute' would never cross the
     // windup→execute boundary, and that boundary is the only place damage is

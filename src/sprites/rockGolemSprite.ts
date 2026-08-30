@@ -1,21 +1,19 @@
-import {
-  drawSpriteKey,
-  walkFrameIndex,
-  progressFrameIndex,
-  timeFrameIndex,
-} from '../core/SpriteRenderer';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
+import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { figureFrameCount, type FigureDef } from './figure/figureDef';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { ROCK_GOLEM_BOSS_FIGURE, ROCK_GOLEM_FIGURE } from './art/rockGolemFigure';
 
 /**
- * The two sheets baked from one drawing engine: the club's bouncers, the hired
- * bruiser and the bounty bodyguard share `rock_golem`; the bounty target uses
- * `rock_golem_boss`, which is the same figure grown and given the four
+ * The two figures painted from one drawing engine: the club's bouncers, the
+ * hired bruiser and the bounty bodyguard share `rock_golem`; the bounty target
+ * uses `rock_golem_boss`, which is the same figure grown and given the four
  * boulder-roll rows.
  */
 export type RockGolemSheet = 'rock_golem' | 'rock_golem_boss';
 
-type RegularState = SpriteStates['rock_golem'];
-type BossState = SpriteStates['rock_golem_boss'];
+function figureFor(sheet: RockGolemSheet): FigureDef {
+  return sheet === 'rock_golem_boss' ? ROCK_GOLEM_BOSS_FIGURE : ROCK_GOLEM_FIGURE;
+}
 
 /** Which of the sheet's three viewpoints a facing vector selects. */
 type GolemView = 'front' | 'side' | 'away';
@@ -27,14 +25,14 @@ export type GolemAttack = 'slam' | 'stomp' | 'throw';
 export type GolemBallState = 'curl' | 'roll' | 'uncurl' | 'stunned';
 
 /**
- * How many frames a row actually holds, read from the sheet the game loaded.
+ * How many frames a row actually holds, read from the figure that paints it.
  *
- * Not a hand-copied table: `drawSprite` *clamps* the frame index, so a row that
- * got shorter in a rebake would silently freeze on its last frame rather than
+ * Not a hand-copied table: `drawFigureCached` *clamps* the frame index, so a
+ * row that got shorter would silently freeze on its last frame rather than
  * throw. There is nothing to notice until someone watches that one animation.
  */
 function frameCountOf(sheet: RockGolemSheet, state: string): number {
-  return getSpriteDefByKey(sheet)?.states.get(state)?.frameCount ?? 1;
+  return Math.max(1, figureFrameCount(figureFor(sheet), state));
 }
 
 /** Loop speed for the idle, which is driven by the clock rather than by a timer. */
@@ -108,61 +106,6 @@ function stateFor(base: string, view: GolemView): string {
   return base;
 }
 
-/**
- * The manifest-derived state unions differ between the two sheets — only the
- * boss has the ball rows — so a row name is resolved as a plain string by the
- * shared choreography above and narrowed to the right union here.
- *
- * The lookup is a `find` over the union's own members rather than a cast: a row
- * that a rename dropped from the manifest stops type-checking in this table
- * instead of silently drawing nothing at runtime.
- */
-function toRegular(name: string): RegularState | null {
-  const known: ReadonlyArray<RegularState> = [
-    'walk',
-    'walk_side',
-    'walk_away',
-    'idle',
-    'idle_side',
-    'idle_away',
-    'slam',
-    'slam_side',
-    'slam_away',
-    'stomp',
-    'stomp_side',
-    'stomp_away',
-    'throw',
-    'throw_side',
-    'throw_away',
-  ];
-  return known.find((state) => state === name) ?? null;
-}
-
-function toBoss(name: string): BossState | null {
-  const known: ReadonlyArray<BossState> = [
-    'walk',
-    'walk_side',
-    'walk_away',
-    'idle',
-    'idle_side',
-    'idle_away',
-    'slam',
-    'slam_side',
-    'slam_away',
-    'stomp',
-    'stomp_side',
-    'stomp_away',
-    'throw',
-    'throw_side',
-    'throw_away',
-    'curl',
-    'roll',
-    'uncurl',
-    'stunned',
-  ];
-  return known.find((state) => state === name) ?? null;
-}
-
 interface ResolvedRow {
   readonly name: string;
   readonly frame: number;
@@ -229,15 +172,44 @@ export function drawRockGolemSprite(
   state: RockGolemSpriteState = {},
 ): void {
   const row = resolveRow(sheet, state);
-  if (sheet === 'rock_golem_boss') {
-    const name = toBoss(row.name);
-    if (name !== null) {
-      drawSpriteKey(ctx, 'rock_golem_boss', name, row.frame, sx, sy, s, { flipX: row.flipX });
-    }
-    return;
-  }
-  const name = toRegular(row.name);
-  if (name !== null) {
-    drawSpriteKey(ctx, 'rock_golem', name, row.frame, sx, sy, s, { flipX: row.flipX });
+  drawFigureCached(ctx, figureFor(sheet), row.name, row.frame, sx, sy, s, { flipX: row.flipX });
+}
+
+/**
+ * Every row a golem of this build can be asked to show, built through the same
+ * `stateFor` the draw path uses so the prewarm list and the draw call can never
+ * name different rows.
+ *
+ * Both bodies paint comfortably inside the millisecond a direct fallback paint
+ * costs (`npm run bench:procedural-draw`), so a cold row is affordable rather
+ * than fatal — the prewarm below is what keeps a hire or a bounty spawn from
+ * paying for one at all.
+ *
+ * The ball rows are narrowed by *build* and never by which states the figure
+ * happens to declare: a filter on `figure.states` drops a renamed row out of
+ * the list instead of reporting it, which leaves the name gate downstream of
+ * this measuring a row nobody paints any more.
+ */
+export function rockGolemReachableStates(sheet: RockGolemSheet): readonly string[] {
+  const views: readonly GolemView[] = ['front', 'side', 'away'];
+  const bases: readonly string[] = ['walk', 'idle', 'slam', 'stomp', 'throw'];
+  const posed = bases.flatMap((base) => views.map((view) => stateFor(base, view)));
+  const ballRows: readonly GolemBallState[] = sheet === 'rock_golem_boss' ? BALL_ROWS : [];
+  return [...new Set([...posed, ...ballRows])];
+}
+
+/** The rows only the boss's body carries; a regular golem never curls up. */
+const BALL_ROWS: readonly GolemBallState[] = ['curl', 'roll', 'uncurl', 'stunned'];
+
+/**
+ * Warms the rows a golem crosses the ground on, at the moment its spawn is
+ * scheduled rather than when it first renders — a hire, or a bounty site being
+ * built.
+ */
+export function prewarmRockGolemApproach(sheet: RockGolemSheet): void {
+  const figure = figureFor(sheet);
+  const views: readonly GolemView[] = ['front', 'side', 'away'];
+  for (const base of ['walk', 'idle']) {
+    for (const view of views) prewarmFigureState(figure, stateFor(base, view));
   }
 }

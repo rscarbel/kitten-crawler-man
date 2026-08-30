@@ -28,8 +28,9 @@ import type { SystemContext } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
 import type { DialogPage } from '../ui/QuestDialog';
 import { handsConeCovers, TheLich } from '../creatures/TheLich';
+import { prewarmLichDazed } from '../sprites/lichSprite';
 import { drawDangerCircle, drawDangerTile } from '../sprites/dangerTelegraph';
-import { drawSoulBurst } from '../sprites/skeletonEffectsSprite';
+import { drawSoulBurst, prewarmSoulBurst } from '../sprites/skeletonEffectsSprite';
 import { drawFireWave, WAVE_MIN_LOOP_FRAMES } from '../sprites/fireWaveSprite';
 import { drawLichOrb } from '../sprites/lichOrbSprite';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
@@ -875,6 +876,10 @@ export class LichBattleSystem implements GroundHazardSource {
   // ── Phase 3: the tantrum ───────────────────────────────────────────────────
 
   private enterTantrum(ctx: SystemContext): void {
+    // The spent row is the payoff of the whole phase and it has no telegraph of
+    // its own — the dodge clock runs out and the row plays on the next frame —
+    // so the phase that will call for it is the only warning the cache gets.
+    prewarmLichDazed();
     this.waves = [];
     this.warnings = [];
     this.orbPlanner.reset();
@@ -984,6 +989,8 @@ export class LichBattleSystem implements GroundHazardSource {
     );
     if (target === null) return;
     this.warnings.push({ tile: target, framesLeft: ORB_WARNING_FRAMES, dealsDamage: true });
+    // The warning hovering on the floor is the burst's whole telegraph.
+    prewarmSoulBurst();
     this.audio?.play('magic_ball_launch', { volume: ORB_LAUNCH_VOLUME });
   }
 

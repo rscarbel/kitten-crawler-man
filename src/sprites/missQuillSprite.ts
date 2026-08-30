@@ -61,8 +61,8 @@ const SHIELD_PULSE_SPEED = 2.4;
 const MS_PER_SECOND = 1000;
 
 /**
- * Sky fowl plumage, sampled off `sky_fowl_body.png` so she reads as one of
- * them at a glance rather than as a bird-shaped stranger.
+ * Sky fowl plumage, taken from the palette in `skyFowlArt.ts` so she reads as
+ * one of them at a glance rather than as a bird-shaped stranger.
  */
 const FEATHER_COLOR = '#7a5530';
 const FEATHER_CROWN_COLOR = '#4a3015';

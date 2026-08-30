@@ -13,6 +13,7 @@ import {
   isRebindCaptureActive,
 } from '../ui/pause/rebindCapture';
 import { activeSearchField, endSearchCapture } from '../ui/SearchField';
+import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
 import { beginPersonFrame } from '../sprites/person/personFrameCache';
 import { perfMonitor } from './PerfMonitor';
 import { renderQuality } from './RenderQuality';
@@ -481,7 +482,25 @@ export class SceneManager {
     this.frameOverlay = overlay;
   }
 
+  /**
+   * One rAF tick, wrapped so nothing thrown inside it can stop the loop.
+   *
+   * A creature's art is painted during render now rather than blitted from a
+   * decoded sheet, and a painter is code that can throw where `drawImage` on a
+   * missing key merely returned. Without this, one bad pose in one creature
+   * ends the game: no further frame is ever scheduled, and the timers stay open
+   * so even the perf readout lies about why. The exception still propagates —
+   * a painter bug has to be loud — it just does not take the loop with it.
+   */
   private loop(now: number): void {
+    try {
+      this.step(now);
+    } finally {
+      requestAnimationFrame((t) => this.loop(t));
+    }
+  }
+
+  private step(now: number): void {
     // Keep frameTime current for smooth visual animations in render().
     updateFrameTime();
     renderQuality.recordFrame(now);
@@ -495,12 +514,15 @@ export class SceneManager {
 
     let steps = 0;
     const updateStartedAt = perfMonitor.begin();
-    while (this.accumulator >= this.FIXED_DT && steps < MAX_CATCHUP_UPDATES) {
-      this.current?.update();
-      this.accumulator -= this.FIXED_DT;
-      steps++;
+    try {
+      while (this.accumulator >= this.FIXED_DT && steps < MAX_CATCHUP_UPDATES) {
+        this.current?.update();
+        this.accumulator -= this.FIXED_DT;
+        steps++;
+      }
+    } finally {
+      perfMonitor.end('update', updateStartedAt);
     }
-    perfMonitor.end('update', updateStartedAt);
     if (this.accumulator >= this.FIXED_DT) this.accumulator = 0;
 
     // Here rather than inside a render pipeline or a scene: the procedural-people
@@ -510,21 +532,23 @@ export class SceneManager {
     // freeze that clock, turning the cache off. This is the one call site every
     // scene passes through.
     beginPersonFrame();
+    beginFigureFrame();
     const renderStartedAt = perfMonitor.begin();
-    this.current?.render(this.ctx);
-    perfMonitor.end('render', renderStartedAt);
+    try {
+      this.current?.render(this.ctx);
+    } finally {
+      perfMonitor.end('render', renderStartedAt);
+      perfMonitor.endFrame();
+    }
 
     // After the timers close, so the overlay reports the frame it is drawn on
     // top of rather than adding its own cost to the figures it shows. Saved and
     // restored around because it draws after an arbitrary scene's render, which
     // is under no obligation to leave alpha, transform or filter as it found them.
-    perfMonitor.endFrame();
     if (this.frameOverlay) {
       this.ctx.save();
       this.frameOverlay(this.ctx);
       this.ctx.restore();
     }
-
-    requestAnimationFrame((t) => this.loop(t));
   }
 }

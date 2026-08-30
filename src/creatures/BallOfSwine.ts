@@ -7,6 +7,9 @@ import {
   drawBallOfSwineSprite,
   drawBallOfSwineStoppedWarning,
   drawBallOfSwineTrack,
+  prewarmBallOfSwineCharge,
+  prewarmBallOfSwineLocomotion,
+  prewarmBallOfSwineWallow,
 } from '../sprites/ballOfSwineSprite';
 import {
   BOS_BODY_RADIUS_TILES,
@@ -17,6 +20,7 @@ import {
 import { STENCH_ATTACK_TYPE, TRAMPLE_ATTACK_TYPE } from './ballOfSwineAttackTypes';
 import { ARENA_INTERIOR_RADIUS_TILES, ARENA_REACH } from '../map/arenaGeometry';
 import { makePoison } from '../core/StatusEffect';
+import { prewarmTuskling } from '../sprites/tusklingSprite';
 import type { LootDrop, PlayerDamageType } from './Mob';
 
 /**
@@ -428,6 +432,10 @@ export class BallOfSwine extends Mob {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, BOS_BASE_HP, BOS_BASE_ROLL_SPEED);
     this.isBoss = false; // managed by ArenaSystem, not BossRoomSystem
+    // It exists for a while before the intro panel draws it and longer still
+    // before it is let loose, and its cells are the largest in the game: the
+    // rolling row and the two overlays are warmed from the moment it is built.
+    prewarmBallOfSwineLocomotion();
   }
 
   /** Must be called once after construction so the ball knows its arena bounds. */
@@ -544,6 +552,10 @@ export class BallOfSwine extends Mob {
     this.pendingBurst = true;
     this.phase = 'bursting';
     this.burstTimer = BOS_BURST_GAME_FRAMES;
+    // The eight Tusklings of phase two are scheduled here, a whole burst
+    // animation before `bossDefeated` builds them, which is the lead the cache
+    // needs to have their rows warm on the frame they appear.
+    prewarmTuskling();
   }
 
   /**
@@ -1044,6 +1056,9 @@ export class BallOfSwine extends Mob {
     const clamped = Math.max(0, Math.min(1, squareness));
     const window = WALLOW_MIN_FRAMES + clamped * (WALLOW_MAX_FRAMES - WALLOW_MIN_FRAMES);
     this.phase = 'wallowing';
+    // The heave is about to play, and the only thing that can follow a long
+    // enough one is the burst.
+    prewarmBallOfSwineWallow();
     this.wallowTotal = Math.max(
       1,
       Math.round(this.isFrenzied ? window * FRENZY_WALLOW_MULTIPLIER : window),
@@ -1058,6 +1073,9 @@ export class BallOfSwine extends Mob {
     this.wallowTimer--;
     if (this.wallowTimer > 0) return;
     this.phase = 'spinning_up';
+    // The telegraph, and the wall impact every charge ends in, warmed across the
+    // wind-up rather than paid for on the frame each first draws.
+    prewarmBallOfSwineCharge();
     this.spinupTimer = BOS_SPINUP_GAME_FRAMES;
     // Aim locked at the top of the telegraph and never touched again until it is
     // moving: the shot vector freezes for at least 21 frames, so what the crawler
@@ -1153,6 +1171,10 @@ export class BallOfSwine extends Mob {
     if (this.shedTimer > 0) return;
     this.shedTimer = SHED_INTERVAL_FRAMES;
     this.pendingSheds++;
+    // Warmed as this shed is queued rather than as the next one is: the arena
+    // drains the queue into live bodies within the frame, so the lead this buys
+    // belongs to the shed after it and to the eight the burst releases.
+    prewarmTuskling();
   }
 
   /**

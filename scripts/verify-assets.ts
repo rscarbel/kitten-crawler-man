@@ -23,12 +23,18 @@
  * actual field values (which are typed to the union, but a def only ever
  * contains what its author wrote) to compute what each floor produces.
  *
+ * A second, independent check runs first: every key in the composed sprite
+ * manifest must belong to some `ASSET_GROUPS` entry. A key no group names is
+ * shipped and precached but never preloaded, so it decodes mid-frame the first
+ * time something draws it.
+ *
  * Run: npx tsx scripts/verify-assets.ts
  */
 import { tutorialLevel, level1, level2, level3 } from '../src/levels/index';
 import type { LevelDef } from '../src/levels/types';
 import { getRegisteredMobTypes } from '../src/levels/spawner';
 import { ASSET_GROUPS, MOB_SPRITE_KEYS, type AssetGroup } from '../src/core/assetGroups';
+import { getManifestKeys } from '../src/core/SpriteLoader';
 import {
   SYSTEM_ASSET_REQUIREMENTS,
   requiredSpriteKeysForLevel,
@@ -68,6 +74,24 @@ function keysForGroups(groups: Iterable<AssetGroup>): Set<string> {
     for (const key of ASSET_GROUPS[group]) keys.add(key);
   }
   return keys;
+}
+
+// Every manifest key must be reachable from some ASSET_GROUPS entry. Nothing
+// else enforces this direction — `ASSET_GROUPS` is typed `readonly SpriteKey[]`,
+// so tsc catches a group naming a key that does not exist, but a key no group
+// names is invisible: the PNG ships, the service worker precaches it, the
+// browser decodes it on first draw, and it pops in mid-frame because no
+// `loadGroups` call ever asked for it. Three sheets shipped that way
+// (`terror_clown`, `golem_rock`, `golem_rock_burst`) before this check existed.
+const keysInSomeGroup = new Set<string>(Object.values(ASSET_GROUPS).flat());
+for (const key of getManifestKeys()) {
+  if (!keysInSomeGroup.has(key)) {
+    fail(
+      `Manifest key "${key}" belongs to no ASSET_GROUPS entry (src/core/assetGroups.ts), so ` +
+        `nothing ever preloads it — add it to the group of whatever draws it, or delete the ` +
+        `sheet and its manifest entry if nothing does.`,
+    );
+  }
 }
 
 // Sanity-check the ground truth itself: every mob the spawner can actually
@@ -140,5 +164,5 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log(
-  `[verify-assets] OK — ${LEVELS.length} floors, ${SYSTEM_ASSET_REQUIREMENTS.length} system/quest/bounty entries, ${getRegisteredMobTypes().length} registered mob types, all covered.`,
+  `[verify-assets] OK — ${LEVELS.length} floors, ${SYSTEM_ASSET_REQUIREMENTS.length} system/quest/bounty entries, ${getRegisteredMobTypes().length} registered mob types, ${getManifestKeys().length} manifest keys, all covered.`,
 );

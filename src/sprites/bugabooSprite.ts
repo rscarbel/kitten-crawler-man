@@ -1,33 +1,43 @@
-import {
-  drawSpriteKey,
-  progressFrameIndex,
-  timeFrameIndex,
-  walkFrameIndex,
-} from '../core/SpriteRenderer';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
-
-type BugabooState = SpriteStates['bugaboo'];
+import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { BUGABOO_FIGURE, SWIPE_FRAMES, SWIPE_IMPACT_FRAME } from './art/bugabooFigure';
+import { figureFrameCount } from './figure/figureDef';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 
 /** Which of the three drawn viewpoints a facing resolves to. */
 export type BugabooView = 'front' | 'side' | 'away';
 
+type BugabooBase = 'idle' | 'walk' | 'swipe';
+
+type BugabooState =
+  | 'idle'
+  | 'idle_side'
+  | 'idle_away'
+  | 'walk'
+  | 'walk_side'
+  | 'walk_away'
+  | 'swipe'
+  | 'swipe_side'
+  | 'swipe_away'
+  | 'breach'
+  | 'emerge';
+
 /**
  * The frame of every swipe row on which the claws are at full extension.
- * `Bugaboo` deals its damage here, and `scripts/generate-bugaboo-sprite.ts`
- * declares the same value — the runtime cannot import from `scripts/` (rootDir
- * is `src/`), so the two are duplicated and a bake gate checks they agree.
+ * `Bugaboo` deals its damage here, and the choreography is where it is decided,
+ * so both read the same constant.
  */
-export const BUGABOO_SWIPE_IMPACT_FRAME = 4;
+export const BUGABOO_SWIPE_IMPACT_FRAME = SWIPE_IMPACT_FRAME;
 
 /** How many frames every swipe row holds, which the impact frame counts into. */
-export const BUGABOO_SWIPE_FRAMES = 8;
+export const BUGABOO_SWIPE_FRAMES = SWIPE_FRAMES;
 
 /**
- * The topmost inked row of the standing frames, in the sheet's own `tileScale`
+ * The topmost inked row of the standing frames, in the figure's own `tileScale`
  * units — every idle and walk frame starts with this much transparent padding.
- * Measured off the baked sheet rather than derived, because the anchor only says
- * where the feet are; nothing in the manifest records how far the horns reach.
- * A bake gate re-measures it, since a redraw would move it silently.
+ * Measured off the painted cells rather than derived, because the anchor only
+ * says where the feet are; nothing in the figure's geometry records how far the
+ * horns reach. `scripts/gates-bugaboo.ts` re-measures it, since a redraw would
+ * move it silently.
  */
 export const BUGABOO_STANDING_INK_TOP = 39;
 
@@ -37,9 +47,7 @@ export const BUGABOO_STANDING_INK_TOP = 39;
  * has to start above this or it lands on his chest.
  */
 export function bugabooHeadClearanceTiles(): number {
-  const def = getSpriteDefByKey('bugaboo');
-  if (!def) return 0;
-  return (def.tileY - BUGABOO_STANDING_INK_TOP) / def.tileScale;
+  return (BUGABOO_FIGURE.tileY - BUGABOO_STANDING_INK_TOP) / BUGABOO_FIGURE.tileScale;
 }
 
 /** Loop speed for the idle, which is driven by the clock rather than a timer. */
@@ -48,13 +56,8 @@ export const BUGABOO_IDLE_FPS = 6;
 export const BUGABOO_BREACH_FPS = 9;
 const MILLISECONDS_PER_SECOND = 1000;
 
-/**
- * Read off the sheet rather than hand-tabled, because `drawSprite` *clamps* the
- * frame index: a row that got shorter would silently freeze on its last frame
- * instead of failing.
- */
 function frameCountOf(state: BugabooState): number {
-  return getSpriteDefByKey('bugaboo')?.states.get(state)?.frameCount ?? 1;
+  return figureFrameCount(BUGABOO_FIGURE, state);
 }
 
 /** Views split on whichever axis the creature is facing hardest along. */
@@ -63,7 +66,7 @@ function viewFor(facingX: number, facingY: number): BugabooView {
   return facingY < 0 ? 'away' : 'front';
 }
 
-function stateFor(base: 'idle' | 'walk' | 'swipe', view: BugabooView): BugabooState {
+function stateFor(base: BugabooBase, view: BugabooView): BugabooState {
   if (view === 'side') return `${base}_side`;
   if (view === 'away') return `${base}_away`;
   return base;
@@ -137,9 +140,9 @@ export function drawBugabooSprite(
     loopFrame ?? timeFrameIndex(nowSeconds, fps, count);
 
   if (emergeProgress !== null) {
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      'bugaboo',
+      BUGABOO_FIGURE,
       'emerge',
       progressFrameIndex(emergeProgress, frameCountOf('emerge')),
       sx,
@@ -150,9 +153,9 @@ export function drawBugabooSprite(
   }
 
   if (breaching) {
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      'bugaboo',
+      BUGABOO_FIGURE,
       'breach',
       loopedFrame(BUGABOO_BREACH_FPS, frameCountOf('breach')),
       sx,
@@ -167,9 +170,9 @@ export function drawBugabooSprite(
 
   if (swipeProgress !== null) {
     const key = stateFor('swipe', view);
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      'bugaboo',
+      BUGABOO_FIGURE,
       key,
       progressFrameIndex(swipeProgress, frameCountOf(key)),
       sx,
@@ -182,9 +185,9 @@ export function drawBugabooSprite(
 
   if (isMoving) {
     const key = stateFor('walk', view);
-    drawSpriteKey(
+    drawFigureCached(
       ctx,
-      'bugaboo',
+      BUGABOO_FIGURE,
       key,
       walkFrameIndex(walkFrame, frameCountOf(key)),
       sx,
@@ -196,9 +199,9 @@ export function drawBugabooSprite(
   }
 
   const key = stateFor('idle', view);
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    'bugaboo',
+    BUGABOO_FIGURE,
     key,
     loopedFrame(BUGABOO_IDLE_FPS, frameCountOf(key)),
     sx,
@@ -208,4 +211,42 @@ export function drawBugabooSprite(
       flipX,
     },
   );
+}
+
+/** Every base pose the creature can play in one of the three views. */
+const BUGABOO_BASES: ReadonlyArray<BugabooBase> = ['idle', 'walk', 'swipe'];
+const BUGABOO_VIEWS: ReadonlyArray<BugabooView> = ['front', 'side', 'away'];
+
+/**
+ * Every state `drawBugabooSprite` can ask the figure for.
+ *
+ * Built from the same two tables `stateFor` composes rather than listed by
+ * hand, so a view or a base added to one is present in the other. The art gates
+ * feed this to `missingStateFailures`: both draw paths return silently on a
+ * state the figure does not paint, so a name only the runtime knows is an
+ * invisible creature and no log line.
+ */
+export const BUGABOO_STATES: ReadonlyArray<BugabooState> = [
+  ...BUGABOO_BASES.flatMap((base) => BUGABOO_VIEWS.map((view) => stateFor(base, view))),
+  'breach',
+  'emerge',
+];
+
+/**
+ * Warms every row a Bugaboo can draw.
+ *
+ * Every row, and not the spawn's first few: `npm run bench:figure-paint` puts
+ * one Bugaboo cell over the threshold the direct-paint fallback is affordable
+ * below, so a row entered without warning costs a full-cell paint on the frame
+ * it is entered. There is no state this creature reaches slowly — a body coming
+ * up a boarded grate is breaching on its first frame and swinging at the boards
+ * a second later — so the coverage has to be the whole set, and the lead has to
+ * come from the wave scheduler rather than from the creature.
+ *
+ * Called where a wave is *scheduled*. A prewarm of a row already warm is nearly
+ * free, so firing this once per wave is cheaper than reasoning about which rows
+ * the last wave happened to leave behind.
+ */
+export function prewarmBugaboo(): void {
+  for (const state of BUGABOO_STATES) prewarmFigureState(BUGABOO_FIGURE, state);
 }

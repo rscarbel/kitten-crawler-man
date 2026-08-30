@@ -1,20 +1,55 @@
-import npcsManifest from '../images/npcs/manifest.json';
-import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import type { SpriteStates } from '../core/SpriteLoader';
+import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { SHADY_FIGURE } from './art/shadyFigure';
+import { figureFrameCount } from './figure/figureDef';
 
-type ShadyState = SpriteStates['shady'];
+/** The three rows he paints. He has one facing and never turns. */
+export type ShadyState = 'idle' | 'scratch' | 'talk';
 
 /**
- * Frame counts read straight out of the manifest the bake writes, rather than
- * retyped here. A hand-kept copy is invisible when it drifts: `drawSprite`
- * clamps the index, so too many frames stalls the animation on its last one and
- * too few leaves frames that never play — neither raises anything.
+ * Every state this wrapper can ask the figure for. An art gate holds it against
+ * what the figure actually paints: the draw call returns silently on a state it
+ * cannot find, so a name that drifts is an invisible NPC and no log line.
+ */
+export const SHADY_DRAWN_STATES: ReadonlyArray<ShadyState> = ['idle', 'scratch', 'talk'];
+
+/**
+ * Frame counts read off the figure that paints them, rather than retyped here.
+ * A hand-kept copy is invisible when it drifts: the draw call clamps the index,
+ * so too many frames stalls the animation on its last one and too few leaves
+ * frames that never play — neither raises anything.
  */
 const FRAME_COUNT: Record<ShadyState, number> = {
-  idle: npcsManifest.shady.states.idle.frameCount,
-  scratch: npcsManifest.shady.states.scratch.frameCount,
-  talk: npcsManifest.shady.states.talk.frameCount,
+  idle: figureFrameCount(SHADY_FIGURE, 'idle'),
+  scratch: figureFrameCount(SHADY_FIGURE, 'scratch'),
+  talk: figureFrameCount(SHADY_FIGURE, 'talk'),
 };
+
+/**
+ * The rows worth warming the moment the town stands him up.
+ *
+ * His idle plays from the frame he exists, and his talk row is one keypress
+ * away from any player who walks up to the notice board. The scratch tic is
+ * minutes away at worst and cheap enough to paint directly if it beats its own
+ * bake.
+ */
+export const SHADY_PREWARMED_STATES: ReadonlyArray<ShadyState> = ['idle', 'talk'];
+
+/** Warms the rows he starts playing immediately. Called when he is placed. */
+export function prewarmShadySprite(): void {
+  for (const state of SHADY_PREWARMED_STATES) prewarmFigureState(SHADY_FIGURE, state);
+}
+
+/**
+ * How far his hood's crown stands above the top of his own tile, in tiles.
+ *
+ * He is about 1.4 tiles of art anchored with the soles near the tile's floor,
+ * so everything hung off the tile origin — the quest marker most of all — lands
+ * somewhere around his chest unless it is lifted by this. It clears his painted
+ * crown with a deliberate gap above it rather than sitting on it, and
+ * `scripts/gates-shady.ts` re-measures the crown against it on every render.
+ */
+export const SHADY_HEAD_ABOVE_TILE_TILES = 0.78;
 
 /** Loop speed for the fidget, which is driven by the clock rather than a timer. */
 const IDLE_FPS = 9;
@@ -55,14 +90,14 @@ export function drawShadySprite(
 ): void {
   if (state.activity === 'scratch') {
     const frame = progressFrameIndex(state.scratchProgress, FRAME_COUNT.scratch);
-    drawSpriteKey(ctx, 'shady', 'scratch', frame, sx, sy, s);
+    drawFigureCached(ctx, SHADY_FIGURE, 'scratch', frame, sx, sy, s);
     return;
   }
   const key: ShadyState = state.activity === 'talk' ? 'talk' : 'idle';
   const nowSeconds = performance.now() / MS_PER_SECOND + state.loopOffsetSeconds;
-  drawSpriteKey(
+  drawFigureCached(
     ctx,
-    'shady',
+    SHADY_FIGURE,
     key,
     timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]),
     sx,

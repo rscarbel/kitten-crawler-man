@@ -97,8 +97,8 @@ export function getMagicMissileStats(level: number): MagicMissileStats {
  * The four looks the missile cycles through as it levels. The bands are the
  * levels where the *mechanics* change — splash at 5, sub-missiles at 10, full
  * power at 15 — so earning a perk is also the moment the spell changes on
- * screen. Sheet rows in `magic_missile_projectile`/`magic_missile_explosion`
- * are named for these, and `scripts/magicMissileArt.ts` paints them.
+ * screen. The bolt and impact figures name a state for each of these, and
+ * `src/sprites/art/magicMissileArt.ts` paints them.
  */
 export type MagicMissileVisualTier = 'tier1' | 'tier2' | 'tier3' | 'tier4';
 

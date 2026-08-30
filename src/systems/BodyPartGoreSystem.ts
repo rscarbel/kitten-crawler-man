@@ -1,14 +1,25 @@
+import { COCKROACH_FIGURE } from '../sprites/art/cockroachFigure';
+import { RAT_FIGURE } from '../sprites/art/ratFigure';
+import { LICH_FIGURE } from '../sprites/art/lichFigure';
+import {
+  SKELETON_ARCHER_FIGURE,
+  SKELETON_LORD_FIGURE,
+  SKELETON_SWORD_FIGURE,
+} from '../sprites/art/skeletonFigure';
 import type { GameSystem } from './GameSystem';
-import type { SpriteKey } from '../core/SpriteLoader';
+import type { FigureDef } from '../sprites/figure/figureDef';
+import {
+  drawFigureCachedRotatedCenter,
+  figureInkRadiusPx,
+} from '../sprites/figure/figureFrameCache';
 import { COCKROACH_BODY_PART_KEY, COCKROACH_GORE_PARTS } from '../sprites/cockroachSprite';
 import { HOARDER_BODY_PART_KEY, HOARDER_GORE_PARTS } from '../sprites/hoarderSprite';
-import { getSpriteDefByKey } from '../core/SpriteLoader';
-import { drawSpriteRotatedCenter } from '../core/SpriteRenderer';
-import { getFrameInkBounds } from '../core/spriteFrames';
 import type { GameMap } from '../map/GameMap';
-import { GOBLIN_GORE_PARTS } from '../sprites/goblinSprite';
+import { GOBLIN_GORE_PARTS, goblinFigure } from '../sprites/goblinSprite';
 import { RAT_BODY_PART_KEY, RAT_GORE_PARTS } from '../sprites/ratSprite';
 import { LLAMA_BODY_PART_KEY, LLAMA_GORE_PARTS } from '../sprites/llamaSprite';
+import { LLAMA_FIGURE } from '../sprites/art/llamaFigure';
+import { BRINDLED_VESPA_FIGURE } from '../sprites/art/brindledVespaFigure';
 import {
   SKELETON_ARCHER_BODY_PART_KEY,
   SKELETON_GORE_PARTS,
@@ -22,72 +33,96 @@ import {
   MANTIS_BODY_PART_KEY,
 } from '../sprites/mantidSprite';
 import { EVIL_CLOWN_BODY_PART_KEY, EVIL_CLOWN_GORE_PARTS } from '../sprites/evilClownSprite';
+import { EVIL_CLOWN_FIGURE } from '../sprites/art/clownFigure';
 import {
   ROCK_GOLEM_BODY_PART_KEY,
   ROCK_GOLEM_BOSS_BODY_PART_KEY,
   ROCK_GOLEM_GORE_PARTS,
 } from '../sprites/rockGolemSprite';
 import { DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_GORE_PARTS } from '../sprites/darkKnightSprite';
+import { DARK_KNIGHT_FIGURE } from '../sprites/art/darkKnightFigure';
 import {
   BRINDLED_VESPA_BODY_PART_KEY,
   BRINDLED_VESPA_GORE_PARTS,
 } from '../sprites/brindledVespaSprite';
 import { TROGLODYTE_BODY_PART_KEY, TROGLODYTE_GORE_PARTS } from '../sprites/troglodyteSprite';
 import { TUSKLING_BODY_PART_KEY, TUSKLING_GORE_PARTS } from '../sprites/tusklingSprite';
+import { TUSKLING_FIGURE } from '../sprites/art/tusklingFigure';
+import { TROGLODYTE_FIGURE } from '../sprites/art/troglodyteFigure';
 import { JUICER_BODY_PART_KEY, JUICER_GORE_PARTS } from '../sprites/juicerSprite';
+import { HOARDER_FIGURE } from '../sprites/art/hoarderFigure';
+import { JUICER_FIGURE } from '../sprites/art/juicerFigure';
+import { MANTID_FIGURE, MANTIS_FIGURE } from '../sprites/art/mantidFigure';
+import { ROCK_GOLEM_BOSS_FIGURE, ROCK_GOLEM_FIGURE } from '../sprites/art/rockGolemFigure';
 import {
   KRAKAREN_TENTACLE_BODY_PART_KEY,
   KRAKAREN_TENTACLE_GORE_PARTS,
 } from '../sprites/krakarenTentacleSprite';
 import { KRAKAREN_BODY_PART_KEY, KRAKAREN_GORE_PARTS } from '../sprites/krakarenSprite';
+import { KRAKAREN_FIGURE, KRAKAREN_TENTACLE_FIGURE } from '../sprites/art/krakarenFigure';
 
 interface MobBodyPartConfig {
-  readonly spriteKey: SpriteKey;
+  readonly art: FigureDef;
   readonly parts: ReadonlyArray<string>;
 }
 
 /**
+ * Gore pieces are one-frame states: each piece is its own row entry rather than
+ * a frame of an animation, so every lookup here reads the row's only frame.
+ */
+const GORE_PIECE_FRAME = 0;
+
+/**
  * The nine pieces every goblin comes apart into, in spawn order.
  *
- * One config per archetype rather than one shared config, because each sheet
- * bakes its own pieces: an axe goblin's severed arm has the axe goblin's skin
+ * One config per archetype rather than one shared config, because each figure
+ * paints its own pieces: an axe goblin's severed arm has the axe goblin's skin
  * tone, build and gear on it. `Goblin.bodyPartKey` is weapon-derived so the
  * flying pieces match the goblin that died.
  */
 const GOBLIN_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
-  ['goblin_sword', { spriteKey: 'goblin_sword', parts: GOBLIN_GORE_PARTS }],
-  ['goblin_axe', { spriteKey: 'goblin_axe', parts: GOBLIN_GORE_PARTS }],
-  ['goblin_mace', { spriteKey: 'goblin_mace', parts: GOBLIN_GORE_PARTS }],
-  ['goblin_warhammer', { spriteKey: 'goblin_warhammer', parts: GOBLIN_GORE_PARTS }],
+  ['goblin_sword', { art: goblinFigure('sword'), parts: GOBLIN_GORE_PARTS }],
+  ['goblin_axe', { art: goblinFigure('axe'), parts: GOBLIN_GORE_PARTS }],
+  ['goblin_mace', { art: goblinFigure('mace'), parts: GOBLIN_GORE_PARTS }],
+  ['goblin_warhammer', { art: goblinFigure('warhammer'), parts: GOBLIN_GORE_PARTS }],
 ];
 
 const COCKROACH_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'cockroach',
+  art: COCKROACH_FIGURE,
   parts: COCKROACH_GORE_PARTS,
 };
 
 const HOARDER_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'hoarder',
+  art: HOARDER_FIGURE,
   parts: HOARDER_GORE_PARTS,
 };
 
-/** The eight pieces a rat comes apart into; all eight live on the rat's own sheet. */
-const RAT_CONFIG: MobBodyPartConfig = { spriteKey: 'rat', parts: RAT_GORE_PARTS };
+/** The eight pieces a rat comes apart into, painted by the rat's own figure. */
+const RAT_CONFIG: MobBodyPartConfig = { art: RAT_FIGURE, parts: RAT_GORE_PARTS };
 
-/** Likewise the llama's eight, which share the llama's animation sheet. */
-const LLAMA_CONFIG: MobBodyPartConfig = { spriteKey: 'llama', parts: LLAMA_GORE_PARTS };
+/** Likewise the llama's eight, painted by the llama's own figure. */
+const LLAMA_CONFIG: MobBodyPartConfig = {
+  art: LLAMA_FIGURE,
+  parts: LLAMA_GORE_PARTS,
+};
 
 /**
  * The boss and his cronies come apart into the same eight pieces, but off their
- * own sheets — the pieces carry each build's colouring, so a dead crony's limbs
+ * own figures — the pieces carry each build's colouring, so a dead crony's limbs
  * are green and the Mantid's are his own dark teal.
  */
-const MANTID_CONFIG: MobBodyPartConfig = { spriteKey: 'mantid', parts: MANTID_GORE_PARTS };
-const MANTIS_CONFIG: MobBodyPartConfig = { spriteKey: 'mantis', parts: MANTID_GORE_PARTS };
+const MANTID_CONFIG: MobBodyPartConfig = {
+  art: MANTID_FIGURE,
+  parts: MANTID_GORE_PARTS,
+};
+const MANTIS_CONFIG: MobBodyPartConfig = {
+  art: MANTIS_FIGURE,
+  parts: MANTID_GORE_PARTS,
+};
 
-/** And the Evil Clown's six, on the last row of his own animation sheet. */
+/** And the Evil Clown's six, painted by his own figure. */
 const EVIL_CLOWN_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'evil_clown',
+  art: EVIL_CLOWN_FIGURE,
   parts: EVIL_CLOWN_GORE_PARTS,
 };
 
@@ -97,7 +132,7 @@ const EVIL_CLOWN_CONFIG: MobBodyPartConfig = {
  * more recognisable for it.
  */
 const DARK_KNIGHT_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'dark_knight',
+  art: DARK_KNIGHT_FIGURE,
   parts: DARK_KNIGHT_GORE_PARTS,
 };
 
@@ -105,35 +140,36 @@ const DARK_KNIGHT_CONFIG: MobBodyPartConfig = {
  * The seven loose bones each skeleton variant scatters.
  *
  * One config per variant rather than one shared config, for the same reason the
- * goblins have four: each sheet bakes its own pieces, so the lord's bones come
- * out pale and crowned while his warriors' come out stained.
+ * goblins have four: each figure paints its own pieces at its own scale, so the
+ * lord's bones come out pale, crowned and a good half again the size of his
+ * warriors'.
  */
 const SKELETON_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
-  [SKELETON_LORD_BODY_PART_KEY, { spriteKey: 'skeleton_lord', parts: SKELETON_GORE_PARTS }],
-  [SKELETON_SWORD_BODY_PART_KEY, { spriteKey: 'skeleton_sword', parts: SKELETON_GORE_PARTS }],
-  [SKELETON_ARCHER_BODY_PART_KEY, { spriteKey: 'skeleton_archer', parts: SKELETON_GORE_PARTS }],
+  [SKELETON_LORD_BODY_PART_KEY, { art: SKELETON_LORD_FIGURE, parts: SKELETON_GORE_PARTS }],
+  [SKELETON_SWORD_BODY_PART_KEY, { art: SKELETON_SWORD_FIGURE, parts: SKELETON_GORE_PARTS }],
+  [SKELETON_ARCHER_BODY_PART_KEY, { art: SKELETON_ARCHER_FIGURE, parts: SKELETON_GORE_PARTS }],
   // The Lich comes apart into the same bones: whatever the robes were hiding,
-  // it was a skeleton, and its sheet bakes the identical gore row.
-  [LICH_BODY_PART_KEY, { spriteKey: 'the_lich', parts: SKELETON_GORE_PARTS }],
+  // it was a skeleton, and its figure paints the identical set.
+  [LICH_BODY_PART_KEY, { art: LICH_FIGURE, parts: SKELETON_GORE_PARTS }],
 ];
 
 /**
  * A golem does not bleed: its eight pieces are rubble, off whichever of the two
- * golem sheets it was drawn from — so the boss's fragments come out molten and
+ * golem figures it was drawn from — so the boss's fragments come out molten and
  * lichened while a bouncer's come out plain grey.
  */
 const ROCK_GOLEM_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
-  [ROCK_GOLEM_BODY_PART_KEY, { spriteKey: 'rock_golem', parts: ROCK_GOLEM_GORE_PARTS }],
-  [ROCK_GOLEM_BOSS_BODY_PART_KEY, { spriteKey: 'rock_golem_boss', parts: ROCK_GOLEM_GORE_PARTS }],
+  [ROCK_GOLEM_BODY_PART_KEY, { art: ROCK_GOLEM_FIGURE, parts: ROCK_GOLEM_GORE_PARTS }],
+  [ROCK_GOLEM_BOSS_BODY_PART_KEY, { art: ROCK_GOLEM_BOSS_FIGURE, parts: ROCK_GOLEM_GORE_PARTS }],
 ];
 
 /**
- * The troglodyte's nine, on the last row of its own animation sheet. The set
+ * The troglodyte's nine, one painted state apiece. The set
  * carries its severed tongue and its shed tail, which are the two pieces a
  * player will recognise as this creature's and no other's.
  */
 const TROGLODYTE_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'troglodyte',
+  art: TROGLODYTE_FIGURE,
   parts: TROGLODYTE_GORE_PARTS,
 };
 
@@ -145,7 +181,7 @@ const TROGLODYTE_CONFIG: MobBodyPartConfig = {
  * severed parts.
  */
 const BRINDLED_VESPA_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'brindled_vespa',
+  art: BRINDLED_VESPA_FIGURE,
   parts: BRINDLED_VESPA_GORE_PARTS,
 };
 
@@ -156,7 +192,7 @@ const BRINDLED_VESPA_CONFIG: MobBodyPartConfig = {
  * the rest of the pile came off something with a coat.
  */
 const TUSKLING_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'tuskling',
+  art: TUSKLING_FIGURE,
   parts: TUSKLING_GORE_PARTS,
 };
 
@@ -165,7 +201,7 @@ const TUSKLING_CONFIG: MobBodyPartConfig = {
  * arm — an absurd bicep over a cut deltoid face — is what says it was him.
  */
 const JUICER_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'juicer',
+  art: JUICER_FIGURE,
   parts: JUICER_GORE_PARTS,
 };
 
@@ -175,13 +211,13 @@ const JUICER_CONFIG: MobBodyPartConfig = {
  * that lifts the boss's guard.
  */
 const KRAKAREN_TENTACLE_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'krakaren_tentacle',
+  art: KRAKAREN_TENTACLE_FIGURE,
   parts: KRAKAREN_TENTACLE_GORE_PARTS,
 };
 
-/** The boss's own seven, on the last row of her own sheet. */
+/** The boss's own seven, painted by her own figure. */
 const KRAKAREN_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'krakaren',
+  art: KRAKAREN_FIGURE,
   parts: KRAKAREN_GORE_PARTS,
 };
 
@@ -205,7 +241,7 @@ const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ...SKELETON_CONFIGS,
 ]);
 
-const PART_LIFETIME = 6000; // 300s @ 60fps
+const PART_LIFETIME = 6000; // 100s @ 60fps
 const PART_FADE_START = 3000; // start fading 50s before despawn
 const MAX_SETTLED_PARTS = 200;
 /** Fraction of PI used for cone spread in impact direction (~100 degrees). */
@@ -271,7 +307,7 @@ interface FlyingPart {
   vz: number; // vertical velocity (positive = rising)
   angle: number;
   spin: number;
-  spriteKey: SpriteKey;
+  art: FigureDef;
   stateName: string;
   tileSize: number;
 }
@@ -287,7 +323,7 @@ interface TumblingPart {
   targetX: number;
   targetY: number;
   framesLeft: number;
-  spriteKey: SpriteKey;
+  art: FigureDef;
   stateName: string;
   tileSize: number;
 }
@@ -296,7 +332,7 @@ interface SettledPart {
   x: number;
   y: number;
   angle: number;
-  spriteKey: SpriteKey;
+  art: FigureDef;
   stateName: string;
   tileSize: number;
   life: number;
@@ -312,6 +348,23 @@ export class BodyPartGoreSystem implements GameSystem {
   /** Pieces in flight, tumbling and settled — how many body parts this system is holding. */
   get liveCount(): number {
     return this.flying.length + this.tumbling.length + this.settled.length;
+  }
+
+  /** Pieces at rest on the floor, which is the population {@link MAX_SETTLED_PARTS} bounds. */
+  get settledCount(): number {
+    return this.settled.length;
+  }
+
+  /**
+   * How many resting pieces this figure painted — how much of one creature's
+   * corpse is still on the floor.
+   */
+  countSettledFrom(art: FigureDef): number {
+    let count = 0;
+    for (const part of this.settled) {
+      if (part.art === art) count++;
+    }
+    return count;
   }
 
   /**
@@ -359,7 +412,7 @@ export class BodyPartGoreSystem implements GameSystem {
         vz: (VZ_MIN + Math.random() * (VZ_MAX - VZ_MIN)) * vzBoost,
         angle: Math.random() * Math.PI * 2,
         spin,
-        spriteKey: config.spriteKey,
+        art: config.art,
         stateName,
         tileSize,
       });
@@ -412,10 +465,10 @@ export class BodyPartGoreSystem implements GameSystem {
    * tumble toward the nearest open ground instead of resting inside geometry.
    */
   private _land(p: FlyingPart): void {
-    // Tumbling parts are already spoken for against the cap, so a part with no
-    // reserved slot is dropped at landing rather than vanishing mid-slide.
+    // Tumbling parts are already spoken for against the cap, so the slot a part
+    // needs has to be free at landing rather than found mid-slide.
     const partsHoldingASettledSlot = this.settled.length + this.tumbling.length;
-    if (partsHoldingASettledSlot >= MAX_SETTLED_PARTS) return;
+    if (partsHoldingASettledSlot >= MAX_SETTLED_PARTS && !this._retireOldestSettled()) return;
 
     const clearance = this._pieceClearanceRadius(p);
     if (this._isClearOfBlockedTiles(p.x, p.y, clearance, p.tileSize)) {
@@ -440,10 +493,40 @@ export class BodyPartGoreSystem implements GameSystem {
       targetX: restingSpot.x,
       targetY: restingSpot.y,
       framesLeft: TUMBLE_DURATION_FRAMES,
-      spriteKey: p.spriteKey,
+      art: p.art,
       stateName: p.stateName,
       tileSize: p.tileSize,
     });
+  }
+
+  /**
+   * Frees a slot for a piece that has just landed by retiring the resting piece
+   * nearest its own despawn. Answers false only when every slot is held by a
+   * piece still tumbling, which leaves nothing to retire.
+   *
+   * The cap has to stay — it is what bounds this system's memory and its
+   * per-frame draw cost — but the newest arrival is the wrong end to trim. A
+   * boss who spawns her own trash mobs kills the payoff of her own fight
+   * otherwise: her swarm's litter takes every slot during the fight and holds it
+   * long past their deaths, so her six pieces burst out of her, fly, and wink
+   * out the instant they touch the floor.
+   *
+   * Life counts down from the same start for every piece, so the lowest life is
+   * the piece that has been lying there longest.
+   */
+  private _retireOldestSettled(): boolean {
+    let oldestIndex = -1;
+    let lowestLifeSeen = Infinity;
+    for (let i = 0; i < this.settled.length; i++) {
+      const life = this.settled[i].life;
+      if (life >= lowestLifeSeen) continue;
+      lowestLifeSeen = life;
+      oldestIndex = i;
+    }
+    if (oldestIndex < 0) return false;
+    this.settled[oldestIndex] = this.settled[this.settled.length - 1];
+    this.settled.pop();
+    return true;
   }
 
   /**
@@ -522,19 +605,12 @@ export class BodyPartGoreSystem implements GameSystem {
 
   /**
    * How far a piece's drawn pixels reach from the position physics tracks it by.
-   * Measured off the sheet rather than taken from the cell size, because a gore
+   * Measured off the painted ink rather than taken from the cell size, because a gore
    * cell is sized for the creature's widest standing pose and a severed jaw
    * fills almost none of it.
    */
-  private _pieceClearanceRadius(
-    part: Pick<FlyingPart, 'spriteKey' | 'stateName' | 'tileSize'>,
-  ): number {
-    const def = getSpriteDefByKey(part.spriteKey);
-    if (!def) return 0;
-    const stateDef = def.states.get(part.stateName);
-    if (!stateDef) return 0;
-    const ink = getFrameInkBounds(def, stateDef, 0);
-    return ink.radius * (part.tileSize / def.tileScale);
+  private _pieceClearanceRadius(part: Pick<FlyingPart, 'art' | 'stateName' | 'tileSize'>): number {
+    return figureInkRadiusPx(part.art, part.stateName, GORE_PIECE_FRAME, part.tileSize);
   }
 
   /**
@@ -559,13 +635,13 @@ export class BodyPartGoreSystem implements GameSystem {
     x: number,
     y: number,
     angle: number,
-    source: Pick<FlyingPart, 'spriteKey' | 'stateName' | 'tileSize'>,
+    source: Pick<FlyingPart, 'art' | 'stateName' | 'tileSize'>,
   ): void {
     this.settled.push({
       x,
       y,
       angle,
-      spriteKey: source.spriteKey,
+      art: source.art,
       stateName: source.stateName,
       tileSize: source.tileSize,
       life: PART_LIFETIME,
@@ -575,20 +651,11 @@ export class BodyPartGoreSystem implements GameSystem {
   renderSettled(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const p of this.settled) {
       const alpha = p.life <= PART_FADE_START ? p.life / PART_FADE_START : 1;
-      this._drawPart(
-        ctx,
-        p.x - camX,
-        p.y - camY,
-        p.angle,
-        p.spriteKey,
-        p.stateName,
-        p.tileSize,
-        alpha,
-      );
+      this._drawPart(ctx, p.x - camX, p.y - camY, p.angle, p.art, p.stateName, p.tileSize, alpha);
     }
 
     for (const p of this.tumbling) {
-      this._drawPart(ctx, p.x - camX, p.y - camY, p.angle, p.spriteKey, p.stateName, p.tileSize, 1);
+      this._drawPart(ctx, p.x - camX, p.y - camY, p.angle, p.art, p.stateName, p.tileSize, 1);
     }
   }
 
@@ -617,7 +684,7 @@ export class BodyPartGoreSystem implements GameSystem {
       ctx.restore();
 
       // Part drawn above its ground position by z pixels
-      this._drawPart(ctx, sx, sy - p.z, p.angle, p.spriteKey, p.stateName, p.tileSize, 1);
+      this._drawPart(ctx, sx, sy - p.z, p.angle, p.art, p.stateName, p.tileSize, 1);
     }
   }
 
@@ -626,15 +693,21 @@ export class BodyPartGoreSystem implements GameSystem {
     sx: number,
     sy: number,
     angle: number,
-    spriteKey: SpriteKey,
+    art: FigureDef,
     stateName: string,
     tileSize: number,
     alpha: number,
   ): void {
-    const def = getSpriteDefByKey(spriteKey);
-    if (!def) return;
-    const stateDef = def.states.get(stateName);
-    if (!stateDef) return;
-    drawSpriteRotatedCenter(ctx, def, stateDef, sx, sy, angle, tileSize, alpha);
+    drawFigureCachedRotatedCenter(
+      ctx,
+      art,
+      stateName,
+      GORE_PIECE_FRAME,
+      sx,
+      sy,
+      angle,
+      tileSize,
+      alpha,
+    );
   }
 }

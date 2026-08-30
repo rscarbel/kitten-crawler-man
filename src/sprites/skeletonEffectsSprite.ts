@@ -1,52 +1,90 @@
+import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { figureFrameCount } from './figure/figureDef';
 import {
-  drawSpriteKey,
-  drawSpriteRotatedCenter,
-  progressFrameIndex,
-  timeFrameIndex,
-} from '../core/SpriteRenderer';
+  drawFigureCached,
+  drawFigureCachedRotatedCenter,
+  prewarmFigureState,
+} from './figure/figureFrameCache';
 import {
-  getSpriteDef,
-  getSpriteDefByKey,
-  type SpriteKey,
-  type SpriteStates,
-} from '../core/SpriteLoader';
+  SKELETON_BONE_ARROW_FIGURE,
+  SKELETON_GRASPING_HANDS_FIGURE,
+  SKELETON_SOUL_BOLT_FIGURE,
+  SKELETON_SOUL_BURST_FIGURE,
+} from './art/skeletonEffectsFigure';
 
 /**
- * Draw wrappers for the four sheets the Skeleton Lord's attacks are made of.
+ * Draw wrappers for the four effects the Skeleton Lord's attacks are made of.
  *
- * Baked by `npm run gen:skeleton-effects` from `scripts/skeletonEffectsArt.ts`.
+ * Painted at runtime from `src/sprites/art/skeletonEffectsArt.ts` through the
+ * figure cache; reviewed with `npm run render:skeleton-effects`.
  *
  * **Anchor convention:** `sx`/`sy` are the screen pixels of the effect's own
  * centre — the world position minus the camera offset, exactly as
- * `LavaBallSystem` passes `bolt.x - camX, bolt.y - camY`. Every sheet's
- * manifest anchor is its cell centre, so the effect lands where the simulation
- * put it and the caller never has to know the cell size.
+ * `LavaBallSystem` passes `bolt.x - camX, bolt.y - camY`. Every figure's anchor
+ * is its cell centre, so the effect lands where the simulation put it and the
+ * caller never has to know the cell size.
  *
  * For the grasping-hands patch, "centre" means the centre of the *patch*: the
  * soil line sits a little below it and the hands reach above it, which is what
  * lets the cone be filled by drawing one instance per tile centre.
  */
 
-/** Frames per second the game loop runs at; the sheets are timed against it. */
+/** Frames per second the game loop runs at; the art is timed against it. */
 const FRAMES_PER_SECOND = 60;
 
 /** Loop speed of the churn on the bolt's surface. */
 const BOLT_FPS = 12;
+
+const BOLT_STATE = 'fly';
+const BURST_STATE = 'burst';
+const ARROW_STATE = 'fly';
+const HANDS_STATE = 'erupt';
+
 /**
- * How many frames a state actually holds, read from the sheet the game loaded.
+ * Warms the two rows a soul-bolt cast will draw.
  *
- * Not a hand-copied table: `drawSprite` *clamps* the frame index, so a row that
- * got shorter in a rebake would silently freeze on its last frame rather than
- * throw. There is nothing to notice until someone watches that one animation.
+ * Called where the cast is *telegraphed* rather than where the bolt is
+ * constructed: the burst in particular is a whole flight away, which is all the
+ * lead the row needs.
  */
-function frameCountOf<K extends SpriteKey>(key: K, state: SpriteStates[K]): number {
-  return getSpriteDefByKey(key)?.states.get(state)?.frameCount ?? 1;
+export function prewarmSoulBoltCast(): void {
+  prewarmFigureState(SKELETON_SOUL_BOLT_FIGURE, BOLT_STATE);
+  prewarmFigureState(SKELETON_SOUL_BURST_FIGURE, BURST_STATE);
+}
+
+/** Warms the impact row on its own, for a burst with no bolt in front of it. */
+export function prewarmSoulBurst(): void {
+  prewarmFigureState(SKELETON_SOUL_BURST_FIGURE, BURST_STATE);
+}
+
+/**
+ * Warms every row the tower fight draws.
+ *
+ * The fight opens on the frame a dialog closes, so its own telegraphs are the
+ * only lead the rows would otherwise get and the first of each attack would be
+ * painted directly. Called once from the reveal, which is minutes of lead ahead
+ * of most of it and seconds ahead of the materialising burst.
+ */
+export function prewarmLichFightEffects(): void {
+  prewarmSoulBoltCast();
+  prewarmBoneArrow();
+  prewarmGraspingHands();
+}
+
+/** Warms the arrow's single cell as the archer draws. */
+export function prewarmBoneArrow(): void {
+  prewarmFigureState(SKELETON_BONE_ARROW_FIGURE, ARROW_STATE);
+}
+
+/** Warms the eruption's row while the cone it fills is still being telegraphed. */
+export function prewarmGraspingHands(): void {
+  prewarmFigureState(SKELETON_GRASPING_HANDS_FIGURE, HANDS_STATE);
 }
 
 /**
  * A soul bolt in flight, centred on (sx, sy).
  *
- * The sheet is not rotated: a ball of witch-light has no nose, and the motion
+ * The cell is not rotated: a ball of witch-light has no nose, and the motion
  * lives inside the loop instead.
  *
  * @param age  the projectile's age in game frames
@@ -59,16 +97,15 @@ export function drawSoulBolt(
   age: number,
 ): void {
   const seconds = age / FRAMES_PER_SECOND;
-  const frameCount = frameCountOf('skeleton_soul_bolt', 'fly');
-  drawSpriteKey(
+  const frameCount = figureFrameCount(SKELETON_SOUL_BOLT_FIGURE, BOLT_STATE);
+  drawFigureCached(
     ctx,
-    'skeleton_soul_bolt',
-    'fly',
+    SKELETON_SOUL_BOLT_FIGURE,
+    BOLT_STATE,
     timeFrameIndex(seconds, BOLT_FPS, frameCount),
     sx,
     sy,
     tileSize,
-    {},
   );
 }
 
@@ -84,27 +121,29 @@ export function drawSoulBurst(
   tileSize: number,
   progress: number,
 ): void {
-  const frameCount = frameCountOf('skeleton_soul_burst', 'burst');
-  drawSpriteKey(
+  const frameCount = figureFrameCount(SKELETON_SOUL_BURST_FIGURE, BURST_STATE);
+  drawFigureCached(
     ctx,
-    'skeleton_soul_burst',
-    'burst',
+    SKELETON_SOUL_BURST_FIGURE,
+    BURST_STATE,
     progressFrameIndex(progress, frameCount),
     sx,
     sy,
     tileSize,
-    {},
   );
 }
 
 /** Full opacity; the arrow has no fade state of its own. */
 const ARROW_ALPHA = 1;
 
+/** The arrow's flight row is a single pose; there is no frame to advance. */
+const ARROW_FRAME = 0;
+
 /**
  * A bone arrow in flight, spinning about its own ink centre at (sx, sy).
  *
- * `headingRad` is the direction of travel. The sheet is drawn pointing along
- * +X, so heading 0 flies right and the sprite needs no other correction.
+ * `headingRad` is the direction of travel. The art points along +X, so heading
+ * 0 flies right and the sprite needs no other correction.
  */
 export function drawBoneArrow(
   ctx: CanvasRenderingContext2D,
@@ -113,11 +152,17 @@ export function drawBoneArrow(
   tileSize: number,
   headingRad: number,
 ): void {
-  const def = getSpriteDef('skeleton_bone_arrow');
-  if (!def) return;
-  const stateDef = def.states.get('fly');
-  if (!stateDef) return;
-  drawSpriteRotatedCenter(ctx, def, stateDef, sx, sy, headingRad, tileSize, ARROW_ALPHA);
+  drawFigureCachedRotatedCenter(
+    ctx,
+    SKELETON_BONE_ARROW_FIGURE,
+    ARROW_STATE,
+    ARROW_FRAME,
+    sx,
+    sy,
+    headingRad,
+    tileSize,
+    ARROW_ALPHA,
+  );
 }
 
 /**
@@ -134,15 +179,14 @@ export function drawGraspingHands(
   tileSize: number,
   progress: number,
 ): void {
-  const frameCount = frameCountOf('skeleton_grasping_hands', 'erupt');
-  drawSpriteKey(
+  const frameCount = figureFrameCount(SKELETON_GRASPING_HANDS_FIGURE, HANDS_STATE);
+  drawFigureCached(
     ctx,
-    'skeleton_grasping_hands',
-    'erupt',
+    SKELETON_GRASPING_HANDS_FIGURE,
+    HANDS_STATE,
     progressFrameIndex(progress, frameCount),
     sx,
     sy,
     tileSize,
-    {},
   );
 }

@@ -2,14 +2,9 @@ import { Mob } from './Mob';
 import type { PlayerDamageType } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
-import {
-  bakeSkyFowlCanvas,
-  drawSkyFowlSprite,
-  SKY_FOWL_PALETTES,
-  type SkyFowlClothColors,
-} from '../sprites/skyFowlSprite';
+import { drawSkyFowlSprite, randomSkyFowlPaletteIndex } from '../sprites/skyFowlSprite';
 import type { LootDrop } from './Mob';
-import { randomFromArray, randomInt, normalize } from '../utils';
+import { randomInt, normalize } from '../utils';
 
 /** The blows the player lands by hand, as opposed to anything fired or thrown. */
 const HAND_SWUNG_DAMAGE_TYPES: ReadonlySet<PlayerDamageType | null> =
@@ -51,16 +46,12 @@ export class SkyFowl extends Mob {
   description = 'A feathery wanderer that pecks at anything that gets too close.';
   override readonly audioTag = 'skyfowl';
 
-  /** Clothing palette chosen at construction — stays the same for this fowl's lifetime. */
-  readonly cloth: SkyFowlClothColors;
-
   /**
-   * Pre-baked sprite canvas with this instance's palette composited onto the
-   * body. Not `readonly`: `dispose()` drops it once this fowl dies, since
-   * `drawSelf` never draws a dead mob again and every other fowl in town
-   * carries its own copy of this same backing-store cost.
+   * Which of the town's eight clothing palettes this fowl wears, chosen at
+   * construction and kept for its lifetime. Each palette is painted by its own
+   * cached figure, so this is what picks the art as well as the colours.
    */
-  private bakedCanvas: HTMLCanvasElement | null;
+  readonly paletteIndex: number;
 
   private isAggressive = false;
 
@@ -90,18 +81,7 @@ export class SkyFowl extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, FOWL_HP, FOWL_SPEED_NEUTRAL);
-    this.cloth = randomFromArray(SKY_FOWL_PALETTES);
-    this.bakedCanvas = bakeSkyFowlCanvas(this.cloth);
-  }
-
-  /** Releases the baked clothing canvas — this fowl is dead and `drawSelf` will never run again. */
-  override dispose(): void {
-    this.bakedCanvas = null;
-  }
-
-  /** Re-bakes the clothing a checkpoint revive needs back; the palette outlives the canvas. */
-  override reacquireDisposedResources(): void {
-    this.bakedCanvas = bakeSkyFowlCanvas(this.cloth);
+    this.paletteIndex = randomSkyFowlPaletteIndex();
   }
 
   override resetToSpawn(): void {
@@ -268,8 +248,7 @@ export class SkyFowl extends Mob {
       this.isMoving,
       this.isAggressive,
       this.facingX,
-      this.facingY,
-      this.bakedCanvas,
+      this.paletteIndex,
       peckAmt,
     );
 

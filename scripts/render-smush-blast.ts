@@ -15,9 +15,8 @@
  */
 
 import { createCanvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { drawSmushBlast, SMUSH_BLAST_FRAMES } from '../src/sprites/smushBlast.js';
 
 /** Level 1 is 3.5 tiles of outer radius; the level cap is 8. */
@@ -91,6 +90,8 @@ radii.forEach((radius, row) => {
   });
 });
 
-const outPath = resolve(parseFlag('out', 'smush-blast.png'));
-writeFileSync(outPath, canvas.toBuffer('image/png'));
+const outPath = writePreviewPng(
+  parseFlag('out', `${PREVIEW_DIR}/smush-blast.png`),
+  canvas.toBuffer('image/png'),
+);
 console.log(`Wrote ${outPath} (${width}×${height}px)`);

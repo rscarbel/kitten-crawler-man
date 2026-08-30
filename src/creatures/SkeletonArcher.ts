@@ -2,6 +2,7 @@ import type { Player } from '../Player';
 import { RisingSkeleton } from './RisingSkeleton';
 import { SKELETON_ARCHER_BODY_PART_KEY, drawSkeletonArcherSprite } from '../sprites/skeletonSprite';
 import { BONE_ARROW_DRAW_FRAMES, boneArrowReleaseFrame } from '../sprites/skeletonTiming';
+import { prewarmBoneArrow } from '../sprites/skeletonEffectsSprite';
 import { SKELETON_ESCORT_XP } from './SkeletonWarrior';
 import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
 import { PLAYER_SPEED } from '../core/constants';
@@ -183,6 +184,7 @@ export class SkeletonArcher extends RisingSkeleton {
       this.shotCooldown = SHOT_COOLDOWN_FRAMES;
       this.drawTimer = BONE_ARROW_DRAW_FRAMES;
       this.isMoving = false;
+      prewarmBoneArrow();
     }
   }
 

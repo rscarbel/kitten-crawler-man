@@ -14,19 +14,18 @@
  * thing the creature actually stands on — the dorsal hide is dark, and a
  * creature at the floor's own luminance is a smudge at 32 px.
  *
- * The sheet is addressed by state name at run time rather than through
- * `drawSpriteKey`'s typed state union, because the manifest entry is pasted
- * only after the art has passed its image review: until then the new rows do
- * not exist as types, and this harness says so on screen rather than failing to
- * compile.
+ * The figure is addressed by state name at run time rather than through a
+ * typed state union, because a row being worked on may not be declared yet:
+ * this harness says so on screen rather than failing to compile.
  */
 
 import { Scene } from '../core/Scene';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawText } from '../ui/TextBox';
 import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
-import { getSpriteDefByKey } from '../core/SpriteLoader';
-import { drawSprite } from '../core/SpriteRenderer';
+import { JUICER_FIGURE } from '../sprites/art/juicerFigure';
+import { figureFrameCount } from '../sprites/figure/figureDef';
+import { drawFigureCached } from '../sprites/figure/figureFrameCache';
 import {
   JUICER_IDLE_FRAMES,
   JUICER_PUNCH_FRAMES,
@@ -37,8 +36,6 @@ import {
   JUICER_SPRINT_FRAME_HOLD,
   juicerActionFrames,
 } from '../sprites/juicerAttackTiming';
-
-const SPRITE_KEY = 'juicer';
 
 /** A facing vector per column, chosen so the view rule picks each viewpoint. */
 interface ViewSpec {
@@ -170,7 +167,7 @@ export class JuicerPreviewScene extends Scene {
   }
 
   /**
-   * Draws one cell, or records the state name when the sheet has no such row.
+   * Draws one cell, or records the state name when the figure has no such row.
    * A silent no-op here would look exactly like a creature that renders nothing
    * because its art is broken.
    */
@@ -183,17 +180,11 @@ export class JuicerPreviewScene extends Scene {
     tile: number,
     flipX: boolean,
   ): void {
-    const def = getSpriteDefByKey(SPRITE_KEY);
-    if (def === undefined) {
-      this.missingStates.add(`${SPRITE_KEY} (sheet not loaded)`);
-      return;
-    }
-    const stateDef = def.states.get(state);
-    if (stateDef === undefined) {
+    if (figureFrameCount(JUICER_FIGURE, state) === 0) {
       this.missingStates.add(state);
       return;
     }
-    drawSprite(ctx, def, stateDef, frame, x, y, tile, { flipX });
+    drawFigureCached(ctx, JUICER_FIGURE, state, frame, x, y, tile, { flipX });
   }
 
   render(ctx: CanvasRenderingContext2D): void {

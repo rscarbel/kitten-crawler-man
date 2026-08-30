@@ -1,33 +1,24 @@
 /**
- * Headless review harness for Shady's sprite sheet.
+ * Shady's review harness. Art has to be judged as an image, by something that
+ * only looks at the image — every defect that has ever mattered on a figure in
+ * this project was invisible to `typecheck`, `lint` and a code read.
  *
- * The art has to be judgeable from a still, so this slices
- * `src/images/npcs/shady.png` into a labelled contact sheet: every row at review
- * scale, plus a strip of the same frames blitted at the in-game tile size, which
- * is where "detail does not rescue a wrong outline" gets caught.
+ * The contact sheet is painted from `SHADY_FIGURE` the way the runtime cache
+ * bakes it, and the art gates run as part of the render, so one command answers
+ * both "does it still hold together" and "what does it look like".
  *
- *   npx tsx scripts/render-shady.ts --out=shady-review.png --scale=2
- *   npx tsx scripts/render-shady.ts --out=hood.png --part=hood --scale=6
- *   npx tsx scripts/render-shady.ts --out=scratch.png --row=scratch --scale=3
- *
- * Regenerate the sheet itself with `npm run gen:shady`.
+ *   npm run render:shady
+ *   npx tsx scripts/render-shady.ts --scale=3 --row=scratch
+ *   npx tsx scripts/render-shady.ts --part=hood --scale=6
  */
 
-import { createCanvas, loadImage } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createCanvas } from 'canvas';
 
-// The row order and frame counts come straight from the generator, so a new row
-// cannot desync the only review path this art has.
-import {
-  FRAME_H,
-  FRAME_W,
-  ROWS,
-  SHEET_PATH,
-  TILE_SCALE,
-  TILE_X,
-  TILE_Y,
-} from './generate-shady-sprite.js';
+import { bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { shadyGateFailures } from './gates-shady.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import { SHADY_FIGURE, SHADY_ROWS, TILE_SCALE } from '../src/sprites/art/shadyFigure.js';
 
 interface PartWindow {
   readonly x: number;
@@ -47,7 +38,7 @@ const PARTS: Record<string, PartWindow> = {
   hem: { x: 32, y: 84, w: 64, h: 40 },
 };
 
-/** Matches TILE_SIZE in src/core/constants.ts; the sheet is drawn at 2× that. */
+/** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
 
 const DEFAULT_SCALE = 2;
@@ -77,88 +68,115 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
   return value;
 }
 
-async function main(): Promise<void> {
-  const outPath = parseFlag('out', 'shady-review.png');
+function main(): void {
+  const outPath = parseFlag('out', `${PREVIEW_DIR}/shady-review.png`);
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
   const only = parseFlag('row', '');
-  const sheet = await loadImage(resolve(SHEET_PATH));
 
-  const rows = only === '' ? ROWS : ROWS.filter((row) => row.name === only);
+  const rows = only === '' ? SHADY_ROWS : SHADY_ROWS.filter((row) => row.name === only);
   if (rows.length === 0) throw new Error(`No row named "${only}"`);
 
-  const part = PARTS[parseFlag('part', '')] ?? null;
-  const srcW = part === null ? FRAME_W : part.w;
-  const srcH = part === null ? FRAME_H : part.h;
-  const srcOffsetX = part === null ? 0 : part.x;
-  const srcOffsetY = part === null ? 0 : part.y;
-  const cell = srcW * scale;
+  const partName = parseFlag('part', '');
+  const part = partName === '' ? null : PARTS[partName];
+  if (partName !== '' && part === undefined) {
+    throw new Error(`--part=${partName} is not one of ${Object.keys(PARTS).join(', ')}`);
+  }
+
+  // Ahead of the contact sheet rather than after it: the sheet is a large
+  // allocation, and measuring the art on the far side of one is how a gate
+  // starts reporting a fault in art nobody touched.
+  console.log('Gating the shady figure…');
+  reportFigureGates('shady', shadyGateFailures());
+
+  const baked = bakeFigureSheet(
+    SHADY_FIGURE,
+    rows.map((row) => row.name),
+  );
+  const sheet = baked.canvas;
+  const frameW = baked.frameWidth;
+  const frameH = baked.frameHeight;
+
+  const cropped = part !== null && part !== undefined;
+  const srcW = cropped ? part.w : frameW;
+  const srcH = cropped ? part.h : frameH;
+  const srcOffsetX = cropped ? part.x : 0;
+  const srcOffsetY = cropped ? part.y : 0;
+  const cellW = srcW * scale;
   const cellH = srcH * scale;
   const maxCols = Math.max(...rows.map((row) => row.frameCount));
-  const inGameFrame = FRAME_W * (IN_GAME_TILE / TILE_SCALE);
+  const inGameFrame = frameW * (IN_GAME_TILE / TILE_SCALE);
 
   const stripWidth = PADDING + rows.length * (inGameFrame + PADDING);
-  const width = Math.max(PADDING + maxCols * (cell + PADDING), stripWidth);
+  const width = Math.max(PADDING + maxCols * (cellW + PADDING), stripWidth);
   const height =
     PADDING +
     rows.length * (cellH + LABEL_HEIGHT + PADDING) +
     (inGameFrame + LABEL_HEIGHT + PADDING);
 
-  const canvas = createCanvas(width, height);
+  const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = BACKDROP;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.font = LABEL_FONT;
 
   let y = PADDING;
-  for (const spec of rows) {
-    const sheetRow = ROWS.findIndex((row) => row.name === spec.name);
+  rows.forEach((spec, sheetRow) => {
     ctx.fillStyle = LABEL_COLOR;
     ctx.fillText(
-      `${spec.name} — ${spec.frameCount} frames, ${spec.loops ? 'loop' : 'one-shot'}`,
+      `${spec.name} — ${spec.frameCount} frames, ${spec.loops ? 'loop' : 'one-shot'}` +
+        (cropped ? `  [${partName}]` : ''),
       PADDING,
       y + LABEL_HEIGHT - PADDING,
     );
     y += LABEL_HEIGHT;
 
     for (let col = 0; col < spec.frameCount; col++) {
-      const x = PADDING + col * (cell + PADDING);
+      const x = PADDING + col * (cellW + PADDING);
       ctx.drawImage(
         sheet,
-        col * FRAME_W + srcOffsetX,
-        sheetRow * FRAME_H + srcOffsetY,
+        col * frameW + srcOffsetX,
+        sheetRow * frameH + srcOffsetY,
         srcW,
         srcH,
         x,
         y,
-        cell,
+        cellW,
         cellH,
       );
       ctx.strokeStyle = GRID_LINE;
-      ctx.strokeRect(x, y, cell, cellH);
-      if (part === null) {
+      ctx.strokeRect(x, y, cellW, cellH);
+      if (!cropped) {
         ctx.strokeStyle = TILE_GUIDE;
         ctx.strokeRect(
-          x + TILE_X * scale,
-          y + TILE_Y * scale,
+          x + SHADY_FIGURE.tileX * scale,
+          y + SHADY_FIGURE.tileY * scale,
           TILE_SCALE * scale,
           TILE_SCALE * scale,
         );
       }
     }
     y += cellH + PADDING;
-  }
+  });
 
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText('in-game size (32px tile)', PADDING, y + LABEL_HEIGHT - PADDING);
   y += LABEL_HEIGHT;
-  for (let i = 0; i < rows.length; i++) {
-    const sheetRow = ROWS.findIndex((row) => row.name === rows[i].name);
-    const x = PADDING + i * (inGameFrame + PADDING);
-    ctx.drawImage(sheet, 0, sheetRow * FRAME_H, FRAME_W, FRAME_H, x, y, inGameFrame, inGameFrame);
-  }
+  rows.forEach((_spec, sheetRow) => {
+    ctx.drawImage(
+      sheet,
+      0,
+      sheetRow * frameH,
+      frameW,
+      frameH,
+      PADDING + sheetRow * (inGameFrame + PADDING),
+      y,
+      inGameFrame,
+      inGameFrame,
+    );
+  });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${width}×${height}px, scale ${scale}×)`);
+  const written = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${written} (${canvas.width}×${canvas.height}px, scale ${scale}×)`);
 }
 
-void main();
+main();

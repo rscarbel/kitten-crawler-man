@@ -1,31 +1,34 @@
 /**
- * Headless review harness for the Dark Knight sprite sheet.
+ * The Dark Knight review harness.
  *
- * Art has to be reviewed as an image, by something that only looks at the
- * image: every defect that has ever mattered on a figure in this project was
- * invisible to typecheck, to lint and to reading the drawing code. This slices
- * `src/images/enemies/dark_knight.png` into a labelled contact sheet at review
- * scale, plus a strip of the same frames blitted at the real 32 px tile — the
- * size where "detail does not rescue a wrong outline" gets caught.
+ * Art has to be judged as an image, by something that only looks at the image:
+ * every defect that has ever mattered on a figure in this project was invisible
+ * to typecheck, to lint and to reading the drawing code. The contact sheet is
+ * painted from `DARK_KNIGHT_FIGURE` the way the runtime cache bakes it, and the
+ * art gates run as part of the render, so one command answers both "does it
+ * still hold together" and "what does it look like".
  *
- *   npx tsx scripts/render-dark-knight.ts --out=knight.png --scale=2
- *   npx tsx scripts/render-dark-knight.ts --out=knight-slam.png --row=slam,slam_side --scale=4
- *   npx tsx scripts/render-dark-knight.ts --out=knight-helm.png --mode=parts --part=helm
- *   npx tsx scripts/render-dark-knight.ts --out=knight-mace.png --mode=prop
- *   npx tsx scripts/render-dark-knight.ts --out=knight-gore.png --mode=gore
- *
- * Regenerate the sheet itself with `npm run gen:dark-knight`.
+ *   npm run render:dark-knight
+ *   npx tsx scripts/render-dark-knight.ts --row=slam,slam_side --scale=4
+ *   npx tsx scripts/render-dark-knight.ts --mode=parts --part=helm
+ *   npx tsx scripts/render-dark-knight.ts --mode=prop
+ *   npx tsx scripts/render-dark-knight.ts --mode=gore
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { type Canvas, createCanvas } from 'canvas';
 
-// The row order and frame counts come straight from the generator, so a new row
-// cannot desync the only review path this art has.
-import { GORE_STATES, ROWS, SHEET_PATH, TILE_SCALE, bake } from './generate-dark-knight-sprite.js';
+import { bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { darkKnightGateFailures } from './gates-dark-knight.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import {
+  DARK_KNIGHT_FIGURE,
+  DARK_KNIGHT_ROWS,
+  GORE_STATES,
+  TILE_SCALE,
+} from '../src/sprites/art/darkKnightFigure.js';
 
-/** Matches TILE_SIZE in src/core/constants.ts; the sheet is drawn at 2× that. */
+/** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
 
 const DEFAULT_SCALE = 2;
@@ -40,6 +43,11 @@ const GRID_LINE = 'rgba(255,255,255,0.12)';
 const TILE_GUIDE = 'rgba(120,220,255,0.35)';
 const LABEL_COLOR = '#e8e2d8';
 const LABEL_FONT = '14px sans-serif';
+
+type Mode = 'sheet' | 'parts' | 'prop' | 'gore';
+const MODES: ReadonlyArray<Mode> = ['sheet', 'parts', 'prop', 'gore'];
+
+type SheetCanvas = ReturnType<Canvas['getContext']>;
 
 function parseFlag(name: string, fallback: string): string {
   const prefix = `--${name}=`;
@@ -57,11 +65,11 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
   return value;
 }
 
-interface Geometry {
-  readonly frameWidth: number;
-  readonly frameHeight: number;
-  readonly tileX: number;
-  readonly tileY: number;
+function parseMode(): Mode {
+  const raw = parseFlag('mode', 'sheet');
+  const found = MODES.find((mode) => mode === raw);
+  if (found === undefined) throw new Error(`--mode=${raw} is not one of ${MODES.join(', ')}`);
+  return found;
 }
 
 /**
@@ -70,8 +78,8 @@ interface Geometry {
  * bucket, a pauldron that has merged with the arm under it — so each region is
  * pulled out across every frame of a row.
  *
- * Fractions of the cell rather than pixels, because the cell size is measured
- * at bake time and a pixel table here would silently rot.
+ * Fractions of the cell rather than pixels, so the table survives the figure
+ * re-deriving its own cell size.
  */
 interface PartCrop {
   readonly x: number;
@@ -89,55 +97,66 @@ const PART_CROPS: Record<string, PartCrop> = {
   mace: { x: 0.45, y: 0.1, w: 0.55, h: 0.45 },
 };
 
+const POSE_STATES: readonly string[] = DARK_KNIGHT_ROWS.map((row) => row.name);
+const { frameWidth, frameHeight } = DARK_KNIGHT_FIGURE;
+
 function backdropFor(index: number): string {
   return FLOOR_SWATCHES[index % FLOOR_SWATCHES.length];
 }
 
-function rowIndexOf(name: string): number {
-  const index = ROWS.findIndex((row) => row.name === name);
-  if (index < 0) throw new Error(`No row named "${name}"`);
-  return index;
+function frameCountOf(state: string): number {
+  const declared = DARK_KNIGHT_FIGURE.states.get(state);
+  if (declared === undefined) throw new Error(`the dark knight declares no state "${state}"`);
+  return declared.frames;
 }
 
-function renderPartsPanel(
-  sheet: Image,
-  geometry: Geometry,
-  outPath: string,
-  partName: string,
-  scale: number,
-): void {
-  const crop = PART_CROPS[partName];
-  if (crop === undefined) {
-    throw new Error(`--part=${partName} is not one of ${Object.keys(PART_CROPS).join(', ')}`);
-  }
-  const cropW = geometry.frameWidth * crop.w;
-  const cropH = geometry.frameHeight * crop.h;
-  const cellW = cropW * scale;
-  const cellH = cropH * scale;
-  const maxCols = Math.max(...ROWS.map((row) => row.frameCount));
+/**
+ * One canvas holding the requested states as rows, painted the way the cache
+ * bakes them. Row `i` of the returned sheet is `states[i]`.
+ */
+function sheetOf(states: readonly string[]): Canvas {
+  return bakeFigureSheet(DARK_KNIGHT_FIGURE, [...states]).canvas;
+}
 
-  const canvas = createCanvas(
-    Math.ceil(PADDING + maxCols * (cellW + PADDING)),
-    Math.ceil(PADDING + ROWS.length * (cellH + LABEL_HEIGHT + PADDING)),
-  );
+function newPanel(width: number, height: number): { canvas: Canvas; ctx: SheetCanvas } {
+  const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = BACKDROP;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.font = LABEL_FONT;
+  return { canvas, ctx };
+}
+
+function renderPartsPanel(outPath: string, partName: string, scale: number): void {
+  const crop = PART_CROPS[partName];
+  if (crop === undefined) {
+    throw new Error(`--part=${partName} is not one of ${Object.keys(PART_CROPS).join(', ')}`);
+  }
+  const sheet = sheetOf(POSE_STATES);
+  const cropW = frameWidth * crop.w;
+  const cropH = frameHeight * crop.h;
+  const cellW = cropW * scale;
+  const cellH = cropH * scale;
+  const maxCols = Math.max(...POSE_STATES.map((state) => frameCountOf(state)));
+
+  const { canvas, ctx } = newPanel(
+    PADDING + maxCols * (cellW + PADDING),
+    PADDING + POSE_STATES.length * (cellH + LABEL_HEIGHT + PADDING),
+  );
 
   let y = PADDING;
-  ROWS.forEach((row, index) => {
+  POSE_STATES.forEach((state, index) => {
     ctx.fillStyle = LABEL_COLOR;
-    ctx.fillText(`${row.name} — ${partName}`, PADDING, y + LABEL_HEIGHT - PADDING);
+    ctx.fillText(`${state} — ${partName}`, PADDING, y + LABEL_HEIGHT - PADDING);
     y += LABEL_HEIGHT;
-    for (let frame = 0; frame < row.frameCount; frame++) {
+    for (let frame = 0; frame < frameCountOf(state); frame++) {
       const x = PADDING + frame * (cellW + PADDING);
       ctx.fillStyle = backdropFor(index);
       ctx.fillRect(x, y, cellW, cellH);
       ctx.drawImage(
         sheet,
-        frame * geometry.frameWidth + geometry.frameWidth * crop.x,
-        index * geometry.frameHeight + geometry.frameHeight * crop.y,
+        frame * frameWidth + frameWidth * crop.x,
+        index * frameHeight + frameHeight * crop.y,
         cropW,
         cropH,
         x,
@@ -151,7 +170,7 @@ function renderPartsPanel(
     y += cellH + PADDING;
   });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, ${partName} crops)`);
 }
 
@@ -163,43 +182,46 @@ function renderPartsPanel(
  */
 const PROP_SCALES: ReadonlyArray<number> = [4, 2, IN_GAME_TILE / TILE_SCALE];
 
-function renderPropPanel(sheet: Image, geometry: Geometry, outPath: string): void {
-  const crop = PART_CROPS.mace;
-  const cropW = geometry.frameWidth * crop.w;
-  const cropH = geometry.frameHeight * crop.h;
-  // The carry frame, plus the slam's raise and the sweep's level pass — the
-  // three places the head is fully clear of the body.
-  const samples: ReadonlyArray<readonly [string, number]> = [
-    ['idle_side', 0],
-    ['walk_side', 4],
-    ['sweep_side', 13],
-    ['slam_side', 15],
-  ];
+/**
+ * The carry frame, plus the slam's raise and the sweep's level pass — the three
+ * places the head is fully clear of the body.
+ */
+const PROP_SAMPLES: ReadonlyArray<readonly [string, number]> = [
+  ['idle_side', 0],
+  ['walk_side', 4],
+  ['sweep_side', 13],
+  ['slam_side', 15],
+];
 
-  const width = PADDING + samples.length * (cropW * Math.max(...PROP_SCALES) + PADDING);
-  const height =
-    PADDING + PROP_SCALES.reduce((total, s) => total + cropH * s + LABEL_HEIGHT + PADDING, 0);
-  const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = BACKDROP;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = LABEL_FONT;
+function renderPropPanel(outPath: string): void {
+  const states = PROP_SAMPLES.map(([state]) => state);
+  const sheet = sheetOf(states);
+  const crop = PART_CROPS.mace;
+  const cropW = frameWidth * crop.w;
+  const cropH = frameHeight * crop.h;
+
+  const { canvas, ctx } = newPanel(
+    PADDING + PROP_SAMPLES.length * (cropW * Math.max(...PROP_SCALES) + PADDING),
+    PADDING + PROP_SCALES.reduce((total, s) => total + cropH * s + LABEL_HEIGHT + PADDING, 0),
+  );
 
   let y = PADDING;
   for (const scale of PROP_SCALES) {
     const cellW = cropW * scale;
     const cellH = cropH * scale;
     ctx.fillStyle = LABEL_COLOR;
-    const caption =
-      scale === Math.min(...PROP_SCALES) ? 'at the size it renders in game' : `${scale}×`;
-    ctx.fillText(caption, PADDING, y + LABEL_HEIGHT - PADDING);
+    ctx.fillText(
+      scale === Math.min(...PROP_SCALES) ? 'at the size it renders in game' : `${scale}×`,
+      PADDING,
+      y + LABEL_HEIGHT - PADDING,
+    );
     y += LABEL_HEIGHT;
-    samples.forEach(([rowName, frame], index) => {
+    PROP_SAMPLES.forEach(([, frame], index) => {
       const x = PADDING + index * (cellW + PADDING);
       ctx.drawImage(
         sheet,
-        frame * geometry.frameWidth + geometry.frameWidth * crop.x,
-        rowIndexOf(rowName) * geometry.frameHeight + geometry.frameHeight * crop.y,
+        frame * frameWidth + frameWidth * crop.x,
+        index * frameHeight + frameHeight * crop.y,
         cropW,
         cropH,
         x,
@@ -213,58 +235,96 @@ function renderPropPanel(sheet: Image, geometry: Geometry, outPath: string): voi
     y += cellH + PADDING;
   }
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, prop panel)`);
 }
 
-function renderSheetPanel(
-  sheet: Image,
-  geometry: Geometry,
-  outPath: string,
-  scale: number,
-  only: string,
-): void {
-  const wanted = only === '' ? [] : only.split(',');
-  const rows =
-    wanted.length === 0
-      ? ROWS.filter((row) => row.kind !== 'gore')
-      : ROWS.filter((row) => wanted.includes(row.name));
-  if (rows.length === 0) throw new Error(`No row named "${only}"`);
+/**
+ * The severed pieces at the three sizes that matter. The bottom strip is the
+ * exit criterion: name all seven from it, or the set has failed.
+ */
+const GORE_REVIEW_SCALES: ReadonlyArray<number> = [4, 1, IN_GAME_TILE / TILE_SCALE];
 
-  const cellW = geometry.frameWidth * scale;
-  const cellH = geometry.frameHeight * scale;
-  const maxCols = Math.max(...rows.map((row) => row.frameCount));
-  const inGameW = geometry.frameWidth * (IN_GAME_TILE / TILE_SCALE);
-  const inGameH = geometry.frameHeight * (IN_GAME_TILE / TILE_SCALE);
+function renderGorePanel(outPath: string): void {
+  const sheet = sheetOf(GORE_STATES);
+  const pieceCount = GORE_STATES.length;
+  const widths = GORE_REVIEW_SCALES.map((scale) => frameWidth * scale);
 
-  const stripWidth = PADDING + rows.length * (inGameW + PADDING);
-  const width = Math.max(PADDING + maxCols * (cellW + PADDING), stripWidth);
-  const height =
-    PADDING + rows.length * (cellH + LABEL_HEIGHT + PADDING) + (inGameH + LABEL_HEIGHT + PADDING);
-
-  const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = BACKDROP;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = LABEL_FONT;
+  const { canvas, ctx } = newPanel(
+    PADDING + Math.max(...widths.map((w) => pieceCount * (w + PADDING))),
+    PADDING +
+      GORE_REVIEW_SCALES.reduce(
+        (total, scale) => total + frameHeight * scale + LABEL_HEIGHT + PADDING,
+        0,
+      ),
+  );
 
   let y = PADDING;
-  rows.forEach((spec, index) => {
-    const sheetRow = rowIndexOf(spec.name);
+  for (const scale of GORE_REVIEW_SCALES) {
+    const cellW = frameWidth * scale;
+    const cellH = frameHeight * scale;
     ctx.fillStyle = LABEL_COLOR;
-    ctx.fillText(`${spec.name} — ${spec.frameCount} frames`, PADDING, y + LABEL_HEIGHT - PADDING);
+    ctx.fillText(
+      scale === Math.min(...GORE_REVIEW_SCALES)
+        ? 'at the size it renders in game — name all seven from this row'
+        : `${scale}×`,
+      PADDING,
+      y + LABEL_HEIGHT - PADDING,
+    );
+    y += LABEL_HEIGHT;
+    GORE_STATES.forEach((state, piece) => {
+      const x = PADDING + piece * (cellW + PADDING);
+      ctx.drawImage(sheet, 0, piece * frameHeight, frameWidth, frameHeight, x, y, cellW, cellH);
+      if (scale === Math.max(...GORE_REVIEW_SCALES)) {
+        ctx.fillStyle = LABEL_COLOR;
+        ctx.fillText(state, x, y + cellH + LABEL_HEIGHT - PADDING);
+      }
+      ctx.strokeStyle = GRID_LINE;
+      ctx.strokeRect(x, y, cellW, cellH);
+    });
+    y += cellH + PADDING;
+  }
+
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, gore panel)`);
+}
+
+function renderSheetPanel(outPath: string, scale: number, only: string): void {
+  const wanted = only === '' ? [] : only.split(',');
+  const states = wanted.length === 0 ? POSE_STATES : POSE_STATES.filter((s) => wanted.includes(s));
+  if (states.length === 0) throw new Error(`No row named "${only}"`);
+  const sheet = sheetOf(states);
+
+  const cellW = frameWidth * scale;
+  const cellH = frameHeight * scale;
+  const maxCols = Math.max(...states.map((state) => frameCountOf(state)));
+  const inGameScale = IN_GAME_TILE / TILE_SCALE;
+  const inGameW = frameWidth * inGameScale;
+  const inGameH = frameHeight * inGameScale;
+
+  const stripWidth = PADDING + states.length * (inGameW + PADDING);
+  const { canvas, ctx } = newPanel(
+    Math.max(PADDING + maxCols * (cellW + PADDING), stripWidth),
+    PADDING + states.length * (cellH + LABEL_HEIGHT + PADDING) + (inGameH + LABEL_HEIGHT + PADDING),
+  );
+
+  let y = PADDING;
+  states.forEach((state, index) => {
+    const frames = frameCountOf(state);
+    ctx.fillStyle = LABEL_COLOR;
+    ctx.fillText(`${state} — ${frames} frames`, PADDING, y + LABEL_HEIGHT - PADDING);
     y += LABEL_HEIGHT;
 
-    for (let frame = 0; frame < spec.frameCount; frame++) {
+    for (let frame = 0; frame < frames; frame++) {
       const x = PADDING + frame * (cellW + PADDING);
       ctx.fillStyle = backdropFor(index);
       ctx.fillRect(x, y, cellW, cellH);
       ctx.drawImage(
         sheet,
-        frame * geometry.frameWidth,
-        sheetRow * geometry.frameHeight,
-        geometry.frameWidth,
-        geometry.frameHeight,
+        frame * frameWidth,
+        index * frameHeight,
+        frameWidth,
+        frameHeight,
         x,
         y,
         cellW,
@@ -274,8 +334,8 @@ function renderSheetPanel(
       ctx.strokeRect(x, y, cellW, cellH);
       ctx.strokeStyle = TILE_GUIDE;
       ctx.strokeRect(
-        x + geometry.tileX * scale,
-        y + geometry.tileY * scale,
+        x + DARK_KNIGHT_FIGURE.tileX * scale,
+        y + DARK_KNIGHT_FIGURE.tileY * scale,
         TILE_SCALE * scale,
         TILE_SCALE * scale,
       );
@@ -286,13 +346,13 @@ function renderSheetPanel(
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText(`in-game size (${IN_GAME_TILE}px tile)`, PADDING, y + LABEL_HEIGHT - PADDING);
   y += LABEL_HEIGHT;
-  rows.forEach((spec, index) => {
+  states.forEach((_state, index) => {
     ctx.drawImage(
       sheet,
       0,
-      rowIndexOf(spec.name) * geometry.frameHeight,
-      geometry.frameWidth,
-      geometry.frameHeight,
+      index * frameHeight,
+      frameWidth,
+      frameHeight,
       PADDING + index * (inGameW + PADDING),
       y,
       inGameW,
@@ -300,98 +360,41 @@ function renderSheetPanel(
     );
   });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, scale ${scale}×)`);
 }
 
-/**
- * Draws the gore row at the three sizes that matter. The bottom strip is the
- * exit criterion: name all seven pieces from it, or the set has failed.
- */
-const GORE_REVIEW_SCALES: ReadonlyArray<number> = [4, 1, IN_GAME_TILE / TILE_SCALE];
-
-function renderGorePanel(sheet: Image, geometry: Geometry, outPath: string): void {
-  const goreRow = ROWS.findIndex((row) => row.kind === 'gore');
-  if (goreRow < 0) throw new Error('the generator has no gore row');
-  const pieceCount = ROWS[goreRow].frameCount;
-
-  const widths = GORE_REVIEW_SCALES.map((scale) => geometry.frameWidth * scale);
-  const width = PADDING + Math.max(...widths.map((w) => pieceCount * (w + PADDING)));
-  const height =
-    PADDING +
-    GORE_REVIEW_SCALES.reduce(
-      (total, scale) => total + geometry.frameHeight * scale + LABEL_HEIGHT + PADDING,
-      0,
-    );
-
-  const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = BACKDROP;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = LABEL_FONT;
-
-  let y = PADDING;
-  for (const scale of GORE_REVIEW_SCALES) {
-    const cellW = geometry.frameWidth * scale;
-    const cellH = geometry.frameHeight * scale;
-    ctx.fillStyle = LABEL_COLOR;
-    ctx.fillText(
-      scale === Math.min(...GORE_REVIEW_SCALES)
-        ? 'at the size it renders in game — name all seven from this row'
-        : `${scale}×`,
-      PADDING,
-      y + LABEL_HEIGHT - PADDING,
-    );
-    y += LABEL_HEIGHT;
-    for (let piece = 0; piece < pieceCount; piece++) {
-      const x = PADDING + piece * (cellW + PADDING);
-      ctx.drawImage(
-        sheet,
-        piece * geometry.frameWidth,
-        goreRow * geometry.frameHeight,
-        geometry.frameWidth,
-        geometry.frameHeight,
-        x,
-        y,
-        cellW,
-        cellH,
-      );
-      if (scale === Math.max(...GORE_REVIEW_SCALES)) {
-        ctx.fillStyle = LABEL_COLOR;
-        ctx.fillText(GORE_STATES[piece] ?? '?', x, y + cellH + LABEL_HEIGHT - PADDING);
-      }
-      ctx.strokeStyle = GRID_LINE;
-      ctx.strokeRect(x, y, cellW, cellH);
-    }
-    y += cellH + PADDING;
-  }
-
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, gore panel)`);
-}
-
-async function main(): Promise<void> {
-  const mode = parseFlag('mode', 'sheet');
-  const outPath = parseFlag('out', `dark-knight-${mode}.png`);
-  const sheet = await loadImage(resolve(SHEET_PATH));
-  // Re-derived from the generator rather than the manifest, so the harness still
-  // works on a bake whose manifest entry has not been pasted in yet.
-  const geometry = bake().geometry;
+function main(): void {
+  const mode = parseMode();
+  const outPath = parseFlag(
+    'out',
+    mode === 'sheet'
+      ? `${PREVIEW_DIR}/dark-knight-review.png`
+      : `${PREVIEW_DIR}/dark-knight-${mode}.png`,
+  );
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
 
+  // Ahead of the contact sheet rather than after it. The sheet is a
+  // tens-of-megapixel allocation, and measuring the art on the other side of
+  // one made the pilot's centroid gate report a seam at twice its true width
+  // every so often — a red gate on art nobody touched, which is the one thing
+  // that teaches an agent to loosen a threshold.
+  console.log('Gating the dark knight figure…');
+  reportFigureGates('dark_knight', darkKnightGateFailures());
+
   if (mode === 'parts') {
-    renderPartsPanel(sheet, geometry, outPath, parseFlag('part', 'helm'), scale);
+    renderPartsPanel(outPath, parseFlag('part', 'helm'), scale);
     return;
   }
   if (mode === 'gore') {
-    renderGorePanel(sheet, geometry, outPath);
+    renderGorePanel(outPath);
     return;
   }
   if (mode === 'prop') {
-    renderPropPanel(sheet, geometry, outPath);
+    renderPropPanel(outPath);
     return;
   }
-  renderSheetPanel(sheet, geometry, outPath, scale, parseFlag('row', ''));
+  renderSheetPanel(outPath, scale, parseFlag('row', ''));
 }
 
-void main();
+main();

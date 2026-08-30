@@ -1,11 +1,18 @@
 import { Mob, scaledCooldownFramesForLevel } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
-import { TROGLODYTE_BODY_PART_KEY, drawTroglodyteSprite } from '../sprites/troglodyteSprite';
+import {
+  TROGLODYTE_BODY_PART_KEY,
+  drawTroglodyteSprite,
+  prewarmTroglodyteGore,
+  prewarmTroglodyteStrike,
+  prewarmTroglodyteTongue,
+} from '../sprites/troglodyteSprite';
 import {
   TROGLODYTE_TONGUE_OVERREACH,
   TROGLODYTE_TONGUE_RANGE_TILES,
 } from '../sprites/troglodyteTongue';
+import { LASH_IMPACT_PROGRESS } from '../sprites/art/troglodyteFigure';
 import { makePoison } from '../core/StatusEffect';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
@@ -61,7 +68,19 @@ export function troglodyteWindupFrames(level: number): number {
     scaledCooldownFramesForLevel(WINDUP_FRAMES, level),
   );
 }
-const STRIKE_FRAMES = 18; // 9 frames out, 9 frames back
+const STRIKE_FRAMES = 18;
+
+/**
+ * The frame of the strike the tongue is fully out on, counted down the way
+ * `strikeTimer` runs.
+ *
+ * Derived from the art's own peak rather than restated as half the row. The
+ * tongue overlay's reach and the damage check have to be the same instant — a
+ * tongue that visibly lands a frame away from the frame that hurts reads as a
+ * hit the player could not have dodged — and two copies of "halfway" drift the
+ * moment the lash choreography is retimed.
+ */
+const IMPACT_TIMER = Math.round(STRIKE_FRAMES * (1 - LASH_IMPACT_PROGRESS));
 const COOLDOWN_FRAMES = 150;
 /** Fraction of tongue range used as follow stop distance. */
 const FOLLOW_STOP_FRACTION = 0.85;
@@ -162,6 +181,11 @@ export class Troglodyte extends Mob {
         this.strikeProgress = null;
         if (nearest) {
           this.state = 'stalking';
+          // The windup's own first frame is already a gape cell, and the nine
+          // severed pieces are all drawn on the single frame the creature comes
+          // apart. Noticing a crawler is the only warning either of those gets.
+          prewarmTroglodyteStrike();
+          prewarmTroglodyteGore();
         } else {
           this.returnHomeOrWander();
         }
@@ -182,6 +206,9 @@ export class Troglodyte extends Mob {
         if (nearestDist <= tongueRangePx && this.hasLOS(nearest)) {
           // In tongue range — start the slow windup
           this.state = 'winding_up';
+          // The tongue is drawn on no frame of the windup, so the telegraph is
+          // a whole row's worth of lead on the one overlay a strike needs.
+          prewarmTroglodyteTongue();
           this.windupDuration = troglodyteWindupFrames(this.mobLevel);
           this.windupTimer = this.windupDuration;
           this.isMoving = false;
@@ -242,17 +269,15 @@ export class Troglodyte extends Mob {
         this.mouthOpenAmt = 0.75;
         this.strikeProgress = (STRIKE_FRAMES - this.strikeTimer) / STRIKE_FRAMES;
 
-        // First half: tongue shoots out; second half: tongue retracts
-        const half = STRIKE_FRAMES / 2;
-        if (this.strikeTimer > half) {
-          this.tongueExtend = (STRIKE_FRAMES - this.strikeTimer) / half;
+        if (this.strikeTimer > IMPACT_TIMER) {
+          this.tongueExtend = (STRIKE_FRAMES - this.strikeTimer) / (STRIKE_FRAMES - IMPACT_TIMER);
         } else {
-          this.tongueExtend = this.strikeTimer / half;
+          this.tongueExtend = this.strikeTimer / IMPACT_TIMER;
         }
 
-        // Hit check at peak extension (frame == half), based on position NOW
-        // so the player can dodge during the windup telegraph.
-        if (this.strikeTimer === half) {
+        // Read at the moment of impact rather than at the windup, so the player
+        // can dodge while the telegraph is still playing.
+        if (this.strikeTimer === IMPACT_TIMER) {
           for (const t of targets) {
             if (!t.isAlive) continue;
             const dx = t.x - this.x;

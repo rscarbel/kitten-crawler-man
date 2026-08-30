@@ -3,10 +3,16 @@ import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import {
   drawEvilClownSprite,
+  prewarmEvilClownStates,
   EVIL_CLOWN_BODY_PART_KEY,
   EVIL_CLOWN_IDLE_LOOP_SECONDS,
+  EVIL_CLOWN_JUGGLE_STATES,
+  EVIL_CLOWN_LOCOMOTION_STATES,
+  EVIL_CLOWN_SWIPE_STATES,
   type EvilClownAnimation,
 } from '../sprites/evilClownSprite';
+import { prewarmClownGasRows } from '../sprites/clownGasSprite';
+import { EVIL_CLOWN_JUGGLE_HAND_HEIGHT_TILES } from '../sprites/art/clownFigure';
 
 /**
  * The Evil Clown — a bounty target, and the only member of Grimaldi's troupe
@@ -83,20 +89,6 @@ const AIMED_THROW_CHANCE = 0.55;
 const AIMED_THROW_JITTER_TILES = 1.2;
 /** Damage a vial's own impact deals to anyone standing on the landing spot. */
 const VIAL_IMPACT_DAMAGE = 4;
-/**
- * How far above the clown's own world position the bottle leaves, in tiles.
- *
- * Measured from `this.y + tileSize * CENTER_OFFSET` — the centre of his
- * one-tile collision box — because that is what `throwVial` uses as the origin.
- * His feet are half a tile *below* that, and the rig in
- * `scripts/generate-clown-sprites.ts` holds the juggling hands 1.415 tiles above
- * his feet (`shoulderHeight` 2.036 less `EVIL_ARM_LENGTH * JUGGLE_HAND_DROP`),
- * so the offset from the collision centre is 1.415 - 0.5.
- *
- * Without it the bottle pops out of his shoes and jumps a tile and a half in one
- * frame; measured from the wrong datum it leaves from empty air above his hands.
- */
-const VIAL_RELEASE_HEIGHT_TILES = 0.915;
 
 /**
  * Boss-tier reward. The named bosses in this game run 500 (the Hoarder) to 2000
@@ -117,6 +109,19 @@ const COIN_DROP_MAX = 200;
 const CULL_MARGIN_TILES = 5;
 
 const CENTER_OFFSET = 0.5;
+
+/**
+ * How far above the clown's own world position the bottle leaves, in tiles.
+ *
+ * Measured from `this.y + tileSize * CENTER_OFFSET` — the centre of his
+ * one-tile collision box — because that is what `throwVial` uses as the origin.
+ * His feet are half a tile *below* that, so the offset from the collision
+ * centre is where the choreography holds the hands, less that half tile.
+ *
+ * Without it the bottle pops out of his shoes and jumps a tile and a half in one
+ * frame; measured from the wrong datum it leaves from empty air above his hands.
+ */
+const VIAL_RELEASE_HEIGHT_TILES = EVIL_CLOWN_JUGGLE_HAND_HEIGHT_TILES - CENTER_OFFSET;
 
 /** Mob level at or above which the loot table steps up. */
 const RICH_LOOT_LEVEL = 8;
@@ -187,6 +192,9 @@ export class EvilClown extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, EVIL_CLOWN_HP, EVIL_CLOWN_SPEED);
+    // Warmed at construction, which is the moment `BountySystem` schedules the
+    // encounter: he is walking toward the player before anything else happens.
+    prewarmEvilClownStates(EVIL_CLOWN_LOCOMOTION_STATES);
   }
 
   override resetToSpawn(): void {
@@ -284,6 +292,7 @@ export class EvilClown extends Mob {
       this.swipeTimer = SWIPE_FRAMES;
       this.swipeConnected = false;
       this.attackCooldown = ATTACK_COOLDOWN;
+      prewarmEvilClownStates(EVIL_CLOWN_SWIPE_STATES);
     }
   }
 
@@ -294,6 +303,11 @@ export class EvilClown extends Mob {
   }
 
   private beginLaugh(): void {
+    // The laugh is the telegraph for the whole vial phase, so it is where the
+    // juggling rows and all three gas rows are warmed: it runs for well over a
+    // second before the first bottle leaves his hands.
+    prewarmEvilClownStates(EVIL_CLOWN_JUGGLE_STATES);
+    prewarmClownGasRows();
     this.phase = 'laughing';
     this.phaseTimer = LAUGH_FRAMES;
     this.isMoving = false;

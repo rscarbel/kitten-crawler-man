@@ -7,7 +7,12 @@ import {
   HOARDER_BODY_PART_KEY,
   HOARDER_VOMIT_RELEASE_PROGRESS,
   drawHoarderSprite,
+  prewarmHoarderGore,
+  prewarmHoarderLocomotion,
+  prewarmHoarderVomit,
 } from '../sprites/hoarderSprite';
+import { prewarmHoarderBile } from '../sprites/hoarderBileSprite';
+import { prewarmCockroach } from '../sprites/cockroachSprite';
 
 const HOARDER_HP = 80;
 const HOARDER_MASS = 10;
@@ -176,6 +181,10 @@ export class TheHoarder extends Mob {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, HOARDER_HP, HOARDER_SPEED);
     this.isBoss = true;
+    // She is built when the floor is generated, which is minutes before anybody
+    // opens her door and frames before the intro panel draws her portrait, so
+    // the rows she stands and waddles in are warm by the time she is seen.
+    prewarmHoarderLocomotion();
   }
 
   /**
@@ -222,6 +231,10 @@ export class TheHoarder extends Mob {
     if (!this.isEnraged && this.hp / this.maxHp < ENRAGE_THRESHOLD) {
       this.isEnraged = true;
       this.setBaseSpeed(HOARDER_SPEED_ENRAGED);
+      // Her severed pieces are all drawn on one frame, with no telegraph of
+      // their own; crossing this threshold is the last warning there is that
+      // the fight is ending.
+      prewarmHoarderGore();
     }
 
     // Unguarded by a target, unlike the two attack clocks: this is a cooldown on
@@ -288,6 +301,15 @@ export class TheHoarder extends Mob {
         this.vomitTarget = victim;
         this.vomitTargetX = victim.x + TILE_SIZE * CENTER_OFFSET;
         this.vomitTargetY = victim.y + TILE_SIZE * CENTER_OFFSET;
+        // At the telegraph, not at the frame the bolus spawns: the wind-up is
+        // the whole warning the player gets, and a row baking during it is a
+        // row baking while the bile is already on its way.
+        prewarmHoarderVomit();
+        prewarmHoarderBile();
+        // The swarm has no entry point but this boss, and the purge that builds
+        // it runs on its own clock: warming the roach here buys the wind-up's
+        // worth of lead for whichever of the two attacks comes next.
+        prewarmCockroach();
         this.hoarderState = 'vomit_windup';
         this.vomitWindupTimer = VOMIT_WINDUP_FRAMES;
         this.vomitFired = false;
@@ -441,6 +463,9 @@ export class TheHoarder extends Mob {
   }
 
   private triggerPurge(): void {
+    // Where the spawn is *scheduled*: `BossRoomSystem` drains these positions
+    // into bodies on a later frame, so the rows are asked for after this.
+    prewarmCockroach();
     const count = randomInt(VOMIT_COUNT_MIN, VOMIT_COUNT_MAX);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;

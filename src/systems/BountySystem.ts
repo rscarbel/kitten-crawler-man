@@ -36,6 +36,7 @@ import { drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
 import { QuestDialog } from '../ui/QuestDialog';
+import { prewarmShadySprite } from '../sprites/shadySprite';
 import { Shady, type ShadyMarker } from '../creatures/Shady';
 import {
   buildBountyActiveDialog,
@@ -297,6 +298,10 @@ export class BountySystem implements GameSystem {
    */
   placeShady(tile: { x: number; y: number }): void {
     const shady = new Shady(tile.x, tile.y, TILE_SIZE);
+    // Warmed as the spawn is scheduled rather than on his first draw: he starts
+    // fidgeting the frame he exists, and the player can open his dialog before
+    // the talk row has ever been asked for.
+    prewarmShadySprite();
     shady.setMap(this.gameMap);
     this.shady = shady;
     this.addMob(shady);

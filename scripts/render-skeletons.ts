@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Headless review harness for the three skeleton sprite sheets.
+ * Headless review harness for the three skeletons.
  *
  * A still cannot answer "does this move well", but it is the only thing that can
  * answer "does this read as bones" — and that is the question this art lives or
@@ -9,29 +9,49 @@
  * ribcage that reads beautifully at 4× and turns into a white blob at 32 px has
  * failed.
  *
- *   npx tsx scripts/render-skeletons.ts --only=lord --out=lord.png --scale=2
+ * The art gates run first, before any contact sheet is baked: a sheet is a
+ * tens-of-megapixel allocation, and a gate that measures on the far side of one
+ * is a gate that reports seams nobody drew. They cover all three variants
+ * whichever one is being rendered, because the three share every pose function.
+ *
+ *   npm run render:skeletons
  *   npx tsx scripts/render-skeletons.ts --only=sword --row=slash_side --scale=5
  *   npx tsx scripts/render-skeletons.ts --only=archer --mode=gore
- *
- * Regenerate the sheets themselves with `npm run gen:skeletons`.
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { type Canvas, createCanvas } from 'canvas';
 
-// Row order, frame counts and cell geometry come straight from the generator, so
-// a new row cannot desync the only review path this art has.
+// Row order, frame counts and cell geometry come straight from the figures, so a
+// new row cannot desync the only review path this art has.
+import { bakeFigureCell, bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { skeletonGateFailures } from './gates-skeletons.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import {
-  SHEETS,
+  GORE_STATES,
+  SKELETON_FIGURES,
+  SKELETON_ROWS,
   TILE_SCALE,
-  bakeSheet,
-  sheetPathFor,
   type RowSpec,
-  type SheetGeometry,
-  type SheetSpec,
-} from './generate-skeleton-sprites.js';
-import { SKELETON_GORE_STATES } from './skeletonGore.js';
+} from '../src/sprites/art/skeletonFigure.js';
+import type { SkeletonVariant } from '../src/sprites/art/skeletonArt.js';
+
+const VARIANTS: ReadonlyArray<SkeletonVariant> = ['lord', 'sword', 'archer'];
+
+/** One variant's figure, its rows and the name its files carry. */
+interface Subject {
+  readonly variant: SkeletonVariant;
+  readonly key: string;
+  readonly rows: readonly RowSpec[];
+}
+
+function subjectFor(variant: SkeletonVariant): Subject {
+  return {
+    variant,
+    key: SKELETON_FIGURES[variant].id,
+    rows: SKELETON_ROWS[variant],
+  };
+}
 
 /** Matches TILE_SIZE in src/core/constants.ts; the sheets are drawn at 2× that. */
 const IN_GAME_TILE = 32;
@@ -67,36 +87,31 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
   return value;
 }
 
-function sheetFor(only: string): SheetSpec {
-  const found = SHEETS.find((sheet) => sheet.variant === only || sheet.key === only);
-  if (found === undefined) {
-    throw new Error(
-      `--only=${only} is not one of ${SHEETS.map((sheet) => sheet.variant).join(' | ')}`,
-    );
-  }
-  return found;
+function subjectNamed(only: string): Subject {
+  const found = VARIANTS.find(
+    (variant) => variant === only || SKELETON_FIGURES[variant].id === only,
+  );
+  if (found === undefined) throw new Error(`--only=${only} is not one of ${VARIANTS.join(' | ')}`);
+  return subjectFor(found);
 }
 
 /**
  * The loose bones at the three sizes that matter. The bottom strip is the exit
  * criterion: name all seven from it, or the set has failed.
  */
-function renderGorePanel(
-  sheet: Image,
-  spec: SheetSpec,
-  geometry: SheetGeometry,
-  outPath: string,
-): void {
-  const goreRow = spec.rows.findIndex((row) => row.kind === 'gore');
-  if (goreRow < 0) throw new Error(`${spec.key} has no gore row`);
-  const pieceCount = spec.rows[goreRow].frameCount;
+function renderGorePanel(subject: Subject, outPath: string): void {
+  const figure = SKELETON_FIGURES[subject.variant];
+  const pieceCount = GORE_STATES.length;
+  if (pieceCount === 0) throw new Error(`${subject.key} paints no loose bones`);
+  const cells = GORE_STATES.map((state) => bakeFigureCell(figure, state, 0));
+  const { frameWidth, frameHeight } = figure;
 
-  const widths = GORE_REVIEW_SCALES.map((scale) => geometry.frameWidth * scale);
+  const widths = GORE_REVIEW_SCALES.map((scale) => frameWidth * scale);
   const width = PADDING + Math.max(...widths.map((w) => pieceCount * (w + PADDING)));
   const height =
     PADDING +
     GORE_REVIEW_SCALES.reduce(
-      (total, scale) => total + geometry.frameHeight * scale + LABEL_HEIGHT + PADDING,
+      (total, scale) => total + frameHeight * scale + LABEL_HEIGHT + PADDING,
       0,
     );
 
@@ -108,32 +123,22 @@ function renderGorePanel(
 
   let y = PADDING;
   for (const scale of GORE_REVIEW_SCALES) {
-    const cellW = geometry.frameWidth * scale;
-    const cellH = geometry.frameHeight * scale;
+    const cellW = frameWidth * scale;
+    const cellH = frameHeight * scale;
     ctx.fillStyle = LABEL_COLOR;
     const caption =
       scale === GORE_RENDER_SCALE
-        ? `${spec.key} — at the size it renders in game; name all ${pieceCount} from this row`
-        : `${spec.key} — ${scale}×`;
+        ? `${subject.key} — at the size it renders in game; name all ${pieceCount} from this row`
+        : `${subject.key} — ${scale}×`;
     ctx.fillText(caption, PADDING, y + LABEL_HEIGHT - PADDING);
     y += LABEL_HEIGHT;
 
     for (let piece = 0; piece < pieceCount; piece++) {
       const x = PADDING + piece * (cellW + PADDING);
-      ctx.drawImage(
-        sheet,
-        piece * geometry.frameWidth,
-        goreRow * geometry.frameHeight,
-        geometry.frameWidth,
-        geometry.frameHeight,
-        x,
-        y,
-        cellW,
-        cellH,
-      );
+      ctx.drawImage(cells[piece], 0, 0, frameWidth, frameHeight, x, y, cellW, cellH);
       if (scale === Math.max(...GORE_REVIEW_SCALES)) {
         ctx.fillStyle = LABEL_COLOR;
-        ctx.fillText(SKELETON_GORE_STATES[piece] ?? '?', x, y + cellH + LABEL_HEIGHT - PADDING);
+        ctx.fillText(GORE_STATES[piece] ?? '?', x, y + cellH + LABEL_HEIGHT - PADDING);
       }
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
@@ -141,32 +146,31 @@ function renderGorePanel(
     y += cellH + PADDING;
   }
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
-  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, ${spec.key} bones)`);
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, ${subject.key} bones)`);
 }
 
 function renderSheetPanel(
-  sheet: Image,
-  spec: SheetSpec,
-  geometry: SheetGeometry,
+  subject: Subject,
+  sheet: Canvas,
   outPath: string,
   scale: number,
   only: string,
   onlyFrame: string,
 ): void {
-  const animationRows = spec.rows.filter((row) => row.kind !== 'gore');
+  const { frameWidth, frameHeight, tileX, tileY } = SKELETON_FIGURES[subject.variant];
   const rows: readonly RowSpec[] =
-    only === '' ? animationRows : spec.rows.filter((row) => row.name === only);
-  if (rows.length === 0) throw new Error(`${spec.key} has no row named "${only}"`);
+    only === '' ? subject.rows : subject.rows.filter((row) => row.name === only);
+  if (rows.length === 0) throw new Error(`${subject.key} has no row named "${only}"`);
   const longestRow = Math.max(...rows.map((row) => row.frameCount));
   const firstFrame = onlyFrame === '' ? 0 : parseNumberFlag('frame', 0, 0, longestRow - 1);
   const framesPerRow = (row: RowSpec): number => (onlyFrame === '' ? row.frameCount : 1);
 
-  const cellW = geometry.frameWidth * scale;
-  const cellH = geometry.frameHeight * scale;
+  const cellW = frameWidth * scale;
+  const cellH = frameHeight * scale;
   const maxCols = Math.max(...rows.map(framesPerRow));
-  const inGameW = geometry.frameWidth * (IN_GAME_TILE / TILE_SCALE);
-  const inGameH = geometry.frameHeight * (IN_GAME_TILE / TILE_SCALE);
+  const inGameW = frameWidth * (IN_GAME_TILE / TILE_SCALE);
+  const inGameH = frameHeight * (IN_GAME_TILE / TILE_SCALE);
 
   const stripWidth = PADDING + rows.length * (inGameW + PADDING);
   const width = Math.max(PADDING + maxCols * (cellW + PADDING), stripWidth);
@@ -183,11 +187,11 @@ function renderSheetPanel(
   ctx.font = LABEL_FONT;
 
   ctx.fillStyle = LABEL_COLOR;
-  ctx.fillText(`${spec.key} — ${scale}×`, PADDING, PADDING + LABEL_HEIGHT - PADDING);
+  ctx.fillText(`${subject.key} — ${scale}×`, PADDING, PADDING + LABEL_HEIGHT - PADDING);
   let y = PADDING + LABEL_HEIGHT;
 
   for (const row of rows) {
-    const sheetRow = spec.rows.findIndex((candidate) => candidate.name === row.name);
+    const sheetRow = subject.rows.findIndex((candidate) => candidate.name === row.name);
     ctx.fillStyle = LABEL_COLOR;
     const shown = framesPerRow(row);
     const label =
@@ -202,10 +206,10 @@ function renderSheetPanel(
       const x = PADDING + i * (cellW + PADDING);
       ctx.drawImage(
         sheet,
-        col * geometry.frameWidth,
-        sheetRow * geometry.frameHeight,
-        geometry.frameWidth,
-        geometry.frameHeight,
+        col * frameWidth,
+        sheetRow * frameHeight,
+        frameWidth,
+        frameHeight,
         x,
         y,
         cellW,
@@ -214,12 +218,7 @@ function renderSheetPanel(
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
       ctx.strokeStyle = TILE_GUIDE;
-      ctx.strokeRect(
-        x + geometry.tileX * scale,
-        y + geometry.tileY * scale,
-        TILE_SCALE * scale,
-        TILE_SCALE * scale,
-      );
+      ctx.strokeRect(x + tileX * scale, y + tileY * scale, TILE_SCALE * scale, TILE_SCALE * scale);
     }
     y += cellH + PADDING;
   }
@@ -228,13 +227,13 @@ function renderSheetPanel(
   ctx.fillText(`in-game size (${IN_GAME_TILE}px tile)`, PADDING, y + LABEL_HEIGHT - PADDING);
   y += LABEL_HEIGHT;
   for (let i = 0; i < rows.length; i++) {
-    const sheetRow = spec.rows.findIndex((candidate) => candidate.name === rows[i].name);
+    const sheetRow = subject.rows.findIndex((candidate) => candidate.name === rows[i].name);
     ctx.drawImage(
       sheet,
-      firstFrame * geometry.frameWidth,
-      sheetRow * geometry.frameHeight,
-      geometry.frameWidth,
-      geometry.frameHeight,
+      firstFrame * frameWidth,
+      sheetRow * frameHeight,
+      frameWidth,
+      frameHeight,
       PADDING + i * (inGameW + PADDING),
       y,
       inGameW,
@@ -242,33 +241,37 @@ function renderSheetPanel(
     );
   }
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, scale ${scale}×)`);
 }
 
-async function main(): Promise<void> {
+function main(): void {
   const mode = parseFlag('mode', 'sheet');
-  const spec = sheetFor(parseFlag('only', 'lord'));
-  const outPath = parseFlag('out', `skeleton-${spec.variant}-${mode}.png`);
-  const sheet = await loadImage(resolve(sheetPathFor(spec.key)));
-  // Re-derives the cell size from the generator rather than the manifest, so the
-  // harness still works on a bake whose manifest entry has not been pasted yet.
-  const geometry = bakeSheet(spec).geometry;
+  const only = parseFlag('only', '');
+  const outPath = parseFlag('out', '');
 
-  if (mode === 'gore') {
-    renderGorePanel(sheet, spec, geometry, outPath);
-    return;
-  }
+  // Gates before any contact sheet, always. A sheet is a tens-of-megapixel
+  // allocation, and measuring the art on the far side of one is how a gate
+  // starts reporting defects nobody drew.
+  reportFigureGates('skeletons', skeletonGateFailures());
+
+  // With no --only the whole family renders: three variants that share one set
+  // of pose functions are only reviewable side by side, and a reviewer handed
+  // one of them cannot see that the other two moved with it.
+  const subjects = only === '' ? VARIANTS.map(subjectFor) : [subjectNamed(only)];
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
-  renderSheetPanel(
-    sheet,
-    spec,
-    geometry,
-    outPath,
-    scale,
-    parseFlag('row', ''),
-    parseFlag('frame', ''),
-  );
+  for (const subject of subjects) {
+    const out = outPath === '' ? `${PREVIEW_DIR}/skeleton-${subject.variant}-${mode}.png` : outPath;
+    if (mode === 'gore') {
+      renderGorePanel(subject, out);
+      continue;
+    }
+    const sheet = bakeFigureSheet(
+      SKELETON_FIGURES[subject.variant],
+      subject.rows.map((row) => row.name),
+    ).canvas;
+    renderSheetPanel(subject, sheet, out, scale, parseFlag('row', ''), parseFlag('frame', ''));
+  }
 }
 
-void main();
+main();

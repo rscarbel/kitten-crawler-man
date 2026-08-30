@@ -23,6 +23,7 @@ import {
 } from '../levels/spawner';
 import { activeDifficultyProfile, applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
+import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
 import { getLevelDef } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
@@ -1368,6 +1369,10 @@ export class DungeonScene extends GameplayScene {
           // floor's required keys, not the old floor's: anything the two
           // floors share (core, dungeon_common, ...) simply isn't touched.
           releaseSpritesExcept(requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups));
+          // The painted creatures give their memory back on the same beat and
+          // for the same reason: whatever the next floor still shows is
+          // repainted lazily, and nothing else is carried down the stairs.
+          flushFigureFrameCache();
           this.sceneManager.replace(
             new DungeonScene(nextDef, this.input, this.sceneManager, {
               // Taking the stairs regroups the party: a companion carried down

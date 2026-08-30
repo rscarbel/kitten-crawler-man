@@ -111,7 +111,7 @@ interface VariantSpec {
   readonly heightTiles: number;
 }
 
-/** Matches LICH_HEIGHT_TILES in `scripts/generate-lich-sprites.ts`. */
+/** Matches LICH_HEIGHT_TILES in `src/sprites/art/lichFigure.ts`. */
 const LICH_HEIGHT_TILES = 2.68;
 
 const VARIANTS: ReadonlyArray<VariantSpec> = [

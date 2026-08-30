@@ -1,9 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * Review harness for the three Krakaren sheets (body, guard tentacle, slam
- * tentacle). Art has to be judged as an image, by something that only looks at
- * the image — every defect that has ever mattered on a figure in this project
- * was invisible to `typecheck`, `lint` and a code read.
+ * Review harness for the three Krakaren figures (body, guard tentacle, slam
+ * tentacle), and the command that runs their art gates.
+ *
+ * Art has to be judged as an image, by something that only looks at the image —
+ * every defect that has ever mattered on a figure in this project was invisible
+ * to `typecheck`, `lint` and a code read. Every cell here is painted and
+ * downsampled exactly as the runtime cache admits it.
  *
  *   npx tsx scripts/render-krakaren.ts --out=krakaren-body.png --sheet=body --scale=1.5
  *   npx tsx scripts/render-krakaren.ts --sheet=body --row=swipe_side --scale=4
@@ -12,35 +15,36 @@
  *   npx tsx scripts/render-krakaren.ts --sheet=slam --row=loom --mode=onion --scale=3
  *   npx tsx scripts/render-krakaren.ts --sheet=body --row=swipe --mode=delta --scale=3
  *   npx tsx scripts/render-krakaren.ts --mode=composite --scale=3
- *   npx tsx scripts/render-krakaren.ts --sheet=slam --fresh    (review the bake, not the file)
  */
 
-import {
-  type Canvas,
-  type CanvasRenderingContext2D as Ctx,
-  type Image,
-  createCanvas,
-  loadImage,
-} from 'canvas';
-import { writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { type Canvas, type CanvasRenderingContext2D as Ctx, createCanvas } from 'canvas';
 
 import {
-  BODY_SHEET,
-  type BakedSheet,
+  BODY_ROWS,
   GROUND_OFFSET_PX,
-  GUARD_SHEET,
+  GUARD_ROWS,
+  KRAKAREN_FIGURE,
+  KRAKAREN_GORE_STATES,
+  KRAKAREN_SLAM_FIGURE,
+  KRAKAREN_TENTACLE_FIGURE,
+  KRAKAREN_TENTACLE_GORE_STATES,
   type RowSpec,
-  SLAM_SHEET,
-  type SheetSpec,
+  SLAM_ROWS,
   TILE_SCALE,
-  bake,
-  goreStatesOf,
-} from './generate-krakaren-sprite.js';
+} from '../src/sprites/art/krakarenFigure.js';
+import type { FigureDef } from '../src/sprites/figure/figureDef.js';
+import { bakeFigureSheet } from './figureSheet.js';
+import { runKrakarenGates } from './gates-krakaren.js';
+import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import {
   KRAKAREN_LAIR_STONE_DARK,
   KRAKAREN_LAIR_STONE_LIGHT,
 } from '../src/map/tiles/specialFloorTiles.js';
+
+// A painter that composes on a scratch surface of its own reaches for
+// `document.createElement('canvas')`, which a Node process does not have.
+installCanvasGlobals();
 
 /** Matches TILE_SIZE in src/core/constants.ts; the sheets are drawn at 2× that. */
 const IN_GAME_TILE = 32;
@@ -60,10 +64,48 @@ const PARTS_ZOOM = 2.2;
 type SheetKey = 'body' | 'tentacle' | 'slam';
 type Mode = 'sheet' | 'parts' | 'gore' | 'onion' | 'delta' | 'composite';
 
-const SHEET_BY_KEY: Record<SheetKey, SheetSpec> = {
-  body: BODY_SHEET,
-  tentacle: GUARD_SHEET,
-  slam: SLAM_SHEET,
+/**
+ * A row as the contact sheet lays it out.
+ *
+ * The severed pieces are single-frame states of the figure rather than columns
+ * of one shared row, so each gets a display row of its own and the `gore` kind
+ * is what groups them back together for `--mode=gore`.
+ */
+interface DisplayRow {
+  readonly name: string;
+  readonly frameCount: number;
+  readonly kind: RowSpec['kind'] | 'gore';
+  readonly view: RowSpec['view'] | null;
+}
+
+/** One figure plus the display rows it is reviewed through. */
+interface FigureSpec {
+  readonly def: FigureDef;
+  readonly rows: readonly DisplayRow[];
+  readonly goreStates: readonly string[];
+}
+
+function figureSpecOf(
+  def: FigureDef,
+  poseRows: readonly RowSpec[],
+  goreStates: readonly string[],
+): FigureSpec {
+  const rows: DisplayRow[] = poseRows.map((row) => ({
+    name: row.name,
+    frameCount: row.frameCount,
+    kind: row.kind,
+    view: row.view,
+  }));
+  for (const state of goreStates) {
+    rows.push({ name: state, frameCount: 1, kind: 'gore', view: null });
+  }
+  return { def, rows, goreStates };
+}
+
+const SHEET_BY_KEY: Record<SheetKey, FigureSpec> = {
+  body: figureSpecOf(KRAKAREN_FIGURE, BODY_ROWS, KRAKAREN_GORE_STATES),
+  tentacle: figureSpecOf(KRAKAREN_TENTACLE_FIGURE, GUARD_ROWS, KRAKAREN_TENTACLE_GORE_STATES),
+  slam: figureSpecOf(KRAKAREN_SLAM_FIGURE, SLAM_ROWS, []),
 };
 
 interface PartWindow {
@@ -141,42 +183,36 @@ function parseMode(): Mode {
 }
 
 interface LoadedSheet {
-  readonly image: Image;
+  readonly image: Canvas;
   readonly frameW: number;
   readonly frameH: number;
-  readonly geometryMatchesSheet: boolean;
-  readonly baked: BakedSheet;
+  readonly def: FigureDef;
 }
 
-async function loadSheet(spec: SheetSpec, fresh: boolean): Promise<LoadedSheet> {
-  const baked = bake(spec);
-  const image = fresh ? await loadImage(baked.buffer) : await loadImage(resolve(spec.path));
-  const columns = Math.max(...spec.rows.map((row) => row.frameCount));
-  const frameW = Math.round(image.width / columns);
-  const frameH = Math.round(image.height / spec.rows.length);
-  const geometryMatchesSheet =
-    baked.geometry.frameWidth === frameW && baked.geometry.frameHeight === frameH;
-  if (!geometryMatchesSheet) {
-    console.warn(
-      `${spec.path} is ${frameW}×${frameH} per cell but the current bake makes ` +
-        `${baked.geometry.frameWidth}×${baked.geometry.frameHeight} — the tile guide is omitted. ` +
-        `Pass --fresh to review the bake instead of the file.`,
-    );
-  }
-  return { image, frameW, frameH, geometryMatchesSheet, baked };
+function bakeSheet(spec: FigureSpec): LoadedSheet {
+  const sheet = bakeFigureSheet(
+    spec.def,
+    spec.rows.map((row) => row.name),
+  );
+  return {
+    image: sheet.canvas,
+    frameW: sheet.frameWidth,
+    frameH: sheet.frameHeight,
+    def: spec.def,
+  };
 }
 
-function rowIndexOf(spec: SheetSpec, name: string): number {
+function rowIndexOf(spec: FigureSpec, name: string): number {
   const index = spec.rows.findIndex((row) => row.name === name);
   if (index === -1) {
     throw new Error(
-      `"${name}" is not a row on this sheet (${spec.rows.map((r) => r.name).join(', ')})`,
+      `"${name}" is not a row on this figure (${spec.rows.map((r) => r.name).join(', ')})`,
     );
   }
   return index;
 }
 
-function selectRows(spec: SheetSpec, rowFilter: string): readonly RowSpec[] {
+function selectRows(spec: FigureSpec, rowFilter: string): readonly DisplayRow[] {
   const rows = rowFilter === '' ? spec.rows : spec.rows.filter((row) => row.name === rowFilter);
   if (rows.length === 0) {
     throw new Error(
@@ -187,11 +223,10 @@ function selectRows(spec: SheetSpec, rowFilter: string): readonly RowSpec[] {
 }
 
 function drawGroundGuide(ctx: Ctx, x: number, y: number, scale: number, loaded: LoadedSheet): void {
-  if (!loaded.geometryMatchesSheet) return;
   ctx.strokeStyle = TILE_GUIDE;
   ctx.strokeRect(
-    x + loaded.baked.geometry.tileX * scale,
-    y + loaded.baked.geometry.tileY * scale,
+    x + loaded.def.tileX * scale,
+    y + loaded.def.tileY * scale,
     TILE_SCALE * scale,
     TILE_SCALE * scale,
   );
@@ -207,7 +242,7 @@ const MAX_CHANNEL_VALUE = 255;
 
 /** A grayscale heat cell: how much a frame moved from the one before it. */
 function diffCanvas(
-  image: Image,
+  image: Canvas,
   frameW: number,
   frameH: number,
   sheetRow: number,
@@ -241,15 +276,15 @@ function diffCanvas(
 }
 
 /** Previous column for a frame-to-frame comparison: loops wrap, one-shots hold frame 0. */
-function previousColumn(row: RowSpec, col: number): number {
+function previousColumn(row: DisplayRow, col: number): number {
   if (col > 0) return col - 1;
   return row.kind === 'loop' ? row.frameCount - 1 : 0;
 }
 
 function renderContactSheet(
-  spec: SheetSpec,
+  spec: FigureSpec,
   loaded: LoadedSheet,
-  rows: readonly RowSpec[],
+  rows: readonly DisplayRow[],
   scale: number,
   mode: 'plain' | 'onion' | 'delta',
   outPath: string,
@@ -278,7 +313,7 @@ function renderContactSheet(
     const sheetRow = rowIndexOf(spec, row.name);
     const label =
       row.kind === 'gore'
-        ? `${row.name} — ${row.frameCount} pieces: ${goreStatesOf(spec).join(', ')}`
+        ? `${row.name} — severed piece`
         : `${row.name} — ${row.frameCount} frames, ${row.view ?? 'no view'}, ${row.kind}`;
     ctx.fillStyle = LABEL_COLOR;
     ctx.fillText(label, PADDING, y + LABEL_HEIGHT - PADDING);
@@ -337,16 +372,16 @@ function renderContactSheet(
     );
   });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  const resolvedOutPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(
-    `Wrote ${outPath} (${canvas.width}×${canvas.height}px, scale ${scale}×, mode ${mode})`,
+    `Wrote ${resolvedOutPath} (${canvas.width}×${canvas.height}px, scale ${scale}×, mode ${mode})`,
   );
 }
 
 // ── Parts mode ───────────────────────────────────────────────────────────────
 
 function renderParts(
-  spec: SheetSpec,
+  spec: FigureSpec,
   sheetKey: SheetKey,
   loaded: LoadedSheet,
   rowName: string,
@@ -414,9 +449,9 @@ function renderParts(
     x += cellW + PADDING;
   });
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  const resolvedOutPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(
-    `Wrote ${outPath} (${canvas.width}×${canvas.height}px, ${row.name}[${frame}], scale ${scale}×)`,
+    `Wrote ${resolvedOutPath} (${canvas.width}×${canvas.height}px, ${row.name}[${frame}], scale ${scale}×)`,
   );
 }
 
@@ -430,18 +465,18 @@ const COMPOSITE_SLAM_OFFSET_TILES = 2.4;
 const COMPOSITE_GROUND_ROW_TILES = 3;
 
 /** Where the ground line sits inside a frame, as a fraction from the top. */
-function groundFraction(baked: BakedSheet): number {
-  return (baked.geometry.tileY + GROUND_OFFSET_PX) / baked.geometry.frameHeight;
+function groundFraction(def: FigureDef): number {
+  return (def.tileY + GROUND_OFFSET_PX) / def.frameHeight;
 }
 
-async function renderComposite(scale: number, fresh: boolean, outPath: string): Promise<void> {
-  const body = await loadSheet(BODY_SHEET, fresh);
-  const guard = await loadSheet(GUARD_SHEET, fresh);
-  const slam = await loadSheet(SLAM_SHEET, fresh);
+function renderComposite(scale: number, outPath: string): void {
+  const body = bakeSheet(SHEET_BY_KEY.body);
+  const guard = bakeSheet(SHEET_BY_KEY.tentacle);
+  const slam = bakeSheet(SHEET_BY_KEY.slam);
 
-  const bodyRow = rowIndexOf(BODY_SHEET, 'idle');
-  const guardRow = rowIndexOf(GUARD_SHEET, 'idle');
-  const slamRow = rowIndexOf(SLAM_SHEET, 'loom');
+  const bodyRow = rowIndexOf(SHEET_BY_KEY.body, 'idle');
+  const guardRow = rowIndexOf(SHEET_BY_KEY.tentacle, 'idle');
+  const slamRow = rowIndexOf(SHEET_BY_KEY.slam, 'loom');
 
   const inGameScale = (IN_GAME_TILE / TILE_SCALE) * scale;
   const width = COMPOSITE_FLOOR_TILES_W * IN_GAME_TILE * scale;
@@ -473,7 +508,7 @@ async function renderComposite(scale: number, fresh: boolean, outPath: string): 
     const drawnH = loaded.frameH * inGameScale;
     const anchorX = centreX + offsetTiles * floorTile;
     const anchorY = groundRowY;
-    const groundY = groundFraction(loaded.baked) * drawnH;
+    const groundY = groundFraction(loaded.def) * drawnH;
     ctx.drawImage(
       loaded.image,
       0,
@@ -491,30 +526,34 @@ async function renderComposite(scale: number, fresh: boolean, outPath: string): 
   place(body, bodyRow, 0);
   place(slam, slamRow, COMPOSITE_SLAM_OFFSET_TILES);
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  const resolvedOutPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(
-    `Wrote ${outPath} (${canvas.width}×${canvas.height}px, scale ${scale}×, mode composite)`,
+    `Wrote ${resolvedOutPath} (${canvas.width}×${canvas.height}px, scale ${scale}×, mode composite)`,
   );
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-async function main(): Promise<void> {
-  const outPath = parseFlag('out', 'krakaren-review.png');
+function main(): void {
+  // Gates before the contact sheet: a sheet is a tens-of-megapixel allocation,
+  // and measuring the art on the far side of one has made a gate report a
+  // defect that was not in the art.
+  if (!runKrakarenGates()) return;
+
+  const outPath = parseFlag('out', `${PREVIEW_DIR}/krakaren-review.png`);
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
   const mode = parseMode();
   const rowFilter = parseFlag('row', '');
   const frame = parseNumberFlag('frame', 0, 0, Number.MAX_SAFE_INTEGER);
-  const fresh = process.argv.includes('--fresh');
 
   if (mode === 'composite') {
-    await renderComposite(scale, fresh, outPath);
+    renderComposite(scale, outPath);
     return;
   }
 
   const sheetKey = parseSheetKey();
   const spec = SHEET_BY_KEY[sheetKey];
-  const loaded = await loadSheet(spec, fresh);
+  const loaded = bakeSheet(spec);
 
   if (mode === 'parts') {
     renderParts(spec, sheetKey, loaded, rowFilter, frame, scale, outPath);
@@ -522,10 +561,11 @@ async function main(): Promise<void> {
   }
 
   if (mode === 'gore') {
-    if (spec.gorePieces.length === 0) {
-      throw new Error(`${spec.key} has no gore row (the slam tentacle is never killable)`);
+    const goreRows = spec.rows.filter((row) => row.kind === 'gore');
+    if (goreRows.length === 0) {
+      throw new Error(`${spec.def.id} has no gore pieces (the slam tentacle is never killable)`);
     }
-    renderContactSheet(spec, loaded, [selectRows(spec, 'gore')[0]], scale, 'plain', outPath);
+    renderContactSheet(spec, loaded, goreRows, scale, 'plain', outPath);
     return;
   }
 
@@ -534,4 +574,4 @@ async function main(): Promise<void> {
   renderContactSheet(spec, loaded, rows, scale, contactMode, outPath);
 }
 
-void main();
+main();

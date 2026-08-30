@@ -11,6 +11,8 @@ import {
   JUICER_BODY_PART_KEY,
   JUICER_HEAD_CLEARANCE_TILES,
 } from '../sprites/juicerSprite';
+import { JUICER_FIGURE } from '../sprites/art/juicerFigure';
+import { prewarmFigureState } from '../sprites/figure/figureFrameCache';
 import {
   JUICER_PUNCH_IMPACT_PROGRESS,
   JUICER_SPRINT_FRAMES,
@@ -176,6 +178,20 @@ interface Projectile {
   ttl: number;
   /** Frames in flight. Drives the spin, which a wall clock cannot do honestly. */
   age: number;
+}
+
+/**
+ * The three views of an attack, warmed together when the wind-up starts.
+ *
+ * All three, not the one he currently faces: a wind-up lasts long enough for
+ * the player to walk around him, and the frames the cache has to have ready are
+ * whichever view he is in when the blow lands.
+ */
+const THROW_ROWS = ['throw', 'throw_side', 'throw_away'] as const;
+const PUNCH_ROWS = ['punch', 'punch_side', 'punch_away'] as const;
+
+function prewarmAttackRows(rows: ReadonlyArray<string>): void {
+  for (const row of rows) prewarmFigureState(JUICER_FIGURE, row);
 }
 
 export class Juicer extends Mob {
@@ -402,6 +418,7 @@ export class Juicer extends Mob {
   }
 
   private beginPunch(target: Player): void {
+    prewarmAttackRows(PUNCH_ROWS);
     this.state = 'punch_windup';
     this.punchTimer = PUNCH_WINDUP_FRAMES;
     this.isMoving = false;
@@ -550,6 +567,7 @@ export class Juicer extends Mob {
       nearestDist <= THROW_RANGE_MAX &&
       this.hasLOS(nearest)
     ) {
+      prewarmAttackRows(THROW_ROWS);
       this.state = 'winding_up';
       this.windupTimer = THROW_WINDUP_FRAMES;
       this.throwAnim = 0;

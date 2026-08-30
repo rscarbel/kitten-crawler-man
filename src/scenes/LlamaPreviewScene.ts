@@ -26,9 +26,8 @@ import { GameMap } from '../map/GameMap';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { LLAMA_SPIT_FRAMES, llamaSpitReleaseFrame } from '../sprites/llamaSpitTiming';
 import { drawLavaBolt, drawLavaBurst, drawLavaFlame } from '../sprites/lavaBallSprite';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
-
-type LlamaState = SpriteStates['llama'];
+import { LLAMA_FIGURE } from '../sprites/art/llamaFigure';
+import { figureFrameCount } from '../sprites/figure/figureDef';
 
 /** A facing vector per column, chosen so `drawLlamaSprite` picks each viewpoint. */
 interface ViewSpec {
@@ -48,16 +47,16 @@ type RowKind = 'walk' | 'idle' | 'spit';
 
 interface RowSpec {
   readonly kind: RowKind;
-  /** Which sheet state the profile column plays, for the frame-count lookup. */
-  readonly probeState: LlamaState;
+  /** Which of the figure's states the profile column plays, for the frame count. */
+  readonly probeState: string;
   readonly fps: number;
 }
 
 /**
  * The rows to show and how fast to play them. Frame counts are deliberately
- * absent: they are read from the loaded manifest at draw time, because a
- * hand-copied count here would silently desync from the sheet the moment a
- * row's length changed.
+ * absent: they are read from the figure at draw time, because a hand-copied
+ * count here would silently desync from the painter the moment a row's length
+ * changed.
  */
 const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'walk', probeState: 'walk_side', fps: 12 },
@@ -65,10 +64,9 @@ const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'spit', probeState: 'spit_side', fps: 14 },
 ];
 
-/** How many frames a row actually holds, from the sheet the game loaded. */
-function frameCountOf(state: LlamaState): number {
-  const def = getSpriteDefByKey('llama');
-  return def?.states.get(state)?.frameCount ?? 1;
+/** How many frames a row actually holds, from the figure that paints it. */
+function frameCountOf(state: string): number {
+  return Math.max(1, figureFrameCount(LLAMA_FIGURE, state));
 }
 
 /** 1× is what a player sees; 4× is where a split lip becomes visible at all. */

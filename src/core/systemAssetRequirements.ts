@@ -41,47 +41,58 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     id: 'bounty:evil_clown',
     levelIds: LEVEL3,
     mobTypes: ['evil_clown', 'stilt_clown', 'fat_clown', 'circus_lemur'],
-    requiredGroups: ['bounty_evil_clown'],
+    requiredGroups: [],
   },
+  // Both builds are painted rather than baked, so no sprite group is needed;
+  // the entry exists so the mob types are still checked against
+  // MOB_SPRITE_KEYS.
   {
     id: 'bounty:mantid',
     levelIds: LEVEL3,
     mobTypes: ['mantid', 'mantis'],
-    requiredGroups: ['bounty_mantid'],
+    requiredGroups: [],
   },
+  // All three are painted, so the encounter needs no sheet group; the entry
+  // exists so the mob types are still checked against MOB_SPRITE_KEYS.
   {
     id: 'bounty:skeleton_lord',
     levelIds: LEVEL3,
     mobTypes: ['skeleton_lord', 'skeleton_sword', 'skeleton_archer'],
-    requiredGroups: ['bounty_skeleton_lord'],
+    requiredGroups: [],
   },
+  // The knight and his ten goblins are all painted, so the encounter needs no
+  // sheet group; the entry exists so the mob types are still checked against
+  // MOB_SPRITE_KEYS.
   {
     id: 'bounty:dark_knight',
     levelIds: LEVEL3,
     mobTypes: ['dark_knight', 'goblin'],
-    requiredGroups: ['bounty_dark_knight'],
+    requiredGroups: [],
   },
+  // Both bodies are painted rather than baked, so no sprite group is needed;
+  // the entry exists so the mob types are still checked against
+  // MOB_SPRITE_KEYS.
   {
     id: 'bounty:rock_golem',
     levelIds: LEVEL3,
     mobTypes: ['rock_golem_boss', 'rock_golem'],
-    requiredGroups: ['bounty_rock_golem'],
+    requiredGroups: [],
   },
 
-  // SkeletonSummonSystem (src/systems/SkeletonSummonSystem.ts) only fires
-  // while a live SkeletonLord exists in `mobs`, which today only happens via
-  // the skeleton_lord bounty above — so its coverage is that bounty's group.
+  // SkeletonSummonSystem (src/systems/SkeletonSummonSystem.ts) raises the two
+  // warriors, both of which are painted rather than baked.
   {
     id: 'skeleton_summons',
     levelIds: LEVEL3,
     mobTypes: ['skeleton_sword', 'skeleton_archer'],
-    requiredGroups: ['bounty_skeleton_lord'],
+    requiredGroups: [],
   },
 
   // CircusQuestSystem (src/systems/CircusQuestSystem.ts) and BigTopMazeSystem
   // (src/systems/BigTopMazeSystem.ts) — both level 3 only (circus tents and
   // the Big Top interior only exist on the overworld map). Nearly every
-  // creature in this chain is procedural; only the stilt/fat clowns have art.
+  // creature in this chain is procedural, so no sprite group is needed; the
+  // entries exist so the mob types are still checked against MOB_SPRITE_KEYS.
   {
     id: 'quest:circus',
     levelIds: LEVEL3,
@@ -94,13 +105,13 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
       'signet',
       'heather_the_bear',
     ],
-    requiredGroups: ['quest_circus'],
+    requiredGroups: [],
   },
   {
     id: 'quest:big_top',
     levelIds: LEVEL3,
     mobTypes: ['circus_lemur', 'stilt_clown', 'fat_clown', 'mold_lion', 'signet'],
-    requiredGroups: ['quest_circus'],
+    requiredGroups: [],
   },
 
   // QuillConfrontationSystem (src/systems/QuillConfrontationSystem.ts) —
@@ -114,15 +125,15 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     requiredGroups: [],
   },
 
-  // The second half of the tower confrontation, which is not procedural: the
-  // Lich has a baked sheet of its own and raises the skeleton escort, so the
-  // whole set has to be resident before the reveal ends — the fight starts on
-  // the frame the last dialog page closes, with nowhere to load anything.
+  // The second half of the tower confrontation. The Lich, the skeletons it
+  // raises and the fight's own effects are all painted, so there is no group
+  // left to load; the entry stays so the mob types are still checked against
+  // MOB_SPRITE_KEYS.
   {
     id: 'quest:murder_lich',
     levelIds: LEVEL3,
     mobTypes: ['the_lich', 'skeleton_sword', 'skeleton_archer'],
-    requiredGroups: ['murder_lich'],
+    requiredGroups: [],
   },
 
   // MurderMysteryQuestSystem (src/systems/MurderMysteryQuestSystem.ts) —
@@ -155,24 +166,14 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
   },
 
   // MercenarySystem (src/systems/MercenarySystem.ts) — a hired mercenary
-  // follows the player across floors once recruited at the level 3 club. Only
-  // the "bruiser" template needs a sheet (it draws from the rock golem sheet);
-  // "enforcer"/"berserker" are procedural (`drawClubNpc`).
+  // follows the player across floors once recruited at the level 3 club. Every
+  // template is painted now: the "bruiser" draws through the rock golem figure
+  // and the other two through `drawClubNpc`.
   {
     id: 'companion:mercenary',
     levelIds: ALL_LEVELS,
     mobTypes: ['mercenary_bruiser'],
-    requiredGroups: ['core'],
-  },
-
-  // BossRoomSystem (src/systems/BossRoomSystem.ts) — `spawnHoarderCockroaches`
-  // only fires while a live TheHoarder exists, i.e. level 1's first gauntlet
-  // boss. The roaches have their own sheet now, and it rides in with hers.
-  {
-    id: 'boss_room:hoarder_cockroaches',
-    levelIds: ['level1'],
-    mobTypes: ['cockroach'],
-    requiredGroups: ['boss_hoarder'],
+    requiredGroups: [],
   },
 ];
 

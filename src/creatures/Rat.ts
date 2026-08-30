@@ -7,6 +7,8 @@ import {
   RAT_BITE_IMPACT_PROGRESS,
   RAT_BODY_PART_KEY,
   drawRatSprite,
+  prewarmRat,
+  prewarmRatCombat,
 } from '../sprites/ratSprite';
 
 const RAT_HP = 3;
@@ -50,6 +52,16 @@ export class Rat extends Mob {
   private isAggro = false;
   private firstBitePending = true;
   private firstBiteWindup = 0;
+
+  /**
+   * Whether this rat's rows have been warmed since its AI woke up.
+   *
+   * `MobUpdateLoop` starts running a mob's AI well outside the screen, so the
+   * first tick is the earliest warning that a body nobody has drawn yet is about
+   * to be drawn — and this painter is far too expensive to meet cold.
+   */
+  private hasWarmedLocomotion = false;
+  private hasWarmedCombat = false;
 
   private readonly aggroRangePx: number;
   private readonly biteRangePx: number;
@@ -104,11 +116,20 @@ export class Rat extends Mob {
   updateAI(targets: Player[]) {
     if (!this.isAlive) return;
 
+    if (!this.hasWarmedLocomotion) {
+      this.hasWarmedLocomotion = true;
+      prewarmRat();
+    }
+
     if (this.attackCooldown > 0) this.attackCooldown--;
 
     const nearest = this.acquireTarget(targets, this.aggroRangePx);
 
     this.currentTarget = nearest;
+    if (nearest !== null && !this.hasWarmedCombat) {
+      this.hasWarmedCombat = true;
+      prewarmRatCombat();
+    }
 
     if (!nearest) {
       this.isAggro = false;

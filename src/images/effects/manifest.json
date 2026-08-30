@@ -1,32 +1,4 @@
 {
-  "vespa_acid_spit_projectile": {
-    "path": "effects/vespa_acid_spit_projectile.png",
-    "frameWidth": 40,
-    "frameHeight": 40,
-    "tileX": 20,
-    "tileY": 20,
-    "tileScale": 64,
-    "states": {
-      "default": {
-        "row": 0,
-        "frameCount": 6
-      }
-    }
-  },
-  "vespa_acid_spit_impact": {
-    "path": "effects/vespa_acid_spit_impact.png",
-    "frameWidth": 96,
-    "frameHeight": 96,
-    "tileX": 48,
-    "tileY": 48,
-    "tileScale": 64,
-    "states": {
-      "default": {
-        "row": 0,
-        "frameCount": 8
-      }
-    }
-  },
   "smush_icon": {
     "path": "effects/smush_icon.png",
     "frameWidth": 64,
@@ -35,8 +7,14 @@
     "tileY": 0,
     "tileScale": 64,
     "states": {
-      "standard": { "row": 0, "frameCount": 1 },
-      "full_power": { "row": 1, "frameCount": 1 }
+      "standard": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "full_power": {
+        "row": 1,
+        "frameCount": 1
+      }
     }
   },
   "magic_missile_icon": {
@@ -54,124 +32,6 @@
       "full_power": {
         "row": 1,
         "frameCount": 1
-      }
-    }
-  },
-  "magic_missile_projectile": {
-    "path": "effects/magic_missile_projectile.png",
-    "frameWidth": 256,
-    "frameHeight": 112,
-    "tileX": 208,
-    "tileY": 56,
-    "tileScale": 64,
-    "states": {
-      "tier1": {
-        "row": 0,
-        "frameCount": 8
-      },
-      "tier2": {
-        "row": 1,
-        "frameCount": 8
-      },
-      "tier3": {
-        "row": 2,
-        "frameCount": 8
-      },
-      "tier4": {
-        "row": 3,
-        "frameCount": 8
-      },
-      "sub_missile": {
-        "row": 4,
-        "frameCount": 8
-      }
-    }
-  },
-  "magic_missile_explosion": {
-    "path": "effects/magic_missile_explosion.png",
-    "frameWidth": 224,
-    "frameHeight": 224,
-    "tileX": 112,
-    "tileY": 112,
-    "tileScale": 64,
-    "states": {
-      "tier1": {
-        "row": 0,
-        "frameCount": 10
-      },
-      "tier2": {
-        "row": 1,
-        "frameCount": 10
-      },
-      "tier3": {
-        "row": 2,
-        "frameCount": 10
-      },
-      "tier4": {
-        "row": 3,
-        "frameCount": 10
-      },
-      "sub_missile": {
-        "row": 4,
-        "frameCount": 10
-      }
-    }
-  },
-  "protective_shell": {
-    "path": "effects/protective_shell.png",
-    "frameWidth": 400,
-    "frameHeight": 400,
-    "tileX": 200,
-    "tileY": 200,
-    "tileScale": 32,
-    "states": {
-      "active": {
-        "row": 0,
-        "frameCount": 8
-      },
-      "full_power": {
-        "row": 1,
-        "frameCount": 8
-      },
-      "appear": {
-        "row": 2,
-        "frameCount": 8
-      },
-      "appear_full_power": {
-        "row": 3,
-        "frameCount": 8
-      },
-      "expire": {
-        "row": 4,
-        "frameCount": 8
-      }
-    }
-  },
-  "protective_shell_mini": {
-    "path": "effects/protective_shell_mini.png",
-    "frameWidth": 192,
-    "frameHeight": 192,
-    "tileX": 96,
-    "tileY": 96,
-    "tileScale": 32,
-    "states": {
-      "active": {
-        "row": 0,
-        "frameCount": 8
-      }
-    }
-  },
-  "protective_shell_shockwave": {
-    "path": "effects/protective_shell_shockwave.png",
-    "frameWidth": 480,
-    "frameHeight": 480,
-    "tileX": 240,
-    "tileY": 240,
-    "tileScale": 32,
-    "states": {
-      "expand": {
-        "row": 0,
-        "frameCount": 8
       }
     }
   },
@@ -204,153 +64,6 @@
       "puddle": {
         "row": 0,
         "frameCount": 6
-      }
-    }
-  },
-  "llama_lava_bolt": {
-    "path": "effects/llama_lava_bolt.png",
-    "frameWidth": 112,
-    "frameHeight": 80,
-    "tileX": 72,
-    "tileY": 40,
-    "tileScale": 64,
-    "states": {
-      "fly": { "row": 0, "frameCount": 8 }
-    }
-  },
-  "llama_lava_burst": {
-    "path": "effects/llama_lava_burst.png",
-    "frameWidth": 128,
-    "frameHeight": 128,
-    "tileX": 64,
-    "tileY": 64,
-    "tileScale": 64,
-    "states": {
-      "burst": { "row": 0, "frameCount": 10 }
-    }
-  },
-  "llama_lava_flame": {
-    "path": "effects/llama_lava_flame.png",
-    "frameWidth": 96,
-    "frameHeight": 104,
-    "tileX": 48,
-    "tileY": 62,
-    "tileScale": 64,
-    "states": {
-      "burn": { "row": 0, "frameCount": 8 }
-    }
-  },
-  "skeleton_soul_bolt": {
-    "path": "effects/skeleton_soul_bolt.png",
-    "frameWidth": 80,
-    "frameHeight": 80,
-    "tileX": 40,
-    "tileY": 40,
-    "tileScale": 64,
-    "states": {
-      "fly": { "row": 0, "frameCount": 8 }
-    }
-  },
-  "skeleton_soul_burst": {
-    "path": "effects/skeleton_soul_burst.png",
-    "frameWidth": 146,
-    "frameHeight": 146,
-    "tileX": 73,
-    "tileY": 73,
-    "tileScale": 64,
-    "states": {
-      "burst": { "row": 0, "frameCount": 10 }
-    }
-  },
-  "skeleton_bone_arrow": {
-    "path": "effects/skeleton_bone_arrow.png",
-    "frameWidth": 98,
-    "frameHeight": 42,
-    "tileX": 49,
-    "tileY": 21,
-    "tileScale": 64,
-    "states": {
-      "fly": { "row": 0, "frameCount": 1 }
-    }
-  },
-  "skeleton_grasping_hands": {
-    "path": "effects/skeleton_grasping_hands.png",
-    "frameWidth": 118,
-    "frameHeight": 118,
-    "tileX": 59,
-    "tileY": 59,
-    "tileScale": 64,
-    "states": {
-      "erupt": { "row": 0, "frameCount": 8 }
-    }
-  },
-  "evil_clown_vial": {
-    "path": "effects/evil_clown_vial.png",
-    "frameWidth": 78,
-    "frameHeight": 78,
-    "tileX": 39,
-    "tileY": 39,
-    "tileScale": 64,
-    "states": {
-      "fly": {
-        "row": 0,
-        "frameCount": 8
-      }
-    }
-  },
-  "evil_clown_shatter": {
-    "path": "effects/evil_clown_shatter.png",
-    "frameWidth": 114,
-    "frameHeight": 114,
-    "tileX": 57,
-    "tileY": 57,
-    "tileScale": 64,
-    "states": {
-      "shatter": {
-        "row": 0,
-        "frameCount": 10
-      }
-    }
-  },
-  "evil_clown_gas": {
-    "path": "effects/evil_clown_gas.png",
-    "frameWidth": 212,
-    "frameHeight": 212,
-    "tileX": 106,
-    "tileY": 106,
-    "tileScale": 64,
-    "states": {
-      "billow": {
-        "row": 0,
-        "frameCount": 8
-      }
-    }
-  },
-  "golem_rock": {
-    "path": "effects/golem_rock.png",
-    "frameWidth": 64,
-    "frameHeight": 64,
-    "tileX": 32,
-    "tileY": 32,
-    "tileScale": 40,
-    "states": {
-      "spin": {
-        "row": 0,
-        "frameCount": 8
-      }
-    }
-  },
-  "golem_rock_burst": {
-    "path": "effects/golem_rock_burst.png",
-    "frameWidth": 96,
-    "frameHeight": 96,
-    "tileX": 48,
-    "tileY": 48,
-    "tileScale": 40,
-    "states": {
-      "spin": {
-        "row": 0,
-        "frameCount": 8
       }
     }
   }

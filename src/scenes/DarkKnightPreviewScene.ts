@@ -23,24 +23,23 @@ import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from 
 import { GameMap } from '../map/GameMap';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { drawDangerCircle } from '../sprites/dangerTelegraph';
-import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
 import {
   DARK_KNIGHT_BODY_PART_KEY,
   darkKnightImpactProgress,
   drawDarkKnightSprite,
   type DarkKnightAttack,
+  type DarkKnightState,
 } from '../sprites/darkKnightSprite';
 // The radii and the fade curve come from the creature rather than being copied:
 // this harness exists to answer "does the circle fade up before the mace is
 // overhead", and it can only answer that about the schedule the game runs. It
 // already refuses to hand-copy frame counts for the same reason.
+import { DARK_KNIGHT_FIGURE } from '../sprites/art/darkKnightFigure';
 import {
   SLAM_RADIUS_TILES,
   SWEEP_RADIUS_TILES,
   darkKnightTelegraphFade,
 } from '../creatures/DarkKnight';
-
-type DarkKnightState = SpriteStates['dark_knight'];
 
 /** A facing vector per column, chosen so `drawDarkKnightSprite` picks each view. */
 interface ViewSpec {
@@ -86,9 +85,11 @@ function isAttack(kind: RowKind): kind is DarkKnightAttack {
   return ATTACK_KINDS.some((attack) => attack === kind);
 }
 
-/** How many frames a row actually holds, from the sheet the game loaded. */
+/** How many frames a row actually holds, from the figure that paints it. */
 function frameCountOf(state: DarkKnightState): number {
-  return getSpriteDefByKey('dark_knight')?.states.get(state)?.frameCount ?? 1;
+  const frames = DARK_KNIGHT_FIGURE.states.get(state);
+  if (frames === undefined) throw new Error(`the dark knight paints no state "${state}"`);
+  return frames.frames;
 }
 
 /** 1× is what a player sees; 4× is where a scored plate seam is visible at all. */

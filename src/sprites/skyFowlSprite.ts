@@ -1,24 +1,121 @@
-import { getSpriteDef } from '../core/SpriteLoader';
 import { walkFrameIndex, progressFrameIndex } from '../core/SpriteRenderer';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { figureFrameCount } from './figure/figureDef';
+import type { FigureDef } from './figure/figureDef';
+import { SKY_FOWL_FIGURES } from './art/skyFowlFigure';
+import { SKY_FOWL_PALETTES, type SkyFowlClothColors } from './art/skyFowlArt';
 
-export interface SkyFowlClothColors {
-  vest: string;
-  pants: string;
-  trim: string;
-  hat: string | null;
+export { SKY_FOWL_PALETTES, type SkyFowlClothColors };
+
+/** The four rows a fowl paints. */
+export type SkyFowlState = 'walk' | 'idle' | 'peck' | 'aggressive';
+
+/**
+ * Every state name this wrapper can ask a figure for. An art gate holds it
+ * against what the figures actually paint: both draw paths return silently on
+ * an unknown state, so a name that drifts is an invisible bird and no log line.
+ */
+export const SKY_FOWL_DRAWN_STATES: readonly SkyFowlState[] = [
+  'walk',
+  'idle',
+  'peck',
+  'aggressive',
+];
+
+/**
+ * The rows worth warming when a fowl is spawned.
+ *
+ * A town bird wanders from the frame it exists, so its walk and its idle are
+ * both one frame away. The peck and the angry stance are behind a player
+ * choosing to start a fight with a civilian, which is minutes of lead at best
+ * and never happens for most of them.
+ */
+export const SKY_FOWL_PREWARMED_STATES: readonly SkyFowlState[] = ['idle', 'walk'];
+
+/**
+ * Frame counts read off the figures that paint them rather than retyped here.
+ * A hand-kept copy is invisible when it drifts: the draw call clamps the index,
+ * so too many frames stalls the animation on its last one and too few leaves
+ * frames that never play.
+ */
+const FRAME_COUNT: Readonly<Record<SkyFowlState, number>> = {
+  walk: figureFrameCount(SKY_FOWL_FIGURES[0], 'walk'),
+  idle: figureFrameCount(SKY_FOWL_FIGURES[0], 'idle'),
+  peck: figureFrameCount(SKY_FOWL_FIGURES[0], 'peck'),
+  aggressive: figureFrameCount(SKY_FOWL_FIGURES[0], 'aggressive'),
+};
+
+/** How fast the walk row is played against the mob's own walk counter. */
+const WALK_CYCLE_RATE = 0.5;
+/** Below this the sprite is mirrored; a fowl facing nearly forward keeps its facing. */
+const FLIP_FACING_THRESHOLD = -0.3;
+
+/** Picks the clothes one fowl wears for its lifetime. */
+export function randomSkyFowlPaletteIndex(): number {
+  return Math.floor(Math.random() * SKY_FOWL_PALETTES.length);
 }
 
-/** Eight distinct clothing palettes — picked randomly per-instance. */
-export const SKY_FOWL_PALETTES: SkyFowlClothColors[] = [
-  { vest: '#2e5c8a', pants: '#1a2a3a', trim: '#f0c060', hat: '#1a4050' }, // blue + gold
-  { vest: '#6b2d2d', pants: '#3a1a1a', trim: '#c8a060', hat: '#8a3020' }, // burgundy + bronze
-  { vest: '#2d6b3a', pants: '#1a3a1a', trim: '#e8d090', hat: null }, // forest green
-  { vest: '#7a6020', pants: '#4a3a1a', trim: '#a8d080', hat: '#6a5010' }, // mustard + olive
-  { vest: '#5a2d7a', pants: '#2a1a3a', trim: '#f0a0d0', hat: '#6a3090' }, // purple + pink
-  { vest: '#1a4a4a', pants: '#0a2a2a', trim: '#80d0d0', hat: null }, // teal
-  { vest: '#8a4020', pants: '#3a2010', trim: '#e0c060', hat: '#6a3010' }, // burnt orange + gold
-  { vest: '#4a4a2a', pants: '#2a2a10', trim: '#a0c050', hat: null }, // olive drab
-];
+/**
+ * The figure for one palette index.
+ *
+ * Each palette is its own figure rather than one figure taking a colour: a
+ * cached cell is keyed by figure, state and frame, so a painter reading a
+ * per-instance palette would hand the first bird's clothes to every bird after
+ * it. An index outside the set is clamped rather than throwing — the caller is
+ * a creature mid-render, and a wrong-coloured vest beats a blank tile.
+ */
+export function skyFowlFigure(paletteIndex: number): FigureDef {
+  const clamped = Math.max(0, Math.min(paletteIndex, SKY_FOWL_FIGURES.length - 1));
+  return SKY_FOWL_FIGURES[clamped];
+}
+
+/** Warms the rows a newly spawned fowl starts playing. */
+export function prewarmSkyFowl(paletteIndex: number): void {
+  const figure = skyFowlFigure(paletteIndex);
+  for (const state of SKY_FOWL_PREWARMED_STATES) prewarmFigureState(figure, state);
+}
+
+/**
+ * Draw the Sky Fowl wearing the palette at `paletteIndex`.
+ *
+ * Selects the animation state and frame and mirrors for left-facing, exactly as
+ * the sheet blit it replaces did.
+ */
+export function drawSkyFowlSprite(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  walkFrame: number,
+  isMoving: boolean,
+  isAggressive: boolean,
+  facingX: number,
+  paletteIndex: number,
+  peckAmt: number,
+): void {
+  let state: SkyFowlState;
+  let frame: number;
+
+  if (peckAmt > 0) {
+    state = 'peck';
+    frame = progressFrameIndex(peckAmt, FRAME_COUNT.peck);
+  } else if (isMoving) {
+    state = 'walk';
+    frame = walkFrameIndex(walkFrame * WALK_CYCLE_RATE, FRAME_COUNT.walk);
+  } else if (isAggressive) {
+    state = 'aggressive';
+    frame = 0;
+  } else {
+    state = 'idle';
+    frame = 0;
+  }
+
+  drawFigureCached(ctx, skyFowlFigure(paletteIndex), state, frame, sx, sy, s, {
+    flipX: facingX < FLIP_FACING_THRESHOLD,
+  });
+}
+
+// ── Magistrate Featherfall's corpse ──────────────────────────────────────────────
 
 /**
  * The magistrate's own colours — blue and gold, the only palette in the set that
@@ -30,149 +127,6 @@ const MAGISTRATE_PALETTE_INDEX = 0;
 const CORPSE_DESATURATION = 0.72;
 /** How far they are then pulled toward black, for weeks of dust and no blood. */
 const CORPSE_DARKENING = 0.34;
-
-const STATE_ROWS = {
-  walk: { row: 0, frameCount: 8 },
-  idle: { row: 1, frameCount: 1 },
-  peck: { row: 2, frameCount: 6 },
-  aggressive: { row: 3, frameCount: 1 },
-} as const;
-
-type SkyFowlState = keyof typeof STATE_ROWS;
-
-/**
- * Pre-bake one sprite sheet canvas for a given clothing palette.
- * Composites the body PNG with each clothing mask PNG tinted to the palette colors.
- * Call once per SkyFowl instance after loadSprites() has resolved.
- * Returns null if any required sprite has not yet loaded.
- */
-export function bakeSkyFowlCanvas(cloth: SkyFowlClothColors): HTMLCanvasElement | null {
-  const bodyDef = getSpriteDef('sky_fowl_body');
-  const pantsDef = getSpriteDef('sky_fowl_pants_mask');
-  const vestDef = getSpriteDef('sky_fowl_vest_mask');
-  const trimDef = getSpriteDef('sky_fowl_trim_mask');
-  const hatDef = getSpriteDef('sky_fowl_hat_mask');
-
-  if (!bodyDef || !pantsDef || !vestDef || !trimDef || !hatDef) return null;
-
-  // `.width`/`.height` rather than `.naturalWidth`/`.naturalHeight`: `img` may
-  // be a `downscaleSheet`-produced `<canvas>` (the low-end-device downscale)
-  // instead of an `<img>`, and the two agree anyway for a plain `Image()`
-  // with no explicit width/height attribute.
-  const w = bodyDef.img.width;
-  const h = bodyDef.img.height;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  // Draw the base body (feathers, beak, eyes, talons, shadow).
-  ctx.drawImage(bodyDef.img, 0, 0);
-
-  // Tint each clothing mask with its palette color using destination-in compositing:
-  // fill solid color → clip to mask alpha → draw onto baked canvas.
-  const clothingLayers: Array<[HTMLImageElement | HTMLCanvasElement, string]> = [
-    [pantsDef.img, cloth.pants],
-    [vestDef.img, cloth.vest],
-    [trimDef.img, cloth.trim],
-  ];
-  if (cloth.hat !== null) {
-    clothingLayers.push([hatDef.img, cloth.hat]);
-  }
-
-  for (const [maskImg, color] of clothingLayers) {
-    const tmp = document.createElement('canvas');
-    tmp.width = w;
-    tmp.height = h;
-    const tc = tmp.getContext('2d');
-    if (!tc) continue;
-
-    tc.fillStyle = color;
-    tc.fillRect(0, 0, w, h);
-    tc.globalCompositeOperation = 'destination-in';
-    // Stretched to the body's own (w, h) rather than drawn at the mask's
-    // natural size: the low-end-device downscale (`downscaleSheet`) resizes
-    // each sheet independently, and while today's source PNGs happen to share
-    // identical dimensions so the rounding agrees, nothing enforces that — an
-    // explicit stretch keeps the mask aligned to the body even if a future
-    // asset edit makes them differ.
-    tc.drawImage(maskImg, 0, 0, maskImg.width, maskImg.height, 0, 0, w, h);
-
-    ctx.drawImage(tmp, 0, 0);
-  }
-
-  return canvas;
-}
-
-/**
- * Draw the Sky Fowl using a pre-baked palette canvas produced by bakeSkyFowlCanvas.
- * Selects the correct animation state and frame, and mirrors for left-facing.
- */
-export function drawSkyFowlSprite(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  s: number,
-  walkFrame = 0,
-  isMoving = false,
-  isAggressive = false,
-  facingX = 0,
-  _facingY = 1,
-  bakedCanvas: HTMLCanvasElement | null,
-  peckAmt = 0,
-): void {
-  if (!bakedCanvas) return;
-
-  const bodyDef = getSpriteDef('sky_fowl_body');
-  if (!bodyDef) return;
-
-  const { frameWidth, frameHeight, tileX, tileY, tileScale } = bodyDef;
-  const scale = s / tileScale;
-
-  let state: SkyFowlState;
-  let frame: number;
-
-  if (peckAmt > 0) {
-    state = 'peck';
-    frame = progressFrameIndex(peckAmt, STATE_ROWS.peck.frameCount);
-  } else if (isMoving) {
-    state = 'walk';
-    frame = walkFrameIndex(walkFrame * 0.5, STATE_ROWS.walk.frameCount);
-  } else if (isAggressive) {
-    state = 'aggressive';
-    frame = 0;
-  } else {
-    state = 'idle';
-    frame = 0;
-  }
-
-  const stateDef = STATE_ROWS[state];
-  const clampedFrame = Math.max(0, Math.min(frame, stateDef.frameCount - 1));
-
-  const srcX = clampedFrame * frameWidth;
-  const srcY = stateDef.row * frameHeight;
-  const dw = frameWidth * scale;
-  const dh = frameHeight * scale;
-  const dx = sx - tileX * scale;
-  const dy = sy - tileY * scale;
-
-  ctx.save();
-
-  if (facingX < -0.3) {
-    const flipCx = sx + s * 0.5;
-    ctx.translate(flipCx, 0);
-    ctx.scale(-1, 1);
-    ctx.translate(-flipCx, 0);
-  }
-
-  ctx.drawImage(bakedCanvas, srcX, srcY, frameWidth, frameHeight, dx, dy, dw, dh);
-
-  ctx.restore();
-}
-
-// ── Magistrate Featherfall's corpse ──────────────────────────────────────────
 
 const HEX_RADIX = 16;
 const CHANNEL_MASK = 0xff;

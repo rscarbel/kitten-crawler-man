@@ -9,3 +9,7 @@
 export function devBootScene(): boolean {
   return false;
 }
+
+export function installDevLoopFallback(): void {
+  // No dev routes in a release build, so nothing to drive.
+}

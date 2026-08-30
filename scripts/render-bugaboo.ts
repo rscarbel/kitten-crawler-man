@@ -8,22 +8,25 @@
  * beautifully at 4× can dissolve completely at 32px. Every mode here exists to
  * catch something a contact sheet alone hides.
  *
- *   npx tsx scripts/render-bugaboo.ts --out=bugaboo-review.png --scale=2
+ * The art gates run first, before the contact sheet is allocated, so one
+ * command answers both "does it still hold together" and "what does it look
+ * like".
+ *
+ *   npm run render:bugaboo
  *   npx tsx scripts/render-bugaboo.ts --row=breach --scale=4
  *   npx tsx scripts/render-bugaboo.ts --part=head --scale=6
  *   npx tsx scripts/render-bugaboo.ts --row=walk_side --mode=onion --scale=3
- *   npx tsx scripts/render-bugaboo.ts --fresh          (bake in memory, skip disk)
- *
- * Regenerate the sheet itself with `npm run gen:bugaboo`.
  */
 
-import { createCanvas, loadImage, type Canvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createCanvas } from 'canvas';
 
-// The row order and frame counts come straight from the generator, so a new row
-// cannot desync the only review path this art has.
-import { ROWS, SHEET_PATH, TILE_SCALE, bake, type BakedSheet } from './generate-bugaboo-sprite.js';
+// The row order and frame counts come straight from the choreography, so a new
+// row cannot desync the only review path this art has.
+import { BUGABOO_FIGURE, BUGABOO_ROWS, TILE_SCALE } from '../src/sprites/art/bugabooFigure.js';
+import { bakeFigureSheet } from './figureSheet.js';
+import { reportFigureGates } from './figureGates.js';
+import { bugabooGateFailures } from './gates-bugaboo.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 interface PartWindow {
   readonly x: number;
@@ -93,48 +96,23 @@ function parseMode(): Mode {
   throw new Error(`--mode=${raw} is not one of contact, onion`);
 }
 
-/**
- * Loads the sheet from disk, falling back to a fresh in-memory bake.
- *
- * The gates refuse to write a failing sheet, so during a fix the file on disk is
- * the *last passing* art — reviewing that instead of the change under way is a
- * silent way to waste a round.
- */
-async function loadSheet(baked: BakedSheet | null): Promise<Canvas> {
-  const image = await loadImage(baked === null ? resolve(SHEET_PATH) : baked.buffer);
-  const canvas = createCanvas(image.width, image.height);
-  canvas.getContext('2d').drawImage(image, 0, 0);
-  return canvas;
-}
+function main(): void {
+  // Ahead of the contact sheet rather than after it: a sheet is a
+  // tens-of-megapixel allocation, and measuring art on the far side of one is
+  // how a gate goes red on art nobody touched.
+  console.log('Gating the bugaboo…');
+  reportFigureGates('bugaboo', bugabooGateFailures());
 
-async function main(): Promise<void> {
-  const outPath = parseFlag('out', 'bugaboo-review.png');
+  const outPath = parseFlag('out', `${PREVIEW_DIR}/bugaboo-review.png`);
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
   const only = parseFlag('row', '');
   const mode = parseMode();
-  // One bake, not two: it is a full eleven-row supersampled render, and the
-  // geometry and the pixels have to come from the same one anyway.
-  const baked = bake();
-  const sheet = await loadSheet(process.argv.includes('--fresh') ? baked : null);
-  const geometry = baked.geometry;
+  const sheet = bakeFigureSheet(BUGABOO_FIGURE).canvas;
 
-  const columns = Math.max(...ROWS.map((row) => row.frameCount));
-  const frameW = Math.round(sheet.width / columns);
-  const frameH = Math.round(sheet.height / ROWS.length);
-  // Every source rectangle in this harness is derived from the *current* code's
-  // row table and the *file's* dimensions. Once those disagree — which is
-  // exactly what happens while a bake is failing its gates and the file on disk
-  // is the last passing art — the whole contact sheet is sheared, not just the
-  // tile guide, so there is nothing worth half-drawing.
-  if (geometry.frameWidth !== frameW || geometry.frameHeight !== frameH) {
-    throw new Error(
-      `${SHEET_PATH} has ${frameW}×${frameH} cells but the current bake makes ` +
-        `${geometry.frameWidth}×${geometry.frameHeight}. Pass --fresh to review the bake ` +
-        `itself, or run \`npm run gen:bugaboo\` to bring the file up to date.`,
-    );
-  }
+  const frameW = BUGABOO_FIGURE.frameWidth;
+  const frameH = BUGABOO_FIGURE.frameHeight;
 
-  const rows = only === '' ? ROWS : ROWS.filter((row) => row.name === only);
+  const rows = only === '' ? BUGABOO_ROWS : BUGABOO_ROWS.filter((row) => row.name === only);
   if (rows.length === 0) throw new Error(`No row named "${only}"`);
 
   const partName = parseFlag('part', '');
@@ -169,7 +147,7 @@ async function main(): Promise<void> {
 
   let y = PADDING;
   for (const spec of rows) {
-    const sheetRow = ROWS.findIndex((row) => row.name === spec.name);
+    const sheetRow = BUGABOO_ROWS.findIndex((row) => row.name === spec.name);
     ctx.fillStyle = LABEL_COLOR;
     ctx.fillText(
       `${spec.name} — ${spec.frameCount} frames, ${spec.view}, ${spec.kind}`,
@@ -203,8 +181,8 @@ async function main(): Promise<void> {
       if (part === null) {
         ctx.strokeStyle = TILE_GUIDE;
         ctx.strokeRect(
-          x + geometry.tileX * scale,
-          y + geometry.tileY * scale,
+          x + BUGABOO_FIGURE.tileX * scale,
+          y + BUGABOO_FIGURE.tileY * scale,
           TILE_SCALE * scale,
           TILE_SCALE * scale,
         );
@@ -223,7 +201,7 @@ async function main(): Promise<void> {
   ctx.fillStyle = DUNGEON_FLOOR;
   ctx.fillRect(0, y, width, inGameH);
   for (let i = 0; i < rows.length; i++) {
-    const sheetRow = ROWS.findIndex((row) => row.name === rows[i].name);
+    const sheetRow = BUGABOO_ROWS.findIndex((row) => row.name === rows[i].name);
     ctx.drawImage(
       sheet,
       0,
@@ -237,8 +215,8 @@ async function main(): Promise<void> {
     );
   }
 
-  writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));
+  writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(`Wrote ${outPath} (${width}×${height}px, scale ${scale}×, mode ${mode})`);
 }
 
-void main();
+main();

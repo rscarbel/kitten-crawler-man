@@ -20,6 +20,7 @@ import { drawText } from '../ui/TextBox';
 import { drawBox, drawProgressBar } from '../ui/Box';
 import { viewportWidth } from '../core/Viewport';
 import { ARENA_INTERIOR_RADIUS_TILES } from '../map/arenaGeometry';
+import { prewarmTuskling } from '../sprites/tusklingSprite';
 
 /** 30 seconds at 60 fps — mirrors BossRoomSystem.ENTRY_WINDOW_FRAMES. */
 const ENTRY_WINDOW_FRAMES = 1800;
@@ -291,6 +292,10 @@ export class ArenaSystem implements GameSystem {
         this.humanIsInsider = humanInside;
         this.catIsInsider = catInside;
         this.bossRoom.newlyLockedBossType = 'ball_of_swine';
+        // Sealing the door schedules the whole fight, Tusklings included: the
+        // ball sheds them once it is hurt and releases eight more when it comes
+        // apart, and no other creature is coming through that door.
+        prewarmTuskling();
       }
 
       // Tick the entry window: keep the door open so the second player can enter,

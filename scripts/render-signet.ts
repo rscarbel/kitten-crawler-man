@@ -12,7 +12,9 @@
  */
 
 import { createCanvas } from 'canvas';
-import { writeFileSync } from 'node:fs';
+
+import { asGameContext } from './nodeGameContext.js';
+import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 import type { SignetPose } from '../src/sprites/signetSprite';
 
@@ -40,7 +42,7 @@ const LABEL_COLOR = '#e2e8f0';
 const LABEL_FONT = 'bold 13px sans-serif';
 
 const DEFAULT_SCALE = 2;
-const DEFAULT_OUT = 'signet.png';
+const DEFAULT_OUT = `${PREVIEW_DIR}/signet.png`;
 
 const WALK_STRIP_FRAMES = 6;
 const RADIANS_PER_TURN = Math.PI * 2;
@@ -164,8 +166,8 @@ function drawCell(
   // Her reach is wider than her tile, so the tile is centred in the cell —
   // drawing at the cell's left edge pushes her arms into the next column.
   const tileX = originX + (cellWidth - ts) / 2;
-  drawSignetSprite(ctx, tileX, originY, ts, pose);
-  drawEliteMarker(ctx, tileX, originY, ts);
+  drawSignetSprite(asGameContext(ctx), tileX, originY, ts, pose);
+  drawEliteMarker(asGameContext(ctx), tileX, originY, ts);
 
   ctx.fillStyle = LABEL_COLOR;
   ctx.font = LABEL_FONT;
@@ -247,5 +249,5 @@ POSES.forEach(({ label, pose }, index) => {
   );
 });
 
-writeFileSync(outPath, canvas.toBuffer('image/png'));
-process.stdout.write(`wrote ${outPath} (${sheetWidth * scale}x${sheetHeight * scale})\n`);
+const resolvedOutPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+process.stdout.write(`wrote ${resolvedOutPath} (${sheetWidth * scale}x${sheetHeight * scale})\n`);

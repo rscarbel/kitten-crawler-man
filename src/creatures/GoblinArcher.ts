@@ -8,6 +8,7 @@ import {
   drawGoblinSprite,
   goblinArrowReleaseFrame,
   goblinBodyPartKey,
+  prewarmGoblinCombat,
   type GoblinAttackKind,
 } from '../sprites/goblinSprite';
 import { GOBLIN_PACK_ALERT_RADIUS_TILES, GOBLIN_PACK_KIND } from './Goblin';
@@ -218,6 +219,21 @@ export class GoblinArcher extends Mob {
     return GOBLIN_BOW_SHOTS[kind].animFrames - goblinArrowReleaseFrame(kind);
   }
 
+  /**
+   * Warms the rows a fight draws, on the frame this archer first notices a
+   * target.
+   *
+   * An archer's cell measures just over the threshold the direct-paint fallback
+   * is affordable below, so a draw or a flinch entered cold costs a paint on the
+   * frame it starts. Aggro range is well outside the band it shoots from, which
+   * is the lead that buys.
+   */
+  private beginEngagement(): void {
+    if (this.isAggro) return;
+    this.isAggro = true;
+    prewarmGoblinCombat('bow');
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
     if (this.shotCooldown > 0) this.shotCooldown--;
@@ -243,7 +259,7 @@ export class GoblinArcher extends Mob {
       return;
     }
 
-    this.isAggro = true;
+    this.beginEngagement();
     this.hold(nearest);
     this.advanceAnimator();
   }
@@ -268,7 +284,8 @@ export class GoblinArcher extends Mob {
   private tickDraw(nearest: Player | null): void {
     this.drawTimer--;
     this.isMoving = false;
-    this.isAggro = nearest !== null;
+    if (nearest === null) this.isAggro = false;
+    else this.beginEngagement();
     const releaseTimer = this.releaseTimerFor(this.shotKind);
     const lockTimer = releaseTimer + GOBLIN_BOW_SHOTS[this.shotKind].lockedFrames;
     if (this.drawTimer > lockTimer && nearest) {

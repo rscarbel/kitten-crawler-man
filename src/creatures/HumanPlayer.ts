@@ -18,8 +18,8 @@ const HUMAN_SOLE_BELOW_TILE_TOP = 0.98;
 const HUMAN_HALF_WIDTH_TILES = 0.3;
 
 /**
- * Carl's ink, measured off `src/images/characters/human.png` against the
- * manifest's tile anchor. Exported so `StatusPreviewScene` reviews effects on
+ * Carl's ink, measured off the painted `HUMAN_FIGURE` cell against its own tile
+ * anchor. Exported so `StatusPreviewScene` reviews effects on
  * the same box the game paints them on — a harness using its own numbers can
  * only prove that the harness's numbers work.
  */
@@ -32,6 +32,7 @@ export const HUMAN_STATUS_FIGURE_BOX: StatusFigureBox = {
 import type { Mob } from './Mob';
 import {
   drawHumanSprite,
+  prewarmHumanSprite,
   SMUSH_FRAME_COUNT,
   SMUSH_IMPACT_FRAME,
   type HumanAttackPhase,
@@ -187,6 +188,10 @@ export class HumanPlayer extends Player {
       baseStats: { dexterity: HumanPlayer.HUMAN_STARTING_DEXTERITY },
       crawlerKind: HUMAN_CRAWLER_KIND,
     });
+    // He is drawn on essentially every frame of the scene he is built for, so
+    // his standing and walking rows are queued now rather than paid for as
+    // cache misses on the scene's first frame.
+    prewarmHumanSprite();
     // Pre-equip Enchanted BigBoi Boxers — adds +2 CON (+4 maxHp)
     this.inventory.addItem('enchanted_bigboi_boxers', 1);
     this.inventory.equipByItemId('enchanted_bigboi_boxers');
