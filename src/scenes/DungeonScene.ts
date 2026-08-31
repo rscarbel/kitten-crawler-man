@@ -284,6 +284,7 @@ import {
 import type { AISceneContext } from '../ai/aiActions';
 import { GameStats } from '../core/GameStats';
 import { difficultyStats } from '../core/DifficultyStats';
+import { settings } from '../core/Settings';
 import type { AudioManager } from '../audio/AudioManager';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
 import { drawText } from '../ui/TextBox';
@@ -2422,6 +2423,10 @@ export class DungeonScene extends GameplayScene {
         this.audio?.setMusicVolume(TUTORIAL_MUSIC_VOLUME);
         this.audio?.playMusic('tutorial_island', { fadeInMs: MUSIC_FADE_IN_MS });
       } else {
+        // The tutorial floor ducks the music bus to TUTORIAL_MUSIC_VOLUME via the
+        // non-remembered setMusicVolume(); nothing else undoes that duck, so every
+        // later level must restore the player's actual preference before playing.
+        this.audio?.setMusicVolume(settings.musicVolume);
         if (!this.skipIntro) this.audio?.playWhenReady('level_begins');
         // Overworld music is zone-driven (town/wilds/circus) by OverworldMusicSystem.
         if (this.overworldMusic === null && this.audio?.currentMusicId !== this.levelDef.music) {
