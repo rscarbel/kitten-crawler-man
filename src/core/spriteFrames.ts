@@ -1,5 +1,5 @@
 import type { SpriteDef, SpriteStateDef } from './SpriteLoader';
-import { allocCanvas, surfaceContext } from './canvasSurface';
+import { allocCanvas, surfaceContext, type CanvasSurface } from './canvasSurface';
 
 /**
  * Resolve the sheet-pixel origin (srcX, srcY) of a frame, wrapping onto
@@ -45,12 +45,12 @@ const ALPHA_CHANNEL_OFFSET = 3;
 const HALF_PIXEL = 0.5;
 
 const inkBoundsBySheet = new WeakMap<
-  HTMLImageElement | HTMLCanvasElement,
+  HTMLImageElement | CanvasSurface,
   Map<number, FrameInkBounds>
 >();
 
 function measureInkBounds(
-  img: HTMLImageElement | HTMLCanvasElement,
+  img: HTMLImageElement | CanvasSurface,
   srcX: number,
   srcY: number,
   frameWidth: number,

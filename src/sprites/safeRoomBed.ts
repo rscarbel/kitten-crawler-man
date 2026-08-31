@@ -8,7 +8,7 @@
  * the rest of the geometry is hung off.
  *
  * Lit up-left and shadowed down-right, matching the direction the generated
- * ground is lit from (`LIGHT_DIR` in `scripts/tilegen/materials.ts`).
+ * ground is lit from (`LIGHT_DIR` in `src/map/tilegen/materials.ts`).
  *
  * Every offset is a fraction of the tile size, so the bed is correct at the 32 px
  * the game draws at and at any size a review harness uses.

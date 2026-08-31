@@ -1,6 +1,5 @@
 {
   "over_city_signpost": {
-    "path": "environment/towns/over_city/signpost.png",
     "frameWidth": 192,
     "frameHeight": 109,
     "tileX": 96,
@@ -14,7 +13,6 @@
     }
   },
   "over_city_fortune_teller": {
-    "path": "environment/towns/over_city/fortune_teller.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 16,

@@ -17,17 +17,30 @@
  */
 
 import { createCanvas } from 'canvas';
-import { BUILDING_SPECS, findBuildingSpec } from './buildinggen/buildings.js';
-import { bake, readFixture, runPixelGates, type BakedBuilding } from './buildinggen/bake.js';
+import { asGameContext } from './nodeGameContext.js';
+import { BUILDING_SPECS, findBuildingSpec } from '../src/sprites/buildinggen/buildings.js';
+import type { BuildingSpec } from '../src/sprites/buildinggen/spec.js';
+import {
+  bake,
+  manifestEntryProblems,
+  readFixture,
+  runPixelGates,
+  sheetLayoutFor,
+  type BakedBuilding,
+} from './buildinggen/bake.js';
 import {
   GateResults,
   TEXTURE_RICHNESS_FLOOR_FRACTION,
   gateDoorway,
-  gateWrittenSheetGeometry,
   measureTextureRichness,
 } from './buildinggen/gates.js';
-import { project, quadPath } from './buildinggen/projection.js';
-import { getRamp, rgb, sampleRamp } from './buildinggen/ramps.js';
+import { project, quadPath } from '../src/sprites/buildinggen/projection.js';
+import { getRamp, rgb, sampleRamp } from '../src/sprites/buildinggen/ramps.js';
+import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+
+// The painters allocate their own scratch surfaces through `allocCanvas`, which
+// has no browser to allocate from here.
+installCanvasGlobals();
 
 const failures: string[] = [];
 const reports: string[] = [];
@@ -52,7 +65,7 @@ function flatFillRichness(key: string): number {
   const spec = findBuildingSpec(key);
   const projection = project(spec);
   const canvas = createCanvas(projection.frameWidth, projection.frameHeight);
-  const ctx = canvas.getContext('2d');
+  const ctx = asGameContext(canvas.getContext('2d'));
   const planes = [
     { quad: projection.roofQuad, ramp: spec.roof.ramp },
     { quad: projection.roofReturnQuad, ramp: spec.roof.ramp },
@@ -148,11 +161,39 @@ function expectGateFails(
   );
 }
 
+/**
+ * Where one life cell sits on the sheet.
+ *
+ * Read back out of the manifest entry rather than restated, for the same reason
+ * the bake reads it: a damage case that wrote to the row the sheet used to have
+ * would clear empty pixels and leave every overlay gate green while claiming to
+ * have broken one.
+ */
+function lifeCellRect(
+  baked: BakedBuilding,
+  step: number,
+): {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+} {
+  const layout = sheetLayoutFor(baked.entry);
+  const width = baked.idle.width;
+  const height = baked.idle.height;
+  return {
+    left: (layout.lifeColumn + step) * width,
+    top: layout.lifeRow * height,
+    width,
+    height,
+  };
+}
+
 const RAMP_MIDPOINT = 0.5;
 
 function flattenEveryPlane(baked: BakedBuilding): void {
   const projection = project(baked.spec);
-  const ctx = baked.sheet.getContext('2d');
+  const ctx = asGameContext(baked.sheet.getContext('2d'));
   const planes = [
     { quad: projection.roofQuad, ramp: baked.spec.roof.ramp },
     { quad: projection.roofReturnQuad, ramp: baked.spec.roof.ramp },
@@ -184,7 +225,7 @@ expectGateFails('a hole punched in the base course', 'silhouette', (baked) => {
 
 expectGateFails('a roof painted no brighter than its wall', 'plane-separation', (baked) => {
   const projection = project(baked.spec);
-  const ctx = baked.sheet.getContext('2d');
+  const ctx = asGameContext(baked.sheet.getContext('2d'));
   const ROOF_DARKEN = 0.45;
   ctx.save();
   quadPath(ctx, projection.roofQuad);
@@ -228,25 +269,29 @@ expectGateFails(
   'life-transparency',
   (baked) => {
     const ctx = baked.sheet.getContext('2d');
-    const frameHeight = baked.idle.height;
-    const row = ctx.getImageData(0, frameHeight, baked.sheet.width, frameHeight);
+    const first = lifeCellRect(baked, 0);
+    const row = ctx.getImageData(
+      first.left,
+      first.top,
+      first.width * baked.life.length,
+      first.height,
+    );
     const ALPHA_OFFSET = 3;
     const CHANNELS_PER_PIXEL = 4;
     for (let pixel = 0; pixel * CHANNELS_PER_PIXEL < row.data.length; pixel++) {
       if (pixel % INK_THINNING_STRIDE === 0) continue;
       row.data[pixel * CHANNELS_PER_PIXEL + ALPHA_OFFSET] = 0;
     }
-    ctx.putImageData(row, 0, frameHeight);
+    ctx.putImageData(row, first.left, first.top);
   },
 );
 
 expectGateFails('an overlay that does not move', 'life-loop', (baked) => {
   const ctx = baked.sheet.getContext('2d');
-  const idleHeight = baked.idle.height;
   for (let step = 1; step < baked.life.length; step++) {
-    const left = step * baked.idle.width;
-    ctx.clearRect(left, idleHeight, baked.idle.width, idleHeight);
-    ctx.drawImage(baked.life[0], left, idleHeight);
+    const cell = lifeCellRect(baked, step);
+    ctx.clearRect(cell.left, cell.top, cell.width, cell.height);
+    ctx.drawImage(baked.life[0], cell.left, cell.top);
   }
 });
 
@@ -263,9 +308,8 @@ expectGateFails('an overlay that does not move', 'life-loop', (baked) => {
  */
 expectGateFails('a seam hiding behind one big move', 'life-loop', (baked) => {
   const ctx = baked.sheet.getContext('2d');
-  const frameHeight = baked.idle.height;
-  const last = baked.life.length - 1;
-  ctx.clearRect(last * baked.idle.width, frameHeight, baked.idle.width, frameHeight);
+  const last = lifeCellRect(baked, baked.life.length - 1);
+  ctx.clearRect(last.left, last.top, last.width, last.height);
 });
 
 /**
@@ -308,7 +352,7 @@ const SIDE_RETURN_BRIGHTEN = 0.55;
 
 expectGateFails('a side return as bright as the front wall', 'plane-separation', (baked) => {
   const projection = project(baked.spec);
-  const ctx = baked.sheet.getContext('2d');
+  const ctx = asGameContext(baked.sheet.getContext('2d'));
   ctx.save();
   quadPath(ctx, projection.sideQuad);
   ctx.clip();
@@ -331,11 +375,11 @@ const OVERWEIGHT_OVERLAY_COVERAGE = 0.055;
 
 expectGateFails('an overlay heavier than the limit', 'life-transparency', (baked) => {
   const ctx = baked.sheet.getContext('2d');
-  const frameHeight = baked.idle.height;
-  const bandHeight = frameHeight * OVERWEIGHT_OVERLAY_COVERAGE;
+  const bandHeight = baked.idle.height * OVERWEIGHT_OVERLAY_COVERAGE;
   ctx.fillStyle = 'rgba(255,255,255,1)';
   for (let step = 0; step < baked.life.length; step++) {
-    ctx.fillRect(step * baked.idle.width, frameHeight, baked.idle.width, bandHeight);
+    const cell = lifeCellRect(baked, step);
+    ctx.fillRect(cell.left, cell.top, cell.width, bandHeight);
   }
 });
 
@@ -364,10 +408,14 @@ expectGateFails('an effect whose cycle does not close', 'life-frame-count', (bak
   };
 });
 
-expectGateFails('a painter reaching past its own cell', 'cell-bleed', (baked) => {
-  // `idle` is one frame, so anything drawn in the columns after it is ink that
-  // escaped its cell — at runtime, a stripe of one frame's art on the next.
-  baked.sheet.getContext('2d').drawImage(baked.idle, baked.idle.width, 0);
+expectGateFails('a facade painted onto an oversized surface', 'cell-bleed', (baked) => {
+  // The idle frame is composited un-clipped, so a surface wider than its own
+  // cell lays a strip of facade over the life frame beside it — at runtime, a
+  // stripe of one frame's art on the next.
+  const OVERSIZE_FACTOR = 2;
+  const oversized = createCanvas(baked.idle.width * OVERSIZE_FACTOR, baked.idle.height);
+  oversized.getContext('2d').drawImage(baked.idle, 0, 0);
+  return { ...baked, idle: oversized };
 });
 
 expectGateFails(
@@ -398,7 +446,8 @@ expectGateFails(
 expectGateFails('an overlay row copied from idle', 'life-transparency', (baked) => {
   const ctx = baked.sheet.getContext('2d');
   for (let step = 0; step < baked.life.length; step++) {
-    ctx.drawImage(baked.idle, step * baked.idle.width, baked.idle.height);
+    const cell = lifeCellRect(baked, step);
+    ctx.drawImage(baked.idle, cell.left, cell.top);
   }
 });
 
@@ -464,58 +513,38 @@ expectDoorwayGateFails('a door tile outside its own opening', {
 });
 
 /**
- * The written-geometry gate, exercised directly.
+ * The spec-versus-entry checks, exercised directly.
  *
- * It normally reads files the bake has just produced, so the only way to hand it
- * a disagreeing pair is to call it with one.
+ * The manifest is checked-in data rather than something a bake emits, so nothing
+ * forces a spec and its entry to agree except this. Each case edits the spec —
+ * the half a person actually changes — and requires the disagreement to be
+ * reported.
  */
-function expectWrittenGeometryFails(
-  label: string,
-  frameWidth: number,
-  frameHeight: number,
-  lifeFrameCount: number,
-  sheetWidth: number,
-  sheetHeight: number,
-): void {
-  const results = new GateResults();
-  gateWrittenSheetGeometry(
-    results,
-    findBuildingSpec('sleeping_cat_inn'),
-    { frameWidth, frameHeight, lifeFrameCount },
-    sheetWidth,
-    sheetHeight,
-  );
-  if (results.failures.some((failure) => failure.gate === 'written-geometry')) {
-    report(`${label}: 'written-geometry' went red, as it must`);
+function expectManifestProblem(label: string, spec: BuildingSpec): void {
+  const problems = manifestEntryProblems(spec);
+  if (problems.length > 0) {
+    report(`${label}: reported as a spec/manifest disagreement, as it must`);
     return;
   }
-  fail(`${label}: 'written-geometry' stayed green on a manifest that does not describe its sheet`);
+  fail(`${label}: went unreported, so a spec can drift from the entry the game reads it through`);
 }
 
-const WRITTEN_FRAME_WIDTH = 384;
-const WRITTEN_FRAME_HEIGHT = 288;
-const WRITTEN_LIFE_FRAMES = 8;
-const WRITTEN_SHEET_WIDTH = WRITTEN_FRAME_WIDTH * WRITTEN_LIFE_FRAMES;
-const WRITTEN_SHEET_HEIGHT = WRITTEN_FRAME_HEIGHT * 2;
-const DRIFT_PX = 32;
+const A_TILE = 1;
 
-expectWrittenGeometryFails(
-  'a manifest frame wider than the sheet it describes',
-  WRITTEN_FRAME_WIDTH + DRIFT_PX,
-  WRITTEN_FRAME_HEIGHT,
-  WRITTEN_LIFE_FRAMES,
-  WRITTEN_SHEET_WIDTH,
-  WRITTEN_SHEET_HEIGHT,
-);
+expectManifestProblem('a facade one tile wider than its entry', {
+  ...INN,
+  tilesWide: INN.tilesWide + A_TILE,
+});
 
-expectWrittenGeometryFails(
-  'a manifest frame taller than the sheet it describes',
-  WRITTEN_FRAME_WIDTH,
-  WRITTEN_FRAME_HEIGHT + DRIFT_PX,
-  WRITTEN_LIFE_FRAMES,
-  WRITTEN_SHEET_WIDTH,
-  WRITTEN_SHEET_HEIGHT,
-);
+expectManifestProblem('a facade with one more life frame than its entry', {
+  ...INN,
+  life: { ...INN.life, frames: INN.life.frames + 1 },
+});
+
+expectManifestProblem('a door moved a tile from where the entry leaves the gap', {
+  ...INN,
+  door: { ...INN.door, col: INN.door.col + A_TILE },
+});
 
 for (const line of reports) console.log(`  ok   ${line}`);
 

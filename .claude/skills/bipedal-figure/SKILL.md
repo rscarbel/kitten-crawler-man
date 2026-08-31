@@ -1,6 +1,6 @@
 ---
 name: bipedal-figure
-description: Draw or redraw a believable two-legged character (human, goblin, clown, humanoid boss/NPC) as procedurally painted sprite art in Kitten Crawler Man — the rig/pose/view contract, the painter/figure/gate/harness pipeline, the image-review loop, and the anatomy traps that only show up in a picture. Use whenever a bipedal character needs new art, a new animation row, or a believability fix. The four-file painter pipeline it describes is the same for any creature; only the anatomy half is biped-specific. NOT for runtime-seeded townsfolk (use add-person) or for props, tiles and environment art, which are still baked PNG sheets (use add-sprite).
+description: Draw or redraw a believable two-legged character (human, goblin, clown, humanoid boss/NPC) as procedurally painted sprite art in Kitten Crawler Man — the rig/pose/view contract, the painter/figure/gate/harness pipeline, the image-review loop, and the anatomy traps that only show up in a picture. Use whenever a bipedal character needs new art, a new animation row, or a believability fix. The four-file painter pipeline it describes is the same for any creature; only the anatomy half is biped-specific. NOT for runtime-seeded townsfolk (use add-person), for ground and floor materials (use add-ground-tile), or for props and environment art, which are painted from sheet plans in src/sprites/sheets/ (use add-sprite).
 ---
 
 # Bipedal Figure Art

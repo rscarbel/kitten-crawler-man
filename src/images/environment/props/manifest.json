@@ -1,6 +1,5 @@
 {
   "torch": {
-    "path": "environment/props/torch.png",
     "frameWidth": 96,
     "frameHeight": 144,
     "tileX": 16,
@@ -63,7 +62,6 @@
     }
   },
   "barrel": {
-    "path": "environment/props/barrel.png",
     "frameWidth": 96,
     "frameHeight": 96,
     "tileX": 16,
@@ -89,7 +87,6 @@
     }
   },
   "barrel_side": {
-    "path": "environment/props/barrel_side.png",
     "frameWidth": 96,
     "frameHeight": 96,
     "tileX": 16,
@@ -115,7 +112,6 @@
     }
   },
   "crate": {
-    "path": "environment/props/crate.png",
     "frameWidth": 96,
     "frameHeight": 96,
     "tileX": 16,
@@ -141,7 +137,6 @@
     }
   },
   "bookshelf": {
-    "path": "environment/props/bookshelf.png",
     "frameWidth": 96,
     "frameHeight": 96,
     "tileX": 16,
@@ -167,7 +162,6 @@
     }
   },
   "brazier": {
-    "path": "environment/props/brazier.png",
     "frameWidth": 96,
     "frameHeight": 144,
     "tileX": 16,

@@ -6,9 +6,12 @@ size of the game. Four pieces make that work, and each imposes an obligation on 
 adding a creature, a sheet or a sound.
 
 Creatures no longer take part in any of it. Every character, creature and
-creature-owned effect is painted by TypeScript at runtime and cached as bitmap cells;
-the sheets below are ground tilesets, town and environment art, props and a handful of
-icons. See "Creatures are painted, not loaded".
+creature-owned effect is painted by TypeScript at runtime and cached as bitmap cells —
+and so, now, is every piece of environment art: the ground tilesets, the town's
+furniture and signage, the wilderness, the props and the building facades. What is
+still fetched is a short list of icons, splash images, room dressing and two authored
+buildings. See "Creatures are painted, not loaded", "The ground is painted too", "So
+are the props" and "Facades are painted in stages".
 
 ## Sprite metadata stays eager; only pixels are lazy
 
@@ -116,6 +119,138 @@ alone — no randomness, no clock, no module state, and nothing that advances a 
 paint time — must stay inside its declared cell, must not read caller `ctx` state, and
 must not call back into the cache. `scripts/gates-<x>.ts` holds its art gates and
 `npm run render:<x>` runs them and writes a contact sheet to `preview/`.
+
+## The ground is painted too
+
+The generated ground tilesets — `ground_overworld`, `ground_dungeon`,
+`ground_floor1`, `ground_floor2`, `ground_interior` and the shared corner masks
+`ground_masks` — no longer ship as PNGs. Their manifest entries stay, because a
+row's `frameCount`, `patchTiles` and label are what every draw site and every
+material union is written against; what they no longer carry is a `path`, and a
+manifest entry with no path means "painted at runtime". `SpriteLoader` refuses to
+fetch one and waits for `registerPaintedSprite` instead.
+
+`src/map/environmentArtCache.ts` owns the painting. A sheet is requested as a
+plan — its geometry plus an ordered list of steps, one per material variant — and
+the cache drains a few milliseconds of steps per render frame, using the same
+mean-not-ceiling budget and cost-before-work check as the figure cache. Nothing
+is published until a sheet's last step lands, so a half-painted sheet is never
+drawn: until then the renderer falls back to each material's
+`GroundPalette.fallbackColor`, exactly as it does for a sheet still in flight over
+the network. Sheets are released at a floor change beside `releaseSpritesExcept`
+and with the same keep set.
+
+**A floor's look is fixed when its layout is.** `GameMap` draws an art seed in its
+constructor and keeps it for the life of the object, and the scene pushes it into
+`src/map/ground/floorArtSeed.ts` before any sheet or tile chunk is baked. A
+checkpoint restore rewinds the same map object and so keeps the same art; a
+genuine descent or restart builds a new map and earns a new look. Every consumer
+forks its own stream with `floorArtSubSeed(SOME_SALT)` rather than reading the
+raw value, so adding a consumer cannot perturb an existing one.
+
+**The seed space is enumerated, not sampled.** The game draws from
+`src/map/ground/artSeedAlphabet.ts`, a generated list of seeds every one of which
+has been painted offline and measured against the reviewed art — wrap seams,
+mean-luminance drift, texture energy, and wall-to-floor luminance separation per
+floor theme. `npm run gen:floor-art-seeds` builds the list;
+`npm run verify:floor-sweep` re-measures all of it and carries its own
+deliberately-torn-patch self test, so the seam gate is proved able to go red. A
+seed that fails simply never enters the alphabet — with only a few Worley cells to
+a patch, some genuinely land a mortar line along the joint.
+
+`npx tsx scripts/generate-ground-tileset.ts [artSeed]` still bakes the sheets, now
+into `preview/tilesets/` for review rather than into `src/images/`. The `?tiles`
+route paints them live and rerolls the art seed on a right-click.
+
+## So are the props
+
+The same conversion, one layer up: the town's street furniture and signage, the
+forest, the boulders and the goblin camps are painted at floor load rather than
+fetched. What each sheet carries — its frame envelope, which state is which row,
+how many frames a row holds — lives in `src/sprites/sheets/`, so the sheet the
+game paints and the sheet a review bake writes are one description rather than
+two. `src/sprites/sheets/environmentSheets.ts` turns a floor's declared
+`AssetGroup`s into painted families, which is the same vocabulary `prewarmGroups`
+already speaks.
+
+Three rules hold this together, and each has a gate behind it:
+
+- **A plan must agree with the manifest entry it is painted under.**
+  `registerPaintedSprite` checks the sheet's own dimensions and
+  `propSheetPlanMismatches` checks every row and frame count;
+  `npm run gates:environment-art` runs the latter over every family, and a plan
+  that disagrees throws at request time rather than landing its art an inch out
+  on every frame forever.
+- **No painter may draw outside its own cell.** A frame is clipped to its cell
+  wherever it is painted, so art that reaches past the envelope is sheared off
+  along a straight line — which the forest bake caught three times and which no
+  typecheck can see. `bakePropFamily` checks the border pixels of every frame of
+  every family.
+- **The port changed nothing.** `npm run parity:props -- --ref=<dir>` paints each
+  plan and compares it channel for channel against the PNG it replaced,
+  recoverable from git for as long as anyone needs it. Sixty-six sheets and 138
+  facade cells came through identical, and the one that did not — the brazier —
+  carries a written budget saying by how much and why, so it goes red again if
+  the difference ever grows.
+
+A sheet is published as soon as its _ready_ rows have landed, not when the last
+step has. A tree's idle and damaged stances are what a floor shows the moment it
+opens; its burning and felling rows are twenty-four frames per tree that most
+trees never play, and they fill in behind the wood the player is already walking
+through.
+
+Street furniture carries no floor art seed — a lamp is the same lamp wherever it
+is hung — so it survives the stairs and is released with its asset group. The
+wilderness does carry one, so a floor's trees, rocks and camps are repainted when
+its layout is.
+
+## Facades are painted in stages
+
+A building facade is the most expensive picture the game makes — around a
+seventh of a second each in a browser, two seconds for the town's fifteen — so
+it is the one family that cannot be painted as a sheet in one step.
+`planBuildingPaint` in `src/sprites/buildinggen/paint.ts` breaks a facade into
+the passes it was always composed of (each plane's material, its weathering
+layers, its shade, the composite, the props, the ink) and hands them back as
+stages sharing one canvas. `runtimeBuildingSheets.ts` feeds those stages to the
+same paced queue everything else uses, and publishes a building the moment its
+own facade is done — its lit windows and forge glow fill in behind it.
+
+Two measurements decided that shape, and both are worth keeping:
+
+- **Declaring a plane read-heavy is worth more than any of the splitting.** Every
+  texture and lighting pass reads a plane's whole buffer back and writes it
+  again, half a dozen times before the plane is drawn once, and a GPU-backed
+  surface pays a full synchronisation for each read. `allocReadableCanvas` cut
+  the town's facades from 4.6 s to 2.1 s in Chrome — more than a factor of two,
+  for one flag.
+- **node-canvas and Chrome disagree by three times in opposite directions.** Node
+  paints a thatched roof in 204 ms against Chrome's 40, and Chrome reads a plane
+  back far more slowly than node does. Chrome's worst single stage is 64 ms.
+  `npm run gates:environment-art` therefore measures node and says so: its
+  worst-frame limit exists to catch a pass that has grown to swallow its whole
+  family, not to certify a frame time.
+
+**The sheet is one row, not two.** A building's `idle` is a single frame and its
+`life` row is up to twenty-four, so a two-row sheet of the wider of those was
+mostly transparent padding that still cost four bytes a pixel. Putting the idle
+frame in column zero and starting the life row at column one — a `colOffset` the
+loader has always understood — took the town's facades from 116 MB resident to
+62 MB. `registerPaintedSprite` and the residency report both size a sheet the way
+`frameOrigin` reads one, so neither can be fooled by the layout.
+
+`overworld_main_tower` and `hoarders_room` stay authored PNGs: neither is a
+generated facade.
+
+## What the conversion cost and bought
+
+Across every domain, measured with `npx tsx scripts/report-asset-residency.ts`:
+shipped image bytes went from 15.6 MB to 6.0 MB, and the resident decoded total
+from 191 MB to 146 MB — with the remaining runtime-painted share now arriving
+per floor and released with it rather than sitting in memory whenever its group
+is loaded. The whole town's art — ground, street furniture, signage, wilderness,
+club, facades — is 718 paint steps, which the queue drains in a few seconds of
+a floor's fade-in while everything that has landed is already drawn.
 
 ## Resolution is not the lever
 

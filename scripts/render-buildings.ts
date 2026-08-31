@@ -2,12 +2,14 @@
 /**
  * Headless review harness for the Over City's generated building exteriors.
  *
- * The bake writes PNGs and a manifest; this writes a picture and touches
- * neither. A sheet opened in an image viewer answers the questions the gates
+ * The game paints these facades for itself and the review bake writes the eye's
+ * copy of each sheet; this writes a picture of the whole family and loads
+ * nothing. A sheet opened in an image viewer answers the questions the gates
  * cannot — whether a facade reads as a volume, whether the smoke leaves the pot
- * it is meant to, whether the thing looks like somewhere a person lives — and it
- * answers one the gates can only answer after a write: whether the painted door
- * sits inside the walkable opening its own spec asks for. That is marked here.
+ * it is meant to, whether the thing looks like somewhere a person lives — and
+ * the doorway markers drawn over the in-game view answer, by eye, the question
+ * the doorway gate answers by number: whether the painted door sits inside the
+ * walkable opening the manifest leaves for it.
  *
  *   npx tsx scripts/render-buildings.ts --only=sleeping_cat_inn --scale=3
  *   npx tsx scripts/render-buildings.ts --compare
@@ -21,10 +23,10 @@
  *   An overlay cell on its own is 95%+ empty by gate, so a row of them alone
  *   tells a reviewer nothing.
  *
- * Like `render-townsfolk.ts` and unlike the bake generator, the PNG is written
- * *before* the failures are reported. A red gate is exactly when the picture is
- * wanted most, and a harness that exits without drawing on failure is a harness
- * that is useless on the only days it matters.
+ * Like `render-townsfolk.ts`, the PNG is written *before* the failures are
+ * reported. A red gate is exactly when the picture is wanted most, and a harness
+ * that exits without drawing on failure is a harness that is useless on the only
+ * days it matters.
  */
 
 import { createCanvas, loadImage, type Canvas } from 'canvas';
@@ -32,7 +34,7 @@ import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
 import { TILE_SIZE } from '../src/core/constants.js';
-import { BUILDING_SPECS, findBuildingSpec } from './buildinggen/buildings.js';
+import { BUILDING_SPECS, findBuildingSpec } from '../src/sprites/buildinggen/buildings.js';
 import {
   bake,
   readFixture,
@@ -40,9 +42,15 @@ import {
   type BakedBuilding,
   type FootprintFixtureEntry,
 } from './buildinggen/bake.js';
-import { GateResults } from './buildinggen/gates.js';
-import { BUILDING_TILE_SCALE, type BuildingSpec } from './buildinggen/spec.js';
+import { GateResults, gateDoorway } from './buildinggen/gates.js';
+import { getSpriteDoorwayByKey } from '../src/core/SpriteLoader.js';
+import { BUILDING_TILE_SCALE, type BuildingSpec } from '../src/sprites/buildinggen/spec.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+
+// The painters allocate their own scratch surfaces through `allocCanvas`, which
+// has no browser to allocate from here.
+installCanvasGlobals();
 
 /**
  * node-canvas's `Image`, named off `loadImage` rather than imported, so the
@@ -344,12 +352,7 @@ const groups: Group[] = [];
 for (const spec of specs) {
   const building = bake(spec);
   runPixelGates(results, building, fixture);
-  results.report(
-    spec.key,
-    'doorway',
-    'not run here — it needs SpriteLoader reading a written manifest, so only ' +
-      '`npm run gen:buildings` can check it',
-  );
+  gateDoorway(results, spec, getSpriteDoorwayByKey(spec.key));
   if (wantsComparison) {
     const comparison = await loadComparison(spec, fixture);
     groups.push(measureGroup(building, comparison.image, comparison.width, comparison.height));
@@ -375,4 +378,4 @@ if (results.failures.length > 0) {
   }
   process.exit(1);
 }
-console.log('All building gates that can run without a written manifest passed.');
+console.log('All building gates passed.');

@@ -101,7 +101,7 @@ const SPEED_FULL = 1;
 const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FULL];
 
 /**
- * The floor mids a Bugaboo actually stands on, from `scripts/tilegen/palette.ts`.
+ * The floor mids a Bugaboo actually stands on, from `src/map/tilegen/palette.ts`.
  * The concrete is the one that matters — it is the defend quest's own floor, and
  * it is the closest in value to the creature.
  */

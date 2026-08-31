@@ -1,6 +1,5 @@
 {
   "shop_sign": {
-    "path": "environment/townscape/shop_sign.png",
     "frameWidth": 65,
     "frameHeight": 87,
     "tileX": 39,
@@ -26,7 +25,6 @@
     }
   },
   "street_lamp": {
-    "path": "environment/townscape/street_lamp.png",
     "frameWidth": 128,
     "frameHeight": 192,
     "tileX": 64,
@@ -40,7 +38,6 @@
     }
   },
   "town_clutter": {
-    "path": "environment/townscape/town_clutter.png",
     "frameWidth": 78,
     "frameHeight": 32,
     "tileX": 39,
@@ -54,7 +51,6 @@
     }
   },
   "gate_arch_across_2": {
-    "path": "environment/townscape/gate_arch_across_2.png",
     "frameWidth": 128,
     "frameHeight": 192,
     "tileX": 32,
@@ -68,7 +64,6 @@
     }
   },
   "gate_arch_across_4": {
-    "path": "environment/townscape/gate_arch_across_4.png",
     "frameWidth": 192,
     "frameHeight": 192,
     "tileX": 32,
@@ -82,7 +77,6 @@
     }
   },
   "gate_arch_along_4": {
-    "path": "environment/townscape/gate_arch_along_4.png",
     "frameWidth": 96,
     "frameHeight": 256,
     "tileX": 32,
@@ -96,7 +90,6 @@
     }
   },
   "bunting_11": {
-    "path": "environment/townscape/bunting_11.png",
     "frameWidth": 384,
     "frameHeight": 96,
     "tileX": 0,
@@ -110,7 +103,6 @@
     }
   },
   "bunting_16": {
-    "path": "environment/townscape/bunting_16.png",
     "frameWidth": 544,
     "frameHeight": 96,
     "tileX": 0,
@@ -124,7 +116,6 @@
     }
   },
   "laundry_line_3": {
-    "path": "environment/townscape/laundry_line_3.png",
     "frameWidth": 128,
     "frameHeight": 96,
     "tileX": 0,
@@ -138,7 +129,6 @@
     }
   },
   "market_stall_back": {
-    "path": "environment/townscape/market_stall_back.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 16,
@@ -152,7 +142,6 @@
     }
   },
   "market_stall_front": {
-    "path": "environment/townscape/market_stall_front.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 16,
@@ -166,7 +155,6 @@
     }
   },
   "market_stall_canopy": {
-    "path": "environment/townscape/market_stall_canopy.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 16,
@@ -208,7 +196,6 @@
     }
   },
   "town_notice_board": {
-    "path": "environment/townscape/notice_board.png",
     "frameWidth": 64,
     "frameHeight": 96,
     "tileX": 16,
@@ -222,7 +209,6 @@
     }
   },
   "town_bench": {
-    "path": "environment/townscape/bench.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 16,

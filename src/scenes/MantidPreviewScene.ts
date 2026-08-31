@@ -82,7 +82,7 @@ const SPEED_HALF = 0.5;
 const SPEED_FULL = 1;
 const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FULL];
 
-/** The floor-3 grounds a mantis actually stands on, from `scripts/tilegen/palette.ts`. */
+/** The floor-3 grounds a mantis actually stands on, from `src/map/tilegen/palette.ts`. */
 const BACKDROPS: ReadonlyArray<{ readonly name: string; readonly color: string }> = [
   { name: 'floor 3 — grass', color: '#637032' },
   { name: 'floor 3 — dirt road', color: '#7a6244' },

@@ -20,11 +20,22 @@
 
 import type { Canvas } from 'canvas';
 import { OVERLAY_FRAME_KEY_STRIDE } from '../../src/map/tiles/overlayAnimation.js';
-import { readCanvas, isOpaque, pixelIndex, pixelLuminance, type PixelBuffer } from './pixels.js';
-import { meanLuminanceInQuad } from './lighting.js';
-import type { Projection } from './projection.js';
-import { getRamp, sampleRamp } from './ramps.js';
-import { BUILDING_TILE_SCALE, type BuildingSpec } from './spec.js';
+import {
+  readCanvas,
+  isOpaque,
+  pixelIndex,
+  pixelLuminance,
+  type PixelBuffer,
+} from '../../src/sprites/buildinggen/pixels.js';
+import { meanLuminanceInQuad } from '../../src/sprites/buildinggen/lighting.js';
+import type { Projection } from '../../src/sprites/buildinggen/projection.js';
+import { getRamp, sampleRamp } from '../../src/sprites/buildinggen/ramps.js';
+import {
+  BUILDING_TILE_SCALE,
+  frameHeightPx,
+  frameWidthPx,
+  type BuildingSpec,
+} from '../../src/sprites/buildinggen/spec.js';
 
 export interface GateFailure {
   readonly key: string;
@@ -78,29 +89,29 @@ export function gateFrameGeometry(
   frozenHeight: number,
 ): void {
   const GATE = 'frame-geometry';
-  const columns = Math.max(1, declared.lifeFrameCount);
-  const LIFE_ROW_COUNT = 2;
 
-  // A cross-function consistency check, and no more than that: the entry and the
-  // canvas are built by two different functions, but both from the same spec and
-  // the same `tiles * BUILDING_TILE_SCALE` expression in the same process, so
-  // this fires only if one of those two functions is edited without the other.
-  // The real question — does the manifest *on disk* describe the PNG *on disk* —
-  // cannot be answered before either exists, and is `gateWrittenSheetGeometry`.
-  if (sheet.width !== columns * declared.frameWidth) {
+  // The sheet's size against the *spec's* own tile counts, which is the reading
+  // the manifest is not involved in. Comparing it against `declared.columns *
+  // declared.frameWidth` would be a self-comparison — the bake sizes the canvas
+  // from that very product — and `manifestEntryProblems` already holds the
+  // manifest to the spec, so this is the half that says the pixels agree with
+  // the geometry rather than that the geometry agrees with itself.
+  const paintedWidth = declared.columns * frameWidthPx(spec);
+  const paintedHeight = declared.rows * frameHeightPx(spec);
+  if (sheet.width !== paintedWidth) {
     results.fail(
       spec.key,
       GATE,
-      `the sheet is ${sheet.width}px wide but the manifest declares ${columns} columns of ` +
-        `${declared.frameWidth}px, which is ${columns * declared.frameWidth}px`,
+      `the sheet is ${sheet.width}px wide but ${spec.tilesWide} tiles across ` +
+        `${declared.columns} column(s) at ${BUILDING_TILE_SCALE}px a tile is ${paintedWidth}px`,
     );
   }
-  if (sheet.height !== LIFE_ROW_COUNT * declared.frameHeight) {
+  if (sheet.height !== paintedHeight) {
     results.fail(
       spec.key,
       GATE,
-      `the sheet is ${sheet.height}px tall but the manifest declares two rows of ` +
-        `${declared.frameHeight}px, which is ${LIFE_ROW_COUNT * declared.frameHeight}px`,
+      `the sheet is ${sheet.height}px tall but ${spec.tilesHigh} tiles across ` +
+        `${declared.rows} row(s) at ${BUILDING_TILE_SCALE}px a tile is ${paintedHeight}px`,
     );
   }
   if (declared.tileScale !== BUILDING_TILE_SCALE) {
@@ -126,58 +137,13 @@ export function gateFrameGeometry(
   );
 }
 
-/**
- * Frame-size drift, measured on the files rather than on the objects.
- *
- * Runs after the write, reading the manifest back as text and decoding the PNG,
- * so it covers what serialising and encoding do to the pair — which the checks
- * before the write cannot, since they hold both sides in memory.
- *
- * What it does **not** cover, and the reason `gateFrameGeometry` still exists:
- * both numbers still originate in this process, from `manifestEntryFor` and
- * `bake`. Drift introduced by hand-editing `manifest.json` between runs survives
- * until the next full bake rewrites that entry, and is invisible to every gate
- * here in the meantime. Catching that would mean gating the manifest against the
- * PNGs independently of a bake.
- */
-export function gateWrittenSheetGeometry(
-  results: GateResults,
-  spec: BuildingSpec,
-  written: {
-    readonly frameWidth: number;
-    readonly frameHeight: number;
-    readonly lifeFrameCount: number;
-  },
-  sheetWidth: number,
-  sheetHeight: number,
-): void {
-  const GATE = 'written-geometry';
-  const LIFE_ROW_COUNT = 2;
-  const expectedWidth = written.frameWidth * Math.max(1, written.lifeFrameCount);
-  const expectedHeight = written.frameHeight * LIFE_ROW_COUNT;
-  if (sheetWidth !== expectedWidth || sheetHeight !== expectedHeight) {
-    results.fail(
-      spec.key,
-      GATE,
-      `the written PNG is ${sheetWidth}x${sheetHeight}, but the written manifest describes ` +
-        `${written.lifeFrameCount} columns of ${written.frameWidth}px over two rows of ` +
-        `${written.frameHeight}px, which is ${expectedWidth}x${expectedHeight}`,
-    );
-    return;
-  }
-  results.report(
-    spec.key,
-    GATE,
-    `the written sheet matches the written manifest at ${written.frameWidth}x${written.frameHeight}`,
-  );
-}
-
 /** What the manifest entry says about the sheet, for the gate to check the pixels against. */
 export interface DeclaredFrameGeometry {
   readonly frameWidth: number;
   readonly frameHeight: number;
   readonly tileScale: number;
-  readonly lifeFrameCount: number;
+  readonly columns: number;
+  readonly rows: number;
 }
 
 // ── 2. the doorway ─────────────────────────────────────────────────────────
@@ -816,54 +782,39 @@ export function gateLifeFrameCount(
 }
 
 /**
- * Nothing was drawn into the idle row beyond its single frame.
+ * The painted facade is exactly the cell the manifest gives it.
  *
- * `idle` is one frame, so every column of the top row after the first must be
- * empty. Ink there means a painter or a placement reached outside its own cell —
- * invisible on the frame that caused it, and a stripe of someone else's art on
- * the next one.
- *
- * Scoped to the idle row on purpose: the life cells are drawn from
- * frame-sized canvases *and* clipped to their own rects, so a life painter that
- * overreached would be cropped rather than caught. This gate is therefore about
- * placement, which is the failure that remains possible.
+ * Idle and life share one row, so the idle frame is composited un-clipped into a
+ * cell whose immediate neighbour is the first life frame. A painter handed a
+ * surface wider or taller than its own frame therefore lays a strip of facade
+ * across that neighbour — invisible on the frame that caused it, and a stripe of
+ * someone else's art on the next one. Size is the whole of the hazard, because a
+ * painter cannot draw outside the surface it was given: this compares the
+ * surface the painter produced against the frame the manifest declares, which
+ * are arrived at by two different routes.
  *
  * It replaced a check that compared the idle cell's width against the expression
  * its own width had been computed from, and so could not fail.
  */
-export function gateNoCellBleed(results: GateResults, spec: BuildingSpec, sheet: Canvas): void {
+export function gateNoCellBleed(
+  results: GateResults,
+  spec: BuildingSpec,
+  idle: Canvas,
+  declared: { readonly frameWidth: number; readonly frameHeight: number },
+): void {
   const GATE = 'cell-bleed';
-  const frameWidth = spec.tilesWide * BUILDING_TILE_SCALE;
-  const frameHeight = spec.tilesHigh * BUILDING_TILE_SCALE;
-  const spare = sheet.width - frameWidth;
-  if (spare <= 0) {
+  if (idle.width !== declared.frameWidth || idle.height !== declared.frameHeight) {
     results.fail(
       spec.key,
       GATE,
-      `the sheet is ${sheet.width}px wide, no wider than its own ${frameWidth}px frame, so there ` +
-        'is no spare idle-row space to scan and this gate would otherwise report green having ' +
-        'measured nothing',
+      `the facade was painted onto a ${idle.width}x${idle.height} surface but its cell is ` +
+        `${declared.frameWidth}x${declared.frameHeight}; composited un-clipped, the excess lands ` +
+        'on the life frame beside it',
     );
     return;
   }
-
-  const strip = sheet.getContext('2d').getImageData(frameWidth, 0, spare, frameHeight);
-  let painted = 0;
-  for (let i = ALPHA_CHANNEL_OFFSET; i < strip.data.length; i += CHANNELS_PER_PIXEL) {
-    if (strip.data[i] !== 0) painted++;
-  }
-  if (painted > 0) {
-    results.fail(
-      spec.key,
-      GATE,
-      `${painted} pixel(s) are painted in the idle row beyond its single frame; a painter has ` +
-        "reached past its own cell and will show up as a stripe in the next frame's art",
-    );
-  }
+  results.report(spec.key, GATE, `the facade fills its ${idle.width}x${idle.height} cell exactly`);
 }
-
-const ALPHA_CHANNEL_OFFSET = 3;
-const CHANNELS_PER_PIXEL = 4;
 
 export function readSheetCell(
   sheet: Canvas,

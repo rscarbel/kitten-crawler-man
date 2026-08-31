@@ -25,7 +25,7 @@ import { positiveMod } from '../../utils';
 export const GROUND_MASK_SHEET_KEY = 'ground_masks';
 export const GROUND_MASK_STATE = 'corner';
 
-/** Corner bits, matching `scripts/tilegen/masks.ts`. */
+/** Corner bits, matching `src/map/tilegen/masks.ts`. */
 export const CORNER_NW = 1;
 export const CORNER_NE = 2;
 export const CORNER_SE = 4;
@@ -59,16 +59,28 @@ export function groundVariantCount(state: SpriteStateDef): number {
  * the mix was added — a 4-variant material laid out `0123 / 3210 / 2301 / 1032`,
  * repeating exactly every 4 patches on both axes, which for 2x2-patch grass is a
  * literal 8-tile repeat; 2-variant materials came out a checkerboard.
+ *
+ * `variantSeed` reshuffles which variant lands on which patch per floor — the
+ * cheapest variation there is, since it reuses art already painted. It is passed
+ * rather than read from the floor slot so this stays a pure function of its
+ * arguments, which is what lets the `?tiles` route and the renderer be checked
+ * against each other.
  */
 export function groundFrameIndex(
   patchTiles: number,
   variantCount: number,
   tx: number,
   ty: number,
+  variantSeed: number,
 ): number {
   const patchX = Math.floor(tx / patchTiles);
   const patchY = Math.floor(ty / patchTiles);
-  const mixed = Math.imul(patchX, VARIANT_HASH_X) ^ Math.imul(patchY, VARIANT_HASH_Y);
+  // The seed joins *before* the avalanche, not after: added to the finished hash
+  // it would be a constant offset on a value whose low bits are already the
+  // selection, which reshuffles nothing — it would slide every patch onto the
+  // next variant and leave the layout identical.
+  const mixed =
+    (Math.imul(patchX, VARIANT_HASH_X) ^ Math.imul(patchY, VARIANT_HASH_Y)) + variantSeed;
   const avalanched = Math.imul(mixed ^ (mixed >>> VARIANT_HASH_SHIFT_A), VARIANT_HASH_MIX);
   const hash = (avalanched ^ (avalanched >>> VARIANT_HASH_SHIFT_B)) >>> 0;
   const variant = hash % variantCount;

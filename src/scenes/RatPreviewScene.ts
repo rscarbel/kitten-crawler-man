@@ -81,7 +81,7 @@ const SPEED_HALF = 0.5;
 const SPEED_FULL = 1;
 const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FULL];
 
-/** The floor mids a rat actually stands on, from `scripts/tilegen/palette.ts`. */
+/** The floor mids a rat actually stands on, from `src/map/tilegen/palette.ts`. */
 const BACKDROPS: ReadonlyArray<{ readonly name: string; readonly color: string }> = [
   { name: 'floor 1 — cellar stone', color: '#8c8170' },
   { name: 'floor 1 — dressed stone', color: '#b09668' },

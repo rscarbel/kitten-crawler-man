@@ -3,6 +3,9 @@ import { type InputManager } from '../core/InputManager';
 import { keybindings } from '../core/Keybindings';
 import { TILE_SIZE } from '../core/constants';
 import { GameMap, TOWER_FLOOR_COUNT, TOWER_INTERIOR_W, type InteriorVariant } from '../map/GameMap';
+import { setFloorArtSeed } from '../map/ground/floorArtSeed';
+import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
+import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
 import { BRAZIER, FIREPLACE } from '../map/tileTypes';
 import { PlayerManager } from '../core/PlayerManager';
 import type { BuildingEntry } from '../systems/BuildingSystem';
@@ -607,6 +610,12 @@ export class BuildingInteriorScene extends GameplayScene {
      * remaining vermin have nowhere else to survive the trip back outside.
      */
     anchorQuestProgress?: AnchorQuestProgress,
+    /**
+     * The town's art seed, so a shop's floorboards are painted from the same
+     * draw as the street outside and stay the same on every visit. Omitted only
+     * by a harness with no town behind it, which then gets its own draw.
+     */
+    townArtSeed?: number,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
@@ -638,7 +647,11 @@ export class BuildingInteriorScene extends GameplayScene {
     if (isTower) {
       // Generate 4 tower floors
       for (let f = 0; f < TOWER_FLOOR_COUNT; f++) {
-        const floorMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+        const floorMap = new GameMap({
+          tileHeight: TILE_SIZE,
+          prebuiltStructure: [],
+          artSeed: townArtSeed,
+        });
         // Every storey of a tower passes `false`: a tower is not a safe-room
         // building, and the flag belongs to the building rather than the floor.
         floorMap.generateInterior('tower', f, entry.name, false);
@@ -647,9 +660,28 @@ export class BuildingInteriorScene extends GameplayScene {
       this.map = this.towerFloors[0];
     } else {
       // Build single interior map
-      this.map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+      this.map = new GameMap({
+        tileHeight: TILE_SIZE,
+        prebuiltStructure: [],
+        artSeed: townArtSeed,
+      });
       this.map.generateInterior(entry.type, 0, entry.name, entry.hasSafeRoom === true, variant);
     }
+
+    // Every storey shares the one seed, so this covers the tower as well as a
+    // single room. Set before any ground sheet or tile chunk is baked indoors.
+    setFloorArtSeed(this.map.artSeed);
+    // Indoors uses one generated sheet, plus the corner masks every pair is
+    // composited through. Queued rather than painted outright, so the fade into
+    // the shop is not the frame that pays for its floorboards.
+    const repaintTileArt = (): void => {
+      for (const floor of isTower ? this.towerFloors : [this.map]) floor.invalidateAllTileArt();
+    };
+    requestGroundSheets(['ground_interior'], repaintTileArt);
+    // The town's furniture stands indoors too — a shop counter and a notice
+    // board are the same sheets the street uses — and entering a building never
+    // releases them, so this is a no-op on every visit after the first.
+    requestEnvironmentSheetsForGroups(['town'], { onSheetPainted: repaintTileArt });
 
     this.mapW = this.map.structure[0]?.length ?? DEFAULT_MAP_FALLBACK_WIDTH;
 

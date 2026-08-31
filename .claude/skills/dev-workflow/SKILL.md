@@ -25,12 +25,15 @@ npm run verify:progression   # 50 generated maps per floor: reachability and byp
 npm run verify:bounty        # bounty registry, encounters, state machine, site scatter
 npm run verify:separation    # mob push-apart force math and strategy equivalence
 npm run verify:assets        # every mob a floor can produce vs. its declared sprite groups
+npm run gates:environment-art # the runtime art queue: sheets arrive, arrive paced, are released
+npm run verify:floor-sweep   # every shippable floor art seed, in every domain that carries one
 npm run bench:separation     # measures the separation strategy crossover
 ```
 
 - `verify:difficulty` covers the cadence curve, telegraph floors, projectile speed caps, the regen curve, spawn-count caps, spawn and boss level bands, progression regions, and that nothing calls `applyMobLevel` twice.
 - `verify:progression` regenerates 50 maps per floor; a rare layout failure needs that volume to show up at all. Bump `VERIFY_RUN_COUNT` locally for a sign-off run and leave the committed value alone.
 - `verify:assets` proves every mob a floor can produce has its sprite keys declared — see `docs/asset-management.md`.
+- The environment art is painted at runtime rather than loaded, so it has gates of its own. `gates:environment-art` is the cheap one and belongs in any run that touched `src/map/environmentArtCache.ts` or a sheet plan. `verify:floor-sweep` takes minutes and is for art changes: it re-measures **every** seed the game can draw, across the ground materials, the seeded prop families and the building facades, which is what makes it exhaustive rather than a sample. `--only=ground|props|facades` narrows it while iterating. Re-run `npm run gen:floor-art-seeds` whenever any seeded painter, ramp or sheet config changes — the alphabet is otherwise a list of seeds verified against art that no longer exists.
 - `verify:bounty`'s map checks are a random sample, not a deterministic gate: overworld generation runs on unseeded `Math.random()` on purpose, because a fixed seed only ever proves the one map it encodes. Run it more than once when something looks marginal.
 - `verify:separation` checks force math, cell-boundary coverage, and that the grid and all-pairs strategies agree to floating-point rounding across 200 random layouts plus degenerate ones. It also pins `SpatialGrid`'s key-packing assumptions: negative coordinates are safe, and a bucket collision can only cost work rather than produce a wrong answer, because every query re-tests its candidates.
 - `bench:separation` is what makes `SEPARATION_GRID_MIN_MOBS` a measured number rather than a guess. It sweeps roster sizes against three crowding levels and carries a max-force-delta column beside the timings, so a faster shape that quietly computed _different_ forces fails loudly. Treat the crossover as the result and the absolute microseconds as scenery — they are wall-clock on whatever machine runs them.
@@ -88,7 +91,7 @@ From `.env.example`: `AI_ENABLED` (default `false` — with it off, `game.ts` sk
 
 ## Sprite generation
 
-Sprite sheets are generated offline: `npx tsx scripts/generate-<name>-sprite.ts` (uses the `canvas` npm package, writes PNGs into `src/images/`). Not wired into npm scripts. See `add-sprite`.
+Most sheets are painted by the game itself and have no file at all — the ground tilesets, the town's furniture and signage, the wilderness, the props and the building facades. Their `scripts/generate-*` entry points are **review bakers**: they write PNGs into `preview/props/` (or `preview/tilesets/`), never into `src/images/`, and they run the checks a picture cannot make for itself. Most are wired up as `gen:` scripts — `gen:townscape`, `gen:trees`, `gen:rocks`, `gen:camps`, `gen:buildings`, `gen:town-art`. A handful of sheets are still fetched, and those generators do write into `src/images/`. See `add-sprite`.
 
 ## Verifying a gameplay change
 

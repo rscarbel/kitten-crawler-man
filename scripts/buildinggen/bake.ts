@@ -1,23 +1,27 @@
 /**
  * Painting a building into a sheet, and putting that sheet through every gate
- * that does not need it on disk.
+ * that measures pixels.
  *
- * This lives apart from the bake driver because two callers need it and they
- * must not drift: the driver writes the result, and `render-buildings.ts` draws
- * contact sheets from it without writing anything. The obvious alternative —
- * letting the review harness import the driver — does not work, because the
- * driver *is* a write: it runs at module load and rewrites the manifest.
+ * The shipped game paints these facades for itself — there is no PNG and no
+ * generated manifest any more — so everything here exists for the offline
+ * harnesses: the review baker writes the picture a reviewer looks at, and
+ * `render-buildings.ts` draws contact sheets. Both compose the sheet the same
+ * way the runtime does, and neither writes into `src/images/`.
  *
- * The one gate not here is the doorway, which needs `SpriteLoader` reading a
- * manifest that exists. Only the driver can run that, and only after it writes.
+ * The layout is never restated here. Which column the idle frame takes and
+ * where the life row starts are the manifest's to choose, so both are read back
+ * out of the checked-in entry through `sheetLayoutFor` — a bake holding its own
+ * copy of the layout would keep composing yesterday's sheet while the game read
+ * today's.
  */
 
 import { createCanvas, type Canvas } from 'canvas';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { paintBuilding } from './paint.js';
-import { paintLifeFrame } from './animate.js';
-import { project } from './projection.js';
+import { asNodeCanvas } from '../nodeGameContext.js';
+import { paintBuilding } from '../../src/sprites/buildinggen/paint.js';
+import { paintLifeFrame } from '../../src/sprites/buildinggen/animate.js';
+import { project } from '../../src/sprites/buildinggen/projection.js';
 import {
   GateResults,
   gateLifeFrameCount,
@@ -32,13 +36,20 @@ import {
   readSheetCell,
   type BlockedRegion,
 } from './gates.js';
-import { BUILDING_TILE_SCALE, type BuildingSpec } from './spec.js';
+import type { SpriteManifestEntry, SpriteStateDef } from '../../src/core/SpriteLoader.js';
+import {
+  BUILDING_IDLE_STATE,
+  BUILDING_LIFE_STATE,
+  buildingManifestEntry,
+} from '../../src/sprites/buildinggen/runtimeBuildingSheets.js';
+import {
+  BUILDING_TILE_SCALE,
+  frameHeightPx,
+  frameWidthPx,
+  type BuildingSpec,
+} from '../../src/sprites/buildinggen/spec.js';
 
 const FIXTURE_PATH = resolve('scripts/buildinggen/fixtures/footprints.json');
-const MANIFEST_DIRECTORY_PREFIX = 'environment/buildings';
-
-export const IDLE_ROW = 0;
-export const LIFE_ROW = 1;
 
 export interface FootprintFixtureEntry {
   readonly footprint: { readonly w: number; readonly h: number };
@@ -95,20 +106,45 @@ export function readFixture(): ReadonlyMap<string, FootprintFixtureEntry> {
   return result;
 }
 
-export interface ManifestStateEntry {
-  readonly row: number;
-  readonly frameCount: number;
+/**
+ * Where a spec's frames sit on its sheet, as the manifest entry lays them out.
+ *
+ * `columns` and `rows` come from the entry alone — the frame counts and offsets
+ * it declares — so a gate comparing them against the painted canvas is
+ * comparing two independently derived numbers rather than one expression
+ * against itself.
+ */
+export interface SheetLayout {
+  readonly idleColumn: number;
+  readonly idleRow: number;
+  readonly lifeColumn: number;
+  readonly lifeRow: number;
+  readonly columns: number;
+  readonly rows: number;
 }
 
-export interface ManifestEntry {
-  readonly path: string;
-  readonly frameWidth: number;
-  readonly frameHeight: number;
-  readonly tileX: number;
-  readonly tileY: number;
-  readonly tileScale: number;
-  readonly blockedRegions: ReadonlyArray<BlockedRegion>;
-  readonly states: Readonly<Record<string, ManifestStateEntry>>;
+function stateOf(entry: SpriteManifestEntry, name: string): SpriteStateDef {
+  const states: Readonly<Record<string, SpriteStateDef | undefined>> = entry.states;
+  const state = states[name];
+  if (state === undefined) {
+    throw new Error(`the manifest entry declares no '${name}' state, so nothing can be laid out`);
+  }
+  return state;
+}
+
+export function sheetLayoutFor(entry: SpriteManifestEntry): SheetLayout {
+  const idle = stateOf(entry, BUILDING_IDLE_STATE);
+  const life = stateOf(entry, BUILDING_LIFE_STATE);
+  const idleColumn = idle.colOffset ?? 0;
+  const lifeColumn = life.colOffset ?? 0;
+  return {
+    idleColumn,
+    idleRow: idle.row,
+    lifeColumn,
+    lifeRow: life.row,
+    columns: Math.max(idleColumn + idle.frameCount, lifeColumn + life.frameCount),
+    rows: Math.max(idle.row, life.row) + 1,
+  };
 }
 
 /**
@@ -149,25 +185,91 @@ export function blockedRegionsFor(spec: BuildingSpec): ReadonlyArray<BlockedRegi
   ];
 }
 
-export function manifestEntryFor(spec: BuildingSpec): ManifestEntry {
-  return {
-    path: `${MANIFEST_DIRECTORY_PREFIX}/${spec.file}`,
-    frameWidth: spec.tilesWide * BUILDING_TILE_SCALE,
-    frameHeight: spec.tilesHigh * BUILDING_TILE_SCALE,
-    tileX: 0,
-    tileY: 0,
-    tileScale: BUILDING_TILE_SCALE,
-    blockedRegions: blockedRegionsFor(spec),
-    states: {
-      idle: { row: IDLE_ROW, frameCount: 1 },
-      life: { row: LIFE_ROW, frameCount: spec.life.frames },
-    },
+function sameRegions(
+  painted: ReadonlyArray<BlockedRegion>,
+  declared: ReadonlyArray<BlockedRegion> | undefined,
+): boolean {
+  if (declared === undefined || declared.length !== painted.length) return false;
+  return painted.every((region, index) => {
+    const other = declared[index];
+    return (
+      region.x1 === other.x1 &&
+      region.y1 === other.y1 &&
+      region.x2 === other.x2 &&
+      region.y2 === other.y2
+    );
+  });
+}
+
+function describeRegions(regions: ReadonlyArray<BlockedRegion>): string {
+  return regions.map((r) => `(${r.x1},${r.y1})-(${r.x2},${r.y2})`).join(' ');
+}
+
+/**
+ * Every way a spec disagrees with the manifest entry the game reads it through.
+ *
+ * The manifest is checked-in data now rather than something a bake emits, which
+ * means the two halves can drift in silence: a spec that grows a tile, gains a
+ * life frame or moves its door still paints happily, while the game keeps
+ * slicing the old geometry out of the new sheet and keeps blocking the old
+ * doorway. Nothing else compares them, so this is the whole of that contract.
+ */
+export function manifestEntryProblems(spec: BuildingSpec): string[] {
+  const entry = buildingManifestEntry(spec);
+  const problems: string[] = [];
+  const complain = (detail: string): void => {
+    problems.push(`'${spec.key}' ${detail}`);
   };
+
+  if (entry.path !== undefined) {
+    complain(
+      `has a manifest entry naming the file '${entry.path}'; these facades are painted at ` +
+        'runtime, and an entry with a path makes the loader fetch a sheet that is not there',
+    );
+  }
+  const frameWidth = frameWidthPx(spec);
+  const frameHeight = frameHeightPx(spec);
+  if (entry.frameWidth !== frameWidth || entry.frameHeight !== frameHeight) {
+    complain(
+      `paints ${frameWidth}x${frameHeight}px frames; its manifest entry declares ` +
+        `${entry.frameWidth}x${entry.frameHeight}, so every frame would be sliced out of the ` +
+        'wrong rectangle',
+    );
+  }
+  if (entry.tileScale !== BUILDING_TILE_SCALE) {
+    complain(
+      `is painted at ${BUILDING_TILE_SCALE}px per tile; its manifest entry declares ` +
+        `${entry.tileScale}, and the footprint every plot is spaced against derives from that`,
+    );
+  }
+  const idle = stateOf(entry, BUILDING_IDLE_STATE);
+  const life = stateOf(entry, BUILDING_LIFE_STATE);
+  const IDLE_FRAME_COUNT = 1;
+  if (idle.frameCount !== IDLE_FRAME_COUNT) {
+    complain(
+      `declares ${idle.frameCount} idle frames; a facade has exactly one, and the rest of the ` +
+        'row belongs to its life overlay',
+    );
+  }
+  if (life.frameCount !== spec.life.frames) {
+    complain(
+      `paints ${spec.life.frames} life frames but its manifest entry declares ${life.frameCount}`,
+    );
+  }
+  const painted = blockedRegionsFor(spec);
+  if (!sameRegions(painted, entry.blockedRegions)) {
+    complain(
+      `paints blocked regions ${describeRegions(painted)}; its manifest entry declares ` +
+        `${describeRegions(entry.blockedRegions ?? [])}, and the doorway the town walks ` +
+        'through is derived from the entry',
+    );
+  }
+  return problems;
 }
 
 export interface BakedBuilding {
   readonly spec: BuildingSpec;
-  /** The two-row sheet as it would be written, which is what the gates measure. */
+  /** The sheet laid out as the manifest describes it, which is what the gates measure. */
   readonly sheet: Canvas;
   /**
    * The individual cells, kept so the review harness can lay them out without
@@ -176,34 +278,43 @@ export interface BakedBuilding {
    */
   readonly idle: Canvas;
   readonly life: ReadonlyArray<Canvas>;
-  readonly entry: ManifestEntry;
+  readonly entry: SpriteManifestEntry;
 }
 
-export function bake(spec: BuildingSpec): BakedBuilding {
-  const frameWidth = spec.tilesWide * BUILDING_TILE_SCALE;
-  const frameHeight = spec.tilesHigh * BUILDING_TILE_SCALE;
-  const sheet = createCanvas(spec.life.frames * frameWidth, frameHeight * 2);
+/**
+ * @param weatherSeed  The floor's art-seed term, which reaches a facade's
+ *   weathering layers and nothing else. Zero — the default — bakes the reviewed
+ *   art, which is what every gate and every review harness wants.
+ */
+export function bake(spec: BuildingSpec, weatherSeed = 0): BakedBuilding {
+  const entry = buildingManifestEntry(spec);
+  const layout = sheetLayoutFor(entry);
+  const frameWidth = frameWidthPx(spec);
+  const frameHeight = frameHeightPx(spec);
+  const sheet = createCanvas(layout.columns * frameWidth, layout.rows * frameHeight);
   const ctx = sheet.getContext('2d');
 
-  const idle = paintBuilding(spec);
-  ctx.drawImage(idle.canvas, 0, 0);
+  const idle = asNodeCanvas(paintBuilding(spec, weatherSeed).canvas);
+  ctx.drawImage(idle, layout.idleColumn * frameWidth, layout.idleRow * frameHeight);
 
   const life: Canvas[] = [];
   for (let step = 0; step < spec.life.frames; step++) {
-    const frame = paintLifeFrame(spec, step);
+    const frame = asNodeCanvas(paintLifeFrame(spec, step));
     life.push(frame);
+    const left = (layout.lifeColumn + step) * frameWidth;
+    const top = layout.lifeRow * frameHeight;
     // Clipped to its own cell: a painter reaching past the frame it was sized
     // for bleeds into the next one, which reads as a drawing bug in the *next*
     // frame and is very hard to trace back to the frame that caused it.
     ctx.save();
     ctx.beginPath();
-    ctx.rect(step * frameWidth, frameHeight, frameWidth, frameHeight);
+    ctx.rect(left, top, frameWidth, frameHeight);
     ctx.clip();
-    ctx.drawImage(frame, step * frameWidth, frameHeight);
+    ctx.drawImage(frame, left, top);
     ctx.restore();
   }
 
-  return { spec, sheet, idle: idle.canvas, life, entry: manifestEntryFor(spec) };
+  return { spec, sheet, idle, life, entry };
 }
 
 /** Every ramp a spec names, which is what the palette gate measures against. */
@@ -250,8 +361,13 @@ export function runPixelGates(
   fixture: ReadonlyMap<string, FootprintFixtureEntry>,
 ): void {
   const { spec, sheet } = baked;
-  const frameWidth = spec.tilesWide * BUILDING_TILE_SCALE;
-  const frameHeight = spec.tilesHigh * BUILDING_TILE_SCALE;
+  const frameWidth = frameWidthPx(spec);
+  const frameHeight = frameHeightPx(spec);
+  const layout = sheetLayoutFor(baked.entry);
+
+  for (const problem of manifestEntryProblems(spec)) {
+    results.fail(spec.key, 'manifest-entry', problem);
+  }
 
   const replaced = fixture.get(spec.replaces);
   if (replaced === undefined) {
@@ -280,18 +396,22 @@ export function runPixelGates(
       frameWidth: baked.entry.frameWidth,
       frameHeight: baked.entry.frameHeight,
       tileScale: baked.entry.tileScale,
-      lifeFrameCount: baked.entry.states.life.frameCount,
+      columns: layout.columns,
+      rows: layout.rows,
     },
     replaced.footprint.w,
     replaced.footprint.h,
   );
 
-  const idle = readSheetCell(sheet, 0, IDLE_ROW, frameWidth, frameHeight);
+  const idle = readSheetCell(sheet, layout.idleColumn, layout.idleRow, frameWidth, frameHeight);
   const lifeFrames = Array.from({ length: spec.life.frames }, (_unused, step) =>
-    readSheetCell(sheet, step, LIFE_ROW, frameWidth, frameHeight),
+    readSheetCell(sheet, layout.lifeColumn + step, layout.lifeRow, frameWidth, frameHeight),
   );
 
-  gateNoCellBleed(results, spec, sheet);
+  gateNoCellBleed(results, spec, baked.idle, {
+    frameWidth: baked.entry.frameWidth,
+    frameHeight: baked.entry.frameHeight,
+  });
   gateSilhouette(results, spec, idle, project(spec));
   gateTextureRichness(results, spec, idle, replaced.textureRichness);
   gatePlaneSeparation(results, spec, idle, project(spec));

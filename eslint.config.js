@@ -71,7 +71,19 @@ export default tseslint.config(
   {
     // Pixel-art sprite and tile drawing functions are coordinate-heavy by nature.
     // The numbers there are art geometry, not semantic game constants.
-    files: ['src/sprites/**/*.ts', 'src/map/tiles/**/*.ts'],
+    // `src/map/tilegen/` is the same category one level down: material painters,
+    // palette ramps and noise lattices, whose numbers are the art itself.
+    files: ['src/sprites/**/*.ts', 'src/map/tiles/**/*.ts', 'src/map/tilegen/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-magic-numbers': 'off',
+    },
+  },
+  {
+    // A generated list of opaque 32-bit seeds. Each is the identity of one
+    // verified look, meaningful only as itself; naming a hundred and twenty
+    // eight of them would replace a table the builder writes with a table
+    // nobody maintains. `npm run gen:ground-art-seeds` owns this file.
+    files: ['src/map/ground/artSeedAlphabet.ts'],
     rules: {
       '@typescript-eslint/no-magic-numbers': 'off',
     },

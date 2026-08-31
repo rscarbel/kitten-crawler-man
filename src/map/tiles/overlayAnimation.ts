@@ -2,8 +2,8 @@
  * The clock every sprite-building overlay plays on, and the radix its frame
  * indices are folded with.
  *
- * These live in a leaf module of their own because the offline building bake
- * (`scripts/buildinggen`) has to honour both of them and cannot import
+ * These live in a leaf module of their own because the building painters
+ * (`src/sprites/buildinggen`) have to honour both of them and cannot import
  * `decorationTiles`, which pulls in the whole tile-rendering graph. A gate that
  * asserted against its own private copy of the radix would keep passing after
  * the runtime's copy changed, which is the failure the split exists to prevent.

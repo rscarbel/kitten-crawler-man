@@ -71,6 +71,7 @@ import {
 } from './tileTypes';
 import { isWalkableTileType } from './walkability';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
+import { drawFloorArtSeed } from './ground/floorArtSeed';
 import { MinHeap, HEAP_EMPTY } from '../core/MinHeap';
 import {
   CLUB_INTERIOR_W,
@@ -472,6 +473,13 @@ export interface GameMapOptions {
    * safeRooms, stairwellTiles, etc. after construction.
    */
   prebuiltStructure?: TileContent[][];
+  /**
+   * The seed every runtime-painted piece of this map's environment art derives
+   * from. Omitted for a map generating its own layout, which draws its own; a
+   * building interior passes the town's so that stepping through a door does not
+   * reroll the world it is a door in.
+   */
+  artSeed?: number;
 }
 
 export type { SpiderLabRoomData };
@@ -479,6 +487,15 @@ export type { SpiderLabRoomData };
 export class GameMap {
   structure: TileContent[][];
   tileHeight: number;
+  /**
+   * Seed for this map's environment art, fixed for the life of the map object.
+   *
+   * A checkpoint restore rewinds this same object rather than building a new one,
+   * so the floor keeps the art it had when the player died — while a genuine
+   * descent or restart constructs a new map and so earns a new look. See
+   * `src/map/ground/floorArtSeed.ts`.
+   */
+  readonly artSeed: number;
   /** Tile coordinates where the player should spawn (centre of the first room). */
   startTile: { x: number; y: number } = { x: 15, y: 15 };
   /** Tile centres of all rooms except the start and safe rooms — used for mob placement. */
@@ -629,8 +646,10 @@ export class GameMap {
       mapType,
       dungeon = { numBossRooms: DEFAULT_BOSS_ROOM_COUNT },
       prebuiltStructure,
+      artSeed = drawFloorArtSeed(),
     } = opts;
     this.tileHeight = tileHeight;
+    this.artSeed = artSeed;
     if (prebuiltStructure) {
       this.structure = prebuiltStructure;
     } else if (mapType === 'overworld') {

@@ -1,6 +1,6 @@
 ---
 name: add-sprite
-description: Add or modify a sprite in Kitten Crawler Man — PNG sprite sheets, JSON manifests, SpriteLoader/SpriteRenderer, offline generator scripts. Use when a creature, item, or effect needs new art or animation states.
+description: Add or modify a sprite in Kitten Crawler Man — sprite sheets (PNG or runtime-painted), JSON manifests, SpriteLoader/SpriteRenderer, offline generator scripts. Use when a creature, item, prop or effect needs new art or animation states.
 ---
 
 # Add a Sprite
@@ -9,15 +9,56 @@ description: Add or modify a sprite in Kitten Crawler Man — PNG sprite sheets,
 >
 > **Bipedal characters (humans, goblins, clowns, humanoid bosses) need the `bipedal-figure` skill first** — the rig/pose/view contract, gait authoring, bake gates and the image-review loop live there. Come back here for the manifest / loader / draw-wrapper wiring.
 >
-> **Ground and floor textures are NOT sprite sheets either** — they're generated
-> by `scripts/generate-ground-tileset.ts` from wrapped noise. Use the
+> **Ground and floor textures are NOT sprite sheets either** — they're painted at
+> runtime by `src/map/tilegen/materials.ts` from wrapped noise. Use the
 > `add-ground-tile` skill for terrain, paving, floors and tilesets.
+>
+> **Neither is the environment.** The town's street furniture and signage, the
+> forest, the boulders and the goblin camps are painted at floor load from plans
+> in `src/sprites/sheets/`. See "Environment art is painted, not fetched" below
+> before adding or changing any of it.
 
-Runtime rendering uses **PNG sprite sheets described by JSON manifests** under `src/images/<category>/` (`enemies/`, `bosses/`, `characters/`, `npcs/`, `effects/`, `environment/`). The sheets themselves are produced offline by procedural generator scripts in `scripts/` — though many are hand-drawn image assets.
+Runtime rendering uses **sprite sheets described by JSON manifests** under `src/images/<category>/` (`enemies/`, `bosses/`, `characters/`, `npcs/`, `effects/`, `environment/`). Most are PNGs, produced offline by procedural generator scripts in `scripts/` or hand-drawn; the environment ones are painted by the game itself and have no file at all.
+
+## Environment art is painted, not fetched
+
+A manifest entry with **no `path`** is painted at runtime rather than loaded.
+`SpriteLoader` refuses to fetch it and waits for `registerPaintedSprite`. The
+entry stays in the manifest either way, because its rows, frame counts,
+`patchTiles`, `tileTypeId` and `blockedRegions` are what every draw site and
+every material union is written against — what it no longer carries is a file.
+
+Such a sheet is described once, in `src/sprites/sheets/`, as a `PropSheetPlan`:
+the frame envelope, which state is which row, and one painter per frame. The game
+turns that plan into paced work through `src/map/environmentArtCache.ts`, and
+`scripts/propSheetBake.ts` turns the same plan into a review PNG under
+`preview/props/`. One description, so the sheet the game paints and the sheet you
+look at cannot be different art.
+
+**Obligations when adding or changing one:**
+
+- The plan must agree with the manifest entry. `propSheetPlanMismatches` proves
+  it and `npm run gates:environment-art` runs that over every family; a
+  disagreement throws at request time rather than landing the art an inch out
+  forever.
+- No painter may draw outside its own cell. Every frame is clipped to its cell
+  wherever it is painted, so art that overruns is sheared off along a straight
+  line — invisible in a typecheck, permanent in the picture. `bakePropFamily`
+  checks the border pixels of every frame.
+- Register the family in `src/sprites/sheets/environmentSheets.ts` against the
+  `AssetGroup` the floor declares, and say whether it varies with the floor's art
+  seed. Seeded art is repainted whenever a floor's layout changes; unseeded art
+  survives the stairs and is released with its asset group.
+- When converting an existing PNG family, prove the port changed nothing:
+  snapshot the sheets from git and run
+  `npm run parity:props -- --family=<name> --ref=<dir>`. Every sheet must come
+  through identical, or — for a difference you have understood and can justify —
+  carry an entry in that script's `PARITY_BUDGETS` saying how large it is and
+  why. The budget is a ceiling, so the check goes red again if it grows.
 
 ## Pipeline
 
-1. **Generator script** (`scripts/generate-<name>-sprite.ts`, run manually with `npx tsx scripts/generate-<name>-sprite.ts`): uses the `canvas` npm package (`createCanvas`) to draw each animation frame with 2D-canvas calls, tiles frames into a sheet grid (one row per state), and writes PNG(s) into `src/images/<category>/`. Top-of-file constants define the geometry: `FRAME_W`, `FRAME_H`, `TILE_SCALE`, `TILE_X`, `TILE_Y` — these **must match the manifest entry**. Existing scripts print them at the end for copy-paste. Model a new one on `scripts/generate-grotesque-spider-sprite.ts`.
+1. **The painter and its layout.** For environment art this is a `PropSheetPlan` in `src/sprites/sheets/`, and the game paints it — see "Environment art is painted, not fetched" above; the `scripts/generate-*` entry points bake the same plans into `preview/props/` for review and never write into `src/images/`. For the remaining fetched sheets, a generator script under `scripts/` uses the `canvas` package (`createCanvas`) to draw each frame, tiles them into a grid (one row per state) and writes a PNG into `src/images/<category>/`. Either way the geometry constants — `FRAME_W`, `FRAME_H`, `TILE_SCALE`, `TILE_X`, `TILE_Y` — **must match the manifest entry**, and for a plan that agreement is proved by `propSheetPlanMismatches` rather than trusted.
 2. **Manifest entry** in that category's `manifest.json`. Shape (`SpriteManifestEntry` in `src/core/SpriteLoader.ts`):
    - `path`, `frameWidth`, `frameHeight`
    - `tileX`/`tileY` — top-left of the logical tile within each frame (anchor offset)
@@ -80,7 +121,7 @@ it.
 
 ## Checklist for a new creature sprite
 
-1. Write + run the generator script → PNG in `src/images/<category>/`.
+1. Write the painter. Environment art: a `PropSheetPlan` in `src/sprites/sheets/`, baked for review into `preview/props/`. Everything else: a generator script writing a PNG into `src/images/<category>/`.
 2. Add the manifest entry with matching geometry.
 3. (Only if new manifest file) import it in `SpriteLoader.ts`.
 4. Write the `src/sprites/*Sprite.ts` wrapper; call it from the creature's `render()`.

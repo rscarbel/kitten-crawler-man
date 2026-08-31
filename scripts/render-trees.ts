@@ -18,12 +18,14 @@
  * Regenerate the sheets with `npm run gen:trees`.
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { resolve } from 'node:path';
+import { createCanvas, type Canvas } from 'canvas';
 import manifest from '../src/images/environment/trees/manifest.json';
+import { treeSheetPlans } from '../src/sprites/sheets/treeSheets.js';
+import { bakePropSheet } from './propSheetBake.js';
 import { mulberry32 } from '../src/sprites/person/rng.js';
+import { floorArtSubSeed, TREE_SALT } from '../src/map/ground/floorArtSeed.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import { OVERWORLD_MAP_SIZE_TILES } from './townSheets.js';
+import { OVERWORLD_MAP_SIZE_TILES } from '../src/sprites/sheets/townscapeSheets.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
 const IN_GAME_TILE = 32;
@@ -53,7 +55,6 @@ const FOREST_CLEARING_RADIUS_TILES = 4;
 const FOREST_ORIGIN_TILE = 24;
 
 interface SheetGeometry {
-  readonly path: string;
   readonly frameWidth: number;
   readonly frameHeight: number;
   readonly tileX: number;
@@ -169,9 +170,12 @@ async function drawContactSheet(scale: number): Promise<Buffer> {
   // A plain object rather than a Map: every selected key is loaded here and the
   // set never changes, so a lookup can be indexed rather than guarded against an
   // absence that cannot happen.
-  const images: Record<string, Image> = {};
-  for (const key of keys) {
-    images[key] = await loadImage(resolve(`src/images/${SHEETS[key].path}`));
+  // Painted here rather than loaded: the shipped game paints these sheets too,
+  // so a review that read a file could be looking at an older bake.
+  const images: Record<string, Canvas> = {};
+  for (const plan of treeSheetPlans(floorArtSubSeed(TREE_SALT))) {
+    if (!keys.includes(plan.key)) continue;
+    images[plan.key] = bakePropSheet(plan).canvas;
   }
 
   const { cells, columns } = planCells(keys, stateFilter);

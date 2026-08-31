@@ -6,6 +6,10 @@ import { clamp, frameTime } from '../utils';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
+import { setFloorArtSeed } from '../map/ground/floorArtSeed';
+import { groundSheetKeysAmong, requestGroundSheets } from '../map/ground/runtimeGroundSheets';
+import { releaseEnvironmentArt } from '../map/environmentArtCache';
+import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
 import { type HumanPlayer } from '../creatures/HumanPlayer';
 import { type CatPlayer } from '../creatures/CatPlayer';
 import { type Mob, type LootDrop } from '../creatures/Mob';
@@ -1086,6 +1090,39 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
+    // The map — freshly generated, reused across a checkpoint restore, or the
+    // tutorial's — is what owns the art seed, and every runtime painter reads it
+    // from the module slot rather than being handed it. Set before the first tile
+    // chunk or ground sheet is baked, and never again while this floor is live:
+    // a chunk baked under one seed and drawn under another is a silent tear.
+    setFloorArtSeed(this.gameMap.artSeed);
+
+    // Queued, not painted: the cache spends a few milliseconds a frame on these
+    // so the floor fades in while its ground arrives, and re-bakes the tile
+    // chunks each time a sheet lands — chunks near the player bake against each
+    // material's fallback colour first and would otherwise keep it forever.
+    const repaintTileArt = (): void => this.gameMap.invalidateAllTileArt();
+    requestGroundSheets(
+      groundSheetKeysAmong(requiredSpriteKeysForLevel(levelDef.id, levelDef.spriteGroups)),
+      repaintTileArt,
+    );
+    // After the ground, because the queue drains in request order and a floor
+    // with no ground yet is unreadable while a floor with no trees yet is merely
+    // sparse. The same tile-art invalidation applies: a decoration bakes into a
+    // chunk, and a chunk baked before its sheet landed would keep the gap.
+    requestEnvironmentSheetsForGroups(levelDef.spriteGroups, {
+      onSheetPainted: repaintTileArt,
+      // The facades are seconds of painting and the rest of the town is not, so
+      // they are painted outward from where the party actually arrives.
+      town:
+        this.gameMap.townPlan === undefined
+          ? undefined
+          : {
+              plan: this.gameMap.townPlan,
+              spawnTile: { x: spawnTileX, y: spawnTileY },
+            },
+    });
+
     this.world = {
       gameMap: this.gameMap,
       bus: this.bus,
@@ -1383,7 +1420,13 @@ export class DungeonScene extends GameplayScene {
           // the same floor identity and must never evict. Keyed on the *new*
           // floor's required keys, not the old floor's: anything the two
           // floors share (core, dungeon_common, ...) simply isn't touched.
-          releaseSpritesExcept(requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups));
+          const nextFloorKeys = requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups);
+          releaseSpritesExcept(nextFloorKeys);
+          // The same keep set on the same beat, so the painted sheets and the
+          // defs pointing at them can never disagree about what is still live.
+          // Anything seeded goes regardless: the next floor draws its own art
+          // seed, including for a key the two floors share.
+          releaseEnvironmentArt(nextFloorKeys);
           // The painted creatures give their memory back on the same beat and
           // for the same reason: whatever the next floor still shows is
           // repainted lazily, and nothing else is carried down the stairs.
@@ -1528,6 +1571,7 @@ export class DungeonScene extends GameplayScene {
               () => this.abilityManager.getLevel('mongo'),
               this.gameStats,
               this.anchorQuestProgress,
+              this.gameMap.artSeed,
             ),
           );
         },

@@ -1,6 +1,5 @@
 {
   "barracks": {
-    "path": "environment/buildings/barracks.png",
     "frameWidth": 384,
     "frameHeight": 288,
     "tileX": 0,
@@ -32,13 +31,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 8
       }
     }
   },
   "blacksmith": {
-    "path": "environment/buildings/blacksmith.png",
     "frameWidth": 384,
     "frameHeight": 240,
     "tileX": 0,
@@ -70,13 +69,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 8
       }
     }
   },
   "desperado_club": {
-    "path": "environment/buildings/desperado_club.png",
     "frameWidth": 576,
     "frameHeight": 480,
     "tileX": 0,
@@ -108,13 +107,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 6
       }
     }
   },
   "temple": {
-    "path": "environment/buildings/temple.png",
     "frameWidth": 384,
     "frameHeight": 336,
     "tileX": 0,
@@ -146,7 +145,8 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 6
       }
     }
@@ -205,7 +205,6 @@
     }
   },
   "sleeping_cat_inn": {
-    "path": "environment/buildings/sleeping_cat_inn.png",
     "frameWidth": 384,
     "frameHeight": 288,
     "tileX": 0,
@@ -237,13 +236,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 8
       }
     }
   },
   "blackwood_lodge": {
-    "path": "environment/buildings/blackwood_lodge.png",
     "frameWidth": 336,
     "frameHeight": 288,
     "tileX": 0,
@@ -275,13 +274,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 9
       }
     }
   },
   "shepherds_cabin": {
-    "path": "environment/buildings/shepherds_cabin.png",
     "frameWidth": 336,
     "frameHeight": 288,
     "tileX": 0,
@@ -313,13 +312,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 7
       }
     }
   },
   "cartwrights_workshop": {
-    "path": "environment/buildings/cartwrights_workshop.png",
     "frameWidth": 384,
     "frameHeight": 336,
     "tileX": 0,
@@ -351,13 +350,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 6
       }
     }
   },
   "herb_remedy": {
-    "path": "environment/buildings/herb_remedy.png",
     "frameWidth": 336,
     "frameHeight": 288,
     "tileX": 0,
@@ -389,13 +388,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 7
       }
     }
   },
   "general_store": {
-    "path": "environment/buildings/general_store.png",
     "frameWidth": 384,
     "frameHeight": 240,
     "tileX": 0,
@@ -427,13 +426,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 6
       }
     }
   },
   "horned_flagon": {
-    "path": "environment/buildings/horned_flagon.png",
     "frameWidth": 384,
     "frameHeight": 240,
     "tileX": 0,
@@ -465,13 +464,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 24
       }
     }
   },
   "hildas_cottage": {
-    "path": "environment/buildings/hildas_cottage.png",
     "frameWidth": 336,
     "frameHeight": 288,
     "tileX": 0,
@@ -503,13 +502,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 7
       }
     }
   },
   "sunken_stump": {
-    "path": "environment/buildings/sunken_stump.png",
     "frameWidth": 384,
     "frameHeight": 240,
     "tileX": 0,
@@ -541,13 +540,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 6
       }
     }
   },
   "millers_farm": {
-    "path": "environment/buildings/millers_farm.png",
     "frameWidth": 384,
     "frameHeight": 336,
     "tileX": 0,
@@ -579,13 +578,13 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 7
       }
     }
   },
   "quiet_needle": {
-    "path": "environment/buildings/quiet_needle.png",
     "frameWidth": 384,
     "frameHeight": 240,
     "tileX": 0,
@@ -617,7 +616,8 @@
         "frameCount": 1
       },
       "life": {
-        "row": 1,
+        "row": 0,
+        "colOffset": 1,
         "frameCount": 8
       }
     }

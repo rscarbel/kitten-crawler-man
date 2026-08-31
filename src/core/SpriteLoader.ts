@@ -13,6 +13,7 @@ import grotesqueSpiderManifest from '../images/bosses/grotesque_spider/manifest.
 import { TILE_SIZE } from './constants';
 import { ASSET_GROUPS, type AssetGroup } from './assetGroups';
 import { settings } from './Settings';
+import type { CanvasSurface } from './canvasSurface';
 
 const environmentManifest = {
   ...environmentBuildingsManifest,
@@ -72,7 +73,16 @@ export interface TileOffset {
 }
 
 export interface SpriteManifestEntry {
-  readonly path: string;
+  /**
+   * Sheet file under `src/images/`, or absent when the sheet is painted at
+   * runtime instead of shipped as a PNG (the generated ground tilesets — see
+   * `src/map/ground/runtimeGroundSheets.ts`). The entry stays in the manifest
+   * either way: its rows, frame counts and `patchTiles` are the geometry every
+   * draw site and every material union is written against, and a painter that
+   * disagrees with them is the frame-size drift this declaration exists to
+   * prevent.
+   */
+  readonly path?: string;
   readonly frameWidth: number;
   readonly frameHeight: number;
   readonly tileX: number;
@@ -121,10 +131,11 @@ export function getManifestKeys(): readonly SpriteKey[] {
  * (see `shouldDownscaleForLowEndDevice`) it may instead be a half-size
  * offscreen `<canvas>` the sheet was resampled into at load time — every other
  * field on this def is halved to match, so nothing downstream needs to know
- * which one it got.
+ * which one it got. A runtime-painted sheet arrives as an off-screen surface
+ * through `registerPaintedSprite` and is otherwise indistinguishable.
  */
 export interface SpriteDef {
-  readonly img: HTMLImageElement | HTMLCanvasElement;
+  readonly img: HTMLImageElement | CanvasSurface;
   readonly frameWidth: number;
   readonly frameHeight: number;
   readonly tileX: number;
@@ -180,7 +191,7 @@ export function getSpriteMissCounts(): ReadonlyMap<string, number> {
 }
 
 /** A sheet resampled to half size shrinks resident bitmap memory 4×. */
-const DOWNSCALE_FACTOR = 0.5;
+export const DOWNSCALE_FACTOR = 0.5;
 
 /**
  * Whether this device is low-end enough to trade sheet resolution for memory.
@@ -270,6 +281,11 @@ function downscaleSheet(
  */
 function ensureLoading(key: string, entry: SpriteManifestEntry, base: string): Promise<void> {
   if (_defs.has(key)) return Promise.resolve();
+  // A runtime-painted sheet has no file to fetch. Deliberately not memoised in
+  // `_loading`: there is no in-flight work to share, and an entry there would
+  // outlive the painter that eventually registers the sheet.
+  const path = entry.path;
+  if (path === undefined) return Promise.resolve();
   const existing = _loading.get(key);
   if (existing) return existing;
 
@@ -296,7 +312,7 @@ function ensureLoading(key: string, entry: SpriteManifestEntry, base: string): P
       console.warn(`[SpriteLoader] Failed to load "${key}" from "${img.src}"`);
       resolve(); // Skip — a procedural fallback may still cover this key.
     };
-    img.src = base + entry.path;
+    img.src = base + path;
   });
 
   _loading.set(key, promise);
@@ -438,7 +454,7 @@ async function withDecodeDeadline(decoding: Promise<void>): Promise<void> {
  * synchronously when `downscaleSheet` drew into it), so that step is skipped
  * for a canvas; the forcing draw below still applies to either source.
  */
-async function forceGpuUpload(img: HTMLImageElement | HTMLCanvasElement): Promise<void> {
+async function forceGpuUpload(img: HTMLImageElement | CanvasSurface): Promise<void> {
   if (img instanceof HTMLImageElement) {
     try {
       await withDecodeDeadline(img.decode());
@@ -497,6 +513,90 @@ export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
     void ensureLoading(key, _manifest[key], DEFAULT_IMAGE_BASE);
   }
   return def;
+}
+
+/**
+ * How large a sheet has to be to hold everything its states declare.
+ *
+ * Derived the way `frameOrigin` reads a sheet rather than from the state count,
+ * so a layout that puts two states on one row — an idle frame beside the
+ * animation row it underlies — is sized for what it actually occupies. The one
+ * place this is computed, because a painter, a registration check and a memory
+ * report that each did their own arithmetic would agree only by luck.
+ */
+export function sheetSizePx(entry: SpriteManifestEntry): {
+  widthPx: number;
+  heightPx: number;
+} {
+  const states = Object.values(entry.states);
+  if (states.some((state) => state.colsPerRow !== undefined)) {
+    throw new Error('A sheet that wraps its rows cannot be sized by this reading');
+  }
+  const columns = Math.max(...states.map((state) => (state.colOffset ?? 0) + state.frameCount));
+  const rows = Math.max(...states.map((state) => state.row)) + 1;
+  return { widthPx: columns * entry.frameWidth, heightPx: rows * entry.frameHeight };
+}
+
+/**
+ * The manifest's own description of a sheet: its frame geometry and its rows.
+ *
+ * The one way a runtime painter learns where a row sits and how many frames it
+ * owes. Reading it rather than restating it is what keeps a painted sheet from
+ * drifting out of step with the geometry every draw site already believes.
+ */
+export function getManifestEntry(key: SpriteKey): SpriteManifestEntry {
+  return _manifest[key];
+}
+
+/**
+ * Publishes a sheet that was painted at runtime rather than fetched, under a
+ * manifest key whose entry declares no `path`.
+ *
+ * The states come from the manifest entry, not from the caller: the entry is
+ * what every draw site, every `patchTiles` decode and every material union is
+ * written against, so a painter proves it matches that geometry rather than
+ * getting to redefine it. Mismatched sheet dimensions throw here rather than
+ * bleeding a neighbouring row into a frame, which is how frame-size drift
+ * usually presents.
+ */
+export function registerPaintedSprite(key: SpriteKey, img: CanvasSurface, scale: number): void {
+  const entry = _manifest[key];
+  if (entry.path !== undefined) {
+    throw new Error(`Sprite "${key}" ships as a file; it must not be painted over at runtime`);
+  }
+  const { widthPx, heightPx } = sheetSizePx(entry);
+  const expectedWidth = Math.round(widthPx * scale);
+  const expectedHeight = Math.round(heightPx * scale);
+  if (img.width !== expectedWidth || img.height !== expectedHeight) {
+    throw new Error(
+      `Painted sheet "${key}" is ${img.width}x${img.height}, but its manifest entry ` +
+        `describes ${expectedWidth}x${expectedHeight} at scale ${scale}`,
+    );
+  }
+  const statesMap = new Map<string, SpriteStateDef>();
+  for (const [name, sd] of Object.entries(entry.states)) statesMap.set(name, sd);
+  _defs.set(key, {
+    img,
+    frameWidth: entry.frameWidth * scale,
+    frameHeight: entry.frameHeight * scale,
+    tileX: entry.tileX * scale,
+    tileY: entry.tileY * scale,
+    tileScale: entry.tileScale * scale,
+    states: statesMap,
+  });
+}
+
+/**
+ * Withdraws a runtime-painted sheet, so the next lookup misses instead of
+ * handing back a def whose surface has been given up.
+ *
+ * The cache that painted the sheet owns its pixels and releases them by shrinking
+ * the surface to nothing; a def left pointing at that surface would draw a
+ * zero-sized image forever rather than repaint.
+ */
+export function unregisterPaintedSprite(key: string): void {
+  _defs.delete(key);
+  _loading.delete(key);
 }
 
 /**

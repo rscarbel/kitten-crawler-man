@@ -14,6 +14,7 @@ import {
 } from '../ui/pause/rebindCapture';
 import { activeSearchField, endSearchCapture } from '../ui/SearchField';
 import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
+import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
 import { beginPersonFrame } from '../sprites/person/personFrameCache';
 import { perfMonitor } from './PerfMonitor';
 import { renderQuality } from './RenderQuality';
@@ -559,6 +560,7 @@ export class SceneManager {
     // scene passes through.
     beginPersonFrame();
     beginFigureFrame();
+    beginEnvironmentArtFrame();
     const renderStartedAt = perfMonitor.begin();
     try {
       this.current?.render(this.ctx);

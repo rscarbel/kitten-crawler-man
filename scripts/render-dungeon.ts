@@ -10,6 +10,9 @@
  *
  *   npx tsx scripts/render-dungeon.ts --level=2 --w=60 --h=34 --scale=2
  *
+ * `--art-seed=N` paints the floor in the Nth verified look rather than the
+ * reviewed one, which is how a floor is judged across the seed space.
+ *
  * With no view given it frames the start room and its surroundings;
  * `--safe-room` frames a Bopca station instead. `--level` picks the floor and so
  * the ground theme. There is no `--seed`: the generator
@@ -22,6 +25,7 @@
 import { createCanvas, type Canvas } from 'canvas';
 
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
+import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
@@ -57,6 +61,14 @@ function stringArg(name: string, fallback: string): string {
   return raw === undefined ? fallback : raw.slice(name.length + ARG_PREFIX_LENGTH);
 }
 
+/**
+ * Which of the verified looks to paint the floor in. The default is the reviewed
+ * art; any other index picks a different member of the alphabet the game itself
+ * draws from, which is how the same floor is compared at several seeds.
+ */
+const artSeedIndex = intArg('art-seed', 0);
+const artSeed = FLOOR_ART_SEEDS[Math.abs(artSeedIndex) % FLOOR_ART_SEEDS.length];
+
 const floorNumber = intArg('level', DEFAULT_LEVEL);
 const levelDef = getLevelDef(`level${floorNumber}`);
 if (levelDef.isOverworld) throw new Error(`level${floorNumber} is an overworld — use render-town`);
@@ -66,7 +78,7 @@ const viewTilesH = intArg('h', DEFAULT_VIEW_TILES_H);
 const scale = intArg('scale', DEFAULT_SCALE);
 const outPath = stringArg('out', DEFAULT_OUT);
 
-await loadGameSpritesInNode();
+await loadGameSpritesInNode(artSeed);
 
 // Written exactly as `DungeonScene` writes it on entering a floor, fallback
 // included: the tile painters read the active theme rather than being handed

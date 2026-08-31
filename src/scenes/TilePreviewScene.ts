@@ -23,6 +23,15 @@ import { getSpriteDef, type SpriteDef, type SpriteStateDef } from '../core/Sprit
 import { TILE_SIZE } from '../core/constants';
 import { groundFrameIndex, groundVariantCount } from '../map/ground/groundFrames';
 import { drawFringe, type FringeMaterial, type ResolvedMaterial } from '../map/tiles/groundTiles';
+import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
+import { flushEnvironmentArtCache } from '../map/environmentArtCache';
+import {
+  DEFAULT_FLOOR_ART_SEED,
+  drawFloorArtSeed,
+  floorArtSubSeed,
+  GROUND_VARIANT_SALT,
+  setFloorArtSeed,
+} from '../map/ground/floorArtSeed';
 
 const BG_COLOR = '#12161f';
 const LABEL_COLOR = '#cbd5e1';
@@ -101,13 +110,34 @@ export class TilePreviewScene extends Scene {
   private mode: PreviewMode = 'materials';
   private scrollY = 0;
   private readonly materials: MaterialEntry[] = [];
+  /**
+   * Starts at the reviewed, unvaried look so the route opens on the art every
+   * material was signed off against; `R` moves off it.
+   */
+  private artSeed = DEFAULT_FLOOR_ART_SEED;
 
   constructor() {
     super();
+    this.repaint();
+  }
+
+  /**
+   * Draws a fresh art seed and repaints every sheet under it.
+   *
+   * The point of the review route is judging the *envelope* the seed moves
+   * inside, not one draw from it, so rerolling here is what a reviewer is
+   * actually looking at: the same materials, a different grain, and the
+   * question of whether any of them stopped reading.
+   */
+  private repaint(): void {
+    flushEnvironmentArtCache();
+    setFloorArtSeed(this.artSeed);
+    requestGroundSheets(SHEET_KEYS, () => this.collectMaterials());
     this.collectMaterials();
   }
 
   private collectMaterials(): void {
+    this.materials.length = 0;
     for (const key of SHEET_KEYS) {
       const def = getSpriteDef(key);
       if (!def) continue;
@@ -130,6 +160,11 @@ export class TilePreviewScene extends Scene {
     this.scrollY = 0;
   }
 
+  handleContextMenu(): void {
+    this.artSeed = drawFloorArtSeed();
+    this.repaint();
+  }
+
   handleWheel(deltaY: number): void {
     this.scrollY = Math.max(0, this.scrollY + deltaY);
   }
@@ -147,7 +182,13 @@ export class TilePreviewScene extends Scene {
     y: number,
   ): void {
     const frame = Math.min(
-      groundFrameIndex(entry.patchTiles, entry.variants, tx, ty),
+      groundFrameIndex(
+        entry.patchTiles,
+        entry.variants,
+        tx,
+        ty,
+        floorArtSubSeed(GROUND_VARIANT_SALT),
+      ),
       entry.state.frameCount - 1,
     );
     const { frameWidth, frameHeight } = entry.def;
@@ -176,7 +217,7 @@ export class TilePreviewScene extends Scene {
 
     if (this.materials.length === 0) {
       drawText(ctx, 'No generated ground sheets found.', { x: MARGIN, y: MARGIN, size: 18 });
-      drawText(ctx, 'Run: npx tsx scripts/generate-ground-tileset.ts', {
+      drawText(ctx, 'Painting — the sheets arrive a few materials a frame.', {
         x: MARGIN,
         y: MARGIN + EMPTY_STATE_LINE_GAP,
         size: HINT_SIZE,
@@ -196,12 +237,16 @@ export class TilePreviewScene extends Scene {
       bold: true,
       color: LABEL_COLOR,
     });
-    drawText(ctx, 'click to switch view · scroll to pan', {
-      x: MARGIN,
-      y: SUBTITLE_Y,
-      size: HINT_SIZE,
-      color: HINT_COLOR,
-    });
+    drawText(
+      ctx,
+      `click to switch view · scroll to pan · right-click for a new art seed (${this.artSeed})`,
+      {
+        x: MARGIN,
+        y: SUBTITLE_Y,
+        size: HINT_SIZE,
+        color: HINT_COLOR,
+      },
+    );
 
     ctx.save();
     ctx.beginPath();
@@ -317,7 +362,13 @@ export class TilePreviewScene extends Scene {
         // Clamped as the renderer clamps, so a mis-sized row previews the way it
         // would draw rather than reading off the end of its own row.
         frame: Math.min(
-          groundFrameIndex(entry.patchTiles, entry.variants, tx, ty),
+          groundFrameIndex(
+            entry.patchTiles,
+            entry.variants,
+            tx,
+            ty,
+            floorArtSubSeed(GROUND_VARIANT_SALT),
+          ),
           entry.state.frameCount - 1,
         ),
       }),

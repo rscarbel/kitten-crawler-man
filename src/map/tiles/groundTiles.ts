@@ -72,6 +72,7 @@ import {
   groundVariantCount,
 } from '../ground/groundFrames';
 import { positiveMod } from '../../utils';
+import { floorArtSubSeed, GROUND_TONE_SALT, GROUND_VARIANT_SALT } from '../ground/floorArtSeed';
 
 export interface ResolvedMaterial {
   readonly def: SpriteDef;
@@ -229,7 +230,13 @@ function resolveMaterial(
   const state = def.states.get(material);
   if (state === undefined) return undefined;
   const patchTiles = state.patchTiles ?? 1;
-  const frame = groundFrameIndex(patchTiles, groundVariantCount(state), tx, ty);
+  const frame = groundFrameIndex(
+    patchTiles,
+    groundVariantCount(state),
+    tx,
+    ty,
+    floorArtSubSeed(GROUND_VARIANT_SALT),
+  );
   // Every material ships a whole number of patches today, but a row with fewer
   // frames than one patch would send the phase term past the row's last frame
   // and blit a slice of the next material — or of nothing. Clamping keeps a
@@ -514,7 +521,7 @@ function layerCoverage(
  * corner they compute different bits for it and read different frames.
  *
  * The mismatch is bounded rather than absent. The mask field is bilinear in the
- * four corner values (`scripts/tilegen/masks.ts`), so along the shared edge the
+ * four corner values (`src/map/tilegen/masks.ts`), so along the shared edge the
  * two fields differ by at most a quarter at the tile corner and decay to nothing
  * half a tile out — about half a cell's coverage of the harder material on one
  * side where the other draws none. Two places produce it: a dungeon doorway,
@@ -1041,10 +1048,44 @@ interface ToneField {
   readonly seed: number;
 }
 
-const TONE_FIELDS: ReadonlyArray<ToneField> = [
+/**
+ * The reviewed pair, at the floor art seed of zero. A floor's own seed is added
+ * to each, which is the sanctioned axis for per-floor variation: the tone layer
+ * is world-space and lives outside the tile, so moving it changes the broad
+ * light and shade of a floor without touching any material's texture energy.
+ */
+const TONE_FIELD_BASES: ReadonlyArray<ToneField> = [
   { periodTiles: 32, seed: 0x2f6e2b1 },
   { periodTiles: 27, seed: 0x9c1b3a7 },
 ];
+
+/** Sentinel no sub-seed can take, so the first call always builds. */
+const TONE_SEED_UNSET = -1;
+let toneFieldSeedTerm = TONE_SEED_UNSET;
+let toneFieldsForSeed: ReadonlyArray<ToneField> = TONE_FIELD_BASES;
+
+/**
+ * The two brightness fields for the floor now being drawn.
+ *
+ * Rebuilding on a seed change also drops the surfaces built under the old one:
+ * they are keyed by seed, so nothing would ever look at them again, and a field
+ * is megabytes rather than kilobytes.
+ */
+function toneFields(): ReadonlyArray<ToneField> {
+  const term = floorArtSubSeed(GROUND_TONE_SALT);
+  if (term === toneFieldSeedTerm) return toneFieldsForSeed;
+  toneFieldSeedTerm = term;
+  toneFieldsForSeed = TONE_FIELD_BASES.map((field) => ({
+    periodTiles: field.periodTiles,
+    seed: (field.seed + term) >>> 0,
+  }));
+  for (const surface of noiseFields.values()) {
+    surface.width = 0;
+    surface.height = 0;
+  }
+  noiseFields.clear();
+  return toneFieldsForSeed;
+}
 
 /** One sample per tile, plus a one-sample margin so the period wraps smoothly. */
 const NOISE_MARGIN_SAMPLES = 1;
@@ -1207,7 +1248,7 @@ function applyWorldNoise(
   ty: number,
 ): void {
   const cell = Math.max(1, Math.round(ts));
-  for (const field of TONE_FIELDS) {
+  for (const field of toneFields()) {
     const surface = noiseField(field, cell);
     const period = field.periodTiles * cell;
     const srcX = positiveMod(tx * cell, period);

@@ -1,6 +1,5 @@
 {
   "tree_oak_a": {
-    "path": "environment/trees/tree_oak_a.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -39,7 +38,6 @@
     "tileTypeId": 13
   },
   "tree_oak_b": {
-    "path": "environment/trees/tree_oak_b.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -77,7 +75,6 @@
     }
   },
   "tree_oak_c": {
-    "path": "environment/trees/tree_oak_c.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -115,7 +112,6 @@
     }
   },
   "tree_oak_d": {
-    "path": "environment/trees/tree_oak_d.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -153,7 +149,6 @@
     }
   },
   "tree_birch_a": {
-    "path": "environment/trees/tree_birch_a.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -191,7 +186,6 @@
     }
   },
   "tree_birch_b": {
-    "path": "environment/trees/tree_birch_b.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -229,7 +223,6 @@
     }
   },
   "tree_birch_c": {
-    "path": "environment/trees/tree_birch_c.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -267,7 +260,6 @@
     }
   },
   "tree_birch_d": {
-    "path": "environment/trees/tree_birch_d.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -305,7 +297,6 @@
     }
   },
   "tree_pine_a": {
-    "path": "environment/trees/tree_pine_a.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -343,7 +334,6 @@
     }
   },
   "tree_pine_b": {
-    "path": "environment/trees/tree_pine_b.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -381,7 +371,6 @@
     }
   },
   "tree_pine_c": {
-    "path": "environment/trees/tree_pine_c.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -419,7 +408,6 @@
     }
   },
   "tree_pine_d": {
-    "path": "environment/trees/tree_pine_d.png",
     "frameWidth": 96,
     "frameHeight": 128,
     "tileX": 32,
@@ -457,7 +445,6 @@
     }
   },
   "tree_remains": {
-    "path": "environment/trees/tree_remains.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 16,

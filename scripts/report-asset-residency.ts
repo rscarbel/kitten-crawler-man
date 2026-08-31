@@ -28,6 +28,7 @@ const IHDR_HEIGHT_OFFSET = 4;
 const GROUP_COLUMN = 24;
 const SHEETS_COLUMN = 4;
 const DISK_COLUMN = 9;
+const PAINTED_COLUMN = 7;
 const DECODED_COLUMN = 10;
 
 interface SheetSize {
@@ -50,8 +51,54 @@ function manifestFiles(dir: string): string[] {
   return found;
 }
 
-function manifestEntries(): Map<string, string> {
-  const paths = new Map<string, string>();
+/**
+ * A manifest entry with no `path` is painted at runtime rather than fetched (the
+ * generated ground tilesets). It costs nothing on disk and it is only resident
+ * while the floor that painted it is, but the pixels are as real as any sheet's
+ * — so its decoded size is computed from the geometry the manifest declares
+ * rather than read out of a PNG header.
+ */
+interface ManifestSheet {
+  readonly path: string | null;
+  readonly decoded: number;
+}
+
+function numberField(fields: Record<string, unknown>, name: string): number {
+  const value = fields[name];
+  return typeof value === 'number' ? value : 0;
+}
+
+function paintedDecodedBytes(fields: Record<string, unknown>): number {
+  const states = fields.states;
+  if (typeof states !== 'object' || states === null) return 0;
+  let columns = 0;
+  let rows = 0;
+  // Read the way `sheetSizePx` reads a sheet rather than by counting states: a
+  // layout that puts an idle frame beside the animation row it underlies
+  // occupies one row, not two, and reporting it as two would overstate the
+  // biggest number in this table by nearly half. Restated here rather than
+  // imported because this walks raw JSON off disk, which is the point — it
+  // reports what shipped, not what the loader believes.
+  for (const state of Object.values({ ...states })) {
+    if (typeof state !== 'object' || state === null) continue;
+    const declared = { ...state };
+    columns = Math.max(
+      columns,
+      numberField(declared, 'colOffset') + numberField(declared, 'frameCount'),
+    );
+    rows = Math.max(rows, numberField(declared, 'row') + 1);
+  }
+  return (
+    columns *
+    numberField(fields, 'frameWidth') *
+    rows *
+    numberField(fields, 'frameHeight') *
+    BYTES_PER_PIXEL
+  );
+}
+
+function manifestEntries(): Map<string, ManifestSheet> {
+  const sheets = new Map<string, ManifestSheet>();
   for (const full of manifestFiles(resolve(IMAGE_ROOT))) {
     const parsed: unknown = JSON.parse(readFileSync(full, 'utf8'));
     if (typeof parsed !== 'object' || parsed === null) continue;
@@ -60,10 +107,15 @@ function manifestEntries(): Map<string, string> {
       if (typeof entry !== 'object' || entry === null) continue;
       const fields: Record<string, unknown> = { ...entry };
       const path = fields.path;
-      if (typeof path === 'string') paths.set(key, path);
+      sheets.set(
+        key,
+        typeof path === 'string'
+          ? { path, decoded: 0 }
+          : { path: null, decoded: paintedDecodedBytes(fields) },
+      );
     }
   }
-  return paths;
+  return sheets;
 }
 
 function sizeOf(relativePath: string): SheetSize | null {
@@ -79,7 +131,7 @@ function megabytes(bytes: number): string {
   return `${(bytes / BYTES_PER_MEGABYTE).toFixed(1)} MB`;
 }
 
-const paths = manifestEntries();
+const sheets = manifestEntries();
 const missing: string[] = [];
 let totalDisk = 0;
 let totalDecoded = 0;
@@ -88,31 +140,38 @@ const groupNames: AssetGroup[] = Object.keys(ASSET_GROUPS).filter(
   (name): name is AssetGroup => name in ASSET_GROUPS,
 );
 
-console.log('group                    sheets      disk     decoded');
+console.log('group                    sheets      disk     decoded   painted');
 for (const group of groupNames) {
   let disk = 0;
   let decoded = 0;
-  let sheets = 0;
+  let sheetCount = 0;
+  let paintedCount = 0;
   for (const key of ASSET_GROUPS[group]) {
-    const path = paths.get(key);
-    if (path === undefined) {
+    const sheet = sheets.get(key);
+    if (sheet === undefined) {
       missing.push(`${group}: "${key}" is in no manifest`);
       continue;
     }
-    const size = sizeOf(path);
+    if (sheet.path === null) {
+      decoded += sheet.decoded;
+      paintedCount++;
+      continue;
+    }
+    const size = sizeOf(sheet.path);
     if (size === null) {
-      missing.push(`${group}: "${key}" points at a missing file (${path})`);
+      missing.push(`${group}: "${key}" points at a missing file (${sheet.path})`);
       continue;
     }
     disk += size.disk;
     decoded += size.decoded;
-    sheets++;
+    sheetCount++;
   }
   totalDisk += disk;
   totalDecoded += decoded;
   console.log(
-    `${group.padEnd(GROUP_COLUMN)} ${String(sheets).padStart(SHEETS_COLUMN)}  ` +
-      `${megabytes(disk).padStart(DISK_COLUMN)}  ${megabytes(decoded).padStart(DECODED_COLUMN)}`,
+    `${group.padEnd(GROUP_COLUMN)} ${String(sheetCount).padStart(SHEETS_COLUMN)}  ` +
+      `${megabytes(disk).padStart(DISK_COLUMN)}  ${megabytes(decoded).padStart(DECODED_COLUMN)}` +
+      `  ${String(paintedCount).padStart(PAINTED_COLUMN)}`,
   );
 }
 

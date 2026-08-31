@@ -10,12 +10,14 @@
  *     plus the same sheets blitted at the in-game tile size, where the
  *     silhouette is all that survives.
  *
- * Regenerate the sheets with `npm run gen:camps`.
+ * The sheets are painted here rather than loaded: the shipped game paints them
+ * too, so a review that read a file could be looking at an older bake.
  */
 
-import { createCanvas, loadImage, type Image } from 'canvas';
-import { resolve } from 'node:path';
-import manifest from '../src/images/environment/camp/manifest.json';
+import { createCanvas, type Canvas } from 'canvas';
+import { campSheetPlans } from '../src/sprites/sheets/campSheets.js';
+import { bakePropSheet } from './propSheetBake.js';
+import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
@@ -35,7 +37,6 @@ const LABEL_FONT = '13px sans-serif';
 const STRIP_TILES_PER_PROP = 4;
 
 interface SheetGeometry {
-  readonly path: string;
   readonly frameWidth: number;
   readonly frameHeight: number;
   readonly tileX: number;
@@ -58,11 +59,14 @@ function stringArg(name: string, fallback: string): string {
 const scale = intArg('scale', DEFAULT_SCALE);
 const outPath = stringArg('out', DEFAULT_OUT);
 
-const sheets: ReadonlyArray<readonly [string, SheetGeometry]> = Object.entries(manifest);
-const images = new Map<string, Image>();
-for (const [key, geometry] of sheets) {
-  images.set(key, await loadImage(resolve('src/images', geometry.path)));
-}
+await loadGameSpritesInNode();
+
+const baked = campSheetPlans(0).map((plan) => bakePropSheet(plan));
+const sheets: ReadonlyArray<readonly [string, SheetGeometry]> = baked.map((sheet) => [
+  sheet.plan.key,
+  sheet.plan,
+]);
+const images = new Map<string, Canvas>(baked.map((sheet) => [sheet.plan.key, sheet.canvas]));
 
 const cellWidth = Math.max(...sheets.map(([, g]) => g.frameWidth)) * scale + PADDING * 2;
 const cellHeight = Math.max(...sheets.map(([, g]) => g.frameHeight)) * scale + PADDING * 2;
@@ -77,7 +81,7 @@ ctx.imageSmoothingEnabled = false;
 
 sheets.forEach(([key, geometry], index) => {
   const image = images.get(key);
-  if (image === undefined) throw new Error(`sheet '${key}' failed to load`);
+  if (image === undefined) throw new Error(`sheet '${key}' was not painted`);
   const cellX = index * cellWidth;
 
   ctx.fillStyle = LABEL_COLOR;
@@ -129,7 +133,7 @@ ctx.fillRect(0, stripGroundTop, canvas.width, IN_GAME_TILE * 3);
 
 sheets.forEach(([key, geometry], index) => {
   const image = images.get(key);
-  if (image === undefined) throw new Error(`sheet '${key}' failed to load`);
+  if (image === undefined) throw new Error(`sheet '${key}' was not painted`);
   // Each rock's anchor tile is placed on the same ground line, so the family can
   // be compared for how high it stands and how deep it sits.
   const anchorLeft = index * STRIP_TILES_PER_PROP * IN_GAME_TILE + IN_GAME_TILE;

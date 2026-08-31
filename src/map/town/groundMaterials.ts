@@ -76,13 +76,13 @@ const GROUND_BLEND_ORDER = {
 export const GROUND_FALLBACK_COLOR = {
   water: '#1e434b',
   highland: '#7f7b49',
-  scree: '#5b5854',
+  scree: '#696661',
   grass: '#667435',
   verge: '#6f773a',
   dirt: '#6b543b',
   gravel: '#575049',
-  lane: '#826e52',
-  cobble: '#746b61',
+  lane: '#736149',
+  cobble: '#5f5850',
   plaza: '#8f8679',
 } as const satisfies Record<GroundMaterial, string>;
 

@@ -10,7 +10,7 @@
  * from behind.
  *
  * Light comes from up-left and shadow falls down-right, matching the direction
- * the generated ground is lit from (`LIGHT_DIR` in `scripts/tilegen/materials.ts`).
+ * the generated ground is lit from (`LIGHT_DIR` in `src/map/tilegen/materials.ts`).
  *
  * Every offset is a fraction of the tile size, so a prop is correct at the 32 px
  * the game draws at and at the sizes the review harnesses use.

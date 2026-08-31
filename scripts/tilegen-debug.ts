@@ -15,16 +15,16 @@
  * half a tile off where the game puts them. Use `?tiles` to judge placement.
  */
 import { createCanvas, type CanvasRenderingContext2D as NodeCtx } from 'canvas';
-import { Surface, TILE_PX } from './tilegen/raster.js';
-import { MATERIALS, getMaterial, paintPatch } from './tilegen/materials.js';
+import { Surface, TILE_PX } from '../src/map/tilegen/raster.js';
+import { MATERIALS, getMaterial, paintPatch } from '../src/map/tilegen/materials.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import { slicePatch } from './tilegen/sheet.js';
+import { slicePatch } from '../src/map/tilegen/patchSlice.js';
 import {
   buildCornerMask,
   CORNER_MASK_COUNT,
   CORNER_ALL,
   MASK_PATCH_TILES,
-} from './tilegen/masks.js';
+} from '../src/map/tilegen/masks.js';
 
 const REPEAT = 4;
 const LABEL_HEIGHT = 18;

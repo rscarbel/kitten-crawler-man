@@ -136,7 +136,7 @@ const MAX_SCALE = 10;
 const LABEL_HEIGHT = 22;
 const PADDING = 8;
 const BACKDROP = '#6b6660';
-/** The real floor mids a goblin stands on, from `scripts/tilegen/palette.ts`. */
+/** The real floor mids a goblin stands on, from `src/map/tilegen/palette.ts`. */
 const FLOOR_SWATCHES: readonly string[] = ['#8c8170', '#b09668', '#888e96', '#637032'];
 const GRID_LINE = 'rgba(255,255,255,0.14)';
 const TILE_GUIDE = 'rgba(120,220,255,0.4)';

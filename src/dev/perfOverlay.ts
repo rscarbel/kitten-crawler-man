@@ -12,6 +12,11 @@
 import { PERF_TIMERS, perfMonitor } from '../core/PerfMonitor';
 import { viewportWidth } from '../core/Viewport';
 import { BYTES_PER_MEGABYTE, getFigureCacheStats } from '../sprites/figure/figureCacheStats';
+import {
+  environmentArtBytes,
+  environmentArtSheetCount,
+  environmentPaintDepth,
+} from '../map/environmentArtCache';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 
@@ -76,6 +81,28 @@ function figureCacheRows(neutral: string): PerfRow[] {
   ];
 }
 
+/**
+ * The runtime-painted environment sheets, or no rows at all before any have been
+ * asked for — a scene drawn entirely from baked art has nothing to report here.
+ */
+function environmentArtRows(neutral: string): PerfRow[] {
+  const sheets = environmentArtSheetCount();
+  const pending = environmentPaintDepth();
+  if (sheets === 0 && pending === 0) return [];
+  return [
+    {
+      label: 'env MB/sheets',
+      value: `${(environmentArtBytes() / BYTES_PER_MEGABYTE).toFixed(MEGABYTE_DECIMALS)}/${sheets}`,
+      color: neutral,
+    },
+    {
+      label: 'env owed',
+      value: pending.toString(),
+      color: pending > 0 ? TEXT_PRESETS.value.color : neutral,
+    },
+  ];
+}
+
 function buildRows(): PerfRow[] {
   const fps = perfMonitor.fps;
   const neutral = TEXT_PRESETS.label.color;
@@ -100,6 +127,7 @@ function buildRows(): PerfRow[] {
       color: neutral,
     },
     ...figureCacheRows(neutral),
+    ...environmentArtRows(neutral),
   ];
 }
 

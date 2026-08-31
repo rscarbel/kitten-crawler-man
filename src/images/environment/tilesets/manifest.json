@@ -34,7 +34,6 @@
     }
   },
   "ground_overworld": {
-    "path": "environment/tilesets/ground_overworld.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 0,
@@ -104,7 +103,6 @@
     }
   },
   "ground_dungeon": {
-    "path": "environment/tilesets/ground_dungeon.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 0,
@@ -132,7 +130,6 @@
     }
   },
   "ground_masks": {
-    "path": "environment/tilesets/ground_masks.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 0,
@@ -148,7 +145,6 @@
     }
   },
   "ground_floor1": {
-    "path": "environment/tilesets/ground_floor1.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 0,
@@ -188,7 +184,6 @@
     }
   },
   "ground_floor2": {
-    "path": "environment/tilesets/ground_floor2.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 0,
@@ -228,7 +223,6 @@
     }
   },
   "ground_interior": {
-    "path": "environment/tilesets/ground_interior.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 0,

@@ -1,4 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
+import type { CanvasSurface } from '../core/canvasSurface';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { LootDrop } from '../creatures/Mob';
 import type { Mob } from '../creatures/Mob';
@@ -107,7 +108,7 @@ const LOCK_SRC_X_PHASE_5 = 400;
  * its group. Undefined until `core` (or a later group) has loaded it;
  * callers must skip drawing rather than pass this to `drawImage`.
  */
-export function getChestImage(): HTMLImageElement | HTMLCanvasElement | undefined {
+export function getChestImage(): HTMLImageElement | CanvasSurface | undefined {
   return getSpriteDefByKey('treasure_chests')?.img;
 }
 

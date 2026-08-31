@@ -104,8 +104,17 @@ const viewTilesW = intArg('w', plan.interior.w);
 const viewTilesH = intArg('h', plan.interior.h);
 const scale = intArg('scale', DEFAULT_SCALE);
 const outPath = stringArg('out', DEFAULT_OUT);
+/** Which of the verified looks to paint the town in; 0 is the reviewed art. */
+const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
+const artSeed = FLOOR_ART_SEEDS[Math.abs(intArg('art-seed', 0)) % FLOOR_ART_SEEDS.length];
 
 await loadSprites('src/images/');
+// The ground tilesets and every prop on the street ship as painters rather than
+// as files, so a harness that only loaded sheets would draw the whole town in
+// fallback colours with nothing standing on it. Painted outright: there is no
+// render loop here to pace the queue.
+const { paintEnvironmentArtInNode } = await import('./nodeCanvasGlobals.js');
+paintEnvironmentArtInNode(artSeed);
 
 const gameMap = new GameMap({ mapSize: MAP_SIZE, tileHeight: TILE_SIZE, mapType: 'overworld' });
 

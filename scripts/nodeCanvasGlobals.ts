@@ -18,6 +18,10 @@
 import { Image, createCanvas } from 'canvas';
 
 import { loadSprites } from '../src/core/SpriteLoader.js';
+import { GROUND_SHEET_KEYS, requestGroundSheets } from '../src/map/ground/runtimeGroundSheets.js';
+import { paintEnvironmentArtNow } from '../src/map/environmentArtCache.js';
+import { requestEnvironmentSheetsForGroups } from '../src/sprites/sheets/environmentSheets.js';
+import { DEFAULT_FLOOR_ART_SEED, setFloorArtSeed } from '../src/map/ground/floorArtSeed.js';
 
 /** Where `SpriteLoader` resolves manifest paths against, from the repo root. */
 const IMAGE_BASE = 'src/images/';
@@ -43,9 +47,32 @@ const BAKE_DEVICE_PIXEL_RATIO = 2;
  * Installs the shims and loads every sheet in the manifest, so painters that
  * blit existing sprites bake the real art rather than nothing.
  */
-export async function loadGameSpritesInNode(): Promise<void> {
+export async function loadGameSpritesInNode(artSeed = DEFAULT_FLOOR_ART_SEED): Promise<void> {
   installCanvasGlobals();
   await loadSprites(IMAGE_BASE);
+  paintEnvironmentArtInNode(artSeed);
+}
+
+/**
+ * Paints every sheet the shipped game paints for itself: the generated ground
+ * tilesets, the town's street furniture and signage, and the wilderness.
+ *
+ * `loadSprites` cannot fetch any of them — their manifest entries declare no
+ * file — so a harness that only loaded sheets would render a floor in each
+ * material's fallback colour with no props on it at all. Painted outright rather
+ * than through the frame-paced queue: a harness has no render loop to tick it
+ * and no frame time to protect.
+ */
+export function paintEnvironmentArtInNode(artSeed = DEFAULT_FLOOR_ART_SEED): void {
+  installCanvasGlobals();
+  setFloorArtSeed(artSeed);
+  requestGroundSheets(GROUND_SHEET_KEYS);
+  // `core` as well as the town's own, and the order matters: the market stall's
+  // counter stacks the game's crate and barrel sheets, and those are painted now
+  // rather than loaded. A harness that asked only for the town would bake the
+  // stall with an empty counter and never say why.
+  requestEnvironmentSheetsForGroups(['core', 'town', 'overworld']);
+  paintEnvironmentArtNow();
 }
 
 /**

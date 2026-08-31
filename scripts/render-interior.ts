@@ -15,6 +15,7 @@
 import { createCanvas, type Canvas } from 'canvas';
 
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
+import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
@@ -62,9 +63,12 @@ const buildingName = stringArg('name', '');
 const towerFloor = intArg('floor', DEFAULT_TOWER_FLOOR);
 const scale = intArg('scale', DEFAULT_SCALE);
 const outPath = stringArg('out', DEFAULT_OUT);
+/** Which of the verified looks to paint the room in; 0 is the reviewed art. */
+const artSeedIndex = intArg('art-seed', 0);
+const artSeed = FLOOR_ART_SEEDS[Math.abs(artSeedIndex) % FLOOR_ART_SEEDS.length];
 const hasSafeRoom = flagArg('safe-room');
 
-await loadGameSpritesInNode();
+await loadGameSpritesInNode(artSeed);
 
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
 map.generateInterior(kind, towerFloor, buildingName, hasSafeRoom);
