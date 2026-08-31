@@ -89,7 +89,7 @@ export function drawArrowAbovePlayer(
  * @param options.outlineColor - Arrow stroke color (e.g. '#000')
  * @param options.avoidRect - Screen rect (e.g. the HUD panel) the arrow must not overlap
  */
-export function drawBearingArrowAbovePlayer(
+function drawBearingArrowAbovePlayer(
   ctx: CanvasRenderingContext2D,
   playerWorldX: number,
   playerWorldY: number,

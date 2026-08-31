@@ -1,5 +1,5 @@
 import type { GameMap } from '../map/GameMap';
-import { TILE_SIZE } from '../core/constants';
+import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import type { LevelDef } from '../levels/types';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { getLevelDef } from '../levels';
@@ -129,19 +129,33 @@ export const WAYFINDER_MOTE_MAX_ALIVE = 2;
 /** Frames between spawns while a pulse is on screen — with the life below, a pulse sheds two motes. */
 export const WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES = 45;
 /**
- * How long one mote drifts before it fades out (3 s at 60 fps). Deliberately
+ * What one release costs the pulse's frame budget: the frame the mote leaves on
+ * plus the cooldown frames it then spends counting down. Named because how many
+ * motes a pulse can shed is `(VISIBLE - 1) / this + 1`, and the off-by-one is
+ * the difference between a gate that predicts the loop and one that is a frame
+ * out from it.
+ */
+export const WAYFINDER_MOTE_RELEASE_COST_FRAMES = WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES + 1;
+/**
+ * How long one mote drifts before it fades out (2 s at 60 fps). Deliberately
  * longer than a pulse: the mote is the message, so it has to outlive the window
  * that released it and still be travelling when the player looks over at it.
  */
-export const WAYFINDER_MOTE_LIFE_FRAMES = 180;
+export const WAYFINDER_MOTE_LIFE_FRAMES = 120;
 /** Frames a mote spends fading in at the start of its life, and fading out again at the end. */
 const WAYFINDER_MOTE_FADE_FRAMES = 40;
 /**
- * Faster than the ambient draft, because this mote has one life to say which
- * way it is going rather than an endless stream to say it with — but still well
- * under a walking crawler, so it reads as something the air is doing.
+ * A mote has to outrun the crawler it is talking to.
+ *
+ * The mote lives in world pixels but is read on a screen the player's own
+ * movement is dragging: anything slower than a walk drifts *backwards* across
+ * the view of a crawler heading the same way, which is the exact opposite of
+ * the cue. The ambient draft gets away with being much slower because it is a
+ * wide converging field with a visible sink in the middle; two grains have no
+ * such context and only their own motion to say anything with.
  */
-const WAYFINDER_MOTE_SPEED = 1;
+const WAYFINDER_MOTE_SPEED_OVER_WALK = 1.2;
+export const WAYFINDER_MOTE_SPEED = PLAYER_SPEED * WAYFINDER_MOTE_SPEED_OVER_WALK;
 const WAYFINDER_MOTE_TRAVEL_PX = WAYFINDER_MOTE_SPEED * WAYFINDER_MOTE_LIFE_FRAMES;
 /**
  * How far back along the bearing a mote starts, as a fraction of the ground it
@@ -189,8 +203,8 @@ function draftStrengthAtPlayerDistance(distPx: number): number {
  *
  * Rounding to the sector centre — rather than to its near edge — is what makes
  * successive pulses agree with each other: a player drifting within one sector
- * sees the same arrow every time, which is the difference between a direction
- * and a live tracker.
+ * is pointed the same way every time, which is the difference between a
+ * direction and a live tracker.
  */
 function quantizeBearingToCompass(angleRadians: number): number {
   return (
@@ -377,8 +391,8 @@ export class StairwellSystem implements GameSystem {
    */
   private wayfinderMotes: WayfinderMote[] = [];
   /**
-   * Counts down between mote releases. Starts at zero so the first frame of a
-   * pulse sheds a mote rather than opening with a pause the player reads as
+   * Counts down between mote releases. Zeroed whenever no pulse is on, so every
+   * pulse opens by shedding a mote rather than by a pause the player reads as
    * nothing happening.
    */
   private wayfinderSpawnCooldownFrames = 0;
@@ -451,6 +465,7 @@ export class StairwellSystem implements GameSystem {
   restoreCheckpoint(snapshot: StairwellCheckpoint): void {
     this.forceDraftReselect();
     this.wayfinderMotes.length = 0;
+    this.wayfinderSpawnCooldownFrames = 0;
     this.dismissed = snapshot.dismissed;
     this.onStairwell = snapshot.onStairwell;
     this._menuOpen = snapshot.menuOpen;
@@ -485,13 +500,22 @@ export class StairwellSystem implements GameSystem {
     const frames = this.wayfinderFrames;
     if (frames === null || this.wayfinderRetired) return;
     this.wayfinderFrames = frames + 1;
-    if (!this.wayfinderPulseVisible()) return;
+    if (!this.wayfinderPulseVisible()) {
+      // Each pulse gets the cooldown back at zero, so it opens by shedding a
+      // mote. Left to carry across the silence between pulses the phase drifts,
+      // and pulses eventually open with half their window already spent — or
+      // shed a single mote, which is a coincidence rather than a bearing.
+      this.wayfinderSpawnCooldownFrames = 0;
+      return;
+    }
 
-    if (!this.wayfinderAnnounced) {
+    // Announced off a mote actually leaving rather than off the pulse window,
+    // because the line describes something the player can look at, and a floor
+    // with no reachable stairwell releases nothing at all.
+    if (this.releaseWayfinderMote(active) && !this.wayfinderAnnounced) {
       this.wayfinderAnnounced = true;
       this.wayfinderAnnouncePending = true;
     }
-    this.releaseWayfinderMote(active);
   }
 
   private stepWayfinderMotes(): void {
@@ -512,16 +536,18 @@ export class StairwellSystem implements GameSystem {
    * and there is room for another. Upwind rather than at their feet: the mote
    * has to arrive from somewhere and leave somewhere, and only the leaving half
    * carries the bearing.
+   *
+   * @returns whether a mote actually left this frame.
    */
-  private releaseWayfinderMote(active: { x: number; y: number }): void {
+  private releaseWayfinderMote(active: { x: number; y: number }): boolean {
     if (this.wayfinderSpawnCooldownFrames > 0) {
       this.wayfinderSpawnCooldownFrames--;
-      return;
+      return false;
     }
-    if (this.wayfinderMotes.length >= WAYFINDER_MOTE_MAX_ALIVE) return;
+    if (this.wayfinderMotes.length >= WAYFINDER_MOTE_MAX_ALIVE) return false;
 
     const bearing = this.wayfinderBearing(active);
-    if (bearing === null) return;
+    if (bearing === null) return false;
 
     const dirX = Math.cos(bearing);
     const dirY = Math.sin(bearing);
@@ -537,6 +563,7 @@ export class StairwellSystem implements GameSystem {
       ageFrames: 0,
     });
     this.wayfinderSpawnCooldownFrames = WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES;
+    return true;
   }
 
   private wayfinderPulseVisible(): boolean {

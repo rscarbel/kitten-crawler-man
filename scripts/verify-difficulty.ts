@@ -51,6 +51,8 @@ import {
   WAYFINDER_PULSE_VISIBLE_FRAMES,
   WAYFINDER_MOTE_MAX_ALIVE,
   WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES,
+  WAYFINDER_MOTE_RELEASE_COST_FRAMES,
+  WAYFINDER_MOTE_SPEED,
   WAYFINDER_MOTE_LIFE_FRAMES,
 } from '../src/systems/StairwellSystem';
 import { Goblin, GOBLIN_MAX_SPEED } from '../src/creatures/Goblin';
@@ -1059,11 +1061,29 @@ section('wayfinder');
     'a Wayfinder mote is still adrift when the next one is released',
   );
   // One mote per pulse is a coincidence a player never reads as a bearing, so
-  // the window has to be wide enough for the cooldown to come round again.
+  // the window has to have room for a second release — and the cap has to allow
+  // it, or the cooldown would come round to a spawn that is refused.
+  const releasesPerPulse =
+    Math.floor((WAYFINDER_PULSE_VISIBLE_FRAMES - 1) / WAYFINDER_MOTE_RELEASE_COST_FRAMES) + 1;
+  check(releasesPerPulse > 1, 'one pulse releases more than a single mote');
+  // Measured against the unclamped release count, so a cap set below what the
+  // window pays for is caught here rather than quietly throttling every pulse.
   check(
-    WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES < WAYFINDER_PULSE_VISIBLE_FRAMES &&
-      WAYFINDER_MOTE_MAX_ALIVE > 1,
-    'one pulse can release more than a single mote',
+    releasesPerPulse <= WAYFINDER_MOTE_MAX_ALIVE,
+    'the concurrent mote cap never throttles a pulse it was not meant to',
+  );
+  /** A hint of two grains, not a plume: more marks the player rather than the direction. */
+  const HINT_MAX_MOTES_PER_PULSE = 2;
+  check(releasesPerPulse <= HINT_MAX_MOTES_PER_PULSE, 'a pulse stays a hint rather than a stream');
+  /** Past this multiple of a walk the mote stops reading as something the air is doing. */
+  const MAX_MOTE_WALK_ADVANTAGE = 2;
+  // Dust that outruns a sprinting crawler stops reading as dust; dust slower
+  // than a walking one drifts backwards across their screen and points the
+  // wrong way. See WAYFINDER_MOTE_SPEED.
+  check(
+    WAYFINDER_MOTE_SPEED > PLAYER_SPEED &&
+      WAYFINDER_MOTE_SPEED < PLAYER_SPEED * MAX_MOTE_WALK_ADVANTAGE,
+    'a fail-safe mote outpaces a walking crawler without outrunning one',
   );
   // Motes that outlive the gap between pulses would accumulate into the steady
   // stream that marks a stairwell, rather than the passing hint this is.
