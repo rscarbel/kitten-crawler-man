@@ -43,7 +43,7 @@ import {
   type JournalProgress,
 } from '../core/JournalProgress';
 import { TownGuideSystem } from '../systems/TownGuideSystem';
-import { drawArrowAbovePlayer, drawBearingArrowAbovePlayer } from '../ui/WorldArrow';
+import { drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
 import {
   availableTargets,
@@ -656,8 +656,6 @@ const PINNED_ARROW_SUPPRESS_TILES = 4;
 const PINNED_ARROW_COLOR = '#facc15';
 /** Gold, as the `!reveal` cheat arrow has always been. */
 const STAIRWELL_ARROW_COLOR = '#facc15';
-/** The stairwell's own violet, so the fail-safe reads as the hole's draft rather than as a quest marker. */
-const WAYFINDER_ARROW_COLOR = '#c084fc';
 
 function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDrop } {
   const humanItems: LootDrop['items'] = [];
@@ -1985,7 +1983,7 @@ export class DungeonScene extends GameplayScene {
   private static readonly STAIRWELL_HINT_ANNOUNCEMENT =
     'The floor shudders. Something has opened below — your map remembers where.';
 
-  /** Fires once, the first time the Wayfinder fail-safe shows its arrow. */
+  /** Fires once, the first time the Wayfinder fail-safe sheds a mote. */
   private static readonly WAYFINDER_ANNOUNCEMENT =
     'Your whiskers catch a draft… something below is breathing.';
 
@@ -2650,31 +2648,6 @@ export class DungeonScene extends GameplayScene {
       camX,
       camY,
       STAIRWELL_ARROW_COLOR,
-      {
-        avoidRect: this._hudRect,
-      },
-    );
-  }
-
-  /**
-   * The Wayfinder fail-safe: an intermittent, compass-rounded bearing for a
-   * crawler who has hunted well past the point where the breadcrumbs were
-   * supposed to work. Deliberately a coarser thing than the cheat above — it
-   * narrows the search to an eighth of the map and then goes away again.
-   */
-  private renderWayfinderArrow(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const player = this.active();
-    const bearing = this.stairwell.wayfinderBearing(player);
-    if (bearing === null) return;
-
-    drawBearingArrowAbovePlayer(
-      ctx,
-      player.x,
-      player.y,
-      bearing,
-      camX,
-      camY,
-      WAYFINDER_ARROW_COLOR,
       {
         avoidRect: this._hudRect,
       },
@@ -4717,7 +4690,6 @@ export class DungeonScene extends GameplayScene {
         : this.miniMap.NORMAL_SIZE;
       renderKnockedOutUI(ctx, camX, camY, this.active(), this.inactive(), mmSize);
       this.renderStairwellRevealArrow(ctx, camX, camY);
-      this.renderWayfinderArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
       this.bounty?.renderArrow(ctx, this.active(), camX, camY, this._hudRect);
       this.renderAvailableQuestBeacons(ctx, camX, camY);

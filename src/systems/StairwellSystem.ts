@@ -119,6 +119,47 @@ export const WAYFINDER_PULSE_VISIBLE_FRAMES = 90;
 /** A nudge, not a route: the bearing is rounded to N/NE/E/SE/S/SW/W/NW. */
 const WAYFINDER_COMPASS_SECTORS = 8;
 const WAYFINDER_COMPASS_SECTOR_RADIANS = (Math.PI * 2) / WAYFINDER_COMPASS_SECTORS;
+/**
+ * How many of the fail-safe's motes may be adrift at once. The hint is the
+ * same dust the stairwell's own draft is made of, so it has to stay countable:
+ * a handful reads as a stream, and a stream near the player is a place, not a
+ * direction.
+ */
+export const WAYFINDER_MOTE_MAX_ALIVE = 2;
+/** Frames between spawns while a pulse is on screen — with the life below, a pulse sheds two motes. */
+export const WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES = 45;
+/**
+ * How long one mote drifts before it fades out (3 s at 60 fps). Deliberately
+ * longer than a pulse: the mote is the message, so it has to outlive the window
+ * that released it and still be travelling when the player looks over at it.
+ */
+export const WAYFINDER_MOTE_LIFE_FRAMES = 180;
+/** Frames a mote spends fading in at the start of its life, and fading out again at the end. */
+const WAYFINDER_MOTE_FADE_FRAMES = 40;
+/**
+ * Faster than the ambient draft, because this mote has one life to say which
+ * way it is going rather than an endless stream to say it with — but still well
+ * under a walking crawler, so it reads as something the air is doing.
+ */
+const WAYFINDER_MOTE_SPEED = 1;
+const WAYFINDER_MOTE_TRAVEL_PX = WAYFINDER_MOTE_SPEED * WAYFINDER_MOTE_LIFE_FRAMES;
+/**
+ * How far back along the bearing a mote starts, as a fraction of the ground it
+ * will cover. Half, so it passes the crawler around the middle of its life:
+ * spawning level with them would put the whole drift on one side of the screen
+ * and waste the half of the journey that best shows the direction.
+ */
+const WAYFINDER_MOTE_LEAD_FRACTION = 0.5;
+const WAYFINDER_MOTE_LEAD_PX = WAYFINDER_MOTE_TRAVEL_PX * WAYFINDER_MOTE_LEAD_FRACTION;
+/** Sideways scatter at spawn, so successive motes are not a dotted line drawn through the player. */
+const WAYFINDER_MOTE_LATERAL_SPREAD_TILES = 3;
+const WAYFINDER_MOTE_LATERAL_SPREAD_PX = WAYFINDER_MOTE_LATERAL_SPREAD_TILES * TILE_SIZE;
+/**
+ * The same ceiling the draft's own motes fade up to. Matching it is the whole
+ * point of the hint: a player who has learned to read the dust near a stairwell
+ * should not be able to tell that this one was sent on purpose.
+ */
+const WAYFINDER_MOTE_ALPHA_MAX = STAIRWELL_DRAFT_MOTE_ALPHA_MAX;
 
 const STAIRWELL_FOOTPRINT_HALF_PX = (TILE_SIZE * STAIRWELL_SCALE) / 2;
 
@@ -224,6 +265,21 @@ interface DraftMote {
   distToCenter: number;
 }
 
+/**
+ * One mote of the Wayfinder fail-safe: a single grain of the stairwell's dust,
+ * released near a lost crawler and drifting off along the bearing so they can
+ * read where it is going. Lives in world pixels, like the draft's own motes, so
+ * the camera moving does not move it.
+ */
+interface WayfinderMote {
+  x: number;
+  y: number;
+  dirX: number;
+  dirY: number;
+  radiusPx: number;
+  ageFrames: number;
+}
+
 /** One stairwell's active pool of draft motes, keyed by its footprint centre in world pixels. */
 interface DraftPool {
   centerX: number;
@@ -316,6 +372,17 @@ export class StairwellSystem implements GameSystem {
   private wayfinderRetired = false;
   private wayfinderAnnounced = false;
   /**
+   * Ambient VFX like the draft pools, and left out of the checkpoint for the
+   * same reason: a restore drops them, and the next pulse releases more.
+   */
+  private wayfinderMotes: WayfinderMote[] = [];
+  /**
+   * Counts down between mote releases. Starts at zero so the first frame of a
+   * pulse sheds a mote rather than opening with a pause the player reads as
+   * nothing happening.
+   */
+  private wayfinderSpawnCooldownFrames = 0;
+  /**
    * Raised the frame the first pulse becomes visible; the scene lowers it once
    * it has said the line. A drained flag rather than a callback because the
    * announcer belongs to the scene, and this is the same hand-off every other
@@ -370,8 +437,10 @@ export class StairwellSystem implements GameSystem {
    *
    * The Wayfinder rides along for the opposite reason: a death mid-hunt costs
    * the player time, so rewinding its clock would punish the death twice, and
-   * dropping the retired latch would put the arrow back on a floor whose
-   * stairwell has already been found.
+   * dropping the retired latch would put the hint back on a floor whose
+   * stairwell has already been found. Its motes are cleared rather than
+   * restored — they were released around a crawler who is no longer standing
+   * there, and the next pulse sheds more.
    *
    * The draft's pool selection is not snapshotted — it is ambient VFX — but it
    * is *invalidated* here: a restore puts the crawler back at a checkpoint that
@@ -381,6 +450,7 @@ export class StairwellSystem implements GameSystem {
    */
   restoreCheckpoint(snapshot: StairwellCheckpoint): void {
     this.forceDraftReselect();
+    this.wayfinderMotes.length = 0;
     this.dismissed = snapshot.dismissed;
     this.onStairwell = snapshot.onStairwell;
     this._menuOpen = snapshot.menuOpen;
@@ -406,14 +476,67 @@ export class StairwellSystem implements GameSystem {
     this.wayfinderAnnouncePending = false;
   }
 
-  private tickWayfinder(): void {
+  private tickWayfinder(active: { x: number; y: number }): void {
+    // Motes outlive the pulse that released them, so they are stepped whatever
+    // the clock is doing — including on a floor whose fail-safe has just retired
+    // because the player finally walked onto the stairs.
+    this.stepWayfinderMotes();
+
     const frames = this.wayfinderFrames;
     if (frames === null || this.wayfinderRetired) return;
     this.wayfinderFrames = frames + 1;
-    if (this.wayfinderPulseVisible() && !this.wayfinderAnnounced) {
+    if (!this.wayfinderPulseVisible()) return;
+
+    if (!this.wayfinderAnnounced) {
       this.wayfinderAnnounced = true;
       this.wayfinderAnnouncePending = true;
     }
+    this.releaseWayfinderMote(active);
+  }
+
+  private stepWayfinderMotes(): void {
+    for (let i = this.wayfinderMotes.length - 1; i >= 0; i--) {
+      const mote = this.wayfinderMotes[i];
+      mote.ageFrames++;
+      if (mote.ageFrames >= WAYFINDER_MOTE_LIFE_FRAMES) {
+        this.wayfinderMotes.splice(i, 1);
+        continue;
+      }
+      mote.x += mote.dirX * WAYFINDER_MOTE_SPEED;
+      mote.y += mote.dirY * WAYFINDER_MOTE_SPEED;
+    }
+  }
+
+  /**
+   * Releases one mote upwind of the crawler, if the spawn cooldown has run out
+   * and there is room for another. Upwind rather than at their feet: the mote
+   * has to arrive from somewhere and leave somewhere, and only the leaving half
+   * carries the bearing.
+   */
+  private releaseWayfinderMote(active: { x: number; y: number }): void {
+    if (this.wayfinderSpawnCooldownFrames > 0) {
+      this.wayfinderSpawnCooldownFrames--;
+      return;
+    }
+    if (this.wayfinderMotes.length >= WAYFINDER_MOTE_MAX_ALIVE) return;
+
+    const bearing = this.wayfinderBearing(active);
+    if (bearing === null) return;
+
+    const dirX = Math.cos(bearing);
+    const dirY = Math.sin(bearing);
+    const lateral = (Math.random() * 2 - 1) * WAYFINDER_MOTE_LATERAL_SPREAD_PX;
+    this.wayfinderMotes.push({
+      x: active.x + TILE_SIZE / 2 - dirX * WAYFINDER_MOTE_LEAD_PX - dirY * lateral,
+      y: active.y + TILE_SIZE / 2 - dirY * WAYFINDER_MOTE_LEAD_PX + dirX * lateral,
+      dirX,
+      dirY,
+      radiusPx:
+        STAIRWELL_DRAFT_MOTE_RADIUS_MIN_PX +
+        Math.random() * (STAIRWELL_DRAFT_MOTE_RADIUS_MAX_PX - STAIRWELL_DRAFT_MOTE_RADIUS_MIN_PX),
+      ageFrames: 0,
+    });
+    this.wayfinderSpawnCooldownFrames = WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES;
   }
 
   private wayfinderPulseVisible(): boolean {
@@ -425,11 +548,14 @@ export class StairwellSystem implements GameSystem {
   }
 
   /**
-   * The compass bearing to point the fail-safe arrow along this frame, or null
-   * whenever it should not be drawn at all.
+   * The compass bearing a fail-safe mote drifts along, or null when there is no
+   * stairwell to point at.
+   *
+   * Rounded to the compass rather than aimed exactly, so a crawler who watches
+   * several motes in a row is given one direction to walk instead of a live
+   * tracker that turns as they move.
    */
-  wayfinderBearing(from: { x: number; y: number }): number | null {
-    if (!this.wayfinderPulseVisible()) return null;
+  private wayfinderBearing(from: { x: number; y: number }): number | null {
     const target = this.nearestStairwellCenter(from);
     if (target === null) return null;
     const fromCenterX = from.x + TILE_SIZE / 2;
@@ -497,7 +623,7 @@ export class StairwellSystem implements GameSystem {
    */
   update(ctx: SystemContext): void {
     this.updateDraftMotes(ctx.active);
-    this.tickWayfinder();
+    this.tickWayfinder(ctx.active);
   }
 
   /** The stairwell's footprint centre in world pixels, matching where `renderStairwells` draws it. */
@@ -723,6 +849,7 @@ export class StairwellSystem implements GameSystem {
     }
 
     this.renderDraftMotes(ctx, camX, camY);
+    this.renderWayfinderMotes(ctx, camX, camY);
   }
 
   /**
@@ -779,6 +906,40 @@ export class StairwellSystem implements GameSystem {
         ctx.arc(screenX, screenY, mote.radiusPx, 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+  }
+
+  /**
+   * The fail-safe's motes, drawn in the draft's own dust so a crawler who has
+   * learned what the dust means reads them without being told anything.
+   */
+  private renderWayfinderMotes(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const viewW = viewportWidth();
+    const viewH = viewportHeight();
+    for (const mote of this.wayfinderMotes) {
+      const screenX = mote.x - camX;
+      const screenY = mote.y - camY;
+      if (
+        screenX + mote.radiusPx < 0 ||
+        screenX - mote.radiusPx > viewW ||
+        screenY + mote.radiusPx < 0 ||
+        screenY - mote.radiusPx > viewH
+      )
+        continue;
+
+      const fadeIn = clamp(mote.ageFrames / WAYFINDER_MOTE_FADE_FRAMES, 0, 1);
+      const fadeOut = clamp(
+        (WAYFINDER_MOTE_LIFE_FRAMES - mote.ageFrames) / WAYFINDER_MOTE_FADE_FRAMES,
+        0,
+        1,
+      );
+      const alpha = WAYFINDER_MOTE_ALPHA_MAX * Math.min(fadeIn, fadeOut);
+      if (alpha < STAIRWELL_DRAFT_MIN_VISIBLE_ALPHA) continue;
+
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(${STAIRWELL_DRAFT_MOTE_COLOR_RGB}, ${alpha})`;
+      ctx.arc(screenX, screenY, mote.radiusPx, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 

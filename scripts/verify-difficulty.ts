@@ -49,6 +49,9 @@ import {
   WAYFINDER_GRACE_FRAMES,
   WAYFINDER_PULSE_PERIOD_FRAMES,
   WAYFINDER_PULSE_VISIBLE_FRAMES,
+  WAYFINDER_MOTE_MAX_ALIVE,
+  WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES,
+  WAYFINDER_MOTE_LIFE_FRAMES,
 } from '../src/systems/StairwellSystem';
 import { Goblin, GOBLIN_MAX_SPEED } from '../src/creatures/Goblin';
 import { BallOfSwine } from '../src/creatures/BallOfSwine';
@@ -1037,15 +1040,36 @@ section('wayfinder');
   check(
     WAYFINDER_GRACE_FRAMES > 0 &&
       WAYFINDER_PULSE_PERIOD_FRAMES > 0 &&
-      WAYFINDER_PULSE_VISIBLE_FRAMES > 0,
+      WAYFINDER_PULSE_VISIBLE_FRAMES > 0 &&
+      WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES > 0 &&
+      WAYFINDER_MOTE_LIFE_FRAMES > 0,
     'every Wayfinder timing is a positive number of frames',
   );
-  // A pulse at least as long as its own period is not a pulse: the arrow would
+  // A pulse at least as long as its own period is not a pulse: the hint would
   // never go away, turning the bounded fail-safe into the always-on GPS the
   // design rules out.
   check(
     WAYFINDER_PULSE_VISIBLE_FRAMES < WAYFINDER_PULSE_PERIOD_FRAMES,
-    'the Wayfinder arrow is off for more of each period than it is on',
+    'the Wayfinder hint is off for more of each period than it is on',
+  );
+  // A hint made of two grains of dust is only readable as a direction if the
+  // second one arrives while the first is still drifting.
+  check(
+    WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES < WAYFINDER_MOTE_LIFE_FRAMES,
+    'a Wayfinder mote is still adrift when the next one is released',
+  );
+  // One mote per pulse is a coincidence a player never reads as a bearing, so
+  // the window has to be wide enough for the cooldown to come round again.
+  check(
+    WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES < WAYFINDER_PULSE_VISIBLE_FRAMES &&
+      WAYFINDER_MOTE_MAX_ALIVE > 1,
+    'one pulse can release more than a single mote',
+  );
+  // Motes that outlive the gap between pulses would accumulate into the steady
+  // stream that marks a stairwell, rather than the passing hint this is.
+  check(
+    WAYFINDER_MOTE_LIFE_FRAMES < WAYFINDER_PULSE_PERIOD_FRAMES - WAYFINDER_PULSE_VISIBLE_FRAMES,
+    'the fail-safe goes fully quiet between pulses',
   );
   // The grace is the "you have genuinely hunted" evidence the pulse waits for.
   // Shorter than a single pulse period it would fire almost immediately.
