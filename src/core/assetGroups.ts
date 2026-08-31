@@ -160,17 +160,10 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   floor2_tileset: ['ground_floor2'],
 
   boss_hoarder: ['hoarders_room'],
-  // Level 2's spider lab: the dressing and minigame art that only exists
-  // because the boss does. The boss herself, her spit, the life machines and
-  // the small-spider adds are all painted.
-  boss_grotesque_spider: [
-    'lab_tables',
-    'scientist',
-    'spider-egg',
-    'spider_room_floor',
-    'keyboard_hero_buttons',
-    'keyboard_hero_playing_field',
-  ],
+  // Level 2's spider lab: the dressing that only exists because the boss does.
+  // The boss herself, her spit, the life machines, the small-spider adds and the
+  // hacking mini-game's console are all painted.
+  boss_grotesque_spider: ['lab_tables', 'scientist', 'spider-egg', 'spider_room_floor'],
 };
 
 /**
@@ -205,14 +198,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   krakaren_clone: [],
   brindle_grub: [],
   bugaboo: [],
-  grotesque_spider: [
-    'lab_tables',
-    'scientist',
-    'spider-egg',
-    'spider_room_floor',
-    'keyboard_hero_buttons',
-    'keyboard_hero_playing_field',
-  ],
+  grotesque_spider: ['lab_tables', 'scientist', 'spider-egg', 'spider_room_floor'],
   small_spider: [],
   ruins_ghoul: [],
   krasue: [],

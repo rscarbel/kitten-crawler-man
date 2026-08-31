@@ -175,6 +175,14 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'krakaren_tentacle_strike',
     'krakaren_yell',
     'life_machine_powering_on',
+    // The keyboard-hero board's own feedback: the per-hit terminal tick, a
+    // firewall pip shattering, and the success stinger. Only the pip's glass is
+    // new to this floor; the other two are already boot-loaded by `universal`,
+    // and are named here so the board's needs are legible in one place rather
+    // than resting on another group happening to carry them.
+    'typing_click',
+    'glass_break_1',
+    'new_unlock',
     'llama_fireball',
     'llama_fireball_explosion',
     'powering_off',

@@ -45,6 +45,8 @@
     "scripts/render-goblins.ts",
     "scripts/gates-magic-missile.ts",
     "scripts/render-magic-missile.ts",
+    "scripts/gates-keyboard-hero.ts",
+    "scripts/render-keyboard-hero.ts",
     "scripts/render-rat.ts",
     "scripts/render-mongo.ts",
     "scripts/gates-mongo.ts",

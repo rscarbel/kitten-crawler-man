@@ -606,6 +606,16 @@ const SUMMON_BUTTON_Y_OFFSET_4 = 8;
 
 // Music and animation timing
 const MUSIC_FADE_IN_MS = 2000;
+
+/**
+ * How fast the floor's track ducks out when a hack begins. Short: the count-in
+ * starts almost immediately, and a long crossfade would have the player counting
+ * themselves in over the tail of the previous song.
+ */
+const KEYBOARD_HERO_MUSIC_HANDOVER_FADE_MS = 400;
+
+/** The keyboard-hero per-hit tick sits under the track rather than over it. */
+const KEYBOARD_HERO_HIT_TICK_VOLUME = 0.45;
 const LONGPRESS_TIMEOUT_MS = 500;
 const MENU_TAP_DURATION_MS = 250;
 const MENU_TAP_MAX_DISTANCE = 20;
@@ -3733,6 +3743,20 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * Cuts the boots off.
+   *
+   * The walking and wading loops are started and stopped from `updateGameplay`,
+   * which a halted frame never reaches — so a loop already playing when an
+   * overlay opens keeps playing under it for as long as the overlay is up. Every
+   * path that skips `updateGameplay` calls this, because none of them is a frame
+   * in which the crawler is walking anywhere.
+   */
+  private silenceMovementLoops(): void {
+    this.audio?.stopWalkingLoop();
+    this.audio?.stopWadingLoop();
+  }
+
+  /**
    * Anything that takes the floor away from ordinary play.
    *
    * Derived from the claim registry rather than restated as a second boolean
@@ -4489,6 +4513,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.bossIntro.isActive) {
+      this.silenceMovementLoops();
       this.bossIntro.tick();
       return;
     }
@@ -4530,18 +4555,24 @@ export class DungeonScene extends GameplayScene {
     this.menus.openPendingSkillBookPrompt(this.menus.inventoryPlayer());
 
     if (this.gameplayHalted) {
+      this.silenceMovementLoops();
       this.marketPanel?.update();
       return;
     }
 
     if (this.safeRoom.isSleeping) {
+      this.silenceMovementLoops();
       const deduct = this.safeRoom.updateSleep(this.human, this.cat);
       this.levelTimerFrames = Math.max(0, this.levelTimerFrames - deduct);
       return;
     }
 
-    if (this.tutorial?.showNearGoblinDialog === true) return;
+    if (this.tutorial?.showNearGoblinDialog === true) {
+      this.silenceMovementLoops();
+      return;
+    }
     if (this.tutorial?.showTutorialMordecaiDialog === true) {
+      this.silenceMovementLoops();
       this.tutorial.tickDialog();
       return;
     }
@@ -5611,6 +5642,14 @@ export class DungeonScene extends GameplayScene {
       // Boosted volume: this audio was recorded significantly quieter than other SFX
       this.audio?.play('scientist_explaining_request', { volume: 3.5 });
     }
+    if (this.spiderQuest.levelMusicStopPending) {
+      this.spiderQuest.levelMusicStopPending = false;
+      this.audio?.stopMusic(KEYBOARD_HERO_MUSIC_HANDOVER_FADE_MS);
+    }
+    if (this.spiderQuest.levelMusicRestorePending) {
+      this.spiderQuest.levelMusicRestorePending = false;
+      this.audio?.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
+    }
     if (this.spiderQuest.keyboardHeroMusicStartPending) {
       this.spiderQuest.keyboardHeroMusicStartPending = false;
       this.audio?.startKeyboardHeroMusic();
@@ -5622,6 +5661,20 @@ export class DungeonScene extends GameplayScene {
     if (this.spiderQuest.hackFailErrorSoundPending) {
       this.spiderQuest.hackFailErrorSoundPending = false;
       this.audio?.play('error');
+    }
+    if (this.spiderQuest.keyboardHeroHitTickPending) {
+      this.spiderQuest.keyboardHeroHitTickPending = false;
+      // A terminal keystroke, not a drum: the tick has to sit under the track
+      // rather than compete with it, so it plays well below the SFX bed.
+      this.audio?.play('typing_click', { volume: KEYBOARD_HERO_HIT_TICK_VOLUME });
+    }
+    if (this.spiderQuest.keyboardHeroPipShatterPending) {
+      this.spiderQuest.keyboardHeroPipShatterPending = false;
+      this.audio?.play('glass_break_1');
+    }
+    if (this.spiderQuest.keyboardHeroAccessGrantedPending) {
+      this.spiderQuest.keyboardHeroAccessGrantedPending = false;
+      this.audio?.play('new_unlock');
     }
     if (this.spiderQuest.cutsceneSpitImpactSoundPending) {
       this.spiderQuest.cutsceneSpitImpactSoundPending = false;

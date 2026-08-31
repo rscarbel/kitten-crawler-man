@@ -58,6 +58,7 @@
     "render:sky-fowl": "tsx scripts/render-sky-fowl.ts",
     "render:vespa-spit": "tsx scripts/render-vespa-spit.ts",
     "gen:keyboard-hero-chart": "tsx scripts/generate-keyboard-hero-chart.ts",
+    "render:keyboard-hero": "tsx scripts/render-keyboard-hero.ts",
     "render:townsfolk": "tsx scripts/render-townsfolk.ts",
     "render:buildings": "tsx scripts/render-buildings.ts",
     "render:lich": "tsx scripts/render-lich.ts",

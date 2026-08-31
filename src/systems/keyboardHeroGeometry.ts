@@ -6,11 +6,11 @@
  * only make sense against the speed and hit window defined here.
  */
 
-/** Playing-field image dimensions (from the sprite manifest). */
-export const FIELD_IMG_W = 426;
-export const FIELD_IMG_H = 586;
-
-/** The visible green band in the playing field, in image-Y coordinates. */
+/**
+ * The band the note had to overlap under the original overlap rule. Nothing draws
+ * it any more — the board's own layout owns where the hit line and its window sit
+ * — but `HIT_WINDOW_MS` is derived from it, so the numbers stay frozen here.
+ */
 export const HIT_ZONE_IMG_TOP = 455;
 export const HIT_ZONE_IMG_BOTTOM = 555;
 

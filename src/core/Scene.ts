@@ -46,6 +46,13 @@ const MAX_CATCHUP_UPDATES = 2;
 /** Floor for the viewport size so a zero-sized window can't divide by zero. */
 const MIN_VIEWPORT_PX = 1;
 
+/**
+ * How deep a nesting of `ctx.save()` a throwing render is assumed to have got
+ * to. Comfortably past the deepest any scene nests; the loop only exists so a
+ * corrupt stack cannot spin forever.
+ */
+const MAX_LEAKED_SAVES = 64;
+
 /** Keys that step the menu focus ring forward. */
 const FOCUS_NEXT_KEYS: ReadonlySet<string> = new Set(['Tab', 'ArrowDown', 'ArrowRight']);
 /** Keys that step it backward. Shift+Tab is handled separately. */
@@ -500,6 +507,25 @@ export class SceneManager {
     }
   }
 
+  /**
+   * Pop everything a half-finished render left on the context's save stack.
+   *
+   * A painter that throws stops between its `save` and its `restore`, and
+   * nothing else ever pops what it pushed — so the clip, alpha, composite mode
+   * and transform of whatever it was drawing become the state every later frame
+   * starts from. The loop above keeps the game running, which makes that the
+   * worst possible outcome: the floor still updates and still takes input behind
+   * a screen that never comes back.
+   *
+   * Draining to empty is the right target rather than a saved marker: the base
+   * transform is established by `applyViewportSize` outside any `save`, so it is
+   * what an emptied stack leaves in place, and `restore` on an empty stack does
+   * nothing. The bound is only there so a corrupt stack cannot spin.
+   */
+  private drainSaveStack(): void {
+    for (let i = 0; i < MAX_LEAKED_SAVES; i++) this.ctx.restore();
+  }
+
   private step(now: number): void {
     // Keep frameTime current for smooth visual animations in render().
     updateFrameTime();
@@ -536,6 +562,9 @@ export class SceneManager {
     const renderStartedAt = perfMonitor.begin();
     try {
       this.current?.render(this.ctx);
+    } catch (error) {
+      this.drainSaveStack();
+      throw error;
     } finally {
       perfMonitor.end('render', renderStartedAt);
       perfMonitor.endFrame();

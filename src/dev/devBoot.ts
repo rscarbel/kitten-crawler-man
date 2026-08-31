@@ -23,6 +23,7 @@ import { KrakarenPreviewScene } from '../scenes/KrakarenPreviewScene';
 import { JuicerPreviewScene } from '../scenes/JuicerPreviewScene';
 import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
+import { KeyboardHeroPreviewScene } from '../scenes/KeyboardHeroPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
 import { getLevelDef } from '../levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from '../core/CircusQuestProgress';
@@ -284,6 +285,11 @@ export function devBootScene(
 
   if (params.get('casino') !== null) {
     sceneManager.replace(new CasinoPreviewScene());
+    return true;
+  }
+
+  if (params.get('keyboardhero') !== null) {
+    sceneManager.replace(new KeyboardHeroPreviewScene());
     return true;
   }
 

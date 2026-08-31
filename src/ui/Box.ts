@@ -251,6 +251,14 @@ export const PROGRESS_PRESETS = {
     borderWidth: 1,
     radius: 0,
   },
+  /** An intrusion's progress through a system — console cyan on a near-black bus. */
+  hack: {
+    fill: '#4fc3f7',
+    background: 'rgba(2,10,18,0.85)',
+    border: '#1e6f96',
+    borderWidth: 1,
+    radius: 1,
+  },
 } satisfies Record<string, ProgressPreset>;
 
 function resolvePadding(p: Padding | undefined): {
