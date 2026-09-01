@@ -34,7 +34,24 @@ const NECK_TOP_Y = JAW_Y - 0.01;
 const SHOULDER_Y = -0.2;
 const SHOULDER_HALF_WIDTH = 0.098;
 const BUST_Y = -0.13;
-const BUST_HALF_WIDTH = 0.104;
+const BUST_HALF_WIDTH = 0.1;
+/**
+ * From behind, the bust still shows past the ribs at the sides, but only as a
+ * side swell — carrying the full front projection round the back gives her two
+ * bulges under her shoulder blades.
+ */
+const BACK_CHEST_HALF_WIDTH = 0.094;
+
+/**
+ * The chest silhouette is three segments per side, not one: the ribcage tucks
+ * in under the deltoid, each breast swells out past the shoulder line, and the
+ * outline falls back in to the ribs beneath it. Run as a single curve from
+ * shoulder to waist the breasts exist only in the shading, and no amount of
+ * modelling inside a straight-sided chest makes them read.
+ */
+const ARMPIT_Y = SHOULDER_Y + 0.026;
+const ARMPIT_HALF_WIDTH = SHOULDER_HALF_WIDTH * 0.94;
+const RIBCAGE_HALF_WIDTH = 0.072;
 const WAIST_Y = -0.022;
 const WAIST_HALF_WIDTH = 0.058;
 const HIP_Y = 0.075;
@@ -43,60 +60,108 @@ const CROTCH_Y = 0.142;
 const CROTCH_HALF_WIDTH = 0.036;
 
 /** Bust apex — the point the hair locks are required to cover. */
-const BUST_POINT_X = 0.052;
+const BUST_POINT_X = 0.048;
 const BUST_POINT_Y = -0.115;
-const BUST_UNDERCURVE_RADIUS = 0.042;
+const BUST_UNDERCURVE_RADIUS = 0.046;
+/** Where each breast is widest, and where the ribs pick the outline back up. */
+const BUST_WIDEST_Y = BUST_POINT_Y + 0.004;
+const RIBCAGE_Y = BUST_POINT_Y + 0.052;
 /** Only the lower outside of the circle is drawn, so it reads as a soft crease. */
-const BUST_UNDERCURVE_ARC_START = HALF_TURN * 0.12;
-const BUST_UNDERCURVE_ARC_END = HALF_TURN * 0.72;
+const BUST_UNDERCURVE_ARC_START = HALF_TURN * 0.1;
+const BUST_UNDERCURVE_ARC_END = HALF_TURN * 0.76;
 /** The undercurve carries the whole read of the form, so it is drawn heavier
  * than the other creases on her. */
-const UNDERCURVE_WEIGHT = 1.3;
+const UNDERCURVE_WEIGHT = 1.15;
 /** Deepest through the middle of the arc, fading out at both ends. */
-const BUST_UNDERCURVE_FADE_IN = 0.18;
-const BUST_UNDERCURVE_FADE_OUT = 0.85;
+const BUST_UNDERCURVE_FADE_IN = 0.16;
+const BUST_UNDERCURVE_FADE_OUT = 0.88;
 
 /**
  * The locks cover the apexes and nothing else, so the breasts themselves have
- * to carry their own volume. As on the seat, the chest is washed down before
- * either one is lit: the torso fill is the lightest tone on her, so a highlight
- * laid straight onto it cannot read.
+ * to carry their own volume, and they carry it with four shapes per side and no
+ * more. A form this small drowns in stacked soft ellipses: every extra pass
+ * lands its own faded rim somewhere on the skin, and a dozen of those is not
+ * shading but grain.
  */
-/** Must cover the breasts themselves, not just the ribs under them — a swell
- * lit outside the wash is lit-on-lit and vanishes. */
-const BUST_SHADE_Y = BUST_POINT_Y + 0.008;
-const BUST_SHADE_RADIUS_X = BUST_HALF_WIDTH;
-const BUST_SHADE_RADIUS_Y = 0.062;
-const BUST_SHADE_ALPHA = 0.6;
 
-const BUST_HIGHLIGHT_X = BUST_POINT_X * 0.9;
-const BUST_HIGHLIGHT_Y = BUST_POINT_Y - 0.018;
-const BUST_HIGHLIGHT_RADIUS_X = 0.043;
-const BUST_HIGHLIGHT_RADIUS_Y = 0.042;
+/**
+ * The chest wall between the collarbones and the breast tops, dropped a step.
+ * The top of the breast is a border between two values, so there has to be a
+ * second value for it to border against — without this the lit swell fades up
+ * into skin of its own brightness and the form has no top at all.
+ */
+const UPPER_CHEST_SHADE_Y = SHOULDER_Y + 0.03;
+const UPPER_CHEST_SHADE_RADIUS_X = 0.088;
+const UPPER_CHEST_SHADE_RADIUS_Y = 0.042;
+const UPPER_CHEST_SHADE_ALPHA = 0.5;
+
+/**
+ * The form shadow, offset down and outward from the apex rather than centred on
+ * it. Concentric with the light it makes the terminator a circle, which is the
+ * whole reason airbrushed shading reads as painted on; offset, the boundary
+ * between the two becomes a diagonal running the way the breast actually turns.
+ */
+const BUST_SHADE_X = BUST_POINT_X * 1.24;
+const BUST_SHADE_Y = BUST_POINT_Y + 0.026;
+const BUST_SHADE_RADIUS_X = 0.05;
+const BUST_SHADE_RADIUS_Y = 0.038;
+const BUST_SHADE_ALPHA = 0.95;
+/** Held nearly to the edge; at the default falloff the wash never reaches full
+ * strength anywhere on a form this size. */
+const BUST_SHADE_CORE_FRACTION = 0.55;
+
+/** The lit swell, up and inboard, its upper edge the top of the form. */
+const BUST_HIGHLIGHT_X = BUST_POINT_X * 0.86;
+const BUST_HIGHLIGHT_Y = BUST_POINT_Y - 0.026;
+const BUST_HIGHLIGHT_RADIUS_X = 0.044;
+const BUST_HIGHLIGHT_RADIUS_Y = 0.03;
 const BUST_HIGHLIGHT_ALPHA = 1;
+const BUST_HIGHLIGHT_CORE_FRACTION = 0.5;
 
 /**
  * The shadow each breast casts onto the ribs beneath it. The crease alone only
  * ever draws the edge of the form; this is what gives it its projection.
  */
-const UNDERBUST_SHADOW_X = BUST_POINT_X * 0.98;
-const UNDERBUST_SHADOW_Y = BUST_POINT_Y + 0.038;
-const UNDERBUST_SHADOW_RADIUS_X = 0.043;
-const UNDERBUST_SHADOW_RADIUS_Y = 0.024;
-const UNDERBUST_SHADOW_ALPHA = 0.7;
+const UNDERBUST_SHADOW_X = BUST_POINT_X * 0.96;
+const UNDERBUST_SHADOW_Y = BUST_POINT_Y + 0.05;
+const UNDERBUST_SHADOW_RADIUS_X = 0.042;
+const UNDERBUST_SHADOW_RADIUS_Y = 0.018;
+const UNDERBUST_SHADOW_ALPHA = 0.85;
 
-/** Where each breast turns away toward the ribs. */
-const BUST_OUTER_SHADE_X = BUST_HALF_WIDTH * 0.95;
-const BUST_OUTER_SHADE_Y = BUST_POINT_Y + 0.004;
-const BUST_OUTER_SHADE_RADIUS_X = 0.026;
-const BUST_OUTER_SHADE_RADIUS_Y = 0.046;
-const BUST_OUTER_SHADE_ALPHA = 0.5;
+/** The valley between them: narrow and deep where they press together at the
+ * bottom, opening and dying out toward the collarbones. */
+const CLEAVAGE_TOP_Y = BUST_Y - 0.022;
+const CLEAVAGE_BOTTOM_Y = BUST_POINT_Y + 0.03;
+const CLEAVAGE_TOP_HALF_WIDTH = 0.019;
+const CLEAVAGE_BOTTOM_HALF_WIDTH = 0.006;
+const CLEAVAGE_ALPHA = 0.85;
+const CLEAVAGE_FADE_STOP = 0.34;
 
-/** The valley between them; without it neither side reads as round. */
-const CLEAVAGE_TOP_Y = BUST_Y - 0.042;
-const CLEAVAGE_BOTTOM_Y = BUST_POINT_Y + 0.024;
-const CLEAVAGE_HALF_WIDTH = 0.017;
-const CLEAVAGE_ALPHA = 0.55;
+/**
+ * Each breast sits on the ribcage turned up and outward, so the light and the
+ * shadow on it share that axis. Left square to the sprite they read as two
+ * discs shaded top-to-bottom.
+ */
+const BUST_AXIS_TILT = -0.34;
+
+/**
+ * The shelf the bust hangs from. Without it the whole span from the throat to
+ * the breasts is one unbroken field, and the chest reads as a blank board with
+ * two shapes shaded onto it.
+ */
+const COLLARBONE_INNER_X = 0.012;
+const COLLARBONE_OUTER_X = SHOULDER_HALF_WIDTH * 0.84;
+const COLLARBONE_Y = SHOULDER_Y + 0.012;
+const COLLARBONE_DIP = 0.012;
+const COLLARBONE_FADE_STOP = 0.72;
+/** The lit edge sitting on top of the bone, without which it is only a groove. */
+const COLLARBONE_RIDGE_RISE = 0.008;
+const COLLARBONE_RIDGE_ALPHA = 0.7;
+/** The hollow between the collarbones, at the foot of the throat. */
+const SUPRASTERNAL_NOTCH_Y = SHOULDER_Y + 0.004;
+const SUPRASTERNAL_NOTCH_RADIUS_X = 0.014;
+const SUPRASTERNAL_NOTCH_RADIUS_Y = 0.008;
+const SUPRASTERNAL_NOTCH_ALPHA = 0.55;
 
 /* ── Front pelvis ──────────────────────────────────────────────────────── */
 
@@ -113,7 +178,7 @@ const HIP_SWELL_X = HIP_HALF_WIDTH * 0.66;
 const HIP_SWELL_Y = HIP_Y - 0.004;
 const HIP_SWELL_RADIUS_X = 0.042;
 const HIP_SWELL_RADIUS_Y = 0.048;
-const HIP_SWELL_ALPHA = 0.6;
+const HIP_SWELL_ALPHA = 0.45;
 
 /**
  * The groin crease running from the hip bone down to the crotch. Deepest at
@@ -122,10 +187,10 @@ const HIP_SWELL_ALPHA = 0.6;
  */
 const GROIN_CREASE_TOP_X = HIP_HALF_WIDTH * 0.82;
 const GROIN_CREASE_TOP_Y = HIP_Y - 0.03;
-const GROIN_CREASE_CONTROL_X = HIP_HALF_WIDTH * 0.52;
+const GROIN_CREASE_CONTROL_X = HIP_HALF_WIDTH * 0.6;
 const GROIN_CREASE_CONTROL_Y = CROTCH_Y - 0.018;
-const GROIN_CREASE_BOTTOM_X = 0.017;
-const GROIN_CREASE_BOTTOM_Y = CROTCH_Y - 0.008;
+const GROIN_CREASE_BOTTOM_X = HIP_HALF_WIDTH * 0.5;
+const GROIN_CREASE_BOTTOM_Y = CROTCH_Y - 0.034;
 /** How far down the crease it reaches full depth, measured from the hip. */
 const GROIN_CREASE_FADE_STOP = 0.5;
 
@@ -183,25 +248,62 @@ const SEAT_NOTCH_Y = CROTCH_Y + 0.012;
 const SEAT_SHADE_Y = HIP_Y + 0.05;
 const SEAT_SHADE_RADIUS_X = SEAT_HALF_WIDTH * 1.5;
 const SEAT_SHADE_RADIUS_Y = 0.105;
-const SEAT_SHADE_ALPHA = 0.62;
+const SEAT_SHADE_ALPHA = 0.4;
 
-/** The lit swell of each cheek, read against that wash. */
-const GLUTE_HIGHLIGHT_X = 0.05;
 /**
- * Set high on the cheek rather than at its middle: what turns the wash from a
- * stain into a form is the band of it left unlit *below* the dome, where the
- * cheek rolls under toward the fold.
+ * Each cheek is a mass tipped up and outward, and its light and its shadow both
+ * run on that axis. Square to the sprite they stack as concentric ellipses,
+ * which puts the terminator on a circle and gives the seat the airbrushed look
+ * of two discs rather than two masses.
  */
-const GLUTE_HIGHLIGHT_Y = HIP_Y + 0.024;
-const GLUTE_HIGHLIGHT_RADIUS_X = 0.05;
-const GLUTE_HIGHLIGHT_RADIUS_Y = 0.058;
-const GLUTE_HIGHLIGHT_ALPHA = 1;
+const GLUTE_AXIS_TILT = -0.42;
 
-const GLUTE_OUTER_SHADE_X = HIP_HALF_WIDTH * 0.98;
-const GLUTE_OUTER_SHADE_Y = HIP_Y + 0.04;
-const GLUTE_OUTER_SHADE_RADIUS_X = 0.028;
-const GLUTE_OUTER_SHADE_RADIUS_Y = 0.06;
-const GLUTE_OUTER_SHADE_ALPHA = 0.55;
+/**
+ * Lit high and outboard, shaded low and inboard, and the two offset from each
+ * other rather than sharing a centre — the diagonal left between them is the
+ * cheek turning under toward the fold and in toward the cleft.
+ */
+const GLUTE_HIGHLIGHT_X = 0.056;
+const GLUTE_HIGHLIGHT_Y = HIP_Y + 0.016;
+const GLUTE_HIGHLIGHT_RADIUS_X = 0.05;
+const GLUTE_HIGHLIGHT_RADIUS_Y = 0.036;
+const GLUTE_HIGHLIGHT_ALPHA = 0.72;
+const GLUTE_HIGHLIGHT_CORE_FRACTION = 0.3;
+
+const GLUTE_SHADE_X = 0.04;
+const GLUTE_SHADE_Y = HIP_Y + 0.056;
+const GLUTE_SHADE_RADIUS_X = 0.052;
+const GLUTE_SHADE_RADIUS_Y = 0.036;
+const GLUTE_SHADE_ALPHA = 0.7;
+const GLUTE_SHADE_CORE_FRACTION = 0.4;
+
+/**
+ * The hollow over the great trochanter, below the flare of the pelvis and above
+ * the widest part of the cheek. It is the landmark that separates a hip from a
+ * balloon: without it the outline runs from waist to seat as one unbroken swell
+ * and the whole pelvis reads as inflated rather than built on bone.
+ */
+const TROCHANTER_DIP_X = HIP_HALF_WIDTH * 0.99;
+const TROCHANTER_DIP_Y = HIP_Y + 0.004;
+const TROCHANTER_DIP_RADIUS_X = 0.019;
+const TROCHANTER_DIP_RADIUS_Y = 0.026;
+const TROCHANTER_DIP_ALPHA = 0.45;
+
+/**
+ * The flat plane of the sacrum above the cleft, between the two dimples. The
+ * cheeks do not meet the small of her back directly — this shelf sits between
+ * them, and it is the reason the cleft appears to start below the hip line
+ * rather than running the whole height of the seat.
+ */
+const SACRUM_HALF_WIDTH = 0.032;
+const SACRUM_TOP_Y = HIP_Y - 0.042;
+const SACRUM_ALPHA = 0.45;
+const SACRUM_FADE_STOP = 0.45;
+
+const SACRAL_DIMPLE_X = 0.03;
+const SACRAL_DIMPLE_Y = HIP_Y - 0.03;
+const SACRAL_DIMPLE_RADIUS = 0.009;
+const SACRAL_DIMPLE_ALPHA = 0.3;
 
 /**
  * The gluteal fold is drawn inset above the silhouette's underside, so what
@@ -224,11 +326,21 @@ const GLUTE_FOLD_OUTER_CONTROL_X = SEAT_UNDERSIDE_CONTROL_X * 1.3;
 const GLUTE_FOLD_OUTER_CONTROL_Y = SEAT_UNDERSIDE_CONTROL_Y - GLUTE_FOLD_INSET;
 /** How far along the crease, measured from the flank, it reaches full depth. */
 const GLUTE_FOLD_FADE_STOP = 0.26;
-
-const SACRAL_DIMPLE_X = 0.026;
-const SACRAL_DIMPLE_Y = HIP_Y - 0.014;
-const SACRAL_DIMPLE_RADIUS = 0.012;
-const SACRAL_DIMPLE_ALPHA = 0.4;
+/**
+ * Narrower than the bust's undercurve. The crease halo scales off this, and at
+ * the undercurve's weight the halo comes out nearly half a cheek wide, which
+ * turns the one edge that proves the seat overhangs the thigh into a smear
+ * across the bottom of it.
+ */
+const GLUTE_FOLD_WEIGHT = 0.85;
+/**
+ * The lit top of the thigh, just under the crease. A shadow alone only says
+ * something is dark there; the light immediately below it is what says one form
+ * is sitting on top of another.
+ */
+const GLUTE_UNDERHANG_LIGHT_DROP = 0.014;
+const GLUTE_UNDERHANG_LIGHT_ALPHA = 0.5;
+const GLUTE_UNDERHANG_LIGHT_WEIGHT = 0.6;
 
 const GLUTE_CLEFT_TOP_Y = HIP_Y + 0.004;
 /** Ends where the two folds meet, so all three creases join into one form. */
@@ -265,18 +377,32 @@ const THIGH_BULGE = 0.014;
 const CALF_BULGE = 0.017;
 
 /**
- * The thighs nearly meet under the crotch and part gradually going down. Left
- * at the full thigh half-width the inner edges run parallel instead, and the
- * gap between them reads as a slot cut between two posts rather than as legs.
+ * The gap between her legs is a lens, not a slot. The adductors close it just
+ * under the crotch, it opens through the lower thigh, and the knees bring it
+ * back in — held at one width from crotch to ankle it reads as a channel milled
+ * between two tubes, which is exactly what a constant inner-edge inset gives.
+ *
+ * Every landmark is expressed against the line between the crotch and the inner
+ * knee rather than in absolute x, so the whole shape travels with the walk's hip
+ * shift and leg swing instead of tearing away from the leg it belongs to.
  */
-const INNER_THIGH_TOP_X = 0;
-const INNER_THIGH_TAPER_X = 0.006;
-/** Slight outward bow of the adductor, so the inner edge is not a taut string. */
-const INNER_THIGH_BOW = 0.004;
+const INNER_THIGH_CROTCH_X = 0.011;
+const INNER_THIGH_CROTCH_Y = FRONT_HEM_POINT_Y + 0.011;
+/** How far the inner edge bows out from that line, and where it peaks. */
+const THIGH_GAP_BOW = 0.018;
+const THIGH_GAP_WIDEST_Y = CROTCH_Y + (KNEE_Y - CROTCH_Y) * 0.62;
+const THIGH_GAP_LOWER_CONTROL_SHARE = 0.25;
+const THIGH_GAP_UPPER_CONTROL_SHARE = 0.7;
+/** The knee is wider on the inside than the shin below it, which is what brings
+ * the two legs back together at the joint and closes the foot of the lens. */
+const INNER_KNEE_INSET = 0.008;
 
 const FOOT_HALF_WIDTH = 0.022;
 /** Lifts the foot ellipse so its lower edge lands on the floor line. */
 const FOOT_CENTER_RISE = 0.012;
+/** The foot rolls away toward the toes; the ankle above it stays lit. */
+const TOE_SHADE_RADIUS_Y = 0.016;
+const TOE_SHADE_ALPHA = 0.5;
 
 /**
  * Back view only: the seat casts onto the top of the thigh, and the hollow
@@ -288,6 +414,28 @@ const THIGH_TOP_SHADOW_RADIUS_Y = 0.05;
 const THIGH_TOP_SHADOW_ALPHA = 0.45;
 const KNEE_CREASE_HALF_WIDTH_FRACTION = 0.6;
 const KNEE_CREASE_DROP = 0.008;
+
+/**
+ * The swinging leg darkens, and only while it is swinging. Keyed to the side
+ * instead, one leg is a step darker in every pose including standing still —
+ * which also puts a hard value edge along the torso's crotch hem, where the lit
+ * pelvis meets a thigh a whole tone below it. It also does real work here: the
+ * swing foot passes close to the planted one, and two legs in the same tone
+ * merge into a single mass at exactly the moment the stride should read.
+ */
+const SWING_LEG_SHADE_ALPHA = 0.3;
+
+/**
+ * Front view: the pelvis casting onto the top of the inner thigh. The torso is
+ * drawn over the legs and both are the same fill, so without a form here the
+ * only thing marking the junction is whatever the two happen to have shaded
+ * differently — a seam that follows the hem for no reason a viewer can name.
+ */
+const CROTCH_SHADOW_X = 0.032;
+const CROTCH_SHADOW_Y = CROTCH_Y + 0.022;
+const CROTCH_SHADOW_RADIUS_X = 0.03;
+const CROTCH_SHADOW_RADIUS_Y = 0.032;
+const CROTCH_SHADOW_ALPHA = 0.42;
 
 /** Inner-thigh shading, kept soft so it reads as depth rather than a stripe. */
 const INNER_THIGH_SHADE_X = 0.02;
@@ -320,33 +468,71 @@ const ELBOW_CAST_ANGLE = -0.55;
 
 /* ── Walk cycle ────────────────────────────────────────────────────────── */
 
-const WALK_LEG_SWING = 0.034;
-/** The ankle overshoots the knee's swing by this much. */
-const WALK_ANKLE_SWING_RATIO = 1.4;
-const WALK_FOOT_LIFT = 0.042;
-/** The knee rises less than the ankle, so the shin folds rather than telescopes. */
-const KNEE_LIFT_SHARE = 0.45;
-const WALK_BODY_BOB = 0.018;
-/** Her weight shifts onto the planted foot, once per step. */
-const WALK_HIP_SHIFT = 0.014;
 /**
- * The hip shift moves the pelvis, which is part of the torso — so the thighs
- * have to travel with it or her hips visibly unseat from her legs. The knee
- * follows partway and the ankle not at all, since that foot is planted.
+ * One phase drives the whole cycle. `stridePhase` is that phase seen from one
+ * leg's side, and it is positive exactly while that leg is swinging.
+ *
+ * Every leg displacement is gated on `Math.max(0, stridePhase)` so the stance
+ * leg is completely static and the pelvis travels over it. Driven off the
+ * signed phase instead, both legs move on every frame and the planted foot
+ * slides sideways under her through the whole step, which no amount of tuning
+ * anywhere else can make read as a walk.
+ */
+
+/**
+ * The knee barely travels while the ankle swings in under her. That difference
+ * is what puts the shin on a diagonal, and a diagonal shin is the only thing
+ * that reads as a bent knee from head on — moved together, the leg just gets
+ * shorter, and a shortened vertical leg reads as a stump rather than a stride.
+ */
+const WALK_KNEE_SWING = 0.005;
+const WALK_ANKLE_SWING = 0.024;
+const WALK_FOOT_LIFT = 0.05;
+/**
+ * The knee barely rises: a real swing leg folds at the knee, so the shin is
+ * what shortens. Sharing the lift evenly between the two shortens both and the
+ * leg telescopes instead of bending.
+ */
+const KNEE_LIFT_SHARE = 0.15;
+const WALK_BODY_BOB = 0.017;
+/**
+ * The whole figure is translated up by the bob, feet included, so a foot on the
+ * floor has to have it taken back off or she bounces clear of the ground on
+ * every step. The knee follows part way, because the leg is what extends.
+ */
+const KNEE_BOB_FOLLOW_SHARE = 0.5;
+
+/**
+ * The pelvis tilts and swings under a level shoulder line, which is the shape
+ * of a real walk seen head on — the hip on the swinging side drops, and the
+ * pelvis travels over the foot that is carrying her.
+ *
+ * That is why the torso pivots at the *shoulder*. Pivoting at the hip instead
+ * swings her shoulders and head through the widest arc in the frame and leaves
+ * the pelvis still, which reads as a metronome rather than as walking.
+ */
+const WALK_PELVIS_TILT = 0.085;
+const TORSO_PIVOT_Y = SHOULDER_Y;
+/** A little weight transfer on top of what the pelvis swing already gives. */
+const WALK_HIP_SHIFT = 0.005;
+/**
+ * The pelvis belongs to the torso, so the thighs have to travel with it or her
+ * hips visibly unseat from her legs. The knee follows partway and the ankle not
+ * at all, since that foot is planted.
  */
 const KNEE_HIP_FOLLOW_SHARE = 0.45;
-/** The shoulders counter-rotate against the hips. */
-const WALK_SHOULDER_ROLL = 0.055;
+/** How much of the pelvis swing her neck cancels to keep her head level. */
+const HEAD_LEVELLING_SHARE = 0.85;
+const WALK_HAIR_SWAY = 0.03;
 /**
- * The spine rolls over the pelvis, so the torso pivots at the hip rather than
- * at the drawing origin — pivoting at the origin swings the pelvis itself
- * sideways and tears it away from the legs, which do not rotate.
+ * Seen head on an arm swings toward and away from the viewer, not out to the
+ * side. Nearly all of that is foreshortening — the arm shortens at both ends of
+ * its swing and is longest hanging straight down at the passing position — and
+ * only a little of it is lateral. Swung wide in the picture plane instead, she
+ * flaps.
  */
-const TORSO_PIVOT_Y = HIP_Y;
-/** How much of the shoulder roll her neck cancels to keep her head level. */
-const HEAD_LEVELLING_SHARE = 0.8;
-const WALK_HAIR_SWAY = 0.055;
-const WALK_ARM_SWING = 0.42;
+const WALK_ARM_SWING = 0.2;
+const ARM_FORESHORTEN = 0.15;
 
 /* ── Hair ──────────────────────────────────────────────────────────────── */
 
@@ -552,7 +738,7 @@ const FLANK_SHADE_ALPHA = 0.4;
 const FLANK_SHADE_RADIUS_X = 0.03;
 const FLANK_SHADE_RADIUS_Y = 0.06;
 const CHEEK_SHADE_ALPHA = 0.5;
-const ABDOMEN_LINE_RISE = 0.05;
+const ABDOMEN_LINE_RISE = 0.028;
 const ABDOMEN_LINE_DROP = 0.03;
 
 /** Old-school flash: one heavy outline weight, no shading. */
@@ -629,7 +815,7 @@ export const SIGNET_CHEST_Y_OFFSET = scaledFromFeet(BUST_Y) + TILE_HALF_SPAN;
  * tile fractions from her centre.
  */
 /** How far the shoulder roll alone carries the arm root sideways. */
-const SHOULDER_ROLL_REACH = Math.sin(WALK_SHOULDER_ROLL) * (TORSO_PIVOT_Y - SHOULDER_Y);
+const PELVIS_SWING_REACH = Math.abs(Math.sin(WALK_PELVIS_TILT) * (HIP_Y - TORSO_PIVOT_Y));
 
 export const SIGNET_HALF_WIDTH =
   (SHOULDER_HALF_WIDTH * ARM_ROOT_X_FRACTION +
@@ -638,8 +824,53 @@ export const SIGNET_HALF_WIDTH =
     HAND_RADIUS +
     NAIL_LENGTH +
     WALK_HIP_SHIFT +
-    SHOULDER_ROLL_REACH) *
+    PELVIS_SWING_REACH) *
   FIGURE_SCALE;
+
+/* ── Level of detail ───────────────────────────────────────────────────── */
+
+/**
+ * Her fine passes are drawn only where they resolve.
+ *
+ * She is two tiles tall, which on a 32-pixel tile at the performance render
+ * scale is sixty-four device pixels for a whole woman. Her tattoos are line
+ * work a fiftieth of a tile wide and her scales are a cell a fortieth across:
+ * at that size neither resolves into a mark, they average into grey blotches
+ * that read as dirt or damage, and — worse — they sit on top of the shading and
+ * destroy the forms underneath. Muting them is not a saving, it is the
+ * difference between a figure and a smudge.
+ *
+ * Measured in *device* pixels, so the same rule answers correctly for the two
+ * render-quality presets without knowing either exists: at the sharp scale she
+ * is twice the pixels and gets her ink back.
+ */
+const INK_MIN_FIGURE_HEIGHT_PX = 100;
+/** The scale cells and the ripple are finer still, and go one rung later. */
+const SKIN_TEXTURE_MIN_FIGURE_HEIGHT_PX = 140;
+
+interface SignetDetail {
+  readonly ink: boolean;
+  readonly skinTexture: boolean;
+}
+
+/**
+ * Her drawn height in device pixels. Read off the destination transform rather
+ * than from the render-quality setting, so a review harness, an offscreen
+ * composite and the game canvas are all answered by the same call.
+ */
+function figureHeightPx(ctx: CanvasRenderingContext2D, tileSizePx: number): number {
+  const transform = ctx.getTransform();
+  const verticalScale = Math.abs(transform.d);
+  const isPlainScale = transform.b === 0 && transform.c === 0 && verticalScale > 0;
+  return tileSizePx * FIGURE_SCALE * (isPlainScale ? verticalScale : 1);
+}
+
+function resolveDetail(heightPx: number): SignetDetail {
+  return {
+    ink: heightPx >= INK_MIN_FIGURE_HEIGHT_PX,
+    skinTexture: heightPx >= SKIN_TEXTURE_MIN_FIGURE_HEIGHT_PX,
+  };
+}
 
 /* ── Elite marker ──────────────────────────────────────────────────────── */
 
@@ -662,16 +893,31 @@ const ELITE_MARKER_MIN_STROKE_PX = 1.5;
 
 /* ── Palette ───────────────────────────────────────────────────────────── */
 
+/**
+ * Above the fill tone, so a lit form has somewhere to go. The torso is filled
+ * `SKIN_LIT`, which means every highlight on her can only ever restore what a
+ * wash took away — a breast washed down and lit back to the fill is a dark
+ * patch with a pale middle, never a volume standing off the ribs.
+ */
+const SKIN_HIGHLIGHT = '#ffffff';
+const SKIN_HIGHLIGHT_FADE = 'rgba(255,255,255,0)';
 const SKIN_LIT = '#f2f6ff';
-const SKIN_BASE = '#dfe8fa';
-const SKIN_SHADE = '#bfcde8';
-const SKIN_DEEP_SHADE = '#a4b5d6';
+const SKIN_BASE = '#dae5f8';
+const SKIN_SHADE = '#b3c3e0';
+const SKIN_DEEP_SHADE = '#92a6cb';
 /** The deepest tone on her, for creases that have to actually read as deep. */
-const SKIN_CREASE = '#8c9ec2';
+const SKIN_CREASE = '#7086b2';
+/**
+ * One step below the deepest skin tone, for the two creases that have to carry
+ * a form on their own — the underbust and the cleavage. Her skin is so pale
+ * that a crease in `SKIN_CREASE` still sits in the top third of the range.
+ */
+const SKIN_DEEP_CREASE = '#4e6291';
+const SKIN_DEEP_CREASE_FADE = 'rgba(78,98,145,0)';
 /** Fully transparent twins of the tones above; must track them by hand. */
 const SKIN_LIT_FADE = 'rgba(242,246,255,0)';
-const SKIN_SHADE_FADE = 'rgba(191,205,232,0)';
-const SKIN_CREASE_FADE = 'rgba(140,158,194,0)';
+const SKIN_SHADE_FADE = 'rgba(179,195,224,0)';
+const SKIN_CREASE_FADE = 'rgba(112,134,178,0)';
 const HAIR_DARK = '#12101c';
 const HAIR_SHEEN = '#3a3550';
 const THONG_COLOR = '#2a2c3d';
@@ -948,10 +1194,12 @@ interface TattooPlacement {
  */
 function stampTattoo(
   ctx: CanvasRenderingContext2D,
+  lod: SignetDetail,
   motif: TattooMotif,
   timeSec: number,
   placement: TattooPlacement,
 ): void {
+  if (!lod.ink) return;
   const { x, y, size, phase, rotation = 0, detail = false } = placement;
   const driftX = Math.sin(timeSec * INK_DRIFT_SPEED + phase) * INK_DRIFT_AMPLITUDE;
   const driftY = Math.cos(timeSec * INK_DRIFT_SPEED * 0.8 + phase) * INK_DRIFT_AMPLITUDE * 0.6;
@@ -991,6 +1239,11 @@ const SOFT_SHADE_CORE_FRACTION = 0.4;
  * A flat-alpha ellipse leaves a hard rim wherever it is not clipped away, and
  * on a body that rim reads as a crease or a seam where there is no anatomy at
  * all — every soft shadow and highlight on her fades out at its edge instead.
+ *
+ * `rotation` matters wherever a form does not run square to the sprite. Stacked
+ * axis-aligned ellipses put the boundary between light and shadow on a circle,
+ * which is the whole reason airbrushed shading reads as painted on: a real
+ * terminator is a line that follows the anatomy underneath it.
  */
 function fillSoftEllipse(
   ctx: CanvasRenderingContext2D,
@@ -1001,14 +1254,17 @@ function fillSoftEllipse(
   color: string,
   fadeColor: string,
   alpha: number,
+  rotation = 0,
+  coreFraction: number = SOFT_SHADE_CORE_FRACTION,
 ): void {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(centerX, centerY);
+  ctx.rotate(rotation);
   ctx.scale(radiusX, radiusY);
   const shade = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
   shade.addColorStop(0, color);
-  shade.addColorStop(SOFT_SHADE_CORE_FRACTION, color);
+  shade.addColorStop(coreFraction, color);
   shade.addColorStop(1, fadeColor);
   ctx.fillStyle = shade;
   ctx.beginPath();
@@ -1018,15 +1274,26 @@ function fillSoftEllipse(
 }
 
 /**
- * Canvas has no cheap blur, so a crease is built from a few strokes of
- * decreasing width and rising opacity: a wide faint halo of shadow around a
- * narrow dark core. A single stroke of even width reads as ink on the skin
- * however dark it is, because a real crease has no edge.
+ * Canvas has no cheap blur, so a crease is built from strokes of decreasing
+ * width and rising opacity: a wide faint halo of shadow around a narrow dark
+ * core. A single stroke of even width reads as ink on the skin however dark it
+ * is, because a real crease has no edge.
+ *
+ * The count matters as much as the range. Three layers spanning 3.4× in width
+ * is a visible step between each pair, and on a wide crease in a strong colour
+ * that stack stops reading as one soft shadow and starts reading as concentric
+ * bands — nested arcs under the bust and ripples across the seat.
  */
 const CREASE_LAYERS = [
-  { widthScale: 3.4, alpha: 0.16 },
-  { widthScale: 2, alpha: 0.24 },
-  { widthScale: 1, alpha: 0.6 },
+  { widthScale: 4, alpha: 0.045 },
+  { widthScale: 3.5, alpha: 0.05 },
+  { widthScale: 3, alpha: 0.06 },
+  { widthScale: 2.6, alpha: 0.07 },
+  { widthScale: 2.2, alpha: 0.085 },
+  { widthScale: 1.8, alpha: 0.1 },
+  { widthScale: 1.5, alpha: 0.13 },
+  { widthScale: 1.2, alpha: 0.18 },
+  { widthScale: 1, alpha: 0.42 },
 ] as const;
 
 function strokeSoftCrease(
@@ -1034,11 +1301,12 @@ function strokeSoftCrease(
   baseWidth: number,
   stroke: string | CanvasGradient,
   tracePath: () => void,
+  opacity = 1,
 ): void {
   ctx.strokeStyle = stroke;
   ctx.lineCap = 'round';
   for (const layer of CREASE_LAYERS) {
-    ctx.globalAlpha = layer.alpha;
+    ctx.globalAlpha = layer.alpha * opacity;
     ctx.lineWidth = baseWidth * layer.widthScale;
     ctx.beginPath();
     tracePath();
@@ -1070,11 +1338,68 @@ function pathSeatUnderside(ctx: CanvasRenderingContext2D): void {
   ctx.quadraticCurveTo(SEAT_HALF_WIDTH, SEAT_WIDEST_Y, HIP_HALF_WIDTH, HIP_Y);
 }
 
+/**
+ * One side of the chest, from the shoulder down to the waist: armpit tuck,
+ * breast swell, ribcage tuck. `side` is -1 tracing down the left, +1 tracing up
+ * the right, so the two calls are mirror images of the same three segments.
+ */
+function pathChestSide(
+  ctx: CanvasRenderingContext2D,
+  side: BodySide,
+  chestHalfWidth: number,
+): void {
+  const armpitDrop = 0.01;
+  const bustEntryDrop = 0.022;
+  const bustExitDrop = 0.03;
+  const ribApproachRise = 0.01;
+
+  if (side < 0) {
+    ctx.quadraticCurveTo(-SHOULDER_HALF_WIDTH, ARMPIT_Y - armpitDrop, -ARMPIT_HALF_WIDTH, ARMPIT_Y);
+    ctx.bezierCurveTo(
+      -chestHalfWidth,
+      ARMPIT_Y + bustEntryDrop,
+      -chestHalfWidth,
+      BUST_WIDEST_Y - bustEntryDrop,
+      -chestHalfWidth,
+      BUST_WIDEST_Y,
+    );
+    ctx.bezierCurveTo(
+      -chestHalfWidth,
+      BUST_WIDEST_Y + bustExitDrop,
+      -RIBCAGE_HALF_WIDTH - 0.008,
+      RIBCAGE_Y - ribApproachRise,
+      -RIBCAGE_HALF_WIDTH,
+      RIBCAGE_Y,
+    );
+    ctx.quadraticCurveTo(-WAIST_HALF_WIDTH - 0.008, WAIST_Y - 0.03, -WAIST_HALF_WIDTH, WAIST_Y);
+    return;
+  }
+
+  ctx.quadraticCurveTo(WAIST_HALF_WIDTH + 0.008, WAIST_Y - 0.03, RIBCAGE_HALF_WIDTH, RIBCAGE_Y);
+  ctx.bezierCurveTo(
+    RIBCAGE_HALF_WIDTH + 0.008,
+    RIBCAGE_Y - ribApproachRise,
+    chestHalfWidth,
+    BUST_WIDEST_Y + bustExitDrop,
+    chestHalfWidth,
+    BUST_WIDEST_Y,
+  );
+  ctx.bezierCurveTo(
+    chestHalfWidth,
+    BUST_WIDEST_Y - bustEntryDrop,
+    chestHalfWidth,
+    ARMPIT_Y + bustEntryDrop,
+    ARMPIT_HALF_WIDTH,
+    ARMPIT_Y,
+  );
+  ctx.quadraticCurveTo(SHOULDER_HALF_WIDTH, ARMPIT_Y - armpitDrop, SHOULDER_HALF_WIDTH, SHOULDER_Y);
+}
+
 function pathTorso(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
+  const chestHalfWidth = facingAway ? BACK_CHEST_HALF_WIDTH : BUST_HALF_WIDTH;
   ctx.beginPath();
   ctx.moveTo(-SHOULDER_HALF_WIDTH, SHOULDER_Y);
-  ctx.quadraticCurveTo(-BUST_HALF_WIDTH, BUST_Y - 0.02, -BUST_HALF_WIDTH, BUST_Y + 0.02);
-  ctx.quadraticCurveTo(-WAIST_HALF_WIDTH - 0.01, WAIST_Y - 0.04, -WAIST_HALF_WIDTH, WAIST_Y);
+  pathChestSide(ctx, -1, chestHalfWidth);
   ctx.quadraticCurveTo(-HIP_HALF_WIDTH, HIP_Y - 0.05, -HIP_HALF_WIDTH, HIP_Y);
   if (facingAway) {
     pathSeatUnderside(ctx);
@@ -1089,8 +1414,7 @@ function pathTorso(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
     ctx.quadraticCurveTo(HIP_HALF_WIDTH - 0.02, FRONT_HEM_SIDE_Y, HIP_HALF_WIDTH, HIP_Y);
   }
   ctx.quadraticCurveTo(HIP_HALF_WIDTH, HIP_Y - 0.05, WAIST_HALF_WIDTH, WAIST_Y);
-  ctx.quadraticCurveTo(WAIST_HALF_WIDTH + 0.01, WAIST_Y - 0.04, BUST_HALF_WIDTH, BUST_Y + 0.02);
-  ctx.quadraticCurveTo(BUST_HALF_WIDTH, BUST_Y - 0.02, SHOULDER_HALF_WIDTH, SHOULDER_Y);
+  pathChestSide(ctx, 1, chestHalfWidth);
   ctx.quadraticCurveTo(NECK_HALF_WIDTH * 2, SHOULDER_Y - 0.02, NECK_HALF_WIDTH, NECK_TOP_Y);
   ctx.lineTo(-NECK_HALF_WIDTH, NECK_TOP_Y);
   ctx.quadraticCurveTo(-NECK_HALF_WIDTH * 2, SHOULDER_Y - 0.02, -SHOULDER_HALF_WIDTH, SHOULDER_Y);
@@ -1099,6 +1423,7 @@ function pathTorso(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
 
 interface LegJoints {
   hipX: number;
+  hipY: number;
   kneeX: number;
   kneeY: number;
   ankleX: number;
@@ -1109,23 +1434,35 @@ interface LegJoints {
  * One leg's joint positions for the current step. Shared by the silhouette and
  * by the shading drawn on top of it, so the two can never drift apart.
  */
-function legJoints(side: BodySide, swing: number, lift: number, hipShift: number): LegJoints {
+function legJoints(
+  side: BodySide,
+  stridePhase: number,
+  hipShift: number,
+  hipDrop: number,
+  bob: number,
+): LegJoints {
+  const swing = Math.max(0, stridePhase);
+  const lift = swing * WALK_FOOT_LIFT;
+  /** Cancels the body bob for as long as this foot is carrying her. */
+  const plant = (1 - swing) * bob;
+
   return {
     hipX: side * LEG_HIP_X + hipShift,
-    kneeX: side * LEG_KNEE_X + swing + hipShift * KNEE_HIP_FOLLOW_SHARE,
-    kneeY: KNEE_Y - lift * KNEE_LIFT_SHARE,
-    ankleX: side * LEG_ANKLE_X + swing * WALK_ANKLE_SWING_RATIO,
-    ankleY: ANKLE_Y - lift,
+    hipY: LEG_TOP_Y + hipDrop,
+    kneeX: side * (LEG_KNEE_X - swing * WALK_KNEE_SWING) + hipShift * KNEE_HIP_FOLLOW_SHARE,
+    kneeY: KNEE_Y - lift * KNEE_LIFT_SHARE + plant * KNEE_BOB_FOLLOW_SHARE,
+    ankleX: side * (LEG_ANKLE_X - swing * WALK_ANKLE_SWING),
+    ankleY: ANKLE_Y - lift + plant,
   };
 }
 
 function pathLeg(ctx: CanvasRenderingContext2D, side: BodySide, joints: LegJoints): void {
-  const { hipX, kneeX, kneeY, ankleX, ankleY } = joints;
-  const thighMidY = (LEG_TOP_Y + kneeY) / 2;
+  const { hipX, hipY, kneeX, kneeY, ankleX, ankleY } = joints;
+  const thighMidY = (hipY + kneeY) / 2;
   const calfMidY = (kneeY + ankleY) / 2;
 
   ctx.beginPath();
-  ctx.moveTo(hipX + side * THIGH_HALF_WIDTH, LEG_TOP_Y);
+  ctx.moveTo(hipX + side * THIGH_HALF_WIDTH, hipY);
   ctx.quadraticCurveTo(
     hipX + side * (THIGH_HALF_WIDTH + THIGH_BULGE),
     thighMidY,
@@ -1139,21 +1476,28 @@ function pathLeg(ctx: CanvasRenderingContext2D, side: BodySide, joints: LegJoint
     ankleY,
   );
   ctx.lineTo(ankleX - side * ANKLE_HALF_WIDTH, ankleY);
+  const pelvisCenterX = hipX - side * LEG_HIP_X;
+  const innerCrotchX = pelvisCenterX + side * INNER_THIGH_CROTCH_X;
+  const innerKneeX = kneeX - side * (KNEE_HALF_WIDTH + INNER_KNEE_INSET);
+  const thighSpan = kneeY - INNER_THIGH_CROTCH_Y;
+  const widestShare = (THIGH_GAP_WIDEST_Y - INNER_THIGH_CROTCH_Y) / thighSpan;
+  const widestX = innerCrotchX + (innerKneeX - innerCrotchX) * widestShare + side * THIGH_GAP_BOW;
+
   ctx.quadraticCurveTo(
     kneeX - side * (KNEE_HALF_WIDTH + CALF_BULGE * 0.3),
     calfMidY,
-    kneeX - side * KNEE_HALF_WIDTH,
+    innerKneeX,
     kneeY,
   );
-  const innerKneeX = kneeX - side * KNEE_HALF_WIDTH;
-  const innerTaperX = hipX - side * LEG_HIP_X + side * INNER_THIGH_TAPER_X;
-  ctx.quadraticCurveTo(
-    (innerKneeX + innerTaperX) / 2 + side * INNER_THIGH_BOW,
-    thighMidY,
-    innerTaperX,
-    (LEG_TOP_Y + thighMidY) / 2,
+  ctx.bezierCurveTo(
+    widestX,
+    kneeY - thighSpan * THIGH_GAP_LOWER_CONTROL_SHARE,
+    widestX,
+    kneeY - thighSpan * THIGH_GAP_UPPER_CONTROL_SHARE,
+    innerCrotchX,
+    INNER_THIGH_CROTCH_Y,
   );
-  ctx.lineTo(hipX - side * LEG_HIP_X + side * INNER_THIGH_TOP_X, LEG_TOP_Y);
+  ctx.lineTo(pelvisCenterX, hipY);
   ctx.closePath();
 }
 
@@ -1233,44 +1577,77 @@ function drawLegs(
   timeSec: number,
   swingPhase: number,
   hipShift: number,
+  pelvisTiltSin: number,
+  bob: number,
   facingAway: boolean,
   castGlow: number,
   tileSizePx: number,
+  detail: SignetDetail,
 ): void {
   const SCALE_PATCH_INSET = 0.01;
   const SCALE_PATCH_WIDTH = 0.11;
 
   for (const side of SIDES) {
     const stridePhase = swingPhase * side;
-    const swing = stridePhase * WALK_LEG_SWING;
-    const lift = Math.max(0, stridePhase) * WALK_FOOT_LIFT;
-    const joints = legJoints(side, swing, lift, hipShift);
+    // The pelvis drops on the swinging side, so that leg's root rides down with
+    // it — the tilt of the two hips against each other is most of what a walk
+    // looks like from the front.
+    const hipDrop = side * pelvisTiltSin * LEG_HIP_X;
+    const joints = legJoints(side, stridePhase, hipShift, hipDrop, bob);
 
     ctx.save();
 
-    ctx.fillStyle = SKIN_BASE;
+    // Hung off the ankle joint rather than off `FOOT_Y`, so it takes the bob
+    // compensation that keeps a planted foot on the floor. Positioned from the
+    // constants instead, the foot rides the body's bob while the ankle above it
+    // stays down, and the two come apart every step.
+    const footHalfHeight = FOOT_Y - ANKLE_Y;
+    const footSoleY = joints.ankleY + footHalfHeight;
+    ctx.fillStyle = SKIN_LIT;
     ctx.beginPath();
     ctx.ellipse(
       joints.ankleX,
-      FOOT_Y - FOOT_CENTER_RISE - lift,
+      footSoleY - FOOT_CENTER_RISE,
       FOOT_HALF_WIDTH,
-      FOOT_Y - ANKLE_Y,
+      footHalfHeight,
       0,
       0,
       Math.PI * 2,
     );
     ctx.fill();
 
+    fillSoftEllipse(
+      ctx,
+      joints.ankleX,
+      footSoleY,
+      FOOT_HALF_WIDTH,
+      TOE_SHADE_RADIUS_Y,
+      SKIN_SHADE,
+      SKIN_SHADE_FADE,
+      TOE_SHADE_ALPHA,
+    );
+
     pathLeg(ctx, side, joints);
-    ctx.fillStyle = side < 0 ? SKIN_BASE : SKIN_LIT;
+    ctx.fillStyle = SKIN_LIT;
     ctx.fill();
 
     ctx.save();
     pathLeg(ctx, side, joints);
     ctx.clip();
 
+    if (stridePhase > 0) {
+      ctx.save();
+      ctx.globalAlpha = SWING_LEG_SHADE_ALPHA * Math.min(1, stridePhase);
+      ctx.fillStyle = SKIN_SHADE;
+      pathLeg(ctx, side, joints);
+      ctx.fill();
+      ctx.restore();
+    }
+
     const scalePatchLeft = side > 0 ? SCALE_PATCH_INSET : -SCALE_PATCH_INSET - SCALE_PATCH_WIDTH;
-    drawScalePatch(ctx, scalePatchLeft, LEG_TOP_Y, SCALE_PATCH_WIDTH, KNEE_Y - LEG_TOP_Y);
+    if (detail.skinTexture) {
+      drawScalePatch(ctx, scalePatchLeft, LEG_TOP_Y, SCALE_PATCH_WIDTH, KNEE_Y - LEG_TOP_Y);
+    }
 
     fillSoftEllipse(
       ctx,
@@ -1281,6 +1658,17 @@ function drawLegs(
       SKIN_SHADE,
       SKIN_SHADE_FADE,
       INNER_THIGH_SHADE_ALPHA,
+    );
+
+    fillSoftEllipse(
+      ctx,
+      side * CROTCH_SHADOW_X + hipShift,
+      CROTCH_SHADOW_Y,
+      CROTCH_SHADOW_RADIUS_X,
+      CROTCH_SHADOW_RADIUS_Y,
+      SKIN_SHADE,
+      SKIN_SHADE_FADE,
+      CROTCH_SHADOW_ALPHA,
     );
 
     if (facingAway) {
@@ -1313,13 +1701,13 @@ function drawLegs(
     // Anchored on the joints rather than on the rest pose, so the flash rides
     // the leg through the stride instead of sliding across the skin.
     if (side < 0) {
-      stampTattoo(ctx, drawThreeHeadedOgreMotif, timeSec, {
+      stampTattoo(ctx, detail, drawThreeHeadedOgreMotif, timeSec, {
         x: joints.hipX,
         y: THIGH_TATTOO_Y,
         size: 0.085,
         phase: 1.1,
       });
-      stampTattoo(ctx, drawEelLightningMotif, timeSec, {
+      stampTattoo(ctx, detail, drawEelLightningMotif, timeSec, {
         x: joints.kneeX,
         y: KNEE_TATTOO_Y,
         size: 0.07,
@@ -1327,7 +1715,7 @@ function drawLegs(
         detail: true,
       });
     } else {
-      stampTattoo(ctx, drawHammerheadSharkMotif, timeSec, {
+      stampTattoo(ctx, detail, drawHammerheadSharkMotif, timeSec, {
         x: joints.hipX,
         y: THIGH_TATTOO_Y,
         size: 0.13,
@@ -1341,8 +1729,13 @@ function drawLegs(
   }
 }
 
-const THONG_STRAP_Y = HIP_Y - 0.005;
-const THONG_STRAP_HEIGHT = 0.009;
+/**
+ * The band rides the hip crest. Slung under it the whole garment hangs off the
+ * front of the pelvis with nothing holding it, which is what makes a low band
+ * read as pasted on rather than worn.
+ */
+const THONG_STRAP_Y = HIP_Y - 0.022;
+const THONG_STRAP_HEIGHT = 0.013;
 /**
  * Wider than the hip, because the band is clipped to the torso: run short of
  * the silhouette and it ends in mid-skin, which reads as a bar laid across her
@@ -1354,21 +1747,40 @@ const THONG_STRAP_HALF_SPAN = HIP_HALF_WIDTH * 1.12;
  * curves, which reads as a painted stripe. It sags at the centre front and sits
  * nearly level at the back, the way a low-rise band actually hangs.
  */
-const THONG_WAISTBAND_FRONT_SAG = 0.012;
-const THONG_WAISTBAND_BACK_SAG = 0.004;
+const THONG_WAISTBAND_FRONT_SAG = 0.026;
+const THONG_WAISTBAND_BACK_SAG = 0.011;
+/**
+ * Fraction of its height the band still shows at her sides. It is a ring seen
+ * head on, so it turns away from the viewer toward both ends and has to
+ * foreshorten there; held at full height to the ends it stays a bar laid across
+ * her however far it is curved.
+ */
+const THONG_BAND_EDGE_HEIGHT_FRACTION = 0.16;
+/** The band edges are parabolas, but the panel hangs off one of them and any
+ * curve fitted to the other opens a seam along the join, so both are walked. */
+const BAND_EDGE_SAMPLES = 24;
 
 /**
- * The front panel is a high-cut V, narrow at the band and tapering to a point.
- * Widened out, with its sides bowing *outward*, it stops reading as a thong and
- * becomes a loincloth hanging off her hips.
+ * The front panel is a high-cut V. Narrow at the band it is a triangle taped to
+ * her; wide with its sides bowing *outward* it becomes a loincloth. It is wide
+ * across the top and cut away hard at the legs.
  */
-const THONG_PANEL_HALF_WIDTH = HIP_HALF_WIDTH * 0.44;
+const THONG_PANEL_HALF_WIDTH = HIP_HALF_WIDTH * 0.74;
 /** Stops above the crotch, or its point runs on into the gap between her legs
  * and panel and gap read as one long dark wedge. */
-const THONG_PANEL_BOTTOM_Y = CROTCH_Y - 0.012;
-/** Pulled well inside the straight line, so each leg opening cuts in. */
-const THONG_PANEL_CONTROL_X_FRACTION = 0.22;
-const THONG_PANEL_CONTROL_Y_FRACTION = 0.72;
+const THONG_PANEL_BOTTOM_Y = CROTCH_Y - 0.019;
+/** A point has no fabric in it; the gusset keeps a width all the way down. */
+const THONG_PANEL_BOTTOM_HALF_WIDTH = 0.013;
+const THONG_PANEL_BOTTOM_DIP = 0.005;
+/**
+ * The leg opening as a cubic between the band corner and the gusset, its
+ * controls pulled in from the straight line between them. That inward bow is
+ * the whole difference between a cut garment and a flat triangle.
+ */
+const THONG_LEG_OPENING_UPPER_WIDTH_FRACTION = 0.6;
+const THONG_LEG_OPENING_UPPER_DROP_FRACTION = 0.3;
+const THONG_LEG_OPENING_LOWER_WIDTH_FRACTION = 0.16;
+const THONG_LEG_OPENING_LOWER_DROP_FRACTION = 0.68;
 
 /** Narrow enough that the cleft shadow still shows on either side of it. */
 const THONG_STRING_HALF_WIDTH = GLUTE_CLEFT_HALF_WIDTH * 0.38;
@@ -1378,51 +1790,106 @@ const THONG_STRING_HALF_WIDTH = GLUTE_CLEFT_HALF_WIDTH * 0.38;
  */
 const THONG_STRING_BOTTOM_Y = GLUTE_CLEFT_WIDEST_Y + 0.008;
 
-/** Height of a band edge at a given x: a parabola, sagging to `sag` at centre. */
-function waistbandEdgeY(x: number, y: number, sag: number): number {
+/** Centre of the band at `x`: a parabola sagging to `sag` at the middle. */
+function bandCenterY(x: number, sag: number): number {
   const acrossBand = x / THONG_STRAP_HALF_SPAN;
-  return y + sag * (1 - acrossBand * acrossBand);
+  return THONG_STRAP_Y + sag * (1 - acrossBand * acrossBand);
 }
 
-/**
- * A band edge across `±halfWidth`. Any span of that parabola is itself a
- * quadratic, so the panel can share the band's exact edge instead of
- * approximating it and leaving its corners poking out above the band.
- */
-function pathWaistbandEdgeSpan(
+/** Half the band's visible height at `x`, foreshortened toward her sides. */
+function bandHalfHeight(x: number): number {
+  const acrossBand = x / THONG_STRAP_HALF_SPAN;
+  const facing =
+    THONG_BAND_EDGE_HEIGHT_FRACTION +
+    (1 - THONG_BAND_EDGE_HEIGHT_FRACTION) * (1 - acrossBand * acrossBand);
+  return (THONG_STRAP_HEIGHT / 2) * facing;
+}
+
+function bandTopEdgeY(x: number, sag: number): number {
+  return bandCenterY(x, sag) - bandHalfHeight(x);
+}
+
+function bandBottomEdgeY(x: number, sag: number): number {
+  return bandCenterY(x, sag) + bandHalfHeight(x);
+}
+
+function traceBandEdge(
   ctx: CanvasRenderingContext2D,
-  halfWidth: number,
-  y: number,
+  edgeY: (x: number, sag: number) => number,
+  fromX: number,
+  toX: number,
   sag: number,
   moveToStart: boolean,
 ): void {
-  const edgeY = waistbandEdgeY(halfWidth, y, sag);
-  /** A quadratic's midpoint sits half way to its control. */
-  const controlY = 2 * (y + sag) - edgeY;
-  if (moveToStart) {
-    ctx.moveTo(-halfWidth, edgeY);
-  } else {
-    ctx.lineTo(-halfWidth, edgeY);
+  for (let i = 0; i <= BAND_EDGE_SAMPLES; i++) {
+    const x = fromX + ((toX - fromX) * i) / BAND_EDGE_SAMPLES;
+    const y = edgeY(x, sag);
+    if (i === 0 && moveToStart) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
   }
-  ctx.quadraticCurveTo(0, controlY, halfWidth, edgeY);
 }
 
 function drawWaistband(ctx: CanvasRenderingContext2D, sag: number): void {
-  const bandTopY = THONG_STRAP_Y - THONG_STRAP_HEIGHT;
-
   ctx.fillStyle = THONG_COLOR;
   ctx.beginPath();
-  pathWaistbandEdgeSpan(ctx, THONG_STRAP_HALF_SPAN, bandTopY, sag, true);
-  ctx.lineTo(THONG_STRAP_HALF_SPAN, THONG_STRAP_Y);
-  ctx.quadraticCurveTo(0, THONG_STRAP_Y + sag * 2, -THONG_STRAP_HALF_SPAN, THONG_STRAP_Y);
+  traceBandEdge(ctx, bandTopEdgeY, -THONG_STRAP_HALF_SPAN, THONG_STRAP_HALF_SPAN, sag, true);
+  traceBandEdge(ctx, bandBottomEdgeY, THONG_STRAP_HALF_SPAN, -THONG_STRAP_HALF_SPAN, sag, false);
   ctx.closePath();
   ctx.fill();
 
   ctx.strokeStyle = THONG_TRIM;
   ctx.lineWidth = HAIRLINE_WIDTH;
   ctx.beginPath();
-  pathWaistbandEdgeSpan(ctx, THONG_STRAP_HALF_SPAN, bandTopY, sag, true);
+  traceBandEdge(ctx, bandTopEdgeY, -THONG_STRAP_HALF_SPAN, THONG_STRAP_HALF_SPAN, sag, true);
   ctx.stroke();
+}
+
+/**
+ * One leg opening, from the band corner down to the gusset. Traced downward on
+ * the right of the panel and upward on the left, so both sides are the same
+ * curve.
+ */
+function pathLegOpening(ctx: CanvasRenderingContext2D, side: BodySide, sag: number): void {
+  const cornerY = bandTopEdgeY(side * THONG_PANEL_HALF_WIDTH, sag);
+  const drop = THONG_PANEL_BOTTOM_Y - cornerY;
+  const spread = THONG_PANEL_HALF_WIDTH - THONG_PANEL_BOTTOM_HALF_WIDTH;
+
+  const upperX =
+    side * (THONG_PANEL_BOTTOM_HALF_WIDTH + spread * THONG_LEG_OPENING_UPPER_WIDTH_FRACTION);
+  const lowerX =
+    side * (THONG_PANEL_BOTTOM_HALF_WIDTH + spread * THONG_LEG_OPENING_LOWER_WIDTH_FRACTION);
+  const upperY = cornerY + drop * THONG_LEG_OPENING_UPPER_DROP_FRACTION;
+  const lowerY = cornerY + drop * THONG_LEG_OPENING_LOWER_DROP_FRACTION;
+
+  if (side > 0) {
+    ctx.bezierCurveTo(
+      upperX,
+      upperY,
+      lowerX,
+      lowerY,
+      THONG_PANEL_BOTTOM_HALF_WIDTH,
+      THONG_PANEL_BOTTOM_Y,
+    );
+    return;
+  }
+  ctx.bezierCurveTo(lowerX, lowerY, upperX, upperY, -THONG_PANEL_HALF_WIDTH, cornerY);
+}
+
+function pathFrontPanel(ctx: CanvasRenderingContext2D, sag: number): void {
+  ctx.beginPath();
+  traceBandEdge(ctx, bandTopEdgeY, -THONG_PANEL_HALF_WIDTH, THONG_PANEL_HALF_WIDTH, sag, true);
+  pathLegOpening(ctx, 1, sag);
+  ctx.quadraticCurveTo(
+    0,
+    THONG_PANEL_BOTTOM_Y + THONG_PANEL_BOTTOM_DIP,
+    -THONG_PANEL_BOTTOM_HALF_WIDTH,
+    THONG_PANEL_BOTTOM_Y,
+  );
+  pathLegOpening(ctx, -1, sag);
+  ctx.closePath();
 }
 
 function drawThong(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
@@ -1437,7 +1904,7 @@ function drawThong(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
     // From behind the panel is only a string, running down the cleft from the
     // band — it has to sit slightly narrower than the cleft or it reads as a
     // painted stripe instead of a garment.
-    const stringTopY = THONG_STRAP_Y + sag;
+    const stringTopY = bandBottomEdgeY(0, sag);
     ctx.beginPath();
     ctx.moveTo(-THONG_STRING_HALF_WIDTH, stringTopY);
     ctx.lineTo(THONG_STRING_HALF_WIDTH, stringTopY);
@@ -1451,24 +1918,51 @@ function drawThong(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
     ctx.closePath();
     ctx.fill();
   } else {
-    const controlX = THONG_PANEL_HALF_WIDTH * THONG_PANEL_CONTROL_X_FRACTION;
-    const controlY =
-      THONG_STRAP_Y + (THONG_PANEL_BOTTOM_Y - THONG_STRAP_Y) * THONG_PANEL_CONTROL_Y_FRACTION;
-
     // Hung from the band's top edge rather than butted against its lower one,
     // so the band covers the join exactly and no seam can open along it.
-    const panelTopY = THONG_STRAP_Y - THONG_STRAP_HEIGHT;
-    const panelCornerY = waistbandEdgeY(THONG_PANEL_HALF_WIDTH, panelTopY, sag);
-
-    ctx.beginPath();
-    pathWaistbandEdgeSpan(ctx, THONG_PANEL_HALF_WIDTH, panelTopY, sag, true);
-    ctx.quadraticCurveTo(controlX, controlY, 0, THONG_PANEL_BOTTOM_Y);
-    ctx.quadraticCurveTo(-controlX, controlY, -THONG_PANEL_HALF_WIDTH, panelCornerY);
-    ctx.closePath();
+    pathFrontPanel(ctx, sag);
     ctx.fill();
+
+    ctx.strokeStyle = THONG_TRIM;
+    ctx.lineWidth = HAIRLINE_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(THONG_PANEL_HALF_WIDTH, bandTopEdgeY(THONG_PANEL_HALF_WIDTH, sag));
+    pathLegOpening(ctx, 1, sag);
+    ctx.quadraticCurveTo(
+      0,
+      THONG_PANEL_BOTTOM_Y + THONG_PANEL_BOTTOM_DIP,
+      -THONG_PANEL_BOTTOM_HALF_WIDTH,
+      THONG_PANEL_BOTTOM_Y,
+    );
+    pathLegOpening(ctx, -1, sag);
+    ctx.stroke();
   }
 
   drawWaistband(ctx, sag);
+  ctx.restore();
+}
+
+function drawSacrum(ctx: CanvasRenderingContext2D): void {
+  const plane = ctx.createLinearGradient(0, SACRUM_TOP_Y, 0, GLUTE_CLEFT_TOP_Y);
+  plane.addColorStop(0, SKIN_SHADE_FADE);
+  plane.addColorStop(SACRUM_FADE_STOP, SKIN_SHADE);
+  plane.addColorStop(1, SKIN_SHADE);
+
+  ctx.save();
+  ctx.globalAlpha = SACRUM_ALPHA;
+  ctx.fillStyle = plane;
+  ctx.beginPath();
+  ctx.moveTo(-SACRUM_HALF_WIDTH, SACRUM_TOP_Y);
+  ctx.quadraticCurveTo(0, SACRUM_TOP_Y - SACRUM_HALF_WIDTH * 0.2, SACRUM_HALF_WIDTH, SACRUM_TOP_Y);
+  ctx.quadraticCurveTo(SACRUM_HALF_WIDTH * 0.5, GLUTE_CLEFT_TOP_Y, 0, GLUTE_CLEFT_TOP_Y);
+  ctx.quadraticCurveTo(
+    -SACRUM_HALF_WIDTH * 0.5,
+    GLUTE_CLEFT_TOP_Y,
+    -SACRUM_HALF_WIDTH,
+    SACRUM_TOP_Y,
+  );
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 }
 
@@ -1489,34 +1983,55 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
   );
 
   for (const side of SIDES) {
+    const tilt = side * GLUTE_AXIS_TILT;
+
+    fillSoftEllipse(
+      ctx,
+      side * GLUTE_SHADE_X,
+      GLUTE_SHADE_Y,
+      GLUTE_SHADE_RADIUS_X,
+      GLUTE_SHADE_RADIUS_Y,
+      SKIN_DEEP_SHADE,
+      SKIN_SHADE_FADE,
+      GLUTE_SHADE_ALPHA,
+      tilt,
+      GLUTE_SHADE_CORE_FRACTION,
+    );
     fillSoftEllipse(
       ctx,
       side * GLUTE_HIGHLIGHT_X,
       GLUTE_HIGHLIGHT_Y,
       GLUTE_HIGHLIGHT_RADIUS_X,
       GLUTE_HIGHLIGHT_RADIUS_Y,
-      SKIN_LIT,
-      SKIN_LIT_FADE,
+      SKIN_HIGHLIGHT,
+      SKIN_HIGHLIGHT_FADE,
       GLUTE_HIGHLIGHT_ALPHA,
+      tilt,
+      GLUTE_HIGHLIGHT_CORE_FRACTION,
     );
     fillSoftEllipse(
       ctx,
-      side * GLUTE_OUTER_SHADE_X,
-      GLUTE_OUTER_SHADE_Y,
-      GLUTE_OUTER_SHADE_RADIUS_X,
-      GLUTE_OUTER_SHADE_RADIUS_Y,
+      side * TROCHANTER_DIP_X,
+      TROCHANTER_DIP_Y,
+      TROCHANTER_DIP_RADIUS_X,
+      TROCHANTER_DIP_RADIUS_Y,
       SKIN_SHADE,
       SKIN_SHADE_FADE,
-      GLUTE_OUTER_SHADE_ALPHA,
+      TROCHANTER_DIP_ALPHA,
     );
+  }
+
+  drawSacrum(ctx);
+
+  for (const side of SIDES) {
     fillSoftEllipse(
       ctx,
       side * SACRAL_DIMPLE_X,
       SACRAL_DIMPLE_Y,
       SACRAL_DIMPLE_RADIUS,
       SACRAL_DIMPLE_RADIUS,
-      SKIN_SHADE,
-      SKIN_SHADE_FADE,
+      SKIN_CREASE,
+      SKIN_CREASE_FADE,
       SACRAL_DIMPLE_ALPHA,
     );
   }
@@ -1534,7 +2049,7 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
     GLUTE_CLEFT_VALLEY_ALPHA,
   );
 
-  ctx.fillStyle = SKIN_CREASE;
+  ctx.fillStyle = SKIN_DEEP_CREASE;
   ctx.beginPath();
   ctx.moveTo(0, GLUTE_CLEFT_TOP_Y);
   ctx.quadraticCurveTo(GLUTE_CLEFT_HALF_WIDTH, GLUTE_CLEFT_WIDEST_Y, 0, GLUTE_CLEFT_BOTTOM_Y);
@@ -1549,54 +2064,140 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
   // the crease dies away there.
   for (const side of SIDES) {
     const outerX = side * GLUTE_FOLD_OUTER_X;
-
-    const crease = ctx.createLinearGradient(outerX, GLUTE_FOLD_OUTER_Y, 0, GLUTE_FOLD_JUNCTION_Y);
-    crease.addColorStop(0, SKIN_CREASE_FADE);
-    crease.addColorStop(GLUTE_FOLD_FADE_STOP, SKIN_CREASE);
-    crease.addColorStop(1, SKIN_CREASE);
-
-    strokeSoftCrease(ctx, BUST_UNDERCURVE_LINE_WIDTH * UNDERCURVE_WEIGHT, crease, () => {
-      ctx.moveTo(outerX, GLUTE_FOLD_OUTER_Y);
+    const traceFold = (drop: number): void => {
+      ctx.moveTo(outerX, GLUTE_FOLD_OUTER_Y + drop);
       ctx.bezierCurveTo(
         side * GLUTE_FOLD_OUTER_CONTROL_X,
-        GLUTE_FOLD_OUTER_CONTROL_Y,
+        GLUTE_FOLD_OUTER_CONTROL_Y + drop,
         side * GLUTE_FOLD_INNER_CONTROL_X,
-        GLUTE_FOLD_INNER_CONTROL_Y,
+        GLUTE_FOLD_INNER_CONTROL_Y + drop,
         0,
-        GLUTE_FOLD_JUNCTION_Y,
+        GLUTE_FOLD_JUNCTION_Y + drop,
       );
+    };
+
+    const crease = ctx.createLinearGradient(outerX, GLUTE_FOLD_OUTER_Y, 0, GLUTE_FOLD_JUNCTION_Y);
+    crease.addColorStop(0, SKIN_DEEP_CREASE_FADE);
+    crease.addColorStop(GLUTE_FOLD_FADE_STOP, SKIN_DEEP_CREASE);
+    crease.addColorStop(1, SKIN_DEEP_CREASE);
+
+    strokeSoftCrease(ctx, BUST_UNDERCURVE_LINE_WIDTH * GLUTE_FOLD_WEIGHT, crease, () =>
+      traceFold(0),
+    );
+
+    const bounce = ctx.createLinearGradient(outerX, GLUTE_FOLD_OUTER_Y, 0, GLUTE_FOLD_JUNCTION_Y);
+    bounce.addColorStop(0, SKIN_HIGHLIGHT_FADE);
+    bounce.addColorStop(GLUTE_FOLD_FADE_STOP, SKIN_HIGHLIGHT);
+    bounce.addColorStop(1, SKIN_HIGHLIGHT);
+    strokeSoftCrease(
+      ctx,
+      BUST_UNDERCURVE_LINE_WIDTH * GLUTE_UNDERHANG_LIGHT_WEIGHT,
+      bounce,
+      () => traceFold(GLUTE_UNDERHANG_LIGHT_DROP),
+      GLUTE_UNDERHANG_LIGHT_ALPHA,
+    );
+  }
+}
+
+function drawCollarbones(ctx: CanvasRenderingContext2D): void {
+  fillSoftEllipse(
+    ctx,
+    0,
+    SUPRASTERNAL_NOTCH_Y,
+    SUPRASTERNAL_NOTCH_RADIUS_X,
+    SUPRASTERNAL_NOTCH_RADIUS_Y,
+    SKIN_CREASE,
+    SKIN_CREASE_FADE,
+    SUPRASTERNAL_NOTCH_ALPHA,
+  );
+
+  for (const side of SIDES) {
+    const innerX = side * COLLARBONE_INNER_X;
+    const outerX = side * COLLARBONE_OUTER_X;
+    const midX = (side * (COLLARBONE_INNER_X + COLLARBONE_OUTER_X)) / 2;
+
+    fillSoftEllipse(
+      ctx,
+      midX,
+      COLLARBONE_Y + COLLARBONE_DIP / 2 - COLLARBONE_RIDGE_RISE,
+      (COLLARBONE_OUTER_X - COLLARBONE_INNER_X) / 2,
+      COLLARBONE_RIDGE_RISE,
+      SKIN_HIGHLIGHT,
+      SKIN_HIGHLIGHT_FADE,
+      COLLARBONE_RIDGE_ALPHA,
+    );
+
+    const bone = ctx.createLinearGradient(innerX, COLLARBONE_Y, outerX, COLLARBONE_Y);
+    bone.addColorStop(0, SKIN_CREASE_FADE);
+    bone.addColorStop(COLLARBONE_FADE_STOP, SKIN_CREASE);
+    bone.addColorStop(1, SKIN_CREASE_FADE);
+
+    strokeSoftCrease(ctx, FINE_LINE_WIDTH, bone, () => {
+      ctx.moveTo(innerX, COLLARBONE_Y);
+      ctx.quadraticCurveTo(midX, COLLARBONE_Y + COLLARBONE_DIP, outerX, COLLARBONE_Y);
     });
   }
 }
 
 /**
- * The bust, front view only. No forward detail is ever drawn on it: the shape
- * is carried entirely by the lit swell of each breast, the valley between them
- * and the crease underneath, and the hair locks cover the apexes on top of it.
- * Expects the caller to have already clipped to the torso path.
+ * A wedge, not an ellipse: the two breasts close on each other going down, so
+ * the valley is narrowest and deepest at the bottom and opens out to nothing at
+ * the collarbones. A symmetric blob with a stroke down the middle of it is the
+ * shape that reads as a line ruled on her.
  */
+function drawCleavage(ctx: CanvasRenderingContext2D): void {
+  const valley = ctx.createLinearGradient(0, CLEAVAGE_TOP_Y, 0, CLEAVAGE_BOTTOM_Y);
+  valley.addColorStop(0, SKIN_DEEP_CREASE_FADE);
+  valley.addColorStop(CLEAVAGE_FADE_STOP, SKIN_CREASE);
+  valley.addColorStop(1, SKIN_DEEP_CREASE);
+
+  ctx.save();
+  ctx.globalAlpha = CLEAVAGE_ALPHA;
+  ctx.fillStyle = valley;
+  ctx.beginPath();
+  for (const side of SIDES) {
+    ctx.moveTo(0, CLEAVAGE_BOTTOM_Y);
+    ctx.quadraticCurveTo(
+      side * CLEAVAGE_BOTTOM_HALF_WIDTH,
+      (CLEAVAGE_TOP_Y + CLEAVAGE_BOTTOM_Y) / 2,
+      side * CLEAVAGE_TOP_HALF_WIDTH,
+      CLEAVAGE_TOP_Y,
+    );
+    ctx.quadraticCurveTo(side * CLEAVAGE_TOP_HALF_WIDTH * 0.3, CLEAVAGE_TOP_Y, 0, CLEAVAGE_TOP_Y);
+    ctx.closePath();
+  }
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawBust(ctx: CanvasRenderingContext2D): void {
+  drawCollarbones(ctx);
+
   fillSoftEllipse(
     ctx,
     0,
-    BUST_SHADE_Y,
-    BUST_SHADE_RADIUS_X,
-    BUST_SHADE_RADIUS_Y,
+    UPPER_CHEST_SHADE_Y,
+    UPPER_CHEST_SHADE_RADIUS_X,
+    UPPER_CHEST_SHADE_RADIUS_Y,
     SKIN_SHADE,
     SKIN_SHADE_FADE,
-    BUST_SHADE_ALPHA,
+    UPPER_CHEST_SHADE_ALPHA,
   );
 
   for (const side of SIDES) {
+    const tilt = side * BUST_AXIS_TILT;
+
     fillSoftEllipse(
       ctx,
-      side * UNDERBUST_SHADOW_X,
-      UNDERBUST_SHADOW_Y,
-      UNDERBUST_SHADOW_RADIUS_X,
-      UNDERBUST_SHADOW_RADIUS_Y,
-      SKIN_CREASE,
-      SKIN_CREASE_FADE,
-      UNDERBUST_SHADOW_ALPHA,
+      side * BUST_SHADE_X,
+      BUST_SHADE_Y,
+      BUST_SHADE_RADIUS_X,
+      BUST_SHADE_RADIUS_Y,
+      SKIN_DEEP_SHADE,
+      SKIN_SHADE_FADE,
+      BUST_SHADE_ALPHA,
+      tilt,
+      BUST_SHADE_CORE_FRACTION,
     );
     fillSoftEllipse(
       ctx,
@@ -1604,32 +2205,26 @@ function drawBust(ctx: CanvasRenderingContext2D): void {
       BUST_HIGHLIGHT_Y,
       BUST_HIGHLIGHT_RADIUS_X,
       BUST_HIGHLIGHT_RADIUS_Y,
-      SKIN_LIT,
-      SKIN_LIT_FADE,
+      SKIN_HIGHLIGHT,
+      SKIN_HIGHLIGHT_FADE,
       BUST_HIGHLIGHT_ALPHA,
+      tilt,
+      BUST_HIGHLIGHT_CORE_FRACTION,
     );
     fillSoftEllipse(
       ctx,
-      side * BUST_OUTER_SHADE_X,
-      BUST_OUTER_SHADE_Y,
-      BUST_OUTER_SHADE_RADIUS_X,
-      BUST_OUTER_SHADE_RADIUS_Y,
-      SKIN_SHADE,
-      SKIN_SHADE_FADE,
-      BUST_OUTER_SHADE_ALPHA,
+      side * UNDERBUST_SHADOW_X,
+      UNDERBUST_SHADOW_Y,
+      UNDERBUST_SHADOW_RADIUS_X,
+      UNDERBUST_SHADOW_RADIUS_Y,
+      SKIN_DEEP_CREASE,
+      SKIN_DEEP_CREASE_FADE,
+      UNDERBUST_SHADOW_ALPHA,
+      tilt,
     );
   }
 
-  fillSoftEllipse(
-    ctx,
-    0,
-    (CLEAVAGE_TOP_Y + CLEAVAGE_BOTTOM_Y) / 2,
-    CLEAVAGE_HALF_WIDTH,
-    (CLEAVAGE_BOTTOM_Y - CLEAVAGE_TOP_Y) / 2,
-    SKIN_CREASE,
-    SKIN_CREASE_FADE,
-    CLEAVAGE_ALPHA,
-  );
+  drawCleavage(ctx);
 
   for (const side of SIDES) {
     const centerX = side * BUST_POINT_X;
@@ -1639,10 +2234,10 @@ function drawBust(ctx: CanvasRenderingContext2D): void {
     const arcEndY = BUST_POINT_Y + BUST_UNDERCURVE_RADIUS * Math.sin(BUST_UNDERCURVE_ARC_END);
 
     const crease = ctx.createLinearGradient(arcStartX, arcStartY, arcEndX, arcEndY);
-    crease.addColorStop(0, SKIN_CREASE_FADE);
-    crease.addColorStop(BUST_UNDERCURVE_FADE_IN, SKIN_CREASE);
-    crease.addColorStop(BUST_UNDERCURVE_FADE_OUT, SKIN_CREASE);
-    crease.addColorStop(1, SKIN_CREASE_FADE);
+    crease.addColorStop(0, SKIN_DEEP_CREASE_FADE);
+    crease.addColorStop(BUST_UNDERCURVE_FADE_IN, SKIN_DEEP_CREASE);
+    crease.addColorStop(BUST_UNDERCURVE_FADE_OUT, SKIN_DEEP_CREASE);
+    crease.addColorStop(1, SKIN_DEEP_CREASE_FADE);
 
     strokeSoftCrease(ctx, BUST_UNDERCURVE_LINE_WIDTH * UNDERCURVE_WEIGHT, crease, () => {
       ctx.arc(
@@ -1675,7 +2270,6 @@ function drawPelvisFront(ctx: CanvasRenderingContext2D): void {
     );
   }
 
-  ctx.lineWidth = CONTOUR_LINE_WIDTH;
   for (const side of SIDES) {
     const topX = side * GROIN_CREASE_TOP_X;
     const bottomX = side * GROIN_CREASE_BOTTOM_X;
@@ -1689,17 +2283,18 @@ function drawPelvisFront(ctx: CanvasRenderingContext2D): void {
     crease.addColorStop(0, SKIN_SHADE_FADE);
     crease.addColorStop(GROIN_CREASE_FADE_STOP, SKIN_SHADE);
     crease.addColorStop(1, SKIN_SHADE);
-    ctx.strokeStyle = crease;
 
-    ctx.beginPath();
-    ctx.moveTo(topX, GROIN_CREASE_TOP_Y);
-    ctx.quadraticCurveTo(
-      side * GROIN_CREASE_CONTROL_X,
-      GROIN_CREASE_CONTROL_Y,
-      bottomX,
-      GROIN_CREASE_BOTTOM_Y,
-    );
-    ctx.stroke();
+    // An even stroke here runs parallel to the leg opening just outside it and
+    // reads as a second garment edge rather than as a fold in her.
+    strokeSoftCrease(ctx, FINE_LINE_WIDTH, crease, () => {
+      ctx.moveTo(topX, GROIN_CREASE_TOP_Y);
+      ctx.quadraticCurveTo(
+        side * GROIN_CREASE_CONTROL_X,
+        GROIN_CREASE_CONTROL_Y,
+        bottomX,
+        GROIN_CREASE_BOTTOM_Y,
+      );
+    });
   }
 }
 
@@ -1708,6 +2303,7 @@ function drawTorso(
   timeSec: number,
   castGlow: number,
   tileSizePx: number,
+  detail: SignetDetail,
   facingAway: boolean,
 ): void {
   pathTorso(ctx, facingAway);
@@ -1770,27 +2366,40 @@ function drawTorso(
   ctx.lineTo(0, WAIST_Y + ABDOMEN_LINE_DROP);
   ctx.stroke();
 
-  drawScalePatch(ctx, -HIP_HALF_WIDTH * 0.7, WAIST_Y + 0.04, HIP_HALF_WIDTH * 1.4, HIP_Y - WAIST_Y);
+  // Her scales and the ripple that travels over them both stop at the hip from
+  // behind. Run down over the seat they lay a band of hard little arcs across
+  // the one form on her that is carried entirely by soft value, and the cheeks
+  // read as rippled rather than round.
+  const texturedBottomY = facingAway ? HIP_Y : CROTCH_Y;
+  if (detail.skinTexture) {
+    drawScalePatch(
+      ctx,
+      -HIP_HALF_WIDTH * 0.7,
+      WAIST_Y + 0.04,
+      HIP_HALF_WIDTH * 1.4,
+      texturedBottomY - WAIST_Y - 0.04,
+    );
+  }
 
   applyInkStyle(ctx, castGlow, tileSizePx);
   if (facingAway) {
     // The book's shoulder-blade fish — see BACK_FISH_Y for why it sits a little
     // below the blades themselves.
-    stampTattoo(ctx, drawSmallFishMotif, timeSec, {
+    stampTattoo(ctx, detail, drawSmallFishMotif, timeSec, {
       x: -BACK_FISH_X,
       y: BACK_FISH_Y,
       size: 0.05,
       phase: 5.2,
       detail: true,
     });
-    stampTattoo(ctx, drawDragonMotif, timeSec, {
+    stampTattoo(ctx, detail, drawDragonMotif, timeSec, {
       x: 0.004,
       y: WAIST_Y + 0.05,
       size: 0.115,
       phase: 1.9,
     });
   } else {
-    stampTattoo(ctx, drawOctopusMotif, timeSec, {
+    stampTattoo(ctx, detail, drawOctopusMotif, timeSec, {
       x: 0.004,
       y: WAIST_Y + 0.045,
       size: 0.115,
@@ -1800,7 +2409,7 @@ function drawTorso(
   ctx.globalAlpha = 1;
   ctx.shadowBlur = 0;
 
-  drawSkinRipple(ctx, timeSec, SHOULDER_Y, CROTCH_Y);
+  if (detail.skinTexture) drawSkinRipple(ctx, timeSec, SHOULDER_Y, texturedBottomY);
   ctx.restore();
 }
 
@@ -1821,12 +2430,13 @@ function armHandPoint(
   side: BodySide,
   shoulderAngle: number,
   elbowAngle: number,
+  reach: number,
 ): { x: number; y: number } {
   const shoulderRotation = -side * shoulderAngle;
   const elbowRotation = shoulderRotation - side * elbowAngle;
-  const elbowX = armRootX(side) - UPPER_ARM_LENGTH * Math.sin(shoulderRotation);
-  const elbowY = ARM_ROOT_Y + UPPER_ARM_LENGTH * Math.cos(shoulderRotation);
-  const handReach = FOREARM_LENGTH + HAND_RADIUS * HAND_CENTER_REACH_FRACTION;
+  const elbowX = armRootX(side) - UPPER_ARM_LENGTH * reach * Math.sin(shoulderRotation);
+  const elbowY = ARM_ROOT_Y + UPPER_ARM_LENGTH * reach * Math.cos(shoulderRotation);
+  const handReach = FOREARM_LENGTH * reach + HAND_RADIUS * HAND_CENTER_REACH_FRACTION;
   return {
     x: elbowX - handReach * Math.sin(elbowRotation),
     y: elbowY + handReach * Math.cos(elbowRotation),
@@ -1853,10 +2463,15 @@ function drawArm(
   side: BodySide,
   shoulderAngle: number,
   elbowAngle: number,
+  reach: number,
   timeSec: number,
   castGlow: number,
   tileSizePx: number,
+  detail: SignetDetail,
 ): void {
+  const upperArmLength = UPPER_ARM_LENGTH * reach;
+  const forearmLength = FOREARM_LENGTH * reach;
+
   ctx.save();
   ctx.translate(armRootX(side), ARM_ROOT_Y);
   ctx.rotate(-side * shoulderAngle);
@@ -1866,39 +2481,39 @@ function drawArm(
   ctx.lineWidth = UPPER_ARM_WIDTH;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(0, UPPER_ARM_LENGTH);
+  ctx.lineTo(0, upperArmLength);
   ctx.stroke();
 
   ctx.save();
-  pathLimb(ctx, UPPER_ARM_WIDTH, UPPER_ARM_LENGTH);
+  pathLimb(ctx, UPPER_ARM_WIDTH, upperArmLength);
   ctx.clip();
   applyInkStyle(ctx, castGlow, tileSizePx);
-  stampTattoo(ctx, drawDragonMotif, timeSec, {
+  stampTattoo(ctx, detail, drawDragonMotif, timeSec, {
     x: 0,
-    y: UPPER_ARM_LENGTH * 0.6,
+    y: upperArmLength * 0.6,
     size: 0.095,
     phase: side < 0 ? 0.9 : 2.8,
     detail: true,
   });
   ctx.restore();
 
-  ctx.translate(0, UPPER_ARM_LENGTH);
+  ctx.translate(0, upperArmLength);
   ctx.rotate(-side * elbowAngle);
 
   ctx.strokeStyle = SKIN_BASE;
   ctx.lineWidth = FOREARM_WIDTH;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(0, FOREARM_LENGTH);
+  ctx.lineTo(0, forearmLength);
   ctx.stroke();
 
   ctx.save();
-  pathLimb(ctx, FOREARM_WIDTH, FOREARM_LENGTH);
+  pathLimb(ctx, FOREARM_WIDTH, forearmLength);
   ctx.clip();
   applyInkStyle(ctx, castGlow, tileSizePx);
-  stampTattoo(ctx, drawEelLightningMotif, timeSec, {
+  stampTattoo(ctx, detail, drawEelLightningMotif, timeSec, {
     x: 0,
-    y: FOREARM_LENGTH * 0.5,
+    y: forearmLength * 0.5,
     size: 0.095,
     phase: side < 0 ? 3.3 : 1.6,
     detail: true,
@@ -1907,13 +2522,7 @@ function drawArm(
 
   ctx.fillStyle = SKIN_BASE;
   ctx.beginPath();
-  ctx.arc(
-    0,
-    FOREARM_LENGTH + HAND_RADIUS * HAND_CENTER_REACH_FRACTION,
-    HAND_RADIUS,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(0, forearmLength + HAND_RADIUS * HAND_CENTER_REACH_FRACTION, HAND_RADIUS, 0, Math.PI * 2);
   ctx.fill();
 
   // Long dark nails, as in her portrait
@@ -1924,8 +2533,8 @@ function drawArm(
     const spread = (i / (NAIL_COUNT - 1) - 0.5) * 1.4;
     const nailRootX = spread * HAND_RADIUS;
     ctx.beginPath();
-    ctx.moveTo(nailRootX, FOREARM_LENGTH + HAND_RADIUS);
-    ctx.lineTo(nailRootX * 1.6, FOREARM_LENGTH + HAND_RADIUS + NAIL_LENGTH);
+    ctx.moveTo(nailRootX, forearmLength + HAND_RADIUS);
+    ctx.lineTo(nailRootX * 1.6, forearmLength + HAND_RADIUS + NAIL_LENGTH);
     ctx.stroke();
   }
 
@@ -2569,12 +3178,20 @@ export function drawSignetSprite(
   const summonEase = pose.summonProgress > 0 ? Math.sin(pose.summonProgress * Math.PI) : 0;
   const castEase = pose.castProgress > 0 ? Math.sin(pose.castProgress * Math.PI) : 0;
   const eyeGlow = Math.max(summonEase, castEase);
-  /** Her neck cancels most of the shoulder roll so her head stays near level. */
-  const headRotation = swingPhase * WALK_SHOULDER_ROLL * HEAD_LEVELLING_SHARE;
+  /**
+   * Positive when her right leg is swinging: the pelvis rotates under a level
+   * shoulder line, carrying her hips away from that leg and over the foot that
+   * is holding her up, and dropping the hip on the side with nothing under it.
+   */
+  const pelvisTilt = swingPhase * WALK_PELVIS_TILT;
+  const pelvisTiltSin = Math.sin(pelvisTilt);
+  /** Her neck cancels most of the pelvis swing so her head stays near level. */
+  const headRotation = -pelvisTilt * HEAD_LEVELLING_SHARE;
 
   // Glow blur is in device pixels and ignores the transform, so the figure
   // scale has to be folded in by hand or her glows shrink as she grows.
   const glowTileSizePx = s * FIGURE_SCALE;
+  const detail = resolveDetail(figureHeightPx(ctx, s));
 
   ctx.save();
   ctx.translate(sx + s / 2, sy + s / 2);
@@ -2584,24 +3201,38 @@ export function drawSignetSprite(
   ctx.scale(FIGURE_SCALE, FIGURE_SCALE);
   ctx.translate(0, -FOOT_Y - bob);
 
-  const hipShift = swingPhase * WALK_HIP_SHIFT;
+  // Where the torso's rotation about the shoulders leaves the pelvis. The legs
+  // have to take the same travel or her hips unseat from her thighs.
+  const pelvisTravel = -pelvisTiltSin * (HIP_Y - TORSO_PIVOT_Y);
+  const hipShift = -swingPhase * WALK_HIP_SHIFT + pelvisTravel;
 
   drawBackHair(ctx, swingPhase * WALK_HAIR_SWAY);
-  drawLegs(ctx, timeSec, swingPhase, hipShift, pose.facingAway, eyeGlow, glowTileSizePx);
+  drawLegs(
+    ctx,
+    timeSec,
+    swingPhase,
+    hipShift,
+    pelvisTiltSin,
+    bob,
+    pose.facingAway,
+    eyeGlow,
+    glowTileSizePx,
+    detail,
+  );
 
-  // Hips shift onto the planted foot and the shoulders roll back against them;
-  // that opposition is what makes the front-on walk read as a walk. The legs
-  // took the same shift above, and the roll pivots at the hip, so the pelvis
-  // and the thighs stay one body through the whole stride.
   ctx.save();
-  ctx.translate(hipShift, 0);
+  ctx.translate(-swingPhase * WALK_HIP_SHIFT, 0);
   ctx.translate(0, TORSO_PIVOT_Y);
-  ctx.rotate(-swingPhase * WALK_SHOULDER_ROLL);
+  ctx.rotate(pelvisTilt);
   ctx.translate(0, -TORSO_PIVOT_Y);
-  drawTorso(ctx, timeSec, eyeGlow, glowTileSizePx, pose.facingAway);
+  drawTorso(ctx, timeSec, eyeGlow, glowTileSizePx, detail, pose.facingAway);
   drawThong(ctx, pose.facingAway);
 
   const handPoints: { x: number; y: number }[] = [];
+  // Longest hanging straight down at the passing position, shortest at both
+  // ends of the swing — the arm is turning toward and away from the viewer.
+  const armReach = 1 - ARM_FORESHORTEN * Math.abs(swingPhase);
+
   for (const side of SIDES) {
     const walkSwing = swingPhase * -side * WALK_ARM_SWING;
     const restShoulder = ARM_REST_ANGLE + walkSwing;
@@ -2617,8 +3248,18 @@ export function drawSignetSprite(
       ELBOW_REST_ANGLE +
       (castElbow - ELBOW_REST_ANGLE) * castEase +
       (ELBOW_SUMMON_ANGLE - ELBOW_REST_ANGLE) * summonEase;
-    drawArm(ctx, side, shoulderAngle, elbowAngle, timeSec, eyeGlow, glowTileSizePx);
-    handPoints.push(armHandPoint(side, shoulderAngle, elbowAngle));
+    drawArm(
+      ctx,
+      side,
+      shoulderAngle,
+      elbowAngle,
+      armReach,
+      timeSec,
+      eyeGlow,
+      glowTileSizePx,
+      detail,
+    );
+    handPoints.push(armHandPoint(side, shoulderAngle, elbowAngle, armReach));
   }
 
   if (pose.facingAway) {

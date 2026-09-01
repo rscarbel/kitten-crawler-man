@@ -2820,7 +2820,7 @@ export class DungeonScene extends GameplayScene {
     camY: number,
   ): void {
     const target = this.pinnedObjectiveTile;
-    if (target === null) return;
+    if (target === null || target.wearsOwnMarker === true) return;
     drawObjectiveBeacon(
       ctx,
       target.x * TILE_SIZE - camX,
@@ -2849,6 +2849,7 @@ export class DungeonScene extends GameplayScene {
   ): void {
     const now = performance.now();
     for (const target of availableTargets(this._trackerEntries)) {
+      if (target.wearsOwnMarker === true) continue;
       drawObjectiveBeacon(
         ctx,
         target.x * TILE_SIZE - camX,

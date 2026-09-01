@@ -1366,6 +1366,13 @@ export abstract class Mob extends Player {
    * `accept` filters candidates a subclass refuses to fight; it runs before the
    * sight test, which is the expensive one. `forceAggro` bypasses range and
    * sight both, so scripted encounters behave exactly as before.
+   *
+   * A defend target is refused outright, ahead of `accept` and of `forceAggro`.
+   * Quest-critical bystanders — the defend quest's NPC, Tsarina Signet at her
+   * own circus — used to be kept out of reach by never appearing in any target
+   * list, which held only for as long as nobody added one; the single mob that
+   * *does* fight one goes through its own `defendTarget` field rather than
+   * through this scan.
    */
   protected acquireTarget(
     targets: readonly Player[],
@@ -1378,6 +1385,7 @@ export abstract class Mob extends Player {
     let nearestDist = Infinity;
     for (const target of targets) {
       if (!target.isAlive) continue;
+      if (target.isDefendTarget === true) continue;
       if (accept && !accept(target)) continue;
       const dist = Math.hypot(target.x - this.x, target.y - this.y);
       if (dist >= nearestDist) continue;

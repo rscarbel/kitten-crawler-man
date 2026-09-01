@@ -39,7 +39,6 @@ import { FatClown } from '../creatures/FatClown';
 import { MoldLion } from '../creatures/MoldLion';
 import { TerrorTheClown } from '../creatures/TerrorTheClown';
 import { HeatherTheBear, HEATHER_LEVEL } from '../creatures/HeatherTheBear';
-import { InkMarauder } from '../creatures/InkMarauder';
 import type { MongoSystem } from './MongoSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -89,8 +88,6 @@ const HEATHER_SPAWN_OFFSET_TILES = 6;
 const SIGNET_DOOR_OFFSET_TILES = 2;
 /** Blood-fueled summon cadence during the assault (~5 s at 60 fps). */
 const BLOOD_FUELED_SUMMON_FRAMES = 300;
-/** Lifespan of the single marauder that fizzles when the first ritual fails. */
-const FIZZLE_MARAUDER_LIFESPAN_FRAMES = 80;
 const BATTLE_MUSIC_FADE_IN_MS = 1000;
 /** The bottle Signet hands over before the Big Top, which its last act is performed with. */
 const BIGTOP_POTION_ITEM_ID = 'health_potion';
@@ -769,7 +766,8 @@ export class CircusQuestSystem implements GameSystem {
    */
   trackerEntries(): ReadonlyArray<TrackerEntry> {
     const name = this.questManager.getDef(CIRCUS_QUEST_ID)?.name ?? 'The Show Must Go On';
-    const atSignet = this.signet?.isAlive === true ? this.signetTile() : undefined;
+    const atSignet =
+      this.signet?.isAlive === true ? { ...this.signetTile(), wearsOwnMarker: true } : undefined;
     const base = { id: CIRCUS_QUEST_ID, name };
 
     switch (this.phase) {
@@ -881,9 +879,7 @@ export class CircusQuestSystem implements GameSystem {
         this.dialog.open(INTRO_DIALOG, () => this.startRitualDefense());
         return true;
       case 'awaiting_ritual_failed':
-        this.dialog.open(buildRitualFailedDialog((this.mongoSystem?.mongo ?? null) !== null), () =>
-          this.startHeatherHunt(active),
-        );
+        this.dialog.open(buildRitualFailedDialog(), () => this.startHeatherHunt(active));
         return true;
       case 'awaiting_heather_return':
         this.dialog.open(HEATHER_RETURN_DIALOG, () => this.startAssault());
@@ -1062,20 +1058,6 @@ export class CircusQuestSystem implements GameSystem {
       return;
     }
 
-    // The casting sputters out — a single marauder half-forms and bleeds away.
-    const signetTile = this.signetTile();
-    const fizzleTile = this.findSpawnTile(signetTile.x - 1, signetTile.y);
-    if (fizzleTile) {
-      const fizzle = new InkMarauder(
-        fizzleTile.x,
-        fizzleTile.y,
-        TILE_SIZE,
-        FIZZLE_MARAUDER_LIFESPAN_FRAMES,
-      );
-      fizzle.setMap(this.gameMap);
-      fizzle.allMobs = ctx.roster.mobs;
-      this.addMob(fizzle);
-    }
     this.stopBattleMusic();
     this.bus.emit('objectiveComplete', { objectiveId: 'circus_ritual_defended' });
     this.phase = 'awaiting_ritual_failed';

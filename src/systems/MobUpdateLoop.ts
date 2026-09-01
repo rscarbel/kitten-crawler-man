@@ -162,7 +162,12 @@ export class MobUpdateLoop implements GameSystem {
         }
 
         // Clear stale retaliate target; add live ones to this mob's AI targets.
-        if (mob.retaliateMob && !mob.retaliateMob.isAlive) mob.retaliateMob = null;
+        // A defend target is dropped as well as a dead one: retaliation is the
+        // one route into this list that does not pass the filter above, and a
+        // stray hit from a quest NPC nobody may attack must not open one.
+        if (mob.retaliateMob && (!mob.retaliateMob.isAlive || mob.retaliateMob.isDefendTarget)) {
+          mob.retaliateMob = null;
+        }
         let aiTargets = playerTargets;
         if (mob.retaliateMob && !(mob instanceof BrindleGrub)) {
           this.aiTargets.length = 0;

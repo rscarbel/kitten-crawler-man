@@ -227,7 +227,7 @@ export class Bugaboo extends Mob {
     }
 
     // Priority 3: Attack nearest player (fallback / NPC dead)
-    const nearest = this.acquireTarget(targets, this.aggroRangePx, (t) => !t.isDefendTarget);
+    const nearest = this.acquireTarget(targets, this.aggroRangePx);
 
     this.currentTarget = nearest;
 

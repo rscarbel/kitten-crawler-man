@@ -22,8 +22,11 @@ import { GameMap } from '../src/map/GameMap';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob, PlayerDamageType } from '../src/creatures/Mob';
+import type { Player } from '../src/Player';
 import { Mongo } from '../src/creatures/Mongo';
 import { Signet } from '../src/creatures/Signet';
+import { MoldLion } from '../src/creatures/MoldLion';
+import { HeatherTheBear } from '../src/creatures/HeatherTheBear';
 import { SkyFowl } from '../src/creatures/SkyFowl';
 import { createMob } from '../src/levels/spawner';
 import { makeSepsis } from '../src/core/StatusEffect';
@@ -63,6 +66,12 @@ const AIMED_DAMAGE_TYPES: readonly (PlayerDamageType | null)[] = [
   'smush',
   null,
 ];
+
+/** Where the circus attackers stand, in tiles east of the map's start tile. */
+const CIRCUS_ATTACKER_OFFSET_TILES = 4;
+/** Signet stands between the attacker and the crawler, and nearer to it. */
+const SIGNET_BESIDE_ATTACKER_TILES = 1;
+const CRAWLER_BEHIND_ATTACKER_TILES = 3;
 
 /** Tiles ahead of the cat the homing bait is placed, well inside the 12-tile seek radius. */
 const BAIT_AHEAD_TILES = 6;
@@ -275,6 +284,61 @@ console.log('\nHoming seeks enemies only');
 
   const towardSignet = sidewaysDriftPast(makeSignet());
   check(towardSignet === 0, `and straight past Signet (${towardSignet})`);
+}
+
+console.log("\nThe circus fight is the crawlers' fight");
+{
+  const circusAttackerTileX = start.x + CIRCUS_ATTACKER_OFFSET_TILES;
+  /**
+   * Both attackers are handed a target list Signet is *in*, standing nearer
+   * than the crawler — the shape a future `extraTargets` entry would produce.
+   * Nearest-wins targeting is what makes this the interesting case: a mob that
+   * may take her will, every time.
+   */
+  function nearestTargetOf(mob: Mob, targets: (HumanPlayer | CatPlayer | Mob)[]): Player | null {
+    mob.updateAI(targets);
+    return mob.currentTarget;
+  }
+
+  for (const [name, make] of [
+    ['a mold lion', () => new MoldLion(circusAttackerTileX, start.y, TILE_SIZE)],
+    ['Heather', () => new HeatherTheBear(circusAttackerTileX, start.y, TILE_SIZE)],
+  ] as const) {
+    const cat = new CatPlayer(
+      circusAttackerTileX - CRAWLER_BEHIND_ATTACKER_TILES,
+      start.y,
+      TILE_SIZE,
+    );
+    const signet = makeSignet();
+    signet.x = (circusAttackerTileX - SIGNET_BESIDE_ATTACKER_TILES) * TILE_SIZE;
+    signet.y = start.y * TILE_SIZE;
+
+    const attacker = make();
+    attacker.setMap(map);
+    check(
+      nearestTargetOf(attacker, [signet, cat]) === cat,
+      `${name} walks past the nearer Signet and takes the crawler`,
+    );
+
+    const alone = make();
+    alone.setMap(map);
+    check(nearestTargetOf(alone, [signet]) === null, `${name} left alone with her attacks nobody`);
+
+    // The negative half: with the crawler standing exactly where Signet stood,
+    // the same call does find a target — so neither check above can pass by
+    // failing to see anything at all.
+    const decoy = new CatPlayer(
+      circusAttackerTileX - SIGNET_BESIDE_ATTACKER_TILES,
+      start.y,
+      TILE_SIZE,
+    );
+    const baited = make();
+    baited.setMap(map);
+    check(
+      nearestTargetOf(baited, [decoy]) === decoy,
+      `${name} does take a crawler standing on that same tile`,
+    );
+  }
 }
 
 console.log(

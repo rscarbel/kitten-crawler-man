@@ -36,6 +36,17 @@ export type TrackerStatus = 'available' | 'active' | 'completed' | 'failed';
 export interface TrackerTarget extends ObjectiveBeaconFootprint {
   readonly x: number;
   readonly y: number;
+  /**
+   * Set for a target that already wears an overhead quest marker of its own.
+   *
+   * The beacon exists to pick one thing out of a dozen that look like it — a
+   * doorway among doorways, a stall among stalls. A quest giver bouncing a '!'
+   * over her head has answered that question already, and standing a second,
+   * far larger light on her only washes her out as she walks through it. The
+   * world arrow and the minimap chevron still point at her: they answer "which
+   * way", which a glyph on an off-screen character cannot.
+   */
+  readonly wearsOwnMarker?: boolean;
 }
 
 export interface TrackerEntry {

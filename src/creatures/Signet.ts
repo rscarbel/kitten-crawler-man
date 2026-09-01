@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import {
@@ -6,6 +7,7 @@ import {
   drawEliteMarker,
   SIGNET_OVERLAY_CLEARANCE,
   SIGNET_CHEST_Y_OFFSET,
+  SIGNET_HALF_WIDTH,
 } from '../sprites/signetSprite';
 import { InkMarauder, MARAUDER_LIFESPAN_FRAMES } from './InkMarauder';
 import type { InkMarauderForm } from '../sprites/inkMarauderSprite';
@@ -17,8 +19,12 @@ import {
   type SignetFireball,
 } from './signetFireball';
 import { normalize, randomInt } from '../utils';
-import { questMarkerColorFor, type QuestMarkerState } from '../sprites/questNPCSprite';
-import { drawQuestBeacon } from '../sprites/questBeacon';
+import {
+  drawQuestMarker,
+  QUEST_MARKER_GOLD,
+  QUEST_MARKER_GREEN,
+  type QuestMarkerState,
+} from '../sprites/questNPCSprite';
 
 const SIGNET_HP = 80;
 const SIGNET_SPEED = 1.6;
@@ -80,10 +86,17 @@ const FULL_CIRCLE_RADIANS = Math.PI * 2;
  * Gait — her figure is drawn at double scale and she spends most of her time
  * shuffling at a fraction of her top speed, so a fixed per-frame walk cycle
  * reads as frantic limb-flailing. Drive the cycle off ground actually covered.
+ *
+ * What that ground buys has to be measured against her own size. One cycle is
+ * two steps, and a walker covers roughly their own height in it; she stands two
+ * tiles tall, so the cycle has to close inside about that. Tuned as a bare
+ * radians-per-pixel constant it was closing over nearer four tiles — a stride
+ * longer than she is tall, which no pose work can rescue, because the feet are
+ * then sliding over the floor between plants no matter how they are drawn.
  */
-const GAIT_RADIANS_PER_PIXEL = 0.05;
+const STRIDE_TILES_PER_CYCLE = 1.7;
 /** Ceiling so a separation shove or a repositioning jump can't snap the cycle forward. */
-const MAX_GAIT_RADIANS_PER_FRAME = 0.09;
+const MAX_GAIT_RADIANS_PER_FRAME = 0.28;
 
 /**
  * Tsarina Signet — the half-naiad, half-high-elf Summoner who catches the
@@ -120,7 +133,7 @@ export class Signet extends Mob {
    * Whether she is waiting to say something, set each frame by
    * CircusQuestSystem from the same phases its minimap marker reads.
    *
-   * She is the one quest giver who walks, which is why her beacon is drawn from
+   * She is the one quest giver who walks, which is why her glyph is drawn from
    * here rather than pinned to a tile the way a notice board's would be.
    */
   markerType: QuestMarkerState = 'none';
@@ -185,6 +198,18 @@ export class Signet extends Mob {
   }
 
   /**
+   * Hostiles never take her as a target, the way they never take the defend
+   * quest's NPC.
+   *
+   * `isHostile: false` only keeps her off *allied* target scans; it says
+   * nothing about whose target list she may appear in. This is the flag the one
+   * chokepoint reads — `MobUpdateLoop`'s player-target filter — and every
+   * projectile system reads it too, so the mold lion wave and Heather stay
+   * pointed at the crawlers no matter what later feeds the target list.
+   */
+  override readonly isDefendTarget = true;
+
+  /**
    * Unlike a temporary summon (Mongo, a hired mercenary), Signet's spawn tile
    * is her leash anchor — see `LEASH_RADIUS_TILES` — so a checkpoint restore
    * should rewind her there and clear her fireballs/cooldowns via
@@ -213,6 +238,18 @@ export class Signet extends Mob {
     return true;
   }
 
+  /**
+   * She stands two tiles tall on a one-tile footprint and carries the elite
+   * marker above that, so the default one-tile margin would let her pop in at
+   * the top of the screen with her head already showing.
+   */
+  override get cullMarginTiles(): number {
+    return Math.min(
+      MAX_MOB_CULL_MARGIN_TILES,
+      Math.max(super.cullMarginTiles, SIGNET_OVERLAY_CLEARANCE, SIGNET_HALF_WIDTH),
+    );
+  }
+
   /** She still flashes, so a blow reads as refused rather than as missed. */
   protected override onDamageBlocked(): void {
     this.damageFlash = SIGNET_HIT_FLASH_FRAMES;
@@ -227,7 +264,8 @@ export class Signet extends Mob {
     const coveredPx = Math.hypot(this.x - this.gaitSampleX, this.y - this.gaitSampleY);
     this.gaitSampleX = this.x;
     this.gaitSampleY = this.y;
-    this.walkFrameSpeed = Math.min(coveredPx * GAIT_RADIANS_PER_PIXEL, MAX_GAIT_RADIANS_PER_FRAME);
+    const radiansPerPixel = (Math.PI * 2) / (STRIDE_TILES_PER_CYCLE * this.tileSize);
+    this.walkFrameSpeed = Math.min(coveredPx * radiansPerPixel, MAX_GAIT_RADIANS_PER_FRAME);
   }
 
   updateAI(_targets: Player[]): void {
@@ -418,20 +456,18 @@ export class Signet extends Mob {
     // double scale — lift them clear of both her head and her elite marker.
     const overlayY = sy - SIGNET_OVERLAY_CLEARANCE * tileSize;
 
-    // Before the body paint, so the column stands behind her.
-    const markerColor = questMarkerColorFor(this.markerType);
-    if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
-    }
-
     if (this.isAggro) {
       this.renderAggroIndicator(ctx, sx, overlayY, tileSize);
     }
 
-    ctx.save();
-    if (this.damageFlash > 0) {
-      ctx.filter = 'brightness(3)';
-    }
+    // No `ctx.filter` for the hit flash, unlike the sheet-drawn mobs. A filter
+    // applies to every drawing operation individually, and where their sprite is
+    // one `drawImage`, hers is many hundreds of live canvas calls layered over
+    // each other — each one would be brightened, over layers already brightened,
+    // which is a blown-out blob rather than a brighter Signet, and hundreds of
+    // filtered operations rather than one. `Character.render` already composites
+    // her once and paints `hitFlashLayer` through her own alpha, so the flash is
+    // already drawn, correctly and at a single blit's cost.
 
     // The last animated frame has to land on 1.0, or the gesture snaps back
     // from partway through its arc every time the timer expires.
@@ -455,13 +491,38 @@ export class Signet extends Mob {
       facingAway: this.facingY < 0 && Math.abs(this.facingY) > Math.abs(this.facingX),
     });
 
-    ctx.restore();
-
-    renderSignetFireballs(ctx, this.fireballs, camX, camY);
-
     drawEliteMarker(ctx, sx, sy, tileSize);
 
+    // Anchored to the same cleared line her other overlays use: at tile anchor
+    // the glyph would sit inside her head, and a step above that it would sit
+    // inside the elite mark.
+    if (this.markerType === 'exclamation') {
+      drawQuestMarker(ctx, sx, overlayY, tileSize, '!', QUEST_MARKER_GOLD);
+    } else if (this.markerType === 'question') {
+      drawQuestMarker(ctx, sx, overlayY, tileSize, '?', QUEST_MARKER_GREEN);
+    }
+
     this.renderMobHealthBar(ctx, sx, overlayY);
-    // The damage flash outlines her actual tile footprint, so it stays put.
+  }
+
+  /**
+   * Her fireballs are drawn out here, not in `drawSelf`.
+   *
+   * `Character.render` composites `drawSelf` into a box a couple of tiles wide
+   * and paints the hit flash through the alpha of everything in it. A fireball
+   * halfway across the room is neither hers to be tinted nor inside that box —
+   * drawn in there it turns red every time she is struck and is sliced off at
+   * the box edge for the rest of its flight.
+   *
+   * `sx` is `this.x - camX`, so the camera offset is recovered from it rather
+   * than passed in — `drawWorldFeedback` is given screen coordinates only.
+   */
+  protected override drawWorldFeedback(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+  ): void {
+    super.drawWorldFeedback(ctx, sx, sy);
+    renderSignetFireballs(ctx, this.fireballs, this.x - sx, this.y - sy);
   }
 }
