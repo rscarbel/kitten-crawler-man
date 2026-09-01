@@ -21,6 +21,7 @@
     "format:check": "prettier --check --ignore-unknown .",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "verify:progression": "tsx scripts/verify-progression.ts",
+    "verify:quest-choke": "tsx scripts/verify-quest-choke.ts",
     "verify:bounty": "tsx scripts/verify-bounty.ts",
     "verify:separation": "tsx scripts/verify-separation.ts",
     "verify:difficulty": "tsx scripts/verify-difficulty.ts",

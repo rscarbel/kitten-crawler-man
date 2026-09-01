@@ -92,11 +92,15 @@ const gameMap = new GameMap({
   dungeon: dungeonOptionsForLevel(levelDef),
 });
 
-// Centred on the start room, or on a safe room when one is asked for: a station
-// keeps its own materials on both floors, so how it sits inside each floor's
-// walls is a question only a framed screenshot answers.
+// Centred on the start room by default. The other three framings are the rooms
+// whose contents are decided by the generator rather than by a tile painter — a
+// station's counter run, the nursery's doorways and its grates, the
+// lab's scientist standing in his own doorway — and every one of them is a
+// question only a framed screenshot answers.
 const safeRoom = process.argv.includes('--safe-room') ? gameMap.safeRooms[0] : undefined;
-const focus = safeRoom === undefined ? gameMap.startTile : safeRoom.centre;
+const questRoom = process.argv.includes('--quest-room') ? gameMap.questRooms[0] : undefined;
+const spiderLab = process.argv.includes('--spider-lab') ? gameMap.spiderLabRoom : null;
+const focus = safeRoom?.centre ?? questRoom?.centre ?? spiderLab?.centre ?? gameMap.startTile;
 
 // The generator lays the room; `DungeonScene` stamps the counter run and the
 // furnishings on entering the floor. A harness that skipped them framed an empty

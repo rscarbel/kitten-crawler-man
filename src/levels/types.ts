@@ -171,11 +171,52 @@ export interface GauntletDef {
   branchCount: { min: number; max: number };
   /** Rooms per branch, exclusive of the entry room and the gateway safe room. */
   branchRooms: { min: number; max: number };
+  /**
+   * Seats the defense quest's room as a mandatory choke on this gauntlet: either
+   * on the sealed stem out of the previous boss room, or on the approach between
+   * the gateway safe room and this gauntlet's own boss. Which of the two is
+   * drawn per map.
+   *
+   * Branches are parallel, so a branch room can never be a forced crossing —
+   * those two stems are the only points on a gauntlet every player provably
+   * walks through.
+   */
+  questChoke?: boolean;
 }
+
+/**
+ * A single forced chain of rooms between two fixed landmarks, replacing the
+ * free-region sprawl on a floor that declares one.
+ *
+ * The journey's length comes from winding rather than from separation: the two
+ * endpoints may be only a few dozen tiles apart, so `rooms` is a contract about
+ * the *walk*, not about the distance.
+ */
+export interface SpineDef {
+  /** Rooms seated along the chain, endpoints exclusive. The quest room is one of them. */
+  rooms: { min: number; max: number };
+  /** Chain positions that fork into a second, reconverging lane. */
+  splits: { min: number; max: number };
+}
+
+/**
+ * The band the defense quest's bugaboo wave rolls its level in on this floor.
+ *
+ * Per floor rather than fixed on the creature, because the encounter is now a
+ * mandatory choke that floor 1 meets mid-run and floor 2 meets again much later:
+ * one body cannot be the right fight for both.
+ */
+export type DefendQuestWaveDef = MobLevelRange;
 
 export interface ProgressionDef {
   /** In order. `gauntlets[i].bossType` must equal `bossRooms[i].type`. */
   gauntlets: GauntletDef[];
+  /**
+   * Replaces the free region past the last gateway boss with one forced,
+   * winding chain of rooms ending at the arena's antechamber. Only meaningful
+   * on a floor that has an arena, which is what supplies the far endpoint.
+   */
+  spine?: SpineDef;
   /** Extra safe rooms scattered in the free region (gateway safe rooms are additional). */
   scatterSafeRooms: number;
   /**
@@ -299,6 +340,12 @@ export interface LevelDef {
   hasArena?: boolean;
   /** Whether this level has a spider lab room with the Grotesque Spider quest. */
   hasSpiderLab?: boolean;
+  /**
+   * Level band the defense quest's bugaboo wave rolls in on this floor. Absent
+   * means the wave spawns at base stats, which is right only for a floor where
+   * the encounter is optional side content.
+   */
+  defendQuestWave?: DefendQuestWaveDef;
   /** Whether mobs on this floor may roll the rare Slingshot world drop. */
   slingshotDrops?: boolean;
   /** Position-relative spawn rules evaluated at level construction time. */

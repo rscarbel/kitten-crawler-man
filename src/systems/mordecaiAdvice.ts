@@ -42,6 +42,18 @@ export interface AdviceObjective {
    * "another crawler spotted it" would be absurd.
    */
   readonly bearing?: string;
+  /**
+   * Content the floor never requires of the player.
+   *
+   * Kept in walking order in its floor's list — Mordecai should raise the
+   * nursery when the party is walking past the nursery — but stepped over while
+   * anything the floor *does* require is still outstanding. An optional
+   * objective a player is simply not interested in is never completed, and the
+   * advice walk stops at the first unfinished entry, so without this one
+   * declined side quest would silence every word he has about the boss beyond
+   * it for the rest of the floor.
+   */
+  readonly optional?: boolean;
 }
 
 export type AdviceSlot = AdviceObjective;
@@ -71,11 +83,10 @@ export class MordecaiAdvisor {
    * casing.
    */
   nextAdvice(snapshot: AdviceSnapshot): ReadonlyArray<string> | null {
-    for (const objective of snapshot.objectives) {
-      if (objective.complete) continue;
-      return this.render(objective, snapshot.bearingOrigin);
-    }
-    return null;
+    const unfinished = snapshot.objectives.filter((objective) => !objective.complete);
+    if (unfinished.length === 0) return null;
+    const next = unfinished.find((objective) => objective.optional !== true) ?? unfinished[0];
+    return this.render(next, snapshot.bearingOrigin);
   }
 
   /**
@@ -155,89 +166,105 @@ interface AdviceText {
 const ADVICE_TEXT = {
   the_hoarder: {
     pages: [
-      "Through the hallway {direction} of this room is a boss. The dungeon contains boss fights that will commence once you are in the boss's area.",
-      "In order to find the stairwell, it looks like you'll have no choice but to face up against this and potentially other bosses.",
-      'Just keep a cool head. She is a neighborhood boss, the weakest kind of boss, and she looks like a simple one.',
+      "There's a boss through the hallway {direction}. Once you enter her territory, the fight will begin. That's how the dungeon likes to do things.",
+      "If you're looking for the stairwell, you'll have to deal with her. There may be other bosses waiting for you as well, but this is the one in your way.",
+      "Keep your head. She's a neighborhood boss, which puts her toward the bottom of the food chain. She shouldn't be too difficult.",
     ],
   },
+
   juicer: {
     pages: [
-      "I see we have another boss that there's no way you can avoid — his den lies {direction} of here. Fortunately, this one is also just a neighborhood boss, but this one looks a little tougher.",
-      "I'm not allowed to tell you any details, but what I can say is be careful of his minions, the Troglodytes.",
-      "Troglodytes lash you with their tongues, which contains a deadly poison. You do not want to get hit with that or there's a solid chance you'll find that your journey ends here.",
-      "Troglodytes are pretty slow, so maybe don't stop moving and you'll be fine.",
+      "There's another boss ahead, {direction} of here. You won't be able to avoid him if you're heading that way. He's another neighborhood boss, though this one looks a little nastier.",
+      "I can't give you much more than that. I can tell you to watch his minions, the Troglodytes.",
+      "They attack with their tongues. The poison they carry is quite unpleasant. Getting hit isn't necessarily fatal, but I'd prefer not to find out how many hits you can take.",
+      "They're slow. Keep moving and don't let them corner you.",
     ],
   },
+
   defend_goblin_mother: {
     pages: [
-      'There is a goblin mother down here asking for help holding her brood. Grim work, but it is a great way to get experience.',
+      "The way forward runs through a goblin nursery. There's a mother in there with her young, and something is coming up through the floor grates at them.",
+      "You can walk straight past her or help. Do it or don't. Whatever crawls out of those grates is worth experience to somebody.",
     ],
-    bearing: 'I heard another crawler spotted her {direction} of here.',
+    bearing: 'Another crawler spotted the nursery {direction} of here.',
   },
+
   krakaren_clone: {
     pages: [
-      "I see a Krakaren Clone just {direction} of here. It is just a copy of the Krakaren boss, which really existed in this dungeon, but don't underestimate it nonetheless.",
-      "Krakaren may be noisy and obviously visible, but she has very powerful attacks. Watch for a tentacle rising out of the floor before she slams it down — if the ground below you turns red too, that is a signal that you may want to move or you'll die.",
-      "She'll also drag up smaller tentacles to guard herself while you fight — you'll see the floor crack open first. While one of those things is still alive your blows barely scratch her, so cut it down before you go back to hitting the big one.",
-      "Krakaren is a very politicized figure here, but there's not really time to get into all that for now.",
+      "There's a Krakaren Clone just {direction} of here. It's a copy of the Krakaren who once existed in this dungeon. A copy is still dangerous, so don't make the mistake of treating it like one.",
+      "Krakaren is loud and difficult to miss, but don't let that distract you from her attacks. Watch the floor. When a tentacle starts coming up, move. If the ground beneath you turns red, move faster.",
+      "She'll summon smaller tentacles to protect herself. You'll see the floor crack before they appear. Kill those first. While they're alive, you're going to have a difficult time doing any real damage to her.",
+      "Krakaren is also a rather... politically complicated figure. We don't have time for that conversation right now.",
     ],
   },
+
   spider_lab: {
     pages: [
-      'Something is going wrong with the Arachnid Experiments. Worth looking into before the problem spreads any further than that room.',
-      'It is among the harder things on this floor, mind. Watch for the red zones on the ground and get out of the way of them.',
+      'Something has gone wrong with the Arachnid Experiments. You should probably deal with it before whatever is happening in that room finds a way to become your problem somewhere else.',
+      "It's one of the more difficult encounters on this floor. Watch the ground. When you see red, don't stand in it.",
     ],
-    bearing: 'I heard another crawler spotted it {direction} of here.',
+    bearing: 'Another crawler spotted the lab {direction} of here.',
   },
+
   ball_of_swine: {
     pages: [
-      "Up ahead, {direction} of this room, is a borough boss. That means it's tougher than the other fights you've had so far. However, it looks like you also have the option to ignore it and go around to see if you can find a different stairwell or find other challenges.",
-      "If you can beat this boss, you're guaranteed a stairwell to the next floor.",
-      'Bosses in this dungeon always have a secret to beating them. This one is a wheel of fused swine that rolls fast enough to break a crawler in half, and it never once slows down of its own accord. Do not try to out-last it.',
-      'That is as much as I will say. But I will note that a wheel is only unstoppable while nothing gets in its way, and that the walls of that place are iron.',
+      "There's a borough boss ahead, {direction} of here. It's considerably tougher than the fights you've dealt with so far. You can avoid it, if you're willing to look for another way around.",
+      "If you kill it, though, you'll be guaranteed a stairwell to the next floor.",
+      "Every boss in this dungeon has a trick. This one is a wheel made from fused swine. It rolls fast enough to turn you into paste, and it doesn't get tired. Trying to beat it by simply staying out of its way won't work.",
+      "That's all I'm going to tell you. I will say this, though: nothing is unstoppable when it has nowhere to go. And that arena is made of iron.",
     ],
   },
+
   ball_of_swine_distant: {
     pages: [
-      'Somewhere out in these halls stands a great iron arena, and a borough boss rolls inside it — a wheel of fused swine. Borough bosses are tougher than anything else on their floor, but beat one and you are guaranteed a stairwell down.',
-      'It is entirely optional, mind. If you would rather keep your bones arranged the way they are, no one here will judge you.',
+      'Somewhere in these halls is a large iron arena. Inside it is a borough boss, a wheel made from fused swine. Borough bosses are considerably tougher than anything else on their floor, but killing one guarantees a stairwell down.',
+      "It's entirely optional. If you'd rather keep all your bones where they currently are, you're free to find another way.",
     ],
     bearing: 'Another crawler marked the arena {direction} of here.',
   },
+
   the_circus: {
     pages: [
-      'The circus has come to town, and not for the reason painted on the tent. Have a look, by all means.',
-      'But be careful about getting involved in anything over your head.',
+      "The circus has come to town. Given the dungeon, I wouldn't assume that's good news.",
+      "You can have a look if you want. Just be careful about getting involved in anything you don't understand.",
     ],
-    bearing: 'You can find it {direction} from here.',
+    bearing: "It's {direction} of here.",
   },
+
   krasue_murders: {
     pages: [
-      'People have been turning up in pieces, and the pieces are the wrong ones. The city guard has decided it is a wild animal. It is not a wild animal.',
-      'I would leave it well alone, and I know perfectly well that you will not.',
+      "People have been turning up in pieces. Not necessarily the pieces they started with, either. The city guard thinks it's a wild animal. It isn't.",
+      "I'd recommend staying away from it. Of course, I know better than to expect you to take that advice.",
     ],
-    bearing: 'It started {direction} of here, if you insist.',
+    bearing: 'The killings started {direction} of here, if you insist on looking into them.',
   },
+
   shady_bounties: {
     pages: [
-      'There is a man by the notice board who will pay you to go and kill something out in the ruins. He will not tell you his name and I would not believe it if he did.',
-      'The coin is real, though, and the marks are out where nobody minds the noise. It is honest work by the standards of this place.',
+      "There's a man by the notice board offering money for killing things out in the ruins. He doesn't give his name. That's probably for the best.",
+      "The money is real, at least. The targets are out where nobody cares how much noise you make. By the standards of this place, it's practically honest work.",
     ],
-    bearing: 'He loiters {direction} of here.',
+    bearing: 'He usually loiters {direction} of here.',
   },
+
   anchor_offer: {
     pages: [
-      "There is a fortune teller in the plaza who claims to know how to get you home faster than your own two feet. Worth hearing out, if you're tired of the walk.",
+      "There's a fortune teller in the plaza who claims she can get you home faster than walking. If you're tired of the trip, you might want to hear what she has to say.",
     ],
     bearing: 'Her table is {direction} of here.',
   },
+
   anchor_stone: {
     pages: [
-      'That stone Madame Voss put together for you is not for show. Use it out in the city and it drags the whole party back to the town square. Use it in the square and it drags you right back to where you were standing. A minute to catch its breath in between.',
+      "That stone Madame Voss made for you isn't decorative. Use it somewhere in the city and it'll pull your entire party back to the town square. Use it in the square, and it'll take you back to wherever you were standing before.",
+      "It needs a little time to recover between uses. Don't expect to bounce back and forth with it indefinitely.",
     ],
   },
+
   speed_fizz_tip: {
-    pages: ['The tinker sells Speed Fizz — twice your speed for 25 seconds.'],
+    pages: [
+      "The tinker sells something called Speed Fizz. Drink it and you'll move twice as fast for twenty-five seconds. Try not to waste it.",
+    ],
     bearing: 'His stall is {direction} of here.',
   },
 } as const satisfies Record<AdviceObjectiveId, AdviceText>;
@@ -264,4 +291,13 @@ export function adviceObjective(
 ): AdviceObjective {
   const text: AdviceText = ADVICE_TEXT[id];
   return { id, complete, target, pages: text.pages, bearing: text.bearing };
+}
+
+/** The same, for content the floor offers rather than demands. See `optional`. */
+export function optionalAdviceObjective(
+  id: AdviceObjectiveId,
+  complete: boolean,
+  target: { x: number; y: number } | null,
+): AdviceObjective {
+  return { ...adviceObjective(id, complete, target), optional: true };
 }

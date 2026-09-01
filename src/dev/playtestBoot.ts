@@ -117,6 +117,8 @@ export function buildPlaytestBoot(preset: PlaytestPreset): PlaytestBoot {
 
 /** Tiles between the spider lab's doorway and the corridor tile outside it. */
 const LAB_DOORWAY_STEP_TILES = 1;
+/** How far inside its own doorway the nursery preset stands the party. */
+const QUEST_DOORWAY_STEP_TILES = 2;
 
 /**
  * The corridor tile just outside the spider lab, so the preset opens on the
@@ -146,6 +148,34 @@ function spiderLabApproachTile(gameMap: GameMap): { x: number; y: number } | nul
 }
 
 /**
+ * A tile just inside the quest room's own doorway, or null on a floor with no
+ * quest room.
+ *
+ * Inside rather than outside, unlike the lab's approach tile: the lab is a room
+ * you decide whether to enter, so the interesting view is from the corridor,
+ * while the nursery is a room the route runs through and what has to be seen is
+ * the goblin mother and the grates around her.
+ */
+function questRoomApproachTile(gameMap: GameMap): { x: number; y: number } | null {
+  if (gameMap.questRooms.length === 0) return null;
+  const { bounds, entranceTile } = gameMap.questRooms[0];
+  const inwardX =
+    entranceTile.x === bounds.x
+      ? QUEST_DOORWAY_STEP_TILES
+      : entranceTile.x === bounds.x + bounds.w - 1
+        ? -QUEST_DOORWAY_STEP_TILES
+        : 0;
+  const inwardY =
+    entranceTile.y === bounds.y
+      ? QUEST_DOORWAY_STEP_TILES
+      : entranceTile.y === bounds.y + bounds.h - 1
+        ? -QUEST_DOORWAY_STEP_TILES
+        : 0;
+  const inside = { x: entranceTile.x + inwardX, y: entranceTile.y + inwardY };
+  return gameMap.isWalkable(inside.x, inside.y) ? inside : entranceTile;
+}
+
+/**
  * The tile a preset's spawn names, or null when this map has no such landmark —
  * in which case the caller falls back to the floor's own start tile.
  */
@@ -162,5 +192,7 @@ export function resolvePlaytestSpawn(
       );
     case 'spiderLabEntrance':
       return spiderLabApproachTile(gameMap);
+    case 'questRoomEntrance':
+      return questRoomApproachTile(gameMap);
   }
 }

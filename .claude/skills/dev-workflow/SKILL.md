@@ -22,6 +22,7 @@ Typecheck and lint don't prove behavior. Several invariants have their own scrip
 ```bash
 npm run verify:difficulty    # the P1-P5 fairness rules (docs/difficulty-fairness-rules.md)
 npm run verify:progression   # 50 generated maps per floor: reachability and bypass invariants
+npm run verify:quest-choke   # the defense quest's room, on the live GameMap
 npm run verify:bounty        # bounty registry, encounters, state machine, site scatter
 npm run verify:separation    # mob push-apart force math and strategy equivalence
 npm run verify:assets        # every mob a floor can produce vs. its declared sprite groups
@@ -32,6 +33,7 @@ npm run bench:separation     # measures the separation strategy crossover
 
 - `verify:difficulty` covers the cadence curve, telegraph floors, projectile speed caps, the regen curve, spawn-count caps, spawn and boss level bands, progression regions, and that nothing calls `applyMobLevel` twice.
 - `verify:progression` regenerates 50 maps per floor; a rare layout failure needs that volume to show up at all. Bump `VERIFY_RUN_COUNT` locally for a sign-off run and leave the committed value alone.
+- `verify:quest-choke` is the runtime half of that: the nursery is a room the route runs _through_, and the wave inside it is optional, so the live map has to show both — a party that never speaks to the goblin mother gets past, and a party that goes around the room does not. `verify:progression` cannot answer either, since the grid is walkable by tile type and passage is governed by a block flag the quest raises at runtime. It also covers the three states her encounter puts the doorway through (clear, barred for the length of a wave, smashed once it ends), the tile-art swaps, and the checkpoint that must not re-board a doorway a finished wave already opened.
 - `verify:assets` proves every mob a floor can produce has its sprite keys declared — see `docs/asset-management.md`.
 - The environment art is painted at runtime rather than loaded, so it has gates of its own. `gates:environment-art` is the cheap one and belongs in any run that touched `src/map/environmentArtCache.ts` or a sheet plan. `verify:floor-sweep` takes minutes and is for art changes: it re-measures **every** seed the game can draw, across the ground materials, the seeded prop families and the building facades, which is what makes it exhaustive rather than a sample. `--only=ground|props|facades` narrows it while iterating. Re-run `npm run gen:floor-art-seeds` whenever any seeded painter, ramp or sheet config changes — the alphabet is otherwise a list of seeds verified against art that no longer exists.
 - `verify:bounty`'s map checks are a random sample, not a deterministic gate: overworld generation runs on unseeded `Math.random()` on purpose, because a fixed seed only ever proves the one map it encodes. Run it more than once when something looks marginal.

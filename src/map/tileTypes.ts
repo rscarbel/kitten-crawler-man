@@ -431,6 +431,36 @@ export const BROKEN_CHAIR = 108;
 export const BROKEN_BOOKSHELF = 109;
 
 /**
+ * The onward doorway of the "Defend the Goblin Mother" quest room, boarded shut.
+ *
+ * Never how the room generates: the nursery sits on the forced path and a
+ * crawler who never speaks to the goblin mother walks straight through it. She
+ * puts these boards up herself, for the length of a wave the player accepted,
+ * and they come down the moment it ends either way — or the moment the party
+ * walks out on it.
+ *
+ * Deliberately **walkable by tile type**, like `QUEST_EXIT_DOOR_OPEN`: the
+ * offline progression validator flood-fills the raw grid to check that
+ * everything past this room is reachable, and a wall here would fail that
+ * check before the quest system ever runs. Passage is instead denied by a
+ * `GameMap` block flag raised for the duration of the encounter — the same
+ * pattern the arena door uses — which the validator does not see and the
+ * player's live movement does.
+ */
+export const QUEST_EXIT_DOOR_CLOSED = 110;
+
+/**
+ * The same doorway once her boards have been broken through — the scar a
+ * finished wave leaves, splintered ends still nailed to the jambs.
+ *
+ * A second tile type rather than a flag on `QUEST_EXIT_DOOR_CLOSED` because
+ * the base dungeon-floor art is baked into reusable chunk canvases: the open
+ * state has to be a distinct tile written into the grid at runtime, not a
+ * per-instance render toggle on a shared bake.
+ */
+export const QUEST_EXIT_DOOR_OPEN = 111;
+
+/**
  * Every ground a town building's interior can be floored in.
  *
  * Grouped because more than one pass has to ask "is this a surface I may stand
@@ -453,7 +483,7 @@ export const INTERIOR_FLOOR_TYPES: ReadonlySet<number> = new Set([
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 110;
+export const TILE_TYPE_COUNT = 112;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
@@ -771,7 +801,7 @@ const HASH_AVALANCHE_SHIFT = 15;
  * All four variants came out at exactly 10000/10000/10000/10000 over 40,000
  * tiles. Uniformity is not independence.
  */
-function positionHash(x: number, y: number): number {
+export function positionHash(x: number, y: number): number {
   const mixed = Math.imul(x, HASH_MULTIPLIER_X) ^ Math.imul(y, HASH_MULTIPLIER_Y);
   const avalanched = Math.imul(mixed ^ (mixed >>> HASH_AVALANCHE_SHIFT), HASH_MULTIPLIER_X);
   return (avalanched ^ (avalanched >>> HASH_AVALANCHE_SHIFT)) >>> 0;

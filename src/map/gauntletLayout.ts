@@ -18,9 +18,10 @@ export const SEGMENT_ARENA = -2;
 export const SEGMENT_BEYOND = -3;
 
 /**
- * A gauntlet owns two segments: one for the branches and the gateway safe room
- * they converge on, and a sealed one for the boss room and the short corridor
- * leading into it.
+ * A gauntlet owns three segments: one for the branches and the gateway safe room
+ * they converge on, a sealed one for the boss room and the short corridor
+ * leading into it, and a third for the optional choke room and the corridor that
+ * enters it.
  *
  * Splitting them is what makes the gateway safe room unavoidable. Same-segment
  * tiles are allowed to touch — branches are meant to braid together — so if the
@@ -28,17 +29,42 @@ export const SEGMENT_BEYOND = -3;
  * room could be seated flush against it, or a branch corridor could cross it,
  * and the player would step onto the boss's doorstep without ever entering the
  * safe room.
+ *
+ * The choke segment exists for the same reason one step further in: a choke room
+ * has a corridor on each side of it, and two corridors sharing a segment may
+ * touch — which would join the room before it straight to the room after it and
+ * leave the choke bypassable. Owning the inbound corridor in a segment of its
+ * own is what keeps the two apart.
  */
-const SEGMENTS_PER_GAUNTLET = 2;
+const SEGMENTS_PER_GAUNTLET = 3;
+
+/** Offsets of a gauntlet's three segments within its block, from 1 so 0 stays "unowned". */
+const BRANCH_SEGMENT_OFFSET = 1;
+const GATEWAY_SEGMENT_OFFSET = 2;
+const CHOKE_SEGMENT_OFFSET = 3;
 
 /** Segment owning gauntlet `index`'s branch chains and its gateway safe room. */
 export function gauntletSegment(index: number): number {
-  return index * SEGMENTS_PER_GAUNTLET + 1;
+  return index * SEGMENTS_PER_GAUNTLET + BRANCH_SEGMENT_OFFSET;
 }
 
 /** Segment owning gauntlet `index`'s boss room and the sealed corridor into it. */
 function gatewaySegment(index: number): number {
-  return index * SEGMENTS_PER_GAUNTLET + 2;
+  return index * SEGMENTS_PER_GAUNTLET + GATEWAY_SEGMENT_OFFSET;
+}
+
+/** Segment owning gauntlet `index`'s choke room and the corridor that enters it. */
+function chokeSegment(index: number): number {
+  return index * SEGMENTS_PER_GAUNTLET + CHOKE_SEGMENT_OFFSET;
+}
+
+/**
+ * Highest segment id the gauntlets can consume, so anything allocating segments
+ * of its own — the floor-2 spine — starts past every gauntlet a floor can hold
+ * rather than guessing at a gap.
+ */
+export function gauntletSegmentCeiling(gauntletCount: number): number {
+  return chokeSegment(Math.max(gauntletCount, 1) - 1);
 }
 
 // ── Geometry constants ────────────────────────────────────────────────────────
@@ -107,6 +133,18 @@ const GAUNTLET_FLANK_TURN_MAX_DEG = 120;
 const BOSS_ROOM_OFFSET_MIN = 26;
 const BOSS_ROOM_OFFSET_MAX = 34;
 
+/**
+ * Centre-to-centre distance from the room before a choke room to the choke room
+ * itself.
+ *
+ * Wider than `BOSS_ROOM_OFFSET_MIN` because the choke room is a 14×12 pass-through
+ * seated between two rooms rather than at the end of a run: both of its
+ * neighbours have to clear it by `ROOM_GAP`, and the corridor on each side needs
+ * enough length to read as a corridor rather than as a shared wall.
+ */
+const CHOKE_ROOM_OFFSET_MIN = 24;
+const CHOKE_ROOM_OFFSET_MAX = 30;
+
 /** Chebyshev clearance any tile must keep from tiles owned by another segment. */
 const FOREIGN_SEGMENT_CLEARANCE = 2;
 
@@ -120,8 +158,8 @@ export const MAX_MAP_ATTEMPTS = 40;
 /** Widening jitter applied on each successive attempt to seat a chain room. */
 const CHAIN_ROOM_JITTER_STEP = 2;
 
-/** Samples used to approximate a branch curve's arc length. */
-const ARC_LENGTH_SAMPLES = 32;
+/** Samples used to approximate a curve's arc length. */
+export const ARC_LENGTH_SAMPLES = 32;
 
 /** Half-spread of a later gauntlet's branch fan around its heading, in degrees. */
 const BRANCH_FAN_HALF_SPREAD_DEG = 70;
@@ -185,7 +223,7 @@ function bezierArcTable(p0: Point, p1: Point, p2: Point): number[] {
 }
 
 /** The curve parameter at a given distance along the curve. */
-function parameterAtArcLength(table: ReadonlyArray<number>, distance: number): number {
+export function parameterAtArcLength(table: ReadonlyArray<number>, distance: number): number {
   const total = table[table.length - 1];
   if (total <= 0) return 0;
   const target = clamp(distance, 0, total);
@@ -483,8 +521,30 @@ export interface GauntletRequest {
   branchCount: number;
   branchRooms: { min: number; max: number };
   sizes: GauntletRoomSizes;
+  /**
+   * The mandatory choke room this gauntlet carries, or undefined for a gauntlet
+   * with none. Present means the room *must* be seated: a plan that cannot fit
+   * it is rejected rather than returned without it, so the floor can never
+   * quietly ship without its choke.
+   *
+   * The slot is chosen by the caller and held across retries, for the reason
+   * {@link branchCount} is: redrawing it per attempt collapses the distribution
+   * onto whichever slot happens to seat more easily.
+   */
+  choke?: { w: number; h: number; slot: ChokeSlot };
   pickCorridorKind: (isSpecial: boolean, target: Point) => CorridorKind;
 }
+
+/**
+ * Where a gauntlet's choke room sits on the one route through it.
+ *
+ * `stem` is the sealed corridor out of the previous gauntlet's boss room, before
+ * this gauntlet's branches fan out — so the choke room becomes the fan's hub.
+ * `approach` is between the gateway safe room and the boss room. Branches are
+ * parallel by construction, so those two stems are the only places on a gauntlet
+ * every player provably crosses.
+ */
+export type ChokeSlot = 'stem' | 'approach';
 
 export interface PlannedCorridor {
   tiles: Point[];
@@ -500,6 +560,18 @@ export interface GauntletPlan {
   chainRooms: Rect[];
   corridors: PlannedCorridor[];
   branchRoomCounts: number[];
+  /** Set only when the request asked for a choke room. */
+  chokeRoom: Rect | null;
+  chokeSlot: ChokeSlot | null;
+  /**
+   * The corridor the player arrives at the choke room through.
+   *
+   * Named rather than inferred, because everything downstream turns on knowing
+   * which of the room's doorways is the way *in*: every other one is a way
+   * onward, and a corridor's L can arrive at a wall that faces nowhere near the
+   * room it came from.
+   */
+  chokeEntryCorridor: PlannedCorridor | null;
 }
 
 function nextHeading(previousHeading: number | null): number {
@@ -590,15 +662,50 @@ function branchWaypoints(
 export function planGauntlet(segments: SegmentMap, request: GauntletRequest): GauntletPlan | null {
   const segment = gauntletSegment(request.index);
   const sealed = gatewaySegment(request.index);
-  const entryCentre = rectCentre(request.entryRoom);
+  const choke = chokeSegment(request.index);
   const heading = nextHeading(request.previousHeading);
+  const corridors: PlannedCorridor[] = [];
 
+  const chokeSlot: ChokeSlot | null = request.choke?.slot ?? null;
+  let chokeRoom: Rect | null = null;
+  let chokeEntryCorridor: PlannedCorridor | null = null;
+
+  // With a stem choke the branches fan out of the choke room rather than out of
+  // the previous boss room, which is what makes it unavoidable: there is no
+  // other way onto any branch.
+  let branchEntryRoom = request.entryRoom;
+  if (request.choke !== undefined && chokeSlot === 'stem') {
+    const entryCentre = rectCentre(request.entryRoom);
+    const stemOffset = polar(heading, randomInt(CHOKE_ROOM_OFFSET_MIN, CHOKE_ROOM_OFFSET_MAX));
+    const stemRoom = rectCentredOn(
+      { x: Math.round(entryCentre.x + stemOffset.x), y: Math.round(entryCentre.y + stemOffset.y) },
+      request.choke.w,
+      request.choke.h,
+    );
+    if (!segments.canPlaceRoom(stemRoom, choke)) return null;
+    segments.addRoom(stemRoom, choke);
+    const stemCorridor = planCorridorBetween(
+      segments,
+      choke,
+      request.entryRoom,
+      stemRoom,
+      request.pickCorridorKind(true, rectCentre(stemRoom)),
+    );
+    if (stemCorridor === null) return null;
+    segments.claimCorridor(stemCorridor.tiles, choke);
+    corridors.push(stemCorridor);
+    chokeRoom = stemRoom;
+    chokeEntryCorridor = stemCorridor;
+    branchEntryRoom = stemRoom;
+  }
+
+  const branchEntryCentre = rectCentre(branchEntryRoom);
   const gatewayRange = gatewayDistanceRange(request.mapSize, request.index);
   const gatewayOffset = polar(heading, randomInt(gatewayRange.min, gatewayRange.max));
   const safeRoom = rectCentredOn(
     {
-      x: Math.round(entryCentre.x + gatewayOffset.x),
-      y: Math.round(entryCentre.y + gatewayOffset.y),
+      x: Math.round(branchEntryCentre.x + gatewayOffset.x),
+      y: Math.round(branchEntryCentre.y + gatewayOffset.y),
     },
     request.sizes.safeRoomW,
     request.sizes.safeRoomH,
@@ -607,9 +714,44 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
   segments.addRoom(safeRoom, segment);
 
   const safeCentre = rectCentre(safeRoom);
+
+  // With an approach choke the sealed run is safe room → choke room → boss room.
+  // The two corridors take different segments deliberately: same-segment
+  // corridors may touch, and two that did would join the safe room straight to
+  // the boss room around the choke.
+  let bossOrigin = safeCentre;
+  let bossCorridorFrom = safeRoom;
+  if (request.choke !== undefined && chokeSlot === 'approach') {
+    const approachOffset = polar(heading, randomInt(CHOKE_ROOM_OFFSET_MIN, CHOKE_ROOM_OFFSET_MAX));
+    const approachRoom = rectCentredOn(
+      {
+        x: Math.round(safeCentre.x + approachOffset.x),
+        y: Math.round(safeCentre.y + approachOffset.y),
+      },
+      request.choke.w,
+      request.choke.h,
+    );
+    if (!segments.canPlaceRoom(approachRoom, choke)) return null;
+    segments.addRoom(approachRoom, choke);
+    const approachCorridor = planCorridorBetween(
+      segments,
+      choke,
+      safeRoom,
+      approachRoom,
+      request.pickCorridorKind(true, rectCentre(approachRoom)),
+    );
+    if (approachCorridor === null) return null;
+    segments.claimCorridor(approachCorridor.tiles, choke);
+    corridors.push(approachCorridor);
+    chokeRoom = approachRoom;
+    chokeEntryCorridor = approachCorridor;
+    bossOrigin = rectCentre(approachRoom);
+    bossCorridorFrom = approachRoom;
+  }
+
   const bossOffset = polar(heading, randomInt(BOSS_ROOM_OFFSET_MIN, BOSS_ROOM_OFFSET_MAX));
   const bossRoom = rectCentredOn(
-    { x: Math.round(safeCentre.x + bossOffset.x), y: Math.round(safeCentre.y + bossOffset.y) },
+    { x: Math.round(bossOrigin.x + bossOffset.x), y: Math.round(bossOrigin.y + bossOffset.y) },
     request.sizes.bossRoomW,
     request.sizes.bossRoomH,
   );
@@ -620,12 +762,13 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
   const gatewayCorridor = planCorridorBetween(
     segments,
     sealed,
-    safeRoom,
+    bossCorridorFrom,
     bossRoom,
     request.pickCorridorKind(true, bossCentre),
   );
   if (gatewayCorridor === null) return null;
   segments.claimCorridor(gatewayCorridor.tiles, sealed);
+  corridors.push(gatewayCorridor);
 
   const exitAngles = branchExitAngles(request, heading, request.branchCount);
   const pullRange =
@@ -634,14 +777,13 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
       : { min: BRANCH_EXIT_PULL_LATER_MIN, max: BRANCH_EXIT_PULL_LATER_MAX };
 
   const chainRooms: Rect[] = [];
-  const corridors: PlannedCorridor[] = [gatewayCorridor];
   const branchRoomCounts: number[] = [];
 
   for (const exitAngle of exitAngles) {
     const branch = planBranch(segments, request, {
       segment,
-      entryRoom: request.entryRoom,
-      entryCentre,
+      entryRoom: branchEntryRoom,
+      entryCentre: branchEntryCentre,
       gatewayRoom: safeRoom,
       gatewayCentre: safeCentre,
       exitAngle,
@@ -653,7 +795,19 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
     branchRoomCounts.push(branch.rooms.length);
   }
 
-  return { heading, safeRoom, bossRoom, chainRooms, corridors, branchRoomCounts };
+  if (request.choke !== undefined && chokeRoom === null) return null;
+
+  return {
+    heading,
+    safeRoom,
+    bossRoom,
+    chainRooms,
+    corridors,
+    branchRoomCounts,
+    chokeRoom,
+    chokeSlot: chokeRoom === null ? null : chokeSlot,
+    chokeEntryCorridor,
+  };
 }
 
 interface BranchRequest {

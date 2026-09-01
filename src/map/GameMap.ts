@@ -68,6 +68,8 @@ import {
   PIGMENT_SHELF,
   INK_BENCH,
   GRINDING_SLAB,
+  QUEST_EXIT_DOOR_CLOSED,
+  QUEST_EXIT_DOOR_OPEN,
 } from './tileTypes';
 import { isWalkableTileType } from './walkability';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
@@ -86,6 +88,7 @@ import {
   type GenerateDungeonOptions,
   type SafeRoomData,
   type ArenaExterior,
+  type ProgressionLayoutData,
   type QuestRoomData,
   type TreasureRoomData,
   type SpiderLabRoomData,
@@ -383,6 +386,37 @@ const BLOCK_PERMANENT = 2;
 const BLOCK_ARENA_DOOR = 4;
 /** Tile is part of a stairwell's 2×2 footprint. */
 const BLOCK_STAIRWELL = 8;
+/**
+ * Tile is part of the defense quest's onward doorway — blocking only while the
+ * goblin mother has it barred, which is only ever during an encounter the
+ * player accepted.
+ *
+ * A flag rather than an unwalkable tile type because the offline progression
+ * validator flood-fills the raw grid, and a wall here would make every landmark
+ * past the quest room read as unreachable on the floors where the room is a
+ * mandatory pass-through.
+ */
+const BLOCK_QUEST_EXIT = 16;
+
+/**
+ * What the defense quest's onward doorway is doing.
+ *
+ * `clear` is what every floor generates in, and what the doorway stays as for a
+ * player who never takes the wave: the nursery is a room on the route, and
+ * walking through it is all it ever demands. `barred` is the goblin mother's
+ * own doing, for the length of an encounter the player accepted — she boards
+ * the far side so nothing gets out of the room past her brood. `smashed` is the
+ * scar the segment leaves once it ends, win or lose: her boards gone but for
+ * the splintered ends still nailed to the jambs.
+ */
+export type QuestExitDoorState = 'clear' | 'barred' | 'smashed';
+
+/** The art a doorway tile wears in a given state, over the floor it generated as. */
+function questExitDoorTileType(state: QuestExitDoorState, generatedType: number): number {
+  if (state === 'barred') return QUEST_EXIT_DOOR_CLOSED;
+  if (state === 'smashed') return QUEST_EXIT_DOOR_OPEN;
+  return generatedType;
+}
 /** Bits that block movement regardless of game state. */
 const BLOCK_UNCONDITIONAL = BLOCK_EXTRA | BLOCK_PERMANENT;
 
@@ -560,6 +594,15 @@ export class GameMap {
   private townSafeRadiusTiles: number | null = null;
   /** Quest rooms generated in the dungeon (defend-NPC encounters). */
   questRooms: QuestRoomData[] = [];
+  /**
+   * What forced-progression mode built, when this map is a progression floor.
+   *
+   * Carried through so a harness can ask the finished map where its choke and
+   * its spine ended up. Nothing in the game reads it — the generator's own
+   * validator has it directly — but a check that had to guess at the choke's
+   * position would prove nothing on the floors where it guessed wrong.
+   */
+  progressionLayout: ProgressionLayoutData | undefined;
   /** Spider lab room, if generated (spider quest boss encounter). */
   spiderLabRoom: SpiderLabRoomData | null = null;
   /** Treasure rooms generated in the dungeon (chest encounters). */
@@ -568,6 +611,16 @@ export class GameMap {
   arenaExteriors: ArenaExterior[] = [];
   /** When true, the arena door gap tiles are treated as unwalkable. */
   arenaDoorLocked = false;
+  /**
+   * What the defense quest's onward doorway is doing. See `QuestExitDoorState`.
+   */
+  private questExitDoorState: QuestExitDoorState = 'clear';
+  /**
+   * Each onward doorway tile, against the floor it generated as — which is what
+   * `clear` puts back when an accepted encounter is abandoned and the doorway
+   * goes back to being a doorway.
+   */
+  private readonly questExitDoorTiles = new Map<number, number>();
   /**
    * Write-side record of every runtime block, keyed with `tileCoordKey` so the
    * entries survive a structure replacement (building interiors regenerate the
@@ -688,6 +741,16 @@ export class GameMap {
     this.safeRooms = data.safeRooms;
     this.bossRooms = data.bossRooms;
     this.questRooms = data.questRooms;
+    this.progressionLayout = data.progressionLayout;
+    // The flag goes on now and stays on; what changes is whether it is being
+    // honoured. Every floor starts `clear`: the nursery is a room on the way,
+    // not a toll gate, and nothing is shut until the player takes the wave.
+    for (const room of data.questRooms) {
+      for (const tile of room.exitDoorTiles) {
+        this.questExitDoorTiles.set(tileCoordKey(tile.x, tile.y), data.grid[tile.y][tile.x].type);
+        this.addBlockFlag(tile.x, tile.y, BLOCK_QUEST_EXIT);
+      }
+    }
     this.treasureRooms = data.treasureRooms;
     this.spiderLabRoom = data.spiderLabRoom;
     this.mobSpawnPoints = data.mobSpawnPoints;
@@ -736,6 +799,26 @@ export class GameMap {
       if (!already) {
         this.setStairwellTiles([...this.stairwellTiles, arena.stairwellTile]);
       }
+    }
+  }
+
+  /**
+   * Sets the defense quest's onward doorway, swapping its art with it.
+   *
+   * Each state is its own tile type because base tiles are baked into reusable
+   * chunk canvases, so the swap has to announce itself as a dirty tile or the
+   * old art keeps being blitted over the new state.
+   */
+  setQuestExitDoorState(state: QuestExitDoorState): void {
+    this.questExitDoorState = state;
+    for (const [key, generatedType] of this.questExitDoorTiles) {
+      const tileX = tileKeyX(key);
+      const tileY = tileKeyY(key);
+      if (!this.isInsideGrid(tileX, tileY)) continue;
+      const doorType = questExitDoorTileType(state, generatedType);
+      if (this.structure[tileY][tileX].type === doorType) continue;
+      this.structure[tileY][tileX].type = doorType;
+      this.markTileDirty(tileX, tileY);
     }
   }
 
@@ -2496,10 +2579,11 @@ export class GameMap {
 
     this.applyBlockKeySet(this.permanentBlockedTiles, BLOCK_PERMANENT);
     this.applyBlockKeySet(this.arenaDoorTileSet, BLOCK_ARENA_DOOR);
+    this.applyBlockKeySet(this.questExitDoorTiles.keys(), BLOCK_QUEST_EXIT);
     this.applyBlockKeySet(this.stairwellBlockedSet, BLOCK_STAIRWELL);
   }
 
-  private applyBlockKeySet(keys: ReadonlySet<number>, flag: number): void {
+  private applyBlockKeySet(keys: Iterable<number>, flag: number): void {
     for (const key of keys) {
       this.addBlockFlag(tileKeyX(key), tileKeyY(key), flag);
     }
@@ -2541,6 +2625,7 @@ export class GameMap {
   captureCheckpoint(): GameMapCheckpoint {
     return {
       arenaDoorLocked: this.arenaDoorLocked,
+      questExitDoorState: this.questExitDoorState,
       permanentBlockedTiles: [...this.permanentBlockedTiles],
       stairwellTiles: this._stairwellTiles.map((tile) => ({ x: tile.x, y: tile.y })),
     };
@@ -2548,6 +2633,10 @@ export class GameMap {
 
   restoreCheckpoint(snapshot: GameMapCheckpoint): void {
     this.arenaDoorLocked = snapshot.arenaDoorLocked;
+    // A resolved encounter is banked: the doorway her wave smashed open must
+    // not come back boarded behind a player who respawns at a checkpoint taken
+    // before it.
+    this.setQuestExitDoorState(snapshot.questExitDoorState);
 
     // The mask is only rebuilt wholesale when the structure changes, so a key
     // dropped from the set without its bit being cleared leaves the tile
@@ -2635,6 +2724,7 @@ export class GameMap {
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
     if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
     if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
+    if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
     return isWalkableTileType(this.structure[tileY][tileX]);
   }
 
@@ -2667,6 +2757,7 @@ export class GameMap {
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
     if ((flags & BLOCK_EXTRA) !== 0) return false;
     if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
+    if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
     return isWalkableTileType(this.structure[tileY][tileX]);
   }
 
@@ -2957,6 +3048,7 @@ export class GameMap {
  */
 export interface GameMapCheckpoint {
   arenaDoorLocked: boolean;
+  questExitDoorState: QuestExitDoorState;
   /** `tileCoordKey` values, so the entries survive a structure replacement. */
   permanentBlockedTiles: number[];
   stairwellTiles: ReadonlyArray<{ x: number; y: number }>;

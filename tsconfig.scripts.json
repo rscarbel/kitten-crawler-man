@@ -8,6 +8,7 @@
   },
   "include": [
     "scripts/verify-progression.ts",
+    "scripts/verify-quest-choke.ts",
     "scripts/verify-menus.ts",
     "scripts/verify-lich.ts",
     "scripts/render-spider.ts",

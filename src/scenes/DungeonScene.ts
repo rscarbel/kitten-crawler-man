@@ -24,6 +24,7 @@ import {
   spawnTreasureRoomMobs,
   partyLevelOf,
   recommendedPartyLevelFor,
+  resolveSpawnLevel,
 } from '../levels/spawner';
 import { activeDifficultyProfile, applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
@@ -223,7 +224,7 @@ import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem, SUMMON_BUTTON_HEIGHT, SUMMON_BUTTON_WIDTH } from '../systems/MongoSystem';
-import { DEFEND_QUEST_ID, DefendQuestSystem } from '../systems/DefendQuestSystem';
+import { DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
 import { CircusQuestSystem, CIRCUS_QUEST_ID } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
@@ -276,6 +277,7 @@ import { randomInt, pointInRect } from '../utils';
 import { aiAdapter } from '../ai/AIAdapter';
 import {
   adviceObjective,
+  optionalAdviceObjective,
   gatewayAdviceId,
   MordecaiAdvisor,
   type AdviceObjective,
@@ -1226,8 +1228,19 @@ export class DungeonScene extends GameplayScene {
     this.juicerBossRoomIdx = levelDef.bossRooms?.findIndex((b) => b.type === 'juicer') ?? -1;
     this.arenaRoom = new ArenaRoomSystem(this.gameMap.arenaExteriors[0]);
     this.barriers = new BarrierSystem(this.gameMap);
-    this.defendQuest = new DefendQuestSystem(this.gameMap, this.bus, (mob) =>
-      this.world.roster.add(mob),
+    this.defendQuest = new DefendQuestSystem(
+      this.gameMap,
+      this.bus,
+      (mob) => this.world.roster.add(mob),
+      () => {
+        const band = levelDef.defendQuestWave;
+        if (band === undefined) return 1;
+        return resolveSpawnLevel(
+          band,
+          partyLevelOf(this.human.level, this.cat.level),
+          activeDifficultyProfile(),
+        );
+      },
     );
     this.spiderQuest = new SpiderQuestSystem(this.gameMap, this.bus, (mob) => {
       this.world.roster.add(mob);
@@ -3927,17 +3940,22 @@ export class DungeonScene extends GameplayScene {
     if (this.levelDef.id === TUTORIAL_LEVEL_ID) return [];
 
     switch (this.levelDef.floorNumber) {
+      // The goblin nursery sits where the player actually meets it: a room on
+      // the forced route that they walk through on the way between two bosses.
+      // So Mordecai raises it in walking order rather than trailing the list —
+      // but as an optional slot, because what happens in it is the player's
+      // choice and an untaken wave must not silence the rest of his advice.
       case DUNGEON_FLOOR_ONE:
         return [
           this.bossObjective('the_hoarder'),
-          this.bossObjective('juicer'),
           this.defendQuestObjective(),
+          this.bossObjective('juicer'),
         ];
       case DUNGEON_FLOOR_TWO:
         return [
           this.bossObjective('krakaren_clone'),
-          this.spiderLabObjective(),
           this.defendQuestObjective(),
+          this.spiderLabObjective(),
           this.ballOfSwineObjective('ball_of_swine_distant'),
         ];
       case OVERWORLD_FLOOR_THREE:
@@ -4010,8 +4028,11 @@ export class DungeonScene extends GameplayScene {
   }
 
   private defendQuestObjective(): AdviceObjective {
-    const complete = this.defendQuest.questManager.getStatus(DEFEND_QUEST_ID) === 'completed';
-    return adviceObjective(
+    // Resolved, not completed: losing the defence is a supported ending, and a
+    // party that fought it and lost should not be sent back to a nursery with
+    // nothing left in it to do.
+    const complete = this.defendQuest.isResolved;
+    return optionalAdviceObjective(
       'defend_goblin_mother',
       complete,
       this.gameMap.questRooms[0]?.centre ?? null,

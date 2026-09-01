@@ -124,6 +124,14 @@ const JUICER_MAX_LEVEL = 7;
 const JUICER_GUARD_MIN_LEVEL = 2;
 const JUICER_GUARD_MAX_LEVEL = 3;
 
+/**
+ * The goblin mother's bugaboo wave. The nursery now sits between the Hoarder and
+ * the Juicer, so it is fought by a party around level 3–5 rather than by the
+ * level-7 one the encounter was first tuned against.
+ */
+const BUGABOO_MIN_LEVEL = 1;
+const BUGABOO_MAX_LEVEL = 3;
+
 /** Troglodyte west-northwest offset. */
 const TROG_WEST_NW_X = -3;
 const TROG_WEST_NW_Y = -2;
@@ -196,12 +204,17 @@ export const level1: LevelDef = {
         bossType: 'juicer',
         branchCount: { min: JUICER_BRANCH_MIN, max: JUICER_BRANCH_MAX },
         branchRooms: { min: JUICER_BRANCH_ROOMS_MIN, max: JUICER_BRANCH_ROOMS_MAX },
+        // The goblin mother's nursery is the one room every crawler crosses
+        // between the Hoarder and the Juicer, on whichever of the two sealed
+        // stems this map drew.
+        questChoke: true,
       },
     ],
     scatterSafeRooms: LEVEL1_SCATTER_SAFE_ROOMS,
     regionSpawnBonus: [PRE_HOARDER_SPAWN_BONUS, POST_HOARDER_SPAWN_BONUS, POST_JUICER_SPAWN_BONUS],
     regionLevelBonus: [PRE_HOARDER_LEVEL_BONUS, POST_HOARDER_LEVEL_BONUS, POST_JUICER_LEVEL_BONUS],
   },
+  defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
   hasCollapseTimer: true,
   hasTreasureRoomGuards: true,
   nextLevelId: 'level2',

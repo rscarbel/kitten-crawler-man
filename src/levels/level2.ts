@@ -8,13 +8,28 @@ const KRAKAREN_BRANCH_MAX = 3;
 const KRAKAREN_BRANCH_ROOMS_MIN = 3;
 const KRAKAREN_BRANCH_ROOMS_MAX = 9;
 
-/** Safe rooms scattered through the post-Krakaren free-roam region. */
+/** Safe rooms hung off the post-Krakaren spine, roughly halfway along it. */
 const LEVEL2_SCATTER_SAFE_ROOMS = 1;
 
 /**
+ * Rooms walked between the Krakaren Clone's lair and the arena's antechamber.
+ *
+ * The two are only a few dozen tiles apart on a compact floor, so this is a
+ * contract about the *walk*: the chain winds to earn its length rather than
+ * spanning the distance.
+ */
+const SPINE_ROOMS_MIN = 12;
+const SPINE_ROOMS_MAX = 16;
+
+/** Places on the chain that fork into a second lane and reconverge. */
+const SPINE_SPLITS_MIN = 1;
+const SPINE_SPLITS_MAX = 2;
+
+/**
  * Extra mobs per room. Floor 2 is already past the point where a crawler is
- * learning the rules, so even its opening rooms carry a bonus — and the
- * free-roam region past the Krakaren carries the floor's heaviest.
+ * learning the rules, so even its opening rooms carry a bonus — and the forced
+ * chain past the Krakaren carries the floor's heaviest, which is what keeps a
+ * one-way journey of a dozen rooms from thinning out as it goes.
  */
 const PRE_KRAKAREN_SPAWN_BONUS = 1;
 const POST_KRAKAREN_SPAWN_BONUS = 2;
@@ -45,6 +60,14 @@ const ARCHER_MIN_LEVEL = AMBIENT_MIN_LEVEL;
 const ARCHER_MAX_LEVEL = AMBIENT_MAX_LEVEL;
 
 /**
+ * The goblin mother's bugaboo wave on this floor. A choke on the post-Krakaren
+ * spine is crossed by a party well past the level floor 1's nursery is fought
+ * at, so the same base-stat body would be a formality here.
+ */
+const BUGABOO_MIN_LEVEL = 4;
+const BUGABOO_MAX_LEVEL = 7;
+
+/**
  * Boss level bands. Both bosses spawned at base stats before this — a Krakaren
  * Clone gating the floor's only forced gauntlet was weaker than the troglodytes
  * in the rooms leading to it.
@@ -64,8 +87,9 @@ const BALL_OF_SWINE_MAX_LEVEL = 16;
  * Level 2 — "The Dungeon, Level 2".
  * Runs against the same collapse countdown as floor 1 and guards its treasure
  * rooms, and is fully populated besides: troglodytes, llamas and goblins roam
- * it, the Krakaren Clone guards the forced gauntlet, and the Ball of Swine waits
- * in the optional arena.
+ * it, the Krakaren Clone guards the forced gauntlet, and past it a single
+ * winding chain of rooms — the goblin mother's nursery among them, and the
+ * spider lab hanging off it — runs to the arena where the Ball of Swine waits.
  */
 export const level2: LevelDef = {
   id: 'level2',
@@ -129,11 +153,16 @@ export const level2: LevelDef = {
         branchRooms: { min: KRAKAREN_BRANCH_ROOMS_MIN, max: KRAKAREN_BRANCH_ROOMS_MAX },
       },
     ],
+    spine: {
+      rooms: { min: SPINE_ROOMS_MIN, max: SPINE_ROOMS_MAX },
+      splits: { min: SPINE_SPLITS_MIN, max: SPINE_SPLITS_MAX },
+    },
     scatterSafeRooms: LEVEL2_SCATTER_SAFE_ROOMS,
     regionSpawnBonus: [PRE_KRAKAREN_SPAWN_BONUS, POST_KRAKAREN_SPAWN_BONUS],
   },
   hasArena: true,
   hasSpiderLab: true,
+  defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
   slingshotDrops: true,
   hasCollapseTimer: true,
   hasTreasureRoomGuards: true,

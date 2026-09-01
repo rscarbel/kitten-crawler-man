@@ -21,7 +21,9 @@ export type PlaytestSpawn =
   /** The gateway safe room whose only onward exit is this boss's room. */
   | { readonly kind: 'safeRoomBefore'; readonly bossType: MobSpawnRule['type'] }
   /** The corridor tile immediately outside the spider lab's door. */
-  | { readonly kind: 'spiderLabEntrance' };
+  | { readonly kind: 'spiderLabEntrance' }
+  /** The tile just inside the goblin mother's nursery, by the way in. */
+  | { readonly kind: 'questRoomEntrance' };
 
 /** One stack of items placed in a fixed slot. */
 export interface PlaytestStack {
@@ -535,9 +537,27 @@ const ANCHOR_STONE: PlaytestPreset = {
   },
 };
 
+/**
+ * The nursery, on floor 1, where the defense quest now sits.
+ *
+ * Its own preset rather than a note to walk there from the `juicer` one: the
+ * nursery is a room every crawler walks through between the two bosses, and its
+ * whole shape — the grates, the wave the goblin mother offers, the boards that
+ * go up only for a party that takes it — is visible only from inside the room.
+ * Finding it from the gateway safe room is several minutes of walking every
+ * time. The loadout is the `juicer` party, which is who meets it.
+ */
+const NURSERY: PlaytestPreset = {
+  ...JUICER,
+  id: 'nursery',
+  description: 'Inside the goblin mother’s nursery, between the Hoarder and the Juicer',
+  spawn: { kind: 'questRoomEntrance' },
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   HOARDER,
   JUICER,
+  NURSERY,
   LEVEL2,
   KRAKAREN,
   SWINE,

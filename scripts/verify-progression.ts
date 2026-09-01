@@ -1,4 +1,8 @@
-import { generateDungeon, type DungeonData } from '../src/map/DungeonGenerator';
+import {
+  generateDungeon,
+  progressionExpectations,
+  type DungeonData,
+} from '../src/map/DungeonGenerator';
 import {
   distanceToRect,
   validateProgression,
@@ -103,11 +107,7 @@ function stairwellRecords(data: DungeonData, gauntletCount: number): StairwellRe
 
 function runFloor(levelDef: LevelDef): RunResult[] {
   const options = { ...dungeonOptionsForLevel(levelDef), size: levelDef.mapSize };
-  const expectations: ProgressionExpectations = {
-    mapSize: levelDef.mapSize,
-    gauntletCount: levelDef.progression?.gauntlets.length ?? 0,
-    hasArena: levelDef.hasArena ?? false,
-  };
+  const expectations: ProgressionExpectations = progressionExpectations(options);
 
   const results: RunResult[] = [];
   for (let run = 0; run < VERIFY_RUN_COUNT; run++) {

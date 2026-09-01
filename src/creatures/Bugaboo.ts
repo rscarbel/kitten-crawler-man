@@ -114,8 +114,7 @@ export class Bugaboo extends Mob {
     // The quest system rebuilds its barrier list and its wave roster on a
     // checkpoint restore, so a grate assignment, its barrier callback and a
     // defend target held across the rewind all point at the old encounter.
-    this.releaseGrate();
-    this.defendTarget = null;
+    this.releaseFromWave();
   }
 
   /**
@@ -147,6 +146,23 @@ export class Bugaboo extends Mob {
   private releaseGrate(): void {
     this.assignedGrate = null;
     this.onBarrierAttack = null;
+  }
+
+  /**
+   * Cuts every tie to the defense encounter: its grate, the barrier callback,
+   * the goblin mother, and the swing already in the air.
+   *
+   * The swing is the one that is easy to forget and the one that matters. A
+   * strike commits its target at wind-up and lands on it a quarter of a second
+   * later, re-checking only that the target is alive and in range — never
+   * whether it is still this creature's `defendTarget`. So a wave released
+   * mid-swing lands one more blow on a mother the quest has just healed back to
+   * full, and the re-staged segment starts with her already chipped.
+   */
+  releaseFromWave(): void {
+    this.releaseGrate();
+    this.defendTarget = null;
+    this.swingTarget = null;
   }
 
   updateAI(targets: Player[]) {

@@ -429,7 +429,7 @@ export class AIAdapter {
       bus.on('questStarted', (e) => {
         const summaries: Record<string, string> = {
           defend_goblin_mother:
-            'Quest started: Defend the Goblin Mother. The players accepted a mini-quest to protect a goblin NPC from incoming waves of enemies. They have a short countdown before attackers arrive and can build a wood-pile barricade to help hold them off. Rewards include XP, coins, and loot if they succeed.',
+            'Quest started: Defend the Goblin Mother. The goblin nursery sits directly on the route the crawlers have to walk, so they were always going to pass through it — but the fight inside is entirely their choice, and they took it. Having accepted, the goblin mother boards the far doors shut for the length of the wave. They have a short countdown before it arrives and can gather boards from a wood pile to barricade the floor grates the attackers climb out of. The boards come down when the encounter ends either way, and come down early if the crawlers walk out on it, so a loss costs them the rewards and not the floor. Rewards include XP, coins, and loot if she survives.',
         };
         this.sendEvent({
           ts: Date.now(),

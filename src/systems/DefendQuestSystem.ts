@@ -7,10 +7,10 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { randomInt, pointInRect } from '../utils';
+import { randomInt, pixelToTile, pointInRect } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { platform } from '../core/Platform';
-import type { GameMap } from '../map/GameMap';
+import type { GameMap, QuestExitDoorState } from '../map/GameMap';
 import type { QuestRoomData } from '../map/DungeonGenerator';
 import type { EventBus } from '../core/EventBus';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -20,6 +20,7 @@ import { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import { Bugaboo } from '../creatures/Bugaboo';
 import { prewarmBugaboo } from '../sprites/bugabooSprite';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { QuestNPC } from '../creatures/QuestNPC';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { QuestManager } from '../core/QuestManager';
@@ -61,6 +62,13 @@ const SPAWN_INTERVAL_MAX = 300; // 5 seconds
 const ENTRANCE_SPAWN_CHANCE = 0.15;
 const INTERACT_RANGE_TILES = 2.5;
 const INTERACT_RANGE_PX = TILE_SIZE * INTERACT_RANGE_TILES;
+/**
+ * How long both crawlers may be outside the nursery before the segment is
+ * called off. Long enough that a step into a doorway, a knockback, or a dash
+ * out to the wood pile is not an abandonment.
+ */
+const AUDIENCE_ABSENCE_GRACE_SECONDS = 1.5;
+const AUDIENCE_ABSENCE_GRACE_FRAMES = AUDIENCE_ABSENCE_GRACE_SECONDS * FRAMES_PER_SECOND;
 
 // Rendering / UI constants
 const FIRST_WAVE_DELAY_FRAMES = FIRST_WAVE_DELAY_SECONDS * FRAMES_PER_SECOND;
@@ -211,6 +219,11 @@ const T2_ARROW_NOTCH_OFFSET = 6;
 const T2_DASH_LENGTH = 3;
 const T2_DASH_GAP = 3;
 
+const APPROACH_TITLE = 'ENEMIES APPROACHING';
+/** Shown while the segment is called off — the timer is frozen and there is nothing to count. */
+const HELD_TITLE = 'SEGMENT ON HOLD';
+const HELD_VALUE = 'GO BACK IN';
+
 // Countdown UI layout
 const COUNTDOWN_TITLE_Y = 50;
 const COUNTDOWN_TITLE_ASCENT = 14;
@@ -240,6 +253,13 @@ export type DefendQuestPhase =
   | 'complete_pending'
   | 'complete'
   | 'failed';
+
+/** Phases in which the defense encounter is over, however it ended. */
+const RESOLVED_PHASES: ReadonlySet<DefendQuestPhase> = new Set([
+  'complete_pending',
+  'complete',
+  'failed',
+]);
 
 export interface WoodBarrier {
   tileX: number;
@@ -285,6 +305,8 @@ export interface DefendQuestCheckpoint {
   readonly woodPileAvailable: boolean;
   readonly barriers: ReadonlyArray<Readonly<WoodBarrier>>;
   readonly pendingBuild: Readonly<PendingBuild> | null;
+  readonly audienceAbsenceFrames: number;
+  readonly encounterAborted: boolean;
   readonly questMobs: readonly Bugaboo[];
   /**
    * The goblin mother is owned by this system rather than by the scene's mob
@@ -307,6 +329,14 @@ export class DefendQuestSystem implements GameSystem {
   private woodPileAvailable = false;
   private barriers: WoodBarrier[] = [];
   private pendingBuild: PendingBuild | null = null;
+  /** Consecutive frames with neither crawler inside the nursery. */
+  private audienceAbsenceFrames = 0;
+  /**
+   * The segment was called off because the room emptied, and is waiting to be
+   * re-staged. Only ever true during `countdown`, because calling it off is what
+   * rewinds the encounter to the top of the countdown.
+   */
+  private encounterAborted = false;
   /** Set every ~30 frames while building; DungeonScene clears it and plays the hammer sound. */
   hammerSoundPending = false;
   /** Set each time a barrier takes damage; DungeonScene clears it and cycles the wood-break sounds. */
@@ -337,11 +367,28 @@ export class DefendQuestSystem implements GameSystem {
   private addMob: (mob: Mob) => void;
   private bus: EventBus;
   private gameMap: GameMap;
+  private resolveWaveLevel: () => number;
 
-  constructor(gameMap: GameMap, bus: EventBus, addMob: (mob: Mob) => void) {
+  constructor(
+    gameMap: GameMap,
+    bus: EventBus,
+    addMob: (mob: Mob) => void,
+    /**
+     * The level one bugaboo spawns at, rolled per body against the floor's own
+     * band and the party's level.
+     *
+     * The wave used to spawn at base stats, which was survivable because the
+     * quest was optional late-floor content a party met at level 7 or later. It
+     * is now a mandatory choke crossed mid-floor 1 by a level-3 party and again
+     * on floor 2 by a level-12 one, so a fixed body is either a wall or a
+     * formality depending on which floor you meet it on.
+     */
+    resolveWaveLevel: () => number,
+  ) {
     this.gameMap = gameMap;
     this.bus = bus;
     this.addMob = addMob;
+    this.resolveWaveLevel = resolveWaveLevel;
 
     this.questManager = new QuestManager();
     this.questManager.register({
@@ -415,11 +462,21 @@ export class DefendQuestSystem implements GameSystem {
           {
             ...base,
             status: 'available',
-            objective: 'Speak to the goblin mother',
-            hint: 'She is waiting in the nursery room, marked on your map.',
+            objective: 'Speak to the goblin mother — her nursery is under attack',
+            hint: 'Optional. The road on is open either way; the sixty seconds are hers to ask for.',
           },
         ];
       case 'countdown':
+        if (this.encounterAborted) {
+          return [
+            {
+              ...base,
+              status: 'active',
+              objective: 'The nursery is empty — go back in',
+              hint: 'The brood came after you instead. The wave restarts where it began.',
+            },
+          ];
+        }
         return [
           {
             ...base,
@@ -446,6 +503,17 @@ export class DefendQuestSystem implements GameSystem {
       case 'complete':
         return [{ id: base.id, name, status: 'completed', objective: 'The nursery held' }];
     }
+  }
+
+  /**
+   * Whether the encounter is over, however it ended.
+   *
+   * Read by the floor's advice list: a *failed* defence is a finished one, so a
+   * guide that only counted `completed` would keep pointing the party back at a
+   * nursery there is nothing left to do in.
+   */
+  get isResolved(): boolean {
+    return RESOLVED_PHASES.has(this.phase);
   }
 
   get isDialogOpen(): boolean {
@@ -574,8 +642,8 @@ export class DefendQuestSystem implements GameSystem {
     const builderId: BarrierBuilderId = isCat ? 'cat' : 'human';
     const totalFrames = isCat ? BUILD_FRAMES * CAT_BUILD_TIME_MULTIPLIER : BUILD_FRAMES;
 
-    const ptx = Math.floor((builder.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
-    const pty = Math.floor((builder.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const ptx = pixelToTile(builder.x);
+    const pty = pixelToTile(builder.y);
 
     // Check if standing on or adjacent to a grate tile
     for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
@@ -630,8 +698,8 @@ export class DefendQuestSystem implements GameSystem {
     const tapTileX = Math.floor((screenX + camX) / TILE_SIZE);
     const tapTileY = Math.floor((screenY + camY) / TILE_SIZE);
 
-    const ptx = Math.floor((builder.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
-    const pty = Math.floor((builder.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const ptx = pixelToTile(builder.x);
+    const pty = pixelToTile(builder.y);
 
     for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
       const g = this.roomData.grateTiles[gi];
@@ -664,6 +732,8 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
+    this.syncQuestExitDoor();
+
     // Overlay timers tick even after quest ends
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
     if (this.failOverlayTimer > 0) this.failOverlayTimer--;
@@ -679,6 +749,10 @@ export class DefendQuestSystem implements GameSystem {
       return;
     }
 
+    if (this.phase === 'countdown' || this.phase === 'defending') {
+      this.tickAudienceWatch(ctx);
+    }
+
     switch (this.phase) {
       case 'npc_waiting':
       case 'dialog':
@@ -686,7 +760,7 @@ export class DefendQuestSystem implements GameSystem {
         break;
 
       case 'countdown':
-        this.updateCountdown(ctx);
+        if (!this.encounterAborted) this.updateCountdown(ctx);
         break;
 
       case 'defending':
@@ -719,6 +793,135 @@ export class DefendQuestSystem implements GameSystem {
     for (const b of this.barriers) {
       if (b.hitFlash > 0) b.hitFlash--;
     }
+  }
+
+  private isInNursery(entity: { x: number; y: number }): boolean {
+    if (!this.roomData) return false;
+    const bounds = this.roomData.bounds;
+    const tileX = pixelToTile(entity.x);
+    const tileY = pixelToTile(entity.y);
+    return (
+      tileX >= bounds.x &&
+      tileX < bounds.x + bounds.w &&
+      tileY >= bounds.y &&
+      tileY < bounds.y + bounds.h
+    );
+  }
+
+  /**
+   * Keeps the wave honest about who is in the room.
+   *
+   * The entrance is deliberately never barred, so a party that accepts the
+   * quest and then walks back into the corridor would otherwise watch the
+   * encounter resolve itself from safety — the timer running out, or the
+   * bugaboos finishing the mother unopposed — and be paid for a segment they
+   * spent in a corridor.
+   *
+   * The show has no reason to run for an empty room either: a nursery defence
+   * with nobody defending it is dead air, so the production calls cut and
+   * re-stages the whole segment from the top when the crawlers come back. What
+   * is already out of the grates stays out — it just stops being part of the
+   * segment and comes after the crawlers instead.
+   */
+  private tickAudienceWatch(ctx: SystemContext): void {
+    if (!this.roomData) return;
+
+    // The *controlled* crawler, conscious, and standing in the room. A body is
+    // not an audience: the companion can be told to hold position and to stop
+    // swinging, and the bugaboos walk past it to reach the mother anyway — so
+    // counting one would let a player park the cat in the corner and watch the
+    // whole segment resolve itself from the corridor, which is the exact bypass
+    // this exists to close.
+    const watcher = ctx.human.isActive ? ctx.human : ctx.cat;
+    const someoneIsWatching = watcher.isAlive && !watcher.isKnockedOut && this.isInNursery(watcher);
+    if (someoneIsWatching) {
+      this.audienceAbsenceFrames = 0;
+      this.encounterAborted = false;
+      return;
+    }
+
+    if (this.encounterAborted) return;
+
+    this.audienceAbsenceFrames++;
+    if (this.audienceAbsenceFrames >= AUDIENCE_ABSENCE_GRACE_FRAMES) {
+      this.abortEncounter();
+    }
+  }
+
+  /**
+   * Rewinds the encounter to the top of the countdown and cuts the wave loose.
+   *
+   * Rewinding rather than merely pausing is what stops a party from yo-yoing
+   * through the doorway to burn the defense timer down a grace period at a time
+   * without ever meeting a bugaboo. The boards come down with it — an abandoned
+   * segment is one nobody is playing, and a room nobody is playing must not be
+   * a room nobody can walk through.
+   */
+  private abortEncounter(): void {
+    this.encounterAborted = true;
+    this.audienceAbsenceFrames = 0;
+    this.releaseWave();
+    this.pendingBuild = null;
+
+    this.phase = 'countdown';
+    this.approachTimer = APPROACH_TIMER_FRAMES;
+    this.defenseTimer = 0;
+    this.spawnTimer = 0;
+    this.woodPileAvailable = true;
+    this.woodRespawnTimer = 0;
+
+    if (this.npc) {
+      // The re-staged segment is the full sixty seconds again, so the mother
+      // starts it whole. Chipped-down HP carried across an abort would make a
+      // single retreat a death sentence on a wave the party has to play in full.
+      this.npc.hp = this.npc.maxHp;
+      this.npc.clearHurtState();
+    }
+  }
+
+  /**
+   * Cuts the live wave loose from the segment, which is the guarantee that the
+   * mother cannot die off camera: only a bugaboo holding her as its
+   * `defendTarget` can damage her, and every other damage path in the game skips
+   * her outright.
+   *
+   * They are released rather than killed. Killing a body the party has already
+   * hit pays the full split — `resolveKills` credits any mob with a damage
+   * ledger, whoever landed the last blow — and the `mobKilled` that goes with it
+   * drops loot and, on floor 2, hatches a litter of brindle grubs. A segment the
+   * player walked out of must not pay for itself, let alone pay again on every
+   * repeat. So the brood simply turns on the crawlers and follows them out; the
+   * XP is there for anyone who wants to fight for it.
+   */
+  private releaseWave(): void {
+    for (const mob of this.questMobs) mob.releaseFromWave();
+    this.questMobs = [];
+  }
+
+  /**
+   * Puts the room's onward doorway where the encounter says it should be.
+   *
+   * Driven off the phase every frame rather than poked at each transition,
+   * because the transitions that matter are not all in one place: the wave can
+   * start, be walked out on, be re-staged by the crawlers coming back, end
+   * either way, or be rewound wholesale by a checkpoint. Deriving the doorway
+   * from the one piece of state all of those already move is what keeps the
+   * player from being shut in — or shut out — by a transition nobody thought to
+   * hook.
+   *
+   * The doorway is only ever barred during a wave the player accepted and is
+   * present for. A crawler who never spoke to her, or who walked out on the
+   * segment, walks straight through: this room is on the route, and passing
+   * through it is all it ever asks.
+   */
+  private syncQuestExitDoor(): void {
+    this.gameMap.setQuestExitDoorState(this.questExitDoorState());
+  }
+
+  private questExitDoorState(): QuestExitDoorState {
+    if (RESOLVED_PHASES.has(this.phase)) return 'smashed';
+    const waveIsStaged = this.phase === 'countdown' || this.phase === 'defending';
+    return waveIsStaged && !this.encounterAborted ? 'barred' : 'clear';
   }
 
   private updateCountdown(ctx: SystemContext): void {
@@ -787,13 +990,28 @@ export class DefendQuestSystem implements GameSystem {
     }
   }
 
+  /**
+   * The room's doorways a bugaboo can actually run in through.
+   *
+   * The goblin mother bars the onward doorway for the length of the encounter,
+   * so during a wave this is normally just the way the player came — but it is
+   * measured rather than assumed, because the room is a pass-through and the
+   * boards are only up while a segment is actually running.
+   */
+  private openDoorwayTiles(): Array<{ x: number; y: number }> {
+    if (!this.roomData) return [];
+    const doorways = [this.roomData.entranceTile, ...this.roomData.exitDoorTiles];
+    return doorways.filter((tile) => this.gameMap.isWalkable(tile.x, tile.y));
+  }
+
   private spawnWave(): void {
     if (!this.roomData || !this.npc) return;
 
-    const spawnAtEntrance = Math.random() < ENTRANCE_SPAWN_CHANCE;
+    const doorways = this.openDoorwayTiles();
+    const spawnAtEntrance = doorways.length > 0 && Math.random() < ENTRANCE_SPAWN_CHANCE;
 
     if (spawnAtEntrance) {
-      const ent = this.roomData.entranceTile;
+      const ent = doorways[Math.floor(Math.random() * doorways.length)];
       this.spawnBugaboo(ent.x, ent.y, -1);
     } else {
       const grateIdx = Math.floor(Math.random() * this.roomData.grateTiles.length);
@@ -805,6 +1023,13 @@ export class DefendQuestSystem implements GameSystem {
   private spawnBugaboo(tileX: number, tileY: number, grateIdx: number): void {
     if (!this.npc) return;
     const bug = new Bugaboo(tileX, tileY, TILE_SIZE);
+    bug.applyMobLevel(this.resolveWaveLevel());
+    // Paired with the level, as every other spawn site in the game pairs them: a
+    // wave that ignored the difficulty reward scale would pay differently from
+    // the mobs standing either side of the nursery door — and since the wave's
+    // survivors are now left alive to be fought, that gap is XP the party can
+    // actually feel.
+    applyActiveDifficultyRewards(bug);
     bug.setMap(this.gameMap);
     bug.defendTarget = this.npc;
 
@@ -828,19 +1053,14 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   private triggerDefenseComplete(): void {
-    for (const mob of this.questMobs) {
-      if (mob.isAlive) {
-        mob.hp = 0;
-        mob.justDied = true;
-        this.bus.emit('spawnGore', {
-          x: mob.x + TILE_SIZE * TILE_CENTER_OFFSET,
-          y: mob.y + TILE_SIZE * TILE_CENTER_OFFSET,
-          impactDx: 0,
-          impactDy: 0,
-        });
-      }
-    }
-    this.questMobs = [];
+    // The segment ends; the bodies already out of the grates do not. Killing the
+    // survivors outright used to end the wave tidily, and it paid for it: a
+    // bugaboo the party had merely chipped came back through `resolveKills` as a
+    // full kill, and the death it emitted hatched a litter of brindle grubs on
+    // floor 2 and drew a second set of gore on top of this one. The nursery
+    // held — that is what the sixty seconds bought. Whatever is still standing
+    // in it is the party's problem, worth exactly the XP they fight it for.
+    this.releaseWave();
     this.barriers = [];
     this.woodPileAvailable = false;
     this.pendingBuild = null;
@@ -896,12 +1116,8 @@ export class DefendQuestSystem implements GameSystem {
     this.questManager.failQuest(DEFEND_QUEST_ID);
     this.failOverlayTimer = QUEST_FAILED_DISPLAY_FRAMES;
 
-    // Clear Bugaboo defend targets so they go after players
-    for (const mob of this.questMobs) {
-      mob.defendTarget = null;
-      mob.assignedGrate = null;
-      mob.onBarrierAttack = null;
-    }
+    // The wave turns on the players, the mother having already fallen.
+    this.releaseWave();
 
     this.bus.emit('questFailed', { questId: DEFEND_QUEST_ID });
   }
@@ -922,6 +1138,8 @@ export class DefendQuestSystem implements GameSystem {
     this.bus.emit('questStarted', { questId: DEFEND_QUEST_ID });
     this.approachTimer = APPROACH_TIMER_FRAMES;
     this.woodPileAvailable = true;
+    this.audienceAbsenceFrames = 0;
+    this.encounterAborted = false;
     if (this.npc) this.npc.markerType = 'none';
   }
 
@@ -1046,8 +1264,8 @@ export class DefendQuestSystem implements GameSystem {
       this.roomData &&
       activeCrawler.inventory.countOf('quest_wood_board') >= BOARDS_PER_BUILD
     ) {
-      const ptx = Math.floor((activeCrawler.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
-      const pty = Math.floor((activeCrawler.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+      const ptx = pixelToTile(activeCrawler.x);
+      const pty = pixelToTile(activeCrawler.y);
       for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
         const g = this.roomData.grateTiles[gi];
         const dist = Math.abs(ptx - g.x) + Math.abs(pty - g.y);
@@ -1123,7 +1341,7 @@ export class DefendQuestSystem implements GameSystem {
         this.renderMobileCountdown(ctx, mobileTopY);
       } else {
         const secs = Math.ceil(this.approachTimer / FRAMES_PER_SECOND);
-        drawText(ctx, 'ENEMIES APPROACHING', {
+        drawText(ctx, this.encounterAborted ? HELD_TITLE : APPROACH_TITLE, {
           x: cw / 2,
           y: COUNTDOWN_TITLE_Y - COUNTDOWN_TITLE_ASCENT,
           size: COUNTDOWN_TITLE_SIZE,
@@ -1134,14 +1352,16 @@ export class DefendQuestSystem implements GameSystem {
           shadowBlurPx: 4,
           shadowOffset: { x: 0, y: 0 },
         });
-        drawText(ctx, `${secs}`, {
-          x: cw / 2,
-          y: COUNTDOWN_NUMBER_Y - COUNTDOWN_NUMBER_ASCENT,
-          size: COUNTDOWN_NUMBER_SIZE,
-          bold: true,
-          color: '#ef4444',
-          align: 'center',
-        });
+        if (!this.encounterAborted) {
+          drawText(ctx, `${secs}`, {
+            x: cw / 2,
+            y: COUNTDOWN_NUMBER_Y - COUNTDOWN_NUMBER_ASCENT,
+            size: COUNTDOWN_NUMBER_SIZE,
+            bold: true,
+            color: '#ef4444',
+            align: 'center',
+          });
+        }
       }
     }
 
@@ -1210,7 +1430,7 @@ export class DefendQuestSystem implements GameSystem {
     ctx.strokeRect(boxX, topY, boxW, MOBILE_QUEST_BOX_H);
     ctx.restore();
 
-    drawText(ctx, 'ENEMIES APPROACHING', {
+    drawText(ctx, this.encounterAborted ? HELD_TITLE : APPROACH_TITLE, {
       x: centerX,
       y: topY + MOBILE_QUEST_PAD_V,
       size: MOBILE_QUEST_TITLE_SIZE,
@@ -1218,7 +1438,7 @@ export class DefendQuestSystem implements GameSystem {
       color: '#fbbf24',
       align: 'center',
     });
-    drawText(ctx, `${secs}`, {
+    drawText(ctx, this.encounterAborted ? HELD_VALUE : `${secs}`, {
       x: centerX,
       y: topY + MOBILE_QUEST_PAD_V + MOBILE_QUEST_TITLE_H + MOBILE_QUEST_GAP,
       size: MOBILE_QUEST_VALUE_SIZE,
@@ -1287,12 +1507,17 @@ export class DefendQuestSystem implements GameSystem {
       color: '#fbbf24',
     });
 
+    // The one place the deal is stated every time the quest is met — that the
+    // road on is open regardless, and that staying is what closes it for a
+    // minute. The tutorial says it too, but that is once per run, so this must
+    // stand on its own for a player meeting her a second time on floor two.
     const dialogLines = [
-      'Please, you must help us! Monsters have',
-      'been trying to get in through the floor',
-      'grates. My child wandered off and knows',
-      'to meet me here. I cannot leave. Will you',
-      'stay and defend us until my child arrives?',
+      'Please — things are coming up through the',
+      'floor grates, and my brood is in here.',
+      'The road on is open; nobody is making you',
+      'stop. But stay, and I bar the far door until',
+      'it is over, win or lose. Hold with me until',
+      'my child is back, and I will owe you for it.',
     ];
     for (let i = 0; i < dialogLines.length; i++) {
       drawText(ctx, dialogLines[i], {
@@ -1624,9 +1849,9 @@ export class DefendQuestSystem implements GameSystem {
 
     const descriptions = [
       [
-        'A goblin mother needs you to protect her.',
-        'Keep her alive for 60 seconds until her',
-        'child safely arrives. Do not let her die!',
+        'The goblin mother bars the way on while this',
+        'runs. Keep her alive for 60 seconds — or walk',
+        'out on it, and the boards come straight down.',
       ],
       [
         'Walk over the WOOD PILE to collect boards.',
@@ -1694,6 +1919,8 @@ export class DefendQuestSystem implements GameSystem {
       woodPileAvailable: this.woodPileAvailable,
       barriers: this.barriers.map((barrier) => ({ ...barrier })),
       pendingBuild: this.pendingBuild === null ? null : { ...this.pendingBuild },
+      audienceAbsenceFrames: this.audienceAbsenceFrames,
+      encounterAborted: this.encounterAborted,
       questMobs: [...this.questMobs],
       npcHp: this.npc?.hp ?? 0,
       npcMarkerType: this.npc?.markerType ?? 'none',
@@ -1715,7 +1942,14 @@ export class DefendQuestSystem implements GameSystem {
     this.woodPileAvailable = snapshot.woodPileAvailable;
     this.barriers = snapshot.barriers.map((barrier) => ({ ...barrier }));
     this.pendingBuild = snapshot.pendingBuild === null ? null : { ...snapshot.pendingBuild };
+    this.audienceAbsenceFrames = snapshot.audienceAbsenceFrames;
+    this.encounterAborted = snapshot.encounterAborted;
     this.questMobs = [...snapshot.questMobs];
+
+    // The map's own checkpoint carries the doorway too, but the quest's phase
+    // is the authority on what is happening in the room, so the two are
+    // reconciled here rather than left to whichever restored last.
+    this.syncQuestExitDoor();
 
     if (this.npc !== null) {
       this.npc.hp = snapshot.npcHp;
