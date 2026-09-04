@@ -45,13 +45,14 @@ export interface AdviceObjective {
   /**
    * Content the floor never requires of the player.
    *
-   * Kept in walking order in its floor's list — Mordecai should raise the
-   * nursery when the party is walking past the nursery — but stepped over while
-   * anything the floor *does* require is still outstanding. An optional
-   * objective a player is simply not interested in is never completed, and the
-   * advice walk stops at the first unfinished entry, so without this one
-   * declined side quest would silence every word he has about the boss beyond
-   * it for the rest of the floor.
+   * Stepped over while anything the floor *does* require is still outstanding,
+   * and raised once nothing is. An optional objective a player is simply not
+   * interested in is never completed, and the advice walk stops at the first
+   * unfinished entry, so without this one declined side quest would silence
+   * every word he has about the boss beyond it for the rest of the floor.
+   *
+   * A floor's list therefore stays in walking order to document where the thing
+   * *is*; where an optional entry sits in it does not decide when it is raised.
    */
   readonly optional?: boolean;
 }
@@ -75,12 +76,15 @@ export interface AdviceSnapshot {
 
 export class MordecaiAdvisor {
   /**
-   * The pages of the first incomplete objective, or `null` when the floor holds
-   * nothing left to point at.
+   * The pages of the objective the floor wants raised next, or `null` when it
+   * holds nothing left to point at.
    *
-   * Walks the snapshot's objectives **in order**, so a player who has already
-   * beaten a higher-priority item simply hears about the next one — no special
-   * casing.
+   * Required work first, in list order: a player who has already beaten a
+   * higher-priority item simply hears about the next one. Optional work is
+   * raised only once none of the required work is outstanding, and then also in
+   * list order — which is what stops a side quest the player has no intention
+   * of taking from standing in front of everything behind it. See
+   * `AdviceObjective.optional`.
    */
   nextAdvice(snapshot: AdviceSnapshot): ReadonlyArray<string> | null {
     const unfinished = snapshot.objectives.filter((objective) => !objective.complete);
@@ -293,11 +297,7 @@ export function adviceObjective(
   return { id, complete, target, pages: text.pages, bearing: text.bearing };
 }
 
-/** The same, for content the floor offers rather than demands. See `optional`. */
-export function optionalAdviceObjective(
-  id: AdviceObjectiveId,
-  complete: boolean,
-  target: { x: number; y: number } | null,
-): AdviceObjective {
-  return { ...adviceObjective(id, complete, target), optional: true };
+/** Marks an objective as content the floor offers rather than demands. See `optional`. */
+export function asOptional(objective: AdviceObjective): AdviceObjective {
+  return { ...objective, optional: true };
 }

@@ -3,7 +3,6 @@ import { isWalkableTileType } from './walkability';
 import type { DungeonData, QuestChokeData } from './DungeonGenerator';
 import { QUEST_EXIT_DOOR_CLOSED } from './tileTypes';
 import { roomDoorways } from './roomDoorways';
-import { tileCoordKey } from './tileIndex';
 import { MIN_CHAIN_ROOMS, SPLIT_LANE_MAX_ROOMS } from './spineLayout';
 import { arenaReserveRect, ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
 
@@ -748,16 +747,27 @@ export function validateProgression(
       if (questRoom.exitDoorTiles.length === 0) {
         fail('S5', 'the quest room has no onward doorway');
       }
-      // Stated separately from the tile checks below because the two failures
-      // are opposite, and only one of them is loud: a doorway list that is too
-      // short leaves a way past the room, while one that swallowed the entrance
-      // hands the goblin mother the way *in* to bar, and shuts the party out of
-      // a room they are meant to walk through.
-      const onwardTiles = new Set(
-        questRoom.exitDoorTiles.map((tile) => tileCoordKey(tile.x, tile.y)),
+      // The way in has to be a doorway a crawler can stand outside of without
+      // first crossing the room. Everything else is treated as a way onward and
+      // is the goblin mother's to board over during her wave, so an entrance
+      // that can only be reached from inside hands her the party's way in —
+      // and this is the check for it, because the entrance is picked from the
+      // *planned* arrival corridor and a corridor network that loops can put
+      // the route to that corridor back through the room.
+      //
+      // `withoutChoke` is the same flood S4 just took: the floor with the
+      // nursery treated as solid.
+      const entranceApproaches = FLOOD_STEPS.some((step) =>
+        isReachable(withoutChoke, {
+          x: questRoom.entranceTile.x + step.dx,
+          y: questRoom.entranceTile.y + step.dy,
+        }),
       );
-      if (onwardTiles.has(tileCoordKey(questRoom.entranceTile.x, questRoom.entranceTile.y))) {
-        fail('S5', 'the quest room’s own entrance is listed among its ways onward');
+      if (!entranceApproaches) {
+        fail(
+          'S5',
+          `the quest room’s entrance at (${questRoom.entranceTile.x},${questRoom.entranceTile.y}) can only be reached through the room itself`,
+        );
       }
       for (const tile of questRoom.exitDoorTiles) {
         const doorTile = grid[tile.y][tile.x];

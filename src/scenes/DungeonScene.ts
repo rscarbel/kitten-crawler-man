@@ -277,7 +277,7 @@ import { randomInt, pointInRect } from '../utils';
 import { aiAdapter } from '../ai/AIAdapter';
 import {
   adviceObjective,
-  optionalAdviceObjective,
+  asOptional,
   gatewayAdviceId,
   MordecaiAdvisor,
   type AdviceObjective,
@@ -3940,11 +3940,22 @@ export class DungeonScene extends GameplayScene {
     if (this.levelDef.id === TUTORIAL_LEVEL_ID) return [];
 
     switch (this.levelDef.floorNumber) {
-      // The goblin nursery sits where the player actually meets it: a room on
-      // the forced route that they walk through on the way between two bosses.
-      // So Mordecai raises it in walking order rather than trailing the list —
-      // but as an optional slot, because what happens in it is the player's
-      // choice and an untaken wave must not silence the rest of his advice.
+      // Walking order. The nursery entry retires itself when the party arrives
+      // rather than when they fight (see `defendQuestObjective`), which is what
+      // lets it sit in front of a boss without a declined wave silencing him,
+      // and what makes the heads-up a heads-up: it is spoken while the room is
+      // still ahead of them. Whether they hear it at all depends on where they
+      // next take advice — a gateway safe room speaks only about the boss it
+      // guards until that boss is dead — so on floor 1 it reaches a party that
+      // sits down again after the Hoarder rather than one that walks straight
+      // on, while on floor 2 the spine's own station usually seats ahead of the
+      // nursery and catches them on the way.
+      //
+      // `asOptional` is for work a party who is not interested never finishes,
+      // and which would therefore stand in front of everything listed behind it
+      // for the rest of the floor: the spider lab is a dead end, and the Ball of
+      // Swine only *guarantees* a way down, which is why Mordecai's own speech
+      // about it says to find another if you would rather keep your bones.
       case DUNGEON_FLOOR_ONE:
         return [
           this.bossObjective('the_hoarder'),
@@ -3955,8 +3966,8 @@ export class DungeonScene extends GameplayScene {
         return [
           this.bossObjective('krakaren_clone'),
           this.defendQuestObjective(),
-          this.spiderLabObjective(),
-          this.ballOfSwineObjective('ball_of_swine_distant'),
+          asOptional(this.spiderLabObjective()),
+          asOptional(this.ballOfSwineObjective('ball_of_swine_distant')),
         ];
       case OVERWORLD_FLOOR_THREE:
         // The floor's three questlines, and deliberately not the Town Guide's
@@ -4007,7 +4018,12 @@ export class DungeonScene extends GameplayScene {
   private bountyObjective(): AdviceObjective | null {
     const bounty = this.bounty;
     if (bounty === null) return null;
-    return adviceObjective('shady_bounties', false, bounty.trackerEntries()[0]?.target ?? null);
+    // Optional, which for a slot that is never complete is the difference
+    // between "the standing work, once the floor's own errands are done" and a
+    // permanent full stop in front of everything listed after it.
+    return asOptional(
+      adviceObjective('shady_bounties', false, bounty.trackerEntries()[0]?.target ?? null),
+    );
   }
 
   /**
@@ -4028,14 +4044,15 @@ export class DungeonScene extends GameplayScene {
   }
 
   private defendQuestObjective(): AdviceObjective {
-    // Resolved, not completed: losing the defence is a supported ending, and a
-    // party that fought it and lost should not be sent back to a nursery with
-    // nothing left in it to do.
-    const complete = this.defendQuest.isResolved;
-    return optionalAdviceObjective(
+    // Spent, not completed. The advice is a heads-up about a room on the way,
+    // so it is done the moment the party gets there — however the wave went,
+    // and whether or not they took it. A floor with no nursery has nothing to
+    // say about one.
+    const hasNursery = this.gameMap.questRooms.length > 0;
+    return adviceObjective(
       'defend_goblin_mother',
-      complete,
-      this.gameMap.questRooms[0]?.centre ?? null,
+      this.defendQuest.isSpentAsAdvice,
+      hasNursery ? this.gameMap.questRooms[0].centre : null,
     );
   }
 

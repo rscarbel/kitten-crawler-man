@@ -320,6 +320,17 @@ export interface DefendQuestCheckpoint {
 export class DefendQuestSystem implements GameSystem {
   readonly questManager: QuestManager;
   private phase: DefendQuestPhase = 'inactive';
+  /**
+   * Whether a crawler has been seen standing in the nursery.
+   *
+   * Only looked for on a frame the encounter is still live enough to tick, so
+   * read it through `isSpentAsAdvice` rather than on its own — that getter
+   * answers the two phases whose frames skip the look.
+   *
+   * Deliberately outside the checkpoint: a respawn rewinds the encounter, not
+   * what the party has seen with their own eyes.
+   */
+  private nurseryVisited = false;
   private roomData: QuestRoomData | null = null;
   private npc: QuestNPC | null = null;
   private approachTimer = 0;
@@ -514,6 +525,23 @@ export class DefendQuestSystem implements GameSystem {
    */
   get isResolved(): boolean {
     return RESOLVED_PHASES.has(this.phase);
+  }
+
+  /**
+   * Whether the floor's guide has anything left to say about this room.
+   *
+   * True once the party has *been* there, which on a floor that seats the
+   * nursery on the forced route is a thing that always happens: the advice is a
+   * heads-up about a room ahead, and the moment they are standing in it the
+   * heads-up has served its purpose whether they take the wave or walk on. That
+   * is what lets the nursery sit in walking order in the floor's advice list
+   * without a declined wave silencing everything listed behind it.
+   */
+  get isSpentAsAdvice(): boolean {
+    // A floor with no nursery is answered here rather than left to the caller:
+    // the room the advice is about does not exist, so there is nothing left to
+    // say about it, and `nurseryVisited` never gets a frame to be set on.
+    return this.roomData === null || this.isResolved || this.nurseryVisited;
   }
 
   get isDialogOpen(): boolean {
@@ -749,6 +777,10 @@ export class DefendQuestSystem implements GameSystem {
       return;
     }
 
+    if (!this.nurseryVisited) {
+      this.nurseryVisited = this.isInNursery(ctx.human) || this.isInNursery(ctx.cat);
+    }
+
     if (this.phase === 'countdown' || this.phase === 'defending') {
       this.tickAudienceWatch(ctx);
     }
@@ -920,8 +952,16 @@ export class DefendQuestSystem implements GameSystem {
 
   private questExitDoorState(): QuestExitDoorState {
     if (RESOLVED_PHASES.has(this.phase)) return 'smashed';
-    const waveIsStaged = this.phase === 'countdown' || this.phase === 'defending';
-    return waveIsStaged && !this.encounterAborted ? 'barred' : 'clear';
+    // Only while bugaboos are actually in the room, and deliberately not during
+    // the staging countdown. A crawler who accepts and thinks better of it has
+    // the whole approach to walk out the far side, and one who walks out on a
+    // live wave gets the boards down with the abort and a fresh countdown to
+    // cross in on the way back. Barring the countdown as well would close both
+    // of those: the re-staged segment starts the moment the party steps back
+    // into the room, which is a dozen tiles short of the far doorway, and the
+    // room they are meant to walk through becomes a room they can only leave by
+    // winning.
+    return this.phase === 'defending' ? 'barred' : 'clear';
   }
 
   private updateCountdown(ctx: SystemContext): void {
