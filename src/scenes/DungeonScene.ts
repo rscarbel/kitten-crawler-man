@@ -5918,7 +5918,7 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
-      if (platform.isMobile) {
+      if (platform.isMobile && !this.menus.pauseMenu.isOpen) {
         const ht = this._hudToggleRect;
         if (pointInRect(x, y, ht)) {
           this._hudCollapsed = !this._hudCollapsed;
@@ -5979,11 +5979,15 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
-      if (platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
+      if (
+        platform.isMobile &&
+        !this.menus.pauseMenu.isOpen &&
+        this.mongoSystem.canShow &&
+        this.cat.isActive
+      ) {
         const mb = this.touch.summonBtnRect;
         if (pointInRect(x, y, mb)) {
-          if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
-            this.toggleMongoSummon();
+          if (!this.safeRoom.isSleeping && !this.gameOver) this.toggleMongoSummon();
           continue;
         }
       }
@@ -5994,17 +5998,15 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
-      if (platform.isMobile) {
+      if (platform.isMobile && !this.menus.pauseMenu.isOpen) {
         const sb = this.touch.switchBtnRect;
         if (pointInRect(x, y, sb)) {
-          if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
-            this.triggerSwitchCharacter();
+          if (!this.safeRoom.isSleeping && !this.gameOver) this.triggerSwitchCharacter();
           continue;
         }
         const fb = this.touch.followBtnRect;
         if (pointInRect(x, y, fb)) {
-          if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
-            this.triggerCompanionFollow();
+          if (!this.safeRoom.isSleeping && !this.gameOver) this.triggerCompanionFollow();
           continue;
         }
       }
