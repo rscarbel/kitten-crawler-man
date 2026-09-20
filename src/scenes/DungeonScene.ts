@@ -5918,7 +5918,14 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
-      if (platform.isMobile && !this.menus.pauseMenu.isOpen) {
+      if (this.menus.gearPanel.hitsPanel(x, y)) {
+        this.handleClick(x, y, e.timeStamp);
+        continue;
+      }
+
+      const coveredByPanel = this.menus.panelCovers(x, y);
+
+      if (platform.isMobile && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
         const ht = this._hudToggleRect;
         if (pointInRect(x, y, ht)) {
           this._hudCollapsed = !this._hudCollapsed;
@@ -5930,12 +5937,13 @@ export class DungeonScene extends GameplayScene {
         platform.isMobile &&
         !this.gameOver &&
         !this.menus.pauseMenu.isOpen &&
+        !coveredByPanel &&
         this.menus.tryOpenSpendScreen(x, y, this._hudSkillBannerRect)
       ) {
         continue;
       }
 
-      if (platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen) {
+      if (platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
         const mm = this.touch.miniMapRect;
         if (pointInRect(x, y, mm)) {
           if (!this.miniMap.isExpanded) {
@@ -5953,7 +5961,7 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      if (platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen) {
+      if (platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
         const bb = this.touch.bagBtnRect;
         if (pointInRect(x, y, bb)) {
           this.menus.inventoryPanel.toggle();
@@ -5971,6 +5979,7 @@ export class DungeonScene extends GameplayScene {
         platform.isMobile &&
         !this.gameOver &&
         !this.menus.pauseMenu.isOpen &&
+        !coveredByPanel &&
         this.journalButtonRect !== null &&
         pointInRect(x, y, this.journalButtonRect)
       ) {
@@ -5982,6 +5991,7 @@ export class DungeonScene extends GameplayScene {
       if (
         platform.isMobile &&
         !this.menus.pauseMenu.isOpen &&
+        !coveredByPanel &&
         this.mongoSystem.canShow &&
         this.cat.isActive
       ) {
@@ -5998,7 +6008,7 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
-      if (platform.isMobile && !this.menus.pauseMenu.isOpen) {
+      if (platform.isMobile && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
         const sb = this.touch.switchBtnRect;
         if (pointInRect(x, y, sb)) {
           if (!this.safeRoom.isSleeping && !this.gameOver) this.triggerSwitchCharacter();
@@ -6011,7 +6021,12 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
+      if (
+        !this.menus.pauseMenu.isOpen &&
+        !this.safeRoom.isSleeping &&
+        !this.gameOver &&
+        !coveredByPanel
+      ) {
         const hi = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
         if (hi >= 0) {
           this.touch.inventoryDragTouchId = touch.identifier;

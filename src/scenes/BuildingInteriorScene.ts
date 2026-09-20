@@ -3465,8 +3465,15 @@ export class BuildingInteriorScene extends GameplayScene {
         continue;
       }
 
+      if (this.menus.gearPanel.hitsPanel(x, y)) {
+        this.handleClick(x, y);
+        continue;
+      }
+
+      const coveredByPanel = this.menus.panelCovers(x, y);
+
       // HUD collapse/expand toggle (mobile only)
-      if (platform.isMobile) {
+      if (platform.isMobile && !coveredByPanel) {
         const ht = this._hudToggleRect;
         if (pointInRect(x, y, ht)) {
           this._hudCollapsed = !this._hudCollapsed;
@@ -3478,7 +3485,7 @@ export class BuildingInteriorScene extends GameplayScene {
       }
 
       // Mobile button hit-test (Switch, Gear, Bag, Pause, Minimap, Follow)
-      if (platform.isMobile) {
+      if (platform.isMobile && !coveredByPanel) {
         const btn = this.mobileHUD.hitTest(x, y);
         if (btn === 'switch') {
           this.trySwitchActive();
@@ -3509,7 +3516,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // Hotbar slot tap — activation is deferred to touch end so a drag off the
       // slot doesn't also fire the item.
       const hi = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
-      if (hi >= 0) {
+      if (hi >= 0 && !coveredByPanel) {
         this.mobileHUD.inventoryDragTouchId = touch.identifier;
         this.handleMouseDown(x, y);
         continue;

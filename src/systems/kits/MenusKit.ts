@@ -185,6 +185,14 @@ export class MenusKit {
     this.gearPanel.isOpen = false;
   }
 
+  /**
+   * True when an open bag or gear panel is drawn over (mx, my). HUD buttons sit
+   * beneath these panels, so a touch that lands on one must never reach them.
+   */
+  panelCovers(mx: number, my: number): boolean {
+    return this.inventoryPanel.hitsPanel(mx, my) || this.gearPanel.hitsPanel(mx, my);
+  }
+
   toggleGear(): void {
     this.gearPanel.toggle();
     if (!this.gearPanel.isOpen) return;

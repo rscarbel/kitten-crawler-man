@@ -273,6 +273,12 @@ export class GearPanel {
     this.hoveredKey = this.slotKeyAt(mx, my, p);
   }
 
+  /** True if (mx, my) is within the open gear panel area. */
+  hitsPanel(mx: number, my: number): boolean {
+    if (!this.isOpen) return false;
+    return pointInRect(mx, my, this.panelRect());
+  }
+
   handleClick(mx: number, my: number, inventory: Inventory): GearClickResult | null {
     if (!this.isOpen) return null;
 
