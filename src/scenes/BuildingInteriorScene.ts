@@ -2445,6 +2445,7 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     this.scrollableShop?.handleWheel(deltaY);
+    this.servicePanel?.handleWheel(deltaY);
   }
 
   handleMouseDown(mx: number, my: number): void {

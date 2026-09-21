@@ -6,7 +6,6 @@ import { QUEST_SLOT_IDX } from '../../core/ItemDefs';
 import { type ButtonRect, type PauseTab } from './types';
 import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
-import { viewportHeight } from '../../core/Viewport';
 
 const MAX_ITEMS_SHOWN = 5;
 
@@ -55,6 +54,7 @@ const SECTIONS_SPACING = 4;
 const BACK_BUTTON_X = 12;
 const BACK_BUTTON_WIDTH_MARGIN = 24;
 const BACK_BUTTON_HEIGHT = 30;
+const BACK_BUTTON_BOTTOM_PAD = 8;
 
 function nonNullItems(slots: ReadonlyArray<InventoryItem | null>): InventoryItem[] {
   return slots.filter((s): s is InventoryItem => s !== null);
@@ -230,6 +230,7 @@ export function renderInventoryTab(
   bx: number,
   by: number,
   bw: number,
+  bh: number,
   human: HumanPlayer,
   cat: CatPlayer,
   setTab: (tab: PauseTab) => void,
@@ -247,9 +248,7 @@ export function renderInventoryTab(
     align: 'center',
   });
 
-  // The modal is centred, so its height is what remains after the equal margins.
-  const boxH = viewportHeight() - by * 2;
-  const compact = boxH < INVENTORY_TAB_BOX_H;
+  const compact = bh < INVENTORY_TAB_BOX_H;
   let y = by + FIRST_SECTION_Y;
 
   y = renderPlayerSection(
@@ -286,9 +285,14 @@ export function renderInventoryTab(
     compact,
   );
 
+  // Pinned to the box floor rather than flowed after the sections: on a phone
+  // too short for the sections, Back is the only way out, so it must never
+  // land below the box edge. The sections crowding it is the better failure.
+  const flowedBackY = y;
+  const pinnedBackY = by + bh - BACK_BUTTON_HEIGHT - BACK_BUTTON_BOTTOM_PAD;
   addButton(ctx, buttons, {
     x: bx + BACK_BUTTON_X,
-    y,
+    y: compact ? pinnedBackY : flowedBackY,
     width: bw - BACK_BUTTON_WIDTH_MARGIN,
     height: BACK_BUTTON_HEIGHT,
     label: 'Back',

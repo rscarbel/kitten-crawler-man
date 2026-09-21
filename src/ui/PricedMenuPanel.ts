@@ -492,16 +492,22 @@ export class PricedMenuPanel {
       });
     }
 
+    const buyTop = rowY - BUY_BTN_Y_LIFT;
+    // A row scrolled out of the band is still drawn (clipped), but must be
+    // inert: `handleClick` ignores a click outside the band, so a focus-ring
+    // accept or a registered click sound on it would fall through to closing
+    // the menu.
+    const isReachable = buyTop >= this.rowsTop && buyTop + BUY_BTN_HEIGHT <= this.rowsBottom;
     this.buyButtons.push(
       drawButton(ctx, {
         x: right,
-        y: rowY - BUY_BTN_Y_LIFT,
+        y: buyTop,
         width: BUY_BTN_WIDTH,
         height: BUY_BTN_HEIGHT,
         alignX: 'right',
         label: 'Buy',
         labelSize: BUY_LABEL_SIZE,
-        disabled: !canAfford || !isAvailable,
+        disabled: !canAfford || !isAvailable || !isReachable,
         ...BUTTON_PRESETS.success,
         primaryAction: isPrimaryBuy,
       }),

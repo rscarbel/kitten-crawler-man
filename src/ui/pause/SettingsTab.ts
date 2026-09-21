@@ -8,6 +8,20 @@ import { settings, type QualityPreset } from '../../core/Settings';
 import { renderQuality } from '../../core/RenderQuality';
 import { DIFFICULTY_LABELS, type Difficulty } from '../../core/difficultyProfiles';
 
+/** The on-screen span of the scrolling list, in canvas pixels. */
+interface ScrollBand {
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Only a control wholly inside the band is live: a half-scrolled one would
+ * otherwise still answer a click or the keyboard from under the title or footer.
+ */
+function isWhollyInBand(band: ScrollBand, y: number, height: number): boolean {
+  return y >= band.top && y + height <= band.bottom;
+}
+
 // Volume slider constants
 const TRACK_HEIGHT = 20;
 /** The drawn track is thin; the touch target around it is not. */
@@ -192,6 +206,7 @@ function renderQualityChoice(
   bx: number,
   by: number,
   bw: number,
+  band: ScrollBand,
 ): void {
   const selected = settings.quality;
   const totalGap = QUALITY_BUTTON_GAP * (QUALITY_CHOICES.length - 1);
@@ -204,6 +219,7 @@ function renderQualityChoice(
       y: by,
       width: buttonWidth,
       height: QUALITY_BUTTON_HEIGHT,
+      disabled: !isWhollyInBand(band, by, QUALITY_BUTTON_HEIGHT),
       label,
       ...(isSelected ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
       action: () => {
@@ -233,6 +249,7 @@ function renderDifficultyChoice(
   bx: number,
   by: number,
   bw: number,
+  band: ScrollBand,
 ): void {
   const selected = settings.difficulty;
   const totalGap = DIFFICULTY_BUTTON_GAP * (DIFFICULTY_ORDER.length - 1);
@@ -245,6 +262,7 @@ function renderDifficultyChoice(
       y: by,
       width: buttonWidth,
       height: DIFFICULTY_BUTTON_HEIGHT,
+      disabled: !isWhollyInBand(band, by, DIFFICULTY_BUTTON_HEIGHT),
       label: DIFFICULTY_LABELS[difficulty],
       ...(isSelected ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
       action: () => {
@@ -367,6 +385,7 @@ export function renderSettingsTab(
   const scrollTop = by + SETTINGS_SCROLL_TOP_Y;
   const scrollHeight = Math.max(0, bh - SETTINGS_SCROLL_TOP_Y - SETTINGS_FOOTER_H);
   const scrollBottom = scrollTop + scrollHeight;
+  const band: ScrollBand = { top: scrollTop, bottom: scrollBottom };
   const contentTop = scrollTop - scrollY;
   const scrolled: ButtonRect[] = [];
 
@@ -408,7 +427,7 @@ export function renderSettingsTab(
     color: '#64748b',
   });
   y += GRAPHICS_ROW_Y_SPACING;
-  renderQualityChoice(ctx, scrolled, sliderX, y, sliderW);
+  renderQualityChoice(ctx, scrolled, sliderX, y, sliderW, band);
   y += QUALITY_SECTION_Y_SPACING;
 
   drawText(ctx, 'Difficulty', {
@@ -419,7 +438,7 @@ export function renderSettingsTab(
     color: '#64748b',
   });
   y += DIFFICULTY_ROW_Y_SPACING;
-  renderDifficultyChoice(ctx, scrolled, sliderX, y, sliderW);
+  renderDifficultyChoice(ctx, scrolled, sliderX, y, sliderW, band);
   y += DIFFICULTY_SECTION_Y_SPACING;
 
   drawText(ctx, 'Controls', {
@@ -436,6 +455,7 @@ export function renderSettingsTab(
     y,
     width: sliderW,
     height: CONTROLS_BUTTON_HEIGHT,
+    disabled: !isWhollyInBand(band, y, CONTROLS_BUTTON_HEIGHT),
     label: 'Controls & Key Bindings',
     ...BUTTON_PRESETS.primary,
     action: () => setTab('controls'),
@@ -458,6 +478,7 @@ export function renderSettingsTab(
         y,
         width: sliderW,
         height: CHAT_BUTTON_HEIGHT,
+        disabled: !isWhollyInBand(band, y, CHAT_BUTTON_HEIGHT),
         label: 'Send Chat',
         ...BUTTON_PRESETS.primary,
         action: onOpenChat,
@@ -480,6 +501,7 @@ export function renderSettingsTab(
     y,
     width: sliderW,
     height: RESET_BUTTON_HEIGHT,
+    disabled: !isWhollyInBand(band, y, RESET_BUTTON_HEIGHT),
     label: 'Reset Game',
     ...BUTTON_PRESETS.danger,
     action: onRequestReset,
@@ -492,8 +514,7 @@ export function renderSettingsTab(
   // Only controls wholly inside the band keep a hit-rect: a half-scrolled one
   // would otherwise still answer a click out under the title or the footer.
   for (const rect of scrolled) {
-    const isWhollyVisible = rect.y >= scrollTop && rect.y + rect.h <= scrollBottom;
-    if (isWhollyVisible) buttons.push(rect);
+    if (isWhollyInBand(band, rect.y, rect.h)) buttons.push(rect);
   }
 
   drawScrollbar(ctx, {

@@ -585,6 +585,7 @@ export class PauseMenu {
           boxX,
           boxY,
           boxW,
+          boxH,
           human,
           cat,
           setTabWithSound,

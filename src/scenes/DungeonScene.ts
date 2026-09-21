@@ -4635,7 +4635,12 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleWheel(deltaY: number): void {
-    if (this.menus.pauseMenu.isOpen) this.menus.pauseMenu.handleWheel(deltaY);
+    if (this.menus.pauseMenu.isOpen) {
+      this.menus.pauseMenu.handleWheel(deltaY);
+      return;
+    }
+    this.noticeBoard?.handleWheel(deltaY);
+    this.marketPanel?.handleWheel(deltaY);
   }
 
   update(): void {
