@@ -884,7 +884,7 @@ export class SpiderQuestSystem implements GameSystem {
     }
 
     if (this.phase === 'awaiting_hacking') {
-      this._updateHackStart(ctx.active);
+      this._updateHackStart();
     }
   }
 
@@ -1459,7 +1459,7 @@ export class SpiderQuestSystem implements GameSystem {
     );
   }
 
-  private _updateHackStart(active: Player): void {
+  private _updateHackStart(): void {
     if (!this.hackStarting) return;
 
     this.hackStartTimer--;
@@ -1474,7 +1474,6 @@ export class SpiderQuestSystem implements GameSystem {
         this._startHacking();
       }
     }
-    void active;
   }
 
   /**

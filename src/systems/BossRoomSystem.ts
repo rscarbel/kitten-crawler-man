@@ -1992,8 +1992,6 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       });
     }
 
-    void camX;
-    void camY;
     return null;
   }
 

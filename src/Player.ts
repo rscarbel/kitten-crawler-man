@@ -519,8 +519,8 @@ export abstract class Player {
    * @param snapshotVersion Format version of the snapshot being restored, so a
    *   migration can tell an old save from one already written under the rule.
    */
-  migrateRestoredStats(snapshotVersion: number): void {
-    void snapshotVersion; // nothing to reconcile for a generic player
+  migrateRestoredStats(_snapshotVersion: number): void {
+    // A generic player has nothing to reconcile; subclasses override this.
   }
 
   /** Queue a System line for the scene to show as a hotbar toast. */
@@ -881,8 +881,7 @@ export abstract class Player {
    * {@link applyPermanentStat} — the lock models the System refusing an
    * allocation, not the attribute being frozen in place.
    */
-  canSpendPointInto(stat: StatName): boolean {
-    void stat; // every stat is open unless a subclass says otherwise
+  canSpendPointInto(_stat: StatName): boolean {
     return true;
   }
 

@@ -123,8 +123,8 @@ export function releaseChargedDynamite(host: HotbarHost, hotbarIdx: number): boo
 }
 
 function releaseDynamite(host: HotbarHost): void {
-  const { pm, roster } = host.world;
-  host.dynamite?.release(pm.human, pm.cat, roster.mobs, roster.grid);
+  const { pm } = host.world;
+  host.dynamite?.release(pm.human);
 }
 
 /** The potion key means "any bottle you have", unlike a slot, which names one. */

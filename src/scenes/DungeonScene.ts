@@ -6240,12 +6240,7 @@ export class DungeonScene extends GameplayScene {
 
       if (touch.identifier === this.touch.dynamiteTouchId) {
         const wasCharging = this.destruction.dynamite.isCharging;
-        this.destruction.dynamite.release(
-          this.human,
-          this.cat,
-          this.world.roster.mobs,
-          this.world.roster.grid,
-        );
+        this.destruction.dynamite.release(this.human);
         if (wasCharging) this.bus.emit('dynamiteUsed', { player: 'Human' });
         this.touch.dynamiteTouchId = null;
         continue;
@@ -6302,12 +6297,7 @@ export class DungeonScene extends GameplayScene {
                 this.human.facingX = ddx / dist;
                 this.human.facingY = ddy / dist;
               }
-              this.destruction.dynamite.release(
-                this.human,
-                this.cat,
-                this.world.roster.mobs,
-                this.world.roster.grid,
-              );
+              this.destruction.dynamite.release(this.human);
               this.bus.emit('dynamiteUsed', { player: 'Human' });
             } else {
               // Captured before `handleClick`, which may turn the last page of

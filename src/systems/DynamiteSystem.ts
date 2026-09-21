@@ -104,7 +104,7 @@ export class DynamiteSystem implements GameSystem {
     this._charging = { hotbarIdx, chargeFrames: 0 };
   }
 
-  release(human: HumanPlayer, cat: CatPlayer, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+  release(human: HumanPlayer): void {
     if (!this._charging) return;
     const { chargeFrames } = this._charging;
     this._charging = null;
@@ -127,34 +127,26 @@ export class DynamiteSystem implements GameSystem {
       explodeTimer: 0,
       explosivesLevel: expLvl,
     });
-    void cat;
-    void mobs;
-    void mobGrid;
   }
 
   update(ctx: SystemContext): void {
     const { human, cat } = ctx;
-    const { mobs, grid: mobGrid } = ctx.roster;
+    const { grid: mobGrid } = ctx.roster;
     if (this._charging) {
       this._charging.chargeFrames++;
       if (this._charging.chargeFrames >= DYN_EXPLODE_HAND) {
-        this.explodeInHand(human, cat, mobs, mobGrid);
+        this.explodeInHand(human, cat, mobGrid);
         return;
       }
     }
-    this.updatePhysics(human, cat, mobs, mobGrid);
+    this.updatePhysics(human, cat, mobGrid);
   }
 
-  private explodeInHand(
-    human: HumanPlayer,
-    cat: CatPlayer,
-    mobs: Mob[],
-    mobGrid: SpatialGrid<Mob>,
-  ): void {
+  private explodeInHand(human: HumanPlayer, cat: CatPlayer, mobGrid: SpatialGrid<Mob>): void {
     this._charging = null;
     const cx = human.x + HALF_TILE;
     const cy = human.y + HALF_TILE;
-    this.triggerExplosion(cx, cy, human.explosivesHandling, human, cat, mobs, mobGrid);
+    this.triggerExplosion(cx, cy, human.explosivesHandling, human, cat, mobGrid);
     this.liveDynamites.push({
       x: cx,
       y: cy,
@@ -173,7 +165,6 @@ export class DynamiteSystem implements GameSystem {
     explosivesLevel: number,
     human: HumanPlayer,
     cat: CatPlayer,
-    mobs: Mob[],
     mobGrid: SpatialGrid<Mob>,
   ): void {
     this.explosionSoundPending = true;
@@ -200,7 +191,6 @@ export class DynamiteSystem implements GameSystem {
         this.bus?.emit('multiKill', { killer: human, count: blastKills });
       }
     }
-    void mobs;
     if (Math.hypot(human.x + HALF_TILE - cx, human.y + HALF_TILE - cy) <= DYN_RADIUS) {
       human.takeDamage(damage, { kind: 'dynamite' });
     }
@@ -219,12 +209,7 @@ export class DynamiteSystem implements GameSystem {
     trees?.igniteRadius(cx, cy, DYN_RADIUS + EXPLOSION_IGNITE_RING_TILES * ts);
   }
 
-  private updatePhysics(
-    human: HumanPlayer,
-    cat: CatPlayer,
-    mobs: Mob[],
-    mobGrid: SpatialGrid<Mob>,
-  ): void {
+  private updatePhysics(human: HumanPlayer, cat: CatPlayer, mobGrid: SpatialGrid<Mob>): void {
     for (const dyn of this.liveDynamites) {
       if (dyn.state === 'exploding') {
         dyn.explodeTimer--;
@@ -235,7 +220,7 @@ export class DynamiteSystem implements GameSystem {
       if (dyn.fuseFrames <= 0) {
         dyn.state = 'exploding';
         dyn.explodeTimer = DYN_ANIM_FRAMES;
-        this.triggerExplosion(dyn.x, dyn.y, dyn.explosivesLevel, human, cat, mobs, mobGrid);
+        this.triggerExplosion(dyn.x, dyn.y, dyn.explosivesLevel, human, cat, mobGrid);
         continue;
       }
 

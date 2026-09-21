@@ -1804,8 +1804,7 @@ export abstract class Mob extends Player {
    * Generates the item portion of this mob's loot drop.
    * Subclasses may override to add extra drops based on who killed them.
    */
-  protected rollLootItems(killer: Player | null): LootDrop['items'] {
-    void killer; // available for subclasses
+  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];
     if (Math.random() < DEFAULT_POTION_DROP_CHANCE)
       items.push({ id: 'health_potion', quantity: 1 });
