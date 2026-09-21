@@ -233,5 +233,31 @@
         "frameCount": 1
       }
     }
+  },
+  "crawler_sign": {
+    "frameWidth": 64,
+    "frameHeight": 72,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "board": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "crawler_sign_arrow": {
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "arrow": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
   }
 }

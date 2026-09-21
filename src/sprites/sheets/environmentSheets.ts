@@ -21,6 +21,7 @@ import { campSheetPlans } from './campSheets';
 import { requestBuildingSheets } from '../buildinggen/runtimeBuildingSheets';
 import { clubFurnitureSheetPlans } from './clubFurnitureSheets';
 import { destructiblePropSheetPlans } from './destructiblePropSheets';
+import { dungeonSignSheetPlans } from './dungeonSignSheets';
 import { overCitySheetPlans } from './overCitySheets';
 import { requestPropSheets } from './runtimePropSheets';
 import { rockSheetPlans } from './rockSheets';
@@ -67,6 +68,11 @@ export function requestEnvironmentSheetsForGroups(
   const wanted = new Set(groups);
   if (wanted.has('core')) {
     requestPropSheets(destructiblePropSheetPlans(UNSEEDED_CORE_PROPS), {
+      variesWithFloorSeed: false,
+      onSheetPainted,
+    });
+    requestPropSheets(dungeonSignSheetPlans(), {
+      // The lettering is the same on every floor, so a repaint per floor buys nothing.
       variesWithFloorSeed: false,
       onSheetPainted,
     });

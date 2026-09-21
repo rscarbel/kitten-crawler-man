@@ -1,3 +1,5 @@
+import type { CrawlerSignDirection } from './crawlerSigns';
+
 export const FLOOR_TYPES = [
   'grass',
   'road',
@@ -461,6 +463,13 @@ export const QUEST_EXIT_DOOR_CLOSED = 110;
 export const QUEST_EXIT_DOOR_OPEN = 111;
 
 /**
+ * A painted wooden sign a previous crawler left standing in a junction room.
+ * Solid: nothing stands inside it, and the generator seats it only on a tile no
+ * other system has claimed.
+ */
+export const CRAWLER_SIGN = 112;
+
+/**
  * Every ground a town building's interior can be floored in.
  *
  * Grouped because more than one pass has to ask "is this a surface I may stand
@@ -483,7 +492,7 @@ export const INTERIOR_FLOOR_TYPES: ReadonlySet<number> = new Set([
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 112;
+export const TILE_TYPE_COUNT = 113;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
@@ -604,6 +613,22 @@ export type TileContent = {
    * its sprite row.
    */
   treeStage?: number;
+  /**
+   * Which way a `CRAWLER_SIGN` tile's arrow points, and the direction its text
+   * names. Set once by the generator so the painted arrow and the sentence read
+   * the same value.
+   *
+   * On the tile for the same reason `damageStage` is: the tile renderer is pure
+   * and has no handle on the generator's placement list.
+   */
+  crawlerSignDirection?: CrawlerSignDirection;
+  /**
+   * Bearing of the sign's painted arrow, in radians, y down (0 points east, a
+   * quarter turn points south): from the sign tile's centre to the centre of the
+   * first tile of the onward hallway, where it meets the sign's room or junction.
+   * Continuous, unlike `crawlerSignDirection`, so the arrow can be diagonal.
+   */
+  crawlerSignArrowAngle?: number;
   /**
    * Animation cursor for whichever looping row a `TREE` tile is currently in —
    * the flame loop while it burns, the collapse while it falls. Advanced by

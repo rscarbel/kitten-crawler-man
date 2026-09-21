@@ -16,8 +16,8 @@ import { drawText } from './TextBox';
 import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
-/** Duration in ms between revealed elements — matches the typing_click sound length. */
-const TYPING_CLICK_DURATION_MS = 100;
+/** Default ms between revealed elements — matches the typing_click sound length. */
+export const TYPING_CLICK_DURATION_MS = 100;
 
 // Layout geometry
 const DIALOG_MAX_WIDTH = 560;
@@ -67,6 +67,8 @@ export interface DialogBoxConfig {
   speakerIcon?: HTMLImageElement;
   /** How text is progressively revealed. Default: 'all' */
   revealMode?: RevealMode;
+  /** Milliseconds between revealed elements. Default: {@link TYPING_CLICK_DURATION_MS}. */
+  revealIntervalMs?: number | undefined;
   /**
    * Whether to render the Skip / Continue footer hint. Set to false for dialogs
    * that auto-dismiss and have no user interaction. Default: true
@@ -90,6 +92,7 @@ export class DialogBox {
   private readonly _speakerName: string;
   private readonly _speakerIcon: HTMLImageElement | undefined;
   private readonly _revealMode: RevealMode;
+  private readonly _revealIntervalMs: number;
   private readonly _showFooterHint: boolean;
 
   private _visible = false;
@@ -103,13 +106,14 @@ export class DialogBox {
     this._speakerName = config.speakerName;
     this._speakerIcon = config.speakerIcon;
     this._revealMode = config.revealMode ?? 'all';
+    this._revealIntervalMs = config.revealIntervalMs ?? TYPING_CLICK_DURATION_MS;
     this._showFooterHint = config.showFooterHint ?? true;
   }
 
   /**
    * Begin displaying text. Resets any in-progress animation.
    * The first element is revealed immediately; subsequent elements follow at
-   * TYPING_CLICK_DURATION_MS intervals (except in 'all' mode, which reveals
+   * the configured reveal interval (except in 'all' mode, which reveals
    * everything at once).
    */
   show(text: string, options?: ShowOptions): void {
@@ -134,7 +138,7 @@ export class DialogBox {
     if (!this._visible || this.isFullyRevealed() || this._revealMode === 'all') return;
 
     const now = performance.now();
-    const readyForNextToken = now - this._lastRevealTime >= TYPING_CLICK_DURATION_MS;
+    const readyForNextToken = now - this._lastRevealTime >= this._revealIntervalMs;
     if (!readyForNextToken) return;
 
     this._lastRevealTime = now;

@@ -112,6 +112,13 @@ import type { Townsperson } from '../creatures/Townsperson';
 import { CONVERSATION_WALK_AWAY_TILES } from '../creatures/townInteraction';
 import { TownDecorSystem } from '../systems/TownDecorSystem';
 import { TownPropSystem } from '../systems/TownPropSystem';
+import {
+  CRAWLER_SIGN_SPEAKER,
+  CrawlerSignSystem,
+  SIGN_REVEAL_INTERVAL_MS,
+  signPages,
+} from '../systems/CrawlerSignSystem';
+import type { CrawlerSignPlacement } from '../map/crawlerSigns';
 import { MarketSystem, type MarketBrowse } from '../systems/market/MarketSystem';
 import type { TownPropRenderable } from '../systems/townPropRenderable';
 import {
@@ -801,6 +808,10 @@ export class DungeonScene extends GameplayScene {
    */
   private townPropRenderables: ReadonlyArray<TownPropRenderable> | null = null;
   private citizenDialog: CitizenDialog | null = null;
+  private crawlerSigns: CrawlerSignSystem | null = null;
+  /** Separate from `citizenDialog`, which is overworld-only and owned by the townsfolk conversation. */
+  private signDialog: CitizenDialog | null = null;
+  private signDialogTarget: CrawlerSignPlacement | null = null;
   /** Citizen currently frozen mid-conversation; unfrozen once `citizenDialog` closes. */
   private citizenDialogTarget: Townsperson | null = null;
   private noticeBoard: NoticeBoardPanel | null = null;
@@ -1769,6 +1780,20 @@ export class DungeonScene extends GameplayScene {
     if (this.townLife !== null && this.audio !== null) {
       this.citizenDialog = new CitizenDialog(this.audio);
     }
+    if (this.audio !== null) {
+      const signDialog = new CitizenDialog(this.audio, 'word', SIGN_REVEAL_INTERVAL_MS);
+      const signs = new CrawlerSignSystem(
+        CrawlerSignSystem.placementsFromMap(this.gameMap),
+        (sign) => {
+          this.signDialogTarget = sign;
+          signDialog.open(CRAWLER_SIGN_SPEAKER, signPages(sign.direction));
+        },
+      );
+      if (!signs.isEmpty) {
+        this.signDialog = signDialog;
+        this.crawlerSigns = signs;
+      }
+    }
     this.skipIntro = options?.skipIntro ?? false;
     if (this.skipIntro) this.dungeonIntro.skip();
     this.overworldMusic =
@@ -2518,6 +2543,10 @@ export class DungeonScene extends GameplayScene {
         // player is actually looking at.
         if (this.citizenDialog?.isOpen === true && !this.gameplayHalted) {
           this.citizenDialog.close();
+          return true;
+        }
+        if (this.signDialog?.isOpen === true && !this.gameplayHalted) {
+          this.signDialog.close();
           return true;
         }
         return false;
@@ -3572,7 +3601,7 @@ export class DungeonScene extends GameplayScene {
 
   /** Floats a SPACE prompt over the nearest interactive town prop, when actionable. */
   private renderPropPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.townProps === null && this.market === null) return;
+    if (this.townProps === null && this.market === null && this.crawlerSigns === null) return;
     if (
       this.noticeBoard?.isOpen === true ||
       this.marketPanel?.isOpen === true ||
@@ -3591,6 +3620,7 @@ export class DungeonScene extends GameplayScene {
     if (this.market?.renderPrompt(ctx, camX, camY, active) === true) return;
     if (this.bounty?.renderPrompt(ctx, camX, camY, active) === true) return;
     this.townProps?.renderPrompt(ctx, camX, camY, active);
+    if (this.signDialog?.isOpen !== true) this.crawlerSigns?.renderPrompt(ctx, camX, camY, active);
   }
 
   /** Floats a "Talk" prompt over the nearest citizen when one is in range and idle. */
@@ -3634,6 +3664,7 @@ export class DungeonScene extends GameplayScene {
     const marketPanel = this.marketPanel;
     const fortuneTeller = this.fortuneTeller;
     const citizenDialog = this.citizenDialog;
+    const signDialog = this.signDialog;
     const closeWithClick = (close: () => void): OverlaySpaceHandling => ({
       kind: 'advance',
       advance: () => {
@@ -3788,6 +3819,13 @@ export class DungeonScene extends GameplayScene {
         // Advance-anywhere: one speaker line, no buttons to reach.
         focusContext: null,
       },
+      {
+        isOpen: signDialog?.isOpen === true,
+        space: { kind: 'advance', advance: () => signDialog?.advance() },
+        locksKeyboard: true,
+        haltsWorld: false,
+        focusContext: null,
+      },
     ];
   }
 
@@ -3857,6 +3895,20 @@ export class DungeonScene extends GameplayScene {
    */
   private yieldCitizenDialogToInterruption(): void {
     if (this.citizenDialog?.isOpen === true && this.gameplayHalted) this.citizenDialog.close();
+    if (this.signDialog?.isOpen === true && this.gameplayHalted) this.signDialog.close();
+  }
+
+  /** Same walk-away rule as a street conversation, measured to the sign's tile. */
+  private dismissSignDialogIfWalkedAway(): void {
+    const target = this.signDialogTarget;
+    const dialog = this.signDialog;
+    if (target === null || dialog?.isOpen !== true) return;
+    const active = this.active();
+    const distance = Math.hypot(
+      active.x - target.tile.x * TILE_SIZE,
+      active.y - target.tile.y * TILE_SIZE,
+    );
+    if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) dialog.close();
   }
 
   /**
@@ -4188,6 +4240,9 @@ export class DungeonScene extends GameplayScene {
       if (this.townProps?.tryInteract(active) === true) {
         return;
       }
+      if (this.crawlerSigns?.tryInteract(active) === true) {
+        return;
+      }
       if (this.tryTalkToCitizen(active)) {
         return;
       }
@@ -4310,6 +4365,7 @@ export class DungeonScene extends GameplayScene {
     // Only the dialog's own box is consumed: a conversation does not halt the
     // world, so the bag can be open underneath it and its slots must stay live.
     if (this.citizenDialog?.handleClick(mx, my) === true) return;
+    if (this.signDialog?.handleClick(mx, my) === true) return;
     if (this.noticeBoard?.isOpen === true) {
       this.noticeBoard.handleClick();
       return;
@@ -4571,6 +4627,7 @@ export class DungeonScene extends GameplayScene {
   update(): void {
     this.yieldCitizenDialogToInterruption();
     this.dismissCitizenDialogIfWalkedAway();
+    this.dismissSignDialogIfWalkedAway();
     if (this.citizenDialogTarget !== null && this.citizenDialog?.isOpen !== true) {
       this.citizenDialogTarget.frozen = false;
       this.citizenDialogTarget = null;
@@ -4578,6 +4635,7 @@ export class DungeonScene extends GameplayScene {
     aiAdapter.update();
     this.chat.update();
     this.citizenDialog?.update();
+    this.signDialog?.update();
     if (this._companionErrorMsg !== null) {
       this._companionErrorMsg.framesLeft--;
       if (this._companionErrorMsg.framesLeft <= 0) {
@@ -5022,6 +5080,7 @@ export class DungeonScene extends GameplayScene {
 
     this.bounty?.renderDialog(ctx);
     this.citizenDialog?.render(ctx);
+    this.signDialog?.render(ctx);
     this.noticeBoard?.render(ctx);
     this.marketPanel?.render(ctx, this.active());
     this.fortuneTeller?.render(ctx, this.active());
@@ -5842,6 +5901,7 @@ export class DungeonScene extends GameplayScene {
         this.murderQuest.isDialogOpen ||
         this.anchorQuest.isDialogOpen ||
         this.citizenDialog?.isOpen === true ||
+        this.signDialog?.isOpen === true ||
         this.chat.isOpen,
     };
   }
@@ -6058,6 +6118,7 @@ export class DungeonScene extends GameplayScene {
         this.murderQuest.isDialogOpen ||
         this.anchorQuest.isDialogOpen ||
         this.citizenDialog?.isOpen === true ||
+        this.signDialog?.isOpen === true ||
         // Town modals (notice board / market stall / fortune teller) are handled
         // by the early full-screen-modal gate at the top of this loop.
         this.tutorial?.showTutorialMordecaiDialog === true ||
@@ -6250,13 +6311,16 @@ export class DungeonScene extends GameplayScene {
               this.bus.emit('dynamiteUsed', { player: 'Human' });
             } else {
               // Captured before `handleClick`, which may turn the last page of
-              // Mordecai's dialog and close it: without this the same tap falls
-              // through to `triggerSpaceAction` and starts the conversation
-              // again, which is the close-then-reopen trap.
-              const mordecaiDialogWasOpen = this.safeRoom.mordecaiDialogOpen;
+              // a dialog and close it: without this the same tap falls through
+              // to `triggerSpaceAction` and starts the conversation again
+              // (the player is still in range), which is the close-then-reopen trap.
+              const dialogWasOpen =
+                this.safeRoom.mordecaiDialogOpen ||
+                this.citizenDialog?.isOpen === true ||
+                this.signDialog?.isOpen === true;
               this.handleClick(x, y, e.timeStamp);
               if (
-                !mordecaiDialogWasOpen &&
+                !dialogWasOpen &&
                 !this.menus.pauseMenu.isOpen &&
                 !this.safeRoom.isSleeping &&
                 !this.gameOver

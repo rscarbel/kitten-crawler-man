@@ -225,7 +225,10 @@ function isRectReachable(flood: FloodField, rect: Rect): boolean {
  * connection. The count is what lets a second corridor between the same pair
  * read as a second route rather than as the same one twice.
  */
-type RoomGraph = ReadonlyArray<ReadonlyMap<number, number>>;
+export type RoomGraph = ReadonlyArray<ReadonlyMap<number, number>>;
+
+/** Marks a tile that belongs to no room. */
+const NO_ROOM = -1;
 
 /**
  * Which rooms the carved map joins to which, read off the finished grid.
@@ -239,20 +242,10 @@ type RoomGraph = ReadonlyArray<ReadonlyMap<number, number>>;
  * component makes every room it touches mutually adjacent, which is exactly what
  * a junction does.
  */
-function buildRoomGraph(grid: TileContent[][], rooms: ReadonlyArray<Rect>): RoomGraph {
+export function buildRoomGraph(grid: TileContent[][], rooms: ReadonlyArray<Rect>): RoomGraph {
   const height = grid.length;
   const width = grid[0]?.length ?? 0;
-  const NO_ROOM = -1;
-  const roomAt = Array.from({ length: height }, () => new Array<number>(width).fill(NO_ROOM));
-  for (const [index, room] of rooms.entries()) {
-    for (let y = room.y; y < room.y + room.h; y++) {
-      if (y < 0 || y >= height) continue;
-      for (let x = room.x; x < room.x + room.w; x++) {
-        if (x < 0 || x >= width) continue;
-        roomAt[y][x] = index;
-      }
-    }
-  }
+  const roomAt = roomIndexGrid(grid, rooms);
 
   const graph = rooms.map(() => new Map<number, number>());
   // Counted rather than merely recorded. Two rooms joined by two *separate*
@@ -266,26 +259,114 @@ function buildRoomGraph(grid: TileContent[][], rooms: ReadonlyArray<Rect>): Room
     graph[b].set(a, (graph[b].get(a) ?? 0) + 1);
   };
 
+  // Two rooms seated flush against each other are joined directly; the
+  // room gap makes that impossible today, and a future layout that
+  // stopped keeping it must not read as unconnected.
+  for (let startY = 0; startY < height; startY++) {
+    for (let startX = 0; startX < width; startX++) {
+      if (roomAt[startY][startX] === NO_ROOM) continue;
+      if (!isWalkableTileType(grid[startY][startX])) continue;
+      for (const step of FLOOD_STEPS) {
+        const nx = startX + step.dx;
+        const ny = startY + step.dy;
+        if (ny < 0 || ny >= height || nx < 0 || nx >= width) continue;
+        if (roomAt[ny][nx] === NO_ROOM) continue;
+        if (!isWalkableTileType(grid[ny][nx])) continue;
+        join(roomAt[startY][startX], roomAt[ny][nx]);
+      }
+    }
+  }
+
+  forEachCorridorComponent(grid, roomAt, (touched) => {
+    // A component can touch one room at several tiles; that is still one
+    // corridor, so the pairs are counted once per component.
+    const distinct = [...new Set(touched)];
+    for (const [index, room] of distinct.entries()) {
+      for (const other of distinct.slice(index + 1)) join(room, other);
+    }
+  });
+  return graph;
+}
+
+/**
+ * The corridor tiles of every corridor that joins two particular rooms.
+ *
+ * Separate from {@link buildRoomGraph} so the validator's walk keeps allocating
+ * nothing it never reads. Empty when the rooms are not joined by a corridor —
+ * including rooms seated flush against each other, which have no corridor tiles
+ * to give.
+ */
+export function corridorTilesBetween(
+  grid: TileContent[][],
+  rooms: ReadonlyArray<Rect>,
+  a: number,
+  b: number,
+): Point[] {
+  const roomAt = roomIndexGrid(grid, rooms);
+  const tiles: Point[] = [];
+  forEachCorridorComponent(grid, roomAt, (touched, componentTiles) => {
+    if (touched.includes(a) && touched.includes(b)) tiles.push(...componentTiles);
+  });
+  return tiles;
+}
+
+/** One stretch of corridor floor and the distinct rooms it opens onto. */
+export interface CorridorComponent {
+  readonly rooms: ReadonlyArray<number>;
+  readonly tiles: ReadonlyArray<Point>;
+}
+
+/**
+ * Every corridor of the map with the distinct rooms it touches. A component
+ * touching exactly two rooms is a plain hallway; one touching more is a
+ * junction of hallways, where a doorway leads to several rooms at once.
+ */
+export function corridorComponents(
+  grid: TileContent[][],
+  rooms: ReadonlyArray<Rect>,
+): CorridorComponent[] {
+  const roomAt = roomIndexGrid(grid, rooms);
+  const components: CorridorComponent[] = [];
+  forEachCorridorComponent(grid, roomAt, (touched, tiles) => {
+    components.push({ rooms: [...new Set(touched)], tiles: [...tiles] });
+  });
+  return components;
+}
+
+/** Which room each tile belongs to, or {@link NO_ROOM}. */
+function roomIndexGrid(grid: TileContent[][], rooms: ReadonlyArray<Rect>): number[][] {
+  const height = grid.length;
+  const width = grid[0]?.length ?? 0;
+  const roomAt = Array.from({ length: height }, () => new Array<number>(width).fill(NO_ROOM));
+  for (const [index, room] of rooms.entries()) {
+    for (let y = room.y; y < room.y + room.h; y++) {
+      if (y < 0 || y >= height) continue;
+      for (let x = room.x; x < room.x + room.w; x++) {
+        if (x < 0 || x >= width) continue;
+        roomAt[y][x] = index;
+      }
+    }
+  }
+  return roomAt;
+}
+
+/**
+ * Visits every stretch of walkable floor outside a room, with the rooms it
+ * touches (duplicates included) and the tiles it is made of.
+ */
+function forEachCorridorComponent(
+  grid: TileContent[][],
+  roomAt: ReadonlyArray<ReadonlyArray<number>>,
+  visit: (touched: number[], tiles: Point[]) => void,
+): void {
+  const height = grid.length;
+  const width = grid[0]?.length ?? 0;
   const seen = Array.from({ length: height }, () => new Array<boolean>(width).fill(false));
   for (let startY = 0; startY < height; startY++) {
     for (let startX = 0; startX < width; startX++) {
       if (seen[startY][startX]) continue;
       seen[startY][startX] = true;
-      if (roomAt[startY][startX] !== NO_ROOM) {
-        // Two rooms seated flush against each other are joined directly; the
-        // room gap makes that impossible today, and a future layout that
-        // stopped keeping it must not read as unconnected.
-        for (const step of FLOOD_STEPS) {
-          const nx = startX + step.dx;
-          const ny = startY + step.dy;
-          if (ny < 0 || ny >= height || nx < 0 || nx >= width) continue;
-          if (roomAt[ny][nx] === NO_ROOM) continue;
-          if (!isWalkableTileType(grid[startY][startX])) continue;
-          if (!isWalkableTileType(grid[ny][nx])) continue;
-          join(roomAt[startY][startX], roomAt[ny][nx]);
-        }
-        continue;
-      }
+      if (roomAt[startY][startX] !== NO_ROOM) continue;
       if (!isWalkableTileType(grid[startY][startX])) continue;
 
       const touched: number[] = [];
@@ -309,15 +390,9 @@ function buildRoomGraph(grid: TileContent[][], rooms: ReadonlyArray<Rect>): Room
           queue.push({ x: nx, y: ny });
         }
       }
-      // A component can touch one room at several tiles; that is still one
-      // corridor, so the pairs are counted once per component.
-      const distinct = [...new Set(touched)];
-      for (const [index, room] of distinct.entries()) {
-        for (const other of distinct.slice(index + 1)) join(room, other);
-      }
+      visit(touched, queue);
     }
   }
-  return graph;
 }
 
 /**

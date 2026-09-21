@@ -52,6 +52,8 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'crate',
     'bookshelf',
     'brazier',
+    'crawler_sign',
+    'crawler_sign_arrow',
     'fountain',
     'well',
     'ground_masks',

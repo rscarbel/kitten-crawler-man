@@ -30,8 +30,6 @@ export function hasRoomToMove(
   tileY: number,
   minOpenTiles = MIN_OPEN_TILES,
 ): boolean {
-  if (!map.isWalkable(tileX, tileY)) return false;
-
   // Both axes read from the grid rather than one standing in for the other: a
   // building interior is 20x16 and a store 20x12, so a square bound taken from
   // the row count would call every column past it out of bounds — and the east
@@ -39,6 +37,24 @@ export function hasRoomToMove(
   // walled off to the flood fill.
   const rows = map.structure.length;
   const columns = map.structure[0]?.length ?? rows;
+  return hasOpenRegion((x, y) => map.isWalkable(x, y), columns, rows, tileX, tileY, minOpenTiles);
+}
+
+/**
+ * {@link hasRoomToMove} over any walkability predicate and grid size, for callers
+ * that hold a raw tile grid rather than a built map — the generator seats fixtures
+ * before a `GameMap` exists, and must ask the same question the spawner will ask.
+ */
+export function hasOpenRegion(
+  isWalkable: (x: number, y: number) => boolean,
+  columns: number,
+  rows: number,
+  tileX: number,
+  tileY: number,
+  minOpenTiles = MIN_OPEN_TILES,
+): boolean {
+  if (!isWalkable(tileX, tileY)) return false;
+
   const seen = new Set<number>();
   // Keyed by arithmetic on the tile position rather than a string, because a
   // ring search calls this once per candidate tile. Only in-bounds tiles are
@@ -63,7 +79,7 @@ export function hasRoomToMove(
       const key = y * columns + x;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (!map.isWalkable(x, y)) continue;
+      if (!isWalkable(x, y)) continue;
       queue.push({ x, y });
     }
   }

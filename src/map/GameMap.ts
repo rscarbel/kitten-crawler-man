@@ -28,6 +28,7 @@ import {
   TOWER_STAIR_SPAN,
   TABLE,
   BOOKSHELF,
+  CRAWLER_SIGN,
   BED,
   FIREPLACE,
   BARREL,
@@ -340,6 +341,7 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   BARREL_SIDE,
   CRATE,
   BOOKSHELF,
+  CRAWLER_SIGN,
   SPRITE_BUILDING,
   MODERN_DECORATION,
   // Both registries, or the tile renders as bare floor: `DECORATION_TYPES` in

@@ -63,6 +63,7 @@ import {
   BROKEN_TABLE,
   BROKEN_CHAIR,
   BROKEN_BOOKSHELF,
+  CRAWLER_SIGN,
 } from './tileTypes';
 
 /** Tile types that cannot be walked on. Everything not listed here is walkable. */
@@ -160,6 +161,7 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   BROKEN_TABLE,
   BROKEN_CHAIR,
   BROKEN_BOOKSHELF,
+  CRAWLER_SIGN,
 ];
 
 /**

@@ -19,6 +19,7 @@ import {
   BARREL,
   BARREL_SIDE,
   BOOKSHELF,
+  CRAWLER_SIGN,
   CRATE,
   BOULDER_SMALL,
   BOULDER_LARGE,
@@ -102,6 +103,7 @@ const DECORATION_TYPES = new Set([
   BARREL_SIDE,
   CRATE,
   BOOKSHELF,
+  CRAWLER_SIGN,
   // The wilderness's boulders. Y-sorted so a player standing north of a rock is
   // drawn behind it and one standing south is drawn in front — a two-tile-wide
   // boulder overhangs its own tile, so flat-drawing it would put the player's

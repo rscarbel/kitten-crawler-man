@@ -26,6 +26,7 @@ import {
   BARREL,
   BARREL_SIDE,
   BOOKSHELF,
+  CRAWLER_SIGN,
   CRATE,
   BRAZIER,
   BONES,
@@ -44,6 +45,7 @@ import {
   PIGMENT_SHELF,
   GRINDING_SLAB,
 } from '../tileTypes';
+import { BOARD_CENTRE_X, SIGN_ARROW_CENTRE_Y_TILES } from '../../sprites/art/crawlerSignArt';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawGroundTile } from './groundTiles';
@@ -1122,6 +1124,10 @@ function drawLongBone(
   ctx.restore();
 }
 
+/** Where the arrow's pivot sits on the board, in tiles down from the sign tile's top edge. */
+const CRAWLER_SIGN_ARROW_PIVOT_Y_TILES = SIGN_ARROW_CENTRE_Y_TILES;
+const CRAWLER_SIGN_ARROW_PIVOT_X_TILES = BOARD_CENTRE_X;
+
 export function drawDecorationTile(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -1164,6 +1170,7 @@ export function drawDecorationTile(
       case BARREL_SIDE:
       case CRATE:
       case BOOKSHELF:
+      case CRAWLER_SIGN:
       // The garrison's and the inking shop's props. Without a case here the
       // chunk bake draws nothing under them and every one sits in a solid black
       // square — which is exactly what shipped for the boulders once already.
@@ -1271,6 +1278,23 @@ export function drawDecorationTile(
     // Wooden crate — sprite only; see BARREL_SIDE above.
     case CRATE: {
       drawSpriteKey(ctx, 'crate', propSpriteState(structure[ty][tx].damageStage), 0, sx, sy, ts);
+      return true;
+    }
+
+    case CRAWLER_SIGN: {
+      const arrowAngle = structure[ty][tx].crawlerSignArrowAngle;
+      if (arrowAngle === undefined) return false;
+      drawSpriteKey(ctx, 'crawler_sign', 'board', 0, sx, sy, ts);
+      drawSpriteKey(
+        ctx,
+        'crawler_sign_arrow',
+        'arrow',
+        0,
+        sx + ts * CRAWLER_SIGN_ARROW_PIVOT_X_TILES,
+        sy + ts * CRAWLER_SIGN_ARROW_PIVOT_Y_TILES,
+        ts,
+        { rotation: arrowAngle },
+      );
       return true;
     }
 

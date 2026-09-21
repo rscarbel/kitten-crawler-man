@@ -14,7 +14,9 @@
  * reviewed one, which is how a floor is judged across the seed space.
  *
  * With no view given it frames the start room and its surroundings;
- * `--safe-room` frames a Bopca station instead. `--level` picks the floor and so
+ * `--safe-room` frames a Bopca station instead, and `--sign=hallway` or
+ * `--sign=room` frames the first wayfinding sign of that kind (a fresh map may
+ * have none of the kind; run again). `--level` picks the floor and so
  * the ground theme. There is no `--seed`: the generator
  * draws from `Math.random`, so a fresh run is a fresh map.
  *
@@ -29,6 +31,7 @@ import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
+import { CRAWLER_SIGN } from '../src/map/tileTypes.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout.js';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout.js';
@@ -100,7 +103,28 @@ const gameMap = new GameMap({
 const safeRoom = process.argv.includes('--safe-room') ? gameMap.safeRooms[0] : undefined;
 const questRoom = process.argv.includes('--quest-room') ? gameMap.questRooms[0] : undefined;
 const spiderLab = process.argv.includes('--spider-lab') ? gameMap.spiderLabRoom : null;
-const focus = safeRoom?.centre ?? questRoom?.centre ?? spiderLab?.centre ?? gameMap.startTile;
+const signKind = stringArg('sign', '');
+const roomBounds = gameMap.progressionLayout?.roomBounds ?? [];
+const insideAny = (
+  rooms: ReadonlyArray<{ x: number; y: number; w: number; h: number }>,
+  tile: { x: number; y: number },
+): boolean =>
+  rooms.some(
+    (room) =>
+      tile.x >= room.x && tile.x < room.x + room.w && tile.y >= room.y && tile.y < room.y + room.h,
+  );
+const framedSign =
+  signKind === ''
+    ? undefined
+    : gameMap.tilesOfType(CRAWLER_SIGN).find((tile) => {
+        const inRoom = insideAny(roomBounds, tile);
+        return signKind === 'room' ? inRoom : !inRoom;
+      });
+if (signKind !== '' && framedSign === undefined) {
+  throw new Error(`this map has no ${signKind} sign; run again for a fresh map`);
+}
+const focus =
+  framedSign ?? safeRoom?.centre ?? questRoom?.centre ?? spiderLab?.centre ?? gameMap.startTile;
 
 // The generator lays the room; `DungeonScene` stamps the counter run and the
 // furnishings on entering the floor. A harness that skipped them framed an empty

@@ -20,9 +20,11 @@ import {
   BOOKSHELF,
   SPIDER_LAB_FLOOR,
   placeProp,
+  CRAWLER_SIGN,
 } from './tileTypes';
 import { randomFromArray, randomInt, clamp } from '../utils';
 import { tileCoordKey } from './tileIndex';
+import { planCrawlerSigns, crawlerSignFootprint, type PlannedCrawlerSign } from './crawlerSigns';
 import { isWalkableTileType } from './walkability';
 import { mordecaiAndBedTiles } from './safeRoomFixtures';
 import type { ProgressionDef } from '../levels/types';
@@ -301,6 +303,19 @@ function chokeSlotsFor(
   return Math.random() < EVEN_SLOT_CHANCE ? ['stem', 'approach'] : ['approach', 'stem'];
 }
 
+/** Side length, in tiles, of the square a stairwell blocks. */
+const STAIRWELL_FOOTPRINT_SPAN = 2;
+
+/** Tiles beyond an arena's radius that no sign pocket is cut into, so its wall ring is never nicked. */
+const SIGN_POCKET_ARENA_MARGIN_TILES = 6;
+
+/**
+ * Rooms a sign may stand in. Safe rooms are excluded because the scene stamps
+ * their counters and decor after generation, where this planner cannot see them;
+ * the start, boss, quest and lab rooms hold scripted encounters it cannot see either.
+ */
+const SIGN_ROOM_ROLES: ReadonlySet<RoomRole> = new Set<RoomRole>(['chain', 'regular']);
+
 /** See {@link MobSpawnPoint.region}. */
 function progressionRegionOf(room: Rect, layout: ProgressionLayoutData | undefined): number {
   if (layout === undefined) return 0;
@@ -330,6 +345,8 @@ export interface DungeonData {
   arenaDoorTile?: Point;
   /** Set only in forced-progression mode. */
   progressionLayout?: ProgressionLayoutData;
+  /** Every wayfinding sign stamped into the grid; empty when the floor has no forced progression. */
+  readonly crawlerSigns: ReadonlyArray<PlannedCrawlerSign>;
 }
 
 // ── Zone helpers ──────────────────────────────────────────────────────────────
@@ -2795,8 +2812,8 @@ function buildDungeon(
 
   const stairwellBlockedSet = new Set<string>();
   for (const s of stairwellTiles) {
-    for (let dy = 0; dy <= 1; dy++) {
-      for (let dx = 0; dx <= 1; dx++) {
+    for (let dy = 0; dy < STAIRWELL_FOOTPRINT_SPAN; dy++) {
+      for (let dx = 0; dx < STAIRWELL_FOOTPRINT_SPAN; dx++) {
         stairwellBlockedSet.add(`${s.x + dx},${s.y + dy}`);
       }
     }
@@ -3230,6 +3247,113 @@ function buildDungeon(
         })
       : stairwellTiles;
 
+  const claimedTiles = new Set<number>();
+  const claim = (tile: Point): void => {
+    claimedTiles.add(tileCoordKey(tile.x, tile.y));
+  };
+  const crawlerSigns: PlannedCrawlerSign[] = [];
+  if (progression !== undefined && progressionLayout !== undefined) {
+    for (const stairwell of stairwellTiles) {
+      for (let dy = 0; dy < STAIRWELL_FOOTPRINT_SPAN; dy++) {
+        for (let dx = 0; dx < STAIRWELL_FOOTPRINT_SPAN; dx++) {
+          claim({ x: stairwell.x + dx, y: stairwell.y + dy });
+        }
+      }
+    }
+    for (const list of [
+      mobSpawnPoints,
+      hallwaySpawnPoints,
+      stairwellTiles,
+      [startTile],
+      treasureRooms.map((room) => room.centre),
+      safeRooms.map((room) => room.centre),
+      bossRooms.map((room) => room.centre),
+      buildingEntries.map((entry) => entry.doorTile),
+      arenaExteriors.map((arena) => arena.stairwellTile),
+      questRooms.flatMap((quest) => [
+        quest.entranceTile,
+        quest.npcTile,
+        quest.woodPileTile,
+        ...quest.grateTiles,
+        ...quest.exitDoorTiles,
+      ]),
+      spiderLabRoom === null
+        ? []
+        : [
+            spiderLabRoom.entranceTile,
+            spiderLabRoom.scientistTile,
+            spiderLabRoom.computerTile,
+            spiderLabRoom.spiderEggTile,
+            ...spiderLabRoom.lifeMachineTiles,
+          ],
+    ]) {
+      for (const tile of list) claim(tile);
+    }
+    // A tile whose type is no longer its room's floor was stamped by a fixture,
+    // a prop or a vignette; none of those record themselves anywhere else.
+    for (const room of rooms) {
+      for (let y = room.y; y < room.y + room.h; y++) {
+        for (let x = room.x; x < room.x + room.w; x++) {
+          if (grid[y]?.[x]?.type !== room.floor) claimedTiles.add(tileCoordKey(x, y));
+        }
+      }
+    }
+
+    const signPlacements = planCrawlerSigns({
+      grid,
+      rooms: rooms.map((room) => ({
+        ...rectOfRoom(room),
+        eligible: SIGN_ROOM_ROLES.has(room.role),
+      })),
+      startRoom: progressionLayout.startRoom,
+      goalRooms: [
+        ...bossRooms.map((boss) => boss.bounds),
+        ...(antechamberSafeRoom === null ? [] : [antechamberSafeRoom.bounds]),
+      ],
+      claimedTiles,
+      keepClear: arenaExteriors.map((arena) => ({
+        centre: arena.centre,
+        radius: arena.radius + SIGN_POCKET_ARENA_MARGIN_TILES,
+      })),
+    });
+
+    const spawnLists: ReadonlyArray<ReadonlyArray<Point>> = [
+      mobSpawnPoints,
+      hallwaySpawnPoints,
+      treasureRooms.map((room) => room.centre),
+    ];
+    for (const placement of signPlacements) {
+      for (const tile of crawlerSignFootprint(placement.tile)) {
+        const target = grid[tile.y][tile.x];
+        const pocketFloor = placement.pocketFloor;
+        const owner = rooms.find(
+          (room) =>
+            tile.x >= room.x &&
+            tile.x < room.x + room.w &&
+            tile.y >= room.y &&
+            tile.y < room.y + room.h,
+        );
+        const heldDecoration =
+          pocketFloor === null
+            ? owner?.floor !== target.type
+            : owner !== undefined || target.type !== FloorTypeValue.wall;
+        const onSpawn = spawnLists.some((list) =>
+          list.some((point) => point.x === tile.x && point.y === tile.y),
+        );
+        if (heldDecoration || onSpawn) {
+          throw new Error(
+            `crawler sign seated on a claimed tile (${tile.x}, ${tile.y}); a claim source is missing from the planner's input`,
+          );
+        }
+        if (pocketFloor !== null) target.groundType = pocketFloor;
+        target.type = CRAWLER_SIGN;
+        target.crawlerSignDirection = placement.direction;
+        target.crawlerSignArrowAngle = placement.arrowAngleRadians;
+      }
+    }
+    crawlerSigns.push(...signPlacements);
+  }
+
   return {
     grid,
     startTile,
@@ -3245,6 +3369,7 @@ function buildDungeon(
     arenaExteriors,
     arenaDoorTile: arenaExteriors[0]?.doorTile,
     progressionLayout,
+    crawlerSigns,
   };
 }
 

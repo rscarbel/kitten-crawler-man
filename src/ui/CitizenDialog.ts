@@ -18,6 +18,7 @@ export class CitizenDialog {
   constructor(
     private readonly audio: AudioManager,
     private readonly revealMode: RevealMode = 'word',
+    private readonly revealIntervalMs?: number,
   ) {}
 
   get isOpen(): boolean {
@@ -29,7 +30,12 @@ export class CitizenDialog {
     if (lines.length === 0) return;
     this.lines = [...lines];
     this.index = 0;
-    this.box = new DialogBox(this.audio, { speakerName, speakerIcon, revealMode: this.revealMode });
+    this.box = new DialogBox(this.audio, {
+      speakerName,
+      speakerIcon,
+      revealMode: this.revealMode,
+      revealIntervalMs: this.revealIntervalMs,
+    });
     this.showCurrent();
   }
 

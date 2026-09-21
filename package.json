@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "verify:progression": "tsx scripts/verify-progression.ts",
     "verify:quest-choke": "tsx scripts/verify-quest-choke.ts",
+    "verify:crawler-signs": "tsx scripts/verify-crawler-signs.ts",
     "verify:bounty": "tsx scripts/verify-bounty.ts",
     "verify:separation": "tsx scripts/verify-separation.ts",
     "verify:difficulty": "tsx scripts/verify-difficulty.ts",
@@ -49,6 +50,7 @@
     "verify:buildings": "tsx scripts/verify-building-gates.ts",
     "verify:bigtop": "tsx scripts/verify-bigtop-maze.ts",
     "render:bigtop": "tsx scripts/render-bigtop-maze.ts",
+    "render:crawler-sign": "tsx scripts/render-crawler-sign.ts",
     "verify:lich": "tsx scripts/verify-lich.ts",
     "gen:townscape": "tsx scripts/generate-townscape-sprites.ts",
     "gen:over-city": "tsx scripts/generate-over-city-sprites.ts",
@@ -108,13 +110,13 @@
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.2",
     "@types/jsonwebtoken": "^9.0.9",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.2.2",
     "canvas": "^3.2.3",
     "esbuild": "^0.28.0",
-    "eslint": "^10.8.0",
-    "prettier": "^3.9.6",
-    "tsx": "^4.23.1",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.8",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.65.0"
+    "typescript-eslint": "^8.70.1"
   }
 }
