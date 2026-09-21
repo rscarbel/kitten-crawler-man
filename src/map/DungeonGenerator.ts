@@ -74,6 +74,7 @@ import {
   validateProgression,
   distanceToRect,
   SCATTER_SAFE_ROOM_SEPARATION,
+  ARENA_BOSS_TYPE,
   STAIRWELL_MIN_SEPARATION,
   STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT,
   STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT,
@@ -98,6 +99,8 @@ type Room = {
   role: RoomRole;
   /** Set on a gateway safe room: the boss its only onward exit leads to. */
   guardsBossType?: string;
+  /** Set on an exit safe room: the gauntlet boss whose room's only onward exit leads here. */
+  followsBossType?: string;
 };
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -168,6 +171,13 @@ export interface SafeRoomData {
    * in that room while the boss is still alive.
    */
   guardsBossType?: string;
+  /**
+   * Set when this safe room is the one behind a gauntlet boss room, naming that
+   * boss's snake_case mob type. Set by the generator on each gauntlet's exit
+   * safe room; read by the validator and verify scripts to tell exit rooms
+   * apart from gateway and scatter rooms without relying on placement order.
+   */
+  followsBossType?: string;
 }
 
 /**
@@ -477,8 +487,6 @@ const ANTECHAMBER_CONNECT_CANDIDATES = 12;
  * often. Only the first is mandatory.
  */
 const ANTECHAMBER_EXIT_TARGET = 3;
-/** Boss the arena's antechamber warns the player about. */
-const ARENA_BOSS_TYPE = 'ball_of_swine';
 /** Antechamber size range — a safe room, so it reuses the safe-room dimensions. */
 /**
  * The antechamber has to reach out under both concourse links, so its width has a
@@ -1391,7 +1399,7 @@ function buildDungeon(
 
   let startCenter: Point | null = null;
   let progressionLayout: ProgressionLayoutData | undefined;
-  let lastGatewayBossRoom: Rect | null = null;
+  let lastGauntletExitBounds: Rect | null = null;
   /**
    * Tiles of the corridor the player arrives at the quest room through, which is
    * what tells the doorway scan which of the room's doorways is the way in and
@@ -1427,8 +1435,23 @@ function buildDungeon(
     }
   };
 
-  const addRoom = (rect: Rect, floor: number, role: RoomRole, guardsBossType?: string): number => {
-    rooms.push({ x: rect.x, y: rect.y, w: rect.w, h: rect.h, floor, role, guardsBossType });
+  const addRoom = (
+    rect: Rect,
+    floor: number,
+    role: RoomRole,
+    guardsBossType?: string,
+    followsBossType?: string,
+  ): number => {
+    rooms.push({
+      x: rect.x,
+      y: rect.y,
+      w: rect.w,
+      h: rect.h,
+      floor,
+      role,
+      guardsBossType,
+      followsBossType,
+    });
     carveRoomFloor(rect, floor);
     return rooms.length - 1;
   };
@@ -1508,6 +1531,8 @@ function buildDungeon(
                 safeRoomH: randomInt(MIN_H, MAX_H),
                 bossRoomW: BOSS_ROOM_W,
                 bossRoomH: BOSS_ROOM_H,
+                exitSafeRoomW: randomInt(MIN_W, MAX_W),
+                exitSafeRoomH: randomInt(MIN_H, MAX_H),
               },
               choke:
                 chokeSlot === undefined
@@ -1533,6 +1558,7 @@ function buildDungeon(
 
       addRoom(plan.safeRoom, SAFE_ROOM_FLOOR, 'safe', gauntlet.bossType);
       addRoom(plan.bossRoom, bossFloorForType(gauntlet.bossType), 'boss');
+      addRoom(plan.exitSafeRoom, SAFE_ROOM_FLOOR, 'safe', undefined, gauntlet.bossType);
       for (const rect of plan.chainRooms) {
         addRoom(rect, randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(rect))]), 'chain');
       }
@@ -1552,18 +1578,28 @@ function buildDungeon(
       }
       for (const corridor of plan.corridors) carvePlannedCorridor(corridor);
 
-      gauntletRoomBounds.push([plan.safeRoom, plan.bossRoom, ...chokeRooms, ...plan.chainRooms]);
+      gauntletRoomBounds.push([
+        plan.safeRoom,
+        plan.bossRoom,
+        plan.exitSafeRoom,
+        ...chokeRooms,
+        ...plan.chainRooms,
+      ]);
       branchRoomCounts.push(plan.branchRoomCounts);
-      entryRoom = plan.bossRoom;
+      entryRoom = plan.exitSafeRoom;
       previousHeading = plan.heading;
     }
 
-    const lastBossRoom = entryRoom;
-    lastGatewayBossRoom = lastBossRoom;
-    const lastBossIndex = rooms.findIndex(
-      (r) => r.role === 'boss' && r.x === lastBossRoom.x && r.y === lastBossRoom.y,
+    const lastGauntletExitRoom = entryRoom;
+    lastGauntletExitBounds = lastGauntletExitRoom;
+    const lastGauntletExitIndex = rooms.findIndex(
+      (r) =>
+        r.role === 'safe' &&
+        r.followsBossType !== undefined &&
+        r.x === lastGauntletExitRoom.x &&
+        r.y === lastGauntletExitRoom.y,
     );
-    const lastBossCentre = rectCentre(lastBossRoom);
+    const lastGauntletExitCentre = rectCentre(lastGauntletExitRoom);
 
     // ── Arena reservation ───────────────────────────────────────────────────
     //
@@ -1702,7 +1738,7 @@ function buildDungeon(
         beyondPocketFailed = false;
         const reservation = reserveArena(
           segments,
-          lastBossCentre,
+          lastGauntletExitCentre,
           size,
           BORDER,
           spineDef === undefined ? 'farthest' : 'varied',
@@ -1727,7 +1763,7 @@ function buildDungeon(
         for (let spineAttempt = 0; spineAttempt < MAX_SPINE_ATTEMPTS; spineAttempt++) {
           const spineSnapshot = segments.snapshot();
           const planned = planSpine(segments, {
-            entryRoom: lastBossRoom,
+            entryRoom: lastGauntletExitRoom,
             exitRoom: reservation.antechamber,
             rooms: spineDef.rooms,
             splits: spineDef.splits,
@@ -1791,8 +1827,8 @@ function buildDungeon(
     //
     // Every free room is connected the moment it is seated, to the nearest
     // already-connected room that yields a legal corridor. That makes the region
-    // a tree rooted at the last gateway boss room by construction: nothing here
-    // can be reached without clearing that boss.
+    // a tree rooted at the last gauntlet's exit safe room by construction: nothing
+    // here can be reached without clearing that gauntlet's boss.
 
     const connectableIndices: number[] = [];
     let seedUsed = false;
@@ -1801,7 +1837,7 @@ function buildDungeon(
       const centre = rectCentre(rect);
       const candidates = seedUsed
         ? [...connectableIndices]
-        : [lastBossIndex, ...connectableIndices];
+        : [lastGauntletExitIndex, ...connectableIndices];
       candidates.sort((a, b) => {
         const ra = rooms[a];
         const rb = rooms[b];
@@ -1826,12 +1862,12 @@ function buildDungeon(
           SEGMENT_FREE,
           candidateRect,
           rect,
-          pickCorridorKind(isSpecial || candidateIndex === lastBossIndex, centre),
+          pickCorridorKind(isSpecial || candidateIndex === lastGauntletExitIndex, centre),
         );
         if (corridor === null) continue;
         segments.claimCorridor(corridor.tiles, SEGMENT_FREE);
         mstEdges.push({ from: candidateIndex, to: rooms.length });
-        if (candidateIndex === lastBossIndex) seedUsed = true;
+        if (candidateIndex === lastGauntletExitIndex) seedUsed = true;
         return corridor;
       }
       return null;
@@ -1951,7 +1987,7 @@ function buildDungeon(
           'quest',
           () => FloorTypeValue.tile_floor,
           (centre) =>
-            Math.hypot(centre.x - lastBossCentre.x, centre.y - lastBossCentre.y) <=
+            Math.hypot(centre.x - lastGauntletExitCentre.x, centre.y - lastGauntletExitCentre.y) <=
             QUEST_ROOM_MAX_DIST_FROM_EXIT,
         ) === null
       ) {
@@ -1965,7 +2001,10 @@ function buildDungeon(
           'spider_lab',
           () => SPIDER_LAB_FLOOR,
           (centre) => {
-            const d = Math.hypot(centre.x - lastBossCentre.x, centre.y - lastBossCentre.y);
+            const d = Math.hypot(
+              centre.x - lastGauntletExitCentre.x,
+              centre.y - lastGauntletExitCentre.y,
+            );
             return d >= SPIDER_LAB_MIN_DIST && d <= SPIDER_LAB_MAX_DIST;
           },
         );
@@ -2412,6 +2451,7 @@ function buildDungeon(
       bounds: { x: sr.x, y: sr.y, w: sr.w, h: sr.h },
       centre: { x: Math.floor(sr.x + sr.w / 2), y: Math.floor(sr.y + sr.h / 2) },
       guardsBossType: sr.guardsBossType,
+      followsBossType: sr.followsBossType,
     }));
   antechamberSafeRoom = safeRooms.find((r) => r.guardsBossType === ARENA_BOSS_TYPE) ?? null;
 
@@ -2635,8 +2675,8 @@ function buildDungeon(
     numStairwellsOverride ?? Math.max(1, Math.floor(regularRooms.length / ROOMS_PER_STAIRWELL));
   const stairwellCount = Math.max(1, Math.round(baseStairwellCount * stairwellCountMultiplier));
 
-  if (progression !== undefined && lastGatewayBossRoom !== null) {
-    // A stairwell must never be in sight of the last boss room's exit, and two
+  if (progression !== undefined && lastGauntletExitBounds !== null) {
+    // A stairwell must never be in sight of the last gauntlet's exit safe room, and two
     // stairwells must never be found in the same sweep of the free region — the
     // hunt for the stairs is the point of the post-gauntlet stretch.
     //
@@ -2651,7 +2691,7 @@ function buildDungeon(
     const stairwellSeparation = hasArena
       ? BEYOND_STAIRWELL_MIN_SEPARATION
       : STAIRWELL_MIN_SEPARATION;
-    const exitBounds = lastGatewayBossRoom;
+    const exitBounds = lastGauntletExitBounds;
     const byDistanceFromExit = stairwellRoomPool
       .map((r) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) }))
       .sort((a, b) => distanceToRect(b, exitBounds) - distanceToRect(a, exitBounds));

@@ -53,7 +53,7 @@ const MIN_BAND_SEATED_STAIRWELL_RATE = 0.2;
 
 /** One placed stairwell, as the band rule sees it. */
 interface StairwellRecord {
-  /** Distance from the last gateway boss room's bounds, in tiles. */
+  /** Distance from the last gauntlet's exit safe room bounds, in tiles. */
   distanceFromExit: number;
   /** Whether the generator seated it from the banded pool rather than the fallback. */
   fromBand: boolean;
@@ -86,21 +86,22 @@ function roomCountOf(data: DungeonData): number {
 }
 
 /**
- * How far each stairwell sits from the last gateway boss room — the quantity the
+ * How far each stairwell sits from the last gauntlet's exit safe room — the quantity the
  * placement band is expressed in — and which pool it was seated from.
  *
  * Measured against the same room `validateProgression` measures I4 against, so a
- * floor whose boss rooms are short of its gauntlet count reports no distances at
+ * floor whose exit safe rooms are short of its gauntlet count reports no distances at
  * all rather than measuring against the wrong room; that shortfall is already an
  * I8 failure, so it can never pass unnoticed.
  */
 function stairwellRecords(data: DungeonData, gauntletCount: number): StairwellRecord[] {
   if (gauntletCount === 0) return [];
-  const lastBossRoom = data.bossRooms[gauntletCount - 1];
-  if (lastBossRoom === undefined) return [];
+  const exitSafeRooms = data.safeRooms.filter((room) => room.followsBossType !== undefined);
+  if (exitSafeRooms.length < gauntletCount) return [];
+  const lastExitSafeRoom = exitSafeRooms[gauntletCount - 1];
   const banded = data.progressionLayout?.bandedStairwellTiles ?? [];
   return data.stairwellTiles.map((tile) => ({
-    distanceFromExit: distanceToRect(tile, lastBossRoom.bounds),
+    distanceFromExit: distanceToRect(tile, lastExitSafeRoom.bounds),
     fromBand: banded.some((bandedTile) => bandedTile.x === tile.x && bandedTile.y === tile.y),
   }));
 }

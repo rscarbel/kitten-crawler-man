@@ -35,13 +35,19 @@ export const SEGMENT_BEYOND = -3;
  * touch — which would join the room before it straight to the room after it and
  * leave the choke bypassable. Owning the inbound corridor in a segment of its
  * own is what keeps the two apart.
+ *
+ * The exit segment owns the safe room behind the boss room and the corridor
+ * into it. It cannot share the sealed segment: the boss-to-exit corridor could
+ * then run alongside the corridor that enters the boss room and join the room
+ * before the boss straight to the room after it, bypassing the fight.
  */
-const SEGMENTS_PER_GAUNTLET = 3;
+const SEGMENTS_PER_GAUNTLET = 4;
 
-/** Offsets of a gauntlet's three segments within its block, from 1 so 0 stays "unowned". */
+/** Offsets of a gauntlet's four segments within its block, from 1 so 0 stays "unowned". */
 const BRANCH_SEGMENT_OFFSET = 1;
 const GATEWAY_SEGMENT_OFFSET = 2;
 const CHOKE_SEGMENT_OFFSET = 3;
+const EXIT_SEGMENT_OFFSET = 4;
 
 /** Segment owning gauntlet `index`'s branch chains and its gateway safe room. */
 export function gauntletSegment(index: number): number {
@@ -58,13 +64,18 @@ function chokeSegment(index: number): number {
   return index * SEGMENTS_PER_GAUNTLET + CHOKE_SEGMENT_OFFSET;
 }
 
+/** Segment owning gauntlet `index`'s exit safe room and the corridor from the boss room into it. */
+function exitSegment(index: number): number {
+  return index * SEGMENTS_PER_GAUNTLET + EXIT_SEGMENT_OFFSET;
+}
+
 /**
  * Highest segment id the gauntlets can consume, so anything allocating segments
  * of its own — the floor-2 spine — starts past every gauntlet a floor can hold
  * rather than guessing at a gap.
  */
 export function gauntletSegmentCeiling(gauntletCount: number): number {
-  return chokeSegment(Math.max(gauntletCount, 1) - 1);
+  return exitSegment(Math.max(gauntletCount, 1) - 1);
 }
 
 // ── Geometry constants ────────────────────────────────────────────────────────
@@ -132,6 +143,16 @@ const GAUNTLET_FLANK_TURN_MAX_DEG = 120;
 /** Gateway safe room centre to boss room centre distance. */
 const BOSS_ROOM_OFFSET_MIN = 26;
 const BOSS_ROOM_OFFSET_MAX = 34;
+
+/**
+ * Boss room centre to exit safe room centre distance.
+ *
+ * The centres must clear the boss room's half-height, the safe room's half-height
+ * and `ROOM_GAP`, with enough left over for the corridor between them to read as
+ * one.
+ */
+const EXIT_SAFE_ROOM_OFFSET_MIN = 28;
+const EXIT_SAFE_ROOM_OFFSET_MAX = 36;
 
 /**
  * Centre-to-centre distance from the room before a choke room to the choke room
@@ -501,6 +522,8 @@ interface GauntletRoomSizes {
   safeRoomH: number;
   bossRoomW: number;
   bossRoomH: number;
+  exitSafeRoomW: number;
+  exitSafeRoomH: number;
 }
 
 export interface GauntletRequest {
@@ -557,6 +580,8 @@ export interface GauntletPlan {
   heading: number;
   safeRoom: Rect;
   bossRoom: Rect;
+  /** The safe room behind the boss room; the boss room's only way onward leads into it. */
+  exitSafeRoom: Rect;
   chainRooms: Rect[];
   corridors: PlannedCorridor[];
   branchRoomCounts: number[];
@@ -663,6 +688,7 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
   const segment = gauntletSegment(request.index);
   const sealed = gatewaySegment(request.index);
   const choke = chokeSegment(request.index);
+  const exit = exitSegment(request.index);
   const heading = nextHeading(request.previousHeading);
   const corridors: PlannedCorridor[] = [];
 
@@ -770,6 +796,29 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
   segments.claimCorridor(gatewayCorridor.tiles, sealed);
   corridors.push(gatewayCorridor);
 
+  const exitOffset = polar(
+    heading,
+    randomInt(EXIT_SAFE_ROOM_OFFSET_MIN, EXIT_SAFE_ROOM_OFFSET_MAX),
+  );
+  const exitSafeRoom = rectCentredOn(
+    { x: Math.round(bossCentre.x + exitOffset.x), y: Math.round(bossCentre.y + exitOffset.y) },
+    request.sizes.exitSafeRoomW,
+    request.sizes.exitSafeRoomH,
+  );
+  if (!segments.canPlaceRoom(exitSafeRoom, exit)) return null;
+  segments.addRoom(exitSafeRoom, exit);
+
+  const exitCorridor = planCorridorBetween(
+    segments,
+    exit,
+    bossRoom,
+    exitSafeRoom,
+    request.pickCorridorKind(true, rectCentre(exitSafeRoom)),
+  );
+  if (exitCorridor === null) return null;
+  segments.claimCorridor(exitCorridor.tiles, exit);
+  corridors.push(exitCorridor);
+
   const exitAngles = branchExitAngles(request, heading, request.branchCount);
   const pullRange =
     request.index === 0
@@ -801,6 +850,7 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
     heading,
     safeRoom,
     bossRoom,
+    exitSafeRoom,
     chainRooms,
     corridors,
     branchRoomCounts,

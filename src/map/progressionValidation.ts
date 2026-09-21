@@ -6,6 +6,9 @@ import { roomDoorways } from './roomDoorways';
 import { MIN_CHAIN_ROOMS, SPLIT_LANE_MAX_ROOMS } from './spineLayout';
 import { arenaReserveRect, ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
 
+/** Boss the arena's antechamber warns the player about. */
+export const ARENA_BOSS_TYPE = 'ball_of_swine';
+
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -64,12 +67,12 @@ export const STAIRWELL_MIN_SEPARATION = 45;
  * stairwells that far apart.
  */
 export const BEYOND_STAIRWELL_MIN_SEPARATION = 20;
-/** Stairwell distance from the last gateway boss room's bounds (I4). */
+/** Stairwell distance from the last gauntlet's exit safe room bounds (I4). */
 export const STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT = 35;
 /**
- * Stairwell distance ceiling from the last gateway boss room's bounds (I4).
+ * Stairwell distance ceiling from the last gauntlet's exit safe room bounds (I4).
  *
- * The minimum keeps the stairs out of sight of the boss door; this ceiling keeps
+ * The minimum keeps the stairs out of sight of the exit door; this ceiling keeps
  * them off the map's perimeter, where maximising distance from the exit parks
  * them by construction. Between the two lies the ring a player actually sweeps
  * first, so the post-gauntlet stretch stays a hunt instead of a grid search.
@@ -546,15 +549,27 @@ export function validateProgression(
     fail('I8', `${bossRooms.length} boss rooms for ${gauntletCount} gauntlets`);
     return failures;
   }
-  if (safeRooms.length < gauntletCount) {
-    fail('I8', `${safeRooms.length} safe rooms for ${gauntletCount} gauntlets`);
+
+  // The antechamber also carries a guardsBossType, so a gateway is told apart by
+  // guarding a boss that is not the arena's and by not sitting behind one.
+  const gatewaySafeRooms = safeRooms.filter(
+    (room) =>
+      room.guardsBossType !== undefined &&
+      room.guardsBossType !== ARENA_BOSS_TYPE &&
+      room.followsBossType === undefined,
+  );
+  const exitSafeRooms = safeRooms.filter((room) => room.followsBossType !== undefined);
+  if (gatewaySafeRooms.length !== gauntletCount || exitSafeRooms.length !== gauntletCount) {
+    fail(
+      'I8',
+      `${gatewaySafeRooms.length} gateway safe rooms and ${exitSafeRooms.length} exit safe rooms for ${gauntletCount} gauntlets`,
+    );
     return failures;
   }
-
-  const gatewaySafeRooms = safeRooms.slice(0, gauntletCount);
-  const otherSafeRooms = safeRooms.slice(gauntletCount);
-  const antechamber = otherSafeRooms.find((room) => room.guardsBossType !== undefined);
-  const scatterSafeRooms = otherSafeRooms.filter((room) => room.guardsBossType === undefined);
+  const antechamber = safeRooms.find((room) => room.guardsBossType === ARENA_BOSS_TYPE);
+  const scatterSafeRooms = safeRooms.filter(
+    (room) => room.guardsBossType === undefined && room.followsBossType === undefined,
+  );
 
   for (const [index, room] of gatewaySafeRooms.entries()) {
     if (room.guardsBossType === undefined) {
@@ -562,7 +577,7 @@ export function validateProgression(
     }
   }
 
-  const lastBossRoom = bossRooms[gauntletCount - 1];
+  const lastExitSafeRoom = exitSafeRooms[gauntletCount - 1];
   const arena = data.arenaExteriors.length > 0 ? data.arenaExteriors[0] : null;
   const arenaDoorTile = data.arenaDoorTile;
   const questChoke = layout.questChoke;
@@ -580,6 +595,7 @@ export function validateProgression(
   for (let k = 0; k < gauntletCount; k++) {
     const gatewaySafe = gatewaySafeRooms[k];
     const gatewayBoss = bossRooms[k];
+    const exitSafe = exitSafeRooms[k];
 
     const laterLandmarks: Array<{ label: string; rect: Rect }> = [];
     for (let later = k + 1; later < gauntletCount; later++) {
@@ -588,6 +604,7 @@ export function validateProgression(
         rect: gatewaySafeRooms[later].bounds,
       });
       laterLandmarks.push({ label: `gateway boss room ${later}`, rect: bossRooms[later].bounds });
+      laterLandmarks.push({ label: `exit safe room ${later}`, rect: exitSafeRooms[later].bounds });
     }
     for (const [index, tile] of stairwellTiles.entries()) {
       laterLandmarks.push({ label: `stairwell ${index}`, rect: stairwellFootprint(tile) });
@@ -611,14 +628,16 @@ export function validateProgression(
       rect: room.bounds,
     }));
 
+    const ownExitLandmark = { label: 'exit safe room', rect: exitSafe.bounds };
+
     // I3a — remove the gateway safe room.
     const withoutSafe = floodFill(grid, startTile, [gatewaySafe.bounds]);
     if (isRectReachable(withoutSafe, gatewayBoss.bounds)) {
       fail('I3a', `gauntlet ${k}: boss room is reachable without its gateway safe room`);
     }
     const safeSideLandmarks = afterSafeRoom
-      ? [...laterLandmarks, ...questLandmarks]
-      : laterLandmarks;
+      ? [ownExitLandmark, ...laterLandmarks, ...questLandmarks]
+      : [ownExitLandmark, ...laterLandmarks];
     for (const landmark of safeSideLandmarks) {
       if (isRectReachable(withoutSafe, landmark.rect)) {
         fail('I3a', `gauntlet ${k}: ${landmark.label} is reachable without the gateway safe room`);
@@ -631,16 +650,33 @@ export function validateProgression(
       fail('I3b', `gauntlet ${k}: gateway safe room became unreachable without the boss room`);
     }
     const bossSideLandmarks = afterBossRoom
-      ? [...laterLandmarks, ...questLandmarks]
-      : laterLandmarks;
+      ? [ownExitLandmark, ...laterLandmarks, ...questLandmarks]
+      : [ownExitLandmark, ...laterLandmarks];
     for (const landmark of bossSideLandmarks) {
       if (isRectReachable(withoutBoss, landmark.rect)) {
         fail('I3b', `gauntlet ${k}: ${landmark.label} is reachable without the gateway boss room`);
       }
     }
+
+    // I3c — remove the exit safe room. It sits after the boss room, so the fight
+    // must survive its removal. A choke of rank k or lower stands in front of this
+    // gauntlet's exit and survives; a higher-ranked one is reachable only through
+    // it, which is exactly when `afterBossRoom` holds.
+    const withoutExit = floodFill(grid, startTile, [exitSafe.bounds]);
+    if (!isRectReachable(withoutExit, gatewayBoss.bounds)) {
+      fail('I3c', `gauntlet ${k}: boss room became unreachable without the exit safe room`);
+    }
+    const exitSideLandmarks = afterBossRoom
+      ? [...laterLandmarks, ...questLandmarks]
+      : laterLandmarks;
+    for (const landmark of exitSideLandmarks) {
+      if (isRectReachable(withoutExit, landmark.rect)) {
+        fail('I3c', `gauntlet ${k}: ${landmark.label} is reachable without the exit safe room`);
+      }
+    }
   }
 
-  // I4 — stairwells are spread out, well past the last boss's exit, and never
+  // I4 — stairwells are spread out, well past the last gauntlet's exit, and never
   // sitting inside a gauntlet.
   //
   // On an arena floor every stairwell seats inside the beyond pocket, which is
@@ -654,11 +690,11 @@ export function validateProgression(
   }
   for (let i = 0; i < stairwellTiles.length; i++) {
     const tile = stairwellTiles[i];
-    const distFromExit = distanceToRect(tile, lastBossRoom.bounds);
+    const distFromExit = distanceToRect(tile, lastExitSafeRoom.bounds);
     if (!layout.stairwellSpacingWaived && distFromExit < STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT) {
       fail(
         'I4',
-        `stairwell ${i} is ${distFromExit.toFixed(1)} tiles from the last boss room (min ${STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT})`,
+        `stairwell ${i} is ${distFromExit.toFixed(1)} tiles from the last exit safe room (min ${STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT})`,
       );
     }
     // The ceiling governs a stairwell that came from the banded pool. The rest
@@ -673,7 +709,7 @@ export function validateProgression(
     ) {
       fail(
         'I4',
-        `stairwell ${i} is ${distFromExit.toFixed(1)} tiles from the last boss room (max ${STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT})`,
+        `stairwell ${i} is ${distFromExit.toFixed(1)} tiles from the last exit safe room (max ${STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT})`,
       );
     }
     for (let j = i + 1; j < stairwellTiles.length; j++) {

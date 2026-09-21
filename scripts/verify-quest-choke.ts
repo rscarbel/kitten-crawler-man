@@ -21,6 +21,7 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants.js';
+import { ARENA_BOSS_TYPE } from '../src/map/progressionValidation.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
@@ -119,20 +120,18 @@ function rectContains(rect: Rect, point: Point): boolean {
 function blockedLandmark(gameMap: GameMap, levelDef: LevelDef): Rect | null {
   const choke = gameMap.progressionLayout?.questChoke ?? null;
   if (choke === null) return null;
-  const gatewayCount = levelDef.progression?.gauntlets.length ?? 0;
   if (choke.blocks === 'gatewayBossRoom') {
     return gameMap.bossRooms[choke.gauntletIndex]?.bounds ?? null;
   }
   if (choke.blocks === 'gatewaySafeRoom') {
-    return gameMap.safeRooms.slice(0, gatewayCount)[choke.gauntletIndex]?.bounds ?? null;
+    const bossType = levelDef.progression?.gauntlets[choke.gauntletIndex]?.bossType;
+    return (
+      gameMap.safeRooms.find(
+        (room) => room.guardsBossType === bossType && room.followsBossType === undefined,
+      )?.bounds ?? null
+    );
   }
-  // Past the gateways, the one safe room that guards a boss is the arena's
-  // antechamber. Sliced first, because every gateway safe room guards one too
-  // and searching the whole list finds the first gauntlet's instead.
-  return (
-    gameMap.safeRooms.slice(gatewayCount).find((room) => room.guardsBossType !== undefined)
-      ?.bounds ?? null
-  );
+  return gameMap.safeRooms.find((room) => room.guardsBossType === ARENA_BOSS_TYPE)?.bounds ?? null;
 }
 
 function verifyFloor(levelDef: LevelDef): void {
