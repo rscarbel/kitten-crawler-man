@@ -18,12 +18,25 @@
  */
 
 import { platform } from '../core/Platform';
-import { drawBox, drawModal, drawOverlay, BOX_PRESETS } from './Box';
+import {
+  drawBox,
+  drawModal,
+  drawOverlay,
+  drawScrollbar,
+  beginModalFit,
+  endModalFit,
+  modalFitPoint,
+  BOX_PRESETS,
+  MODAL_FIT_NONE,
+  type ModalFit,
+} from './Box';
 import {
   beginMenuFocus,
   clearMenuFocus,
   drawButton,
   endMenuFocus,
+  setButtonPointerSpace,
+  resetButtonPointerSpace,
   BUTTON_PRESETS,
   type ButtonResult,
 } from './Button';
@@ -79,9 +92,16 @@ export type PricedPurchaseHandler = (option: PricedOption, player: Player) => Pr
 /** Builds the current menu. Re-run after every purchase so availability stays honest. */
 export type PricedMenuBuilder = () => PricedMenu;
 
-const PANEL_MAX_WIDTH = 400;
-/** Gap kept between the panel and the screen edges on phones narrower than the ideal width. */
-const PANEL_SIDE_MARGIN = 10;
+const PANEL_WIDTH = 400;
+/** Gap kept between the panel and every screen edge. */
+const SCREEN_MARGIN = 8;
+/** Below this the text is illegible; the panel overflows the width rather than shrink further. */
+const MIN_FIT_SCALE = 0.4;
+const WHEEL_SCROLL_SCALE = 0.5;
+const SCROLLBAR_INSET = 8;
+const SCROLL_BTN_SIZE = 40;
+const SCROLL_BTN_GAP = 4;
+const SCROLL_BTN_LABEL_SIZE = 14;
 const PANEL_PADDING = 18;
 const TITLE_SIZE = 17;
 const BARK_SIZE = 11;
@@ -103,13 +123,13 @@ const BYLINE_GAP = 5;
 const BYLINE_LINE_HEIGHT = BYLINE_SIZE + BYLINE_GAP;
 
 const BUY_BTN_WIDTH = 78;
-const BUY_BTN_HEIGHT = 30;
-const BUY_BTN_Y_LIFT = 2;
+const BUY_BTN_HEIGHT = 40;
+const BUY_BTN_Y_LIFT = 8;
 const BUY_LABEL_SIZE = 12;
 const CLOSE_BTN_WIDTH = 120;
 /** Narrower on touch, where the label is bare "Close" and the purse shares the footer. */
 const CLOSE_BTN_MOBILE_WIDTH = 88;
-const CLOSE_BTN_HEIGHT = 30;
+const CLOSE_BTN_HEIGHT = 40;
 const CLOSE_LABEL_SIZE = 11;
 const CLOSE_LABEL_MOBILE = 'Close';
 const CLOSE_LABEL_DESKTOP = 'Close  [Space / Esc]';
@@ -160,6 +180,12 @@ export class PricedMenuPanel {
   private feedbackTimer = 0;
   private buyButtons: ButtonResult[] = [];
   private closeButton: ButtonResult | null = null;
+  private fit: ModalFit = MODAL_FIT_NONE;
+  private scrollY = 0;
+  private maxScrollY = 0;
+  private rowsTop = 0;
+  private rowsBottom = 0;
+  private scrollButtons: { up: ButtonResult; down: ButtonResult } | null = null;
   private modalContains: ((px: number, py: number) => boolean) | null = null;
 
   get isOpen(): boolean {
@@ -181,6 +207,7 @@ export class PricedMenuPanel {
     this.onPurchase = onPurchase;
     this.onBlocked = onBlocked ?? null;
     this.feedbackTimer = 0;
+    this.scrollY = 0;
     // Every priced menu shares one focus context, so a selection the player left
     // behind in the tavern would otherwise still be live when a stall opens —
     // and the first accept press would buy whatever row that stale index landed
@@ -196,6 +223,7 @@ export class PricedMenuPanel {
     this.buyButtons = [];
     this.closeButton = null;
     this.modalContains = null;
+    this.scrollButtons = null;
     clearMenuFocus();
   }
 
@@ -212,7 +240,17 @@ export class PricedMenuPanel {
       canvasHeight: viewportHeight(),
       alpha: OVERLAY_ALPHA,
     });
-    const panelWidth = Math.min(PANEL_MAX_WIDTH, viewportWidth() - PANEL_SIDE_MARGIN * 2);
+    // Only width is fitted; height is handled by scrolling the rows, since a
+    // stall's stock can be longer than any phone screen at a legible size.
+    const fitScale = Math.max(
+      MIN_FIT_SCALE,
+      Math.min(1, (viewportWidth() - SCREEN_MARGIN * 2) / PANEL_WIDTH),
+    );
+    this.fit = { scale: fitScale, pivotX: viewportWidth() / 2, pivotY: viewportHeight() / 2 };
+    const maxPanelHeight = (viewportHeight() - SCREEN_MARGIN * 2) / fitScale;
+    beginModalFit(ctx, this.fit);
+    setButtonPointerSpace(fitScale, this.fit.pivotX, this.fit.pivotY);
+    const panelWidth = PANEL_WIDTH;
     // Measured before the panel is drawn because the panel's height depends on
     // it: a resident's own bark is a full sentence in their voice, far longer
     // than the one line the header used to assume, and the wrapped remainder
@@ -229,7 +267,11 @@ export class PricedMenuPanel {
     // long name and a long title would silently overlap.
     const headerHeight =
       HEADER_HEIGHT + extraBarkHeight + (menu.byline === undefined ? 0 : BYLINE_LINE_HEIGHT);
-    const height = headerHeight + menu.options.length * ROW_HEIGHT + FOOTER_HEIGHT;
+    const rowsHeight = menu.options.length * ROW_HEIGHT;
+    const height = Math.min(headerHeight + rowsHeight + FOOTER_HEIGHT, maxPanelHeight);
+    const visibleRowsHeight = height - headerHeight - FOOTER_HEIGHT;
+    this.maxScrollY = Math.max(0, rowsHeight - visibleRowsHeight);
+    this.scrollY = Math.min(this.scrollY, this.maxScrollY);
     const modal = drawModal(ctx, {
       canvasWidth: viewportWidth(),
       canvasHeight: viewportHeight(),
@@ -292,7 +334,13 @@ export class PricedMenuPanel {
     // `beginMenuFocus('...')` call to confirm each scene's declared
     // `focusContext: 'priced-menu'` overlay claim actually has an opener.
     beginMenuFocus('priced-menu', questRowIsPrimary);
-    let rowY = modal.y + headerHeight;
+    this.rowsTop = modal.y + headerHeight;
+    this.rowsBottom = this.rowsTop + visibleRowsHeight;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(modal.x, this.rowsTop, modal.width, visibleRowsHeight);
+    ctx.clip();
+    let rowY = this.rowsTop - this.scrollY;
     for (let i = 0; i < menu.options.length; i++) {
       this.renderRow(
         ctx,
@@ -306,6 +354,14 @@ export class PricedMenuPanel {
       );
       rowY += ROW_HEIGHT;
     }
+    ctx.restore();
+    drawScrollbar(ctx, {
+      x: modal.x + modal.width - SCROLLBAR_INSET,
+      trackY: this.rowsTop,
+      trackH: visibleRowsHeight,
+      contentH: rowsHeight,
+      scrollY: this.scrollY,
+    });
 
     const footerCenterY = modal.y + height - FOOTER_HEIGHT / 2;
     this.closeButton = drawButton(ctx, {
@@ -320,6 +376,7 @@ export class PricedMenuPanel {
       ...BUTTON_PRESETS.primary,
       primaryAction: !questRowIsPrimary,
     });
+    this.scrollButtons = this.renderScrollButtons(ctx, contentLeft, footerCenterY);
     endMenuFocus();
     // The purse shares the footer rather than the header: a centred title on a
     // narrow phone panel grows into the top-right corner and hides it.
@@ -331,6 +388,46 @@ export class PricedMenuPanel {
       color: '#d4c070',
       align: 'right',
     });
+    endModalFit(ctx);
+    resetButtonPointerSpace();
+  }
+
+  /** Touch has no wheel and the scene forwards no drags, so the footer carries explicit step buttons. */
+  private renderScrollButtons(
+    ctx: CanvasRenderingContext2D,
+    left: number,
+    centerY: number,
+  ): { up: ButtonResult; down: ButtonResult } | null {
+    if (this.maxScrollY <= 0) return null;
+    const common = {
+      y: centerY,
+      width: SCROLL_BTN_SIZE,
+      height: SCROLL_BTN_SIZE,
+      alignY: 'middle',
+      ...BUTTON_PRESETS.toggle,
+      labelSize: SCROLL_BTN_LABEL_SIZE,
+    } as const;
+    const up = drawButton(ctx, {
+      ...common,
+      x: left,
+      label: '▲',
+      disabled: this.scrollY <= 0,
+    });
+    const down = drawButton(ctx, {
+      ...common,
+      x: left + SCROLL_BTN_SIZE + SCROLL_BTN_GAP,
+      label: '▼',
+      disabled: this.scrollY >= this.maxScrollY,
+    });
+    return { up, down };
+  }
+
+  handleWheel(deltaY: number): void {
+    if (this.menu !== null) this.scrollBy(deltaY * WHEEL_SCROLL_SCALE);
+  }
+
+  private scrollBy(delta: number): void {
+    this.scrollY = Math.max(0, Math.min(this.maxScrollY, this.scrollY + delta));
   }
 
   private renderRow(
@@ -431,11 +528,24 @@ export class PricedMenuPanel {
    * dismiss a menu the player is mid-order in. Returns whether consumed (always
    * true while open, so the tap can't fall through to move/attack).
    */
-  handleClick(mx: number, my: number, active: Player): boolean {
+  handleClick(canvasX: number, canvasY: number, active: Player): boolean {
     const menu = this.menu;
     if (menu === null) return false;
+    const { x: mx, y: my } = modalFitPoint(this.fit, canvasX, canvasY);
+    const scrollButtons = this.scrollButtons;
+    if (scrollButtons?.up.contains(mx, my) === true) {
+      this.scrollBy(-ROW_HEIGHT);
+      return true;
+    }
+    if (scrollButtons?.down.contains(mx, my) === true) {
+      this.scrollBy(ROW_HEIGHT);
+      return true;
+    }
+    // A row scrolled under the header or footer is clipped from view, so its
+    // Buy button must not stay live there.
+    const inRowsBand = my >= this.rowsTop && my <= this.rowsBottom;
     for (let i = 0; i < this.buyButtons.length; i++) {
-      if (this.buyButtons[i].contains(mx, my)) {
+      if (inRowsBand && this.buyButtons[i].contains(mx, my)) {
         this.tryBuy(menu.options[i], active);
         return true;
       }

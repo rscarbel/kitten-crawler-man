@@ -6,8 +6,18 @@ import { QUEST_SLOT_IDX } from '../../core/ItemDefs';
 import { type ButtonRect, type PauseTab } from './types';
 import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
+import { viewportHeight } from '../../core/Viewport';
 
 const MAX_ITEMS_SHOWN = 5;
+
+// Compact layout, used when the viewport is too short for the full item lists
+const COMPACT_SUMMARY_SIZE = 10;
+const COMPACT_SUMMARY_Y_SPACING = 16;
+const COMPACT_BUTTON_HEIGHT = 36;
+const COMPACT_BUTTON_GAP = 8;
+const COMPACT_SECTION_GAP = 10;
+const COMPACT_EQUIPMENT_LABEL = 'Equipment';
+const COMPACT_INVENTORY_LABEL = 'Inventory';
 
 // Player section layout
 const SECTION_INDENT_X = 14;
@@ -63,6 +73,7 @@ function renderPlayerSection(
   onManage: () => void,
   equipmentLabel: string,
   onManageEquipment: () => void,
+  compact: boolean,
 ): number {
   let y = startY;
   const indentX = bx + SECTION_INDENT_X;
@@ -70,6 +81,42 @@ function renderPlayerSection(
 
   drawText(ctx, label, { x: indentX, y, bold: true, size: SECTION_LABEL_SIZE, color: labelColor });
   y += SECTION_LABEL_Y_SPACING;
+
+  if (compact) {
+    const equippedCount = inventory.equippedItems().length;
+    const bagCount =
+      nonNullItems(inventory.bag.slots).length +
+      nonNullItems(inventory.actionBar.slots.slice(0, QUEST_SLOT_IDX)).length;
+    drawText(ctx, `Equipped: ${equippedCount}   Bag: ${bagCount}`, {
+      x: indentX,
+      y,
+      size: COMPACT_SUMMARY_SIZE,
+      color: '#94a3b8',
+      width: contentW,
+    });
+    y += COMPACT_SUMMARY_Y_SPACING;
+
+    const halfWidth = (bw - BUTTON_WIDTH_MARGIN - COMPACT_BUTTON_GAP) / 2;
+    addButton(ctx, buttons, {
+      x: bx + BUTTON_X_OFFSET,
+      y,
+      width: halfWidth,
+      height: COMPACT_BUTTON_HEIGHT,
+      label: COMPACT_EQUIPMENT_LABEL,
+      ...BUTTON_PRESETS.primary,
+      action: onManageEquipment,
+    });
+    addButton(ctx, buttons, {
+      x: bx + BUTTON_X_OFFSET + halfWidth + COMPACT_BUTTON_GAP,
+      y,
+      width: halfWidth,
+      height: COMPACT_BUTTON_HEIGHT,
+      label: COMPACT_INVENTORY_LABEL,
+      ...BUTTON_PRESETS.primary,
+      action: onManage,
+    });
+    return y + COMPACT_BUTTON_HEIGHT + COMPACT_SECTION_GAP;
+  }
 
   // Equipped items
   const equipped = inventory.equippedItems();
@@ -200,6 +247,9 @@ export function renderInventoryTab(
     align: 'center',
   });
 
+  // The modal is centred, so its height is what remains after the equal margins.
+  const boxH = viewportHeight() - by * 2;
+  const compact = boxH < INVENTORY_TAB_BOX_H;
   let y = by + FIRST_SECTION_Y;
 
   y = renderPlayerSection(
@@ -215,6 +265,7 @@ export function renderInventoryTab(
     onManageHuman,
     'Manage Human Equipment',
     onManageHumanEquipment,
+    compact,
   );
 
   y += SECTIONS_SPACING;
@@ -232,6 +283,7 @@ export function renderInventoryTab(
     onManageCat,
     'Manage Cat Equipment',
     onManageCatEquipment,
+    compact,
   );
 
   addButton(ctx, buttons, {

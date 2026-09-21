@@ -2,7 +2,7 @@ import type { AudioManager } from '../../audio/AudioManager';
 import { type ButtonRect, type PauseTab } from './types';
 import { addButton, beginMenuFocus, endMenuFocus, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
-import { drawBox, BOX_PRESETS } from '../Box';
+import { drawBox, drawScrollbar, BOX_PRESETS } from '../Box';
 import { platform } from '../../core/Platform';
 import { settings, type QualityPreset } from '../../core/Settings';
 import { renderQuality } from '../../core/RenderQuality';
@@ -10,6 +10,8 @@ import { DIFFICULTY_LABELS, type Difficulty } from '../../core/difficultyProfile
 
 // Volume slider constants
 const TRACK_HEIGHT = 20;
+/** The drawn track is thin; the touch target around it is not. */
+const TRACK_HIT_PAD = 10;
 const LABEL_Y_OFFSET = 13;
 const TRACK_Y_OFFSET = 22;
 const PERCENTAGE_MULTIPLIER = 100;
@@ -20,14 +22,21 @@ const TRACK_FILL_HEIGHT_MARGIN = 2;
 const MIN_FILL_WIDTH = 2;
 
 // Settings tab layout
+/** Top of the scrolling list and the footer that holds the always-reachable Back button. */
+export const SETTINGS_SCROLL_TOP_Y = 46;
+export const SETTINGS_FOOTER_H = 60;
+const BACK_BUTTON_HEIGHT = 44;
+const BACK_BUTTON_BOTTOM_PAD = 8;
+const SCROLLBAR_X_OFFSET = 7;
+const SCROLLBAR_WIDTH = 3;
 const SETTINGS_TITLE_Y = 30;
 const SETTINGS_TITLE_SIZE = 18;
 const AUDIO_LABEL_X = 20;
-const AUDIO_LABEL_Y = 60;
+const AUDIO_LABEL_Y = 8;
 const AUDIO_LABEL_SIZE = 12;
 const SLIDER_WIDTH_MARGIN = 40;
 const SLIDER_X_OFFSET = 20;
-const FIRST_SLIDER_Y_OFFSET = 72;
+const FIRST_SLIDER_Y_OFFSET = 20;
 const SLIDER_SPACING = 58;
 const LAST_SLIDER_SPACING = 52;
 
@@ -35,17 +44,13 @@ const LAST_SLIDER_SPACING = 52;
 const GRAPHICS_LABEL_Y_OFFSET = 16;
 const GRAPHICS_LABEL_SIZE = 12;
 const GRAPHICS_ROW_Y_SPACING = 32;
-const QUALITY_BUTTON_HEIGHT = 36;
+const QUALITY_BUTTON_HEIGHT = 40;
 const QUALITY_BUTTON_GAP = 6;
-const QUALITY_HINT_Y_OFFSET = 16;
+const QUALITY_HINT_Y_OFFSET = 6;
 const QUALITY_HINT_SIZE = 10;
-/**
- * Height the section claims below the button row. The pause box's height is
- * fixed, and the mobile one is already tight in landscape, so the explanatory
- * line is a desktop luxury and the section is shorter without it.
- */
-const QUALITY_SECTION_Y_SPACING_WITH_HINT = 60;
-const QUALITY_SECTION_Y_SPACING_BARE = 44;
+/** Enough for a hint that wraps to three lines on a narrow phone, plus the gap before the next section. */
+const HINT_BLOCK_H = 48;
+const QUALITY_SECTION_Y_SPACING = QUALITY_BUTTON_HEIGHT + QUALITY_HINT_Y_OFFSET + HINT_BLOCK_H;
 
 /** Order the three presets are laid out in, left to right. */
 const QUALITY_CHOICES: ReadonlyArray<{ preset: QualityPreset; label: string }> = [
@@ -66,12 +71,12 @@ const QUALITY_HINTS: Record<QualityPreset, string> = {
 const DIFFICULTY_LABEL_Y_OFFSET = 16;
 const DIFFICULTY_LABEL_SIZE = 12;
 const DIFFICULTY_ROW_Y_SPACING = 32;
-const DIFFICULTY_BUTTON_HEIGHT = 36;
+const DIFFICULTY_BUTTON_HEIGHT = 40;
 const DIFFICULTY_BUTTON_GAP = 6;
-const DIFFICULTY_HINT_Y_OFFSET = 16;
+const DIFFICULTY_HINT_Y_OFFSET = 6;
 const DIFFICULTY_HINT_SIZE = 10;
-const DIFFICULTY_SECTION_Y_SPACING_WITH_HINT = 60;
-const DIFFICULTY_SECTION_Y_SPACING_BARE = 44;
+const DIFFICULTY_SECTION_Y_SPACING =
+  DIFFICULTY_BUTTON_HEIGHT + DIFFICULTY_HINT_Y_OFFSET + HINT_BLOCK_H;
 
 /** Order the three tiers are laid out in, left to right. */
 const DIFFICULTY_ORDER: ReadonlyArray<Difficulty> = ['easy', 'normal', 'hard'];
@@ -86,19 +91,18 @@ const DIFFICULTY_HINTS: Record<Difficulty, string> = {
 // Controls section
 const CONTROLS_SECTION_LABEL_Y_OFFSET = 16;
 const CONTROLS_SECTION_Y_SPACING = 32;
-const CONTROLS_BUTTON_HEIGHT = 40;
-const CONTROLS_BUTTON_Y_SPACING = 52;
+const CONTROLS_BUTTON_HEIGHT = 44;
+const CONTROLS_BUTTON_Y_SPACING = 56;
 
 // Mobile controls section
 const MOBILE_SECTION_LABEL_Y_OFFSET = 16;
 const MOBILE_SECTION_LABEL_SIZE = 12;
 const MOBILE_SECTION_Y_SPACING = 32;
-const CHAT_BUTTON_HEIGHT = 40;
-const CHAT_BUTTON_Y_SPACING = 52;
+const CHAT_BUTTON_HEIGHT = 44;
+const CHAT_BUTTON_Y_SPACING = 56;
 
 // Reset Game button
-const RESET_BUTTON_HEIGHT = 40;
-const RESET_BUTTON_Y_SPACING = 52;
+const RESET_BUTTON_HEIGHT = 44;
 /** Breathing room under the last button when the section is bottom-anchored. */
 const GAME_SECTION_BOTTOM_PAD = 12;
 const SECTION_LABEL_Y_SPACING = 32;
@@ -169,9 +173,9 @@ function renderVolumeSlider(
   const sliderX = bx;
   buttons.push({
     x: sliderX,
-    y: trackY,
+    y: trackY - TRACK_HIT_PAD,
     w: bw,
-    h: TRACK_HEIGHT,
+    h: TRACK_HEIGHT + TRACK_HIT_PAD * 2,
     positionedAction: (mx: number) => {
       setter(Math.max(0, Math.min(1, (mx - sliderX) / bw)));
     },
@@ -208,15 +212,13 @@ function renderQualityChoice(
     });
   });
 
-  if (!platform.isMobile) {
-    drawText(ctx, QUALITY_HINTS[selected], {
-      x: bx,
-      y: by + QUALITY_BUTTON_HEIGHT + QUALITY_HINT_Y_OFFSET,
-      size: QUALITY_HINT_SIZE,
-      color: '#64748b',
-      width: bw,
-    });
-  }
+  drawText(ctx, QUALITY_HINTS[selected], {
+    x: bx,
+    y: by + QUALITY_BUTTON_HEIGHT + QUALITY_HINT_Y_OFFSET,
+    size: QUALITY_HINT_SIZE,
+    color: '#64748b',
+    width: bw,
+  });
 }
 
 /**
@@ -251,15 +253,13 @@ function renderDifficultyChoice(
     });
   });
 
-  if (!platform.isMobile) {
-    drawText(ctx, DIFFICULTY_HINTS[selected], {
-      x: bx,
-      y: by + DIFFICULTY_BUTTON_HEIGHT + DIFFICULTY_HINT_Y_OFFSET,
-      size: DIFFICULTY_HINT_SIZE,
-      color: '#64748b',
-      width: bw,
-    });
-  }
+  drawText(ctx, DIFFICULTY_HINTS[selected], {
+    x: bx,
+    y: by + DIFFICULTY_BUTTON_HEIGHT + DIFFICULTY_HINT_Y_OFFSET,
+    size: DIFFICULTY_HINT_SIZE,
+    color: '#64748b',
+    width: bw,
+  });
 }
 
 function renderResetConfirmDialog(
@@ -353,7 +353,8 @@ export function renderSettingsTab(
   onRequestReset: () => void,
   onCancelReset: () => void,
   onConfirmReset: (() => void) | null,
-): void {
+  scrollY: number,
+): number {
   drawText(ctx, 'SETTINGS', {
     x: bx + bw / 2,
     y: by + SETTINGS_TITLE_Y,
@@ -363,9 +364,20 @@ export function renderSettingsTab(
     align: 'center',
   });
 
+  const scrollTop = by + SETTINGS_SCROLL_TOP_Y;
+  const scrollHeight = Math.max(0, bh - SETTINGS_SCROLL_TOP_Y - SETTINGS_FOOTER_H);
+  const scrollBottom = scrollTop + scrollHeight;
+  const contentTop = scrollTop - scrollY;
+  const scrolled: ButtonRect[] = [];
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(bx, scrollTop, bw, scrollHeight);
+  ctx.clip();
+
   drawText(ctx, 'Audio', {
     x: bx + AUDIO_LABEL_X,
-    y: by + AUDIO_LABEL_Y,
+    y: contentTop + AUDIO_LABEL_Y,
     bold: true,
     size: AUDIO_LABEL_SIZE,
     color: '#64748b',
@@ -373,17 +385,17 @@ export function renderSettingsTab(
 
   const sliderW = bw - SLIDER_WIDTH_MARGIN;
   const sliderX = bx + SLIDER_X_OFFSET;
-  let y = by + FIRST_SLIDER_Y_OFFSET;
+  let y = contentTop + FIRST_SLIDER_Y_OFFSET;
 
-  renderVolumeSlider(ctx, buttons, sliderX, y, sliderW, 'Master Volume', audio.masterVolume, (v) =>
+  renderVolumeSlider(ctx, scrolled, sliderX, y, sliderW, 'Master Volume', audio.masterVolume, (v) =>
     audio.setMasterVolumePreference(v),
   );
   y += SLIDER_SPACING;
-  renderVolumeSlider(ctx, buttons, sliderX, y, sliderW, 'Music Volume', audio.musicVolume, (v) =>
+  renderVolumeSlider(ctx, scrolled, sliderX, y, sliderW, 'Music Volume', audio.musicVolume, (v) =>
     audio.setMusicVolumePreference(v),
   );
   y += SLIDER_SPACING;
-  renderVolumeSlider(ctx, buttons, sliderX, y, sliderW, 'SFX Volume', audio.sfxVolume, (v) =>
+  renderVolumeSlider(ctx, scrolled, sliderX, y, sliderW, 'SFX Volume', audio.sfxVolume, (v) =>
     audio.setSfxVolumePreference(v),
   );
   y += LAST_SLIDER_SPACING;
@@ -396,8 +408,8 @@ export function renderSettingsTab(
     color: '#64748b',
   });
   y += GRAPHICS_ROW_Y_SPACING;
-  renderQualityChoice(ctx, buttons, sliderX, y, sliderW);
-  y += platform.isMobile ? QUALITY_SECTION_Y_SPACING_BARE : QUALITY_SECTION_Y_SPACING_WITH_HINT;
+  renderQualityChoice(ctx, scrolled, sliderX, y, sliderW);
+  y += QUALITY_SECTION_Y_SPACING;
 
   drawText(ctx, 'Difficulty', {
     x: bx + AUDIO_LABEL_X,
@@ -407,10 +419,8 @@ export function renderSettingsTab(
     color: '#64748b',
   });
   y += DIFFICULTY_ROW_Y_SPACING;
-  renderDifficultyChoice(ctx, buttons, sliderX, y, sliderW);
-  y += platform.isMobile
-    ? DIFFICULTY_SECTION_Y_SPACING_BARE
-    : DIFFICULTY_SECTION_Y_SPACING_WITH_HINT;
+  renderDifficultyChoice(ctx, scrolled, sliderX, y, sliderW);
+  y += DIFFICULTY_SECTION_Y_SPACING;
 
   drawText(ctx, 'Controls', {
     x: bx + AUDIO_LABEL_X,
@@ -421,7 +431,7 @@ export function renderSettingsTab(
   });
   y += CONTROLS_SECTION_Y_SPACING;
 
-  addButton(ctx, buttons, {
+  addButton(ctx, scrolled, {
     x: sliderX,
     y,
     width: sliderW,
@@ -443,7 +453,7 @@ export function renderSettingsTab(
     y += MOBILE_SECTION_Y_SPACING;
 
     if (onOpenChat !== null) {
-      addButton(ctx, buttons, {
+      addButton(ctx, scrolled, {
         x: sliderX,
         y,
         width: sliderW,
@@ -456,16 +466,6 @@ export function renderSettingsTab(
     }
   }
 
-  // Anchored to the bottom of the box rather than flowed after the sections
-  // above. The box height is clamped to the viewport, so on a short screen the
-  // flowed content runs past its lower edge — and Reset Game and Back are the
-  // two controls that must never become unreachable. Anchoring can crowd the
-  // section above it on such a screen, which is the better failure: the tab
-  // does not scroll, so anything below the box edge cannot be reached at all.
-  const gameSectionHeight =
-    SECTION_LABEL_Y_SPACING + RESET_BUTTON_Y_SPACING + CHAT_BUTTON_HEIGHT + GAME_SECTION_BOTTOM_PAD;
-  y = by + bh - gameSectionHeight;
-
   drawText(ctx, 'Game', {
     x: bx + AUDIO_LABEL_X,
     y: y + MOBILE_SECTION_LABEL_Y_OFFSET,
@@ -475,7 +475,7 @@ export function renderSettingsTab(
   });
   y += SECTION_LABEL_Y_SPACING;
 
-  addButton(ctx, buttons, {
+  addButton(ctx, scrolled, {
     x: sliderX,
     y,
     width: sliderW,
@@ -484,13 +484,32 @@ export function renderSettingsTab(
     ...BUTTON_PRESETS.danger,
     action: onRequestReset,
   });
-  y += RESET_BUTTON_Y_SPACING;
+  y += RESET_BUTTON_HEIGHT + GAME_SECTION_BOTTOM_PAD;
+
+  const contentHeight = y - contentTop;
+  ctx.restore();
+
+  // Only controls wholly inside the band keep a hit-rect: a half-scrolled one
+  // would otherwise still answer a click out under the title or the footer.
+  for (const rect of scrolled) {
+    const isWhollyVisible = rect.y >= scrollTop && rect.y + rect.h <= scrollBottom;
+    if (isWhollyVisible) buttons.push(rect);
+  }
+
+  drawScrollbar(ctx, {
+    x: bx + bw - SCROLLBAR_X_OFFSET,
+    trackY: scrollTop,
+    trackH: scrollHeight,
+    contentH: contentHeight,
+    scrollY,
+    width: SCROLLBAR_WIDTH,
+  });
 
   addButton(ctx, buttons, {
     x: sliderX,
-    y,
+    y: by + bh - BACK_BUTTON_HEIGHT - BACK_BUTTON_BOTTOM_PAD,
     width: sliderW,
-    height: CHAT_BUTTON_HEIGHT,
+    height: BACK_BUTTON_HEIGHT,
     label: '← Back',
     ...BUTTON_PRESETS.primary,
     primaryAction: true,
@@ -505,4 +524,6 @@ export function renderSettingsTab(
     renderResetConfirmDialog(ctx, buttons, bx, by, bw, bh, onCancelReset, onConfirmReset);
     endMenuFocus();
   }
+
+  return contentHeight;
 }

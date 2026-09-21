@@ -24,7 +24,11 @@ import {
 import { renderStatsTab } from './pause/StatsTab';
 import { renderSpendTab } from './pause/SpendTab';
 import { renderSkillsTab } from './pause/SkillsTab';
-import { renderAchievementsTab } from './pause/AchievementsTab';
+import {
+  renderAchievementsTab,
+  ACHIEVEMENTS_SCROLL_TOP_Y,
+  ACHIEVEMENTS_FOOTER_H,
+} from './pause/AchievementsTab';
 import {
   renderAbilitiesTab,
   resetAbilitiesTab,
@@ -33,7 +37,7 @@ import {
   abilitiesTabTouchMove,
   abilitiesTabTouchEnd,
 } from './pause/AbilitiesTab';
-import { renderSettingsTab } from './pause/SettingsTab';
+import { renderSettingsTab, SETTINGS_SCROLL_TOP_Y, SETTINGS_FOOTER_H } from './pause/SettingsTab';
 import {
   renderControlsTab,
   resetControlsTab,
@@ -42,7 +46,6 @@ import {
 } from './pause/ControlsTab';
 import { beginMenuFocus, endMenuFocus } from './Button';
 import { drawOverlay, drawModal, BOX_PRESETS } from './Box';
-import { platform } from '../core/Platform';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Constants for magic numbers
@@ -55,32 +58,15 @@ const ABILITIES_ACHIEVEMENTS_BOX_H = 440;
 const MODAL_PADDING = 16;
 const MODAL_BOX_WIDTH = 380;
 /**
- * The settings box height is hardcoded rather than measured from its content,
- * so it has to grow by hand whenever the tab gains a section — here, Graphics.
- * That section is shorter on mobile, where it drops the explanatory line under
- * the buttons rather than spend more of an already tight box.
- */
-const GRAPHICS_SECTION_H_MOBILE = 76;
-const GRAPHICS_SECTION_H_DESKTOP = 92;
-/**
- * The Controls section — a label and the button that opens the Controls tab —
- * is the same height on both platforms, so it is one constant rather than two.
- */
-const CONTROLS_SECTION_H = 84;
-/** Height of everything in the tab other than the Graphics and Controls sections. */
-const SETTINGS_BASE_H_MOBILE = 520;
-const SETTINGS_BASE_H_DESKTOP = 390;
-const SETTINGS_BOX_H_MOBILE =
-  SETTINGS_BASE_H_MOBILE + GRAPHICS_SECTION_H_MOBILE + CONTROLS_SECTION_H;
-const SETTINGS_BOX_H_DESKTOP =
-  SETTINGS_BASE_H_DESKTOP + GRAPHICS_SECTION_H_DESKTOP + CONTROLS_SECTION_H;
-
-/**
  * Self-contained pause menu. Holds tab state internally and rebuilds button
  * hit-rects on every render call. Call `handleClick` from the scene's click
  * handler — it returns true when a click was consumed so the caller can stop
  * propagation.
  */
+/** A press shorter and shorter-travelled than this is a tap, not a scroll drag. */
+export const MENU_TAP_DURATION_MS = 250;
+export const MENU_TAP_MAX_DISTANCE = 20;
+
 export class PauseMenu {
   private _isOpen = false;
   private tab: PauseTab = 'main';
@@ -95,6 +81,10 @@ export class PauseMenu {
   private controlsContentH = 0;
   private journalScrollY = 0;
   private journalContentH = 0;
+  private settingsScrollY = 0;
+  private settingsContentH = 0;
+  private achievementsScrollY = 0;
+  private achievementsContentH = 0;
   private touchScrollStartY: number | null = null;
 
   /**
@@ -259,6 +249,10 @@ export class PauseMenu {
       );
     } else if (this.tab === 'journal') {
       this.scrollJournal(deltaY * SCROLL_MULTIPLIER);
+    } else if (this.tab === 'settings') {
+      this.scrollSettings(deltaY * SCROLL_MULTIPLIER);
+    } else if (this.tab === 'achievements') {
+      this.scrollAchievements(deltaY * SCROLL_MULTIPLIER);
     } else if (this.tab === 'abilities') {
       scrollAbilitiesTab(deltaY);
     }
@@ -284,7 +278,9 @@ export class PauseMenu {
       this.tab === 'stats' ||
       this.tab === 'skills' ||
       this.tab === 'controls' ||
-      this.tab === 'journal'
+      this.tab === 'journal' ||
+      this.tab === 'settings' ||
+      this.tab === 'achievements'
     ) {
       this.touchScrollStartY = y;
     }
@@ -315,6 +311,10 @@ export class PauseMenu {
         this.controlsScrollY = Math.max(0, Math.min(maxScroll, this.controlsScrollY + delta));
       } else if (this.tab === 'journal') {
         this.scrollJournal(delta);
+      } else if (this.tab === 'settings') {
+        this.scrollSettings(delta);
+      } else if (this.tab === 'achievements') {
+        this.scrollAchievements(delta);
       }
     }
   }
@@ -365,6 +365,8 @@ export class PauseMenu {
   private _lastSkillsBoxH = SKILLS_BOX_H;
   private _lastControlsBoxH = CONTROLS_BOX_H;
   private _lastJournalBoxH = JOURNAL_BOX_H;
+  private _lastSettingsBoxH = SETTINGS_BOX_H;
+  private _lastAchievementsBoxH = ABILITIES_ACHIEVEMENTS_BOX_H;
 
   private get statsScrollH(): number {
     // Must match the scroll area computed in renderStatsTab: bh - STATS_BOX_TOP_MARGIN - STATS_BOX_BOTTOM_MARGIN
@@ -390,6 +392,27 @@ export class PauseMenu {
   private scrollJournal(delta: number): void {
     const maxScroll = Math.max(0, this.journalContentH - this.journalScrollH);
     this.journalScrollY = Math.max(0, Math.min(maxScroll, this.journalScrollY + delta));
+  }
+
+  private scrollSettings(delta: number): void {
+    const maxScroll = Math.max(0, this.settingsContentH - this.settingsScrollH);
+    this.settingsScrollY = Math.max(0, Math.min(maxScroll, this.settingsScrollY + delta));
+  }
+
+  private scrollAchievements(delta: number): void {
+    const maxScroll = Math.max(0, this.achievementsContentH - this.achievementsScrollH);
+    this.achievementsScrollY = Math.max(0, Math.min(maxScroll, this.achievementsScrollY + delta));
+  }
+
+  private get settingsScrollH(): number {
+    return Math.max(0, this._lastSettingsBoxH - SETTINGS_SCROLL_TOP_Y - SETTINGS_FOOTER_H);
+  }
+
+  private get achievementsScrollH(): number {
+    return Math.max(
+      0,
+      this._lastAchievementsBoxH - ACHIEVEMENTS_SCROLL_TOP_Y - ACHIEVEMENTS_FOOTER_H,
+    );
   }
 
   private get journalScrollH(): number {
@@ -465,6 +488,8 @@ export class PauseMenu {
     if (this.tab === 'skills') this._lastSkillsBoxH = boxH;
     if (this.tab === 'controls') this._lastControlsBoxH = boxH;
     if (this.tab === 'journal') this._lastJournalBoxH = boxH;
+    if (this.tab === 'settings') this._lastSettingsBoxH = boxH;
+    if (this.tab === 'achievements') this._lastAchievementsBoxH = boxH;
     const modal = drawModal(ctx, {
       canvasWidth: cw,
       canvasHeight: ch,
@@ -480,6 +505,8 @@ export class PauseMenu {
       if (t !== 'spend') this.spendScrollY = 0;
       if (t !== 'skills') this.skillsScrollY = 0;
       if (t !== 'journal') this.journalScrollY = 0;
+      if (t !== 'settings') this.settingsScrollY = 0;
+      if (t !== 'achievements') this.achievementsScrollY = 0;
       if (t !== 'abilities') resetAbilitiesTab();
       // Leaving the tab drops the drag and the filter, and hands the keyboard
       // back: the search field's capture outlives the panel that drew it, so
@@ -637,7 +664,9 @@ export class PauseMenu {
         // demonstrably looked at must never survive the look.
         humanAchievements?.markMenuSeen();
         catAchievements?.markMenuSeen();
-        renderAchievementsTab(
+        // A rotation can make the visible band taller than the stored offset allows.
+        this.scrollAchievements(0);
+        this.achievementsContentH = renderAchievementsTab(
           ctx,
           this.buttons,
           boxX,
@@ -647,6 +676,7 @@ export class PauseMenu {
           setTabWithSound,
           humanAchievements,
           catAchievements,
+          this.achievementsScrollY,
           onOpenHumanBoxes,
           onOpenCatBoxes,
         );
@@ -671,7 +701,8 @@ export class PauseMenu {
         break;
       case 'settings':
         if (this.audio !== null) {
-          renderSettingsTab(
+          this.scrollSettings(0);
+          this.settingsContentH = renderSettingsTab(
             ctx,
             this.buttons,
             boxX,
@@ -694,6 +725,7 @@ export class PauseMenu {
                   this.onResetGame?.();
                 }
               : null,
+            this.settingsScrollY,
           );
         }
         break;
@@ -752,7 +784,8 @@ export class PauseMenu {
 const STATS_BOX_H = 420;
 const SPEND_BOX_H = 480;
 const SKILLS_BOX_H = 480;
-const SETTINGS_BOX_H = platform.isMobile ? SETTINGS_BOX_H_MOBILE : SETTINGS_BOX_H_DESKTOP;
+/** Wants room for every section; `render` clamps it to the viewport and the tab scrolls inside what survives. */
+const SETTINGS_BOX_H = 640;
 /**
  * The Controls tab wants every pixel it can get — the action list is ~20 rows —
  * so it asks for the tallest box any tab uses. `render` clamps it to the

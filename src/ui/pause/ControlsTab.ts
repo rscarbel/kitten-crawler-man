@@ -37,7 +37,7 @@ const TITLE_SIZE = 18;
 
 const SIDE_MARGIN = 16;
 const VIEW_BUTTON_Y = 46;
-const VIEW_BUTTON_H = 28;
+const VIEW_BUTTON_H = 32;
 const VIEW_BUTTON_GAP = 6;
 
 /** Top of the scrolling list, measured from the box's top edge. */
@@ -46,17 +46,17 @@ export const CONTROLS_SCROLL_TOP_Y = 84;
  * Height of the footer the list must not run into: a notice line plus the two
  * full-width buttons and the breathing room under them.
  */
-export const CONTROLS_FOOTER_H = 126;
+export const CONTROLS_FOOTER_H = 92;
 
 /** Breathing room above the first row so it clears the divider it scrolls under. */
 const CONTENT_TOP_PAD = 8;
-const ROW_HEIGHT = 32;
+const ROW_HEIGHT = 36;
 const ROW_LABEL_SIZE = 11;
 const ROW_LABEL_COLOR = '#cbd5e1';
 const UNBOUND_LABEL_COLOR = '#fca5a5';
 
-const CHIP_W = 64;
-const CHIP_H = 24;
+const CHIP_W = 56;
+const CHIP_H = 30;
 const CHIP_GAP = 5;
 const CHIP_LABEL_SIZE = 11;
 const RESET_CHIP_W = 40;
@@ -81,11 +81,11 @@ const NOTICE_COLOR = '#facc15';
 const SCROLLBAR_X_OFFSET = 7;
 const SCROLLBAR_WIDTH = 3;
 
-const FOOTER_BUTTON_H = 34;
+const FOOTER_BUTTON_H = 40;
 const FOOTER_BUTTON_GAP = 8;
 const NOTICE_Y_FROM_FOOTER_TOP = 14;
 const HINT_Y_FROM_FOOTER_TOP = 16;
-const FOOTER_FIRST_BUTTON_Y_FROM_FOOTER_TOP = 38;
+const FOOTER_FIRST_BUTTON_Y_FROM_FOOTER_TOP = 32;
 
 const CONFIRM_DIALOG_H = 160;
 const CONFIRM_DIALOG_SIDE_MARGIN = 20;
@@ -521,12 +521,13 @@ export function renderControlsTab(
   }
 
   const footerButtonY = footerTop + FOOTER_FIRST_BUTTON_Y_FROM_FOOTER_TOP;
+  const footerButtonW = Math.floor((rowWidth - FOOTER_BUTTON_GAP) / 2);
   addButton(ctx, buttons, {
     x: bx + SIDE_MARGIN,
     y: footerButtonY,
-    width: rowWidth,
+    width: footerButtonW,
     height: FOOTER_BUTTON_H,
-    label: 'Restore Default Keys',
+    label: 'Restore Keys',
     ...BUTTON_PRESETS.danger,
     disabled: currentView !== 'keyboard',
     action: () => {
@@ -537,9 +538,9 @@ export function renderControlsTab(
   });
 
   addButton(ctx, buttons, {
-    x: bx + SIDE_MARGIN,
-    y: footerButtonY + FOOTER_BUTTON_H + FOOTER_BUTTON_GAP,
-    width: rowWidth,
+    x: bx + SIDE_MARGIN + footerButtonW + FOOTER_BUTTON_GAP,
+    y: footerButtonY,
+    width: footerButtonW,
     height: FOOTER_BUTTON_H,
     label: '← Back',
     ...BUTTON_PRESETS.primary,

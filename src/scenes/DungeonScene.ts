@@ -36,7 +36,7 @@ import { getLevelDef } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { LevelCompleteScreen } from '../ui/LevelCompleteScreen';
-import type { PauseMenu } from '../ui/PauseMenu';
+import { MENU_TAP_DURATION_MS, MENU_TAP_MAX_DISTANCE, type PauseMenu } from '../ui/PauseMenu';
 import { SpellSystem } from '../systems/SpellSystem';
 import type { InventoryItem } from '../core/ItemDefs';
 import { AchievementManager } from '../core/AchievementManager';
@@ -622,8 +622,6 @@ const KEYBOARD_HERO_MUSIC_HANDOVER_FADE_MS = 400;
 /** The keyboard-hero per-hit tick sits under the track rather than over it. */
 const KEYBOARD_HERO_HIT_TICK_VOLUME = 0.45;
 const LONGPRESS_TIMEOUT_MS = 500;
-const MENU_TAP_DURATION_MS = 250;
-const MENU_TAP_MAX_DISTANCE = 20;
 const TOUCH_DRAG_THRESHOLD = 10;
 const MINIMAP_DRAG_THRESHOLD = 5;
 

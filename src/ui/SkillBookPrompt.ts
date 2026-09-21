@@ -40,9 +40,9 @@ const WARNING_SIZE = 10;
 
 // Buttons
 const BUTTON_WIDTH = 116;
-const BUTTON_HEIGHT = 34;
+const BUTTON_HEIGHT = 40;
 const BUTTON_GAP = 12;
-const BUTTON_BOTTOM_OFFSET = 50;
+const BUTTON_BOTTOM_OFFSET = 54;
 
 const TITLE_COLOR = '#e9d5ff';
 const NAME_COLOR = '#f5f3ff';

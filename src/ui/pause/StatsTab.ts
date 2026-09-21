@@ -12,7 +12,7 @@ const HEADER_Y_OFFSET = 34;
 const HEADER_Y_TEXT_OFFSET = 13;
 const HEADER_TEXT_SIZE = 16;
 const SCROLL_TOP_Y_OFFSET = 50;
-const BACK_BTN_H = 52;
+const BACK_BTN_H = 56;
 
 // Content layout constants
 const CONTENT_START_Y = 14;
@@ -65,7 +65,7 @@ const SCROLLBAR_WIDTH = 3;
 const BACK_BTN_X_OFFSET = 20;
 const BACK_BTN_Y_OFFSET = 8;
 const BACK_BTN_WIDTH_REDUCTION = 40;
-const BACK_BTN_HEIGHT = 36;
+const BACK_BTN_HEIGHT = 40;
 
 /** Returns total content height so PauseMenu can clamp scroll. */
 export function renderStatsTab(
@@ -106,16 +106,19 @@ export function renderStatsTab(
   const statBlock = (p: Player): number => {
     const midStat =
       p instanceof HumanPlayer ? `EXP: ${p.explosivesHandling}` : `INT: ${p.intelligence}`;
-    drawText(
-      ctx,
-      `HP: ${p.hp}/${p.maxHp}   STR: ${p.strength}   ${midStat}   CON: ${p.constitution}   DEX: ${p.dexterity}`,
-      {
-        x: bx + STAT_BLOCK_X,
-        y: y - STAT_LABEL_Y_OFFSET,
-        size: STAT_SUBLABEL_SIZE,
-        color: '#e2e8f0',
-      },
-    );
+    drawText(ctx, `HP: ${p.hp}/${p.maxHp}   STR: ${p.strength}   ${midStat}`, {
+      x: bx + STAT_BLOCK_X,
+      y: y - STAT_LABEL_Y_OFFSET,
+      size: STAT_SUBLABEL_SIZE,
+      color: '#e2e8f0',
+    });
+    y += LINE_HEIGHT;
+    drawText(ctx, `CON: ${p.constitution}   DEX: ${p.dexterity}`, {
+      x: bx + STAT_BLOCK_X,
+      y: y - STAT_LABEL_Y_OFFSET,
+      size: STAT_SUBLABEL_SIZE,
+      color: '#e2e8f0',
+    });
     y += LINE_HEIGHT;
     drawText(ctx, `XP: ${p.xp} / ${p.xpNeededForNextLevel}`, {
       x: bx + STAT_BLOCK_X,

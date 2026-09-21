@@ -31,6 +31,8 @@ const SEARCH_CARET_COLOR = '#e2e8f0';
 const SEARCH_CARET_WIDTH = 1;
 const SEARCH_CARET_INSET_Y = 4;
 const SEARCH_CARET_GAP = 1;
+/** The drawn field is short; a fingertip needs more vertical room to focus it. */
+const SEARCH_HIT_SLOP_Y = 10;
 
 const BLINK_PERIOD_FRAMES = SEARCH_CARET_BLINK_FRAMES * 2;
 
@@ -162,12 +164,17 @@ export class SearchField {
     const showsPlaceholder = this.text.length === 0;
     const textX = x + SEARCH_TEXT_PAD_X;
     const textY = y + Math.round((h - SEARCH_FONT_SIZE) / 2);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
     drawText(ctx, showsPlaceholder ? SEARCH_PLACEHOLDER : this.text, {
       x: textX,
       y: textY,
       size: SEARCH_FONT_SIZE,
       color: showsPlaceholder ? SEARCH_PLACEHOLDER_COLOR : SEARCH_TEXT_COLOR,
     });
+    ctx.restore();
 
     if (!focused) return;
 
@@ -188,7 +195,12 @@ export class SearchField {
   hits(mx: number, my: number): boolean {
     const rect = this.lastRect;
     if (rect === null) return false;
-    return pointInRect(mx, my, rect);
+    return pointInRect(mx, my, {
+      x: rect.x,
+      y: rect.y - SEARCH_HIT_SLOP_Y,
+      w: rect.w,
+      h: rect.h + SEARCH_HIT_SLOP_Y * 2,
+    });
   }
 
   /**

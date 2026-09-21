@@ -21,10 +21,18 @@ const SUBTITLE_Y_OFFSET = 20;
 const SUBTITLE_FONT_SIZE = 14;
 const SUBTITLE_LINE_HEIGHT = 20;
 const BUTTON_WIDTH = 210;
+const MIN_TOUCH_BUTTON_HEIGHT = 40;
 const BUTTON_HEIGHT = 48;
 const BUTTON_Y_OFFSET = 75;
 const BUTTON_LABEL_SIZE = 17;
 const YOU_DIED_FONT_SIZE = 72;
+/** Monospace bold glyph advance as a fraction of font size, used to keep the headline inside the screen. */
+const HEADLINE_GLYPH_ADVANCE = 0.62;
+const HEADLINE_GLYPH_COUNT = 'YOU DIED'.length;
+const HEADLINE_SIDE_MARGIN = 16;
+/** Height of the stacked content block (headline top to button bottom) at full scale. */
+const DESIGN_CONTENT_HEIGHT = YOU_DIED_OFFSET_Y + BUTTON_Y_OFFSET + BUTTON_HEIGHT;
+const SCREEN_VERTICAL_MARGIN = 12;
 
 /** Where a death screen exit sends the player: the floor restart, or an in-run safe-room checkpoint. */
 export type RespawnMode = 'floorRestart' | 'checkpoint';
@@ -93,6 +101,12 @@ export class DeathScreen {
 
     const w = viewportWidth();
     const h = viewportHeight();
+    const fit = Math.min(1, (h - SCREEN_VERTICAL_MARGIN * 2) / DESIGN_CONTENT_HEIGHT);
+    const u = (designPx: number): number => Math.round(designPx * fit);
+    const headlineSize = Math.min(
+      u(YOU_DIED_FONT_SIZE),
+      Math.floor((w - HEADLINE_SIDE_MARGIN * 2) / (HEADLINE_GLYPH_COUNT * HEADLINE_GLYPH_ADVANCE)),
+    );
 
     drawOverlay(ctx, { canvasWidth: w, canvasHeight: h, alpha: this.alpha });
 
@@ -112,9 +126,9 @@ export class DeathScreen {
     // "YOU DIED"
     drawText(ctx, 'YOU DIED', {
       x: w / 2,
-      y: h / 2 - YOU_DIED_OFFSET_Y,
+      y: h / 2 - u(YOU_DIED_OFFSET_Y),
       bold: true,
-      size: YOU_DIED_FONT_SIZE,
+      size: headlineSize,
       color: '#dc2626',
       align: 'center',
       alpha: textAlpha,
@@ -125,7 +139,7 @@ export class DeathScreen {
       const explanationW = Math.min(EXPLANATION_MAX_WIDTH, w - EXPLANATION_PADDING);
       drawText(ctx, this._explanation, {
         x: w / 2 - explanationW / 2,
-        y: h / 2 + EXPLANATION_Y_OFFSET,
+        y: h / 2 + u(EXPLANATION_Y_OFFSET),
         size: EXPLANATION_FONT_SIZE,
         color: '#e2bfa0',
         align: 'center',
@@ -139,7 +153,7 @@ export class DeathScreen {
     const subtitleW = Math.min(SUBTITLE_MAX_WIDTH, w - SUBTITLE_PADDING);
     drawText(ctx, RESPAWN_SUBTITLE[this._mode], {
       x: w / 2 - subtitleW / 2,
-      y: h / 2 + SUBTITLE_Y_OFFSET,
+      y: h / 2 + u(SUBTITLE_Y_OFFSET),
       size: SUBTITLE_FONT_SIZE,
       color: '#94a3b8',
       align: 'center',
@@ -150,9 +164,9 @@ export class DeathScreen {
 
     // Restart button
     const btnW = BUTTON_WIDTH;
-    const btnH = BUTTON_HEIGHT;
+    const btnH = Math.max(u(BUTTON_HEIGHT), MIN_TOUCH_BUTTON_HEIGHT);
     const btnX = w / 2 - btnW / 2;
-    const btnY = h / 2 + BUTTON_Y_OFFSET;
+    const btnY = h / 2 + u(BUTTON_Y_OFFSET);
     this._btnResult = drawButton(ctx, {
       x: btnX,
       y: btnY,

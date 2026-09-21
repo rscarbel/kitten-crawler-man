@@ -7,14 +7,20 @@
  */
 
 import { platform } from '../core/Platform';
-import { drawModal, drawOverlay, BOX_PRESETS } from './Box';
+import { drawModal, drawOverlay, drawScrollbar, BOX_PRESETS } from './Box';
 import { suppressMenuFocus } from './Button';
 import { drawText, wrapText, TEXT_PRESETS } from './TextBox';
 import type { Notice, NoticeTone } from '../systems/townNotices';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const PANEL_WIDTH = 440;
+/** Gap kept between the panel and the screen edges on phones narrower than the ideal width. */
+const PANEL_SIDE_MARGIN = 8;
 const PANEL_PADDING = 20;
+/** Fraction of the visible list a tap scrolls, so the last line of the old page stays as a landmark. */
+const TAP_SCROLL_FRACTION = 0.85;
+const WHEEL_SCROLL_SCALE = 0.5;
+const SCROLLBAR_INSET = 8;
 const PANEL_MAX_HEIGHT_FRACTION = 0.92;
 
 const TITLE_SIZE = 18;
@@ -56,6 +62,9 @@ interface LaidOutNotice {
 export class NoticeBoardPanel {
   private notices: Notice[] = [];
   private open = false;
+  private scrollY = 0;
+  private maxScrollY = 0;
+  private visibleHeight = 0;
 
   get isOpen(): boolean {
     return this.open;
@@ -64,24 +73,42 @@ export class NoticeBoardPanel {
   openWith(notices: ReadonlyArray<Notice>): void {
     this.notices = [...notices];
     this.open = true;
+    this.scrollY = 0;
   }
 
   close(): void {
     this.open = false;
   }
 
-  /** Any click while open dismisses the board. Returns whether it was consumed. */
+  /**
+   * A tap pages down while postings remain below the fold and dismisses once the
+   * bottom is showing, so a phone can read every posting without a drag gesture.
+   * Returns whether it was consumed.
+   */
   handleClick(): boolean {
     if (!this.open) return false;
+    if (this.scrollY < this.maxScrollY) {
+      this.scrollBy(this.visibleHeight * TAP_SCROLL_FRACTION);
+      return true;
+    }
     this.close();
     return true;
+  }
+
+  handleWheel(deltaY: number): void {
+    if (this.open) this.scrollBy(deltaY * WHEEL_SCROLL_SCALE);
+  }
+
+  private scrollBy(delta: number): void {
+    this.scrollY = Math.max(0, Math.min(this.maxScrollY, this.scrollY + delta));
   }
 
   render(ctx: CanvasRenderingContext2D): void {
     if (!this.open) return;
     suppressMenuFocus('notice-board');
 
-    const bodyWidth = PANEL_WIDTH - PANEL_PADDING * 2;
+    const panelWidth = Math.min(PANEL_WIDTH, viewportWidth() - PANEL_SIDE_MARGIN * 2);
+    const bodyWidth = panelWidth - PANEL_PADDING * 2;
     const laidOut = this.layout(ctx, bodyWidth);
     const contentHeight = laidOut.reduce((sum, n) => sum + n.height + NOTICE_GAP, 0);
     const fullHeight = HEADER_HEIGHT + contentHeight + FOOTER_HEIGHT + PANEL_PADDING;
@@ -95,7 +122,7 @@ export class NoticeBoardPanel {
     const modal = drawModal(ctx, {
       canvasWidth: viewportWidth(),
       canvasHeight: viewportHeight(),
-      width: PANEL_WIDTH,
+      width: panelWidth,
       height,
       radius: PANEL_RADIUS,
       shadow: true,
@@ -104,7 +131,7 @@ export class NoticeBoardPanel {
 
     const left = modal.inner.x + PANEL_PADDING;
     drawText(ctx, 'TOWN NOTICE BOARD', {
-      x: modal.x + PANEL_WIDTH / 2,
+      x: modal.x + panelWidth / 2,
       y: modal.inner.y + PANEL_PADDING,
       size: TITLE_SIZE,
       bold: true,
@@ -113,15 +140,35 @@ export class NoticeBoardPanel {
       outline: true,
     });
 
-    let y = modal.inner.y + PANEL_PADDING + HEADER_HEIGHT;
+    const listTop = modal.inner.y + PANEL_PADDING + HEADER_HEIGHT;
+    const listBottom = modal.y + height - FOOTER_HEIGHT;
+    this.visibleHeight = listBottom - listTop;
+    this.maxScrollY = Math.max(0, contentHeight - this.visibleHeight);
+    this.scrollY = Math.min(this.scrollY, this.maxScrollY);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(modal.x, listTop, panelWidth, this.visibleHeight);
+    ctx.clip();
+    let y = listTop - this.scrollY;
     for (const item of laidOut) {
       this.renderNotice(ctx, item, left, y, bodyWidth);
       y += item.height + NOTICE_GAP;
     }
+    ctx.restore();
+    drawScrollbar(ctx, {
+      x: modal.x + panelWidth - SCROLLBAR_INSET,
+      trackY: listTop,
+      trackH: this.visibleHeight,
+      contentH: contentHeight,
+      scrollY: this.scrollY,
+    });
 
-    const closeHint = platform.isMobile ? 'TAP to close' : 'SPACE / ESC to close';
+    const hasMore = this.scrollY < this.maxScrollY;
+    const tapHint = hasMore ? 'TAP for more' : 'TAP to close';
+    const closeHint = platform.isMobile ? tapHint : 'SPACE / ESC to close';
     drawText(ctx, closeHint, {
-      x: modal.x + PANEL_WIDTH / 2,
+      x: modal.x + panelWidth / 2,
       y: modal.y + height - FOOTER_HEIGHT,
       align: 'center',
       ...TEXT_PRESETS.muted,

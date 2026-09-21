@@ -32,7 +32,7 @@ const BOX_W = 420;
 const BOX_H = 280;
 const FADE_IN_FRAMES = 18;
 const OK_BTN_W = 100;
-const OK_BTN_H = 36;
+const OK_BTN_H = 40;
 
 // Magic number constants
 const OVERLAY_ALPHA = 0.55;

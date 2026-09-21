@@ -2,7 +2,7 @@ import { ITEM_DEF } from '../core/ItemDefs';
 import type { LootDrop } from '../creatures/Mob';
 import type { TreasureChest } from '../systems/TreasureChestSystem';
 import { getChestImage, getChestSourceScale } from '../systems/TreasureChestSystem';
-import { drawText, TEXT_PRESETS } from './TextBox';
+import { drawText, measureTextBox, TEXT_PRESETS } from './TextBox';
 import { drawBox, drawOverlay, BOX_PRESETS } from './Box';
 import { suppressMenuFocus } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -59,6 +59,8 @@ const LOOT_COLUMN_HEADER_SIZE = 11;
 const LOOT_COLUMN_DIVIDER_Y_OFFSET = 40;
 const LOOT_ITEMS_Y_OFFSET = 16;
 const LOOT_ITEM_SIZE = 11;
+const LOOT_ITEM_MIN_SIZE = 8;
+const LOOT_ITEM_SHRINK_STEP = 1;
 
 // Opening animation
 const OPENING_ANIMATION_FRAME_STEP = 10;
@@ -331,7 +333,6 @@ export class ChestRewardDialog {
     const leftColX = boxX + colPad;
     const rightColX = dividerX + colPad;
 
-    // Column headers
     drawText(ctx, 'Human', {
       x: leftColX,
       y: lootStartY,
@@ -351,7 +352,6 @@ export class ChestRewardDialog {
       color: '#fb923c',
     });
 
-    // Vertical divider
     ctx.save();
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.lineWidth = 1;
@@ -361,108 +361,87 @@ export class ChestRewardDialog {
     ctx.stroke();
     ctx.restore();
 
-    let leftY = lootStartY + LOOT_ITEMS_Y_OFFSET;
-    let rightY = lootStartY + LOOT_ITEMS_Y_OFFSET;
+    const itemsTop = lootStartY + LOOT_ITEMS_Y_OFFSET;
+    const itemsBottom = boxY + boxH - LOOT_COLUMN_DIVIDER_Y_OFFSET;
+    const leftEntries = lootEntries(split.humanLoot, split.displayLabels, split.customHumanEntries);
+    const rightEntries = lootEntries(split.catLoot, split.displayLabels, split.customCatEntries);
 
-    // Human loot
-    if (split.humanLoot.coins > 0) {
-      const { totalHeight } = drawText(ctx, `${split.humanLoot.coins} coins`, {
-        x: leftColX,
-        y: leftY,
-        width: colW,
-        align: 'center',
-        ...TEXT_PRESETS.value,
-      });
-      leftY += totalHeight;
-    }
-    for (const entry of split.humanLoot.items) {
-      const def = ITEM_DEF[entry.id];
-      const baseName = split.displayLabels?.[entry.id] ?? def.name;
-      const label = entry.quantity > 1 ? `${entry.quantity}x ${baseName}` : baseName;
-      const { totalHeight } = drawText(ctx, label, {
-        x: leftColX,
-        y: leftY,
-        width: colW,
-        align: 'center',
-        size: LOOT_ITEM_SIZE,
-        color: LOOT_ENTRY_COLOR,
-      });
-      leftY += totalHeight;
-    }
-    for (const label of split.customHumanEntries ?? []) {
-      const { totalHeight } = drawText(ctx, label, {
-        x: leftColX,
-        y: leftY,
-        width: colW,
-        align: 'center',
-        size: LOOT_ITEM_SIZE,
-        color: LOOT_ENTRY_COLOR,
-      });
-      leftY += totalHeight;
-    }
-    const humanIsEmpty =
-      split.humanLoot.coins === 0 &&
-      split.humanLoot.items.length === 0 &&
-      (split.customHumanEntries?.length ?? 0) === 0;
-    if (humanIsEmpty) {
-      drawText(ctx, '(empty)', {
-        x: leftColX,
-        y: leftY,
-        width: colW,
-        align: 'center',
-        ...TEXT_PRESETS.hint,
-      });
+    // A long haul on a short phone screen shrinks the text instead of running
+    // into the continue prompt underneath.
+    let itemSize = LOOT_ITEM_SIZE;
+    for (;;) {
+      const tallest = Math.max(
+        columnHeight(ctx, leftEntries, colW, itemSize),
+        columnHeight(ctx, rightEntries, colW, itemSize),
+      );
+      if (itemsTop + tallest <= itemsBottom || itemSize <= LOOT_ITEM_MIN_SIZE) break;
+      itemSize -= LOOT_ITEM_SHRINK_STEP;
     }
 
-    // Cat loot
-    if (split.catLoot.coins > 0) {
-      const { totalHeight } = drawText(ctx, `${split.catLoot.coins} coins`, {
-        x: rightColX,
-        y: rightY,
-        width: colW,
-        align: 'center',
-        ...TEXT_PRESETS.value,
-      });
-      rightY += totalHeight;
-    }
-    for (const entry of split.catLoot.items) {
-      const def = ITEM_DEF[entry.id];
-      const baseName = split.displayLabels?.[entry.id] ?? def.name;
-      const label = entry.quantity > 1 ? `${entry.quantity}x ${baseName}` : baseName;
-      const { totalHeight } = drawText(ctx, label, {
-        x: rightColX,
-        y: rightY,
-        width: colW,
-        align: 'center',
-        size: LOOT_ITEM_SIZE,
-        color: LOOT_ENTRY_COLOR,
-      });
-      rightY += totalHeight;
-    }
-    for (const label of split.customCatEntries ?? []) {
-      const { totalHeight } = drawText(ctx, label, {
-        x: rightColX,
-        y: rightY,
-        width: colW,
-        align: 'center',
-        size: LOOT_ITEM_SIZE,
-        color: LOOT_ENTRY_COLOR,
-      });
-      rightY += totalHeight;
-    }
+    drawLootColumn(ctx, leftEntries, leftColX, itemsTop, colW, itemSize);
+    drawLootColumn(ctx, rightEntries, rightColX, itemsTop, colW, itemSize);
+  }
+}
 
-    const catIsEmpty =
-      split.catLoot.coins === 0 &&
-      split.catLoot.items.length === 0 &&
-      (split.customCatEntries?.length ?? 0) === 0;
-    if (catIsEmpty) {
-      drawText(ctx, '(empty)', {
-        x: rightColX,
-        y: rightY,
-        width: colW,
-        align: 'center',
-        ...TEXT_PRESETS.hint,
-      });
-    }
+interface LootEntry {
+  label: string;
+  kind: 'coins' | 'item' | 'empty';
+}
+
+function lootEntries(
+  loot: ChestLootSplit['humanLoot'],
+  displayLabels: ChestLootSplit['displayLabels'],
+  customEntries: ReadonlyArray<string> | undefined,
+): LootEntry[] {
+  const entries: LootEntry[] = [];
+  if (loot.coins > 0) entries.push({ label: `${loot.coins} coins`, kind: 'coins' });
+  for (const entry of loot.items) {
+    const baseName = displayLabels?.[entry.id] ?? ITEM_DEF[entry.id].name;
+    const label = entry.quantity > 1 ? `${entry.quantity}x ${baseName}` : baseName;
+    entries.push({ label, kind: 'item' });
+  }
+  for (const label of customEntries ?? []) entries.push({ label, kind: 'item' });
+  if (entries.length === 0) entries.push({ label: '(empty)', kind: 'empty' });
+  return entries;
+}
+
+function columnHeight(
+  ctx: CanvasRenderingContext2D,
+  entries: ReadonlyArray<LootEntry>,
+  width: number,
+  itemSize: number,
+): number {
+  let total = 0;
+  for (const entry of entries) {
+    const size = entry.kind === 'item' ? itemSize : undefined;
+    total += measureTextBox(ctx, entry.label, { width, size }).totalHeight;
+  }
+  return total;
+}
+
+function drawLootColumn(
+  ctx: CanvasRenderingContext2D,
+  entries: ReadonlyArray<LootEntry>,
+  x: number,
+  top: number,
+  width: number,
+  itemSize: number,
+): void {
+  let y = top;
+  for (const entry of entries) {
+    const style =
+      entry.kind === 'coins'
+        ? TEXT_PRESETS.value
+        : entry.kind === 'empty'
+          ? TEXT_PRESETS.hint
+          : { size: itemSize, color: LOOT_ENTRY_COLOR };
+    const { totalHeight } = drawText(ctx, entry.label, {
+      x,
+      y,
+      width,
+      align: 'center',
+      ...style,
+    });
+    y += totalHeight;
   }
 }

@@ -1,8 +1,26 @@
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import { drawText } from '../ui/TextBox';
-import { drawModal, drawOverlay, drawBox, BOX_PRESETS } from '../ui/Box';
-import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
+import {
+  drawModal,
+  drawOverlay,
+  drawBox,
+  BOX_PRESETS,
+  beginModalFit,
+  endModalFit,
+  modalFitPoint,
+  MODAL_FIT_NONE,
+  type ModalFit,
+} from '../ui/Box';
+import { fitPanel } from '../ui/panelFit';
+import {
+  beginMenuFocus,
+  drawButton,
+  endMenuFocus,
+  BUTTON_PRESETS,
+  setButtonPointerSpace,
+  resetButtonPointerSpace,
+} from '../ui/Button';
 import { pointInRect } from '../utils';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -12,8 +30,6 @@ const PANEL_W = 540;
 const PANEL_H = 536;
 const PANEL_PADDING = 24;
 const OVERLAY_ALPHA = 0.6;
-/** Minimum horizontal breathing room kept between the panel and the canvas edges on narrow (mobile) viewports. */
-const PANEL_CANVAS_SIDE_MARGIN = 40;
 
 const TITLE_SIZE = 18;
 const SUBTITLE_SIZE = 11;
@@ -117,6 +133,8 @@ export class ClubVipLoungeSystem {
   /** Transient status line (e.g. "Not enough coins"); cleared on the next valid action. */
   private feedbackMsg = '';
   private buttons: VipButton[] = [];
+  /** Set every render; clicks are mapped back through it before hit-testing. */
+  private fit: ModalFit = MODAL_FIT_NONE;
 
   constructor(private readonly audio: AudioManager | null) {}
 
@@ -197,8 +215,9 @@ export class ClubVipLoungeSystem {
   }
 
   handleClick(mx: number, my: number, player: Player): void {
+    const point = modalFitPoint(this.fit, mx, my);
     for (const btn of this.buttons) {
-      if (!pointInRect(mx, my, btn)) continue;
+      if (!pointInRect(point.x, point.y, btn)) continue;
       const action = btn.action;
       switch (action.kind) {
         case 'heal':
@@ -226,7 +245,11 @@ export class ClubVipLoungeSystem {
       canvasHeight: viewportHeight(),
       alpha: OVERLAY_ALPHA,
     });
-    const panelW = Math.min(PANEL_W, viewportWidth() - PANEL_CANVAS_SIDE_MARGIN);
+    this.fit = fitPanel(PANEL_W, PANEL_H);
+    beginModalFit(ctx, this.fit);
+    setButtonPointerSpace(this.fit.scale, this.fit.pivotX, this.fit.pivotY);
+
+    const panelW = PANEL_W;
     const panel = drawModal(ctx, {
       canvasWidth: viewportWidth(),
       canvasHeight: viewportHeight(),
@@ -294,6 +317,9 @@ export class ClubVipLoungeSystem {
       color: '#9a8452',
       align: 'center',
     });
+
+    endModalFit(ctx);
+    resetButtonPointerSpace();
   }
 
   /**

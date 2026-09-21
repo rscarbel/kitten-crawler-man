@@ -10,11 +10,13 @@ import {
 } from '../../core/SkillManager';
 import { type ButtonRect, type PauseTab } from './types';
 import { addButton, BUTTON_PRESETS } from '../Button';
-import { drawText } from '../TextBox';
+import { drawText, measureTextBox } from '../TextBox';
 import { drawDivider, drawProgressBar, drawScrollbar } from '../Box';
 
 // Card geometry
 const CARD_H = 84;
+/** Line pitch `drawText` gives 9-10px text; the card's fixed rows assume one line each. */
+const CARD_TEXT_LINE_H = 14;
 const CARD_GAP = 6;
 const CARD_BORDER_WIDTH = 3;
 const CARD_PADDING = 10;
@@ -57,7 +59,6 @@ const CHAR_LABEL_SIZE = 13;
 const CHAR_COUNT_X_OFFSET = 20;
 const CHAR_COUNT_SIZE = 11;
 const EMPTY_LINE_SIZE = 10;
-const EMPTY_LINE_H = 15;
 
 // Cards
 const CARD_X_OFFSET = 16;
@@ -95,22 +96,37 @@ function renderLevelPips(
   }
 }
 
+/** Card height for `state`: the effect and flavor lines wrap, so a narrow card grows. */
+function skillCardHeight(ctx: CanvasRenderingContext2D, w: number, state: SkillState): number {
+  const def = getSkillDef(state.id);
+  const textWidth = w - CARD_BORDER_WIDTH - CARD_PADDING - CARD_RIGHT_EDGE_OFFSET;
+  const effect = measureTextBox(ctx, def.describeEffect(state.level), {
+    size: CARD_EFFECT_SIZE,
+    width: textWidth,
+  });
+  const flavor = measureTextBox(ctx, def.flavor, { size: CARD_FLAVOR_SIZE, width: textWidth });
+  const extraLines = effect.lineCount + flavor.lineCount - 2;
+  return CARD_H + Math.max(0, extraLines) * CARD_TEXT_LINE_H;
+}
+
 function renderSkillCard(
   ctx: CanvasRenderingContext2D,
   localX: number,
   localY: number,
   w: number,
   state: SkillState,
+  cardH: number,
 ): void {
   const def = getSkillDef(state.id);
+  const extra = cardH - CARD_H;
 
   ctx.fillStyle = SKILL_CARD_BG;
-  ctx.fillRect(localX, localY, w, CARD_H);
+  ctx.fillRect(localX, localY, w, cardH);
   ctx.fillStyle = SKILL_ACCENT;
-  ctx.fillRect(localX, localY, CARD_BORDER_WIDTH, CARD_H);
+  ctx.fillRect(localX, localY, CARD_BORDER_WIDTH, cardH);
   ctx.strokeStyle = SKILL_DIM_BORDER;
   ctx.lineWidth = 1;
-  ctx.strokeRect(localX, localY, w, CARD_H);
+  ctx.strokeRect(localX, localY, w, cardH);
 
   const textX = localX + CARD_BORDER_WIDTH + CARD_PADDING;
   const rightEdge = localX + w - CARD_RIGHT_EDGE_OFFSET;
@@ -125,6 +141,11 @@ function renderSkillCard(
   });
   renderLevelPips(ctx, rightEdge, localY + PIP_Y_OFFSET, state.level, def.maxLevel);
 
+  const effectLines = measureTextBox(ctx, def.describeEffect(state.level), {
+    size: CARD_EFFECT_SIZE,
+    width: textWidth,
+  }).lineCount;
+  const effectExtra = (effectLines - 1) * CARD_TEXT_LINE_H;
   drawText(ctx, def.describeEffect(state.level), {
     x: textX,
     y: localY + CARD_EFFECT_Y,
@@ -135,7 +156,7 @@ function renderSkillCard(
 
   drawText(ctx, def.flavor, {
     x: textX,
-    y: localY + CARD_FLAVOR_Y,
+    y: localY + CARD_FLAVOR_Y + effectExtra,
     size: CARD_FLAVOR_SIZE,
     color: '#64748b',
     width: textWidth,
@@ -145,7 +166,7 @@ function renderSkillCard(
   const atMax = !Number.isFinite(needed);
   drawProgressBar(ctx, {
     x: textX,
-    y: localY + CARD_BAR_Y,
+    y: localY + CARD_BAR_Y + extra,
     width: textWidth,
     height: CARD_BAR_H,
     value: atMax ? 1 : state.usesTowardNext / needed,
@@ -154,7 +175,7 @@ function renderSkillCard(
   });
   drawText(ctx, atMax ? 'Mastered' : `${state.usesTowardNext} / ${needed} uses to next level`, {
     x: textX,
-    y: localY + CARD_BAR_LABEL_Y,
+    y: localY + CARD_BAR_LABEL_Y + extra,
     size: CARD_BAR_LABEL_SIZE,
     color: atMax ? '#fbbf24' : '#475569',
   });
@@ -244,38 +265,39 @@ export function renderSkillsTab(
     y += SECTION_HEADER_H;
 
     if (states.length === 0) {
-      drawText(ctx, 'No skills yet. The dungeon has not offered any.', {
+      y += drawText(ctx, 'No skills yet. The dungeon has not offered any.', {
         x: bx + CARD_X_OFFSET,
         y,
         size: EMPTY_LINE_SIZE,
         color: '#64748b',
-      });
-      y += EMPTY_LINE_H;
-      drawText(ctx, 'Skill books drop from the things that lived by them.', {
+        width: bw - CARD_WIDTH_MARGIN,
+      }).totalHeight;
+      y += drawText(ctx, 'Skill books drop from the things that lived by them.', {
         x: bx + CARD_X_OFFSET,
         y,
         size: EMPTY_LINE_SIZE,
         color: '#475569',
-      });
-      y += EMPTY_LINE_H;
+        width: bw - CARD_WIDTH_MARGIN,
+      }).totalHeight;
     } else {
       const cardX = bx + CARD_X_OFFSET;
       const cardW = bw - CARD_WIDTH_MARGIN;
       for (const state of states) {
-        renderSkillCard(ctx, cardX, y, cardW, state);
-        y += CARD_H + CARD_GAP;
+        const cardH = skillCardHeight(ctx, cardW, state);
+        renderSkillCard(ctx, cardX, y, cardW, state, cardH);
+        y += cardH + CARD_GAP;
       }
     }
 
     if (remaining > 0) {
       // Named skills stay hidden until found — the discovery is the reward.
-      drawText(ctx, `Undiscovered skills: ${remaining}. The dungeon provides. Eventually.`, {
+      y += drawText(ctx, `Undiscovered skills: ${remaining}. The dungeon provides. Eventually.`, {
         x: bx + CARD_X_OFFSET,
         y,
         size: EMPTY_LINE_SIZE,
         color: '#475569',
-      });
-      y += EMPTY_LINE_H;
+        width: bw - CARD_WIDTH_MARGIN,
+      }).totalHeight;
     }
 
     y += SECTION_GAP;

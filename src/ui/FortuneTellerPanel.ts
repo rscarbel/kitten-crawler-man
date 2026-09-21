@@ -11,12 +11,24 @@
  */
 
 import { platform } from '../core/Platform';
-import { drawModal, drawOverlay, BOX_PRESETS } from './Box';
+import {
+  drawModal,
+  drawOverlay,
+  beginModalFit,
+  endModalFit,
+  modalFitPoint,
+  BOX_PRESETS,
+  MODAL_FIT_NONE,
+  type ModalFit,
+} from './Box';
+import { fitPanel } from './panelFit';
 import {
   beginMenuFocus,
   drawButton,
   endMenuFocus,
   BUTTON_PRESETS,
+  setButtonPointerSpace,
+  resetButtonPointerSpace,
   type ButtonResult,
 } from './Button';
 import { drawText } from './TextBox';
@@ -78,7 +90,8 @@ const CARD_LABEL_SIZE = 30;
 const CARD_ROW_TOP = 70;
 
 const FOOTER_BTN_WIDTH = 130;
-const FOOTER_BTN_HEIGHT = 30;
+/** Comfortable thumb target; the panel is shrunk uniformly on small screens so this stays near 40 there. */
+const FOOTER_BTN_HEIGHT = 40;
 const FOOTER_BTN_GAP = 12;
 const FOOTER_LABEL_SIZE = 11;
 const FORTUNE_TEXT_TOP = 58;
@@ -93,6 +106,7 @@ export class FortuneTellerPanel {
   private cardButtons: ButtonResult[] = [];
   private actionButtons: ButtonResult[] = [];
   private closeButton: ButtonResult | null = null;
+  private fit: ModalFit = MODAL_FIT_NONE;
   private modalContains: ((px: number, py: number) => boolean) | null = null;
 
   get isOpen(): boolean {
@@ -124,6 +138,9 @@ export class FortuneTellerPanel {
       canvasHeight: viewportHeight(),
       alpha: OVERLAY_ALPHA,
     });
+    this.fit = fitPanel(PANEL_WIDTH, PANEL_HEIGHT);
+    beginModalFit(ctx, this.fit);
+    setButtonPointerSpace(this.fit.scale, this.fit.pivotX, this.fit.pivotY);
     const modal = drawModal(ctx, {
       canvasWidth: viewportWidth(),
       canvasHeight: viewportHeight(),
@@ -164,6 +181,8 @@ export class FortuneTellerPanel {
 
     this.renderFooter(ctx, modal.y, centerX, canAfford);
     endMenuFocus();
+    endModalFit(ctx);
+    resetButtonPointerSpace();
   }
 
   private renderCards(
@@ -270,8 +289,9 @@ export class FortuneTellerPanel {
    * and swallows other in-modal taps without closing. Returns whether consumed
    * (always true while open, so the tap can't fall through to move/attack).
    */
-  handleClick(mx: number, my: number, active: Player): boolean {
+  handleClick(canvasX: number, canvasY: number, active: Player): boolean {
     if (!this.open) return false;
+    const { x: mx, y: my } = modalFitPoint(this.fit, canvasX, canvasY);
 
     if (this.fortune === null) {
       for (const card of this.cardButtons) {

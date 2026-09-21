@@ -274,6 +274,11 @@ export class DesperadoClubSystem {
     return null;
   }
 
+  /** The bar/market buy panel on screen, exposed so the scene can feed it scroll gestures. */
+  get openShop(): ShopSystem | null {
+    return this.activeShop();
+  }
+
   get modalOpen(): boolean {
     return (
       this.dialog.isOpen ||

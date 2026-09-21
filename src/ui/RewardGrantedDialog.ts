@@ -10,7 +10,7 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 const DIALOG_MAX_WIDTH = 320;
 const DIALOG_PADDING_HORIZONTAL = 32;
 const DIALOG_MIN_HEIGHT = 280;
-const DIALOG_BASE_HEIGHT = 230;
+const DIALOG_BASE_HEIGHT = 236;
 const DIALOG_DESC_LINE_HEIGHT = 15;
 
 // Dialog layout positions
@@ -30,8 +30,8 @@ const ICON_SIZE = 56;
 
 // OK button
 const OK_BUTTON_WIDTH = 100;
-const OK_BUTTON_HEIGHT = 34;
-const OK_BUTTON_Y_OFFSET = 50;
+const OK_BUTTON_HEIGHT = 40;
+const OK_BUTTON_Y_OFFSET = 56;
 
 // Animation timing
 const POWER_UP_FRAMES = 60;

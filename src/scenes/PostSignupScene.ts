@@ -22,8 +22,16 @@ const TITLE_Y_FRACTION = 0.22;
 const SUBTITLE_Y_FRACTION = 0.35;
 const BTN_Y_FRACTION = 0.5;
 const BTN_GAP = 20;
+const BTN_COMPACT_GAP = 10;
 const BTN_WIDTH = 300;
 const BTN_HEIGHT = 56;
+/** Smallest fingertip-friendly button; the stack shrinks to this before it may run off-screen. */
+const BTN_MIN_HEIGHT = 44;
+const SCREEN_BOTTOM_MARGIN = 12;
+const BUTTONS_WITH_CHECKPOINT = 3;
+const BUTTONS_WITHOUT_CHECKPOINT = 2;
+/** Clear space kept between the subtitle's baseline and the first button. */
+const SUBTITLE_TO_BUTTONS_GAP = 40;
 const OVERLAY_ALPHA = 0.92;
 const BG_COLOR = '#0f172a';
 const TEXT_SIDE_MARGIN = 24;
@@ -95,27 +103,41 @@ export class PostSignupScene extends Scene {
       width: viewportWidth() - TEXT_SIDE_MARGIN * 2,
     });
 
-    let btnY = viewportHeight() * BTN_Y_FRACTION;
+    const buttonCount = hasCheckpoint ? BUTTONS_WITH_CHECKPOINT : BUTTONS_WITHOUT_CHECKPOINT;
+    const btnWidth = Math.min(BTN_WIDTH, viewportWidth() - TEXT_SIDE_MARGIN * 2);
+    const idealTop = viewportHeight() * BTN_Y_FRACTION;
+    const idealStackHeight = buttonCount * BTN_HEIGHT + (buttonCount - 1) * BTN_GAP;
+    const fitsAtIdealTop = idealTop + idealStackHeight + SCREEN_BOTTOM_MARGIN <= viewportHeight();
+    const compactTop = viewportHeight() * SUBTITLE_Y_FRACTION + SUBTITLE_TO_BUTTONS_GAP;
+    const compactAvailable = viewportHeight() - SCREEN_BOTTOM_MARGIN - compactTop;
+    const compactHeight = Math.floor(
+      (compactAvailable - (buttonCount - 1) * BTN_COMPACT_GAP) / buttonCount,
+    );
+    const btnHeight = fitsAtIdealTop
+      ? BTN_HEIGHT
+      : Math.min(BTN_HEIGHT, Math.max(BTN_MIN_HEIGHT, compactHeight));
+    const btnGap = fitsAtIdealTop ? BTN_GAP : BTN_COMPACT_GAP;
+    let btnY = fitsAtIdealTop ? idealTop : compactTop;
 
     if (hasCheckpoint) {
       this.continueButton = drawButton(ctx, {
         x: cx,
         y: btnY,
-        width: BTN_WIDTH,
-        height: BTN_HEIGHT,
+        width: btnWidth,
+        height: btnHeight,
         alignX: 'center',
         label: 'Continue from last checkpoint',
         ...BUTTON_PRESETS.gold,
         primaryAction: true,
       });
-      btnY += BTN_HEIGHT + BTN_GAP;
+      btnY += btnHeight + btnGap;
     }
 
     this.tutorialButton = drawButton(ctx, {
       x: cx,
       y: btnY,
-      width: BTN_WIDTH,
-      height: BTN_HEIGHT,
+      width: btnWidth,
+      height: btnHeight,
       alignX: 'center',
       label: hasCheckpoint ? 'New Game: Tutorial' : 'Continue to Tutorial',
       ...BUTTON_PRESETS.success,
@@ -124,9 +146,9 @@ export class PostSignupScene extends Scene {
 
     this.skipButton = drawButton(ctx, {
       x: cx,
-      y: btnY + BTN_HEIGHT + BTN_GAP,
-      width: BTN_WIDTH,
-      height: BTN_HEIGHT,
+      y: btnY + btnHeight + btnGap,
+      width: btnWidth,
+      height: btnHeight,
       alignX: 'center',
       label: hasCheckpoint ? 'New Game: Level 1' : 'Skip to Level 1',
       ...BUTTON_PRESETS.primary,

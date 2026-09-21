@@ -64,7 +64,7 @@ export interface DialogPage {
 const DIALOG_WIDTH = 460;
 const DIALOG_CANVAS_PADDING = 40;
 const DIALOG_BASE_HEIGHT = 72;
-const DIALOG_BUTTON_AREA_HEIGHT = 52;
+const DIALOG_BUTTON_AREA_HEIGHT = 64;
 const DIALOG_LINE_SPACING = 17;
 const DIALOG_PAD_X = 18;
 const DIALOG_TITLE_Y_OFFSET = 14;
@@ -72,11 +72,17 @@ const DIALOG_TITLE_SIZE = 14;
 const DIALOG_LINE_START_Y = 40;
 const DIALOG_LINE_SIZE = 12;
 const DIALOG_BTN_W = 150;
-const DIALOG_BTN_H = 30;
-const DIALOG_BTN_Y_FROM_BOTTOM = 42;
+const DIALOG_BTN_H = 40;
+const DIALOG_BTN_Y_FROM_BOTTOM = 52;
 /** Gap between the accept and decline buttons when a page offers both. */
 const DIALOG_BTN_GAP = 12;
 const DIALOG_BTN_LABEL_SIZE = 12;
+const DIALOG_SCREEN_MARGIN = 8;
+/** Body text stops shrinking here; a panel still too tall is clamped to the screen. */
+const DIALOG_MIN_LINE_SIZE = 9;
+const DIALOG_MIN_LINE_SPACING = 13;
+const DIALOG_LINE_SHRINK_STEP = 1;
+const DIALOG_LINE_SPACING_RATIO = DIALOG_LINE_SPACING / DIALOG_LINE_SIZE;
 const DIALOG_PAGE_COUNTER_SIZE = 10;
 /**
  * Gap kept between the panel's foot and the bottom of the viewport.
@@ -314,21 +320,35 @@ export class QuestDialog {
     // line count so long lines stay inside the panel instead of running past it.
     const contentWidth = dw - DIALOG_PAD_X * 2;
     const body = page.lines.join('\n');
-    const { lineCount } = measureTextBox(ctx, body, {
-      width: contentWidth,
-      size: DIALOG_LINE_SIZE,
-      lineHeight: DIALOG_LINE_SPACING,
-    });
+    const btnW = Math.min(DIALOG_BTN_W, (contentWidth - DIALOG_BTN_GAP) / 2);
+    const maxHeight = viewportHeight() - DIALOG_SCREEN_MARGIN * 2;
     const reward = page.reward;
     const rewardHeight =
       reward === undefined
         ? 0
         : REWARD_STRIP_TOP_GAP + this.rewardStripHeight(ctx, reward, contentWidth);
-    const dh =
-      DIALOG_BASE_HEIGHT +
-      lineCount * DIALOG_LINE_SPACING +
-      rewardHeight +
-      DIALOG_BUTTON_AREA_HEIGHT;
+    const fixedHeight = DIALOG_BASE_HEIGHT + rewardHeight + DIALOG_BUTTON_AREA_HEIGHT;
+
+    // A short phone screen cannot hold the panel at full size, so the body
+    // shrinks until it fits rather than pushing the buttons off-screen.
+    let lineSize = DIALOG_LINE_SIZE;
+    let lineSpacing = DIALOG_LINE_SPACING;
+    let lineCount = 0;
+    for (;;) {
+      lineCount = measureTextBox(ctx, body, {
+        width: contentWidth,
+        size: lineSize,
+        lineHeight: lineSpacing,
+      }).lineCount;
+      const fits = fixedHeight + lineCount * lineSpacing <= maxHeight;
+      if (fits || lineSize <= DIALOG_MIN_LINE_SIZE) break;
+      lineSize -= DIALOG_LINE_SHRINK_STEP;
+      lineSpacing = Math.max(
+        DIALOG_MIN_LINE_SPACING,
+        Math.round(lineSize * DIALOG_LINE_SPACING_RATIO),
+      );
+    }
+    const dh = Math.min(maxHeight, fixedHeight + lineCount * lineSpacing);
 
     const box = drawModal(ctx, {
       canvasWidth: viewportWidth(),
@@ -351,8 +371,8 @@ export class QuestDialog {
       x: box.x + DIALOG_PAD_X,
       y: box.y + DIALOG_LINE_START_Y,
       width: contentWidth,
-      lineHeight: DIALOG_LINE_SPACING,
-      size: DIALOG_LINE_SIZE,
+      lineHeight: lineSpacing,
+      size: lineSize,
       color: '#e2e8f0',
     });
 
@@ -371,7 +391,7 @@ export class QuestDialog {
         ctx,
         reward,
         box.x + DIALOG_PAD_X,
-        box.y + DIALOG_LINE_START_Y + lineCount * DIALOG_LINE_SPACING + REWARD_STRIP_TOP_GAP,
+        box.y + DIALOG_LINE_START_Y + lineCount * lineSpacing + REWARD_STRIP_TOP_GAP,
         contentWidth,
       );
     }
@@ -381,11 +401,11 @@ export class QuestDialog {
 
     beginMenuFocus('quest-dialog');
     if (decline === undefined) {
-      const btnX = box.x + dw / 2 - DIALOG_BTN_W / 2;
+      const btnX = box.x + dw / 2 - btnW / 2;
       drawButton(ctx, {
         x: btnX,
         y: btnY,
-        width: DIALOG_BTN_W,
+        width: btnW,
         height: DIALOG_BTN_H,
         label: page.button,
         ...BUTTON_PRESETS.primary,
@@ -393,7 +413,7 @@ export class QuestDialog {
         primaryAction: true,
       });
       endMenuFocus();
-      this.buttonRect = { x: btnX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
+      this.buttonRect = { x: btnX, y: btnY, w: btnW, h: DIALOG_BTN_H };
       this.declineRect = null;
       return;
     }
@@ -401,13 +421,13 @@ export class QuestDialog {
     // Decline on the left, accept on the right: the committing button is the one
     // under the thumb on mobile, and the pair reads in the order the player is
     // being asked to weigh them.
-    const pairWidth = DIALOG_BTN_W * 2 + DIALOG_BTN_GAP;
+    const pairWidth = btnW * 2 + DIALOG_BTN_GAP;
     const declineX = box.x + dw / 2 - pairWidth / 2;
-    const acceptX = declineX + DIALOG_BTN_W + DIALOG_BTN_GAP;
+    const acceptX = declineX + btnW + DIALOG_BTN_GAP;
     drawButton(ctx, {
       x: declineX,
       y: btnY,
-      width: DIALOG_BTN_W,
+      width: btnW,
       height: DIALOG_BTN_H,
       label: decline,
       ...BUTTON_PRESETS.toggle,
@@ -416,7 +436,7 @@ export class QuestDialog {
     drawButton(ctx, {
       x: acceptX,
       y: btnY,
-      width: DIALOG_BTN_W,
+      width: btnW,
       height: DIALOG_BTN_H,
       label: page.button,
       ...BUTTON_PRESETS.primary,
@@ -424,7 +444,7 @@ export class QuestDialog {
       primaryAction: true,
     });
     endMenuFocus();
-    this.declineRect = { x: declineX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
-    this.buttonRect = { x: acceptX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
+    this.declineRect = { x: declineX, y: btnY, w: btnW, h: DIALOG_BTN_H };
+    this.buttonRect = { x: acceptX, y: btnY, w: btnW, h: DIALOG_BTN_H };
   }
 }

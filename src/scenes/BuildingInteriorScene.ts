@@ -31,7 +31,7 @@ import { GameplayScene } from './GameplayScene';
 import { pointInRect } from '../utils';
 import { AchievementManager } from '../core/AchievementManager';
 import { GameStats } from '../core/GameStats';
-import type { PauseMenu } from '../ui/PauseMenu';
+import { MENU_TAP_DURATION_MS, MENU_TAP_MAX_DISTANCE, type PauseMenu } from '../ui/PauseMenu';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -399,6 +399,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private _mouseX = OFFSCREEN_CURSOR_POS;
   private _mouseY = OFFSCREEN_CURSOR_POS;
   private _mouseDown = false;
+  /** The finger scrolling a pause-menu tab; its release is a click only if it never became a drag. */
+  private pauseScrollTouch: { id: number; x: number; y: number; time: number } | null = null;
   private exitMenuOpen = false;
   private exitDismissed = false;
   /** Exit/Stay hit-rects, rebuilt by `renderExitMenu` and read by `handleExitMenuClick`. */
@@ -2431,10 +2433,29 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.menus.isOverlayBlockingPointer;
   }
 
+  /** The buy panel currently open, whether the shop floor's own or one of the club's. */
+  private get scrollableShop(): ShopSystem | null {
+    if (this.shop?.shopOpen === true) return this.shop;
+    return this.club?.openShop ?? null;
+  }
+
+  handleWheel(deltaY: number): void {
+    if (this.pauseMenu.isOpen) {
+      this.pauseMenu.handleWheel(deltaY);
+      return;
+    }
+    this.scrollableShop?.handleWheel(deltaY);
+  }
+
   handleMouseDown(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
     this._mouseDown = true;
+    const openShop = this.scrollableShop;
+    if (openShop !== null) {
+      openShop.handlePointerDown(mx, my);
+      return;
+    }
     // Delegated rather than swallowed: the pause menu's Equipment tab drags gear
     // between the bag and the doll, and a drag is a press and a release, not a
     // click. Every other tab ignores these.
@@ -2449,6 +2470,7 @@ export class BuildingInteriorScene extends GameplayScene {
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
+    this.scrollableShop?.handlePointerMove(mx, my);
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleMouseMove(mx, my);
       return;
@@ -2461,6 +2483,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseX = mx;
     this._mouseY = my;
     this._mouseDown = false;
+    this.scrollableShop?.handlePointerUp();
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
       return;
@@ -3457,9 +3480,20 @@ export class BuildingInteriorScene extends GameplayScene {
         // The Equipment tab is the one halting surface a finger can drag across
         // rather than only tap, so it takes the press now and the release from
         // the drag branch in `handleTouchEnd`, which already ends with a click.
-        if (this.pauseMenu.isOpen && this.pauseMenu.currentTab === 'equipment') {
+        const shopIsScrollable = this.scrollableShop !== null;
+        if (
+          shopIsScrollable ||
+          (this.pauseMenu.isOpen && this.pauseMenu.currentTab === 'equipment')
+        ) {
           this.handleMouseDown(x, y);
           this.mobileHUD.inventoryDragTouchId ??= touch.identifier;
+          continue;
+        }
+        // A tab taller than the box scrolls under the finger, so the press
+        // can't be a click yet: the release decides between the two.
+        if (this.pauseMenu.isOpen && this.pauseScrollTouch === null) {
+          this.pauseScrollTouch = { id: touch.identifier, x, y, time: Date.now() };
+          this.pauseMenu.touchScrollStart(x, y, this.human, this.cat);
           continue;
         }
         this.handleClick(x, y);
@@ -3547,6 +3581,11 @@ export class BuildingInteriorScene extends GameplayScene {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
+      if (touch.identifier === this.pauseScrollTouch?.id) {
+        this.pauseMenu.touchScrollMove(x, y);
+        continue;
+      }
+
       // Update inventory drag
       this.handleMouseMove(x, y);
       this.mobileHUD.checkInvLongPressMove(x, y);
@@ -3562,6 +3601,22 @@ export class BuildingInteriorScene extends GameplayScene {
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
+
+      const pauseScroll = this.pauseScrollTouch;
+      if (pauseScroll !== null && touch.identifier === pauseScroll.id) {
+        this.pauseScrollTouch = null;
+        this.pauseMenu.touchScrollEnd(x, y, this.human, this.cat);
+        const elapsed = Date.now() - pauseScroll.time;
+        const moved = Math.hypot(x - pauseScroll.x, y - pauseScroll.y);
+        if (elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE) {
+          this.handleClick(x, y);
+        } else {
+          // No click follows a drag, so the menu's held-back click would
+          // otherwise sit waiting and eat the next tap.
+          this.pauseMenu.clearSuppressedClick();
+        }
+        continue;
+      }
 
       // Inventory / hotbar drag end
       if (touch.identifier === this.mobileHUD.inventoryDragTouchId) {
@@ -3580,7 +3635,14 @@ export class BuildingInteriorScene extends GameplayScene {
         // The pause menu is named separately because it covers the bar without
         // being a pointer-blocking overlay: the hotbar is not drawn under it, so
         // a release over where it used to be must go to the menu instead.
-        if (hi >= 0 && !this.isOverlayBlockingPointer && !this.pauseMenu.isOpen) {
+        // An open shop is drawn over the bar and is not a pointer-blocking overlay,
+        // so its Close and lower Buy rows would otherwise fire the slot beneath.
+        if (
+          hi >= 0 &&
+          !this.isOverlayBlockingPointer &&
+          !this.pauseMenu.isOpen &&
+          this.scrollableShop === null
+        ) {
           activateHotbarSlot(this.hotbarHost(), hi);
         } else {
           this.handleClick(x, y);

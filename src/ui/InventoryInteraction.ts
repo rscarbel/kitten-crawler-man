@@ -7,40 +7,42 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Drop dialog layout dimensions
 const DROP_DIALOG_WIDTH = 200;
-const DROP_DIALOG_HEIGHT = 110;
-const DROP_DIALOG_CLOSE_BTN_RIGHT = 22;
+const DROP_DIALOG_HEIGHT = 130;
+const DROP_DIALOG_CLOSE_BTN_RIGHT = 34;
 const DROP_DIALOG_CLOSE_BTN_LEFT = 6;
 const DROP_DIALOG_CLOSE_BTN_TOP = 6;
-const DROP_DIALOG_CLOSE_BTN_HEIGHT = 22;
-const DROP_DIALOG_BUTTON_WIDTH = 24;
-const DROP_DIALOG_BUTTON_HEIGHT = 24;
+const DROP_DIALOG_CLOSE_BTN_HEIGHT = 34;
+const DROP_DIALOG_BUTTON_WIDTH = 36;
+const DROP_DIALOG_BUTTON_HEIGHT = 36;
 const DROP_DIALOG_MINUS_BTN_X = 20;
-const DROP_DIALOG_MINUS_BTN_Y = 54;
-const DROP_DIALOG_PLUS_BTN_X_OFFSET = 44;
-const DROP_DIALOG_PLUS_BTN_Y = 54;
+const DROP_DIALOG_MINUS_BTN_Y = 38;
+const DROP_DIALOG_PLUS_BTN_X_OFFSET = 56;
+const DROP_DIALOG_PLUS_BTN_Y = 38;
 const DROP_DIALOG_CONFIRM_X = 20;
-const DROP_DIALOG_CONFIRM_Y_OFFSET = 28;
+const DROP_DIALOG_CONFIRM_Y_OFFSET = 44;
 const DROP_DIALOG_CONFIRM_WIDTH_MARGIN = 40;
-const DROP_DIALOG_CONFIRM_HEIGHT = 22;
+const DROP_DIALOG_CONFIRM_HEIGHT = 34;
 
 // Context menu layout
 const CONTEXT_MENU_WIDTH = 120;
-const CONTEXT_MENU_ITEM_HEIGHT = 22;
+export const CONTEXT_MENU_ITEM_HEIGHT = 34;
 const CONTEXT_MENU_PADDING = 4;
 const CONTEXT_MENU_MARGIN = 4;
 const CONTEXT_MENU_ITEM_Y_OFFSET = 2;
 
 // Panel interaction
+/** The drawn x is only 16px wide; the hit area extends left so a fingertip lands. */
+const CLOSE_BTN_HIT_SLOP_LEFT = 14;
 const CLOSE_BTN_RIGHT_OFFSET = 20;
-const CLOSE_BTN_WIDTH = 16;
-const CLOSE_BTN_TOP = 8;
-const CLOSE_BTN_HEIGHT = 24;
+const CLOSE_BTN_WIDTH = 30;
+const CLOSE_BTN_TOP = 0;
+const CLOSE_BTN_HEIGHT = 30;
 
 // Navigation
 const INVENTORY_NAV_HEIGHT = 28;
 const INVENTORY_NAV_Y_OFFSET = 6;
-const INVENTORY_NAV_HOVER_TOP_OFFSET = 12;
-const INVENTORY_NAV_HOVER_BOTTOM_OFFSET = 4;
+const INVENTORY_NAV_HOVER_TOP_OFFSET = 18;
+const INVENTORY_NAV_HOVER_BOTTOM_OFFSET = 22;
 const INVENTORY_NAV_HALF = 0.5;
 
 /**
@@ -345,7 +347,7 @@ export class InventoryInteraction {
     if (!isOpen) return false;
 
     const p = panelRect;
-    const closeX = p.x + p.w - CLOSE_BTN_RIGHT_OFFSET;
+    const closeX = p.x + p.w - CLOSE_BTN_RIGHT_OFFSET - CLOSE_BTN_HIT_SLOP_LEFT;
     if (
       mx >= closeX &&
       mx <= closeX + CLOSE_BTN_WIDTH &&

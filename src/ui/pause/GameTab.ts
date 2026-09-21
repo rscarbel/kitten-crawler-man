@@ -19,7 +19,7 @@ const TITLE_SIZE = 18;
 const BUTTON_WIDTH_MARGIN = 40;
 const BUTTON_X_OFFSET = 20;
 const BUTTON_HEIGHT = 40;
-const FIRST_BUTTON_Y = 52;
+const FIRST_BUTTON_Y = 46;
 const BUTTON_SPACING = 50;
 /** Gap between the last button and the bottom of the modal. */
 const BOTTOM_MARGIN = 12;
@@ -29,6 +29,8 @@ const BUTTON_COUNT_NO_JOURNAL = 6;
 const BUTTON_COUNT_WITH_JOURNAL = BUTTON_COUNT_NO_JOURNAL + 1;
 /** Buttons stay legible even when the pitch is compressed to fit a short window. */
 const MIN_BUTTON_HEIGHT = 26;
+/** Gap kept between buttons once the pitch is compressed, so a short window still gets tall touch targets. */
+const MIN_BUTTON_GAP = 4;
 
 /** Height this tab wants, so `PauseMenu` can size the modal around it. */
 export function gameTabHeight(hasQuestJournal: boolean): number {
@@ -64,10 +66,7 @@ export function renderGameTab(
   const buttonCount = hasQuestJournal ? BUTTON_COUNT_WITH_JOURNAL : BUTTON_COUNT_NO_JOURNAL;
   const availableH = bh - FIRST_BUTTON_Y - BOTTOM_MARGIN;
   const spacing = Math.min(BUTTON_SPACING, availableH / buttonCount);
-  const bH = Math.max(
-    MIN_BUTTON_HEIGHT,
-    Math.min(BUTTON_HEIGHT, spacing - (BUTTON_SPACING - BUTTON_HEIGHT)),
-  );
+  const bH = Math.max(MIN_BUTTON_HEIGHT, Math.min(BUTTON_HEIGHT, spacing - MIN_BUTTON_GAP));
   let bY = by + FIRST_BUTTON_Y;
 
   if (hasQuestJournal) {

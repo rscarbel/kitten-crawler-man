@@ -24,7 +24,7 @@ import {
   drawTreadmillInventoryIcon,
 } from '../sprites/gymEquipmentSprite';
 import { drawWoodPileSprite } from '../sprites/questNPCSprite';
-import { InventoryInteraction } from './InventoryInteraction';
+import { InventoryInteraction, CONTEXT_MENU_ITEM_HEIGHT } from './InventoryInteraction';
 import { SearchField } from './SearchField';
 import { drawCooldownOverlay } from './CooldownOverlay';
 import { drawText, measureTextBox } from './TextBox';
@@ -34,7 +34,8 @@ import { drawButton, BUTTON_PRESETS } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Layout constants
-const SLOT_SIZE = 54;
+const MAX_SLOT_SIZE = 54;
+const PANEL_SCREEN_MARGIN = 6;
 const SLOT_GAP = 4;
 const COLS = 4;
 const ROWS_PER_PAGE = 4; // 4×4 = 16 slots per page
@@ -66,9 +67,8 @@ const HOTBAR_HIT_MARGIN = 12;
 
 // Context menu layout
 const CONTEXT_MENU_W = 120;
-const CONTEXT_MENU_ITEM_H = 22;
 const CONTEXT_MENU_V_PAD = 4;
-const CONTEXT_LABEL_OFFSET = 6;
+const CONTEXT_LABEL_SIZE = 11;
 
 // Info popup
 const INFO_POPUP_MAX_W = 280;
@@ -84,25 +84,25 @@ const INFO_LABEL_X_OFFSET = 8;
 // Drop dialog
 const DROP_DIALOG_MAX_W = 200;
 const DROP_DIALOG_MARGIN = 32;
-const DROP_DIALOG_H = 110;
+const DROP_DIALOG_H = 130;
 const DROP_TITLE_Y = 22;
 const DROP_TITLE_Y_CORRECTION = 9;
 const DROP_TITLE_SIZE = 11;
-const DROP_CLOSE_BTN_OFFSET_X = 22;
+const DROP_CLOSE_BTN_OFFSET_X = 34;
 const DROP_CLOSE_BTN_Y = 6;
-const DROP_CLOSE_BTN_W = 16;
-const DROP_CLOSE_BTN_H = 16;
+const DROP_CLOSE_BTN_W = 28;
+const DROP_CLOSE_BTN_H = 28;
 const DROP_MINUS_BTN_X_PAD = 20;
-const DROP_MINUS_BTN_Y = 54;
-const DROP_PM_BTN_SIZE = 24;
-const DROP_PLUS_BTN_OFFSET = 44;
+const DROP_MINUS_BTN_Y = 38;
+const DROP_PM_BTN_SIZE = 36;
+const DROP_PLUS_BTN_OFFSET = 56;
 const DROP_QTY_FONT_SIZE = 16;
 const DROP_HINT_X_OFFSET = 14;
-const DROP_QTY_Y_OFFSET = 5;
-const DROP_HINT_Y_OFFSET = 11;
+const DROP_QTY_Y_OFFSET = 10;
+const DROP_HINT_Y_OFFSET = 16;
 const DROP_HINT_SIZE = 9;
-const DROP_CONFIRM_OFFSET = 28;
-const DROP_CONFIRM_BTN_H = 22;
+const DROP_CONFIRM_OFFSET = 44;
+const DROP_CONFIRM_BTN_H = 34;
 const DROP_CONFIRM_SIDE_PAD = 40;
 
 // Panel header
@@ -622,8 +622,9 @@ export class InventoryPanel {
   }
 
   private panelRect() {
-    const innerW = COLS * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP;
-    const innerH = ROWS_PER_PAGE * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP;
+    const slotSize = this.slotSize();
+    const innerW = COLS * (slotSize + SLOT_GAP) - SLOT_GAP;
+    const innerH = ROWS_PER_PAGE * (slotSize + SLOT_GAP) - SLOT_GAP;
     const w = innerW + PANEL_PAD * 2;
     const h = HEADER_H + PANEL_PAD + innerH + PANEL_PAD + NAV_H;
     return {
@@ -632,6 +633,14 @@ export class InventoryPanel {
       w,
       h,
     };
+  }
+
+  /** Shrinks the bag cells so the whole panel fits a short or narrow phone viewport. */
+  private slotSize(): number {
+    const chromeH = HEADER_H + PANEL_PAD * 2 + NAV_H - SLOT_GAP;
+    const byHeight = (viewportHeight() - PANEL_SCREEN_MARGIN * 2 - chromeH) / ROWS_PER_PAGE;
+    const byWidth = (viewportWidth() - PANEL_SCREEN_MARGIN * 2 - PANEL_PAD * 2 + SLOT_GAP) / COLS;
+    return Math.max(1, Math.floor(Math.min(MAX_SLOT_SIZE, byHeight, byWidth) - SLOT_GAP));
   }
 
   private computedHotbarSlotSize(): number {
@@ -656,11 +665,12 @@ export class InventoryPanel {
   private invSlotRect(i: number, panel: { x: number; y: number }) {
     const col = i % COLS;
     const row = Math.floor(i / COLS);
+    const slotSize = this.slotSize();
     return {
-      x: panel.x + PANEL_PAD + col * (SLOT_SIZE + SLOT_GAP),
-      y: panel.y + HEADER_H + PANEL_PAD + row * (SLOT_SIZE + SLOT_GAP),
-      w: SLOT_SIZE,
-      h: SLOT_SIZE,
+      x: panel.x + PANEL_PAD + col * (slotSize + SLOT_GAP),
+      y: panel.y + HEADER_H + PANEL_PAD + row * (slotSize + SLOT_GAP),
+      w: slotSize,
+      h: slotSize,
     };
   }
 
@@ -740,7 +750,7 @@ export class InventoryPanel {
     }
     // Dragged item floats on top of everything
     if (this.drag) {
-      const s = SLOT_SIZE;
+      const s = this.slotSize();
       InventoryPanel.renderItemIcon(
         ctx,
         this.drag.item,
@@ -770,7 +780,7 @@ export class InventoryPanel {
     if (!cm) return;
     const options = this.interaction.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
     const menuW = CONTEXT_MENU_W;
-    const menuItemH = CONTEXT_MENU_ITEM_H;
+    const menuItemH = CONTEXT_MENU_ITEM_HEIGHT;
     const menuH = options.length * menuItemH + CONTEXT_MENU_V_PAD;
     // Already on-screen: `InventoryInteraction.openContextMenu` resolved the
     // origin once, so hit-testing and this drawing can't disagree.
@@ -807,8 +817,8 @@ export class InventoryPanel {
       // baseline_y=oy+15, size=11 → top_y = oy+15-9 = oy+6
       drawText(ctx, options[i], {
         x: mx + INFO_LABEL_X_OFFSET,
-        y: oy + CONTEXT_LABEL_OFFSET,
-        size: 11,
+        y: oy + Math.round((menuItemH - CONTEXT_LABEL_SIZE) / 2),
+        size: CONTEXT_LABEL_SIZE,
         color,
       });
     }

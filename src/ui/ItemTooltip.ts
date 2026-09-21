@@ -37,12 +37,12 @@ const BONUS_LINE_PREFIX = '+';
 const ABILITY_LINE_PREFIX = 'Ability:';
 const FOOTER_LINE_PREFIX = '[';
 
-function wrapDescription(description: string): string[] {
+function wrapDescription(description: string, wrapChars: number): string[] {
   const lines: string[] = [];
   let current = '';
   for (const word of description.split(' ')) {
     const joined = `${current} ${word}`.trim();
-    if (joined.length <= DESC_WRAP_CHARS) {
+    if (joined.length <= wrapChars) {
       current = joined;
     } else {
       lines.push(current);
@@ -61,10 +61,14 @@ function bodyLineColor(line: string): string {
 }
 
 /** The lines the card will show, so a caller can size around it if it needs to. */
-export function itemTooltipLines(item: InventoryItem, footer: string | null): string[] {
+export function itemTooltipLines(
+  item: InventoryItem,
+  footer: string | null,
+  wrapChars: number = DESC_WRAP_CHARS,
+): string[] {
   const lines: string[] = [item.name, ...describeItemEffects(item)];
   lines.push('');
-  if (item.description) lines.push(...wrapDescription(item.description));
+  if (item.description) lines.push(...wrapDescription(item.description, wrapChars));
   if (footer !== null) {
     lines.push('');
     lines.push(footer);
@@ -85,8 +89,9 @@ export function drawItemTooltip(
   my: number,
   footer: string | null,
 ): void {
-  const lines = itemTooltipLines(item, footer);
-  const width = TOOLTIP_WIDTH;
+  const width = Math.min(TOOLTIP_WIDTH, viewportWidth() - TOOLTIP_SCREEN_MARGIN * 2);
+  const wrapChars = Math.max(1, Math.floor((DESC_WRAP_CHARS * width) / TOOLTIP_WIDTH));
+  const lines = itemTooltipLines(item, footer, wrapChars);
   const titleMaxWidth = width - TOOLTIP_TEXT_INDENT * 2;
 
   // A source-material item name can run long enough to need its own wrap,
@@ -98,7 +103,11 @@ export function drawItemTooltip(
   const bodyLines = lines.slice(1);
 
   const height = (titleLines.length + bodyLines.length) * TOOLTIP_LINE_HEIGHT + TOOLTIP_PAD;
-  const x = Math.min(mx + TOOLTIP_X_OFFSET, viewportWidth() - width - TOOLTIP_SCREEN_MARGIN);
+  const rightLimitedX = Math.min(
+    mx + TOOLTIP_X_OFFSET,
+    viewportWidth() - width - TOOLTIP_SCREEN_MARGIN,
+  );
+  const x = Math.max(rightLimitedX, TOOLTIP_SCREEN_MARGIN);
   const clampedY = Math.min(my - height / 2, viewportHeight() - height - TOOLTIP_SCREEN_MARGIN);
   const y = Math.max(clampedY, TOOLTIP_MIN_Y);
 

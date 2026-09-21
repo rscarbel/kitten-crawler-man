@@ -14,7 +14,6 @@ import {
   drawOverlay,
   drawBox,
   BOX_PRESETS,
-  fitModal,
   beginModalFit,
   endModalFit,
   modalFitPoint,
@@ -29,6 +28,7 @@ import {
   setButtonPointerSpace,
   resetButtonPointerSpace,
 } from '../ui/Button';
+import { fitPanel } from '../ui/panelFit';
 import { pointInRect } from '../utils';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -37,8 +37,6 @@ const PANEL_W = 540;
 const PANEL_H = 540;
 const PANEL_PADDING = 24;
 const OVERLAY_ALPHA = 0.6;
-/** Minimum horizontal breathing room kept between the panel and the canvas edges on narrow (mobile) viewports. */
-const PANEL_CANVAS_SIDE_MARGIN = 40;
 
 const TITLE_SIZE = 18;
 const SUBTITLE_SIZE = 11;
@@ -188,13 +186,13 @@ export class MercenaryGuildSystem {
       alpha: OVERLAY_ALPHA,
     });
 
-    // Three hire cards plus the close cluster need more height than a landscape
-    // phone has; shrink the whole panel rather than let its bottom fall off.
-    this.fit = fitModal(PANEL_H);
+    // Three hire cards plus the close cluster need more room than a phone has;
+    // shrink the whole panel rather than let an edge fall off.
+    this.fit = fitPanel(PANEL_W, PANEL_H);
     beginModalFit(ctx, this.fit);
     setButtonPointerSpace(this.fit.scale, this.fit.pivotX, this.fit.pivotY);
 
-    const panelW = Math.min(PANEL_W, viewportWidth() - PANEL_CANVAS_SIDE_MARGIN);
+    const panelW = PANEL_W;
     const panel = drawModal(ctx, {
       canvasWidth: viewportWidth(),
       canvasHeight: viewportHeight(),

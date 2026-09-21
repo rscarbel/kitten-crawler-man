@@ -12,7 +12,7 @@
  */
 
 import { drawBox } from './Box';
-import { drawText } from './TextBox';
+import { drawText, measureTextBox } from './TextBox';
 import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -41,6 +41,12 @@ const ICON_GAP = 8;
 const TEXT_AREA_Y = 34;
 const TEXT_SIZE = 12;
 const TEXT_LINE_HEIGHT = 18;
+/** Body text never shrinks below this; past it the box is already as tall as the screen allows. */
+const MIN_TEXT_SIZE = 9;
+const MIN_TEXT_LINE_HEIGHT = 13;
+const TEXT_SHRINK_STEP = 1;
+/** Line height stays in this proportion to the size as the text shrinks. */
+const LINE_HEIGHT_RATIO = TEXT_LINE_HEIGHT / TEXT_SIZE;
 const SPEAKER_SIZE = 13;
 const FOOTER_HINT_SIZE = 10;
 const FOOTER_Y_FROM_BOTTOM = 18;
@@ -96,6 +102,9 @@ export class DialogBox {
   private readonly _showFooterHint: boolean;
 
   private _visible = false;
+  private _height = DIALOG_HEIGHT;
+  private _textSize = TEXT_SIZE;
+  private _textLineHeight = TEXT_LINE_HEIGHT;
   private _tokens: string[] = [];
   private _revealedCount = 0;
   private _lastRevealTime = 0;
@@ -174,6 +183,7 @@ export class DialogBox {
   render(ctx: CanvasRenderingContext2D, alpha = 1): void {
     if (!this._visible) return;
 
+    this._fitToText(ctx);
     const { x: dx, y: dy, width: dw } = this._computeRect();
 
     ctx.save();
@@ -183,7 +193,7 @@ export class DialogBox {
       x: dx,
       y: dy,
       width: dw,
-      height: DIALOG_HEIGHT,
+      height: this._height,
       fill: DIALOG_BG,
       border: BORDER_COLOR,
       borderWidth: BORDER_WIDTH,
@@ -206,7 +216,7 @@ export class DialogBox {
    * the moment the box is resized.
    */
   rect(): { x: number; y: number; width: number; height: number } {
-    return { ...this._computeRect(), height: DIALOG_HEIGHT };
+    return { ...this._computeRect(), height: this._height };
   }
 
   /**
@@ -215,7 +225,7 @@ export class DialogBox {
    */
   contains(px: number, py: number): boolean {
     const { x, y, width } = this._computeRect();
-    return px >= x && px <= x + width && py >= y && py <= y + DIALOG_HEIGHT;
+    return px >= x && px <= x + width && py >= y && py <= y + this._height;
   }
 
   private _renderSpeakerRow(ctx: CanvasRenderingContext2D, dx: number, dy: number): void {
@@ -241,15 +251,15 @@ export class DialogBox {
     const footerReserve = this._showFooterHint
       ? FOOTER_Y_FROM_BOTTOM + TEXT_AREA_BOTTOM_GAP
       : TEXT_AREA_BOTTOM_GAP;
-    const textAreaHeight = DIALOG_HEIGHT - TEXT_AREA_Y - footerReserve;
+    const textAreaHeight = this._height - TEXT_AREA_Y - footerReserve;
     drawText(ctx, this._displayText, {
       x: dx + DIALOG_PADDING,
       y: dy + TEXT_AREA_Y,
-      size: TEXT_SIZE,
+      size: this._textSize,
       color: TEXT_COLOR,
       width: textAreaWidth,
       height: textAreaHeight,
-      lineHeight: TEXT_LINE_HEIGHT,
+      lineHeight: this._textLineHeight,
     });
   }
 
@@ -260,7 +270,7 @@ export class DialogBox {
     dw: number,
   ): void {
     if (!this._showFooterHint) return;
-    const footerY = dy + DIALOG_HEIGHT - FOOTER_Y_FROM_BOTTOM;
+    const footerY = dy + this._height - FOOTER_Y_FROM_BOTTOM;
 
     if (this._pageIndicator !== null) {
       drawText(ctx, `${this._pageIndicator.current} / ${this._pageIndicator.total}`, {
@@ -287,11 +297,41 @@ export class DialogBox {
     });
   }
 
+  /**
+   * Sizes the box from the whole message, not the revealed part, so it does not
+   * grow mid-typing. Grows past the default height for long text, then shrinks
+   * the font once the box has used all the room above the hotbar.
+   */
+  private _fitToText(ctx: CanvasRenderingContext2D): void {
+    const width = this._computeRect().width - DIALOG_PADDING * 2;
+    const fullText = this._tokens.join(this._revealMode === 'word' ? ' ' : '');
+    const footerReserve = this._showFooterHint
+      ? FOOTER_Y_FROM_BOTTOM + TEXT_AREA_BOTTOM_GAP
+      : TEXT_AREA_BOTTOM_GAP;
+    const chrome = TEXT_AREA_Y + footerReserve;
+    const hotbarTop = viewportHeight() - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN;
+    const maxHeight = Math.max(DIALOG_HEIGHT, hotbarTop - GAP_ABOVE_HOTBAR - DIALOG_MIN_TOP);
+
+    let size = TEXT_SIZE;
+    let lineHeight = TEXT_LINE_HEIGHT;
+    let needed = chrome;
+    for (;;) {
+      const { totalHeight } = measureTextBox(ctx, fullText, { size, width, lineHeight });
+      needed = totalHeight + chrome;
+      if (needed <= maxHeight || size <= MIN_TEXT_SIZE) break;
+      size -= TEXT_SHRINK_STEP;
+      lineHeight = Math.max(MIN_TEXT_LINE_HEIGHT, Math.round(size * LINE_HEIGHT_RATIO));
+    }
+    this._textSize = size;
+    this._textLineHeight = lineHeight;
+    this._height = Math.min(maxHeight, Math.max(DIALOG_HEIGHT, needed));
+  }
+
   private _computeRect(): { x: number; y: number; width: number } {
     const hotbarTop = viewportHeight() - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN;
     const width = Math.min(DIALOG_MAX_WIDTH, viewportWidth() - DIALOG_SIDE_MARGIN * 2);
     const x = (viewportWidth() - width) / 2;
-    const y = Math.max(DIALOG_MIN_TOP, hotbarTop - GAP_ABOVE_HOTBAR - DIALOG_HEIGHT);
+    const y = Math.max(DIALOG_MIN_TOP, hotbarTop - GAP_ABOVE_HOTBAR - this._height);
     return { x, y, width };
   }
 

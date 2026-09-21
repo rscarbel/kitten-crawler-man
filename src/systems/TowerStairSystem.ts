@@ -2,8 +2,23 @@ import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
-import { drawBox, drawOverlay } from '../ui/Box';
-import { addButton, beginMenuFocus, endMenuFocus } from '../ui/Button';
+import {
+  drawBox,
+  drawOverlay,
+  beginModalFit,
+  endModalFit,
+  modalFitPoint,
+  MODAL_FIT_NONE,
+  type ModalFit,
+} from '../ui/Box';
+import {
+  addButton,
+  beginMenuFocus,
+  endMenuFocus,
+  setButtonPointerSpace,
+  resetButtonPointerSpace,
+} from '../ui/Button';
+import { fitPanel } from '../ui/panelFit';
 import type { ButtonRect } from '../ui/pause/types';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -102,6 +117,8 @@ export class TowerStairSystem implements GameSystem {
   private downDismissed = false;
   /** Rebuilt by `renderMenu`, so a click and the thing it hits can never drift apart. */
   private menuButtons: ButtonRect[] = [];
+  /** Set every render; clicks are mapped back through it before hit-testing. */
+  private menuFit: ModalFit = MODAL_FIT_NONE;
 
   constructor(
     private map: GameMap,
@@ -175,12 +192,13 @@ export class TowerStairSystem implements GameSystem {
 
   handleClick(mx: number, my: number): boolean {
     if (!this.menuOpen) return false;
+    const point = modalFitPoint(this.menuFit, mx, my);
     for (const button of this.menuButtons) {
       if (
-        mx >= button.x &&
-        mx <= button.x + button.w &&
-        my >= button.y &&
-        my <= button.y + button.h
+        point.x >= button.x &&
+        point.x <= button.x + button.w &&
+        point.y >= button.y &&
+        point.y <= button.y + button.h
       ) {
         button.action?.();
         return true;
@@ -249,6 +267,7 @@ export class TowerStairSystem implements GameSystem {
 
     this.menuButtons = [];
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: MENU_OVERLAY_ALPHA });
+    this.beginFit(ctx, MENU_PANEL_WIDTH, MENU_PANEL_HEIGHT);
 
     const panelW = MENU_PANEL_WIDTH;
     const panelH = MENU_PANEL_HEIGHT;
@@ -329,6 +348,18 @@ export class TowerStairSystem implements GameSystem {
       action: () => this.closeMenu(),
     });
     endMenuFocus();
+    this.endFit(ctx);
+  }
+
+  private beginFit(ctx: CanvasRenderingContext2D, designWidth: number, designHeight: number): void {
+    this.menuFit = fitPanel(designWidth, designHeight);
+    beginModalFit(ctx, this.menuFit);
+    setButtonPointerSpace(this.menuFit.scale, this.menuFit.pivotX, this.menuFit.pivotY);
+  }
+
+  private endFit(ctx: CanvasRenderingContext2D): void {
+    endModalFit(ctx);
+    resetButtonPointerSpace();
   }
 
   /**
@@ -348,6 +379,7 @@ export class TowerStairSystem implements GameSystem {
 
     this.menuButtons = [];
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: MENU_OVERLAY_ALPHA });
+    this.beginFit(ctx, FINALE_PANEL_WIDTH, FINALE_PANEL_HEIGHT);
 
     const panelX = cw / 2 - FINALE_PANEL_WIDTH / 2;
     const panelY = ch / 2 - FINALE_PANEL_HEIGHT / 2;
@@ -414,6 +446,7 @@ export class TowerStairSystem implements GameSystem {
       action: () => this.onAscend(),
     });
     endMenuFocus();
+    this.endFit(ctx);
   }
 
   private finaleMenuRects() {

@@ -46,7 +46,7 @@ const SUBHEAD_Y = 40;
 
 /** Where the scrolling list starts and how much the footer keeps for itself. */
 export const JOURNAL_SCROLL_TOP_Y = 58;
-export const JOURNAL_FOOTER_H = 52;
+export const JOURNAL_FOOTER_H = 56;
 
 const ROW_X_INSET = 14;
 /** Breathing room above the first row, so its top border is not clipped away. */
@@ -92,17 +92,17 @@ const SCROLLBAR_X_INSET = 7;
 const SCROLLBAR_WIDTH = 3;
 
 /** The ▲/▼ pair in the header, shown only when the list overflows its band. */
-const SCROLL_BTN_SIZE = 20;
+const SCROLL_BTN_SIZE = 28;
 const SCROLL_BTN_GAP = 4;
 const SCROLL_BTN_RIGHT_INSET = 10;
-const SCROLL_BTN_Y = 12;
+const SCROLL_BTN_Y = 6;
 /** One row of travel per press, so a press always reveals exactly one new row. */
 const SCROLL_STEP = ROW_HEIGHT + ROW_GAP;
 
 const BACK_BTN_X_OFFSET = 20;
 const BACK_BTN_Y_OFFSET = 8;
 const BACK_BTN_WIDTH_REDUCTION = 40;
-const BACK_BTN_HEIGHT = 36;
+const BACK_BTN_HEIGHT = 40;
 
 /** The eight compass glyphs, in clockwise order starting due east. */
 const COMPASS_GLYPHS = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'] as const;

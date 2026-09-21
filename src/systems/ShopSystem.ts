@@ -4,8 +4,25 @@ import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawText } from '../ui/TextBox';
-import { drawBox, drawOverlay } from '../ui/Box';
-import { addButton, beginMenuFocus, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
+import {
+  drawBox,
+  drawOverlay,
+  drawScrollbar,
+  beginModalFit,
+  endModalFit,
+  modalFitPoint,
+  MODAL_FIT_NONE,
+  type ModalFit,
+} from '../ui/Box';
+import { fitPanel } from '../ui/panelFit';
+import {
+  addButton,
+  beginMenuFocus,
+  endMenuFocus,
+  BUTTON_PRESETS,
+  setButtonPointerSpace,
+  resetButtonPointerSpace,
+} from '../ui/Button';
 import type { ButtonRect } from '../ui/pause/types';
 import { drawShopkeeper } from '../sprites/shopkeeperSprite';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -41,7 +58,7 @@ const BUY_UNAFFORDABLE_LABEL = '#5a4040';
 const PANEL_W = 400;
 const PANEL_ITEM_H = 56;
 const PANEL_HEADER_H = 72;
-const PANEL_FOOTER_H = 32;
+const PANEL_FOOTER_H = 44;
 const PANEL_INNER_INSET = 5;
 const PANEL_INNER_SIZE_REDUCTION = 10;
 const PANEL_TITLE_Y = 26;
@@ -65,17 +82,33 @@ const PANEL_ITEM_NAME_SIZE = 13;
 const PANEL_ITEM_DESC_Y = 36;
 const PANEL_ITEM_DESC_BASELINE = 8;
 const PANEL_DESC_SIZE = 10;
-const PANEL_PRICE_X_FROM_RIGHT = 90;
-const PANEL_BTN_W = 68;
-const PANEL_BTN_H = 32;
+const PANEL_PRICE_X_FROM_RIGHT = 100;
+const PANEL_BTN_W = 76;
+/** Fills the row so a fingertip can hit it; the row itself is 56 tall. */
+const PANEL_BTN_H = 40;
 const PANEL_BTN_BORDER_W = 1.5;
 const PANEL_BTN_X_MARGIN = 12;
 const PANEL_BTN_TEXT_SIZE = 12;
 /** The footer's Close button, sized to sit inside PANEL_FOOTER_H with a hair of margin. */
 const PANEL_CLOSE_BTN_W = 150;
-const PANEL_CLOSE_BTN_H = 24;
-const PANEL_CLOSE_BTN_Y_FROM_BOTTOM = 28;
+const PANEL_CLOSE_BTN_H = 34;
+const PANEL_CLOSE_BTN_Y_FROM_BOTTOM = 40;
 const PANEL_CLOSE_SIZE = 10;
+
+/**
+ * Below this fit scale the shop shows fewer rows and scrolls instead of
+ * shrinking further, so its text stays readable on a landscape phone.
+ */
+const SHOP_COMFORT_SCALE = 0.8;
+/** Vertical breathing room the fit keeps above and below the panel (matches fitPanel). */
+const SHOP_VERTICAL_MARGIN = 16;
+const SHOP_MIN_VISIBLE_ROWS = 3;
+const SCROLLBAR_WIDTH = 4;
+const SCROLLBAR_X_FROM_RIGHT = 7;
+/** Pointer travel, in design px, before a press counts as a scroll drag instead of a tap. */
+const DRAG_THRESHOLD = 6;
+/** One wheel notch reports ~100; a row per notch feels right for a list this short. */
+const WHEEL_NOTCH_DELTA = 100;
 
 const HEALTH_POTION_PRICE = 5;
 const GOBLIN_DYNAMITE_PRICE = 10;
@@ -133,6 +166,15 @@ export class ShopSystem implements GameSystem {
   private feedbackTimer = 0;
   /** Rebuilt every render, so a click and the row it hits can never drift apart. */
   private panelButtons: ButtonRect[] = [];
+  /** Set every render; clicks are mapped back through it before hit-testing. */
+  private fit: ModalFit = MODAL_FIT_NONE;
+  private scrollY = 0;
+  private maxScrollY = 0;
+  private listRect = { x: 0, y: 0, w: 0, h: 0 };
+  private pressY: number | null = null;
+  private pressScrollY = 0;
+  /** Latched by a drag so the click that ends it does not also buy the row under the finger. */
+  private dragged = false;
 
   private readonly title: string;
   private readonly items: ReadonlyArray<ShopItem>;
@@ -208,6 +250,48 @@ export class ShopSystem implements GameSystem {
     }
   }
 
+  /** Rows that fit on screen at a legible scale; the rest scroll. */
+  private visibleRowCount(): number {
+    const maxDesignHeight = (viewportHeight() - SHOP_VERTICAL_MARGIN * 2) / SHOP_COMFORT_SCALE;
+    const rowsThatFit = Math.floor(
+      (maxDesignHeight - PANEL_HEADER_H - PANEL_FOOTER_H) / PANEL_ITEM_H,
+    );
+    return Math.min(this.items.length, Math.max(SHOP_MIN_VISIBLE_ROWS, rowsThatFit));
+  }
+
+  private scrollBy(designPx: number): void {
+    this.scrollY = Math.min(this.maxScrollY, Math.max(0, this.scrollY + designPx));
+  }
+
+  handleWheel(deltaY: number): void {
+    if (!this.shopOpen) return;
+    this.scrollBy((deltaY / WHEEL_NOTCH_DELTA) * PANEL_ITEM_H);
+  }
+
+  handlePointerDown(mx: number, my: number): void {
+    this.dragged = false;
+    const point = modalFitPoint(this.fit, mx, my);
+    const r = this.listRect;
+    const insideList =
+      point.x >= r.x && point.x <= r.x + r.w && point.y >= r.y && point.y <= r.y + r.h;
+    this.pressY = insideList ? point.y : null;
+    this.pressScrollY = this.scrollY;
+  }
+
+  handlePointerMove(mx: number, my: number): void {
+    if (this.pressY === null) return;
+    const point = modalFitPoint(this.fit, mx, my);
+    const travel = this.pressY - point.y;
+    if (Math.abs(travel) > DRAG_THRESHOLD) this.dragged = true;
+    if (!this.dragged) return;
+    this.scrollY = this.pressScrollY;
+    this.scrollBy(travel);
+  }
+
+  handlePointerUp(): void {
+    this.pressY = null;
+  }
+
   renderShopPanel(ctx: CanvasRenderingContext2D, active: Player): void {
     if (!this.shopOpen) return;
     const cw = viewportWidth();
@@ -215,9 +299,20 @@ export class ShopSystem implements GameSystem {
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: PANEL_OVERLAY_ALPHA });
 
-    const panelH = PANEL_HEADER_H + this.items.length * PANEL_ITEM_H + PANEL_FOOTER_H;
+    const visibleRows = this.visibleRowCount();
+    const listH = visibleRows * PANEL_ITEM_H;
+    const panelH = PANEL_HEADER_H + listH + PANEL_FOOTER_H;
+    this.fit = fitPanel(PANEL_W, panelH);
+    beginModalFit(ctx, this.fit);
+    setButtonPointerSpace(this.fit.scale, this.fit.pivotX, this.fit.pivotY);
+
     const panelX = cw / 2 - PANEL_W / 2;
     const panelY = ch / 2 - panelH / 2;
+    const listTop = panelY + PANEL_FIRST_ROW_Y;
+    const listBottom = listTop + listH;
+    this.maxScrollY = Math.max(0, (this.items.length - visibleRows) * PANEL_ITEM_H);
+    this.scrollY = Math.min(this.scrollY, this.maxScrollY);
+    this.listRect = { x: panelX, y: listTop, w: PANEL_W, h: listH };
 
     drawBox(ctx, {
       x: panelX,
@@ -265,9 +360,15 @@ export class ShopSystem implements GameSystem {
 
     this.panelButtons = [];
     beginMenuFocus('shop');
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(panelX, listTop, PANEL_W, listH);
+    ctx.clip();
     for (let i = 0; i < this.items.length; i++) {
       const item = this.items[i];
-      const rowY = panelY + PANEL_FIRST_ROW_Y + i * PANEL_ITEM_H;
+      const rowY = listTop + i * PANEL_ITEM_H - this.scrollY;
+      if (rowY + PANEL_ITEM_H <= listTop || rowY >= listBottom) continue;
       const canAfford = active.coins >= item.price;
 
       ctx.fillStyle =
@@ -307,6 +408,10 @@ export class ShopSystem implements GameSystem {
 
       const btnX = panelX + PANEL_W - PANEL_BTN_W - PANEL_BTN_X_MARGIN;
       const btnY = rowY + (PANEL_ITEM_H - PANEL_BTN_H) / 2;
+      // A half-scrolled Buy button would be drawn clipped yet still hittable
+      // through the clip edge, so only whole buttons exist.
+      const buttonFullyVisible = btnY >= listTop && btnY + PANEL_BTN_H <= listBottom;
+      if (!buttonFullyVisible) continue;
 
       const itemIdx = i;
       addButton(ctx, this.panelButtons, {
@@ -324,6 +429,16 @@ export class ShopSystem implements GameSystem {
         action: () => this.tryBuy(itemIdx, active),
       });
     }
+    ctx.restore();
+
+    drawScrollbar(ctx, {
+      x: panelX + PANEL_W - SCROLLBAR_X_FROM_RIGHT,
+      trackY: listTop,
+      trackH: listH,
+      contentH: this.items.length * PANEL_ITEM_H,
+      scrollY: this.scrollY,
+      width: SCROLLBAR_WIDTH,
+    });
 
     addButton(ctx, this.panelButtons, {
       x: cw / 2,
@@ -341,16 +456,24 @@ export class ShopSystem implements GameSystem {
       },
     });
     endMenuFocus();
+
+    endModalFit(ctx);
+    resetButtonPointerSpace();
   }
 
   handleClick(mx: number, my: number): void {
     if (!this.shopOpen) return;
+    if (this.dragged) {
+      this.dragged = false;
+      return;
+    }
+    const point = modalFitPoint(this.fit, mx, my);
     for (const button of this.panelButtons) {
       if (
-        mx >= button.x &&
-        mx <= button.x + button.w &&
-        my >= button.y &&
-        my <= button.y + button.h
+        point.x >= button.x &&
+        point.x <= button.x + button.w &&
+        point.y >= button.y &&
+        point.y <= button.y + button.h
       ) {
         button.action?.();
         return;
