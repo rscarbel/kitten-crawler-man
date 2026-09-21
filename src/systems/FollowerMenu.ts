@@ -13,15 +13,18 @@ interface Rect {
 }
 
 // Menu dimensions
-const MENU_PANEL_WIDTH = 360;
-const MENU_PANEL_HEIGHT = 380;
-const MENU_TITLE_Y_OFFSET = 42;
-const MENU_BUTTON_WIDTH = 320;
-const MENU_BUTTON_HEIGHT = 48;
+const MENU_PANEL_WIDTH = 440;
+const MENU_PANEL_HEIGHT = 540;
+const MENU_TITLE_Y_OFFSET = 48;
+const MENU_BUTTON_WIDTH = 400;
+const MENU_BUTTON_HEIGHT = 60;
+
+/** Breathing room kept between the panel and the screen edge on small viewports. */
+const MENU_SCREEN_MARGIN = 8;
 
 // Menu layout spacing
-const MENU_INITIAL_Y_OFFSET = 62;
-const MENU_SECTION_HEADER_SIZE = 10;
+const MENU_INITIAL_Y_OFFSET = 72;
+const MENU_SECTION_HEADER_SIZE = 12;
 const MENU_SECTION_HEADER_Y_OFFSET = 18;
 const MENU_SECTION_SPACING = 10;
 const MENU_BUTTON_SPACING = 8;
@@ -31,7 +34,7 @@ const MENU_BACKDROP_ALPHA = 0.65;
 const MENU_PANEL_BG_COLOR = '#111927';
 const MENU_PANEL_BORDER_COLOR = '#5a8fc5';
 const MENU_PANEL_BORDER_WIDTH = 2;
-const MENU_TITLE_SIZE = 22;
+const MENU_TITLE_SIZE = 26;
 
 // Button styling
 const BUTTON_ACTIVE_BG = 'rgba(90,143,197,0.3)';
@@ -42,29 +45,32 @@ const BUTTON_ACTIVE_BORDER_WIDTH = 2;
 const BUTTON_INACTIVE_BORDER_WIDTH = 1;
 
 // Icon styling
-const BUTTON_ICON_FONT_SIZE = 20;
-const BUTTON_ICON_X_OFFSET = 28;
-const BUTTON_ICON_Y_ADJUST = 7;
+const BUTTON_ICON_FONT_SIZE = 24;
+const BUTTON_ICON_X_OFFSET = 34;
+const BUTTON_ICON_Y_ADJUST = 8;
 const BUTTON_ICON_ACTIVE_COLOR = '#ffffff';
 const BUTTON_ICON_INACTIVE_COLOR = '#8ba8c4';
 
 // Label styling
-const BUTTON_LABEL_X_OFFSET = 54;
-const BUTTON_LABEL_SIZE = 16;
+const BUTTON_LABEL_X_OFFSET = 66;
+const BUTTON_LABEL_SIZE = 20;
 const BUTTON_LABEL_ACTIVE_COLOR = '#ffffff';
 const BUTTON_LABEL_INACTIVE_COLOR = '#b8cfe4';
 
 // Radio button styling
-const RADIO_X_OFFSET = 22;
+const RADIO_X_OFFSET = 26;
 const RADIO_OUTER_RADIUS = 7;
 const RADIO_INNER_RADIUS = 4;
 const RADIO_ACTIVE_COLOR = '#5a8fc5';
 const RADIO_INACTIVE_COLOR = '#334155';
 const RADIO_OUTER_BORDER_WIDTH = 2;
 
+// Switch button
+const SWITCH_BUTTON_ICON = '⇄';
+
 // Footer
 const MENU_FOOTER_Y_OFFSET = 18;
-const MENU_FOOTER_SIZE = 11;
+const MENU_FOOTER_SIZE = 13;
 const MENU_FOOTER_COLOR = '#4a6680';
 
 /**
@@ -83,6 +89,7 @@ export class FollowerMenu {
   onDoNotMove: (() => void) | null = null;
   onSetAggressive: (() => void) | null = null;
   onSetPassive: (() => void) | null = null;
+  onSwitchCharacter: (() => void) | null = null;
 
   /**
    * When non-null, only the button at this index is clickable.
@@ -139,11 +146,17 @@ export class FollowerMenu {
 
     const cw = viewportWidth();
     const ch = viewportHeight();
+    const fit = Math.min(
+      1,
+      (cw - MENU_SCREEN_MARGIN * 2) / MENU_PANEL_WIDTH,
+      (ch - MENU_SCREEN_MARGIN * 2) / MENU_PANEL_HEIGHT,
+    );
+    const u = (designPx: number): number => Math.round(designPx * fit);
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: MENU_BACKDROP_ALPHA });
 
-    const panelW = MENU_PANEL_WIDTH;
-    const panelH = MENU_PANEL_HEIGHT;
+    const panelW = u(MENU_PANEL_WIDTH);
+    const panelH = u(MENU_PANEL_HEIGHT);
     const panelX = Math.round(cw / 2 - panelW / 2);
     const panelY = Math.round(ch / 2 - panelH / 2);
 
@@ -162,15 +175,15 @@ export class FollowerMenu {
     const companionName = companionIsCat ? 'Cat Companion' : 'Human Companion';
     drawText(ctx, `${companionEmoji}  ${companionName}`, {
       x: cw / 2,
-      y: panelY + MENU_TITLE_Y_OFFSET - MENU_TITLE_SIZE,
-      size: MENU_TITLE_SIZE,
+      y: panelY + u(MENU_TITLE_Y_OFFSET) - u(MENU_TITLE_SIZE),
+      size: u(MENU_TITLE_SIZE),
       bold: true,
       color: '#ffffff',
       align: 'center',
     });
 
-    const btnW = MENU_BUTTON_WIDTH;
-    const btnH = MENU_BUTTON_HEIGHT;
+    const btnW = u(MENU_BUTTON_WIDTH);
+    const btnH = u(MENU_BUTTON_HEIGHT);
     const btnX = panelX + Math.round((panelW - btnW) / 2);
 
     const sections: Array<{
@@ -195,18 +208,18 @@ export class FollowerMenu {
 
     this._buttonRects = [];
     beginMenuFocus('follower-menu');
-    let currentY = panelY + MENU_INITIAL_Y_OFFSET;
+    let currentY = panelY + u(MENU_INITIAL_Y_OFFSET);
 
     for (const section of sections) {
       // Section header
       drawText(ctx, section.header, {
         x: btnX,
         y: currentY,
-        size: MENU_SECTION_HEADER_SIZE,
+        size: u(MENU_SECTION_HEADER_SIZE),
         bold: true,
         color: '#7a9ec0',
       });
-      currentY += MENU_SECTION_HEADER_Y_OFFSET;
+      currentY += u(MENU_SECTION_HEADER_Y_OFFSET);
 
       for (const item of section.items) {
         const r: Rect = { x: btnX, y: currentY, w: btnW, h: btnH };
@@ -244,51 +257,95 @@ export class FollowerMenu {
         }
 
         // Icon (large, left side)
-        ctx.font = `bold ${BUTTON_ICON_FONT_SIZE}px monospace`;
+        ctx.font = `bold ${u(BUTTON_ICON_FONT_SIZE)}px monospace`;
         ctx.textAlign = 'center';
         ctx.fillStyle = item.active ? BUTTON_ICON_ACTIVE_COLOR : BUTTON_ICON_INACTIVE_COLOR;
         ctx.fillText(
           item.icon,
-          r.x + BUTTON_ICON_X_OFFSET,
-          r.y + Math.round(r.h / 2) + BUTTON_ICON_Y_ADJUST,
+          r.x + u(BUTTON_ICON_X_OFFSET),
+          r.y + Math.round(r.h / 2) + u(BUTTON_ICON_Y_ADJUST),
         );
         ctx.textAlign = 'left';
 
         // Label text — large and readable
         drawText(ctx, item.label, {
-          x: r.x + BUTTON_LABEL_X_OFFSET,
-          y: r.y + Math.round((r.h - BUTTON_LABEL_SIZE) / 2),
-          size: BUTTON_LABEL_SIZE,
+          x: r.x + u(BUTTON_LABEL_X_OFFSET),
+          y: r.y + Math.round((r.h - u(BUTTON_LABEL_SIZE)) / 2),
+          size: u(BUTTON_LABEL_SIZE),
           bold: item.active,
           color: item.active ? BUTTON_LABEL_ACTIVE_COLOR : BUTTON_LABEL_INACTIVE_COLOR,
         });
 
         // Radio button indicator on the right (always rendered; filled when active)
-        const radioCx = r.x + r.w - RADIO_X_OFFSET;
+        const radioCx = r.x + r.w - u(RADIO_X_OFFSET);
         const radioCy = r.y + Math.round(r.h / 2);
         ctx.beginPath();
-        ctx.arc(radioCx, radioCy, RADIO_OUTER_RADIUS, 0, Math.PI * 2);
+        ctx.arc(radioCx, radioCy, u(RADIO_OUTER_RADIUS), 0, Math.PI * 2);
         ctx.strokeStyle = item.active ? RADIO_ACTIVE_COLOR : RADIO_INACTIVE_COLOR;
         ctx.lineWidth = RADIO_OUTER_BORDER_WIDTH;
         ctx.stroke();
         if (item.active) {
           ctx.beginPath();
-          ctx.arc(radioCx, radioCy, RADIO_INNER_RADIUS, 0, Math.PI * 2);
+          ctx.arc(radioCx, radioCy, u(RADIO_INNER_RADIUS), 0, Math.PI * 2);
           ctx.fillStyle = RADIO_ACTIVE_COLOR;
           ctx.fill();
         }
 
-        currentY += btnH + MENU_BUTTON_SPACING;
+        currentY += btnH + u(MENU_BUTTON_SPACING);
       }
 
-      currentY += MENU_SECTION_SPACING;
+      currentY += u(MENU_SECTION_SPACING);
     }
+
+    const switchRect: Rect = { x: btnX, y: currentY, w: btnW, h: btnH };
+    const switchRestricted = this.restrictedToButtonIndex !== null;
+    addButton(ctx, this._buttonRects, {
+      x: switchRect.x,
+      y: switchRect.y,
+      width: switchRect.w,
+      height: switchRect.h,
+      label: '',
+      fill: BUTTON_INACTIVE_BG,
+      border: BUTTON_ACTIVE_BORDER,
+      borderWidth: BUTTON_INACTIVE_BORDER_WIDTH,
+      radius: 0,
+      disabled: switchRestricted,
+      action: switchRestricted
+        ? () => {
+            // Swallow: the tutorial is pointing at another row.
+          }
+        : () => {
+            this._isOpen = false;
+            this.onSwitchCharacter?.();
+          },
+    });
+    if (switchRestricted) {
+      ctx.fillStyle = `rgba(0, 0, 0, ${RESTRICTED_DIM_ALPHA})`;
+      ctx.fillRect(switchRect.x, switchRect.y, switchRect.w, switchRect.h);
+    }
+    ctx.font = `bold ${u(BUTTON_ICON_FONT_SIZE)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = BUTTON_ICON_ACTIVE_COLOR;
+    ctx.fillText(
+      SWITCH_BUTTON_ICON,
+      switchRect.x + u(BUTTON_ICON_X_OFFSET),
+      switchRect.y + Math.round(switchRect.h / 2) + u(BUTTON_ICON_Y_ADJUST),
+    );
+    ctx.textAlign = 'left';
+    const otherPlayableCharacter = companionIsCat ? 'Cat' : 'Human';
+    drawText(ctx, `Switch to ${otherPlayableCharacter}`, {
+      x: switchRect.x + u(BUTTON_LABEL_X_OFFSET),
+      y: switchRect.y + Math.round((switchRect.h - u(BUTTON_LABEL_SIZE)) / 2),
+      size: u(BUTTON_LABEL_SIZE),
+      bold: true,
+      color: BUTTON_LABEL_ACTIVE_COLOR,
+    });
     endMenuFocus();
 
     drawText(ctx, 'Esc or click outside to close', {
       x: cw / 2,
-      y: panelY + panelH - MENU_FOOTER_Y_OFFSET,
-      size: MENU_FOOTER_SIZE,
+      y: panelY + panelH - u(MENU_FOOTER_Y_OFFSET),
+      size: u(MENU_FOOTER_SIZE),
       color: MENU_FOOTER_COLOR,
       align: 'center',
     });

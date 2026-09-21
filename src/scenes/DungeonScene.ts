@@ -1381,6 +1381,7 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('menu_change_follower');
       this.companion.setAggressive(this.human.isActive);
     };
+    this.followerMenu.onSwitchCharacter = () => this.triggerSwitchCharacter();
     this.followerMenu.onSetPassive = () => {
       this.audio?.play('menu_change_follower');
       this.companion.setPassive(this.human.isActive);

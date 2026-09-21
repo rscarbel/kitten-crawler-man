@@ -1635,6 +1635,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.audio?.play('menu_click');
       this.companion.setAggressive(this.human.isActive);
     };
+    this.followerMenu.onSwitchCharacter = () => this.trySwitchActive();
     this.followerMenu.onSetPassive = () => {
       this.audio?.play('menu_click');
       this.companion.setPassive(this.human.isActive);
