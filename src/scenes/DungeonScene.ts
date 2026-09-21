@@ -6,6 +6,8 @@ import { clamp, frameTime } from '../utils';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
+import type { GameProgressInput } from '../auth/AuthClient';
+import { WORLD_GENERATOR_VERSION } from '../core/SavedWorld';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { groundSheetKeysAmong, requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { releaseEnvironmentArt } from '../map/environmentArtCache';
@@ -161,11 +163,7 @@ import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { TreeSystem } from '../systems/TreeSystem';
 import { WaterAnimationSystem } from '../systems/WaterAnimationSystem';
-import {
-  AbilityManager,
-  type AbilityId,
-  type SerializedAbilityState,
-} from '../core/AbilityManager';
+import { AbilityManager, type AbilityId } from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { MONGO_DEF, getMongoStats } from '../abilities/mongo';
@@ -311,23 +309,10 @@ import {
 /**
  * Persists a run. Everything a resumed game needs that the scene cannot
  * re-derive: both crawlers, the floor they are on, and the party's ability
- * progress — which belongs to neither `PlayerSnapshot` because it is shared.
+ * progress — which belongs to neither `PlayerSnapshot` because it is shared —
+ * plus the floor's generation seeds and the safe room to stand back in.
  */
-export type SaveProgressFn = (data: {
-  humanSnap: PlayerSnapshot;
-  catSnap: PlayerSnapshot;
-  levelId: string;
-  abilityStates: SerializedAbilityState[];
-  /**
-   * Whether the Krakaren chest has been opened. The pet's level and XP ride
-   * along in `abilityStates`, but whether he exists at all does not — it is not
-   * an ability state, it is a one-off unlock.
-   */
-  mongoUnlocked: boolean;
-  /** The pet's current HP, which does not reset between summons or sessions. */
-  mongoPetHp: number;
-  mongoPetResting: boolean;
-}) => void;
+export type SaveProgressFn = (data: GameProgressInput) => void;
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -343,6 +328,12 @@ export interface DungeonSceneOptions {
   knockedOutCompanionAt?: { x: number; y: number };
   /** Existing map to reuse instead of generating a new one (e.g. returning from building). */
   existingMap?: GameMap;
+  /** Regenerates the floor a save was written on. Unused when `existingMap` is given. */
+  worldSeed?: number;
+  /** Collapse-timer frames remaining, so a resume does not hand back a full clock. */
+  levelTimerFrames?: number;
+  /** The art seed that floor was painted with, so a resume looks like the run it resumes. */
+  artSeed?: number;
   /**
    * Minimap to reuse so fog-of-war survives the scene rebuild. Only honoured
    * alongside `existingMap` — its fog array is sized to that map's structure.
@@ -902,6 +893,8 @@ export class DungeonScene extends GameplayScene {
   private levelTimerFrames = 0;
   private readonly LEVEL_TIME_LIMIT = 216_000; // 1 hour @ 60 fps
   private wasInSafeRoom = false;
+  /** Centre tile of the last safe room the party stood in, which is where a resume puts them. */
+  private lastSafeRoomTile: { x: number; y: number } | null = null;
   /** In-run checkpoint from the last safe room entered on this floor, or null if none yet. */
   private checkpoint: LevelCheckpoint | null = null;
   private speechBubblePulse = 0;
@@ -1030,8 +1023,13 @@ export class DungeonScene extends GameplayScene {
           tileHeight: TILE_SIZE,
           mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
           dungeon: dungeonOptionsForLevel(levelDef),
+          worldSeed: options?.worldSeed,
+          artSeed: options?.artSeed,
         });
-      this.levelTimerFrames = levelDef.hasCollapseTimer === true ? this.LEVEL_TIME_LIMIT : 0;
+      this.levelTimerFrames =
+        levelDef.hasCollapseTimer === true
+          ? Math.min(options?.levelTimerFrames ?? this.LEVEL_TIME_LIMIT, this.LEVEL_TIME_LIMIT)
+          : 0;
 
       // Dev bootstrap: spawn on the southern circus grounds so quest stages
       // can be exercised without the walk from town.
@@ -2350,6 +2348,11 @@ export class DungeonScene extends GameplayScene {
       if (this.tutorial === null && this.catAchievements.tryUnlock('safe_haven')) {
         bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Cat' });
       }
+      // The event fires when either crawler is protected, so the active one may
+      // be outside the room; keep the last room actually seen rather than
+      // overwriting a good resume point with nothing.
+      const enteredRoom = this.safeRoom.safeRoomInfoAt(this.active());
+      if (enteredRoom !== null) this.lastSafeRoomTile = enteredRoom.centre;
       this.onSaveProgress?.({
         humanSnap: revivedSnapshot(snapPlayer(this.human)),
         catSnap: revivedSnapshot(snapPlayer(this.cat)),
@@ -2362,6 +2365,18 @@ export class DungeonScene extends GameplayScene {
         // player's heel was recording 130.
         mongoPetHp: this.mongoSystem.hp,
         mongoPetResting: this.mongoSystem.restingUntilFull,
+        // The tutorial's hand-built map has no layout to regenerate.
+        world:
+          this.tutorial === null
+            ? {
+                generatorVersion: WORLD_GENERATOR_VERSION,
+                worldSeed: this.gameMap.worldSeed,
+                artSeed: this.gameMap.artSeed,
+                safeRoomTile: this.lastSafeRoomTile,
+                levelTimerFrames:
+                  this.levelDef.hasCollapseTimer === true ? this.levelTimerFrames : null,
+              }
+            : undefined,
       });
 
       // Skipped in the tutorial, matching the achievement unlocks above — the

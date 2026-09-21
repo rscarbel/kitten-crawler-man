@@ -1,3 +1,4 @@
+import { worldRandom } from './core/WorldRandom';
 import { TILE_SIZE } from './core/constants';
 
 /** Tile center offset as a fraction of tile size. */
@@ -8,10 +9,10 @@ const MS_PER_SECOND = 1000;
 
 /** Return a random integer in the inclusive range [min, max]. */
 export const randomInt = (min: number, max: number) =>
-  min + Math.floor(Math.random() * (max - min + 1));
+  min + Math.floor(worldRandom() * (max - min + 1));
 
 /** Pick a uniformly random element from a non-empty array. */
-export const randomFromArray = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+export const randomFromArray = <T>(arr: T[]): T => arr[Math.floor(worldRandom() * arr.length)];
 
 const GOLDEN_RATIO_RADICAND = 5;
 const GOLDEN_RATIO_CONJUGATE = (Math.sqrt(GOLDEN_RATIO_RADICAND) - 1) / 2;

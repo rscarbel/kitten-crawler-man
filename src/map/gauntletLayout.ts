@@ -1,4 +1,5 @@
 import { randomInt, clamp } from '../utils';
+import { worldRandom } from '../core/WorldRandom';
 
 export type Point = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -206,12 +207,12 @@ function polar(angleRadians: number, distance: number): Point {
 }
 
 function randomSign(): number {
-  return Math.random() < EVEN_CHANCE ? -1 : 1;
+  return worldRandom() < EVEN_CHANCE ? -1 : 1;
 }
 
 /** Uniform angle in [-spreadRadians, spreadRadians]. */
 function angleJitter(spreadRadians: number): number {
-  return (Math.random() * 2 - 1) * spreadRadians;
+  return (worldRandom() * 2 - 1) * spreadRadians;
 }
 
 function quadraticBezier(p0: Point, p1: Point, p2: Point, t: number): Point {
@@ -600,7 +601,7 @@ export interface GauntletPlan {
 }
 
 function nextHeading(previousHeading: number | null): number {
-  if (previousHeading === null) return Math.random() * FULL_TURN_RADIANS;
+  if (previousHeading === null) return worldRandom() * FULL_TURN_RADIANS;
   const turnDegrees = randomInt(GAUNTLET_FLANK_TURN_MIN_DEG, GAUNTLET_FLANK_TURN_MAX_DEG);
   return previousHeading + randomSign() * turnDegrees * DEGREES_TO_RADIANS;
 }
@@ -614,7 +615,7 @@ function branchExitAngles(
   if (request.index === 0) {
     // Leaving the start room, the player should be able to set off in any
     // direction, so the branches ring the room rather than fanning one way.
-    const rotation = Math.random() * FULL_TURN_RADIANS;
+    const rotation = worldRandom() * FULL_TURN_RADIANS;
     const spacing = FULL_TURN_RADIANS / branchCount;
     for (let i = 0; i < branchCount; i++) {
       angles.push(rotation + i * spacing + angleJitter(spacing * RADIAL_BRANCH_JITTER_FRACTION));
@@ -671,8 +672,8 @@ function branchWaypoints(
       gatewayCentre,
       parameterAtArcLength(arcTable, distance),
     );
-    const jitterAngle = Math.random() * FULL_TURN_RADIANS;
-    const jitterDistance = Math.random() * WAYPOINT_JITTER;
+    const jitterAngle = worldRandom() * FULL_TURN_RADIANS;
+    const jitterDistance = worldRandom() * WAYPOINT_JITTER;
     const offset = polar(jitterAngle, jitterDistance);
     waypoints.push({ x: Math.round(point.x + offset.x), y: Math.round(point.y + offset.y) });
   }
@@ -963,7 +964,7 @@ export function planCorridorBetween(
 ): PlannedCorridor | null {
   const fromCentre = rectCentre(from);
   const toCentre = rectCentre(to);
-  const orientations = Math.random() < EVEN_CHANCE ? [true, false] : [false, true];
+  const orientations = worldRandom() < EVEN_CHANCE ? [true, false] : [false, true];
   for (const horizontalFirst of orientations) {
     const tiles = segments.corridorTiles(fromCentre, toCentre, kind, horizontalFirst);
     if (segments.canCarveCorridor(tiles, segment, [from, to])) {

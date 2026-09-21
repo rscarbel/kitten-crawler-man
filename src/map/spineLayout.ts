@@ -9,6 +9,7 @@ import {
   type Point,
   type Rect,
 } from './gauntletLayout';
+import { worldRandom } from '../core/WorldRandom';
 
 /**
  * The spine: one forced, winding chain of rooms between two fixed landmarks,
@@ -225,7 +226,7 @@ export interface SpineRequest {
 
 /** Uniform angle in [-spread, spread]. */
 function angleJitter(spread: number): number {
-  return (Math.random() * 2 - 1) * spread;
+  return (worldRandom() * 2 - 1) * spread;
 }
 
 /** Signed angle difference, wrapped into (-π, π]. */
@@ -310,7 +311,7 @@ function seatBesideChain(
   h: number,
   accept?: (centre: Point) => boolean,
 ): Rect | null {
-  const signs = Math.random() < EVEN_CHANCE ? SIDE_SIGNS : [SIDE_SIGNS[1], SIDE_SIGNS[0]];
+  const signs = worldRandom() < EVEN_CHANCE ? SIDE_SIGNS : [SIDE_SIGNS[1], SIDE_SIGNS[0]];
   for (const sign of signs) {
     const waypoint = {
       x: Math.round(anchor.x - heading.y * offset * sign),
@@ -352,7 +353,7 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
   // winding passage rather than as a drunk walk: the chain leans one way, then
   // the other, and the lean is what a player feels as a bend.
   let heading = Math.atan2(to.y - from.y, to.x - from.x) + angleJitter(START_HEADING_JITTER);
-  let turnSign = Math.random() < EVEN_CHANCE ? -1 : 1;
+  let turnSign = worldRandom() < EVEN_CHANCE ? -1 : 1;
   let roomsUntilFlip = randomInt(ROOMS_PER_LEAN_MIN, ROOMS_PER_LEAN_MAX);
   let current = from;
 
@@ -368,7 +369,7 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
     }
     roomsUntilFlip--;
     heading +=
-      turnSign * (TURN_PER_ROOM_MIN + Math.random() * (TURN_PER_ROOM_MAX - TURN_PER_ROOM_MIN));
+      turnSign * (TURN_PER_ROOM_MIN + worldRandom() * (TURN_PER_ROOM_MAX - TURN_PER_ROOM_MIN));
 
     const isQuest = index === questIndex;
     const w = isQuest ? request.questRoom.w : randomInt(SPINE_ROOM_W_MIN, SPINE_ROOM_W_MAX);
@@ -600,7 +601,7 @@ function seatLane(
   const unit = normalize(heading.x, heading.y);
   const roomCount = randomInt(1, SPLIT_LANE_MAX_ROOMS);
   const offset = randomInt(LANE_OFFSET_MIN, LANE_OFFSET_MAX);
-  const sign = Math.random() < EVEN_CHANCE ? -1 : 1;
+  const sign = worldRandom() < EVEN_CHANCE ? -1 : 1;
 
   // A two-room lane that seats its first room and fails on its second would
   // otherwise leave the first claimed for the rest of the plan — an invisible

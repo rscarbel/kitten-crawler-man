@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "verify:progression": "tsx scripts/verify-progression.ts",
     "verify:quest-choke": "tsx scripts/verify-quest-choke.ts",
+    "verify:world-seed": "tsx scripts/verify-world-seed.ts",
     "verify:crawler-signs": "tsx scripts/verify-crawler-signs.ts",
     "verify:bounty": "tsx scripts/verify-bounty.ts",
     "verify:separation": "tsx scripts/verify-separation.ts",

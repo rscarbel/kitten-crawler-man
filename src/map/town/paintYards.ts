@@ -13,6 +13,7 @@
 import { GARDEN_PLANTING, VERGE_GRASS, YARD_GRAVEL } from '../tileTypes';
 import type { TileGrid } from './tileGrid';
 import type { PlannedYard, TileRect, TownPlan, YardKind } from './townPlan';
+import { worldRandom } from '../../core/WorldRandom';
 
 /** The surface each kind of yard must stand on. */
 const YARD_SURFACE: Record<YardKind, number> = {
@@ -184,7 +185,7 @@ export function plantGardens(
         const y = yard.bounds.y + dy;
         if (containedByAny(buildingArt, x, y)) continue;
         if (grid.typeAt(x, y) !== VERGE_GRASS) continue;
-        if (Math.random() >= density) continue;
+        if (worldRandom() >= density) continue;
         grid.set(x, y, GARDEN_PLANTING);
       }
     }

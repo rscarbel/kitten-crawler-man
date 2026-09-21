@@ -19,6 +19,7 @@ import {
 } from '../tileTypes';
 import type { TileGrid } from './tileGrid';
 import type { TileRect, TownPlan } from './townPlan';
+import { worldRandom } from '../../core/WorldRandom';
 
 /** Paints the impassable ring of void that frames the map. */
 export function paintVoidBorder(grid: TileGrid, borderTiles: number): void {
@@ -68,7 +69,7 @@ export function scatterGroundCover(
     for (let y = borderTiles + 1; y < grid.size - borderTiles - 1; y++) {
       for (let x = borderTiles + 1; x < grid.size - borderTiles - 1; x++) {
         if (isReserved(x, y)) continue;
-        if (grid.typeAt(x, y) === sourceType && Math.random() < density) {
+        if (grid.typeAt(x, y) === sourceType && worldRandom() < density) {
           grid.set(x, y, scatterType);
         }
       }
@@ -120,7 +121,7 @@ export function scatterWildernessGroundCover(
       for (let x = borderTiles + 1; x < grid.size - borderTiles - 1; x++) {
         if (grid.typeAt(x, y) !== sourceType) continue;
         if (Math.hypot(x - plan.centre.x, y - plan.centre.y) <= plan.safeRadiusTiles) continue;
-        if (Math.random() < density) grid.setStanding(x, y, coverType);
+        if (worldRandom() < density) grid.setStanding(x, y, coverType);
       }
     }
   };

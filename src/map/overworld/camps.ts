@@ -27,6 +27,7 @@ import {
 import type { TileGrid } from '../town/tileGrid';
 import type { TilePoint, TownPlan } from '../town/townPlan';
 import type { ElevationField } from './elevation';
+import { worldRandom } from '../../core/WorldRandom';
 
 /** Which kind of camp a site is. Consumed by `LevelDef.campSpawns`. */
 export type CampKind = 'goblin' | 'troglodyte';
@@ -144,9 +145,9 @@ function pickCampSite(
   let bestScore = -1;
 
   for (let attempt = 0; attempt < CAMP_SITE_ATTEMPTS; attempt++) {
-    const angle = Math.random() * TWO_PI;
+    const angle = worldRandom() * TWO_PI;
     const distance =
-      CAMP_MIN_DISTANCE_TILES + Math.random() * Math.max(0, maxDistance - CAMP_MIN_DISTANCE_TILES);
+      CAMP_MIN_DISTANCE_TILES + worldRandom() * Math.max(0, maxDistance - CAMP_MIN_DISTANCE_TILES);
     const site: TilePoint = {
       x: Math.round(townCentre.x + Math.cos(angle) * distance),
       y: Math.round(townCentre.y + Math.sin(angle) * distance),
@@ -193,8 +194,8 @@ function scatterInCamp(
   count: number,
 ): void {
   for (let placed = 0; placed < count; placed++) {
-    const angle = Math.random() * TWO_PI;
-    const reach = Math.sqrt(Math.random()) * radiusTiles;
+    const angle = worldRandom() * TWO_PI;
+    const reach = Math.sqrt(worldRandom()) * radiusTiles;
     const tx = Math.round(centre.x + Math.cos(angle) * reach);
     const ty = Math.round(centre.y + Math.sin(angle) * reach);
     if (grid.isSolid(tx, ty)) continue;
@@ -214,7 +215,7 @@ function paintGoblinCamp(grid: TileGrid, centre: TilePoint): void {
   // clearance idiom the circus's small tents use.
   const placed: TilePoint[] = [centre];
   for (let tent = 0; tent < GOBLIN_TENT_COUNT; tent++) {
-    const angle = (tent / GOBLIN_TENT_COUNT) * TWO_PI + Math.random();
+    const angle = (tent / GOBLIN_TENT_COUNT) * TWO_PI + worldRandom();
     const spot: TilePoint = {
       x: Math.round(centre.x + Math.cos(angle) * TENT_RING_RADIUS_TILES),
       y: Math.round(centre.y + Math.sin(angle) * TENT_RING_RADIUS_TILES),
@@ -250,11 +251,11 @@ function paintTroglodyteDen(grid: TileGrid, centre: TilePoint): void {
   }
 
   for (let boulder = 0; boulder < DEN_BOULDER_COUNT; boulder++) {
-    const angle = (boulder / DEN_BOULDER_COUNT) * TWO_PI + Math.random();
+    const angle = (boulder / DEN_BOULDER_COUNT) * TWO_PI + worldRandom();
     const tx = Math.round(centre.x + Math.cos(angle) * DEN_BOULDER_RING_RADIUS_TILES);
     const ty = Math.round(centre.y + Math.sin(angle) * DEN_BOULDER_RING_RADIUS_TILES);
     if (grid.isSolid(tx, ty)) continue;
-    const isLarge = Math.random() < DEN_LARGE_BOULDER_SHARE;
+    const isLarge = worldRandom() < DEN_LARGE_BOULDER_SHARE;
     grid.setStanding(tx, ty, isLarge ? BOULDER_LARGE : BOULDER_SMALL);
   }
 

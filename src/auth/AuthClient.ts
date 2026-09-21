@@ -1,3 +1,4 @@
+import type { SavedWorld } from '../core/SavedWorld';
 import type { PlayerSnapshot } from '../core/PlayerSnapshot';
 import type { SerializedAbilityState } from '../core/AbilityManager';
 
@@ -36,8 +37,17 @@ export interface GameProgress {
    * zero or was simply recalled hurt.
    */
   mongoPetResting?: boolean;
+  /**
+   * The floor's generation seeds and the safe room to stand back in. Absent on
+   * saves that predate it, and dropped on load when the generator has changed;
+   * either way the party resumes on a freshly generated floor.
+   */
+  world?: SavedWorld;
   savedAt: string;
 }
+
+/** A save as the scene hands it over — the timestamp is stamped on write. */
+export type GameProgressInput = Omit<GameProgress, 'savedAt'>;
 
 class ApiError extends Error {
   constructor(

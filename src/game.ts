@@ -14,13 +14,15 @@ import { SMUSH_DEF } from './abilities/smush';
 import { MONGO_DEF, getMongoStats } from './abilities/mongo';
 import { createMongoPetState } from './core/MongoPetState';
 import { AuthClient } from './auth/AuthClient';
-import type { GameProgress } from './auth/AuthClient';
+import type { GameProgress, GameProgressInput } from './auth/AuthClient';
 import { LoginUI } from './auth/LoginUI';
 import { prewarmGroups } from './core/SpriteLoader';
 import { AudioManager } from './audio/AudioManager';
 import { CORE_SFX_IDS } from './audio/sfxGroups';
 import { showLoadingScreen } from './ui/LoadingScreen';
 import { difficultyStats } from './core/DifficultyStats';
+import { parseSavedWorld } from './core/SavedWorld';
+import { clearLocalProgress, readLocalProgress, writeLocalProgress } from './core/LocalProgress';
 import { setSearchCaptureHeldKeyRelease } from './ui/SearchField';
 
 declare const __AI_ENABLED__: boolean;
@@ -44,6 +46,58 @@ function resumedAbilityManager(states: GameProgress['abilityStates']): AbilityMa
   manager.register(MONGO_DEF);
   if (states !== undefined) manager.restoreSerializedStates(states);
   return manager;
+}
+
+/**
+ * Starts the scene on the floor a save was written on, with its party, abilities
+ * and pet restored.
+ *
+ * Works on a copy of `baseOptions`: the caller keeps handing the same object to
+ * later new-game launches, and a restored party leaking into those would start a
+ * fresh run with the old run's characters.
+ */
+function resumeFromProgress(baseOptions: DungeonSceneOptions, progress: GameProgress): void {
+  const options: DungeonSceneOptions = { ...baseOptions };
+  // Loading straight into a wipe is never recoverable — the same save would
+  // reload into the same wipe — so a resumed party always arrives on its feet.
+  options.humanSnap = revivedSnapshot(progress.humanSnap);
+  options.catSnap = revivedSnapshot(progress.catSnap);
+  options.abilityManager = resumedAbilityManager(progress.abilityStates);
+  options.mongoUnlocked = progress.mongoUnlocked ?? false;
+  if (progress.mongoPetHp !== undefined && Number.isFinite(progress.mongoPetHp)) {
+    // Clamped against the maximum the *restored* level implies: this arrives
+    // as unvalidated JSON, and a value above the maximum renders as a
+    // permanently full bar that never regenerates down to the truth.
+    const petMaxHp = getMongoStats(options.abilityManager.getLevel('mongo')).maxHp;
+    const restoredHp = Math.max(0, Math.min(petMaxHp, progress.mongoPetHp));
+    options.mongoPetState = createMongoPetState(
+      restoredHp,
+      petMaxHp,
+      // Absent from saves written before the rest latch existed, where a zeroed
+      // pet is exactly the case the latch is for.
+      progress.mongoPetResting ?? restoredHp <= 0,
+    );
+  }
+  // progress.levelId is unvalidated JSON — a save written against a
+  // since-renamed level must fall back rather than throw at boot.
+  let resumeLevel;
+  let levelResolved = true;
+  try {
+    resumeLevel = getLevelDef(progress.levelId);
+  } catch {
+    resumeLevel = tutorialLevel;
+    levelResolved = false;
+  }
+  // A fallback level has no relationship to the saved seed, and a seed replayed
+  // against different level options would land the safe room in a wall.
+  const savedWorld = levelResolved ? parseSavedWorld(progress.world) : undefined;
+  if (savedWorld !== undefined) {
+    options.worldSeed = savedWorld.worldSeed;
+    options.artSeed = savedWorld.artSeed;
+    options.spawnAt = savedWorld.safeRoomTile ?? undefined;
+    options.levelTimerFrames = savedWorld.levelTimerFrames ?? undefined;
+  }
+  sceneManager.replace(new DungeonScene(resumeLevel, input, sceneManager, options));
 }
 
 const input = new InputManager();
@@ -74,12 +128,22 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
 
   if (!__AI_ENABLED__) {
     // AI/backend disabled at build time — run as a pure static game with no server calls.
-    const onResetGame = () => {
-      difficultyStats.beginRun();
-      sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
+    const options: DungeonSceneOptions = {
+      audio,
+      saveProgress: writeLocalProgress,
+      onResetGame: () => {
+        difficultyStats.beginRun();
+        clearLocalProgress();
+        showStartMenu();
+      },
     };
-    if (devBootScene(sceneManager, input, { audio, onResetGame })) return;
-    sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
+    const showStartMenu = () => {
+      const saved = readLocalProgress();
+      const onContinue = saved === null ? undefined : () => resumeFromProgress(options, saved);
+      sceneManager.replace(new PostSignupScene(input, sceneManager, options, onContinue));
+    };
+    if (devBootScene(sceneManager, input, options)) return;
+    showStartMenu();
     return;
   }
 
@@ -104,15 +168,7 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
   // Load any previously saved progress for this user.
   const progress = await authClient.loadProgress().catch(() => null);
 
-  const saveProgress = (data: {
-    humanSnap: GameProgress['humanSnap'];
-    catSnap: GameProgress['catSnap'];
-    levelId: string;
-    abilityStates: GameProgress['abilityStates'];
-    mongoUnlocked: boolean;
-    mongoPetHp: number;
-    mongoPetResting: boolean;
-  }) => {
+  const saveProgress = (data: GameProgressInput) => {
     authClient.saveProgress({ ...data, savedAt: new Date().toISOString() }).catch(() => {
       void 0;
     });
@@ -136,35 +192,7 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
   if (devBootScene(sceneManager, input, options)) return;
 
   if (progress) {
-    // Loading straight into a wipe is never recoverable — the same save would
-    // reload into the same wipe — so a resumed party always arrives on its feet.
-    options.humanSnap = revivedSnapshot(progress.humanSnap);
-    options.catSnap = revivedSnapshot(progress.catSnap);
-    options.abilityManager = resumedAbilityManager(progress.abilityStates);
-    options.mongoUnlocked = progress.mongoUnlocked ?? false;
-    if (progress.mongoPetHp !== undefined && Number.isFinite(progress.mongoPetHp)) {
-      // Clamped against the maximum the *restored* level implies: this arrives
-      // as unvalidated server JSON, and a value above the maximum renders as a
-      // permanently full bar that never regenerates down to the truth.
-      const petMaxHp = getMongoStats(options.abilityManager.getLevel('mongo')).maxHp;
-      const restoredHp = Math.max(0, Math.min(petMaxHp, progress.mongoPetHp));
-      options.mongoPetState = createMongoPetState(
-        restoredHp,
-        petMaxHp,
-        // Absent from saves written before the rest latch existed, where a zeroed
-        // pet is exactly the case the latch is for.
-        progress.mongoPetResting ?? restoredHp <= 0,
-      );
-    }
-    // progress.levelId is unvalidated server JSON — a save written against a
-    // since-renamed level must fall back rather than throw at boot.
-    let resumeLevel;
-    try {
-      resumeLevel = getLevelDef(progress.levelId);
-    } catch {
-      resumeLevel = tutorialLevel;
-    }
-    sceneManager.replace(new DungeonScene(resumeLevel, input, sceneManager, options));
+    resumeFromProgress(options, progress);
   } else {
     sceneManager.replace(new PostSignupScene(input, sceneManager, options));
   }

@@ -75,6 +75,7 @@ import {
 import { Reachability } from './overworld/reachability';
 import { hasWaterWithin, paintCamps, type CampSite } from './overworld/camps';
 import { openCliffRamps, paintCliffs } from './overworld/cliffs';
+import { worldRandom } from '../core/WorldRandom';
 
 export interface BuildingEntry {
   doorTile: TilePoint;
@@ -1162,8 +1163,8 @@ function placeTileBuilding(
 function pickCircusCentre(grid: TileGrid, townX: number, townY: number): TilePoint {
   let candidate: TilePoint = { x: townX, y: townY };
   for (let attempt = 0; attempt < CIRCUS_SITE_ATTEMPTS; attempt++) {
-    const angle = Math.random() * Math.PI * 2;
-    const distance = CIRCUS_MIN_DIST + Math.random() * CIRCUS_DIST_VARIANCE;
+    const angle = worldRandom() * Math.PI * 2;
+    const distance = CIRCUS_MIN_DIST + worldRandom() * CIRCUS_DIST_VARIANCE;
     candidate = {
       x: Math.round(townX + Math.cos(angle) * distance),
       y: Math.round(townY + Math.sin(angle) * distance),
@@ -1334,9 +1335,9 @@ function scatterBoulders(
       if (!isOpenWildernessGround(grid.typeAt(tx, ty))) continue;
       if (Math.hypot(tx - plan.centre.x, ty - plan.centre.y) <= plan.safeRadiusTiles) continue;
       const band = elevation.bandAt(tx, ty);
-      if (Math.random() >= BOULDER_DENSITY_BY_BAND[band]) continue;
+      if (worldRandom() >= BOULDER_DENSITY_BY_BAND[band]) continue;
       if (nearADoor(tx, ty)) continue;
-      const isLarge = Math.random() < LARGE_BOULDER_SHARE_BY_BAND[band];
+      const isLarge = worldRandom() < LARGE_BOULDER_SHARE_BY_BAND[band];
       grid.setStanding(tx, ty, isLarge ? BOULDER_LARGE : BOULDER_SMALL);
     }
   }
@@ -1370,8 +1371,8 @@ function paintElevationBands(grid: TileGrid, elevation: ElevationField): void {
 function paintForests(grid: TileGrid, plan: TownPlan): void {
   const size = grid.size;
   for (let i = 0; i < NUM_FORESTS; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const distance = FOREST_MIN_DIST_TILES + Math.random() * (size / 2 - FOREST_EDGE_MARGIN);
+    const angle = worldRandom() * Math.PI * 2;
+    const distance = FOREST_MIN_DIST_TILES + worldRandom() * (size / 2 - FOREST_EDGE_MARGIN);
     const fx = Math.round(plan.centre.x + Math.cos(angle) * distance);
     const fy = Math.round(plan.centre.y + Math.sin(angle) * distance);
     const radius = randomInt(FOREST_MIN_RADIUS, FOREST_MAX_RADIUS);
@@ -1380,7 +1381,7 @@ function paintForests(grid: TileGrid, plan: TownPlan): void {
         const d = Math.hypot(dx, dy);
         if (d > radius) continue;
         // Irregular edge — outer tiles drop out at random.
-        if (d > radius * FOREST_EDGE_NOISE_RADIUS && Math.random() < FOREST_EDGE_SKIP_CHANCE)
+        if (d > radius * FOREST_EDGE_NOISE_RADIUS && worldRandom() < FOREST_EDGE_SKIP_CHANCE)
           continue;
         const tx = fx + dx;
         const ty = fy + dy;
@@ -1435,11 +1436,11 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
   // start sampling that far past the safe radius to keep their footprint fully outside it.
   const shellClearance = RUIN_SHELL_MIN_SIZE + RUIN_SHELL_SIZE_RANGE;
   for (let i = 0; i < NUM_RUIN_SHELLS; i++) {
-    const angle = Math.random() * Math.PI * 2;
+    const angle = worldRandom() * Math.PI * 2;
     const distance =
       plan.safeRadiusTiles +
       shellClearance +
-      Math.random() *
+      worldRandom() *
         (size / 2 - BORDER - RUINS_EDGE_MARGIN - plan.safeRadiusTiles - shellClearance);
     const shellCx = Math.round(cx + Math.cos(angle) * distance);
     const shellCy = Math.round(cy + Math.sin(angle) * distance);
@@ -1458,7 +1459,7 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
     for (let dy = 0; dy < h; dy++) {
       for (let dx = 0; dx < w; dx++) {
         const isPerimeter = dy === 0 || dy === h - 1 || dx === 0 || dx === w - 1;
-        if (!isPerimeter || Math.random() < RUIN_SHELL_BREAK_CHANCE) continue;
+        if (!isPerimeter || worldRandom() < RUIN_SHELL_BREAK_CHANCE) continue;
         const tx = shellX + dx;
         const ty = shellY + dy;
         if (!isRuinsGround(tx, ty)) continue;
@@ -1468,7 +1469,7 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
     // Rubble-strewn interior
     for (let dy = 1; dy < h - 1; dy++) {
       for (let dx = 1; dx < w - 1; dx++) {
-        if (Math.random() >= RUIN_SHELL_INTERIOR_RUBBLE_CHANCE) continue;
+        if (worldRandom() >= RUIN_SHELL_INTERIOR_RUBBLE_CHANCE) continue;
         const tx = shellX + dx;
         const ty = shellY + dy;
         if (!isRuinsGround(tx, ty)) continue;
@@ -1482,7 +1483,7 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
     for (let x = BORDER + 1; x < size - BORDER - 1; x++) {
       if (!isOpenWildernessGround(grid.typeAt(x, y))) continue;
       if (Math.hypot(x - cx, y - cy) <= plan.safeRadiusTiles) continue;
-      if (Math.random() < RUBBLE_DENSITY) grid.setStanding(x, y, RUBBLE);
+      if (worldRandom() < RUBBLE_DENSITY) grid.setStanding(x, y, RUBBLE);
     }
   }
 }
@@ -1501,10 +1502,10 @@ function scatterRuinsSpawnPoints(
   const { x: cx, y: cy } = plan.centre;
   const points: TilePoint[] = [];
   for (let i = 0; i < RUINS_SPAWN_ATTEMPTS; i++) {
-    const angle = Math.random() * Math.PI * 2;
+    const angle = worldRandom() * Math.PI * 2;
     const distance =
       plan.safeRadiusTiles +
-      Math.random() * (size / 2 - BORDER - RUINS_EDGE_MARGIN - plan.safeRadiusTiles);
+      worldRandom() * (size / 2 - BORDER - RUINS_EDGE_MARGIN - plan.safeRadiusTiles);
     const tx = Math.round(cx + Math.cos(angle) * distance);
     const ty = Math.round(cy + Math.sin(angle) * distance);
     if (tx <= BORDER || tx >= size - BORDER || ty <= BORDER || ty >= size - BORDER) continue;
@@ -1578,8 +1579,8 @@ function scatterBountySites(
   const minSpacingSq = BOUNTY_SITE_MIN_SPACING_TILES * BOUNTY_SITE_MIN_SPACING_TILES;
 
   for (let i = 0; i < BOUNTY_SITE_ATTEMPTS && sites.length < BOUNTY_SITE_TARGET; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const distance = innerRadius + Math.random() * Math.max(0, outerRadius - innerRadius);
+    const angle = worldRandom() * Math.PI * 2;
+    const distance = innerRadius + worldRandom() * Math.max(0, outerRadius - innerRadius);
     const tx = Math.round(cx + Math.cos(angle) * distance);
     const ty = Math.round(cy + Math.sin(angle) * distance);
     if (tx <= BORDER || tx >= size - BORDER || ty <= BORDER || ty >= size - BORDER) continue;

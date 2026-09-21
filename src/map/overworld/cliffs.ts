@@ -23,6 +23,7 @@ import type { TilePoint, TownPlan } from '../town/townPlan';
 import type { CampSite } from './camps';
 import type { ElevationBand, ElevationField } from './elevation';
 import { NO_REGION, Reachability } from './reachability';
+import { worldRandom } from '../../core/WorldRandom';
 
 /**
  * How steep the ground must be before a ledge shows, in normalised elevation per
@@ -239,7 +240,7 @@ function growRun(
   //
   // Placement and art have to agree. `isSouthFacingDrop` selects south-facing
   // drops, so the ledge that marks one runs east-west.
-  const runLength = MIN_CLIFF_RUN_TILES + Math.floor(Math.random() * CLIFF_RUN_LENGTH_RANGE);
+  const runLength = MIN_CLIFF_RUN_TILES + Math.floor(worldRandom() * CLIFF_RUN_LENGTH_RANGE);
 
   for (const step of [-1, 1]) {
     let reach = 1;
@@ -318,7 +319,7 @@ function scatterSpoil(
 ): void {
   for (const tile of placed) {
     if (grid.typeAt(tile.x, tile.y) !== CLIFF) continue;
-    if (Math.random() >= CLIFF_SPOIL_CHANCE) continue;
+    if (worldRandom() >= CLIFF_SPOIL_CHANCE) continue;
     const belowY = tile.y + 1;
     if (!canCarryLedge(grid, camps, tile.x, belowY)) continue;
     grid.set(tile.x, belowY, SCREE);

@@ -84,6 +84,7 @@ import {
   type InvariantFailure,
   type ProgressionExpectations,
 } from './progressionValidation';
+import { worldRandom } from '../core/WorldRandom';
 
 /**
  * What a generated room is *for*. Carried on the room itself rather than
@@ -300,7 +301,7 @@ function chokeSlotsFor(
   // gauntlet 0 leaves from the start room instead — a choke there would gate the
   // floor before the player has walked anywhere.
   if (gauntletIndex === 0) return ['approach'];
-  return Math.random() < EVEN_SLOT_CHANCE ? ['stem', 'approach'] : ['approach', 'stem'];
+  return worldRandom() < EVEN_SLOT_CHANCE ? ['stem', 'approach'] : ['approach', 'stem'];
 }
 
 /** Side length, in tiles, of the square a stairwell blocks. */
@@ -553,12 +554,12 @@ const ZONE_FLOORS: Record<Zone, number[]> = {
 function corridorFloorForZone(zone: Zone): number {
   if (zone === 'entrance') return FloorTypeValue.concrete;
   if (zone === 'mid') {
-    return Math.random() < MID_ZONE_CONCRETE_PROB
+    return worldRandom() < MID_ZONE_CONCRETE_PROB
       ? FloorTypeValue.concrete
       : FloorTypeValue.tile_floor;
   }
   // deep: darker, worn floors
-  return Math.random() < DEEP_ZONE_TILE_PROB ? FloorTypeValue.tile_floor : FloorTypeValue.wood;
+  return worldRandom() < DEEP_ZONE_TILE_PROB ? FloorTypeValue.tile_floor : FloorTypeValue.wood;
 }
 
 // ── Vignette system ───────────────────────────────────────────────────────────
@@ -706,7 +707,7 @@ function pickVignette(zone: Zone, room: Room): Vignette | null {
 
   let totalWeight = 0;
   for (const v of eligible) totalWeight += v.weight;
-  let pick = Math.random() * totalWeight;
+  let pick = worldRandom() * totalWeight;
   for (const v of eligible) {
     pick -= v.weight;
     if (pick <= 0) return v;
@@ -750,7 +751,7 @@ function seatStairwellsByIsolation(
   const FARTHEST_CANDIDATE_INDEX = 0;
   const seedIndex =
     seedStrategy === 'random'
-      ? Math.floor(Math.random() * candidates.length)
+      ? Math.floor(worldRandom() * candidates.length)
       : FARTHEST_CANDIDATE_INDEX;
   const seated: Point[] = alreadySeated.length > 0 ? [...alreadySeated] : [candidates[seedIndex]];
   while (seated.length < count) {
@@ -1230,8 +1231,8 @@ function reserveArena(
 
   for (let attempt = 0; attempt < ARENA_PLACEMENT_ATTEMPTS; attempt++) {
     const angle =
-      (attempt / ARENA_PLACEMENT_ATTEMPTS) * Math.PI * 2 + Math.random() * ARENA_ANGLE_JITTER;
-    const distance = ARENA_MIN_DIST_FROM_GAUNTLET_EXIT + Math.random() * ARENA_DIST_VARIANCE;
+      (attempt / ARENA_PLACEMENT_ATTEMPTS) * Math.PI * 2 + worldRandom() * ARENA_ANGLE_JITTER;
+    const distance = ARENA_MIN_DIST_FROM_GAUNTLET_EXIT + worldRandom() * ARENA_DIST_VARIANCE;
     if (siting === 'farthest' && distance <= bestDistance) continue;
     const centre: Point = {
       x: Math.round(origin.x + Math.cos(angle) * distance),
@@ -1378,9 +1379,9 @@ function buildDungeon(
     if (isSpecial) {
       // Connections to/from safe rooms, boss rooms, and the first hub connections
       // get a wider passage so key areas feel accessible.
-      return Math.random() < SPECIAL_CONN_STANDARD_PROB ? 'standard' : 'narrow';
+      return worldRandom() < SPECIAL_CONN_STANDARD_PROB ? 'standard' : 'narrow';
     }
-    const r = Math.random();
+    const r = worldRandom();
     if (zone === 'entrance') {
       if (r < ENTRANCE_NARROW_THRESH) return 'narrow';
       if (r < ENTRANCE_STANDARD_THRESH) return 'standard';
@@ -2862,7 +2863,7 @@ function buildDungeon(
     }
 
     // Vignette chance scales with zone depth
-    const useVignette = Math.random() < VIGNETTE_CHANCE[zone];
+    const useVignette = worldRandom() < VIGNETTE_CHANCE[zone];
     if (useVignette) {
       const vignette = pickVignette(zone, r);
       if (vignette !== null) {
@@ -3023,7 +3024,7 @@ function buildDungeon(
   // Fisher-Yates shuffle for a uniform distribution
   const shuffledEligible = [...eligibleRegularRooms];
   for (let i = shuffledEligible.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(worldRandom() * (i + 1));
     [shuffledEligible[i], shuffledEligible[j]] = [shuffledEligible[j], shuffledEligible[i]];
   }
   const selectedTreasureRooms = shuffledEligible.slice(0, treasureRoomTarget);
@@ -3172,8 +3173,8 @@ function buildDungeon(
 
     for (let attempt = 0; attempt < ARENA_PLACEMENT_ATTEMPTS && !arenaPlaced; attempt++) {
       const angle =
-        (attempt / ARENA_PLACEMENT_ATTEMPTS) * Math.PI * 2 + Math.random() * ARENA_ANGLE_JITTER;
-      const dist = ARENA_MIN_DIST + Math.random() * ARENA_DIST_VARIANCE;
+        (attempt / ARENA_PLACEMENT_ATTEMPTS) * Math.PI * 2 + worldRandom() * ARENA_ANGLE_JITTER;
+      const dist = ARENA_MIN_DIST + worldRandom() * ARENA_DIST_VARIANCE;
       const acx = Math.round(startCentre.x + Math.cos(angle) * dist);
       const acy = Math.round(startCentre.y + Math.sin(angle) * dist);
 

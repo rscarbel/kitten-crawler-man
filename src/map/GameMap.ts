@@ -76,6 +76,7 @@ import { isWalkableTileType } from './walkability';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
 import { drawFloorArtSeed } from './ground/floorArtSeed';
 import { MinHeap, HEAP_EMPTY } from '../core/MinHeap';
+import { drawWorldSeed, withWorldSeed } from '../core/WorldRandom';
 import {
   CLUB_INTERIOR_W,
   CLUB_INTERIOR_H,
@@ -516,6 +517,12 @@ export interface GameMapOptions {
    * reroll the world it is a door in.
    */
   artSeed?: number;
+  /**
+   * Replays the layout a save was written on: the same seed with the same level
+   * options generates the same floor. Omitted for a new floor, which draws its
+   * own. Ignored when `prebuiltStructure` is supplied, since nothing is generated.
+   */
+  worldSeed?: number;
 }
 
 export type { SpiderLabRoomData };
@@ -532,6 +539,12 @@ export class GameMap {
    * `src/map/ground/floorArtSeed.ts`.
    */
   readonly artSeed: number;
+  /**
+   * The seed this map's layout was generated from, so a save can rebuild the
+   * same floor. Hand-built maps (tutorial, interiors) generate nothing and
+   * carry a seed that reproduces nothing.
+   */
+  readonly worldSeed: number;
   /** Tile coordinates where the player should spawn (centre of the first room). */
   startTile: { x: number; y: number } = { x: 15, y: 15 };
   /** Tile centres of all rooms except the start and safe rooms — used for mob placement. */
@@ -702,15 +715,19 @@ export class GameMap {
       dungeon = { numBossRooms: DEFAULT_BOSS_ROOM_COUNT },
       prebuiltStructure,
       artSeed = drawFloorArtSeed(),
+      worldSeed = drawWorldSeed(),
     } = opts;
     this.tileHeight = tileHeight;
     this.artSeed = artSeed;
+    this.worldSeed = worldSeed;
     if (prebuiltStructure) {
       this.structure = prebuiltStructure;
     } else if (mapType === 'overworld') {
-      this.structure = this.generateOverworldMap(mapSize);
+      this.structure = withWorldSeed(worldSeed, () => this.generateOverworldMap(mapSize));
     } else {
-      this.structure = this.generateDungeonMap({ ...dungeon, size: mapSize });
+      this.structure = withWorldSeed(worldSeed, () =>
+        this.generateDungeonMap({ ...dungeon, size: mapSize }),
+      );
     }
     this.rebuildBlockedMasks();
   }

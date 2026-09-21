@@ -37,11 +37,14 @@ export class PostSignupScene extends Scene {
    */
   private tutorialButton: ButtonResult | null = null;
   private skipButton: ButtonResult | null = null;
+  private continueButton: ButtonResult | null = null;
 
   constructor(
     private readonly input: InputManager,
     private readonly sceneManager: SceneManager,
     private readonly baseOptions: DungeonSceneOptions,
+    /** Present only when a saved checkpoint exists on this device. */
+    private readonly onContinue?: () => void,
   ) {
     super();
   }
@@ -65,7 +68,13 @@ export class PostSignupScene extends Scene {
     setButtonMouseState(this._mouseX, this._mouseY);
     beginMenuFocus('post-signup');
 
-    drawText(ctx, 'Welcome, adventurer!', {
+    const hasCheckpoint = this.onContinue !== undefined;
+    const title = hasCheckpoint ? 'Welcome back, adventurer!' : 'Welcome, adventurer!';
+    const subtitle = hasCheckpoint
+      ? 'Pick up where you left off, or start over?'
+      : 'Would you like to start with the tutorial?';
+
+    drawText(ctx, title, {
       x: TEXT_SIDE_MARGIN,
       y: viewportHeight() * TITLE_Y_FRACTION,
       align: 'center',
@@ -77,7 +86,7 @@ export class PostSignupScene extends Scene {
       width: viewportWidth() - TEXT_SIDE_MARGIN * 2,
     });
 
-    drawText(ctx, 'Would you like to start with the tutorial?', {
+    drawText(ctx, subtitle, {
       x: TEXT_SIDE_MARGIN,
       y: viewportHeight() * SUBTITLE_Y_FRACTION,
       align: 'center',
@@ -86,7 +95,21 @@ export class PostSignupScene extends Scene {
       width: viewportWidth() - TEXT_SIDE_MARGIN * 2,
     });
 
-    const btnY = viewportHeight() * BTN_Y_FRACTION;
+    let btnY = viewportHeight() * BTN_Y_FRACTION;
+
+    if (hasCheckpoint) {
+      this.continueButton = drawButton(ctx, {
+        x: cx,
+        y: btnY,
+        width: BTN_WIDTH,
+        height: BTN_HEIGHT,
+        alignX: 'center',
+        label: 'Continue from last checkpoint',
+        ...BUTTON_PRESETS.gold,
+        primaryAction: true,
+      });
+      btnY += BTN_HEIGHT + BTN_GAP;
+    }
 
     this.tutorialButton = drawButton(ctx, {
       x: cx,
@@ -94,9 +117,9 @@ export class PostSignupScene extends Scene {
       width: BTN_WIDTH,
       height: BTN_HEIGHT,
       alignX: 'center',
-      label: 'Continue to Tutorial',
+      label: hasCheckpoint ? 'New Game: Tutorial' : 'Continue to Tutorial',
       ...BUTTON_PRESETS.success,
-      primaryAction: true,
+      primaryAction: !hasCheckpoint,
     });
 
     this.skipButton = drawButton(ctx, {
@@ -105,7 +128,7 @@ export class PostSignupScene extends Scene {
       width: BTN_WIDTH,
       height: BTN_HEIGHT,
       alignX: 'center',
-      label: 'Skip to Level 1',
+      label: hasCheckpoint ? 'New Game: Level 1' : 'Skip to Level 1',
       ...BUTTON_PRESETS.primary,
     });
 
@@ -115,7 +138,9 @@ export class PostSignupScene extends Scene {
   handleClick(mx: number, my: number): void {
     notifyButtonClick(mx, my);
 
-    if (this.tutorialButton?.contains(mx, my) === true) {
+    if (this.continueButton?.contains(mx, my) === true) {
+      this.onContinue?.();
+    } else if (this.tutorialButton?.contains(mx, my) === true) {
       this.launchTutorial();
     } else if (this.skipButton?.contains(mx, my) === true) {
       this.launchLevel1();

@@ -30,6 +30,7 @@ import type { BridgeAxis, TileGrid } from '../town/tileGrid';
 import type { TilePoint, TownPlan } from '../town/townPlan';
 import type { ElevationField } from './elevation';
 import { NO_REGION, Reachability } from './reachability';
+import { worldRandom } from '../../core/WorldRandom';
 
 /**
  * How many rivers a map gets.
@@ -209,22 +210,22 @@ function pickCourseEnds(
   border: number,
 ): { source: TilePoint; mouth: TilePoint } {
   const inset = border + RIVER_EDGE_INSET_TILES;
-  const sourceSide = Math.floor(Math.random() * EDGE_SIDES) % EDGE_SIDES;
+  const sourceSide = Math.floor(worldRandom() * EDGE_SIDES) % EDGE_SIDES;
   const mouthSide = (sourceSide + OPPOSITE_SIDE_OFFSET) % EDGE_SIDES;
 
-  let source = edgePoint(sourceSide, Math.random(), size, inset);
+  let source = edgePoint(sourceSide, worldRandom(), size, inset);
   let sourceElevation = -Infinity;
-  let mouth = edgePoint(mouthSide, Math.random(), size, inset);
+  let mouth = edgePoint(mouthSide, worldRandom(), size, inset);
   let mouthElevation = Infinity;
 
   for (let i = 0; i < EDGE_CANDIDATE_SAMPLES; i++) {
-    const sourceCandidate = edgePoint(sourceSide, Math.random(), size, inset);
+    const sourceCandidate = edgePoint(sourceSide, worldRandom(), size, inset);
     const sourceHeight = elevation.elevationAt(sourceCandidate.x, sourceCandidate.y);
     if (sourceHeight > sourceElevation) {
       sourceElevation = sourceHeight;
       source = sourceCandidate;
     }
-    const mouthCandidate = edgePoint(mouthSide, Math.random(), size, inset);
+    const mouthCandidate = edgePoint(mouthSide, worldRandom(), size, inset);
     const mouthHeight = elevation.elevationAt(mouthCandidate.x, mouthCandidate.y);
     if (mouthHeight < mouthElevation) {
       mouthElevation = mouthHeight;
@@ -322,7 +323,7 @@ function routeRiver(
     }
 
     const turn = signedAngleBetween(bestAngle, heading);
-    const wobble = (Math.random() - ARC_MIDPOINT) * ARC_FULL_SPAN * RIVER_WOBBLE_RADIANS;
+    const wobble = (worldRandom() - ARC_MIDPOINT) * ARC_FULL_SPAN * RIVER_WOBBLE_RADIANS;
     heading += turn * RIVER_TURN_RATE + wobble;
     x += Math.cos(heading) * RIVER_STEP_TILES;
     y += Math.sin(heading) * RIVER_STEP_TILES;
@@ -679,7 +680,7 @@ export function scatterRiverRocks(
 ): void {
   for (const river of rivers) {
     for (const point of river.path) {
-      if (Math.random() >= RIVER_ROCK_CHANCE_PER_STEP) continue;
+      if (worldRandom() >= RIVER_ROCK_CHANCE_PER_STEP) continue;
       if (
         point.x < border ||
         point.y < border ||
