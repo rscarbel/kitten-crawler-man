@@ -22,7 +22,7 @@ import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
-import type { Mob } from '../creatures/Mob';
+import { despawnMob, type Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Player } from '../Player';
 import { QuestManager, type QuestStatus } from '../core/QuestManager';
@@ -460,6 +460,15 @@ export class CircusQuestSystem implements GameSystem {
     this.spawnSignetAt(door.x + SIGNET_DOOR_OFFSET_TILES, door.y + SIGNET_DOOR_OFFSET_TILES);
   }
 
+  /** Signet's spot for the restored phase, split the same way as in `enterStageFromProgress`. */
+  private spawnSignetForPhase(): void {
+    if (BIGTOP_DOOR_PHASES.has(this.phase) || this.phase === 'complete') {
+      this.spawnSignetAtBigTopDoor();
+    } else {
+      this.spawnSignetAtLookout();
+    }
+  }
+
   private spawnHeather(origin: { x: number; y: number }): void {
     // Arena-constrained like a wave mob: outside the grounds the offset can drop
     // her into forest, where a walkable tile fenced in by trunks strands her.
@@ -707,7 +716,7 @@ export class CircusQuestSystem implements GameSystem {
    * scene's rewind replaces its grid wholesale just before this runs, so the
    * cached frame context points at the discarded one.
    */
-  restoreCheckpoint(snapshot: CircusQuestCheckpoint, mobGrid: SpatialGrid<Mob>): void {
+  restoreCheckpoint(snapshot: CircusQuestCheckpoint, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
     this.questManager.restoreStatuses(snapshot.questStatuses);
     this.phase = snapshot.phase;
     this.waveIndex = snapshot.waveIndex;
@@ -715,8 +724,37 @@ export class CircusQuestSystem implements GameSystem {
     // The rewind teleports every survivor back to its spawn tile, so every
     // recorded position describes ground the mob is no longer standing on.
     this.stallWatch.clear();
+
+    // A save loaded after a reload has no mobs, so `signet`/`heather` are null.
+    // The constructor spawned them anyway, from default progress, so its guess
+    // is swept and rebuilt from the restored phase.
+    const staleSignet = this.signet;
+    const staleHeather = this.heather;
     this.signet = snapshot.signet;
     this.heather = snapshot.heather;
+
+    if (this.signet === null) {
+      if (staleSignet) despawnMob(staleSignet, mobs, mobGrid);
+      if (this.circusCentre) this.spawnSignetForPhase();
+    }
+    if (this.heather === null) {
+      if (staleHeather) despawnMob(staleHeather, mobs, mobGrid);
+      if (this.phase === 'heather_hunt' && this.circusCentre) this.spawnHeather(this.circusCentre);
+    }
+
+    // A save loaded after a reload has no wave. The fight updates read an empty
+    // `waveMobs` as "wave cleared", which would hand out the wave for free.
+    if (
+      (this.phase === 'ritual_defense' || this.phase === 'assault') &&
+      snapshot.waveMobs.length === 0
+    ) {
+      this.startBattleMusic();
+      if (this.phase === 'ritual_defense') {
+        this.spawnWave(RITUAL_WAVES, this.waveIndex, this.ritualWaveOrigin());
+      } else {
+        this.spawnWave(ASSAULT_WAVES, this.waveIndex, this.assaultWaveOrigin());
+      }
+    }
 
     // Signet is `resetsFullyOnCheckpoint`, so the rewind has already sent her
     // back to the lookout tile she spawned on and re-anchored her loiter there.

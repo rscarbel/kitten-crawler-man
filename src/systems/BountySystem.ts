@@ -562,6 +562,18 @@ export class BountySystem implements GameSystem {
     this.shady = snapshot.shady;
   }
 
+  /**
+   * {@link restoreCheckpoint} for a save loaded after a reload. The save cannot
+   * hold a mob, so its `shady` is always null, but `placeShady` has already
+   * placed her by then and she is kept. In a death rewind a null means she had
+   * not been placed yet, which is why the rewind overwrites.
+   */
+  restoreFromSave(snapshot: BountyCheckpoint): void {
+    const placedShady = this.shady;
+    this.restoreCheckpoint(snapshot);
+    this.shady = placedShady;
+  }
+
   update(ctx: SystemContext): void {
     if (this.respawnPending) {
       this.respawnPending = false;

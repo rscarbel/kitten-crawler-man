@@ -96,6 +96,7 @@ function resumeFromProgress(baseOptions: DungeonSceneOptions, progress: GameProg
     options.artSeed = savedWorld.artSeed;
     options.spawnAt = savedWorld.safeRoomTile ?? undefined;
     options.levelTimerFrames = savedWorld.levelTimerFrames ?? undefined;
+    options.persistedWorldState = savedWorld.persisted;
   }
   sceneManager.replace(new DungeonScene(resumeLevel, input, sceneManager, options));
 }

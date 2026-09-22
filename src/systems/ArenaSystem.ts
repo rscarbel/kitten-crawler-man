@@ -149,6 +149,15 @@ export class ArenaSystem implements GameSystem {
   }
 
   /**
+   * From the door starting to close on the ball until the last Tuskling falls.
+   * The entry window counts: the door is still open, but the fight has begun.
+   */
+  get isBossFightInProgress(): boolean {
+    const tusklingPhaseUnresolved = this.arenaPhase2Active && !this.arenaStairwellUnlocked;
+    return this.entryWindowTimer > 0 || this.arenaLocked || tusklingPhaseUnresolved;
+  }
+
+  /**
    * Unlocks the arena door and clears the entry-window/insider state — used on
    * a checkpoint respawn so the door doesn't stay shut (or slam shut on its
    * own timer) behind a player who is no longer inside. This has to run
@@ -209,8 +218,12 @@ export class ArenaSystem implements GameSystem {
       else this.gameMap.unlockArenaDoor();
     }
 
-    // The stairwell's map tiles are not re-locked here: `unlockArenaStairwell()`
-    // has no inverse, and the map side of this rewind is restored separately.
+    // Never re-locked: `unlockArenaStairwell()` has no inverse, and a rewind
+    // restores the map's side separately. A save loaded into a fresh map has no
+    // map side to restore, so the unlock is replayed here.
+    if (snapshot.arenaStairwellUnlocked && !this.arenaStairwellUnlocked) {
+      this.gameMap.unlockArenaStairwell();
+    }
     this.arenaStairwellUnlocked = snapshot.arenaStairwellUnlocked;
   }
 

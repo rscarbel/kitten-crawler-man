@@ -655,6 +655,19 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     return tx >= bounds.x && tx < bounds.x + bounds.w && ty >= bounds.y && ty < bounds.y + bounds.h;
   }
 
+  /**
+   * Bosses standing in a room already marked defeated. `update()` never looks
+   * at a defeated room again, so a boss found there fights with no lock, and
+   * killing it announces `bossDefeated` a second time.
+   */
+  bossesInDefeatedRooms(mobs: readonly Mob[]): Mob[] {
+    return mobs.filter(
+      (mob) =>
+        mob.isBoss &&
+        this.states.some((state) => state.defeated && this.isEntityInRoom(mob, state.bounds)),
+    );
+  }
+
   isEntityInAnyBossRoom(entity: { x: number; y: number }): boolean {
     return this.states.some((s) => this.isEntityInRoom(entity, s.bounds));
   }

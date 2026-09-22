@@ -687,6 +687,11 @@ export class SpiderQuestSystem implements GameSystem {
     return this.phase === 'complete';
   }
 
+  /** From the cutscene that hatches the spider until she dies. */
+  get isBossFightInProgress(): boolean {
+    return this.phase === 'cutscene' || this.phase === 'boss_fight';
+  }
+
   get isDialogOpen(): boolean {
     return (
       this.phase === 'scientist_dialog' ||

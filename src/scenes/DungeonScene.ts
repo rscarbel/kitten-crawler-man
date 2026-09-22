@@ -14,7 +14,7 @@ import { releaseEnvironmentArt } from '../map/environmentArtCache';
 import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
 import { type HumanPlayer } from '../creatures/HumanPlayer';
 import { type CatPlayer } from '../creatures/CatPlayer';
-import { type Mob, type LootDrop } from '../creatures/Mob';
+import { despawnMob, type Mob, type LootDrop } from '../creatures/Mob';
 import type { Player } from '../Player';
 import { PlayerManager } from '../core/PlayerManager';
 import { MobileTouchState } from '../core/MobileTouchState';
@@ -160,6 +160,26 @@ import {
 } from '../core/PlayerSnapshot';
 import type { LevelCheckpoint } from '../core/LevelCheckpoint';
 import type { WorldCheckpoint } from '../core/WorldCheckpoint';
+import {
+  toPersistedArenaCheckpoint,
+  fromPersistedArenaCheckpoint,
+  toPersistedTreasureChestCheckpoint,
+  fromPersistedTreasureChestCheckpoint,
+  toPersistedDefendQuestCheckpoint,
+  fromPersistedDefendQuestCheckpoint,
+  toPersistedSpiderQuestCheckpoint,
+  fromPersistedSpiderQuestCheckpoint,
+  toPersistedCircusQuestCheckpoint,
+  fromPersistedCircusQuestCheckpoint,
+  toPersistedMurderMysteryQuestCheckpoint,
+  fromPersistedMurderMysteryQuestCheckpoint,
+  toPersistedBountyCheckpoint,
+  fromPersistedBountyCheckpoint,
+  toPersistedMarketStockCheckpoint,
+  fromPersistedMarketStockCheckpoint,
+  type PersistedWorldState,
+} from '../core/PersistedWorldState';
+import { assertNoFieldsLeft } from '../core/guards';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { TreeSystem } from '../systems/TreeSystem';
@@ -425,6 +445,8 @@ export interface DungeonSceneOptions {
    * room rather than restarting the floor.
    */
   checkpoint?: LevelCheckpoint;
+  /** Floor and run state from a resumed save; absent on a fresh game or an older save. */
+  persistedWorldState?: PersistedWorldState;
 }
 
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
@@ -1425,6 +1447,8 @@ export class DungeonScene extends GameplayScene {
           // player's heel was recording 130.
           mongoPetHp: this.mongoSystem.hp,
           mongoPetResting: this.mongoSystem.restingUntilFull,
+          // No `world`: everything in it describes the floor being left, and a
+          // reload has to build the next floor fresh, exactly as the stairs do.
         });
 
         this.bus.emit('levelComplete', {});
@@ -1957,6 +1981,10 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('chest_unlocked_in_treasure_room');
     });
 
+    if (options?.persistedWorldState !== undefined) {
+      this.applyPersistedWorldState(options.persistedWorldState);
+    }
+
     this.wireEventBus();
     this.checkFloorEntryAchievements();
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
@@ -2349,6 +2377,11 @@ export class DungeonScene extends GameplayScene {
       if (this.tutorial === null && this.catAchievements.tryUnlock('safe_haven')) {
         bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Cat' });
       }
+      // Reachable mid-fight: the event fires for either crawler, and one left
+      // outside a locked boss room can still walk into a safe room. Both the
+      // saved game and the death checkpoint are skipped, so neither one can
+      // resume a fight that is still in progress.
+      if (this.isBossFightInProgress) return;
       // The event fires when either crawler is protected, so the active one may
       // be outside the room; keep the last room actually seen rather than
       // overwriting a good resume point with nothing.
@@ -2376,6 +2409,7 @@ export class DungeonScene extends GameplayScene {
                 safeRoomTile: this.lastSafeRoomTile,
                 levelTimerFrames:
                   this.levelDef.hasCollapseTimer === true ? this.levelTimerFrames : null,
+                persisted: this.capturePersistedWorldState(),
               }
             : undefined,
       });
@@ -3409,8 +3443,16 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.restoreCheckpoint(world.spiderQuest);
     // The grid the mob rewind just rebuilt, not the one the last frame saw:
     // Signet's move back to the Big Top door has to land in the live one.
-    this.circusQuest.restoreCheckpoint(world.circusQuest, this.world.roster.grid);
-    this.murderQuest.restoreCheckpoint(world.murderQuest);
+    this.circusQuest.restoreCheckpoint(
+      world.circusQuest,
+      this.world.roster.mobs,
+      this.world.roster.grid,
+    );
+    this.murderQuest.restoreCheckpoint(
+      world.murderQuest,
+      this.world.roster.mobs,
+      this.world.roster.grid,
+    );
     this.doomsdayEscape.restoreCheckpoint(world.doomsdayEscape);
 
     if (this.trees !== null && world.trees !== null) {
@@ -3444,6 +3486,139 @@ export class DungeonScene extends GameplayScene {
     this.krakarenBossRoomIdx = world.krakarenBossRoomIdx;
     this.juicerKilled = world.juicerKilled;
     this.juicerBossRoomIdx = world.juicerBossRoomIdx;
+  }
+
+  /**
+   * The subset of {@link captureWorldCheckpoint} that survives a page reload,
+   * written into `SavedWorld` on safe-room entry. See {@link PersistedWorldState}.
+   */
+  private capturePersistedWorldState(): PersistedWorldState {
+    return {
+      bossRoom: this.bossRoom.captureCheckpoint(),
+      arena: toPersistedArenaCheckpoint(this.arena.captureCheckpoint()),
+      treasureChests: toPersistedTreasureChestCheckpoint(this.treasureChests.captureCheckpoint()),
+      defendQuest: toPersistedDefendQuestCheckpoint(this.defendQuest.captureCheckpoint()),
+      spiderQuest: toPersistedSpiderQuestCheckpoint(this.spiderQuest.captureCheckpoint()),
+      circusQuest: toPersistedCircusQuestCheckpoint(this.circusQuest.captureCheckpoint()),
+      murderQuest: toPersistedMurderMysteryQuestCheckpoint(this.murderQuest.captureCheckpoint()),
+      bounty:
+        this.bounty === null ? null : toPersistedBountyCheckpoint(this.bounty.captureCheckpoint()),
+
+      circusQuestProgress: captureCircusQuestProgress(this.circusQuestProgress),
+      anchorQuestProgress: captureAnchorQuestProgress(this.anchorQuestProgress),
+      murderQuestProgress: captureMurderQuestProgress(this.murderQuestProgress),
+      journal: captureJournalProgress(this.journalProgress),
+      bountyProgress: captureBountyProgress(this.bountyProgress),
+      clubMembership: captureClubMembership(this.clubMembership),
+      marketStock: toPersistedMarketStockCheckpoint(captureMarketStock(this.marketStock)),
+      townMemory: captureTownMemory(this.townMemory),
+      mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
+      mongoPetState: captureMongoPetState({ ...this.mongoPetState, hp: this.mongoSystem.hp }),
+
+      krakarenKilled: this.krakarenKilled,
+      krakarenBossRoomIdx: this.krakarenBossRoomIdx,
+      juicerKilled: this.juicerKilled,
+      juicerBossRoomIdx: this.juicerBossRoomIdx,
+    };
+  }
+
+  /**
+   * Applies a `PersistedWorldState` from a resumed save. Runs once, from the
+   * constructor, after every system it touches exists. Unlike
+   * {@link restoreWorldCheckpoint} it is not a rewind, so there is no fight or
+   * companion directive to clear first.
+   */
+  private applyPersistedWorldState(state: PersistedWorldState): void {
+    // Every field is destructured so that the unused-variable lint catches one
+    // that is read here but never applied, and the rest has to type as empty so
+    // that a field added to the save but never read here fails the typecheck.
+    const {
+      bossRoom,
+      arena,
+      treasureChests,
+      defendQuest,
+      spiderQuest,
+      circusQuest,
+      murderQuest,
+      bounty,
+      circusQuestProgress,
+      anchorQuestProgress,
+      murderQuestProgress,
+      journal,
+      bountyProgress,
+      clubMembership,
+      marketStock,
+      townMemory,
+      mercenaryRoster,
+      mongoPetState,
+      krakarenKilled,
+      krakarenBossRoomIdx,
+      juicerKilled,
+      juicerBossRoomIdx,
+      ...unappliedFields
+    } = state;
+    assertNoFieldsLeft(unappliedFields);
+
+    const { mobs, grid } = this.world.roster;
+
+    this.bossRoom.restoreCheckpoint(bossRoom);
+    this.arena.restoreCheckpoint(fromPersistedArenaCheckpoint(arena));
+    // The roster was regenerated from the seed, so it holds every boss the
+    // player already killed, alive again.
+    const beatenBosses = this.bossRoom.bossesInDefeatedRooms(mobs);
+    if (this.arena.phase2Active) {
+      beatenBosses.push(...mobs.filter((mob) => mob instanceof BallOfSwine));
+    }
+    for (const boss of beatenBosses) despawnMob(boss, mobs, grid);
+
+    this.treasureChests.restoreCheckpoint(
+      fromPersistedTreasureChestCheckpoint(treasureChests, this.treasureChests.allChests),
+    );
+    this.defendQuest.restoreCheckpoint(fromPersistedDefendQuestCheckpoint(defendQuest));
+    this.spiderQuest.restoreCheckpoint(fromPersistedSpiderQuestCheckpoint(spiderQuest));
+
+    // Before the quest systems' own restores: they reconcile the NPCs their
+    // constructors spawned against this same progress object, and must see the
+    // saved progress rather than the default those constructors read.
+    restoreCircusQuestProgress(this.circusQuestProgress, circusQuestProgress);
+    restoreMurderQuestProgress(this.murderQuestProgress, murderQuestProgress);
+
+    this.circusQuest.restoreCheckpoint(fromPersistedCircusQuestCheckpoint(circusQuest), mobs, grid);
+    this.murderQuest.restoreCheckpoint(
+      fromPersistedMurderMysteryQuestCheckpoint(murderQuest),
+      mobs,
+      grid,
+    );
+    if (this.bounty !== null && bounty !== null) {
+      this.bounty.restoreFromSave(fromPersistedBountyCheckpoint(bounty));
+    }
+
+    restoreAnchorQuestProgress(this.anchorQuestProgress, anchorQuestProgress);
+    restoreJournalProgress(this.journalProgress, journal);
+    restoreBountyProgress(this.bountyProgress, bountyProgress);
+    restoreClubMembership(this.clubMembership, clubMembership);
+    restoreTownMemory(this.townMemory, townMemory);
+    restoreMarketStock(this.marketStock, fromPersistedMarketStockCheckpoint(marketStock));
+    restoreMercenaryRoster(this.mercenaryRoster, mercenaryRoster);
+    restoreMongoPetState(this.mongoPetState, mongoPetState);
+
+    this.krakarenKilled = krakarenKilled;
+    this.krakarenBossRoomIdx = krakarenBossRoomIdx;
+    this.juicerKilled = juicerKilled;
+    this.juicerBossRoomIdx = juicerBossRoomIdx;
+  }
+
+  /**
+   * A save is never written mid-fight. The save cannot hold the creatures in
+   * the fight, so a reload would either hand out the fight for free or rebuild
+   * it around a party standing in a safe room outside the locked door.
+   */
+  private get isBossFightInProgress(): boolean {
+    return (
+      this.bossRoom.anyLocked ||
+      this.arena.isBossFightInProgress ||
+      this.spiderQuest.isBossFightInProgress
+    );
   }
 
   /**

@@ -1,13 +1,10 @@
 import type { GameProgress, GameProgressInput } from '../auth/AuthClient';
 import { parseSavedWorld } from './SavedWorld';
+import { isRecord } from './guards';
 import type { PlayerSnapshot } from './PlayerSnapshot';
 
 const STORAGE_KEY = 'kcm.progress';
 const LOCAL_PROGRESS_VERSION = 1;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /**
  * Shallow shape check: the fields a restore cannot survive without. Item ids and

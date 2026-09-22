@@ -9,6 +9,7 @@ import { AGGRO_PERSIST_MULTIPLIER, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../co
 import { tryConsumePathfind } from './pathfindBudget';
 import { alertPackAround } from './packAlert';
 import { drawText } from '../ui/TextBox';
+import type { SpatialGrid } from '../core/SpatialGrid';
 
 /**
  * The weapon a player-sourced blow was struck with, named so that everything
@@ -2216,4 +2217,12 @@ export abstract class Mob extends Player {
   }
 
   abstract updateAI(targets: Player[]): void;
+}
+
+/** Removes a mob from the roster and the grid, and disposes it. */
+export function despawnMob(mob: Mob, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+  const index = mobs.indexOf(mob);
+  if (index >= 0) mobs.splice(index, 1);
+  mobGrid.remove(mob);
+  mob.dispose();
 }

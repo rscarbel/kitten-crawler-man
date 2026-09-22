@@ -1,3 +1,7 @@
+import type { PersistedWorldState } from './PersistedWorldState';
+import { parsePersistedWorldState, parsePoint } from './PersistedWorldState';
+import { isRecord } from './guards';
+
 /**
  * Bumped whenever a change to map generation would make an old seed produce a
  * different floor. A save from before the bump keeps its party but loses its
@@ -20,18 +24,8 @@ export interface SavedWorld {
   safeRoomTile: TilePoint | null;
   /** Frames left on the floor's collapse timer; `null` on a floor that has none. */
   levelTimerFrames: number | null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function parseTile(value: unknown): TilePoint | null {
-  if (!isRecord(value)) return null;
-  const { x, y } = value;
-  if (typeof x !== 'number' || typeof y !== 'number') return null;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  return { x, y };
+  /** Absent on an older save or one that no longer parses; the floor then starts fresh. */
+  persisted?: PersistedWorldState;
 }
 
 /**
@@ -41,18 +35,20 @@ function parseTile(value: unknown): TilePoint | null {
  */
 export function parseSavedWorld(value: unknown): SavedWorld | undefined {
   if (!isRecord(value)) return undefined;
-  const { generatorVersion, worldSeed, artSeed, safeRoomTile, levelTimerFrames } = value;
+  const { generatorVersion, worldSeed, artSeed, safeRoomTile, levelTimerFrames, persisted } = value;
   if (generatorVersion !== WORLD_GENERATOR_VERSION) return undefined;
   if (typeof worldSeed !== 'number' || !Number.isFinite(worldSeed)) return undefined;
   if (typeof artSeed !== 'number' || !Number.isFinite(artSeed)) return undefined;
+  const parsedPersisted = persisted === undefined ? undefined : parsePersistedWorldState(persisted);
   return {
     generatorVersion,
     worldSeed,
     artSeed,
-    safeRoomTile: parseTile(safeRoomTile),
+    safeRoomTile: parsePoint(safeRoomTile) ?? null,
     levelTimerFrames:
       typeof levelTimerFrames === 'number' && Number.isFinite(levelTimerFrames)
         ? Math.max(0, levelTimerFrames)
         : null,
+    persisted: parsedPersisted,
   };
 }

@@ -21,7 +21,8 @@ import { WELL } from '../map/tileTypes';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
-import type { Mob } from '../creatures/Mob';
+import { despawnMob, type Mob } from '../creatures/Mob';
+import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Player } from '../Player';
 import { QuestManager, type QuestStatus } from '../core/QuestManager';
 import type { ItemId } from '../core/ItemDefs';
@@ -628,16 +629,26 @@ export class MurderMysteryQuestSystem implements GameSystem {
     };
   }
 
-  restoreCheckpoint(snapshot: MurderMysteryQuestCheckpoint): void {
+  restoreCheckpoint(
+    snapshot: MurderMysteryQuestCheckpoint,
+    mobs: Mob[],
+    mobGrid: SpatialGrid<Mob>,
+  ): void {
     this.questManager.restoreStatuses(snapshot.questStatuses);
     this.phase = snapshot.phase;
     this.swarmCleared = snapshot.swarmCleared;
     this.swarm = [...snapshot.swarm];
-    this.swarmStarted = snapshot.swarmStarted;
+    // A save loaded after a reload has no swarm. A saved `true` would stop
+    // `update()` from spawning another, leaving the night attack waiting on
+    // krasue that do not exist.
+    this.swarmStarted =
+      snapshot.phase === 'night_attack' && snapshot.swarm.length === 0
+        ? false
+        : snapshot.swarmStarted;
     this.swarmDefeatedBaseline = snapshot.swarmDefeatedBaseline;
     this.swarmSpawnQueue = [...snapshot.swarmSpawnQueue];
     this.swarmSpawnGrace = new Map(snapshot.swarmSpawnGrace);
-    this.restoreGumGum(snapshot.gumgum);
+    this.restoreGumGum(snapshot.gumgum, mobs, mobGrid);
   }
 
   /**
@@ -649,13 +660,30 @@ export class MurderMysteryQuestSystem implements GameSystem {
    * The live `gumgumInWorld` flag decides, not the snapshot: whichever GumGum is
    * currently on the street is the right one to keep — she is stationary, so no
    * repositioning is owed — and only a world with none at all needs a new one.
+   *
+   * A save loaded after a reload always has a null `snapshotGumGum`, while the
+   * constructor may already have spawned her from default progress. So a null
+   * is checked against the restored phase instead of trusted.
    */
-  private restoreGumGum(snapshotGumGum: GumGum | null): void {
-    if (snapshotGumGum === null) {
-      this.gumgum = null;
+  private restoreGumGum(
+    snapshotGumGum: GumGum | null,
+    mobs: Mob[],
+    mobGrid: SpatialGrid<Mob>,
+  ): void {
+    if (snapshotGumGum !== null) {
+      if (!this.gumgumInWorld) this.respawnGumGumForCheckpoint();
       return;
     }
-    if (!this.gumgumInWorld) this.respawnGumGumForCheckpoint();
+
+    const stray = this.gumgumInWorld ? this.gumgum : null;
+    const shouldBeInWorld = this.phase === 'gumgum_waiting';
+    if (shouldBeInWorld) {
+      if (stray === null) this.respawnGumGumForCheckpoint();
+    } else {
+      this.gumgum = null;
+      this.gumgumInWorld = false;
+      if (stray) despawnMob(stray, mobs, mobGrid);
+    }
   }
 
   /**
@@ -900,9 +928,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     // GumGum slips away into the crowd — the next time anyone sees her is the alley.
     if (this.gumgum && this.lastCtx) {
       const { mobs, grid } = this.lastCtx.roster;
-      const idx = mobs.indexOf(this.gumgum);
-      if (idx >= 0) mobs.splice(idx, 1);
-      grid.remove(this.gumgum);
+      despawnMob(this.gumgum, mobs, grid);
     }
     this.gumgum = null;
     this.gumgumInWorld = false;
