@@ -621,11 +621,11 @@ function gateGoreDistinctness(): void {
 /**
  * How much bigger than the animation rows need the gore may make every cell.
  *
- * The bake this figure replaces refused to write a sheet whose gore pieces
- * inflated every cell past this, because one long piece quietly widens all nine
- * animation rows to suit itself. The cell is frozen now, so the same rule is
- * expressed the other way round: the declared cell has to stay within this much
- * of what the animation rows themselves ask for.
+ * A sheet whose gore pieces inflate every cell past this is rejected, because
+ * one long piece quietly widens all nine animation rows to suit itself. The
+ * cell is frozen, so the rule is expressed the other way round: the declared
+ * cell has to stay within this much of what the animation rows themselves ask
+ * for.
  */
 const GORE_AREA_INFLATION_LIMIT = 2;
 /** Clear pixels the bake kept between the furthest ink and the frame edge. */
@@ -635,8 +635,8 @@ const FRAME_PADDING = 6;
  * G8 — a gore piece sweeps its cell's *inscribed* circle when
  * `BodyPartGoreSystem` spins it, so a cell wide enough but not tall enough still
  * shears the piece halfway through its tumble — a defect that only shows in
- * play, on one frame out of a spin. The second half of the gate is the cost the
- * old bake policed: cells sized for the pieces rather than for the animal.
+ * play, on one frame out of a spin. The second half of the gate polices a
+ * related cost: cells sized for the pieces rather than for the animal.
  */
 function gateGoreClearance(): void {
   const centreX = frameWidth / 2;

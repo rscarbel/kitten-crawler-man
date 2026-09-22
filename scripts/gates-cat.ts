@@ -1,11 +1,11 @@
 /**
  * Donut's art gates.
  *
- * She has no baked sheet to inspect any more, so the invariants the old bake
- * held by construction — a pose that fits its cell, a row that keeps its frames
- * — are enforced here against cells painted from `CAT_FIGURE`, baked exactly
- * the way the runtime cache bakes them, plus pose-stream checks that measure
- * the choreography itself and need no pixels at all.
+ * These gates enforce sheet-shape invariants — a pose that fits its cell, a
+ * row that keeps its frames — directly against cells painted from
+ * `CAT_FIGURE`, baked exactly the way the runtime cache bakes them, plus
+ * pose-stream checks that measure the choreography itself and need no pixels
+ * at all.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong. A gate that cannot find the row it names fails

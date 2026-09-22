@@ -47,12 +47,13 @@ export function paintVoidBorder(grid: TileGrid, borderTiles: number): void {
  * so painted onto a verge it draws the *field grass* row instead of the verge row,
  * and because grass is the softest material in the blend order it also becomes an
  * island the surrounding verge bleeds into through the corner masks, eroding the
- * tuft the tile exists to show. It put about four tiles of the wrong material
- * inside the walls per generation and broke the rule that every surface inside
- * the walls is a decision, in the only place that matters — what gets drawn. The verge material
- * already depicts grass invaded by stone and weeds, so nothing is lost; planting
- * inside the walls is `paintYards`'s job, and any decoration for it needs its own
- * tile type mapping to `verge` rather than a reuse of the outdoor one.
+ * tuft the tile exists to show. Scattering it there would put about four tiles of
+ * the wrong material inside the walls per generation, breaking the rule that
+ * every surface inside the walls is a decision, in the only place that matters —
+ * what gets drawn. The verge material already depicts grass invaded by stone and
+ * weeds, so nothing is lost; planting inside the walls is `paintYards`'s job, and
+ * any decoration for it needs its own tile type mapping to `verge` rather than a
+ * reuse of the outdoor one.
  */
 export function scatterGroundCover(
   grid: TileGrid,

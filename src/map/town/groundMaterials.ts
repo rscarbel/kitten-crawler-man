@@ -118,8 +118,8 @@ const GROUND_SPILL = {
  * The materials a kerb belongs to, and the ones it is laid against.
  *
  * Every made street gets a lip where it meets **planted** ground, and nowhere
- * else. The three exclusions are each a case the first cut got wrong and a
- * screenshot caught:
+ * else. The three exclusions each cover a made or open surface that looks like
+ * it should kerb but must not:
  *
  * - `dirt` is `FloorTypeValue.road` — the town's alleys, which the `TownPlan`
  *   calls the lowest rung of the street hierarchy and `TileGrid` counts as paving, plus
@@ -175,7 +175,7 @@ const FRINGE_STAND_IN_MATERIAL: GroundMaterial = 'grass';
  * drawn over the right thing and the water beside them still fringes against
  * water. **Not** `setStanding`: that records with `??=`, and a water tile
  * already carries the record the carve left on it, so a deck written that way
- * keeps the pre-river surface. That is exactly what the first cut did.
+ * would keep the pre-river surface instead of the water it actually spans.
  *
  * `RUBBLE` and `RUINED_WALL` are **not** listed either, for exactly the reason
  * `TREE` is not. They were pinned to `grass` while grass was the only surface
@@ -184,15 +184,14 @@ const FRINGE_STAND_IN_MATERIAL: GroundMaterial = 'grass';
  * stands on. Both are now written with `setStanding`, so each records the band
  * it replaced and `groundMaterialUnder` reads it back before inference.
  *
- * `TREE` is deliberately **not** listed, though it used to be. A tree stands on
- * ground rather than being ground, and a few of them stand on a track rather
- * than on grass — pinning them all to `grass` here drew turf under those and
- * then popped the tile to dirt the moment the tree was felled. It was pinned
- * because `groundMaterialUnder`'s *inference* cannot help a tree in the middle
- * of a blob that has nothing but trees for three rings around it; that is no
- * longer the fallback, because `paintForests` now uses `setStanding` and every
- * tree records the surface it replaced, which `groundMaterialUnder` consults
- * before it ever reaches inference.
+ * `TREE` is deliberately **not** listed. A tree stands on ground rather than
+ * being ground, and a few of them stand on a track rather than on grass, so
+ * pinning them all to `grass` here would draw turf under those and pop the tile
+ * to dirt the moment the tree is felled. `groundMaterialUnder`'s *inference*
+ * alone cannot help a tree in the middle of a blob that has nothing but trees
+ * for three rings around it, so `paintForests` uses `setStanding` instead:
+ * every tree records the surface it replaced, which `groundMaterialUnder`
+ * consults before it ever reaches inference.
  *
  * Anything else that *stands on* ground rather than being ground — a torch, a
  * well, a building anchor — is not listed, because outdoors and in a dungeon it

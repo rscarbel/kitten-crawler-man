@@ -113,9 +113,9 @@ function drawBridgeDeck(
   const deckH = runsEastWest ? ts - inset * 2 : ts;
 
   // Clamped to the tile's own edge. The shadow's depth is deeper than the deck's
-  // inset, so drawn at full depth it ran past the tile — and terrain is baked in
-  // 16x16-tile chunks clipped to their own rect, which slices it off at every
-  // chunk seam. Measured before this: 64 escaping pixels per tile.
+  // inset, so drawn at full depth it would run past the tile — and terrain is
+  // baked in 16x16-tile chunks clipped to their own rect, which slices it off at
+  // every chunk seam.
   ctx.fillStyle = BRIDGE_UNDERSHADOW_COLOR;
   if (runsEastWest) {
     const shadowTop = deckY + deckH;

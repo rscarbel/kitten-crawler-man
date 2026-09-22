@@ -1455,7 +1455,6 @@ function drawBreastplate(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, ramp: Ram
 const CUIRASS_ROLL_ALPHA = 0.5;
 const BELLY_SHADE_ALPHA = 0.4;
 
-/** The cloak, drawn behind everything and widest when seen from the back. */
 /**
  * Head-on the cloak shows only as the sliver that hangs past his own outline.
  * Given the back view's spread it wraps round both legs and the figure reads as
@@ -1482,6 +1481,7 @@ const CLOAK_SHOULDER_SHARE = 0.92;
 /** How far the cloak's shoulder line sits above the shoulder joints. */
 const CLOAK_RISE = 0.05;
 
+/** The cloak, drawn behind everything else and widest when seen from the back. */
 function drawCloak(ctx: Ctx, skeleton: Skeleton, pose: KnightPose, view: ViewSpec): void {
   const top = skeleton.shoulderCentre;
   const half = view.showsBack ? CLOAK_BACK_WIDTH : CLOAK_WIDTH * view.girth;

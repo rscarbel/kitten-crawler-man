@@ -57,8 +57,8 @@ export const MONGO_WALK_FRAMES = 8;
  * the legs jump between non-adjacent poses, and he reads as vibrating.
  *
  * Lives here rather than on `Mongo` so the preview harness plays the gait that
- * ships. It previously kept its own slower number, which is why the strobe was
- * invisible in every review of the art.
+ * ships — a duplicated number can drift out of sync and hide the strobe from
+ * review.
  */
 export const MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED = 0.5;
 

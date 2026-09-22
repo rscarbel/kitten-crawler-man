@@ -2,12 +2,10 @@
  * The Mantid family's art gates, covering the bounty boss and the crony
  * mantis that escorts him.
  *
- * Neither creature has a baked sheet to inspect any more, so every invariant
- * the old bake enforced by throwing before it wrote a PNG is enforced here
- * instead: the anatomy gates measure the rig's own constants, and the pixel
- * gates measure cells painted from `MANTID_FIGURE` and `MANTIS_FIGURE` exactly
- * the way the runtime cache bakes them — supersampled and downsampled — so what
- * is measured is what the game blits.
+ * The anatomy gates measure the rig's own constants, and the pixel gates
+ * measure cells painted from `MANTID_FIGURE` and `MANTIS_FIGURE` exactly the
+ * way the runtime cache bakes them — supersampled and downsampled — so what is
+ * measured is what the game blits.
  *
  * Both builds are gated, not just the boss: they are drawn by one engine at two
  * scales, and a change that only breaks the small one is exactly the change

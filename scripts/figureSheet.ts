@@ -1,11 +1,10 @@
 /**
  * A contact sheet baked from a `FigureDef`'s painter.
  *
- * Every review harness used to load the creature's PNG and cut it into cells.
- * A painted creature has no PNG, so the sheet is assembled here instead — one
- * row per declared state, each cell painted supersampled and downsampled into
- * place exactly as the runtime cache bakes it, so what a reviewer looks at is
- * what the game blits.
+ * A painted creature has no PNG for a review harness to load and cut into
+ * cells, so the sheet is assembled here instead — one row per declared state,
+ * each cell painted supersampled and downsampled into place exactly as the
+ * runtime cache bakes it, so what a reviewer looks at is what the game blits.
  */
 
 import { createCanvas, type Canvas } from 'canvas';

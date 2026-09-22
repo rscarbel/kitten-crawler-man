@@ -340,12 +340,11 @@ const gravel: Material = {
  * the drifting highlights `WaterAnimationSystem` lays on top and read as grit
  * frozen in the surface.
  *
- * The broad-tone weight is well below the first cut's 0.8, and that is the
- * fourth rule of `add-ground-tile` biting: broad tone inside a patch makes each
+ * The broad-tone weight is kept low: broad tone inside a patch makes each
  * *patch* read as a tonal block, and on a material as flat as water — with no
- * grain or joints to distract from it — a river came out as a mosaic of slightly
- * different squares. Large-scale variation belongs to the renderer's world-space
- * noise layer, not to the tile.
+ * grain or joints to distract from it — a high weight turns a river into a
+ * mosaic of slightly different squares. Large-scale variation belongs to the
+ * renderer's world-space noise layer, not to the tile.
  */
 const WATER_GROUND: GroundOptions = { patchPeriod: 12, patchWeight: 0.4, contrast: 0.32 };
 const WATER_DEPTH_POOL_COUNT = 5;
@@ -437,29 +436,22 @@ const highland: Material = {
 /**
  * Scree is `paintSetts` on a four-tile patch, not the gravel painter on a two.
  *
- * Two things had to be unlearned here, and both are general.
+ * Gravel's discs of `nearest < edge` cells leave each chip a separated lump
+ * with a lit rim and a shadowed underside — at scree's coarser cell size that
+ * reads as a tray of ball bearings rather than *tessellating angular plates*.
+ * The joint between a Worley cell and its neighbour is exactly that
+ * tessellation, so this is a paving painter with the paving taken out of it.
  *
- * The first cut copied gravel — discs of `nearest < edge` cells — which covers
- * about half the area and leaves every chip a separated lump with a lit rim and
- * a shadowed underside. At scree's coarser cell size that read as a tray of ball
- * bearings. What scree actually is, seen from above, is *tessellating angular
- * plates*, and the joint between a Worley cell and its neighbour is exactly
- * that — so this is a paving painter with the paving taken out of it.
+ * A material with **visible units** repeats at its patch, not at its cell, so
+ * a two-tile patch would show the same handful of plates every 64 screen
+ * pixels however irregular one patch is on its own — hence the four-tile
+ * patch, matching every other cell-structured material in this file.
  *
- * The second cut kept `patchTiles: 2`, and a slope of it read as woven fabric.
- * A material with **visible units** repeats at its patch, not at its cell, so a
- * two-tile patch shows the same handful of plates every 64 screen pixels however
- * irregular one patch is on its own. Every other cell-structured material in
- * this file is on a four-tile patch for that reason, and the fix was to join
- * them rather than to keep chasing the regularity with jitter and warp.
- *
- * The third cut went to 1.25 cells and failed the seam gate at 1.30 — which was
- * *not* a new seam. The generator's ratio is the wrap error over the patch's own
- * strongest interior edge, so calming a material shrinks the yardstick: scree's
- * absolute wrap error actually fell (4.34 → 3.30) while its interior denominator
- * fell further (4.76 → 2.39). The gate is right to fail it anyway, because a
- * fixed wrap error is more visible on a calm surface than on a busy one. 1.5 is
- * where the plates are large and the wrap error is genuinely small.
+ * The cell size is 1.5, not smaller: a fixed wrap error is more visible on a
+ * calm surface than a busy one, so the seam gate's ratio — wrap error over the
+ * patch's own strongest interior edge — gets harder to pass as the material
+ * calms down, even while the absolute wrap error falls. 1.5 is where the
+ * plates are large and the wrap error is genuinely small.
  */
 const SCREE_CELLS_PER_TILE = 1.5;
 const SCREE_JITTER = 0.85;
@@ -988,7 +980,7 @@ const PLANK_GRAIN_SEEDS: ReadonlyArray<number> = [71, 73];
  * keeps every one of them clear of the patch boundary. A continuous stagger puts
  * a butt joint on the boundary for roughly one board row in ten, and even though
  * that joint stays symmetric across the wrap it is still a hard line sitting
- * exactly where two variants meet — `f1_timber` scored 1.52 before this.
+ * exactly where two variants meet, which the seam audit flags.
  */
 const PLANK_STAGGER_STEPS = 4;
 
@@ -1762,10 +1754,10 @@ const serviceWall: Material = {
 
 // ── town building interiors ────────────────────────────────────────────────
 //
-// A shop, a house and the tower, seen from inside. These exist because those
-// three used to be floored and walled in the dungeon's generic tile types and so
-// wore whichever cellar's art was loaded; see the note above `INTERIOR_WALL` in
-// `src/map/tileTypes.ts`.
+// A shop, a house and the tower, seen from inside. Without their own materials
+// these would be floored and walled in the dungeon's generic tile types and so
+// would wear whichever cellar's art happens to be loaded; see the note above
+// `INTERIOR_WALL` in `src/map/tileTypes.ts`.
 
 const INTERIOR_BOARDS_PER_TILE = 2;
 const INTERIOR_BOARD_LENGTH_TILES = 2;
@@ -2255,10 +2247,9 @@ const interiorInk: Material = {
 // **indoors**. That is the whole reason these three are laid on a regular grid
 // rather than built from Worley cells like `plaza` and `dungeon_flagstone`: an
 // irregular cell with a rounded bevel is a cobble or a flagstone, and a floor of
-// them reads as a courtyard however warm the palette is. Screenshotted in-game,
-// the first cut of these materials made the safe room look like it had been
-// carved out of the open air. Square units on straight grout lines are what say
-// *tiled room*.
+// them reads as a courtyard however warm the palette is — carved out of the
+// open air rather than roofed. Square units on straight grout lines are what
+// say *tiled room*.
 
 interface CeramicOptions {
   /** Ceramic tiles across one game tile. Must multiply with the material's
@@ -2293,8 +2284,8 @@ interface CeramicOptions {
  *
  * Kept on one side of the ramp's midpoint on purpose. A range that straddles it
  * splits every tile into "sampled shadow→mid" or "sampled mid→light", which is
- * bimodal rather than varied: the first cut spanned 0.30–0.56 and the floor came
- * out as a two-tone chessboard rather than fired ceramic.
+ * bimodal rather than varied, and reads as a two-tone chessboard rather than
+ * fired ceramic.
  */
 const CERAMIC_TONE_FLOOR = 0.5;
 const CERAMIC_GRAIN_OCTAVES = 2;

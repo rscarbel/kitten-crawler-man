@@ -27,9 +27,8 @@ const SPARKLE_COLORS = [
 ];
 
 const FADE_IN_FRAMES = 45;
-const BTN_APPEAR_FRAMES = 90; // button fades in after this frame
+const BTN_APPEAR_FRAMES = 90;
 
-// Magic number constants for LevelCompleteScreen
 const SPARKLE_MIN_SPEED = 1.5;
 const SPARKLE_MAX_SPEED_RANGE = 5.5;
 const SPARKLE_MIN_LIFE = 80;
@@ -159,15 +158,12 @@ export class LevelCompleteScreen {
   }
 
   private tickSparkles(cx: number, cy: number): void {
-    // Big burst on reveal
     if (this.frame === 1) this.spawnBurst(cx, cy, BURST_COUNT_INITIAL);
-    // Sustained shower from random positions
     if (this.frame < BURST_TRANSITION_FRAME && this.frame % BURST_INTERVAL_MAIN === 0) {
       const angle = Math.random() * Math.PI * 2;
       const r = BURST_RADIUS_MIN + Math.random() * BURST_RADIUS_MAX;
       this.spawnBurst(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, BURST_COUNT_MAIN);
     }
-    // Gentle trickle after the main burst
     if (this.frame >= BURST_TRANSITION_FRAME && this.frame % BURST_INTERVAL_LATE === 0) {
       const angle = Math.random() * Math.PI * 2;
       const r = BURST_RADIUS_MIN_LATE + Math.random() * BURST_RADIUS_MAX_LATE;
@@ -201,7 +197,6 @@ export class LevelCompleteScreen {
       Math.min(1, (this.frame - BTN_APPEAR_FRAMES) / BTN_FADE_IN_DURATION),
     );
 
-    // Dark vignette overlay
     drawOverlay(ctx, {
       canvasWidth: w,
       canvasHeight: h,
@@ -209,7 +204,6 @@ export class LevelCompleteScreen {
       alpha: alpha * OVERLAY_ALPHA_MULT,
     });
 
-    // Draw sparkles behind the panel
     const now = performance.now() / PERFORMANCE_TIME_DIVISOR;
     ctx.save();
     for (const s of this.sparkles) {
@@ -269,7 +263,6 @@ export class LevelCompleteScreen {
 
     const panelCenterX = panel.x + panel.width / 2;
 
-    // Animated corner rune marks
     const runeAlpha = alpha * (RUNE_ALPHA_MIN + RUNE_ALPHA_RANGE * Math.sin(now * RUNE_PULSE_FREQ));
     ctx.save();
     ctx.globalAlpha = runeAlpha;
@@ -294,7 +287,6 @@ export class LevelCompleteScreen {
     }
     ctx.restore();
 
-    // "LEVEL COMPLETE!" headline — pulsing gold glow
     // Cap size so 15-char text never word-wraps: ~9.75 px per char, needs panelW-32 px total
     const headPulse = HEAD_PULSE_MIN + HEAD_PULSE_RANGE * Math.sin(now * HEAD_PULSE_FREQ);
     const headSize = Math.min(
@@ -316,7 +308,6 @@ export class LevelCompleteScreen {
       width: panelW - PANEL_PAD_HORIZONTAL,
     });
 
-    // Level name subtitle
     drawText(ctx, this.levelName, {
       x: panel.x + PANEL_PAD_VERTICAL,
       y: panel.y + TEXT_Y_OFFSET_2,
@@ -329,7 +320,6 @@ export class LevelCompleteScreen {
       width: panelW - PANEL_PAD_HORIZONTAL,
     });
 
-    // Decorative divider
     ctx.save();
     ctx.globalAlpha = alpha * DIVIDER_ALPHA_MULT;
     ctx.strokeStyle = '#ffd700';
@@ -340,7 +330,6 @@ export class LevelCompleteScreen {
     ctx.stroke();
     ctx.restore();
 
-    // Progress-saved confirmation
     drawText(ctx, 'Floor cleared — progress saved.', {
       x: panelCenterX,
       y: panel.y + TEXT_Y_OFFSET_4,
@@ -350,7 +339,6 @@ export class LevelCompleteScreen {
       alpha: alpha * CONFIRM_ALPHA_MULT,
     });
 
-    // Continue button — always positioned with consistent bottom margin inside the panel
     if (btnAlpha > 0) {
       const btnX = panelCenterX - btnW / 2;
       const btnY = panel.y + panelH - btnH - BTN_MARGIN_BOTTOM;

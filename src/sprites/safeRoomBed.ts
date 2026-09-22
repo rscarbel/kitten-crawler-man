@@ -1,11 +1,11 @@
 /**
  * The safe room's bed — the one place in the dungeon the party can sleep.
  *
- * Drawn to the game's oblique projection rather than flat from above. The
- * previous version was six top-down rectangles, which read as a decal painted on
- * the floor; what makes a bed read as *furniture* is a tall headboard with a
- * visible vertical face and a turned post at each corner, so that is the piece
- * the rest of the geometry is hung off.
+ * Drawn to the game's oblique projection rather than flat from above: flat
+ * top-down rectangles read as a decal painted on the floor, while what makes a
+ * bed read as *furniture* is a tall headboard with a visible vertical face and
+ * a turned post at each corner, so that is the piece the rest of the geometry
+ * is hung off.
  *
  * Lit up-left and shadowed down-right, matching the direction the generated
  * ground is lit from (`LIGHT_DIR` in `src/map/tilegen/materials.ts`).

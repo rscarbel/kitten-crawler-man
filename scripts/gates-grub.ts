@@ -1,11 +1,9 @@
 /**
  * The Brindle Grub family's art gates, covering both instars.
  *
- * Neither has a baked sheet to inspect any more, so every invariant the old bake
- * enforced by throwing before it wrote a PNG is enforced here instead, against
- * cells painted from `BRINDLE_GRUB_FIGURE` and `COW_TAILED_GRUB_FIGURE` exactly
- * the way the runtime cache bakes them — supersampled and downsampled — so what
- * is measured is what the game blits.
+ * These gates run against cells painted from `BRINDLE_GRUB_FIGURE` and
+ * `COW_TAILED_GRUB_FIGURE` exactly the way the runtime cache bakes them —
+ * supersampled and downsampled — so what is measured is what the game blits.
  *
  * Both builds are gated, not just the one that fights: they are drawn by one
  * engine at two scales, and a change that only breaks the larva is exactly the
@@ -598,13 +596,12 @@ function highestInkColumn(def: FigureDef, state: string, frame: number): number 
 // ── G7 the frozen cell geometry ──────────────────────────────────────────────
 
 /**
- * The numbers the old bake used to size a cell around the art it measured.
+ * The four numbers a cell was sized around when this art was baked.
  *
- * Held here as its own constants rather than imported, because the module that
- * used to own them is the generator this figure replaced. They are what makes
- * the check below a re-measurement rather than a restatement: the cell is
- * re-derived from painted ink and compared against the four numbers frozen in
- * the figure.
+ * Held here as its own constants rather than imported, since no generator
+ * module exists to own them anymore. They are what makes the check below a
+ * re-measurement rather than a restatement: the cell is re-derived from
+ * painted ink and compared against the four numbers frozen in the figure.
  */
 const FRAME_PADDING = 6;
 const FRAME_SIZE_QUANTUM = 8;

@@ -2016,8 +2016,8 @@ const FACING_TAIL_GIRTH = 0.82;
  * From behind, the tail is coming toward the camera down the midline, so it is
  * foreshortened rather than shortened: it shows nearly its full girth over a
  * fraction of its length, and the far end is a blunt disc of a tip rather than
- * a point. Given the profile's slender taper it comes out as a leaf lying on
- * his back — the very shape the tail was rebuilt to stop being.
+ * a point. Given the profile's slender taper it would otherwise come out as a
+ * leaf lying flat on his back.
  */
 const AWAY_TAIL_GIRTH = 0.72;
 const AWAY_TAIL_TIP_BLUNT = 2.4;
@@ -2230,7 +2230,7 @@ function drawTail(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: JuicerPose
   //
   // Each is an arc bowed along the taper and stopped short of the lit edge,
   // never a chord straight across the girth: a full-width straight rule reads as
-  // a chevron printed on a flat wedge, which is what the whole tail read as.
+  // a chevron printed on a flat wedge rather than as a band wrapped round a tube.
   ctx.strokeStyle = washed(HIDE.dark, TAIL_BAND_ALPHA);
   ctx.lineCap = 'round';
   for (let i = 1; i < spine.points.length - 1; i++) {
@@ -2341,8 +2341,7 @@ function speckleTorso(ctx: Ctx, skeleton: Skeleton, spread: number): void {
  * 32 px tile: a stack of pale slabs separated by hard dark grooves. That is why
  * the plating carries the muscle read and no interior line work is needed —
  * but the grooves have to be *hard* and the ramp step has to be big. A soft
- * gradient across a torso reads at tile size as a slightly uneven barrel, which
- * is exactly what the first bake of this creature was.
+ * gradient across a torso reads at tile size as a slightly uneven barrel.
  */
 const PEC_HALF_SHARE = 0.48;
 const PEC_DEPTH_SHARE = 0.2;
@@ -2740,7 +2739,7 @@ function drawTorso(ctx: Ctx, skeleton: Skeleton, pose: JuicerPose, view: ViewSpe
   // The trunk's own volume goes down *before* the plating, never over it. Laid
   // on top, a 40% wash of the dark hide drags every lit plate two-thirds of the
   // way back to the base tone and turns the whole chest into one flat khaki
-  // field — which is exactly what "definition" looked like before.
+  // field with no definition left in it.
   const shadeCentre = offset(
     skeleton.chest,
     -LIGHT.x * half * MASS_SHADE_OFFSET,
@@ -2795,8 +2794,7 @@ const MUZZLE_Y = HEAD_RY * 0.34;
 /**
  * How far the muzzle's own centre sits from the skull's, seen edge-on. It has
  * to clear the skull's radius or there is no muzzle at all — a snout drawn
- * inside its own head is a face painted on a ball, which is what the first bake
- * of this creature was.
+ * inside its own head is a face painted on a ball.
  */
 const MUZZLE_REACH = HEAD_DEPTH * 0.62;
 /** How much muzzle survives the turn to head-on, where it is foreshortened. */
@@ -2841,11 +2839,10 @@ const EAR_SWING_COMPLETE = FACING_HEAD_YAW;
  * forward toward the face and y down. It is walked from the brow's leading
  * corner down the cheek, around the underside and back up over the crown.
  *
- * An ellipse here is a beach ball with a face stuck on the front of it, which
- * is what the first bake of this skull read as. The crown instead runs as one
- * near-straight plane from the brow's corner back to a high occiput, so the
- * brow ridge is the leading edge of a continuous wedge rather than a stripe
- * painted across a sphere.
+ * An ellipse here is a beach ball with a face stuck on the front of it. The
+ * crown instead runs as one near-straight plane from the brow's corner back to
+ * a high occiput, so the brow ridge is the leading edge of a continuous wedge
+ * rather than a stripe painted across a sphere.
  *
  * The walk order matters: the muzzle wedge is traced into the same path, and a
  * subpath wound against it would punch the overlap back out again.
@@ -3179,9 +3176,9 @@ function drawHead(ctx: Ctx, pose: JuicerPose, yaw: number, showsFace: boolean): 
   /**
    * The muzzle is a wedge traced into the same path as the skull: a straight
    * bridge running out from under the brow to a squared-off nose, and a jaw
-   * line under it. An ellipse stuck on the front of a ball is a pair of lips,
-   * which is what the first bake of this creature read as — the reptile cue is
-   * the flat top plane and the hard corner at the nose, never a bulb.
+   * line under it. An ellipse stuck on the front of a ball reads as a pair of
+   * lips — the reptile cue is the flat top plane and the hard corner at the
+   * nose, never a bulb.
    */
   const traceSkull = (grow: number): void => {
     ctx.beginPath();

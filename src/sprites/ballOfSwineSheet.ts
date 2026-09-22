@@ -5,9 +5,9 @@
  * Three parties have to agree about it: the choreography in
  * `src/sprites/art/ballOfSwineFigure.ts`, the rows
  * `src/sprites/ballOfSwineSprite.ts` plays, and the phase lengths
- * `src/creatures/BallOfSwine.ts` runs the fight on. The row lengths used to be
- * bare literals at the three draw call sites, so the first frame-count change
- * would have played half a row and repeated the rest.
+ * `src/creatures/BallOfSwine.ts` runs the fight on. Bare literals at the three
+ * draw call sites would let a frame-count change desync them, playing half a
+ * row and repeating the rest.
  *
  * This module deliberately imports nothing: the offline harness pulls it in as
  * well as the browser bundle, and anything it touched would have to work in

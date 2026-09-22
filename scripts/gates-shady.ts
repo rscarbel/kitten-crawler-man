@@ -1,11 +1,10 @@
 /**
  * Shady's art gates.
  *
- * He has no baked sheet to inspect any more, so every invariant the old bake
- * enforced against sheet pixels is enforced here against cells painted from
- * `SHADY_FIGURE` — baked exactly the way the runtime cache bakes them,
- * supersampled and downsampled, so what is measured is what the game blits. The
- * elbow gate measures the rig itself and needs no pixels at all.
+ * These gates enforce sheet-shape invariants directly against cells painted
+ * from `SHADY_FIGURE` — baked exactly the way the runtime cache bakes them,
+ * supersampled and downsampled, so what is measured is what the game blits.
+ * The elbow gate measures the rig itself and needs no pixels at all.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong. A gate that cannot find the row or state it names
@@ -104,9 +103,9 @@ function rowNamed(name: string, gateId: string): RowSpec | null {
 /**
  * G1 — the shared structural gates: every declared state paints every declared
  * frame, nothing paints against the cell edge, and the cell is not mostly
- * empty. The edge check is what the old bake's border-clip gate did; a frame
- * that paints outside its cell is clipped away silently, and nothing
- * downstream can detect it.
+ * empty. A frame that paints outside its cell is clipped away silently by the
+ * cache, and nothing downstream can detect it, which is why the edge check
+ * exists.
  */
 function gateStructure(): void {
   for (const failure of figureStructuralFailures(SHADY_FIGURE)) fail('G1', failure);
@@ -416,11 +415,11 @@ function gateLoopCloses(): void {
  * How far a one-shot's last frame may sit from the idle it hands off to,
  * measured as the total travel of both hands in tile units.
  *
- * A pixel-delta ratio against the row's own median step — what the old bake gate
- * used — cannot fail on this figure: the scratch sweeps an arm most of a tile
- * every frame, so its median step is large enough that a row ending with the
- * hand still fully raised measures 1.9x it and passes. The hands are what the
- * row moves, so the hands are what has to come back.
+ * A pixel-delta ratio against the row's own median step cannot fail on this
+ * figure: the scratch sweeps an arm most of a tile every frame, so its median
+ * step is large enough that a row ending with the hand still fully raised
+ * measures 1.9x it and passes. The hands are what the row moves, so the hands
+ * are what has to come back.
  */
 const SETTLE_TOLERANCE_TILES = 0.02;
 

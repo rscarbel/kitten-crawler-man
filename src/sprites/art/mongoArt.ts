@@ -699,9 +699,9 @@ export function buildSkeleton(pose: MongoPose, prop: MongoProportions): MongoSke
   const tailRoot = add(pelvis, rot({ x: -TAIL_ROOT_BACK, y: -TAIL_ROOT_RISE }, spineAngle));
   const tail: Pt[] = [tailRoot];
   // `+ tailLift`, not `-`: with +Y down the screen, adding to an angle already
-  // past π swings the tail *up*. Subtracting inverted every constant named
-  // "lift" in the choreography — the pounce dropped its tail and the collapse
-  // held its own aloft like a handle.
+  // past π swings the tail *up*. Subtracting would invert every constant named
+  // "lift" in the choreography — the pounce would drop its tail and the
+  // collapse would hold its own aloft like a handle.
   let tailAngle = spineAngle + Math.PI + pose.tailLift;
   let node = tailRoot;
   prop.tail.forEach((segment, index) => {
@@ -825,8 +825,8 @@ function drawLimb(
  *
  * Limbs built as one quad per segment show a stroked seam at every joint, and a
  * tail drawn that way reads as a string of sausages rather than as one animal's
- * tail — which is what the first bake of this sprite did. Offsetting a single
- * polyline by a per-node half-width gives one continuous silhouette instead.
+ * tail. Offsetting a single polyline by a per-node half-width gives one
+ * continuous silhouette instead.
  */
 function ribbonOutline(nodes: readonly Pt[], halfAt: readonly number[]): Pt[] {
   const left: Pt[] = [];
@@ -1123,7 +1123,7 @@ function bodyOutline(sk: MongoSkeleton, prop: MongoProportions, breathe: number)
     at(SADDLE_ALONG, -hipDepth * SADDLE_SHARE),
     at(WITHERS_ALONG, -chestDepth * WITHERS_SHARE),
     // The shoulder runs on into the neck rather than stopping at a corner; a
-    // notch here is what made the first bake look like a head bolted to a box.
+    // notch here would make the head look bolted onto a box.
     at(NECK_ROOT_ALONG, -chestDepth * NECK_ROOT_RISE),
     at(THROAT_ALONG, chestDepth * THROAT_DROP),
     at(BRISKET_ALONG, chestDepth),
@@ -1333,9 +1333,9 @@ function drawClaw(ctx: Ctx, root: Pt, along: Pt, side: Pt, length: number, shade
 const CLAW_HALF = 0.008;
 
 /**
- * A hand claw. Pale keratin like the sickle, because the same near-black on the
- * same dark limb produced the same result: a claw drawn every frame and visible
- * in none of them, which at the rake's peak left the arm ending in a bare hook.
+ * A hand claw. Pale keratin like the sickle: the same near-black on the same
+ * dark limb would be a claw drawn every frame and visible in none of them,
+ * leaving the arm ending in a bare hook at the rake's peak.
  */
 function drawFingerClaw(
   ctx: Ctx,
@@ -1896,9 +1896,9 @@ function quadTangent(a: Pt, b: Pt, c: Pt, t: number): Pt {
  * both map onto screen-Y: the chest sits nearer the viewer than the hips and is
  * therefore drawn *lower* on screen, the head hangs further forward and lower
  * still, and the tail rises away behind the hips. Built as a vertical torso
- * with a head stacked on top — which is what the first bake did — the same
- * creature reads as a raptor in profile and as a small blue humanoid head-on,
- * i.e. it changes species every time the player turns ninety degrees.
+ * with a head stacked on top instead, the same creature would read as a raptor
+ * in profile and as a small blue humanoid head-on, i.e. it would change
+ * species every time the player turns ninety degrees.
  */
 interface AxialView {
   /** +1 when the animal's front is toward the camera, -1 when it is away. */
@@ -1924,11 +1924,11 @@ interface AxialLayout {
  * The head goes on *top*, with the body below it and the tail swept out to one
  * side — which is the convention every other horizontal animal in this game is
  * already drawn to (see the rat's `walk` row). A projection-correct layout, with
- * the head hanging below a receding body, was tried first and measured worse in
- * every way that matters: the head could not be located at 32 px, the two axial
- * views came out a third shorter than the profile, and the muzzle punched
- * through the floor on the bite. Consistency with the rest of the bestiary beats
- * a correct projection nobody can read.
+ * the head hanging below a receding body, fails in every way that matters: the
+ * head cannot be located at 32 px, the two axial views come out a third shorter
+ * than the profile, and the muzzle punches through the floor on the bite.
+ * Consistency with the rest of the bestiary beats a correct projection nobody
+ * can read.
  */
 const AXIAL_CHEST_RISE = 0.34;
 const AXIAL_HEAD_ABOVE = 0.9;
@@ -2270,8 +2270,8 @@ function drawAxialHead(
   const jawY = centre.y + snoutDrop;
   if (pose.gape > GAPE_MOUTH_VISIBLE) {
     ctx.beginPath();
-    // Bounded by the skull. Scaled off the snout drop alone it grew wider than
-    // the head is tall and hung down over the chest like a necktie.
+    // Bounded by the skull. Scaled off the snout drop alone it would grow wider
+    // than the head is tall and hang down over the chest like a necktie.
     ctx.ellipse(
       centre.x,
       jawY - halfH * AXIAL_GAPE_RISE,
@@ -2339,7 +2339,7 @@ function drawMongoAxial(ctx: Ctx, pose: MongoPose, prop: MongoProportions, view:
   // ovals stacked on top of each other. Seen end-on a horizontal-spined animal
   // is still *long* — the length is simply pointing at the camera — and two
   // separate circles with a gap between them read as a head on a body, i.e. as
-  // a small upright humanoid, which is exactly what the first bake produced.
+  // a small upright humanoid.
   const spine = [
     { x: chest.x, y: chest.y - prop.spineLength * AXIAL_BRISKET_OVERHANG },
     chest,
@@ -2450,10 +2450,9 @@ function drawMongoAxial(ctx: Ctx, pose: MongoPose, prop: MongoProportions, view:
 
   // Far-to-near, and which end is near reverses between the two views: head-on
   // the tail is behind everything and the head in front of it; from behind it is
-  // the other way round. One fixed order for both is how the first bake ended up
-  // stacking the rump on the shoulders like a snowman.
-  // The only thing depth actually reorders is the tail: it is behind everything
-  // when he faces the camera and in front of everything when he faces away.
+  // the other way round. The only thing depth actually reorders is the tail: it
+  // is behind everything when he faces the camera and in front of everything
+  // when he faces away.
   if (view.depth > 0) drawTailAxial(ctx, layout, prop, view);
   paintTorsoAndArms();
   paintHips();

@@ -191,9 +191,9 @@ export type GateArchAxis = 'across' | 'along';
  * the player has to squeeze through.
  *
  * The face-on vault rises nearly two tiles above its springing over the widest
- * gate. A first cut at 1.2 read as a bent wire across the gap rather than as
- * masonry: over a four-tile span, a shallow curve of a thin band is a line, and
- * what makes an arch an arch is that its rise is a real fraction of its span.
+ * gate: over a four-tile span, a shallow curve of a thin band reads as a bent
+ * wire across the gap rather than as masonry, and what makes an arch an arch
+ * is that its rise is a real fraction of its span.
  */
 export function drawGateArch(
   ctx: CanvasRenderingContext2D,
@@ -307,15 +307,13 @@ function drawArchAcross(
  * The gateway seen from above: a stone pier beyond each end of the opening, each
  * carrying a lantern on its inner face.
  *
- * **Nothing is drawn across the throat.** A first cut roofed the opening — a slab
- * of coursed stone over all four of its tiles — on the reasoning that a gatehouse
- * seen from above *is* its roof. What that produced was an unbroken six-tile grey
- * band embedded in the wall with no visible gate at all, and it sorted two ways at
- * once: a player on the roof's own anchor row was hidden under it, one row south
- * was drawn over it. The face-on form already states the rule this broke — an arch
- * that narrows its opening is a wall with a hole in it — and two piers say
- * "gateway" from above without covering the one tile the player has to walk
- * through.
+ * **Nothing is drawn across the throat.** A slab of coursed stone over all four
+ * tiles of the opening reads as an unbroken six-tile grey band embedded in the
+ * wall with no visible gate, and it sorts two ways at once: a player on the
+ * roof's own anchor row is hidden under it, one row south is drawn over it. The
+ * face-on form states the same rule — an arch that narrows its opening is a
+ * wall with a hole in it — and two piers say "gateway" from above without
+ * covering the one tile the player has to walk through.
  */
 function drawGatehouseAlong(
   ctx: CanvasRenderingContext2D,

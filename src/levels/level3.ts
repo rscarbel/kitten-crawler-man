@@ -64,9 +64,8 @@ const SKYF_12_Y = -4;
 const FLOOR3_RECOMMENDED_LEVEL = 24;
 
 /**
- * Sky fowl level range. They spawned at level 1 until the difficulty pass — a
- * floor-3 creature no tougher than a floor-1 rat, on a floor whose weakest
- * regular is level 5.
+ * Sky fowl level range, kept in line with the floor's weakest regular so this
+ * floor-3 creature isn't as fragile as a floor-1 rat.
  */
 const SKY_FOWL_MIN_LEVEL = 5;
 const SKY_FOWL_MAX_LEVEL = 7;

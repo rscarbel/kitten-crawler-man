@@ -133,10 +133,10 @@ export type VariantId = 'brindle_grub' | 'cow_tailed_grub';
  * The cell a variant's poses are painted into, and where its own tile sits
  * inside it.
  *
- * These four numbers were measured by the bake this figure replaces — the widest
- * pose plus padding, quantised — and `scripts/parity-figure-sheet.ts` is what
- * proved the painters still fill exactly those cells. `scripts/gates-grub.ts`
- * re-measures the ink and re-derives them on every render.
+ * These four numbers are measured from the widest pose plus padding, quantised,
+ * and `scripts/parity-figure-sheet.ts` confirms the painters still fill exactly
+ * those cells. `scripts/gates-grub.ts` re-measures the ink and re-derives them
+ * on every render.
  */
 interface CellGeometry {
   readonly frameWidth: number;

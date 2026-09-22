@@ -372,11 +372,10 @@ function gateCellGeometry(): void {
  * Where the rat's soles sit inside its tile, as a share of the tile's height
  * below the tile's top edge.
  *
- * Frozen here rather than taken from the art's own `GROUND_Y`, which is what
- * this gate used to do and what made it unfailable against the defect it names:
- * `paintFrame` pivots the whole animal about `GROUND_Y` and plants every stance
- * foot on it, so a gate deriving its ground line from the same constant moved
- * both sides of the comparison together and passed for any value of it. The tile
+ * Frozen here rather than taken from the art's own `GROUND_Y`: `paintFrame`
+ * pivots the whole animal about `GROUND_Y` and plants every stance foot on it,
+ * so a gate deriving its ground line from the same constant would move both
+ * sides of the comparison together and pass for any value of it. The tile
  * box is what the runtime hangs the creature off, so that is what the soles are
  * held to. Measured off the shipped idle rows.
  */

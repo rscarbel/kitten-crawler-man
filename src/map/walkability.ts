@@ -75,9 +75,9 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   // `applyMovement` apply the speed penalty; `RenderPipeline` sinks the sprite.
   //
   // `RIVER_ROCK` below is what keeps a midstream stone solid, and that entry is
-  // now load-bearing rather than belt-and-braces: a rock replaces the water tile
-  // type outright, so without it the rock would be the one *swimmable* tile in a
-  // river everything else can already cross.
+  // load-bearing: a rock replaces the water tile type outright, so without it
+  // the rock would be the one *swimmable* tile in a river everything else can
+  // already cross.
   VOID_TYPE,
   TREE,
   BUILDING_WALL,
@@ -92,11 +92,9 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   ROOF_CIRCUS_PURPLE,
   FOUNTAIN,
   TORCH,
-  // A stone well is as solid as the fountain beside it. Its absence here was
-  // pre-existing: both town wells were walkable and the player could stand
-  // inside one. Every consumer that cares about a well — the murder quest's
-  // clue and the drink heal — measures distance to the tile rather than
-  // standing on it.
+  // A stone well is as solid as the fountain beside it: nothing needs the
+  // player to stand on one — the murder quest's clue and the drink heal both
+  // measure distance to the tile instead.
   WELL,
   TABLE,
   BOOKSHELF,
@@ -125,9 +123,9 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   SAFE_ROOM_TABLE,
   SAFE_ROOM_STOOL,
   SAFE_ROOM_LARDER,
-  // A town interior's plastered wall and its counter runs. The counters were
-  // `FloorTypeValue.wall` until they got a type of their own, so they were
-  // already solid; this is what keeps them that way.
+  // A town interior's plastered wall and its counter runs — the counters are
+  // solid the same way `FloorTypeValue.wall` is, the type they were split out
+  // of.
   INTERIOR_WALL,
   INTERIOR_COUNTER,
   // The garrison's and the inking shop's furniture. `DRILL_SAND_FLOOR` is

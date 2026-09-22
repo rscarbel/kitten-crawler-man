@@ -338,12 +338,12 @@ const FENCE_HIGHLIGHT_PX = 1;
  * `SpriteLoader` derives a footprint from the frame's whole width and height and
  * blocks all of it bar the doorway, so transparent sky and transparent side
  * columns are "blocked" exactly as solid wall is. Measured over the real grid,
- * routing `anchorsRailAt` through it gained **6** anchored sides, not the 43 this
- * note used to predict — and alpha-scanning the art at those six found three
- * anchoring into pixels that are 0.0%, 0.0% and 1.1% opaque, which is the same
- * rail-into-open-verge defect the paragraph above records. Closing them properly
- * needs a per-tile opacity index built from the loaded images, and the measured
- * prize for building one is three fence tiles.
+ * routing `anchorsRailAt` through it gains **6** anchored sides — far short of
+ * the 43 that actually abut a facade — and alpha-scanning the art at those six
+ * finds three anchoring into pixels that are 0.0%, 0.0% and 1.1% opaque, which
+ * is the same rail-into-open-verge defect the paragraph above records. Closing
+ * them properly needs a per-tile opacity index built from the loaded images,
+ * and the measured prize for building one is three fence tiles.
  */
 export const FENCE_ANCHOR_TYPES: ReadonlySet<number> = new Set<number>([
   FENCE,
@@ -377,8 +377,8 @@ function anchorsRailAt(structure: TileContent[][], tx: number, ty: number): bool
  * only spans 24%–84% of the tile, so the run reads as a dashed string.
  *
  * A lone tile with no fence neighbour at all is a gate cheek — a perimeter is
- * never one tile long — and draws its post alone. Rails to nowhere on both sides
- * are what it used to draw, and a cheek is exactly where a rail stops.
+ * never one tile long — and draws its post alone, with no rails to nowhere on
+ * either side: a cheek is exactly where a rail stops.
  */
 function drawFence(
   ctx: CanvasRenderingContext2D,
@@ -506,9 +506,9 @@ function drawFenceInfill(
     const paleBottom = sy + Math.round(ts * PICKET_PALE_BOTTOM_FRACTION);
     const step = PICKET_PALE_WIDTH_PX + PICKET_PALE_GAP_PX;
     // Phased off `sx` so pales line up across a tile joint instead of restarting
-    // at every tile edge. `sx` is chunk-local on the baked path, so the run of
-    // pales does restart at a 16-tile chunk seam — invisible at a 3-tile pale
-    // period, but it is not the world column and the comment used to say it was.
+    // at every tile edge. `sx` is chunk-local on the baked path, not the world
+    // column, so the run of pales does restart at a 16-tile chunk seam —
+    // invisible at a 3-tile pale period.
     const phase = ((sx % step) + step) % step;
     for (let x = westEdge - phase; x < eastEdge; x += step) {
       const left = Math.max(x, westEdge);
@@ -646,13 +646,13 @@ function drawGardenPlanting(
  * Avalanche mixing constants, and the salts that separate one stream from
  * another.
  *
- * The first cut of this used `(|tx*a + ty*b| % 251) / 251` and passed `tx + i`
- * for the i-th element of a clump. That expression is **linear in its
- * arguments**, so stepping `i` steps the result by a constant: every clump came
- * out as points on one fixed diagonal with a fixed spacing, identical in shape
- * on every tile in the map, and the seven "pebbles" overlapped into a single
- * diagonal smear. A scatter pass that draws the same motif everywhere is worse
- * than no scatter pass, because it adds a repeat instead of breaking one.
+ * A linear hash such as `(|tx*a + ty*b| % 251) / 251`, passed `tx + i` for the
+ * i-th element of a clump, fails here: that expression is **linear in its
+ * arguments**, so stepping `i` steps the result by a constant, and every clump
+ * comes out as points on one fixed diagonal with a fixed spacing — identical in
+ * shape on every tile in the map, with the seven "pebbles" overlapping into a
+ * single diagonal smear. A scatter pass that draws the same motif everywhere is
+ * worse than no scatter pass, because it adds a repeat instead of breaking one.
  *
  * `Math.imul` with a shift-xor finish is the idiom used throughout the tile
  * renderers, and it decorrelates the element index properly.
@@ -1000,12 +1000,12 @@ const CLIFF_CRACK_COLOR = 'rgba(28,25,22,0.6)';
  * Shade pooling at the **foot of the ledge's own face**, where the rock meets
  * the ground.
  *
- * Not the drop-shadow onto the tile below, which is what an earlier version of
- * this comment claimed. A tile may not paint outside itself — terrain is baked
- * in 16x16-tile chunks clipped to their own rect — so the shadow the *neighbour*
- * receives is cast by the ground-AO pass instead, which is why `CLIFF` is in
- * `GROUND_OCCLUDER_TYPES`. The two together are the height illusion: this darkens
- * the base of the face, the AO darkens the ground in front of it.
+ * Not the drop-shadow onto the tile below: a tile may not paint outside itself —
+ * terrain is baked in 16x16-tile chunks clipped to their own rect — so the
+ * shadow the *neighbour* receives is cast by the ground-AO pass instead, which
+ * is why `CLIFF` is in `GROUND_OCCLUDER_TYPES`. The two together are the height
+ * illusion: this darkens the base of the face, the AO darkens the ground in
+ * front of it.
  */
 const CLIFF_FACE_FOOT_SHADE_COLOR = 'rgba(16,14,12,0.42)';
 

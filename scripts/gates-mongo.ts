@@ -1,8 +1,7 @@
 /**
  * Mongo's art gates, across all three growth stages.
  *
- * The creature has no baked sheets any more, so every invariant the old bake
- * gate enforced against sheet pixels is enforced here against cells painted
+ * These gates enforce sheet-shape invariants directly against cells painted
  * from the three `FigureDef`s — baked exactly the way the runtime cache bakes
  * them, supersampled and downsampled, so what is measured is what the game
  * blits. The pose-stream gates measure the rig itself and need no pixels at all.

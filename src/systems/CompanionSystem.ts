@@ -575,11 +575,9 @@ export class CompanionSystem implements GameSystem {
     );
 
     if (human.isActive) {
-      // Clear cat's target if it's dead or became an avoid-instead mob
       if (cat.autoTarget && (!cat.autoTarget.isAlive || cat.autoTarget.avoidInstead))
         cat.autoTarget = null;
 
-      // Also clear if the current target is in an untriggered boss room
       if (cat.autoTarget && isUntriggeredBossRoomMob(cat.autoTarget, human)) cat.autoTarget = null;
 
       // While the companion is being recalled, nothing is assigned at all.
@@ -632,9 +630,9 @@ export class CompanionSystem implements GameSystem {
         // The missile first, always, and the claw in the gaps between casts.
         // Her missile out-damages her claw several times over at every ability
         // level, so a swipe that costs her a shot is a straight loss — but the
-        // frames between shots used to be frames a companion with one attack
-        // spent doing nothing at all, however close the thing chewing on her
-        // was. That is what the claw is for.
+        // without it, the frames between shots would be spent doing nothing at
+        // all, however close the thing chewing on her was. That is what the
+        // claw is for.
         // Captured first: `autoFireTick` drops the target if it died between
         // acquisition and the shot, and the distance test below would then be
         // measured against nothing.
@@ -645,11 +643,9 @@ export class CompanionSystem implements GameSystem {
         }
       }
     } else {
-      // Clear human's target if it's dead or became an avoid-instead mob
       if (human.autoTarget && (!human.autoTarget.isAlive || human.autoTarget.avoidInstead))
         human.autoTarget = null;
 
-      // Also clear if the current target is in an untriggered boss room
       if (human.autoTarget && isUntriggeredBossRoomMob(human.autoTarget, cat))
         human.autoTarget = null;
 
@@ -1048,8 +1044,6 @@ export class CompanionSystem implements GameSystem {
       return;
     }
 
-    // If any avoidInstead mob is nearby, flee from it — takes priority over all other movement.
-    //
     // Above the recall, not below it: "follow me" is a request to close the
     // distance, never a request to sprint through fire to do it. Ranked the
     // other way, a recall pressed on a floor with a live hazard ran the

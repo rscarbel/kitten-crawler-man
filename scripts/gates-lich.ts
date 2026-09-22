@@ -1,11 +1,10 @@
 /**
  * The Lich's art gates.
  *
- * The creature has no baked sheet to inspect any more, so every invariant the
- * old bake enforced by throwing before it wrote a PNG is enforced here instead:
- * the pose-stream gates measure the rig itself, and the pixel gates measure
- * cells painted from `LICH_FIGURE` exactly the way the runtime cache bakes them
- * — supersampled and downsampled — so what is measured is what the game blits.
+ * The pose-stream gates measure the rig itself, and the pixel gates measure
+ * cells painted from `LICH_FIGURE` exactly the way the runtime cache bakes
+ * them — supersampled and downsampled — so what is measured is what the game
+ * blits.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong. A gate that cannot find the row or state it names

@@ -370,7 +370,6 @@ export class ClubVipLoungeSystem {
         borderWidth: 1.5,
         radius: 8,
       });
-      // Gold accent bar down the left edge of each service card.
       drawBox(ctx, { x, y, width: 4, height: CARD_H, fill: ACCENT, radius: 2 });
 
       drawText(ctx, service.name, {

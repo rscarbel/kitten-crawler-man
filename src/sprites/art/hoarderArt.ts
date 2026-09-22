@@ -183,9 +183,10 @@ export const FIGURE_HEIGHT = 2.4;
 /**
  * One pixel of the baked sheet, in figure units. The generator draws a tile at
  * 64px and scales the figure by `HOARDER_TILES_TALL / FIGURE_HEIGHT`, which
- * comes to 96 sheet pixels per unit. Every constant below that came out of a
- * measurement on a rendered image is written against this rather than as a bare
- * fraction, so the number in the code is the number the review asked for.
+ * comes to 96 sheet pixels per unit. Constants below that derive from a
+ * measurement on a rendered image are written against this rather than as a
+ * bare fraction, so the number in the code is the number measured on the
+ * image.
  */
 const SHEET_PX = 1 / 96;
 
@@ -195,9 +196,8 @@ const SHEET_PX = 1 / 96;
  * scaled up reads as a doll rather than as a giant. A stylised game figure is
  * drawn at ~4.8 heads *because* it is meant to read as a person; she must not.
  *
- * Three independent blind reviews of this sheet asked for a smaller head, in
- * that order, before they asked for anything else. It is the one proportion no
- * amount of detail elsewhere can recover.
+ * Head size is the first thing read on a figure this large. It is the one
+ * proportion no amount of detail elsewhere can recover.
  */
 const HEADS_TALL = 8.3;
 const HEAD_HEIGHT = FIGURE_HEIGHT / HEADS_TALL;
@@ -277,9 +277,9 @@ export const ANKLE_WIDTH = 0.05;
 const CALF_AT = 0.34;
 
 /**
- * A third of the torso's width, not most of it. At the previous value the arms
- * were columns as wide as her ribcage, so the figure read as three parallel
- * masses rather than as a body with limbs on it.
+ * A third of the torso's width, not most of it. Any wider and the arms are
+ * columns as wide as her ribcage, so the figure reads as three parallel masses
+ * rather than as a body with limbs on it.
  */
 export const UPPER_ARM_WIDTH = 0.125;
 export const ELBOW_WIDTH = 0.095;
@@ -297,8 +297,8 @@ export const FOOT_DEPTH = FOOT_LENGTH * 0.52;
 /**
  * Head-on the foot is nearly end-on, so almost all of its length is lost and
  * only its breadth survives. Two numbers rather than one: foreshortening the
- * breadth as hard as the length gives a doll's foot, and foreshortening neither
- * gives the 24-pixel paddle the first pass had.
+ * breadth as hard as the length gives a doll's foot, and foreshortening
+ * neither gives a 24-pixel paddle.
  */
 const FOOT_FORESHORTEN = 0.62;
 const FOOT_FACING_BREADTH = 0.72;
@@ -1120,8 +1120,8 @@ const APRON_BOTTOM_Y = -0.78;
  * ones around it did not, and no two are closer in height than the width step
  * between them. Both are the same rule seen twice: what the eye reads as a
  * corner is not a steep edge, it is a *change* of steepness packed into no
- * height at all. G14 measures the turn radius the spline through these actually
- * produces, which is several times tighter than the polygon they describe.
+ * height at all. The spline through these produces a turn radius several times
+ * tighter than the polygon they describe.
  */
 const TORSO_STATIONS: readonly TorsoStation[] = [
   { y: SHOULDER_Y, half: SHOULDER_HALF, front: 0.26, back: 0.2 },
@@ -1166,12 +1166,12 @@ const BELLY_HEAVE_RISE = -0.05;
  * gut and nothing at the bust; the swing keeps `BELLY_SWING_UPPER_SHARE` up
  * there, because a chest riding over a swinging gut does move, just less.
  *
- * This used to be a boolean on `station.y > WAIST_Y`, and a boolean is a step. A
- * heave then lifted one station by the full rise while the one 0.18 above it did
- * not move at all, which put a hard kink in the outline at the waist on every
- * frame of the vomit — the two stations were the same distance apart in width
- * and no distance apart in the code, and the crease that produced looked like a
- * fold in cardboard.
+ * A boolean gate on `station.y > WAIST_Y` would be a step: a heave would lift
+ * one station by the full rise while the one 0.18 above it did not move at
+ * all, putting a hard kink in the outline at the waist on every frame of the
+ * vomit — two stations the same distance apart in width but no distance apart
+ * in the code, producing a crease that looks like a fold in cardboard. A
+ * continuous fade instead of a boolean avoids that.
  */
 const BELLY_INFLUENCE_TOP = BUST_Y;
 const BELLY_INFLUENCE_BOTTOM = BELLY_Y;
@@ -1249,9 +1249,10 @@ const LEAN_SHEAR = 0.55;
  * constant, so a station whose neighbours are far above and close below gets a
  * tangent scaled for the long gap and applied to the short one: the control
  * point lands past the next station and the curve doubles back on itself. That
- * showed up as a crease under the widest part of the apron that no amount of
- * moving the stations would shift, because the stations were not what was wrong.
- * Centripetal spacing is the standard cure and provably cusp-free.
+ * produces a crease under the widest part of the apron that persists regardless
+ * of how the stations are placed, because the interpolation is the cause, not
+ * the station positions. Centripetal spacing is the standard cure and provably
+ * cusp-free.
  */
 const CENTRIPETAL_EXPONENT = 0.5;
 /**
@@ -1389,9 +1390,9 @@ function traceTorso(ctx: Ctx, sk: Skeleton, pose: HoarderPose, view: ViewSpec, g
 }
 
 /**
- * Deliberately weak. It was strong enough to lift the middle of the belly to
- * within fifteen luminance units of the near arm lying on it, which put the two
- * back inside the margin the arm's own value was raised to clear.
+ * Deliberately weak: any stronger and the middle of the belly comes within
+ * fifteen luminance units of the near arm lying on it, undoing the margin the
+ * arm's own value was raised to clear.
  */
 const TORSO_AMBIENT_ALPHA = 0.14;
 
@@ -1468,17 +1469,16 @@ function drawTorsoTerminator(ctx: Ctx, sk: Skeleton, pose: HoarderPose, view: Vi
 /**
  * Unevenly spaced, and every one of them stops well inside the silhouette. A
  * fold that reaches the outline is a seam: run edge to edge at even spacing
- * they turn the bare belly into a striped shirt, which is exactly how the first
- * pass read at tile size.
+ * they turn the bare belly into a striped shirt at tile size.
  */
 const FOLD_SHARES = [0.3, 0.46, 0.58, 0.74] as const;
 const FOLD_SPANS = [0.5, 0.62, 0.56, 0.44] as const;
 /**
  * A crease is a quadratic and `sag` is its *control* offset, so the arc's actual
- * mid-drop is half of what is written here. At the old values the deepest fold
- * dropped 2.9 sheet pixels across a fold two thirds of a tile wide — 2% of its
- * own span, which is a straight line. A fold lying across a belly this deep has
- * to sag like one or the belly behind it flattens into a disc.
+ * mid-drop is half of what is written here. A shallow sag drops only a couple
+ * of sheet pixels across a fold two thirds of a tile wide — under 2% of its own
+ * span, which reads as a straight line. A fold lying across a belly this deep
+ * has to sag like one or the belly behind it flattens into a disc.
  */
 const FOLD_SAGS = [0.07, 0.11, 0.09, 0.06] as const;
 const FOLD_THICKNESS = 0.028;
@@ -1578,12 +1578,12 @@ function drawTorsoFolds(ctx: Ctx, sk: Skeleton, pose: HoarderPose, view: ViewSpe
 /**
  * Her back, which is not her front.
  *
- * The whole apron story — the under-bust crease, the four belly rolls, the
- * navel, the deep chafed fold over the waistband — was drawn in every view, so
- * a pixel diff of the walking rows found the two sides of her identical below
- * the neck and she carried a navel on her back. From behind there is no apron
- * at all: there is a spine groove, two shoulder blades, a pair of wide rolls
- * across the small of her back, and the cleft between her buttocks.
+ * The front's apron story — the under-bust crease, the four belly rolls, the
+ * navel, the deep chafed fold over the waistband — belongs to the front alone;
+ * drawn in every view it makes the front and back identical below the neck and
+ * puts a navel on her back. From behind there is no apron at all: there is a
+ * spine groove, two shoulder blades, a pair of wide rolls across the small of
+ * her back, and the cleft between her buttocks.
  */
 const BACK_ROLL_SHARES = [0.34, 0.62] as const;
 const BACK_ROLL_SPANS = [0.68, 0.78] as const;
@@ -1756,9 +1756,9 @@ const FOLD_HEAVE_LIFT = 0.02;
 const VEST_HEM_AT = 0.3;
 const VEST_HEM_AT_BACK = 0.92;
 /**
- * The hem sags 9 sheet pixels over the belly. It arced *upward* before, which
- * is what a hem does on a flat stomach and the opposite of what it does when
- * the garment is riding on top of one.
+ * The hem sags 9 sheet pixels over the belly, rather than arcing upward the way
+ * a hem does on a flat stomach — the opposite of what it does when the garment
+ * is riding on top of one.
  */
 const VEST_HEM_SAG = 0.18;
 /** Edge-on the hem cannot be level: the gut it lies on protrudes most of a head. */
@@ -1924,10 +1924,11 @@ const BUST_SEAM_ALPHA = 0.3;
  */
 const WAISTBAND_AT = 1.02;
 /**
- * How far down the shin the trouser leg reaches. Stopping above the knee left a
- * 28-pixel dark band that read as underwear; carried to mid-shin the bare calf
- * disappears and the pale apron above it starts reading as a skirt. Just past
- * the knee is the only place that is a trouser leg and not either of those.
+ * How far down the shin the trouser leg reaches. Stopping above the knee
+ * leaves a 28-pixel dark band that reads as underwear; carried to mid-shin the
+ * bare calf disappears and the pale apron above it reads as a skirt. Just past
+ * the knee is the only place that reads as a trouser leg rather than either of
+ * those.
  */
 const TROUSER_SHIN_AT = 0.38;
 /** Where along the knee-to-cuff run the darkened hem band starts. */
@@ -1982,12 +1983,11 @@ function drawTrousers(
     ctx.globalAlpha = 1;
   }
 
-  // There is no waistband drawn here. There used to be one, and it never
-  // rendered a single pixel: it sits at `bandY`, the apron hangs a third of a
-  // tile lower, and the flesh is painted after the trousers — so the only part
-  // of it anything ever saw was the sliver that reached past her back edge in
-  // profile and hung a two-pixel spur off the silhouette. A band that has to be
-  // clipped to be correct is a band nobody can see.
+  // There is no waistband drawn here: one would sit at `bandY`, but the apron
+  // hangs a third of a tile lower and the flesh is painted after the trousers,
+  // so the only part of it that would ever show is a sliver reaching past her
+  // back edge in profile — a two-pixel spur off the silhouette. A band that
+  // has to be clipped to be correct is a band nobody can see.
   ctx.fillStyle = TROUSERS.mid;
   ctx.beginPath();
   ctx.moveTo(sk.hip.x - half, bandY);
@@ -2250,10 +2250,10 @@ interface HairClump {
 
 /**
  * The head's centre is 21 sheet pixels above the bottom of her jaw, so the
- * longest hanks are the ones that hang past it onto her shoulders. Measured on
- * a render, the first pass's tips all landed inside eight pixels of each other
- * however varied the table looked — the spread here is 32, better than 3:1
- * between the shortest and the longest.
+ * longest hanks are the ones that hang past it onto her shoulders. A table of
+ * drop values that all land within a few pixels of each other reads as uniform
+ * regardless of how varied it looks on paper — the spread here is 32, better
+ * than 3:1 between the shortest and the longest.
  */
 const HAIR_CLUMPS: readonly HairClump[] = [
   { at: -1, width: 4, drop: 34, kick: -0.11, tone: 'mid' },
@@ -2401,10 +2401,9 @@ function drawHair(ctx: Ctx, pose: HoarderPose, view: ViewSpec): void {
 /**
  * The profile face. A head-on face painted on a profile skull is the single
  * most obvious thing a side view can get wrong: two eyes and a centred mouth
- * make the figure read as facing the camera whatever the body is doing, which
- * is exactly what the first pass did. Edge-on she gets one eye, a nose that
- * breaks the front of the skull, an ear behind it, and a mouth that opens
- * forward.
+ * make the figure read as facing the camera whatever the body is doing.
+ * Edge-on she gets one eye, a nose that breaks the front of the skull, an ear
+ * behind it, and a mouth that opens forward.
  */
 const PROFILE_EYE_AT = 0.56;
 const PROFILE_BROW_AT = 0.66;
@@ -2457,9 +2456,9 @@ const PROFILE_JAW_FROM = 0.4;
 
 function traceProfileSkull(ctx: Ctx, toward: number, gape: number, grow: number): void {
   const gain = 1 + grow;
-  // Walked as a closed spline rather than as line segments: joined straight the
-  // back of the skull came out as a 26-pixel vertical wall, and a head with a
-  // flat back is a rectangle with a face painted on the front of it.
+  // Walked as a closed spline rather than as line segments: joined straight,
+  // the back of the skull is a 26-pixel vertical wall, and a head with a flat
+  // back is a rectangle with a face painted on the front of it.
   const points = PROFILE_SKULL_PATH.map(([depth, height]) => {
     const swings = height > PROFILE_JAW_FROM;
     return pt(
@@ -2497,9 +2496,8 @@ function drawProfileEye(ctx: Ctx, toward: number, lidOpen: number): void {
   ctx.fill();
   if (lidOpen <= EYE_MIN_OPEN) return;
 
-  // One almond, one pupil, one glint. The previous pass laid a horizontal
-  // sclera under a pupil offset most of its own width forward, and the two read
-  // as a "+" rather than as an eye.
+  // One almond, one pupil, one glint. A horizontal sclera under a pupil offset
+  // most of its own width forward reads as a "+" rather than as an eye.
   ctx.fillStyle = IRIS;
   ctx.beginPath();
   ctx.ellipse(

@@ -9,13 +9,13 @@
  * measures pixels the game's own painter produced, positioned by the same
  * `computeKeyboardHeroLayout` the runtime positions them with.
  *
- * The art used to ship as five baked PNGs and these gates used to decode them.
- * It is painted at runtime now, so a cell here is produced by running the
- * painter through `nodeGameContext` at the same supersampled size the runtime
- * paints it at. One gate went with the bake: K4 checked that the manifest's
- * frame sizes divided the sheets they described, and there is no longer a
- * manifest, a sheet or a frame grid for it to disagree about. The other gate IDs
- * keep their numbers so a failure means the same thing it used to.
+ * The art is painted at runtime rather than shipped as PNGs, so a cell here is
+ * produced by running the painter through `nodeGameContext` at the same
+ * supersampled size the runtime paints it at. Gate IDs skip K4: it checked
+ * that the manifest's frame sizes divided the sheets they described, and there
+ * is no manifest, sheet or frame grid left for it to disagree about. The other
+ * gate IDs keep their original numbers so a failure means the same thing
+ * across runs.
  *
  * Failures accumulate rather than throwing one at a time, and a gate that cannot
  * find the piece it was going to measure fails loudly instead of skipping — a

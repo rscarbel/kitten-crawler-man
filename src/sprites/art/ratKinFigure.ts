@@ -453,15 +453,13 @@ const FACING_UPPER_TILT = deg(24);
  */
 const FACING_FOREARM_TILT = deg(-21);
 /**
- * Head-on the upper arm is nearly end-on to the viewer and has almost nothing it
- * *can* show, so the forearm carries what visible travel there is — and even
- * that stays small.
- */
-/**
+ * Head-on the upper arm is nearly end-on to the viewer and has almost nothing
+ * it *can* show, so the forearm carries what visible travel there is.
+ *
  * Bigger than a head-on human's, and deliberately so. Carl's arms hang at his
  * sides, where a few degrees at the shoulder moves the hand a long way; these
- * are folded up in front of the chest, where the same few degrees move it
- * almost nowhere — the first pass had no visible arm swing at all head-on.
+ * are folded up in front of the chest, where the same few degrees barely move
+ * it at all.
  */
 const FACING_UPPER_SWING = deg(12);
 const FACING_FOREARM_SWING = deg(26);
@@ -627,11 +625,10 @@ const FAR_SIDE = -1;
 /**
  * Standing still has to read as *alive*, not as swaying: every term here is
  * deliberately near the threshold of visibility at a 32px tile.
- */
-/**
- * Small, but not invisible. At a third of this the whole idle measured under one
- * pixel of movement across all eight frames on the baked sheet — a statue, which
- * for a talkative advisor is the second thing a player notices.
+ *
+ * Small, but not invisible: dropped much further, the whole idle sinks under
+ * one pixel of movement across all eight frames of the baked sheet and reads
+ * as a statue — for a talkative advisor, the second thing a player notices.
  */
 const BREATH_RISE = 0.024;
 const BREATH_LEAN = deg(1.6);

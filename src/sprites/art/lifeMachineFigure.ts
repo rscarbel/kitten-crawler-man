@@ -229,7 +229,7 @@ interface LifeMachineRow {
   readonly lampColor?: string;
 }
 
-/** The manifest prefixed every row with the sprite's own name; the runtime still asks for those. */
+/** Every row's state name carries the sprite's own name, because that is how the runtime looks it up. */
 const STATE_PREFIX = 'life_machine_';
 
 export const LIFE_MACHINE_ROWS: readonly LifeMachineRow[] = [

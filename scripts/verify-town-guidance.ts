@@ -200,9 +200,9 @@ console.log('\nDoorway derivation (manifest, no map needed)');
     // Measured here from the manifest independently of `SpriteLoader`, and
     // compared against what it derived. Checking the derived door tile against
     // the derived opening instead would be checking a clamp against the range it
-    // was just clamped into — always true, and blind to the whole point of the
-    // fix, which is that the tile is anchored on the *painted* door rather than
-    // on the middle of a tile run biased left of it.
+    // was just clamped into — always true, and blind to whether the tile is
+    // actually anchored on the *painted* door rather than on the middle of a
+    // tile run biased left of it.
     const painted = paintedDoorColumn(building.spriteKey);
     check(
       painted !== undefined && doorway.dx === painted,
@@ -243,7 +243,7 @@ for (let mapIndex = 0; mapIndex < MAPS_TO_GENERATE; mapIndex++) {
     map.isWalkable(x, y) && !props.has(y * MAP_SIZE + x);
 
   // Every tile of every opening, not just the one the entry menu is keyed on —
-  // the whole point of the fix is that the other columns are enterable too.
+  // a doorway several tiles wide must be enterable at any column along it.
   for (const entry of map.buildingEntries) {
     const { x0, width } = doorwaySpanOf(entry);
     for (let x = x0; x < x0 + width; x++) {

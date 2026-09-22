@@ -1,6 +1,5 @@
 /**
- * AchievementUISystem — owns all achievement/loot-box UI state that was
- * previously scattered across DungeonScene: notification queue, achievement
+ * Owns all achievement/loot-box UI state: notification queue, achievement
  * icon, loot box icon, and the loot-box-opener lifecycle.
  */
 
@@ -86,7 +85,7 @@ export class AchievementUISystem {
   /**
    * Handle a space-bar press as an OK/continue action.
    *
-   * The achievement notification accepts through its own focus ring now, so all
+   * The achievement notification accepts through its own focus ring, so all
    * that is left here is the loot-box reveal — which has no button to focus and
    * is skipped by a bare press.
    *
@@ -110,7 +109,6 @@ export class AchievementUISystem {
       this.achievementNotif.reset();
     } else {
       this._notifActive = false;
-      // Chain directly into loot box opening
       const inSafe = this.human.isProtected || this.cat.isProtected;
       if (inSafe) {
         if (this.humanAchievements.pendingBoxes.length > 0) {
@@ -132,7 +130,6 @@ export class AchievementUISystem {
       return true;
     }
 
-    // Achievement notification overlay
     if (this._notifActive) {
       if (this.achievementNotif.handleClick(mx, my)) {
         this._advanceNotifQueue();

@@ -156,11 +156,9 @@ function chimneyGeometry(
   const scale = projection.scale;
   const across = acrossFractionForColumn(projection, chimney.col, CHIMNEY_SLOPE_SEAT);
   const surface = roofSurfacePoint(projection.roofQuad, across, CHIMNEY_SLOPE_SEAT);
-  // Seated on the bowed surface, exactly as the dormer is. Leaving this out is
-  // the failure `roofSagPx` was exported to prevent, and it was left out here:
-  // the Sunken Stump bows fifteen pixels and seats its stack near the ridge, so
-  // the chimney — and the `life` smoke, which derives from this same geometry —
-  // floated clear of the roof they stand on.
+  // Seated on the bowed surface, exactly as the dormer is: a stack near the ridge
+  // of a steeply sagged roof otherwise floats clear of the surface it stands on,
+  // and so does the `life` smoke, which derives from this same geometry.
   const sagPx = spec.roof.ridgeSagTiles * scale;
   const seat: Point = {
     x: surface.x,

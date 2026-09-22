@@ -276,8 +276,7 @@ const REFERENCE_CYCLE_FRACTION =
 /**
  * How much of a stride difference is taken out of a person's *speed* rather
  * than left to show up in their cadence. One means everybody steps at the same
- * rate; zero means nobody's speed is adjusted at all, which is where this
- * started.
+ * rate; zero means nobody's speed is adjusted at all.
  */
 const STRIDE_SPEED_SHARE = 0.75;
 /**
@@ -453,7 +452,7 @@ function walkPose(appearance: PersonAppearance, facing: Facing, phase: number): 
   );
 
   // Zero at contact and one over the straight stance leg, so the pelvis troughs
-  // where a real one does. The old pose had this exactly inverted.
+  // where a real one does.
   const overStanceLeg = Math.abs(Math.sin(cycle * TWO_PI));
   const hipDrop = hipDropAmplitude(appearance) * (1 - overStanceLeg);
 

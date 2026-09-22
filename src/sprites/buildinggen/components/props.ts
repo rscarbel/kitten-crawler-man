@@ -980,10 +980,10 @@ const FIREWOOD_PACK_OVERLAP = 0.14;
 /**
  * A cord of split logs, stacked end-on in courses.
  *
- * The dark backing is what makes this a stack rather than the field of loose
- * discs it used to be: with the wall showing between the ends, nothing holds the
- * logs together, and every gap reads as space around a separate object. Real
- * ends also vary in diameter — a course of identical circles is a bead string.
+ * The dark backing is what makes this a stack rather than a field of loose
+ * discs: without it, the wall shows between the ends, nothing holds the logs
+ * together, and every gap reads as space around a separate object. Real ends
+ * also vary in diameter — a course of identical circles is a bead string.
  */
 function paintFirewood(draw: PropDraw): void {
   const { ctx, box, accent, seed } = draw;
@@ -1762,9 +1762,9 @@ function paintLeafCluster(draw: PropDraw, x: number, y: number, index: number): 
   for (let leaf = 0; leaf < VINE_CLUSTER_LEAVES; leaf++) {
     const angle = (leaf / VINE_CLUSTER_LEAVES) * TWO_PI + elementValue(seed, STREAM_WOBBLE, index);
     // A leaf facing up-left catches the sun; one facing down-right does not.
-    // Peaks toward the upper left, where the town's sun is. At three quarters of
-    // pi it peaked upper *right*, so every vine in town was lit from the wrong
-    // side — invisible on a leaf, obvious across a wall of them.
+    // `LEAF_LIGHT_TURNS` rotates the peak to the upper left, matching the
+    // town's one sun — a wrong sign here is invisible on a single leaf but
+    // obvious across a wall of them.
     const litness = (1 - Math.cos(angle - Math.PI * LEAF_LIGHT_TURNS)) / 2;
     fillEllipse(
       ctx,

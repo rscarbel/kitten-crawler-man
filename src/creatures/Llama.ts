@@ -206,10 +206,8 @@ export class Llama extends Mob {
     const targetCY = nearest.y + this.tileSize * CENTER_OFFSET;
     const mouth = this.mouthPosition();
 
-    // Check line of sight from mouth to target centre
     const hasLOS = this.map ? this.map.hasLineOfSight(mouth.x, mouth.y, targetCX, targetCY) : true;
 
-    // Track last known position while we have LOS
     if (hasLOS) {
       this.lastKnownTargetX = nearest.x;
       this.lastKnownTargetY = nearest.y;
@@ -229,7 +227,6 @@ export class Llama extends Mob {
       this.strafeFrames--;
       this.stepInDirection(this.strafeDirX, this.strafeDirY);
     } else if (!hasLOS) {
-      // No line of sight — navigate toward last known position to find a clear angle
       this.followTargetAStar(
         this.lastKnownTargetX,
         this.lastKnownTargetY,
@@ -237,7 +234,6 @@ export class Llama extends Mob {
         this.tileSize * FOLLOW_STOP_RANGE_TILES,
       );
     } else if (nearestDist > this.spitRangePx) {
-      // Has LOS but too far — move closer
       this.followTargetAStar(
         nearest.x,
         nearest.y,
@@ -245,7 +241,6 @@ export class Llama extends Mob {
         this.spitRangePx * FOLLOW_CLOSE_RANGE_RATIO,
       );
     } else {
-      // In range with LOS — hold position
       this.isMoving = false;
     }
 

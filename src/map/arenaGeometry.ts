@@ -67,7 +67,7 @@ export const ARENA_CONCOURSE_LINK_INNER_DX = ARENA_CONCOURSE_LINK_OUTER_DX - 1;
  * Wide enough to reach out under both concourse links, which is what joins the ring
  * to the safe room. Narrower and the ring's two ends dead-end against rock, leaving a
  * band of floor nothing can walk on — the exact failure `validateProgression`'s I6b
- * exists to catch, and the reason the outer ring used to be suppressed entirely.
+ * exists to catch.
  *
  * This also covers the ring's southern overhang, which reaches less far than the
  * links do on the row below the door, so one bound serves both.

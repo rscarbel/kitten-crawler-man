@@ -572,18 +572,15 @@ export function mantidGorePieces(): readonly MantidGorePiece[] {
   const gut: MantidGorePiece = {
     state: 'gore_entrails',
     paint: (ctx) => {
-      // A folded length of gut: one tapering tube doubled back on itself.
+      // A folded length of gut: one tapering tube doubled back on itself, with
+      // deliberately no radial symmetry — a shape with a centre reads as the
+      // visual grammar of a *pickup* lying on the ground rather than as
+      // something torn out of a body.
       //
-      // Two earlier attempts got this wrong in the same way — they made a shape
-      // with a centre. A stroked Archimedean coil is radially symmetric, which
-      // is the visual grammar of a *pickup*, and in play it read as an item
-      // lying on the ground. A rosette of lobes fixed the symmetry but still
-      // resolved to a tidy cluster with a polygon of creases through it.
-      //
-      // A tube has no centre to find. It is built as a filled outline rather
-      // than a stroke so it can *taper*: a constant-width stroke is a hose, and
-      // the taper at the torn ends is most of what says this came out of
-      // something. Segmented across its length, so it is gut and not a worm.
+      // Built as a filled outline rather than a stroke so it can *taper*: a
+      // constant-width stroke is a hose, and the taper at the torn ends is most
+      // of what says this came out of something. Segmented across its length,
+      // so it is gut and not a worm.
       const STEPS = 44;
       /** Half-width at the fattest point. The piece is small on purpose. */
       const FAT_HALF_WIDTH = 0.052;

@@ -208,9 +208,8 @@ function drawLeg(dc: DrawContext, leg: Limb): void {
  * A shoe, drawn from the ankle and pitched with the gait.
  *
  * The roll is the whole point: heel down at contact, flat through midstance, up
- * onto the toe to push off. An axis-aligned ellipse — which is what this was —
- * cannot show any of that, and a foot that never rotates is most of why a walk
- * reads as sliding.
+ * onto the toe to push off. An axis-aligned ellipse cannot show any of that,
+ * and a foot that never rotates is most of why a walk reads as sliding.
  */
 function drawFoot(dc: DrawContext, leg: Limb): void {
   const { ctx, app, s, facing } = dc;

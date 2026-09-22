@@ -5,36 +5,30 @@
  * forms, so a scree slope is a slope of *different rocks* rather than one rock
  * repeated. Variation comes only from a seed and a spec; nothing is hand-placed.
  *
- * ## The two things the first cut got wrong
+ * ## Two invariants the body and its footprint hold to
  *
  * **A rock is a mass standing on the ground, not a plate lying on it.** The
- * first cut built the body as a hull plus a shrunk copy of itself pushed up and
- * to the left, with the shrink at 0.56 — so more than half of every boulder was
- * a big lit top face receding from the camera, and the silhouette was wider than
- * it was tall. The result read as a flat disc seen from above, sloping away at
- * the back, which is a shape a player standing behind it should be visible over.
- * The body is a **front elevation** now: a superellipse profile with straight
- * sides and a broad crown, and only a narrow lit cap where that crown turns
- * over. `CAP_HEIGHT_FRACTION` controls the read — push it down and the rock lies
- * back down again.
+ * body is a **front elevation**: a superellipse profile with straight sides and
+ * a broad crown, and only a narrow lit cap where that crown turns over.
+ * `CAP_HEIGHT_FRACTION` controls the read — push it down and the rock reads as a
+ * flat disc seen from above, sloping away at the back, rather than as a mass a
+ * player standing behind it can be hidden by.
  *
- * **Art that overhangs its tile lets the player stand inside the rock.** Only
- * the anchor tile is non-walkable, so every solid pixel outside it is ground the
- * player can walk onto while being drawn behind the stone. The old two-tile-wide
- * large boulder put 380–490 such pixels on its neighbours. Every stone is now
- * built inside a half-width budget of `MAX_HALF_WIDTH_TILES` and *normalised* to
- * it after shear and wobble rather than merely being started below it, and
- * `generate-rock-sprites.ts` fails the bake if a solid pixel escapes anyway.
+ * **Art must never overhang its tile.** Only the anchor tile is non-walkable,
+ * so every solid pixel outside it is ground the player can walk onto while
+ * being drawn behind the stone. Every stone is built inside a half-width budget
+ * of `MAX_HALF_WIDTH_TILES` and *normalised* to it after shear and wobble rather
+ * than merely being started below it, and `generate-rock-sprites.ts` fails the
+ * bake if a solid pixel escapes anyway.
  *
  * That budget is a hard ceiling on how big a boulder can look. Within one tile
  * the large variant can only be about 30 px across, so its bulk has to come from
- * height and from a low stone tucked against its base. Three intermediate
- * attempts are worth not repeating: a single tall mass read as a headstone, that
- * mass flanked by two round stones read as a headstone between two eggs, and
- * three interlocking slabs read as crystal shards, because a stone one third of
- * a tile wide and a whole tile tall is a shard whatever is drawn on it. A
- * genuinely larger boulder needs a footprint wider than one tile, which is a
- * change to collision rather than to art.
+ * height and from a low stone tucked against its base: a single tall mass alone
+ * reads as a headstone, flanking it with two round stones reads as a headstone
+ * between two eggs, and interlocking slabs read as crystal shards, because a
+ * stone one third of a tile wide and a whole tile tall is a shard whatever is
+ * drawn on it. A genuinely larger boulder needs a footprint wider than one tile,
+ * which is a change to collision rather than to art.
  *
  * Everything is expressed in multiples of `tileScale`, so the sheets can be
  * baked at any resolution without hand-tuned pixel constants drifting apart.
@@ -91,14 +85,14 @@ interface Palette {
 /**
  * The four rock palettes.
  *
- * Granite is unchanged from the first cut and is sampled to sit beside the
- * generated `scree` ground material rather than beside anything hand-drawn — a
- * boulder on a scree slope is the commonest place one is seen.
+ * Granite is sampled to sit beside the generated `scree` ground material rather
+ * than beside anything hand-drawn — a boulder on a scree slope is the commonest
+ * place one is seen.
  *
  * Nothing else depends on these values. `drawRiverRock` in `decorationTiles.ts`
- * was once described as matching granite by hand; it does not, and never did —
- * it has its own ramp, deliberately darker and bluer, because a stone standing
- * in a river is wet. These four palettes can be retuned freely.
+ * does not match granite — it has its own ramp, deliberately darker and bluer,
+ * because a stone standing in a river is wet. These four palettes can be
+ * retuned freely.
  *
  * The other three are spaced around it in *value* as much as in hue: basalt
  * darker than the ground it stands on, limestone lighter, sandstone warmer. Two
@@ -143,9 +137,8 @@ const PALETTES: Readonly<Record<Lithology, Palette>> = {
  *
  * Copied rather than imported because `src/sprites/art/treeArt.ts` keeps its ramps private, and
  * exporting a tree's palette so a rock can borrow it would make every future
- * change to the forest a change to the rocks as well. The first cut *said* it
- * had done this and had not — the colours were hand-picked at hue 84°, outside
- * the 85°–120° band that file states its foliage is confined to.
+ * change to the forest a change to the rocks as well. These values must stay
+ * inside the 85°–120° hue band that file states its foliage is confined to.
  */
 const MOSS_DARK = '#2c4a1f';
 const MOSS_LIGHT = '#3e6529';
@@ -165,11 +158,11 @@ const MAX_HALF_WIDTH_TILES = 0.46;
 /**
  * Heights, in tiles, measured from the rock's base to its crown.
  *
- * These decide how much of a player standing directly behind a boulder it hides,
- * which is the complaint the rework started from. Measured on the baked sheets:
- * a small boulder ends 3–8 px *below* the top of its own tile and so hides
- * nothing at all, and a large one reaches 1–7 px into the row above and hides a
- * standing player's feet. Both are amounts the shapes plainly justify.
+ * These decide how much of a player standing directly behind a boulder it
+ * hides. On the baked sheets a small boulder ends 3–8 px *below* the top of
+ * its own tile and so hides nothing at all, and a large one reaches 1–7 px
+ * into the row above and hides a standing player's feet. Both are amounts the
+ * shapes plainly justify.
  *
  * Raising `SMALL_HEIGHT_TILES_MIN + SMALL_HEIGHT_TILES_RANGE` past `1 -
  * BASE_LIFT_TILES` is what would break that, by letting a knee-high stone start
@@ -254,8 +247,8 @@ const FORM_PROFILES: Readonly<Record<RockForm, FormProfile>> = {
 
 /**
  * The lit cap: where the crown turns over, and how far the seam bows toward the
- * viewer. Small is the whole point — a wide cap is a plate, and a plate is what
- * made the first cut read as sloping away at the back.
+ * viewer. Small is the whole point — a wide cap reads as a plate sloping away
+ * at the back rather than as a mass standing on the ground.
  */
 const CAP_HEIGHT_FRACTION = 0.7;
 const CAP_BOW_TILES = 0.09;
@@ -427,8 +420,8 @@ const SEAT_DEEPEN = -0.25;
  * A large boulder is a broad mass with one low stone tucked against its base,
  * overlapping it rather than standing clear. The overlap is the point: a small
  * stone whose width and height are similar is an egg whatever else is done to
- * it, and an earlier version that set two such stones either side of a tall mass
- * read as a headstone flanked by eggs.
+ * it, and two such stones set either side of a tall mass instead would read as
+ * a headstone flanked by eggs.
  *
  * `offsetShare` and `halfWidthShare` are fractions of the half-width budget, and
  * every member satisfies `|offsetShare| + halfWidthShare <= 1` — that is what
@@ -636,8 +629,7 @@ function traceOutline(ctx: Ctx, outline: ReadonlyArray<RockVertex>): void {
  * A canvas gradient resolves its coordinates in the user space in effect when it
  * is *painted*, not when it is created — so one built at `(cx, baseY)` and then
  * painted under `translate(cx, baseY)` lands at `(2cx, 2baseY)` and every filled
- * pixel falls past its outer stop, painting nothing at all. That exact mistake
- * shipped shadowless art on all thirteen tree sheets.
+ * pixel falls past its outer stop, painting nothing at all.
  */
 function paintContactShadow(ctx: Ctx, stone: Stone, maxDropPx: number): void {
   const rx = stone.halfWidth * CONTACT_SHADOW_WIDTH_RATIO;
@@ -1062,11 +1054,9 @@ function paintSurface(
  * The clip is never lifted before the end, and the seat in particular must stay
  * inside it. The seat is a rect spanning the stone's full half-width either
  * side, but the silhouette has tapered in by the time it reaches the ground, so
- * outside the clip it paints hard square corners sticking out past the rock's
- * own outline. Measured by lifting the clip in a scratch bake: 130 pixels change
- * on `boulder_large_a`, all of them inside the blocked tile — so this is a
- * silhouette problem, not a footprint one, and `assertBodyFitsBlockedTile` would
- * not catch it.
+ * outside the clip it would paint hard square corners sticking out past the
+ * rock's own outline — a silhouette problem, not a footprint one, so
+ * `assertBodyFitsBlockedTile` would not catch it.
  *
  * The contact shadow is the one thing painted outside the clip, by the caller,
  * before this runs.

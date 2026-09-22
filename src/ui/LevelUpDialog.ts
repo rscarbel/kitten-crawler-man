@@ -6,34 +6,29 @@ import { drawOverlay, drawBox } from './Box';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
-// Dialog box dimensions
 const DIALOG_MAX_WIDTH = 320;
 const DIALOG_PADDING_HORIZONTAL = 32;
 const DIALOG_MIN_HEIGHT = 280;
 const DIALOG_BASE_HEIGHT = 222;
 const DIALOG_PERK_LINE_HEIGHT = 15;
 
-// Dialog layout positions
 const DIALOG_TITLE_Y_OFFSET = 30;
 const DIALOG_TITLE_OVERLAP = 13;
 const DIALOG_ICON_Y = 48;
 const DIALOG_LEVEL_Y_OFFSET = 28;
 
-// Level display
 const LEVEL_TEXT_X_OFFSET = 18;
 const LEVEL_TEXT_SIZE = 13;
 const LEVEL_NUMBER_X_OFFSET = 14;
 const LEVEL_NUMBER_SIZE = 18;
 const LEVEL_NUMBER_ANIM_AMPLITUDE = 0.5;
 
-// Perk description layout
 const PERK_DESCRIPTION_Y_OFFSET = 22;
 const PERK_DESCRIPTION_X = 20;
 const PERK_DESCRIPTION_SIZE = 11;
 const PERK_DESCRIPTION_WIDTH_MARGIN = 40;
 const PERK_DESCRIPTION_LINE_HEIGHT = 15;
 
-// OK button
 const OK_BUTTON_WIDTH = 100;
 const OK_BUTTON_HEIGHT = 40;
 const OK_BUTTON_Y_OFFSET = 56;
@@ -60,7 +55,6 @@ export class LevelUpDialog {
   private phase: Phase = 'idle';
   private frame = 0;
 
-  // Animation state
   private displayedLevel = 0;
   private iconPulse = 0;
   private okBtnRect = { x: 0, y: 0, w: 0, h: 0 };
@@ -131,7 +125,6 @@ export class LevelUpDialog {
     const cw = viewportWidth();
     const ch = viewportHeight();
 
-    // Dim background
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.72 });
 
     const boxW = Math.min(DIALOG_MAX_WIDTH, cw - DIALOG_PADDING_HORIZONTAL);
@@ -146,7 +139,6 @@ export class LevelUpDialog {
     const bx = cw / 2 - boxW / 2;
     const by = ch / 2 - boxH / 2;
 
-    // Panel
     drawBox(ctx, {
       x: bx,
       y: by,
@@ -157,7 +149,6 @@ export class LevelUpDialog {
       borderWidth: 2.5,
     });
 
-    // Title
     drawText(ctx, `${current.name} Level Up!`, {
       x: bx + boxW / 2,
       y: by + DIALOG_TITLE_Y_OFFSET - DIALOG_TITLE_OVERLAP,
@@ -167,7 +158,6 @@ export class LevelUpDialog {
       align: 'center',
     });
 
-    // Icon with power-up animation
     const iconSize = 56;
     const iconX = bx + boxW / 2 - iconSize / 2;
     const iconY = by + DIALOG_ICON_Y;
@@ -175,7 +165,6 @@ export class LevelUpDialog {
       current.renderIcon(ctx, iconX, iconY, iconSize, current.newLevel);
     });
 
-    // Level display
     const levelY = iconY + iconSize + DIALOG_LEVEL_Y_OFFSET;
     const isCountingUp = this.phase === 'count_up';
     const progress = isCountingUp ? this.frame / this.COUNT_UP_FRAMES : 1;
@@ -202,7 +191,6 @@ export class LevelUpDialog {
     ctx.fillText(String(displayNum), 0, 0);
     ctx.restore();
 
-    // Perk for the new level
     if (this.phase === 'done' && perk !== null) {
       const descY = levelY + PERK_DESCRIPTION_Y_OFFSET;
       drawText(ctx, perk, {
@@ -216,7 +204,6 @@ export class LevelUpDialog {
       });
     }
 
-    // OK button (only shown when animation is complete)
     if (this.phase === 'done') {
       const btnW = OK_BUTTON_WIDTH;
       const btnH = OK_BUTTON_HEIGHT;

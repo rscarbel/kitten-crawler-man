@@ -4,11 +4,8 @@ import type { Player } from '../Player';
 import { TILE_SIZE } from './constants';
 
 /**
- * Manages the player party (Human + Cat). Provides a unified interface for
- * accessing players, switching the active character, and querying party state.
- *
- * Systems that previously took `(human: HumanPlayer, cat: CatPlayer)` can
- * instead accept a PlayerManager and call players(), active(), etc.
+ * The player party (Human + Cat): a single handle systems can accept instead
+ * of separate `human`/`cat` parameters.
  */
 export class PlayerManager {
   readonly human: HumanPlayer;

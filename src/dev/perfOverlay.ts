@@ -4,9 +4,8 @@
  * Lives here rather than beside the monitor so a release build has no import
  * edge to it at all — see the module comment on `devBoot.ts`. It exists because
  * spawn-density tuning otherwise has no number to argue with: the separation
- * row shows the pass the spatial-partitioning plan rewrote, and the check count
- * next to it shows whether that work is tracking the roster size or the local
- * crowding.
+ * row shows the cost of mob-separation checks, and the check count next to it
+ * shows whether that cost tracks the roster size or the local crowding.
  */
 
 import { PERF_TIMERS, perfMonitor } from '../core/PerfMonitor';

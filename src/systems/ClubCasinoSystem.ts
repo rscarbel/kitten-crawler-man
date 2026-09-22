@@ -187,9 +187,9 @@ const BIG_WIN_COINS = 50;
 const HINT_RETIREMENT_LINE = '"You\'ve got the hang of this — I\'ll stop calling the plays."';
 
 /**
- * The table's cues play at full SFX volume. They used to duck for the club music
- * and the bar-crowd bed, which left them inaudible — the music bus carries that
- * headroom now (see `MUSIC_BUS_HEADROOM`), so the cards and chips can be heard.
+ * The table's cues play at full SFX volume: the music bus already carries
+ * headroom for them (see `MUSIC_BUS_HEADROOM`), so the cards and chips can
+ * still be heard over the club music and the bar-crowd bed.
  */
 const TABLE_SFX_VOLUME = 1;
 const CHIP_SFX_VOLUME = 1;

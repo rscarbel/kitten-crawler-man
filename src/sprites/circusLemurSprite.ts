@@ -71,7 +71,6 @@ export function drawCircusLemurSprite(
   const swayPhase = isMoving ? Math.sin(walkFrame) : 0;
   const lunge = attackAnim > 0 ? Math.sin(attackAnim * Math.PI) * LEMUR_ATTACK_LUNGE * s : 0;
 
-  // Ringed tail — curls behind the body
   ctx.strokeStyle = '#8a6a3a';
   ctx.lineWidth = LEMUR_TAIL_RING_R * s * 1.4;
   ctx.lineCap = 'round';
@@ -98,7 +97,6 @@ export function drawCircusLemurSprite(
     ctx.fill();
   }
 
-  // Legs — short, skittering
   ctx.fillStyle = '#6b5a3a';
   const legSwing = isMoving ? swayPhase * LEMUR_LEG_SWING_AMP * s : 0;
   ctx.fillRect(
@@ -114,7 +112,6 @@ export function drawCircusLemurSprite(
     LEMUR_LEG_HEIGHT * s,
   );
 
-  // Body — mangy, sickly ochre fur
   ctx.fillStyle = '#9a8450';
   ctx.beginPath();
   ctx.ellipse(
@@ -128,7 +125,6 @@ export function drawCircusLemurSprite(
   );
   ctx.fill();
 
-  // Head
   const headX = lunge + LEMUR_HEAD_X_OFFSET * s;
   const headY = LEMUR_HEAD_Y_OFFSET * s;
   ctx.fillStyle = '#ab9560';
@@ -136,7 +132,6 @@ export function drawCircusLemurSprite(
   ctx.arc(headX, headY, LEMUR_HEAD_R * s, 0, Math.PI * 2);
   ctx.fill();
 
-  // Ears
   ctx.fillStyle = '#7a6540';
   const earY = headY + LEMUR_EAR_Y_OFFSET * s;
   ctx.beginPath();
@@ -146,7 +141,6 @@ export function drawCircusLemurSprite(
   ctx.arc(headX + LEMUR_EAR_X_OFFSET * s, earY, LEMUR_EAR_R * s, 0, Math.PI * 2);
   ctx.fill();
 
-  // Glowing feral eyes
   ctx.save();
   ctx.shadowColor = '#e8f050';
   ctx.shadowBlur = LEMUR_EYE_GLOW_RADIUS;
@@ -162,7 +156,6 @@ export function drawCircusLemurSprite(
   ctx.fill();
   ctx.restore();
 
-  // Throwing arm — raised with a knife during windup, sweeping forward on release
   if (throwAnim > 0) {
     const armAngle = LEMUR_ARM_WINDUP_ANGLE + throwAnim * LEMUR_ARM_RELEASE_SWEEP;
     ctx.save();

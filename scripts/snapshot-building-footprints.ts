@@ -162,10 +162,10 @@ async function measureIdleRichness(geometry: ManifestGeometry): Promise<number> 
  * put the originals back.
  *
  * The test is the *presence of the archive*, not which keys the manifest still
- * names. An earlier version keyed on the missing keys and happened to fire, but
- * only as a side effect of nine unrelated entries having been removed — prune
- * the fixture to match the manifest, a natural tidy-up, and that guard would
- * have opened the door it was written to hold shut.
+ * names. A guard keyed on the missing keys would fire only as a side effect of
+ * nine unrelated entries having been removed — pruning the fixture to match
+ * the manifest, a natural tidy-up, would then open the door this guard exists
+ * to hold shut.
  */
 function refuseIfTheRecordAlreadyExists(): void {
   const archived = existsSync(REPLACED_ART_DIR) ? readdirSync(REPLACED_ART_DIR) : [];

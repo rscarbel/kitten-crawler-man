@@ -416,12 +416,11 @@ function drawShagLocks(
       const fromVertical = SHAG_FAN_START_RADIANS + acrossHalf * layerSweep;
 
       // Golden-angle stepping so no two locks in a layer are the same length.
-      // A fixed seed, not a phase — the locks no longer animate independently.
+      // A fixed seed, not a phase, so the locks stay static relative to each other.
       const lengthSeedAngle = (i + (layer + layerOffset) * SHAG_LOCKS_PER_LAYER) * GOLDEN_ANGLE_RAD;
       const lengthJitter = (Math.sin(lengthSeedAngle) + 1) / 2;
       // Locks shorten as they angle away from vertical. Long locks out near the
-      // horizontal read as spikes shooting out of the character's ears, which is
-      // exactly what the first pass of this looked like.
+      // horizontal read as spikes shooting out of the character's ears.
       const verticality = Math.cos(fromVertical);
       const length =
         h *

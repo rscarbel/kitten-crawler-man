@@ -77,7 +77,6 @@ export function drawGumGumSprite(
 
   const legSwing = isMoving ? Math.sin(walkFrame) * GG_LEG_SWING_AMP * s : 0;
 
-  // Legs
   ctx.fillStyle = SKIN_SHADE;
   ctx.fillRect(
     -GG_LEG_X * s - GG_LEG_WIDTH * s * 0.5,
@@ -92,7 +91,6 @@ export function drawGumGumSprite(
     GG_LEG_HEIGHT * s,
   );
 
-  // Coat — a rounded hunched mass
   ctx.fillStyle = GG_COAT_COLOR;
   ctx.beginPath();
   ctx.moveTo(-GG_BODY_HALF_WIDTH * s, GG_BODY_BOTTOM_Y * s);
@@ -111,11 +109,9 @@ export function drawGumGumSprite(
   ctx.closePath();
   ctx.fill();
 
-  // Mismatched patch sewn onto the coat
   ctx.fillStyle = GG_COAT_PATCH_COLOR;
   ctx.fillRect(GG_PATCH_X * s, GG_PATCH_Y * s, GG_PATCH_W * s, GG_PATCH_H * s);
 
-  // Arms clutching the coat closed at the chest
   ctx.strokeStyle = SKIN_COLOR;
   ctx.lineWidth = GG_ARM_WIDTH * s;
   ctx.lineCap = 'round';
@@ -126,7 +122,6 @@ export function drawGumGumSprite(
     ctx.stroke();
   }
 
-  // Head — thrust forward of the hunched shoulders
   const headX = GG_HUNCH_X * s;
   const headY = GG_HEAD_Y * s;
   ctx.fillStyle = SKIN_COLOR;
@@ -134,7 +129,6 @@ export function drawGumGumSprite(
   ctx.arc(headX, headY, GG_HEAD_R * s, 0, Math.PI * 2);
   ctx.fill();
 
-  // Oversized ears
   ctx.fillStyle = SKIN_COLOR;
   for (const side of [-1, 1]) {
     const earRootX = headX + side * GG_HEAD_R * s * 0.85;
@@ -146,7 +140,6 @@ export function drawGumGumSprite(
     ctx.fill();
   }
 
-  // Darting eyes
   const dart = Math.sin(timeSec * GG_EYE_DART_SPEED) * GG_EYE_DART_AMP * s;
   ctx.fillStyle = EYE_COLOR;
   for (const side of [-1, 1]) {
@@ -174,7 +167,6 @@ export function drawGumGumCorpse(
   ctx.save();
   ctx.translate(cx, cy);
 
-  // Blood pool
   ctx.fillStyle = POOL_COLOR;
   ctx.beginPath();
   ctx.ellipse(
@@ -191,13 +183,11 @@ export function drawGumGumCorpse(
   ctx.lineWidth = Math.max(1, s * 0.02);
   ctx.stroke();
 
-  // Body lying on its side — coat mass, no head
   ctx.fillStyle = GG_COAT_COLOR;
   ctx.beginPath();
   ctx.ellipse(0, 0, CORPSE_BODY_HALF_LEN * s, CORPSE_BODY_HALF_WIDTH * s, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Outflung arm
   ctx.strokeStyle = SKIN_SHADE;
   ctx.lineWidth = GG_ARM_WIDTH * s;
   ctx.lineCap = 'round';

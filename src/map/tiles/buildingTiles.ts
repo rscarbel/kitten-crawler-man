@@ -1521,14 +1521,14 @@ export function drawBuildingTile(
  * each crenel; a tile in a north-south run gets plain masonry, because a crenel
  * there would open a hole onto the wall standing behind it.
  *
- * "In an east-west run" means it has a wall to its east or west, which is not the
- * same as "has no wall to its north" — the first cut used that instead and got two
- * cases wrong: the south-west and south-east **corner** tiles have the last tile
- * of a vertical run directly above them, so they lost their battlement in the
- * middle of an otherwise crenellated south face; and the tile directly **below a
- * side gate** has the gate's cobble above it, so it grew a battlement in the
- * middle of a vertical run — the exact case the rule exists to prevent. A corner
- * belongs to both runs, and taking the horizontal one is right: it is the end of a
+ * "In an east-west run" means it has a wall to its east or west — not "has no
+ * wall to its north", which gets two cases wrong: the south-west and south-east
+ * **corner** tiles have the last tile of a vertical run directly above them, so
+ * that test would drop their battlement in the middle of an otherwise
+ * crenellated south face; and the tile directly **below a side gate** has the
+ * gate's cobble above it, so that test would grow a battlement in the middle of
+ * a vertical run — the exact case the rule exists to prevent. A corner belongs
+ * to both runs, and taking the horizontal one is right: it is the end of a
  * face, not the end of a flank.
  */
 function drawTownWallTile(

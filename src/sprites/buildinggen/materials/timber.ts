@@ -638,12 +638,12 @@ function paintSplitEnd(options: PlankWallOptions, plank: Plank): void {
   const inward = fromTop ? 1 : -1;
   const length = options.scale * SPLIT_LENGTH_TILES;
   const width = plank.acrossEnd - plank.acrossStart;
-  // `chance` has already been narrowed to the split interval by the guard above,
-  // so using it directly as a position confines every split to one narrow band
-  // of its plank and — for a split running the other way — carries it past the
-  // board's own edge and across the gap into its neighbour. Re-spread across the
-  // interval first, exactly as `stone.ts` does for its cracks, and clamp so the
-  // drift can never leave the plank whichever way the split runs.
+  // `chance` is already narrowed to the split interval by the guard above, so it
+  // is re-spread across that interval before being used as a position — using it
+  // directly would confine every split to one narrow band of its plank, or for a
+  // split running the other way, carry it past the board's own edge into its
+  // neighbour. The result is clamped so the drift can never leave the plank
+  // whichever way the split runs.
   const withinInterval = chance / SPLIT_CHANCE;
   const drift = (withinInterval - JITTER_MIDPOINT) * 2 * SPLIT_DRIFT;
   const acrossFraction = Math.min(

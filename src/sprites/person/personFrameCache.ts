@@ -9,8 +9,8 @@
  * builder; only the number of times it runs changes.
  *
  * The cost that matters is memory, not bake time: cells scale with the square
- * of the device pixel ratio, and a retina crowd's working set once ran several
- * times the byte budget. Four things keep it inside:
+ * of the device pixel ratio, so an unbounded retina crowd's working set can run
+ * several times the byte budget. Four things keep it inside:
  *
  *  - only three facings are baked, since `left` is a mirror of `right`;
  *  - idle needs a couple of buckets where walking needs sixteen;
@@ -49,10 +49,10 @@ import type { Facing } from './skeleton';
  * Points in the walk cycle a person is rendered at, matching the player
  * character's own walk row.
  *
- * Sixteen is not arbitrary and it is not merely inherited: cadence is now tied
- * to speed, so the bucket count is the frame rate of the leg animation only if
- * a citizen takes at least this many frames to complete a stride. `gateCadence`
- * in `scripts/render-townsfolk.ts` enforces exactly that, failing the build if
+ * Sixteen is not arbitrary: cadence is tied to speed, so the bucket count is
+ * the frame rate of the leg animation only if a citizen takes at least this
+ * many frames to complete a stride. `gateCadence` in
+ * `scripts/render-townsfolk.ts` enforces exactly that, failing the build if
  * any genome drops below it — so no baked pose is ever skipped. The crowd runs
  * 3.5–6.1 steps/s, or 19.7–34 frames per stride at full cohort speed.
  */

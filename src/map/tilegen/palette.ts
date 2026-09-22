@@ -141,12 +141,11 @@ export const CELLAR_STONE_RAMP: Ramp = {
  * Sandstone cut to square flags — the surface a cellar's finished rooms are laid
  * in, as opposed to the rough tan flagstone of its passages.
  *
- * Deliberately ochre rather than red. The first cut of this role was fired brick
- * in a running bond, and a running bond is a *wall*: playtested in situ it read
- * as masonry laid flat, and no amount of joint softening fixes a pattern whose
- * whole job elsewhere is to say "you cannot walk through this". Square units on
- * ruled joints say floor; the warm cast is what survives of the brick, and it is
- * what keeps this apart from `CELLAR_STONE_RAMP` at a glance.
+ * Deliberately ochre rather than red, and laid as square units on ruled joints
+ * rather than a running bond: a running bond reads as a *wall*, since that
+ * pattern's whole job elsewhere is to say "you cannot walk through this", and no
+ * amount of joint softening undoes it. The warm cast is what keeps this apart
+ * from `CELLAR_STONE_RAMP` at a glance.
  */
 export const CELLAR_DRESSED_STONE_RAMP: Ramp = {
   shadow: [112, 92, 62],
@@ -170,8 +169,7 @@ export const CELLAR_MORTAR_RAMP: Ramp = {
  * warm brown, and boarding dark enough to look oiled sits close enough to it in
  * both value and hue that a room stops reading as a room. Contrast against the
  * wall is what makes a dungeon legible at a glance, so every floor on this level
- * is held well clear of it — the first cut had this at a mid of 92 against the
- * wall's 50 and the two blurred together on screen.
+ * is held well clear of it.
  */
 export const CELLAR_TIMBER_RAMP: Ramp = {
   shadow: [82, 56, 32],
@@ -200,8 +198,6 @@ export const CELLAR_CINDER_RAMP: Ramp = {
  * mostly solid rock — in a framed screenshot of floor 1 the walls are four fifths
  * of the pixels — so a wall that carries anything like a floor's brightness stops
  * being a backdrop and starts competing with the rooms it is supposed to frame.
- * The first cut sat at a mid of 84 and turned every screenshot into a wall of
- * brickwork with a few pale rooms punched out of it.
  */
 export const CELLAR_WALL_RAMP: Ramp = {
   shadow: [24, 20, 16],

@@ -695,9 +695,10 @@ export function drawInteriorTile(
 
     // The safe room's loose furnishings, which paint the floor they were stamped
     // over. `drawFloorBeneath` rather than the hearth palette because a safe room
-    // is no longer only a dungeon room: the same furnishings now stand on a town
-    // interior's boards or rushes, and `DUNGEON_GROUND` has no material for those
-    // floor types — it returned without drawing at all, leaving a black tile.
+    // is not only a dungeon room: the same furnishings stand on a town interior's
+    // boards or rushes too, and `DUNGEON_GROUND` has no material for those floor
+    // types — used there, it would return without drawing at all, leaving a
+    // black tile.
     case SAFE_ROOM_MENU_BOARD:
     case SAFE_ROOM_HERB_RACK:
     case SAFE_ROOM_BANNER:

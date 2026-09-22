@@ -7,7 +7,6 @@ import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText, measureTextBox } from '../TextBox';
 import { drawBox, drawDivider, drawProgressBar, drawScrollbar } from '../Box';
 
-// Layout constants
 const SCROLL_SPEED_MULTIPLIER = 0.5;
 const LIST_ROW_H = 54;
 const LIST_HEADER_H = 82; // extra space for the Equipped Abilities button
@@ -21,7 +20,6 @@ const DETAIL_PERK_ROW_H = 24;
 const DETAIL_PERK_LINE_H = 12;
 const DETAIL_PERK_VPAD = 5;
 
-// UI positioning (list view)
 const LIST_TITLE_Y_OFFSET = 22;
 const LIST_TITLE_Y_ADJUST = 10;
 const LIST_BUTTON_Y_OFFSET = 34;
@@ -51,7 +49,6 @@ const BACK_BUTTON_Y_OFFSET = 7;
 const BACK_BUTTON_HEIGHT = 34;
 const BACK_BUTTON_MARGIN = 40;
 
-// UI positioning (equipped abilities view)
 const EQUIPPED_TITLE_Y_OFFSET = 22;
 const EQUIPPED_TITLE_Y_ADJUST = 10;
 const EQUIPPED_TITLE_SIZE = 15;
@@ -85,7 +82,6 @@ const ADD_BUTTON_HEIGHT = 16;
 const ADD_BUTTON_LABEL_SIZE = 9;
 const TOOLTIP_TEXT_Y_OFFSET = 5;
 
-// UI positioning (detail view)
 const DETAIL_TITLE_Y_OFFSET = 24;
 const DETAIL_TITLE_Y_ADJUST = 12;
 const DETAIL_TITLE_SIZE = 15;
@@ -126,11 +122,9 @@ const SCROLL_HINT_Y_ADJUST = 7;
 const SCROLL_HINT_SIZE = 9;
 const SCROLL_HINT_X_OFFSET = 2;
 
-// Colors
 const TOOLTIP_BG_COLOR = 'rgba(15,23,42,0.95)';
 const TOOLTIP_BORDER_COLOR = '#7c3aed';
 
-// Additional layout constants
 const ICON_Y_OFFSET_LIST = 2;
 const TITLE_Y_OFFSET_LIST = 16;
 const DETAILS_BUTTON_WIDTH = 88;
@@ -154,7 +148,6 @@ const PERK_NEW_BOX_Y_OFFSET = 2;
 const PERK_NEW_BOX_WIDTH_MARGIN = 8;
 const PERK_AREA_BACK_BTN_Y_OFFSET = 6;
 
-// Additional magic numbers
 const TOOLTIP_DRAW_Y_OFFSET = 16;
 const TOGGLE_W_WIDTH_MARGIN = 40;
 const PERK_BADGE_CENTER_Y_OFFSET = 13;
@@ -173,7 +166,6 @@ let listViewportH = 0;
 let detailContentH = 0;
 let detailViewportH = 0;
 
-// Touch scroll tracking
 let touchStartY: number | null = null;
 let touchScrollBase = 0;
 
@@ -463,8 +455,6 @@ function renderListView(
   });
 }
 
-// Tooltip helper
-
 function drawTooltip(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -499,8 +489,6 @@ function drawTooltip(
   ctx.restore();
 }
 
-// Equipped Abilities View
-
 function renderEquippedAbilitiesView(
   ctx: CanvasRenderingContext2D,
   buttons: ButtonRect[],
@@ -514,7 +502,6 @@ function renderEquippedAbilitiesView(
   mouseX: number | undefined,
   mouseY: number | undefined,
 ): void {
-  // Header
   drawText(ctx, 'Equipped Abilities', {
     x: bx + bw / 2,
     y: by + EQUIPPED_TITLE_Y_OFFSET - EQUIPPED_TITLE_Y_ADJUST,
@@ -524,7 +511,6 @@ function renderEquippedAbilitiesView(
     align: 'center',
   });
 
-  // Player toggle
   const toggleY = by + TOGGLE_Y_OFFSET;
   const toggleW = (bw - TOGGLE_W_WIDTH_MARGIN) / TOGGLE_W_DIVISOR;
   const humanColor = equippedPlayer === 'human' ? '#fb923c' : '#475569';
@@ -589,7 +575,6 @@ function renderEquippedAbilitiesView(
   ctx.rect(bx, contentY, bw, contentH);
   ctx.clip();
 
-  //  Hotbar section
   drawText(ctx, 'Hotbar Abilities', {
     x: bx + ICON_MARGIN_LEFT,
     y: contentY + HOTBAR_LABEL_Y_OFFSET - HOTBAR_LABEL_Y_ADJUST,
@@ -609,7 +594,6 @@ function renderEquippedAbilitiesView(
     const slot = inventory?.actionBar.slots[i] ?? null;
     const isAbilityTome = slot !== null && slot.canDrop === false && slot.abilityId !== undefined;
 
-    // Slot background
     drawBox(ctx, {
       x: sx,
       y: sy,
@@ -620,7 +604,6 @@ function renderEquippedAbilitiesView(
       borderWidth: 1.5,
     });
 
-    // Slot label
     drawText(ctx, String(i + 1), {
       x: sx + SLOT_LABEL_OFFSET,
       y: sy + SLOT_LABEL_Y_OFFSET - SLOT_LABEL_Y_ADJUST,
@@ -643,7 +626,6 @@ function renderEquippedAbilitiesView(
             abilityManager.getLevel(def.id),
           );
 
-          // Hover tooltip
           if (
             mouseX !== undefined &&
             mouseY !== undefined &&
@@ -655,7 +637,6 @@ function renderEquippedAbilitiesView(
             drawTooltip(ctx, def.name, mouseX, mouseY, bx, by, bw, bh);
           }
 
-          // Remove button
           const rmY = sy + EQ_SLOT_SIZE + REMOVE_BUTTON_Y_OFFSET;
           const slotCapture = slot;
           addButton(ctx, buttons, {
@@ -677,7 +658,6 @@ function renderEquippedAbilitiesView(
           });
         }
       } else {
-        // Non-ability item — show grayed indicator
         drawBox(ctx, {
           x: sx + ITEM_INDICATOR_OFFSET,
           y: sy + ITEM_INDICATOR_OFFSET,
@@ -696,7 +676,6 @@ function renderEquippedAbilitiesView(
     }
   }
 
-  // Available abilities section
   const availSectionY = slotRowY + EQ_SLOT_SIZE + AVAIL_SECTION_Y_OFFSET;
   drawText(ctx, 'Available Abilities', {
     x: bx + ICON_MARGIN_LEFT,
@@ -706,7 +685,6 @@ function renderEquippedAbilitiesView(
     color: '#94a3b8',
   });
 
-  // Find ability tomes in the bag
   const bagTomes: Array<{ bagIdx: number; abilityId: AbilityId }> = [];
   if (inventory) {
     for (let i = 0; i < inventory.bag.slots.length; i++) {
@@ -767,7 +745,6 @@ function renderEquippedAbilitiesView(
         drawTooltip(ctx, def.name, mouseX, mouseY, bx, by, bw, bh);
       }
 
-      // Add button
       const addBtnY = sy + EQ_SLOT_SIZE + ADD_BUTTON_Y_OFFSET;
       const bagIdxCapture = bagIdx;
       addButton(ctx, buttons, {
@@ -796,7 +773,6 @@ function renderEquippedAbilitiesView(
           }
           const displaced = inventory.actionBar.slots[targetSlot];
           if (displaced && displaced.canDrop !== false) {
-            // Move displaced item to first empty bag slot
             const emptyBag = inventory.bag.slots.indexOf(null);
             if (emptyBag !== -1) {
               inventory.bag.slots[emptyBag] = displaced;
@@ -813,7 +789,6 @@ function renderEquippedAbilitiesView(
 
   ctx.restore();
 
-  // Back button
   addButton(ctx, buttons, {
     x: bx + BACK_BTN_X,
     y: by + bh - EQ_FOOTER_H + BACK_BUTTON_Y_OFFSET,
@@ -844,7 +819,6 @@ function renderDetailView(
 
   const currentLevel = state.level;
 
-  // Title
   drawText(ctx, def.name, {
     x: bx + bw / TOGGLE_W_DIVISOR,
     y: by + DETAIL_TITLE_Y_OFFSET - DETAIL_TITLE_Y_ADJUST,
@@ -854,7 +828,6 @@ function renderDetailView(
     align: 'center',
   });
 
-  // Owner
   const ownerLabel = state.owner === 'cat' ? 'Cat' : 'Human';
   const ownerColor = state.owner === 'cat' ? '#38bdf8' : '#fb923c';
   drawText(ctx, `Owner: ${ownerLabel}`, {
@@ -897,7 +870,6 @@ function renderDetailView(
   const equipBottom = equipTop + equipLines * DETAIL_EQUIP_LINE_H + DETAIL_EQUIP_GAP;
   let y = Math.max(by + DETAIL_CONTENT_Y_OFFSET, equipBottom);
 
-  // Level + XP bar
   drawText(ctx, `Current level: ${currentLevel}`, {
     x: bx + DETAIL_BAR_X_OFFSET,
     y: y - DETAIL_LEVEL_Y_ADJUST,
@@ -939,7 +911,6 @@ function renderDetailView(
   }
   y += DETAIL_LEVEL_SPACING;
 
-  // Separator
   drawDivider(ctx, {
     x: bx + DETAIL_DIVIDER_X_OFFSET,
     y,
@@ -948,7 +919,6 @@ function renderDetailView(
   });
   y += DETAIL_DIVIDER_Y_OFFSET;
 
-  // Perks heading
   drawText(ctx, 'Level Perks:', {
     x: bx + DETAIL_BAR_X_OFFSET,
     y: y - PERK_HEADING_Y_OFFSET,
@@ -958,13 +928,11 @@ function renderDetailView(
   });
   y += PERK_HEADING_Y_SPACING;
 
-  // Scrollable perks area
   const backBtnH = PERK_AREA_BACK_BTN_H;
   const perkAreaTop = y;
   const perkAreaH = bh - (perkAreaTop - by) - backBtnH;
   const descMaxW = bw - DESC_MAX_W_OFFSET - SCROLLBAR_W - DESC_MAX_W_SCROLLBAR_MARGIN;
 
-  // Pre-pass: measure row heights for each perk using measureTextBox
   const perksLayout = def.perks.map((perk) => {
     const unlocked = currentLevel >= perk.level;
     const displayText = unlocked ? perk.description : '???';
@@ -1000,7 +968,6 @@ function renderDetailView(
       });
     }
 
-    // Level badge — vertically centered in row
     const badgeY = perkY + Math.floor((rowH - PERK_LEVEL_BADGE_H) / TOGGLE_W_DIVISOR);
     drawBox(ctx, {
       x: bx + PERK_LEVEL_BADGE_X_OFFSET,
@@ -1018,7 +985,6 @@ function renderDetailView(
       align: 'center',
     });
 
-    // Description — word-wrapped via drawText
     const descX = bx + PERK_DESC_X_OFFSET;
     const firstLineTop = perkY + PERK_DESC_FIRST_LINE_TOP_OFFSET;
     drawText(ctx, displayText, {
@@ -1036,7 +1002,6 @@ function renderDetailView(
 
   ctx.restore();
 
-  // Scrollbar
   drawScrollbar(ctx, {
     x: bx + bw - SCROLLBAR_W - 2,
     trackY: perkAreaTop,
@@ -1047,7 +1012,6 @@ function renderDetailView(
     thumbColor: '#7c3aed',
   });
   if (detailContentH > perkAreaH) {
-    // Scroll hint
     if (detailScrollY === 0) {
       drawText(ctx, 'scroll ↓', {
         x: bx + bw - SCROLLBAR_W / TOGGLE_W_DIVISOR - SCROLL_HINT_X_OFFSET,
@@ -1059,7 +1023,6 @@ function renderDetailView(
     }
   }
 
-  // Back button
   addButton(ctx, buttons, {
     x: bx + BACK_BTN_X,
     y: by + bh - backBtnH + PERK_AREA_BACK_BTN_Y_OFFSET,

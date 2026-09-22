@@ -7,14 +7,12 @@ import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 import { drawDivider, drawScrollbar } from '../Box';
 
-// Layout constants
 const HEADER_Y_OFFSET = 34;
 const HEADER_Y_TEXT_OFFSET = 13;
 const HEADER_TEXT_SIZE = 16;
 const SCROLL_TOP_Y_OFFSET = 50;
 const BACK_BTN_H = 56;
 
-// Content layout constants
 const CONTENT_START_Y = 14;
 const LINE_HEIGHT = 16;
 const SECTION_SPACING = 12;
@@ -22,19 +20,15 @@ const STAT_BLOCK_X = 20;
 const STAT_LABEL_Y_OFFSET = 10;
 const STAT_SUBLABEL_SIZE = 11;
 
-// Player section constants
 const PLAYER_LABEL_Y_OFFSET = 10;
 const PLAYER_LABEL_SIZE = 12;
 const PLAYER_SPACING_AFTER_STATS = 10;
 
-// XP display constants
 const XP_LABEL_SIZE = 11;
 const UNSPENT_POINTS_SIZE = 11;
 
-// Section title constants
 const DIVIDER_SPACING_BEFORE = 6;
 
-// Kill stats display
 const KILLS_TITLE_Y_OFFSET = 9;
 const KILLS_TITLE_SIZE = 11;
 const KILL_ENTRY_LABEL_X = 24;
@@ -45,23 +39,19 @@ const NO_KILLS_Y_OFFSET = 9;
 const NO_KILLS_SIZE = 11;
 const CONTENT_SPACING_END = 4;
 
-// Divider constants
 const DIVIDER_X_OFFSET = 20;
 const DIVIDER_LENGTH_REDUCTION = 40;
 const DIVIDER_Y_AFTER_HEADER = 14;
 
-// Stat display positioning
 const STAT_LABEL_X = 20;
 const STAT_VALUE_X = 140;
 const STAT_VALUE_SIZE = 13;
 const SECOND_STAT_Y = 24;
 const STAT_SPACING = 20;
 
-// Scrollbar constants
 const SCROLLBAR_X_OFFSET = 7;
 const SCROLLBAR_WIDTH = 3;
 
-// Back button constants
 const BACK_BTN_X_OFFSET = 20;
 const BACK_BTN_Y_OFFSET = 8;
 const BACK_BTN_WIDTH_REDUCTION = 40;
@@ -242,7 +232,6 @@ export function renderStatsTab(
   const contentHeight = y;
   ctx.restore();
 
-  // Scrollbar
   drawScrollbar(ctx, {
     x: bx + bw - SCROLLBAR_X_OFFSET,
     trackY: scrollTop,

@@ -70,18 +70,18 @@ const TURN = Math.PI * 2;
 /**
  * The weight shift, as a −1…1 signal that *holds* at each extreme.
  *
- * Not a sine. A blind review of the first bake measured a clean single sinusoid
- * with 6.8–10% silhouette change on every consecutive frame — not one still
- * frame in the loop — and named it a pendulum: serene, or dancing. Nerves are
- * irregular. Somebody shifts, stands there, then shifts back.
+ * Not a sine: a sinusoid changes the silhouette on every single frame with no
+ * still frame anywhere in the loop, which reads as a pendulum — serene, or
+ * dancing. Nerves are irregular. Somebody shifts, stands there, then shifts
+ * back.
  */
 const SHIFT_DURATION = 0.34;
 function weightShift(rawT: number): number {
   // Wrapped, because `trailOf` samples this at a *negative* offset near the
   // start of the loop. `ramp` clamps rather than wrapping, so an unwrapped
-  // argument returned the beginning of the cycle where the end belonged — which
-  // is a discontinuity at exactly the seam, and it measured as a 2.2x hitch at
-  // the wrap with a stall beside it, once per loop forever.
+  // argument would return the beginning of the cycle where the end belongs —
+  // a discontinuity at exactly the seam, which reads as a hitch and a stall
+  // once per loop forever.
   const t = ((rawT % 1) + 1) % 1;
   const rise = easeInOut(
     ramp(t, FIRST_SHIFT_AT - SHIFT_DURATION / 2, FIRST_SHIFT_AT + SHIFT_DURATION / 2),
@@ -96,10 +96,10 @@ const SECOND_SHIFT_AT = 0.75;
 
 /**
  * How far a hanging mass trails the body, given how far the body has travelled
- * since `lag` ago. Sampling the drive signal at an offset and differencing it is
- * an exact lag; the first bake instead added a phase-shifted sine of its own,
- * which measured as the hood and hem *leading* the shoulders by a quarter cycle
- * — the robe animating the man. Same trap as Carl's arm swing.
+ * since `lag` ago. Sampling the drive signal at an offset and differencing it
+ * is an exact lag. A phase-shifted sine of its own instead risks the hood and
+ * hem *leading* the shoulders — the robe animating the man rather than
+ * following him. Same trap as Carl's arm swing.
  */
 function trailOf(t: number, lag: number): number {
   return weightShift(t - lag) - weightShift(t);
@@ -115,9 +115,9 @@ const IDLE_BREATH_RATE = 2;
 /**
  * How far behind the body the hood and the hem each run, in cycles.
  *
- * Small. The first pass at these put the hood's peak four frames behind the
- * shoulders' on a ten-frame loop — 144°, near enough anti-phase that the head
- * read as counter-rotating off the neck rather than trailing it.
+ * Kept small: a lag near half a cycle puts the hood's peak near anti-phase
+ * with the shoulders', which reads as the head counter-rotating off the neck
+ * rather than trailing it.
  */
 const HOOD_TRAIL = 0.115;
 const HEM_TRAIL = 0.115;
@@ -146,10 +146,10 @@ const IDLE_FLICK_WIDTH = 0.16;
 const BELT_HAND_Y = -0.78;
 const BELT_HAND_SPREAD = 0.235;
 /**
- * The two hands never mirror each other. The first bake moved them as one
- * symmetric unit at identical heights, which cannot read as "restless" however
- * far it travels — so one worries at the belt on the fast beat while the other
- * picks at its own sleeve on the slow one, at different heights.
+ * The two hands never mirror each other: moved as one symmetric unit at
+ * identical heights they cannot read as "restless" however far it travels, so
+ * one worries at the belt on the fast beat while the other picks at its own
+ * sleeve on the slow one, at different heights.
  */
 const LEFT_HAND_LIFT = 0.05;
 const LEFT_HAND_DRIFT = 0.03;
@@ -193,10 +193,10 @@ function idlePose(t: number): ShadyPose {
 /**
  * A fast attack, a long working hold, and a slower relaxed return.
  *
- * Deliberately asymmetric. With the reach and the return the same length the
- * whole row measured as an exact frame-for-frame palindrome — the hand went up
- * and came back down the identical path, which reads as a machine rather than
- * as somebody dealing with an itch.
+ * Deliberately asymmetric: reach and return of equal length make the row an
+ * exact frame-for-frame palindrome, the hand going up and coming back down the
+ * identical path, which reads as a machine rather than as somebody dealing
+ * with an itch.
  */
 const SCRATCH_REACH_END = 0.16;
 const SCRATCH_RUB_END = 0.66;
@@ -211,9 +211,9 @@ const SCRATCH_HAND_Y = -1.44;
 /** How far the hand travels out from the body on the way up — an elbow-led arc. */
 const SCRATCH_ARC_OUT = 0.13;
 /**
- * The rub itself. The first bake used a travel so small that six of the twelve
- * frames measured as a dead stop — the animation raised a hand, froze for half
- * its runtime, and lowered it, and the scratching never happened.
+ * The rub itself. Too small a travel here leaves several consecutive frames
+ * pixel-identical — the hand raises, holds for half the row's runtime, and
+ * lowers, with no scratching motion actually visible in between.
  */
 const SCRATCH_RUB_TRAVEL = 0.075;
 /**
@@ -233,8 +233,8 @@ const SCRATCH_HOOD_JIGGLE = 1.4;
 const SCRATCH_TILT_JIGGLE = deg(2.4);
 /**
  * A man reaching the back of his own neck tilts his head away from the hand and
- * drops his chin. Without this the head sat locked to a tenth of a pixel through
- * the whole row while an arm moved around it.
+ * drops his chin. Without this the head stays locked in place through the whole
+ * row while an arm moves around it.
  */
 const SCRATCH_HEAD_LEAN = -0.55;
 /** He hunches further and tips his head into the hand while scratching. */
@@ -282,9 +282,9 @@ function scratchPose(t: number): ShadyPose {
   pose.headTurn = lerp(pose.headTurn, SCRATCH_HEAD_TURN, raised);
   pose.hoodLag += rubAmount * SCRATCH_HOOD_JIGGLE + raised * SCRATCH_HEAD_LEAN;
   // The lower body counterbalances, and keeps moving *through* the hold rather
-  // than settling into a pose and holding it. Driving it off `raised` alone left
-  // the hem and both feet bit-identical for six consecutive frames — the same
-  // freeze, one layer down, hiding behind a fix that only moved the hand.
+  // than settling into a pose and holding it. Driving it off `raised` alone
+  // leaves the hem and both feet frozen for the length of the hold — the same
+  // dead-stop failure as the hand's, one layer down.
   pose.sway = -SCRATCH_COUNTER_SWAY * raised + rubAmount * SCRATCH_COUNTER_RUB_SWAY;
   pose.hemSway = SCRATCH_COUNTER_HEM * raised + rubAmount * SCRATCH_COUNTER_RUB_HEM;
   return pose;
@@ -307,10 +307,9 @@ const SCRATCH_OVER_MANTLE_AT = 0.55;
 // ── Talk choreography ────────────────────────────────────────────────────────
 
 /**
- * He straightens and leans in to talk. The first bake changed nothing but the
- * lateral head wobble, measured at zero vertical travel and identical sprite
- * height on all four frames — so opening the dialog box produced no visible
- * state change at all.
+ * He straightens and leans in to talk. The lean has to carry real vertical
+ * travel and a changed silhouette height, or opening the dialog box produces
+ * no visible state change beyond a lateral head wobble.
  */
 const TALK_SLOUCH_RELIEF = 0.16;
 /** The lean-in itself: he drops and compresses toward the person he is talking to. */
@@ -333,9 +332,9 @@ const TALK_ARM_FORESHORTEN = 0.35;
 function talkPose(t: number): ShadyPose {
   const pose = idlePose(0);
   const phase = t * TURN;
-  // The lean swells and settles across the loop rather than sliding sideways.
-  // The first pass moved 2.7x as far horizontally as vertically, which reads as
-  // a head wobbling on a still body rather than as a man leaning in to talk.
+  // The lean swells and settles across the loop rather than sliding sideways —
+  // mostly-horizontal travel here reads as a head wobbling on a still body
+  // rather than as a man leaning in to talk.
   const swell = hump(t);
   pose.slouch += TALK_LEAN_IN_SLOUCH - TALK_SLOUCH_RELIEF + swell * TALK_LEAN_SWELL;
   pose.bob = TALK_LEAN_IN_BOB + swell * TALK_DIP;

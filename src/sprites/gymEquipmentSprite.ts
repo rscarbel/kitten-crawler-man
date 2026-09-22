@@ -495,7 +495,6 @@ export function drawDumbbellFloor(
   const cx = sx + s * DUMBBELL_FLOOR_CX_OFFSET;
   const cy = sy + s * DUMBBELL_FLOOR_CY_OFFSET;
 
-  // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
   ctx.ellipse(
@@ -509,7 +508,6 @@ export function drawDumbbellFloor(
   );
   ctx.fill();
 
-  // Bar (horizontal rod)
   ctx.fillStyle = '#888';
   ctx.fillRect(
     cx - s * DUMBBELL_BAR_HALF_WIDTH,
@@ -518,7 +516,6 @@ export function drawDumbbellFloor(
     s * DUMBBELL_BAR_HEIGHT,
   );
 
-  // Left weight plate (outer)
   ctx.fillStyle = '#444';
   ctx.beginPath();
   ctx.ellipse(
@@ -531,7 +528,6 @@ export function drawDumbbellFloor(
     Math.PI * 2,
   );
   ctx.fill();
-  // Left weight plate (inner rim highlight)
   ctx.fillStyle = '#666';
   ctx.beginPath();
   ctx.ellipse(
@@ -544,13 +540,11 @@ export function drawDumbbellFloor(
     Math.PI * 2,
   );
   ctx.fill();
-  // Left weight plate hole
   ctx.fillStyle = '#333';
   ctx.beginPath();
   ctx.arc(cx - s * DUMBBELL_BAR_HALF_WIDTH, cy, s * DUMBBELL_PLATE_HOLE_R, 0, Math.PI * 2);
   ctx.fill();
 
-  // Right weight plate (outer)
   ctx.fillStyle = '#444';
   ctx.beginPath();
   ctx.ellipse(
@@ -563,7 +557,6 @@ export function drawDumbbellFloor(
     Math.PI * 2,
   );
   ctx.fill();
-  // Right weight plate (inner rim highlight)
   ctx.fillStyle = '#666';
   ctx.beginPath();
   ctx.ellipse(
@@ -576,13 +569,11 @@ export function drawDumbbellFloor(
     Math.PI * 2,
   );
   ctx.fill();
-  // Right weight plate hole
   ctx.fillStyle = '#333';
   ctx.beginPath();
   ctx.arc(cx + s * DUMBBELL_BAR_HALF_WIDTH, cy, s * DUMBBELL_PLATE_HOLE_R, 0, Math.PI * 2);
   ctx.fill();
 
-  // Bar shine
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.fillRect(
     cx - s * DUMBBELL_BAR_SHINE_HALF_W,
@@ -601,7 +592,6 @@ export function drawDumbbellInventoryIcon(
   const cx = x + size * DUMBBELL_ICON_CX_OFFSET;
   const cy = y + size * DUMBBELL_ICON_CY_OFFSET;
 
-  // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
   ctx.ellipse(
@@ -615,7 +605,6 @@ export function drawDumbbellInventoryIcon(
   );
   ctx.fill();
 
-  // Bar
   ctx.fillStyle = '#999';
   ctx.fillRect(
     cx - size * DUMBBELL_ICON_BAR_HALF,
@@ -624,7 +613,6 @@ export function drawDumbbellInventoryIcon(
     size * DUMBBELL_ICON_BAR_HEIGHT,
   );
 
-  // Left weight
   ctx.fillStyle = '#555';
   ctx.beginPath();
   ctx.ellipse(
@@ -650,7 +638,6 @@ export function drawDumbbellInventoryIcon(
   );
   ctx.fill();
 
-  // Right weight
   ctx.fillStyle = '#555';
   ctx.beginPath();
   ctx.ellipse(
@@ -703,7 +690,6 @@ export function drawDumbbellHeld(
     s * DUMBBELL_HELD_BAR_HEIGHT,
   );
 
-  // Plates
   for (const sign of [-1, 1]) {
     ctx.fillStyle = '#444';
     ctx.beginPath();

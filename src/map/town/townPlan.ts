@@ -188,8 +188,8 @@ export interface PlannedBuilding {
  *
  * The tower stands *in* the north wall: its two blocking rows are the wall row
  * and the row below, and the other 21 rows of spire overhang the fields outside
- * the town. That is what recovers the 6 x 22 dead corridor the tower used to
- * sterilise in the town centre.
+ * the town — recovering the 6 x 22 corridor in the town centre that a
+ * fully-blocking footprint would otherwise sterilise.
  */
 export interface PlannedTower {
   /** Tile carrying the `MAIN_TOWER` type that triggers the sprite render. */
@@ -502,11 +502,11 @@ const TERRACE_MOUTH_ROW = UPPER_LANE_BOTTOM;
  *
  * **Two columns clear of the road, not one.** The gate arch's piers stand on the
  * wall tiles immediately flanking the opening and are 0.7 of a tile wide, so they
- * cover the outer 70% of the first column either side — which is where these
- * torches used to be, and both were about 70% painted over whichever row the arch
- * was anchored on. Measured against a render with no gateway: at one column out,
- * 69.6% and 71.9% overpainted at the two anchor rows that were tried; at two, the
- * piers do not touch them at all.
+ * cover the outer 70% of the first column either side. A torch placed in that
+ * column is about 70% painted over regardless of which row the arch is anchored
+ * on — measured at 69.6% and 71.9% overpainted at the two candidate anchor rows,
+ * against a render with no gateway. At two columns out the piers do not touch
+ * them at all.
  */
 const SOUTH_GATE_TORCH_WEST = KINGS_ROAD_WEST - 2;
 const SOUTH_GATE_TORCH_EAST = KINGS_ROAD_EAST + 2;

@@ -182,13 +182,12 @@ export class Bugaboo extends Mob {
       return;
     }
 
-    // Priority 1: If assigned grate has a barrier, attack the barrier
+    // Priority 1: a grate barrier outranks any player target.
     if (this.assignedGrate && this.onBarrierAttack) {
       const barrierX = this.assignedGrate.x * TILE_SIZE;
       const barrierY = this.assignedGrate.y * TILE_SIZE;
       const distToBarrier = Math.hypot(barrierX - this.x, barrierY - this.y);
 
-      // Check if barrier still exists
       const barrierExists = this.onBarrierAttack(this.assignedGrate, 0);
       if (barrierExists) {
         this.isAggro = true;
@@ -219,7 +218,7 @@ export class Bugaboo extends Mob {
       }
     }
 
-    // Priority 2: Attack defend target (NPC) if alive
+    // Priority 2: the defend target, if the quest assigned one.
     if (this.defendTarget?.isAlive) {
       const dist = Math.hypot(this.defendTarget.x - this.x, this.defendTarget.y - this.y);
       this.isAggro = true;
@@ -242,7 +241,7 @@ export class Bugaboo extends Mob {
       return;
     }
 
-    // Priority 3: Attack nearest player (fallback / NPC dead)
+    // Priority 3: fall back to the nearest player.
     const nearest = this.acquireTarget(targets, this.aggroRangePx);
 
     this.currentTarget = nearest;

@@ -81,13 +81,13 @@ export class Reachability {
    * things that show up here. A region cut off by the **river** has water on its
    * border and can be bridged back; one cut off by a **cliff line** has cliff on
    * its border and can have a ramp cut through it. A region a **forest blob**
-   * closed around has trees on its border, nothing to span or cut, and has been
-   * part of every generated map since long before this plan — one measured at 153
-   * tiles with 156 of its 156 border tiles a `TREE`.
+   * closed around has trees on its border and nothing to span or cut — one
+   * measured at 153 tiles with 156 of its 156 border tiles a `TREE`, independent
+   * of anything the river or cliff carving do.
    *
    * Without the flags the repair passes waste rounds on pockets they can never
-   * fix, and — far worse — the generator's assertion fails maps for a defect this
-   * plan did not cause, blaming a river for a hole in a wood.
+   * fix, and — far worse — the generator's assertion fails maps for a hole in a
+   * wood, blaming the river for a defect it did not cause.
    */
   marooned(): MaroonedRegions {
     const size = this.grid.size;

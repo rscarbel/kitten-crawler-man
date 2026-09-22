@@ -280,10 +280,9 @@ const HAND_HANG_SPREAD = restingPose().rightHand.x;
 // ── Walking ──────────────────────────────────────────────────────────────────
 
 /**
- * How far each foot travels fore and aft in profile. It was a third of this,
- * which measured on a render as no step at all — the two feet overlapped for
- * the whole cycle and the side walk, the view a player sees on every horizontal
- * move, read as a skate.
+ * How far each foot travels fore and aft in profile. Any shorter and the two
+ * feet overlap for the whole cycle, so the side walk — the view a player sees
+ * on every horizontal move — reads as a skate rather than a step.
  *
  * The headroom for it comes from the bob: her leg is almost exactly as long as
  * her hip is high, so a stride is only affordable at all because the pelvis
@@ -301,10 +300,10 @@ const PASS_AT = 0.55;
 const REACH_AT = 0.8;
 
 /**
- * 5% of her height, against the 1.25% the first pass had — which measured as
- * a shimmy rather than as a walk. It is spent entirely *downward*: her leg is
- * almost exactly as long as her hip is high, so a bob that lifts the pelvis at
- * all puts the planted ankle beyond the leg's reach and the IK clamps.
+ * 5% of her height. Much smaller and it measures as a shimmy rather than as a
+ * walk. It is spent entirely *downward*: her leg is almost exactly as long as
+ * her hip is high, so a bob that lifts the pelvis at all puts the planted
+ * ankle beyond the leg's reach and the IK clamps.
  */
 const WALK_BOB = 0.12;
 /**

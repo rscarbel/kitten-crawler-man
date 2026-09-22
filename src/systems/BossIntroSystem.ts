@@ -128,10 +128,8 @@ const SPIDER_SPRITE_SIZE = 80;
 const SPIDER_SPRITE_Y_OFFSET = 16;
 /** Hoarder sprite size. */
 /**
- * The redraw moved her tile anchor from 26px down a 206px frame to 191px down a
- * 280px one, and the portrait is positioned off that anchor: at the old size and
- * offset the panel showed her shins and painted her head off the top of the
- * screen. Both numbers are measured against the current sheet.
+ * Her tile anchor sits 191px down a 280px frame, and the portrait is
+ * positioned off that anchor — both numbers measured against the current sheet.
  */
 const HOARDER_SPRITE_SIZE = 44;
 /** Hoarder sprite y offset. */
@@ -221,7 +219,6 @@ export class BossIntroSystem implements GameSystem {
     const CX = viewportWidth() / 2;
     const CY = viewportHeight() / 2;
 
-    // Dark overlay
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
@@ -233,7 +230,6 @@ export class BossIntroSystem implements GameSystem {
       ctx.save();
       ctx.textAlign = 'center';
 
-      // Render each visible character with individual color/scale for flair
       const fullText = TITLE.slice(0, charsShown);
       const fontSize = Math.min(
         INTRO_FONT_MIN_SIZE,
@@ -241,9 +237,7 @@ export class BossIntroSystem implements GameSystem {
       );
       ctx.font = `bold ${fontSize}px monospace`;
 
-      // Measure total width for centering
       const charW = ctx.measureText('B').width;
-      // Draw character-by-character with last char having a flash
       for (let i = 0; i < fullText.length; i++) {
         const isLast = i === charsShown - 1;
         const FLASH_PULSE_SPEED = 0.6;
@@ -266,13 +260,11 @@ export class BossIntroSystem implements GameSystem {
             : '#f1f5f9';
         }
 
-        // Calculate x for each char
         const CHAR_X_CENTER = 0.5;
         const totalW = fullText.length * charW;
         const startX = CX - totalW / 2 + charW * CHAR_X_CENTER;
         const cx = startX + i * charW;
 
-        // Scale up last revealed char slightly
         const scale = isLast ? 1 + LAST_CHAR_SCALE_FACTOR * Math.abs(flashPulse) : 1;
         ctx.save();
         ctx.translate(cx, CY);
@@ -292,7 +284,6 @@ export class BossIntroSystem implements GameSystem {
         ctx.restore();
       }
 
-      // Subtext hint after title is fully shown
       const titleLen = TITLE.length;
       if (charsShown >= titleLen) {
         const holdProgress = (intro.frame - titleLen * FPC) / BossIntroSystem.INTRO_HOLD_FRAMES;
@@ -313,7 +304,6 @@ export class BossIntroSystem implements GameSystem {
 
       ctx.restore();
     } else {
-      // Versus screen
       const t = intro.frame;
       const slideIn = Math.min(1, t / VERSUS_SLIDE_IN_FRAMES);
       const EASE_POWER = 3;
@@ -323,7 +313,6 @@ export class BossIntroSystem implements GameSystem {
       const panelH = VERSUS_PANEL_H;
       const panelY = CY - panelH / 2;
 
-      // Left panel — Team Cat Posse
       const leftX = CX - VERSUS_PANEL_GAP - panelW - (1 - eased) * CX;
       ctx.save();
       ctx.fillStyle = 'rgba(10,20,40,0.9)';
@@ -366,7 +355,6 @@ export class BossIntroSystem implements GameSystem {
         align: 'center',
       });
 
-      // Right panel — Boss
       const rightX = CX + VERSUS_PANEL_GAP + (1 - eased) * CX;
       ctx.save();
       ctx.fillStyle = BOSS_PANEL_BACKGROUNDS[intro.bossType] ?? BOSS_PANEL_DEFAULT_BG;
@@ -443,7 +431,6 @@ export class BossIntroSystem implements GameSystem {
         align: 'center',
       });
 
-      // VS in the centre
       const VS_BASE_SIZE = 48;
       const vsAlpha = Math.min(1, (t - VS_APPEAR_AFTER_FRAMES) / VS_FLASH_FRAMES);
       if (vsAlpha > 0) {
@@ -463,7 +450,6 @@ export class BossIntroSystem implements GameSystem {
         });
       }
 
-      // Countdown hint at bottom
       const framesLeft = BossIntroSystem.INTRO_VERSUS_FRAMES - t;
       if (framesLeft < FIGHT_LABEL_BEFORE_END) {
         drawText(ctx, 'FIGHT!', {

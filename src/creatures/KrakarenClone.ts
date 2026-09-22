@@ -413,7 +413,6 @@ export class KrakarenClone extends Mob {
 
     this.animTime += 1 / FRAMES_PER_SECOND;
 
-    // Enrage check
     if (!this.isEnraged && this.hp / this.maxHp < ENRAGE_THRESHOLD) {
       this.isEnraged = true;
     }
@@ -456,7 +455,6 @@ export class KrakarenClone extends Mob {
       }
     }
 
-    // Tick slam timer (always ticks when aggro'd)
     if (nearest && this.state !== 'slam_charging') {
       this.slamTimer--;
       if (this.slamTimer <= 0) {
@@ -464,7 +462,6 @@ export class KrakarenClone extends Mob {
       }
     }
 
-    // Tick slam shadow countdown
     if (this.slamActive) {
       this.slamShadowTimer--;
       if (this.slamShadowTimer <= 0) {
@@ -472,7 +469,6 @@ export class KrakarenClone extends Mob {
       }
     }
 
-    // Tick slam impact visual
     if (this.slamImpactTimer > 0) {
       this.slamImpactTimer--;
     }
@@ -506,7 +502,6 @@ export class KrakarenClone extends Mob {
       return;
     }
 
-    // If target is in melee range, start a tentacle attack
     if (nearestDist <= MELEE_RANGE_PX) {
       this.startMeleeWindup();
     }
@@ -515,7 +510,7 @@ export class KrakarenClone extends Mob {
   /**
    * The lash commits here: facing freezes for the whole windup and swing, which
    * is 20 + the 8 swing frames before the damage frame = 28 locked frames, well
-   * clear of the 21-frame minimum in `docs/difficulty-fairness-rules.md` (P2).
+   * clear of the 21-frame minimum in `docs/difficulty-fairness-rules.md`.
    */
   private startMeleeWindup(): void {
     this.state = 'melee_windup';
@@ -538,7 +533,6 @@ export class KrakarenClone extends Mob {
   private doMeleeSwing(nearest: Player | null): void {
     this.meleeSwingTimer--;
 
-    // Deal damage at the midpoint of the swing
     if (this.meleeSwingTimer === Math.floor(MELEE_SWING_FRAMES / 2) && nearest?.isAlive) {
       const dist = Math.hypot(nearest.x - this.x, nearest.y - this.y);
       if (dist <= MELEE_RANGE_PX) {
@@ -557,7 +551,6 @@ export class KrakarenClone extends Mob {
   private doMeleeCooldown(nearest: Player | null, nearestDist: number): void {
     this.meleeCooldownTimer--;
     if (this.meleeCooldownTimer <= 0) {
-      // Immediately attack again if still in range
       if (nearest && nearestDist <= MELEE_RANGE_PX) {
         this.startMeleeWindup();
       } else {
@@ -592,10 +585,8 @@ export class KrakarenClone extends Mob {
   }
 
   private startSlam(primary: Player, targets: Player[]): void {
-    // Target the nearest player's current position
     const ts = this.tileSize;
 
-    // Pick a target — prefer the one closest to the boss
     let slamTarget = primary;
     let bestDist = Math.hypot(primary.x - this.x, primary.y - this.y);
     for (const t of targets) {
@@ -642,7 +633,6 @@ export class KrakarenClone extends Mob {
     this.slamActive = false;
     this.slamImpactTimer = SLAM_IMPACT_FRAMES;
 
-    // Check if any player is in the kill zone
     const ts = this.tileSize;
     for (const t of targets) {
       if (!t.isAlive) continue;

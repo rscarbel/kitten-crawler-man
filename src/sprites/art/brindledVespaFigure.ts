@@ -43,11 +43,11 @@ export const TILE_SCALE = 64;
  * The cell the poses and the gore pieces are painted into, and where the
  * hornet's own tile sits inside it.
  *
- * These four numbers were measured by the bake this figure replaces — the widest
- * pose plus padding, quantised, widened until a spinning gore piece clears the
- * cell's inscribed circle — and `scripts/parity-figure-sheet.ts` is what proved
- * the painter still fills exactly that cell. The gates re-check that nothing
- * paints against the edge, which is what would say a pose has outgrown them.
+ * These four numbers are measured off the widest pose plus padding, quantised,
+ * and widened until a spinning gore piece clears the cell's inscribed circle;
+ * `scripts/parity-figure-sheet.ts` proves the painter still fills exactly that
+ * cell. The gates re-check that nothing paints against the edge, which is what
+ * would say a pose has outgrown them.
  */
 const FRAME_WIDTH = 112;
 const FRAME_HEIGHT = 88;

@@ -1,10 +1,10 @@
 /**
  * The Ball of Swine's art gates.
  *
- * The creature has no baked sheet any more, so every invariant the old bake gate
- * enforced against sheet pixels is enforced here against cells painted from
- * `BALL_OF_SWINE_FIGURE` — baked exactly the way the runtime cache bakes them,
- * supersampled and downsampled, so what is measured is what the game blits.
+ * These gates enforce sheet-shape invariants directly against cells painted
+ * from `BALL_OF_SWINE_FIGURE` — baked exactly the way the runtime cache bakes
+ * them, supersampled and downsampled, so what is measured is what the game
+ * blits.
  *
  * Several gates exist specifically to catch the ways the *previous* art failed —
  * a ball that was a third of the size its frame paid for, and a maroon sphere

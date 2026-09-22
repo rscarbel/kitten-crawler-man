@@ -13,7 +13,6 @@ import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText, measureTextBox } from '../TextBox';
 import { drawDivider, drawProgressBar, drawScrollbar } from '../Box';
 
-// Card geometry
 const CARD_H = 84;
 /** Line pitch `drawText` gives 9-10px text; the card's fixed rows assume one line each. */
 const CARD_TEXT_LINE_H = 14;
@@ -32,12 +31,10 @@ const CARD_BAR_H = 6;
 const CARD_BAR_LABEL_Y = 78;
 const CARD_BAR_LABEL_SIZE = 9;
 
-// Level pips
 const PIP_SIZE = 7;
 const PIP_GAP = 3;
 const PIP_Y_OFFSET = 4;
 
-// Tab header
 const TAB_TITLE_Y = 16;
 const TAB_TITLE_SIZE = 16;
 const TAB_SUBTITLE_Y = 36;
@@ -46,29 +43,24 @@ const TAB_HEADER_DIVIDER_X = 20;
 const TAB_HEADER_DIVIDER_Y = 50;
 const TAB_HEADER_DIVIDER_LENGTH_MARGIN = 40;
 
-// Scroll area
 const SCROLL_TOP_Y = 56;
 const BACK_BTN_HEIGHT = 52;
 const SECTION_HEADER_H = 20;
 const SECTION_GAP = 14;
 const CONTENT_START_Y = 8;
 
-// Character section
 const CHAR_LABEL_X = 20;
 const CHAR_LABEL_SIZE = 13;
 const CHAR_COUNT_X_OFFSET = 20;
 const CHAR_COUNT_SIZE = 11;
 const EMPTY_LINE_SIZE = 10;
 
-// Cards
 const CARD_X_OFFSET = 16;
 const CARD_WIDTH_MARGIN = 32;
 
-// Scrollbar
 const SCROLLBAR_X_OFFSET = 7;
 const SCROLLBAR_WIDTH = 3;
 
-// Back button
 const BACK_BTN_X_MARGIN = 20;
 const BACK_BTN_Y_OFFSET = 8;
 const BACK_BTN_WIDTH_MARGIN = 40;

@@ -550,7 +550,6 @@ const ZONE_FLOORS: Record<Zone, number[]> = {
   deep: [FloorTypeValue.wood, FloorTypeValue.concrete, FloorTypeValue.carpet],
 };
 
-// Zone-based corridor floor — corridors now visually match their zone theme.
 function corridorFloorForZone(zone: Zone): number {
   if (zone === 'entrance') return FloorTypeValue.concrete;
   if (zone === 'mid') {
@@ -1064,8 +1063,7 @@ function setArenaCages(
  *
  * The door sits at the outer edge of the wall, so the concourse's own tiles run
  * along beside it — and a crawler standing on one could step sideways into the
- * arena without ever entering the antechamber, which is precisely the bypass the
- * outer ring used to be suppressed to avoid. Walling the row instead keeps the
+ * arena without ever entering the antechamber. Walling the row instead keeps the
  * ring and closes the bypass: the only tiles left touching the door from outside
  * belong to the safe room.
  *

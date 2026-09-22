@@ -4,9 +4,9 @@
  * One `GroundPalette` over the generated `ground_interior` sheet — see
  * `src/map/ground/GroundPalette.ts` for what a palette is.
  *
- * It exists because a shop, a house and the tower used to be floored and walled
- * in the *dungeon's* generic tile types, so they wore whichever cellar's art was
- * loaded at the time; see the note above `INTERIOR_BOARD_FLOOR` in
+ * Without it a shop, a house and the tower would be floored and walled in the
+ * *dungeon's* generic tile types, so they would wear whichever cellar's art
+ * happens to be loaded; see the note above `INTERIOR_BOARD_FLOOR` in
  * `src/map/tileTypes.ts`. The Desperado Club and the Big Top already had floor
  * types of their own and are drawn elsewhere.
  *

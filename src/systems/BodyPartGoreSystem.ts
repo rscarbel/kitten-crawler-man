@@ -401,7 +401,6 @@ export class BodyPartGoreSystem implements GameSystem {
       const SPIN_DIRECTION_THRESHOLD = 0.5;
       const spinDir = Math.random() < SPIN_DIRECTION_THRESHOLD ? 1 : -1;
       const spin = spinDir * (SPIN_MIN + Math.random() * (SPIN_MAX - SPIN_MIN));
-      // Higher upward pop when there's a strong impact — parts burst higher
       const vzBoost = hasDir ? IMPACT_VZ_BOOST : DEFAULT_SPEED_MULT;
       this.flying.push({
         x: cx,
@@ -683,7 +682,6 @@ export class BodyPartGoreSystem implements GameSystem {
       ctx.fill();
       ctx.restore();
 
-      // Part drawn above its ground position by z pixels
       this._drawPart(ctx, sx, sy - p.z, p.angle, p.art, p.stateName, p.tileSize, 1);
     }
   }

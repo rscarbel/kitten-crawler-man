@@ -392,8 +392,9 @@ const LAST_BAKED_FRAME_PROGRESS = (EXPLOSION_FRAME_COUNT - 1) / EXPLOSION_FRAME_
 /** Where the blast starts being pulled down toward nothing. */
 const EXTINCTION_ONSET = 0.55;
 /**
- * What is left on the last frame. Not zero: a blank final frame is the bug this
- * replaced, and a few percent is below the threshold where the cut is visible.
+ * What is left on the last frame. Not zero: a blank final frame pops the blast
+ * out of existence, and a few percent is below the threshold where the cut is
+ * visible.
  */
 const EXTINCTION_FLOOR = 0.16;
 

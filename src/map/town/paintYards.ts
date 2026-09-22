@@ -59,8 +59,8 @@ function plannedPropTiles(plan: TownPlan): ReadonlySet<string> {
  * `TownPlan` and be gravel-and-setts on the map. It matters because planting
  * reports the material it is drawn *over*, so a garden on the wrong surface
  * draws verge tufts on that surface's sheet row and is then eroded by its
- * neighbours through the corner masks — the defect that once took the weed
- * scatter off the verge.
+ * neighbours through the corner masks — the same defect class that keeps the
+ * weed scatter off the verge (see `scatterGroundCover` in `paintGround.ts`).
  *
  * Two exemptions, both for things the `TownPlan` put there on purpose. A tile
  * under **building art** is fine: an enclosure stated across a whole block

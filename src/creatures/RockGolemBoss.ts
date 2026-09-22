@@ -372,7 +372,7 @@ export class RockGolemBoss extends RockGolem {
       // Dealt directly rather than through `dealDamage`, which would run it
       // through the mob-level multiplier as well. This number is *already*
       // scaled — it is a fraction of the victim's own maximum health — and
-      // stacking `MOB_LEVEL_DAMAGE_SCALE` on top of that makes one pass an
+      // stacking `damageScaleForLevel` on top of that makes one pass an
       // outright kill from full at any bounty level past five.
       const damage = Math.ceil(target.maxHp * ROLL_DAMAGE_HP_FRACTION) + ROLL_FLAT_DAMAGE;
       // `targets` is not just the two crawlers: `MobUpdateLoop` folds in the

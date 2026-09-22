@@ -1,12 +1,11 @@
 /**
  * Carl's art gates.
  *
- * He has no baked sheet to inspect any more, so the invariants the old bake
- * enforced by throwing — a pose that painted outside its cell, a strike that
- * missed the frame the hit is scored on — are enforced here against cells
- * painted from `HUMAN_FIGURE`, baked exactly the way the runtime cache bakes
- * them, plus pose-stream checks that measure the rig itself and need no pixels
- * at all.
+ * These gates enforce sheet-shape invariants — a pose that fits its cell, a
+ * strike that lands on the frame the hit is scored on — directly against
+ * cells painted from `HUMAN_FIGURE`, baked exactly the way the runtime cache
+ * bakes them, plus pose-stream checks that measure the rig itself and need no
+ * pixels at all.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong. A gate that cannot find the row it names fails

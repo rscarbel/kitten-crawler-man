@@ -99,7 +99,7 @@ export class BarrierSystem implements GameSystem {
 
   /** Start the 1-second construct animation for the given hotbar slot. */
   beginConstruct(player: Player, hotbarIdx: number, itemId: BarrierItemId): void {
-    if (this.pending) return; // Already constructing
+    if (this.pending) return;
     this.pending = {
       player,
       hotbarIdx,
@@ -147,7 +147,6 @@ export class BarrierSystem implements GameSystem {
 
     const { grid: mobGrid } = ctx.roster;
 
-    // Tick pending construction
     if (this.pending) {
       this.pending.framesLeft--;
       if (this.pending.framesLeft <= 0) {
@@ -156,7 +155,6 @@ export class BarrierSystem implements GameSystem {
       }
     }
 
-    // Apply slow effect to mobs near active barriers
     for (const barrier of this.barriers) {
       const bwcx = barrier.worldX + TILE_SIZE * TILE_CENTER_FRACTION;
       const bwcy = barrier.worldY + TILE_SIZE * TILE_CENTER_FRACTION;
@@ -185,7 +183,6 @@ export class BarrierSystem implements GameSystem {
   }
 
   private finishConstruct(c: PendingConstruct): void {
-    // Remove one item from player inventory
     const removed = c.player.inventory.removeOne(c.itemId);
     if (!removed) return; // Player lost the item before construction finished
 
@@ -195,16 +192,13 @@ export class BarrierSystem implements GameSystem {
     const tileX = Math.floor(px / ts);
     const tileY = Math.floor(py / ts);
 
-    // Don't stack barriers on the same tile
     const occupied = this.barriers.some((b) => b.tileX === tileX && b.tileY === tileY);
     if (occupied) {
-      // Refund the item
       c.player.inventory.addItem(c.itemId, 1);
       return;
     }
 
     if (!this.gameMap.isWalkable(tileX, tileY)) {
-      // Refund
       c.player.inventory.addItem(c.itemId, 1);
       return;
     }
@@ -257,7 +251,6 @@ export class BarrierSystem implements GameSystem {
           break;
       }
 
-      // Slow zone pulse ring
       ctx.save();
       ctx.globalAlpha =
         SLOW_PULSE_ALPHA_BASE + SLOW_PULSE_ALPHA_RANGE * Math.sin(Date.now() * SLOW_PULSE_SPEED);
@@ -274,7 +267,6 @@ export class BarrierSystem implements GameSystem {
       ctx.stroke();
       ctx.restore();
 
-      // Pickup prompt when player is on this tile
       if (activePlayer) {
         const ts = TILE_SIZE;
         const ptx = Math.floor((activePlayer.x + ts * TILE_CENTER_FRACTION) / ts);
@@ -323,7 +315,6 @@ export class BarrierSystem implements GameSystem {
 
     ctx.restore();
 
-    // Label
     drawText(ctx, 'PLACING...', {
       x: cx,
       y: cy + radius + CONSTRUCT_LABEL_Y_OFFSET - CONSTRUCT_LABEL_ADJUST,

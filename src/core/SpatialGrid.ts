@@ -51,7 +51,7 @@ export class SpatialGrid<T extends { x: number; y: number }> {
     const ocx = Math.floor(oldX / this.cs);
     const ocy = Math.floor(oldY / this.cs);
     const [cx, cy] = this.cellOf(entity.x, entity.y);
-    if (ocx === cx && ocy === cy) return; // same cell — nothing to do
+    if (ocx === cx && ocy === cy) return;
     this.cells.get(this.key(ocx, ocy))?.delete(entity);
     const k = this.key(cx, cy);
     let cell = this.cells.get(k);

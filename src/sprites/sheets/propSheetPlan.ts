@@ -2,12 +2,11 @@
  * A prop sheet, described once and painted in two places.
  *
  * The town's street furniture, the forest, the boulders and the camps are all
- * painted by the game's own painters in `src/sprites/`. What used to differ
- * between the shipped game and the offline bakers was only *who* called those
- * painters: the game loaded a PNG, and a script in `scripts/` decided which
- * pictures went on it. That decision — the frame envelope, which state is which
- * row, how many frames a row holds — now lives here, so the sheet the game
- * paints and the sheet a review bake writes cannot describe different art.
+ * painted by the game's own painters in `src/sprites/`. This module is the one
+ * description both the shipped game and a review bake paint from — the frame
+ * envelope, which state is which row, how many frames a row holds — so the
+ * sheet the game paints and the sheet a review bake writes cannot describe
+ * different art.
  *
  * The frame envelope is not derived from the manifest, it is checked against it:
  * `SpriteLoader`'s entry is what every draw site, footprint and cull margin is

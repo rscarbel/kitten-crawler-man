@@ -14,7 +14,6 @@ const MS_TO_SECONDS = 1000;
 const NPC_CENTER_X = 0.5;
 const NPC_FLIP_TRANSLATE_Y = 0;
 
-// Feet
 const NPC_LEFT_FOOT_X = 0.3;
 const NPC_RIGHT_FOOT_X = 0.55;
 const NPC_FOOT_Y = 0.88;

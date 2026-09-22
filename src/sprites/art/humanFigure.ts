@@ -245,7 +245,7 @@ function idleBack(phase: number): CarlPose {
  * its feet out in front of it is the *tuck*: after toe-off the foot comes up
  * behind the hip with the knee folded, passes under the body, and only then
  * reaches forward. A swing leg that travels forward straight-kneed is a goose
- * step, which is what the first pass drew.
+ * step.
  */
 /**
  * Short, and it has to be. His leg is very nearly as long as his hip is high,
@@ -344,8 +344,8 @@ function gaitFootSide(phase: number): { foot: Pt; pitch: number } {
  * A knee pointed at the viewer does not read as an angle — it hinges away from
  * the camera, not across it — so the swing leg stays a straight column and
  * reports how foreshortened it is, which is what tells the painter to stop
- * pinching the shin at the knee. Bending it in the image plane instead is what
- * made the earlier front walk look like the legs were snapping sideways.
+ * pinching the shin at the knee. Bending it in the image plane instead reads
+ * as the legs snapping sideways.
  */
 function gaitFootFacing(
   phase: number,
@@ -360,8 +360,8 @@ function gaitFootFacing(
     return {
       foot: pt(home + FACING_STRIDE_DRIFT * lerp(1, -1, t), 0),
       // Same shape as the profile's, scaled down. Held flat and then jumping to
-      // the swing's constant pitch — which is what this did — moves the ankle a
-      // step sideways on the frame the foot changes phase.
+      // the swing's constant pitch moves the ankle a step sideways on the frame
+      // the foot changes phase.
       pitch: keyed(t, [
         [0, HEEL_STRIKE_PITCH * FACING_PITCH_SHARE],
         [0.2, 0],
@@ -513,11 +513,10 @@ const ARM_BACKSWING_SHARE = 0.55;
 /**
  * One arm of a head-on walk, as joint angles.
  *
- * Placing the hand instead is a trap that cost several passes: head-on a
- * swinging arm foreshortens, a shorter hand target is slack the IK has nowhere
- * to put but the elbow, and at full swing the elbow duly swung 0.18 tiles out
- * to the side. Rotating the joints keeps the arm at its own length, so nothing
- * bows.
+ * Placing the hand instead is a trap: head-on a swinging arm foreshortens, a
+ * shorter hand target is slack the IK has nowhere to put but the elbow, and at
+ * full swing the elbow bows out to the side. Rotating the joints keeps the arm
+ * at its own length, so nothing bows.
  *
  * The upper arm barely moves — at this angle it is nearly end-on to the viewer
  * and has almost nothing it *can* show — so the forearm carries what travel

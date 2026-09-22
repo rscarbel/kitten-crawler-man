@@ -18,7 +18,6 @@ const COMPACT_SECTION_GAP = 10;
 const COMPACT_EQUIPMENT_LABEL = 'Equipment';
 const COMPACT_INVENTORY_LABEL = 'Inventory';
 
-// Player section layout
 const SECTION_INDENT_X = 14;
 const SECTION_CONTENT_WIDTH = 28;
 const SECTION_LABEL_SIZE = 13;
@@ -46,7 +45,6 @@ const BUTTON_Y_SPACING = 38;
 /** Gap between the Equipment button and the Inventory button beneath it. */
 const EQUIPMENT_BUTTON_Y_SPACING = 34;
 
-// Tab layout
 const TITLE_Y = 22;
 const TITLE_SIZE = 16;
 const FIRST_SECTION_Y = 46;
@@ -118,7 +116,6 @@ function renderPlayerSection(
     return y + COMPACT_BUTTON_HEIGHT + COMPACT_SECTION_GAP;
   }
 
-  // Equipped items
   const equipped = inventory.equippedItems();
   drawText(ctx, 'Equipped:', { x: indentX, y, size: EQUIPPED_LABEL_SIZE, color: '#94a3b8' });
   y += EQUIPPED_LABEL_Y_SPACING;
@@ -302,7 +299,7 @@ export function renderInventoryTab(
   });
 }
 
-/** Base height estimate before the two Equipment buttons were added: title + two player sections + back. */
+/** Height of title + two player sections + back, not counting the two Equipment buttons each section also draws. */
 const BASE_INVENTORY_TAB_BOX_H = 530;
 
 /** Conservative height estimate for the inventory tab modal: title + two player sections + back. */

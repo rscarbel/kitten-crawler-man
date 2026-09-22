@@ -2,9 +2,9 @@
  * The box a person's ink actually occupies, derived from their own genome.
  *
  * The frame cache bakes each figure into an offscreen cell, and one worst-case
- * box for everybody is expensive: the old padding reserved a quarter of the draw
- * size above the head for a mohawk on a tall genome, and every bald citizen paid
- * for it. Cell area is the cache's whole memory cost, so the box is measured per
+ * box for everybody is expensive: reserving headroom for the tallest possible
+ * hairdo above every head means every bald citizen pays for that reservation
+ * too. Cell area is the cache's whole memory cost, so the box is measured per
  * person instead.
  *
  * The limbs are measured by **sampling the skeleton** rather than by algebra on

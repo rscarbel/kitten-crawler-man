@@ -38,35 +38,26 @@ const REVEAL_FRAMES = 50;
 /** Frames to display the open box before auto-advancing to the next. */
 const NEXT_DELAY = 180;
 
-// Panel margin
 const PANEL_MARGIN = 32;
 
-// Ongoing sparkle frequency (every N frames)
 const SPARKLE_INTERVAL = 6;
-// Reveal sparkle frequency
 const REVEAL_SPARKLE_INTERVAL = 4;
 
-// Content reveal layout
 const CONTENT_Y_OFFSET_FRACTION = 0.633;
 
-// Reveal opacity transition
 const REVEAL_FADE_FRACTION = 0.6;
 
-// Skip hint y from bottom
 const SKIP_HINT_BOTTOM_OFFSET = 52;
 
-// Countdown bar layout
 const COUNTDOWN_BAR_MARGIN = 24;
 const COUNTDOWN_BAR_SIDE_PAD = 48;
 const COUNTDOWN_BAR_Y_FROM_BOTTOM = 18;
 const COUNTDOWN_BAR_H = 6;
 const COUNTDOWN_BAR_ALPHA = 0.7;
 
-// Countdown label y offset above bar
 const COUNTDOWN_LABEL_Y_ABOVE_BAR = 4;
 const COUNTDOWN_LABEL_CORRECTION = 8;
 
-// Animated box graphic
 const BOX_ANIM_SIZE = 56;
 const BOX_SHAKE_AMPLITUDE_FRAMES = 1.8;
 const BOX_SHAKE_COS_FREQ = 2.1;
@@ -85,7 +76,6 @@ const BOX_SHAKE_FILL_Y_FRAC = 0.18;
 const BOX_RIBBON_Y_FRAC = 0.15;
 const BOX_GLOW_FILL_Y_FRAC = 0.2;
 
-// Particle physics
 const PARTICLE_GRAVITY = 0.12;
 const PARTICLE_BURST_SPEED_BASE = 3;
 const PARTICLE_BURST_SPEED_RANGE = 6;
@@ -99,7 +89,6 @@ const PARTICLE_LIFE_MIN = 40;
 const PARTICLE_LIFE_MAX = 79;
 const PARTICLE_MAX_LIFE = 80;
 
-// Panel header layout
 const HEADER_PROGRESS_RIGHT_MARGIN = 12;
 const HEADER_PROGRESS_Y_FROM_TOP = 20;
 const HEADER_TITLE_X_MARGIN = 16;
@@ -112,7 +101,6 @@ const HEADER_PLAYER_SIZE = 11;
 const HEADER_DIVIDER_Y_FROM_TOP = 62;
 const HEADER_DIVIDER_SIDE_PAD = 24;
 
-// Content rendering layout
 const CONTENT_LINE_STEP_SMALL = 14;
 const CONTENT_LINE_STEP_NORMAL = 16;
 const CONTENT_FONT_SMALL = 10;
@@ -123,18 +111,15 @@ const CONTENT_RECEIVED_SIZE = 13;
 const CONTENT_ITEM_Y_OFFSET = 10;
 const CONTENT_ADVANCE_Y = 18;
 
-// Content reveal position
 const CONTENT_LEFT_PAD = 20;
 const CONTENT_WIDTH_REDUCTION = 40;
 
 // Particle spread — centering the random range around zero
 const PARTICLE_CENTER_OFFSET = 0.5;
 
-// Burst particle counts
 const BURST_COUNT_OPEN = 30;
 const BURST_COUNT_REVEAL = 50;
 
-// Header progress bar correction
 const HEADER_PROGRESS_Y_CORRECTION = 9;
 
 /** Ascending rarity order for sorting boxes (lowest first). */
@@ -215,7 +200,7 @@ export class LootBoxOpener {
   ): void {
     if (boxes.length === 0) return;
     this.getContents = getContents;
-    this.queue = [...boxes].sort((a, b) => (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0)); // ascending rarity
+    this.queue = [...boxes].sort((a, b) => (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0));
     this.queueIndex = 0;
     this.playerName = playerName;
     this.onBoxOpened = onBoxOpened;
@@ -229,13 +214,11 @@ export class LootBoxOpener {
     if (!this.active || !this.box) return;
     this.frame++;
 
-    // Auto-advance countdown while in 'done' phase
     if (this.phase === 'done') {
       if (this.nextTimer > 0) {
         this.nextTimer--;
         if (this.nextTimer === 0) this.advance();
       }
-      // Gentle ongoing sparkles while waiting
       if (this.frame % SPARKLE_INTERVAL === 0) this.spawnParticle();
     }
 
@@ -246,7 +229,6 @@ export class LootBoxOpener {
           this.frame = 0;
           this.burstParticles(BURST_COUNT_OPEN);
           this.onEachBoxOpening?.();
-          // Grant reward as soon as the box starts opening
           if (!this.rewardGranted && this.onBoxOpened && this.contents) {
             this.rewardGranted = true;
             this.onBoxOpened(this.box, this.contents);
@@ -272,7 +254,6 @@ export class LootBoxOpener {
         break;
     }
 
-    // Animate particles
     for (const p of this.particles) {
       p.x += p.vx;
       p.y += p.vy;
@@ -296,10 +277,8 @@ export class LootBoxOpener {
     const by = (ch - boxH) / 2;
     const cx = cw / 2;
 
-    // Backdrop
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.7 });
 
-    // Panel
     const tierColor = this.tierColor(this.box.tier);
     drawBox(ctx, {
       x: bx,
@@ -313,7 +292,6 @@ export class LootBoxOpener {
       glowBlur: 28,
     });
 
-    // Progress indicator (N of M)
     const total = this.queue.length;
     const current = this.queueIndex + 1;
     drawText(ctx, `Box ${current} of ${total}`, {
@@ -334,7 +312,6 @@ export class LootBoxOpener {
       width: boxW - PANEL_MARGIN,
     });
 
-    // Player label
     drawText(ctx, `for ${this.playerName}`, {
       x: cx,
       y: by + HEADER_PLAYER_Y_FROM_TOP - HEADER_PLAYER_Y_CORRECTION,
@@ -343,7 +320,6 @@ export class LootBoxOpener {
       align: 'center',
     });
 
-    // Divider
     drawDivider(ctx, {
       x: bx + HEADER_DIVIDER_SIDE_PAD,
       y: by + HEADER_DIVIDER_Y_FROM_TOP,
@@ -351,10 +327,8 @@ export class LootBoxOpener {
       color: `${tierColor}55`,
     });
 
-    // Draw the animated box graphic
     this.drawAnimatedBox(ctx, cx, by + boxH / 2 - HEADER_TITLE_FONT_CORRECTION, tierColor);
 
-    // Content reveal
     if (this.phase === 'revealing' || this.phase === 'done') {
       const revealAlpha =
         this.phase === 'done'
@@ -380,7 +354,6 @@ export class LootBoxOpener {
       align: 'center',
     });
 
-    // Auto-advance countdown bar (shown during 'done' phase)
     if (this.phase === 'done' && this.nextTimer > 0) {
       const ratio = this.nextTimer / NEXT_DELAY;
       const barW = boxW - COUNTDOWN_BAR_SIDE_PAD;
@@ -397,7 +370,6 @@ export class LootBoxOpener {
         alpha: COUNTDOWN_BAR_ALPHA,
       });
 
-      // "Next box…" or "Done!" label
       const isLast = this.queueIndex >= this.queue.length - 1;
       drawText(ctx, isLast ? 'Done!' : 'Next box…', {
         x: cx,
@@ -408,7 +380,6 @@ export class LootBoxOpener {
       });
     }
 
-    // Particles
     for (const p of this.particles) {
       const ratio = p.life / p.maxLife;
       ctx.globalAlpha = ratio;
@@ -421,8 +392,6 @@ export class LootBoxOpener {
 
     ctx.restore();
   }
-
-  // Private helpers
 
   private loadCurrent(): void {
     this.box = this.queue[this.queueIndex];
@@ -494,7 +463,6 @@ export class LootBoxOpener {
     const by = cy - size / 2 + shakeY;
 
     if (this.phase === 'opening' || this.phase === 'revealing' || this.phase === 'done') {
-      // Lid flying open
       const t = this.phase === 'opening' ? Math.min(1, this.frame / OPEN_FRAMES) : 1;
       const lidAngle = t * BOX_LID_ANGLE;
       ctx.save();
@@ -521,7 +489,6 @@ export class LootBoxOpener {
       );
       ctx.restore();
 
-      // Glow from inside
       {
         ctx.save();
         const glowAlpha =
@@ -543,7 +510,6 @@ export class LootBoxOpener {
       }
     }
 
-    // Box body
     ctx.fillStyle = color;
     ctx.globalAlpha = BOX_BODY_FILL_ALPHA;
     ctx.fillRect(bx, by + size * BOX_BODY_Y_FRAC, size, size * BOX_BODY_H_FRAC);
@@ -561,7 +527,6 @@ export class LootBoxOpener {
       ctx.strokeRect(bx - BOX_LID_PAD, by, size + BOX_LID_PAD * 2, size * BOX_SHAKE_FILL_Y_FRAC);
     }
 
-    // Ribbon
     ctx.strokeStyle = `${color}cc`;
     const RIBBON_LINE_W = 2;
     ctx.lineWidth = RIBBON_LINE_W;

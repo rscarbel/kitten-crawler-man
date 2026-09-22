@@ -6,9 +6,9 @@
  * puts the ankle there. That is the same structure the player character's
  * choreography uses (`src/sprites/art/humanFigure.ts`), and it is the reason his
  * walk is the only convincing one in the game — you cannot plant a foot whose
- * position you do not control. Driving the legs forward from the hip instead,
- * as this file used to, makes the planted foot slide backward at a rate with no
- * relation to the body's speed, which is the skating read.
+ * position you do not control. Driving the legs forward from the hip instead
+ * makes the planted foot slide backward at a rate with no relation to the
+ * body's speed, which is the skating read.
  *
  * The arms stay forward-kinematic. Almost all of a walking arm's travel belongs
  * to the shoulder, and a hand target forces both segments to swing together.

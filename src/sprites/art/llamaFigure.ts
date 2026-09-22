@@ -322,10 +322,9 @@ function spitPhases(progress: number): SpitPhases {
     // The lip peels back before the mouth opens and stays curled into the
     // recovery — the disgusted sneer is the half of this that reads at tile size.
     lip: easeInOut(ramp(progress, 0.1, 0.36)) * (1 - easeInOut(ramp(progress, 0.78, 1))),
-    // The charge climbs the neck across the whole gather and is gone the instant
-    // the thrust launches it, which is what makes the glow a usable warning.
-    // The glow has to be gone the instant the thrust launches the ball, so it
-    // fades across the whip rather than over a window of its own.
+    // The charge climbs the neck across the whole gather and has to be gone the
+    // instant the thrust launches the ball — that is what makes the glow a
+    // usable warning rather than decoration.
     charge:
       clamp01(ramp(progress, 0.05, SPIT_GATHER_END)) *
       (1 - clamp01(ramp(progress, SPIT_GATHER_END, LLAMA_SPIT_RELEASE_PROGRESS))),

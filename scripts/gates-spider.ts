@@ -704,11 +704,10 @@ function gateContactShadowIsTranslucent(): void {
 // ── L3 the plinth covers its tile ────────────────────────────────────────────
 
 /**
- * The machine's manifest entry used to declare a blocked region over its bottom
- * tile, which is what made that tile solid to walk into. The declaration is
- * gone with the manifest; what has to stay true is the thing it described — the
- * plinth fills the tile the player collides with, or they walk into an
- * invisible wall beside a machine that is not there.
+ * There is no manifest entry to declare a blocked region over the machine's
+ * bottom tile and make it solid to walk into, so what has to stay true is
+ * enforced here directly: the plinth fills the tile the player collides with,
+ * or they walk into an invisible wall beside a machine that is not there.
  */
 const PLINTH_TILE_COVERAGE = 0.75;
 

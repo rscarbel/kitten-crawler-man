@@ -53,12 +53,11 @@ export const TILE_SCALE = 64;
  * it.
  *
  * Square, and anchored dead centre, because a rotated draw pivots on the anchor.
- * The size was measured by the bake this figure replaces — the widest thing any
- * painter threw off the ball, plus padding, quantised — and
- * `scripts/parity-figure-sheet.ts` is what proved the painter still fills
- * exactly that cell. The gates re-check that nothing paints against the edge and
- * that the ball is still the diameter the art module declares, which is what
- * would say a pose has outgrown it.
+ * The size is measured off the widest thing any painter throws off the ball,
+ * plus padding, quantised, and `scripts/parity-figure-sheet.ts` proves the
+ * painter still fills exactly that cell. The gates re-check that nothing paints
+ * against the edge and that the ball is still the diameter the art module
+ * declares, which is what would say a pose has outgrown it.
  */
 const FRAME_SIZE = 288;
 const ANCHOR = FRAME_SIZE / 2;

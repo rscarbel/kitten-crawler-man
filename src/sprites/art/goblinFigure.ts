@@ -214,10 +214,10 @@ const GAITS: Record<GoblinArchetype, GaitConfig> = {
     headLead: 0.02,
   },
   // The longest stride in the set: this one is not scuttling in to swing at
-  // anybody, it is repositioning. The bob is what a blind review found missing —
-  // at 0.042 the head sat at a constant height for all twelve frames and the
-  // whole walk read as a figure on a conveyor. A stride needs the hips to rise
-  // and fall, or nothing about it lands.
+  // anybody, it is repositioning. Without enough bob the head sits at a
+  // constant height across all twelve frames and the whole walk reads as a
+  // figure on a conveyor — a stride needs the hips to rise and fall, or nothing
+  // about it lands.
   bow: {
     stride: 0.42,
     lift: 0.15,
@@ -252,9 +252,9 @@ interface CarryConfig {
    * through the floor", which is the right question for a weapon with a head.
    * A bow has none — both its ends are tips — and the solve puts it right up
    * against `MAX_CARRY_ANGLE`, where `asin` is nearly vertical: the idle's own
-   * breathing bob then swings the stave several degrees a frame and gate G8
-   * reports the spacing cliff. Stating the angle removes the derivative along
-   * with the cliff.
+   * breathing bob then swings the stave several degrees a frame, which shows up
+   * as a spacing cliff between neighbouring frames. Stating the angle removes
+   * the derivative along with the cliff.
    */
   readonly angle?: number;
 }
@@ -265,20 +265,18 @@ interface CarryConfig {
  * Per-archetype rather than one shared pair, and the axe is the reason. The
  * height ends up in {@link carryAngle}, which solves for the steepest angle
  * that still keeps the weapon's tip off the floor — so a low hand on a long
- * weapon *forces* a near-horizontal haft. At the shared 0.46 the axe hung 14°
- * off level, and a broad bit hanging off a horizontal stick at ankle height is
- * a spade however the head itself is drawn: three blind silhouette reviews
- * running named it shovel, spade, boot and bucket, and two redraws of the head
- * moved none of them. The head was never the variable.
+ * weapon *forces* a near-horizontal haft. At a shared low carry height the axe
+ * hangs well off level, and a broad bit hanging off a horizontal stick at ankle
+ * height reads as a spade however the head itself is drawn: hand height, not
+ * the head art, is what sells the silhouette.
  *
- * The two numbers have to move together on a two-handed weapon, which cost a
- * round on its own. Raising the hand alone pulled the butt grip in under the
- * far shoulder, and the off arm — which has only 0.72 of the near arm's length
- * — folded to a third of its span and threw its elbow up behind the shoulder,
- * reading as an arm on upside down. G14 is blind to that: the fist is still on
- * the haft, it is the elbow that is wrong. Carrying further *out* as well as up
- * keeps the off arm's span past half its reach, which is where it bends like an
- * arm.
+ * The two numbers have to move together on a two-handed weapon. Raising the
+ * hand alone pulls the butt grip in under the far shoulder, and the off arm —
+ * which has only 0.72 of the near arm's length — folds to a third of its span
+ * and throws its elbow up behind the shoulder, reading as an arm on upside
+ * down, even though the fist stays correctly placed on the haft. Carrying
+ * further *out* as well as up keeps the off arm's span past half its reach,
+ * which is where it bends like an arm.
  *
  * Note the trap in the other direction: `GoblinProp.headHalfHeight` feeds the
  * same solve, so making the bit *taller* to read better lowers the carry angle
@@ -295,11 +293,10 @@ const CARRIES: Record<GoblinArchetype, CarryConfig> = {
   // Held high and *well clear of the body*, and the hip fraction is the load
   // bearing half of that. The height sets the carry angle (see `carryAngle`),
   // and near-vertical is what makes a hanging bow read as a bow rather than as
-  // the tail a blind silhouette review named it. But a near-vertical stave
-  // carried at the hip lies straight down the middle of the torso — the same
-  // review's next look called it an ironing board. The stave is 0.5 tiles either
-  // side of the fist, so the fist has to sit further out than the shoulder is
-  // wide before the bow becomes a separate shape in pure black.
+  // a tail. But a near-vertical stave carried at the hip lies straight down the
+  // middle of the torso and reads as an ironing board. The stave is 0.5 tiles
+  // either side of the fist, so the fist has to sit further out than the
+  // shoulder is wide before the bow becomes a separate shape in pure black.
   bow: { hipFraction: 3.6, heightFraction: 0.62, angle: BOW_CARRY_ANGLE },
 };
 
@@ -321,11 +318,11 @@ const MAX_CARRY_ANGLE = deg(70);
 /**
  * How far a carried weapon's tip is held clear of the floor, in tile units.
  *
- * The carry angle used to put the tip exactly on the ground plane, which reads
- * nicely at review scale and fails the silhouette test outright: the axe head
- * and the mace head landed in among the feet, merged with them and with the
- * ground shadow, and both archetypes became a hunched blob with a lump at the
- * bottom. The weapon has to sit against empty background to be nameable.
+ * A carried weapon's tip resting exactly on the ground plane fails the
+ * silhouette test: the axe head and the mace head land in among the feet,
+ * merging with them and with the ground shadow into a hunched blob with a lump
+ * at the bottom. The weapon has to sit against empty background to be
+ * nameable.
  */
 const CARRY_GROUND_CLEARANCE = 0.1;
 
@@ -364,7 +361,7 @@ function carryAngle(style: GoblinStyle, prop: GoblinProp, handY: number): number
   // Capped short of vertical because `asin` is near-vertical as its argument
   // approaches 1: a hand raised to within a few percent of the weapon's own
   // length would otherwise swing the blade tens of degrees in a single frame,
-  // which gate G8 reports as a cliff and a player sees as a snap.
+  // which a player sees as a snap.
   const dropToClearance = -handY - groundDrop(prop);
   const reachRatio = Math.min(
     clamp01(dropToClearance / prop.tipDistance),
@@ -400,7 +397,7 @@ function walkPose(
    *
    * Small on purpose: the hand is already swinging fore-and-aft on a once-per
    * -stride sine, and a large second-harmonic bob on top of it makes the tip
-   * lurch where the two are in phase — which gate G8 reports as a cliff.
+   * lurch where the two are in phase.
    */
   const WEAPON_BOB = 0.022;
   const carry = carryHand(archetype, style);
@@ -524,10 +521,10 @@ function idlePose(
    * The weight shift, phased so it is **zero at frame 0**.
    *
    * Every one-shot row ends by handing back to idle frame 0, so any field that
-   * is non-zero there is a pop on every swing, blink and flinch — which is
-   * exactly what gate G6 measures. A raw `sin(θ − π/2)` sits at −1 on frame 0.
-   * Offsetting it makes the goblin lean onto one foot and back rather than
-   * rocking between them, which is what a bored scavenger does anyway.
+   * is non-zero there is a pop on every swing, blink and flinch. A raw
+   * `sin(θ − π/2)` sits at −1 on frame 0. Offsetting it makes the goblin lean
+   * onto one foot and back rather than rocking between them, which is what a
+   * bored scavenger does anyway.
    */
   const shift = (Math.sin(phase * FULL_CYCLE - Math.PI / 2) + 1) / 2;
   const blink = windowedAt(frame, config.blinkFrame, BLINK_FRAMES, frameCount);
@@ -566,9 +563,9 @@ function idlePose(
  * A 0→1→0 envelope whose ends are flat.
  *
  * A raw `hump` has its steepest slope at t=0, so a flourish built on one leaves
- * the idle pose at full speed and the first two frames jump — which is what gate
- * G8 measures as a cliff in the tip-spacing chart. Easing the input first flattens
- * both ends, so the break grows out of the idle and settles back into it.
+ * the idle pose at full speed and the first two frames jump. Easing the input
+ * first flattens both ends, so the break grows out of the idle and settles back
+ * into it.
  */
 function smoothHump(t: number): number {
   return hump(easeInOut(t));
@@ -596,9 +593,9 @@ function idleBreakPose(
       // Raises the blade to thumb the edge and levels the point forward in one
       // continuous gesture, then lowers it.
       //
-      // The first cut split this into two beats with a gap between them, and the
-      // gap was the defect: the blade stalled for a frame and then leapt, which
-      // is a spacing cliff rather than a pause. One envelope cannot stall.
+      // Splitting this into two beats with a gap between them stalls the blade
+      // for a frame and then makes it leap — a spacing cliff rather than a
+      // pause. One envelope cannot stall.
       const raise = smoothHump(progress);
       const LEVELLED_ANGLE = deg(-6);
       const nearHand: Pt = {
@@ -688,9 +685,9 @@ function idleBreakPose(
       // idling archer reads as one about to shoot and the telegraph loses its
       // meaning.
       // Both envelopes span the whole row rather than a leading slice of it.
-      // Compressed into the first 40% the pluck left the idle pose at speed and
-      // the opening frames jumped — the same spacing cliff the sword's break was
-      // rewritten to avoid, and gate G4 measures it.
+      // Compressed into the first 40% the pluck would leave the idle pose at
+      // speed and the opening frames would jump — the same spacing cliff a
+      // leading-slice envelope produces anywhere in this rig.
       const pluck = smoothHump(progress);
       const scan = Math.sin(progress * Math.PI * SCAN_SWEEPS) * swell;
       const nearHand: Pt = {
@@ -724,8 +721,7 @@ function idleBreakPose(
  * Hand positions are in figure space. Angles are the weapon's own axis. Each
  * beat is eased differently on purpose: the wind is `easeInOut` so it settles,
  * the drive is `easeIn` so it accelerates into the hit, and the follow-through
- * is `easeOut` so it decays. A linear sweep across the row is what the old
- * goblin did, and it is exactly why that attack read as a robot arm.
+ * is `easeOut` so it decays. A linear sweep across the row reads as a robot arm.
  */
 interface SwingSpec {
   /** Progress at which the wind is fully loaded. */
@@ -894,10 +890,9 @@ function thrustPose(
   /**
    * The recovery gets the back 42% of the row — six frames.
    *
-   * An earlier cut at 0.68 left only four recovery frames, and a `easeInOut`
-   * over four frames has a middle step nearly four times its end steps: the
-   * blade snapped back to guard instead of retracting. Six frames keeps the
-   * steepest step inside 1.9× its neighbours, which is what gate G8 measures.
+   * Fewer than six recovery frames gives `easeInOut` a middle step several
+   * times its end steps: the blade snaps back to guard instead of retracting.
+   * Six frames keeps the steepest step inside 1.9× its neighbours.
    */
   const SETTLE_END = 0.58;
   const LEVELLED_ANGLE = deg(-3);
@@ -931,7 +926,7 @@ function thrustPose(
     torsoSquash: 1 + 0.03 * wind - 0.02 * drive,
     nearFoot: steppingFoot(rest.nearFoot.x, LUNGE, WIND_END, impactAt, progress, STEP_LIFT * 0.8),
     // The rear foot must leave the ground to brace back, or it is dragging
-    // rather than stepping — which is exactly what gate G7 measures.
+    // rather than stepping.
     farFoot: steppingFoot(rest.farFoot.x, -0.1, 0, WIND_END, progress, STEP_LIFT * 0.35),
     nearHand,
     // Off hand thrown back and out for balance.
@@ -967,9 +962,9 @@ const BOW_AIM_ANGLE = deg(-90);
  *
  * Half the row, which is much of it — and it has to be. The bow hand travels
  * from the hip to full extension, which at 14 frames is a long way; compressed
- * into the opening quarter it covered that distance in three frames and gate G4
- * reported the first of them as a hitch, correctly. Raising and drawing overlap
- * anyway, which is how the motion actually works.
+ * into the opening quarter it would cover that distance in three frames, which
+ * reads as a hitch. Raising and drawing overlap anyway, which is how the
+ * motion actually works.
  */
 const BOW_RAISE_END = 0.5;
 /** Progress the string starts moving at. */
@@ -982,10 +977,10 @@ const BOW_DRAW_START = 0.12;
  * exactly on the release frame is a string that snaps back the instant it
  * reaches tension, which at 14 frames the eye never resolves at all.
  *
- * 0.72 rather than 0.82 because the shorter row is what sets the floor: at 0.82
- * the 14-frame hurried shot reached full draw on the single frame before its
- * loose, which is not a hold. Gate G16 asserts both rows hold for at least
- * `MIN_DRAW_HOLD_FRAMES`.
+ * 0.72 rather than 0.82 because the shorter row sets the floor: at 0.82 the
+ * 14-frame hurried shot reaches full draw on the single frame before its
+ * loose, which is not a hold. Both rows need to hold at full draw for at least
+ * a couple of frames before releasing.
  */
 const BOW_DRAW_END_FRACTION = 0.72;
 /** How far the snap shot pulls, against the aimed shot's full draw. */
@@ -1023,7 +1018,7 @@ const BOW_DRAW_HAND_RECOIL = 0.09;
 /**
  * The bow's shape on one frame of a named shot row.
  *
- * Exported for gate G16, which measures the baked draw rather than trusting the
+ * Exported so the baked draw can be measured directly rather than trusting the
  * table it came from.
  */
 export function bowDrawAt(kind: 'light' | 'heavy', frame: number, frameCount: number): BowDraw {
@@ -1366,12 +1361,11 @@ const SWING_SPECS: Record<MeleeArchetype, { light: SwingSpec | null; heavy: Swin
  * Frames over which an attack is *supposed* to accelerate: from the end of its
  * wind through to just past impact.
  *
- * Gates G4 and G8 skip this window. That is not a loophole — it is the whole
+ * Spacing gates skip this window. That is not a loophole — it is the whole
  * point of the animation. A strike that spaced its frames evenly through the
- * drive would have no anticipation and no impact, which is precisely the "linear
- * sweep, reads as a robot arm" failure this rework exists to fix. The smear
- * crescent is drawn over the same frames, so what the gates exempt is exactly
- * what the art covers.
+ * drive would have no anticipation and no impact, which reads as a robot arm
+ * rather than a strike. The smear crescent is drawn over the same frames, so
+ * what the gates exempt is exactly what the art covers.
  */
 export function accelerationWindow(
   archetype: GoblinArchetype,
@@ -1582,12 +1576,11 @@ function poseFor(
 /**
  * Where the goblin's own tile sits inside its cell, and how big that cell is.
  *
- * These four numbers per archetype were measured by the bake this figure
- * replaces — the widest pose plus padding, quantised, and wide enough that a
- * spinning gore piece clears the corners — and `scripts/parity-figure-sheet.ts`
- * is what proved the painter still fills exactly that cell. The gates re-check
- * that nothing paints against the edge, which is what would say a pose has
- * outgrown them.
+ * These four numbers per archetype are measured from the widest pose plus
+ * padding, quantised, and wide enough that a spinning gore piece clears the
+ * corners; `scripts/parity-figure-sheet.ts` confirms the painter still fills
+ * exactly that cell. The gates re-check that nothing paints against the edge,
+ * which is what would say a pose has outgrown them.
  *
  * They differ per archetype because a war hammer hauled overhead is a much
  * taller thing than a mace held at the hip.

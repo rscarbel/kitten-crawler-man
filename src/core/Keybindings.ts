@@ -53,10 +53,7 @@ export const HOTBAR_ACTIONS = [
 
 const SPACE_KEY = ' ';
 
-/**
- * Reproduces the literals every consumer used before this table existed, so
- * installing the binding layer changed no defaults.
- */
+/** The shipped key for each action, used whenever there is no override. */
 const DEFAULT_BINDINGS: Record<GameAction, readonly string[]> = {
   moveUp: ['w', 'ArrowUp'],
   moveDown: ['s', 'ArrowDown'],

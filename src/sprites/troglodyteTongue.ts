@@ -8,10 +8,8 @@
  * hurt someone. This module is where all three meet.
  *
  * The anchors and the art's reach are *read from the painter* rather than
- * copied from it. They used to be frozen tables, because the runtime could not
- * import a module that lived under `scripts/` and a bake gate compared the two
- * copies on every run; now both sides live under `src/`, so the head cannot
- * move without the tongue moving with it.
+ * duplicated as frozen tables — both sides live under `src/`, so the head
+ * cannot move without the tongue moving with it.
  */
 
 import {

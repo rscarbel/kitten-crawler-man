@@ -1,8 +1,7 @@
 /**
  * QuestDialog — shared paged modal dialog for quest systems. Owns pagination,
  * the advance button, and rendering; callers supply pages and a completion
- * callback. Extracted from CircusQuestSystem so every questline renders
- * dialog the same way.
+ * callback, so every questline renders dialog the same way.
  */
 
 import { pointInRect } from '../utils';

@@ -236,14 +236,14 @@ export const SAFE_ROOM_RUG = 76;
 
 // ── Town building interiors ───────────────────────────────────────────────────
 //
-// A shop, a house and the tower used to be floored and walled in the *dungeon's*
-// generic types — `FloorTypeValue.wood`, `carpet` and `wall` — so whatever art
-// the dungeon's floors happened to be wearing is what a townhouse was built out
-// of. That was invisible while both were hand-extracted frames of one tileset;
-// once each dungeon floor got a palette of its own it meant a house was floored
-// in whichever cellar the player had most recently walked through. These four
-// types are the town's own, so an interior is a decision on the map rather than
-// a side effect of somebody else's.
+// Without these, a shop, a house and the tower would be floored and walled in
+// the *dungeon's* generic types — `FloorTypeValue.wood`, `carpet` and `wall` —
+// so whatever art the dungeon's floors happen to be wearing is what a
+// townhouse would be built out of: with each dungeon floor carrying a palette
+// of its own, a house would end up floored in whichever cellar the player had
+// most recently walked through. These four types are the town's own, so an
+// interior is a decision on the map rather than a side effect of somebody
+// else's.
 //
 // The Desperado Club and the Big Top keep their own floor types (`CLUB_FLOOR`,
 // `SAWDUST_FLOOR`) — but their *walls* change with everything else, because
@@ -316,19 +316,16 @@ export const BOULDER_SMALL = 87;
  * A big boulder: a broad mass drawn **inside** the one tile it blocks, standing
  * about a tile tall so it reaches a few pixels into the row above.
  *
- * It used to be about two tiles wide, overhanging its anchor by roughly four
- * tenths of a tile each side, on the argument that this is what the trees do.
- * The analogy was wrong and the overhang was a real defect: a tree's canopy is
- * above head height and nothing about it says you cannot stand under it, but a
- * boulder's flank is at knee height and says the opposite. Because only the
- * anchor tile is in `NON_WALKABLE_TILE_TYPES`, the overhanging stone sat over
- * walkable ground and the player could stand *inside* the rock — measured at
- * 380–490 solid pixels per variant.
+ * The art is constrained to exactly this footprint, and
+ * `generate-rock-sprites.ts` fails the bake if a single solid pixel escapes it.
+ * A boulder overhanging its anchor the way a tree's canopy does cannot work
+ * here: only the anchor tile is in `NON_WALKABLE_TILE_TYPES`, so any overhang
+ * would sit over walkable ground and let the player stand *inside* the rock. A
+ * tree's canopy is above head height and says nothing about standing under it;
+ * a boulder's flank is at knee height and says the opposite.
  *
- * So the art is now constrained to the footprint, and `generate-rock-sprites.ts`
- * fails the bake if a single solid pixel escapes it. **Widening the art again
- * reintroduces the bug**: making a genuinely wider boulder legitimate needs a
- * multi-tile *block* with one anchor, which `SpriteLoader`'s
+ * **Widening the art reintroduces this bug**: making a genuinely wider boulder
+ * legitimate needs a multi-tile *block* with one anchor, which `SpriteLoader`'s
  * one-geometry-per-type model does not express.
  */
 export const BOULDER_LARGE = 88;
@@ -473,10 +470,11 @@ export const CRAWLER_SIGN = 112;
  * Every ground a town building's interior can be floored in.
  *
  * Grouped because more than one pass has to ask "is this a surface I may stand
- * something on?", and the answer used to be spelled out as a pair of safe-room
- * ids at each site. That was fine while the only safe room was floored in
- * `SAFE_ROOM_FLOOR`; the moment a safe room sat inside an ordinary building the
- * tests stopped matching its floor and the fittings silently stamped nothing.
+ * something on?". Spelling that out as a pair of safe-room ids at each call
+ * site instead would only match while the only safe room was floored in
+ * `SAFE_ROOM_FLOOR`; the moment a safe room sits inside an ordinary building
+ * such a test stops matching its floor and the fittings silently stamp
+ * nothing.
  */
 export const INTERIOR_FLOOR_TYPES: ReadonlySet<number> = new Set([
   INTERIOR_BOARD_FLOOR,

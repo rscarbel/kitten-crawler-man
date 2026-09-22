@@ -872,9 +872,9 @@ const PRONOTUM_KEEL_WIDTH = 0.009;
 /**
  * The pronotum plate, its scars and its keel.
  *
- * Shared by all three views rather than reimplemented for the head-on ones,
- * which is how those quietly lost the keel — the ridge that stops the segment
- * reading as a smooth tube, and takes the neck's whole length cue with it.
+ * Shared by all three views rather than reimplemented per view, so none of them
+ * can end up missing the keel — the ridge that stops the segment reading as a
+ * smooth tube, and carries the neck's whole length cue.
  */
 function paintPronotumPlate(ctx: Ctx, build: MantidBuild, root: Pt, tip: Pt, bow: number): void {
   const half = pronotumHalfWidths(build);
@@ -907,9 +907,9 @@ function drawAbdomen(
   const length = ABDOMEN_LENGTH * foreshorten;
   /**
    * The curl accumulates *along* the abdomen: none at the root, all of it by the
-   * tip. Applied in full at the root and unwound toward the tip instead — which
-   * is what this did — the whole abdomen swings as one rigid piece off a hinge,
-   * which is exactly the tail read the shape exists to avoid.
+   * tip. Applied in full at the root and unwound toward the tip instead, the
+   * whole abdomen would swing as one rigid piece off a hinge, which is exactly
+   * the tail read the shape exists to avoid.
    */
   const spineAngleAt = (t: number): number => baseAngle + p.abdomenCurl * t;
   const pts: Pt[] = [];
@@ -1152,8 +1152,7 @@ function drawHeadAxial(
     for (const side of [-1, 1]) {
       // Turning the face toward +x carries the +x eye *away* from the viewer, so
       // that is the one that narrows and slides in toward the midline. Narrowing
-      // the other instead — which is what this did — reads as the head turning
-      // the wrong way, and is why the pivot never quite landed.
+      // the other instead reads as the head turning the wrong way.
       const away = Math.sign(p.headTurn) === side ? turn : 0;
       drawCompoundEye(
         ctx,
@@ -1190,8 +1189,8 @@ function drawHeadAxial(
  * Deliberately its own shape rather than the front triangle squashed on one
  * axis: from the side a mantis head is a short rounded wedge that is *almost
  * entirely eye*, with the mandibles as a small dark notch at the front-bottom.
- * Squashing the triangle instead gave a narrow slab with a bead on it, which is
- * how the head ended up reading as part of the arm.
+ * Squashing the triangle instead produces a narrow slab with a bead on it,
+ * reading as part of the arm rather than as a head.
  */
 function drawHeadSide(ctx: Ctx, build: MantidBuild, p: MantidPose, neck: Placed): void {
   ctx.save();

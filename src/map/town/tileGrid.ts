@@ -207,11 +207,9 @@ export class TileGrid {
    * `setStanding` records with `??=`, so it only writes a record where there was
    * none — and every water tile already carries one, because carving the river
    * recorded the grass or the track it drowned. A deck laid with `setStanding`
-   * therefore keeps the *pre-river* surface, and `groundMaterialUnder` then draws
+   * would keep the *pre-river* surface, and `groundMaterialUnder` would then draw
    * a strip of road or turf through the middle of the channel, with the water on
-   * either side fringing a bank edge against it. Measured before this method
-   * existed: 184 deck tiles across five maps, **zero** of which resolved to
-   * water.
+   * either side fringing a bank edge against it instead of the deck.
    *
    * Overwriting is right here in a way it is not for a prop: a span tile's
    * surface *is* the water it crosses, and an abutment's *is* the road it
@@ -220,17 +218,15 @@ export class TileGrid {
    * But it must overwrite **once**. A deck is laid repeatedly over the same
    * tiles — the road-crossing scan finds one span per water tile, so a four-wide
    * crossing lays the same deck a dozen times — and a second unconditional write
-   * records `BRIDGE` itself as the tile's ground. `materialForTileType(BRIDGE)`
-   * is undefined and so is the inference behind it, and `drawGroundTile` then
-   * paints *nothing*: a transparent hole under the deck's inset edges. Measured
-   * before this guard: 9 of 545 span tiles across 15 maps, every one of them
-   * written twice.
+   * would record `BRIDGE` itself as the tile's ground. `materialForTileType(BRIDGE)`
+   * is undefined and so is the inference behind it, so `drawGroundTile` would
+   * then paint *nothing*: a transparent hole under the deck's inset edges.
    *
    * `axis` is recorded for the renderer, which is handed a grid and a position
    * rather than a plan — the same reason `fenceStyle` and `flowDir` live on the
-   * tile. Guessing it from the neighbours is what the first two versions did, and
-   * a deck tile in the middle of a wide bridge has deck on all four sides and no
-   * water at all to break the tie.
+   * tile. Guessing it from the neighbours does not work: a deck tile in the
+   * middle of a wide bridge has deck on all four sides and no water at all to
+   * break the tie.
    */
   setBridgeDeck(x: number, y: number, type: number, axis: BridgeAxis): void {
     if (!this.inBounds(x, y)) return;
@@ -239,17 +235,16 @@ export class TileGrid {
     // covers the record *and* the axis, and both need it. A later lay can arrive
     // with the other axis — the minimum-crossing top-up and the connectivity
     // repair both re-span tiles a road crossing already covered, and they pick
-    // the shorter span rather than the same one — which left wide decks with
-    // their columns disagreeing about which way they ran.
+    // the shorter span rather than the same one — which would leave wide decks
+    // with their columns disagreeing about which way they ran.
     if (cell.type === type) return;
     // What the deck spans, which is not always the tile's own type. A bank can
     // be a *prop* — a plank crossing does not require a paved bank, and `TREE`
     // and `RUBBLE` are not in `SOLID_TILE_TYPES`, so an abutment lands on one
-    // about once a map. Recording the prop leaves the deck with a `groundType`
-    // that has no ground material at all, and `drawGroundTile` then paints
-    // nothing: a transparent hole along the deck's exposed edge, which the
-    // frame's black fill shows through. Measured before this: 28 deck tiles over
-    // 25 maps, 21 recording `TREE` and 7 `RUBBLE`.
+    // about once a map. Recording the prop would leave the deck with a
+    // `groundType` that has no ground material at all, and `drawGroundTile`
+    // would then paint nothing: a transparent hole along the deck's exposed
+    // edge, which the frame's black fill shows through.
     //
     // A prop was written with `setStanding`, so it already carries the surface it
     // stands on; that is what the deck spans. Water is the one type that

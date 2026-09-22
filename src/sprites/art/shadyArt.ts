@@ -68,9 +68,9 @@ export function ramp(value: number, start: number, end: number): number {
 /**
  * The cape reads lighter than the coat under it, not darker.
  *
- * Its top is the most sky-facing plane on the figure, so lighting it *below* the
- * vertical coat — which the first pass did — inverts the whole read and the cape
- * stops looking like it is on top of anything.
+ * Its top is the most sky-facing plane on the figure, so lighting it below the
+ * vertical coat's own value would invert the whole read and the cape would stop
+ * looking like it is on top of anything.
  */
 const CLOAK_MID = '#6d6550';
 const CLOAK_LIGHT = '#7d745c';
@@ -83,10 +83,10 @@ const HOOD_LIGHT = '#9c9172';
 /** The hood's front edge, in shadow where it turns into the opening. */
 const HOOD_RIM = '#4a4433';
 /**
- * The sleeves sit between the cape and the coat in value rather than below both.
- * At coat value minus a step they measured seven luminance points off the
- * background — the arms dissolved into the ground at the silhouette edge and
- * vanished outright at a 32px tile.
+ * The sleeves sit between the cape and the coat in value rather than below both:
+ * at coat value they sit too close to the background's own luminance and the
+ * arms dissolve into the ground at the silhouette edge, vanishing outright at a
+ * 32px tile.
  */
 const SLEEVE_MID = '#948a6c';
 const SLEEVE_CUFF = '#776e53';
@@ -128,9 +128,9 @@ const HEAD_CENTRE_Y = -1.53;
 
 /**
  * Broad enough that the hood reads as a head on a body rather than as the top
- * of a post. A blind review of the first bake named the figure a chess pawn: at
- * a hood 81% as wide as the shoulders, that is simply what the outline is.
- * The hood/shoulder ratio wants to be nearer 0.55.
+ * of a post: the hood/shoulder ratio wants to be nearer 0.55. A hood much
+ * narrower than that relative to the shoulders reads as a chess pawn rather
+ * than a figure with a head.
  */
 const SHOULDER_HALF = 0.35;
 const CHEST_HALF = 0.31;
@@ -145,10 +145,9 @@ const HEM_HALF = 0.355;
 /**
  * The shoulder cape stops well short of the hem.
  *
- * It used to be the widest thing on him — wider than the coat below it — which
- * inverts a garment's natural flare and turns the silhouette into a mushroom
- * cap. A blind review named that shape a monk, which is the one character the
- * brief rules out.
+ * A cape wider than the coat below it inverts a garment's natural flare and
+ * turns the silhouette into a mushroom cap, which reads as a robed monk — the
+ * one character this figure must not be mistaken for.
  */
 const MANTLE_HALF = 0.26;
 
@@ -158,11 +157,11 @@ export const ARM_LENGTH = UPPER_ARM_LENGTH + FOREARM_LENGTH;
 /**
  * Arms root well inboard, under the cape.
  *
- * They used to root wide enough that the *sleeves* — not the cape — were the
- * widest thing on the figure, so the coat's hem was 11% narrower than his
- * shoulders and the silhouette stayed a mushroom however far the cape came in.
- * Pulling the roots in also closes the slit between sleeve and cape that was
- * letting the background through his armpit.
+ * Rooted any wider, the sleeves would become the widest thing on the figure —
+ * wider than the coat's own hem — and the silhouette would stay a mushroom
+ * however far the cape comes in. Rooting them inboard also closes the slit
+ * between sleeve and cape that would otherwise let the background show through
+ * his armpit.
  */
 const ARM_ROOT_HALF = 0.235;
 /** The shoulder joint hangs below the shoulder line, where a deltoid would. */
@@ -180,8 +179,8 @@ const SLEEVE_WRIST_WIDTH = 0.042;
  */
 const HAND_LENGTH = FOREARM_LENGTH * 0.55;
 /**
- * As wide as the forearm it ends, not narrower. A hand at 0.7× its own sleeve
- * reads as a pebble stuck on the cuff — the blind review named them beads.
+ * As wide as the forearm it ends, not narrower. A hand notably narrower than
+ * its own sleeve reads as a pebble stuck on the cuff rather than as a hand.
  */
 const HAND_WIDTH = HAND_LENGTH * 1.0;
 
@@ -292,10 +291,9 @@ const RESTING_HAND_SPREAD = 0.245;
 /**
  * A permanent cock of the hood and a dropped shoulder, present in *every* frame.
  *
- * A blind review measured the figure bilaterally symmetric to within a pixel and
- * called it out: a furtive man cannot be built out of a symmetric silhouette
- * plus a sway, because the symmetry is what the eye reads first and the sway is
- * what it reads last.
+ * A furtive man cannot be built out of a symmetric silhouette plus a sway,
+ * because the symmetry is what the eye reads first and the sway is what it
+ * reads last.
  */
 const RESTING_HOOD_COCK = deg(4);
 const RESTING_SHOULDER_TILT = deg(1.2);
@@ -617,9 +615,9 @@ function drawCloak(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
   const hipY = skel.hipCentre.y;
   // Pinned to the floor, unlike every other height here, which ride the slouch
   // down. A coat hangs from the shoulders and pools at a fixed hem — letting it
-  // descend with the body meant the talk row's deeper lean drove the hem *over
-  // the boots* and four pixels below the ground line the other rows establish,
-  // so his feet vanished and he sank into the tile the moment a dialog opened.
+  // descend with the body would drive the hem *over the boots* on the talk
+  // row's deeper lean, below the ground line the other rows establish, sinking
+  // his feet into the tile the moment a dialog opens.
   const hemY = HEM_Y;
 
   ctx.beginPath();
@@ -730,13 +728,11 @@ function drawBelt(ctx: Ctx, skel: ShadySkeleton): void {
  * His boots, pinned to the ground.
  *
  * Deliberately *not* offset by the pose's sway: a weight shift moves the
- * pelvis over the feet, it does not slide the feet across the flagstones. The
- * first bake let them travel two pixels and the whole figure skated in place.
+ * pelvis over the feet, it does not slide the feet across the flagstones.
  */
 function drawBoots(ctx: Ctx): void {
   // Pinned in Y as well as X. A slouch compresses the body over the feet; it
-  // does not push the feet into the floor — and letting it do so sank him
-  // through the bottom of his own frame the moment the talk row leaned in.
+  // does not push the feet into the floor.
   const y = GROUND_Y;
   for (const spread of [-BOOT_SPREAD, BOOT_SPREAD]) {
     const x = spread;
@@ -749,9 +745,9 @@ function drawBoots(ctx: Ctx): void {
 /**
  * How far down the cape's top edge falls before it reaches its full width.
  *
- * Generous, because the silhouette used to jump from 37px to 69px between two
- * adjacent rows — a hard T with no trapezius at all. The widening now spreads
- * over several rows.
+ * Generous, so the widening spreads over several rows rather than jumping the
+ * silhouette abruptly wider between two adjacent rows — a hard step there reads
+ * as a T with no trapezius at all.
  */
 const MANTLE_SHOULDER_DROP = 0.19;
 const MANTLE_HEM_DIP = 0.1;
@@ -795,24 +791,23 @@ const COWL_TURN_TRAVEL = 0.06;
  */
 function drawMantle(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
   const lag = pose.hoodLag * MANTLE_LAG_TRAVEL;
-  // The whole cape trails, not just its collar. Applying the lag to the control
-  // points alone left the cape measuring dead in phase with the shoulders — a
-  // rigid shell, when it is the one garment on him that is obviously cloth.
+  // The whole cape trails, not just its collar: lagging only the control points
+  // would leave the cape moving in phase with the shoulders, a rigid shell,
+  // when it is the one garment on him that is obviously cloth.
   const sx = skel.shoulderCentre.x + lag * MANTLE_BODY_LAG_SHARE;
   const topY = MANTLE_TOP_Y + (skel.hipCentre.y - HIP_Y);
   const hemY = MANTLE_HEM_Y + (skel.hipCentre.y - HIP_Y);
 
   // The outer ends sit well below the collar, so the top edge is two slopes
   // rather than one flat run. A level top on a cape this wide reads as a
-  // countertop, and it was the second-largest reason the first bake named as an
-  // obelisk.
+  // countertop rather than as a shoulder line.
   const collarHalf = MANTLE_HALF * MANTLE_COLLAR_FRACTION;
   const tipY = topY + MANTLE_TIP_DROP;
   ctx.beginPath();
   ctx.moveTo(sx - collarHalf + lag, topY);
   // Curved into the shoulder point rather than cornered at it: a straight run
-  // out to the tip left a triangular spur at each upper corner that read as a
-  // broken pixel, and detached outright when the arm swung away from it.
+  // out to the tip leaves a triangular spur at each upper corner that reads as
+  // a broken pixel, and detaches outright when the arm swings away from it.
   ctx.quadraticCurveTo(sx - MANTLE_HALF + lag, topY + MANTLE_SHOULDER_DROP, sx - MANTLE_HALF, tipY);
   ctx.quadraticCurveTo(
     sx - MANTLE_HALF,
@@ -896,7 +891,7 @@ function drawMantle(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
   // A centre seam and one fold either side of it. Without them the lit plane
   // bakes as a single hard-edged pale ellipse across his chest, and at a 32px
   // tile that oval — not the hood, not the coat — is the shape the eye takes
-  // first: a blind review read it as a bib, a carapace and a shield.
+  // first, reading as a bib or a breastplate rather than as cloth.
   ctx.strokeStyle = MANTLE_DARK;
   ctx.lineWidth = MANTLE_SEAM_WIDTH;
   ctx.setLineDash([]);
@@ -958,15 +953,14 @@ const NECK_SHADOW_TAPER = 0.62;
  * The hood and the void inside it.
  *
  * Painted as four shapes: the shell, one flat lit band, a shadowed inner rim,
- * and the void. Two properties are load-bearing and both came out of a blind
- * review of the first bake:
+ * and the void. Two properties are load-bearing:
  *
- * - **The shading is banded, not a gradient.** The first hood was a smooth
- *   radial falloff with a specular hotspot at twice its own base value, and it
- *   read as a motorcycle helmet standing next to a shelf of baked pixel sheets.
+ * - **The shading is banded, not a gradient.** A smooth radial falloff with a
+ *   specular hotspot reads as a motorcycle helmet next to the rest of this
+ *   flat-shaded set.
  * - **The void opens downward.** A dark ellipse with cloth on all four sides is
- *   a black disc stuck on a shape — and, worse, the lit lip drawn back over its
- *   top turned into a forehead, which made the rest of the darkness a mouth.
+ *   a black disc stuck on a shape, and a lit lip drawn back over its top turns
+ *   into a forehead, which makes the rest of the darkness read as a mouth.
  *   A real cowl is open at the bottom: the darkness runs off the hood's lower
  *   edge into the shadow at his neck, so the shape is a U and never a face.
  */
@@ -980,7 +974,7 @@ function drawHood(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
   ctx.rotate(pose.headTilt);
 
   // Shell: a rounded crown that drapes back over the shoulder rather than
-  // meeting it in a notch — the notch is what made the first bake a shark fin.
+  // meeting it in a notch — a notch there reads as a shark fin.
   ctx.beginPath();
   ctx.moveTo(-HOOD_RX, HOOD_RY * HOOD_JAW_RATIO);
   ctx.quadraticCurveTo(-HOOD_RX, -HOOD_RY, -HOOD_PEAK_OFFSET, -HOOD_RY - HOOD_PEAK_LIFT);
@@ -1013,7 +1007,7 @@ function drawHood(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
 
   // Shadowed rim, drawn under the void so the cloth turns into the opening
   // instead of ending at it. Under, never over: a lip painted on top of the
-  // darkness is the forehead that a blind review read as a face.
+  // darkness reads as a forehead, turning the void into a face.
   ctx.beginPath();
   ctx.ellipse(
     openX,

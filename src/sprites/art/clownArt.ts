@@ -5,16 +5,14 @@
  * Three viewpoints share the one rig (see {@link ClownView}). The skeleton is
  * identical in all three — a head-on figure's "near" limb is simply its right
  * one — so only the head painter, the depth shading and the way a spine lean
- * foreshortens differ. The troupe's original three clowns predate the views and
- * bake as `'profile'`, which is the default and is bit-for-bit what they were.
+ * foreshortens differ. `'profile'` is the default view, chosen because it
+ * reproduces the troupe's original three clowns' baked art bit-for-bit.
  *
  * All three share one skeletal rig so their silhouettes read as members of the
  * same troupe: a pelvis, a leaning spine, a head on a neck, and four two-bone
  * limbs solved by inverse kinematics from foot/hand targets. Solving the limbs
  * from targets rather than from raw joint angles is what keeps hands and feet
- * where the animation wants them while the elbow and knee stay attached — the
- * previous hand-drawn clowns posed each segment independently, which is why
- * their limbs floated away from the body.
+ * where the animation wants them while the elbow and knee stay attached.
  *
  * Everything here works in *tile units*: 1.0 is one dungeon tile. The caller
  * scales into pixels once, so a sheet can be regenerated at any resolution.
@@ -337,7 +335,7 @@ export interface ClownStyle {
  * The layout constants below are tuned for a clown whose head is a prop; a
  * figure meant to be frightening needs a smaller nose and larger eyes on the
  * same skull. Every field is optional and every default is 1 or 0, so a style
- * that omits this is drawn exactly as it was before the hook existed.
+ * that omits this renders with the shared default layout unchanged.
  */
 export interface ClownFaceTuning {
   readonly eyeScale?: number;

@@ -7,17 +7,14 @@ const WALKING_VOLUME = 0.25;
 /**
  * The wading loop has to beat the river bed, not merely the footsteps it
  * replaces, and that is a much higher bar: both are broadband water noise, so
- * they mask each other almost perfectly and a few dB of difference is inaudible
- * rather than quiet. Measured effective levels (file loudness + this gain): the
- * Tuned by ear over several passes and finally set by measurement: the river bed
- * lands at an effective -22.2 dB, and this puts the wading loop 3 dB under it,
- * at -25.2. Under rather than over, which is the opposite of where it started —
- * the loop only has to be *distinguishable* from the bed, and both being
- * broadband water noise it reads as part of the river rather than as a separate
- * sound when it sits above.
+ * they mask each other almost perfectly and a few dB of difference is
+ * inaudible rather than quiet.
  *
- * The number is not comparable to earlier values: the file itself was remastered
- * 8 dB louder partway through. Only the effective levels are.
+ * Effective level (file loudness + this gain): the river bed sits at an
+ * effective -22.2 dB, and this keeps the wading loop 3 dB under it, at -25.2.
+ * Under rather than over — sitting above the bed would read as the loop
+ * replacing the river rather than as a sound distinguishable from it, since
+ * both are the same broadband water noise.
  */
 const WADING_VOLUME = 0.32;
 /**
@@ -334,7 +331,6 @@ export class AudioManager {
   }
 
   private onContextUnlocked(): void {
-    // Fire one-time callbacks registered via onRunning().
     const callbacks = this.runningCallbacks.splice(0);
     for (const cb of callbacks) cb();
 

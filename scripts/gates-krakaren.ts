@@ -1012,11 +1012,10 @@ function gateDescribedCreature(subject: Subject): void {
  * How high the risen slam tentacle must stand above the floor, in tiles, on
  * *every* frame of the loom.
  *
- * Frozen here rather than taken as a share of the art's own `SLAM_HEIGHT`, which
- * is what this gate used to do and what made it unfailable against the defect it
- * names: that constant is the arc length the painter draws the tentacle at, so a
- * share of it moved the pass mark down in step with a shortened tentacle and the
- * gate stayed green at any height. Measured on the shipped row, which rises
+ * Frozen here rather than taken as a share of the art's own `SLAM_HEIGHT`:
+ * that constant is the arc length the painter draws the tentacle at, so a
+ * share of it would move the pass mark down in step with a shortened tentacle
+ * and stay green at any height. Measured on the shipped row, which rises
  * 2.328–2.578 tiles; her own body crests at 2.33–2.38 tiles, so a loom under
  * this floor has stopped clearing the boss it telegraphs over.
  */
@@ -1154,14 +1153,13 @@ function gateGoreDistinctness(subject: Subject): void {
  * silence: `BodyPartGoreSystem` skips a state the figure cannot paint.
  *
  * There are only two parties here, not three. A clause comparing the painter's
- * list against "the figure's declared states" used to sit beside this one, and
- * mutation testing showed it could not fail: `KRAKAREN_GORE_STATES` is
- * `krakarenGorePieces().map(p => p.state)` and the figure's states are built
- * from the same `krakarenGorePieces()`, so it compared one list against itself
- * — reordering the painter's pieces moved both sides together and it stayed
- * green while this clause caught the drift. Nothing is lost by its absence:
- * were those two ever to diverge, `paintSpecFrame` throws "paints no state"
- * on the first gore cell the gates bake.
+ * list against "the figure's declared states" cannot fail: `KRAKAREN_GORE_STATES`
+ * is `krakarenGorePieces().map(p => p.state)` and the figure's states are built
+ * from the same `krakarenGorePieces()`, so such a comparison would compare one
+ * list against itself and stay green even if the painter's pieces were
+ * reordered. Nothing is lost by leaving it out: were those two ever to
+ * diverge, `paintSpecFrame` throws "paints no state" on the first gore cell
+ * the gates bake.
  */
 interface GoreContract {
   readonly subject: Subject;

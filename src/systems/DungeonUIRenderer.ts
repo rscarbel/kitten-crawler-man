@@ -1,6 +1,6 @@
 /**
- * DungeonUIRenderer — stateless rendering functions extracted from DungeonScene.
- * Each function is a pure draw call with no side effects on game state.
+ * DungeonUIRenderer — stateless rendering functions for the dungeon HUD. Each
+ * function is a pure draw call with no side effects on game state.
  */
 
 import { TILE_SIZE } from '../core/constants';
@@ -452,7 +452,6 @@ export function renderMobileButtons(
   }
   drawSmallBtn(touch.bagBtnRect, 'Bag', state.inventoryPanel.isOpen);
 
-  // Mongo summon button — above the switch button when cat is active
   if (state.mongoSystem.canShow && state.cat.isActive) {
     const summonY = btnY - MOBILE_BTN_H - MOBILE_BUTTON_GAP;
     touch.summonBtnRect = state.mongoSystem.renderSummonButton(
@@ -638,7 +637,6 @@ export function renderFollowerButton(
     ...(nonDefault ? BUTTON_PRESETS.mobileActive : BUTTON_PRESETS.mobile),
   });
 
-  // Show which character is the companion
   const companionEmoji = humanIsActive ? '🐱' : '🧍';
   ctx.save();
   ctx.textAlign = 'center';

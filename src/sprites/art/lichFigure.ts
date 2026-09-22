@@ -897,9 +897,9 @@ const RIM_MASK_CUTOFF = 128;
  *
  * The silhouette is thresholded to a hard mask, dilated by sampling a ring of
  * offsets, punched back out with its own mask to leave a halo, and then faded
- * across so the light reads as coming from one side. Applied per form instead —
- * which is what this file did first — every internal seam gets an edge and the
- * creature reads as a wireframe.
+ * across so the light reads as coming from one side. Applied per form instead,
+ * every internal seam would get an edge and the creature would read as a
+ * wireframe.
  */
 function paintWithEdgeLight(
   target: CanvasSurface,

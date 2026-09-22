@@ -158,11 +158,11 @@ const MOON_BITE_OFFSET_FRACTION = 0.62;
 const drawMoon: EmblemPainter = (ctx, box) => {
   const r = box.ry * MOON_RADIUS_FRACTION;
   const biteX = box.cx + r * MOON_BITE_OFFSET_FRACTION;
-  // A crescent is one disc *minus* another, which even-odd over two discs does
-  // not give you — it fills the symmetric difference, so the earlier version
-  // drew both limbs and read as an eclipse. Clipping to "the box, minus the bite
-  // disc" is the subtraction, and unlike overpainting the bite in the board's
-  // colour it does not have to know what is underneath.
+  // A crescent is one disc *minus* another; even-odd over two discs instead
+  // fills their symmetric difference, which draws both limbs and reads as an
+  // eclipse. Clipping to "the box, minus the bite disc" is the subtraction,
+  // and unlike overpainting the bite in the board's colour it does not have
+  // to know what is underneath.
   ctx.save();
   ctx.beginPath();
   ctx.rect(box.cx - box.rx, box.cy - box.ry, box.rx * 2, box.ry * 2);
@@ -489,11 +489,10 @@ const drawCauldron: EmblemPainter = (ctx, box) => {
 /**
  * A smith's hammer: a heavy head on a haft, laid on the diagonal.
  *
- * **This is the third device on The Rusty Anvil's sign, and the first that reads
- * at the size it is drawn.** An anvil is a face, a horn, a waist and a foot — and
- * a symmetric face over a symmetric foot is a capital T whatever happens between
- * them, which is what two attempts at it produced. The horn is the only cue that
- * distinguishes the shape and it is the first thing to vanish at 18 px.
+ * An anvil is a face, a horn, a waist and a foot — and a symmetric face over a
+ * symmetric foot is a capital T whatever happens between them. The horn is the
+ * only cue that distinguishes the shape and it is the first thing to vanish at
+ * 18 px, which is why The Rusty Anvil's sign carries a hammer instead.
  *
  * A hammer needs no fine detail: a thick bar and a thin one, crossing at an angle,
  * with the mass all at one end. That asymmetry survives being three pixels wide.

@@ -610,9 +610,9 @@ function drawPigEye(ctx: Ctx, unit: number, mood: MemberMood, seed: number): voi
   const ry = unit * 0.26 * open;
 
   // A ring of swollen hide around the socket, so the eye is set *into* the flesh.
-  // Without it a black eye on pink flesh is a hole in the ball — which is exactly
-  // what the art this replaces looked like. Painted in the hide's own mid tone
-  // rather than a pale one: a bright ring turns a pig's eye into a cartoon's.
+  // Without it a black eye on pink flesh is a hole in the ball. Painted in the
+  // hide's own mid tone rather than a pale one: a bright ring turns a pig's eye
+  // into a cartoon's.
   fillEllipse(ctx, 0, 0, rx * 1.42, Math.max(ry * 1.5, unit * 0.07), HIDE.mid);
   fillEllipse(ctx, 0, 0, rx * 1.2, Math.max(ry * 1.26, unit * 0.055), HIDE.dark);
   if (ry <= unit * 0.03) return;

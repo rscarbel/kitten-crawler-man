@@ -1,9 +1,8 @@
 /**
  * The Protective Shell's art gates.
  *
- * These three effects have no baked sheet to look at any more, so everything
- * the old bake would have shown a reviewer is asserted here against cells
- * painted from the figures themselves. The shell is almost entirely a
+ * These gates run against cells painted from the figures themselves. The
+ * shell is almost entirely a
  * *relationship between frames* — a ring that grows, a border that pulses, a
  * ripple that fades as it travels — so most of what follows measures a row
  * across its whole length rather than any single cell.

@@ -150,13 +150,6 @@ const IDLE_FOOT_SPREAD = 0.16;
 const IDLE_SIDE_FOOT_LEAD = 0.085;
 
 /**
- * Puts the mace on the right shoulder for a locomotion or idle pose.
- *
- * The haft leans *outboard*, away from the helm. Leaned the other way it lies
- * diagonally across the visor and the head sits behind the helm's own corner:
- * from the front the knight then appears to be carrying nothing at all.
- */
-/**
  * How far the shouldered mace rocks against the stride, and how far behind the
  * torso's own bob its head lags. Small numbers: it is fifteen pounds of steel
  * braced on a pauldron, not a swinging arm. Without either, the upper body is
@@ -165,6 +158,13 @@ const IDLE_SIDE_FOOT_LEAD = 0.085;
 const CARRY_ROCK = deg(7);
 const CARRY_HAND_BOB = 0.018;
 
+/**
+ * Puts the mace on the right shoulder for a locomotion or idle pose.
+ *
+ * The haft leans *outboard*, away from the helm. Leaned the other way it lies
+ * diagonally across the visor and the head sits behind the helm's own corner:
+ * from the front the knight then appears to be carrying nothing at all.
+ */
 function shoulderTheMace(pose: KnightPose, view: KnightView, rock = 0): void {
   const lean = CARRY_MACE_TILT;
   pose.rightHand = pt(
@@ -777,25 +777,24 @@ export function isDeclaredTipSpike(rowName: string, fromFrame: number): boolean 
 // ── Sweep ────────────────────────────────────────────────────────────────────
 
 /**
- * The arc sweep: the mace is whirled twice round the helm to wind up, then
+ * The arc sweep: the mace is whirled once round the helm to wind up, then
  * levelled and driven through a full turn at torso height. The whirl is what
  * the ground ring's fade is timed against — it has to be visibly a wind-up and
  * not just a fast swing.
- */
-/**
+ *
  * One turn round the helm, not two. Two spun the head through ninety degrees
  * per frame, which at any playback rate is a strobe rather than a swing — the
  * eye cannot follow an arc that jumps more than about a sixth of a turn a frame.
  */
 const SWEEP_WHIRL_TURNS = 1;
+/** Where round the orbit the whirl begins, in turns. */
+const WHIRL_START_TURN = 0.14;
 /**
  * How far from the body the *grip* orbits. The head then reaches a further
  * `MACE_REACH` beyond it, so the arc the player has to back out of is the sum
  * of the two. Held small enough that the arm never has to over-reach for it:
  * a clamped arm stops orbiting and the sweep stalls on one side.
  */
-/** Where round the orbit the whirl begins, in turns. */
-const WHIRL_START_TURN = 0.14;
 const SWEEP_WHIRL_RADIUS = 0.2;
 const SWEEP_LEVEL_RADIUS = 0.3;
 const SWEEP_PLANT_CROUCH = 0.13;
@@ -963,7 +962,6 @@ function punchPose(t: number, view: KnightView): KnightPose {
 /** How far the shouldered mace rocks back to clear the jab, in `rock` units. */
 const PUNCH_MACE_CLEARANCE = 2.2;
 
-/** How high the jabbing fist rides, measured from the shoulder line. */
 /**
  * How far below the shoulder line the jabbing fist lands. Chest height, not
  * shoulder height: level with the shoulder it arrives on top of the mace hand

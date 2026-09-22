@@ -17,13 +17,14 @@ import type { TilePoint, TownPlan } from './townPlan';
  *
  * A prop's own type replaces the ground's, and the renderers then infer a floor
  * from the first cardinal neighbour they find — a probe that starts to the south
- * and skips anything that is not floor. The west side-gate torch stands on the
- * verge strip inside the wall with the fence south of it, the wall west of it and
- * **Market Street's cobble to the north**, so it drew a full tile of cobble
- * jutting down into the verge. Its mirror at the east gate has the identical
- * neighbourhood and drew verge — only because the tile south of it happened to be
- * planted that generation. Two identical props, opposite results, decided by a
- * dice roll in `plantGardens`; recording the surface removes the dice.
+ * and skips anything that is not floor. Without a recorded surface, the west
+ * side-gate torch — standing on the verge strip inside the wall with the fence
+ * south of it, the wall west of it and **Market Street's cobble to the
+ * north** — would draw a full tile of cobble jutting down into the verge. Its
+ * mirror at the east gate has the identical neighbourhood but would draw verge
+ * instead, purely depending on whether `plantGardens` happens to plant the tile
+ * south of it that generation. Two identical props, opposite results, decided by
+ * a dice roll; recording the surface removes the dice.
  */
 export function paintTownProps(grid: TileGrid, plan: TownPlan): void {
   for (const prop of plan.props) {

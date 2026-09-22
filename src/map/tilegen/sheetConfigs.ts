@@ -18,12 +18,11 @@ export interface GroundSheetConfig {
    * Seed slot of this sheet's first material; the rest run consecutively from
    * it, and the slot is all that decides a material's structure seed.
    *
-   * Written down rather than derived from the sheet's position in this array,
-   * which is what it used to be. Splitting the dungeon's materials across three
-   * sheets moved every Bopca material to a different position and so regenerated
-   * the safe room's floor — art that had already been reviewed — for no reason
-   * other than that a sheet had been added above it. Slots are wide apart so a
-   * sheet can grow without colliding with the next.
+   * Written down explicitly rather than derived from the sheet's position in
+   * this array: deriving it from position means adding a sheet above another
+   * shifts every later material's seed, silently regenerating art that has
+   * already been reviewed. Slots are wide apart so a sheet can grow without
+   * colliding with the next.
    */
   readonly seedSlotBase: number;
 }

@@ -1079,9 +1079,8 @@ export function validateProgression(
       // The concourse is a ring of floor inside reserved rock whose only ways in
       // are two links down into the antechamber. Get those wrong by a tile and it
       // becomes a band of floor nothing in the game can ever walk on — invisible
-      // in a screenshot, invisible in the invariants above, and exactly the failure
-      // the outer ring used to be suppressed to avoid. So the whole footprint is
-      // walked: every carved tile the arena owns has to be reachable.
+      // in a screenshot and invisible in the invariants above. So the whole
+      // footprint is walked: every carved tile the arena owns has to be reachable.
       const orphan = firstUnreachableFloor(grid, fullFlood, arenaReserveRect(arena.centre));
       if (orphan !== null) {
         fail(

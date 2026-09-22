@@ -10,7 +10,7 @@
  * The figure is posed by *targets*, not joint angles: a pose says where the
  * feet and hands are and {@link solveTwoBone} finds the knee and elbow. That is
  * the single reason limbs stay welded to the body across a swing — posing each
- * segment independently is what made the previous goblins' arms float.
+ * segment independently lets an arm float free of the body it is attached to.
  *
  * Coordinates are tile units: 1.0 is one dungeon tile. The origin is the point
  * between the feet, +X is the direction the goblin faces and -Y is up. The
@@ -292,11 +292,11 @@ export function fillCapsule(
  * A starved limb is a thin bone between wide ends, so every segment narrows to a
  * waist at its middle and widens again at both joints.
  *
- * The first cut instead drew a constant-width capsule with an oversized disc at
- * the joint, and because that disc stuck out past the capsule it carried a ring
- * of its own outline — four ball joints per limb, which read as an artist's
- * mannequin. Shaping the bone rather than bolting on a knuckle cannot produce
- * that failure: the joint here is never wider than the segment that meets it.
+ * A constant-width capsule with an oversized disc at the joint sticks out past
+ * the capsule and carries a ring of its own outline — four ball joints per limb,
+ * which reads as an artist's mannequin. Shaping the bone rather than bolting on
+ * a knuckle avoids that: the joint here is never wider than the segment that
+ * meets it.
  */
 const LIMB_WAIST_FRACTION = 0.66;
 /** The joint end of a segment, relative to its root. */
@@ -433,11 +433,11 @@ export interface GoblinGear {
   /**
    * Arrow quiver slung across the back.
    *
-   * The archer's whole design job is to be pickable out of a crowd, and a blind
-   * silhouette review found it failing at exactly that: walking and idling, with
-   * the bow hanging along the body, it read as "hunched creature with a tail".
-   * Shafts standing proud of the shoulder are the one cue that survives a 32-px
-   * pure-black silhouette on every frame of every row.
+   * The archer's whole design job is to be pickable out of a crowd. Walking and
+   * idling, with the bow hanging along the body, a quiver with no shafts showing
+   * reads as "hunched creature with a tail". Shafts standing proud of the
+   * shoulder are the one cue that survives a 32-px pure-black silhouette on
+   * every frame of every row.
    */
   readonly quiver: boolean;
 }
@@ -883,9 +883,8 @@ function drawHand(
   const reach = r * FINGER_LENGTH_FRACTION * lerp(0.7, 1, open);
   const curl = lerp(deg(78), 0, open);
   // The thumb tucks in as the hand closes. Thrown out to the side on a fist
-  // wrapped round a haft — which is what it used to do, because only the fingers
-  // read `open` — it reads as a stray sixth finger stuck to the weapon rather
-  // than as part of the hand.
+  // wrapped round a haft, it reads as a stray sixth finger stuck to the weapon
+  // rather than as part of the hand.
   const thumbFan = lerp(THUMB_TUCKED_FAN, THUMB_OPEN_FAN, open);
   const thumbLength = r * THUMB_LENGTH_FRACTION * lerp(THUMB_TUCKED_FRACTION, 1, open);
   const digits: ReadonlyArray<readonly [number, number, number]> = [
@@ -1263,9 +1262,12 @@ const QUIVER_LENGTH_FRACTION = 0.66;
 const QUIVER_HALF_WIDTH_FRACTION = 0.17;
 /** How far a shaft stands past the quiver's mouth, as a fraction of its length. */
 const QUIVER_SHAFT_OVERHANG = 0.85;
-/** Lean of the whole bundle off vertical — back and up, never down. */
-// Near vertical. At 28° the tube lay back along the spine and two blind reviews
-// named it a tail; standing it up is what turns the same object into ammunition.
+/**
+ * Lean of the whole bundle off vertical — back and up, never down.
+ *
+ * A quiver laid back along the spine reads as a tail; standing it up near
+ * vertical is what turns the same object into ammunition.
+ */
 const QUIVER_TILT = deg(10);
 /** Centres the shaft fan on the quiver's mouth. */
 const QUIVER_SPREAD_CENTRE = 0.5;
@@ -1439,10 +1441,10 @@ function drawEar(
   ).sort((a, b) => a.at - b.at);
 
   /**
-   * The notches are cut into the traced path rather than painted over it. The
-   * first cut painted them as dark blobs on top, which read as rivets and left
-   * the silhouette perfectly smooth — so the one feature the ear was supposed to
-   * contribute at 32 px contributed nothing.
+   * The notches are cut into the traced path rather than painted over it.
+   * Painted on top as dark blobs, they read as rivets and leave the silhouette
+   * perfectly smooth — the one feature the ear is supposed to contribute at
+   * 32 px would contribute nothing.
    */
   const traceEar = (grow: number): void => {
     ctx.beginPath();
@@ -1573,9 +1575,8 @@ function drawEye(
 /**
  * A lipless slot with two asymmetric fangs.
  *
- * An even row of rectangular teeth is a jack-o'-lantern grin and was the single
- * cutest thing on the first cut of this figure. Two teeth breaking an otherwise
- * dark line reads as a mouth that bites.
+ * An even row of rectangular teeth reads as a jack-o'-lantern grin. Two
+ * mismatched teeth breaking an otherwise dark line reads as a mouth that bites.
  */
 function drawMouth(ctx: Ctx, style: GoblinStyle, mouthOpen: number): void {
   const p = style.proportions;
@@ -1610,7 +1611,7 @@ function drawMouth(ctx: Ctx, style: GoblinStyle, mouthOpen: number): void {
   ctx.clip();
   ctx.fillStyle = toothEnamel;
   // Deliberately mismatched: one long lower fang forward, one short upper one
-  // set back. Symmetry here is what made the first cut read as a grin.
+  // set back. Symmetric teeth here read as a grin.
   const HANGING_FANG_X = 0.3;
   const HANGING_FANG_WIDTH = 0.28;
   const SNAGGLE_X = -0.5;
@@ -1643,8 +1644,8 @@ function drawMouth(ctx: Ctx, style: GoblinStyle, mouthOpen: number): void {
  * The hooked nose, drawn over the face so its overhang breaks the skull line.
  *
  * A hook is a convex bridge over a *concave* underside meeting at a downturned
- * tip. Drawn as a plain wedge instead — which is what the first cut did — the
- * head reads as a bird's, and no amount of ear tuning fixes that.
+ * tip. Drawn as a plain wedge, the head reads as a bird's, and no amount of ear
+ * tuning fixes that.
  */
 function drawNose(ctx: Ctx, style: GoblinStyle): void {
   const p = style.proportions;
@@ -2207,23 +2208,21 @@ function goblinPalette(skin: Ramp): GoblinPalette {
  * Skin `mid` luminances are spread 94–128, and every ramp spans from roughly a
  * third of its `mid` at `shadow` to nearly double at `rim`.
  *
- * The span is the point. An earlier pass chased separation from the floor by
- * dropping the whole set to luminance 66, which bought the contrast and turned
- * the goblins into dark silhouettes — at 32 px with the renderer's 0.5×
- * downscale there was nothing inside the outline to see. Contrast *within* the
+ * The span is the point. Chasing separation from the floor by dropping the
+ * whole set to a uniform low luminance buys contrast against the ground but
+ * turns the goblins into dark silhouettes — at 32 px with the renderer's 0.5×
+ * downscale there is nothing inside the outline to see. Contrast *within* the
  * figure is what makes a face and a fist survive that downscale, and a narrow
  * ramp has none to give however dark you push it.
  *
- * The spread matters as much as the values. Floors run 101 through 185, so there
- * is no single luminance that clears all of them — setting the four archetypes
- * to one value simply picks a floor for all four to disappear against at once,
- * which is what happened when they were briefly levelled at 104 and every one of
- * them landed within three points of grass. Spread out, no single floor can take
- * more than one of them, and the dark outline carries the rest.
+ * The spread matters as much as the values. Floors run 101 through 185, so
+ * there is no single luminance that clears all of them — setting the four
+ * archetypes to one value simply picks a floor for all four to disappear
+ * against at once. Spread out, no single floor can take more than one of them,
+ * and the dark outline carries the rest.
  *
- * Do not flatten these ramps to buy luminance contrast back — that trade has
- * been made once and it produced four dark silhouettes with nothing legible
- * inside them.
+ * Do not flatten these ramps to buy luminance contrast back — a uniform low
+ * value produces four dark silhouettes with nothing legible inside them.
  */
 const SWORD_SKIN: Ramp = {
   shadow: '#20261c',
@@ -2353,11 +2352,9 @@ const AXE_STYLE: GoblinStyle = {
 };
 
 /**
- * Short and wiry, not heavy. This one was originally pot-bellied, and it was cut
- * twice on Ryan's note that it still read as fat — it is now the *shortest* of
- * the four rather than the widest, and carries barely more bulk than the sword
- * goblin. What identifies it at 32 px is no longer its mass: it is the shortest
- * ears in the set (0.24) and the flanged head of the mace.
+ * Short and wiry, not heavy — the shortest of the four archetypes and barely
+ * bulkier than the sword goblin. What identifies it at 32 px is not its mass:
+ * it is the shortest ears in the set (0.24) and the flanged head of the mace.
  */
 const MACE_BUILD: GoblinProportions = {
   thighLength: 0.27,
@@ -2438,10 +2435,10 @@ const BOW_BUILD: GoblinProportions = {
   shinLength: 0.32,
   footHeight: 0.05,
   // Long torso on narrow hips, and shoulders nearly twice the hips' width. Lean
-  // is not the same as *tubular*: at equal shoulder and hip width the figure had
-  // no chest for a bow arm to hang off, and a blind review read the whole thing
-  // as a pipe. Wide-and-flat is also the shape nothing else in the goblin set
-  // has — the other four are wide *and* thick.
+  // is not the same as *tubular*: at equal shoulder and hip width the figure has
+  // no chest for a bow arm to hang off and reads as a pipe. Wide-and-flat is also
+  // the shape nothing else in the goblin set has — the other four are wide *and*
+  // thick.
   torsoLength: 0.45,
   neckLength: 0.07,
   headRadius: 0.175,
@@ -2452,8 +2449,8 @@ const BOW_BUILD: GoblinProportions = {
   upperArmLength: 0.46,
   forearmLength: 0.5,
   // Legs a good deal thicker than the arms, and not only for looks: the gore
-  // sheet cuts a limb straight off these numbers, and at 0.115 against 0.1 the
-  // severed arm and the severed leg were the same 16-px blob (gate G9c).
+  // sheet cuts a limb straight off these numbers, and at equal widths the
+  // severed arm and the severed leg render as the same 16-px blob.
   legWidth: 0.135,
   armWidth: 0.09,
   handRadius: 0.092,
@@ -2470,8 +2467,8 @@ const BOW_STYLE: GoblinStyle = {
   // what makes the walk and idle silhouettes say "archer" at all.
   // The greave is load-bearing in a way that has nothing to do with armour: the
   // gore sheet cuts limbs off the same proportions, and with this archer's long
-  // arms its severed arm and severed leg came out as the same 16-px blob (gate
-  // G9c). A shin guard is what makes the leg nameable on the floor.
+  // arms its severed arm and severed leg render as the same 16-px blob without
+  // it. A shin guard is what makes the leg nameable on the floor.
   gear: { pauldron: false, bracer: true, greave: true, necklace: false, hood: true, quiver: true },
   spineLean: deg(4),
   earNotches: 2,

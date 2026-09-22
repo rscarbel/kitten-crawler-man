@@ -357,9 +357,9 @@ export class TileChunkCache {
           ctx.drawImage(cached.canvas, dx, dy);
           continue;
         }
-        // Baking every cold chunk on the frame a scroll reveals them is what
-        // used to cost 40-100 ms. Bake up to the budget; paint the rest the
-        // slow way, and they bake over the next frame or two.
+        // Baking every cold chunk on the frame a scroll reveals them costs
+        // 40-100 ms. Bake up to the budget; paint the rest the slow way, and
+        // they bake over the next frame or two.
         if (bakeBudget > 0) {
           bakeBudget -= CHUNK_TILES * CHUNK_TILES;
           ctx.drawImage(this.bakeChunk(cx, cy).canvas, dx, dy);
@@ -485,10 +485,10 @@ export function decorationTileExtentsPx(
  * them (a torch reaches exactly one tile up), and every such type is cull-margin
  * only: none is cached, so the slack costs nothing but scan width.
  *
- * `TREE` used to land here and no longer does: its sheets declare
- * `tileTypeId: 13`, so a three-tile canopy gets its real extents rather than
- * this one-tile guess. A tree that fell back here would have its crown culled
- * the moment its own tile left the screen.
+ * `TREE` does not land here: its sheets declare `tileTypeId: 13`, so a
+ * three-tile canopy gets its real extents rather than this one-tile guess. A
+ * tree that fell back here would have its crown culled the moment its own tile
+ * left the screen.
  */
 function unregisteredDecorationExtents(ts: number): MapSpriteExtentsPx {
   return { left: ts, up: ts, right: ts, down: ts };

@@ -42,10 +42,9 @@ const FOOTER_HINT_HEIGHT = 24;
 /**
  * The page counter's line, above the hint.
  *
- * Reserved whether or not a counter is drawn, and — critically — subtracted from
- * the pagination budget as well as added to the panel height. Reserving it in
- * only one of those two places is what put the counter on top of the last line
- * of body text the first time this was written.
+ * Reserved whether or not a counter is drawn, and must be subtracted from the
+ * pagination budget as well as added to the panel height — reserving it in only
+ * one of those two places puts the counter on top of the last line of body text.
  */
 const FOOTER_COUNTER_HEIGHT = 19;
 const FOOTER_HEIGHT = FOOTER_HINT_HEIGHT + FOOTER_COUNTER_HEIGHT;

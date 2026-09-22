@@ -107,7 +107,8 @@ export class AIMessageDisplay {
       roundRect(ctx, px, py, pillW, pillH, pillH / 2);
       ctx.stroke();
 
-      // baseline was ty = py + pad + fsize - 1; top = baseline - round(11 * 0.8) = baseline - 9
+      // drawText positions from the top, so the baseline computed here is converted
+      // back to a top-anchored y below via ACTION_TEXT_TOP_OFFSET.
       const ty = py + pad + fsize - ACTION_TEXT_Y_BASELINE_OFFSET;
       drawText(ctx, label, {
         x: px + pad,

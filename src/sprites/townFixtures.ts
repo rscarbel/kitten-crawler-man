@@ -2,11 +2,10 @@
  * The town's interactive fixtures, as pictures: the bench you rest on, the
  * notice board you read, and Madame Voss at her table.
  *
- * They used to be painted inline inside `TownPropSystem`'s renderables, which
- * made the system that owns their *behaviour* also the only place their art
- * existed. They live here so the offline sheet generators can call the same
- * painters the game used to call every frame — a second copy of the drawing
- * would diverge the first time one of them was touched.
+ * They live here, separate from `TownPropSystem`'s renderables which own their
+ * behaviour, so the offline sheet generators can call the same painters the
+ * game calls every frame — a second copy of the drawing would diverge the
+ * first time one of them was touched.
  *
  * Every measure is a fraction of the tile size `ts`, taken from the anchor
  * tile's top-left corner, with negative fractions reaching above it. The tile is
@@ -133,13 +132,13 @@ export function drawBench(ctx: CanvasRenderingContext2D, sx: number, sy: number,
 // glowing crystal orb. Every measure is a fraction of tile size so she reads as
 // a person, not a robe-blob. She has no animation — the glows are `shadowBlur`
 // on fixed geometry — so she is one picture, baked once.
-const SEER_BASE_FRACTION = 0.96; // seat/base line
-const SEER_SHOULDER_FRACTION = 0.44; // shoulder line
+const SEER_BASE_FRACTION = 0.96;
+const SEER_SHOULDER_FRACTION = 0.44;
 const SEER_TABLE_TOP_FRACTION = 0.66;
 const SEER_TABLE_HEIGHT_FRACTION = 0.13;
 const SEER_TABLE_INSET_FRACTION = 0.05;
-const SEER_SHOULDER_HALF = 0.28; // half shoulder width
-const SEER_HEM_HALF = 0.42; // half robe hem width at the seat
+const SEER_SHOULDER_HALF = 0.28;
+const SEER_HEM_HALF = 0.42;
 const SEER_ROBE_SEAM_WIDTH = 0.02;
 const SEER_HEAD_CY_FRACTION = 0.27;
 const SEER_HOOD_R = 0.19;
@@ -157,14 +156,14 @@ const SEER_HAND_R = 0.045;
 const SEER_ORB_RADIUS_FRACTION = 0.09;
 const SEER_ORB_LIFT_FRACTION = 0.05;
 const SEER_COWL_SIDE_FRACTION = 0.9; // where the cowl meets the head, as a fraction of hood radius
-const SEER_COWL_SHOULDER_DROP = 0.02; // how far the cowl laps over the shoulders
+const SEER_COWL_SHOULDER_DROP = 0.02;
 const SEER_BROW_SHADOW_RISE = 0.5; // brow shadow center above the face center, as a fraction of face RY
 const SEER_EYE_GLOW_BLUR = 0.08;
 const SEER_HAND_REST_LIFT = 0.01; // hands sit just above the table surface
 const SEER_ARM_ROOT_SPREAD = 0.7; // arm root spacing as a fraction of shoulder half-width
-const SEER_ARM_ROOT_DROP = 0.03; // arm root below the shoulder line
-const SEER_ARM_ELBOW_DX = 0.24; // elbow bow-out from center
-const SEER_ARM_ELBOW_LIFT = 0.04; // elbow above the table surface
+const SEER_ARM_ROOT_DROP = 0.03;
+const SEER_ARM_ELBOW_DX = 0.24;
+const SEER_ARM_ELBOW_LIFT = 0.04;
 const SEER_ORB_GLOW_BLUR_FACTOR = 2; // the orb's halo, as a multiple of its radius
 
 const SEER_ROBE = '#3b2f5e';

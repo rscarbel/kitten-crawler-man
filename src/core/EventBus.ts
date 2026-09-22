@@ -32,7 +32,6 @@ import type { SkillId } from './SkillManager';
 export type BossMusicOwnership = 'shared' | 'caller';
 
 export interface GameEvents {
-  /** A mob was just killed. */
   mobKilled: {
     mob: Mob;
     killer: HumanPlayer | CatPlayer | null;
@@ -53,16 +52,12 @@ export interface GameEvents {
   /** A boss room was locked (player entered). */
   bossRoomLocked: { bossType: string };
 
-  /** A boss was defeated. */
   bossDefeated: { bossType: string; mob: Mob; music?: BossMusicOwnership };
 
-  /** A player leveled up. */
   playerLevelUp: { player: Player; newLevel: number };
 
-  /** Gore should be spawned at a position. */
   spawnGore: { x: number; y: number; impactDx: number; impactDy: number };
 
-  /** A loot drop should be created. */
   lootDrop: {
     x: number;
     y: number;
@@ -71,19 +66,15 @@ export interface GameEvents {
     isBossLoot: boolean;
   };
 
-  /** An achievement was unlocked. */
   achievementUnlocked: {
     achievementId: string;
     player: 'Human' | 'Cat';
   };
 
-  /** A quest was started. */
   questStarted: { questId: string };
 
-  /** A quest was completed. */
   questCompleted: { questId: string; difficulty?: 'easy' | 'medium' | 'hard' };
 
-  /** A quest was failed. */
   questFailed: { questId: string };
 
   /** A player first attacks a mob after being out of combat. */
@@ -92,10 +83,8 @@ export interface GameEvents {
   /** Players entered a boss room and the fight has begun. */
   bossFightInitiated: { bossType: string; music?: BossMusicOwnership };
 
-  /** A player drank a healing potion. */
   healingPotionUsed: { player: 'Human' | 'Cat'; hpRestored: number };
 
-  /** A player threw goblin dynamite. */
   dynamiteUsed: { player: 'Human' | 'Cat' };
 
   /** A player's HP dropped below 25 % of max. */
@@ -107,16 +96,14 @@ export interface GameEvents {
   /** Active player has been standing still and doing nothing for another 5-second interval. */
   playerIdle: { totalIdleMs: number };
 
-  /** Human melee attack peak fired (swing animation peak). */
+  /** Human melee attack's swing-animation peak. */
   humanMeleeSwing: { hit: boolean };
 
-  /** Cat melee attack peak fired (claw swipe peak). */
+  /** Cat claw-swipe attack's animation peak. */
   catMeleeSwing: { hit: boolean };
 
-  /** A magic missile struck a mob. */
   missileImpact: Record<string, never>;
 
-  /** A slingshot stone struck something. */
   slingshotImpact: Record<string, never>;
 
   /** Player descended to the next floor via a stairwell. */

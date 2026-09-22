@@ -255,13 +255,12 @@ function routeRiver(
   let heading = Math.atan2(mouth.y - source.y, mouth.x - source.x);
 
   for (let step = 0; step < RIVER_MAX_STEPS; step++) {
-    // Deflected around the town, not rejected on touching it. Rejection is what
-    // it used to be, and it made the router blind: source and mouth sit on
-    // opposite edges, so a course runs straight at the keep-out disc in the
-    // middle of the map, walks into it, and throws the whole route away —
-    // measured at 1 map in 40 shipping with *no river at all*, the entire
-    // feature silently absent. Sliding along the disc's edge instead means a
-    // course always completes and the river simply goes round the town.
+    // Deflected around the town, not rejected on touching it. Source and mouth
+    // sit on opposite edges, so a course runs straight at the keep-out disc in
+    // the middle of the map; rejecting on touch would throw the whole route
+    // away there — measured at 1 map in 40 shipping with *no river at all*, the
+    // entire feature silently absent. Sliding along the disc's edge instead
+    // means a course always completes and the river simply goes round the town.
     for (const site of keepOut) {
       const awayX = x - site.centreTileX;
       const awayY = y - site.centreTileY;

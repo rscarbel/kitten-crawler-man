@@ -296,12 +296,12 @@ const AXE_TIP = 0.72;
  * Negative: the off hand grips the *butt*, behind the lead hand, rather than up
  * the haft in front of it.
  *
- * A forward off grip put both fists within a hand's width of each other with the
- * off arm stretched flat along the wood, and at 0.34 — right under the head
- * socket — that arm had to span further than it is long, so the rig clamped it
- * and left the fist floating off the haft on most frames rather than gripping
- * it. Gripping behind gives the off arm slack to fold, so the two arms open into
- * a triangle with the haft as its long side. G14 asserts the result.
+ * A forward off grip right under the head socket puts both fists within a
+ * hand's width of each other with the off arm stretched flat along the wood —
+ * that arm has to span further than it is long, so the rig clamps it and
+ * leaves the fist floating off the haft on most frames rather than gripping
+ * it. Gripping behind gives the off arm slack to fold, so the two arms open
+ * into a triangle with the haft as its long side.
  */
 const AXE_OFF_GRIP = -0.16;
 /** Leather at each grip; the lead hand's, then the butt the off hand holds. */
@@ -311,23 +311,21 @@ const AXE_HAFT_HALF_WIDTH = 0.028;
 /**
  * The bit hangs off the **side** of the haft, and the haft carries on past it.
  *
- * The first version ran the bit forward along the haft to its far end, which
- * makes a symmetric slab mounted terminal to a stick — and four blind silhouette
- * reviews running named that a shovel, never an axe. What identifies an axe in
- * black at 32 px is the bit sitting beside the shaft with the shaft protruding
- * beyond it, and a beard dropping much further below the axis than the poll
- * rises above it.
+ * Run forward along the haft to its far end instead, the bit becomes a
+ * symmetric slab mounted terminal to a stick, which reads as a shovel rather
+ * than an axe. What identifies an axe in black at 32 px is the bit sitting
+ * beside the shaft with the shaft protruding beyond it, and a beard dropping
+ * much further below the axis than the poll rises above it.
  */
 /**
  * The head sits at the **far end** of the haft, not partway along it.
  *
- * The eye used to start at 0.28 of a 0.66 haft with a 0.30 butt behind the
- * hand, which put the head at 40% of the wood's total length — a lump partway
- * down a pole, which is a hoe or a paddle, not an axe. The head now finishes
- * one haft-width short of the tip: enough wood past the eye to show the haft
- * runs *through* the socket, which is what stops the bit reading as a blade
- * glued onto the end of a stick, and not enough to read as a pole with
- * something clamped to its middle.
+ * An eye positioned partway down the haft puts the head at a fraction of the
+ * wood's total length — a lump partway down a pole, which reads as a hoe or a
+ * paddle, not an axe. The head finishes one haft-width short of the tip:
+ * enough wood past the eye to show the haft runs *through* the socket, which
+ * is what stops the bit reading as a blade glued onto the end of a stick, and
+ * not enough to read as a pole with something clamped to its middle.
  */
 const AXE_EYE_START = 0.44;
 const AXE_EYE_END = 0.6;
@@ -335,26 +333,22 @@ const AXE_EYE_END = 0.6;
  * The bit **flares** from the socket: a narrow neck on the haft opening into an
  * edge two and a half times its length.
  *
- * With the eye as long as the edge the head was a plate of even width slung
- * under the shaft — a trowel, and the third blind review to say so. Flare is
- * what a spade does not have: a spade blade is a parallel-sided plate on the
- * end of its handle, and an axe is a wedge that grows out of one. This is the
- * variable the two earlier redraws missed, because both of them changed how the
- * *edge* was drawn while leaving the socket as wide as the edge.
+ * An eye as long as the edge makes the head a plate of even width slung under
+ * the shaft, which reads as a trowel. Flare is what a spade does not have: a
+ * spade blade is a parallel-sided plate on the end of its handle, and an axe
+ * is a wedge that grows out of one — the socket has to stay narrower than the
+ * edge, not just the edge shape.
  */
 /**
  * How far the cutting edge stands off the haft's axis, on the bit side.
  *
  * Read together with the beard span below: what those two numbers make is the
- * bit's **aspect ratio**, and that is the part of an axe head a silhouette test
- * actually judges. At 0.20 deep over a 0.34 span the bit was 1.3:1 — near
- * square, and a near-square lump beside a stick is a spade blade or a boot
- * whatever its edges do. The edge is now over twice as long as the bit is deep,
- * which is what makes it read as something that cuts along its length.
+ * bit's **aspect ratio**. A near-square bit beside a stick reads as a spade
+ * blade or a boot whatever its edges do — the edge needs to stay over twice as
+ * long as the bit is deep to read as something that cuts along its length.
  *
  * Shallower also buys carry angle, because this value is the prop's
- * `headHalfHeight` and every extra unit of it flattens the carry (see
- * `CARRY_HAND_HEIGHT_FRACTION`).
+ * `headHalfHeight` and every extra unit of it flattens the carry.
  */
 const AXE_BIT_DROP = 0.16;
 /** The poll: the small counterweight on the other side of the eye. */
@@ -613,12 +607,11 @@ const HAMMER_HAFT_HALF_WIDTH = 0.034;
  * The head is mounted **across** the haft near its far end, not on the end of it,
  * and it is one clean rectangular block.
  *
- * As a slab running along the axis it was the same shape as the old axe head and
- * a blind review named both "shovel". The first correction added a spike out the
- * far side to make a T — which cost the hammer its identity outright: at 32 px
- * the spike is two pixels, adds no information, and turns a rectangle into an
- * irregular radiating star, so the next review read the war hammer as a
- * *morningstar* and the mace as a hammer. The two archetypes swapped. A blunt
+ * A slab running along the axis is the same shape as the axe head, which reads
+ * as another shovel rather than a distinct weapon. A spike added out the far
+ * side to make a T costs the hammer its identity outright: at 32 px the spike
+ * is two pixels, adds no information, and turns a rectangle into an irregular
+ * radiating star that reads as a morningstar rather than a hammer. A blunt
  * rectangle with flat parallel edges is the whole read; nothing else in the set
  * is a clean rectangle.
  */
@@ -725,9 +718,8 @@ export function makeWarhammerProp(palette: GoblinPalette, seed: () => number): G
 /**
  * Half the stave's length: local +X to the upper tip, −X to the lower.
  *
- * Sized against the *figure*, not against realism. A blind review at in-game
- * size asked for a bow spanning 70–85% of the archer's own height, on the
- * grounds that a shape smaller than that cannot dominate a 28-pixel silhouette
+ * Sized against the *figure*, not against realism. A bow spanning much less
+ * than 70–85% of the archer's own height cannot dominate a 28-pixel silhouette
  * — and dominating the silhouette is the whole reason this creature is drawn
  * differently from the other four goblins. At 0.56 either side the stave comes
  * to about three quarters of the figure.
@@ -738,10 +730,10 @@ const BOW_LIMB = 0.56;
  *
  * Read together with {@link BOW_TIP_SETBACK}: those two are what decide how much
  * open background the stave and its string enclose, and that gap is the entire
- * archer signal in a pure-black silhouette. Two blind reviews running failed the
- * walking figure for having none — at 0.115 over a 0.5 half-length the enclosed
- * sliver came to about two pixels at the in-game tile, which the outline eats.
- * Together they now enclose ~0.27 tiles, which survives as a visible D-hole.
+ * archer signal in a pure-black silhouette. Too shallow a belly over the half
+ * -length and the enclosed sliver comes to about two pixels at the in-game
+ * tile, which the outline eats. Together they enclose ~0.27 tiles, which
+ * survives as a visible D-hole.
  *
  * There is a limit in the other direction: a belly this deep on a *filled* shape
  * reads as a shield, so the string has to stay thin enough to leave the middle
@@ -756,11 +748,11 @@ const BOW_RISER = 0.085;
 /**
  * The string's drawn width, which is nothing like a real bowstring's.
  *
- * At a hair's width it is under a pixel on the baked sheet and vanishes: a blind
- * review looking at 7× magnification reported no string at all. A bow without a
- * visible string is a boomerang, so it is drawn at the smallest width that
- * survives the bake and in near-white, which is the only value that reads
- * against both the brown limbs and a dungeon floor.
+ * At a hair's width it is under a pixel on the baked sheet and vanishes
+ * entirely, even under magnification. A bow without a visible string is a
+ * boomerang, so it is drawn at the smallest width that survives the bake and
+ * in near-white, which is the only value that reads against both the brown
+ * limbs and a dungeon floor.
  */
 const BOW_STRING_WIDTH = 0.026;
 /** Arrow length forward of the nocking point. */

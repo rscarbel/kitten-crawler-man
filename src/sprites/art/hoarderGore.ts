@@ -75,8 +75,8 @@ const HAIR_DARK = '#241f19';
 const OUTLINE_INK = '#160d0a';
 /**
  * The sliver of eye a half-shut lid leaves showing: the living sprite's sclera
- * white, dulled. The previous grey-green read as teal at review size, which is a
- * colour that appears nowhere else on her.
+ * white, dulled. A grey-green reads as teal at review size, a colour that
+ * appears nowhere else on her.
  */
 const EYE_DEAD = '#d8cfba';
 
@@ -247,11 +247,7 @@ function mottle(ctx: Ctx, trace: (grow: number) => void, seed: number, spread: n
 // ── The pieces ───────────────────────────────────────────────────────────────
 
 /**
- * A severed head is her head, so it is drawn at the size her head is: these were
- * hand-set literals, and while `HEADS_TALL` went from 5.6 to 8.3 chasing the
- * "she reads as a toddler" note they did not follow. The piece ended up 2.4×
- * her skull across and 1.8× down — four times its area — which is the single
- * thing that made the gore read as a cartoon.
+ * A severed head is her head, so it is drawn at the size her head actually is.
  *
  * Everything below is a fraction of the skull for the same reason: a feature in
  * absolute units survives the next proportion change and the face slides off.
@@ -289,9 +285,9 @@ const HEAD_WOUND_AT = { x: HEAD_RX * -0.5, y: HEAD_RY * 0.769 } as const;
 const HEAD_WOUND_RADIUS = HEAD_RX * 0.467;
 
 /**
- * The same hanks the living figure wears, at the same proportions. The previous
- * pass put four hard black triangles on the crown, which matched nothing
- * anywhere else on her and read as a spiked helmet rather than as hair.
+ * The same hanks the living figure wears, at the same proportions. Hard black
+ * triangles on the crown match nothing anywhere else on her and read as a
+ * spiked helmet rather than as hair.
  */
 interface GoreHairClump {
   readonly at: number;
@@ -305,10 +301,9 @@ interface GoreHairClump {
  * `half` is a share of the skull's half-width, `length` of its half-height.
  *
  * Wide and short. Thin hanks half a skull long stand off the crown as three
- * hard points, and three hard points on a round shape is a crown of spikes —
- * the same read this table was rewritten once already to escape. Matted hair on
- * a severed head is a mass with a couple of clumps trailing out of it, and a
- * blunt tip is what stops a clump being a quill.
+ * hard points, and three hard points on a round shape is a crown of spikes.
+ * Matted hair on a severed head is a mass with a couple of clumps trailing out
+ * of it, and a blunt tip is what stops a clump being a quill.
  */
 const GORE_HAIR: readonly GoreHairClump[] = [
   { at: -0.96, half: 0.29, length: 0.33, kick: -0.18, dark: false },
@@ -510,9 +505,8 @@ function torsoPiece(ctx: Ctx): void {
   ];
   paintMass(ctx, tracer(ctx, vest), VEST_TONE);
 
-  // Belly folds carried over from the living silhouette. The previous pass put
-  // a row of evenly spaced pale lumps inside a dark crescent here, and a
-  // reviewer read the whole piece as a jaw with four molars in it.
+  // Belly folds carried over from the living silhouette. Evenly spaced pale
+  // lumps inside a dark crescent here read as a jaw with four molars in it.
   ctx.globalAlpha = TORSO_FOLD_ALPHA;
   ctx.strokeStyle = FLESH_DARK;
   ctx.lineWidth = TORSO_FOLD_WIDTH;
@@ -573,10 +567,8 @@ function torsoPiece(ctx: Ctx): void {
 /**
  * A limb piece's joints, laid out along the bones they came off.
  *
- * The three points used to be typed in, and their spacing drifted from the
- * skeleton just as the widths did — the severed thigh was drawn 37% longer than
- * her actual femur on a leg half its width. Only the *directions* are art here;
- * the lengths belong to the figure.
+ * Only the *directions* are art here; the lengths belong to the figure, so a
+ * piece's bone spacing cannot drift from the skeleton it was severed from.
  */
 function jointsAlong(
   root: Pt,
@@ -601,11 +593,9 @@ function jointsAlong(
 
 const ARM_SEED = 17.3;
 /**
- * A severed arm is her arm, at her arm's widths and her arm's bone lengths.
- * These were hand-set, and every one of them drifted from the figure: the whole
- * set was somewhere around four fifths of life while the head sat at two and a
- * half times it, which is what made the pile read as a cartoon rather than as
- * parts of one creature.
+ * A severed arm is her arm, at her arm's widths and her arm's bone lengths, so
+ * the whole pile of severed pieces reads as parts of one creature rather than
+ * as a cartoon assortment of mismatched sizes.
  */
 const ARM_ROOT_HALF = UPPER_ARM_WIDTH;
 const ARM_ELBOW_HALF = ELBOW_WIDTH;
@@ -691,9 +681,9 @@ const KNUCKLE_RADIUS = 0.026;
 
 /** The folded arm — an L, hand closed, which is the straight arm's opposite. */
 function leftArmPiece(ctx: Ctx): void {
-  // Folded far harder than either leg is, and slimmer. Bent to the same ninety
-  // degrees at the same taper it was named a leg in a blind test, and at half
-  // size it and the bare leg were the same comma.
+  // Folded far harder than either leg is, and slimmer: bent to a leg's own fold
+  // angle and taper this reads as a leg rather than an arm, and at a reduced
+  // scale it becomes indistinguishable from the bare leg.
   const {
     root: shoulder,
     joint: elbow,
@@ -756,9 +746,8 @@ const LEG_SEED = 27.9;
  */
 const LEG_SEVERED_AT = 0.42;
 /**
- * Her leg is a huge thigh on a peg ankle — 6.4 to 1 root to tip. Hand-set, the
- * piece was 2.2 to 1, a near-uniform column, and its femur stump was drawn
- * wider than the thigh the femur supposedly came out of.
+ * Her leg is a huge thigh on a peg ankle — 6.4 to 1 root to tip — and the piece
+ * follows that ratio rather than drawing a near-uniform column.
  */
 const LEG_ROOT_HALF = THIGH_WIDTH + (KNEE_WIDTH - THIGH_WIDTH) * LEG_SEVERED_AT;
 /**
@@ -773,10 +762,10 @@ const LEG_WOUND_RADIUS = LEG_ROOT_HALF * 0.72;
 const TROUSER_CUFF_LENGTH = 0.14;
 const TROUSER_WRAP = 1.08;
 /**
- * The foot and what is on it, off the foot's own dimensions. Left in absolute
- * units they survived the ankle shrinking by 29% and came out as a detached
- * brown box, a pale crescent the limb painted over, and three toes packed
- * closer together than their own radius.
+ * The foot and what is on it, sized off the foot's own dimensions rather than
+ * in absolute units: an absolute size does not track the ankle if it is
+ * retuned, and comes out as a detached box, a crescent the limb paints over,
+ * and toes packed closer together than their own radius.
  */
 const SLIPPER_HALF = FOOT_DEPTH * 0.62;
 const SLIPPER_LENGTH = FOOT_LENGTH * 0.86;
@@ -812,9 +801,9 @@ function leftLegPiece(ctx: Ctx): void {
   mottle(ctx, tracer(ctx, outline), LEG_SEED, LEG_ROOT_HALF * 2);
 
   // The trouser cuff, which is what stops this leg reading as the bare one. Its
-  // length is measured in figure units, not as a share of the surviving stub:
-  // as a share it collapsed when the piece started being torn mid-thigh, and a
-  // band 0.59 wide over 0.08 of length is a plank lying across the limb.
+  // length is measured in figure units rather than as a share of the surviving
+  // stub: a share-based length collapses on a short stub, and a band wide
+  // relative to a short length reads as a plank lying across the limb.
   const cuffAlong = TROUSER_CUFF_LENGTH / Math.max(MIN_SEGMENT_LENGTH, distance(hip, knee));
   const cuffTo = {
     x: lerp(hip.x, knee.x, Math.min(1, cuffAlong)),
@@ -861,10 +850,9 @@ function leftLegPiece(ctx: Ctx): void {
 
 /** The straight leg, bare, ending in toes — a column, not an L. */
 function rightLegPiece(ctx: Ctx): void {
-  // Only slightly bent. It used to fold hard, which is what told it apart from
-  // the straight arm — but once every piece was laid out along her real bone
-  // lengths this leg and the *folded* arm became the same comma, and G7 said so
-  // at 63% shared silhouette. The L now belongs to the left leg alone.
+  // Only slightly bent: a hard fold at her real bone lengths makes this leg's
+  // silhouette match the folded arm's, so the sharp L belongs to the left leg
+  // alone and this one stays straighter to stay distinguishable.
   const {
     root: hip,
     joint: knee,

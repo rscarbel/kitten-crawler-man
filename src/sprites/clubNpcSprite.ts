@@ -413,7 +413,6 @@ function drawHumanoid(
   drawLeg(-1, pose.leftLegLift);
   drawLeg(1, pose.rightLegLift);
 
-  // Torso.
   const torsoW = s * 0.32;
   const torsoTopX = shoulderCX - torsoW / 2;
   ctx.fillStyle = look.outfit;
@@ -425,11 +424,9 @@ function drawHumanoid(
   ctx.closePath();
   ctx.fill();
 
-  // Accent trim down the front.
   ctx.fillStyle = look.accent;
   ctx.fillRect(shoulderCX - s * 0.02, shoulderY, s * 0.04, hipY - shoulderY);
 
-  // Arms — swing from the shoulders, hand at the end.
   const armLen = s * 0.28;
   const drawArm = (dir: number, raise: number, out: number): void => {
     const shX = shoulderCX + dir * torsoW * 0.5;
@@ -450,11 +447,9 @@ function drawHumanoid(
   drawArm(-1, pose.leftArmRaise, pose.leftArmOut);
   drawArm(1, pose.rightArmRaise, pose.rightArmOut);
 
-  // Head.
   const headCX = shoulderCX + pose.headTilt * s;
   const headCY = bsy + s * 0.26;
   const headR = s * 0.13;
-  // Hair backing.
   ctx.fillStyle = look.hair;
   ctx.beginPath();
   ctx.arc(headCX, headCY - s * 0.02, headR * 1.12, 0, TWO_PI);
@@ -531,7 +526,6 @@ function drawStoneGolem(
   ctx.fillRect(cx - s * 0.22, bsy + s * 0.78 - leftLift, s * 0.19, s * 0.2);
   ctx.fillRect(cx + s * 0.03, bsy + s * 0.78 - rightLift, s * 0.19, s * 0.2);
 
-  // Rubble torso — an irregular stone slab.
   const torso = new Path2D();
   torso.moveTo(cx - s * 0.34, bsy + s * 0.4);
   torso.lineTo(cx - s * 0.28, bsy + s * 0.34);
@@ -543,7 +537,6 @@ function drawStoneGolem(
   ctx.fillStyle = GOLEM_STONE_BASE;
   ctx.fill(torso);
 
-  // Tuxedo over the stone — dark jacket panels with a gold-trimmed lapel V.
   ctx.fillStyle = GOLEM_TUX;
   ctx.beginPath();
   ctx.moveTo(cx - s * 0.28, bsy + s * 0.36);
@@ -559,7 +552,6 @@ function drawStoneGolem(
   ctx.lineTo(cx + s * 0.3, bsy + s * 0.5);
   ctx.closePath();
   ctx.fill();
-  // Shirt strip + gold lapel edges + bow tie.
   ctx.fillStyle = '#d8d4c8';
   ctx.fillRect(cx - s * 0.05, bsy + s * 0.4, s * 0.1, s * 0.34);
   ctx.strokeStyle = accent;
@@ -579,7 +571,6 @@ function drawStoneGolem(
   ctx.lineTo(cx + s * 0.08, bsy + s * 0.48);
   ctx.fill();
 
-  // Boulder shoulders + blocky arms flanking the jacket.
   ctx.fillStyle = GOLEM_STONE_LIGHT;
   ctx.beginPath();
   ctx.arc(cx - s * 0.34, bsy + s * 0.42, s * 0.12, 0, TWO_PI);
@@ -596,7 +587,6 @@ function drawStoneGolem(
     s * 0.14,
     s * 0.3,
   );
-  // Stone fists.
   ctx.fillStyle = GOLEM_STONE_LIGHT;
   ctx.beginPath();
   ctx.arc(cx - s * 0.37 - armSwing, bsy + s * 0.76, s * 0.09, 0, TWO_PI);
@@ -609,7 +599,6 @@ function drawStoneGolem(
   );
   ctx.fill();
 
-  // Craggy head — a rough boulder with a chip knocked off the top-right.
   ctx.fillStyle = GOLEM_STONE_LIGHT;
   ctx.beginPath();
   ctx.moveTo(cx - s * 0.16, bsy + s * 0.24);
@@ -621,7 +610,6 @@ function drawStoneGolem(
   ctx.closePath();
   ctx.fill();
 
-  // Cracks + facet shading across body and head.
   ctx.strokeStyle = GOLEM_CRACK;
   ctx.lineWidth = Math.max(1, s * 0.012);
   ctx.beginPath();

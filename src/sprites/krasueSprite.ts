@@ -68,7 +68,6 @@ export function drawKrasueSprite(
   if (facingX < 0) ctx.scale(-1, 1);
   ctx.translate(attackEase * KRASUE_LUNGE_DISTANCE * s, 0);
 
-  // Ambient glow aura
   ctx.save();
   ctx.shadowColor = isAggressive ? '#ff3020' : '#aa2a40';
   ctx.shadowBlur = KRASUE_GLOW_RADIUS;
@@ -126,7 +125,6 @@ export function drawKrasueSprite(
     }
   }
 
-  // Intestine loop — a coil crossing the strand mass
   ctx.strokeStyle = '#b04858';
   ctx.lineWidth = KRASUE_ENTRAIL_MAX_WIDTH * s;
   ctx.beginPath();
@@ -180,7 +178,6 @@ export function drawKrasueSprite(
   );
   ctx.fill();
 
-  // Head
   ctx.fillStyle = '#7a5a58';
   ctx.beginPath();
   ctx.arc(0, 0, KRASUE_HEAD_R * s, 0, Math.PI * 2);
@@ -215,7 +212,6 @@ export function drawKrasueSprite(
     ctx.fill();
   }
 
-  // Glowing eyes
   ctx.save();
   ctx.shadowColor = isAggressive ? '#ff5030' : '#ff8060';
   ctx.shadowBlur = 6;

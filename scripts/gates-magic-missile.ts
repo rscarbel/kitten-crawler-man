@@ -1,11 +1,9 @@
 /**
  * The Magic Missile art gates.
  *
- * The two sheets are gone, so every invariant the old bake enforced by throwing
- * — and the ones it only enforced by being looked at — is enforced here against
- * cells painted from `MAGIC_MISSILE_PROJECTILE_FIGURE` and
- * `MAGIC_MISSILE_EXPLOSION_FIGURE`, baked exactly the way the runtime cache
- * bakes them.
+ * These gates run against cells painted from
+ * `MAGIC_MISSILE_PROJECTILE_FIGURE` and `MAGIC_MISSILE_EXPLOSION_FIGURE`,
+ * baked exactly the way the runtime cache bakes them.
  *
  * The spell's whole design is that four level bands escalate and the fifteenth
  * level breaks the pattern, so most of what is worth asserting is about the

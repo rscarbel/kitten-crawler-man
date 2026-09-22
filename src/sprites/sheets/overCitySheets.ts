@@ -11,9 +11,9 @@
  *
  * Text is painted here, which is what makes these sheets town-specific in the
  * first place: `drawSignpost` sizes each arm by measuring its label, so the arm
- * lengths are a property of the words — and, now that the game paints them
- * rather than loading them, of the font the player's browser resolves. The frame
- * is sized generously for exactly that reason.
+ * lengths are a property of the words — and of the font the player's browser
+ * resolves, since the sheet is painted by code rather than loaded as a
+ * pre-rendered image. The frame is sized generously for exactly that reason.
  */
 
 import { drawFortuneTeller } from '../townFixtures';

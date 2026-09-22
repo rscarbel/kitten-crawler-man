@@ -164,7 +164,6 @@ export class MiniMapSystem implements GameSystem {
     const sz = gameMap.structure.length;
     this.fogOfWar = new Uint8Array(sz * sz);
 
-    // Create offscreen tile cache (1px per tile, pre-filled with fog color)
     if (typeof OffscreenCanvas !== 'undefined') {
       const c = new OffscreenCanvas(sz, sz);
       const tctx = c.getContext('2d');
@@ -396,7 +395,6 @@ export class MiniMapSystem implements GameSystem {
     const viewCenterTX = expanded ? playerTX + this._scrollTX : playerTX;
     const viewCenterTY = expanded ? playerTY + this._scrollTY : playerTY;
 
-    // Background
     ctx.fillStyle = 'rgba(0,0,0,0.82)';
     ctx.fillRect(mmX, mmY, mmSize, mmSize);
 
@@ -435,7 +433,6 @@ export class MiniMapSystem implements GameSystem {
       ctx.fillRect(sx, sy, pxPerTile + 2, pxPerTile + 2);
     }
 
-    // Corpse markers — X
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 1;
     for (const corpse of this.corpseMarkers) {
@@ -471,7 +468,6 @@ export class MiniMapSystem implements GameSystem {
       ctx.fill();
     }
 
-    // Companion — blue dot
     const compTX = Math.floor((companion.x + HALF_TILE) / TILE_SIZE);
     const compTY = Math.floor((companion.y + HALF_TILE) / TILE_SIZE);
     const compSX =
@@ -520,8 +516,6 @@ export class MiniMapSystem implements GameSystem {
       halfTiles,
     );
 
-    // Quest markers — yellow !, green ?, or red X
-    // size=8 bold; old baseline was qsy+3; top = (qsy+3) - round(8*0.8) = (qsy+3) - 6 = qsy-3
     for (const qm of questMarkers) {
       if (!this.fogOfWar[qm.y * mapSize + qm.x]) continue;
       const qsx = mmX + (qm.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
@@ -593,7 +587,6 @@ export class MiniMapSystem implements GameSystem {
 
     ctx.restore();
 
-    // Border
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1;
     ctx.strokeRect(mmX, mmY, mmSize, mmSize);
@@ -630,28 +623,28 @@ export class MiniMapSystem implements GameSystem {
   private tileColor(type: number): string {
     switch (type) {
       case VOID_TYPE:
-        return '#000000'; // void border
+        return '#000000';
       case FloorTypeValue.wall:
-        return '#3a3028'; // wall
+        return '#3a3028';
       case FloorTypeValue.grass:
-        return '#3a7040'; // grass
+        return '#3a7040';
       case FloorTypeValue.road:
-        return '#6a5040'; // road
+        return '#6a5040';
       case FloorTypeValue.water:
-        return '#1a6880'; // water
+        return '#1a6880';
       case FloorTypeValue.concrete:
-        return '#606060'; // concrete (hallway)
+        return '#606060';
       case FloorTypeValue.tile_floor:
-        return '#707070'; // tile floor
+        return '#707070';
       case FloorTypeValue.carpet:
-        return '#503030'; // carpet
+        return '#503030';
       case FloorTypeValue.wood:
-        return '#704030'; // wood
+        return '#704030';
       case SAFE_ROOM_FLOOR:
       // A minimap is a floor plan, so the runner the player walks straight over
       // is the floor.
       case SAFE_ROOM_RUG:
-        return '#8a7040'; // safe room floor
+        return '#8a7040';
       case SAFE_ROOM_THRESHOLD:
         return '#7a6a4c'; // the worn band inside a safe room's doorways
       // The eight solid furnishings share one furniture tone rather than each
@@ -664,11 +657,11 @@ export class MiniMapSystem implements GameSystem {
       case SAFE_ROOM_TABLE:
       case SAFE_ROOM_STOOL:
       case SAFE_ROOM_LARDER:
-        return '#5c4a2c'; // safe-room furniture
+        return '#5c4a2c';
       case HORDER_BOSS_ROOM_FLOOR:
-        return '#2a1808'; // boss room floor
+        return '#2a1808';
       case TOWN_WALL:
-        return '#8a8175'; // the town's wall ring
+        return '#8a8175';
       case VERGE_GRASS:
         return '#4c6338'; // street verge — greener than a street, duller than field grass
       case YARD_GRAVEL:

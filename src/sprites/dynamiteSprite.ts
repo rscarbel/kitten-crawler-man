@@ -11,7 +11,7 @@ const FLOOR_CX_OFFSET = 0.5;
 const FLOOR_CY_OFFSET = 0.55;
 const FLOOR_BODY_WIDTH = 0.18;
 const FLOOR_BODY_HEIGHT = 0.44;
-const HALO_FUSE_THRESHOLD = 0.4; // fuse ratio below which halo activates
+const HALO_FUSE_THRESHOLD = 0.4;
 const HALO_PULSE_FREQ = 0.012;
 const HALO_RADIUS = 0.36;
 const BAND_UPPER_Y = 0.15;
@@ -93,12 +93,14 @@ const CHARGE_BAR_TICK_THREE_QUARTER = 0.75;
 
 // Throw path preview overlay constants
 const THROW_PATH_DOT_RADIUS = 2.5;
-const THROW_PATH_DOT_SPACING = 12; // pixels between dots along the path
+const THROW_PATH_DOT_SPACING = 12;
 const THROW_PATH_DOT_ALPHA = 0.3;
-const THROW_PATH_MARCH_SPEED = 6; // px/sec — very slow drift for golf-simulator feel
-const THROW_PATH_IMPACT_BASE_RADIUS = 11; // base radius of the impact ring
-const THROW_PATH_IMPACT_PULSE_AMP = 3; // radius oscillation in pixels
-const THROW_PATH_IMPACT_PULSE_FREQ = 0.7; // Hz — slow breathe
+/** Slow enough to read as a golf-simulator style drift rather than a scroll. */
+const THROW_PATH_MARCH_SPEED = 6;
+const THROW_PATH_IMPACT_BASE_RADIUS = 11;
+const THROW_PATH_IMPACT_PULSE_AMP = 3;
+/** Hz — a slow breathing pulse. */
+const THROW_PATH_IMPACT_PULSE_FREQ = 0.7;
 const THROW_PATH_IMPACT_ALPHA = 0.4;
 const THROW_PATH_IMPACT_LINE_WIDTH = 1.5;
 const THROW_PATH_IMPACT_CENTER_RADIUS = 3;
@@ -126,10 +128,9 @@ export function drawDynamiteFloorSprite(
 
   const cx = sx + s * FLOOR_CX_OFFSET;
   const cy = sy + s * FLOOR_CY_OFFSET;
-  const bw = s * FLOOR_BODY_WIDTH; // body width
-  const bh = s * FLOOR_BODY_HEIGHT; // body height
+  const bw = s * FLOOR_BODY_WIDTH;
+  const bh = s * FLOOR_BODY_HEIGHT;
 
-  // Pulsing red halo when fuse < 40% (120 frames)
   const fuseRatio = fuseFrames / fuseTotal;
   if (fuseRatio < HALO_FUSE_THRESHOLD) {
     const pulse = Math.sin(Date.now() * HALO_PULSE_FREQ) * FLOOR_CX_OFFSET + FLOOR_CX_OFFSET;
@@ -143,20 +144,16 @@ export function drawDynamiteFloorSprite(
     ctx.fill();
   }
 
-  // Body
   ctx.fillStyle = '#cc1a1a';
   ctx.fillRect(cx - bw / 2, cy - bh / 2, bw, bh);
 
-  // Black bands
   ctx.fillStyle = '#1a0000';
   ctx.fillRect(cx - bw / 2, cy - bh * BAND_UPPER_Y, bw, s * BAND_THICKNESS_SCALE);
   ctx.fillRect(cx - bw / 2, cy + bh * BAND_LOWER_Y, bw, s * BAND_THICKNESS_SCALE);
 
-  // Label stripe (white stripe at center)
   ctx.fillStyle = 'rgba(255,255,255,0.18)';
   ctx.fillRect(cx - bw / 2 + 1, cy - s * LABEL_STRIPE_Y_OFFSET, bw - 2, s * LABEL_STRIPE_HEIGHT);
 
-  // Fuse rope (curved line from top)
   ctx.strokeStyle = '#6b3a1f';
   ctx.lineWidth = s * FUSE_LINEWIDTH;
   ctx.lineCap = 'round';
@@ -186,17 +183,14 @@ export function drawDynamiteFloorSprite(
   if (sparkVisible) {
     const sparkX = cx + s * FUSE_END_X_OFFSET;
     const sparkY = cy - bh / 2 - s * FUSE_END_Y_OFFSET;
-    // Glow
     ctx.beginPath();
     ctx.arc(sparkX, sparkY, s * SPARK_GLOW_R, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255, 140, 0, 0.45)';
     ctx.fill();
-    // Core spark
     ctx.beginPath();
     ctx.arc(sparkX, sparkY, s * SPARK_CORE_R, 0, Math.PI * 2);
     ctx.fillStyle = '#ffdd00';
     ctx.fill();
-    // Tiny bright center
     ctx.beginPath();
     ctx.arc(sparkX, sparkY, s * SPARK_CENTER_R, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
@@ -369,16 +363,13 @@ export function drawDynamiteInventoryIcon(
   const bw = size * ICON_BODY_WIDTH;
   const bh = size * ICON_BODY_HEIGHT;
 
-  // Body
   ctx.fillStyle = '#cc1a1a';
   ctx.fillRect(cx - bw / 2, cy - bh / 2, bw, bh);
 
-  // Bands
   ctx.fillStyle = '#1a0000';
   ctx.fillRect(cx - bw / 2, cy - bh * ICON_BAND_UPPER_Y, bw, size * ICON_BAND_THICKNESS);
   ctx.fillRect(cx - bw / 2, cy + bh * ICON_BAND_LOWER_Y, bw, size * ICON_BAND_THICKNESS);
 
-  // Highlight
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.fillRect(
     cx - bw / 2 + 1,
@@ -387,7 +378,6 @@ export function drawDynamiteInventoryIcon(
     bh * ICON_HIGHLIGHT_HEIGHT,
   );
 
-  // Fuse
   ctx.strokeStyle = '#6b3a1f';
   ctx.lineWidth = size * ICON_FUSE_LINEWIDTH;
   ctx.lineCap = 'round';
@@ -401,7 +391,6 @@ export function drawDynamiteInventoryIcon(
   );
   ctx.stroke();
 
-  // Spark tip
   const sparkX = cx + size * ICON_FUSE_END_X;
   const sparkY = cy - bh / 2 - size * ICON_FUSE_END_Y;
   ctx.beginPath();
@@ -470,7 +459,6 @@ export function drawDynamiteThrowPath(
   // Slowly drifting dot offset — barely perceptible movement
   const marchOffset = (nowSec * THROW_PATH_MARCH_SPEED) % THROW_PATH_DOT_SPACING;
 
-  // Uniform red dots along the entire path
   let dist = marchOffset;
   while (dist < totalLength) {
     const pos = getPositionAtDistance(screenPoints, cumDists, dist);
@@ -481,7 +469,6 @@ export function drawDynamiteThrowPath(
     dist += THROW_PATH_DOT_SPACING;
   }
 
-  // Pulsing target ring at the impact (landing) point only
   const impact = screenPoints[screenPoints.length - 1];
   const pulse = Math.sin(nowSec * THROW_PATH_IMPACT_PULSE_FREQ * Math.PI * 2);
   const impactRadius = THROW_PATH_IMPACT_BASE_RADIUS + pulse * THROW_PATH_IMPACT_PULSE_AMP;
@@ -529,7 +516,6 @@ export function drawDynamiteChargeBar(
   // Flash every 8 frames when in danger
   const flashOn = !isDanger || Math.floor(chargeFrames / CHARGE_BAR_FLASH_DIVISOR) % 2 === 0;
 
-  // Labels above bar — baseline_y converted to top_y: top = baseline - Math.round(size * 0.8)
   const labelX = barX + barW / 2;
   if (isDanger) {
     drawText(ctx, '⚠', {
@@ -571,7 +557,6 @@ export function drawDynamiteChargeBar(
     });
   }
 
-  // Background
   ctx.fillStyle = 'rgba(0,0,0,0.72)';
   ctx.fillRect(
     barX - CHARGE_BAR_BORDER,
@@ -599,7 +584,6 @@ export function drawDynamiteChargeBar(
     ctx.fillRect(barX, barY + barH - fillH, barW, fillH);
   }
 
-  // Tick marks at 25%, 50%, 75% (horizontal lines)
   ctx.strokeStyle = 'rgba(255,255,255,0.25)';
   ctx.lineWidth = 1;
   for (const pct of [

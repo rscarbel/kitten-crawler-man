@@ -5,7 +5,6 @@ import { addButton, drawButton, BUTTON_PRESETS } from '../Button';
 import { drawText, measureTextBox, TEXT_PRESETS } from '../TextBox';
 import { drawBox, drawDivider, drawScrollbar } from '../Box';
 
-// Layout constants
 const TAB_TITLE_SIZE = 16;
 const TAB_TITLE_Y = 15;
 const SIDE_MARGIN = 12;

@@ -1,9 +1,7 @@
 /**
  * The Dark Knight's art gates.
  *
- * The creature has no baked sheet to inspect any more, so every invariant the
- * old bake enforced by throwing before it wrote a PNG is enforced here instead:
- * the pose-stream gates measure the rig itself, and the pixel gates measure
+ * The pose-stream gates measure the rig itself, and the pixel gates measure
  * cells painted from `DARK_KNIGHT_FIGURE` exactly the way the runtime cache
  * bakes them — supersampled and downsampled — so what is measured is what the
  * game blits.
@@ -823,8 +821,8 @@ const GORE_ROTATION_PADDING_PX = 6;
  * `BodyPartGoreSystem` spins a piece about the centre of its own ink, so what
  * has to fit is the *inscribed* circle of the cell rather than the cell's box:
  * a piece wide enough but not tall enough is clipped a quarter turn later. The
- * bake used to size the cell around this; the cell is frozen now, so the same
- * invariant becomes a check on the pieces.
+ * cell is frozen, so this invariant is enforced here as a check on the pieces
+ * rather than by sizing the bake around them.
  */
 function gateGoreRotationClearance(): void {
   const clearance = Math.min(frameWidth, frameHeight) / 2 - GORE_ROTATION_PADDING_PX;

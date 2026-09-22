@@ -18,9 +18,9 @@
  * it is the silhouette** — but the rim is deliberately *not* painted here. Every
  * form in this file is drawn with the same warm near-black outline the rest of
  * the repo uses, and the generator lays one cold edge light around the finished
- * figure's own alpha. Painted per form instead, as the first version did, the
- * rim lands on every internal seam and the creature reads as a neon sign in the
- * shape of a robe.
+ * figure's own alpha. Painted per form instead, the rim would land on every
+ * internal seam and the creature would read as a neon sign in the shape of a
+ * robe.
  *
  * Coordinates are tile units with the origin between the feet and +Y down the
  * screen, so heights above the ground are negative. The caller translates to
@@ -106,9 +106,8 @@ const CLOTH: Ramp = {
 /**
  * The clerk's stole, sash and cuffs: old vellum, gone grey.
  *
- * The one mid-value on the figure, and deliberately dim: at the first pass this
- * was two bright bars down a black chest and the creature read as wearing a
- * ladder. It has to be findable, not the loudest thing on the sprite.
+ * The one mid-value on the figure, and deliberately dim — it has to be
+ * findable, not the loudest thing on the sprite.
  */
 const VELLUM: Ramp = {
   shadow: '#22231c',
@@ -493,9 +492,9 @@ function paintLeg(paint: PaintContext, chain: BoneChain, pitch: number, side: nu
   const { ctx } = paint;
   paintLongBone(ctx, chain.root, chain.joint, FEMUR_WIDTH, FEMUR_KNOB, KNEE_KNOB, LICH_BONE, 0);
   // The shin is the only bone that shows under the hem, and it is deliberately
-  // held down in value. At the mid tone the two shins were the brightest thing
-  // on the sprite after the eyes and read as a pair of talons hanging out of the
-  // robe — the legs are meant to be found, not looked at.
+  // held down in value: at the mid tone the two shins become the brightest
+  // thing on the sprite after the eyes and read as a pair of talons hanging
+  // out of the robe — the legs are meant to be found, not looked at.
   paintLongBone(
     ctx,
     chain.joint,
@@ -830,12 +829,10 @@ const SEAL_CORD_WIDTH = 0.008;
  */
 function paintStole(paint: PaintContext): void {
   const { ctx, rig, view } = paint;
-  // One band down the centre, not two down the sides.
-  //
-  // Two bands were tried both parallel and splayed, and read as a ladder and
-  // then as a pair of braces: at this size any repeated vertical pair on a
-  // chest becomes a structure. A single strip is unambiguous, and it is what a
-  // scribe's scapular actually is.
+  // One band down the centre, not two down the sides: at this size any
+  // repeated vertical pair on a chest reads as a structure — a ladder or a
+  // pair of braces. A single strip is unambiguous, and it is what a scribe's
+  // scapular actually is.
   const top = offset(
     rig.shoulderCentre,
     view.profile ? STOLE_PROFILE_FORWARD : 0,
@@ -904,10 +901,9 @@ const COWL_RISE = 0.2;
 /**
  * How far the crown slumps past the dome.
  *
- * Small. A tall point on a hood is a wizard hat or a ghost sheet, and the first
- * pass of this cowl was both — the shape has to read as cloth draped over a
- * skull, which means a low crown that leans forward and falls to the shoulders,
- * not a cone.
+ * Small. A tall point on a hood reads as a wizard hat or a ghost sheet, so the
+ * shape has to read as cloth draped over a skull instead — a low crown that
+ * leans forward and falls to the shoulders, not a cone.
  */
 const COWL_PEAK = 0.018;
 /** Where the drape gathers across the base of the hood, between the two falls. */

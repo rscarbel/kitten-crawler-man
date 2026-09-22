@@ -68,9 +68,9 @@ const BUGABOO_MIN_LEVEL = 4;
 const BUGABOO_MAX_LEVEL = 7;
 
 /**
- * Boss level bands. Both bosses spawned at base stats before this — a Krakaren
- * Clone gating the floor's only forced gauntlet was weaker than the troglodytes
- * in the rooms leading to it.
+ * Boss level bands. The Krakaren Clone gates the floor's only forced gauntlet
+ * and is levelled to stay tougher than the troglodytes in the rooms leading
+ * to it.
  */
 const KRAKAREN_MIN_LEVEL = 6;
 const KRAKAREN_MAX_LEVEL = 10;

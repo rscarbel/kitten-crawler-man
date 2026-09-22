@@ -1324,8 +1324,7 @@ function drawEyes(ctx: Ctx, d: DrawCtx, centre: Pt, rx: number): void {
 
 /**
  * A short thick pillar of stone under the head. Without it the head-boulder
- * floats above the shoulders with a hole where a neck should be — the single
- * loudest defect in the first bake of this figure.
+ * floats above the shoulders with a hole where a neck should be.
  */
 function drawNeck(ctx: Ctx, d: DrawCtx, head: Pt): void {
   const y = NECK_Y + d.pose.crouch + d.pose.slump * HEAD_SLUMP_DROP * 0.6;

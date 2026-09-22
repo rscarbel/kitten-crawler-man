@@ -1,12 +1,10 @@
 /**
  * The Juicer's art gates.
  *
- * The creature has no baked sheet to inspect any more, so every invariant the
- * old bake gate enforced against sheet pixels is enforced here against cells
- * painted from `JUICER_FIGURE` — baked exactly the way the runtime cache bakes
- * them, supersampled and downsampled, so what is measured is what the game
- * blits. The pose-stream gates measure the rig itself and need no pixels at
- * all.
+ * These gates enforce sheet-shape invariants directly against cells painted
+ * from `JUICER_FIGURE` — baked exactly the way the runtime cache bakes them,
+ * supersampled and downsampled, so what is measured is what the game blits.
+ * The pose-stream gates measure the rig itself and need no pixels at all.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong. A gate that cannot find the row or state it names

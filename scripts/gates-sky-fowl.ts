@@ -1,11 +1,11 @@
 /**
  * The Sky Fowl's art gates.
  *
- * The five sheets are gone, so every invariant they used to be inspected for is
- * enforced here against cells painted from the figures — baked exactly the way
- * the runtime cache bakes them, supersampled and downsampled, so what is
- * measured is what the game blits. The gait gate measures the rig itself and
- * needs no pixels at all.
+ * There are no baked sheets for this creature; every invariant is enforced
+ * here against cells painted from the figures — baked exactly the way the
+ * runtime cache bakes them, supersampled and downsampled, so what is measured
+ * is what the game blits. The gait gate measures the rig itself and needs no
+ * pixels at all.
  *
  * This creature is eight figures rather than one: a fowl wears one of eight
  * clothing palettes and each palette is its own `FigureDef`, because a cached
@@ -175,9 +175,9 @@ function countColor(data: Uint8ClampedArray, want: Rgb): number {
 /**
  * G1 — the shared structural gates over every palette: each declared state
  * paints each declared frame, nothing paints against the cell edge, and the
- * cell is not mostly empty. The edge check is what the old bake's border-clip
- * gate did; a frame that paints outside its cell is clipped away silently and
- * nothing downstream can detect it.
+ * cell is not mostly empty. A frame that paints outside its cell is clipped
+ * away silently by the cache, and nothing downstream can detect it, which is
+ * why the edge check exists.
  */
 function gateStructure(): void {
   let figuresMeasured = 0;
@@ -768,11 +768,10 @@ function countCrownColor(data: Uint8ClampedArray, want: Rgb): number {
  * G9 — every palette paints its own vest and its own trousers, and a hatless
  * palette paints no hat.
  *
- * This is the gate for the thing the conversion changed: the clothing used to
- * be four tinted mask sheets composited over a neutral body, and is now painted
- * straight from the palette. A palette silently falling back to another's
- * colours — or to none — is invisible to every other gate here, because the
- * bird is still a correctly shaped bird.
+ * The clothing is painted straight from the palette, with no compositing step
+ * to catch a wrong color. A palette silently falling back to another's colours
+ * — or to none — is invisible to every other gate here, because the bird is
+ * still a correctly shaped bird.
  */
 function gateClothing(): void {
   const idle = rowNamed('idle', 'G9');

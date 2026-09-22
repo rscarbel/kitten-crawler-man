@@ -1300,9 +1300,9 @@ function drawLeg(
 const TAIL_LENGTH = 1.02;
 const TAIL_SEGMENTS = 14;
 /**
- * A tail is a rope, not a limb. At half again this width the first pass baked a
- * pink slab as thick as his own thigh, which read as a trunk rather than as a
- * tail however well it was posed — the taper is the whole shape.
+ * A tail is a rope, not a limb: much thicker than this and it reads as a slab
+ * as thick as his own thigh — a trunk rather than a tail, however well it is
+ * posed — because the taper is the whole shape.
  */
 const TAIL_ROOT_WIDTH = 0.036;
 const TAIL_TIP_WIDTH = 0.006;
@@ -2244,9 +2244,9 @@ function drawFigure(ctx: Ctx, view: ViewSpec, pose: RatKinPose): void {
   // candidate: it never moves sideways in any pose this figure has, so a
   // hip-following shadow is a constant dressed as a variable.
   //
-  // Constant alpha, deliberately. An earlier version faded it as the feet left
-  // the floor, which the ground-contact gate makes unreachable — he always has a
-  // foot down — so the fade was a branch that could never run.
+  // Constant alpha, deliberately: fading it as the feet left the floor would be
+  // a branch that never runs, since the ground-contact gate guarantees he
+  // always has a foot down.
   const stanceCentre = (pose.nearFoot.ball.x + pose.farFoot.ball.x) / 2;
   drawGroundShadow(ctx, stanceCentre * SHADOW_FOLLOW, SHADOW_RX, CONTACT_SHADOW_ALPHA);
 

@@ -473,10 +473,10 @@ const drawAnvilBlock: ClutterPainter = (ctx, sx, sy, ts) => {
 /**
  * A heap of coal: a flat mound with lumps breaking its top edge.
  *
- * Wider than it is tall, and the lumps sit *on* the mound rather than inside it.
- * A first cut stacked four overlapping discs of similar size, which merged into
- * one circle and read as a cannonball — a pile is recognised by its silhouette
- * being flat-bottomed and ragged on top, not by being dark.
+ * Wider than it is tall, and the lumps sit *on* the mound rather than inside
+ * it — overlapping discs of similar size merge into one circle and read as a
+ * cannonball, while a pile is recognised by its silhouette being flat-bottomed
+ * and ragged on top, not by being dark.
  */
 const COAL_MOUND_CY = 0.76;
 const COAL_MOUND_RX = 0.42;
@@ -723,8 +723,8 @@ const SHEET_SWAY_AMPLITUDE_RAD = 0.07;
  * The poles the line is strung between.
  *
  * Drawn rather than assumed: the alleys' flanking ground is verge and street, not
- * a building wall, so with nothing at the ends the rope read as trailing off into
- * the open — which is exactly what the placement doc used to claim it did not.
+ * a building wall, so with nothing at the ends the rope reads as trailing off
+ * into the open instead of strung between two fixed points.
  */
 const LINE_POLE_WIDTH_PX = 2;
 const LINE_POLE_FOOT = 0.42;

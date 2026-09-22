@@ -17,14 +17,12 @@ import { drawSkillIcon } from './icons/skillIcons';
 import { pointInRect } from '../utils';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
-// Panel
 const PANEL_MAX_WIDTH = 340;
 const PANEL_HORIZONTAL_MARGIN = 32;
 const PANEL_MIN_HEIGHT = 250;
 const PANEL_BASE_HEIGHT = 208;
 const OVERLAY_ALPHA = 0.72;
 
-// Layout
 const TITLE_Y_OFFSET = 20;
 const TITLE_SIZE = 16;
 const ICON_SIZE = 48;
@@ -38,7 +36,6 @@ const BODY_WIDTH_MARGIN = 36;
 const WARNING_Y_GAP = 8;
 const WARNING_SIZE = 10;
 
-// Buttons
 const BUTTON_WIDTH = 116;
 const BUTTON_HEIGHT = 40;
 const BUTTON_GAP = 12;

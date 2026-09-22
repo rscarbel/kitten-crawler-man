@@ -132,10 +132,10 @@ function planCells(
   if (keys.length === 1) {
     const key = keys[0];
     const rows = rowsFor(key);
-    // Settled over every row *before* any cell is emitted. Growing it inside the
-    // loop meant the one-frame states padded against a width of 1 while the
-    // layout below used the final maximum, so `burning` began mid-line and split
-    // across two grid rows — a review harness that lies about its own geometry.
+    // Settled over every row *before* any cell is emitted, so every row lays out
+    // against the same final width. Computing it row-by-row instead would pad a
+    // one-frame state against whatever width had been seen so far rather than
+    // the eventual maximum, splitting it mid-line across two grid rows.
     const columns = Math.max(1, ...rows.map((spec) => spec.frameCount));
     const cells: Cell[] = [];
     for (const spec of rows) {
@@ -187,8 +187,9 @@ async function drawContactSheet(scale: number): Promise<Buffer> {
   const inGameStripHeight = LABEL_HEIGHT + cellH / scale + PADDING;
 
   // The in-game strip below the grid lays every selected sheet out in a single
-  // row at 1:1, which at a small --scale is wider than the grid itself. Sizing
-  // the canvas to the grid alone silently truncated it off the right edge.
+  // row at 1:1, which at a small --scale is wider than the grid itself, so the
+  // canvas has to be sized to the strip too or it gets truncated off the right
+  // edge with no error.
   const stripWidth =
     PADDING +
     keys.reduce((total, key) => {

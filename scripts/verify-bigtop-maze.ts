@@ -1632,9 +1632,9 @@ console.log('\nWalking into the centre ring and reaching the last conversation�
 {
   const { maze, ctx, human, cat, spawnedMobs } = buildMazeHarness();
 
-  // The whole point of the rework: the ring holds nothing to break. A prop
-  // spawned in the chamber is a fight nobody asked for, and it would take the
-  // last beat of the questline back out of the player's hands.
+  // The centre ring must hold nothing to break. A prop spawned in the chamber
+  // is a fight nobody asked for, and it would take the last beat of the
+  // questline back out of the player's hands.
   const propsInTheRing = spawnedMobs.filter(
     (mob) =>
       mob instanceof MazeBlockTarget &&
@@ -1875,9 +1875,9 @@ console.log('\nParking a crawler on every authored rest cell…');
 
 // ── The sealed door ───────────────────────────────────────────────────────────
 
-// `BuildingSystem` gained the entry gate for this one tent, but the code path is
-// every door in town — so the ordinary open-door behaviour is asserted here
-// beside the refusal it was added for.
+// The entry gate exists for this one tent, but `BuildingSystem` runs the same
+// code path for every door in town — so the ordinary open-door behaviour is
+// asserted here beside the refusal.
 
 console.log('\nDriving the Big Top’s door gate…');
 {

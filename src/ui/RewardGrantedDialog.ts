@@ -6,14 +6,12 @@ import { drawOverlay, drawBox } from './Box';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
-// Dialog box dimensions
 const DIALOG_MAX_WIDTH = 320;
 const DIALOG_PADDING_HORIZONTAL = 32;
 const DIALOG_MIN_HEIGHT = 280;
 const DIALOG_BASE_HEIGHT = 236;
 const DIALOG_DESC_LINE_HEIGHT = 15;
 
-// Dialog layout positions
 const DIALOG_TITLE_Y_OFFSET = 17;
 const DIALOG_ICON_Y = 48;
 const DIALOG_NAME_Y_OFFSET = 28;
@@ -25,15 +23,12 @@ const DIALOG_DESC_WIDTH_MARGIN = 40;
 const DIALOG_DESC_SIZE = 11;
 const DIALOG_DESC_Y_ADJUST = 11;
 
-// Icon
 const ICON_SIZE = 56;
 
-// OK button
 const OK_BUTTON_WIDTH = 100;
 const OK_BUTTON_HEIGHT = 40;
 const OK_BUTTON_Y_OFFSET = 56;
 
-// Animation timing
 const POWER_UP_FRAMES = 60;
 
 /** The only thing that differs between an ability, a skill and an item grant. */
@@ -153,7 +148,6 @@ export class RewardGrantedDialog {
       borderWidth: 2.5,
     });
 
-    // Title
     drawText(ctx, REWARD_HEADINGS[current.kind], {
       x: bx + boxW / 2,
       y: by + DIALOG_TITLE_Y_OFFSET,
@@ -163,14 +157,12 @@ export class RewardGrantedDialog {
       align: 'center',
     });
 
-    // Icon with power-up animation
     const iconX = bx + boxW / 2 - ICON_SIZE / 2;
     const iconY = by + DIALOG_ICON_Y;
     drawPowerUpIcon(ctx, iconX, iconY, ICON_SIZE, this.iconPulse, this.phase === 'power_up', () => {
       current.renderIcon(ctx, iconX, iconY, ICON_SIZE);
     });
 
-    // Reward name
     const nameY = iconY + ICON_SIZE + DIALOG_NAME_Y_OFFSET;
     drawText(ctx, current.name, {
       x: bx + boxW / 2,
@@ -181,7 +173,6 @@ export class RewardGrantedDialog {
       align: 'center',
     });
 
-    // Description and OK button (shown after power-up completes)
     if (this.phase === 'done') {
       const descY = nameY + DIALOG_DESC_Y_OFFSET;
       drawText(ctx, current.description, {

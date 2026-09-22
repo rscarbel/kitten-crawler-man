@@ -15,9 +15,10 @@ export const QUEST_LEVEL_LAG_ALLOWANCE = 6;
  * The most levels the party floor may add to an encounter's authored level.
  *
  * Without a ceiling the floor alone rewrites a fight. A circus wave is authored
- * at base stats and fielded five at a time; every level multiplies its bite by
- * 20% and its health by 30%, so lifting it the full lag allowance against a
- * late-floor party turned a warm-up into an unwinnable one. Four levels is
+ * at base stats and fielded five at a time, and every level grows each body's
+ * health and bite along the curves in `src/creatures/mobLevelScaling.ts` —
+ * multiplied across five bodies, lifting it the full lag allowance against a
+ * late-floor party turns a warm-up into a different encounter. Four levels is
  * enough that the encounter is no longer free XP and small enough that the
  * numbers its designer picked still describe the fight.
  */

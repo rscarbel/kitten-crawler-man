@@ -24,12 +24,11 @@
  *
  * A town building interior is a separate map with tile types of its own —
  * `INTERIOR_BOARD_FLOOR`, `INTERIOR_STONE_FLOOR`, `INTERIOR_WALL` and
- * `INTERIOR_COUNTER`, drawn through `TOWN_INTERIOR_GROUND`. It did not use to
- * be: a shop and a house were floored in `FloorTypeValue.wood`, the tower in
- * `carpet`, and every interior wall and counter run in `wall`, so an interior
- * resolved through whichever dungeon theme happened to be active and a
- * townhouse's floorboards changed with the last cellar the player walked
- * through. That is what those four types were added to end.
+ * `INTERIOR_COUNTER`, drawn through `TOWN_INTERIOR_GROUND`. Those types exist so
+ * an interior's floor and wall art is independent of the dungeon theme: sharing
+ * the generic `FloorTypeValue.wood`/`carpet`/`wall` types would make a
+ * townhouse's floorboards resolve through whichever dungeon theme happens to be
+ * active, rather than through the interior's own palette.
  */
 
 import type { GroundPalette } from '../ground/GroundPalette';

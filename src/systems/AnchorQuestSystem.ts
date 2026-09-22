@@ -324,10 +324,9 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
       this.bus.emit('playerLevelUp', { player: payer, newLevel: payer.level });
     }
     // `QuestManager`'s generic `lootBoxItems` field is never read by any payout
-    // path in this codebase — granted directly here instead, so the errand
-    // actually restocks the walk home rather than only promising to in a
-    // comment on a dead declaration. `addItem` drops silently when there is no
-    // room, same as every other grant here checks for first.
+    // path in this codebase, so the potions are granted directly here.
+    // `addItem` drops silently when there is no room, same as every other
+    // grant here checks for first.
     if (payer.inventory.hasRoomFor('health_potion')) {
       const potionCount =
         ANCHOR_REWARD_POTIONS_MIN +

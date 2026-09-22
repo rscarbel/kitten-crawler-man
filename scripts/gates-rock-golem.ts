@@ -2,12 +2,10 @@
  * The rock golems' art gates, covering the regular golem, the bounty boss and
  * the two thrown-rock effects.
  *
- * None of the four has a baked sheet to inspect any more, so every invariant
- * the old bake enforced by throwing before it wrote a PNG is enforced here
- * instead: the pose-stream gates measure the rig itself, and the pixel gates
- * measure cells painted from the figures exactly the way the runtime cache
- * bakes them — supersampled and downsampled — so what is measured is what the
- * game blits.
+ * The pose-stream gates measure the rig itself, and the pixel gates measure
+ * cells painted from the figures exactly the way the runtime cache bakes them
+ * — supersampled and downsampled — so what is measured is what the game
+ * blits.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong. A gate that cannot find the row or state it names
@@ -581,11 +579,11 @@ function gateStoneSeams(): void {
  * The impact frame the runtime lands damage on has to be the frame that shows
  * the impact.
  *
- * An earlier version of this gate compared the row table's frame counts against
- * the timing module the row table is *built from*, which is `X !== X` and can
- * never fail. What is checked now: on the declared impact frame both fists are
- * at their lowest of the whole row, and they are within a fist's width of the
- * ground. On the declared release frame the rock has just left the hands.
+ * Comparing the row table's frame counts against the timing module the row
+ * table is *built from* would be `X !== X` and could never fail. What is
+ * checked instead: on the declared impact frame both fists are at their
+ * lowest of the whole row, and they are within a fist's width of the ground.
+ * On the declared release frame the rock has just left the hands.
  */
 const SLAM_GROUND_CLEARANCE = FIST_RADIUS * 1.35;
 

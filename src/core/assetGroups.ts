@@ -59,7 +59,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'ground_masks',
     // The "find the stairwell" banner shown on entering (or re-entering) any
     // dungeon floor — not a tile sprite, just a full-screen splash image, but
-    // tracked through SpriteLoader like everything else per the asset plan.
+    // tracked through SpriteLoader like every other sheet.
     'find-the-stairwell',
   ],
 

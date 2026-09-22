@@ -601,8 +601,6 @@ function paintTileCourse(
   const bottom = course.top + course.height * (1 + style.lapFraction);
   const slipChance = style.slipRate * disrepair;
   const missingChance = style.missingRate * disrepair;
-  // Scaled by disrepair like the other two. It was used raw, against its own
-  // field's documentation, so a well-kept shake roof split as often as a ruin.
   const splitChance = style.splitRate * disrepair;
 
   let x = -bond;
@@ -1275,9 +1273,7 @@ function paintDomeTiling(options: RoofPaintOptions, ramp: Ramp, geometry: DomeGe
   ctx.lineWidth = DOME_COURSE_WIDTH_PX;
   for (let course = 1; course < DOME_COURSE_COUNT; course++) {
     // A hemisphere's equal-arc courses project as the sine of the polar angle,
-    // which bunches them at the *crown*. Squaring the fraction instead bunched
-    // them at the springing line — the opposite end — piling three unreadable
-    // rings into the bottom tenth of the dome and leaving the crown bare.
+    // which bunches them at the *crown* rather than spacing them evenly.
     const height = Math.sin((course / DOME_COURSE_COUNT) * (Math.PI / 2));
     const ringX = radiusX * Math.sqrt(Math.max(0, 1 - height * height));
     const ringY = radiusY * height;

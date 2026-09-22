@@ -862,19 +862,15 @@ function swipeFacing(t: number, away: boolean): BugabooPose {
  * standing in a hole rather than one still coming out of it.
  */
 /**
- * Deep enough that only the crown of the skull and the eyes clear the lip. The
- * shot is a hand coming out of a hole in the floor, not a creature standing in
- * one: raised far enough to show its shoulders it stops reading as trapped and
- * the hole stops reading as a hole.
- */
-/**
- * Deep enough that the *face* never clears the floor line.
+ * Deep enough that only the crown of the skull and the eyes clear the lip, and
+ * the face itself never clears the floor line — the shot is a hand coming out
+ * of a hole in the floor, not a creature standing in one.
  *
  * The barrier's boards are painted before mobs are, so everything this row
  * draws lands on top of them. An arm through a gap in boards genuinely is in
  * front of them, seen from above — but a face pressed to their underside is
- * not, and at 0.78 the eyes sat squarely on the planks. Sunk this far only the
- * crown of the skull breaks the line, which reads as the boards bulging.
+ * not. Sunk this far only the crown of the skull breaks the line, which reads
+ * as the boards bulging.
  */
 const BREACH_DEPTH = 0.88;
 const BREACH_HEAVE = 0.03;
@@ -1151,11 +1147,11 @@ function paintView(ctx: CanvasRenderingContext2D, view: BugabooView, pose: Bugab
  * The cell every pose is painted into, and where the creature's own tile sits
  * inside it.
  *
- * The bake this figure replaces *measured* these: it painted every frame of
- * every row onto an oversized canvas, took the widest reach in each direction
- * from the ground point, added `FRAME_PADDING` and rounded up to
- * `FRAME_SIZE_QUANTUM`. Nothing can measure ink at runtime, so the answer is
- * frozen here and `scripts/gates-bugaboo.ts` re-measures it on every render:
+ * These numbers come from painting every frame of every row onto an oversized
+ * canvas, taking the widest reach in each direction from the ground point, and
+ * adding `FRAME_PADDING` before rounding up to `FRAME_SIZE_QUANTUM`. Nothing
+ * can measure ink at runtime, so the answer is frozen here and
+ * `scripts/gates-bugaboo.ts` re-measures it on every render:
  * a pose that grows past the cell is sheared flat by the blit and baked in, and
  * nothing downstream can see it happen.
  */

@@ -201,13 +201,11 @@ export class Tuskling extends Mob {
           break;
         }
 
-        // Initiate charge if in range and has LOS
         if (nearestDist <= chargeRangePx && nearestDist > meleeRangePx && this.hasLOS(nearest)) {
           this.state = 'charge_windup';
           this.windupTimer = TUSKLING_WINDUP_GAME_FRAMES;
           this.isMoving = false;
           this._faceToward(nearest);
-          // Lock charge direction now
           const d = Math.hypot(nearest.x - this.x, nearest.y - this.y);
           this.chargeDx = d > 0 ? (nearest.x - this.x) / d : 0;
           this.chargeDy = d > 0 ? (nearest.y - this.y) / d : 1;
@@ -255,7 +253,6 @@ export class Tuskling extends Mob {
         this.chargeWindup = 1 - this.windupTimer / TUSKLING_WINDUP_GAME_FRAMES;
         this.isMoving = false;
 
-        // Keep facing locked target direction
         if (nearest) this._faceToward(nearest);
 
         if (this.windupTimer <= 0) {
@@ -273,25 +270,21 @@ export class Tuskling extends Mob {
         this.chargeAnimTimer++;
         this.isMoving = true;
 
-        // Move at charge speed in the locked direction
         const prevX = this.x;
         const prevY = this.y;
         this.moveWithCollision(this.chargeDx * CHARGE_SPEED, this.chargeDy * CHARGE_SPEED);
 
-        // Hit wall detection: if neither axis moved at all, the charge is blocked
         const movedX = Math.abs(this.x - prevX) > MIN_MOVEMENT_PX;
         const movedY = Math.abs(this.y - prevY) > MIN_MOVEMENT_PX;
         const wallHit = !movedX && !movedY;
 
         if (wallHit) {
-          // Bonk — stagger into cooldown
           this.state = 'cooldown';
           this.cooldownTimer = CHARGE_COOLDOWN + WALL_BONK_PENALTY_FRAMES;
           this.isMoving = false;
           break;
         }
 
-        // Damage any target we're close enough to (once per charge)
         if (!this.chargeHitDealt && nearest) {
           const distNow = Math.hypot(nearest.x - this.x, nearest.y - this.y);
           if (distNow <= this.tileSize * CHARGE_HIT_RANGE_TILES) {

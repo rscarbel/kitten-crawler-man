@@ -22,7 +22,6 @@ function isWhollyInBand(band: ScrollBand, y: number, height: number): boolean {
   return y >= band.top && y + height <= band.bottom;
 }
 
-// Volume slider constants
 const TRACK_HEIGHT = 20;
 /** The drawn track is thin; the touch target around it is not. */
 const TRACK_HIT_PAD = 10;
@@ -35,7 +34,6 @@ const TRACK_FILL_WIDTH_MARGIN = 2;
 const TRACK_FILL_HEIGHT_MARGIN = 2;
 const MIN_FILL_WIDTH = 2;
 
-// Settings tab layout
 /** Top of the scrolling list and the footer that holds the always-reachable Back button. */
 export const SETTINGS_SCROLL_TOP_Y = 46;
 export const SETTINGS_FOOTER_H = 60;
@@ -54,7 +52,6 @@ const FIRST_SLIDER_Y_OFFSET = 20;
 const SLIDER_SPACING = 58;
 const LAST_SLIDER_SPACING = 52;
 
-// Graphics section
 const GRAPHICS_LABEL_Y_OFFSET = 16;
 const GRAPHICS_LABEL_SIZE = 12;
 const GRAPHICS_ROW_Y_SPACING = 32;
@@ -102,27 +99,23 @@ const DIFFICULTY_HINTS: Record<Difficulty, string> = {
   hard: 'Take more damage now; tougher spawns and bigger rewards from the next floor or bounty.',
 };
 
-// Controls section
 const CONTROLS_SECTION_LABEL_Y_OFFSET = 16;
 const CONTROLS_SECTION_Y_SPACING = 32;
 const CONTROLS_BUTTON_HEIGHT = 44;
 const CONTROLS_BUTTON_Y_SPACING = 56;
 
-// Mobile controls section
 const MOBILE_SECTION_LABEL_Y_OFFSET = 16;
 const MOBILE_SECTION_LABEL_SIZE = 12;
 const MOBILE_SECTION_Y_SPACING = 32;
 const CHAT_BUTTON_HEIGHT = 44;
 const CHAT_BUTTON_Y_SPACING = 56;
 
-// Reset Game button
 const RESET_BUTTON_HEIGHT = 44;
 /** Breathing room under the last button when the section is bottom-anchored. */
 const GAME_SECTION_BOTTOM_PAD = 12;
 const SECTION_LABEL_Y_SPACING = 32;
 const SECTION_LABEL_SIZE = 12;
 
-// Confirmation dialog
 const CONFIRM_DIALOG_H = 170;
 const CONFIRM_DIALOG_H_MARGIN = 20;
 const CONFIRM_TITLE_Y_OFFSET = 28;
@@ -290,7 +283,6 @@ function renderResetConfirmDialog(
   onCancel: () => void,
   onConfirm: (() => void) | null,
 ): void {
-  // Dim the settings content behind the dialog
   ctx.save();
   ctx.globalAlpha = CONFIRM_OVERLAY_ALPHA;
   ctx.fillStyle = '#000000';

@@ -427,10 +427,10 @@ export function generateOverworld(size: number): OverworldData {
   // camps, forests, the town — so it runs once all of them are on the grid.
   paintCliffs(grid, plan, elevation, camps, BORDER);
   // Both checks run over the *finished* grid, which is load-bearing rather than
-  // tidy. The scatter pass is itself something that has put the wrong material
-  // inside the walls, and `paintTownProps` is the only writer of the wells and the
-  // fountain — an earlier draft of the escape-tile guard sat above it and every one
-  // of its prop branches was therefore dead code that could never fire.
+  // tidy. The scatter pass is itself something that can put the wrong material
+  // inside the walls, and `paintTownProps` is the only writer of the wells and
+  // the fountain — a check that ran before either of them would never see the
+  // prop branches it exists to guard.
   assertTownInteriorIsIntact(grid, plan, tracksInTownBefore);
   assertDoomsdayEscapeTileIsClear(grid, plan);
 
@@ -531,18 +531,14 @@ function asPercent(fraction: number): string {
  *
  * - The **doors and the circus throw**, like every other validator here. Those
  *   are what make a map playable at all, and neither has ever failed.
- * - A large **marooned region warns**. It used to throw, and that was wrong in
- *   both directions at once. Blaming the river carving for any region with a
- *   water tile on its rim rejected about one map in 250 for holes in woods that
- *   predate rivers entirely;
- *   attributing properly by border share fixed that but still left 2 maps in
- *   2,500 with a *genuine* severing — one of 4,914 tiles, 88% of the map still
- *   reachable — that neither repair pass can open, because a composite border of
- *   forest, boulders, cliff and water offers no single tile to bridge or ramp.
- *   Refusing to load the floor one time in 1,250 is a far worse outcome than a
- *   corner of the wilderness the player cannot walk to, especially when the
- *   doors, the circus and every spawn point are separately guaranteed. So it
- *   says so loudly and carries on.
+ * - A large **marooned region warns** rather than throws. A genuine severing —
+ *   one of 4,914 tiles, 88% of the map still reachable — happens in about 2 maps
+ *   in 2,500, where a composite border of forest, boulders, cliff and water
+ *   offers no single tile either repair pass can bridge or ramp. Refusing to
+ *   load the floor one time in 1,250 is a far worse outcome than a corner of the
+ *   wilderness the player cannot walk to, especially when the doors, the circus
+ *   and every spawn point are separately guaranteed. So it says so loudly and
+ *   carries on.
  * - An unreachable **spawn point is pruned, not thrown on**. A generated map has
  *   always sealed a handful of them inside a forest pocket or a ruin shell —
  *   measured at two to eleven per map, and true even with no rivers carved at
@@ -1408,11 +1404,12 @@ function paintForests(grid: TileGrid, plan: TownPlan): void {
 /**
  * The three open, walkable surfaces the wilderness is made of.
  *
- * The ruins and the ambient spawn scatter both used to test `=== grass`, which
- * was the same question while grass was the only thing out there. Once the
- * elevation bands repaint a third of the map, that test silently confined every
- * ruin and every ghoul to the lowlands — the scatter's ~220 points would have
- * collapsed with it, since a rejected attempt is not retried.
+ * The elevation bands repaint a third of the map to `HIGHLAND_GRASS` or
+ * `SCREE`, so the ruins and the ambient spawn scatter have to test for open
+ * ground across all three surfaces rather than `=== grass` alone — a narrower
+ * test would silently confine every ruin and every ghoul to the lowlands, and
+ * the scatter's ~220 points would collapse with it, since a rejected attempt is
+ * not retried.
  */
 function isOpenWildernessGround(type: number | undefined): boolean {
   return type === FloorTypeValue.grass || type === HIGHLAND_GRASS || type === SCREE;

@@ -245,10 +245,9 @@ export function drawCounterFrontFace(
  * The run's side return: the short leg that turns off the front bar and closes
  * the galley against the wall.
  *
- * Wood-dominant panelling rather than the bar's stone slab. An earlier pass drew
- * it as slab-across-the-tile and the two returns read as a pair of grey pillars
- * standing loose in the kitchen; as joinery they read as what they are, the end
- * of the counter.
+ * Wood-dominant panelling rather than the bar's stone slab: a slab across the
+ * tile reads as a pair of grey pillars standing loose in the kitchen, while
+ * joinery reads as what it is, the end of the counter.
  */
 function drawCounterReturn(
   ctx: CanvasRenderingContext2D,

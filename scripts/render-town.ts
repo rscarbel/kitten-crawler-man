@@ -32,9 +32,8 @@ import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
  * browser globals. Three shims are the whole compatibility layer: `Image` for
  * `SpriteLoader`, `document.createElement('canvas')` for `allocCanvas`'s
  * fallback path, and `window.devicePixelRatio` for the low-end downscale check.
- * The tile animations want `performance.now`, which Node provides as a global
- * already — worth stating, because a fourth shim was written for it here and
- * never assigned, and nothing failed.
+ * The tile animations need `performance.now`, which Node already provides as
+ * a global, so it needs no shim of its own.
  *
  * They are installed before the game modules are imported, because
  * `SpriteLoader` builds its footprint tables at module load.
@@ -47,14 +46,10 @@ interface CanvasGlobals {
 const globals: CanvasGlobals = globalThis;
 
 /**
- * Retina, so `shouldDownscaleForLowEndDevice` returns false and the sheets are
- * rendered at the resolution they were baked at.
- *
- * Absent entirely until a sheet grew large enough to reach that check, at which
- * point this harness died on a bare `window is not defined` — the shim was
- * missing all along and nothing had asked for it. Halving the sheets here would
- * be worse than the crash: the review image would no longer be showing the art
- * that ships.
+ * Retina, so `shouldDownscaleForLowEndDevice` returns false and the sheets
+ * render at the resolution they were baked at — halving them here would mean
+ * the review image no longer shows the art that ships. Without this shim,
+ * `window.devicePixelRatio` is undefined and that check throws.
  */
 const REVIEW_DEVICE_PIXEL_RATIO = 2;
 

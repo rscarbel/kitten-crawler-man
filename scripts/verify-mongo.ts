@@ -269,10 +269,10 @@ function findEnclosedBlockedTile(
 /**
  * A cat that keeps walking, the way a player leaving a fight behind does.
  *
- * Routed rather than steered: an earlier version aimed her straight at a distant
- * tile and she spent the whole run pressed into the first wall between, which
- * made the run look like a pass while testing nothing — the pet caught up
- * because nobody was going anywhere. She now walks A* hops, preferring each next
+ * Routed rather than steered: aiming her straight at a distant tile risks
+ * pressing her into the first wall between, which would make the run look
+ * like a pass while testing nothing — the pet catches up because she isn't
+ * actually going anywhere. She instead walks A* hops, preferring each next
  * hop to be further from where she started, so the gap she opens on a slower
  * animal is the gap ordinary forward progress opens.
  */
@@ -477,10 +477,10 @@ console.log('\nthe activation-radius exemption');
   if (mongo === null) {
     check(false, 'a Mongo could be summoned beside the cat on a generated overworld');
   } else {
-    // Exiled far outside the mob loop's activation radius by hand. Before the
-    // exemption this is precisely the state that froze him: `updateAI` never
-    // ran, so he could not follow, could not recall, and could not even count
-    // down his own despawn.
+    // Exiled far outside the mob loop's activation radius by hand — exactly the
+    // state that freezes him without his activation-radius exemption:
+    // `updateAI` never runs, so he cannot follow, cannot recall, and cannot
+    // even count down his own despawn.
     const preX = mongo.x;
     const preY = mongo.y;
     mongo.x = h.cat.x + TILE_SIZE * FAR_EXILE_TILES;
@@ -691,14 +691,14 @@ console.log('\na pet who cannot move at all');
 
 console.log('\nstuck, with something biting the cat');
 {
-  // The nastiest shape this whole change has, and the one a reasonable-looking
-  // fix walks straight into. A mob attacking the owner is top priority *and* is
+  // The nastiest failure shape here, and the one a reasonable-looking guard
+  // walks straight into. A mob attacking the owner is top priority *and* is
   // exempt from the unreachable-route ban, so a Mongo who cannot reach it will
   // re-acquire it the instant he bans it — an A* search per frame, forever. The
   // damage is not the cost: it holds him inside `engage`, and the homeward
   // watchdog only runs on the paths where he is walking to the cat. He laps
-  // there with no route to the mob and no route to a rescue, which is the
-  // original vanish wearing a different hat.
+  // there with no route to the mob and no route to a rescue — vanished from the
+  // player's control just the same.
   const h = buildHarness();
   const mongo = summonInto(h);
   const catTile = {
@@ -865,10 +865,10 @@ console.log('\nthe level table');
 
 console.log('\nwho he picks a fight with');
 {
-  // The largest behavioural change in the rework, and the one a headless run can
-  // check exactly: he guards the cat, helps with her target, otherwise hunts what
-  // is nearest. Each tier gets its own run, because the inputs overlap — a mob the
-  // cat has hit is one its own AI will happily start targeting her over, and a
+  // Mongo's core targeting rule, and the one a headless run can check exactly:
+  // he guards the cat, helps with her target, otherwise hunts what is nearest.
+  // Each tier gets its own run, because the inputs overlap — a mob the cat has
+  // hit is one its own AI will happily start targeting her over, and a
   // scenario that cannot hold its inputs still is measuring the goblin's mood
   // rather than Mongo's rule.
   for (const tier of ['party threat', "the cat's quarry", 'nearest'] as const) {
@@ -1133,10 +1133,10 @@ console.log('\nthe summon button has room for its own text');
 
 console.log('\nthe first level-up is reachable');
 {
-  // The complaint was not that levelling was slow — it was that players never
-  // saw the level-up dialog at all, because at the old rate the first level was
-  // five-plus minutes of *uninterrupted* biting from an animal who dies in a few
-  // hits. This bounds the fixed rate against the same arithmetic.
+  // The complaint is not that levelling is slow — it is that players never see
+  // the level-up dialog at all, when the first level takes five-plus minutes of
+  // *uninterrupted* biting from an animal who dies in a few hits. This bounds
+  // the rate against that same arithmetic.
   const BITE_COOLDOWN_FRAMES = 46;
   const FRAMES_PER_SECOND = 60;
   /** The first level-up has to land inside a single session of real use. */

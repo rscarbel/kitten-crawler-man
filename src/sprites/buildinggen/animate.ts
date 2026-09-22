@@ -74,16 +74,12 @@ function particleAlpha(phase: number): number {
 /**
  * A value in [0, 1) that varies per element *and* around the loop, and closes.
  *
- * The obvious tool is `NoiseField.value`, and reaching for it here is a trap the
- * first version of this file fell into wholesale. That field divides its
- * coordinates by `wrapSize / period`; with a wrap size of a few hundred pixels
- * and the small periods these effects asked for, one lattice cell came out
- * sixty to a hundred pixels wide — and every call site was passing indices and
- * phases in the range zero to ten. Every sample landed inside a single cell, so
- * the "flicker" varied by less than a thousandth across a whole loop, seven
- * spark motes rose along one line, and three flame tongues never changed width.
- * Nothing measured it: the loop gate reads a whole-frame mean, and the parts of
- * those effects that *did* move covered for the parts that did not.
+ * `NoiseField.value` is the obvious tool but the wrong one here: it divides its
+ * coordinates by `wrapSize / period`, so with a wrap size of a few hundred
+ * pixels and the small periods these effects need, one lattice cell would span
+ * sixty to a hundred pixels against indices and phases in the range zero to
+ * ten — every sample would land inside a single cell, and the flicker, spark
+ * spread and tongue width these effects depend on would collapse to nothing.
  *
  * So this hashes lattice points directly — no coordinate scaling to get wrong —
  * and interpolates between them around a ring, which is what makes the value

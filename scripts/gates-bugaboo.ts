@@ -1,12 +1,10 @@
 /**
  * The Bugaboo's art gates.
  *
- * The creature has no baked sheet to inspect any more, so every invariant the
- * old bake gate enforced against sheet pixels is enforced here against cells
- * painted from `BUGABOO_FIGURE` — baked exactly the way the runtime cache bakes
- * them, supersampled and downsampled, so what is measured is what the game
- * blits. The pose-stream gates measure the rig itself and need no pixels at
- * all.
+ * These gates enforce sheet-shape invariants directly against cells painted
+ * from `BUGABOO_FIGURE` — baked exactly the way the runtime cache bakes them,
+ * supersampled and downsampled, so what is measured is what the game blits.
+ * The pose-stream gates measure the rig itself and need no pixels at all.
  *
  * Every gate here exists because something on this figure was wrong in a way
  * that `typecheck`, `lint` and reading the drawing code could not see.
@@ -548,12 +546,11 @@ function gateBreachReach(): void {
  * How far a swipe's last frame may sit from the stance it hands back to, as a
  * share of the cell.
  *
- * Re-derived from the art rather than left at the 0.045 it carried, which no
- * plausible defect could reach: the three swipes hand off at 515px, 804px and
- * 515px of this 176×176 cell, so the old limit sat at nearly twice the worst of
- * them and a swipe left visibly mid-recovery — its hand keyed to arrive home
- * half a row late — still measured 1059px and passed. This sits above the
- * shipped rows by about a quarter and under that defect.
+ * Derived from the art itself: the three swipes hand off at 515px, 804px and
+ * 515px of this 176×176 cell, while a swipe left visibly mid-recovery — its
+ * hand keyed to arrive home half a row late — measures 1059px. This sits above
+ * the shipped rows by about a quarter and under that defect, tight enough that
+ * the defect cannot pass unnoticed.
  */
 const SETTLE_LIMIT_SHARE = 0.0323;
 /**

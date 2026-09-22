@@ -117,9 +117,9 @@ const JUICER_MIN_LEVEL = 3;
 const JUICER_MAX_LEVEL = 7;
 
 /**
- * The troglodytes guarding the Juicer's gateway. They used to spawn at level 1,
- * which put weaker creatures outside the second gauntlet boss than inside the
- * rooms leading up to it.
+ * The troglodytes guarding the Juicer's gateway, levelled above the rooms
+ * leading up to it so the gauntlet boss isn't guarded by weaker creatures
+ * than the ones a party already fought to reach it.
  */
 const JUICER_GUARD_MIN_LEVEL = 2;
 const JUICER_GUARD_MAX_LEVEL = 3;

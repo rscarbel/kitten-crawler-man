@@ -140,8 +140,8 @@ export class BuildingSystem implements GameSystem {
     gameMap.buildingEntries.forEach((entry, index) => {
       const { x0, width } = doorwaySpan(entry);
       for (let x = x0; x < x0 + width; x++) {
-        // First match wins, as the `findIndex` scan this replaces did — two
-        // entries sharing a door tile are guarded against but not impossible.
+        // First match wins — two entries sharing a door tile are guarded
+        // against but not impossible.
         const key = tileCoordKey(x, entry.doorTile.y);
         if (!byDoorTile.has(key)) byDoorTile.set(key, index);
       }
@@ -273,7 +273,6 @@ export class BuildingSystem implements GameSystem {
       )
         continue;
 
-      // Small glowing marker above the door
       const arrowSize = Math.floor(ts * ARROW_SIZE_FRACTION);
       const ARROW_TEXT_ADJUST_FRACTION = 0.8;
       drawText(ctx, '▶', {
@@ -285,7 +284,6 @@ export class BuildingSystem implements GameSystem {
         align: 'center',
       });
 
-      // Building name label
       const BUILDING_NAME_TEXT_ADJUST = 9;
       const BUILDING_NAME_Y_EXTRA = 2;
       drawText(ctx, entry.name, {

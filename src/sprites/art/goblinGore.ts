@@ -97,9 +97,9 @@ export interface CutSpec {
    * Direction, in cell-local radians, that blood runs from this wound.
    *
    * It has to point *into the piece*, along the surface blood would actually run
-   * down. The first cut fired drips radially outward from the wound centre in
-   * every direction, which drew a red starburst: the severed arm looked like a
-   * spider, not like something bleeding.
+   * down. Drips fired radially outward from the wound centre in every direction
+   * draw a red starburst: the severed arm looks like a spider, not like
+   * something bleeding.
    */
   readonly runAngle: number;
   readonly seed: number;
@@ -230,9 +230,9 @@ export function drawWound(ctx: Ctx, cut: CutSpec, style: GoblinStyle): void {
   ctx.fill();
 
   // 6a. Wet layer: blood pooled toward the cavity's interior edge. Drawn
-  // *before* the bone, not after: a 72%-opacity wash over the one element gate
-  // G9b requires to be the brightest in the wound is a contradiction, and blood
-  // pools around bone rather than over it. The pooling is deliberately interior
+  // *before* the bone, not after: bone has to be the brightest element in the
+  // wound, and a 72%-opacity wash over it would contradict that — blood pools
+  // around bone rather than over it. The pooling is deliberately interior
   // rather than downward, because the piece is tumbling and "down" is meaningless.
   const pooling = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 0.95);
   pooling.addColorStop(0, rgba(BLOOD, 0));
@@ -241,9 +241,8 @@ export function drawWound(ctx: Ctx, cut: CutSpec, style: GoblinStyle): void {
   traceLobes(0.84);
   ctx.fill();
 
-  // 5. Bone. The highest-contrast element in the wound by design — gate G9b
-  // measures exactly this, and it is what makes the piece read as a body part
-  // rather than as a red smear.
+  // 5. Bone. The highest-contrast element in the wound by design — it is what
+  // makes the piece read as a body part rather than as a red smear.
   for (const spec of cut.bones) {
     const boneRadius = r * spec.size * BONE_OF_WOUND * 0.5;
     const at = pt(spec.at.x * r, spec.at.y * r);
@@ -255,8 +254,8 @@ export function drawWound(ctx: Ctx, cut: CutSpec, style: GoblinStyle): void {
       for (let i = 0; i < shards; i++) {
         const angle = (i / shards) * FULL_CIRCLE_ANGLE + noise() * 0.6;
         // Splinters are drawn long and bright. A crushed bone reduced to a few
-        // small mid-tone chips loses the one element gate G9b requires to carry
-        // the wound, and at 16 px it reads as gravel in a red hole.
+        // small mid-tone chips loses the brightest element the wound relies on,
+        // and at 16 px it reads as gravel in a red hole.
         const reach = boneRadius * lerp(1.1, 2.1, noise());
         ctx.fillStyle = i % 2 === 0 ? bone.rim : bone.light;
         ctx.beginPath();
@@ -411,8 +410,8 @@ export function drawWound(ctx: Ctx, cut: CutSpec, style: GoblinStyle): void {
 /**
  * A limb or chunk, in cell-local tile units centred on the cell centre.
  *
- * Gate G10 measures the painted ink: nothing a piece paints may fall outside the
- * circle the cell inscribes, or the art clips at the corners as it spins.
+ * Nothing a piece paints may fall outside the circle the cell inscribes, or the
+ * art clips at the corners as it spins.
  */
 export interface GorePiece {
   readonly state: string;
@@ -483,13 +482,10 @@ const PIECE_SEED_STRIDE = 977;
 /**
  * Where in the seed sequence the shipped wounds start.
  *
- * The seeds used to be drawn from a counter that advanced inside `paint`, which
- * made a piece's grain depend on how many times it had already been drawn — a
- * detail no bake could show, because a bake always painted the set in the same
- * order, and a different picture the moment a frame cache repaints one cell on
- * its own. Allocating them at construction fixes that, and starting the
- * sequence here is what keeps the art the one that shipped: the sheets were
- * baked on the second pass over a piece set, one pass of eight draws in.
+ * Seeds are allocated once at construction rather than from a counter advanced
+ * inside `paint`, so a piece's grain is fixed and does not depend on how many
+ * times it has already been drawn — a frame cache that repaints one cell on its
+ * own must produce the same picture every time.
  */
 const PIECE_SEED_START = 8;
 
@@ -497,11 +493,11 @@ const PIECE_SEED_START = 8;
  * Arms and legs are pulled apart in length as well as in width.
  *
  * A goblin's authored arm is *longer* than its leg, so drawing both limbs at
- * their true lengths made four pieces of near-identical proportion — which is
- * half of why a blind naming test could see "a severed limb" on four cells
- * running and name none of them. Anatomy loses to legibility here: what the
- * player has to be able to do is tell an arm from a leg at 16 px, and a short
- * thin one against a long thick one is the only cue that survives that size.
+ * their true lengths makes four pieces of near-identical proportion, which is
+ * indistinguishable as "a severed limb" without further cues. Anatomy loses to
+ * legibility here: what the player has to be able to do is tell an arm from a
+ * leg at 16 px, and a short thin one against a long thick one is the only cue
+ * that survives that size.
  */
 const ARM_LENGTH_SCALE = 0.82;
 const LEG_LENGTH_SCALE = 1.45;
@@ -510,8 +506,8 @@ const LEG_LENGTH_SCALE = 1.45;
  * How far each limb is folded at its joint, 0 straight and 1 fully bent.
  *
  * Spread as widely as four values can be, because the fold *is* the outline:
- * pieces at 0.85/0.35/0.12/0 gave one tight V and three near-straight sticks,
- * and the three sticks were indistinguishable. Gate G9c measures the result.
+ * values clustered together give one tight V and several near-straight sticks
+ * that are indistinguishable from each other.
  */
 const ARM_NEAR_FOLD = 0.95;
 const ARM_FAR_FOLD = 0.52;
@@ -563,10 +559,9 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
        *
        * They are the only thing that makes this piece a *head* rather than one
        * more rounded lump — and the set has two other rounded lumps, the torso
-       * slab and the rib chunk, which gate G9c scored 65–68% identical to it
-       * while the ears were at their anatomical length. Two spikes off a ball is
-       * a silhouette nothing else here can imitate, and a severed head is not
-       * the piece to be shy about.
+       * slab and the rib chunk, which read as near-identical to it at anatomical
+       * ear length. Two spikes off a ball is a silhouette nothing else here can
+       * imitate, and a severed head is not the piece to be shy about.
        */
       const EAR_LEGIBILITY_SCALE = 1.45;
       const earLength = p.earLength * EAR_LEGIBILITY_SCALE;
@@ -941,9 +936,8 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
       const RIB_CHUNK_LEGIBILITY_SCALE = 1.68;
       /**
        * Long and shallow, not square. A slab of chest wall cut between two ribs
-       * is a strip; drawn at the width and depth the anatomy suggests it came
-       * out nearly circular — and a circle is the severed head, which G9c scored
-       * within a couple of points of the ceiling on every archetype.
+       * is a strip; drawn at the width and depth the anatomy suggests it comes
+       * out nearly circular — and a circle reads as the severed head.
        */
       const RIB_CHUNK_HALF_LENGTH = 0.82;
       const RIB_CHUNK_HALF_DEPTH = 0.2;
@@ -962,10 +956,10 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
       // The sawn rib ends stand **proud of the flesh**, so the piece's own
       // outline is three bone stubs off one edge.
       //
-      // Kept inside the meat, the rib arcs were shading on a rounded lump, and a
-      // rounded lump is what a severed head is too: gate G9c scored the two 65%
-      // identical and a blind reviewer had no way to tell them apart. Ribs are
-      // the only thing in the set that can break its own silhouette, so they do.
+      // Kept inside the meat, the rib arcs would be shading on a rounded lump,
+      // and a rounded lump is what a severed head is too — the two would be
+      // indistinguishable. Ribs are the only thing in the set that can break
+      // its own silhouette, so they do.
       const ARCS = 3;
       const STUB_REACH = 1.24;
       ctx.strokeStyle = outline;
@@ -1057,9 +1051,9 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
        * A mandible, drawn as a thick horseshoe of bone with the teeth standing
        * up off its top edge and the tongue lolling inside it.
        *
-       * The first cut was a thin arch with four cream spikes on a nearly
-       * transparent field: at the 0.5× scale gore actually renders at, that is a
-       * few stray specks. Mass first, detail second.
+       * A thin arch with a few cream spikes on a nearly transparent field
+       * reduces to a few stray specks at the 0.5× scale gore actually renders
+       * at. Mass first, detail second.
        */
       const JAW_LEGIBILITY_SCALE = 2.2;
       const w = p.headRadius * 0.62 * JAW_LEGIBILITY_SCALE;
@@ -1104,11 +1098,10 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
 
       // The tongue lolls *out* of the arch rather than filling it.
       //
-      // Sized to the arch it sat in, it plugged the one hole in the piece, and a
-      // plugged horseshoe is a solid wide mass — which is exactly what the rib
-      // chunk is, and G9c scored the two 64% identical. The open U is the whole
-      // reason a mandible is nameable at 16 px; the tongue may hang over its lip
-      // but it may not fill it.
+      // A tongue sized to fill the arch plugs the one hole in the piece, and a
+      // plugged horseshoe is a solid wide mass — indistinguishable from the rib
+      // chunk. The open U is the whole reason a mandible is nameable at 16 px;
+      // the tongue may hang over its lip but it may not fill it.
       ctx.fillStyle = mix(MUSCLE.light, SUBCUTANEOUS, 0.3);
       ctx.beginPath();
       ctx.ellipse(w * 0.16, h * 0.5, w * 0.3, h * 0.36, deg(24), 0, FULL_CIRCLE_ANGLE);
@@ -1211,8 +1204,8 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
 /**
  * Pieces with no cut face and therefore no bone.
  *
- * Gate G9b asks whether bone is the brightest thing in a wound. A rope of gut
- * has neither: it is torn from its mesentery, not cut through a limb, and the
- * gate would be asking a question the piece cannot answer.
+ * Bone is expected to be the brightest thing in a wound. A rope of gut has
+ * neither: it is torn from its mesentery, not cut through a limb, so that
+ * expectation does not apply.
  */
 export const BONELESS_GORE_STATES: readonly string[] = ['gore_entrails'];

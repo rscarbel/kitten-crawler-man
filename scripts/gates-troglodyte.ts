@@ -1,12 +1,11 @@
 /**
  * The Troglodyte's art gates.
  *
- * The creature has no baked sheet to inspect any more, so every invariant the
- * old bake gate enforced against sheet pixels is enforced here against cells
- * painted from `TROGLODYTE_FIGURE` and `TROGLODYTE_TONGUE_FIGURE` — baked
- * exactly the way the runtime cache bakes them, supersampled and downsampled,
- * so what is measured is what the game blits. The pose-stream gates measure the
- * rig itself and need no pixels at all.
+ * These gates enforce sheet-shape invariants directly against cells painted
+ * from `TROGLODYTE_FIGURE` and `TROGLODYTE_TONGUE_FIGURE` — baked exactly the
+ * way the runtime cache bakes them, supersampled and downsampled, so what is
+ * measured is what the game blits. The pose-stream gates measure the rig
+ * itself and need no pixels at all.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong. A gate that cannot find the row or state it names
@@ -699,13 +698,12 @@ function gateTongueReach(): void {
 /**
  * G13 — the mouth the tongue leaves from is on the creature.
  *
- * The anchors used to be a table frozen in the runtime and compared against the
- * rig on every bake. Both sides live under `src/` now and the runtime reads the
- * rig's own answer, so that comparison cannot fail any more, whatever the rig
- * says. What still can — and is the thing the old gate was really protecting —
- * is the anchor and the head parting company: the tongue is drawn from this
- * point, so a point outside the creature's painted ink is a tongue leaving from
- * somewhere near its jaw rather than out of it.
+ * Comparing the anchor table against the rig cannot fail: both live under
+ * `src/`, and the runtime reads the rig's own answer, so the comparison agrees
+ * with itself by construction whatever the rig says. What can still go wrong —
+ * and is what this checks — is the anchor and the head parting company: the
+ * tongue is drawn from this point, so a point outside the creature's painted
+ * ink is a tongue leaving from somewhere near its jaw rather than out of it.
  *
  * Checked on every frame of the lash, in every view, because that is the table
  * the overlay is actually positioned from.

@@ -1,7 +1,7 @@
 /**
- * Shared quest banner / completion-overlay rendering, extracted from
- * CircusQuestSystem so every questline announces stages and completion the
- * same way. Callers own the countdown timers and pass frames-remaining.
+ * Shared quest banner / completion-overlay rendering, so every questline
+ * announces stages and completion the same way. Callers own the countdown
+ * timers and pass frames-remaining.
  */
 
 import { drawText } from './TextBox';

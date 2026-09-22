@@ -34,22 +34,19 @@ interface MongoLevelRow extends MongoStats {
 /**
  * Every stat he has, per level.
  *
- * The `maxHp` column carries two invariants the perk text depends on and the
- * numbers do not state, both of which a partial re-scale breaks quietly.
+ * The `maxHp` column carries two invariants the perk text depends on, neither
+ * of which the numbers state on their own, so a partial re-scale can break
+ * them quietly.
  *
- * Levels 5 and 10 are *growth spurts*, so their step has to be visibly larger
- * than the ordinary steps either side of it. Fattening the juvenile rows without
- * re-taping the adolescent ones broke this in the worst possible way — a level-4
- * raptor with more health than a level-5 one, under a perk line reading GROWTH
- * SPURT.
+ * Levels 5 and 10 are *growth spurts*: their step must be visibly larger than
+ * the ordinary steps either side of it, or a level-4 raptor can end up with
+ * more health than a level-5 one under a perk line reading GROWTH SPURT.
  *
- * And the ordinary steps never go backwards: a level-6 raptor must not gain less
- * health per level than a level-2 one. That is the trap the first repair fell
- * into. Restoring the spurt by *flattening its neighbours* satisfies a purely
- * relative check while leaving the adolescent band the slowest-growing stretch
- * in the table, right where the player has just been taught that levelling
- * matters. Both invariants are gated in `verify-mongo.ts`; re-scale a band and
- * run it.
+ * The ordinary steps must never go backwards either: a level-6 raptor must
+ * not gain less health per level than a level-2 one — the adolescent band
+ * can't be the slowest-growing stretch in the table, since that's right
+ * where the player has just been taught that levelling matters. Both
+ * invariants are gated in `verify-mongo.ts`; re-scale a band and run it.
  */
 const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
@@ -247,14 +244,13 @@ export const MONGO_MAX_LEVEL = MONGO_LEVELS.length;
  *
  * Deliberately coarse. A rate fine enough to pay per blow at level 1 pays an
  * adult twelve times as much for the same swing, and his XP thresholds are the
- * ones that grew — see {@link MONGO_DEF.xpGrowthRate}.
+ * ones that grow — see {@link MONGO_DEF.xpGrowthRate}.
  *
- * Two, not five, because at five the arithmetic never reached a level-up. A
- * level-1 raptor bites for two every 46 frames, which at five damage a point is
- * about a third of a point per second of *uninterrupted* combat — five-plus
- * minutes of continuous biting, from an animal who dies in a few hits and then
- * owes minutes of recovery, to buy the first level. Players did not report
- * levelling as slow; they reported it as not existing.
+ * Set to two rather than five: a level-1 raptor bites for two every 46 frames,
+ * and at five damage per point that's only about a third of a point per second
+ * of *uninterrupted* combat — several minutes of continuous biting, from an
+ * animal that dies in a few hits and then owes minutes of recovery, just to
+ * reach the first level. At two, the first level-up lands within a session.
  */
 export const MONGO_DAMAGE_PER_XP = 2;
 
@@ -303,10 +299,9 @@ export const MONGO_DEF: AbilityDef = {
     'before he can be sent in again. Below roughly two fifths of his health he will not go in ' +
     'at all — a raptor that hurt stays at your side instead of fighting, so the button holds ' +
     'him back until he is fit.',
-  // Sixty rather than a hundred: the first level-up has to land inside the first
-  // session that actually uses him, because it is the proof to the player that
-  // he levels at all. The 1.45 growth rate is untouched — the late curve is fine
-  // once there is a reason to believe in it.
+  // Sixty rather than a hundred: the first level-up needs to land inside the
+  // first session that uses him, since that's the proof to the player that he
+  // levels at all.
   baseXpToLevel2: 60,
   xpGrowthRate: 1.45,
   finalLevelMultiplier: 2.0,

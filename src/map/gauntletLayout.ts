@@ -649,8 +649,8 @@ function branchWaypoints(
 
   // Chain rooms start and stop clear of the rooms at either end of the branch.
   // Without this a branch aimed straight at the gateway lands its last room on
-  // top of it — which is why a four-branch start, where one branch always points
-  // roughly at the gateway, used to be unbuildable.
+  // top of it — the case a four-branch start always hits, since one branch
+  // always points roughly at the gateway.
   const usableLength = Math.max(0, curveLength - BRANCH_END_CLEARANCE * 2);
 
   // The room count is drawn from the configured range rather than derived from

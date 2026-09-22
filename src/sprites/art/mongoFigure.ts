@@ -244,10 +244,10 @@ function levelHead(pose: MongoPose, prop: MongoProportions): MongoPose {
  * How much of the body's bob the neck absorbs.
  *
  * Not all of it. A head pinned to a constant height across every frame is
- * technically what avian head stabilisation does and reads on screen as a skull
- * glued in mid-air while the body slides under it — the reviewer measured the
- * eye travelling 0.07 px across a whole stride. The residual quarter is the
- * pigeon's own hold-and-thrust, and it is what makes the walk look alive.
+ * technically what avian head stabilisation does, but it reads on screen as a
+ * skull glued in mid-air while the body slides under it, with the eye barely
+ * travelling at all. The residual quarter is the pigeon's own hold-and-thrust,
+ * and it is what makes the walk look alive.
  */
 const HEAD_STABILISE_SHARE = 0.74;
 
@@ -285,35 +285,27 @@ const IDLE_ARCH_SWING = 0.34;
 /**
  * How far the tail rod swings above and below its rest angle while he stands.
  *
- * Half what it was, because carrying the balance shift is a bigger job than
- * riding the breath was: on the same nine degrees the tail tip travelled 17.8
- * game pixels on a 31-pixel creature, well over half his own height, and read
- * as an agitated swish rather than as a counterweight. At this it travels 13.5
- * edge-on, a little under the 14.2 it travelled before any of this — the tail
- * moves as much as it always did, on a clock the profile can see.
+ * Kept modest because the tail carries the whole balance-shift counterweight
+ * edge-on: swung further, the tip's travel across a 31-pixel creature reads as
+ * an agitated swish rather than as a counterweight.
  */
 const IDLE_TAIL_SWING = deg(4.5);
 const IDLE_TAIL_FLICK = 0.1;
 const IDLE_HEAD_SCAN = deg(9);
 /**
- * The tail's lateral swing, away-facing. This is what decides how near the floor
- * the tip gets, because a tail swung out to the side projects downward: at the
- * nine degrees the balance shift was first given, the lowest frame left three
- * game pixels of clearance and read as scraping. Seven keeps three and a half
- * and cuts the tip's travel in that view from six game pixels to four and a
- * half.
+ * The tail's lateral swing, away-facing.
+ *
+ * This decides how near the floor the tip gets, because a tail swung out to the
+ * side projects downward — too wide a swing leaves the lowest frame scraping
+ * the ground in that view.
  */
 const IDLE_TAIL_SWAY = deg(7);
 /**
  * How far the head leads the body's balance shift, across the facing, -1..1.
  *
- * It is deliberately close to the body's own `IDLE_SWAY`: an animal's head goes
- * where its weight goes and overshoots it a little, and it does not travel
- * across a body that is standing perfectly still. This was seven and a half
- * times the torso's amplitude and a quarter cycle ahead of it — three in-game
- * pixels on a thirty-one pixel adult, a fifth of his body width — because the
- * yaw was the only thing separating the head-on frames from each other. That is
- * the balance shift's job now, and the head is back to a share of it.
+ * Deliberately close to the body's own `IDLE_SWAY`: an animal's head goes where
+ * its weight goes and overshoots it a little, and it does not travel across a
+ * body that is standing perfectly still.
  */
 const IDLE_HEAD_TURN = 0.09;
 const REST_TAIL_LIFT = deg(-6);
@@ -324,12 +316,11 @@ const REST_TAIL_LIFT = deg(-6);
  * A two-legged animal standing still is never quite still: the mass rocks fore
  * and aft over the toes and the tail counterweights it. That is its own clock,
  * not his lungs', and in quadrature it is what keeps eight frames eight
- * pictures. Every term of the idle used to be the same `sin` of the cycle, and
- * a sine sampled at eight frames takes each of its values twice — frames 0 and
- * 4 of the profile idle differed by eighteen pixels, a tenth of a percent of the
- * cell, byte-distinct and visually a duplicate. Breath and balance in quadrature
- * trace a circle through the cycle, so the eight frames sit an even eighth of a
- * turn apart in every view.
+ * pictures: a sine sampled at eight frames takes each of its values twice, so
+ * driving both breath and balance off the same phase collapses pairs of frames
+ * into near-duplicates. Breath and balance in quadrature instead trace a circle
+ * through the cycle, so the eight frames sit an even eighth of a turn apart in
+ * every view.
  */
 const IDLE_BALANCE_QUARTER_TURN = Math.PI / 2;
 /**
@@ -930,9 +921,8 @@ function collapseSide(frame: number, prop: MongoProportions): MongoPose {
       restingTailLift,
       easeInOut(ramp(progress, COLLAPSE_TAIL_FLOP_START, COLLAPSE_TAIL_FLOP_END)),
     ),
-    // A settle after the sink: the last frames were pixel-identical, so a tenth
-    // of the death animation was a dead hold on a corpse that had stopped moving
-    // before the row ended.
+    // A settle after the sink keeps the ribs moving to the end of the row,
+    // rather than holding the last frames on a dead, motionless corpse.
     breathe: -sink + COLLAPSE_SETTLE * hump(ramp(progress, COLLAPSE_SINK_END, 1)),
     nearArm: {
       ...restArm(),

@@ -1,9 +1,8 @@
 /**
  * The painter library behind the rat sprite sheet.
  *
- * The rat that shipped before this was a grey box with a pink circle on it. What
- * makes a rodent read as a rodent — at 32 px, in motion, from three viewpoints —
- * is a short list of cues that nothing else in the bestiary has: a long
+ * What makes a rodent read as a rodent — at 32 px, in motion, from three
+ * viewpoints — is a short list of cues that nothing else in the bestiary has: a long
  * unbroken wedge from ear to nose with no forehead stop, two big thin naked
  * ears, a scaly annulated tail as long as the body, naked pink feet with splayed
  * toes, a forest of whiskers, and orange incisors that only show when it bites.

@@ -94,7 +94,6 @@ const PUNCH_KNOCKBACK_TILES = 2.2;
 const PUNCH_KNOCKBACK_FRAMES = 14;
 /** Frames the wave takes to travel from his fists out to {@link PUNCH_RADIUS_TILES}. */
 const PUNCH_SHOCKWAVE_FRAMES = 20;
-/** Recorded on the damage so the death screen can name the fist, not the weight. */
 /** Recorded on punch damage so `DeathCauseSystem` can tell it apart from a thrown dumbbell. */
 export const GROUND_PUNCH_ATTACK_TYPE = 'ground_punch';
 
@@ -322,13 +321,11 @@ export class Juicer extends Mob {
     if (this.punchCooldownTimer > 0) this.punchCooldownTimer--;
     if (this.shockwaveTimer > 0) this.shockwaveTimer--;
 
-    // Enrage check
     if (!this.isEnraged && this.hp / this.maxHp < ENRAGE_THRESHOLD) {
       this.isEnraged = true;
       this.setBaseSpeed(JUICER_SPEED_ENRAGED);
     }
 
-    // Update thrown projectile physics
     this.updateProjectile(targets);
 
     const nearest = this.acquireTarget(targets, AGGRO_RANGE_PX);
@@ -336,7 +333,6 @@ export class Juicer extends Mob {
 
     this.currentTarget = nearest;
 
-    // Taunt cycling when aggro'd
     if (nearest) {
       this.tauntTimer++;
       this.bubblePulse++;
@@ -510,14 +506,12 @@ export class Juicer extends Mob {
       return;
     }
 
-    // Navigate to nearest dumbbell position
     if (this.nearestDumbbellPos) {
       const dist = Math.hypot(
         this.nearestDumbbellPos.x - this.x,
         this.nearestDumbbellPos.y - this.y,
       );
       if (dist < TILE_SIZE * DUMBBELL_PICKUP_RANGE_TILES) {
-        // Close enough — request pickup
         this.requestDumbbellAt = {
           x: this.nearestDumbbellPos.x,
           y: this.nearestDumbbellPos.y,
@@ -597,9 +591,9 @@ export class Juicer extends Mob {
       THROW_PATHFIND_MAX,
     );
 
-    // A follow that is already inside its stop range returns without writing
-    // facing, which used to be invisible on a side-only sheet and now leaves him
-    // standing with his back to a player he is squaring up to throw at.
+    // A follow already inside its stop range returns without writing facing, so
+    // without this he stands with his back to a player he is squaring up to
+    // throw at.
     if (!this.isMoving) this.faceToward(nearest);
   }
 
@@ -733,7 +727,6 @@ export class Juicer extends Mob {
       }
     }
 
-    // Check player hit
     const ts = this.tileSize;
     const hitRadius = ts * HIT_RADIUS_TILES;
     for (const t of targets) {
@@ -829,7 +822,6 @@ export class Juicer extends Mob {
       drawJuicerSpeechBubble(ctx, sx, sy, tileSize, this.currentTaunt, this.bubblePulse);
     }
 
-    // Active throw projectile
     if (this.activeThrow) {
       drawThrownDumbbell(
         ctx,

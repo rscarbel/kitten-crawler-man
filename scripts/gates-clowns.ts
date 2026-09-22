@@ -1,16 +1,14 @@
 /**
  * The clown family's art gates.
  *
- * None of these creatures has a baked sheet to inspect any more, so every
- * invariant the old bake enforced by throwing before it wrote a PNG is enforced
- * here instead, against cells painted from the figures themselves. The two
- * generators between them threw on three things — a frame clipped by its own
- * cell wall, a frame that painted nothing, and a gas cloud that had gone
- * opaque because node-canvas dropped an exponent-notation alpha — and all three
- * survive below. The rest are invariants the bake never checked and could not:
- * that the feet stand on the ground line the tile hangs off, that the wrapper's
- * frame counts and the figure's agree, that every state name the runtime can
- * build is one the figure paints, and that a warm row still fits the cache.
+ * These gates run against cells painted from the figures themselves. Three of
+ * them guard failure modes the generators have hit before — a frame clipped by
+ * its own cell wall, a frame that painted nothing, and a gas cloud that had
+ * gone opaque because node-canvas dropped an exponent-notation alpha. The rest
+ * check invariants a build alone can't: that the feet stand on the ground line
+ * the tile hangs off, that the wrapper's frame counts and the figure's agree,
+ * that every state name the runtime can build is one the figure paints, and
+ * that a warm row still fits the cache.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong. A gate that cannot find the row or state it names

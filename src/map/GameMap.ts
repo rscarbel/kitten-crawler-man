@@ -170,21 +170,18 @@ const BIGTOP_BLEACHER_DEPTH = 2;
 
 // ── Tile types used in interior generation ────────────────────────────────────
 //
-// These three used to be the *dungeon's* generic types under local aliases: the
-// tower's floor was `FloorTypeValue.carpet`, a shop's and a house's was
-// `FloorTypeValue.wood`, and every interior wall was `FloorTypeValue.wall`.
-// That read as harmless while all of them were rows of one shared tileset, but
-// it meant a townhouse was floored in whatever the dungeon's fourth surface
-// happened to be — and once each dungeon floor was given a material set of its
-// own it meant a shop's floorboards changed depending on which cellar the player
-// had most recently walked through. The town owns them now.
+// These four interior types belong to the town, distinct from the dungeon's
+// generic floor/wall types. Sharing a type with the dungeon — a shop floored in
+// `FloorTypeValue.wood`, a wall drawn in `FloorTypeValue.wall` — would make a
+// townhouse's floorboards resolve through whichever dungeon floor's material
+// set happens to be active, rather than through the town's own palette.
 
 // The four interior types are used under their own names below rather than
-// through local aliases. Aliasing is what hid the borrowing in the first place:
-// a use site reading `WALL_TILE` gives no clue which kind of wall it is, which
-// is how a townhouse came to be built out of dungeon rock without anyone
-// noticing. The exit door likewise names `FloorTypeValue.road` outright — it is
-// genuinely the outdoor threshold type, and a bare `1` said nothing.
+// through local aliases: a use site reading `WALL_TILE` would give no clue
+// which kind of wall it is, which is exactly the ambiguity that would let a
+// townhouse be built out of dungeon rock without anyone noticing. The exit
+// door likewise names `FloorTypeValue.road` outright — it is genuinely the
+// outdoor threshold type, and a bare `1` would say nothing.
 
 interface InteriorShell {
   readonly w: number;
@@ -673,9 +670,9 @@ export class GameMap {
 
   /**
    * Memoized results of `tilesOfType`. Exiting a building rebuilds the town's
-   * systems against this same map instance, and each of them used to re-sweep
-   * all 78,400 tiles looking for wells and fountains — a visible hitch at every
-   * shop door, for a list that cannot have changed.
+   * systems against this same map instance, and without this cache each of them
+   * would re-sweep all 78,400 tiles looking for wells and fountains — a visible
+   * hitch at every shop door, for a list that cannot have changed.
    */
   private _tilesOfTypeCache = new Map<number, ReadonlyArray<{ x: number; y: number }>>();
 

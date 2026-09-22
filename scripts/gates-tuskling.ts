@@ -1,12 +1,10 @@
 /**
  * The Tuskling's art gates.
  *
- * The creature has no baked sheet to inspect any more, so every invariant the
- * old bake gate enforced against sheet pixels is enforced here against cells
- * painted from `TUSKLING_FIGURE` — baked exactly the way the runtime cache
- * bakes them, supersampled and downsampled, so what is measured is what the
- * game blits. The pose-stream gates measure the rig itself and need no pixels
- * at all.
+ * These gates enforce sheet-shape invariants directly against cells painted
+ * from `TUSKLING_FIGURE` — baked exactly the way the runtime cache bakes them,
+ * supersampled and downsampled, so what is measured is what the game blits.
+ * The pose-stream gates measure the rig itself and need no pixels at all.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong. A gate that cannot find the row or state it names
@@ -329,9 +327,10 @@ function gateLoopClosure(): void {
     const seam = frameDelta(cells[cells.length - 1], cells[0]);
     const typical = median(steps);
     if (typical === 0) {
-      // Skipping a motionless loop here is how this gate used to go green on the
-      // very row it exists to judge: with no median there is no scale for the
-      // seam, and a row that has aliased into a still is the defect itself.
+      // This must fail rather than skip: skipping a motionless loop would let
+      // it go green on exactly the row it exists to judge. With no median
+      // there is no scale for the seam, and a row that has aliased into a
+      // still is the defect itself.
       fail(
         'G3',
         `${row.name} does not move at all: its median frame-to-frame step is 0px, so the row ` +

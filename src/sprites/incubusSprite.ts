@@ -183,16 +183,14 @@ export function drawIncubusSprite(
   const wingFlapL = -wingFlap;
   const wingFlapR = wingFlap;
 
-  // Left wing membrane
   ctx.fillStyle = '#241020';
   ctx.beginPath();
-  ctx.moveTo(sx + s * WING_SHOULDER_L_X, bsy + s * WING_SHOULDER_L_Y); // shoulder
-  ctx.lineTo(sx - s * WING_TIP_L_X, bsy + s * WING_TIP_L_Y + wingFlapL); // top tip
-  ctx.lineTo(sx - s * WING_OUTER_BOTTOM_L_X, bsy + s * WING_OUTER_BOTTOM_L_Y + wingFlapL); // outer bottom
-  ctx.lineTo(sx - s * WING_INNER_BOTTOM_L_X, bsy + s * WING_INNER_BOTTOM_L_Y); // inner bottom
+  ctx.moveTo(sx + s * WING_SHOULDER_L_X, bsy + s * WING_SHOULDER_L_Y);
+  ctx.lineTo(sx - s * WING_TIP_L_X, bsy + s * WING_TIP_L_Y + wingFlapL);
+  ctx.lineTo(sx - s * WING_OUTER_BOTTOM_L_X, bsy + s * WING_OUTER_BOTTOM_L_Y + wingFlapL);
+  ctx.lineTo(sx - s * WING_INNER_BOTTOM_L_X, bsy + s * WING_INNER_BOTTOM_L_Y);
   ctx.closePath();
   ctx.fill();
-  // Left wing finger bones
   ctx.strokeStyle = '#3a1830';
   ctx.lineWidth = s * WING_LINEWIDTH;
   ctx.lineCap = 'round';
@@ -212,7 +210,6 @@ export function drawIncubusSprite(
   );
   ctx.stroke();
 
-  // Right wing membrane
   ctx.fillStyle = '#241020';
   ctx.beginPath();
   ctx.moveTo(sx + s * WING_SHOULDER_R_X, bsy + s * WING_SHOULDER_L_Y);
@@ -221,7 +218,6 @@ export function drawIncubusSprite(
   ctx.lineTo(sx + s * WING_INNER_BOTTOM_R_X, bsy + s * WING_INNER_BOTTOM_L_Y);
   ctx.closePath();
   ctx.fill();
-  // Right wing finger bones
   ctx.strokeStyle = '#3a1830';
   ctx.lineWidth = s * WING_LINEWIDTH;
   ctx.beginPath();
@@ -253,7 +249,6 @@ export function drawIncubusSprite(
     bsy + s * TAIL_END_Y,
   );
   ctx.stroke();
-  // Fork prongs
   ctx.lineWidth = s * TAIL_LINEWIDTH_PRONG;
   ctx.beginPath();
   ctx.moveTo(sx + s * TAIL_END_X, bsy + s * TAIL_END_Y);
@@ -265,13 +260,10 @@ export function drawIncubusSprite(
   ctx.stroke();
 
   // === TUXEDO BODY ===
-  // Black jacket
   ctx.fillStyle = '#111111';
   ctx.fillRect(sx + s * JACKET_X, bsy + s * JACKET_Y, s * JACKET_WIDTH, s * JACKET_HEIGHT);
-  // White shirt front
   ctx.fillStyle = '#ebebeb';
   ctx.fillRect(sx + s * SHIRT_X, bsy + s * SHIRT_Y, s * SHIRT_WIDTH, s * SHIRT_HEIGHT);
-  // Shirt studs
   ctx.fillStyle = '#b8b8b8';
   for (let i = 0; i < SHIRT_STUD_COUNT; i++) {
     ctx.beginPath();
@@ -284,20 +276,17 @@ export function drawIncubusSprite(
     );
     ctx.fill();
   }
-  // Left lapel
   ctx.fillStyle = '#111111';
   ctx.beginPath();
   ctx.moveTo(sx + s * LAPEL_TOP_X, bsy + s * LAPEL_TOP_Y);
   ctx.lineTo(sx + s * LAPEL_BOTTOM_X, bsy + s * LAPEL_BOTTOM_Y);
   ctx.lineTo(sx + s * LAPEL_MID_X, bsy + s * LAPEL_BOTTOM_TIP_Y);
   ctx.fill();
-  // Right lapel
   ctx.beginPath();
   ctx.moveTo(sx + s * LAPEL_RIGHT_TOP_X, bsy + s * LAPEL_TOP_Y);
   ctx.lineTo(sx + s * LAPEL_RIGHT_BOTTOM_X, bsy + s * LAPEL_BOTTOM_Y);
   ctx.lineTo(sx + s * LAPEL_RIGHT_TOP_X, bsy + s * LAPEL_BOTTOM_TIP_Y);
   ctx.fill();
-  // Hem
   ctx.fillRect(sx + s * JACKET_X, bsy + s * JACKET_HEM_Y, s * JACKET_WIDTH, s * JACKET_HEM_HEIGHT);
 
   // === SLEEVES / ARMS ===
@@ -306,7 +295,6 @@ export function drawIncubusSprite(
   ctx.fillStyle = '#111111';
   ctx.fillRect(sx + s * ARM_LEFT_X, leftArmY, s * ARM_WIDTH, s * ARM_HEIGHT);
   ctx.fillRect(sx + s * ARM_RIGHT_X, rightArmY, s * ARM_WIDTH, s * ARM_HEIGHT);
-  // White cuffs
   ctx.fillStyle = '#ebebeb';
   ctx.fillRect(sx + s * CUFF_LEFT_X, leftArmY + s * CUFF_Y_OFFSET, s * CUFF_WIDTH, s * CUFF_HEIGHT);
   ctx.fillRect(
@@ -315,7 +303,6 @@ export function drawIncubusSprite(
     s * CUFF_WIDTH,
     s * CUFF_HEIGHT,
   );
-  // Hands (dusky gray)
   ctx.fillStyle = '#7a7a8e';
   ctx.beginPath();
   ctx.arc(sx + s * HAND_LEFT_X, leftArmY + s * HAND_Y_OFFSET, s * HAND_R, 0, Math.PI * 2);
@@ -349,7 +336,6 @@ export function drawIncubusSprite(
 
   // === DEVIL HORNS (drawn before head so head overlaps base) ===
   ctx.fillStyle = '#6b0000';
-  // Left horn
   ctx.beginPath();
   ctx.moveTo(sx + s * HORN_LEFT_BASE_X, bsy + s * HORN_LEFT_BASE_Y);
   ctx.lineTo(sx + s * HORN_LEFT_TIP_X, bsy - s * HORN_LEFT_TIP_Y);
@@ -363,7 +349,6 @@ export function drawIncubusSprite(
   ctx.lineTo(sx + s * HORN_LEFT_SIDE_X, bsy + s * HORN_LEFT_SIDE_Y);
   ctx.closePath();
   ctx.fill();
-  // Right horn
   ctx.fillStyle = '#6b0000';
   ctx.beginPath();
   ctx.moveTo(sx + s * HORN_RIGHT_BASE_X, bsy + s * HORN_RIGHT_BASE_Y);
@@ -393,7 +378,6 @@ export function drawIncubusSprite(
   ctx.beginPath();
   ctx.arc(sx + s * EYE_RIGHT_X, bsy + s * EYE_Y, s * EYE_IRIS_R, 0, Math.PI * 2);
   ctx.fill();
-  // Slit pupils
   ctx.fillStyle = '#1a0000';
   ctx.beginPath();
   ctx.ellipse(
@@ -417,7 +401,6 @@ export function drawIncubusSprite(
     Math.PI * 2,
   );
   ctx.fill();
-  // Eye glow
   ctx.save();
   ctx.globalAlpha = EYE_GLOW_ALPHA;
   ctx.fillStyle = '#ff4400';
@@ -449,5 +432,5 @@ export function drawIncubusSprite(
   );
   ctx.stroke();
 
-  ctx.restore(); // undo facing flip
+  ctx.restore();
 }

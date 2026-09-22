@@ -1,8 +1,7 @@
 /**
  * The Hoarder's art gates, and her bile's.
  *
- * She has no baked sheet to inspect any more, so every invariant the old bake
- * gates enforced against sheet pixels is enforced here against cells painted
+ * These gates enforce sheet-shape invariants directly against cells painted
  * from `HOARDER_FIGURE`, `HOARDER_BILE_ARC_FIGURE` and `HOARDER_ACID_FIGURE` —
  * baked exactly the way the runtime cache bakes them, supersampled and
  * downsampled, so what is measured is what the game blits. The pose-stream

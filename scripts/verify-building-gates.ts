@@ -319,14 +319,13 @@ expectGateFails('a seam hiding behind one big move', 'life-loop', (baked) => {
  * fills it or not, so this is the half of the silhouette gate that catches a
  * building leaving blocked, empty ground beside itself.
  *
- * The damage has to land *outside* the window the coverage check measures, and
- * that window is `[round(facadeLeft), round(facadeRight) - 1]` in absolute
- * projection coordinates — not, as an earlier version of this case assumed,
- * between the ink's own edges. Trimming inside it failed both halves of the
- * gate at once, which meant the span floor could have been deleted with this
- * case still red. The base row's ink genuinely runs wider than the facade
- * window on both sides, which is what leaves room to shorten the silhouette
- * without touching the wall.
+ * The damage has to land *outside* the window the coverage check measures —
+ * `[round(facadeLeft), round(facadeRight) - 1]` in absolute projection
+ * coordinates — rather than between the ink's own edges: damage inside that
+ * window fails both halves of the gate at once, so the span floor could be
+ * deleted with this case still red. The base row's ink genuinely runs wider
+ * than the facade window on both sides, which is what leaves room to shorten
+ * the silhouette without touching the wall.
  */
 expectGateFails('a facade narrower than the plot it stands on', 'silhouette', (baked) => {
   const projection = project(baked.spec);
@@ -368,8 +367,7 @@ expectGateFails('a side return as bright as the front wall', 'plane-separation',
  * Distinct from the copy-of-idle case, which is opaque everywhere and would be
  * caught by any ceiling at all. This one is sized to land just the wrong side of
  * the real limit — a band a little over the 5% allowance — so the limit cannot
- * drift upward without this going green. An earlier version used a tenth of the
- * frame, which the ceiling could have been loosened to 0.89 without noticing.
+ * drift upward without this going green.
  */
 const OVERWEIGHT_OVERLAY_COVERAGE = 0.055;
 

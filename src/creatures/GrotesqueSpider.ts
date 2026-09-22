@@ -768,7 +768,6 @@ export class GrotesqueSpider extends Mob {
       trap.ttl--;
       if (trap.ttl <= 0) return false;
 
-      // Advance animation frame
       trap.frameTimer--;
       if (trap.frameTimer <= 0) {
         trap.animFrame++;

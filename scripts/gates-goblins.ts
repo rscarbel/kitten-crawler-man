@@ -1,12 +1,10 @@
 /**
  * The goblins' art gates, for all five figures.
  *
- * The family has no baked sheets to inspect any more, so every invariant the
- * old bake gate enforced against sheet pixels is enforced here against cells
- * painted from the figures — baked exactly the way the runtime cache bakes
- * them, supersampled and downsampled, so what is measured is what the game
- * blits. The pose-stream gates measure the rig itself and need no pixels at
- * all.
+ * These gates enforce sheet-shape invariants directly against cells painted
+ * from the figures — baked exactly the way the runtime cache bakes them,
+ * supersampled and downsampled, so what is measured is what the game blits.
+ * The pose-stream gates measure the rig itself and need no pixels at all.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong across all five builds. A gate that cannot find the
@@ -1107,7 +1105,7 @@ function gateRotationSafety(archetype: GoblinArchetype): void {
 /**
  * How many megabytes one state of one figure may occupy in the frame cache.
  *
- * This is what replaced the old whole-sheet texture budget. A painted figure is
+ * A painted figure is
  * admitted to the cache one state at a time, so the number that decides whether
  * it fits is the widest state's bytes against the cache's per-figure ceiling,
  * not the sum of every state. Measured over every state the def declares, gore

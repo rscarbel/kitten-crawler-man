@@ -6,7 +6,6 @@ import { type ButtonRect, type PauseTab } from './types';
 import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 
-// Main tab layout
 const TITLE_Y = 34;
 const TITLE_Y_ADJUST = 14;
 const TITLE_SIZE = 18;

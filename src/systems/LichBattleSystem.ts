@@ -848,9 +848,9 @@ export class LichBattleSystem implements GroundHazardSource {
   /**
    * The wave that will next burn across a row, or null when none will.
    *
-   * The *newest* wave is the wrong answer and was the bug: it belongs to the
-   * wall still at the top of the room, and standing in its gap means standing in
-   * a burning column of the wall that arrives first. Waves already south of the
+   * The *newest* wave is the wrong answer: it belongs to the wall still at the
+   * top of the room, and standing in its gap means standing in a burning column
+   * of the wall that arrives first. Waves already south of the
    * row are excluded for the mirror-image reason — they have swept past it and
    * are never coming back.
    */

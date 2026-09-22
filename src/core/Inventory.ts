@@ -20,7 +20,6 @@ export class Inventory {
 
   /** Add `quantity` of the given item, stacking into an existing slot when possible. */
   addItem(id: ItemId, quantity: number): void {
-    // Quest items always go to the reserved quest slot (last hotbar slot)
     if (ITEM_DEF[id].isQuestItem) {
       this.addToQuestSlot(id, quantity);
       return;
@@ -45,10 +44,8 @@ export class Inventory {
   private addToQuestSlot(id: ItemId, quantity: number): void {
     const slot = this.actionBar.slots[QUEST_SLOT_IDX];
     if (slot?.id === id) {
-      // Stack onto existing
       this.actionBar.slots[QUEST_SLOT_IDX] = { ...slot, quantity: slot.quantity + quantity };
     } else {
-      // Place fresh
       const def = ITEM_DEF[id];
       this.actionBar.slots[QUEST_SLOT_IDX] = {
         ...def,
@@ -184,14 +181,12 @@ export class Inventory {
   }
 
   swapHotbar(a: number, b: number): void {
-    // Block swapping into or out of the quest slot
     if (a === QUEST_SLOT_IDX || b === QUEST_SLOT_IDX) return;
     if (this.mergeStacks(this.actionBar.slots, a, this.actionBar.slots, b)) return;
     this.actionBar.swap(a, b);
   }
 
   swapInvToHotbar(slotIdx: number, hotbarIdx: number): void {
-    // Block swapping into the quest slot
     if (hotbarIdx === QUEST_SLOT_IDX) return;
     const inv = this.bag.slots[slotIdx];
     if (inv && !itemCanHotlist(inv.id)) return;
@@ -202,7 +197,6 @@ export class Inventory {
   }
 
   swapHotbarToInv(hotbarIdx: number, slotIdx: number): void {
-    // Block swapping out of the quest slot
     if (hotbarIdx === QUEST_SLOT_IDX) return;
     // No itemCanHotlist guard here: the player is dragging OUT of the hotbar,
     // and grandfathered gear that predates the hotlist restriction must stay

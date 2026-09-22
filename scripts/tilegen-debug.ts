@@ -173,8 +173,8 @@ function renderBlob(): void {
       } else if (bits !== 0) {
         // One warp seed for every combination, and the patch phase from the tile's
         // position — the two things the shipped masks depend on. Seeding per
-        // combination, as this tool used to, tears the boundary wherever two
-        // neighbours hold different combinations.
+        // combination instead tears the boundary wherever two neighbours hold
+        // different combinations.
         composed.compositeMasked(
           frameFor(over, tx, ty),
           buildCornerMask(

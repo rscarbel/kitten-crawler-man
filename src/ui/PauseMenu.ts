@@ -48,7 +48,6 @@ import { beginMenuFocus, endMenuFocus } from './Button';
 import { drawOverlay, drawModal, BOX_PRESETS } from './Box';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
-// Constants for magic numbers
 const SCROLL_MULTIPLIER = 0.5;
 const STATS_BOX_TOP_MARGIN = 50;
 const STATS_BOX_BOTTOM_MARGIN = 52;

@@ -1,11 +1,10 @@
 /**
  * The structural gates every painted figure must pass.
  *
- * A figure that ships its painter instead of its pixels has no baked PNG for
- * anyone to look at during a build, so the invariants the old bake enforced by
- * throwing — a pose that resolved to NaN and painted nothing, a cell too small
- * for the pose inside it, a row that lost its frames — have to be asserted
- * against the painter instead. These are the ones every figure shares; a
+ * A figure ships its painter instead of its pixels, so these gates assert
+ * directly against the painter: a pose that resolves to NaN and paints
+ * nothing, a cell too small for the pose inside it, a row that loses its
+ * frames. These are the ones every figure shares; a
  * figure's own art gates (proportion, palette, silhouette) sit beside these in
  * its own gate module.
  *

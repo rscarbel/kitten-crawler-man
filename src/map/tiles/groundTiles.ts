@@ -1617,12 +1617,11 @@ export function drawGroundTile(
   // So such a tile reports the material of the tile being drawn: the floor runs
   // under the wall rather than meeting something else there.
   //
-  // **Only when the material would be inferred.** The first cut keyed this on
-  // `occluderAt` alone, which also covers every tile inside a town building
-  // sprite's frame — 735 of them on the real map, 716 of which carry a perfectly
-  // good material of their own and 321 of which abut a different one. Those were
-  // blending correctly, and substituting removed a material that appears at no
-  // other corner, so the neighbour drew a hard tile-aligned edge where the
+  // **Only when the material would be inferred.** Keying this on `occluderAt`
+  // alone also covers every tile inside a town building sprite's frame, most of
+  // which carry a perfectly good material of their own that blends correctly
+  // with its neighbours. Substituting removes a material that appears at no
+  // other corner, so the neighbour would draw a hard tile-aligned edge where the
   // footprint tile drew a full blend. A tile that knows its own ground keeps it.
   //
   // This makes the answer depend on the asker, which the fringe otherwise avoids:

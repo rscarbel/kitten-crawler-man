@@ -275,9 +275,9 @@ const WRIST_WIDTH = 0.036;
 const SLEEVE_BULK = 0.011;
 
 /**
- * Head-on the head is a tall oval, not a ball. Measured off the sheet this
- * replaced, the skull ran 27px across against 38 tall — and a round head is
- * what makes any chin drawn under it read as blocky, however narrow the chin.
+ * Head-on the head is a tall oval, not a ball. At authored scale the skull runs
+ * about 27px across against 38 tall, and a round head is what makes any chin
+ * drawn under it read as blocky, however narrow the chin.
  */
 const HEAD_WIDTH_RATIO = 0.74;
 const HEAD_DEPTH_RATIO = 0.9;
@@ -881,8 +881,8 @@ function drawLimb(ctx: Ctx, chain: BoneChain, shape: LimbShape, paint: LimbPaint
   const bulkRoot = shape.root + paint.clothBulk;
   const bulkEnd = shape.tip + paint.clothBulk * SLEEVE_TAPER;
   const cloth = mix(paint.clothRamp.mid, OUTLINE, paint.shade);
-  // The sleeve follows the arm through the elbow rather than cutting the corner,
-  // which is what let the old one-piece sleeve read as a log strapped on.
+  // The sleeve follows the arm through the elbow rather than cutting the corner;
+  // cutting the corner reads as a log strapped to the arm.
   outlineCapsule(ctx, chain.root, chain.joint, bulkRoot, shape.joint + paint.clothBulk);
   outlineCapsule(ctx, chain.joint, sleeveEnd, shape.joint + paint.clothBulk, bulkEnd);
   fillCapsule(ctx, chain.root, chain.joint, bulkRoot, shape.joint + paint.clothBulk, cloth);
@@ -933,7 +933,6 @@ function drawGroundShadow(
 
 // ── Feet ─────────────────────────────────────────────────────────────────────
 
-/** A foot is about two thirds of the head's height; longer reads as a flipper. */
 /**
  * Derived from his height, not from his head: a foot is about 15% of a figure,
  * and hanging it off this character's deliberately oversized head — the trap
@@ -1842,8 +1841,8 @@ function drawHair(
   const sweep = (profile ? -toward * HAIR_SWEEP_BACK : 0) + flow * HAIR_SPIKE_LEAN;
 
   // The crop is one soft mass with an uneven edge, drawn as a curve through a
-  // ring of small tufts. Straight lines between tall peaks and deep notches —
-  // which is what this was — give him a crown of thorns, not hair.
+  // ring of small tufts. Straight lines between tall peaks and deep notches
+  // would give him a crown of thorns, not hair.
   // Edge-on the crop has to stop where the hairline starts. Carried round to the
   // same angle the head-on view uses, its front end juts out past the brow and
   // the hairline then cuts back up behind it — an overhang over his face.

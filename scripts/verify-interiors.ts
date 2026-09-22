@@ -532,9 +532,9 @@ console.log("\nFurniture scan matches the placer's own border");
 
 console.log('\nEvery roster occupant finds furniture to stand at');
 // `forBuilding` drops an occupant whose anchor group matched nothing, with no
-// warning of any kind: the NPC simply is not in the room. That is how three
-// taverns lost their innkeepers once, and how a cottage lost its resident again
-// during this rework — both found by hand, neither by anything automatic.
+// warning of any kind: the NPC simply is not in the room. Three taverns have
+// lost their innkeepers this way, and a cottage its resident — each found only
+// by hand, none by anything automatic.
 for (const [name, roster] of BUILDING_OCCUPANTS) {
   const kind = buildings.get(name);
   if (kind === undefined) continue;

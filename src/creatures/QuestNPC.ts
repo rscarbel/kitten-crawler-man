@@ -72,7 +72,6 @@ export class QuestNPC extends Player {
       drawQuestMarker(ctx, sx, sy, tileSize, '?', QUEST_MARKER_GREEN);
     }
 
-    // Health bar when damaged
     if (this.hp < this.maxHp) {
       this.renderHealthBar(ctx, sx, sy);
     }

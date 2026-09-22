@@ -2,12 +2,10 @@
  * The skeleton family's art gates — the Skeleton Lord and his sword and bow
  * warriors.
  *
- * The three creatures have no baked sheets to inspect any more, so every
- * invariant the old bake enforced by throwing before it wrote a PNG is enforced
- * here instead: the pose-stream gates measure the rig itself, and the pixel
- * gates measure cells painted from the three `FigureDef`s exactly the way the
- * runtime cache bakes them — supersampled and downsampled — so what is measured
- * is what the game blits.
+ * The pose-stream gates measure the rig itself, and the pixel gates measure
+ * cells painted from the three `FigureDef`s exactly the way the runtime cache
+ * bakes them — supersampled and downsampled — so what is measured is what the
+ * game blits.
  *
  * Every gate runs over all three variants. They share one set of pose functions
  * and differ only in scale and gear, which is precisely the shape of defect that

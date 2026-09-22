@@ -427,13 +427,9 @@ export function gateTextureRichness(
  * That is what catches a building which has lost its light — a facade brighter
  * than its own roof, or a return that stopped being a return.
  *
- * An earlier revision dropped the roof comparison to a symmetric
- * "must differ by 6% either way", on the grounds that the Temple of the Sky is
- * pale ashlar under a deep blue dome and its facade was genuinely the brighter
- * of the two. That was measured before the dome was rebuilt and before the dark
- * ramps were re-exposed, and it is no longer true of any building in the town.
- * A symmetric test would pass a building whose lighting had been inverted, which
- * is precisely the defect worth failing, so the direction is back.
+ * A symmetric tolerance — "must differ by 6% either way" — would pass a
+ * building whose lighting had been inverted, which is precisely the defect
+ * worth failing, so the comparison stays directional.
  *
  * If a future building genuinely cannot satisfy it — a dark roof over a white
  * wall is a real thing to want — the honest move is to give that building a
@@ -751,10 +747,9 @@ export function gateLifeFrameCount(
    * One below the radix `decorationAnimationFrame` folds overlay frame indices
    * with. That fold is the actual hazard: at 16 two distinct combinations of
    * frame indices collide on one cache key and a tile draws a frame belonging
-   * to another animation. The bound used to sit at 10 on the grounds that a
-   * longer loop "drags", which is taste rather than a defect — and the pub's
-   * walkers need the length, because the pause between two passes cannot last
-   * longer than the loop that repeats them.
+   * to another animation. A shorter cap would trade correctness for taste —
+   * the pub's walkers need the full length, because the pause between two
+   * passes cannot last longer than the loop that repeats them.
    */
   const MAX_FRAMES = OVERLAY_FRAME_KEY_STRIDE - 1;
   // No check that `lifeFrames.length === spec.life.frames`: the only caller

@@ -126,10 +126,9 @@ const FLESH: Ramp = { dark: '#4a2340', mid: '#f292bf', light: '#fdc0da' };
 /**
  * The near-black end of the flesh range, at about 13% luminance.
  *
- * Nothing on the first bake was darker than a midtone, which is why she read as
- * a flat printed toy: deep folds, the undersides of the heaped limbs and the
- * insides of the wounds all sat at the same value as her lit flesh. This is the
- * value those places are painted at.
+ * Deep folds, the undersides of the heaped limbs and the insides of the wounds
+ * are painted at this value rather than the lit midtone, so they read as
+ * shadow instead of flattening the creature into a single value.
  */
 const FLESH_DEEP = '#2a1226';
 /** The underside of every tentacle, where the sucker rows run. */
@@ -139,10 +138,10 @@ const INK = '#2c0a1e';
 /**
  * A dim, sickly rim — not a clean cool one.
  *
- * The first bake ran a bright cyan line all the way round her, which at a 32 px
- * tile was the highest-contrast thing in the frame and drew her as a tidy
- * cartoon outline. What separates her from the lair floor now is value, not a
- * traced edge, and the rim is a broken green-grey sheen rather than a contour.
+ * A bright unbroken rim line is the highest-contrast thing in a 32px frame and
+ * reads as a traced cartoon outline. What separates her from the lair floor is
+ * value, not an edge, so the rim is a broken green-grey sheen rather than a
+ * contour.
  */
 const RIM_LIGHT = '#8ba284';
 const RIM_ALPHA = 0.34;
@@ -215,19 +214,18 @@ export const KRAKAREN_SPREAD_HALF_TILES = 1.4;
 /**
  * A slumped lump, not a head.
  *
- * The dome carried two thirds of the silhouette's height for two bakes running,
- * and that alone was the octopus: a big smooth ball with limbs hanging off the
- * bottom is a cartoon cephalopod however the limbs are drawn. It is now under
- * two fifths of the drawn height, wider than it is tall, and the crown limbs
- * arch over the top of it — so the tallest thing in the frame is tentacle and
- * the dome is something they erupt from.
+ * The dome is under two fifths of the drawn height and wider than it is tall,
+ * with the crown limbs arching over its top: a big smooth ball with limbs
+ * hanging off the bottom reads as a cartoon cephalopod however the limbs are
+ * drawn, so the tallest thing in the frame must be tentacle, with the dome
+ * something they erupt from.
  *
- * It is also narrower than the ring its limbs root on. At 0.78 the dome
- * swallowed the whole root ring and every limb left the silhouette from inside
- * one unbroken convex arc, which traced as a single smooth curve for most of a
- * turn — the last thing on her that read as a moulded shell. The outermost
- * roots now sit at 0.60 against a 0.55 half-width, so a third of the limbs
- * break out through the dome's own contour rather than from under it.
+ * The dome is also narrower than the ring its limbs root on. A dome half-width
+ * that covers the whole root ring puts every limb's silhouette exit inside one
+ * unbroken convex arc, which traces as a single smooth curve — a moulded
+ * shell. The outermost roots sit at 0.60 against a 0.55 half-width, so a third
+ * of the limbs break out through the dome's own contour rather than from
+ * under it.
  */
 const MANTLE_HALF_WIDTH = 0.6;
 /** Barely taller above the widest point than below it: a lump, not an egg. */
@@ -260,9 +258,8 @@ const CROWN_OVERSHOOT_TILES = 1.045;
  * How far the highest ink on a resting frame stands above her ground point.
  *
  * The bake gate anchors the sheet on this: she sprawls well below her own
- * contact point, so the lowest ink cannot say where the floor is. It used to be
- * the top of the dome; now the crown limbs arch over the dome, so the crest of
- * that arch is the top of her.
+ * contact point, so the lowest ink cannot say where the floor is. The crown
+ * limbs arch over the dome, so the crest of that arch is the top of her.
  */
 export const KRAKAREN_CREST_TILES = MANTLE_APEX_TILES + CROWN_OVERSHOOT_TILES;
 
@@ -519,8 +516,8 @@ const CROWN_ROOT_DEPTH_SHARE = 0.25;
  * The tip share and the taper power are what keep it from being a rectangle.
  * At 0.62 of its own base over a third of a tile the two sides never converge
  * enough to read as a taper at all, and what the eye finds is a straight-sided
- * pink bar with a straight cut on the end — a panel, which is the same defect
- * the crown limbs used to have where they crossed the dome.
+ * pink bar with a straight cut on the end — a panel, the same flat-tube defect
+ * a limb without a wave shows crossing the dome.
  */
 const STUB_TIP_SHARE = 0.42;
 const STUB_TAPER_POWER = 1.15;
@@ -563,11 +560,11 @@ const TUBE_BULGE_PHASE_SKEW = 1.7;
  *
  * A fixed lobe count spends the same number of bulges on a 0.4-tile stub and on
  * the 2.5-tile slam trunk, so the longer the limb the further apart they
- * stretch: over the slam's whole length the slow lobe never finished half a
- * cycle, which left a girth falling monotonically from 38px to 6px with two
- * dead-straight sides — a traffic cone rather than an arm. A rate fixes that end
- * and breaks the other, smoothing every short limb into a plain taper, so the
- * lobe count is a rate with the old fixed count as its floor.
+ * stretch: over the slam's whole length the slow lobe never finishes half a
+ * cycle, leaving a girth falling monotonically from 38px to 6px with two
+ * dead-straight sides — a traffic cone rather than an arm. The lobe count is a
+ * rate per tile with a floor, so a long limb still gets enough bulges while a
+ * short one isn't smoothed into a plain taper.
  */
 const TUBE_BULGE_SLOW_LOBES_PER_TILE = 3.4;
 const TUBE_BULGE_FAST_LOBES_PER_TILE = 8.3;
@@ -607,7 +604,7 @@ const BODY_MOUTH_SIZE = 0.095;
 const BODY_EYES_MAX = 2;
 
 /**
- * The big split low on the dome, where a beak used to be.
+ * The big split low on the dome, where an octopus's beak would sit.
  *
  * A chitin beak is the single most recognisable thing an octopus has, and two
  * eyes above one is a face however far off the midline it is shoved. What is
@@ -909,8 +906,8 @@ function buildTentacleSpine(spec: TentacleSpec): TentacleSpine {
   // Two incommensurate bulges along the girth, so no stretch of a tube has two
   // parallel edges. A tapered tube with a smooth taper has *straight* sides
   // wherever it is not turning, and a straight-sided pink shape lying across a
-  // body is read as a folded panel rather than as a limb — which is exactly how
-  // four crown limbs over one dome turned her into origami.
+  // body reads as a folded panel rather than as a limb — which is how four
+  // crown limbs over one dome would fold her into origami.
   const slowLobes = Math.max(
     TUBE_BULGE_MIN_SLOW_LOBES,
     spec.length * TUBE_BULGE_SLOW_LOBES_PER_TILE,
@@ -1182,11 +1179,11 @@ const SUCKER_FLEX = 0.22;
  * The two kinds of step between one station and the next.
  *
  * A single jittered step is still an even row: shoving each station a little
- * off its own share keeps the mean spacing and only smudges it, which is why
- * the last bake measured a coefficient of variation under 0.15 down the slam's
- * whole length. What breaks a row is *clumping* — two or three crowded almost
- * on top of each other, then a long bare stretch — so the step is drawn from
- * one of two separated bands rather than from one range.
+ * off its own share keeps the mean spacing and only smudges it, holding the
+ * coefficient of variation under 0.15 down the slam's whole length. What
+ * breaks a row is *clumping* — two or three crowded almost on top of each
+ * other, then a long bare stretch — so the step is drawn from one of two
+ * separated bands rather than from one range.
  */
 const SUCKER_TIGHT_STEP_MIN = 0.16;
 const SUCKER_TIGHT_STEP_MAX = 0.44;
@@ -1297,12 +1294,12 @@ function suckerStations(spine: TentacleSpine, spec: TentacleSpec): SuckerStation
 /**
  * One sucker, drawn as a hole rather than as a disc.
  *
- * The last bake drew a pale ring with a dark centre, which is exactly what an
- * eye is: a light annulus round a dark middle. Seven of them across one frame
- * made the eyes and the suckers one motif, and a motif repeated is read as
- * pattern. A sucker here is a recess — a lit lip on the upper edge, a dark cup
- * under it, a near-black hole in the middle — so it lands in a different value
- * class from every eye on her and cannot be mistaken for one.
+ * A pale ring with a dark centre is exactly what an eye is: a light annulus
+ * round a dark middle. Seven or more of those across one frame would make the
+ * eyes and the suckers one motif, and a motif repeated reads as pattern. A
+ * sucker here is a recess — a lit lip on the upper edge, a dark cup under it, a
+ * near-black hole in the middle — so it lands in a different value class from
+ * every eye on her and cannot be mistaken for one.
  */
 function paintSuckerPit(ctx: Ctx, station: SuckerStation, shade: number): void {
   const r = station.radius;
@@ -1396,9 +1393,9 @@ const SPECULAR_WIDTH_SHARE = 0.24;
  * The near-black band along the unlit flank of every tube.
  *
  * The heap only reads as a heap if the limbs underneath are darker than the
- * limbs on top, and the first bake had nothing in its range dark enough to do
- * that: the shaded side of a tentacle was the same value as the lit side of the
- * one behind it, so twelve limbs stacked up as one pink field.
+ * limbs on top. Without a value this dark in range, the shaded side of a
+ * tentacle sits at the same value as the lit side of the one behind it, and
+ * twelve limbs stack up as one pink field.
  */
 const DEEP_SHADE_INSET = 0.86;
 const DEEP_SHADE_ALPHA = 0.58;
@@ -1503,8 +1500,8 @@ const MOUTH_SEED_STRIDE = 7;
  *
  * Walked rather than divided: a clump of two or three splits crowded together,
  * then an irregular stretch of unbroken flesh, then the next clump. Dividing
- * the span evenly — which is what the first bake did — turns the horror into a
- * bead pattern, and a pattern is read as decoration.
+ * the span evenly turns the horror into a bead pattern, and a pattern reads as
+ * decoration.
  */
 const MOUTH_CLUSTER_MAX = 3;
 const MOUTH_CLUSTER_STEP = 0.075;
@@ -1649,7 +1646,7 @@ export function paintTentacle(ctx: Ctx, spec: TentacleSpec): void {
   // highlight however it is coloured.
   // Laid down as narrowing layers rather than as one stroke: a single band of
   // constant alpha has a hard edge down the middle of the tube, which cel-shades
-  // it into two flat halves — the exact plastic read the whole rework is against.
+  // it into two flat halves — a plastic-moulded read this creature must avoid.
   for (let layer = 0; layer < LIT_BAND_LAYERS; layer++) {
     const narrowing = 1 - layer / LIT_BAND_LAYERS;
     strokeRolledEdge(
@@ -1821,13 +1818,12 @@ const MOUTH_WIDTH_LIMIT_SHARE = 0.85;
 /**
  * A mouth on this creature is a split in the flesh, not a face's mouth.
  *
- * The first bake drew lips: a cupid's bow, a smooth symmetric curve, a wet
- * catchlight on the lower lip. A row of those down a tentacle read as a
- * decorative motif rather than as damage, and read as *human*, which is the one
- * thing they must not do. What is drawn now is a fissure — two independently
- * ragged edges pinned at two corners, a border of raw flesh torn back from the
- * split, a wet dark throat, and teeth that agree on neither length nor angle
- * nor which edge they grow from.
+ * Lips — a cupid's bow, a smooth symmetric curve, a wet catchlight on the
+ * lower lip — would read as a decorative motif rather than as damage, and read
+ * as *human*, which is the one thing they must not do. What is drawn instead
+ * is a fissure — two independently ragged edges pinned at two corners, a
+ * border of raw flesh torn back from the split, a wet dark throat, and teeth
+ * that agree on neither length nor angle nor which edge they grow from.
  *
  * The raw border is also what the bake's mouth-presence gate counts: it is the
  * only deeply saturated red on her, so a change that buries the gashes under
@@ -2068,7 +2064,7 @@ export function paintMouth(ctx: Ctx, spec: MouthSpec): void {
 
   // No wet catchlight in the throat. A specular blob inside a mouth is what
   // makes a drawn mouth read as a *mouth* — it is the cue for a tongue behind a
-  // lower lip — and it was the last thing keeping these splits cartoonish.
+  // lower lip, which these splits must not suggest.
   ctx.save();
   ctx.clip();
   if (open > TOOTH_MIN_OPEN) paintTeeth(ctx, half, upper, lower, shade, spec.seed);
@@ -2153,11 +2149,10 @@ const SMALL_EYE_INK_WIDTH = 0.009;
 /**
  * What state one of her eyes is in.
  *
- * Every eye on the first bake was the same token — a yellow ring with a black
- * bar in it — repeated a dozen times over her flesh, and a token repeated a
- * dozen times is read as a *pattern*: polka dots, not eyes. Nearly half of them
- * are now something that has gone wrong with an eye instead, so the count reads
- * as a disease rather than as decoration.
+ * The same token — a yellow ring with a black bar in it — repeated a dozen
+ * times over her flesh reads as a *pattern*: polka dots, not eyes. Nearly half
+ * of them are instead something that has gone wrong with an eye, so the count
+ * reads as a disease rather than as decoration.
  */
 type EyeForm =
   | 'seeing'
@@ -2214,9 +2209,9 @@ function eyeFormAt(seed: number): EyeForm {
  * Half her eyes have gone wrong, and against a dome wearing eyes at five sizes
  * a clouded or burst one still reads as an eye — that is what the count is for.
  * A guard tentacle carries two and the slam three, set in a row of dark sucker
- * pits, and a clouded eye there is a pale blank disc: exactly the thing the pits
- * were re-cut as recesses to stop being mistaken for. What has to survive on a
- * lone limb is the iris.
+ * pits, and a clouded eye there is a pale blank disc — indistinguishable from a
+ * sucker pit painted as a flat disc rather than a recess. What has to survive
+ * on a lone limb is the iris.
  */
 function soloEyeFormAt(seed: number): EyeForm {
   return hash1(seed) < EYE_SLIT_SHARE ? 'slit' : 'seeing';
@@ -2549,7 +2544,7 @@ function paintEmergenceCollar(
   const lower = Math.floor(COLLAR_STEPS / 2) + 1;
   // Pinched to nothing at both ends. A lip of constant thickness closes on two
   // straight radial joins, and a straight edge across a mound of flesh is the
-  // same panel seam the crown limbs used to cut into the dome.
+  // same flat-panel seam a straight-sided limb cuts into the dome.
   const inner = outer.slice(0, lower).map((p, i) => {
     const along = Math.sin((i / (lower - 1)) * Math.PI);
     const share = lerp(1, COLLAR_LIP_SHARE, along);
@@ -2750,8 +2745,7 @@ const MANTLE_OCCLUSION_SQUASH = 0.8;
  *
  * Four small uneven smears covering about 4% of the dome, rather than one big
  * soft ellipse over a fifth of it: a single broad highlight on a round shape is
- * the most reliable "moulded toy" cue in the whole vocabulary, and it was most
- * of what made the first two bakes read as one.
+ * the most reliable "moulded toy" cue in the whole vocabulary.
  */
 interface MantleGloss {
   readonly x: number;
@@ -2851,10 +2845,10 @@ const MANTLE_CREASES: readonly MantleCrease[] = [
  * dome's half-width, and how far past the notch's own wall it spills.
  *
  * A notch with no shadow in it is a change of outline the eye reads at the
- * silhouette and nowhere else. Filling it puts near-black into the *upper* half
- * of the creature, which is the half that had none: every dark value on the
- * last bake sat in the pocket under the dome, so from the shoulders up she
- * flattened into one pink field at a 32 px tile.
+ * silhouette and nowhere else. Filling it puts near-black into the *upper*
+ * half of the creature: without it, every dark value sits in the pocket under
+ * the dome, so from the shoulders up she flattens into one pink field at a
+ * 32 px tile.
  */
 const NOTCH_SHADOW_REACH = 0.46;
 const NOTCH_SHADOW_ALPHA = 0.5;
@@ -2879,9 +2873,8 @@ const MANTLE_MOTTLE_SIZE_MAX = 1.4;
  * The broken rim up the lit side of the dome.
  *
  * Three short arcs covering 108° of the ellipse — under a third of its
- * circumference — rather than the single 165° sweep the last bake ran. A rim
- * that traces most of a contour *is* the contour at a 32 px tile, and a clean
- * continuous outline is the definition of a cartoon.
+ * circumference. A rim that traces most of a contour *is* the contour at a
+ * 32 px tile, and a clean continuous outline is the definition of a cartoon.
  */
 interface RimArc {
   readonly fromDegrees: number;
@@ -3144,9 +3137,9 @@ interface EyeDisc {
  * Two discs of similar size, side by side at the same height, with anything at
  * all under them, is a face — and a viewer who finds a face stops looking. The
  * rule is written in diameters rather than tiles because it is about how the
- * *shapes* group, so it has to scale with them: the pair that survived the last
- * bake was two eyes about one diameter apart with barely any height between
- * them and a gash directly below, which is a face however small it is.
+ * *shapes* group, so it has to scale with them: two eyes about one diameter
+ * apart with barely any height between them and a gash directly below is a
+ * face however small it is.
  */
 const EYE_PAIR_MIN_GAP_DIAMETERS = 2.5;
 const EYE_PAIR_LEVEL_DIAMETERS = 1;
@@ -3154,9 +3147,8 @@ const EYE_PAIR_LEVEL_DIAMETERS = 1;
  * How far apart two eyes' diameters have to be before proximity stops mattering.
  *
  * Size is half of what makes two discs read as a pair. A big eye with a small
- * one beside it is a big eye with a small one beside it; the face only assembles
- * when the two are close enough in size to be taken for each other, which is
- * what the surviving pair on the last bake was at 1.2×.
+ * one beside it is a big eye with a small one beside it; the face only
+ * assembles when the two are close enough in size to be taken for each other.
  */
 const EYE_PAIR_SIZE_RATIO = 2;
 /** How far a violating eye is shoved, in diameters, and how many shoves it gets. */
@@ -3303,12 +3295,12 @@ const MANTLE_EYE_COUNT = 9;
 /**
  * The three sizes a scattered eye comes in, in tile units of radius.
  *
- * Classes rather than a range, and a range of 3.7× rather than the 2.5× the
- * last bake drew from. A dozen discs whose diameters all sit inside a third of
- * each other are not read as "too many eyes to count" — they are read as spots,
- * because the eye that finds two shapes the same size assumes they are the same
- * *kind* of thing and stops resolving them. Three separated sizes with nothing
- * between them is what makes the count refuse to settle.
+ * Classes rather than a range, and a range of 3.7×. A dozen discs whose
+ * diameters all sit inside a third of each other are not read as "too many
+ * eyes to count" — they are read as spots, because the eye that finds two
+ * shapes the same size assumes they are the same *kind* of thing and stops
+ * resolving them. Three separated sizes with nothing between them is what
+ * makes the count refuse to settle.
  */
 const MANTLE_EYE_RADIUS_SMALL = 0.03;
 const MANTLE_EYE_RADIUS_MIDDLING = 0.058;
@@ -3457,8 +3449,8 @@ interface RingTentacle {
   /**
    * What the painter actually sorts on: nearness with a fixed per-tentacle
    * offset, so limbs at similar depths trade places and their masses cross.
-   * Sorting strictly by depth is what laid an earlier bake's limbs out in a
-   * clean fan with no limb ever passing in front of another.
+   * Sorting strictly by depth instead lays the limbs out in a clean fan with
+   * no limb ever passing in front of another.
    */
   readonly layer: number;
 }
@@ -3522,15 +3514,15 @@ interface SwipeShape {
  * The blow lands at full extension, at the end of the swing rather than in the
  * middle of it.
  *
- * The first cut of this row swept the limb symmetrically through the melee arc
- * and crossed the body's centre line on the impact frame. That put the lashing
- * tentacle at its most *tucked in* on the frame the damage fires — the side
- * view's cell was measurably narrower there than at rest — and left the frames
- * either side of the impact drawn equally hard, so which one read as the blow
- * came down to which flank the limb happened to be on. Winding back and then
- * whipping out to a single extreme, with extension and azimuth cresting
- * together on the damage frame, makes the hit the widest and hardest-driven
- * frame in the row in every view.
+ * A limb swept symmetrically through the melee arc crosses the body's centre
+ * line on the impact frame, putting the lashing tentacle at its most *tucked
+ * in* on the frame the damage fires — the side view's cell would be
+ * measurably narrower there than at rest — and leaves the frames either side
+ * of the impact drawn equally hard, so which one reads as the blow comes down
+ * to which flank the limb happens to be on. Winding back and then whipping
+ * out to a single extreme, with extension and azimuth cresting together on
+ * the damage frame, makes the hit the widest and hardest-driven frame in the
+ * row in every view.
  */
 function swipeShape(progress: number): SwipeShape {
   const p = clamp01(progress);
@@ -3572,10 +3564,10 @@ function buildRingTentacle(
   const lash = swipe === null ? 0 : swipe.lash;
   const rear = swipe === null ? 0 : swipe.rear;
 
-  // Every limb roots on the same ring, crown limbs included. Rooting a crown on
-  // the dome's shoulder instead left the flat cut its tube starts with sitting
-  // in the middle of the dome, which reads as a slab bolted on rather than as a
-  // limb: the base of a tentacle has to be buried in the heap.
+  // Every limb roots on the same ring, crown limbs included. Rooting a crown
+  // on the dome's shoulder instead would leave the flat cut its tube starts
+  // with sitting in the middle of the dome, which reads as a slab bolted on
+  // rather than as a limb: the base of a tentacle has to be buried in the heap.
   // A crown limb's root barely rides the ring's depth. It rides it fully for a
   // drape limb — that is the perspective — but a crown limb carries the top of
   // the whole creature, and a root that sits a third of a tile higher when the
@@ -3597,10 +3589,11 @@ function buildRingTentacle(
   // the dome to turn the limb back across it.
   //
   // The lean takes only its *side* from the ring, never its size. Scaling it by
-  // `sin(ringA)` instead stood a crown limb facing the camera bolt upright and
-  // laid the same limb over at a third of a radian from the side, which moved
-  // the top of the whole creature by a quarter of a tile between one facing row
-  // and the next — more than twice what the anchor gate can absorb.
+  // `sin(ringA)` instead would stand a crown limb facing the camera bolt
+  // upright while laying the same limb over at a third of a radian from the
+  // side, moving the top of the whole creature by a quarter of a tile between
+  // one facing row and the next — more than twice what the anchor gate can
+  // absorb.
   const crownAngle = -Math.PI / 2 + (Math.sin(ringA) >= 0 ? 1 : -1) * CROWN_LEAN;
   const baseAngle = (crown ? crownAngle : drapeAngle) - rear * SWIPE_REAR_ANGLE;
 
@@ -3692,12 +3685,13 @@ const BEHIND_MANTLE_NEARNESS = 0;
  * The pocket of shadow the heaped limbs sit in, laid over everything already
  * painted there.
  *
- * A limb crossing that pocket was being drawn in the plain flesh midtone, which
- * is the brightest large-area colour on her: the result was a bright convex
- * patch of pink sitting in the darkest part of the creature, and the eye went
- * to it before it went to anything she is actually made of. It is composited
- * `source-atop` so it can only ever darken flesh that is already there — a
- * plain fill would paint a dark ellipse into the empty air beside her.
+ * A limb crossing that pocket is otherwise drawn in the plain flesh midtone,
+ * which is the brightest large-area colour on her: without this shadow it is
+ * a bright convex patch of pink sitting in the darkest part of the creature,
+ * and the eye goes to it before it goes to anything she is actually made of.
+ * It is composited `source-atop` so it can only ever darken flesh that is
+ * already there — a plain fill would paint a dark ellipse into the empty air
+ * beside her.
  */
 const POCKET_SHADOW_RX = 0.66;
 const POCKET_SHADOW_RY = 0.3;
@@ -4024,10 +4018,10 @@ const SLAM_SPLAY_RAMP_TO = 0.86;
 /**
  * The floor coming apart under the fronds, and the ring of dust it throws.
  *
- * The emergence point has thrown broken floor since the first bake and the
- * *landing* point never had anything at all, so the payoff pose was an arm
- * hanging in mid air. The runtime paints the kill-radius ring over the top of
- * this; what is baked here is the hit itself.
+ * The emergence point throws broken floor of its own; without a matching
+ * burst at the *landing* point, the payoff pose is an arm hanging in mid air.
+ * The runtime paints the kill-radius ring over the top of this; what is baked
+ * here is the hit itself.
  */
 const SLAM_LANDING_T = 0.97;
 const SLAM_LANDING_RADIUS = 0.5;
@@ -4038,12 +4032,12 @@ const SLAM_LANDING_SEED = 3557;
 /**
  * The bounce off her own blow.
  *
- * Between the hit at 0.2 and the retract at 0.45 every dial in the pose was
- * already at its extreme and none of them moved: three frames of a twelve-frame
- * row were the same drawing, and one adjacent pair changed 1512px of ink where
- * every other pair in the row changes four to ten thousand. Nothing here moves
- * the hit — the drive still crests on the contract's own frame — it is what the
- * trunk does *after* it, which is where the dead air was.
+ * Between the hit at 0.2 and the retract at 0.45, every other pose dial sits
+ * at its extreme and holds there: without this, several frames of the row
+ * would be the same drawing, changing only a sliver of ink where every other
+ * adjacent pair in the row changes far more. Nothing here moves the hit — the
+ * drive still crests on the contract's own frame — it is what the trunk does
+ * *after* it, filling that otherwise dead air.
  */
 /**
  * How many half-swings the trunk takes settling, and how far each of them turns

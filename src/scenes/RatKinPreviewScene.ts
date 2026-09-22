@@ -51,8 +51,7 @@ const LANE_GROUND_FRAC = 0.86;
  * The harness drives a real `MordecaiWanderer` rather than reproducing its
  * pacing, because the whole reason this scene exists is that a contact sheet
  * cannot show gait speed — and a harness that shows a *different* gait speed
- * from the game is worse than none. Reproducing it by hand is exactly how the
- * first version ended up 13% fast against a comment claiming it matched.
+ * from the game is worse than none.
  */
 const PREVIEW_ROOM = { x: 0, y: 0, w: 9, h: 9 };
 const PREVIEW_HOME = { x: 4, y: 4 };

@@ -60,7 +60,6 @@ export function drawCityElfCultistSprite(
   const hemSway = swayPhase * CULTIST_ROBE_SWAY_AMP * s;
   const castEase = castAnim > 0 ? Math.sin(castAnim * Math.PI) : 0;
 
-  // Robe — hooded silhouette flaring from the shoulders to the hem
   ctx.fillStyle = ROBE_COLOR;
   ctx.beginPath();
   ctx.moveTo(-CULTIST_SHOULDER_HALF_WIDTH * s, CULTIST_SHOULDER_Y * s);
@@ -70,7 +69,6 @@ export function drawCityElfCultistSprite(
   ctx.closePath();
   ctx.fill();
 
-  // Trim line down the robe front
   ctx.strokeStyle = ROBE_TRIM;
   ctx.lineWidth = Math.max(1, s * 0.02);
   ctx.beginPath();
@@ -78,7 +76,6 @@ export function drawCityElfCultistSprite(
   ctx.lineTo(hemSway, CULTIST_ROBE_HEM_Y * s);
   ctx.stroke();
 
-  // Rope belt with a hanging skyfowl feather
   ctx.strokeStyle = BELT_COLOR;
   ctx.beginPath();
   ctx.moveTo(-CULTIST_SHOULDER_HALF_WIDTH * s, CULTIST_BELT_Y * s);
@@ -95,7 +92,6 @@ export function drawCityElfCultistSprite(
   );
   ctx.stroke();
 
-  // Sleeves — the leading arm points at the target while casting
   ctx.strokeStyle = ROBE_COLOR;
   ctx.lineWidth = CULTIST_ARM_WIDTH * s;
   ctx.lineCap = 'round';
@@ -114,7 +110,6 @@ export function drawCityElfCultistSprite(
     ctx.restore();
   }
 
-  // Hood — a rounded cowl with a shadowed opening
   ctx.fillStyle = ROBE_COLOR;
   ctx.beginPath();
   ctx.arc(0, CULTIST_HOOD_Y * s, CULTIST_HOOD_R * s, 0, Math.PI * 2);
@@ -124,7 +119,6 @@ export function drawCityElfCultistSprite(
   ctx.arc(s * 0.015, CULTIST_HOOD_Y * s + s * 0.01, CULTIST_HOOD_R * s * 0.72, 0, Math.PI * 2);
   ctx.fill();
 
-  // Glowing eyes in the hood shadow — brighter mid-cast
   ctx.save();
   ctx.shadowColor = EYE_COLOR;
   ctx.shadowBlur = CULTIST_EYE_GLOW_RADIUS + castEase * CULTIST_EYE_GLOW_RADIUS;

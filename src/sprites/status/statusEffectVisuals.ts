@@ -2,12 +2,10 @@
  * One place that answers, for any status effect: what does it look like on the
  * character, what does it look like in the HUD, and what is it called.
  *
- * Before this registry existed those three answers lived in three files and
- * disagreed — seven of the twelve statuses drew nothing on the character at all,
- * and the same seven fell through to an identical grey HUD pill, so a player
- * being stunned, webbed and electrocuted saw three indistinguishable badges and
- * no world-space cue whatsoever. Adding a status now means adding one entry
- * here; leaving one out is visible immediately rather than three files away.
+ * Keeping the three answers in one place is what stops them from disagreeing: a
+ * status left out of this registry falls back to a generic grey HUD pill and
+ * draws nothing on the character, so the gap is visible immediately rather than
+ * buried across separate files.
  *
  * Each entry can contribute two things:
  *

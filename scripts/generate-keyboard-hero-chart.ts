@@ -7,9 +7,8 @@
  * rather than analysed at runtime because the analysis needs the whole decoded
  * waveform and several seconds of FFT work.
  *
- * Note density is matched to what the old random spawner produced
- * (TARGET_NOTES_PER_SECOND), so re-baking the chart does not quietly change how
- * hard the mini-game is.
+ * Note density is pinned to `TARGET_NOTES_PER_SECOND`, so re-baking the chart
+ * does not quietly change how hard the mini-game is.
  *
  * Requires `ffmpeg` on PATH.
  *

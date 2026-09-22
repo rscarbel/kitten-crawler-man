@@ -84,7 +84,6 @@ export function drawHeatherBearSprite(
   ctx.translate(cx, cy);
   if (facingX < 0) ctx.scale(-1, 1);
 
-  // Legs
   ctx.fillStyle = FUR_SHADE;
   for (const [legX, swing] of [
     [BEAR_BACK_LEG_X, legSwing],
@@ -98,7 +97,6 @@ export function drawHeatherBearSprite(
     );
   }
 
-  // Worms wriggling out of the front paw
   ctx.strokeStyle = WORM_COLOR;
   ctx.lineWidth = Math.max(1, gs * 0.015);
   ctx.lineCap = 'round';
@@ -117,7 +115,6 @@ export function drawHeatherBearSprite(
     ctx.stroke();
   }
 
-  // Body — big shaggy mass with a shoulder hump
   ctx.fillStyle = FUR_COLOR;
   ctx.beginPath();
   ctx.ellipse(
@@ -143,7 +140,6 @@ export function drawHeatherBearSprite(
   );
   ctx.fill();
 
-  // Swiping forepaw — raised with the rear, slashing down across the second half
   if (attackAnim > 0) {
     const swipeProgress = attackAnim > 0.5 ? (attackAnim - 0.5) * 2 : 0;
     const pawAngle = -BEAR_SWIPE_ARC * rear + swipeProgress * BEAR_SWIPE_ARC * 1.3;
@@ -156,7 +152,6 @@ export function drawHeatherBearSprite(
     ctx.moveTo(0, 0);
     ctx.lineTo(BEAR_SWIPE_PAW_LENGTH * gs, 0);
     ctx.stroke();
-    // Claws
     ctx.strokeStyle = BONE_COLOR;
     ctx.lineWidth = Math.max(1, gs * 0.015);
     for (let i = 0; i < BEAR_CLAW_COUNT; i++) {
@@ -169,7 +164,6 @@ export function drawHeatherBearSprite(
     ctx.restore();
   }
 
-  // Head — low and forward; lifts as she rears
   const headX = BEAR_HEAD_X * gs;
   const headY = BEAR_HEAD_Y * gs - bodyLift * 1.4;
   ctx.fillStyle = FUR_COLOR;
@@ -186,7 +180,6 @@ export function drawHeatherBearSprite(
     Math.PI * 2,
   );
   ctx.fill();
-  // Snout
   ctx.fillStyle = FUR_SHADE;
   ctx.beginPath();
   ctx.ellipse(
@@ -200,7 +193,6 @@ export function drawHeatherBearSprite(
   );
   ctx.fill();
 
-  // Exposed skull patch — bone over the leading side of the face
   ctx.fillStyle = BONE_COLOR;
   ctx.beginPath();
   ctx.arc(
@@ -212,7 +204,6 @@ export function drawHeatherBearSprite(
   );
   ctx.closePath();
   ctx.fill();
-  // Empty eye socket in the bone
   ctx.fillStyle = '#1a1410';
   ctx.beginPath();
   ctx.arc(
@@ -224,7 +215,6 @@ export function drawHeatherBearSprite(
   );
   ctx.fill();
 
-  // Living eye on the fur side — small, dark, tired
   ctx.fillStyle = '#2a1c10';
   ctx.beginPath();
   ctx.arc(

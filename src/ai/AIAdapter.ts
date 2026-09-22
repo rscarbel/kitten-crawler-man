@@ -184,7 +184,6 @@ export class AIAdapter {
     this.sceneCtx = ctx;
     this.sceneBus = bus;
 
-    // If already connected, subscribe immediately
     if (this.connected) {
       this.subscribeToEvents(bus);
       this.startSnapshotTimer();
@@ -264,7 +263,6 @@ export class AIAdapter {
     const recent = this.actionHistory.slice(-ACTION_HISTORY_MAX);
     const lines: string[] = [];
 
-    // Check for repeated stat modifications
     const statCounts = new Map<string, number>();
     for (const a of recent) {
       if (a.type === 'modify_stat' && typeof a.stat === 'string') {
@@ -279,7 +277,6 @@ export class AIAdapter {
       }
     }
 
-    // Check for repeated mob spawns of the same type
     const mobCounts = new Map<string, number>();
     for (const a of recent) {
       if (a.type === 'spawn_mob' && typeof a.mob_type === 'string') {
@@ -732,7 +729,6 @@ export class AIAdapter {
       return { clientId: __AI_CLIENT_ID__, clientSecret: __AI_CLIENT_SECRET__ };
     }
 
-    // Fall back to per-session self-registration
     const stored = localStorage.getItem(CREDS_KEY);
     if (stored) {
       try {

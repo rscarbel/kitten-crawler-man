@@ -12,20 +12,16 @@
  * by anything: this is the eye's copy, and it goes under `preview/props/`
  * alongside the other families rather than into `src/images/`.
  *
- * ## Nothing here can take the game down, and that is new
+ * ## Nothing here can take the game down
  *
- * This used to write the facades and their manifest, which made ordering the
- * whole safety story: `SpriteLoader` builds its footprint and doorway tables
- * from the manifest at module load and **throws** when a building's painted door
- * falls outside the walkable opening its blocked regions leave, so a bad bake
- * left a tree that would not boot, and the doorway gate could only run after the
- * write with a snapshot standing by to undo it.
- *
- * The manifest is checked-in data now and this writes only preview art, so that
- * gate simply runs first, against the entry the game itself reads. Two checks
- * carry what the ordering used to: `manifestEntryProblems` reports a spec that
- * has drifted from its entry, and the doorway gate asks `SpriteLoader` for the
- * opening it derives from that entry and requires the spec's door to sit in it.
+ * The manifest is checked-in data, and this script writes only preview art, so
+ * a bad bake can never leave a tree that won't boot: `SpriteLoader` builds its
+ * footprint and doorway tables from the manifest at module load and **throws**
+ * when a building's painted door falls outside the walkable opening its
+ * blocked regions leave. Two checks stand in front of that risk instead:
+ * `manifestEntryProblems` reports a spec that has drifted from its entry, and
+ * the doorway gate asks `SpriteLoader` for the opening it derives from that
+ * entry and requires the spec's door to sit in it.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';

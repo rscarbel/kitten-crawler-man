@@ -39,10 +39,9 @@ const FLAME_GLOW_BLUR = 0.55;
  *
  * Drawn as its own disc rather than left to the flame's `shadowBlur`, because
  * blur spreads a shape's *own* alpha: the flame is a 2.6 px ellipse at a 32 px
- * tile, so blurring it over half a tile thinned it to nothing. The lamp then had
- * no visible light at its head while the pool at its foot stayed solid, and the
- * whole prop read as glowing at its base — a lamp lighting its own feet and
- * nothing else.
+ * tile, so blurring it over half a tile thins it to nothing, leaving no visible
+ * light at the head while the pool at the foot stays solid — a lamp that only
+ * lights its own feet.
  */
 const HEAD_GLOW_RADIUS = 0.55;
 const HEAD_GLOW_ALPHA = 0.22;

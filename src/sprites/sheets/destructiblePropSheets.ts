@@ -19,16 +19,14 @@
 /**
  * The brazier's ember glow is wider than the frame it sits in, and that is fine.
  *
- * Its halo has a radius a little past the cell's half-width, so in the sheet
- * this replaced — which composited every frame onto one canvas without clipping
- * — each brazier frame carried a sliver of the *next* phase's glow. The game
- * draws one frame at a time, so that sliver was foreign light in the frame being
- * shown. Clipping each frame to its own cell removes it, and the frame that is
- * drawn is now only its own glow. Measured against the replaced sheet: 2172
- * pixels change in opacity by at most 7 parts in 255 — a three-percent halo —
- * and 1383 change in colour where anything is actually drawn, by at most 22.
- * Invisible at any size, which is why a parity check reports the brazier and
- * nothing else.
+ * Its halo has a radius a little past the cell's half-width, so without
+ * clipping each brazier frame would carry a sliver of the *next* phase's glow
+ * bleeding in from the neighbouring cell — foreign light in a frame the game
+ * draws on its own. Clipping each frame to its own cell removes that sliver, at
+ * a difference too small to see: 2172 pixels shift in opacity by at most 7
+ * parts in 255 (about three percent), and 1383 shift in colour by at most 22,
+ * wherever anything is actually drawn. That is why a parity check reports the
+ * brazier and nothing else — the diff is real but invisible at any size.
  */
 
 import {

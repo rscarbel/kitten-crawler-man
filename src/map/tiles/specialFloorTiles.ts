@@ -158,10 +158,9 @@ const ARENA_GRID_DIVISIONS = 4;
 const ARENA_RIVET_RADIUS = 1.3;
 const ARENA_BASE = '#191b21';
 /**
- * The two plate tones, exported because the ball's bake gate measures the boss's
- * contrast against the floor it rolls on and the review harness paints it as a
- * backdrop. Both had a copied hex that this file's own rewrite left behind, so the
- * gate was measuring against a colour the game no longer draws.
+ * The two plate tones, exported so the ball's bake gate and the review harness
+ * measure contrast against the actual colours drawn here rather than a copied
+ * hex that can drift out of sync with them.
  */
 export const ARENA_PLATE_LIGHT = '#20232b';
 export const ARENA_PLATE_DARK = '#14161b';

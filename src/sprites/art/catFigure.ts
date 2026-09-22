@@ -54,8 +54,8 @@ import { type FigureDef, figureStates } from '../figure/figureDef';
  * The cell the poses are painted into, and where Donut's own tile sits inside
  * it.
  *
- * These five numbers were measured by the bake this figure replaces, and
- * `scripts/parity-figure-sheet.ts` is what proved the painter still fills
+ * These five numbers are measured off the widest pose plus padding, quantised,
+ * and `scripts/parity-figure-sheet.ts` proves the painter still fills
  * exactly that cell. The gates re-check that nothing paints against the edge,
  * which is what would say a pose has outgrown them.
  */

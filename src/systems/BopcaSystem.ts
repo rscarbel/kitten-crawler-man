@@ -625,11 +625,11 @@ export class BopcaSystem implements GameSystem {
     this.talkingWith = active;
     this.dialogBox = null;
     this.activeTone = toneFor(active);
-    // Only an idle Bopca turns to face you. A busy one keeps its pose: this used
-    // to overwrite `cooking` unconditionally, and since `updateCook` is the sole
-    // thing that advances that state and nothing ever re-arms it, closing the
-    // dialog and reopening it to check on your order froze the order forever.
-    // `updateCook` hands the pose back to `talking` once the stove work is done.
+    // Only an idle Bopca turns to face you. A busy one keeps its pose:
+    // `updateCook` is the sole thing that advances the `cooking` state and
+    // nothing else re-arms it, so overwriting it here would freeze the order
+    // forever the moment the dialog is closed and reopened. `updateCook` hands
+    // the pose back to `talking` once the stove work is done.
     if (entry.activity === 'idleAnim') entry.activity = 'talking';
     entry.barkFramesLeft = 0;
     entry.barkedThisVisit = true;

@@ -1,18 +1,17 @@
 /**
- * Paints the generated ground tilesets at runtime, from the floor's art seed.
+ * Paints the generated ground tilesets at runtime, from the floor's art seed,
+ * rather than shipping them as baked PNGs.
  *
- * These sheets used to ship as PNGs baked by `scripts/generate-ground-tileset.ts`.
- * The painters were always pure `Surface` maths (`src/map/tilegen/`), so the
- * conversion is: run the same painters, blit the same sliced tiles into a canvas
- * in the same order, and publish it under the same manifest key. Every draw site
- * — `groundTiles.ts`, the `?tiles` review route, `TileChunkCache` — is unchanged,
- * because the manifest entry that describes the sheet is unchanged too.
+ * The painters are pure `Surface` maths (`src/map/tilegen/`), so painting at
+ * runtime is: run the same painters, blit the same sliced tiles into a canvas
+ * in the same order, and publish it under the same manifest key. Every draw
+ * site — `groundTiles.ts`, the `?tiles` review route, `TileChunkCache` — reads
+ * the manifest entry exactly as it would a shipped sheet.
  *
- * What is new is the seed. A material's structure seed now carries a per-floor
- * term, so each generation of a floor gets its own grain and joint layout inside
- * the reviewed envelope. The corner masks stay unseeded: mask geometry is what
- * makes two materials meet without a visible edge, and it is gated as a set
- * rather than per floor.
+ * A material's structure seed carries a per-floor term, so each generation of a
+ * floor gets its own grain and joint layout inside the reviewed envelope. The
+ * corner masks stay unseeded: mask geometry is what makes two materials meet
+ * without a visible edge, and it is gated as a set rather than per floor.
  */
 
 import {

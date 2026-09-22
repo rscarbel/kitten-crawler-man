@@ -284,8 +284,8 @@ function placeNearSite(
  *
  * The rescue spiral has to know what the encounter has already taken, or it
  * happily hands the same tile to two minions — or hands a minion the boss's own
- * tile, since every def's offsets are inside the boss's rescue radius. That is
- * the identical bug the Dark Knight's goblin placement was fixed for.
+ * tile, since every def's offsets are inside the boss's rescue radius. The Dark
+ * Knight's goblin placement guards against the identical failure.
  */
 function tileKey(x: number, y: number): string {
   return `${x},${y}`;
@@ -425,10 +425,7 @@ const ROCK_GOLEM_DEF: BountyDef = {
 /**
  * Every bounty type Shady can issue.
  *
- * A `debug_ghoul` stand-in lived here while the real bosses were being built, so
- * the loop was exercisable before any of them existed. It was removed once all
- * five landed — `npm run verify:bounty` now builds a real encounter from every
- * entry in this array, so there is nothing left for a placeholder to cover.
+ * `npm run verify:bounty` builds a real encounter from every entry in this array.
  */
 export const BOUNTY_DEFS: readonly BountyDef[] = [
   EVIL_CLOWN_DEF,
