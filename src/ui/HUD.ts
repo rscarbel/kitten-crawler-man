@@ -89,6 +89,7 @@ const NOTIF_SHADOW_BLUR_BASE = 14;
 const NOTIF_SHADOW_BLUR_PULSE = 12;
 const NOTIF_BORDER_BASE_ALPHA = 0.65;
 const NOTIF_BORDER_PULSE_ALPHA = 0.35;
+const NOTIF_LINE_WIDTH_MIN = 2;
 const NOTIF_FILL = 'rgba(40,24,0,0.96)';
 const NOTIF_ICON_X = 28;
 const NOTIF_ICON_Y = 34;
@@ -110,6 +111,27 @@ const NOTIF_TEXT_COLOR_MIN_ALPHA = 0.9;
 const NOTIF_TEXT_COLOR_PULSE_ALPHA = 0.1;
 const NOTIF_ICON_COLOR_MIN_ALPHA = 0.8;
 const NOTIF_ICON_COLOR_PULSE_ALPHA = 0.2;
+
+// Reminder-flagged constants — applied on top of the normal notification once
+// the point has gone unspent long enough to nag about (see
+// SkillPointReminderSystem). Growing the box around its own center keeps the
+// stable click rect centered rather than shifting the whole banner.
+const REMINDER_SIZE_SCALE = 1.45;
+const REMINDER_SHADOW_BLUR_BOOST = 40;
+const REMINDER_BORDER_ALPHA = 1;
+const REMINDER_BORDER_LINE_WIDTH = 4;
+/** Added to the mobile badge's normal border width while flagged. */
+const REMINDER_LINE_WIDTH_BOOST = 2;
+/** Faster, brighter oscillation layered on top of the base pulse's white flash. */
+const REMINDER_FLASH_FREQ = 2.5;
+const REMINDER_FLASH_ALPHA = 0.35;
+// A soft aura drawn behind the box, sized off the box's own width so it scales
+// with the banner (full-width desktop vs. the narrower mobile badge) rather
+// than being a fixed radius that looks right on only one of them.
+const REMINDER_GLOW_WIDTH_RATIO = 0.9;
+const REMINDER_GLOW_RADIUS_PULSE = 24;
+const REMINDER_GLOW_ALPHA_BASE = 0.3;
+const REMINDER_GLOW_ALPHA_PULSE = 0.3;
 
 // Player block constants
 const PLAYER_BLOCK_BAR_X_OFFSET = 88;
@@ -167,6 +189,7 @@ export function drawHUD(
   cat: CatPlayer,
   pulseRef: { value: number },
   collapsed = false,
+  reminderActive = false,
 ): HudResult {
   if (platform.showHudCollapseToggle && collapsed) {
     return drawHUDCollapsed(ctx, human, cat, pulseRef);
@@ -222,7 +245,7 @@ export function drawHUD(
     color: '#fbbf24',
   });
 
-  const notifRect = renderNotification(ctx, human, cat, pulseRef);
+  const notifRect = renderNotification(ctx, human, cat, pulseRef, reminderActive);
   const hudPanelBottom = panelTopY + panelHeight;
   const hudRect: HudRect = { x: PANEL_START_X, y: panelTopY, w: PANEL_WIDTH, h: panelHeight };
 
@@ -365,6 +388,7 @@ export function renderMobileSkillBadge(
   cat: CatPlayer,
   pulseRef: { value: number },
   topY: number,
+  reminderActive = false,
 ): HudRect {
   const hasUnspent = human.unspentPoints > 0 || cat.unspentPoints > 0;
   if (!hasUnspent) return HIDDEN_RECT;
@@ -379,16 +403,33 @@ export function renderMobileSkillBadge(
   );
   const badgeRect: HudRect = { x: BADGE_X, y: topY, w: badgeMaxW, h: BADGE_H };
 
+  // Same grow/glow/flash treatment as the desktop notification (see
+  // renderNotification and reminderGrowthCenter).
+  const scale = reminderActive ? REMINDER_SIZE_SCALE : 1;
+  const { pivotX, finalCenterX, finalCenterY } = reminderGrowthCenter(
+    badgeRect,
+    scale,
+    reminderActive,
+  );
+
   ctx.save();
-  ctx.shadowColor = '#fbbf24';
-  ctx.shadowBlur = BADGE_SHADOW_BLUR + BADGE_PULSE_SHADOW_MULT * pulse;
-  ctx.fillStyle = BADGE_FILL_RGB;
-  ctx.fillRect(badgeRect.x, badgeRect.y, badgeRect.w, badgeRect.h);
-  ctx.strokeStyle = `rgba(251,191,36,${BADGE_BORDER_BASE_ALPHA + BADGE_BORDER_PULSE_ALPHA * pulse})`;
-  ctx.lineWidth = BADGE_LINE_WIDTH_MIN + pulse * BADGE_LINE_WIDTH_PULSE_MULT;
-  ctx.strokeRect(badgeRect.x, badgeRect.y, badgeRect.w, badgeRect.h);
-  ctx.shadowBlur = 0;
-  ctx.restore();
+  if (reminderActive) {
+    drawReminderGlow(ctx, finalCenterX, finalCenterY, badgeRect.w, pulseRef.value);
+    ctx.translate(pivotX, finalCenterY);
+    ctx.scale(scale, scale);
+    ctx.translate(-pivotX, -finalCenterY);
+  }
+
+  const badgeLineWidth = reminderActive
+    ? BADGE_LINE_WIDTH_MIN + REMINDER_LINE_WIDTH_BOOST + pulse * BADGE_LINE_WIDTH_PULSE_MULT
+    : BADGE_LINE_WIDTH_MIN + pulse * BADGE_LINE_WIDTH_PULSE_MULT;
+  drawReminderBox(ctx, badgeRect, pulse, pulseRef.value, reminderActive, badgeLineWidth, {
+    fill: BADGE_FILL_RGB,
+    shadowBlurBase: BADGE_SHADOW_BLUR,
+    shadowBlurPulseMult: BADGE_PULSE_SHADOW_MULT,
+    borderBaseAlpha: BADGE_BORDER_BASE_ALPHA,
+    borderPulseAlpha: BADGE_BORDER_PULSE_ALPHA,
+  });
 
   const cx = badgeRect.x + badgeRect.w / 2;
   const goldColor = `rgba(251,191,36,${BADGE_TEXT_COLOR_MIN_ALPHA + BADGE_TEXT_COLOR_PULSE_ALPHA * pulse})`;
@@ -408,7 +449,15 @@ export function renderMobileSkillBadge(
     align: 'center',
   });
 
-  return badgeRect;
+  ctx.restore(); // pops the reminder growth transform (a no-op transform when not flagged)
+
+  if (!reminderActive) return badgeRect;
+  return {
+    x: finalCenterX - (badgeRect.w * scale) / 2,
+    y: finalCenterY - (badgeRect.h * scale) / 2,
+    w: badgeRect.w * scale,
+    h: badgeRect.h * scale,
+  };
 }
 
 export function drawHUDPlayerBlock(
@@ -591,6 +640,98 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
 }
 
 /**
+ * Soft radial aura drawn behind a reminder-flagged skill-point box, sized off
+ * the box's own width and pulsing independently of the box's own
+ * grow/flash/border pulse — the glow a flagged box needs to be seen from
+ * across a busy HUD, not just brighter at the edges.
+ */
+function drawReminderGlow(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  boxWidth: number,
+  pulseValue: number,
+): void {
+  const glowPulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(pulseValue * REMINDER_FLASH_FREQ);
+  const radius =
+    (boxWidth * REMINDER_GLOW_WIDTH_RATIO) / 2 + REMINDER_GLOW_RADIUS_PULSE * glowPulse;
+  const alpha = REMINDER_GLOW_ALPHA_BASE + REMINDER_GLOW_ALPHA_PULSE * glowPulse;
+  const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+  gradient.addColorStop(0, `rgba(251,191,36,${alpha})`);
+  gradient.addColorStop(1, 'rgba(251,191,36,0)');
+  ctx.save();
+  ctx.fillStyle = gradient;
+  ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+  ctx.restore();
+}
+
+/**
+ * Fill, border and reminder-flash pass shared by the notification banner and
+ * the mobile skill badge — everything inside their `ctx.save()`/`ctx.restore()`
+ * pair once the growth transform (if any) is already applied.
+ */
+function drawReminderBox(
+  ctx: CanvasRenderingContext2D,
+  rect: { x: number; y: number; w: number; h: number },
+  pulse: number,
+  pulsePhase: number,
+  reminderActive: boolean,
+  lineWidth: number,
+  style: {
+    fill: string;
+    shadowBlurBase: number;
+    shadowBlurPulseMult: number;
+    borderBaseAlpha: number;
+    borderPulseAlpha: number;
+  },
+): void {
+  ctx.save();
+  ctx.shadowColor = '#fbbf24';
+  ctx.shadowBlur =
+    style.shadowBlurBase +
+    style.shadowBlurPulseMult * pulse +
+    (reminderActive ? REMINDER_SHADOW_BLUR_BOOST : 0);
+  ctx.fillStyle = style.fill;
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  ctx.strokeStyle = reminderActive
+    ? `rgba(251,191,36,${REMINDER_BORDER_ALPHA})`
+    : `rgba(251,191,36,${style.borderBaseAlpha + style.borderPulseAlpha * pulse})`;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+
+  if (reminderActive) {
+    const flashAlpha =
+      REMINDER_FLASH_ALPHA * Math.max(0, Math.sin(pulsePhase * REMINDER_FLASH_FREQ));
+    ctx.fillStyle = `rgba(255,255,255,${flashAlpha})`;
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+/**
+ * Transform pivot and final on-screen center for a box that, while flagged,
+ * grows toward the horizontal center of the viewport instead of around its
+ * own position. Both the notification banner and the mobile badge are anchored
+ * near the left edge, so growing 45% around their own center pushes the added
+ * width straight off the left of the screen — this solves for the pivot that
+ * lands the box's own geometry exactly on the viewport's horizontal center
+ * once scaled: `pivot + scale * (own - pivot) = final`.
+ */
+function reminderGrowthCenter(
+  drawnRect: HudRect,
+  scale: number,
+  reminderActive: boolean,
+): { pivotX: number; finalCenterX: number; finalCenterY: number } {
+  const ownCenterX = drawnRect.x + drawnRect.w / 2;
+  const finalCenterY = drawnRect.y + drawnRect.h / 2;
+  const finalCenterX = reminderActive ? viewportWidth() / 2 : ownCenterX;
+  const pivotX = reminderActive ? (finalCenterX - scale * ownCenterX) / (1 - scale) : ownCenterX;
+  return { pivotX, finalCenterX, finalCenterY };
+}
+
+/**
  * Gold skill-point notification badge rendered below the HUD panel.
  * Much larger and visually distinct from the panel above it.
  * Returns the stable click rect if visible, else HIDDEN_RECT.
@@ -600,6 +741,7 @@ function renderNotification(
   human: Player,
   cat: Player,
   pulseRef: { value: number },
+  reminderActive = false,
 ): HudRect {
   if (human.unspentPoints <= 0 && cat.unspentPoints <= 0) return HIDDEN_RECT;
 
@@ -622,21 +764,47 @@ function renderNotification(
   const rect: HudRect = { x: PANEL_START_X, y: NOTIF_Y, w: notifW, h: NOTIF_H };
   const drawY = rect.y + bounceY;
 
+  // Once flagged by SkillPointReminderSystem, everything below is drawn inside
+  // a transform that grows the whole banner toward the viewport's horizontal
+  // center (see reminderGrowthCenter) — the banner is anchored near the left
+  // edge, and growing around its own position would push the added width
+  // straight off the screen.
+  const scale = reminderActive ? REMINDER_SIZE_SCALE : 1;
+  const { pivotX, finalCenterX, finalCenterY } = reminderGrowthCenter(
+    { x: rect.x, y: drawY, w: rect.w, h: rect.h },
+    scale,
+    reminderActive,
+  );
+
   ctx.save();
-  ctx.shadowColor = '#fbbf24';
-  ctx.shadowBlur = NOTIF_SHADOW_BLUR_BASE + NOTIF_SHADOW_BLUR_PULSE * pulse;
+  if (reminderActive) {
+    // Drawn before the growth transform below so the halo's own size and
+    // pulse are independent of the box scaling up inside it.
+    drawReminderGlow(ctx, finalCenterX, finalCenterY, rect.w, pulseRef.value);
+    ctx.translate(pivotX, finalCenterY);
+    ctx.scale(scale, scale);
+    ctx.translate(-pivotX, -finalCenterY);
+  }
 
-  // Dark amber background
-  ctx.fillStyle = NOTIF_FILL;
-  ctx.fillRect(rect.x, drawY, rect.w, rect.h);
-
-  // Gold border — thicker when pulsing
-  ctx.strokeStyle = `rgba(251,191,36,${NOTIF_BORDER_BASE_ALPHA + NOTIF_BORDER_PULSE_ALPHA * pulse})`;
-  ctx.lineWidth = 2 + pulse;
-  ctx.strokeRect(rect.x, drawY, rect.w, rect.h);
-
-  ctx.shadowBlur = 0;
-  ctx.restore();
+  // Gold border — thicker when pulsing, maxed out and pinned wide while flagged
+  const notifLineWidth = reminderActive
+    ? REMINDER_BORDER_LINE_WIDTH + pulse
+    : NOTIF_LINE_WIDTH_MIN + pulse;
+  drawReminderBox(
+    ctx,
+    { x: rect.x, y: drawY, w: rect.w, h: rect.h },
+    pulse,
+    pulseRef.value,
+    reminderActive,
+    notifLineWidth,
+    {
+      fill: NOTIF_FILL,
+      shadowBlurBase: NOTIF_SHADOW_BLUR_BASE,
+      shadowBlurPulseMult: NOTIF_SHADOW_BLUR_PULSE,
+      borderBaseAlpha: NOTIF_BORDER_BASE_ALPHA,
+      borderPulseAlpha: NOTIF_BORDER_PULSE_ALPHA,
+    },
+  );
 
   // Large star icon
   ctx.save();
@@ -674,5 +842,15 @@ function renderNotification(
     align: 'center',
   });
 
-  return rect;
+  ctx.restore(); // pops the reminder growth transform (a no-op transform when not flagged)
+
+  if (!reminderActive) return rect;
+  // Hit rect grows with the drawn box so the enlarged banner stays clickable
+  // exactly where it now visually sits.
+  return {
+    x: finalCenterX - (rect.w * scale) / 2,
+    y: finalCenterY - (rect.h * scale) / 2,
+    w: rect.w * scale,
+    h: rect.h * scale,
+  };
 }

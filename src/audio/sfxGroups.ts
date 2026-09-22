@@ -122,6 +122,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'potion_drink',
     'quest_complete',
     'reviving_tone',
+    'skillpoint_reminder',
     'speed_fizz',
     'splat_1',
     'splat_2',

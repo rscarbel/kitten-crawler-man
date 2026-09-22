@@ -23,6 +23,9 @@ import type { HudRect } from '../ui/HUD';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { platform } from '../core/Platform';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import type { AudioManager } from '../audio/AudioManager';
+import type { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
+import type { SystemContext } from '../systems/GameSystem';
 
 const CAMERA_CENTER_OFFSET_MULTIPLIER = 0.5;
 const HUD_SKILL_BADGE_GAP = 4;
@@ -35,8 +38,19 @@ export abstract class GameplayScene extends Scene {
   protected _hudCollapsed = platform.initialHudCollapsed;
   protected _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
   protected _hudSkillBannerRect = { x: -9999, y: 0, w: 0, h: 0 };
+  /**
+   * Whether the "spend it" box should render in its flagged, more-prominent
+   * state. Owned by each concrete scene's own `SkillPointReminderSystem` (they
+   * each have their own mob roster to check for nearby enemies), and copied
+   * here each frame before `renderHUD` runs.
+   */
+  protected skillPointReminderActive = false;
   /** Screen rect of the HUD health-bar panel, for keeping world arrows clear of it. */
   protected _hudRect: HudRect = { x: 0, y: 0, w: 0, h: 0 };
+
+  /** Each concrete scene owns its own instance — it has its own mob roster to check. */
+  protected abstract readonly skillPointReminder: SkillPointReminderSystem;
+  protected abstract readonly audio: AudioManager | null;
 
   constructor(
     protected readonly input: InputManager,
@@ -107,8 +121,25 @@ export abstract class GameplayScene extends Scene {
     };
   }
 
+  /** Advances the shared skill-point nag and drains its sound cue into `audio`. */
+  protected tickSkillPointReminder(ctx: SystemContext): void {
+    this.skillPointReminder.update(ctx);
+    this.skillPointReminderActive = this.skillPointReminder.reminderActive;
+    if (this.skillPointReminder.reminderSoundPending) {
+      this.skillPointReminder.reminderSoundPending = false;
+      this.audio?.play('skillpoint_reminder');
+    }
+  }
+
   protected renderHUD(ctx: CanvasRenderingContext2D): void {
-    const hud = drawHUD(ctx, this.human, this.cat, this.notifPulse, this._hudCollapsed);
+    const hud = drawHUD(
+      ctx,
+      this.human,
+      this.cat,
+      this.notifPulse,
+      this._hudCollapsed,
+      this.skillPointReminderActive,
+    );
     this._hudToggleRect = hud.toggleRect;
     this._hudRect = hud.hudRect;
     if (platform.isMobile) {
@@ -120,6 +151,7 @@ export abstract class GameplayScene extends Scene {
         this.cat,
         this.notifPulse,
         hud.hudPanelBottom + HUD_SKILL_BADGE_GAP,
+        this.skillPointReminderActive,
       );
     } else {
       this._hudSkillBannerRect = hud.notifRect;

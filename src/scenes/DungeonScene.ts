@@ -61,6 +61,7 @@ import {
   type TrackerTarget,
 } from '../systems/questTracker';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
+import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { resolveSkillBookPrompt } from '../systems/skillBookUse';
@@ -756,6 +757,7 @@ export class DungeonScene extends GameplayScene {
   private miniMap: MiniMapSystem;
   private safeRoom: SafeRoomSystem;
   private bopca: BopcaSystem;
+  protected readonly skillPointReminder = new SkillPointReminderSystem();
   private readonly systemNotices: SystemNoticeSystem;
   /** Spells, mob AI, attack and death resolution, gore, regen, the death screen. */
   private readonly combat: CombatKit;
@@ -923,7 +925,7 @@ export class DungeonScene extends GameplayScene {
 
   private readonly onResetGameCallback: (() => void) | null;
 
-  private readonly audio: AudioManager | null;
+  protected readonly audio: AudioManager | null;
   private readonly tutorial: TutorialController | null = null;
 
   constructor(
@@ -4860,7 +4862,14 @@ export class DungeonScene extends GameplayScene {
 
     // Render the HUD panel. On mobile the skill-points badge is NOT drawn here;
     // it is stacked below the boss UI box further down in this method.
-    const hudResult = drawHUD(ctx, this.human, this.cat, this.notifPulse, this._hudCollapsed);
+    const hudResult = drawHUD(
+      ctx,
+      this.human,
+      this.cat,
+      this.notifPulse,
+      this._hudCollapsed,
+      this.skillPointReminderActive,
+    );
     this._hudToggleRect = hudResult.toggleRect;
     this._hudRect = hudResult.hudRect;
     if (!platform.isMobile) {
@@ -4940,6 +4949,7 @@ export class DungeonScene extends GameplayScene {
         this.cat,
         this.notifPulse,
         skillTopY,
+        this.skillPointReminderActive,
       );
       const skillBadgeBottom =
         this._hudSkillBannerRect.w > 0
@@ -5415,6 +5425,7 @@ export class DungeonScene extends GameplayScene {
     const ctx = this.buildSystemContext();
 
     this.safeRoom.update(ctx);
+    this.tickSkillPointReminder(ctx);
     // Straight after the context is built, so the move-cancel it watches for is
     // this frame's movement rather than the previous frame's.
     this.recall.update(ctx);

@@ -141,6 +141,7 @@ import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { GrimaldiVine } from '../creatures/GrimaldiVine';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import { CombatKit } from '../systems/kits/CombatKit';
+import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
 import { partyLevelOf } from '../levels/spawner';
 import { AnchorInteriorSystem, SKY_TEMPLE_NAME } from '../systems/AnchorInteriorSystem';
@@ -460,12 +461,19 @@ export class BuildingInteriorScene extends GameplayScene {
   // Notif pulse (unused but needed for HUD signature)
   protected readonly notifPulse = { value: 0 };
 
+  /**
+   * One instance shared across every floor: it only reads the roster each
+   * frame's `ctx` hands it, so it has nothing floor-specific to reset when the
+   * party changes storeys.
+   */
+  protected readonly skillPointReminder = new SkillPointReminderSystem();
+
   // Tower multi-floor state
   private towerFloors: GameMap[] = [];
   private currentFloor = 0;
   private towerStairs: TowerStairSystem | null = null;
 
-  private readonly audio: AudioManager | null;
+  protected readonly audio: AudioManager | null;
 
   /**
    * One per map: the ground floor of a shop, or all four storeys of the tower.
@@ -2121,6 +2129,8 @@ export class BuildingInteriorScene extends GameplayScene {
     const active = ctx.active;
 
     const destruction = this.destruction;
+
+    this.tickSkillPointReminder(ctx);
 
     // Ahead of the swings it decides on.
     this.companion.update(ctx);
