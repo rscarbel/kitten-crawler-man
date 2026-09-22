@@ -45,6 +45,7 @@ import {
   type PlannedCrawlerSign,
 } from '../src/map/crawlerSigns.js';
 import { GameMap } from '../src/map/GameMap.js';
+import { findHallwayForks } from '../src/map/hallwayForks.js';
 import { hasOpenRegion } from '../src/map/findWalkableTile.js';
 import { applyMovement } from '../src/systems/PlayerMovementSystem.js';
 import { TILE_KEY_STRIDE, tileCoordKey } from '../src/map/tileIndex.js';
@@ -73,10 +74,10 @@ const MIN_SIGNS_PER_FLOOR = 1;
 const MIN_ROOM_SIGNS_ACROSS_FLOORS = 20;
 
 /**
- * Share of a floor's signable trap junction rooms (safe rooms excluded) that must hold a
- * sign. What is left over is
- * rooms with no legal seat or a hard exclusion, both proven independently per room,
- * so this only guards against the exemption list itself growing.
+ * Share of a floor's signable trap junction rooms (those whose role rules a sign out
+ * excluded) that must hold a sign. What is left over is rooms with no legal seat or
+ * twin corridors, both proven independently per room, so this only guards against
+ * the exemption list itself growing.
  */
 const MIN_ROOM_SIGNED_SHARE = 0.9;
 
@@ -107,7 +108,10 @@ const ROOMS_PER_PLAIN_HALLWAY = 2;
 /** Branches a hallway junction needs before the way onward is a real choice. */
 const MIN_HALLWAY_BRANCHES = 3;
 
-/** Chebyshev radius around a junction inside which its branches must stay connected. */
+/**
+ * Tiles around a junction inside which its ways out may meet again and still be one
+ * way out, and inside which its branches must stay connected once a sign is stamped.
+ */
 const JUNCTION_WINDOW_TILES = 3;
 
 /** Pixels the simulated player advances per step; one keeps every tile-aligned waypoint exact. */
@@ -121,6 +125,16 @@ const WALK_STEP_BUDGET = TILE_SIZE * JUNCTION_WINDOW_TILES * JUNCTION_WINDOW_TIL
  * Restated here so the gate does not import the planner's constant.
  */
 const MIN_DEAD_END_ROOMS = 3;
+
+/**
+ * Tiles a wrong turn must cost before it is worth a sign: how much further a
+ * goal-reaching branch is than the best one, or how long a loop walks before it
+ * comes back round. Restated so the gate does not import the planner's constant.
+ */
+const MIN_DETOUR_TILES = 80;
+
+/** Widest corridor the generator carves, in tiles; forks are searched for up to this width. */
+const WIDEST_CORRIDOR_TILES = 3;
 
 /** Old board geometry: three tiles wide, one to each side of the tile it blocked. */
 const OVERHANGING_BOARD = { frameWidth: 192, tileX: 64, tileScale: 64 } as const;
@@ -625,15 +639,18 @@ interface FloorStats {
   leafJunctions: number;
   loopJunctions: number;
   deadEndJunctions: number;
+  detourJunctions: number;
   safeRoomControls: number;
   safeExcludedRooms: number;
+  /** Unsigned trap rooms whose role rules a sign out: start, safe, boss, quest or lab. */
+  roleExcludedRooms: number;
 }
 
 /** What leaving a junction down one branch amounts to, judged by the gate's own flood. */
 interface BranchOutcome {
   readonly reachesGoal: boolean;
   readonly trap: boolean;
-  readonly kind: 'goal' | 'arrival' | 'loop' | 'dead end' | 'stub';
+  readonly kind: 'goal' | 'detour' | 'arrival' | 'loop' | 'short loop' | 'dead end' | 'stub';
 }
 
 /**
@@ -642,7 +659,8 @@ interface BranchOutcome {
  * Built by a different method from the planner's: instead of labelling whole
  * regions and counting how many seeds fell in each, every branch walks the live map
  * on its own and reports what it met. A branch is a loop when its walk arrives at
- * another branch's first tile without crossing the junction; it reaches the goal
+ * another branch's first tile without crossing the junction, and a trap only when
+ * that walk is at least {@link MIN_DETOUR_TILES} long; it reaches the goal
  * when its walk touches the goal room, which is a wall to the walk; and it spans
  * the rooms its own tiles fall in against the model's room map.
  */
@@ -664,7 +682,8 @@ function independentBranchOutcomes(
   interface Walk {
     touchesGoal: boolean;
     holdsStart: boolean;
-    metOtherBranch: boolean;
+    /** Steps to the nearest other branch's first tile; infinite when the walk meets none. */
+    stepsToOtherBranch: number;
     rooms: Set<number>;
   }
   const walkFrom = (seedIndex: number): Walk => {
@@ -672,52 +691,96 @@ function independentBranchOutcomes(
     const walk: Walk = {
       touchesGoal: false,
       holdsStart: false,
-      metOtherBranch: false,
+      stepsToOtherBranch: Number.POSITIVE_INFINITY,
       rooms: new Set<number>(),
     };
-    const seen = new Set<number>([tileKeyOf(seed)]);
+    const steps = new Map<number, number>([[tileKeyOf(seed), 0]]);
     const queue: Point[] = [seed];
     for (const tile of queue) {
       const room = roomIndexAt(model, tile.x, tile.y);
       if (room !== NO_ROOM) walk.rooms.add(room);
       if (room !== NO_ROOM && room === startRoom) walk.holdsStart = true;
       const key = tileKeyOf(tile);
+      const here = steps.get(key) ?? 0;
       if (seedKeys.some((other, index) => index !== seedIndex && other === key)) {
-        walk.metOtherBranch = true;
+        walk.stepsToOtherBranch = Math.min(walk.stepsToOtherBranch, here);
       }
       for (const step of ORTHOGONAL_STEPS) {
         const next = { x: tile.x + step.x, y: tile.y + step.y };
         if (!map.isWalkable(next.x, next.y)) continue;
         if (roomIndexAt(model, next.x, next.y) === goalRoom) walk.touchesGoal = true;
-        if (isWall(next) || seen.has(tileKeyOf(next))) continue;
-        seen.add(tileKeyOf(next));
+        if (isWall(next) || steps.has(tileKeyOf(next))) continue;
+        steps.set(tileKeyOf(next), here + 1);
         queue.push(next);
       }
     }
     return walk;
   };
 
-  return seeds.map((seed, seedIndex): BranchOutcome => {
-    if (roomIndexAt(model, seed.x, seed.y) === goalRoom) {
-      return { reachesGoal: true, trap: false, kind: 'goal' };
+  // How far each branch's first tile is from the goal with the junction gone: a
+  // branch that gets there only the long way round is a wrong turn too.
+  const stepsToGoal = new Map<number, number>();
+  const goalBounds = model.rooms[goalRoom];
+  const goalQueue: Point[] = [];
+  if (goalBounds !== undefined) {
+    for (let y = goalBounds.y; y < goalBounds.y + goalBounds.h; y++) {
+      for (let x = goalBounds.x; x < goalBounds.x + goalBounds.w; x++) {
+        if (!map.isWalkable(x, y) || removedKeys.has(tileKeyOf({ x, y }))) continue;
+        stepsToGoal.set(tileKeyOf({ x, y }), 0);
+        goalQueue.push({ x, y });
+      }
     }
+  }
+  for (const tile of goalQueue) {
+    const here = stepsToGoal.get(tileKeyOf(tile)) ?? 0;
+    for (const step of ORTHOGONAL_STEPS) {
+      const next = { x: tile.x + step.x, y: tile.y + step.y };
+      if (!map.isWalkable(next.x, next.y) || removedKeys.has(tileKeyOf(next))) continue;
+      if (stepsToGoal.has(tileKeyOf(next))) continue;
+      stepsToGoal.set(tileKeyOf(next), here + 1);
+      goalQueue.push(next);
+    }
+  }
+  const seedSteps = seeds.map(
+    (seed) => stepsToGoal.get(tileKeyOf(seed)) ?? Number.POSITIVE_INFINITY,
+  );
+  const fewestSteps = Math.min(Number.POSITIVE_INFINITY, ...seedSteps);
+  const goalOutcome = (seedIndex: number): BranchOutcome => {
+    const detour = (seedSteps[seedIndex] ?? Number.POSITIVE_INFINITY) - fewestSteps;
+    return detour >= MIN_DETOUR_TILES
+      ? { reachesGoal: true, trap: true, kind: 'detour' }
+      : { reachesGoal: true, trap: false, kind: 'goal' };
+  };
+
+  return seeds.map((seed, seedIndex): BranchOutcome => {
+    if (roomIndexAt(model, seed.x, seed.y) === goalRoom) return goalOutcome(seedIndex);
     if (isWall(seed)) return { reachesGoal: false, trap: false, kind: 'stub' };
     const walk = walkFrom(seedIndex);
-    if (walk.touchesGoal) return { reachesGoal: true, trap: false, kind: 'goal' };
-    if (walk.metOtherBranch) return { reachesGoal: false, trap: true, kind: 'loop' };
+    if (walk.touchesGoal) return goalOutcome(seedIndex);
+    if (walk.stepsToOtherBranch >= MIN_DETOUR_TILES && Number.isFinite(walk.stepsToOtherBranch)) {
+      return { reachesGoal: false, trap: true, kind: 'loop' };
+    }
     if (walk.holdsStart) return { reachesGoal: false, trap: false, kind: 'arrival' };
     const isBigDeadEnd = walk.rooms.size >= MIN_DEAD_END_ROOMS;
-    return { reachesGoal: false, trap: isBigDeadEnd, kind: isBigDeadEnd ? 'dead end' : 'stub' };
+    if (isBigDeadEnd) return { reachesGoal: false, trap: true, kind: 'dead end' };
+    const isShortLoop = Number.isFinite(walk.stepsToOtherBranch);
+    return { reachesGoal: false, trap: false, kind: isShortLoop ? 'short loop' : 'stub' };
   });
 }
 
-/** Outcomes at a hallway junction tile: the tile is removed, one branch per open side. */
-function hallwayJunctionOutcomes(model: FloorModel, centre: Point, stage: number): BranchOutcome[] {
-  const seeds = openSidesOf(model.map, centre).map((step) => ({
-    x: centre.x + step.x,
-    y: centre.y + step.y,
-  }));
-  return independentBranchOutcomes(model, [centre], seeds, model.stageGoals[stage] ?? NO_ROOM);
+/** Outcomes at a hallway junction: its tiles are removed, one branch per way out. */
+function hallwayJunctionOutcomes(
+  model: FloorModel,
+  junction: Junction,
+  stage: number,
+): BranchOutcome[] {
+  const seeds = junction.mouths.flatMap((mouth) => mouth.slice(0, 1));
+  return independentBranchOutcomes(
+    model,
+    junction.tiles,
+    seeds,
+    model.stageGoals[stage] ?? NO_ROOM,
+  );
 }
 
 /** Outcomes at a junction room: every tile of the room is removed, one branch per corridor leaving it. */
@@ -750,6 +813,7 @@ function isTrapJunction(outcomes: ReadonlyArray<BranchOutcome>): boolean {
 function tallyTrapKinds(outcomes: ReadonlyArray<BranchOutcome>, stats: FloorStats): void {
   if (outcomes.some((outcome) => outcome.kind === 'loop')) stats.loopJunctions++;
   if (outcomes.some((outcome) => outcome.kind === 'dead end')) stats.deadEndJunctions++;
+  if (outcomes.some((outcome) => outcome.kind === 'detour')) stats.detourJunctions++;
 }
 
 interface WallOpening {
@@ -851,7 +915,7 @@ function verifyRoomSign(
   );
   check(
     isTrapJunction(roomJunctionOutcomes(model, room)),
-    `${where} stands in a room where no wrong turn is a loop or a dead end of ${MIN_DEAD_END_ROOMS}+ rooms`,
+    `${where} stands in a room where no wrong turn is a loop of ${MIN_DETOUR_TILES}+ tiles, a dead end of ${MIN_DEAD_END_ROOMS}+ rooms or a detour of ${MIN_DETOUR_TILES}+ tiles`,
   );
   const reduced = new Set([...openings].slice(0, MIN_JUNCTION_OPENINGS - 1));
   check(
@@ -1116,20 +1180,44 @@ function tileKeyOf(tile: Point): number {
   return tileCoordKey(tile.x, tile.y);
 }
 
+/** A rectangle of tiles by its inclusive corners. */
+interface TileBounds {
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+}
+
+/** The bounding box of `tiles` grown by `margin` on every side. */
+function boundsAround(tiles: ReadonlyArray<Point>, margin: number): TileBounds {
+  const xs = tiles.map((tile) => tile.x);
+  const ys = tiles.map((tile) => tile.y);
+  return {
+    minX: Math.min(...xs) - margin,
+    minY: Math.min(...ys) - margin,
+    maxX: Math.max(...xs) + margin,
+    maxY: Math.max(...ys) + margin,
+  };
+}
+
+function inBounds(bounds: TileBounds, tile: Point): boolean {
+  return (
+    tile.x >= bounds.minX && tile.x <= bounds.maxX && tile.y >= bounds.minY && tile.y <= bounds.maxY
+  );
+}
+
 /**
- * Whether every lane tile in `targets` can reach every other without leaving the
- * junction's window, treating `blocked` as solid.
+ * Whether every lane tile in `targets` can reach every other without leaving
+ * `window`, treating `blocked` as solid.
  */
 function lanesConnected(
   map: GameMap,
-  centre: Point,
+  window: TileBounds,
   targets: ReadonlyArray<Point>,
   blocked: ReadonlySet<number>,
 ): boolean {
-  const inWindow = (tile: Point): boolean =>
-    Math.max(Math.abs(tile.x - centre.x), Math.abs(tile.y - centre.y)) <= JUNCTION_WINDOW_TILES;
   const open = (tile: Point): boolean =>
-    inWindow(tile) && map.isWalkable(tile.x, tile.y) && !blocked.has(tileKeyOf(tile));
+    inBounds(window, tile) && map.isWalkable(tile.x, tile.y) && !blocked.has(tileKeyOf(tile));
   const [origin, ...rest] = targets;
   if (origin === undefined || !open(origin)) return false;
   const seen = new Set<number>([tileKeyOf(origin)]);
@@ -1180,26 +1268,203 @@ function playerCanWalk(map: GameMap, from: Point, to: Point): boolean {
   return true;
 }
 
-/** One way out of a hallway junction, as a flood from the tile beside it. */
+/**
+ * A place the corridors split three or more ways, read off the live map: the
+ * corridor tiles the choice is made on and, for each way out, the walkable tiles
+ * beside them that lead that way.
+ */
+interface Junction {
+  readonly tiles: ReadonlyArray<Point>;
+  readonly keys: ReadonlySet<number>;
+  readonly mouths: ReadonlyArray<ReadonlyArray<Point>>;
+}
+
+/** Walkable tiles orthogonally beside `tiles` and not among them, lowest key first. */
+function mouthAround(
+  map: GameMap,
+  tiles: ReadonlyArray<Point>,
+  keys: ReadonlySet<number>,
+): Point[] {
+  const found = new Map<number, Point>();
+  for (const tile of tiles) {
+    for (const step of ORTHOGONAL_STEPS) {
+      const next = { x: tile.x + step.x, y: tile.y + step.y };
+      if (keys.has(tileKeyOf(next)) || !map.isWalkable(next.x, next.y)) continue;
+      found.set(tileKeyOf(next), next);
+    }
+  }
+  return [...found.entries()].sort(([a], [b]) => a - b).map(([, tile]) => tile);
+}
+
+/**
+ * Splits `mouth` into ways out: a walk starts from each tile not yet placed, stays
+ * inside `window` and off `removed`, and every mouth tile it reaches leads the same way.
+ */
+function waysOut(
+  map: GameMap,
+  mouth: ReadonlyArray<Point>,
+  removed: ReadonlySet<number>,
+  window: TileBounds,
+): Point[][] {
+  const open = (tile: Point): boolean =>
+    inBounds(window, tile) && map.isWalkable(tile.x, tile.y) && !removed.has(tileKeyOf(tile));
+  const placed = new Set<number>();
+  const ways: Point[][] = [];
+  for (const origin of mouth) {
+    if (placed.has(tileKeyOf(origin))) continue;
+    const seen = new Set<number>([tileKeyOf(origin)]);
+    const queue: Point[] = [origin];
+    for (const tile of queue) {
+      for (const step of ORTHOGONAL_STEPS) {
+        const next = { x: tile.x + step.x, y: tile.y + step.y };
+        if (!open(next) || seen.has(tileKeyOf(next))) continue;
+        seen.add(tileKeyOf(next));
+        queue.push(next);
+      }
+    }
+    const way = mouth.filter((tile) => seen.has(tileKeyOf(tile)) && !placed.has(tileKeyOf(tile)));
+    for (const tile of way) placed.add(tileKeyOf(tile));
+    ways.push(way);
+  }
+  return ways;
+}
+
+/**
+ * Whether a walk out through `mouth`, never onto `junction`, reaches a room. A way
+ * out that reaches none is the rest of a wide patch of floor or a dead-end stub,
+ * which leads nowhere and so is no choice.
+ */
+function reachesAnyRoom(
+  model: FloorModel,
+  mouth: ReadonlyArray<Point>,
+  junction: ReadonlySet<number>,
+): boolean {
+  const seen = new Set<number>([...junction, ...mouth.map(tileKeyOf)]);
+  const queue: Point[] = [...mouth];
+  for (const tile of queue) {
+    if (roomIndexAt(model, tile.x, tile.y) !== NO_ROOM) return true;
+    for (const step of ORTHOGONAL_STEPS) {
+      const next = { x: tile.x + step.x, y: tile.y + step.y };
+      if (seen.has(tileKeyOf(next)) || !model.map.isWalkable(next.x, next.y)) continue;
+      seen.add(tileKeyOf(next));
+      queue.push(next);
+    }
+  }
+  return false;
+}
+
+const junctionCache = new WeakMap<FloorModel, Junction[]>();
+
+/**
+ * Every place on the floor where the corridors split three or more ways, however
+ * wide the corridors are.
+ *
+ * A square of corridor floor, one to {@link WIDEST_CORRIDOR_TILES} across, is a
+ * fork when taking it out leaves three ways out that do not meet again within
+ * {@link JUNCTION_WINDOW_TILES} of it; a room beside the square is one of those ways.
+ * Fork squares that overlap or touch are one junction, and only its ways out that
+ * reach a room count.
+ */
+function findJunctions(model: FloorModel): Junction[] {
+  const cached = junctionCache.get(model);
+  if (cached !== undefined) return cached;
+  const { map } = model;
+  const size = map.gridSize;
+  const isCorridor = (x: number, y: number): boolean =>
+    x >= 0 &&
+    y >= 0 &&
+    x < size &&
+    y < size &&
+    map.isWalkable(x, y) &&
+    roomIndexAt(model, x, y) === NO_ROOM;
+
+  const forkKeys = new Set<number>();
+  for (let width = 1; width <= WIDEST_CORRIDOR_TILES; width++) {
+    for (let y = 0; y + width <= size; y++) {
+      for (let x = 0; x + width <= size; x++) {
+        if (!isCorridor(x, y)) continue;
+        const square: Point[] = [];
+        for (let dy = 0; dy < width; dy++) {
+          for (let dx = 0; dx < width; dx++) {
+            if (isCorridor(x + dx, y + dy)) square.push({ x: x + dx, y: y + dy });
+          }
+        }
+        if (square.length !== width * width) continue;
+        const keys = new Set(square.map(tileKeyOf));
+        const mouth = mouthAround(map, square, keys);
+        if (mouth.length < MIN_HALLWAY_BRANCHES) continue;
+        const ways = waysOut(map, mouth, keys, boundsAround(square, JUNCTION_WINDOW_TILES));
+        if (ways.length < MIN_HALLWAY_BRANCHES) continue;
+        for (const key of keys) forkKeys.add(key);
+      }
+    }
+  }
+
+  const junctions: Junction[] = [];
+  const grouped = new Set<number>();
+  for (const start of [...forkKeys].sort((a, b) => a - b)) {
+    if (grouped.has(start)) continue;
+    grouped.add(start);
+    const tiles: Point[] = [{ x: start % TILE_KEY_STRIDE, y: Math.floor(start / TILE_KEY_STRIDE) }];
+    for (const tile of tiles) {
+      for (const step of ORTHOGONAL_STEPS) {
+        const next = { x: tile.x + step.x, y: tile.y + step.y };
+        const key = tileKeyOf(next);
+        if (!forkKeys.has(key) || grouped.has(key)) continue;
+        grouped.add(key);
+        tiles.push(next);
+      }
+    }
+    const keys = new Set(tiles.map(tileKeyOf));
+    const mouths = waysOut(
+      map,
+      mouthAround(map, tiles, keys),
+      keys,
+      boundsAround(tiles, JUNCTION_WINDOW_TILES),
+    );
+    const leading = mouths.filter((mouth) => reachesAnyRoom(model, mouth, keys));
+    if (leading.length >= MIN_HALLWAY_BRANCHES) junctions.push({ tiles, keys, mouths: leading });
+  }
+  junctionCache.set(model, junctions);
+  return junctions;
+}
+
+/** Junctions with a tile among the eight around `tile`. */
+function junctionsBeside(model: FloorModel, tile: Point): Junction[] {
+  return findJunctions(model).filter((junction) =>
+    [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS].some((step) =>
+      junction.keys.has(tileKeyOf({ x: tile.x + step.x, y: tile.y + step.y })),
+    ),
+  );
+}
+
+/** One way out of a hallway junction, as a flood from the tiles beside it. */
 interface JunctionBranch {
-  readonly step: Point;
+  readonly mouth: ReadonlyArray<Point>;
+  /** The sides of the junction some tile of the mouth lies on. */
+  readonly sides: ReadonlySet<CrawlerSignDirection>;
   readonly rooms: Set<number>;
   /** Fewest room-steps to the leg's goal from any room this branch reaches. */
   hops: number;
-  /** Tiles from the branch's first tile to the goal room, walking. */
+  /** Fewest tiles from any of the branch's first tiles to the goal room, walking. */
   walk: number;
 }
 
-const openSidesOf = (map: GameMap, tile: Point): Point[] =>
-  ORTHOGONAL_STEPS.filter((step) => map.isWalkable(tile.x + step.x, tile.y + step.y));
-
-function junctionBranches(model: FloorModel, centre: Point): JunctionBranch[] {
+function junctionBranches(model: FloorModel, junction: Junction): JunctionBranch[] {
   const { map } = model;
-  return openSidesOf(map, centre).map((step) => {
-    const first = { x: centre.x + step.x, y: centre.y + step.y };
-    const seen = new Set<number>([tileKeyOf(first), tileKeyOf(centre)]);
+  return junction.mouths.map((mouth) => {
     const rooms = new Set<number>();
-    const queue: Point[] = [first];
+    const seen = new Set<number>(junction.keys);
+    const queue: Point[] = [];
+    for (const tile of mouth) {
+      const room = roomIndexAt(model, tile.x, tile.y);
+      if (room !== NO_ROOM) {
+        rooms.add(room);
+        continue;
+      }
+      seen.add(tileKeyOf(tile));
+      queue.push(tile);
+    }
     for (const tile of queue) {
       for (const next of ORTHOGONAL_STEPS) {
         const neighbour = { x: tile.x + next.x, y: tile.y + next.y };
@@ -1214,8 +1479,36 @@ function junctionBranches(model: FloorModel, centre: Point): JunctionBranch[] {
         queue.push(neighbour);
       }
     }
-    return { step, rooms, hops: Number.POSITIVE_INFINITY, walk: Number.POSITIVE_INFINITY };
+    const sides = new Set(
+      AXIS_DIRECTIONS.filter((direction) =>
+        mouth.some((tile) =>
+          junction.keys.has(
+            tileKeyOf({ x: tile.x - AXIS_STEP[direction].x, y: tile.y - AXIS_STEP[direction].y }),
+          ),
+        ),
+      ),
+    );
+    return {
+      mouth,
+      sides,
+      rooms,
+      hops: Number.POSITIVE_INFINITY,
+      walk: Number.POSITIVE_INFINITY,
+    };
   });
+}
+
+/**
+ * The one branch whose mouth lies on `direction`'s side of the junction, or
+ * undefined when none does or several share that side: a sign's words can only
+ * name a way out no other way out shares.
+ */
+function branchNamedBy(
+  branches: ReadonlyArray<JunctionBranch>,
+  direction: CrawlerSignDirection,
+): JunctionBranch | undefined {
+  const named = branches.filter((branch) => branch.sides.has(direction));
+  return named.length === 1 ? named[0] : undefined;
 }
 
 /**
@@ -1267,13 +1560,13 @@ function walkDistanceToGoal(model: FloorModel, stage: number): Map<number, numbe
 }
 
 /**
- * Fills each branch's rank against the leg's goal and returns the branches tied for
- * the best rank: fewest room-steps, then the shortest walk.
+ * Fills each branch's rank against the leg's goal and returns the goal-reaching
+ * branches tied for the best rank: fewest room-steps, then the shortest walk.
  */
 function bestBranches(
   model: FloorModel,
-  centre: Point,
   branches: ReadonlyArray<JunctionBranch>,
+  outcomes: ReadonlyArray<BranchOutcome>,
   stage: number,
 ): JunctionBranch[] {
   const field = model.stageDistance[stage] ?? [];
@@ -1283,25 +1576,22 @@ function bestBranches(
       Number.POSITIVE_INFINITY,
       ...[...branch.rooms].map((room) => field[room] ?? Number.POSITIVE_INFINITY),
     );
-    branch.walk =
-      walked.get(tileKeyOf({ x: centre.x + branch.step.x, y: centre.y + branch.step.y })) ??
-      Number.POSITIVE_INFINITY;
+    branch.walk = Math.min(
+      Number.POSITIVE_INFINITY,
+      ...branch.mouth.map((tile) => walked.get(tileKeyOf(tile)) ?? Number.POSITIVE_INFINITY),
+    );
   }
-  const rankOf = (branch: JunctionBranch): readonly [number, number] => [branch.hops, branch.walk];
-  const worse = (a: JunctionBranch, b: JunctionBranch): boolean => {
-    const [hopsA, walkA] = rankOf(a);
-    const [hopsB, walkB] = rankOf(b);
-    return hopsA > hopsB || (hopsA === hopsB && walkA > walkB);
-  };
-  return branches.filter((candidate) => !branches.some((other) => worse(candidate, other)));
+  const candidates = branches.filter((_, index) => outcomes[index]?.reachesGoal === true);
+  const worse = (a: JunctionBranch, b: JunctionBranch): boolean =>
+    a.hops > b.hops || (a.hops === b.hops && a.walk > b.walk);
+  return candidates.filter((candidate) => !candidates.some((other) => worse(candidate, other)));
 }
 
 /**
  * One hallway junction sign, judged from the live map alone: the junction is
- * whichever walkable tile beside the sign has three or more walkable sides, the
- * branches are floods from each of them, and the arrow must point down the one
- * that reaches the leg's goal in the fewest room-steps, the shorter walk breaking
- * a tie between branches that meet again.
+ * whichever fork touches the sign, the branches are floods from its ways out, and
+ * the words must name the one way out, unshared by any other, of a branch that
+ * reaches the leg's goal in the fewest room-steps, the shorter walk breaking a tie.
  */
 function verifyHallwaySign(
   model: FloorModel,
@@ -1315,16 +1605,10 @@ function verifyHallwaySign(
     x: sign.tile.x + step.x,
     y: sign.tile.y + step.y,
   }));
-  const junctions = around.filter(
-    (tile) =>
-      map.isWalkable(tile.x, tile.y) && openSidesOf(map, tile).length >= MIN_HALLWAY_BRANCHES,
-  );
-  check(
-    junctions.length === 1,
-    `${where} has ${junctions.length} junction tiles beside it, not one`,
-  );
-  const [centre] = junctions;
-  if (centre === undefined) return;
+  const beside = junctionsBeside(model, sign.tile);
+  check(beside.length === 1, `${where} has ${beside.length} junctions beside it, not one`);
+  const [junction] = beside;
+  if (junction === undefined) return;
 
   check(
     !around.some((tile) => roomIndexAt(model, tile.x, tile.y) !== NO_ROOM),
@@ -1334,93 +1618,90 @@ function verifyHallwaySign(
     map.structure[sign.tile.y][sign.tile.x].groundType !== undefined,
     `${where} carries no floor under its pocket`,
   );
-  check(
-    !DIAGONAL_STEPS.some((step) => map.isWalkable(centre.x + step.x, centre.y + step.y)),
-    `${where} stands at a junction wider than one tile`,
-  );
 
-  const branches = junctionBranches(model, centre);
+  const branches = junctionBranches(model, junction);
   const stage = junctionStage(model, branches);
   check(
     stage !== NO_STAGE,
     `${where} stands at a junction off the forced path: a branch reaches the stair search or two legs`,
   );
   if (stage === NO_STAGE) return;
+  const outcomes = hallwayJunctionOutcomes(model, junction, stage);
   check(
-    isTrapJunction(hallwayJunctionOutcomes(model, centre, stage)),
-    `${where} stands at a fork where no wrong turn is a loop or a dead end of ${MIN_DEAD_END_ROOMS}+ rooms`,
+    isTrapJunction(outcomes),
+    `${where} stands at a fork where no wrong turn is a loop of ${MIN_DETOUR_TILES}+ tiles, a dead end of ${MIN_DEAD_END_ROOMS}+ rooms or a detour of ${MIN_DETOUR_TILES}+ tiles`,
   );
 
-  const best = bestBranches(model, centre, branches, stage);
+  const best = bestBranches(model, branches, outcomes, stage);
+  const accepts = (named: CrawlerSignDirection): boolean => {
+    const branch = branchNamedBy(branches, named);
+    return branch !== undefined && best.includes(branch);
+  };
   check(
-    best.some(
-      (branch) =>
-        AXIS_STEP[direction].x === branch.step.x && AXIS_STEP[direction].y === branch.step.y,
-    ),
-    `${where} says ${direction} but the branches best placed for the goal leave ${best.map((branch) => `${branch.step.x},${branch.step.y}`).join(' | ')}`,
+    accepts(direction),
+    `${where} says ${direction} but the branches best placed for the goal leave ${best.map((branch) => [...branch.sides].join('/')).join(' | ')}, and the words must name a side only one branch leaves by`,
   );
   if (best.length > 1) stats.tiedBranches++;
-  const onward = best.find(
-    (branch) =>
-      AXIS_STEP[direction].x === branch.step.x && AXIS_STEP[direction].y === branch.step.y,
-  );
-  if (onward === undefined) return;
+  const onward = branchNamedBy(branches, direction);
+  if (onward === undefined || !best.includes(onward)) return;
   check(
     Number.isFinite(onward.hops),
     `${where} points down a branch that reaches no room of the forced path`,
   );
   const wrong = branches.find((branch) => !best.includes(branch));
   if (wrong !== undefined) {
-    const wrongDirection = AXIS_DIRECTIONS.find(
-      (name) => AXIS_STEP[name].x === wrong.step.x && AXIS_STEP[name].y === wrong.step.y,
-    );
-    check(
-      wrongDirection !== direction && !best.includes(wrong),
-      `negative control: a sign pointing down branch ${wrongDirection} was not worse than the onward one`,
-    );
+    for (const wrongDirection of wrong.sides) {
+      check(
+        !accepts(wrongDirection),
+        `negative control: a sign pointing down branch ${wrongDirection} was not worse than the onward one`,
+      );
+    }
   }
 
-  if (sign.arrowAngle !== undefined) {
-    const entrance = { x: centre.x + onward.step.x, y: centre.y + onward.step.y };
-    const expected = expectedArrowAngle(sign.tile, entrance, direction);
-    check(
-      sameBearing(sign.arrowAngle, expected),
-      `${where} arrow angle ${sign.arrowAngle} is not the bearing ${expected} to the first tile of the onward branch (${entrance.x},${entrance.y})`,
+  const arrowAngle = sign.arrowAngle;
+  if (arrowAngle !== undefined) {
+    const step = AXIS_STEP[direction];
+    const entrances = onward.mouth.filter((tile) =>
+      junction.keys.has(tileKeyOf({ x: tile.x - step.x, y: tile.y - step.y })),
     );
-    check(
-      !sameBearing(sign.arrowAngle + WRONG_ANGLE_OFFSET_RADIANS, expected),
-      `negative control: a wrong arrow angle at ${where} was accepted`,
+    const bearings = entrances.map((entrance) =>
+      expectedArrowAngle(sign.tile, entrance, direction),
     );
-    const quarterTurns = sign.arrowAngle / WRONG_ANGLE_OFFSET_RADIANS;
+    const matched = bearings.find((bearing) => sameBearing(arrowAngle, bearing));
+    check(
+      matched !== undefined,
+      `${where} arrow angle ${arrowAngle} is not the bearing to any first tile of the onward branch (${bearings.join(', ')})`,
+    );
+    if (matched !== undefined) {
+      check(
+        !sameBearing(arrowAngle + WRONG_ANGLE_OFFSET_RADIANS, matched),
+        `negative control: a wrong arrow angle at ${where} was accepted`,
+      );
+    }
+    const quarterTurns = arrowAngle / WRONG_ANGLE_OFFSET_RADIANS;
     if (Math.abs(quarterTurns - Math.round(quarterTurns)) > ARROW_ANGLE_TOLERANCE_RADIANS) {
       stats.diagonalArrows++;
     }
-    const wrongBranch = branches.find((branch) => !best.includes(branch));
-    if (wrongBranch !== undefined) {
-      const wrongEntrance = {
-        x: centre.x + wrongBranch.step.x,
-        y: centre.y + wrongBranch.step.y,
-      };
+    const wrongEntrance = wrong?.mouth[0];
+    if (wrongEntrance !== undefined) {
       const towardWrong = expectedArrowAngle(sign.tile, wrongEntrance, direction);
-      if (!sameBearing(towardWrong, expected)) {
+      if (!bearings.some((bearing) => sameBearing(towardWrong, bearing))) {
         check(
-          !sameBearing(towardWrong, sign.arrowAngle),
+          !sameBearing(towardWrong, arrowAngle),
           `negative control: an arrow aimed down the wrong branch at ${where} was accepted`,
         );
       }
     }
     check(
-      agreesWithDirection(sign.arrowAngle, direction),
+      agreesWithDirection(arrowAngle, direction),
       `${where} arrow angle contradicts its ${direction} wording`,
     );
   }
 
-  const laneTiles = branches.map((branch) => ({
-    x: centre.x + branch.step.x,
-    y: centre.y + branch.step.y,
-  }));
+  const laneTiles = branches.flatMap((branch) => branch.mouth.slice(0, 1));
+  const window = boundsAround(junction.tiles, JUNCTION_WINDOW_TILES);
   check(
-    lanesConnected(map, centre, laneTiles, new Set()),
+    lanesConnected(map, window, laneTiles, new Set()),
     `${where} leaves the junction's branches disconnected with the sign stamped`,
   );
   for (const end of laneTiles) {
@@ -1432,17 +1713,17 @@ function verifyHallwaySign(
     );
   }
 
-  // A sign stamped into the lane of a one-tile hallway is the failure this
-  // design exists to avoid; the same predicate must call it out.
+  // A sign stamped into a lane is the failure this design exists to avoid; the
+  // same predicate must call it out.
   const blockedAcrossJunction = lanesConnected(
     map,
-    centre,
+    window,
     laneTiles,
     new Set(laneTiles.map(tileKeyOf)),
   );
   check(
     !blockedAcrossJunction,
-    `negative control: solid tiles stamped into every one-tile lane at ${where} were reported connected`,
+    `negative control: solid tiles stamped into every lane at ${where} were reported connected`,
   );
   stats.hallwayNegativeControls++;
 }
@@ -1550,35 +1831,11 @@ function verifyChains(model: FloorModel, signs: ReadonlyArray<SignTile>, stats: 
 function hallwayOnwardRoom(model: FloorModel, sign: SignTile): number | null {
   const direction = sign.direction;
   if (direction === undefined) return null;
-  const { map } = model;
-  const junction = [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS]
-    .map((step) => ({ x: sign.tile.x + step.x, y: sign.tile.y + step.y }))
-    .find(
-      (tile) =>
-        map.isWalkable(tile.x, tile.y) &&
-        ORTHOGONAL_STEPS.filter((step) => map.isWalkable(tile.x + step.x, tile.y + step.y))
-          .length >= MIN_HALLWAY_BRANCHES,
-    );
+  const [junction] = junctionsBeside(model, sign.tile);
   if (junction === undefined) return null;
-  const step = AXIS_STEP[direction];
-  const first = { x: junction.x + step.x, y: junction.y + step.y };
-  const seen = new Set<number>([tileKeyOf(junction), tileKeyOf(first)]);
-  const queue: Point[] = [first];
-  const reached: number[] = [];
-  for (const tile of queue) {
-    for (const next of ORTHOGONAL_STEPS) {
-      const neighbour = { x: tile.x + next.x, y: tile.y + next.y };
-      if (!map.isWalkable(neighbour.x, neighbour.y)) continue;
-      const room = roomIndexAt(model, neighbour.x, neighbour.y);
-      if (room !== NO_ROOM) {
-        reached.push(room);
-        continue;
-      }
-      if (seen.has(tileKeyOf(neighbour))) continue;
-      seen.add(tileKeyOf(neighbour));
-      queue.push(neighbour);
-    }
-  }
+  const onward = branchNamedBy(junctionBranches(model, junction), direction);
+  if (onward === undefined) return null;
+  const reached = [...onward.rooms];
   const field = fieldOf(model, reached[0] ?? NO_ROOM);
   reached.sort(
     (a, b) =>
@@ -1664,36 +1921,22 @@ function verifyNoSafeRoomSigns(
   }
 }
 
-/** Every one-tile-wide fork in a hallway: no room, no wide floor beside it. */
-function genuineJunctions(model: FloorModel): Point[] {
-  const { map } = model;
-  const found: Point[] = [];
-  for (let y = 1; y < map.gridSize - 1; y++) {
-    for (let x = 1; x < map.gridSize - 1; x++) {
-      const tile = { x, y };
-      if (!map.isWalkable(x, y) || roomIndexAt(model, x, y) !== NO_ROOM) continue;
-      const open = openSidesOf(map, tile);
-      if (open.length < MIN_HALLWAY_BRANCHES) continue;
-      if (open.some((step) => roomIndexAt(model, x + step.x, y + step.y) !== NO_ROOM)) continue;
-      if (DIAGONAL_STEPS.some((step) => map.isWalkable(x + step.x, y + step.y))) continue;
-      found.push(tile);
-    }
-  }
-  return found;
-}
-
-/** Why no wall tile beside `junction` could legally hold a sign, or null when one could. */
+/** Why no wall tile touching `junction` could legally hold a sign, or null when one could. */
 function noPocketReason(
   model: FloorModel,
-  junction: Point,
+  junction: Junction,
   claimed: ReadonlySet<number>,
 ): string | null {
   const { map } = model;
-  const isJunction = (t: Point): boolean =>
-    map.isWalkable(t.x, t.y) && openSidesOf(map, t).length >= MIN_HALLWAY_BRANCHES;
-  const legal = [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS].some((step) => {
-    const pocket = { x: junction.x + step.x, y: junction.y + step.y };
-    if (map.structure[pocket.y][pocket.x].type !== FloorTypeValue.wall) return false;
+  const pockets = new Map<number, Point>();
+  for (const tile of junction.tiles) {
+    for (const step of [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS]) {
+      const pocket = { x: tile.x + step.x, y: tile.y + step.y };
+      if (!junction.keys.has(tileKeyOf(pocket))) pockets.set(tileKeyOf(pocket), pocket);
+    }
+  }
+  const legal = [...pockets.values()].some((pocket) => {
+    if (map.structure[pocket.y]?.[pocket.x]?.type !== FloorTypeValue.wall) return false;
     if (claimed.has(tileKeyOf(pocket))) return false;
     for (const around of [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS, { x: 0, y: 0 }]) {
       if (roomIndexAt(model, pocket.x + around.x, pocket.y + around.y) !== NO_ROOM) return false;
@@ -1704,14 +1947,28 @@ function noPocketReason(
         arena.radius + ARENA_POCKET_MARGIN_TILES,
     );
     if (nearArena) return false;
-    const beside = [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS].filter((a) =>
-      isJunction({ x: pocket.x + a.x, y: pocket.y + a.y }),
-    );
-    return beside.length === 1;
+    return junctionsBeside(model, pocket).length === 1;
   });
   return legal
     ? null
     : 'no legal pocket: every wall tile beside it is claimed, beside a room, in the arena margin or touches a second junction';
+}
+
+/** Why a trap junction may stand unsigned, or null when nothing excuses it. */
+function unsignedJunctionReason(
+  model: FloorModel,
+  junction: Junction,
+  branches: ReadonlyArray<JunctionBranch>,
+  best: ReadonlyArray<JunctionBranch>,
+  claimed: ReadonlySet<number>,
+): string | null {
+  const nameable = best.some((branch) =>
+    [...branch.sides].some((side) => branchNamedBy(branches, side) === branch),
+  );
+  if (!nameable) {
+    return 'every branch best placed for the goal leaves by a side another branch shares, so no word names it';
+  }
+  return noPocketReason(model, junction, claimed);
 }
 
 /** Tiles of `room` the planner's own claim rules would treat as taken, judged from the live map. */
@@ -1919,6 +2176,7 @@ function verifyRoomCoverage(
     const reason = roomWithoutSignReason(model, room, onward, claimed, null);
     stats.exemptions.push(`${label}: ${reason ?? 'UNEXPLAINED'}`);
     if (reason?.includes('a safe room') === true) stats.safeExcludedRooms++;
+    if (excludedRoleOf(model, room) !== null) stats.roleExcludedRooms++;
     check(reason !== null, `${label} on the forced path has no sign and nothing explains it`);
   }
 }
@@ -1935,11 +2193,18 @@ function verifyCoverage(
 ): void {
   const claimed = new Set(claimLists(model.map).flatMap((l) => l.points.map(tileKeyOf)));
   const signKeys = new Set(signs.map((sign) => tileKeyOf(sign.tile)));
-  const beside = (junction: Point, ignored: number | null): boolean =>
-    [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS].some((step) => {
-      const key = tileKeyOf({ x: junction.x + step.x, y: junction.y + step.y });
-      return key !== ignored && signKeys.has(key);
-    });
+  const signsTouching = (junction: Junction): number[] => {
+    const touching = new Set<number>();
+    for (const tile of junction.tiles) {
+      for (const step of [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS]) {
+        const key = tileKeyOf({ x: tile.x + step.x, y: tile.y + step.y });
+        if (signKeys.has(key)) touching.add(key);
+      }
+    }
+    return [...touching];
+  };
+  const beside = (junction: Junction, ignored: number | null): boolean =>
+    signsTouching(junction).some((key) => key !== ignored);
 
   const { far } = searchTerritory(model);
   check(
@@ -1970,14 +2235,15 @@ function verifyCoverage(
   }
 
   let controlled = false;
-  for (const junction of genuineJunctions(model)) {
+  for (const junction of findJunctions(model)) {
     const branches = junctionBranches(model, junction);
-    if (junctionStage(model, branches) === NO_STAGE) {
+    const stage = junctionStage(model, branches);
+    if (stage === NO_STAGE) {
       stats.junctionsOffPath++;
       continue;
     }
-    const label = `junction (${junction.x},${junction.y})`;
-    const stage = junctionStage(model, branches);
+    const [corner] = junction.tiles;
+    const label = `junction (${corner?.x},${corner?.y})`;
     const outcomes = hallwayJunctionOutcomes(model, junction, stage);
     if (!isTrapJunction(outcomes)) {
       stats.leafJunctions++;
@@ -1987,22 +2253,22 @@ function verifyCoverage(
     stats.junctionsRequired++;
     stats.trapJunctions++;
     tallyTrapKinds(outcomes, stats);
-    if (beside(junction, null)) {
+    const best = bestBranches(model, branches, outcomes, stage);
+    const [servingKey] = signsTouching(junction);
+    if (servingKey !== undefined) {
       stats.junctionsSigned++;
-      const servingKey = [...ORTHOGONAL_STEPS, ...DIAGONAL_STEPS]
-        .map((step) => tileKeyOf({ x: junction.x + step.x, y: junction.y + step.y }))
-        .find((key) => signKeys.has(key));
-      if (!controlled && servingKey !== undefined) {
+      if (!controlled) {
         controlled = true;
         stats.coverageControls++;
         check(
-          !beside(junction, servingKey) || noPocketReason(model, junction, claimed) === null,
+          !beside(junction, servingKey) ||
+            unsignedJunctionReason(model, junction, branches, best, claimed) === null,
           'negative control: removing a sign left its junction covered',
         );
       }
       continue;
     }
-    const reason = noPocketReason(model, junction, claimed);
+    const reason = unsignedJunctionReason(model, junction, branches, best, claimed);
     stats.exemptions.push(`${label}: ${reason ?? 'UNEXPLAINED'}`);
     check(
       reason !== null,
@@ -2012,7 +2278,13 @@ function verifyCoverage(
 }
 
 /** Side of the hand-built grids, in tiles; large enough for every scene below with walls to spare. */
-const SCENE_SIZE = 60;
+const SCENE_SIZE = 90;
+
+/**
+ * Row a scene's loop turns back at when the loop must be long enough to be a trap:
+ * far enough below the rooms that the ring is over {@link MIN_DETOUR_TILES} round.
+ */
+const LONG_LOOP_ROW = 60;
 
 interface Scene {
   readonly name: string;
@@ -2088,8 +2360,29 @@ function plannedSigns(scene: Scene): {
   };
 }
 
+/*
+ * A long loop is the long way round from both of its ends, so a scene with one also
+ * signs the fork at the loop's far end. Scenes therefore demand one sign at the fork
+ * they are about and that every sign points onward, not that the scene holds one sign.
+ */
+
 /** How far, in tiles, a hallway sign's pocket may sit from the junction it serves. */
 const POCKET_REACH_TILES = 1;
+
+/**
+ * How far, in tiles, a hallway sign's pocket may sit from the middle of a
+ * three-wide fork: across half the artery, then into the wall.
+ */
+const WIDE_FORK_POCKET_REACH_TILES = 2;
+
+/** Every tile of the rectangle with inclusive corners `from` and `to`. */
+function filledRect(from: Point, to: Point): Point[] {
+  const tiles: Point[] = [];
+  for (let y = from.y; y <= to.y; y++) {
+    for (let x = from.x; x <= to.x; x++) tiles.push({ x, y });
+  }
+  return tiles;
+}
 
 /** Row the northern twin corridor turns at, three tiles above the room it leaves. */
 const NORTHERN_TWIN_ROW = 2;
@@ -2198,13 +2491,74 @@ function verifyTrapScenes(): number {
     },
     {
       scene: hallwayScene(
-        'a fork whose wrong branch circles back to the hallway behind it',
+        'a fork whose wrong branch circles a long way back to the hallway behind it',
         [],
-        [polyline(at(25, 10), at(25, 18), at(15, 18), at(15, 10))],
+        [polyline(at(25, 10), at(25, LONG_LOOP_ROW), at(15, LONG_LOOP_ROW), at(15, 10))],
       ),
       signed: true,
     },
+    {
+      scene: hallwayScene(
+        'a fork whose wrong branch is a short ring back to the hallway behind it',
+        [],
+        [polyline(at(25, 10), at(25, 18), at(15, 18), at(15, 10))],
+      ),
+      signed: false,
+    },
     { scene: pastGoal, signed: false },
+  ];
+
+  // The shapes real floors fork in, which a one-tile T never matches: a three-wide
+  // artery, a fork against a doorway, and a branch that does reach the goal but only
+  // the long way round.
+  const forkShapeCases: ReadonlyArray<{ scene: Scene; fork: Point; signed: boolean }> = [
+    {
+      scene: buildScene(
+        'a three-wide artery whose wrong branch circles back behind the fork',
+        [hallwayStart, hallwayGoal],
+        [
+          filledRect(at(11, 9), at(40, 11)),
+          filledRect(at(24, 12), at(26, LONG_LOOP_ROW)),
+          filledRect(at(14, LONG_LOOP_ROW - 2), at(26, LONG_LOOP_ROW)),
+          filledRect(at(14, 12), at(16, LONG_LOOP_ROW)),
+        ],
+        hallwayStart,
+        [hallwayGoal],
+      ),
+      fork: at(25, 10),
+      signed: true,
+    },
+    {
+      scene: hallwayScene(
+        'a fork against a doorway whose room leads into a three-room dead-end tree',
+        [roomAtSpot(20, 11, 11, 9), roomAtSpot(20, 36, 11, 9), roomAtSpot(2, 22, 11, 9)],
+        [
+          polyline(at(25, 10), at(25, 11)),
+          polyline(at(25, 19), at(25, 36)),
+          polyline(at(20, 17), at(7, 17), at(7, 22)),
+        ],
+      ),
+      fork: hallwayJunction,
+      signed: true,
+    },
+    {
+      scene: hallwayScene(
+        'a fork whose wrong branch reaches the goal only the long way round',
+        [],
+        [polyline(at(25, 11), at(25, 56), at(56, 56), at(56, 10), at(50, 10))],
+      ),
+      fork: hallwayJunction,
+      signed: true,
+    },
+    {
+      scene: hallwayScene(
+        'a fork whose other branch reaches the goal a little the longer way',
+        [],
+        [polyline(at(25, 11), at(25, 20), at(45, 20), at(45, 15))],
+      ),
+      fork: hallwayJunction,
+      signed: false,
+    },
   ];
 
   const junctionRoom = roomAtSpot(22, 5, 13, 13);
@@ -2256,11 +2610,23 @@ function verifyTrapScenes(): number {
     },
     {
       scene: roomScene(
-        'a junction room with two doors that lead round to each other',
+        'a junction room with two doors that lead a long way round to each other',
+        [roomAtSpot(22, LONG_LOOP_ROW, 13, 9), roomAtSpot(4, LONG_LOOP_ROW, 13, 9)],
+        [
+          polyline(at(28, 17), at(28, LONG_LOOP_ROW)),
+          polyline(at(22, LONG_LOOP_ROW + 4), at(16, LONG_LOOP_ROW + 4)),
+          polyline(at(22, 15), at(12, 15), at(12, LONG_LOOP_ROW)),
+        ],
+      ),
+      signed: true,
+    },
+    {
+      scene: roomScene(
+        'a junction room with two doors that lead a short way round to each other',
         [roomFirstStub, roomRing],
         [roomStem, polyline(at(22, 28), at(16, 28)), polyline(at(22, 15), at(12, 15), at(12, 24))],
       ),
-      signed: true,
+      signed: false,
     },
   ];
 
@@ -2277,7 +2643,7 @@ function verifyTrapScenes(): number {
       polyline(at(9, 10), at(12, 10)),
       polyline(at(20, 10), at(23, 10)),
       polyline(at(31, 10), at(48, 10)),
-      polyline(at(39, 10), at(39, 18), at(35, 18), at(35, 10)),
+      polyline(at(39, 10), at(39, LONG_LOOP_ROW), at(35, LONG_LOOP_ROW), at(35, 10)),
     ],
     laterStart,
     [laterFirstGoal, laterFinalGoal],
@@ -2289,7 +2655,7 @@ function verifyTrapScenes(): number {
   const loopFirstGoal = roomAtSpot(14, 5, 9, 13);
   const loopHub = roomAtSpot(28, 5, 13, 13);
   const loopFinalGoal = roomAtSpot(46, 5, 11, 13);
-  const loopDetour = roomAtSpot(28, 24, 13, 9);
+  const loopDetour = roomAtSpot(28, LONG_LOOP_ROW, 13, 9);
   const throughGoalScene = buildScene(
     'a second-leg junction room whose wrong door circles through the first goal',
     [loopStart, loopFirstGoal, loopHub, loopFinalGoal, loopDetour],
@@ -2297,8 +2663,8 @@ function verifyTrapScenes(): number {
       polyline(at(9, 11), at(14, 11)),
       polyline(at(22, 11), at(28, 11)),
       polyline(at(40, 11), at(46, 11)),
-      polyline(at(34, 17), at(34, 24)),
-      polyline(at(28, 28), at(18, 28), at(18, 17)),
+      polyline(at(34, 17), at(34, LONG_LOOP_ROW)),
+      polyline(at(28, LONG_LOOP_ROW + 4), at(18, LONG_LOOP_ROW + 4), at(18, 17)),
     ],
     loopStart,
     [loopFirstGoal, loopFinalGoal],
@@ -2350,8 +2716,82 @@ function verifyTrapScenes(): number {
         ) <= POCKET_REACH_TILES,
     );
     check(
-      signed ? near.length === 1 && hallways.length === 1 : hallways.length === 0,
-      `scene "${scene.name}": expected ${signed ? 'exactly one sign, at the fork' : 'no sign'}, got ${hallways.length} (${near.length} at the fork)`,
+      signed
+        ? near.length === 1 && hallways.every((sign) => sign.direction === 'East')
+        : hallways.length === 0,
+      `scene "${scene.name}": expected ${signed ? 'exactly one sign at the fork, and every sign pointing East' : 'no sign'}, got ${hallways.length} (${near.length} at the fork)`,
+    );
+    if (signed) {
+      check(
+        near[0]?.direction === 'East',
+        `scene "${scene.name}": the sign points ${near[0]?.direction}, not toward the goal`,
+      );
+    }
+  }
+  // Open floor wider than the widest fork block: a block tucked into its corner
+  // leaves the rest of the floor on one side, which is no way out of its own.
+  const patch = filledRect(at(20, 20), at(24, 24));
+  const patchEast = roomAtSpot(40, 17, 11, 11);
+  const patchSouth = roomAtSpot(17, 40, 11, 11);
+  const patchWest = roomAtSpot(1, 17, 11, 11);
+  const toEast = polyline(at(25, 23), at(40, 23));
+  const toSouth = polyline(at(23, 25), at(23, 40));
+  const toWest = polyline(at(11, 22), at(19, 22));
+  const patchCases: ReadonlyArray<{ scene: Scene; isFork: boolean }> = [
+    {
+      scene: buildScene(
+        'a wide patch of floor with two ways out beside one corner',
+        [patchEast, patchSouth],
+        [patch, toEast, toSouth],
+        patchEast,
+        [patchSouth],
+      ),
+      isFork: false,
+    },
+    {
+      scene: buildScene(
+        'the same patch with a third way out on its far side',
+        [patchEast, patchSouth, patchWest],
+        [patch, toEast, toSouth, toWest],
+        patchEast,
+        [patchSouth],
+      ),
+      isFork: true,
+    },
+  ];
+  const patchKeys = new Set(patch.map(tileKeyOf));
+  for (const { scene, isFork } of patchCases) {
+    controls++;
+    const { grid, rooms } = scene.plan;
+    const forks = findHallwayForks({
+      columns: SCENE_SIZE,
+      rows: SCENE_SIZE,
+      walkable: (x, y) => grid[y]?.[x]?.type !== FloorTypeValue.wall,
+      inRoom: (x, y) => rooms.some((room) => rectContains(room, x, y)),
+    });
+    const onPatch = forks.filter((fork) =>
+      fork.tiles.some((tile) => patchKeys.has(tileKeyOf(tile))),
+    );
+    check(
+      isFork ? onPatch.length === 1 : onPatch.length === 0,
+      `scene "${scene.name}": expected ${isFork ? 'one fork' : 'no fork'} on the patch, found ${onPatch.length}`,
+    );
+  }
+
+  for (const { scene, fork, signed } of forkShapeCases) {
+    controls++;
+    const { rooms, hallways } = plannedSigns(scene);
+    check(rooms.length === 0, `scene "${scene.name}": a room sign was seated where none belongs`);
+    const near = hallways.filter(
+      (sign) =>
+        Math.max(Math.abs(sign.tile.x - fork.x), Math.abs(sign.tile.y - fork.y)) <=
+        WIDE_FORK_POCKET_REACH_TILES,
+    );
+    check(
+      signed
+        ? near.length === 1 && hallways.every((sign) => sign.direction === 'East')
+        : hallways.length === 0,
+      `scene "${scene.name}": expected ${signed ? 'exactly one sign at the fork, and every sign pointing East' : 'no sign'}, got ${hallways.length} (${near.length} at the fork)`,
     );
     if (signed) {
       check(
@@ -2387,7 +2827,7 @@ function verifyTrapScenes(): number {
   );
   check(
     laterSigns.rooms.length === 0 &&
-      laterSigns.hallways.length === 1 &&
+      laterSigns.hallways.every((sign) => sign.direction === 'East') &&
       laterNear.length === 1 &&
       laterNear[0]?.direction === 'East',
     `scene "${laterHallwayScene.name}": expected one East sign at the fork, got ${laterSigns.hallways.length} hallway and ${laterSigns.rooms.length} room signs`,
@@ -2446,8 +2886,10 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
     leafJunctions: 0,
     loopJunctions: 0,
     deadEndJunctions: 0,
+    detourJunctions: 0,
     safeRoomControls: 0,
     safeExcludedRooms: 0,
+    roleExcludedRooms: 0,
   };
 
   for (let run = 0; run < RUNS_PER_FLOOR; run++) {
@@ -2563,6 +3005,7 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
     ['trap junctions', stats.trapJunctions],
     ['leaf-only junctions', stats.leafJunctions],
     ['loop trap junctions', stats.loopJunctions],
+    ['long-way-round trap junctions', stats.detourJunctions],
     ['search-territory negative controls', stats.searchControls],
   ];
   chainedAcrossFloors += stats.chainedSigns;
@@ -2579,7 +3022,7 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
       `${levelDef.id} exercised ${count} ${name} over ${RUNS_PER_FLOOR} maps; that gate had nothing to check`,
     );
   }
-  const signableRooms = stats.roomsRequired - stats.safeExcludedRooms;
+  const signableRooms = stats.roomsRequired - stats.roleExcludedRooms;
   check(
     stats.roomsSigned >= signableRooms * MIN_ROOM_SIGNED_SHARE,
     `${levelDef.id} signed only ${stats.roomsSigned} of ${signableRooms} signable trap junction rooms`,
@@ -2597,10 +3040,10 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
     `${levelDef.id} ran ${stats.roomControls} sign-deletion controls for ${stats.roomsSigned} signed rooms`,
   );
   console.log(
-    `  room coverage: ${stats.roomsSigned}/${stats.roomsRequired} trap junction rooms signed (${stats.roomsRequired - stats.safeExcludedRooms} signable), ${stats.roomControls} negative controls`,
+    `  room coverage: ${stats.roomsSigned}/${stats.roomsRequired} trap junction rooms signed (${signableRooms} signable), ${stats.roomControls} negative controls`,
   );
   console.log(
-    `  trap junctions (rooms + hallways): ${stats.trapJunctions} (${stats.loopJunctions} with a loop, ${stats.deadEndJunctions} with a big dead end), ${stats.leafJunctions} leaf-only junctions left bare\n` +
+    `  trap junctions (rooms + hallways): ${stats.trapJunctions} (${stats.loopJunctions} with a loop, ${stats.deadEndJunctions} with a big dead end, ${stats.detourJunctions} with a long way round), ${stats.leafJunctions} leaf-only junctions left bare\n` +
       `  coverage: ${stats.junctionsSigned}/${stats.junctionsRequired} trap hallway junctions signed, ` +
       `${stats.junctionsOffPath} off-path junctions skipped by definition, ${stats.exemptions.length} exempt, ` +
       `${stats.tiedBranches} tied branches, ${stats.searchTilesChecked} signs checked against search territory`,

@@ -49,6 +49,11 @@ export function mordecaiOverheadLift(levelId: string, tileSize: number): number 
   return Math.max(0, excessTiles * tileSize);
 }
 
+/** The highest his art reaches for a figure whose tile top is at `sy`. */
+export function mordecaiHeadTop(levelId: string, sy: number, tileSize: number): number {
+  return sy - mordecaiOverheadLift(levelId, tileSize) - TILE_ANCHORED_UI_CLEARANCE_TILES * tileSize;
+}
+
 /**
  * Warms the cached rows of whichever Mordecai variant this level draws, at the
  * moment his room is built rather than on his first frame.

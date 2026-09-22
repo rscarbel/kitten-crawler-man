@@ -335,6 +335,21 @@ export function questMarkerColorFor(state: QuestMarkerState): string | undefined
 }
 
 /**
+ * The `sy` to pass {@link drawQuestMarker} so its lowest pixel — bounce and
+ * outline included — never dips below `bottomY`. For NPCs taller than their tile
+ * or with a prompt over their head, where the default anchor overlaps both.
+ */
+export function questMarkerAnchorAbove(bottomY: number, s: number): number {
+  const glyphHalfHeight = Math.floor(s * EXCLAMATION_FONT_SIZE_RATIO) / 2;
+  const lowestBelowAnchor =
+    -s * EXCLAMATION_BASE_OFFSET_Y +
+    s * EXCLAMATION_BOUNCE_AMP +
+    glyphHalfHeight +
+    EXCLAMATION_OUTLINE_WIDTH / 2;
+  return bottomY - lowestBelowAnchor;
+}
+
+/**
  * Bouncing overhead quest marker.
  *
  * The glyph is a parameter rather than something inferred from `color`: an

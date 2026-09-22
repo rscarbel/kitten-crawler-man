@@ -13,6 +13,7 @@
     "scripts/verify-crawler-signs.ts",
     "scripts/verify-menus.ts",
     "scripts/verify-lich.ts",
+    "scripts/verify-mordecai-debrief.ts",
     "scripts/render-spider.ts",
     "scripts/gates-spider.ts",
     "scripts/gates-spider-small.ts",

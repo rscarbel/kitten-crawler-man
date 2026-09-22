@@ -37,6 +37,11 @@ export function setInteractionPromptsSuppressed(suppressed: boolean): void {
   _promptsSuppressed = suppressed;
 }
 
+/** The highest pixel a prompt anchored at `sy` reaches, bob included, for UI stacked above it. */
+export function interactionPromptTop(sy: number): number {
+  return sy - LABEL_Y_OFFSET - KEY_HEIGHT - BOB_AMPLITUDE;
+}
+
 /**
  * Draws a floating interaction prompt above an object in world-space.
  *

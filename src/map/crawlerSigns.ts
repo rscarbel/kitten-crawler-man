@@ -9,7 +9,8 @@ import {
   type RoomDoorway,
 } from './roomDoorways';
 import { hasOpenRegion } from './findWalkableTile';
-import { tileCoordKey } from './tileIndex';
+import { tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
+import { findHallwayForks, mouthOnSide, type ForkBranch, type ForkSide } from './hallwayForks';
 import { isWalkableTileType } from './walkability';
 
 export type CrawlerSignDirection = Extract<CardinalDirection, 'North' | 'East' | 'South' | 'West'>;
@@ -68,9 +69,6 @@ export interface CrawlerSignInput {
   readonly keepClear: ReadonlyArray<{ readonly centre: Point; readonly radius: number }>;
 }
 
-/** Hallway branches a junction needs before the way onward is a real choice. */
-const MIN_HALLWAY_BRANCHES = 3;
-
 /**
  * Openings a room needs before its exits can be a real choice. Counted twice over:
  * as distinct doorways in the wall, and as distinct rooms they lead to, so a
@@ -91,6 +89,17 @@ const MIN_DOORWAY_CLEARANCE_TILES = 3;
  * of; three or more is a region they can spend real time exploring for nothing.
  */
 export const MIN_TRAP_REGION_ROOMS = 3;
+
+/**
+ * Tiles a wrong turn must cost before it is worth a sign: how much further a
+ * goal-reaching branch is than the best one, or how far a loop walks before it comes
+ * back round. Floors whose rooms loop into one another reach the goal down every
+ * branch, and one of those branches is usually the long way back past the start: a
+ * walk the player cannot tell from the right one until they recognise the rooms
+ * again. A short loop is the opposite, a ring the player is round and out of before
+ * it could mislead them.
+ */
+export const MIN_TRAP_DETOUR_TILES = 80;
 
 const UNREACHED = Number.POSITIVE_INFINITY;
 
@@ -330,8 +339,18 @@ export interface TrapFloodInput {
 /** How one exit branch of a junction fares once the junction itself is taken away. */
 export interface BranchVerdict {
   readonly reachesGoal: boolean;
-  /** Walking this way costs a loop or a large wasted region. */
+  /** Walking this way costs a loop, a large wasted region, or a long way round. */
   readonly isTrap: boolean;
+  /**
+   * Tiles further from the goal this branch's first tile is than the best branch's,
+   * walking without crossing the junction; infinite when it cannot reach the goal.
+   */
+  readonly detourTiles: number;
+  /**
+   * Tiles from this branch's first tile round to another branch's, walking without
+   * crossing the junction or entering the goal; infinite when the branch loops nowhere.
+   */
+  readonly loopTiles: number;
 }
 
 /**
@@ -344,7 +363,10 @@ export interface BranchVerdict {
  * - Two or more branches in one region form a loop: a wrong turn walks the player
  *   round and back to the junction. This holds for the region containing the start
  *   too, where one of those branches is the way the player arrived and another leads
- *   round to the arrival side again.
+ *   round to the arrival side again. The loop is a trap only when it is at least
+ *   {@link MIN_TRAP_DETOUR_TILES} long.
+ * - A goal-reaching branch is a trap when it is at least {@link MIN_TRAP_DETOUR_TILES}
+ *   further from the goal than the best branch.
  * - A region holding the start through a single branch is only the arrival itself.
  *   Turning back is not a wrong turn, so it is never a trap.
  * - A lone branch into a region without the start is a dead end. It is a trap only
@@ -399,6 +421,29 @@ export function classifyTrapBranches(input: TrapFloodInput): BranchVerdict[] {
     return region;
   };
 
+  const goalDistance = new Map<number, number>();
+  const goalQueue: Point[] = [];
+  for (const key of input.goalTiles) {
+    const tile = { x: tileKeyX(key), y: tileKeyY(key) };
+    if (!open(tile.x, tile.y)) continue;
+    goalDistance.set(key, 0);
+    goalQueue.push(tile);
+  }
+  for (const tile of goalQueue) {
+    const here = goalDistance.get(tileCoordKey(tile.x, tile.y)) ?? 0;
+    for (const step of ROOM_WALL_OUTWARD) {
+      const x = tile.x + step.dx;
+      const y = tile.y + step.dy;
+      if (!open(x, y) || goalDistance.has(tileCoordKey(x, y))) continue;
+      goalDistance.set(tileCoordKey(x, y), here + 1);
+      goalQueue.push({ x, y });
+    }
+  }
+  const seedDistance = input.branchSeeds.map(
+    (seed) => goalDistance.get(tileCoordKey(seed.x, seed.y)) ?? UNREACHED,
+  );
+  const bestDistance = Math.min(UNREACHED, ...seedDistance);
+
   const regionOfSeed = input.branchSeeds.map((seed) => {
     if (!open(seed.x, seed.y)) return null;
     const existing = regionOfTile.get(tileCoordKey(seed.x, seed.y));
@@ -407,12 +452,41 @@ export function classifyTrapBranches(input: TrapFloodInput): BranchVerdict[] {
     return region;
   });
 
-  return regionOfSeed.map((region) => {
-    if (region === null) return { reachesGoal: false, isTrap: false };
-    if (region.reachesGoal) return { reachesGoal: true, isTrap: false };
-    const isLoop = region.branches >= 2;
+  const seedKeys = input.branchSeeds.map((seed) => tileCoordKey(seed.x, seed.y));
+  const loopLength = (index: number): number => {
+    const seed = input.branchSeeds[index];
+    const steps = new Map<number, number>([[seedKeys[index], 0]]);
+    const queue: Point[] = [seed];
+    for (const tile of queue) {
+      const here = steps.get(tileCoordKey(tile.x, tile.y)) ?? 0;
+      for (const step of ROOM_WALL_OUTWARD) {
+        const x = tile.x + step.dx;
+        const y = tile.y + step.dy;
+        const key = tileCoordKey(x, y);
+        if (!open(x, y) || input.goalTiles.has(key) || steps.has(key)) continue;
+        if (seedKeys.some((other, otherIndex) => otherIndex !== index && other === key)) {
+          return here + 1;
+        }
+        steps.set(key, here + 1);
+        queue.push({ x, y });
+      }
+    }
+    return UNREACHED;
+  };
+
+  return regionOfSeed.map((region, index) => {
+    const detourTiles = seedDistance[index] - bestDistance;
+    if (region === null) {
+      return { reachesGoal: false, isTrap: false, detourTiles, loopTiles: UNREACHED };
+    }
+    if (region.reachesGoal) {
+      const isTrap = detourTiles >= MIN_TRAP_DETOUR_TILES;
+      return { reachesGoal: true, isTrap, detourTiles, loopTiles: UNREACHED };
+    }
+    const loopTiles = region.branches >= 2 ? loopLength(index) : UNREACHED;
+    const isLongLoop = loopTiles !== UNREACHED && loopTiles >= MIN_TRAP_DETOUR_TILES;
     const isBigDeadEnd = !region.hasStart && region.rooms.size >= MIN_TRAP_REGION_ROOMS;
-    return { reachesGoal: false, isTrap: isLoop || isBigDeadEnd };
+    return { reachesGoal: false, isTrap: isLongLoop || isBigDeadEnd, detourTiles, loopTiles };
   });
 }
 
@@ -582,16 +656,6 @@ export function planCrawlerSigns(input: CrawlerSignInput): PlannedCrawlerSign[] 
   return placements;
 }
 
-/** One way out of a hallway junction and what lies down it. */
-interface HallwayBranch {
-  readonly side: (typeof ROOM_WALL_OUTWARD)[number];
-  readonly rooms: ReadonlySet<number>;
-  /** Fewest room-steps to the leg's goal from any room this branch reaches. */
-  hops: number;
-  /** Tiles a walker takes from the branch's first tile to the goal room. */
-  walk: number;
-}
-
 const DIAGONAL_OFFSETS: ReadonlyArray<Point> = [
   { x: 1, y: -1 },
   { x: 1, y: 1 },
@@ -621,22 +685,38 @@ function roomIndexGrid(grid: TileContent[][], rooms: ReadonlyArray<Rect>): numbe
   return roomAt;
 }
 
+/** One way out of a hallway fork and what lies down it. */
+interface RankedBranch {
+  readonly branch: ForkBranch;
+  readonly rooms: ReadonlySet<number>;
+  /** Fewest room-steps to the leg's goal from any room this branch reaches. */
+  readonly hops: number;
+  /** Fewest tiles a walker takes from the branch's mouth to the goal room. */
+  readonly walk: number;
+}
+
+const EIGHT_NEIGHBOURS: ReadonlyArray<Point> = [
+  ...ROOM_WALL_OUTWARD.map((side) => ({ x: side.dx, y: side.dy })),
+  ...DIAGONAL_OFFSETS,
+];
+
 /**
- * Signs for hallway junctions: one-tile-wide corridors that split three or four
- * ways, on the forced path, where a wrong turn costs a loop or a large wasted region.
+ * Signs for hallway forks (see {@link findHallwayForks}): places on the forced path
+ * where the corridors split three or more ways, however wide, and a wrong turn
+ * costs a loop or a large wasted region.
  *
  * Whether a branch is such a trap is decided by {@link classifyTrapBranches} with
- * the junction tile removed; a fork whose wrong branches are all short stubs, or
+ * the fork's tiles removed; a fork whose wrong branches are all short stubs, or
  * that has none, is left bare.
  *
- * The sign goes in a wall pocket touching the junction rather than in the lane, so
- * no branch is ever narrowed: on a three-way split the pocket is the wall tile
- * opposite the stem or one of the corner tiles, on a four-way split a corner tile.
- * The arrow points down the goal-reaching branch that has the fewest room-steps to
- * the leg's goal; branches that meet again further on tie on that measure and the
- * shorter walk decides, then the branch's side, so every signed junction gets an
- * answer and the same one every time. A pocket beside a second junction would
- * leave its arrow ambiguous, so each junction takes a pocket touching only itself.
+ * The sign goes in a wall pocket touching the fork rather than on its floor, so no
+ * branch is ever narrowed; a pocket beside the fork's side walls is preferred to
+ * one at its corner. The arrow points down the goal-reaching branch that has the
+ * fewest room-steps to the leg's goal; branches that meet again further on tie on
+ * that measure and the shorter walk decides. The words name a side of the fork, so
+ * the side must be one no other branch also leaves by. A pocket beside a second
+ * fork would leave its arrow ambiguous, so each fork takes a pocket touching only
+ * itself.
  */
 function planHallwaySigns(
   input: CrawlerSignInput,
@@ -654,7 +734,6 @@ function planHallwaySigns(
   const walkable = (x: number, y: number): boolean =>
     inGrid(x, y) && isWalkableTileType(grid[y][x]);
   const inRoom = (x: number, y: number): boolean => inGrid(x, y) && roomAt[y][x] !== NO_ROOM;
-  const inCorridor = (x: number, y: number): boolean => walkable(x, y) && !inRoom(x, y);
   const claimed = (x: number, y: number): boolean => input.claimedTiles.has(tileCoordKey(x, y));
 
   const walkFromGoal = new Map<number, Int32Array>();
@@ -685,14 +764,19 @@ function planHallwaySigns(
     return distance;
   };
 
-  const floodBranch = (centre: Point, side: HallwayBranch['side']): HallwayBranch => {
-    const first = { x: centre.x + side.dx, y: centre.y + side.dy };
+  /** Rooms a branch reaches by corridor alone, a mouth that opens straight into a room included. */
+  const roomsDownBranch = (forkKeys: ReadonlySet<number>, branch: ForkBranch): Set<number> => {
     const rooms = new Set<number>();
-    const queue: Point[] = [first];
-    const seen = new Set<number>([
-      tileCoordKey(centre.x, centre.y),
-      tileCoordKey(first.x, first.y),
-    ]);
+    const seen = new Set<number>(forkKeys);
+    const queue: Point[] = [];
+    for (const tile of branch.mouth) {
+      if (inRoom(tile.x, tile.y)) {
+        rooms.add(roomAt[tile.y][tile.x]);
+        continue;
+      }
+      seen.add(tileCoordKey(tile.x, tile.y));
+      queue.push(tile);
+    }
     for (const tile of queue) {
       for (const step of ROOM_WALL_OUTWARD) {
         const x = tile.x + step.dx;
@@ -708,7 +792,7 @@ function planHallwaySigns(
         queue.push({ x, y });
       }
     }
-    return { side, rooms, hops: UNREACHED, walk: UNREACHED };
+    return rooms;
   };
 
   const isPlainWall = (x: number, y: number): boolean =>
@@ -727,87 +811,117 @@ function planHallwaySigns(
     );
   };
 
-  const isJunctionTile = (x: number, y: number): boolean =>
-    walkable(x, y) &&
-    ROOM_WALL_OUTWARD.filter((side) => walkable(x + side.dx, y + side.dy)).length >=
-      MIN_HALLWAY_BRANCHES;
+  const forks = findHallwayForks({ columns, rows, walkable, inRoom });
+  const forkOfTile = new Map<number, number>();
+  for (const [index, fork] of forks.entries()) {
+    for (const tile of fork.tiles) forkOfTile.set(tileCoordKey(tile.x, tile.y), index);
+  }
+  const forksBeside = (pocket: Point): Set<number> => {
+    const beside = new Set<number>();
+    for (const offset of EIGHT_NEIGHBOURS) {
+      const fork = forkOfTile.get(tileCoordKey(pocket.x + offset.x, pocket.y + offset.y));
+      if (fork !== undefined) beside.add(fork);
+    }
+    return beside;
+  };
 
-  // A pocket touching a second junction would leave its arrow ambiguous about
-  // which fork it speaks for.
-  const junctionsBeside = (pocket: Point): number =>
-    [
-      ...ROOM_WALL_OUTWARD,
-      ...DIAGONAL_OFFSETS.map((offset) => ({ dx: offset.x, dy: offset.y })),
-    ].filter((offset) => isJunctionTile(pocket.x + offset.dx, pocket.y + offset.dy)).length;
+  /** Wall tiles touching the fork: those beside its sides first, then its corners, each in scan order. */
+  const pocketCandidates = (forkKeys: ReadonlySet<number>): Point[] => {
+    const touching = (offsets: ReadonlyArray<Point>): number[] => {
+      const found = new Set<number>();
+      for (const key of forkKeys) {
+        for (const offset of offsets) {
+          const x = tileKeyX(key) + offset.x;
+          const y = tileKeyY(key) + offset.y;
+          if (!forkKeys.has(tileCoordKey(x, y))) found.add(tileCoordKey(x, y));
+        }
+      }
+      return [...found].sort((a, b) => a - b);
+    };
+    const besideSides = touching(ROOM_WALL_OUTWARD.map((side) => ({ x: side.dx, y: side.dy })));
+    const atCorners = touching(DIAGONAL_OFFSETS).filter((key) => !besideSides.includes(key));
+    return [...besideSides, ...atCorners].map((key) => ({ x: tileKeyX(key), y: tileKeyY(key) }));
+  };
 
   const placements: PlannedCrawlerSign[] = [];
   const takenPockets = new Set<number>();
-  for (let y = 1; y < rows - 1; y++) {
-    for (let x = 1; x < columns - 1; x++) {
-      if (!inCorridor(x, y)) continue;
-      const openSides = ROOM_WALL_OUTWARD.filter((side) => walkable(x + side.dx, y + side.dy));
-      if (openSides.length < MIN_HALLWAY_BRANCHES) continue;
-      // A tile touching a room is a doorway mouth, and one with a walkable diagonal
-      // is a stretch of wide floor: neither is a fork in a one-tile hallway.
-      if (openSides.some((side) => inRoom(x + side.dx, y + side.dy))) continue;
-      if (DIAGONAL_OFFSETS.some((offset) => walkable(x + offset.x, y + offset.y))) continue;
-
-      const branches = openSides.map((side) => floodBranch({ x, y }, side));
-      const stagesReached = new Set<number>();
-      for (const branch of branches) {
-        for (const room of branch.rooms) stagesReached.add(forced.stageOfRoom[room]);
-      }
-      // A fork with a room of the stair search down one branch, or one that lies
-      // between two legs, has no single goal its arrow could honestly name.
-      if (stagesReached.size !== 1) continue;
-      const [stage] = stagesReached;
-      if (stage === NO_STAGE) continue;
-
-      const toGoal = forced.stages[stage].distance;
-      const walkDistance = walkDistances(stage);
-      for (const branch of branches) {
-        branch.hops = Math.min(UNREACHED, ...[...branch.rooms].map((room) => toGoal[room]));
-        const walked = walkDistance[(y + branch.side.dy) * columns + (x + branch.side.dx)];
-        branch.walk = walked === UNWALKED ? UNREACHED : walked;
-      }
-      const verdicts = classifyTrapBranches({
-        ...floodInput,
-        removed: new Set([tileCoordKey(x, y)]),
-        branchSeeds: branches.map((branch) => ({ x: x + branch.side.dx, y: y + branch.side.dy })),
-        goalTiles: goalTilesOfStage[stage],
-      });
-      if (!verdicts.some((verdict) => verdict.isTrap)) continue;
-      const goalBranches = branches.filter((_, index) => verdicts[index].reachesGoal);
-      const rankedBranches = goalBranches.sort((a, b) => a.hops - b.hops || a.walk - b.walk);
-      const onward = rankedBranches.length > 0 ? rankedBranches[0] : undefined;
-      if (onward === undefined || onward.hops === UNREACHED) continue;
-
-      const closedSide = ROOM_WALL_OUTWARD.find((side) => !openSides.includes(side));
-      const pockets: Point[] = [
-        ...(closedSide === undefined ? [] : [{ x: x + closedSide.dx, y: y + closedSide.dy }]),
-        ...DIAGONAL_OFFSETS.map((offset) => ({ x: x + offset.x, y: y + offset.y })),
-      ];
-      const pocket = pockets.find(
-        (candidate) =>
-          !takenPockets.has(tileCoordKey(candidate.x, candidate.y)) &&
-          pocketFits(candidate) &&
-          junctionsBeside(candidate) === 1,
-      );
-      if (pocket === undefined) continue;
-
-      const branchEntrance = { x: x + onward.side.dx, y: y + onward.side.dy };
-      placements.push({
-        kind: 'hallway',
-        pocketFloor: grid[y][x].type,
-        tile: pocket,
-        direction: DIRECTION_OF_SIDE[onward.side.wall],
-        arrowAngleRadians: arrowBearing(pocket, branchEntrance, {
-          x: onward.side.dx,
-          y: onward.side.dy,
-        }),
-      });
-      takenPockets.add(tileCoordKey(pocket.x, pocket.y));
+  for (const [forkIndex, fork] of forks.entries()) {
+    const forkKeys = new Set(fork.tiles.map((tile) => tileCoordKey(tile.x, tile.y)));
+    const reached = fork.branches.map((branch) => roomsDownBranch(forkKeys, branch));
+    const stagesReached = new Set<number>();
+    for (const rooms of reached) {
+      for (const room of rooms) stagesReached.add(forced.stageOfRoom[room]);
     }
+    // A fork with a room of the stair search down one branch, or one that lies
+    // between two legs, has no single goal its arrow could honestly name.
+    if (stagesReached.size !== 1) continue;
+    const [stage] = stagesReached;
+    if (stage === NO_STAGE) continue;
+
+    const toGoal = forced.stages[stage].distance;
+    const walkDistance = walkDistances(stage);
+    const branches: RankedBranch[] = fork.branches.map((branch, index) => {
+      const walked = branch.mouth
+        .map((tile) => walkDistance[tile.y * columns + tile.x])
+        .filter((distance) => distance !== UNWALKED);
+      return {
+        branch,
+        rooms: reached[index],
+        hops: Math.min(UNREACHED, ...[...reached[index]].map((room) => toGoal[room])),
+        walk: Math.min(UNREACHED, ...walked),
+      };
+    });
+    const verdicts = classifyTrapBranches({
+      ...floodInput,
+      removed: forkKeys,
+      branchSeeds: branches.map(({ branch }) => branch.mouth[0]),
+      goalTiles: goalTilesOfStage[stage],
+    });
+    if (!verdicts.some((verdict) => verdict.isTrap)) continue;
+    const ranked = branches
+      .filter((_, index) => verdicts[index].reachesGoal && !verdicts[index].isTrap)
+      .sort((a, b) => a.hops - b.hops || a.walk - b.walk);
+    const best = ranked.length > 0 ? ranked[0] : undefined;
+    if (best === undefined || best.hops === UNREACHED) continue;
+    const tiedForBest = ranked.filter(
+      (candidate) => candidate.hops === best.hops && candidate.walk === best.walk,
+    );
+    const exclusiveSideOf = (candidate: RankedBranch): ForkSide | undefined =>
+      candidate.branch.sides.find((side) =>
+        branches.every((other) => other === candidate || !other.branch.sides.includes(side)),
+      );
+    const onward = tiedForBest
+      .map((candidate) => ({ candidate, side: exclusiveSideOf(candidate) }))
+      .find((choice) => choice.side !== undefined);
+    if (onward?.side === undefined) continue;
+    const onwardSide = onward.side;
+
+    const pocket = pocketCandidates(forkKeys).find((candidate) => {
+      if (takenPockets.has(tileCoordKey(candidate.x, candidate.y))) return false;
+      if (!pocketFits(candidate)) return false;
+      const beside = forksBeside(candidate);
+      return beside.size === 1 && beside.has(forkIndex);
+    });
+    if (pocket === undefined) continue;
+    const floorUnderPocket = EIGHT_NEIGHBOURS.map((offset) => ({
+      x: pocket.x + offset.x,
+      y: pocket.y + offset.y,
+    })).find((tile) => forkKeys.has(tileCoordKey(tile.x, tile.y)));
+    if (floorUnderPocket === undefined) continue;
+
+    const entrances = mouthOnSide(fork, onward.candidate.branch, onwardSide);
+    const branchEntrance = entrances[Math.floor(entrances.length / 2)];
+    placements.push({
+      kind: 'hallway',
+      pocketFloor: grid[floorUnderPocket.y][floorUnderPocket.x].type,
+      tile: pocket,
+      direction: DIRECTION_OF_SIDE[onwardSide.wall],
+      arrowAngleRadians: arrowBearing(pocket, branchEntrance, {
+        x: onwardSide.dx,
+        y: onwardSide.dy,
+      }),
+    });
+    takenPockets.add(tileCoordKey(pocket.x, pocket.y));
   }
   return placements;
 }

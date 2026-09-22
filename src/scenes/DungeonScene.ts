@@ -60,7 +60,7 @@ import {
   type TrackerEntry,
   type TrackerTarget,
 } from '../systems/questTracker';
-import { SafeRoomSystem } from '../systems/SafeRoomSystem';
+import { SafeRoomSystem, type SafeRoomInfo } from '../systems/SafeRoomSystem';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
@@ -309,6 +309,23 @@ import {
   type AdviceObjective,
   type AdviceSlot,
 } from '../systems/mordecaiAdvice';
+import {
+  ALL_DEBRIEF_BOSS_TYPES,
+  debriefBossType,
+  debriefHasNews,
+  debriefPages,
+  EMPTY_DEBRIEF_MEMORY,
+  isSupersededDebrief,
+  reconcileDebriefMemory,
+  rememberDebriefSpoken,
+  sameDebriefMemory,
+  unwornGear,
+  type DebriefBossType,
+  type DebriefMemory,
+  type DebriefState,
+  type MordecaiDebriefCheckpoint,
+} from '../systems/mordecaiDebrief';
+import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import type { AISceneContext } from '../ai/aiActions';
 import { GameStats } from '../core/GameStats';
 import { difficultyStats } from '../core/DifficultyStats';
@@ -791,6 +808,11 @@ export class DungeonScene extends GameplayScene {
   private readonly chat: ChatKit;
   private bossRoom: BossRoomSystem;
   private readonly mordecaiAdvisor = new MordecaiAdvisor();
+  /**
+   * Saved, but not rewound on death, so heard speeches stay heard; see
+   * `forgetDebriefsOfLivingBosses` for the one rewind that must reset it.
+   */
+  private mordecaiDebrief: MordecaiDebriefCheckpoint = {};
   private lavaBalls: LavaBallSystem;
   private rockThrows: RockThrowSystem;
   private skeletonShots: SkeletonProjectileSystem;
@@ -1184,6 +1206,7 @@ export class DungeonScene extends GameplayScene {
       this.levelDef.id,
       this.audio,
     );
+    this.safeRoom.setMarkerSource((room) => this.mordecaiMarkerFor(room));
     this.combat = new CombatKit({
       world: this.world,
       abilityManager: this.abilityManager,
@@ -2387,32 +2410,7 @@ export class DungeonScene extends GameplayScene {
       // overwriting a good resume point with nothing.
       const enteredRoom = this.safeRoom.safeRoomInfoAt(this.active());
       if (enteredRoom !== null) this.lastSafeRoomTile = enteredRoom.centre;
-      this.onSaveProgress?.({
-        humanSnap: revivedSnapshot(snapPlayer(this.human)),
-        catSnap: revivedSnapshot(snapPlayer(this.cat)),
-        levelId: this.levelDef.id,
-        abilityStates: this.abilityManager.serializeStates(),
-        mongoUnlocked: this.mongoSystem.unlocked,
-        // The system's accessor, not the stored value: both of these saves can
-        // fire with Mongo still out, and the stored value is only written back
-        // when he despawns — so a safe room entered with a 5/130 raptor at the
-        // player's heel was recording 130.
-        mongoPetHp: this.mongoSystem.hp,
-        mongoPetResting: this.mongoSystem.restingUntilFull,
-        // The tutorial's hand-built map has no layout to regenerate.
-        world:
-          this.tutorial === null
-            ? {
-                generatorVersion: WORLD_GENERATOR_VERSION,
-                worldSeed: this.gameMap.worldSeed,
-                artSeed: this.gameMap.artSeed,
-                safeRoomTile: this.lastSafeRoomTile,
-                levelTimerFrames:
-                  this.levelDef.hasCollapseTimer === true ? this.levelTimerFrames : null,
-                persisted: this.capturePersistedWorldState(),
-              }
-            : undefined,
-      });
+      this.saveProgress();
 
       // Skipped in the tutorial, matching the achievement unlocks above — the
       // tutorial has its own hand-scripted flow and never reaches death-restart.
@@ -3337,6 +3335,7 @@ export class DungeonScene extends GameplayScene {
     // same room locks and entry windows the snapshot describes, and they clear
     // them to "no fight in progress" rather than to what was actually captured.
     this.restoreWorldCheckpoint(cp.world);
+    this.forgetDebriefsOfLivingBosses();
 
     this.bossIntro.cancel();
     this.combatCooldownFrames = 0;
@@ -3514,6 +3513,7 @@ export class DungeonScene extends GameplayScene {
       townMemory: captureTownMemory(this.townMemory),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
       mongoPetState: captureMongoPetState({ ...this.mongoPetState, hp: this.mongoSystem.hp }),
+      mordecaiDebrief: { ...this.mordecaiDebrief },
 
       krakarenKilled: this.krakarenKilled,
       krakarenBossRoomIdx: this.krakarenBossRoomIdx,
@@ -3551,6 +3551,7 @@ export class DungeonScene extends GameplayScene {
       townMemory,
       mercenaryRoster,
       mongoPetState,
+      mordecaiDebrief,
       krakarenKilled,
       krakarenBossRoomIdx,
       juicerKilled,
@@ -3602,10 +3603,41 @@ export class DungeonScene extends GameplayScene {
     restoreMercenaryRoster(this.mercenaryRoster, mercenaryRoster);
     restoreMongoPetState(this.mongoPetState, mongoPetState);
 
+    this.mordecaiDebrief = { ...mordecaiDebrief };
+
     this.krakarenKilled = krakarenKilled;
     this.krakarenBossRoomIdx = krakarenBossRoomIdx;
     this.juicerKilled = juicerKilled;
     this.juicerBossRoomIdx = juicerBossRoomIdx;
+  }
+
+  private saveProgress(): void {
+    this.onSaveProgress?.({
+      humanSnap: revivedSnapshot(snapPlayer(this.human)),
+      catSnap: revivedSnapshot(snapPlayer(this.cat)),
+      levelId: this.levelDef.id,
+      abilityStates: this.abilityManager.serializeStates(),
+      mongoUnlocked: this.mongoSystem.unlocked,
+      // The system's accessor, not the stored value: both of these saves can
+      // fire with Mongo still out, and the stored value is only written back
+      // when he despawns — so a safe room entered with a 5/130 raptor at the
+      // player's heel was recording 130.
+      mongoPetHp: this.mongoSystem.hp,
+      mongoPetResting: this.mongoSystem.restingUntilFull,
+      // The tutorial's hand-built map has no layout to regenerate.
+      world:
+        this.tutorial === null
+          ? {
+              generatorVersion: WORLD_GENERATOR_VERSION,
+              worldSeed: this.gameMap.worldSeed,
+              artSeed: this.gameMap.artSeed,
+              safeRoomTile: this.lastSafeRoomTile,
+              levelTimerFrames:
+                this.levelDef.hasCollapseTimer === true ? this.levelTimerFrames : null,
+              persisted: this.capturePersistedWorldState(),
+            }
+          : undefined,
+    });
   }
 
   /**
@@ -4105,7 +4137,7 @@ export class DungeonScene extends GameplayScene {
   /**
    * Mordecai's answer, from the highest-ranked of three sources that has one:
    *
-   *     tutorial (if it handles it) → floor advice → AI chat
+   *     tutorial (if it handles it) → post-boss debrief → floor advice → AI chat
    *
    * The tutorial keeps first claim, as it always had. Floor advice sits above the
    * AI chat because it is the deterministic answer to "what is left to do here",
@@ -4113,6 +4145,8 @@ export class DungeonScene extends GameplayScene {
    */
   private talkToMordecai(active: { x: number; y: number }): void {
     if (this.tutorial?.onMordecaiInteracted() === true) return;
+
+    if (this.speakPostBossDebrief(active)) return;
 
     const pages = this.floorAdvice(active);
     if (pages !== null) {
@@ -4132,6 +4166,83 @@ export class DungeonScene extends GameplayScene {
         catLevel: this.cat.level,
       }),
     );
+  }
+
+  /**
+   * Saves after the talk: the entry save predates it, so a reload in this room
+   * would otherwise congratulate them again.
+   */
+  private speakPostBossDebrief(active: { x: number; y: number }): boolean {
+    const room = this.safeRoom.safeRoomInfoAt(active);
+    const bossType = this.exitRoomBoss(room);
+    if (room === null || bossType === null) return false;
+    const state = this.debriefState();
+    const memory = this.debriefMemoryFor(bossType, state);
+    const pages = debriefPages(bossType, memory, state);
+    if (pages === null) return false;
+
+    const remembered = rememberDebriefSpoken(memory, state);
+    this.mordecaiDebrief[bossType] = remembered;
+    this.safeRoom.openMordecaiPages(pages);
+    // Boxes repeat every talk; don't pay a server round trip for a repeat.
+    const worthSaving = !sameDebriefMemory(memory, remembered);
+    if (worthSaving && this.tutorial === null && !this.isBossFightInProgress) {
+      // `safeRoomEntered` fires once, for whichever crawler got in first.
+      this.lastSafeRoomTile = room.centre;
+      this.saveProgress();
+    }
+    return true;
+  }
+
+  private exitRoomBoss(room: SafeRoomInfo | null): DebriefBossType | null {
+    if (room === null) return null;
+    const bossType = debriefBossType(room.followsBossType);
+    if (bossType === null) return null;
+    const defeated = this.bossRoom.defeatedBossTypes;
+    if (!defeated.has(bossType) || isSupersededDebrief(bossType, defeated)) return null;
+    return bossType;
+  }
+
+  /**
+   * The checkpoint can predate a kill when the companion reached the exit room
+   * first, so a rewind can bring a debriefed boss back.
+   */
+  private forgetDebriefsOfLivingBosses(): void {
+    const defeated = this.bossRoom.defeatedBossTypes;
+    const kept: MordecaiDebriefCheckpoint = {};
+    for (const bossType of ALL_DEBRIEF_BOSS_TYPES) {
+      const memory = this.mordecaiDebrief[bossType];
+      if (memory !== undefined && defeated.has(bossType)) kept[bossType] = memory;
+    }
+    this.mordecaiDebrief = kept;
+  }
+
+  private debriefMemoryFor(bossType: DebriefBossType, state: DebriefState): DebriefMemory {
+    const stored = this.mordecaiDebrief[bossType] ?? EMPTY_DEBRIEF_MEMORY;
+    const reconciled = reconcileDebriefMemory(stored, state.pendingBoxes);
+    if (reconciled !== stored) this.mordecaiDebrief[bossType] = reconciled;
+    return reconciled;
+  }
+
+  private debriefState(): DebriefState {
+    return {
+      pendingBoxes: {
+        human: this.humanAchievements.pendingBoxes.length,
+        cat: this.catAchievements.pendingBoxes.length,
+      },
+      unworn: [
+        ...unwornGear('human', this.human.inventory),
+        ...unwornGear('cat', this.cat.inventory),
+      ],
+    };
+  }
+
+  private mordecaiMarkerFor(room: SafeRoomInfo): QuestMarkerState {
+    const bossType = this.exitRoomBoss(room);
+    if (bossType === null) return 'none';
+    const state = this.debriefState();
+    const hasNews = debriefHasNews(this.debriefMemoryFor(bossType, state), state);
+    return hasNews ? 'exclamation' : 'none';
   }
 
   /**
@@ -5475,6 +5586,7 @@ export class DungeonScene extends GameplayScene {
     markers.push(...this.murderQuest.questMarkers);
     markers.push(...this.anchorQuest.questMarkers);
     if (this.bounty !== null) markers.push(...this.bounty.questMarkers);
+    markers.push(...this.safeRoom.mordecaiMarkers);
     const pinned = resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries);
     // The pinned objective gets a marker of its own on top of whatever its own
     // system already contributes. That is not redundant: a quest can be pinned

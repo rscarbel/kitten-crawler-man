@@ -14,6 +14,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
   drawMordecaiForLevel,
+  mordecaiHeadTop,
   mordecaiOverheadLift,
   prewarmMordecaiForLevel,
 } from '../sprites/mordecaiSprite';
@@ -22,9 +23,15 @@ import { MordecaiWanderer } from './mordecaiWander';
 import { drawSafeRoomBed, restedPulse } from '../sprites/safeRoomBed';
 import { drawStoveSteam } from '../sprites/safeRoomDecor';
 import { drawSpeechBubble } from '../sprites/speechBubble';
+import {
+  drawQuestMarker,
+  questMarkerAnchorAbove,
+  questMarkerColorFor,
+  type QuestMarkerState,
+} from '../sprites/questNPCSprite';
 import type { InteriorFigure } from '../core/InteriorFigure';
 import type { GameSystem, SystemContext } from './GameSystem';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { drawInteractionPrompt, interactionPromptTop } from '../ui/InteractionPrompt';
 import { randomFromArray, clamp, frameTime } from '../utils';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { DialogBox } from '../ui/DialogBox';
@@ -36,13 +43,25 @@ import { drawRadialGlow, type GlowStop } from '../sprites/radialGlow';
 export interface SafeRoomInfo {
   centre: { x: number; y: number };
   guardsBossType?: string;
+  followsBossType?: string;
 }
+
+interface MordecaiMinimapMarker {
+  x: number;
+  y: number;
+  type: Exclude<QuestMarkerState, 'none'>;
+}
+
+/** Keeps boss kills and the players' bags out of this system. */
+export type MordecaiMarkerSource = (room: SafeRoomInfo) => QuestMarkerState;
 
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
   centre: { x: number; y: number };
   /** Boss this room is the last stop before, when it guards one. */
   guardsBossType?: string;
+  followsBossType?: string;
+  marker: QuestMarkerState;
   /** Tiles holding a standing lantern — the room's light sources. */
   lanternTiles: ReadonlyArray<{ x: number; y: number }>;
   /** Tiles holding a stove, whose steam has to be drawn per frame. */
@@ -136,6 +155,7 @@ export class SafeRoomSystem implements GameSystem {
    * without weakening the walk-out rule.
    */
   private _hasBeenInSafeRoom = false;
+  private markerSource: MordecaiMarkerSource | null = null;
   private readonly _dialogBox: DialogBox | null;
   private _isSleeping = false;
   private sleepTimer = 0;
@@ -169,6 +189,7 @@ export class SafeRoomSystem implements GameSystem {
   private static readonly MORDECAI_WALK_AWAY_DISTANCE =
     SafeRoomSystem.MORDECAI_NEAR_DISTANCE * SafeRoomSystem.MORDECAI_WALK_AWAY_MULTIPLE;
   private static readonly BED_NEAR_DISTANCE = 1.8;
+  private static readonly MARKER_GAP_PX = 3;
   private static readonly SLEEP_HEAL_TRIGGER = 5;
   /** Reach and strength of one standing lantern's pool of light. */
   private static readonly LANTERN_LIGHT_RADIUS_TILES = 3.2;
@@ -233,6 +254,8 @@ export class SafeRoomSystem implements GameSystem {
           bounds: sr.bounds,
           centre: sr.centre,
           guardsBossType: sr.guardsBossType,
+          followsBossType: sr.followsBossType,
+          marker: 'none',
           lanternTiles: propTilesOfType(plan, SAFE_ROOM_LANTERN),
           stoveTiles: propTilesOfType(plan, SAFE_ROOM_STOVE),
           mordecaiHomeTileX: mordecai.x,
@@ -267,6 +290,19 @@ export class SafeRoomSystem implements GameSystem {
       x: e.mordecaiHomeTileX,
       y: e.mordecaiHomeTileY,
     }));
+  }
+
+  get mordecaiMarkers(): MordecaiMinimapMarker[] {
+    const markers: MordecaiMinimapMarker[] = [];
+    for (const e of this.entries) {
+      if (e.marker === 'none') continue;
+      markers.push({ x: e.mordecaiHomeTileX, y: e.mordecaiHomeTileY, type: e.marker });
+    }
+    return markers;
+  }
+
+  setMarkerSource(source: MordecaiMarkerSource): void {
+    this.markerSource = source;
   }
 
   get isSleeping(): boolean {
@@ -369,6 +405,23 @@ export class SafeRoomSystem implements GameSystem {
     this.closeMordecaiDialogIfWalkedAway(ctx.active);
     this.evictMobs(ctx.roster.mobs, ctx.roster.grid);
     this.updateWander();
+    this.refreshMarkers();
+  }
+
+  /** Once per update, not per draw: the answer walks both crawlers' bags. */
+  private refreshMarkers(): void {
+    const source = this.markerSource;
+    for (const entry of this.entries) {
+      entry.marker = source === null ? 'none' : source(SafeRoomSystem.infoOf(entry));
+    }
+  }
+
+  private static infoOf(entry: SafeRoomEntry): SafeRoomInfo {
+    return {
+      centre: entry.centre,
+      guardsBossType: entry.guardsBossType,
+      followsBossType: entry.followsBossType,
+    };
   }
 
   /**
@@ -447,7 +500,7 @@ export class SafeRoomSystem implements GameSystem {
         ty < e.bounds.y + e.bounds.h,
     );
     if (entry === undefined) return null;
-    return { centre: entry.centre, guardsBossType: entry.guardsBossType };
+    return SafeRoomSystem.infoOf(entry);
   }
 
   isNearMordecai(entity: { x: number; y: number }): boolean {
@@ -462,6 +515,14 @@ export class SafeRoomSystem implements GameSystem {
     const { x, y } = entry.wanderer.state;
     return (
       Math.hypot(entity.x - x, entity.y - y) < TILE_SIZE * SafeRoomSystem.MORDECAI_NEAR_DISTANCE
+    );
+  }
+
+  private showsTalkPrompt(entry: SafeRoomEntry, active: { x: number; y: number }): boolean {
+    return (
+      this.isEntityInSafeRoom(active) &&
+      SafeRoomSystem.isNearThisMordecai(entry, active) &&
+      !this._mordecaiDialogOpen
     );
   }
 
@@ -627,7 +688,14 @@ export class SafeRoomSystem implements GameSystem {
     this.sortedFigures.length = 0;
     for (const e of this.entries) {
       const wander = e.wanderer.state;
-      const showBubble = SafeRoomSystem.isNearThisMordecai(e, active) && !this._mordecaiDialogOpen;
+      const markerColor = this._mordecaiDialogOpen ? undefined : questMarkerColorFor(e.marker);
+      // Unlike the bubble, the marker shows at any distance to pull the player over.
+      const showBubble =
+        markerColor === undefined &&
+        SafeRoomSystem.isNearThisMordecai(e, active) &&
+        !this._mordecaiDialogOpen;
+      const markerGlyph = e.marker === 'question' ? '?' : '!';
+      const promptShown = this.showsTalkPrompt(e, active);
       this.sortedFigures.push({
         y: wander.y,
         render: (ctx, camX, camY, ts) => {
@@ -649,9 +717,16 @@ export class SafeRoomSystem implements GameSystem {
             },
             this.levelId,
           );
-          if (showBubble) {
-            const bubbleY = msy - mordecaiOverheadLift(this.levelId, ts);
-            drawSpeechBubble(ctx, msx, bubbleY, ts, speechBubblePulse);
+          const overheadY = msy - mordecaiOverheadLift(this.levelId, ts);
+          if (markerColor !== undefined) {
+            const headTop = mordecaiHeadTop(this.levelId, msy, ts);
+            const clearOf = promptShown
+              ? Math.min(headTop, interactionPromptTop(overheadY))
+              : headTop;
+            const markerY = questMarkerAnchorAbove(clearOf - SafeRoomSystem.MARKER_GAP_PX, ts);
+            drawQuestMarker(ctx, msx, markerY, ts, markerGlyph, markerColor);
+          } else if (showBubble) {
+            drawSpeechBubble(ctx, msx, overheadY, ts, speechBubblePulse);
           }
         },
       });
@@ -696,11 +771,7 @@ export class SafeRoomSystem implements GameSystem {
       const wander = e.wanderer.state;
       const mx = wander.x - camX;
       const promptY = wander.y - camY - mordecaiOverheadLift(this.levelId, TILE_SIZE);
-      const nearThis =
-        this.isEntityInSafeRoom(active) &&
-        SafeRoomSystem.isNearThisMordecai(e, active) &&
-        !this._mordecaiDialogOpen;
-      if (nearThis) {
+      if (this.showsTalkPrompt(e, active)) {
         drawInteractionPrompt(ctx, mx, promptY, TILE_SIZE, 'Talk');
         break; // only prompt once
       }

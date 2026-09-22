@@ -30,6 +30,11 @@ import type { LifeMachine } from '../systems/SpiderQuestSystem';
 import { allResidents } from '../systems/townResidents';
 import { MERCENARY_TEMPLATES } from './mercenaryTemplates';
 import { isRecord } from './guards';
+import {
+  debriefBossType,
+  type DebriefMemory,
+  type MordecaiDebriefCheckpoint,
+} from '../systems/mordecaiDebrief';
 
 /**
  * The subset of `WorldCheckpoint` that survives a page reload.
@@ -61,6 +66,8 @@ export interface PersistedWorldState {
   townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
   mongoPetState: MongoPetStateCheckpoint;
+  /** Optional: an older save costs one repeated congratulation, not a failed load. */
+  mordecaiDebrief?: MordecaiDebriefCheckpoint;
 
   krakarenKilled: boolean;
   krakarenBossRoomIdx: number;
@@ -393,6 +400,32 @@ function parseQuestStatuses(value: unknown): Array<[string, QuestStatus]> | unde
     const parsed = parseStringKeyedTuple(entry, parseQuestStatus);
     return parsed === undefined ? undefined : [parsed[0], parsed[1]];
   });
+}
+
+function parseDebriefMemory(value: unknown): DebriefMemory | undefined {
+  if (!isRecord(value)) return undefined;
+  const { congratulated, namedItemIds, boxCountsAtLastTalk } = value;
+  if (!isBoolean(congratulated) || !isUnknownArray(namedItemIds)) return undefined;
+  if (!isRecord(boxCountsAtLastTalk)) return undefined;
+  const { human, cat } = boxCountsAtLastTalk;
+  if (!isNumber(human) || !isNumber(cat)) return undefined;
+  return {
+    congratulated,
+    namedItemIds: namedItemIds.filter(isItemId),
+    boxCountsAtLastTalk: { human, cat },
+  };
+}
+
+/** Lenient, unlike its neighbours: a bad entry only costs a repeated congratulation. */
+function parseMordecaiDebriefCheckpoint(value: unknown): MordecaiDebriefCheckpoint | undefined {
+  if (!isRecord(value)) return undefined;
+  const parsed: MordecaiDebriefCheckpoint = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const bossType = debriefBossType(key);
+    const memory = parseDebriefMemory(entry);
+    if (bossType !== null && memory !== undefined) parsed[bossType] = memory;
+  }
+  return parsed;
 }
 
 function parseBossRoomRoom(value: unknown): BossRoomCheckpoint['rooms'][number] | undefined {
@@ -1192,6 +1225,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const townMemory = parseTownMemoryCheckpoint(value.townMemory);
   const mercenaryRoster = parseMercenaryRosterCheckpoint(value.mercenaryRoster);
   const mongoPetState = parseMongoPetStateCheckpoint(value.mongoPetState);
+  const mordecaiDebrief = parseMordecaiDebriefCheckpoint(value.mordecaiDebrief);
   const { krakarenKilled, krakarenBossRoomIdx, juicerKilled, juicerBossRoomIdx } = value;
 
   if (
@@ -1240,6 +1274,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     townMemory,
     mercenaryRoster,
     mongoPetState,
+    mordecaiDebrief,
     krakarenKilled,
     krakarenBossRoomIdx,
     juicerKilled,

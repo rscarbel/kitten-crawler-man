@@ -172,6 +172,12 @@ const STATUS_ICON_BORDER_WIDTH = 1.5;
 // Pulse constants
 const PULSE_AMPLITUDE = 0.5;
 const PULSE_BASE = 0.5;
+/**
+ * Widest the desktop banner's border ever gets while flagged — the growth
+ * shift is solved against this rather than the live pulsing width so the
+ * banner doesn't jitter sideways with the pulse.
+ */
+const REMINDER_BORDER_LINE_WIDTH_MAX = REMINDER_BORDER_LINE_WIDTH + PULSE_BASE + PULSE_AMPLITUDE;
 
 /**
  * Draws the top-left HUD panel: active-character label, control hints,
@@ -403,13 +409,16 @@ export function renderMobileSkillBadge(
   );
   const badgeRect: HudRect = { x: BADGE_X, y: topY, w: badgeMaxW, h: BADGE_H };
 
-  // Same grow/glow/flash treatment as the desktop notification (see
-  // renderNotification and reminderGrowthCenter).
+  // Same grow/glow/flash treatment as the desktop notification, except the
+  // mobile badge lands on the viewport's center rather than shifting only as
+  // far as it must to stay on screen.
   const scale = reminderActive ? REMINDER_SIZE_SCALE : 1;
+  const badgeOwnCenterX = badgeRect.x + badgeRect.w / 2;
+  const badgeTargetCenterX = reminderActive ? viewportWidth() / 2 : badgeOwnCenterX;
   const { pivotX, finalCenterX, finalCenterY } = reminderGrowthCenter(
     badgeRect,
     scale,
-    reminderActive,
+    badgeTargetCenterX,
   );
 
   ctx.save();
@@ -712,23 +721,38 @@ function drawReminderBox(
 
 /**
  * Transform pivot and final on-screen center for a box that, while flagged,
- * grows toward the horizontal center of the viewport instead of around its
- * own position. Both the notification banner and the mobile badge are anchored
+ * grows to land centered on `targetCenterX` instead of around its own
+ * position. Both the notification banner and the mobile badge are anchored
  * near the left edge, so growing 45% around their own center pushes the added
  * width straight off the left of the screen — this solves for the pivot that
- * lands the box's own geometry exactly on the viewport's horizontal center
- * once scaled: `pivot + scale * (own - pivot) = final`.
+ * lands the box's own geometry exactly on the target once scaled:
+ * `pivot + scale * (own - pivot) = final`.
  */
 function reminderGrowthCenter(
   drawnRect: HudRect,
   scale: number,
-  reminderActive: boolean,
+  targetCenterX: number,
 ): { pivotX: number; finalCenterX: number; finalCenterY: number } {
   const ownCenterX = drawnRect.x + drawnRect.w / 2;
   const finalCenterY = drawnRect.y + drawnRect.h / 2;
-  const finalCenterX = reminderActive ? viewportWidth() / 2 : ownCenterX;
-  const pivotX = reminderActive ? (finalCenterX - scale * ownCenterX) / (1 - scale) : ownCenterX;
+  const isGrowing = scale !== 1;
+  const finalCenterX = isGrowing ? targetCenterX : ownCenterX;
+  const pivotX = isGrowing ? (finalCenterX - scale * ownCenterX) / (1 - scale) : ownCenterX;
   return { pivotX, finalCenterX, finalCenterY };
+}
+
+/**
+ * Smallest rightward shift that keeps a scaled box — border stroke included —
+ * from clipping past the HUD's left margin. The desktop banner has room to
+ * grow in place, so it moves only as far as it must rather than jumping to the
+ * middle of the screen.
+ */
+function minimalUnclippedCenterX(drawnRect: HudRect, scale: number, lineWidth: number): number {
+  const ownCenterX = drawnRect.x + drawnRect.w / 2;
+  const scaledHalfWidth = (drawnRect.w * scale) / 2;
+  const scaledStrokeOverhang = (lineWidth * scale) / 2;
+  const leftmostUnclippedCenterX = PANEL_START_X + scaledStrokeOverhang + scaledHalfWidth;
+  return Math.max(ownCenterX, leftmostUnclippedCenterX);
 }
 
 /**
@@ -765,15 +789,16 @@ function renderNotification(
   const drawY = rect.y + bounceY;
 
   // Once flagged by SkillPointReminderSystem, everything below is drawn inside
-  // a transform that grows the whole banner toward the viewport's horizontal
-  // center (see reminderGrowthCenter) — the banner is anchored near the left
+  // a transform that grows the whole banner and nudges it right just enough
+  // to keep its left edge on screen — the banner is anchored near the left
   // edge, and growing around its own position would push the added width
   // straight off the screen.
   const scale = reminderActive ? REMINDER_SIZE_SCALE : 1;
+  const drawnRect: HudRect = { x: rect.x, y: drawY, w: rect.w, h: rect.h };
   const { pivotX, finalCenterX, finalCenterY } = reminderGrowthCenter(
-    { x: rect.x, y: drawY, w: rect.w, h: rect.h },
+    drawnRect,
     scale,
-    reminderActive,
+    minimalUnclippedCenterX(drawnRect, scale, REMINDER_BORDER_LINE_WIDTH_MAX),
   );
 
   ctx.save();
@@ -790,21 +815,13 @@ function renderNotification(
   const notifLineWidth = reminderActive
     ? REMINDER_BORDER_LINE_WIDTH + pulse
     : NOTIF_LINE_WIDTH_MIN + pulse;
-  drawReminderBox(
-    ctx,
-    { x: rect.x, y: drawY, w: rect.w, h: rect.h },
-    pulse,
-    pulseRef.value,
-    reminderActive,
-    notifLineWidth,
-    {
-      fill: NOTIF_FILL,
-      shadowBlurBase: NOTIF_SHADOW_BLUR_BASE,
-      shadowBlurPulseMult: NOTIF_SHADOW_BLUR_PULSE,
-      borderBaseAlpha: NOTIF_BORDER_BASE_ALPHA,
-      borderPulseAlpha: NOTIF_BORDER_PULSE_ALPHA,
-    },
-  );
+  drawReminderBox(ctx, drawnRect, pulse, pulseRef.value, reminderActive, notifLineWidth, {
+    fill: NOTIF_FILL,
+    shadowBlurBase: NOTIF_SHADOW_BLUR_BASE,
+    shadowBlurPulseMult: NOTIF_SHADOW_BLUR_PULSE,
+    borderBaseAlpha: NOTIF_BORDER_BASE_ALPHA,
+    borderPulseAlpha: NOTIF_BORDER_PULSE_ALPHA,
+  });
 
   // Large star icon
   ctx.save();
