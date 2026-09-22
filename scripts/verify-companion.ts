@@ -29,7 +29,7 @@ import { MELEE_POINT_BLANK_RANGE } from '../src/systems/CombatSystem';
 import { MIN_STAT_VALUE } from '../src/Player';
 import { BossRoomSystem } from '../src/systems/BossRoomSystem';
 import { MiniMapSystem } from '../src/systems/MiniMapSystem';
-import { TreasureChestSystem } from '../src/systems/TreasureChestSystem';
+import { TreasureChestSystem, isChestOpenable } from '../src/systems/TreasureChestSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../src/systems/GameSystem';
@@ -1692,6 +1692,123 @@ console.log('\nA boss chest that cannot be filled says so');
     !chests.hasLockedBossChest(BOSS_ROOM_UNDER_TEST),
     'after which nothing is left locked for that room',
   );
+}
+
+console.log('\nA won boss room holds the party until its chest is opened');
+{
+  const map = makeBossRoomMap();
+  const room = map?.bossRooms[0];
+  if (map === null || room === undefined) {
+    check(false, 'a generated dungeon offered a boss room to test with');
+  } else {
+    const party = makeParty(map);
+    const chests = new TreasureChestSystem();
+    chests.addBossChest(room.centre.x, room.centre.y, BOSS_ROOM_UNDER_TEST);
+    const bossRoom = new BossRoomSystem(
+      map,
+      new MiniMapSystem(map),
+      ['krakaren_clone'],
+      (roomIndex) => chests.hasUnopenedBossChest(roomIndex),
+    );
+    const boss = addMob(party, 'krakaren_clone', room.centre.x, room.centre.y);
+    const insideX = (room.bounds.x + 1) * TILE_SIZE;
+    const outsideX = (room.bounds.x - PARTY_STANDOFF_TILES) * TILE_SIZE;
+    const isInRoom = (entity: { x: number; y: number }): boolean =>
+      bossRoom.isEntityInRoom(entity, room.bounds);
+
+    party.human.x = insideX;
+    party.human.y = room.centre.y * TILE_SIZE;
+    party.cat.x = insideX;
+    party.cat.y = party.human.y;
+    bossRoom.update(makeContext(party, bossRoom));
+    boss.takeDamageFrom(boss.maxHp, party.human, 'missile');
+    bossRoom.update(makeContext(party, bossRoom));
+    check(bossRoom.getBossRoomStates()[0].defeated, 'the boss is down and the room is won');
+
+    party.human.x = outsideX;
+    bossRoom.update(makeContext(party, bossRoom));
+    check(isInRoom(party.human), 'stepping out before looting puts the player back inside');
+
+    party.cat.x = outsideX;
+    bossRoom.clampJoinedPlayers(party.human, party.cat);
+    check(isInRoom(party.cat), 'and the companion cannot be walked out either');
+
+    chests.receiveBossLoot(BOSS_ROOM_UNDER_TEST, { coins: 1, items: [] });
+    party.human.x = room.centre.x * TILE_SIZE;
+    party.human.y = room.centre.y * TILE_SIZE;
+    chests.tryInteract(party.human);
+    check(
+      !chests.hasUnopenedBossChest(BOSS_ROOM_UNDER_TEST),
+      'the chest opens the moment its loot lands, without waiting out the unlock',
+    );
+
+    party.human.x = outsideX;
+    party.cat.x = outsideX;
+    bossRoom.update(makeContext(party, bossRoom));
+    bossRoom.clampJoinedPlayers(party.human, party.cat);
+    check(
+      !isInRoom(party.human) && !isInRoom(party.cat),
+      'once it is looted the party walks out freely',
+    );
+  }
+}
+
+console.log('\nA wooden chest still makes the party wait for its lock to fall');
+{
+  const chests = new TreasureChestSystem();
+  chests.addWoodenChest(
+    CHEST_TILE,
+    CHEST_TILE,
+    {
+      x: CHEST_TILE,
+      y: CHEST_TILE,
+      w: 1,
+      h: 1,
+    },
+    { coins: 1, items: [] },
+  );
+  const [chest] = chests.allChests;
+  chests.triggerUnlock(0);
+  check(chest.state === 'unlocking', 'the guards are down and the lock is coming off');
+  check(!isChestOpenable(chest), 'but it cannot be opened mid-animation');
+}
+
+console.log('\nA companion that wanders into an unlooted room is not stranded there');
+{
+  const map = makeBossRoomMap();
+  const room = map?.bossRooms[0];
+  if (map === null || room === undefined) {
+    check(false, 'a generated dungeon offered a boss room to test with');
+  } else {
+    const party = makeParty(map);
+    const chests = new TreasureChestSystem();
+    chests.addBossChest(room.centre.x, room.centre.y, BOSS_ROOM_UNDER_TEST);
+    const bossRoom = new BossRoomSystem(
+      map,
+      new MiniMapSystem(map),
+      ['krakaren_clone'],
+      (roomIndex) => chests.hasUnopenedBossChest(roomIndex),
+    );
+    const boss = addMob(party, 'krakaren_clone', room.centre.x, room.centre.y);
+    party.human.x = (room.bounds.x - PARTY_STANDOFF_TILES) * TILE_SIZE;
+    party.human.y = room.centre.y * TILE_SIZE;
+    party.cat.x = party.human.x;
+    party.cat.y = party.human.y;
+
+    boss.takeDamageFrom(boss.maxHp, party.human, 'missile');
+    bossRoom.update(makeContext(party, bossRoom));
+    check(bossRoom.getBossRoomStates()[0].defeated, 'a boss sniped from the corridor still dies');
+
+    const edgeX = room.bounds.x * TILE_SIZE;
+    party.cat.x = edgeX;
+    bossRoom.update(makeContext(party, bossRoom));
+    party.cat.x = edgeX - TILE_SIZE;
+    bossRoom.clampJoinedPlayers(party.human, party.cat);
+    check(
+      !bossRoom.isEntityInRoom(party.cat, room.bounds),
+      'the cat can follow the player back out while the player never came in',
+    );
+  }
 }
 
 console.log(failures === 0 ? '\nAll companion checks passed.' : `\n${failures} check(s) FAILED.`);

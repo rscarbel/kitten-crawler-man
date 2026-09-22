@@ -8,6 +8,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { cloneLootDrop } from '../core/lootDrop';
+import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 
 export type ChestType = 'wooden' | 'silver';
 
@@ -41,6 +42,27 @@ export interface TreasureChestProgressSnapshot {
 
 export interface TreasureChestCheckpoint {
   chests: TreasureChestProgressSnapshot[];
+}
+
+/** Gold, the colour of the reward it is pointing the party at. */
+const LOOT_ARROW_COLOR = '#facc15';
+
+/**
+ * Whether the party may open this chest now.
+ *
+ * A boss chest opens the moment its loot lands, mid-animation: the party is
+ * sealed in the room until they loot it, and making them wait out the lock
+ * falling off reads as the game ignoring the key press. A wooden chest keeps
+ * its animation as the beat that says the guards are all dead.
+ */
+export function isChestOpenable(chest: TreasureChest): boolean {
+  if (chest.state === 'unlocked') return true;
+  return chest.state === 'unlocking' && chest.bossRoomIndex !== null;
+}
+
+/** A boss chest holding the loot of a defeated boss that nobody has opened yet. */
+function isAwaitingBossLoot(chest: TreasureChest): boolean {
+  return chest.bossRoomIndex !== null && isChestOpenable(chest);
 }
 
 // Sparkle animation constants
@@ -189,6 +211,11 @@ export class TreasureChestSystem {
     return this.chests.some((c) => c.bossRoomIndex === bossRoomIndex && c.state === 'locked');
   }
 
+  /** Whether this boss room still has a chest nobody has opened, whatever its lock state. */
+  hasUnopenedBossChest(bossRoomIndex: number): boolean {
+    return this.chests.some((c) => c.bossRoomIndex === bossRoomIndex && c.state !== 'opened');
+  }
+
   /**
    * Hands a boss room's silver chest its loot and starts the unlock.
    *
@@ -241,21 +268,17 @@ export class TreasureChestSystem {
 
     if (closestChest === null) return false;
 
-    if (closestChest.state === 'locked' || closestChest.state === 'unlocking') {
+    if (!isChestOpenable(closestChest)) {
       closestChest.tryLockedTimer = TRY_LOCKED_TIMER_FRAMES;
       this.onLockedAttempt?.();
       return true;
     }
 
-    if (closestChest.state === 'unlocked') {
-      closestChest.state = 'opened';
-      if (this.onChestOpened !== null) {
-        this.onChestOpened(closestChest);
-      }
-      return true;
+    closestChest.state = 'opened';
+    if (this.onChestOpened !== null) {
+      this.onChestOpened(closestChest);
     }
-
-    return false;
+    return true;
   }
 
   update(mobs: Mob[]): void {
@@ -419,7 +442,7 @@ export class TreasureChestSystem {
       ctx.restore();
     }
 
-    if (chest.state === 'unlocked') {
+    if (isChestOpenable(chest)) {
       const playerDist = Math.hypot(
         active.x - chest.tileX * TILE_SIZE,
         active.y - chest.tileY * TILE_SIZE,
@@ -433,6 +456,25 @@ export class TreasureChestSystem {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     for (const chest of this.chests) {
       this.renderSingle(ctx, camX, camY, active, chest);
+    }
+  }
+
+  /**
+   * Points at every boss chest the party has earned but not opened. Drawn over
+   * the Y-sorted entity pass rather than inside it, so a boss's corpse or the
+   * party standing south of the chest can never cover the arrow.
+   */
+  renderLootArrows(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const chest of this.chests) {
+      if (!isAwaitingBossLoot(chest)) continue;
+      drawBouncingArrowAboveEntity(
+        ctx,
+        chest.tileX * TILE_SIZE,
+        chest.tileY * TILE_SIZE,
+        camX,
+        camY,
+        LOOT_ARROW_COLOR,
+      );
     }
   }
 

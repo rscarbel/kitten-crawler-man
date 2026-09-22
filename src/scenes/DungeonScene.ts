@@ -145,7 +145,7 @@ import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
-import { TreasureChestSystem } from '../systems/TreasureChestSystem';
+import { TreasureChestSystem, isChestOpenable } from '../systems/TreasureChestSystem';
 import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Goblin } from '../creatures/Goblin';
@@ -1263,6 +1263,7 @@ export class DungeonScene extends GameplayScene {
       this.gameMap,
       this.miniMap,
       levelDef.bossRooms?.map((b) => b.type) ?? [],
+      (roomIndex) => this.treasureChests.hasUnopenedBossChest(roomIndex),
     );
     this._systemContext = {
       human: this.human,
@@ -4823,9 +4824,8 @@ export class DungeonScene extends GameplayScene {
     const { x: camX, y: camY } = this.camera();
     if (this.destruction.loot.tryCollectLootAt(mx, my, camX, camY, active, this.inactive())) return;
 
-    // Click on an unlocked chest in the world to open it
     for (const chest of this.treasureChests.allChests) {
-      if (chest.state !== 'unlocked') continue;
+      if (!isChestOpenable(chest)) continue;
       const chestScreenX = chest.tileX * TILE_SIZE - camX;
       const chestScreenY = chest.tileY * TILE_SIZE - camY;
       if (
@@ -5103,6 +5103,7 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.renderTableForeground(ctx, camX, camY, this.active());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
     this.bossRoom.renderProjectiles(ctx, camX, camY);
+    this.treasureChests.renderLootArrows(ctx, camX, camY);
     // Projectile renders after entities so it flies visually over mobs/players
     for (const spider of this.grotesqueSpiders) {
       spider.renderSpitProjectile(ctx, camX, camY, TILE_SIZE);

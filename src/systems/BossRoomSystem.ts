@@ -124,6 +124,16 @@ const UNENTERED_BOSS_REGEN_NOTICE = 'The boss is healing — this fight starts i
 const REGEN_NOTICE_RANGE_TILES = 20;
 
 /**
+ * Said the first time a player is held inside a won room, because a boss that
+ * is plainly dead and a door that will not let you through otherwise reads as
+ * the lock failing to release.
+ */
+const LOOT_SEAL_NOTICE = 'The room stays sealed until the boss chest is opened';
+
+/** Silver, like the chest the seal is waiting on — distinct from the fight's yellow and red. */
+const LOOT_SEAL_BORDER_COLOR = '#e5e7eb';
+
+/**
  * Drops every hazard a given boss laid, in place. In place because the arrays
  * are held by reference — the renderer and the companion's hazard-avoidance
  * both read them — and by owner because one system owns the hazards of every
@@ -496,6 +506,16 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   private readonly roomHasLivingBoss: boolean[];
   /** Whether the un-entered-regen lesson has already been given for each room. */
   private readonly regenNoticeGiven: boolean[];
+  /** Whether the loot-seal explanation has already been given for each room. */
+  private readonly lootSealNoticeGiven: boolean[];
+  /**
+   * Who is being held in each won-but-unlooted room. Remembered rather than
+   * re-read from position, because a body knocked or walked across the edge in
+   * a single frame is already outside by the time anything looks, and reading
+   * position alone would let that frame be the way out.
+   */
+  private readonly humanHeldForLoot: boolean[];
+  private readonly catHeldForLoot: boolean[];
 
   /** Set when a boss room is entered for the first time; cleared by DungeonScene. */
   newlyLockedBossType: string | null = null;
@@ -513,10 +533,17 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    */
   readonly newlyDefeatedRooms: Array<{ roomIndex: number; boss: Mob }> = [];
 
+  /**
+   * @param hasUnopenedChest Whether a room's boss chest has yet to be opened.
+   *   Asked of the chests themselves rather than mirrored into room state, so a
+   *   checkpoint restore of either system can never leave the seal and the
+   *   chest disagreeing.
+   */
   constructor(
     private readonly gameMap: GameMap,
     private readonly miniMap: MiniMapSystem,
     bossTypes: string[] = [],
+    private readonly hasUnopenedChest: (roomIndex: number) => boolean = () => false,
   ) {
     this.bossTypes = bossTypes;
     this.states = gameMap.bossRooms.map((br) => ({
@@ -535,6 +562,60 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     this.unenteredRegenDelay = gameMap.bossRooms.map(() => 0);
     this.roomHasLivingBoss = gameMap.bossRooms.map(() => true);
     this.regenNoticeGiven = gameMap.bossRooms.map(() => false);
+    this.lootSealNoticeGiven = gameMap.bossRooms.map(() => false);
+    this.humanHeldForLoot = gameMap.bossRooms.map(() => false);
+    this.catHeldForLoot = gameMap.bossRooms.map(() => false);
+  }
+
+  /**
+   * Whether this room has been won but its chest not yet opened. Players in it
+   * cannot leave until they loot it: walking out past the reward is never what
+   * the party meant to do, and on a gateway floor it strands the chest behind
+   * them.
+   */
+  private isSealedForLoot(roomIndex: number): boolean {
+    return this.states[roomIndex].defeated && this.hasUnopenedChest(roomIndex);
+  }
+
+  /**
+   * Holds the party inside a won room until its chest is opened.
+   *
+   * The companion is held only while the active player is in there too. The
+   * active player has to walk in to open the chest anyway, but a companion
+   * that wandered in on its own after a boss killed from the corridor would
+   * otherwise be stranded against the wall, trying to follow a leader it can
+   * never reach.
+   */
+  private holdPartyForLoot(
+    roomIndex: number,
+    human: HumanPlayer | CatPlayer,
+    cat: HumanPlayer | CatPlayer,
+  ): void {
+    const { bounds } = this.states[roomIndex];
+    const humanHeld = this.humanHeldForLoot[roomIndex] || this.isEntityInRoom(human, bounds);
+    const catHeld = this.catHeldForLoot[roomIndex] || this.isEntityInRoom(cat, bounds);
+    const activeHeld = human.isActive ? humanHeld : catHeld;
+    this.humanHeldForLoot[roomIndex] = activeHeld && humanHeld;
+    this.catHeldForLoot[roomIndex] = activeHeld && catHeld;
+    if (!activeHeld) return;
+
+    const active = human.isActive ? human : cat;
+    const activeX = active.x;
+    const activeY = active.y;
+    if (this.humanHeldForLoot[roomIndex]) this.clampToBossRoom(human, bounds);
+    if (this.catHeldForLoot[roomIndex]) this.clampToBossRoom(cat, bounds);
+
+    const activeWasPulledBack = active.x !== activeX || active.y !== activeY;
+    if (activeWasPulledBack && !this.lootSealNoticeGiven[roomIndex]) {
+      this.lootSealNoticeGiven[roomIndex] = true;
+      active.queueSystemNotice(LOOT_SEAL_NOTICE);
+    }
+  }
+
+  /** Lets go of everyone held in a room, once its chest is opened or the room restored. */
+  private releaseLootHold(roomIndex: number): void {
+    this.humanHeldForLoot[roomIndex] = false;
+    this.catHeldForLoot[roomIndex] = false;
   }
 
   getBossRoomStates(): BossRoomState[] {
@@ -565,6 +646,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   resetForCheckpoint(): void {
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
+      this.releaseLootHold(i);
       if (state.defeated) continue;
       state.locked = false;
       state.entryWindowTimer = 0;
@@ -614,6 +696,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       state.entryWindowTimer = room.entryWindowTimer;
       state.fightAborted = room.fightAborted;
     }
+    for (let index = 0; index < this.states.length; index++) this.releaseLootHold(index);
     this.enteredRooms.clear();
     for (const index of snapshot.enteredRoomIndices) this.enteredRooms.add(index);
     this.humanIsInsider = [...snapshot.humanIsInsider];
@@ -777,13 +860,15 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     // Tick defeat timers and pulse
     for (const state of this.states) {
       if (state.defeatTimer > 0) state.defeatTimer--;
-      if (state.locked || state.defeatTimer > 0) state.pulse++;
     }
 
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
+      if (state.locked || state.defeatTimer > 0 || this.isSealedForLoot(i)) state.pulse++;
       if (state.defeated) {
         this.roomHasLivingBoss[i] = false;
+        if (this.isSealedForLoot(i)) this.holdPartyForLoot(i, human, cat);
+        else this.releaseLootHold(i);
         continue;
       }
 
@@ -977,6 +1062,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         state.locked = false;
         state.defeated = true;
         state.defeatTimer = DEFEAT_TIMER_FRAMES;
+        this.humanHeldForLoot[i] = this.humanIsInsider[i];
+        this.catHeldForLoot[i] = this.catIsInsider[i];
         this.humanIsInsider[i] = false;
         this.catIsInsider[i] = false;
         this.miniMap.revealBossNeighborhood(state.bounds);
@@ -1160,9 +1247,13 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * frame than this system's own update — without it the companion can be walked
    * out of a sealed boss room and end the frame beyond it.
    */
-  clampJoinedPlayers(human: { x: number; y: number }, cat: { x: number; y: number }): void {
+  clampJoinedPlayers(human: HumanPlayer, cat: CatPlayer): void {
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
+      if (this.isSealedForLoot(i)) {
+        this.holdPartyForLoot(i, human, cat);
+        continue;
+      }
       if (!state.locked || state.defeated) continue;
       if (this.humanIsInsider[i]) this.clampToBossRoom(human, state.bounds);
       if (this.catIsInsider[i]) this.clampToBossRoom(cat, state.bounds);
@@ -1843,17 +1934,17 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   ): number | null {
     if (this.states.length === 0) return null;
 
-    // Barrier lines for locked rooms
-    for (const state of this.states) {
-      if (!state.locked) continue;
+    this.states.forEach((state, roomIndex) => {
+      const sealedForLoot = this.isSealedForLoot(roomIndex);
+      if (!state.locked && !sealedForLoot) return;
       const b = state.bounds;
       const ts = TILE_SIZE;
       ctx.save();
       const pulse =
         BORDER_PULSE_MIN + BORDER_PULSE_AMP * Math.sin(state.pulse * BORDER_PULSE_SPEED);
       ctx.globalAlpha = pulse;
-      // Yellow border while entry window is open; red once it closes.
-      ctx.strokeStyle = state.entryWindowTimer > 0 ? '#fbbf24' : '#ef4444';
+      const fightBorderColor = state.entryWindowTimer > 0 ? '#fbbf24' : '#ef4444';
+      ctx.strokeStyle = sealedForLoot ? LOOT_SEAL_BORDER_COLOR : fightBorderColor;
       ctx.lineWidth = BORDER_LINE_WIDTH;
       ctx.strokeRect(b.x * ts - camX, b.y * ts - camY, b.w * ts, b.h * ts);
       ctx.lineWidth = 2;
@@ -1874,7 +1965,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         ctx.stroke();
       }
       ctx.restore();
-    }
+    });
 
     // Boss health bar
     const active = human.isActive ? human : cat;
