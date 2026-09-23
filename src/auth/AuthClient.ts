@@ -1,6 +1,7 @@
 import type { SavedWorld } from '../core/SavedWorld';
 import type { PlayerSnapshot } from '../core/PlayerSnapshot';
 import type { SerializedAbilityState } from '../core/AbilityManager';
+import type { SerializedAchievements } from '../core/AchievementManager';
 
 /** HTTP status code for server error (fallback for API errors). */
 const HTTP_SERVER_ERROR = 500;
@@ -37,6 +38,14 @@ export interface GameProgress {
    * zero or was simply recalled hurt.
    */
   mongoPetResting?: boolean;
+  /**
+   * Each crawler's unlocked achievements, unread notices and unopened loot
+   * boxes. Absent on saves written before achievements were persisted — those
+   * resume with none. Unknown until parsed: the server returns this blob as it
+   * was stored, so it is screened by `AchievementManager.fromSerialized`.
+   */
+  humanAchievements?: SerializedAchievements;
+  catAchievements?: SerializedAchievements;
   /**
    * The floor's generation seeds and the safe room to stand back in. Absent on
    * saves that predate it, and dropped on load when the generator has changed;

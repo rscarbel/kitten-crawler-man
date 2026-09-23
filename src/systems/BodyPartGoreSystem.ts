@@ -37,6 +37,7 @@ import { EVIL_CLOWN_FIGURE } from '../sprites/art/clownFigure';
 import {
   ROCK_GOLEM_BODY_PART_KEY,
   ROCK_GOLEM_BOSS_BODY_PART_KEY,
+  ROCK_GOLEM_ALLY_BODY_PART_KEY,
   ROCK_GOLEM_GORE_PARTS,
 } from '../sprites/rockGolemSprite';
 import { DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_GORE_PARTS } from '../sprites/darkKnightSprite';
@@ -53,7 +54,11 @@ import { JUICER_BODY_PART_KEY, JUICER_GORE_PARTS } from '../sprites/juicerSprite
 import { HOARDER_FIGURE } from '../sprites/art/hoarderFigure';
 import { JUICER_FIGURE } from '../sprites/art/juicerFigure';
 import { MANTID_FIGURE, MANTIS_FIGURE } from '../sprites/art/mantidFigure';
-import { ROCK_GOLEM_BOSS_FIGURE, ROCK_GOLEM_FIGURE } from '../sprites/art/rockGolemFigure';
+import {
+  ROCK_GOLEM_ALLY_FIGURE,
+  ROCK_GOLEM_BOSS_FIGURE,
+  ROCK_GOLEM_FIGURE,
+} from '../sprites/art/rockGolemFigure';
 import {
   KRAKAREN_TENTACLE_BODY_PART_KEY,
   KRAKAREN_TENTACLE_GORE_PARTS,
@@ -161,6 +166,7 @@ const SKELETON_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
 const ROCK_GOLEM_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
   [ROCK_GOLEM_BODY_PART_KEY, { art: ROCK_GOLEM_FIGURE, parts: ROCK_GOLEM_GORE_PARTS }],
   [ROCK_GOLEM_BOSS_BODY_PART_KEY, { art: ROCK_GOLEM_BOSS_FIGURE, parts: ROCK_GOLEM_GORE_PARTS }],
+  [ROCK_GOLEM_ALLY_BODY_PART_KEY, { art: ROCK_GOLEM_ALLY_FIGURE, parts: ROCK_GOLEM_GORE_PARTS }],
 ];
 
 /**

@@ -111,6 +111,29 @@ export class Bugaboo extends Mob {
     return NO_BUGABOO_TACTICS;
   }
 
+  /**
+   * Breaking in, the body is under the floor and the only thing above it is an
+   * arm out of a hole. Left solid, a crawler standing beside the grate shoves
+   * that hidden body more than `BREACH_STAND_RANGE_TILES` off it, the breach
+   * lapses, and the whole creature pops up on the floor and walks back into the
+   * grate — every time someone stands close enough to board it.
+   */
+  override get displacesPlayers(): boolean {
+    return !this.isBreakingIn;
+  }
+
+  /** Nothing on the floor can reach a body that is under it; see `displacesPlayers`. */
+  override applySeparation(dx: number, dy: number): void {
+    if (this.isBreakingIn) return;
+    super.applySeparation(dx, dy);
+  }
+
+  /** A hireling's charge or blast wave cannot fling a body out from under the floor either. */
+  override applyKnockback(dirX: number, dirY: number, distancePx: number, frames: number): void {
+    if (this.isBreakingIn) return;
+    super.applyKnockback(dirX, dirY, distancePx, frames);
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, BUGABOO_HP, BUGABOO_SPEED);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;

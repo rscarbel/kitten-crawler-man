@@ -212,8 +212,8 @@ export class AchievementUISystem {
         if (contents.bonus && isItemId(contents.bonus.id)) {
           this.human.inventory.addItem(contents.bonus.id, contents.bonus.quantity);
         }
-        if (contents.itemReward) {
-          this.grantItemReward(target, contents.itemReward.id, contents.itemReward.quantity);
+        for (const reward of contents.itemRewards ?? []) {
+          this.grantItemReward(target, reward.id, reward.quantity);
         }
       },
       () => {
@@ -235,14 +235,14 @@ export class AchievementUISystem {
 
   /**
    * What a box holds: its shared tier/category contents, plus the granting
-   * achievement's own item reward (if any) as a separate addition so the
-   * reveal shows both the shared bonus and the achievement-specific item.
+   * achievement's own item rewards (if any) as a separate addition so the
+   * reveal shows both the shared bonus and the achievement-specific items.
    */
   private contentsFor(box: LootBox): BoxContents {
     const base = getBoxContents(box.tier, box.category);
-    const itemReward = ACHIEVEMENT_DEFS[box.fromAchievement].itemReward;
-    if (itemReward === undefined) return base;
-    return { ...base, itemReward: { id: itemReward.id, quantity: itemReward.quantity } };
+    const itemRewards = ACHIEVEMENT_DEFS[box.fromAchievement].itemRewards;
+    if (itemRewards === undefined) return base;
+    return { ...base, itemRewards: itemRewards.map((reward) => ({ ...reward })) };
   }
 
   private grantItemReward(target: HumanPlayer | CatPlayer, id: ItemId, quantity: number): void {

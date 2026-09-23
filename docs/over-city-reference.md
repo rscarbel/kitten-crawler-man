@@ -43,6 +43,61 @@ The third floor is **the Over City** — the first floor of the "Volcano" storyl
 - Carl contains the exploding crystal inside an **enchanted glass display box** and pulls it into his inventory, where it becomes the item **"Carl's Doomsday Scenario"** — a city-levelling bomb he carries for the rest of the series.
 - A secondary explosion (Remex's body) starts a ~20-minute countdown. They flee for the stairwell, **Katia** detonates pre-planted bombs, and they evacuate dozens of crawlers and thousands of NPCs down to floor 4.
 
+## The Desperado Club's cast, as the game implements it
+
+The game only reaches floor 3, so every club character gets only what they have
+intrinsically at that point in the books — species, look, personality, class and core
+fighting style. Nothing a character gains on a later floor (Bomo's Teleport to
+Stairwell, Sledge's Zerzura, anything from the Faction Wars) is in, and no line
+refers to later events.
+
+**Staff.**
+
+- **Clarabelle** works the front door: a Crocodilian bouncer, lizard-faced, level 40,
+  a non-combatant. Bored, transactional, fond of money, and immune to charm — if the
+  cat is the one at the door she says Charisma doesn't work on her. She reads the club
+  rules (no fighting, neutral ground) and hands over the pass.
+- **Rosemarie** runs the **Meat Shields** mercenary desk: an elderly, stooped, hobbling
+  female dwarf, crude and cheerful and a little dangerous. **Bernie**, a black-and-white
+  fuzzy mole with blue-heeler markings, rides her shoulder. In the books she throws coins
+  at the dancers, aiming for their eyes; her figure has the flick as its own row.
+- **Doctor Bones** stays the DJ; he is not for hire.
+- **The VIP Private Escort** is two cretin bodyguards per visit, sold separately and free
+  after heavy spending at the tables. The pair is **The Sledge and Bomo**; while either
+  of them is out on a Meat Shields contract, **Clay-ton and Very Sullen** work the escort
+  instead, so one cretin is never in two places. Clay-ton and Very Sullen are escort-only
+  and cannot be hired.
+
+**The hire roster**, cheapest first. Every hireling wears an orange Meat Shields armband
+(the desk's colour) so a hired rock golem can be told from a wild one.
+
+| Hire         | Species     | Role       | Price | Kit                                                                                                                                                                                                  |
+| ------------ | ----------- | ---------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bucket Boy   | Crocodilian | Medic      | 120   | Seeks no fights; follows close, flees anything that gets near, casts Triage (a heal of 15% of max HP) on whoever of the party, Mongo or himself is under half health, slaps only when cornered.      |
+| Gluteus Maxx | Unknown     | Brawler    | 220   | Reckless: engages from further out and ranges further, never backs off when hurt. Alternating left and right gauntlet jabs; sits on a nearly dead non-boss foe to finish it (the Glute Crush).       |
+| Splash Zone  | Otter       | Water Mage | 260   | Holds 3–5 tiles off and shoots crossbow bolts, stepping back from anything in his face; with three or more foes in front of him, rolls a wave that hurts and washes them back. Never in a safe room. |
+| Dong Quixote | Human       | Lancer     | 280   | Lance thrust with long reach; charges a foe 3–7 tiles down a clear lane, running down and knocking aside everything in it, then stands winded. Never charges through a friend.                       |
+| Tumbledown   | Rock Golem  | Heavy      | 300   | Meat Shields' non-sapient equipment rental: the rock golem's slam and stomp, and a thrown boulder at range. Grunts, never speaks.                                                                    |
+| Bomo         | Cretin      | Bodyguard  | 300   | Punches; casts a damage-absorbing Shield on whichever ally is worst hurt, Mongo included, and steps into the path of whatever is closing on a hurt owner.                                            |
+| The Sledge   | Cretin      | Bodyguard  | 350   | Punches; casts the same Shield, cat first; whoever hurts the cat becomes his target. Does the robot with her after a fight. Wears the cowboy hat, pink boa and pinback button.                       |
+
+**Damascus Steel** (an Ifrit dancer) is on Meat Shields' books but refuses crawlers: he
+is a greyed-out entry at the foot of the desk list, and Rosemarie says so.
+
+**Contract rules**, as Meat Shields sells them in the books:
+
+- One contract at a time, **paid up front**.
+- The contract runs to the **end of the floor it was signed on, or the hireling's
+  death**, whichever comes first. A hire does not follow the party to the next floor, and
+  restoring a checkpoint does not bring back a contract that has ended.
+- **No refunds**, for either ending. Rosemarie mentions the dead on the next visit and
+  reminds the player the fee stands.
+- **Dismissal only at the desk** — a hireling cannot be fired in the field.
+- A dead hireling leaves a body that fades, and **cannot be looted**.
+- Hirelings talk: each has lines for being hired, idling, engaging, kills, low health,
+  their special, the owner or the cat getting hurt, dying, the floor ending, and being
+  talked to.
+
 ## Supporting cast met on this floor
 
 | Character              | Role                                                                  |

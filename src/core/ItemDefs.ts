@@ -23,6 +23,7 @@ export type ItemId =
   | 'quest_wood_board'
   | 'magic_missile_tome'
   | 'smush_tome'
+  | 'explosives_handling_tome'
   | 'doomsday_scenario'
   | 'skill_book_cockroach'
   | 'skill_book_cat_reflexes'
@@ -78,6 +79,11 @@ export interface InventoryItem {
   abilityId?: string;
   /** Skill this item teaches when used. Set on skill books. */
   skillId?: SkillId;
+  /**
+   * Levels of the human's Explosives Handling this item adds when studied, and
+   * is used up doing it. Only the human can study one.
+   */
+  explosivesHandlingLevels?: number;
   /**
    * A potion that can be drunk straight from the bag, without first assigning it
    * to a hotbar slot. Drives the context menu's Drink entry.
@@ -429,6 +435,18 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     description:
       'Use the crushing power of your bare feet to pound enemies into the ground with explosive force. ' +
       'Only the Human can use it. Place on the hotbar and press the assigned key to activate.',
+  },
+  explosives_handling_tome: {
+    id: 'explosives_handling_tome',
+    name: 'Tome of Explosives Handling',
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'consumable',
+    explosivesHandlingLevels: 1,
+    description:
+      'A blast-singed manual with most of its fingers — sorry, pages — still attached. ' +
+      'Only the Human can study it. Adds one level to Explosives Handling.',
   },
   skill_book_cockroach: {
     id: 'skill_book_cockroach',

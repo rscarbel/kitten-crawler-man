@@ -4,7 +4,7 @@
  * the regular golem, the bounty boss, and the thrown boulder and its burst.
  *
  * One row table for both bodies on purpose: the boss, the regular golem and the
- * hired bruiser share their animations and attacks, and one table is the only
+ * hired Tumbledown share their animations and attacks, and one table is the only
  * way that stays true after the next edit. The boss is the same creature grown
  * half a tile, plus the four boulder-roll rows.
  *
@@ -84,7 +84,7 @@ function pt(x: number, y: number): Pt {
  * a thing; the boss is the same creature grown half a tile, which is as much
  * size difference as reads at a 32 px tile before he stops fitting through gaps.
  */
-const VARIANT_TILE_HEIGHT: Record<GolemVariant, number> = { regular: 2, boss: 2.5 };
+const VARIANT_TILE_HEIGHT: Record<GolemVariant, number> = { regular: 2, boss: 2.5, ally: 2 };
 
 export function variantScale(variant: GolemVariant): number {
   return VARIANT_TILE_HEIGHT[variant] / FIGURE_HEIGHT;
@@ -627,6 +627,9 @@ interface CellGeometry {
 const CELL: Record<GolemVariant, CellGeometry> = {
   regular: { frameWidth: 112, frameHeight: 112, tileX: 36, tileY: 55 },
   boss: { frameWidth: 136, frameHeight: 136, tileX: 48, tileY: 77 },
+  // Same rig and the same standing height as the regular golem — the band is
+  // the only thing that differs, so the cell is identical.
+  ally: { frameWidth: 112, frameHeight: 112, tileX: 36, tileY: 55 },
 };
 
 /**
@@ -756,11 +759,13 @@ function figureOf(variant: GolemVariant, id: string): FigureDef {
 
 export const ROCK_GOLEM_FIGURE: FigureDef = figureOf('regular', 'rock_golem');
 export const ROCK_GOLEM_BOSS_FIGURE: FigureDef = figureOf('boss', 'rock_golem_boss');
+export const ROCK_GOLEM_ALLY_FIGURE: FigureDef = figureOf('ally', 'rock_golem_ally');
 
 /** The variant a figure id names, for the gates and the review harness. */
 export const GOLEM_FIGURES: Readonly<Record<GolemVariant, FigureDef>> = {
   regular: ROCK_GOLEM_FIGURE,
   boss: ROCK_GOLEM_BOSS_FIGURE,
+  ally: ROCK_GOLEM_ALLY_FIGURE,
 };
 
 // ── The thrown boulder and its burst ─────────────────────────────────────────

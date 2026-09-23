@@ -832,8 +832,12 @@ export class GameMap {
       const tileY = tileKeyY(key);
       if (!this.isInsideGrid(tileX, tileY)) continue;
       const doorType = questExitDoorTileType(state, generatedType);
-      if (this.structure[tileY][tileX].type === doorType) continue;
-      this.structure[tileY][tileX].type = doorType;
+      const tile = this.structure[tileY][tileX];
+      if (tile.type === doorType) continue;
+      // The smashed state paints the floor it opens back onto, and a doorway
+      // inferring that floor from its neighbours would take the next room's.
+      tile.groundType = generatedType;
+      tile.type = doorType;
       this.markTileDirty(tileX, tileY);
     }
   }

@@ -10,6 +10,7 @@ import { SMUSH_DEF } from '../abilities/smush';
 import { MONGO_DEF, getMongoStats } from '../abilities/mongo';
 import { createMongoPetState } from '../core/MongoPetState';
 import { parseSavedWorld } from '../core/SavedWorld';
+import { AchievementManager } from '../core/AchievementManager';
 
 /**
  * An ability manager carrying a save's progress, or a fresh one at level 1.
@@ -58,6 +59,12 @@ export function sceneSetupFromSave(
   options.catSnap = revivedSnapshot(progress.catSnap);
   options.abilityManager = resumedAbilityManager(progress.abilityStates);
   options.mongoUnlocked = progress.mongoUnlocked ?? false;
+  if (progress.humanAchievements !== undefined) {
+    options.humanAchievements = AchievementManager.fromSerialized(progress.humanAchievements);
+  }
+  if (progress.catAchievements !== undefined) {
+    options.catAchievements = AchievementManager.fromSerialized(progress.catAchievements);
+  }
   if (progress.mongoPetHp !== undefined && Number.isFinite(progress.mongoPetHp)) {
     // Clamped against the maximum the *restored* level implies: this arrives
     // as unvalidated JSON, and a value above the maximum renders as a

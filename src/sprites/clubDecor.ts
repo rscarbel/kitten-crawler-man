@@ -131,7 +131,7 @@ const FLOOR_STAIN_COLOR: Record<ClubStationId, string> = {
   casino: 'rgba(12,44,26,0.22)',
   mercenary: 'rgba(52,18,14,0.22)',
   vip: 'rgba(46,14,26,0.24)',
-  sledge: 'rgba(0,0,0,0.15)',
+  clarabelle: 'rgba(0,0,0,0.15)',
 };
 
 /** Expand a `#rrggbb` string to an `rgba()` with the given alpha. */

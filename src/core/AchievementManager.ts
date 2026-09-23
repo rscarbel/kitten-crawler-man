@@ -1,5 +1,6 @@
 import { randomInt } from '../utils';
 import type { ItemId } from './ItemDefs';
+import { isRecord } from './guards';
 
 const BRONZE_ADVENTURER_POTION_MIN = 1;
 const BRONZE_ADVENTURER_POTION_MAX = 2;
@@ -12,6 +13,8 @@ const BRONZE_BOSS_COIN_MAX = 25;
 const BRONZE_SPICY_POTION_RANDOM_MAX = 2;
 const BRONZE_SPICY_COINS = 15;
 const RECENT_EVENTS_MAX_CAP = 20;
+/** Sticks of dynamite each explosives achievement hands over. */
+const ACHIEVEMENT_DYNAMITE_STICKS = 5;
 const EVENT_TIMESTAMP_MILLISECONDS_DIVISOR = 1000;
 
 export interface RecentEvent {
@@ -37,10 +40,22 @@ export type AchievementId =
   | 'first_hundred'
   | 'podophilia'
   | 'crowd_control'
-  | 'big_brawler';
+  | 'big_brawler'
+  | 'little_boom'
+  | 'finish_with_a_blow';
 
-export type BoxTier = 'Bronze' | 'Silver' | 'Gold' | 'Legendary' | 'Celestial';
-export type BoxCategory = 'Adventurer' | 'Boss' | 'Spicy' | 'Tutorial';
+const BOX_TIERS = ['Bronze', 'Silver', 'Gold', 'Legendary', 'Celestial'] as const;
+const BOX_CATEGORIES = ['Adventurer', 'Boss', 'Spicy', 'Tutorial'] as const;
+export type BoxTier = (typeof BOX_TIERS)[number];
+export type BoxCategory = (typeof BOX_CATEGORIES)[number];
+
+function isBoxTier(value: unknown): value is BoxTier {
+  return BOX_TIERS.some((tier) => tier === value);
+}
+
+function isBoxCategory(value: unknown): value is BoxCategory {
+  return BOX_CATEGORIES.some((category) => category === value);
+}
 export type PlayerTarget = 'human' | 'cat' | 'both';
 
 export interface LootBox {
@@ -48,6 +63,12 @@ export interface LootBox {
   tier: BoxTier;
   category: BoxCategory;
   fromAchievement: AchievementId;
+}
+
+/** One item an achievement hands over, on top of its box's shared contents. */
+export interface ItemReward {
+  readonly id: ItemId;
+  readonly quantity: number;
 }
 
 export interface AchievementDef {
@@ -59,11 +80,11 @@ export interface AchievementDef {
   /** Loot box granted on unlock; omit for achievements with no box reward. */
   lootBox?: { tier: BoxTier; category: BoxCategory };
   /**
-   * Specific item granted when this achievement's loot box is opened, on top of
+   * Specific items granted when this achievement's loot box is opened, on top of
    * that box's shared tier/category contents. Delivered to the box owner's
    * inventory rather than always to the human.
    */
-  itemReward?: { id: ItemId; quantity: number };
+  itemRewards?: ReadonlyArray<ItemReward>;
 }
 
 export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
@@ -146,7 +167,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
   club_bodyguards: {
     id: 'club_bodyguards',
     name: 'Personal Security',
-    description: 'Hire the Sledge & Bomo as your VIP escort.',
+    description: 'Hire a pair of Cretin bodyguards as your VIP escort.',
     playerType: 'both',
     lootBox: { tier: 'Bronze', category: 'Adventurer' },
   },
@@ -163,7 +184,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     description: 'Entered the dungeon without wearing any pants.',
     playerType: 'human',
     lootBox: { tier: 'Bronze', category: 'Spicy' },
-    itemReward: { id: 'nightgaunt_cloak', quantity: 1 },
+    itemRewards: [{ id: 'nightgaunt_cloak', quantity: 1 }],
   },
   first_hundred: {
     id: 'first_hundred',
@@ -171,7 +192,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     description: 'One of the first 100 crawlers to level Magic Missile to level three.',
     playerType: 'cat',
     lootBox: { tier: 'Bronze', category: 'Adventurer' },
-    itemReward: { id: 'slate_butterfly_talisman', quantity: 1 },
+    itemRewards: [{ id: 'slate_butterfly_talisman', quantity: 1 }],
   },
   podophilia: {
     id: 'podophilia',
@@ -179,7 +200,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     description: 'Killed a goblin with Smush.',
     playerType: 'human',
     lootBox: { tier: 'Bronze', category: 'Spicy' },
-    itemReward: { id: 'splatter_skunk_toe_ring', quantity: 1 },
+    itemRewards: [{ id: 'splatter_skunk_toe_ring', quantity: 1 }],
   },
   crowd_control: {
     id: 'crowd_control',
@@ -187,7 +208,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     description: 'Killed 10 enemies in a single attack.',
     playerType: 'human',
     lootBox: { tier: 'Silver', category: 'Spicy' },
-    itemReward: { id: 'shade_gnoll_kneepads', quantity: 1 },
+    itemRewards: [{ id: 'shade_gnoll_kneepads', quantity: 1 }],
   },
   big_brawler: {
     id: 'big_brawler',
@@ -195,7 +216,26 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     description: 'Killed a roided-out mutant troglodyte and his minions.',
     playerType: 'human',
     lootBox: { tier: 'Silver', category: 'Boss' },
-    itemReward: { id: 'grull_war_gauntlet', quantity: 1 },
+    itemRewards: [{ id: 'grull_war_gauntlet', quantity: 1 }],
+  },
+  little_boom: {
+    id: 'little_boom',
+    name: 'Little Boom',
+    description: 'Killed two or more enemies with a single dynamite blast.',
+    playerType: 'human',
+    lootBox: { tier: 'Bronze', category: 'Adventurer' },
+    itemRewards: [{ id: 'goblin_dynamite', quantity: ACHIEVEMENT_DYNAMITE_STICKS }],
+  },
+  finish_with_a_blow: {
+    id: 'finish_with_a_blow',
+    name: 'Finish with a blow',
+    description: 'Landed the killing blow on a boss with dynamite.',
+    playerType: 'human',
+    lootBox: { tier: 'Silver', category: 'Boss' },
+    itemRewards: [
+      { id: 'goblin_dynamite', quantity: ACHIEVEMENT_DYNAMITE_STICKS },
+      { id: 'explosives_handling_tome', quantity: 1 },
+    ],
   },
 };
 
@@ -206,11 +246,11 @@ export interface BoxContents {
   /** Optional extra item id and quantity. */
   bonus?: { id: string; quantity: number };
   /**
-   * An achievement's own item reward, granted in addition to `bonus`. Distinct
-   * from `bonus` because it goes to the box owner's inventory rather than
+   * An achievement's own item rewards, granted in addition to `bonus`. Distinct
+   * from `bonus` because they go to the box owner's inventory rather than
    * always to the human, and both can be present on the same box.
    */
-  itemReward?: { id: ItemId; quantity: number };
+  itemRewards?: ReadonlyArray<ItemReward>;
   /**
    * When present, overrides the default reward-line rendering in LootBoxOpener.
    * Use for boxes whose actual item grants are handled outside the normal path
@@ -287,6 +327,46 @@ export function getBoxContents(tier: BoxTier, category: BoxCategory): BoxContent
 
 export function isAchievementId(s: string): s is AchievementId {
   return s in ACHIEVEMENT_DEFS;
+}
+
+function isAchievementIdValue(value: unknown): value is AchievementId {
+  return typeof value === 'string' && isAchievementId(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function parseLootBox(value: unknown): LootBox | undefined {
+  if (!isRecord(value)) return undefined;
+  const { id, tier, category, fromAchievement } = value;
+  if (!isFiniteNumber(id) || !isBoxTier(tier) || !isBoxCategory(category)) return undefined;
+  if (!isAchievementIdValue(fromAchievement)) return undefined;
+  return { id, tier, category, fromAchievement };
+}
+
+function parseRecentEvent(value: unknown): RecentEvent | undefined {
+  if (!isRecord(value)) return undefined;
+  const { label, timestamp } = value;
+  if (typeof label !== 'string' || !isFiniteNumber(timestamp)) return undefined;
+  return { label, timestamp };
+}
+
+function arrayOrEmpty(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+/**
+ * One crawler's achievements as a save stores them. Notifications are kept by
+ * id rather than by def, so a reworded achievement shows its current text.
+ */
+export interface SerializedAchievements {
+  unlocked: AchievementId[];
+  pendingNotifications: AchievementId[];
+  pendingBoxes: LootBox[];
+  nextBoxId: number;
+  recentEvents: RecentEvent[];
+  menuUnseen: number;
 }
 
 export class AchievementManager {
@@ -410,6 +490,46 @@ export class AchievementManager {
     copy.recentEvents = this.recentEvents.map((e) => ({ ...e }));
     copy.menuUnseen = this.menuUnseen;
     return copy;
+  }
+
+  serialize(): SerializedAchievements {
+    return {
+      unlocked: [...this.unlocked],
+      pendingNotifications: this.pendingNotifications.map((def) => def.id),
+      pendingBoxes: this.pendingBoxes.map((box) => ({ ...box })),
+      nextBoxId: this.nextBoxId,
+      recentEvents: this.recentEvents.map((event) => ({ ...event })),
+      menuUnseen: this.menuUnseen,
+    };
+  }
+
+  /**
+   * A manager carrying what {@link serialize} wrote, or a fresh one when the
+   * save has none. The input is unvalidated JSON from storage or the server, so
+   * every entry is re-screened: one naming an achievement this build no longer
+   * has is dropped rather than failing the whole restore.
+   */
+  static fromSerialized(value: unknown): AchievementManager {
+    const manager = new AchievementManager();
+    if (!isRecord(value)) return manager;
+    manager.unlocked = new Set(arrayOrEmpty(value.unlocked).filter(isAchievementIdValue));
+    const notifications = arrayOrEmpty(value.pendingNotifications).filter(isAchievementIdValue);
+    manager.pendingNotifications.push(...notifications.map((id) => ACHIEVEMENT_DEFS[id]));
+    const boxes = arrayOrEmpty(value.pendingBoxes)
+      .map(parseLootBox)
+      .filter((box) => box !== undefined);
+    manager.pendingBoxes.push(...boxes);
+    // Kept above every restored box id, so a box granted after the load can
+    // never share an id with one still waiting to be opened.
+    const highestBoxId = Math.max(0, ...boxes.map((box) => box.id));
+    const savedNextBoxId = isFiniteNumber(value.nextBoxId) ? value.nextBoxId : 1;
+    manager.nextBoxId = Math.max(savedNextBoxId, highestBoxId + 1);
+    manager.recentEvents = arrayOrEmpty(value.recentEvents)
+      .map(parseRecentEvent)
+      .filter((event) => event !== undefined)
+      .slice(0, RECENT_EVENTS_MAX_CAP);
+    manager.menuUnseen = isFiniteNumber(value.menuUnseen) ? Math.max(0, value.menuUnseen) : 0;
+    return manager;
   }
 
   /**

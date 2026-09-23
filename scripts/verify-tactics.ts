@@ -869,7 +869,14 @@ function makeThornsHuman(tileX: number, tileY: number): HumanPlayer {
 }
 
 /** Files that deal damage in a hireling's name, and so must name the real striker. */
-const HIRELING_DAMAGE_FILES = ['src/creatures/Mercenary.ts', 'src/systems/RockThrowSystem.ts'];
+const HIRELING_DAMAGE_FILES = [
+  'src/creatures/mercenaries/mercenaryStrike.ts',
+  'src/creatures/mercenaries/golemKit.ts',
+  'src/creatures/mercenaries/brawlerKit.ts',
+  'src/creatures/mercenaries/lancerKit.ts',
+  'src/systems/RockThrowSystem.ts',
+  'src/systems/HirelingBoltSystem.ts',
+];
 
 function checkCreditedBlows(map: GameMap): void {
   section('Block: reflected and hireling damage is judged by whoever struck');

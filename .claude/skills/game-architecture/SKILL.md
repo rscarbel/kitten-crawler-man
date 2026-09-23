@@ -56,6 +56,10 @@ quest behind it at all — it points at the town's own furniture. See `add-quest
 
 `Player` (`src/Player.ts`, abstract: position, HP, stats, status effects, walk animation) → `HumanPlayer`, `CatPlayer`, and `Mob` (`src/creatures/Mob.ts`, abstract: aggro, A* pathfinding, LOS, health bar, loot). All enemies extend `Mob`. See the `add-creature` skill.
 
+### Companions and hirelings
+
+Mongo (`MongoSystem`) and the Meat Shields hirelings (`MercenarySystem`) are `Mob`s on the party's side, handed to hostiles through `ctx.extraTargets` and crediting their kills to their owner. A hireling is a shell (`Mercenary`) plus a kit (`src/creatures/mercenaries/`), drawn through `MERCENARY_ART` and voiced through `MERCENARY_VOICES`; its shots fly in `RockThrowSystem` and `HirelingBoltSystem`. See the `add-creature` skill.
+
 ### Carl's animation
 
 `HumanPlayer` never chooses a row itself; four modules do, and systems never draw him.

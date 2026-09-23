@@ -6,7 +6,8 @@
  * that a second copy would have drifted.
  */
 
-import { drawText } from '../ui/TextBox';
+import { drawText, measureTextBox } from '../ui/TextBox';
+import { drawBox } from '../ui/Box';
 
 const BUBBLE_PULSE_RATE = 0.12;
 const BUBBLE_ALPHA_BASE = 0.7;
@@ -172,5 +173,161 @@ export function drawSpeechBubbleWithText(
     color: BUBBLE_TEXT,
     width: boxWidth - TEXT_PADDING * 2,
     lineHeight: TEXT_LINE_HEIGHT,
+  });
+}
+
+/** How long a timed line stays up, in frames, unless the speaker asks for longer. */
+export const SPEECH_DURATION_FRAMES = 150;
+/** The last stretch of a timed line fades out rather than vanishing mid-read. */
+const TIMED_FADE_FRAMES = 30;
+
+/**
+ * A line a character says over their head for a while and then drops — a
+ * crawler calling her pet, a hireling's bark. The state half of a timed
+ * bubble; {@link drawTimedSpeechBubble} is the drawing half.
+ *
+ * Frames rather than wall-clock, so a line said just before the pause menu is
+ * still up when the game resumes.
+ */
+export class TimedSpeech {
+  private text: string | null = null;
+  private italic = false;
+  private framesLeft = 0;
+  private duration = SPEECH_DURATION_FRAMES;
+
+  /**
+   * @param options.italic Set for narration — what a character does rather
+   *   than says — so it reads as a stage direction, not a line.
+   */
+  say(text: string, options?: { durationFrames?: number; italic?: boolean }): void {
+    this.text = text;
+    this.italic = options?.italic ?? false;
+    this.duration = options?.durationFrames ?? SPEECH_DURATION_FRAMES;
+    this.framesLeft = this.duration;
+  }
+
+  tick(): void {
+    if (this.framesLeft > 0) this.framesLeft--;
+    if (this.framesLeft <= 0) this.text = null;
+  }
+
+  clear(): void {
+    this.text = null;
+    this.framesLeft = 0;
+  }
+
+  /** The line on screen, or null when nothing is being said. */
+  get current(): string | null {
+    return this.framesLeft > 0 ? this.text : null;
+  }
+
+  get isItalic(): boolean {
+    return this.italic;
+  }
+
+  /** Opacity for this frame: full until the fade-out stretch at the end of the line. */
+  get alpha(): number {
+    return Math.min(1, this.framesLeft / Math.min(TIMED_FADE_FRAMES, this.duration));
+  }
+}
+
+const TIMED_FONT_SIZE = 11;
+const TIMED_LINE_HEIGHT = 14;
+/** Wide enough for a short sentence on one line, narrow enough to wrap a long one. */
+const TIMED_MAX_TEXT_WIDTH = 200;
+const TIMED_PADDING_X = 8;
+const TIMED_PADDING_Y = 4;
+/** Centres the glyphs vertically inside their line box. */
+const TIMED_GLYPH_INSET = (TIMED_LINE_HEIGHT - TIMED_FONT_SIZE) / 2;
+const TIMED_CORNER_RADIUS = 6;
+const TIMED_BG_ALPHA = 0.8;
+const TIMED_BORDER_WIDTH = 1;
+const TIMED_POINTER_HALF_WIDTH = 5;
+const TIMED_POINTER_HEIGHT = 6;
+
+export interface TimedBubbleStyle {
+  /** Border colour: tells the speakers apart when two talk at once. */
+  readonly border: string;
+  readonly text: string;
+}
+
+/** The cat's calls to Mongo: a cool blue, the colour of her own UI. */
+export const CAT_SPEECH_STYLE: TimedBubbleStyle = { border: '#60a5fa', text: '#e0f2fe' };
+
+/**
+ * Draws a {@link TimedSpeech} line in a dark rounded box with a pointer at its
+ * speaker, word-wrapped when it runs long.
+ *
+ * @param anchorX Screen-x the pointer aims at — the speaker's centre.
+ * @param headY Screen-y the pointer's tip touches — the top of the speaker's head.
+ */
+export function drawTimedSpeechBubble(
+  ctx: CanvasRenderingContext2D,
+  speech: TimedSpeech,
+  anchorX: number,
+  headY: number,
+  style: TimedBubbleStyle,
+): void {
+  const text = speech.current;
+  if (text === null) return;
+  const alpha = speech.alpha;
+  const italic = speech.isItalic;
+
+  ctx.save();
+  ctx.font = `${italic ? 'italic ' : ''}bold ${TIMED_FONT_SIZE}px monospace`;
+  const singleLineWidth = ctx.measureText(text).width;
+  ctx.restore();
+  const textWidth = Math.min(singleLineWidth, TIMED_MAX_TEXT_WIDTH);
+  const { lineCount } = measureTextBox(ctx, text, {
+    size: TIMED_FONT_SIZE,
+    bold: true,
+    italic,
+    width: textWidth,
+    lineHeight: TIMED_LINE_HEIGHT,
+  });
+
+  const boxWidth = textWidth + TIMED_PADDING_X * 2;
+  const boxHeight = lineCount * TIMED_LINE_HEIGHT + TIMED_PADDING_Y * 2;
+  const boxX = anchorX - boxWidth / 2;
+  const boxBottom = headY - TIMED_POINTER_HEIGHT;
+  const boxY = boxBottom - boxHeight;
+  const fill = `rgba(0,0,0,${TIMED_BG_ALPHA})`;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  drawBox(ctx, {
+    x: boxX,
+    y: boxY,
+    width: boxWidth,
+    height: boxHeight,
+    fill,
+    border: style.border,
+    borderWidth: TIMED_BORDER_WIDTH,
+    radius: TIMED_CORNER_RADIUS,
+    // drawBox sets its own globalAlpha, so the fade has to be handed to it.
+    alpha,
+  });
+  // The pointer is the one part with no utility for it: a triangle hanging off
+  // one edge of a box is not a box.
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(anchorX - TIMED_POINTER_HALF_WIDTH, boxBottom);
+  ctx.lineTo(anchorX, boxBottom + TIMED_POINTER_HEIGHT);
+  ctx.lineTo(anchorX + TIMED_POINTER_HALF_WIDTH, boxBottom);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  drawText(ctx, text, {
+    x: boxX + TIMED_PADDING_X,
+    y: boxY + TIMED_PADDING_Y + TIMED_GLYPH_INSET,
+    width: textWidth,
+    size: TIMED_FONT_SIZE,
+    lineHeight: TIMED_LINE_HEIGHT,
+    bold: true,
+    italic,
+    color: style.text,
+    align: 'center',
+    alpha,
   });
 }

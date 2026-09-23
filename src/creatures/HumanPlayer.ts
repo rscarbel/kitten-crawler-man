@@ -905,6 +905,15 @@ export class HumanPlayer extends Player {
   }
 
   /**
+   * The furthest a press of the attack key can reach, in pixels: a slingshot
+   * stone's full flight, whether or not one is wielded right now, since a
+   * press can swap to it as easily as it can swing.
+   */
+  attackReachPx(): number {
+    return Math.max(this.getMeleeRange(), this.tileSize * SLINGSHOT_RANGE_TILES);
+  }
+
+  /**
    * Clears mid-swing/cooldown state so a checkpoint restore doesn't resume an
    * attack frozen mid-animation from the encounter that killed the player.
    * Several of these fields are private, so `DungeonScene` can't clear them

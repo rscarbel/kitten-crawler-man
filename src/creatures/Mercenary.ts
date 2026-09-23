@@ -3,97 +3,111 @@ import type { LootDrop } from './Mob';
 import type { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
-import { drawClubNpc, type ClubNpcVariant } from '../sprites/clubNpcSprite';
-import { drawRockGolemSprite, type GolemAttack } from '../sprites/rockGolemSprite';
-import { GOLEM_ATTACK_TIMING, FRAMES_PER_SHEET_FRAME } from './RockGolem';
 import type { GolemRockThrow } from '../systems/RockThrowSystem';
+import type { HirelingShot } from '../systems/HirelingBoltSystem';
 import {
-  GOLEM_MERCENARY_TEMPLATE,
   getMercenaryTemplate,
   type MercenaryTemplateId,
   type MercenaryTemplate,
 } from '../core/mercenaryTemplates';
+import { MERCENARY_ART, type MercenaryArt } from '../sprites/mercenaryArt';
+import {
+  SPEECH_DURATION_FRAMES,
+  TimedSpeech,
+  drawTimedSpeechBubble,
+  type TimedBubbleStyle,
+} from '../sprites/speechBubble';
+import type {
+  MercenaryDrawState,
+  MercenaryKit,
+  MercenaryKitContext,
+} from './mercenaries/MercenaryKit';
+import { createMercenaryKit } from './mercenaries/mercenaryKits';
+import { MercenaryBarker } from './mercenaries/MercenaryBarker';
+import { MERCENARY_VOICES, type MercenaryBarkTrigger } from './mercenaries/mercenaryVoices';
 
 /**
- * A mercenary hired at the Desperado Club's "Meat Shields" guild — a friendly
- * `Mob` that follows the active player through the overworld and auto-attacks
- * nearby hostiles, never the players.
+ * A mercenary hired at the Desperado Club's "Meat Shields" desk — a friendly
+ * `Mob` that follows the active player and fights nearby hostiles, never the
+ * players.
  *
- * The AI follows the Mongo template (chase the nearest hostile within aggro
- * range of the owner, leash back when it strays too far). Unlike Mongo it does
- * **not** recall at low HP: a merc fights to the death, and its death clears the
- * roster (a coin sink with real stakes). Its owner is reassigned each frame by
- * `MercenarySystem` so it trails whichever character is active.
+ * This class is the shell every hire shares: following, the leash, the aggro
+ * scan, speech, death and drawing. How a hire fights lives in its kit
+ * (`src/creatures/mercenaries/`), and how it looks in its entry in
+ * `MERCENARY_ART`.
+ *
+ * It does **not** recall at low HP the way Mongo does: a hireling fights to the
+ * death, and its death ends the contract with no refund. Its owner is
+ * reassigned each frame by `MercenarySystem` so it trails whichever character
+ * is active.
  */
 
-const AGGRO_RADIUS_TILES = 12;
-const STRIKE_RANGE_TILES = 0.9;
-const ATTACK_COOLDOWN_FRAMES = 45;
-/** Length of the visible swing — short enough to finish well inside the cooldown. */
-const STRIKE_ANIM_FRAMES = 18;
-const LEASH_RADIUS_TILES = 14;
-/**
- * Follow band. The merc only sets off once the owner is `RETURN_THRESHOLD_TILES`
- * away and parks at `RETURN_STOP_TILES`, so the gap between the two is real
- * hysteresis: a tighter band had it arriving, being nudged out of range by the
- * owner's next step, and re-pathing every frame — which reads on screen as the
- * sprite vibrating against the player's shoulder.
- */
-const RETURN_THRESHOLD_TILES = 3.0;
-const RETURN_STOP_TILES = 2.2;
 const CENTER_OFFSET = 0.5;
 const FOLLOW_STOP_RANGE_RATIO = 0.7;
-const STRIKE_TRIGGER_RANGE_RATIO = 1.2;
+/**
+ * How far past the follow band's stop still counts as arrived: the path's own
+ * close-in stops a hair outside it, and a latch waiting for the exact stop
+ * would never let go.
+ */
+const FOLLOW_ARRIVAL_SLACK_PX = 1;
 const DAMAGE_FLASH_BRIGHTNESS = 'brightness(3)';
-/** The golem's fists reach a little further than a swordsman's blade. */
-const GOLEM_REACH_RATIO = 1.6;
+
+/** Below this share of its health the hireling says so. */
+const LOW_HP_BARK_FRACTION = 0.35;
+/** It must heal back past this before it will complain again. */
+const LOW_HP_REARM_FRACTION = 0.6;
+/** Quiet this long, with nothing hostile in range, before an idle line. */
+const IDLE_QUIET_FRAMES = 600;
+/** How far from a wounded ally to look for whoever did it. */
+const ATTACKER_SEARCH_TILES = 3;
+
+/** Lingers long enough to be noticed as a body before it starts to fade. */
+const CORPSE_LINGER_FRAMES = 240;
+const CORPSE_FADE_FRAMES = 90;
+
+/** Longer lines stay up longer, so a sentence can be read before it goes. */
+const SPEECH_FRAMES_PER_CHARACTER = 4;
+const MAX_SPEECH_FRAMES = 420;
+
+/** The orange of the `MEAT SHIELDS` desk, so every hireling's bubble reads as one brand. */
+const MERCENARY_SPEECH_STYLE: TimedBubbleStyle = { border: '#e06040', text: '#ffe8dc' };
+
+const NO_THROWS: readonly GolemRockThrow[] = [];
+const NO_SHOTS: readonly HirelingShot[] = [];
+
+/** Where the shell is in a hireling's life; `gone` is terminal. */
+export type MercenaryLifePhase = 'alive' | 'dying' | 'corpse' | 'gone';
 
 /**
- * The two non-golem archetypes reuse a club-NPC figure until bespoke merc art
- * lands. The bruiser no longer appears here: it *is* a rock golem, and it draws
- * from the golem sheet with the golem's own rows.
+ * The kit's view of its hireling, rebuilt from the shell's fields on every
+ * read so it is always the current frame's.
  */
-const TEMPLATE_SPRITE: Record<Exclude<MercenaryTemplateId, 'bruiser'>, ClubNpcVariant> = {
-  enforcer: 'vip',
-  berserker: 'merchant',
-};
+class ShellKitContext implements MercenaryKitContext {
+  constructor(readonly merc: Mercenary) {}
 
-/**
- * The bruiser fights with the rock golem's kit — the same slam/stomp
- * alternation and the same boulder throw, off the same shared timing table.
- *
- * Per Ryan, a hired meat shield shares the golem's animations and attacks; the
- * club's Sledge is a rock golem, so the thing you hire from behind him is one
- * too. It stays a `Mercenary` rather than becoming a `RockGolem` subclass
- * because everything that makes a merc a merc — the owner it trails, the leash,
- * the roster that dies with it — lives on this class and in `MercenarySystem`,
- * and moving that under the golem hierarchy would be a far larger change than
- * driving three animation rows from here.
- */
-const GOLEM_TEMPLATE = GOLEM_MERCENARY_TEMPLATE;
+  get owner(): Player {
+    return this.merc.owner;
+  }
 
-/** Audio tags `playMobAudioCues` switches on. */
-const MERCENARY_AUDIO_TAG = 'mercenary';
-const GOLEM_AUDIO_TAG = 'rock_golem';
+  get allMobs(): readonly Mob[] {
+    return this.merc.allMobs;
+  }
 
-/** Range at which the bruiser hurls a boulder instead of closing, in tiles. */
-const THROW_MIN_RANGE_TILES = 4;
-const THROW_MAX_RANGE_TILES = 9;
-/** Frames between the bruiser's thrown rocks. */
-const THROW_COOLDOWN_FRAMES = 240;
-/** Damage a thrown rock deals, scaled off the template's melee number. */
-const THROW_DAMAGE_RATIO = 0.7;
-/** Height and reach the boulder leaves the golem at, as fractions of a tile. */
-const HAND_OFFSET_X = 0.3;
-const HAND_OFFSET_Y = 0.25;
-/** The golem sheet is two tiles tall, so a one-tile cull margin clips its head. */
-const GOLEM_MERC_CULL_MARGIN_TILES = 2;
+  get allies(): readonly Player[] {
+    return this.merc.allies;
+  }
 
-const EMPTY_THROWS: readonly GolemRockThrow[] = [];
+  get cat(): Player {
+    return this.merc.cat;
+  }
 
-/** Null for the bruiser, which is drawn from the golem sheet instead. */
-function clubNpcVariantFor(templateId: MercenaryTemplateId): ClubNpcVariant | null {
-  return templateId === GOLEM_TEMPLATE ? null : TEMPLATE_SPRITE[templateId];
+  isInSafeRoom(entity: { readonly x: number; readonly y: number }): boolean {
+    return this.merc.safeRoomTest(entity);
+  }
+
+  bark(trigger: MercenaryBarkTrigger): void {
+    this.merc.bark(trigger);
+  }
 }
 
 export class Mercenary extends Mob {
@@ -102,52 +116,70 @@ export class Mercenary extends Mob {
   protected coinDropMax = 0;
   displayName: string;
   description: string;
-  /**
-   * Assigned per hire rather than fixed on the class: a bruiser is a rock golem
-   * and has to sound like one. Left on the swordsman's cue it plays a blade
-   * swing every time it drives two stone fists into the ground.
-   */
   override readonly audioTag: string;
+  /** A fallen hireling leaves a body that fades, so kill resolution keeps it drawn. */
+  override readonly rendersWhenDead = true;
+  /**
+   * A figure that comes apart on death, like the golem, names its rubble here;
+   * every other hireling falls over instead and leaves this null.
+   */
+  override readonly bodyPartKey: string | null;
 
   /** The player this merc currently trails — reassigned each frame to the active character. */
   owner: Player;
   /** All mobs in the scene — set each frame by MercenarySystem so the merc can pick a target. */
   allMobs: Mob[] = [];
+  /** The party's side, less this hireling — set each frame by MercenarySystem. */
+  allies: readonly Player[] = [];
+  /** The cat crawler — set each frame by MercenarySystem. */
+  cat: Player;
+  /** Whether a point is inside a safe room — injected by MercenarySystem. */
+  safeRoomTest: (entity: { readonly x: number; readonly y: number }) => boolean = () => false;
 
   readonly template: MercenaryTemplate;
-  private readonly strikeDamage: number;
-  /** Null for the bruiser, which draws from the golem sheet instead. */
-  private readonly spriteVariant: ClubNpcVariant | null;
-  private readonly isGolem: boolean;
+  readonly kit: MercenaryKit;
+  private readonly art: MercenaryArt;
+  private readonly barker: MercenaryBarker;
+  private readonly kitContext: ShellKitContext;
+  /** What the hireling is saying; drawn by `renderSpeech`. */
+  readonly speech = new TimedSpeech();
 
-  /** Golem-kit state; inert on the two archetypes that do not use it. */
-  private golemAttack: GolemAttack | null = null;
-  private golemAttackFrame = 0;
-  private golemAttackResolved = false;
-  /** Alternates the two melee attacks, exactly as `RockGolem` does. */
-  private lastMelee: GolemAttack = 'stomp';
-  private throwCooldown = 0;
-  /** Whatever the golem committed its swing to, so the impact frame can land it. */
-  private golemVictim: Mob | null = null;
+  /**
+   * Frames until the next attack may start. Shared by every kit: the shell
+   * ticks it down and kits set it when they swing.
+   */
+  attackCooldown = 0;
+  readonly strikeRangePx: number;
+  private readonly aggroRangePx: number;
+  private readonly leashPx: number;
+
+  private animPhase = 0;
+  /** The hostile being fought, for telling a fresh fight from one already joined. */
+  private engaged: Mob | null = null;
+  /**
+   * Latched when the owner gets further than the follow band's start and held
+   * until the hireling is back within its stop. Two thresholds re-read from
+   * the raw distance each frame are not a band: against an owner drifting away
+   * slowly the hireling steps, falls back inside the start, stops, and steps
+   * again, flickering its walk every few frames and parking at the start.
+   */
+  private followingOwner = false;
+  private quietFrames = 0;
+  private lowHpLatched = false;
+  /** Each ally's HP as of last frame, so a wound shows as a drop. */
+  private readonly lastHpByAlly = new Map<Player, number>();
+  private corpseFrames = 0;
+  /** Where the hireling stood last tick, for a gait paced by ground covered. */
+  private gaitSampleX: number;
+  private gaitSampleY: number;
+
   /**
    * Rocks thrown but not yet handed to `RockThrowSystem`, which drains this
    * every frame. A merc that dies mid-throw must not take the boulder with it.
    */
   private pendingThrows: GolemRockThrow[] = [];
-
-  override clearAirborneAttacks(): void {
-    this.pendingThrows = [];
-  }
-  private readonly throwMinRangePx: number;
-  private readonly throwMaxRangePx: number;
-
-  private attackCooldown = 0;
-  private animPhase = 0;
-  /** Frames left in the strike animation; drives the swing pose while it runs. */
-  private strikeAnimFrames = 0;
-  private readonly aggroRangePx: number;
-  private readonly strikeRangePx: number;
-  private readonly leashPx: number;
+  /** Bolts and waves not yet handed to `HirelingBoltSystem`, for the same reason. */
+  private pendingShots: HirelingShot[] = [];
 
   constructor(
     tileX: number,
@@ -161,33 +193,50 @@ export class Mercenary extends Mob {
     super(tileX, tileY, tileSize, template.hp, template.speed);
     this.template = template;
     this.owner = owner;
-    this.strikeDamage = template.damage;
-    this.isGolem = templateId === GOLEM_TEMPLATE;
-    this.audioTag = this.isGolem ? GOLEM_AUDIO_TAG : MERCENARY_AUDIO_TAG;
-    this.spriteVariant = clubNpcVariantFor(templateId);
-    this.throwMinRangePx = tileSize * THROW_MIN_RANGE_TILES;
-    this.throwMaxRangePx = tileSize * THROW_MAX_RANGE_TILES;
+    this.cat = owner;
+    this.kit = createMercenaryKit(template);
+    this.art = MERCENARY_ART[template.art];
+    this.bodyPartKey = this.art.goreBodyPartKey ?? null;
+    this.barker = new MercenaryBarker(MERCENARY_VOICES[template.voice]);
+    this.kitContext = new ShellKitContext(this);
+    this.audioTag = template.audioTag;
     this.displayName = name;
-    this.description = `A hired ${template.title.toLowerCase()} from the Meat Shields guild.`;
-    this.aggroRangePx = tileSize * AGGRO_RADIUS_TILES;
-    this.strikeRangePx = tileSize * STRIKE_RANGE_TILES;
-    this.leashPx = tileSize * LEASH_RADIUS_TILES;
+    this.description = `A Meat Shields ${template.role.toLowerCase()}. Contract runs to the end of the floor.`;
+    this.aggroRangePx = tileSize * this.kit.engageRadiusTiles;
+    this.strikeRangePx = tileSize * this.kit.strikeRangeTiles;
+    this.leashPx = tileSize * this.kit.leashRadiusTiles;
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
   }
 
   override get cullMarginTiles(): number {
-    return this.isGolem ? GOLEM_MERC_CULL_MARGIN_TILES : super.cullMarginTiles;
+    return this.art.cullMarginTiles ?? super.cullMarginTiles;
+  }
+
+  override clearAirborneAttacks(): void {
+    this.kit.clearAirborne();
+    this.pendingThrows = [];
+    this.pendingShots = [];
   }
 
   /**
    * Hands over every rock thrown since the last call and clears the queue.
-   * `RockThrowSystem` finds this structurally, so a bruiser's boulders fly by
-   * exactly the same path a wild golem's do.
+   * `RockThrowSystem` finds this structurally, so a golem hireling's boulders
+   * fly by exactly the same path a wild golem's do.
    */
   takePendingThrows(): readonly GolemRockThrow[] {
-    if (this.pendingThrows.length === 0) return EMPTY_THROWS;
+    if (this.pendingThrows.length === 0) return NO_THROWS;
     const throws = this.pendingThrows;
     this.pendingThrows = [];
     return throws;
+  }
+
+  /** Hands over every bolt and wave loosed since the last call; `HirelingBoltSystem` drains it. */
+  takePendingShots(): readonly HirelingShot[] {
+    if (this.pendingShots.length === 0) return NO_SHOTS;
+    const shots = this.pendingShots;
+    this.pendingShots = [];
+    return shots;
   }
 
   /** A hired ally — never hostile to the players. */
@@ -195,9 +244,140 @@ export class Mercenary extends Mob {
     return false;
   }
 
+  /** Walks with the party, so it steps around its owner on the way to a fight. */
+  override get yieldsToParty(): boolean {
+    return true;
+  }
+
   /** No loot on death — the merc is the coin sink, not a source. */
   protected override rollLootItems(): LootDrop['items'] {
     return [];
+  }
+
+  /** Line of sight to a target, through the shared per-mob cache. */
+  canSee(target: Player): boolean {
+    return this.hasLOS(target);
+  }
+
+  /**
+   * Whether nothing solid lies between two world points, for a kit that sizes
+   * up several bodies at once and cannot spend the single-target cache on each.
+   */
+  hasClearLine(fromX: number, fromY: number, toX: number, toY: number): boolean {
+    return this.map?.hasLineOfSight(fromX, fromY, toX, toY) ?? true;
+  }
+
+  /**
+   * Whether the tile under a world point is ground a step could end on: the
+   * same walkable-and-not-a-stairwell test `moveWithCollision` makes. A sight
+   * line alone cannot say this — it never tests the tile it ends in.
+   */
+  canStandAt(x: number, y: number): boolean {
+    const map = this.map;
+    if (map === null) return true;
+    const tileX = Math.floor(x / this.tileSize);
+    const tileY = Math.floor(y / this.tileSize);
+    return map.isWalkable(tileX, tileY) && !map.isStairwellTile(tileX, tileY);
+  }
+
+  /** Paths toward a point, stopping `stopPx` short of it. */
+  walkTo(x: number, y: number, stopPx: number): void {
+    this.followTargetAStar(x, y, this.speed, stopPx);
+  }
+
+  /** Steps by a raw offset, respecting walls — for kits that move off the path, like a charge. */
+  stepBy(dx: number, dy: number): void {
+    this.moveWithCollision(dx, dy);
+  }
+
+  faceToward(target: { readonly x: number; readonly y: number }): void {
+    const dx = target.x - this.x;
+    const dy = target.y - this.y;
+    if (dx === 0 && dy === 0) return;
+    const heading = normalize(dx, dy);
+    this.facingX = heading.x;
+    this.facingY = heading.y;
+  }
+
+  /** Kits call this after each blow they land, so a finishing blow gets its line. */
+  noteBlowLanded(victim: Mob): void {
+    if (!victim.isAlive) this.bark('kill');
+  }
+
+  /**
+   * Says something for `trigger` if the hireling is allowed to speak now.
+   * @returns whether anything was said or grunted.
+   */
+  bark(trigger: MercenaryBarkTrigger): boolean {
+    const utterance = this.barker.bark(trigger);
+    if (utterance === null) return false;
+    if (utterance.text !== null) {
+      const readingFrames = utterance.text.length * SPEECH_FRAMES_PER_CHARACTER;
+      this.speech.say(utterance.text, {
+        italic: utterance.italic,
+        durationFrames: Math.min(
+          MAX_SPEECH_FRAMES,
+          Math.max(SPEECH_DURATION_FRAMES, readingFrames),
+        ),
+      });
+    }
+    // The golem's audio cues ride on these two flags: `playMobAudioCues` plays
+    // the grunt for a special and the groan for a damage cue.
+    if (utterance.grunt === 'grunt') this.specialSoundPending = true;
+    if (utterance.grunt === 'frustrated') this.damageSoundPending = true;
+    this.kit.onBark?.(this.kitContext, trigger);
+    return true;
+  }
+
+  /** The player walked up and asked. */
+  talkTo(player: Player): void {
+    this.faceToward(player);
+    this.bark('talk');
+  }
+
+  /**
+   * Called by `MercenarySystem` the frame HP reaches zero. Last words, and the
+   * attack in progress is dropped.
+   *
+   * Only the kit's swing is cancelled. A bolt or boulder already released this
+   * frame is still in the outbox, and the projectile systems drain it after
+   * death interception runs, so wiping the outbox here would delete a shot the
+   * player watched leave. `clearAirborneAttacks` stays the full wipe for a
+   * rewound world.
+   */
+  beginDeath(): void {
+    this.kit.clearAirborne();
+    this.engaged = null;
+    this.isMoving = false;
+    this.corpseFrames = 0;
+    this.bark('death');
+  }
+
+  /**
+   * `isAlive` is left as plain `hp > 0`: a dying hireling is dead to every
+   * system that asks, so nothing keeps fighting it or following its orders.
+   * The death animation and fade run off their own frame count instead, and
+   * end in `gone`, which never advances further.
+   */
+  get lifePhase(): MercenaryLifePhase {
+    if (this.isAlive) return 'alive';
+    if (this.corpseFrames < this.art.deathFrames) return 'dying';
+    if (this.corpseFrames < this.corpseTotalFrames) return 'corpse';
+    return 'gone';
+  }
+
+  private get corpseTotalFrames(): number {
+    return this.art.deathFrames + CORPSE_LINGER_FRAMES + CORPSE_FADE_FRAMES;
+  }
+
+  override tickCorpse(): void {
+    if (this.corpseFrames < this.corpseTotalFrames) this.corpseFrames++;
+    this.barker.tick();
+    this.speech.tick();
+  }
+
+  override get corpseExpired(): boolean {
+    return this.lifePhase === 'gone';
   }
 
   /**
@@ -208,17 +388,112 @@ export class Mercenary extends Mob {
   updateAI(_targets: Player[]): void {
     if (!this.isAlive) return;
     this.animPhase++;
+    this.syncGaitToGroundCovered();
+    this.barker.tick();
+    this.speech.tick();
     if (this.attackCooldown > 0) this.attackCooldown--;
-    if (this.strikeAnimFrames > 0) this.strikeAnimFrames--;
-    if (this.throwCooldown > 0) this.throwCooldown--;
 
-    // A golem's wind-up owns the frame it is playing on, exactly as the wild
-    // ones do: it commits to the swing and finishes it.
-    if (this.advanceGolemAttack()) return;
+    this.think();
+    this.collectProjectiles();
+  }
 
+  /**
+   * For a figure with a measured gait, turns the walk phase by the ground
+   * covered since last tick rather than a fixed amount. Measured from position,
+   * so it also counts slides along a wall and separation shoves, and a hireling
+   * grinding into a wall with `isMoving` set does not tread the air.
+   */
+  private syncGaitToGroundCovered(): void {
+    const coveredPx = Math.hypot(this.x - this.gaitSampleX, this.y - this.gaitSampleY);
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    const gait = this.art.gait;
+    if (gait === undefined) return;
+    this.walkFrameSpeed = Math.min(
+      coveredPx * gait.radiansPerPixel(this.tileSize),
+      gait.maxRadiansPerTick,
+    );
+  }
+
+  private think(): void {
+    const ctx = this.kitContext;
+    this.reactToWounds();
+    this.checkLowHp();
+    this.kit.tick(ctx);
+    // A committed swing owns the frame it is playing on: the hireling finishes
+    // what it started before it looks for anything else.
+    if (this.kit.update(ctx)) return;
+
+    const nearest = this.nearestHostileInRange();
+    this.updateIdle(nearest !== null);
+    const target = this.kit.chooseTarget ? this.kit.chooseTarget(ctx, nearest) : nearest;
+    // A fight interrupts the walk home; afterwards the band decides afresh.
+    if (target !== null) this.followingOwner = false;
+    if (target !== null && this.engaged === null) {
+      this.bark('engage');
+      this.art.prewarmForFight?.();
+    }
+    this.engaged = target;
+
+    const distToOwner = Math.hypot(this.x - this.owner.x, this.y - this.owner.y);
+    if (target === null || distToOwner > this.leashPx) {
+      this.followOwner(distToOwner);
+      return;
+    }
+
+    const targetDist = Math.hypot(target.x - this.x, target.y - this.y);
+    this.updateLastKnown(target);
+    const approached = this.kit.approach?.(ctx, target, targetDist) ?? false;
+    if (!approached) this.closeOn(target, targetDist);
+
+    if (this.attackCooldown > 0) return;
+    if (!this.kit.canStartAttack(ctx, target, targetDist)) return;
+    this.kit.startAttack(ctx, target, targetDist);
+  }
+
+  /** Whether the hireling is walking back to its owner, latched across its follow band. */
+  get isFollowingOwner(): boolean {
+    return this.followingOwner;
+  }
+
+  private followOwner(distToOwner: number): void {
+    const band = this.kit.followBand;
+    if (this.restsAgainstParty(this.owner, this.allies)) {
+      this.followingOwner = false;
+      this.isMoving = false;
+      return;
+    }
+    const stopPx = TILE_SIZE * band.stopTiles;
+    if (distToOwner > TILE_SIZE * band.startTiles) this.followingOwner = true;
+    else if (distToOwner <= stopPx + FOLLOW_ARRIVAL_SLACK_PX) this.followingOwner = false;
+    if (this.followingOwner) {
+      this.followTargetAStar(this.owner.x, this.owner.y, this.speed, stopPx);
+    } else {
+      // Stand at ease rather than wander: `doWander` drifts back toward the
+      // merc's spawn tile, which for a bodyguard that has followed the player
+      // across the floor means constantly tugging away from them.
+      this.isMoving = false;
+    }
+  }
+
+  private closeOn(target: Mob, targetDist: number): void {
+    if (targetDist > this.strikeRangePx) {
+      this.followTargetAStar(
+        this.lastKnownTargetX,
+        this.lastKnownTargetY,
+        this.speed,
+        this.strikeRangePx * FOLLOW_STOP_RANGE_RATIO,
+      );
+      return;
+    }
+    this.isMoving = false;
+    this.faceToward(target);
+  }
+
+  /** The nearest living hostile within engage range of the owner, measured from the hireling. */
+  private nearestHostileInRange(): Mob | null {
     const ownerCx = this.owner.x + TILE_SIZE * CENTER_OFFSET;
     const ownerCy = this.owner.y + TILE_SIZE * CENTER_OFFSET;
-
     let nearest: Mob | null = null;
     let nearestDist = Infinity;
     for (const mob of this.allMobs) {
@@ -234,196 +509,106 @@ export class Mercenary extends Mob {
         nearest = mob;
       }
     }
-
-    const distToOwner = Math.hypot(this.x - this.owner.x, this.y - this.owner.y);
-    if (!nearest || distToOwner > this.leashPx) {
-      if (distToOwner > TILE_SIZE * RETURN_THRESHOLD_TILES) {
-        this.followTargetAStar(
-          this.owner.x,
-          this.owner.y,
-          this.speed,
-          TILE_SIZE * RETURN_STOP_TILES,
-        );
-      } else {
-        // Stand at ease rather than wander: `doWander` drifts back toward the
-        // merc's spawn tile, which for a bodyguard that has followed the player
-        // across the floor means constantly tugging away from them.
-        this.isMoving = false;
-      }
-      return;
-    }
-
-    this.updateLastKnown(nearest);
-    if (nearestDist > this.strikeRangePx) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        this.speed,
-        this.strikeRangePx * FOLLOW_STOP_RANGE_RATIO,
-      );
-    } else {
-      this.isMoving = false;
-      const dx = nearest.x - this.x;
-      const dy = nearest.y - this.y;
-      if (dx !== 0 || dy !== 0) {
-        const n = normalize(dx, dy);
-        this.facingX = n.x;
-        this.facingY = n.y;
-      }
-    }
-
-    if (this.attackCooldown > 0) return;
-
-    if (this.isGolem && this.canThrowAt(nearest, nearestDist)) {
-      // Committed before the wind-up starts, exactly as the melee branch does.
-      // Left unset the release aims at whatever direction pathfinding happened
-      // to leave the merc facing, and carries no target for the projectile
-      // system to include — so the rock could never hit anything.
-      this.golemVictim = nearest;
-      this.beginGolemAttack('throw');
-      this.throwCooldown = THROW_COOLDOWN_FRAMES;
-      return;
-    }
-    if (nearestDist > this.strikeRangePx * STRIKE_TRIGGER_RANGE_RATIO) return;
-
-    if (this.isGolem) {
-      // The golem's melee lands on the animation's own impact frame rather than
-      // instantly, so the slam a player watches is the slam that connects.
-      this.golemVictim = nearest;
-      this.beginGolemAttack(this.lastMelee === 'slam' ? 'stomp' : 'slam');
-      return;
-    }
-    nearest.takeCreditedDamage(this.strikeDamage, this.owner, 'melee', this);
-    this.attackCooldown = ATTACK_COOLDOWN_FRAMES;
-    this.strikeAnimFrames = STRIKE_ANIM_FRAMES;
-    this.attackSoundPending = true;
+    return nearest;
   }
 
-  private canThrowAt(victim: Mob, distance: number): boolean {
-    if (this.throwCooldown > 0) return false;
-    if (distance < this.throwMinRangePx || distance > this.throwMaxRangePx) return false;
-    // Without this it lobs boulders into the wall it is standing behind
-    // forever: the cooldown resets, the rock shatters on the same face, and the
-    // merc never closes. `Mob.hasLOS` is the shared cached check the wild golem
-    // uses, so the two ends of the same attack agree on what "can see" means.
-    return this.hasLOS(victim);
+  private updateIdle(hostileInRange: boolean): void {
+    if (hostileInRange) {
+      this.quietFrames = 0;
+      return;
+    }
+    this.quietFrames++;
+    if (this.quietFrames >= IDLE_QUIET_FRAMES) this.bark('idle');
   }
 
-  private beginGolemAttack(attack: GolemAttack): void {
-    this.golemAttack = attack;
-    this.golemAttackFrame = 0;
-    this.golemAttackResolved = false;
-    this.attackCooldown = ATTACK_COOLDOWN_FRAMES;
-    this.isMoving = false;
-    if (attack !== 'throw') {
-      this.lastMelee = attack;
-      this.attackSoundPending = true;
-    }
+  private checkLowHp(): void {
+    const fraction = this.hp / this.maxHp;
+    if (fraction >= LOW_HP_REARM_FRACTION) this.lowHpLatched = false;
+    if (fraction >= LOW_HP_BARK_FRACTION || this.lowHpLatched) return;
+    this.lowHpLatched = true;
+    this.bark('low_hp');
   }
 
   /**
-   * Plays one frame of a golem attack. Returns true while one owns the frame,
-   * so the caller does no movement or targeting of its own.
+   * Compares every ally's HP with last frame's and hands each drop to the kit,
+   * with a best guess at who dealt it. The owner is always watched, even when
+   * the scene lists no allies.
    */
-  private advanceGolemAttack(): boolean {
-    const attack = this.golemAttack;
-    if (attack === null) return false;
-
-    const timing = GOLEM_ATTACK_TIMING[attack];
-    const sheetFrame = Math.floor(this.golemAttackFrame / FRAMES_PER_SHEET_FRAME);
-    this.isMoving = false;
-
-    // Keeps tracking until it commits, exactly as a wild golem does. A facing
-    // locked from frame zero of a fifty-six frame throw sends the boulder
-    // wherever pathfinding happened to leave the merc pointing.
-    const victim = this.golemVictim;
-    if (!this.golemAttackResolved && sheetFrame < timing.impactFrame && victim !== null) {
-      const heading = normalize(victim.x - this.x, victim.y - this.y);
-      this.facingX = heading.x;
-      this.facingY = heading.y;
+  private reactToWounds(): void {
+    const ctx = this.kitContext;
+    let ownerHurt = false;
+    let catHurt = false;
+    const watched = this.allies.includes(this.owner) ? this.allies : [...this.allies, this.owner];
+    for (const friend of watched) {
+      const previous = this.lastHpByAlly.get(friend);
+      this.lastHpByAlly.set(friend, friend.hp);
+      if (previous === undefined || friend.hp >= previous) continue;
+      const attacker = this.likelyAttackerOf(friend);
+      this.kit.onFriendHurt?.(ctx, friend, attacker);
+      if (friend === this.owner) {
+        ownerHurt = true;
+        this.kit.onOwnerHurt?.(ctx, attacker);
+      }
+      if (friend === this.cat) catHurt = true;
     }
-
-    if (!this.golemAttackResolved && sheetFrame >= timing.impactFrame) {
-      this.golemAttackResolved = true;
-      this.resolveGolemAttack(attack);
-    }
-
-    this.golemAttackFrame++;
-    if (this.golemAttackFrame >= timing.frames * FRAMES_PER_SHEET_FRAME) {
-      this.golemAttack = null;
-      this.golemAttackFrame = 0;
-      this.golemAttackResolved = false;
-      this.golemVictim = null;
-    }
-    return true;
-  }
-
-  private resolveGolemAttack(attack: GolemAttack): void {
-    const victim = this.golemVictim;
-    if (attack === 'throw') {
-      this.releaseRock(victim);
-      return;
-    }
-    if (victim?.isAlive !== true) return;
-    if (Math.hypot(victim.x - this.x, victim.y - this.y) > this.strikeRangePx * GOLEM_REACH_RATIO) {
-      return;
-    }
-    victim.takeCreditedDamage(this.strikeDamage, this.owner, 'melee', this);
+    if (catHurt && this.bark('cat_hurt')) return;
+    if (ownerHurt) this.bark('owner_hurt');
   }
 
   /**
-   * Queues one boulder. Damage is attributed to the owner in the same way the
-   * merc's melee is, so a kill it lands still credits the player who paid for it.
+   * The hostile most likely to have wounded `friend`: one that has noticed
+   * them, else the nearest one close by. Null for a wound nobody nearby could
+   * have dealt — a burn, a trap.
    */
-  private releaseRock(victim: Mob | null): void {
-    const facing = Math.sign(this.facingX) === 0 ? 1 : Math.sign(this.facingX);
-    const handX = this.x + TILE_SIZE * (CENTER_OFFSET + HAND_OFFSET_X * facing);
-    const handY = this.y + TILE_SIZE * HAND_OFFSET_Y;
-    const aimX = victim ? victim.x + TILE_SIZE * CENTER_OFFSET : handX + this.facingX;
-    const aimY = victim ? victim.y + TILE_SIZE * CENTER_OFFSET : handY + this.facingY;
-    const dirX = aimX - handX;
-    const dirY = aimY - handY;
-    // A zero direction normalises to NaN and produces a rock that never moves
-    // and never expires.
-    const degenerate = dirX === 0 && dirY === 0;
-    this.pendingThrows.push({
-      x: handX,
-      y: handY,
-      dirX: degenerate ? facing : dirX,
-      dirY: degenerate ? this.facingY : dirY,
-      damage: Math.max(1, Math.round(this.strikeDamage * THROW_DAMAGE_RATIO)),
-      mobType: this.mobType,
-      aimedAt: victim,
-      thrower: this,
-      // Kill credit follows the melee: whoever paid for the merc gets the XP.
-      owner: this.owner,
-    });
-    this.projectileSoundPending = true;
+  private likelyAttackerOf(friend: Player): Mob | null {
+    const searchPx = TILE_SIZE * ATTACKER_SEARCH_TILES;
+    let best: Mob | null = null;
+    let bestScore = Infinity;
+    for (const mob of this.allMobs) {
+      if (mob === this || !mob.isAlive || !mob.isHostile) continue;
+      const d = Math.hypot(mob.x - friend.x, mob.y - friend.y);
+      const noticed = mob.currentTarget === friend;
+      if (!noticed && d > searchPx) continue;
+      // A mob that has noticed the friend always outranks one that has not.
+      const score = noticed ? d : d + searchPx;
+      if (score < bestScore) {
+        bestScore = score;
+        best = mob;
+      }
+    }
+    return best;
   }
 
-  /** 0→1 through the current swing, or null when the merc isn't mid-strike. */
-  private strikeProgress(): number | null {
-    if (this.strikeAnimFrames <= 0) return null;
-    return 1 - this.strikeAnimFrames / STRIKE_ANIM_FRAMES;
+  private collectProjectiles(): void {
+    // Each kind goes to the outbox its own projectile system drains.
+    for (const projectile of this.kit.drainProjectiles()) {
+      if (projectile.kind === 'rock') this.pendingThrows.push(projectile.rock);
+      else this.pendingShots.push(projectile);
+    }
   }
 
-  private drawGolemSelf(
-    ctx: CanvasRenderingContext2D,
-    sx: number,
-    sy: number,
-    tileSize: number,
-  ): void {
-    const attack = this.golemAttack;
-    const timing = attack === null ? null : GOLEM_ATTACK_TIMING[attack];
-    drawRockGolemSprite(ctx, 'rock_golem', sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      attack,
-      attackProgress:
-        timing === null ? 0 : this.golemAttackFrame / (timing.frames * FRAMES_PER_SHEET_FRAME),
-    });
+  private drawState(): MercenaryDrawState {
+    if (this.isAlive) return this.kit.drawState(this);
+    return { row: 'death', progress: Math.min(1, this.corpseFrames / this.art.deathFrames) };
+  }
+
+  /** 1 until the fade begins, then down to 0 as the body goes. */
+  private corpseAlpha(): number {
+    const fadeStart = this.art.deathFrames + CORPSE_LINGER_FRAMES;
+    if (this.corpseFrames <= fadeStart) return 1;
+    return Math.max(0, 1 - (this.corpseFrames - fadeStart) / CORPSE_FADE_FRAMES);
+  }
+
+  /**
+   * Draws whatever the hireling is saying, and whatever its kit left on its
+   * allies. Called from the effects pass rather than from `drawSelf`, so a
+   * bubble is never hidden behind whoever stands south of the speaker.
+   */
+  renderSpeech(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    this.kit.renderEffects?.(ctx, camX, camY);
+    const anchorX = this.x - camX + this.tileSize * CENTER_OFFSET;
+    const headY = this.y - camY - this.art.headLiftTiles * this.tileSize;
+    drawTimedSpeechBubble(ctx, this.speech, anchorX, headY, MERCENARY_SPEECH_STYLE);
   }
 
   protected override drawSelf(
@@ -432,23 +617,33 @@ export class Mercenary extends Mob {
     camY: number,
     tileSize: number,
   ): void {
-    if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
+    const frame = {
+      state: this.drawState(),
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      clock: this.animPhase,
+    };
+
+    if (!this.isAlive) {
+      const alpha = this.corpseAlpha();
+      if (alpha <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      this.art.draw(ctx, sx, sy, tileSize, frame);
+      ctx.restore();
+      return;
+    }
 
     ctx.save();
     if (this.damageFlash > 0) ctx.filter = DAMAGE_FLASH_BRIGHTNESS;
-    if (this.spriteVariant === null) {
-      this.drawGolemSelf(ctx, sx, sy, tileSize);
-    } else {
-      drawClubNpc(ctx, sx, sy, tileSize, this.spriteVariant, this.animPhase, this.facingX, 0, {
-        walking: this.isMoving,
-        attack: this.strikeProgress(),
-      });
-    }
+    this.art.draw(ctx, sx, sy, tileSize, frame);
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy - (this.art.healthBarLiftTiles ?? 0) * tileSize);
   }
 }

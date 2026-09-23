@@ -47,11 +47,12 @@ const INVENTORY_NAV_HALF = 0.5;
 
 /**
  * The one action an item offers on its own, ahead of the generic entries. An
- * item has at most one: a skill book is read, a potion is drunk, everything else
- * leads with the generic list.
+ * item has at most one: a skill book is read, a tome is studied, a potion is
+ * drunk, everything else leads with the generic list.
  */
 function leadOptionFor(item: InventoryItem): string[] {
   if (item.skillId !== undefined) return ['Read'];
+  if (item.explosivesHandlingLevels !== undefined) return ['Study'];
   if (item.drinkable === true) return ['Drink'];
   return [];
 }
@@ -143,6 +144,7 @@ export class InventoryInteraction {
    * who drinks — the bag on screen is not always the active crawler's.
    */
   pendingDrinkSlot: { source: 'inv' | 'hotbar'; slotIdx: number; id: ItemId } | null = null;
+  pendingStudySlot: { source: 'inv' | 'hotbar'; slotIdx: number; id: ItemId } | null = null;
   /** Set when the user confirms a drop; DungeonScene reads and clears this. */
   pendingDropItem: { id: ItemId; quantity: number } | null = null;
   /**
@@ -304,6 +306,8 @@ export class InventoryInteraction {
             this.requestSkillBookRead(cm.item);
           } else if (action === 'Drink') {
             this.pendingDrinkSlot = { source: cm.source, slotIdx: cm.slotIdx, id: cm.item.id };
+          } else if (action === 'Study') {
+            this.pendingStudySlot = { source: cm.source, slotIdx: cm.slotIdx, id: cm.item.id };
           } else if (action === 'Equip') {
             this.pendingEquipSlot = cm.slotIdx;
             this.pendingEquipSource = cm.source;

@@ -46,6 +46,13 @@ export interface GameEvents {
    */
   multiKill: { killer: HumanPlayer; count: number };
 
+  /**
+   * One dynamite blast (a single stick or a whole chain) killed enemies.
+   * `bossKilled` is set when one of them was a boss and this blast landed the
+   * killing blow. Allies caught in the blast are not counted.
+   */
+  dynamiteKills: { killer: HumanPlayer; kills: number; bossKilled: boolean };
+
   /** A player entered a safe room (fires on each entry). */
   safeRoomEntered: Record<string, never>;
 

@@ -1,5 +1,5 @@
 /**
- * Drawing engine for the rock golem — the Sledge's kind.
+ * Drawing engine for the rock golem: a non-sapient pile of stone that walks.
  *
  * A golem only reads as *rock* when it reads as an **assembly of separate
  * stones**. Every part painted here is therefore an independently jittered
@@ -9,10 +9,12 @@
  * tapered capsule the figure turns into a grey man in a costume, which is the
  * one failure this art has to avoid.
  *
- * Two variants share the whole rig (`regular` and `boss`); the boss is the same
- * creature with a hotter core, lichen on its weathered upper surfaces and a
- * broken stone crown, so the club's bouncers and the bounty target read as one
- * species.
+ * Three variants share the whole rig: `regular`, `boss`, and `ally`. The boss
+ * is the same creature with a hotter core, lichen on its weathered upper
+ * surfaces and a broken stone crown, so the hostile golems and the bounty
+ * target read as one species. The ally is the same creature again, with a
+ * painted Meat Shields band on one bicep marking it as hired rather than
+ * hostile.
  *
  * Poses are authored in **body space** — a lateral axis, a fore/aft axis and a
  * vertical axis — and each view projects them onto the screen. That is what lets
@@ -141,10 +143,6 @@ export function rgba(hex: string, alpha: number): string {
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-/**
- * The greys are lifted from `drawStoneGolem` in `src/sprites/clubNpcSprite.ts`
- * so the bounty golem and the club's bouncers read as one species.
- */
 const STONE_BASE = '#6a6f78';
 const STONE_LIGHT = '#868c96';
 const STONE_HILITE = '#a9afb9';
@@ -172,7 +170,7 @@ const STRATA_ALPHA = 0.22;
 const SEAM_ALPHA = 0.9;
 const CONTACT_SHADOW_ALPHA = 0.34;
 
-export type GolemVariant = 'regular' | 'boss';
+export type GolemVariant = 'regular' | 'boss' | 'ally';
 
 interface VariantSpec {
   /** Colour leaking from the joint gaps and the chest core. */
@@ -188,6 +186,11 @@ interface VariantSpec {
   readonly bulk: number;
   /** Extra jitter on every silhouette: the boss is the more badly weathered one. */
   readonly weathering: number;
+  /**
+   * A painted Meat Shields band on one bicep. Hostile golems exist, so this is
+   * the cue that tells a hired one apart from them at a glance.
+   */
+  readonly armband: boolean;
 }
 
 const VARIANTS: Record<GolemVariant, VariantSpec> = {
@@ -199,6 +202,7 @@ const VARIANTS: Record<GolemVariant, VariantSpec> = {
     crown: false,
     bulk: 1,
     weathering: 1,
+    armband: false,
   },
   boss: {
     core: CORE_MOLTEN,
@@ -208,6 +212,17 @@ const VARIANTS: Record<GolemVariant, VariantSpec> = {
     crown: true,
     bulk: 1.08,
     weathering: 1.25,
+    armband: false,
+  },
+  ally: {
+    core: CORE_WARM,
+    coreHot: CORE_WARM_HOT,
+    seamGlow: 0.3,
+    lichen: false,
+    crown: false,
+    bulk: 1,
+    weathering: 1,
+    armband: true,
   },
 };
 
@@ -884,6 +899,54 @@ const TORSO_SEED = 7;
 const HEAD_SEED = 211;
 const SHOULDER_SEEDS: Record<'left' | 'right', number> = { left: 101, right: 103 };
 
+/**
+ * The `MEAT SHIELDS` zone colour in `CLUB_ZONES` (`src/core/clubLayout.ts`),
+ * repeated here rather than imported so the art module stays free of any
+ * dependency on the club's own geometry.
+ */
+const ARMBAND_COLOR = '#e06040';
+const ARMBAND_SHADOW = '#8f3020';
+const ARMBAND_SEED = 151;
+/** Which body-space side carries the band; painting both reads as shoulder pads. */
+const ARMBAND_SIDE = 1;
+/** Fraction along the shoulder-to-elbow segment the band is centred on. */
+const ARMBAND_AT = 0.52;
+const ARMBAND_HALF_SPAN = 0.075;
+const ARMBAND_HALF_WIDTH_SCALE = 1.35;
+const ARMBAND_JITTER = 0.05;
+const ARMBAND_SEAM_WIDTH = 0.018;
+
+/**
+ * A flat-painted cloth band wrapped around the bicep. It is deliberately not
+ * another stone facet — a hard flat colour against the faceted rock is what
+ * reads as gear rather than as one more boulder — and it is positioned off the
+ * solved arm chain, so it follows the arm through every pose and view for
+ * free.
+ */
+function drawArmband(ctx: Ctx, chain: ArmChain): void {
+  const dx = chain.elbow.x - chain.shoulder.x;
+  const dy = chain.elbow.y - chain.shoulder.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const ux = dx / length;
+  const uy = dy / length;
+  const cx = lerp(chain.shoulder.x, chain.elbow.x, ARMBAND_AT);
+  const cy = lerp(chain.shoulder.y, chain.elbow.y, ARMBAND_AT);
+  const from = { x: cx - ux * ARMBAND_HALF_SPAN, y: cy - uy * ARMBAND_HALF_SPAN };
+  const to = { x: cx + ux * ARMBAND_HALF_SPAN, y: cy + uy * ARMBAND_HALF_SPAN };
+  const halfW = UPPER_ARM_HALF_W * ARMBAND_HALF_WIDTH_SCALE;
+  const band = slabPolygon(ARMBAND_SEED, from, to, halfW, halfW, ARMBAND_JITTER);
+
+  traceOutline(ctx, band);
+  ctx.fillStyle = ARMBAND_COLOR;
+  ctx.fill();
+
+  ctx.strokeStyle = rgba(ARMBAND_SHADOW, 0.85);
+  ctx.lineWidth = ARMBAND_SEAM_WIDTH;
+  ctx.lineJoin = 'round';
+  traceOutline(ctx, band);
+  ctx.stroke();
+}
+
 function shortenToward(from: Pt, toward: Pt, amount: number): Pt {
   const dx = toward.x - from.x;
   const dy = toward.y - from.y;
@@ -912,6 +975,8 @@ function drawArm(
     slabPolygon(seed, chain.shoulder, upperEnd, UPPER_ARM_HALF_W * 1.15, UPPER_ARM_HALF_W, jitter),
     { ...paint, tone: -0.15 },
   );
+
+  if (d.spec.armband && side === ARMBAND_SIDE) drawArmband(ctx, chain);
 
   const foreStart = shortenToward(chain.elbow, chain.fist, JOINT_GAP);
   paintStone(

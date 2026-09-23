@@ -245,6 +245,20 @@ export function focusPreviousButton(): void {
       : (current + _focusRing.length - 1) % _focusRing.length;
 }
 
+/**
+ * Put focus on entry `index` of `contextId`'s ring, as if the keyboard had
+ * walked there. For a menu whose keypress means "go over there" rather than
+ * "press this": a list row that hands focus to the controls describing it, or
+ * a list that always takes focus back on the row already chosen.
+ *
+ * Takes effect from the next button drawn under `contextId`; an index past the
+ * end of the ring is clamped to its last entry, as a shrinking ring is.
+ */
+export function focusMenuButton(contextId: string, index: number): void {
+  _focusedContextId = contextId;
+  _focusIndex = index;
+}
+
 /** Canvas coordinates of a ring entry's centre — where a synthesized click lands. */
 function entryCenterInCanvasSpace(entry: FocusEntry): { x: number; y: number } {
   const { scale, pivotX, pivotY } = entry.space;
@@ -469,6 +483,8 @@ export interface ButtonResult {
   hovered: boolean;
   /** True when hovered AND the primary mouse button is held. */
   pressed: boolean;
+  /** True when the keyboard focus ring is on this button. */
+  focused: boolean;
   /** Returns true if canvas point (px, py) falls inside the button rect. */
   contains(px: number, py: number): boolean;
 }
@@ -606,6 +622,18 @@ export const BUTTON_PRESETS = {
   bagCell: { fill: '#1e293b', border: '#334155', borderWidth: 1, radius: 2 },
   /** A bag cell holding gear that can go on right now. */
   bagCellEligible: { fill: '#0f2318', border: '#4ade80', borderWidth: 1.5, radius: 2 },
+  /**
+   * A row on the Meat Shields hire list. The name and price are drawn over it,
+   * so like a Journal row it is mostly a hover target in the desk's brass.
+   */
+  mercRow: { fill: 'rgba(30,26,18,0.75)', border: '#5a4a30', borderWidth: 1, radius: 4 },
+  /** The hire list row whose details the pane is showing. */
+  mercRowSelected: { fill: 'rgba(200,168,64,0.2)', border: '#c8a840', borderWidth: 2, radius: 4 },
+  /**
+   * A hire list row for someone on the books who won't sign. Still a button —
+   * selecting it is how the player hears why — but sunk and colourless.
+   */
+  mercRowUnavailable: { fill: 'rgba(20,18,16,0.55)', border: '#3a342a', borderWidth: 1, radius: 4 },
   /** A bound key chip: quiet, reads as a keycap rather than an action. */
   keyChip: {
     fill: '#0f172a',
@@ -846,6 +874,7 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     height: rh,
     hovered,
     pressed,
+    focused,
     contains(px: number, py: number): boolean {
       return px >= rx && px <= rx + rw && py >= ry && py <= ry + rh;
     },

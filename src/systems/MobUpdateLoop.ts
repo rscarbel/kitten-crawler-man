@@ -236,6 +236,10 @@ export class MobUpdateLoop implements GameSystem {
     // Player-mob collision. Human-controlled: mass-weighted push so heavy bosses and light
     // cockroaches are displaced proportionally to their mass relative to the player.
     // AI-controlled follower: full push back onto the player only — mobs act as walls.
+    // A party companion (`yieldsToParty`) never moves a crawler: it takes the
+    // whole push itself. A pet or hireling pathing to a fight through its
+    // standing owner would otherwise re-overlap her every frame and carry her
+    // along the floor.
     this.players.length = 0;
     this.players.push(human, cat);
     for (const player of this.players) {
@@ -248,7 +252,13 @@ export class MobUpdateLoop implements GameSystem {
         if (distSq >= SEPARATION_RADIUS_SQ) continue;
         const dist = Math.sqrt(distSq);
         if (dist > SEPARATION_POSITION_TOLERANCE) {
-          if (player.isActive) {
+          if (mob.yieldsToParty) {
+            const full = (SEPARATION_RADIUS - dist) / dist;
+            const mobOx = mob.x;
+            const mobOy = mob.y;
+            mob.applySeparation(-dx * full, -dy * full);
+            if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
+          } else if (player.isActive) {
             const base = (SEPARATION_RADIUS - dist) / dist;
             const totalMass = PLAYER_MASS + mob.mass;
             const playerShare = mob.mass / totalMass;

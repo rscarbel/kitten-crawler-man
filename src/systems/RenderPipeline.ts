@@ -30,6 +30,7 @@ import type { DynamiteSystem } from './DynamiteSystem';
 import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { LavaBallSystem } from './LavaBallSystem';
 import type { RockThrowSystem } from './RockThrowSystem';
+import type { HirelingBoltSystem } from './HirelingBoltSystem';
 import type { SkeletonProjectileSystem } from './SkeletonProjectileSystem';
 import type { GoblinArrowSystem } from './GoblinArrowSystem';
 import type { ClownGasSystem } from './ClownGasSystem';
@@ -40,6 +41,7 @@ import type { WaterAnimationSystem } from './WaterAnimationSystem';
 import type { LootSystem } from './LootSystem';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
+import type { MercenarySystem } from './MercenarySystem';
 import type { PlayerManager } from '../core/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
@@ -184,6 +186,8 @@ export interface RenderContext {
   smushFx: SmushEffectSystem;
   lavaBalls: LavaBallSystem;
   rockThrows: RockThrowSystem;
+  /** Absent in scenes a hireling never fights in. */
+  hirelingShots?: HirelingBoltSystem;
   skeletonShots: SkeletonProjectileSystem;
   goblinArrows: GoblinArrowSystem;
   clownGas: ClownGasSystem;
@@ -201,6 +205,7 @@ export interface RenderContext {
   treasureChests: TreasureChestSystem;
   miniMap: MiniMapSystem;
   mongoSystem: MongoSystem;
+  mercenarySystem: MercenarySystem;
 
   // Pulse counters
   speechBubblePulse: number;
@@ -278,6 +283,9 @@ export class RenderPipeline {
     // The Smush's floor half: its rings and cracks are the ground Carl stamps,
     // and drawn over him they wash out the feet the stamp is read from.
     rc.smushFx.renderGround(ctx, camX, camY);
+    // A blast's scorch is floor too: drawn over the crawlers it would sit on
+    // their feet rather than under them.
+    rc.dynamite.renderGround(ctx, camX, camY);
 
     safeRoom.renderObjects(ctx, camX, camY, active);
     bossRoom.renderObjects(ctx, camX, camY);
@@ -508,6 +516,7 @@ export class RenderPipeline {
     rc.lavaBalls.render(ctx, camX, camY);
     // Same slot and the same reason for the golem's thrown boulders.
     rc.rockThrows.render(ctx, camX, camY);
+    rc.hirelingShots?.render(ctx, camX, camY);
     // Same slot and the same reason: a bolt crossing the fight must never vanish
     // behind the skeleton it is about to fly past.
     rc.skeletonShots.render(ctx, camX, camY);
@@ -520,6 +529,7 @@ export class RenderPipeline {
 
     // Cat speech bubble for Mongo summon/recall
     mongoSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);
+    rc.mercenarySystem.renderSpeech(ctx, camX, camY);
   }
 
   /**

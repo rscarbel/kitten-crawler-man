@@ -783,6 +783,7 @@ export class BuildingInteriorScene extends GameplayScene {
             this.mercenaryRoster,
             this.audio,
             this.human.hasDesperadoPassTattoo || this.cat.hasDesperadoPassTattoo,
+            this.active(),
             this.humanAchievements,
             this.catAchievements,
           )
@@ -2054,7 +2055,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.beginModalGrace();
     }
 
-    // Club: talk to a station NPC (the Sledge, bar, casino, …) with Space.
+    // Club: talk to a station NPC (Clarabelle, bar, casino, …) with Space.
     // Only consume when a station actually answered, so a press beside an
     // ambient occupant still reaches the conversation below.
     if (this.club !== null && interactPressed() && this.club.handleInteract(player)) {
@@ -2507,6 +2508,10 @@ export class BuildingInteriorScene extends GameplayScene {
   handleWheel(deltaY: number): void {
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleWheel(deltaY);
+      return;
+    }
+    if (this.followerMenu.isOpen) {
+      this.followerMenu.handleWheel(deltaY);
       return;
     }
     this.scrollableShop?.handleWheel(deltaY);
@@ -3543,6 +3548,12 @@ export class BuildingInteriorScene extends GameplayScene {
       // second hand-maintained list, so a panel added to one is never missing
       // from the other.
       if (worldHalted(this.overlayClaims)) {
+        // The follower menu's rows scroll under a drag, so the release decides
+        // whether the press was a click.
+        if (this.followerMenu.isOpen && !this.pauseMenu.isOpen) {
+          this.followerMenu.touchStart(touch.identifier, x, y);
+          continue;
+        }
         // The Equipment tab is the one halting surface a finger can drag across
         // rather than only tap, so it takes the press now and the release from
         // the drag branch in `handleTouchEnd`, which already ends with a click.
@@ -3652,6 +3663,8 @@ export class BuildingInteriorScene extends GameplayScene {
         continue;
       }
 
+      if (this.followerMenu.touchMove(touch.identifier, x, y)) continue;
+
       // Update inventory drag
       this.handleMouseMove(x, y);
       this.mobileHUD.checkInvLongPressMove(x, y);
@@ -3667,6 +3680,12 @@ export class BuildingInteriorScene extends GameplayScene {
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
+
+      const followerMenuTouch = this.followerMenu.touchEnd(touch.identifier);
+      if (followerMenuTouch !== null) {
+        if (followerMenuTouch === 'tap') this.handleClick(x, y);
+        continue;
+      }
 
       const pauseScroll = this.pauseScrollTouch;
       if (pauseScroll !== null && touch.identifier === pauseScroll.id) {

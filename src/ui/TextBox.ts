@@ -50,6 +50,8 @@ export interface TextOptions {
   size?: number;
   /** Bold weight. Default: false */
   bold?: boolean;
+  /** Italic style — for narration set apart from spoken lines. Default: false */
+  italic?: boolean;
   /** Font family. Default: 'monospace' */
   font?: string;
   /** Text fill color — any CSS color string. Default: '#e2e8f0' */
@@ -193,6 +195,15 @@ function buildFontString(size: number, bold: boolean, font: string): string {
 }
 
 /**
+ * Italic is rare enough that it is built on demand rather than given a slot in
+ * the cache above, which every other call in the game goes through.
+ */
+function styledFontString(size: number, bold: boolean, italic: boolean, font: string): string {
+  const base = buildFontString(size, bold, font);
+  return italic ? `italic ${base}` : base;
+}
+
+/**
  * Word-wrap `text` to `maxWidth` under the ctx's current font, honoring explicit
  * `\n` breaks. Set the font before calling. Useful for measuring how tall a block
  * of text will be (line count) so a container can be sized before it's drawn.
@@ -254,6 +265,7 @@ export function drawText(
     y,
     size = DEFAULT_FONT_SIZE,
     bold = false,
+    italic = false,
     font = 'monospace',
     color = '#e2e8f0',
     alpha = 1,
@@ -277,7 +289,7 @@ export function drawText(
 
   const lineHeight =
     opts.lineHeight ?? Math.max(MIN_LINE_HEIGHT, Math.ceil(size * LINE_HEIGHT_MULTIPLIER));
-  const fontStr = buildFontString(size, bold, font);
+  const fontStr = styledFontString(size, bold, italic, font);
 
   ctx.save();
   ctx.font = fontStr;
@@ -402,10 +414,14 @@ export function drawText(
 export function measureTextBox(
   ctx: CanvasRenderingContext2D,
   text: string,
-  opts: Pick<TextOptions, 'size' | 'bold' | 'font' | 'width' | 'padding' | 'lineHeight' | 'height'>,
+  opts: Pick<
+    TextOptions,
+    'size' | 'bold' | 'italic' | 'font' | 'width' | 'padding' | 'lineHeight' | 'height'
+  >,
 ): TextResult {
   const size = opts.size ?? DEFAULT_FONT_SIZE;
   const bold = opts.bold ?? false;
+  const italic = opts.italic ?? false;
   const font = opts.font ?? 'monospace';
   const lineHeight =
     opts.lineHeight ?? Math.max(MIN_LINE_HEIGHT, Math.ceil(size * LINE_HEIGHT_MULTIPLIER));
@@ -413,7 +429,7 @@ export function measureTextBox(
   const { width, height } = opts;
 
   ctx.save();
-  ctx.font = buildFontString(size, bold, font);
+  ctx.font = styledFontString(size, bold, italic, font);
 
   const innerW = width !== undefined ? width - padding * 2 : undefined;
   const lines = resolveLines(ctx, text, innerW);

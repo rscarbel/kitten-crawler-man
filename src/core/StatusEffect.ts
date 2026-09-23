@@ -24,6 +24,60 @@ export interface StatusEffect {
    * kill credit already treats null as "not killed by anyone".
    */
   applier: Player | null;
+  /**
+   * Damage this effect will still soak up before any reaches HP. Only an
+   * absorbing effect (see {@link makeShield}) carries it; `Player.takeDamage`
+   * drains it ahead of HP. Kept as flat numbers on the record rather than a
+   * nested object because snapshots copy effects with a shallow spread, and a
+   * shared pool would drain the snapshot along with the live effect.
+   */
+  absorbRemaining?: number;
+  /** What {@link absorbRemaining} started at, for the HUD's how-much-is-left bar. */
+  absorbTotal?: number;
+}
+
+/** The status every damage-absorbing ward is filed under. */
+export const SHIELD_STATUS = 'shield';
+
+/**
+ * How long a broken ward stays on the character after its pool runs dry: long
+ * enough for the dome to be seen coming apart, rather than vanishing between
+ * one frame and the next. It absorbs nothing while it lingers.
+ */
+export const ABSORB_BREAK_LINGER_TICKS = 18;
+
+/**
+ * A damage-absorbing ward: the next `absorb` points of damage from any source
+ * are taken off the ward rather than off HP, for up to `ticks` ticks. Cast
+ * again on the same body, it is replaced whole — a fresh pool and a fresh
+ * clock — rather than stacked.
+ */
+export function makeShield(absorb: number, ticks: number): StatusEffect {
+  return {
+    type: SHIELD_STATUS,
+    ticksRemaining: ticks,
+    totalTicks: ticks,
+    applier: null,
+    absorbRemaining: absorb,
+    absorbTotal: absorb,
+  };
+}
+
+/** Whether an effect still has any damage left to absorb. */
+export function isAbsorbing(effect: StatusEffect): boolean {
+  return (effect.absorbRemaining ?? 0) > 0;
+}
+
+/**
+ * How much of an effect is left, 0–1: its clock, or for a ward whichever of
+ * its clock and its pool will run out first, since either one ends it.
+ */
+export function statusRemainingFraction(effect: StatusEffect): number {
+  const timeLeft = effect.totalTicks > 0 ? effect.ticksRemaining / effect.totalTicks : 0;
+  const total = effect.absorbTotal;
+  if (total === undefined || total <= 0) return timeLeft;
+  const poolLeft = (effect.absorbRemaining ?? 0) / total;
+  return Math.max(0, Math.min(timeLeft, poolLeft));
 }
 
 /**

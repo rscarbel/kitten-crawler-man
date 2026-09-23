@@ -138,7 +138,7 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     return 'rockGolemRoll';
   }
   // The thrown boulder is a third fight again — one you dodge by moving, not by
-  // closing — and it can be attributed to a hired bruiser as well as to a golem.
+  // closing — and it can be attributed to a hired golem as well as to a wild one.
   if (attackType === ROCK_THROW_ATTACK_TYPE) return 'rockGolemRock';
 
   if (mobType === 'KrakarenTentacle') return 'krakarenTentacleStrike';

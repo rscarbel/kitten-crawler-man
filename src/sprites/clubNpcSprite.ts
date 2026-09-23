@@ -5,14 +5,20 @@
  * actually swing, step, and sway — this is what sells the dancing. Appearance
  * (skin, outfit, hair) for the crowd figures (dancers/patrons) is derived from a
  * stable per-figure `seed` so a floor full of people reads as a varied crowd
- * rather than clones. The Cretin bouncers (Sledge/Bomo) render as cracked stone
- * golems in tuxedos instead of the humanoid.
+ * rather than clones. The Cretins — the club's tuxedoed rock-monster bodyguards
+ * — are painted figures of their own (`cretinSprite.ts`) rather than the
+ * humanoid.
  */
 
+import { drawCretinSprite, type CretinVariant } from './cretinSprite';
+import { CRETIN_WALK_FRAMES } from './cretinTiming';
 import { scaleHumanoidBox } from './humanoidScale';
 
+/** The club NPCs who are Cretins, drawn from the Cretin figure. */
+type ClubCretin = Extract<CretinVariant, 'sledge' | 'bomo' | 'clayton' | 'very_sullen'>;
+
 export type ClubNpcVariant =
-  'sledge' | 'bomo' | 'dj' | 'dancer' | 'patron' | 'bartender' | 'merchant' | 'rosemarie' | 'vip';
+  ClubCretin | 'dj' | 'dancer' | 'patron' | 'bartender' | 'merchant' | 'vip';
 
 interface Appearance {
   skin: string;
@@ -27,13 +33,12 @@ interface FixedStyle extends Appearance {
 
 /** Fixed-look figures (named staff + the skeleton DJ). Crowd figures are seeded instead. */
 const FIXED_STYLES: Record<
-  Exclude<ClubNpcVariant, 'sledge' | 'bomo' | 'dancer' | 'patron'>,
+  Exclude<ClubNpcVariant, ClubCretin | 'dancer' | 'patron'>,
   FixedStyle
 > = {
   dj: { skin: '#e8e6de', outfit: '#2a1a3a', accent: '#e0407a', hair: '#e8e6de', skeleton: true },
   bartender: { skin: '#c89068', outfit: '#3a1f14', accent: '#e4d8b0', hair: '#241812' },
   merchant: { skin: '#b88858', outfit: '#4a2a5a', accent: '#e0b040', hair: '#3a2410' },
-  rosemarie: { skin: '#d8b088', outfit: '#5a2a2a', accent: '#e0a040', hair: '#6a2820' },
   vip: { skin: '#d0a070', outfit: '#1a1a3a', accent: '#c8a840', hair: '#2a1c10' },
 };
 
@@ -334,6 +339,9 @@ function danceStyleLite(t: number, lively: boolean): Pose {
   };
 }
 
+/** The club's animation clock ticks once per 60 Hz frame; figures timed in seconds divide by this. */
+export const CLUB_ANIM_FRAMES_PER_SECOND = 60;
+
 /**
  * Draws a club NPC standing at (sx, sy) sized to `s` pixels. `phase` advances
  * the animation clock; `seed` is a stable per-figure integer that fixes crowd
@@ -350,6 +358,10 @@ export function drawClubNpc(
   seed = 0,
   motion?: ClubNpcMotion,
 ): void {
+  if (isClubCretin(variant)) {
+    drawClubCretin(ctx, sx, sy, s, variant, phase, facingX, motion);
+    return;
+  }
   ctx.save();
   const box = scaleHumanoidBox(sx, sy, s);
   sx = box.sx;
@@ -360,12 +372,6 @@ export function drawClubNpc(
     ctx.translate(cx, 0);
     ctx.scale(-1, 1);
     ctx.translate(-cx, 0);
-  }
-
-  if (variant === 'sledge' || variant === 'bomo') {
-    drawStoneGolem(ctx, cx, sy, s, variant, phase, motion);
-    ctx.restore();
-    return;
   }
 
   const appearance =
@@ -472,161 +478,43 @@ function drawHumanoid(
   }
 }
 
-// ── Stone golem bouncers ──────────────────────────────────────────────────
+// ── Cretins ──────────────────────────────────────────────────────────────
 
-const GOLEM_STONE_BASE = '#6a6f78';
-const GOLEM_STONE_LIGHT = '#868c96';
-const GOLEM_STONE_DARK = '#3f434b';
-const GOLEM_CRACK = '#26282e';
-const GOLEM_EYE = '#ffc23a';
-const GOLEM_EYE_GLOW = '#ffb000';
-const GOLEM_TUX_ACCENT: Record<'sledge' | 'bomo', string> = {
-  sledge: '#c8a840',
-  bomo: '#b8863c',
-};
-const GOLEM_TUX = '#15151b';
-const GOLEM_BOB_SPEED = 0.045;
-const GOLEM_BOB_AMOUNT = 0.01;
-/** A slab of granite plods: a slower cycle and a heavier heave than a person's. */
-const GOLEM_WALK_SPEED = 0.18;
-const GOLEM_STOMP_LIFT = 0.05;
-const GOLEM_WALK_HEAVE = 0.02;
-/** How far the leading fist travels forward through a swing, as a fraction of the figure. */
-const GOLEM_SWING_REACH = 0.26;
+const CLUB_CRETINS: readonly ClubCretin[] = ['sledge', 'bomo', 'clayton', 'very_sullen'];
+
+function isClubCretin(variant: ClubNpcVariant): variant is ClubCretin {
+  return CLUB_CRETINS.some((cretin) => cretin === variant);
+}
 
 /**
- * A broad, cracked-granite bruiser in a tuxedo — angular boulder shoulders, a
- * blocky rubble body, glowing eyes, and gold tuxedo trim. Deliberately not the
- * smooth humanoid so it reads as living rock, not a grey man.
+ * Gait advance per tick for a club Cretin on the move: one sheet frame a tick.
+ * The club has no distance covered to pace the stride by, and one frame a tick
+ * is the most a row can play before it is undersampled into a vibration.
  */
-function drawStoneGolem(
+const CLUB_CRETIN_WALK_RADIANS_PER_TICK = TWO_PI / CRETIN_WALK_FRAMES;
+
+/**
+ * A club Cretin at its tile: facing the room while it stands, and seen in
+ * profile, heading the way it faces, while it walks. It is drawn at its own
+ * size — two tiles of rock in a tux — rather than through the humanoid box.
+ */
+function drawClubCretin(
   ctx: CanvasRenderingContext2D,
-  cx: number,
+  sx: number,
   sy: number,
   s: number,
-  variant: 'sledge' | 'bomo',
+  variant: ClubCretin,
   phase: number,
-  motion?: ClubNpcMotion,
+  facingX: number,
+  motion: ClubNpcMotion | undefined,
 ): void {
-  const striking = motion?.attack !== undefined && motion.attack !== null;
-  const walking = !striking && motion?.walking === true;
-  const stride = walking ? Math.sin(phase * GOLEM_WALK_SPEED) : 0;
-  const heave = walking ? Math.abs(Math.sin(phase * GOLEM_WALK_SPEED * 2)) * GOLEM_WALK_HEAVE : 0;
-  // A strike is a wind-up followed by the arm being thrown across the body.
-  const swing = striking ? Math.sin((motion.attack ?? 0) * Math.PI) : 0;
-
-  const bob = (Math.sin(phase * GOLEM_BOB_SPEED) + 1) * 0.5 * GOLEM_BOB_AMOUNT * s;
-  const bsy = sy + bob - heave * s;
-  const accent = GOLEM_TUX_ACCENT[variant];
-
-  // Blocky legs — a stomping stride raises one slab at a time.
-  ctx.fillStyle = GOLEM_STONE_DARK;
-  const leftLift = Math.max(0, stride) * GOLEM_STOMP_LIFT * s;
-  const rightLift = Math.max(0, -stride) * GOLEM_STOMP_LIFT * s;
-  ctx.fillRect(cx - s * 0.22, bsy + s * 0.78 - leftLift, s * 0.19, s * 0.2);
-  ctx.fillRect(cx + s * 0.03, bsy + s * 0.78 - rightLift, s * 0.19, s * 0.2);
-
-  const torso = new Path2D();
-  torso.moveTo(cx - s * 0.34, bsy + s * 0.4);
-  torso.lineTo(cx - s * 0.28, bsy + s * 0.34);
-  torso.lineTo(cx + s * 0.28, bsy + s * 0.34);
-  torso.lineTo(cx + s * 0.34, bsy + s * 0.42);
-  torso.lineTo(cx + s * 0.3, bsy + s * 0.82);
-  torso.lineTo(cx - s * 0.3, bsy + s * 0.82);
-  torso.closePath();
-  ctx.fillStyle = GOLEM_STONE_BASE;
-  ctx.fill(torso);
-
-  ctx.fillStyle = GOLEM_TUX;
-  ctx.beginPath();
-  ctx.moveTo(cx - s * 0.28, bsy + s * 0.36);
-  ctx.lineTo(cx, bsy + s * 0.52);
-  ctx.lineTo(cx - s * 0.26, bsy + s * 0.8);
-  ctx.lineTo(cx - s * 0.3, bsy + s * 0.5);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(cx + s * 0.28, bsy + s * 0.36);
-  ctx.lineTo(cx, bsy + s * 0.52);
-  ctx.lineTo(cx + s * 0.26, bsy + s * 0.8);
-  ctx.lineTo(cx + s * 0.3, bsy + s * 0.5);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#d8d4c8';
-  ctx.fillRect(cx - s * 0.05, bsy + s * 0.4, s * 0.1, s * 0.34);
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = Math.max(1, s * 0.015);
-  ctx.beginPath();
-  ctx.moveTo(cx - s * 0.28, bsy + s * 0.36);
-  ctx.lineTo(cx, bsy + s * 0.52);
-  ctx.lineTo(cx + s * 0.28, bsy + s * 0.36);
-  ctx.stroke();
-  ctx.fillStyle = accent;
-  ctx.beginPath();
-  ctx.moveTo(cx - s * 0.08, bsy + s * 0.4);
-  ctx.lineTo(cx, bsy + s * 0.44);
-  ctx.lineTo(cx - s * 0.08, bsy + s * 0.48);
-  ctx.moveTo(cx + s * 0.08, bsy + s * 0.4);
-  ctx.lineTo(cx, bsy + s * 0.44);
-  ctx.lineTo(cx + s * 0.08, bsy + s * 0.48);
-  ctx.fill();
-
-  ctx.fillStyle = GOLEM_STONE_LIGHT;
-  ctx.beginPath();
-  ctx.arc(cx - s * 0.34, bsy + s * 0.42, s * 0.12, 0, TWO_PI);
-  ctx.arc(cx + s * 0.34, bsy + s * 0.42, s * 0.12, 0, TWO_PI);
-  ctx.fill();
-  ctx.fillStyle = GOLEM_STONE_BASE;
-  // The right arm is the one that swings; a stride counter-swings both.
-  const armSwing = stride * GOLEM_SWING_REACH * 0.35 * s;
-  const strikeReach = swing * GOLEM_SWING_REACH * s;
-  ctx.fillRect(cx - s * 0.44 - armSwing, bsy + s * 0.44, s * 0.14, s * 0.3);
-  ctx.fillRect(
-    cx + s * 0.3 + armSwing + strikeReach,
-    bsy + s * 0.44 - strikeReach * 0.6,
-    s * 0.14,
-    s * 0.3,
-  );
-  ctx.fillStyle = GOLEM_STONE_LIGHT;
-  ctx.beginPath();
-  ctx.arc(cx - s * 0.37 - armSwing, bsy + s * 0.76, s * 0.09, 0, TWO_PI);
-  ctx.arc(
-    cx + s * 0.37 + armSwing + strikeReach,
-    bsy + s * 0.76 - strikeReach * 0.6,
-    s * 0.11,
-    0,
-    TWO_PI,
-  );
-  ctx.fill();
-
-  ctx.fillStyle = GOLEM_STONE_LIGHT;
-  ctx.beginPath();
-  ctx.moveTo(cx - s * 0.16, bsy + s * 0.24);
-  ctx.lineTo(cx - s * 0.14, bsy + s * 0.06);
-  ctx.lineTo(cx + s * 0.05, bsy + s * 0.02);
-  ctx.lineTo(cx + s * 0.17, bsy + s * 0.12);
-  ctx.lineTo(cx + s * 0.15, bsy + s * 0.26);
-  ctx.lineTo(cx - s * 0.05, bsy + s * 0.32);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = GOLEM_CRACK;
-  ctx.lineWidth = Math.max(1, s * 0.012);
-  ctx.beginPath();
-  ctx.moveTo(cx - s * 0.2, bsy + s * 0.5);
-  ctx.lineTo(cx - s * 0.08, bsy + s * 0.62);
-  ctx.moveTo(cx + s * 0.22, bsy + s * 0.56);
-  ctx.lineTo(cx + s * 0.12, bsy + s * 0.7);
-  ctx.moveTo(cx - s * 0.1, bsy + s * 0.14);
-  ctx.lineTo(cx - s * 0.02, bsy + s * 0.2);
-  ctx.stroke();
-
-  // Glowing eyes — the clearest "this is alive" tell.
-  ctx.save();
-  ctx.shadowColor = GOLEM_EYE_GLOW;
-  ctx.shadowBlur = s * 0.12;
-  ctx.fillStyle = GOLEM_EYE;
-  ctx.fillRect(cx - s * 0.1, bsy + s * 0.13, s * 0.06, s * 0.035);
-  ctx.fillRect(cx + s * 0.03, bsy + s * 0.12, s * 0.06, s * 0.035);
-  ctx.restore();
+  const walking = motion?.walking === true;
+  drawCretinSprite(ctx, sx, sy, s, {
+    variant,
+    row: walking ? 'walk' : 'idle',
+    facingX: walking ? facingX : 0,
+    facingY: walking ? 0 : 1,
+    walkPhase: phase * CLUB_CRETIN_WALK_RADIANS_PER_TICK,
+    ticks: phase,
+  });
 }

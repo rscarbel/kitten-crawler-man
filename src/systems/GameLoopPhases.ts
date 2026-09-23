@@ -402,8 +402,22 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
             audio?.play('mongo_slash');
           }
           break;
-        case 'mercenary':
+        // Hired Meat Shields. Tumbledown is a rock golem and swings under the
+        // golem's own tag below.
+        case 'merc_cretin':
+          audio?.playRandom(['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4']);
+          break;
+        case 'merc_lancer':
           audio?.play('sword_attack_1');
+          break;
+        case 'merc_water_mage':
+          audio?.play('shooting_an_arrow');
+          break;
+        case 'merc_brawler':
+          audio?.playRandom(['human_punch_1', 'human_punch_2', 'human_punch_3']);
+          break;
+        case 'merc_medic':
+          audio?.play('human_punch_weak');
           break;
         case 'mantis':
         case 'mantid':

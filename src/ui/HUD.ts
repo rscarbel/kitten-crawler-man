@@ -2,7 +2,7 @@ import { displayHp } from '../core/crawlerFormulas';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { StatusEffect } from '../core/StatusEffect';
+import { statusRemainingFraction, type StatusEffect } from '../core/StatusEffect';
 import { platform } from '../core/Platform';
 import { drawText } from './TextBox';
 import { drawBox, drawProgressBar } from './Box';
@@ -642,8 +642,9 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
     color: '#fff',
   });
 
-  // Duration bar (white strip across the bottom of the pill)
-  const ratio = effect.ticksRemaining / effect.totalTicks;
+  // A ward's strip drains with its pool as well as its clock, so a shield about
+  // to break never reads as nearly full.
+  const ratio = statusRemainingFraction(effect);
   drawProgressBar(ctx, {
     x: x + STATUS_ICON_BAR_X_INSET,
     y: y + pillH - STATUS_ICON_BAR_Y_OFFSET,

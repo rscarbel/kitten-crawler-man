@@ -23,6 +23,7 @@ import { knockbackStepPx } from '../core/knockbackEase';
 import { MobTactics } from './tactics/MobTactics';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { retreatTowardHelper } from './tactics/retreat';
+import { SEPARATION_RADIUS } from '../systems/mobSeparation';
 import type { KiteAim, TacticalMove } from './tactics/tacticalFrame';
 import {
   GUARD_KNOCKBACK_FRAMES,
@@ -98,6 +99,20 @@ const MOB_LEVEL_XP_SCALE = 0.25;
  * {@link Mob.applySeparation}.
  */
 const MAX_SEPARATION_STEP_FRACTION = 0.5;
+
+/**
+ * How far past the separation radius still counts as touching a crawler:
+ * separation leaves a resting body exactly at the radius, and it has to read as
+ * still in contact there, or it walks back in and is pushed out every frame.
+ */
+export const PARTY_CONTACT_SLACK_RATIO = 1.1;
+
+/**
+ * How close to the owner a crawler stands to count as with her rather than
+ * left behind. The following crawler trails the active one by up to about two
+ * and a half tiles on her own follow rules, so this covers that with room.
+ */
+export const PARTY_HUDDLE_TILES = 3;
 
 /** Fraction of tile for center offset used in same-tile and LOS checks. */
 const MOB_TILE_CENTER = 0.5;
@@ -628,12 +643,14 @@ export abstract class Mob extends Player {
    * "the dead are never spliced out" note in `DungeonScene`), so freeing on
    * death rather than on removal from the array is what actually bounds this.
    *
-   * Not called for every kind of removal: `MongoSystem`/`MercenarySystem`
-   * intercept their companion's lethal damage and clear `justDied` (Mongo) or
-   * splice themselves out directly (Mercenary) specifically so `resolveKills`
-   * never processes them — neither overrides `dispose()` today since neither
-   * bakes a per-instance resource, but a future one that does would need its
-   * own cleanup hook rather than assuming this path covers it.
+   * Not called for every kind of removal: `MongoSystem` and `MercenarySystem`
+   * both intercept their companion's lethal damage and clear `justDied` before
+   * `resolveKills` runs, so kill resolution never processes them as a slain
+   * enemy. A dead hireling's body then plays out through the corpse sweep and
+   * is spliced out of the mob list by `MercenarySystem` once it has faded.
+   * Neither overrides `dispose()` today since neither bakes a per-instance
+   * resource, but a future one that does would need its own cleanup hook
+   * rather than assuming this path covers it.
    */
   dispose(): void {
     // Nothing to release by default.
@@ -677,10 +694,11 @@ export abstract class Mob extends Player {
   mass = 1;
 
   /**
-   * Whether walking into this mob shoves a crawler back out of it.
+   * Whether walking into this mob shoves a crawler back out of it, or it back
+   * out of a crawler.
    *
-   * True for anything with a body. False for the prop-shaped mobs that exist
-   * only to be hit — a counterweight hung on a grate, a timber driven through a
+   * True for anything with a body. False for a pet that walks through its own
+   * party, and for the prop-shaped mobs that exist only to be hit — a counterweight hung on a grate, a timber driven through a
    * wall — because separation is not a soft nudge: it pushes the crawler a full
    * `SEPARATION_RADIUS`, which is one whole tile, and a rooted prop cannot give
    * any of that ground back (`applySeparation` caps a mob's own displacement
@@ -690,6 +708,52 @@ export abstract class Mob extends Player {
    */
   get displacesPlayers(): boolean {
     return true;
+  }
+
+  /**
+   * Whether this is a companion travelling with the party — a pet or a
+   * hireling — that steps aside for a crawler rather than shoving her. Such a
+   * mob takes the whole of a crawler collision itself (`MobUpdateLoop`, capped
+   * like any separation at half its walk step, so it still gains ground past
+   * her) and never moves either crawler. Other friendly NPCs keep ordinary
+   * collision: a rooted one blocking a doorway may be the point of it.
+   */
+  get yieldsToParty(): boolean {
+    return false;
+  }
+
+  /**
+   * Whether a companion walking back to `owner` has come up against another of
+   * the party standing with her — touching a crawler, or another companion
+   * that travels with the party (Mongo), who is nearer the owner than it is and
+   * within {@link PARTY_HUDDLE_TILES} of her. Whatever body holds the spot its
+   * follow band wants, it can get no closer than touching it. That is as close as
+   * it can get: walking on only presses it into her, where separation pushes it
+   * back at half the pace it walks in, so neither ever wins and the companion
+   * rests inside her, flickering between its walk and its idle every frame. A
+   * companion's follow counts this as arrived.
+   *
+   * Judged by where the crawler in the way stands, never by where the companion
+   * does. Its own distance is what separation keeps changing — a rule on it
+   * latches when the push lets it in and drops when the push takes it out, and
+   * the flicker comes back. And a crawler left standing where the owner walked
+   * away from — told to wait, say — is not with her: that one is walked round.
+   * Other mobs, friendly or not, are never rested against: they are not with
+   * the party, and separation between mobs moves both of them.
+   */
+  protected restsAgainstParty(owner: Player, party: readonly Player[]): boolean {
+    const toOwner = Math.hypot(owner.x - this.x, owner.y - this.y);
+    const contactPx = SEPARATION_RADIUS * PARTY_CONTACT_SLACK_RATIO;
+    const huddlePx = PARTY_HUDDLE_TILES * this.tileSize;
+    return party.some((member) => {
+      if (member === owner || member === this || !member.isAlive) return false;
+      const travelsWithTheParty =
+        member.isCrawler || (member instanceof Mob && member.yieldsToParty);
+      if (!travelsWithTheParty) return false;
+      const touching = Math.hypot(member.x - this.x, member.y - this.y) <= contactPx;
+      const memberToOwner = Math.hypot(owner.x - member.x, owner.y - member.y);
+      return touching && memberToOwner < toOwner && memberToOwner <= huddlePx;
+    });
   }
 
   /** Set by the spawner from `LevelDef.slingshotDrops`; gates the rare world-drop roll. */
@@ -1814,8 +1878,13 @@ export abstract class Mob extends Player {
     if (attacker !== null && striker !== null) {
       if (this.tryGuardBlow(amount, attacker, striker, damageType)) return;
     }
+    const scaled = this.scaleIncomingDamage(amount);
+    // Only the party's side is ever warded (a hireling's Shield on Mongo); a
+    // hostile carries none, so it skips the pass outright.
+    const unabsorbed = this.isHostile ? scaled : this.soakWithWards(scaled);
+    if (unabsorbed <= 0 && scaled > 0) return;
     const prev = this.hp;
-    this.hp = Math.max(0, this.hp - this.scaleIncomingDamage(amount));
+    this.hp = Math.max(0, this.hp - unabsorbed);
     const actual = prev - this.hp;
     if (actual > 0) {
       this.damageFlash = MOB_DAMAGE_FLASH_FRAMES;

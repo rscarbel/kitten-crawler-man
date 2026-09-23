@@ -23,11 +23,12 @@
  */
 
 import { GameMap } from '../src/map/GameMap';
+import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob } from '../src/creatures/Mob';
-import type { Mongo } from '../src/creatures/Mongo';
+import { Mongo } from '../src/creatures/Mongo';
 import {
   MONGO_BUTTON_LABELS,
   MONGO_BUTTON_TEXT_MIN_GAP,
@@ -36,6 +37,7 @@ import {
   SUMMON_BUTTON_WIDTH,
 } from '../src/systems/MongoSystem';
 import { MobUpdateLoop } from '../src/systems/MobUpdateLoop';
+import { SEPARATION_RADIUS } from '../src/systems/mobSeparation';
 import {
   createMongoPetState,
   mongoFramesUntilReady,
@@ -1296,6 +1298,162 @@ console.log('\na full recovery never takes more than thirty seconds');
       `knockout to full takes ${(frames / FRAMES_PER_SECOND).toFixed(2)}s including a ${(ranHomeFrames / FRAMES_PER_SECOND).toFixed(1)}s run home (want <= ${MAX_RECOVERY_SECONDS}s)`,
     );
   }
+}
+
+// ── He steps around the cat, never shoves her ───────────────────────────────
+//
+// The cat stands still with a hostile straight ahead and Mongo straight behind
+// her, so every step he takes toward the fight runs into her. A companion that
+// shoved her like any other mob would carry her down the room ahead of him.
+{
+  const ROOM_WIDTH_TILES = 32;
+  const ROOM_HEIGHT_TILES = 22;
+  const CAT_TILE_X = 8;
+  const ROW = 10;
+  const FOE_OFFSET_TILES = 8;
+  const WATCH_FRAMES = 600;
+  /** Rounding, not a shove. */
+  const CAT_DRIFT_TOLERANCE_TILES = 0.05;
+  const HUMAN_TILE_X = 3;
+
+  const lastX = ROOM_WIDTH_TILES - 1;
+  const lastY = ROOM_HEIGHT_TILES - 1;
+  const grid: TileContent[][] = Array.from({ length: ROOM_HEIGHT_TILES }, (_, y) =>
+    Array.from({ length: ROOM_WIDTH_TILES }, (_, x) => ({
+      tileId: `${x}#${y}`,
+      type:
+        x > 0 && y > 0 && x < lastX && y < lastY ? FloorTypeValue.tile_floor : FloorTypeValue.wall,
+    })),
+  );
+
+  /** How far the cat was carried, and whether he reached the fight past her. */
+  const catDrift = (yieldsToParty: boolean): { driftTiles: number; foeHit: boolean } => {
+    const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: grid });
+    const human = new HumanPlayer(HUMAN_TILE_X, ROW, TILE_SIZE);
+    const cat = new CatPlayer(CAT_TILE_X, ROW, TILE_SIZE);
+    cat.isActive = true;
+    const roster = new MobRoster(map, new SpellSystem());
+    const level = 1;
+    const mongo = new Mongo(CAT_TILE_X - 1, ROW, TILE_SIZE, cat, level, getMongoStats(level).maxHp);
+    if (!yieldsToParty) Object.defineProperty(mongo, 'yieldsToParty', { value: false });
+    roster.add(mongo);
+    const foe = createMob(ATTACKER_MOB_ID, CAT_TILE_X + FOE_OFFSET_TILES, ROW, map);
+    foe.x = (CAT_TILE_X + FOE_OFFSET_TILES) * TILE_SIZE;
+    foe.y = ROW * TILE_SIZE;
+    foe.aiHeld = true;
+    roster.add(foe);
+    const ctx: SystemContext = { ...makeContext(human, cat, map, roster), activeIsMoving: false };
+    const loop = new MobUpdateLoop();
+    const startX = cat.x;
+    const startY = cat.y;
+    let drift = 0;
+    let foeHit = false;
+    for (let frame = 0; frame < WATCH_FRAMES; frame++) {
+      mongo.allMobs = roster.mobs;
+      foe.hp = foe.maxHp;
+      loop.update(ctx);
+      if (foe.hp < foe.maxHp) foeHit = true;
+      drift = Math.max(drift, Math.hypot(cat.x - startX, cat.y - startY) / TILE_SIZE);
+    }
+    return { driftTiles: drift, foeHit };
+  };
+
+  const yielding = catDrift(true);
+  check(
+    yielding.driftTiles <= CAT_DRIFT_TOLERANCE_TILES && yielding.foeHit,
+    `with the cat standing between him and a hostile, he gets past her to it and she moves ${yielding.driftTiles.toFixed(2)} tiles (want <= ${CAT_DRIFT_TOLERANCE_TILES})`,
+  );
+  const shoving = catDrift(false);
+  check(
+    shoving.driftTiles > CAT_DRIFT_TOLERANCE_TILES,
+    `negative: not yielding to the party, he is caught carrying her ${shoving.driftTiles.toFixed(2)} tiles`,
+  );
+}
+
+// ── Coming home with the human in the way ────────────────────────────────────
+//
+// The cat stands still with the human a tile toward Mongo, who comes home from
+// further down the same line: the human stands where he wants to stop. As a
+// companion that yields to the party he takes the whole of any collision with
+// her, so walking on into her would leave him half inside her, flickering
+// between walk and idle. He must come to rest clear of her and stay put.
+{
+  const ROOM_WIDTH_TILES = 32;
+  const ROOM_HEIGHT_TILES = 22;
+  const CAT_TILE_X = 12;
+  const ROW = 10;
+  const HUMAN_OFFSET_TILES = 1;
+  const START_OFFSET_TILES = 6;
+  const WATCH_FRAMES = 600;
+  const SETTLED_FRAME = WATCH_FRAMES / 2;
+  /** A whisker of rounding inside the separation radius, not a body half inside her. */
+  const OVERLAP_TOLERANCE_TILES = 0.1;
+  const HALF_INSIDE_TILES = 0.5;
+
+  const lastX = ROOM_WIDTH_TILES - 1;
+  const lastY = ROOM_HEIGHT_TILES - 1;
+  const grid: TileContent[][] = Array.from({ length: ROOM_HEIGHT_TILES }, (_, y) =>
+    Array.from({ length: ROOM_WIDTH_TILES }, (_, x) => ({
+      tileId: `${x}#${y}`,
+      type:
+        x > 0 && y > 0 && x < lastX && y < lastY ? FloorTypeValue.tile_floor : FloorTypeValue.wall,
+    })),
+  );
+
+  /** `pinnedInside`, if set, holds him half inside the human: what the measure must catch. */
+  const homecoming = (pinnedInside: boolean): { nearestTiles: number; toggles: number } => {
+    const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: grid });
+    const cat = new CatPlayer(CAT_TILE_X, ROW, TILE_SIZE);
+    const human = new HumanPlayer(CAT_TILE_X - HUMAN_OFFSET_TILES, ROW, TILE_SIZE);
+    cat.isActive = true;
+    const roster = new MobRoster(map, new SpellSystem());
+    const level = 1;
+    const mongo = new Mongo(
+      CAT_TILE_X - START_OFFSET_TILES,
+      ROW,
+      TILE_SIZE,
+      cat,
+      level,
+      getMongoStats(level).maxHp,
+    );
+    roster.add(mongo);
+    const ctx: SystemContext = { ...makeContext(human, cat, map, roster), activeIsMoving: false };
+    const loop = new MobUpdateLoop();
+    let nearest = Number.POSITIVE_INFINITY;
+    let toggles = 0;
+    let wasMoving: boolean | null = null;
+    for (let frame = 0; frame < WATCH_FRAMES; frame++) {
+      // What `MongoSystem.update` hands him every frame.
+      mongo.allMobs = roster.mobs;
+      loop.update(ctx);
+      if (pinnedInside) mongo.x = human.x - TILE_SIZE * HALF_INSIDE_TILES;
+      if (frame < SETTLED_FRAME) continue;
+      for (const crawler of [human, cat]) {
+        nearest = Math.min(
+          nearest,
+          Math.hypot(mongo.x - crawler.x, mongo.y - crawler.y) / TILE_SIZE,
+        );
+      }
+      if (wasMoving !== null && mongo.isMoving !== wasMoving) toggles++;
+      wasMoving = mongo.isMoving;
+    }
+    return { nearestTiles: nearest, toggles };
+  };
+
+  const separationTiles = SEPARATION_RADIUS / TILE_SIZE;
+  const settled = (outcome: { nearestTiles: number; toggles: number }): boolean =>
+    outcome.nearestTiles >= separationTiles - OVERLAP_TOLERANCE_TILES && outcome.toggles === 0;
+
+  const stops = homecoming(false);
+  check(
+    settled(stops),
+    `coming home with the human in the way, he stops clear of her (${stops.nearestTiles.toFixed(2)} tiles) and stays stopped (${stops.toggles} walk/stand switches)`,
+  );
+  const pinned = homecoming(true);
+  check(
+    !settled(pinned),
+    `negative: held half inside her, he is caught there (${pinned.nearestTiles.toFixed(2)} tiles)`,
+  );
 }
 
 console.log(failures === 0 ? '\nAll Mongo checks passed.' : `\n${failures} check(s) FAILED.`);

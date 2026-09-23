@@ -2,8 +2,9 @@
  * All procedural drawing functions for Goblin Dynamite:
  *  - In-world floor sprite (with fuse countdown)
  *  - Inventory icon
- *  - Explosion animation
  *  - Throw charge bar
+ *
+ * The blast itself is painted by `dynamiteExplosion.ts`.
  */
 import { drawText } from '../ui/TextBox';
 
@@ -31,32 +32,6 @@ const SPARK_DISAPPEAR_THRESHOLD = 0.2;
 const SPARK_GLOW_R = 0.07;
 const SPARK_CORE_R = 0.035;
 const SPARK_CENTER_R = 0.015;
-
-const EXPLOSION_SHOCKWAVE_THRESHOLD = 0.55;
-const EXPLOSION_RING_LINE_SCALE = 0.06;
-const EXPLOSION_RING_SHRINK = 0.5;
-const EXPLOSION_FIRE_SCALE = 0.75;
-const EXPLOSION_FIRE_FADE = 1.3;
-const EXPLOSION_CORE_THRESHOLD = 0.35;
-const EXPLOSION_CORE_SCALE = 0.25;
-const EXPLOSION_CORE_ALPHA = 0.9;
-const EXPLOSION_SPARK_THRESHOLD = 0.45;
-const EXPLOSION_SPARK_REACH = 0.9;
-const EXPLOSION_SPARK_LINEWIDTH = 0.04;
-const EXPLOSION_SPARK_COUNT = 12;
-const EXPLOSION_SPARK_START_FRAC = 0.15;
-const EXPLOSION_SECONDARY_SPARK_COUNT = 6;
-const EXPLOSION_SECONDARY_LINEWIDTH = 0.025;
-const EXPLOSION_SECONDARY_REACH_SCALE = 0.6;
-const EXPLOSION_SECONDARY_ALPHA_SCALE = 0.7;
-const EXPLOSION_SMOKE_THRESHOLD = 0.3;
-const EXPLOSION_SMOKE_SCALE = 0.32;
-const EXPLOSION_SMOKE_GROW = 0.8;
-const EXPLOSION_SMOKE_ALPHA = 0.65;
-const EXPLOSION_SMOKE_SQUASH = 0.75;
-const EXPLOSION_PUFF_SPREAD_SCALE = 0.5;
-const EXPLOSION_FIRE_GRADIENT_MID1 = 0.3;
-const EXPLOSION_FIRE_GRADIENT_MID2 = 0.7;
 
 const ICON_CX_OFFSET = 0.5;
 const ICON_CY_OFFSET = 0.58;
@@ -195,151 +170,6 @@ export function drawDynamiteFloorSprite(
     ctx.arc(sparkX, sparkY, s * SPARK_CENTER_R, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
-  }
-
-  ctx.restore();
-}
-
-// Explosion animation
-
-/**
- * Draws the dynamite explosion animation.
- * @param sx           Screen X of explosion center
- * @param sy           Screen Y of explosion center
- * @param s            Tile size (for scale reference)
- * @param timer        Frames remaining in animation
- * @param totalFrames  Total animation frames (e.g. 45)
- * @param explosionRadius  Radius of the AoE in pixels
- */
-export function drawDynamiteExplosion(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  s: number,
-  timer: number,
-  totalFrames: number,
-  explosionRadius: number,
-): void {
-  ctx.save();
-
-  const t = 1 - timer / totalFrames; // 0 = just started, 1 = finished
-
-  // 1. Shockwave ring — expands fast, fades early
-  if (t < EXPLOSION_SHOCKWAVE_THRESHOLD) {
-    const ringProgress = t / EXPLOSION_SHOCKWAVE_THRESHOLD;
-    const ringR = explosionRadius * ringProgress;
-    const ringAlpha = 1 - ringProgress;
-    ctx.beginPath();
-    ctx.arc(sx, sy, ringR, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(255, 255, 255, ${ringAlpha * EXPLOSION_CORE_ALPHA})`;
-    ctx.lineWidth = s * EXPLOSION_RING_LINE_SCALE * (1 - ringProgress * EXPLOSION_RING_SHRINK);
-    ctx.stroke();
-  }
-
-  // 2. Fire fill — grows then shrinks
-  const fireR = explosionRadius * EXPLOSION_FIRE_SCALE * Math.sin(t * Math.PI);
-  const fireAlpha = Math.max(0, 1 - t * EXPLOSION_FIRE_FADE);
-  if (fireR > 0 && fireAlpha > 0) {
-    const fireGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, fireR);
-    fireGrad.addColorStop(0, `rgba(255, 255, 200, ${fireAlpha})`);
-    fireGrad.addColorStop(EXPLOSION_FIRE_GRADIENT_MID1, `rgba(255, 160, 0, ${fireAlpha})`);
-    fireGrad.addColorStop(
-      EXPLOSION_FIRE_GRADIENT_MID2,
-      `rgba(220, 60, 0, ${fireAlpha * EXPLOSION_CORE_ALPHA})`,
-    );
-    fireGrad.addColorStop(1, `rgba(100, 20, 0, 0)`);
-    ctx.beginPath();
-    ctx.arc(sx, sy, fireR, 0, Math.PI * 2);
-    ctx.fillStyle = fireGrad;
-    ctx.fill();
-  }
-
-  // 3. Hot bright core — early, shrinks fast
-  if (t < EXPLOSION_CORE_THRESHOLD) {
-    const coreT = t / EXPLOSION_CORE_THRESHOLD;
-    const coreR = explosionRadius * EXPLOSION_CORE_SCALE * (1 - coreT);
-    const coreAlpha = 1 - coreT;
-    ctx.beginPath();
-    ctx.arc(sx, sy, coreR, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255, 255, 255, ${coreAlpha * EXPLOSION_CORE_ALPHA})`;
-    ctx.fill();
-  }
-
-  // 4. Spark rays — 12 lines, early phase only
-  if (t < EXPLOSION_SPARK_THRESHOLD) {
-    const sparkT = t / EXPLOSION_SPARK_THRESHOLD;
-    const sparkLen = explosionRadius * EXPLOSION_SPARK_REACH * sparkT;
-    const sparkAlpha = 1 - sparkT;
-    ctx.strokeStyle = `rgba(255, 220, 50, ${sparkAlpha})`;
-    ctx.lineWidth = s * EXPLOSION_SPARK_LINEWIDTH;
-    ctx.lineCap = 'round';
-    for (let i = 0; i < EXPLOSION_SPARK_COUNT; i++) {
-      const angle = (i / EXPLOSION_SPARK_COUNT) * Math.PI * 2;
-      const startR = explosionRadius * EXPLOSION_SPARK_START_FRAC;
-      ctx.beginPath();
-      ctx.moveTo(sx + Math.cos(angle) * startR, sy + Math.sin(angle) * startR);
-      ctx.lineTo(
-        sx + Math.cos(angle) * (startR + sparkLen),
-        sy + Math.sin(angle) * (startR + sparkLen),
-      );
-      ctx.stroke();
-    }
-    // 6 shorter secondary sparks at offset angles
-    ctx.lineWidth = s * EXPLOSION_SECONDARY_LINEWIDTH;
-    ctx.strokeStyle = `rgba(255, 140, 0, ${sparkAlpha * EXPLOSION_SECONDARY_ALPHA_SCALE})`;
-    for (let i = 0; i < EXPLOSION_SECONDARY_SPARK_COUNT; i++) {
-      const angle =
-        (i / EXPLOSION_SECONDARY_SPARK_COUNT) * Math.PI * 2 +
-        Math.PI / EXPLOSION_SECONDARY_SPARK_COUNT;
-      const startR = (explosionRadius * CHARGE_BAR_TICK_QUARTER) / FLOOR_CX_OFFSET;
-      ctx.beginPath();
-      ctx.moveTo(sx + Math.cos(angle) * startR, sy + Math.sin(angle) * startR);
-      ctx.lineTo(
-        sx + Math.cos(angle) * (startR + sparkLen * EXPLOSION_SECONDARY_REACH_SCALE),
-        sy + Math.sin(angle) * (startR + sparkLen * EXPLOSION_SECONDARY_REACH_SCALE),
-      );
-      ctx.stroke();
-    }
-  }
-
-  // 5. Smoke puffs — 6 dark ellipses, appear later and fade out
-  if (t > EXPLOSION_SMOKE_THRESHOLD) {
-    const smokeT = (t - EXPLOSION_SMOKE_THRESHOLD) / (1 - EXPLOSION_SMOKE_THRESHOLD);
-    const smokeAlpha = Math.max(0, (1 - smokeT) * EXPLOSION_SMOKE_ALPHA);
-    const puffPositions = [
-      { dx: -0.4, dy: -FLOOR_CX_OFFSET },
-      { dx: 0.4, dy: -FLOOR_CX_OFFSET },
-      {
-        dx: -EXPLOSION_SHOCKWAVE_THRESHOLD,
-        dy: EXPLOSION_SMOKE_THRESHOLD / EXPLOSION_SMOKE_THRESHOLD,
-      },
-      {
-        dx: EXPLOSION_SHOCKWAVE_THRESHOLD,
-        dy: EXPLOSION_SMOKE_THRESHOLD / EXPLOSION_SMOKE_THRESHOLD,
-      },
-      { dx: -0.2, dy: FLOOR_CX_OFFSET },
-      { dx: 0.2, dy: FLOOR_CX_OFFSET },
-    ];
-    for (const pos of puffPositions) {
-      const puffR =
-        explosionRadius *
-        EXPLOSION_SMOKE_SCALE *
-        (EXPLOSION_SECONDARY_REACH_SCALE + smokeT * EXPLOSION_SMOKE_GROW);
-      const puffX =
-        sx +
-        pos.dx *
-          explosionRadius *
-          (EXPLOSION_PUFF_SPREAD_SCALE + smokeT * EXPLOSION_PUFF_SPREAD_SCALE);
-      const puffY =
-        sy +
-        pos.dy *
-          explosionRadius *
-          (EXPLOSION_PUFF_SPREAD_SCALE + smokeT * EXPLOSION_PUFF_SPREAD_SCALE);
-      ctx.beginPath();
-      ctx.ellipse(puffX, puffY, puffR, puffR * EXPLOSION_SMOKE_SQUASH, 0, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(60, 50, 50, ${smokeAlpha})`;
-      ctx.fill();
-    }
   }
 
   ctx.restore();

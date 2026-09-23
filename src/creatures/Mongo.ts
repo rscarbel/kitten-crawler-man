@@ -532,6 +532,20 @@ export class Mongo extends Mob {
     return false;
   }
 
+  /** Runs with the cat, so he steps around her on the way to a fight. */
+  override get yieldsToParty(): boolean {
+    return true;
+  }
+
+  /**
+   * He walks straight through the human and the cat, and they through him. A
+   * pet that has to be stepped around blocks the doorway his owner is backing
+   * out of mid-fight.
+   */
+  override get displacesPlayers(): boolean {
+    return false;
+  }
+
   /**
    * He ticks wherever he is. A summon frozen for being far from the party is a
    * summon that can never stop being far from the party — see the base getter.
@@ -1363,12 +1377,11 @@ export class Mongo extends Mob {
     this.gaitSampleY = this.y;
     const baseSpeed = this.stats.speed;
     const speedRatio = baseSpeed > 0 ? coveredPx / baseSpeed : 1;
-    // Ceiling, because not everything that moves him is a stride. The cat leaning
-    // on her pet shoves him three quarters of the overlap in one frame — nine
-    // pixels against his own two — and unbounded that reads back as five times
-    // his speed, which skips three frames of eight and is the strobe again,
-    // reachable by standing next to him. Nothing he does under his own power
-    // exceeds the recall sprint, so that is the bound.
+    // Ceiling, because not everything that moves him is a stride. A separation
+    // shove from a crowding mob can be several times his own step in one frame,
+    // and unbounded that reads back as a multiple of his speed, which skips
+    // frames of the cycle and is the strobe again. Nothing he does under his own
+    // power exceeds the recall sprint, so that is the bound.
     const framesPerTick = Math.min(
       MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED * speedRatio,
       MAX_WALK_FRAMES_PER_TICK,

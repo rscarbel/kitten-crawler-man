@@ -35,8 +35,10 @@ import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 /** Matches TILE_SIZE in src/core/constants.ts. */
 const IN_GAME_TILE = 32;
 const IN_GAME_SCALE = IN_GAME_TILE / TILE_SCALE;
+/** The close-up scale a rubble piece is first judged at, before shrinking down. */
+const GORE_CLOSEUP_SCALE = 4;
 /** The three sizes a rubble piece has to survive, largest first. */
-const GORE_REVIEW_SCALES: ReadonlyArray<number> = [4, 1, IN_GAME_SCALE];
+const GORE_REVIEW_SCALES: ReadonlyArray<number> = [GORE_CLOSEUP_SCALE, 1, IN_GAME_SCALE];
 
 const DEFAULT_SCALE = 2;
 const MIN_SCALE = 0.25;
@@ -53,7 +55,7 @@ const LABEL_FONT = '14px sans-serif';
 
 type Mode = 'sheet' | 'gore' | 'effects';
 const MODES: ReadonlyArray<Mode> = ['sheet', 'gore', 'effects'];
-const VARIANTS: ReadonlyArray<GolemVariant> = ['regular', 'boss'];
+const VARIANTS: ReadonlyArray<GolemVariant> = ['regular', 'boss', 'ally'];
 
 type SheetContext = ReturnType<Canvas['getContext']>;
 

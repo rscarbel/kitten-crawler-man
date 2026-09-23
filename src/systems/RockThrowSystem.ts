@@ -25,7 +25,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 
 /**
  * Anything that throws boulders. Structural rather than `instanceof RockGolem`
- * because the hired bruiser mercenary shares the golem's attack kit without
+ * because the hired golem, Tumbledown, shares the golem's attack kit without
  * sharing its class — the requirement is that a hired meat shield fights the
  * same way, and a nominal check would silently strand its rocks in its queue.
  */
@@ -57,7 +57,7 @@ export interface GolemRockThrow {
   /**
    * Whoever threw it, excluded from its own shot.
    *
-   * A hired bruiser is itself in the scene's extra-target list, and the boulder
+   * A hired golem is itself in the scene's extra-target list, and the boulder
    * spawns about half a tile from its own centre — well inside the direct-hit
    * radius. Without this the merc's ranged attack was a self-damage button that
    * detonated on the frame it was fired.
@@ -65,7 +65,7 @@ export interface GolemRockThrow {
   readonly thrower: Player | null;
   /**
    * Who gets the kill if the rock finishes something off, and whose side the
-   * thrower is on. Null for a wild golem, the hiring player for a bruiser.
+   * thrower is on. Null for a wild golem, the hiring player for a hired one.
    *
    * A hired golem throws from four to nine tiles while leashed two to three
    * tiles from the person who paid for it, so its boulder crosses them on the
@@ -261,7 +261,7 @@ export class RockThrowSystem implements GameSystem {
    * register the death now, but it credits nobody: it is the route for a burn or
    * a poison tick, which have no owner by the time they land. A thrown rock has
    * one, and `takeDamageFrom` is what puts the thrower in the ledger the XP split
-   * reads. That is the *normal* case for a hired bruiser, whose whole job is
+   * reads. That is the *normal* case for a hired golem, whose whole job is
    * throwing rocks at mobs.
    */
   private strike(rock: Rock, target: Player, damage: number, source: DamageSource): void {
@@ -273,7 +273,7 @@ export class RockThrowSystem implements GameSystem {
       //
       // Typed `melee` rather than `missile` on purpose: `missile` kills credited
       // to the cat grant Magic Missile ability XP and, past level 15, fire a
-      // free magic shockwave — from a spell nobody cast. A hired bruiser's owner
+      // free magic shockwave — from a spell nobody cast. A hired golem's owner
       // is reassigned to whichever crawler is active every frame, so that was
       // reachable simply by playing as the cat. Blunt impact is also the truer
       // description of a boulder.
@@ -304,7 +304,7 @@ export class RockThrowSystem implements GameSystem {
       if (!targets.includes(candidate)) targets.push(candidate);
     };
     // A rock thrown by an ally only ever hits what it was aimed at. The party
-    // and its other hirelings are never candidates — a bruiser standing three
+    // and its other hirelings are never candidates — a hired golem standing three
     // tiles from its employer would otherwise put every boulder through them.
     if (rock.owner === null) {
       consider(ctx.human);

@@ -6,6 +6,8 @@ import {
   makeDrunk,
   STAT_BOON_BONUSES,
   WHETSTONE_MELEE_DAMAGE_BONUS,
+  ABSORB_BREAK_LINGER_TICKS,
+  isAbsorbing,
 } from './core/StatusEffect';
 import { Inventory } from './core/Inventory';
 import type { ResistanceType } from './core/ItemDefs';
@@ -150,6 +152,8 @@ export const MIN_STAT_VALUE = 1;
 /** Species HP floor used when a subclass doesn't declare one (mobs, which pass a fixed maxHp). */
 const DEFAULT_BASE_HP_OFFSET = 0;
 const DAMAGE_FLASH_FRAMES = 8;
+/** What floats up over a crawler when a ward takes a whole blow for her. */
+const ABSORBED_TEXT = 'ABSORBED';
 /**
  * How long a hit holds passive regeneration off, in frames (5 s at 60 fps).
  *
@@ -677,8 +681,12 @@ export abstract class Player {
       this.onDodged();
       return false;
     }
+    const unabsorbed = this.soakWithWards(scaledAmount);
+    // A blow the ward swallowed whole never reached her: no flash, no wound, and
+    // no poison or other rider coming in behind it.
+    if (unabsorbed <= 0) return false;
     const hpBeforeBlow = this.hp;
-    const remainingHp = Math.max(0, this.hp - scaledAmount);
+    const remainingHp = Math.max(0, this.hp - unabsorbed);
     this.damageFlash = DAMAGE_FLASH_FRAMES;
     // Every route into this method refreshes the counter, which is what makes a
     // damage-over-time effect hold regen off for as long as it is burning
@@ -695,6 +703,37 @@ export abstract class Player {
     this.hp = remainingHp;
     this.pendingDamageTaken += hpBeforeBlow - remainingHp;
     return true;
+  }
+
+  /**
+   * Takes `amount` off every absorbing ward in turn, oldest first, and returns
+   * whatever none of them could hold. A ward drained dry stays on only for
+   * {@link ABSORB_BREAK_LINGER_TICKS}, so its picture can be seen breaking.
+   *
+   * Every door damage comes in by — `takeDamage` here, `Mob.takeDamageFrom` for
+   * a pet struck by another mob — runs through this, after its own immunity
+   * checks and scaling and before HP is written, and bails out on a zero.
+   */
+  protected soakWithWards(amount: number): number {
+    const unabsorbed = this.drainAbsorbingEffects(amount);
+    if (amount > 0 && unabsorbed <= 0) this.queueFloatingText(ABSORBED_TEXT, 'block');
+    return unabsorbed;
+  }
+
+  private drainAbsorbingEffects(amount: number): number {
+    let left = amount;
+    for (const effect of this.statusEffects) {
+      if (left <= 0) break;
+      if (!isAbsorbing(effect)) continue;
+      const pool = effect.absorbRemaining ?? 0;
+      const soaked = Math.min(pool, left);
+      effect.absorbRemaining = pool - soaked;
+      left -= soaked;
+      if (effect.absorbRemaining <= 0) {
+        effect.ticksRemaining = Math.min(effect.ticksRemaining, ABSORB_BREAK_LINGER_TICKS);
+      }
+    }
+    return left;
   }
 
   /**
@@ -1165,7 +1204,13 @@ export abstract class Player {
    */
   restoreStatusEffects(effects: ReadonlyArray<StatusEffect>, juggJuiceHpBoost: number): void {
     this.clearStatusEffects();
-    for (const effect of effects) this.statusEffects.push({ ...effect });
+    for (const effect of effects) {
+      // A ward whose pool did not survive the trip is dropped rather than kept
+      // as a badge that absorbs nothing or, with a non-finite pool, everything.
+      const pool = effect.absorbRemaining;
+      if (pool !== undefined && !Number.isFinite(pool)) continue;
+      this.statusEffects.push({ ...effect });
+    }
     this._potionSpeedBoost = this.hasStatus('speed_fizz') ? SPEED_FIZZ_MULTIPLIER : 1;
     // Screened like every other restored numeric: this one feeds max HP directly,
     // so a non-finite value from a save would make the whole stat block NaN.
@@ -1600,6 +1645,7 @@ export abstract class Player {
       footY: sy + figure.bottom * size,
       width: figure.halfWidth * 2 * size,
       height: (figure.bottom - figure.top) * size,
+      tileSize: size,
       timeMs: Date.now(),
       seed: this.visualSeed,
       fade: statusFade(effect),
@@ -1621,7 +1667,7 @@ export abstract class Player {
     for (const effect of this.statusEffects) {
       const overlay = statusVisual(effect.type)?.overlay;
       if (overlay === undefined) continue;
-      overlay(ctx, this.statusFrameAt(effect, sx, sy, this.tileSize));
+      overlay(ctx, this.statusFrameAt(effect, sx, sy, this.tileSize), effect);
       // Each overlay is free to leave alpha and blend mode wherever it landed;
       // resetting between them is cheaper than making every one of them tidy up.
       ctx.globalAlpha = 1;

@@ -34,8 +34,7 @@ export type AssetGroup =
  * need a sheet" answer that `verify:assets` actually checks against.
  */
 export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = {
-  // Needed on every floor: the mercenary "bruiser" template (which draws from
-  // the rock golem sheet — see Mercenary.ts), player-cast effects usable
+  // Needed on every floor: player-cast effects usable
   // anywhere, and the generic props/masks that appear in both dungeon rooms and
   // the town. The two player characters are painted rather than baked and hold
   // no key here.
@@ -174,7 +173,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
  * Keyed by the same strings `MobSpawnRule['type']`/`MOB_REGISTRY` use, plus a
  * handful of creatures that are only ever constructed directly by a bounty or
  * quest system rather than through `createMob` (`dark_knight`, `mongo`,
- * `mercenary_bruiser`) — those never appear in a `LevelDef`'s spawn tables, so
+ * `mercenary`) — those never appear in a `LevelDef`'s spawn tables, so
  * they would otherwise have no ground truth for `verify:assets` to check
  * `requiredGroups` against.
  *
@@ -230,6 +229,6 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   gum_gum: [],
   /** `MongoSystem` — a persistent companion, not a spawn-table mob; painted. */
   mongo: [],
-  /** `MercenarySystem`'s "bruiser" template (`Mercenary.ts`, draws via `drawRockGolemSprite`). */
-  mercenary_bruiser: [],
+  /** `MercenarySystem`'s hirelings, drawn through `MERCENARY_ART` (`src/sprites/mercenaryArt.ts`); painted. */
+  mercenary: [],
 };

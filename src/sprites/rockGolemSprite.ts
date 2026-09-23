@@ -1,18 +1,26 @@
 import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
 import { figureFrameCount, type FigureDef } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
-import { ROCK_GOLEM_BOSS_FIGURE, ROCK_GOLEM_FIGURE } from './art/rockGolemFigure';
+import {
+  ROCK_GOLEM_ALLY_FIGURE,
+  ROCK_GOLEM_BOSS_FIGURE,
+  ROCK_GOLEM_FIGURE,
+} from './art/rockGolemFigure';
 
 /**
- * The two figures painted from one drawing engine: the club's bouncers, the
- * hired bruiser and the bounty bodyguard share `rock_golem`; the bounty target
- * uses `rock_golem_boss`, which is the same figure grown and given the four
- * boulder-roll rows.
+ * The three figures painted from one drawing engine: hostile golems use
+ * `rock_golem`; the bounty target uses `rock_golem_boss`,
+ * which is the same figure grown and given the four boulder-roll rows; a hired
+ * golem uses `rock_golem_ally`, which is the same rig again with a painted
+ * Meat Shields band on one bicep. Each id caches its baked frames separately,
+ * so a hired golem never shares a sheet with a hostile one.
  */
-export type RockGolemSheet = 'rock_golem' | 'rock_golem_boss';
+export type RockGolemSheet = 'rock_golem' | 'rock_golem_boss' | 'rock_golem_ally';
 
 function figureFor(sheet: RockGolemSheet): FigureDef {
-  return sheet === 'rock_golem_boss' ? ROCK_GOLEM_BOSS_FIGURE : ROCK_GOLEM_FIGURE;
+  if (sheet === 'rock_golem_boss') return ROCK_GOLEM_BOSS_FIGURE;
+  if (sheet === 'rock_golem_ally') return ROCK_GOLEM_ALLY_FIGURE;
+  return ROCK_GOLEM_FIGURE;
 }
 
 /** Which of the sheet's three viewpoints a facing vector selects. */
@@ -76,6 +84,7 @@ export const ROCK_GOLEM_GORE_PARTS: ReadonlyArray<string> = [
 /** The `BodyPartGoreSystem` registry keys a dead golem's flying rubble comes from. */
 export const ROCK_GOLEM_BODY_PART_KEY = 'rock_golem';
 export const ROCK_GOLEM_BOSS_BODY_PART_KEY = 'rock_golem_boss';
+export const ROCK_GOLEM_ALLY_BODY_PART_KEY = 'rock_golem_ally';
 
 /** Everything the golem sprite needs to pick a pose. All fields are optional. */
 export interface RockGolemSpriteState {

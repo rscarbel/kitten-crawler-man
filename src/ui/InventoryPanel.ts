@@ -1,5 +1,5 @@
 import type { Inventory } from '../core/Inventory';
-import { drawSkillBookIcon } from './icons/skillBookIcon';
+import { type CoverPalette, drawBookIcon, drawSkillBookIcon } from './icons/skillBookIcon';
 import { drawIssueKitIcon, isIssueKitItem } from './icons/issueKitIcon';
 import { drawEnchantedGearIcon, isEnchantedGearItem } from './icons/enchantedGearIcons';
 import { drawAnchorStoneIcon, drawAnchorShardIcon } from './icons/anchorStoneIcon';
@@ -35,6 +35,12 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Layout constants
 const MAX_SLOT_SIZE = 54;
+/** Soot-black cover, charred-red spine: the explosives tome reads apart from every skill book. */
+const EXPLOSIVES_TOME_COVER: CoverPalette = { cover: '#262222', spine: '#7f1d1d' };
+/** The dynamite emblem on the tome's cover, as a share of the icon. */
+const EXPLOSIVES_TOME_EMBLEM_SCALE = 0.55;
+/** Nudges the emblem off the spine so it sits on the face of the cover. */
+const EXPLOSIVES_TOME_EMBLEM_SPINE_OFFSET = 0.04;
 const PANEL_SCREEN_MARGIN = 6;
 const SLOT_GAP = 4;
 const COLS = 4;
@@ -1464,6 +1470,16 @@ export function drawItemIcon(
 
   if (item.skillId !== undefined) {
     drawSkillBookIcon(ctx, x, y, size, item.skillId);
+    ctx.restore();
+    return;
+  }
+
+  if (item.explosivesHandlingLevels !== undefined) {
+    drawBookIcon(ctx, x, y, size, EXPLOSIVES_TOME_COVER);
+    const emblemSize = size * EXPLOSIVES_TOME_EMBLEM_SCALE;
+    const emblemX = x + (size - emblemSize) / 2 + size * EXPLOSIVES_TOME_EMBLEM_SPINE_OFFSET;
+    const emblemY = y + (size - emblemSize) / 2;
+    drawDynamiteInventoryIcon(ctx, emblemX, emblemY, emblemSize);
     ctx.restore();
     return;
   }

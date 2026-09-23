@@ -17,7 +17,8 @@
  * `--safe-room` frames a Bopca station instead, and `--sign=hallway` or
  * `--sign=room` frames the first wayfinding sign of that kind (a fresh map may
  * have none of the kind; run again). `--level` picks the floor and so
- * the ground theme. There is no `--seed`: the generator
+ * the ground theme. `--quest-exit=barred` or `--quest-exit=smashed` puts the
+ * nursery's onward doorway in that state and frames it. There is no `--seed`: the generator
  * draws from `Math.random`, so a fresh run is a fresh map.
  *
  * What it cannot show is anything that needs a player or a system: no entities,
@@ -30,7 +31,7 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
-import { GameMap } from '../src/map/GameMap.js';
+import { GameMap, type QuestExitDoorState } from '../src/map/GameMap.js';
 import { CRAWLER_SIGN } from '../src/map/tileTypes.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout.js';
@@ -47,6 +48,7 @@ const DEFAULT_VIEW_TILES_W = 56;
 const DEFAULT_VIEW_TILES_H = 32;
 const DEFAULT_SCALE = 1;
 const DEFAULT_OUT = `${PREVIEW_DIR}/dungeon.png`;
+const QUEST_EXIT_DOOR_STATES: readonly QuestExitDoorState[] = ['clear', 'barred', 'smashed'];
 
 /** Length of the `--name=` prefix an argument's value starts after. */
 const ARG_PREFIX_LENGTH = '--='.length;
@@ -104,6 +106,17 @@ const safeRoom = process.argv.includes('--safe-room') ? gameMap.safeRooms[0] : u
 const questRoom = process.argv.includes('--quest-room') ? gameMap.questRooms[0] : undefined;
 const spiderLab = process.argv.includes('--spider-lab') ? gameMap.spiderLabRoom : null;
 const signKind = stringArg('sign', '');
+const questExitArg = stringArg('quest-exit', '');
+const questExitState = QUEST_EXIT_DOOR_STATES.find((state) => state === questExitArg);
+if (questExitArg !== '' && questExitState === undefined) {
+  throw new Error(`--quest-exit must be one of ${QUEST_EXIT_DOOR_STATES.join(', ')}`);
+}
+const questExitTile =
+  questExitState === undefined ? undefined : gameMap.questRooms[0]?.exitDoorTiles[0];
+if (questExitState !== undefined) {
+  if (questExitTile === undefined) throw new Error('this map has no quest exit doorway');
+  gameMap.setQuestExitDoorState(questExitState);
+}
 const roomBounds = gameMap.progressionLayout?.roomBounds ?? [];
 const insideAny = (
   rooms: ReadonlyArray<{ x: number; y: number; w: number; h: number }>,
@@ -124,7 +137,12 @@ if (signKind !== '' && framedSign === undefined) {
   throw new Error(`this map has no ${signKind} sign; run again for a fresh map`);
 }
 const focus =
-  framedSign ?? safeRoom?.centre ?? questRoom?.centre ?? spiderLab?.centre ?? gameMap.startTile;
+  questExitTile ??
+  framedSign ??
+  safeRoom?.centre ??
+  questRoom?.centre ??
+  spiderLab?.centre ??
+  gameMap.startTile;
 
 // The generator lays the room; `DungeonScene` stamps the counter run and the
 // furnishings on entering the floor. A harness that skipped them framed an empty

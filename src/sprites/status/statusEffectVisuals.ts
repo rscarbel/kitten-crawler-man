@@ -19,7 +19,7 @@
  */
 
 import type { SilhouetteLayer } from '../../core/silhouetteComposite';
-import type { StatusEffect } from '../../core/StatusEffect';
+import { SHIELD_STATUS, type StatusEffect } from '../../core/StatusEffect';
 import type { StatusVisualFrame } from './statusPaint';
 import { ARCANE_FLAME, NATURAL_FLAME, drawFlames, flameBodyLayers } from './statusFlames';
 import {
@@ -55,6 +55,8 @@ import {
   wellRestedBodyLayer,
   whetstoneBodyLayer,
 } from './statusBoons';
+import { drawShieldDome } from './statusShield';
+import { SHIELD_AMBER_DEEP } from '../art/cretinArt';
 
 export type { StatusVisualFrame } from './statusPaint';
 
@@ -72,8 +74,16 @@ export interface StatusVisual {
    * and add light, and fire needs both — see {@link flameBodyLayers}.
    */
   readonly bodyLayers?: (frame: StatusVisualFrame) => readonly SilhouetteLayer[];
-  /** World-space art drawn on top of the character. */
-  readonly overlay?: (ctx: CanvasRenderingContext2D, frame: StatusVisualFrame) => void;
+  /**
+   * World-space art drawn on top of the character. Handed the effect itself
+   * for art that plays through the effect's own life — rising when it is laid
+   * on, breaking when it runs out.
+   */
+  readonly overlay?: (
+    ctx: CanvasRenderingContext2D,
+    frame: StatusVisualFrame,
+    effect: StatusEffect,
+  ) => void;
 }
 
 const STATUS_VISUALS = new Map<string, StatusVisual>([
@@ -224,6 +234,16 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       harmful: false,
       bodyLayers: (f) => [deepSlumberBodyLayer(f)],
       overlay: drawDeepSlumber,
+    },
+  ],
+  [
+    SHIELD_STATUS,
+    {
+      label: 'SHLD',
+      // The amber of the dome itself, so the badge and the picture read as one thing.
+      color: SHIELD_AMBER_DEEP,
+      harmful: false,
+      overlay: drawShieldDome,
     },
   ],
   [

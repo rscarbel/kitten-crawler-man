@@ -53,6 +53,7 @@ const PREVIEW_STATUSES: readonly string[] = [
   'well_rested',
   'hearth_warmed',
   'deep_slumber',
+  'shield',
 ];
 
 /** The grounds a character is actually seen standing on, worst contrast first. */
@@ -259,6 +260,7 @@ export class StatusPreviewScene extends Scene {
       footY: top + size * HUMAN_STATUS_FIGURE_BOX.bottom,
       width: size * HUMAN_STATUS_FIGURE_BOX.halfWidth * 2,
       height: size * (HUMAN_STATUS_FIGURE_BOX.bottom - HUMAN_STATUS_FIGURE_BOX.top),
+      tileSize: size,
       timeMs: performance.now(),
       // Seeded off the status so every cell has its own particle scatter, the
       // way twelve different creatures would.
@@ -297,7 +299,7 @@ export class StatusPreviewScene extends Scene {
     const overlay = statusVisual(type)?.overlay;
     if (overlay !== undefined) {
       ctx.save();
-      overlay(ctx, frame);
+      overlay(ctx, frame, effect);
       ctx.restore();
     }
   }

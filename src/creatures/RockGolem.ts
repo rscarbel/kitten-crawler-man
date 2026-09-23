@@ -88,7 +88,7 @@ export interface AttackTiming {
 
 /**
  * When each shared attack lands, in sheet frames. Exported because the hired
- * bruiser drives the same rows off the same table — the whole point of the
+ * golem, Tumbledown, drives the same rows off the same table — the whole point of the
  * shared kit is that there is one timing source, not two that drift.
  */
 export const GOLEM_ATTACK_TIMING: Record<GolemAttack, AttackTiming> = {
@@ -101,14 +101,14 @@ export const GOLEM_ATTACK_TIMING: Record<GolemAttack, AttackTiming> = {
 const FRAMES_PER_SHEET_FRAME = 4;
 
 /**
- * A rock golem — the Sledge's kind.
+ * A rock golem: the dungeon's non-sapient stone brute, and the rental Meat
+ * Shields leases out as muscle.
  *
  * One shared attack kit: it alternates a double-fist slam and a ground stomp in
  * melee, and hauls a boulder up off the ground to throw when the target is too
- * far to reach. The bounty boss (`RockGolemBoss`) and the hired bruiser
- * mercenary both extend or reuse this class rather than reimplementing it —
- * Ryan's requirement is that every golem in the game shares its animations and
- * its attacks.
+ * far to reach. The bounty boss (`RockGolemBoss`) extends this class and the
+ * hired golem's kit (`golemKit.ts`) reuses its timing rather than reimplementing it,
+ * so every golem in the game shares its animations and its attacks.
  */
 export class RockGolem extends Mob {
   readonly xpValue: number = GOLEM_XP_VALUE;

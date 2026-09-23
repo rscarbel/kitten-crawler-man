@@ -176,10 +176,10 @@ export function flameStamps(): FlameStamps {
       STAMP_TEARDROP_HEIGHT,
       FLAME_ROOT_CURVATURE,
     ),
-    throat: bakeDisc(FLAME_THROAT_INK, STAMP_ROUND_SIZE),
-    ember: bakeDisc(FLAME_EMBER_INK, STAMP_ROUND_SIZE),
-    fuel: bakeDisc(FLAME_FUEL_INK, STAMP_ROUND_SIZE),
-    glow: bakeDisc(FLAME_GLOW_INK, STAMP_GLOW_SIZE),
+    throat: bakeSoftDisc(FLAME_THROAT_INK, STAMP_ROUND_SIZE),
+    ember: bakeSoftDisc(FLAME_EMBER_INK, STAMP_ROUND_SIZE),
+    fuel: bakeSoftDisc(FLAME_FUEL_INK, STAMP_ROUND_SIZE),
+    glow: bakeSoftDisc(FLAME_GLOW_INK, STAMP_GLOW_SIZE),
   };
   return bakedFlameStamps;
 }
@@ -209,7 +209,11 @@ function stampDisc(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius
   ctx.restore();
 }
 
-function bakeDisc(ink: FlameInk, size: number): CanvasSurface {
+/**
+ * A soft, edgeless disc of one ink, baked at `size` pixels across. Exported so
+ * anything else made of burning gas or its smoke is shaded with the same falloff.
+ */
+export function bakeSoftDisc(ink: FlameInk, size: number): CanvasSurface {
   const surface = allocCanvas(size, size);
   const ctx = surfaceContext(surface);
   ctx.fillStyle = unitFalloff(ctx, ink, ink.alpha);

@@ -2,6 +2,8 @@ import type { GameProgress, GameProgressInput } from '../auth/AuthClient';
 import { parseSavedWorld } from './SavedWorld';
 import { isRecord } from './guards';
 import type { PlayerSnapshot } from './PlayerSnapshot';
+import { AchievementManager } from './AchievementManager';
+import type { SerializedAchievements } from './AchievementManager';
 
 const STORAGE_KEY = 'kcm.progress';
 const LOCAL_PROGRESS_VERSION = 1;
@@ -38,6 +40,10 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
   );
 }
 
+function parseAchievements(value: unknown): SerializedAchievements | undefined {
+  return value === undefined ? undefined : AchievementManager.fromSerialized(value).serialize();
+}
+
 function parseProgress(raw: unknown): GameProgress | null {
   if (!isRecord(raw)) return null;
   if (raw.version !== LOCAL_PROGRESS_VERSION) return null;
@@ -53,6 +59,8 @@ function parseProgress(raw: unknown): GameProgress | null {
     mongoUnlocked: typeof raw.mongoUnlocked === 'boolean' ? raw.mongoUnlocked : undefined,
     mongoPetHp: typeof raw.mongoPetHp === 'number' ? raw.mongoPetHp : undefined,
     mongoPetResting: typeof raw.mongoPetResting === 'boolean' ? raw.mongoPetResting : undefined,
+    humanAchievements: parseAchievements(raw.humanAchievements),
+    catAchievements: parseAchievements(raw.catAchievements),
     world: parseSavedWorld(raw.world),
   };
 }

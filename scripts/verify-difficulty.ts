@@ -1601,7 +1601,7 @@ function blastAgainstLevelledMob(
     gameMap: explosiveMap,
   };
   for (let stick = 0; stick < sticks; stick++) {
-    dynamite.beginCharge(0);
+    dynamite.beginCharge(0, human);
     dynamite.release(human);
   }
   for (let frame = 0; frame < DYNAMITE_SETTLE_FRAMES; frame++) dynamite.update(context);

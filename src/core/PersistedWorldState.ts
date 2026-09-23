@@ -11,7 +11,7 @@ import type { SpiderQuestCheckpoint } from '../systems/SpiderQuestSystem';
 import type { CircusQuestCheckpoint } from '../systems/CircusQuestSystem';
 import type { BountyCheckpoint } from '../systems/BountySystem';
 import type { ClubMembershipCheckpoint } from './ClubMembership';
-import type { MercenaryRosterCheckpoint } from './MercenaryRoster';
+import type { HiredMercenary, MercenaryRosterCheckpoint } from './MercenaryRoster';
 import type { MongoPetStateCheckpoint } from './MongoPetState';
 import type { TownMemoryCheckpoint } from './TownMemory';
 import type { JournalProgressCheckpoint } from './JournalProgress';
@@ -29,7 +29,7 @@ import { SUITS, RANKS, type ShoeState } from '../systems/casino/Deck';
 import type { WoodBarrier, PendingBuild } from '../systems/DefendQuestSystem';
 import type { LifeMachine } from '../systems/SpiderQuestSystem';
 import { allResidents } from '../systems/townResidents';
-import { MERCENARY_TEMPLATES } from './mercenaryTemplates';
+import { MERCENARY_TEMPLATE_IDS } from './mercenaryTemplates';
 import { isRecord } from './guards';
 import {
   debriefBossType,
@@ -1015,17 +1015,28 @@ function parseClubMembershipCheckpoint(value: unknown): ClubMembershipCheckpoint
   return { hasDesperadoPass, casinoShoe: parsedShoe, casinoHintsEnabled };
 }
 
-function parseMercenaryRosterCheckpoint(value: unknown): MercenaryRosterCheckpoint | undefined {
+/**
+ * A hire the save cannot account for — a template id that no longer exists, or
+ * a record missing a field — drops the contract and nothing else. The roster is
+ * the least important thing in a save, and rejecting the whole world state over
+ * it would throw away every quest the player had progressed with it.
+ */
+function parseHiredMercenary(value: unknown): HiredMercenary | null {
+  if (!isRecord(value)) return null;
+  const { id, name, contractLevelId, introduced } = value;
+  const parsedId = stringUnion(id, MERCENARY_TEMPLATE_IDS);
+  if (parsedId === undefined || !isString(name) || !isString(contractLevelId)) return null;
+  if (!isBoolean(introduced)) return null;
+  return { id: parsedId, name, contractLevelId, introduced };
+}
+
+export function parseMercenaryRosterCheckpoint(
+  value: unknown,
+): MercenaryRosterCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { active } = value;
-  if (active === null) return { active: null };
-  if (!isRecord(active)) return undefined;
-  const parsedId = stringUnion(
-    active.id,
-    MERCENARY_TEMPLATES.map((template) => template.id),
-  );
-  if (parsedId === undefined || !isString(active.name)) return undefined;
-  return { active: { id: parsedId, name: active.name } };
+  const { active, lastDeceased } = value;
+  const parsedDeceased = isString(lastDeceased) ? lastDeceased : null;
+  return { active: parseHiredMercenary(active), lastDeceased: parsedDeceased };
 }
 
 function parseMongoPetStateCheckpoint(value: unknown): MongoPetStateCheckpoint | undefined {

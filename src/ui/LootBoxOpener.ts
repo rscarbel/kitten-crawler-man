@@ -585,7 +585,7 @@ export class LootBoxOpener {
       (potionCount > 0 ? 1 : 0) +
       (this.contents.coins > 0 ? 1 : 0) +
       (this.contents.bonus ? 1 : 0) +
-      (this.contents.itemReward ? 1 : 0);
+      (this.contents.itemRewards?.length ?? 0);
     const itemFontSize =
       itemCount >= CONTENT_FONT_SMALL_THRESHOLD ? CONTENT_FONT_SMALL : CONTENT_FONT_NORMAL;
     const lineStep =
@@ -629,8 +629,7 @@ export class LootBoxOpener {
       });
       y += lineStep;
     }
-    if (this.contents.itemReward) {
-      const { id, quantity } = this.contents.itemReward;
+    for (const { id, quantity } of this.contents.itemRewards ?? []) {
       drawText(ctx, `+${quantity} ${ITEM_DEF[id].name}`, {
         x: leftX,
         y: y - CONTENT_ITEM_Y_OFFSET,
@@ -639,6 +638,7 @@ export class LootBoxOpener {
         align: 'center',
         width: maxW,
       });
+      y += lineStep;
     }
   }
 

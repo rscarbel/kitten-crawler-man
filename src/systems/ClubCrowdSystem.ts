@@ -7,7 +7,7 @@
  * - **Range.** Patrons roam the club's whole open floor rather than a hard-coded
  *   box by the door, gated by {@link isClubPatronTile} and real map walkability
  *   so they never clip a wall or a counter.
- * - **Weight.** Every figure on the floor — patrons, staff, the Sledge, the
+ * - **Weight.** Every figure on the floor — patrons, staff, Clarabelle, the
  *   crawlers themselves — is a circular body, and patrons are pushed out of any
  *   overlap. They shoulder past each other, they refuse to stand inside the
  *   bouncer, and the player shoves them aside instead of walking through them.

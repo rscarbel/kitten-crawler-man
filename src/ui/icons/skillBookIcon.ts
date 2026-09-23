@@ -28,7 +28,7 @@ const PAGE_COLOR = '#e8dfc8';
 const PAGE_LINE_COLOR = '#a8927a';
 const CLASP_COLOR = '#c8a860';
 
-interface CoverPalette {
+export interface CoverPalette {
   cover: string;
   spine: string;
 }
@@ -43,7 +43,7 @@ const SKILL_COVERS: Record<SkillId, CoverPalette> = {
   powerful_strike: { cover: '#92400e', spine: '#4a1f04' },
 };
 
-/** Draws a closed book, cover facing the viewer, into a square icon region. */
+/** Draws a closed skill book, cover facing the viewer, into a square icon region. */
 export function drawSkillBookIcon(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -51,7 +51,20 @@ export function drawSkillBookIcon(
   size: number,
   skillId: SkillId,
 ): void {
-  const palette = SKILL_COVERS[skillId];
+  drawBookIcon(ctx, x, y, size, SKILL_COVERS[skillId]);
+}
+
+/**
+ * Draws a closed book in the given cover colours. Shared by every tome in the
+ * game, so a book always reads as a book at slot size whatever it teaches.
+ */
+export function drawBookIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  palette: CoverPalette,
+): void {
   const w = size * BOOK_W;
   const h = size * BOOK_H;
   const left = x + size * BOOK_CX - w / 2;

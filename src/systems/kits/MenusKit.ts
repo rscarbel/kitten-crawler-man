@@ -16,7 +16,7 @@ import { playDrinkGesture } from '../../creatures/humanGestures';
 import type { AchievementManager } from '../../core/AchievementManager';
 import type { GameStats } from '../../core/GameStats';
 import { displayHp } from '../../core/crawlerFormulas';
-import type { InventoryItem, ItemId } from '../../core/ItemDefs';
+import { ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
 import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../../core/timedPotions';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
@@ -413,6 +413,24 @@ export class MenusKit {
     return true;
   }
 
+  /**
+   * Studies one tome from `reader`'s pack, spending it for the Explosives
+   * Handling it teaches. Only the human can study one; the cat is refused and
+   * keeps nothing, since the tome can never reach her pack in the first place.
+   */
+  private studyTome(reader: HumanPlayer | CatPlayer, tome: PotionSlot & { id: ItemId }): void {
+    const audio = this.world.audio;
+    const levels = ITEM_DEF[tome.id].explosivesHandlingLevels;
+    if (levels === undefined || !(reader instanceof HumanPlayer)) {
+      audio?.play('error_taking_action');
+      return;
+    }
+    if (!reader.inventory.removeOneFromSlot(tome.source, tome.slotIdx, tome.id)) return;
+    reader.explosivesHandling += levels;
+    audio?.play('menu_skillpoint_spent');
+    this.announce(`Explosives Handling is now level ${reader.explosivesHandling}.`);
+  }
+
   /** The gulp, then the effect landing a beat later. */
   private playDrinkSounds(effectSound: SoundId): void {
     this.world.audio?.play('potion_drink');
@@ -459,6 +477,13 @@ export class MenusKit {
       if (this.drinkPotion(holder, bottle.id, bottle) && this.inventoryPanel.isOpen) {
         this.inventoryPanel.toggle();
       }
+    }
+
+    const tome = interaction.pendingStudySlot;
+    if (tome !== null) {
+      interaction.pendingStudySlot = null;
+      this.cancelInventoryDragForOverlay();
+      this.studyTome(holder, tome);
     }
 
     const equipSlot = interaction.pendingEquipSlot;

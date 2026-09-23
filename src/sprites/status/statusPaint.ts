@@ -51,6 +51,8 @@ export interface StatusVisualFrame {
   readonly width: number;
   /** Height of the drawn figure in screen pixels. Vertical reaches scale by it. */
   readonly height: number;
+  /** One tile in screen pixels, for art authored per tile rather than per figure. */
+  readonly tileSize: number;
   /** Animation clock in milliseconds. */
   readonly timeMs: number;
   /**

@@ -2,6 +2,9 @@ import { playDrinkGesture } from '../creatures/humanGestures';
 import { displayHp } from '../core/crawlerFormulas';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
+import type { MercenaryRoster } from '../core/MercenaryRoster';
+import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
+import type { CretinVariant } from '../sprites/cretinSprite';
 import { drawText } from '../ui/TextBox';
 import {
   drawModal,
@@ -74,8 +77,38 @@ const BODY_TEXT = '#e8dcbe';
 /** Prices for the VIP back-room services (canon-flavoured coin sinks). */
 const VIP_HEAL_PRICE = 40;
 const VIP_COCKTAIL_PRICE = 60;
-/** The Sledge + Bomo escort pair (canon: 300/crawler, 500/pair). Free when casino wagers exceed it. */
+/** The escort pair (canon: 300/crawler, 500/pair). Free when casino wagers exceed it. */
 export const BODYGUARD_PAIR_PRICE = 500;
+
+/** The two Cretins who shadow a crawler that books the Private Escort. */
+export interface EscortPair {
+  /** Both names together, as the panel prints them. */
+  readonly names: string;
+  readonly variants: readonly [CretinVariant, CretinVariant];
+}
+
+/** The club's usual security detail, and the pair in the books. */
+const HOUSE_ESCORT: EscortPair = { names: 'The Sledge & Bomo', variants: ['sledge', 'bomo'] };
+
+/** Club security who are not Meat Shields hires, so they are never out on contract. */
+const RELIEF_ESCORT: EscortPair = {
+  names: 'Clay-ton & Very Sullen',
+  variants: ['clayton', 'very_sullen'],
+};
+
+/** Hires who are also the house escort: with either out on contract, the relief pair works the floor. */
+const HOUSE_ESCORT_HIRES: ReadonlySet<MercenaryTemplateId> = new Set(['sledge', 'bomo']);
+
+/**
+ * Which pair walks the floor with a crawler. One Cretin cannot shadow the
+ * party inside the club while also being under contract to it, so a hired
+ * Sledge or Bomo sends Clay-ton and Very Sullen instead.
+ */
+export function escortPairFor(roster: MercenaryRoster): EscortPair {
+  const hiredId = roster.active?.id;
+  const houseEscortOnContract = hiredId !== undefined && HOUSE_ESCORT_HIRES.has(hiredId);
+  return houseEscortOnContract ? RELIEF_ESCORT : HOUSE_ESCORT;
+}
 
 type VipAction = { kind: 'heal' } | { kind: 'buff' } | { kind: 'escort' } | { kind: 'close' };
 
@@ -89,24 +122,25 @@ interface VipButton {
 
 interface VipService {
   name: string;
-  desc: string;
+  /** Takes the escort pair because the escort card names whichever two are working tonight. */
+  desc: (escort: EscortPair) => string;
   action: VipAction;
 }
 
 const VIP_SERVICES: ReadonlyArray<VipService> = [
   {
     name: 'Full Recovery',
-    desc: 'A back-room medic patches you up completely.',
+    desc: () => 'A back-room medic patches you up completely.',
     action: { kind: 'heal' },
   },
   {
     name: 'VIP Cocktail',
-    desc: 'Speed Fizz + Cooldown Crisp on the house pour.',
+    desc: () => 'Speed Fizz + Cooldown Crisp on the house pour.',
     action: { kind: 'buff' },
   },
   {
     name: 'Private Escort',
-    desc: 'The Sledge & Bomo shadow you through the club.',
+    desc: (escort) => `${escort.names} shadow you through the club.`,
     action: { kind: 'escort' },
   },
 ];
@@ -114,7 +148,7 @@ const VIP_SERVICES: ReadonlyArray<VipService> = [
 /**
  * The Desperado Club's VIP Lounge — the tasteful adaptation of the book's
  * members-only back room. Sells three premium coin sinks: a
- * full heal, a short buff cocktail, and the Sledge/Bomo bodyguard escort. The
+ * full heal, a short buff cocktail, and a Cretin bodyguard escort. The
  * escort is free when the player's casino wagers this visit clear
  * {@link BODYGUARD_PAIR_PRICE} — the canon "spend enough at the tables and
  * security is free" perk. The escort is cosmetic (the club is a safe zone); the
@@ -138,10 +172,18 @@ export class ClubVipLoungeSystem {
   /** Set every render; clicks are mapped back through it before hit-testing. */
   private fit: ModalFit = MODAL_FIT_NONE;
 
-  constructor(private readonly audio: AudioManager | null) {}
+  constructor(
+    private readonly audio: AudioManager | null,
+    private readonly roster: MercenaryRoster,
+  ) {}
 
   get escortActive(): boolean {
     return this.escortHired;
+  }
+
+  /** Read live, so a Cretin hired at the desk mid-visit hands the escort to the relief pair. */
+  get escortPair(): EscortPair {
+    return escortPairFor(this.roster);
   }
 
   openPanel(coinsWageredThisVisit: number): void {
@@ -213,7 +255,7 @@ export class ClubVipLoungeSystem {
     this.escortPending = true;
     this.feedbackMsg = this.escortIsFree
       ? 'On the house — the tables have been kind. Enjoy the muscle.'
-      : 'The Sledge & Bomo fall in behind you.';
+      : `${this.escortPair.names} fall in behind you.`;
     this.audio?.play('purchase_success');
   }
 
@@ -326,9 +368,9 @@ export class ClubVipLoungeSystem {
   }
 
   /**
-   * The visible way out. The panel used to offer only a `[Space / Esc]` hint,
-   * which leaves a player driving with a mouse — or reading the buttons rather
-   * than the fine print — with nothing to aim at but the three purchases.
+   * The visible way out. A `[Space / Esc]` hint alone leaves a player driving
+   * with a mouse — or reading the buttons rather than the fine print — with
+   * nothing to aim at but the three purchases.
    */
   private renderLeaveButton(ctx: CanvasRenderingContext2D, panelY: number, centerX: number): void {
     const btnX = centerX - LEAVE_BTN_W / 2;
@@ -383,7 +425,7 @@ export class ClubVipLoungeSystem {
         color: GOLD_TEXT,
         align: 'left',
       });
-      drawText(ctx, service.desc, {
+      drawText(ctx, service.desc(this.escortPair), {
         x: x + CARD_PAD,
         y: y + CARD_DESC_Y,
         size: CARD_DESC_SIZE,
@@ -455,7 +497,7 @@ export class ClubVipLoungeSystem {
           return {
             label: 'Hired',
             disabled: true,
-            statusLine: 'The Sledge & Bomo have your back.',
+            statusLine: `${this.escortPair.names} have your back.`,
           };
         }
         const free = this.escortIsFree;

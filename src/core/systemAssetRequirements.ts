@@ -166,13 +166,14 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
   },
 
   // MercenarySystem (src/systems/MercenarySystem.ts) — a hired mercenary
-  // follows the player across floors once recruited at the level 3 club. Every
-  // template is painted now: the "bruiser" draws through the rock golem figure
-  // and the other two through `drawClubNpc`.
+  // follows the player once recruited at the level 3 club. Every hire is
+  // painted at runtime through `MERCENARY_ART`, so none holds a sheet key;
+  // residency is the figure cache's, and `MercenarySystem` warms only the
+  // hired figure each time it spawns, never all seven.
   {
     id: 'companion:mercenary',
     levelIds: ALL_LEVELS,
-    mobTypes: ['mercenary_bruiser'],
+    mobTypes: ['mercenary'],
     requiredGroups: [],
   },
 ];

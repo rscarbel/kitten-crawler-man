@@ -19,6 +19,7 @@ import { isWalkableTileType } from '../walkability';
 import { drawWallShadow } from './helpers';
 import { drawGroundTile } from './groundTiles';
 import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
+import { dungeonFloorTheme } from '../dungeon/floorTheme';
 import { getSpriteDef } from '../../core/SpriteLoader';
 
 const GYM_RUBBER_DOT_TILE_STRIDE = 3;
@@ -372,8 +373,6 @@ const DRILL_SAND_HASH_MOD = 89;
 
 /** The unlit passage behind the boards; the gaps between planks read as depth against it. */
 const DOOR_VOID_COLOR = '#080605';
-/** Lifted a little in the smashed-open state so the way through reads as walkable, not filled in. */
-const DOOR_OPEN_VOID_COLOR = '#100c08';
 /** Shading down the jamb ends of the void, so the hole reads as a passage with sides. */
 const DOOR_VOID_JAMB_SHADE = 'rgba(0,0,0,0.6)';
 const DOOR_VOID_JAMB_SHADE_FRACTION = 0.14;
@@ -460,6 +459,27 @@ const DOOR_FRAGMENT_SHADOW_COLOR = 'rgba(0,0,0,0.5)';
 const DOOR_LOOSE_NAIL_COUNT = 2;
 /** Fragments and nails are kept off the extreme edges so they don't clip in half. */
 const DOOR_DEBRIS_MARGIN_FRACTION = 0.16;
+/**
+ * Small splinters scattered over the floor of a smashed doorway, beside the few
+ * large fragments. The fragments alone read as three sticks someone dropped;
+ * it is the spray of chips that says the boards were broken here.
+ */
+const DOOR_CHIP_COUNT = 9;
+const DOOR_CHIP_MIN_LENGTH_FRACTION = 0.04;
+const DOOR_CHIP_MAX_LENGTH_FRACTION = 0.09;
+const DOOR_CHIP_MIN_SIZE_PX = 1;
+/** A chip is a flake, not a stick: this much narrower than it is long. */
+const DOOR_CHIP_ASPECT = 0.5;
+/** Chips spray further than fragments fall, so they get closer to the tile edge. */
+const DOOR_CHIP_MARGIN_FRACTION = 0.06;
+/** Freshly split wood is paler than the weathered face of the board it came from. */
+const DOOR_CHIP_TONES = ['#b18449', '#9a6e38', '#c79a5d'] as const;
+const DOOR_HASH_CHIP_X = 307;
+const DOOR_HASH_CHIP_Y = 311;
+const DOOR_HASH_CHIP_ANGLE_X = 313;
+const DOOR_HASH_CHIP_ANGLE_Y = 317;
+const DOOR_HASH_CHIP_LENGTH_X = 331;
+const DOOR_HASH_CHIP_LENGTH_Y = 337;
 
 /**
  * Which way the boards run: across the doorway, i.e. along the wall line they
@@ -726,9 +746,37 @@ function drawSplinteredStub(
   const left = side === 'start' ? sx - overrun : sx + ts - stubLength;
   const width = stubLength + overrun;
   const { top, height } = barricadeBand(sy, ts, plankIndex);
+  const castShadowHeight = ts * DOOR_PLANK_CAST_SHADOW_FRACTION;
+
+  // The broken end tears to points along a zigzag. Rectangular notches read as
+  // a row of tidy blocks; a board that was kicked through tears to points, and
+  // only the points say "smashed". Cut by a clip rather than painted over, so
+  // the floor the doorway opens onto shows through between the teeth.
+  const brokenEdgeX = side === 'start' ? left + width : left;
+  const towardStub = side === 'start' ? -1 : 1;
+  const nailedEdgeX = side === 'start' ? left : left + width;
+  const maxToothDepth = stubLength * DOOR_STUB_TOOTH_DEPTH_FRACTION;
+  const bottom = top + height + castShadowHeight;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(nailedEdgeX, top);
+  for (let tooth = 0; tooth <= DOOR_STUB_TEETH; tooth++) {
+    const depth =
+      maxToothDepth *
+      doorHashUnit(
+        runSeed * DOOR_HASH_TOOTH_X + tooth + plankIndex,
+        runSeed * DOOR_HASH_TOOTH_Y + sideChannel,
+      );
+    const toothX = brokenEdgeX + towardStub * depth;
+    ctx.lineTo(toothX, top + (height * tooth) / DOOR_STUB_TEETH);
+    if (tooth === DOOR_STUB_TEETH) ctx.lineTo(toothX, bottom);
+  }
+  ctx.lineTo(nailedEdgeX, bottom);
+  ctx.closePath();
+  ctx.clip();
 
   ctx.fillStyle = DOOR_PLANK_CAST_SHADOW_COLOR;
-  ctx.fillRect(left, top + height, width, ts * DOOR_PLANK_CAST_SHADOW_FRACTION);
+  ctx.fillRect(left, top + height, width, castShadowHeight);
 
   ctx.fillStyle = doorPlankTone(runSeed, plankIndex);
   ctx.fillRect(left, top, width, height);
@@ -740,27 +788,7 @@ function drawSplinteredStub(
   ctx.fillStyle = DOOR_PLANK_CAST_SHADOW_COLOR;
   ctx.fillRect(left, top + height - shadowEdgeHeight, width, shadowEdgeHeight);
 
-  // The broken end, cut back to the void colour along a zigzag. Rectangular
-  // notches were tried first and read as a row of tidy blocks; a board that was
-  // kicked through tears to points, and only the points say "smashed".
-  const brokenEdgeX = side === 'start' ? left + width : left;
-  const towardStub = side === 'start' ? -1 : 1;
-  const maxToothDepth = stubLength * DOOR_STUB_TOOTH_DEPTH_FRACTION;
-  ctx.fillStyle = DOOR_OPEN_VOID_COLOR;
-  ctx.beginPath();
-  ctx.moveTo(brokenEdgeX, top);
-  for (let tooth = 0; tooth <= DOOR_STUB_TEETH; tooth++) {
-    const depth =
-      maxToothDepth *
-      doorHashUnit(
-        runSeed * DOOR_HASH_TOOTH_X + tooth + plankIndex,
-        runSeed * DOOR_HASH_TOOTH_Y + sideChannel,
-      );
-    ctx.lineTo(brokenEdgeX + towardStub * depth, top + (height * tooth) / DOOR_STUB_TEETH);
-  }
-  ctx.lineTo(brokenEdgeX, top + height);
-  ctx.closePath();
-  ctx.fill();
+  ctx.restore();
 
   const nailX =
     side === 'start'
@@ -769,7 +797,47 @@ function drawSplinteredStub(
   drawNailHead(ctx, nailX, top + height / 2, ts);
 }
 
-/** Broken board fragments and bent nails left lying in the smashed doorway. */
+/** The spray of small splinters the boards threw across the floor as they broke. */
+function drawDoorChips(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const margin = ts * DOOR_CHIP_MARGIN_FRACTION;
+  const spread = ts - margin * 2;
+  const lengthSpan = DOOR_CHIP_MAX_LENGTH_FRACTION - DOOR_CHIP_MIN_LENGTH_FRACTION;
+  for (let chip = 0; chip < DOOR_CHIP_COUNT; chip++) {
+    const cx =
+      sx + margin + spread * doorHashUnit(tx * DOOR_HASH_CHIP_X + chip, ty * DOOR_HASH_CHIP_Y);
+    const cy =
+      sy + margin + spread * doorHashUnit(tx * DOOR_HASH_CHIP_Y + chip, ty * DOOR_HASH_CHIP_X);
+    const angle =
+      doorHashUnit(tx * DOOR_HASH_CHIP_ANGLE_X + chip, ty * DOOR_HASH_CHIP_ANGLE_Y) * Math.PI * 2;
+    const length = Math.max(
+      DOOR_CHIP_MIN_SIZE_PX,
+      ts *
+        (DOOR_CHIP_MIN_LENGTH_FRACTION +
+          lengthSpan *
+            doorHashUnit(tx * DOOR_HASH_CHIP_LENGTH_X + chip, ty * DOOR_HASH_CHIP_LENGTH_Y)),
+    );
+    const width = Math.max(DOOR_CHIP_MIN_SIZE_PX, length * DOOR_CHIP_ASPECT);
+    const tone = DOOR_CHIP_TONES[chip % DOOR_CHIP_TONES.length];
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.fillStyle = DOOR_FRAGMENT_SHADOW_COLOR;
+    ctx.fillRect(-length / 2, -width / 2 + width, length, width);
+    ctx.fillStyle = tone;
+    ctx.fillRect(-length / 2, -width / 2, length, width);
+    ctx.restore();
+  }
+}
+
+/** Broken board fragments, wood chips and bent nails left lying in the smashed doorway. */
 function drawDoorDebris(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -819,6 +887,8 @@ function drawDoorDebris(
     ctx.fillRect(-length / 2, -thickness / 2, length, 1);
     ctx.restore();
   }
+
+  drawDoorChips(ctx, sx, sy, ts, tx, ty);
 
   for (let nail = 0; nail < DOOR_LOOSE_NAIL_COUNT; nail++) {
     const nx =
@@ -1170,14 +1240,19 @@ export function drawSpecialFloorTile(
     // Its own tile type rather than a flag on the closed one because
     // the base dungeon floor is baked into reusable chunk canvases: the open
     // state has to be a distinct tile written into the grid at runtime.
+    //
+    // It opens back onto the floor it generated as (recorded in `groundType`
+    // when the doorway is barred), with the wreckage lying on top. No
+    // `drawWallShadow`: the ground pass already shades the jambs, as it does
+    // for every plain floor tile.
     case QUEST_EXIT_DOOR_OPEN: {
       const axis = doorwayAxis(structure, tx, ty);
       const runSeed = doorRunSeed(axis, tx, ty);
       const stubAtStart = isRunEnd(structure, axis, tx, ty, 'start');
       const stubAtEnd = isRunEnd(structure, axis, tx, ty, 'end');
 
+      drawGroundTile(ctx, dungeonFloorTheme().ground, structure, sx, sy, ts, tx, ty);
       withDoorwayFrame(ctx, sx, sy, ts, axis, () => {
-        drawDoorwayVoid(ctx, sx, sy, ts, DOOR_OPEN_VOID_COLOR, stubAtStart, stubAtEnd);
         for (let plank = 0; plank < DOOR_PLANK_COUNT; plank++) {
           if (stubAtStart) drawSplinteredStub(ctx, sx, sy, ts, runSeed, plank, 'start');
           if (stubAtEnd) drawSplinteredStub(ctx, sx, sy, ts, runSeed, plank, 'end');
@@ -1185,7 +1260,6 @@ export function drawSpecialFloorTile(
         drawDoorDebris(ctx, sx, sy, ts, tx, ty);
       });
 
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
 

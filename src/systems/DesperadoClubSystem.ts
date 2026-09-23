@@ -18,14 +18,22 @@ import {
 import { CLUB_PROPS, propSortY } from '../core/clubProps';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { QuestDialog } from '../ui/QuestDialog';
-import { drawClubNpc, type ClubNpcVariant } from '../sprites/clubNpcSprite';
+import {
+  CLUB_ANIM_FRAMES_PER_SECOND,
+  drawClubNpc,
+  type ClubNpcVariant,
+} from '../sprites/clubNpcSprite';
 import { drawCasinoDealer } from '../sprites/casinoDealerSprite';
+import { drawCrocodilianSprite, prewarmClarabelle } from '../sprites/crocodilianSprite';
+import { drawCretinSprite, prewarmCretin, type CretinVariant } from '../sprites/cretinSprite';
+import { CRETIN_WALK_FRAMES, CRETIN_WALK_TILES_PER_CYCLE } from '../sprites/cretinTiming';
+import { CatPlayer } from '../creatures/CatPlayer';
 import { drawClubProp } from '../sprites/clubFurnitureSprite';
 import { drawClubDecor } from '../sprites/clubDecor';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
 import { ClubCasinoSystem } from './ClubCasinoSystem';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
-import { ClubVipLoungeSystem } from './ClubVipLoungeSystem';
+import { ClubVipLoungeSystem, type EscortPair } from './ClubVipLoungeSystem';
 import { ClubCrowdSystem, tileBody, playerBody, type CrowdBody } from './ClubCrowdSystem';
 
 const STATION_INTERACT_RANGE = 2.6;
@@ -34,8 +42,7 @@ const STATION_INTERACT_RANGE = 2.6;
  * milliseconds so the two renderings of Deuce move at the same speed.
  */
 const MS_PER_SECOND = 1000;
-const FRAMES_PER_SECOND = 60;
-const MS_PER_FRAME = MS_PER_SECOND / FRAMES_PER_SECOND;
+const MS_PER_FRAME = MS_PER_SECOND / CLUB_ANIM_FRAMES_PER_SECOND;
 const TILE_HALF = 0.5;
 
 // VIP bodyguard escort: two Cretins that trail the player around the club (cosmetic — the club is a safe zone).
@@ -46,15 +53,31 @@ const ESCORT_OFFSET_X = TILE_SIZE * ESCORT_OFFSET_X_TILES;
 const ESCORT_OFFSET_Y = TILE_SIZE * ESCORT_OFFSET_Y_TILES;
 
 interface EscortFollower {
-  variant: ClubNpcVariant;
+  variant: CretinVariant;
   offsetX: number;
   offsetY: number;
   x: number;
   y: number;
+  /** The heading of its last step, held while it stands so it stops facing where it was going. */
+  facingX: number;
+  facingY: number;
+  /** Gait angle in radians, advanced by ground covered so the planted foot never skates. */
+  walkPhase: number;
+  walking: boolean;
 }
 
 /** Below this per-frame travel an escort counts as standing still, not walking. */
 const ESCORT_WALK_EPSILON = 0.12;
+
+/** An escort that has not moved yet faces the room, like the rest of the club's staff. */
+const ESCORT_REST_FACING_X = 0;
+const ESCORT_REST_FACING_Y = 1;
+
+const FULL_TURN_RADIANS = Math.PI * 2;
+/** Gait radians per world pixel covered: one full cycle over the ground the Cretin's stride carries it. */
+const ESCORT_WALK_RADIANS_PER_PIXEL = FULL_TURN_RADIANS / (CRETIN_WALK_TILES_PER_CYCLE * TILE_SIZE);
+/** One sheet frame a tick: any faster and the walk row is undersampled into a vibration. */
+const ESCORT_MAX_WALK_RADIANS_PER_TICK = FULL_TURN_RADIANS / CRETIN_WALK_FRAMES;
 
 // Dance-floor light overlay
 const DANCE_LIGHT_COLORS = ['#ff2d78', '#2d9bff', '#a94dff', '#4dffb0', '#ffd23d'];
@@ -66,24 +89,61 @@ const DANCE_LIGHT_ALPHA_SWING = 0.22;
 const DANCE_LIGHT_CENTER_FRACTION = 0.5;
 const DANCE_LIGHT_RADIUS_FRACTION = 0.62;
 
-/** The Sledge's welcome + house rules, shown once and granting the Desperado Pass on dismiss. */
+/** Clarabelle's welcome + house rules, shown once and granting the Desperado Pass on dismiss. */
 const GREETING_LINES: ReadonlyArray<string> = [
-  'A seven-foot slab of tuxedoed granite steps into your path.',
-  '"Welcome to the Desperado Club. Name\'s Sledge. Two house rules:"',
-  '"No fighting inside — the club is neutral ground, always."',
-  '"First membership\'s on the house. Take the Pass. Spend well."',
+  "A lizard-faced Crocodilian in a bouncer's jacket leans across the doorway, chewing. She does not look up.",
+  '"Yeah, yeah. Welcome to the Desperado Club. I\'m Clarabelle. I do the door."',
+  '"Two house rules. I counted. No fighting inside — the club is neutral ground, always."',
+  '"And spend money. That one\'s more of a feeling. It\'s my favourite one."',
+  "\"First membership's free. Don't look at me, I didn't make it free. Take the Pass.\"",
 ];
 
 const GREETING_TITLE = '🔪  The Desperado Club  🔪';
 
-/** The Sledge reading a Desperado Pass tattoo off a crawler who earned it from the Juicer. */
+/** Clarabelle reading a Desperado Pass tattoo off a crawler who earned it from the Juicer. */
 const TATTOO_GREETING_LINES: ReadonlyArray<string> = [
-  'A seven-foot slab of tuxedoed granite blocks the doorway — then clocks the ink on your skin.',
-  '"That\'s a Desperado Pass. Earned, not bought. Welcome to the Desperado Club."',
-  '"Two house rules: no fighting inside — the club is neutral ground, always. And spend well."',
+  'A lizard-faced Crocodilian holds out a palm for the cover charge — then squints at the ink on your skin.',
+  '"Huh. That\'s a Desperado Pass. Tattooed on. So I can\'t sell you one. Great."',
+  '"Two house rules: no fighting inside — the club is neutral ground, always. And spend money. Lots."',
 ];
 
-const SLEDGE_WELCOME = '"Back again? Good. Enjoy yourself — and mind the rules."';
+const CLARABELLE_WELCOME = '"You again. Pass is good. Rules ain\'t changed. Go spend something."';
+
+/** Clarabelle is immune to charm, and the cat is the crawler who leads with it. */
+const CLARABELLE_CAT_LINE =
+  '"And don\'t bother batting your eyes, furball. Charisma don\'t work on me."';
+
+/**
+ * She stands facing the south door, so the crawlers walking in see her face
+ * rather than her profile.
+ */
+const CLARABELLE_FACING_X = 0;
+const CLARABELLE_FACING_Y = 1;
+
+/** Clarabelle's lines for whoever is at the door: the cat gets told her eyelashes won't work. */
+function clarabelleLines(lines: ReadonlyArray<string>, crawler: Player): ReadonlyArray<string> {
+  return crawler instanceof CatPlayer ? [...lines, CLARABELLE_CAT_LINE] : lines;
+}
+
+/** An escort Cretin taking up its flank `offsetX` behind the crawler it shadows. */
+function escortFollower(variant: CretinVariant, offsetX: number, active: Player): EscortFollower {
+  return {
+    variant,
+    offsetX,
+    offsetY: ESCORT_OFFSET_Y,
+    x: active.x + offsetX,
+    y: active.y + ESCORT_OFFSET_Y,
+    facingX: ESCORT_REST_FACING_X,
+    facingY: ESCORT_REST_FACING_Y,
+    walkPhase: 0,
+    walking: false,
+  };
+}
+
+/** Warms both escort Cretins when their walk-on is booked, not when they first draw. */
+function prewarmEscort(pair: EscortPair): void {
+  for (const variant of pair.variants) prewarmCretin(variant);
+}
 
 // Bar drinks — the club's buff consumables, priced as premium members' pours.
 /** The house special leads the board, because that is what a house special is. */
@@ -151,18 +211,19 @@ const MARKET_SHOP_CONFIG: ShopConfig = {
   ],
 };
 
-/** Which shared club-NPC sprite each station uses; the casino has its own renderer. */
-const STATION_VARIANT: Record<Exclude<ClubStationId, 'casino'>, ClubNpcVariant> = {
-  sledge: 'sledge',
+/** Which shared club-NPC sprite each station uses; the casino and the door have their own renderers. */
+const STATION_VARIANT: Record<
+  Exclude<ClubStationId, 'casino' | 'clarabelle' | 'mercenary'>,
+  ClubNpcVariant
+> = {
   bar: 'bartender',
   market: 'merchant',
-  mercenary: 'rosemarie',
   vip: 'vip',
 };
 
-/** Proximity-prompt verb for a station: "Talk" to the Sledge, "Shop" at the vendors, "Play" at the casino, else the room name. */
+/** Proximity-prompt verb for a station: "Talk" to Clarabelle, "Shop" at the vendors, "Play" at the casino, else the room name. */
 function promptLabel(station: ClubStation): string {
-  if (station.id === 'sledge') return 'Talk';
+  if (station.id === 'clarabelle') return 'Talk';
   if (station.id === 'bar' || station.id === 'market') return 'Shop';
   if (station.id === 'casino') return 'Play Blackjack';
   if (station.id === 'mercenary') return 'Hire';
@@ -171,7 +232,7 @@ function promptLabel(station: ClubStation): string {
 
 /**
  * Host system for the Desperado Club interior (the analog of SafeRoomSystem /
- * ShopSystem): the Sledge's greeting + membership gate, the floor dressing and
+ * ShopSystem): Clarabelle's greeting + membership gate, the floor dressing and
  * dance-floor lights, the furniture and staff that join the interior's Y-sorted
  * pass, the wandering crowd, and proximity prompts for every station. The
  * bar/market shops, the casino, the mercenary guild and the VIP lounge attach
@@ -192,9 +253,7 @@ export class DesperadoClubSystem {
   private readonly vip: ClubVipLoungeSystem;
 
   /** Escort Cretins trailing the player once hired from the VIP Lounge; lazily positioned on first update. */
-  private escortFollowers: EscortFollower[] | null = null;
-  /** Per-escort travel last frame, so a stationary bodyguard doesn't play a walk cycle. */
-  private readonly escortWalking: boolean[] = [false, false];
+  private escortFollowers: [EscortFollower, EscortFollower] | null = null;
 
   private readonly crowd: ClubCrowdSystem;
 
@@ -217,6 +276,7 @@ export class DesperadoClubSystem {
     roster: MercenaryRoster,
     private readonly audio: AudioManager | null,
     hasPassTattoo: boolean,
+    arrivingCrawler: Player,
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
   ) {
@@ -226,16 +286,17 @@ export class DesperadoClubSystem {
     this.marketShop = new ShopSystem(CLUB_INTERIOR_W, MARKET_SHOP_CONFIG);
     this.casino = new ClubCasinoSystem(audio, membership);
     this.guild = new MercenaryGuildSystem(roster, audio);
-    this.vip = new ClubVipLoungeSystem(audio);
+    this.vip = new ClubVipLoungeSystem(audio, roster);
+    prewarmClarabelle();
     if (membership.hasDesperadoPass) {
       this.unlockAchievement('desperado_member');
     } else if (hasPassTattoo) {
       // The tattoo is the pass; the door only has to read it, so membership is
       // granted here rather than waiting on the dialog the way the giveaway does.
       membership.hasDesperadoPass = true;
-      this.openTattooGreeting();
+      this.openTattooGreeting(arrivingCrawler);
     } else {
-      this.openGreeting();
+      this.openGreeting(arrivingCrawler);
     }
   }
 
@@ -291,6 +352,7 @@ export class DesperadoClubSystem {
 
   update(active: Player, companion: Player | null): void {
     this.animTime++;
+    this.guild.updateDesk();
     this.updateEscort(active);
     this.crowd.update(this.staticCrowdBodies(active, companion));
     this.barShop.update();
@@ -316,6 +378,7 @@ export class DesperadoClubSystem {
    */
   tickOpenModals(active: Player): void {
     this.animTime++;
+    this.guild.updateDesk();
     this.casino.update(active);
     // A natural can settle while the panel is still open, and that panel can be
     // the last thing the player touches before leaving — so the flags are
@@ -342,7 +405,7 @@ export class DesperadoClubSystem {
   /**
    * The immovable figures on the floor this frame: every station NPC, the DJ,
    * the dancers, the crawlers, and any hired escort. Patrons are pushed clear of
-   * all of them, which is what stops the crowd wading through the Sledge.
+   * all of them, which is what stops the crowd wading through the bouncer.
    */
   private staticCrowdBodies(active: Player, companion: Player | null): ReadonlyArray<CrowdBody> {
     this.crowdObstacles.length = 0;
@@ -358,9 +421,15 @@ export class DesperadoClubSystem {
   }
 
   /** Grants the Desperado Pass once the greeting dialog is taken to its final page. */
-  private openGreeting(): void {
+  private openGreeting(crawler: Player): void {
     this.dialog.open(
-      [{ title: GREETING_TITLE, lines: GREETING_LINES, button: 'Take the Pass' }],
+      [
+        {
+          title: GREETING_TITLE,
+          lines: clarabelleLines(GREETING_LINES, crawler),
+          button: 'Take the Pass',
+        },
+      ],
       () => {
         if (this.membership.hasDesperadoPass) return;
         this.membership.hasDesperadoPass = true;
@@ -370,13 +439,13 @@ export class DesperadoClubSystem {
     );
   }
 
-  /** The Sledge waving through a crawler wearing the Juicer's ink. */
-  private openTattooGreeting(): void {
+  /** Clarabelle waving through a crawler wearing the Juicer's ink. */
+  private openTattooGreeting(crawler: Player): void {
     this.dialog.open(
       [
         {
           title: GREETING_TITLE,
-          lines: TATTOO_GREETING_LINES,
+          lines: clarabelleLines(TATTOO_GREETING_LINES, crawler),
           button: 'Enter the Club',
         },
       ],
@@ -387,8 +456,8 @@ export class DesperadoClubSystem {
     );
   }
 
-  private openFlavor(title: string, line: string): void {
-    this.dialog.open([{ title, lines: [line], button: 'Continue' }], () => undefined);
+  private openFlavor(title: string, lines: ReadonlyArray<string>): void {
+    this.dialog.open([{ title, lines, button: 'Continue' }], () => undefined);
   }
 
   /** Close the open shop panel, or advance the open sub-panel/dialog. */
@@ -443,9 +512,12 @@ export class DesperadoClubSystem {
     }
     const station = this.nearestStation(player);
     if (!station) return false;
-    if (station.id === 'sledge') {
-      if (this.membership.hasDesperadoPass) this.openFlavor(station.label, SLEDGE_WELCOME);
-      else this.openGreeting();
+    if (station.id === 'clarabelle') {
+      if (this.membership.hasDesperadoPass) {
+        this.openFlavor(station.label, clarabelleLines([CLARABELLE_WELCOME], player));
+      } else {
+        this.openGreeting(player);
+      }
       return true;
     }
     if (station.id === 'bar') {
@@ -465,6 +537,7 @@ export class DesperadoClubSystem {
       return true;
     }
     this.vip.openPanel(this.coinsWageredThisVisit);
+    prewarmEscort(this.vip.escortPair);
     return true;
   }
 
@@ -562,6 +635,19 @@ export class DesperadoClubSystem {
         figures.push(this.dealerFigure(station.tile));
         continue;
       }
+      if (station.id === 'clarabelle') {
+        figures.push(this.clarabelleFigure(station.tile));
+        continue;
+      }
+      if (station.id === 'mercenary') {
+        // Read through `this.guild` at draw time: this list is built by a field
+        // initializer, before the constructor has made the guild.
+        figures.push({
+          y: station.tile.y * TILE_SIZE,
+          render: (ctx, camX, camY, tileSize) => this.guild.renderDesk(ctx, camX, camY, tileSize),
+        });
+        continue;
+      }
       figures.push(this.npcFigure(station.tile, STATION_VARIANT[station.id], station.tile.x));
     }
     return figures;
@@ -614,7 +700,27 @@ export class DesperadoClubSystem {
     };
   }
 
+  /**
+   * Clarabelle at the door. She talks with her palm out for as long as her
+   * dialog is up — the only dialog the club's own box ever shows is hers — and
+   * stands with her arms crossed otherwise.
+   */
+  private clarabelleFigure(tile: { x: number; y: number }): InteriorFigure {
+    return {
+      y: tile.y * TILE_SIZE,
+      render: (ctx, camX, camY, tileSize) =>
+        drawCrocodilianSprite(ctx, tile.x * TILE_SIZE - camX, tile.y * TILE_SIZE - camY, tileSize, {
+          variant: 'clarabelle',
+          row: this.dialog.isOpen ? 'talk' : 'idle',
+          facingX: CLARABELLE_FACING_X,
+          facingY: CLARABELLE_FACING_Y,
+          elapsedSeconds: this.animTime / CLUB_ANIM_FRAMES_PER_SECOND,
+        }),
+    };
+  }
+
   renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
+    this.guild.renderDeskOverlay(ctx, camX, camY);
     if (this.modalOpen) return;
     const station = this.nearestStation(active);
     if (station) {
@@ -655,41 +761,39 @@ export class DesperadoClubSystem {
     ctx.restore();
   }
 
-  /** Once the VIP escort is hired, two Cretins ease toward flanking offsets behind the player. */
+  /**
+   * Once the VIP escort is hired, two Cretins ease toward flanking offsets
+   * behind the player. The pair is re-read every tick: hiring Sledge or Bomo at
+   * the desk mid-visit hands the escort to the relief pair on the spot.
+   */
   private updateEscort(active: Player): void {
     if (!this.vip.escortActive) return;
+    const pair = this.vip.escortPair;
+    const [leftVariant, rightVariant] = pair.variants;
     if (this.escortFollowers === null) {
+      prewarmEscort(pair);
       this.escortFollowers = [
-        {
-          variant: 'sledge',
-          offsetX: -ESCORT_OFFSET_X,
-          offsetY: ESCORT_OFFSET_Y,
-          x: active.x - ESCORT_OFFSET_X,
-          y: active.y + ESCORT_OFFSET_Y,
-        },
-        {
-          variant: 'bomo',
-          offsetX: ESCORT_OFFSET_X,
-          offsetY: ESCORT_OFFSET_Y,
-          x: active.x + ESCORT_OFFSET_X,
-          y: active.y + ESCORT_OFFSET_Y,
-        },
+        escortFollower(leftVariant, -ESCORT_OFFSET_X, active),
+        escortFollower(rightVariant, ESCORT_OFFSET_X, active),
       ];
-      this.escortFigureList = this.escortFollowers.map((follower, i) => ({
+      this.escortFigureList = this.escortFollowers.map((follower) => ({
         y: follower.y,
         render: (ctx, camX, camY, tileSize) =>
-          drawClubNpc(
-            ctx,
-            follower.x - camX,
-            follower.y - camY,
-            tileSize,
-            follower.variant,
-            this.animTime,
-            follower.offsetX < 0 ? -1 : 1,
-            0,
-            { walking: this.escortWalking[i] },
-          ),
+          drawCretinSprite(ctx, follower.x - camX, follower.y - camY, tileSize, {
+            variant: follower.variant,
+            row: follower.walking ? 'walk' : 'idle',
+            facingX: follower.facingX,
+            facingY: follower.facingY,
+            walkPhase: follower.walkPhase,
+            ticks: this.animTime,
+          }),
       }));
+    }
+    const [leftFollower, rightFollower] = this.escortFollowers;
+    if (leftFollower.variant !== leftVariant || rightFollower.variant !== rightVariant) {
+      prewarmEscort(pair);
+      leftFollower.variant = leftVariant;
+      rightFollower.variant = rightVariant;
     }
     this.escortFollowers.forEach((follower, i) => {
       const targetX = active.x + follower.offsetX;
@@ -698,7 +802,17 @@ export class DesperadoClubSystem {
       const stepY = (targetY - follower.y) * ESCORT_FOLLOW_LERP;
       follower.x += stepX;
       follower.y += stepY;
-      this.escortWalking[i] = Math.hypot(stepX, stepY) > ESCORT_WALK_EPSILON;
+      const stepLength = Math.hypot(stepX, stepY);
+      follower.walking = stepLength > ESCORT_WALK_EPSILON;
+      if (follower.walking) {
+        follower.facingX = stepX;
+        follower.facingY = stepY;
+        const gaitAdvance = Math.min(
+          stepLength * ESCORT_WALK_RADIANS_PER_PIXEL,
+          ESCORT_MAX_WALK_RADIANS_PER_TICK,
+        );
+        follower.walkPhase = (follower.walkPhase + gaitAdvance) % FULL_TURN_RADIANS;
+      }
       this.escortFigureList[i].y = follower.y;
     });
   }

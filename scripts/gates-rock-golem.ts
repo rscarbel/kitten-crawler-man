@@ -57,6 +57,11 @@ import {
   type RockGolemSheet,
 } from '../src/sprites/rockGolemSprite.js';
 
+/** Scales a 0..1 fraction to a percent for a gate's printed messages. */
+const PERCENT_SCALE = 100;
+/** Decimal places a gate prints a tile-unit distance or span at. */
+const TILE_SPAN_DECIMALS = 3;
+
 const INK_ALPHA_THRESHOLD = 24;
 /**
  * Alpha above which a pixel is the golem itself rather than the soft contact
@@ -70,7 +75,7 @@ const GROUND_MEASURE_PAD = 48;
 const CHANNELS = 4;
 const ALPHA_OFFSET = 3;
 
-const VARIANTS: readonly GolemVariant[] = ['regular', 'boss'];
+const VARIANTS: readonly GolemVariant[] = ['regular', 'boss', 'ally'];
 const EFFECT_FIGURES: readonly FigureDef[] = [GOLEM_ROCK_FIGURE, GOLEM_ROCK_BURST_FIGURE];
 
 const failures: string[] = [];
@@ -292,6 +297,13 @@ function loopRowsOf(variant: GolemVariant): readonly RowSpec[] {
 /** Floating-point slack on a phase span that has to be exactly one turn. */
 const PHASE_EPSILON = 1e-9;
 const ONE_TURN = 1;
+/** Decimal places a gate prints a fraction-of-a-turn phase value at. */
+const TURN_FRACTION_DECIMALS = 4;
+/**
+ * The shortest row the loop-closure gate can say anything about: it needs at
+ * least one in-cycle step and a seam step to compare against each other.
+ */
+const MIN_FRAMES_FOR_LOOP_CLOSURE = 3;
 
 /**
  * The ceiling, in the units the defect is actually in.
@@ -307,8 +319,8 @@ function failUnlessOneEvenTurn(id: string, frameCount: number): void {
   if (Math.abs(span - ONE_TURN) > PHASE_EPSILON) {
     fail(
       'G4',
-      `${id} spends ${span.toFixed(4)} of a turn over its ${frameCount} frames rather than ` +
-        'exactly one, so the frame after the last does not land on the first',
+      `${id} spends ${span.toFixed(TURN_FRACTION_DECIMALS)} of a turn over its ${frameCount} ` +
+        'frames rather than exactly one, so the frame after the last does not land on the first',
     );
   }
   const firstStep = cyclePhase(1, frameCount) - cyclePhase(0, frameCount);
@@ -319,8 +331,9 @@ function failUnlessOneEvenTurn(id: string, frameCount: number): void {
     if (Math.abs(step - firstStep) <= PHASE_EPSILON) continue;
     fail(
       'G4',
-      `${id} advances ${step.toFixed(4)} of a turn into frame ${frame} against ` +
-        `${firstStep.toFixed(4)} at the start of the row; an unevenly sampled loop stutters`,
+      `${id} advances ${step.toFixed(TURN_FRACTION_DECIMALS)} of a turn into frame ${frame} ` +
+        `against ${firstStep.toFixed(TURN_FRACTION_DECIMALS)} at the start of the row; an ` +
+        'unevenly sampled loop stutters',
     );
   }
   failUnlessMeasured('G4', stepsMeasured, `phase steps of ${id}`);
@@ -331,7 +344,7 @@ function gateLoopClosure(): void {
   for (const variant of VARIANTS) {
     const def = GOLEM_FIGURES[variant];
     for (const row of loopRowsOf(variant)) {
-      if (row.frameCount < 3) continue;
+      if (row.frameCount < MIN_FRAMES_FOR_LOOP_CLOSURE) continue;
       loopsMeasured++;
       failUnlessOneEvenTurn(`${def.id}.${row.name}`, row.frameCount);
       const steps: number[] = [];
@@ -371,13 +384,15 @@ function gateLoopClosure(): void {
 
 /** A step far above the row's median is a snapped joint or a draw-order flip. */
 const CONTINUITY_RATIO = 3.8;
+/** The shortest row a median-of-steps comparison can say anything meaningful about. */
+const MIN_FRAMES_FOR_CONTINUITY = 4;
 
 function gateContinuity(): void {
   let rowsMeasured = 0;
   for (const variant of VARIANTS) {
     const def = GOLEM_FIGURES[variant];
     for (const row of golemRowsFor(variant)) {
-      if (row.frameCount < 4) continue;
+      if (row.frameCount < MIN_FRAMES_FOR_CONTINUITY) continue;
       const steps: number[] = [];
       for (let frame = 1; frame < row.frameCount; frame++) {
         steps.push(frameDelta(def, row.name, frame - 1, frame));
@@ -429,7 +444,8 @@ function gateFootSlide(): void {
         fail(
           'G6',
           `the ${side < 0 ? 'left' : 'right'} foot moves forward at walk frame ${frame} while ` +
-            `planted (${previous.toFixed(4)} → ${foot.toFixed(4)}) — that is a moonwalk`,
+            `planted (${previous.toFixed(FOOT_POSITION_DECIMALS)} → ` +
+            `${foot.toFixed(FOOT_POSITION_DECIMALS)}) — that is a moonwalk`,
         );
       }
       previous = foot;
@@ -443,6 +459,8 @@ function gateFootSlide(): void {
 
 /** Forward drift below this is the solver's own rounding, not a slide. */
 const FOOT_SLIDE_EPSILON = 1e-6;
+/** Decimal places a moonwalk failure prints a foot's tile-unit position at. */
+const FOOT_POSITION_DECIMALS = 4;
 
 // ── G7 the legs never clamp ──────────────────────────────────────────────────
 
@@ -469,7 +487,8 @@ function gateLegReach(): void {
         fail(
           'G7',
           `${row.name}[${frame}] stretches the ${side < 0 ? 'left' : 'right'} leg to ` +
-            `${span.toFixed(3)} against a reach of ${limit.toFixed(3)}`,
+            `${span.toFixed(TILE_SPAN_DECIMALS)} against a reach of ` +
+            limit.toFixed(TILE_SPAN_DECIMALS),
         );
       }
     }
@@ -510,8 +529,9 @@ function gateGrip(): void {
       if (gap <= pose.rockRadius + FIST_RADIUS) continue;
       fail(
         'G8',
-        `${row.name}[${frame}] holds a rock of radius ${pose.rockRadius.toFixed(3)} with fists ` +
-          `${gap.toFixed(3)} from its centre — the boulder floats between the hands`,
+        `${row.name}[${frame}] holds a rock of radius ` +
+          `${pose.rockRadius.toFixed(TILE_SPAN_DECIMALS)} with fists ` +
+          `${gap.toFixed(TILE_SPAN_DECIMALS)} from its centre — the boulder floats between the hands`,
       );
     }
     if (held < 2) fail('G8', `${row.name} never shows the rock in hand for two frames`);
@@ -559,14 +579,15 @@ function gateStoneSeams(): void {
       cellsMeasured++;
       const fraction = seam / body;
       console.log(
-        `  G9 ${def.id}.${state}[0] is ${(fraction * 100).toFixed(1)}% seam pixels of ` +
-          `${body} body pixels (floor ${(MIN_SEAM_FRACTION * 100).toFixed(0)}%)`,
+        `  G9 ${def.id}.${state}[0] is ${(fraction * PERCENT_SCALE).toFixed(1)}% seam pixels of ` +
+          `${body} body pixels (floor ${(MIN_SEAM_FRACTION * PERCENT_SCALE).toFixed(0)}%)`,
       );
       if (fraction >= MIN_SEAM_FRACTION) continue;
       fail(
         'G9',
-        `${def.id}.${state}[0] is only ${(fraction * 100).toFixed(1)}% seam pixels (need ` +
-          `${(MIN_SEAM_FRACTION * 100).toFixed(0)}%) — the stones have merged into one mass`,
+        `${def.id}.${state}[0] is only ${(fraction * PERCENT_SCALE).toFixed(1)}% seam pixels ` +
+          `(need ${(MIN_SEAM_FRACTION * PERCENT_SCALE).toFixed(0)}%) — the stones have merged ` +
+          'into one mass',
       );
     }
   }
@@ -585,7 +606,9 @@ function gateStoneSeams(): void {
  * lowest of the whole row, and they are within a fist's width of the ground.
  * On the declared release frame the rock has just left the hands.
  */
-const SLAM_GROUND_CLEARANCE = FIST_RADIUS * 1.35;
+/** How many fist-widths of daylight under the fists still counts as a ground slam. */
+const SLAM_CLEARANCE_FIST_MULTIPLE = 1.35;
+const SLAM_GROUND_CLEARANCE = FIST_RADIUS * SLAM_CLEARANCE_FIST_MULTIPLE;
 
 function gateSlamReachesGround(): void {
   const impact = golemSlamImpactFrame();
@@ -627,8 +650,9 @@ function gateSlamReachesGround(): void {
     if (clearance <= SLAM_GROUND_CLEARANCE) continue;
     fail(
       'G10',
-      `${row.name} stops its fists ${clearance.toFixed(3)} tiles above the ground (limit ` +
-        `${SLAM_GROUND_CLEARANCE.toFixed(3)}) — that is not a ground slam`,
+      `${row.name} stops its fists ${clearance.toFixed(TILE_SPAN_DECIMALS)} tiles above the ` +
+        `ground (limit ${SLAM_GROUND_CLEARANCE.toFixed(TILE_SPAN_DECIMALS)}) — that is not a ` +
+        'ground slam',
     );
   }
   failUnlessMeasured('G10', rowsMeasured, 'slam rows');
@@ -671,7 +695,8 @@ function gateThrowReleasesOnTime(): void {
 // ── G11 warm-row memory ──────────────────────────────────────────────────────
 
 const BYTES_PER_PIXEL = 4;
-const BYTES_PER_MEGABYTE = 1024 * 1024;
+const BYTES_PER_KILOBYTE = 1024;
+const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 
 /**
  * The hard ceiling for one warm animation row.
@@ -838,8 +863,8 @@ function gateGoreDistinctness(): void {
         fail(
           'G13',
           `${def.id}'s ${GORE_STATES[a]} and ${GORE_STATES[b]} differ by only ` +
-            `${(share * 100).toFixed(1)}% of the smaller piece's ink — one of them is a ` +
-            'duplicate of the other and a body part is silently missing',
+            `${(share * PERCENT_SCALE).toFixed(1)}% of the smaller piece's ink — one of them is ` +
+            'a duplicate of the other and a body part is silently missing',
         );
       }
     }
@@ -853,6 +878,9 @@ function gateGoreDistinctness(): void {
  * enough but not tall enough still shears the piece halfway through its tumble
  * — a defect that only shows in play, on one frame out of a spin.
  */
+/** Samples are taken at pixel centres, not pixel corners. */
+const PIXEL_CENTER_OFFSET = 0.5;
+
 function gateGoreRotationClearance(): void {
   let piecesMeasured = 0;
   for (const variant of VARIANTS) {
@@ -868,7 +896,10 @@ function gateGoreRotationClearance(): void {
         for (let x = 0; x < def.frameWidth; x++) {
           if (alpha[y * def.frameWidth + x] < INK_ALPHA_THRESHOLD) continue;
           found = true;
-          worst = Math.max(worst, Math.hypot(x + 0.5 - centreX, y + 0.5 - centreY));
+          worst = Math.max(
+            worst,
+            Math.hypot(x + PIXEL_CENTER_OFFSET - centreX, y + PIXEL_CENTER_OFFSET - centreY),
+          );
         }
       }
       if (!found) {
@@ -918,8 +949,8 @@ function gateEffectMotion(): void {
       fail(
         'G14',
         `${def.id}[${frame}] differs from the frame before it by only ` +
-          `${(share * 100).toFixed(1)}% of its ink, under the ` +
-          `${MIN_EFFECT_STEP_SHARE * 100}% a moving effect shows`,
+          `${(share * PERCENT_SCALE).toFixed(1)}% of its ink, under the ` +
+          `${MIN_EFFECT_STEP_SHARE * PERCENT_SCALE}% a moving effect shows`,
       );
     }
   }
@@ -948,6 +979,7 @@ function gateEffectMotion(): void {
 const SHEET_OF: Readonly<Record<GolemVariant, RockGolemSheet>> = {
   regular: 'rock_golem',
   boss: 'rock_golem_boss',
+  ally: 'rock_golem_ally',
 };
 
 function gateRuntimeStateNames(): void {

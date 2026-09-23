@@ -109,6 +109,13 @@ where that hook goes: the lead must exceed
 `rows x frames x bake_ms / PREWARM_BAKE_BUDGET_MS`, and it must sit inside the cache's
 idle-release window or the warming is thrown away before it is used.
 
+A companion that follows the party is warmed on arrival, not per floor. The Meat Shields
+hirelings are all painted (the `companion:mercenary` requirement declares no sheets), and
+only the one under contract is ever warmed: its `MERCENARY_ART` entry's `prewarm` runs
+when the desk signs the contract and again every time `MercenarySystem` spawns it — a
+save restore, a walk out of a building — and `prewarmForFight` when it picks a fight.
+Warming all seven would hold six figures nobody can see.
+
 The cache is flushed when the render quality changes (cells are density-specific) and at
 the stairs transition, beside `releaseSpritesExcept`, for the same reason sheets are
 evicted there.

@@ -9,10 +9,16 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
   drawDynamiteFloorSprite,
-  drawDynamiteExplosion,
   drawDynamiteChargeBar,
   drawDynamiteThrowPath,
 } from '../sprites/dynamiteSprite';
+import {
+  type BlastCore,
+  drawDynamiteExplosion,
+  drawScorchMark,
+  EXPLOSION_TOTAL_FRAMES,
+  SCORCH_TOTAL_FRAMES,
+} from '../sprites/dynamiteExplosion';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { EventBus } from '../core/EventBus';
 import {
@@ -51,7 +57,6 @@ const DYN_RADIUS_TILES = 3;
 const DYN_RADIUS = TILE_SIZE * DYN_RADIUS_TILES;
 /** What an untrained level-1 human's stick does, to crawlers and enemies alike. */
 const DYN_DAMAGE = 8;
-const DYN_ANIM_FRAMES = 45;
 /** Bonus speed per extra explosives handling level above 1. */
 const DYN_SPEED_PER_LEVEL = 4;
 /** Flat bonus per explosives handling level above 1 to what a blast does to the crawlers. */
@@ -90,6 +95,28 @@ export const DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL = 0.3;
  * bought rather than how the fight was played.
  */
 export const BLAST_RESISTANT_COOLDOWN_FRAMES = 60;
+/**
+ * How much harder a chain of sticks hits enemies than the same sticks going off
+ * one at a time. Packed charges detonating together make one blast, and one
+ * blast is worse than its parts: the overlapping fronts reinforce.
+ */
+export const CHAIN_DAMAGE_BONUS = 1.25;
+/**
+ * The furthest a chained blast can reach, in tiles, however many sticks are in
+ * it — a floor carpeted in dynamite should level the room, not the level.
+ */
+const CHAIN_MAX_RADIUS_TILES = 8;
+/** Each extra stick in a chain adds this share to the size of every fireball in it. */
+const CHAIN_FIREBALL_GROWTH_PER_STICK = 0.12;
+const CHAIN_MAX_FIREBALL_SCALE = 1.5;
+/**
+ * How fast a chain ripples outward from the stick that set it off, in pixels
+ * per frame. Damage lands at once; only the pictures of the later fireballs
+ * wait, so a chain reads as one charge setting off the next.
+ */
+const CHAIN_RIPPLE_PX_PER_FRAME = 24;
+/** Spreads consecutive blasts' seeds so no two blasts share a picture. */
+const BLAST_SEED_STRIDE = 7919;
 /** Max frames to simulate for the throw path preview (covers full fuse duration). */
 const TRAJECTORY_MAX_FRAMES = 300;
 /** Collect a path point every N simulated frames to keep screen-point count manageable. */
@@ -213,8 +240,7 @@ interface LiveDynamite {
   vx: number;
   vy: number;
   fuseFrames: number;
-  state: 'flying' | 'sliding' | 'stopped' | 'exploding';
-  explodeTimer: number;
+  state: 'flying' | 'sliding' | 'stopped';
   /** Taken at throw time, so a level-up while the fuse burns cannot change the stick. */
   mobDamage: number;
   /** Taken at throw time, for the same reason as {@link mobDamage}. */
@@ -228,6 +254,45 @@ interface LiveDynamite {
   lobFrame: number;
   /** How high the lob arcs, in tiles; set at launch by {@link lobArcTiles}. */
   lobArc: number;
+}
+
+/** What one stick brings to a blast, whether lying on the floor or still in his hand. */
+type BlastCharge = Pick<LiveDynamite, 'x' | 'y' | 'mobDamage' | 'crawlerDamage'>;
+
+/**
+ * One detonation — a single stick, or every stick a chain reaction swept up.
+ *
+ * The per-stick figures are kept beside the chained totals because a
+ * blast-resistant mob takes only one stick's share, chain or no chain: a boss's
+ * health bar must be a question of how the fight was played, not of how many
+ * sticks were piled up before it.
+ */
+interface Blast {
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+  readonly mobDamage: number;
+  readonly crawlerDamage: number;
+  readonly stickMobDamage: number;
+  readonly stickCrawlerDamage: number;
+}
+
+/** A blast's picture, aged every tick until its smoke has cleared. */
+interface LiveExplosion {
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+  readonly coreRadius: number;
+  readonly cores: ReadonlyArray<BlastCore>;
+  ageFrames: number;
+}
+
+interface ScorchMark {
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+  readonly seed: number;
+  ageFrames: number;
 }
 
 /** A stick released and waiting for the throw's release frame to leave his hand. */
@@ -250,6 +315,9 @@ export class DynamiteSystem implements GameSystem {
   } | null = null;
   private pendingThrow: PendingThrow | null = null;
   private liveDynamites: LiveDynamite[] = [];
+  private explosions: LiveExplosion[] = [];
+  private scorches: ScorchMark[] = [];
+  private blastCount = 0;
   /** Set each time a stick goes off; `DestructionKit` reads and clears it to sound the blast. */
   explosionSoundPending = false;
 
@@ -287,6 +355,8 @@ export class DynamiteSystem implements GameSystem {
     this._charging = null;
     this.pendingThrow = null;
     this.liveDynamites = [];
+    this.explosions = [];
+    this.scorches = [];
     this.lastBlastFrame = new WeakMap<Mob, number>();
   }
 
@@ -302,8 +372,16 @@ export class DynamiteSystem implements GameSystem {
     return this._charging?.hotbarIdx ?? null;
   }
 
-  beginCharge(hotbarIdx: number): void {
+  /**
+   * Starts lighting a stick. Refused in the safe room, which is a sanctuary
+   * for the crawlers and not a bunker to bomb out of.
+   *
+   * @returns whether the light began; a refusal is the caller's to explain.
+   */
+  beginCharge(hotbarIdx: number, human: HumanPlayer): boolean {
+    if (human.isProtected) return false;
     this._charging = { hotbarIdx, chargeFrames: 0, lit: false, warmedView: null };
+    return true;
   }
 
   release(human: HumanPlayer): void {
@@ -331,7 +409,6 @@ export class DynamiteSystem implements GameSystem {
       vy: human.facingY * speed,
       fuseFrames: DYN_FUSE,
       state: isTap ? 'stopped' : 'flying',
-      explodeTimer: 0,
       mobDamage: dynamiteMobDamage(human.level, expLvl),
       crawlerDamage: dynamiteCrawlerDamage(expLvl),
       lobFrom: null,
@@ -460,6 +537,12 @@ export class DynamiteSystem implements GameSystem {
     this.frame++;
     const { human, cat } = ctx;
     const { grid: mobGrid } = ctx.roster;
+    // Walking into the safe room with a stick alight snuffs it: the stick is
+    // only spent on release, so it goes back in the bag unburned.
+    if (this._charging !== null && human.isProtected) {
+      this._charging = null;
+      this.stopDynamiteAction(human);
+    }
     if (this._charging) {
       this._charging.chargeFrames++;
       if (this._charging.chargeFrames >= DYN_EXPLODE_HAND) {
@@ -475,79 +558,133 @@ export class DynamiteSystem implements GameSystem {
   private explodeInHand(human: HumanPlayer, cat: CatPlayer, mobGrid: SpatialGrid<Mob>): void {
     this._charging = null;
     this.stopDynamiteAction(human);
-    const cx = human.x + HALF_TILE;
-    const cy = human.y + HALF_TILE;
-    const mobDamage = dynamiteMobDamage(human.level, human.explosivesHandling);
-    const crawlerDamage = dynamiteCrawlerDamage(human.explosivesHandling);
-    this.triggerExplosion(cx, cy, mobDamage, crawlerDamage, human, cat, mobGrid);
-    this.liveDynamites.push({
-      x: cx,
-      y: cy,
-      vx: 0,
-      vy: 0,
-      fuseFrames: 0,
-      state: 'exploding',
-      explodeTimer: DYN_ANIM_FRAMES,
-      mobDamage,
-      crawlerDamage,
-      lobFrom: null,
-      lobArc: 0,
-      lobFrame: 0,
-    });
+    // The stick is spent by going off, exactly as by being thrown. With none
+    // left — the last one dropped mid-charge — there is nothing in his hand.
+    if (!human.inventory.removeOne('goblin_dynamite')) return;
+    const inHand: BlastCharge = {
+      x: human.x + HALF_TILE,
+      y: human.y + HALF_TILE,
+      mobDamage: dynamiteMobDamage(human.level, human.explosivesHandling),
+      crawlerDamage: dynamiteCrawlerDamage(human.explosivesHandling),
+    };
+    this.detonate(inHand, human, cat, mobGrid);
   }
 
-  private triggerExplosion(
-    cx: number,
-    cy: number,
-    mobDamage: number,
-    crawlerDamage: number,
+  /**
+   * Sets off `trigger` and every stick lying within a blast's reach of it, and
+   * of each of those in turn, as one blast.
+   */
+  private detonate(
+    trigger: BlastCharge,
     human: HumanPlayer,
     cat: CatPlayer,
     mobGrid: SpatialGrid<Mob>,
   ): void {
+    const chain = this.sweepChain(trigger);
+    const blast = chainedBlast(chain);
+    this.blastCount++;
+    const seed = this.blastCount * BLAST_SEED_STRIDE;
+    const fireballScale = Math.min(
+      CHAIN_MAX_FIREBALL_SCALE,
+      1 + CHAIN_FIREBALL_GROWTH_PER_STICK * (chain.length - 1),
+    );
+    this.explosions.push({
+      x: blast.x,
+      y: blast.y,
+      radius: blast.radius,
+      coreRadius: DYN_RADIUS * fireballScale,
+      cores: chain.map((stick, index) => ({
+        x: stick.x,
+        y: stick.y,
+        delayFrames: Math.round(
+          Math.hypot(stick.x - trigger.x, stick.y - trigger.y) / CHAIN_RIPPLE_PX_PER_FRAME,
+        ),
+        seed: seed + index,
+      })),
+      ageFrames: 0,
+    });
+    this.scorches.push({ x: blast.x, y: blast.y, radius: blast.radius, seed, ageFrames: 0 });
+    this.triggerExplosion(blast, human, cat, mobGrid);
+  }
+
+  /**
+   * `trigger` followed by every stick still in the world that a blast in the
+   * chain reaches, each removed from the world as it is swept up.
+   */
+  private sweepChain(trigger: BlastCharge): BlastCharge[] {
+    const chain: BlastCharge[] = [trigger];
+    // A for-of over an array visits what is pushed onto it mid-loop, which is
+    // what walks the chain out to every stick each newly caught one reaches.
+    for (const source of chain) {
+      const caught = this.liveDynamites.filter(
+        (stick) => Math.hypot(stick.x - source.x, stick.y - source.y) <= DYN_RADIUS,
+      );
+      if (caught.length === 0) continue;
+      this.liveDynamites = this.liveDynamites.filter((stick) => !caught.includes(stick));
+      chain.push(...caught);
+    }
+    return chain;
+  }
+
+  private triggerExplosion(
+    blast: Blast,
+    human: HumanPlayer,
+    cat: CatPlayer,
+    mobGrid: SpatialGrid<Mob>,
+  ): void {
+    const { x: cx, y: cy, radius } = blast;
     this.explosionSoundPending = true;
-    const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + TILE_SIZE);
+    const nearBlast = mobGrid.queryCircle(cx, cy, radius + TILE_SIZE);
     if (!human.zeroDamage) {
       let blastKills = 0;
+      let enemyKills = 0;
+      let bossKilled = false;
       for (const mob of nearBlast) {
         // Allies included, which is the point of the type: a blast is the one
         // player-sourced damage that ignores friendly-fire immunity, exactly as
         // it already ignores the pair who lit it.
         if (!mob.isAlive || !mob.takesPlayerDamage('explosion')) continue;
-        if (Math.hypot(mob.x + HALF_TILE - cx, mob.y + HALF_TILE - cy) <= DYN_RADIUS) {
+        if (Math.hypot(mob.x + HALF_TILE - cx, mob.y + HALF_TILE - cy) <= radius) {
           if (this.isBlastCoolingDown(mob)) continue;
+          const isBlastResistant = mob.blastDamageScale < 1;
+          const damage = isBlastResistant
+            ? dynamiteDamageToMob(mob, blast.stickMobDamage, blast.stickCrawlerDamage)
+            : dynamiteDamageToMob(mob, blast.mobDamage, blast.crawlerDamage);
           // Death resolves synchronously inside `takeDamageFrom`, so the health
           // either side of the call is what says whether this blast did it. The
           // `justDied` flag cannot answer: it stays latched for a whole frame.
           const wasAlive = mob.hp > 0;
-          mob.takeDamageFrom(
-            dynamiteDamageToMob(mob, mobDamage, crawlerDamage),
-            human,
-            'explosion',
-          );
-          if (wasAlive && mob.hp <= 0) blastKills++;
+          mob.takeDamageFrom(damage, human, 'explosion');
+          if (wasAlive && mob.hp <= 0) {
+            blastKills++;
+            if (mob.isHostile) enemyKills++;
+            if (mob.isHostile && mob.isBoss) bossKilled = true;
+          }
         }
       }
       if (blastKills > 0) {
         this.bus?.emit('multiKill', { killer: human, count: blastKills });
       }
+      if (enemyKills > 0) {
+        this.bus?.emit('dynamiteKills', { killer: human, kills: enemyKills, bossKilled });
+      }
     }
-    if (Math.hypot(human.x + HALF_TILE - cx, human.y + HALF_TILE - cy) <= DYN_RADIUS) {
-      human.takeDamage(crawlerDamage, { kind: 'dynamite' });
+    if (Math.hypot(human.x + HALF_TILE - cx, human.y + HALF_TILE - cy) <= radius) {
+      human.takeDamage(blast.crawlerDamage, { kind: 'dynamite' });
     }
-    if (Math.hypot(cat.x + HALF_TILE - cx, cat.y + HALF_TILE - cy) <= DYN_RADIUS) {
-      cat.takeDamage(crawlerDamage, { kind: 'dynamite' });
+    if (Math.hypot(cat.x + HALF_TILE - cx, cat.y + HALF_TILE - cy) <= radius) {
+      cat.takeDamage(blast.crawlerDamage, { kind: 'dynamite' });
     }
     // Flattened outright rather than damaged: a barrel that survives a stick of
     // dynamite reads as a bug, however much health it had left. The same goes
     // for a tree, tough as one otherwise is.
-    this.destructibles?.destroyInRadius(cx, cy, DYN_RADIUS, human);
+    this.destructibles?.destroyInRadius(cx, cy, radius, human);
     const trees = this.trees();
-    trees?.destroyInRadius(cx, cy, DYN_RADIUS, human);
+    trees?.destroyInRadius(cx, cy, radius, human);
     // Ignition second, and deliberately: the ring reaches back over the blast
     // radius, and setting fire to the trees first would leave the ones inside it
     // burning as they came down.
-    trees?.igniteRadius(cx, cy, DYN_RADIUS + EXPLOSION_IGNITE_RING_TILES * TILE_SIZE);
+    trees?.igniteRadius(cx, cy, radius + EXPLOSION_IGNITE_RING_TILES * TILE_SIZE);
   }
 
   /** Whether a blast-resistant mob is still inside its window from the last blast; stamps a new one if not. */
@@ -563,75 +700,71 @@ export class DynamiteSystem implements GameSystem {
   }
 
   private updatePhysics(human: HumanPlayer, cat: CatPlayer, mobGrid: SpatialGrid<Mob>): void {
-    for (const dyn of this.liveDynamites) {
-      if (dyn.state === 'exploding') {
-        dyn.explodeTimer--;
-        continue;
-      }
+    for (const explosion of this.explosions) explosion.ageFrames++;
+    this.explosions = this.explosions.filter((e) => e.ageFrames < EXPLOSION_TOTAL_FRAMES);
+    for (const scorch of this.scorches) scorch.ageFrames++;
+    this.scorches = this.scorches.filter((mark) => mark.ageFrames < SCORCH_TOTAL_FRAMES);
 
+    for (const dyn of this.liveDynamites) {
       dyn.fuseFrames--;
       if (dyn.lobFrame < LOB_FRAMES) dyn.lobFrame++;
-      if (dyn.fuseFrames <= 0) {
-        dyn.state = 'exploding';
-        dyn.explodeTimer = DYN_ANIM_FRAMES;
-        this.triggerExplosion(dyn.x, dyn.y, dyn.mobDamage, dyn.crawlerDamage, human, cat, mobGrid);
-        continue;
+      if (dyn.state === 'stopped') continue;
+
+      const nextX = dyn.x + dyn.vx;
+      const txX = Math.floor(nextX / TILE_SIZE);
+      const ty = Math.floor(dyn.y / TILE_SIZE);
+      if (!this.gameMap.isWalkable(txX, ty)) {
+        dyn.vx = -dyn.vx * DYN_BOUNCE;
+      } else {
+        dyn.x = nextX;
       }
 
-      if (dyn.state === 'flying' || dyn.state === 'sliding') {
-        const nextX = dyn.x + dyn.vx;
-        const txX = Math.floor(nextX / TILE_SIZE);
-        const ty = Math.floor(dyn.y / TILE_SIZE);
-        if (!this.gameMap.isWalkable(txX, ty)) {
-          dyn.vx = -dyn.vx * DYN_BOUNCE;
-        } else {
-          dyn.x = nextX;
-        }
+      const nextY = dyn.y + dyn.vy;
+      const tx = Math.floor(dyn.x / TILE_SIZE);
+      const tyY = Math.floor(nextY / TILE_SIZE);
+      if (!this.gameMap.isWalkable(tx, tyY)) {
+        dyn.vy = -dyn.vy * DYN_BOUNCE;
+      } else {
+        dyn.y = nextY;
+      }
 
-        const nextY = dyn.y + dyn.vy;
-        const tx = Math.floor(dyn.x / TILE_SIZE);
-        const tyY = Math.floor(nextY / TILE_SIZE);
-        if (!this.gameMap.isWalkable(tx, tyY)) {
-          dyn.vy = -dyn.vy * DYN_BOUNCE;
-        } else {
-          dyn.y = nextY;
-        }
-
-        dyn.vx *= DYN_FRICTION;
-        dyn.vy *= DYN_FRICTION;
-        const spd = Math.hypot(dyn.vx, dyn.vy);
-        if (spd < DYN_STOP) {
-          dyn.state = 'stopped';
-          dyn.vx = 0;
-          dyn.vy = 0;
-        } else if (spd < DYN_SLIDE_THRESHOLD) {
-          dyn.state = 'sliding';
-        }
+      dyn.vx *= DYN_FRICTION;
+      dyn.vy *= DYN_FRICTION;
+      const spd = Math.hypot(dyn.vx, dyn.vy);
+      if (spd < DYN_STOP) {
+        dyn.state = 'stopped';
+        dyn.vx = 0;
+        dyn.vy = 0;
+      } else if (spd < DYN_SLIDE_THRESHOLD) {
+        dyn.state = 'sliding';
       }
     }
 
-    this.liveDynamites = this.liveDynamites.filter(
-      (d) => !(d.state === 'exploding' && d.explodeTimer <= 0),
-    );
+    // After the physics, so a chain is swept from where every stick lies this
+    // frame. Each detonation removes its whole chain from the world, which is
+    // why the next burnt-out fuse is looked up afresh rather than iterated.
+    let burntOut = this.liveDynamites.find((dyn) => dyn.fuseFrames <= 0);
+    while (burntOut !== undefined) {
+      const trigger = burntOut;
+      this.liveDynamites = this.liveDynamites.filter((dyn) => dyn !== trigger);
+      this.detonate(trigger, human, cat, mobGrid);
+      burntOut = this.liveDynamites.find((dyn) => dyn.fuseFrames <= 0);
+    }
+  }
+
+  /** The blackened floor under past blasts; drawn in the ground pass, under everything standing on it. */
+  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const mark of this.scorches) {
+      drawScorchMark(ctx, mark.x - camX, mark.y - camY, mark.radius, mark.seed, mark.ageFrames);
+    }
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const dyn of this.liveDynamites) {
-      const sx = dyn.x - camX;
-      const sy = dyn.y - camY;
-      if (dyn.state !== 'exploding') {
-        this.renderStick(ctx, dyn, sx, sy);
-      } else {
-        drawDynamiteExplosion(
-          ctx,
-          sx,
-          sy,
-          TILE_SIZE,
-          dyn.explodeTimer,
-          DYN_ANIM_FRAMES,
-          DYN_RADIUS,
-        );
-      }
+      this.renderStick(ctx, dyn, dyn.x - camX, dyn.y - camY);
+    }
+    for (const explosion of this.explosions) {
+      drawDynamiteExplosion(ctx, explosion, camX, camY);
     }
   }
 
@@ -751,4 +884,38 @@ export class DynamiteSystem implements GameSystem {
     const screenPoints = worldPoints.map((p) => ({ x: p.x - camX, y: p.y - camY }));
     drawDynamiteThrowPath(ctx, screenPoints);
   }
+}
+
+/**
+ * The single blast a chain of sticks makes.
+ *
+ * Centred on the chain's middle, and big enough to cover every stick's own
+ * blast — the reach grows with the cube root of the charge, as a real blast
+ * front's does, plus however far the chain is strung out. Enemies take every
+ * stick's damage with {@link CHAIN_DAMAGE_BONUS} on top; the crawlers, and
+ * allies, take every stick's share with no bonus.
+ */
+function chainedBlast(chain: ReadonlyArray<BlastCharge>): Blast {
+  const stickCount = Math.max(1, chain.length);
+  const centreX = chain.reduce((sum, stick) => sum + stick.x, 0) / stickCount;
+  const centreY = chain.reduce((sum, stick) => sum + stick.y, 0) / stickCount;
+  const furthestStick = chain.reduce(
+    (furthest, stick) => Math.max(furthest, Math.hypot(stick.x - centreX, stick.y - centreY)),
+    0,
+  );
+  const radius = Math.min(
+    CHAIN_MAX_RADIUS_TILES * TILE_SIZE,
+    DYN_RADIUS * Math.cbrt(stickCount) + furthestStick,
+  );
+  const totalMobDamage = chain.reduce((sum, stick) => sum + stick.mobDamage, 0);
+  const isChain = stickCount > 1;
+  return {
+    x: centreX,
+    y: centreY,
+    radius,
+    mobDamage: Math.round(isChain ? totalMobDamage * CHAIN_DAMAGE_BONUS : totalMobDamage),
+    crawlerDamage: chain.reduce((sum, stick) => sum + stick.crawlerDamage, 0),
+    stickMobDamage: chain.reduce((most, stick) => Math.max(most, stick.mobDamage), 0),
+    stickCrawlerDamage: chain.reduce((most, stick) => Math.max(most, stick.crawlerDamage), 0),
+  };
 }

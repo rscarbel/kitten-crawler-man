@@ -77,6 +77,7 @@ import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
+import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
 import { GoblinArrowSystem } from '../systems/GoblinArrowSystem';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
@@ -91,6 +92,7 @@ import {
   activateHotbarSlot,
   drinkAnyHealthPotion,
   releaseChargedDynamite,
+  refuseDynamiteInSafeRoom,
   type HotbarHost,
 } from '../systems/kits/hotbarActions';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
@@ -145,7 +147,11 @@ import { CitizenDialog } from '../ui/CitizenDialog';
 import { NoticeBoardPanel } from '../ui/NoticeBoardPanel';
 import { PricedMenuPanel } from '../ui/PricedMenuPanel';
 import { FortuneTellerPanel } from '../ui/FortuneTellerPanel';
-import { drawInteractionPrompt, setInteractionPromptsSuppressed } from '../ui/InteractionPrompt';
+import {
+  drawInteractionPrompt,
+  interactionPromptsDrawnThisFrame,
+  setInteractionPromptsSuppressed,
+} from '../ui/InteractionPrompt';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
@@ -561,6 +567,7 @@ const FORCED_TO_HUMAN = new Set<string>([
   'shade_gnoll_kneepads',
   'grull_war_gauntlet',
   'slingshot',
+  'explosives_handling_tome',
 ]);
 const FORCED_TO_CAT = new Set<string>([
   'enchanted_crown_sepsis_whore',
@@ -672,6 +679,8 @@ const MAGIC_MISSILE_TALISMAN_LEVEL = 3;
 
 /** Kills one attack has to land at once to earn the crowd-control award. */
 const MULTIKILL_ACHIEVEMENT_THRESHOLD = 10;
+/** Enemies one dynamite blast has to kill to earn the Little Boom award. */
+const LITTLE_BOOM_KILL_THRESHOLD = 2;
 
 /**
  * How far around the Juicer's room a troglodyte still counts as one of his
@@ -873,6 +882,7 @@ export class DungeonScene extends GameplayScene {
   private readonly tacticsNoticesSeen: Set<TacticsTrait>;
   private lavaBalls: LavaBallSystem;
   private rockThrows: RockThrowSystem;
+  private hirelingShots: HirelingBoltSystem;
   private skeletonShots: SkeletonProjectileSystem;
   private goblinArrows: GoblinArrowSystem;
   private skeletonSummons: SkeletonSummonSystem;
@@ -1404,7 +1414,9 @@ export class DungeonScene extends GameplayScene {
     this.townMemory = options?.townMemory ?? createTownMemory();
     this.marketStock = options?.marketStock ?? createMarketStock();
     this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
-    this.mercenarySystem = new MercenarySystem(this.mercenaryRoster);
+    this.mercenarySystem = new MercenarySystem(this.mercenaryRoster, levelDef.id, (entity) =>
+      this.safeRoom.isEntityInSafeRoom(entity),
+    );
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
@@ -1425,6 +1437,9 @@ export class DungeonScene extends GameplayScene {
     this.water = levelDef.isOverworld ? new WaterAnimationSystem(this.gameMap) : null;
     this.lavaBalls = new LavaBallSystem(this.gameMap);
     this.rockThrows = new RockThrowSystem(this.gameMap);
+    this.hirelingShots = new HirelingBoltSystem(this.gameMap, (point) =>
+      this.safeRoom.isEntityInSafeRoom(point),
+    );
     this.skeletonShots = new SkeletonProjectileSystem(this.gameMap);
     this.goblinArrows = new GoblinArrowSystem(this.gameMap);
     this.skeletonSummons = new SkeletonSummonSystem(this.gameMap, (mob) =>
@@ -1572,6 +1587,7 @@ export class DungeonScene extends GameplayScene {
         });
 
         this.bus.emit('levelComplete', {});
+        this.mercenarySystem.endContractForFloor();
 
         // Drain now: the celebration screen stops `updateGameplay`, and the queue
         // does not survive into the next scene, so a level-up earned on the last
@@ -2448,6 +2464,20 @@ export class DungeonScene extends GameplayScene {
       if (e.count < MULTIKILL_ACHIEVEMENT_THRESHOLD) return;
       if (this.humanAchievements.tryUnlock('crowd_control')) {
         bus.emit('achievementUnlocked', { achievementId: 'crowd_control', player: 'Human' });
+      }
+    });
+
+    // Human-only by construction: only the human can light a stick.
+    bus.on('dynamiteKills', (e) => {
+      if (this.tutorial !== null) return;
+      if (
+        e.kills >= LITTLE_BOOM_KILL_THRESHOLD &&
+        this.humanAchievements.tryUnlock('little_boom')
+      ) {
+        bus.emit('achievementUnlocked', { achievementId: 'little_boom', player: 'Human' });
+      }
+      if (e.bossKilled && this.humanAchievements.tryUnlock('finish_with_a_blow')) {
+        bus.emit('achievementUnlocked', { achievementId: 'finish_with_a_blow', player: 'Human' });
       }
     });
 
@@ -3374,8 +3404,10 @@ export class DungeonScene extends GameplayScene {
    * Carries over only what the save does not hold and a reload would not want
    * lost. The doomsday countdown is preserved for the same reason
    * {@link restoreFromCheckpoint} preserves it: rewinding it would make dying a
-   * way to buy back time. Achievements and the run's tallies are carried as they
-   * stand rather than wiped, because the save has no copy of them to rewind to.
+   * way to buy back time. The run's tallies are carried as they stand rather
+   * than wiped, because the save has no copy of them to rewind to. Achievements
+   * are carried the same way only for a save written before they were
+   * persisted; otherwise the save's copy replaces them.
    */
   private respawnFromSave(progress: GameProgressInput): void {
     // His HP only reaches the shared state through a despawn, and the instance
@@ -3471,6 +3503,7 @@ export class DungeonScene extends GameplayScene {
     this.destruction.resetForCheckpoint();
     this.lavaBalls.resetForCheckpoint();
     this.rockThrows.resetForCheckpoint();
+    this.hirelingShots.resetForCheckpoint();
     this.skeletonShots.resetForCheckpoint();
     this.goblinArrows.resetForCheckpoint();
     this.clownGas.resetForCheckpoint();
@@ -3797,6 +3830,8 @@ export class DungeonScene extends GameplayScene {
       // player's heel was recording 130.
       mongoPetHp: this.mongoSystem.hp,
       mongoPetResting: this.mongoSystem.restingUntilFull,
+      humanAchievements: this.humanAchievements.serialize(),
+      catAchievements: this.catAchievements.serialize(),
       // The tutorial's hand-built map has no layout to regenerate.
       world:
         this.tutorial === null
@@ -4134,6 +4169,23 @@ export class DungeonScene extends GameplayScene {
     const target = this.townLife.findTalkTarget(active.x, active.y);
     if (target === null) return;
     drawInteractionPrompt(ctx, target.x - camX, target.y - camY, TILE_SIZE, 'Talk');
+  }
+
+  /**
+   * Floats a "Talk" prompt over the hireling when a press would reach it.
+   *
+   * Talking is the last link of the Space chain, so this draws last of all the
+   * world prompts and yields to any of them already on screen: a chest, a quest
+   * giver or a citizen in reach takes the press first, and its prompt says so.
+   * `talkTarget` holds back while a fight is on, as the chain does.
+   */
+  private renderMercenaryPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const active = this.active();
+    if (this.safeRoom.isEntityInSafeRoom(active)) return;
+    if (interactionPromptsDrawnThisFrame() > 0) return;
+    const merc = this.mercenarySystem.talkTarget(active, this.world.roster.mobs);
+    if (merc === null) return;
+    drawInteractionPrompt(ctx, merc.x - camX, merc.y - camY, TILE_SIZE, 'Talk');
   }
 
   /** Opens a conversation with the nearest street citizen, if one is in range. */
@@ -4824,6 +4876,11 @@ export class DungeonScene extends GameplayScene {
       if (this.tryTalkToCitizen(active)) {
         return;
       }
+      // Last in the chain: the hireling stands at the party's shoulder all
+      // floor, so anything else within reach is what a press is meant for.
+      if (this.mercenarySystem.tryTalk(active, this.world.roster.mobs)) {
+        return;
+      }
     }
     if (this.tutorial !== null && !this.tutorial.canAttack) return;
 
@@ -5202,6 +5259,10 @@ export class DungeonScene extends GameplayScene {
       this.menus.pauseMenu.handleWheel(deltaY);
       return;
     }
+    if (this.followerMenu.isOpen) {
+      this.followerMenu.handleWheel(deltaY);
+      return;
+    }
     this.noticeBoard?.handleWheel(deltaY);
     this.marketPanel?.handleWheel(deltaY);
   }
@@ -5352,6 +5413,7 @@ export class DungeonScene extends GameplayScene {
       smushFx: this.combat.smushFx,
       lavaBalls: this.lavaBalls,
       rockThrows: this.rockThrows,
+      hirelingShots: this.hirelingShots,
       skeletonShots: this.skeletonShots,
       goblinArrows: this.goblinArrows,
       clownGas: this.clownGas,
@@ -5363,6 +5425,7 @@ export class DungeonScene extends GameplayScene {
       treasureChests: this.treasureChests,
       miniMap: this.miniMap,
       mongoSystem: this.mongoSystem,
+      mercenarySystem: this.mercenarySystem,
       speechBubblePulse: this.speechBubblePulse,
     };
 
@@ -5671,6 +5734,7 @@ export class DungeonScene extends GameplayScene {
       this.renderCitizenPrompt(ctx, camX, camY);
       this.bounty?.renderShadyOverlay(ctx, camX, camY, this.active());
       this.renderPropPrompt(ctx, camX, camY);
+      this.renderMercenaryPrompt(ctx, camX, camY);
     }
 
     if (this.safeRoom.mordecaiDialogOpen) {
@@ -6219,7 +6283,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.mongoSystem.checkHealth();
-    this.mercenarySystem.checkHealth(this.world.roster.mobs, this.world.roster.grid);
+    this.mercenarySystem.checkHealth((merc) => this.combat.spawnKillGore(merc, null));
     this.combat.resolveKills();
 
     this.combat.resolveSpellAftermath();
@@ -6250,6 +6314,7 @@ export class DungeonScene extends GameplayScene {
     this.combat.updatePostCombat(this.audio);
     this.lavaBalls.update(ctx);
     this.rockThrows.update(ctx);
+    this.hirelingShots.update(ctx);
     // Summons first, so a skeleton raised this frame is already in `ctx.roster.mobs`
     // when the projectile system walks it. Neither ordering can strand a shot —
     // the drain reads the whole list every frame — but this one keeps a wave and
@@ -6276,6 +6341,17 @@ export class DungeonScene extends GameplayScene {
     if (this.rockThrows.burstSoundPending) {
       this.rockThrows.burstSoundPending = false;
       this.audio?.playRandom(['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4']);
+    }
+
+    // Splash Zone's water, drained here for the same reason: a bolt or a wave
+    // outlives the hireling who loosed it.
+    if (this.hirelingShots.impactSoundPending) {
+      this.hirelingShots.impactSoundPending = false;
+      this.audio?.play('arrow_impact');
+    }
+    if (this.hirelingShots.waveSoundPending) {
+      this.hirelingShots.waveSoundPending = false;
+      this.audio?.play('mob_splash');
     }
 
     // Drained here rather than from `playMobAudioCues` for the same reason the
@@ -6599,6 +6675,14 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
+      // The follower menu covers the whole screen, so it owns every finger — a
+      // tap must not reach the HUD buttons drawn beneath it. Its rows scroll
+      // under a drag, so the release decides whether the press was a click.
+      if (this.followerMenu.isOpen) {
+        this.followerMenu.touchStart(touch.identifier, x, y);
+        continue;
+      }
+
       if (this.menus.gearPanel.hitsPanel(x, y)) {
         this.handleClick(x, y, e.timeStamp);
         continue;
@@ -6683,12 +6767,6 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      if (platform.isMobile && this.followerMenu.isOpen) {
-        this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
-        this.followerMenu.handleClick(x, y);
-        continue;
-      }
-
       if (platform.isMobile && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
         const sb = this.touch.switchBtnRect;
         if (pointInRect(x, y, sb)) {
@@ -6760,8 +6838,11 @@ export class DungeonScene extends GameplayScene {
       if (this.human.isActive) {
         const dynIdx = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
         if (dynIdx >= 0 && this.human.inventory.actionBar.slots[dynIdx]?.id === 'goblin_dynamite') {
-          this.destruction.dynamite.beginCharge(dynIdx);
-          this.touch.dynamiteTouchId = touch.identifier;
+          if (this.destruction.dynamite.beginCharge(dynIdx, this.human)) {
+            this.touch.dynamiteTouchId = touch.identifier;
+          } else {
+            refuseDynamiteInSafeRoom(this.hotbarHost());
+          }
           continue;
         }
       }
@@ -6795,6 +6876,8 @@ export class DungeonScene extends GameplayScene {
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
+
+      if (this.followerMenu.touchMove(touch.identifier, x, y)) continue;
 
       if (this.touch.longPressPos) {
         const dist = Math.hypot(x - this.touch.longPressPos.x, y - this.touch.longPressPos.y);
@@ -6831,6 +6914,12 @@ export class DungeonScene extends GameplayScene {
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
+
+      const followerMenuTouch = this.followerMenu.touchEnd(touch.identifier);
+      if (followerMenuTouch !== null) {
+        if (followerMenuTouch === 'tap') this.handleClick(x, y, e.timeStamp);
+        continue;
+      }
 
       if (touch.identifier === this.touch.miniMapTouchId) {
         if (!this.touch.miniMapDragged) this.miniMap.toggle();

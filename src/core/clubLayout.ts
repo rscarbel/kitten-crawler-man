@@ -35,7 +35,7 @@ export const CLUB_DIVIDER_WALLS = [
 ] as const;
 
 /** Identifiers for every interactable club station. */
-export type ClubStationId = 'sledge' | 'bar' | 'casino' | 'market' | 'mercenary' | 'vip';
+export type ClubStationId = 'clarabelle' | 'bar' | 'casino' | 'market' | 'mercenary' | 'vip';
 
 export interface ClubStation {
   id: ClubStationId;
@@ -44,17 +44,20 @@ export interface ClubStation {
   label: string;
 }
 
+/** Rosemarie's Meat Shields desk; her coin tosses are thrown from here. */
+export const CLUB_MERC_DESK_TILE = { x: 20, y: 14 } as const;
+
 /**
- * Fixed positions of each station NPC. The Sledge stands in the vestibule
+ * Fixed positions of each station NPC. Clarabelle works the door from the vestibule
  * between the exit and the dance floor; the others sit in the four corner
  * alcoves and the north-centre VIP nook.
  */
 export const CLUB_STATIONS: ReadonlyArray<ClubStation> = [
-  { id: 'sledge', tile: { x: 12, y: 14 }, label: 'The Sledge' },
+  { id: 'clarabelle', tile: { x: 12, y: 14 }, label: 'Clarabelle' },
   { id: 'bar', tile: { x: 3, y: 3 }, label: 'Bar' },
   { id: 'market', tile: { x: 3, y: 14 }, label: 'Market' },
   { id: 'casino', tile: { x: 20, y: 4 }, label: 'Blackjack' },
-  { id: 'mercenary', tile: { x: 20, y: 14 }, label: 'Meat Shields' },
+  { id: 'mercenary', tile: CLUB_MERC_DESK_TILE, label: 'Meat Shields' },
   { id: 'vip', tile: { x: 12, y: 2 }, label: 'VIP Lounge' },
 ];
 

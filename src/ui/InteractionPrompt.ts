@@ -19,6 +19,7 @@ const HIGHLIGHT_OFFSET_Y = 2;
 const HIGHLIGHT_LINE_OFFSET = 1;
 
 let _promptsSuppressed = false;
+let _promptsDrawnThisFrame = 0;
 
 /**
  * Silences every floating prompt for the frame.
@@ -35,6 +36,20 @@ let _promptsSuppressed = false;
  */
 export function setInteractionPromptsSuppressed(suppressed: boolean): void {
   _promptsSuppressed = suppressed;
+  _promptsDrawnThisFrame = 0;
+}
+
+/**
+ * Prompts actually drawn since the frame began — the frame being the last
+ * {@link setInteractionPromptsSuppressed} call, which every prompting scene
+ * makes at the top of its render.
+ *
+ * For a prompt that stands for the last link of a scene's Space chain: drawn
+ * after every other prompt, it can show only when none of them did, and so
+ * never promises a press that an earlier link would take.
+ */
+export function interactionPromptsDrawnThisFrame(): number {
+  return _promptsDrawnThisFrame;
 }
 
 /** The highest pixel a prompt anchored at `sy` reaches, bob included, for UI stacked above it. */
@@ -66,6 +81,7 @@ export function drawInteractionPrompt(
   keyOverride?: string,
 ): void {
   if (_promptsSuppressed) return;
+  _promptsDrawnThisFrame++;
   const keyText =
     keyOverride ?? (platform.isMobile ? 'TAP' : keybindings.labelFor('attack').toUpperCase());
   const bob = Math.sin(performance.now() / BOB_PERIOD) * BOB_AMPLITUDE;

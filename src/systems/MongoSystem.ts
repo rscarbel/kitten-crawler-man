@@ -19,9 +19,10 @@ import { drawMongoIcon } from '../sprites/mongoSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 import { drawButton } from '../ui/Button';
-import { drawBox, drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
+import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import { drawCooldownOverlay } from '../ui/CooldownOverlay';
 import { ToastStack } from '../ui/ToastStack';
+import { CAT_SPEECH_STYLE, TimedSpeech, drawTimedSpeechBubble } from '../sprites/speechBubble';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { viewportHeight, viewportWidth } from '../core/Viewport';
 
@@ -59,9 +60,6 @@ const AUTO_SUMMON_THREAT_RADIUS_TILES = 7;
  * each refusal re-raises the "No room" line over her head.
  */
 const AUTO_SUMMON_RETRY_FRAMES = 120;
-
-/** Duration a speech bubble stays visible (frames). */
-const SPEECH_DURATION = 150;
 
 // Rendering constants
 /**
@@ -155,22 +153,8 @@ const OFFSCREEN_MARKER_CHEVRON_COLOR = '#f0abfc';
 const OFFSCREEN_MARKER_CHEVRON_OUTLINE = '#000000';
 const OFFSCREEN_MARKER_CHEVRON_LINE_WIDTH = 1.5;
 
-// Speech bubble rendering
-const SPEECH_BUBBLE_ALPHA_DECAY_TIME = 30; // frames
-const SPEECH_BUBBLE_FONT_SIZE = 11;
-const SPEECH_BUBBLE_BOLD_FONT = `bold ${SPEECH_BUBBLE_FONT_SIZE}px monospace`;
-const SPEECH_BUBBLE_OFFSET_X_RATIO = 0.5;
-const SPEECH_BUBBLE_OFFSET_Y = 28;
-const SPEECH_BUBBLE_PADDING = 16;
-const SPEECH_BUBBLE_PADDING_CORNERS = 6;
-const SPEECH_BUBBLE_HEIGHT = 22;
-const SPEECH_BUBBLE_BG_ALPHA = 0.8;
-const SPEECH_BUBBLE_BORDER_WIDTH = 1;
-const SPEECH_BUBBLE_BORDER_COLOR = '#60a5fa';
-const SPEECH_BUBBLE_POINTER_SIZE = 5;
-const SPEECH_BUBBLE_POINTER_HEIGHT = 6;
-const SPEECH_BUBBLE_TEXT_Y_OFFSET = 15;
-const SPEECH_BUBBLE_TEXT_Y_ADJUST = 9;
+/** The cat's calls are centred over her tile. */
+const SPEECH_ANCHOR_X_RATIO = 0.5;
 
 // Recovery toasts — the "-1.2s" flags a kill puts over the Summon button.
 const RECOVERY_TOAST_FRAMES = 90;
@@ -210,10 +194,8 @@ export class MongoSystem implements GameSystem {
   /** The currently active Mongo instance (null when not summoned). */
   mongo: Mongo | null = null;
 
-  /** Current speech bubble text shown above the cat. */
-  speechText: string | null = null;
-  /** Remaining frames for the speech bubble. */
-  speechTimer = 0;
+  /** The cat's summon and recall calls, said over her head. */
+  private readonly speech = new TimedSpeech();
 
   /**
    * The mob list from the last frame.
@@ -378,8 +360,7 @@ export class MongoSystem implements GameSystem {
     this.petState.regenFrames = 0;
     this.retreatFrames = 0;
 
-    this.speechText = 'Go Mongo!';
-    this.speechTimer = SPEECH_DURATION;
+    this.speech.say('Go Mongo!');
 
     return this.mongo;
   }
@@ -489,8 +470,7 @@ export class MongoSystem implements GameSystem {
     const { mobs, grid: mobGrid } = ctx.roster;
     this.retreatMobs = mobs;
 
-    if (this.speechTimer > 0) this.speechTimer--;
-    if (this.speechTimer <= 0) this.speechText = null;
+    this.speech.tick();
 
     // Above the summoned/not-summoned branch below: a toast raised by the last
     // kill before he came up would otherwise hang on screen forever.
@@ -747,8 +727,7 @@ export class MongoSystem implements GameSystem {
   }
 
   private speak(text: string): void {
-    this.speechText = text;
-    this.speechTimer = SPEECH_DURATION;
+    this.speech.say(text);
   }
 
   /**
@@ -1109,65 +1088,14 @@ export class MongoSystem implements GameSystem {
     ctx.restore();
   }
 
-  /**
-   * Render the cat's speech bubble for Mongo-related lines.
-   */
+  /** Render the cat's speech bubble for Mongo-related lines. */
   renderSpeechBubble(ctx: CanvasRenderingContext2D, catScreenX: number, catScreenY: number): void {
-    if (!this.speechText || this.speechTimer <= 0) return;
-
-    const alpha = Math.min(1, this.speechTimer / SPEECH_BUBBLE_ALPHA_DECAY_TIME);
-    const text = this.speechText;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.font = SPEECH_BUBBLE_BOLD_FONT;
-    const tw = ctx.measureText(text).width;
-    const bw = tw + SPEECH_BUBBLE_PADDING;
-    const bh = SPEECH_BUBBLE_HEIGHT;
-    const bx = catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO - bw / 2;
-    const by = catScreenY - SPEECH_BUBBLE_OFFSET_Y;
-
-    drawBox(ctx, {
-      x: bx,
-      y: by,
-      width: bw,
-      height: bh,
-      fill: `rgba(0,0,0,${SPEECH_BUBBLE_BG_ALPHA})`,
-      border: SPEECH_BUBBLE_BORDER_COLOR,
-      borderWidth: SPEECH_BUBBLE_BORDER_WIDTH,
-      radius: SPEECH_BUBBLE_PADDING_CORNERS,
-    });
-
-    // The pointer is the one part with no utility for it: a triangle hanging off
-    // one edge of a box is not a box.
-    ctx.fillStyle = `rgba(0,0,0,${SPEECH_BUBBLE_BG_ALPHA})`;
-    ctx.beginPath();
-    ctx.moveTo(
-      catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO - SPEECH_BUBBLE_POINTER_SIZE,
-      by + bh,
+    drawTimedSpeechBubble(
+      ctx,
+      this.speech,
+      catScreenX + TILE_SIZE * SPEECH_ANCHOR_X_RATIO,
+      catScreenY,
+      CAT_SPEECH_STYLE,
     );
-    ctx.lineTo(
-      catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO,
-      by + bh + SPEECH_BUBBLE_POINTER_HEIGHT,
-    );
-    ctx.lineTo(
-      catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO + SPEECH_BUBBLE_POINTER_SIZE,
-      by + bh,
-    );
-    ctx.closePath();
-    ctx.fill();
-
-    // Text
-    drawText(ctx, text, {
-      x: catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO,
-      y: by + SPEECH_BUBBLE_TEXT_Y_OFFSET - SPEECH_BUBBLE_TEXT_Y_ADJUST,
-      size: SPEECH_BUBBLE_FONT_SIZE,
-      bold: true,
-      color: '#e0f2fe',
-      align: 'center',
-      alpha,
-    });
-
-    ctx.restore();
   }
 }

@@ -94,8 +94,8 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
     if (host.dynamite.isCharging) {
       releaseDynamite(host);
       bus.emit('dynamiteUsed', { player: 'Human' });
-    } else {
-      host.dynamite.beginCharge(hotbarIdx);
+    } else if (!host.dynamite.beginCharge(hotbarIdx, pm.human)) {
+      refuseDynamiteInSafeRoom(host);
     }
     return;
   }
@@ -114,6 +114,15 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
     const request: SkillBookReadRequest = { bookId: slot.id, skillId: slot.skillId };
     host.menus.queueSkillBookRead(request, active);
   }
+}
+
+/** What the hotbar says when a stick is lit where lighting one is refused. */
+export const DYNAMITE_SAFE_ROOM_REFUSAL = 'No explosives in the safe room.';
+
+/** Buzzes and explains a refused light, from any route that tried one. */
+export function refuseDynamiteInSafeRoom(host: Pick<HotbarHost, 'world' | 'menus'>): void {
+  host.world.audio?.play('error_taking_action');
+  host.menus.announce(DYNAMITE_SAFE_ROOM_REFUSAL);
 }
 
 /**

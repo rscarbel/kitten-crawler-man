@@ -244,6 +244,21 @@ export class CatPlayer extends Player {
     return this.tileSize * CatPlayer.MELEE_RANGE_MULTIPLIER;
   }
 
+  /** The furthest a press of the attack key can reach, in pixels: her missile's full flight. */
+  attackReachPx(): number {
+    const stats = getMagicMissileStats(this.getMagicMissileLevel());
+    return Math.max(this.getMeleeRange(), this.missileBaseRangePx() * stats.rangeMultiplier);
+  }
+
+  /** A missile's flight before its level's range multiplier. */
+  private missileBaseRangePx(): number {
+    return (
+      (CatPlayer.MISSILE_BASE_RANGE +
+        this.intelligence * CatPlayer.MISSILE_RANGE_INTELLIGENCE_MULTIPLIER) *
+      this.tileSize
+    );
+  }
+
   /**
    * Clears in-flight missiles and cooldowns so a checkpoint restore doesn't
    * resume an attack from the encounter that killed the player. Several of
@@ -302,10 +317,7 @@ export class CatPlayer extends Player {
     const level = this.getMagicMissileLevel();
     const stats = getMagicMissileStats(level);
     const baseAngle = Math.atan2(this.facingY, this.facingX) + angleOffset;
-    const baseRange =
-      (CatPlayer.MISSILE_BASE_RANGE +
-        this.intelligence * CatPlayer.MISSILE_RANGE_INTELLIGENCE_MULTIPLIER) *
-      this.tileSize;
+    const baseRange = this.missileBaseRangePx();
     const maxDist = isSubMissile
       ? this.tileSize * CatPlayer.SUBMISSILE_MAX_DIST_TILES
       : baseRange * stats.rangeMultiplier;
