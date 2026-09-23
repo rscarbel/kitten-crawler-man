@@ -13,6 +13,8 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import { setPackAlertGrid } from '../creatures/packAlert';
+import { setMarkedGroundSources } from '../creatures/tactics/markedGround';
+import type { GroundHazardSource } from './GroundHazardSource';
 import { SeparationGrid } from '../core/SeparationGrid';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import {
@@ -71,6 +73,18 @@ export class MobUpdateLoop implements GameSystem {
    * candidate buffer serve both.
    */
   private readonly separationGrid = new SeparationGrid<Mob>();
+  /** Whose damaging ground a mob's tactics must never walk it onto. */
+  private readonly hazardSources: GroundHazardSource[] = [];
+
+  /**
+   * Registers a system whose damaging ground no tactic may walk a mob onto.
+   * Registration rather than a constructor dependency for the same reason the
+   * companion's is: the hazard owners come and go with their encounters.
+   */
+  registerHazardSource(source: GroundHazardSource): void {
+    if (this.hazardSources.includes(source)) return;
+    this.hazardSources.push(source);
+  }
 
   /**
    * Run one frame of mob AI for all mobs within activation radius
@@ -82,6 +96,7 @@ export class MobUpdateLoop implements GameSystem {
 
     resetPathfindBudget();
     setPackAlertGrid(mobGrid);
+    setMarkedGroundSources(this.hazardSources);
 
     // Tick BrindleGrub evolution for ALL alive grubs (not just those in AI radius)
     for (const mob of mobs) {
@@ -178,6 +193,12 @@ export class MobUpdateLoop implements GameSystem {
         mob.updateAI(holdsFire ? NO_TARGETS : aiTargets);
       }
 
+      // Between the `ox`/`oy` capture and the `mobGrid.move` below, so a shove
+      // that carries the mob into another cell is re-bucketed by the same call
+      // that covers its walking. Outside the AI branches because a stagger is
+      // physics: a held or confused mob is still pushed.
+      mob.advanceKnockback();
+
       // Keep bosses (specifically the Juicer) confined to their room
       if (mob.isBoss && !(mob instanceof BallOfSwine)) bossRoom?.clampBossToRoom(mob);
       mob.tickTimers();
@@ -254,6 +275,8 @@ export class MobUpdateLoop implements GameSystem {
   /** Drops the published grid so a torn-down scene's mobs can never be searched. */
   dispose(): void {
     setPackAlertGrid(null);
+    setMarkedGroundSources([]);
+    this.hazardSources.length = 0;
   }
 
   /**

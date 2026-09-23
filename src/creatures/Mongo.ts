@@ -767,6 +767,12 @@ export class Mongo extends Mob {
    * chase the player thought he had broken off.
    */
   private disengageWounded(): void {
+    // A mob he has bitten keeps him on its target list through `retaliateMob`,
+    // which nothing clears while he lives — so without this a raptor who has
+    // stopped fighting is still the thing the Ball of Swine rolls at.
+    for (const mob of this.allMobs) {
+      if (mob.retaliateMob === this) mob.retaliateMob = null;
+    }
     if (this.target === null) return;
     this.target = null;
     this.engageStallFrames = 0;
@@ -997,6 +1003,13 @@ export class Mongo extends Mob {
    */
   private isValidTarget(mob: Mob, radiusTiles: number, rank = PRIORITY_NEAREST): boolean {
     if (mob === this || !mob.isAlive || !mob.isPetAttackable) return false;
+    // A body that has to be dodged rather than fought — the rolling Ball of
+    // Swine — tramples for a large share of its victim's health a pass, and he
+    // has no dodge. Charging it would spend him before the fight's second
+    // phase, and the wounded hold would then keep him out of every fight left
+    // in the room. The same test drops a held ball the moment it starts rolling
+    // again; it is fair game once it stops, the window it is meant to be hit in.
+    if (mob.avoidInstead) return false;
     const fromCat = this.catDistanceTo(mob);
     const ban = this.offLimits.get(mob);
     if (ban !== undefined) {

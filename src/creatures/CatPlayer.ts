@@ -15,7 +15,6 @@ import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
 import {
-  CAT_SWIPE_FRAMES,
   CatAnimator,
   drawCatSprite,
   drawMissiles,
@@ -34,15 +33,20 @@ import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/PlayerSnapshot';
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
 const CAT_CRAWLER_KIND: CrawlerKind = 'cat';
 
-/** Damage a claw swipe does before strength, gear or status are counted. */
-const BARE_CLAW_DAMAGE = 1;
+import {
+  bareClawDamage,
+  CAT_BASE_CONSTITUTION,
+  CAT_BASE_HP_OFFSET,
+  CAT_DEXTERITY_PER_LEVEL,
+  CAT_LOCKED_STATS,
+  CAT_STARTING_DEXTERITY,
+  CAT_SWIPE_FRAMES,
+  missileDamage,
+} from '../core/crawlerFormulas';
 import { CAT_REFLEXES_DODGE_BONUS_PER_LEVEL } from '../core/SkillManager';
 
 /** Degrees in π radians, for the one place this class works in degrees. */
 const DEGREES_PER_HALF_TURN = 180;
-
-/** Dexterity the System hands Donut for free on each level-up. */
-const ENHANCED_GROWTH_DEX_PER_LEVEL = 1;
 
 const CONSTITUTION_AUDIT_NOTICE = 'Constitution refunded — spend the points';
 
@@ -81,12 +85,6 @@ export class CatPlayer extends Player {
   /** The mob the cat will automatically shoot at when not player-controlled. */
   autoTarget: Mob | null = null;
 
-  /** Species HP floor: 2 + CON 2 × 2 = 6 starting max HP. She is meant to be fragile. */
-  private static readonly CAT_BASE_HP_OFFSET = 2;
-  /** Donut's constitution is fixed at 2 by the enhanced pet biscuit — book canon. */
-  static readonly CAT_BASE_CONSTITUTION = 2;
-  /** The pet biscuit's head start: she is very hard to hit. */
-  private static readonly CAT_STARTING_DEXTERITY = 8;
   /** Her spell and her healing sit under the first two number keys. */
   private static readonly TOME_HOTBAR_SLOT = 0;
   private static readonly POTION_HOTBAR_SLOT = 1;
@@ -160,10 +158,10 @@ export class CatPlayer extends Player {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, {
-      baseHpOffset: CatPlayer.CAT_BASE_HP_OFFSET,
+      baseHpOffset: CAT_BASE_HP_OFFSET,
       baseStats: {
-        constitution: CatPlayer.CAT_BASE_CONSTITUTION,
-        dexterity: CatPlayer.CAT_STARTING_DEXTERITY,
+        constitution: CAT_BASE_CONSTITUTION,
+        dexterity: CAT_STARTING_DEXTERITY,
       },
       crawlerKind: CAT_CRAWLER_KIND,
     });
@@ -179,9 +177,8 @@ export class CatPlayer extends Player {
   }
 
   getMissileDamage(): number {
-    const base = 2 + this.intelligence;
     const stats = getMagicMissileStats(this.getMagicMissileLevel());
-    return Math.round(base * stats.damageMultiplier);
+    return missileDamage(this.intelligence, stats.damageMultiplier);
   }
 
   /** Crawlers dodge; the mobs they fight do not. */
@@ -206,7 +203,7 @@ export class CatPlayer extends Player {
    * banked points go to strength and intelligence.
    */
   override canSpendPointInto(stat: StatName): boolean {
-    return stat !== 'constitution' && stat !== 'dexterity';
+    return !CAT_LOCKED_STATS.includes(stat);
   }
 
   /**
@@ -221,9 +218,9 @@ export class CatPlayer extends Player {
    */
   override migrateRestoredStats(snapshotVersion: number): void {
     if (snapshotVersion >= CONSTITUTION_LOCK_SNAPSHOT_VERSION) return;
-    const excess = this.getBaseStat('constitution') - CatPlayer.CAT_BASE_CONSTITUTION;
+    const excess = this.getBaseStat('constitution') - CAT_BASE_CONSTITUTION;
     if (excess <= 0) return;
-    this.setBaseStat('constitution', CatPlayer.CAT_BASE_CONSTITUTION);
+    this.setBaseStat('constitution', CAT_BASE_CONSTITUTION);
     this.unspentPoints += excess;
     this.queueSystemNotice(CONSTITUTION_AUDIT_NOTICE);
   }
@@ -232,17 +229,15 @@ export class CatPlayer extends Player {
    * Enhanced Growth: the System auto-allocates Donut's dexterity on every
    * level-up, which is the counterweight to her locked constitution.
    */
-  override gainXp(amount: number): boolean {
-    const leveled = super.gainXp(amount);
-    if (!leveled) return false;
-    this.setBaseStat('dexterity', this.getBaseStat('dexterity') + ENHANCED_GROWTH_DEX_PER_LEVEL);
-    this.queueFloatingText(`+${ENHANCED_GROWTH_DEX_PER_LEVEL} DEX`, 'buff');
+  protected override onLevelGained(): void {
+    super.onLevelGained();
+    this.setBaseStat('dexterity', this.getBaseStat('dexterity') + CAT_DEXTERITY_PER_LEVEL);
+    this.queueFloatingText(`+${CAT_DEXTERITY_PER_LEVEL} DEX`, 'buff');
     this.animator.play('dance');
-    return true;
   }
 
   getMeleeDamage(): number {
-    return BARE_CLAW_DAMAGE + this.strength + this.statusMeleeDamageBonus;
+    return bareClawDamage(this.strength) + this.statusMeleeDamageBonus;
   }
 
   getMeleeRange(): number {

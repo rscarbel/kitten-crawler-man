@@ -1,4 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
+import { awardXp } from '../core/awardXp';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { Mongo } from '../creatures/Mongo';
 import { MONGO_ASSIST_XP } from '../abilities/mongo';
@@ -17,7 +18,6 @@ import { SMUSH_STAMP_X, SMUSH_STAMP_Y } from '../sprites/humanSprite';
 import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
-import { diminishedXpShare, type XpDiminishingTier } from '../levels/xpDiminishing';
 import {
   POWERFUL_STRIKE_CHANCE_PER_LEVEL,
   POWERFUL_STRIKE_DAMAGE_MULTIPLIER,
@@ -96,8 +96,6 @@ export interface CombatContext {
   smushFx?: Pick<SmushEffectSystem, 'spawn'>;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
-  /** This floor's combat-XP diminishing curve. Absent means kills award full XP. */
-  xpDiminishingTiers?: readonly XpDiminishingTier[];
 }
 
 export function resolvePlayerAttacks(ctx: CombatContext): void {
@@ -143,7 +141,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         mob.takeDamageFrom(Math.round(damage * strikeMultiplier), human, 'melee');
         ctx.hitLanded = true;
         humanHit = true;
+        // A guarded blow never touched the mob, so nothing rides in on it.
+        const bladeConnected = !mob.lastBlowWasGuarded;
         if (
+          bladeConnected &&
           human.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
           Math.random() < SEPSIS_PROC_CHANCE
         ) {
@@ -155,7 +156,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         // unchecked it can hold a boss in a permanent stun loop, which stops being
         // a fight.
         const stunChance = human.inventory.equipment.getStunOnHitChance();
-        if (stunChance > 0 && !mob.isBoss && Math.random() < stunChance) {
+        if (bladeConnected && stunChance > 0 && !mob.isBoss && Math.random() < stunChance) {
           mob.applyStatus(makeStun(GAUNTLET_STUN_TICKS));
         }
       }
@@ -194,6 +195,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         ctx.hitLanded = true;
         catHit = true;
         if (
+          !mob.lastBlowWasGuarded &&
           cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
           Math.random() < SEPSIS_PROC_CHANCE
         ) {
@@ -472,7 +474,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 }
 
 export function resolveKills(ctx: CombatContext): void {
-  const { mobs, human, cat, mobGrid, bus, abilityManager, spells, xpDiminishingTiers } = ctx;
+  const { mobs, human, cat, mobGrid, bus, abilityManager, spells } = ctx;
 
   // Mobs that leave a body behind stay in the grid past death so their corpse
   // keeps being drawn; they drop out here once it has played out. Runs before
@@ -528,14 +530,8 @@ export function resolveKills(ctx: CombatContext): void {
       const totalXp = mob.scaledXpValue;
       const topXp = Math.max(1, Math.round(totalXp * XP_TOP_DEALER_FRACTION));
       const shareXp = Math.max(1, totalXp - topXp);
-      // Scaled per character, not per kill: the two can sit on opposite sides of
-      // the floor's curve.
-      if (topPlayer?.gainXp(diminishedXpShare(topXp, xpDiminishingTiers, topPlayer.level))) {
-        bus.emit('playerLevelUp', { player: topPlayer, newLevel: topPlayer.level });
-      }
-      if (otherPlayer.gainXp(diminishedXpShare(shareXp, xpDiminishingTiers, otherPlayer.level))) {
-        bus.emit('playerLevelUp', { player: otherPlayer, newLevel: otherPlayer.level });
-      }
+      if (topPlayer !== null) awardXp(topPlayer, topXp, bus);
+      awardXp(otherPlayer, shareXp, bus);
     }
 
     const killer =

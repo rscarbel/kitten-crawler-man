@@ -20,7 +20,7 @@
 
 import { prewarmLichLocomotion } from '../sprites/lichSprite';
 import { TILE_SIZE } from '../core/constants';
-import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { TOWN_MUSIC_TRACKS } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
@@ -86,8 +86,8 @@ const GUARD_POST_LEASH_TILES = 1.5;
 /**
  * The Lich's spawn level — far below its own guards', deliberately.
  *
- * Levelling multiplies health in place at 30% a level, so the number that reads
- * as "a serious boss" on a cultist is a health bar three times the size on
+ * Levelling multiplies health in place along `hpScaleForLevel`, so the level
+ * that reads as "a serious boss" on a cultist is a far bigger health bar on
  * something that already has one. Its base health is tuned for this fight and
  * the level is here for the damage and the coins: three lands it beside Miss
  * Quill's own bar rather than well past it, and what makes the second half of
@@ -345,7 +345,7 @@ export class QuillConfrontationSystem implements GameSystem {
       const guard = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
       guard.setMap(this.map);
       guard.applyMobLevel(questMobLevel(GUARD_LEVEL, this.partyLevel));
-      applyActiveDifficultyRewards(guard);
+      applySpawnDifficulty(guard);
       guard.homePoint = { x: guard.x, y: guard.y };
       guard.leashRadiusTiles = GUARD_POST_LEASH_TILES;
       this.addMob(guard);
@@ -558,7 +558,7 @@ export class QuillConfrontationSystem implements GameSystem {
     const lich = new TheLich(this.lichTile.x, this.lichTile.y, TILE_SIZE);
     lich.setMap(this.map);
     lich.applyMobLevel(questMobLevel(LICH_LEVEL, this.partyLevel));
-    applyActiveDifficultyRewards(lich);
+    applySpawnDifficulty(lich);
     this.addMob(lich);
     this.lich = lich;
     this.battle = new LichBattleSystem(this.map, lich, this.audio, this.companion, {

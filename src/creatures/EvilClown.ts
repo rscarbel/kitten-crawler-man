@@ -1,4 +1,4 @@
-import { Mob } from './Mob';
+import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import {
@@ -33,7 +33,14 @@ const EVIL_CLOWN_SPEED = 0.85;
 const AGGRO_RANGE_TILES = 11;
 /** His arms hang below his knees, so he reaches further than he looks. */
 const ATTACK_RANGE_TILES = 2.3;
-const ATTACK_DAMAGE = 16;
+/**
+ * The backhand's authored damage. A bounty mark always spawns a level above the
+ * party, where the level multiplier is steepest against the crawler's own
+ * growth, so this is sized for that: an on-schedule crawler walks away from it
+ * with a quarter of her bar (`BOUNTY_MAX_BLOW_HP_SHARE`). His weight is the
+ * troupe and the gas, not one swing that kills from full.
+ */
+const ATTACK_DAMAGE = 4;
 /** Frames between backhands (~2.5 s at 60 fps). */
 const ATTACK_COOLDOWN = 150;
 /** Frames of the swipe animation; damage lands at {@link SWIPE_CONTACT_FRAME}. */
@@ -151,6 +158,11 @@ const EMPTY_VIALS: readonly PendingVial[] = [];
 type ClownPhase = 'hunting' | 'laughing' | 'juggling';
 
 export class EvilClown extends Mob {
+  /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
+  override get blastDamageScale(): number {
+    return BOSS_BLAST_DAMAGE_SCALE;
+  }
+
   readonly xpValue = EVIL_CLOWN_XP;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

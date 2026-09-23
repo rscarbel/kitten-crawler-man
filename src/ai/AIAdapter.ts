@@ -2,6 +2,7 @@
 // If the server is not running, initialize() silently no-ops and the game
 // continues normally. All public methods are safe to call whether connected or not.
 
+import { displayHp } from '../core/crawlerFormulas';
 import type { AIAction, ClientMessage, GameEventRecord } from 'game-ai-server/sdk';
 import type { EventBus } from '../core/EventBus';
 import type { Player } from '../Player';
@@ -320,7 +321,7 @@ export class AIAdapter {
         type: m.constructor.name,
         tileX: Math.floor(m.x / TILE_SIZE),
         tileY: Math.floor(m.y / TILE_SIZE),
-        hp: m.hp,
+        hp: displayHp(m.hp),
         maxHp: m.maxHp,
         isBoss: m.isBoss,
       }))
@@ -501,9 +502,9 @@ export class AIAdapter {
         this.sendEvent({
           ts: Date.now(),
           type: 'health_low',
-          data: { player: e.player, hp: e.hp, maxHp: e.maxHp },
+          data: { player: e.player, hp: displayHp(e.hp), maxHp: e.maxHp },
           importance: 4,
-          summary: `${e.player} health is critically low (${e.hp}/${e.maxHp})`,
+          summary: `${e.player} health is critically low (${displayHp(e.hp)}/${e.maxHp})`,
         });
       }),
 
@@ -776,7 +777,7 @@ export class AIAdapter {
 
 function playerSnapshot(p: Player) {
   return {
-    hp: p.hp,
+    hp: displayHp(p.hp),
     maxHp: p.maxHp,
     level: p.level,
     xp: p.xp,

@@ -1,4 +1,4 @@
-import { Mob } from './Mob';
+import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import type { Player } from '../Player';
 import {
@@ -174,6 +174,11 @@ const SLAM_FADE_DIVISOR = 0.4;
 const SLAM_ARC_DIVISOR = 3;
 
 export class GrotesqueSpider extends Mob {
+  /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
+  override get blastDamageScale(): number {
+    return BOSS_BLAST_DAMAGE_SCALE;
+  }
+
   /**
    * Her telegraphs are drawn by `drawSelf`, and the screech ring is the widest
    * of them. Left at the mob default the composite would slice that ring into a

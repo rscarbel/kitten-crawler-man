@@ -1,7 +1,7 @@
 /**
  * One step of a floor's diminishing-returns curve: once the character is at
- * least `minPlayerLevel`, combat XP earned on that floor is scaled by
- * `multiplier`.
+ * least `minPlayerLevel`, XP earned on that floor buys levels at `multiplier`
+ * of its face value.
  */
 export interface XpDiminishingTier {
   /** Inclusive character level at which this tier takes over. */
@@ -34,20 +34,4 @@ export function xpMultiplierForPlayerLevel(
     }
   }
   return multiplier;
-}
-
-/**
- * Scales one character's share of a mob's XP by their floor's curve.
- *
- * A diminished share is allowed to reach zero — that is the point of the curve,
- * and the caller's usual "never award less than 1" floor would defeat it.
- */
-export function diminishedXpShare(
-  share: number,
-  tiers: readonly XpDiminishingTier[] | undefined,
-  playerLevel: number,
-): number {
-  const multiplier = xpMultiplierForPlayerLevel(tiers, playerLevel);
-  if (multiplier === FULL_XP_MULTIPLIER) return share;
-  return Math.max(0, Math.round(share * multiplier));
 }

@@ -207,7 +207,7 @@ interface Stage {
  */
 function makeStage(map: GameMap, humanTileX: number, humanTileY: number): Stage {
   const bus = new EventBus();
-  const pm = new PlayerManager(humanTileX, humanTileY);
+  const pm = new PlayerManager(humanTileX, humanTileY, undefined);
   pm.cat.x = pm.human.x;
   pm.cat.y = pm.human.y;
   const roster = new MobRoster(map, new SpellSystem());

@@ -2,6 +2,9 @@ import { Mob } from './Mob';
 import type { Player } from '../Player';
 import { drawCityElfCultistSprite } from '../sprites/cityElfCultistSprite';
 import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import type { KiteAim } from './tactics/tacticalFrame';
+import { retreatBehindHelper } from './tactics/retreat';
 
 const CULTIST_HP = 22;
 const CULTIST_SPEED = 1.15;
@@ -24,8 +27,11 @@ const CAST_RANGE_MIN_TILES = 3;
 /** How long one retreat lasts, and how long before the next one can start. */
 const RETREAT_MAX_FRAMES = 70;
 const RETREAT_COOLDOWN_FRAMES = 150;
-/** Frames between soul-bolt casts (~2.3 s at 60 fps). */
-const CAST_COOLDOWN = 140;
+/**
+ * Frames between soul-bolt casts (~2.3 s at 60 fps). Exported so the tactics
+ * gate can hold a falling-back cultist to the cadence it casts at standing.
+ */
+export const CITY_ELF_CULTIST_CAST_COOLDOWN_FRAMES = 140;
 const CAST_ANIM_FRAMES = 24;
 const BOLT_DAMAGE = 5;
 const COIN_DROP_MIN = 2;
@@ -33,6 +39,7 @@ const COIN_DROP_MAX = 5;
 const CENTER_OFFSET = 0.5;
 const FOLLOW_STOP_RANGE_TILES = 1.5;
 const FOLLOW_CLOSE_RANGE_RATIO = 0.85;
+const CULTIST_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
 
 /**
  * A city elf cultist — one of Miss Quill's hooded faithful, who believe the
@@ -59,6 +66,26 @@ export class CityElfCultist extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, CULTIST_HP, CULTIST_SPEED);
+  }
+
+  /**
+   * A caster, so what it can learn is to keep its distance well: fall back
+   * behind another cultist rather than straight away from whoever crowds it,
+   * so the player who follows has to get through one to reach the other; and
+   * fall back on one when hurt. Never `block` — it has nothing to turn a blade with — and
+   * never `flank`, whose approach would walk it inside its own cast band.
+   *
+   * A posted guard with `forceAggro` has a target from the moment it spawns,
+   * but a kite or regroup needs blood drawn on both sides of it, so a guard
+   * nobody has fought yet neither kites nor serves as anyone's friend.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return CULTIST_TACTICS;
+  }
+
+  /** A caster regroups behind its friend, never up to it and into the melee. */
+  protected override get regroupAim(): KiteAim {
+    return retreatBehindHelper;
   }
 
   override resetToSpawn(): void {
@@ -92,6 +119,7 @@ export class CityElfCultist extends Mob {
     if (!nearest) {
       this.isAggro = false;
       this.retreatFrames = 0;
+      this.tactics.disengage();
       this.clearAStarPath();
       // A cultist posted by an encounter carries a `homePoint` and a leash, and
       // only this path consults them: an idle drift of a tile or two is nothing
@@ -114,13 +142,33 @@ export class CityElfCultist extends Mob {
       this.lastKnownTargetY = nearest.y;
     }
 
+    // Whichever fallback starts first runs to its own end: the tactics are not
+    // asked while a backpedal is under way, and a backpedal cannot start while
+    // a kite or regroup is — so the two never trade frames. On a frame where
+    // neither is running, the tactics are asked first; the kite's own cooldown
+    // then leaves the backpedal the next crowding.
+    const tacticalMove =
+      this.retreatFrames > 0
+        ? null
+        : this.chooseTacticalStep(nearest, castRangeMinPx, true, retreatBehindHelper);
     const isCrowded = hasLOS && nearestDist < castRangeMinPx;
-    if (isCrowded && this.retreatFrames === 0 && this.retreatCooldown === 0) {
+    const canBackpedal = tacticalMove === null && this.retreatCooldown === 0;
+    if (isCrowded && this.retreatFrames === 0 && canBackpedal) {
       this.retreatFrames = RETREAT_MAX_FRAMES;
       this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;
     }
 
-    if (this.retreatFrames > 0) {
+    if (tacticalMove !== null) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      // Faced at the quarry, not along the walk, for the same reason the
+      // backpedal is: a cultist falling back is still casting.
+      this.facingX = targetCX >= handX ? 1 : -1;
+      // A fall-back is a backpedal's worth of retreat: its cooldown runs from
+      // the end of this one, or a kite that ends still crowded would chain
+      // straight into a backpedal — faster than a kite may go, and half as
+      // long again as the kite itself.
+      if (tacticalMove.breaksOff) this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;
+    } else if (this.retreatFrames > 0) {
       this.retreatFrames--;
       if (nearestDist >= castRangeMinPx) {
         this.retreatFrames = 0;
@@ -149,7 +197,7 @@ export class CityElfCultist extends Mob {
 
     if (hasLOS && nearestDist <= castRangePx && this.castCooldown === 0) {
       this.bolts.push(fireSoulBolt(handX, handY, targetCX, targetCY));
-      this.castCooldown = CAST_COOLDOWN;
+      this.castCooldown = CITY_ELF_CULTIST_CAST_COOLDOWN_FRAMES;
       this.castAnimTimer = CAST_ANIM_FRAMES;
       this.projectileSoundPending = true;
     }

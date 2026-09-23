@@ -13,6 +13,8 @@ import { normalize } from './utils';
 import { drawText } from './ui/TextBox';
 import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
 import { computeDodgeChance } from './core/dodge';
+import { xpMultiplierForPlayerLevel, type XpDiminishingTier } from './levels/xpDiminishing';
+import { crawlerMaxHp, STAT_POINTS_PER_LEVEL } from './core/crawlerFormulas';
 import { activeDifficultyProfile } from './core/difficultyProfiles';
 import {
   SkillManager,
@@ -95,6 +97,13 @@ export type DamageSource =
        * parking in a puddle.
        */
       readonly undodgeable?: boolean;
+      /**
+       * The most of the victim's own max HP this one blow may take, applied
+       * after the difficulty's incoming-damage scale so it holds on every
+       * setting and against every crawler. Stamped by `Mob.stampBlowCap` for
+       * encounters that promise no blow kills from full.
+       */
+      readonly maxShareOfTargetHp?: number;
     }
   | {
       readonly kind: 'status';
@@ -146,8 +155,6 @@ export const REGEN_SUPPRESS_FRAMES = 300;
 const LEVEL_UP_FLASH_FRAMES = 120;
 const SPEND_POINT_FLASH_FRAMES = 60;
 const XP_PER_LEVEL_MULTIPLIER = 10;
-/** Max HP granted by each point of constitution. The single source for this ratio. */
-export const CON_HP_BONUS_PER_POINT = 2;
 const POTION_HEAL_FRACTION = 0.5;
 /**
  * Half what a health potion gives back. The Dirty Shirley is a cocktail with a
@@ -196,8 +203,9 @@ const STAT_BOOST_RANGE = 3;
 /** Health bar display thresholds */
 const HP_BAR_GREEN_THRESHOLD = 0.5;
 const HP_BAR_YELLOW_THRESHOLD = 0.25;
-const HP_BAR_HEIGHT = 4;
-const HP_BAR_Y_OFFSET = 7;
+/** Exported so a mob can size a mark against its own health bar without redrawing it. */
+export const HP_BAR_HEIGHT = 4;
+export const HP_BAR_Y_OFFSET = 7;
 
 /**
  * How far past their tile the crawlers' own art reaches, in tiles — enough to
@@ -276,6 +284,12 @@ export abstract class Player {
   private _godModeStatBonus = 0;
   levelUpStat: string | null = null;
   levelUpFlash = 0;
+  /**
+   * The diminishing-returns curve of the floor this character is on, or none
+   * for full XP. Set by the floor's scene; every award through {@link gainXp}
+   * reads it, so kill, boss and quest XP all pass through the same curve.
+   */
+  xpCurve: readonly XpDiminishingTier[] | undefined = undefined;
   damageFlash = 0;
   isMoving = false;
   walkFrame = 0;
@@ -523,10 +537,17 @@ export abstract class Player {
     // A generic player has nothing to reconcile; subclasses override this.
   }
 
-  /** Queue a System line for the scene to show as a hotbar toast. */
-  queueSystemNotice(line: string): void {
-    if (this.pendingSystemNotices.length >= MAX_PENDING_SYSTEM_NOTICES) return;
+  /**
+   * Queue a System line for the scene to show as a hotbar toast.
+   *
+   * @returns Whether the line was actually queued. A caller that latches a
+   *   one-time flag on a successful call (rather than on having merely tried)
+   *   gets a free retry next frame if the queue was full this one.
+   */
+  queueSystemNotice(line: string): boolean {
+    if (this.pendingSystemNotices.length >= MAX_PENDING_SYSTEM_NOTICES) return false;
     this.pendingSystemNotices.push(line);
+    return true;
   }
 
   /**
@@ -535,8 +556,7 @@ export abstract class Player {
    * fixed value to the constructor and keep it.
    */
   get maxHp(): number {
-    const base =
-      this._maxHpOverride ?? this.baseHpOffset + this.constitution * CON_HP_BONUS_PER_POINT;
+    const base = this._maxHpOverride ?? crawlerMaxHp(this.baseHpOffset, this.constitution);
     return Math.max(1, base + this._juggJuiceHpBoost);
   }
 
@@ -614,6 +634,23 @@ export abstract class Player {
   }
 
   /**
+   * What a blow of `amount` actually costs this crawler before any dodge: the
+   * difficulty's incoming-damage scale, then the source's cap as a share of her
+   * own max HP. Public so a headless harness prices a blow exactly as it lands.
+   */
+  incomingDamage(amount: number, source?: DamageSource): number {
+    if (source?.kind !== 'mob') return amount;
+    // Read live rather than stamped at spawn: flipping to Kitten mid-bounty must
+    // help immediately, or the toggle fails the player who needed it most.
+    // Status ticks and self-inflicted dynamite are unscaled — re-pricing a burn
+    // that is already running would re-price a hit after the dodge/avoid
+    // decision was already made.
+    const difficultyScaled = amount * activeDifficultyProfile().incomingMobDamageScale;
+    if (source.maxShareOfTargetHp === undefined) return difficultyScaled;
+    return Math.min(difficultyScaled, this.maxHp * source.maxShareOfTargetHp);
+  }
+
+  /**
    * @returns whether the attack connected. False when it was dodged, or when the
    *   safe room, god mode, a knockout or i-frames swallowed it — attackers use
    *   this to hold back the status riders they apply alongside their damage, so a
@@ -621,13 +658,7 @@ export abstract class Player {
    */
   takeDamage(amount: number, source?: DamageSource): boolean {
     if (amount <= 0 || !this.canBeHarmed) return false;
-    // Read live rather than stamped at spawn: flipping to Kitten mid-bounty must
-    // help immediately, or the toggle fails the player who needed it most.
-    // Status ticks and self-inflicted dynamite are unscaled — re-pricing a burn
-    // that is already running would re-price a hit after the dodge/avoid
-    // decision was already made.
-    const scaledAmount =
-      source?.kind === 'mob' ? amount * activeDifficultyProfile().incomingMobDamageScale : amount;
+    const scaledAmount = this.incomingDamage(amount, source);
     // Only a swung, thrown or bitten attack can be dodged. Status ticks, your own
     // dynamite, standing damage fields and the doomsday clock all land regardless.
     if (source?.kind === 'mob' && source.undodgeable !== true && this.rollDodge()) {
@@ -846,19 +877,52 @@ export abstract class Player {
     return false;
   }
 
+  /**
+   * Awards XP, levelling as many times as it pays for. Returns whether any
+   * level was gained.
+   *
+   * Every level is bought at {@link xpCurve}'s multiplier for the level being
+   * bought, not the level the award arrived at, so one large boss or quest
+   * award buys exactly what the same XP earned kill by kill would. Anything
+   * else lets an award earned just under a tier carry a crawler past it at
+   * full value. Call it through `awardXp`, which announces the level-up.
+   */
   gainXp(amount: number): boolean {
     if (amount <= 0) return false;
-    this.xp += amount;
-    const xpNeeded = this.xpNeededForNextLevel;
-    if (this.xp >= xpNeeded) {
-      this.xp -= xpNeeded;
-      this.level++;
-      this.unspentPoints++;
-      this.levelUpStat = 'POINT';
-      this.levelUpFlash = LEVEL_UP_FLASH_FRAMES;
-      return true;
+    let unconverted = amount;
+    let leveled = false;
+    while (unconverted > 0) {
+      const multiplier = xpMultiplierForPlayerLevel(this.xpCurve, this.level);
+      if (multiplier <= 0) break;
+      const missing = this.xpRemainingToNextLevel;
+      const worth = unconverted * multiplier;
+      if (worth < missing) {
+        this.xp += Math.round(worth);
+        break;
+      }
+      unconverted -= missing / multiplier;
+      this.xp += missing;
+      this.advanceLevel();
+      leveled = true;
     }
-    return false;
+    return leveled;
+  }
+
+  /** Spends one level's worth of XP on the next level, whatever curve the floor has. */
+  advanceLevel(): void {
+    this.xp = Math.max(0, this.xp - this.xpNeededForNextLevel);
+    this.level++;
+    this.unspentPoints += STAT_POINTS_PER_LEVEL;
+    this.onLevelGained();
+  }
+
+  /**
+   * Runs once for every level gained, after the level has changed. Overrides
+   * add to the level-up flash rather than replace it.
+   */
+  protected onLevelGained(): void {
+    this.levelUpStat = 'POINT';
+    this.levelUpFlash = LEVEL_UP_FLASH_FRAMES;
   }
 
   /**

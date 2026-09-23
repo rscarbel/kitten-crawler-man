@@ -26,7 +26,7 @@ import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
 import { RisingSkeleton } from '../creatures/RisingSkeleton';
 import { TILE_SIZE } from '../core/constants';
 import { hasRoomToMove } from '../map/findWalkableTile';
-import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 /**
@@ -132,15 +132,20 @@ export class SkeletonSummonSystem implements GameSystem {
         ? new SkeletonWarrior(tileX, tileY, TILE_SIZE)
         : new SkeletonArcher(tileX, tileY, TILE_SIZE);
     risen.setMap(this.gameMap);
+    // Before the roll below: a skeleton learns what it may know from whether
+    // it was summoned, and only this call marks it so.
+    risen.beginRising();
     // The flags BountySystem would have applied at issue time. Summons never
     // pass through it, so they are applied here — exactly once each.
-    risen.applyMobLevel(summoner.mobLevel);
-    applyActiveDifficultyRewards(risen);
+    risen.applyMobLevel(summoner.mobLevel, summoner.levelledCurve);
+    applySpawnDifficulty(risen);
     risen.ignoresTownSafeZone = true;
+    // A summon fights the summoner's fight, so it keeps the summoner's promise
+    // about how much one blow may take.
+    risen.blowCapShareOfTargetHp = summoner.blowCapShareOfTargetHp;
     // Deliberately unleashed: they climb out into a fight that is already
     // happening, so there is no site for them to be anchored to.
     risen.forceAggro = true;
-    risen.beginRising();
     this.addMob(risen);
     this.riseSoundPending = true;
   }

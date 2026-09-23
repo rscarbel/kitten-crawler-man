@@ -294,8 +294,12 @@ export const MONGO_DEF: AbilityDef = {
   tag: 'PET',
   equipInstructions:
     'Switch to Cat (Tab), then press R or the Summon button. Press again to recall. ' +
+    'While you play the human, the cat sends him in herself when enemies are near ' +
+    '(Settings or the follower menu turn this off). ' +
     'His health is his own and it carries between summons — he does not come back topped up. ' +
-    'He heals slowly only while recalled, and a knockout means he rests all the way to full ' +
+    'He heals once you call him back, counting his run home — never more than 30 seconds ' +
+    'from empty to full — and a ' +
+    'knockout means he rests all the way to full ' +
     'before he can be sent in again. Below roughly two fifths of his health he will not go in ' +
     'at all — a raptor that hurt stays at your side instead of fighting, so the button holds ' +
     'him back until he is fit.',

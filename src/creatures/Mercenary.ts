@@ -293,7 +293,7 @@ export class Mercenary extends Mob {
       this.beginGolemAttack(this.lastMelee === 'slam' ? 'stomp' : 'slam');
       return;
     }
-    nearest.takeDamageFrom(this.strikeDamage, this.owner, 'melee');
+    nearest.takeCreditedDamage(this.strikeDamage, this.owner, 'melee', this);
     this.attackCooldown = ATTACK_COOLDOWN_FRAMES;
     this.strikeAnimFrames = STRIKE_ANIM_FRAMES;
     this.attackSoundPending = true;
@@ -368,7 +368,7 @@ export class Mercenary extends Mob {
     if (Math.hypot(victim.x - this.x, victim.y - this.y) > this.strikeRangePx * GOLEM_REACH_RATIO) {
       return;
     }
-    victim.takeDamageFrom(this.strikeDamage, this.owner, 'melee');
+    victim.takeCreditedDamage(this.strikeDamage, this.owner, 'melee', this);
   }
 
   /**

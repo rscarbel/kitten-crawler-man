@@ -5,6 +5,10 @@ import type { LootDrop } from './Mob';
 import { HumanPlayer } from './HumanPlayer';
 import { CatPlayer } from './CatPlayer';
 import { PLAYER_SPEED } from '../core/constants';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import { retreatTowardHelper } from './tactics/retreat';
+import { riposteCooldown } from './tactics/riposte';
+import type { TacticalBehaviour, TacticalMove } from './tactics/tacticalFrame';
 import {
   GOBLIN_ATTACKS,
   GoblinAnimator,
@@ -72,6 +76,7 @@ const MILLISECONDS_PER_SECOND = 1000;
  * frame early at the short end of the timing table.
  */
 const FRAME_MIDPOINT = 0.5;
+const GOBLIN_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'kite', 'regroup', 'riposte'];
 
 export class Goblin extends Mob {
   readonly xpValue = 5;
@@ -108,6 +113,15 @@ export class Goblin extends Mob {
   /** Windup frames remaining before the first strike connects. */
   private attackWindupTimer = 0;
   private previousHp: number;
+  /**
+   * The movement tactic that steered the last AI frame. A change means the
+   * cached route leads somewhere this goblin no longer wants to go — a kiter
+   * following its old chase path would step *toward* the player it is backing
+   * away from until the next repath.
+   */
+  private lastTacticalBehaviour: TacticalBehaviour | null = null;
+  /** Reused every frame so asking the tactics where the target was allocates nothing. */
+  private readonly lastKnownTargetPoint = { x: 0, y: 0 };
 
   constructor(tileX: number, tileY: number, tileSize: number, weapon: GoblinWeapon) {
     super(tileX, tileY, tileSize, GOBLIN_HP, GOBLIN_SPEED);
@@ -158,6 +172,17 @@ export class Goblin extends Mob {
     return GOBLIN_PACK_KIND;
   }
 
+  /**
+   * A goblin is a pack skirmisher with a weapon in hand: it can learn to fan
+   * out around its quarry, turn a blow aside and answer it, back off toward a
+   * friend, and fall back on one when hurt. Only traits this class's own AI
+   * acts on belong here: a trait rolled with no behaviour behind it is a
+   * promise the fight never keeps.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return GOBLIN_TACTICS;
+  }
+
   override resetToSpawn(): void {
     super.resetToSpawn();
     this.attackCooldown = 0;
@@ -167,6 +192,7 @@ export class Goblin extends Mob {
     this.firstHitPending = true;
     this.attackWindupTimer = 0;
     this.previousHp = this.hp;
+    this.lastTacticalBehaviour = null;
     this.animator.reset();
   }
 
@@ -300,6 +326,8 @@ export class Goblin extends Mob {
       this.isAggro = false;
       this.firstHitPending = true;
       this.attackWindupTimer = 0;
+      this.tactics.disengage();
+      this.lastTacticalBehaviour = null;
       this.clearAStarPath();
       this.returnHomeOrWander();
       this.advanceCombatTimers(null);
@@ -309,11 +337,18 @@ export class Goblin extends Mob {
     this.beginEngagement();
     const nearestDist = this.distanceTo(nearest);
 
-    // Track last known position while we have LOS (enables navigation around corners)
     this.updateLastKnown(nearest);
 
-    // Chase toward last known position (= current position when LOS is clear).
-    //
+    if (this.tactics.claimRiposte()) {
+      this.attackCooldown = riposteCooldown(this.attackCooldown, this.attackAnimTimer);
+    }
+    const tacticalMove = this.chooseTacticalMove(nearest);
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      this.advanceCombatTimers(nearest);
+      return;
+    }
+
     // A camp resident that has strayed past its own leash stops *travelling* and
     // heads home instead — but it keeps its target, so it still turns and fights
     // anything that follows it or that is already on top of it. No-op for an
@@ -321,6 +356,8 @@ export class Goblin extends Mob {
     if (nearestDist > this.attackRangePx) {
       if (this.isBeyondLeash(this.x, this.y)) {
         this.returnHomeOrWander();
+      } else if (tacticalMove !== null) {
+        this.walkTacticalStep(tacticalMove, nearest);
       } else {
         this.followTargetAStar(
           this.lastKnownTargetX,
@@ -335,7 +372,6 @@ export class Goblin extends Mob {
 
     this.advanceCombatTimers(nearest);
 
-    // Brief windup before the very first strike of each engagement
     const inRange = nearestDist <= this.attackRangePx;
     if (inRange && this.attackAnimTimer === 0) this.faceToward(nearest);
     if (inRange && this.firstHitPending && this.attackWindupTimer === 0) {
@@ -345,6 +381,32 @@ export class Goblin extends Mob {
     if (this.attackWindupTimer > 0) this.attackWindupTimer--;
 
     if (this.canStrike(nearest, nearestDist)) this.beginAttack();
+  }
+
+  /**
+   * Ask this goblin's tactics where to walk this frame, dropping the cached
+   * route whenever the answer changes kind.
+   */
+  private chooseTacticalMove(target: Player): TacticalMove | null {
+    if (!this.tactics.hasMovementTraits) return null;
+    this.lastKnownTargetPoint.x = this.lastKnownTargetX;
+    this.lastKnownTargetPoint.y = this.lastKnownTargetY;
+    const move = this.tactics.chooseMove({
+      self: this,
+      map: this.map,
+      tileSize: this.goblinTileSize,
+      target,
+      targetPoint: this.lastKnownTargetPoint,
+      attackRangePx: this.attackRangePx,
+      canBreakOff: this.attackAnimTimer === 0 && this.pendingImpact === 0,
+      kiteAim: retreatTowardHelper,
+    });
+    const behaviour = move?.behaviour ?? null;
+    if (behaviour !== this.lastTacticalBehaviour) {
+      this.lastTacticalBehaviour = behaviour;
+      this.clearAStarPath();
+    }
+    return move;
   }
 
   protected override drawSelf(

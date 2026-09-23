@@ -173,9 +173,8 @@ export class ChatKit {
         name: '!levelup',
         run: () => {
           for (const player of this.world.pm.players()) {
-            if (player.gainXp(player.xpRemainingToNextLevel)) {
-              this.world.bus.emit('playerLevelUp', { player, newLevel: player.level });
-            }
+            player.advanceLevel();
+            this.world.bus.emit('playerLevelUp', { player, newLevel: player.level });
           }
           return '⭐ LEVEL UP';
         },

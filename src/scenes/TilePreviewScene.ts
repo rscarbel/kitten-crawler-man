@@ -170,7 +170,7 @@ export class TilePreviewScene extends Scene {
   }
 
   update(): void {
-    // Static preview — nothing animates.
+    // The preview is repainted only on input, so there is nothing to advance per frame.
   }
 
   private drawTile(
@@ -302,7 +302,6 @@ export class TilePreviewScene extends Scene {
     });
   }
 
-  /** Material pairs worth judging an edge on, base first. */
   /**
    * Pairs previewed as blended boundaries, softer material first.
    *

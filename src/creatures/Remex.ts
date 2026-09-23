@@ -1,4 +1,4 @@
-import { Mob } from './Mob';
+import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawRemexSprite } from '../sprites/remexSprite';
@@ -14,6 +14,11 @@ const REMEX_SPEED = 0;
  * attacks — a stationary, always-targetable objective.
  */
 export class Remex extends Mob {
+  /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
+  override get blastDamageScale(): number {
+    return BOSS_BLAST_DAMAGE_SCALE;
+  }
+
   readonly xpValue = 120;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

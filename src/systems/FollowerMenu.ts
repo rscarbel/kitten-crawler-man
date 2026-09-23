@@ -28,6 +28,13 @@ const MENU_SECTION_HEADER_SIZE = 12;
 const MENU_SECTION_HEADER_Y_OFFSET = 18;
 const MENU_SECTION_SPACING = 10;
 const MENU_BUTTON_SPACING = 8;
+/**
+ * What the pet section adds to the panel: its header, its one row and the gap
+ * after it. Grown rather than squeezed in, so the footer line keeps its place
+ * under the switch button.
+ */
+const MENU_PET_SECTION_HEIGHT =
+  MENU_SECTION_HEADER_Y_OFFSET + MENU_BUTTON_HEIGHT + MENU_BUTTON_SPACING + MENU_SECTION_SPACING;
 
 // Menu styling
 const MENU_BACKDROP_ALPHA = 0.65;
@@ -68,6 +75,12 @@ const RADIO_OUTER_BORDER_WIDTH = 2;
 // Switch button
 const SWITCH_BUTTON_ICON = '⇄';
 
+/**
+ * Row index of the pet toggle. Past the four orders so a tutorial restriction,
+ * which names a row by index, never lands on it by accident.
+ */
+const PET_TOGGLE_ROW_INDEX = 4;
+
 // Footer
 const MENU_FOOTER_Y_OFFSET = 18;
 const MENU_FOOTER_SIZE = 13;
@@ -90,6 +103,7 @@ export class FollowerMenu {
   onSetAggressive: (() => void) | null = null;
   onSetPassive: (() => void) | null = null;
   onSwitchCharacter: (() => void) | null = null;
+  onToggleMongoAutoSummon: (() => void) | null = null;
 
   /**
    * When non-null, only the button at this index is clickable.
@@ -127,36 +141,35 @@ export class FollowerMenu {
     return true;
   }
 
-  /** The order the four orders are drawn in, which is also their callback order. */
-  private orderCallback(idx: number): (() => void) | null {
-    const callbacks = [this.onFollowMe, this.onDoNotMove, this.onSetAggressive, this.onSetPassive];
-    return callbacks[idx] ?? null;
-  }
-
   /**
    * @param companionIsCat - true when the human is the active player (cat is the companion)
+   * @param mongoAutoSummon - whether the cat sends Mongo in on her own, or null
+   *   to leave the row out — no pet yet, or a scene he cannot be summoned in
    */
   render(
     ctx: CanvasRenderingContext2D,
     movementMode: MovementMode,
     combatStance: CombatStance,
     companionIsCat: boolean,
+    mongoAutoSummon: boolean | null = null,
   ): void {
     if (!this._isOpen) return;
 
     const cw = viewportWidth();
     const ch = viewportHeight();
+    const showsPetSection = companionIsCat && mongoAutoSummon !== null;
+    const designPanelHeight = MENU_PANEL_HEIGHT + (showsPetSection ? MENU_PET_SECTION_HEIGHT : 0);
     const fit = Math.min(
       1,
       (cw - MENU_SCREEN_MARGIN * 2) / MENU_PANEL_WIDTH,
-      (ch - MENU_SCREEN_MARGIN * 2) / MENU_PANEL_HEIGHT,
+      (ch - MENU_SCREEN_MARGIN * 2) / designPanelHeight,
     );
     const u = (designPx: number): number => Math.round(designPx * fit);
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: MENU_BACKDROP_ALPHA });
 
     const panelW = u(MENU_PANEL_WIDTH);
-    const panelH = u(MENU_PANEL_HEIGHT);
+    const panelH = u(designPanelHeight);
     const panelX = Math.round(cw / 2 - panelW / 2);
     const panelY = Math.round(ch / 2 - panelH / 2);
 
@@ -188,23 +201,67 @@ export class FollowerMenu {
 
     const sections: Array<{
       header: string;
-      items: Array<{ icon: string; label: string; active: boolean; idx: number }>;
+      items: Array<{
+        icon: string;
+        label: string;
+        active: boolean;
+        idx: number;
+        callback: (() => void) | null;
+      }>;
     }> = [
       {
         header: 'MOVEMENT',
         items: [
-          { icon: '↩', label: 'Follow me', active: movementMode === 'follow', idx: 0 },
-          { icon: '⚓', label: 'Do not move', active: movementMode === 'anchored', idx: 1 },
+          {
+            icon: '↩',
+            label: 'Follow me',
+            active: movementMode === 'follow',
+            idx: 0,
+            callback: this.onFollowMe,
+          },
+          {
+            icon: '⚓',
+            label: 'Do not move',
+            active: movementMode === 'anchored',
+            idx: 1,
+            callback: this.onDoNotMove,
+          },
         ],
       },
       {
         header: 'COMBAT STANCE',
         items: [
-          { icon: '⚔', label: 'Aggressive', active: combatStance === 'aggressive', idx: 2 },
-          { icon: '🛡', label: 'Passive', active: combatStance === 'passive', idx: 3 },
+          {
+            icon: '⚔',
+            label: 'Aggressive',
+            active: combatStance === 'aggressive',
+            idx: 2,
+            callback: this.onSetAggressive,
+          },
+          {
+            icon: '🛡',
+            label: 'Passive',
+            active: combatStance === 'passive',
+            idx: 3,
+            callback: this.onSetPassive,
+          },
         ],
       },
     ];
+    if (showsPetSection) {
+      sections.push({
+        header: 'PET',
+        items: [
+          {
+            icon: '🦖',
+            label: 'Summon Mongo in fights',
+            active: mongoAutoSummon,
+            idx: PET_TOGGLE_ROW_INDEX,
+            callback: this.onToggleMongoAutoSummon,
+          },
+        ],
+      });
+    }
 
     this._buttonRects = [];
     beginMenuFocus('follower-menu');
@@ -227,7 +284,7 @@ export class FollowerMenu {
         // keeps it out of the focus ring — the keyboard skips it for free.
         const isRestricted =
           this.restrictedToButtonIndex !== null && item.idx !== this.restrictedToButtonIndex;
-        const callback = this.orderCallback(item.idx);
+        const callback = item.callback;
         addButton(ctx, this._buttonRects, {
           x: r.x,
           y: r.y,

@@ -8,6 +8,8 @@ import {
   mantidOverheadLiftTiles,
   prewarmMantidCombat,
 } from '../sprites/mantidSprite';
+import { riposteCooldown } from './tactics/riposte';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 
 /**
  * A crony mantis — the escort that spawns alongside the Mantid on a bounty.
@@ -54,6 +56,7 @@ const XP_VALUE = 22;
 const MASS = 1.2;
 /** How close the pursuit stops, as a fraction of the strike's own reach. */
 const PURSUIT_STOP_RATIO = 0.85;
+const MANTIS_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'kite', 'regroup', 'riposte'];
 
 export class MantisCrony extends Mob {
   readonly xpValue = XP_VALUE;
@@ -87,6 +90,17 @@ export class MantisCrony extends Mob {
   /** Ceiling on the walk. See {@link MANTIS_MAX_SPEED}. */
   protected override get levelledSpeedCap(): number {
     return MANTIS_MAX_SPEED;
+  }
+
+  /**
+   * A quick pack skirmisher with two blades: it can learn to fan out around
+   * its quarry, parry a blow and answer it, dart back toward its partner to
+   * draw the player in between them, and fall back on it when hurt. A kite is
+   * walked no faster than any other mob's retreat, so its speed never makes
+   * one uncatchable.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return MANTIS_TACTICS;
   }
 
   override resetToSpawn(): void {
@@ -124,9 +138,15 @@ export class MantisCrony extends Mob {
       this.advanceSlash(nearest);
       return;
     }
+    // Claimed only between strikes: the cooldown a riposte cuts is set as a
+    // strike ends, so a guard met mid-strike is answered after it.
+    if (this.tactics.claimRiposte()) {
+      this.slashCooldown = riposteCooldown(this.slashCooldown, 0);
+    }
 
     if (nearest === null) {
       this.isAggro = false;
+      this.tactics.disengage();
       this.clearAStarPath();
       // Not `doWander`: BountySystem anchors an un-aggroed escort to its bounty
       // site with `homePoint`, and only this path consults it.
@@ -142,6 +162,12 @@ export class MantisCrony extends Mob {
     this.updateLastKnown(nearest);
     const distance = this.distanceTo(nearest);
 
+    const tacticalMove = this.chooseTacticalStep(nearest, this.slashRangePx, true);
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
+
     if (distance <= this.slashRangePx && this.slashCooldown === 0) {
       this.slashTimer = MANTIS_SLASH_TOTAL_FRAMES;
       this.slashLanded = false;
@@ -150,6 +176,10 @@ export class MantisCrony extends Mob {
       return;
     }
 
+    if (tacticalMove !== null) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
     this.followTargetAStar(
       this.lastKnownTargetX,
       this.lastKnownTargetY,

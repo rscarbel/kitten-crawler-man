@@ -57,8 +57,12 @@ import type { CrawlerKind } from '../core/SkillManager';
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
 const HUMAN_CRAWLER_KIND: CrawlerKind = 'human';
 
-/** Damage a punch does before strength, gear, skills or status are counted. */
-const BARE_FIST_DAMAGE = 1;
+import {
+  bareFistDamage,
+  HUMAN_BASE_HP_OFFSET,
+  HUMAN_STARTING_DEXTERITY,
+  HUMAN_SWING_FRAMES,
+} from '../core/crawlerFormulas';
 import {
   IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL,
   PUGILISM_DAMAGE_PER_LEVEL,
@@ -96,7 +100,7 @@ export class HumanPlayer extends Player {
 
   attackPhase: HumanAttackPhase = null;
   attackTimer = 0;
-  readonly ATTACK_FRAMES = 18;
+  readonly ATTACK_FRAMES = HUMAN_SWING_FRAMES;
   private nextSideType: 'punch_side' | 'kick_side' = 'punch_side';
   private autoAttackCooldown = 0;
   private readonly AUTO_ATTACK_COOLDOWN = 90;
@@ -139,10 +143,6 @@ export class HumanPlayer extends Player {
   slingshotCooldown = 0;
   private rocks: SlingshotRock[] = [];
 
-  /** Species HP floor: 8 + CON 1 × 2 = 10 starting max HP. */
-  private static readonly HUMAN_BASE_HP_OFFSET = 8;
-  /** An ordinary human is not especially nimble. */
-  private static readonly HUMAN_STARTING_DEXTERITY = 2;
   /** His spell and his healing sit under the first two number keys. */
   private static readonly TOME_HOTBAR_SLOT = 0;
   private static readonly POTION_HOTBAR_SLOT = 1;
@@ -186,8 +186,8 @@ export class HumanPlayer extends Player {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, {
-      baseHpOffset: HumanPlayer.HUMAN_BASE_HP_OFFSET,
-      baseStats: { dexterity: HumanPlayer.HUMAN_STARTING_DEXTERITY },
+      baseHpOffset: HUMAN_BASE_HP_OFFSET,
+      baseStats: { dexterity: HUMAN_STARTING_DEXTERITY },
       crawlerKind: HUMAN_CRAWLER_KIND,
     });
     // He is drawn on essentially every frame of the scene he is built for, so
@@ -239,9 +239,7 @@ export class HumanPlayer extends Player {
     const pugilismBonus = PUGILISM_DAMAGE_PER_LEVEL * this.effectiveSkillLevel('pugilism');
     const meleeOnlyStrength = this.inventory.equipment.getMeleeOnlyStatBonus('strength');
     const flatDamage =
-      BARE_FIST_DAMAGE +
-      this.strength +
-      meleeOnlyStrength +
+      bareFistDamage(this.strength + meleeOnlyStrength) +
       this.statusMeleeDamageBonus +
       pugilismBonus;
     // Iron Punch is a technique of the gauntlet, not of the hand: without one

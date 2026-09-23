@@ -1,6 +1,8 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import { drawRuinsGhoulSprite } from '../sprites/ruinsGhoulSprite';
+import { riposteCooldown } from './tactics/riposte';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 
 const GHOUL_HP = 16;
 const GHOUL_SPEED = 1.1;
@@ -10,12 +12,18 @@ const ATTACK_RANGE_TILES = 1.2;
 const ATTACK_COOLDOWN = 100;
 /** Frames the bite/claw animation plays. */
 const ATTACK_ANIM_FRAMES = 26;
-const ATTACK_DAMAGE = 5;
+/**
+ * The overworld's commonest mob, met in pairs on every road; its bite is set
+ * so that a badly built party can still walk away from the pair it cannot
+ * avoid, which `verify:difficulty-curve` holds.
+ */
+const ATTACK_DAMAGE = 4;
 const COIN_DROP_MAX = 2;
 /** Fraction of attack range used as follow stop distance. */
 const FOLLOW_STOP_FRACTION = 0.8;
 /** Frames of windup before the first strike of an engagement. */
 const FIRST_HIT_WINDUP_FRAMES = 18;
+const GHOUL_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
 /**
  * A former Over City citizen twisted by Scolopendra's poison catastrophe into
@@ -37,6 +45,20 @@ export class RuinsGhoul extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, GHOUL_HP, GHOUL_SPEED);
+  }
+
+  /** A flank can be walking it while its swing still plays, and turning then would flip the arc. */
+  protected override get isSwingAnimating(): boolean {
+    return this.attackAnimTimer > 0;
+  }
+
+  /**
+   * A shambling brawler with claws and teeth: it can learn to come at its prey
+   * from an angle, turn a blow aside and answer it, and fall back on another
+   * ghoul when hurt. It has no reason to back off from anything it can reach.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return GHOUL_TACTICS;
   }
 
   override resetToSpawn(): void {
@@ -69,6 +91,7 @@ export class RuinsGhoul extends Mob {
       this.isAggro = false;
       this.firstHitPending = true;
       this.attackWindupTimer = 0;
+      this.tactics.disengage();
       this.clearAStarPath();
       this.doWander();
       return;
@@ -78,13 +101,27 @@ export class RuinsGhoul extends Mob {
     const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
 
+    if (this.tactics.claimRiposte()) {
+      this.attackCooldown = riposteCooldown(this.attackCooldown, this.attackAnimTimer);
+    }
+    const isCommitted = this.attackAnimTimer > 0 || this.attackWindupTimer > 0;
+    const tacticalMove = this.chooseTacticalStep(nearest, attackRangePx, !isCommitted);
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
+
     if (nearestDist > attackRangePx) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        this.speed,
-        attackRangePx * FOLLOW_STOP_FRACTION,
-      );
+      if (tacticalMove !== null) {
+        this.walkTacticalStep(tacticalMove, nearest);
+      } else {
+        this.followTargetAStar(
+          this.lastKnownTargetX,
+          this.lastKnownTargetY,
+          this.speed,
+          attackRangePx * FOLLOW_STOP_FRACTION,
+        );
+      }
     } else {
       this.isMoving = false;
     }

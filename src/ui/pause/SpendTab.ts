@@ -1,4 +1,6 @@
-import { type Player, type StatName, CON_HP_BONUS_PER_POINT } from '../../Player';
+import { type Player, type StatName } from '../../Player';
+import { CON_HP_BONUS_PER_POINT } from '../../core/crawlerFormulas';
+import { DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL } from '../../systems/DynamiteSystem';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { type ButtonRect, type PauseTab } from './types';
@@ -6,7 +8,6 @@ import { addButton, drawButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 import { drawDivider, drawScrollbar } from '../Box';
 
-// Stat card layout
 const CARD_H = 70;
 const CARD_GAP = 6;
 const BTN_W = 32;
@@ -26,7 +27,6 @@ const CARD_DESC_WIDTH_BTN_OFFSET = 24;
 const CARD_BTN_X_OFFSET = 8;
 const CARD_BTN_Y_OFFSET = 40;
 
-// Tab header
 const TAB_TITLE_Y = 16;
 const TAB_TITLE_SIZE = 16;
 const TAB_SUBTITLE_Y = 36;
@@ -35,13 +35,11 @@ const TAB_HEADER_DIVIDER_X = 20;
 const TAB_HEADER_DIVIDER_Y = 50;
 const TAB_HEADER_DIVIDER_LENGTH_MARGIN = 40;
 
-// Scroll area
 const SCROLL_TOP_Y = 56;
 const BACK_BTN_HEIGHT = 52;
 const SCROLL_ITEM_MARGIN_Y = 20;
 const SCROLL_ITEM_EXTRA_SPACE = 14;
 
-// Character section
 const CHAR_LABEL_X = 20;
 const CHAR_LABEL_SIZE = 13;
 const CHAR_POINTS_LABEL_X_OFFSET = 20;
@@ -49,15 +47,17 @@ const CHAR_POINTS_LABEL_SIZE = 11;
 const CHAR_NO_POINTS_Y_OFFSET = 1;
 const CHAR_NO_POINTS_SIZE = 10;
 
-// Stat cards layout
 const CARD_X_OFFSET = 16;
 const CARD_WIDTH_MARGIN = 32;
 
-// Scrollbar
+const PERCENT = 100;
+const EXPLOSIVE_DAMAGE_PERCENT_PER_POINT = Math.round(
+  DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL * PERCENT,
+);
+
 const SCROLLBAR_X_OFFSET = 7;
 const SCROLLBAR_WIDTH = 3;
 
-// Back button
 const BACK_BTN_X_MARGIN = 20;
 const BACK_BTN_Y_OFFSET = 8;
 const BACK_BTN_WIDTH_MARGIN = 40;
@@ -103,7 +103,7 @@ const HUMAN_STAT_DEFS: StatDef[] = [
   {
     statName: null,
     name: 'Explosives Handling',
-    description: 'Bigger booms. Boosts dynamite damage & throw range.',
+    description: `Bigger booms. Each point adds +${EXPLOSIVE_DAMAGE_PERCENT_PER_POINT}% dynamite damage to enemies and a longer throw.`,
     accent: '#fbbf24',
     dimBorder: 'rgba(251,191,36,0.22)',
     cardBg: '#16110a',

@@ -18,12 +18,13 @@
  * Run: npx tsx scripts/verify-difficulty.ts
  */
 
+import { Mob } from '../src/creatures/Mob';
 import {
   CADENCE_SCALE_FLOOR,
   cooldownScaleForLevel,
+  LOCKED_TELEGRAPH_MIN_FRAMES,
   scaledCooldownFramesForLevel,
-  Mob,
-} from '../src/creatures/Mob';
+} from '../src/creatures/mobLevelScaling';
 import {
   TROGLODYTE_AIM_LOCK_FRAMES,
   TROGLODYTE_WINDUP_FLOOR_FRAMES,
@@ -39,6 +40,12 @@ import {
   MAX_MOB_LEVEL,
   MAX_ROOM_SPAWN_COUNT,
   earnedLevelFloor,
+  overLevelReinforcementBodies,
+  partyTrackedBand,
+  resolveAmbientLevel,
+  progressionRegions,
+  regionLevelBonusFor,
+  rollRoomPopulation,
   partyLevelOf,
   recommendedPartyLevelFor,
   regionLevelBand,
@@ -73,6 +80,9 @@ import { StiltClown, CLOWN_MAX_SPEED as STILT_CLOWN_MAX_SPEED } from '../src/cre
 import { FatClown, CLOWN_MAX_SPEED as FAT_CLOWN_MAX_SPEED } from '../src/creatures/FatClown';
 import { Mantid, MANTID_MAX_SPEED } from '../src/creatures/Mantid';
 import { MantisCrony, MANTIS_MAX_SPEED } from '../src/creatures/MantisCrony';
+import { SkyFowl } from '../src/creatures/SkyFowl';
+import { GameMap } from '../src/map/GameMap';
+import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { TheLich, HANDS_WINDUP_FRAMES, LICH_MAX_SPEED } from '../src/creatures/TheLich';
 import {
@@ -81,14 +91,37 @@ import {
   NORMAL_BOSS_LEVEL_RATIO,
   type Difficulty,
 } from '../src/core/difficultyProfiles';
-import { bountyMinionLevel, MAX_BOUNTY_MOB_LEVEL } from '../src/systems/BountySystem';
+import {
+  bountyBossLevel,
+  bountyMinionLevel,
+  MAX_BOUNTY_MOB_LEVEL,
+} from '../src/systems/BountySystem';
 import { generateDungeon } from '../src/map/DungeonGenerator';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level1 } from '../src/levels/level1';
+import { withWorldSeed } from '../src/core/WorldRandom';
+import { readdirSync, readFileSync } from 'fs';
+import { dirname, join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { level2 } from '../src/levels/level2';
 import { level3 } from '../src/levels/level3';
 import type { LevelDef, MobLevelRange } from '../src/levels/types';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
+import { DifficultyStats, type RoomFightDetails } from '../src/core/DifficultyStats';
+import { CatPlayer } from '../src/creatures/CatPlayer';
+import { createMob } from '../src/levels/spawner';
+import { MobRoster } from '../src/systems/kits/SceneWorld';
+import { SpellSystem } from '../src/systems/SpellSystem';
+import {
+  DynamiteSystem,
+  dynamiteCrawlerDamage,
+  dynamiteDamageToMob,
+  dynamiteMobDamage,
+} from '../src/systems/DynamiteSystem';
+import { HeatherTheBear } from '../src/creatures/HeatherTheBear';
+import { MissQuill } from '../src/creatures/MissQuill';
+import { Remex } from '../src/creatures/Remex';
+import { DarkKnight } from '../src/creatures/DarkKnight';
 
 /**
  * Levels probed past {@link MAX_MOB_LEVEL} for the shape checks. A curve that is
@@ -97,19 +130,52 @@ import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
  */
 const PROBE_LEVEL_LIMIT = 60;
 
-/**
- * The fairness rule: an attack whose aim is frozen must stay frozen for at
- * least this many frames (350 ms) at every level, so avoiding it by movement
- * alone is always possible.
- */
-const MIN_LOCKED_TELEGRAPH_FRAMES = 21;
-
+/** The shortest and longest base cooldowns sampled for the floor check, around the real ones. */
+const SHORTEST_SAMPLED_COOLDOWN = 1;
+const TWO_FRAME_COOLDOWN = 2;
+const LONGEST_SAMPLED_COOLDOWN = 600;
+/** The span of base cooldowns creatures actually author, swept one frame at a time. */
+const SHORTEST_AUTHORED_COOLDOWN = 60;
+const LONGEST_AUTHORED_COOLDOWN = 180;
+const AUTHORED_COOLDOWNS_SAMPLED = Array.from(
+  { length: LONGEST_AUTHORED_COOLDOWN - SHORTEST_AUTHORED_COOLDOWN + 1 },
+  (_, offset) => SHORTEST_AUTHORED_COOLDOWN + offset,
+);
 /** Base cooldowns sampled for the floor check — the real ones plus the extremes. */
-const SAMPLED_BASE_COOLDOWNS = [1, 2, 78, 90, 100, 120, 150, 600];
+const SAMPLED_BASE_COOLDOWNS = [
+  SHORTEST_SAMPLED_COOLDOWN,
+  TWO_FRAME_COOLDOWN,
+  ...AUTHORED_COOLDOWNS_SAMPLED,
+  LONGEST_SAMPLED_COOLDOWN,
+];
+/**
+ * How close to its floor the cadence curve must come at an absurd level, as a
+ * fraction of level 1's cadence — close enough that the floor is a bound the
+ * curve actually reaches toward rather than a number it never nears.
+ */
+const CADENCE_FLOOR_APPROACH_SLACK = 0.02;
+/** Constitutions whose regen gains are compared: an early point and a late one. */
+const EARLY_CONSTITUTION = 3;
+const LATE_CONSTITUTION = 12;
+/** A levelled mob used for the re-level refusal check. */
+const RELEVEL_TEST_LEVEL = 5;
+/** Two crawler levels for the "party level is the stronger one" check. */
+const WEAKER_CRAWLER_LEVEL = 3;
+const STRONGER_CRAWLER_LEVEL = 9;
+
+/** Comparisons over authored constants, which the linter would otherwise read as literal types. */
+function isAtLeast(value: number, minimum: number): boolean {
+  return value >= minimum;
+}
+function isBelow(value: number, limit: number): boolean {
+  return value < limit;
+}
 
 /** Constitutions sampled for the regen curve, from a fresh crawler to an absurd one. */
 const MAX_PROBED_CONSTITUTION = 200;
 
+/** Seed for the reinforced-room rolls, so the cap check reads the same rooms every run. */
+const REINFORCEMENT_ROLL_SEED = 0x2e1_f0cc;
 /** Party levels sampled for the level-band checks. */
 const MAX_PROBED_PARTY_LEVEL = 40;
 
@@ -188,7 +254,7 @@ section('cadence curve');
   // floor would make the floor a number that describes nothing.
   const deepScale = cooldownScaleForLevel(PROBE_LEVEL_LIMIT * PROBE_LEVEL_LIMIT);
   check(
-    deepScale - CADENCE_SCALE_FLOOR < 0.02,
+    deepScale - CADENCE_SCALE_FLOOR < CADENCE_FLOOR_APPROACH_SLACK,
     'it approaches the floor rather than levelling off short of it',
   );
 
@@ -209,8 +275,8 @@ section('cadence curve');
 section('telegraphs');
 {
   check(
-    TROGLODYTE_AIM_LOCK_FRAMES >= MIN_LOCKED_TELEGRAPH_FRAMES,
-    `the troglodyte's aim stays locked for at least ${MIN_LOCKED_TELEGRAPH_FRAMES} frames`,
+    isAtLeast(TROGLODYTE_AIM_LOCK_FRAMES, LOCKED_TELEGRAPH_MIN_FRAMES),
+    `the troglodyte's aim stays locked for at least ${LOCKED_TELEGRAPH_MIN_FRAMES} frames`,
   );
 
   let windupRespectsFloor = true;
@@ -236,7 +302,7 @@ section('telegraphs');
   let archerTracksFirst = true;
   for (const kind of ['light', 'heavy'] as const) {
     const shot = GOBLIN_BOW_SHOTS[kind];
-    if (shot.lockedFrames < MIN_LOCKED_TELEGRAPH_FRAMES) archerLockIsEnough = false;
+    if (shot.lockedFrames < LOCKED_TELEGRAPH_MIN_FRAMES) archerLockIsEnough = false;
     if (shot.releaseFrame < 0 || shot.releaseFrame >= shot.spriteFrames) archerTracksFirst = false;
     // Frames of aim tracking before the lock, in game frames. The extra frame
     // comes off because `tickDraw` decrements before it compares, so a draw that
@@ -250,9 +316,9 @@ section('telegraphs');
   check(archerTracksFirst, 'each archer shot tracks its target before it commits');
 
   check(
-    HANDS_WINDUP_FRAMES >= MIN_LOCKED_TELEGRAPH_FRAMES,
+    isAtLeast(HANDS_WINDUP_FRAMES, LOCKED_TELEGRAPH_MIN_FRAMES),
     "the Lich's grasping-hands windup stays locked for at least " +
-      `${MIN_LOCKED_TELEGRAPH_FRAMES} frames`,
+      `${LOCKED_TELEGRAPH_MIN_FRAMES} frames`,
   );
 
   // The release has to land *inside* the animation. If a retune ever pushed it
@@ -341,8 +407,10 @@ section('regen curve');
   // The whole point of decoupling regen from max HP: constitution must buy far
   // less regen than it used to, or the curve has been retuned back into the
   // out-heal-everything regime it was written to end.
-  const earlyPointGain = humanRegenHpPerSecond(4) - humanRegenHpPerSecond(3);
-  const latePointGain = humanRegenHpPerSecond(13) - humanRegenHpPerSecond(12);
+  const earlyPointGain =
+    humanRegenHpPerSecond(EARLY_CONSTITUTION + 1) - humanRegenHpPerSecond(EARLY_CONSTITUTION);
+  const latePointGain =
+    humanRegenHpPerSecond(LATE_CONSTITUTION + 1) - humanRegenHpPerSecond(LATE_CONSTITUTION);
   check(latePointGain < earlyPointGain, 'each point of constitution buys less regen than the last');
 }
 
@@ -380,9 +448,177 @@ section('spawn counts');
     authoredCountsFitTheCap,
     'no rule asks for more mobs than the per-room cap would ever allow',
   );
+
+  check(
+    level1.overLevelReinforcement === undefined,
+    'the learning floor keeps its authored room counts at every party level',
+  );
+  const reinforcedFloors = LEVEL_DEFS.filter((def) => def.overLevelReinforcement !== undefined);
+  check(
+    reinforcedFloors.length > 0,
+    'at least one floor reinforces its rooms for a party ahead of it',
+  );
+  let onScheduleUnreinforced = true;
+  let reinforcementBounded = true;
+  let reinforcementMonotone = true;
+  let roomsFitTheCap = true;
+  const profile = DIFFICULTY_PROFILES.normal;
+  const openBand: MobLevelRange = { minLevel: 1, maxLevel: MAX_MOB_LEVEL };
+  for (const def of reinforcedFloors) {
+    const maxBodies = def.overLevelReinforcement?.maxBodies ?? 0;
+    const regions = progressionRegions(def);
+    for (const rule of def.roomMobs) {
+      for (const region of regions) {
+        const band = regionLevelBand(rule, regionLevelBonusFor(def, region));
+        let previous = 0;
+        for (let partyLevel = 1; partyLevel <= MAX_PROBED_PARTY_LEVEL; partyLevel++) {
+          const bodies = overLevelReinforcementBodies(def, band, partyLevel, profile);
+          const bandTop = band.maxLevel ?? band.minLevel ?? 1;
+          const partyIsInsideBand = earnedLevelFloor(openBand, partyLevel, profile) <= bandTop;
+          if (partyIsInsideBand && bodies > 0) onScheduleUnreinforced = false;
+          if (bodies < 0 || bodies > maxBodies) reinforcementBounded = false;
+          if (bodies < previous) reinforcementMonotone = false;
+          previous = bodies;
+          const population = withWorldSeed(REINFORCEMENT_ROLL_SEED + partyLevel, () =>
+            rollRoomPopulation(def, rule, region, partyLevel, profile),
+          );
+          if (population.hostCount + population.escorts.length > MAX_ROOM_SPAWN_COUNT) {
+            roomsFitTheCap = false;
+          }
+        }
+      }
+    }
+  }
+  check(onScheduleUnreinforced, 'a party still inside a room’s band meets its authored count');
+  check(reinforcementBounded, 'over-level reinforcement never adds more than its floor’s maximum');
+  check(reinforcementMonotone, 'a party further ahead never meets fewer reinforcements');
+  check(roomsFitTheCap, 'a reinforced room still never exceeds the per-room cap');
 }
 
 // ── Level bands ──────────────────────────────────────────────────────────────
+
+// ── Party tracking ───────────────────────────────────────────────────────────
+
+section('party tracking');
+{
+  check(
+    level1.ambientTracking === undefined,
+    'the learning floor’s bands stay hard ceilings at every party level',
+  );
+  let trackedFloors = 0;
+  let insideBandUnchanged = true;
+  let underCeiling = true;
+  let earnedFloorBelowParty = true;
+  let neverFalls = true;
+  for (const def of LEVEL_DEFS) {
+    const ceiling = def.ambientTracking?.maxLevel;
+    if (ceiling === undefined) continue;
+    trackedFloors++;
+    const bands: MobLevelRange[] = [
+      ...def.roomMobs,
+      ...def.hallwayMobs,
+      ...Object.values(def.campSpawns ?? {}).flat(),
+      ...(def.extraSpawns ?? []),
+    ];
+    for (const band of bands) {
+      const authoredTop = band.maxLevel ?? band.minLevel ?? 1;
+      let previousTop = 0;
+      for (let partyLevel = 1; partyLevel <= MAX_PROBED_PARTY_LEVEL; partyLevel++) {
+        const profile = DIFFICULTY_PROFILES.normal;
+        const tracked = partyTrackedBand(band, def, partyLevel, profile);
+        const trackedTop = tracked.maxLevel ?? tracked.minLevel ?? 1;
+        const partyInsideBand = earnedLevelFloor(band, partyLevel, profile) < authoredTop;
+        if (partyInsideBand && tracked !== band) insideBandUnchanged = false;
+        if (trackedTop > Math.max(authoredTop, Math.min(ceiling, MAX_MOB_LEVEL))) {
+          underCeiling = false;
+        }
+        if (trackedTop < previousTop) neverFalls = false;
+        previousTop = trackedTop;
+        const isTracked = tracked !== band;
+        if (isTracked && resolveAmbientLevel(band, def, partyLevel, profile) >= partyLevel) {
+          earnedFloorBelowParty = false;
+        }
+      }
+    }
+  }
+  check(trackedFloors > 0, `${trackedFloors} floors let their mobs follow an over-levelled party`);
+  check(insideBandUnchanged, 'a party still inside a band meets it exactly as authored');
+  check(underCeiling, 'a tracked band never passes its floor’s ceiling or the level cap');
+  check(neverFalls, 'a party further ahead never meets a lower tracked band');
+  check(earnedFloorBelowParty, 'a tracked mob still sits below the party’s own level');
+}
+
+// ── XP curve ─────────────────────────────────────────────────────────────────
+
+/** An award several levels' worth on floor 2, earned just under its first tier. */
+const LARGE_XP_AWARD = 2000;
+/** The same award, dripped in pieces the size of one ordinary kill. */
+const DRIP_XP_AWARD = 10;
+/** A crawler just under floor 2's first tier, which is where banked XP used to escape it. */
+const XP_TEST_START_LEVEL = 17;
+/** The game's source tree, found from this script rather than from wherever it was run. */
+const SOURCE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src');
+const AWARD_XP_FILE = join(SOURCE_ROOT, 'core', 'awardXp.ts');
+const DIRECT_XP_CALL = '.gainXp(';
+
+function sourceFilesUnder(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFilesUnder(path);
+    return entry.name.endsWith('.ts') ? [path] : [];
+  });
+}
+
+/** How far one large award and the same XP dripped in may differ, from rounding each drip. */
+const XP_PATH_LEVEL_SLACK = 1;
+
+section('xp curve');
+{
+  const curve = level2.xpDiminishingTiers;
+  const atStart = (): HumanPlayer => {
+    const crawler = new HumanPlayer(0, 0, TILE_SIZE);
+    while (crawler.level < XP_TEST_START_LEVEL) crawler.advanceLevel();
+    crawler.xpCurve = curve;
+    return crawler;
+  };
+  const lump = atStart();
+  lump.gainXp(LARGE_XP_AWARD);
+  const dripped = atStart();
+  for (let given = 0; given < LARGE_XP_AWARD; given += DRIP_XP_AWARD) dripped.gainXp(DRIP_XP_AWARD);
+  check(
+    curve !== undefined && Math.abs(lump.level - dripped.level) <= XP_PATH_LEVEL_SLACK,
+    `one large award buys what the same XP bought kill by kill (${lump.level} vs ${dripped.level}), so a boss or quest reward cannot carry a crawler past the floor’s tiers`,
+  );
+  const uncurved = atStart();
+  uncurved.xpCurve = undefined;
+  uncurved.gainXp(LARGE_XP_AWARD);
+  check(
+    uncurved.level > lump.level,
+    `the curve is what holds it back (${uncurved.level} with none, ${lump.level} under floor 2’s)`,
+  );
+  const cat = new CatPlayer(0, 0, TILE_SIZE);
+  const dexterityBefore = cat.dexterity;
+  cat.gainXp(LARGE_XP_AWARD);
+  check(
+    cat.level > 1 && cat.dexterity - dexterityBefore === cat.level - 1,
+    `the cat gains her dexterity on every level one award buys (${cat.level - 1} levels)`,
+  );
+
+  // `awardXp` is the one place a level-up is announced; a direct `gainXp` call
+  // levels a crawler silently — no sound, no achievement log, no AI event.
+  const sourceFiles = sourceFilesUnder(SOURCE_ROOT);
+  check(
+    sourceFiles.length > 0 && sourceFiles.includes(AWARD_XP_FILE),
+    `the XP-award scan reads the source tree (${sourceFiles.length} files, awardXp.ts among them)`,
+  );
+  const directCallers = sourceFiles.filter(
+    (file) => file !== AWARD_XP_FILE && readFileSync(file, 'utf8').includes(DIRECT_XP_CALL),
+  );
+  check(
+    directCallers.length === 0,
+    `every XP award goes through awardXp${directCallers.length > 0 ? ` (direct: ${directCallers.join(', ')})` : ''}`,
+  );
+}
 
 section('level bands');
 {
@@ -418,7 +654,10 @@ section('level bands');
   }
   check(partyStaysAhead, 'an open band’s earned floor always sits below the party’s own level');
 
-  check(partyLevelOf(3, 9) === 9, 'party level is the stronger crawler’s');
+  check(
+    partyLevelOf(WEAKER_CRAWLER_LEVEL, STRONGER_CRAWLER_LEVEL) === STRONGER_CRAWLER_LEVEL,
+    'party level is the stronger crawler’s',
+  );
 }
 
 // ── Re-levelling ─────────────────────────────────────────────────────────────
@@ -426,12 +665,12 @@ section('level bands');
 section('re-levelling');
 {
   const mob = new Goblin(0, 0, TILE_SIZE, 'sword');
-  mob.applyMobLevel(5);
+  mob.applyMobLevel(RELEVEL_TEST_LEVEL);
   const levelledMaxHp = mob.maxHp;
   console.log('  (the warning below is the check working, not a failure)');
-  mob.applyMobLevel(5);
+  mob.applyMobLevel(RELEVEL_TEST_LEVEL);
   check(mob.maxHp === levelledMaxHp, 'a second applyMobLevel is refused rather than compounded');
-  check(mob.mobLevel === 5, 'the refused call leaves the original level in place');
+  check(mob.mobLevel === RELEVEL_TEST_LEVEL, 'the refused call leaves the original level in place');
 
   // The other half of the same problem, and the one that actually shipped: a
   // level cannot be re-applied, so anything that re-authors speed or max HP from
@@ -648,6 +887,70 @@ section('speed caps');
   );
 }
 
+// ── Levelled chase speed ─────────────────────────────────────────────────────
+
+/** Side of the open room the fowl chase is measured in, walls included. */
+const CHASE_ROOM_TILES = 24;
+const CHASE_FOWL_TILE = 3;
+/** Far enough that the fowl is still closing on the target when the run ends. */
+const CHASE_TARGET_TILE = 20;
+/** Frames the chase is measured over, after the first one that plans its route. */
+const CHASE_MEASURED_FRAMES = 60;
+/** Levels a provoked fowl's chase is compared across: authored, and the top. */
+const CHASE_LOW_LEVEL = 1;
+const CHASE_HIGH_LEVEL = MAX_MOB_LEVEL;
+/** Rounding room on a mean step measured against a speed, in pixels per frame. */
+const CHASE_STEP_EPSILON_PX = 1e-6;
+/** Decimal places a chase speed is printed to. */
+const CHASE_PRINT_DIGITS = 3;
+
+function openChaseRoom(): GameMap {
+  const lastTile = CHASE_ROOM_TILES - 1;
+  const grid: TileContent[][] = Array.from({ length: CHASE_ROOM_TILES }, (_, y) =>
+    Array.from({ length: CHASE_ROOM_TILES }, (_, x) => ({
+      tileId: `${x}#${y}`,
+      type:
+        x === 0 || y === 0 || x === lastTile || y === lastTile
+          ? FloorTypeValue.wall
+          : FloorTypeValue.tile_floor,
+    })),
+  );
+  return new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: grid });
+}
+
+/** The mean pixels per frame a provoked fowl of `level` covers chasing a far target. */
+function provokedFowlChase(level: number): { stepPx: number; moveSpeed: number } {
+  const map = openChaseRoom();
+  const fowl = new SkyFowl(CHASE_FOWL_TILE, CHASE_FOWL_TILE, TILE_SIZE);
+  fowl.setMap(map);
+  fowl.applyMobLevel(level);
+  const target = new HumanPlayer(CHASE_TARGET_TILE, CHASE_FOWL_TILE, TILE_SIZE);
+  target.godMode = true;
+  fowl.takeDamageFrom(1, target, 'explosion');
+  fowl.updateAI([target]);
+  const startX = fowl.x;
+  const startY = fowl.y;
+  for (let frame = 0; frame < CHASE_MEASURED_FRAMES; frame++) fowl.updateAI([target]);
+  const walkedPx = Math.hypot(fowl.x - startX, fowl.y - startY);
+  return { stepPx: walkedPx / CHASE_MEASURED_FRAMES, moveSpeed: fowl.moveSpeed };
+}
+
+section('levelled chase speed');
+{
+  // A fowl breaks into its chase long after spawn, by re-authoring its speed —
+  // the moment a flat constant would silently throw its level away.
+  const low = provokedFowlChase(CHASE_LOW_LEVEL);
+  const high = provokedFowlChase(CHASE_HIGH_LEVEL);
+  check(
+    low.stepPx > 0 && Math.abs(high.stepPx - high.moveSpeed) <= CHASE_STEP_EPSILON_PX,
+    `a provoked level-${CHASE_HIGH_LEVEL} sky fowl chases at its levelled speed (${high.stepPx.toFixed(CHASE_PRINT_DIGITS)} px/frame, speed ${high.moveSpeed.toFixed(CHASE_PRINT_DIGITS)})`,
+  );
+  check(
+    high.stepPx > low.stepPx + CHASE_STEP_EPSILON_PX,
+    `levelling speeds up a sky fowl's chase (${low.stepPx.toFixed(CHASE_PRINT_DIGITS)} at level ${CHASE_LOW_LEVEL}, ${high.stepPx.toFixed(CHASE_PRINT_DIGITS)} at level ${CHASE_HIGH_LEVEL})`,
+  );
+}
+
 // ── Difficulty profiles ──────────────────────────────────────────────────────
 
 /** Party level the bounty-relief check is run at — comfortably into the Dark Knight's range. */
@@ -665,7 +968,8 @@ section('difficulty profiles');
       normal.rewardXpScale === 1 &&
       normal.rewardCoinScale === 1 &&
       normal.bountyPayoutScale === 1 &&
-      normal.bountyLevelRatio === 1,
+      normal.bountyLevelRatio === 1 &&
+      normal.tacticsChanceScale === 1,
     "Normal's scales are all exactly 1 — today's game, untouched",
   );
   check(
@@ -680,6 +984,11 @@ section('difficulty profiles');
     easy.incomingMobDamageScale <= normal.incomingMobDamageScale &&
       normal.incomingMobDamageScale <= hard.incomingMobDamageScale,
     'incoming mob damage only ever rises from Kitten to Nightmare',
+  );
+  check(
+    easy.tacticsChanceScale < normal.tacticsChanceScale &&
+      normal.tacticsChanceScale < hard.tacticsChanceScale,
+    'tactics trait chances are lower on Kitten and higher on Nightmare',
   );
   check(
     easy.ambientLevelRatio <= normal.ambientLevelRatio &&
@@ -1040,24 +1349,26 @@ section('recommended party level');
 section('wayfinder');
 {
   check(
-    WAYFINDER_GRACE_FRAMES > 0 &&
-      WAYFINDER_PULSE_PERIOD_FRAMES > 0 &&
-      WAYFINDER_PULSE_VISIBLE_FRAMES > 0 &&
-      WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES > 0 &&
-      WAYFINDER_MOTE_LIFE_FRAMES > 0,
+    [
+      WAYFINDER_GRACE_FRAMES,
+      WAYFINDER_PULSE_PERIOD_FRAMES,
+      WAYFINDER_PULSE_VISIBLE_FRAMES,
+      WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES,
+      WAYFINDER_MOTE_LIFE_FRAMES,
+    ].every((frames) => frames > 0),
     'every Wayfinder timing is a positive number of frames',
   );
   // A pulse at least as long as its own period is not a pulse: the hint would
   // never go away, turning the bounded fail-safe into the always-on GPS the
   // design rules out.
   check(
-    WAYFINDER_PULSE_VISIBLE_FRAMES < WAYFINDER_PULSE_PERIOD_FRAMES,
+    isBelow(WAYFINDER_PULSE_VISIBLE_FRAMES, WAYFINDER_PULSE_PERIOD_FRAMES),
     'the Wayfinder hint is off for more of each period than it is on',
   );
   // A hint made of two grains of dust is only readable as a direction if the
   // second one arrives while the first is still drifting.
   check(
-    WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES < WAYFINDER_MOTE_LIFE_FRAMES,
+    isBelow(WAYFINDER_MOTE_SPAWN_INTERVAL_FRAMES, WAYFINDER_MOTE_LIFE_FRAMES),
     'a Wayfinder mote is still adrift when the next one is released',
   );
   // One mote per pulse is a coincidence a player never reads as a bearing, so
@@ -1094,8 +1405,426 @@ section('wayfinder');
   // The grace is the "you have genuinely hunted" evidence the pulse waits for.
   // Shorter than a single pulse period it would fire almost immediately.
   check(
-    WAYFINDER_GRACE_FRAMES > WAYFINDER_PULSE_PERIOD_FRAMES,
+    isBelow(WAYFINDER_PULSE_PERIOD_FRAMES, WAYFINDER_GRACE_FRAMES),
     'the hunt gets longer than one pulse period before the fail-safe starts',
+  );
+}
+
+section('difficulty telemetry: trait/no-trait HP split');
+{
+  /** Fixture numbers for the two room fights recorded below. */
+  const TRAIT_FIGHT_HP_FRACTION = 0.5;
+  const NO_TRAIT_FIGHT_HP_FRACTION = 0.8;
+  const TRAIT_FIGHT_SECONDS = 12;
+  const NO_TRAIT_FIGHT_SECONDS = 6;
+  const TRAIT_FIGHT_BLOCKS = 2;
+  const TRAIT_FIGHT_KITE_STARTS = 1;
+  const TRAIT_FIGHT_KITE_ENDS = 1;
+  const TRAIT_FIGHT_KITE_FRAMES = 30;
+
+  const emptyFightDetails: RoomFightDetails = {
+    hpRemainingFraction: 0,
+    seconds: 0,
+    blocks: 0,
+    kiteStarts: 0,
+    kiteEnds: 0,
+    kiteFramesSum: 0,
+    hadTraitMob: false,
+  };
+
+  const stats = new DifficultyStats();
+  stats.beginRun();
+  stats.setFloor(1);
+  stats.recordRoomFight({
+    ...emptyFightDetails,
+    hpRemainingFraction: TRAIT_FIGHT_HP_FRACTION,
+    seconds: TRAIT_FIGHT_SECONDS,
+    blocks: TRAIT_FIGHT_BLOCKS,
+    kiteStarts: TRAIT_FIGHT_KITE_STARTS,
+    kiteEnds: TRAIT_FIGHT_KITE_ENDS,
+    kiteFramesSum: TRAIT_FIGHT_KITE_FRAMES,
+    hadTraitMob: true,
+  });
+  stats.recordRoomFight({
+    ...emptyFightDetails,
+    hpRemainingFraction: NO_TRAIT_FIGHT_HP_FRACTION,
+    seconds: NO_TRAIT_FIGHT_SECONDS,
+  });
+
+  const tally = stats.tallyFor('floor1-pre-hoarder');
+  check(tally !== null, 'a segment with recorded fights has a tally');
+  if (tally !== null) {
+    check(tally.roomFights === 2, `roomFights counts both fights (got ${tally.roomFights})`);
+    check(
+      tally.blocksSum === TRAIT_FIGHT_BLOCKS,
+      `blocksSum carries only the trait fight's blocks (got ${tally.blocksSum})`,
+    );
+    check(tally.kiteStarts === TRAIT_FIGHT_KITE_STARTS, `kiteStarts (got ${tally.kiteStarts})`);
+    check(tally.kiteEnds === TRAIT_FIGHT_KITE_ENDS, `kiteEnds (got ${tally.kiteEnds})`);
+    check(
+      tally.kiteFramesSum === TRAIT_FIGHT_KITE_FRAMES,
+      `kiteFramesSum (got ${tally.kiteFramesSum})`,
+    );
+    check(
+      tally.traitFights === 1,
+      `exactly the trait fight lands in the trait bucket (got ${tally.traitFights})`,
+    );
+    check(
+      tally.traitFightsHpRemainingSum === TRAIT_FIGHT_HP_FRACTION,
+      `the trait bucket's HP sum is just that fight's fraction (got ${tally.traitFightsHpRemainingSum})`,
+    );
+    check(
+      tally.noTraitFights === 1,
+      `exactly the plain fight lands in the no-trait bucket (got ${tally.noTraitFights})`,
+    );
+    check(
+      tally.noTraitFightsHpRemainingSum === NO_TRAIT_FIGHT_HP_FRACTION,
+      `the no-trait bucket's HP sum is just that fight's fraction (got ${tally.noTraitFightsHpRemainingSum})`,
+    );
+  }
+
+  // A gate that cannot find what it measures must fail, not pass vacuously —
+  // an untouched segment must report no tally at all rather than one full of
+  // zeroes that would satisfy every check above by accident.
+  check(
+    new DifficultyStats().tallyFor('floor1-pre-hoarder') === null,
+    'an untouched segment has no tally',
+  );
+}
+
+// ── Explosives handling ──────────────────────────────────────────────────────
+//
+// A stick of dynamite is a consumable bought and dropped at a flat price, thrown
+// at mobs whose health grows with every level. The rules: an untrained stick stays
+// worth a real share of a same-floor mob at every party level; every point of
+// Explosives Handling makes it hit enemies harder; and no boss, bounty mark or
+// escort can be deleted by a bag of sticks. Measured through a live
+// `DynamiteSystem` blast where the resolution path matters, so a blast that stops
+// using the formula fails here too.
+
+const MID_GAME_PARTY_LEVEL = 14;
+const LATE_GAME_PARTY_LEVEL = 26;
+const EXPLOSIVE_PROBE_PARTY_LEVELS = [MID_GAME_PARTY_LEVEL, LATE_GAME_PARTY_LEVEL];
+/**
+ * Party levels the boss sweeps run over: from floor 2 to past the mob level cap.
+ * Floor 1 is left out because an on-curve thrower there has no points to spend.
+ */
+const FLOOR_TWO_PARTY_LEVEL = 10;
+const UPPER_MID_PARTY_LEVEL = 20;
+const PAST_BOSS_CAP_PARTY_LEVEL = 30;
+const BOSS_PROBE_PARTY_LEVELS = [
+  FLOOR_TWO_PARTY_LEVEL,
+  MID_GAME_PARTY_LEVEL,
+  UPPER_MID_PARTY_LEVEL,
+  LATE_GAME_PARTY_LEVEL,
+  PAST_BOSS_CAP_PARTY_LEVEL,
+];
+/** Scales a share to the percentage printed beside it. */
+const PERCENT = 100;
+/** A floor-3 regular, levelled to what the party has earned. */
+const EXPLOSIVE_TARGET_MOB = 'ruins_ghoul';
+/** The least share of that mob's health one untrained stick must take. */
+const UNTRAINED_BLAST_MIN_HP_SHARE = 0.35;
+/** The least share one stick must take at the on-curve Explosives Handling level. */
+const ON_CURVE_BLAST_MIN_HP_SHARE = 0.9;
+/** The most one on-curve stick may deal to that mob, as a multiple of its health. */
+const ON_CURVE_BLAST_MAX_OVERKILL = 2.5;
+/**
+ * The balanced human spreads his points over four cards, one of which is
+ * Explosives Handling, so a quarter of them is the on-curve investment.
+ */
+const SPEND_CARDS = 4;
+/** Explosives Handling levels swept for the "every point helps" check. */
+const MAX_PROBED_HANDLING_LEVEL = 12;
+/** An on-curve stick must hurt enemies at least this many times harder than it hurts the crawlers. */
+const ENEMY_TO_CRAWLER_MIN_RATIO = 2;
+/** Fewest separate blasts any boss or bounty mark may take to kill, at on-curve Explosives Handling. */
+const BOSS_MIN_STICKS_ON_CURVE = 9;
+/** Fewest when every level-up point went into Explosives Handling. */
+const BOSS_MIN_STICKS_ALL_IN = 3;
+/** Explosives Handling at which bounty escorts must survive a stick. */
+const ESCORT_CHECK_HANDLING_LEVEL = 1;
+/** Fewest sticks a bounty escort may take at {@link ESCORT_CHECK_HANDLING_LEVEL}. */
+const ESCORT_MIN_STICKS = 2;
+/** Party level far past every cap, to show the stick has stopped growing. */
+const FAR_PAST_CAP_PARTY_LEVEL = 200;
+/** Frames the dropped stick is ticked for, comfortably past its five-second fuse. */
+const DYNAMITE_SETTLE_FRAMES = 360;
+const EXPLOSIVE_MAP_SIZE = 40;
+/** Tiles east of the thrower the target stands, well inside the three-tile blast. */
+const EXPLOSIVE_TARGET_OFFSET_TILES = 1;
+/** Sticks dropped together on a boss for the volley check. */
+const VOLLEY_STICKS = 4;
+/** Tile the bosses are built on for the arithmetic sweeps; they never move. */
+const BOSS_PROBE_TILE = 2;
+
+function onCurveHandlingLevel(partyLevel: number): number {
+  const pointsEarned = partyLevel - 1;
+  return 1 + Math.floor(pointsEarned / SPEND_CARDS);
+}
+
+function allInHandlingLevel(partyLevel: number): number {
+  return partyLevel;
+}
+
+const explosiveMap = new GameMap({ mapSize: EXPLOSIVE_MAP_SIZE, tileHeight: TILE_SIZE });
+
+/**
+ * Drops `sticks` sticks at once at the human's feet beside a levelled mob and
+ * reports what the blasts took.
+ */
+function blastAgainstLevelledMob(
+  makeTarget: (tileX: number, tileY: number) => Mob,
+  throwerLevel: number,
+  handlingLevel: number,
+  mobLevel: number,
+  sticks = 1,
+): { hpLost: number; maxHp: number } {
+  const start = explosiveMap.startTile;
+  const human = new HumanPlayer(start.x, start.y, TILE_SIZE);
+  const cat = new CatPlayer(start.x, start.y, TILE_SIZE);
+  human.level = throwerLevel;
+  human.explosivesHandling = handlingLevel;
+  human.inventory.addItem('goblin_dynamite', sticks);
+  const roster = new MobRoster(explosiveMap, new SpellSystem());
+  const mob = makeTarget(start.x + EXPLOSIVE_TARGET_OFFSET_TILES, start.y);
+  mob.applyMobLevel(mobLevel);
+  roster.add(mob);
+  const dynamite = new DynamiteSystem(explosiveMap);
+  const context = {
+    human,
+    cat,
+    active: human,
+    inactive: cat,
+    activeIsMoving: false,
+    roster,
+    gameMap: explosiveMap,
+  };
+  for (let stick = 0; stick < sticks; stick++) {
+    dynamite.beginCharge(0);
+    dynamite.release(human);
+  }
+  for (let frame = 0; frame < DYNAMITE_SETTLE_FRAMES; frame++) dynamite.update(context);
+  return { hpLost: mob.maxHp - mob.hp, maxHp: mob.maxHp };
+}
+
+function makeGhoul(tileX: number, tileY: number): Mob {
+  return createMob(EXPLOSIVE_TARGET_MOB, tileX, tileY, explosiveMap);
+}
+
+/** Separate blasts needed to kill a mob of this level, before any guard or phase of its own. */
+function sticksToKill(
+  makeTarget: () => Mob,
+  mobLevel: number,
+  throwerLevel: number,
+  handlingLevel: number,
+): number {
+  const mob = makeTarget();
+  mob.applyMobLevel(mobLevel);
+  const perStick = dynamiteDamageToMob(
+    mob,
+    dynamiteMobDamage(throwerLevel, handlingLevel),
+    dynamiteCrawlerDamage(handlingLevel),
+  );
+  return Math.ceil(mob.maxHp / perStick);
+}
+
+/** Where a probed boss's summons go; none of them is ever ticked. */
+const probeSpawns: Mob[] = [];
+function collectProbeSpawn(mob: Mob): void {
+  probeSpawns.push(mob);
+}
+
+function registeredMob(id: string): () => Mob {
+  return () => createMob(id, BOSS_PROBE_TILE, BOSS_PROBE_TILE, explosiveMap);
+}
+
+/**
+ * Every boss the player fights, by the level rule that sets it. Bosses built
+ * outside the spawner registry are constructed directly, exactly as their own
+ * systems build them.
+ */
+const ARENA_BOSSES: readonly (readonly [string, () => Mob])[] = [
+  ['the_hoarder', registeredMob('the_hoarder')],
+  ['juicer', registeredMob('juicer')],
+  ['krakaren_clone', registeredMob('krakaren_clone')],
+  ['ball_of_swine', registeredMob('ball_of_swine')],
+  ['grotesque_spider', registeredMob('grotesque_spider')],
+  ['the_lich', registeredMob('the_lich')],
+  ['heather', () => new HeatherTheBear(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE)],
+  [
+    'miss_quill',
+    () => new MissQuill(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE, collectProbeSpawn),
+  ],
+  ['remex', () => new Remex(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE)],
+  ['terror_the_clown', registeredMob('terror_the_clown')],
+];
+const BOUNTY_MARKS: readonly (readonly [string, () => Mob])[] = [
+  ['evil_clown', registeredMob('evil_clown')],
+  ['mantid', registeredMob('mantid')],
+  ['skeleton_lord', registeredMob('skeleton_lord')],
+  ['dark_knight', () => new DarkKnight(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE)],
+  ['rock_golem_boss', registeredMob('rock_golem_boss')],
+];
+/**
+ * Bounty escorts sturdy enough, as authored, to outlast an untrained level-1
+ * stick. Goblins, lemurs and the like are built to fold to a single blast on any
+ * floor; the rule is that dynamite never makes a tougher escort one of them.
+ */
+const BOUNTY_ESCORTS = [
+  'stilt_clown',
+  'fat_clown',
+  'mantis',
+  'skeleton_sword',
+  'skeleton_archer',
+  'rock_golem',
+];
+
+section('explosives handling');
+{
+  const normalProfile = DIFFICULTY_PROFILES.normal;
+  const openBand: MobLevelRange = { minLevel: 1, maxLevel: MAX_MOB_LEVEL };
+  for (const partyLevel of EXPLOSIVE_PROBE_PARTY_LEVELS) {
+    const mobLevel = earnedLevelFloor(openBand, partyLevel, normalProfile);
+
+    const untrained = blastAgainstLevelledMob(makeGhoul, partyLevel, 1, mobLevel);
+    const untrainedShare = untrained.hpLost / untrained.maxHp;
+    check(
+      untrained.hpLost === Math.min(untrained.maxHp, dynamiteMobDamage(partyLevel, 1)),
+      `party level ${partyLevel}: the live blast deals what dynamiteMobDamage prices (${untrained.hpLost})`,
+    );
+    check(
+      untrainedShare >= UNTRAINED_BLAST_MIN_HP_SHARE,
+      `party level ${partyLevel}: an untrained stick takes ${(untrainedShare * PERCENT).toFixed(0)}% of a level-${mobLevel} ${EXPLOSIVE_TARGET_MOB} (min ${UNTRAINED_BLAST_MIN_HP_SHARE * PERCENT}%)`,
+    );
+
+    const onCurveHandling = onCurveHandlingLevel(partyLevel);
+    const onCurve = blastAgainstLevelledMob(makeGhoul, partyLevel, onCurveHandling, mobLevel);
+    const onCurveShare = onCurve.hpLost / onCurve.maxHp;
+    check(
+      onCurveShare >= ON_CURVE_BLAST_MIN_HP_SHARE,
+      `party level ${partyLevel}: at on-curve Explosives Handling ${onCurveHandling} a stick takes ${(onCurveShare * PERCENT).toFixed(0)}% (min ${ON_CURVE_BLAST_MIN_HP_SHARE * PERCENT}%)`,
+    );
+    const onCurveOverkill = dynamiteMobDamage(partyLevel, onCurveHandling) / onCurve.maxHp;
+    check(
+      onCurveOverkill <= ON_CURVE_BLAST_MAX_OVERKILL,
+      `party level ${partyLevel}: that stick deals ${onCurveOverkill.toFixed(2)}x the mob's health (max ${ON_CURVE_BLAST_MAX_OVERKILL}x)`,
+    );
+
+    let everyPointHelps = true;
+    for (let handling = 2; handling <= MAX_PROBED_HANDLING_LEVEL; handling++) {
+      if (dynamiteMobDamage(partyLevel, handling) <= dynamiteMobDamage(partyLevel, handling - 1)) {
+        everyPointHelps = false;
+      }
+    }
+    check(
+      everyPointHelps,
+      `party level ${partyLevel}: every Explosives Handling point raises blast damage to enemies`,
+    );
+
+    const enemyDamage = dynamiteMobDamage(partyLevel, onCurveHandling);
+    const crawlerDamage = dynamiteCrawlerDamage(onCurveHandling);
+    check(
+      enemyDamage >= crawlerDamage * ENEMY_TO_CRAWLER_MIN_RATIO,
+      `party level ${partyLevel}: an on-curve stick does ${enemyDamage} to enemies and ${crawlerDamage} to the crawlers (min ${ENEMY_TO_CRAWLER_MIN_RATIO}x)`,
+    );
+  }
+
+  const cappedStick = dynamiteMobDamage(MAX_MOB_LEVEL / normalProfile.ambientLevelRatio, 1);
+  check(
+    dynamiteMobDamage(FAR_PAST_CAP_PARTY_LEVEL, 1) === cappedStick,
+    `the thrower-level term stops growing once mob health does (${cappedStick} at the cap)`,
+  );
+
+  const ally = { isHostile: false, blastDamageScale: 1 };
+  const lateCrawlerDamage = dynamiteCrawlerDamage(MAX_PROBED_HANDLING_LEVEL);
+  check(
+    dynamiteDamageToMob(
+      ally,
+      dynamiteMobDamage(LATE_GAME_PARTY_LEVEL, MAX_PROBED_HANDLING_LEVEL),
+      lateCrawlerDamage,
+    ) === lateCrawlerDamage,
+    'an ally caught in a blast takes the crawlers’ share, not the enemies’',
+  );
+
+  const bossRows = [
+    ...ARENA_BOSSES.map(
+      ([name, make]) =>
+        [name, make, (pl: number) => resolveBossLevel(openBand, pl, normalProfile)] as const,
+    ),
+    ...BOUNTY_MARKS.map(
+      ([name, make]) =>
+        [name, make, (pl: number) => bountyBossLevel(pl, pl, normalProfile)] as const,
+    ),
+  ];
+  for (const [name, make, levelFor] of bossRows) {
+    const onCurveSticks = BOSS_PROBE_PARTY_LEVELS.map((pl) =>
+      sticksToKill(make, levelFor(pl), pl, onCurveHandlingLevel(pl)),
+    );
+    const allInSticks = BOSS_PROBE_PARTY_LEVELS.map((pl) =>
+      sticksToKill(make, levelFor(pl), pl, allInHandlingLevel(pl)),
+    );
+    check(
+      Math.min(...onCurveSticks) >= BOSS_MIN_STICKS_ON_CURVE &&
+        Math.min(...allInSticks) >= BOSS_MIN_STICKS_ALL_IN,
+      `${name}: ${onCurveSticks.join('/')} sticks on-curve, ${allInSticks.join('/')} all-in (min ${BOSS_MIN_STICKS_ON_CURVE} / ${BOSS_MIN_STICKS_ALL_IN})`,
+    );
+
+    const boss = make();
+    let weakestMargin = Infinity;
+    for (let throwerLevel = 1; throwerLevel <= PAST_BOSS_CAP_PARTY_LEVEL; throwerLevel++) {
+      for (let handling = 1; handling <= MAX_PROBED_HANDLING_LEVEL; handling++) {
+        const crawlerShare = dynamiteCrawlerDamage(handling);
+        const perStick = dynamiteDamageToMob(
+          boss,
+          dynamiteMobDamage(throwerLevel, handling),
+          crawlerShare,
+        );
+        weakestMargin = Math.min(weakestMargin, perStick - crawlerShare);
+      }
+    }
+    check(
+      weakestMargin >= 0,
+      `${name}: a stick never does less to it than to a crawler (weakest margin ${weakestMargin})`,
+    );
+  }
+
+  for (const name of BOUNTY_ESCORTS) {
+    const escortSticks = BOSS_PROBE_PARTY_LEVELS.map((pl) =>
+      sticksToKill(
+        registeredMob(name),
+        bountyMinionLevel(pl, pl, normalProfile),
+        pl,
+        ESCORT_CHECK_HANDLING_LEVEL,
+      ),
+    );
+    check(
+      Math.min(...escortSticks) >= ESCORT_MIN_STICKS,
+      `escort ${name}: ${escortSticks.join('/')} sticks at Explosives Handling ${ESCORT_CHECK_HANDLING_LEVEL} (min ${ESCORT_MIN_STICKS})`,
+    );
+  }
+
+  const makeLord = (tileX: number, tileY: number): Mob =>
+    createMob('skeleton_lord', tileX, tileY, explosiveMap);
+  const lordLevel = bountyBossLevel(LATE_GAME_PARTY_LEVEL, LATE_GAME_PARTY_LEVEL, normalProfile);
+  const lateHandling = onCurveHandlingLevel(LATE_GAME_PARTY_LEVEL);
+  const singleBlast = blastAgainstLevelledMob(
+    makeLord,
+    LATE_GAME_PARTY_LEVEL,
+    lateHandling,
+    lordLevel,
+  );
+  const volleyOfSticks = VOLLEY_STICKS;
+  const volley = blastAgainstLevelledMob(
+    makeLord,
+    LATE_GAME_PARTY_LEVEL,
+    lateHandling,
+    lordLevel,
+    volleyOfSticks,
+  );
+  check(
+    singleBlast.hpLost > 0 && volley.hpLost === singleBlast.hpLost,
+    `a boss hit by ${volleyOfSticks} sticks at once loses what one stick takes (${volley.hpLost} vs ${singleBlast.hpLost})`,
   );
 }
 

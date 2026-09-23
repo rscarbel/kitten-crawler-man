@@ -1,3 +1,4 @@
+import { displayHp } from '../core/crawlerFormulas';
 import { TILE_SIZE } from '../core/constants';
 import { mongoMinFightingHp, Mongo } from '../creatures/Mongo';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -28,7 +29,7 @@ import { viewportHeight, viewportWidth } from '../core/Viewport';
  * Mongo's lifecycle: summoning, recall, off-duty recovery and the summon button.
  *
  * The pet's HP is *persistent*. He does not heal by being put away and brought
- * back out; he regenerates slowly while off duty and carries whatever is left
+ * back out; he regenerates while off duty and carries whatever is left
  * into his next summon. That is the whole shape of the feature: sending him in
  * costs something, and the cost is paid in the time he needs to recover.
  */
@@ -43,6 +44,21 @@ const TILE_CENTER = 0.5;
  * to her side, and past this the honest answer is her own tile.
  */
 const SPAWN_SEARCH_RADIUS_TILES = 3;
+
+/**
+ * How close an enemy has to be for the companion cat to send Mongo in.
+ *
+ * About the reach of her own engage scan: near enough that the fight is plainly
+ * hers, not so far that she wastes a summon on a mob idling across a hall.
+ */
+const AUTO_SUMMON_THREAT_RADIUS_TILES = 7;
+/**
+ * The wait before the cat tries again after a summon she could not make.
+ *
+ * Without it a cat standing somewhere too tight for him retries every frame, and
+ * each refusal re-raises the "No room" line over her head.
+ */
+const AUTO_SUMMON_RETRY_FRAMES = 120;
 
 /** Duration a speech bubble stays visible (frames). */
 const SPEECH_DURATION = 150;
@@ -156,7 +172,7 @@ const SPEECH_BUBBLE_POINTER_HEIGHT = 6;
 const SPEECH_BUBBLE_TEXT_Y_OFFSET = 15;
 const SPEECH_BUBBLE_TEXT_Y_ADJUST = 9;
 
-// Recovery toasts — the "-1.3s" flags a kill puts over the Summon button.
+// Recovery toasts — the "-1.2s" flags a kill puts over the Summon button.
 const RECOVERY_TOAST_FRAMES = 90;
 /** Frames of the tail spent fading, so a toast never simply blinks out. */
 const RECOVERY_TOAST_FADE_FRAMES = 30;
@@ -209,7 +225,7 @@ export class MongoSystem implements GameSystem {
   private retreatMobs: Mob[] = [];
 
   /**
-   * The "-1.3s" flags over the Summon button.
+   * The "-1.2s" flags over the Summon button.
    *
    * Not merged by text: identical numbers back to back are the normal case here
    * — every kill is worth the same tick — and three of them mean three kills.
@@ -236,6 +252,20 @@ export class MongoSystem implements GameSystem {
    * true for minutes and would re-announce at every transition.
    */
   private hasExplainedOffDutyRegen = false;
+
+  /**
+   * Frames he has spent collapsing or running home this summon.
+   *
+   * Credited to his recovery when he despawns. The recovery ceiling is a promise
+   * about the time from the moment he is spent, and he is on the field — where
+   * nothing heals him — for the whole run home that follows it.
+   */
+  private retreatFrames = 0;
+
+  /** Frames left before the companion cat may try another summon on her own. */
+  private autoSummonRetryFrames = 0;
+  /** Reused every frame by {@link catWantsToSummon}, which runs whenever he is off duty. */
+  private readonly threatQuery = new Set<Mob>();
 
   /**
    * @param petState  HP and the quest lock, threaded by reference across scenes
@@ -346,11 +376,57 @@ export class MongoSystem implements GameSystem {
     this.mongo = new Mongo(spawn.x, spawn.y, TILE_SIZE, cat, this.petLevel(), this.petState.hp);
     this.mongo.setMap(gameMap);
     this.petState.regenFrames = 0;
+    this.retreatFrames = 0;
 
     this.speechText = 'Go Mongo!';
     this.speechTimer = SPEECH_DURATION;
 
     return this.mongo;
+  }
+
+  /**
+   * Whether the companion cat should send Mongo in on her own this frame: she is
+   * fighting, or a hostile is close enough that she soon will be.
+   *
+   * Only the threat is judged here. The caller owns the other half of the
+   * question — whether the player has left this to her at all — because the
+   * setting, the stance and who is being driven are the scene's to know.
+   */
+  catWantsToSummon(ctx: SystemContext): boolean {
+    if (this.autoSummonRetryFrames > 0) {
+      this.autoSummonRetryFrames--;
+      return false;
+    }
+    const { cat, human, gameMap, bossRoom } = ctx;
+    if (!this.canSummon || !cat.isAlive || cat.isKnockedOut) return false;
+    if (cat.autoTarget?.isAlive === true) return true;
+
+    // Centres cancel in the distance, so the query can use raw sprite origins;
+    // only the sight line needs them.
+    this.threatQuery.clear();
+    const nearby = ctx.roster.grid.queryCircle(
+      cat.x,
+      cat.y,
+      AUTO_SUMMON_THREAT_RADIUS_TILES * TILE_SIZE,
+      this.threatQuery,
+    );
+    const catCentreX = cat.x + TILE_SIZE * TILE_CENTER;
+    const catCentreY = cat.y + TILE_SIZE * TILE_CENTER;
+    for (const mob of nearby) {
+      if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+      // An unstarted boss fight is the player's to start. Sending the pet at it
+      // through the doorway would begin it for them with nobody in the room.
+      if (bossRoom?.isUntriggeredBossRoomMob(mob, human) === true) continue;
+      const mobCentreX = mob.x + TILE_SIZE * TILE_CENTER;
+      const mobCentreY = mob.y + TILE_SIZE * TILE_CENTER;
+      if (gameMap.hasLineOfSight(catCentreX, catCentreY, mobCentreX, mobCentreY)) return true;
+    }
+    return false;
+  }
+
+  /** Called when a summon the cat chose herself was refused, so she backs off. */
+  onAutoSummonRefused(): void {
+    this.autoSummonRetryFrames = AUTO_SUMMON_RETRY_FRAMES;
   }
 
   /**
@@ -431,6 +507,7 @@ export class MongoSystem implements GameSystem {
     }
 
     this.mongo.allMobs = mobs;
+    if (this.mongo.recalling || this.mongo.collapsing) this.retreatFrames++;
     this.payOutDamageXp(this.mongo);
     // A growth spurt mid-fight has to reach the creature that is already out, or
     // he keeps the juvenile's stats and sheet until the next time he is summoned.
@@ -543,7 +620,7 @@ export class MongoSystem implements GameSystem {
     this.pushRecoveryToast(framesSaved);
   }
 
-  /** Raises a fresh "-1.3s" over the button, pushing the older ones up a row. */
+  /** Raises a fresh "-1.2s" over the button, pushing the older ones up a row. */
   private pushRecoveryToast(framesSaved: number): void {
     const secondsSaved = framesSaved / FRAMES_PER_SECOND;
     this.recoveryToasts.show(`-${secondsSaved.toFixed(RECOVERY_TOAST_DECIMALS)}s`);
@@ -718,6 +795,10 @@ export class MongoSystem implements GameSystem {
     if (index >= 0) mobs.splice(index, 1);
     this.mongo = null;
     this.petState.regenFrames = 0;
+    // Measured against full rather than the summon floor, so the credit heals
+    // him whenever he is short of full, not only while he is unsummonable.
+    advanceMongoRecovery(this.petState, mongo.maxHp, mongo.maxHp, this.retreatFrames);
+    this.retreatFrames = 0;
     return true;
   }
 
@@ -881,7 +962,7 @@ export class MongoSystem implements GameSystem {
       color: labelColor,
       align: 'left',
     });
-    drawText(ctx, `${Math.round(this.hp)}/${this.maxHp}`, {
+    drawText(ctx, `${displayHp(this.hp)}/${this.maxHp}`, {
       x: x + w - MONGO_BUTTON_TEXT_INSET,
       y: textRowY,
       size: MONGO_HP_TEXT_SIZE,
@@ -936,7 +1017,7 @@ export class MongoSystem implements GameSystem {
   }
 
   /**
-   * The stack of "-1.3s" flags, drawn upward from just above the button.
+   * The stack of "-1.2s" flags, drawn upward from just above the button.
    *
    * Anchored to the button rather than to the screen so it cannot drift away
    * from the countdown it is explaining — the number the toast is subtracting

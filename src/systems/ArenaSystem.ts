@@ -5,8 +5,9 @@
  * Subscribes to EventBus events instead of being manually orchestrated.
  */
 
+import { displayHp } from '../core/crawlerFormulas';
 import { TILE_SIZE } from '../core/constants';
-import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -157,6 +158,27 @@ export class ArenaSystem implements GameSystem {
     return this.entryWindowTimer > 0 || this.arenaLocked || tusklingPhaseUnresolved;
   }
 
+  /** Inside the arena's wall ring: the same test that starts the fight. */
+  isInsideArena(entity: { x: number; y: number }): boolean {
+    if (!this.hasArena) return false;
+    const arena = this.gameMap.arenaExteriors[0];
+    const centreX = arena.centre.x * TILE_SIZE;
+    const centreY = arena.centre.y * TILE_SIZE;
+    const innerRadius = ARENA_INTERIOR_RADIUS_TILES * TILE_SIZE;
+    return Math.hypot(entity.x - centreX, entity.y - centreY) < innerRadius;
+  }
+
+  /**
+   * Whether this entity is in the arena while its fight is unfinished — the
+   * fight's own clock still running, or the ball or any Tuskling still alive in
+   * the ring.
+   */
+  isEntityInUnresolvedArena(entity: { x: number; y: number }, mobs: readonly Mob[]): boolean {
+    if (!this.isInsideArena(entity)) return false;
+    if (this.isBossFightInProgress) return true;
+    return mobs.some((mob) => mob.isAlive && mob.isHostile && this.isInsideArena(mob));
+  }
+
   /**
    * Unlocks the arena door and clears the entry-window/insider state — used on
    * a checkpoint respawn so the door doesn't stay shut (or slam shut on its
@@ -288,8 +310,8 @@ export class ArenaSystem implements GameSystem {
       const innerRadius = ARENA_INTERIOR_RADIUS_TILES * TILE_SIZE;
       this.resolveStench(bos, ctx, cx, cy, innerRadius);
 
-      const humanInside = Math.hypot(human.x - cx, human.y - cy) < innerRadius;
-      const catInside = Math.hypot(cat.x - cx, cat.y - cy) < innerRadius;
+      const humanInside = this.isInsideArena(human);
+      const catInside = this.isInsideArena(cat);
 
       // Use hp > 0 (not isAlive) because BallOfSwine overrides isAlive to return
       // true during its burst animation even after hp hits 0, which would
@@ -388,8 +410,8 @@ export class ArenaSystem implements GameSystem {
       if (!(mob instanceof Tuskling)) continue;
       // Levelled to its parent: a base-stats Tuskling next to a level-15 boss is a
       // distraction the crawler can ignore, which is the opposite of the point.
-      mob.applyMobLevel(bos.mobLevel);
-      applyActiveDifficultyRewards(mob);
+      mob.applyMobLevel(bos.mobLevel, bos.levelledCurve);
+      applySpawnDifficulty(mob);
       mob.shedFromBall = true;
       mob.dazeTimer = SHED_DAZE_FRAMES;
       this.addMob(mob);
@@ -542,7 +564,7 @@ export class ArenaSystem implements GameSystem {
         radius: 0,
       });
 
-      drawText(ctx, `${bos.hp} / ${bos.maxHp}`, {
+      drawText(ctx, `${displayHp(bos.hp)} / ${bos.maxHp}`, {
         x: viewportWidth() / 2,
         y: barY + barH - HP_TEXT_INSET - HP_TEXT_ADJUST,
         size: 9,

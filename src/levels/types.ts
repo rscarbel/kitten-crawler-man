@@ -3,6 +3,7 @@ import type { SoundId } from '../audio/sounds';
 import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
 import type { AssetGroup } from '../core/assetGroups';
+import type { LevelledCurve } from '../creatures/mobLevelScaling';
 
 /**
  * One entry of a camp's roster: a mob type, a count and a level range.
@@ -159,6 +160,22 @@ export interface OnMobKilledSpawn {
   spreadRadius: number;
 }
 
+/** How far a floor's ambient bands may follow a party past their authored tops. */
+export interface AmbientTracking {
+  /** The highest level any ambient mob on the floor may be slid up to. */
+  readonly maxLevel: number;
+  /** Levels a slid band's rolls sit under the party's earned level. */
+  readonly levelsBehind: number;
+}
+
+/** How a floor's rooms grow once a party's earned level has passed their bands. */
+export interface OverLevelReinforcement {
+  /** Levels the earned level must pass a room's band top by for each extra body. */
+  readonly levelsPerBody: number;
+  /** The most extra bodies one room gains, however far ahead the party is. */
+  readonly maxBodies: number;
+}
+
 /**
  * One forced-progression unit on a floor: several branching room chains leaving
  * a common entry, all converging on a single gateway safe room whose only onward
@@ -283,9 +300,10 @@ export interface LevelDef {
   /** ID of the next level in the registry, if any. */
   nextLevelId?: string;
   /**
-   * Diminishing returns on combat XP earned here, so an early floor can't be
-   * farmed into trivialising the ones below it. Absent means uncapped. Quest
-   * rewards ignore this entirely — only mob kills are scaled.
+   * Diminishing returns on XP earned here — kills, bosses and quest rewards
+   * alike — so an early floor can't be farmed into trivialising the ones below
+   * it. Absent means uncapped. Applied per level bought (`Player.gainXp`), so a
+   * large award cannot carry a crawler past a tier at full value.
    */
   xpDiminishingTiers?: XpDiminishingTier[];
   /**
@@ -309,6 +327,25 @@ export interface LevelDef {
    * difficulty change than the advice text alone.
    */
   recommendedLevelOverride?: number;
+  /**
+   * Extra bodies every room gains once the party has out-levelled that room's
+   * band. Absent means rooms spawn their authored counts at any party level, as
+   * the learning floor does. See `overLevelReinforcementBodies`.
+   */
+  overLevelReinforcement?: OverLevelReinforcement;
+  /**
+   * How this floor's ambient mobs keep pace with a party that has out-levelled
+   * their authored bands. Absent means the bands are hard ceilings, as on the
+   * learning floor. See `partyTrackedBand`.
+   */
+  ambientTracking?: AmbientTracking;
+  /**
+   * The HP and damage curve every mob this floor levels is levelled on — rooms,
+   * hallways, treasure guards, extra spawns, bosses and the defend-quest wave.
+   * Absent means `SHARED_LEVELLED_CURVE`. Level-1 mobs are the same under every
+   * curve. See `LevelledCurve`.
+   */
+  levelledCurve?: LevelledCurve;
   /**
    * Suppresses the stairwell menu's "Recommended level" advice entirely — no
    * number, and no underlevelled warning.

@@ -168,12 +168,12 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
           toY: vial.toY,
           releaseHeightPx: vial.releaseHeightPx,
           damage: vial.damage,
-          source: {
+          source: mob.stampBlowCap({
             kind: 'mob',
             mobType: vial.mobType,
             attackType: VIAL_ATTACK_TYPE,
             undodgeable: true,
-          },
+          }),
           owner: mob,
           age: 0,
         });

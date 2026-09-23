@@ -2,6 +2,7 @@ import type { Player } from '../Player';
 import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 import {
   RAT_BITE_FRAMES,
   RAT_BITE_IMPACT_PROGRESS,
@@ -28,6 +29,9 @@ const BITE_DAMAGE = 1;
 const FOLLOW_STOP_FRACTION = 0.8;
 /** Fraction of bite range to check engagement for first-bite windup. */
 const ENGAGE_RANGE_FRACTION = 1.15;
+/** Frames a rat hesitates before the first bite of an engagement. */
+const FIRST_BITE_WINDUP_FRAMES = 10;
+const RAT_TACTICS: readonly TacticsTrait[] = ['flank'];
 
 export class Rat extends Mob {
   /** Vermin survive everything; the rarest of them leave the manual behind. */
@@ -84,6 +88,19 @@ export class Rat extends Mob {
   }
 
   /**
+   * A rat is a tiny swarmer: it can learn to come at the player from more than
+   * one side, and nothing else. A three-hit-point rodent turning a sword aside
+   * reads as silly, and a rat backing off toward its friends reads as fleeing.
+   *
+   * Its aggro range sits inside the flank's staging ring, so a rat that has
+   * just noticed the player is already close enough to go straight in; the
+   * trait shows when the player backs off and the rats run them down again.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return RAT_TACTICS;
+  }
+
+  /**
    * Lands a bite committed to `BITE_IMPACT_DELAY` frames ago. The target is
    * re-checked rather than trusted: it can die, or walk out of reach, between
    * the lunge starting and the jaws closing.
@@ -135,6 +152,7 @@ export class Rat extends Mob {
       this.isAggro = false;
       this.firstBitePending = true;
       this.firstBiteWindup = 0;
+      this.tactics.disengage();
       this.clearAStarPath();
       this.doWander();
       return;
@@ -143,22 +161,30 @@ export class Rat extends Mob {
     this.isAggro = true;
     const nearestDist = this.distanceTo(nearest);
 
-    // Track last known position while we have LOS
     this.updateLastKnown(nearest);
 
-    // Skitter toward last known position (= current when LOS clear)
+    // A rat only learns `flank`, whose moves never break off, so the bite
+    // below is untouched by whatever this answers.
+    const flankMove = this.chooseTacticalStep(
+      nearest,
+      this.biteRangePx,
+      this.biteImpactTimer === 0,
+    );
     if (nearestDist > this.biteRangePx) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        this.speed,
-        this.biteRangePx * FOLLOW_STOP_FRACTION,
-      );
+      if (flankMove !== null) {
+        this.walkTacticalStep(flankMove, nearest);
+      } else {
+        this.followTargetAStar(
+          this.lastKnownTargetX,
+          this.lastKnownTargetY,
+          this.speed,
+          this.biteRangePx * FOLLOW_STOP_FRACTION,
+        );
+      }
     } else {
       this.isMoving = false;
     }
 
-    // Short windup before the first bite of each engagement
     const inRange = nearestDist <= this.biteRangePx * ENGAGE_RANGE_FRACTION;
 
     // Once it stops walking nothing else writes `facing`, and the sheet has a
@@ -168,7 +194,7 @@ export class Rat extends Mob {
     // lunge would cut from the profile pose to the head-on one mid-bite.
     if (inRange && this.attackAnimTimer === 0) this.faceToward(nearest);
     if (inRange && this.firstBitePending && this.firstBiteWindup === 0) {
-      this.firstBiteWindup = 10;
+      this.firstBiteWindup = FIRST_BITE_WINDUP_FRAMES;
       this.firstBitePending = false;
     }
     if (this.firstBiteWindup > 0) this.firstBiteWindup--;

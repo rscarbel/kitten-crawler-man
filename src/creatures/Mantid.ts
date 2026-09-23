@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import { Mob, type LootDrop } from './Mob';
+import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop } from './Mob';
 import {
   MANTID_BODY_PART_KEY,
   drawMantidSprite,
@@ -58,8 +58,11 @@ const SLASH_RANGE_TILES = 1.7;
  * The stalking strike. Deliberately modest: the flurry is his damage, and this
  * is what he does while the player is looking for the opening to break away
  * from it. At 9 it was killing faster than the attack it exists to set up.
+ *
+ * Also held under `BOUNTY_MAX_BLOW_HP_SHARE`: he only ever spawns a level above
+ * the party, where the level multiplier is steepest against the crawler.
  */
-const SLASH_DAMAGE = 5;
+const SLASH_DAMAGE = 4;
 const SLASH_WINDUP_FRAMES = 26;
 const SLASH_RECOVER_FRAMES = 20;
 /** Length of one complete strike. Exported so the `?mantid` harness plays it at his tempo. */
@@ -72,7 +75,12 @@ const RAGE_PAUSE_FRAMES = 60;
 const FLURRY_FRAMES = 180;
 /** Frames between flurry damage ticks — five hits per second of standing in it. */
 const FLURRY_TICK_FRAMES = 12;
-const FLURRY_TICK_DAMAGE = 5;
+/**
+ * Each tick is a blow in its own right, so it answers to the same per-blow bound
+ * as the slash; the flurry's weight is its rate, and staying inside it still
+ * empties a bar in well under its three seconds.
+ */
+const FLURRY_TICK_DAMAGE = 4;
 const FLURRY_RADIUS_TILES = 1.6;
 /**
  * The `attackType` a flurry tick is tagged with.
@@ -172,6 +180,11 @@ const COMMITTED_STATES: ReadonlySet<MantidState> = new Set<MantidState>([
 ]);
 
 export class Mantid extends Mob {
+  /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
+  override get blastDamageScale(): number {
+    return BOSS_BLAST_DAMAGE_SCALE;
+  }
+
   readonly xpValue = XP_VALUE;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

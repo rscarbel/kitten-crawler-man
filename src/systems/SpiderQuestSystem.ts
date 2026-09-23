@@ -7,6 +7,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
 import type { TrackerEntry } from './questTracker';
 import { clamp, pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
@@ -115,6 +116,18 @@ const SCIENTIST_WANDER_FRAMES = 180;
 const SCIENTIST_WALK_ANIM_FRAMES = 8;
 const SCIENTIST_WALK_FRAME_COUNT = 4;
 const SCIENTIST_WANDER_SPREAD_TILES = 3;
+/**
+ * Half-width of the scientist's footprint, in tiles. His sprite is drawn
+ * centred on his feet and is nearly a tile wide, so a single-point wall test
+ * lets half his coat through the masonry either side. Just under half a tile so
+ * he still fits a one-tile gap.
+ */
+const SCIENTIST_FOOTPRINT_HALF_WIDTH_TILES = 0.45;
+/**
+ * How far up from his soles the footprint reaches, in tiles. The same rule the
+ * crawlers follow: the upper body may lean over a north wall row, the legs may not.
+ */
+const SCIENTIST_FOOTPRINT_DEPTH_TILES = 0.5;
 
 // Animation and physics
 const SPIDER_LAB_ENTRY_HP_THRESHOLD = 0.3;
@@ -645,9 +658,10 @@ export class SpiderQuestSystem implements GameSystem {
       this.roomData = gameMap.spiderLabRoom;
       this.phase = 'scientist_waiting';
 
-      // Initialise scientist position
-      this.scientistX = this.roomData.scientistTile.x * TILE_SIZE;
-      this.scientistY = this.roomData.scientistTile.y * TILE_SIZE;
+      // His position is the point he is drawn standing on — the draw anchors his
+      // feet there — so home is the feet point of his tile, not its corner.
+      this.scientistX = this.scientistHomeX(this.roomData);
+      this.scientistY = this.scientistHomeY(this.roomData);
       this.scientistTargetX = this.scientistX;
       this.scientistTargetY = this.scientistY;
 
@@ -690,6 +704,20 @@ export class SpiderQuestSystem implements GameSystem {
   /** From the cutscene that hatches the spider until she dies. */
   get isBossFightInProgress(): boolean {
     return this.phase === 'cutscene' || this.phase === 'boss_fight';
+  }
+
+  /**
+   * Whether this entity is in the lab while its fight is unfinished: any time
+   * before the spider falls — it is unhatched, not absent, through the scientist
+   * and the hack — or while anything hostile is still alive in the room.
+   */
+  isEntityInUnresolvedLab(entity: { x: number; y: number }, mobs: readonly Mob[]): boolean {
+    if (this.roomData === null) return false;
+    const { bounds } = this.roomData;
+    if (!this._isInRoom(entity, bounds)) return false;
+    const spiderStillToFight = this.phase !== 'complete' && this.phase !== 'inactive';
+    if (spiderStillToFight) return true;
+    return mobs.some((mob) => mob.isAlive && mob.isHostile && this._isInRoom(mob, bounds));
   }
 
   get isDialogOpen(): boolean {
@@ -949,8 +977,7 @@ export class SpiderQuestSystem implements GameSystem {
 
     // Scientist interaction prompt when scientist_waiting
     if (this.phase === 'scientist_waiting' && active !== undefined && !this.scientistDead) {
-      const dist = Math.hypot(active.x - this.scientistX, active.y - this.scientistY);
-      if (dist <= INTERACT_RANGE_PX) {
+      if (this.isWithinScientistReach(active)) {
         const sx = this.scientistX - camX;
         const sy = this.scientistY - camY;
         drawInteractionPrompt(ctx2d, sx, sy, TILE_SIZE, 'Talk');
@@ -1106,8 +1133,7 @@ export class SpiderQuestSystem implements GameSystem {
     if (!this.roomData) return false;
 
     if (this.phase === 'scientist_waiting') {
-      const dist = Math.hypot(active.x - this.scientistX, active.y - this.scientistY);
-      if (dist > INTERACT_RANGE_PX) return false;
+      if (!this.isWithinScientistReach(active)) return false;
       this.phase = 'scientist_dialog';
       this.menuOpenSoundPending = true;
       this.explanationSoundPending = true;
@@ -1709,10 +1735,45 @@ export class SpiderQuestSystem implements GameSystem {
     this.smallSpiders.push(spider);
   }
 
+  private scientistHomeX(room: SpiderLabRoomData): number {
+    return (room.scientistTile.x + CENTER_COLLISION_OFFSET) * TILE_SIZE;
+  }
+
+  /** Just above the tile's bottom edge, so his feet still floor into his own tile. */
+  private scientistHomeY(room: SpiderLabRoomData): number {
+    return (room.scientistTile.y + SOLE_COLLISION_OFFSET) * TILE_SIZE;
+  }
+
+  /**
+   * Whether every tile under his footprint is walkable with his feet at
+   * (feetX, feetY) — not just the one tile under a single point.
+   */
+  private scientistCanStandAt(feetX: number, feetY: number): boolean {
+    const halfWidthPx = TILE_SIZE * SCIENTIST_FOOTPRINT_HALF_WIDTH_TILES;
+    const depthPx = TILE_SIZE * SCIENTIST_FOOTPRINT_DEPTH_TILES;
+    const leftTile = Math.floor((feetX - halfWidthPx) / TILE_SIZE);
+    const rightTile = Math.floor((feetX + halfWidthPx) / TILE_SIZE);
+    const topTile = Math.floor((feetY - depthPx) / TILE_SIZE);
+    const soleTile = Math.floor(feetY / TILE_SIZE);
+    for (let tileY = topTile; tileY <= soleTile; tileY++) {
+      for (let tileX = leftTile; tileX <= rightTile; tileX++) {
+        if (!this.gameMap.isWalkable(tileX, tileY)) return false;
+      }
+    }
+    return true;
+  }
+
+  /** Measured feet to feet: his position is his feet, a crawler's is a sprite corner. */
+  private isWithinScientistReach(active: Player): boolean {
+    const activeFeetX = active.x + TILE_SIZE * CENTER_COLLISION_OFFSET;
+    const activeFeetY = active.y + TILE_SIZE * SOLE_COLLISION_OFFSET;
+    const dist = Math.hypot(activeFeetX - this.scientistX, activeFeetY - this.scientistY);
+    return dist <= INTERACT_RANGE_PX;
+  }
+
   private _updateScientistWander(active: Player): void {
     if (!this.roomData) return;
 
-    // Scientist faces player when in dialog
     if (this.phase === 'scientist_dialog') {
       this.scientistFacingX = active.x >= this.scientistX ? 1 : -1;
       this.scientistIsWalking = false;
@@ -1725,15 +1786,19 @@ export class SpiderQuestSystem implements GameSystem {
     if (this.scientistWanderTimer <= 0) {
       this.scientistWanderTimer = SCIENTIST_WANDER_FRAMES;
 
-      const homeX = this.roomData.scientistTile.x * TILE_SIZE;
-      const homeY = this.roomData.scientistTile.y * TILE_SIZE;
+      const homeX = this.scientistHomeX(this.roomData);
+      const homeY = this.scientistHomeY(this.roomData);
+      const labBounds = this.roomData.bounds;
       const spread = TILE_SIZE * SCIENTIST_WANDER_SPREAD_TILES;
       let pickedX = homeX;
       let pickedY = homeY;
       for (let attempt = 0; attempt < SCIENTIST_WANDER_ATTEMPTS; attempt++) {
         const tx = homeX + (Math.random() * 2 - 1) * spread;
         const ty = homeY + (Math.random() * 2 - 1) * spread;
-        if (this.gameMap.isWalkable(Math.floor(tx / TILE_SIZE), Math.floor(ty / TILE_SIZE))) {
+        // Kept inside the lab: the room's doorway is wide enough for a random
+        // wander to walk him out into the corridor, away from his own quest.
+        const insideLab = pointInRect(tx / TILE_SIZE, ty / TILE_SIZE, labBounds);
+        if (insideLab && this.scientistCanStandAt(tx, ty)) {
           pickedX = tx;
           pickedY = ty;
           break;
@@ -1751,7 +1816,7 @@ export class SpiderQuestSystem implements GameSystem {
       const speed = SCIENTIST_WALK_SPEED;
       const nextX = this.scientistX + (dx / dist) * speed;
       const nextY = this.scientistY + (dy / dist) * speed;
-      if (!this.gameMap.isWalkable(Math.floor(nextX / TILE_SIZE), Math.floor(nextY / TILE_SIZE))) {
+      if (!this.scientistCanStandAt(nextX, nextY)) {
         this.scientistIsWalking = false;
         this.scientistWanderTimer = 0;
         return;

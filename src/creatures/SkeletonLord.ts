@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
+import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
 import { makeStuck } from '../core/StatusEffect';
 import { drawDangerCone } from '../sprites/dangerTelegraph';
@@ -54,7 +54,12 @@ const CENTER_OFFSET = 0.5;
 // ── Soul bolts ───────────────────────────────────────────────────────────────
 
 const SOUL_BOLT_COOLDOWN_FRAMES = 165;
-const SOUL_BOLT_DAMAGE = 3;
+/**
+ * He opens every fight from range, so a bolt is usually first blood and his
+ * swordsmen arrive close behind it: sized so the bolt and the first sword
+ * together still leave an on-schedule crawler standing.
+ */
+const SOUL_BOLT_DAMAGE = 2;
 /** Half-angle between adjacent bolts of a fan, in radians. */
 const BOLT_FAN_STEP = 0.21;
 /** Bolts thrown at full health, and at death's door. */
@@ -155,6 +160,11 @@ const LORD_CULL_MARGIN_TILES = Math.min(MAX_MOB_CULL_MARGIN_TILES, HANDS_RANGE_T
 const LORD_SILHOUETTE_MARGIN_TILES = HANDS_RANGE_TILES + 1;
 
 export class SkeletonLord extends Mob {
+  /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
+  override get blastDamageScale(): number {
+    return BOSS_BLAST_DAMAGE_SCALE;
+  }
+
   readonly xpValue = LORD_XP;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

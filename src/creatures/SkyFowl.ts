@@ -4,7 +4,8 @@ import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
 import { drawSkyFowlSprite, randomSkyFowlPaletteIndex } from '../sprites/skyFowlSprite';
 import type { LootDrop } from './Mob';
-import { randomInt, normalize } from '../utils';
+import { randomInt } from '../utils';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 
 /** The blows the player lands by hand, as opposed to anything fired or thrown. */
 const HAND_SWUNG_DAMAGE_TYPES: ReadonlySet<PlayerDamageType | null> =
@@ -37,6 +38,7 @@ const WANDER_PULLBACK_FRACTION = 0.45;
 const FOLLOW_STOP_FRACTION = 0.7;
 /** Fraction of peck range within which the peck attack is attempted. */
 const PECK_ENGAGE_FRACTION = 1.2;
+const FOWL_TACTICS: readonly TacticsTrait[] = ['flank', 'regroup'];
 
 export class SkyFowl extends Mob {
   readonly xpValue = 8;
@@ -92,6 +94,17 @@ export class SkyFowl extends Mob {
     this.peckAnimTimer = 0;
   }
 
+  /**
+   * A provoked fowl is a walking melee pecker: it can learn to come at the
+   * player from several sides when a flock has been stirred up together, and
+   * to fall back on a flock-mate when hurt. Never `block` — a bird turning a
+   * sword aside reads as silly — and never `kite`: it has no reach to fight
+   * from and nothing to draw the player toward.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return FOWL_TACTICS;
+  }
+
   /** No dungeon loot — only, very rarely, the book on being this quick. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];
@@ -125,7 +138,6 @@ export class SkyFowl extends Mob {
       this.wanderTimer--;
     } else {
       if (Math.random() < WANDER_PAUSE_CHANCE) {
-        // Pause and look around
         this.wanderDx = 0;
         this.wanderDy = 0;
       } else {
@@ -138,7 +150,6 @@ export class SkyFowl extends Mob {
     }
 
     if (this.wanderDx !== 0 || this.wanderDy !== 0) {
-      // Gently steer back toward spawn when too far
       const dx = this.spawnX - this.x;
       const dy = this.spawnY - this.y;
       const distToSpawn = Math.hypot(dx, dy);
@@ -163,13 +174,11 @@ export class SkyFowl extends Mob {
     if (this.peckCooldown > 0) this.peckCooldown--;
     if (this.peckAnimTimer > 0) this.peckAnimTimer--;
 
-    // Neutral — just wander peacefully, ignore players entirely
     if (!this.isAggressive) {
       this.doWiderWander();
       return;
     }
 
-    // Aggressive — chase nearest living target and peck it
     const peckRangePx = this.tileSize * PECK_RANGE_TILES;
     let nearest: Player | null = null;
     let nearestDist = Infinity;
@@ -184,39 +193,42 @@ export class SkyFowl extends Mob {
     this.currentTarget = nearest;
 
     if (!nearest) {
+      this.tactics.disengage();
       this.doWiderWander();
       return;
     }
 
     this.updateLastKnown(nearest);
 
-    if (nearestDist > peckRangePx) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        FOWL_SPEED_AGGRO,
-        peckRangePx * FOLLOW_STOP_FRACTION,
-      );
-    } else {
-      this.isMoving = false;
-      // Face the target while in peck range
-      const dx = nearest.x - this.x;
-      const dy = nearest.y - this.y;
-      if (dx !== 0 || dy !== 0) {
-        const n = normalize(dx, dy);
-        this.facingX = n.x;
-        this.facingY = n.y;
-      }
+    const tacticalMove = this.chooseTacticalStep(nearest, peckRangePx, this.peckAnimTimer === 0);
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
     }
 
-    // Peck attack
+    if (nearestDist > peckRangePx) {
+      if (tacticalMove !== null) {
+        this.walkTacticalStep(tacticalMove, nearest);
+      } else {
+        this.followTargetAStar(
+          this.lastKnownTargetX,
+          this.lastKnownTargetY,
+          this.speed,
+          peckRangePx * FOLLOW_STOP_FRACTION,
+        );
+      }
+    } else {
+      this.isMoving = false;
+      this.faceToward(nearest);
+    }
+
     if (
       nearestDist <= peckRangePx * PECK_ENGAGE_FRACTION &&
       this.peckCooldown === 0 &&
       (this.hasLOS(nearest) || this.onSameTile(nearest))
     ) {
       this.dealDamage(nearest, PECK_DAMAGE);
-      this.peckCooldown = PECK_COOLDOWN;
+      this.peckCooldown = this.scaledCooldownFrames(PECK_COOLDOWN);
       this.peckAnimTimer = PECK_ANIM_FRAMES;
     }
   }

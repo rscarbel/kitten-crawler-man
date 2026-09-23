@@ -51,3 +51,24 @@ export function alertPackAround(caller: Mob, radiusPx: number, target: Player): 
     ally.noticeTarget(target);
   }
 }
+
+/**
+ * Fill `out` with every living, hostile mob of `caller`'s own pack within
+ * `radiusPx` of it, the caller excluded. `out` is emptied first.
+ *
+ * The read side of the same roster: a tactic that needs to know where its
+ * friends are asks here rather than being handed the world. Empty when no
+ * roster is published, so a headless mob with no scene simply has no friends.
+ */
+export function collectPackmates(caller: Mob, radiusPx: number, out: Mob[]): void {
+  out.length = 0;
+  if (mobGrid === null) return;
+  nearbyScratch.clear();
+  mobGrid.queryCircle(caller.x, caller.y, radiusPx, nearbyScratch);
+  for (const ally of nearbyScratch) {
+    if (ally === caller || !ally.isAlive || !ally.isHostile) continue;
+    if (ally.packKind !== caller.packKind) continue;
+    out.push(ally);
+  }
+  nearbyScratch.clear();
+}

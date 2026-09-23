@@ -5,7 +5,7 @@ import { drawMissQuillSprite } from '../sprites/missQuillSprite';
 import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
 import { Krasue } from './Krasue';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
-import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { questMobLevel } from '../systems/questMobLevel';
 
 const QUILL_HP = 260;
@@ -192,8 +192,9 @@ export class MissQuill extends Mob {
           const krasue = new Krasue(spawnTile.x, spawnTile.y, this.tileSize);
           krasue.setMap(this.map);
           krasue.ignoresTownSafeZone = true;
+          krasue.isSummon = true;
           krasue.applyMobLevel(questMobLevel(SUMMON_LEVEL, this.summonPartyLevel));
-          applyActiveDifficultyRewards(krasue);
+          applySpawnDifficulty(krasue);
           this.addMob(krasue);
           this.summons.push(krasue);
           this.castAnimTimer = CAST_ANIM_FRAMES;

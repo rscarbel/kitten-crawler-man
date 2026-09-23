@@ -1,6 +1,7 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 import {
   BUGABOO_SWIPE_FRAMES,
   BUGABOO_SWIPE_IMPACT_FRAME,
@@ -58,6 +59,8 @@ const BREACH_STAND_RANGE_TILES = 0.2;
  */
 const BUGABOO_CULL_MARGIN_TILES = 1.6;
 
+const NO_BUGABOO_TACTICS: readonly TacticsTrait[] = [];
+
 /** What a Bugaboo is doing with its arms this frame, in priority order. */
 type SwingTarget = { readonly player: Player } | { readonly barrier: { x: number; y: number } };
 
@@ -94,6 +97,18 @@ export class Bugaboo extends Mob {
 
   override get cullMarginTiles(): number {
     return BUGABOO_CULL_MARGIN_TILES;
+  }
+
+  /**
+   * None, although defense waves are levelled into the tactics range. A
+   * bugaboo's fight is with the boards and the goblin mother, not with the
+   * player: the movement tactics all plan an approach to a crawler, and the
+   * wave's pressure is paced by the defense quest instead. A guard's shove
+   * would also knock the body off a grate mid-breach, so a player boarding it
+   * up would see the creature pop out of the floor and walk back in.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return NO_BUGABOO_TACTICS;
   }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
@@ -277,7 +292,7 @@ export class Bugaboo extends Mob {
   }
 
   private beginSwing(target: SwingTarget): void {
-    this.attackCooldown = ATTACK_COOLDOWN;
+    this.attackCooldown = this.scaledCooldownFrames(ATTACK_COOLDOWN);
     this.attackAnimTimer = BUGABOO_ATTACK_FRAMES;
     this.swingTarget = target;
   }
@@ -325,7 +340,7 @@ export class Bugaboo extends Mob {
       if (!target.isAlive || target.isDefendTarget) continue;
       if (Math.hypot(target.x - grateX, target.y - grateY) > reach) continue;
       this.dealDamage(target, BREACH_GRAB_DAMAGE);
-      this.breachGrabCooldown = BREACH_GRAB_COOLDOWN;
+      this.breachGrabCooldown = this.scaledCooldownFrames(BREACH_GRAB_COOLDOWN);
       return;
     }
   }

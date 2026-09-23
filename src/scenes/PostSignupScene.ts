@@ -58,13 +58,12 @@ export class PostSignupScene extends Scene {
   }
 
   update(): void {
-    // No per-frame logic — purely a menu screen
+    // A menu screen: every frame is drawn from input alone, so there is no state to advance.
   }
 
   render(ctx: CanvasRenderingContext2D): void {
     const cx = viewportWidth() / 2;
 
-    // Dark background
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
     drawOverlay(ctx, {

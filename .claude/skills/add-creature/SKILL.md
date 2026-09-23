@@ -16,11 +16,24 @@ A mob is a `Player` with AI: `Mob` (`src/creatures/Mob.ts`) extends `Player` (`s
 
 ## Optional overrides (all have base defaults)
 
-`coinDropMin/Max`, `displayName`, `description`, `audioTag`, `bodyPartKey`, `mass` (heavier = displaced less in separation), `isFlying`, `isBoss`, `isHostile`, `requiresEvasion`, `rollLootItems(killer)` for creature-specific drops.
+`coinDropMin/Max`, `displayName`, `description`, `audioTag`, `bodyPartKey`, `mass` (heavier = displaced less in separation), `isFlying`, `isBoss`, `isHostile`, `requiresEvasion`, `rollLootItems(killer)` for creature-specific drops, `tacticsEligibility` (see below).
 
 ## Do not reimplement — inherited helpers
 
 `dealDamage(target, base)` (**use this, not `target.takeDamage()`** — it scales with mob level and sets `attackSoundPending`), `takeDamageFrom` (handles damage tracking, kill credit, loot roll), `followTargetAStar`, `followTargetCollide`, `moveWithCollision` (respects walls), `hasLOS`, `doWander`, `applyMobLevel`, `applyStatus`/`hasStatus`. `setMap()` is injected by the spawner.
+
+Level math goes through `src/creatures/mobLevelScaling.ts` (`hpScaleForLevel`, `damageScaleForLevel`, `scaledCooldownFramesForLevel`, ...). Never write `1 + x * (level - 1)` in a creature, boss or system — `npm run verify:difficulty-curve` prices every regular creature, boss and bounty escort through those curves, and it fails (rather than skips) a creature it cannot build headlessly, kill or measure damage from.
+
+## Tactics traits
+
+Levelled mobs can learn `flank`, `block`, `kite`, `regroup` and `riposte` (`src/creatures/tactics/`; rules are P6 in `docs/difficulty-fairness-rules.md`). A creature opts in by overriding `protected get tacticsEligibility(): readonly TacticsTrait[]`. The default is none, and it **stays none** for bosses, quest NPCs, summons, maze targets, non-combatants, mercenaries and rooted creatures (a rooted mob cannot flank or kite). When a boss or system conjures a creature that is eligible on its own (Miss Quill's krasues), set `mob.isSummon = true` before `applySpawnDifficulty` and it rolls nothing. List only traits your `updateAI` actually acts on — a rolled trait with no behaviour behind it is a promise the fight never keeps.
+
+- Which bodies suit which traits: melee brawlers take `flank`, `block`, `regroup`, `riposte`; pack skirmishers add `kite`; ranged creatures take `kite` (with a `KiteAim` that keeps a friend between them and the player) and `regroup`, never `block`; tiny swarmers take `flank` only.
+- `block` needs no creature code — `Mob.takeDamageFrom` rolls the guard and shoves the mob. But while a guard's shove runs, `Mob.moveWithCollision` refuses the mob's own movement. A charger that reads a refused move as a wall hit (and stuns itself, ends its charge, bounces) will misfire on every guard; handle that before listing `block`.
+- Movement traits are wired into `updateAI`. `Goblin` is the reference: each frame with a target, call `this.tactics.chooseMove(frame)` (a `TacticalFrame` with `canBreakOff` false mid-swing), walk a `breaksOff` move instead of fighting, walk a flank move as the chase goal, and keep facing the target on arrival. A creature that chases its last sighting with `followTargetAStar` does all of that through two `Mob` helpers: `chooseTacticalStep(target, attackRangePx, canBreakOff, kiteAim?)` (builds the frame, drops the cached route when the answer changes kind) and `walkTacticalStep(move, target)` (walks it, caps a retreat at `TACTICAL_RETREAT_MAX_SPEED` so a fast creature stays catchable, faces the target on stopping) — `RuinsGhoul` is the shortest example. Call `this.tactics.disengage()` when the target is lost. For `riposte`, `if (this.tactics.claimRiposte()) this.attackCooldown = riposteCooldown(this.attackCooldown, swingFramesLeft)` — it cuts only the wait between attacks, never the windup.
+- A creature whose body changes mid-life can make `tacticsEligibility` read its current form (`BrindleGrub` flanks as a grub, learns nothing as a Vespa). Traits are still rolled once, at spawn; one the new body is not eligible for goes dormant — dropped from `activeTacticsTraits`, which the rank mark, notices and telemetry read — rather than stripped. Stop asking for tactical moves in that form and call `this.tactics.disengage()` when it changes.
+- Traits are rolled at spawn by `applySpawnDifficulty` (`src/core/difficultyProfiles.ts`), which every spawn site must call straight after `applyMobLevel`. A system that levels a mob itself (a summon, a quest wave) calls it too.
+- Run `npm run verify:tactics` after opting a creature in.
 
 ## Registration (all required for spawnable mobs)
 
@@ -58,4 +71,4 @@ A player-owned creature is a `Mob` with three contracts the base class does not 
 
 **Leash bands are not self-guaranteeing.** Ordering an engage-persist radius inside a leash-break radius does not prevent yo-yoing: persist is straight-line, the leash is route length, so a mob four tiles away behind a nine-tile detour is simultaneously inside persist and past break. What stops it is dropping the target and holding it off in a ban map with an expiry. Likewise a follow band needs a latched flag, not two thresholds — re-deciding from raw distance each frame stops the pet the instant it crosses the line, the owner's next step pushes it back over, and the sprite vibrates at her shoulder. And a stall detector must measure pixels actually covered, never `isMoving`, which is true for a mob grinding into a wall.
 
-Finish with the `dev-workflow` gates (typecheck, lint, format), plus `npm run verify:assets`.
+Finish with the `dev-workflow` gates (typecheck, lint, format), plus `npm run verify:assets`, `npm run verify:difficulty-curve`, and `npm run verify:tactics` if the creature is tactics-eligible.

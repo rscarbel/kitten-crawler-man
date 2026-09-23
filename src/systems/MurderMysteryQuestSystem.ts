@@ -13,8 +13,9 @@
  * entry-idempotent so building round-trips reconstruct cleanly.
  */
 
+import { awardXp } from '../core/awardXp';
 import { TILE_SIZE } from '../core/constants';
-import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { WELL } from '../map/tileTypes';
@@ -1032,7 +1033,10 @@ export class MurderMysteryQuestSystem implements GameSystem {
       krasue.setMap(this.gameMap);
       krasue.ignoresTownSafeZone = true;
       krasue.applyMobLevel(questMobLevel(NIGHT_SWARM_LEVEL, this.partyLevel));
-      applyActiveDifficultyRewards(krasue);
+      // Rolls traits like any krasue: the swarm is a wave of ordinary floor
+      // creatures, not a quest NPC and not a caster's summon, which are the
+      // encounters `docs/difficulty-fairness-rules.md` keeps authored.
+      applySpawnDifficulty(krasue);
       krasue.aiHeld = true;
       this.swarmSpawnGrace.set(krasue, NIGHT_SWARM_SPAWN_GRACE_FRAMES);
       this.addMob(krasue);
@@ -1075,7 +1079,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.questManager.completeQuest(MURDER_QUEST_ID);
 
     const def = this.questManager.getDef(MURDER_QUEST_ID);
-    if (def) active.gainXp(def.rewards.xp);
+    if (def) awardXp(active, def.rewards.xp, this.bus);
 
     this.bus.emit('questCompleted', { questId: MURDER_QUEST_ID });
     this.completeOverlayTimer = QUEST_COMPLETE_OVERLAY_FRAMES;

@@ -14,6 +14,7 @@ import type { SoundId } from '../../audio/sounds';
 import type { AbilityManager } from '../../core/AbilityManager';
 import type { AchievementManager } from '../../core/AchievementManager';
 import type { GameStats } from '../../core/GameStats';
+import { displayHp } from '../../core/crawlerFormulas';
 import type { InventoryItem, ItemId } from '../../core/ItemDefs';
 import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../../core/timedPotions';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -362,7 +363,7 @@ export class MenusKit {
       }
       this.world.bus.emit('healingPotionUsed', {
         player: drinker === this.world.pm.human ? 'Human' : 'Cat',
-        hpRestored: drinker.hp - hpBefore,
+        hpRestored: displayHp(drinker.hp) - displayHp(hpBefore),
       });
       this.showPotionEffectNotice(id);
       return true;

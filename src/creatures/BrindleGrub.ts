@@ -3,6 +3,7 @@ import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import { randomInt, normalize } from '../utils';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 import {
   drawBrindleGrubSprite,
   drawCowTailedGrubSprite,
@@ -19,7 +20,12 @@ import {
 
 const STAGE1_HP = 4;
 const STAGE2_HP = 10;
-const STAGE3_HP = 30;
+/**
+ * The Vespa is an elite, but one met only on floor 2 at the level of whatever
+ * died to spawn it — tuned so a crawler who never bought damage can still
+ * outlast it there.
+ */
+const STAGE3_HP = 20;
 
 const STAGE1_SPEED = 0.3;
 const STAGE2_SPEED = 0.5;
@@ -35,7 +41,7 @@ const STAGE2_EVOLVE_MAX = 2400;
 const VESPA_AGGRO_TILES = 10;
 const VESPA_SPIT_RANGE_TILES = 6;
 const VESPA_SPIT_SPEED = 3.5;
-const VESPA_SPIT_DAMAGE = 3;
+const VESPA_SPIT_DAMAGE = 2;
 const VESPA_SPIT_COOLDOWN = 100; // ~1.7 s
 const VESPA_SPIT_TTL = 220;
 const VESPA_HIT_FADE = 5; // TTL decrease per frame once hit
@@ -77,6 +83,8 @@ const VESPA_FOLLOW_STOP_RANGE_RATIO = 0.8;
 const EVOLUTION_PREWARM_LEAD_FRAMES = 60;
 
 const STAGE_LARVA = 1;
+const GRUB_TACTICS: readonly TacticsTrait[] = ['flank'];
+const NO_VESPA_TACTICS: readonly TacticsTrait[] = [];
 const STAGE1_NAME = 'Brindle Grub';
 const STAGE1_DESCRIPTION = 'A harmless wriggling larva. It seems to be growing...';
 
@@ -98,7 +106,7 @@ export interface AcidSpit {
  *
  *   Stage 1 – Brindle Grub      : passive worm, no damage, 4 HP, 0 XP
  *   Stage 2 – Cow-Tailed Grub   : weak melee bite, 10 HP, 2 XP
- *   Stage 3 – Brindled Vespa    : hornet, acid-spit ranged, 30 HP, 22 XP
+ *   Stage 3 – Brindled Vespa    : hornet, acid-spit ranged, 20 HP, 22 XP
  *                                  attacks players AND other mobs; attacked
  *                                  mobs will retaliate.
  */
@@ -153,11 +161,6 @@ export class BrindleGrub extends Mob {
   }
 
   /**
-   * Rewinds the whole lifecycle, not just the combat state: the checkpoint
-   * predates however far this grub grew, so it goes back to the larva it was
-   * authored to spawn as and starts its evolution clock over.
-   */
-  /**
    * The growth stage is deliberately left alone.
    *
    * Every checkpoint restore calls this on living mobs too, so rewinding the
@@ -174,6 +177,19 @@ export class BrindleGrub extends Mob {
     this.spitCooldown = 0;
     this.spitWindupTimer = 0;
     this.biteAnimTimer = 0;
+  }
+
+  /**
+   * A grub is a tiny swarmer that bursts out several at a time, so the one
+   * thing worth learning is to come at its prey from more than one side — a
+   * guarding larva would read as silly. The Vespa it grows into learns
+   * nothing: it hovers at spit range and picks fights with other mobs as
+   * readily as with the party, so a slot around one target is not a fight it
+   * has. Traits are rolled while it is still a grub; once it evolves, a rolled
+   * `flank` goes dormant rather than being acted on.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return this.stage === STAGE_VESPA ? NO_VESPA_TACTICS : GRUB_TACTICS;
   }
 
   override get mobType(): string {
@@ -204,6 +220,8 @@ export class BrindleGrub extends Mob {
 
   private evolveToStage3(): void {
     this.stage = 3;
+    // The flank it was planning belongs to a body that no longer exists.
+    this.tactics.disengage();
     this.setBaseSpeed(STAGE3_SPEED);
     this.setBaseMaxHp(STAGE3_HP);
     this.hp = this.maxHp;
@@ -238,19 +256,15 @@ export class BrindleGrub extends Mob {
     if (!this.isAlive) return;
 
     if (this.stage < STAGE_VESPA) {
-      // evolveTimer is ticked by tickEvolve() separately (works off-screen too)
-
+      // evolveTimer is ticked by tickEvolve() separately, so growth continues off-screen.
       if (this.stage === STAGE_LARVA) {
-        // Stage 1: wander passively, never attack
         this.doWander();
       } else {
-        // Stage 2: weak melee chase
         this.updateStage2AI(playerTargets);
       }
       return;
     }
 
-    // Stage 3 — Brindled Vespa
     this.updateVespaAI(playerTargets);
   }
 
@@ -274,24 +288,34 @@ export class BrindleGrub extends Mob {
     this.currentTarget = nearest;
 
     if (!nearest) {
+      this.tactics.disengage();
       this.doWander();
       return;
     }
 
     this.updateLastKnown(nearest);
 
+    // A grub only learns `flank`, whose moves never break off, so the bite
+    // below is untouched by whatever this answers.
+    const flankMove = this.chooseTacticalStep(nearest, attackRange, this.biteAnimTimer === 0);
     if (nearestDist > attackRange) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        this.speed,
-        attackRange * STAGE2_FOLLOW_STOP_RANGE_RATIO,
-      );
+      if (flankMove !== null) {
+        this.walkTacticalStep(flankMove, nearest);
+      } else {
+        this.followTargetAStar(
+          this.lastKnownTargetX,
+          this.lastKnownTargetY,
+          this.speed,
+          attackRange * STAGE2_FOLLOW_STOP_RANGE_RATIO,
+        );
+      }
     } else {
       this.isMoving = false;
+      // Held still mid-bite, so the strike cannot swing round to a new facing.
+      if (this.biteAnimTimer === 0) this.faceToward(nearest);
       if (this.spitCooldown <= 0) {
-        this.dealDamage(nearest, STAGE2_BITE_DAMAGE); // very weak bite
-        this.spitCooldown = STAGE2_BITE_COOLDOWN;
+        this.dealDamage(nearest, STAGE2_BITE_DAMAGE);
+        this.spitCooldown = this.scaledCooldownFrames(STAGE2_BITE_COOLDOWN);
         this.biteAnimTimer = STAGE2_BITE_ANIM_FRAMES;
       }
     }
@@ -304,7 +328,6 @@ export class BrindleGrub extends Mob {
 
     if (this.spitCooldown > 0) this.spitCooldown--;
 
-    // Advance projectiles
     for (const spit of this.spits) {
       if (spit.hit) {
         spit.ttl -= VESPA_HIT_FADE;
@@ -321,7 +344,6 @@ export class BrindleGrub extends Mob {
       spit.y += spit.vy;
       spit.ttl--;
 
-      // Check hit against all potential targets
       const mobTargets = this.allMobs.filter(
         (m) => m !== this && m.isAlive && !(m instanceof BrindleGrub),
       );
@@ -332,7 +354,6 @@ export class BrindleGrub extends Mob {
         if (Math.hypot(spit.x - cx, spit.y - cy) < ts * PLAYER_HITBOX_RADIUS_RATIO) {
           if (t instanceof Mob) {
             t.takeDamageFrom(VESPA_SPIT_DAMAGE, this, 'missile');
-            // Mark mob to retaliate against this Vespa
             t.retaliateMob = this;
           } else {
             this.dealRangedDamage(t, VESPA_SPIT_DAMAGE, 'spit');
@@ -343,12 +364,10 @@ export class BrindleGrub extends Mob {
       }
     }
 
-    // Prune dead spits
     for (let i = this.spits.length - 1; i >= 0; i--) {
       if (this.spits[i].ttl <= 0) this.spits.splice(i, 1);
     }
 
-    // Build combined target list (players + live non-grub mobs)
     const aggroRange = ts * VESPA_AGGRO_TILES;
     const allTargets: Player[] = [
       ...playerTargets,
@@ -361,7 +380,6 @@ export class BrindleGrub extends Mob {
       ),
     ];
 
-    // Find nearest target
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of allTargets) {
@@ -409,7 +427,7 @@ export class BrindleGrub extends Mob {
       this.isMoving = false;
       this._faceToward(nearest);
       this.spitWindupTimer = VESPA_SPIT_WINDUP_FRAMES;
-      this.spitCooldown = VESPA_SPIT_COOLDOWN;
+      this.spitCooldown = this.scaledCooldownFrames(VESPA_SPIT_COOLDOWN);
       prewarmVespaSpit();
     }
   }

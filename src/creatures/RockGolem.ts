@@ -17,6 +17,8 @@ import {
   golemThrowReleaseFrame,
 } from '../sprites/rockGolemTiming';
 import type { GolemRockThrow } from '../systems/RockThrowSystem';
+import { riposteCooldown } from './tactics/riposte';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 
 const GOLEM_HP = 26;
 const GOLEM_XP_VALUE = 22;
@@ -39,9 +41,14 @@ const THROW_MIN_RANGE_TILES = 2.6;
 /** Matched to the aggro range: anything it can see, it can throw at. */
 const THROW_MAX_RANGE_TILES = AGGRO_RANGE_TILES;
 
-const SLAM_DAMAGE = 5;
+/**
+ * Sized for where a golem is actually met: a bounty, at the party's own level
+ * or a level above it, where one blow must leave an on-schedule crawler a
+ * quarter of her bar (`BOUNTY_MAX_BLOW_HP_SHARE`). The boss shares it.
+ */
+const SLAM_DAMAGE = 4;
 /** The stomp trades reach for a little less damage than the double-fist slam. */
-const STOMP_DAMAGE = 4;
+const STOMP_DAMAGE = 3;
 /** The stomp's shock reaches further than the fists do. */
 const STOMP_RANGE_TILES = 2.1;
 const THROW_DAMAGE = 4;
@@ -71,6 +78,7 @@ const GOLEM_MASS = 6;
 const GOLEM_CULL_MARGIN_TILES = 2;
 
 const EMPTY_THROWS: readonly GolemRockThrow[] = [];
+const ROCK_GOLEM_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
 export interface AttackTiming {
   readonly frames: number;
@@ -157,6 +165,16 @@ export class RockGolem extends Mob {
     return GOLEM_CULL_MARGIN_TILES;
   }
 
+  /**
+   * A slow tank: it can learn to come at its quarry from an angle, turn a
+   * blow aside on its stone and answer it, and fall back on another golem
+   * when hurt. Never `kite` — a golem never outruns anything, and its rock is
+   * already its answer to a player who keeps away.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return ROCK_GOLEM_TACTICS;
+  }
+
   /** Which of the two baked sheets this golem draws from. */
   protected get sheet(): RockGolemSheet {
     return 'rock_golem';
@@ -196,7 +214,14 @@ export class RockGolem extends Mob {
     this.isAggro = nearest !== null;
 
     if (this.advanceAttack(nearest)) return;
+    // Claimed only between attacks, so a guard met mid-swing keeps its answer
+    // until the swing is done rather than spending it on a cooldown the swing
+    // is still running down.
+    if (this.tactics.claimRiposte()) {
+      this.attackCooldown = riposteCooldown(this.attackCooldown, 0);
+    }
     if (nearest === null) {
+      this.tactics.disengage();
       this.clearAStarPath();
       // Not `doWander`: a bounty encounter is anchored to its site by a
       // homePoint and a leash, and only this path consults them. A golem that
@@ -262,6 +287,12 @@ export class RockGolem extends Mob {
     const distance = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
 
+    const tacticalMove = this.chooseTacticalStep(nearest, this.meleeRangePx, true);
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
+
     if (this.attackCooldown === 0 && this.canThrowAt(nearest, distance)) {
       this.beginAttack('throw');
       this.throwCooldown = this.throwCooldownFrames;
@@ -272,6 +303,10 @@ export class RockGolem extends Mob {
       return;
     }
 
+    if (tacticalMove !== null) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
     this.followTargetAStar(
       this.lastKnownTargetX,
       this.lastKnownTargetY,

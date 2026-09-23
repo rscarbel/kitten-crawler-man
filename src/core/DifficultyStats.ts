@@ -57,6 +57,21 @@ export interface SegmentTally {
   readonly hpRemainingSum: number;
   /** Summed seconds each counted fight lasted, for the time-to-kill target. */
   readonly fightSecondsSum: number;
+  /** Guard blocks landed by any mob across every counted fight in this segment. */
+  readonly blocksSum: number;
+  /** Kites a mob began across every counted fight in this segment. */
+  readonly kiteStarts: number;
+  /** Kites that ended, paired with {@link kiteFramesSum} to average a kite's length. */
+  readonly kiteEnds: number;
+  readonly kiteFramesSum: number;
+  /** Counted fights where at least one participating mob had rolled a tactics trait. */
+  readonly traitFights: number;
+  /** HP-remaining fraction summed over just {@link traitFights}. */
+  readonly traitFightsHpRemainingSum: number;
+  /** Counted fights where no participating mob had a tactics trait. */
+  readonly noTraitFights: number;
+  /** HP-remaining fraction summed over just {@link noTraitFights}. */
+  readonly noTraitFightsHpRemainingSum: number;
   /** Times the party used a stairwell menu to descend while this segment was open. */
   readonly descents: number;
   /**
@@ -76,6 +91,17 @@ interface OpenHunt {
   frames: number;
 }
 
+/** Everything one completed room fight reports to {@link DifficultyStats.recordRoomFight}. */
+export interface RoomFightDetails {
+  readonly hpRemainingFraction: number;
+  readonly seconds: number;
+  readonly blocks: number;
+  readonly kiteStarts: number;
+  readonly kiteEnds: number;
+  readonly kiteFramesSum: number;
+  readonly hadTraitMob: boolean;
+}
+
 /** A point-in-time copy of the stairwell-hunt clock and of the hunts already measured. */
 export interface StairwellHuntCheckpoint {
   readonly openHunt: OpenHunt | null;
@@ -92,6 +118,14 @@ function emptyTally(difficulty: Difficulty): MutableTally {
     roomFights: 0,
     hpRemainingSum: 0,
     fightSecondsSum: 0,
+    blocksSum: 0,
+    kiteStarts: 0,
+    kiteEnds: 0,
+    kiteFramesSum: 0,
+    traitFights: 0,
+    traitFightsHpRemainingSum: 0,
+    noTraitFights: 0,
+    noTraitFightsHpRemainingSum: 0,
     descents: 0,
     descendedUnderleveled: 0,
     descendedLevelDeltaSum: 0,
@@ -175,15 +209,33 @@ export class DifficultyStats {
   /**
    * One completed room fight.
    *
-   * @param hpRemainingFraction Party HP over party max HP the moment the last
-   *   engaged mob let go — "HP remaining after a regular room fight".
-   * @param seconds How long the fight ran, for the time-to-kill target.
+   * @param details.hpRemainingFraction Party HP over party max HP the moment
+   *   the last engaged mob let go — "HP remaining after a regular room fight".
+   * @param details.seconds How long the fight ran, for the time-to-kill target.
+   * @param details.blocks Guard blocks landed by any mob during the fight.
+   * @param details.kiteStarts Kites a mob began during the fight.
+   * @param details.kiteEnds Kites that ended during the fight, paired with
+   *   `details.kiteFramesSum` to average a kite's length.
+   * @param details.hadTraitMob Whether at least one mob that fought had rolled
+   *   a tactics trait — splits the HP-remaining average so a tactics fight can
+   *   be checked against the same 40–70% band on its own.
    */
-  recordRoomFight(hpRemainingFraction: number, seconds: number): void {
+  recordRoomFight(details: RoomFightDetails): void {
     const tally = this.current();
     tally.roomFights++;
-    tally.hpRemainingSum += hpRemainingFraction;
-    tally.fightSecondsSum += seconds;
+    tally.hpRemainingSum += details.hpRemainingFraction;
+    tally.fightSecondsSum += details.seconds;
+    tally.blocksSum += details.blocks;
+    tally.kiteStarts += details.kiteStarts;
+    tally.kiteEnds += details.kiteEnds;
+    tally.kiteFramesSum += details.kiteFramesSum;
+    if (details.hadTraitMob) {
+      tally.traitFights++;
+      tally.traitFightsHpRemainingSum += details.hpRemainingFraction;
+    } else {
+      tally.noTraitFights++;
+      tally.noTraitFightsHpRemainingSum += details.hpRemainingFraction;
+    }
   }
 
   /** The tally for one segment, or null when nothing has happened in it yet. */

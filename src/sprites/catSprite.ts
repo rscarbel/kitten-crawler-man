@@ -1,6 +1,7 @@
 import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { figureFrameCount } from './figure/figureDef';
+import { CAT_SWIPE_FRAMES } from '../core/crawlerFormulas';
 import {
   ACTION_FRAMES,
   BREAK_FRAMES,
@@ -64,8 +65,6 @@ type CatView = 'front' | 'side' | 'away';
 /** Animations that play once and then hand control back to walk/idle. */
 export type CatOneShot = 'swipe' | 'cast' | 'dance' | 'look_around' | 'groom_paw' | 'groom_flank';
 
-/** Frames the claw swipe animation covers; `CatPlayer` times its hit window to this. */
-export const CAT_SWIPE_FRAMES = 18;
 const CAT_CAST_FRAMES = 24;
 const CAT_DANCE_FRAMES = 96;
 const CAT_LOOK_AROUND_FRAMES = 90;

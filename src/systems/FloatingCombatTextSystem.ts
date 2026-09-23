@@ -1,5 +1,6 @@
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Player } from '../Player';
+import type { Mob } from '../creatures/Mob';
 import type { FloatingTextStyle } from '../core/FloatingText';
 import { TILE_SIZE } from '../core/constants';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
@@ -25,6 +26,9 @@ const STYLE_DEFS: Record<FloatingTextStyle, StyleDef> = {
   miss: { size: 11, color: '#cbd5e1', bold: true },
   buff: { size: 12, color: '#22d3ee', bold: true },
   trigger: { size: 16, color: '#f97316', bold: true },
+  // Steel blue: a guard is a clang, and it must not be mistaken for the grey
+  // of a crawler's own dodge happening in the same melee.
+  block: { size: 12, color: '#60a5fa', bold: true },
 };
 
 interface FloatingLabel {
@@ -38,10 +42,11 @@ interface FloatingLabel {
 /**
  * Rising, fading labels anchored to a world position.
  *
- * Players queue requests on themselves (`Player.queueFloatingText`) because the
- * code that raises one — `takeDamage`, a level-up — has no scene in scope. This
- * is purely cosmetic: gameplay signals ride their own counters on `Player` and
- * are drained by `SystemNoticeSystem`, which unlike this exists in every scene.
+ * Players and mobs queue requests on themselves (`Player.queueFloatingText`)
+ * because the code that raises one — `takeDamage`, a level-up, a mob guarding a
+ * blow — has no scene in scope. This is purely cosmetic: gameplay signals ride
+ * their own counters on `Player` and are drained by `SystemNoticeSystem`, which
+ * unlike this exists in every scene.
  */
 export class FloatingCombatTextSystem implements GameSystem {
   private readonly labels: FloatingLabel[] = [];
@@ -59,16 +64,18 @@ export class FloatingCombatTextSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
-    this.updateFor(ctx.human, ctx.cat);
+    this.updateFor(ctx.human, ctx.cat, ctx.roster.mobs);
   }
 
   /**
-   * Drain both crawlers and age the live labels. Building interiors without an
-   * encounter never build a `SystemContext`, but a level-up still happens there.
+   * Drain both crawlers and every mob, and age the live labels. Building
+   * interiors without an encounter never build a `SystemContext`, but a
+   * level-up still happens there.
    */
-  updateFor(human: Player, cat: Player): void {
+  updateFor(human: Player, cat: Player, mobs: readonly Mob[]): void {
     this.drainPlayer(human);
     this.drainPlayer(cat);
+    for (const mob of mobs) this.drainPlayer(mob);
 
     let kept = 0;
     for (const label of this.labels) {

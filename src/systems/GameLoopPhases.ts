@@ -7,11 +7,13 @@ import { type GameMap } from '../map/GameMap';
 import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
 import { type Player } from '../Player';
 import { pushPlayerWithCollision } from './playerDisplacement';
+import { knockbackStepPx } from '../core/knockbackEase';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { AudioManager } from '../audio/AudioManager';
+import type { SoundId } from '../audio/sounds';
 import { applyDrunkWalkWobble } from '../core/DrunkEffect';
 import { frameTime } from '../utils';
 import { SkeletonLord } from '../creatures/SkeletonLord';
@@ -44,17 +46,6 @@ import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
  *   9. tickTimers            — player timers, loot TTL, dynamite, smush blasts, level timer
  *   10. checkDeath           — game over conditions
  */
-
-/** Fraction of a tile a single knockback frame may cover. See {@link KNOCKBACK_MAX_STEP_PX}. */
-const KNOCKBACK_MAX_STEP_TILE_FRACTION = 0.4;
-/**
- * Largest distance knockback may move a player in a single frame.
- *
- * Kept below one tile so the per-axis wall check in `pushPlayerWithCollision`
- * — which only tests the tile the player is about to land in, not anything
- * between — can never be skipped over by a single oversized step.
- */
-export const KNOCKBACK_MAX_STEP_PX = TILE_SIZE * KNOCKBACK_MAX_STEP_TILE_FRACTION;
 
 /** 90 seconds at 60 fps — the revival window before the run ends. */
 export const KNOCKOUT_TIMEOUT_FRAMES = 5400;
@@ -217,19 +208,14 @@ export function applyMovement(
  * Phase 3: Advance an in-progress knockback by one frame, on top of whatever
  * `applyMovement` already did this frame.
  *
- * The per-frame share is weighted by frames remaining out of a triangular
- * total (1 + 2 + ... + knockbackTotalFrames), so the first frame — the one
- * with the most frames still remaining — carries the largest share and each
- * later frame carries less: an ease-out stagger, not a linear glide. Distinct
- * from `applyMovement`'s walk input, this is physical displacement and runs
- * even while the player `hasStatus('stuck')`.
+ * Eased out by {@link knockbackStepPx}, which mobs share. Distinct from
+ * `applyMovement`'s walk input, this is physical displacement and runs even
+ * while the player `hasStatus('stuck')`.
  */
 export function applyKnockbackMotion(player: Player, gameMap: GameMap): void {
   if (player.knockbackFramesRemaining <= 0) return;
 
-  const triangularTotal = (player.knockbackTotalFrames * (player.knockbackTotalFrames + 1)) / 2;
-  const easeShare = triangularTotal > 0 ? player.knockbackFramesRemaining / triangularTotal : 0;
-  const stepDistance = Math.min(player.knockbackDistancePx * easeShare, KNOCKBACK_MAX_STEP_PX);
+  const stepDistance = knockbackStepPx(player, TILE_SIZE);
 
   pushPlayerWithCollision(
     player,
@@ -356,12 +342,25 @@ export function triggerPlayerAttack(
 }
 
 /**
+ * The cue for a mob turning a blow aside. A stand-in from the `universal` SFX
+ * group, so it is loaded on every floor a guarding mob can spawn on.
+ */
+const GUARD_SOUND = 'hammer_strike' satisfies SoundId;
+
+/**
  * Play queued per-mob combat audio cues (attack + projectile), keyed by each
  * mob's audioTag. Shared by DungeonScene and interior combat scenes; clears
  * the pending flags even when audio is unavailable so cues never backlog.
  */
 export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void {
   for (const mob of mobs) {
+    // Outside the `audioTag` switch: a guard is the same metal-on-metal beat on
+    // every creature that can raise one, and a tag lookup would leave any
+    // creature without a tag silent.
+    if (mob.guardSoundPending) {
+      mob.guardSoundPending = false;
+      audio?.play(GUARD_SOUND);
+    }
     if (mob.attackSoundPending) {
       mob.attackSoundPending = false;
       switch (mob.audioTag) {

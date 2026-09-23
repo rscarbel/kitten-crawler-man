@@ -176,13 +176,17 @@ export class RockThrowSystem implements GameSystem {
           age: 0,
           spin: 0,
           damage: thrown.damage,
-          source: { kind: 'mob', mobType: thrown.mobType, attackType: ROCK_THROW_ATTACK_TYPE },
-          burstSource: {
+          source: mob.stampBlowCap({
+            kind: 'mob',
+            mobType: thrown.mobType,
+            attackType: ROCK_THROW_ATTACK_TYPE,
+          }),
+          burstSource: mob.stampBlowCap({
             kind: 'mob',
             mobType: thrown.mobType,
             attackType: ROCK_THROW_ATTACK_TYPE,
             undodgeable: true,
-          },
+          }),
           aimedAt: thrown.aimedAt,
           thrower: thrown.thrower,
           owner: thrown.owner,
@@ -273,7 +277,8 @@ export class RockThrowSystem implements GameSystem {
       // is reassigned to whichever crawler is active every frame, so that was
       // reachable simply by playing as the cat. Blunt impact is also the truer
       // description of a boulder.
-      target.takeDamageFrom(damage, rock.owner ?? rock.thrower, 'melee');
+      // Struck by the golem that threw it, whoever collects the credit.
+      target.takeCreditedDamage(damage, rock.owner ?? rock.thrower, 'melee', rock.attacker);
       return;
     }
     const connected = target.takeDamage(damage, source);

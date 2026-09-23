@@ -10,6 +10,12 @@
  * flashing for that window, then it drops back to its normal state — and the
  * wait restarts so an ignored point keeps nagging every cycle instead of
  * flagging once and going quiet.
+ *
+ * Inside a boss room whose fight is not over the nag never fires and the HUD
+ * hides the badge outright (see `suppressed`). A boss kill is often the level-up
+ * that banks the point, and the room can still be full of what the boss left
+ * behind; a "go spend it" prompt over that fight invites the player to open a
+ * menu at the worst moment of the floor.
  */
 
 import type { Mob } from '../creatures/Mob';
@@ -32,6 +38,12 @@ const FLASH_DURATION_FRAMES = FLASH_DURATION_SECONDS * FRAMES_PER_SECOND;
  */
 const RECENTLY_STRUCK_FRAMES = 2 * FRAMES_PER_SECOND;
 
+/**
+ * Whether the party stands in a boss room whose fight is not over. Supplied by
+ * the scene, the only thing that knows which boss systems it runs.
+ */
+export type UnresolvedBossRoomCheck = (ctx: SystemContext) => boolean;
+
 export class SkillPointReminderSystem implements GameSystem {
   private elapsedFrames = 0;
   private retryCountdown = 0;
@@ -49,9 +61,16 @@ export class SkillPointReminderSystem implements GameSystem {
   reminderActive = false;
   /** Set once per fire; the scene drains this into a sound cue. */
   reminderSoundPending = false;
+  /** True while the party is in an unfinished boss room — read by the HUD, which hides the badge. */
+  suppressed = false;
+
+  constructor(private readonly isInUnresolvedBossRoom: UnresolvedBossRoomCheck = () => false) {}
 
   update(ctx: SystemContext): void {
     const total = ctx.human.unspentPoints + ctx.cat.unspentPoints;
+    // Ahead of every early return, so a point banked by this frame's boss kill
+    // is already hidden when the HUD draws it.
+    this.suppressed = this.isInUnresolvedBossRoom(ctx);
 
     if (!this.hasBaseline) {
       this.hasBaseline = true;
@@ -76,6 +95,12 @@ export class SkillPointReminderSystem implements GameSystem {
     }
     this.previousUnspentTotal = total;
 
+    if (this.suppressed) {
+      // A flash already running when the party walked in is cut short too.
+      this.flashFramesRemaining = 0;
+      this.reminderActive = false;
+    }
+
     if (this.flashFramesRemaining > 0) {
       this.flashFramesRemaining--;
       this.reminderActive = this.flashFramesRemaining > 0;
@@ -93,7 +118,9 @@ export class SkillPointReminderSystem implements GameSystem {
       this.retryCountdown--;
       return;
     }
-    if (this.isInCombat(ctx)) {
+    // The wait keeps counting inside the room, so the nag lands on the first
+    // retry after the room is cleared rather than after another full wait.
+    if (this.suppressed || this.isInCombat(ctx)) {
       this.retryCountdown = RETRY_INTERVAL_FRAMES;
       return;
     }

@@ -554,7 +554,11 @@ export class SafeRoomSystem implements GameSystem {
         b.h * ts + ts * 2,
       );
       for (const mob of candidates) {
-        if (!mob.isAlive) continue;
+        // Only threats are turned out. Mongo and a hired mercenary follow the
+        // party in, and flinging an ally to a random spawn point every frame
+        // makes Mongo's rescue snap him straight back — a teleport loop that
+        // never settles while the party stands inside.
+        if (!mob.isAlive || !mob.isHostile) continue;
         if (this.isEntityInSafeRoom(mob)) {
           const ox = mob.x,
             oy = mob.y;

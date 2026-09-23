@@ -1,4 +1,4 @@
-import { Mob } from './Mob';
+import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
 import type { Player } from '../Player';
 import {
   TERROR_CLOWN_LOCOMOTION_STATES,
@@ -39,6 +39,11 @@ const CULL_MARGIN_TILES = 3;
  * hulking mini-boss guarding the big top's sideshow tents.
  */
 export class TerrorTheClown extends Mob {
+  /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
+  override get blastDamageScale(): number {
+    return BOSS_BLAST_DAMAGE_SCALE;
+  }
+
   readonly xpValue = 90;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

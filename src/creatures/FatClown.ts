@@ -10,6 +10,8 @@ import {
 } from '../sprites/fatClownSprite';
 import { SLAM_WINDUP_END } from '../sprites/art/clownFigure';
 import { PLAYER_SPEED } from '../core/constants';
+import { riposteCooldown } from './tactics/riposte';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 
 const CLOWN_HP = 30;
 const CLOWN_SPEED = 0.7;
@@ -19,7 +21,12 @@ export const CLOWN_MAX_SPEED = PLAYER_SPEED * CLOWN_MAX_SPEED_RATIO;
 /** How far a fat clown notices from. Exported for the bounty troupe's regression gate. */
 export const FAT_CLOWN_AGGRO_RANGE_TILES = 6;
 const ATTACK_RANGE_TILES = 1.2;
-const ATTACK_DAMAGE = 10;
+/**
+ * Sized for the Evil Clown's troupe, where this clown fights at the party's own
+ * level: a slam there must leave an on-schedule crawler a quarter of her bar
+ * (`BOUNTY_MAX_BLOW_HP_SHARE`). The circus waves meet it lower, and feel it less.
+ */
+const ATTACK_DAMAGE = 4;
 /** Frames between slams (~1.8 s at 60 fps). */
 const ATTACK_COOLDOWN = 110;
 /** Frames the slam animation plays. */
@@ -40,6 +47,14 @@ const FOLLOW_STOP_FRACTION = 0.8;
  * art reaches a little over one tile above the tile it stands on.
  */
 const CULL_MARGIN_TILES = 2;
+const FAT_CLOWN_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
+
+/**
+ * Grimaldi's performers fight as one troupe: a stilt clown and a fat clown
+ * after the same player fan out around each other and fall back on each
+ * other, where two classes left to their own kinds would each see half a pack.
+ */
+export const CIRCUS_CLOWN_PACK_KIND = 'circus_clown';
 
 /**
  * A Fat Clown — one of Grimaldi's corrupted performers, tanky and slow with
@@ -59,6 +74,26 @@ export class FatClown extends Mob {
 
   protected override get levelledSpeedCap(): number {
     return CLOWN_MAX_SPEED;
+  }
+
+  override get packKind(): string {
+    return CIRCUS_CLOWN_PACK_KIND;
+  }
+
+  /** A flank can be walking it while its swing still plays, and turning then would flip the arc. */
+  protected override get isSwingAnimating(): boolean {
+    return this.attackAnimTimer > 0;
+  }
+
+  /**
+   * The troupe's bruiser: it can learn to come at its quarry from an angle,
+   * turn a blow aside and answer it, and fall back on the troupe when hurt.
+   * Never `kite` — its job is to stand between the player and whatever it
+   * escorts, and a clown that backs away opens the very path it is there to
+   * close. A regroup is one short walk per life, so the wall comes back.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return FAT_CLOWN_TACTICS;
   }
 
   /** Staggers this clown's idle loop so a pack of them does not move as one. */
@@ -96,6 +131,7 @@ export class FatClown extends Mob {
 
     if (!nearest) {
       this.isAggro = false;
+      this.tactics.disengage();
       this.clearAStarPath();
       // `returnHomeOrWander`, not `doWander`: this class is reused as a bounty
       // encounter's escort, and only the former honours the `homePoint` the
@@ -109,13 +145,30 @@ export class FatClown extends Mob {
     const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
 
+    if (this.tactics.claimRiposte()) {
+      this.attackCooldown = riposteCooldown(this.attackCooldown, this.attackAnimTimer);
+    }
+    const tacticalMove = this.chooseTacticalStep(
+      nearest,
+      attackRangePx,
+      this.attackAnimTimer === 0,
+    );
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
+
     if (nearestDist > attackRangePx) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        this.speed,
-        attackRangePx * FOLLOW_STOP_FRACTION,
-      );
+      if (tacticalMove !== null) {
+        this.walkTacticalStep(tacticalMove, nearest);
+      } else {
+        this.followTargetAStar(
+          this.lastKnownTargetX,
+          this.lastKnownTargetY,
+          this.speed,
+          attackRangePx * FOLLOW_STOP_FRACTION,
+        );
+      }
     } else {
       this.isMoving = false;
     }

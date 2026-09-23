@@ -1,6 +1,13 @@
-import type { DamageSource, Player } from '../Player';
+import type { Player } from '../Player';
 import { RockGolem, FRAMES_PER_SHEET_FRAME } from './RockGolem';
-import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
+import {
+  BOSS_BLAST_DAMAGE_SCALE,
+  Mob,
+  NO_TACTICS,
+  type LootDrop,
+  type MobDamageSource,
+  type PlayerDamageType,
+} from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import { ROLL_ATTACK_TYPE } from './rockGolemAttackTypes';
 import {
@@ -9,6 +16,7 @@ import {
   type RockGolemSheet,
   type RockGolemSpriteState,
 } from '../sprites/rockGolemSprite';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 
 const BOSS_HP = 90;
 /**
@@ -56,8 +64,13 @@ const STUN_FRAMES = 150;
 
 /** Contact damage while rolling, as a fraction of the victim's own maximum HP. */
 const ROLL_DAMAGE_HP_FRACTION = 0.5;
-/** Flat damage added on top, so a full-health player still feels the hit. */
-const ROLL_FLAT_DAMAGE = 3;
+/**
+ * Flat damage added on top, so a full-health player still feels the hit. Small
+ * because it is unscaled against a bar that is smallest at the start: at a
+ * fresh crawler's ten HP every point of it is a tenth of her health, and the
+ * roll must still leave her a quarter (`BOUNTY_MAX_BLOW_HP_SHARE`).
+ */
+const ROLL_FLAT_DAMAGE = 2;
 /** Frames before the same target can be hit again by the roll. */
 const ROLL_HIT_COOLDOWN = 90;
 const ROLL_CONTACT_RANGE_TILES = 1.1;
@@ -67,7 +80,7 @@ const ROLL_CONTACT_RANGE_TILES = 1.1;
  * Dodgeable: getting out of the boulder's lane is the entire counterplay, and
  * marking it undodgeable would take that away from a dexterous character.
  */
-function rollDamageSource(mobType: string): DamageSource {
+function rollDamageSource(mobType: string): MobDamageSource {
   return { kind: 'mob', mobType, attackType: ROLL_ATTACK_TYPE };
 }
 
@@ -106,6 +119,11 @@ interface RollAim {
  * gym equipment the counterplay, at the cost of no new coupling at all.
  */
 export class RockGolemBoss extends RockGolem {
+  /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
+  override get blastDamageScale(): number {
+    return BOSS_BLAST_DAMAGE_SCALE;
+  }
+
   override readonly xpValue: number = BOSS_XP_VALUE;
   protected override coinDropMin = BOSS_COIN_DROP_MIN;
   protected override coinDropMax = BOSS_COIN_DROP_MAX;
@@ -145,6 +163,15 @@ export class RockGolemBoss extends RockGolem {
 
   protected override get sheet(): RockGolemSheet {
     return 'rock_golem_boss';
+  }
+
+  /**
+   * None of what a common golem may learn. He is a boss with an authored
+   * fight, and his roll is a committed charge through `moveWithCollision`: a
+   * guard's shove refuses that movement, which the roll reads as a wall.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return NO_TACTICS;
   }
 
   /** Rolled, he is a hazard to run from rather than a thing to trade blows with. */
@@ -381,7 +408,7 @@ export class RockGolemBoss extends RockGolem {
       // plain `takeDamage` dies unattributed — the boulder has a thrower, and
       // `takeDamageFrom` is what puts him in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
-      else if (target.takeDamage(damage, rollDamageSource(this.mobType))) {
+      else if (target.takeDamage(damage, this.stampBlowCap(rollDamageSource(this.mobType)))) {
         this.noteStruckPlayer(target);
         // A boulder rolling over someone is contact, so reflect gear bites into
         // it exactly as it does into a swing.

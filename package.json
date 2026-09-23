@@ -27,6 +27,8 @@
     "verify:bounty": "tsx scripts/verify-bounty.ts",
     "verify:separation": "tsx scripts/verify-separation.ts",
     "verify:difficulty": "tsx scripts/verify-difficulty.ts",
+    "verify:difficulty-curve": "tsx scripts/verify-difficulty-curve.ts",
+    "verify:tactics": "tsx scripts/verify-tactics.ts",
     "verify:mongo": "tsx scripts/verify-mongo.ts",
     "verify:companion": "tsx scripts/verify-companion.ts",
     "verify:friendly-fire": "tsx scripts/verify-friendly-fire.ts",

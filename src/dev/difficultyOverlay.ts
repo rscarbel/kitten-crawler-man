@@ -4,7 +4,9 @@
  * Lives here rather than beside the counters so a release build has no import
  * edge to it at all — see the module comment on `devBoot.ts`. Its whole job is
  * to end a playtest with target-feel numbers instead of an impression: HP left
- * after a room fight, potions per segment, deaths per floor, seconds per fight.
+ * after a room fight, potions per segment, deaths per floor, seconds per fight,
+ * guard blocks and kites per fight, and whether trait-bearing mobs are pushing
+ * fights below the target-feel band on their own.
  */
 
 import {
@@ -16,7 +18,7 @@ import { DIFFICULTY_LABELS } from '../core/difficultyProfiles';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 
-const PANEL_WIDTH = 420;
+const PANEL_WIDTH = 660;
 const PANEL_MARGIN = 8;
 const PANEL_PADDING = 8;
 const PANEL_RADIUS = 4;
@@ -33,6 +35,11 @@ const COLUMN_DEATHS = 268;
 const COLUMN_SECONDS = 296;
 const COLUMN_DESCENTS = 332;
 const COLUMN_UNDERLEVELED = 370;
+const COLUMN_BLOCKS = 410;
+const COLUMN_KITES = 446;
+const COLUMN_KITE_LEN = 480;
+const COLUMN_HP_TRAIT = 522;
+const COLUMN_HP_NO_TRAIT = 590;
 
 /** A blank row's height between the segment table and the hunt-time footer. */
 const FOOTER_GAP_ROWS = 1;
@@ -81,27 +88,43 @@ interface DifficultyRow {
   readonly seconds: string;
   readonly descents: string;
   readonly underleveled: string;
+  /** Guard blocks per counted room fight. */
+  readonly blocksPerFight: string;
+  readonly kiteStarts: string;
+  /** Mean frame length of a kite that has ended. */
+  readonly kiteAvgFrames: string;
+  /** Mean HP-remaining fraction for fights with at least one trait-bearing mob. */
+  readonly hpTrait: string;
+  readonly hpTraitColor: string;
+  /** Mean HP-remaining fraction for fights with no trait-bearing mob. */
+  readonly hpNoTrait: string;
+  readonly hpNoTraitColor: string;
+}
+
+/** The target-feel HP color for a fraction, or the muted label color when there is no data yet. */
+function hpTargetColor(fraction: number | null): string {
+  if (fraction === null) return TEXT_PRESETS.label.color;
+  const onTarget = fraction >= HP_TARGET_MIN_FRACTION && fraction <= HP_TARGET_MAX_FRACTION;
+  return onTarget ? TEXT_PRESETS.value.color : TEXT_PRESETS.danger.color;
 }
 
 function buildRow(segment: DifficultySegment): DifficultyRow | null {
   const tally = difficultyStats.tallyFor(segment);
   if (tally === null) return null;
   const hasFights = tally.roomFights > 0;
-  const meanHpFraction = hasFights ? tally.hpRemainingSum / tally.roomFights : 0;
-  const isOnTarget =
-    meanHpFraction >= HP_TARGET_MIN_FRACTION && meanHpFraction <= HP_TARGET_MAX_FRACTION;
+  const meanHpFraction = hasFights ? tally.hpRemainingSum / tally.roomFights : null;
   // The tag names the tier this segment's numbers were actually measured
   // under — stamped on the tally when it opened, not read live, so it stays
   // correct even if the player flips difficulty mid-run.
   const tag = DIFFICULTY_LABELS[tally.difficulty][0];
+  const hpTraitFraction =
+    tally.traitFights > 0 ? tally.traitFightsHpRemainingSum / tally.traitFights : null;
+  const hpNoTraitFraction =
+    tally.noTraitFights > 0 ? tally.noTraitFightsHpRemainingSum / tally.noTraitFights : null;
   return {
     label: `${SEGMENT_LABELS[segment]} [${tag}]`,
-    hp: hasFights ? `${Math.round(meanHpFraction * PERCENT_SCALE)}%` : NO_DATA,
-    hpColor: !hasFights
-      ? TEXT_PRESETS.label.color
-      : isOnTarget
-        ? TEXT_PRESETS.value.color
-        : TEXT_PRESETS.danger.color,
+    hp: meanHpFraction === null ? NO_DATA : `${Math.round(meanHpFraction * PERCENT_SCALE)}%`,
+    hpColor: hpTargetColor(meanHpFraction),
     potions: `${tally.potionsUsed}`,
     damage: `${Math.round(tally.damageTaken)}`,
     dodges: `${tally.dodges}`,
@@ -114,6 +137,17 @@ function buildRow(segment: DifficultySegment): DifficultyRow | null {
       tally.descendedUnderleveled > 0
         ? `${tally.descendedUnderleveled} (+${(tally.descendedLevelDeltaSum / tally.descendedUnderleveled).toFixed(LEVEL_DELTA_DECIMALS)})`
         : NO_DATA,
+    blocksPerFight: hasFights
+      ? (tally.blocksSum / tally.roomFights).toFixed(SECONDS_DECIMALS)
+      : NO_DATA,
+    kiteStarts: `${tally.kiteStarts}`,
+    kiteAvgFrames:
+      tally.kiteEnds > 0 ? Math.round(tally.kiteFramesSum / tally.kiteEnds).toString() : NO_DATA,
+    hpTrait: hpTraitFraction === null ? NO_DATA : `${Math.round(hpTraitFraction * PERCENT_SCALE)}%`,
+    hpTraitColor: hpTargetColor(hpTraitFraction),
+    hpNoTrait:
+      hpNoTraitFraction === null ? NO_DATA : `${Math.round(hpNoTraitFraction * PERCENT_SCALE)}%`,
+    hpNoTraitColor: hpTargetColor(hpNoTraitFraction),
   };
 }
 
@@ -156,6 +190,11 @@ export function drawDifficultyOverlay(ctx: CanvasRenderingContext2D): void {
     [COLUMN_SECONDS, 'sec'],
     [COLUMN_DESCENTS, 'desc'],
     [COLUMN_UNDERLEVELED, 'under'],
+    [COLUMN_BLOCKS, 'blk/fight'],
+    [COLUMN_KITES, 'kites'],
+    [COLUMN_KITE_LEN, 'kite f'],
+    [COLUMN_HP_TRAIT, 'hp% trait'],
+    [COLUMN_HP_NO_TRAIT, 'hp% none'],
   ];
   for (const [offset, label] of columns) {
     drawText(ctx, label, { x: inner.x + offset, y: inner.y, ...TEXT_PRESETS.hint });
@@ -173,6 +212,11 @@ export function drawDifficultyOverlay(ctx: CanvasRenderingContext2D): void {
       [COLUMN_SECONDS, row.seconds, TEXT_PRESETS.value.color],
       [COLUMN_DESCENTS, row.descents, TEXT_PRESETS.value.color],
       [COLUMN_UNDERLEVELED, row.underleveled, TEXT_PRESETS.value.color],
+      [COLUMN_BLOCKS, row.blocksPerFight, TEXT_PRESETS.value.color],
+      [COLUMN_KITES, row.kiteStarts, TEXT_PRESETS.value.color],
+      [COLUMN_KITE_LEN, row.kiteAvgFrames, TEXT_PRESETS.value.color],
+      [COLUMN_HP_TRAIT, row.hpTrait, row.hpTraitColor],
+      [COLUMN_HP_NO_TRAIT, row.hpNoTrait, row.hpNoTraitColor],
     ];
     for (const [offset, text, color] of cells) {
       drawText(ctx, text, { x: inner.x + offset, y, ...TEXT_PRESETS.hint, color });

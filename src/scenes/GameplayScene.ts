@@ -45,6 +45,8 @@ export abstract class GameplayScene extends Scene {
    * here each frame before `renderHUD` runs.
    */
   protected skillPointReminderActive = false;
+  /** Mirrors `SkillPointReminderSystem.suppressed`: hides the skill-point badge. */
+  protected skillPointsSuppressed = false;
   /** Screen rect of the HUD health-bar panel, for keeping world arrows clear of it. */
   protected _hudRect: HudRect = { x: 0, y: 0, w: 0, h: 0 };
 
@@ -125,6 +127,7 @@ export abstract class GameplayScene extends Scene {
   protected tickSkillPointReminder(ctx: SystemContext): void {
     this.skillPointReminder.update(ctx);
     this.skillPointReminderActive = this.skillPointReminder.reminderActive;
+    this.skillPointsSuppressed = this.skillPointReminder.suppressed;
     if (this.skillPointReminder.reminderSoundPending) {
       this.skillPointReminder.reminderSoundPending = false;
       this.audio?.play('skillpoint_reminder');
@@ -139,6 +142,7 @@ export abstract class GameplayScene extends Scene {
       this.notifPulse,
       this._hudCollapsed,
       this.skillPointReminderActive,
+      this.skillPointsSuppressed,
     );
     this._hudToggleRect = hud.toggleRect;
     this._hudRect = hud.hudRect;
@@ -152,6 +156,7 @@ export abstract class GameplayScene extends Scene {
         this.notifPulse,
         hud.hudPanelBottom + HUD_SKILL_BADGE_GAP,
         this.skillPointReminderActive,
+        this.skillPointsSuppressed,
       );
     } else {
       this._hudSkillBannerRect = hud.notifRect;

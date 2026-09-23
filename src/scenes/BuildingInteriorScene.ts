@@ -1,3 +1,5 @@
+import { displayHp } from '../core/crawlerFormulas';
+import type { XpDiminishingTier } from '../levels/xpDiminishing';
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { keybindings } from '../core/Keybindings';
@@ -54,6 +56,8 @@ import { addButton, beginMenuFocus, endMenuFocus, menuFocusContextId } from '../
 import type { ButtonRect } from '../ui/pause/types';
 import { EventBus } from '../core/EventBus';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
+import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
+import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import { causeFromDamageSource } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { resolveSkillBookPrompt } from '../systems/skillBookUse';
@@ -423,6 +427,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private readonly bus = new EventBus();
   private readonly systemNotices: SystemNoticeSystem;
+  private readonly tacticsNotices: TacticsNoticeSystem;
   /** Bag, gear, pause menu, award stack, toasts and the hotbar's one routine. */
   private readonly menus: MenusKit;
 
@@ -466,7 +471,9 @@ export class BuildingInteriorScene extends GameplayScene {
    * frame's `ctx` hands it, so it has nothing floor-specific to reset when the
    * party changes storeys.
    */
-  protected readonly skillPointReminder = new SkillPointReminderSystem();
+  protected readonly skillPointReminder = new SkillPointReminderSystem((ctx) =>
+    this.isEncounterFightUnresolved(ctx),
+  );
 
   // Tower multi-floor state
   private towerFloors: GameMap[] = [];
@@ -582,6 +589,8 @@ export class BuildingInteriorScene extends GameplayScene {
     private readonly entry: BuildingEntry,
     humanSnap: PlayerSnapshot,
     catSnap: PlayerSnapshot,
+    /** The curve of the floor this building stands on: XP earned indoors is earned there. */
+    private readonly xpCurve: readonly XpDiminishingTier[] | undefined,
     input: InputManager,
     sceneManager: SceneManager,
     private readonly onExitCallback: (
@@ -626,6 +635,12 @@ export class BuildingInteriorScene extends GameplayScene {
      * by a harness with no town behind it, which then gets its own draw.
      */
     townArtSeed?: number,
+    /**
+     * Tactics-trait System notices already shown this run, threaded by
+     * reference from `DungeonScene` like `townMemory`, so a trait first met
+     * indoors (a cultist, a rat) isn't announced a second time outside.
+     */
+    tacticsNoticesSeen?: Set<TacticsTrait>,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
@@ -713,7 +728,7 @@ export class BuildingInteriorScene extends GameplayScene {
     });
 
     const { x: sx, y: sy } = this.map.startTile;
-    this.pm = new PlayerManager(sx, sy);
+    this.pm = new PlayerManager(sx, sy, this.xpCurve);
     this.cat.setMap(this.map);
 
     restorePlayer(this.human, humanSnap);
@@ -825,6 +840,7 @@ export class BuildingInteriorScene extends GameplayScene {
     };
     this.mobileHUD = new MobileHUDSystem(this.menus.inventoryPanel, this.menus.gearPanel);
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.hotbarToast);
+    this.tacticsNotices = new TacticsNoticeSystem(tacticsNoticesSeen ?? new Set<TacticsTrait>());
     this.chat = new ChatKit({
       world: this.floors[GROUND_FLOOR_INDEX].world,
       abilityManager: this.abilityManager,
@@ -832,7 +848,7 @@ export class BuildingInteriorScene extends GameplayScene {
       describeSituation: () =>
         `Human is level ${this.human.level}, Cat is level ${this.cat.level}. ` +
         `Inside: ${this.entry.name}. ` +
-        `Human HP: ${this.human.hp}/${this.human.maxHp}, Cat HP: ${this.cat.hp}/${this.cat.maxHp}.`,
+        `Human HP: ${displayHp(this.human.hp)}/${this.human.maxHp}, Cat HP: ${displayHp(this.cat.hp)}/${this.cat.maxHp}.`,
     });
     this.chat.applyCarriedCheat();
     this.wirePauseMenu();
@@ -947,6 +963,16 @@ export class BuildingInteriorScene extends GameplayScene {
   /** That floor's raised skeletons. */
   private get skeletonSummons(): SkeletonSummonSystem {
     return this.floors[this.currentFloor].skeletonSummons;
+  }
+
+  /**
+   * An interior's boss fights are its quest encounters, and each fills the
+   * storey it runs on, so the storey is the room: the fight is unfinished while
+   * anything hostile on it is still alive.
+   */
+  private isEncounterFightUnresolved(ctx: SystemContext): boolean {
+    if (this.activeEncounter === null) return false;
+    return ctx.roster.mobs.some((mob) => mob.isAlive && mob.isHostile);
   }
 
   /** The quest fight, but only while the player is on the floor holding it. */
@@ -1211,6 +1237,7 @@ export class BuildingInteriorScene extends GameplayScene {
         // encounter in a building with stairs has to re-register from its own
         // update the way the tower's Lich fight does.
         this.companion.registerHazardSource(maze);
+        this.combat.mobLoop.registerHazardSource(maze);
         // Both parked, not just whoever is standing in for the companion right
         // now: each crawler walks their own half, and the moment the player uses
         // the switch key — which is the whole mechanic — the other stance would
@@ -1781,8 +1808,11 @@ export class BuildingInteriorScene extends GameplayScene {
       this.catAchievements.tryUnlock('doomsday_contained');
     }
 
+    // Before `drainFor`, so a notice queued this frame drains on this same
+    // frame's toast pass rather than sitting a frame behind.
+    this.tacticsNotices.scan(this.world.roster.mobs, this.human);
     this.systemNotices.drainFor(this.human, this.cat);
-    this.combat.floatingText.updateFor(this.human, this.cat);
+    this.combat.floatingText.updateFor(this.human, this.cat, this.world.roster.mobs);
     this.menus.openPendingSkillBookPrompt(this.inventoryPlayer());
     const invPlayer = this.inventoryPlayer();
     this.menus.resolvePendingInventoryActions(invPlayer, (id, quantity) =>

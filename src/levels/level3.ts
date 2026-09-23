@@ -64,6 +64,41 @@ const SKYF_12_Y = -4;
 const FLOOR3_RECOMMENDED_LEVEL = 24;
 
 /**
+ * How high the overworld's ambient mobs may follow a party that out-levels the
+ * bands below. A party arrives here already past every band's top, so without
+ * this the whole floor met it several levels behind and fell further behind as
+ * it grew. Held two levels under the level cap because that is the last level
+ * at which every tactics trait is still short of its maximum chance, which is
+ * where bounty escorts, not ordinary mobs, are meant to take it.
+ */
+const FLOOR3_AMBIENT_TRACKING_MAX_LEVEL = 18;
+/**
+ * How far under the party's earned level the overworld's tracked mobs sit.
+ * Stepping onto the overworld is the steepest jump in the game — every band's
+ * top is several levels under what the party has earned — so without a step
+ * back the first roaming pair a badly built party meets would cost it nearly
+ * its whole bar. The gap closes on its own once the party's earned level
+ * passes {@link FLOOR3_AMBIENT_TRACKING_MAX_LEVEL} by this much.
+ */
+const FLOOR3_AMBIENT_TRACKING_LEVELS_BEHIND = 2;
+
+/**
+ * The overworld's diminishing-returns curve. Without one, its quests and
+ * endlessly repeatable bounties carried a party from the mid-twenties to
+ * levels no mob can follow, since tracking stops at
+ * {@link FLOOR3_AMBIENT_TRACKING_MAX_LEVEL}. The tiers start a few levels past
+ * the point where that ceiling is reached, so the ambient mobs, camps and
+ * quests still level a party that plays through them, and grinding past it
+ * slows to a crawl.
+ */
+const FLOOR3_XP_HALF_LEVEL = 30;
+const FLOOR3_XP_QUARTER_LEVEL = 32;
+const FLOOR3_XP_TENTH_LEVEL = 34;
+const FLOOR3_XP_HALF_MULTIPLIER = 0.5;
+const FLOOR3_XP_QUARTER_MULTIPLIER = 0.25;
+const FLOOR3_XP_TENTH_MULTIPLIER = 0.1;
+
+/**
  * Sky fowl level range, kept in line with the floor's weakest regular so this
  * floor-3 creature isn't as fragile as a floor-1 rat.
  */
@@ -89,7 +124,13 @@ const GOBLIN_CAMP_POPULATION = 5;
 const GOBLIN_CAMP_ARCHERS = 2;
 const GOBLIN_MIN_LEVEL = 5;
 const GOBLIN_MAX_LEVEL = 7;
-const TROGLODYTE_DEN_POPULATION = 4;
+/**
+ * Kept small: a troglodyte's cost to the party grows with every other one
+ * alive beside it, and the den's size is what keeps it a hard fight rather
+ * than one the party cannot finish. `verify:difficulty-curve` prices the den
+ * whole.
+ */
+const TROGLODYTE_DEN_POPULATION = 3;
 const TROGLODYTE_MIN_LEVEL = 6;
 const TROGLODYTE_MAX_LEVEL = 8;
 
@@ -100,6 +141,15 @@ export const level3: LevelDef = {
   music: 'bg_level_1',
   mapSize: 280,
   recommendedLevelOverride: FLOOR3_RECOMMENDED_LEVEL,
+  ambientTracking: {
+    maxLevel: FLOOR3_AMBIENT_TRACKING_MAX_LEVEL,
+    levelsBehind: FLOOR3_AMBIENT_TRACKING_LEVELS_BEHIND,
+  },
+  xpDiminishingTiers: [
+    { minPlayerLevel: FLOOR3_XP_HALF_LEVEL, multiplier: FLOOR3_XP_HALF_MULTIPLIER },
+    { minPlayerLevel: FLOOR3_XP_QUARTER_LEVEL, multiplier: FLOOR3_XP_QUARTER_MULTIPLIER },
+    { minPlayerLevel: FLOOR3_XP_TENTH_LEVEL, multiplier: FLOOR3_XP_TENTH_MULTIPLIER },
+  ],
   // Deliberately does NOT include the bounty/circus/quill/murder-mystery
   // groups: none of those systems is named anywhere in this def (they key off
   // map features like `gameMap.circusCentre`, not `LevelDef`), so a naive

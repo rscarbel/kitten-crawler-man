@@ -1,4 +1,4 @@
-import { Mob } from './Mob';
+import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import type { Player } from '../Player';
 import { randomInt } from '../utils';
@@ -122,12 +122,18 @@ const SWEEP_SHARE_INSIDE_RING = 0.6;
  * player's health bar — a telegraphed attack that killed from full whether or
  * not it was the first thing he did. That double-scaling, not these fractions,
  * was why the fight was unsurvivable.
+ *
+ * Share and mace together must still leave an on-schedule crawler a quarter of
+ * her bar (`BOUNTY_MAX_BLOW_HP_SHARE`). The mace half is the one that climbs —
+ * he spawns a level above the party, where the level multiplier is steepest
+ * against her — so it is kept small, and the slam's extra weight over the sweep
+ * lives in the share.
  */
-const SLAM_HP_FRACTION = 0.4;
+const SLAM_HP_FRACTION = 0.3;
 const SWEEP_HP_FRACTION = 0.18;
 /** Flat damage on top, which *is* level-scaled — it is a mace, not a percentage. */
-const SLAM_BONUS_DAMAGE = 5;
-const SWEEP_BONUS_DAMAGE = 4;
+const SLAM_BONUS_DAMAGE = 2;
+const SWEEP_BONUS_DAMAGE = 2.5;
 /** The jab is chip damage — unavoidable, so it must never be a burst. */
 const PUNCH_DAMAGE = 4;
 
@@ -147,8 +153,12 @@ const PUNCH_DAMAGE = 4;
 const BOLT_INTERVAL_FRAMES = 30;
 const BOLTS_PER_VOLLEY = 6;
 const BOLT_OVERHEAT_FRAMES = 360;
-/** Chip damage per bolt, level-scaled, matching the jab. Six of them is the threat. */
-const BOLT_DAMAGE = 4;
+/**
+ * Chip damage per bolt, level-scaled. Six of them half a second apart is the
+ * threat, so one bolt is small: a crawler who stands in the volley loses her
+ * bar over a couple of seconds, not in the half second between two bolts.
+ */
+const BOLT_DAMAGE = 2;
 /**
  * How far into the raise the first bolt leaves. The mace has to be up before
  * anything comes off it, and the slam row this borrows reaches its apex at its
@@ -261,6 +271,11 @@ function prewarmRows(states: ReadonlyArray<string>): void {
 }
 
 export class DarkKnight extends Mob {
+  /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
+  override get blastDamageScale(): number {
+    return BOSS_BLAST_DAMAGE_SCALE;
+  }
+
   readonly xpValue = KNIGHT_XP_VALUE;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
@@ -725,12 +740,15 @@ export class DarkKnight extends Mob {
     // becomes unavoidable.
     if (Math.hypot(target.x - this.x, target.y - this.y) > this.punchResolveRangePx()) return;
     const damage = this.scaledDamage(PUNCH_DAMAGE);
-    const connected = target.takeDamage(damage, {
-      kind: 'mob',
-      mobType: this.mobType,
-      attackType: 'gauntlet',
-      undodgeable: true,
-    });
+    const connected = target.takeDamage(
+      damage,
+      this.stampBlowCap({
+        kind: 'mob',
+        mobType: this.mobType,
+        attackType: 'gauntlet',
+        undodgeable: true,
+      }),
+    );
     if (connected) {
       this.noteStruckPlayer(target);
       this.reflectMeleeDamage(target, damage);

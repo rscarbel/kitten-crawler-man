@@ -4,6 +4,7 @@ import { EXPLOSION_IGNITE_RING_TILES, type TreeSystem } from './TreeSystem';
 import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
+import { MAX_MOB_HP_MULTIPLIER } from '../creatures/mobLevelScaling';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
@@ -15,33 +16,124 @@ import {
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { EventBus } from '../core/EventBus';
 
-// Goblin Dynamite constants
-export const DYN_MAX_CHARGE = 120; // 2 s at 60 fps → full throw
-export const DYN_DANGER = 240; // 4 s → charge bar turns red
-const DYN_EXPLODE_HAND = 300; // 5 s → boom in hand
-const DYN_FUSE = 300; // 5 s fuse after thrown/dropped
-const DYN_TAP = 8; // frames: release faster than this = tap (drop at feet)
+/** Frames of charge for a full-strength throw. */
+export const DYN_MAX_CHARGE = 120;
+/** Frames of charge after which the charge bar turns red, a second before the stick goes off in hand. */
+export const DYN_DANGER = 240;
+/** Frames of charge after which the stick goes off in the thrower's hand. */
+const DYN_EXPLODE_HAND = 300;
+/** Frames a thrown or dropped stick burns before it goes off. */
+const DYN_FUSE = 300;
+/** Releases shorter than this many frames drop the stick at the thrower's feet. */
+const DYN_TAP = 8;
 const DYN_SPEED_MIN = 2.0;
 const DYN_SPEED_MAX = 23.1;
-const DYN_BOUNCE = 0.6; // velocity fraction kept after wall bounce
-const DYN_FRICTION = 0.88; // per-frame speed multiplier
-const DYN_STOP = 0.08; // px/frame below which dynamite is considered stopped
+/** Share of its speed a stick keeps off a wall. */
+const DYN_BOUNCE = 0.6;
+const DYN_FRICTION = 0.88;
+/** Speed (px/frame) below which a stick comes to rest. */
+const DYN_STOP = 0.08;
 /** Speed (px/frame) below which dynamite transitions from flying to sliding. */
 const DYN_SLIDE_THRESHOLD = 1.5;
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
-const DYN_RADIUS_TILES = 3; // AoE explosion radius in tiles
-const DYN_RADIUS = TILE_SIZE * DYN_RADIUS_TILES; // AoE explosion radius (96 px)
-const DYN_DAMAGE = 8; // damage dealt to all entities in radius
-const DYN_ANIM_FRAMES = 45; // explosion animation duration
+const DYN_RADIUS_TILES = 3;
+const DYN_RADIUS = TILE_SIZE * DYN_RADIUS_TILES;
+/** What an untrained level-1 human's stick does, to crawlers and enemies alike. */
+const DYN_DAMAGE = 8;
+const DYN_ANIM_FRAMES = 45;
 /** Bonus speed per extra explosives handling level above 1. */
 const DYN_SPEED_PER_LEVEL = 4;
-/** Bonus damage per extra explosives handling level above 1. */
-const DYN_DAMAGE_PER_LEVEL = 2;
+/** Flat bonus per explosives handling level above 1 to what a blast does to the crawlers. */
+const DYN_CRAWLER_DAMAGE_PER_LEVEL = 2;
+/**
+ * Blast damage to enemies added per thrower level above 1, as a fraction of
+ * {@link DYN_DAMAGE}.
+ *
+ * Enemy health grows as a fraction of its authored value with every level
+ * (`MOB_LEVEL_HP_SCALE`), so a stick whose damage stayed fixed would fall from
+ * a threat to a firecracker over a couple of floors. Growing the same way keeps
+ * an untrained stick worth roughly the same share of a same-floor mob's health
+ * at every level — a consumable that drops and sells at a flat price should not
+ * quietly lose its worth.
+ */
+export const DYN_MOB_DAMAGE_FRACTION_PER_THROWER_LEVEL = 0.15;
+/**
+ * Ceiling on the thrower-level multiplier. Mob health stops growing at
+ * `MAX_MOB_HP_MULTIPLIER`, so a stick that kept growing past it would outscale
+ * everything it is thrown at.
+ */
+const MAX_DYN_THROWER_LEVEL_MULTIPLIER = MAX_MOB_HP_MULTIPLIER;
+/**
+ * Multiplier on blast damage to enemies added per explosives handling level
+ * above 1.
+ *
+ * A multiplier rather than a flat bonus, the same shape as Iron Punch: a flat
+ * point would shrink to nothing against levelled health, where a share of an
+ * already-levelled stick keeps every point spent worth what it was when spent.
+ */
+export const DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL = 0.3;
+/**
+ * Frames after a blast lands on a blast-resistant mob during which further
+ * blasts do nothing to it. Without it a volley of sticks dropped together is one
+ * enormous hit, and a boss's health bar is a question of how many sticks were
+ * bought rather than how the fight was played.
+ */
+export const BLAST_RESISTANT_COOLDOWN_FRAMES = 60;
 /** Max frames to simulate for the throw path preview (covers full fuse duration). */
 const TRAJECTORY_MAX_FRAMES = 300;
 /** Collect a path point every N simulated frames to keep screen-point count manageable. */
 const TRAJECTORY_SAMPLE_INTERVAL = 3;
+
+/**
+ * What one blast does to each enemy caught in it, rounded to a whole point.
+ *
+ * Enemies only: the crawlers' own share of a blast is {@link dynamiteCrawlerDamage},
+ * which neither the thrower's level nor this multiplier touches, so training the
+ * skill never makes a fumbled stick deadlier to the pair who lit it.
+ */
+export function dynamiteMobDamage(throwerLevel: number, explosivesLevel: number): number {
+  const throwerLevelsAboveFirst = Math.max(0, throwerLevel - 1);
+  const handlingLevelsAboveFirst = Math.max(0, explosivesLevel - 1);
+  const throwerLevelMultiplier = Math.min(
+    MAX_DYN_THROWER_LEVEL_MULTIPLIER,
+    1 + DYN_MOB_DAMAGE_FRACTION_PER_THROWER_LEVEL * throwerLevelsAboveFirst,
+  );
+  const levelledStick = DYN_DAMAGE * throwerLevelMultiplier;
+  const handlingMultiplier =
+    1 + DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL * handlingLevelsAboveFirst;
+  return Math.round(levelledStick * handlingMultiplier);
+}
+
+/** What one blast does to the human or the cat when either stands inside it. */
+export function dynamiteCrawlerDamage(explosivesLevel: number): number {
+  const handlingLevelsAboveFirst = Math.max(0, explosivesLevel - 1);
+  return DYN_DAMAGE + handlingLevelsAboveFirst * DYN_CRAWLER_DAMAGE_PER_LEVEL;
+}
+
+/**
+ * What one blast does to a particular mob caught in it.
+ *
+ * An ally takes the crawlers' share rather than the enemies': the skill trains
+ * the human to hurt what he is fighting, and a companion standing in the blast
+ * is exactly as unlucky as the cat would be. A boss takes its
+ * {@link Mob.blastDamageScale} share, so a bag of sticks cannot skip its fight,
+ * but never less than the crawlers' share.
+ */
+export function dynamiteDamageToMob(
+  mob: Pick<Mob, 'isHostile' | 'blastDamageScale'>,
+  mobDamage: number,
+  crawlerDamage: number,
+): number {
+  if (!mob.isHostile) return crawlerDamage;
+  const scaledEnemyDamage = Math.max(1, Math.round(mobDamage * mob.blastDamageScale));
+  const isBlastResistant = mob.blastDamageScale < 1;
+  if (!isBlastResistant) return scaledEnemyDamage;
+  // A boss never resists a stick more than a crawler does. The scale is there
+  // to stop the level-grown number deleting a boss, and early on that number
+  // times the scale falls below what an untrained stick did before it grew.
+  return Math.max(crawlerDamage, scaledEnemyDamage);
+}
 
 interface LiveDynamite {
   x: number;
@@ -51,8 +143,10 @@ interface LiveDynamite {
   fuseFrames: number;
   state: 'flying' | 'sliding' | 'stopped' | 'exploding';
   explodeTimer: number;
-  /** Snapshot of human.explosivesHandling at throw time — scales damage. */
-  explosivesLevel: number;
+  /** Taken at throw time, so a level-up while the fuse burns cannot change the stick. */
+  mobDamage: number;
+  /** Taken at throw time, for the same reason as {@link mobDamage}. */
+  crawlerDamage: number;
 }
 
 export class DynamiteSystem implements GameSystem {
@@ -60,6 +154,14 @@ export class DynamiteSystem implements GameSystem {
   private liveDynamites: LiveDynamite[] = [];
   /** Set each time a stick goes off; `DestructionKit` reads and clears it to sound the blast. */
   explosionSoundPending = false;
+
+  /** Counts {@link update} calls, so a blast cooldown can be read against it. */
+  private frame = 0;
+  /**
+   * The frame each blast-resistant mob was last hurt by a blast. Weak, so a mob
+   * dropped from the floor is not pinned here.
+   */
+  private lastBlastFrame = new WeakMap<Mob, number>();
 
   private _trajectoryCache: Array<{ x: number; y: number }> | null = null;
   private _trajCacheKey = '';
@@ -86,6 +188,7 @@ export class DynamiteSystem implements GameSystem {
   resetForCheckpoint(): void {
     this._charging = null;
     this.liveDynamites = [];
+    this.lastBlastFrame = new WeakMap<Mob, number>();
   }
 
   get isCharging(): boolean {
@@ -125,11 +228,13 @@ export class DynamiteSystem implements GameSystem {
       fuseFrames: DYN_FUSE,
       state: isTap ? 'stopped' : 'flying',
       explodeTimer: 0,
-      explosivesLevel: expLvl,
+      mobDamage: dynamiteMobDamage(human.level, expLvl),
+      crawlerDamage: dynamiteCrawlerDamage(expLvl),
     });
   }
 
   update(ctx: SystemContext): void {
+    this.frame++;
     const { human, cat } = ctx;
     const { grid: mobGrid } = ctx.roster;
     if (this._charging) {
@@ -146,7 +251,9 @@ export class DynamiteSystem implements GameSystem {
     this._charging = null;
     const cx = human.x + HALF_TILE;
     const cy = human.y + HALF_TILE;
-    this.triggerExplosion(cx, cy, human.explosivesHandling, human, cat, mobGrid);
+    const mobDamage = dynamiteMobDamage(human.level, human.explosivesHandling);
+    const crawlerDamage = dynamiteCrawlerDamage(human.explosivesHandling);
+    this.triggerExplosion(cx, cy, mobDamage, crawlerDamage, human, cat, mobGrid);
     this.liveDynamites.push({
       x: cx,
       y: cy,
@@ -155,22 +262,22 @@ export class DynamiteSystem implements GameSystem {
       fuseFrames: 0,
       state: 'exploding',
       explodeTimer: DYN_ANIM_FRAMES,
-      explosivesLevel: human.explosivesHandling,
+      mobDamage,
+      crawlerDamage,
     });
   }
 
   private triggerExplosion(
     cx: number,
     cy: number,
-    explosivesLevel: number,
+    mobDamage: number,
+    crawlerDamage: number,
     human: HumanPlayer,
     cat: CatPlayer,
     mobGrid: SpatialGrid<Mob>,
   ): void {
     this.explosionSoundPending = true;
-    const ts = TILE_SIZE;
-    const damage = DYN_DAMAGE + (explosivesLevel - 1) * DYN_DAMAGE_PER_LEVEL;
-    const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + ts);
+    const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + TILE_SIZE);
     if (!human.zeroDamage) {
       let blastKills = 0;
       for (const mob of nearBlast) {
@@ -179,11 +286,16 @@ export class DynamiteSystem implements GameSystem {
         // it already ignores the pair who lit it.
         if (!mob.isAlive || !mob.takesPlayerDamage('explosion')) continue;
         if (Math.hypot(mob.x + HALF_TILE - cx, mob.y + HALF_TILE - cy) <= DYN_RADIUS) {
+          if (this.isBlastCoolingDown(mob)) continue;
           // Death resolves synchronously inside `takeDamageFrom`, so the health
           // either side of the call is what says whether this blast did it. The
           // `justDied` flag cannot answer: it stays latched for a whole frame.
           const wasAlive = mob.hp > 0;
-          mob.takeDamageFrom(damage, human, 'explosion');
+          mob.takeDamageFrom(
+            dynamiteDamageToMob(mob, mobDamage, crawlerDamage),
+            human,
+            'explosion',
+          );
           if (wasAlive && mob.hp <= 0) blastKills++;
         }
       }
@@ -192,10 +304,10 @@ export class DynamiteSystem implements GameSystem {
       }
     }
     if (Math.hypot(human.x + HALF_TILE - cx, human.y + HALF_TILE - cy) <= DYN_RADIUS) {
-      human.takeDamage(damage, { kind: 'dynamite' });
+      human.takeDamage(crawlerDamage, { kind: 'dynamite' });
     }
     if (Math.hypot(cat.x + HALF_TILE - cx, cat.y + HALF_TILE - cy) <= DYN_RADIUS) {
-      cat.takeDamage(damage, { kind: 'dynamite' });
+      cat.takeDamage(crawlerDamage, { kind: 'dynamite' });
     }
     // Flattened outright rather than damaged: a barrel that survives a stick of
     // dynamite reads as a bug, however much health it had left. The same goes
@@ -206,7 +318,19 @@ export class DynamiteSystem implements GameSystem {
     // Ignition second, and deliberately: the ring reaches back over the blast
     // radius, and setting fire to the trees first would leave the ones inside it
     // burning as they came down.
-    trees?.igniteRadius(cx, cy, DYN_RADIUS + EXPLOSION_IGNITE_RING_TILES * ts);
+    trees?.igniteRadius(cx, cy, DYN_RADIUS + EXPLOSION_IGNITE_RING_TILES * TILE_SIZE);
+  }
+
+  /** Whether a blast-resistant mob is still inside its window from the last blast; stamps a new one if not. */
+  private isBlastCoolingDown(mob: Mob): boolean {
+    const isBlastResistant = mob.blastDamageScale < 1;
+    if (!isBlastResistant) return false;
+    const lastBlast = this.lastBlastFrame.get(mob);
+    if (lastBlast !== undefined && this.frame - lastBlast < BLAST_RESISTANT_COOLDOWN_FRAMES) {
+      return true;
+    }
+    this.lastBlastFrame.set(mob, this.frame);
+    return false;
   }
 
   private updatePhysics(human: HumanPlayer, cat: CatPlayer, mobGrid: SpatialGrid<Mob>): void {
@@ -220,7 +344,7 @@ export class DynamiteSystem implements GameSystem {
       if (dyn.fuseFrames <= 0) {
         dyn.state = 'exploding';
         dyn.explodeTimer = DYN_ANIM_FRAMES;
-        this.triggerExplosion(dyn.x, dyn.y, dyn.explosivesLevel, human, cat, mobGrid);
+        this.triggerExplosion(dyn.x, dyn.y, dyn.mobDamage, dyn.crawlerDamage, human, cat, mobGrid);
         continue;
       }
 

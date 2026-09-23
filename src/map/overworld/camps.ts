@@ -6,11 +6,11 @@
  * and what a camp adds is a place on the map that is obviously *somebody's*,
  * with its own residents standing around it.
  *
- * The camps are also deliberately inert: nothing here clears, respawns, or
- * reports. What it does leave is a clean seam — the sites come out of the
- * generator on `OverworldData.camps` and are carried onto `GameMap` exactly the
- * way the circus's centre and radius are — so a future quest can find a camp
- * without the generator having to know anything about quests.
+ * The generator itself is inert: it sites and paints, and nothing here clears,
+ * respawns, or reports. The sites come out on `OverworldData.camps` and are
+ * carried onto `GameMap` exactly the way the circus's centre and radius are, so
+ * the spawner can populate a camp — and `TownMemory` can remember one as
+ * cleared — without the generator knowing about either.
  */
 
 import {
@@ -37,6 +37,19 @@ export interface CampSite {
   readonly kind: CampKind;
   readonly centre: TilePoint;
   readonly radiusTiles: number;
+}
+
+/**
+ * The name a camp is remembered under once cleared.
+ *
+ * Built from the kind and the centre tile rather than an index into
+ * `GameMap.camps`: the centre is drawn under the world seed, so the same save
+ * regenerates the same key after a reload, while a floor rebuilt from a fresh
+ * seed produces keys nothing remembers — its camps come back populated, as a
+ * new floor's should.
+ */
+export function campSiteKey(camp: Pick<CampSite, 'kind' | 'centre'>): string {
+  return `${camp.kind}@${camp.centre.x},${camp.centre.y}`;
 }
 
 const CAMP_RADIUS_TILES = 7;

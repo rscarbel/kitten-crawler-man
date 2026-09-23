@@ -20,11 +20,13 @@ import type { DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { Llama } from '../creatures/Llama';
+import { projectileSpeedScaleForLevel } from '../creatures/mobLevelScaling';
 import { makeBurn } from '../core/StatusEffect';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawLavaBolt, drawLavaBurst, drawLavaFlame } from '../sprites/lavaBallSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { GroundHazardSource } from './GroundHazardSource';
 
 /** One shot, as the llama hands it over. */
 export interface LavaSpit {
@@ -97,8 +99,6 @@ interface FlamePatch {
 }
 
 const BOLT_SPEED = 1.9;
-/** Extra bolt speed per llama level, before the cap. */
-const BOLT_SPEED_LEVEL_SCALE = 0.04;
 /**
  * The cap, as a share of the player's own run speed.
  *
@@ -118,8 +118,7 @@ export const BOLT_SPEED_CAP = PLAYER_SPEED * BOLT_SPEED_CAP_PLAYER_FRACTION;
  * function rather than against a copy of it.
  */
 export function lavaBoltSpeedForLevel(level: number): number {
-  const extraLevels = Math.max(0, level - 1);
-  return Math.min(BOLT_SPEED_CAP, BOLT_SPEED * (1 + extraLevels * BOLT_SPEED_LEVEL_SCALE));
+  return Math.min(BOLT_SPEED_CAP, BOLT_SPEED * projectileSpeedScaleForLevel(level));
 }
 
 const BOLT_RADIUS_PX = 7;
@@ -177,7 +176,7 @@ const FLAME_DAMAGE_SOURCE: DamageSource = { kind: 'environmental', hazard: 'lava
  */
 const MAX_FLAME_PATCHES = 24;
 
-export class LavaBallSystem implements GameSystem {
+export class LavaBallSystem implements GameSystem, GroundHazardSource {
   private bolts: Bolt[] = [];
   private bursts: Burst[] = [];
   private flames: FlamePatch[] = [];
@@ -355,6 +354,36 @@ export class LavaBallSystem implements GameSystem {
   private advanceFlames(): void {
     for (const flame of this.flames) flame.tick--;
     this.flames = this.flames.filter((flame) => flame.tick > 0);
+  }
+
+  /**
+   * Which way out of the nearest fire patch covering (x, y), for anything
+   * steering a body clear of burning ground.
+   *
+   * Includes patches still catching, which `flameUnder` excludes: damage must
+   * not land before the fire is drawn, but a route planned onto a patch that
+   * is about to burn is a route into fire. A body on a patch's exact centre
+   * gets a fixed direction rather than a zero vector.
+   */
+  getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
+    const cx = x + TILE_SIZE * CENTER_OFFSET;
+    const cy = y + TILE_SIZE * CENTER_OFFSET;
+    const radius = TILE_SIZE * FLAME_RADIUS_TILES;
+    let nearest: FlamePatch | null = null;
+    let nearestDistance = radius;
+    for (const flame of this.flames) {
+      const distance = Math.hypot(flame.x - cx, flame.y - cy);
+      if (distance < nearestDistance) {
+        nearest = flame;
+        nearestDistance = distance;
+      }
+    }
+    if (nearest === null) return null;
+    if (nearestDistance === 0) return { dx: 1, dy: 0 };
+    return {
+      dx: (cx - nearest.x) / nearestDistance,
+      dy: (cy - nearest.y) / nearestDistance,
+    };
   }
 
   /** The burning patch this player is standing in, if any. */

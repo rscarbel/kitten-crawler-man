@@ -20,6 +20,7 @@ import { drawSpriteKey } from '../core/SpriteRenderer';
 import { makeBurn } from '../core/StatusEffect';
 import { randomInt } from '../utils';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { GroundHazardSource } from './GroundHazardSource';
 import type { LootSystem } from './LootSystem';
 import { MELEE_POINT_BLANK_RANGE } from './CombatSystem';
 import { tileKey } from './tileKey';
@@ -255,7 +256,7 @@ function maxHpFor(stage: number): number {
  * per-frame work is likewise bounded by the number of trees that are *alight*,
  * never by the number of trees on the map.
  */
-export class TreeSystem implements GameSystem {
+export class TreeSystem implements GameSystem, GroundHazardSource {
   private readonly health = new Map<string, TreeHealth>();
   private readonly stumps: Stump[] = [];
   private readonly embers: Ember[] = [];
@@ -830,16 +831,41 @@ export class TreeSystem implements GameSystem {
   }
 
   private isTouchingFire(player: Player): boolean {
-    const centerX = player.x + HALF_TILE;
-    const centerY = player.y + HALF_TILE;
+    return this.burningTreeTouching(player.x, player.y) !== null;
+  }
+
+  /**
+   * The centre of a burning tree close enough to scorch a body whose top-left
+   * is at (x, y), or null when none is.
+   */
+  private burningTreeTouching(x: number, y: number): { x: number; y: number } | null {
+    const centerX = x + HALF_TILE;
+    const centerY = y + HALF_TILE;
     for (const key of this.burning) {
       const health = this.health.get(key);
       if (health === undefined) continue;
       const treeX = (health.tileX + TILE_CENTER_OFFSET) * TILE_SIZE;
       const treeY = (health.tileY + TILE_CENTER_OFFSET) * TILE_SIZE;
-      if (Math.hypot(treeX - centerX, treeY - centerY) <= TREE_CONTACT_RADIUS) return true;
+      if (Math.hypot(treeX - centerX, treeY - centerY) <= TREE_CONTACT_RADIUS) {
+        return { x: treeX, y: treeY };
+      }
     }
-    return false;
+    return null;
+  }
+
+  /**
+   * Which way away from a burning tree a body at (x, y) should go, so nothing
+   * steering a body plans a route that brushes past one. A body dead on the
+   * tree's centre gets a fixed direction rather than a zero vector.
+   */
+  getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
+    const tree = this.burningTreeTouching(x, y);
+    if (tree === null) return null;
+    const dx = x + HALF_TILE - tree.x;
+    const dy = y + HALF_TILE - tree.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) return { dx: 1, dy: 0 };
+    return { dx: dx / distance, dy: dy / distance };
   }
 
   private tickEmbers(): void {

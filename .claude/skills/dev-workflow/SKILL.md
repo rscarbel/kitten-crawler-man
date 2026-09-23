@@ -20,7 +20,9 @@ CLAUDE.md rules that gate on these: strict types everywhere, **no `as` casts, no
 Typecheck and lint don't prove behavior. Several invariants have their own scripts, each running against the game's own exported functions and constants rather than a copy, so a retuned formula either still satisfies the rule or fails the script. Run the one that covers what you touched:
 
 ```bash
-npm run verify:difficulty    # the P1-P5 fairness rules (docs/difficulty-fairness-rules.md)
+npm run verify:difficulty    # the P2 and P5 fairness rules (docs/difficulty-fairness-rules.md)
+npm run verify:difficulty-curve # P1: HP share per fight across party levels, every spawnable creature
+npm run verify:tactics       # P6: tactics trait rolls, guard, kite, flank, riposte bounds
 npm run verify:progression   # 50 generated maps per floor: reachability and bypass invariants
 npm run verify:quest-choke   # the defense quest's room, on the live GameMap
 npm run verify:bounty        # bounty registry, encounters, state machine, site scatter
@@ -44,7 +46,7 @@ npm run bench:separation     # measures the separation strategy crossover
 
 ## Dev overlays
 
-`?perf` shows fps, update/render/separation ms, and active vs. separated mob counts — the game's only profiling. `?difficulty` shows damage taken, potions consumed, dodges, deaths and per-segment HP delta. They compose rather than replacing each other. Both live under `src/dev/`, which release builds resolve to an inert stub, so neither reaches a player.
+`?perf` shows fps, update/render/separation ms, and active vs. separated mob counts — the game's only profiling. `?difficulty` shows damage taken, potions consumed, dodges, deaths and per-segment HP delta, plus guard blocks per fight, kites and their length, and HP remaining in fights with vs. without a trait-bearing mob. They compose rather than replacing each other. Both live under `src/dev/`, which release builds resolve to an inert stub, so neither reaches a player.
 
 ## Running the game
 

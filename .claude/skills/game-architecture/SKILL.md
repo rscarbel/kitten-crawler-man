@@ -56,6 +56,12 @@ quest behind it at all — it points at the town's own furniture. See `add-quest
 
 `Player` (`src/Player.ts`, abstract: position, HP, stats, status effects, walk animation) → `HumanPlayer`, `CatPlayer`, and `Mob` (`src/creatures/Mob.ts`, abstract: aggro, A* pathfinding, LOS, health bar, loot). All enemies extend `Mob`. See the `add-creature` skill.
 
+### Mob levels and tactics
+
+A mob is levelled once, at spawn: `applyMobLevel` multiplies its stats through the curves in `src/creatures/mobLevelScaling.ts` (the only place level math lives), then `applySpawnDifficulty` (`src/core/difficultyProfiles.ts`) stamps the profile's reward scale and rolls its tactics traits. Every spawn site calls both, in that order. The curves are held to an HP-share-per-fight target by `verify:difficulty-curve`; the reference crawler it measures against is `src/core/referenceCrawler.ts`.
+
+Traits (`src/creatures/tactics/`) are opt-in per creature via `Mob.tacticsEligibility` (default none) and owned by `Mob.tactics` (`MobTactics`). `block` is resolved in `Mob.takeDamageFrom` for every creature; movement traits are queried from the creature's own `updateAI` (`chooseMove` / `disengage` / `claimRiposte`), with `Goblin` as the reference. Tactics read the world through two per-frame publications from `MobUpdateLoop` — the mob grid (`setPackAlertGrid` in `packAlert.ts`) and marked hazard ground (`tactics/markedGround.ts`) — rather than holding a world reference. `verify:tactics` gates them; the rules are P6 in `docs/difficulty-fairness-rules.md`.
+
 ## EventBus
 
 `src/core/EventBus.ts` — typed pub/sub keyed on the `GameEvents` interface (`mobKilled`, `bossDefeated`, `questStarted/Completed/Failed`, `achievementUnlocked`, `levelComplete`, `healingPotionUsed`, ...). `bus.on(event, cb)` returns an unsubscribe fn; `emit` is synchronous; `clear()` runs on scene teardown, so subscribers (e.g. `AudioManager.wireEvents`) must re-wire per scene. Prefer wiring sounds to events in `AudioManager.wireEvents` over sprinkling `audio.play` at emit sites.
@@ -77,7 +83,7 @@ Durable reference — describes the shipped system, is kept and maintained:
 - `docs/town.md` — how the third floor's town is generated, rendered and tuned
 - `docs/over-city-reference.md` — source-material background for third-floor content
 - `docs/asset-management.md` — lazy sprite/sound loading, per-floor eviction, declared coverage
-- `docs/difficulty-fairness-rules.md` — the P1-P5 fairness rules and the target-feel bands
+- `docs/difficulty-fairness-rules.md` — the P1-P6 fairness rules (curves, telegraphs, tactics) and the target-feel bands
 
 Every other file in `docs/` is an implementation plan — usually named
 `*-plan.md`, occasionally not — meaning scaffolding written for an agent to

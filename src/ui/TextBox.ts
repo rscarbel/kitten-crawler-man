@@ -166,6 +166,8 @@ export const TEXT_PRESETS = {
   cat: { size: 12, color: '#fb923c' },
   /** Purple ability / legendary text. */
   ability: { size: 11, color: '#c084fc' },
+  /** Tiny in-world rank mark — a hint beside a health bar, not HUD text. */
+  tacticsMark: { size: 7, bold: true, color: '#facc15', outline: true },
 } satisfies Record<string, Partial<Omit<TextOptions, 'x' | 'y'>>>;
 
 /**

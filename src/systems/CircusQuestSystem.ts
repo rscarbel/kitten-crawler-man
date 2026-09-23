@@ -15,8 +15,9 @@
  * entry-idempotent so building round-trips reconstruct cleanly.
  */
 
+import { awardXp } from '../core/awardXp';
 import { TILE_SIZE } from '../core/constants';
-import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { EventBus } from '../core/EventBus';
@@ -266,9 +267,9 @@ export class CircusQuestSystem implements GameSystem {
       name: 'The Show Must Go On',
       type: 'story',
       rewards: {
-        // Folds in the 800 the tent's boss used to pay: the finale is a rescue
-        // now, and nothing in there is killed, so the questline has to carry
-        // that XP itself or floor-three progression quietly drops by a boss.
+        // Includes the 800 XP a boss fight would have paid: the finale is a
+        // rescue, not a kill, so the questline has to carry that XP itself or
+        // floor-three progression quietly drops by a boss.
         xp: 1800,
         lootBoxItems: [
           { id: 'health_potion', minQty: 3, maxQty: 6 },
@@ -477,7 +478,7 @@ export class CircusQuestSystem implements GameSystem {
     const heather = new HeatherTheBear(tile.x, tile.y, TILE_SIZE);
     heather.setMap(this.gameMap);
     heather.applyMobLevel(questMobLevel(HEATHER_LEVEL, this.partyLevel));
-    applyActiveDifficultyRewards(heather);
+    applySpawnDifficulty(heather);
     this.heather = heather;
     this.addMob(heather);
   }
@@ -499,7 +500,10 @@ export class CircusQuestSystem implements GameSystem {
       // party floor — without it the circus is a level-1 encounter no matter
       // when the player walks into it.
       mob.applyMobLevel(questMobLevel(WAVE_AUTHORED_LEVEL, this.partyLevel));
-      applyActiveDifficultyRewards(mob);
+      // A wave's lemurs and clowns roll traits like the same creatures anywhere
+      // else: `docs/difficulty-fairness-rules.md` keeps quest NPCs and summons
+      // authored, and a wave is neither.
+      applySpawnDifficulty(mob);
       mob.forceAggro = true;
       // Instance-scoped, never on the class: `StiltClown`, `FatClown` and
       // `CircusLemur` are the Evil Clown bounty's troupe as well, and a wider
@@ -1018,7 +1022,7 @@ export class CircusQuestSystem implements GameSystem {
     this.questManager.completeQuest(CIRCUS_QUEST_ID);
 
     const def = this.questManager.getDef(CIRCUS_QUEST_ID);
-    if (def) active.gainXp(def.rewards.xp);
+    if (def) awardXp(active, def.rewards.xp, this.bus);
 
     if (this.progress.mongoKidnapped && this.mongoSystem) {
       this.mongoSystem.summonLocked = false;
@@ -1125,7 +1129,6 @@ export class CircusQuestSystem implements GameSystem {
     this.progress.stage = 'bigtop_ready';
     this.bannerText = 'THE BIG TOP AWAITS';
     this.bannerTimer = QUEST_BANNER_FRAMES;
-    // Signet moves ahead to wait by the Big Top door.
     this.repositionSignetToBigTopDoor(ctx.roster.grid);
   }
 

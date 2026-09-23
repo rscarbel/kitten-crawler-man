@@ -16,6 +16,7 @@
 import type { Player } from '../Player';
 import { MOB_SLOWED_SPEED_FRACTION } from './Mob';
 import { Rat } from './Rat';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 import { drawQuestMarker, QUEST_MARKER_GOLD } from '../sprites/questNPCSprite';
 
 /**
@@ -60,9 +61,21 @@ const FLIGHT_TURN_OFFSETS_RADIANS: ReadonlyArray<number> = ((): number[] => {
  */
 const FLIGHT_LOOKAHEAD_TILES = 0.9;
 
+const NO_VERMIN_TACTICS: readonly TacticsTrait[] = [];
+
 export class ShrineVermin extends Rat {
   override displayName = 'Shrine Vermin';
   override description = 'A temple rat, interested only in being somewhere else.';
+
+  /**
+   * None. The temple spawns vermin at level 1 today, but a vermin never
+   * fights at any level: it has no approach to fan out, and its flight below
+   * never asks the tactics anything, so an inherited `flank` would be a rank
+   * mark over a creature whose only behaviour is running away.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return NO_VERMIN_TACTICS;
+  }
 
   /**
    * Flight, in place of the inherited chase.

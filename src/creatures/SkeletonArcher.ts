@@ -6,6 +6,9 @@ import { prewarmBoneArrow } from '../sprites/skeletonEffectsSprite';
 import { SKELETON_ESCORT_XP } from './SkeletonWarrior';
 import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
 import { PLAYER_SPEED } from '../core/constants';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import { retreatBehindHelper } from './tactics/retreat';
+import type { KiteAim } from './tactics/tacticalFrame';
 
 /**
  * A bow skeleton.
@@ -45,6 +48,8 @@ const RELEASE_TIMER = BONE_ARROW_DRAW_FRAMES - boneArrowReleaseFrame();
 const NO_SHOTS: readonly SkeletonShot[] = [];
 
 const SKELETON_ARCHER_CULL_MARGIN_TILES = 1.5;
+
+const ARCHER_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
 
 export class SkeletonArcher extends RisingSkeleton {
   readonly xpValue = SKELETON_ESCORT_XP;
@@ -95,6 +100,24 @@ export class SkeletonArcher extends RisingSkeleton {
     return ARCHER_MAX_SPEED;
   }
 
+  /** A shooter regroups behind its friend, never up to it and into the melee. */
+  protected override get regroupAim(): KiteAim {
+    return retreatBehindHelper;
+  }
+
+  /**
+   * A shooter behind the sword skeletons: it can learn to fall back so one of
+   * them stands between it and the player, and to fall back on one when hurt.
+   * Stated here rather than inherited, because the sword skeleton it shares a
+   * base class with learns melee traits — a guard and a riposte — that a bow
+   * has nothing to do with. A summon learns nothing — `beginRising` flags it
+   * `isSummon` — since it is the caster's attack, raised mid-fight, rather than
+   * the escort it stands in for.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return ARCHER_TACTICS;
+  }
+
   override resetToSpawn(): void {
     super.resetToSpawn();
     this.shotCooldown = 0;
@@ -141,6 +164,7 @@ export class SkeletonArcher extends RisingSkeleton {
 
     if (!nearest) {
       this.isAggro = false;
+      this.tactics.disengage();
       this.clearAStarPath();
       // Not `doWander`: an un-aggroed bounty escort is leashed to its site, and
       // only this path consults the leash.
@@ -161,6 +185,23 @@ export class SkeletonArcher extends RisingSkeleton {
     }
 
     const distance = this.distanceTo(nearest);
+
+    // A kite or regroup outranks the band-hold outright, and no draw starts
+    // until the walk is over — the arrival, capped at the kite's frame cap, is
+    // the shot. The band-hold only ever runs on a frame the tactics decline.
+    // Only reached between draws — a draw returns before this — so breaking
+    // off here never abandons a committed shot.
+    const tacticalMove = this.chooseTacticalStep(
+      nearest,
+      this.kiteMinPx,
+      true,
+      retreatBehindHelper,
+    );
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
+
     if (!hasLineOfSight) {
       // Blocked: move onto the last place it could see them, looking for an
       // angle. Standing still and drawing at a wall is what a turret does.

@@ -14,6 +14,9 @@ import {
 import { GOBLIN_PACK_ALERT_RADIUS_TILES, GOBLIN_PACK_KIND } from './Goblin';
 import type { GoblinArrowShot } from '../systems/GoblinArrowSystem';
 import { PLAYER_SPEED } from '../core/constants';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import { retreatBehindHelper } from './tactics/retreat';
+import type { KiteAim } from './tactics/tacticalFrame';
 
 /**
  * A goblin that will not close.
@@ -77,6 +80,8 @@ const MILLISECONDS_PER_SECOND = 1000;
 
 /** Shared empty result so the common no-shots-this-frame path allocates nothing. */
 const NO_SHOTS: readonly GoblinArrowShot[] = [];
+
+const ARCHER_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
 
 export class GoblinArcher extends Mob {
   readonly xpValue = 7;
@@ -153,6 +158,21 @@ export class GoblinArcher extends Mob {
 
   protected override get levelledSpeedCap(): number {
     return ARCHER_MAX_SPEED;
+  }
+
+  /**
+   * A shooter that fights from behind its own line: it can learn to fall back
+   * so a melee goblin stands between it and the player, and to fall back on
+   * one when hurt. Never `block` — a bow is no guard, and a shove would read
+   * as the archer being knocked off its band rather than turning a blow.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return ARCHER_TACTICS;
+  }
+
+  /** A shooter regroups behind its friend, never up to it and into the melee. */
+  protected override get regroupAim(): KiteAim {
+    return retreatBehindHelper;
   }
 
   /** Its telegraphs are long and its shots are dodgeable — so the companion dodges. */
@@ -251,6 +271,7 @@ export class GoblinArcher extends Mob {
     if (!nearest) {
       this.isAggro = false;
       this.retreatFrames = 0;
+      this.tactics.disengage();
       this.clearAStarPath();
       // Not `doWander`: a floor-3 camp resident is leashed to its camp, and only
       // this path consults the leash.
@@ -313,6 +334,27 @@ export class GoblinArcher extends Mob {
 
     const distance = this.distanceTo(nearest);
     const isCrowded = distance < this.bandMinPx;
+
+    // A kite or regroup outranks the band-hold outright: it is this exchange's
+    // retreat, so the archer's own backpedal is cancelled and its cooldown
+    // spent rather than left to follow straight on. No draw starts until the
+    // walk is over — the arrival, capped at the kite's frame cap, is the shot.
+    //
+    // Only reached between draws — a draw returns before this — so breaking
+    // off here never abandons a committed shot.
+    const tacticalMove = this.chooseTacticalStep(
+      nearest,
+      this.bandMinPx,
+      true,
+      retreatBehindHelper,
+    );
+    if (tacticalMove?.breaksOff === true) {
+      this.retreatFrames = 0;
+      this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
+
     if (isCrowded && this.retreatFrames === 0 && this.retreatCooldown === 0) {
       this.retreatFrames = RETREAT_MAX_FRAMES;
       this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;

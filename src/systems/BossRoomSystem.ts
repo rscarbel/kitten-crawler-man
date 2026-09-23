@@ -1,7 +1,8 @@
+import { displayHp } from '../core/crawlerFormulas';
 import type { GameMap } from '../map/GameMap';
 import type { DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
-import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { clamp } from '../utils';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
@@ -638,6 +639,33 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   }
 
   /**
+   * Whether a mob sits in a boss room whose fight has not started, in which
+   * case a companion — and anything acting for one — must leave it alone.
+   *
+   * Engagement is harm or entry, never notice. A mob's `currentTarget` cannot
+   * stand in for "the fight is on": the Krakaren's aggro radius reaches out
+   * through its own doorway, so it acquires a crawler standing in the corridor,
+   * and a veto keyed on that would let the companion shoot an untouched boss to
+   * death through a wall — no intro, no room lock, no chest.
+   *
+   * @param activePlayer the crawler the player is driving; walking them into
+   *   the room is what starts the fight.
+   */
+  isUntriggeredBossRoomMob(mob: Mob, activePlayer: { x: number; y: number }): boolean {
+    for (const state of this.states) {
+      if (!this.isEntityInRoom(mob, state.bounds)) continue;
+      // A room whose fight is over — or that never had one — vetoes nothing.
+      // The bounds outlive the boss, and every goblin that later wanders into a
+      // cleared boss room must still be visible to the companion.
+      if (!this.isFightPending(state)) return false;
+      const playerInRoom = this.isEntityInRoom(activePlayer, state.bounds);
+      const bloodDrawn = mob.hasStruckPlayer || mob.wasDamagedByParty;
+      return !playerInRoom && !state.locked && !bloodDrawn;
+    }
+    return false;
+  }
+
+  /**
    * Unlocks every non-defeated room and drops standing acid/vomit so a
    * checkpoint respawn doesn't land the player inside a damage field left over
    * from the fight that killed them. Defeated rooms are left untouched. Walking
@@ -748,6 +776,19 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       (mob) =>
         mob.isBoss &&
         this.states.some((state) => state.defeated && this.isEntityInRoom(mob, state.bounds)),
+    );
+  }
+
+  /**
+   * Whether this entity stands in a boss room whose fight is not over: its boss
+   * or anything else hostile is still alive in there. A won room still sealed
+   * for its chest counts as over — that seal holds the party for loot, not a fight.
+   */
+  isEntityInUnresolvedBossRoom(entity: { x: number; y: number }, mobs: readonly Mob[]): boolean {
+    return this.states.some(
+      (state) =>
+        this.isEntityInRoom(entity, state.bounds) &&
+        mobs.some((mob) => mob.isAlive && mob.isHostile && this.isEntityInRoom(mob, state.bounds)),
     );
   }
 
@@ -1500,8 +1541,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         const tentacle = new KrakarenTentacle(tileX, tileY, TILE_SIZE, mob);
         // Once, at spawn, from the boss that raised it: an add levelled to a
         // weaker curve than the fight it belongs to is free damage reduction.
-        tentacle.applyMobLevel(mob.mobLevel);
-        applyActiveDifficultyRewards(tentacle);
+        tentacle.applyMobLevel(mob.mobLevel, mob.levelledCurve);
+        applySpawnDifficulty(tentacle);
         // Through the roster rather than by hand, so it receives the scene's
         // map and spell context like anything else that joins a fight.
         roster.add(tentacle);
@@ -1530,11 +1571,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       if (!(mob instanceof Cockroach) || !mob.isAlive) continue;
       mob.ttl--;
       if (mob.ttl <= 0) {
-        // Despawned, not killed. It used to be marked `justDied` purely to get
-        // it out of the mob grid, which was harmless only while the kill
-        // resolver dropped a mob nothing had damaged — now that it does not, a
-        // roach that merely ran out of time would spray gore, leave a corpse
-        // marker and add itself to the party's kill count.
+        // Despawned, not killed: never mark a timed-out roach `justDied`, or it
+        // would spray gore, leave a corpse marker and add itself to the
+        // party's kill count the same as an actual kill.
         mob.hp = 0;
         expired++;
       }
@@ -2065,7 +2104,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
     ctx.restore();
 
-    drawText(ctx, `${boss.hp} / ${boss.maxHp}`, {
+    drawText(ctx, `${displayHp(boss.hp)} / ${boss.maxHp}`, {
       x: viewportWidth() / 2,
       y: barY + barH - BOSS_HP_TEXT_OFFSET,
       size: 9,
@@ -2163,7 +2202,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     ctx.strokeRect(innerX, barY, innerW, BAR_H);
     ctx.restore();
 
-    drawText(ctx, `${boss.hp} / ${boss.maxHp}`, {
+    drawText(ctx, `${displayHp(boss.hp)} / ${boss.maxHp}`, {
       x: innerX + innerW / 2,
       y: barY + Math.floor((BAR_H - MOBILE_HP_SIZE) / 2),
       size: MOBILE_HP_SIZE,

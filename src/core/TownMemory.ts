@@ -38,6 +38,23 @@ export interface TownMemory {
    * a fight into a farm.
    */
   clearedRooms: Set<string>;
+  /**
+   * Wilderness camps whose every resident has been killed, keyed by
+   * `campSiteKey`.
+   *
+   * The overworld has the same problem as an interior: leaving a building
+   * rebuilds the whole floor scene and reruns the spawner, so a camp cleared
+   * before the door re-stocks behind it — at the party's new level, which made
+   * a camp and a doorway an XP farm. Only a camp emptied outright is recorded;
+   * one left half-fought comes back whole, as it always has.
+   *
+   * Rewound with the rest of this record on a checkpoint restore, which is what
+   * keeps it honest: the same restore revives every resident killed since the
+   * checkpoint, and a camp remembered as empty while its residents stand again
+   * would vanish at the next doorway, along with the XP the rewind just took
+   * back from the party.
+   */
+  clearedCamps: Set<string>;
 }
 
 /** How many poultices Fen has made up, and does not remake while you wait. */
@@ -48,6 +65,7 @@ export function createTownMemory(): TownMemory {
     residentTalks: new Map(),
     poulticesLeft: APOTHECARY_BATCH_SIZE,
     clearedRooms: new Set(),
+    clearedCamps: new Set(),
   };
 }
 
@@ -65,11 +83,51 @@ export function noteResidentTalk(memory: TownMemory, id: ResidentId): void {
   memory.residentTalks.set(id, residentTalkCount(memory, id) + 1);
 }
 
+/** All the camp bookkeeping needs to know about a mob. */
+interface CampResident {
+  readonly campKey: string | null;
+  readonly isAlive: boolean;
+}
+
+/**
+ * Records `killed`'s camp as cleared when it was that camp's last resident
+ * standing. Returns whether this kill was the one that cleared it.
+ *
+ * `population` is the whole live roster rather than a per-camp tally, so a
+ * resident that wandered off or was walked back home by its leash still counts
+ * as standing — only a death takes one off the camp's books. `killed` is
+ * skipped by identity rather than trusted to read as dead: a mob playing out a
+ * death animation can still report itself alive on the frame it is announced.
+ */
+export function noteCampCasualty(
+  memory: TownMemory,
+  killed: CampResident,
+  population: Iterable<CampResident>,
+): boolean {
+  const key = killed.campKey;
+  if (key === null || memory.clearedCamps.has(key)) return false;
+  for (const mob of population) {
+    if (mob !== killed && mob.campKey === key && mob.isAlive) return false;
+  }
+  memory.clearedCamps.add(key);
+  return true;
+}
+
+/**
+ * Drops every remembered camp. For a floor that is being regenerated from a
+ * fresh seed, whose camps are new places — a key that happened to coincide
+ * with an old site would otherwise leave a brand-new camp standing empty.
+ */
+export function forgetClearedCamps(memory: TownMemory): void {
+  memory.clearedCamps.clear();
+}
+
 /** A point-in-time copy of the town's memory. */
 export interface TownMemoryCheckpoint {
   residentTalks: ReadonlyArray<readonly [ResidentId, number]>;
   poulticesLeft: number;
   clearedRooms: ReadonlyArray<string>;
+  clearedCamps: ReadonlyArray<string>;
 }
 
 /**
@@ -82,6 +140,7 @@ export function captureTownMemory(memory: TownMemory): TownMemoryCheckpoint {
     residentTalks: [...memory.residentTalks],
     poulticesLeft: memory.poulticesLeft,
     clearedRooms: [...memory.clearedRooms],
+    clearedCamps: [...memory.clearedCamps],
   };
 }
 
@@ -93,4 +152,5 @@ export function restoreTownMemory(memory: TownMemory, snapshot: TownMemoryCheckp
   memory.residentTalks = new Map(snapshot.residentTalks);
   memory.poulticesLeft = snapshot.poulticesLeft;
   memory.clearedRooms = new Set(snapshot.clearedRooms);
+  memory.clearedCamps = new Set(snapshot.clearedCamps);
 }

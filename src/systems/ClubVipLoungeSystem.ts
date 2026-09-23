@@ -1,3 +1,4 @@
+import { displayHp } from '../core/crawlerFormulas';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import { drawText } from '../ui/TextBox';
@@ -434,7 +435,9 @@ export class ClubVipLoungeSystem {
         return {
           label: `Buy — ${VIP_HEAL_PRICE}`,
           disabled: atFull || player.coins < VIP_HEAL_PRICE,
-          statusLine: atFull ? 'Already at full health.' : `${player.hp} / ${player.maxHp} HP`,
+          statusLine: atFull
+            ? 'Already at full health.'
+            : `${displayHp(player.hp)} / ${player.maxHp} HP`,
         };
       }
       case 'buff': {

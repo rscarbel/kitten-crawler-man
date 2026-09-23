@@ -1,3 +1,5 @@
+import { displayHp } from '../core/crawlerFormulas';
+import { awardXp } from '../core/awardXp';
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
@@ -26,9 +28,9 @@ import {
   spawnTreasureRoomMobs,
   partyLevelOf,
   recommendedPartyLevelFor,
-  resolveSpawnLevel,
+  resolveAmbientLevel,
 } from '../levels/spawner';
-import { activeDifficultyProfile, applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { activeDifficultyProfile, applySpawnDifficulty } from '../core/difficultyProfiles';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
 import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
@@ -64,6 +66,8 @@ import { SafeRoomSystem, type SafeRoomInfo } from '../systems/SafeRoomSystem';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
+import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
+import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import { resolveSkillBookPrompt } from '../systems/skillBookUse';
 import { getSkillDef, type CrawlerKind } from '../core/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
@@ -271,6 +275,8 @@ import {
 import {
   captureTownMemory,
   createTownMemory,
+  forgetClearedCamps,
+  noteCampCasualty,
   restoreTownMemory,
   type TownMemory,
 } from '../core/TownMemory';
@@ -421,6 +427,8 @@ export interface DungeonSceneOptions {
   anchorQuestProgress?: AnchorQuestProgress;
   /** Journal state that must survive a door: guide visits and the pinned objective. */
   journalProgress?: JournalProgress;
+  /** Tactics-trait System notices already shown this run, threaded like `journalProgress`. */
+  tacticsNoticesSeen?: Set<TacticsTrait>;
   /** Bounty-board state, threaded by reference across building/scene transitions. */
   bountyProgress?: BountyProgress;
   /** Doomsday-finale state (soul crystal containment + escape), threaded by reference across building/scene transitions. */
@@ -796,8 +804,13 @@ export class DungeonScene extends GameplayScene {
   private miniMap: MiniMapSystem;
   private safeRoom: SafeRoomSystem;
   private bopca: BopcaSystem;
-  protected readonly skillPointReminder = new SkillPointReminderSystem();
+  // Only ever called from `update`, by which point the constructor has assigned
+  // every boss system the check reads.
+  protected readonly skillPointReminder = new SkillPointReminderSystem((ctx) =>
+    this.isPartyInUnresolvedBossRoom(ctx),
+  );
   private readonly systemNotices: SystemNoticeSystem;
+  private readonly tacticsNotices: TacticsNoticeSystem;
   /** Spells, mob AI, attack and death resolution, gore, regen, the death screen. */
   private readonly combat: CombatKit;
   /** Smashable props, floor loot and dynamite. Always present — see `DestructionKit`. */
@@ -813,6 +826,12 @@ export class DungeonScene extends GameplayScene {
    * `forgetDebriefsOfLivingBosses` for the one rewind that must reset it.
    */
   private mordecaiDebrief: MordecaiDebriefCheckpoint = {};
+  /**
+   * Saved, but not rewound on death, so a heard System notice stays heard.
+   * Threaded by reference across building/scene transitions like
+   * `journalProgress`, so a trait met indoors is still met on the way back out.
+   */
+  private readonly tacticsNoticesSeen: Set<TacticsTrait>;
   private lavaBalls: LavaBallSystem;
   private rockThrows: RockThrowSystem;
   private skeletonShots: SkeletonProjectileSystem;
@@ -1040,7 +1059,7 @@ export class DungeonScene extends GameplayScene {
 
       spawnTileX = tutMap.humanStartTile.x;
       spawnTileY = tutMap.humanStartTile.y;
-      this.pm = new PlayerManager(spawnTileX, spawnTileY);
+      this.pm = new PlayerManager(spawnTileX, spawnTileY, levelDef.xpDiminishingTiers);
       // Place cat at its own spawn room, separated from the human
       this.pm.cat.x = tutMap.catStartTile.x * TILE_SIZE;
       this.pm.cat.y = tutMap.catStartTile.y * TILE_SIZE;
@@ -1092,7 +1111,7 @@ export class DungeonScene extends GameplayScene {
       const spawn = circusSpawn ?? resolvedSpawn ?? options?.spawnAt ?? this.gameMap.startTile;
       spawnTileX = spawn.x;
       spawnTileY = spawn.y;
-      this.pm = new PlayerManager(spawnTileX, spawnTileY);
+      this.pm = new PlayerManager(spawnTileX, spawnTileY, levelDef.xpDiminishingTiers);
 
       if (options?.humanSnap) restorePlayer(this.human, options.humanSnap);
       if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
@@ -1130,7 +1149,14 @@ export class DungeonScene extends GameplayScene {
       // settings flip mid-floor must not re-level anything already spawned.
       const partyLevel = partyLevelOf(this.human.level, this.cat.level);
       const difficultyProfile = activeDifficultyProfile();
-      initialMobs.push(...spawnForLevel(levelDef, this.gameMap, partyLevel, difficultyProfile));
+      // Read from the save itself on a resume: the saved `townMemory` is only
+      // applied once every system exists, long after the roster is filled.
+      const clearedCamps = new Set(
+        options?.persistedWorldState?.townMemory.clearedCamps ?? options?.townMemory?.clearedCamps,
+      );
+      initialMobs.push(
+        ...spawnForLevel(levelDef, this.gameMap, partyLevel, difficultyProfile, clearedCamps),
+      );
       initialMobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel, difficultyProfile));
 
       // Treasure room mobs (extra enemies guarding wooden chests)
@@ -1140,6 +1166,7 @@ export class DungeonScene extends GameplayScene {
             this.gameMap.treasureRooms,
             levelDef,
             this.gameMap,
+            partyLevel,
             difficultyProfile,
           ),
         );
@@ -1211,7 +1238,6 @@ export class DungeonScene extends GameplayScene {
       world: this.world,
       abilityManager: this.abilityManager,
       safeRoom: this.safeRoom,
-      xpDiminishingTiers: levelDef.xpDiminishingTiers,
     });
     this.menus = new MenusKit({
       world: this.world,
@@ -1235,7 +1261,7 @@ export class DungeonScene extends GameplayScene {
       describeSituation: () =>
         `Human is level ${this.human.level}, Cat is level ${this.cat.level}. ` +
         `Floor: ${this.levelDef.id}. ` +
-        `Human HP: ${this.human.hp}/${this.human.maxHp}, Cat HP: ${this.cat.hp}/${this.cat.maxHp}.`,
+        `Human HP: ${displayHp(this.human.hp)}/${this.human.maxHp}, Cat HP: ${displayHp(this.cat.hp)}/${this.cat.maxHp}.`,
       sceneCommands: this.dungeonChatCommands(),
     });
     this.destruction = new DestructionKit(this.world, levelDef.floorNumber, {
@@ -1290,12 +1316,14 @@ export class DungeonScene extends GameplayScene {
       () => {
         const band = levelDef.defendQuestWave;
         if (band === undefined) return 1;
-        return resolveSpawnLevel(
+        return resolveAmbientLevel(
           band,
+          levelDef,
           partyLevelOf(this.human.level, this.cat.level),
           activeDifficultyProfile(),
         );
       },
+      levelDef.levelledCurve,
     );
     this.spiderQuest = new SpiderQuestSystem(this.gameMap, this.bus, (mob) => {
       this.world.roster.add(mob);
@@ -1310,6 +1338,8 @@ export class DungeonScene extends GameplayScene {
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
     this.anchorQuestProgress = options?.anchorQuestProgress ?? createAnchorQuestProgress();
     this.journalProgress = options?.journalProgress ?? createJournalProgress();
+    this.tacticsNoticesSeen = options?.tacticsNoticesSeen ?? new Set<TacticsTrait>();
+    this.tacticsNotices = new TacticsNoticeSystem(this.tacticsNoticesSeen);
     this.bountyProgress = options?.bountyProgress ?? createBountyProgress();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
@@ -1352,6 +1382,10 @@ export class DungeonScene extends GameplayScene {
     );
     this.companion.registerHazardSource(this.bossRoom);
     this.companion.registerHazardSource(this.clownGas);
+    this.combat.mobLoop.registerHazardSource(this.bossRoom);
+    this.combat.mobLoop.registerHazardSource(this.clownGas);
+    this.combat.mobLoop.registerHazardSource(this.lavaBalls);
+    if (this.trees !== null) this.combat.mobLoop.registerHazardSource(this.trees);
 
     if (tutorialController !== null) {
       // Both players start anchored in the tutorial so neither chases the other
@@ -1428,6 +1462,10 @@ export class DungeonScene extends GameplayScene {
       this.companion.setAggressive(this.human.isActive);
     };
     this.followerMenu.onSwitchCharacter = () => this.triggerSwitchCharacter();
+    this.followerMenu.onToggleMongoAutoSummon = () => {
+      this.audio?.play('menu_change_follower');
+      settings.setCatAutoSummonsMongo(!settings.catAutoSummonsMongo);
+    };
     this.followerMenu.onSetPassive = () => {
       this.audio?.play('menu_change_follower');
       this.companion.setPassive(this.human.isActive);
@@ -1519,6 +1557,9 @@ export class DungeonScene extends GameplayScene {
               onResetGame: this.onResetGameCallback ?? undefined,
               godModeState: this.godModeState,
               companionStance: this.companionStance,
+              // Unlike the journal or the club, this is run-scoped: a trait
+              // announced once stays announced for every floor of the run.
+              tacticsNoticesSeen: this.tacticsNoticesSeen,
             }),
           );
         });
@@ -1570,6 +1611,7 @@ export class DungeonScene extends GameplayScene {
               entry,
               humanSnap,
               catSnap,
+              levelDef.xpDiminishingTiers,
               this.input,
               this.sceneManager,
               (hSnap, cSnap, defeated) => {
@@ -1623,6 +1665,7 @@ export class DungeonScene extends GameplayScene {
                     godModeState: this.godModeState,
                     companionStance: this.companionStance,
                     gameStats: this.gameStats,
+                    tacticsNoticesSeen: this.tacticsNoticesSeen,
                     skipIntro: true,
                   }),
                 );
@@ -1644,6 +1687,7 @@ export class DungeonScene extends GameplayScene {
               this.gameStats,
               this.anchorQuestProgress,
               this.gameMap.artSeed,
+              this.tacticsNoticesSeen,
             ),
           );
         },
@@ -2192,6 +2236,7 @@ export class DungeonScene extends GameplayScene {
 
       this.combat.spawnKillGore(mob, killer);
       this.miniMap.addCorpseMarker(cx, cy);
+      noteCampCasualty(this.townMemory, mob, this.world.roster.mobs);
 
       if (killer === this.human && this.humanAchievements.tryUnlock('first_blood')) {
         bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Human' });
@@ -2329,8 +2374,8 @@ export class DungeonScene extends GameplayScene {
               // Inherited rather than left at 1: these burst out of a mob the
               // party has just fought, and a level-1 grub swarm on floor 2 was
               // free XP that arrived exactly when the fight should be hardest.
-              spawned.applyMobLevel(mob.mobLevel);
-              applyActiveDifficultyRewards(spawned);
+              spawned.applyMobLevel(mob.mobLevel, mob.levelledCurve);
+              applySpawnDifficulty(spawned);
               this.world.roster.add(spawned);
               placed = true;
             }
@@ -2461,12 +2506,8 @@ export class DungeonScene extends GameplayScene {
         this.cat.inventory.clearQuestSlot();
       }
       if (e.questId === 'grotesque_spider') {
-        if (this.human.gainXp(SPIDER_QUEST_COMPLETION_XP)) {
-          this.bus.emit('playerLevelUp', { player: this.human, newLevel: this.human.level });
-        }
-        if (this.cat.gainXp(SPIDER_QUEST_COMPLETION_XP)) {
-          this.bus.emit('playerLevelUp', { player: this.cat, newLevel: this.cat.level });
-        }
+        awardXp(this.human, SPIDER_QUEST_COMPLETION_XP, this.bus);
+        awardXp(this.cat, SPIDER_QUEST_COMPLETION_XP, this.bus);
         // Straight to the cat: the lab's dark is what the book is about, and she
         // is the only crawler who can read it.
         this.cat.inventory.addItem('skill_book_night_vision', 1);
@@ -3239,12 +3280,53 @@ export class DungeonScene extends GameplayScene {
       this.mongoSystem.toggleRecall();
       return;
     }
+    this.summonMongo();
+  }
+
+  /**
+   * Whether either crawler stands in a boss room whose fight is unfinished.
+   *
+   * Three owners, because the Ball of Swine arena and the spider lab are run by
+   * their own systems rather than `BossRoomSystem`. Either crawler counts:
+   * either one walking in is what starts and holds a boss fight.
+   */
+  private isPartyInUnresolvedBossRoom(ctx: SystemContext): boolean {
+    const { mobs } = ctx.roster;
+    return [ctx.human, ctx.cat].some(
+      (crawler) =>
+        this.bossRoom.isEntityInUnresolvedBossRoom(crawler, mobs) ||
+        this.arena.isEntityInUnresolvedArena(crawler, mobs) ||
+        this.spiderQuest.isEntityInUnresolvedLab(crawler, mobs),
+    );
+  }
+
+  /** Returns whether he came out; a refusal has already been spoken by the cat. */
+  private summonMongo(): boolean {
     const mongo = this.mongoSystem.summon(this.cat, this.gameMap);
-    if (mongo) {
-      this.world.roster.add(mongo);
-      this.abilityManager.addUsageXp('mongo');
-      this.audio?.play('mongo_released');
-    }
+    if (mongo === null) return false;
+    this.world.roster.add(mongo);
+    this.abilityManager.addUsageXp('mongo');
+    this.audio?.play('mongo_released');
+    return true;
+  }
+
+  /**
+   * The companion cat sends Mongo in on her own when a fight reaches her.
+   *
+   * Only while the human is being driven: with the cat in hand the player has
+   * the Summon button, and a pet that deployed himself would take the decision
+   * away from them. A passive stance is an order to stay out of fights, and
+   * sending the pet in would break it by proxy.
+   */
+  private autoSummonMongo(ctx: SystemContext): void {
+    if (!settings.catAutoSummonsMongo) return;
+    if (!this.human.isActive || this.mongoSystem.mongo !== null) return;
+    if (this.companion.getCombatStance(true) === 'passive') return;
+    // A rest stop is not a staging ground: a hostile in sight through the door
+    // would otherwise have him deployed from inside the sanctuary.
+    if (this.pm.isAnySafe(this.safeRoom)) return;
+    if (!this.mongoSystem.catWantsToSummon(ctx)) return;
+    if (!this.summonMongo()) this.mongoSystem.onAutoSummonRefused();
   }
 
   /**
@@ -3515,6 +3597,7 @@ export class DungeonScene extends GameplayScene {
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
       mongoPetState: captureMongoPetState({ ...this.mongoPetState, hp: this.mongoSystem.hp }),
       mordecaiDebrief: { ...this.mordecaiDebrief },
+      tacticsNoticesSeen: [...this.tacticsNoticesSeen],
 
       krakarenKilled: this.krakarenKilled,
       krakarenBossRoomIdx: this.krakarenBossRoomIdx,
@@ -3553,6 +3636,7 @@ export class DungeonScene extends GameplayScene {
       mercenaryRoster,
       mongoPetState,
       mordecaiDebrief,
+      tacticsNoticesSeen,
       krakarenKilled,
       krakarenBossRoomIdx,
       juicerKilled,
@@ -3605,6 +3689,11 @@ export class DungeonScene extends GameplayScene {
     restoreMongoPetState(this.mongoPetState, mongoPetState);
 
     this.mordecaiDebrief = { ...mordecaiDebrief };
+    // `TacticsNoticeSystem` holds this exact Set by reference, so it's refilled
+    // in place rather than replaced — a reassignment here would leave the
+    // system watching the stale, pre-load one.
+    this.tacticsNoticesSeen.clear();
+    for (const trait of tacticsNoticesSeen ?? []) this.tacticsNoticesSeen.add(trait);
 
     this.krakarenKilled = krakarenKilled;
     this.krakarenBossRoomIdx = krakarenBossRoomIdx;
@@ -3720,6 +3809,9 @@ export class DungeonScene extends GameplayScene {
     // a despawn, and the instance holding it is about to be discarded.
     this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.audio?.stopSound('death_sequence');
+    // The restart generates the floor from a fresh seed and rewinds the party
+    // to floor entry, so every camp is a new place with fresh XP in it.
+    forgetClearedCamps(this.townMemory);
     this.sceneManager.replace(
       new DungeonScene(this.levelDef, this.input, this.sceneManager, {
         humanSnap: this.floorEntryHumanSnap,
@@ -3758,6 +3850,7 @@ export class DungeonScene extends GameplayScene {
         mercenaryRoster: this.mercenaryRoster,
         godModeState: this.godModeState,
         companionStance: this.companionStance,
+        tacticsNoticesSeen: this.tacticsNoticesSeen,
       }),
     );
   }
@@ -5156,6 +5249,7 @@ export class DungeonScene extends GameplayScene {
       this.notifPulse,
       this._hudCollapsed,
       this.skillPointReminderActive,
+      this.skillPointsSuppressed,
     );
     this._hudToggleRect = hudResult.toggleRect;
     this._hudRect = hudResult.hudRect;
@@ -5237,6 +5331,7 @@ export class DungeonScene extends GameplayScene {
         this.notifPulse,
         skillTopY,
         this.skillPointReminderActive,
+        this.skillPointsSuppressed,
       );
       const skillBadgeBottom =
         this._hudSkillBannerRect.w > 0
@@ -5424,6 +5519,7 @@ export class DungeonScene extends GameplayScene {
         this.companion.getMovementMode(this.human.isActive),
         this.companion.getCombatStance(this.human.isActive),
         this.human.isActive,
+        this.mongoSystem.unlocked ? settings.catAutoSummonsMongo : null,
       );
     }
 
@@ -5724,6 +5820,9 @@ export class DungeonScene extends GameplayScene {
     }
     this.bopca.update(ctx);
     this.combat.floatingText.update(ctx);
+    // Before `systemNotices`, so a notice queued this frame drains on this
+    // same frame's toast pass rather than sitting a frame behind.
+    this.tacticsNotices.update(ctx);
     this.systemNotices.update(ctx);
     this.bossRoom.update(ctx);
     this.spiderQuest.applyRoomLock(this.human, this.cat);
@@ -5923,6 +6022,7 @@ export class DungeonScene extends GameplayScene {
     this.combat.resolveSpellAftermath();
 
     this.mongoSystem.update(ctx);
+    this.autoSummonMongo(ctx);
     this.mercenarySystem.update(ctx);
     this.pm.tickTimers();
 

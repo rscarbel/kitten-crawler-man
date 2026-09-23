@@ -60,7 +60,18 @@ import { SpellSystem } from '../src/systems/SpellSystem';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { MIN_STAT_VALUE } from '../src/Player';
-import { partyLevelOf } from '../src/levels/spawner';
+import { partyLevelOf, spawnForLevel } from '../src/levels/spawner';
+import { level3 } from '../src/levels/level3';
+import { campSiteKey } from '../src/map/overworld/camps';
+import {
+  captureTownMemory,
+  createTownMemory,
+  forgetClearedCamps,
+  noteCampCasualty,
+  restoreTownMemory,
+} from '../src/core/TownMemory';
+import { parseTownMemoryCheckpoint } from '../src/core/PersistedWorldState';
+import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles';
 import type { Mob } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
 
@@ -129,6 +140,14 @@ const TOWER_CONFRONTATION_FLOOR = TOWER_FLOOR_COUNT - 1;
 const ARRIVAL_SAFETY_MARGIN_TILES = 2;
 /** How long the party is left standing on the landing, doing nothing at all. */
 const ARRIVAL_VIGIL_FRAMES = 60 * 20;
+
+/** The floor-3 world seed the camp checks regenerate, standing in for a save. */
+const CAMP_WORLD_SEED = 424242;
+/** A different seed, whose camps are somewhere else entirely. */
+const CAMP_OTHER_WORLD_SEED = 868686;
+/** The party that clears the camp, and the stronger one that walks back out. */
+const CAMP_CLEARING_PARTY_LEVEL = 10;
+const CAMP_RETURNING_PARTY_LEVEL = 14;
 
 let failures = 0;
 
@@ -835,6 +854,160 @@ console.log('\nThe office scene holds the room until it is read');
     releasedAtFrame >= 0 && releasedAtFrame <= QUEST_BANNER_FRAMES,
     `the fight opens once the scene closes (woke at frame ${releasedAtFrame})`,
   );
+}
+
+// The overworld rebuilds its scene on every building exit and reruns the
+// spawner, so a camp is exactly as farmable as an interior room unless the town
+// remembers it. The scene wires three calls — `noteCampCasualty` from its
+// `mobKilled` handler, `spawnForLevel` with the remembered set, and the
+// capture/parse/restore of `TownMemory` — and these checks drive those same
+// calls through a clear, a doorway, a reload and a rewind.
+console.log('\nA cleared camp stays cleared');
+{
+  const profile = DIFFICULTY_PROFILES.normal;
+  const buildFloor = (worldSeed: number): GameMap =>
+    new GameMap({
+      mapSize: level3.mapSize,
+      mapType: 'overworld',
+      tileHeight: TILE_SIZE,
+      worldSeed,
+    });
+  const residentsOf = (mobs: readonly Mob[], key: string): Mob[] =>
+    mobs.filter((mob) => mob.campKey === key);
+  const kill = (mob: Mob): void => {
+    mob.hp = 0;
+  };
+
+  const floor = buildFloor(CAMP_WORLD_SEED);
+  const clearedCamp = floor.camps.find((camp) => camp.kind === 'goblin');
+  const standingCamp = floor.camps.find((camp) => camp.kind === 'troglodyte');
+  check(
+    clearedCamp !== undefined && standingCamp !== undefined,
+    'the overworld sites a goblin camp and a troglodyte den to test against',
+  );
+  if (clearedCamp !== undefined && standingCamp !== undefined) {
+    const clearedKey = campSiteKey(clearedCamp);
+    const standingKey = campSiteKey(standingCamp);
+    const memory = createTownMemory();
+    const firstVisit = spawnForLevel(
+      level3,
+      floor,
+      CAMP_CLEARING_PARTY_LEVEL,
+      profile,
+      memory.clearedCamps,
+    );
+    const clearedResidents = residentsOf(firstVisit, clearedKey);
+    const standingResidents = residentsOf(firstVisit, standingKey);
+    check(
+      clearedResidents.length > 1 && standingResidents.length > 1,
+      `both camps are populated on first visit (${clearedResidents.length}, ${standingResidents.length})`,
+    );
+    check(
+      firstVisit.every((mob) => mob.campKey === null || mob.homePoint !== undefined),
+      'only camp residents carry a camp key',
+    );
+
+    const checkpointBeforeClear = captureTownMemory(memory);
+
+    let clearingKill = -1;
+    clearedResidents.forEach((mob, index) => {
+      kill(mob);
+      if (noteCampCasualty(memory, mob, firstVisit)) clearingKill = index;
+    });
+    check(
+      clearingKill === clearedResidents.length - 1,
+      `the camp is recorded on its last resident's death, not before (kill ${clearingKill + 1} of ${clearedResidents.length})`,
+    );
+
+    // Everyone but one: the survivor may have wandered off or been leashed
+    // home, and either way it is still standing.
+    const survivor = standingResidents[standingResidents.length - 1];
+    for (const mob of standingResidents) {
+      if (mob === survivor) continue;
+      kill(mob);
+      noteCampCasualty(memory, mob, firstVisit);
+    }
+    check(
+      !memory.clearedCamps.has(standingKey),
+      'a camp with one resident still standing is not remembered',
+    );
+
+    const afterDoorway = spawnForLevel(
+      level3,
+      floor,
+      CAMP_RETURNING_PARTY_LEVEL,
+      profile,
+      memory.clearedCamps,
+    );
+    check(
+      residentsOf(afterDoorway, clearedKey).length === 0,
+      'leaving a building does not re-stock the cleared camp',
+    );
+    check(
+      residentsOf(afterDoorway, standingKey).length > 0,
+      'the half-fought camp is re-stocked after the doorway',
+    );
+
+    const savedText = JSON.stringify(captureTownMemory(memory));
+    const savedValue: unknown = JSON.parse(savedText);
+    const parsed = parseTownMemoryCheckpoint(savedValue);
+    check(parsed !== undefined, 'the saved town memory parses back');
+    const reloadedMemory = createTownMemory();
+    if (parsed !== undefined) restoreTownMemory(reloadedMemory, parsed);
+    const afterReload = spawnForLevel(
+      level3,
+      buildFloor(CAMP_WORLD_SEED),
+      CAMP_RETURNING_PARTY_LEVEL,
+      profile,
+      reloadedMemory.clearedCamps,
+    );
+    check(
+      residentsOf(afterReload, clearedKey).length === 0,
+      'a reload from the same seed keeps the cleared camp empty',
+    );
+    check(
+      residentsOf(afterReload, standingKey).length > 0,
+      'and still populates the uncleared one',
+    );
+
+    const legacySave = { ...captureTownMemory(memory), clearedCamps: undefined };
+    const legacyValue: unknown = JSON.parse(JSON.stringify(legacySave));
+    check(
+      parseTownMemoryCheckpoint(legacyValue)?.clearedCamps.length === 0,
+      'a save written before camps were remembered still loads, remembering none',
+    );
+
+    const rewound = createTownMemory();
+    restoreTownMemory(rewound, captureTownMemory(memory));
+    restoreTownMemory(rewound, checkpointBeforeClear);
+    check(
+      !rewound.clearedCamps.has(clearedKey),
+      'a checkpoint from before the clear rewinds the camp with the residents it revives',
+    );
+
+    const seededKeys = new Set(floor.camps.map(campSiteKey));
+    const otherFloor = buildFloor(CAMP_OTHER_WORLD_SEED);
+    check(
+      otherFloor.camps.every((camp) => !seededKeys.has(campSiteKey(camp))),
+      "another seed's camps are different camps, not the same kind remembered twice",
+    );
+
+    // The same seed again is the worst case for a restart: a regenerated camp
+    // landing on a remembered site.
+    forgetClearedCamps(memory);
+    const restartFloor = buildFloor(CAMP_WORLD_SEED);
+    const restarted = spawnForLevel(
+      level3,
+      restartFloor,
+      CAMP_CLEARING_PARTY_LEVEL,
+      profile,
+      memory.clearedCamps,
+    );
+    check(
+      restartFloor.camps.every((camp) => residentsOf(restarted, campSiteKey(camp)).length > 0),
+      'a floor restart repopulates every camp, even one regenerated on a remembered site',
+    );
+  }
 }
 
 if (failures > 0) {

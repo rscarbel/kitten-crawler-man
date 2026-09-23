@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
+import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import { MAX_MOB_CULL_MARGIN_TILES, PLAYER_SPEED } from '../core/constants';
 import { makeStuck } from '../core/StatusEffect';
 import { drawDangerCone } from '../sprites/dangerTelegraph';
@@ -252,6 +252,11 @@ const LICH_CULL_MARGIN_TILES = Math.min(MAX_MOB_CULL_MARGIN_TILES, HANDS_RANGE_T
 const LICH_SILHOUETTE_MARGIN_TILES = HANDS_RANGE_TILES + 1;
 
 export class TheLich extends Mob {
+  /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
+  override get blastDamageScale(): number {
+    return BOSS_BLAST_DAMAGE_SCALE;
+  }
+
   readonly xpValue = LICH_XP;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

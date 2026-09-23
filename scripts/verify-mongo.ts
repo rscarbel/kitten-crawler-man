@@ -36,7 +36,12 @@ import {
   SUMMON_BUTTON_WIDTH,
 } from '../src/systems/MongoSystem';
 import { MobUpdateLoop } from '../src/systems/MobUpdateLoop';
-import { createMongoPetState, type MongoPetState } from '../src/core/MongoPetState';
+import {
+  createMongoPetState,
+  mongoFramesUntilReady,
+  tickMongoRegen,
+  type MongoPetState,
+} from '../src/core/MongoPetState';
 import {
   getMongoStats,
   MONGO_DAMAGE_PER_XP,
@@ -49,6 +54,7 @@ import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { createMob } from '../src/levels/spawner';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
 import { setPackAlertGrid } from '../src/creatures/packAlert';
+import { SafeRoomSystem } from '../src/systems/SafeRoomSystem';
 
 const MAP_SIZE = 220;
 
@@ -316,8 +322,8 @@ function makeCatWalker(map: GameMap, cat: CatPlayer): () => void {
 
   return () => {
     if (route.length === 0) planHop();
+    if (route.length === 0) return;
     const waypoint = route[0];
-    if (waypoint === undefined) return;
     const targetX = waypoint.x * TILE_SIZE;
     const targetY = waypoint.y * TILE_SIZE;
     const dx = targetX - cat.x;
@@ -357,7 +363,7 @@ function adoptPetState(petState: MongoPetState): Harness {
   return adopted;
 }
 
-function buildHarness(existingPetState?: MongoPetState): Harness {
+function buildHarness(existingPetState?: MongoPetState, petLevel = 1): Harness {
   // `tileHeight` is not optional in practice, whatever its default says: the map
   // measures line of sight in these units while every caller passes world pixels,
   // so a map built without it silently answers every sight question against a
@@ -373,11 +379,12 @@ function buildHarness(existingPetState?: MongoPetState): Harness {
   // silently reaches nobody.
   setPackAlertGrid(roster.grid);
   const petState =
-    existingPetState ?? createMongoPetState(getMongoStats(1).maxHp, getMongoStats(1).maxHp);
+    existingPetState ??
+    createMongoPetState(getMongoStats(petLevel).maxHp, getMongoStats(petLevel).maxHp);
   const announced: string[] = [];
   const system = new MongoSystem(
     petState,
-    () => 1,
+    () => petLevel,
     () => {
       /* XP pacing is checked arithmetically below, not by driving fights */
     },
@@ -421,12 +428,13 @@ function findOpenTileNear(
 ): { x: number; y: number } | null {
   const STEPS_AROUND = 32;
   const RADIUS_SLACK_TILES = 2;
+  const TILE_CENTRE = 0.5;
   const visibleFrom = (x: number, y: number): boolean =>
     map.hasLineOfSight(
-      (from.x + 0.5) * TILE_SIZE,
-      (from.y + 0.5) * TILE_SIZE,
-      (x + 0.5) * TILE_SIZE,
-      (y + 0.5) * TILE_SIZE,
+      (from.x + TILE_CENTRE) * TILE_SIZE,
+      (from.y + TILE_CENTRE) * TILE_SIZE,
+      (x + TILE_CENTRE) * TILE_SIZE,
+      (y + TILE_CENTRE) * TILE_SIZE,
     );
 
   for (const roomy of [true, false]) {
@@ -818,7 +826,12 @@ console.log('\nthe level table');
   // holds the numbers to it: fattening one band without re-taping the next
   // produced a level-4 raptor healthier than a level-5 one, under a line reading
   // GROWTH SPURT.
-  const SPURT_LEVELS = [5, 10];
+  // Read off the table's own stage changes, so the check follows the spurts
+  // wherever a re-tune moves them rather than guarding two hard-coded levels.
+  const SPURT_LEVELS: number[] = [];
+  for (let level = 2; level <= MONGO_MAX_LEVEL; level++) {
+    if (getMongoStats(level).stage !== getMongoStats(level - 1).stage) SPURT_LEVELS.push(level);
+  }
   let monotonic = true;
   for (let level = 2; level <= MONGO_MAX_LEVEL; level++) {
     if (getMongoStats(level).maxHp <= getMongoStats(level - 1).maxHp) monotonic = false;
@@ -1094,7 +1107,7 @@ console.log('\nthe knockout rule is stated once, when it is true');
     for (let frame = 0; frame < NOTICE_REPEAT_FRAMES; frame++) h.system.update(h.ctx);
     check(knockoutSaid() === 1, 'and not once per frame thereafter');
 
-    // Nor once per scene. The latch it describes stays true for the two minutes
+    // Nor once per scene. The latch it describes stays true for the half minute
     // of regen a knockout costs, which outlasts a stairwell and a shop door —
     // each of which builds a new system around the same pet record.
     const nextScene = adoptPetState(h.petState);
@@ -1149,6 +1162,140 @@ console.log('\nthe first level-up is reachable');
     secondsOfBiting <= MAX_ACCEPTABLE_SECONDS,
     `level 2 is ~${secondsOfBiting.toFixed(0)}s of continuous biting from a juvenile (want <= ${MAX_ACCEPTABLE_SECONDS})`,
   );
+}
+
+console.log('\na safe room lets its allies in');
+{
+  // The room turns threats out, and Mongo is a mob. Were he turned out too, he
+  // would land on a random spawn point far from the cat, his rescue would bring
+  // him straight back, and the next frame would turn him out again — a teleport
+  // loop that runs as long as the party stands inside.
+  const SAFE_ROOM_FRAMES = 120;
+  const map = new GameMap({ mapSize: MAP_SIZE, tileHeight: TILE_SIZE });
+  if (map.safeRooms.length === 0) {
+    check(false, 'the dungeon generated a safe room to stand in');
+  } else {
+    const room = map.safeRooms[0];
+    const human = new HumanPlayer(room.centre.x, room.centre.y, TILE_SIZE);
+    const cat = new CatPlayer(room.centre.x, room.centre.y, TILE_SIZE);
+    cat.setMap(map);
+    const roster = new MobRoster(map, new SpellSystem());
+    setPackAlertGrid(roster.grid);
+    const maxHp = getMongoStats(1).maxHp;
+    const ignoreXp = (): void => {
+      /* only the eviction is under test */
+    };
+    const ignoreAnnouncement = (): void => {
+      /* only the eviction is under test */
+    };
+    const system = new MongoSystem(
+      createMongoPetState(maxHp, maxHp),
+      () => 1,
+      ignoreXp,
+      () => 0,
+      ignoreAnnouncement,
+    );
+    system.unlocked = true;
+    const safeRoom = new SafeRoomSystem(map, room.centre.x, room.centre.y);
+    const ctx = makeContext(human, cat, map, roster);
+    const mongo = system.summon(cat, map);
+    if (mongo === null) {
+      check(false, 'he can be summoned inside the safe room');
+    } else {
+      roster.add(mongo);
+      let rescues = 0;
+      for (let frame = 0; frame < SAFE_ROOM_FRAMES; frame++) {
+        safeRoom.update(ctx);
+        mongo.updateAI([]);
+        if (mongo.needsRescue) rescues++;
+        system.update(ctx);
+      }
+      check(rescues === 0, `no rescue fires while he stands in the room (${rescues} fired)`);
+      check(safeRoom.isEntityInSafeRoom(mongo), 'and he is still in the room with her');
+    }
+  }
+}
+
+console.log('\nthe companion cat calls him into a fight');
+{
+  const THREAT_TILES = 4;
+  const h = buildHarness();
+  h.human.isActive = true;
+  h.cat.isActive = false;
+  const catTile = { x: Math.round(h.cat.x / TILE_SIZE), y: Math.round(h.cat.y / TILE_SIZE) };
+  check(!h.system.catWantsToSummon(h.ctx), 'with nothing hostile near her she keeps him back');
+
+  const threatTile = findOpenTileNear(h.map, catTile, THREAT_TILES);
+  if (threatTile === null) {
+    check(false, 'there was open ground near the cat for a hostile');
+  } else {
+    spawnHostile(h, threatTile);
+    check(h.system.catWantsToSummon(h.ctx), 'a hostile in sight of her sends him in');
+
+    h.petState.hp = 0;
+    h.petState.restingUntilFull = true;
+    check(!h.system.catWantsToSummon(h.ctx), 'but never a pet still resting off a knockout');
+  }
+}
+
+console.log('\na full recovery never takes more than thirty seconds');
+{
+  // Measured by running the tick rather than by reading the constants, so a
+  // re-tune that keeps the interval but changes the rounding is caught too.
+  const FRAMES_PER_SECOND = 60;
+  const MAX_RECOVERY_SECONDS = 30;
+  const maxRecoveryFrames = MAX_RECOVERY_SECONDS * FRAMES_PER_SECOND;
+  let slowestFrames = 0;
+  let slowestLevel = 0;
+  let countdownAgrees = true;
+  for (let level = 1; level <= MONGO_MAX_LEVEL; level++) {
+    const maxHp = getMongoStats(level).maxHp;
+    const state = createMongoPetState(0, maxHp);
+    const predicted = mongoFramesUntilReady(state, maxHp, maxHp);
+    let frames = 0;
+    while (state.hp < maxHp && frames <= maxRecoveryFrames) {
+      tickMongoRegen(state, maxHp);
+      frames++;
+    }
+    if (predicted !== frames) countdownAgrees = false;
+    if (frames > slowestFrames) {
+      slowestFrames = frames;
+      slowestLevel = level;
+    }
+  }
+  check(
+    slowestFrames <= maxRecoveryFrames,
+    `empty to full takes at most ${(slowestFrames / FRAMES_PER_SECOND).toFixed(2)}s (level ${slowestLevel}; want <= ${MAX_RECOVERY_SECONDS}s)`,
+  );
+  check(countdownAgrees, 'the countdown predicts the recovery the tick actually delivers');
+
+  // The ceiling is promised from the knockout, not from the despawn: he runs home
+  // on one hit point first, and that run has to come out of the thirty seconds.
+  const KNOCKOUT_DISTANCE_TILES = 8;
+  const h = buildHarness(undefined, slowestLevel);
+  const mongo = summonInto(h);
+  const catTile = { x: Math.round(h.cat.x / TILE_SIZE), y: Math.round(h.cat.y / TILE_SIZE) };
+  const farTile = findOpenTileNear(h.map, catTile, KNOCKOUT_DISTANCE_TILES);
+  if (mongo === null || farTile === null) {
+    check(false, 'a pet could be summoned and knocked out away from the cat');
+  } else {
+    pinInto(h, mongo, farTile);
+    mongo.hp = 0;
+    h.system.checkHealth();
+    const loop = new MobUpdateLoop();
+    let frames = 0;
+    let ranHomeFrames = 0;
+    while (frames <= maxRecoveryFrames * 2) {
+      tickWithLoop(h, loop);
+      frames++;
+      if (h.system.mongo !== null) ranHomeFrames = frames;
+      if (h.system.mongo === null && h.petState.hp >= mongo.maxHp) break;
+    }
+    check(
+      frames <= maxRecoveryFrames,
+      `knockout to full takes ${(frames / FRAMES_PER_SECOND).toFixed(2)}s including a ${(ranHomeFrames / FRAMES_PER_SECOND).toFixed(1)}s run home (want <= ${MAX_RECOVERY_SECONDS}s)`,
+    );
+  }
 }
 
 console.log(failures === 0 ? '\nAll Mongo checks passed.' : `\n${failures} check(s) FAILED.`);

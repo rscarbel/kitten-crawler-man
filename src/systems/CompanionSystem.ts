@@ -171,6 +171,13 @@ const NO_CACHED_GOAL_TILE = -1;
 const WAYPOINT_ARRIVAL_DISTANCE = 0.65;
 const PATHING_FAILURE_DISTANCE = 4;
 const FLEE_RADIUS_MULTIPLIER = 8;
+/**
+ * How far past the flee radius a companion already fleeing keeps going before
+ * she stops. A rolling threat keeps coming: stopping on the rim hands her back
+ * to the follow drive, the ball rolls in again a frame later, and she zigzags
+ * — one frame away from it, a few towards the player — for as long as it chases.
+ */
+const AVOID_FLEE_CLEARANCE_TILES = 1.5;
 const ANCHOR_FOLLOW_DISTANCE = 0.9;
 const ANCHOR_CLOSE_DISTANCE = 0.5;
 const NEARBY_TARGET_FOLLOW_DISTANCE = 0.9;
@@ -214,6 +221,15 @@ export class CompanionSystem implements GameSystem {
 
   /** Reused result set for companion proximity queries. */
   private readonly _proximityQuery = new Set<Mob>();
+  /**
+   * Kept apart from {@link _proximityQuery}: `companionFollow` reads it, and
+   * several of its callers are still iterating that one.
+   */
+  private readonly _avoidQuery = new Set<Mob>();
+  /** This frame's mob grid, so the follow drive can see the flee radius it must not re-enter. */
+  private avoidGrid: SpatialGrid<Mob> | null = null;
+  /** Whether the companion fled an avoid mob last time she was asked; widens the radius she flees. */
+  private fleeingAvoidMob = false;
 
   /** Mobs the companion broke its leash on, mapped to frames of ban remaining. */
   private readonly targetBans = new Map<Mob, number>();
@@ -469,6 +485,7 @@ export class CompanionSystem implements GameSystem {
       companion.isMoving = false;
       return;
     }
+    this.avoidGrid = mobGrid;
 
     const chaseBlocked = this.isLeashStretched(human, cat, ctx.bossRoom);
     this.updateAutoAI(human, cat, mobGrid, ctx.bossRoom, chaseBlocked);
@@ -541,29 +558,8 @@ export class CompanionSystem implements GameSystem {
       return;
     }
 
-    // Whether a mob sits in a boss room whose fight has not started, in which
-    // case the companion must leave it alone.
-    //
-    // Engagement is harm or entry, never notice. A mob's `currentTarget` used to
-    // stand in for "the fight is on", and it cannot: the Krakaren's aggro radius
-    // reaches out through its own doorway, so it acquired a crawler standing in
-    // the corridor, the veto lifted, and the companion cat shot an untouched
-    // boss to death through a wall — no intro, no room lock, no chest.
-    const isUntriggeredBossRoomMob = (m: Mob, activePlayer: { x: number; y: number }): boolean => {
-      if (!bossRoom) return false;
-      for (const state of bossRoom.getBossRoomStates()) {
-        if (!bossRoom.isEntityInRoom(m, state.bounds)) continue;
-        // A room whose fight is over — or that never had one — vetoes nothing.
-        // The bounds outlive the boss, and without this every goblin that later
-        // wandered into a cleared boss room was invisible to the companion for
-        // the rest of the run.
-        if (!bossRoom.isFightPending(state)) return false;
-        const playerInRoom = bossRoom.isEntityInRoom(activePlayer, state.bounds);
-        const bloodDrawn = m.hasStruckPlayer || m.wasDamagedByParty;
-        return !playerInRoom && !state.locked && !bloodDrawn;
-      }
-      return false;
-    };
+    const isUntriggeredBossRoomMob = (m: Mob, activePlayer: { x: number; y: number }): boolean =>
+      bossRoom?.isUntriggeredBossRoomMob(m, activePlayer) ?? false;
 
     this.breakStretchedLeash(human, cat, chaseBlocked);
     // Capped at the leash, because a job the companion has to break its leash to
@@ -858,8 +854,10 @@ export class CompanionSystem implements GameSystem {
   private fleeFromAvoidMobs(
     companion: HumanPlayer | CatPlayer,
     mobGrid: SpatialGrid<Mob>,
-    fleeRadius: number,
+    baseFleeRadius: number,
   ): boolean {
+    const clearance = this.fleeingAvoidMob ? TILE_SIZE * AVOID_FLEE_CLEARANCE_TILES : 0;
+    const fleeRadius = baseFleeRadius + clearance;
     let closest: Mob | null = null;
     let closestDistSq = fleeRadius * fleeRadius;
     // Centres cancel in the difference, so the query and the compare can both
@@ -876,6 +874,7 @@ export class CompanionSystem implements GameSystem {
         closest = m;
       }
     }
+    this.fleeingAvoidMob = closest !== null;
     if (!closest) return false;
 
     const dx =
@@ -883,13 +882,34 @@ export class CompanionSystem implements GameSystem {
     const dy =
       companion.y + TILE_SIZE * TILE_CENTER_OFFSET - (closest.y + TILE_SIZE * TILE_CENTER_OFFSET);
     const n = normalize(dx, dy);
-    this.entityMoveWithCollision(
-      companion,
-      n.x * FOLLOWER_SPEED * RECALL_CHASE_SPEED,
-      n.y * FOLLOWER_SPEED * RECALL_CHASE_SPEED,
-    );
-    companion.isMoving = true;
+    const fleeSpeed = FOLLOWER_SPEED * RECALL_CHASE_SPEED;
+    const beforeX = companion.x;
+    const beforeY = companion.y;
+    this.entityMoveWithCollision(companion, n.x * fleeSpeed, n.y * fleeSpeed);
+    // Straight away from a rolling threat is often straight into a wall — the
+    // Ball of Swine's arena is a ring she is always backed against — and a
+    // vector into a wall stays refused every frame while the threat closes.
+    const pinned = companion.x === beforeX && companion.y === beforeY;
+    if (pinned) this.unwedge(companion, { dx: n.x, dy: n.y }, fleeSpeed, true);
+    // Cornered with nowhere away left to go, she stands rather than running on the spot.
+    companion.isMoving = companion.x !== beforeX || companion.y !== beforeY;
     return true;
+  }
+
+  /** Whether a body at these coordinates is inside the flee radius of anything the companion runs from. */
+  private insideAvoidRadius(x: number, y: number): boolean {
+    if (this.avoidGrid === null) return false;
+    const fleeRadius = TILE_SIZE * FLEE_RADIUS_MULTIPLIER;
+    this._avoidQuery.clear();
+    for (const mob of this.avoidGrid.queryCircle(x, y, fleeRadius, this._avoidQuery)) {
+      if (!mob.isAlive || !mob.avoidInstead) continue;
+      // The same strict test `fleeFromAvoidMobs` makes. Disagreeing by even the
+      // boundary itself leaves one position both rules claim, and she shakes on it.
+      const dx = mob.x - x;
+      const dy = mob.y - y;
+      if (dx * dx + dy * dy < fleeRadius * fleeRadius) return true;
+    }
+    return false;
   }
 
   /**
@@ -951,11 +971,16 @@ export class CompanionSystem implements GameSystem {
     companion: HumanPlayer | CatPlayer,
     escape: { dx: number; dy: number },
     speed: number,
+    awayOnly = false,
   ): void {
-    const preferred = [...CARDINAL_DIRECTIONS].sort(
-      (a, b) => b.dx * escape.dx + b.dy * escape.dy - (a.dx * escape.dx + a.dy * escape.dy),
-    );
+    const alignment = (direction: { dx: number; dy: number }): number =>
+      direction.dx * escape.dx + direction.dy * escape.dy;
+    const preferred = [...CARDINAL_DIRECTIONS].sort((a, b) => alignment(b) - alignment(a));
     for (const direction of preferred) {
+      // Fleeing a mob rather than ground, any step with no component away from
+      // it is a step towards it — and alternating one of those with a step away
+      // is a companion shaking on the spot in a corner.
+      if (awayOnly && alignment(direction) <= 0) return;
       const beforeX = companion.x;
       const beforeY = companion.y;
       this.entityMoveWithCollision(companion, direction.dx * speed, direction.dy * speed);
@@ -1503,11 +1528,19 @@ export class CompanionSystem implements GameSystem {
     // a tile and a partial step lands on the same one. Only a step that *enters*
     // it: when she is already standing in marked ground the flee above owns her,
     // and a guard here would pin her inside it.
+    //
+    // The flee radius of a mob to be dodged is the same kind of ground. Without
+    // it the flee steps her out past the radius, the follow walks her back in
+    // towards a player fighting inside it, and the two alternate every frame —
+    // a companion visibly shaking on the rim of the Ball of Swine's range.
     const wasOnMarkedGround = this.standsOnHazard(entity);
+    const wasInsideAvoidRadius = this.insideAvoidRadius(entity.x, entity.y);
     const beforeX = entity.x;
     const beforeY = entity.y;
     this.entityMoveWithCollision(entity, moveNx * step, moveNy * step);
-    if (!wasOnMarkedGround && this.standsOnHazard(entity)) {
+    const enteredMarkedGround = !wasOnMarkedGround && this.standsOnHazard(entity);
+    const enteredAvoidRadius = !wasInsideAvoidRadius && this.insideAvoidRadius(entity.x, entity.y);
+    if (enteredMarkedGround || enteredAvoidRadius) {
       entity.x = beforeX;
       entity.y = beforeY;
       entity.isMoving = false;

@@ -3,6 +3,9 @@ import { Mob } from './Mob';
 import type { PlayerDamageType } from './Mob';
 import { SKELETON_RISE_FRAMES } from '../sprites/skeletonTiming';
 
+/** The group every risen skeleton answers to; see {@link Mob.packKind}. */
+const SKELETON_PACK_KIND = 'skeleton';
+
 /**
  * The half of a skeleton warrior that is about climbing out of the ground.
  *
@@ -18,9 +21,14 @@ import { SKELETON_RISE_FRAMES } from '../sprites/skeletonTiming';
 export abstract class RisingSkeleton extends Mob {
   private riseTimer = 0;
 
-  /** Starts this skeleton underground. Called by the summon path, not the spawner. */
+  /**
+   * Starts this skeleton underground. Called by the summon path, not the
+   * spawner, and before the summon's traits are rolled: a skeleton a caster
+   * raises mid-fight is a summon, and so learns nothing.
+   */
   beginRising(): void {
     this.riseTimer = SKELETON_RISE_FRAMES;
+    this.isSummon = true;
   }
 
   /** True while it is still coming out of the ground. */
@@ -43,6 +51,15 @@ export abstract class RisingSkeleton extends Mob {
     this.riseTimer--;
     this.isMoving = false;
     return true;
+  }
+
+  /**
+   * Sword and bow skeletons are one company. The archer's kite is falling back
+   * behind a sword skeleton, and a pack split by class would leave it with no
+   * friend to fall back on in the escort it stands in.
+   */
+  override get packKind(): string {
+    return SKELETON_PACK_KIND;
   }
 
   override resetToSpawn(): void {

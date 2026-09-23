@@ -2983,7 +2983,13 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
     }
 
     const signKeys = new Set(signs.map((sign) => tileCoordKey(sign.tile.x, sign.tile.y)));
-    const mobs = spawnForLevel(levelDef, map, SPAWN_PARTY_LEVEL, DIFFICULTY_PROFILES.normal);
+    const mobs = spawnForLevel(
+      levelDef,
+      map,
+      SPAWN_PARTY_LEVEL,
+      DIFFICULTY_PROFILES.normal,
+      new Set(),
+    );
     check(mobs.length > 0 || signs.length === 0, 'the spawner seated no mobs, proving nothing');
     for (const mob of mobs) {
       const tileX = Math.floor((mob.x + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE);

@@ -9,6 +9,9 @@ import {
   IDLE_LOOP_SECONDS,
 } from '../sprites/stiltClownSprite';
 import { PLAYER_SPEED } from '../core/constants';
+import { riposteCooldown } from './tactics/riposte';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import { CIRCUS_CLOWN_PACK_KIND } from './FatClown';
 
 const CLOWN_HP = 14;
 const CLOWN_SPEED = 0.9;
@@ -26,7 +29,11 @@ export const CLOWN_MAX_SPEED = PLAYER_SPEED * CLOWN_MAX_SPEED_RATIO;
 export const STILT_CLOWN_AGGRO_RANGE_TILES = 8;
 /** Long reach — the stilt clown's signature "Slender Man" lunge. */
 const ATTACK_RANGE_TILES = 2.2;
-const ATTACK_DAMAGE = 7;
+/**
+ * A little under the fat clown's slam, which it out-reaches. Sized for the Evil
+ * Clown's troupe, where it fights at the party's own level — see `FatClown`.
+ */
+const ATTACK_DAMAGE = 3;
 /** Frames between lunges (~2.2 s at 60 fps) — slow but telegraphed and punishing. */
 const ATTACK_COOLDOWN = 130;
 /** Frames of windup before every strike (not just the first) — sells the "telegraphed lunge" read. */
@@ -41,6 +48,7 @@ const FOLLOW_STOP_FRACTION = 0.75;
  * stilts and head reach well over two tiles above the tile it stands on.
  */
 const CULL_MARGIN_TILES = 3;
+const STILT_CLOWN_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
 /**
  * A Stilt Clown — one of Grimaldi's corrupted performers, towering on
@@ -60,6 +68,19 @@ export class StiltClown extends Mob {
 
   protected override get levelledSpeedCap(): number {
     return CLOWN_MAX_SPEED;
+  }
+
+  override get packKind(): string {
+    return CIRCUS_CLOWN_PACK_KIND;
+  }
+
+  /**
+   * A reaching brawler: it can learn to come at its quarry from an angle, turn
+   * a blow aside and answer it, and fall back on the troupe when hurt. Never
+   * `kite` — its lunge is its reach, and backing off only wastes it.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return STILT_CLOWN_TACTICS;
   }
 
   /** Staggers this clown's idle loop so a pack of them does not move as one. */
@@ -100,6 +121,7 @@ export class StiltClown extends Mob {
       this.isAggro = false;
       this.windupTimer = 0;
       this.lungeTimer = 0;
+      this.tactics.disengage();
       this.clearAStarPath();
       // `returnHomeOrWander`, not `doWander`: this class is reused as a bounty
       // encounter's escort, and only the former honours the `homePoint` the
@@ -113,16 +135,31 @@ export class StiltClown extends Mob {
     const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
 
+    const strikeFramesLeft = this.windupTimer + this.lungeTimer;
+    if (this.tactics.claimRiposte()) {
+      this.attackCooldown = riposteCooldown(this.attackCooldown, strikeFramesLeft);
+    }
+    const tacticalMove = this.chooseTacticalStep(nearest, attackRangePx, strikeFramesLeft === 0);
+    // Only offered with no strike under way, so no windup or lunge is abandoned.
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
+
     // Hold still while winding up or mid-lunge — the strike itself is stationary.
-    if (this.windupTimer > 0 || this.lungeTimer > 0) {
+    if (strikeFramesLeft > 0) {
       this.isMoving = false;
     } else if (nearestDist > attackRangePx) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        this.speed,
-        attackRangePx * FOLLOW_STOP_FRACTION,
-      );
+      if (tacticalMove !== null) {
+        this.walkTacticalStep(tacticalMove, nearest);
+      } else {
+        this.followTargetAStar(
+          this.lastKnownTargetX,
+          this.lastKnownTargetY,
+          this.speed,
+          attackRangePx * FOLLOW_STOP_FRACTION,
+        );
+      }
     } else {
       this.isMoving = false;
     }

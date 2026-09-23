@@ -54,7 +54,7 @@ export interface MongoPetState {
    *
    * Lives beside the latch it explains rather than on `MongoSystem`, because the
    * two have to share a lifetime. {@link restingUntilFull} stays true for the
-   * couple of minutes of regen a knockout costs, and the notice is raised from
+   * half minute of regen a knockout costs, and the notice is raised from
    * that state rather than from the despawn that produced it — so a flag scoped
    * to the system, which is rebuilt for every scene, turns "once" into once per
    * stairwell and once per shop door. The player was told three times.
@@ -161,10 +161,13 @@ export function mongoTotalRecoveryFrames(
 }
 
 /**
- * Off-duty recovery: one percent of his maximum, rounded up, every 1.3 seconds.
+ * Off-duty recovery: a {@link MONGO_REGEN_TICKS_TO_FULL}th of his maximum,
+ * rounded up, every {@link MONGO_REGEN_INTERVAL_FRAMES} frames.
  *
- * Rounded up rather than down so a low-level Mongo — whose one percent is a
- * fraction of a hit point — recovers at all instead of sitting at zero forever.
+ * Rounded up rather than down so the tick count to full can never exceed
+ * {@link MONGO_REGEN_TICKS_TO_FULL} — the rounding is what keeps the 30-second
+ * ceiling a ceiling at every level, including a juvenile whose share of a tick
+ * is a fraction of a hit point.
  *
  * Call once per game frame from any scene the party can be in while the pet is
  * not summoned.
@@ -223,8 +226,22 @@ export function advanceMongoRecovery(
   return waitBefore - mongoFramesUntilReady(state, maxHp, minSummonHp);
 }
 
-const MONGO_REGEN_INTERVAL_FRAMES = 78;
-const MONGO_REGEN_PERCENT = 0.01;
+const FRAMES_PER_SECOND = 60;
+
+/**
+ * The longest he can ever be off duty: from zero — a knockout — to full.
+ *
+ * A ceiling rather than a typical wait, and chosen as one. A recall at any
+ * health, or a knockout, costs at most this; anything longer and the pet stops
+ * being part of the fight the player is in and becomes part of the next one.
+ */
+const MONGO_FULL_RECOVERY_SECONDS = 30;
+/** How many regen ticks a full recovery is split into — the countdown's granularity. */
+const MONGO_REGEN_TICKS_TO_FULL = 25;
+const MONGO_REGEN_INTERVAL_FRAMES = Math.round(
+  (MONGO_FULL_RECOVERY_SECONDS * FRAMES_PER_SECOND) / MONGO_REGEN_TICKS_TO_FULL,
+);
+const MONGO_REGEN_PERCENT = 1 / MONGO_REGEN_TICKS_TO_FULL;
 
 /**
  * How much recovery one kill takes off the clock: exactly one regen tick.

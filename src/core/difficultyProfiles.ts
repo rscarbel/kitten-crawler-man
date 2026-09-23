@@ -14,6 +14,7 @@
  */
 
 import { settings } from './Settings';
+import { worldRandom } from './WorldRandom';
 import type { Mob } from '../creatures/Mob';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -32,6 +33,12 @@ export interface DifficultyProfile {
   rewardCoinScale: number;
   /** Multiplies Shady's coin payout, captured at kill time. */
   bountyPayoutScale: number;
+  /**
+   * Multiplies every tactics trait's chance before its cap, stamped on the mob
+   * with its traits at spawn. Never moves the unlock levels, so a mob below
+   * them behaves identically on every profile.
+   */
+  tacticsChanceScale: number;
 }
 
 /** The shipped ambient/boss level ratios, before any difficulty axis existed. */
@@ -58,6 +65,7 @@ export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     rewardXpScale: 1.0,
     rewardCoinScale: 1.0,
     bountyPayoutScale: 0.85,
+    tacticsChanceScale: 0.6,
   },
   normal: {
     incomingMobDamageScale: 1.0,
@@ -67,6 +75,7 @@ export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     rewardXpScale: 1.0,
     rewardCoinScale: 1.0,
     bountyPayoutScale: 1.0,
+    tacticsChanceScale: 1.0,
   },
   hard: {
     incomingMobDamageScale: 1.3,
@@ -76,6 +85,7 @@ export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     rewardXpScale: 1.25,
     rewardCoinScale: 1.25,
     bountyPayoutScale: 1.5,
+    tacticsChanceScale: 1.3,
   },
 };
 
@@ -85,13 +95,22 @@ export function activeDifficultyProfile(): DifficultyProfile {
 }
 
 /**
- * Applies the active difficulty's reward scale to a mob, alongside
- * `applyMobLevel` at every spawn site. The one-liner every such site wants —
- * `mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale)`
- * off a freshly read `activeDifficultyProfile()` — so a third reward axis is a
- * one-line change here instead of an edit at every call site.
+ * Everything a difficulty profile stamps on a mob at spawn, called straight
+ * after `applyMobLevel` at every spawn site: the explicit reward scale, and the
+ * tactics traits rolled from the level that call just set.
+ *
+ * One call rather than two so a spawn site cannot level a mob, scale its
+ * rewards and forget its traits. `profile` defaults to the live setting; the
+ * floor spawner passes the profile it resolved levels with, so both halves of
+ * a spawn read the same one.
+ *
+ * Traits draw from {@link worldRandom}, the source the spawner's own level
+ * rolls use, so whatever makes one reproducible makes the other so too.
  */
-export function applyActiveDifficultyRewards(mob: Mob): void {
-  const profile = activeDifficultyProfile();
+export function applySpawnDifficulty(
+  mob: Mob,
+  profile: DifficultyProfile = activeDifficultyProfile(),
+): void {
   mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+  mob.rollTactics(profile.tacticsChanceScale, worldRandom);
 }

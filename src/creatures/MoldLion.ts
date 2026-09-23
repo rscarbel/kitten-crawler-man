@@ -3,6 +3,8 @@ import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawMoldLionSprite } from '../sprites/moldLionSprite';
 import { makePoison } from '../core/StatusEffect';
+import { riposteCooldown } from './tactics/riposte';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 
 const LION_HP = 24;
 const LION_SPEED = 1.3;
@@ -27,6 +29,7 @@ const AURA_TICK_COOLDOWN = 180;
  * inert until then, so players are never poisoned by a lion they only walked past.
  */
 const AURA_ARM_TOUCH_RANGE_TILES = 1;
+const MOLD_LION_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
 /**
  * A Mold Lion — one of Grimaldi's corrupted performers, a mid-tier bruiser
@@ -49,6 +52,20 @@ export class MoldLion extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, LION_HP, LION_SPEED);
+  }
+
+  /** A flank can be walking it while its swing still plays, and turning then would flip the arc. */
+  protected override get isSwingAnimating(): boolean {
+    return this.attackAnimTimer > 0;
+  }
+
+  /**
+   * A pouncing brawler: it can learn to come at its prey from an angle, turn a
+   * blow aside and answer it, and fall back on the pride when hurt. Never
+   * `kite` — its aura is its threat, and it only works up close.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return MOLD_LION_TACTICS;
   }
 
   override resetToSpawn(): void {
@@ -112,6 +129,7 @@ export class MoldLion extends Mob {
 
     if (!nearest) {
       this.isAggro = false;
+      this.tactics.disengage();
       this.clearAStarPath();
       this.doWander();
       return;
@@ -121,13 +139,30 @@ export class MoldLion extends Mob {
     const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
 
+    if (this.tactics.claimRiposte()) {
+      this.attackCooldown = riposteCooldown(this.attackCooldown, this.attackAnimTimer);
+    }
+    const tacticalMove = this.chooseTacticalStep(
+      nearest,
+      attackRangePx,
+      this.attackAnimTimer === 0,
+    );
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
+
     if (nearestDist > attackRangePx) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        this.speed,
-        attackRangePx * FOLLOW_STOP_FRACTION,
-      );
+      if (tacticalMove !== null) {
+        this.walkTacticalStep(tacticalMove, nearest);
+      } else {
+        this.followTargetAStar(
+          this.lastKnownTargetX,
+          this.lastKnownTargetY,
+          this.speed,
+          attackRangePx * FOLLOW_STOP_FRACTION,
+        );
+      }
     } else {
       this.isMoving = false;
     }

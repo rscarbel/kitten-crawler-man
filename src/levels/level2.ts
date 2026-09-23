@@ -53,6 +53,16 @@ const LEVEL2_XP_FIFTH_MULTIPLIER = 0.2;
 const AMBIENT_MIN_LEVEL = 4;
 const AMBIENT_MAX_LEVEL = 7;
 
+/**
+ * Boss and quest XP bring a thorough party down these stairs well past the
+ * recommended arrival level, and it keeps growing here while the band above
+ * holds every room at level 7. Each few levels it pulls ahead buys each room
+ * another body instead, up to a limit that keeps a room a fight rather than
+ * a wall.
+ */
+const OVER_LEVEL_LEVELS_PER_BODY = 3;
+const OVER_LEVEL_MAX_BODIES = 3;
+
 /** Goblin archers per goblin room, and the band they spawn in. */
 const ARCHER_MIN_PER_ROOM = 1;
 const ARCHER_MAX_PER_ROOM = 2;
@@ -98,6 +108,10 @@ export const level2: LevelDef = {
   music: 'bg_level_2',
   groundTheme: 'service_level',
   mapSize: 260,
+  overLevelReinforcement: {
+    levelsPerBody: OVER_LEVEL_LEVELS_PER_BODY,
+    maxBodies: OVER_LEVEL_MAX_BODIES,
+  },
   spriteGroups: ['core', 'dungeon_common', 'floor2_tileset', 'boss_grotesque_spider'],
   roomMobs: [
     {

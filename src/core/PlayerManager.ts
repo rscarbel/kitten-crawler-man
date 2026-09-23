@@ -2,6 +2,7 @@ import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import { TILE_SIZE } from './constants';
+import type { XpDiminishingTier } from '../levels/xpDiminishing';
 
 /**
  * The player party (Human + Cat): a single handle systems can accept instead
@@ -11,10 +12,18 @@ export class PlayerManager {
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
 
-  constructor(spawnX: number, spawnY: number) {
+  /**
+   * @param xpCurve The diminishing-returns curve of the floor the party is on,
+   *   or `undefined` for a floor that has none. Required rather than optional
+   *   so that no scene — an interior hanging off a floor included — can build
+   *   a party that quietly earns XP at full rate.
+   */
+  constructor(spawnX: number, spawnY: number, xpCurve: readonly XpDiminishingTier[] | undefined) {
     this.human = new HumanPlayer(spawnX, spawnY, TILE_SIZE);
     this.cat = new CatPlayer(spawnX + 1, spawnY, TILE_SIZE);
     this.human.isActive = true;
+    this.human.xpCurve = xpCurve;
+    this.cat.xpCurve = xpCurve;
   }
 
   /** The currently player-controlled character. */

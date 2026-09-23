@@ -16,6 +16,7 @@
  * rather than the other way round.
  */
 
+import { awardXp } from '../core/awardXp';
 import type { GameSystem } from './GameSystem';
 import type { TrackerEntry, TrackerSource, TrackerTarget } from './questTracker';
 import type { QuestMarkerType } from './MiniMapSystem';
@@ -320,9 +321,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     // Granted once, to the payer: `gainXp` is a per-player ledger, and the
     // errand was one trip for the party, not one trip each.
     const xp = this.questManager.getDef(ANCHOR_QUEST_ID)?.rewards.xp ?? ANCHOR_QUEST_XP;
-    if (payer.gainXp(xp)) {
-      this.bus.emit('playerLevelUp', { player: payer, newLevel: payer.level });
-    }
+    awardXp(payer, xp, this.bus);
     // `QuestManager`'s generic `lootBoxItems` field is never read by any payout
     // path in this codebase, so the potions are granted directly here.
     // `addItem` drops silently when there is no room, same as every other

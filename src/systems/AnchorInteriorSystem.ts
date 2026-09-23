@@ -39,7 +39,7 @@ import {
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { distinctSpawnTiles } from './interiorHostiles';
 import { ShrineVermin } from '../creatures/ShrineVermin';
-import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { QuestDialog, type DialogPage } from '../ui/QuestDialog';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawWoodPileSprite } from '../sprites/questNPCSprite';
@@ -308,7 +308,7 @@ export class AnchorInteriorSystem {
     const wanted = this.naveSpawnAnchors(count);
     for (const tile of distinctSpawnTiles(this.map, wanted, VERMIN_SEARCH_RADIUS_TILES)) {
       const rat = new ShrineVermin(tile.x, tile.y, TILE_SIZE);
-      applyActiveDifficultyRewards(rat);
+      applySpawnDifficulty(rat);
       this.vermin.push(rat);
       this.addMob(rat);
     }

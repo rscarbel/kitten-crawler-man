@@ -6,6 +6,7 @@
  *   complete_pending → complete | failed
  */
 
+import { awardXp } from '../core/awardXp';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt, pixelToTile, pointInRect } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -15,12 +16,13 @@ import type { QuestRoomData } from '../map/DungeonGenerator';
 import type { EventBus } from '../core/EventBus';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
+import type { LevelledCurve } from '../creatures/mobLevelScaling';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import { Bugaboo } from '../creatures/Bugaboo';
 import { prewarmBugaboo } from '../sprites/bugabooSprite';
-import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { QuestNPC } from '../creatures/QuestNPC';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { QuestManager } from '../core/QuestManager';
@@ -379,6 +381,7 @@ export class DefendQuestSystem implements GameSystem {
   private bus: EventBus;
   private gameMap: GameMap;
   private resolveWaveLevel: () => number;
+  private waveCurve: LevelledCurve | undefined;
 
   constructor(
     gameMap: GameMap,
@@ -395,11 +398,14 @@ export class DefendQuestSystem implements GameSystem {
      * formality depending on which floor you meet it on.
      */
     resolveWaveLevel: () => number,
+    /** The floor's `levelledCurve`, which the wave is levelled on. */
+    waveCurve: LevelledCurve | undefined,
   ) {
     this.gameMap = gameMap;
     this.bus = bus;
     this.addMob = addMob;
     this.resolveWaveLevel = resolveWaveLevel;
+    this.waveCurve = waveCurve;
 
     this.questManager = new QuestManager();
     this.questManager.register({
@@ -788,7 +794,6 @@ export class DefendQuestSystem implements GameSystem {
     switch (this.phase) {
       case 'npc_waiting':
       case 'dialog':
-        // NPC just stands there
         break;
 
       case 'countdown':
@@ -809,7 +814,6 @@ export class DefendQuestSystem implements GameSystem {
         break;
     }
 
-    // Tick pending build/repair
     if (this.pendingBuild && this.roomData) {
       const elapsed = this.pendingBuild.totalFrames - this.pendingBuild.framesLeft;
       if (elapsed % HAMMER_SOUND_INTERVAL === 0) {
@@ -821,7 +825,6 @@ export class DefendQuestSystem implements GameSystem {
       }
     }
 
-    // Tick barrier hit flash
     for (const b of this.barriers) {
       if (b.hitFlash > 0) b.hitFlash--;
     }
@@ -1063,13 +1066,13 @@ export class DefendQuestSystem implements GameSystem {
   private spawnBugaboo(tileX: number, tileY: number, grateIdx: number): void {
     if (!this.npc) return;
     const bug = new Bugaboo(tileX, tileY, TILE_SIZE);
-    bug.applyMobLevel(this.resolveWaveLevel());
+    bug.applyMobLevel(this.resolveWaveLevel(), this.waveCurve);
     // Paired with the level, as every other spawn site in the game pairs them: a
     // wave that ignored the difficulty reward scale would pay differently from
     // the mobs standing either side of the nursery door — and since the wave's
     // survivors are now left alive to be fought, that gap is XP the party can
     // actually feel.
-    applyActiveDifficultyRewards(bug);
+    applySpawnDifficulty(bug);
     bug.setMap(this.gameMap);
     bug.defendTarget = this.npc;
 
@@ -1093,13 +1096,13 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   private triggerDefenseComplete(): void {
-    // The segment ends; the bodies already out of the grates do not. Killing the
-    // survivors outright used to end the wave tidily, and it paid for it: a
-    // bugaboo the party had merely chipped came back through `resolveKills` as a
-    // full kill, and the death it emitted hatched a litter of brindle grubs on
-    // floor 2 and drew a second set of gore on top of this one. The nursery
-    // held — that is what the sixty seconds bought. Whatever is still standing
-    // in it is the party's problem, worth exactly the XP they fight it for.
+    // The segment ends; the bodies already out of the grates do not.
+    // Force-killing survivors here would route a bugaboo the party had merely
+    // chipped through `resolveKills` as a full kill, hatching a litter of
+    // brindle grubs on floor 2 and drawing a second set of gore on top of this
+    // one. The nursery held — that is what the sixty seconds bought. Whatever
+    // is still standing in it is the party's problem, worth exactly the XP
+    // they fight it for.
     this.releaseWave();
     this.barriers = [];
     this.woodPileAvailable = false;
@@ -1144,7 +1147,7 @@ export class DefendQuestSystem implements GameSystem {
 
     const def = this.questManager.getDef(DEFEND_QUEST_ID);
     if (!def) return;
-    active.gainXp(def.rewards.xp);
+    awardXp(active, def.rewards.xp, this.bus);
     this.xpFloatTimer = XP_FLOAT_FRAMES;
 
     this.bus.emit('questCompleted', { questId: DEFEND_QUEST_ID });
@@ -1242,7 +1245,6 @@ export class DefendQuestSystem implements GameSystem {
 
     if (this.npc?.isAlive) {
       this.npc.render(ctx, camX, camY, TILE_SIZE);
-      // Interaction prompt when player is near and NPC is interactable
       if (active && (this.phase === 'npc_waiting' || this.phase === 'complete_pending')) {
         const dist = Math.hypot(active.x - this.npc.x, active.y - this.npc.y);
         if (dist <= INTERACT_RANGE_PX) {
@@ -1253,7 +1255,6 @@ export class DefendQuestSystem implements GameSystem {
       }
     }
 
-    // Dead NPC red X
     if (this.npc && !this.npc.isAlive && this.phase === 'failed') {
       const sx = this.npc.x - camX;
       const sy = this.npc.y - camY;
@@ -1295,7 +1296,6 @@ export class DefendQuestSystem implements GameSystem {
       this.renderBuildProgress(ctx, camX, camY);
     }
 
-    // Build/repair prompt on nearest grate
     if (
       activeCrawler &&
       activeCrawler.isActive &&
@@ -1375,7 +1375,6 @@ export class DefendQuestSystem implements GameSystem {
 
     const cw = viewportWidth();
 
-    // Approach countdown
     if (this.phase === 'countdown') {
       if (platform.isMobile && mobileTopY !== undefined) {
         this.renderMobileCountdown(ctx, mobileTopY);
@@ -1405,7 +1404,6 @@ export class DefendQuestSystem implements GameSystem {
       }
     }
 
-    // Defense countdown
     if (this.phase === 'defending') {
       if (platform.isMobile && mobileTopY !== undefined) {
         this.renderMobileDefenseTimer(ctx, mobileTopY);

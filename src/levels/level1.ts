@@ -1,4 +1,5 @@
 import type { LevelDef } from './types';
+import { LEARNING_FLOOR_LEVELLED_CURVE } from '../creatures/mobLevelScaling';
 
 /** Goblin spawn chance (85%). */
 const GOBLIN_CHANCE = 0.85;
@@ -215,6 +216,9 @@ export const level1: LevelDef = {
     regionLevelBonus: [PRE_HOARDER_LEVEL_BONUS, POST_HOARDER_LEVEL_BONUS, POST_JUICER_LEVEL_BONUS],
   },
   defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
+  // Floor 1 keeps the curve it was tuned on when the shared one was flattened
+  // for the deeper floors, so none of its fights got easier with them.
+  levelledCurve: LEARNING_FLOOR_LEVELLED_CURVE,
   hasCollapseTimer: true,
   hasTreasureRoomGuards: true,
   nextLevelId: 'level2',

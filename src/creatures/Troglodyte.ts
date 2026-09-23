@@ -1,4 +1,5 @@
-import { Mob, scaledCooldownFramesForLevel } from './Mob';
+import { Mob } from './Mob';
+import { scaledCooldownFramesForLevel } from './mobLevelScaling';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
 import {
@@ -16,6 +17,8 @@ import { LASH_IMPACT_PROGRESS } from '../sprites/art/troglodyteFigure';
 import { makePoison } from '../core/StatusEffect';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
+import { riposteCooldown } from './tactics/riposte';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 
 const TROG_HP = 22;
 const TROG_SPEED = 0.7;
@@ -29,7 +32,14 @@ const AGGRO_RANGE_TILES = 8;
  * that damages them.
  */
 const TONGUE_RANGE_TILES = TROGLODYTE_TONGUE_RANGE_TILES;
-const TONGUE_DAMAGE = 4;
+/**
+ * Light for its size on purpose. The troglodyte carries the most HP of any
+ * regular mob, and a fight's cost is how long a mob lives times how hard it
+ * hits, so a tank that also hit hardest would make a room or den of them the
+ * one regular fight that empties the party's bar. It is the tank the party
+ * works through, not the damage.
+ */
+const TONGUE_DAMAGE = 3;
 const POISON_CHANCE = 0.25;
 
 /** Slow, menacing windup at level 1. Shortened with level, never past the floor. */
@@ -94,6 +104,8 @@ const TONGUE_BLOCK_XP = 3;
 
 type TrogState = 'idle' | 'stalking' | 'winding_up' | 'striking' | 'cooldown';
 
+const TROGLODYTE_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
+
 export class Troglodyte extends Mob {
   readonly xpValue = 20;
   protected coinDropMin = 0;
@@ -156,6 +168,16 @@ export class Troglodyte extends Mob {
     this.facingLocked = false;
   }
 
+  /**
+   * A slow brawler that fights at tongue's length: it can learn to come at its
+   * quarry from an angle, turn a blow aside and answer it, and fall back on a
+   * denmate when hurt. Never `kite` — at its pace a retreat is just a free
+   * stretch of hits on its back.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return TROGLODYTE_TACTICS;
+  }
+
   /** No coins, no gear — only, very rarely, a lifetime in the dark written down. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];
@@ -173,6 +195,8 @@ export class Troglodyte extends Mob {
     const nearest = this.acquireTarget(targets, aggroRangePx);
     const nearestDist = nearest ? this.distanceTo(nearest) : Infinity;
     this.currentTarget = nearest;
+    if (!nearest) this.tactics.disengage();
+    this.answerGuard();
 
     switch (this.state) {
       case 'idle': {
@@ -203,7 +227,11 @@ export class Troglodyte extends Mob {
         }
         this.updateLastKnown(nearest);
 
-        if (nearestDist <= tongueRangePx && this.hasLOS(nearest)) {
+        // Nothing is committed while stalking, so a tactic may always steer it.
+        const tacticalMove = this.chooseTacticalStep(nearest, tongueRangePx, true);
+        if (tacticalMove?.breaksOff === true) {
+          this.walkTacticalStep(tacticalMove, nearest);
+        } else if (nearestDist <= tongueRangePx && this.hasLOS(nearest)) {
           // In tongue range — start the slow windup
           this.state = 'winding_up';
           // The tongue is drawn on no frame of the windup, so the telegraph is
@@ -220,8 +248,9 @@ export class Troglodyte extends Mob {
           // unleashed troglodyte: every one on floors 1 and 2. See
           // `Mob.isBeyondLeash`.
           this.returnHomeOrWander();
+        } else if (tacticalMove !== null) {
+          this.walkTacticalStep(tacticalMove, nearest);
         } else {
-          // Slowly lumber toward the player
           this.followTargetAStar(
             this.lastKnownTargetX,
             this.lastKnownTargetY,
@@ -323,6 +352,18 @@ export class Troglodyte extends Mob {
         break;
       }
     }
+  }
+
+  /**
+   * Spend a riposte a guard earned. A guard met while the tongue is winding up
+   * or out is answered after that strike, by cutting the wait that follows it;
+   * one met while stalking needs no answer, since a stalking troglodyte gapes
+   * the moment it is in reach. The windup itself is never shortened.
+   */
+  private answerGuard(): void {
+    if (this.state === 'winding_up' || this.state === 'striking') return;
+    if (!this.tactics.claimRiposte() || this.state !== 'cooldown') return;
+    this.cooldownTimer = riposteCooldown(this.cooldownTimer, 0);
   }
 
   private _faceToward(target: Player): void {

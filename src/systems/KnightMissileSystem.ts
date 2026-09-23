@@ -115,11 +115,11 @@ export class KnightMissileSystem implements GameSystem {
           dirX: dx / length,
           dirY: dy / length,
           damage: released.damage,
-          source: {
+          source: mob.stampBlowCap({
             kind: 'mob',
             mobType: released.mobType,
             attackType: KNIGHT_MISSILE_ATTACK_TYPE,
-          },
+          }),
           owner: mob,
           age: 0,
         });

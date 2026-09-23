@@ -1001,6 +1001,8 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
   const HANDOFF_WINDOW_ROWS = 1;
   let handoffsMeasured = 0;
   let armedLastFrame = new Set<string>();
+  /** The frame each armed orb was first seen on, keyed like `armedLastFrame`. */
+  const orbArmedSinceFrame = new Map<string, number>();
   let landedOrbsMeasured = 0;
   let closestOrbImpactTiles = Number.POSITIVE_INFINITY;
   let laneOrdersChecked = 0;
@@ -1349,8 +1351,19 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
       // that has to get lucky with the fight's own randomness to see it at all.
       // A near miss is the same failure with the dice rolling the other way.
       const armedNow = new Set(battle.armedOrbTiles.map((tile) => `${tile.col},${tile.row}`));
+      for (const key of armedNow) {
+        if (!orbArmedSinceFrame.has(key)) orbArmedSinceFrame.set(key, framesSpent);
+      }
       for (const key of armedLastFrame) {
         if (armedNow.has(key)) continue;
+        const framesArmed = framesSpent - (orbArmedSinceFrame.get(key) ?? framesSpent);
+        orbArmedSinceFrame.delete(key);
+        // An orb leaves `armedOrbTiles` early when a daze defangs it mid-fall, and
+        // the companion is right to stop avoiding it then. Counting that as a
+        // landing measured her mid-retreat against an orb that could never land
+        // armed — only one that ran its whole warning is a near miss.
+        const ranFullWarning = framesArmed >= ORB_WARNING_FRAMES;
+        if (!ranFullWarning) continue;
         const [col, row] = key.split(',').map(Number);
         landedOrbsMeasured++;
         closestOrbImpactTiles = Math.min(

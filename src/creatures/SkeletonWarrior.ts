@@ -3,6 +3,8 @@ import { RisingSkeleton } from './RisingSkeleton';
 import { SKELETON_SWORD_BODY_PART_KEY, drawSkeletonWarriorSprite } from '../sprites/skeletonSprite';
 import { SWORD_SLASH_FRAMES, swordSlashImpactFrame } from '../sprites/skeletonTiming';
 import { PLAYER_SPEED } from '../core/constants';
+import { riposteCooldown } from './tactics/riposte';
+import type { TacticsTrait } from './tactics/tacticsTraits';
 
 /**
  * A sword-and-shield skeleton.
@@ -40,6 +42,7 @@ export const SKELETON_ESCORT_XP = 4;
 const SLASH_IMPACT_TIMER = SWORD_SLASH_FRAMES - swordSlashImpactFrame();
 
 const SKELETON_WARRIOR_CULL_MARGIN_TILES = 2;
+const SKELETON_WARRIOR_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
 export class SkeletonWarrior extends RisingSkeleton {
   readonly xpValue = SKELETON_ESCORT_XP;
@@ -77,6 +80,20 @@ export class SkeletonWarrior extends RisingSkeleton {
     return SKELETON_MAX_SPEED;
   }
 
+  /**
+   * A sword-and-shield brawler: it can learn to come at its quarry from an
+   * angle, turn a blow aside with the shield and answer it, and fall back on
+   * its brothers when hurt.
+   *
+   * Only a warrior a spawn placed learns any of it. One a caster raised
+   * mid-fight is flagged `isSummon` by `beginRising`: they come on a cadence,
+   * and a stream of fresh guards and flankers would make the boss fight harder
+   * with every wave.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return SKELETON_WARRIOR_TACTICS;
+  }
+
   override resetToSpawn(): void {
     super.resetToSpawn();
     this.attackCooldown = 0;
@@ -91,6 +108,9 @@ export class SkeletonWarrior extends RisingSkeleton {
 
     const nearest = this.acquireTarget(targets, this.aggroRangePx);
     this.currentTarget = nearest;
+    if (this.tactics.claimRiposte()) {
+      this.attackCooldown = riposteCooldown(this.attackCooldown, this.slashTimer);
+    }
 
     // The swing runs to completion whatever happens to the target: it is the
     // player's window to step back, and a warrior that abandons it mid-stroke
@@ -104,6 +124,7 @@ export class SkeletonWarrior extends RisingSkeleton {
 
     if (!nearest) {
       this.isAggro = false;
+      this.tactics.disengage();
       this.clearAStarPath();
       // Not `doWander`: an un-aggroed bounty escort is leashed to its site, and
       // only this path consults the leash.
@@ -114,7 +135,17 @@ export class SkeletonWarrior extends RisingSkeleton {
     this.isAggro = true;
     this.updateLastKnown(nearest);
     const distance = this.distanceTo(nearest);
+    // Past the swing above, nothing is committed, so a tactic may steer it.
+    const tacticalMove = this.chooseTacticalStep(nearest, this.attackRangePx, true);
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
     if (distance > this.attackRangePx) {
+      if (tacticalMove !== null) {
+        this.walkTacticalStep(tacticalMove, nearest);
+        return;
+      }
       this.followTargetAStar(
         this.lastKnownTargetX,
         this.lastKnownTargetY,

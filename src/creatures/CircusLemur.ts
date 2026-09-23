@@ -2,6 +2,8 @@ import { Mob } from './Mob';
 import type { Player } from '../Player';
 import { drawCircusLemurSprite, drawThrownKnife } from '../sprites/circusLemurSprite';
 import { normalize } from '../utils';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import { retreatBehindHelper } from './tactics/retreat';
 
 interface ThrownKnife {
   x: number;
@@ -36,10 +38,14 @@ const THROW_COOLDOWN = 110;
 const THROW_ANIM_FRAMES = 16;
 const KNIFE_SPIN_SPEED = 0.45;
 const KNIFE_HIT_RADIUS_RATIO = 0.3;
-/** Preferred throwing distance — the lemur holds here rather than closing in. */
-const KITE_STOP_RANGE_TILES = 3.5;
+/**
+ * Preferred throwing distance — the lemur holds here rather than closing in.
+ * Exported for the tactics gate, which holds a flanking lemur to it.
+ */
+export const CIRCUS_LEMUR_THROW_STANDOFF_TILES = 3.5;
 const COIN_DROP_MAX = 1;
 const CENTER_OFFSET = 0.5;
+const LEMUR_TACTICS: readonly TacticsTrait[] = ['flank', 'kite', 'regroup'];
 
 /**
  * A Former Circus Lemur — one of Grimaldi's mutated sideshow performers.
@@ -83,6 +89,26 @@ export class CircusLemur extends Mob {
     this.isAggro = false;
   }
 
+  /**
+   * A lemur is a pack skirmisher that fights with thrown knives: it can learn
+   * to spread around the player so the knives come from several sides, to
+   * slip behind a friend when the player closes to nipping distance rather
+   * than stand and nip, and to fall back on a friend when hurt. Never `block`
+   * — a thrower with a nip is not a guard.
+   *
+   * The lemur outruns the player by design, which a kite must not: the
+   * shared tactical walk caps every retreat below player speed, so a player
+   * who chases a kiting lemur still catches it.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return LEMUR_TACTICS;
+  }
+
+  /** A thrower fans out at its throwing stand-off, not at a brawler's closing ring. */
+  protected override get flankStagingTiles(): number {
+    return CIRCUS_LEMUR_THROW_STANDOFF_TILES;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 
@@ -102,6 +128,7 @@ export class CircusLemur extends Mob {
 
     if (!nearest) {
       this.isAggro = false;
+      this.tactics.disengage();
       this.clearAStarPath();
       // `returnHomeOrWander`, not `doWander`: this class is reused as a bounty
       // encounter's escort, and only the former honours the `homePoint` the
@@ -115,17 +142,36 @@ export class CircusLemur extends Mob {
     const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
     const hasLOS = this.hasLOS(nearest) || this.onSameTile(nearest);
+    const canThrowFromHere = hasLOS && nearestDist <= knifeRangePx;
 
-    if (!hasLOS || nearestDist > knifeRangePx) {
+    // Its kite answers the nip, not the knife: it starts only once the player
+    // is inside biting distance, the moment the lemur would otherwise be cornered.
+    const tacticalMove = this.chooseTacticalStep(
+      nearest,
+      meleeRangePx,
+      this.meleeAnimTimer === 0 && this.throwAnimTimer === 0,
+      retreatBehindHelper,
+    );
+    if (tacticalMove?.breaksOff === true) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
+
+    if (tacticalMove !== null) {
+      this.walkTacticalStep(tacticalMove, nearest);
+      // Circling to its slot inside throwing range, it keeps its eyes on the
+      // player it is throwing at rather than on the ground it is crossing.
+      if (canThrowFromHere) this.faceHorizontallyToward(nearest);
+    } else if (!canThrowFromHere) {
       this.followTargetAStar(
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         this.speed,
-        this.tileSize * KITE_STOP_RANGE_TILES,
+        this.tileSize * CIRCUS_LEMUR_THROW_STANDOFF_TILES,
       );
     } else {
       this.isMoving = false;
-      this.facingX = nearest.x >= this.x ? 1 : -1;
+      this.faceHorizontallyToward(nearest);
     }
 
     if (nearestDist <= meleeRangePx && this.meleeCooldown === 0 && hasLOS) {
@@ -159,6 +205,11 @@ export class CircusLemur extends Mob {
       this.throwAnimTimer = THROW_ANIM_FRAMES;
       this.projectileSoundPending = true;
     }
+  }
+
+  /** The sprite only mirrors left and right, so only the horizontal facing matters. */
+  private faceHorizontallyToward(target: Player): void {
+    this.facingX = target.x >= this.x ? 1 : -1;
   }
 
   private updateKnives(targets: Player[]): void {

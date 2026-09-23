@@ -76,6 +76,13 @@ interface SettingsData {
   sfxVolume: number;
   musicVolume: number;
   bindings: StoredBindings;
+  /**
+   * Whether the companion cat sends Mongo in on her own when a fight is on her.
+   *
+   * On by default: with the human in control the cat has no Summon button, so
+   * without it the pet sits out every fight the player does not switch over for.
+   */
+  catAutoSummonsMongo: boolean;
 }
 
 const DEFAULTS: SettingsData = {
@@ -85,6 +92,7 @@ const DEFAULTS: SettingsData = {
   sfxVolume: DEFAULT_SFX_VOLUME,
   musicVolume: DEFAULT_MUSIC_VOLUME,
   bindings: {},
+  catAutoSummonsMongo: true,
 };
 
 function isQualityPreset(value: unknown): value is QualityPreset {
@@ -102,6 +110,11 @@ function readVolume(source: Record<string, unknown>, key: string, fallback: numb
   const raw = source[key];
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
   return Math.min(MAX_VOLUME, Math.max(MIN_VOLUME, raw));
+}
+
+function readBoolean(source: Record<string, unknown>, key: string, fallback: boolean): boolean {
+  const raw = source[key];
+  return typeof raw === 'boolean' ? raw : fallback;
 }
 
 /**
@@ -152,6 +165,7 @@ function load(): SettingsData {
     sfxVolume: readVolume(stored, 'sfxVolume', DEFAULTS.sfxVolume),
     musicVolume: readVolume(stored, 'musicVolume', DEFAULTS.musicVolume),
     bindings: readBindings(stored, 'bindings'),
+    catAutoSummonsMongo: readBoolean(stored, 'catAutoSummonsMongo', DEFAULTS.catAutoSummonsMongo),
   };
 }
 
@@ -200,6 +214,15 @@ class Settings {
 
   setMusicVolume(volume: number): void {
     this.data.musicVolume = clampVolume(volume);
+    this.persist();
+  }
+
+  get catAutoSummonsMongo(): boolean {
+    return this.data.catAutoSummonsMongo;
+  }
+
+  setCatAutoSummonsMongo(enabled: boolean): void {
+    this.data.catAutoSummonsMongo = enabled;
     this.persist();
   }
 

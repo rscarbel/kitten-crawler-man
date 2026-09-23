@@ -15,6 +15,7 @@ import type { MercenaryRosterCheckpoint } from './MercenaryRoster';
 import type { MongoPetStateCheckpoint } from './MongoPetState';
 import type { TownMemoryCheckpoint } from './TownMemory';
 import type { JournalProgressCheckpoint } from './JournalProgress';
+import { TACTICS_TRAITS, type TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import type { MarketStockCheckpoint } from '../systems/market/MarketStock';
 import type { CircusQuestProgressCheckpoint } from './CircusQuestProgress';
 import type { AnchorQuestProgressCheckpoint } from './AnchorQuestProgress';
@@ -68,6 +69,12 @@ export interface PersistedWorldState {
   mongoPetState: MongoPetStateCheckpoint;
   /** Optional: an older save costs one repeated congratulation, not a failed load. */
   mordecaiDebrief?: MordecaiDebriefCheckpoint;
+  /**
+   * Tactics traits the party has already been told enemies have learned,
+   * for the whole run. Optional for the same reason `mordecaiDebrief` is: an older save
+   * without it just costs a repeated System notice, not a failed load.
+   */
+  tacticsNoticesSeen?: readonly TacticsTrait[];
 
   krakarenKilled: boolean;
   krakarenBossRoomIdx: number;
@@ -424,6 +431,17 @@ function parseMordecaiDebriefCheckpoint(value: unknown): MordecaiDebriefCheckpoi
     const bossType = debriefBossType(key);
     const memory = parseDebriefMemory(entry);
     if (bossType !== null && memory !== undefined) parsed[bossType] = memory;
+  }
+  return parsed;
+}
+
+/** Lenient, like its neighbour above: a bad entry only costs one repeated System notice. */
+function parseTacticsNoticesSeen(value: unknown): readonly TacticsTrait[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const parsed: TacticsTrait[] = [];
+  for (const entry of value) {
+    const trait = stringUnion(entry, TACTICS_TRAITS);
+    if (trait !== undefined) parsed.push(trait);
   }
   return parsed;
 }
@@ -935,14 +953,22 @@ function parsePersistedMarketStockCheckpoint(
   return { remaining };
 }
 
-function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint | undefined {
+export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
   const { residentTalks, poulticesLeft, clearedRooms } = value;
+  // Absent from a save written before camps were remembered; such a save
+  // simply remembers none, rather than losing the whole world state over it.
+  const clearedCamps = value.clearedCamps ?? [];
   const residentIds = allResidents().map((resident) => resident.id);
   const parsedTalks = parseArray(residentTalks, (entry) =>
     parseStringKeyedTuple(entry, (v) => (isNumber(v) ? v : undefined)),
   );
-  if (parsedTalks === undefined || !isNumber(poulticesLeft) || !isStringArray(clearedRooms)) {
+  if (
+    parsedTalks === undefined ||
+    !isNumber(poulticesLeft) ||
+    !isStringArray(clearedRooms) ||
+    !isStringArray(clearedCamps)
+  ) {
     return undefined;
   }
   const validTalks: Array<[(typeof residentIds)[number], number]> = [];
@@ -951,7 +977,7 @@ function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint | undef
     if (residentId === undefined) continue;
     validTalks.push([residentId, count]);
   }
-  return { residentTalks: validTalks, poulticesLeft, clearedRooms };
+  return { residentTalks: validTalks, poulticesLeft, clearedRooms, clearedCamps };
 }
 
 function parseJournalProgressCheckpoint(value: unknown): JournalProgressCheckpoint | undefined {
@@ -1226,6 +1252,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const mercenaryRoster = parseMercenaryRosterCheckpoint(value.mercenaryRoster);
   const mongoPetState = parseMongoPetStateCheckpoint(value.mongoPetState);
   const mordecaiDebrief = parseMordecaiDebriefCheckpoint(value.mordecaiDebrief);
+  const tacticsNoticesSeen = parseTacticsNoticesSeen(value.tacticsNoticesSeen);
   const { krakarenKilled, krakarenBossRoomIdx, juicerKilled, juicerBossRoomIdx } = value;
 
   if (
@@ -1275,6 +1302,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     mercenaryRoster,
     mongoPetState,
     mordecaiDebrief,
+    tacticsNoticesSeen,
     krakarenKilled,
     krakarenBossRoomIdx,
     juicerKilled,

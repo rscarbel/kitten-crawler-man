@@ -21,7 +21,6 @@ import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { Mob } from '../../creatures/Mob';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { AbilityManager } from '../../core/AbilityManager';
-import type { XpDiminishingTier } from '../../levels/xpDiminishing';
 import { DeathScreen } from '../../ui/DeathScreen';
 import { BodyPartGoreSystem } from '../BodyPartGoreSystem';
 import { resolveKills, resolvePlayerAttacks, type CombatContext } from '../CombatSystem';
@@ -59,12 +58,6 @@ export interface CombatKitDeps {
   readonly abilityManager: AbilityManager;
   /** Narrowed exactly as `CombatContext` narrows it. Null where there is no safe room. */
   readonly safeRoom: Pick<SafeRoomSystem, 'isEntityInSafeRoom'> | null;
-  /**
-   * This floor's combat-XP diminishing curve. Absent means kills award full XP —
-   * which is the case indoors, since interiors hang off a floor that declares no
-   * curve of its own.
-   */
-  readonly xpDiminishingTiers?: readonly XpDiminishingTier[];
 }
 
 /** Systems a swing can reach that not every scene has. */
@@ -132,7 +125,6 @@ export class CombatKit {
       spells: this.spells,
       smushFx: this.smushFx,
       hitLanded: false,
-      xpDiminishingTiers: deps.xpDiminishingTiers,
     };
   }
 

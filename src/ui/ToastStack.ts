@@ -52,7 +52,7 @@ export class ToastStack {
    *   exact words instead of stacking a second copy, and move it back to the
    *   newest row so a refreshed line cannot outlive the one below it and shuffle
    *   the rows. Wrong for a line whose repetition is the information — three
-   *   identical `-1.3s` flags mean three kills, and merging them would report
+   *   identical `-1.2s` flags mean three kills, and merging them would report
    *   one.
    */
   show(text: string, mergeDuplicates = false): void {

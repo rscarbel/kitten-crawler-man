@@ -1,3 +1,4 @@
+import { displayHp } from '../../core/crawlerFormulas';
 import type { Player } from '../../Player';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -96,7 +97,7 @@ export function renderStatsTab(
   const statBlock = (p: Player): number => {
     const midStat =
       p instanceof HumanPlayer ? `EXP: ${p.explosivesHandling}` : `INT: ${p.intelligence}`;
-    drawText(ctx, `HP: ${p.hp}/${p.maxHp}   STR: ${p.strength}   ${midStat}`, {
+    drawText(ctx, `HP: ${displayHp(p.hp)}/${p.maxHp}   STR: ${p.strength}   ${midStat}`, {
       x: bx + STAT_BLOCK_X,
       y: y - STAT_LABEL_Y_OFFSET,
       size: STAT_SUBLABEL_SIZE,

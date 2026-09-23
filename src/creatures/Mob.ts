@@ -1,4 +1,4 @@
-import { Player } from '../Player';
+import { Player, HP_BAR_HEIGHT, HP_BAR_Y_OFFSET } from '../Player';
 import type { DamageSource } from '../Player';
 import type { StatusEffect } from '../core/StatusEffect';
 import { MOB_MAX_PATH_DISTANCE_TILES, type GameMap } from '../map/GameMap';
@@ -8,8 +8,27 @@ import { randomInt } from '../utils';
 import { AGGRO_PERSIST_MULTIPLIER, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../core/constants';
 import { tryConsumePathfind } from './pathfindBudget';
 import { alertPackAround } from './packAlert';
-import { drawText } from '../ui/TextBox';
+import {
+  scaledCooldownFramesForLevel,
+  scaledDamageForLevel,
+  levelledMaxHp,
+  SHARED_LEVELLED_CURVE,
+  speedScaleForLevel,
+  type LevelledCurve,
+} from './mobLevelScaling';
+import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import type { SpatialGrid } from '../core/SpatialGrid';
+import type { Rng } from '../sprites/person/rng';
+import { knockbackStepPx } from '../core/knockbackEase';
+import { MobTactics } from './tactics/MobTactics';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import { retreatTowardHelper } from './tactics/retreat';
+import type { KiteAim, TacticalMove } from './tactics/tacticalFrame';
+import {
+  GUARD_KNOCKBACK_FRAMES,
+  GUARD_KNOCKBACK_TILES,
+  isGuardableBlow,
+} from './tactics/blockGuard';
 
 /**
  * The weapon a player-sourced blow was struck with, named so that everything
@@ -25,6 +44,9 @@ export type PlayerDamageType = 'melee' | 'missile' | 'shell' | 'smush' | 'explos
  */
 const EXPLOSION_DAMAGE_TYPE = 'explosion' satisfies PlayerDamageType;
 
+/** The share of a dynamite blast any boss takes; see `Mob.blastDamageScale`. */
+export const BOSS_BLAST_DAMAGE_SCALE = 0.25;
+
 /**
  * How one of this mob's blows reached its victim.
  *
@@ -35,13 +57,26 @@ const EXPLOSION_DAMAGE_TYPE = 'explosion' satisfies PlayerDamageType;
  */
 export type MobBlowDelivery = 'contact' | 'ranged';
 
+/** The damage source every blow a mob lands is described by. */
+export type MobDamageSource = Extract<DamageSource, { kind: 'mob' }>;
+
+/** Shared by every creature that has not opted in to any tactics trait. */
+export const NO_TACTICS: readonly TacticsTrait[] = [];
+
+/** A kite or regroup is walked at no more than this share of the player's speed. */
+const TACTICAL_RETREAT_MAX_SPEED_RATIO = 0.8;
+/**
+ * The fastest a mob walks while falling back. A player who chases a kiter must
+ * be able to catch it, and some creatures' own walk is quicker than the player's.
+ */
+export const TACTICAL_RETREAT_MAX_SPEED = PLAYER_SPEED * TACTICAL_RETREAT_MAX_SPEED_RATIO;
+
+/** The floating label a guarded blow shows over the mob. */
+const GUARD_LABEL = 'Blocked';
+
 /** Stagger range for initial wander timer so mobs don't change direction together. */
 const WANDER_TIMER_STAGGER_MAX = 119;
 
-/** Per-level HP scaling multiplier increment (+30% per level above 1). */
-const MOB_LEVEL_HP_SCALE = 0.3;
-/** Per-level speed scaling multiplier increment (+8% per level above 1). */
-const MOB_LEVEL_SPEED_SCALE = 0.08;
 /**
  * The fraction of the player's own speed that levelling alone may take a mob to.
  *
@@ -55,55 +90,6 @@ const LEVELLED_SPEED_PLAYER_RATIO = 0.9;
 const MOB_LEVEL_COIN_SCALE = 0.25;
 /** Per-level XP scaling multiplier increment (+25% per level above 1). */
 const MOB_LEVEL_XP_SCALE = 0.25;
-/** Per-level damage scaling multiplier increment (+20% per level). */
-const MOB_LEVEL_DAMAGE_SCALE = 0.2;
-
-/**
- * The shortest a scaled cooldown ever gets, as a fraction of its level-1 value.
- *
- * The fourth scaling axis, alongside HP, speed and damage. Threat is damage ×
- * cadence × hit-rate × count, and before this only the first of those moved with
- * level: a level-8 goblin swung on exactly the level-1 goblin's clock, so
- * levelling made enemies survive longer without ever making them more dangerous
- * — the definition of an HP sponge. The fix this codebase commits to is
- * pressure over sponge: scale the attack clock with level rather than
- * inflating HP, so a higher level reads as a more dangerous fight and not
- * just a longer one.
- *
- * Asymptotic and floored rather than linear, because the failure mode at the far
- * end is a machine gun: the curve is steepest over the first few levels, where
- * the player feels it, and flattens out well before it becomes unreactable.
- */
-const CADENCE_FLOOR = 0.55;
-/** How quickly {@link CADENCE_FLOOR} is approached; larger is faster. */
-const CADENCE_RATE = 0.12;
-
-/**
- * Multiplier a mob of this level applies to any of its own attack cooldowns and
- * wind-ups: 1.00 at level 1, ~0.79 at level 8, approaching {@link CADENCE_FLOOR}.
- *
- * A free function as well as {@link Mob.scaledCooldownFrames} so
- * `scripts/verify-difficulty.ts` can assert the curve's shape directly, rather
- * than against a copy of it that could drift.
- */
-export function cooldownScaleForLevel(level: number): number {
-  const extra = Math.max(0, level - 1);
-  return CADENCE_FLOOR + (1 - CADENCE_FLOOR) / (1 + CADENCE_RATE * extra);
-}
-
-/** The value {@link cooldownScaleForLevel} approaches but never reaches. */
-export const CADENCE_SCALE_FLOOR = CADENCE_FLOOR;
-
-/**
- * A base cooldown or wind-up shortened for a given level, never below one frame.
- *
- * The single implementation behind {@link Mob.scaledCooldownFrames} and behind
- * every creature that exposes its own scaled timing as a free function, so
- * `scripts/verify-difficulty.ts` checks the real arithmetic rather than a copy.
- */
-export function scaledCooldownFramesForLevel(baseFrames: number, level: number): number {
-  return Math.max(1, Math.round(baseFrames * cooldownScaleForLevel(level)));
-}
 
 /**
  * The most of its own walk step a mob may be displaced by separation in one
@@ -250,6 +236,11 @@ const AGGRO_INDICATOR_LINE_WIDTH = 3;
 /** Aggro indicator Y offset above mob. */
 const AGGRO_INDICATOR_Y_OFFSET = 3;
 
+/** Star drawn beside the health bar of a mob that rolled at least one tactics trait. */
+const TACTICS_RANK_MARK = '★';
+/** Gap between the health bar's right edge and the rank mark. */
+const TACTICS_RANK_MARK_GAP = 3;
+
 /** Septic label Y offset above health bar. */
 const SEPTIC_LABEL_Y_OFFSET = 12;
 /** Septic label secondary Y offset. */
@@ -344,6 +335,13 @@ export abstract class Mob extends Player {
   homePoint?: { x: number; y: number };
   /** Set beside `homePoint`; both in the same units the mob's own `x`/`y` are. */
   leashRadiusTiles?: number;
+  /**
+   * The `campSiteKey` of the camp this mob was spawned to live in, or null for
+   * everything that is not a camp resident. Held on the mob rather than in a
+   * per-camp list, so nothing outside the roster pins a resident once it is
+   * gone. Written by the camp spawner only.
+   */
+  campKey: string | null = null;
 
   /** Tracks how much damage each player has dealt to this mob (for XP split). */
   readonly damageTakenBy = new Map<Player, number>();
@@ -512,6 +510,21 @@ export abstract class Mob extends Player {
    * every other reader of that flag.
    */
   immuneToConfusion = false;
+
+  /**
+   * The most of a victim's own max HP any one blow from this mob may take, or
+   * null for no cap. Set on encounters that promise no blow ever kills from
+   * full (a bounty's mark and escort) and carried on every source this mob's
+   * harm is dealt through — its own blows and the projectiles it launches — so
+   * the victim can hold it after its own difficulty scaling.
+   */
+  blowCapShareOfTargetHp: number | null = null;
+
+  /** `source` with this mob's blow cap on it, if it has one. */
+  stampBlowCap(source: MobDamageSource): MobDamageSource {
+    if (this.blowCapShareOfTargetHp === null) return source;
+    return { ...source, maxShareOfTargetHp: this.blowCapShareOfTargetHp };
+  }
 
   /**
    * When true this mob hunts players sheltering inside the town safe zone.
@@ -758,6 +771,31 @@ export abstract class Mob extends Player {
    */
   specialSoundPending = false;
 
+  /** Set when this mob guards a blow; polled and cleared by the scene each frame. */
+  guardSoundPending = false;
+
+  /**
+   * The behaviours this mob learned at spawn, and the live state of any of
+   * them in progress. See {@link rollTactics} and {@link tacticsEligibility}.
+   */
+  readonly tactics = new MobTactics();
+  /** Reused every frame so asking the tactics where the target was allocates nothing. */
+  private readonly tacticalTargetPoint = { x: 0, y: 0 };
+
+  private _lastBlowWasGuarded = false;
+
+  /** True only inside {@link advanceKnockback}'s own step; see `moveWithCollision`. */
+  private knockbackStepInProgress = false;
+
+  /**
+   * Whether the most recent {@link takeDamageFrom} was turned aside by this
+   * mob's guard. Read by whoever landed the blow straight after the call, so an
+   * on-hit rider — a sepsis proc, a stun — is not applied through a guard.
+   */
+  get lastBlowWasGuarded(): boolean {
+    return this._lastBlowWasGuarded;
+  }
+
   /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
   get isHostile(): boolean {
     return true;
@@ -888,21 +926,29 @@ export abstract class Mob extends Player {
   }
 
   /**
-   * What this mob's level multiplied its authored speed and max HP by.
+   * What this mob's level multiplied its authored speed by, and the curve its
+   * max HP was levelled on.
    *
    * Kept because a good many creatures write those two fields again later in
    * their lives — a grub that evolves, a boss that enrages, a sky fowl that
    * breaks into a chase, anything reset by `resetToSpawn` — and every one of
-   * those writes is a flat authored constant. Before this pass none of them were
-   * ever levelled so it never showed; now that they are, a plain reassignment
-   * silently throws the level away and leaves a boss with levelled HP moving at
-   * level-1 speed — an HP sponge with none of the matching threat, which is the
-   * exact failure mode {@link cooldownScaleForLevel} exists to avoid elsewhere.
+   * those writes is a flat authored constant. A plain reassignment silently
+   * throws the level away and leaves a boss with levelled HP moving at level-1
+   * speed — an HP sponge with none of the matching threat.
    * Anything reassigning those fields must go through {@link setBaseSpeed} or
    * {@link setBaseMaxHp}.
    */
   private _levelSpeedMultiplier = 1;
-  private _levelHpMultiplier = 1;
+  private _levelledCurve: LevelledCurve = SHARED_LEVELLED_CURVE;
+
+  /**
+   * The HP and damage curve this mob was levelled on. Anything spawned at this
+   * mob's level — a summon, a burst, a tentacle — is levelled on it too, so it
+   * matches the floor it appears on.
+   */
+  get levelledCurve(): LevelledCurve {
+    return this._levelledCurve;
+  }
 
   /**
    * The walk speed this mob was authored at, before any level scaling.
@@ -958,19 +1004,23 @@ export abstract class Mob extends Player {
 
   /** Re-author this mob's max HP from a base constant, keeping its level scaling. */
   protected setBaseMaxHp(baseMaxHp: number): void {
-    this.setFixedMaxHp(Math.ceil(baseMaxHp * this._levelHpMultiplier));
+    this.setFixedMaxHp(levelledMaxHp(baseMaxHp, this.mobLevel, this._levelledCurve));
   }
 
   /**
-   * Scale this mob's stats for the given difficulty level.
-   * Level 1 = base stats. Each level above 1 increases:
-   *   HP:     +30% per level
-   *   Speed:  +8% per level
-   *   XP:     +25% per level
-   *   Coins:  +25% per level
-   * Damage is scaled via dealDamage() at +20% per level.
+   * Scale this mob's stats for the given difficulty level. Level 1 is the
+   * authored stats.
+   *
+   * Max HP and walk speed are multiplied here by the curves in
+   * `mobLevelScaling.ts`; damage and attack cadence are scaled where each blow
+   * is dealt and each cooldown is reset (see {@link scaledDamage} and
+   * {@link scaledCooldownFrames}); coins and XP by their own per-level rates.
+   *
+   * @param curve the HP and damage curve to level on: the spawning floor's
+   *   `levelledCurve`, or the curve of the mob this one was spawned from. A
+   *   level-1 mob returns before it is read, so it never moves an unlevelled mob.
    */
-  applyMobLevel(level: number) {
+  applyMobLevel(level: number, curve: LevelledCurve = SHARED_LEVELLED_CURVE) {
     if (level <= 1) return;
     // Every multiplier below reads the mob's *current* stats, so a second call
     // compounds: a level-7 mark levelled twice arrives with ~5× the HP it was
@@ -987,16 +1037,13 @@ export abstract class Mob extends Player {
     this.mobLevel = level;
     const extra = level - 1;
 
-    // HP
-    this._levelHpMultiplier = 1 + extra * MOB_LEVEL_HP_SCALE;
-    this.setFixedMaxHp(Math.ceil(this.maxHp * this._levelHpMultiplier));
+    this._levelledCurve = curve;
+    this.setFixedMaxHp(levelledMaxHp(this.maxHp, level, curve));
     this.hp = this.maxHp;
 
-    // Speed
-    this._levelSpeedMultiplier = 1 + extra * MOB_LEVEL_SPEED_SCALE;
+    this._levelSpeedMultiplier = speedScaleForLevel(level);
     this.speed = this.clampToSpeedCap(this.speed * this._levelSpeedMultiplier);
 
-    // Coins
     this.coinDropMin = Math.ceil(this.coinDropMin * (1 + extra * MOB_LEVEL_COIN_SCALE));
     this.coinDropMax = Math.ceil(this.coinDropMax * (1 + extra * MOB_LEVEL_COIN_SCALE));
   }
@@ -1031,7 +1078,7 @@ export abstract class Mob extends Player {
    * *reset*, never where one is compared, or the remaining time changes meaning
    * halfway through a swing.
    *
-   * Never below one frame, and never below `base × CADENCE_FLOOR` — that lower
+   * Never below one frame, and never below `base × CADENCE_SCALE_FLOOR` — that lower
    * bound is the explicit floor the fairness rules require, and it comes from
    * the curve itself rather than from a second constant per creature that could
    * disagree with it.
@@ -1086,7 +1133,7 @@ export abstract class Mob extends Player {
       this.attackSoundPending = true;
       return false;
     }
-    const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
+    const source = this.stampBlowCap({ kind: 'mob', mobType: this.mobType, attackType });
     const connected = target.takeDamage(damage, source);
     if (connected) {
       this.noteStruckPlayer(target);
@@ -1107,7 +1154,9 @@ export abstract class Mob extends Player {
   protected reflectMeleeDamage(target: Player, damage: number): void {
     const pct = target.inventory.equipment.getDamageReflectPct();
     if (pct <= 0) return;
-    this.takeDamageFrom(Math.max(1, Math.ceil(damage * pct)), target, 'melee');
+    // Struck by nobody: the mob hurt itself on the gear, so there is no blow
+    // to guard and none that should count as breaking a run of guards.
+    this.takeCreditedDamage(Math.max(1, Math.ceil(damage * pct)), target, 'melee', null);
   }
 
   /**
@@ -1142,8 +1191,8 @@ export abstract class Mob extends Player {
   }
 
   /**
-   * This mob's damage number after its level multiplier, and zero if it is
-   * harmless.
+   * This mob's damage number on the curve it was levelled on, and zero if it
+   * is harmless.
    *
    * For attacks that cannot go through {@link dealDamage} because the harm is
    * resolved somewhere else — a projectile that outlives its owner, say. It
@@ -1152,8 +1201,7 @@ export abstract class Mob extends Player {
    */
   protected scaledDamage(baseDamage: number): number {
     if (this.harmless) return 0;
-    const mult = 1 + (this.mobLevel - 1) * MOB_LEVEL_DAMAGE_SCALE;
-    return Math.ceil(baseDamage * mult);
+    return scaledDamageForLevel(baseDamage, this.mobLevel, this._levelledCurve);
   }
 
   setMap(map: GameMap) {
@@ -1523,6 +1571,11 @@ export abstract class Mob extends Player {
    * movement so mobs can slide along walls instead of passing through them.
    */
   protected moveWithCollision(dx: number, dy: number) {
+    // A mob being shoved goes where the shove takes it. Its own chase, wander
+    // and separation steps would otherwise walk straight back into the room
+    // the shove was meant to give the player. Facing and attack timers are
+    // untouched, so the stagger reads as a stumble, not a freeze.
+    if (this.knockbackFramesRemaining > 0 && !this.knockbackStepInProgress) return;
     if (!this.map) {
       this.x += dx;
       this.y += dy;
@@ -1648,6 +1701,19 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Share of a dynamite blast's enemy damage this mob takes.
+   *
+   * Every boss answers {@link BOSS_BLAST_DAMAGE_SCALE}, not only the ones that
+   * set {@link isBoss}: that flag also routes boss-room ownership, and several
+   * bosses run by their own systems leave it false on purpose. Those override
+   * this getter instead. A stick scaled to level a floor's rank and file would
+   * otherwise let a bag bought for a few dozen gold skip a boss fight outright.
+   */
+  get blastDamageScale(): number {
+    return this.isBoss ? BOSS_BLAST_DAMAGE_SCALE : 1;
+  }
+
+  /**
    * Only scales a genuine hit. Zero/negative amounts pass through untouched so
    * the "amount <= 0" guards further down the pipeline (dodge rolls, no-op
    * ticks) still see the caller's original value instead of a floor-forced 1.
@@ -1671,6 +1737,38 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * The body that physically delivered the blow now resolving in
+   * {@link takeDamageFrom}, when a {@link takeCreditedDamage} call named one
+   * other than the credited attacker. Set only for the length of that call, so
+   * it reaches the base implementation through every subclass override without
+   * each of them having to forward it.
+   */
+  private _creditedStrike: { readonly striker: Player | null } | null = null;
+
+  /**
+   * {@link takeDamageFrom} for harm credited to one body but delivered by
+   * another: a hireling's sword or thrown boulder credited to the crawler who
+   * paid for it, or reflect gear credited to its wearer.
+   *
+   * `striker` is what a guard is judged against and shoved away from. `null`
+   * means nothing struck at all — reflected damage — which can neither be
+   * guarded nor count as the clean hit that ends a run of guards.
+   */
+  takeCreditedDamage(
+    amount: number,
+    creditedTo: Player | null,
+    damageType: PlayerDamageType | null,
+    striker: Player | null,
+  ): void {
+    this._creditedStrike = { striker };
+    try {
+      this.takeDamageFrom(amount, creditedTo, damageType);
+    } finally {
+      this._creditedStrike = null;
+    }
+  }
+
+  /**
    * Deal damage and attribute it to an attacker for kill-credit / XP tracking.
    * Also triggers the damage flash and shows the health bar.
    *
@@ -1684,6 +1782,8 @@ export abstract class Mob extends Player {
     attacker: Player | null,
     damageType: PlayerDamageType | null = 'melee',
   ) {
+    this._lastBlowWasGuarded = false;
+    const striker = this._creditedStrike === null ? attacker : this._creditedStrike.striker;
     if (this.isDamageImmune) {
       this.onDamageBlocked();
       return;
@@ -1694,28 +1794,256 @@ export abstract class Mob extends Player {
     // working, not friendly fire.
     const isCrawlerAttack = attacker !== null && !(attacker instanceof Mob);
     if (isCrawlerAttack && !this.takesPlayerDamage(damageType)) return;
+    if (attacker !== null && striker !== null) {
+      if (this.tryGuardBlow(amount, attacker, striker, damageType)) return;
+    }
     const prev = this.hp;
     this.hp = Math.max(0, this.hp - this.scaleIncomingDamage(amount));
     const actual = prev - this.hp;
     if (actual > 0) {
       this.damageFlash = MOB_DAMAGE_FLASH_FRAMES;
       this.healthBarTimer = HEALTH_BAR_VISIBLE_FRAMES;
+      // A tick is not a blow, and reflected damage was struck by nobody, so
+      // only a weapon that someone swung breaks a run of guards.
+      if (damageType !== null && striker !== null) this.tactics.noteCleanHit();
       if (attacker) {
         this.damageTakenBy.set(attacker, (this.damageTakenBy.get(attacker) ?? 0) + actual);
-        this.alertedTo.set(attacker, ALERT_DURATION_FRAMES);
-        // Being shot from cover is the case a sight-based alert cannot cover:
-        // nobody in the pack has noticed anything, and without this the archer
-        // picks them off one at a time from outside everyone's aggro range.
-        //
-        // Only while unengaged. A mob already fighting shouted when it acquired
-        // its target, so repeating it here would buy nothing and would run a
-        // spatial query per damage tick for the whole of every fight.
-        if (this.currentTarget === null && this.packAlertRadiusTiles > 0) {
-          alertPackAround(this, this.packAlertRadiusTiles * this.tileSize, attacker);
-        }
+        this.noteAttackedBy(attacker);
       }
     }
     if (this.hp === 0 && prev > 0) this._resolveDeath(attacker, damageType);
+  }
+
+  /**
+   * Turn `attacker` toward this mob as an enemy, wounded or not.
+   *
+   * Shared by a blow that landed and a blow this mob guarded: a guard is still
+   * being attacked, and a mob that shrugged off the first swing and then stood
+   * idle would read as broken rather than skilled.
+   */
+  private noteAttackedBy(attacker: Player): void {
+    this.alertedTo.set(attacker, ALERT_DURATION_FRAMES);
+    // Being shot from cover is the case a sight-based alert cannot cover:
+    // nobody in the pack has noticed anything, and without this the archer
+    // picks them off one at a time from outside everyone's aggro range.
+    //
+    // Only while unengaged. A mob already fighting shouted when it acquired
+    // its target, so repeating it here would buy nothing and would run a
+    // spatial query per damage tick for the whole of every fight.
+    if (this.currentTarget === null && this.packAlertRadiusTiles > 0) {
+      alertPackAround(this, this.packAlertRadiusTiles * this.tileSize, attacker);
+    }
+  }
+
+  /**
+   * Which tactics traits this creature can ever roll. None by default: bosses,
+   * quest NPCs, summons, props and allies keep their authored behaviour, and a
+   * regular creature opts in only to what makes sense for its body.
+   */
+  protected get tacticsEligibility(): readonly TacticsTrait[] {
+    return NO_TACTICS;
+  }
+
+  /**
+   * Set by whatever conjures this mob into a fight, before the spawn roll. A
+   * summon is part of its summoner's authored fight, so it learns nothing even
+   * when its creature, spawned on a floor in its own right, could.
+   */
+  isSummon = false;
+
+  /**
+   * Roll this mob's tactics traits from its level. Call once, at spawn, straight
+   * after {@link applyMobLevel} — `applySpawnDifficulty` does both halves of that
+   * for every spawn site.
+   */
+  rollTactics(chanceScale: number, rng: Rng): void {
+    const eligibility = this.isSummon ? NO_TACTICS : this.tacticsEligibility;
+    this.tactics.roll(this.mobLevel, eligibility, chanceScale, rng);
+  }
+
+  /**
+   * The traits this mob rolled that its current body still acts on.
+   *
+   * Traits are rolled once and kept for life, but a creature whose body changes
+   * mid-life — a grub that becomes a hornet — can outgrow what it learned. Its
+   * eligibility then narrows and the rest go dormant rather than being
+   * stripped. The rank mark, the first-meeting notices and the trait-fight
+   * telemetry all promise the player a behaviour, so they read this list, not
+   * every trait ever rolled.
+   */
+  get activeTacticsTraits(): readonly TacticsTrait[] {
+    if (!this.tactics.hasAnyTrait) return this.tactics.traits;
+    const eligibility = this.tacticsEligibility;
+    return this.tactics.traits.filter((trait) => eligibility.includes(trait));
+  }
+
+  /** Whether {@link activeTacticsTraits} is non-empty, without building the list. */
+  get hasActiveTactics(): boolean {
+    if (!this.tactics.hasAnyTrait) return false;
+    const eligibility = this.tacticsEligibility;
+    return this.tactics.traits.some((trait) => eligibility.includes(trait));
+  }
+
+  /**
+   * Ask this mob's tactics where to walk this frame, for a creature that chases
+   * its last sighting of `target` with {@link followTargetAStar}. Null — and
+   * nothing asked — for a mob with no movement trait, so an untrained mob pays
+   * nothing and behaves exactly as it always has.
+   *
+   * Drops the cached route whenever the answer changes kind: a mob following
+   * its old chase path would step *toward* the player it has just started
+   * backing away from, until the next repath.
+   */
+  protected chooseTacticalStep(
+    target: Player,
+    attackRangePx: number,
+    canBreakOff: boolean,
+    kiteAim: KiteAim = retreatTowardHelper,
+  ): TacticalMove | null {
+    if (!this.tactics.hasMovementTraits) return null;
+    const previous = this.tactics.lastMove;
+    this.tacticalTargetPoint.x = this.lastKnownTargetX;
+    this.tacticalTargetPoint.y = this.lastKnownTargetY;
+    const move = this.tactics.chooseMove({
+      self: this,
+      map: this.map,
+      tileSize: this.tileSize,
+      target,
+      targetPoint: this.tacticalTargetPoint,
+      attackRangePx,
+      canBreakOff,
+      kiteAim,
+      flankStagingTiles: this.flankStagingTiles,
+      regroupAim: this.regroupAim,
+    });
+    if ((move?.behaviour ?? null) !== previous) this.clearAStarPath();
+    return move;
+  }
+
+  /**
+   * How far from its quarry, in tiles, this creature stages a flank. Undefined
+   * — the brawler's default — unless a creature that fights from range
+   * overrides it with its own stand-off.
+   */
+  protected get flankStagingTiles(): number | undefined {
+    return undefined;
+  }
+
+  /**
+   * Where this creature regroups to, given the friend it regroups on.
+   * Undefined — walk up to the friend itself, as a brawler does — unless a
+   * creature that fights from range overrides it; see
+   * `TacticalFrame.regroupAim`.
+   */
+  protected get regroupAim(): KiteAim | undefined {
+    return undefined;
+  }
+
+  /**
+   * Walk one frame of a move from {@link chooseTacticalStep}, then face
+   * `target` if the walk stopped: `followTargetCollide` writes no facing inside
+   * its stop radius, so a mob arriving where its tactic sent it would otherwise
+   * stand looking the way it walked.
+   *
+   * Held while {@link isSwingAnimating}, as `faceToward` asks: an arc that
+   * flips direction halfway through reads as the sprite glitching.
+   *
+   * A retreat is walked no faster than {@link TACTICAL_RETREAT_MAX_SPEED}, so a
+   * creature quick enough to outpace the player still cannot kite out of reach.
+   *
+   * A retreat is also walked in a straight line rather than along a route. Its
+   * planner only accepts a walk whose straight line is open and keeps clear of
+   * the player, and a route through tile centres bends off that line — for a
+   * brawler starting in contact, toward the player, where the separation that
+   * keeps bodies apart then shoves the player along the whole walk.
+   */
+  protected walkTacticalStep(move: TacticalMove, target: Player): void {
+    if (move.breaksOff) {
+      const speed = Math.min(this.speed, TACTICAL_RETREAT_MAX_SPEED);
+      this.followTargetCollide(move.x, move.y, speed, move.stopPx);
+    } else {
+      this.followTargetAStar(move.x, move.y, this.speed, move.stopPx);
+    }
+    if (!this.isMoving && !this.isSwingAnimating) this.faceToward(target);
+  }
+
+  /**
+   * Whether a swing's animation is playing, so turning now would flip its
+   * arc. False by default; a creature whose swing animation can still be
+   * running while a tactic walks it says so.
+   */
+  protected get isSwingAnimating(): boolean {
+    return false;
+  }
+
+  /**
+   * Roll this mob's guard against one incoming blow, and on success turn it
+   * aside: no damage, a "Blocked" label, and a shove away from whoever struck
+   * it that buys the player the space the lost hit cost them.
+   *
+   * Judged against `striker`, the body that swung, rather than `attacker`, the
+   * one credited: a hireling's sword is a creature's blow even when the crawler
+   * who hired it collects the kill.
+   *
+   * Not recorded in the damage ledger, so a guard alone does not count as the
+   * party having fought this mob — but the mob is still told it was attacked.
+   */
+  private tryGuardBlow(
+    amount: number,
+    attacker: Player,
+    striker: Player,
+    damageType: PlayerDamageType | null,
+  ): boolean {
+    const guardable = isGuardableBlow({
+      amount,
+      damageType,
+      fromCrawler: striker.isCrawler,
+      hp: this.hp,
+      maxHp: this.maxHp,
+    });
+    if (!guardable || !this.tactics.tryGuard()) return false;
+    this._lastBlowWasGuarded = true;
+    this.healthBarTimer = HEALTH_BAR_VISIBLE_FRAMES;
+    this.queueFloatingText(GUARD_LABEL, 'block');
+    this.guardSoundPending = true;
+    this.shoveAwayFrom(striker);
+    this.noteAttackedBy(attacker);
+    return true;
+  }
+
+  /** Start a guard's knockback, directed from `striker` through this mob. */
+  private shoveAwayFrom(striker: Player): void {
+    let dirX = this.x - striker.x;
+    let dirY = this.y - striker.y;
+    // Standing exactly on the striker gives no direction, so step back the
+    // way this mob is facing away from.
+    if (dirX === 0 && dirY === 0) {
+      dirX = -this.facingX;
+      dirY = -this.facingY;
+    }
+    if (dirX === 0 && dirY === 0) return;
+    this.applyKnockback(dirX, dirY, GUARD_KNOCKBACK_TILES * this.tileSize, GUARD_KNOCKBACK_FRAMES);
+  }
+
+  /**
+   * Advance an in-progress knockback by one frame through this mob's own wall
+   * collision, so a mob shoved into masonry simply stops against it.
+   *
+   * The caller owns the spatial grid and must re-bucket the mob afterwards;
+   * `MobUpdateLoop` does, by running this inside the span its `mobGrid.move`
+   * already covers.
+   */
+  advanceKnockback(): void {
+    if (this.knockbackFramesRemaining <= 0) return;
+    const step = knockbackStepPx(this, this.tileSize);
+    this.knockbackStepInProgress = true;
+    try {
+      this.moveWithCollision(this.knockbackDirX * step, this.knockbackDirY * step);
+    } finally {
+      this.knockbackStepInProgress = false;
+    }
+    this.knockbackFramesRemaining--;
+    if (this.knockbackFramesRemaining <= 0) this.clearKnockback();
   }
 
   /**
@@ -1832,6 +2160,7 @@ export abstract class Mob extends Player {
     super.tickTimers();
     if (this.healthBarTimer > 0) this.healthBarTimer--;
     if (this.hitSlowFrames > 0) this.hitSlowFrames--;
+    this.tactics.tick();
     // Saturating rather than wrapping: this counter is only ever compared
     // against a small window, and a mob that has not hit anybody for two years
     // of game time must not roll back around to "just did".
@@ -2006,8 +2335,37 @@ export abstract class Mob extends Player {
       ctx.save();
       ctx.globalAlpha = alpha;
       this.renderHealthBar(ctx, sx, sy);
+      // drawText sets its own globalAlpha from its `alpha` option rather than
+      // reading the ambient one, so the fade above has to be threaded through
+      // explicitly or the mark would snap straight to opaque.
+      this.renderTacticsRankMark(ctx, sx, sy, alpha);
       ctx.restore();
     }
+  }
+
+  /**
+   * A tiny star beside the health bar of a mob that still acts on at least one
+   * tactics trait — enough for a player to tell a smart enemy from a dumb one
+   * without spelling out which trait. Bosses author their own behaviour and
+   * never carry a trait, but the boss check stays explicit rather than relying
+   * on that, since a boss subclass could still override its eligibility.
+   */
+  private renderTacticsRankMark(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    alpha: number,
+  ) {
+    if (this.isBoss || !this.hasActiveTactics) return;
+    const barTop = sy - HP_BAR_Y_OFFSET;
+    const barCenterY = barTop + HP_BAR_HEIGHT / 2;
+    drawText(ctx, TACTICS_RANK_MARK, {
+      x: sx + this.tileSize + TACTICS_RANK_MARK_GAP,
+      y: barCenterY - TEXT_PRESETS.tacticsMark.size / 2,
+      align: 'left',
+      alpha,
+      ...TEXT_PRESETS.tacticsMark,
+    });
   }
 
   /**
@@ -2143,6 +2501,8 @@ export abstract class Mob extends Player {
     this.clearAStarPath();
     this.clearStatusEffects();
     this.clearTransientCombatState();
+    // The traits stay: they were rolled at spawn and are who this mob is.
+    this.tactics.clearLiveState();
   }
 
   /**
@@ -2214,6 +2574,8 @@ export abstract class Mob extends Player {
     this.healthBarTimer = 0;
     this.clearStatusEffects();
     this.clearTransientCombatState();
+    // The traits stay: they were rolled at spawn and are who this mob is.
+    this.tactics.clearLiveState();
   }
 
   abstract updateAI(targets: Player[]): void;

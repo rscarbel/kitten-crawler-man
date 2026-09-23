@@ -99,6 +99,17 @@ const DIFFICULTY_HINTS: Record<Difficulty, string> = {
   hard: 'Take more damage now; tougher spawns and bigger rewards from the next floor or bounty.',
 };
 
+const COMPANION_LABEL_Y_OFFSET = 16;
+const COMPANION_ROW_Y_SPACING = 32;
+const COMPANION_BUTTON_HEIGHT = 40;
+const COMPANION_HINT_Y_OFFSET = 6;
+const COMPANION_HINT_SIZE = 10;
+const COMPANION_SECTION_Y_SPACING =
+  COMPANION_BUTTON_HEIGHT + COMPANION_HINT_Y_OFFSET + HINT_BLOCK_H;
+
+const MONGO_AUTO_SUMMON_HINT =
+  'While you play the human, the cat sends Mongo in when enemies are near. Also in the follower menu.';
+
 const CONTROLS_SECTION_LABEL_Y_OFFSET = 16;
 const CONTROLS_SECTION_Y_SPACING = 32;
 const CONTROLS_BUTTON_HEIGHT = 44;
@@ -273,6 +284,37 @@ function renderDifficultyChoice(
   });
 }
 
+function renderMongoAutoSummonToggle(
+  ctx: CanvasRenderingContext2D,
+  buttons: ButtonRect[],
+  bx: number,
+  by: number,
+  bw: number,
+  band: ScrollBand,
+): void {
+  const enabled = settings.catAutoSummonsMongo;
+  addButton(ctx, buttons, {
+    x: bx,
+    y: by,
+    width: bw,
+    height: COMPANION_BUTTON_HEIGHT,
+    disabled: !isWhollyInBand(band, by, COMPANION_BUTTON_HEIGHT),
+    label: `Cat summons Mongo: ${enabled ? 'On' : 'Off'}`,
+    ...(enabled ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+    action: () => {
+      settings.setCatAutoSummonsMongo(!enabled);
+    },
+  });
+
+  drawText(ctx, MONGO_AUTO_SUMMON_HINT, {
+    x: bx,
+    y: by + COMPANION_BUTTON_HEIGHT + COMPANION_HINT_Y_OFFSET,
+    size: COMPANION_HINT_SIZE,
+    color: '#64748b',
+    width: bw,
+  });
+}
+
 function renderResetConfirmDialog(
   ctx: CanvasRenderingContext2D,
   buttons: ButtonRect[],
@@ -432,6 +474,17 @@ export function renderSettingsTab(
   y += DIFFICULTY_ROW_Y_SPACING;
   renderDifficultyChoice(ctx, scrolled, sliderX, y, sliderW, band);
   y += DIFFICULTY_SECTION_Y_SPACING;
+
+  drawText(ctx, 'Companion', {
+    x: bx + AUDIO_LABEL_X,
+    y: y + COMPANION_LABEL_Y_OFFSET,
+    bold: true,
+    size: SECTION_LABEL_SIZE,
+    color: '#64748b',
+  });
+  y += COMPANION_ROW_Y_SPACING;
+  renderMongoAutoSummonToggle(ctx, scrolled, sliderX, y, sliderW, band);
+  y += COMPANION_SECTION_Y_SPACING;
 
   drawText(ctx, 'Controls', {
     x: bx + AUDIO_LABEL_X,

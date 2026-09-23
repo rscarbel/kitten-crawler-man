@@ -1,3 +1,4 @@
+import { displayHp } from '../core/crawlerFormulas';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -196,6 +197,7 @@ export function drawHUD(
   pulseRef: { value: number },
   collapsed = false,
   reminderActive = false,
+  skillPointsHidden = false,
 ): HudResult {
   if (platform.showHudCollapseToggle && collapsed) {
     return drawHUDCollapsed(ctx, human, cat, pulseRef);
@@ -251,7 +253,11 @@ export function drawHUD(
     color: '#fbbf24',
   });
 
-  const notifRect = renderNotification(ctx, human, cat, pulseRef, reminderActive);
+  // Hidden rather than drawn inert: a hidden rect is also what disarms the
+  // banner's click-to-spend, so nothing invisible can be tapped.
+  const notifRect = skillPointsHidden
+    ? HIDDEN_RECT
+    : renderNotification(ctx, human, cat, pulseRef, reminderActive);
   const hudPanelBottom = panelTopY + panelHeight;
   const hudRect: HudRect = { x: PANEL_START_X, y: panelTopY, w: PANEL_WIDTH, h: panelHeight };
 
@@ -395,9 +401,10 @@ export function renderMobileSkillBadge(
   pulseRef: { value: number },
   topY: number,
   reminderActive = false,
+  hidden = false,
 ): HudRect {
   const hasUnspent = human.unspentPoints > 0 || cat.unspentPoints > 0;
-  if (!hasUnspent) return HIDDEN_RECT;
+  if (hidden || !hasUnspent) return HIDDEN_RECT;
 
   pulseRef.value = (pulseRef.value + BADGE_PULSE_INCREMENT) % (Math.PI * 2);
   const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(pulseRef.value);
@@ -504,7 +511,7 @@ export function drawHUDPlayerBlock(
     background: '#374151',
   });
 
-  drawText(ctx, `${player.hp}/${player.maxHp}`, {
+  drawText(ctx, `${displayHp(player.hp)}/${player.maxHp}`, {
     x: barX + barW + PLAYER_BLOCK_HP_TEXT_X_OFFSET,
     y: y + barH - PLAYER_BLOCK_TEXT_Y_OFFSET,
     size: PLAYER_BLOCK_TEXT_SIZE,

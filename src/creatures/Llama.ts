@@ -9,6 +9,9 @@ import {
 import { LLAMA_SPIT_FRAMES, llamaSpitReleaseFrame } from '../sprites/llamaSpitTiming';
 import { prewarmLavaSpit } from '../sprites/lavaBallSprite';
 import type { LavaSpit } from '../systems/LavaBallSystem';
+import type { TacticsTrait } from './tactics/tacticsTraits';
+import { retreatBehindHelper } from './tactics/retreat';
+import type { KiteAim } from './tactics/tacticalFrame';
 
 const LLAMA_HP = 10;
 const LLAMA_SPEED = 1.0;
@@ -63,6 +66,8 @@ const RETREAT_COOLDOWN_FRAMES = 180;
  * frame the shared timing module names.
  */
 const SPIT_RELEASE_TIMER = LLAMA_SPIT_FRAMES - llamaSpitReleaseFrame();
+
+const LLAMA_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
 
 export class Llama extends Mob {
   readonly xpValue = 8;
@@ -126,6 +131,25 @@ export class Llama extends Mob {
     this.retreatCooldown = 0;
   }
 
+  /**
+   * A spitter that works alongside its own herd: it can learn to fall back so
+   * another llama stands between it and the player, and to fall back on one
+   * when hurt. Never `block` — nothing about a llama turns a blow aside.
+   *
+   * Its own spits leave the fire the tactics treat as marked ground, which is
+   * safe here because every patch lands where the player was standing: a kite
+   * leads away from the player, and one that would cross a patch is refused
+   * and retried rather than taken, while the llama spits on as it always has.
+   */
+  protected override get tacticsEligibility(): readonly TacticsTrait[] {
+    return LLAMA_TACTICS;
+  }
+
+  /** A spitter regroups behind its friend, never up to it and into the fight. */
+  protected override get regroupAim(): KiteAim {
+    return retreatBehindHelper;
+  }
+
   /** Whether this llama is experienced enough to move between shots. */
   private get isEvasive(): boolean {
     return this.mobLevel >= EVASIVE_MIN_LEVEL;
@@ -181,12 +205,46 @@ export class Llama extends Mob {
       this.strafeFrames = 0;
       this.strafeQueued = false;
       this.retreatFrames = 0;
+      this.tactics.disengage();
       this.clearAStarPath();
       this.doWander();
       return;
     }
     this.isAggro = true;
     const nearestDist = this.distanceTo(nearest);
+
+    const targetCX = nearest.x + this.tileSize * CENTER_OFFSET;
+    const targetCY = nearest.y + this.tileSize * CENTER_OFFSET;
+    const mouth = this.mouthPosition();
+
+    const hasLOS = this.map ? this.map.hasLineOfSight(mouth.x, mouth.y, targetCX, targetCY) : true;
+
+    if (hasLOS) {
+      this.lastKnownTargetX = nearest.x;
+      this.lastKnownTargetY = nearest.y;
+    }
+
+    // A kite or regroup outranks the llama's own backpedal and sidestep: it is
+    // this exchange's retreat, so both are cancelled and the backpedal's
+    // cooldown spent rather than left to follow straight on. Like the
+    // backpedal, it never spits on the move — the wind-up waits for the walk
+    // to end, which the kite's frame cap bounds. Only reached between
+    // wind-ups — one returns before this — so breaking off here never abandons
+    // a committed spit.
+    const tacticalMove = this.chooseTacticalStep(
+      nearest,
+      this.tileSize * RETREAT_TRIGGER_TILES,
+      true,
+      retreatBehindHelper,
+    );
+    if (tacticalMove?.breaksOff === true) {
+      this.strafeQueued = false;
+      this.strafeFrames = 0;
+      this.retreatFrames = 0;
+      this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;
+      this.walkTacticalStep(tacticalMove, nearest);
+      return;
+    }
 
     // The sidestep is queued on the release frame and started here, once the
     // spit animation has played out — begun any earlier it would run underneath
@@ -200,17 +258,6 @@ export class Llama extends Mob {
       this.retreatFrames = RETREAT_MAX_FRAMES;
       this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;
       this.strafeFrames = 0;
-    }
-
-    const targetCX = nearest.x + this.tileSize * CENTER_OFFSET;
-    const targetCY = nearest.y + this.tileSize * CENTER_OFFSET;
-    const mouth = this.mouthPosition();
-
-    const hasLOS = this.map ? this.map.hasLineOfSight(mouth.x, mouth.y, targetCX, targetCY) : true;
-
-    if (hasLOS) {
-      this.lastKnownTargetX = nearest.x;
-      this.lastKnownTargetY = nearest.y;
     }
 
     // Movement: give ground first, then finish any sidestep, then the standing

@@ -1,6 +1,7 @@
 import { type GameMap } from '../map/GameMap';
 import { type Mob } from '../creatures/Mob';
 import type { TreasureRoomData } from '../map/DungeonGenerator';
+import { campSiteKey } from '../map/overworld/camps';
 import { Goblin } from '../creatures/Goblin';
 import { prewarmGoblin, type GoblinWeapon } from '../sprites/goblinSprite';
 import { Llama } from '../creatures/Llama';
@@ -47,7 +48,7 @@ import { GoblinArcher } from '../creatures/GoblinArcher';
 import { clamp, randomInt } from '../utils';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { TILE_SIZE } from '../core/constants';
-import type { DifficultyProfile } from '../core/difficultyProfiles';
+import { applySpawnDifficulty, type DifficultyProfile } from '../core/difficultyProfiles';
 import type { EscortSpawnRule, MobLevelRange, MobSpawnRule, LevelDef } from './types';
 
 type GoblinVariant = { readonly weapon: GoblinWeapon; readonly weight: number };
@@ -56,10 +57,10 @@ type GoblinVariant = { readonly weapon: GoblinWeapon; readonly weight: number };
 const MAX_SPAWN_ATTEMPTS = 20;
 
 /** Extra mobs spawned in treasure rooms for difficulty. */
-const TREASURE_ROOM_EXTRA_MOBS = 3;
+export const TREASURE_ROOM_EXTRA_MOBS = 3;
 
 /** Treasure room mob level boost. */
-const TREASURE_ROOM_LEVEL_BOOST = 1;
+export const TREASURE_ROOM_LEVEL_BOOST = 1;
 
 /** Maximum mob level cap. */
 export const MAX_MOB_LEVEL = 20;
@@ -221,7 +222,56 @@ export function earnedLevelFloor(
 ): number {
   const min = band.minLevel ?? 1;
   const max = band.maxLevel ?? min;
-  return clamp(Math.round(partyLevel * profile.ambientLevelRatio), min, max);
+  return clamp(earnedLevel(partyLevel, profile), min, max);
+}
+
+/** The ambient level a party has earned before any band holds it: its level times the profile's ratio. */
+function earnedLevel(partyLevel: number, profile: DifficultyProfile): number {
+  return Math.round(partyLevel * profile.ambientLevelRatio);
+}
+
+/**
+ * An ambient band slid up to meet a party that has out-levelled it, on a floor
+ * that authors `ambientTracking`; the band unchanged anywhere else.
+ *
+ * The slide is how far the party's earned level, less the floor's
+ * `levelsBehind`, has passed the band's top, so every roll lands a fixed step
+ * under the earned level — an over-levelled party meets what an on-schedule one
+ * meets at the band's top, never a spread above it. A party whose earned level
+ * is still inside the band meets it as authored. The slide stops at the floor's
+ * `maxLevel`.
+ *
+ * Without this a band's ceiling pinned a floor's mobs while the party kept
+ * growing, and the whole floor fell further behind with every level it gave.
+ */
+export function partyTrackedBand(
+  band: MobLevelRange,
+  def: Pick<LevelDef, 'ambientTracking'>,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): MobLevelRange {
+  const tracking = def.ambientTracking;
+  if (tracking === undefined) return band;
+  const min = band.minLevel ?? 1;
+  const max = band.maxLevel ?? min;
+  const headroom = Math.max(0, Math.min(tracking.maxLevel, MAX_MOB_LEVEL) - max);
+  const trackedLevel = earnedLevel(partyLevel, profile) - tracking.levelsBehind;
+  const slide = clamp(trackedLevel - max, 0, headroom);
+  if (slide === 0) return band;
+  return { minLevel: min + slide, maxLevel: max + slide };
+}
+
+/**
+ * The level one ambient spawn rolls at on `def`: {@link resolveSpawnLevel} over
+ * the band as {@link partyTrackedBand} moves it for this party.
+ */
+export function resolveAmbientLevel(
+  band: MobLevelRange,
+  def: Pick<LevelDef, 'ambientTracking'>,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): number {
+  return resolveSpawnLevel(partyTrackedBand(band, def, partyLevel, profile), partyLevel, profile);
 }
 
 /**
@@ -243,8 +293,22 @@ export function regionLevelBand(band: MobLevelRange, bonus: number): MobLevelRan
   };
 }
 
+/**
+ * Every progression region a floor's rooms can be seeded in, in order: one per
+ * gauntlet plus the free region past the last, or the single region of a floor
+ * that authors no progression.
+ */
+export function progressionRegions(def: LevelDef): number[] {
+  const count = Math.max(
+    1,
+    def.progression?.regionSpawnBonus?.length ?? 0,
+    def.progression?.regionLevelBonus?.length ?? 0,
+  );
+  return Array.from({ length: count }, (_, region) => region);
+}
+
 /** The `regionLevelBonus` earned for a region, or none if the floor authors no bonuses at all. */
-function regionLevelBonusFor(def: LevelDef, region: number): number {
+export function regionLevelBonusFor(def: LevelDef, region: number): number {
   return (def.progression?.regionLevelBonus ?? [])[region] ?? 0;
 }
 
@@ -305,7 +369,7 @@ export function recommendedPartyLevelFor(def: LevelDef, profile: DifficultyProfi
   if (def.recommendedLevelOverride !== undefined) return def.recommendedLevelOverride;
   const ceiling = ambientBandCeiling(def);
   for (let level = 1; level < MAX_RECOMMENDED_PARTY_LEVEL; level++) {
-    if (Math.round(level * profile.ambientLevelRatio) >= ceiling) return level;
+    if (earnedLevel(level, profile) >= ceiling) return level;
   }
   return MAX_RECOMMENDED_PARTY_LEVEL;
 }
@@ -326,18 +390,6 @@ export function resolveBossLevel(
   const min = band.minLevel ?? 1;
   const max = band.maxLevel ?? min;
   return clamp(Math.round(partyLevel * profile.bossLevelRatio), min, max);
-}
-
-/** Whichever of the two rules above suits what was actually spawned. */
-function levelForMob(
-  mob: Mob,
-  band: MobLevelRange,
-  partyLevel: number,
-  profile: DifficultyProfile,
-): number {
-  return mob.isBoss
-    ? resolveBossLevel(band, partyLevel, profile)
-    : resolveSpawnLevel(band, partyLevel, profile);
 }
 
 /**
@@ -553,8 +605,13 @@ export function spawnExtraMobs(
 
     for (const [dx, dy] of rule.offsets) {
       const mob = createMob(rule.type, origin.x + dx, origin.y + dy, map);
-      mob.applyMobLevel(levelForMob(mob, rule, partyLevel, profile));
-      mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+      mob.applyMobLevel(
+        mob.isBoss
+          ? resolveBossLevel(rule, partyLevel, profile)
+          : resolveAmbientLevel(rule, def, partyLevel, profile),
+        def.levelledCurve,
+      );
+      applySpawnDifficulty(mob, profile);
       mob.allowSlingshotDrop = def.slingshotDrops === true;
       if (rule.setup) {
         SPAWN_SETUP[rule.setup]?.(mob, map, origin);
@@ -588,12 +645,16 @@ const CAMP_SPAWN_ATTEMPTS = 40;
  * Residents are leashed to their camp. `BountySystem` is the only other writer
  * of `homePoint`/`leashRadiusTiles` and it writes them on floor 3 only, so this
  * remains provably invisible to the goblins and troglodytes on floors 1 and 2.
+ *
+ * A camp in `clearedCamps` is skipped outright: its ground and props are part
+ * of the map and still stand, but nobody lives there any more.
  */
 function spawnCampResidents(
   def: LevelDef,
   map: GameMap,
   partyLevel: number,
   profile: DifficultyProfile,
+  clearedCamps: ReadonlySet<string>,
 ): Mob[] {
   const mobs: Mob[] = [];
   const rosters = def.campSpawns;
@@ -602,14 +663,16 @@ function spawnCampResidents(
   for (const camp of map.camps) {
     const roster = rosters[camp.kind];
     if (roster === undefined || roster.length === 0) continue;
+    const key = campSiteKey(camp);
+    if (clearedCamps.has(key)) continue;
     for (const rule of roster) {
       const count = randomInt(rule.minCount ?? 1, rule.maxCount ?? 1);
       for (let spawned = 0; spawned < count; spawned++) {
         const tile = findWalkableTileInCamp(map, camp.centre, camp.radiusTiles);
         if (tile === null) continue;
         const mob = createMob(rule.type, tile.x, tile.y, map);
-        mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel, profile));
-        mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+        mob.applyMobLevel(resolveAmbientLevel(rule, def, partyLevel, profile), def.levelledCurve);
+        applySpawnDifficulty(mob, profile);
         mob.allowSlingshotDrop = def.slingshotDrops === true;
         // Its own spawn tile, **not** the camp's centre. The centre is a
         // `CAMPFIRE` — solid — and `followTargetAStar` would be asked to path to
@@ -618,6 +681,7 @@ function spawnCampResidents(
         // construction and is inside the camp, which is all the leash needs.
         mob.homePoint = { x: mob.x, y: mob.y };
         mob.leashRadiusTiles = CAMP_LEASH_RADIUS_TILES;
+        mob.campKey = key;
         mobs.push(mob);
       }
     }
@@ -644,37 +708,93 @@ function findWalkableTileInCamp(
 }
 
 /**
+ * The extra bodies a room of `band` gains on a floor with an
+ * `overLevelReinforcement`: one for every `levelsPerBody` levels the party's
+ * earned level has passed the band's top, never more than `maxBodies`.
+ *
+ * One of two answers to a party that has out-levelled a floor, the other being
+ * {@link partyTrackedBand}. This one leaves every mob at its authored level, so
+ * the one-on-one rules — the off-stat crawler winning alone among them — hold
+ * exactly as authored, while the room still costs more: its cost grows with
+ * the number of bodies attacking while the party works through them.
+ */
+export function overLevelReinforcementBodies(
+  def: Pick<LevelDef, 'overLevelReinforcement'>,
+  band: MobLevelRange,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): number {
+  const reinforcement = def.overLevelReinforcement;
+  if (reinforcement === undefined) return 0;
+  const bandTop = band.maxLevel ?? band.minLevel ?? 1;
+  const levelsAhead = earnedLevel(partyLevel, profile) - bandTop;
+  if (levelsAhead <= 0) return 0;
+  return Math.min(reinforcement.maxBodies, Math.floor(levelsAhead / reinforcement.levelsPerBody));
+}
+
+/** How many of a room's host rule spawn, and which escorts join them. */
+export interface RoomPopulation {
+  readonly hostCount: number;
+  readonly escorts: readonly EscortSpawnRule[];
+}
+
+/**
+ * Rolls how many mobs one room spawns under `rule` in `region`: the host rule's
+ * roll plus its region's spawn bonus and any over-level reinforcement, with the
+ * escorts' places reserved first and the whole room held under
+ * {@link MAX_ROOM_SPAWN_COUNT}.
+ *
+ * Exported so `scripts/verify-difficulty-curve.ts` prices the rooms the
+ * spawner really fills rather than a copy of its arithmetic.
+ */
+export function rollRoomPopulation(
+  def: LevelDef,
+  rule: MobSpawnRule,
+  region: number,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): RoomPopulation {
+  // Escorts are rolled first and their places *reserved*, so a room that
+  // would otherwise fill its whole allowance with the host rule still has
+  // room for the archer that makes it a mixed group.
+  const escorts = rollEscorts(rule, region);
+  const regionSpawnBonus = (def.progression?.regionSpawnBonus ?? [])[region] ?? 0;
+  const hostBand = regionLevelBand(rule, regionLevelBonusFor(def, region));
+  const reinforcement = overLevelReinforcementBodies(def, hostBand, partyLevel, profile);
+  const rolled = randomInt(rule.minCount ?? 1, rule.maxCount ?? 1);
+  const hostCount = Math.max(
+    0,
+    Math.min(MAX_ROOM_SPAWN_COUNT - escorts.length, rolled + regionSpawnBonus + reinforcement),
+  );
+  return { hostCount, escorts };
+}
+
+/**
  * Instantiate all mobs for a level. Room spawn points draw from
  * `def.roomMobs`; hallway points draw from `def.hallwayMobs`.
  * If `def.bossRoom` is set and the map has a boss room centre, spawns the boss there.
+ * Camps named in `clearedCamps` (see `TownMemory.clearedCamps`) are left empty.
  */
 export function spawnForLevel(
   def: LevelDef,
   map: GameMap,
   partyLevel: number,
   profile: DifficultyProfile,
+  clearedCamps: ReadonlySet<string>,
 ): Mob[] {
   const mobs: Mob[] = [];
 
   if (def.roomMobs.length > 0) {
-    const regionBonuses = def.progression?.regionSpawnBonus ?? [];
     for (const { x, y, w, h, region } of map.mobSpawnPoints) {
       const levelBonus = regionLevelBonusFor(def, region);
       const rule = pickRule(def.roomMobs);
-      const min = rule.minCount ?? 1;
-      const max = rule.maxCount ?? 1;
-      // Escorts are rolled first and their places *reserved*, so a room that
-      // would otherwise fill its whole allowance with the host rule still has
-      // room for the archer that makes it a mixed group.
-      const escorts = rollEscorts(rule, region);
-      const count = Math.max(
-        0,
-        Math.min(
-          MAX_ROOM_SPAWN_COUNT - escorts.length,
-          randomInt(min, max) + (regionBonuses[region] ?? 0),
-        ),
+      const { hostCount: count, escorts } = rollRoomPopulation(
+        def,
+        rule,
+        region,
+        partyLevel,
+        profile,
       );
-      // Interior tile range: 1-tile inset from walls on each side
       const minTX = x - Math.floor(w / 2) + ROOM_BOUNDARY_INSET;
       const minTY = y - Math.floor(h / 2) + ROOM_BOUNDARY_INSET;
       const maxTX = minTX + w - ROOM_BOUNDS_OFFSET;
@@ -684,9 +804,10 @@ export function spawnForLevel(
         if (tile === null) return;
         const mob = createMob(type, tile.x, tile.y, map);
         mob.applyMobLevel(
-          resolveSpawnLevel(regionLevelBand(band, levelBonus), partyLevel, profile),
+          resolveAmbientLevel(regionLevelBand(band, levelBonus), def, partyLevel, profile),
+          def.levelledCurve,
         );
-        mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+        applySpawnDifficulty(mob, profile);
         mob.allowSlingshotDrop = def.slingshotDrops === true;
         mobs.push(mob);
       };
@@ -699,14 +820,14 @@ export function spawnForLevel(
     for (const { x, y } of map.hallwaySpawnPoints) {
       const rule = pickRule(def.hallwayMobs);
       const mob = createMob(rule.type, x, y, map);
-      mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel, profile));
-      mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+      mob.applyMobLevel(resolveAmbientLevel(rule, def, partyLevel, profile), def.levelledCurve);
+      applySpawnDifficulty(mob, profile);
       mob.allowSlingshotDrop = def.slingshotDrops === true;
       mobs.push(mob);
     }
   }
 
-  mobs.push(...spawnCampResidents(def, map, partyLevel, profile));
+  mobs.push(...spawnCampResidents(def, map, partyLevel, profile, clearedCamps));
 
   const bossRooms = def.bossRooms ?? [];
   for (let i = 0; i < bossRooms.length; i++) {
@@ -714,8 +835,8 @@ export function spawnForLevel(
     if (i >= map.bossRooms.length) continue;
     const brData = map.bossRooms[i];
     const boss = createMob(bossEntry.type, brData.centre.x, brData.centre.y, map);
-    boss.applyMobLevel(resolveBossLevel(bossEntry, partyLevel, profile));
-    boss.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+    boss.applyMobLevel(resolveBossLevel(bossEntry, partyLevel, profile), def.levelledCurve);
+    applySpawnDifficulty(boss, profile);
     boss.allowSlingshotDrop = def.slingshotDrops === true;
     mobs.push(boss);
   }
@@ -731,6 +852,7 @@ export function spawnTreasureRoomMobs(
   treasureRooms: TreasureRoomData[],
   def: LevelDef,
   map: GameMap,
+  partyLevel: number,
   profile: DifficultyProfile,
 ): Mob[] {
   const mobs: Mob[] = [];
@@ -752,10 +874,13 @@ export function spawnTreasureRoomMobs(
       const tile = findWalkableSpawnTile(map, { minTX, minTY, maxTX, maxTY });
       if (tile === null) continue;
       const mob = createMob(rule.type, tile.x, tile.y, map);
-      const band = regionLevelBand(rule, levelBonus);
+      const band = partyTrackedBand(regionLevelBand(rule, levelBonus), def, partyLevel, profile);
       const maxLevel = band.maxLevel ?? band.minLevel ?? 1;
-      mob.applyMobLevel(Math.min(maxLevel + TREASURE_ROOM_LEVEL_BOOST, MAX_MOB_LEVEL));
-      mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+      mob.applyMobLevel(
+        Math.min(maxLevel + TREASURE_ROOM_LEVEL_BOOST, MAX_MOB_LEVEL),
+        def.levelledCurve,
+      );
+      applySpawnDifficulty(mob, profile);
       mob.allowSlingshotDrop = def.slingshotDrops === true;
       mobs.push(mob);
     }

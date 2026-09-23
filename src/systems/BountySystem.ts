@@ -16,7 +16,11 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { activeDifficultyProfile, type DifficultyProfile } from '../core/difficultyProfiles';
+import {
+  activeDifficultyProfile,
+  applySpawnDifficulty,
+  type DifficultyProfile,
+} from '../core/difficultyProfiles';
 import { settings } from '../core/Settings';
 import { clamp } from '../utils';
 import type { GameMap } from '../map/GameMap';
@@ -44,7 +48,9 @@ import {
   buildBountyPayoutDialog,
   SHADY_PROXIMITY_BUBBLE,
 } from './shadyDialogs';
-import { findBountyDef } from './bountyDefs';
+import { findBountyDef, type BountyDef } from './bountyDefs';
+import { EncounterCommitment } from './bountyCommit';
+import { BOUNTY_MAX_BLOW_HP_SHARE } from '../creatures/mobLevelScaling';
 import { prewarmGroups } from '../core/SpriteLoader';
 import { SYSTEM_ASSET_REQUIREMENTS } from '../core/systemAssetRequirements';
 import {
@@ -59,16 +65,13 @@ import {
 /**
  * Hard ceiling on any mob's level, matching the spawner's own cap.
  *
- * Deliberately still the party's own level rather than a fraction of it. It was
- * briefly lowered on the theory that bounty packs were uniformly overtuned —
- * floor 3's ambient residents are level 5–9, so a level-20 escort hits at 4.8×
- * base against their 2.2× — but that theory was wrong: the Rock Golem falls on
- * the first attempt at these levels. What made the Knight and the Mantid
- * unbeatable was specific to them (a percentage-of-max-HP attack scaled a second
- * time by mob level; a walk speed with no ceiling), and both are fixed at the
- * source — every levelled walk speed in the game now goes through
- * `Mob.levelledSpeedCap`, so no escort of any kind can outrun the player
- * again. Tune an individual mark, not this number.
+ * Deliberately the same cap as every other mob rather than a lower one: a
+ * bounty that felt unbeatable has always traced back to something specific to
+ * its mark — a percentage-of-max-HP attack scaled a second time by mob level,
+ * or a walk speed with no ceiling — and those are fixed at the source. Every
+ * levelled walk speed goes through `Mob.levelledSpeedCap`, so no escort can
+ * outrun the player, and `verify:difficulty-curve` holds escorts at this level
+ * to their own HP-share band. Tune an individual mark, not this number.
  */
 export const MAX_BOUNTY_MOB_LEVEL = 20;
 /** The mark itself outranks its escort by this much. */
@@ -173,6 +176,55 @@ export function bountyPayoutCoins(bossLevel: number): number {
   return BOUNTY_PAYOUT_BASE_COINS + BOUNTY_PAYOUT_PER_LEVEL_COINS * (bossLevel - 1);
 }
 
+/** A bounty encounter as staged, before it is inserted into a scene. */
+export interface StagedBountyEncounter {
+  readonly boss: Mob;
+  readonly minions: readonly Mob[];
+  readonly bossLevel: number;
+  readonly minionLevel: number;
+}
+
+/**
+ * Builds an encounter through its def and applies everything the bounty rules
+ * demand of its mobs — level, difficulty, boss flags, the per-blow cap, the
+ * site leash — so a new bounty creature cannot forget any of it. Exported so
+ * `verify:difficulty-curve` fights exactly what a player meets.
+ */
+export function stageBountyEncounter(
+  def: BountyDef,
+  site: { readonly x: number; readonly y: number },
+  map: GameMap,
+  humanLevel: number,
+  catLevel: number,
+  profile: DifficultyProfile,
+): StagedBountyEncounter {
+  const minionLevel = bountyMinionLevel(humanLevel, catLevel, profile);
+  const bossLevel = bountyBossLevel(humanLevel, catLevel, profile);
+  const { boss, minions } = def.spawn(site.x, site.y, map, minionLevel);
+
+  boss.applyMobLevel(bossLevel);
+  applySpawnDifficulty(boss, profile);
+  boss.isBoss = true;
+  boss.immuneToConfusion = true;
+  for (const minion of minions) {
+    minion.applyMobLevel(minionLevel);
+    applySpawnDifficulty(minion, profile);
+  }
+
+  const homePoint = { x: site.x * TILE_SIZE, y: site.y * TILE_SIZE };
+  for (const mob of [boss, ...minions]) {
+    mob.ignoresTownSafeZone = true;
+    // The promise a bounty makes: hard, never a kill from full in one blow,
+    // however the curve, the difficulty or the crawler's own bar moves.
+    mob.blowCapShareOfTargetHp = BOUNTY_MAX_BLOW_HP_SHARE;
+    // Pre-aggro only: cleared the moment the fight starts, so a mark lured back
+    // to town is never yanked home mid-chase.
+    mob.homePoint = homePoint;
+    mob.leashRadiusTiles = SITE_LEASH_RADIUS_TILES;
+  }
+  return { boss, minions, bossLevel, minionLevel };
+}
+
 /**
  * A point-in-time copy of the live half of the bounty loop, for the in-run
  * safe-room checkpoint. The durable half is snapshotted separately — see
@@ -194,8 +246,8 @@ export class BountySystem implements GameSystem {
   private boss: Mob | null = null;
   /** Every mob of the current encounter, mark included. */
   private encounter: Mob[] = [];
-  /** True once any encounter mob has picked up a target — leashes come off for good. */
-  private aggroReleased = false;
+  /** The group's commitment to the fight, and its release one member at a time. */
+  private commitment = new EncounterCommitment();
   /** Set when the record says a bounty is out but the mobs were lost with the old scene. */
   private respawnPending = false;
 
@@ -474,7 +526,7 @@ export class BountySystem implements GameSystem {
     advanceBountyType(this.progress);
     this.encounter = [];
     this.boss = null;
-    this.aggroReleased = false;
+    this.endCommit();
     return coins;
   }
 
@@ -502,7 +554,7 @@ export class BountySystem implements GameSystem {
     }
     this.encounter = [];
     this.boss = null;
-    this.aggroReleased = false;
+    this.endCommit();
     this.respawnPending = false;
     this.progress.phase = 'available';
     this.progress.currentTypeId = null;
@@ -524,7 +576,7 @@ export class BountySystem implements GameSystem {
     return {
       boss: this.boss,
       encounter: [...this.encounter],
-      aggroReleased: this.aggroReleased,
+      aggroReleased: this.commitment.hasCommitted,
       respawnPending: this.respawnPending,
       markers: this._markers.map((marker) => ({ ...marker })),
       collectPointWorld: this.collectPointWorld === null ? null : { ...this.collectPointWorld },
@@ -553,7 +605,7 @@ export class BountySystem implements GameSystem {
     const markWasStillAtLarge = snapshot.boss !== null || snapshot.respawnPending;
     this.boss = null;
     this.encounter = [];
-    this.aggroReleased = false;
+    this.endCommit();
     this.respawnPending = markWasStillAtLarge;
     this._markers.length = 0;
     for (const marker of snapshot.markers) this._markers.push({ ...marker });
@@ -580,8 +632,7 @@ export class BountySystem implements GameSystem {
       this.restageFromRecord(ctx.human, ctx.cat);
     }
     if (this.encounter.length === 0) return;
-    this.releaseLeashesOnAggro();
-    if (this.aggroReleased) this.holdAggro();
+    if (this.commitment.update(this.encounter)) this.onEncounterCommitted();
   }
 
   /**
@@ -821,19 +872,15 @@ export class BountySystem implements GameSystem {
     // resumed after a door stays on that setting only if it still says so —
     // the same re-read `restageFromRecord` already does for player levels.
     const profile = activeDifficultyProfile();
-    const minionLevel = bountyMinionLevel(human.level, cat.level, profile);
-    const bossLevel = bountyBossLevel(human.level, cat.level, profile);
-    const { boss, minions } = def.spawn(site.x, site.y, this.gameMap, minionLevel);
-
-    boss.applyMobLevel(bossLevel);
-    boss.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+    const { boss, minions, bossLevel } = stageBountyEncounter(
+      def,
+      site,
+      this.gameMap,
+      human.level,
+      cat.level,
+      profile,
+    );
     boss.displayName = name;
-    boss.isBoss = true;
-    boss.immuneToConfusion = true;
-    for (const minion of minions) {
-      minion.applyMobLevel(minionLevel);
-      minion.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
-    }
     // Stamped on `progress` here, alongside the level and the mob rewards,
     // rather than read live at collection time: the payout is a reward like
     // any other, and a player who kills the mark on Kitten and only then
@@ -847,56 +894,23 @@ export class BountySystem implements GameSystem {
 
     this.encounter = [boss, ...minions];
     this.boss = boss;
-    this.aggroReleased = false;
-    const homePoint = { x: site.x * TILE_SIZE, y: site.y * TILE_SIZE };
-    for (const mob of this.encounter) {
-      mob.ignoresTownSafeZone = true;
-      // Pre-aggro only: cleared the moment the fight starts, so a mark lured back
-      // to town is never yanked home mid-chase.
-      mob.homePoint = homePoint;
-      mob.leashRadiusTiles = SITE_LEASH_RADIUS_TILES;
-      this.addMob(mob);
-    }
+    this.endCommit();
+    for (const mob of this.encounter) this.addMob(mob);
   }
 
-  /**
-   * Once anything in the encounter has a target, the whole group commits: the
-   * leashes come off and they will follow the party anywhere, town included.
-   */
-  private releaseLeashesOnAggro(): void {
-    if (this.aggroReleased) return;
-    if (!this.encounter.some((mob) => mob.isAlive && mob.currentTarget !== null)) return;
-    this.aggroReleased = true;
+  /** The frame the group commits to the fight. */
+  private onEncounterCommitted(): void {
     // Held until here rather than fired at spawn: the music is the fight
     // starting, and a mark staged across the map has not started anything.
     const typeId = this.progress.currentTypeId;
     if (typeId !== null) this.bus.emit('bossFightInitiated', { bossType: typeId });
     this.audio?.play('bounty_fight_engaged');
-    for (const mob of this.encounter) {
-      mob.homePoint = undefined;
-      mob.leashRadiusTiles = undefined;
-      mob.forceAggro = true;
-    }
   }
 
-  /**
-   * Re-asserts the commitment every frame rather than once at aggro.
-   *
-   * A safe-room checkpoint restore runs `resetToSpawn()` on every hostile mob,
-   * which clears `forceAggro` — and out here there is no boss room to put it
-   * back, so a one-shot set silently returns the whole encounter to ordinary
-   * aggro-range AI for the rest of the run. `CircusQuestSystem` learned the
-   * same lesson about its wave mobs.
-   */
-  private holdAggro(): void {
-    for (const mob of this.encounter) {
-      if (!mob.isAlive) continue;
-      mob.forceAggro = true;
-      // Cleared here too: `resetToSpawn` does not touch them, but a def that
-      // re-homed a mob would otherwise leash it back mid-chase.
-      mob.homePoint = undefined;
-      mob.leashRadiusTiles = undefined;
-    }
+  /** Lets any member still waiting its turn loose, before the encounter is dropped or rebuilt. */
+  private endCommit(): void {
+    this.commitment.release();
+    this.commitment = new EncounterCommitment();
   }
 
   private onMobKilled(mob: Mob): void {
