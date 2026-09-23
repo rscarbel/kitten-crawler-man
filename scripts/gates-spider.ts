@@ -28,7 +28,7 @@ installCanvasGlobals();
 import { TRAP_HIT_RADIUS_FRACTION } from '../src/creatures/GrotesqueSpider.js';
 import { LIFE_MACHINE_STATES } from '../src/systems/SpiderQuestSystem.js';
 import { figureFrameCount, figureStates, type FigureDef } from '../src/sprites/figure/figureDef.js';
-import { FIGURE_BYTE_BUDGET } from '../src/sprites/figure/figureFrameCache.js';
+import { figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
 import {
   drawGrotesqueSpider,
   getSpiderLegTip,
@@ -284,12 +284,13 @@ function gateWarmRowSize(): void {
       widest = bytes;
       widestState = state;
     }
-    if (widest <= FIGURE_BYTE_BUDGET) continue;
+    const figureBudget = figureByteBudgetFor(def);
+    if (widest <= figureBudget) continue;
     fail(
       'G3',
       `${def.id}'s widest row ${widestState} is ` +
         `${(widest / BYTES_PER_MEGABYTE).toFixed(1)} MB, over the ` +
-        `${(FIGURE_BYTE_BUDGET / BYTES_PER_MEGABYTE).toFixed(0)} MB one figure may hold, so it ` +
+        `${(figureBudget / BYTES_PER_MEGABYTE).toFixed(0)} MB one figure may hold, so it ` +
         'can never be admitted and every frame of it repaints',
     );
   }

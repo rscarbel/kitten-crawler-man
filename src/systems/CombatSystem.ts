@@ -14,7 +14,6 @@ import type { AbilityManager } from '../core/AbilityManager';
 import type { SpellSystem } from './SpellSystem';
 import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
 import { getSmushStats } from '../abilities/smush';
-import { SMUSH_STAMP_X, SMUSH_STAMP_Y } from '../sprites/humanSprite';
 import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
@@ -24,7 +23,7 @@ import {
 } from '../core/SkillManager';
 import { SLINGSHOT_HIT_RADIUS_FRACTION } from '../sprites/slingshotSprite';
 
-/** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
+/** From an entity's tile origin to the centre of its tile. */
 const HALF_TILE = TILE_SIZE / 2;
 /** Sepsis proc chance per hit when enchanted crown is equipped. */
 const SEPSIS_PROC_CHANCE = 0.15;
@@ -126,7 +125,9 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       const dist = Math.hypot(dx, dy);
       if (dist === 0 || dist > range) continue;
       if (dist > MELEE_POINT_BLANK_RANGE) {
-        const dot = (dx / dist) * human.facingX + (dy / dist) * human.facingY;
+        // The facing the blow was thrown along, not the one input steers now:
+        // the hit lands where the fist is drawn.
+        const dot = (dx / dist) * human.strikeFacingX + (dy / dist) * human.strikeFacingY;
         if (dot <= 0.0) continue;
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
@@ -220,14 +221,17 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const outerRadius = stats.outerBlastRadius * TILE_SIZE;
 
     // Spawned before the damage pass so the shockwave and the hits it explains
-    // start on the same frame. Centred on the heel that made it, not on him:
-    // the damage query still runs off his centre, but a wave that starts at his
-    // waist reads as coming out of his body.
+    // start on the same frame. Centred on the heel that made it, read off the
+    // row being drawn: the damage query still runs off his centre, and every
+    // Smush row lands its heel within a few pixels of that centre across the
+    // tile, but a wave that starts at his waist reads as coming out of his body.
+    const stamp = human.smushStampTile();
     ctx.smushFx?.spawn(
-      human.x + SMUSH_STAMP_X * TILE_SIZE,
-      human.y + SMUSH_STAMP_Y * TILE_SIZE,
+      human.x + stamp.x * TILE_SIZE,
+      human.y + stamp.y * TILE_SIZE,
       outerRadius,
       stats.isFullPower,
+      () => human.smushGrindBeat(),
     );
 
     let totalSmushDamage = 0;

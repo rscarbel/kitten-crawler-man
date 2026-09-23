@@ -132,7 +132,7 @@ export class CatPlayer extends Player {
    * cuts just under the belly so her legs are in and her whole body, back and
    * head stay clear.
    *
-   * Far shallower than the human's 27 px, and that is the per-crawler lie
+   * Far shallower than the human's hip-deep water, and that is the per-crawler lie
    * `Player.waterlineAboveFootPx` documents: one honest water depth either takes
    * him to the ankle or puts her under.
    */

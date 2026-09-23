@@ -111,6 +111,11 @@ export interface AcidSpit {
  *                                  mobs will retaliate.
  */
 export class BrindleGrub extends Mob {
+  /** Knee-high to a man, so a crawler kicks or stomps it rather than punching. */
+  override get lowProfile(): boolean {
+    return true;
+  }
+
   stage: GrubStage = STAGE_LARVA;
   private evolveTimer: number;
   private spitCooldown = 0;

@@ -4,7 +4,7 @@
  * The legs are solved by **inverse kinematics to a foot target**: `gait.ts`
  * decides where each foot is in ground space, and the knee is whatever angle
  * puts the ankle there. That is the same structure the player character's
- * choreography uses (`src/sprites/art/humanFigure.ts`), and it is the reason his
+ * choreography uses (`src/sprites/art/human/locomotion.ts`), and it is the reason his
  * walk is the only convincing one in the game — you cannot plant a foot whose
  * position you do not control. Driving the legs forward from the hip instead
  * makes the planted foot slide backward at a rate with no relation to the
@@ -102,7 +102,7 @@ export interface Skeleton {
 
 // Vertical layout as fractions of draw size, measured up from the feet.
 export const FOOT_BASE_FRAC = 0.97;
-export const NECK_FRAC = 0.05;
+const NECK_FRAC = 0.05;
 const THIGH_SHARE = 0.52;
 const UPPER_ARM_SHARE = 0.48;
 
@@ -114,7 +114,7 @@ const PROFILE_LATERAL_FACTOR = 0.28;
 // Legs root well inboard of the hip joints so the thighs come together under the
 // torso instead of splaying out at the full hip width — a person stands with
 // their legs close, not planted at shoulder width.
-export const LEG_STANCE_FACTOR = 0.55;
+const LEG_STANCE_FACTOR = 0.55;
 
 /**
  * Head-on, an arm swings in the plane perpendicular to the screen, so only a

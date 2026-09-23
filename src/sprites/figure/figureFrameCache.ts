@@ -1,16 +1,15 @@
 /**
  * Baked frames for procedurally painted creatures.
  *
- * A creature's art used to ship as a PNG sheet: every row of every animation,
- * decoded into memory the moment its floor loaded and resident whether or not
- * the creature was ever on screen. The art code that produced those pixels was
- * an offline generator, so the runtime had no way to make one.
+ * A PNG sheet holds every row of every animation, decoded into memory the
+ * moment its floor loads and resident whether or not the creature is ever on
+ * screen, and the runtime cannot make one of its own.
  *
- * Here the painter ships instead of the pixels, and this cache stands where the
- * sheet stood. A `(figure, state, frame)` is painted once into an offscreen
- * cell and blitted from then on, so the steady-state cost per draw is a
- * `drawImage` — the same cost the sheet path paid — while the resident set is
- * the rows actually being played rather than every row the floor could show.
+ * A figure ships its painter instead of its pixels, and this cache stands
+ * where a sheet would. A `(figure, state, frame)` is painted once into an
+ * offscreen cell and blitted from then on, so the steady-state cost per draw
+ * is a `drawImage` — what a sheet's draw costs — while the resident set is the
+ * rows actually being played rather than every row the floor could show.
  *
  * Four decisions carry that:
  *
@@ -28,9 +27,11 @@
  *    frame and hold another back for no reason.
  *
  * Cells are baked supersampled and downsampled into place, exactly as the
- * offline generators did, so a cached cell is the sheet cell it replaces. The
- * direct-paint fallback skips the supersample — it costs a quarter as much, and
- * one softer frame before the bake lands is not a thing a player can see.
+ * offline generators bake a sheet, so a cached cell matches the sheet cell a
+ * generator would write — all but a figure declaring `skipSupersample`, which
+ * composes its own antialiased surface at the bake's density. The direct-paint
+ * fallback skips the supersample — it costs a quarter as much, and one softer
+ * frame before the bake lands is not a thing a player can see.
  *
  * Both paths composite off screen and blit once. A painter is hundreds of
  * canvas operations, and a caller that has set `filter`, `globalAlpha`,
@@ -47,7 +48,7 @@ import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canv
 import { shouldDownscaleForLowEndDevice } from '../../core/SpriteLoader';
 import type { DrawSpriteOpts } from '../../core/SpriteRenderer';
 import { EMPTY_ALPHA_CUTOFF, type FrameInkBounds } from '../../core/spriteFrames';
-import { figureFrameCount, type FigureDef, type FigureId } from './figureDef';
+import { figureBakeDensity, type FigureDef, figureFrameCount, type FigureId } from './figureDef';
 import {
   BYTES_PER_MEGABYTE,
   beginFigureCacheStatsFrame,
@@ -60,13 +61,6 @@ import {
   recordFigureCachePrewarmBake,
   recordFigureCacheRelease,
 } from './figureCacheStats';
-
-/**
- * Density each cell is painted at before being downsampled into place. Two is
- * what every offline generator baked at, and matching it is what makes a cached
- * cell pixel-equivalent to the sheet cell it replaces.
- */
-const SUPERSAMPLE = 2;
 
 /**
  * A sheet the loader decides this display is too poor for is resampled to half
@@ -90,7 +84,7 @@ const CACHE_BUDGET_MEGABYTES = 96;
 const CACHE_BYTE_BUDGET = CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
 
 /**
- * Ceiling on one figure's cells.
+ * Default ceiling on one figure's cells.
  *
  * Sized from the pilot conversion, which is the fleet's shape for a boss: the
  * Juicer declares 182 cells of 176×176, which is 21.5 MB with every row of
@@ -102,9 +96,31 @@ const CACHE_BYTE_BUDGET = CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
  * ceiling is there to catch. For the fleet's other extremes this is six of the
  * Ball of Swine's ~3.8 MB rows, or about fifty of the Grotesque Spider's
  * ~480 KB cells.
+ *
+ * A figure whose `FigureDef.budgetMegabytes` is set is measured against that
+ * number instead — see {@link figureByteBudgetFor} — but the number here is
+ * still what every other figure in the fleet is held to, and it is what the
+ * global ceiling below is sized as a multiple of.
  */
 const FIGURE_BUDGET_MEGABYTES = 24;
 export const FIGURE_BYTE_BUDGET = FIGURE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
+
+/**
+ * The byte ceiling one figure's cells are held to: its own
+ * `FigureDef.budgetMegabytes` when it declares one, or the fleet default
+ * otherwise.
+ *
+ * Every admission check in this module goes through this rather than reading
+ * {@link FIGURE_BYTE_BUDGET} directly, so a figure that declares an override
+ * is honoured wherever the default would otherwise have been assumed —
+ * including by the gates that size a real figure's rows, which import this
+ * instead of restating the fallback. Only the cache's own gates read
+ * {@link FIGURE_BYTE_BUDGET} directly, because the synthetic figures they
+ * build to probe the default declare no override.
+ */
+export function figureByteBudgetFor(def: FigureDef): number {
+  return (def.budgetMegabytes ?? FIGURE_BUDGET_MEGABYTES) * BYTES_PER_MEGABYTE;
+}
 
 /** RGBA. */
 const BYTES_PER_PIXEL = 4;
@@ -115,7 +131,7 @@ const BYTES_PER_PIXEL = 4;
  * row in two or three frames while an expensive one lands a cell per frame and
  * paints directly in the meantime.
  */
-const FRAME_BAKE_BUDGET_MS = 2;
+export const FRAME_BAKE_BUDGET_MS = 2;
 
 /**
  * The share of that budget prewarming may take. Prewarm runs at the frame
@@ -240,6 +256,8 @@ let msBakedThisFrame = 0;
 interface PrewarmRequest {
   readonly def: FigureDef;
   readonly state: string;
+  /** How many of the row's frames, from its first, the request covers. */
+  frames: number;
   /** Frames this request has been refused for want of room. */
   capacityRefusals: number;
 }
@@ -268,10 +286,10 @@ const bakeCostByFigure = new Map<FigureId, BakeCostEstimate>();
  * Milliseconds prewarming has spent beyond its allowance and has yet to repay,
  * drained one allowance per frame.
  *
- * The queue used to be pumped once per frame with the allowance checked only
- * *before* a bake started, so a figure whose cells cost six milliseconds spent
- * six every frame for as long as it took to drain — a burst of dozens of
- * consecutive over-budget frames, each of which also left the rendering that
+ * The allowance can only be checked *before* a bake starts, so without a debt
+ * a figure whose cells cost six milliseconds would spend six every frame for
+ * as long as its queue took to drain — a burst of dozens of consecutive
+ * over-budget frames, each of which would also leave the rendering that
  * followed it with no bake allowance at all. Carrying the overspend forward
  * makes the allowance mean what it says over any window longer than one cell,
  * while the queue still moves: the debt shrinks by a fixed amount every frame,
@@ -455,7 +473,7 @@ function admitsGlobally(bytes: number): boolean {
 }
 
 function admitsForFigure(entry: FigureEntry, bytes: number): boolean {
-  return entry.bytes + bytes <= FIGURE_BYTE_BUDGET;
+  return entry.bytes + bytes <= figureByteBudgetFor(entry.def);
 }
 
 /** What a cell of this figure is expected to cost, or null if none has been baked. */
@@ -516,8 +534,9 @@ function paintInto(
     ctx.scale(density, density);
     def.paintFrame(ctx, state, frame);
   } finally {
-    // A painter that throws must not leave a pooled surface holding its
-    // transform and its half-applied state for the next thing to paint on it.
+    // Pops the density transform however the painter ended. It cannot pop a
+    // save the painter itself made and then threw past; the pooled callers
+    // discard their surface for that case.
     ctx.restore();
   }
 }
@@ -566,6 +585,27 @@ function releaseScratch(): void {
   scratchDepth -= 1;
 }
 
+/**
+ * Throws away the scratch surface the innermost paint is using.
+ *
+ * `paintInto`'s save/restore pops one level of the context's state stack, but
+ * a painter that throws between a `save()` of its own and the matching
+ * `restore()` leaves its clip, `globalAlpha` and whatever else it set sitting
+ * beneath that level, where no reset `acquireScratch` performs can reach them —
+ * so every later cell painted on the pooled surface is clipped and faded by a
+ * paint that no longer exists. `ctx.reset()` would unwind it but is not
+ * available on every canvas this runs on; a fresh surface always is, and a
+ * throwing painter is rare enough that reallocating after one costs nothing.
+ */
+function discardInnermostScratch(): void {
+  const level = scratchDepth - 1;
+  const poisoned = scratchStack[level] ?? null;
+  if (poisoned === null) return;
+  scratchBytes -= surfaceBytes(poisoned);
+  scratchStack[level] = null;
+  publishOccupancy();
+}
+
 function releaseScratchSurfaces(): void {
   scratchStack.length = 0;
   scratchBytes = 0;
@@ -581,7 +621,7 @@ function bakeCell(
   const bytes = cellBytes(entry);
   // No eviction can free room for a cell that does not fit an empty cache, and
   // sweeping for one only destroys rows that were serving somebody.
-  if (bytes > FIGURE_BYTE_BUDGET || bytes > CACHE_BYTE_BUDGET) return null;
+  if (bytes > figureByteBudgetFor(entry.def) || bytes > CACHE_BYTE_BUDGET) return null;
   if (!admitsForFigure(entry, bytes)) {
     evictStaleForFigureBytes(entry, bytes);
     if (!admitsForFigure(entry, bytes)) return null;
@@ -593,12 +633,13 @@ function bakeCell(
 
   const startedAt = performance.now();
   const msBakedBefore = msBakedThisFrame;
-  const superWidth = entry.cellPixelWidth * SUPERSAMPLE;
-  const superHeight = entry.cellPixelHeight * SUPERSAMPLE;
+  const supersample = figureBakeDensity(entry.def);
+  const superWidth = entry.cellPixelWidth * supersample;
+  const superHeight = entry.cellPixelHeight * supersample;
   const cell = allocCanvas(entry.cellPixelWidth, entry.cellPixelHeight);
   const surface = acquireScratch(superWidth, superHeight);
   try {
-    paintInto(surfaceContext(surface), entry.def, state, frame, entry.bakeScale * SUPERSAMPLE);
+    paintInto(surfaceContext(surface), entry.def, state, frame, entry.bakeScale * supersample);
     surfaceContext(cell).drawImage(
       surface,
       0,
@@ -610,6 +651,9 @@ function bakeCell(
       entry.cellPixelWidth,
       entry.cellPixelHeight,
     );
+  } catch (error) {
+    discardInnermostScratch();
+    throw error;
   } finally {
     releaseScratch();
   }
@@ -636,17 +680,25 @@ function bakeCell(
  * are drained a few cells per frame under their own slice of the bake budget,
  * which is what keeps a wave of eight arriving at once from being eight cold
  * misses on the frame they appear.
+ *
+ * `frameLimit` warms only the row's first frames — a blow's wind-up up to the
+ * frame it lands on, say, where the rest can bake while the first frames play.
  */
-export function prewarmFigureState(def: FigureDef, state: string): void {
-  if (figureFrameCount(def, state) === 0) {
+export function prewarmFigureState(def: FigureDef, state: string, frameLimit?: number): void {
+  const declared = figureFrameCount(def, state);
+  if (declared === 0) {
     warnMissingState(def, state);
     return;
   }
-  const alreadyQueued = prewarmQueue.some(
+  const frames = Math.min(declared, frameLimit ?? declared);
+  const queued = prewarmQueue.find(
     (pending) => pending.def.id === def.id && pending.state === state,
   );
-  if (alreadyQueued) return;
-  prewarmQueue.push({ def, state, capacityRefusals: 0 });
+  if (queued !== undefined) {
+    queued.frames = Math.max(queued.frames, frames);
+    return;
+  }
+  prewarmQueue.push({ def, state, frames, capacityRefusals: 0 });
 }
 
 /** Frames still waiting to be prewarmed. For gates and dev readouts. */
@@ -674,9 +726,8 @@ function drainPrewarmQueue(): void {
     const entry = entryFor(pending.def);
     if (!fitsBakeAllowance(entry, msBakedThisFrame, PREWARM_BAKE_BUDGET_MS)) return;
     const row = rowFor(entry, pending.state);
-    const frames = figureFrameCount(pending.def, pending.state);
     let baked = false;
-    for (let frame = 0; frame < frames; frame++) {
+    for (let frame = 0; frame < pending.frames; frame++) {
       if (row.cells.has(frame)) continue;
       if (!fitsBakeAllowance(entry, msBakedThisFrame, PREWARM_BAKE_BUDGET_MS)) return;
       if (bakeCell(entry, row, pending.state, frame) === null) {
@@ -706,12 +757,39 @@ function deferRefusedPrewarm(pending: PrewarmRequest): void {
   warnPrewarmAbandoned(pending);
 }
 
-/** Drops a figure's prewarm request, e.g. when its spawn was cancelled. */
-export function cancelFigurePrewarm(def: FigureDef, state: string): void {
-  const index = prewarmQueue.findIndex(
-    (pending) => pending.def.id === def.id && pending.state === state,
-  );
-  if (index >= 0) prewarmQueue.splice(index, 1);
+/**
+ * Drops every cell of one figure and every prewarm queued for it, at once.
+ *
+ * For a figure that has been replaced rather than merely left undrawn — Carl
+ * changing outfit, say — where waiting on the idle release would hold the old
+ * figure's rows beside the new one's for {@link IDLE_FRAMES_BEFORE_RELEASE}
+ * frames, and a figure whose working set alone nearly fills its budget has no
+ * room for two.
+ */
+export function releaseFigure(def: FigureDef): void {
+  const entry = entries.get(def.id);
+  if (entry !== undefined) {
+    for (const [state, row] of entry.rows) {
+      dropRow(entry, state, row);
+      recordFigureCacheRelease();
+    }
+    entries.delete(def.id);
+  }
+  for (let i = prewarmQueue.length - 1; i >= 0; i--) {
+    if (prewarmQueue[i].def.id === def.id) prewarmQueue.splice(i, 1);
+  }
+  if (entries.size === 0) releaseScratchSurfaces();
+  publishOccupancy();
+}
+
+/** Bytes of baked cells one figure is holding right now. For gates and dev readouts. */
+export function figureResidentBytes(def: FigureDef): number {
+  return entries.get(def.id)?.bytes ?? 0;
+}
+
+/** Prewarm requests queued for one figure. For gates and dev readouts. */
+export function figurePrewarmRequests(def: FigureDef): number {
+  return prewarmQueue.filter((pending) => pending.def.id === def.id).length;
 }
 
 function warnMissingState(def: FigureDef, state: string): void {
@@ -800,6 +878,9 @@ function directPaint(
     // A pooled surface may be larger than this figure needs, so the source rect
     // is stated rather than left to default to the whole surface.
     ctx.drawImage(surface, 0, 0, width, height, destX, destY, width, height);
+  } catch (error) {
+    discardInnermostScratch();
+    throw error;
   } finally {
     releaseScratch();
   }
@@ -936,7 +1017,7 @@ const inkBoundsByFrame = new Map<string, FrameInkBounds>();
  * the answer has to exist whether or not the cache admitted that frame, and a
  * bounding box is not a thing supersampling moves.
  */
-export function figureInkBounds(def: FigureDef, state: string, frame: number): FrameInkBounds {
+function figureInkBounds(def: FigureDef, state: string, frame: number): FrameInkBounds {
   const key = `${def.id}|${state}|${frame}`;
   const cached = inkBoundsByFrame.get(key);
   if (cached !== undefined) return cached;

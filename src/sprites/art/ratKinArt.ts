@@ -10,7 +10,7 @@
  *
  *   1. A **digitigrade** leg. The hock — what reads as a backward-bending knee —
  *      is the strongest rodent cue in the silhouette, and it is why this module
- *      solves a three-segment leg where `carlArt.ts` solves two.
+ *      solves a three-segment leg where Carl's rig (`carl/rig.ts`) solves two.
  *   2. A long **tail** counterbalancing behind him, the one part of the outline
  *      that is unambiguously not human.
  *   3. A long **muzzle** and big round **ears** breaking the head's circle.

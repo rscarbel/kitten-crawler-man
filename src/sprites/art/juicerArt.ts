@@ -16,7 +16,8 @@
  *
  * The rig — the view table, the two-bone IK, the FK escape hatch for swinging
  * arms, and "every pose is an edit to one resting pose" — is taken from
- * `carlArt.ts`, which is the only figure in this game whose movement convinces.
+ * Carl's rig (`carl/rig.ts`), the only figure in this game whose movement
+ * convinces.
  * Enrage is deliberately not painted here: it is a runtime filter over these
  * same rows, because five states across three views would double a sheet that
  * is already the largest creature bake in the game.

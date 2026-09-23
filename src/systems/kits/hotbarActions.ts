@@ -8,6 +8,7 @@
  */
 
 import type { AbilityManager } from '../../core/AbilityManager';
+import { castShellWithGesture, isCastingShell } from '../../creatures/humanGestures';
 import type { InventoryItem } from '../../core/ItemDefs';
 import type { DynamiteSystem } from '../DynamiteSystem';
 import type { SkillBookReadRequest } from '../../ui/InventoryInteraction';
@@ -60,17 +61,21 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
   }
 
   if (slot.abilityId === 'protective_shell' && pm.human.isActive) {
-    const level = pm.human.getProtectiveShellLevel();
-    const cast = host.spells.triggerProtectiveShell(
-      pm.human,
-      pm.cat,
-      host.world.roster.grid,
-      level,
-    );
-    if (cast) {
-      host.abilityManager.addUsageXp('protective_shell');
-      audio?.play('human_protective_shell');
-    }
+    // A press while the cooldown runs, or while his palm is still on its way
+    // down, changes nothing: the dome goes up where the palm lands.
+    if (host.spells.shellCooldown > 0 || isCastingShell(pm.human)) return;
+    castShellWithGesture(pm.human, () => {
+      const cast = host.spells.triggerProtectiveShell(
+        pm.human,
+        pm.cat,
+        host.world.roster.grid,
+        pm.human.getProtectiveShellLevel(),
+      );
+      if (cast) {
+        host.abilityManager.addUsageXp('protective_shell');
+        audio?.play('human_protective_shell');
+      }
+    });
     return;
   }
 

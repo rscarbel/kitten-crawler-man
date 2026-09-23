@@ -60,6 +60,11 @@ export class CircusLemur extends Mob {
   description = 'A mutated circus lemur that still remembers its knife-throwing act.';
   override readonly audioTag = 'lemur';
 
+  /** A lemur on all fours is knee-high to a man, so a crawler kicks or stomps it rather than punching. */
+  override get lowProfile(): boolean {
+    return true;
+  }
+
   private knives: ThrownKnife[] = [];
 
   override clearAirborneAttacks(): void {

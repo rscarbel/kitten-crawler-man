@@ -15,6 +15,16 @@ import {
 } from '../sprites/dynamiteSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { EventBus } from '../core/EventBus';
+import {
+  eventFrame,
+  type HumanRowName,
+  humanRowOf,
+  type ViewRows,
+} from '../sprites/art/humanFigure';
+import { DYNAMITE_THROWING_HAND } from '../sprites/art/human/actionsThrow';
+import { prewarmHumanRow, viewForFacing } from '../sprites/humanSprite';
+import type { CarlView } from '../sprites/art/carl/rig';
+import { easeOut, type Pt } from '../sprites/art/carlArt';
 
 /** Frames of charge for a full-strength throw. */
 export const DYN_MAX_CHARGE = 120;
@@ -85,6 +95,68 @@ const TRAJECTORY_MAX_FRAMES = 300;
 /** Collect a path point every N simulated frames to keep screen-point count manageable. */
 const TRAJECTORY_SAMPLE_INTERVAL = 3;
 
+/** The rows he lights, holds and throws a stick in, per view. */
+const LIGHT_ROWS: ViewRows = {
+  front: 'dynamite_light',
+  side: 'dynamite_light_side',
+  back: 'dynamite_light_away',
+};
+const HOLD_ROWS: ViewRows = {
+  front: 'dynamite_hold',
+  side: 'dynamite_hold_side',
+  back: 'dynamite_hold_away',
+};
+const THROW_ROWS: ViewRows = {
+  front: 'dynamite_throw',
+  side: 'dynamite_throw_side',
+  back: 'dynamite_throw_away',
+};
+const ALL_DYNAMITE_ROWS: ReadonlySet<HumanRowName> = new Set([
+  ...Object.values(LIGHT_ROWS),
+  ...Object.values(HOLD_ROWS),
+  ...Object.values(THROW_ROWS),
+]);
+
+/**
+ * Frames over which a thrown stick's drawn position closes from the hand
+ * that let it go onto the gameplay body it rides on. The body is launched
+ * from his centre and never changes course for the picture; only where it is
+ * drawn starts at the fist and settles onto it, so the landing, the bounces
+ * and the preview path are exactly the gameplay ones.
+ */
+const LOB_FRAMES = 16;
+/** How high above the straight path from hand to body the drawn stick arcs, in tiles. */
+const LOB_ARC_TILES = 1;
+/**
+ * Extra arc, as a share of {@link LOB_ARC_TILES}, on a stick thrown straight
+ * down the screen. Toward the camera the flight runs down over his own body,
+ * and without a higher arc the drawn stick slides down his chest and legs and
+ * reads as dropped rather than thrown.
+ */
+const LOB_TOWARD_CAMERA_EXTRA_ARC = 1;
+
+/** How high a stick launched with this velocity arcs, in tiles. */
+function lobArcTiles(vx: number, vy: number): number {
+  const speed = Math.hypot(vx, vy);
+  const towardCamera = speed > 0 ? Math.max(0, vy / speed) : 0;
+  return LOB_ARC_TILES * (1 + LOB_TOWARD_CAMERA_EXTRA_ARC * towardCamera);
+}
+/**
+ * Full turns a lobbed stick tumbles end over end before it lands. A thrown
+ * stick spins; a sliding one does not. Whole, because the settled stick is
+ * drawn unrotated: any fraction of a turn left at the end of the lob would
+ * snap it square on the frame it lands.
+ */
+const LOB_TUMBLE_TURNS = 1;
+/** A parabola's peak, `4u(1 − u)`, is 1 at `u = ½`; this is the 4. */
+const PARABOLA_PEAK_GAIN = 4;
+/**
+ * The floor sprite is drawn larger than the stick he holds — it has to read
+ * lying on its own on the floor — so a lobbed stick leaves the hand at the
+ * held size and grows into the floor sprite as it lands.
+ */
+const LOB_START_SCALE = 0.6;
+
 /**
  * What one blast does to each enemy caught in it, rounded to a whole point.
  *
@@ -147,10 +219,36 @@ interface LiveDynamite {
   mobDamage: number;
   /** Taken at throw time, for the same reason as {@link mobDamage}. */
   crawlerDamage: number;
+  /**
+   * The world point the stick left his hand at, which its drawn position
+   * closes from onto its body over the lob — null on a stick that never left
+   * a hand — and how many frames of the lob have run.
+   */
+  lobFrom: Pt | null;
+  lobFrame: number;
+  /** How high the lob arcs, in tiles; set at launch by {@link lobArcTiles}. */
+  lobArc: number;
+}
+
+/** A stick released and waiting for the throw's release frame to leave his hand. */
+interface PendingThrow {
+  readonly stick: LiveDynamite;
+  /** Ticks since the key was let go, which the fuse is charged when it launches. */
+  ticksPending: number;
+  /** Puts the stick in the world, from his throwing hand or from his centre. */
+  readonly launch: (fromHand: boolean) => void;
 }
 
 export class DynamiteSystem implements GameSystem {
-  private _charging: { hotbarIdx: number; chargeFrames: number } | null = null;
+  private _charging: {
+    hotbarIdx: number;
+    chargeFrames: number;
+    /** Whether the fuse has been drawn catching, so a light cut short is not played twice. */
+    lit: boolean;
+    /** The view whose hold and throw have been warmed, null before the first tick. */
+    warmedView: CarlView | null;
+  } | null = null;
+  private pendingThrow: PendingThrow | null = null;
   private liveDynamites: LiveDynamite[] = [];
   /** Set each time a stick goes off; `DestructionKit` reads and clears it to sound the blast. */
   explosionSoundPending = false;
@@ -187,6 +285,7 @@ export class DynamiteSystem implements GameSystem {
   /** Drops any thrown/charging dynamite — used on a checkpoint respawn. */
   resetForCheckpoint(): void {
     this._charging = null;
+    this.pendingThrow = null;
     this.liveDynamites = [];
     this.lastBlastFrame = new WeakMap<Mob, number>();
   }
@@ -204,7 +303,7 @@ export class DynamiteSystem implements GameSystem {
   }
 
   beginCharge(hotbarIdx: number): void {
-    this._charging = { hotbarIdx, chargeFrames: 0 };
+    this._charging = { hotbarIdx, chargeFrames: 0, lit: false, warmedView: null };
   }
 
   release(human: HumanPlayer): void {
@@ -212,7 +311,12 @@ export class DynamiteSystem implements GameSystem {
     const { chargeFrames } = this._charging;
     this._charging = null;
 
-    if (!human.inventory.removeOne('goblin_dynamite')) return;
+    // With no stick left to throw — the last one sold or dropped mid-charge —
+    // the light or the hold he is posed in has nothing in its hand.
+    if (!human.inventory.removeOne('goblin_dynamite')) {
+      this.stopDynamiteAction(human);
+      return;
+    }
 
     const isTap = chargeFrames < DYN_TAP;
     const chargeRatio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
@@ -220,7 +324,7 @@ export class DynamiteSystem implements GameSystem {
     const speedMax = DYN_SPEED_MAX + (expLvl - 1) * DYN_SPEED_PER_LEVEL;
     const speed = isTap ? 0 : DYN_SPEED_MIN + (speedMax - DYN_SPEED_MIN) * chargeRatio;
 
-    this.liveDynamites.push({
+    const stick: LiveDynamite = {
       x: human.x + HALF_TILE,
       y: human.y + HALF_TILE,
       vx: human.facingX * speed,
@@ -230,7 +334,126 @@ export class DynamiteSystem implements GameSystem {
       explodeTimer: 0,
       mobDamage: dynamiteMobDamage(human.level, expLvl),
       crawlerDamage: dynamiteCrawlerDamage(expLvl),
+      lobFrom: null,
+      lobArc: 0,
+      lobFrame: 0,
+    };
+    if (isTap) {
+      this.stopDynamiteAction(human);
+      this.liveDynamites.push(stick);
+      return;
+    }
+    this.throwFromHand(human, stick);
+  }
+
+  /**
+   * Has him throw `stick`, and launches it on the frame it leaves his hand —
+   * from that hand — or at once from his centre if he cannot throw right now
+   * (mid-blow, reeling, out cold). A throw cut short before its release frame
+   * still launches the stick, from his centre: the item is already spent.
+   */
+  private throwFromHand(human: HumanPlayer, stick: LiveDynamite): void {
+    // A second release can land before the first throw reaches its release
+    // frame; the new throw row replaces the old one, whose own end is then no
+    // longer the pending throw's and would drop a stick already paid for.
+    this.flushPendingThrow();
+    const view = viewForFacing(human.facingX, human.facingY);
+    const row = THROW_ROWS[view];
+    const releaseFrame = eventFrame(row, 'release');
+    const pending: PendingThrow = {
+      stick,
+      ticksPending: 0,
+      launch: (fromHand) => {
+        if (this.pendingThrow !== pending) return;
+        this.pendingThrow = null;
+        // The fuse is lit from the key's release, not from the frame the stick
+        // leaves his hand, so a throw's windup never delays the blast the
+        // player timed.
+        stick.fuseFrames -= pending.ticksPending;
+        if (fromHand) {
+          stick.lobFrom = human.handWorldPosition(DYNAMITE_THROWING_HAND);
+          stick.lobArc = lobArcTiles(stick.vx, stick.vy);
+        }
+        this.liveDynamites.push(stick);
+      },
+    };
+    this.pendingThrow = pending;
+    const accepted =
+      releaseFrame !== undefined &&
+      human.playAction(row, {
+        faceX: human.facingX,
+        faceY: human.facingY,
+        onFrame: [{ frame: releaseFrame, run: () => pending.launch(true) }],
+        onEnd: (reason) => {
+          // Under the death screen the stick never leaves his hand: the world
+          // it would land in is about to be rewound or rebuilt.
+          if (reason === 'defeated') this.dropPendingThrow(pending);
+          else pending.launch(false);
+        },
+      });
+    if (!accepted) pending.launch(false);
+  }
+
+  /** Launches a stick still waiting on its throw, from his centre. */
+  private flushPendingThrow(): void {
+    this.pendingThrow?.launch(false);
+  }
+
+  /** Forgets a throw that will never launch, so no later throw flushes it into the world. */
+  private dropPendingThrow(pending: PendingThrow): void {
+    if (this.pendingThrow === pending) this.pendingThrow = null;
+  }
+
+  /**
+   * Keeps him posed for the charge: lighting the stick until the fuse has
+   * caught, then holding it cocked. Asked again whenever the row he is drawn
+   * in is not the one wanted — he walked and the stride took over, or he
+   * turned and the view changed — and only while he stands still, since
+   * moving ends an action on its first step anyway.
+   */
+  private poseForCharge(human: HumanPlayer): void {
+    const charging = this._charging;
+    if (charging === null) return;
+    const view = viewForFacing(human.facingX, human.facingY);
+    // The light buys the better part of a second, which is lead enough to
+    // bake the hold and the throw before either is drawn. Turning mid-charge
+    // warms the new view's pair the same way: its throw can be let go at once.
+    if (charging.warmedView !== view) {
+      charging.warmedView = view;
+      prewarmHumanRow(HOLD_ROWS[view]);
+      prewarmHumanRow(THROW_ROWS[view]);
+    }
+    if (human.isMoving) return;
+    const row = charging.lit ? HOLD_ROWS[view] : LIGHT_ROWS[view];
+    const drawn = human.spriteSelection();
+    const facesLeft = human.facingX < 0;
+    const flipMatches = view !== 'side' || drawn.flipX === facesLeft;
+    if (human.isActing && drawn.row === row && flipMatches) return;
+    // The fuse catches partway through the light; the rest of it — the draw
+    // back into the stance — plays out before the hold takes over.
+    const lightRow = LIGHT_ROWS[view];
+    const lightStillPlaying =
+      drawn.row === lightRow && drawn.frame < (humanRowOf(lightRow)?.frameCount ?? 0) - 1;
+    if (human.isActing && lightStillPlaying && flipMatches) return;
+    if (human.isActing && !ALL_DYNAMITE_ROWS.has(drawn.row)) return;
+    const fuseFrame = eventFrame(row, 'fuseLit');
+    const lightFuse = (): void => {
+      charging.lit = true;
+    };
+    // The light holds its last frame — the cocked stance the hold loops on —
+    // so there is no tick of standing between the two rows.
+    human.playAction(row, {
+      loop: charging.lit,
+      holdLastFrame: !charging.lit,
+      faceX: human.facingX,
+      faceY: human.facingY,
+      onFrame: fuseFrame === undefined ? [] : [{ frame: fuseFrame, run: lightFuse }],
     });
+  }
+
+  /** Ends a light or a hold he is still drawn in, handing him back to standing. */
+  private stopDynamiteAction(human: HumanPlayer): void {
+    if (human.isActing && ALL_DYNAMITE_ROWS.has(human.spriteSelection().row)) human.stopAction();
   }
 
   update(ctx: SystemContext): void {
@@ -243,12 +466,15 @@ export class DynamiteSystem implements GameSystem {
         this.explodeInHand(human, cat, mobGrid);
         return;
       }
+      this.poseForCharge(human);
     }
+    if (this.pendingThrow !== null) this.pendingThrow.ticksPending++;
     this.updatePhysics(human, cat, mobGrid);
   }
 
   private explodeInHand(human: HumanPlayer, cat: CatPlayer, mobGrid: SpatialGrid<Mob>): void {
     this._charging = null;
+    this.stopDynamiteAction(human);
     const cx = human.x + HALF_TILE;
     const cy = human.y + HALF_TILE;
     const mobDamage = dynamiteMobDamage(human.level, human.explosivesHandling);
@@ -264,6 +490,9 @@ export class DynamiteSystem implements GameSystem {
       explodeTimer: DYN_ANIM_FRAMES,
       mobDamage,
       crawlerDamage,
+      lobFrom: null,
+      lobArc: 0,
+      lobFrame: 0,
     });
   }
 
@@ -341,6 +570,7 @@ export class DynamiteSystem implements GameSystem {
       }
 
       dyn.fuseFrames--;
+      if (dyn.lobFrame < LOB_FRAMES) dyn.lobFrame++;
       if (dyn.fuseFrames <= 0) {
         dyn.state = 'exploding';
         dyn.explodeTimer = DYN_ANIM_FRAMES;
@@ -390,14 +620,7 @@ export class DynamiteSystem implements GameSystem {
       const sx = dyn.x - camX;
       const sy = dyn.y - camY;
       if (dyn.state !== 'exploding') {
-        drawDynamiteFloorSprite(
-          ctx,
-          sx - HALF_TILE,
-          sy - HALF_TILE,
-          TILE_SIZE,
-          dyn.fuseFrames,
-          DYN_FUSE,
-        );
+        this.renderStick(ctx, dyn, sx, sy);
       } else {
         drawDynamiteExplosion(
           ctx,
@@ -410,6 +633,46 @@ export class DynamiteSystem implements GameSystem {
         );
       }
     }
+  }
+
+  /**
+   * A stick where it is drawn: over its body once it has settled, and on the
+   * way there from the hand that threw it — closing on the body along an arc
+   * above the straight line, tumbling end over end as it goes.
+   */
+  private renderStick(
+    ctx: CanvasRenderingContext2D,
+    dyn: LiveDynamite,
+    sx: number,
+    sy: number,
+  ): void {
+    const lobFrom = dyn.lobFrame < LOB_FRAMES ? dyn.lobFrom : null;
+    if (lobFrom === null) {
+      drawDynamiteFloorSprite(
+        ctx,
+        sx - HALF_TILE,
+        sy - HALF_TILE,
+        TILE_SIZE,
+        dyn.fuseFrames,
+        DYN_FUSE,
+      );
+      return;
+    }
+    const progress = dyn.lobFrame / LOB_FRAMES;
+    const closed = easeOut(progress);
+    const arc = PARABOLA_PEAK_GAIN * progress * (1 - progress) * dyn.lobArc * TILE_SIZE;
+    // Measured against where the body is now, not where it was launched: the
+    // drawn stick is a blend of the hand and the body, so on its first frame
+    // it is at the fist however far the body has already flown.
+    const drawnX = sx + (lobFrom.x - dyn.x) * (1 - closed);
+    const drawnY = sy + (lobFrom.y - dyn.y) * (1 - closed) - arc;
+    ctx.save();
+    ctx.translate(drawnX, drawnY);
+    ctx.rotate(progress * LOB_TUMBLE_TURNS * Math.PI * 2);
+    const scale = LOB_START_SCALE + (1 - LOB_START_SCALE) * closed;
+    ctx.scale(scale, scale);
+    drawDynamiteFloorSprite(ctx, -HALF_TILE, -HALF_TILE, TILE_SIZE, dyn.fuseFrames, DYN_FUSE);
+    ctx.restore();
   }
 
   renderChargeBar(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number): void {

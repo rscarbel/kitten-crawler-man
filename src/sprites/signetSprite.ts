@@ -8,6 +8,14 @@
  * pixel tile size.
  */
 
+import {
+  fillSoftEllipse,
+  strokeSoftCrease,
+  taperedCreaseGradient,
+  withClip,
+} from './art/softShade';
+import { rgba } from './art/carlArt';
+
 const MS_PER_SECOND = 1000;
 const HALF_TURN = Math.PI;
 /** The tile spans -0.5..0.5 on both axes once the context is scaled. */
@@ -200,6 +208,8 @@ const SHOULDER_BLADE_X = 0.05;
 const SHOULDER_BLADE_TOP_Y = -0.17;
 const SHOULDER_BLADE_BOTTOM_Y = -0.092;
 const SHOULDER_BLADE_FLARE = 0.02;
+/** A blade's lower tip tucks in toward the spine, to this share of its top's reach from it. */
+const SHOULDER_BLADE_TIP_SHARE = 0.6;
 /** How far down the spine the groove reaches full depth, from the blades. */
 const SPINE_FADE_STOP = 0.35;
 /**
@@ -210,6 +220,23 @@ const SPINE_FADE_STOP = 0.35;
  */
 const BACK_FISH_X = 0.052;
 const BACK_FISH_Y = -0.012;
+/**
+ * Where each torso and arm tattoo starts in its drift and roll, so no two
+ * motifs move in lockstep. The dragon on her back and the octopus on her belly
+ * are never seen together, so they may share one.
+ */
+const BACK_FISH_PHASE = 5.2;
+const TORSO_MOTIF_PHASE = 1.9;
+const LEFT_ARM_DRAGON_PHASE = 0.9;
+const RIGHT_ARM_DRAGON_PHASE = 2.8;
+/** The arm dragon sits this share of the way down the upper arm, clear of shoulder and elbow. */
+const ARM_DRAGON_ALONG_UPPER_ARM = 0.6;
+/**
+ * Her scales cover the middle of her torso: this share of her hip's
+ * half-width either side of her centreline, from just below her waist down.
+ */
+const SCALE_PATCH_HALF_WIDTH_SHARE = 0.7;
+const SCALE_PATCH_TOP_BELOW_WAIST = 0.04;
 const BACK_OF_HEAD_WIDTH_FRACTION = 1.08;
 const BACK_OF_HEAD_HEIGHT_FRACTION = 1.02;
 
@@ -900,7 +927,6 @@ const ELITE_MARKER_MIN_STROKE_PX = 1.5;
  * patch with a pale middle, never a volume standing off the ribs.
  */
 const SKIN_HIGHLIGHT = '#ffffff';
-const SKIN_HIGHLIGHT_FADE = 'rgba(255,255,255,0)';
 const SKIN_LIT = '#f2f6ff';
 const SKIN_BASE = '#dae5f8';
 const SKIN_SHADE = '#b3c3e0';
@@ -913,11 +939,6 @@ const SKIN_CREASE = '#7086b2';
  * that a crease in `SKIN_CREASE` still sits in the top third of the range.
  */
 const SKIN_DEEP_CREASE = '#4e6291';
-const SKIN_DEEP_CREASE_FADE = 'rgba(78,98,145,0)';
-/** Fully transparent twins of the tones above; must track them by hand. */
-const SKIN_LIT_FADE = 'rgba(242,246,255,0)';
-const SKIN_SHADE_FADE = 'rgba(179,195,224,0)';
-const SKIN_CREASE_FADE = 'rgba(112,134,178,0)';
 const HAIR_DARK = '#12101c';
 const HAIR_SHEEN = '#3a3550';
 const THONG_COLOR = '#2a2c3d';
@@ -936,7 +957,6 @@ const LIP_COLOR = '#b3899e';
 const LIP_UPPER_COLOR = '#9d788c';
 const LIP_SEAM_COLOR = '#5f4257';
 const LIP_SHEEN_COLOR = '#e6d4de';
-const LIP_SHEEN_FADE = 'rgba(230,212,222,0)';
 const EYE_IDLE_COLOR = '#9fd8f0';
 const EYE_CAST_COLOR = '#d6fff4';
 const SCALE_COLOR = '#8fc4e8';
@@ -1231,89 +1251,6 @@ function applyInkStyle(ctx: CanvasRenderingContext2D, castGlow: number, tileSize
 }
 
 /* ══ Body paths ═════════════════════════════════════════════════════════ */
-
-/** Fraction of the radius held at full strength before the fade starts. */
-const SOFT_SHADE_CORE_FRACTION = 0.4;
-
-/**
- * A flat-alpha ellipse leaves a hard rim wherever it is not clipped away, and
- * on a body that rim reads as a crease or a seam where there is no anatomy at
- * all — every soft shadow and highlight on her fades out at its edge instead.
- *
- * `rotation` matters wherever a form does not run square to the sprite. Stacked
- * axis-aligned ellipses put the boundary between light and shadow on a circle,
- * which is the whole reason airbrushed shading reads as painted on: a real
- * terminator is a line that follows the anatomy underneath it.
- */
-function fillSoftEllipse(
-  ctx: CanvasRenderingContext2D,
-  centerX: number,
-  centerY: number,
-  radiusX: number,
-  radiusY: number,
-  color: string,
-  fadeColor: string,
-  alpha: number,
-  rotation = 0,
-  coreFraction: number = SOFT_SHADE_CORE_FRACTION,
-): void {
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.translate(centerX, centerY);
-  ctx.rotate(rotation);
-  ctx.scale(radiusX, radiusY);
-  const shade = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-  shade.addColorStop(0, color);
-  shade.addColorStop(coreFraction, color);
-  shade.addColorStop(1, fadeColor);
-  ctx.fillStyle = shade;
-  ctx.beginPath();
-  ctx.arc(0, 0, 1, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-/**
- * Canvas has no cheap blur, so a crease is built from strokes of decreasing
- * width and rising opacity: a wide faint halo of shadow around a narrow dark
- * core. A single stroke of even width reads as ink on the skin however dark it
- * is, because a real crease has no edge.
- *
- * The count matters as much as the range. Three layers spanning 3.4× in width
- * is a visible step between each pair, and on a wide crease in a strong colour
- * that stack stops reading as one soft shadow and starts reading as concentric
- * bands — nested arcs under the bust and ripples across the seat.
- */
-const CREASE_LAYERS = [
-  { widthScale: 4, alpha: 0.045 },
-  { widthScale: 3.5, alpha: 0.05 },
-  { widthScale: 3, alpha: 0.06 },
-  { widthScale: 2.6, alpha: 0.07 },
-  { widthScale: 2.2, alpha: 0.085 },
-  { widthScale: 1.8, alpha: 0.1 },
-  { widthScale: 1.5, alpha: 0.13 },
-  { widthScale: 1.2, alpha: 0.18 },
-  { widthScale: 1, alpha: 0.42 },
-] as const;
-
-function strokeSoftCrease(
-  ctx: CanvasRenderingContext2D,
-  baseWidth: number,
-  stroke: string | CanvasGradient,
-  tracePath: () => void,
-  opacity = 1,
-): void {
-  ctx.strokeStyle = stroke;
-  ctx.lineCap = 'round';
-  for (const layer of CREASE_LAYERS) {
-    ctx.globalAlpha = layer.alpha * opacity;
-    ctx.lineWidth = baseWidth * layer.widthScale;
-    ctx.beginPath();
-    tracePath();
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-}
 
 /**
  * The underside of the seat, back view only: the hip line continues into two
@@ -1623,7 +1560,6 @@ function drawLegs(
       FOOT_HALF_WIDTH,
       TOE_SHADE_RADIUS_Y,
       SKIN_SHADE,
-      SKIN_SHADE_FADE,
       TOE_SHADE_ALPHA,
     );
 
@@ -1631,99 +1567,98 @@ function drawLegs(
     ctx.fillStyle = SKIN_LIT;
     ctx.fill();
 
-    ctx.save();
-    pathLeg(ctx, side, joints);
-    ctx.clip();
-
-    if (stridePhase > 0) {
-      ctx.save();
-      ctx.globalAlpha = SWING_LEG_SHADE_ALPHA * Math.min(1, stridePhase);
-      ctx.fillStyle = SKIN_SHADE;
-      pathLeg(ctx, side, joints);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    const scalePatchLeft = side > 0 ? SCALE_PATCH_INSET : -SCALE_PATCH_INSET - SCALE_PATCH_WIDTH;
-    if (detail.skinTexture) {
-      drawScalePatch(ctx, scalePatchLeft, LEG_TOP_Y, SCALE_PATCH_WIDTH, KNEE_Y - LEG_TOP_Y);
-    }
-
-    fillSoftEllipse(
+    withClip(
       ctx,
-      side * INNER_THIGH_SHADE_X + hipShift,
-      (LEG_TOP_Y + joints.kneeY) / 2,
-      INNER_THIGH_SHADE_RADIUS_X,
-      (joints.kneeY - LEG_TOP_Y) / 2,
-      SKIN_SHADE,
-      SKIN_SHADE_FADE,
-      INNER_THIGH_SHADE_ALPHA,
+      () => pathLeg(ctx, side, joints),
+      () => {
+        if (stridePhase > 0) {
+          ctx.save();
+          ctx.globalAlpha = SWING_LEG_SHADE_ALPHA * Math.min(1, stridePhase);
+          ctx.fillStyle = SKIN_SHADE;
+          pathLeg(ctx, side, joints);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        const scalePatchLeft =
+          side > 0 ? SCALE_PATCH_INSET : -SCALE_PATCH_INSET - SCALE_PATCH_WIDTH;
+        if (detail.skinTexture) {
+          drawScalePatch(ctx, scalePatchLeft, LEG_TOP_Y, SCALE_PATCH_WIDTH, KNEE_Y - LEG_TOP_Y);
+        }
+
+        fillSoftEllipse(
+          ctx,
+          side * INNER_THIGH_SHADE_X + hipShift,
+          (LEG_TOP_Y + joints.kneeY) / 2,
+          INNER_THIGH_SHADE_RADIUS_X,
+          (joints.kneeY - LEG_TOP_Y) / 2,
+          SKIN_SHADE,
+          INNER_THIGH_SHADE_ALPHA,
+        );
+
+        fillSoftEllipse(
+          ctx,
+          side * CROTCH_SHADOW_X + hipShift,
+          CROTCH_SHADOW_Y,
+          CROTCH_SHADOW_RADIUS_X,
+          CROTCH_SHADOW_RADIUS_Y,
+          SKIN_SHADE,
+          CROTCH_SHADOW_ALPHA,
+        );
+
+        if (facingAway) {
+          fillSoftEllipse(
+            ctx,
+            joints.hipX,
+            THIGH_TOP_SHADOW_Y,
+            THIGH_TOP_SHADOW_RADIUS_X,
+            THIGH_TOP_SHADOW_RADIUS_Y,
+            SKIN_SHADE,
+            THIGH_TOP_SHADOW_ALPHA,
+          );
+
+          ctx.strokeStyle = SKIN_SHADE;
+          ctx.lineWidth = FINE_LINE_WIDTH;
+          const creaseHalfWidth = KNEE_HALF_WIDTH * KNEE_CREASE_HALF_WIDTH_FRACTION;
+          ctx.beginPath();
+          ctx.moveTo(joints.kneeX - creaseHalfWidth, joints.kneeY);
+          ctx.quadraticCurveTo(
+            joints.kneeX,
+            joints.kneeY + KNEE_CREASE_DROP,
+            joints.kneeX + creaseHalfWidth,
+            joints.kneeY,
+          );
+          ctx.stroke();
+        }
+
+        applyInkStyle(ctx, castGlow, tileSizePx);
+        // Anchored on the joints rather than on the rest pose, so the flash rides
+        // the leg through the stride instead of sliding across the skin.
+        if (side < 0) {
+          stampTattoo(ctx, detail, drawThreeHeadedOgreMotif, timeSec, {
+            x: joints.hipX,
+            y: THIGH_TATTOO_Y,
+            size: 0.085,
+            phase: 1.1,
+          });
+          stampTattoo(ctx, detail, drawEelLightningMotif, timeSec, {
+            x: joints.kneeX,
+            y: KNEE_TATTOO_Y,
+            size: 0.07,
+            phase: 3.7,
+            detail: true,
+          });
+        } else {
+          stampTattoo(ctx, detail, drawHammerheadSharkMotif, timeSec, {
+            x: joints.hipX,
+            y: THIGH_TATTOO_Y,
+            size: 0.13,
+            phase: 2.3,
+            rotation: HALF_TURN * 0.5,
+          });
+        }
+      },
     );
-
-    fillSoftEllipse(
-      ctx,
-      side * CROTCH_SHADOW_X + hipShift,
-      CROTCH_SHADOW_Y,
-      CROTCH_SHADOW_RADIUS_X,
-      CROTCH_SHADOW_RADIUS_Y,
-      SKIN_SHADE,
-      SKIN_SHADE_FADE,
-      CROTCH_SHADOW_ALPHA,
-    );
-
-    if (facingAway) {
-      fillSoftEllipse(
-        ctx,
-        joints.hipX,
-        THIGH_TOP_SHADOW_Y,
-        THIGH_TOP_SHADOW_RADIUS_X,
-        THIGH_TOP_SHADOW_RADIUS_Y,
-        SKIN_SHADE,
-        SKIN_SHADE_FADE,
-        THIGH_TOP_SHADOW_ALPHA,
-      );
-
-      ctx.strokeStyle = SKIN_SHADE;
-      ctx.lineWidth = FINE_LINE_WIDTH;
-      const creaseHalfWidth = KNEE_HALF_WIDTH * KNEE_CREASE_HALF_WIDTH_FRACTION;
-      ctx.beginPath();
-      ctx.moveTo(joints.kneeX - creaseHalfWidth, joints.kneeY);
-      ctx.quadraticCurveTo(
-        joints.kneeX,
-        joints.kneeY + KNEE_CREASE_DROP,
-        joints.kneeX + creaseHalfWidth,
-        joints.kneeY,
-      );
-      ctx.stroke();
-    }
-
-    applyInkStyle(ctx, castGlow, tileSizePx);
-    // Anchored on the joints rather than on the rest pose, so the flash rides
-    // the leg through the stride instead of sliding across the skin.
-    if (side < 0) {
-      stampTattoo(ctx, detail, drawThreeHeadedOgreMotif, timeSec, {
-        x: joints.hipX,
-        y: THIGH_TATTOO_Y,
-        size: 0.085,
-        phase: 1.1,
-      });
-      stampTattoo(ctx, detail, drawEelLightningMotif, timeSec, {
-        x: joints.kneeX,
-        y: KNEE_TATTOO_Y,
-        size: 0.07,
-        phase: 3.7,
-        detail: true,
-      });
-    } else {
-      stampTattoo(ctx, detail, drawHammerheadSharkMotif, timeSec, {
-        x: joints.hipX,
-        y: THIGH_TATTOO_Y,
-        size: 0.13,
-        phase: 2.3,
-        rotation: HALF_TURN * 0.5,
-      });
-    }
-    ctx.restore();
 
     ctx.restore();
   }
@@ -1893,58 +1828,64 @@ function pathFrontPanel(ctx: CanvasRenderingContext2D, sag: number): void {
 }
 
 function drawThong(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
-  ctx.save();
-  pathTorso(ctx, facingAway);
-  ctx.clip();
+  withClip(
+    ctx,
+    () => pathTorso(ctx, facingAway),
+    () => {
+      const sag = facingAway ? THONG_WAISTBAND_BACK_SAG : THONG_WAISTBAND_FRONT_SAG;
+      ctx.fillStyle = THONG_COLOR;
 
-  const sag = facingAway ? THONG_WAISTBAND_BACK_SAG : THONG_WAISTBAND_FRONT_SAG;
-  ctx.fillStyle = THONG_COLOR;
+      if (facingAway) {
+        // From behind the panel is only a string, running down the cleft from the
+        // band — it has to sit slightly narrower than the cleft or it reads as a
+        // painted stripe instead of a garment.
+        const stringTopY = bandBottomEdgeY(0, sag);
+        ctx.beginPath();
+        ctx.moveTo(-THONG_STRING_HALF_WIDTH, stringTopY);
+        ctx.lineTo(THONG_STRING_HALF_WIDTH, stringTopY);
+        ctx.quadraticCurveTo(
+          THONG_STRING_HALF_WIDTH,
+          THONG_STRING_BOTTOM_Y,
+          0,
+          THONG_STRING_BOTTOM_Y,
+        );
+        ctx.quadraticCurveTo(
+          -THONG_STRING_HALF_WIDTH,
+          THONG_STRING_BOTTOM_Y,
+          -THONG_STRING_HALF_WIDTH,
+          stringTopY,
+        );
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        // Hung from the band's top edge rather than butted against its lower one,
+        // so the band covers the join exactly and no seam can open along it.
+        pathFrontPanel(ctx, sag);
+        ctx.fill();
 
-  if (facingAway) {
-    // From behind the panel is only a string, running down the cleft from the
-    // band — it has to sit slightly narrower than the cleft or it reads as a
-    // painted stripe instead of a garment.
-    const stringTopY = bandBottomEdgeY(0, sag);
-    ctx.beginPath();
-    ctx.moveTo(-THONG_STRING_HALF_WIDTH, stringTopY);
-    ctx.lineTo(THONG_STRING_HALF_WIDTH, stringTopY);
-    ctx.quadraticCurveTo(THONG_STRING_HALF_WIDTH, THONG_STRING_BOTTOM_Y, 0, THONG_STRING_BOTTOM_Y);
-    ctx.quadraticCurveTo(
-      -THONG_STRING_HALF_WIDTH,
-      THONG_STRING_BOTTOM_Y,
-      -THONG_STRING_HALF_WIDTH,
-      stringTopY,
-    );
-    ctx.closePath();
-    ctx.fill();
-  } else {
-    // Hung from the band's top edge rather than butted against its lower one,
-    // so the band covers the join exactly and no seam can open along it.
-    pathFrontPanel(ctx, sag);
-    ctx.fill();
+        ctx.strokeStyle = THONG_TRIM;
+        ctx.lineWidth = HAIRLINE_WIDTH;
+        ctx.beginPath();
+        ctx.moveTo(THONG_PANEL_HALF_WIDTH, bandTopEdgeY(THONG_PANEL_HALF_WIDTH, sag));
+        pathLegOpening(ctx, 1, sag);
+        ctx.quadraticCurveTo(
+          0,
+          THONG_PANEL_BOTTOM_Y + THONG_PANEL_BOTTOM_DIP,
+          -THONG_PANEL_BOTTOM_HALF_WIDTH,
+          THONG_PANEL_BOTTOM_Y,
+        );
+        pathLegOpening(ctx, -1, sag);
+        ctx.stroke();
+      }
 
-    ctx.strokeStyle = THONG_TRIM;
-    ctx.lineWidth = HAIRLINE_WIDTH;
-    ctx.beginPath();
-    ctx.moveTo(THONG_PANEL_HALF_WIDTH, bandTopEdgeY(THONG_PANEL_HALF_WIDTH, sag));
-    pathLegOpening(ctx, 1, sag);
-    ctx.quadraticCurveTo(
-      0,
-      THONG_PANEL_BOTTOM_Y + THONG_PANEL_BOTTOM_DIP,
-      -THONG_PANEL_BOTTOM_HALF_WIDTH,
-      THONG_PANEL_BOTTOM_Y,
-    );
-    pathLegOpening(ctx, -1, sag);
-    ctx.stroke();
-  }
-
-  drawWaistband(ctx, sag);
-  ctx.restore();
+      drawWaistband(ctx, sag);
+    },
+  );
 }
 
 function drawSacrum(ctx: CanvasRenderingContext2D): void {
   const plane = ctx.createLinearGradient(0, SACRUM_TOP_Y, 0, GLUTE_CLEFT_TOP_Y);
-  plane.addColorStop(0, SKIN_SHADE_FADE);
+  plane.addColorStop(0, rgba(SKIN_SHADE, 0));
   plane.addColorStop(SACRUM_FADE_STOP, SKIN_SHADE);
   plane.addColorStop(1, SKIN_SHADE);
 
@@ -1978,7 +1919,6 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
     SEAT_SHADE_RADIUS_X,
     SEAT_SHADE_RADIUS_Y,
     SKIN_SHADE,
-    SKIN_SHADE_FADE,
     SEAT_SHADE_ALPHA,
   );
 
@@ -1992,10 +1932,13 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
       GLUTE_SHADE_RADIUS_X,
       GLUTE_SHADE_RADIUS_Y,
       SKIN_DEEP_SHADE,
-      SKIN_SHADE_FADE,
       GLUTE_SHADE_ALPHA,
       tilt,
       GLUTE_SHADE_CORE_FRACTION,
+      // Fades toward the shallower shade tone's transparency rather than its
+      // own, which is what keeps the cheek's wash blending into the
+      // surrounding flank instead of vanishing into a darker halo of its own.
+      rgba(SKIN_SHADE, 0),
     );
     fillSoftEllipse(
       ctx,
@@ -2004,7 +1947,6 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
       GLUTE_HIGHLIGHT_RADIUS_X,
       GLUTE_HIGHLIGHT_RADIUS_Y,
       SKIN_HIGHLIGHT,
-      SKIN_HIGHLIGHT_FADE,
       GLUTE_HIGHLIGHT_ALPHA,
       tilt,
       GLUTE_HIGHLIGHT_CORE_FRACTION,
@@ -2016,7 +1958,6 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
       TROCHANTER_DIP_RADIUS_X,
       TROCHANTER_DIP_RADIUS_Y,
       SKIN_SHADE,
-      SKIN_SHADE_FADE,
       TROCHANTER_DIP_ALPHA,
     );
   }
@@ -2031,7 +1972,6 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
       SACRAL_DIMPLE_RADIUS,
       SACRAL_DIMPLE_RADIUS,
       SKIN_CREASE,
-      SKIN_CREASE_FADE,
       SACRAL_DIMPLE_ALPHA,
     );
   }
@@ -2045,7 +1985,6 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
     GLUTE_CLEFT_VALLEY_HALF_WIDTH,
     (GLUTE_CLEFT_BOTTOM_Y - GLUTE_CLEFT_TOP_Y) / 2,
     SKIN_CREASE,
-    SKIN_CREASE_FADE,
     GLUTE_CLEFT_VALLEY_ALPHA,
   );
 
@@ -2077,7 +2016,7 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
     };
 
     const crease = ctx.createLinearGradient(outerX, GLUTE_FOLD_OUTER_Y, 0, GLUTE_FOLD_JUNCTION_Y);
-    crease.addColorStop(0, SKIN_DEEP_CREASE_FADE);
+    crease.addColorStop(0, rgba(SKIN_DEEP_CREASE, 0));
     crease.addColorStop(GLUTE_FOLD_FADE_STOP, SKIN_DEEP_CREASE);
     crease.addColorStop(1, SKIN_DEEP_CREASE);
 
@@ -2086,7 +2025,7 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
     );
 
     const bounce = ctx.createLinearGradient(outerX, GLUTE_FOLD_OUTER_Y, 0, GLUTE_FOLD_JUNCTION_Y);
-    bounce.addColorStop(0, SKIN_HIGHLIGHT_FADE);
+    bounce.addColorStop(0, rgba(SKIN_HIGHLIGHT, 0));
     bounce.addColorStop(GLUTE_FOLD_FADE_STOP, SKIN_HIGHLIGHT);
     bounce.addColorStop(1, SKIN_HIGHLIGHT);
     strokeSoftCrease(
@@ -2107,7 +2046,6 @@ function drawCollarbones(ctx: CanvasRenderingContext2D): void {
     SUPRASTERNAL_NOTCH_RADIUS_X,
     SUPRASTERNAL_NOTCH_RADIUS_Y,
     SKIN_CREASE,
-    SKIN_CREASE_FADE,
     SUPRASTERNAL_NOTCH_ALPHA,
   );
 
@@ -2123,14 +2061,18 @@ function drawCollarbones(ctx: CanvasRenderingContext2D): void {
       (COLLARBONE_OUTER_X - COLLARBONE_INNER_X) / 2,
       COLLARBONE_RIDGE_RISE,
       SKIN_HIGHLIGHT,
-      SKIN_HIGHLIGHT_FADE,
       COLLARBONE_RIDGE_ALPHA,
     );
 
-    const bone = ctx.createLinearGradient(innerX, COLLARBONE_Y, outerX, COLLARBONE_Y);
-    bone.addColorStop(0, SKIN_CREASE_FADE);
-    bone.addColorStop(COLLARBONE_FADE_STOP, SKIN_CREASE);
-    bone.addColorStop(1, SKIN_CREASE_FADE);
+    const bone = taperedCreaseGradient(
+      ctx,
+      innerX,
+      COLLARBONE_Y,
+      outerX,
+      COLLARBONE_Y,
+      SKIN_CREASE,
+      COLLARBONE_FADE_STOP,
+    );
 
     strokeSoftCrease(ctx, FINE_LINE_WIDTH, bone, () => {
       ctx.moveTo(innerX, COLLARBONE_Y);
@@ -2147,7 +2089,7 @@ function drawCollarbones(ctx: CanvasRenderingContext2D): void {
  */
 function drawCleavage(ctx: CanvasRenderingContext2D): void {
   const valley = ctx.createLinearGradient(0, CLEAVAGE_TOP_Y, 0, CLEAVAGE_BOTTOM_Y);
-  valley.addColorStop(0, SKIN_DEEP_CREASE_FADE);
+  valley.addColorStop(0, rgba(SKIN_DEEP_CREASE, 0));
   valley.addColorStop(CLEAVAGE_FADE_STOP, SKIN_CREASE);
   valley.addColorStop(1, SKIN_DEEP_CREASE);
 
@@ -2180,7 +2122,6 @@ function drawBust(ctx: CanvasRenderingContext2D): void {
     UPPER_CHEST_SHADE_RADIUS_X,
     UPPER_CHEST_SHADE_RADIUS_Y,
     SKIN_SHADE,
-    SKIN_SHADE_FADE,
     UPPER_CHEST_SHADE_ALPHA,
   );
 
@@ -2194,10 +2135,13 @@ function drawBust(ctx: CanvasRenderingContext2D): void {
       BUST_SHADE_RADIUS_X,
       BUST_SHADE_RADIUS_Y,
       SKIN_DEEP_SHADE,
-      SKIN_SHADE_FADE,
       BUST_SHADE_ALPHA,
       tilt,
       BUST_SHADE_CORE_FRACTION,
+      // Same reason as the glute wash: fades toward the shallower shade
+      // tone's transparency so the breast's shadow blends into the
+      // surrounding skin instead of the deep tone's own darker halo.
+      rgba(SKIN_SHADE, 0),
     );
     fillSoftEllipse(
       ctx,
@@ -2206,7 +2150,6 @@ function drawBust(ctx: CanvasRenderingContext2D): void {
       BUST_HIGHLIGHT_RADIUS_X,
       BUST_HIGHLIGHT_RADIUS_Y,
       SKIN_HIGHLIGHT,
-      SKIN_HIGHLIGHT_FADE,
       BUST_HIGHLIGHT_ALPHA,
       tilt,
       BUST_HIGHLIGHT_CORE_FRACTION,
@@ -2218,7 +2161,6 @@ function drawBust(ctx: CanvasRenderingContext2D): void {
       UNDERBUST_SHADOW_RADIUS_X,
       UNDERBUST_SHADOW_RADIUS_Y,
       SKIN_DEEP_CREASE,
-      SKIN_DEEP_CREASE_FADE,
       UNDERBUST_SHADOW_ALPHA,
       tilt,
     );
@@ -2233,11 +2175,16 @@ function drawBust(ctx: CanvasRenderingContext2D): void {
     const arcEndX = centerX + BUST_UNDERCURVE_RADIUS * Math.cos(BUST_UNDERCURVE_ARC_END);
     const arcEndY = BUST_POINT_Y + BUST_UNDERCURVE_RADIUS * Math.sin(BUST_UNDERCURVE_ARC_END);
 
-    const crease = ctx.createLinearGradient(arcStartX, arcStartY, arcEndX, arcEndY);
-    crease.addColorStop(0, SKIN_DEEP_CREASE_FADE);
-    crease.addColorStop(BUST_UNDERCURVE_FADE_IN, SKIN_DEEP_CREASE);
-    crease.addColorStop(BUST_UNDERCURVE_FADE_OUT, SKIN_DEEP_CREASE);
-    crease.addColorStop(1, SKIN_DEEP_CREASE_FADE);
+    const crease = taperedCreaseGradient(
+      ctx,
+      arcStartX,
+      arcStartY,
+      arcEndX,
+      arcEndY,
+      SKIN_DEEP_CREASE,
+      BUST_UNDERCURVE_FADE_IN,
+      BUST_UNDERCURVE_FADE_OUT,
+    );
 
     strokeSoftCrease(ctx, BUST_UNDERCURVE_LINE_WIDTH * UNDERCURVE_WEIGHT, crease, () => {
       ctx.arc(
@@ -2265,7 +2212,6 @@ function drawPelvisFront(ctx: CanvasRenderingContext2D): void {
       HIP_SWELL_RADIUS_X,
       HIP_SWELL_RADIUS_Y,
       SKIN_LIT,
-      SKIN_LIT_FADE,
       HIP_SWELL_ALPHA,
     );
   }
@@ -2280,7 +2226,7 @@ function drawPelvisFront(ctx: CanvasRenderingContext2D): void {
       bottomX,
       GROIN_CREASE_BOTTOM_Y,
     );
-    crease.addColorStop(0, SKIN_SHADE_FADE);
+    crease.addColorStop(0, rgba(SKIN_SHADE, 0));
     crease.addColorStop(GROIN_CREASE_FADE_STOP, SKIN_SHADE);
     crease.addColorStop(1, SKIN_SHADE);
 
@@ -2310,107 +2256,109 @@ function drawTorso(
   ctx.fillStyle = SKIN_LIT;
   ctx.fill();
 
-  ctx.save();
-  pathTorso(ctx, facingAway);
-  ctx.clip();
-
-  // Waist and flank shading — the hourglass reads from the shading, not the outline
-  for (const side of SIDES) {
-    fillSoftEllipse(
-      ctx,
-      side * WAIST_HALF_WIDTH,
-      WAIST_Y,
-      FLANK_SHADE_RADIUS_X,
-      FLANK_SHADE_RADIUS_Y,
-      SKIN_SHADE,
-      SKIN_SHADE_FADE,
-      FLANK_SHADE_ALPHA,
-    );
-  }
-
-  if (facingAway) {
-    for (const side of SIDES) {
-      strokeSoftCrease(ctx, BUST_UNDERCURVE_LINE_WIDTH, SKIN_DEEP_SHADE, () => {
-        ctx.moveTo(side * SHOULDER_BLADE_X, SHOULDER_BLADE_TOP_Y);
-        ctx.quadraticCurveTo(
-          side * (SHOULDER_BLADE_X + SHOULDER_BLADE_FLARE),
-          (SHOULDER_BLADE_TOP_Y + SHOULDER_BLADE_BOTTOM_Y) / 2,
-          side * SHOULDER_BLADE_X * 0.6,
-          SHOULDER_BLADE_BOTTOM_Y,
+  withClip(
+    ctx,
+    () => pathTorso(ctx, facingAway),
+    () => {
+      // The hourglass reads from this shading, not from the outline.
+      for (const side of SIDES) {
+        fillSoftEllipse(
+          ctx,
+          side * WAIST_HALF_WIDTH,
+          WAIST_Y,
+          FLANK_SHADE_RADIUS_X,
+          FLANK_SHADE_RADIUS_Y,
+          SKIN_SHADE,
+          FLANK_SHADE_ALPHA,
         );
-      });
-    }
+      }
 
-    // The spine is a groove that deepens toward the small of her back, not a
-    // ruled line down the middle of a flat panel.
-    const spine = ctx.createLinearGradient(0, SHOULDER_BLADE_TOP_Y, 0, HIP_Y);
-    spine.addColorStop(0, SKIN_SHADE_FADE);
-    spine.addColorStop(SPINE_FADE_STOP, SKIN_SHADE);
-    spine.addColorStop(1, SKIN_CREASE);
-    strokeSoftCrease(ctx, CONTOUR_LINE_WIDTH, spine, () => {
-      ctx.moveTo(0, SHOULDER_BLADE_TOP_Y);
-      ctx.lineTo(0, HIP_Y);
-    });
+      if (facingAway) {
+        for (const side of SIDES) {
+          strokeSoftCrease(ctx, BUST_UNDERCURVE_LINE_WIDTH, SKIN_DEEP_SHADE, () => {
+            ctx.moveTo(side * SHOULDER_BLADE_X, SHOULDER_BLADE_TOP_Y);
+            ctx.quadraticCurveTo(
+              side * (SHOULDER_BLADE_X + SHOULDER_BLADE_FLARE),
+              (SHOULDER_BLADE_TOP_Y + SHOULDER_BLADE_BOTTOM_Y) / 2,
+              side * SHOULDER_BLADE_X * SHOULDER_BLADE_TIP_SHARE,
+              SHOULDER_BLADE_BOTTOM_Y,
+            );
+          });
+        }
 
-    drawGlutes(ctx);
-  } else {
-    drawBust(ctx);
-    drawPelvisFront(ctx);
-  }
+        // The spine is a groove that deepens toward the small of her back, not a
+        // ruled line down the middle of a flat panel.
+        const spine = ctx.createLinearGradient(0, SHOULDER_BLADE_TOP_Y, 0, HIP_Y);
+        spine.addColorStop(0, rgba(SKIN_SHADE, 0));
+        spine.addColorStop(SPINE_FADE_STOP, SKIN_SHADE);
+        spine.addColorStop(1, SKIN_CREASE);
+        strokeSoftCrease(ctx, CONTOUR_LINE_WIDTH, spine, () => {
+          ctx.moveTo(0, SHOULDER_BLADE_TOP_Y);
+          ctx.lineTo(0, HIP_Y);
+        });
 
-  // Navel and the soft line of the abdomen
-  ctx.strokeStyle = SKIN_SHADE;
-  ctx.lineWidth = CONTOUR_LINE_WIDTH;
-  ctx.beginPath();
-  ctx.moveTo(0, WAIST_Y - ABDOMEN_LINE_RISE);
-  ctx.lineTo(0, WAIST_Y + ABDOMEN_LINE_DROP);
-  ctx.stroke();
+        drawGlutes(ctx);
+      } else {
+        drawBust(ctx);
+        drawPelvisFront(ctx);
+      }
 
-  // Her scales and the ripple that travels over them both stop at the hip from
-  // behind. Run down over the seat they lay a band of hard little arcs across
-  // the one form on her that is carried entirely by soft value, and the cheeks
-  // read as rippled rather than round.
-  const texturedBottomY = facingAway ? HIP_Y : CROTCH_Y;
-  if (detail.skinTexture) {
-    drawScalePatch(
-      ctx,
-      -HIP_HALF_WIDTH * 0.7,
-      WAIST_Y + 0.04,
-      HIP_HALF_WIDTH * 1.4,
-      texturedBottomY - WAIST_Y - 0.04,
-    );
-  }
+      ctx.strokeStyle = SKIN_SHADE;
+      ctx.lineWidth = CONTOUR_LINE_WIDTH;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, WAIST_Y - ABDOMEN_LINE_RISE);
+      ctx.lineTo(0, WAIST_Y + ABDOMEN_LINE_DROP);
+      ctx.stroke();
 
-  applyInkStyle(ctx, castGlow, tileSizePx);
-  if (facingAway) {
-    // The book's shoulder-blade fish — see BACK_FISH_Y for why it sits a little
-    // below the blades themselves.
-    stampTattoo(ctx, detail, drawSmallFishMotif, timeSec, {
-      x: -BACK_FISH_X,
-      y: BACK_FISH_Y,
-      size: 0.05,
-      phase: 5.2,
-      detail: true,
-    });
-    stampTattoo(ctx, detail, drawDragonMotif, timeSec, {
-      x: 0.004,
-      y: WAIST_Y + 0.05,
-      size: 0.115,
-      phase: 1.9,
-    });
-  } else {
-    stampTattoo(ctx, detail, drawOctopusMotif, timeSec, {
-      x: 0.004,
-      y: WAIST_Y + 0.045,
-      size: 0.115,
-      phase: 1.9,
-    });
-  }
-  ctx.globalAlpha = 1;
-  ctx.shadowBlur = 0;
+      // Her scales and the ripple that travels over them both stop at the hip from
+      // behind. Run down over the seat they lay a band of hard little arcs across
+      // the one form on her that is carried entirely by soft value, and the cheeks
+      // read as rippled rather than round.
+      const texturedBottomY = facingAway ? HIP_Y : CROTCH_Y;
+      if (detail.skinTexture) {
+        const patchHalfWidth = HIP_HALF_WIDTH * SCALE_PATCH_HALF_WIDTH_SHARE;
+        const patchTop = WAIST_Y + SCALE_PATCH_TOP_BELOW_WAIST;
+        drawScalePatch(
+          ctx,
+          -patchHalfWidth,
+          patchTop,
+          2 * patchHalfWidth,
+          texturedBottomY - WAIST_Y - SCALE_PATCH_TOP_BELOW_WAIST,
+        );
+      }
 
-  if (detail.skinTexture) drawSkinRipple(ctx, timeSec, SHOULDER_Y, texturedBottomY);
-  ctx.restore();
+      applyInkStyle(ctx, castGlow, tileSizePx);
+      if (facingAway) {
+        // The book's shoulder-blade fish — see BACK_FISH_Y for why it sits a little
+        // below the blades themselves.
+        stampTattoo(ctx, detail, drawSmallFishMotif, timeSec, {
+          x: -BACK_FISH_X,
+          y: BACK_FISH_Y,
+          size: 0.05,
+          phase: BACK_FISH_PHASE,
+          detail: true,
+        });
+        stampTattoo(ctx, detail, drawDragonMotif, timeSec, {
+          x: 0.004,
+          y: WAIST_Y + 0.05,
+          size: 0.115,
+          phase: TORSO_MOTIF_PHASE,
+        });
+      } else {
+        stampTattoo(ctx, detail, drawOctopusMotif, timeSec, {
+          x: 0.004,
+          y: WAIST_Y + 0.045,
+          size: 0.115,
+          phase: TORSO_MOTIF_PHASE,
+        });
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+
+      if (detail.skinTexture) drawSkinRipple(ctx, timeSec, SHOULDER_Y, texturedBottomY);
+    },
+  );
 }
 
 const ARM_ROOT_Y = SHOULDER_Y + ARM_ROOT_Y_OFFSET;
@@ -2484,18 +2432,20 @@ function drawArm(
   ctx.lineTo(0, upperArmLength);
   ctx.stroke();
 
-  ctx.save();
-  pathLimb(ctx, UPPER_ARM_WIDTH, upperArmLength);
-  ctx.clip();
-  applyInkStyle(ctx, castGlow, tileSizePx);
-  stampTattoo(ctx, detail, drawDragonMotif, timeSec, {
-    x: 0,
-    y: upperArmLength * 0.6,
-    size: 0.095,
-    phase: side < 0 ? 0.9 : 2.8,
-    detail: true,
-  });
-  ctx.restore();
+  withClip(
+    ctx,
+    () => pathLimb(ctx, UPPER_ARM_WIDTH, upperArmLength),
+    () => {
+      applyInkStyle(ctx, castGlow, tileSizePx);
+      stampTattoo(ctx, detail, drawDragonMotif, timeSec, {
+        x: 0,
+        y: upperArmLength * ARM_DRAGON_ALONG_UPPER_ARM,
+        size: 0.095,
+        phase: side < 0 ? LEFT_ARM_DRAGON_PHASE : RIGHT_ARM_DRAGON_PHASE,
+        detail: true,
+      });
+    },
+  );
 
   ctx.translate(0, upperArmLength);
   ctx.rotate(-side * elbowAngle);
@@ -2507,25 +2457,26 @@ function drawArm(
   ctx.lineTo(0, forearmLength);
   ctx.stroke();
 
-  ctx.save();
-  pathLimb(ctx, FOREARM_WIDTH, forearmLength);
-  ctx.clip();
-  applyInkStyle(ctx, castGlow, tileSizePx);
-  stampTattoo(ctx, detail, drawEelLightningMotif, timeSec, {
-    x: 0,
-    y: forearmLength * 0.5,
-    size: 0.095,
-    phase: side < 0 ? 3.3 : 1.6,
-    detail: true,
-  });
-  ctx.restore();
+  withClip(
+    ctx,
+    () => pathLimb(ctx, FOREARM_WIDTH, forearmLength),
+    () => {
+      applyInkStyle(ctx, castGlow, tileSizePx);
+      stampTattoo(ctx, detail, drawEelLightningMotif, timeSec, {
+        x: 0,
+        y: forearmLength * 0.5,
+        size: 0.095,
+        phase: side < 0 ? 3.3 : 1.6,
+        detail: true,
+      });
+    },
+  );
 
   ctx.fillStyle = SKIN_BASE;
   ctx.beginPath();
   ctx.arc(0, forearmLength + HAND_RADIUS * HAND_CENTER_REACH_FRACTION, HAND_RADIUS, 0, Math.PI * 2);
   ctx.fill();
 
-  // Long dark nails, as in her portrait
   ctx.strokeStyle = NAIL_COLOR;
   ctx.lineWidth = CONTOUR_LINE_WIDTH;
   ctx.lineCap = 'round';
@@ -2755,7 +2706,6 @@ function shadeFace(ctx: CanvasRenderingContext2D): void {
     TEMPLE_SHADE_RADIUS_X,
     TEMPLE_SHADE_RADIUS_Y,
     SKIN_SHADE,
-    SKIN_SHADE_FADE,
     CHEEK_SHADE_ALPHA,
   );
 
@@ -2767,7 +2717,6 @@ function shadeFace(ctx: CanvasRenderingContext2D): void {
       CHEEK_HOLLOW_RADIUS_X,
       CHEEK_HOLLOW_RADIUS_Y,
       SKIN_SHADE,
-      SKIN_SHADE_FADE,
       CHEEK_HOLLOW_ALPHA,
     );
   }
@@ -2779,7 +2728,6 @@ function shadeFace(ctx: CanvasRenderingContext2D): void {
     JAW_SHADE_RADIUS_X,
     JAW_SHADE_RADIUS_Y,
     SKIN_SHADE,
-    SKIN_SHADE_FADE,
     JAW_SHADE_ALPHA,
   );
 }
@@ -2849,7 +2797,6 @@ function drawEyes(ctx: CanvasRenderingContext2D, castGlow: number, tileSizePx: n
     ctx.restore();
   }
 
-  // The lash line, laid over the upper lid and flicked past the outer corner.
   ctx.save();
   ctx.strokeStyle = HAIR_DARK;
   ctx.lineWidth = LASH_LINE_WIDTH;
@@ -2880,7 +2827,6 @@ function drawNose(ctx: CanvasRenderingContext2D): void {
     NOSE_BRIDGE_SHADE_RADIUS_X,
     (NOSE_TIP_Y - NOSE_BRIDGE_TOP_Y) / 2,
     SKIN_SHADE,
-    SKIN_SHADE_FADE,
     NOSE_BRIDGE_SHADE_ALPHA,
   );
   fillSoftEllipse(
@@ -2890,7 +2836,6 @@ function drawNose(ctx: CanvasRenderingContext2D): void {
     NOSE_TIP_SHADE_RADIUS_X,
     NOSE_TIP_SHADE_RADIUS_Y,
     SKIN_SHADE,
-    SKIN_SHADE_FADE,
     NOSE_TIP_SHADE_ALPHA,
   );
   fillSoftEllipse(
@@ -2900,7 +2845,6 @@ function drawNose(ctx: CanvasRenderingContext2D): void {
     NOSE_TIP_HIGHLIGHT_RADIUS,
     NOSE_TIP_HIGHLIGHT_RADIUS,
     SKIN_LIT,
-    SKIN_LIT_FADE,
     NOSE_TIP_HIGHLIGHT_ALPHA,
   );
   for (const side of SIDES) {
@@ -2911,7 +2855,6 @@ function drawNose(ctx: CanvasRenderingContext2D): void {
       NOSTRIL_RADIUS_X,
       NOSTRIL_RADIUS_Y,
       SKIN_CREASE,
-      SKIN_CREASE_FADE,
       NOSTRIL_ALPHA,
     );
   }
@@ -2967,7 +2910,6 @@ function drawMouth(ctx: CanvasRenderingContext2D): void {
     LOWER_LIP_SHEEN_RADIUS_X,
     LOWER_LIP_SHEEN_RADIUS_Y,
     LIP_SHEEN_COLOR,
-    LIP_SHEEN_FADE,
     LOWER_LIP_SHEEN_ALPHA,
   );
 
@@ -2986,7 +2928,6 @@ function drawMouth(ctx: CanvasRenderingContext2D): void {
     CHIN_SHADOW_RADIUS_X,
     CHIN_SHADOW_RADIUS_Y,
     SKIN_SHADE,
-    SKIN_SHADE_FADE,
     CHIN_SHADOW_ALPHA,
   );
 
@@ -3007,7 +2948,6 @@ function drawHead(
   tileSizePx: number,
   facingAway: boolean,
 ): void {
-  // Long high-elf ears, swept up and back behind the face
   ctx.fillStyle = SKIN_BASE;
   for (const side of SIDES) {
     const earRootX = side * HEAD_RADIUS_X * 0.8;
@@ -3049,11 +2989,11 @@ function drawHead(
   ctx.fill();
 
   if (!facingAway) {
-    ctx.save();
-    pathFace(ctx);
-    ctx.clip();
-    shadeFace(ctx);
-    ctx.restore();
+    withClip(
+      ctx,
+      () => pathFace(ctx),
+      () => shadeFace(ctx),
+    );
   }
 
   ctx.fillStyle = HORN_COLOR;

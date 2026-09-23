@@ -12,6 +12,7 @@
  */
 
 import { makeDrunk } from '../core/StatusEffect';
+import { playDrinkGesture } from '../creatures/humanGestures';
 import type { Player } from '../Player';
 import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
 import type { ResidentHost } from './townResidents';
@@ -171,6 +172,8 @@ function drinksFor(house: string): ReadonlyArray<Drink> {
 
 function pourDrink(drink: Drink, player: Player): void {
   player.recordSwallowed();
+  // The kitchen's plates are eaten, not drunk: only a drink gets the bottle.
+  if (drink.effect !== 'heal') playDrinkGesture(player);
   if (drink.effect === 'speed') {
     player.activateSpeedFizz();
     return;

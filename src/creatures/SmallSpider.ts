@@ -120,6 +120,11 @@ export class SmallSpider extends Mob {
   override description = 'A quick, venomous spider that pounces on its prey.';
   override mass = 1;
 
+  /** Flat to the floor, so a crawler kicks or stomps it rather than punching. */
+  override get lowProfile(): boolean {
+    return true;
+  }
+
   private state: SpiderState = 'idle';
   private crouchTimer = 0;
   /** Counts down from POUNCE_FRAMES to 0. */

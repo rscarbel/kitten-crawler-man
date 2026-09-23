@@ -1,5 +1,3 @@
-import { TILE_SIZE } from '../core/constants';
-
 /**
  * A stone in the air from the human's slingshot.
  *
@@ -12,6 +10,21 @@ export interface SlingshotRock {
   y: number;
   vx: number;
   vy: number;
+  /**
+   * Where the stone is drawn at launch relative to where it flies, in world
+   * pixels: it leaves the fork of the sling in his raised fist, which stands
+   * well above the ground line the stone is tested along. Drawing only; the
+   * offset closes to nothing over {@link convergeDistance}.
+   */
+  launchOffsetX: number;
+  launchOffsetY: number;
+  /**
+   * World pixels of flight over which the drawn stone closes onto its real
+   * line: {@link ROCK_LAUNCH_CONVERGE_TILES}, cut short to the stone's last
+   * step before a wall it will hit, so a stone that strikes a wall close by
+   * vanishes where it struck rather than in the air off the fork.
+   */
+  convergeDistance: number;
   distTraveled: number;
   maxDist: number;
   state: 'flying' | 'done';
@@ -46,6 +59,13 @@ export const SLINGSHOT_HIT_RADIUS_FRACTION = 0.4;
 /** Radius of the drawn pebble, as a fraction of a tile. */
 const ROCK_RADIUS_FRACTION = 0.1;
 
+/**
+ * How far a stone flies, in tiles, before it is drawn on the line it actually
+ * travels rather than coming off the fork. Short, so it reads as leaving his
+ * hand and then as a stone skimming at the height of what it will hit.
+ */
+export const ROCK_LAUNCH_CONVERGE_TILES = 1.5;
+
 /** How far behind the pebble its motion streak trails, in ticks of travel. */
 const ROCK_TRAIL_TICKS = 2;
 
@@ -75,8 +95,10 @@ export function drawSlingshotRocks(
 
   for (const rock of rocks) {
     if (rock.state !== 'flying') continue;
-    const rx = rock.x - camX;
-    const ry = rock.y - camY;
+    const launchShare =
+      rock.convergeDistance > 0 ? Math.max(0, 1 - rock.distTraveled / rock.convergeDistance) : 0;
+    const rx = rock.x + rock.launchOffsetX * launchShare - camX;
+    const ry = rock.y + rock.launchOffsetY * launchShare - camY;
 
     ctx.save();
 
@@ -109,80 +131,4 @@ export function drawSlingshotRocks(
 
     ctx.restore();
   }
-}
-
-/** Length of the Y-frame's forks, as a fraction of a tile. */
-const FRAME_FORK_LENGTH_FRACTION = 0.16;
-/** Length of the handle below the fork, as a fraction of a tile. */
-const FRAME_HANDLE_LENGTH_FRACTION = 0.13;
-/** Half the angle the two forks open to, in radians. */
-const FRAME_FORK_HALF_ANGLE = 0.55;
-/** How far in front of the wielder's centre the frame is held, in tile fractions. */
-const FRAME_HOLD_DISTANCE_FRACTION = 0.42;
-/** How far above the tile anchor the holding hand sits, in pixels at `TILE_SIZE`. */
-const FRAME_HOLD_HEIGHT_PX = 14;
-
-const FRAME_WOOD = '#6b4b2a';
-const FRAME_BAND = 'rgba(40,26,14,0.9)';
-
-/**
- * Draws the little Y-frame in the wielder's hand so a wielded slingshot is
- * visible in the world and not only on the hotbar.
- *
- * Drawn from the facing vector rather than from a sprite row: the human's sheet
- * has no armed poses, and a stick held out in front reads correctly from all
- * four views without one.
- */
-export function drawSlingshotWield(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  s: number,
-  facingX: number,
-  facingY: number,
-): void {
-  const facingLength = Math.hypot(facingX, facingY);
-  if (facingLength === 0) return;
-  const dirX = facingX / facingLength;
-  const dirY = facingY / facingLength;
-
-  const holdHeight = (FRAME_HOLD_HEIGHT_PX / TILE_SIZE) * s;
-  const centreX = sx + s / 2 + dirX * s * FRAME_HOLD_DISTANCE_FRACTION;
-  const centreY = sy + s / 2 + dirY * s * FRAME_HOLD_DISTANCE_FRACTION - holdHeight;
-
-  const forkLength = s * FRAME_FORK_LENGTH_FRACTION;
-  const handleLength = s * FRAME_HANDLE_LENGTH_FRACTION;
-
-  ctx.save();
-  ctx.strokeStyle = FRAME_WOOD;
-  ctx.lineWidth = Math.max(1, s * ROCK_RADIUS_FRACTION);
-  ctx.lineCap = 'round';
-
-  ctx.beginPath();
-  ctx.moveTo(centreX, centreY + handleLength);
-  ctx.lineTo(centreX, centreY);
-  ctx.stroke();
-
-  for (const side of [-1, 1]) {
-    const angle = -Math.PI / 2 + side * FRAME_FORK_HALF_ANGLE;
-    ctx.beginPath();
-    ctx.moveTo(centreX, centreY);
-    ctx.lineTo(centreX + Math.cos(angle) * forkLength, centreY + Math.sin(angle) * forkLength);
-    ctx.stroke();
-  }
-
-  ctx.strokeStyle = FRAME_BAND;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(
-    centreX + Math.cos(-Math.PI / 2 - FRAME_FORK_HALF_ANGLE) * forkLength,
-    centreY + Math.sin(-Math.PI / 2 - FRAME_FORK_HALF_ANGLE) * forkLength,
-  );
-  ctx.lineTo(
-    centreX + Math.cos(-Math.PI / 2 + FRAME_FORK_HALF_ANGLE) * forkLength,
-    centreY + Math.sin(-Math.PI / 2 + FRAME_FORK_HALF_ANGLE) * forkLength,
-  );
-  ctx.stroke();
-
-  ctx.restore();
 }

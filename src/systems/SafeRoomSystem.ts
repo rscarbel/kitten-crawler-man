@@ -503,6 +503,16 @@ export class SafeRoomSystem implements GameSystem {
     return SafeRoomSystem.infoOf(entry);
   }
 
+  /**
+   * Where the Mordecai the crawler is talking to is standing, while that
+   * conversation is open — so the crawler can be turned to face him. Null
+   * with no conversation, or before the speaker has been picked out.
+   */
+  get speakingMordecaiPosition(): { x: number; y: number } | null {
+    if (!this._mordecaiDialogOpen) return null;
+    return this._speakingEntry?.wanderer.state ?? null;
+  }
+
   isNearMordecai(entity: { x: number; y: number }): boolean {
     return this.entries.some((e) => SafeRoomSystem.isNearThisMordecai(e, entity));
   }

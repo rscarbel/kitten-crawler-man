@@ -12,6 +12,7 @@
 
 import type { SoundId } from '../../audio/sounds';
 import type { AbilityManager } from '../../core/AbilityManager';
+import { playDrinkGesture } from '../../creatures/humanGestures';
 import type { AchievementManager } from '../../core/AchievementManager';
 import type { GameStats } from '../../core/GameStats';
 import { displayHp } from '../../core/crawlerFormulas';
@@ -334,7 +335,10 @@ export class MenusKit {
    */
   drinkPotion(drinker: HumanPlayer | CatPlayer, id: ItemId, bottle: PotionSlot | null): boolean {
     const swallowed = this.pourPotion(drinker, id, bottle);
-    if (swallowed) this.onPotionDrunk?.(id, drinker);
+    if (swallowed) {
+      this.onPotionDrunk?.(id, drinker);
+      playDrinkGesture(drinker);
+    }
     return swallowed;
   }
 

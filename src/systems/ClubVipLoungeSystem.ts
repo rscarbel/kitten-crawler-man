@@ -1,3 +1,4 @@
+import { playDrinkGesture } from '../creatures/humanGestures';
 import { displayHp } from '../core/crawlerFormulas';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
@@ -196,6 +197,7 @@ export class ClubVipLoungeSystem {
     if (!cooldownActive) player.activateCooldownCrisp();
     this.feedbackMsg = 'The VIP Cocktail hits. You feel unstoppable.';
     this.audio?.play('potion_drink');
+    playDrinkGesture(player);
   }
 
   private hireEscort(player: Player): void {

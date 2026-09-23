@@ -501,6 +501,15 @@ export abstract class Mob extends Player {
 
   /** True for boss-tier mobs — used by DungeonScene to identify which mob belongs to which boss room. */
   isBoss = false;
+
+  /**
+   * Knee-high: a blow thrown at chest height passes over it. The crawler's
+   * animator throws punts and stomps at a low-profile target rather than
+   * punches — he earned Foot Soldier punting rats.
+   */
+  get lowProfile(): boolean {
+    return false;
+  }
   /** Set each frame by DungeonScene when this mob is inside an active confusing fog. */
   isConfused = false;
 
@@ -1133,7 +1142,15 @@ export abstract class Mob extends Player {
       this.attackSoundPending = true;
       return false;
     }
-    const source = this.stampBlowCap({ kind: 'mob', mobType: this.mobType, attackType });
+    const source = this.stampBlowCap({
+      kind: 'mob',
+      mobType: this.mobType,
+      attackType,
+      from: {
+        x: this.x + this.tileSize * MOB_TILE_CENTER,
+        y: this.y + this.tileSize * MOB_TILE_CENTER,
+      },
+    });
     const connected = target.takeDamage(damage, source);
     if (connected) {
       this.noteStruckPlayer(target);

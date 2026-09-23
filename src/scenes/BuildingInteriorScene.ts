@@ -36,6 +36,7 @@ import { GameStats } from '../core/GameStats';
 import { MENU_TAP_DURATION_MS, MENU_TAP_MAX_DISTANCE, type PauseMenu } from '../ui/PauseMenu';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
+import { HumanTalkDriver } from '../creatures/humanGestures';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { AbilityManager } from '../core/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
@@ -534,6 +535,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly citizenDialog: CitizenDialog | null;
   /** Occupant the open conversation belongs to; used to notice the player walking off. */
   private citizenDialogTarget: Townsperson | null = null;
+  /** Keeps Carl talking, turned to whoever he is in conversation with. */
+  private readonly humanTalk = new HumanTalkDriver();
   /**
    * A service NPC whose story is playing, and the turn their menu should open
    * on. The turn is captured here rather than re-read later: `noteTalk` runs the
@@ -1604,6 +1607,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // closes the club's panels itself while the coins can still reach the
     // player. Idempotent, so running twice costs nothing.
     this.club?.closeAll(this.active());
+    this.humanTalk.stop(this.human);
     // Same contract as DungeonScene's bus: subscribers are re-wired per scene, so
     // the listeners this scene added must not outlive it.
     this.bus.clear();
@@ -1787,6 +1791,16 @@ export class BuildingInteriorScene extends GameplayScene {
     if (inactive.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) this.raiseDeathScreen();
   }
 
+  /**
+   * Where the one Carl is in conversation with stands, while a street-style
+   * conversation is open — a resident, or Mordecai; null otherwise.
+   */
+  private humanTalkSpeaker(): { x: number; y: number } | null {
+    const citizen = this.citizenDialogTarget;
+    if (this.citizenDialog?.isOpen === true && citizen !== null) return citizen;
+    return this.safeRoom?.speakingMordecaiPosition ?? null;
+  }
+
   update(): void {
     // Above the death-screen return: an award earned by the blow that killed the
     // party is still drawn on top of the screen announcing it, and a dialog that
@@ -1794,8 +1808,12 @@ export class BuildingInteriorScene extends GameplayScene {
     this.menus.update();
 
     // The death screen accepts through its own focus ring, which reaches
-    // `handleClick` — nothing to poll for here.
-    if (this.gameOver) return;
+    // `handleClick` — nothing to poll for here. The fall he died in still
+    // plays out beneath it as it fades in.
+    if (this.gameOver) {
+      this.human.tickReactionWhileDefeated();
+      return;
+    }
 
     // Ticked on every floor of every building, and the one exception is the
     // return above: a party that is already dead has nothing left to contain.
@@ -1928,6 +1946,9 @@ export class BuildingInteriorScene extends GameplayScene {
     // they have walked from him.
     const talkingSafeRoom = this.safeRoom?.mordecaiDialogOpen === true ? this.safeRoom : null;
     talkingSafeRoom?.tickDialog(this.active());
+    // Both conversations that reach here leave the world running, so his
+    // talking is advanced by his own tick below.
+    this.humanTalk.update(this.human, this.humanTalkSpeaker(), false);
     if (this.resolvePendingServiceTalk()) return;
     const conversationOpen = this.citizenDialog?.isOpen === true;
     if (conversationOpen) this.citizenDialog.update();

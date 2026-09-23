@@ -37,6 +37,14 @@ import {
 import { drawText } from '../ui/TextBox';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import {
+  BUILD_KNEEL_ROWS,
+  BUILD_RISE_ROWS,
+  BUILD_ROWS,
+  humanRowOf,
+} from '../sprites/art/humanFigure';
+import { viewForFacing } from '../sprites/humanSprite';
+import type { CarlView } from '../sprites/art/carl/rig';
 
 export const DEFEND_QUEST_ID = 'defend_goblin_mother';
 
@@ -82,6 +90,11 @@ const OVERLAY_FADE_FRAMES = 90;
 const TEXT_HEIGHT_FACTOR = 0.8;
 const SECS_LOW_THRESHOLD = 30;
 const PICKUP_PROXIMITY_FRACTION = 1.2;
+/**
+ * The hammer's cadence for a build nobody is drawn hammering — the cat's, or
+ * one the human walked away from. While his hammering loop plays, the sound
+ * is struck on the frames the hammer lands instead.
+ */
 const HAMMER_SOUND_INTERVAL = 30;
 const BUILD_PROGRESS_RADIUS_FRACTION = 0.6;
 const BUILD_PROGRESS_TRACK_ALPHA = 0.5;
@@ -281,6 +294,14 @@ export interface WoodBarrier {
  */
 export type BarrierBuilderId = 'human' | 'cat';
 
+/** The human at work on a build, and the way he faces it. */
+interface Hammering {
+  readonly human: HumanPlayer;
+  readonly view: CarlView;
+  readonly faceX: number;
+  readonly faceY: number;
+}
+
 export interface PendingBuild {
   framesLeft: number;
   /** Seeded duration, so the progress arc and hammer cadence stay right for a slower builder. */
@@ -350,8 +371,14 @@ export class DefendQuestSystem implements GameSystem {
    * rewinds the encounter to the top of the countdown.
    */
   private encounterAborted = false;
-  /** Set every ~30 frames while building; DungeonScene clears it and plays the hammer sound. */
+  /**
+   * Set on each hammer strike while building — as the hammer lands in the
+   * human's hammering loop, or on a fixed cadence when no one is drawn
+   * hammering; DungeonScene clears it and plays the hammer sound.
+   */
   hammerSoundPending = false;
+  /** The human kneeling at the pending build, while his hammering is what times its sound. */
+  private hammering: Hammering | null = null;
   /** Set each time a barrier takes damage; DungeonScene clears it and cycles the wood-break sounds. */
   woodBreakSoundPending = false;
   /** Set when a dialog box opens; DungeonScene clears it and plays menu_open. */
@@ -391,11 +418,9 @@ export class DefendQuestSystem implements GameSystem {
      * The level one bugaboo spawns at, rolled per body against the floor's own
      * band and the party's level.
      *
-     * The wave used to spawn at base stats, which was survivable because the
-     * quest was optional late-floor content a party met at level 7 or later. It
-     * is now a mandatory choke crossed mid-floor 1 by a level-3 party and again
-     * on floor 2 by a level-12 one, so a fixed body is either a wall or a
-     * formality depending on which floor you meet it on.
+     * The quest is a mandatory choke crossed mid-floor 1 by a level-3 party
+     * and again on floor 2 by a level-12 one, so a wave at fixed stats would
+     * be either a wall or a formality depending on which floor it is met on.
      */
     resolveWaveLevel: () => number,
     /** The floor's `levelledCurve`, which the wave is levelled on. */
@@ -695,6 +720,7 @@ export class DefendQuestSystem implements GameSystem {
             isRepair: true,
             builder: builderId,
           };
+          if (!(builder instanceof CatPlayer)) this.startHammering(builder, g);
           return true;
         }
         continue; // Already at full HP
@@ -707,9 +733,68 @@ export class DefendQuestSystem implements GameSystem {
         isRepair: false,
         builder: builderId,
       };
+      if (!(builder instanceof CatPlayer)) this.startHammering(builder, g);
       return true;
     }
     return false;
+  }
+
+  /**
+   * Turns him to the grate and down onto one knee, then into the hammering
+   * loop, whose landing frames strike the hammer sound. Refused mid-blow or
+   * mid-flinch, in which case the build is simply heard on the fixed cadence.
+   */
+  private startHammering(human: HumanPlayer, grate: { x: number; y: number }): void {
+    const toX =
+      (grate.x + TILE_CENTER_OFFSET) * TILE_SIZE - (human.x + TILE_SIZE * TILE_CENTER_OFFSET);
+    const toY =
+      (grate.y + TILE_CENTER_OFFSET) * TILE_SIZE - (human.y + TILE_SIZE * TILE_CENTER_OFFSET);
+    const distance = Math.hypot(toX, toY);
+    const faceX = distance > 0 ? toX / distance : human.facingX;
+    const faceY = distance > 0 ? toY / distance : human.facingY;
+    const hammering: Hammering = { human, view: viewForFacing(faceX, faceY), faceX, faceY };
+    const kneeling = human.playAction(BUILD_KNEEL_ROWS[hammering.view], {
+      faceX,
+      faceY,
+      onEnd: (reason) => {
+        if (this.hammering !== hammering) return;
+        if (reason === 'finished' && this.pendingBuild) this.loopHammering(hammering);
+        else this.hammering = null;
+      },
+    });
+    this.hammering = kneeling ? hammering : null;
+  }
+
+  private loopHammering(hammering: Hammering): void {
+    const row = BUILD_ROWS[hammering.view];
+    const strikes = humanRowOf(row)?.eventFrames?.strike ?? [];
+    const looping = hammering.human.playAction(row, {
+      faceX: hammering.faceX,
+      faceY: hammering.faceY,
+      loop: true,
+      onFrame: strikes.map((frame) => ({
+        frame,
+        run: (): void => {
+          this.hammerSoundPending = true;
+        },
+      })),
+      onEnd: () => {
+        if (this.hammering === hammering) this.hammering = null;
+      },
+    });
+    if (!looping) this.hammering = null;
+  }
+
+  /** Ends the hammering with him getting back up off his knee. */
+  private endHammering(): void {
+    const hammering = this.hammering;
+    if (hammering === null) return;
+    this.hammering = null;
+    hammering.human.stopAction();
+    hammering.human.playAction(BUILD_RISE_ROWS[hammering.view], {
+      faceX: hammering.faceX,
+      faceY: hammering.faceY,
+    });
   }
 
   /**
@@ -814,9 +899,12 @@ export class DefendQuestSystem implements GameSystem {
         break;
     }
 
+    // The build was called off, rewound or finished elsewhere: he gets up off his knee.
+    if (this.hammering !== null && this.pendingBuild === null) this.endHammering();
+
     if (this.pendingBuild && this.roomData) {
       const elapsed = this.pendingBuild.totalFrames - this.pendingBuild.framesLeft;
-      if (elapsed % HAMMER_SOUND_INTERVAL === 0) {
+      if (this.hammering === null && elapsed % HAMMER_SOUND_INTERVAL === 0) {
         this.hammerSoundPending = true;
       }
       this.pendingBuild.framesLeft--;
@@ -1190,6 +1278,7 @@ export class DefendQuestSystem implements GameSystem {
     if (!this.pendingBuild || !this.roomData) return;
     const { grateIdx, isRepair, builder } = this.pendingBuild;
     this.pendingBuild = null;
+    this.endHammering();
 
     const buildingCrawler = builder === 'cat' ? ctx.cat : ctx.human;
     const boardCount = buildingCrawler.inventory.countOf('quest_wood_board');

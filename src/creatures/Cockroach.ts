@@ -99,6 +99,11 @@ function randomSign(): number {
 }
 
 export class Cockroach extends Mob {
+  /** Knee-high to a man, so a crawler kicks or stomps it rather than punching. */
+  override get lowProfile(): boolean {
+    return true;
+  }
+
   /** Vermin survive everything; the rarest of them leave the manual behind. */
   protected override rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);

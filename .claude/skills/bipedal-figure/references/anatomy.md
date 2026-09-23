@@ -5,10 +5,9 @@ They are ordered roughly by how much time each one cost.
 
 **Numbers here are illustrative of _scale_, not authoritative.** Where a value
 appears, the named constant beside it is the source of truth — grep
-`src/sprites/art/carlArt.ts` or `src/sprites/art/humanFigure.ts` for the name
-before relying on a figure. Five
-values in the first draft of this file were already stale. The _reasoning_ is
-what carries; the digits drift.
+`src/sprites/art/carl/` (the painter) or `src/sprites/art/human/` (the
+choreography) for the name before relying on a figure. The _reasoning_ is what
+carries; the digits drift.
 
 **Provenance matters.** Everything under Arms / Legs / Feet / Timing comes from
 Carl, the one figure in this game whose movement actually convinces — treat it as
@@ -19,12 +18,12 @@ against, or cited as "how it's done here".
 
 ## Proportions {#proportions}
 
-- **Never derive a body part from the head.** A game figure is ~4.8 heads tall
-  with a deliberately oversized head, so any life-drawing ratio hung off it
-  inflates. `HAND_LENGTH` was `HEAD_RY * 1.12` — the usual "a hand is as long as
-  the face" — which made the hand 80% of its own forearm, and the bare skin
-  below the cuff then read as a rolled-up sleeve. Derive from the _parent limb_:
-  `HAND_LENGTH = FOREARM_LENGTH * 0.38`.
+- **Never derive a body part from the head.** A game figure is `HEADS_TALL` 5.5
+  overall, but draws at roughly 4.5 heads hair-to-chin, with a deliberately
+  oversized head, so any life-drawing ratio hung off it inflates. A hand set to `HEAD_RY * 1.12` — the usual "a hand is as long as
+  the face" — came out 80% of its own forearm, and the bare skin below the cuff
+  read as a rolled-up sleeve. Derive from the _parent limb_: `HAND_LENGTH` in
+  `carl/limbs.ts` is a share of `FOREARM_LENGTH`.
 - **Pin height and heads-tall, derive every joint from those.** `HIP_Y`,
   `WAIST_Y`, `SHOULDER_Y`, `HEAD_CENTRE_Y` are constants in tile units with
   origin between the feet and +Y down (heights are negative). Bone lengths come
@@ -125,11 +124,19 @@ against, or cited as "how it's done here".
   locks straight, and the foot hangs above the floor. **The pelvis must drop at
   contact**, not rise at mid-stance — which is what a real pelvis does anyway.
   Get this backwards and no amount of stride or knee tuning fixes the side walk.
+  Carl's walk derives it rather than keying a bob: the pelvis rides the lower
+  of the two stance legs' reach arcs (`walkHipHeight` in
+  `human/locomotion.ts`).
 - **A stride that clamps on even one frame reads as a hop.** Check it
   numerically: model hip→ankle distance per frame against
-  `THIGH + SHIN - JOINT_SLACK` and require headroom on _every_ frame. Carl's
-  worst frame sits at 0.9307 against a 0.9334 limit (`STRIDE` 0.17,
-  `WALK_BOB` 0.038, plus a toe-lift key easing the foot off the floor).
+  `THIGH + SHIN - JOINT_SLACK` (`LEG_MAX_REACH`) and require headroom on
+  _every_ frame with a foot down — Carl's G13. A run's flight frames are the
+  one exemption: nothing pushes against the floor there.
+- **A stride is solved from the leg, never chosen.** A foot in stance has to
+  slide back through the cell at exactly the rate the sprite is carried over
+  the floor, so the ground a cycle covers follows from how far the leg reaches
+  at contact and at push-off, and the phase is advanced by ground covered. See
+  `carl.md#locomotion-a-planted-foot-does-not-move-relative-to-the-floor`.
 - **A raised leg solves into a shin sticking out sideways** unless the pose
   carries an explicit knee-break (−1 folds the knee up in front) plus a foot
   swung outboard.
@@ -148,7 +155,10 @@ against, or cited as "how it's done here".
   nothing on a straight limb, so punches are unaffected.
 - **A hand as wide as its own wrist reads as a stick.** Width at 0.52 of hand
   length came out 0.07 across against a 0.07 wrist — one taper, and the
-  cuff→hand step looked like a kink. 0.72 (fist 0.85).
+  cuff→hand step looked like a kink. It must clear the wrist by a pixel each
+  side at the tile: Carl's `HAND_WIDTH` is 0.74 of the hand's length and his
+  `FIST_WIDTH` 1.4× the wrist's full width — a fist no wider than its wrist
+  reads as the arm ending in a stump.
 - **Every digit must read `openness`.** A thumb pinned at its open-hand fan
   throws a stub sideways out of every closed fist that reads as a stray sixth
   finger. If a digit is added, it tucks with the rest.
@@ -164,8 +174,16 @@ against, or cited as "how it's done here".
 
 ## Head, face, hair {#head}
 
+- **A big head shows first in profile.** Head-on the shoulders dwarf it; edge-on
+  the torso is only a ribcage deep, and a head drawn to a game proportion plus
+  its nose and hair came out 0.8 of the chest's depth — "his head is as big as
+  his torso". Hold the profile head (hair to nose tip) to about 0.65 of the
+  chest (G27): a real heavy man's is about 21 cm against 28–30. Shrink the whole
+  head a little and keep the back of the crop close to the occiput rather than
+  narrowing the profile alone — a real head with its nose is ~0.85 as deep as
+  it is tall, and a narrower one reads as a flattened face.
 - **The head is a tall oval head-on and a deeper one in profile — two radii, not
-  one.** Width ratio 0.74, depth ratio 0.9. A round head makes any chin under it
+  one.** Width ratio 0.74, depth ratio 0.85. A round head makes any chin under it
   read as blocky _however narrow the chin is_, so narrowing the jaw alone never
   fixes it. The profile skull, hair, ear, brow, eye and mouth all key off
   **depth**, not width.
@@ -217,8 +235,10 @@ against, or cited as "how it's done here".
   because roots narrow with `view.lateral` and the hip does not), and its
   half-width is floored at `THIGH_WIDTH * CUFF_SLACK` (a flare-derived width came
   out a third narrower than the leg edge-on, so the thigh stuck out both sides).
-- **A printed motif needs to be at least ~3px on the sheet.** A 3×5 grid at 0.03
-  tiles made each heart under two pixels — a polka dot. 2×3 at 0.058 works.
+- **A printed motif needs to be at least ~3px on the sheet.** Fifteen hearts at
+  0.03 tiles made each one under two pixels — a polka dot. Few and large
+  (`HEART_SIZE` 0.07 in `carl/boxers.ts`), wrapped round each leg's tube and
+  foreshortened toward its edges.
 - **The arm/hip gap is a chain of widths, not one number.** Hands clear of the
   body means hand-hang-spread > the hem, the hem must still cover
   `LEG_ROOT_HALF + THIGH_WIDTH` (so the hem flare can't drop below ~1.4), and
@@ -232,8 +252,24 @@ against, or cited as "how it's done here".
   by the same amount as the limb spacing makes a plank. `lateral` moves limb
   roots (`PROFILE_LATERAL` 0.3); `girth` scales torso/hip/clothing width
   (`PROFILE_GIRTH` 0.68).
-- **Head-on, both arms belong in front of the torso.** Drawing the far arm first
-  — correct in profile — makes the figure look one-armed.
+- **Head-on, both arms belong in front of the torso** unless the pose puts one
+  on the far side of the body (`leftArmBehind`, or a hand depth far enough from
+  the camera). Drawing the far arm first by default — correct in profile —
+  makes the figure look one-armed.
+- **Head-on, depth is a little screen height on the floor and nothing at the
+  hip.** The floor is seen from above while the figure stands as if seen
+  level, so a foot a stride ahead draws lower on the screen, but a knee driven
+  at the camera must not — it would hang where a straight leg does. Carl's rig
+  blends the two through the height of the leg (`depthShareAt` in
+  `carl/rig.ts`). **Never draw the floor's depth at the floor's own scale under
+  an upright figure**: a planted foot held to the floor slides the full world
+  stride down the screen while the hips ride with the sprite, and the leg
+  between them grows to half again its length and shrinks to a stub through
+  every stance — a planted leg drawn at full floor depth grows to about 1.4×
+  its length in the run away from the camera, visible at a glance.
+  The floor is drawn foreshortened (`HEAD_ON_FLOOR_FORESHORTENING`, the largest
+  share that keeps a planted leg within a tenth of its no-depth length); the
+  foot slides that share and the hips carry the rest. G26 holds it.
 - **Bare skin takes no depth shade outside the profile.** Legs never take one in
   any view (the outline separates them edge-on) and head-on neither arm does,
   including an arm drawn behind the torso. A depth shade on skin does not read as
@@ -260,13 +296,26 @@ against, or cited as "how it's done here".
 
 ## Timing and motion {#timing}
 
-- **Pace a walk with a phase-speed multiplier on the actor, never by scaling the
-  frame index.** The frame index maps a phase in radians onto however many frames
-  exist, so more frames buy smoothness and nothing else. `Player` wraps
-  `walkFrame` at 2π, and a **non-integer** multiple of an already-wrapped phase
-  does not wrap with it: at rate 1.3 the cycle jumped from frame 4 straight back
-  to 0 once per lap — a glitch frame in every direction that no amount of staring
-  at a contact sheet finds, because the art is fine. Integer rates hide the bug.
+- **Pace a gait by ground covered, never by scaling the frame index.** The frame
+  index maps a phase in radians onto however many frames exist, so more frames
+  buy smoothness and nothing else. Carl's phase advances by radians per world
+  pixel actually covered (`HumanAnimator`), which is the only way a stance foot
+  stays put; a mob on `Player.walkFrame` gets a phase-speed multiplier instead.
+  Either way, never multiply an already-wrapped phase: `Player` wraps
+  `walkFrame` at 2π, and a **non-integer** multiple of it does not wrap with it —
+  at rate 1.3 the cycle jumped from frame 4 straight back to 0 once per lap, a
+  glitch frame in every direction that no contact sheet shows. Integer rates
+  hide the bug.
+- **An arm's swing peaks at contact, so drive it with a cosine of the gait
+  phase when phase 0 is a foot's contact.** At contact the same-side arm is
+  furthest back. A sine driver puts the arms neutral at contact and peaking at
+  mid-stance — a quarter-cycle out, which reads as a shuffle while every limb
+  moves correctly. G11 asserts the phase; do not inspect it.
+- **A `hump` bell is zero at its own centre.** `hump(1 - distance / width)` is
+  open at the moment a blink should be shut and blinks twice;
+  `hump(0.5 * (1 - distance / width))` peaks at the centre (`blink` in
+  `human/gaitShared.ts`). G12 asserts one contiguous lidded run per cycle, shut
+  on its middle frame.
 - _(from the goblin rig — a caution, not a model)_ **A swing cap silently
   discards authored angles.** A ground-clearance clamp on
   a chop returned 16° from an authored 58° at impact, so the swing lay flat and
@@ -282,8 +331,10 @@ against, or cited as "how it's done here".
 ## Anchoring and wiring {#anchor}
 
 - **A redraw moves the tile anchor**, so health-bar and active-marker offsets
-  must move with it. Measure off painted cells: Carl's standing rows top out
-  40 px above the tile anchor against ~32 px on the old art.
+  must move with it. Measure off painted cells: Carl's standing solid ink tops
+  out 21.5 px above the tile anchor at the 32 px tile, frozen as
+  `HUMAN_SPRITE_TOP_ABOVE_TILE` (22) in `HumanPlayer.ts` and re-measured by G21
+  with the rest of `HUMAN_STATUS_FIGURE_BOX`.
 - **Frame geometry is measured, not authored — and nothing can measure ink at
   runtime.** Measure it once offline, freeze it as a named constant in the
   figure module (`frameWidth`, `frameHeight`, `tileX`, `tileY`, a head clearance,

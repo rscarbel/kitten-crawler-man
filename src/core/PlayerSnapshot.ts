@@ -280,7 +280,7 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
     if (snap.explosivesHandling !== undefined) {
       p.explosivesHandling = Math.max(1, finiteOr(snap.explosivesHandling, p.explosivesHandling));
     }
-    p.wieldedWeaponId = snap.wieldedWeaponId ?? null;
+    p.wield(snap.wieldedWeaponId ?? null);
     p.slingshotCooldown = Math.max(0, finiteOr(snap.slingshotCooldown, 0));
   }
 
@@ -303,6 +303,9 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.inventory.consolidateStacks();
   // Equipment first: the stat getters — and therefore max HP — read from it.
   p.inventory.equipment.replaceAll(snap.equippedEntries);
+  // A scene change builds a fresh player before restoring him, so this is the
+  // first moment his outfit is known; dressing here keeps the warm one resident.
+  if (p instanceof HumanPlayer) p.syncAppearance();
 
   const baseStats = baseStatsFrom(p, snap);
   for (const stat of ALL_STATS) p.setBaseStat(stat, baseStats[stat]);

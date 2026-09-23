@@ -17,7 +17,7 @@
  */
 
 /** A figure's animation state: one row of the sheet it replaces. */
-export interface FigureStateDef {
+interface FigureStateDef {
   readonly frames: number;
 }
 
@@ -27,7 +27,7 @@ export interface FigureStateDef {
  * tracking — the sheet path answers an unknown key with `undefined`, and so
  * must this one.
  */
-export type FigureStateTable = ReadonlyMap<string, FigureStateDef>;
+type FigureStateTable = ReadonlyMap<string, FigureStateDef>;
 
 /** Builds a state table from a figure's own frame-count record. */
 export function figureStates(frameCounts: Readonly<Record<string, number>>): FigureStateTable {
@@ -40,7 +40,7 @@ export function figureStates(frameCounts: Readonly<Record<string, number>>): Fig
  * Density is applied by the caller's transform, so the painter never knows
  * whether it is drawing a supersampled bake or a one-shot direct draw.
  */
-export type FigurePainter = (ctx: CanvasRenderingContext2D, state: string, frame: number) => void;
+type FigurePainter = (ctx: CanvasRenderingContext2D, state: string, frame: number) => void;
 
 /**
  * A stable identity for a figure, shared by every instance of it. Appearance is
@@ -61,6 +61,43 @@ export interface FigureDef {
   readonly tileScale: number;
   readonly states: FigureStateTable;
   readonly paintFrame: FigurePainter;
+  /**
+   * Replaces the cache's default per-figure ceiling for this figure alone.
+   *
+   * Legitimate only for a figure that is on screen almost every frame, where
+   * the rows that must stay warm together — locomotion, idle, and whatever it
+   * is doing right now — add up to more than the default affords on their own,
+   * before any figure-specific rows are counted. Raising this never raises the
+   * cache's global ceiling, so the trade is paid for out of the room every
+   * other figure already shares, not created new.
+   */
+  readonly budgetMegabytes?: number;
+  /**
+   * Bakes this figure's cells at the bake's own density instead of
+   * supersampled.
+   *
+   * For a figure that composes itself on a surface of its own at whatever
+   * density it is painted at, with effects sized in whole pixels of that
+   * surface — an outline one screen pixel wide, a cast shadow two. Its edges
+   * are already antialiased there, so a supersampled bake composes four times
+   * the pixels only to filter those whole-pixel effects back down into
+   * half-pixel smears.
+   */
+  readonly skipSupersample?: boolean;
+}
+
+/**
+ * Density each cell is painted at before being downsampled into place. Two is
+ * what every offline generator baked at, and matching it is what makes a cached
+ * cell pixel-equivalent to the sheet cell it replaces.
+ */
+const FIGURE_SUPERSAMPLE = 2;
+/** Painting straight at the cell's own density. */
+const CELL_DENSITY = 1;
+
+/** The density a figure's cells are baked at: supersampled, unless it declares `skipSupersample`. */
+export function figureBakeDensity(def: FigureDef): number {
+  return def.skipSupersample === true ? CELL_DENSITY : FIGURE_SUPERSAMPLE;
 }
 
 /** The frame count of a state, or 0 when the figure declares no such state. */

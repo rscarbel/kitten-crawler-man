@@ -21,6 +21,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { playDrinkGesture } from '../creatures/humanGestures';
 import { FOUNTAIN, WELL } from '../map/tileTypes';
 import { drawTownSheetFrame } from '../sprites/townSheetProp';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -254,6 +255,8 @@ export class TownPropSystem implements GameSystem {
     active.hp = Math.min(active.maxHp, active.hp + amount);
     this.healCooldown = spot.cooldownFrames;
     this.getAudio()?.play('potion_drink');
+    // A bench is a sit, not a sip.
+    if (spot.kind !== 'bench') playDrinkGesture(active);
   }
 
   private gatherWaterSpots(): void {

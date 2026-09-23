@@ -8,6 +8,11 @@
  * figure can never drift from what the game renders: there is no second copy of
  * the art to keep in step.
  *
+ * A painter that composes on off-screen raster layers exports those layers as
+ * embedded `<image>` elements at their own resolution rather than as paths.
+ * Carl is the subject that does this throughout (see his entry in
+ * `svgSubjects.ts`), so his export does not scale the way the others do.
+ *
  *   npx tsx scripts/render-svg.ts --list
  *   npx tsx scripts/render-svg.ts --subject=signet
  *   npx tsx scripts/render-svg.ts --subject=signet --view=front --out=signet.svg

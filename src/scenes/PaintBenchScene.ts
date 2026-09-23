@@ -17,6 +17,7 @@ import { viewportHeight, viewportWidth } from '../core/Viewport';
 import { PAINT_BENCH_SUBJECTS, type PaintBenchSubject } from '../dev/paintBenchSubjects';
 import { allocCanvas, surfaceContext } from '../core/canvasSurface';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { figureBakeDensity } from '../sprites/figure/figureDef';
 
 const BACKGROUND_COLOR = '#12161f';
 const MARGIN = 32;
@@ -28,9 +29,6 @@ const HEADING_GAP = 26;
 /** Untimed passes that let the JIT settle before anything is recorded. */
 const WARMUP_PAINTS = 5;
 const TIMED_PAINTS = 30;
-
-/** Density a cached cell is baked at, matching the figure cache. */
-const SUPERSAMPLE = 2;
 
 const MS_DECIMALS = 3;
 
@@ -89,6 +87,45 @@ function timePaints(subject: PaintBenchSubject, density: number): number {
   return (performance.now() - startedAt) / TIMED_PAINTS;
 }
 
+/**
+ * Times a bake the way `bakeCell` in the figure cache composes one: painted
+ * at `figureBakeDensity` into a scratch surface and downsampled into a
+ * cell-sized surface, unless the figure declares `skipSupersample`, in which
+ * case the paint already lands at cell density and only the downsample copy
+ * remains. Sharing this shape with the cache is what keeps this column from
+ * overstating what a figure that opts out of supersampling actually costs to
+ * admit.
+ */
+function timeBakePaints(subject: PaintBenchSubject): number {
+  const { def } = subject;
+  const supersample = figureBakeDensity(def);
+  const cellWidth = Math.ceil(def.frameWidth);
+  const cellHeight = Math.ceil(def.frameHeight);
+  const superWidth = cellWidth * supersample;
+  const superHeight = cellHeight * supersample;
+  const superSurface = allocCanvas(superWidth, superHeight);
+  const superCtx = surfaceContext(superSurface);
+  const cellSurface = allocCanvas(cellWidth, cellHeight);
+  const cellCtx = surfaceContext(cellSurface);
+  const frames = def.states.get(subject.state)?.frames ?? 1;
+
+  const paint = (index: number): void => {
+    superCtx.setTransform(1, 0, 0, 1, 0, 0);
+    superCtx.clearRect(0, 0, superWidth, superHeight);
+    superCtx.save();
+    superCtx.scale(supersample, supersample);
+    def.paintFrame(superCtx, subject.state, index % frames);
+    superCtx.restore();
+    cellCtx.clearRect(0, 0, cellWidth, cellHeight);
+    cellCtx.drawImage(superSurface, 0, 0, superWidth, superHeight, 0, 0, cellWidth, cellHeight);
+  };
+
+  for (let i = 0; i < WARMUP_PAINTS; i++) paint(i);
+  const startedAt = performance.now();
+  for (let i = 0; i < TIMED_PAINTS; i++) paint(i);
+  return (performance.now() - startedAt) / TIMED_PAINTS;
+}
+
 /** Gap between subjects, long enough that the tab stays answerable. */
 const SUBJECT_INTERVAL_MS = 0;
 
@@ -117,7 +154,7 @@ export class PaintBenchScene extends Scene {
     const subject = PAINT_BENCH_SUBJECTS[this.nextSubject];
     this.nextSubject++;
     const directMs = timePaints(subject, 1);
-    const bakeMs = timePaints(subject, SUPERSAMPLE);
+    const bakeMs = timeBakePaints(subject);
     const measurement: Measurement = {
       name: `${subject.def.id} (${subject.state})`,
       cellPixels: `${subject.def.frameWidth}×${subject.def.frameHeight}`,

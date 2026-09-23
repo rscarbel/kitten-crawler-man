@@ -57,7 +57,8 @@ import {
   restPose as mongoRestPose,
 } from '../src/sprites/art/mongoArt.js';
 import { drawBallRoll } from '../src/sprites/art/ballOfSwineArt.js';
-import { drawCarlFront, restingPose as carlRestingPose } from '../src/sprites/art/carlArt.js';
+import { drawCarlFront } from '../src/sprites/art/carl/figure.js';
+import { restingPose as carlRestingPose } from '../src/sprites/art/carl/rig.js';
 import { restPose as catRestPose, drawCatFront } from '../src/sprites/art/catArt.js';
 import {
   MANTID_BOSS_BUILD,

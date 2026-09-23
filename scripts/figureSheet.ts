@@ -9,11 +9,9 @@
 
 import { createCanvas, type Canvas } from 'canvas';
 
-import type { FigureDef } from '../src/sprites/figure/figureDef.js';
+import { figureBakeDensity, type FigureDef } from '../src/sprites/figure/figureDef.js';
+import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
-
-/** Density each cell is painted at before being downsampled, as the cache does. */
-const SUPERSAMPLE = 2;
 
 export interface FigureSheet {
   readonly canvas: Canvas;
@@ -36,8 +34,21 @@ export function frameCountOf(def: FigureDef, state: string): number {
   return declared.frames;
 }
 
+/**
+ * Gives a painter that composes on scratch surfaces of its own somewhere to
+ * allocate them. `allocCanvas` wants `OffscreenCanvas` or a DOM `document`,
+ * and node has neither until the shims are installed, so a script painting a
+ * figure would otherwise throw on the first cell. A script that installed its
+ * own shims keeps them.
+ */
+function ensureScratchSurfaces(): void {
+  if (typeof OffscreenCanvas !== 'undefined' || typeof document !== 'undefined') return;
+  installCanvasGlobals();
+}
+
 /** Paints one cell of a figure at the given density onto its own canvas. */
 export function paintFigureCell(def: FigureDef, state: string, frame: number, density = 1): Canvas {
+  ensureScratchSurfaces();
   const width = Math.ceil(def.frameWidth * density);
   const height = Math.ceil(def.frameHeight * density);
   const cell = createCanvas(width, height);
@@ -49,9 +60,10 @@ export function paintFigureCell(def: FigureDef, state: string, frame: number, de
   return cell;
 }
 
-/** One cell, baked the way the runtime cache bakes it: supersampled, then down. */
+/** One cell, baked the way the runtime cache bakes it: supersampled then down, unless the figure opts out. */
 export function bakeFigureCell(def: FigureDef, state: string, frame: number): Canvas {
-  const supersampled = paintFigureCell(def, state, frame, SUPERSAMPLE);
+  if (def.skipSupersample === true) return paintFigureCell(def, state, frame);
+  const supersampled = paintFigureCell(def, state, frame, figureBakeDensity(def));
   const cell = createCanvas(def.frameWidth, def.frameHeight);
   const ctx = cell.getContext('2d');
   ctx.drawImage(

@@ -275,6 +275,9 @@ export class RenderPipeline {
     // player it is burning.
     rc.lavaBalls.renderGround(ctx, camX, camY);
     rc.clownGas.renderGround(ctx, camX, camY);
+    // The Smush's floor half: its rings and cracks are the ground Carl stamps,
+    // and drawn over him they wash out the feet the stamp is read from.
+    rc.smushFx.renderGround(ctx, camX, camY);
 
     safeRoom.renderObjects(ctx, camX, camY, active);
     bossRoom.renderObjects(ctx, camX, camY);
@@ -326,11 +329,8 @@ export class RenderPipeline {
     )) {
       const e = this._getEntry();
       // Sort by the sprite's visual foot position, derived from manifest
-      // geometry. Trees used to be special-cased to a large negative key, which
-      // put every tree behind every entity — the player walked in front of a
-      // tree they were standing north of. They now sort on their foot like
-      // everything else, which is only correct because `tree_oak_a` declares
-      // `tileTypeId` and so has a real anchor to sort on.
+      // geometry. Trees sort on their foot like everything else because
+      // `tree_oak_a` declares `tileTypeId` and so has a real anchor to sort on.
       e.sortY = ty * TILE_SIZE + sortYAnchorPx;
       e.kind = DRAW_KIND_DECO;
       e.tx = tx;
@@ -514,8 +514,8 @@ export class RenderPipeline {
     rc.goblinArrows.render(ctx, camX, camY);
     rc.clownGas.render(ctx, camX, camY);
     rc.knightMissiles.render(ctx, camX, camY);
-    // Last of the world effects: the stamp's fire reads as being in front of
-    // everything it just hit.
+    // Last of the world effects: the stamp's air and thrown chips read as being
+    // in front of everything it just hit.
     rc.smushFx.render(ctx, camX, camY);
 
     // Cat speech bubble for Mongo summon/recall

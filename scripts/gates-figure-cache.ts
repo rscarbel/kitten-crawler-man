@@ -12,6 +12,7 @@
 
 import { EMPTY_ALPHA_CUTOFF } from '../src/core/spriteFrames.js';
 import {
+  BYTES_PER_MEGABYTE,
   getFigureCacheStats,
   setFigureCacheStatsRecording,
 } from '../src/sprites/figure/figureCacheStats.js';
@@ -19,14 +20,26 @@ import { figureStates, type FigureDef } from '../src/sprites/figure/figureDef.js
 import {
   beginFigureFrame,
   drawFigureCached,
+  figureByteBudgetFor,
   figurePrewarmDepth,
+  figurePrewarmRequests,
+  figureResidentBytes,
   flushFigureFrameCache,
   prewarmFigureState,
   FIGURE_BYTE_BUDGET,
   IDLE_FRAMES_BEFORE_RELEASE,
   PREWARM_BAKE_BUDGET_MS,
   PREWARM_CAPACITY_RETRIES,
+  releaseFigure,
 } from '../src/sprites/figure/figureFrameCache.js';
+import { DEFAULT_HUMAN_APPEARANCE } from '../src/sprites/art/human/appearance.js';
+import {
+  activeHumanFigure,
+  drawHumanSelection,
+  setHumanAppearance,
+} from '../src/sprites/humanSprite.js';
+import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
+import { restorePlayer, snapPlayer } from '../src/core/PlayerSnapshot.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
 
@@ -460,10 +473,13 @@ console.log('figure frame cache gates');
     `the row came back after ${idleFrames} idle frames, not the ` +
       `${RELEASE_FRAME_AFTER_WINDOW} its ${IDLE_FRAMES_BEFORE_RELEASE}-frame window names`,
   );
+  // Measured, not read off the declared window: comparing two constants is
+  // settled at compile time and can never fail, while the frames the sweep
+  // actually took answer the claim whatever the cache declares.
   check(
-    'the release window is still inside the ceiling it is held to',
-    IDLE_FRAMES_BEFORE_RELEASE <= MAX_IDLE_FRAMES_TO_RELEASE,
-    `the cache holds an unplayed row for ${IDLE_FRAMES_BEFORE_RELEASE} frames, past the ` +
+    'an unplayed row is released inside the ceiling it is held to',
+    idleFrames <= MAX_IDLE_FRAMES_TO_RELEASE,
+    `the cache held an unplayed row for ${idleFrames} frames, past the ` +
       `${MAX_IDLE_FRAMES_TO_RELEASE} a finished fight is allowed to keep paying for`,
   );
 }
@@ -717,6 +733,252 @@ console.log('figure frame cache gates');
       `${rowsHeld} empty row(s); after ${PREWARM_CAPACITY_RETRIES} it held ` +
       `${figurePrewarmDepth()}`,
   );
+}
+
+// A `FigureDef.budgetMegabytes` below the fleet default is honoured: two rows
+// that fit easily under the default ceiling still evict one another once an
+// override sets the figure's own ceiling below their combined size.
+{
+  const overrideBudgetMegabytes = 6;
+  const overrideCellSize = 512;
+  const overrideFramesPerRow = 4;
+  const rowMegabytes =
+    (overrideFramesPerRow * overrideCellSize * overrideCellSize * BYTES_PER_PIXEL) /
+    BYTES_PER_MEGABYTE;
+  const overriddenFigure: FigureDef = {
+    ...makeFigure('budget_override', 0, overrideCellSize, overrideFramesPerRow),
+    budgetMegabytes: overrideBudgetMegabytes,
+  };
+  check(
+    'the override scenario is sized to actually test something',
+    rowMegabytes < overrideBudgetMegabytes && rowMegabytes * 2 > overrideBudgetMegabytes,
+    `one row is ${rowMegabytes} MB against a ${overrideBudgetMegabytes} MB override — it must ` +
+      'fit alone and overflow paired with a second row for the eviction below to prove anything',
+  );
+
+  // One cell a frame, and evictions summed over the frames: the stats are
+  // per frame, and a whole row baked inside one frame's 2 ms allowance depends
+  // on how fast this machine allocates a 1 MB cell, which is not what the case
+  // is about.
+  const evictionsDrawingRow = (figure: FigureDef, state: string): number => {
+    let evictions = 0;
+    for (let frame = 0; frame < overrideFramesPerRow; frame++) {
+      beginFigureFrame();
+      drawFigureCached(ctx, figure, state, frame, 0, 0, TILE_SIZE);
+      evictions += getFigureCacheStats().evictions;
+    }
+    return evictions;
+  };
+  reset();
+  const walkEvictions = evictionsDrawingRow(overriddenFigure, 'walk');
+  const attackEvictions = evictionsDrawingRow(overriddenFigure, 'attack');
+  check(
+    'a per-figure budget override is honoured: a second row evicts the first once it is exceeded',
+    walkEvictions === 0 && attackEvictions > 0,
+    `the walk row alone caused ${walkEvictions} eviction(s); adding the attack row under ` +
+      `the ${overrideBudgetMegabytes} MB override caused ${attackEvictions}, though the two ` +
+      `rows together are only ${(rowMegabytes * 2).toFixed(1)} MB — well inside the ` +
+      `${(FIGURE_BYTE_BUDGET / BYTES_PER_MEGABYTE).toFixed(0)} MB fleet default`,
+  );
+
+  // The same geometry without the override must not evict, or the eviction
+  // above would say nothing about the override in particular.
+  reset();
+  const defaultFigure = makeFigure('budget_no_override', 0, overrideCellSize, overrideFramesPerRow);
+  const withoutOverride =
+    evictionsDrawingRow(defaultFigure, 'walk') + evictionsDrawingRow(defaultFigure, 'attack');
+  check(
+    'the same rows fit without an override, isolating the eviction above to the override itself',
+    withoutOverride === 0,
+    `the identical rows caused ${withoutOverride} eviction(s) under the fleet default, ` +
+      'so the eviction seen with the override cannot be attributed to the override',
+  );
+
+  check(
+    'figureByteBudgetFor reports the override rather than the fleet default',
+    figureByteBudgetFor(overriddenFigure) === overrideBudgetMegabytes * BYTES_PER_MEGABYTE,
+    `reported ${figureByteBudgetFor(overriddenFigure) / BYTES_PER_MEGABYTE} MB for a figure ` +
+      `declaring a ${overrideBudgetMegabytes} MB override`,
+  );
+}
+
+// A painter that throws inside a save of its own must not leave its clip and
+// alpha on the pooled scratch surface for every later figure to paint through —
+// on the bake path, and on the direct path a cell the cache refused falls to.
+{
+  const poisonClipPx = 4;
+  const poisonAlpha = 0.1;
+  const probeCellSize = PARITY_CELL_SIZE;
+  const probeTarget = gameContext(probeCellSize, probeCellSize);
+  const makeThrower = (id: string, cellSize: number): FigureDef => ({
+    ...makeFigure(id, 0, cellSize, 1),
+    paintFrame: (paintCtx) => {
+      paintCtx.save();
+      paintCtx.beginPath();
+      paintCtx.rect(0, 0, poisonClipPx, poisonClipPx);
+      paintCtx.clip();
+      paintCtx.globalAlpha = poisonAlpha;
+      paintCtx.save();
+      throw new Error('painter failed mid-save');
+    },
+  });
+  const probe: FigureDef = {
+    id: 'after_throw_probe',
+    frameWidth: probeCellSize,
+    frameHeight: probeCellSize,
+    tileX: 0,
+    tileY: 0,
+    tileScale: probeCellSize,
+    states: figureStates({ walk: 1 }),
+    paintFrame: (paintCtx) => {
+      paintCtx.fillStyle = PARITY_BASE_COLOR;
+      paintCtx.fillRect(0, 0, probeCellSize, probeCellSize);
+    },
+  };
+  const oversizedCell = Math.ceil(Math.sqrt(FIGURE_BYTE_BUDGET / BYTES_PER_PIXEL)) + 1;
+  const throwers = [
+    { path: 'bake', figure: makeThrower('throws_while_baking', CELL_SIZE) },
+    { path: 'direct paint', figure: makeThrower('throws_while_painting', oversizedCell) },
+  ];
+
+  // Some figure has to stay resident, or the next frame's sweep releases the
+  // scratch surfaces along with the empty cache and hides the poisoning.
+  const resident = makeFigure('resident_through_throw', 0, BYSTANDER_CELL_SIZE, 1);
+
+  for (const { path, figure } of throwers) {
+    reset();
+    drawFigureCached(ctx, resident, 'walk', 0, 0, 0, TILE_SIZE);
+    let rethrown = false;
+    try {
+      drawFigureCached(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
+    } catch {
+      rethrown = true;
+    }
+    beginFigureFrame();
+    probeTarget.clearRect(0, 0, probeCellSize, probeCellSize);
+    drawFigureCached(probeTarget, probe, 'walk', 0, 0, 0, probeCellSize);
+    const pixels = probeTarget.getImageData(0, 0, probeCellSize, probeCellSize).data;
+    let opaquePixels = 0;
+    for (let i = ALPHA_OFFSET; i < pixels.length; i += RGBA_STRIDE) {
+      if (pixels[i] === OPAQUE) opaquePixels++;
+    }
+    const expectedPixels = probeCellSize * probeCellSize;
+    check(
+      `a painter throwing mid-save on the ${path} path does not poison the next figure`,
+      rethrown && opaquePixels === expectedPixels,
+      `the painter's error was ${rethrown ? '' : 'not '}rethrown; the next figure painted ` +
+        `${opaquePixels} of ${expectedPixels} pixels opaque`,
+    );
+  }
+}
+
+/** Each outfit in the release gate is drawn in one row; its prewarm is queued, never pumped. */
+const ROWS_DRAWN_PER_OUTFIT = 1;
+
+// A replaced figure gives its memory back at once, and only its own.
+{
+  reset();
+  const replaced = makeFigure('replaced_outfit', 0);
+  const bystander = makeFigure('bystander_outfit', 0);
+  drawFigureCached(ctx, replaced, 'walk', 0, 0, 0, TILE_SIZE);
+  drawFigureCached(ctx, bystander, 'walk', 0, 0, 0, TILE_SIZE);
+  prewarmFigureState(replaced, 'attack');
+  prewarmFigureState(bystander, 'attack');
+  const warmBytes = figureResidentBytes(replaced);
+  const bystanderBytes = figureResidentBytes(bystander);
+  const occupancyBefore = getFigureCacheStats();
+  releaseFigure(replaced);
+  const occupancyAfter = getFigureCacheStats();
+  check(
+    'a released figure holds no cells and no queued prewarm',
+    warmBytes > 0 && figureResidentBytes(replaced) === 0 && figurePrewarmRequests(replaced) === 0,
+    `held ${warmBytes} bytes warm; after release it holds ${figureResidentBytes(replaced)} ` +
+      `bytes and ${figurePrewarmRequests(replaced)} queued prewarm(s)`,
+  );
+  // The per-figure count and the cache's own total are kept apart; a release
+  // that clears one and not the other leaves the budget believing it is fuller
+  // than it is, and every later admission pays for memory nobody holds.
+  const bytesFreed = occupancyBefore.bytes - occupancyAfter.bytes;
+  const rowsFreed = occupancyBefore.rows - occupancyAfter.rows;
+  check(
+    "a released figure's bytes and rows leave the cache's total",
+    bytesFreed === warmBytes && rowsFreed === ROWS_DRAWN_PER_OUTFIT,
+    `released ${warmBytes} bytes in ${ROWS_DRAWN_PER_OUTFIT} row(s); the cache total fell by ` +
+      `${bytesFreed} bytes and ${rowsFreed} row(s)`,
+  );
+  check(
+    'releasing one figure leaves every other alone',
+    figureResidentBytes(bystander) === bystanderBytes && figurePrewarmRequests(bystander) === 1,
+    `the bystander went from ${bystanderBytes} to ${figureResidentBytes(bystander)} bytes with ` +
+      `${figurePrewarmRequests(bystander)} queued prewarm(s)`,
+  );
+}
+
+// Carl changing outfit: the outfit he took off is released, the new one warmed.
+{
+  reset();
+  setHumanAppearance(DEFAULT_HUMAN_APPEARANCE);
+  const before = activeHumanFigure();
+  drawHumanSelection(ctx, 0, 0, TILE_SIZE, { row: 'idle', frame: 0, flipX: false });
+  const warmBytes = figureResidentBytes(before);
+  setHumanAppearance({ ...DEFAULT_HUMAN_APPEARANCE, cloak: true, gauntlet: true });
+  const after = activeHumanFigure();
+  check(
+    "Carl's equipment change releases the outfit he took off",
+    warmBytes > 0 &&
+      after.id !== before.id &&
+      figureResidentBytes(before) === 0 &&
+      figurePrewarmRequests(before) === 0,
+    `the old outfit held ${warmBytes} bytes; after the change it holds ` +
+      `${figureResidentBytes(before)} bytes and ${figurePrewarmRequests(before)} queued prewarm(s), ` +
+      `drawing ${after.id} in place of ${before.id}`,
+  );
+  check(
+    "Carl's equipment change queues the new outfit's rows",
+    figurePrewarmRequests(after) > 0,
+    `${after.id} has no prewarm queued after the change, so his first frames in it paint cold`,
+  );
+  setHumanAppearance(DEFAULT_HUMAN_APPEARANCE);
+}
+
+/** Frames the geared player is drawn for, so his outfit is resident before the scene changes. */
+const TRANSIT_WARM_FRAMES = 60;
+/** Where the transit gate's Carl stands; anywhere on the map serves. */
+const TRANSIT_TILE = 3;
+
+// A scene change keeps a geared Carl's warm outfit: the new scene builds a
+// fresh player, empty-handed, and restores his gear onto him from a snapshot.
+// Dressing that fresh player in what his empty inventory says releases every
+// cell of the outfit he is about to be drawn in again.
+{
+  reset();
+  const carl = new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
+  carl.inventory.addItem('nightgaunt_cloak', 1);
+  carl.inventory.equipByItemId('nightgaunt_cloak');
+  carl.onEquipmentChanged();
+  const geared = activeHumanFigure();
+  for (let i = 0; i < TRANSIT_WARM_FRAMES; i++) {
+    beginFigureFrame();
+    carl.render(ctx, 0, 0, TILE_SIZE);
+  }
+  const warmBytes = figureResidentBytes(geared);
+  const snapshot = snapPlayer(carl);
+  const residentAt: Array<readonly [string, number]> = [];
+  const rebuilt = new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
+  residentAt.push(['construct', figureResidentBytes(geared)]);
+  restorePlayer(rebuilt, snapshot);
+  residentAt.push(['restore', figureResidentBytes(geared)]);
+  beginFigureFrame();
+  rebuilt.render(ctx, 0, 0, TILE_SIZE);
+  residentAt.push(['first draw', figureResidentBytes(geared)]);
+  const dropped = residentAt.filter(([, bytes]) => bytes === 0).map(([step]) => step);
+  check(
+    "a scene change keeps a geared Carl's outfit resident",
+    warmBytes > 0 && dropped.length === 0 && activeHumanFigure() === geared,
+    `${geared.id} held ${warmBytes} bytes before the change; it held none after ` +
+      `${dropped.join(', ') || 'no step'} and is drawing ${activeHumanFigure().id}`,
+  );
+  setHumanAppearance(DEFAULT_HUMAN_APPEARANCE);
 }
 
 if (failures > 0) {

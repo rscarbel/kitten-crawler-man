@@ -1605,7 +1605,7 @@ export class TutorialController {
     ctx.rect(areaX, areaY, areaWidth, DIALOG_ANIMATION_AREA_H);
     ctx.clip();
 
-    const humanAttackPhase = humanIsAttacking ? ('punch_side' as const) : null;
+    const humanAttackPhase = humanIsAttacking ? ('jab_side' as const) : null;
     const humanAttackTimer = humanIsAttacking ? COMBAT_ATTACK_FRAMES - phaseT : 0;
 
     drawHumanSprite(ctx, humanX, spriteY, s, {

@@ -1,10 +1,10 @@
 /**
- * Carl, as a painted figure: the choreography, the cell geometry, and the
+ * Carl, as a painted figure: the row table, the cell geometry, and the
  * `FigureDef` the runtime cache and the review harness both draw through.
  *
- * This module is choreography and nothing else: one pose function per animation
- * row, sampled per frame, plus the placement of a pose inside its cell. The
- * anatomy, the palette and every stroke of paint live in `carlArt.ts`.
+ * This module is the assembly and nothing else. The pose functions each row
+ * samples per frame live in `human/`, one file per family of rows; the anatomy,
+ * the palette and every stroke of paint live in `carl/`.
  *
  * Rows:
  *    idle        — toward the camera, breathing, fists loose
@@ -13,854 +13,618 @@
  *    walk
  *    walk_side
  *    walk_away
- *    punch_side  — straight right cross, contact on the impact frame
- *    kick_side   — chambered front kick
- *    punch_up    — uppercut at something north of him, so seen from behind
- *    kick_down   — stomp at something south of him, so seen head-on
- *    smush       — the ability: foot raised over the head, then driven down
- *
- * The blast Smush throws off is NOT painted here. It scales with the ability's
- * level-dependent radius, so it is drawn at runtime by `SmushEffectSystem`.
+ *    run, run_side, run_away
+ *                — the run he travels in at his base speed
+ *    run_start*, run_stop*, walk_start*, walk_stop*
+ *                — one-shots bridging standing and each gait, per view
+ *    jab_side, cross_side, hook_side, barge_side
+ *                — the profile punch chain, the barge only ever as its finisher
+ *    punt_side, roundhouse_side, knee_side
+ *                — the profile kicks, favoured against knee-high targets
+ *    jab_run_side_1…5, punt_run_side_1…5
+ *                — the jab and the punt thrown on the run, legs still stepping,
+ *                  one version per phase of the stride it can be begun at
+ *    uppercut_up, overhand_up, hammer_fist_up, front_kick_up, hop_knee_up
+ *                — the strikes at something north of him, so seen from behind
+ *    front_kick_up_moving_1…4
+ *                — the front kick as a running punt, legs still striding
+ *    stomp_down  — a stamp at something south of him, so seen head-on
+ *    punt_down   — a toe punt toward the camera
+ *    hammer_down — a hammer-fist dropped onto something low
+ *    knee_drop_down — a finisher: his weight dropped onto one knee
+ *    stomp_run_down_1…4 — the stomp on the move: a hop-in stamp mid-stride
+ *    smush, smush_side, smush_away
+ *                — the ability: knee chambered high, heel stamped down, then pressed
+ *    smush_hop_1…4, smush_hop_side_1…5, smush_hop_away_1…4
+ *                — Smush thrown on the run: a hop off the rear foot onto the stamp
+ *    guard       — combat-ready stance for a few seconds after a blow, per view
+ *    fidget_*    — one-shot gestures that break a long idle, each starting and
+ *                  ending on the idle's first frame
+ *    shell_cast, drink, grab, chest_open, talk (each ×3 views)
+ *                — actions a system plays: the Protective Shell cast, a swig
+ *                  from a bottle, a stoop for loot, heaving a chest open, and
+ *                  a talking loop
  *
  * The art invariants live in `scripts/gates-human.ts`, which the review harness
  * runs: `npm run render:human`.
  */
 
-import {
-  ARM_LENGTH,
-  FACING_ARM_ROOT_HALF,
-  type ArmAngles,
-  type CarlPose,
-  type Pt,
-  clamp01,
-  deg,
-  drawCarlBack,
-  drawCarlFront,
-  drawCarlSide,
-  easeIn,
-  easeInOut,
-  easeOut,
-  hump,
-  lerp,
-  ramp,
-  FOREARM_LENGTH,
-  restingPose,
-  SHOULDER_JOINT_DROP,
-  UPPER_ARM_LENGTH,
-  SHOULDER_Y,
-} from './carlArt';
 import { type FigureDef, figureStates } from '../figure/figureDef';
+import { drawCarlBack, drawCarlFront, drawCarlSide } from './carl/figure';
+import { type Pt } from './carlArt';
+import { type BodySide, type CarlPose, type CarlView } from './carl/rig';
+import {
+  fidgetCeilingBack,
+  fidgetCeilingFront,
+  fidgetCeilingSide,
+  fidgetFist,
+  fidgetFistSide,
+  fidgetGlance,
+  fidgetGlanceBack,
+  fidgetGlanceSide,
+  fidgetKnuckles,
+  fidgetKnucklesSide,
+  fidgetNeckRoll,
+  fidgetNeckRollBack,
+  fidgetNeckRollSide,
+  guardBack,
+  guardDropBack,
+  guardDropFront,
+  guardDropSide,
+  guardFront,
+  guardSide,
+  idleBack,
+  idleFront,
+  idleSide,
+} from './human/idles';
+import {
+  RUN_START_EXIT_PHASE,
+  RUN_STOP_ENTRY_PHASE,
+  runFacingCycle,
+  runSide,
+  runStart,
+  runStop,
+  walkFacing,
+  walkSide,
+  walkStart,
+  walkStartExitPhase,
+  walkStop,
+  walkStopEntryPhase,
+} from './human/locomotion';
+import {
+  DYNAMITE_FUSE_CATCH_FRAME,
+  DYNAMITE_HOLD_FRAMES,
+  DYNAMITE_HOLD_TICKS_PER_FRAME,
+  DYNAMITE_LIGHT_FRAMES,
+  DYNAMITE_LIGHT_TICKS_PER_FRAME,
+  DYNAMITE_RELEASE_FRAME,
+  DYNAMITE_THROW_FRAMES,
+  DYNAMITE_THROW_TICKS_PER_FRAME,
+  dynamiteHold,
+  dynamiteLight,
+  dynamiteThrow,
+} from './human/actionsThrow';
+import {
+  CHEST_LID_UP_FRAME,
+  CHEST_OPEN_FRAMES,
+  CHEST_OPEN_TICKS_PER_FRAME,
+  chestOpenBack,
+  chestOpenFront,
+  chestOpenSide,
+  DRINK_FRAMES,
+  DRINK_TICKS_PER_FRAME,
+  drinkBack,
+  drinkFront,
+  drinkSide,
+  GRAB_FRAMES,
+  GRAB_TICKS_PER_FRAME,
+  grabBack,
+  grabFront,
+  grabSide,
+  SHELL_CAST_FRAME,
+  SHELL_CAST_FRAMES,
+  SHELL_CAST_TICKS_PER_FRAME,
+  shellCastBack,
+  shellCastFront,
+  shellCastSide,
+  TALK_FRAMES,
+  TALK_TICKS_PER_FRAME,
+  talkBack,
+  talkFront,
+  talkSide,
+} from './human/actionsMisc';
+import {
+  BUILD_FRAMES,
+  BUILD_KNEEL_FRAMES,
+  BUILD_KNEEL_TICKS_PER_FRAME,
+  BUILD_RISE_FRAMES,
+  BUILD_RISE_TICKS_PER_FRAME,
+  BUILD_STRIKE_FRAMES,
+  BUILD_TICKS_PER_FRAME,
+  buildKneel,
+  buildLoop,
+  buildRise,
+  PLACE_FRAMES,
+  PLACE_TICKS_PER_FRAME,
+  placeEquipment,
+  REPAIR_FRAMES,
+  REPAIR_TICKS_PER_FRAME,
+  repairMend,
+} from './human/actionsBuild';
+import { HUMAN_SCALE, TILE_CENTRE_FRACTION, TILE_SCALE } from './human/figureScale';
+import { sideOfSign } from './human/gaitShared';
+import { travellingEntryPhase } from './human/travelling';
+import { REACTION_ROW_NAMES, REACTION_ROW_TABLE } from './human/reactions';
+import {
+  SLING_FRAMES,
+  SLING_TICKS_PER_FRAME,
+  slingBack,
+  slingFront,
+  slingSide,
+} from './human/actionsSling';
+import {
+  SMUSH_HOP_PRESS_FRAMES,
+  SMUSH_PRESS_FRAMES,
+  smushHop,
+  smushHopExitPhase,
+  smushHopStampSide,
+  smushStampPoint,
+  smushStanding,
+} from './human/stomps';
+import {
+  HAMMER_DOWN_FRAMES,
+  HAMMER_DOWN_IMPACT,
+  hammerDown,
+  KNEE_DROP_FRAMES,
+  KNEE_DROP_IMPACT,
+  kneeDropDown,
+  PUNT_DOWN_FRAMES,
+  PUNT_DOWN_IMPACT,
+  puntDown,
+  STOMP_DOWN_FRAMES,
+  STOMP_DOWN_IMPACT,
+  stompDown,
+  STOMP_RUN_ENTRY_PHASES,
+  STOMP_RUN_FRAMES,
+  STOMP_RUN_IMPACT,
+  stompRunDown,
+  stompRunExitPhase,
+  stompRunStampingSide,
+} from './human/strikesDown';
+import {
+  bargeSide,
+  crossSide,
+  hookSide,
+  jabRunSide,
+  jabSide,
+  kneeSide,
+  puntRunKickingSide,
+  puntRunSide,
+  puntSide,
+  roundhouseSide,
+  RUNNING_STRIKE_FRAMES,
+  RUNNING_STRIKE_IMPACT_FRAME,
+  runningStrikeExitPhase,
+} from './human/strikesSide';
+import {
+  frontKickUp,
+  hammerFistUp,
+  hopKneeUp,
+  overhandUp,
+  runningPuntExitPhase,
+  runningPuntUp,
+  runningPuntUpKickingSide,
+  uppercutUp,
+} from './human/strikesUp';
+import {
+  ATTACK_FRAMES,
+  ATTACK_IMPACT_FRAME,
+  FIDGET_CEILING_FRAMES,
+  FIDGET_FIST_FRAMES,
+  FIDGET_GLANCE_FRAMES,
+  FIDGET_KNUCKLES_FRAMES,
+  FIDGET_NECK_FRAMES,
+  FIDGET_TICKS_PER_FRAME,
+  GUARD_DROP_FACING_FRAMES,
+  GUARD_DROP_PROFILE_FRAMES,
+  GUARD_DROP_TICKS_PER_FRAME,
+  GUARD_FRAMES,
+  GUARD_TICKS_PER_FRAME,
+  IDLE_FRAMES,
+  IDLE_BLINK_FRAME,
+  IDLE_FRAME_TICKS,
+  heldFrameStart,
+  heldLength,
+  SMUSH_FRAMES,
+  SMUSH_IMPACT_FRAME,
+  RUN_FRAMES,
+  RUN_START_FRAMES,
+  RUN_STOP_FRAMES,
+  WALK_FRAMES,
+  WALK_START_FRAMES,
+  WALK_STOP_FRAMES,
+} from './human/timing';
 
 // ── Cell geometry ────────────────────────────────────────────────────────────
 
 /**
  * The cell the poses are painted into, and where Carl's own tile sits inside
- * it.
- *
- * These five numbers were measured by the bake this figure replaces, and
- * `scripts/parity-figure-sheet.ts` is what proved the painter still fills
- * exactly that cell. The gates re-check that nothing paints against the edge,
- * which is what would say a pose has outgrown them.
+ * it. The gates check that nothing paints against the edge, which is what
+ * would say a pose has outgrown them.
  */
 export const FRAME_W = 192;
 export const FRAME_H = 192;
-/** Tile size the art is drawn at; the runtime scales by tileSize / TILE_SCALE. */
-export const TILE_SCALE = 64;
 export const TILE_X = (FRAME_W - TILE_SCALE) / 2;
 /**
  * The tile sits low in the frame: Carl is two tiles tall and throws a fist
- * higher still, so almost all the spare room has to be above his feet.
- */
-export const TILE_Y = 120;
-/** Ground line within the frame, matching the cat's foot placement in its tile. */
-export const GROUND_OFFSET_IN_TILE = 0.9;
-const ORIGIN_X = TILE_X + TILE_SCALE / 2;
-const ORIGIN_Y = TILE_Y + TILE_SCALE * GROUND_OFFSET_IN_TILE;
-/**
- * How much of a tile Carl fills. The anatomy is authored at a comfortable
- * working size and then scaled about his own ground line, which keeps his feet
- * on the tile they belong to. The factor is set from the sheet he replaces: at
- * full size he stood 2.2 tiles tall against that sprite's 1.6, and a crawler
- * 40% taller than the one the maps were built around reads as a giant.
- */
-export const HUMAN_SCALE = 0.72;
-
-export const IDLE_FRAMES = 8;
-/**
- * Twice the frames of the other cycles. The walk is the animation that plays
- * most and travels furthest, so it is the one where 8 steps read as a stutter;
- * these are half-steps, not extra motion.
- */
-export const WALK_FRAMES = 16;
-export const ATTACK_FRAMES = 8;
-export const SMUSH_FRAMES = 12;
-
-/**
- * `HumanPlayer` fires the melee hit on the middle frame of its swing, so every
- * attack row has to reach full extension exactly here.
- */
-export const ATTACK_IMPACT_FRAME = 4;
-/**
- * The frame Smush's blast is spawned on. `HumanPlayer` derives the frame its
- * blast is spawned on from this, so the stamp and the explosion cannot drift
- * apart.
- */
-export const SMUSH_IMPACT_FRAME = 4;
-// ── Pose helpers ─────────────────────────────────────────────────────────────
-
-function pt(x: number, y: number): Pt {
-  return { x, y };
-}
-
-/** Progress through a one-shot, where `impact` is the moment of contact. */
-function strikePhase(t: number, impact: number): { wind: number; strike: number; recover: number } {
-  const wind = clamp01(t / impact);
-  const strike = t <= impact ? 0 : clamp01((t - impact) / (1 - impact));
-  return { wind, strike, recover: strike };
-}
-
-/**
- * Standing still is meant to read as *alive*, not as swaying. Every idle term
- * is deliberately near the threshold of visibility at a 32px tile.
- */
-const BREATH_RISE = 0.005;
-const BREATH_SHOULDER_LEAN = deg(0.4);
-const BLINK_AT = 0.72;
-const BLINK_WIDTH = 0.08;
-
-/** A blink centred on `at`, expressed in cycle phase. */
-function blink(phase: number, at: number): number {
-  const distance = Math.abs(((phase - at + 1.5) % 1) - 0.5);
-  return distance > BLINK_WIDTH ? 0 : hump(1 - distance / BLINK_WIDTH);
-}
-
-const IDLE_HAND_SWAY = 0.005;
-const IDLE_HEAD_TURN = 0.05;
-const IDLE_HAIR_DRIFT = 0.04;
-/** How far he keeps his face toward the camera while standing in profile. */
-const SIDE_HEAD_TURN = 0.2;
-/**
- * Where a relaxed arm hangs: straight down from the shoulder root, wrist level
- * with the boxer hem. Standing and the head-on walk share these, because the
- * walk has to start from where he stands.
+ * higher still, so most of the spare room has to be above his feet.
  *
- * Both numbers are load-bearing. Set the hands inboard of the shoulder roots
- * (`SHOULDER_HALF * ARM_INSET`, 0.252) and the forearms converge on the
- * centreline, which turns his hands inward in front of his own crotch. Set the
- * drop past the arm's reach (0.628) and the IK clamps it, which tips the whole
- * arm toward whatever the target was — inward, again.
+ * Not all of it, though. Seen head-on a stride reaches along the floor, and
+ * the floor is drawn from above: running away from the camera, the pushing
+ * foot is half a leg nearer the viewer than his hips and draws that far below
+ * his ground line. Every row stands on the one ground line — a figure carried
+ * up the cell to make room would jump by that much whenever he set off or
+ * stopped — so the room is left below the ground line for all of them.
  */
-const HAND_HANG_SPREAD = 0.345;
+export const TILE_Y = 104;
 /**
- * How far the wrist sits below the shoulder *joint* — just inside the arm's own
- * reach, so the IK has nothing to bend to take up. Measured from the shoulder
- * line instead (the joint is `SHOULDER_JOINT_DROP` lower) the arm comes up 0.05
- * short of straight, and the solver spends every bit of that slack throwing the
- * elbow sideways: a 6px bow on a 46px-per-tile sheet.
+ * The ground line's cell row within the tile, near the cat's 0.9 foot
+ * placement. A whole row, not 0.9 of the tile (57.6 px): the painter composes
+ * Carl on a surface of its own laid on the pose's origin, and an origin on a
+ * fractional row resamples the whole figure half a pixel down, smearing every
+ * one-pixel mark — the mouth line, the zip — across two rows.
  */
-const ARM_HANG_REACH = ARM_LENGTH * 0.995;
-/** The same hang, measured from the shoulder line, where poses place hands. */
-const HAND_HANG_DROP = SHOULDER_JOINT_DROP + ARM_HANG_REACH;
-/**
- * Feet stand under the hips. Any wider and the thighs have to angle out to
- * reach them, which reads as knock-kneed however subtle the knee itself is.
- */
-const IDLE_FOOT_SPREAD = 0.135;
-/**
- * Edge-on the two feet are only slightly staggered: a wide profile stance
- * splits the legs so far fore-and-aft that no pair of shorts can cover both.
- */
-const IDLE_SIDE_FOOT_LEAD = 0.075;
-/** How far behind the hip the hands hang in profile. */
-const SIDE_HAND_BEHIND = 0.05;
+const GROUND_ROW_IN_TILE = 58;
+export const GROUND_OFFSET_IN_TILE = GROUND_ROW_IN_TILE / TILE_SCALE;
+/** The cell pixel the pose's ground point — between his feet — is painted at. */
+export const ORIGIN_X = TILE_X + TILE_SCALE / 2;
+export const ORIGIN_Y = TILE_Y + TILE_SCALE * GROUND_OFFSET_IN_TILE;
 
-function idleBase(phase: number): CarlPose {
-  const breath = Math.sin(phase * Math.PI * 2);
-  const pose = restingPose();
-  pose.bob = -BREATH_RISE * (breath * 0.5 + 0.5);
-  pose.lean = BREATH_SHOULDER_LEAN * breath;
-  pose.blink = blink(phase, BLINK_AT);
-  pose.brow = 0.55;
-  pose.hairFlow = breath * IDLE_HAIR_DRIFT;
-  return pose;
-}
-
-function idleFront(phase: number): CarlPose {
-  const pose = idleBase(phase);
-  const sway = Math.sin(phase * Math.PI * 2);
-  pose.sway = sway * IDLE_HAND_SWAY;
-  pose.headTurn = sway * IDLE_HEAD_TURN;
-  // The same joint angles the head-on walk swings around, so stepping off from
-  // standing cannot change the shape of his arms — only how much they move.
-  pose.rightArmAngles = facingArmAngles(RIGHT_ARM, sway * IDLE_ARM_DRIFT, 0, 0);
-  pose.leftArmAngles = facingArmAngles(LEFT_ARM, sway * IDLE_ARM_DRIFT, 0, 0);
-  pose.leftFoot = pt(-IDLE_FOOT_SPREAD, 0);
-  pose.rightFoot = pt(IDLE_FOOT_SPREAD, 0);
-  // Straight columns, matching the head-on walk, so standing up out of a step
-  // doesn't pop the knees into a bow.
-  pose.leftForeshorten = 1;
-  pose.rightForeshorten = 1;
-  return pose;
-}
-
-function idleSide(phase: number): CarlPose {
-  const pose = idleBase(phase);
-  const sway = Math.sin(phase * Math.PI * 2);
-  // Edge-on, a relaxed hand hangs beside the hip, not out in front of the
-  // crotch: anything forward of the centreline reads as reaching for something.
-  // Edge-on the arms hang against the hip, and the fingertips have to stop at
-  // or above the boxer hem: a bare hand below it, on the centreline, reads
-  // obscenely at tile size.
-  // The same near-full-reach hang the front view uses. Held any higher the IK
-  // takes up the slack at the elbow, and 0.04 of shortfall was enough to throw
-  // this arm into a visible dog-leg.
-  pose.leftHand = pt(-SIDE_HAND_BEHIND, SHOULDER_Y + HAND_HANG_DROP + pose.bob);
-  pose.rightHand = pt(-SIDE_HAND_BEHIND * 0.4, SHOULDER_Y + HAND_HANG_DROP - pose.bob);
-  pose.leftFoot = pt(-IDLE_SIDE_FOOT_LEAD, 0);
-  pose.rightFoot = pt(IDLE_SIDE_FOOT_LEAD, 0);
-  pose.headTurn = SIDE_HEAD_TURN + sway * IDLE_HEAD_TURN;
-  // Edge-on the elbow has to break backward; forward it swings the forearm
-  // across his own crotch.
-  pose.elbowFlare = -0.35;
-  return pose;
-}
-
-function idleBack(phase: number): CarlPose {
-  const pose = idleFront(phase);
-  pose.headTurn = -pose.headTurn;
-  // Seen from behind his arms hang on the far side of him, the same as they do
-  // in the walk he steps into from here.
-  pose.leftArmBehind = true;
-  pose.rightArmBehind = true;
-  return pose;
-}
-
-// ── Walking ──────────────────────────────────────────────────────────────────
+// ── Row table ────────────────────────────────────────────────────────────────
 
 /**
- * A walk cycle, timed the way animators key one: contact → down → passing → up,
- * twice per cycle. Phase 0 is right-foot contact.
- *
- * The thing that makes a walk read as walking rather than as a figure kicking
- * its feet out in front of it is the *tuck*: after toe-off the foot comes up
- * behind the hip with the knee folded, passes under the body, and only then
- * reaches forward. A swing leg that travels forward straight-kneed is a goose
- * step.
+ * Every row Carl is painted in, in sheet order. The runtime's state type is
+ * derived from this tuple, and {@link HUMAN_ROW_TABLE} must carry exactly these
+ * keys, so a row cannot be added to one side without the other.
  */
-/**
- * Short, and it has to be. His leg is very nearly as long as his hip is high,
- * so a foot planted much further out than this is beyond the leg's reach: the
- * IK clamps at the end of stance, the leg locks dead straight, and the next
- * frame's tuck snaps the knee back in — the hitch that reads as a hop.
- */
-const STRIDE = 0.17;
-/**
- * Foot height just after toe-off, when the knee is most folded — eased into by
- * `TOE_LIFT` rather than reached straight off the floor. A leg that is nearly
- * straight one frame and deeply folded the next pops at the knee.
- */
-const TUCK_LIFT = 0.17;
-/** The first, small lift as the toe leaves the floor. */
-const TOE_LIFT = 0.05;
-const TOE_LIFT_AT = 0.12;
-/** Foot height as it passes under the hip. */
-const PASS_LIFT = 0.115;
-/** Foot height as it reaches out for the next contact. */
-const REACH_LIFT = 0.03;
-/** Where in the swing the tuck, the pass and the reach fall. */
-const TUCK_AT = 0.32;
-const PASS_AT = 0.55;
-const REACH_AT = 0.8;
+export const HUMAN_ROW_NAMES = [
+  'idle',
+  'idle_side',
+  'idle_away',
+  'walk',
+  'walk_side',
+  'walk_away',
+  'run',
+  'run_side',
+  'run_away',
+  'run_start',
+  'run_start_side',
+  'run_start_away',
+  'run_stop',
+  'run_stop_side',
+  'run_stop_away',
+  'walk_start',
+  'walk_start_side',
+  'walk_start_away',
+  'walk_stop',
+  'walk_stop_side',
+  'walk_stop_away',
+  'jab_side',
+  'cross_side',
+  'hook_side',
+  'barge_side',
+  'punt_side',
+  'roundhouse_side',
+  'knee_side',
+  'jab_run_side_1',
+  'jab_run_side_2',
+  'jab_run_side_3',
+  'jab_run_side_4',
+  'jab_run_side_5',
+  'punt_run_side_1',
+  'punt_run_side_2',
+  'punt_run_side_3',
+  'punt_run_side_4',
+  'punt_run_side_5',
+  'uppercut_up',
+  'overhand_up',
+  'hammer_fist_up',
+  'front_kick_up',
+  'hop_knee_up',
+  'front_kick_up_moving_1',
+  'front_kick_up_moving_2',
+  'front_kick_up_moving_3',
+  'front_kick_up_moving_4',
+  'stomp_down',
+  'punt_down',
+  'hammer_down',
+  'knee_drop_down',
+  'stomp_run_down_1',
+  'stomp_run_down_2',
+  'stomp_run_down_3',
+  'stomp_run_down_4',
+  'smush',
+  'smush_side',
+  'smush_away',
+  'smush_hop_1',
+  'smush_hop_2',
+  'smush_hop_3',
+  'smush_hop_4',
+  'smush_hop_side_1',
+  'smush_hop_side_2',
+  'smush_hop_side_3',
+  'smush_hop_side_4',
+  'smush_hop_side_5',
+  'smush_hop_away_1',
+  'smush_hop_away_2',
+  'smush_hop_away_3',
+  'smush_hop_away_4',
+  'guard',
+  'guard_side',
+  'guard_away',
+  'guard_drop',
+  'guard_drop_side',
+  'guard_drop_away',
+  'fidget_ceiling',
+  'fidget_ceiling_side',
+  'fidget_neck',
+  'fidget_fist',
+  'fidget_knuckles',
+  'fidget_glance',
+  'fidget_ceiling_away',
+  'fidget_neck_side',
+  'fidget_neck_away',
+  'fidget_fist_side',
+  'fidget_knuckles_side',
+  'fidget_glance_side',
+  'fidget_glance_away',
+  'sling_shot',
+  'sling_shot_side',
+  'sling_shot_away',
+  'dynamite_light',
+  'dynamite_light_side',
+  'dynamite_light_away',
+  'dynamite_hold',
+  'dynamite_hold_side',
+  'dynamite_hold_away',
+  'dynamite_throw',
+  'dynamite_throw_side',
+  'dynamite_throw_away',
+  'shell_cast',
+  'shell_cast_side',
+  'shell_cast_away',
+  'drink',
+  'drink_side',
+  'drink_away',
+  'grab',
+  'grab_side',
+  'grab_away',
+  'chest_open',
+  'chest_open_side',
+  'chest_open_away',
+  'talk',
+  'talk_side',
+  'talk_away',
+  'build_kneel',
+  'build_kneel_side',
+  'build_kneel_away',
+  'build',
+  'build_side',
+  'build_away',
+  'build_rise',
+  'build_rise_side',
+  'build_rise_away',
+  ...REACTION_ROW_NAMES,
+  'place',
+  'place_side',
+  'place_away',
+  'repair',
+  'repair_side',
+  'repair_away',
+] as const;
 
-const WALK_BOB = 0.038;
-const WALK_LEAN = deg(3);
-const HEEL_STRIKE_PITCH = deg(-9);
-const TOE_OFF_PITCH = deg(13);
-const SWING_PITCH = deg(-6);
-
-/** Piecewise linear interpolation through a set of (t, value) keys. */
-function keyed(t: number, keys: readonly (readonly [number, number])[]): number {
-  for (let i = 1; i < keys.length; i++) {
-    const [prevT, prevV] = keys[i - 1];
-    const [nextT, nextV] = keys[i];
-    if (t <= nextT) return lerp(prevV, nextV, (t - prevT) / (nextT - prevT));
-  }
-  return keys[keys.length - 1][1];
-}
-
-/**
- * One foot of a profile gait. During stance the foot is planted and slides
- * backward under the body at a constant rate — the body is what moves. During
- * swing it tucks, passes and reaches.
- */
-function gaitFootSide(phase: number): { foot: Pt; pitch: number } {
-  const cycle = ((phase % 1) + 1) % 1;
-  const stance = cycle < 0.5;
-  const t = stance ? cycle / 0.5 : (cycle - 0.5) / 0.5;
-
-  if (stance) {
-    return {
-      foot: pt(lerp(STRIDE, -STRIDE, t), 0),
-      // Heel strike, flat through mid-stance, then up onto the toes to push off.
-      pitch: keyed(t, [
-        [0, HEEL_STRIKE_PITCH],
-        [0.2, 0],
-        [0.75, 0],
-        [1, TOE_OFF_PITCH],
-      ]),
-    };
-  }
-  return {
-    foot: pt(
-      keyed(t, [
-        [0, -STRIDE],
-        [TUCK_AT, -STRIDE * 0.75],
-        [PASS_AT, 0],
-        [REACH_AT, STRIDE * 0.8],
-        [1, STRIDE],
-      ]),
-      -keyed(t, [
-        [0, 0],
-        [TOE_LIFT_AT, TOE_LIFT],
-        [TUCK_AT, TUCK_LIFT],
-        [PASS_AT, PASS_LIFT],
-        [REACH_AT, REACH_LIFT],
-        [1, 0],
-      ]),
-    ),
-    pitch: keyed(t, [
-      [0, TOE_OFF_PITCH],
-      [PASS_AT, SWING_PITCH],
-      [1, HEEL_STRIKE_PITCH],
-    ]),
-  };
-}
-
-/**
- * Walking at the camera. Almost none of the stride is visible head-on, so the
- * step has to be sold by the foot rising and the leg foreshortening rather than
- * by any sideways travel.
- *
- * A knee pointed at the viewer does not read as an angle — it hinges away from
- * the camera, not across it — so the swing leg stays a straight column and
- * reports how foreshortened it is, which is what tells the painter to stop
- * pinching the shin at the knee. Bending it in the image plane instead reads
- * as the legs snapping sideways.
- */
-function gaitFootFacing(
-  phase: number,
-  side: number,
-): { foot: Pt; pitch: number; nearness: number } {
-  const cycle = ((phase % 1) + 1) % 1;
-  const stance = cycle < 0.5;
-  const t = stance ? cycle / 0.5 : (cycle - 0.5) / 0.5;
-  const home = side * IDLE_FOOT_SPREAD;
-
-  if (stance) {
-    return {
-      foot: pt(home + FACING_STRIDE_DRIFT * lerp(1, -1, t), 0),
-      // Same shape as the profile's, scaled down. Held flat and then jumping to
-      // the swing's constant pitch moves the ankle a step sideways on the frame
-      // the foot changes phase.
-      pitch: keyed(t, [
-        [0, HEEL_STRIKE_PITCH * FACING_PITCH_SHARE],
-        [0.2, 0],
-        [0.75, 0],
-        [1, TOE_OFF_PITCH * FACING_PITCH_SHARE],
-      ]),
-      nearness: 0,
-    };
-  }
-  const lift = keyed(t, [
-    [0, 0],
-    [TOE_LIFT_AT, TOE_LIFT * FACING_LIFT_SHARE],
-    [TUCK_AT, TUCK_LIFT * FACING_LIFT_SHARE],
-    [PASS_AT, PASS_LIFT * FACING_LIFT_SHARE],
-    [REACH_AT, REACH_LIFT],
-    [1, 0],
-  ]);
-  return {
-    foot: pt(home + FACING_STRIDE_DRIFT * lerp(-1, 1, easeInOut(t)), -lift),
-    pitch:
-      keyed(t, [
-        [0, TOE_OFF_PITCH],
-        [PASS_AT, SWING_PITCH],
-        [1, HEEL_STRIKE_PITCH],
-      ]) * FACING_PITCH_SHARE,
-    nearness: clamp01(lift / FULLY_NEAR_LIFT),
-  };
-}
-
-/**
- * Head-on the step reads only as height, so it takes nearly the full profile
- * lift to be legible at all; the pitch, by contrast, is almost invisible.
- */
-const FACING_LIFT_SHARE = 0.95;
-const FACING_PITCH_SHARE = 0.5;
-const FACING_STRIDE_DRIFT = 0.035;
-/** The lift at which the swing leg's shin is drawn at full near-camera width. */
-const FULLY_NEAR_LIFT = TUCK_LIFT * FACING_LIFT_SHARE;
-
-function walkSide(phase: number): CarlPose {
-  const pose = restingPose();
-  const right = gaitFootSide(phase);
-  const left = gaitFootSide(phase + 0.5);
-  const bobPhase = Math.abs(Math.sin(phase * Math.PI * 2));
-
-  // The pelvis *drops* at contact rather than rising at mid-stance. A walking
-  // leg is nearly as long as the hip is high, so a foot planted a stride ahead
-  // is out of reach from the standing height: the IK clamps, and the clamped
-  // leg locks straight with its foot hanging above the floor. Dropping the hip
-  // is what buys the stride, and it is what a real pelvis does anyway.
-  pose.bob = WALK_BOB * (1 - bobPhase);
-  pose.lean = WALK_LEAN;
-  pose.rightFoot = right.foot;
-  pose.rightFootPitch = right.pitch;
-  pose.leftFoot = left.foot;
-  pose.leftFootPitch = left.pitch;
-
-  const rightForward = -Math.sin(phase * Math.PI * 2);
-  pose.rightArmAngles = sideArmAngles(rightForward);
-  pose.leftArmAngles = sideArmAngles(-rightForward);
-  pose.rightFist = 0.55;
-  pose.leftFist = 0.55;
-  // Edge-on the elbow trails behind the shoulder through the swing.
-  pose.elbowFlare = -0.5;
-  pose.jacketFlare = 0.25;
-  pose.hairFlow = -0.2;
-  pose.blink = blink(phase, BLINK_AT);
-  pose.brow = 0.6;
-  pose.headTurn = 0.25;
-  return pose;
-}
-
-function walkFacing(phase: number, away: boolean): CarlPose {
-  const pose = restingPose();
-  const right = gaitFootFacing(phase, 1);
-  const left = gaitFootFacing(phase + 0.5, -1);
-  const bobPhase = Math.abs(Math.sin(phase * Math.PI * 2));
-
-  pose.bob = -WALK_BOB * bobPhase;
-  pose.sway = Math.sin(phase * Math.PI * 2) * WALK_SWAY;
-  pose.rightFoot = right.foot;
-  pose.rightFootPitch = right.pitch;
-  pose.leftFoot = left.foot;
-  pose.leftFootPitch = left.pitch;
-  pose.rightLegNearness = right.nearness;
-  pose.leftLegNearness = left.nearness;
-  // Both legs, not just the swinging one: a bow that appears on the planted leg
-  // and vanishes on the swinging one flickers once per step and reads as a
-  // wiggle. Head-on, every knee is a straight column.
-  pose.rightForeshorten = 1;
-  pose.leftForeshorten = 1;
-
-  const rightArm = facingArmSwing(phase, RIGHT_ARM, away);
-  const leftArm = facingArmSwing(phase, LEFT_ARM, away);
-  pose.rightArmAngles = rightArm.angles;
-  pose.leftArmAngles = leftArm.angles;
-  pose.rightArmBehind = rightArm.behind;
-  pose.leftArmBehind = leftArm.behind;
-  pose.rightFist = 0.55;
-  pose.leftFist = 0.55;
-  pose.twist = Math.sin(phase * Math.PI * 2) * FACING_SHOULDER_TWIST;
-  pose.jacketFlare = 0.2;
-  pose.hairFlow = Math.sin(phase * Math.PI * 2) * 0.12;
-  pose.blink = blink(phase, BLINK_AT);
-  pose.brow = 0.6;
-  pose.headTurn = away ? 0 : Math.sin(phase * Math.PI * 2) * 0.15;
-  return pose;
-}
-
-const WALK_SWAY = 0.014;
-/**
- * Barely there: the shoulders are what carry the *upper* arm, and head-on the
- * upper arm is the part that should not visibly move at all.
- */
-const FACING_SHOULDER_TWIST = 0.1;
-
-/** Shoulder rotation for a swing that is `forward` of vertical, −1 to 1. */
-function armSwingAngle(forward: number): number {
-  const shortened = forward >= 0 ? forward : forward * ARM_BACKSWING_SHARE;
-  return shortened * ARM_SWING_ANGLE;
-}
-
-/**
- * A profile arm, driven from its joints rather than from a hand target.
- *
- * Almost all of a walking arm's travel belongs to the shoulder; the elbow keeps
- * a near-constant bend and the forearm barely sweeps at all. Placed by its hand
- * the arm cannot do that — both segments are forced to swing together, and the
- * forearm ends up flailing at the full amplitude of the shoulder.
- */
-function sideArmAngles(forward: number): ArmAngles {
-  const upper = armSwingAngle(forward);
-  // Edge-on the swing is all in the picture plane, so nothing foreshortens.
-  return { upper, fore: upper * FOREARM_FOLLOW + ELBOW_FLEX, foreScale: 1 };
-}
-
-/** How much of the shoulder's swing the forearm inherits. */
-const FOREARM_FOLLOW = 0.22;
-/** The bend a walking elbow simply holds, keeping the forearm ahead of the arm. */
-const ELBOW_FLEX = deg(11);
-
-/** `side` is +1 for the arm that swings forward on the beat and −1 for its pair. */
-const RIGHT_ARM = 1;
-const LEFT_ARM = -1;
-/** Shoulder rotation at the top of the forward swing. */
-const ARM_SWING_ANGLE = deg(36);
-/** An arm swings further forward than back, so the backswing is scaled down. */
-const ARM_BACKSWING_SHARE = 0.55;
-/**
- * One arm of a head-on walk, as joint angles.
- *
- * Placing the hand instead is a trap: head-on a swinging arm foreshortens, a
- * shorter hand target is slack the IK has nowhere to put but the elbow, and at
- * full swing the elbow bows out to the side. Rotating the joints keeps the arm
- * at its own length, so nothing bows.
- *
- * The upper arm barely moves — at this angle it is nearly end-on to the viewer
- * and has almost nothing it *can* show — so the forearm carries what travel
- * there is, and even that stays small.
- *
- * The travel is inward only. Arms swing in a plane just off the body and cross
- * slightly toward the centreline as they come forward; they never swing out
- * away from it. So each arm's hang is its rest tilt *minus* an inward amount
- * that peaks when that arm is forward — the two arms alternate in time, not in
- * direction.
- *
- * That inward amount has to be a *remapped* swing, not a rectified one. Folding
- * the negative half back up (`own >= 0 ? own : -own`) keeps the motion inward,
- * but it also makes each arm reach an inward peak twice per stride instead of
- * once — the swing then reads at double speed however small the amplitude is.
- */
-function facingArmSwing(
-  phase: number,
-  side: number,
-  away: boolean,
-): { angles: ArmAngles; behind: boolean } {
-  const own = Math.sin(phase * Math.PI * 2) * side;
-  const signedSwing = own >= 0 ? own : own * ARM_BACKSWING_SHARE;
-  // Centred on the rest hang, so the *average* of the cycle is where his arms
-  // stand. Left uncentred the whole swing sits inboard of the idle, and he
-  // visibly tucks his arms in the moment he starts walking.
-  const swing = signedSwing - (1 - ARM_BACKSWING_SHARE) / 2;
-  // 0 at the back of the swing, 1 at the front — one peak per stride, matching
-  // the inward travel rather than doubling its rate.
-  const forward = (own + 1) / 2;
-  return {
-    angles: facingArmAngles(side, swing, forward, WALK_ELBOW_FLEX),
-    // Whole-row, not per-frame: an arm that changes sides partway through the
-    // cycle pops at the shoulder. Toward the camera an arm is in front of the
-    // chest for the whole swing; away from it, behind the back.
-    behind: away,
-  };
-}
-
-/**
- * One head-on arm, `swing` positive as it comes forward and crosses inboard.
- *
- * `forward` runs 0 at the back of the swing to 1 at the front, and drives the
- * foreshortening: an arm swung at the camera turns out of the picture plane, so
- * its forearm draws shorter and carries the hand *up* the body. Without that
- * the hand tracks a flat arc at one height, which is the last thing that kept
- * the head-on walk from looking like a walk.
- */
-function facingArmAngles(side: number, swing: number, forward: number, flex: number): ArmAngles {
-  return {
-    upper: side * (FACING_UPPER_TILT - swing * FACING_UPPER_SWING),
-    fore: side * (FACING_FOREARM_TILT - flex - swing * FACING_FOREARM_SWING),
-    foreScale: 1 - forward * FACING_FOREARM_FORESHORTEN,
-  };
-}
-
-/** How much of its length the forearm loses at the front of the swing. */
-const FACING_FOREARM_FORESHORTEN = 0.18;
-/** Walking bends the elbow a little past where it hangs standing. */
-const WALK_ELBOW_FLEX = deg(7);
-
-/** Standing, the arms drift by a fraction of the walk's swing. */
-const IDLE_ARM_DRIFT = 0.07;
-
-/**
- * A relaxed arm is not a straight rod: the elbow carries a little standing
- * flexion, which is what gives the arm a readable break at the joint and holds
- * it off the ribs. The upper arm therefore tilts out further than the forearm
- * does — elbow outboard, forearm hanging closer to vertical.
- */
-const FACING_ELBOW_FLEX = deg(8);
-
-/**
- * The pair of tilts that hold `FACING_ELBOW_FLEX` of bend while still landing
- * the wrist exactly where the idle's hand hangs. Two segments at two angles
- * have no tidy closed form for that, so it is solved by bisection at load.
- */
-function solveForearmTilt(): number {
-  const wristOffset = HAND_HANG_SPREAD - FACING_ARM_ROOT_HALF;
-  const reach = (fore: number): number =>
-    UPPER_ARM_LENGTH * Math.sin(fore + FACING_ELBOW_FLEX) + FOREARM_LENGTH * Math.sin(fore);
-  let low = -Math.PI / 2;
-  let high = Math.PI / 2;
-  for (let i = 0; i < TILT_SOLVE_STEPS; i++) {
-    const mid = (low + high) / 2;
-    if (reach(mid) < wristOffset) low = mid;
-    else high = mid;
-  }
-  return (low + high) / 2;
-}
-
-/** Enough halvings to land the wrist inside a thousandth of a tile. */
-const TILT_SOLVE_STEPS = 40;
-
-const FACING_FOREARM_TILT = solveForearmTilt();
-const FACING_UPPER_TILT = FACING_FOREARM_TILT + FACING_ELBOW_FLEX;
-
-/**
- * The shoulder does move — an arm swinging only at the elbow is a hand waving
- * on a fixed stick. It just moves far less than the elbow does, since head-on
- * the upper arm is close to end-on and has little of its travel to show.
- */
-const FACING_UPPER_SWING = deg(5);
-/** The forearm still carries most of the visible work at this angle. */
-const FACING_FOREARM_SWING = deg(11);
-
-// ── Attacks ──────────────────────────────────────────────────────────────────
-
-const GUARD_HAND_X = 0.12;
-const GUARD_HAND_Y = -1.42;
-const PUNCH_REACH = 0.66;
-const PUNCH_CHAMBER_X = -0.12;
-
-/** A straight right cross thrown in profile, landing on the impact frame. */
-function punchSide(t: number): CarlPose {
-  const { wind, strike } = strikePhase(t, ATTACK_IMPACT_FRAME / (ATTACK_FRAMES - 1));
-  const thrown = strike > 0 ? 1 - easeOut(strike) : easeIn(wind);
-  const pose = restingPose();
-
-  pose.lean = deg(3) * thrown - deg(2) * (1 - thrown);
-  pose.twist = lerp(-0.4, 0.6, thrown);
-  pose.bob = -0.012 * thrown;
-  pose.crouch = 0.06 * (1 - thrown) + 0.03;
-
-  pose.rightHand = pt(
-    lerp(PUNCH_CHAMBER_X, PUNCH_REACH, thrown),
-    lerp(GUARD_HAND_Y, -1.56, thrown),
-  );
-  pose.leftHand = pt(GUARD_HAND_X * (1 - thrown) - 0.02, GUARD_HAND_Y + 0.04 * thrown);
-  pose.rightFist = 1;
-  pose.leftFist = 0.9;
-  pose.elbowFlare = 0.9;
-
-  pose.rightFoot = pt(0.2 + 0.06 * thrown, 0);
-  pose.leftFoot = pt(-0.22, 0);
-  pose.leftFootPitch = deg(-8) * thrown;
-  pose.brow = 0.8 + 0.2 * thrown;
-  pose.mouth = 0.55 * thrown;
-  pose.headTurn = 0.4;
-  pose.hairFlow = -0.5 * thrown;
-  pose.jacketFlare = 0.5 * thrown;
-  return pose;
-}
-
-const KICK_CHAMBER_LIFT = 0.72;
-const KICK_REACH = 0.86;
-const KICK_HEIGHT = 0.62;
-
-/** A chambered front kick: knee up, then the sole driven out. */
-function kickSide(t: number): CarlPose {
-  const { wind, strike } = strikePhase(t, ATTACK_IMPACT_FRAME / (ATTACK_FRAMES - 1));
-  const chambered = easeInOut(wind);
-  const extended = strike > 0 ? 1 - easeOut(strike) : easeIn(wind);
-  const pose = restingPose();
-
-  pose.lean = -deg(6) * extended;
-  pose.bob = -0.03 * chambered;
-  pose.crouch = 0.1 * chambered;
-
-  pose.rightFoot = pt(
-    lerp(0.16, KICK_REACH, extended),
-    -lerp(KICK_CHAMBER_LIFT * chambered, KICK_HEIGHT, extended),
-  );
-  pose.rightFootPitch = deg(-30) * (1 - extended) + deg(8) * extended;
-  pose.leftFoot = pt(-0.1, 0);
-
-  const shoulderY = SHOULDER_Y + pose.bob;
-  pose.rightHand = pt(-0.2 * extended - 0.04, shoulderY + 0.5);
-  pose.leftHand = pt(0.16 - 0.24 * extended, shoulderY + 0.4 - 0.08 * extended);
-  pose.rightFist = 0.8;
-  pose.leftFist = 0.8;
-  pose.elbowFlare = 0.7;
-  pose.brow = 0.85;
-  pose.mouth = 0.6 * extended;
-  pose.headTurn = 0.35;
-  pose.hairFlow = -0.4 * extended;
-  pose.jacketFlare = 0.6 * extended;
-  return pose;
-}
-
-const UPPERCUT_RISE = 0.64;
-
-/** An uppercut at something north of him — seen from behind, so back view. */
-function punchUp(t: number): CarlPose {
-  const { wind, strike } = strikePhase(t, ATTACK_IMPACT_FRAME / (ATTACK_FRAMES - 1));
-  const thrown = strike > 0 ? 1 - easeOut(strike) : easeIn(wind);
-  const pose = restingPose();
-
-  pose.crouch = 0.16 * (1 - thrown) * easeInOut(wind) + 0.04;
-  pose.bob = -0.05 * thrown;
-  pose.lean = -deg(3) * thrown;
-  pose.twist = 0.3 * thrown;
-
-  const shoulderY = SHOULDER_Y + pose.bob;
-  pose.rightHand = pt(
-    lerp(0.3, 0.14, thrown),
-    lerp(shoulderY + 0.34, shoulderY - UPPERCUT_RISE, thrown),
-  );
-  pose.leftHand = pt(-0.32, shoulderY + 0.44 - 0.1 * thrown);
-  pose.rightFist = 1;
-  pose.leftFist = 0.85;
-  pose.elbowFlare = 0.85;
-
-  pose.rightFoot = pt(0.16, -0.05 * thrown);
-  pose.rightFootPitch = deg(24) * thrown;
-  pose.leftFoot = pt(-0.16, 0);
-  pose.hairFlow = 0.4 * thrown;
-  pose.jacketFlare = 0.7 * thrown;
-  return pose;
-}
-
-const STOMP_LIFT = 0.62;
-const STOMP_CROUCH = 0.13;
-const STOMP_FOOT_OUT = 0.3;
-const STOMP_STANCE = 0.22;
-
-/** A stomp at something south of him — seen head-on, so front view. */
-function kickDown(t: number): CarlPose {
-  const impactAt = ATTACK_IMPACT_FRAME / (ATTACK_FRAMES - 1);
-  const raised = easeInOut(clamp01(t / impactAt));
-  // The sole meets the floor *on* the impact frame, so everything after it is
-  // recovery: a lift that is still up on that frame reads as a missed beat.
-  const landed = t >= impactAt ? 1 : 0;
-  const recoil = landed * (1 - ramp(t, impactAt, 1));
-  const pose = restingPose();
-
-  pose.bob = -0.05 * raised * (1 - landed);
-  pose.crouch = STOMP_CROUCH * recoil + 0.1 * raised * (1 - landed);
-  pose.lean = deg(3) * recoil;
-
-  const lift = STOMP_LIFT * raised * (1 - landed);
-  // The knee comes up in front of him and the foot swings outboard, because a
-  // knee raised straight at the camera has no silhouette to read.
-  pose.rightFoot = pt(STOMP_STANCE + STOMP_FOOT_OUT * (lift / STOMP_LIFT), -lift);
-  pose.rightKneeBreak = 1;
-  pose.rightFootPitch = deg(-22) * raised * (1 - landed) + deg(14) * recoil;
-  pose.leftFoot = pt(-STOMP_STANCE, 0);
-
-  const shoulderY = SHOULDER_Y + pose.bob;
-  const armsUp = 0.16 * raised * (1 - landed);
-  pose.rightHand = pt(0.34 + 0.06 * raised, shoulderY + 0.4 - armsUp + 0.14 * recoil);
-  pose.leftHand = pt(-0.34 - 0.06 * raised, shoulderY + 0.4 - armsUp + 0.14 * recoil);
-  pose.rightFist = 0.9;
-  pose.leftFist = 0.9;
-  pose.elbowFlare = 0.9;
-  pose.brow = 0.9;
-  pose.mouth = 0.7 * recoil;
-  pose.hairFlow = 0.3 * raised * (1 - landed) - 0.3 * recoil;
-  pose.jacketFlare = 0.8 * recoil;
-  pose.blink = 0.5 * recoil;
-  return pose;
-}
-
-// ── Smush ────────────────────────────────────────────────────────────────────
-
-const SMUSH_KNEE_APEX = 0.92;
-const SMUSH_FOOT_OUT = 0.26;
-const SMUSH_ARCH_BACK = deg(-5);
-/**
- * A crouch drops the hip toward the planted feet, so the knees have to break
- * out to absorb it. Too deep a landing and the recovery frames spend half the
- * animation bow-legged.
- */
-const SMUSH_LANDED_CROUCH = 0.26;
-/**
- * The landing stance. A crouch bends the knees outward whatever you do, so the
- * feet plant wide enough that the knees end up over them and it reads as an
- * athletic landing rather than as bow legs.
- */
-export const SMUSH_STANCE = 0.19;
-const SMUSH_ARMS_UP = 0.46;
-const SMUSH_RECOIL_FRAMES = 3;
-const SMUSH_REBOUND = 0.03;
-
-/**
- * The ability itself: Carl rears back, drives one bare foot up over his own
- * waist, and stamps it through the floor. Timed so the sole meets the ground on
- * {@link SMUSH_IMPACT_FRAME}, which is the frame the blast is spawned on.
- */
-function smush(t: number): CarlPose {
-  const impactAt = SMUSH_IMPACT_FRAME / (SMUSH_FRAMES - 1);
-  const recoilEnd = (SMUSH_IMPACT_FRAME + SMUSH_RECOIL_FRAMES) / (SMUSH_FRAMES - 1);
-
-  const rear = ramp(t, 0, impactAt * 0.55);
-  // The foot is at its apex on the frame *before* impact, so the raise has to
-  // be finished by then: on the impact frame itself the sole is already down.
-  const apexAt = impactAt * ((SMUSH_IMPACT_FRAME - 1) / SMUSH_IMPACT_FRAME);
-  const raise = ramp(t, impactAt * 0.25, apexAt);
-  const landed = t >= impactAt ? 1 : 0;
-  const recoil = landed * (1 - ramp(t, impactAt, recoilEnd));
-  const settle = landed * ramp(t, recoilEnd, 1);
-
-  const pose = restingPose();
-  const airborne = raise * (1 - landed);
-
-  pose.bob = -0.06 * airborne + SMUSH_REBOUND * recoil * (1 - recoil) * 4;
-  pose.crouch = 0.2 * rear * (1 - airborne) + SMUSH_LANDED_CROUCH * recoil;
-  pose.lean = SMUSH_ARCH_BACK * airborne + deg(5) * recoil;
-
-  pose.rightFoot = pt(SMUSH_STANCE + SMUSH_FOOT_OUT * airborne, -SMUSH_KNEE_APEX * airborne);
-  pose.rightKneeBreak = 1;
-  pose.rightFootPitch = deg(-30) * airborne + deg(16) * recoil;
-  pose.leftFoot = pt(-SMUSH_STANCE - 0.04 * airborne, 0);
-
-  const shoulderY = SHOULDER_Y + pose.bob;
-  const armsUp = SMUSH_ARMS_UP * airborne;
-  // On the stamp the fists are driven down past the hips: it is the follow
-  // through that sells the weight, not the raised leg.
-  const armsDown = 0.3 * recoil;
-  pose.rightHand = pt(0.4 + 0.12 * airborne, shoulderY + 0.4 - armsUp + armsDown);
-  pose.leftHand = pt(-0.4 - 0.12 * airborne, shoulderY + 0.4 - armsUp + armsDown);
-  pose.rightFist = 1;
-  pose.leftFist = 1;
-  pose.elbowFlare = 0.9;
-
-  pose.brow = 1;
-  pose.mouth = Math.max(0.45 * airborne, recoil);
-  pose.blink = 0.6 * recoil;
-  pose.headTilt = deg(-6) * airborne + deg(9) * recoil;
-  pose.hairFlow = 0.6 * airborne - 0.5 * recoil;
-  pose.jacketFlare = Math.max(0.5 * airborne, recoil);
-  // Settling back to the stance is what makes the row loop cleanly into idle.
-  pose.crouch *= 1 - settle;
-  pose.lean *= 1 - settle;
-  return pose;
-}
-
-// ── Sheet assembly ───────────────────────────────────────────────────────────
-
-type View = 'front' | 'side' | 'back';
+export type HumanRowName = (typeof HUMAN_ROW_NAMES)[number];
 
 /**
  * A looping row is sampled evenly around its cycle and has to close back on
  * frame 0; a one-shot runs from its first frame to its last and stops. The gates
  * read this to know which continuity rule a row is held to.
  */
-type RowKind = 'loop' | 'oneShot';
+export type RowKind = 'loop' | 'oneShot';
 
-export interface RowSpec {
-  readonly name: string;
+/**
+ * How a row's feet relate to the ground.
+ *
+ * - `planted`: he stands where he is; a foot on the floor stays where it was put.
+ * - `travelling`: the body moves over the ground; a foot in stance holds its
+ *   ground position while the sprite carries him forward.
+ * - `none`: no contract with the floor, for rows that leave it entirely.
+ */
+type RowLocomotion = 'none' | 'planted' | 'travelling';
+
+/**
+ * Which gait a locomotion cycle is. A run has a flight phase — both feet off
+ * the floor at once — and a walk never does, so the gates hold each to its own
+ * contact rule.
+ */
+export type HumanGait = 'walk' | 'run';
+
+/**
+ * The moments a system synchronises to while a row plays:
+ * - `fuseLit`: the dynamite's fuse catches.
+ * - `release`: the dynamite leaves his hand.
+ * - `cast`: the Protective Shell's palm lands, and the dome goes up.
+ * - `lidUp`: a chest's lid is up past his chest.
+ * - `strike`: the hammer lands on the board.
+ * - `grind`: a Smush's heel, already down, is ground into the floor.
+ */
+export type HumanRowEvent = 'fuseLit' | 'release' | 'cast' | 'lidUp' | 'strike' | 'grind';
+
+/** What the runtime and the gates know about a row, besides how to pose it. */
+export interface HumanRowMeta {
   readonly frameCount: number;
-  readonly view: View;
+  readonly view: CarlView;
   readonly kind: RowKind;
+  /** Frames on which a blow lands. Empty for a row that strikes nothing. */
+  readonly impactFrames: readonly number[];
+  /** Painted facing +X and flipped at blit time when he faces −X. */
+  readonly mirrorable: boolean;
+  readonly locomotion: RowLocomotion;
+  /** The gait a locomotion cycle is; absent on every row that is not one. */
+  readonly gait?: HumanGait;
+  /** On a start or a stop, the gait it bridges to or from standing. */
+  readonly bridges?: HumanGait;
+  /**
+   * The gait phase whose leg pose the row's first frame matches, for a row
+   * entered from a locomotion cycle mid-stride: a fraction of the cycle in
+   * `[0, 1)`, 0 at right-foot contact as every cycle keys it.
+   */
+  readonly entryFootPhase?: number;
+  /**
+   * The gait phase, as a fraction of the cycle in `[0, 1)`, whose leg pose the
+   * row's last frame hands back to.
+   */
+  readonly exitFootPhase?: number;
+  /**
+   * Where the stamping heel lands on the impact frame, in tile fractions from
+   * the sprite's own tile origin. The runtime spawns a stomp's blast here.
+   */
+  readonly stampAnchor?: Pt;
+  /**
+   * What the animator plays the row for. A row without one is still drawn if
+   * something names it, but the animator never picks it on its own; a
+   * locomotion cycle needs none, being found by its `gait`.
+   */
+  readonly role?: HumanRowRole;
+  /**
+   * Game ticks each frame is held for, on a row the animator plays off its own
+   * clock rather than off a strike timer or the gait phase. The breath and the
+   * fidgets are timed in wall-clock seconds, not in frames, so the hold is what
+   * sets how long they take.
+   */
+  readonly ticksPerFrame?: number;
+  /**
+   * Game ticks each frame is held for, frame by frame, on a clock-paced row
+   * whose frames are not all held alike — one entry per frame, winning over
+   * `ticksPerFrame`. The idle's blink is the reason: a frame held as long as
+   * a breath would shut the eye for half a second.
+   */
+  readonly frameTicks?: readonly number[];
+  /** How the animator chooses between the strikes of one view. */
+  readonly strike?: StrikeMeta;
+  /**
+   * On a fidget, its place in the gestures a level-up plays — the fist clench,
+   * then the look at the ceiling. Absent on a fidget a level-up does not use.
+   */
+  readonly levelUpOrder?: number;
+  /**
+   * Named frames a system synchronises to while the row plays — the frame a
+   * hammer lands on the board, the frame a thing leaves the hand — each the
+   * frames, in playing order, on which that moment is first drawn. Pass them to
+   * `onFrame` rather than copying the numbers, so a re-timed row keeps its
+   * sound and its spawn on the picture.
+   */
+  readonly eventFrames?: Readonly<Partial<Record<HumanRowEvent, readonly number[]>>>;
+}
+
+/** The frame a row's first blow lands on, or undefined for a row that strikes nothing. */
+export function firstImpactFrame(row: HumanRowMeta): number | undefined {
+  return row.impactFrames.length > 0 ? Math.min(...row.impactFrames) : undefined;
+}
+
+/**
+ * - `idle`: the relaxed standing loop.
+ * - `guard`: the combat-ready standing loop, for a few seconds after a blow.
+ * - `fidget`: a one-shot that breaks a long idle, from and back to its first frame.
+ * - `drop`: a one-shot from the guard's first frame down to the idle's, played
+ *   when the guard runs out.
+ * - `start` / `stop`: a one-shot bridging standing and a locomotion cycle.
+ * - `strike`: a melee blow; the family a facing throws is the strikes in its view.
+ * - `stomp`: Smush.
+ * - `action`: something a system has him do — build, carry, mend — played
+ *   only when that system asks for it by name.
+ * - `reaction`: something done to him — a flinch, a stumble, a fall — played
+ *   only when the player's own state asks for it by name.
+ */
+export type HumanRowRole =
+  | 'idle'
+  | 'guard'
+  | 'drop'
+  | 'fidget'
+  | 'start'
+  | 'stop'
+  | 'strike'
+  | 'stomp'
+  | 'action'
+  | 'reaction';
+
+/**
+ * What a strike is, as far as choosing one goes.
+ *
+ * - `punch` / `kick`: which limb.
+ * - `low`: lands below his waist, where a rat or a grub actually is.
+ * - `punt` / `stomp`: the blows canon says he earned Foot Soldier with.
+ * - `high`: lands at a tall enemy's chest or head.
+ * - `long`: reaches past his arms, for a target at the edge of his range.
+ * - `finisher`: ends a combo, and only ever thrown as its last blow.
+ * - `downed`: made for an enemy already on the floor; the combo's last blow on one.
+ */
+export type StrikeTag =
+  'punch' | 'kick' | 'low' | 'punt' | 'stomp' | 'high' | 'long' | 'finisher' | 'downed';
+
+interface StrikeMeta {
+  readonly tags: readonly StrikeTag[];
+  /**
+   * The places in a combo chain this blow may be thrown at, 0 for the opener.
+   * Absent means anywhere in the chain.
+   */
+  readonly comboSlots?: readonly number[];
+  /**
+   * On a travelling strike, the standing strike it is the on-the-move version
+   * of. The animator throws it in place of that row when he is moving.
+   */
+  readonly standing?: HumanRowName;
+  /**
+   * The part of him that lands the blow. Every strike names one, and its
+   * impact frame is the frame that part is driven furthest in `drive`'s
+   * direction — the hit is scored on that frame, so a blow whose extreme
+   * falls a frame either side lands its damage on a picture of a limb still
+   * travelling. On a punch it is also which fist wears the gauntlet's steel.
+   */
+  readonly reachLimb: StrikeReachLimb;
+  /** Which way `reachLimb` is driven to land the blow; absent is `'out'`. */
+  readonly drive?: StrikeDrive;
+}
+
+/**
+ * The part of him a blow lands with, and how far it is driven is measured.
+ *
+ * - `hand` / `leftHand`: the right or the left fist, from its own shoulder,
+ *   counting the length a foreshortened arm turns toward or away from the
+ *   camera; in profile the left is the lead.
+ * - `foot` / `leftFoot`: the right or the left foot, from the floor point he
+ *   stands on, with its depth ahead of him head-on.
+ * - `knee` / `leftKnee`: the right or the left knee, from that same point.
+ * - `shoulder`: the lead shoulder, by how far ahead of that point it is
+ *   driven; a profile blow only.
+ */
+export type StrikeReachLimb =
+  'hand' | 'leftHand' | 'foot' | 'leftFoot' | 'knee' | 'leftKnee' | 'shoulder';
+
+/**
+ * - `out`: the blow lands where the part reaches furthest from him.
+ * - `down`: the blow lands where the part, having come down from its
+ *   highest, first reaches its lowest — a stamp, a hammer-fist, a knee
+ *   dropped onto what is below him.
+ */
+type StrikeDrive = 'out' | 'down';
+
+export interface HumanRowDef extends HumanRowMeta {
   readonly pose: (frame: number) => CarlPose;
+}
+
+export interface RowSpec extends HumanRowDef {
+  readonly name: HumanRowName;
 }
 
 /** Loops sample the cycle evenly; one-shots sample the frame's own position. */
@@ -868,98 +632,1386 @@ function cyclePhase(frame: number, frameCount: number): number {
   return frame / frameCount;
 }
 
+/**
+ * How far round the breath an idle frame is, from the tick it is first drawn
+ * on: its frames are not held alike, and a breath sampled by frame index would
+ * lurch across the short blink frame.
+ */
+function idlePhase(frame: number): number {
+  return heldFrameStart(IDLE_FRAME_TICKS, frame) / heldLength(IDLE_FRAME_TICKS);
+}
+
+/** The idle's eye: shut on its blink frame, open on every other. */
+function idleLid(frame: number): number {
+  return frame % IDLE_FRAMES === IDLE_BLINK_FRAME ? 1 : 0;
+}
+
 function shotProgress(frame: number, frameCount: number): number {
   return frame / (frameCount - 1);
 }
 
-export const HUMAN_ROWS: readonly RowSpec[] = [
-  {
-    name: 'idle',
+const NO_IMPACT: readonly number[] = [];
+const STRIKE_IMPACT: readonly number[] = [ATTACK_IMPACT_FRAME];
+const SMUSH_IMPACT: readonly number[] = [SMUSH_IMPACT_FRAME];
+
+/** The frames after the stamp that the heel stays down and grinds, `pressFrames` counting the stamp. */
+function grindFrames(pressFrames: number): readonly number[] {
+  const grinds = pressFrames - SMUSH_IMPACT.length;
+  return Array.from({ length: grinds }, (_unused, beat) => SMUSH_IMPACT_FRAME + 1 + beat);
+}
+const SMUSH_GRIND_EVENTS = { grind: grindFrames(SMUSH_PRESS_FRAMES) } as const;
+const SMUSH_HOP_GRIND_EVENTS = { grind: grindFrames(SMUSH_HOP_PRESS_FRAMES) } as const;
+const RUNNING_STRIKE_IMPACT: readonly number[] = [RUNNING_STRIKE_IMPACT_FRAME];
+
+/** Places in a combo chain, counted from the opening blow. */
+const COMBO_OPENER = 0;
+const COMBO_SECOND = 1;
+const COMBO_THIRD = 2;
+const COMBO_FINISHER = 3;
+
+/**
+ * A Smush row's stamp point in tile fractions: the choreography's stamp point,
+ * in figure units from the pose's ground origin, painted at `HUMAN_SCALE` of a
+ * tile about a ground line `GROUND_OFFSET_IN_TILE` down it.
+ * `scripts/gates-human.ts` re-measures it against the painted pose on the
+ * impact frame.
+ */
+function smushStampAnchor(view: CarlView, hop: boolean, stampSide: BodySide = 'right'): Pt {
+  const point = smushStampPoint(view, hop, stampSide);
+  return {
+    x: TILE_CENTRE_FRACTION + point.x * HUMAN_SCALE,
+    y: GROUND_OFFSET_IN_TILE + point.y * HUMAN_SCALE,
+  };
+}
+
+// ── Blows thrown on the move ─────────────────────────────────────────────────
+//
+// Each is painted once per phase of the stride it can be begun at, the
+// `version`-th of its view's entry phases; the animator throws whichever
+// version begins nearest the stride on screen.
+
+function jabRunRow(version: number): HumanRowDef {
+  const entry = travellingEntryPhase('side', version);
+  return {
+    frameCount: RUNNING_STRIKE_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: RUNNING_STRIKE_IMPACT,
+    mirrorable: true,
+    locomotion: 'travelling',
+    role: 'strike',
+    entryFootPhase: entry,
+    exitFootPhase: runningStrikeExitPhase(entry),
+    strike: { tags: ['punch'], standing: 'jab_side', reachLimb: 'leftHand' },
+    pose: (f) => jabRunSide(f, entry),
+  };
+}
+
+function puntRunRow(version: number): HumanRowDef {
+  const entry = travellingEntryPhase('side', version);
+  const reachLimb = sideOfSign(puntRunKickingSide(entry)) === 'right' ? 'foot' : 'leftFoot';
+  return {
+    frameCount: RUNNING_STRIKE_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: RUNNING_STRIKE_IMPACT,
+    mirrorable: true,
+    locomotion: 'travelling',
+    role: 'strike',
+    entryFootPhase: entry,
+    exitFootPhase: runningStrikeExitPhase(entry),
+    strike: { tags: ['kick', 'punt', 'low', 'long'], standing: 'punt_side', reachLimb },
+    pose: (f) => puntRunSide(f, entry),
+  };
+}
+
+/**
+ * The one up strike with a moving version: every knee-high target north of
+ * him draws the punt, and knee-high targets are most of what he fights.
+ */
+function frontKickUpMovingRow(version: number): HumanRowDef {
+  const entry = travellingEntryPhase('back', version);
+  return {
+    frameCount: ATTACK_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: false,
+    locomotion: 'travelling',
+    entryFootPhase: entry,
+    exitFootPhase: runningPuntExitPhase(entry),
+    role: 'strike',
+    strike: {
+      tags: ['kick', 'punt', 'low', 'long'],
+      standing: 'front_kick_up',
+      reachLimb: sideOfSign(runningPuntUpKickingSide(entry)) === 'right' ? 'foot' : 'leftFoot',
+    },
+    pose: (f) => runningPuntUp(f, entry),
+  };
+}
+
+function stompRunRow(version: number): HumanRowDef {
+  const entry = STOMP_RUN_ENTRY_PHASES[version];
+  return {
+    frameCount: STOMP_RUN_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: [STOMP_RUN_IMPACT],
+    mirrorable: false,
+    locomotion: 'travelling',
+    role: 'strike',
+    entryFootPhase: entry,
+    exitFootPhase: stompRunExitPhase(entry),
+    strike: {
+      tags: ['kick', 'stomp', 'low'],
+      standing: 'stomp_down',
+      reachLimb: sideOfSign(stompRunStampingSide(entry)) === 'right' ? 'foot' : 'leftFoot',
+      drive: 'down',
+    },
+    pose: (f) => stompRunDown(f, entry),
+  };
+}
+
+function smushHopRow(view: CarlView, version: number): HumanRowDef {
+  const entry = travellingEntryPhase(view, version);
+  return {
+    frameCount: SMUSH_FRAMES,
+    kind: 'oneShot',
+    view,
+    impactFrames: SMUSH_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'travelling',
+    entryFootPhase: entry,
+    exitFootPhase: smushHopExitPhase(entry),
+    stampAnchor: smushStampAnchor(view, true, smushHopStampSide(entry)),
+    role: 'stomp',
+    eventFrames: SMUSH_HOP_GRIND_EVENTS,
+    pose: (f) => smushHop(f, view, entry),
+  };
+}
+
+/** A level-up clenches the fist first, then looks up at the ceiling. */
+
+const LEVEL_UP_CLENCH = 0;
+const LEVEL_UP_LOOK_UP = 1;
+
+/** The frame the fuse catches, for a system that times a hiss to it. */
+const DYNAMITE_LIGHT_EVENTS = { fuseLit: [DYNAMITE_FUSE_CATCH_FRAME] } as const;
+/** The frame the stick leaves his hand, which is where and when it is spawned. */
+const DYNAMITE_THROW_EVENTS = { release: [DYNAMITE_RELEASE_FRAME] } as const;
+
+/** The frame the Protective Shell's palm meets the dome's centre, where the dome is raised. */
+const SHELL_CAST_EVENTS = { cast: [SHELL_CAST_FRAME] } as const;
+/** The frame a chest's lid is up past his chest and what is inside can be shown. */
+const CHEST_OPEN_EVENTS = { lidUp: [CHEST_LID_UP_FRAME] } as const;
+
+/** The hammer landing on the board, which the build sound is struck on. */
+const BUILD_EVENTS = { strike: BUILD_STRIKE_FRAMES } as const;
+
+/**
+ * A guard drop's frames sit strictly between its two ends — the guard's first
+ * frame before it, the idle's after — so neither end is drawn twice.
+ */
+function guardDropRow(view: CarlView, pose: (t: number) => CarlPose): HumanRowDef {
+  const frames = view === 'side' ? GUARD_DROP_PROFILE_FRAMES : GUARD_DROP_FACING_FRAMES;
+  return {
+    frameCount: frames,
+    kind: 'oneShot',
+    view,
+    impactFrames: NO_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'planted',
+    role: 'drop',
+    ticksPerFrame: GUARD_DROP_TICKS_PER_FRAME,
+    pose: (f) => pose((f + 1) / (frames + 1)),
+  };
+}
+
+/** A fidget in one view; a level-up plays the ones given a place in its gestures. */
+function fidgetRow(
+  view: CarlView,
+  frames: number,
+  pose: (t: number) => CarlPose,
+  levelUpOrder?: number,
+): HumanRowDef {
+  return {
+    frameCount: frames,
+    kind: 'oneShot',
+    view,
+    impactFrames: NO_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'planted',
+    role: 'fidget',
+    ticksPerFrame: FIDGET_TICKS_PER_FRAME,
+    ...(levelUpOrder === undefined ? {} : { levelUpOrder }),
+    pose: (f) => pose(shotProgress(f, frames)),
+  };
+}
+
+/** Every row's metadata and pose function, keyed by row name. */
+export const HUMAN_ROW_TABLE = {
+  idle: {
     frameCount: IDLE_FRAMES,
     kind: 'loop',
     view: 'front',
-    pose: (f) => idleFront(cyclePhase(f, IDLE_FRAMES)),
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'idle',
+    frameTicks: IDLE_FRAME_TICKS,
+    pose: (f) => idleFront(idlePhase(f), idleLid(f)),
   },
-  {
-    name: 'idle_side',
+  idle_side: {
     frameCount: IDLE_FRAMES,
     kind: 'loop',
     view: 'side',
-    pose: (f) => idleSide(cyclePhase(f, IDLE_FRAMES)),
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'idle',
+    frameTicks: IDLE_FRAME_TICKS,
+    pose: (f) => idleSide(idlePhase(f), idleLid(f)),
   },
-  {
-    name: 'idle_away',
+  idle_away: {
     frameCount: IDLE_FRAMES,
     kind: 'loop',
     view: 'back',
-    pose: (f) => idleBack(cyclePhase(f, IDLE_FRAMES)),
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'idle',
+    frameTicks: IDLE_FRAME_TICKS,
+    pose: (f) => idleBack(idlePhase(f), idleLid(f)),
   },
-  {
-    name: 'walk',
+  walk: {
     frameCount: WALK_FRAMES,
     kind: 'loop',
     view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'travelling',
+    gait: 'walk',
     pose: (f) => walkFacing(cyclePhase(f, WALK_FRAMES), false),
   },
-  {
-    name: 'walk_side',
+  walk_side: {
     frameCount: WALK_FRAMES,
     kind: 'loop',
     view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'travelling',
+    gait: 'walk',
     pose: (f) => walkSide(cyclePhase(f, WALK_FRAMES)),
   },
-  {
-    name: 'walk_away',
+  walk_away: {
     frameCount: WALK_FRAMES,
     kind: 'loop',
     view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'travelling',
+    gait: 'walk',
     pose: (f) => walkFacing(cyclePhase(f, WALK_FRAMES), true),
   },
-  {
-    name: 'punch_side',
+  run: {
+    frameCount: RUN_FRAMES,
+    kind: 'loop',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'travelling',
+    gait: 'run',
+    pose: (f) => runFacingCycle(cyclePhase(f, RUN_FRAMES), false),
+  },
+  run_side: {
+    frameCount: RUN_FRAMES,
+    kind: 'loop',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'travelling',
+    gait: 'run',
+    pose: (f) => runSide(cyclePhase(f, RUN_FRAMES)),
+  },
+  run_away: {
+    frameCount: RUN_FRAMES,
+    kind: 'loop',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'travelling',
+    gait: 'run',
+    pose: (f) => runFacingCycle(cyclePhase(f, RUN_FRAMES), true),
+  },
+  run_start: {
+    frameCount: RUN_START_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'travelling',
+    role: 'start',
+    bridges: 'run',
+    exitFootPhase: RUN_START_EXIT_PHASE,
+    pose: (f) => runStart(f, 'front'),
+  },
+  run_start_side: {
+    frameCount: RUN_START_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'travelling',
+    role: 'start',
+    bridges: 'run',
+    exitFootPhase: RUN_START_EXIT_PHASE,
+    pose: (f) => runStart(f, 'side'),
+  },
+  run_start_away: {
+    frameCount: RUN_START_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'travelling',
+    role: 'start',
+    bridges: 'run',
+    exitFootPhase: RUN_START_EXIT_PHASE,
+    pose: (f) => runStart(f, 'back'),
+  },
+  run_stop: {
+    frameCount: RUN_STOP_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'stop',
+    bridges: 'run',
+    entryFootPhase: RUN_STOP_ENTRY_PHASE,
+    pose: (f) => runStop(f, 'front'),
+  },
+  run_stop_side: {
+    frameCount: RUN_STOP_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'stop',
+    bridges: 'run',
+    entryFootPhase: RUN_STOP_ENTRY_PHASE,
+    pose: (f) => runStop(f, 'side'),
+  },
+  run_stop_away: {
+    frameCount: RUN_STOP_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'stop',
+    bridges: 'run',
+    entryFootPhase: RUN_STOP_ENTRY_PHASE,
+    pose: (f) => runStop(f, 'back'),
+  },
+  walk_start: {
+    frameCount: WALK_START_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'travelling',
+    role: 'start',
+    bridges: 'walk',
+    exitFootPhase: walkStartExitPhase('front'),
+    pose: (f) => walkStart(f, 'front'),
+  },
+  walk_start_side: {
+    frameCount: WALK_START_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'travelling',
+    role: 'start',
+    bridges: 'walk',
+    exitFootPhase: walkStartExitPhase('side'),
+    pose: (f) => walkStart(f, 'side'),
+  },
+  walk_start_away: {
+    frameCount: WALK_START_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'travelling',
+    role: 'start',
+    bridges: 'walk',
+    exitFootPhase: walkStartExitPhase('back'),
+    pose: (f) => walkStart(f, 'back'),
+  },
+  walk_stop: {
+    frameCount: WALK_STOP_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'stop',
+    bridges: 'walk',
+    entryFootPhase: walkStopEntryPhase('front'),
+    pose: (f) => walkStop(f, 'front'),
+  },
+  walk_stop_side: {
+    frameCount: WALK_STOP_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'stop',
+    bridges: 'walk',
+    entryFootPhase: walkStopEntryPhase('side'),
+    pose: (f) => walkStop(f, 'side'),
+  },
+  walk_stop_away: {
+    frameCount: WALK_STOP_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'stop',
+    bridges: 'walk',
+    entryFootPhase: walkStopEntryPhase('back'),
+    pose: (f) => walkStop(f, 'back'),
+  },
+  jab_side: {
     frameCount: ATTACK_FRAMES,
     kind: 'oneShot',
     view: 'side',
-    pose: (f) => punchSide(shotProgress(f, ATTACK_FRAMES)),
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'strike',
+    // A punch chain reads jab, cross, hook, then the barge to finish it.
+    strike: { tags: ['punch'], comboSlots: [COMBO_OPENER], reachLimb: 'leftHand' },
+    pose: (f) => jabSide(f),
   },
-  {
-    name: 'kick_side',
+  cross_side: {
     frameCount: ATTACK_FRAMES,
     kind: 'oneShot',
     view: 'side',
-    pose: (f) => kickSide(shotProgress(f, ATTACK_FRAMES)),
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: { tags: ['punch', 'high'], comboSlots: [COMBO_SECOND], reachLimb: 'hand' },
+    pose: (f) => crossSide(f),
   },
-  {
-    name: 'punch_up',
+  hook_side: {
+    frameCount: ATTACK_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: { tags: ['punch', 'high'], comboSlots: [COMBO_THIRD], reachLimb: 'hand' },
+    pose: (f) => hookSide(f),
+  },
+  barge_side: {
+    frameCount: ATTACK_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'strike',
+    // The barge lands with the lead shoulder driven into the target.
+    strike: { tags: ['high', 'finisher'], comboSlots: [COMBO_FINISHER], reachLimb: 'shoulder' },
+    pose: (f) => bargeSide(f),
+  },
+  punt_side: {
+    frameCount: ATTACK_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'strike',
+    // The rat-punting kick opens a chain on anything knee-high and may carry it on,
+    // but never takes the finisher's place: a chain that ran past its last slot
+    // would have nothing left to throw but punts.
+    strike: {
+      tags: ['kick', 'punt', 'low', 'long'],
+      comboSlots: [COMBO_OPENER, COMBO_SECOND, COMBO_THIRD],
+      reachLimb: 'foot',
+    },
+    pose: (f) => puntSide(f),
+  },
+  roundhouse_side: {
+    frameCount: ATTACK_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: {
+      tags: ['kick', 'high', 'long'],
+      comboSlots: [COMBO_SECOND, COMBO_THIRD],
+      reachLimb: 'foot',
+    },
+    pose: (f) => roundhouseSide(f),
+  },
+  knee_side: {
+    frameCount: ATTACK_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: { tags: ['kick', 'low'], comboSlots: [COMBO_SECOND, COMBO_THIRD], reachLimb: 'knee' },
+    pose: (f) => kneeSide(f),
+  },
+  jab_run_side_1: jabRunRow(0),
+  jab_run_side_2: jabRunRow(1),
+  jab_run_side_3: jabRunRow(2),
+  jab_run_side_4: jabRunRow(3),
+  jab_run_side_5: jabRunRow(4),
+  punt_run_side_1: puntRunRow(0),
+  punt_run_side_2: puntRunRow(1),
+  punt_run_side_3: puntRunRow(2),
+  punt_run_side_4: puntRunRow(3),
+  punt_run_side_5: puntRunRow(4),
+  // The strikes thrown north, away from the camera. Punches and the knee go
+  // to a tall enemy's head; the front kick is the punt, for what is knee-high
+  // or at the edge of his reach. As a combo: uppercut to open, the overhand
+  // behind it, the hop-knee in the middle, the two-hand hammer-fist to end it.
+  uppercut_up: {
     frameCount: ATTACK_FRAMES,
     kind: 'oneShot',
     view: 'back',
-    pose: (f) => punchUp(shotProgress(f, ATTACK_FRAMES)),
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: {
+      tags: ['punch', 'high'],
+      comboSlots: [COMBO_OPENER, COMBO_THIRD],
+      reachLimb: 'hand',
+    },
+    pose: uppercutUp,
   },
-  {
-    name: 'kick_down',
+  overhand_up: {
     frameCount: ATTACK_FRAMES,
     kind: 'oneShot',
-    view: 'front',
-    pose: (f) => kickDown(shotProgress(f, ATTACK_FRAMES)),
+    view: 'back',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: {
+      tags: ['punch', 'high'],
+      comboSlots: [COMBO_SECOND, COMBO_FINISHER],
+      reachLimb: 'hand',
+    },
+    pose: overhandUp,
   },
-  {
-    name: 'smush',
+  hammer_fist_up: {
+    frameCount: ATTACK_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: {
+      tags: ['punch', 'high', 'finisher'],
+      comboSlots: [COMBO_THIRD, COMBO_FINISHER],
+      reachLimb: 'hand',
+      drive: 'down',
+    },
+    pose: hammerFistUp,
+  },
+  front_kick_up: {
+    frameCount: ATTACK_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: { tags: ['kick', 'punt', 'low', 'long'], reachLimb: 'foot' },
+    pose: frontKickUp,
+  },
+  hop_knee_up: {
+    frameCount: ATTACK_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: STRIKE_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: { tags: ['kick', 'high'], comboSlots: [COMBO_SECOND, COMBO_THIRD], reachLimb: 'knee' },
+    pose: hopKneeUp,
+  },
+  front_kick_up_moving_1: frontKickUpMovingRow(0),
+  front_kick_up_moving_2: frontKickUpMovingRow(1),
+  front_kick_up_moving_3: frontKickUpMovingRow(2),
+  front_kick_up_moving_4: frontKickUpMovingRow(3),
+  stomp_down: {
+    frameCount: STOMP_DOWN_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: [STOMP_DOWN_IMPACT],
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: { tags: ['kick', 'stomp', 'low'], reachLimb: 'foot', drive: 'down' },
+    pose: stompDown,
+  },
+  punt_down: {
+    frameCount: PUNT_DOWN_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: [PUNT_DOWN_IMPACT],
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: { tags: ['kick', 'punt', 'low', 'long'], reachLimb: 'foot' },
+    pose: puntDown,
+  },
+  hammer_down: {
+    frameCount: HAMMER_DOWN_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: [HAMMER_DOWN_IMPACT],
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: { tags: ['punch', 'low'], reachLimb: 'hand', drive: 'down' },
+    pose: hammerDown,
+  },
+  knee_drop_down: {
+    frameCount: KNEE_DROP_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: [KNEE_DROP_IMPACT],
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'strike',
+    strike: { tags: ['finisher', 'low', 'downed'], reachLimb: 'knee', drive: 'down' },
+    pose: kneeDropDown,
+  },
+  stomp_run_down_1: stompRunRow(0),
+  stomp_run_down_2: stompRunRow(1),
+  stomp_run_down_3: stompRunRow(2),
+  stomp_run_down_4: stompRunRow(3),
+  smush: {
     frameCount: SMUSH_FRAMES,
     kind: 'oneShot',
     view: 'front',
-    pose: (f) => smush(shotProgress(f, SMUSH_FRAMES)),
+    impactFrames: SMUSH_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    stampAnchor: smushStampAnchor('front', false),
+    role: 'stomp',
+    eventFrames: SMUSH_GRIND_EVENTS,
+    pose: (f) => smushStanding(f, 'front'),
   },
-];
+  smush_side: {
+    frameCount: SMUSH_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: SMUSH_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    stampAnchor: smushStampAnchor('side', false),
+    role: 'stomp',
+    eventFrames: SMUSH_GRIND_EVENTS,
+    pose: (f) => smushStanding(f, 'side'),
+  },
+  smush_away: {
+    frameCount: SMUSH_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: SMUSH_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    stampAnchor: smushStampAnchor('back', false),
+    role: 'stomp',
+    eventFrames: SMUSH_GRIND_EVENTS,
+    pose: (f) => smushStanding(f, 'back'),
+  },
+  smush_hop_1: smushHopRow('front', 0),
+  smush_hop_2: smushHopRow('front', 1),
+  smush_hop_3: smushHopRow('front', 2),
+  smush_hop_4: smushHopRow('front', 3),
+  smush_hop_side_1: smushHopRow('side', 0),
+  smush_hop_side_2: smushHopRow('side', 1),
+  smush_hop_side_3: smushHopRow('side', 2),
+  smush_hop_side_4: smushHopRow('side', 3),
+  smush_hop_side_5: smushHopRow('side', 4),
+  smush_hop_away_1: smushHopRow('back', 0),
+  smush_hop_away_2: smushHopRow('back', 1),
+  smush_hop_away_3: smushHopRow('back', 2),
+  smush_hop_away_4: smushHopRow('back', 3),
+  guard: {
+    frameCount: GUARD_FRAMES,
+    kind: 'loop',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'guard',
+    ticksPerFrame: GUARD_TICKS_PER_FRAME,
+    pose: (f) => guardFront(cyclePhase(f, GUARD_FRAMES)),
+  },
+  guard_side: {
+    frameCount: GUARD_FRAMES,
+    kind: 'loop',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'guard',
+    ticksPerFrame: GUARD_TICKS_PER_FRAME,
+    pose: (f) => guardSide(cyclePhase(f, GUARD_FRAMES)),
+  },
+  guard_away: {
+    frameCount: GUARD_FRAMES,
+    kind: 'loop',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'guard',
+    ticksPerFrame: GUARD_TICKS_PER_FRAME,
+    pose: (f) => guardBack(cyclePhase(f, GUARD_FRAMES)),
+  },
+  guard_drop: guardDropRow('front', guardDropFront),
+  guard_drop_side: guardDropRow('side', guardDropSide),
+  guard_drop_away: guardDropRow('back', guardDropBack),
+  fidget_ceiling: {
+    frameCount: FIDGET_CEILING_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'fidget',
+    ticksPerFrame: FIDGET_TICKS_PER_FRAME,
+    levelUpOrder: LEVEL_UP_LOOK_UP,
+    pose: (f) => fidgetCeilingFront(shotProgress(f, FIDGET_CEILING_FRAMES)),
+  },
+  fidget_ceiling_side: {
+    frameCount: FIDGET_CEILING_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'fidget',
+    ticksPerFrame: FIDGET_TICKS_PER_FRAME,
+    levelUpOrder: LEVEL_UP_LOOK_UP,
+    pose: (f) => fidgetCeilingSide(shotProgress(f, FIDGET_CEILING_FRAMES)),
+  },
+  fidget_neck: {
+    frameCount: FIDGET_NECK_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'fidget',
+    ticksPerFrame: FIDGET_TICKS_PER_FRAME,
+    pose: (f) => fidgetNeckRoll(shotProgress(f, FIDGET_NECK_FRAMES)),
+  },
+  fidget_fist: {
+    frameCount: FIDGET_FIST_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'fidget',
+    ticksPerFrame: FIDGET_TICKS_PER_FRAME,
+    levelUpOrder: LEVEL_UP_CLENCH,
+    pose: (f) => fidgetFist(shotProgress(f, FIDGET_FIST_FRAMES)),
+  },
+  fidget_knuckles: {
+    frameCount: FIDGET_KNUCKLES_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'fidget',
+    ticksPerFrame: FIDGET_TICKS_PER_FRAME,
+    pose: (f) => fidgetKnuckles(shotProgress(f, FIDGET_KNUCKLES_FRAMES)),
+  },
+  fidget_glance: {
+    frameCount: FIDGET_GLANCE_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'fidget',
+    ticksPerFrame: FIDGET_TICKS_PER_FRAME,
+    pose: (f) => fidgetGlance(shotProgress(f, FIDGET_GLANCE_FRAMES)),
+  },
+  fidget_ceiling_away: fidgetRow(
+    'back',
+    FIDGET_CEILING_FRAMES,
+    fidgetCeilingBack,
+    LEVEL_UP_LOOK_UP,
+  ),
+  fidget_neck_side: fidgetRow('side', FIDGET_NECK_FRAMES, fidgetNeckRollSide),
+  fidget_neck_away: fidgetRow('back', FIDGET_NECK_FRAMES, fidgetNeckRollBack),
+  fidget_fist_side: fidgetRow('side', FIDGET_FIST_FRAMES, fidgetFistSide, LEVEL_UP_CLENCH),
+  fidget_knuckles_side: fidgetRow('side', FIDGET_KNUCKLES_FRAMES, fidgetKnucklesSide),
+  fidget_glance_side: fidgetRow('side', FIDGET_GLANCE_FRAMES, fidgetGlanceSide),
+  fidget_glance_away: fidgetRow('back', FIDGET_GLANCE_FRAMES, fidgetGlanceBack),
+  sling_shot: {
+    frameCount: SLING_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: SLING_TICKS_PER_FRAME,
+    pose: slingFront,
+  },
+  sling_shot_side: {
+    frameCount: SLING_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: SLING_TICKS_PER_FRAME,
+    pose: slingSide,
+  },
+  sling_shot_away: {
+    frameCount: SLING_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: SLING_TICKS_PER_FRAME,
+    pose: slingBack,
+  },
+  dynamite_light: {
+    frameCount: DYNAMITE_LIGHT_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DYNAMITE_LIGHT_TICKS_PER_FRAME,
+    eventFrames: DYNAMITE_LIGHT_EVENTS,
+    pose: (f) => dynamiteLight('front', f),
+  },
+  dynamite_hold: {
+    frameCount: DYNAMITE_HOLD_FRAMES,
+    kind: 'loop',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DYNAMITE_HOLD_TICKS_PER_FRAME,
+    pose: (f) => dynamiteHold('front', f),
+  },
+  dynamite_throw: {
+    frameCount: DYNAMITE_THROW_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DYNAMITE_THROW_TICKS_PER_FRAME,
+    eventFrames: DYNAMITE_THROW_EVENTS,
+    pose: (f) => dynamiteThrow('front', f),
+  },
+  dynamite_light_side: {
+    frameCount: DYNAMITE_LIGHT_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DYNAMITE_LIGHT_TICKS_PER_FRAME,
+    eventFrames: DYNAMITE_LIGHT_EVENTS,
+    pose: (f) => dynamiteLight('side', f),
+  },
+  dynamite_hold_side: {
+    frameCount: DYNAMITE_HOLD_FRAMES,
+    kind: 'loop',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DYNAMITE_HOLD_TICKS_PER_FRAME,
+    pose: (f) => dynamiteHold('side', f),
+  },
+  dynamite_throw_side: {
+    frameCount: DYNAMITE_THROW_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DYNAMITE_THROW_TICKS_PER_FRAME,
+    eventFrames: DYNAMITE_THROW_EVENTS,
+    pose: (f) => dynamiteThrow('side', f),
+  },
+  dynamite_light_away: {
+    frameCount: DYNAMITE_LIGHT_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DYNAMITE_LIGHT_TICKS_PER_FRAME,
+    eventFrames: DYNAMITE_LIGHT_EVENTS,
+    pose: (f) => dynamiteLight('back', f),
+  },
+  dynamite_hold_away: {
+    frameCount: DYNAMITE_HOLD_FRAMES,
+    kind: 'loop',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DYNAMITE_HOLD_TICKS_PER_FRAME,
+    pose: (f) => dynamiteHold('back', f),
+  },
+  dynamite_throw_away: {
+    frameCount: DYNAMITE_THROW_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DYNAMITE_THROW_TICKS_PER_FRAME,
+    eventFrames: DYNAMITE_THROW_EVENTS,
+    pose: (f) => dynamiteThrow('back', f),
+  },
+  shell_cast: {
+    frameCount: SHELL_CAST_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: SHELL_CAST_TICKS_PER_FRAME,
+    eventFrames: SHELL_CAST_EVENTS,
+    pose: shellCastFront,
+  },
+  shell_cast_side: {
+    frameCount: SHELL_CAST_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: SHELL_CAST_TICKS_PER_FRAME,
+    eventFrames: SHELL_CAST_EVENTS,
+    pose: shellCastSide,
+  },
+  shell_cast_away: {
+    frameCount: SHELL_CAST_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: SHELL_CAST_TICKS_PER_FRAME,
+    eventFrames: SHELL_CAST_EVENTS,
+    pose: shellCastBack,
+  },
+  drink: {
+    frameCount: DRINK_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DRINK_TICKS_PER_FRAME,
+    pose: drinkFront,
+  },
+  drink_side: {
+    frameCount: DRINK_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DRINK_TICKS_PER_FRAME,
+    pose: drinkSide,
+  },
+  drink_away: {
+    frameCount: DRINK_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: DRINK_TICKS_PER_FRAME,
+    pose: drinkBack,
+  },
+  grab: {
+    frameCount: GRAB_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: GRAB_TICKS_PER_FRAME,
+    pose: grabFront,
+  },
+  grab_side: {
+    frameCount: GRAB_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: GRAB_TICKS_PER_FRAME,
+    pose: grabSide,
+  },
+  grab_away: {
+    frameCount: GRAB_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: GRAB_TICKS_PER_FRAME,
+    pose: grabBack,
+  },
+  chest_open: {
+    frameCount: CHEST_OPEN_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: CHEST_OPEN_TICKS_PER_FRAME,
+    eventFrames: CHEST_OPEN_EVENTS,
+    pose: chestOpenFront,
+  },
+  chest_open_side: {
+    frameCount: CHEST_OPEN_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: CHEST_OPEN_TICKS_PER_FRAME,
+    eventFrames: CHEST_OPEN_EVENTS,
+    pose: chestOpenSide,
+  },
+  chest_open_away: {
+    frameCount: CHEST_OPEN_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: CHEST_OPEN_TICKS_PER_FRAME,
+    eventFrames: CHEST_OPEN_EVENTS,
+    pose: chestOpenBack,
+  },
+  talk: {
+    frameCount: TALK_FRAMES,
+    kind: 'loop',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: TALK_TICKS_PER_FRAME,
+    pose: talkFront,
+  },
+  talk_side: {
+    frameCount: TALK_FRAMES,
+    kind: 'loop',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: TALK_TICKS_PER_FRAME,
+    pose: talkSide,
+  },
+  talk_away: {
+    frameCount: TALK_FRAMES,
+    kind: 'loop',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: TALK_TICKS_PER_FRAME,
+    pose: talkBack,
+  },
+  // Nailing down a barricade: down onto one knee (a deep squat head-on), the
+  // hammering loop with its check, and back up. Every view has all three, so
+  // the work can lie on any side of him.
+  build_kneel: {
+    frameCount: BUILD_KNEEL_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: BUILD_KNEEL_TICKS_PER_FRAME,
+    pose: (f) => buildKneel(f, 'front'),
+  },
+  build_kneel_side: {
+    frameCount: BUILD_KNEEL_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: BUILD_KNEEL_TICKS_PER_FRAME,
+    pose: (f) => buildKneel(f, 'side'),
+  },
+  build_kneel_away: {
+    frameCount: BUILD_KNEEL_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: BUILD_KNEEL_TICKS_PER_FRAME,
+    pose: (f) => buildKneel(f, 'back'),
+  },
+  build: {
+    frameCount: BUILD_FRAMES,
+    kind: 'loop',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: BUILD_TICKS_PER_FRAME,
+    eventFrames: BUILD_EVENTS,
+    pose: (f) => buildLoop(f, 'front'),
+  },
+  build_side: {
+    frameCount: BUILD_FRAMES,
+    kind: 'loop',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: BUILD_TICKS_PER_FRAME,
+    eventFrames: BUILD_EVENTS,
+    pose: (f) => buildLoop(f, 'side'),
+  },
+  build_away: {
+    frameCount: BUILD_FRAMES,
+    kind: 'loop',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: BUILD_TICKS_PER_FRAME,
+    eventFrames: BUILD_EVENTS,
+    pose: (f) => buildLoop(f, 'back'),
+  },
+  build_rise: {
+    frameCount: BUILD_RISE_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: BUILD_RISE_TICKS_PER_FRAME,
+    pose: (f) => buildRise(f, 'front'),
+  },
+  build_rise_side: {
+    frameCount: BUILD_RISE_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: BUILD_RISE_TICKS_PER_FRAME,
+    pose: (f) => buildRise(f, 'side'),
+  },
+  build_rise_away: {
+    frameCount: BUILD_RISE_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: BUILD_RISE_TICKS_PER_FRAME,
+    pose: (f) => buildRise(f, 'back'),
+  },
+  ...REACTION_ROW_TABLE,
+  // Setting a piece of gym equipment down: a straight-backed squat with the
+  // case, and up again once it is placed.
+  place: {
+    frameCount: PLACE_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: PLACE_TICKS_PER_FRAME,
+    pose: (f) => placeEquipment(f, 'front'),
+  },
+  place_side: {
+    frameCount: PLACE_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: PLACE_TICKS_PER_FRAME,
+    pose: (f) => placeEquipment(f, 'side'),
+  },
+  place_away: {
+    frameCount: PLACE_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: PLACE_TICKS_PER_FRAME,
+    pose: (f) => placeEquipment(f, 'back'),
+  },
+  // Mending a broken thing: crouch, a turn of the spanner, stand.
+  repair: {
+    frameCount: REPAIR_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: REPAIR_TICKS_PER_FRAME,
+    pose: (f) => repairMend(f, 'front'),
+  },
+  repair_side: {
+    frameCount: REPAIR_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    impactFrames: NO_IMPACT,
+    mirrorable: true,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: REPAIR_TICKS_PER_FRAME,
+    pose: (f) => repairMend(f, 'side'),
+  },
+  repair_away: {
+    frameCount: REPAIR_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    impactFrames: NO_IMPACT,
+    mirrorable: false,
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame: REPAIR_TICKS_PER_FRAME,
+    pose: (f) => repairMend(f, 'back'),
+  },
+} satisfies Record<HumanRowName, HumanRowDef>;
 
-function paintView(ctx: CanvasRenderingContext2D, view: View, pose: CarlPose): void {
+/**
+ * One action drawn in each of the three views. A system playing it picks the
+ * row for the way he faces it with `viewForFacing`, so the rows are named
+ * here once rather than composed from a view suffix, which would let a
+ * misspelt name through to a figure that silently paints nothing.
+ */
+export type ViewRows = Readonly<Record<CarlView, HumanRowName>>;
+
+export const BUILD_KNEEL_ROWS: ViewRows = {
+  front: 'build_kneel',
+  side: 'build_kneel_side',
+  back: 'build_kneel_away',
+};
+export const BUILD_ROWS: ViewRows = { front: 'build', side: 'build_side', back: 'build_away' };
+export const BUILD_RISE_ROWS: ViewRows = {
+  front: 'build_rise',
+  side: 'build_rise_side',
+  back: 'build_rise_away',
+};
+export const PLACE_ROWS: ViewRows = { front: 'place', side: 'place_side', back: 'place_away' };
+export const REPAIR_ROWS: ViewRows = { front: 'repair', side: 'repair_side', back: 'repair_away' };
+
+/** The row table as a list, in sheet order. */
+export const HUMAN_ROWS: readonly RowSpec[] = HUMAN_ROW_NAMES.map((name) => ({
+  name,
+  ...HUMAN_ROW_TABLE[name],
+}));
+
+// ── Painting ─────────────────────────────────────────────────────────────────
+
+function paintView(ctx: CanvasRenderingContext2D, view: CarlView, pose: CarlPose): void {
   if (view === 'front') drawCarlFront(ctx, pose);
   else if (view === 'back') drawCarlBack(ctx, pose);
   else drawCarlSide(ctx, pose);
 }
 
-function rowOf(state: string): RowSpec | undefined {
-  return HUMAN_ROWS.find((row) => row.name === state);
+const HUMAN_ROWS_BY_NAME: ReadonlyMap<string, RowSpec> = new Map(
+  HUMAN_ROWS.map((row) => [row.name, row]),
+);
+
+/** The row a state name paints, or undefined for a name the figure does not declare. */
+export function humanRowOf(state: string): RowSpec | undefined {
+  return HUMAN_ROWS_BY_NAME.get(state);
+}
+
+/** The first frame a named moment of a row is drawn on, if the row names it. */
+export function eventFrame(row: HumanRowName, event: HumanRowEvent): number | undefined {
+  const meta: HumanRowMeta = HUMAN_ROW_TABLE[row];
+  return meta.eventFrames?.[event]?.[0];
 }
 
 /**
@@ -970,13 +2022,37 @@ function rowOf(state: string): RowSpec | undefined {
  * ground line so his feet stay on it whatever `HUMAN_SCALE` is set to.
  */
 function paintHumanFrame(ctx: CanvasRenderingContext2D, state: string, frame: number): void {
-  const row = rowOf(state);
+  paintDressedHumanFrame(ctx, state, frame, undressed);
+}
+
+function undressed(pose: CarlPose): CarlPose {
+  return pose;
+}
+
+/**
+ * Lays what he is wearing onto a row's pose. It sees the row and frame the
+ * pose was authored for, so gear that changes with the action — steel that
+ * forms round a fist on the frames a blow lands — is decided per cell.
+ */
+type HumanPoseDresser = (pose: CarlPose, row: RowSpec, frame: number) => CarlPose;
+
+/**
+ * {@link paintHumanFrame} for a figure that wears something: every pose
+ * passes through `dress` before it is painted.
+ */
+export function paintDressedHumanFrame(
+  ctx: CanvasRenderingContext2D,
+  state: string,
+  frame: number,
+  dress: HumanPoseDresser,
+): void {
+  const row = humanRowOf(state);
   if (row === undefined) return;
   ctx.save();
   ctx.translate(ORIGIN_X, ORIGIN_Y);
   ctx.scale(TILE_SCALE, TILE_SCALE);
   ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
-  paintView(ctx, row.view, row.pose(frame));
+  paintView(ctx, row.view, dress(row.pose(frame), row, frame));
   ctx.restore();
 }
 
@@ -985,6 +2061,28 @@ function humanStateFrames(): Record<string, number> {
   for (const row of HUMAN_ROWS) frames[row.name] = row.frameCount;
   return frames;
 }
+
+/**
+ * Carl's own per-figure cache ceiling, in place of the fleet default.
+ *
+ * He is the one figure on screen almost every frame, so the rows that must
+ * stay warm together are his baseline footprint rather than a peak: the run,
+ * its start and stop, the idle and the guard in all three views; every strike
+ * one facing can throw, standing and in each version painted on the move; the
+ * Smush, standing and hopping, of the views a fight can stamp in within one
+ * release window; the wind-up of every blow a fight can open with from
+ * standing; and the opening frames of the rows held on stand-by for a moment
+ * that can come on any tick — the flinch, the stumble, the Protective Shell
+ * cast and, once he is low, the falls. At 192×192 (144 KiB a cell) that comes
+ * to about fifty-five megabytes — the blows thrown on the move alone are
+ * painted once per phase of the stride they can begin at, five versions a row
+ * in profile, which is what takes it past the fleet's 24 MB default twice
+ * over. Fifty-six megabytes leaves a handful of cells over that — the slack
+ * for a row still warm from the last view — and still leaves the cache's 96 MB global
+ * ceiling, which this does not change, room for the rest of the floor's
+ * figures. `scripts/gates-human.ts` measures the working set against it.
+ */
+const HUMAN_FIGURE_BUDGET_MEGABYTES = 56;
 
 export const HUMAN_FIGURE: FigureDef = {
   id: 'human',
@@ -995,4 +2093,6 @@ export const HUMAN_FIGURE: FigureDef = {
   tileScale: TILE_SCALE,
   states: figureStates(humanStateFrames()),
   paintFrame: paintHumanFrame,
+  budgetMegabytes: HUMAN_FIGURE_BUDGET_MEGABYTES,
+  skipSupersample: true,
 };

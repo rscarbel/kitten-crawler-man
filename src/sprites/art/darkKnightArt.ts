@@ -1,7 +1,7 @@
 /**
  * Drawing engine for the Dark Knight — the bounty board's mace-wielding boss.
  *
- * The skeleton is the one Carl uses (`scripts/carlArt.ts`): a pelvis, a leaning
+ * The skeleton is the one Carl uses (`carl/rig.ts`): a pelvis, a leaning
  * spine, four two-bone limbs solved by inverse kinematics from foot and hand
  * targets, plus a forward-kinematic escape hatch for arms that have to swing
  * rather than reach. Plate armour changes what is *painted* over that skeleton,

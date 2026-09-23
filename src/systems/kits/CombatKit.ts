@@ -283,10 +283,11 @@ export class CombatKit {
     playMobAudioCues(this.world.roster.mobs, audio);
   }
 
-  /** The layer under the entities: settled blood and the parts that came to rest. */
+  /** The layer under the entities: settled blood, parts that came to rest, the Smush's floor. */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.gore.renderPuddles(ctx, camX, camY);
     this.bodyPartGore.renderSettled(ctx, camX, camY);
+    this.smushFx.renderGround(ctx, camX, camY);
   }
 
   /** The layer over the entities: airborne gore, shells, lightning, ripples, fog. */

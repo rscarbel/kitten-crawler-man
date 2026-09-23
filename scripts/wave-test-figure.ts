@@ -31,6 +31,7 @@ import {
   figurePrewarmDepth,
   flushFigureFrameCache,
   prewarmFigureState,
+  FRAME_BAKE_BUDGET_MS,
 } from '../src/sprites/figure/figureFrameCache.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
@@ -61,12 +62,8 @@ const DEFAULT_FIGHT_FRAMES = 180;
 const DEFAULT_INSTANCES = 8;
 
 /**
- * The per-frame paint the cache allows itself, from `figureFrameCache`. A frame
- * that spends more than this on the cache is the spike the test exists to find.
- */
-const FRAME_BAKE_BUDGET_MS = 2;
-/**
- * How much a frame may exceed that budget before it counts as a spike.
+ * How much a frame may exceed the cache's `FRAME_BAKE_BUDGET_MS` before it
+ * counts as a spike.
  *
  * The budget bounds what the cache *starts*; a bake already under way runs to
  * completion, so one cell's paint can land on top of a full budget. The margin

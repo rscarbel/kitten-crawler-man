@@ -11,10 +11,18 @@ import {
 } from '../sprites/gymEquipmentSprite';
 import { drawText } from '../ui/TextBox';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { HumanPlayer } from '../creatures/HumanPlayer';
+import { PLACE_ROWS } from '../sprites/art/humanFigure';
+import { PLACE_RELEASE_TICKS } from '../sprites/art/human/actionsBuild';
+import { viewForFacing } from '../sprites/humanSprite';
 
 export type BarrierItemId = 'gym_dumbbell' | 'gym_bench_press' | 'gym_treadmill';
 
-const CONSTRUCT_FRAMES = 60; // 1 second at 60 fps
+/**
+ * The construct lasts exactly as long as he takes to set the case down, so the
+ * equipment stands on the tick his hands leave it.
+ */
+const CONSTRUCT_FRAMES = PLACE_RELEASE_TICKS;
 /** Slow zone radius as a fraction of a tile. */
 const SLOW_RADIUS_TILE_FRACTION = 0.9;
 /** Tiles adjacent to a barrier that count as a slow zone (half-tile radius). */
@@ -78,6 +86,8 @@ function clonePendingConstruct(construct: PendingConstruct): PendingConstruct {
 export class BarrierSystem implements GameSystem {
   private barriers: PlacedBarrier[] = [];
   private pending: PendingConstruct | null = null;
+  /** The human while he is drawn setting the piece down, so a cancel can stand him back up. */
+  private placingHuman: HumanPlayer | null = null;
   /** Mobs this system slowed last frame — only these need their flag cleared. */
   private slowedLastFrame: Mob[] = [];
   /** Reused result set for the slow-zone neighbour query. */
@@ -97,7 +107,11 @@ export class BarrierSystem implements GameSystem {
 
   // Actions
 
-  /** Start the 1-second construct animation for the given hotbar slot. */
+  /**
+   * Start the 1-second construct for the given hotbar slot. The human squats
+   * and sets the piece down while it runs; the placing row is timed so his
+   * hands leave the case on the tick the equipment appears.
+   */
   beginConstruct(player: Player, hotbarIdx: number, itemId: BarrierItemId): void {
     if (this.pending) return;
     this.pending = {
@@ -106,11 +120,24 @@ export class BarrierSystem implements GameSystem {
       itemId,
       framesLeft: CONSTRUCT_FRAMES,
     };
+    if (player instanceof HumanPlayer) {
+      const faceX = player.facingX;
+      const faceY = player.facingY;
+      const placing = player.playAction(PLACE_ROWS[viewForFacing(faceX, faceY)], {
+        faceX,
+        faceY,
+        onEnd: () => {
+          if (this.placingHuman === player) this.placingHuman = null;
+        },
+      });
+      if (placing) this.placingHuman = player;
+    }
   }
 
   /** Cancel any in-progress construction (e.g. player dies or pauses). */
   cancelConstruct(): void {
     this.pending = null;
+    this.placingHuman?.stopAction();
   }
 
   captureCheckpoint(): BarrierCheckpoint {

@@ -64,7 +64,7 @@ import {
   nothingMeasuredFailures,
 } from './figureGates.js';
 import { bakeFigureCell, paintFigureCell } from './figureSheet.js';
-import { FIGURE_BYTE_BUDGET } from '../src/sprites/figure/figureFrameCache.js';
+import { figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
 
 const CHANNELS = 4;
 const ALPHA_OFFSET = 3;
@@ -425,10 +425,12 @@ const ROWS_THAT_MUST_FIT_TOGETHER = 4;
  *
  * A painted figure is admitted a row at a time, so the number that decides
  * whether it fits is the widest row's warm bytes rather than the sum of every
- * row. Importing the cache's constant is what stops this from quietly becoming
+ * row. Reading the cache's own ceiling is what stops this from quietly becoming
  * a different budget from the one the runtime enforces.
  */
-const ROW_BUDGET_MEGABYTES = FIGURE_BYTE_BUDGET / BYTES_PER_MEGABYTE / ROWS_THAT_MUST_FIT_TOGETHER;
+function rowBudgetMegabytes(def: FigureDef): number {
+  return figureByteBudgetFor(def) / BYTES_PER_MEGABYTE / ROWS_THAT_MUST_FIT_TOGETHER;
+}
 
 function gateWarmRowSize(): void {
   let figuresMeasured = 0;
@@ -454,15 +456,15 @@ function gateWarmRowSize(): void {
     const allWarm = (totalFrames * cellBytes) / BYTES_PER_MEGABYTE;
     console.log(
       `  G5 warm row: ${def.id}.${widestState} is ${megabytes.toFixed(2)} MB of a ` +
-        `${ROW_BUDGET_MEGABYTES.toFixed(0)} MB budget; all ${statesMeasured} states warm at ` +
+        `${rowBudgetMegabytes(def).toFixed(0)} MB budget; all ${statesMeasured} states warm at ` +
         `once would be ${allWarm.toFixed(2)} MB against the cache's ` +
-        `${(FIGURE_BYTE_BUDGET / BYTES_PER_MEGABYTE).toFixed(0)} MB per-figure ceiling`,
+        `${(figureByteBudgetFor(def) / BYTES_PER_MEGABYTE).toFixed(0)} MB per-figure ceiling`,
     );
-    if (megabytes > ROW_BUDGET_MEGABYTES) {
+    if (megabytes > rowBudgetMegabytes(def)) {
       fail(
         'G5',
         `${def.id}.${widestState} warms to ${megabytes.toFixed(2)} MB against a budget of ` +
-          `${ROW_BUDGET_MEGABYTES.toFixed(0)} MB`,
+          `${rowBudgetMegabytes(def).toFixed(0)} MB`,
       );
     }
   }

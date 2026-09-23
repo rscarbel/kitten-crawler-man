@@ -10,7 +10,8 @@ import {
 import { Inventory } from './core/Inventory';
 import type { ResistanceType } from './core/ItemDefs';
 import { normalize } from './utils';
-import { drawText } from './ui/TextBox';
+import { drawText, TEXT_PRESETS } from './ui/TextBox';
+import { drawBox } from './ui/Box';
 import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
 import { computeDodgeChance } from './core/dodge';
 import { xpMultiplierForPlayerLevel, type XpDiminishingTier } from './levels/xpDiminishing';
@@ -104,6 +105,12 @@ export type DamageSource =
        * encounters that promise no blow kills from full.
        */
       readonly maxShareOfTargetHp?: number;
+      /**
+       * Where the blow came from — the centre of the striker's tile, in world
+       * pixels — when the source knows it. The victim reads it only to flinch
+       * away from the right side, measured from its own tile's centre.
+       */
+      readonly from?: { readonly x: number; readonly y: number };
     }
   | {
       readonly kind: 'status';
@@ -247,6 +254,8 @@ const TILE_FIGURE_BOX: StatusFigureBox = {
 
 /** KO overlay parameters */
 const KO_OVERLAY_ALPHA = 0.55;
+/** The deep slate the downed crawler's tile is dimmed with. */
+const KO_OVERLAY_FILL = '#0f172a';
 const KO_RING_ALPHA_BASE = 0.45;
 const KO_RING_ALPHA_RANGE = 0.3;
 const KO_RING_LINE_WIDTH = 2;
@@ -300,9 +309,12 @@ export abstract class Player {
    */
   protected walkFrameSpeed = WALK_FRAME_SPEED;
   /**
-   * How far above the sprite's foot line the river surface cuts across it, in
-   * pixels at the in-game tile size. Everything below is clipped away and
-   * replaced by the waterline, so this is literally how deep the crawler wades.
+   * How far above the bottom edge of the sprite's tile the river surface cuts
+   * across it, in pixels at the in-game tile size. Everything below is clipped
+   * away and replaced by the waterline, so this is literally how deep the
+   * crawler wades. Measured from the tile's edge rather than from wherever a
+   * figure happens to plant its feet, so a figure whose ground line sits above
+   * that edge has to add the difference.
    *
    * Per-crawler rather than one world-wide water depth, and that is a deliberate
    * lie about the river. A single depth that puts the human in at the waist is
@@ -1626,12 +1638,16 @@ export abstract class Player {
     const t = Date.now();
     const pulse = HALF + HALF * Math.sin(t * KO_PULSE_SPEED);
 
-    ctx.save();
+    drawBox(ctx, {
+      x: sx,
+      y: sy,
+      width: s,
+      height: s,
+      fill: KO_OVERLAY_FILL,
+      alpha: KO_OVERLAY_ALPHA,
+    });
 
-    // Dark desaturating overlay
-    ctx.globalAlpha = KO_OVERLAY_ALPHA;
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(sx, sy, s, s);
+    ctx.save();
 
     // Pulsing red ring
     ctx.globalAlpha = KO_RING_ALPHA_BASE + KO_RING_ALPHA_RANGE * pulse;
@@ -1647,17 +1663,15 @@ export abstract class Player {
     );
     ctx.stroke();
 
-    // Badge above the tile: "Reviving" while being revived, "KO" otherwise
     const isReviving = this.reviveProgress > 0;
     const label = isReviving ? 'Reviving' : 'KO';
     const fontSize = Math.round(s * (isReviving ? KO_FONT_REVIVING_FRACTION : KO_FONT_KO_FRACTION));
     drawText(ctx, label, {
+      ...(isReviving ? TEXT_PRESETS.heading : TEXT_PRESETS.danger),
       x: cx,
       y: sy - fontSize - KO_LABEL_Y_PADDING,
       align: 'center',
       size: fontSize,
-      bold: true,
-      color: isReviving ? '#ffffff' : '#ef4444',
       outline: true,
     });
 

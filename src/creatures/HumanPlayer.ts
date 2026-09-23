@@ -1,21 +1,110 @@
-import { Player, WALK_FRAME_SPEED, type StatName, type StatusFigureBox } from '../Player';
+import { Player, type DamageSource, type StatName, type StatusFigureBox } from '../Player';
 import { TILE_SIZE } from '../core/constants';
+import {
+  handTipInTile,
+  type HumanHandSide,
+  standingHipAboveSolePx,
+} from '../sprites/art/human/probe';
+import type { Mob } from './Mob';
+import {
+  stampPointOf,
+  drawHumanSelection,
+  prewarmHumanRow,
+  prewarmHumanSprite,
+  type HumanRowSelection,
+  setHumanAppearance,
+  viewForFacing,
+} from '../sprites/humanSprite';
+import { type HumanAppearance } from '../sprites/art/human/appearance';
+import { FALL_SPANS, HumanReactionDirector, type HumanWarmSpan } from '../sprites/humanReactions';
+import { IDLE_FRAMES_BEFORE_RELEASE } from '../sprites/figure/figureFrameCache';
+import {
+  type HumanActionOptions,
+  HumanAnimator,
+  type HumanReactionOptions,
+  type HumanStrikeClock,
+  type StrikeTargetContext,
+} from '../sprites/humanAnimator';
+import { SMUSH_DURATION_TICKS, SMUSH_RECOVERY_TICKS } from '../sprites/art/human/timing';
+import { type Pt } from '../sprites/art/carlArt';
+import {
+  GROUND_OFFSET_IN_TILE,
+  HUMAN_ROW_TABLE,
+  humanRowOf,
+  type HumanRowMeta,
+  type HumanRowName,
+  type ViewRows,
+} from '../sprites/art/humanFigure';
+import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
+import type { AbilityManager } from '../core/AbilityManager';
+import { getSmushStats } from '../abilities/smush';
+import type { ItemId } from '../core/ItemDefs';
+import type { GameMap } from '../map/GameMap';
+import {
+  drawSlingshotRocks,
+  ROCK_LAUNCH_CONVERGE_TILES,
+  SLINGSHOT_BASE_DAMAGE,
+  SLINGSHOT_COOLDOWN_FRAMES,
+  SLINGSHOT_RANGE_TILES,
+  SLINGSHOT_SPEED,
+  SLINGSHOT_STRENGTH_FRACTION,
+  type SlingshotRock,
+} from '../sprites/slingshotSprite';
+import {
+  carriedForkInTile,
+  carriedSlingshotOf,
+  drawCarriedSlingshot,
+} from '../sprites/slingshotCarrySprite';
+import type { CrawlerKind } from '../core/SkillManager';
+import {
+  bareFistDamage,
+  HUMAN_BASE_HP_OFFSET,
+  HUMAN_STARTING_DEXTERITY,
+  HUMAN_SWING_FRAMES,
+} from '../core/crawlerFormulas';
+import {
+  IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL,
+  PUGILISM_DAMAGE_PER_LEVEL,
+} from '../core/SkillManager';
 
 /**
  * How far the top of his hair sits above the tile anchor at the in-game tile
- * size. Measured off the generated sheet: the standing rows top out 22px above
- * the anchor. Re-measure it whenever `HUMAN_SCALE` in the generator changes.
+ * size, rounded up to a whole pixel so the health bar hung off it clears the
+ * hair. Measured off the painted cells: the standing rows' solid ink tops out
+ * 21.5px above the anchor. Gate G21 in `scripts/gates-human.ts` re-measures it.
  */
 const HUMAN_SPRITE_TOP_ABOVE_TILE = 22;
 
-/** Where his soles land, in tile fractions — a hair short of the tile's foot. */
-const HUMAN_SOLE_BELOW_TILE_TOP = 0.98;
+/**
+ * How far his ground line sits above the bottom edge of his tile. The rig is
+ * measured from the ground line, but the waterline is placed from the tile's
+ * bottom edge, so the two are this far apart.
+ */
+const HUMAN_GROUND_ABOVE_TILE_BOTTOM_PX = (1 - GROUND_OFFSET_IN_TILE) * TILE_SIZE;
 
 /**
- * Half his shoulder-to-shoulder width in tile fractions. He is a narrow figure:
- * flames or drips spread across the full tile would visibly miss him.
+ * Where a waterline crosses him when he wades: his hips, read off the solved
+ * rig of his standing pose at the in-game tile rather than frozen, so a redraw
+ * that changes his proportions moves the waterline with it.
  */
-const HUMAN_HALF_WIDTH_TILES = 0.3;
+const HUMAN_WAIST_ABOVE_FOOT_PX =
+  standingHipAboveSolePx(TILE_SIZE) + HUMAN_GROUND_ABOVE_TILE_BOTTOM_PX;
+
+/**
+ * Where his soles land, in tile fractions: the ground line sits at 58/64 of
+ * the tile and the soles' outline a pixel or so under it. Measured off the
+ * standing rows' solid ink (0.984): head-on the toes of a foot pointing at the
+ * camera draw a little below the ground line. Gate G21 re-measures it.
+ */
+const HUMAN_SOLE_BELOW_TILE_TOP = 0.984;
+
+/**
+ * Half his width head-on, arms included, in tile fractions. He is narrower
+ * than the tile: flames or drips spread across the full tile would visibly
+ * miss him. Measured off the standing front and back rows (0.406); gate G21
+ * re-measures it.
+ */
+const HUMAN_HALF_WIDTH_TILES = 0.41;
 
 /**
  * Carl's ink, measured off the painted `HUMAN_FIGURE` cell against its own tile
@@ -29,50 +118,61 @@ export const HUMAN_STATUS_FIGURE_BOX: StatusFigureBox = {
   bottom: HUMAN_SOLE_BELOW_TILE_TOP,
   halfWidth: HUMAN_HALF_WIDTH_TILES,
 };
-import type { Mob } from './Mob';
-import {
-  drawHumanSprite,
-  prewarmHumanSprite,
-  SMUSH_FRAME_COUNT,
-  SMUSH_IMPACT_FRAME,
-  type HumanAttackPhase,
-} from '../sprites/humanSprite';
-import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
-import type { AbilityManager } from '../core/AbilityManager';
-import { getSmushStats } from '../abilities/smush';
-import type { ItemId } from '../core/ItemDefs';
-import type { GameMap } from '../map/GameMap';
-import {
-  drawSlingshotRocks,
-  drawSlingshotWield,
-  SLINGSHOT_BASE_DAMAGE,
-  SLINGSHOT_COOLDOWN_FRAMES,
-  SLINGSHOT_RANGE_TILES,
-  SLINGSHOT_SPEED,
-  SLINGSHOT_STRENGTH_FRACTION,
-  type SlingshotRock,
-} from '../sprites/slingshotSprite';
-import type { CrawlerKind } from '../core/SkillManager';
+
+/** The point under the middle of his tile he stands on, in tile fractions. */
+const SMUSH_FALLBACK_STAMP_TILE: Pt = { x: 0.5, y: GROUND_OFFSET_IN_TILE };
+
+/** The slingshot shot he draws for each view he can face. */
+const SLING_SHOT_ROWS: ViewRows = {
+  front: 'sling_shot',
+  side: 'sling_shot_side',
+  back: 'sling_shot_away',
+};
 
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
 const HUMAN_CRAWLER_KIND: CrawlerKind = 'human';
 
-import {
-  bareFistDamage,
-  HUMAN_BASE_HP_OFFSET,
-  HUMAN_STARTING_DEXTERITY,
-  HUMAN_SWING_FRAMES,
-} from '../core/crawlerFormulas';
-import {
-  IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL,
-  PUGILISM_DAMAGE_PER_LEVEL,
-} from '../core/SkillManager';
+/**
+ * Rendered frames per fixed update on the fastest display the cache's release
+ * window has to be read against: a 240 Hz screen over the 60 Hz update.
+ */
+const FASTEST_DISPLAY_FRAMES_PER_TICK = 4;
+/**
+ * How often a row held warm on stand-by is asked for again. The cache
+ * releases a row left undrawn for its release window, counted in rendered
+ * frames, and a stand-by row is by definition not being drawn; asking for it
+ * again is what marks it used. Twice inside the window on the fastest display,
+ * so one late refresh never costs the row.
+ */
+const STANDBY_REWARM_TICKS = Math.floor(
+  IDLE_FRAMES_BEFORE_RELEASE / FASTEST_DISPLAY_FRAMES_PER_TICK / 2,
+);
+/**
+ * Under this share of his health the falls are held warm: a blow or two from
+ * here can put him down, and the fall is the one reaction nobody can wait on.
+ */
+const FALL_STANDBY_HEALTH_SHARE = 0.33;
+
+/** What a set of stand-by rows is held warm for. */
+type HumanStandbyReason = 'shell_cast' | 'fall';
+
+interface HumanStandby {
+  readonly spans: readonly HumanWarmSpan[];
+  readonly askedAtTick: number;
+}
+
+function sameSpans(a: readonly HumanWarmSpan[], b: readonly HumanWarmSpan[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((span, index) => span.row === b[index].row && span.frames === b[index].frames)
+  );
+}
 
 /** Short label the level-up flash shows for Explosives Handling. */
 const EXPLOSIVES_HANDLING_CODE = 'EXP';
 
 /** The human alone can invest points in Explosives Handling. */
-export type HumanSpendableStat = StatName | 'explosivesHandling';
+type HumanSpendableStat = StatName | 'explosivesHandling';
 
 /**
  * This is a playable character.
@@ -89,8 +189,6 @@ export class HumanPlayer extends Player {
   }
 
   override get isSwinging(): boolean {
-    // The timer, not the phase: `attackPhase` records which limb threw the last
-    // blow and is never cleared, so reading it answers "has he ever punched".
     return this.attackTimer > 0;
   }
   /** Increases dynamite damage and throw distance. */
@@ -98,36 +196,32 @@ export class HumanPlayer extends Player {
 
   private abilityManager: AbilityManager | null = null;
 
-  attackPhase: HumanAttackPhase = null;
   attackTimer = 0;
   readonly ATTACK_FRAMES = HUMAN_SWING_FRAMES;
-  private nextSideType: 'punch_side' | 'kick_side' = 'punch_side';
   private autoAttackCooldown = 0;
   private readonly AUTO_ATTACK_COOLDOWN = 90;
 
   smushTimer = 0;
   smushCooldown = 0;
-  readonly SMUSH_FRAMES = 44;
+  /** Ticks a Smush holds him, from the key press to back in guard. */
+  readonly SMUSH_FRAMES = SMUSH_DURATION_TICKS;
   /**
-   * The tick the stamp lands on, derived from where the impact sits in the
-   * animation rather than hard-coded: `drawHumanSprite` picks its frame from
-   * `1 - smushTimer / SMUSH_FRAMES`, so the timer that shows the impact frame
-   * is the one the blast has to fire on. It floors rather than rounds because
-   * `progressFrameIndex` floors — rounding lets the blast drift a frame ahead
-   * of the sole the moment either constant changes.
+   * The timer value the stamp lands on: the windup has run and the press and
+   * recovery are still to come. Every Smush row is fitted around this tick —
+   * its stamp frame is the one the animator shows here — never the other way
+   * round; `scripts/gates-human.ts` replays the player to hold them to it.
    */
-  private readonly SMUSH_HIT_TIMER = Math.floor(
-    this.SMUSH_FRAMES * (1 - SMUSH_IMPACT_FRAME / SMUSH_FRAME_COUNT),
-  );
+  private readonly SMUSH_HIT_TIMER = SMUSH_RECOVERY_TICKS;
 
   /** The mob the human will automatically fight when not player-controlled. */
   autoTarget: Mob | null = null;
 
   /**
    * The weapon held in hand, or null for bare fists. Only the human wields —
-   * the cat's ranged attack is a spell, not a thing she picks up.
+   * the cat's ranged attack is a spell, not a thing she picks up. Written only
+   * through {@link wield}, so letting go of a weapon always lowers its pose.
    */
-  wieldedWeaponId: ItemId | null = null;
+  private heldWeaponId: ItemId | null = null;
 
   /** Set when a stone actually leaves the sling, so the scene can sound it. */
   pendingSlingshotFireSound = false;
@@ -142,11 +236,16 @@ export class HumanPlayer extends Player {
    */
   slingshotCooldown = 0;
   private rocks: SlingshotRock[] = [];
+  /**
+   * Whether the slingshot shot is the action he is drawn in. Tracked here
+   * rather than read off the animator, so putting the sling away ends only
+   * the shot and never an action some other system started.
+   */
+  private slingDrawn = false;
 
   /** His spell and his healing sit under the first two number keys. */
   private static readonly TOME_HOTBAR_SLOT = 0;
   private static readonly POTION_HOTBAR_SLOT = 1;
-  private static readonly FACING_Y_THRESHOLD = 0.5;
   private static readonly MELEE_RANGE_MULTIPLIER = 1.95;
   private static readonly ACTIVE_SPHERE_RADIUS = 4;
   /** Distance above the sprite so the sphere sits just below the health bar. */
@@ -159,18 +258,23 @@ export class HumanPlayer extends Player {
   private static readonly ACTIVE_SPHERE_SPRITE_TOP = HumanPlayer.SPRITE_TOP_ABOVE_TILE;
   private static readonly HEALTH_BAR_Y_OFFSET =
     HumanPlayer.SPRITE_TOP_ABOVE_TILE + HumanPlayer.BAR_LIFT_ABOVE_SPHERE;
+  readonly waterlineAboveFootPx = HUMAN_WAIST_ABOVE_FOOT_PX;
+
   /**
-   * Waist height. His standing figure spans `SPRITE_TOP_ABOVE_TILE + TILE_SIZE`
-   * = 54 px from sole to hair, and a waist sits at about half a person's height.
+   * Chooses every row he is drawn in. Ticked from `tickTimers`, once per fixed
+   * update, so a catch-up frame that runs two updates advances it twice — the
+   * same as everything else it is keeping time with.
    */
-  /** How much faster than the shared default his cycle turns over. */
-  private static readonly GAIT_RATE = 1.3;
-  readonly waterlineAboveFootPx = 27;
-  /**
-   * His stride is short — a stride the leg can actually reach — so the cycle has
-   * to turn over faster than the shared default to match the ground he covers.
-   */
-  protected override walkFrameSpeed = WALK_FRAME_SPEED * HumanPlayer.GAIT_RATE;
+  readonly animator = new HumanAnimator({ warmRow: prewarmHumanRow });
+  /** Chooses his reaction rows — flinch, stumble, struggle, falls — from what is done to him. */
+  private readonly reactions = new HumanReactionDirector(this);
+  /** Rows held warm ahead of a moment that can come on any tick, by what they wait for. */
+  private readonly standbys = new Map<HumanStandbyReason, HumanStandby>();
+  /** Fixed updates counted for the stand-by refresh. */
+  private standbyTicks = 0;
+  /** Where he stood on the previous tick, which is what his gait is paced from. */
+  private lastTickX: number;
+  private lastTickY: number;
   private static readonly SPRITE_HORIZONTAL_OFFSET = 0.5;
   private static readonly SPRITE_VERTICAL_OFFSET = 0.5;
 
@@ -190,9 +294,14 @@ export class HumanPlayer extends Player {
       baseStats: { dexterity: HUMAN_STARTING_DEXTERITY },
       crawlerKind: HUMAN_CRAWLER_KIND,
     });
+    this.lastTickX = this.x;
+    this.lastTickY = this.y;
     // He is drawn on essentially every frame of the scene he is built for, so
-    // his standing and walking rows are queued now rather than paid for as
-    // cache misses on the scene's first frame.
+    // his standing and running rows are queued now rather than paid for as
+    // cache misses on the scene's first frame. They are queued in the outfit
+    // already being drawn, not re-dressed from this still-empty inventory: a
+    // scene change builds him bare and restores his gear a moment later, and
+    // dressing him bare in between would release the outfit he is wearing.
     prewarmHumanSprite();
     // Pre-equip Enchanted BigBoi Boxers — adds +2 CON (+4 maxHp)
     this.inventory.addItem('enchanted_bigboi_boxers', 1);
@@ -203,6 +312,42 @@ export class HumanPlayer extends Player {
     // The base player already granted the starting potions; moving that one
     // stack keeps it a single stack, where re-granting it here would not.
     this.inventory.placeOnHotbar('health_potion', HumanPlayer.POTION_HOTBAR_SLOT);
+  }
+
+  /**
+   * The gear he is seen in, read off what he has equipped. Nothing in the game
+   * grants a pedicure, so its shine is always off; this is the one place a
+   * grant would have to answer.
+   */
+  private appearance(): HumanAppearance {
+    const { inventory } = this;
+    return {
+      gauntlet: inventory.hasEquipped('grull_war_gauntlet'),
+      cloak: inventory.hasEquipped('nightgaunt_cloak'),
+      trollskinShirt: inventory.hasEquipped('trollskin_shirt'),
+      toeRing: inventory.hasEquipped('splatter_skunk_toe_ring'),
+      pedicure: false,
+    };
+  }
+
+  /**
+   * Dresses his sprite in what he has on. Cheap when nothing changed, so it is
+   * also run on every draw: a tutorial reset or a dev preset replaces his
+   * equipment without going through {@link onEquipmentChanged}, and he must
+   * never be drawn in last session's clothes. A restore calls it directly.
+   *
+   * On a change every row asked for ahead of need is asked for again: the
+   * stand-bys and the animator's warm requests went to the outfit he took off.
+   */
+  syncAppearance(): void {
+    if (!setHumanAppearance(this.appearance())) return;
+    this.standbys.clear();
+    this.animator.forgetWarmRequests();
+  }
+
+  override onEquipmentChanged(): void {
+    super.onEquipmentChanged();
+    this.syncAppearance();
   }
 
   setAbilityManager(manager: AbilityManager): void {
@@ -250,17 +395,41 @@ export class HumanPlayer extends Player {
     return flatDamage * ironPunchMultiplier;
   }
 
+  /** The weapon held in hand, or null for bare fists. */
+  get wieldedWeaponId(): ItemId | null {
+    return this.heldWeaponId;
+  }
+
   /** True while the slingshot is in hand, which redirects the attack key. */
   get isWieldingSlingshot(): boolean {
-    return this.wieldedWeaponId === 'slingshot';
+    return this.heldWeaponId === 'slingshot';
+  }
+
+  /**
+   * Puts `weaponId` in his hand, or empties it with null. Every change of
+   * weapon comes through here: a draw held at full stretch belongs to the
+   * sling, and anything that set the weapon behind its back would leave him
+   * aiming an empty fist.
+   */
+  wield(weaponId: ItemId | null): void {
+    this.heldWeaponId = weaponId;
+    // Taking it out warms the shot for the way he faces, so the first release
+    // is not baked on the tick the stone leaves.
+    if (this.isWieldingSlingshot) prewarmHumanRow(this.slingShotRow());
+    else this.lowerSlingshot();
   }
 
   /**
    * Takes the slingshot out or puts it away, reporting whether it is now held.
    */
   toggleSlingshotWield(): boolean {
-    this.wieldedWeaponId = this.isWieldingSlingshot ? null : 'slingshot';
+    this.wield(this.isWieldingSlingshot ? null : 'slingshot');
     return this.isWieldingSlingshot;
+  }
+
+  /** Ends the held draw once the sling is no longer in his hand. */
+  private lowerSlingshot(): void {
+    if (this.slingDrawn) this.stopAction();
   }
 
   /**
@@ -270,8 +439,8 @@ export class HumanPlayer extends Player {
    * `wieldedWeaponId` only ever names an item and never checks it is still held.
    */
   override onInventoryChanged(): void {
-    if (this.wieldedWeaponId !== null && this.inventory.countOf(this.wieldedWeaponId) === 0) {
-      this.wieldedWeaponId = null;
+    if (this.heldWeaponId !== null && this.inventory.countOf(this.heldWeaponId) === 0) {
+      this.wield(null);
     }
   }
 
@@ -293,9 +462,22 @@ export class HumanPlayer extends Player {
     if (this.slingshotCooldown > 0) return false;
 
     const angle = Math.atan2(this.facingY, this.facingX);
+    const x = this.x + this.tileSize * HumanPlayer.SPRITE_HORIZONTAL_OFFSET;
+    const y = this.y + this.tileSize * HumanPlayer.SPRITE_VERTICAL_OFFSET;
+    // On the move the shot is not drawn at all: the stride would take it back
+    // on its first tick, which shows one frame of him planted and sliding. He
+    // looses from the sling he carries instead and keeps running.
+    const shotDrawn = !this.isMoving && this.playSlingShot();
+    // The stone flies the gameplay line from his centre; only its picture
+    // starts at the fork he is drawn letting go from, and closes onto that
+    // line within its first stretch of flight.
+    const fork = shotDrawn ? this.handWorldPosition('left') : this.carriedForkWorldPosition();
     this.rocks.push({
-      x: this.x + this.tileSize * HumanPlayer.SPRITE_HORIZONTAL_OFFSET,
-      y: this.y + this.tileSize * HumanPlayer.SPRITE_VERTICAL_OFFSET,
+      x,
+      y,
+      launchOffsetX: fork.x - x,
+      launchOffsetY: fork.y - y,
+      convergeDistance: this.tileSize * ROCK_LAUNCH_CONVERGE_TILES,
       vx: Math.cos(angle) * SLINGSHOT_SPEED,
       vy: Math.sin(angle) * SLINGSHOT_SPEED,
       distTraveled: 0,
@@ -309,6 +491,58 @@ export class HumanPlayer extends Player {
   }
 
   /**
+   * Draws the shot: the release on this tick, then the reload and redraw,
+   * held at full draw until he moves or fires again. Refused mid-blow or
+   * mid-reaction, which costs only the picture — the stone has already gone.
+   */
+  private playSlingShot(): boolean {
+    const playing = this.playAction(this.slingShotRow(), {
+      faceX: this.facingX,
+      faceY: this.facingY,
+      holdLastFrame: true,
+      onEnd: () => {
+        this.slingDrawn = false;
+      },
+    });
+    // Replacing a shot still drawn ends it first, and its onEnd clears the
+    // flag, so the new one is marked only after it has taken over.
+    if (playing) this.slingDrawn = true;
+    return playing;
+  }
+
+  /** The fork of the sling he carries, or his left fist on a cell that holds it some other way. */
+  private carriedForkWorldPosition(): Pt {
+    const carry = carriedSlingshotOf(this.spriteSelection());
+    if (carry === null) return this.handWorldPosition('left');
+    const fork = carriedForkInTile(carry);
+    return { x: this.x + fork.x * this.tileSize, y: this.y + fork.y * this.tileSize };
+  }
+
+  /** The slingshot shot drawn in the view he faces. */
+  private slingShotRow(): HumanRowName {
+    return SLING_SHOT_ROWS[viewForFacing(this.facingX, this.facingY)];
+  }
+
+  /**
+   * Lowers a held draw once he has turned away from where it aims — the
+   * companion follow and the auto-target turn him without a step, and a draw
+   * held along the old facing would aim at nothing — or once the sling is no
+   * longer in his hand at all, whatever took it.
+   */
+  private lowerSlingshotIfStale(): void {
+    if (!this.slingDrawn) return;
+    if (!this.isWieldingSlingshot) {
+      this.stopAction();
+      return;
+    }
+    const drawn = this.spriteSelection();
+    const aimed = this.slingShotRow();
+    const flipped = this.facingX < 0;
+    const mirrored = humanRowOf(aimed)?.mirrorable === true;
+    if (drawn.row !== aimed || (mirrored && drawn.flipX !== flipped)) this.stopAction();
+  }
+
+  /**
    * Advances every stone in the air and drops the spent ones.
    *
    * Takes the map rather than holding one, so a stone is always tested against
@@ -319,6 +553,9 @@ export class HumanPlayer extends Player {
 
     for (const rock of this.rocks) {
       if (rock.state !== 'flying') continue;
+      if (rock.distTraveled === 0) {
+        rock.convergeDistance = Math.min(rock.convergeDistance, this.clearFlight(map, rock));
+      }
 
       const nextX = rock.x + rock.vx;
       const nextY = rock.y + rock.vy;
@@ -339,6 +576,25 @@ export class HumanPlayer extends Player {
   }
 
   /**
+   * World pixels a stone will fly before its next step lands in a wall,
+   * walked along the very steps {@link updateRocks} will take, and looked for
+   * only as far as the stone's drawn launch takes to close.
+   */
+  private clearFlight(map: GameMap, rock: SlingshotRock): number {
+    const step = Math.hypot(rock.vx, rock.vy);
+    const lookaheadSteps = step > 0 ? Math.ceil(rock.convergeDistance / step) : 0;
+    let x = rock.x;
+    let y = rock.y;
+    for (let taken = 0; taken < lookaheadSteps; taken++) {
+      x += rock.vx;
+      y += rock.vy;
+      const blocked = !map.isWalkable(Math.floor(x / this.tileSize), Math.floor(y / this.tileSize));
+      if (blocked) return taken * step;
+    }
+    return rock.convergeDistance;
+  }
+
+  /**
    * Drops the stones he has in the air, and nothing else — a party walking off
    * a floor leaves them behind, but the cooldown they cost is not refunded by a
    * staircase.
@@ -347,7 +603,11 @@ export class HumanPlayer extends Player {
     this.rocks = [];
   }
 
-  triggerAttack() {
+  /**
+   * Throws a blow along his facing, at `target` when he has one — what he is
+   * swinging at decides which blow it is.
+   */
+  triggerAttack(target: Mob | null = null) {
     if (this.attackTimer > 0 || this.smushTimer > 0) return;
     // A weapon in hand takes the attack key: bare fists are what the punch and
     // the kick animate, and he cannot swing what he is holding a sling with.
@@ -357,19 +617,266 @@ export class HumanPlayer extends Player {
       this.triggerSlingshot();
       return;
     }
-    if (Math.abs(this.facingY) > HumanPlayer.FACING_Y_THRESHOLD) {
-      this.attackPhase = this.facingY < 0 ? 'punch_up' : 'kick_down';
-    } else {
-      this.attackPhase = this.nextSideType;
-      this.nextSideType = this.nextSideType === 'punch_side' ? 'kick_side' : 'punch_side';
-    }
+    this.animator.beginStrike(
+      this.facingX,
+      this.facingY,
+      target === null ? null : this.strikeContextOf(target),
+    );
     this.attackTimer = this.ATTACK_FRAMES;
+  }
+
+  /** What about a target decides the blow thrown at it. */
+  private strikeContextOf(target: Mob): StrikeTargetContext {
+    const dx = target.x - this.x;
+    const dy = target.y - this.y;
+    return {
+      lowProfile: target.lowProfile,
+      downed: target.hasStatus('stun') || target.hasStatus('stuck'),
+      tall: target.isBoss,
+      reachShare: Math.hypot(dx, dy) / this.getMeleeRange(),
+    };
   }
 
   triggerSmush(): boolean {
     if (this.smushCooldown > 0 || this.smushTimer > 0 || this.attackTimer > 0) return false;
     this.smushTimer = this.SMUSH_FRAMES;
+    this.animator.beginSmush(this.facingX, this.facingY);
     return true;
+  }
+
+  /**
+   * The direction a blow in flight lands along: the facing it was thrown with,
+   * latched when it began, so steering mid-swing cannot turn the hit away
+   * from the fist that is drawn throwing it. Between blows, his facing.
+   */
+  get strikeFacingX(): number {
+    return this.animator.latchedFacing?.x ?? this.facingX;
+  }
+
+  get strikeFacingY(): number {
+    return this.animator.latchedFacing?.y ?? this.facingY;
+  }
+
+  private strikeClock(): HumanStrikeClock {
+    return {
+      attackTimer: this.attackTimer,
+      attackFrames: this.ATTACK_FRAMES,
+      smushTimer: this.smushTimer,
+      smushFrames: this.SMUSH_FRAMES,
+    };
+  }
+
+  /** The cell he is drawn in this frame — the one `drawSelf` paints. */
+  spriteSelection(): HumanRowSelection {
+    return this.animator.select(this.strikeClock());
+  }
+
+  /**
+   * Plays one of his rows as an action — something a system has him do:
+   * hammer a board, pull a lever, drink. Priority, highest first: a blow or a
+   * Smush, then a reaction, then an action, then standing and moving; a knockout
+   * outranks them all but a reaction that overrides blows. So this is refused
+   * (false) mid-blow, mid-reaction or out cold, and replaces an action already
+   * playing. By default it ends the first tick he moves, and the stride takes
+   * over. With `faceX`/`faceY` the row is drawn in the view that way and
+   * mirrored to it, but his gameplay facing is left alone: a gesture toward a
+   * pickup must not turn the next sling shot or blow away from the fight.
+   *
+   * Synchronise to it with `onFrame` (a callback on the tick a frame is first
+   * drawn — a hammer's sound on its impact frame) and read positions off the
+   * drawn cell with {@link handWorldPosition}.
+   */
+  playAction(row: HumanRowName, options: HumanActionOptions = {}): boolean {
+    return this.animator.playAction(row, options);
+  }
+
+  /**
+   * Plays one of his rows as a reaction — something done to him: a flinch, a
+   * knockback, a knockdown. It ends any action. A reaction never cuts off his
+   * own blow unless `overridesBlows` is set (a knockdown, a death), which also
+   * plays through a knockout.
+   */
+  playReaction(row: HumanRowName, options: HumanReactionOptions = {}): boolean {
+    return this.animator.playReaction(row, options);
+  }
+
+  /** Ends the playing action, if any; its `onEnd` hears `stopped`. */
+  stopAction(): void {
+    this.animator.stopAction();
+  }
+
+  /** Ends the playing reaction, if any; its `onEnd` hears `stopped`. */
+  stopReaction(): void {
+    this.animator.stopReaction();
+  }
+
+  /** Whether an action row is playing. */
+  get isActing(): boolean {
+    return this.animator.isActing;
+  }
+
+  /**
+   * Holds rows warm, up to the frame count each span names, for as long as
+   * `spans` is asked for under `reason` — the frame a moment he can be drawn
+   * in on any tick needs is then baked before that tick. An empty list lets
+   * them go; the cache releases them once they sit unused through its window.
+   * Asked once a tick; the rows are queued only when the set changes and on
+   * a slow refresh, so holding costs nothing between.
+   */
+  standBy(reason: HumanStandbyReason, spans: readonly HumanWarmSpan[]): void {
+    if (spans.length === 0) {
+      this.standbys.delete(reason);
+      return;
+    }
+    const held = this.standbys.get(reason);
+    const due =
+      held === undefined ||
+      !sameSpans(held.spans, spans) ||
+      this.standbyTicks - held.askedAtTick >= STANDBY_REWARM_TICKS;
+    if (!due) return;
+    for (const span of spans) prewarmHumanRow(span.row, span.frames);
+    this.standbys.set(reason, { spans, askedAtTick: this.standbyTicks });
+  }
+
+  /** The falls, held warm while he is low enough that the next blows could floor him. */
+  private standByForFalls(): void {
+    const low = this.isAlive && this.hp < this.maxHp * FALL_STANDBY_HEALTH_SHARE;
+    this.standBy('fall', low ? FALL_SPANS : []);
+  }
+
+  /**
+   * Where the tip of one of his hands is in the world this tick, read off the
+   * solved rig of the cell being drawn — mirrored with it and scaled to his
+   * tile — so a thing thrown on a release frame leaves the hand that is drawn
+   * throwing it.
+   */
+  handWorldPosition(side: HumanHandSide): Pt {
+    const drawn = this.spriteSelection();
+    const inTile = handTipInTile(drawn.row, drawn.frame, drawn.flipX, side);
+    return { x: this.x + inTile.x * this.tileSize, y: this.y + inTile.y * this.tileSize };
+  }
+
+  /**
+   * Where the heel of the Smush being drawn meets the floor, in tile
+   * fractions from his tile origin — read off the row actually playing, so
+   * the blast lands under the foot in every view, standing or on the hop.
+   * His tile's own ground point when no stamp is being drawn.
+   */
+  smushStampTile(): Pt {
+    return stampPointOf(this.spriteSelection()) ?? SMUSH_FALLBACK_STAMP_TILE;
+  }
+
+  /**
+   * Which grind of the Smush being drawn is on screen this tick, counted from
+   * 1 on the first frame after the stamp that the heel is ground into the
+   * floor; null on every other frame, and when no Smush is drawn. Read off the
+   * row actually playing, so the blast's grind lands on the picture's.
+   */
+  smushGrindBeat(): number | null {
+    const drawn = this.spriteSelection();
+    const row: HumanRowMeta = HUMAN_ROW_TABLE[drawn.row];
+    const grinds = row.eventFrames?.grind ?? [];
+    const beat = grinds.indexOf(drawn.frame);
+    return beat < 0 ? null : beat + 1;
+  }
+
+  /**
+   * Paces his legs from the ground he actually covered since the last tick,
+   * whichever system moved him — his own input, the companion follow, a
+   * scripted walk. Only while he means to be walking: a shove or a knockback
+   * with his feet still is not a stride.
+   */
+  override tickTimers(): void {
+    super.tickTimers();
+    const covered = Math.hypot(this.x - this.lastTickX, this.y - this.lastTickY);
+    this.lastTickX = this.x;
+    this.lastTickY = this.y;
+    this.lowerSlingshotIfStale();
+    this.standbyTicks++;
+    this.standByForFalls();
+    this.tickReactions(covered);
+    this.animator.tick({
+      groundPx: this.isMoving ? covered : 0,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      knockedOut: this.isKnockedOut,
+      clock: this.strikeClock(),
+    });
+  }
+
+  /**
+   * Advances only an action that is playing, with him standing where he is —
+   * for a scene whose world is halted under a conversation he should still be
+   * seen talking through. Nothing else of his moves on: the scene has stopped
+   * his timers, and an action is the one thing on him that is only a picture.
+   */
+  tickActionWhileHalted(): void {
+    if (!this.animator.isActing) return;
+    this.animator.tick({
+      groundPx: 0,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      knockedOut: this.isKnockedOut,
+      clock: this.strikeClock(),
+    });
+  }
+
+  /**
+   * Advances only the fall he died in, with him lying where he fell — for a
+   * scene whose world has stopped under the death screen, which fades in over
+   * him while he goes down. Nothing about the defeat itself moves on.
+   *
+   * Any action still playing is abandoned first, before the fall can
+   * interrupt it: an interrupted gesture carries out what it was holding back
+   * (a Protective Shell heals him to full, a chest shows its loot), and under
+   * the death screen none of that may happen.
+   */
+  tickReactionWhileDefeated(): void {
+    this.animator.abandonActionForDefeat();
+    this.tickReactions(0);
+    this.animator.tickReactionOnly();
+  }
+
+  private tickReactions(coveredPx: number): void {
+    this.reactions.tick({
+      alive: this.isAlive,
+      active: this.isActive,
+      knockedOut: this.isKnockedOut,
+      stuck: this.hasStatus('stuck'),
+      facingX: this.facingX,
+      facingY: this.facingY,
+      coveredPx,
+      knockbackActive: this.knockbackFramesRemaining > 0,
+    });
+  }
+
+  override takeDamage(amount: number, source?: DamageSource): boolean {
+    const landed = super.takeDamage(amount, source);
+    // Any wound puts the fidgets off; only a blow from something raises his guard.
+    if (landed) this.animator.noteCombat(source?.kind === 'mob');
+    // Only a blow flinches him: a burn or poison tick is a steady hurt, and a
+    // killing blow is the fall's to draw.
+    if (landed && source?.kind === 'mob' && this.isAlive) {
+      // `from` is the striker's tile centre, so the side is measured from his.
+      const tileCentre = {
+        x: this.x + this.tileSize * HumanPlayer.SPRITE_HORIZONTAL_OFFSET,
+        y: this.y + this.tileSize * HumanPlayer.SPRITE_VERTICAL_OFFSET,
+      };
+      this.reactions.hurt(source.from, tileCentre, this.facingX, this.facingY);
+    }
+    return landed;
+  }
+
+  /** A shove also stumbles him backward, for as far as it carries him. */
+  override applyKnockback(dirX: number, dirY: number, distancePx: number, frames: number): void {
+    super.applyKnockback(dirX, dirY, distancePx, frames);
+    if (this.isAlive && !this.isKnockedOut) this.reactions.knockback(dirX, dirY, distancePx);
+  }
+
+  /** A level gained: a fist clench and a look at the ceiling, if he is standing about. */
+  protected override onLevelGained(): void {
+    super.onLevelGained();
+    this.animator.celebrateLevelUp();
   }
 
   updateAttack() {
@@ -404,12 +911,13 @@ export class HumanPlayer extends Player {
    * directly and needs this entry point.
    */
   resetCombatState(): void {
-    this.attackPhase = null;
     this.attackTimer = 0;
     this.smushTimer = 0;
     this.smushCooldown = 0;
     this.autoAttackCooldown = 0;
     this.autoTarget = null;
+    this.reactions.reset();
+    this.animator.reset();
     this.clearAirborneAttacks();
     this.slingshotCooldown = 0;
     this.pendingSlingshotFireSound = false;
@@ -444,7 +952,7 @@ export class HumanPlayer extends Player {
       if (this.autoAttackCooldown > 0) {
         this.autoAttackCooldown--;
       } else {
-        this.triggerAttack();
+        this.triggerAttack(this.autoTarget);
         this.autoAttackCooldown = this.AUTO_ATTACK_COOLDOWN;
       }
     }
@@ -468,21 +976,13 @@ export class HumanPlayer extends Player {
       drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
     }
 
-    drawHumanSprite(ctx, sx, sy, s, {
-      attackPhase: this.attackPhase,
-      attackTimer: this.attackTimer,
-      attackFrames: this.ATTACK_FRAMES,
-      smushTimer: this.smushTimer,
-      smushFrames: this.SMUSH_FRAMES,
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-    });
+    this.syncAppearance();
+    const selection = this.spriteSelection();
+    const carry = this.isWieldingSlingshot && this.isAlive ? carriedSlingshotOf(selection) : null;
+    if (carry?.behindFigure === true) drawCarriedSlingshot(ctx, carry, sx, sy, s);
+    drawHumanSelection(ctx, sx, sy, s, selection);
+    if (carry?.behindFigure === false) drawCarriedSlingshot(ctx, carry, sx, sy, s);
 
-    if (this.isWieldingSlingshot) {
-      drawSlingshotWield(ctx, sx, sy, s, this.facingX, this.facingY);
-    }
     drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
 
     this.renderHealthBar(ctx, sx, sy - HumanPlayer.HEALTH_BAR_Y_OFFSET);

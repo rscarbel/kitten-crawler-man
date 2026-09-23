@@ -29,6 +29,7 @@ import {
   shellTileSizeFor,
 } from '../sprites/art/protectiveShellFigure';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { standByForShellCast } from '../creatures/humanGestures';
 
 interface ActiveShell {
   x: number;
@@ -451,6 +452,7 @@ export class SpellSystem implements GameSystem {
     const mobGrid = ctx.roster.grid;
 
     this._shellCooldown = human.tickCooldown(this._shellCooldown);
+    standByForShellCast(human, this._shellCooldown === 0);
 
     if (this.activeShell) {
       // Clear heal boost from previous frame; re-applied below if ally is still inside

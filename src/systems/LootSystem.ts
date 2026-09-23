@@ -2,6 +2,7 @@ import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { LootDrop } from '../creatures/Mob';
 import { HumanPlayer } from '../creatures/HumanPlayer';
+import { playPickupGesture } from '../creatures/humanGestures';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -316,6 +317,7 @@ export class LootSystem implements GameSystem {
           for (const player of party) {
             if (this.isWithinPickupRange(player, loot, DROPPED_PICKUP_RANGE)) {
               this.creditLoot(loot, player, party);
+              playPickupGesture(player, loot);
               break;
             }
           }
@@ -324,6 +326,8 @@ export class LootSystem implements GameSystem {
             if (player !== active && companion.autoTarget?.isAlive) continue;
             if (this.isWithinPickupRange(player, loot, LOOT_PICKUP_RANGE)) {
               this.creditLoot(loot, loot.owner, party);
+              // The one who stooped for it, not the one it was credited to.
+              playPickupGesture(player, loot);
               break;
             }
           }
@@ -370,6 +374,7 @@ export class LootSystem implements GameSystem {
       if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
         const recipient = (loot.droppedByPlayer ?? false) ? active : loot.owner;
         this.creditLoot(loot, recipient, [active, inactive]);
+        playPickupGesture(active, loot);
         return true;
       }
     }

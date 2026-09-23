@@ -51,6 +51,11 @@ const HOOK_IMPACT_FRAME = tusklingImpactFrame(TUSKLING_HOOK_FRAMES, TUSKLING_HOO
 type TuskState = 'idle' | 'stalking' | 'hooking' | 'charge_windup' | 'charging' | 'cooldown';
 
 export class Tuskling extends Mob {
+  /** Knee-high to a man, so a crawler kicks or stomps it rather than punching. */
+  override get lowProfile(): boolean {
+    return true;
+  }
+
   readonly xpValue = 18;
   protected coinDropMin = 2;
   protected coinDropMax = COIN_DROP_MAX;

@@ -54,7 +54,7 @@ import {
   KRAKAREN_TENTACLE_STATES,
 } from '../src/sprites/krakarenTentacleSprite.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
-import { FIGURE_BYTE_BUDGET } from '../src/sprites/figure/figureFrameCache.js';
+import { figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
 import { bakeFigureCell } from './figureSheet.js';
 import {
   distinctFrameFailures as sharedDistinctFrameFailures,
@@ -1219,16 +1219,17 @@ function gateWarmRowBudget(subject: Subject): void {
   }
   failUnlessMeasured('G14', measured, 'declared states for the warm-row budget');
   const megabytes = (value: number): string => (value / BYTES_PER_MEGABYTE).toFixed(2);
+  const figureBudget = figureByteBudgetFor(subject.def);
   console.log(
     `  G14 warm rows: ${subject.def.id}'s widest state is ${widestState} at ` +
-      `${megabytes(widest)} MB of a ${megabytes(FIGURE_BYTE_BUDGET)} MB per-figure ceiling; ` +
+      `${megabytes(widest)} MB of a ${megabytes(figureBudget)} MB per-figure ceiling; ` +
       `every state warm at once is ${megabytes(total)} MB`,
   );
-  if (widest > FIGURE_BYTE_BUDGET) {
+  if (widest > figureBudget) {
     fail(
       'G14',
       `${subject.def.id}'s ${widestState} is ${megabytes(widest)} MB, over the ` +
-        `${megabytes(FIGURE_BYTE_BUDGET)} MB the cache will hold for one figure — it can never be ` +
+        `${megabytes(figureBudget)} MB the cache will hold for one figure — it can never be ` +
         `admitted and every frame of it falls back to a direct paint`,
     );
   }

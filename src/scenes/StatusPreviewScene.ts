@@ -274,8 +274,6 @@ export class StatusPreviewScene extends Scene {
         attackPhase: null,
         attackTimer: 0,
         attackFrames: 1,
-        smushTimer: 0,
-        smushFrames: 1,
         walkFrame: this.walking ? this.frame * WALK_FRAME_SPEED : 0,
         isMoving: this.walking,
         facingX: 1,

@@ -265,22 +265,25 @@ const SNAP_DOT_PRODUCT_THRESHOLD = 0.25;
 const SNAP_TILE_CENTER_OFFSET = 0.5;
 
 /**
- * Rotate the player to face the nearest live mob in their front cone with
- * line of sight, within `range` pixels. No-op when nothing qualifies.
+ * Rotate the player to face the nearest live hostile mob in their front cone
+ * with line of sight, within `range` pixels, and return it. No-op returning null
+ * when nothing qualifies.
  */
 export function snapFacingToNearestMob(
   player: HumanPlayer | CatPlayer,
   range: number,
   mobGrid: SpatialGrid<Mob>,
   gameMap: GameMap,
-): void {
+): Mob | null {
   const px = player.x + TILE_SIZE * SNAP_TILE_CENTER_OFFSET;
   const py = player.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET;
   let bestDist = range;
   let bestMob: Mob | null = null;
   const nearPlayer = mobGrid.queryCircle(px, py, range);
   for (const mob of nearPlayer) {
-    if (!mob.isAlive) continue;
+    // Allies share the mob grid: turning to swing at a companion is a miss at
+    // best, and a blow thrown at the one enemy beside it goes the wrong way.
+    if (!mob.isAlive || !mob.isHostile) continue;
     const dx = mob.x + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - px;
     const dy = mob.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - py;
     const dist = Math.hypot(dx, dy);
@@ -308,6 +311,7 @@ export function snapFacingToNearestMob(
     player.facingX = n.x;
     player.facingY = n.y;
   }
+  return bestMob;
 }
 
 /**
@@ -323,8 +327,13 @@ export function triggerPlayerAttack(
   audio: AudioManager | null,
 ): void {
   if (human.isActive) {
-    snapFacingToNearestMob(human, TILE_SIZE * HUMAN_ATTACK_RANGE_TILES, mobGrid, gameMap);
-    human.triggerAttack();
+    const target = snapFacingToNearestMob(
+      human,
+      TILE_SIZE * HUMAN_ATTACK_RANGE_TILES,
+      mobGrid,
+      gameMap,
+    );
+    human.triggerAttack(target);
     if (human.pendingSlingshotFireSound) {
       human.pendingSlingshotFireSound = false;
       // [STAND-IN] The bow release, the library's closest launch cue, until a

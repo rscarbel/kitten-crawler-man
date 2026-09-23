@@ -149,7 +149,13 @@ import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
-import { TreasureChestSystem, isChestOpenable } from '../systems/TreasureChestSystem';
+import {
+  type TreasureChest,
+  TreasureChestSystem,
+  isChestOpenable,
+} from '../systems/TreasureChestSystem';
+import { HumanTalkDriver, openChestWithGesture } from '../creatures/humanGestures';
+import { type Pt } from '../sprites/art/carlArt';
 import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Goblin } from '../creatures/Goblin';
@@ -514,6 +520,17 @@ const PROGRESS_SAVED_TOAST_TEXT = 'Progress Saved...';
 const DESPERADO_TATTOO_NOTICE = 'New tattoo: the Desperado Pass. The Club will know you.';
 /** Its line in the Juicer chest's reward columns — an award, not an inventory item. */
 const DESPERADO_TATTOO_REWARD_LABEL = 'Desperado Pass Tattoo (both crawlers)';
+/** Healing potions the tutorial's treasure chest hands the cat with her Magic Missile tome. */
+const TUTORIAL_CHEST_CAT_POTIONS = 10;
+
+/**
+ * What an opened chest's reward dialog shows, and what dismissing it grants
+ * over and above the loot, which is already handed over when it is shown.
+ */
+interface ChestReward {
+  readonly split: ChestLootSplit | null;
+  readonly onDismissed?: () => void;
+}
 
 const FORCED_TO_HUMAN = new Set<string>([
   'trollskin_shirt',
@@ -868,6 +885,8 @@ export class DungeonScene extends GameplayScene {
   private signDialogTarget: CrawlerSignPlacement | null = null;
   /** Citizen currently frozen mid-conversation; unfrozen once `citizenDialog` closes. */
   private citizenDialogTarget: Townsperson | null = null;
+  /** Keeps Carl talking, turned to whoever he is in conversation with. */
+  private readonly humanTalk = new HumanTalkDriver();
   private noticeBoard: NoticeBoardPanel | null = null;
   private marketPanel: PricedMenuPanel | null = null;
   private fortuneTeller: FortuneTellerPanel | null = null;
@@ -1980,66 +1999,17 @@ export class DungeonScene extends GameplayScene {
 
     // Wire chest opened callback
     this.treasureChests.setOnOpen((chest) => {
-      const tutorial = this.tutorial;
-      if (tutorial !== null && tutorial.state === 'CAT_INSIDE_TREASURE_ROOM') {
-        const catRewardSplit: ChestLootSplit = {
-          humanLoot: { coins: 0, items: [] },
-          catLoot: {
-            coins: 0,
-            items: [
-              { id: 'magic_missile_tome', quantity: 1 },
-              { id: 'health_potion', quantity: 10 },
-            ],
-          },
-          displayLabels: { magic_missile_tome: 'Magic Missile Ability' },
-        };
-        this.chestRewardDialog.open(chest, catRewardSplit, () => {
-          tutorial.onCatRewardDialogDismissed(this.cat);
-          this.bus.emit('rewardGranted', {
-            rewards: [this._makeAbilityReward('magic_missile')],
-          });
-        });
-        this.audio?.play('opening_treasure_chest');
-        return;
-      }
-
-      // Krakaren boss chest: append "Mongo (pet)" to the cat column and trigger the reward dialog
-      if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.krakarenBossRoomIdx) {
-        const baseSplit = chest.loot !== null ? splitChestLoot(chest.loot) : null;
-        this._grantChestLootSplit(baseSplit);
-        this.tutorial?.onChestOpened();
-        const krakarenSplit: ChestLootSplit = {
-          humanLoot: baseSplit?.humanLoot ?? { coins: 0, items: [] },
-          catLoot: baseSplit?.catLoot ?? { coins: 0, items: [] },
-          customCatEntries: ['Mongo (pet)'],
-        };
-        this.chestRewardDialog.open(chest, krakarenSplit, () => {
-          this.mongoSystem.unlocked = true;
-          this.bus.emit('rewardGranted', { rewards: [this._makeMongoReward()] });
-        });
-        this.audio?.play('opening_treasure_chest');
-        return;
-      }
-
-      if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.juicerBossRoomIdx) {
-        const baseSplit = chest.loot !== null ? splitChestLoot(chest.loot) : null;
-        this._grantChestLootSplit(baseSplit);
-        this.tutorial?.onChestOpened();
-        const juicerSplit: ChestLootSplit = {
-          humanLoot: baseSplit?.humanLoot ?? { coins: 0, items: [] },
-          catLoot: baseSplit?.catLoot ?? { coins: 0, items: [] },
-          customHumanEntries: [DESPERADO_TATTOO_REWARD_LABEL],
-        };
-        this.chestRewardDialog.open(chest, juicerSplit);
-        this.audio?.play('opening_treasure_chest');
-        return;
-      }
-
-      const split = chest.loot !== null ? splitChestLoot(chest.loot) : null;
-      this._grantChestLootSplit(split);
-      this.tutorial?.onChestOpened();
-      this.chestRewardDialog.open(chest, split);
-      this.audio?.play('opening_treasure_chest');
+      // The loot is his on the press, so nothing that befalls him while he
+      // heaves the lid can lose it; only the showing waits for the lid.
+      const reward = this.grantChestContents(chest);
+      const chestCentre = {
+        x: chest.tileX * TILE_SIZE + TILE_SIZE / 2,
+        y: chest.tileY * TILE_SIZE + TILE_SIZE / 2,
+      };
+      openChestWithGesture(this.active(), chestCentre, (outcome) => {
+        if (outcome === 'shown') this.showChestReward(chest, reward);
+        else reward.onDismissed?.();
+      });
     });
 
     this.treasureChests.setOnLockedAttempt(() => {
@@ -2298,9 +2268,9 @@ export class DungeonScene extends GameplayScene {
           );
           // Onto the floor when no chest took it — a boss standing outside every
           // boss room the map knows about, or one whose chest is already open.
-          // Tested rather than assumed: this used to discard the drop on the
-          // strength of having called `receiveBossLoot`, whether or not the call
-          // found anything. Still partitioned by owner even down this path — The
+          // Tested rather than assumed: calling `receiveBossLoot` is no proof a
+          // chest took the drop, and a drop nothing took must still land
+          // somewhere. Still partitioned by owner even down this path — The
           // Hoarder's guaranteed Cockroach book is the cat's only reliable
           // source and must never land on the human.
           // `hasLockedBossChest` is asked first because `receiveBossLoot` warns
@@ -2704,6 +2674,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   onExit(): void {
+    this.humanTalk.stop(this.human);
     this.audio?.stopWalkingLoop();
     // Walking into a building mid-river must not leave the wading loop running
     // under the interior: nothing in `BuildingInteriorScene` would ever stop it.
@@ -4178,9 +4149,9 @@ export class DungeonScene extends GameplayScene {
    * Anything that takes the floor away from ordinary play.
    *
    * Derived from the claim registry rather than restated as a second boolean
-   * chain: the two used to be hand-maintained lists of the same overlays, and a
-   * dialog added to one of them and not the other is a menu the world keeps
-   * running underneath. The spider lab's cutscene is the one term with no
+   * chain: two hand-maintained lists of the same overlays drift, and a dialog
+   * added to one of them and not the other is a menu the world keeps running
+   * underneath. The spider lab's cutscene is the one term with no
    * overlay behind it — the quest freezes the floor from inside its own state
    * machine.
    */
@@ -5100,6 +5071,14 @@ export class DungeonScene extends GameplayScene {
     // own click handler, and the prompt it opens is itself one of the gates.
     this.menus.openPendingSkillBookPrompt(this.menus.inventoryPlayer());
 
+    // Ahead of the halt for the same reason: most conversations halt the
+    // world, and he is to be seen talking through them.
+    this.humanTalk.update(this.human, this.humanTalkSpeaker(), this.gameplayHalted);
+
+    // The world stops under the death screen, but the fall he died in plays
+    // out beneath it as it fades in.
+    if (this.gameOver) this.human.tickReactionWhileDefeated();
+
     if (this.gameplayHalted) {
       this.silenceMovementLoops();
       this.marketPanel?.update();
@@ -5526,8 +5505,8 @@ export class DungeonScene extends GameplayScene {
     // The award stack, drawn lowest-priority first so that draw order matches
     // the order `overlayClaims` and `handleClick` rank these same surfaces in.
     // Whichever one is on top is then also the one that owns the keyboard's
-    // focus ring and the one a click reaches — three orders that used to
-    // disagree, which left the topmost dialog visible but un-activatable.
+    // focus ring and the one a click reaches. Were the three orders to
+    // disagree, the topmost dialog would be visible but un-activatable.
     this.menus.renderOverlays(ctx);
     this.achievementUI.renderOverlays(ctx);
     if (this.chestRewardDialog.isOpen) {
@@ -5715,9 +5694,9 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Refreshes and returns the shared per-frame system context. One mutable
-   * object reused across every system and every call in a frame — it used to be
-   * rebuilt (with a fresh `extraTargets` array) twice per frame.
+   * Refreshes and returns the shared per-frame system context: one mutable
+   * object, and one `extraTargets` array, reused across every system and every
+   * call in a frame rather than allocated afresh by each.
    */
   private buildSystemContext(): SystemContext {
     const active = this.active();
@@ -6770,6 +6749,88 @@ export class DungeonScene extends GameplayScene {
             ctx.fillRect(x, y, size, size);
           };
     return { kind: 'ability', name, description, renderIcon };
+  }
+
+  /**
+   * Where the one Carl is in conversation with stands, while a conversation
+   * with somebody is open; null otherwise. Only the conversations whose
+   * speaker this scene can place — a townsperson, Mordecai, the defend-quest
+   * giver.
+   */
+  private humanTalkSpeaker(): Pt | null {
+    const citizen = this.citizenDialogTarget;
+    if (this.citizenDialog?.isOpen === true && citizen !== null) return citizen;
+    const mordecai = this.safeRoom.speakingMordecaiPosition;
+    if (mordecai !== null) return mordecai;
+    if (this.defendQuest.isDialogOpen) return this.defendQuest.questNPC;
+    return null;
+  }
+
+  /**
+   * Hands over what is inside a chest the moment it is opened, and returns
+   * what its reward dialog is to show and what dismissing that dialog grants
+   * (the Mongo unlock, the tutorial's cat reward). The dialog only previews
+   * the loot already handed over, so showing it never grants twice.
+   */
+  private grantChestContents(chest: TreasureChest): ChestReward {
+    const tutorial = this.tutorial;
+    if (tutorial !== null && tutorial.state === 'CAT_INSIDE_TREASURE_ROOM') {
+      return {
+        split: {
+          humanLoot: { coins: 0, items: [] },
+          catLoot: {
+            coins: 0,
+            items: [
+              { id: 'magic_missile_tome', quantity: 1 },
+              { id: 'health_potion', quantity: TUTORIAL_CHEST_CAT_POTIONS },
+            ],
+          },
+          displayLabels: { magic_missile_tome: 'Magic Missile Ability' },
+        },
+        onDismissed: () => {
+          tutorial.onCatRewardDialogDismissed(this.cat);
+          this.bus.emit('rewardGranted', {
+            rewards: [this._makeAbilityReward('magic_missile')],
+          });
+        },
+      };
+    }
+
+    const baseSplit = chest.loot !== null ? splitChestLoot(chest.loot) : null;
+    this._grantChestLootSplit(baseSplit);
+    this.tutorial?.onChestOpened();
+
+    if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.krakarenBossRoomIdx) {
+      return {
+        split: {
+          humanLoot: baseSplit?.humanLoot ?? { coins: 0, items: [] },
+          catLoot: baseSplit?.catLoot ?? { coins: 0, items: [] },
+          customCatEntries: ['Mongo (pet)'],
+        },
+        onDismissed: () => {
+          this.mongoSystem.unlocked = true;
+          this.bus.emit('rewardGranted', { rewards: [this._makeMongoReward()] });
+        },
+      };
+    }
+
+    if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.juicerBossRoomIdx) {
+      return {
+        split: {
+          humanLoot: baseSplit?.humanLoot ?? { coins: 0, items: [] },
+          catLoot: baseSplit?.catLoot ?? { coins: 0, items: [] },
+          customHumanEntries: [DESPERADO_TATTOO_REWARD_LABEL],
+        },
+      };
+    }
+
+    return { split: baseSplit };
+  }
+
+  /** A chest's lid is up: show what came out of it. */
+  private showChestReward(chest: TreasureChest, reward: ChestReward): void {
+    this.chestRewardDialog.open(chest, reward.split, reward.onDismissed);
+    this.audio?.play('opening_treasure_chest');
   }
 
   private _grantChestLootSplit(split: { humanLoot: LootDrop; catLoot: LootDrop } | null): void {

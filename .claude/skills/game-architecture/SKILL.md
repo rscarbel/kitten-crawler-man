@@ -56,6 +56,26 @@ quest behind it at all — it points at the town's own furniture. See `add-quest
 
 `Player` (`src/Player.ts`, abstract: position, HP, stats, status effects, walk animation) → `HumanPlayer`, `CatPlayer`, and `Mob` (`src/creatures/Mob.ts`, abstract: aggro, A* pathfinding, LOS, health bar, loot). All enemies extend `Mob`. See the `add-creature` skill.
 
+### Carl's animation
+
+`HumanPlayer` never chooses a row itself; four modules do, and systems never draw him.
+
+- **`HumanAnimator`** (`src/sprites/humanAnimator.ts`) owns which row he is drawn in and how far through it. `HumanPlayer` feeds it once a tick — ground actually covered (measured from position, not `isMoving`), facing, knockout, the strike and Smush timers — and `spriteSelection()` returns the row, frame and mirroring `drawSelf` paints. It is tick-driven and seeded, so the art gates replay it exactly. It owns:
+  - **Row choice from metadata**, never names: the view comes from `viewForFacing` (`src/sprites/humanSprite.ts`), a strike family is "the strikes in this view", chosen by target (low, tall, downed, far) and combo slot within `COMBO_WINDOW_TICKS`.
+  - **The gait**: walk or run by smoothed measured speed, phase advanced by radians per pixel covered, starts and stops cut only where the legs already agree (a stride settles to the frame its stop begins from).
+  - **Moving strikes**: on the move it never throws a standing blow; it picks the travelling version whose legs begin nearest the stride on screen, and a Smush becomes a hop.
+  - **Latched facing**: a blow or Smush latches its facing and row for the whole swing; `latchedFacing` feeds `HumanPlayer.strikeFacingX/Y`, and the hit is resolved along it, so the damage goes where the drawn fist goes however the stick is steered mid-swing.
+  - **Standing**: the guard held after any blow given or taken, its drop to the idle, fidgets after 6–12 s of quiet (suppressed after damage), the level-up gestures.
+  - **Scripted rows**: `playAction` / `playReaction` / `stopAction` / `stopReaction` (exposed on `HumanPlayer`), with `loop`, `holdLastFrame`, `faceX/Y`, `cancelOnMove`, `progress`, `onFrame` (callbacks on the tick a frame is first drawn — pass the row's `eventFrames`, never copied numbers) and `onEnd(reason)`. Priority, highest first: a reaction flagged `overridesBlows` (knockdown, death); a blow or Smush; a reaction; an action; standing and moving. An action is refused mid-blow, mid-reaction or knocked out, and by default ends the tick he moves.
+  - **Warming** the rows it is about to need through `warmRow`.
+- **`HumanPlayer`** exposes `handWorldPosition(side)` (the hand tip read off the solved rig of the cell being drawn, so a thrown thing leaves the drawn hand), `smushStampTile()`, `standBy(reason, spans)` for rows that must be warm before a moment that can come on any tick, and `syncAppearance()`.
+- **`HumanReactionDirector`** (`src/sprites/humanReactions.ts`) reads the player's state once a tick and asks for the matching reaction row — death over going down and lying out cold, over getting up, over the stumble (paced by how far the shove carried him), over the flinch (front or behind), over the struggle. It never draws him and never changes what happens to him.
+- **`humanGestures`** (`src/creatures/humanGestures.ts`) is how systems ask for a gesture outside a fight — shell cast, drink, pickup, chest open, talk (`HumanTalkDriver`). Systems tell the player what is happening; they never draw him. Where gameplay waits on a gesture (the dome on the palm's landing, the chest's contents once the lid is up) the wait is only as long as the picture, and a refused or interrupted gesture runs the gameplay at once. Systems with their own rows (barricade building, dynamite, repair, placing gym kit) call `human.playAction` directly with the view's row from the tables in `humanFigure.ts`.
+- **Appearance**: what he wears is read off his equipment and applied through `setHumanAppearance` in `humanSprite.ts`, which swaps the active outfit figure and releases the old one's cells. The slingshot carried while wielded is a runtime overlay (`src/sprites/slingshotCarrySprite.ts`), because the cells are shared by every state, wielding or not.
+- **`?human`** (`src/scenes/HumanPreviewScene.ts`, `?human=<row>`) plays one row at the game's real pacing at three sizes, beside a live `HumanPlayer` driven through a fixed script.
+
+The painter, the row table and the gates are in the `bipedal-figure` skill (`references/carl.md`).
+
 ### Mob levels and tactics
 
 A mob is levelled once, at spawn: `applyMobLevel` multiplies its stats through the curves in `src/creatures/mobLevelScaling.ts` (the only place level math lives), then `applySpawnDifficulty` (`src/core/difficultyProfiles.ts`) stamps the profile's reward scale and rolls its tactics traits. Every spawn site calls both, in that order. The curves are held to an HP-share-per-fight target by `verify:difficulty-curve`; the reference crawler it measures against is `src/core/referenceCrawler.ts`.

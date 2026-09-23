@@ -7,7 +7,7 @@
  * Anatomy, palette and every stroke of paint live in `tusklingArt.ts` and
  * `tusklingGore.ts`.
  *
- * The gait is Carl's, in `humanFigure.ts`, scaled to this creature's much
+ * The gait is Carl's, in `human/locomotion.ts`, scaled to this creature's much
  * shorter leg: stance is a constant-rate backward slide so the contact rolls
  * rather than skates, swing is a keyed tuck -> pass -> reach, and the pelvis
  * *drops* at contact so the IK never clamps. Arms swing from joint angles, not

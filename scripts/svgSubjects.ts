@@ -159,10 +159,15 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
+    // The one raster exception: Carl's outline, cast shadows and bounce rim are
+    // pixel morphology — the silhouette dilated and eroded by whole-pixel blits
+    // and `destination-out` compositing on a fixed-density layer — with no path
+    // for the recorder to capture. His export is that finished layer embedded
+    // as an `<image>` at the layer's own resolution, not scalable art.
     name: 'carl',
     views: async (frame) => {
       const { drawCarlFront, drawCarlBack, drawCarlSide } =
-        await import('../src/sprites/art/carlArt.js');
+        await import('../src/sprites/art/carl/figure.js');
       const { HUMAN_ROWS } = await import('../src/sprites/art/humanFigure.js');
       return sheetViews(
         HUMAN_ROWS,

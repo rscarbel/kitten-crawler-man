@@ -74,6 +74,16 @@ look at cannot be different art.
 - Multi-layer sprites (e.g. goblin body + weapon overlay): separate manifest keys drawn at the same frame — see `src/sprites/goblinSprite.ts`.
 - Reference shape (`src/sprites/ratSprite.ts`): attack anim → `attack` state via `progressFrameIndex`; moving → `walk` via `walkFrameIndex`; else `idle` frame 0. `flipX = facingX < 0`.
 
+## Painted figures and the frame cache
+
+Creatures are not sheets at all: each is a `FigureDef` (`src/sprites/figure/figureDef.ts`) whose `paintFrame` is baked into cells on demand by `src/sprites/figure/figureFrameCache.ts` (`drawFigureCached`). The `bipedal-figure` skill owns the painter pipeline; these are the cache contracts a figure opts into or must respect:
+
+- **Per-figure budget.** Every figure's cells are held to a 24 MB default under a 96 MB global ceiling. `FigureDef.budgetMegabytes` replaces the default for one figure, and is legitimate only for a figure on screen almost every frame whose rows that must stay warm _together_ (locomotion, idle, whatever it is doing now) outgrow the default on their own. It never raises the global ceiling, so the room comes out of every other figure's share. Anything that checks a figure's bytes — admission, gates — goes through `figureByteBudgetFor(def)`, never `FIGURE_BYTE_BUDGET`, which only the cache's own gates read. Carl is the one figure that declares one (56 MB), gated by G9b.
+- **`skipSupersample`.** Cells are normally painted at twice the density and downsampled. A figure that composes itself on a scratch surface at whatever density it is painted at, with whole-pixel effects (a one-pixel outline, a two-pixel cast shadow), sets this: its edges are already antialiased, and supersampling would compose four times the pixels only to smear those effects into half-pixel blurs.
+- **Outfit variants and `releaseFigure`.** A cell is keyed on `(figure, state, frame)` and shared by every draw, so a closed set of looks is a set of figures, each with its own id and the same rows. Only the variant on screen should be resident: `releaseFigure(def)` drops every cell and queued prewarm of a replaced figure at once, instead of waiting out `IDLE_FRAMES_BEFORE_RELEASE` with two working sets side by side. Carl's `setHumanAppearance` releases the old outfit and prewarms the new one; anything that queued rows for the old outfit must ask again.
+- **`prewarmFigureState(def, state, frameLimit?)`.** `frameLimit` warms only a row's first frames — a blow's wind-up up to its impact frame — so the rest can bake while those play. Repeated requests for the same row merge to the larger limit.
+- **A throwing painter cannot poison later cells.** When a painter throws mid-bake, the cache discards the scratch surface it was painting on (a `save()` of the painter's own may still hold a clip and an alpha under the cache's restore) and rethrows; the next cell gets a fresh surface. `gates:figure-cache` asserts it. Painters should still restore their own state in `try/finally` — `withClip` in `src/sprites/art/softShade.ts` does.
+
 ## Animation cadence
 
 A sprite row is sampled by however many game ticks the motion driving it lasts.

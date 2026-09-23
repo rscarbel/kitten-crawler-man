@@ -21,8 +21,10 @@ durable description of that architecture and the obligations it puts on a
 figure; read it once before your first conversion or new figure.
 
 > **Carl is the only figure in this game whose movement is convincing.**
-> `src/sprites/art/carlArt.ts` + `src/sprites/art/humanFigure.ts` are the _sole_
-> reference for gait, limb motion, weight, and pose authoring. The goblin and
+> His painter (`src/sprites/art/carl/`), his choreography
+> (`src/sprites/art/human/`) and his row table (`src/sprites/art/humanFigure.ts`)
+> are the _sole_ reference for gait, limb motion, weight, and pose authoring —
+> `references/carl.md` maps them file by file. The goblin and
 > clown pipelines are cited here **only** for build structure — gate shapes,
 > harness modes, prop silhouette — and their walks, idles and attacks are
 > explicitly not a model to copy or measure against. If a motion question comes
@@ -40,10 +42,17 @@ not invent a new one. The Juicer is the worked bipedal example end to end.
 
 | File                           | Job                                                                                                                                                                                                         | Reference implementations                                  |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `src/sprites/art/<x>Art.ts`    | **The painter.** Palette ramps, proportions in tile units, the view table, the pose interface, the IK solver, and one `draw<Name><View>` per view over one shared pose type. Knows nothing about animation. | `carlArt.ts` — the rig to copy; `juicerArt.ts`             |
+| `src/sprites/art/<x>Art.ts`    | **The painter.** Palette ramps, proportions in tile units, the view table, the pose interface, the IK solver, and one `draw<Name><View>` per view over one shared pose type. Knows nothing about animation. | `carl/rig.ts` — the rig to copy; `juicerArt.ts`            |
 | `src/sprites/art/<x>Figure.ts` | **Choreography plus the `FigureDef`.** One pose function per row, the row table, the cell geometry constants, gore-piece placement, `paintFrame(ctx, state, frame)`, and the exported `<X>_FIGURE`.         | `humanFigure.ts`, `juicerFigure.ts`                        |
 | `scripts/gates-<x>.ts`         | **The art gates.** Paints cells from the `FigureDef` and measures them, plus pose-stream gates that need no pixels. Accumulates failures and exports `<x>GateFailures()`.                                   | `gates-juicer.ts` (~19 gates), `gates-goblins.ts`          |
 | `scripts/render-<x>.ts`        | **The review harness.** Runs the gates **first**, then bakes a labelled contact sheet with `bakeFigureSheet` into `preview/`. This is the only way the art gets judged.                                     | `render-juicer.ts`, `render-human.ts`, `render-goblins.ts` |
+
+A figure that outgrows one painter file splits it by concern rather than
+growing it: Carl's painter is a directory (`carl/` — geometry, palette,
+proportions, rig, paint primitives, one file per body part, gear, props, and
+`figure.ts` for draw order) and his choreography another (`human/`, one file per
+row family, plus timing, scale and the joint probe). The four jobs above are
+unchanged; `references/carl.md` has the layout.
 
 `src/sprites/<x>Sprite.ts` is the runtime wrapper: it keeps its exported
 signature and calls `drawFigureCached(ctx, <X>_FIGURE, state, frame, sx, sy, tileSize, opts)`.
@@ -57,7 +66,13 @@ Wire `"render:<x>": "tsx scripts/render-<x>.ts"` in `package.json`. There is no
 ### Shared infrastructure
 
 - `src/sprites/figure/figureDef.ts` — `FigureDef`, `FigureStateDef`,
-  `figureStates(record)`, `figureFrameCount(def, state)`, `FigurePainter`.
+  `figureStates(record)`, `figureFrameCount(def, state)`, `FigurePainter`, and
+  the two opt-ins `budgetMegabytes` and `skipSupersample` (see `add-sprite`).
+- `src/sprites/art/carlArt.ts` — the small maths and colour helpers every
+  painted figure imports (`Pt`, `lerp`, easing, `hump`, `mix`, `rgba`,
+  `clampAlpha`). Carl's own painter is not in it.
+- `src/sprites/art/softShade.ts` — soft fills, layered creases, tapered crease
+  gradients and a throw-safe clip; `references/carl.md` says why each exists.
 - `src/sprites/figure/figureFrameCache.ts` — `drawFigureCached`,
   `drawFigureCachedRotatedCenter`, `prewarmFigureState`, `figureInkBounds`.
   Its `beginFigureFrame` / `flushFigureFrameCache` are already wired into
@@ -105,10 +120,20 @@ sheet the reviewer approved.
   `prewarmFigureState` or `figureInkBounds` from inside a painter — the cache is
   mid-bake when it calls you, and re-entering it stores a half-painted cell as
   finished.
-- **A painter needing a scratch surface pins its own density.** Density is the
-  caller's transform, so reading `ctx.getTransform()` would make the painter
-  depend on caller state. Compose the whole cell at a density the painter names
-  itself and blit it down once — which also composes `globalAlpha` correctly.
+- **A painter may read one thing off its context's transform: the density it
+  is painting at.** The scale (and the sub-pixel phase of the translation, to
+  lay a scratch grid on the target's pixels) is the size the figure is being
+  drawn at, which a painter drawing straight into its context honours by
+  construction; reading it is not reading caller state provided the output is
+  the same figure at every density. Anything else on the transform is caller
+  state. A painter that composes on a scratch surface (Carl does, because the
+  outline, the cast shadows and the rim are functions of the finished
+  silhouette) allocates it at that density, sizes every whole-pixel effect in
+  cell pixels converted by it, and blits it down once — which also composes
+  `globalAlpha` correctly. Such a figure sets `skipSupersample` on its
+  `FigureDef`, because its edges are already antialiased and a supersampled
+  bake would only smear its one-pixel effects. Inside its own surface a part
+  may read that surface's transform freely (`onePixel` in `carl/head.ts`).
 
 **Art modules under `src/sprites/art/` are typed against the DOM
 `CanvasRenderingContext2D`**, never node-canvas's: declare
@@ -134,27 +159,36 @@ Two lint rules bite modules that live under `src/`:
 1. **Read `references/anatomy.md` first.** It is the trap catalog, organised by
    body part. Skimming it costs minutes; rediscovering it costs review rounds.
 2. **Pin the proportions.** Height in tiles, heads-tall, then every joint height
-   derived from those two. Carl is `FIGURE_HEIGHT = 2.03` at `HEADS_TALL = 4.8`
-   in `carlArt.ts`. **Never derive a body part from the head** — a game figure's
+   derived from those two. Carl is `FIGURE_HEIGHT = 2.03` at `HEADS_TALL = 5.5`
+   in `carl/proportions.ts`. **Never derive a body part from the head** — a game figure's
    head is deliberately oversized, so any life-drawing ratio hung off it inflates
    (`references/anatomy.md#proportions`).
 3. **Write the `ViewSpec` table before any drawing code.** Head-on and edge-on
    are not one figure with a multiplier: a profile needs _two_ lateral factors
    (`lateral` for limb roots, `girth` for torso width) plus `chestTaper`,
-   `hipDepth`, `armSpread`, `crotchNotch`, and the `showsFace`/`showsBack` flags.
-   See the `ViewSpec` interface and the `VIEWS` table in `carlArt.ts`.
+   `hipDepth`, `armSpread`, `crotchNotch`, the `showsFace`/`showsBack` flags,
+   and `mirrored`. See the `ViewSpec` interface and the `VIEWS` table in
+   `carl/rig.ts`. **Decide handedness here**: author every pose with the
+   figure's right side at +X (as seen from behind) and let the head-on-front
+   view reflect it (`mirrored`, `poseAsDrawn`), or a right-handed throw swaps
+   hands when he turns round and no symmetric gate will notice.
 4. **Define the pose interface as targets, not angles — with FK escape hatches.**
    Hand/foot positions the IK reaches for is the right default; but a walking arm
    _must_ be FK (`ArmAngles`), because IK from a hand target sweeps both segments
    together and the forearm flails. Both mechanisms coexist in `CarlPose`; the
    angles win for that arm when set.
 5. **Author `restingPose()` and write every animation as edits to it.**
-6. **Choreograph rows in `<x>Figure.ts`.** Walk rows at 16 frames, most others at
-   8; more frames buy smoothness only. Pace motion with a _phase speed_ on the
-   player/mob, never by scaling the frame index
+6. **Choreograph rows in `<x>Figure.ts`.** Walk and run cycles at 16 frames,
+   strikes at 8; more frames buy smoothness only. Pace a gait by the **ground
+   actually covered** — radians per world pixel derived from the stride the leg
+   geometry allows — never by time and never by scaling the frame index
    (`references/anatomy.md#timing`). Keep the row table, the frame counts and the
-   impact frames in this one module and import them everywhere else — a constant
-   duplicated into a runtime module is a constant that drifts.
+   impact frames in one module and import them everywhere else — a constant
+   duplicated into a runtime module is a constant that drifts. Put what the
+   runtime needs to know about a row in the table's metadata (role, locomotion,
+   entry/exit foot phase, impact and event frames, strike tags) and choose rows
+   from that, never from their names; Carl's table is the model
+   (`references/carl.md#the-row-table`).
 7. **Declare the `FigureDef`**: `frameWidth`, `frameHeight`, `tileX`, `tileY`,
    `tileScale`, `states: figureStates({...})`, `paintFrame`. A gore piece is not
    a row — each piece takes its own one-frame state.
@@ -193,7 +227,9 @@ Two lint rules bite modules that live under `src/`:
     bars and aggro markers key off it and _will_ be wrong after a redraw
     (`references/anatomy.md#anchor`).
 13. **Validation gates:** `npm run typecheck`, `npm run lint`, `npm run format`,
-    `npm run gates:figure-cache`, `npm run render:<x>` must all exit 0.
+    `npm run gates:figure-cache`, `npm run render:<x>` must all exit 0 (for
+    Carl, `render:human` gates three outfits and `bench:figure-paint` gates his
+    slowest cell).
     `npm run format` is prettier over the whole repo — while other agents are
     mid-edit, format your own paths only and finish with
     `npx prettier --check --ignore-unknown .`.
@@ -332,14 +368,21 @@ Three more that are not about vacuity but bite the same way:
   ceiling binds only on a figure holding its entire declared set at once. The
   number that decides whether it fits is the **widest state's** bytes, measured
   over every declared state, gore pieces included. Report an overrun; do not
-  raise the ceiling. And the supersampled surface is scratch, not residency —
-  the resident cell is the declared cell at bake scale.
+  raise the ceiling. The one exception is a figure on screen almost every frame
+  whose rows that must stay warm _together_ outgrow the default: it declares
+  `FigureDef.budgetMegabytes`, and a gate measures that working set against it
+  (Carl declares 56 MB; G9b). And the supersampled surface is scratch, not
+  residency — the resident cell is the declared cell at bake scale.
 
 ## References
 
+- `references/carl.md` — Carl file by file: the painter and choreography
+  layout, soft shading, palette and outline conventions, the row table, the
+  distance-driven gait, moving strikes, handedness, pose fields, outfits, the
+  three-quarter-view finding, and the frozen anchors.
 - `references/anatomy.md` — the trap catalog: proportions, arms, legs, hands,
   feet, head/hair, clothing, views, depth shading, anchoring.
-- `references/gates.md` — the gate list, what each catches, and the ones that are
-  blind to what.
-- `references/review.md` — the blind image-review loop, part crops, blind naming
-  tests, and the diagnostic harness modes.
+- `references/gates.md` — the gate list, what each catches, the ones that are
+  blind to what, and Carl's G1–G27 with G9b.
+- `references/review.md` — the self-examination loop, the blind image-review
+  loop, part crops, blind naming tests, and the diagnostic harness modes.

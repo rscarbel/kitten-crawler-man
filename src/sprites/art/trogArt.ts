@@ -19,12 +19,12 @@
  *
  * Coordinates are tile units with the origin at the point between the feet and
  * +Y pointing down the screen, so heights above the ground are negative — the
- * same frame `carlArt.ts` uses, and for the same reason: the generator
+ * same frame Carl's rig (`carl/rig.ts`) uses, and for the same reason: the generator
  * translates to that ground point, scales by one tile, and calls a painter.
  *
  * The rig's structure — the `ViewSpec` table, hand/foot targets solved by a
  * two-bone IK with FK escape hatches for swinging arms, and poses written as
- * edits to one resting pose — is taken from `carlArt.ts`, the only figure in
+ * edits to one resting pose — is taken from `carl/rig.ts`, the only figure in
  * this game whose movement convinces. The anatomy on top of it is not.
  */
 

@@ -16,15 +16,24 @@
 
 import { createCanvas } from 'canvas';
 
+import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import { drawSmushBlast, SMUSH_BLAST_FRAMES } from '../src/sprites/smushBlast.js';
+import {
+  drawSmushBlastAir,
+  drawSmushBlastGround,
+  SMUSH_BLAST_FRAMES,
+} from '../src/sprites/smushBlast.js';
 
 /** Level 1 is 3.5 tiles of outer radius; the level cap is 8. */
 const LEVEL_ONE_RADIUS_PX = 112;
 const CAPPED_RADIUS_PX = 256;
 const FULL_POWER_RADIUS_PX = CAPPED_RADIUS_PX;
 
-const AGES = [0, 3, 6, 10, 14, 20, 28, 38];
+/** Evenly spaced from the stamp to the blast's last frame, both included. */
+const AGE_SAMPLES = 8;
+const AGES = Array.from({ length: AGE_SAMPLES }, (_, index) =>
+  Math.round((index * SMUSH_BLAST_FRAMES) / (AGE_SAMPLES - 1)),
+);
 /**
  * The whole point of the effect is that the ring stops exactly on the damage
  * radius, so the cell has to be big enough to contain that radius — sized to a
@@ -32,6 +41,8 @@ const AGES = [0, 3, 6, 10, 14, 20, 28, 38];
  */
 const CELL_MARGIN_PX = 48;
 const LABEL_HEIGHT = 20;
+const LABEL_INSET_X = 8;
+const LABEL_BASELINE = 14;
 const CHECKER = 32;
 const FLOOR_LIGHT = '#4a4238';
 const FLOOR_DARK = '#3b342c';
@@ -57,7 +68,7 @@ const width = CELL * AGES.length;
 const height = (CELL + LABEL_HEIGHT) * radii.length;
 const canvas = createCanvas(width, height);
 const ctx = canvas.getContext('2d');
-const gameCtx = ctx as unknown as CanvasRenderingContext2D;
+const gameCtx = asGameContext(ctx);
 
 for (let y = 0; y < height; y += CHECKER) {
   for (let x = 0; x < width; x += CHECKER) {
@@ -76,17 +87,24 @@ radii.forEach((radius, row) => {
     ctx.beginPath();
     ctx.rect(left, top + LABEL_HEIGHT, CELL, CELL);
     ctx.clip();
-    drawSmushBlast(gameCtx, {
+    const blast = {
       cx: left + CELL / 2,
       cy: top + LABEL_HEIGHT + CELL / 2,
       damageRadius: radius,
       age,
       seed: REVIEW_SEED,
       fullPower: radius >= FULL_POWER_RADIUS_PX,
-    });
+    };
+    // In the game's order, with nothing standing between the two layers.
+    drawSmushBlastGround(gameCtx, blast);
+    drawSmushBlastAir(gameCtx, blast);
     ctx.restore();
     ctx.fillStyle = LABEL_COLOR;
-    ctx.fillText(`r=${radius}px  frame ${age}/${SMUSH_BLAST_FRAMES}`, left + 8, top + 14);
+    ctx.fillText(
+      `r=${radius}px  frame ${age}/${SMUSH_BLAST_FRAMES}`,
+      left + LABEL_INSET_X,
+      top + LABEL_BASELINE,
+    );
   });
 });
 

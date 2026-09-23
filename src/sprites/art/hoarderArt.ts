@@ -32,7 +32,8 @@
  *
  * The rig — the view table, the two-bone IK, and "every pose is an edit to one
  * resting pose" — is taken from
- * `carlArt.ts`, which is the only figure in this game whose movement convinces.
+ * Carl's rig (`carl/rig.ts`), the only figure in this game whose movement
+ * convinces.
  * The anatomy on top of it is not.
  *
  * This module knows nothing about animation: it paints one pose. The

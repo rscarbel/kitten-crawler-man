@@ -37,6 +37,9 @@ import {
   TABLE,
 } from '../map/tileTypes';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
+import { HumanPlayer } from '../creatures/HumanPlayer';
+import { REPAIR_ROWS } from '../sprites/art/humanFigure';
+import { viewForFacing } from '../sprites/humanSprite';
 import { distinctSpawnTiles } from './interiorHostiles';
 import { ShrineVermin } from '../creatures/ShrineVermin';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
@@ -464,6 +467,23 @@ export class AnchorInteriorSystem {
     return this.wreckWithinReach(crawler);
   }
 
+  /**
+   * The mend is instant; this is him crouching to it with a spanner
+   * afterwards, turned to the part of the wreck nearest him, so the thing
+   * now standing whole has a reason to be.
+   */
+  private playMend(human: HumanPlayer, wreck: RepairableFurnishing): void {
+    const standingX = Math.floor((human.x + TILE_SIZE / 2) / TILE_SIZE);
+    const standingY = Math.floor((human.y + TILE_SIZE / 2) / TILE_SIZE);
+    const nearest = this.nearestTileOf(wreck, standingX, standingY);
+    const toX = nearest.x - standingX;
+    const toY = nearest.y - standingY;
+    const distance = Math.hypot(toX, toY);
+    const faceX = distance > 0 ? toX / distance : human.facingX;
+    const faceY = distance > 0 ? toY / distance : human.facingY;
+    human.playAction(REPAIR_ROWS[viewForFacing(faceX, faceY)], { faceX, faceY });
+  }
+
   /** The `R` press. Returns true when a mend actually happened. */
   tryRepair(crawler: Player): boolean {
     const wreck = this.canRepairAt(crawler);
@@ -478,6 +498,7 @@ export class AnchorInteriorSystem {
 
     this.progress.hildaRepairedTypes.push(wreck.intactType);
     this.audio?.play('hammer_strike');
+    if (crawler instanceof HumanPlayer) this.playMend(crawler, wreck);
     const done = this.progress.hildaRepairedTypes.length;
     if (done >= HILDA_REPAIRS_REQUIRED) {
       this.progress.hilda = 'shard_owed';
