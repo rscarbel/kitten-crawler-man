@@ -34,7 +34,10 @@ const HEADLINE_SIDE_MARGIN = 16;
 const DESIGN_CONTENT_HEIGHT = YOU_DIED_OFFSET_Y + BUTTON_Y_OFFSET + BUTTON_HEIGHT;
 const SCREEN_VERTICAL_MARGIN = 12;
 
-/** Where a death screen exit sends the player: the floor restart, or an in-run safe-room checkpoint. */
+/**
+ * Where a death screen exit sends the player: the floor restart, or the last
+ * save point — a safe room, entering town, or arriving on the floor.
+ */
 export type RespawnMode = 'floorRestart' | 'checkpoint';
 
 const RESPAWN_BUTTON_LABEL: Record<RespawnMode, string> = {
@@ -44,7 +47,7 @@ const RESPAWN_BUTTON_LABEL: Record<RespawnMode, string> = {
 
 const RESPAWN_SUBTITLE: Record<RespawnMode, string> = {
   floorRestart: 'Respawning at floor start — progress from previous floors kept.',
-  checkpoint: 'Respawning at your last safe room — the floor rewinds to how you left it.',
+  checkpoint: 'Respawning where you last saved — the floor rewinds to how you left it.',
 };
 
 /**

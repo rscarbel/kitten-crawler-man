@@ -59,6 +59,7 @@ import { EventBus } from '../core/EventBus';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
+import type { RespawnMode } from '../ui/DeathScreen';
 import { causeFromDamageSource } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { resolveSkillBookPrompt } from '../systems/skillBookUse';
@@ -644,6 +645,8 @@ export class BuildingInteriorScene extends GameplayScene {
      * indoors (a cultist, a rat) isn't announced a second time outside.
      */
     tacticsNoticesSeen?: Set<TacticsTrait>,
+    /** What the overworld does with a defeat here, so the death screen names it. */
+    private readonly defeatRespawnMode: RespawnMode = 'floorRestart',
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
@@ -2275,7 +2278,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // A death arrives from the fight, not from a key or a click, so nothing else
     // here has taken the keyboard off a bag left open behind it.
     this.menus.cancelInventoryDragForOverlay();
-    this.combat.deathScreen.activate(this.deathScreenMessage());
+    this.combat.deathScreen.activate(this.deathScreenMessage(), this.defeatRespawnMode);
   }
 
   /**
@@ -2303,9 +2306,10 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Death inside an encounter: patch both crawlers up and send them back to the
-   * level's respawn point rather than the building's doorstep, so a defeat costs
-   * the walk back. The fight resets on re-entry.
+   * Death inside an encounter: hands the defeat to the overworld, which respawns
+   * the party at the last save. The patch-up only matters on the fallback for a
+   * floor with no save yet, which sets them down alive at the start tile. The
+   * fight resets on re-entry.
    */
   private reviveAndExit(): void {
     for (const player of [this.human, this.cat]) {

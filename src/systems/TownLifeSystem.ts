@@ -387,17 +387,11 @@ export class TownLifeSystem implements GameSystem {
   /**
    * True when the tile lies strictly within the wall ring. Maps with no town plan
    * — anything that isn't the overworld — have no wall to be inside of, so they
-   * admit everything and keep their old behaviour.
+   * admit everything.
    */
   private isInsideTownWall(tx: number, ty: number): boolean {
-    const interior = this.gameMap.townPlan?.interior;
-    if (interior === undefined) return true;
-    return (
-      tx >= interior.x &&
-      ty >= interior.y &&
-      tx < interior.x + interior.w &&
-      ty < interior.y + interior.h
-    );
+    if (this.gameMap.townPlan === undefined) return true;
+    return this.gameMap.isTileInsideTownWall(tx, ty);
   }
 
   /** True when tile (tx, ty) lies inside `radius` tiles of the town centre. */

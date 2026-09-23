@@ -139,6 +139,27 @@ export function installDevLoopFallback(): void {
 }
 
 /**
+ * The options a dev-booted floor starts from: a copy, because the caller hands
+ * the same object to the normal boot, whose saves must stay persisted and whose
+ * quest state must not pick up a dev seed; without the persist step unless the
+ * URL opts in with `save`; and with any `murder` stage seeded, so
+ * `?playtest=<id>&murder=<stage>` drops a kitted party straight into a
+ * questline beat.
+ */
+function devFloorOptions(
+  options: DungeonSceneOptions,
+  params: URLSearchParams,
+): DungeonSceneOptions {
+  const persistsSaves = params.get('save') !== null;
+  const seededMurderProgress = parseMurderQuestProgress(params.get('murder'));
+  return {
+    ...options,
+    saveProgress: persistsSaves ? options.saveProgress : undefined,
+    murderQuestProgress: seededMurderProgress ?? options.murderQuestProgress,
+  };
+}
+
+/**
  * Replaces the opening scene when a dev-only parameter asks for one.
  *
  * `?playtest=spider` opens a named preset — a floor, a spawn landmark and a
@@ -146,6 +167,12 @@ export function installDevLoopFallback(): void {
  * optionally seeding circus-quest state; `?level=level3&murder=cult_hideout`
  * does the same for the Krasue Murders questline. The rest are art preview
  * harnesses.
+ *
+ * A booted floor never writes the real saved game unless `&save` is added (e.g.
+ * `?playtest=spider&save`): a kitted preset or a seeded quest stage written over
+ * the developer's own run would be waiting for them on the next normal load.
+ * Saving still happens in memory either way, so a death in a dev boot returns
+ * to the last save point just as it does in a real run.
  *
  * Returns true when it took over, meaning the caller must not boot normally.
  */
@@ -309,11 +336,6 @@ export function devBootScene(
     return true;
   }
 
-  // Seeded ahead of the preset branch so `?playtest=<id>&murder=<stage>` drops a
-  // kitted party straight into a questline beat.
-  const seededMurderProgress = parseMurderQuestProgress(params.get('murder'));
-  if (seededMurderProgress !== null) options.murderQuestProgress = seededMurderProgress;
-
   const playtestId = params.get('playtest');
   if (playtestId !== null) {
     const preset = getPlaytestPreset(playtestId);
@@ -326,7 +348,9 @@ export function devBootScene(
       // and a playtest drop-in that cannot summon him cannot test him.
       options.mongoUnlocked = true;
       options.resolveSpawnTile = (gameMap) => resolvePlaytestSpawn(boot.spawn, gameMap);
-      sceneManager.replace(new DungeonScene(boot.levelDef, input, sceneManager, options));
+      sceneManager.replace(
+        new DungeonScene(boot.levelDef, input, sceneManager, devFloorOptions(options, params)),
+      );
       return true;
     }
     console.error(`Unknown playtest preset: "${playtestId}"`);
@@ -351,7 +375,9 @@ export function devBootScene(
 
   try {
     const levelDef = getLevelDef(levelId);
-    sceneManager.replace(new DungeonScene(levelDef, input, sceneManager, options));
+    sceneManager.replace(
+      new DungeonScene(levelDef, input, sceneManager, devFloorOptions(options, params)),
+    );
     return true;
   } catch {
     return false;

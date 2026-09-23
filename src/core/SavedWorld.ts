@@ -20,7 +20,12 @@ export interface SavedWorld {
   generatorVersion: number;
   worldSeed: number;
   artSeed: number;
-  /** Centre of the last safe room entered; `null` when the floor has none to return to. */
+  /**
+   * The last save point entered — a safe room's centre, or the tile where the
+   * party entered town — which is where a resume puts them; `null` when the
+   * floor has none to return to. Named for safe rooms because it is a key in
+   * existing saves.
+   */
   safeRoomTile: TilePoint | null;
   /** Frames left on the floor's collapse timer; `null` on a floor that has none. */
   levelTimerFrames: number | null;

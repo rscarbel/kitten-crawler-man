@@ -68,6 +68,7 @@ import { BopcaSystem } from '../systems/BopcaSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
+import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
 import { resolveSkillBookPrompt } from '../systems/skillBookUse';
 import { getSkillDef, type CrawlerKind } from '../core/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
@@ -169,6 +170,14 @@ import {
   type PlayerSnapshot,
 } from '../core/PlayerSnapshot';
 import type { LevelCheckpoint } from '../core/LevelCheckpoint';
+import {
+  respawnModeFor,
+  respawnRouteFor,
+  savePointAfterWrite,
+  type SavePoint,
+} from '../core/SavePoint';
+import { sceneSetupFromSave } from './resumeFromSave';
+import type { TilePoint } from '../map/town/townPlan';
 import type { WorldCheckpoint } from '../core/WorldCheckpoint';
 import {
   toPersistedArenaCheckpoint,
@@ -471,11 +480,24 @@ export interface DungeonSceneOptions {
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
   skipIntro?: boolean;
   /**
-   * In-run checkpoint from the last safe room entered on this floor. Threaded
-   * through building detours so a death mid-detour still returns to the safe
-   * room rather than restarting the floor.
+   * The first frame takes no save: neither the floor-arrival save nor, for a
+   * party that starts inside the town wall, a town entry. Set by a floor
+   * restart, which rewinds the party to how it stood when the floor began.
+   * The restart only runs when the run has no save to return to, but writing
+   * that older party over one would lose it, so the arrival never writes. The
+   * next real save point saves as usual.
    */
-  checkpoint?: LevelCheckpoint;
+  suppressArrivalSave?: boolean;
+  /**
+   * The last save the run wrote, for a scene rebuilt without writing a new one
+   * — a building exit, or a respawn from the save itself. A death before this
+   * scene takes its own save respawns from it. Only the save crosses over, never
+   * its in-place checkpoint: a rebuilt scene regenerates its population, and a
+   * checkpoint's mob flags belong to the roster that captured it.
+   *
+   * Absent on a new floor, which takes its own save on arrival.
+   */
+  lastSave?: GameProgressInput;
   /** Floor and run state from a resumed save; absent on a fresh game or an older save. */
   persistedWorldState?: PersistedWorldState;
 }
@@ -975,10 +997,27 @@ export class DungeonScene extends GameplayScene {
   private levelTimerFrames = 0;
   private readonly LEVEL_TIME_LIMIT = 216_000; // 1 hour @ 60 fps
   private wasInSafeRoom = false;
-  /** Centre tile of the last safe room the party stood in, which is where a resume puts them. */
-  private lastSafeRoomTile: { x: number; y: number } | null = null;
-  /** In-run checkpoint from the last safe room entered on this floor, or null if none yet. */
-  private checkpoint: LevelCheckpoint | null = null;
+  /**
+   * Whether the active crawler stood inside the town wall last frame. Starts
+   * false so that a scene built with the party already inside the wall — a
+   * building exit, the floor-3 arrival, a loaded save — counts as entering town
+   * on its first frame and takes a save. A death restart opts out through
+   * `suppressArrivalSave`.
+   */
+  private wasInTown = false;
+  /**
+   * The last save point entered — a safe room's centre, or the tile where the
+   * party entered town — which is where a resume puts them.
+   */
+  private lastSavePointTile: TilePoint | null = null;
+  /** The last save the run wrote, which is where a death respawns; null until there is one. */
+  private lastSave: SavePoint | null = null;
+  /**
+   * Whether the first frame still owes the floor-arrival save. A floor with no
+   * save of its own would send a death back to the previous floor's last save
+   * point, so a new floor saves where the party stands the moment it arrives.
+   */
+  private arrivalSavePending = false;
   private speechBubblePulse = 0;
 
   private readonly inputHandler = new GameplayInputHandler();
@@ -1634,8 +1673,16 @@ export class DungeonScene extends GameplayScene {
               this.input,
               this.sceneManager,
               (hSnap, cSnap, defeated) => {
-                // Losing an interior encounter sends the party home to the level's
-                // start tile instead of dumping them back on the doorstep.
+                // A defeat indoors is a death like any other, so it lands on the
+                // last save rather than on the doorstep the party died behind.
+                const lastSave = this.lastSave;
+                if (defeated && lastSave !== null) {
+                  this.respawnFromSave(lastSave.progress);
+                  return;
+                }
+                // Unreachable once the floor has taken its arrival save, which
+                // the overworld does on its first frame; the start tile at least
+                // keeps a defeat off the doorstep.
                 const exitTile = defeated ? this.gameMap.startTile : returnTile;
                 this.sceneManager.replace(
                   new DungeonScene(levelDef, this.input, this.sceneManager, {
@@ -1643,23 +1690,20 @@ export class DungeonScene extends GameplayScene {
                     humanSnap: hSnap,
                     catSnap: cSnap,
                     knockedOutCompanionAt: downedCompanionAt,
-                    // Entering a building is a detour, not a new floor — the death
-                    // checkpoint has to stay pinned to where this floor began.
+                    // Entering a building is a detour, not a new floor — the floor
+                    // restart has to stay pinned to where this floor began.
                     floorEntryHumanSnap: this.floorEntryHumanSnap,
                     floorEntryCatSnap: this.floorEntryCatSnap,
                     floorEntryHumanAchievements: this.floorEntryHumanAchievements,
                     floorEntryCatAchievements: this.floorEntryCatAchievements,
                     floorEntryAbilityManager: this.floorEntryAbilityManager,
-                    // Deliberately NOT threaded, though the scene rebuilt here keeps
-                    // the same map: a checkpoint now describes the *population* too,
-                    // and every mob and player reference in it belongs to the scene
-                    // this line is destroying. Restoring one on the far side would
-                    // revive corpses nothing can see and pay floor loot into a
-                    // detached crawler. Unreachable either way today — the overworld
-                    // is the only level with buildings and it generates no safe
-                    // rooms — so the cost of dropping it is currently zero, and the
-                    // fallback (a floor restart) is merely harsh rather than broken.
-                    checkpoint: undefined,
+                    // The save, not its checkpoint: the rebuilt scene regenerates the
+                    // overworld's creatures, so mob flags captured against this
+                    // scene would mean nothing there. An exit inside the town wall
+                    // saves afresh on its first frame whenever a town save is
+                    // allowed; until then — and for good after an exit outside the
+                    // wall, such as the Big Top's — a death respawns from this save.
+                    lastSave: this.lastSave?.progress,
                     existingMap: this.gameMap,
                     existingMiniMap: this.miniMap,
                     existingRecallState: this.recall.captureForSceneRebuild(),
@@ -1707,6 +1751,7 @@ export class DungeonScene extends GameplayScene {
               this.anchorQuestProgress,
               this.gameMap.artSeed,
               this.tacticsNoticesSeen,
+              respawnModeFor(respawnRouteFor(this.lastSave)),
             ),
           );
         },
@@ -1862,7 +1907,18 @@ export class DungeonScene extends GameplayScene {
     this.chat.applyCarriedCheat();
 
     this.onSaveProgress = options?.saveProgress;
-    this.checkpoint = options?.checkpoint ?? null;
+    const carriedSave = options?.lastSave;
+    if (carriedSave !== undefined) {
+      this.lastSave = { progress: carriedSave, checkpoint: null };
+      // A safe-room save with no room under either crawler names no tile of its
+      // own, so it keeps the resume tile the carried save already had.
+      this.lastSavePointTile = carriedSave.world?.safeRoomTile ?? null;
+    }
+    // The tutorial is left out because its scripted flow saves at its own safe
+    // rooms, and a save of a tutorial just begun would resume without the script.
+    this.arrivalSavePending =
+      carriedSave === undefined && options?.suppressArrivalSave !== true && this.tutorial === null;
+    this.wasInTown = options?.suppressArrivalSave === true;
     this.onResetGameCallback = options?.onResetGame ?? null;
     // Additive and cheap even on a re-entry: `preload` skips any id already in
     // `buffers`, so this just tops up whatever this floor needs without
@@ -2421,36 +2477,19 @@ export class DungeonScene extends GameplayScene {
       // saved game and the death checkpoint are skipped, so neither one can
       // resume a fight that is still in progress.
       if (this.isBossFightInProgress) return;
-      // The event fires when either crawler is protected, so the active one may
-      // be outside the room; keep the last room actually seen rather than
-      // overwriting a good resume point with nothing.
-      const enteredRoom = this.safeRoom.safeRoomInfoAt(this.active());
-      if (enteredRoom !== null) this.lastSafeRoomTile = enteredRoom.centre;
-      this.saveProgress();
-
-      // Skipped in the tutorial, matching the achievement unlocks above — the
-      // tutorial has its own hand-scripted flow and never reaches death-restart.
-      if (this.tutorial === null) {
-        // The event fires from `pm.isAnySafe()`, which can be true for the
-        // inactive crawler while the active one is still outside the room
-        // bounds — guard rather than assert on a missing room.
-        const roomInfo = this.safeRoom.safeRoomInfoAt(this.active());
-        if (roomInfo !== null) {
-          this.markMobsAtCheckpoint();
-          this.checkpoint = {
-            world: this.captureWorldCheckpoint(),
-            humanSnap: checkpointSnapshot(snapPlayer(this.human)),
-            catSnap: checkpointSnapshot(snapPlayer(this.cat)),
-            abilities: this.abilityManager.clone(),
-            humanAchievements: this.humanAchievements.clone(),
-            catAchievements: this.catAchievements.clone(),
-            respawnX: roomInfo.centre.x * TILE_SIZE,
-            respawnY: roomInfo.centre.y * TILE_SIZE,
-            levelTimerFrames: this.levelTimerFrames,
-          };
-          this.menus.hotbarToast.show(PROGRESS_SAVED_TOAST_TEXT);
-        }
+      // The event fires from `pm.isAnySafe()`, which is true when either crawler
+      // is protected, so the active one may still be outside the room; the save
+      // point is then the room the companion reached.
+      const enteredRoom =
+        this.safeRoom.safeRoomInfoAt(this.active()) ??
+        this.safeRoom.safeRoomInfoAt(this.inactive());
+      if (enteredRoom === null) {
+        // With no room to name, the resume tile stays as it was and the save
+        // carries no checkpoint, so a death rebuilds from this save.
+        this.saveProgress(null);
+        return;
       }
+      this.captureSavePoint(enteredRoom.centre);
     });
 
     // Whatever the player just picked up is what they mean to do next, so the
@@ -3178,8 +3217,8 @@ export class DungeonScene extends GameplayScene {
    * Sets both crawlers down on a landing tile: the human on it, the companion on
    * the nearest tile beside it that will hold them.
    *
-   * Shared by every warp that is not a checkpoint respawn, so the cheat and the
-   * stone cannot drift apart on where a party ends up.
+   * Shared by the bounty cheat, the recall stone and the checkpoint respawn, so
+   * none of them can drift apart on where a party ends up.
    */
   private placePartyAtTile(landing: { x: number; y: number }): void {
     this.human.x = landing.x * TILE_SIZE;
@@ -3301,22 +3340,72 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Routes a death-screen exit to the in-run checkpoint, if one was captured on
-   * this floor, or to the full floor restart otherwise.
+   * Routes a death-screen exit to the last save: rewound in place when this
+   * scene took it, rebuilt from it when the scene was built after it, and the
+   * floor restart only when the run has never saved.
    */
   private respawnAfterDeath(): void {
-    // Before the branch, so it runs on both routes: a checkpoint restore keeps
+    // Before the branch, so it runs on every route: a checkpoint restore keeps
     // the world (and so would keep the mark standing where the party fell) while
-    // a floor restart throws it away, and the durable record would have survived
-    // either one.
+    // the other two throw it away, and the durable record would have survived
+    // any of them.
     this.bounty?.abandonBounty(this.world.roster.mobs, this.world.roster.grid);
 
-    const cp = this.checkpoint;
-    if (cp !== null) {
-      this.restoreFromCheckpoint(cp);
-    } else {
-      this.restartAtFloorEntry();
+    const route = respawnRouteFor(this.lastSave);
+    switch (route.kind) {
+      case 'checkpoint':
+        this.restoreFromCheckpoint(route.checkpoint);
+        break;
+      case 'resumeSave':
+        this.respawnFromSave(route.progress);
+        break;
+      case 'floorRestart':
+        this.restartAtFloorEntry();
+        break;
     }
+  }
+
+  /**
+   * Rebuilds the floor from a save, exactly as a page reload would, for a scene
+   * that holds the save but not a checkpoint of it: one rebuilt around a
+   * regenerated population after a building exit, one that was itself resumed
+   * from the save, or one whose last write had no room to stand the party in.
+   *
+   * Carries over only what the save does not hold and a reload would not want
+   * lost. The doomsday countdown is preserved for the same reason
+   * {@link restoreFromCheckpoint} preserves it: rewinding it would make dying a
+   * way to buy back time. Achievements and the run's tallies are carried as they
+   * stand rather than wiped, because the save has no copy of them to rewind to.
+   */
+  private respawnFromSave(progress: GameProgressInput): void {
+    // His HP only reaches the shared state through a despawn, and the instance
+    // holding it is about to be discarded.
+    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.audio?.stopSound('death_sequence');
+    const sameFloor = progress.levelId === this.levelDef.id;
+    const { levelDef, options } = sceneSetupFromSave(
+      {
+        audio: this.audio ?? undefined,
+        saveProgress: this.onSaveProgress,
+        onResetGame: this.onResetGameCallback ?? undefined,
+        humanAchievements: this.humanAchievements,
+        catAchievements: this.catAchievements,
+        // A respawn is not a new floor, so a later floor restart still rewinds
+        // to where this one began.
+        floorEntryHumanSnap: sameFloor ? this.floorEntryHumanSnap : undefined,
+        floorEntryCatSnap: sameFloor ? this.floorEntryCatSnap : undefined,
+        floorEntryHumanAchievements: sameFloor ? this.floorEntryHumanAchievements : undefined,
+        floorEntryCatAchievements: sameFloor ? this.floorEntryCatAchievements : undefined,
+        floorEntryAbilityManager: sameFloor ? this.floorEntryAbilityManager : undefined,
+        doomsdayQuestProgress: this.doomsdayQuestProgress,
+        godModeState: this.godModeState,
+        companionStance: this.companionStance,
+        gameStats: this.gameStats,
+        skipIntro: true,
+      },
+      progress,
+    );
+    this.sceneManager.replace(new DungeonScene(levelDef, this.input, this.sceneManager, options));
   }
 
   /**
@@ -3354,10 +3443,15 @@ export class DungeonScene extends GameplayScene {
     this.human.resetCombatState();
     this.cat.resetCombatState();
 
-    this.human.x = cp.respawnX;
-    this.human.y = cp.respawnY;
-    this.cat.x = cp.respawnX + TILE_SIZE;
-    this.cat.y = cp.respawnY;
+    // Placed rather than offset by a fixed tile: a town save point is wherever
+    // the party crossed the wall, and the tile beside it can be the gate pier.
+    const respawnTile = {
+      x: Math.round(cp.respawnX / TILE_SIZE),
+      y: Math.round(cp.respawnY / TILE_SIZE),
+    };
+    this.placePartyAtTile(respawnTile);
+    // After the placement, so the companion's fresh anchors name the save point.
+    this.companion.resetForRespawn(this.human, this.cat);
 
     this.levelTimerFrames = cp.levelTimerFrames;
 
@@ -3402,9 +3496,21 @@ export class DungeonScene extends GameplayScene {
       this.audio?.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
     }
 
-    // The player is standing in the safe room right now — the latch has to
-    // agree, or the next step out and back in is the only thing that re-arms it.
+    // A town save can predate a quest fight that was still being fought when
+    // the party fell. Rewound to before it, the quest no longer owns the track,
+    // and nothing else on this path hands it back to the zone music.
+    const questFightOwnsTrack =
+      this.circusQuest.isWaveFightInProgress || this.murderQuest.isTownFightInProgress;
+    if (this.overworldMusic !== null && !questFightOwnsTrack) {
+      this.overworldMusic.battleMusicActive = false;
+      this.overworldMusic.reset();
+    }
+
+    // The party is standing on the save point right now — the latches have to
+    // agree, or the respawn frame would read as a fresh entry and save the
+    // rewound world over itself.
     this.wasInSafeRoom = true;
+    this.wasInTown = this.isInsideTownWall(this.active());
   }
 
   /**
@@ -3672,8 +3778,14 @@ export class DungeonScene extends GameplayScene {
     this.juicerBossRoomIdx = juicerBossRoomIdx;
   }
 
-  private saveProgress(): void {
-    this.onSaveProgress?.({
+  /**
+   * Writes the save and makes it the one a death respawns from, paired with
+   * `checkpoint` when the caller took one alongside it. A save without one still
+   * replaces the last checkpoint: a death then rebuilds from this save rather
+   * than rewinding to an older moment than the one just persisted.
+   */
+  private saveProgress(checkpoint: LevelCheckpoint | null): void {
+    const progress: GameProgressInput = {
       humanSnap: revivedSnapshot(snapPlayer(this.human)),
       catSnap: revivedSnapshot(snapPlayer(this.cat)),
       levelId: this.levelDef.id,
@@ -3692,13 +3804,111 @@ export class DungeonScene extends GameplayScene {
               generatorVersion: WORLD_GENERATOR_VERSION,
               worldSeed: this.gameMap.worldSeed,
               artSeed: this.gameMap.artSeed,
-              safeRoomTile: this.lastSafeRoomTile,
+              safeRoomTile: this.lastSavePointTile,
               levelTimerFrames:
                 this.levelDef.hasCollapseTimer === true ? this.levelTimerFrames : null,
               persisted: this.capturePersistedWorldState(),
             }
           : undefined,
-    });
+    };
+    this.lastSave = savePointAfterWrite(progress, checkpoint, this.tutorial !== null);
+    this.onSaveProgress?.(progress);
+  }
+
+  /**
+   * Takes a save point at `respawnTile`: the persisted game, which resumes on
+   * that tile, and — outside the tutorial — the in-run checkpoint that rewinds
+   * a death to the same moment in place. Callers own the guards; this never
+   * refuses. `announce: false` is for a save the player did nothing to trigger
+   * beyond what already told them they were safe.
+   *
+   * The tutorial takes no checkpoint and shows no toast: its hand-scripted flow
+   * cannot be rewound in place, and a death there restarts it rather than
+   * returning here.
+   */
+  private captureSavePoint(respawnTile: TilePoint, { announce = true } = {}): void {
+    this.lastSavePointTile = respawnTile;
+    this.saveProgress(this.tutorial === null ? this.captureLevelCheckpoint(respawnTile) : null);
+    if (announce && this.tutorial === null) this.menus.hotbarToast.show(PROGRESS_SAVED_TOAST_TEXT);
+  }
+
+  private captureLevelCheckpoint(respawnTile: TilePoint): LevelCheckpoint {
+    this.markMobsAtCheckpoint();
+    return {
+      world: this.captureWorldCheckpoint(),
+      humanSnap: checkpointSnapshot(snapPlayer(this.human)),
+      catSnap: checkpointSnapshot(snapPlayer(this.cat)),
+      abilities: this.abilityManager.clone(),
+      humanAchievements: this.humanAchievements.clone(),
+      catAchievements: this.catAchievements.clone(),
+      respawnX: respawnTile.x * TILE_SIZE,
+      respawnY: respawnTile.y * TILE_SIZE,
+      levelTimerFrames: this.levelTimerFrames,
+    };
+  }
+
+  /** Whether a body's centre stands inside the town wall; false off the overworld. */
+  private isInsideTownWall(body: Pick<Mob, 'x' | 'y'>): boolean {
+    return this.gameMap.isInsideTownWall(
+      body.x + TILE_SIZE * TILE_CENTRE_FRACTION,
+      body.y + TILE_SIZE * TILE_CENTRE_FRACTION,
+    );
+  }
+
+  /**
+   * The walled town is a save point. Deliberately not `safeRoomEntered`: that
+   * event also plays the safe-room sound, unlocks `safe_haven`, drives the
+   * tutorial and reports to the AI adapter, none of which belongs to walking
+   * through a gate.
+   *
+   * A blocked entry is not retried when the blocker clears; the next save is
+   * the next real entry. That keeps the rule predictable — walking in is what
+   * saves, never something that happens later somewhere in the streets.
+   */
+  private onTownEntered(active: Pick<Mob, 'x' | 'y'>): void {
+    if (!this.canSaveInTown) return;
+    this.captureSavePoint(this.saveTileUnder(active));
+  }
+
+  /**
+   * The tile a town or arrival save resumes and respawns on: where the active
+   * crawler stands, so a building exit resumes on that building's doorstep,
+   * unless that tile is a pocket a respawn could get stuck in.
+   */
+  private saveTileUnder(active: Pick<Mob, 'x' | 'y'>): TilePoint {
+    const standingTile = {
+      x: Math.floor((active.x + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE),
+      y: Math.floor((active.y + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE),
+    };
+    if (hasRoomToMove(this.gameMap, standingTile.x, standingTile.y)) return standingTile;
+    return this.gameMap.townSquareCentre ?? this.gameMap.startTile;
+  }
+
+  private get canSaveInTown(): boolean {
+    return !this.isRevivePending && !this.isTownUnderAttack && !this.isBossFightInProgress;
+  }
+
+  /**
+   * Either crawler, not just the inactive one: the active crawler can be the
+   * downed one for a frame around a switch. Both save snapshots stand a downed
+   * crawler back up, so saving now would turn a pending revive into a free one.
+   */
+  private get isRevivePending(): boolean {
+    return this.human.isKnockedOut || this.cat.isKnockedOut;
+  }
+
+  /**
+   * A fight in the streets: the krasue night attack, or any hostile creature
+   * inside the wall that has actually traded blows with the party — a bounty
+   * target or a summon that chased them through a gate. A mob that has only
+   * noticed the party is not a fight, and allies are filtered by `isHostile`
+   * because they share the mob roster.
+   */
+  private get isTownUnderAttack(): boolean {
+    if (this.murderQuest.isTownFightInProgress) return true;
+    return this.world.roster.mobs.some(
+      (mob) => mob.isHostile && isEngagedInFight(mob) && this.isInsideTownWall(mob),
+    );
   }
 
   /**
@@ -3822,6 +4032,7 @@ export class DungeonScene extends GameplayScene {
         godModeState: this.godModeState,
         companionStance: this.companionStance,
         tacticsNoticesSeen: this.tacticsNoticesSeen,
+        suppressArrivalSave: true,
       }),
     );
   }
@@ -4252,9 +4463,9 @@ export class DungeonScene extends GameplayScene {
     // Boxes repeat every talk; don't pay a server round trip for a repeat.
     const worthSaving = !sameDebriefMemory(memory, remembered);
     if (worthSaving && this.tutorial === null && !this.isBossFightInProgress) {
-      // `safeRoomEntered` fires once, for whichever crawler got in first.
-      this.lastSafeRoomTile = room.centre;
-      this.saveProgress();
+      // `safeRoomEntered` fires once, for whichever crawler got in first. A
+      // checkpoint comes with it, so a death here rewinds to after the talk.
+      this.captureSavePoint(room.centre, { announce: false });
     }
     return true;
   }
@@ -5785,6 +5996,19 @@ export class DungeonScene extends GameplayScene {
     }
     this.wasInSafeRoom = nowInSafeRoom;
 
+    // Every map without a town plan answers false here, so dungeon floors never
+    // take this path.
+    const nowInTown = this.isInsideTownWall(player);
+    if (nowInTown && !this.wasInTown) this.onTownEntered(player);
+    this.wasInTown = nowInTown;
+
+    // After the safe-room and town checks, so an arrival that already stands
+    // in one is saved once, by that check, rather than twice.
+    if (this.arrivalSavePending) {
+      this.arrivalSavePending = false;
+      if (this.lastSave === null) this.captureSavePoint(this.saveTileUnder(player));
+    }
+
     const ctx = this.buildSystemContext();
 
     this.safeRoom.update(ctx);
@@ -6143,7 +6367,7 @@ export class DungeonScene extends GameplayScene {
       );
       this.combat.deathScreen.activate(
         pickDeathExplanation(deathCause),
-        this.checkpoint !== null ? 'checkpoint' : 'floorRestart',
+        respawnModeFor(respawnRouteFor(this.lastSave)),
       );
     }
   }

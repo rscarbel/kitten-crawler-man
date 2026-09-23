@@ -287,16 +287,59 @@ export class CompanionSystem implements GameSystem {
    */
   setMap(gameMap: GameMap, human: HumanPlayer, cat: CatPlayer): void {
     this.gameMap = gameMap;
-    this.companionPaths.clear();
-    this.targetBans.clear();
-    this._followOverride = false;
-    this.clearDirective();
+    this.dropPlaceBoundState(human, cat);
     // A storey change invalidates a hazard the same way it invalidates a
     // standing order: the fire and the impact circles belong to the room the
     // party just left, and a source left registered keeps answering — at the
     // old floor's coordinates — for every frame spent on the new one. An
     // encounter that is still live re-registers from its own update.
     this.hazardSources.length = 0;
+  }
+
+  /**
+   * Puts the companion back at the respawned player's heel after a death that
+   * rewinds the world in place, keeping only the player's combat stance.
+   *
+   * A checkpoint restore keeps this system, so without this every order the
+   * party died under survives the death: a "do not move" anchor left on the
+   * spot where the companion fell, a chase target or path towards a fight the
+   * rewind has undone, a recall still in flight. The player respawns and the
+   * companion walks straight back out of the save point. Aggressive/passive is
+   * a preference about how the companion fights and is kept; where it stands is
+   * an order about the fight that was just lost, and is not.
+   *
+   * Both stances are reset, not just the companion's: the other crawler's
+   * stance is the one the next switch hands the follow drive, and a stale
+   * anchor there would send the newly inactive crawler back to where it
+   * stood when the party fell.
+   *
+   * Hazard sources are left alone — unlike {@link setMap}, the scene and its
+   * encounters are the same ones, and they registered once, at construction.
+   * Call after the party has been placed at the respawn point, so the fresh
+   * anchors and wander target name the save point rather than the death site.
+   */
+  resetForRespawn(human: HumanPlayer, cat: CatPlayer): void {
+    this.dropPlaceBoundState(human, cat);
+    this.humanStance.movementMode = 'follow';
+    this.catStance.movementMode = 'follow';
+    // Idle time accrued before the death would start the cat's idle wander the
+    // moment the party is back on its feet.
+    this.humanIdleFrames = 0;
+    this.catWanderTimer = 0;
+    this.fleeingAvoidMob = false;
+    this.humanEvasionStuckFrames = 0;
+  }
+
+  /**
+   * Drops every order, target and cached route that names a place or a mob the
+   * party has just been taken away from — by stairs or by a death — and
+   * re-anchors both crawlers where they now stand.
+   */
+  private dropPlaceBoundState(human: HumanPlayer, cat: CatPlayer): void {
+    this.companionPaths.clear();
+    this.targetBans.clear();
+    this._followOverride = false;
+    this.clearDirective();
     human.autoTarget = null;
     cat.autoTarget = null;
     this.humanStance.anchorX = human.x;

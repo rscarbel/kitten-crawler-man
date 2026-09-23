@@ -99,6 +99,7 @@
     "verify:tactics": "tsx scripts/verify-tactics.ts",
     "verify:town": "tsx scripts/verify-town-guidance.ts",
     "verify:world-seed": "tsx scripts/verify-world-seed.ts",
+    "verify:town-save": "tsx scripts/verify-town-save.ts",
     "wave:figure": "tsx scripts/wave-test-figure.ts"
   },
   "dependencies": {

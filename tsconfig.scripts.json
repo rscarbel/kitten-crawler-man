@@ -10,6 +10,7 @@
     "scripts/verify-progression.ts",
     "scripts/verify-quest-choke.ts",
     "scripts/verify-world-seed.ts",
+    "scripts/verify-town-save.ts",
     "scripts/verify-crawler-signs.ts",
     "scripts/verify-menus.ts",
     "scripts/verify-lich.ts",

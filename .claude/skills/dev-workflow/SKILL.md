@@ -74,6 +74,11 @@ Builds, serves on :3000 and opens `?playtest=<id>` — a floor, a spawn landmark
 can be exercised without replaying the floors above it. Presets are data in
 `src/dev/playtestPresets.ts`; add one there.
 
+A `?playtest=` or `?level=` boot never writes the real saved game, so it can't
+clobber your own run. Add `&save` (e.g. `?playtest=spider&save`) to persist its
+saves. Without it, saves still happen in memory, so a death still respawns at the
+last save point.
+
 **All dev-only routes are release-stripped.** `?playtest=`, `?level=`, and the
 art preview routes (`?goblins`, `?tiles`, …) live in `src/dev/devBoot.ts`, which
 `scripts/build.js` resolves to an inert stub unless the build passed

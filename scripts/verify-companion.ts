@@ -1474,6 +1474,50 @@ console.log('\nAn anchored stance loses to a directive, and gets itself back aft
   }
 }
 
+console.log('\nA respawn puts the companion back at heel and keeps only her combat stance');
+{
+  const stage = stageDirective();
+  if (stage === null) {
+    check(false, 'a generated dungeon offered open floor to stage a respawn on');
+  } else {
+    const { party, companion, post } = stage;
+    // Everything the party can die under: a passive cat parked at the far spot,
+    // the other crawler's stance parked too, a standing order and a recall,
+    // and a chase target over by where she fell.
+    companion.setPassive(true);
+    party.cat.x = post.x;
+    party.cat.y = post.y;
+    companion.setDoNotMove(party.cat, true);
+    companion.setDoNotMove(party.human, false);
+    companion.setDirective({ x: post.x, y: post.y, hold: false });
+    companion.isFollowOverride = true;
+    const quarryTile = { x: post.x / TILE_SIZE, y: post.y / TILE_SIZE };
+    party.cat.autoTarget = createMob('rat', quarryTile.x, quarryTile.y, party.map);
+
+    party.cat.x = party.human.x;
+    party.cat.y = party.human.y;
+    companion.resetForRespawn(party.human, party.cat);
+
+    check(companion.getMovementMode(true) === 'follow', 'the companion is following again');
+    check(
+      companion.getMovementMode(false) === 'follow',
+      'and so is the stance the next switch hands the follow drive',
+    );
+    check(companion.getCombatStance(true) === 'passive', 'while the passive stance is kept');
+    check(party.cat.autoTarget === null, 'the chase target from the lost fight is gone');
+    check(!companion.isFollowOverride, 'and no recall is left in flight');
+
+    // Away from the death site as well as from the respawn point: an anchor
+    // re-pinned to the save point would pass a check that only stood still.
+    party.human.x -= DIRECTIVE_TILES_AWAY * TILE_SIZE;
+    runCompanion(companion, party, DIRECTIVE_WALK_FRAMES);
+    check(
+      distanceTiles(party.cat, party.human) <= FOLLOW_REJOIN_TILES,
+      `so she keeps to the player's side as he walks off (${distanceTiles(party.cat, party.human).toFixed(2)} tiles)`,
+    );
+  }
+}
+
 console.log('\nA held companion does not fight, and the same staging proves she would have');
 {
   const held = stageDirective();

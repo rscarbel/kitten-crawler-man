@@ -670,6 +670,15 @@ export class CircusQuestSystem implements GameSystem {
     return this.phase !== 'awaiting_intro' && this.phase !== 'complete';
   }
 
+  /**
+   * True during the two wave fights on the circus grounds — the ritual defense
+   * and the sideshow assault — which are exactly the phases that own the
+   * battle track.
+   */
+  get isWaveFightInProgress(): boolean {
+    return this.phase === 'ritual_defense' || this.phase === 'assault';
+  }
+
   get isDialogOpen(): boolean {
     return this.dialog.isOpen;
   }
@@ -746,17 +755,19 @@ export class CircusQuestSystem implements GameSystem {
       if (this.phase === 'heather_hunt' && this.circusCentre) this.spawnHeather(this.circusCentre);
     }
 
-    // A save loaded after a reload has no wave. The fight updates read an empty
-    // `waveMobs` as "wave cleared", which would hand out the wave for free.
-    if (
-      (this.phase === 'ritual_defense' || this.phase === 'assault') &&
-      snapshot.waveMobs.length === 0
-    ) {
+    if (this.isWaveFightInProgress) {
+      // Every wave phase, not only a rebuilt wave: a rewind can land back in a
+      // fight the party went on to win, whose end handed the track to the zone
+      // music, and nothing else puts the battle track back.
       this.startBattleMusic();
-      if (this.phase === 'ritual_defense') {
-        this.spawnWave(RITUAL_WAVES, this.waveIndex, this.ritualWaveOrigin());
-      } else {
-        this.spawnWave(ASSAULT_WAVES, this.waveIndex, this.assaultWaveOrigin());
+      // A save loaded after a reload has no wave. The fight updates read an
+      // empty `waveMobs` as "wave cleared", which would hand out the wave for free.
+      if (snapshot.waveMobs.length === 0) {
+        if (this.phase === 'ritual_defense') {
+          this.spawnWave(RITUAL_WAVES, this.waveIndex, this.ritualWaveOrigin());
+        } else {
+          this.spawnWave(ASSAULT_WAVES, this.waveIndex, this.assaultWaveOrigin());
+        }
       }
     }
 

@@ -584,6 +584,15 @@ export class MurderMysteryQuestSystem implements GameSystem {
   }
 
   /**
+   * True while the krasue night attack is being fought in the town streets: from
+   * nightfall until the last swarm krasue falls. The aftermath dialog that
+   * follows is not a fight, so it does not count.
+   */
+  get isTownFightInProgress(): boolean {
+    return this.phase === 'night_attack' && !this.swarmCleared;
+  }
+
+  /**
    * The completion banner, which a press dismisses early. It rides over live
    * play rather than pausing it, so it is not part of `isDialogOpen`.
    */
@@ -650,6 +659,17 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.swarmSpawnQueue = [...snapshot.swarmSpawnQueue];
     this.swarmSpawnGrace = new Map(snapshot.swarmSpawnGrace);
     this.restoreGumGum(snapshot.gumgum, mobs, mobGrid);
+    // A swarm that has not started yet gets its music from `update()` when it
+    // does. One already under way owns the track now, even if the fight the
+    // rewind skipped past ended and handed it back to the zone music.
+    if (this.isTownFightInProgress && this.swarmStarted) this.startNightAttackMusic();
+  }
+
+  private startNightAttackMusic(): void {
+    if (this.overworldMusic) this.overworldMusic.battleMusicActive = true;
+    if (this.audio && this.audio.currentMusicId !== 'defense_quest_music') {
+      this.audio.playMusic('defense_quest_music', { fadeInMs: BATTLE_MUSIC_FADE_IN_MS });
+    }
   }
 
   /**
@@ -1110,10 +1130,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
         // owed dead from `progress.swarmKrasueDefeated`.
         if (!this.swarmStarted && !this.dialog.isOpen) {
           this.swarmStarted = true;
-          if (this.overworldMusic) this.overworldMusic.battleMusicActive = true;
-          if (this.audio && this.audio.currentMusicId !== 'defense_quest_music') {
-            this.audio.playMusic('defense_quest_music', { fadeInMs: BATTLE_MUSIC_FADE_IN_MS });
-          }
+          this.startNightAttackMusic();
           this.spawnNightSwarm(ctx.active);
           break;
         }

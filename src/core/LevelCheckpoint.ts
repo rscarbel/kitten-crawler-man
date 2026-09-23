@@ -4,16 +4,18 @@ import type { PlayerSnapshot } from './PlayerSnapshot';
 import type { WorldCheckpoint } from './WorldCheckpoint';
 
 /**
- * In-run checkpoint captured on safe-room entry. Restoring it puts the current
- * `DungeonScene` back the way it was at capture time rather than rebuilding the
- * scene — map generation has no seed, so "the world you left" cannot be
- * re-derived, only kept. In-memory only: it does not survive a page reload.
+ * In-run checkpoint captured at a save point, alongside the save it mirrors in
+ * a `SavePoint`. Restoring it puts the current `DungeonScene` back the way
+ * it was at capture time rather than rebuilding the scene, which keeps what the
+ * save cannot: which ordinary mobs are already dead, the fog, the felled trees.
+ * In-memory only, and bound to the scene that captured it — its mob flags live
+ * on that scene's roster — so a rebuilt scene falls back to the save itself.
  */
 export interface LevelCheckpoint {
   /**
-   * The floor and the run as they stood at capture. Without this the checkpoint
-   * rewound the party but not the world, so a boss killed after the safe room
-   * stayed dead and its reward stayed collected.
+   * The floor and the run as they stood at capture. Without it a respawn would
+   * rewind the party but not the world, so a boss killed after the save point
+   * would stay dead and its reward stay collected.
    */
   world: WorldCheckpoint;
   humanSnap: PlayerSnapshot;
@@ -26,7 +28,7 @@ export interface LevelCheckpoint {
   abilities: AbilityManager;
   humanAchievements: AchievementManager;
   catAchievements: AchievementManager;
-  /** Pixel position both crawlers respawn at — the safe room's centre. */
+  /** Pixel position the party respawns at — a safe room's centre, or the tile where it entered town. */
   respawnX: number;
   respawnY: number;
   /** Frames left on the floor clock — restoring it is what stops a respawn into an expired timer. */

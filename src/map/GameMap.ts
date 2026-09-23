@@ -2726,6 +2726,33 @@ export class GameMap {
   }
 
   /**
+   * True when the given world-pixel position lies strictly inside the town wall
+   * ring. Always false on maps with no town plan.
+   *
+   * Not {@link isInTownSafeZone}: that circle reaches past the wall and takes in
+   * the gate aprons and open fields beyond them, so it cannot answer "is the party
+   * in town" for anything the wall is meant to bound.
+   */
+  isInsideTownWall(worldX: number, worldY: number): boolean {
+    return this.isTileInsideTownWall(
+      Math.floor(worldX / this.tileHeight),
+      Math.floor(worldY / this.tileHeight),
+    );
+  }
+
+  /** Tile-coordinate form of {@link isInsideTownWall}. */
+  isTileInsideTownWall(tileX: number, tileY: number): boolean {
+    const interior = this.townPlan?.interior;
+    if (interior === undefined) return false;
+    return (
+      tileX >= interior.x &&
+      tileY >= interior.y &&
+      tileX < interior.x + interior.w &&
+      tileY < interior.y + interior.h
+    );
+  }
+
+  /**
    * Tell the renderer a tile's base art changed. Base tiles are baked into
    * reusable chunk canvases, so anything that rewrites `structure[y][x].type`
    * (or a field the tile's renderer reads, such as `damageStage`) at runtime

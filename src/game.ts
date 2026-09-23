@@ -3,16 +3,9 @@ import { SceneManager } from './core/Scene';
 import { DungeonScene } from './scenes/DungeonScene';
 import type { DungeonSceneOptions } from './scenes/DungeonScene';
 import { PostSignupScene } from './scenes/PostSignupScene';
-import { tutorialLevel, getLevelDef } from './levels/index';
+import { sceneSetupFromSave } from './scenes/resumeFromSave';
 import { aiAdapter } from './ai/AIAdapter';
-import { revivedSnapshot } from './core/PlayerSnapshot';
 import { devBootScene, installDevLoopFallback } from './dev/devBoot';
-import { AbilityManager } from './core/AbilityManager';
-import { MAGIC_MISSILE_DEF } from './abilities/magicMissile';
-import { PROTECTIVE_SHELL_DEF } from './abilities/protectiveShell';
-import { SMUSH_DEF } from './abilities/smush';
-import { MONGO_DEF, getMongoStats } from './abilities/mongo';
-import { createMongoPetState } from './core/MongoPetState';
 import { AuthClient } from './auth/AuthClient';
 import type { GameProgress, GameProgressInput } from './auth/AuthClient';
 import { LoginUI } from './auth/LoginUI';
@@ -21,7 +14,6 @@ import { AudioManager } from './audio/AudioManager';
 import { CORE_SFX_IDS } from './audio/sfxGroups';
 import { showLoadingScreen } from './ui/LoadingScreen';
 import { difficultyStats } from './core/DifficultyStats';
-import { parseSavedWorld } from './core/SavedWorld';
 import { clearLocalProgress, readLocalProgress, writeLocalProgress } from './core/LocalProgress';
 import { setSearchCaptureHeldKeyRelease } from './ui/SearchField';
 
@@ -30,75 +22,10 @@ declare const __AI_ENABLED__: boolean;
 /** HTTP status code for unauthorized. */
 const HTTP_UNAUTHORIZED = 401;
 
-/**
- * An ability manager carrying a save's progress, or a fresh one at level 1.
- *
- * The defs have to be registered here rather than left to `DungeonScene`:
- * restoring clamps each level against its def's maximum, so a manager with no
- * defs would discard every state it was handed. Registering the same defs again
- * in the scene constructor is harmless — `register` leaves existing state alone.
- */
-function resumedAbilityManager(states: GameProgress['abilityStates']): AbilityManager {
-  const manager = new AbilityManager();
-  manager.register(MAGIC_MISSILE_DEF);
-  manager.register(PROTECTIVE_SHELL_DEF);
-  manager.register(SMUSH_DEF);
-  manager.register(MONGO_DEF);
-  if (states !== undefined) manager.restoreSerializedStates(states);
-  return manager;
-}
-
-/**
- * Starts the scene on the floor a save was written on, with its party, abilities
- * and pet restored.
- *
- * Works on a copy of `baseOptions`: the caller keeps handing the same object to
- * later new-game launches, and a restored party leaking into those would start a
- * fresh run with the old run's characters.
- */
+/** Starts the scene on the floor a save was written on, with its party, abilities and pet restored. */
 function resumeFromProgress(baseOptions: DungeonSceneOptions, progress: GameProgress): void {
-  const options: DungeonSceneOptions = { ...baseOptions };
-  // Loading straight into a wipe is never recoverable — the same save would
-  // reload into the same wipe — so a resumed party always arrives on its feet.
-  options.humanSnap = revivedSnapshot(progress.humanSnap);
-  options.catSnap = revivedSnapshot(progress.catSnap);
-  options.abilityManager = resumedAbilityManager(progress.abilityStates);
-  options.mongoUnlocked = progress.mongoUnlocked ?? false;
-  if (progress.mongoPetHp !== undefined && Number.isFinite(progress.mongoPetHp)) {
-    // Clamped against the maximum the *restored* level implies: this arrives
-    // as unvalidated JSON, and a value above the maximum renders as a
-    // permanently full bar that never regenerates down to the truth.
-    const petMaxHp = getMongoStats(options.abilityManager.getLevel('mongo')).maxHp;
-    const restoredHp = Math.max(0, Math.min(petMaxHp, progress.mongoPetHp));
-    options.mongoPetState = createMongoPetState(
-      restoredHp,
-      petMaxHp,
-      // Absent from saves written before the rest latch existed, where a zeroed
-      // pet is exactly the case the latch is for.
-      progress.mongoPetResting ?? restoredHp <= 0,
-    );
-  }
-  // progress.levelId is unvalidated JSON — a save written against a
-  // since-renamed level must fall back rather than throw at boot.
-  let resumeLevel;
-  let levelResolved = true;
-  try {
-    resumeLevel = getLevelDef(progress.levelId);
-  } catch {
-    resumeLevel = tutorialLevel;
-    levelResolved = false;
-  }
-  // A fallback level has no relationship to the saved seed, and a seed replayed
-  // against different level options would land the safe room in a wall.
-  const savedWorld = levelResolved ? parseSavedWorld(progress.world) : undefined;
-  if (savedWorld !== undefined) {
-    options.worldSeed = savedWorld.worldSeed;
-    options.artSeed = savedWorld.artSeed;
-    options.spawnAt = savedWorld.safeRoomTile ?? undefined;
-    options.levelTimerFrames = savedWorld.levelTimerFrames ?? undefined;
-    options.persistedWorldState = savedWorld.persisted;
-  }
-  sceneManager.replace(new DungeonScene(resumeLevel, input, sceneManager, options));
+  const { levelDef, options } = sceneSetupFromSave(baseOptions, progress);
+  sceneManager.replace(new DungeonScene(levelDef, input, sceneManager, options));
 }
 
 const input = new InputManager();
