@@ -62,6 +62,12 @@ import {
   BROKEN_BOOKSHELF,
   BOSS_ROOM_PROP_TILE_TYPES,
   BOSS_ROOM_FLAT_TILE_TYPES,
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -113,6 +119,10 @@ const SHADOW_TYPES = new Set([
   // carry their own contact shadow in the sprite, so the rectangular strip would
   // only show as a grey band poking out from under them.
   CLIFF,
+  // A roofless village wall is architecture in the same sense a town wall is.
+  // The palisade, the gate and the village's props are excluded — shoulder
+  // height at most, so a rectangular strip would poke out from under them.
+  HOLLOW_WALL,
 ]);
 
 // Full set of non-floor tile types used when scanning neighbours for inferFloorType.
@@ -204,6 +214,16 @@ const NON_FLOOR_TYPES = new Set<number>([
   // only stops a type without one being taken for a floor material.
   ...BOSS_ROOM_PROP_TILE_TYPES,
   ...BOSS_ROOM_FLAT_TILE_TYPES,
+  // Briar Hollow's solids, for the same reason as everything above: a probe
+  // reaching one must not infer it as ground and draw whatever material it
+  // claims. The walkable village types are absent on purpose — they *are*
+  // floor, or ground cover recorded exactly as `GRASSY_WEED` is.
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 ]);
 
 /**

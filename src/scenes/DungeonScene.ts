@@ -89,6 +89,7 @@ import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
 import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
 import { awardFirstHundred, bindAbilityLevelUps } from '../systems/abilityLevelUps';
+import { bindCraftLevelUps } from '../systems/craftLevelUps';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
 import { GoblinArrowSystem } from '../systems/GoblinArrowSystem';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
@@ -349,6 +350,24 @@ import {
   type TownMemory,
 } from '../core/TownMemory';
 import {
+  clonePartyCraftsState,
+  createPartyCraftsState,
+  restorePartyCraftsState,
+  type PartyCraftsState,
+} from '../core/partyCrafts';
+import {
+  captureBriarHollowState,
+  createBriarHollowState,
+  restoreBriarHollowState,
+  type BriarHollowState,
+} from '../core/briarHollowState';
+import { PartyTools } from '../core/PartyTools';
+import { keybindings } from '../core/Keybindings';
+import {
+  BriarHollowKit,
+  type BriarHollowKitCheckpoint,
+} from '../systems/briarHollow/BriarHollowKit';
+import {
   captureMercenaryRoster,
   createMercenaryRoster,
   restoreMercenaryRoster,
@@ -530,6 +549,18 @@ export interface DungeonSceneOptions {
   clubMembership?: ClubMembership;
   /** Resident lore progress + the apothecary's batch, threaded by reference across building/scene transitions. */
   townMemory?: TownMemory;
+  /**
+   * Shared tool tiers and seen craft explainers. Party progress like
+   * `abilityManager`, so it is threaded the same way rather than reset per
+   * floor: an axe upgrade survives every door and every stairway.
+   */
+  partyCrafts?: PartyCraftsState;
+  /**
+   * Briar Hollow's quest, structures and soldier orders, threaded by
+   * reference across building/scene transitions like `townMemory`. Empty and
+   * inert off floor 3.
+   */
+  briarHollowState?: BriarHollowState;
   /** Market-stall stock, threaded by reference so a shop trip can't restock a stall. */
   marketStock?: MarketStock;
   /** Hired-mercenary roster, threaded by reference across building/scene transitions. */
@@ -805,6 +836,8 @@ const KEYBOARD_HERO_HIT_TICK_VOLUME = 0.45;
 const LONGPRESS_TIMEOUT_MS = 500;
 const TOUCH_DRAG_THRESHOLD = 10;
 const MINIMAP_DRAG_THRESHOLD = 5;
+/** How close two world taps must land, in time, to read as the village kit's double-tap gesture. */
+const BRIAR_HOLLOW_DOUBLE_TAP_WINDOW_MS = 300;
 
 // Health visual feedback
 const HEALTH_BAR_COLOR_THRESHOLD = 0.78;
@@ -1053,6 +1086,25 @@ export class DungeonScene extends GameplayScene {
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
   private readonly townMemory: TownMemory;
+  private readonly partyCrafts: PartyCraftsState;
+  /** Wraps `partyCrafts.tools` by reference; one instance for the scene's lifetime. */
+  private readonly partyTools: PartyTools;
+  private readonly briarHollowState: BriarHollowState;
+  /**
+   * Built only on the floor-3 overworld, and only once its village site has
+   * been generated onto the map (`gameMap.briarHollow`). Null everywhere else,
+   * which is every save today — the generator that fills that field has not
+   * landed yet.
+   */
+  private briarHollowKit: BriarHollowKit | null = null;
+  /**
+   * The kit's own transient state as of the last save point, held on this scene
+   * instance rather than in `LevelCheckpoint` — nothing here is durable, and a
+   * door-rebuild or a fresh load starts the kit with nothing to restore.
+   */
+  private briarHollowKitCheckpoint: BriarHollowKitCheckpoint | null = null;
+  /** When the last world tap resolved, so a second one close behind it reads as the kit's double-tap gesture. */
+  private briarHollowLastWorldTapAt: number | null = null;
   private readonly marketStock: MarketStock;
   private readonly mercenaryRoster: MercenaryRoster;
   /** Companion combat stance, threaded by reference so it survives building trips and floor changes. */
@@ -1566,6 +1618,14 @@ export class DungeonScene extends GameplayScene {
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
     this.townMemory = options?.townMemory ?? createTownMemory();
+    this.partyCrafts = options?.partyCrafts ?? createPartyCraftsState();
+    this.partyTools = new PartyTools(this.partyCrafts.tools);
+    // Self-heals any drift between the two inventories (a stray other-tier
+    // tool, one crawler missing the current tier entirely). A no-op while no
+    // tool has ever been granted, since `reconcile` only touches a kind whose
+    // tier is non-null.
+    this.partyTools.reconcile(this.human, this.cat);
+    this.briarHollowState = options?.briarHollowState ?? createBriarHollowState();
     this.marketStock = options?.marketStock ?? createMarketStock();
     this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
     this.floorEntryMercenaryRoster =
@@ -1769,6 +1829,7 @@ export class DungeonScene extends GameplayScene {
           catSnap: revivedSnapshot(snapPlayer(this.cat)),
           levelId: levelDef.nextLevelId,
           abilityStates: this.abilityManager.serializeStates(),
+          crafts: this.partyCrafts,
           mongoUnlocked: this.mongoSystem.unlocked,
           // The system's accessor, not the stored value: both of these saves can
           // fire with Mongo still out, and the stored value is only written back
@@ -1821,6 +1882,9 @@ export class DungeonScene extends GameplayScene {
               mongoUnlocked: this.mongoSystem.unlocked,
               mongoPetState: this.mongoPetState,
               abilityManager: this._cleanAbilityManager(),
+              // Party progress, not floor state: an axe bought on this floor is
+              // still the axe in hand on the next one.
+              partyCrafts: this.partyCrafts,
               saveProgress: this.onSaveProgress,
               audio: this.audio ?? undefined,
               onResetGame: this.onResetGameCallback ?? undefined,
@@ -1937,6 +2001,7 @@ export class DungeonScene extends GameplayScene {
                     mongoPetState: this.mongoPetState,
                     mongoWasOut: companionDeparture.mongoWasOut,
                     abilityManager: this._cleanAbilityManager(),
+                    partyCrafts: this.partyCrafts,
                     saveProgress: this.onSaveProgress,
                     audio: this.audio ?? undefined,
                     onResetGame: this.onResetGameCallback ?? undefined,
@@ -1948,6 +2013,7 @@ export class DungeonScene extends GameplayScene {
                     doomsdayQuestProgress: this.doomsdayQuestProgress,
                     clubMembership: this.clubMembership,
                     townMemory: this.townMemory,
+                    briarHollowState: this.briarHollowState,
                     marketStock: this.marketStock,
                     mercenaryRoster: this.mercenaryRoster,
                     godModeState: this.godModeState,
@@ -1979,6 +2045,8 @@ export class DungeonScene extends GameplayScene {
               this.tacticsNoticesSeen,
               respawnModeFor(respawnRouteFor(this.lastSave)),
               companionArrival,
+              this.partyCrafts,
+              this.briarHollowState,
             ),
           );
         },
@@ -2051,6 +2119,19 @@ export class DungeonScene extends GameplayScene {
         this.townProps.boardTile,
         this.journalProgress,
       );
+      this.briarHollowKit =
+        this.gameMap.briarHollow !== null
+          ? new BriarHollowKit(this.world, {
+              human: this.human,
+              cat: this.cat,
+              partyTools: this.partyTools,
+              partyCrafts: this.partyCrafts,
+              state: this.briarHollowState,
+              menus: this.menus,
+              audio: this.audio,
+              keybindings,
+            })
+          : null;
     }
 
     this.achievementUI = new AchievementUISystem(
@@ -2117,6 +2198,7 @@ export class DungeonScene extends GameplayScene {
       onPetLevelUp: () => this.mongoSystem.onPetLevelUp(),
       onTalismanLevel: () => this.unlockFirstHundred(),
     });
+    bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
     this.cat.setAbilityManager(this.abilityManager);
     this.human.setAbilityManager(this.abilityManager);
 
@@ -2965,6 +3047,9 @@ export class DungeonScene extends GameplayScene {
       buildAction: () => this.triggerBuildAction(),
       hotbarActivation: (idx) => activateHotbarSlot(this.hotbarHost(), idx),
       dynamiteRelease: (idx) => releaseChargedDynamite(this.hotbarHost(), idx),
+      onConstruction: () => this.briarHollowKit?.openConstruction(false),
+      onStructureMenu: () => void this.briarHollowKit?.tryStructureMenu(),
+      onQuickLoad: () => this.briarHollowKit?.quickLoad(),
     });
   }
 
@@ -2991,6 +3076,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.spiderQuest.dispose();
     this.bounty?.dispose();
+    this.briarHollowKit?.dispose();
     this.fairies.dispose();
     this.fairyFireballs.dispose();
     // Drops any standing order along with the hazard sources that were meant to
@@ -3753,6 +3839,10 @@ export class DungeonScene extends GameplayScene {
     restorePlayer(this.human, cp.humanSnap);
     restorePlayer(this.cat, cp.catSnap);
     this.abilityManager.restoreStates(cp.abilities.snapshotStates());
+    restorePartyCraftsState(this.partyCrafts, cp.crafts);
+    // The restored tool tier may not match what each inventory now holds, so
+    // self-heal the same way scene entry does.
+    this.partyTools.reconcile(this.human, this.cat);
     this.humanAchievements.restoreFrom(cp.humanAchievements);
     this.catAchievements.restoreFrom(cp.catAchievements);
 
@@ -3809,6 +3899,9 @@ export class DungeonScene extends GameplayScene {
     // same room locks and entry windows the snapshot describes, and they clear
     // them to "no fight in progress" rather than to what was actually captured.
     this.restoreWorldCheckpoint(cp.world);
+    if (this.briarHollowKitCheckpoint !== null) {
+      this.briarHollowKit?.restoreCheckpoint(this.briarHollowKitCheckpoint);
+    }
     this.fairies.resetForCheckpoint(
       this.world.roster.mobs,
       deadFairyUpgradeBosses(this.bossRoom, this.arena),
@@ -3890,6 +3983,7 @@ export class DungeonScene extends GameplayScene {
       marketStock: captureMarketStock(this.marketStock),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
       mongoPetState: captureMongoPetState(this.mongoPetState),
+      briarHollow: captureBriarHollowState(this.briarHollowState),
 
       krakarenKilled: this.krakarenKilled,
       krakarenBossRoomIdx: this.krakarenBossRoomIdx,
@@ -3970,6 +4064,7 @@ export class DungeonScene extends GameplayScene {
     // and rest latch into this very object on its way out — restoring first
     // would hand the despawn a snapshot to overwrite.
     restoreMongoPetState(this.mongoPetState, world.mongoPetState);
+    restoreBriarHollowState(this.briarHollowState, world.briarHollow);
 
     this.krakarenKilled = world.krakarenKilled;
     this.krakarenBossRoomIdx = world.krakarenBossRoomIdx;
@@ -4007,6 +4102,7 @@ export class DungeonScene extends GameplayScene {
       tacticsNoticesSeen: [...this.tacticsNoticesSeen],
       doomsday: capturePersistedDoomsday(this.doomsdayQuestProgress, Date.now()),
       bossRoomDressing: this.bossRoomDressings.captureCheckpoint(),
+      briarHollow: captureBriarHollowState(this.briarHollowState),
 
       krakarenKilled: this.krakarenKilled,
       krakarenBossRoomIdx: this.krakarenBossRoomIdx,
@@ -4057,6 +4153,7 @@ export class DungeonScene extends GameplayScene {
       tacticsNoticesSeen,
       doomsday,
       bossRoomDressing,
+      briarHollow,
       krakarenKilled,
       krakarenBossRoomIdx,
       juicerKilled,
@@ -4112,6 +4209,9 @@ export class DungeonScene extends GameplayScene {
     restoreMarketStock(this.marketStock, fromPersistedMarketStockCheckpoint(marketStock));
     restoreMercenaryRoster(this.mercenaryRoster, mercenaryRoster);
     restoreMongoPetState(this.mongoPetState, mongoPetState);
+    // A save older than the village restores none of it, leaving the
+    // constructor's fresh, empty state in place.
+    if (briarHollow !== undefined) restoreBriarHollowState(this.briarHollowState, briarHollow);
 
     this.mordecaiDebrief = { ...mordecaiDebrief };
     // `TacticsNoticeSystem` holds this exact Set by reference, so it's refilled
@@ -4141,6 +4241,7 @@ export class DungeonScene extends GameplayScene {
       catSnap: revivedSnapshot(snapPlayer(this.cat)),
       levelId: this.levelDef.id,
       abilityStates: this.abilityManager.serializeStates(),
+      crafts: this.partyCrafts,
       mongoUnlocked: this.mongoSystem.unlocked,
       // The system's accessor, not the stored value: both of these saves can
       // fire with Mongo still out, and the stored value is only written back
@@ -4245,11 +4346,13 @@ export class DungeonScene extends GameplayScene {
 
   private captureLevelCheckpoint(respawnTile: TilePoint): LevelCheckpoint {
     markMobsAtCheckpoint(this.world.roster);
+    this.briarHollowKitCheckpoint = this.briarHollowKit?.captureCheckpoint() ?? null;
     return {
       world: this.captureWorldCheckpoint(),
       humanSnap: checkpointSnapshot(snapPlayer(this.human)),
       catSnap: checkpointSnapshot(snapPlayer(this.cat)),
       abilities: this.abilityManager.clone(),
+      crafts: clonePartyCraftsState(this.partyCrafts),
       humanAchievements: this.humanAchievements.clone(),
       catAchievements: this.catAchievements.clone(),
       respawnX: respawnTile.x * TILE_SIZE,
@@ -4399,6 +4502,11 @@ export class DungeonScene extends GameplayScene {
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         clubMembership: this.clubMembership,
         townMemory: this.townMemory,
+        partyCrafts: this.partyCrafts,
+        // No `briarHollowState`: the village is per-floor and this restart can
+        // only fire before this floor's first save, so the live state holds
+        // nothing a save has ever recorded — the constructor's fresh state is
+        // the correct rewind, the same as taking the stairs down.
         marketStock: this.marketStock,
         mercenaryRoster: this.mercenaryRoster,
         godModeState: this.godModeState,
@@ -4683,6 +4791,7 @@ export class DungeonScene extends GameplayScene {
       },
       modal(this.stairwell.menuOpen, 'stairwell'),
       modal(this.building?.menuOpen === true, 'building-entry'),
+      ...(this.briarHollowKit?.overlayClaims() ?? []),
       {
         isOpen: this.followerMenu.isOpen,
         space: { kind: 'swallow' },
@@ -5219,6 +5328,9 @@ export class DungeonScene extends GameplayScene {
       if (this.crawlerSigns?.tryInteract(active) === true) {
         return;
       }
+      if (this.briarHollowKit?.tryInteract(active) === true) {
+        return;
+      }
       if (this.tryTalkToCitizen(active)) {
         return;
       }
@@ -5680,6 +5792,7 @@ export class DungeonScene extends GameplayScene {
       !this.runCompleteScreen.isActive
     ) {
       this.townLife?.update(this.buildSystemContext());
+      this.briarHollowKit?.update(this.buildSystemContext());
       this.townProps?.update();
       this.townDecor?.update();
       this.market?.update();
@@ -5758,7 +5871,10 @@ export class DungeonScene extends GameplayScene {
       mobs: this.world.roster.mobs,
       mobGrid: this.world.roster.grid,
       townsfolk: this.townLife?.people,
-      townProps: this.townPropRenderables ?? undefined,
+      townProps:
+        this.briarHollowKit !== null
+          ? [...(this.townPropRenderables ?? []), ...this.briarHollowKit.renderEntities()]
+          : (this.townPropRenderables ?? undefined),
       gameOver: this.gameOver,
       pauseMenuOpen: this.menus.pauseMenu.isOpen,
       gore: this.combat.gore,
@@ -5794,6 +5910,7 @@ export class DungeonScene extends GameplayScene {
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
+    this.briarHollowKit?.renderGround(ctx, camX, camY);
     this.bopca.renderObjects(ctx, camX, camY, this.active(), this.inactive());
     this.tutorial?.renderGatesAndLedge(ctx, camX, camY);
     const activeCrawler = this.active();
@@ -5823,6 +5940,7 @@ export class DungeonScene extends GameplayScene {
       spider.renderSpitProjectile(ctx, camX, camY, TILE_SIZE);
     }
     this.spiderQuest.renderCutsceneEffects(ctx, camX, camY);
+    this.briarHollowKit?.renderAbove(ctx, camX, camY);
     // Over the entities: a label spawned on a large body (a boss) would
     // otherwise rise out of sight behind its own sprite.
     this.combat.floatingText.render(ctx, camX, camY);
@@ -5880,6 +5998,7 @@ export class DungeonScene extends GameplayScene {
     if (!platform.isMobile) {
       this._hudSkillBannerRect = hudResult.notifRect;
     }
+    this.briarHollowKit?.renderHud(ctx);
 
     // Rebuilt once here, above every consumer: the pinned world arrow, the
     // minimap's extra marker and the Journal tab all resolve the pin against
@@ -6114,6 +6233,7 @@ export class DungeonScene extends GameplayScene {
       this.renderCitizenPrompt(ctx, camX, camY);
       this.bounty?.renderShadyOverlay(ctx, camX, camY, this.active());
       this.renderPropPrompt(ctx, camX, camY);
+      this.briarHollowKit?.renderPrompt(ctx, camX, camY, this.active());
       this.renderMercenaryPrompt(ctx, camX, camY);
     }
 
@@ -6318,6 +6438,7 @@ export class DungeonScene extends GameplayScene {
     markers.push(...this.murderQuest.questMarkers);
     markers.push(...this.anchorQuest.questMarkers);
     if (this.bounty !== null) markers.push(...this.bounty.questMarkers);
+    if (this.briarHollowKit !== null) markers.push(...this.briarHollowKit.questMarkers);
     markers.push(...this.safeRoom.mordecaiMarkers);
     const pinned = resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries);
     // The pinned objective gets a marker of its own on top of whatever its own
@@ -6345,6 +6466,7 @@ export class DungeonScene extends GameplayScene {
         this.bounty,
         this.townGuide,
         this.doomsdayEscape,
+        this.briarHollowKit,
       ]),
     );
     return entries;
@@ -7455,18 +7577,40 @@ export class DungeonScene extends GameplayScene {
                 !this.gameOver
               ) {
                 const cam = this.camera();
-                const grateHandled = this.defendQuest.tryMobileTapOnGrate(
-                  x,
-                  y,
-                  cam.x,
-                  cam.y,
-                  this.active(),
-                );
-                if (!grateHandled) {
-                  this.triggerSpaceAction(x, y);
+                let villageConsumed = false;
+                if (this.briarHollowKit !== null) {
+                  const now = Date.now();
+                  const isDoubleTap =
+                    this.briarHollowLastWorldTapAt !== null &&
+                    now - this.briarHollowLastWorldTapAt < BRIAR_HOLLOW_DOUBLE_TAP_WINDOW_MS;
+                  this.briarHollowLastWorldTapAt = now;
+                  villageConsumed = isDoubleTap
+                    ? this.briarHollowKit.handleDoubleTap(x, y, cam.x, cam.y, this.active())
+                    : this.briarHollowKit.handleTap(x, y, cam.x, cam.y, this.active());
+                }
+                if (!villageConsumed) {
+                  const grateHandled = this.defendQuest.tryMobileTapOnGrate(
+                    x,
+                    y,
+                    cam.x,
+                    cam.y,
+                    this.active(),
+                  );
+                  if (!grateHandled) {
+                    this.triggerSpaceAction(x, y);
+                  }
                 }
               }
             }
+          } else if (
+            this.briarHollowKit !== null &&
+            elapsed >= MENU_TAP_DURATION_MS &&
+            moved < MENU_TAP_MAX_DISTANCE
+          ) {
+            // Held roughly in place past tap duration, rather than dragged —
+            // the village kit's long-press gesture.
+            const cam = this.camera();
+            this.briarHollowKit.handleLongPress(x, y, cam.x, cam.y, this.active());
           }
         }
         this.menus.pauseMenu.touchScrollEnd(x, y, this.human, this.cat);
@@ -7505,6 +7649,8 @@ export class DungeonScene extends GameplayScene {
     const mordecai = this.safeRoom.speakingMordecaiPosition;
     if (mordecai !== null) return mordecai;
     if (this.defendQuest.isDialogOpen) return this.defendQuest.questNPC;
+    const villager = this.briarHollowKit?.humanTalkSpeaker() ?? null;
+    if (villager !== null) return villager;
     return null;
   }
 

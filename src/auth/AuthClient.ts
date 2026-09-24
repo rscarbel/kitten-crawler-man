@@ -3,6 +3,7 @@ import type { PlayerSnapshot } from '../core/PlayerSnapshot';
 import type { SerializedAbilityState } from '../core/AbilityManager';
 import type { SerializedAchievements } from '../core/AchievementManager';
 import type { GameStatsSnapshot } from '../core/GameStats';
+import type { PartyCraftsState } from '../core/partyCrafts';
 
 /** HTTP status code for server error (fallback for API errors). */
 const HTTP_SERVER_ERROR = 500;
@@ -39,6 +40,13 @@ export interface GameProgress {
    * zero or was simply recalled hurt.
    */
   mongoPetResting?: boolean;
+  /**
+   * Shared axe/pickaxe tiers and which craft-skill explainers have already
+   * played. Party progress rather than either crawler's own — a tool upgrade
+   * always applies to both inventories at once. Absent on saves predating
+   * craft skills, which resume with no tools granted and every explainer unseen.
+   */
+  crafts?: PartyCraftsState;
   /**
    * Each crawler's unlocked achievements, unread notices and unopened loot
    * boxes. Absent on saves written before achievements were persisted — those

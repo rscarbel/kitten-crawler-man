@@ -32,6 +32,7 @@ import type { MercenaryRosterCheckpoint } from './MercenaryRoster';
 import type { MongoPetStateCheckpoint } from './MongoPetState';
 import type { MurderQuestProgressCheckpoint } from './MurderQuestProgress';
 import type { JournalProgressCheckpoint } from './JournalProgress';
+import type { BriarHollowStateSnapshot } from './briarHollowState';
 
 /**
  * Everything about the floor — and the run — that a safe-room checkpoint has to
@@ -97,6 +98,8 @@ export interface WorldCheckpoint {
   townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
   mongoPetState: MongoPetStateCheckpoint;
+  /** Briar Hollow's quest, structures and soldier orders. Empty on every floor but 3. */
+  briarHollow: BriarHollowStateSnapshot;
 
   /**
    * One-time kill latches the scene owns directly rather than through a system.

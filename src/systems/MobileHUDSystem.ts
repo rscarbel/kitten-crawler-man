@@ -30,6 +30,18 @@ import {
   CAMPFIRE,
   GOBLIN_TENT,
   DEN_HOLLOW,
+  HOLLOW_WALL,
+  HOLLOW_PLANK_FLOOR,
+  HOLLOW_THRESHOLD,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_DECAL,
+  HOLLOW_PALISADE,
+  HOLLOW_PALISADE_GAP,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
+  PASTURE_GRASS,
+  CROP_FIELD,
 } from '../map/tileTypes';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { bossRoomMinimapColor } from '../map/tiles/bossRoomTiles';
@@ -583,6 +595,31 @@ export class MobileHUDSystem implements GameSystem {
         return '#7a5f3a';
       case DEN_HOLLOW:
         return '#2e2a26';
+      // Briar Hollow, in the same colours `MiniMapSystem` uses.
+      case HOLLOW_WALL:
+        return '#8a7458';
+      case HOLLOW_PLANK_FLOOR:
+        return '#8a6a42';
+      case HOLLOW_THRESHOLD:
+        return '#7a6248';
+      case HOLLOW_PROP_LOW:
+        return '#9a7850';
+      case HOLLOW_PROP_TALL:
+        return '#6a5238';
+      case HOLLOW_DECAL:
+        return '#6e7a3c';
+      case HOLLOW_PALISADE:
+        return '#8a6a3c';
+      case HOLLOW_PALISADE_GAP:
+        return '#5c5548';
+      case HOLLOW_GATE:
+        return '#6b5636';
+      case ROCK_DEPOSIT:
+        return '#726a5e';
+      case PASTURE_GRASS:
+        return '#5c8048';
+      case CROP_FIELD:
+        return '#6e5636';
       default:
         return bossRoomMinimapColor(type) ?? '#555555';
     }

@@ -242,6 +242,16 @@
     "scripts/propSeedGates.ts",
     "scripts/facadeSeedGates.ts",
     "scripts/gates-floor-seed-sweep.ts",
-    "scripts/build-floor-art-seeds.ts"
+    "scripts/build-floor-art-seeds.ts",
+    "scripts/verify-village-dialogue.ts",
+    "scripts/verify-craft-perks.ts",
+    "scripts/verify-craft-skills.ts",
+    "scripts/verify-party-tools.ts",
+    "scripts/verify-party-resources.ts",
+    "scripts/verify-quantity-picker.ts",
+    "scripts/gates-village-icons.ts",
+    "scripts/verify-briar-hollow-state.ts",
+    "scripts/render-crafts-tab.ts",
+    "scripts/verify-craft-level-ups.ts"
   ]
 }

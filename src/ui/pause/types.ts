@@ -9,6 +9,7 @@ export type PauseTab =
   | 'skills'
   | 'achievements'
   | 'abilities'
+  | 'crafts'
   | 'settings'
   | 'controls';
 

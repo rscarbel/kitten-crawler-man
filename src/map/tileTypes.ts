@@ -561,11 +561,76 @@ export const INTERIOR_FLOOR_TYPES: ReadonlySet<number> = new Set([
   DRILL_SAND_FLOOR,
 ]);
 
+// ── Briar Hollow, the ratkin village ──────────────────────────────────────────
+//
+// Village tile types; walls and palisades are Y-sorted and must stay in both
+// decoration registries.
+
+/** A roofless village wall: solid, and seen straight into from above. */
+export const HOLLOW_WALL = 128;
+
+/** A village building's plank floor — walkable. */
+export const HOLLOW_PLANK_FLOOR = 129;
+
+/** A village doorway's worn threshold board — walkable. */
+export const HOLLOW_THRESHOLD = 130;
+
+/**
+ * A knee-high blocking prop a crawler can see over — a bench, a trough, a
+ * crate. Solid and Y-sorted, but low enough to shoot and see over. Its art is
+ * selected by `spriteKey`, the same field `SPRITE_BUILDING` uses.
+ */
+export const HOLLOW_PROP_LOW = 131;
+
+/**
+ * A head-high blocking prop that also blocks sight — a bell tower, a hearth, a
+ * shelf, a sawmill. Solid and Y-sorted. Its art is selected by `spriteKey`.
+ */
+export const HOLLOW_PROP_TALL = 132;
+
+/** Walkable flat village dressing: a rug, a crop row, a scatter of straw. */
+export const HOLLOW_DECAL = 133;
+
+/**
+ * Which stage a palisade segment has been built or upgraded to.
+ *
+ * Its own field on `TileContent` rather than a reuse of `spriteKey`, the same
+ * way `FENCE` carries `fenceStyle` rather than a string: the tier is data a
+ * later system reasons about (HP, upgrade cost), not just an art selector.
+ */
+export type PalisadeTier = 'fence' | 'wood' | 'stone' | 'fortified';
+
+/**
+ * A palisade segment, at whichever tier `wallTier` records. Solid and
+ * Y-sorted, and low enough to see and shoot over.
+ */
+export const HOLLOW_PALISADE = 134;
+
+/** A breach in the palisade — walkable rubble that remembers its former tier. */
+export const HOLLOW_PALISADE_GAP = 135;
+
+/**
+ * The village gate. Walkable by tile type — a hostile mob is turned away by a
+ * runtime block flag, the same pattern the arena door uses, never by the tile
+ * type itself, so the offline reachability validator sees straight through it.
+ * Solid for `TileGrid`, and Y-sorted.
+ */
+export const HOLLOW_GATE = 136;
+
+/** A minable stone outcrop, one tile. Solid and Y-sorted, and blocks sight. */
+export const ROCK_DEPOSIT = 137;
+
+/** Grazed-short pasture grass — walkable ground material. */
+export const PASTURE_GRASS = 138;
+
+/** Tilled crop rows — walkable ground material. */
+export const CROP_FIELD = 139;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 128;
+export const TILE_TYPE_COUNT = 140;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
@@ -733,6 +798,8 @@ export type TileContent = {
    * mid-channel tiles drew their planks across their own walkway.
    */
   bridgeAxis?: number;
+  /** Set on `HOLLOW_PALISADE` tiles: which of the four palisade tiers this segment is. */
+  wallTier?: PalisadeTier;
 };
 
 /** Which way a bridge deck runs. */

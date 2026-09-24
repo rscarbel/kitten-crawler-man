@@ -3,6 +3,8 @@ import type { Player } from '../Player';
 import type { EventBus } from '../core/EventBus';
 import type { SkillEvent, SkillId } from '../core/SkillManager';
 import { getSkillDef } from '../core/SkillManager';
+import type { CraftSkillEvent } from '../core/CraftSkills';
+import type { CrawlerKind } from '../core/SkillManager';
 import type { HotbarToast } from '../ui/HotbarToast';
 
 /**
@@ -85,9 +87,32 @@ export class SystemNoticeSystem implements GameSystem {
     player.pendingDodges = 0;
 
     const queue = player.skills.pendingEvents;
-    if (queue.length === 0) return;
-    for (const event of queue) this.handle(event, who);
-    queue.length = 0;
+    if (queue.length > 0) {
+      for (const event of queue) this.handle(event, who);
+      queue.length = 0;
+    }
+
+    const craftQueue = player.craftSkills.pendingEvents;
+    if (craftQueue.length === 0) return;
+    const crawler: CrawlerKind =
+      player.craftSkills.crawlerKind ?? (who === 'Human' ? 'human' : 'cat');
+    for (const event of craftQueue) this.handleCraftSkillEvent(event, crawler);
+    craftQueue.length = 0;
+  }
+
+  private handleCraftSkillEvent(event: CraftSkillEvent, crawler: CrawlerKind): void {
+    switch (event.kind) {
+      case 'learned':
+        this.bus.emit('craftSkillLearned', { crawler, id: event.id });
+        return;
+      case 'leveled':
+        this.bus.emit('craftSkillLevelUp', { crawler, id: event.id, level: event.level });
+        return;
+      default: {
+        const unhandled: never = event.kind;
+        return unhandled;
+      }
+    }
   }
 
   private handle(event: SkillEvent, who: 'Human' | 'Cat'): void {

@@ -371,6 +371,44 @@ function chilled(color: string, amount: number): string {
   return `rgb(${mix(r, cr)},${mix(g, cg)},${mix(b, cb)})`;
 }
 
+/** Where a dish icon's vessel rim sits, as a fraction of the icon square. */
+const DISH_ICON_BASE_Y_FRACTION = 0.63;
+/**
+ * `drawBowl`'s own proportions (`DISH_BOWL_WIDTH_FRACTION` etc.) are tuned for
+ * a dish sitting on the counter slab, where the bowl is only one element in a
+ * wider composition. An inventory slot has nothing else in it, so the bowl is
+ * drawn at a larger virtual tile size than the icon square actually is —
+ * `drawBowl` itself is untouched, only the size it's told to fill.
+ */
+const DISH_ICON_VESSEL_SCALE = 1.55;
+
+/**
+ * Draws a dish's bowl into a square icon region, e.g. an inventory slot.
+ *
+ * Wraps the vessel painter only, not the counter slab and shadow
+ * {@link drawServedDish} draws around a served dish, so the icon is just the
+ * food itself.
+ */
+export function drawDishIcon(
+  ctx: CanvasRenderingContext2D,
+  visual: DishVisual,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  const cx = x + size / 2;
+  const baseY = y + size * DISH_ICON_BASE_Y_FRACTION;
+  drawBowl(
+    ctx,
+    cx,
+    baseY,
+    size * DISH_ICON_VESSEL_SCALE,
+    visual.vesselColor,
+    visual.contentColor,
+    visual.garnishColor,
+  );
+}
+
 /**
  * A dish sitting on the counter: vessel, contents, garnish, shadow and steam.
  *

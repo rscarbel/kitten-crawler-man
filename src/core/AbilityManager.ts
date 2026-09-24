@@ -8,6 +8,12 @@
  * Both fields have per-ability overrides; defaults are 1.3 and 1.8 respectively.
  */
 
+import {
+  computeXpToNextLevel,
+  DEFAULT_XP_GROWTH_RATE,
+  DEFAULT_FINAL_LEVEL_MULTIPLIER,
+} from './xpCurve';
+
 export type AbilityId = 'magic_missile' | 'protective_shell' | 'smush' | 'mongo';
 
 /**
@@ -97,25 +103,6 @@ export interface AbilityState {
  * rather than on either `PlayerSnapshot`.
  */
 export type SerializedAbilityState = Omit<AbilityState, 'xpToNextLevel'>;
-
-const DEFAULT_XP_GROWTH_RATE = 1.3;
-const DEFAULT_FINAL_LEVEL_MULTIPLIER = 1.8;
-
-function computeXpToNextLevel(
-  currentLevel: number,
-  baseXpToLevel2: number,
-  growthRate: number,
-  finalLevelMultiplier: number,
-  maxLevel: number,
-): number {
-  if (currentLevel >= maxLevel) return Infinity;
-  let xp = baseXpToLevel2;
-  for (let i = 1; i < currentLevel; i++) {
-    // The final transition (maxLevel-1 → maxLevel) uses its own multiplier
-    xp = i === maxLevel - 2 ? Math.round(xp * finalLevelMultiplier) : Math.round(xp * growthRate);
-  }
-  return xp;
-}
 
 function xpToNextLevel(def: AbilityDef, currentLevel: number): number {
   return computeXpToNextLevel(

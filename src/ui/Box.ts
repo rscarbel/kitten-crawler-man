@@ -259,6 +259,10 @@ export const PROGRESS_PRESETS = {
     borderWidth: 1,
     radius: 1,
   },
+  /** Resourcing's XP bar — the same green a fresh-cut log or a cut stone reads as. */
+  resourcing: { fill: '#84cc16', background: 'rgba(0,0,0,0.5)', radius: 2 },
+  /** Construction's XP bar — amber, distinct from Resourcing's green so the two crawlers' progressions never read as one meter. */
+  construction: { fill: '#f59e0b', background: 'rgba(0,0,0,0.5)', radius: 2 },
 } satisfies Record<string, ProgressPreset>;
 
 function resolvePadding(p: Padding | undefined): {

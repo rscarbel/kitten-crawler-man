@@ -14,14 +14,13 @@ import {
   type ResistanceType,
 } from '../src/core/ItemDefs.js';
 import type { StatName } from '../src/Player.js';
-import type { CrawlerKind } from '../src/core/SkillManager.js';
+import { CRAWLER_NAMES, type CrawlerKind } from '../src/core/SkillManager.js';
 import { Juicer } from '../src/creatures/Juicer.js';
 import { KrakarenClone } from '../src/creatures/KrakarenClone.js';
 import { TheHoarder } from '../src/creatures/TheHoarder.js';
 import {
   ALL_DEBRIEF_BOSS_TYPES,
   BOSS_DISPLAY_NAMES,
-  CRAWLER_NAMES,
   EMPTY_DEBRIEF_MEMORY,
   HUSHED_ONLY_LINE,
   MAX_ITEMS_PER_DEBRIEF_PAGE,

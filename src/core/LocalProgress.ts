@@ -5,6 +5,7 @@ import { isRecord } from './guards';
 import type { PlayerSnapshot } from './PlayerSnapshot';
 import { AchievementManager } from './AchievementManager';
 import type { SerializedAchievements } from './AchievementManager';
+import { parsePartyCraftsState } from './partyCrafts';
 
 const STORAGE_KEY = 'kcm.progress';
 const LOCAL_PROGRESS_VERSION = 1;
@@ -64,6 +65,7 @@ function parseProgress(raw: unknown): GameProgress | null {
     catAchievements: parseAchievements(raw.catAchievements),
     world: parseSavedWorld(raw.world),
     gameStats: parseGameStatsSnapshot(raw.gameStats),
+    crafts: parsePartyCraftsState(raw.crafts),
   };
 }
 

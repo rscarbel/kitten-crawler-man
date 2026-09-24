@@ -156,6 +156,25 @@ export class Inventory {
   }
 
   /**
+   * Swaps the first slot holding `fromId` (hotbar checked before bag) for
+   * `toId`, keeping the same slot index. Used for in-place gear upgrades,
+   * where the item's position must survive the swap.
+   *
+   * @returns false when `fromId` was not held anywhere.
+   */
+  replaceItemInPlace(fromId: ItemId, toId: ItemId): boolean {
+    for (const slots of [this.actionBar.slots, this.bag.slots]) {
+      const idx = slots.findIndex((s) => s?.id === fromId);
+      if (idx === -1) continue;
+      const existing = slots[idx];
+      if (!existing) continue;
+      slots[idx] = { ...ITEM_DEF[toId], quantity: existing.quantity };
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Remove one from the exact slot the player pointed at, rather than the first
    * copy anywhere. Without this, using a bag stack while the same potion also
    * sits in the hotbar would silently drain the hotbar one instead.

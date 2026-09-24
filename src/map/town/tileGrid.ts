@@ -39,6 +39,12 @@ import {
   CLIFF,
   CAMPFIRE,
   GOBLIN_TENT,
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 } from '../tileTypes';
 import type { TileRect } from './townPlan';
 
@@ -73,6 +79,14 @@ const SOLID_TILE_TYPES: ReadonlySet<number> = new Set([
   CLIFF,
   CAMPFIRE,
   GOBLIN_TENT,
+  // Briar Hollow's walls, props and the gate. The gate is walkable for bodies
+  // but is still ground no generator pass may pave over.
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 ]);
 
 /**

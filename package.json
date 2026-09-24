@@ -121,6 +121,7 @@
     "verify:mercenaries": "tsx scripts/verify-mercenaries.ts",
     "verify:mordecai-debrief": "tsx scripts/verify-mordecai-debrief.ts",
     "verify:progression": "tsx scripts/verify-progression.ts",
+    "verify:quantity-picker": "tsx scripts/verify-quantity-picker.ts",
     "verify:quest-choke": "tsx scripts/verify-quest-choke.ts",
     "verify:run-stats": "tsx scripts/verify-run-stats.ts",
     "verify:separation": "tsx scripts/verify-separation.ts",
@@ -130,6 +131,15 @@
     "verify:world-seed": "tsx scripts/verify-world-seed.ts",
     "verify:town-save": "tsx scripts/verify-town-save.ts",
     "verify:hireling-loss": "tsx scripts/verify-hireling-loss.ts",
+    "verify:village-dialogue": "tsx scripts/verify-village-dialogue.ts",
+    "verify:craft-perks": "tsx scripts/verify-craft-perks.ts",
+    "verify:craft-skills": "tsx scripts/verify-craft-skills.ts",
+    "verify:party-tools": "tsx scripts/verify-party-tools.ts",
+    "verify:party-resources": "tsx scripts/verify-party-resources.ts",
+    "verify:briar-hollow-state": "tsx scripts/verify-briar-hollow-state.ts",
+    "verify:craft-level-ups": "tsx scripts/verify-craft-level-ups.ts",
+    "render:crafts-tab": "tsx scripts/render-crafts-tab.ts",
+    "gates:village-icons": "tsx scripts/gates-village-icons.ts",
     "wave:figure": "tsx scripts/wave-test-figure.ts"
   },
   "dependencies": {

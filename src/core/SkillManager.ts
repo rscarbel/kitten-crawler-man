@@ -30,6 +30,12 @@ export type SkillId =
 /** The two playable crawlers, for skill eligibility. */
 export type CrawlerKind = 'cat' | 'human';
 
+/** The crawlers' in-fiction names, for any UI that must name one of them. */
+export const CRAWLER_NAMES = {
+  human: 'Carl',
+  cat: 'Donut',
+} as const satisfies Record<CrawlerKind, string>;
+
 /** Which crawler a skill can be used by. */
 export type SkillOwner = CrawlerKind | 'both';
 

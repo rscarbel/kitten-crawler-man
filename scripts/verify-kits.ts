@@ -65,6 +65,13 @@ import {
 import { CULT_HIDEOUT_CULTIST_LEVEL } from '../src/systems/CultHideoutSystem';
 import { createTownMemory } from '../src/core/TownMemory';
 import { createMurderQuestProgress } from '../src/core/MurderQuestProgress';
+import { MenusKit } from '../src/systems/kits/MenusKit';
+import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
+import { createBriarHollowState } from '../src/core/briarHollowState';
+import { createPartyCraftsState } from '../src/core/partyCrafts';
+import { PartyTools } from '../src/core/PartyTools';
+import { keybindings } from '../src/core/Keybindings';
+import { focusedOverlay, worldHalted } from '../src/systems/kits/OverlayClaims';
 
 const HALF_TILE = TILE_SIZE / 2;
 
@@ -850,6 +857,52 @@ console.log('\nA room with hostiles in it is content, not wiring');
     interiorHostilesFor({ ...uncleared, buildingType: 'store' }).length === 0,
     'and no other building type is garrisoned',
   );
+}
+
+console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
+{
+  const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+  map.generateInterior(INTERIOR_KIND, GROUND_FLOOR, INTERIOR_NAME);
+  const stage = makeStage(map, PARKED_TILE, PARKED_TILE);
+  const menus = new MenusKit({ world: stage.world, abilityManager: new AbilityManager() });
+  const partyCrafts = createPartyCraftsState();
+  const kit = new BriarHollowKit(stage.world, {
+    human: stage.pm.human,
+    cat: stage.pm.cat,
+    partyTools: new PartyTools(partyCrafts.tools),
+    partyCrafts,
+    state: createBriarHollowState(),
+    menus,
+    audio: null,
+    keybindings,
+  });
+
+  check(!kit.tryInteract(stage.pm.active()), 'tryInteract claims nothing');
+  check(!kit.tryStructureMenu(), 'the Structure menu never opens');
+  check(!kit.handleTap(0, 0, 0, 0, stage.pm.active()), 'a world tap is not consumed');
+  check(!kit.handleLongPress(0, 0, 0, 0, stage.pm.active()), 'a long-press is not consumed');
+  check(!kit.handleDoubleTap(0, 0, 0, 0, stage.pm.active()), 'a double-tap is not consumed');
+  check(kit.overlayClaims().length === 0, 'it raises no overlay');
+  check(focusedOverlay(kit.overlayClaims()) === null, 'so nothing can own the screen through it');
+  check(!worldHalted(kit.overlayClaims()), 'and nothing can halt the world through it');
+  check(kit.questMarkers.length === 0, 'no minimap markers');
+  check(kit.trackerEntries().length === 0, 'no Journal rows');
+  check(kit.renderEntities().length === 0, 'no Y-sorted renderables');
+  check(kit.humanTalkSpeaker() === null, 'no conversation to place Carl in front of');
+
+  // Round-trips without throwing, and restoring twice in a row is safe — the
+  // same shape a death rewind on the same scene instance asks of it.
+  const checkpoint = kit.captureCheckpoint();
+  kit.restoreCheckpoint(checkpoint);
+  kit.restoreCheckpoint(checkpoint);
+  check(true, 'captureCheckpoint/restoreCheckpoint round-trip without throwing');
+
+  kit.update(makeContext(stage));
+  check(true, 'update runs without throwing against a real SystemContext');
+
+  kit.dispose();
+  kit.dispose();
+  check(true, 'dispose is idempotent');
 }
 
 if (failures > 0) {

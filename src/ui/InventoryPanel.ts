@@ -3,6 +3,10 @@ import { type CoverPalette, drawBookIcon, drawSkillBookIcon } from './icons/skil
 import { drawIssueKitIcon, isIssueKitItem } from './icons/issueKitIcon';
 import { drawEnchantedGearIcon, isEnchantedGearItem } from './icons/enchantedGearIcons';
 import { drawAnchorStoneIcon, drawAnchorShardIcon } from './icons/anchorStoneIcon';
+import { drawResourceIcon, isResourceIconId } from './icons/resourceIcons';
+import { drawToolIcon, isToolIconId } from './icons/toolIcons';
+import { drawFoodIcon, isFoodIconId } from './icons/foodIcons';
+import { drawKitIcon, isKitIconId } from './icons/kitIcons';
 import {
   drawMagistratesWritIcon,
   drawUnreadableLetterIcon,
@@ -1504,6 +1508,30 @@ export function drawItemIcon(
 
   if (isAnchorShardId(item.id)) {
     drawAnchorShardIcon(ctx, x, y, size);
+    ctx.restore();
+    return;
+  }
+
+  if (isResourceIconId(item.id)) {
+    drawResourceIcon(ctx, item.id, x, y, size);
+    ctx.restore();
+    return;
+  }
+
+  if (isToolIconId(item.id)) {
+    drawToolIcon(ctx, item.id, x, y, size);
+    ctx.restore();
+    return;
+  }
+
+  if (isFoodIconId(item.id)) {
+    drawFoodIcon(ctx, item.id, x, y, size);
+    ctx.restore();
+    return;
+  }
+
+  if (isKitIconId(item.id)) {
+    drawKitIcon(ctx, item.id, x, y, size);
     ctx.restore();
     return;
   }

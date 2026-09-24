@@ -45,6 +45,7 @@ import {
   type DebriefMemory,
   type MordecaiDebriefCheckpoint,
 } from '../systems/mordecaiDebrief';
+import { parseBriarHollowStateSnapshot, type BriarHollowStateSnapshot } from './briarHollowState';
 
 /**
  * The subset of `WorldCheckpoint` that survives a page reload.
@@ -94,6 +95,12 @@ export interface PersistedWorldState {
    * without it loads every room as it was generated.
    */
   bossRoomDressing?: BossRoomDressingCheckpoint;
+  /**
+   * Briar Hollow's quest, structures and soldier orders. Optional: a save
+   * written before the village existed loads with no village progress, and a
+   * save from any floor but 3 simply never carries one.
+   */
+  briarHollow?: BriarHollowStateSnapshot;
 
   krakarenKilled: boolean;
   krakarenBossRoomIdx: number;
@@ -1288,6 +1295,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const tacticsNoticesSeen = parseTacticsNoticesSeen(value.tacticsNoticesSeen);
   const doomsday = parsePersistedDoomsday(value.doomsday);
   const bossRoomDressing = parseBossRoomDressingCheckpoint(value.bossRoomDressing);
+  const briarHollow = parseBriarHollowStateSnapshot(value.briarHollow);
   const { krakarenKilled, krakarenBossRoomIdx, juicerKilled, juicerBossRoomIdx } = value;
 
   if (
@@ -1340,6 +1348,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     tacticsNoticesSeen,
     doomsday,
     bossRoomDressing,
+    briarHollow,
     krakarenKilled,
     krakarenBossRoomIdx,
     juicerKilled,

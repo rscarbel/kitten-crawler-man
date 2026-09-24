@@ -78,6 +78,18 @@ import {
   CAMPFIRE,
   GOBLIN_TENT,
   DEN_HOLLOW,
+  HOLLOW_WALL,
+  HOLLOW_PLANK_FLOOR,
+  HOLLOW_THRESHOLD,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_DECAL,
+  HOLLOW_PALISADE,
+  HOLLOW_PALISADE_GAP,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
+  PASTURE_GRASS,
+  CROP_FIELD,
 } from '../map/tileTypes';
 
 const BG_COLOR = '#0b0e14';
@@ -144,6 +156,19 @@ const TILE_COLORS = new Map<number, string>([
   [CAMPFIRE, '#e8862f'],
   [GOBLIN_TENT, '#8f6f42'],
   [DEN_HOLLOW, '#3a352f'],
+  // Briar Hollow, in the same schematic palette.
+  [HOLLOW_WALL, '#8a7458'],
+  [HOLLOW_PLANK_FLOOR, '#8a6a42'],
+  [HOLLOW_THRESHOLD, '#7a6248'],
+  [HOLLOW_PROP_LOW, '#9a7850'],
+  [HOLLOW_PROP_TALL, '#6a5238'],
+  [HOLLOW_DECAL, '#6e7a3c'],
+  [HOLLOW_PALISADE, '#8a6a3c'],
+  [HOLLOW_PALISADE_GAP, '#5c5548'],
+  [HOLLOW_GATE, '#6b5636'],
+  [ROCK_DEPOSIT, '#726a5e'],
+  [PASTURE_GRASS, '#5c8048'],
+  [CROP_FIELD, '#6e5636'],
 ]);
 
 /** Header band above the map viewport. */

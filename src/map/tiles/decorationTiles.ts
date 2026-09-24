@@ -54,7 +54,16 @@ import {
   KRAKAREN_CONSOLE,
   LAB_BENCH,
   LAB_SHELF,
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 } from '../tileTypes';
+import { drawHollowWallTile, drawHollowGateTile, drawHollowPalisadeTile } from './hollowWallTiles';
+import { drawHollowPropLowTile, drawHollowPropTallTile } from './hollowVillageTiles';
+import { drawRockDepositTile } from './rockDepositTiles';
 import { BOARD_CENTRE_X, SIGN_ARROW_CENTRE_Y_TILES } from '../../sprites/art/crawlerSignArt';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
@@ -1165,6 +1174,12 @@ export function drawDecorationTile(
       case CAMPFIRE:
       case GOBLIN_TENT:
       case CLIFF:
+      // Briar Hollow's walls, palisade and gate stand on the village's own
+      // ground the same way — recorded in `groundType`, resolved by
+      // `groundMaterialUnder` rather than by the type passed here.
+      case HOLLOW_WALL:
+      case HOLLOW_PALISADE:
+      case HOLLOW_GATE:
         // Routed through the outdoor ground path; which material actually gets
         // drawn is resolved by `groundMaterialUnder` from the `groundType` the
         // tile recorded, not from the type passed here.
@@ -1200,6 +1215,9 @@ export function drawDecorationTile(
       case KRAKAREN_CONSOLE:
       case LAB_BENCH:
       case LAB_SHELF:
+      case HOLLOW_PROP_LOW:
+      case HOLLOW_PROP_TALL:
+      case ROCK_DEPOSIT:
       case MODERN_DECORATION: {
         const floorType = inferFloorType(structure, tx, ty);
         if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
@@ -1711,6 +1729,32 @@ export function drawDecorationTile(
         drawSpecialFloorTile(ctx, structure, floorType, sx, sy, ts, tx, ty);
       }
       drawSprite(ctx, def, stateDef, col, sx, sy, ts);
+      return true;
+    }
+
+    // Briar Hollow, walled off in its own file until its real art lands.
+    case HOLLOW_WALL: {
+      drawHollowWallTile(ctx, sx, sy, ts);
+      return true;
+    }
+    case HOLLOW_PALISADE: {
+      drawHollowPalisadeTile(ctx, structure, sx, sy, ts, tx, ty);
+      return true;
+    }
+    case HOLLOW_GATE: {
+      drawHollowGateTile(ctx, sx, sy, ts);
+      return true;
+    }
+    case HOLLOW_PROP_LOW: {
+      drawHollowPropLowTile(ctx, sx, sy, ts);
+      return true;
+    }
+    case HOLLOW_PROP_TALL: {
+      drawHollowPropTallTile(ctx, sx, sy, ts);
+      return true;
+    }
+    case ROCK_DEPOSIT: {
+      drawRockDepositTile(ctx, sx, sy, ts);
       return true;
     }
 

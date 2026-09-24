@@ -1,6 +1,12 @@
-import { ALL_STATS, type StatName } from '../Player';
+import { ALL_STATS, POTION_HEAL_FRACTION, type StatName } from '../Player';
 import type { InventoryItem, ResistanceType } from '../core/ItemDefs';
 import { getSkillDef, SKILL_IDS } from '../core/SkillManager';
+import {
+  HAMBURGER_FED_DURATION_SECONDS,
+  HAMBURGER_HEAL_FRACTION,
+  HAMBURGER_STR_BONUS,
+} from '../core/foodEffects';
+import { toolTierDef } from '../core/toolTiers';
 
 /** Multiplier→percentage conversion for the lines that read as percentages. */
 const PERCENT = 100;
@@ -82,6 +88,22 @@ export function describeItemEffects(item: InventoryItem): string[] {
   }
 
   if (item.wearer) lines.push(WEARER_LABELS[item.wearer]);
+
+  const tool = item.tool;
+  if (tool) {
+    const def = toolTierDef(tool.kind, tool.tier);
+    lines.push(`Efficiency ×${def.efficiency}`);
+  }
+
+  if (item.id === 'hamburger') {
+    lines.push(
+      `Heals ${asPercent(HAMBURGER_HEAL_FRACTION)}% max HP, +${HAMBURGER_STR_BONUS} STR for ${HAMBURGER_FED_DURATION_SECONDS}s`,
+    );
+  }
+
+  if (item.id === 'hollow_stew') {
+    lines.push(`Heals ${asPercent(POTION_HEAL_FRACTION)}% max HP`);
+  }
 
   return lines;
 }

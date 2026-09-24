@@ -74,6 +74,12 @@ import {
   KRAKAREN_CONSOLE,
   LAB_BENCH,
   LAB_SHELF,
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 } from './tileTypes';
 
 /** Tile types that cannot be walked on. Everything not listed here is walkable. */
@@ -183,6 +189,16 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   KRAKAREN_CONSOLE,
   LAB_BENCH,
   LAB_SHELF,
+  // Briar Hollow. `HOLLOW_GATE` is deliberately absent — it is walkable by
+  // tile type, and a hostile mob is turned away by a runtime block flag
+  // instead. `HOLLOW_PLANK_FLOOR`, `HOLLOW_THRESHOLD`, `HOLLOW_DECAL`,
+  // `HOLLOW_PALISADE_GAP`, `PASTURE_GRASS` and `CROP_FIELD` are also absent —
+  // every one of them is ground the player is meant to cross.
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  ROCK_DEPOSIT,
 ];
 
 /**
@@ -195,6 +211,12 @@ const SIGHT_TRANSPARENT_TILE_TYPES: readonly number[] = [
   GYM_RACK,
   KRAKAREN_CONSOLE,
   LAB_BENCH,
+  // A palisade segment and the gate are shoulder height; a crawler behind one
+  // is still exposed. `HOLLOW_PROP_LOW` is the same idea for the village's own
+  // low blocking props.
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  HOLLOW_PROP_LOW,
 ];
 
 /**

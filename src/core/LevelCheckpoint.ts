@@ -2,6 +2,7 @@ import type { AbilityManager } from './AbilityManager';
 import type { AchievementManager } from './AchievementManager';
 import type { PlayerSnapshot } from './PlayerSnapshot';
 import type { WorldCheckpoint } from './WorldCheckpoint';
+import type { PartyCraftsState } from './partyCrafts';
 
 /**
  * In-run checkpoint captured at a save point, alongside the save it mirrors in
@@ -28,6 +29,13 @@ export interface LevelCheckpoint {
   abilities: AbilityManager;
   humanAchievements: AchievementManager;
   catAchievements: AchievementManager;
+  /**
+   * Party tool tiers and seen explainers at capture time. Not in `PlayerSnapshot`
+   * — this is party progress threaded as a live `PartyCraftsState`, so without a
+   * copy here a death rewind would leave an upgrade bought after the save point
+   * in place.
+   */
+  crafts: PartyCraftsState;
   /** Pixel position the party respawns at — a safe room's centre, or the tile where it entered town. */
   respawnX: number;
   respawnY: number;

@@ -52,6 +52,12 @@ export interface GameplayInputActions {
    * something must not also send the pet in or call him back.
    */
   buildAction?(): boolean;
+  /** Opens the village construction menu. Absent where there is no village to build in. */
+  onConstruction?(): void;
+  /** Opens the menu for the structure the active crawler stands at. Absent outside the village. */
+  onStructureMenu?(): void;
+  /** Deposits as much stone as fits into the nearest trebuchet in reach. Absent outside the village. */
+  onQuickLoad?(): void;
   usePotion(): void;
   toggleInventory(): void;
   toggleGear(): void;
@@ -107,6 +113,9 @@ const SIMPLE_ACTION_HANDLERS: Partial<Record<GameAction, (actions: GameplayInput
       if (actions.buildAction?.() === true) return;
       actions.mongoSummon?.();
     },
+    construction: (actions) => actions.onConstruction?.(),
+    structureMenu: (actions) => actions.onStructureMenu?.(),
+    quickLoad: (actions) => actions.onQuickLoad?.(),
   };
 
 /** The hotbar slot an action drives, or null when the action is not a hotbar key. */

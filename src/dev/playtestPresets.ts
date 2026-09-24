@@ -669,6 +669,43 @@ const CIRCUS_HIRE: PlaytestPreset = {
   circusQuest: { stage: 'heather_hunt', heatherSlain: true },
 };
 
+/** How many of each raw/refined resource the Briar Hollow preset starts with. */
+const BRIAR_HOLLOW_STARTING_RESOURCE_QTY = 50;
+/** How many hamburgers the Briar Hollow preset starts with. */
+const BRIAR_HOLLOW_STARTING_HAMBURGERS = 5;
+
+/**
+ * Third floor town with the starter tools already in hand and a resource
+ * stockpile, for jumping straight into gathering, processing and building
+ * without a run to the forge and the lumber yard first.
+ */
+const BRIAR_HOLLOW_KIT: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'briar-hollow-kit',
+  description: 'Third floor town, starter tools and a Briar Hollow resource stockpile',
+  human: {
+    ...LEVEL3.human,
+    bag: [
+      ...LEVEL3.human.bag,
+      { id: 'basic_axe', quantity: 1 },
+      { id: 'basic_pickaxe', quantity: 1 },
+      { id: 'wood', quantity: BRIAR_HOLLOW_STARTING_RESOURCE_QTY },
+      { id: 'stone', quantity: BRIAR_HOLLOW_STARTING_RESOURCE_QTY },
+      { id: 'wood_board', quantity: BRIAR_HOLLOW_STARTING_RESOURCE_QTY },
+      { id: 'rope', quantity: BRIAR_HOLLOW_STARTING_RESOURCE_QTY },
+      { id: 'hamburger', quantity: BRIAR_HOLLOW_STARTING_HAMBURGERS },
+    ],
+  },
+  cat: {
+    ...LEVEL3.cat,
+    bag: [
+      ...LEVEL3.cat.bag,
+      { id: 'basic_axe', quantity: 1 },
+      { id: 'basic_pickaxe', quantity: 1 },
+    ],
+  },
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   HOARDER,
   JUICER,
@@ -686,6 +723,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   DOOMSDAY_CONTAINMENT,
   COMPANIONS_INDOORS,
   CIRCUS_HIRE,
+  BRIAR_HOLLOW_KIT,
 ];
 
 export function getPlaytestPreset(id: string): PlaytestPreset | null {

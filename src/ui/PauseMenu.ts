@@ -37,6 +37,16 @@ import {
   abilitiesTabTouchMove,
   abilitiesTabTouchEnd,
 } from './pause/AbilitiesTab';
+import {
+  renderCraftsTab,
+  resetCraftsTab,
+  scrollCraftsTab,
+  craftsTabTouchStart,
+  craftsTabTouchMove,
+  craftsTabTouchEnd,
+  hasAnyCraftSkill,
+} from './pause/CraftsTab';
+import type { CraftSkillId } from '../core/CraftSkills';
 import { renderSettingsTab, SETTINGS_SCROLL_TOP_Y, SETTINGS_FOOTER_H } from './pause/SettingsTab';
 import {
   renderControlsTab,
@@ -130,6 +140,9 @@ export class PauseMenu {
 
   /** Opens Mongo's explainer; the Abilities tab offers it on his page when set. */
   onHowMongoWorks: (() => void) | null = null;
+
+  /** Opens a craft skill's explainer; the Crafts tab offers it per skill card when set. */
+  onHowCraftWorks: ((id: CraftSkillId) => void) | null = null;
 
   get isOpen(): boolean {
     return this._isOpen;
@@ -257,6 +270,8 @@ export class PauseMenu {
       this.scrollAchievements(deltaY * SCROLL_MULTIPLIER);
     } else if (this.tab === 'abilities') {
       scrollAbilitiesTab(deltaY);
+    } else if (this.tab === 'crafts') {
+      scrollCraftsTab(deltaY);
     }
   }
 
@@ -275,6 +290,8 @@ export class PauseMenu {
     }
     if (this.tab === 'abilities') {
       abilitiesTabTouchStart(y);
+    } else if (this.tab === 'crafts') {
+      craftsTabTouchStart(y);
     } else if (
       this.tab === 'spend' ||
       this.tab === 'stats' ||
@@ -296,6 +313,8 @@ export class PauseMenu {
     }
     if (this.tab === 'abilities') {
       abilitiesTabTouchMove(y);
+    } else if (this.tab === 'crafts') {
+      craftsTabTouchMove(y);
     } else if (this.touchScrollStartY !== null) {
       const delta = this.touchScrollStartY - y;
       this.touchScrollStartY = y;
@@ -329,6 +348,8 @@ export class PauseMenu {
     }
     if (this.tab === 'abilities') {
       abilitiesTabTouchEnd();
+    } else if (this.tab === 'crafts') {
+      craftsTabTouchEnd();
     }
     this.touchScrollStartY = null;
   }
@@ -441,6 +462,9 @@ export class PauseMenu {
     // has none — the scene is rebuilt under the menu on every building entry —
     // would otherwise spend a frame as a modal with no content and no way out.
     if (this.tab === 'journal' && this.journalContext === null) this.tab = 'game';
+    // Same reasoning as the Journal fallback above: a save loaded onto a
+    // rebuilt scene could in principle land here with no craft skill learned.
+    if (this.tab === 'crafts' && !hasAnyCraftSkill(human, cat)) this.tab = 'game';
     // Keyed by tab so that activating a button which changes tabs hands the new
     // tab a fresh ring, rather than leaving focus on whatever now occupies the
     // same index.
@@ -458,14 +482,15 @@ export class PauseMenu {
     const idealBoxW = this.tab === 'equipment' ? EQUIPMENT_TAB_BOX_W : MODAL_BOX_WIDTH;
     const boxW = Math.min(idealBoxW, cw - MODAL_PADDING);
     const hasQuestJournal = this.journalContext !== null;
+    const hasCrafts = hasAnyCraftSkill(human, cat);
     const mainBoxH =
       this.tab === 'main'
         ? mainTabHeight(human.unspentPoints + cat.unspentPoints > 0)
         : this.tab === 'game'
-          ? gameTabHeight(hasQuestJournal)
+          ? gameTabHeight(hasQuestJournal, hasCrafts)
           : 0;
     const rawBoxH =
-      this.tab === 'achievements' || this.tab === 'abilities'
+      this.tab === 'achievements' || this.tab === 'abilities' || this.tab === 'crafts'
         ? ABILITIES_ACHIEVEMENTS_BOX_H
         : this.tab === 'journal'
           ? JOURNAL_BOX_H
@@ -510,6 +535,7 @@ export class PauseMenu {
       if (t !== 'settings') this.settingsScrollY = 0;
       if (t !== 'achievements') this.achievementsScrollY = 0;
       if (t !== 'abilities') resetAbilitiesTab();
+      if (t !== 'crafts') resetCraftsTab();
       // Leaving the tab drops the drag and the filter, and hands the keyboard
       // back: the search field's capture outlives the panel that drew it, so
       // nothing else would release it.
@@ -556,8 +582,23 @@ export class PauseMenu {
           setTabWithSound,
           hasQuestJournal,
           this.journalContext === null ? 0 : outstandingCount(this.journalContext.entries),
+          hasCrafts,
           humanAchievements,
           catAchievements,
+        );
+        break;
+      case 'crafts':
+        renderCraftsTab(
+          ctx,
+          this.buttons,
+          boxX,
+          boxY,
+          boxW,
+          boxH,
+          setTabWithSound,
+          human,
+          cat,
+          this.onHowCraftWorks ?? undefined,
         );
         break;
       case 'journal':

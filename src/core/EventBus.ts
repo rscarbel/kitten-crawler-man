@@ -18,7 +18,12 @@ import type { Player } from '../Player';
 import type { GrantedReward } from './GrantedReward';
 import type { DishId } from '../systems/bopcaDialog';
 import type { RecallMode } from '../systems/RecallSystem';
-import type { SkillId } from './SkillManager';
+import type { SkillId, CrawlerKind } from './SkillManager';
+import type { CraftSkillId } from './CraftSkills';
+import type { StructureKind } from './structureKinds';
+import type { PalisadeTier } from '../map/tileTypes';
+import type { ResourceId } from './resourceIds';
+import type { VillageQuestPhase } from './villageQuestPhase';
 
 /**
  * Who decides what plays when a boss fight starts or ends.
@@ -158,6 +163,45 @@ export interface GameEvents {
 
   /** A skill fired in the moment (e.g. Cockroach catching a fatal blow). */
   skillTriggered: { player: 'Human' | 'Cat'; skillId: SkillId };
+
+  /** A crawler was taught a craft skill for the first time, at level 1. */
+  craftSkillLearned: { crawler: CrawlerKind; id: CraftSkillId };
+
+  /** A crawler's craft skill advanced a level, through XP earned from its own actions. */
+  craftSkillLevelUp: { crawler: CrawlerKind; id: CraftSkillId; level: number };
+
+  /** A crawler (or their thrall) pulled a raw resource out of a deposit. */
+  resourceHarvested: {
+    id: ResourceId;
+    amount: number;
+    byThrall: boolean;
+    x: number;
+    y: number;
+  };
+
+  /** A structure finished construction. `tier` is set for palisade segments. */
+  structureBuilt: { kind: StructureKind; tier?: PalisadeTier };
+
+  /** A damaged structure was repaired back to full health. */
+  structureRepaired: { kind: StructureKind };
+
+  /** A structure took damage but survived. */
+  structureDamaged: { kind: StructureKind; x: number; y: number };
+
+  /** A structure's health reached zero. `permanent` is set when it cannot be rebuilt. */
+  structureDestroyed: { kind: StructureKind; permanent: boolean };
+
+  /** A crawler petted a village cow. */
+  cowPetted: { x: number; y: number };
+
+  /** A village cow died. */
+  cowKilled: { x: number; y: number };
+
+  /** The Briar Hollow defense quest moved to a new phase. */
+  villageQuestPhaseChanged: { phase: VillageQuestPhase };
+
+  /** A wave of the village assault began. `index` counts from 0. */
+  villageAssaultWave: { index: number };
 }
 
 type EventCallback<T> = (data: T) => void;

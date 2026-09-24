@@ -16,6 +16,12 @@ import {
   QUEST_EXIT_DOOR_CLOSED,
   QUEST_EXIT_DOOR_OPEN,
   positionHash,
+  HOLLOW_PLANK_FLOOR,
+  HOLLOW_THRESHOLD,
+  HOLLOW_DECAL,
+  HOLLOW_PALISADE_GAP,
+  PASTURE_GRASS,
+  CROP_FIELD,
 } from '../tileTypes';
 import { isWalkableTileType } from '../walkability';
 import { drawWallShadow } from './helpers';
@@ -25,6 +31,14 @@ import { drawGroundTile } from './groundTiles';
 import { drawKrakarenLabFloor } from './bossRooms/krakarenTiles';
 import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';
+import {
+  drawHollowPlankFloorTile,
+  drawHollowThresholdTile,
+  drawHollowDecalTile,
+  drawPastureGrassTile,
+  drawCropFieldTile,
+} from './hollowVillageTiles';
+import { drawHollowPalisadeGapTile } from './hollowWallTiles';
 
 const GRATE_BASE_FILL_FRACTION = 0.06;
 const GRATE_GAP_DIVISIONS = 6;
@@ -814,6 +828,34 @@ export function drawSpecialFloorTile(
         drawDoorDebris(ctx, sx, sy, ts, tx, ty);
       });
 
+      break;
+    }
+
+    // Briar Hollow ground, walled off in its own file until its real art
+    // lands. Flat colour blocks, no wall shadow: nothing here abuts a solid
+    // tile the way a dungeon corridor does.
+    case HOLLOW_PLANK_FLOOR: {
+      drawHollowPlankFloorTile(ctx, sx, sy, ts);
+      break;
+    }
+    case HOLLOW_THRESHOLD: {
+      drawHollowThresholdTile(ctx, sx, sy, ts);
+      break;
+    }
+    case HOLLOW_DECAL: {
+      drawHollowDecalTile(ctx, sx, sy, ts);
+      break;
+    }
+    case HOLLOW_PALISADE_GAP: {
+      drawHollowPalisadeGapTile(ctx, sx, sy, ts);
+      break;
+    }
+    case PASTURE_GRASS: {
+      drawPastureGrassTile(ctx, sx, sy, ts);
+      break;
+    }
+    case CROP_FIELD: {
+      drawCropFieldTile(ctx, sx, sy, ts);
       break;
     }
 

@@ -1,5 +1,16 @@
 import type { StatName } from '../Player';
 import type { CrawlerKind, SkillId } from './SkillManager';
+import {
+  toolTierDef,
+  TOOL_TIER_BASIC,
+  TOOL_TIER_HARDENED,
+  TOOL_TIER_LONG_HAFT,
+  TOOL_TIER_RATKIN_FORGE,
+  TOOL_TIER_DEEPWOOD,
+  TOOL_TIER_GRAVEYARD,
+  type ToolKind,
+  type ToolTier,
+} from './toolTiers';
 
 export type ItemId =
   | 'health_potion'
@@ -43,7 +54,27 @@ export type ItemId =
   | 'anchor_shard_hilda'
   | 'anchor_shard_temple'
   | 'magistrates_writ'
-  | 'unreadable_letter';
+  | 'unreadable_letter'
+  | 'wood'
+  | 'stone'
+  | 'wood_board'
+  | 'rope'
+  | 'basic_axe'
+  | 'hardened_axe'
+  | 'lumberjacks_axe'
+  | 'ratkin_forge_axe'
+  | 'deepwood_cleaver'
+  | 'graveyards_bane'
+  | 'basic_pickaxe'
+  | 'hardened_pickaxe'
+  | 'quarrymans_pick'
+  | 'ratkin_forge_pick'
+  | 'stonebreaker'
+  | 'worldscar_pick'
+  | 'hamburger'
+  | 'hollow_stew'
+  | 'trebuchet_kit'
+  | 'snare_kit';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -70,7 +101,7 @@ export interface InventoryItem {
   stackable: boolean;
   /** Only items with an action (e.g. potion, ability) may be placed in the hotbar. */
   canHotlist: boolean;
-  type?: 'consumable' | 'armor' | 'weapon';
+  type?: 'consumable' | 'armor' | 'weapon' | 'tool';
   equipSlot?: EquipSlot;
   equipSubSlot?: string;
   description?: string;
@@ -113,6 +144,10 @@ export interface InventoryItem {
   stunOnHitChance?: number;
   /** Which crawler can equip this item; omitted means either. */
   wearer?: CrawlerKind;
+  /** Set on an axe/pickaxe item, naming which tier ladder it belongs to and where on it. */
+  tool?: { kind: ToolKind; tier: ToolTier };
+  /** Whether this item is eaten (as opposed to drunk) to trigger its effect. */
+  edible?: boolean;
 }
 
 /**
@@ -344,7 +379,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   quest_wood_board: {
     id: 'quest_wood_board',
-    name: 'Boards of Wood',
+    name: 'Barricade Boards',
     stackable: true,
     canHotlist: true,
     type: 'consumable',
@@ -649,6 +684,190 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
       'hand is shaped into a fist. Grants +3 Strength (in fist mode only), +1 Dexterity, +2 skill ' +
       'levels to the Iron Punch skill, +1 skill level to the Powerful Strike skill, and a 2% ' +
       'chance to Stun an enemy on a successful hit.',
+  },
+  wood: {
+    id: 'wood',
+    name: 'Wood',
+    stackable: true,
+    canHotlist: false,
+    description: 'Raw timber harvested from trees.',
+  },
+  stone: {
+    id: 'stone',
+    name: 'Stone',
+    stackable: true,
+    canHotlist: false,
+    description: 'Usable stone harvested from exposed rock deposits.',
+  },
+  wood_board: {
+    id: 'wood_board',
+    name: 'Boards of Wood',
+    stackable: true,
+    canHotlist: false,
+    description:
+      'Processed timber used for walls, repairs, trebuchets, snares, and other construction.',
+  },
+  rope: {
+    id: 'rope',
+    name: 'Rope',
+    stackable: true,
+    canHotlist: false,
+    description: 'Strong processed rope used for trebuchets and snare traps.',
+  },
+  basic_axe: {
+    id: 'basic_axe',
+    name: toolTierDef('axe', TOOL_TIER_BASIC).name,
+    description: toolTierDef('axe', TOOL_TIER_BASIC).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'axe', tier: TOOL_TIER_BASIC },
+  },
+  hardened_axe: {
+    id: 'hardened_axe',
+    name: toolTierDef('axe', TOOL_TIER_HARDENED).name,
+    description: toolTierDef('axe', TOOL_TIER_HARDENED).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'axe', tier: TOOL_TIER_HARDENED },
+  },
+  lumberjacks_axe: {
+    id: 'lumberjacks_axe',
+    name: toolTierDef('axe', TOOL_TIER_LONG_HAFT).name,
+    description: toolTierDef('axe', TOOL_TIER_LONG_HAFT).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'axe', tier: TOOL_TIER_LONG_HAFT },
+  },
+  ratkin_forge_axe: {
+    id: 'ratkin_forge_axe',
+    name: toolTierDef('axe', TOOL_TIER_RATKIN_FORGE).name,
+    description: toolTierDef('axe', TOOL_TIER_RATKIN_FORGE).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'axe', tier: TOOL_TIER_RATKIN_FORGE },
+  },
+  deepwood_cleaver: {
+    id: 'deepwood_cleaver',
+    name: toolTierDef('axe', TOOL_TIER_DEEPWOOD).name,
+    description: toolTierDef('axe', TOOL_TIER_DEEPWOOD).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'axe', tier: TOOL_TIER_DEEPWOOD },
+  },
+  graveyards_bane: {
+    id: 'graveyards_bane',
+    name: toolTierDef('axe', TOOL_TIER_GRAVEYARD).name,
+    description: toolTierDef('axe', TOOL_TIER_GRAVEYARD).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'axe', tier: TOOL_TIER_GRAVEYARD },
+  },
+  basic_pickaxe: {
+    id: 'basic_pickaxe',
+    name: toolTierDef('pickaxe', TOOL_TIER_BASIC).name,
+    description: toolTierDef('pickaxe', TOOL_TIER_BASIC).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'pickaxe', tier: TOOL_TIER_BASIC },
+  },
+  hardened_pickaxe: {
+    id: 'hardened_pickaxe',
+    name: toolTierDef('pickaxe', TOOL_TIER_HARDENED).name,
+    description: toolTierDef('pickaxe', TOOL_TIER_HARDENED).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'pickaxe', tier: TOOL_TIER_HARDENED },
+  },
+  quarrymans_pick: {
+    id: 'quarrymans_pick',
+    name: toolTierDef('pickaxe', TOOL_TIER_LONG_HAFT).name,
+    description: toolTierDef('pickaxe', TOOL_TIER_LONG_HAFT).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'pickaxe', tier: TOOL_TIER_LONG_HAFT },
+  },
+  ratkin_forge_pick: {
+    id: 'ratkin_forge_pick',
+    name: toolTierDef('pickaxe', TOOL_TIER_RATKIN_FORGE).name,
+    description: toolTierDef('pickaxe', TOOL_TIER_RATKIN_FORGE).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'pickaxe', tier: TOOL_TIER_RATKIN_FORGE },
+  },
+  stonebreaker: {
+    id: 'stonebreaker',
+    name: toolTierDef('pickaxe', TOOL_TIER_DEEPWOOD).name,
+    description: toolTierDef('pickaxe', TOOL_TIER_DEEPWOOD).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'pickaxe', tier: TOOL_TIER_DEEPWOOD },
+  },
+  worldscar_pick: {
+    id: 'worldscar_pick',
+    name: toolTierDef('pickaxe', TOOL_TIER_GRAVEYARD).name,
+    description: toolTierDef('pickaxe', TOOL_TIER_GRAVEYARD).description,
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    type: 'tool',
+    tool: { kind: 'pickaxe', tier: TOOL_TIER_GRAVEYARD },
+  },
+  hamburger: {
+    id: 'hamburger',
+    name: 'Hamburger',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    edible: true,
+    description:
+      "Pipkin's specialty: fresh meat, a hot pan, bread, and enough seasoning to make it worth chewing.",
+  },
+  hollow_stew: {
+    id: 'hollow_stew',
+    name: 'Hollow Stew',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    edible: true,
+    description: "Pipkin's filling stew. Heals you the same way a health potion does.",
+  },
+  trebuchet_kit: {
+    id: 'trebuchet_kit',
+    name: 'Trebuchet Kit',
+    stackable: true,
+    canHotlist: false,
+    description:
+      'A complete trebuchet, folded for carrying. Build it from the Construction menu at no cost.',
+  },
+  snare_kit: {
+    id: 'snare_kit',
+    name: 'Snare Kit',
+    stackable: true,
+    canHotlist: false,
+    description:
+      'A complete snare, folded for carrying. Build it from the Construction menu at no cost.',
   },
   slingshot: {
     id: 'slingshot',

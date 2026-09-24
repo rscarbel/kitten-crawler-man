@@ -143,6 +143,8 @@ import {
   residentTalkCount,
   type TownMemory,
 } from '../core/TownMemory';
+import { createPartyCraftsState, type PartyCraftsState } from '../core/partyCrafts';
+import { createBriarHollowState, type BriarHollowState } from '../core/briarHollowState';
 import { CitizenDialog } from '../ui/CitizenDialog';
 import { FortuneTellerPanel, HEDGE_WITCH } from '../ui/FortuneTellerPanel';
 import { ReadablePanel } from '../ui/ReadablePanel';
@@ -200,6 +202,7 @@ import { cameraWorldView, setVisibleWorldView } from '../core/visibleWorldView';
 import { createMongoPetState, type MongoPetState } from '../core/MongoPetState';
 import { settings } from '../core/Settings';
 import { awardFirstHundred, bindAbilityLevelUps } from '../systems/abilityLevelUps';
+import { bindCraftLevelUps } from '../systems/craftLevelUps';
 import {
   MongoSystem,
   mongoXpFraction,
@@ -599,6 +602,17 @@ export class BuildingInteriorScene extends GameplayScene {
    * instead would reset each visit, which is exactly the bug it exists to fix.
    */
   private readonly townMemory: TownMemory;
+  /**
+   * Shared tool tiers and seen craft explainers, threaded by reference like
+   * `townMemory`. Public: nothing in this scene reads it yet, but the village
+   * kit built beside it reads it directly rather than through an accessor.
+   */
+  public readonly partyCrafts: PartyCraftsState;
+  /**
+   * Briar Hollow's quest, structures and soldier orders, threaded by
+   * reference like `townMemory`. Public for the same reason as `partyCrafts`.
+   */
+  public readonly briarHollowState: BriarHollowState;
   private readonly anchorQuestProgress: AnchorQuestProgress;
   /** The anchor questline's business in this room; null in every other room. */
   private readonly anchorInterior: AnchorInteriorSystem | null;
@@ -726,6 +740,8 @@ export class BuildingInteriorScene extends GameplayScene {
     private readonly defeatRespawnMode: RespawnMode = 'floorRestart',
     /** Who came through the door with the party. */
     companionArrival: InteriorCompanionArrival = NO_INTERIOR_COMPANIONS,
+    partyCrafts?: PartyCraftsState,
+    briarHollowState?: BriarHollowState,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
@@ -735,6 +751,8 @@ export class BuildingInteriorScene extends GameplayScene {
     void this.audio?.preload(sfxGroupsForBuildingEntry(entry));
     this.abilityManager = abilityManager ?? new AbilityManager();
     this.townMemory = townMemory ?? createTownMemory();
+    this.partyCrafts = partyCrafts ?? createPartyCraftsState();
+    this.briarHollowState = briarHollowState ?? createBriarHollowState();
     this.anchorQuestProgress = anchorQuestProgress ?? createAnchorQuestProgress();
     this.gameStats = gameStats ?? new GameStats();
     this.humanAchievements = humanAchievements ?? new AchievementManager();
@@ -984,6 +1002,7 @@ export class BuildingInteriorScene extends GameplayScene {
       onPetLevelUp: () => this.mongoSystem.onPetLevelUp(),
       onTalismanLevel: () => awardFirstHundred(this.catAchievements, this.bus),
     });
+    bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
     this.wireCombatGore();
     this.initEntryEncounter(this.circus?.progress);
     this.populateHostileRooms();
@@ -1738,7 +1757,27 @@ export class BuildingInteriorScene extends GameplayScene {
       interactReleased: () => {
         this.interactArmed = true;
       },
+      onConstruction: () => this.openConstructionReadOnly(),
+      // Structures and trebuchets are an outdoor fixture of the Briar Hollow
+      // palisade; there is nothing indoors for either key to reach yet.
+      onStructureMenu: () => this.noVillageStructuresIndoors(),
+      onQuickLoad: () => this.noVillageStructuresIndoors(),
     });
+  }
+
+  /** Indoors has no structure to open a menu for or deposit ammo into. */
+  private noVillageStructuresIndoors(): void {
+    // Nothing to do: the Structure menu and Quick Load only ever act outdoors.
+  }
+
+  /**
+   * Stands in for opening the Construction menu indoors, where every build row
+   * is meant to show disabled with "Build outdoors" rather than act. The menu
+   * itself does not exist yet — this is the no-op the key is safe to bind to
+   * until it does.
+   */
+  private openConstructionReadOnly(): void {
+    // The Construction menu does not exist yet.
   }
 
   /** The collaborators a hotbar press reaches, resolved against the live floor. */

@@ -40,6 +40,7 @@ import {
   type CrawlerKind,
   type SkillId,
 } from './core/SkillManager';
+import { CraftSkills } from './core/CraftSkills';
 import type {
   FloatingTextOptions,
   FloatingTextRequest,
@@ -410,6 +411,11 @@ export abstract class Player {
   /** Trained skills. Starts empty — every skill has to be found in the dungeon. */
   readonly skills: SkillManager;
   /**
+   * Village craft progression (Resourcing, Construction). Never shared between
+   * crawlers — each tracks only the XP it personally earned.
+   */
+  readonly craftSkills: CraftSkills;
+  /**
    * Wall-clock time (ms since epoch) when Cockroach can next save this crawler,
    * or null when it has never fired.
    */
@@ -589,6 +595,7 @@ export abstract class Player {
       ...config.baseStats,
     };
     this.skills = new SkillManager(config.crawlerKind ?? null);
+    this.craftSkills = new CraftSkills(config.crawlerKind ?? null);
     this.inventory = new Inventory(config.crawlerKind ?? null);
     this._maxHpOverride = config.maxHp ?? null;
     this.hp = this.maxHp;

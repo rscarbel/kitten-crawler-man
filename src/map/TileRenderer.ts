@@ -33,6 +33,12 @@ import {
   PIGMENT_SHELF,
   GRINDING_SLAB,
   BOSS_ROOM_PROP_TILE_TYPES,
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 } from './tileTypes';
 import { drawTerrainTile } from './tiles/terrainTiles';
 import { drawBossRoomTile } from './tiles/bossRoomTiles';
@@ -131,6 +137,14 @@ const DECORATION_TYPES = new Set([
   // Boss-room props, low ones included: a boss or a crawler north of a garbage
   // bag must still be drawn behind it.
   ...BOSS_ROOM_PROP_TILE_TYPES,
+  // Briar Hollow's walls, palisade, gate and blocking props. Y-sorted so a
+  // crawler standing north of one is drawn behind it.
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 ]);
 
 /**

@@ -6,6 +6,8 @@ import { HumanPlayer } from '../creatures/HumanPlayer';
 import { ITEM_DEF, isItemId } from './ItemDefs';
 import { REVIVE_HP_FRACTION } from './reviveRules';
 import type { InventoryItem, ItemId } from './ItemDefs';
+import type { CraftSkillsSnapshot } from './CraftSkills';
+import { parseCraftSkillsSnapshot } from './CraftSkills';
 
 /**
  * Snapshot format version.
@@ -94,6 +96,12 @@ export interface PlayerSnapshot {
   /** Discovered skills and their progress. Absent on saves predating the skill system. */
   skillStates?: SkillState[];
   /**
+   * Resourcing and Construction levels, saved and restored per crawler like
+   * `skillStates` — Carl's and Donut's craft progress never mix. Absent on
+   * saves predating craft skills.
+   */
+  craftSkillStates?: CraftSkillsSnapshot;
+  /**
    * Wall-clock deadline for Cockroach's recharge. Absolute epoch-ms is the point:
    * a save opened tomorrow should find the skill ready, not still counting down.
    */
@@ -147,6 +155,7 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     knockedOutFrames: p.knockedOutFrames,
     reviveProgress: p.reviveProgress,
     skillStates: p.skills.snapshotStates(),
+    craftSkillStates: p.craftSkills.snapshot(),
     cockroachReadyAt: p.cockroachReadyAt,
   };
   if (p instanceof HumanPlayer) {
@@ -191,6 +200,12 @@ export function checkpointSnapshot(snap: PlayerSnapshot): PlayerSnapshot {
     reviveProgress: 0,
   };
 }
+
+/** What a crawler's craft skills read as when a snapshot has none: neither skill taught yet. */
+const UNLEARNED_CRAFT_SKILLS: CraftSkillsSnapshot = {
+  resourcing: { learned: false, level: 0, xp: 0 },
+  construction: { learned: false, level: 0, xp: 0 },
+};
 
 /** The snapshot's format version, defaulting to v1 for saves predating the field. */
 function snapshotVersionOf(snap: PlayerSnapshot): number {
@@ -271,6 +286,7 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.knockedOutFrames = snap.knockedOutFrames ?? 0;
   p.reviveProgress = snap.reviveProgress ?? 0;
   p.skills.restoreStates(snap.skillStates ?? []);
+  p.craftSkills.restore(parseCraftSkillsSnapshot(snap.craftSkillStates) ?? UNLEARNED_CRAFT_SKILLS);
   const readyAt = snap.cockroachReadyAt;
   p.cockroachReadyAt =
     readyAt !== null && readyAt !== undefined && Number.isFinite(readyAt) ? readyAt : null;

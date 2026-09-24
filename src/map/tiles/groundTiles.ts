@@ -50,6 +50,8 @@ import {
   CLIFF,
   SPRITE_BUILDING,
   TOWN_WALL,
+  HOLLOW_WALL,
+  HOLLOW_PALISADE,
 } from '../tileTypes';
 import {
   getBlockedTileOffsets,
@@ -1293,6 +1295,10 @@ const GROUND_OCCLUDER_TYPES = new Set<number>([
   // their art, and a rectangular occlusion band under one would show as a grey
   // strip poking out from beneath it.
   CLIFF,
+  // Briar Hollow's roofless walls and its palisade — both stand tall enough to
+  // shade the ground at their foot the way a town wall does.
+  HOLLOW_WALL,
+  HOLLOW_PALISADE,
 ]);
 
 /**

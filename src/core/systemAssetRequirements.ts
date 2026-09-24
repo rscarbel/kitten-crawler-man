@@ -177,6 +177,15 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     requiredGroups: ['core'],
   },
 
+  // BriarHollowKit (src/systems/briarHollow/BriarHollowKit.ts) — village
+  // creatures aren't spawned yet, so this stays empty until one is.
+  {
+    id: 'briar_hollow',
+    levelIds: LEVEL3,
+    mobTypes: [],
+    requiredGroups: [],
+  },
+
   // MercenarySystem (src/systems/MercenarySystem.ts) — a hired mercenary
   // follows the player once recruited at the level 3 club. Every hire is
   // painted at runtime through `MERCENARY_ART`, so none holds a sheet key;

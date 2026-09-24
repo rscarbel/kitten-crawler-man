@@ -12,6 +12,7 @@ import { createMongoPetState } from '../core/MongoPetState';
 import { parseSavedWorld } from '../core/SavedWorld';
 import { AchievementManager } from '../core/AchievementManager';
 import { GameStats, parseGameStatsSnapshot } from '../core/GameStats';
+import { createPartyCraftsState } from '../core/partyCrafts';
 
 /**
  * An ability manager carrying a save's progress, or a fresh one at level 1.
@@ -60,6 +61,7 @@ export function sceneSetupFromSave(
   options.catSnap = revivedSnapshot(progress.catSnap);
   options.abilityManager = resumedAbilityManager(progress.abilityStates);
   options.mongoUnlocked = progress.mongoUnlocked ?? false;
+  options.partyCrafts = progress.crafts ?? createPartyCraftsState();
   if (progress.humanAchievements !== undefined) {
     options.humanAchievements = AchievementManager.fromSerialized(progress.humanAchievements);
   }

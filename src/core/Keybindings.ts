@@ -26,6 +26,9 @@ export type GameAction =
   | 'toggleMiniMap'
   | 'toggleQuestTracker'
   | 'buildSummon'
+  | 'construction'
+  | 'structureMenu'
+  | 'quickLoad'
   | 'openChat'
   | 'hotbar1'
   | 'hotbar2'
@@ -68,6 +71,9 @@ const DEFAULT_BINDINGS: Record<GameAction, readonly string[]> = {
   toggleMiniMap: ['m'],
   toggleQuestTracker: ['j'],
   buildSummon: ['r'],
+  construction: ['u'],
+  structureMenu: ['e'],
+  quickLoad: ['x'],
   openChat: ['Enter'],
   hotbar1: ['1'],
   hotbar2: ['2'],
@@ -97,6 +103,9 @@ export const ACTION_ORDER: readonly GameAction[] = [
   'toggleMiniMap',
   'toggleQuestTracker',
   'buildSummon',
+  'construction',
+  'structureMenu',
+  'quickLoad',
   'openChat',
   ...HOTBAR_ACTIONS,
 ];
@@ -116,6 +125,9 @@ export const ACTION_LABELS: Record<GameAction, string> = {
   toggleMiniMap: 'Mini-Map',
   toggleQuestTracker: 'Quest Journal',
   buildSummon: 'Build / Summon Pet',
+  construction: 'Construction',
+  structureMenu: 'Structure Menu',
+  quickLoad: 'Quick Load Trebuchet',
   openChat: 'Open Chat',
   hotbar1: 'Hotbar Slot 1',
   hotbar2: 'Hotbar Slot 2',

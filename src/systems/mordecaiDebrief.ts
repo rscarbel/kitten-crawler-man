@@ -11,7 +11,7 @@ import {
   type ItemId,
   type WearableItem,
 } from '../core/ItemDefs';
-import type { CrawlerKind } from '../core/SkillManager';
+import { CRAWLER_NAMES, type CrawlerKind } from '../core/SkillManager';
 
 /** In the order the spine meets them; {@link isSupersededDebrief} relies on it. */
 const DEBRIEF_BOSS_TYPES = ['the_hoarder', 'juicer', 'krakaren_clone'] as const;
@@ -46,11 +46,6 @@ export const BOSS_DISPLAY_NAMES = {
   juicer: 'The Juicer',
   krakaren_clone: 'Krakaren Clone',
 } as const satisfies Record<DebriefBossType, string>;
-
-export const CRAWLER_NAMES = {
-  human: 'Carl',
-  cat: 'Donut',
-} as const satisfies Record<CrawlerKind, string>;
 
 const CRAWLER_POSSESSIVES = {
   human: 'his',

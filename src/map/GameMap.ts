@@ -72,6 +72,12 @@ import {
   QUEST_EXIT_DOOR_CLOSED,
   QUEST_EXIT_DOOR_OPEN,
   BOSS_ROOM_PROP_TILE_TYPES,
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 } from './tileTypes';
 import { isSightTransparentTileType, isWalkableTileType } from './walkability';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
@@ -99,6 +105,7 @@ import {
 } from './DungeonGenerator';
 import { generateOverworld, type BuildingEntry } from './OverworldGenerator';
 import type { CampSite } from './overworld/camps';
+import type { BriarHollowSite } from './overworld/briarHollowSite';
 import type { BuildingKind, TownPlan } from './town/townPlan';
 import {
   getBlockedTileOffsets,
@@ -362,6 +369,13 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   PIGMENT_SHELF,
   GRINDING_SLAB,
   ...BOSS_ROOM_PROP_TILE_TYPES,
+  // Briar Hollow's walls, palisade, gate and blocking props.
+  HOLLOW_WALL,
+  HOLLOW_PROP_LOW,
+  HOLLOW_PROP_TALL,
+  HOLLOW_PALISADE,
+  HOLLOW_GATE,
+  ROCK_DEPOSIT,
 ]);
 
 /**
@@ -605,6 +619,12 @@ export class GameMap {
    * re-deriving it. `spawnForLevel` populates each camp from this.
    */
   camps: ReadonlyArray<CampSite> = [];
+  /**
+   * Briar Hollow's site on the overworld, when the village has been generated
+   * onto this map. Null everywhere else, and on every overworld map until its
+   * generator lands — `BriarHollowKit` is built only when this is non-null.
+   */
+  briarHollow: BriarHollowSite | null = null;
   /**
    * Radius (in tiles, from map centre) inside which the overworld town is
    * considered safe — no hostile ambient spawns, and hostile mobs won't

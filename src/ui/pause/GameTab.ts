@@ -27,14 +27,18 @@ const BOTTOM_MARGIN = 12;
 const BUTTON_COUNT_NO_JOURNAL = 6;
 /** Plus the Quest Journal button, which only the town floors onward have. */
 const BUTTON_COUNT_WITH_JOURNAL = BUTTON_COUNT_NO_JOURNAL + 1;
+/** Plus Crafts, shown only once either crawler has learned a craft skill. */
+const CRAFTS_BUTTON_COUNT = 1;
 /** Buttons stay legible even when the pitch is compressed to fit a short window. */
 const MIN_BUTTON_HEIGHT = 26;
 /** Gap kept between buttons once the pitch is compressed, so a short window still gets tall touch targets. */
 const MIN_BUTTON_GAP = 4;
 
 /** Height this tab wants, so `PauseMenu` can size the modal around it. */
-export function gameTabHeight(hasQuestJournal: boolean): number {
-  const buttonCount = hasQuestJournal ? BUTTON_COUNT_WITH_JOURNAL : BUTTON_COUNT_NO_JOURNAL;
+export function gameTabHeight(hasQuestJournal: boolean, hasCrafts: boolean): number {
+  const buttonCount =
+    (hasQuestJournal ? BUTTON_COUNT_WITH_JOURNAL : BUTTON_COUNT_NO_JOURNAL) +
+    (hasCrafts ? CRAFTS_BUTTON_COUNT : 0);
   return FIRST_BUTTON_Y + buttonCount * BUTTON_SPACING + BOTTOM_MARGIN;
 }
 
@@ -48,6 +52,7 @@ export function renderGameTab(
   setTab: (tab: PauseTab) => void,
   hasQuestJournal: boolean,
   outstandingQuests: number,
+  hasCrafts: boolean,
   humanAchievements?: AchievementManager,
   catAchievements?: AchievementManager,
 ): void {
@@ -63,7 +68,9 @@ export function renderGameTab(
   const bW = bw - BUTTON_WIDTH_MARGIN;
   const bX = bx + BUTTON_X_OFFSET;
 
-  const buttonCount = hasQuestJournal ? BUTTON_COUNT_WITH_JOURNAL : BUTTON_COUNT_NO_JOURNAL;
+  const buttonCount =
+    (hasQuestJournal ? BUTTON_COUNT_WITH_JOURNAL : BUTTON_COUNT_NO_JOURNAL) +
+    (hasCrafts ? CRAFTS_BUTTON_COUNT : 0);
   const availableH = bh - FIRST_BUTTON_Y - BOTTOM_MARGIN;
   const spacing = Math.min(BUTTON_SPACING, availableH / buttonCount);
   const bH = Math.max(MIN_BUTTON_HEIGHT, Math.min(BUTTON_HEIGHT, spacing - MIN_BUTTON_GAP));
@@ -117,6 +124,19 @@ export function renderGameTab(
     action: () => setTab('abilities'),
   });
   bY += spacing;
+
+  if (hasCrafts) {
+    addButton(ctx, buttons, {
+      x: bX,
+      y: bY,
+      width: bW,
+      height: bH,
+      label: 'Crafts',
+      ...BUTTON_PRESETS.primary,
+      action: () => setTab('crafts'),
+    });
+    bY += spacing;
+  }
 
   const unread =
     (humanAchievements?.menuUnseenCount ?? 0) + (catAchievements?.menuUnseenCount ?? 0);
