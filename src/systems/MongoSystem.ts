@@ -1,6 +1,6 @@
 import { displayHp } from '../core/crawlerFormulas';
 import { TILE_SIZE } from '../core/constants';
-import { mongoMinFightingHp, Mongo } from '../creatures/Mongo';
+import { Mongo } from '../creatures/Mongo';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Mob } from '../creatures/Mob';
@@ -9,6 +9,7 @@ import type { GameMap } from '../map/GameMap';
 import {
   advanceMongoRecovery,
   MONGO_KILL_RECOVERY_FRAMES,
+  MONGO_MIN_SUMMON_HP,
   mongoFramesUntilReady,
   mongoTotalRecoveryFrames,
   tickMongoRegen,
@@ -335,16 +336,12 @@ export class MongoSystem implements GameSystem {
   }
 
   /**
-   * The health he has to have recovered before the button will send him in.
-   *
-   * Not a constant, because "fit to be sent in" is not the same question as
-   * "alive": a raptor under the wounded-retreat threshold walks out and refuses
-   * to fight. Every clock on the button — the countdown, the drain overlay, the
-   * `canSummon` gate — measures against this one number, or the wait finishes
-   * over a button that still says no.
+   * The health he has to have recovered before the button will send him in:
+   * alive, nothing more. Every clock on the button — the countdown, the drain
+   * overlay, the `canSummon` gate — measures against this one number.
    */
   private get minSummonHp(): number {
-    return mongoMinFightingHp(this.maxHp);
+    return MONGO_MIN_SUMMON_HP;
   }
 
   /** Blocked while the circus quest holds him as Signet's collateral. */

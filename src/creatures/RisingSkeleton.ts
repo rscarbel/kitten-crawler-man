@@ -65,14 +65,26 @@ export abstract class RisingSkeleton extends Mob {
   }
 
   /**
-   * Advances the climb. Returns true while it is still running, which is the
-   * subclass's signal to do nothing else this frame.
+   * Extends {@link Mob.tickTimers} to advance the climb out of the ground.
+   *
+   * `tickTimers` runs for every active mob every frame regardless of which AI
+   * branch `MobUpdateLoop` takes for it — unlike `updateAI`, which a confused or
+   * held mob never reaches. A skeleton summoned inside a fog cloud is confused
+   * on the very frame it rises, so advancing the climb from `updateAI` left it
+   * stuck at its first frame — undamageable and visually still buried — for as
+   * long as the fog kept re-confusing it.
    */
+  override tickTimers(): void {
+    super.tickTimers();
+    if (this.riseTimer > 0) {
+      this.riseTimer--;
+      this.isMoving = false;
+    }
+  }
+
+  /** True while it is still coming out of the ground, which is the subclass's signal to do nothing else this frame. */
   protected tickRise(): boolean {
-    if (this.riseTimer <= 0) return false;
-    this.riseTimer--;
-    this.isMoving = false;
-    return true;
+    return this.riseTimer > 0;
   }
 
   /**

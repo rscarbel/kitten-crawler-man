@@ -20,6 +20,7 @@ import { awardXp } from '../core/awardXp';
 import type { GameSystem } from './GameSystem';
 import type { TrackerEntry, TrackerSource, TrackerTarget } from './questTracker';
 import type { QuestMarkerType } from './MiniMapSystem';
+import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import { QuestManager, type QuestStatus } from '../core/QuestManager';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
@@ -384,11 +385,21 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
     const tile = this.fortuneTile();
     if (tile === null) return [];
-    if (this.status === 'available') return [{ x: tile.x, y: tile.y, type: 'exclamation' }];
-    if (this.status === 'active' && this.shardsHeld === SHARDS_REQUIRED) {
-      return [{ x: tile.x, y: tile.y, type: 'question' }];
-    }
-    return [];
+    const state = this.markerState;
+    if (state === 'none') return [];
+    return [{ x: tile.x, y: tile.y, type: state }];
+  }
+
+  /**
+   * What Voss has for the player right now, for the overhead beacon/glyph over
+   * her plaza prop. Same branch `questMarkers` reads, so the minimap dot and the
+   * marker over her head can never disagree about whether she has something to
+   * say.
+   */
+  get markerState(): QuestMarkerState {
+    if (this.status === 'available') return 'exclamation';
+    if (this.status === 'active' && this.shardsHeld === SHARDS_REQUIRED) return 'question';
+    return 'none';
   }
 
   /**

@@ -2974,7 +2974,9 @@ function fairyRoomSources(
       const count = Math.min(rolledCount, MAX_FAIRIES_PER_ROOM);
       const kinds: FairyKind[] = Array.from({ length: count }, pickRegularFairyKind);
       if (worldRandom() < table.roomHealerChance) kinds.push('healer');
-      if (needsGuaranteedShield(kinds)) kinds.push('shield');
+      if (needsGuaranteedShield(kinds, difficulty, table.guaranteedShieldNightmareOnly === true)) {
+        kinds.push('shield');
+      }
       const fairies = kinds.flatMap((kind) =>
         fairyBodies(kind, def, levelOf(pickWeighted(def.roomMobs, totalChance)), difficulty),
       );
@@ -3008,7 +3010,11 @@ function fairyScatterSources(def: LevelDef, withFairies = true): EncounterSource
         });
         const kinds: FairyKind[] = [pickRegularFairyKind()];
         if (worldRandom() < (table.scatterHealerChance ?? 0)) kinds.push('healer');
-        if (needsGuaranteedShield(kinds)) kinds.push('shield');
+        if (
+          needsGuaranteedShield(kinds, difficulty, table.guaranteedShieldNightmareOnly === true)
+        ) {
+          kinds.push('shield');
+        }
         const fairies = kinds.flatMap((kind) => fairyBodies(kind, def, levelOf(), difficulty));
         return withFairies ? [...hosts, ...fairies] : hosts;
       },

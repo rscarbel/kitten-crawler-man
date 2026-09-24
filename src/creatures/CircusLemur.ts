@@ -1,4 +1,4 @@
-import { Mob } from './Mob';
+import { FACING_FLIP_DEADZONE_TILE_RATIO, Mob } from './Mob';
 import type { Player } from '../Player';
 import { drawCircusLemurSprite, drawThrownKnife } from '../sprites/circusLemurSprite';
 import { normalize } from '../utils';
@@ -212,9 +212,24 @@ export class CircusLemur extends Mob {
     }
   }
 
-  /** The sprite only mirrors left and right, so only the horizontal facing matters. */
+  /**
+   * The sprite only mirrors left and right, so only the horizontal facing
+   * matters. A target within {@link FACING_FLIP_DEADZONE_TILE_RATIO} of this
+   * lemur's own centre — almost directly above or below it, or a player
+   * strafing at throwing range while it holds its stand-off — holds the side
+   * already facing instead of flipping every frame the raw sign crosses zero.
+   */
   private faceHorizontallyToward(target: Player): void {
-    this.facingX = target.x >= this.x ? 1 : -1;
+    const dx = target.x - this.x;
+    const deadzonePx = this.tileSize * FACING_FLIP_DEADZONE_TILE_RATIO;
+    if (
+      Math.sign(dx) !== 0 &&
+      Math.sign(dx) !== Math.sign(this.facingX) &&
+      Math.abs(dx) < deadzonePx
+    ) {
+      return;
+    }
+    this.facingX = dx >= 0 ? 1 : -1;
   }
 
   private updateKnives(targets: Player[]): void {

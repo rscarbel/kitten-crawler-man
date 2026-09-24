@@ -79,6 +79,17 @@ export const FAIRY_NOTICE_RANGE_TILES = 8;
 export const FAIRY_ALLY_SEARCH_TILES = 10;
 
 /**
+ * Farthest a fairy may fly from the tile it spawned on, in tiles, whether it
+ * is backing off from a crawler, hunting a hover goal, or running for another
+ * room to regroup. Past its notice range (8), so a fairy that has just noticed
+ * a crawler can still take a step back, and short enough that neither kind of
+ * run drags a chase into a room the fairy never started in. Every candidate
+ * spot is measured against the same fixed point every frame, so nothing here
+ * can disagree with itself about whether a spot is in bounds.
+ */
+export const FAIRY_SPAWN_LEASH_TILES = 9;
+
+/**
  * Frames between re-choosing a hover goal while nothing is closing in; a goal
  * re-picked every frame jitters.
  */
@@ -281,8 +292,14 @@ export const SHIELD_SUPPORT_LEASH_TILES = 4;
  */
 export const SHIELD_BETWEEN_CASTS_FRAMES = 90;
 export const SHIELD_BETWEEN_CASTS_MIN_FRAMES = 60;
-/** Farthest ally a shield fairy will ward, in tiles; it also needs a clear line to it. */
-export const SHIELD_CAST_RANGE_TILES = 6;
+/**
+ * Farthest an ally may stand from a shield fairy and either take a ward or
+ * keep one it already holds, in tiles; a new ward also needs a clear line to
+ * the ally. A carrier that runs past this range while warded has its ward
+ * stripped on the spot, so a fairy's protection can never follow its ally
+ * somewhere the fairy itself cannot be reached and killed.
+ */
+export const SHIELD_WARD_LINK_RANGE_TILES = 7;
 /**
  * An ally that struck a crawler this recently counts as in the fight, for
  * choosing whom to ward first.

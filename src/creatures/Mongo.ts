@@ -25,7 +25,6 @@ import {
   mongoImpactFrame,
 } from '../sprites/mongoAttackTiming';
 import { getMongoStats, type MongoAttack, type MongoStats } from '../abilities/mongo';
-import { MONGO_MIN_SUMMON_HP } from '../core/MongoPetState';
 import type { LootDrop, PlayerDamageType } from './Mob';
 import { DamageLedger } from './damageLedger';
 
@@ -225,55 +224,6 @@ const PRIORITY_NONE = -1;
  * tuned as the single lever it is.
  */
 const MONGO_DAMAGE_TAKEN_MULTIPLIER = 0.6;
-
-/**
- * Whether a badly wounded Mongo breaks off and holds at the cat's side.
- *
- * A single switch because it is a genuine design trade rather than a tuning
- * number: it turns "he died instantly" into a visible limping raptor the player
- * can answer with a recall, at the cost of softening the rule that spending him
- * is the decision. Flip it off to get the old press-until-collapse behaviour
- * back in one edit.
- */
-// A named setting rather than a bare `true`, because a bare boolean cannot be
-// written here at all: left to infer it takes the literal type and the guard
-// reading it is dead code the linter rejects, and annotated `boolean` it is a
-// trivially-inferrable annotation the linter also rejects. A two-member union
-// says the same thing and stays flippable in one edit.
-type WoundedRetreatSetting = 'on' | 'off';
-const MONGO_WOUNDED_RETREAT: WoundedRetreatSetting = 'on';
-/** HP fraction at or below which the wounded retreat takes over from fighting. */
-const MONGO_RETREAT_HP_FRACTION = 0.25;
-
-/**
- * Health fraction the Summon button requires, against the retreat threshold's.
- *
- * A margin rather than one hit point above the threshold, and the gap is the
- * point. Sent in at exactly the threshold he stops fighting again after a single
- * point of damage — which is what every status tick delivers, and what the
- * resistance's own floor guarantees the smallest blow delivers — so the trap
- * this floor exists to close would reopen within a second of closing. The gap is
- * roughly fifteen per cent of his health: a few blows of fighting, which is the
- * least a summon should be worth.
- */
-const MONGO_MIN_SUMMON_HP_FRACTION = 0.4;
-
-/**
- * The least health he can be sent in with and still be worth sending in.
- *
- * One hit point used to be the floor, and with the wounded retreat that becomes
- * a trap rather than a choice: the whole band under the retreat threshold
- * summons a raptor who walks out, never picks a target, never bites, and stands
- * on every hostile's list as a free target — for two usage XP and a green
- * button that explains none of it. The Summon button already has the right
- * affordance for "not yet": it reads Resting and counts down.
- */
-export function mongoMinFightingHp(maxHp: number): number {
-  // With the retreat switched off he fights at any health, so the only floor left
-  // is the one the pet state has always had.
-  if (MONGO_WOUNDED_RETREAT === 'off') return MONGO_MIN_SUMMON_HP;
-  return Math.ceil(maxHp * MONGO_MIN_SUMMON_HP_FRACTION);
-}
 
 /**
  * Frames a recall must have been running before a second press of the button is
@@ -704,9 +654,7 @@ export class Mongo extends Mob {
     if (distToCat > TILE_SIZE * LEASH_BREAK_TILES) this.breakLeash();
     else if (distToCat < TILE_SIZE * LEASH_RESUME_TILES) this.leashed = false;
 
-    if (this.isTooWoundedToFight) this.disengageWounded();
-    const holdingBack = this.leashed || this.isTooWoundedToFight;
-    const target = holdingBack ? null : this.pickTarget();
+    const target = this.leashed ? null : this.pickTarget();
     if (target === null) {
       this.standBy(distToCat, party);
       return;
@@ -714,36 +662,6 @@ export class Mongo extends Mob {
 
     this.following = false;
     this.engage(target);
-  }
-
-  /**
-   * Whether he has taken enough that he stops picking fights and sticks to the
-   * cat — see {@link MONGO_WOUNDED_RETREAT}.
-   */
-  private get isTooWoundedToFight(): boolean {
-    if (MONGO_WOUNDED_RETREAT === 'off') return false;
-    return this.maxHp > 0 && this.hp <= this.maxHp * MONGO_RETREAT_HP_FRACTION;
-  }
-
-  /**
-   * Drops the fight he was in on the frame the wound threshold is crossed.
-   *
-   * Without this the target is merely never re-picked: `pickTarget` is skipped,
-   * so the mob he held stays in the field and the cached route to it stays on
-   * the books, and the first frame he heals back over the line he resumes a
-   * chase the player thought he had broken off.
-   */
-  private disengageWounded(): void {
-    // A mob he has bitten keeps him on its target list through `retaliateMob`,
-    // which nothing clears while he lives — so without this a raptor who has
-    // stopped fighting is still the thing the Ball of Swine rolls at.
-    for (const mob of this.allMobs) {
-      if (mob.retaliateMob === this) mob.retaliateMob = null;
-    }
-    if (this.target === null) return;
-    this.target = null;
-    this.engageStallFrames = 0;
-    this.clearAStarPath();
   }
 
   /**
@@ -972,6 +890,15 @@ export class Mongo extends Mob {
     if (mob === this || !mob.isAlive || !mob.isPetAttackable) return false;
     // Held out of its fight by a script, it cannot answer a blow; going for it is a free kill.
     if (mob.offLimitsToAllies) return false;
+    // Once the cat is behind the town wall a mob outside it is a fight he'd have
+    // to leave the party to take — see `isInsideTownWall`, not the wider safe-zone
+    // radius, which reaches past the wall into the gate aprons this rule keeps him
+    // out of. Applies to a held target too, so one left outside is dropped the
+    // moment the cat comes home rather than re-validated forever.
+    const ownerInsideWalls = this.map?.isInsideTownWall(this.owner.x, this.owner.y) ?? false;
+    if (ownerInsideWalls && this.map?.isInsideTownWall(mob.x, mob.y) !== true) {
+      return false;
+    }
     // A body that has to be dodged rather than fought — the rolling Ball of
     // Swine — tramples for a large share of its victim's health a pass, and he
     // has no dodge. Charging it would spend him before the fight's second

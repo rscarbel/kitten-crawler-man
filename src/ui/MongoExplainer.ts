@@ -14,7 +14,6 @@ import { getMongoStats } from '../abilities/mongo';
 import { keybindings } from '../core/Keybindings';
 import { MONGO_KILL_RECOVERY_FRAMES } from '../core/MongoPetState';
 import { platform } from '../core/Platform';
-import { mongoMinFightingHp } from '../creatures/Mongo';
 import {
   MONGO_BUTTON_LABELS,
   SUMMON_BUTTON_HEIGHT,
@@ -159,7 +158,6 @@ const GOBLIN_STATES_DRAWN: readonly GoblinState[] = ['idle', 'attack_light', 'fl
 
 const HALF = 0.5;
 const FRAMES_PER_SECOND = 60;
-const PERCENT = 100;
 const TWO_PI = Math.PI * 2;
 
 // ── Controls: keycaps, taps, the Summon button ──────────────────────────────
@@ -314,11 +312,19 @@ const FIGHT_LEG_GAP = 10;
 
 const HEALTH_PERIOD = 600;
 const HEALTH_FIGHT_END = 180;
-const HEALTH_HP_AFTER_FIGHT = 0.3;
-const HEALTH_RETREAT_END = 220;
-const HEALTH_RECALL_AT = 245;
-const HEALTH_FADE_END = 270;
-const HEALTH_KILL_CAST_AT = 300;
+/** The collapse plays once, in place, the instant his HP hits zero. */
+const HEALTH_COLLAPSE_FRAMES = mongoActionDuration('collapse');
+const HEALTH_COLLAPSE_END = HEALTH_FIGHT_END + HEALTH_COLLAPSE_FRAMES;
+/** How long the run home takes, once the collapse animation ends. */
+const HEALTH_RUN_HOME_FRAMES = 40;
+const HEALTH_RUN_HOME_END = HEALTH_COLLAPSE_END + HEALTH_RUN_HOME_FRAMES;
+/** The beat between arriving home and the Cat's bark, and again before the fade. */
+const HEALTH_BARK_DELAY_FRAMES = 25;
+const HEALTH_RECALL_AT = HEALTH_RUN_HOME_END + HEALTH_BARK_DELAY_FRAMES;
+const HEALTH_FADE_END = HEALTH_RECALL_AT + HEALTH_BARK_DELAY_FRAMES;
+/** How long after he fades before the Cat's own kill speeds his recovery. */
+const HEALTH_KILL_CAST_DELAY_FRAMES = 30;
+const HEALTH_KILL_CAST_AT = HEALTH_FADE_END + HEALTH_KILL_CAST_DELAY_FRAMES;
 const HEALTH_REGEN_END = 540;
 const HEALTH_BARK_FRAMES = 70;
 const HEALTH_CAT_X = 0.11;
@@ -330,9 +336,6 @@ const HEALTH_GOBLIN_SWING_FRAMES = GOBLIN_ATTACKS.sword.light.animFrames;
 const HEALTH_BAR_W = 64;
 const HEALTH_BAR_H = 7;
 const HEALTH_BAR_ABOVE_HEAD = 14;
-const HEALTH_THRESHOLD_TICK_COLOR = '#fbbf24';
-const HEALTH_THRESHOLD_TICK_OVERHANG = 3;
-const HEALTH_THRESHOLD_LABEL_SIZE = 9;
 const HEALTH_TOAST_FRAMES = 70;
 const HEALTH_TOAST_RISE = 26;
 const HEALTH_TOAST_SIZE = 13;
@@ -1175,15 +1178,19 @@ function drawLegend(ctx: CanvasRenderingContext2D, width: number, activeIndex: n
 
 // ── Page 3 ──────────────────────────────────────────────────────────────────
 
-/** His health across the page's loop: worn down, held, then climbing while he rests. */
+/**
+ * His health across the page's loop: worn down to nothing, held there through
+ * the collapse and the run home, then climbing while he rests. He never breaks
+ * off early — the only floor is zero.
+ */
 function healthAt(frame: number, killBoostAt: number): number {
   if (frame < HEALTH_FIGHT_END) {
     const swings = Math.floor(frame / HEALTH_GOBLIN_SWING_FRAMES);
     const totalSwings = Math.floor(HEALTH_FIGHT_END / HEALTH_GOBLIN_SWING_FRAMES);
-    return lerp(1, HEALTH_HP_AFTER_FIGHT, swings / totalSwings);
+    return lerp(1, 0, swings / totalSwings);
   }
-  if (frame < HEALTH_FADE_END) return HEALTH_HP_AFTER_FIGHT;
-  const regen = lerp(HEALTH_HP_AFTER_FIGHT, 1, span(frame, HEALTH_FADE_END, HEALTH_REGEN_END));
+  if (frame < HEALTH_FADE_END) return 0;
+  const regen = span(frame, HEALTH_FADE_END, HEALTH_REGEN_END);
   const boost = frame >= killBoostAt ? HEALTH_KILL_BOOST : 0;
   return Math.min(1, regen + boost);
 }
@@ -1191,7 +1198,6 @@ function healthAt(frame: number, killBoostAt: number): number {
 function drawHealthPage(
   ctx: CanvasRenderingContext2D,
   stage: MongoStage,
-  minFightingFraction: number,
   rawFrame: number,
   width: number,
 ): void {
@@ -1217,22 +1223,19 @@ function drawHealthPage(
   const pose = mongoOnHealthPage(frame, catX, goblinX);
   if (pose !== null) {
     drawMongo(ctx, stage, pose);
-    drawMongoHealthBar(ctx, stage, pose, hp, minFightingFraction);
+    drawMongoHealthBar(ctx, stage, pose, hp);
   }
   if (within(frame, HEALTH_RECALL_AT, HEALTH_BARK_FRAMES)) catBark(ctx, catX, 'Rest up, Mongo.');
 
   const buttonX = width * HEALTH_BUTTON_X;
   const out = frame < HEALTH_FADE_END;
-  const fit = hp >= minFightingFraction;
+  // Knocked out, he is only fit again once the bar reads full — the ordinary
+  // "alive enough to send in" floor does not apply after a collapse.
+  const fit = hp >= 1;
   const restingSpan = span(frame, HEALTH_FADE_END, HEALTH_REGEN_END);
-  const framesToFit = Math.max(
-    0,
-    ((minFightingFraction - hp) / (1 - HEALTH_HP_AFTER_FIGHT)) *
-      (HEALTH_REGEN_END - HEALTH_FADE_END),
-  );
-  const totalToFit =
-    ((minFightingFraction - HEALTH_HP_AFTER_FIGHT) / (1 - HEALTH_HP_AFTER_FIGHT)) *
-    (HEALTH_REGEN_END - HEALTH_FADE_END);
+  const regenSpanFrames = HEALTH_REGEN_END - HEALTH_FADE_END;
+  const framesToFit = Math.max(0, (1 - hp) * regenSpanFrames);
+  const totalToFit = regenSpanFrames;
   const face: SummonButtonFace = {
     label: out
       ? MONGO_BUTTON_LABELS.recall
@@ -1297,8 +1300,20 @@ function mongoOnHealthPage(frame: number, catX: number, goblinX: number): MongoP
       actionProgress: (frame % biteFrames) / biteFrames,
     };
   }
-  if (frame < HEALTH_RETREAT_END) {
-    const t = span(frame, HEALTH_FIGHT_END, HEALTH_RETREAT_END);
+  if (frame < HEALTH_COLLAPSE_END) {
+    // Drawn in place: the collapse plays once, at zero HP, before the run home starts.
+    const collapseFrame = frame - HEALTH_FIGHT_END;
+    return {
+      x: fightX,
+      facingX: 1,
+      moving: false,
+      frame,
+      action: 'collapse',
+      actionProgress: collapseFrame / HEALTH_COLLAPSE_FRAMES,
+    };
+  }
+  if (frame < HEALTH_RUN_HOME_END) {
+    const t = span(frame, HEALTH_COLLAPSE_END, HEALTH_RUN_HOME_END);
     return { x: lerp(fightX, besideCatX, t), facingX: -1, moving: true, frame };
   }
   if (frame >= HEALTH_FADE_END) return null;
@@ -1311,7 +1326,6 @@ function drawMongoHealthBar(
   stage: MongoStage,
   pose: MongoPose,
   hp: number,
-  minFightingFraction: number,
 ): void {
   const alpha = pose.alpha ?? 1;
   const barX = pose.x - HEALTH_BAR_W * HALF;
@@ -1325,33 +1339,13 @@ function drawMongoHealthBar(
     height: HEALTH_BAR_H,
     value: hp,
     ...PROGRESS_PRESETS.hp,
-    fill: hp >= minFightingFraction ? BUTTON_READY_COLOR : BUTTON_SPENT_COLOR,
+    // Red only once he is actually down — he fights on at every HP above zero.
+    fill: hp > 0 ? BUTTON_READY_COLOR : BUTTON_SPENT_COLOR,
   });
-  const tickX = barX + HEALTH_BAR_W * minFightingFraction;
-  ctx.strokeStyle = HEALTH_THRESHOLD_TICK_COLOR;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(tickX, barY - HEALTH_THRESHOLD_TICK_OVERHANG);
-  ctx.lineTo(tickX, barY + HEALTH_BAR_H + HEALTH_THRESHOLD_TICK_OVERHANG);
-  ctx.stroke();
   ctx.restore();
-  drawText(ctx, `${Math.round(minFightingFraction * PERCENT)}%`, {
-    x: tickX,
-    y: barY - HEALTH_THRESHOLD_TICK_OVERHANG - HEALTH_THRESHOLD_LABEL_SIZE - 1,
-    size: HEALTH_THRESHOLD_LABEL_SIZE,
-    bold: true,
-    color: HEALTH_THRESHOLD_TICK_COLOR,
-    align: 'center',
-    alpha,
-  });
 }
 
 // ── Copy and pages ──────────────────────────────────────────────────────────
-
-/** The health below which he will not be sent in, as a fraction of his maximum. */
-function minFightingFractionOfHealth(): number {
-  return mongoMinFightingHp(PERCENT) / PERCENT;
-}
 
 function currentLabels(isMobile: boolean): Labels {
   return {
@@ -1389,12 +1383,11 @@ function fightLines(labels: Labels): readonly string[] {
   ];
 }
 
-function healthLines(minFightingFraction: number): readonly string[] {
-  const percent = Math.round(minFightingFraction * PERCENT);
+function healthLines(): readonly string[] {
   return [
     'Damage stays with him between summons, and he only heals while recalled.',
-    `Below ${percent}% health he won't go in — the button reads Resting until he's fit.`,
-    'Knocked out, he runs home and must heal all the way to full. Every kill while he rests speeds that up.',
+    "He fights at any health, all the way down — there's no point where he holds back or breaks off.",
+    'Knocked out, he collapses and runs home, then must heal all the way to full before you can summon him again. Every kill while he rests speeds that up.',
   ];
 }
 
@@ -1408,7 +1401,6 @@ export function buildMongoExplainerPages(
   isMobile: boolean,
 ): readonly HowToPlayPage[] {
   const labels = currentLabels(isMobile);
-  const minFightingFraction = minFightingFractionOfHealth();
   return [
     {
       subtitle: 'Calling him',
@@ -1424,11 +1416,9 @@ export function buildMongoExplainerPages(
     },
     {
       subtitle: 'His health',
-      lines: healthLines(minFightingFraction),
+      lines: healthLines(),
       drawIllustration: (ctx, rect, frame) =>
-        inDesignSpace(ctx, rect, (width) =>
-          drawHealthPage(ctx, stage, minFightingFraction, frame, width),
-        ),
+        inDesignSpace(ctx, rect, (width) => drawHealthPage(ctx, stage, frame, width)),
     },
   ];
 }

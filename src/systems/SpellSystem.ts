@@ -103,10 +103,19 @@ const FOG_COLOR_STOP_1 = 0.55;
 const SHELL_COOLDOWN_FRAMES = 7200;
 const CHAIN_LIGHTNING_FRAMES = 20;
 const INITIAL_SHOCKWAVE_FRAMES = 40;
-const FOG_RADIUS_BASE = 3;
-const FOG_RADIUS_INT_MULTIPLIER = 0.5;
-const MAX_FOG_RADIUS_TILES = 16;
-const FOG_DURATION_INT_MULTIPLIER = 5;
+/**
+ * Fog radius and duration both approach a hard cap asymptotically rather than
+ * scaling linearly with intelligence, so a heavily-invested late-game caster
+ * (easily reached by floor 3) gets a noticeably bigger cloud than a fresh one
+ * without ever reaching a cloud big enough, or long enough, to blanket a whole
+ * fight indefinitely: `base + (cap - base) * (1 - exp(-k * intelligence))`.
+ */
+const FOG_RADIUS_BASE_TILES = 3;
+const FOG_RADIUS_CAP_TILES = 9;
+const FOG_RADIUS_GROWTH_RATE = 0.12;
+const FOG_DURATION_BASE_SECONDS = 4;
+const FOG_DURATION_CAP_SECONDS = 12;
+const FOG_DURATION_GROWTH_RATE = 0.12;
 const FOG_DURATION_FRAME_MULTIPLIER = 60;
 const MINI_SHELL_FRAMES = 180;
 const MINI_SHELL_TILES = 1.5;
@@ -183,6 +192,11 @@ function bakeFogCloud(radiusPx: number): { canvas: HTMLCanvasElement; size: numb
   }
 
   return { canvas, size };
+}
+
+/** `base + (cap - base) * (1 - exp(-k * n))`: rises fast off `base`, flattens toward `cap`, never reaches it. */
+function asymptoticApproach(n: number, base: number, cap: number, growthRate: number): number {
+  return base + (cap - base) * (1 - Math.exp(-growthRate * n));
 }
 
 export class SpellSystem implements GameSystem {
@@ -428,12 +442,20 @@ export class SpellSystem implements GameSystem {
   castConfusingFog(caster: HumanPlayer | CatPlayer): void {
     if (!caster.canAct) return;
     if (!caster.inventory.removeOne('scroll_of_confusing_fog')) return;
-    const radiusPx = Math.min(
-      (FOG_RADIUS_BASE + caster.intelligence * FOG_RADIUS_INT_MULTIPLIER) * TILE_SIZE,
-      MAX_FOG_RADIUS_TILES * TILE_SIZE,
+    const radiusTiles = asymptoticApproach(
+      caster.intelligence,
+      FOG_RADIUS_BASE_TILES,
+      FOG_RADIUS_CAP_TILES,
+      FOG_RADIUS_GROWTH_RATE,
     );
-    const totalFrames =
-      caster.intelligence * FOG_DURATION_INT_MULTIPLIER * FOG_DURATION_FRAME_MULTIPLIER;
+    const radiusPx = radiusTiles * TILE_SIZE;
+    const durationSeconds = asymptoticApproach(
+      caster.intelligence,
+      FOG_DURATION_BASE_SECONDS,
+      FOG_DURATION_CAP_SECONDS,
+      FOG_DURATION_GROWTH_RATE,
+    );
+    const totalFrames = Math.round(durationSeconds * FOG_DURATION_FRAME_MULTIPLIER);
     const { canvas, size } = bakeFogCloud(radiusPx);
     this.activeFogs.push({
       owner: caster,

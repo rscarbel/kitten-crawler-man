@@ -143,7 +143,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     canHotlist: true,
     type: 'consumable',
     description:
-      'Summons a thick fog cloud around the caster. Any enemy caught inside the fog loses all sense of sight and cannot target any entity. Lasts INT × 5 seconds.',
+      'Summons a thick fog cloud around the caster. Any enemy caught inside the fog loses all sense of sight and cannot target any entity. Size and duration grow with INT, tapering off at higher values.',
   },
   dirty_shirley: {
     id: 'dirty_shirley',

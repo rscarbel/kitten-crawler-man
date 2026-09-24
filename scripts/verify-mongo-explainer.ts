@@ -15,7 +15,8 @@
  *     draw order, and a button hidden under it cannot answer a press with its
  *     click sound.
  *  5. The copy reads the live key bindings, uses touch wording on a phone, and
- *     quotes the summon health floor Mongo actually enforces.
+ *     says what is actually true of him: he fights at any health, and a
+ *     knockout demands a full heal before he can be sent back in.
  *
  * Check 2 reads the source, because the trigger is a line inside a scene no
  * headless harness can construct; the scene-level behaviour still wants a look
@@ -31,7 +32,6 @@ import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
 import { setViewportSize } from '../src/core/Viewport.js';
 import { keybindings } from '../src/core/Keybindings.js';
-import { mongoMinFightingHp } from '../src/creatures/Mongo.js';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog.js';
 import { drawButton, renderedButtonSoundAt, setButtonMouseState } from '../src/ui/Button.js';
 import { HowToPlayOverlay, type HowToPlayPage } from '../src/ui/HowToPlayOverlay.js';
@@ -43,7 +43,6 @@ const VIEWPORT_H = 720;
 /** Comfortably past the reward dialog's reveal animation. */
 const REVEAL_FRAMES = 120;
 const PAGE_COUNT = 3;
-const PERCENT = 100;
 const REBOUND_SUMMON_KEY = 'g';
 
 const failures: string[] = [];
@@ -291,10 +290,13 @@ function checkOrder(text: string, anchors: readonly string[], where: string): vo
   check(phoneText.includes('Tap'), 'phone copy has no touch wording');
   check(desktopText.includes('indoors'), 'the copy does not say he follows the party indoors');
 
-  const percent = Math.round((mongoMinFightingHp(PERCENT) / PERCENT) * PERCENT);
   check(
-    desktopText.includes(`${percent}%`),
-    `the copy does not quote the summon health floor Mongo enforces (${percent}%)`,
+    desktopText.includes('at any health'),
+    'the copy does not say he fights at any health, all the way down',
+  );
+  check(
+    desktopText.includes('heal all the way to full'),
+    'the copy does not say a knockout requires a full heal before he can be sent back in',
   );
 
   const defaults = keybindings.keysFor('buildSummon');

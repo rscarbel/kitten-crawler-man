@@ -263,9 +263,18 @@ function healerRooms(
 }
 
 /** A mutant roll's own fairies with the guarantee the shipped rule gives them. */
-function withGuarantee(fairies: readonly RegularFairyKind[], healer: boolean): RoomFairyRoll {
+function withGuarantee(
+  fairies: readonly RegularFairyKind[],
+  healer: boolean,
+  difficulty: Difficulty,
+  nightmareOnly: boolean,
+): RoomFairyRoll {
   const kinds: FairyKind[] = healer ? [...fairies, 'healer'] : [...fairies];
-  return { fairies, healer, guaranteedShield: needsGuaranteedShield(kinds) };
+  return {
+    fairies,
+    healer,
+    guaranteedShield: needsGuaranteedShield(kinds, difficulty, nightmareOnly),
+  };
 }
 
 /**
@@ -277,13 +286,17 @@ const healerFoldedRoller: Roller = (table, region, difficulty, upgraded, rng) =>
   const rate = fairyRoomRate(table, region, upgraded);
   const cap = rate?.maxCount[difficulty] ?? 0;
   if (!roll.healer || roll.fairies.length < cap) return roll;
-  return withGuarantee(roll.fairies.slice(0, cap - 1), true);
+  const nightmareOnly = table.guaranteedShieldNightmareOnly === true;
+  return withGuarantee(roll.fairies.slice(0, cap - 1), true, difficulty, nightmareOnly);
 };
 
 /** A roller whose healer only comes to rooms the regular roll left empty. */
 const healerOnlyWhenEmptyRoller: Roller = (table, region, difficulty, upgraded, rng) => {
   const roll = rollRoomFairies(table, region, difficulty, upgraded, rng);
-  return roll.fairies.length > 0 ? withGuarantee(roll.fairies, false) : roll;
+  const nightmareOnly = table.guaranteedShieldNightmareOnly === true;
+  return roll.fairies.length > 0
+    ? withGuarantee(roll.fairies, false, difficulty, nightmareOnly)
+    : roll;
 };
 
 /**
@@ -504,7 +517,7 @@ const guaranteedBossHealerSpawn: BossHealerSpawn = (boss, map, addMob, difficult
   const healer = spawnBossHealer(boss, map, addMob, BOSS_HEALER_STAGE_FLOOR, difficulty);
   if (healer === null) return;
   const kinds: FairyKind[] = [healer.kind];
-  if (!needsGuaranteedShield(kinds)) return;
+  if (!needsGuaranteedShield(kinds, difficulty, false)) return;
   const centreTile = Math.floor(ARENA_TILES / 2);
   addMob(createMob(FAIRY_SPAWN_KEYS.shield, centreTile, centreTile, map));
 };

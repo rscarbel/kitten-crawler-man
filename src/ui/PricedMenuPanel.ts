@@ -493,11 +493,16 @@ export class PricedMenuPanel {
     }
 
     const buyTop = rowY - BUY_BTN_Y_LIFT;
-    // A row scrolled out of the band is still drawn (clipped), but must be
-    // inert: `handleClick` ignores a click outside the band, so a focus-ring
-    // accept or a registered click sound on it would fall through to closing
-    // the menu.
-    const isReachable = buyTop >= this.rowsTop && buyTop + BUY_BTN_HEIGHT <= this.rowsBottom;
+    // Reachability is checked against the row's own bounds, not the Buy
+    // button's: the button sits lifted above `rowY` to centre on the row, so
+    // its rect starts a few pixels above the row even when the row itself is
+    // flush with the top of the list — testing the lifted rect against
+    // `rowsTop` would falsely disable the topmost visible row. A row scrolled
+    // out of the band is still drawn (clipped) and must stay inert:
+    // `handleClick` ignores a click outside the band, so a focus-ring accept
+    // or a registered click sound on a clipped row would otherwise fall
+    // through to closing the menu.
+    const isReachable = rowY >= this.rowsTop && rowY + ROW_HEIGHT <= this.rowsBottom;
     this.buyButtons.push(
       drawButton(ctx, {
         x: right,

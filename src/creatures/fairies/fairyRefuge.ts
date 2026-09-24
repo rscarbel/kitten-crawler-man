@@ -47,6 +47,10 @@ export interface FairyRefugeQuery {
   readonly passedOver: WeakSet<object>;
   /** Whether a mob is a body the fairy would support: living, hostile and not a fairy. */
   readonly isSupportable: (mob: Mob) => boolean;
+  /** Where the fairy spawned, in world pixels: a refuge past {@link leashRadiusPx} of it is never chosen. */
+  readonly leashOriginX: number;
+  readonly leashOriginY: number;
+  readonly leashRadiusPx: number;
 }
 
 /**
@@ -150,6 +154,11 @@ function routeRunsThroughParty(query: FairyRefugeQuery, x: number, y: number): b
   });
 }
 
+/** Whether (x, y) lies within the fairy's spawn leash, so a refuge never carries it past it. */
+function withinSpawnLeash(query: FairyRefugeQuery, x: number, y: number): boolean {
+  return Math.hypot(x - query.leashOriginX, y - query.leashOriginY) <= query.leashRadiusPx;
+}
+
 interface ScoredRefuge {
   readonly refuge: FairyRefuge;
   readonly score: number;
@@ -240,6 +249,7 @@ function chooseRoomRefuge(query: FairyRefugeQuery): FairyRefuge | null {
     if (landing === null) continue;
     const x = landing.x * ts;
     const y = landing.y * ts;
+    if (!withinSpawnLeash(query, x, y)) continue;
     const score = refugeScore(query, x, y, countSupportableIn(query, room) > 0);
     candidates.push({ refuge: { x, y, room, source: point }, score });
   }
@@ -259,6 +269,7 @@ function chooseOpenGroundRefuge(query: FairyRefugeQuery): FairyRefuge | null {
   for (const mob of nearbyScratch) {
     if (!query.isSupportable(mob) || query.passedOver.has(mob)) continue;
     if (Math.hypot(mob.x - query.fromX, mob.y - query.fromY) <= allyReachPx) continue;
+    if (!withinSpawnLeash(query, mob.x, mob.y)) continue;
     const tile = tileOf(mob.x, mob.y, ts);
     if (!map.isWalkable(tile.x, tile.y) || isFairyGroundForbidden(map, tile.x, tile.y)) continue;
     const score = refugeScore(query, mob.x, mob.y, true);

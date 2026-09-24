@@ -60,6 +60,7 @@ import {
   FAIRY_REFUGE_STALL_FRAMES,
   FAIRY_RETREAT_LEASH_STRETCH,
   FAIRY_RETREAT_STEP_TILES,
+  FAIRY_SPAWN_LEASH_TILES,
   FAIRY_SUPPORT_TOO_FAR_WEIGHT,
   FAIRY_THREAT_SHIFT_REPLAN_TILES,
   FAIRY_TOO_CLOSE_WEIGHT,
@@ -746,6 +747,9 @@ export abstract class Fairy extends Mob {
       threats: this.threats,
       passedOver: this.refugePassedOver,
       isSupportable: (mob) => mob.isAlive && mob.isHostile && !(mob instanceof Fairy),
+      leashOriginX: this.spawnX,
+      leashOriginY: this.spawnY,
+      leashRadiusPx: this.tileSize * this.spawnLeashTiles,
     };
   }
 
@@ -880,24 +884,51 @@ export abstract class Fairy extends Mob {
   }
 
   /**
-   * A hover goal must be open floor, must not be marked ground, and must not
-   * be ground a fairy is never placed on: hazards outrank positioning for the
-   * same reason they outrank a tactic, and a fairy that parked in the acid to
-   * keep its range would be a free kill.
+   * Whether (x, y) lies within {@link FAIRY_SPAWN_LEASH_TILES} of the tile
+   * this fairy spawned on. Spawn is fixed for the fairy's whole life, unlike
+   * {@link homeX}/{@link homeY}, so the leash cannot be walked outward by a
+   * fairy that has already relocated once.
+   */
+  private isWithinSpawnLeash(x: number, y: number): boolean {
+    const leashPx = this.tileSize * this.spawnLeashTiles;
+    return Math.hypot(x - this.spawnX, y - this.spawnY) <= leashPx;
+  }
+
+  /**
+   * The spawn leash's radius, in tiles. A seam for a fixture that must prove
+   * a *different* mechanism (such as a boss bond) in isolation from this one,
+   * by overriding it past anything a test arena spans; every shipped fairy
+   * uses {@link FAIRY_SPAWN_LEASH_TILES}.
+   */
+  protected get spawnLeashTiles(): number {
+    return FAIRY_SPAWN_LEASH_TILES;
+  }
+
+  /**
+   * A hover goal must be open floor, must not be marked ground, must not be
+   * ground a fairy is never placed on, and — save for a boss's healer — must
+   * not carry it past its spawn leash: hazards and the leash both outrank
+   * positioning for the same reason they outrank a tactic, and a fairy that
+   * parked in the acid — or kept backing up past its leash — to hold its
+   * range would be a free kill or an endless chase.
    *
-   * A boss's healer is exempt from the forbidden ground alone: it is spawned
-   * inside its boss's arena, which on floor 3 is the circus, and refusing that
-   * ground would refuse every goal it has and leave it hanging in place.
+   * A boss's healer is exempt from both the forbidden ground and the spawn
+   * leash: it is spawned inside its boss's arena, which on floor 3 is the
+   * circus, and stays sealed to the boss's own leash
+   * ({@link FAIRY_BOUND_HEALER_LEASH_TILES}) for as long as the boss lives —
+   * refusing ground or distance by the fairy's own spawn tile would refuse
+   * goals a boss that has moved across its arena still needs it to reach.
    */
   protected isHoverGoalAllowed(x: number, y: number): boolean {
     if (isMarkedGround(x, y)) return false;
+    const boundToBoss = bossOfHealer(this) !== null;
+    if (!boundToBoss && !this.isWithinSpawnLeash(x, y)) return false;
     const map = this.map;
     if (map === null) return true;
     const ts = this.tileSize;
     const tileX = Math.floor((x + ts / 2) / ts);
     const tileY = Math.floor((y + ts / 2) / ts);
     if (!map.isWalkable(tileX, tileY)) return false;
-    const boundToBoss = bossOfHealer(this) !== null;
     return boundToBoss || !isFairyGroundForbidden(map, tileX, tileY);
   }
 

@@ -37,8 +37,11 @@ import {
 } from '../../src/creatures/fairies/fairyRefuge';
 import {
   FAIRY_BASE_HP_FRACTION,
+  FAIRY_BOUND_HEALER_LEASH_TILES,
   FAIRY_COVER_LINE_TOLERANCE_TILES,
   FAIRY_GOAL_ARRIVAL_TILES,
+  FAIRY_RETREAT_LEASH_STRETCH,
+  FAIRY_SPAWN_LEASH_TILES,
   FAIRY_TYPICAL_HOST_HP_BY_FLOOR,
   SHIELD_MAX_SPEED,
   SHIELD_PREFERRED_RANGE_TILES,
@@ -442,12 +445,20 @@ const ROOM_FAR_WALL_TILES = ROOM_SIZE - 2;
 const ROOM_LAST_TILE = ROOM_SIZE - 1;
 const ROW_Y = 4;
 const CORRIDOR_Y = ROW_Y + ROOM_CENTRE_TILES;
-/** Three rooms in a row: the party side, the fairy's own, and the far side. */
-const NEAR_ROOM: RectSpec = { x: 2, y: ROW_Y, w: ROOM_SIZE, h: ROOM_SIZE };
-const HOME_ROOM: RectSpec = { x: 16, y: ROW_Y, w: ROOM_SIZE, h: ROOM_SIZE };
-const FAR_ROOM: RectSpec = { x: 32, y: ROW_Y, w: ROOM_SIZE, h: ROOM_SIZE };
-const ROW_W = 42;
+/**
+ * Three rooms in a row: the party side, the fairy's own, and the far side.
+ * Near and far sit on either side of home, each close enough to the fairy's
+ * spawn tile that a refuge choice there is a leash question, not a distance
+ * one — {@link FAIRY_SPAWN_LEASH_TILES} is what the "never lies through the
+ * party" and "stays and fights when cornered" cases are actually testing.
+ */
+const NEAR_ROOM: RectSpec = { x: 7, y: ROW_Y, w: ROOM_SIZE, h: ROOM_SIZE };
+const HOME_ROOM: RectSpec = { x: 14, y: ROW_Y, w: ROOM_SIZE, h: ROOM_SIZE };
+const FAR_ROOM: RectSpec = { x: 22, y: ROW_Y, w: ROOM_SIZE, h: ROOM_SIZE };
+const ROW_W = 34;
 const ROW_GRID_H = 15;
+/** Under both the near and far rooms' distance from the fairy's spawn, so a leash this small takes neither. */
+const TINY_LEASH_TILES = 3;
 const CORRIDOR: RectSpec = {
   x: NEAR_ROOM.x,
   y: CORRIDOR_Y,
@@ -459,18 +470,39 @@ const PARTY_TILE = { x: HOME_ROOM.x + 1, y: CORRIDOR_Y };
 /** One tile nearer the near room's centre than the far room's, so a party-blind choice goes near. */
 const ROW_FAIRY_TILE = { x: HOME_ROOM.x + ROOM_CENTRE_TILES, y: CORRIDOR_Y - 2 };
 const HOME_ALLY_TILE = { x: HOME_ROOM.x + ROOM_CENTRE_TILES, y: CORRIDOR_Y };
-const NEAR_ALLY_TILE = { x: NEAR_ROOM.x + ROOM_CENTRE_TILES, y: CORRIDOR_Y };
-const FAR_ALLY_TILE = { x: FAR_ROOM.x + ROOM_CENTRE_TILES, y: CORRIDOR_Y };
+/**
+ * Each room's ally stands at its own outer wall, away from home, rather than
+ * its centre: far enough from the fairy's spawn tile to sit outside
+ * `FAIRY_ALLY_SEARCH_TILES` even though the room's centre — where a refuge
+ * lands — sits inside the spawn leash. Without that separation the fairy
+ * would count the next room's ally as its own the moment it spawns, and never
+ * count itself alone at all.
+ */
+const NEAR_ALLY_TILE = { x: NEAR_ROOM.x, y: CORRIDOR_Y };
+const FAR_ALLY_TILE = { x: FAR_ROOM.x + ROOM_LAST_TILE, y: CORRIDOR_Y };
 const CAT_ROW_TILE = { x: 1, y: 1 };
 const FLEE_FRAMES = 600;
 /** Frames the fairy is watched after it arrives, to see it stay among its new allies. */
 const STAY_FRAMES = 120;
+/**
+ * The farthest a healer bound to a (dead) boss may ever stray from it under
+ * retreat pressure: its own leash, stretched the same as any retreat step.
+ * The room-arrival proxy this used to be checked against stops being sound
+ * once a nearby room's distance and this stray radius are close enough to
+ * overlap by coincidence, which the compact layout above makes true; the
+ * distance from the dead ally is what the bound branch actually promises.
+ */
+const BOUND_HEALER_MAX_STRAY_TILES = FAIRY_BOUND_HEALER_LEASH_TILES * FAIRY_RETREAT_LEASH_STRETCH;
+/** Slack over the theoretical stray radius for a goal's own arrival tolerance. */
+const STRAY_SLACK_TILES = 1;
 
 interface FleeResult {
   readonly arrivedInFarRoom: boolean;
   readonly enteredNearRoom: boolean;
   readonly stayedAfterArrival: boolean;
   readonly maxStepPx: number;
+  /** Farthest the fairy ever stood from its dead ally's tile, in tiles. */
+  readonly maxHomeDistTiles: number;
 }
 
 function rowFloor(): { floor: Floor; homeAlly: Mob } {
@@ -501,10 +533,12 @@ function fleeRun(makeFairy: (x: number, y: number) => Fairy, bind: boolean): Fle
   let enteredNearRoom = false;
   let maxStepPx = 0;
   let stayedAfterArrival = true;
+  let maxHomeDistPx = 0;
   for (let frame = 0; frame < FLEE_FRAMES; frame++) {
     const before = { x: fairy.x, y: fairy.y };
     floor.loop.update(floor.ctx());
     maxStepPx = Math.max(maxStepPx, distance(fairy, before));
+    maxHomeDistPx = Math.max(maxHomeDistPx, distance(fairy, homeAlly));
     const tile = tileOf(fairy);
     if (isTileInRect(tile.x, tile.y, NEAR_ROOM)) enteredNearRoom = true;
     const inFar = isTileInRect(tile.x, tile.y, FAR_ROOM);
@@ -512,7 +546,13 @@ function fleeRun(makeFairy: (x: number, y: number) => Fairy, bind: boolean): Fle
     if (arrivedAt !== null && frame - arrivedAt <= STAY_FRAMES && !inFar)
       stayedAfterArrival = false;
   }
-  return { arrivedInFarRoom: arrivedAt !== null, enteredNearRoom, stayedAfterArrival, maxStepPx };
+  return {
+    arrivedInFarRoom: arrivedAt !== null,
+    enteredNearRoom,
+    stayedAfterArrival,
+    maxStepPx,
+    maxHomeDistTiles: maxHomeDistPx / TILE_SIZE,
+  };
 }
 
 function verifyRunningForTheNextRoom(report: FairyGateReport): void {
@@ -533,9 +573,9 @@ function verifyRunningForTheNextRoom(report: FairyGateReport): void {
   );
   const tethered = fleeRun((x, y) => new ShieldFairy(x, y, TILE_SIZE), true);
   report.checkCatches(
-    tethered.arrivedInFarRoom,
-    'a fairy that stays put when its room falls (here: bound to its dead ally as a boss healer is) is caught not leaving',
-    describe(tethered),
+    tethered.maxHomeDistTiles > BOUND_HEALER_MAX_STRAY_TILES + STRAY_SLACK_TILES,
+    'a fairy that stays put when its room falls (here: bound to its dead ally as a boss healer is) is caught straying off it',
+    `${describe(tethered)}, ${tethered.maxHomeDistTiles.toFixed(1)} tiles from its dead ally at the farthest`,
   );
   const fast = fleeRun((x, y) => new DoubledStepFairy(x, y, TILE_SIZE), false);
   report.checkCatches(
@@ -552,7 +592,10 @@ function verifyRunningForTheNextRoom(report: FairyGateReport): void {
   const isSupportable = (mob: Mob): boolean =>
     mob.isAlive && mob.isHostile && !(mob instanceof Fairy);
   setPackAlertGrid(floor.roster.grid);
-  const choose = (threats: readonly { x: number; y: number }[]) =>
+  const choose = (
+    threats: readonly { x: number; y: number }[],
+    leashRadiusPx = Number.POSITIVE_INFINITY,
+  ) =>
     chooseFairyRefuge({
       map: floor.map,
       tileSize: TILE_SIZE,
@@ -561,7 +604,11 @@ function verifyRunningForTheNextRoom(report: FairyGateReport): void {
       threats,
       passedOver: new WeakSet(),
       isSupportable,
+      leashOriginX: from.x,
+      leashOriginY: from.y,
+      leashRadiusPx,
     });
+  // Routing round the party is judged with the leash out of the way.
   const chosen = choose(party);
   const blind = choose([]);
   const roomOf = (refuge: ReturnType<typeof choose>): string =>
@@ -582,6 +629,21 @@ function verifyRunningForTheNextRoom(report: FairyGateReport): void {
     'a refuge choice blind to the party is caught taking the nearer room past it',
     `chose the ${roomOf(blind)} room`,
   );
+
+  // The leash on its own: a radius under every room's distance takes none of
+  // them, and the shipped radius still reaches the far room it is sized for.
+  const tinyLeash = choose([], TILE_SIZE * TINY_LEASH_TILES);
+  report.check(
+    roomOf(tinyLeash) === 'none',
+    `a refuge past a ${TINY_LEASH_TILES}-tile leash is never chosen`,
+    `chose the ${roomOf(tinyLeash)} room`,
+  );
+  const shippedLeash = choose(party, TILE_SIZE * FAIRY_SPAWN_LEASH_TILES);
+  report.check(
+    roomOf(shippedLeash) === 'far',
+    `the shipped ${FAIRY_SPAWN_LEASH_TILES}-tile spawn leash still reaches the far room`,
+    `chose the ${roomOf(shippedLeash)} room`,
+  );
 }
 
 // ── Cornered: the only refuge lies past the party ───────────────────────────
@@ -594,8 +656,13 @@ const CORNERED_CORRIDOR: RectSpec = {
   w: HOME_ROOM.x + HOME_ROOM.w - NEAR_ROOM.x,
   h: 1,
 };
-/** The fairy starts in its room's far half, the crawler between it and the corridor out. */
-const CORNERED_FAIRY_TILE = { x: HOME_ROOM.x + ROOM_FAR_WALL_TILES, y: CORRIDOR_Y - 2 };
+/**
+ * The fairy starts past the room's centre, the crawler (at `HOME_ROOM.x + 1`)
+ * still between it and the corridor out — one tile past centre is enough for
+ * that ordering without pushing the near room's landing point outside the
+ * spawn leash the way the room's literal far wall would.
+ */
+const CORNERED_FAIRY_TILE = { x: HOME_ROOM.x + ROOM_CENTRE_TILES + 1, y: CORRIDOR_Y - 2 };
 const CORNERED_FRAMES = 600;
 /** Nearer than this to the crawler, in tiles, and the fairy has flown into the party. */
 const CORNERED_MIN_GAP_TILES = 2;
@@ -666,7 +733,8 @@ function verifyCornered(report: FairyGateReport): void {
  * and loops north, so for its first stretch the route leads away.
  */
 const DETOUR_HOME: RectSpec = { x: 10, y: 10, w: ROOM_SIZE, h: ROOM_SIZE };
-const DETOUR_REFUGE: RectSpec = { x: 24, y: 10, w: ROOM_SIZE, h: ROOM_SIZE };
+/** Close enough to the home room, straight-line, to sit inside the spawn leash — only the route is long. */
+const DETOUR_REFUGE: RectSpec = { x: 18, y: 10, w: ROOM_SIZE, h: ROOM_SIZE };
 const DETOUR_LOOP_X = 6;
 const DETOUR_LOOP_Y = 3;
 const DETOUR_EXIT_Y = DETOUR_HOME.y + ROOM_CENTRE_TILES;

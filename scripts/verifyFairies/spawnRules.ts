@@ -464,10 +464,21 @@ interface ScatterGuaranteeVerdict {
   rolls: number;
   readonly breaksByDifficulty: Record<Difficulty, number>;
   readonly guaranteedByDifficulty: Record<Difficulty, number>;
+  readonly unshieldedByDifficulty: Record<Difficulty, number>;
   unshielded: number;
 }
 
-function expectsScatterGuarantee(roll: RoomFairyRoll): boolean {
+/**
+ * Whether `roll` should carry the guarantee: it holds any fairy, healer
+ * included, none of them is already a shield, and — when `nightmareOnly` —
+ * `difficulty` is nightmare (`hard`).
+ */
+function expectsScatterGuarantee(
+  roll: RoomFairyRoll,
+  difficulty: Difficulty,
+  nightmareOnly: boolean,
+): boolean {
+  if (nightmareOnly && difficulty !== 'hard') return false;
   const holdsAnyFairy = roll.fairies.length > 0 || roll.healer;
   return holdsAnyFairy && !roll.fairies.includes('shield');
 }
@@ -477,23 +488,28 @@ function scatterGuaranteeVerdict(
   table: FairySpawnTable,
   rng: FairyRng,
 ): ScatterGuaranteeVerdict {
+  const nightmareOnly = table.guaranteedShieldNightmareOnly === true;
   const verdict: ScatterGuaranteeVerdict = {
     rolls: 0,
     breaksByDifficulty: { easy: 0, normal: 0, hard: 0 },
     guaranteedByDifficulty: { easy: 0, normal: 0, hard: 0 },
+    unshieldedByDifficulty: { easy: 0, normal: 0, hard: 0 },
     unshielded: 0,
   };
   for (const difficulty of DIFFICULTIES) {
     for (let i = 0; i < ROLLS_PER_CELL; i++) {
       const roll = roller(table, difficulty, rng);
       verdict.rolls++;
-      if (roll.guaranteedShield !== expectsScatterGuarantee(roll)) {
+      if (roll.guaranteedShield !== expectsScatterGuarantee(roll, difficulty, nightmareOnly)) {
         verdict.breaksByDifficulty[difficulty]++;
       }
       if (roll.guaranteedShield) verdict.guaranteedByDifficulty[difficulty]++;
       const holdsAnyFairy = roll.fairies.length > 0 || roll.healer;
       const shielded = roll.fairies.includes('shield') || roll.guaranteedShield;
-      if (holdsAnyFairy && !shielded) verdict.unshielded++;
+      if (holdsAnyFairy && !shielded) {
+        verdict.unshielded++;
+        verdict.unshieldedByDifficulty[difficulty]++;
+      }
     }
   }
   return verdict;
@@ -511,7 +527,7 @@ function describeScatterVerdict(verdict: ScatterGuaranteeVerdict): string {
   return `${verdict.rolls} rolls; ${perDifficulty}; ${verdict.unshielded} unshielded`;
 }
 
-/** The difficulty a difficulty-gated mutant keeps the guarantee on. */
+/** The one difficulty floor 3's guarantee holds on: nightmare. */
 const GUARANTEE_ONLY_DIFFICULTY: Difficulty = 'hard';
 
 const noScatterGuarantee: ScatterRoller = (table, difficulty, rng) => ({
@@ -519,10 +535,13 @@ const noScatterGuarantee: ScatterRoller = (table, difficulty, rng) => ({
   guaranteedShield: false,
 });
 
-const hardOnlyScatterGuarantee: ScatterRoller = (table, difficulty, rng) => {
-  const roll = rollScatterFairies(table, difficulty, rng);
-  return difficulty === GUARANTEE_ONLY_DIFFICULTY ? roll : { ...roll, guaranteedShield: false };
-};
+/**
+ * A scatter roll that keeps the old, every-difficulty guarantee regardless of
+ * the table's {@link FairySpawnTable.guaranteedShieldNightmareOnly} flag: the
+ * defect "the nightmare-only gate was dropped".
+ */
+const ignoresNightmareOnlyScatterGuarantee: ScatterRoller = (table, difficulty, rng) =>
+  rollScatterFairies({ ...table, guaranteedShieldNightmareOnly: false }, difficulty, rng);
 
 /** A scatter roll whose guarantee comes only with a regular fairy, never a lone healer. */
 const healerBlindScatterGuarantee: ScatterRoller = (table, difficulty, rng) => {
@@ -530,8 +549,17 @@ const healerBlindScatterGuarantee: ScatterRoller = (table, difficulty, rng) => {
   return roll.fairies.length > 0 ? roll : { ...roll, guaranteedShield: false };
 };
 
-/** The share of scatter points that should get a guaranteed shield on `difficulty`. */
+/**
+ * The share of scatter points that should get a guaranteed shield on
+ * `difficulty`: zero on any difficulty a nightmare-only table gates it off.
+ */
 function expectedScatterGuaranteeShare(design: DesignTable, difficulty: Difficulty): number {
+  if (
+    design.shipped.guaranteedShieldNightmareOnly === true &&
+    difficulty !== GUARANTEE_ONLY_DIFFICULTY
+  ) {
+    return 0;
+  }
   const fairyChance = withBonus(design.scatterChance?.[difficulty] ?? DISABLED);
   const healerChance = withBonus(design.scatterHealerChance);
   const nonShieldPick = 1 - 1 / REGULAR_FAIRY_KINDS.length;
@@ -543,8 +571,8 @@ function verifyScatterGuarantee(report: FairyGateReport, rng: FairyRng): void {
   if (floor3 === undefined) throw new Error('no design table with scatter rates');
   const shipped = scatterGuaranteeVerdict(rollScatterFairies, floor3.shipped, rng);
   report.check(
-    scatterBreaks(shipped) === 0 && shipped.unshielded === 0,
-    'every floor-3 scatter roll on every difficulty holding any fairy, healer included, carries a shield',
+    scatterBreaks(shipped) === 0 && shipped.unshieldedByDifficulty[GUARANTEE_ONLY_DIFFICULTY] === 0,
+    `every floor-3 scatter roll on ${GUARANTEE_ONLY_DIFFICULTY} holding any fairy, healer included, carries a shield`,
     describeScatterVerdict(shipped),
   );
   const shares: string[] = [];
@@ -557,7 +585,8 @@ function verifyScatterGuarantee(report: FairyGateReport, rng: FairyRng): void {
   }
   report.check(
     shareOk,
-    `each difficulty guarantees a scatter shield at P(fairy)·P(not a shield) + P(no fairy)·P(healer), within ${CHANCE_TOLERANCE}`,
+    `each difficulty guarantees a scatter shield at P(fairy)·P(not a shield) + P(no fairy)·P(healer) on ` +
+      `${GUARANTEE_ONLY_DIFFICULTY} alone, and never on the others, within ${CHANCE_TOLERANCE}`,
     shares.join('; '),
   );
 
@@ -567,11 +596,15 @@ function verifyScatterGuarantee(report: FairyGateReport, rng: FairyRng): void {
     'a scatter roll without the guarantee is caught leaving points unshielded',
     describeScatterVerdict(without),
   );
-  const hardOnly = scatterGuaranteeVerdict(hardOnlyScatterGuarantee, floor3.shipped, rng);
+  const ignoresGate = scatterGuaranteeVerdict(
+    ignoresNightmareOnlyScatterGuarantee,
+    floor3.shipped,
+    rng,
+  );
   report.checkCatches(
-    scatterBreaks(hardOnly) === 0,
-    `a scatter guarantee given only on ${GUARANTEE_ONLY_DIFFICULTY} is caught on the other difficulties`,
-    describeScatterVerdict(hardOnly),
+    scatterBreaks(ignoresGate) === 0,
+    `a scatter guarantee that ignores the nightmare-only gate is caught granting it on the other difficulties`,
+    describeScatterVerdict(ignoresGate),
   );
   const healerBlind = scatterGuaranteeVerdict(healerBlindScatterGuarantee, floor3.shipped, rng);
   report.checkCatches(

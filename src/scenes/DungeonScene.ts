@@ -416,6 +416,7 @@ import { GameStats, bindRunStats, type GameStatsSnapshot } from '../core/GameSta
 import { difficultyStats } from '../core/DifficultyStats';
 import { settings } from '../core/Settings';
 import type { AudioManager } from '../audio/AudioManager';
+import type { SoundId } from '../audio/sounds';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
 import { drawText } from '../ui/TextBox';
 import { renderKnockedOutUI, updateKnockoutState } from '../systems/KnockoutRevive';
@@ -830,6 +831,23 @@ const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
 const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
+
+/**
+ * Mob-attack and hazard one-shots long enough to still be sounding when a
+ * death interrupts them — a bottle's gas hiss, a spider's slam or screech
+ * wind-up. Nothing else stops these mid-play: `restoreFromCheckpoint` (an
+ * in-place restore) and `restartAtFloorEntry` (a full floor restart) both
+ * carry the same `AudioManager` into the world that comes after, so an
+ * orphaned source plays out its full length across the death screen and into
+ * the respawn — which is exactly what reads as a hazard sound that "keeps
+ * going" after reviving. Stopped alongside `death_sequence` everywhere that
+ * one already is.
+ */
+const HAZARD_SOUNDS_TO_STOP_ON_RESPAWN: readonly SoundId[] = [
+  'gas_cloud',
+  'grotesque_spider_slam_attack',
+  'grotesque_spider_screech_attack',
+];
 
 // Spider-lab arrow geometry
 const ARROW_LENGTH_MULTIPLIER_BASE2 = 0.45;
@@ -3654,6 +3672,16 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * Stops every hazard/attack one-shot in {@link HAZARD_SOUNDS_TO_STOP_ON_RESPAWN}
+   * that might still be sounding. Call anywhere the party is put back at a save
+   * or floor entry — the world a death interrupted is going away or being
+   * rewound, and nothing else will ever stop a source that outlives it.
+   */
+  private stopHazardSoundsForRespawn(): void {
+    for (const id of HAZARD_SOUNDS_TO_STOP_ON_RESPAWN) this.audio?.stopSound(id);
+  }
+
+  /**
    * Rebuilds the floor from a save, exactly as a page reload would, for a scene
    * that holds the save but not a checkpoint of it: one rebuilt around a
    * regenerated population after a building exit, one that was itself resumed
@@ -3673,6 +3701,7 @@ export class DungeonScene extends GameplayScene {
     // holding it is about to be discarded.
     this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.audio?.stopSound('death_sequence');
+    this.stopHazardSoundsForRespawn();
     const sameFloor = progress.levelId === this.levelDef.id;
     const { levelDef, options } = sceneSetupFromSave(
       {
@@ -3714,6 +3743,7 @@ export class DungeonScene extends GameplayScene {
    */
   private restoreFromCheckpoint(cp: LevelCheckpoint): void {
     this.audio?.stopSound('death_sequence');
+    this.stopHazardSoundsForRespawn();
     this.combat.deathScreen.reset();
     this.gameOver = false;
     // Its pending callback grants a chest's reward against a world that is
@@ -4324,6 +4354,7 @@ export class DungeonScene extends GameplayScene {
     // a despawn, and the instance holding it is about to be discarded.
     this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.audio?.stopSound('death_sequence');
+    this.stopHazardSoundsForRespawn();
     // The restart generates the floor from a fresh seed and rewinds the party
     // to floor entry, so every camp is a new place with fresh XP in it.
     forgetClearedCamps(this.townMemory);
@@ -6486,6 +6517,9 @@ export class DungeonScene extends GameplayScene {
     this.circusQuest.update(ctx);
     this.murderQuest.update(ctx);
     this.anchorQuest.update();
+    // She is a plaza prop, not a `Player`, so unlike every other quest giver
+    // she has no `markerType` field of her own for the beacon to read.
+    this.townProps?.setFortuneTellerMarker(this.anchorQuest.markerState);
     this.updateSpeedFizzDiscovery();
     this.doomsdayEscape.update(ctx);
     if (this.doomsdayEscape.pinRequested) {

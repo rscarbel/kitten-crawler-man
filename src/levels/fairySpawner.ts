@@ -81,13 +81,24 @@ export interface RoomFairyRoll {
 const NO_ROOM_FAIRIES: RoomFairyRoll = { fairies: [], healer: false, guaranteedShield: false };
 
 /**
- * Whether a spawn point holding `kinds` gets one more fairy, a shield: it holds
- * at least one fairy and none of them is a shield. On every difficulty alike,
- * extra to the rolled count and outside {@link MAX_FAIRIES_PER_ROOM}, because a
- * shield fairy is what makes the rest of a fairy group a fight about who dies
- * first. Never applied to a boss's healer, which is its own encounter.
+ * Whether a spawn point holding `kinds` gets one more fairy, a shield: it
+ * holds at least one fairy and none of them is a shield. Extra to the rolled
+ * count and outside {@link MAX_FAIRIES_PER_ROOM}, because a shield fairy is
+ * what makes the rest of a fairy group a fight about who dies first. Never
+ * applied to a boss's healer, which is its own encounter.
+ *
+ * A table marked {@link FairySpawnTable.guaranteedShieldNightmareOnly} keeps
+ * this only on nightmare (`hard`): floor 3's own table is the one marked, so
+ * its groups are only as hard on easy and normal as whatever they rolled on
+ * their own, and the forced extra shows up only on the difficulty a player
+ * chose to make harder.
  */
-export function needsGuaranteedShield(kinds: readonly FairyKind[]): boolean {
+export function needsGuaranteedShield(
+  kinds: readonly FairyKind[],
+  difficulty: Difficulty,
+  nightmareOnly: boolean,
+): boolean {
+  if (nightmareOnly && difficulty !== 'hard') return false;
   return kinds.length > 0 && !kinds.includes('shield');
 }
 
@@ -151,7 +162,12 @@ export function rollRoomFairies(
   for (let i = 0; i < count; i++) fairies.push(pickRegularKind(rng));
   const healer = rng() < table.roomHealerChance;
   const rolled: FairyKind[] = healer ? [...fairies, 'healer'] : [...fairies];
-  return { fairies, healer, guaranteedShield: needsGuaranteedShield(rolled) };
+  const nightmareOnly = table.guaranteedShieldNightmareOnly === true;
+  return {
+    fairies,
+    healer,
+    guaranteedShield: needsGuaranteedShield(rolled, difficulty, nightmareOnly),
+  };
 }
 
 /** One room a fairy pass populated, remembered for a later rate upgrade. */
@@ -343,7 +359,9 @@ function placeGuaranteedShield(
   map: GameMap,
   ledger: FairyRoomLedger,
 ): Fairy | null {
-  if (!needsGuaranteedShield(residents.map((fairy) => fairy.kind))) return null;
+  const nightmareOnly = ledger.def.fairies?.guaranteedShieldNightmareOnly === true;
+  const kinds = residents.map((fairy) => fairy.kind);
+  if (!needsGuaranteedShield(kinds, ledger.difficulty, nightmareOnly)) return null;
   const shield = placeRoomFairy('shield', room, map, ledger);
   room.guaranteedShield = shield;
   return shield;
@@ -502,7 +520,12 @@ export function rollScatterFairies(
   if (rng() < scatterChance[difficulty]) fairies.push(pickRegularKind(rng));
   const healer = rng() < (table.scatterHealerChance ?? 0);
   const rolled: FairyKind[] = healer ? [...fairies, 'healer'] : [...fairies];
-  return { fairies, healer, guaranteedShield: needsGuaranteedShield(rolled) };
+  const nightmareOnly = table.guaranteedShieldNightmareOnly === true;
+  return {
+    fairies,
+    healer,
+    guaranteedShield: needsGuaranteedShield(rolled, difficulty, nightmareOnly),
+  };
 }
 
 /**

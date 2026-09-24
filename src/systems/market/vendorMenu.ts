@@ -14,6 +14,13 @@ import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../../ui/P
 export const SOLD_OUT_LABEL = 'Sold out';
 
 /**
+ * Shown on a vendor's everyday stock while one of their lines is a live
+ * quest errand — Voss sends the player here for exactly one thing, so the
+ * rest of the counter is closed until that line is bought.
+ */
+export const GATE_LOCKED_LABEL = 'Not for sale right now';
+
+/**
  * The pouch reads as a texture layer under `purchase_success` rather than a
  * second sting competing with it.
  */
@@ -38,6 +45,13 @@ export function buildVendorMenu(
   visits: number,
   isGateOpen: VendorGateCheck,
 ): PricedMenu {
+  // While a gated line is on the counter, it is the one thing the player was
+  // sent here for — the rest of the stock is genuinely closed rather than
+  // merely present-and-tempting, so a mid-errand player can't wander off and
+  // spend the coins Voss is waiting on.
+  const errandInProgress = def.items.some(
+    (line) => line.gate !== undefined && isGateOpen(line.gate),
+  );
   return {
     title: def.stallName,
     bark: vendorBark(def, visits),
@@ -59,6 +73,9 @@ export function buildVendorMenu(
           isQuestItem: line.gate !== undefined,
         };
         if (remainingFor(stock, def.id, line) === 0) option.unavailable = SOLD_OUT_LABEL;
+        else if (errandInProgress && line.gate === undefined) {
+          option.unavailable = GATE_LOCKED_LABEL;
+        }
         return option;
       }),
   };

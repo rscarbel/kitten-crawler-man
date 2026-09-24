@@ -28,6 +28,7 @@ import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob } from '../src/creatures/Mob';
+import type { Player } from '../src/Player';
 import { Mongo } from '../src/creatures/Mongo';
 import {
   MONGO_BUTTON_LABELS,
@@ -183,16 +184,16 @@ const SHELL_TICKS = 200;
 /** Blows thrown after that run, to prove no credit was banked. */
 const BLOWS_AFTER_TICKS = 4;
 
-/** Health fraction the wounded-retreat run puts him at: comfortably under the threshold. */
+/** Health fraction the "still fighting while wounded" run holds him at. */
 const WOUNDED_HP_FRACTION = 0.15;
-/** The fraction at which he is expected to stop fighting, written down independently. */
-const RETREAT_HP_FRACTION = 0.25;
 /**
- * Health, as a fraction of his maximum, that a freshly summoned pet must have
- * above the retreat threshold — i.e. how much fighting a summon is worth at the
- * very worst. A couple of blows, not a single point.
+ * The deleted wounded-retreat's threshold. Kept only so the negative check can
+ * reproduce that exact rule by hand and prove this file would go red if it
+ * were ever restored, rather than trusting the positive check's sensitivity.
  */
-const MIN_FIGHTING_ROOM_FRACTION = 0.1;
+const OLD_RETREAT_HP_FRACTION = 0.25;
+/** Frames watched at the wounded fraction — long enough for at least one bite. */
+const WOUNDED_FIGHT_FRAMES = 60;
 const PERCENT = 100;
 
 /**
@@ -1008,8 +1009,11 @@ console.log('\nwhat a blow actually costs him');
   }
 }
 
-console.log('\nwounded, and not summonable while he would not fight');
+console.log('\nfighting on while wounded');
 {
+  // He has no wounded state that pulls him out of a fight early — only the
+  // collapse at zero HP. Held at a fraction well under the deleted retreat's
+  // old threshold, adjacent to a hostile, he must keep attacking it.
   const h = buildHarness();
   const mongo = summonInto(h);
   const catTile = {
@@ -1025,44 +1029,85 @@ console.log('\nwounded, and not summonable while he would not fight');
     for (let frame = 0; frame < TARGETING_SETTLE_FRAMES; frame++) tickWithLoop(h, loop);
     check(mongo.engagedTarget === hostile, 'at full health he takes the fight');
 
-    mongo.hp = Math.max(1, Math.floor(mongo.maxHp * WOUNDED_HP_FRACTION));
-    for (let frame = 0; frame < TARGETING_SETTLE_FRAMES; frame++) tickWithLoop(h, loop);
-    check(
-      mongo.engagedTarget === null,
-      `at ${Math.round(WOUNDED_HP_FRACTION * PERCENT)}% health he breaks off and sticks to the cat`,
-    );
-
-    // …and therefore must not be *summonable* down there either. A pet who walks
-    // out, never picks a target and never bites, for two usage XP and a green
-    // button, is a trap rather than a decision.
-    h.system.dismiss(h.roster.mobs, h.roster.grid);
-    check(
-      !h.system.canSummon,
-      `the button refuses to send in a pet too wounded to fight (${h.system.hp}/${h.system.maxHp})`,
-    );
-
-    check(
-      h.system.framesUntilReady > 0,
-      'and its countdown is counting toward that same floor rather than to one hit point',
-    );
-
-    // And the floor leaves him room to actually fight once he is over it. Set at
-    // the retreat threshold plus a hit point, a summoned pet drops back under it
-    // after one point of damage — which is what every status tick delivers — so
-    // the trap would reopen a second after it closed.
-    const maxHp = h.system.maxHp;
-    let floorHp = 1;
-    for (let hp = 1; hp <= maxHp; hp++) {
-      h.petState.hp = hp;
-      if (h.system.canSummon) {
-        floorHp = hp;
-        break;
-      }
+    const woundedHp = Math.max(1, Math.floor(mongo.maxHp * WOUNDED_HP_FRACTION));
+    const hpBeforeWound = hostile.hp;
+    for (let frame = 0; frame < WOUNDED_FIGHT_FRAMES; frame++) {
+      // Held at the wounded fraction every frame, so the run measures whether
+      // he keeps fighting from there rather than whether he happens to survive
+      // the window on his own regeneration or the hostile's misses.
+      mongo.hp = woundedHp;
+      tickWithLoop(h, loop);
     }
-    const fightingRoom = floorHp - Math.floor(maxHp * RETREAT_HP_FRACTION);
     check(
-      fightingRoom >= Math.ceil(maxHp * MIN_FIGHTING_ROOM_FRACTION),
-      `the summon floor (${floorHp}/${maxHp}) leaves ${fightingRoom} HP of fighting before he breaks off`,
+      mongo.engagedTarget === hostile,
+      `at ${Math.round(WOUNDED_HP_FRACTION * PERCENT)}% health, adjacent to a hostile, he keeps fighting rather than breaking off`,
+    );
+    check(
+      hostile.hp < hpBeforeWound,
+      'and the hostile is actually losing HP to him — a stale held target with no attacks landing would not move it',
+    );
+
+    // Fit to be sent in is "alive", nothing more: the summon floor no longer
+    // scales off a retreat threshold that does not exist.
+    h.system.dismiss(h.roster.mobs, h.roster.grid);
+    h.petState.hp = 1;
+    check(
+      h.system.canSummon,
+      `a pet at 1 HP is summonable like a healthy one (${h.system.hp}/${h.system.maxHp})`,
+    );
+  }
+}
+
+/**
+ * Reproduces the deleted wounded-retreat by hand — refuse to fight under a
+ * fixed fraction of max HP — so the negative check below proves this file
+ * would go red if that rule ever came back, rather than trusting that the
+ * positive check above happens to be sensitive to it.
+ */
+class RetreatingMongo extends Mongo {
+  override updateAI(party: Player[]): void {
+    if (this.maxHp > 0 && this.hp <= this.maxHp * OLD_RETREAT_HP_FRACTION) return;
+    super.updateAI(party);
+  }
+}
+
+console.log('\nnegative: a reintroduced wounded-retreat is caught');
+{
+  const h = buildHarness();
+  const catTile = {
+    x: Math.floor((h.cat.x + TILE_SIZE / 2) / TILE_SIZE),
+    y: Math.floor((h.cat.y + TILE_SIZE / 2) / TILE_SIZE),
+  };
+  const spot = findOpenTileNear(h.map, catTile, BYSTANDER_TILES);
+  if (spot === null) {
+    check(false, 'the negative run had somewhere to put a hostile');
+  } else {
+    const level = 1;
+    const mongo = new RetreatingMongo(
+      catTile.x,
+      catTile.y,
+      TILE_SIZE,
+      h.cat,
+      level,
+      getMongoStats(level).maxHp,
+    );
+    h.roster.add(mongo);
+    const hostile = spawnHostile(h, spot);
+    for (let frame = 0; frame < TARGETING_SETTLE_FRAMES; frame++) {
+      mongo.allMobs = h.roster.mobs;
+      mongo.updateAI([]);
+    }
+
+    const woundedHp = Math.max(1, Math.floor(mongo.maxHp * WOUNDED_HP_FRACTION));
+    const hpBeforeWound = hostile.hp;
+    for (let frame = 0; frame < WOUNDED_FIGHT_FRAMES; frame++) {
+      mongo.hp = woundedHp;
+      mongo.allMobs = h.roster.mobs;
+      mongo.updateAI([]);
+    }
+    check(
+      hostile.hp === hpBeforeWound,
+      'negative: with the deleted retreat reproduced by hand, he lands no blows at 15% health — the check above would have caught it',
     );
   }
 }

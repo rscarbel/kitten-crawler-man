@@ -627,7 +627,7 @@ const describeArmy = (count: ArmyCount | null): string =>
 
 /** Stands a skeleton the rest of the way out of the ground, so a blow can land on it. */
 function finishSkeletonRise(skeleton: RisingSkeleton): void {
-  for (let frame = 0; frame < RISE_FRAMES && skeleton.isRising; frame++) skeleton.updateAI([]);
+  for (let frame = 0; frame < RISE_FRAMES && skeleton.isRising; frame++) skeleton.tickTimers();
 }
 
 interface ArmyRun {
@@ -1569,6 +1569,7 @@ function biteOf(skeleton: Mob): number {
       human.invulnerableFrames = 0;
       const hpBefore = human.hp;
       skeleton.updateAI([human]);
+      skeleton.tickTimers();
       if (human.hp < hpBefore) return hpBefore - human.hp;
     }
     return NaN;

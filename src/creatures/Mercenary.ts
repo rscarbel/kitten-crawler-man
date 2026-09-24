@@ -680,12 +680,18 @@ export class Mercenary extends Mob {
   private nearestHostileInRange(): Mob | null {
     const ownerCx = this.owner.x + TILE_SIZE * CENTER_OFFSET;
     const ownerCy = this.owner.y + TILE_SIZE * CENTER_OFFSET;
+    // The aggro circle reaches past the wall, so once the party is behind it a
+    // target outside is a mob the hireling has to leave the town to reach — see
+    // `isInsideTownWall`, not the wider safe-zone radius, which already takes in
+    // the gate aprons this rule is meant to keep the hireling out of.
+    const ownerInsideWalls = this.map?.isInsideTownWall(this.owner.x, this.owner.y) ?? false;
     let nearest: Mob | null = null;
     let nearestDist = Infinity;
     for (const mob of this.allMobs) {
       if (mob === this || !mob.isAlive || !mob.isHostile) continue;
       // Held out of its fight by a script, it cannot answer a blow; going for it is a free kill.
       if (mob.offLimitsToAllies) continue;
+      if (ownerInsideWalls && this.map?.isInsideTownWall(mob.x, mob.y) !== true) continue;
       const dOwner = Math.hypot(
         mob.x + TILE_SIZE * CENTER_OFFSET - ownerCx,
         mob.y + TILE_SIZE * CENTER_OFFSET - ownerCy,

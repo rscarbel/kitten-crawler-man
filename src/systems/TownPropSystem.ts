@@ -23,6 +23,14 @@
 import { TILE_SIZE } from '../core/constants';
 import { playDrinkGesture } from '../creatures/humanGestures';
 import { FOUNTAIN, WELL } from '../map/tileTypes';
+import { drawQuestBeacon } from '../sprites/questBeacon';
+import {
+  drawQuestMarker,
+  questMarkerColorFor,
+  QUEST_MARKER_GOLD,
+  QUEST_MARKER_GREEN,
+  type QuestMarkerState,
+} from '../sprites/questNPCSprite';
 import { drawTownSheetFrame } from '../sprites/townSheetProp';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { tileKey } from './tileKey';
@@ -106,6 +114,7 @@ export class TownPropSystem implements GameSystem {
   private readonly renderables: TownPropRenderable[] = [];
   private board: NoticeBoardProp | null = null;
   private fortuneTile: TileXY | null = null;
+  private fortuneTellerProp: FortuneTellerProp | null = null;
   private healCooldown = 0;
   private readonly occupied = new Set<string>();
 
@@ -300,7 +309,17 @@ export class TownPropSystem implements GameSystem {
     if (tile === null) return;
     this.reserve(tile);
     this.fortuneTile = tile;
-    this.renderables.push(new FortuneTellerProp(tile));
+    this.fortuneTellerProp = new FortuneTellerProp(tile);
+    this.renderables.push(this.fortuneTellerProp);
+  }
+
+  /**
+   * Sets Madame Voss's overhead beacon/glyph. She is a prop, not a `Player`, so
+   * unlike every other quest giver she has no `markerType` field of her own for
+   * the scene to write each frame — this is the one way in.
+   */
+  setFortuneTellerMarker(state: QuestMarkerState): void {
+    if (this.fortuneTellerProp !== null) this.fortuneTellerProp.markerState = state;
   }
 
   private placeBenches(): void {
@@ -462,6 +481,9 @@ class BenchProp implements TownPropRenderable {
 }
 
 class FortuneTellerProp implements TownPropRenderable {
+  /** What Voss has for the player — written each frame by `AnchorQuestSystem` via `setFortuneTellerMarker`. */
+  markerState: QuestMarkerState = 'none';
+
   constructor(readonly tile: TileXY) {}
 
   get x(): number {
@@ -473,14 +495,30 @@ class FortuneTellerProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    const sx = this.tile.x * tileSize - camX;
+    const sy = this.tile.y * tileSize - camY;
+
+    // Beacon first, so the column stands behind her rather than across her —
+    // the same order every other quest giver draws these two in.
+    const markerColor = questMarkerColorFor(this.markerState);
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+    }
+
     drawTownSheetFrame(
       ctx,
       FORTUNE_TELLER_SHEET_KEY,
       FIXTURE_STATE,
       FIXTURE_FRAME,
-      this.tile.x * tileSize - camX,
-      this.tile.y * tileSize - camY,
+      sx,
+      sy,
       tileSize,
     );
+
+    if (this.markerState === 'exclamation') {
+      drawQuestMarker(ctx, sx, sy, tileSize, '!', QUEST_MARKER_GOLD);
+    } else if (this.markerState === 'question') {
+      drawQuestMarker(ctx, sx, sy, tileSize, '?', QUEST_MARKER_GREEN);
+    }
   }
 }

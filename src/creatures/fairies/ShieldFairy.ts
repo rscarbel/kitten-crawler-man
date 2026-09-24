@@ -17,11 +17,11 @@ import {
   SHIELD_BETWEEN_CASTS_FRAMES,
   SHIELD_BETWEEN_CASTS_MIN_FRAMES,
   SHIELD_BASE_SPEED,
-  SHIELD_CAST_RANGE_TILES,
   SHIELD_ENGAGED_RECENT_FRAMES,
   SHIELD_MAX_SPEED,
   SHIELD_PREFERRED_RANGE_TILES,
   SHIELD_SUPPORT_LEASH_TILES,
+  SHIELD_WARD_LINK_RANGE_TILES,
 } from './fairyTuning';
 
 const POSITIONING: FairyPositioning = {
@@ -139,13 +139,22 @@ export class ShieldFairy extends Fairy {
   }
 
   /**
-   * Drops every ward whose carrier died or left the scene, or whose slot
-   * another took, so the fairy can spend it on someone standing.
+   * Drops every ward whose carrier died, left the scene, or ran past
+   * {@link SHIELD_WARD_LINK_RANGE_TILES}, or whose slot another took, so the
+   * fairy can spend it on someone standing. A carrier that outruns the link
+   * loses its ward on the spot rather than keeping it until the fairy dies —
+   * otherwise the only way to stop it would be to chase it down and kill the
+   * fairy that is no longer anywhere near it.
    */
   private forgetLostWards(): void {
+    const linkRangePx = this.tileSize * SHIELD_WARD_LINK_RANGE_TILES;
     let kept = 0;
     for (const mob of this.warded) {
       if (!isInPublishedRoster(mob) || !mob.isAlive || !isWardedBy(mob, this)) continue;
+      if (this.distanceTo(mob) > linkRangePx) {
+        mob.removeWardsAppliedBy(this);
+        continue;
+      }
       this.warded[kept++] = mob;
     }
     this.warded.length = kept;
@@ -154,14 +163,16 @@ export class ShieldFairy extends Fairy {
   /**
    * Whether the fairy can see `mob` and reach it with a ward: a ward that
    * crossed a wall would protect a goblin the player cannot see the fairy
-   * tending, and a tether through masonry reads as a bug.
+   * tending, and a tether through masonry reads as a bug. The same range
+   * {@link forgetLostWards} holds an existing ward to, so a ward is never laid
+   * at a distance it would be stripped at on the very next frame.
    */
   private canReach(mob: Mob): boolean {
     const ts = this.tileSize;
     const from = this.groundCentre;
     const toX = mob.x + ts / 2;
     const toY = mob.y + ts / 2;
-    if (Math.hypot(toX - from.x, toY - from.y) > ts * SHIELD_CAST_RANGE_TILES) return false;
+    if (Math.hypot(toX - from.x, toY - from.y) > ts * SHIELD_WARD_LINK_RANGE_TILES) return false;
     const map = this.map;
     return map === null || map.hasLineOfSight(from.x, from.y, toX, toY);
   }

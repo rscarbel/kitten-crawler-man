@@ -1184,6 +1184,21 @@ function stepToward(chaser: Player, quarry: { x: number; y: number }, map: GameM
 }
 
 /**
+ * A healer with no spawn leash of its own: the chase negatives put one where
+ * a real, un-bonded healer would stand to show that a bond — not proximity to
+ * where it happened to spawn — is what normally holds a boss's healer in its
+ * fight. Every shipped healer still carries the ordinary leash; only this
+ * stand-in for the "nothing holds it" defect skips it, so the chase can prove
+ * the point over a whole boss room or ring rather than the 9 tiles the leash
+ * would otherwise allow.
+ */
+class UnleashedHealingFairy extends HealingFairy {
+  protected override get spawnLeashTiles(): number {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+/**
  * A healer at `bound`'s tile and level that no boss is bonded to, put in its
  * place in `roster`: the defect under test in the chase negatives.
  */
@@ -1192,10 +1207,12 @@ function swapForUnboundHealer(
   map: GameMap,
   roster: MobRoster,
 ): HealingFairy | null {
-  const tileX = Math.floor(bound.groundCentre.x / TILE_SIZE);
-  const tileY = Math.floor(bound.groundCentre.y / TILE_SIZE);
-  const stray = createMob(FAIRY_SPAWN_KEYS.healer, tileX, tileY, map);
-  if (!(stray instanceof HealingFairy)) return null;
+  const stray = new UnleashedHealingFairy(
+    Math.floor(bound.x / TILE_SIZE),
+    Math.floor(bound.y / TILE_SIZE),
+    TILE_SIZE,
+  );
+  stray.setMap(map);
   stray.applyMobLevel(bound.mobLevel, bound.levelledCurve);
   stray.x = bound.x;
   stray.y = bound.y;

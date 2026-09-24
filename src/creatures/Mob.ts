@@ -194,6 +194,20 @@ const ALERT_DURATION_FRAMES = 300;
 /** How many stuck frames before flipping the perpendicular steer direction. */
 const STUCK_FLIP_FRAMES = 50;
 
+/**
+ * How firmly a target must clear this mob's own centre, in tiles, before
+ * `faceToward` is allowed to flip which side a mirrored sprite faces.
+ *
+ * Below this a target sitting almost directly above or below — or a player
+ * strafing at melee range while the mob holds still to fight — pushes the
+ * raw direction's sign back and forth every frame with nothing behind it but
+ * a flickering sprite. Other bosses already work around the same underlying
+ * instability by locking a copy of `facingX` before a committed swing
+ * (`Troglodyte.lockedFacingX`, `TheLich.lockedFacingX`); this keeps the
+ * source itself from chattering in the first place.
+ */
+export const FACING_FLIP_DEADZONE_TILE_RATIO = 0.12;
+
 /** Speed multiplier while mob is slowed. */
 export const MOB_SLOWED_SPEED_FRACTION = 0.35;
 
@@ -1828,6 +1842,15 @@ export abstract class Mob extends Player {
     const dy = target.y - this.y;
     const distance = Math.hypot(dx, dy);
     if (distance === 0) return;
+    const deadzonePx = this.tileSize * FACING_FLIP_DEADZONE_TILE_RATIO;
+    // A target inside the dead zone that would flip the mirror is a wobble
+    // across dead centre, not a turn: hold the side already facing and let
+    // only the depth component (used for reach/aim, not mirroring) track it.
+    const wouldFlipMirror = Math.sign(dx) !== 0 && Math.sign(dx) !== Math.sign(this.facingX);
+    if (wouldFlipMirror && Math.abs(dx) < deadzonePx) {
+      this.facingY = dy / distance;
+      return;
+    }
     this.facingX = dx / distance;
     this.facingY = dy / distance;
   }

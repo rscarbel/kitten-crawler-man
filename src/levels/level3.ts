@@ -183,6 +183,10 @@ export const level3: LevelDef = {
     roomHealerChance: 0,
     scatterChance: FLOOR3_FAIRY_SCATTER_CHANCE,
     scatterHealerChance: FLOOR3_FAIRY_SCATTER_HEALER_CHANCE,
+    // The forced extra shield fairy is what turns a chance encounter into a
+    // brutal one; keeping it off easy and normal leaves those difficulties at
+    // whatever a group rolled on its own.
+    guaranteedShieldNightmareOnly: true,
   },
   campSpawns: {
     goblin: [

@@ -313,6 +313,12 @@ export interface FairySpawnTable {
   readonly scatterChance?: Readonly<Record<Difficulty, number>>;
   /** Independent per-point healer roll, extra to the scatter fairy; 0 disables. */
   readonly scatterHealerChance?: number;
+  /**
+   * Keeps the guaranteed shield fairy (`needsGuaranteedShield`) to nightmare
+   * (`hard`) only: on easy and normal a group with no shield in it stays that
+   * way. Unset (or false) guarantees on every difficulty, the original rule.
+   */
+  readonly guaranteedShieldNightmareOnly?: boolean;
 }
 
 /** Data-only description of a dungeon level. No game-logic dependencies. */
