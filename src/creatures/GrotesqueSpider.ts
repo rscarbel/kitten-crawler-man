@@ -47,6 +47,7 @@ import {
   SLAM_CONE_HALF_ANGLE_RAD,
   SLAM_CONE_RADIUS_PX,
   SPIDER_ATTACK_TIMELINES,
+  SPIDER_DAMAGING_ATTACKS,
   strikeFrame,
   totalFrames,
 } from './grotesqueSpiderTimeline';
@@ -57,7 +58,7 @@ import type {
   SpiderImpactEvent,
 } from './grotesqueSpiderTimeline';
 
-const SPIDER_HP = 1800;
+const SPIDER_HP = 2400;
 const SPIDER_SPEED = 2.5;
 const DASH_SPEED_MULTIPLIER = 2.5;
 /** Her sprint toward a rooted player: pressure, never a hit on its own. */
@@ -278,10 +279,28 @@ export const ATTACK_GAP_JITTER_FRAMES = 5;
 export const ATTACK_GAP_FLOOR_FRAMES = 45;
 /** The pause before her first attack of an engagement, so the fight opens on a chase rather than a hit. */
 export const FIRST_ATTACK_GAP_FRAMES = 60;
+/**
+ * After a blow lands, her next strike must arrive within this share of the
+ * victim's own potion cooldown, so a crawler who drinks straight after the hit
+ * is still recharging when the follow-up lands. Under 1 by more than Iron
+ * Stomach's per-level shave, so a well-trained stomach does not undo it.
+ */
+const FOLLOW_UP_POTION_WINDOW_FRACTION = 0.75;
+/**
+ * The shortest gap a follow-up may be squeezed to. Her tells and locks are
+ * fixed by the locked-telegraph rule, so a very fast potion cooldown cannot be
+ * beaten outright; this keeps some breath between recovery and the next tell.
+ */
+const FOLLOW_UP_GAP_FLOOR_FRAMES = 15;
 /** The same attack may run at most this many times back to back. */
 const MAX_SAME_ATTACK_IN_A_ROW = 2;
 /** How long a spit chain waits for its slam to become legal before she drops it. */
 const CHAIN_SLAM_PATIENCE_FRAMES = 150;
+
+/** The longest tell-plus-lock of any attack that can hit, the worst case a follow-up gap must budget for. */
+const LONGEST_DAMAGING_WINDUP_FRAMES = Math.max(
+  ...SPIDER_DAMAGING_ATTACKS.map((attack) => strikeFrame(attack)),
+);
 
 /** Eggs plus hatchlings alive at once; a lay that would exceed it does not start. */
 export const MAX_LIVE_EGGS_AND_HATCHLINGS = 10;
@@ -521,6 +540,8 @@ export class GrotesqueSpider extends Mob {
   private cutsceneDriven = false;
 
   private gapTimer = FIRST_ATTACK_GAP_FRAMES;
+  /** The tightest follow-up window earned by blows landed this attack, or null if none landed. */
+  private followUpWindowFrames: number | null = null;
   private cycleIndex = 0;
   private lastAttack: SpiderAttack | null = null;
   private sameAttackRun = 0;
@@ -691,6 +712,7 @@ export class GrotesqueSpider extends Mob {
     this._attackFrame = 0;
     this.cutsceneDriven = false;
     this.gapTimer = FIRST_ATTACK_GAP_FRAMES;
+    this.followUpWindowFrames = null;
     this.cycleIndex = 0;
     this.lastAttack = null;
     this.sameAttackRun = 0;
@@ -1482,6 +1504,27 @@ export class GrotesqueSpider extends Mob {
     return min + Math.floor(this.rng() * (max - min + 1));
   }
 
+  /**
+   * The gap after `attack`, squeezed if it landed a blow. The window runs from
+   * the blow to the follow-up's strike, so what is left for the gap is the
+   * window minus the rest of this attack and the follow-up's own windup.
+   */
+  private rollFollowUpGap(attack: SpiderAttack): number {
+    const window = this.followUpWindowFrames;
+    this.followUpWindowFrames = null;
+    const normalGap = this.rollGap();
+    if (window === null) return normalGap;
+    const framesAfterStrike = totalFrames(attack) - strikeFrame(attack);
+    const affordableGap = window - framesAfterStrike - LONGEST_DAMAGING_WINDUP_FRAMES;
+    return Math.min(normalGap, Math.max(FOLLOW_UP_GAP_FLOOR_FRAMES, affordableGap));
+  }
+
+  /** Records that a blow connected, tightening the follow-up window to the victim's potion cooldown. */
+  private noteBlowLanded(victim: Player): void {
+    const window = Math.floor(victim.computePotionCooldown() * FOLLOW_UP_POTION_WINDOW_FRACTION);
+    this.followUpWindowFrames = Math.min(this.followUpWindowFrames ?? window, window);
+  }
+
   private rollGap(): number {
     const centre = HP_PHASES[this.reachedPhase].gapCentreFrames;
     const jitter = this.rollInt(-ATTACK_GAP_JITTER_FRAMES, ATTACK_GAP_JITTER_FRAMES);
@@ -1609,7 +1652,7 @@ export class GrotesqueSpider extends Mob {
     this._currentAttack = null;
     this._attackFrame = 0;
     this.cutsceneDriven = false;
-    this.gapTimer = this.rollGap();
+    this.gapTimer = this.rollFollowUpGap(attack);
     if (attack === 'spit' && this.chainArmed) {
       this.chainSlamPatience = CHAIN_SLAM_PATIENCE_FRAMES;
     }
@@ -1676,11 +1719,12 @@ export class GrotesqueSpider extends Mob {
       }
       // Priced as a share of the victim's own health, which already scales
       // with the party; level-scaling it again would multiply it in twice.
-      this.dealPreScaledRangedDamage(
+      const connected = this.dealPreScaledRangedDamage(
         t,
         Math.ceil(t.maxHp * SCREECH_HP_FRACTION) + SCREECH_BONUS_DAMAGE,
         'screech',
       );
+      if (connected) this.noteBlowLanded(t);
     }
   }
 
@@ -1704,11 +1748,12 @@ export class GrotesqueSpider extends Mob {
         this.spells.addBlockXp(SLAM_BLOCK_XP);
         continue;
       }
-      this.dealPreScaledRangedDamage(
+      const connected = this.dealPreScaledRangedDamage(
         t,
         Math.ceil(t.maxHp * SLAM_HP_FRACTION) + SLAM_BONUS_DAMAGE,
         'slam',
       );
+      if (connected) this.noteBlowLanded(t);
     }
   }
 
