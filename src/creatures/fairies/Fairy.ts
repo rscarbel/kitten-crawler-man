@@ -277,8 +277,13 @@ export abstract class Fairy extends Mob {
   private refugeSearchFailedFrames = 0;
   private refugeRetryFrames = 0;
 
-  constructor(tileX: number, tileY: number, tileSize: number) {
-    super(tileX, tileY, tileSize, fairyBaseHpForFloor(FAIRY_DEFAULT_HOST_FLOOR), FAIRY_BASE_SPEED);
+  constructor(
+    tileX: number,
+    tileY: number,
+    tileSize: number,
+    baseSpeed: number = FAIRY_BASE_SPEED,
+  ) {
+    super(tileX, tileY, tileSize, fairyBaseHpForFloor(FAIRY_DEFAULT_HOST_FLOOR), baseSpeed);
     this.wingClockShare = wingClockShare(tileX, tileY);
     this.homeX = this.spawnX;
     this.homeY = this.spawnY;
@@ -288,9 +293,13 @@ export abstract class Fairy extends Mob {
     return FAIRY_CULL_MARGIN_TILES;
   }
 
-  /** A crawler that chases a fairy down always catches it, at any level. */
-  protected override get levelledSpeedCap(): number {
+  /** Top speed of this kind of fairy; a crawler that chases one down always catches it. */
+  protected get topSpeed(): number {
     return FAIRY_MAX_SPEED;
+  }
+
+  protected override get levelledSpeedCap(): number {
+    return this.topSpeed;
   }
 
   /** Flyers are outside the crawler-collision pass already; said here as well so it cannot drift. */
@@ -563,14 +572,14 @@ export abstract class Fairy extends Mob {
 
   /**
    * Flutters at its top speed with a threat close by, cruises otherwise. Top
-   * speed is {@link FAIRY_MAX_SPEED}, under the crawler's, so a crawler who
+   * speed is {@link topSpeed}, under the crawler's, so a crawler who
    * commits to the chase still catches it.
    */
   private movementSpeed(): number {
     const flutterPx = this.tileSize * FAIRY_FLUTTER_RANGE_TILES;
     const threatClose = this.nearestThreatDistance(this) <= flutterPx;
     const running = this.refuge !== null && this.threats.length > 0;
-    return threatClose || running ? FAIRY_MAX_SPEED : this.speed;
+    return threatClose || running ? this.topSpeed : this.speed;
   }
 
   /**

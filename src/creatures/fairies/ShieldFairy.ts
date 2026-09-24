@@ -16,8 +16,10 @@ import {
   FAIRY_CAST_RECOVER_FRAMES,
   SHIELD_BETWEEN_CASTS_FRAMES,
   SHIELD_BETWEEN_CASTS_MIN_FRAMES,
+  SHIELD_BASE_SPEED,
   SHIELD_CAST_RANGE_TILES,
   SHIELD_ENGAGED_RECENT_FRAMES,
+  SHIELD_MAX_SPEED,
   SHIELD_PREFERRED_RANGE_TILES,
   SHIELD_SUPPORT_LEASH_TILES,
 } from './fairyTuning';
@@ -95,6 +97,14 @@ export class ShieldFairy extends Fairy {
   private glyphTarget: Mob | null = null;
 
   private readonly glyphSeed = Math.floor(Math.random() * GLYPH_SEED_RANGE);
+
+  constructor(tileX: number, tileY: number, tileSize: number) {
+    super(tileX, tileY, tileSize, SHIELD_BASE_SPEED);
+  }
+
+  protected override get topSpeed(): number {
+    return SHIELD_MAX_SPEED;
+  }
 
   protected override get casts(): readonly FairyCast[] {
     return SHIELD_CASTS;

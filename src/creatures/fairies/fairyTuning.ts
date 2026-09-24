@@ -43,17 +43,31 @@ export const FAIRY_TYPICAL_HOST_HP_BY_FLOOR: ReadonlyMap<number, number> = new M
 /** Floor whose host HP a fairy is authored at when nothing names another. */
 export const FAIRY_DEFAULT_HOST_FLOOR = FLOOR1;
 
+/** Share of the pre-slowdown speeds every fairy but the shield fairy moves at: 30% slower. */
+export const FAIRY_SPEED_SCALE = 0.7;
+
+/** The shield fairy's ceiling as a share of the crawler's speed; it is the one fairy not slowed. */
+export const SHIELD_MAX_SPEED_FRACTION_OF_PLAYER = 0.85;
+
+/** The shield fairy's ceiling in pixels per frame. */
+export const SHIELD_MAX_SPEED = PLAYER_SPEED * SHIELD_MAX_SPEED_FRACTION_OF_PLAYER;
+
+/** The shield fairy's authored walk speed before level scaling. */
+export const SHIELD_BASE_SPEED = 1.5;
+
 /**
  * Ceiling on a fairy's walk speed as a share of the crawler's, levelled or not,
- * so a crawler who chases one down always catches it.
+ * so a crawler who chases one down always catches it. Not the shield fairy's:
+ * see {@link SHIELD_MAX_SPEED_FRACTION_OF_PLAYER}.
  */
-export const FAIRY_MAX_SPEED_FRACTION_OF_PLAYER = 0.85;
+export const FAIRY_MAX_SPEED_FRACTION_OF_PLAYER =
+  SHIELD_MAX_SPEED_FRACTION_OF_PLAYER * FAIRY_SPEED_SCALE;
 
 /** The ceiling above in pixels per frame. */
 export const FAIRY_MAX_SPEED = PLAYER_SPEED * FAIRY_MAX_SPEED_FRACTION_OF_PLAYER;
 
 /** Authored walk speed before level scaling; levelling can lift it only as far as {@link FAIRY_MAX_SPEED}. */
-export const FAIRY_BASE_SPEED = 1.5;
+export const FAIRY_BASE_SPEED = SHIELD_BASE_SPEED * FAIRY_SPEED_SCALE;
 
 /** How far a fairy notices a crawler, in tiles. */
 export const FAIRY_NOTICE_RANGE_TILES = 8;

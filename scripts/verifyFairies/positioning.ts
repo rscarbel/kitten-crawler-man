@@ -13,7 +13,7 @@
  *   room reached only by a detour that first leads away is still reached.
  * - A boss's healer keeps its distance on the circus grounds, the ground every
  *   other fairy is kept off.
- * - It never flies faster than `FAIRY_MAX_SPEED`, so a crawler who keeps
+ * - It never flies faster than `SHIELD_MAX_SPEED`, so a crawler who keeps
  *   chasing it at `PLAYER_SPEED` catches it.
  *
  * Every rule is paired with a broken fairy it must catch.
@@ -39,8 +39,8 @@ import {
   FAIRY_BASE_HP_FRACTION,
   FAIRY_COVER_LINE_TOLERANCE_TILES,
   FAIRY_GOAL_ARRIVAL_TILES,
-  FAIRY_MAX_SPEED,
   FAIRY_TYPICAL_HOST_HP_BY_FLOOR,
+  SHIELD_MAX_SPEED,
   SHIELD_PREFERRED_RANGE_TILES,
 } from '../../src/creatures/fairies/fairyTuning';
 import { GameMap } from '../../src/map/GameMap';
@@ -527,9 +527,9 @@ function verifyRunningForTheNextRoom(report: FairyGateReport): void {
     describe(real),
   );
   report.check(
-    real.maxStepPx <= FAIRY_MAX_SPEED + STEP_EPSILON_PX,
-    'a running fairy never steps faster than FAIRY_MAX_SPEED',
-    `${real.maxStepPx.toFixed(SPEED_DISPLAY_DECIMALS)} px against ${FAIRY_MAX_SPEED.toFixed(SPEED_DISPLAY_DECIMALS)}`,
+    real.maxStepPx <= SHIELD_MAX_SPEED + STEP_EPSILON_PX,
+    'a running fairy never steps faster than SHIELD_MAX_SPEED',
+    `${real.maxStepPx.toFixed(SPEED_DISPLAY_DECIMALS)} px against ${SHIELD_MAX_SPEED.toFixed(SPEED_DISPLAY_DECIMALS)}`,
   );
   const tethered = fleeRun((x, y) => new ShieldFairy(x, y, TILE_SIZE), true);
   report.checkCatches(
@@ -539,7 +539,7 @@ function verifyRunningForTheNextRoom(report: FairyGateReport): void {
   );
   const fast = fleeRun((x, y) => new DoubledStepFairy(x, y, TILE_SIZE), false);
   report.checkCatches(
-    fast.maxStepPx <= FAIRY_MAX_SPEED + STEP_EPSILON_PX,
+    fast.maxStepPx <= SHIELD_MAX_SPEED + STEP_EPSILON_PX,
     'a fairy whose steps are doubled is caught over the speed cap',
     `${fast.maxStepPx.toFixed(SPEED_DISPLAY_DECIMALS)} px`,
   );

@@ -60,7 +60,7 @@ const SCREECH_AUDIO_IMPACT_SECONDS = 1.05;
 /** Frames between successive eggs of one clutch. */
 const LAY_EGG_INTERVAL_FRAMES = 8;
 /** The largest clutch any HP phase lays; sizes the drop window. */
-export const MAX_EGG_CLUTCH_SIZE = 3;
+export const MAX_EGG_CLUTCH_SIZE = 5;
 
 /**
  * Tell and lock lengths are identical in every HP phase: only the gaps between

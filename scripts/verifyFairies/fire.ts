@@ -149,8 +149,14 @@ const LEADING_TARGET_TILE_X = FAIRY_TILE_X + 2;
 const PROMPT_REACTION_FRAMES = 1;
 /** A throw held back this long after it is chosen: as long as the telegraph floor. */
 const HELD_THROW_FRAMES = LOCKED_TELEGRAPH_MIN_FRAMES;
-/** Where an approaching crawler starts: a tile past the fairy's notice. */
-const APPROACH_START_TILE_X = FAIRY_TILE_X + FAIRY_NOTICE_RANGE_TILES + 1;
+/**
+ * Tiles past the fairy's notice range an approaching crawler starts. Far enough
+ * that the fairy is still flying to its hover spot when it casts: the slowest
+ * fairies reach it, and stop, a frame before a nearer start lets them cast.
+ */
+const APPROACH_START_MARGIN_TILES = 4;
+/** Where an approaching crawler starts. */
+const APPROACH_START_TILE_X = FAIRY_TILE_X + FAIRY_NOTICE_RANGE_TILES + APPROACH_START_MARGIN_TILES;
 /** An approaching crawler stops this close, so it never walks through the fairy. */
 const APPROACH_STOP_TILES = 2;
 /** Frames watched before and after a throw for the fairy standing still. */

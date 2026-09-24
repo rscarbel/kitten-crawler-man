@@ -111,8 +111,14 @@ const MONGO_HITS_WANTED = 2;
 const SEQUENCE_HITS = 3;
 /** The hit in that sequence that freezes. */
 const FREEZING_HIT = 2;
-/** Where an approaching crawler starts: a tile past the fairy's notice. */
-const APPROACH_START_TILE_X = FAIRY_TILE + FAIRY_NOTICE_RANGE_TILES + 1;
+/**
+ * Tiles past the fairy's notice range an approaching crawler starts. Far enough
+ * that the fairy is still flying to its hover spot when it casts: the slowest
+ * fairies reach it, and stop, a frame before a nearer start lets them cast.
+ */
+const APPROACH_START_MARGIN_TILES = 4;
+/** Where an approaching crawler starts. */
+const APPROACH_START_TILE_X = FAIRY_TILE + FAIRY_NOTICE_RANGE_TILES + APPROACH_START_MARGIN_TILES;
 /** An approaching crawler stops this close, so it never walks through the fairy. */
 const APPROACH_STOP_TILES = 2;
 /** Frames watched before and after a shot for the fairy standing still. */

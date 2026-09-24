@@ -57,7 +57,7 @@ import type {
   SpiderImpactEvent,
 } from './grotesqueSpiderTimeline';
 
-const SPIDER_HP = 1200;
+const SPIDER_HP = 1800;
 const SPIDER_SPEED = 2.5;
 const DASH_SPEED_MULTIPLIER = 2.5;
 /** Her sprint toward a rooted player: pressure, never a hit on its own. */
@@ -107,8 +107,6 @@ const TRAP_TTL = 3600;
 const TRAP_SPLAT_TICKS_PER_FRAME = 6;
 const TRAP_IDLE_TICKS_PER_FRAME = 8;
 
-// ── Roots ───────────────────────────────────────────────────────────────────
-
 /** How long a spit hit or a puddle roots a player. */
 export const SPIDER_ROOT_FRAMES = 90;
 /**
@@ -127,8 +125,6 @@ export const PUDDLE_EVAPORATE_FRAMES = 30;
  */
 const ROOT_CLEAR_MARGIN_FRAMES = 2;
 
-// ── Escape rule ─────────────────────────────────────────────────────────────
-
 /**
  * Compass directions the escape probe walks a crawler along. Keyboard movement
  * only has these eight, so an escape that needs any angle in between is one a
@@ -142,8 +138,6 @@ const ESCAPE_PROBE_DIRECTIONS = 8;
  * whether the player's first step lands on the first lock tick or the next.
  */
 const ESCAPE_CLEARANCE_MARGIN_PX = 6;
-
-// ── Stalemate ───────────────────────────────────────────────────────────────
 
 /**
  * Frames every attack may be refused, with the target in reach and her gap
@@ -159,8 +153,6 @@ export const REPOSITION_ARRIVAL_PX = TILE_SIZE * REPOSITION_ARRIVAL_TILE_FRACTIO
 /** A walk to the spot that has not arrived by now is given up (a blocked path, a moved target). */
 export const REPOSITION_TIMEOUT_FRAMES = 180;
 
-// ── Damage ──────────────────────────────────────────────────────────────────
-
 /*
  * The screech circle and the slam cone both paint the floor for well over a
  * second before they land, so both are priced as a share of the victim's own
@@ -168,12 +160,12 @@ export const REPOSITION_TIMEOUT_FRAMES = 180;
  * short of a one-shot so reading the fight can be learnt by trying.
  */
 const SCREECH_BLOCK_XP = 10;
-export const SCREECH_HP_FRACTION = 0.5;
-const SCREECH_BONUS_DAMAGE = 3;
+export const SCREECH_HP_FRACTION = 0.8;
+const SCREECH_BONUS_DAMAGE = 4;
 
 const SLAM_BLOCK_XP = 8;
-export const SLAM_HP_FRACTION = 0.4;
-const SLAM_BONUS_DAMAGE = 4;
+export const SLAM_HP_FRACTION = 0.6;
+const SLAM_BONUS_DAMAGE = 6;
 
 const SHELL_BLOCK_XP = 8;
 const SPIT_DAMAGE_MIN = 8;
@@ -238,8 +230,6 @@ function occludedPlayerScratch(size: number): {
   return { surface: occludedPlayerSurface, ctx: occludedPlayerCtx };
 }
 
-// ── Sequencer ───────────────────────────────────────────────────────────────
-
 /** HP phases: 1 above two thirds of her HP, 2 above one third, 3 below. */
 export type SpiderHpPhase = 1 | 2 | 3;
 const FINAL_HP_PHASE = 3;
@@ -293,12 +283,10 @@ const MAX_SAME_ATTACK_IN_A_ROW = 2;
 /** How long a spit chain waits for its slam to become legal before she drops it. */
 const CHAIN_SLAM_PATIENCE_FRAMES = 150;
 
-// ── Eggs ────────────────────────────────────────────────────────────────────
-
 /** Eggs plus hatchlings alive at once; a lay that would exceed it does not start. */
-export const MAX_LIVE_EGGS_AND_HATCHLINGS = 6;
+export const MAX_LIVE_EGGS_AND_HATCHLINGS = 10;
 /** Minimum frames between two lays, since the live cap limits how many, not how often. */
-export const LAY_COOLDOWN_FRAMES = 600;
+export const LAY_COOLDOWN_FRAMES = 400;
 /** How deep, in tiles, the band behind her that eggs land in is. */
 const EGG_BAND_DEPTH_TILES = 1.5;
 /** How squarely behind her an egg must land: the cosine of the widest allowed angle off straight back. */
@@ -337,8 +325,6 @@ export interface SpiderBroodContext {
 
 /** Undrained events kept at most; a headless run with no system draining them must not grow without bound. */
 const MAX_PENDING_EVENTS = 16;
-
-// ── Misc ────────────────────────────────────────────────────────────────────
 
 const COIN_DROP_MIN = 50;
 const COIN_DROP_MAX = 100;
@@ -602,8 +588,6 @@ export class GrotesqueSpider extends Mob {
     super(tileX, tileY, tileSize, SPIDER_HP, SPIDER_SPEED);
   }
 
-  // ── Read-only view for renderers, systems and gates ──────────────────────
-
   /** The attack she is committed to, or null between attacks and during a roar. */
   get currentAttack(): SpiderAttack | null {
     return this._currentAttack;
@@ -694,8 +678,6 @@ export class GrotesqueSpider extends Mob {
     this.impactEvents = [];
     return events;
   }
-
-  // ── Lifecycle ────────────────────────────────────────────────────────────
 
   /**
    * Drops whatever attack, roar, chain or cycle position she is in and starts
@@ -825,8 +807,6 @@ export class GrotesqueSpider extends Mob {
     if (this.hp / this.maxHp > PHASE_THREE_HP_FRACTION) return;
     prewarmGrotesqueSpiderAttack('death');
   }
-
-  // ── Per-frame AI ─────────────────────────────────────────────────────────
 
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
@@ -1068,8 +1048,6 @@ export class GrotesqueSpider extends Mob {
     );
   }
 
-  // ── Stalemate reposition ─────────────────────────────────────────────────
-
   /**
    * Picks open floor a short way off the target from which some attack would
    * pass every fairness check, and commits her to walking there.
@@ -1215,8 +1193,6 @@ export class GrotesqueSpider extends Mob {
     this.repositionFramesLeft = 0;
     this.stalemateFrames = 0;
   }
-
-  // ── Sequencer ────────────────────────────────────────────────────────────
 
   /**
    * The next eligible attack in this phase's cycle, or null to keep pursuing
@@ -1512,8 +1488,6 @@ export class GrotesqueSpider extends Mob {
     return Math.max(ATTACK_GAP_FLOOR_FRAMES, centre + jitter);
   }
 
-  // ── Attacks ──────────────────────────────────────────────────────────────
-
   /**
    * Warms the rows this attack is about to play, at the moment it telegraphs.
    *
@@ -1751,8 +1725,6 @@ export class GrotesqueSpider extends Mob {
     this.spitFireSoundPending = true;
   }
 
-  // ── Phase-change roar ────────────────────────────────────────────────────
-
   /**
    * The slam and screech sounds start well before the strike, so their audible
    * hit lands on it. An attack that ends before its strike (given up at the
@@ -1805,8 +1777,6 @@ export class GrotesqueSpider extends Mob {
       this.gapTimer = this.rollGap();
     }
   }
-
-  // ── Eggs ─────────────────────────────────────────────────────────────────
 
   private directionAwayFrom(target: Player): { x: number; y: number } {
     const dx = this.x - target.x;
@@ -1898,8 +1868,6 @@ export class GrotesqueSpider extends Mob {
     if (candidates.length === 0) return null;
     return candidates[Math.floor(this.rng() * candidates.length)] ?? null;
   }
-
-  // ── Spit glob and puddles ────────────────────────────────────────────────
 
   private landSpitOn(target: Player): void {
     if (this.dealRangedDamage(target, this.rollInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX), 'spit')) {
@@ -2028,8 +1996,6 @@ export class GrotesqueSpider extends Mob {
     });
   }
 
-  // ── Roaming ──────────────────────────────────────────────────────────────
-
   private doRoam(): void {
     this.roamTimer--;
     const ts = this.tileSize;
@@ -2076,8 +2042,6 @@ export class GrotesqueSpider extends Mob {
     return super.hasLOS(target);
   }
 
-  // ── Lab cutscene ─────────────────────────────────────────────────────────
-
   /**
    * Aims the spider toward the given world-space direction and starts a spit
    * with its aim already locked. Called from SpiderQuestSystem to drive the
@@ -2109,8 +2073,6 @@ export class GrotesqueSpider extends Mob {
     }
     return this._attackFrame === strikeFrame('spit');
   }
-
-  // ── Rendering ────────────────────────────────────────────────────────────
 
   /**
    * Renders only the ground spit traps (puddles).

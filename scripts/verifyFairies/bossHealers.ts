@@ -1126,6 +1126,14 @@ function describeSeal(seal: RoomSeal): string {
 
 /** Frames the crawler chases the healer: long enough to corner it many times over. */
 const CHASE_FRAMES = 900;
+
+/**
+ * Share of full pace a crawler chasing an unbonded healer walks at. A healer's
+ * ceiling is under the crawler's pace, so a crawler at full pace pins it and it
+ * never gets a route clear of the party; at about the healer's own ceiling the
+ * run tests whether the healer leaves, not whether it is caught.
+ */
+const STRAY_CHASE_PACE_FRACTION = 0.6;
 /**
  * How close the chasing crawler must come to the healer, in tiles, for the
  * chase to count as one: a crawler that never closed in never pressed it to run.
@@ -1211,6 +1219,8 @@ function chaseHealer(scene: {
   readonly holds: (healer: HealingFairy) => boolean;
   /** Read by HP: a boss can stay `isAlive` through a death animation after the killing blow. */
   readonly bossFell: boolean;
+  /** Share of full pace the crawler walks at, 1 being every frame. */
+  readonly crawlerPaceFraction: number;
 }): HealerChase {
   const { healer, party, map, ctx } = scene;
   const mobLoop = new MobUpdateLoop();
@@ -1218,7 +1228,10 @@ function chaseHealer(scene: {
   let framesFleeing = 0;
   let closestPx = Infinity;
   for (let frame = 0; frame < CHASE_FRAMES; frame++) {
-    stepToward(party.human, healer, map);
+    const stepsThisFrame =
+      Math.floor((frame + 1) * scene.crawlerPaceFraction) >
+      Math.floor(frame * scene.crawlerPaceFraction);
+    if (stepsThisFrame) stepToward(party.human, healer, map);
     mobLoop.update(ctx);
     scene.updateFight();
     if (!scene.holds(healer)) framesOutside++;
@@ -1285,6 +1298,7 @@ function bossRoomChases(
         updateFight: () => bossRoom.update(ctx),
         holds: (chased) => bossRoom.isEntityInRoom(chased, bounds),
         bossFell: boss.hp <= 0,
+        crawlerPaceFraction: unbound ? STRAY_CHASE_PACE_FRACTION : 1,
       });
       // A room left sealed on its living healer would hold on to this party's
       // crawlers as insiders and pull the next room's party back into it.
@@ -1386,6 +1400,7 @@ function arenaChase(seed: number, unbound: boolean): HealerChase {
       updateFight: () => arena.update(ctx),
       holds: (chased) => arena.isInsideArena(chased),
       bossFell: !bos.isAlive,
+      crawlerPaceFraction: unbound ? STRAY_CHASE_PACE_FRACTION : 1,
     });
   });
 }
