@@ -5,8 +5,9 @@ import type { FloatingTextRequest, FloatingTextStyle } from '../core/FloatingTex
 import { TILE_SIZE } from '../core/constants';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 
-/** How long a label stays on screen. */
-const LABEL_FRAMES = 55;
+/** Frames a floating label stays on screen, rising and fading. */
+export const FLOATING_LABEL_FRAMES = 55;
+const LABEL_FRAMES = FLOATING_LABEL_FRAMES;
 /** Tiles the label travels upward over its lifetime. */
 const LABEL_RISE_TILES = 1.3;
 /** Fraction of the lifetime spent fully opaque before the fade begins. */
@@ -29,6 +30,9 @@ const STYLE_DEFS: Record<FloatingTextStyle, StyleDef> = {
   // Steel blue: a guard is a clang, and it must not be mistaken for the grey
   // of a crawler's own dodge happening in the same melee.
   block: { size: 12, color: '#60a5fa', bold: true },
+  // Gold and larger than any hit label: a blow landed in a boss's punish
+  // window, and it matches the halo she wears while that window is open.
+  exposed: { size: 18, color: '#facc15', bold: true },
 };
 
 interface FloatingLabel {

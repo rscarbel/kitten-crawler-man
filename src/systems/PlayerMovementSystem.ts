@@ -18,8 +18,8 @@ interface Moveable {
   facingY: number;
 }
 
-// Diagonal movement penalty
-const DIAGONAL_PENALTY = 0.7071; // 1/sqrt(2)
+/** Keyboard diagonals are scaled by this so they move no faster than a straight step. */
+export const DIAGONAL_PENALTY = 0.7071;
 
 // Wall collision offsets for leading_edge mode
 const LEADING_EDGE_FRONT = 0.72;

@@ -29,6 +29,7 @@ export type DeathCause =
   | 'tuskling'
   | 'troglodyte'
   | 'smallSpider'
+  | 'spiderHatchling'
   | 'skyFowl'
   | 'llama'
   | 'rat'
@@ -260,19 +261,19 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You died to venom. Keep the poison off next time.',
   ],
   grotesqueSpiderSlam: [
-    'You were crushed under the legs of a mutant spider. Maybe get out of the red zone next time...',
-    "You did not get out of the beast's legs in time. Next time, get out of the red area.",
-    'Crunch. The giant spider thing slammed you into the ground. Take the hint and avoid red ground areas.',
+    'When the red fills to its outline, it lands. Be outside the line.',
+    'Her legs came down the moment the red cone filled. When the outline goes solid, step out of it.',
+    'Crunch. The cone was full and you were still in it. Get out while the red is still growing.',
   ],
   grotesqueSpiderScreech: [
-    'Your head literally exploded from the mutant spider screech. Avoid the red areas next time.',
-    'Your mind was melted by the screech of the creature. Next time, step away and out of the red warning area to survive.',
-    'You were killed by a screech so loud your organs ruptured. Step out of the red zones to avoid this fate next time...',
+    'When the red fills to its outline, it lands. Be outside the line.',
+    'The circle filled from her body to its edge, and then she screamed. Be past the outline before it fills.',
+    'Your organs ruptured the instant the red reached the ring. Once the outline goes solid, it is too late to be inside it.',
   ],
   grotesqueSpiderSpit: [
-    'Acid from the mutant spider dissolved your armor and then you.',
-    "The spider's spit projectile caught you. Keep moving to dodge them.",
-    "You were dissolved by the grotesque spider's acid spit. Hard to come back from that.",
+    'The aim line froze, then the glob flew down it. Step sideways off the line when it stops tracking you.',
+    'Once her aim line locks it cannot follow you. Sidestep it; running straight back only keeps you on it.',
+    "You were dissolved by acid that flew exactly where the frozen line pointed. Don't stand on the line.",
   ],
   krakarenCloneSlam: [
     "You were crushed under the Krakaren's falling appendage. Don't stand in the shadow.",
@@ -315,6 +316,7 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     "The spider's bite quickly liquified your organs.",
     '8-legged death came for you. Spiders are not your friend.',
   ],
+  spiderHatchling: ['A spider egg hatched. Smash eggs before they crack open.'],
   skyFowl: [
     "A Sky Fowl's talons finished you off.",
     'You were killed by a dungeon bird.',

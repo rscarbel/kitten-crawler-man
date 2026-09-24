@@ -666,6 +666,12 @@ export class CompanionSystem implements GameSystem {
           cat.autoTarget = mobTargetingCat;
         } else if (!cat.autoTarget && mobTargetingHuman) {
           cat.autoTarget = mobTargetingHuman;
+        } else if (
+          !cat.autoTarget &&
+          this.catStance.combatStance === 'aggressive' &&
+          !chaseBlocked
+        ) {
+          cat.autoTarget = this.findAggroDrawingMobNear(mobGrid, human, nearPlayerRange);
         }
       }
 
@@ -739,7 +745,10 @@ export class CompanionSystem implements GameSystem {
             closestDist = dist;
             closest = mob;
           }
-          human.autoTarget = closest;
+          // Beyond his own engage range, the same on-sight rule the cat uses: a
+          // mob that never targets anybody (a ticking egg) is left to hatch
+          // otherwise.
+          human.autoTarget = closest ?? this.findAggroDrawingMobNear(mobGrid, cat, nearPlayerRange);
         }
       }
 
@@ -898,6 +907,33 @@ export class CompanionSystem implements GameSystem {
       if (mob.currentTarget !== quarry) continue;
       if (this.targetBans.has(mob)) continue;
       if (isUntriggeredBossRoomMob(mob, activePlayer)) continue;
+      const dx = mob.x - centre.x;
+      const dy = mob.y - centre.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq >= closestDistSq) continue;
+      closestDistSq = distSq;
+      closest = mob;
+    }
+    return closest;
+  }
+
+  /**
+   * The nearest mob within `range` of `centre` that asks to be attacked on
+   * sight ({@link Mob.drawsCompanionAggro}), measured from the player so the
+   * companion is not drawn away from her.
+   */
+  private findAggroDrawingMobNear(
+    mobGrid: SpatialGrid<Mob>,
+    centre: { readonly x: number; readonly y: number },
+    range: number,
+  ): Mob | null {
+    this._proximityQuery.clear();
+    const nearby = mobGrid.queryCircle(centre.x, centre.y, range, this._proximityQuery);
+    let closest: Mob | null = null;
+    let closestDistSq = range * range;
+    for (const mob of nearby) {
+      if (!mob.isAlive || !mob.drawsCompanionAggro || !mob.isHostile) continue;
+      if (mob.offLimitsToAllies || this.targetBans.has(mob)) continue;
       const dx = mob.x - centre.x;
       const dy = mob.y - centre.y;
       const distSq = dx * dx + dy * dy;

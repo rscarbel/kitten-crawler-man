@@ -220,38 +220,42 @@ export const SUBJECTS: readonly SvgSubject[] = [
   {
     name: 'grotesque-spider',
     views: async () => {
-      const { drawGrotesqueSpiderSprite } = await import('../src/sprites/grotesqueSpiderSprite.js');
-      const time = 0;
+      const { drawGrotesqueSpiderPoseSprite } =
+        await import('../src/sprites/grotesqueSpiderSprite.js');
+      const { strikeFrame } = await import('../src/creatures/grotesqueSpiderTimeline.js');
+      // She is painted once, from above, facing +Y; every view is that one
+      // orientation, as the fight rotates it rather than redrawing it.
       return [
         {
-          name: 'front',
+          name: 'idle',
           paint: ({ dom, unit }) =>
-            drawGrotesqueSpiderSprite(dom, 0, 0, unit, time, 0, FACING_TOWARD_CAMERA),
+            drawGrotesqueSpiderPoseSprite(dom, 0, 0, unit, { kind: 'idle', time: STILL_FRAME }),
         },
         {
-          name: 'back',
+          name: 'walk',
           paint: ({ dom, unit }) =>
-            drawGrotesqueSpiderSprite(dom, 0, 0, unit, time, 0, FACING_AWAY),
-        },
-        {
-          name: 'side',
-          paint: ({ dom, unit }) =>
-            drawGrotesqueSpiderSprite(dom, 0, 0, unit, time, FACING_RIGHT, 0),
+            drawGrotesqueSpiderPoseSprite(dom, 0, 0, unit, {
+              kind: 'walk',
+              distancePx: WALK_FRAME * unit,
+            }),
         },
         {
           name: 'slam',
           paint: ({ dom, unit }) =>
-            drawGrotesqueSpiderSprite(
-              dom,
-              0,
-              0,
-              unit,
-              time,
-              FACING_RIGHT,
-              0,
-              'attack_slam',
-              ATTACK_MIDPOINT,
-            ),
+            drawGrotesqueSpiderPoseSprite(dom, 0, 0, unit, {
+              kind: 'attack',
+              attack: 'slam',
+              attackFrame: strikeFrame('slam'),
+            }),
+        },
+        {
+          name: 'screech',
+          paint: ({ dom, unit }) =>
+            drawGrotesqueSpiderPoseSprite(dom, 0, 0, unit, {
+              kind: 'attack',
+              attack: 'screech',
+              attackFrame: strikeFrame('screech'),
+            }),
         },
       ];
     },

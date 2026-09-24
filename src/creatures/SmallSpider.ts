@@ -113,10 +113,11 @@ function leapSpeedFactor(flightProgress: number): number {
 }
 
 export class SmallSpider extends Mob {
-  readonly xpValue = SPIDER_XP;
+  readonly xpValue: number = SPIDER_XP;
   protected override coinDropMin = 0;
   protected override coinDropMax = SPIDER_COIN_DROP_MAX;
   override displayName = 'Spider';
+  override readonly audioTag: string = 'small_spider';
   override description = 'A quick, venomous spider that pounces on its prey.';
   override mass = 1;
 
@@ -209,7 +210,7 @@ export class SmallSpider extends Mob {
     const startX = this.x;
     const startY = this.y;
 
-    const nearest = this._findTarget(targets);
+    const nearest = this.acquireTarget(targets);
     this.currentTarget = nearest;
     const nearestDist =
       nearest === null ? Infinity : Math.hypot(nearest.x - this.x, nearest.y - this.y);
@@ -327,6 +328,25 @@ export class SmallSpider extends Mob {
     this._advanceGait(startX, startY);
   }
 
+  /**
+   * The crawler this spider hunts this frame. A subclass whose target is decided
+   * by its spawn rather than its senses replaces this and keeps the rest of the
+   * crouch-and-pounce cycle.
+   */
+  protected acquireTarget(targets: Player[]): Player | null {
+    return this._findTarget(targets);
+  }
+
+  /** Base damage of the pounce's landing, before level scaling. */
+  protected get pounceDamage(): number {
+    return ATTACK_DAMAGE;
+  }
+
+  /** Size the body is drawn at, as a fraction of a tile; centred on the tile either way. */
+  protected get drawScale(): number {
+    return 1;
+  }
+
   private _findTarget(targets: Player[]): Player | null {
     // An already-alerted spider keeps hunting further than it first noticed you.
     const scanRange =
@@ -361,7 +381,7 @@ export class SmallSpider extends Mob {
         this.spells.addBlockXp(SHELL_BLOCK_XP);
         continue;
       }
-      this.dealDamage(target, ATTACK_DAMAGE);
+      this.dealDamage(target, this.pounceDamage);
     }
   }
 
@@ -431,6 +451,10 @@ export class SmallSpider extends Mob {
   ): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
+    const bodyTileSize = tileSize * this.drawScale;
+    const bodyInset = (tileSize - bodyTileSize) * TILE_CENTER_FRACTION;
+    const bodyX = sx + bodyInset;
+    const bodyY = sy + bodyInset;
 
     if (!this.isAlive) {
       // Once the animation ends the corpse holds its last frame — curled on its
@@ -439,9 +463,9 @@ export class SmallSpider extends Mob {
       if (style === null) return;
       drawSpiderSprite(
         ctx,
-        sx,
-        sy,
-        tileSize,
+        bodyX,
+        bodyY,
+        bodyTileSize,
         this.facingX,
         this.facingY,
         this._deathAnimation(style),
@@ -450,7 +474,15 @@ export class SmallSpider extends Mob {
       return;
     }
 
-    drawSpiderSprite(ctx, sx, sy, tileSize, this.facingX, this.facingY, this._animation());
+    drawSpiderSprite(
+      ctx,
+      bodyX,
+      bodyY,
+      bodyTileSize,
+      this.facingX,
+      this.facingY,
+      this._animation(),
+    );
 
     this.renderMobHealthBar(ctx, sx, sy);
   }

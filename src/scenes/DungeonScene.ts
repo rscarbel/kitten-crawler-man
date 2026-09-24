@@ -376,8 +376,8 @@ import { BrindleGrub } from '../creatures/BrindleGrub';
 import { SmallSpider } from '../creatures/SmallSpider';
 import {
   GrotesqueSpider,
-  SLAM_AUDIO_OFFSET,
-  SCREECH_AUDIO_OFFSET,
+  SLAM_AUDIO_SEEK_SECONDS,
+  SCREECH_AUDIO_SEEK_SECONDS,
 } from '../creatures/GrotesqueSpider';
 import { randomInt, pointInRect } from '../utils';
 import { aiAdapter } from '../ai/AIAdapter';
@@ -2554,6 +2554,7 @@ export class DungeonScene extends GameplayScene {
         for (const rule of this.levelDef.onMobKilledSpawns) {
           if (mob instanceof BrindleGrub && rule.type === 'brindle_grub') continue;
           if (mob instanceof SmallSpider) continue;
+          if (!mob.seedsOnKillSpawns) continue;
           // A body an enemy conjured is not a kill the party earned, so it
           // does not seed a swarm either — a necro fairy's skeletons would
           // otherwise turn every raise into free grubs.
@@ -5731,13 +5732,16 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.render(ctx, camX, camY, this.active());
     this.circusQuest.render(ctx, camX, camY, this.active());
     this.murderQuest.render(ctx, camX, camY, this.active());
-    this.combat.floatingText.render(ctx, camX, camY);
-    // Puddles render before entities so players/mobs always appear on top of them
+    // Puddles and telegraphs are floor paint, so players/mobs always appear on top of them
     for (const spider of this.grotesqueSpiders) {
       spider.renderSpitGroundTraps(ctx, camX, camY, TILE_SIZE);
+      spider.renderGroundTelegraphs(ctx, camX, camY);
     }
 
     this.renderPipeline.renderEntities(ctx, rc);
+    for (const spider of this.grotesqueSpiders) {
+      spider.renderAboveEntities(ctx, camX, camY, [this.human, this.cat]);
+    }
     this.murderQuest.renderWellClueOverlay(ctx, camX, camY, this.active());
     this.spiderQuest.renderTableForeground(ctx, camX, camY, this.active());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
@@ -5748,6 +5752,9 @@ export class DungeonScene extends GameplayScene {
       spider.renderSpitProjectile(ctx, camX, camY, TILE_SIZE);
     }
     this.spiderQuest.renderCutsceneEffects(ctx, camX, camY);
+    // Over the entities: a label spawned on a large body (a boss) would
+    // otherwise rise out of sight behind its own sprite.
+    this.combat.floatingText.render(ctx, camX, camY);
 
     this.chat.renderBubble(ctx, camX, camY);
 
@@ -6503,6 +6510,7 @@ export class DungeonScene extends GameplayScene {
     this.bounty?.update(ctx);
     setVisibleWorldView(cameraWorldView(this.camera(), clearSightOf(this.active())));
     this.combat.updateMobs(ctx);
+    this.spiderQuest.updateImpactFeedback();
     for (const name of this.combat.spells.takeFogResistedNames()) {
       this.menus.announce(`${name} sees you through the fog`);
     }
@@ -6515,14 +6523,17 @@ export class DungeonScene extends GameplayScene {
     let anySpiderWalkingNear = false;
 
     for (const spider of this.grotesqueSpiders) {
+      const cancelledAttack = spider.drainCancelledAttackAudio();
+      if (cancelledAttack === 'slam') this.audio?.stopSound('grotesque_spider_slam_attack');
+      if (cancelledAttack === 'screech') this.audio?.stopSound('grotesque_spider_screech_attack');
       if (spider.slamSoundPending) {
         spider.slamSoundPending = false;
-        this.audio?.play('grotesque_spider_slam_attack', { startOffset: SLAM_AUDIO_OFFSET });
+        this.audio?.play('grotesque_spider_slam_attack', { startOffset: SLAM_AUDIO_SEEK_SECONDS });
       }
       if (spider.screechSoundPending) {
         spider.screechSoundPending = false;
         this.audio?.play('grotesque_spider_screech_attack', {
-          startOffset: SCREECH_AUDIO_OFFSET,
+          startOffset: SCREECH_AUDIO_SEEK_SECONDS,
         });
       }
       if (spider.spitFireSoundPending) {
@@ -6824,6 +6835,10 @@ export class DungeonScene extends GameplayScene {
       this.spiderQuest.keyboardHeroAccessGrantedPending = false;
       this.audio?.play('new_unlock');
     }
+    if (this.spiderQuest.cutsceneSpitFireSoundPending) {
+      this.spiderQuest.cutsceneSpitFireSoundPending = false;
+      this.audio?.play('grotesque_spider_spit_attack');
+    }
     if (this.spiderQuest.cutsceneSpitImpactSoundPending) {
       this.spiderQuest.cutsceneSpitImpactSoundPending = false;
       this.audio?.play('grotesque_spider_spit_landing');
@@ -6831,6 +6846,18 @@ export class DungeonScene extends GameplayScene {
     if (this.spiderQuest.cutsceneGoreSoundPending) {
       this.spiderQuest.cutsceneGoreSoundPending = false;
       this.audio?.play('flesh_being_sliced');
+    }
+    if (this.spiderQuest.eggLandSoundPending) {
+      this.spiderQuest.eggLandSoundPending = false;
+      this.audio?.play('splat_1');
+    }
+    if (this.spiderQuest.eggBurstSoundPending) {
+      this.spiderQuest.eggBurstSoundPending = false;
+      this.audio?.play('splat_2');
+    }
+    if (this.spiderQuest.eggHatchSoundPending) {
+      this.spiderQuest.eggHatchSoundPending = false;
+      this.audio?.play('splat_3');
     }
     if (this.spiderQuest.bossFightStartPending) {
       this.spiderQuest.bossFightStartPending = false;

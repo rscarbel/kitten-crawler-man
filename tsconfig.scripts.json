@@ -16,6 +16,7 @@
     "scripts/verify-crawler-signs.ts",
     "scripts/verify-menus.ts",
     "scripts/verify-lich.ts",
+    "scripts/verify-spider-fight.ts",
     "scripts/verify-doomsday.ts",
     "scripts/verify-run-stats.ts",
     "scripts/render-run-complete.ts",

@@ -396,6 +396,7 @@ const IDLE_BUBBLE2_STROKE_ALPHA = 0.48;
 /**
  * Draw the idle sticky puddle trap.
  * @param frame  0–7 loop frame
+ * @param fade   1 for a fresh puddle, falling to 0 as it dries up
  * @param ts     tile size matching the manifest tileScale
  */
 export function drawSpitTrapIdle(
@@ -404,7 +405,11 @@ export function drawSpitTrapIdle(
   cy: number,
   ts: number,
   frame: number,
+  fade = 1,
 ): void {
+  // Composes with the caller's alpha rather than overwriting it, so a puddle
+  // drying up can be faded as a whole.
+  const baseAlpha = ctx.globalAlpha * fade;
   const time = (frame / IDLE_FRAME_COUNT) * TWO_PI;
   const breathe = Math.sin(time * IDLE_BREATHE_FREQ) * IDLE_BREATHE_AMPLITUDE;
   const rx = ts * IDLE_RADIUS_X_RATIO * (1 + breathe);
@@ -413,21 +418,21 @@ export function drawSpitTrapIdle(
   ctx.save();
 
   // Soft outer glow — signals the sticky zone
-  ctx.globalAlpha = IDLE_GLOW_ALPHA;
+  ctx.globalAlpha = baseAlpha * IDLE_GLOW_ALPHA;
   ctx.fillStyle = '#6a9014';
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx * IDLE_GLOW_EXPAND, ry * IDLE_GLOW_EXPAND, 0, 0, TWO_PI);
   ctx.fill();
 
   // Base puddle
-  ctx.globalAlpha = IDLE_BASE_ALPHA;
+  ctx.globalAlpha = baseAlpha * IDLE_BASE_ALPHA;
   ctx.fillStyle = '#384808';
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, ry, 0, 0, TWO_PI);
   ctx.fill();
 
   // Secondary brighter layer
-  ctx.globalAlpha = IDLE_BRIGHT_ALPHA;
+  ctx.globalAlpha = baseAlpha * IDLE_BRIGHT_ALPHA;
   ctx.fillStyle = '#4c6010';
   ctx.beginPath();
   ctx.ellipse(
@@ -442,7 +447,7 @@ export function drawSpitTrapIdle(
   ctx.fill();
 
   // Wet surface highlight
-  ctx.globalAlpha = IDLE_GLEAM_ALPHA;
+  ctx.globalAlpha = baseAlpha * IDLE_GLEAM_ALPHA;
   ctx.fillStyle = 'rgba(140,180,20,0.5)';
   ctx.beginPath();
   ctx.ellipse(
@@ -457,7 +462,7 @@ export function drawSpitTrapIdle(
   ctx.fill();
 
   // Web / sticky strands crossing the puddle
-  ctx.globalAlpha = IDLE_STRAND_ALPHA;
+  ctx.globalAlpha = baseAlpha * IDLE_STRAND_ALPHA;
   ctx.strokeStyle = '#6a8812';
   ctx.lineWidth = 1.6;
   ctx.lineCap = 'round';
@@ -485,13 +490,13 @@ export function drawSpitTrapIdle(
     const bubbleR = ts * IDLE_BUBBLE1_RADIUS_RATIO * bubbleAlpha;
     const bx = cx + ts * IDLE_BUBBLE1_OFFSET_X;
     const by = cy - ts * IDLE_BUBBLE1_OFFSET_Y;
-    ctx.globalAlpha = bubbleAlpha * IDLE_BUBBLE1_STROKE_ALPHA;
+    ctx.globalAlpha = baseAlpha * bubbleAlpha * IDLE_BUBBLE1_STROKE_ALPHA;
     ctx.strokeStyle = '#8aaa18';
     ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.arc(bx, by, bubbleR, 0, TWO_PI);
     ctx.stroke();
-    ctx.globalAlpha = bubbleAlpha * IDLE_BUBBLE1_FILL_ALPHA;
+    ctx.globalAlpha = baseAlpha * bubbleAlpha * IDLE_BUBBLE1_FILL_ALPHA;
     ctx.fillStyle = '#aace24';
     ctx.beginPath();
     ctx.arc(
@@ -510,7 +515,7 @@ export function drawSpitTrapIdle(
   const bubble2Alpha = Math.sin(bubble2Cycle * Math.PI);
   if (bubble2Alpha > IDLE_BUBBLE2_MIN_ALPHA) {
     const bubbleR2 = ts * IDLE_BUBBLE2_RADIUS_RATIO * bubble2Alpha;
-    ctx.globalAlpha = bubble2Alpha * IDLE_BUBBLE2_STROKE_ALPHA;
+    ctx.globalAlpha = baseAlpha * bubble2Alpha * IDLE_BUBBLE2_STROKE_ALPHA;
     ctx.strokeStyle = '#7a9a14';
     ctx.lineWidth = 1.0;
     ctx.beginPath();
@@ -518,5 +523,30 @@ export function drawSpitTrapIdle(
     ctx.stroke();
   }
 
+  ctx.restore();
+}
+
+/** How far a drying puddle shrinks by the time it has gone, as a share of its size. */
+const EVAPORATE_SHRINK = 0.45;
+
+/**
+ * Draw a puddle drying up: the idle puddle shrinking and fading out. Played
+ * for the oldest puddle when a newer one pushes it out.
+ * @param progress 0 just starting to dry, 1 gone
+ */
+export function drawSpitTrapEvaporate(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  ts: number,
+  frame: number,
+  progress: number,
+): void {
+  const scale = 1 - EVAPORATE_SHRINK * progress;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  ctx.translate(-cx, -cy);
+  drawSpitTrapIdle(ctx, cx, cy, ts, frame, 1 - progress);
   ctx.restore();
 }

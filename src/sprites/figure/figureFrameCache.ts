@@ -94,8 +94,8 @@ const CACHE_BYTE_BUDGET = CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
  * it evicts the row it is about to play again; above it, the only figure that
  * can reach the ceiling is one holding every row it has, which is the leak the
  * ceiling is there to catch. For the fleet's other extremes this is six of the
- * Ball of Swine's ~3.8 MB rows, or about fifty of the Grotesque Spider's
- * ~480 KB cells.
+ * Ball of Swine's ~3.8 MB rows, or about forty-two of the Grotesque Spider's
+ * 384×384 cells of ~576 KB each.
  *
  * A figure whose `FigureDef.budgetMegabytes` is set is measured against that
  * number instead — see {@link figureByteBudgetFor} — but the number here is

@@ -47,6 +47,7 @@ function isShieldFairy(mob: Mob): boolean {
 export function canTakeWardFrom(mob: Mob, fairy: Player): boolean {
   if (isShieldFairy(mob)) return false;
   if (!mob.isAlive || !mob.isHostile || mob.refusesDamage) return false;
+  if (!mob.acceptsWards) return false;
   const ward = fairyWardOn(mob);
   if (ward === null || ward.applier?.isAlive !== true) return true;
   return ward.applier === fairy;

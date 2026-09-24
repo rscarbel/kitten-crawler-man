@@ -23,8 +23,14 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { EventBus } from '../core/EventBus';
 import { SmallSpider } from '../creatures/SmallSpider';
-import { prewarmSmallSpider } from '../sprites/spiderSprite';
+import { prewarmSmallSpider, prewarmSmallSpiderCombat } from '../sprites/spiderSprite';
 import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
+import type { SpiderBroodContext, SpiderEggTile } from '../creatures/GrotesqueSpider';
+import { EGG_HATCHLINGS_PER_EGG, SpiderEgg } from '../creatures/SpiderEgg';
+import { SpiderHatchling } from '../creatures/SpiderHatchling';
+import { prewarmSpiderEgg } from '../sprites/spiderEggSprite';
+import { isInsideSlamCone, type SlamImpact } from '../creatures/grotesqueSpiderTimeline';
+import { SpiderImpactFeedback } from './SpiderImpactFeedback';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { lifeMachineSacSplitFrame } from '../sprites/lifeMachineTiming';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
@@ -48,7 +54,11 @@ import {
   drawReceptor,
   drawTouchButton,
 } from './keyboardHeroBoardArt';
-import { SPIT_SPEED_PX, SPIT_ANIM_CYCLE_FRAMES } from '../creatures/GrotesqueSpider';
+import {
+  DEATH_ANIM_FRAMES,
+  SPIT_SPEED_PX,
+  SPIT_ANIM_CYCLE_FRAMES,
+} from '../creatures/GrotesqueSpider';
 import { drawSpitProjectile } from '../sprites/grotesqueSpiderSpitSprite';
 import { prewarmGrotesqueSpiderLocomotion } from '../sprites/grotesqueSpiderSprite';
 import { LIFE_MACHINE_FIGURE, lifeMachineStateName } from '../sprites/art/lifeMachineFigure';
@@ -328,6 +338,14 @@ const SHAKE_JITTER_CENTER = 0.5;
 
 // Quest complete overlay constants
 const QUEST_COMPLETE_DISPLAY_FRAMES = 420; // 7 seconds at 60 fps
+/** A short pause after her death finishes playing, before the banner covers the room. */
+const QUEST_COMPLETE_AFTER_DEATH_BEAT_FRAMES = 30;
+/**
+ * Frames from her death to the quest-complete banner. Its dimmed screen would
+ * otherwise hide her whole collapse, which plays out on her corpse clock.
+ */
+export const QUEST_COMPLETE_OVERLAY_DELAY_FRAMES =
+  DEATH_ANIM_FRAMES + QUEST_COMPLETE_AFTER_DEATH_BEAT_FRAMES;
 const OVERLAY_FADE_FRAMES = 90;
 const TEXT_HEIGHT_FACTOR = 0.8;
 const OVERLAY_PULSE_SPEED = 200;
@@ -519,7 +537,15 @@ export class SpiderQuestSystem implements GameSystem {
   /** The intrusion succeeded — the ACCESS GRANTED stinger. */
   keyboardHeroAccessGrantedPending = false;
   cutsceneSpitImpactSoundPending = false;
+  /** Her cutscene spit left her mouth this tick. */
+  cutsceneSpitFireSoundPending = false;
   cutsceneGoreSoundPending = false;
+  /** An egg dropped from her abdomen this tick. */
+  eggLandSoundPending = false;
+  /** Her own slam crushed an egg this tick. A crawler's smash is voiced by its kill event instead. */
+  eggBurstSoundPending = false;
+  /** An egg hatched this tick. */
+  eggHatchSoundPending = false;
 
   /**
    * Boss music follows the room lock rather than the quest, because this fight
@@ -541,6 +567,8 @@ export class SpiderQuestSystem implements GameSystem {
 
   // Quest completion
   completeOverlayTimer = 0;
+  /** Frames until the quest-complete banner opens; the quest itself is already complete. */
+  completeOverlayDelay = 0;
 
   // Boss intro trigger — set when the cutscene ends and the fight begins
   bossFightStartPending = false;
@@ -549,6 +577,7 @@ export class SpiderQuestSystem implements GameSystem {
   private _screenShakeX = 0;
   private _screenShakeY = 0;
   private _screenShakeIntensity = 0;
+  private readonly impactFeedback = new SpiderImpactFeedback();
   private _cameraOverrideTile: { x: number; y: number } | null = null;
 
   // Phase state
@@ -558,6 +587,15 @@ export class SpiderQuestSystem implements GameSystem {
   // Life machines
   private lifeMachines: LifeMachine[] = [];
   private smallSpiders: SmallSpider[] = [];
+
+  // The spider's brood. Kept apart from `smallSpiders`, which the life machines
+  // count against their own cap, and never checkpointed: a brood belongs to one
+  // attempt at the fight and every way that attempt ends clears it.
+  private spiderEggs: SpiderEgg[] = [];
+  private hatchlings: SpiderHatchling[] = [];
+  private broodContext: SpiderBroodContext | null = null;
+  /** Latched per lay so the brood's rows are warmed once, on the lay's first tell tick. */
+  private layTellWarmed = false;
 
   // Scientist NPC state
   private scientistX = 0;
@@ -752,7 +790,16 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   get cameraOffset(): { x: number; y: number } {
-    return { x: this._screenShakeX, y: this._screenShakeY };
+    const impact = this.impactFeedback.cameraOffset;
+    return { x: this._screenShakeX + impact.x, y: this._screenShakeY + impact.y };
+  }
+
+  /**
+   * Drains the boss's strike events into shake and floor effects. Run after the
+   * mobs update, so the effects start on the same tick her damage lands.
+   */
+  updateImpactFeedback(): void {
+    this.impactFeedback.update(this.phase === 'boss_fight' ? this._grotesqueSpider : null);
   }
 
   get cameraTargetOverride(): { x: number; y: number } | null {
@@ -883,6 +930,11 @@ export class SpiderQuestSystem implements GameSystem {
   update(ctx: SystemContext): void {
     // Overlay timer ticks even after quest ends
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
+    if (this.completeOverlayDelay > 0) {
+      this.completeOverlayDelay--;
+      if (this.completeOverlayDelay === 0)
+        this.completeOverlayTimer = QUEST_COMPLETE_DISPLAY_FRAMES;
+    }
 
     if (this.phase === 'inactive') return;
     if (!this.roomData) return;
@@ -900,6 +952,7 @@ export class SpiderQuestSystem implements GameSystem {
         this.onBossKilled();
         return;
       }
+      this._updateBrood(this._grotesqueSpider);
     }
 
     if (this.phase === 'cutscene') {
@@ -941,6 +994,7 @@ export class SpiderQuestSystem implements GameSystem {
       this._renderComputerTable(ctx2d, camX, camY);
     }
     this._renderSpiderEgg(ctx2d, camX, camY);
+    this.impactFeedback.renderGround(ctx2d, camX, camY);
 
     if (!this.scientistDead) {
       this._renderScientist(ctx2d, camX, camY);
@@ -1227,7 +1281,8 @@ export class SpiderQuestSystem implements GameSystem {
   onBossKilled(): void {
     if (this.phase === 'complete') return;
     this.phase = 'complete';
-    this.completeOverlayTimer = QUEST_COMPLETE_DISPLAY_FRAMES;
+    this._clearBrood();
+    this.completeOverlayDelay = QUEST_COMPLETE_OVERLAY_DELAY_FRAMES;
     this._playerLocked = false;
     this._roomLocked = false;
     this._fightAborted = false;
@@ -1298,6 +1353,10 @@ export class SpiderQuestSystem implements GameSystem {
    * next attempt never mutates the checkpoint it was restored from.
    */
   restoreCheckpoint(snapshot: SpiderQuestCheckpoint): void {
+    // No save point is taken mid-fight, so the roster rewind has already dropped
+    // every egg and hatchling as arriving after the checkpoint. Ending them
+    // anyway keeps that true should a checkpoint ever be taken with a brood out.
+    this._clearBrood();
     this.phase = snapshot.phase;
     this.spiderEggOpened = snapshot.spiderEggOpened;
     this.scientistDead = snapshot.scientistDead;
@@ -1315,6 +1374,8 @@ export class SpiderQuestSystem implements GameSystem {
     this.smallSpiders = [...snapshot.smallSpiders];
     this.lifeMachines = snapshot.lifeMachines.map((machine) => ({ ...machine }));
     this.keyboardHero.restoreCheckpoint(snapshot.keyboardHero);
+    this.impactFeedback.reset();
+    this.completeOverlayDelay = 0;
   }
 
   dispose(): void {
@@ -1324,7 +1385,11 @@ export class SpiderQuestSystem implements GameSystem {
     this.dialogButtons = [];
     this.hackFailedButtons = [];
     this._cutsceneGore = [];
+    this._clearBrood();
+    this._grotesqueSpider?.setBroodContext(null);
     this._grotesqueSpider = null;
+    this.impactFeedback.reset();
+    this.completeOverlayDelay = 0;
   }
 
   /**
@@ -1387,6 +1452,7 @@ export class SpiderQuestSystem implements GameSystem {
         this._fightAborted = true;
         this._beginBossMusicStopGrace();
         spider.hp = spider.maxHp;
+        this._resetFightForAbort(spider);
       }
       return;
     }
@@ -1454,7 +1520,135 @@ export class SpiderQuestSystem implements GameSystem {
       this._humanIsInsider = false;
       this._catIsInsider = false;
       spider.hp = spider.maxHp;
+      this._resetFightForAbort(spider);
     }
+  }
+
+  /**
+   * An abort hands the party a fresh fight on re-entry, not the one they left:
+   * her puddles, glob, attack in progress and brood go with her lost HP.
+   */
+  private _resetFightForAbort(spider: GrotesqueSpider): void {
+    spider.clearAirborneAttacks();
+    spider.resetAttackState();
+    this._clearBrood();
+  }
+
+  // ── Brood ────────────────────────────────────────────────────────────────
+
+  /** Live eggs, for the verify gates and anything that draws or counts the brood. */
+  get broodEggs(): ReadonlyArray<SpiderEgg> {
+    return this.spiderEggs;
+  }
+
+  /** Live hatchlings, for the verify gates and anything that counts the brood. */
+  get broodHatchlings(): ReadonlyArray<SpiderHatchling> {
+    return this.hatchlings;
+  }
+
+  private _broodContextFor(room: SpiderLabRoomData): SpiderBroodContext {
+    this.broodContext ??= {
+      bounds: room.bounds,
+      liveBroodCount: () =>
+        this.spiderEggs.filter((egg) => egg.isAlive).length +
+        this.hatchlings.filter((hatchling) => hatchling.isAlive).length,
+      eggTiles: () =>
+        this.spiderEggs
+          .filter((egg) => egg.isAlive)
+          .map((egg): SpiderEggTile => ({ tileX: egg.tileX, tileY: egg.tileY })),
+    };
+    return this.broodContext;
+  }
+
+  /**
+   * One frame of the brood: eggs she dropped join the room, a slam crushes the
+   * eggs under it, and a due egg becomes hatchlings. While the fight is aborted
+   * she is given no context, so she cannot lay to a room nobody is in.
+   */
+  private _updateBrood(spider: GrotesqueSpider): void {
+    const room = this.roomData;
+    if (room === null) return;
+    spider.setBroodContext(this._fightAborted ? null : this._broodContextFor(room));
+    const layRequests = spider.drainEggLayRequests();
+    const slamImpacts = spider.drainSlamImpacts();
+    if (this._fightAborted) return;
+
+    this._warmBroodArtOnLayTell(spider);
+    for (const impact of slamImpacts) this._crushEggsUnder(impact);
+    for (const tile of layRequests) this._spawnEgg(tile);
+    this._hatchDueEggs(room);
+
+    this.spiderEggs = this.spiderEggs.filter((egg) => egg.isAlive);
+    this.hatchlings = this.hatchlings.filter((hatchling) => hatchling.isAlive);
+  }
+
+  /**
+   * Warms the egg and hatchling rows as the lay telegraphs. The eggs land a
+   * moment later, and a hatch comes with no lead of its own: the egg's
+   * countdown is the whole warning the player gets, and the cache needs it too.
+   */
+  private _warmBroodArtOnLayTell(spider: GrotesqueSpider): void {
+    if (spider.currentAttack !== 'lay') {
+      this.layTellWarmed = false;
+      return;
+    }
+    if (this.layTellWarmed) return;
+    this.layTellWarmed = true;
+    prewarmSpiderEgg();
+    prewarmSmallSpider();
+    prewarmSmallSpiderCombat();
+  }
+
+  private _spawnEgg(tile: SpiderEggTile): void {
+    const egg = new SpiderEgg(tile.tileX, tile.tileY, TILE_SIZE);
+    this.addMob(egg);
+    this.spiderEggs.push(egg);
+    this.eggLandSoundPending = true;
+  }
+
+  /** Her slam lands on her own clutch as readily as on the party. */
+  private _crushEggsUnder(impact: SlamImpact): void {
+    for (const egg of this.spiderEggs) {
+      if (!egg.isAlive) continue;
+      const eggCentreX = egg.x + TILE_SIZE * TILE_CENTER_OFFSET_PX;
+      const eggCentreY = egg.y + TILE_SIZE * TILE_CENTER_OFFSET_PX;
+      if (!isInsideSlamCone(impact, eggCentreX, eggCentreY)) continue;
+      egg.burst();
+      // A crawler's smash is a kill and is voiced by the kill; a burst under
+      // her own legs is not, so it is voiced here.
+      this.eggBurstSoundPending = true;
+    }
+  }
+
+  private _hatchDueEggs(room: SpiderLabRoomData): void {
+    for (const egg of this.spiderEggs) {
+      if (!egg.isAlive || !egg.hatchPending) continue;
+      egg.hatch();
+      this.eggHatchSoundPending = true;
+      for (let i = 0; i < EGG_HATCHLINGS_PER_EGG; i++) {
+        const hatchling = new SpiderHatchling(egg.tileX, egg.tileY, TILE_SIZE, room.bounds);
+        this.addMob(hatchling);
+        this.hatchlings.push(hatchling);
+      }
+    }
+  }
+
+  /**
+   * Ends the whole brood. Eggs burst where they sit and pay nothing; each
+   * hatchling dies through the kill path, which is what takes it out of the mob
+   * grid, with any ward on it stripped first so the blow cannot be soaked.
+   */
+  private _clearBrood(): void {
+    for (const egg of this.spiderEggs) egg.burst();
+    for (const hatchling of this.hatchlings) {
+      if (!hatchling.isAlive) continue;
+      hatchling.paysNoRewards = true;
+      hatchling.clearStatusEffects();
+      hatchling.takeDamageFrom(hatchling.hp, null, null);
+    }
+    this.spiderEggs = [];
+    this.hatchlings = [];
+    this.layTellWarmed = false;
   }
 
   private _isInRoom(
@@ -1839,6 +2033,13 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   private _updateCutscene(ctx: SystemContext): void {
+    // Her spit keeps playing through the glob's flight and the impact hold:
+    // frozen on its release frame she would show a second glob in her mouth
+    // while the first is in the air. It has already fired, so it cannot fire
+    // again; it only plays out its release and recoil.
+    const spitAlreadyFired = this._cutsceneProjectile !== null || this._cutsceneFightStartTimer > 0;
+    if (spitAlreadyFired) this._grotesqueSpider?.tickCutsceneSpit();
+
     // ── Impact hold: the spit has landed, the camera stays on the kill ─────
     if (this._cutsceneFightStartTimer > 0) {
       this._cutsceneFightStartTimer--;
@@ -1862,6 +2063,10 @@ export class SpiderQuestSystem implements GameSystem {
         this._screenShakeX = 0;
         this._screenShakeY = 0;
         this._playerLocked = false;
+        // The fight opens from a clean slate, never mid-recovery from the
+        // cutscene spit (exposed, and taking bonus damage, before she has done
+        // anything a player could have read).
+        this._grotesqueSpider?.resetAttackState();
         this.phase = 'boss_fight';
         this.bossFightStartPending = true;
         this._takeBossMusic();
@@ -1960,6 +2165,7 @@ export class SpiderQuestSystem implements GameSystem {
     if (t > CS_CAMERA_PAN_FRAME && this._grotesqueSpider !== null) {
       const fired = this._grotesqueSpider.tickCutsceneSpit();
       if (fired) {
+        this.cutsceneSpitFireSoundPending = true;
         // Projectile fires — launch it toward the scientist's current world position
         const spider = this._grotesqueSpider;
         // spider.x/y are already in world pixels (set by Player constructor as tileX * tileSize)

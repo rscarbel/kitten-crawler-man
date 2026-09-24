@@ -47,6 +47,7 @@ export function applyHealingWave(target: Mob): HealingWaveOutcome {
     applyFairyHeal(target, ceiling - target.hp);
     return 'healed';
   }
+  if (!target.acceptsWards) return 'untouched';
   const overheal = Math.max(1, Math.round(target.maxHp * OVERHEAL_MAX_HP_FRACTION));
   target.applyStatus(makeOverheal(overheal, OVERHEAL_DURATION_FRAMES));
   return 'overhealed';

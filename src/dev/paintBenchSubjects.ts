@@ -55,10 +55,13 @@ import {
 } from '../sprites/art/skeletonFigure';
 import {
   GROTESQUE_SPIDER_BASE_FIGURE,
+  GROTESQUE_SPIDER_DEATH_FIGURE,
+  GROTESQUE_SPIDER_LAY_FIGURE,
   GROTESQUE_SPIDER_SCREECH_FIGURE,
   GROTESQUE_SPIDER_SLAM_FIGURE,
   GROTESQUE_SPIDER_SPIT_FIGURE,
 } from '../sprites/art/grotesqueSpiderFigure';
+import { SPIDER_EGG_FIGURE } from '../sprites/art/spiderEggFigure';
 import {
   GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE,
   GROTESQUE_SPIDER_SPIT_TRAP_FIGURE,
@@ -147,10 +150,13 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: SKELETON_LORD_FIGURE, state: 'idle' },
   { def: SKELETON_SWORD_FIGURE, state: 'walk_side' },
   { def: SKELETON_ARCHER_FIGURE, state: 'walk_side' },
-  { def: GROTESQUE_SPIDER_BASE_FIGURE, state: 'walk_down' },
+  { def: GROTESQUE_SPIDER_BASE_FIGURE, state: 'walk' },
   { def: GROTESQUE_SPIDER_SLAM_FIGURE, state: 'attack_slam' },
   { def: GROTESQUE_SPIDER_SCREECH_FIGURE, state: 'attack_screech' },
   { def: GROTESQUE_SPIDER_SPIT_FIGURE, state: 'attack_spit' },
+  { def: GROTESQUE_SPIDER_LAY_FIGURE, state: 'attack_lay' },
+  { def: GROTESQUE_SPIDER_DEATH_FIGURE, state: 'death' },
+  { def: SPIDER_EGG_FIGURE, state: 'incubate' },
   { def: GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE, state: 'fly' },
   { def: GROTESQUE_SPIDER_SPIT_TRAP_FIGURE, state: 'idle' },
   { def: LIFE_MACHINE_FIGURE, state: lifeMachineStateName('printing') },

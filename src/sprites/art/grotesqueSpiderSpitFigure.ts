@@ -8,7 +8,12 @@
  */
 
 import { figureStates, type FigureDef } from '../figure/figureDef';
-import { drawSpitProjectile, drawSpitTrapIdle, drawSpitTrapSplat } from './grotesqueSpiderSpitArt';
+import {
+  drawSpitProjectile,
+  drawSpitTrapEvaporate,
+  drawSpitTrapIdle,
+  drawSpitTrapSplat,
+} from './grotesqueSpiderSpitArt';
 
 /** Cell geometry frozen from the sheets these replace; proved by the parity run. */
 const PROJECTILE_FRAME_W = 96;
@@ -23,11 +28,8 @@ const TILE_SCALE = 64;
 
 const PROJECTILE_FRAMES = 8;
 const TRAP_FRAMES = 8;
-
-/** The glob's only state: a wobble loop, drawn rotated to its flight angle. */
-export type SpitProjectileState = 'fly';
-/** The puddle's two states: landing, then sitting. */
-export type SpitTrapState = 'splat' | 'idle';
+/** Frames a pushed-out puddle takes to dry up, played once. */
+const EVAPORATE_FRAMES = 8;
 
 export const GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE: FigureDef = {
   id: 'grotesque_spider_spit_projectile',
@@ -50,13 +52,21 @@ export const GROTESQUE_SPIDER_SPIT_TRAP_FIGURE: FigureDef = {
   tileX: TRAP_TILE_X,
   tileY: TRAP_TILE_Y,
   tileScale: TILE_SCALE,
-  states: figureStates({ splat: TRAP_FRAMES, idle: TRAP_FRAMES }),
+  states: figureStates({ splat: TRAP_FRAMES, idle: TRAP_FRAMES, evaporate: EVAPORATE_FRAMES }),
   paintFrame: (ctx, state, frame) => {
     if (state === 'splat') {
       drawSpitTrapSplat(ctx, TRAP_TILE_X, TRAP_TILE_Y, TILE_SCALE, frame);
       return;
     }
-    if (state === 'idle') drawSpitTrapIdle(ctx, TRAP_TILE_X, TRAP_TILE_Y, TILE_SCALE, frame);
+    if (state === 'idle') {
+      drawSpitTrapIdle(ctx, TRAP_TILE_X, TRAP_TILE_Y, TILE_SCALE, frame);
+      return;
+    }
+    if (state === 'evaporate') {
+      // The last frame is the puddle gone, so a runtime holding it draws nothing.
+      const progress = frame / (EVAPORATE_FRAMES - 1);
+      drawSpitTrapEvaporate(ctx, TRAP_TILE_X, TRAP_TILE_Y, TILE_SCALE, frame, progress);
+    }
   },
 };
 
@@ -65,4 +75,8 @@ export const GROTESQUE_SPIDER_SPIT_EFFECT_FIGURES: readonly FigureDef[] = [
   GROTESQUE_SPIDER_SPIT_TRAP_FIGURE,
 ];
 
-export { PROJECTILE_FRAMES as SPIT_PROJECTILE_FRAMES, TRAP_FRAMES as SPIT_TRAP_FRAMES };
+export {
+  EVAPORATE_FRAMES as SPIT_TRAP_EVAPORATE_FRAMES,
+  PROJECTILE_FRAMES as SPIT_PROJECTILE_FRAMES,
+  TRAP_FRAMES as SPIT_TRAP_FRAMES,
+};

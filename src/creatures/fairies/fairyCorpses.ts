@@ -82,10 +82,12 @@ export class FairyCorpseLedger {
  * add, a summon, a fairy nor a brindle grub (at any stage of its evolution),
  * and has not already been raised once. Raising a boss or its adds would undo
  * or rewrite a fight; raising a summon or a fairy would let casters farm each
- * other; and a body that has already come back once stays down.
+ * other; and a body that has already come back once stays down. A boss to the
+ * player that is no room boss (`countsAsBossKill` without `isBoss`) counts:
+ * its fight is over and its room unlocked, so raised it would fight on alone.
  */
 function isRaisableKind(mob: Mob): boolean {
-  const partOfABossFight = mob.isBoss || mob.isBossAdd;
+  const partOfABossFight = mob.isBoss || mob.countsAsBossKill || mob.isBossAdd;
   return (
     mob.isHostile &&
     !partOfABossFight &&

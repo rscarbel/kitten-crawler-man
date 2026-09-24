@@ -7,6 +7,12 @@
  *
  * All geometry is in **screen pixels** — callers pass an already camera-offset
  * centre. `fade` is the 0–1 opacity ramp of the windup.
+ *
+ * A telegraph can also say *when* it lands, through {@link DangerTelegraphOptions}:
+ * the fill grows from the centre toward an outline drawn at the full hit reach,
+ * the outline freezes solid once the aim can no longer change, and the whole
+ * shape flashes on the tick the damage is computed. Omitting the options draws
+ * the plain crawling warning.
  */
 
 /** Opacity of the flat red ground fill at full fade. */
@@ -21,6 +27,48 @@ const STRIPE_ANIM_DIVISOR = 120;
 const STRIPE_SPACING = 28;
 const STRIPE_WIDTH = 10;
 const OUTLINE_WIDTH = 3;
+
+/** Opacity of a locked outline at full fade: brighter than the crawling one so the change of state reads. */
+const LOCKED_OUTLINE_ALPHA = 1;
+const LOCKED_OUTLINE_WIDTH = 4;
+/** A thin pale core inside a locked outline, so it reads as lit rather than just thicker. */
+const LOCKED_OUTLINE_CORE_COLOR = '#ffe0d0';
+const LOCKED_OUTLINE_CORE_WIDTH = 1.5;
+const LOCKED_OUTLINE_CORE_ALPHA = 0.85;
+/** Opacity of the solid edge at the front of a growing fill, marking how far it has come. */
+const FILL_FRONT_ALPHA = 0.55;
+const FILL_FRONT_WIDTH = 2;
+/** The strike flash: a red wash under a white one, together reading as white-hot red. */
+const STRIKE_FLASH_RED = '#ff3020';
+const STRIKE_FLASH_RED_ALPHA = 0.55;
+const STRIKE_FLASH_WHITE = '#fff4ee';
+const STRIKE_FLASH_WHITE_ALPHA = 0.5;
+
+/**
+ * How a telegraph shows timing on top of where it hits. Every field is
+ * optional; omitted, the telegraph is the plain crawling warning with a full
+ * fill.
+ */
+export interface DangerTelegraphOptions {
+  /**
+   * 0–1: how far the fill has grown from the centre toward the outline, which is
+   * always drawn at the full reach. The rule a player learns is that the hit
+   * lands when the fill meets the outline, so a caller drives this to exactly 1
+   * on the damage tick. Omitted, the whole shape is filled.
+   */
+  readonly fillProgress?: number;
+  /** The aim and shape are frozen: the outline goes solid and brighter and its dashes stop crawling. */
+  readonly locked?: boolean;
+  /** 0–1 strength of a white-red flash over the whole shape, for the ticks after the damage lands. */
+  readonly strikeFlash?: number;
+  /**
+   * Draws only the strokes: the outline and the front of a growing fill, with
+   * no wash, stripes or flash. For an overlay drawn above the entities, where
+   * the edge must stay readable over the caster's own body without tinting
+   * whoever stands inside the shape.
+   */
+  readonly outlineOnly?: boolean;
+}
 
 /** Colours and dash rhythm for one telegraph. */
 export interface DangerPalette {
@@ -99,6 +147,81 @@ function beginDangerOutline(
   ctx.lineDashOffset = -(now / palette.dashSpeed) % palette.dashMod;
 }
 
+/**
+ * Strokes the outline along `tracePath`: dashed and crawling, or solid with a
+ * pale core once locked.
+ */
+function strokeDangerOutline(
+  ctx: CanvasRenderingContext2D,
+  fade: number,
+  palette: DangerPalette,
+  now: number,
+  locked: boolean,
+  tracePath: () => void,
+): void {
+  ctx.save();
+  if (!locked) {
+    beginDangerOutline(ctx, fade, palette, now);
+    tracePath();
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  ctx.setLineDash([]);
+  ctx.globalAlpha = fade * LOCKED_OUTLINE_ALPHA;
+  ctx.strokeStyle = palette.outline;
+  ctx.lineWidth = LOCKED_OUTLINE_WIDTH;
+  tracePath();
+  ctx.stroke();
+  ctx.globalAlpha = fade * LOCKED_OUTLINE_CORE_ALPHA;
+  ctx.strokeStyle = LOCKED_OUTLINE_CORE_COLOR;
+  ctx.lineWidth = LOCKED_OUTLINE_CORE_WIDTH;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Washes the already-clipped region white-red. */
+function paintStrikeFlash(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radiusPx: number,
+  strength: number,
+): void {
+  const left = cx - radiusPx;
+  const top = cy - radiusPx;
+  const size = radiusPx * 2;
+  ctx.globalAlpha = strength * STRIKE_FLASH_RED_ALPHA;
+  ctx.fillStyle = STRIKE_FLASH_RED;
+  ctx.fillRect(left, top, size, size);
+  ctx.globalAlpha = strength * STRIKE_FLASH_WHITE_ALPHA;
+  ctx.fillStyle = STRIKE_FLASH_WHITE;
+  ctx.fillRect(left, top, size, size);
+}
+
+/** The fill's reach for a 0–1 progress, or the full reach when no progress is given. */
+function fillRadiusFor(radiusPx: number, fillProgress: number | undefined): number {
+  if (fillProgress === undefined) return radiusPx;
+  return radiusPx * Math.min(1, Math.max(0, fillProgress));
+}
+
+/** Strokes the solid front of a fill still growing toward its outline. */
+function strokeFillFront(
+  ctx: CanvasRenderingContext2D,
+  fade: number,
+  palette: DangerPalette,
+  tracePath: () => void,
+): void {
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = fade * FILL_FRONT_ALPHA;
+  ctx.strokeStyle = palette.outline;
+  ctx.lineWidth = FILL_FRONT_WIDTH;
+  tracePath();
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** A circular ground warning centred on (cx, cy). */
 export function drawDangerCircle(
   ctx: CanvasRenderingContext2D,
@@ -107,22 +230,43 @@ export function drawDangerCircle(
   radiusPx: number,
   fade: number,
   palette: DangerPalette = DANGER_CIRCLE_PALETTE,
+  options: DangerTelegraphOptions = {},
 ): void {
   const now = performance.now();
+  const fillRadius = fillRadiusFor(radiusPx, options.fillProgress);
+  const outlineOnly = options.outlineOnly ?? false;
+  const flash = outlineOnly ? 0 : (options.strikeFlash ?? 0);
+  const traceFull = (): void => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radiusPx, 0, Math.PI * 2);
+  };
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, radiusPx, 0, Math.PI * 2);
-  ctx.clip();
-  paintHazardFill(ctx, cx, cy, radiusPx, fade, palette, now);
-  ctx.restore();
+  if (fillRadius > 0) {
+    if (!outlineOnly) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, fillRadius, 0, Math.PI * 2);
+      ctx.clip();
+      paintHazardFill(ctx, cx, cy, radiusPx, fade, palette, now);
+      ctx.restore();
+    }
+    if (fillRadius < radiusPx) {
+      strokeFillFront(ctx, fade, palette, () => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, fillRadius, 0, Math.PI * 2);
+      });
+    }
+  }
 
-  ctx.save();
-  beginDangerOutline(ctx, fade, palette, now);
-  ctx.beginPath();
-  ctx.arc(cx, cy, radiusPx, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
+  if (flash > 0) {
+    ctx.save();
+    traceFull();
+    ctx.clip();
+    paintStrikeFlash(ctx, cx, cy, radiusPx, flash);
+    ctx.restore();
+  }
+
+  strokeDangerOutline(ctx, fade, palette, now, options.locked ?? false, traceFull);
 }
 
 /**
@@ -163,7 +307,8 @@ export function drawDangerTile(
 
 /**
  * A pie-slice ground warning: a cone of half-angle `halfAngleRad` either side of
- * `facingAngle`, radiating from (cx, cy).
+ * `facingAngle`, radiating from (cx, cy). A growing fill spreads outward from
+ * the apex.
  */
 export function drawDangerCone(
   ctx: CanvasRenderingContext2D,
@@ -174,26 +319,44 @@ export function drawDangerCone(
   halfAngleRad: number,
   fade: number,
   palette: DangerPalette = DANGER_CONE_PALETTE,
+  options: DangerTelegraphOptions = {},
 ): void {
   const now = performance.now();
   const arcStart = facingAngle - halfAngleRad;
   const arcEnd = facingAngle + halfAngleRad;
+  const fillRadius = fillRadiusFor(radiusPx, options.fillProgress);
+  const outlineOnly = options.outlineOnly ?? false;
+  const flash = outlineOnly ? 0 : (options.strikeFlash ?? 0);
+  const tracePie = (reach: number): void => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, reach, arcStart, arcEnd);
+    ctx.closePath();
+  };
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.arc(cx, cy, radiusPx, arcStart, arcEnd);
-  ctx.closePath();
-  ctx.clip();
-  paintHazardFill(ctx, cx, cy, radiusPx, fade, palette, now);
-  ctx.restore();
+  if (fillRadius > 0) {
+    if (!outlineOnly) {
+      ctx.save();
+      tracePie(fillRadius);
+      ctx.clip();
+      paintHazardFill(ctx, cx, cy, radiusPx, fade, palette, now);
+      ctx.restore();
+    }
+    if (fillRadius < radiusPx) {
+      strokeFillFront(ctx, fade, palette, () => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, fillRadius, arcStart, arcEnd);
+      });
+    }
+  }
 
-  ctx.save();
-  beginDangerOutline(ctx, fade, palette, now);
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.arc(cx, cy, radiusPx, arcStart, arcEnd);
-  ctx.closePath();
-  ctx.stroke();
-  ctx.restore();
+  if (flash > 0) {
+    ctx.save();
+    tracePie(radiusPx);
+    ctx.clip();
+    paintStrikeFlash(ctx, cx, cy, radiusPx, flash);
+    ctx.restore();
+  }
+
+  strokeDangerOutline(ctx, fade, palette, now, options.locked ?? false, () => tracePie(radiusPx));
 }

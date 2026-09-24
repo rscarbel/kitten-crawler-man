@@ -1,185 +1,287 @@
 /**
  * The Grotesque Spider, drawn through the figure cache.
  *
- * A massive, misshapen spider-form entity: fused body, stringy black hair in
- * dozens of individual strands, asymmetric scattered eyes, an inward-toothed
- * gaping maw. Visual footprint ~3×3 tiles; collision footprint one tile.
+ * The painting lives in `art/grotesqueSpiderArt.ts`, the rig and poses in
+ * `art/grotesqueSpiderRig.ts`, and the frames each row holds in
+ * `art/grotesqueSpiderFigure.ts`. This module maps what the creature knows —
+ * the attack and its frame, the distance walked, the time idled — onto a row
+ * frame and blits a baked cell.
  *
- * The painting lives in `art/grotesqueSpiderArt.ts` and the pose each frame
- * holds in `art/grotesqueSpiderFigure.ts`. This module is the mapping between
- * the two: it takes the continuous clock and attack progress the creature and
- * the boss intro hand it, quantises them onto the rows those figures declare,
- * and blits a baked cell. Painting her live is several hundred canvas
- * operations — 48 hair strands and 8 two-segment legs — which is the cost the
- * cache exists to pay once per frame index rather than once per frame.
+ * She is painted once, facing +Y, and the caller rotates the whole cell to her
+ * facing with {@link grotesqueSpiderFacingRotation}.
  */
 
+import { TILE_SIZE } from '../core/constants';
 import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
 import {
-  GROTESQUE_SPIDER_ATTACK_FRAMES,
-  GROTESQUE_SPIDER_BASE_FIGURE,
-  GROTESQUE_SPIDER_LOCOMOTION_FRAMES,
-  GROTESQUE_SPIDER_SCREECH_FIGURE,
-  GROTESQUE_SPIDER_SLAM_FIGURE,
-  GROTESQUE_SPIDER_SPIT_FIGURE,
-  type GrotesqueSpiderBaseState,
+  attackStageAt,
+  MAX_EGG_CLUTCH_SIZE,
+  recoveryStartFrame,
+  strikeFrame,
+  totalFrames,
+  type SpiderAttack,
+  type SpiderAttackStage,
+} from '../creatures/grotesqueSpiderTimeline';
+import {
+  GROTESQUE_SPIDER_ATTACK_SAMPLES,
+  GROTESQUE_SPIDER_ATTACK_SAMPLING,
+  GROTESQUE_SPIDER_FIGURE_FOR_ROW,
+  GROTESQUE_SPIDER_ROW_FRAMES,
 } from './art/grotesqueSpiderFigure';
-import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import {
+  WALK_STRIDE_TILES,
+  type GrotesqueSpiderAttackRow,
+  type GrotesqueSpiderState,
+} from './art/grotesqueSpiderRig';
+import { drawFigureCached, prewarmFigureState, releaseFigure } from './figure/figureFrameCache';
 import type { FigureDef } from './figure/figureDef';
 
-export type { GrotesqueSpiderState } from './art/grotesqueSpiderArt';
-import type { GrotesqueSpiderState } from './art/grotesqueSpiderArt';
+export type { GrotesqueSpiderState } from './art/grotesqueSpiderRig';
 
 /**
  * Frames per second the idle row runs at.
  *
- * Each of its frames is a second of idling apart from the next, so playback
- * here is a choice about how fast that second passes. The eyelids set the
- * ceiling: several of the seven eyes blink somewhere inside the row, and a row
- * run fast enough to smooth the breath turns those blinks into a flicker.
+ * The row is picked by time, not by game tick, so this sets only how long each
+ * pose is held; it cannot alias the row's motions, which are sampled at least
+ * four frames a cycle whatever the rate. What it decides is whether the loop
+ * reads as motion: held half a second, each of the eight poses is a still and
+ * the loop a slideshow. At four a second the breath takes two seconds, each
+ * foreleg's taste of the air one, and a shut eye shows for a quarter of a
+ * second, as long as a real blink; much faster and she pants and the blinks
+ * flicker.
  */
-const IDLE_FPS = 2;
+const IDLE_FPS = 4;
+
+/** The row each attack plays. */
+export const GROTESQUE_SPIDER_ATTACK_ROWS: Readonly<
+  Record<SpiderAttack, GrotesqueSpiderAttackRow>
+> = {
+  slam: 'attack_slam',
+  screech: 'attack_screech',
+  spit: 'attack_spit',
+  lay: 'attack_lay',
+};
 
 /**
- * Frames per second the walk rows run at.
- *
- * The row samples 0.38 s of gait per frame, so eight frames a second plays the
- * creep back at close to three times the clock it was sampled off — the pace
- * the creature was authored to move at, and slow enough that the eight
- * desynchronised legs still read individually.
+ * World pixels she covers in one full gait cycle. The walk row is picked by
+ * distance travelled against this, so her feet stay planted at any speed: half
+ * speed roaming and the dash both step at the pace the ground goes by.
  */
-const WALK_FPS = 8;
+export const GROTESQUE_SPIDER_STRIDE_PX = WALK_STRIDE_TILES * TILE_SIZE;
 
-/** Facing thresholds, matching the ones the art mirrors and hides its face on. */
-const FACING_UP_THRESHOLD = -0.3;
-const FACING_LEFT_THRESHOLD = -0.1;
+/**
+ * The rotation that turns her painted +Y facing to (facingX, facingY).
+ *
+ * A quarter turn *back* from the facing's angle: rotating by θ sends the art's
+ * +Y axis to (−sin θ, cos θ), which is (facingX, facingY) when θ is the facing
+ * angle minus a quarter turn.
+ */
+export function grotesqueSpiderFacingRotation(facingX: number, facingY: number): number {
+  return Math.atan2(facingY, facingX) - Math.PI / 2;
+}
 
-/** A row of an attack figure and the frame of it being played. */
+const STAGE_ORDER: readonly SpiderAttackStage[] = ['tell', 'lock', 'strike', 'recovery'];
+
+/**
+ * Samples sit on whole ticks, and a stage's progress is recomputed by division
+ * (and, for a repeating strike, a multiply and a modulo), so the tick a sample
+ * names can come back a rounding error short of it.
+ */
+const SAMPLE_PROGRESS_EPSILON = 1e-9;
+
+/**
+ * The frame of an attack row a stage and its progress show: the latest sample
+ * of that stage at or before the progress. The strike stage's first frame is
+ * therefore always the row's contact frame, and it holds until the next
+ * strike sample.
+ */
+export function grotesqueSpiderAttackRowFrame(
+  row: GrotesqueSpiderAttackRow,
+  stage: SpiderAttackStage,
+  stageProgress: number,
+): number {
+  const samples = GROTESQUE_SPIDER_ATTACK_SAMPLES[row];
+  const stageRank = STAGE_ORDER.indexOf(stage);
+  let lastEarlier = 0;
+  let chosen = -1;
+  // Samples within one stage are listed in ascending progress.
+  samples.forEach((sample, index) => {
+    if (STAGE_ORDER.indexOf(sample.stage) < stageRank) lastEarlier = index;
+    if (sample.stage !== stage) return;
+    if (sample.stageProgress <= stageProgress + SAMPLE_PROGRESS_EPSILON) chosen = index;
+  });
+  // Before a stage's first sample, and through a stage the row never samples
+  // (the lay has no lock), the frame before it holds.
+  return chosen >= 0 ? chosen : lastEarlier;
+}
+
+/** What the creature knows about the pose it is in. */
+export type GrotesqueSpiderSpritePose =
+  | { readonly kind: 'idle'; readonly time: number }
+  | { readonly kind: 'walk'; readonly distancePx: number }
+  | {
+      readonly kind: 'attack';
+      readonly attack: SpiderAttack;
+      readonly attackFrame: number;
+      /** Eggs in the clutch being laid; only the lay reads it. */
+      readonly eggsInClutch?: number;
+    }
+  | { readonly kind: 'death'; readonly progress: number };
+
 interface PlacedFrame {
   readonly def: FigureDef;
-  readonly state: string;
+  readonly state: GrotesqueSpiderState;
   readonly frame: number;
-  readonly flipX: boolean;
 }
 
-/** The attack figures, one per sheet the boss used to carry. */
-const ATTACK_FIGURES: ReadonlyMap<string, FigureDef> = new Map([
-  ['attack_slam', GROTESQUE_SPIDER_SLAM_FIGURE],
-  ['attack_screech', GROTESQUE_SPIDER_SCREECH_FIGURE],
-  ['attack_spit', GROTESQUE_SPIDER_SPIT_FIGURE],
-]);
-
-/** Which locomotion row a facing direction is drawn from. */
-function locomotionState(facingX: number, facingY: number): GrotesqueSpiderBaseState {
-  const movingUp = facingY < FACING_UP_THRESHOLD && Math.abs(facingY) > Math.abs(facingX);
-  if (movingUp) return 'walk_up';
-  if (Math.abs(facingX) > Math.abs(facingY)) return 'walk_side';
-  return 'walk_down';
+/**
+ * The frame of an attack's row shown on an attack frame, read through the
+ * attack timeline. On `strikeFrame(attack)` this is by construction the row's
+ * contact, burst or release frame, and it holds for the impact hold.
+ *
+ * @param eggsInClutch For the lay, how many eggs this clutch drops; the drop
+ *   windows past its last egg show no egg.
+ */
+export function grotesqueSpiderRowFrameAt(
+  attack: SpiderAttack,
+  attackFrame: number,
+  eggsInClutch = MAX_EGG_CLUTCH_SIZE,
+): number {
+  const row = GROTESQUE_SPIDER_ATTACK_ROWS[attack];
+  const at = attackStageAt(attack, attackFrame);
+  const repeats = at.stage === 'strike' ? GROTESQUE_SPIDER_ATTACK_SAMPLING[row].strikeRepeats : 1;
+  const rawRepeated = at.stageProgress * repeats;
+  const nearestWhole = Math.round(rawRepeated);
+  // A drop boundary computed by division can land a hair short of the whole
+  // number, which would show the last frame of the previous egg's drop.
+  const repeated =
+    Math.abs(rawRepeated - nearestWhole) < SAMPLE_PROGRESS_EPSILON ? nearestWhole : rawRepeated;
+  // The last tick of a repeating stage is progress 1, which belongs to the final
+  // repeat rather than wrapping to the start of another.
+  const stageProgress = repeated >= repeats ? 1 : repeated % 1;
+  // Each drop window of the lay crowns and expels the egg that lands at the
+  // start of the next window. The row is painted for the largest clutch, so
+  // once the clutch's last egg is down she holds the window's egg-free
+  // opening instead of pushing out an egg the creature never lays.
+  const dropWindow = Math.min(repeats - 1, Math.floor(repeated));
+  if (attack === 'lay' && at.stage === 'strike' && dropWindow + 1 >= eggsInClutch) {
+    return grotesqueSpiderAttackRowFrame(row, at.stage, 0);
+  }
+  return grotesqueSpiderAttackRowFrame(row, at.stage, stageProgress);
 }
 
-function placeFrame(
-  time: number,
-  facingX: number,
-  facingY: number,
-  state: GrotesqueSpiderState,
-  stateProgress: number,
+/**
+ * The screech attack frame the phase-change roar shows on a roar frame. The
+ * roar has its own length, so its build is stretched over the screech's
+ * run-up — bursting on the build's last frame — and its pause over the
+ * screech's dazed recovery.
+ */
+export function grotesqueSpiderRoarAttackFrame(
+  roarFrame: number,
+  buildFrames: number,
+  pauseFrames: number,
+): number {
+  const burst = strikeFrame('screech');
+  if (roarFrame < buildFrames) return (roarFrame / buildFrames) * burst;
+  const recovery = recoveryStartFrame('screech');
+  const recoveryLength = totalFrames('screech') - recovery;
+  const holdFrames = recovery - burst;
+  const sinceBurst = roarFrame - buildFrames;
+  // The burst pose holds for the screech's own impact hold, then she is dazed.
+  if (sinceBurst < holdFrames) return burst + sinceBurst;
+  // The dazed stretch runs from the first tick after the hold to the roar's
+  // last tick, and spans the screech's recovery from its first frame to its last.
+  const dazedFrames = pauseFrames - holdFrames;
+  const dazed = Math.min(1, (sinceBurst - holdFrames) / Math.max(dazedFrames - 1, 1));
+  return recovery + dazed * (recoveryLength - 1);
+}
+
+function placeAttack(
+  attack: SpiderAttack,
+  attackFrame: number,
+  eggsInClutch: number | undefined,
 ): PlacedFrame {
-  const attack = ATTACK_FIGURES.get(state);
-  if (attack !== undefined) {
-    return {
-      def: attack,
-      state,
-      frame: progressFrameIndex(stateProgress, GROTESQUE_SPIDER_ATTACK_FRAMES),
-      flipX: false,
-    };
-  }
-  if (state === 'walk') {
-    const row = locomotionState(facingX, facingY);
-    return {
-      def: GROTESQUE_SPIDER_BASE_FIGURE,
-      state: row,
-      frame: timeFrameIndex(time, WALK_FPS, GROTESQUE_SPIDER_LOCOMOTION_FRAMES),
-      // Only the profile row has a handedness; the head-on rows are symmetric
-      // about the same axis the mirror uses, so flipping them changes nothing.
-      flipX: row === 'walk_side' && facingX < FACING_LEFT_THRESHOLD,
-    };
-  }
+  const row = GROTESQUE_SPIDER_ATTACK_ROWS[attack];
   return {
-    def: GROTESQUE_SPIDER_BASE_FIGURE,
-    state: 'idle',
-    frame: timeFrameIndex(time, IDLE_FPS, GROTESQUE_SPIDER_LOCOMOTION_FRAMES),
-    flipX: false,
+    def: GROTESQUE_SPIDER_FIGURE_FOR_ROW[row],
+    state: row,
+    frame: grotesqueSpiderRowFrameAt(attack, attackFrame, eggsInClutch),
   };
 }
 
+function placePose(pose: GrotesqueSpiderSpritePose): PlacedFrame {
+  switch (pose.kind) {
+    case 'idle':
+      return {
+        def: GROTESQUE_SPIDER_FIGURE_FOR_ROW.idle,
+        state: 'idle',
+        frame: timeFrameIndex(pose.time, IDLE_FPS, GROTESQUE_SPIDER_ROW_FRAMES.idle),
+      };
+    case 'walk': {
+      const frames = GROTESQUE_SPIDER_ROW_FRAMES.walk;
+      const cycles = pose.distancePx / GROTESQUE_SPIDER_STRIDE_PX;
+      const cycle = cycles - Math.floor(cycles);
+      return {
+        def: GROTESQUE_SPIDER_FIGURE_FOR_ROW.walk,
+        state: 'walk',
+        frame: Math.min(frames - 1, Math.floor(cycle * frames)),
+      };
+    }
+    case 'attack':
+      return placeAttack(pose.attack, pose.attackFrame, pose.eggsInClutch);
+    case 'death':
+      return {
+        def: GROTESQUE_SPIDER_FIGURE_FOR_ROW.death,
+        state: 'death',
+        frame: progressFrameIndex(pose.progress, GROTESQUE_SPIDER_ROW_FRAMES.death),
+      };
+  }
+}
+
 /**
- * Draw the Grotesque Spider.
+ * Draws her on the tile whose top-left is (sx, sy), facing +Y. Rotate the
+ * context about the tile centre first to face her anywhere else.
  *
- * @param sx            Tile top-left x (screen coords)
- * @param sy            Tile top-left y (screen coords)
- * @param ts            Tile size in pixels
- * @param time          Monotonic time in seconds (performance.now() / 1000)
- * @param facingX       Normalised horizontal facing (-1 left, 0, +1 right)
- * @param facingY       Normalised vertical facing   (-1 up,   0, +1 down)
- * @param state         Animation state
- * @param stateProgress 0–1 progress within the current attack state; ignored for idle/walk
+ * @param alpha Multiplies into the caller's alpha; a lingering corpse fades by it.
  */
-export function drawGrotesqueSpiderSprite(
+export function drawGrotesqueSpiderPoseSprite(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
   ts: number,
-  time: number,
-  facingX: number,
-  facingY: number,
-  state: GrotesqueSpiderState = 'idle',
-  stateProgress = 0,
+  pose: GrotesqueSpiderSpritePose,
+  alpha = 1,
 ): void {
-  const placed = placeFrame(time, facingX, facingY, state, stateProgress);
-  drawFigureCached(ctx, placed.def, placed.state, placed.frame, sx, sy, ts, {
-    flipX: placed.flipX,
-  });
+  const placed = placePose(pose);
+  drawFigureCached(ctx, placed.def, placed.state, placed.frame, sx, sy, ts, { alpha });
 }
 
 /**
- * Warms the rows the boss stands and walks on.
- *
- * Called when the fight starts rather than when she first renders: her cells
- * are the largest in the game, and the frame that would otherwise bake the
- * first of them is the frame the player is being charged on.
+ * Warms the rows she stands and walks on. Called when the fight starts rather
+ * than when she first renders: the frame that would otherwise bake the first of
+ * her cells is the frame the player is being charged on.
  */
 export function prewarmGrotesqueSpiderLocomotion(): void {
-  prewarmFigureState(GROTESQUE_SPIDER_BASE_FIGURE, 'idle');
-  prewarmFigureState(GROTESQUE_SPIDER_BASE_FIGURE, 'walk_down');
+  prewarmFigureState(GROTESQUE_SPIDER_FIGURE_FOR_ROW.idle, 'idle');
+  prewarmFigureState(GROTESQUE_SPIDER_FIGURE_FOR_ROW.walk, 'walk');
 }
 
 /**
- * Warms one attack's row, at the moment that attack telegraphs.
- *
- * Each attack is its own figure, so warming one never costs another its cells.
+ * Warms one attack's row, or the death row, at the moment it telegraphs. Each is
+ * its own figure, so warming one never costs another its cells.
  */
 export function prewarmGrotesqueSpiderAttack(state: GrotesqueSpiderState): void {
-  const attack = ATTACK_FIGURES.get(state);
-  if (attack === undefined) return;
-  prewarmFigureState(attack, state);
+  prewarmFigureState(GROTESQUE_SPIDER_FIGURE_FOR_ROW[state], state);
 }
 
-/** Every state the creature and the boss intro can ask this module to draw. */
-const DRAWN_STATES: readonly GrotesqueSpiderState[] = [
-  'idle',
-  'walk',
-  'attack_slam',
-  'attack_screech',
-  'attack_spit',
-];
-
-/** The four facings a caller can hand in, one per row the mapping can select. */
-const DRAWN_FACINGS: readonly (readonly [number, number])[] = [
-  [0, 1],
-  [0, -1],
-  [1, 0],
-  [-1, 0],
-];
+/**
+ * Drops the death row and any prewarm queued for it. For a fight that resets
+ * with her alive: the row was warmed because she was close to dying, and at
+ * full health again it is only memory held for nothing.
+ */
+export function releaseGrotesqueSpiderDeath(): void {
+  releaseFigure(GROTESQUE_SPIDER_FIGURE_FOR_ROW.death);
+}
 
 /** One row a draw call can land on. */
 export interface GrotesqueSpiderRuntimeRow {
@@ -187,18 +289,24 @@ export interface GrotesqueSpiderRuntimeRow {
   readonly state: string;
 }
 
+const RUNTIME_POSES: readonly GrotesqueSpiderSpritePose[] = [
+  { kind: 'idle', time: 0 },
+  { kind: 'walk', distancePx: 0 },
+  { kind: 'attack', attack: 'slam', attackFrame: 0 },
+  { kind: 'attack', attack: 'screech', attackFrame: 0 },
+  { kind: 'attack', attack: 'spit', attackFrame: 0 },
+  { kind: 'attack', attack: 'lay', attackFrame: 0 },
+  { kind: 'death', progress: 0 },
+];
+
 /**
  * Every (figure, row) pair a draw call can resolve to, resolved by the mapping
- * itself rather than restated.
- *
- * Both draw paths return silently on a row a figure does not declare, so a
- * facing that resolves to a name nobody paints is an invisible boss and no log
- * line. The gates walk this.
+ * itself rather than restated. Both draw paths return silently on a row a
+ * figure does not declare, so a pose that resolves to a name nobody paints is
+ * an invisible boss and no log line; the gates walk this.
  */
 export const GROTESQUE_SPIDER_RUNTIME_ROWS: readonly GrotesqueSpiderRuntimeRow[] =
-  DRAWN_STATES.flatMap((state) =>
-    DRAWN_FACINGS.map(([facingX, facingY]) => {
-      const placed = placeFrame(0, facingX, facingY, state, 0);
-      return { def: placed.def, state: placed.state };
-    }),
-  );
+  RUNTIME_POSES.map((pose) => {
+    const placed = placePose(pose);
+    return { def: placed.def, state: placed.state };
+  });

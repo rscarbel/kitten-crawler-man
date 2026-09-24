@@ -32,6 +32,7 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   Tuskling: 'tuskling',
   Troglodyte: 'troglodyte',
   SmallSpider: 'smallSpider',
+  SpiderHatchling: 'spiderHatchling',
   SkyFowl: 'skyFowl',
   Llama: 'llama',
   Rat: 'rat',
@@ -100,10 +101,13 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   // is always true.
   const { mobType, attackType } = source;
 
+  // Each of her attacks has its own tell to teach, so a blow nobody named is
+  // reported as unknown rather than dressed up as one of them.
   if (mobType === 'GrotesqueSpider') {
+    if (attackType === 'slam') return 'grotesqueSpiderSlam';
     if (attackType === 'screech') return 'grotesqueSpiderScreech';
     if (attackType === 'spit') return 'grotesqueSpiderSpit';
-    return 'grotesqueSpiderSlam';
+    return 'unknown';
   }
 
   // The glass and the backhand are the same mob but not the same death, and the

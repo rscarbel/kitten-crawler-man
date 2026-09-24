@@ -10,7 +10,9 @@ import {
 } from '../sprites/krakarenSprite';
 import { ballOfSwinePortrait, drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
 import { BOS_BODY_RADIUS_TILES } from '../sprites/ballOfSwineSheet';
-import { drawGrotesqueSpiderSprite } from '../sprites/grotesqueSpiderSprite';
+import { drawGrotesqueSpiderPoseSprite } from '../sprites/grotesqueSpiderSprite';
+import { GROTESQUE_SPIDER_IDLE_REACH_TILES } from '../sprites/art/grotesqueSpiderFigure';
+import { SPIDER_FRAMES_PER_SECOND } from '../creatures/grotesqueSpiderTimeline';
 import type { GameSystem } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -47,7 +49,6 @@ const VS_PULSE_SCALE = 0.06;
 const VS_PULSE_SPEED = 0.15;
 /** VS sprite size on intro screen. */
 const VERSUS_VS_Y_OFFSET = 18;
-/** Frames before end when the FIGHT label appears. */
 /** FIGHT label alpha denominator. */
 const FIGHT_ALPHA_RAMP = 20;
 /** FIGHT label y offset from panel bottom. */
@@ -107,7 +108,6 @@ const KRAKAREN_FALLBACK_ART_TOP_TILES = 1.6;
 /** She is posed head-on in the panel, and a portrait holds one frame. */
 const KRAKAREN_INTRO_FACING_Y = 1;
 const KRAKAREN_INTRO_IDLE_FRAME = 0;
-/** Ball of Swine sprite size. */
 /**
  * How wide the ball is drawn in its panel, and the tile size that produces it.
  *
@@ -118,15 +118,29 @@ const KRAKAREN_INTRO_IDLE_FRAME = 0;
  */
 const BOS_PANEL_DIAMETER = 112;
 const BOS_SPRITE_SIZE = Math.round(BOS_PANEL_DIAMETER / (BOS_BODY_RADIUS_TILES * 2));
-/** Ball of Swine sprite y offset. */
 /** Where the ball's own centre sits down the panel, leaving room for its name. */
 const BOS_PANEL_CENTRE_Y = 86;
 const BOS_SPRITE_Y_OFFSET = BOS_PANEL_CENTRE_Y - BOS_SPRITE_SIZE / 2;
-/** Grotesque Spider sprite size. */
-const SPIDER_SPRITE_SIZE = 80;
-/** Grotesque Spider sprite y offset. */
-const SPIDER_SPRITE_Y_OFFSET = 16;
-/** Hoarder sprite size. */
+/** Clear panel kept round the Grotesque Spider: above her tail, below her fangs, and at either side. */
+const SPIDER_PANEL_PAD = 8;
+/** How far down the panel her art may reach: clear of the name label under her. */
+const SPIDER_PANEL_ART_BOTTOM =
+  VERSUS_PANEL_H - TEAM_LABEL_Y_OFFSET_FROM_BOTTOM - LABEL_TEXT_ADJUST - SPIDER_PANEL_PAD;
+
+/**
+ * The Grotesque Spider's tile size in a panel `panelW` wide.
+ *
+ * Derived from her measured reach rather than picked: seen from above with her
+ * legs splayed she spans about five tiles, so a tile size picked by eye either
+ * pushes her tail through the top of the panel and her fangs into her name, or
+ * overflows the sides once a narrow viewport shrinks the panel.
+ */
+function spiderPortraitTileSize(panelW: number): number {
+  const reach = GROTESQUE_SPIDER_IDLE_REACH_TILES;
+  const byHeight = (SPIDER_PANEL_ART_BOTTOM - SPIDER_PANEL_PAD) / (reach.tail + reach.head);
+  const byWidth = (panelW - SPIDER_PANEL_PAD * 2) / (reach.side * 2);
+  return Math.floor(Math.min(byHeight, byWidth));
+}
 /**
  * Her tile anchor sits 191px down a 280px frame, and the portrait is
  * positioned off that anchor — both numbers measured against the current sheet.
@@ -393,16 +407,17 @@ export class BossIntroSystem implements GameSystem {
           ballOfSwinePortrait(),
         );
       } else if (intro.bossType === 'grotesque_spider') {
-        const spS = SPIDER_SPRITE_SIZE;
-        const SPIDER_WALK_SPEED = 60;
-        drawGrotesqueSpiderSprite(
+        const spS = spiderPortraitTileSize(panelW);
+        const tailTop = panelY + SPIDER_PANEL_PAD;
+        const tileCentreY = tailTop + GROTESQUE_SPIDER_IDLE_REACH_TILES.tail * spS;
+        // Painted from above facing +Y, the orientation the fight rotates from:
+        // here she faces straight down the panel at the player.
+        drawGrotesqueSpiderPoseSprite(
           ctx,
           rightX + panelW / 2 - spS / 2,
-          panelY + SPIDER_SPRITE_Y_OFFSET,
+          tileCentreY - spS / 2,
           spS,
-          t / SPIDER_WALK_SPEED,
-          -1,
-          0,
+          { kind: 'idle', time: t / SPIDER_FRAMES_PER_SECOND },
         );
       } else {
         const hS = HOARDER_SPRITE_SIZE;

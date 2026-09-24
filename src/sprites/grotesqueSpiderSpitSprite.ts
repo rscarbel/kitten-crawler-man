@@ -3,6 +3,7 @@
  *   drawSpitProjectile — viscous olive-green glob in flight (8-frame wobble)
  *   drawSpitTrapSplat  — landing splat expanding on the ground (8 frames, 0→1)
  *   drawSpitTrapIdle   — sticky puddle sitting on the ground (8-frame loop)
+ *   drawSpitTrapEvaporate — a puddle drying up when a newer one pushes it out
  *
  * All three are centred on (cx, cy), which is also where their figures anchor
  * their tile, so a caller places them by where the effect *is*. The projectile
@@ -13,9 +14,11 @@
  * `art/grotesqueSpiderSpitFigure.ts`.
  */
 
+import { progressFrameIndex } from '../core/SpriteRenderer';
 import {
   GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE,
   GROTESQUE_SPIDER_SPIT_TRAP_FIGURE,
+  SPIT_TRAP_EVAPORATE_FRAMES,
 } from './art/grotesqueSpiderSpitFigure';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 
@@ -63,6 +66,21 @@ export function drawSpitTrapIdle(
 }
 
 /**
+ * Draw a puddle drying up, centred on (cx, cy).
+ * @param progress 0 just pushed out, 1 gone
+ */
+export function drawSpitTrapEvaporate(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  ts: number,
+  progress: number,
+): void {
+  const frame = progressFrameIndex(progress, SPIT_TRAP_EVAPORATE_FRAMES);
+  drawFigureCached(ctx, GROTESQUE_SPIDER_SPIT_TRAP_FIGURE, 'evaporate', frame, cx, cy, ts);
+}
+
+/**
  * Warms the glob and the puddle it lands in, at the moment the spit telegraphs.
  *
  * Both rows exist for a second and a half at most and the wind-up is longer
@@ -73,6 +91,7 @@ export function prewarmSpitEffects(): void {
   prewarmFigureState(GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE, 'fly');
   prewarmFigureState(GROTESQUE_SPIDER_SPIT_TRAP_FIGURE, 'splat');
   prewarmFigureState(GROTESQUE_SPIDER_SPIT_TRAP_FIGURE, 'idle');
+  prewarmFigureState(GROTESQUE_SPIDER_SPIT_TRAP_FIGURE, 'evaporate');
 }
 
 /** The rows the three draw calls above ask for, for the gates to check. */
@@ -83,4 +102,5 @@ export const SPIT_EFFECT_RUNTIME_ROWS: ReadonlyArray<{
   { figureId: GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE.id, state: 'fly' },
   { figureId: GROTESQUE_SPIDER_SPIT_TRAP_FIGURE.id, state: 'splat' },
   { figureId: GROTESQUE_SPIDER_SPIT_TRAP_FIGURE.id, state: 'idle' },
+  { figureId: GROTESQUE_SPIDER_SPIT_TRAP_FIGURE.id, state: 'evaporate' },
 ];

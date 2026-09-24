@@ -119,6 +119,7 @@
     "verify:quest-choke": "tsx scripts/verify-quest-choke.ts",
     "verify:run-stats": "tsx scripts/verify-run-stats.ts",
     "verify:separation": "tsx scripts/verify-separation.ts",
+    "verify:spider-fight": "tsx scripts/verify-spider-fight.ts",
     "verify:tactics": "tsx scripts/verify-tactics.ts",
     "verify:town": "tsx scripts/verify-town-guidance.ts",
     "verify:world-seed": "tsx scripts/verify-world-seed.ts",

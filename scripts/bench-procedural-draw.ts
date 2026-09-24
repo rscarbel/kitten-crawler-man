@@ -87,10 +87,13 @@ import {
 } from '../src/sprites/art/clownGasFigure.js';
 import {
   GROTESQUE_SPIDER_BASE_FIGURE,
+  GROTESQUE_SPIDER_DEATH_FIGURE,
+  GROTESQUE_SPIDER_LAY_FIGURE,
   GROTESQUE_SPIDER_SCREECH_FIGURE,
   GROTESQUE_SPIDER_SLAM_FIGURE,
   GROTESQUE_SPIDER_SPIT_FIGURE,
 } from '../src/sprites/art/grotesqueSpiderFigure.js';
+import { SPIDER_EGG_FIGURE } from '../src/sprites/art/spiderEggFigure.js';
 import {
   GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE,
   GROTESQUE_SPIDER_SPIT_TRAP_FIGURE,
@@ -322,10 +325,13 @@ const SUBJECTS: readonly Subject[] = [
   figureSubject(CLOWN_VIAL_FIGURE, 'fly'),
   figureSubject(CLOWN_SHATTER_FIGURE, 'shatter'),
   figureSubject(CLOWN_GAS_FIGURE, 'billow'),
-  figureSubject(GROTESQUE_SPIDER_BASE_FIGURE, 'walk_down'),
+  figureSubject(GROTESQUE_SPIDER_BASE_FIGURE, 'walk'),
   figureSubject(GROTESQUE_SPIDER_SLAM_FIGURE, 'attack_slam'),
   figureSubject(GROTESQUE_SPIDER_SCREECH_FIGURE, 'attack_screech'),
   figureSubject(GROTESQUE_SPIDER_SPIT_FIGURE, 'attack_spit'),
+  figureSubject(GROTESQUE_SPIDER_LAY_FIGURE, 'attack_lay'),
+  figureSubject(GROTESQUE_SPIDER_DEATH_FIGURE, 'death'),
+  figureSubject(SPIDER_EGG_FIGURE, 'incubate'),
   figureSubject(GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE, 'fly'),
   figureSubject(GROTESQUE_SPIDER_SPIT_TRAP_FIGURE, 'idle'),
   figureSubject(SPIDER_FIGURE, 'walk'),
@@ -379,6 +385,11 @@ function benchBlit(width: number, height: number): number {
   });
 }
 
+/** Report column widths and precision. */
+const NAME_COLUMN = 16;
+const CELL_COLUMN = 9;
+const MS_DECIMALS = 3;
+
 for (const subject of SUBJECTS) {
   const height = subject.frameHeight ?? subject.frameSize;
   const paintMs = benchPaint(subject);
@@ -387,7 +398,8 @@ for (const subject of SUBJECTS) {
   const cell =
     height === subject.frameSize ? `${subject.frameSize}px` : `${subject.frameSize}x${height}`;
   console.log(
-    `${subject.name.padEnd(16)} ${cell.padEnd(9)} paint ${paintMs.toFixed(3)} ms  ` +
-      `blit ${blitMs.toFixed(3)} ms  ${ratio.toFixed(0)}x`,
+    `${subject.name.padEnd(NAME_COLUMN)} ${cell.padEnd(CELL_COLUMN)} ` +
+      `paint ${paintMs.toFixed(MS_DECIMALS)} ms  ` +
+      `blit ${blitMs.toFixed(MS_DECIMALS)} ms  ${ratio.toFixed(0)}x`,
   );
 }

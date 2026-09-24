@@ -816,6 +816,33 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether this mob's death can trigger a floor's `onMobKilledSpawns` rule.
+   * False for a thing that was never a creature in its own right — an egg a
+   * boss laid — whose smashing must not seed a swarm that outlives the fight.
+   */
+  get seedsOnKillSpawns(): boolean {
+    return true;
+  }
+
+  /**
+   * Whether an AI companion goes for this mob on sight even though it targets
+   * nobody. Companions otherwise answer only mobs already fighting the party,
+   * which leaves a threat that never attacks — a ticking egg — unanswered.
+   */
+  get drawsCompanionAggro(): boolean {
+    return false;
+  }
+
+  /**
+   * Whether this mob can hold an absorbing ward or overheal. False for a mob
+   * whose whole promise is that one hit ends it; fairies read this before
+   * choosing a target, so they never spend a cast on something that drops it.
+   */
+  get acceptsWards(): boolean {
+    return true;
+  }
+
+  /**
    * Whether this is a companion travelling with the party — a pet or a
    * hireling — that steps aside for a crawler rather than shoving her. Such a
    * mob takes the whole of a crawler collision itself (`MobUpdateLoop`, capped

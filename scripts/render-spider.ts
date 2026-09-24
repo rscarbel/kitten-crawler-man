@@ -1,6 +1,6 @@
 /**
- * The spider lab's review harness: the Grotesque Spider, her spit effects, and
- * the small spiders that hatch behind her.
+ * The spider lab's review harness: the Grotesque Spider, her spit effects, her
+ * eggs, and the small spiders that hatch from them.
  *
  * Art has to be judged as an image, by something that only looks at the image.
  * All three subjects are painted from their figures the way the runtime cache
@@ -10,6 +10,11 @@
  *   npm run render:spider
  *   npx tsx scripts/render-spider.ts --subject=boss --scale=2
  *   npx tsx scripts/render-spider.ts --subject=spit --row=idle
+ *   npx tsx scripts/render-spider.ts --subject=egg
+ *   npx tsx scripts/render-spider.ts --subject=boss --row=attack_slam --bare
+ *
+ * `--bare` leaves out every text label, for a blind reviewer who must name the
+ * creature and the action from the pictures alone.
  */
 
 import { type Canvas, createCanvas } from 'canvas';
@@ -23,12 +28,15 @@ import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { GROTESQUE_SPIDER_FIGURES } from '../src/sprites/art/grotesqueSpiderFigure.js';
 import { GROTESQUE_SPIDER_SPIT_EFFECT_FIGURES } from '../src/sprites/art/grotesqueSpiderSpitFigure.js';
 import { SPIDER_FIGURE } from '../src/sprites/art/spiderFigure.js';
+import { SPIDER_EGG_FIGURE } from '../src/sprites/art/spiderEggFigure.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
 
 const DEFAULT_BOSS_SCALE = 0.5;
 const DEFAULT_EFFECT_SCALE = 1;
+/** The egg's cell is two tiles across, so it is shown enlarged to be judged at all. */
+const DEFAULT_EGG_SCALE = 2;
 /**
  * One: the small spider's cell is already four tiles across, so a contact sheet
  * at any magnification is tens of megapixels of mostly empty padding.
@@ -48,8 +56,8 @@ const LABEL_FONT = '14px sans-serif';
 
 type SheetContext = ReturnType<Canvas['getContext']>;
 
-type Subject = 'boss' | 'spit' | 'small';
-const SUBJECTS: readonly Subject[] = ['boss', 'spit', 'small'];
+type Subject = 'boss' | 'spit' | 'egg' | 'small';
+const SUBJECTS: readonly Subject[] = ['boss', 'spit', 'egg', 'small'];
 
 function parseFlag(name: string, fallback: string): string {
   const prefix = `--${name}=`;
@@ -113,6 +121,7 @@ function renderFigurePanel(
   scale: number,
   only: string,
 ): void {
+  const bare = process.argv.includes('--bare');
   const rows = rowsOf(defs, only);
   const sheets = new Map<string, Canvas>();
   for (const def of defs) sheets.set(def.id, bakeFigureSheet(def).canvas);
@@ -152,7 +161,7 @@ function renderFigurePanel(
     }
     const cellW = cellWidthOf(row);
     const cellH = cellHeightOf(row);
-    ctx.fillStyle = LABEL_COLOR;
+    ctx.fillStyle = bare ? BACKDROP : LABEL_COLOR;
     ctx.fillText(
       `${row.def.id} — ${row.state} — ${row.frames} frames`,
       PADDING,
@@ -176,18 +185,20 @@ function renderFigurePanel(
       );
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
-      ctx.strokeStyle = TILE_GUIDE;
-      ctx.strokeRect(
-        x + row.def.tileX * scale,
-        y + row.def.tileY * scale,
-        row.def.tileScale * scale,
-        row.def.tileScale * scale,
-      );
+      if (!bare) {
+        ctx.strokeStyle = TILE_GUIDE;
+        ctx.strokeRect(
+          x + row.def.tileX * scale,
+          y + row.def.tileY * scale,
+          row.def.tileScale * scale,
+          row.def.tileScale * scale,
+        );
+      }
     }
     y += cellH + PADDING;
   }
 
-  ctx.fillStyle = LABEL_COLOR;
+  ctx.fillStyle = bare ? BACKDROP : LABEL_COLOR;
   ctx.fillText(`in-game size (${IN_GAME_TILE}px tile)`, PADDING, y + LABEL_HEIGHT - PADDING);
   y += LABEL_HEIGHT;
   let stripX = PADDING;
@@ -246,6 +257,14 @@ function main(): void {
       GROTESQUE_SPIDER_SPIT_EFFECT_FIGURES,
       outFor('spider-spit-review.png'),
       parseNumberFlag('scale', DEFAULT_EFFECT_SCALE, MIN_SCALE, MAX_SCALE),
+      only,
+    );
+  }
+  if (subjects.includes('egg')) {
+    renderFigurePanel(
+      [SPIDER_EGG_FIGURE],
+      outFor('spider-egg-review.png'),
+      parseNumberFlag('scale', DEFAULT_EGG_SCALE, MIN_SCALE, MAX_SCALE),
       only,
     );
   }

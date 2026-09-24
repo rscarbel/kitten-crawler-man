@@ -7,6 +7,7 @@ import { type GameMap } from '../map/GameMap';
 import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
 import { type Player } from '../Player';
 import { pushPlayerWithCollision } from './playerDisplacement';
+import { DIAGONAL_PENALTY } from './PlayerMovementSystem';
 import { knockbackStepPx } from '../core/knockbackEase';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -54,9 +55,6 @@ export const KNOCKOUT_TIMEOUT_FRAMES = 5400;
 // Mobile input constants
 const MOBILE_TOUCH_MIN_HOLD_TIME = 150; // ms
 const MOBILE_DISTANCE_THRESHOLD = 8; // px
-
-// Diagonal movement penalty
-const DIAGONAL_PENALTY = 0.7071; // 1/sqrt(2)
 
 // Wall collision offsets
 const LEADING_EDGE_FRONT = 0.72;
@@ -459,6 +457,10 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
           break;
         case 'bear':
           audio?.play('bear_big_attack');
+          break;
+        // The lab's hatchlings and the small spiders share this pounce bite.
+        case 'small_spider':
+          audio?.playRandom(['bite_1', 'bite_2', 'bite_3']);
           break;
         case 'grimaldi':
           audio?.playRandom([
