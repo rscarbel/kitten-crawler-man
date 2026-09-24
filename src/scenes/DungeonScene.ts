@@ -5198,11 +5198,11 @@ export class DungeonScene extends GameplayScene {
       if (this.murderQuest.tryInteract(active)) {
         return;
       }
-      if (
-        this.bossRoomDressings.tryInteract(active) ||
-        this.arenaRoom.tryPickupNear(active) ||
-        this.barriers.tryPickupNear(active)
-      ) {
+      if (this.bossRoomDressings.tryInteract(active)) {
+        return;
+      }
+      if (this.arenaRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
+        this.audio?.play('picking_up_ground_object');
         return;
       }
       if (this.market?.tryInteract(active) === true) {
@@ -6513,6 +6513,10 @@ export class DungeonScene extends GameplayScene {
     if (this.defendQuest.menuOpenSoundPending) {
       this.defendQuest.menuOpenSoundPending = false;
       this.audio?.play('menu_open');
+    }
+    if (this.defendQuest.woodPickupSoundPending) {
+      this.defendQuest.woodPickupSoundPending = false;
+      this.audio?.play('picking_up_ground_object');
     }
     this.circusQuest.update(ctx);
     this.murderQuest.update(ctx);

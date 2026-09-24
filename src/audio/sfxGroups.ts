@@ -18,6 +18,7 @@ export type SfxGroup =
   | 'level1'
   | 'level2'
   | 'level3'
+  | 'briarHollow'
   | 'bounty'
   | 'circusQuest'
   | 'murderMysteryQuest'
@@ -155,6 +156,11 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'opening_treasure_chest',
     'pickup_1',
     'pickup_2',
+    // Lifting a physical thing off the floor by hand — the defend quest's wood
+    // pile, gym equipment, anything lying in the world — as opposed to
+    // \`pickup_1\`/\`pickup_2\`, which are loot landing in the bag. Those objects
+    // lie on every floor, so it boots with the rest.
+    'picking_up_ground_object',
     'player_level_up',
     'player_wading',
     'player_walking',
@@ -162,6 +168,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'quest_complete',
     'reviving_tone',
     'skillpoint_reminder',
+    // Eating anything brothy with a spoon. A safe room's Bopca serves soups and
+    // stews on every floor, so it can't wait for a floor group.
+    'slurping_soup',
     'speed_fizz',
     'splat_1',
     'splat_2',
@@ -258,6 +267,34 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'rumble',
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
+  ],
+
+  /**
+   * Briar Hollow and the work it runs on: the pasture's cows and calves, petting,
+   * felling and mining (which reach every tree and boulder on floor 3, not just
+   * the village's), wood processing, and the Resourcing thralls.
+   */
+  briarHollow: [
+    'axe_striking_wood',
+    'calf_moo_1',
+    'calf_moo_2',
+    'calf_moo_3',
+    'cow_ambient_moo_1',
+    'cow_ambient_moo_2',
+    'cow_ambient_moo_3',
+    'cow_angry_moo_1',
+    'cow_angry_moo_2',
+    'cow_happy_moo',
+    'found_trap_woodchopping',
+    'happy_hearts',
+    'loopable_sawing',
+    'lucky_refined',
+    'pickaxe_strike_stone',
+    'rock_breaking_1',
+    'rock_breaking_2',
+    'rope_tightening',
+    'thrall_fade_out',
+    'thrall_summoned',
   ],
 
   /**
@@ -427,13 +464,14 @@ export const CORE_SFX_IDS: readonly SoundId[] = SFX_GROUPS.universal;
 
 /**
  * The floor-3 overworld is the only place bounty bosses, the circus/murder-
- * mystery questlines and Mongo/mercenary escorts can appear (`BountySystem`,
+ * mystery questlines, Briar Hollow and Mongo/mercenary escorts can appear (`BountySystem`,
  * `CircusQuestSystem` etc. are all constructed only for that level def), so
  * its groups are bundled together rather than requiring each system to
  * preload for itself.
  */
 const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
   'level3',
+  'briarHollow',
   'bounty',
   'circusQuest',
   'murderMysteryQuest',

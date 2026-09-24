@@ -381,6 +381,8 @@ export class DefendQuestSystem implements GameSystem {
   private hammering: Hammering | null = null;
   /** Set each time a barrier takes damage; DungeonScene clears it and cycles the wood-break sounds. */
   woodBreakSoundPending = false;
+  /** Set when a crawler lifts boards off the wood pile; drained by the scene. */
+  woodPickupSoundPending = false;
   /** Set when a dialog box opens; DungeonScene clears it and plays menu_open. */
   menuOpenSoundPending = false;
   // Spawned Bugaboos (tracked separately for quest-end cleanup)
@@ -1111,6 +1113,7 @@ export class DefendQuestSystem implements GameSystem {
         const dist = Math.hypot(p.x - wpx, p.y - wpy);
         if (dist < TILE_SIZE * PICKUP_PROXIMITY_FRACTION) {
           p.inventory.addItem('quest_wood_board', WOOD_PER_PICKUP);
+          this.woodPickupSoundPending = true;
           this.woodPileAvailable = false;
           this.woodRespawnTimer = WOOD_RESPAWN_FRAMES;
           return true;

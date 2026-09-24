@@ -1,4 +1,5 @@
 import type { EventBus } from '../core/EventBus';
+import { DISH_DEF } from '../systems/bopcaDialog';
 import { settings } from '../core/Settings';
 import type { SoundId } from './sounds';
 import { NON_STREAMING_SOUND_IDS, SOUND_MANIFEST, STREAMING_SOUND_IDS } from './sounds';
@@ -1137,8 +1138,8 @@ export class AudioManager {
       this.play('bopca_dish_set_down');
     });
 
-    bus.on('bopcaFoodEaten', () => {
-      this.play('bopca_eating');
+    bus.on('bopcaFoodEaten', (e) => {
+      this.play(DISH_DEF[e.dishId].eating === 'slurp' ? 'slurping_soup' : 'bopca_eating');
     });
 
     // No bespoke assets exist for the skill system yet, so each of these borrows

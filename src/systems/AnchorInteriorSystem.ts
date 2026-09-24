@@ -380,7 +380,7 @@ export class AnchorInteriorSystem {
       crawler.inventory.addItem('quest_wood_board', BOARDS_PER_PICKUP);
       this.woodPileAvailable = false;
       this.woodPileRespawnTimer = WOOD_PILE_RESPAWN_FRAMES;
-      this.audio?.play('pickup_1');
+      this.audio?.play('picking_up_ground_object');
       return;
     }
   }

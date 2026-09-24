@@ -56,10 +56,18 @@ export type DishId =
   | 'green_aspic'
   | 'yesterdays_stew';
 
+/** How a dish is eaten, which decides what the crawler sounds like eating it. */
+export type DishEating = 'slurp' | 'chew';
+
 export interface DishDef {
   /** How the Bopca names it, dropped into the serving line. */
   name: string;
   visual: DishVisual;
+  /**
+   * Stated per dish rather than read off the vessel: a bowl can hold pickled
+   * eggs, and a mug can hold stew.
+   */
+  eating: DishEating;
 }
 
 /**
@@ -73,6 +81,7 @@ export interface DishDef {
 export const DISH_DEF: Record<DishId, DishDef> = {
   moss_broth_stew: {
     name: 'moss-broth stew',
+    eating: 'slurp',
     visual: {
       shape: 'bowl',
       vesselColor: '#e0d7c0',
@@ -82,6 +91,7 @@ export const DISH_DEF: Record<DishId, DishDef> = {
   },
   root_and_bone_soup: {
     name: 'root-and-bone soup',
+    eating: 'slurp',
     visual: {
       shape: 'bowl',
       vesselColor: '#d8cdb4',
@@ -91,14 +101,17 @@ export const DISH_DEF: Record<DishId, DishDef> = {
   },
   grub_skewers: {
     name: 'grub skewers',
+    eating: 'chew',
     visual: { shape: 'skewer', vesselColor: '#c9a86a', contentColor: '#c8a2a8' },
   },
   hard_yellow_cheese: {
     name: 'a wedge of hard yellow cheese',
+    eating: 'chew',
     visual: { shape: 'wedge', vesselColor: '#8a6a42', contentColor: '#e0b743' },
   },
   black_bread_and_dripping: {
     name: 'black bread with dripping',
+    eating: 'chew',
     visual: {
       shape: 'plate',
       vesselColor: '#cfc4ab',
@@ -108,10 +121,12 @@ export const DISH_DEF: Record<DishId, DishDef> = {
   },
   spiced_gruel: {
     name: 'spiced gruel',
+    eating: 'slurp',
     visual: { shape: 'bowl', vesselColor: '#dcd2bb', contentColor: '#c2a06a' },
   },
   fried_cave_fish: {
     name: 'fried cave-fish',
+    eating: 'chew',
     visual: {
       shape: 'plate',
       vesselColor: '#d4cbb6',
@@ -121,6 +136,7 @@ export const DISH_DEF: Record<DishId, DishDef> = {
   },
   honeyed_tubers: {
     name: 'honeyed tubers',
+    eating: 'chew',
     visual: {
       shape: 'plate',
       vesselColor: '#cfc0a2',
@@ -130,10 +146,12 @@ export const DISH_DEF: Record<DishId, DishDef> = {
   },
   pickled_eggs: {
     name: 'pickled eggs',
+    eating: 'chew',
     visual: { shape: 'bowl', vesselColor: '#c8cfc4', contentColor: '#eee4c8' },
   },
   mushroom_hash: {
     name: 'mushroom hash',
+    eating: 'chew',
     visual: {
       shape: 'plate',
       vesselColor: '#d2c8b2',
@@ -143,10 +161,12 @@ export const DISH_DEF: Record<DishId, DishDef> = {
   },
   green_aspic: {
     name: 'a wobbling green aspic',
+    eating: 'chew',
     visual: { shape: 'plate', vesselColor: '#d6d0bc', contentColor: '#7fae62' },
   },
   yesterdays_stew: {
     name: "yesterday's stew, but better",
+    eating: 'slurp',
     visual: {
       shape: 'mug',
       vesselColor: '#b8916a',
