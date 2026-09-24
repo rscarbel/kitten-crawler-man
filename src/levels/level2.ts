@@ -142,7 +142,14 @@ export const level2: LevelDef = {
     levelsPerBody: OVER_LEVEL_LEVELS_PER_BODY,
     maxBodies: OVER_LEVEL_MAX_BODIES,
   },
-  spriteGroups: ['core', 'dungeon_common', 'floor2_tileset', 'boss_grotesque_spider'],
+  spriteGroups: [
+    'core',
+    'dungeon_common',
+    'floor2_tileset',
+    'boss_krakaren',
+    'boss_grotesque_spider',
+    'boss_colosseum',
+  ],
   roomMobs: [
     {
       type: 'troglodyte',

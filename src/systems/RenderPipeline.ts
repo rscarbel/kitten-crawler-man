@@ -21,7 +21,7 @@ import type { GoreSystem } from './GoreSystem';
 import type { BodyPartGoreSystem } from './BodyPartGoreSystem';
 import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { BossRoomSystem } from './BossRoomSystem';
-import type { JuicerRoomSystem } from './JuicerRoomSystem';
+import type { BossRoomDressings } from './bossRooms/BossRoomDressings';
 import type { ArenaRoomSystem } from './ArenaRoomSystem';
 import type { StairwellSystem } from './StairwellSystem';
 import type { BuildingSystem } from './BuildingSystem';
@@ -192,7 +192,8 @@ export interface RenderContext {
   bodyPartGore: BodyPartGoreSystem;
   safeRoom: SafeRoomSystem;
   bossRoom: BossRoomSystem;
-  juicerRoom: JuicerRoomSystem;
+  /** Every boss room's props, slow ground and room hazards on the floor. */
+  bossRoomDressings: BossRoomDressings;
   arenaRoom: ArenaRoomSystem;
   stairwell: StairwellSystem;
   building: BuildingSystem | null;
@@ -264,6 +265,24 @@ export class RenderPipeline {
     this._drawCount++;
     return e;
   }
+  /** Queues one prop for the Y-sorted pass, unless it is too far off screen to reach it. */
+  private _pushPropEntry(prop: TownPropRenderable, camX: number, camY: number): void {
+    // Per-prop, because the props differ by an order of magnitude in reach:
+    // a shop sign is half a tile wide and a bunting span is sixteen.
+    const margin =
+      prop.cullMarginTiles === undefined ? PROP_CULL_MARGIN : TILE_SIZE * prop.cullMarginTiles;
+    const minX = camX - margin;
+    const minY = camY - margin;
+    const maxX = camX + viewportWidth() + margin;
+    const maxY = camY + viewportHeight() + margin;
+    if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) return;
+    const e = this._getEntry();
+    e.sortY = prop.y + ENTITY_SORT_Y_OFFSET;
+    e.kind = DRAW_KIND_TOWN_PROP;
+    e.entity = prop;
+    e.chestRef = null;
+  }
+
   /**
    * Render the world layer: map tiles, gore puddles, room objects, door hints.
    */
@@ -276,7 +295,7 @@ export class RenderPipeline {
       gore,
       safeRoom,
       bossRoom,
-      juicerRoom,
+      bossRoomDressings,
       arenaRoom,
       stairwell,
       building,
@@ -311,7 +330,7 @@ export class RenderPipeline {
 
     safeRoom.renderObjects(ctx, camX, camY, active);
     bossRoom.renderObjects(ctx, camX, camY);
-    juicerRoom.render(ctx, camX, camY, active);
+    bossRoomDressings.renderGround(ctx, camX, camY, active);
     arenaRoom.render(ctx, camX, camY, active);
     stairwell.renderStairwells(ctx, camX, camY);
     building?.renderDoorHints(ctx, camX, camY);
@@ -453,23 +472,9 @@ export class RenderPipeline {
     }
 
     if (townProps !== undefined) {
-      for (const prop of townProps) {
-        // Per-prop, because the props differ by an order of magnitude in reach:
-        // a shop sign is half a tile wide and a bunting span is sixteen.
-        const margin =
-          prop.cullMarginTiles === undefined ? PROP_CULL_MARGIN : TILE_SIZE * prop.cullMarginTiles;
-        const minX = camX - margin;
-        const minY = camY - margin;
-        const maxX = camX + viewportWidth() + margin;
-        const maxY = camY + viewportHeight() + margin;
-        if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) continue;
-        const e = this._getEntry();
-        e.sortY = prop.y + ENTITY_SORT_Y_OFFSET;
-        e.kind = DRAW_KIND_TOWN_PROP;
-        e.entity = prop;
-        e.chestRef = null;
-      }
+      for (const prop of townProps) this._pushPropEntry(prop, camX, camY);
     }
+    for (const prop of rc.bossRoomDressings.renderEntities()) this._pushPropEntry(prop, camX, camY);
 
     // Sort only the active portion of the pool
     const items = this._drawPool;
@@ -548,6 +553,9 @@ export class RenderPipeline {
     rc.fairies?.render(ctx, camX, camY);
     rc.fairyFireballs?.render(ctx, camX, camY);
     rc.knightMissiles.render(ctx, camX, camY);
+    // Falling junk, sparks and spray belong to the room, and cross in front of
+    // whoever they are landing on.
+    rc.bossRoomDressings.renderAbove(ctx, camX, camY);
     // Last of the world effects: the stamp's air and thrown chips read as being
     // in front of everything it just hit.
     rc.smushFx.render(ctx, camX, camY);

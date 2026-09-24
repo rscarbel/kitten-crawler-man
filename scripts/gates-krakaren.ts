@@ -38,7 +38,7 @@ import {
 import {
   KRAKAREN_LAIR_STONE_DARK,
   KRAKAREN_LAIR_STONE_LIGHT,
-} from '../src/map/tiles/specialFloorTiles.js';
+} from '../src/map/tiles/bossRooms/krakarenTiles.js';
 import {
   KRAKAREN_SWIPE_IMPACT_PROGRESS,
   SLAM_SMASH_IMPACT_PROGRESS,

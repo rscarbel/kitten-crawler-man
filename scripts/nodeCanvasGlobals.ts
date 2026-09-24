@@ -21,6 +21,7 @@ import { loadSprites } from '../src/core/SpriteLoader.js';
 import { GROUND_SHEET_KEYS, requestGroundSheets } from '../src/map/ground/runtimeGroundSheets.js';
 import { paintEnvironmentArtNow } from '../src/map/environmentArtCache.js';
 import { requestEnvironmentSheetsForGroups } from '../src/sprites/sheets/environmentSheets.js';
+import { BOSS_ROOM_ASSET_GROUPS } from '../src/sprites/sheets/bossRoomSheets.js';
 import { DEFAULT_FLOOR_ART_SEED, setFloorArtSeed } from '../src/map/ground/floorArtSeed.js';
 
 /** Where `SpriteLoader` resolves manifest paths against, from the repo root. */
@@ -71,7 +72,9 @@ export function paintEnvironmentArtInNode(artSeed = DEFAULT_FLOOR_ART_SEED): voi
   // counter stacks the game's crate and barrel sheets, and those are painted now
   // rather than loaded. A harness that asked only for the town would bake the
   // stall with an empty counter and never say why.
-  requestEnvironmentSheetsForGroups(['core', 'town', 'overworld']);
+  // The boss rooms' dressing too: a room harness renders the floors those
+  // rooms sit on, and without their sheets every prop in them draws nothing.
+  requestEnvironmentSheetsForGroups(['core', 'town', 'overworld', ...BOSS_ROOM_ASSET_GROUPS]);
   paintEnvironmentArtNow();
 }
 

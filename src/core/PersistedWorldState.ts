@@ -1,4 +1,8 @@
 import type { BossRoomCheckpoint } from '../systems/BossRoomSystem';
+import {
+  parseBossRoomDressingCheckpoint,
+  type BossRoomDressingCheckpoint,
+} from '../systems/bossRooms/bossRoomDressingCheckpoint';
 import type { ArenaCheckpoint } from '../systems/ArenaSystem';
 import type {
   TreasureChest,
@@ -85,6 +89,11 @@ export interface PersistedWorldState {
    * a save without it loads as a finale that has not started.
    */
   doomsday?: PersistedDoomsdayProgress;
+  /**
+   * What each boss room's props and ground looked like. Optional: a save
+   * without it loads every room as it was generated.
+   */
+  bossRoomDressing?: BossRoomDressingCheckpoint;
 
   krakarenKilled: boolean;
   krakarenBossRoomIdx: number;
@@ -1278,6 +1287,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const mordecaiDebrief = parseMordecaiDebriefCheckpoint(value.mordecaiDebrief);
   const tacticsNoticesSeen = parseTacticsNoticesSeen(value.tacticsNoticesSeen);
   const doomsday = parsePersistedDoomsday(value.doomsday);
+  const bossRoomDressing = parseBossRoomDressingCheckpoint(value.bossRoomDressing);
   const { krakarenKilled, krakarenBossRoomIdx, juicerKilled, juicerBossRoomIdx } = value;
 
   if (
@@ -1329,6 +1339,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     mordecaiDebrief,
     tacticsNoticesSeen,
     doomsday,
+    bossRoomDressing,
     krakarenKilled,
     krakarenBossRoomIdx,
     juicerKilled,

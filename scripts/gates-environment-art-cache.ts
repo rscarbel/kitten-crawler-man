@@ -51,6 +51,7 @@ const { campSheetPlans } = await import('../src/sprites/sheets/campSheets.js');
 const { destructiblePropSheetPlans } =
   await import('../src/sprites/sheets/destructiblePropSheets.js');
 const { clubFurnitureSheetPlans } = await import('../src/sprites/sheets/clubFurnitureSheets.js');
+const { allBossRoomSheetPlans } = await import('../src/sprites/sheets/bossRoomSheets.js');
 const { getLevelDef } = await import('../src/levels/index.js');
 
 const MASK_SHEET_KEY = 'ground_masks';
@@ -159,6 +160,7 @@ const PROP_FAMILIES = [
   ...campSheetPlans(0),
   ...destructiblePropSheetPlans(0),
   ...clubFurnitureSheetPlans(0),
+  ...allBossRoomSheetPlans(0),
 ];
 
 let plansChecked = 0;

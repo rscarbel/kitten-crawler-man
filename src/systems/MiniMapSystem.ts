@@ -11,7 +11,7 @@ import {
   TREE,
   TREE_STAGE_CHARRED,
   FloorTypeValue,
-  HORDER_BOSS_ROOM_FLOOR,
+  HOARDER_FLOOR,
   LANE_STREET,
   PLAZA_STONE,
   FENCE,
@@ -54,6 +54,7 @@ import {
   DEN_HOLLOW,
 } from '../map/tileTypes';
 import { viewportWidth } from '../core/Viewport';
+import { bossRoomMinimapColor } from '../map/tiles/bossRoomTiles';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -689,7 +690,7 @@ export class MiniMapSystem implements GameSystem {
       case SAFE_ROOM_STOOL:
       case SAFE_ROOM_LARDER:
         return '#5c4a2c';
-      case HORDER_BOSS_ROOM_FLOOR:
+      case HOARDER_FLOOR:
         return '#2a1808';
       case TOWN_WALL:
         return '#8a8175';
@@ -759,7 +760,7 @@ export class MiniMapSystem implements GameSystem {
       case DEN_HOLLOW:
         return '#2e2a26';
       default:
-        return '#555555';
+        return bossRoomMinimapColor(type) ?? '#555555';
     }
   }
 

@@ -1,0 +1,147 @@
+{
+  "krakaren_vat": {
+    "frameWidth": 32,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "intact": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "intact_empty": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "cracking": {
+        "row": 2,
+        "frameCount": 3
+      },
+      "cracking_empty": {
+        "row": 3,
+        "frameCount": 3
+      },
+      "burst": {
+        "row": 4,
+        "frameCount": 4
+      },
+      "burst_empty": {
+        "row": 5,
+        "frameCount": 4
+      },
+      "broken": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "broken_empty": {
+        "row": 7,
+        "frameCount": 1
+      }
+    },
+    "tileTypeId": 122
+  },
+  "krakaren_console": {
+    "frameWidth": 32,
+    "frameHeight": 48,
+    "tileX": 0,
+    "tileY": 16,
+    "tileScale": 32,
+    "states": {
+      "screen": {
+        "row": 0,
+        "frameCount": 4
+      }
+    },
+    "tileTypeId": 123
+  },
+  "krakaren_junction": {
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "states": {
+      "intact": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "sparking": {
+        "row": 1,
+        "frameCount": 2
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "krakaren_fx": {
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "states": {
+      "ripple": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "drain_burst": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "drip": {
+        "row": 2,
+        "frameCount": 4
+      }
+    }
+  },
+  "krakaren_wash": {
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "states": {
+      "sparks": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "arc": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "warn": {
+        "row": 2,
+        "frameCount": 2
+      }
+    }
+  },
+  "krakaren_splash": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 32,
+    "states": {
+      "splash": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "krakaren_seal": {
+    "frameWidth": 32,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "grow": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  }
+}

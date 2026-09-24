@@ -1,4 +1,5 @@
 import type { TileContent } from '../tileTypes';
+import { isColosseumRingTile } from './bossRooms/colosseumTiles';
 import {
   FloorTypeValue,
   INTERIOR_COUNTER,
@@ -59,6 +60,8 @@ import {
   BROKEN_TABLE,
   BROKEN_CHAIR,
   BROKEN_BOOKSHELF,
+  BOSS_ROOM_PROP_TILE_TYPES,
+  BOSS_ROOM_FLAT_TILE_TYPES,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -196,6 +199,11 @@ const NON_FLOOR_TYPES = new Set<number>([
   PIGMENT_SHELF,
   INK_BENCH,
   GRINDING_SLAB,
+  // Boss-room props and decals. Each is stamped with `placeProp`, so a probe
+  // reaching one gets its recorded floor before this set is consulted; this
+  // only stops a type without one being taken for a floor material.
+  ...BOSS_ROOM_PROP_TILE_TYPES,
+  ...BOSS_ROOM_FLAT_TILE_TYPES,
 ]);
 
 /**
@@ -286,11 +294,21 @@ export function drawWallShadow(
   tx: number,
   ty: number,
 ) {
-  if (ty > 0 && SHADOW_TYPES.has(structure[ty - 1][tx].type)) {
+  // The colosseum's round wall paints its own curved shadow, which a square
+  // strip would cut straight across.
+  if (
+    ty > 0 &&
+    SHADOW_TYPES.has(structure[ty - 1][tx].type) &&
+    !isColosseumRingTile(structure, tx, ty - 1)
+  ) {
     ctx.fillStyle = 'rgba(0,0,0,0.40)';
     ctx.fillRect(sx, sy, ts, SHADOW_TOP_DEPTH);
   }
-  if (tx > 0 && SHADOW_TYPES.has(structure[ty][tx - 1].type)) {
+  if (
+    tx > 0 &&
+    SHADOW_TYPES.has(structure[ty][tx - 1].type) &&
+    !isColosseumRingTile(structure, tx - 1, ty)
+  ) {
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
     ctx.fillRect(sx, sy, SHADOW_SIDE_DEPTH, ts);
   }

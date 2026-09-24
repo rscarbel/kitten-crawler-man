@@ -22,12 +22,17 @@ const AGGRO_RANGE_TILE_MULTIPLIER = 10;
 const FLEE_RANGE_TILE_MULTIPLIER = 8;
 const AGGRO_RANGE_PX = TILE_SIZE * AGGRO_RANGE_TILE_MULTIPLIER;
 const FLEE_RANGE_PX = TILE_SIZE * FLEE_RANGE_TILE_MULTIPLIER;
+/** How far past her flee range a crawler must be before she will walk back to her bed. */
+const BED_MARGIN_TILES = 1.5;
+const BED_RANGE_PX = FLEE_RANGE_PX + TILE_SIZE * BED_MARGIN_TILES;
+/** A way to her bed within about sixty degrees of the crawler counts as toward them (a cosine). */
+const BED_TOWARD_THREAT_COSINE = 0.5;
 const ENRAGE_THRESHOLD = 0.5;
 /**
- * The bile and the cockroaches are two attacks on two clocks. They used to be
- * one: she only ever spat when the roach cap was already full, so in a normal
- * clear the acid never appeared at all and the fight was three roaches and
- * nothing else.
+ * The bile and the cockroaches are two attacks on two clocks. Tied to one clock
+ * she would only spit when the roach cap was already full, so in a normal clear
+ * the acid would never appear and the fight would be three roaches and nothing
+ * else.
  */
 const VOMIT_INTERVAL = 210;
 /**
@@ -95,6 +100,19 @@ const VOMIT_COUNT_MAX = 5;
 /** Covers the sheet: she stands 3.6 tiles and the frame is wider still. */
 const HOARDER_CULL_MARGIN_TILES = 4;
 const COIN_DROP_MIN = 50;
+const MAX_COCKROACHES = 5;
+/** How often she asks whether she is cornered, and how little ground counts as cornered. */
+const CORNERED_CHECK_FRAMES = 45;
+const CORNERED_TRAVEL_TILES = 0.5;
+const CORNERED_TRAVEL_PX = TILE_SIZE * CORNERED_TRAVEL_TILES;
+/** How long she commits to running for a gap before fleeing straight again. */
+const ORBIT_COMMIT_FRAMES = 150;
+/** A gap whose way lies no more than this far toward the threat counts as clear of it (a cosine). */
+const ORBIT_MIN_ALIGNMENT = -0.2;
+/** How much a clear way out outweighs sheer distance from the threat. */
+const ORBIT_CLEAR_BONUS_TILES = 6;
+const ORBIT_CLEAR_BONUS_PX = TILE_SIZE * ORBIT_CLEAR_BONUS_TILES;
+const ENRAGED_MAX_COCKROACHES = 7;
 const COIN_DROP_MAX = 100;
 
 type HoarderState = 'fleeing' | 'vomit_windup';
@@ -146,13 +164,51 @@ export class TheHoarder extends Mob {
    */
   isAcidCovered: ((x: number, y: number) => boolean) | null = null;
 
+  /**
+   * How many purges she has begun, whatever they yielded. A purge's roaches
+   * arrive over several frames — hers at once, the junk's after a rustle — so
+   * counting roaches is not counting purges.
+   */
+  purgesBegun = 0;
+
   /** Pending cockroach spawn positions. BossRoomSystem drains this each frame. */
   cockroachSpawns: Array<{ x: number; y: number }> = [];
 
   /**
-   * Bile released this frame. BossRoomSystem drains it; enraged there is more
-   * than one, which is why this is a list rather than the single slot it was.
+   * Set by her lair: each purge stirs up the junk near `target`, and a roach
+   * or two crawls out of a heap there instead of out of her. Returns how many
+   * heaps it stirred, which is how many fewer she brings up herself.
    */
+  roachNest: ((target: Player) => number) | null = null;
+
+  /**
+   * Set by her lair: where she lies when nobody is there to run from — the top
+   * left of the tile at the middle of her mattress. Null sends her back to
+   * where she spawned.
+   */
+  restingPlace: { x: number; y: number } | null = null;
+
+  /**
+   * Set by her lair: open ground in the gaps between its islands, as mob
+   * positions, in order round the loop. Null in a room with nothing to run round.
+   */
+  fleeWaypoints: ReadonlyArray<{ x: number; y: number }> | null = null;
+  private orbitTarget: { x: number; y: number } | null = null;
+  private orbitFrames = 0;
+  private corneredCheckFrames = 0;
+  private corneredAnchorX = 0;
+  private corneredAnchorY = 0;
+
+  /**
+   * How many of her roaches may be alive at once. Enraged she brings up more
+   * than the room can clear at her calm pace: she is the easiest boss, and the
+   * second half of her fight is where it stops being easy.
+   */
+  get cockroachCap(): number {
+    return this.isEnraged ? ENRAGED_MAX_COCKROACHES : MAX_COCKROACHES;
+  }
+
+  /** Bile released this frame. BossRoomSystem drains it; enraged there is more than one. */
   pendingVomitProjectiles: Array<{ x: number; y: number; dx: number; dy: number }> = [];
 
   override clearAirborneAttacks(): void {
@@ -228,6 +284,9 @@ export class TheHoarder extends Mob {
     this.fleeStuckFrames = 0;
     this.fleeBias = 0;
     this.fleeBiasSign = 1;
+    this.orbitTarget = null;
+    this.orbitFrames = 0;
+    this.corneredCheckFrames = 0;
     this.stationaryFrames = 0;
     this.wanderActive = false;
     this.cockroachAtCap = false;
@@ -341,11 +400,13 @@ export class TheHoarder extends Mob {
     if (!nearest) {
       this.stationaryFrames = 0;
       this.wanderActive = false;
-      const toHome = Math.hypot(this.x - this.spawnX, this.y - this.spawnY);
+      const homeX = this.restingPlace?.x ?? this.spawnX;
+      const homeY = this.restingPlace?.y ?? this.spawnY;
+      const toHome = Math.hypot(this.x - homeX, this.y - homeY);
       if (toHome > TILE_SIZE * RETURN_TO_SPAWN_THRESHOLD_TILES) {
         this.followTargetCollide(
-          this.spawnX,
-          this.spawnY,
+          homeX,
+          homeY,
           this.speed * RETURN_TO_SPAWN_SPEED_MULTIPLIER,
           TILE_SIZE,
         );
@@ -360,6 +421,7 @@ export class TheHoarder extends Mob {
     if (nearestDist < FLEE_RANGE_PX) {
       this.stationaryFrames = 0;
       this.wanderActive = false;
+      if (this.fleeAlongOrbit(nearest)) return;
       const dx = this.x - nearest.x;
       const dy = this.y - nearest.y;
       const len = Math.hypot(dx, dy);
@@ -385,7 +447,24 @@ export class TheHoarder extends Mob {
         this.fleeBias *= FLEE_BIAS_DECAY;
       }
     } else {
-      // Player is in aggro range but outside flee range — wander if stationary too long
+      // Given room, she backs off to her bed in the far corner of her lair
+      // rather than waiting where the last chase left her. Only with a margin
+      // past her flee range, and never toward the crawler: a crawler standing
+      // at the edge of that range between her and the bed would otherwise have
+      // her walk at them, turn and run, and walk at them again.
+      const bed = this.restingPlace;
+      if (
+        bed !== null &&
+        nearestDist > BED_RANGE_PX &&
+        Math.hypot(this.x - bed.x, this.y - bed.y) > TILE_SIZE * RETURN_TO_SPAWN_THRESHOLD_TILES &&
+        !this.isTowardThreat(bed, nearest)
+      ) {
+        this.stationaryFrames = 0;
+        this.wanderActive = false;
+        this.followTargetAStar(bed.x, bed.y, this.speed, 0);
+        return;
+      }
+      // Outside flee range with nowhere better to be: wander if stationary too long.
       this.stationaryFrames++;
       if (this.wanderActive) {
         const preX = this.x;
@@ -419,6 +498,79 @@ export class TheHoarder extends Mob {
         this.isMoving = false;
       }
     }
+  }
+
+  /**
+   * Runs for a gap between her lair's islands instead of straight away, once
+   * she has been cornered: straight away from a crawler is into a wall, and
+   * without somewhere to go round she backs into the nearest corner and stays
+   * there. Returns whether she moved this way this frame.
+   */
+  private fleeAlongOrbit(threat: Player): boolean {
+    const waypoints = this.fleeWaypoints;
+    if (waypoints === null || waypoints.length === 0) return false;
+    this.corneredCheckFrames++;
+    if (this.corneredCheckFrames >= CORNERED_CHECK_FRAMES) {
+      const travelled = Math.hypot(this.x - this.corneredAnchorX, this.y - this.corneredAnchorY);
+      if (travelled < CORNERED_TRAVEL_PX && this.orbitFrames === 0) {
+        this.orbitTarget = this.pickOrbitWaypoint(waypoints, threat);
+        this.orbitFrames = this.orbitTarget === null ? 0 : ORBIT_COMMIT_FRAMES;
+      }
+      this.corneredCheckFrames = 0;
+      this.corneredAnchorX = this.x;
+      this.corneredAnchorY = this.y;
+    }
+    const target = this.orbitTarget;
+    if (target === null || this.orbitFrames <= 0) return false;
+    this.orbitFrames--;
+    this.followTargetAStar(target.x, target.y, this.speed, 0);
+    if (Math.hypot(this.x - target.x, this.y - target.y) < TILE_SIZE) this.orbitFrames = 0;
+    if (this.orbitFrames === 0) this.orbitTarget = null;
+    return true;
+  }
+
+  /**
+   * The gap to run for: one whose way lies away from the threat rather than
+   * through it, and of those the one furthest from the threat. Any gap at all
+   * when every way out passes the threat — a gap past a crawler is still out
+   * of the corner.
+   */
+  private pickOrbitWaypoint(
+    waypoints: ReadonlyArray<{ x: number; y: number }>,
+    threat: Player,
+  ): { x: number; y: number } | null {
+    const awayX = this.x - threat.x;
+    const awayY = this.y - threat.y;
+    const awayLength = Math.hypot(awayX, awayY);
+    let best: { x: number; y: number } | null = null;
+    let bestScore = -Infinity;
+    for (const waypoint of waypoints) {
+      const toX = waypoint.x - this.x;
+      const toY = waypoint.y - this.y;
+      const toLength = Math.hypot(toX, toY);
+      if (toLength < TILE_SIZE) continue;
+      const alignment = awayLength > 0 ? (toX * awayX + toY * awayY) / (toLength * awayLength) : 0;
+      const clearOfThreat = alignment > ORBIT_MIN_ALIGNMENT;
+      const score =
+        Math.hypot(waypoint.x - threat.x, waypoint.y - threat.y) +
+        (clearOfThreat ? ORBIT_CLEAR_BONUS_PX : 0);
+      if (score > bestScore) {
+        best = waypoint;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  /** Whether heading for `point` would take her toward `threat` rather than away or across. */
+  private isTowardThreat(point: { x: number; y: number }, threat: Player): boolean {
+    const toPointX = point.x - this.x;
+    const toPointY = point.y - this.y;
+    const toThreatX = threat.x - this.x;
+    const toThreatY = threat.y - this.y;
+    const lengths = Math.hypot(toPointX, toPointY) * Math.hypot(toThreatX, toThreatY);
+    if (lengths === 0) return false;
+    return (toPointX * toThreatX + toPointY * toThreatY) / lengths > BED_TOWARD_THREAT_COSINE;
   }
 
   /** True when a player is standing on ground her acid already covers. */
@@ -476,7 +628,11 @@ export class TheHoarder extends Mob {
     // Where the spawn is *scheduled*: `BossRoomSystem` drains these positions
     // into bodies on a later frame, so the rows are asked for after this.
     prewarmCockroach();
-    const count = randomInt(VOMIT_COUNT_MIN, VOMIT_COUNT_MAX);
+    this.purgesBegun++;
+    const brought = randomInt(VOMIT_COUNT_MIN, VOMIT_COUNT_MAX);
+    const target = this.currentTarget;
+    const stirred = target !== null ? (this.roachNest?.(target) ?? 0) : 0;
+    const count = Math.max(0, brought - stirred);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist =

@@ -127,6 +127,21 @@ export function hasClearLine(
 }
 
 /**
+ * Whether a straight walk between two bodies' centres crosses only walkable
+ * tiles; `hasClearLine` sees over low props a body cannot pass.
+ */
+export function hasWalkableLine(
+  map: GameMap | null,
+  tileSize: number,
+  from: TacticalPoint,
+  to: TacticalPoint,
+): boolean {
+  if (map === null) return true;
+  const half = tileSize / 2;
+  return map.hasWalkableLine(from.x + half, from.y + half, to.x + half, to.y + half);
+}
+
+/**
  * Whether a mob could stand at `point`: walkable, not a stairwell (which
  * `isWalkable` admits but a mob's own collision refuses), and not marked ground.
  */
@@ -150,7 +165,7 @@ export function isOpenWalk(
   to: TacticalPoint,
 ): boolean {
   if (!isStandable(map, tileSize, to)) return false;
-  if (!hasClearLine(map, tileSize, from, to)) return false;
+  if (!hasWalkableLine(map, tileSize, from, to)) return false;
   return !lineCrossesMarkedGround(
     from.x,
     from.y,

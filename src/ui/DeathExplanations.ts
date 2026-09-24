@@ -12,6 +12,7 @@ export type DeathCause =
   | 'hoarder'
   | 'juicer'
   | 'juicerPunch'
+  | 'juicerPlateRoll'
   | 'bugaboo'
   | 'burnedStatus'
   | 'poisonStatus'
@@ -78,6 +79,9 @@ export type DeathCause =
   | 'clownGas'
   | 'lichFirewall'
   | 'lichOrb'
+  | 'hoarderAvalanche'
+  | 'krakarenLiveWire'
+  | 'krakarenTankBurst'
   | 'explosiveFriendlyFire'
   | 'doomsdayExplosion'
   | 'unknown';
@@ -114,6 +118,11 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   juicerPunch: [
     'The Juicer put both fists through the floor, and you were standing on it.',
     'He punched the ground. The ground punched you. Never leg day, always dead.',
+  ],
+  juicerPlateRoll: [
+    'He bowled a forty-five pound plate at your ankles. It was drawn on the floor in chalk first.',
+    'Flattened by a rolling bumper plate. The chalk line was the part where you move.',
+    'The Juicer racked you like a spare. Somebody should have spotted you.',
   ],
   bugaboo: [
     'A Bugaboo swarmed you to death. Hard to dodge what you cannot see.',
@@ -229,6 +238,20 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'A green light landed on the floor you were standing on. You had been warned.',
     'The circle was on the ground for a reason. You were still inside it.',
     'The Lich rained soul-fire on the office and one of them found you.',
+  ],
+  hoarderAvalanche: [
+    'A tower of her newspapers came down on you. She had been saving them for exactly this.',
+    'Buried under forty years of junk mail. The tower wobbled first. You watched it wobble.',
+    'Crushed by a hoard. Somewhere in that pile is the receipt for everything that killed you.',
+  ],
+  krakarenLiveWire: [
+    'You stood in the wired puddle while the cable sparked its way down to you. The junction box was right there. It had a lightning bolt on it.',
+    'Two amps of lab current through ankle-deep clone soup. The sparks crawled toward you for a full second first.',
+    'Death by live wire in a flooded lab. The water hummed, the cable fizzed, and you kept standing in it.',
+  ],
+  krakarenTankBurst: [
+    'A clone vat cracked for a whole second, sprayed you, and then burst in your face. Stand to the side of the glass.',
+    'Flattened by a wave of growth medium and a failed copy of the boss. It had been in that tank a long time. So had the pressure.',
   ],
   clownGas: [
     "You stood in the clown's gas until your lungs gave out.",

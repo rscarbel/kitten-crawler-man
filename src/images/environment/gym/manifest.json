@@ -1,0 +1,173 @@
+{
+  "gym_rack": {
+    "frameWidth": 64,
+    "frameHeight": 112,
+    "tileX": 0,
+    "tileY": 48,
+    "tileScale": 64,
+    "states": {
+      "rack": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "gym_squat_rack": {
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 112,
+    "tileScale": 64,
+    "states": {
+      "loaded": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "stripped": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "gym_cable_stack": {
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 112,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "gym_belt": {
+    "frameWidth": 66,
+    "frameHeight": 66,
+    "tileX": 1,
+    "tileY": 1,
+    "tileScale": 64,
+    "states": {
+      "run": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "gym_console": {
+    "frameWidth": 64,
+    "frameHeight": 96,
+    "tileX": 0,
+    "tileY": 48,
+    "tileScale": 64,
+    "states": {
+      "off": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "on": {
+        "row": 1,
+        "frameCount": 2
+      },
+      "beep": {
+        "row": 2,
+        "frameCount": 2
+      }
+    }
+  },
+  "gym_boombox": {
+    "frameWidth": 64,
+    "frameHeight": 80,
+    "tileX": 0,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "intact": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "thump": {
+        "row": 1,
+        "frameCount": 2
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "gym_shutter": {
+    "frameWidth": 66,
+    "frameHeight": 66,
+    "tileX": 1,
+    "tileY": 1,
+    "tileScale": 64,
+    "states": {
+      "roll": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "gym_plate": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "roll": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "gym_chalk_puff": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "puff": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "gym_mirror_crack": {
+    "frameWidth": 192,
+    "frameHeight": 80,
+    "tileX": 0,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "crack": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "gym_pickups": {
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 32,
+    "tileY": 48,
+    "tileScale": 64,
+    "states": {
+      "bench": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "treadmill": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "dumbbell": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  }
+}

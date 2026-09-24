@@ -15,8 +15,8 @@ export const FLOOR_TYPES = [
 export const VOID_TYPE = 9;
 /** Tile type for the Safe Room floor — warm sanctuary look. */
 export const SAFE_ROOM_FLOOR = 10;
-/** Tile type for the Boss Room floor — grimy, trash-covered look (TheHoarder). */
-export const HORDER_BOSS_ROOM_FLOOR = 11;
+/** The Hoarder's lair floor: yellowed linoleum, painted by `drawHoarderFloor`. */
+export const HOARDER_FLOOR = 11;
 /** Tile type for the Gym Boss Room floor — dark rubber mat look (Juicer). */
 export const JUICER_BOSS_ROOM_FLOOR = 12;
 /** Tile type for outdoor trees — renders as trunk + canopy, not walkable. */
@@ -466,6 +466,81 @@ export const QUEST_EXIT_DOOR_OPEN = 111;
  */
 export const CRAWLER_SIGN = 112;
 
+/*
+ * Boss-room dressing. Every solid one is Y-sorted and stamped with `placeProp`,
+ * so it records the floor it stands on. Whether a solid one also blocks sight is
+ * decided by `SIGHT_TRANSPARENT_TILE_TYPES` in `walkability.ts`: a knee-high
+ * prop that hid a crawler from a boss's line of fire would be free cover.
+ */
+
+/** A tall heap of household junk in the Hoarder's lair. Solid, blocks sight. */
+export const HOARD_PILE = 113;
+
+/** A teetering tower of newspapers and boxes that can topple. Solid, blocks sight. */
+export const HOARD_TOWER = 114;
+
+/** A split, breakable garbage bag. Solid but low, so it does not block sight. */
+export const HOARD_BAG = 115;
+
+/** What a toppled `HOARD_TOWER` leaves behind: a walkable spread of flattened junk. */
+export const HOARD_RUBBLE = 116;
+
+/** A knee-high dumbbell rack in the Juicer's gym. Solid, does not block sight. */
+export const GYM_RACK = 117;
+
+/** A head-high squat rack. Solid, blocks sight. */
+export const GYM_SQUAT_RACK = 118;
+
+/** A cable machine's weight stack and frame. Solid, blocks sight. */
+export const GYM_CABLE_STACK = 119;
+
+/** A treadmill's belt, walkable, and a conveyor when powered. */
+export const GYM_TREADMILL_BELT = 120;
+
+/** Shallow flood water in the Krakaren clone lab. Walkable, slows crawlers. */
+export const KRAKAREN_WADE = 121;
+
+/** A clone vat, two tiles tall. Solid, blocks sight. */
+export const KRAKAREN_TANK = 122;
+
+/** A waist-high control console. Solid, does not block sight. */
+export const KRAKAREN_CONSOLE = 123;
+
+/** A waist-high lab bench in the Grotesque Spider's lab. Solid, does not block sight. */
+export const LAB_BENCH = 124;
+
+/** A tall specimen shelf. Solid, blocks sight. */
+export const LAB_SHELF = 125;
+
+/** Web spun across the lab floor. Walkable, slows crawlers. */
+export const LAB_WEB = 126;
+
+/** A mud wallow on the Iron Colosseum's sand. Walkable, slows crawlers. */
+export const ARENA_MUD = 127;
+
+/** Every solid boss-room prop; each is drawn in the Y-sorted decoration pass. */
+export const BOSS_ROOM_PROP_TILE_TYPES: ReadonlySet<number> = new Set([
+  HOARD_PILE,
+  HOARD_TOWER,
+  HOARD_BAG,
+  GYM_RACK,
+  GYM_SQUAT_RACK,
+  GYM_CABLE_STACK,
+  KRAKAREN_TANK,
+  KRAKAREN_CONSOLE,
+  LAB_BENCH,
+  LAB_SHELF,
+]);
+
+/** Every walkable boss-room ground decal; each is baked flat into the chunk. */
+export const BOSS_ROOM_FLAT_TILE_TYPES: ReadonlySet<number> = new Set([
+  HOARD_RUBBLE,
+  GYM_TREADMILL_BELT,
+  KRAKAREN_WADE,
+  LAB_WEB,
+  ARENA_MUD,
+]);
+
 /**
  * Every ground a town building's interior can be floored in.
  *
@@ -490,7 +565,7 @@ export const INTERIOR_FLOOR_TYPES: ReadonlySet<number> = new Set([
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 113;
+export const TILE_TYPE_COUNT = 128;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

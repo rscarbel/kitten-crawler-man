@@ -1488,7 +1488,7 @@ export class CompanionSystem implements GameSystem {
 
     const hasLOS =
       dist < ts * PATHFINDING_DISTANCE_THRESHOLD ||
-      this.gameMap.hasLineOfSight(
+      this.gameMap.hasWalkableLine(
         entity.x + ts * TILE_CENTER_OFFSET,
         entity.y + ts * TILE_CENTER_OFFSET,
         targetX + ts * TILE_CENTER_OFFSET,

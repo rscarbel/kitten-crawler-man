@@ -1,0 +1,87 @@
+{
+  "colosseum_portcullis": {
+    "frameWidth": 160,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "drop": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "colosseum_cage": {
+    "frameWidth": 64,
+    "frameHeight": 84,
+    "tileX": 32,
+    "tileY": 52,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 2
+      },
+      "rattle": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "burst": {
+        "row": 2,
+        "frameCount": 3
+      },
+      "open": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "colosseum_cheer": {
+    "frameWidth": 40,
+    "frameHeight": 44,
+    "tileX": 20,
+    "tileY": 36,
+    "tileScale": 64,
+    "states": {
+      "cheer0": {
+        "row": 0,
+        "frameCount": 2
+      },
+      "cheer1": {
+        "row": 1,
+        "frameCount": 2
+      },
+      "cheer2": {
+        "row": 2,
+        "frameCount": 2
+      }
+    }
+  },
+  "colosseum_banner": {
+    "frameWidth": 32,
+    "frameHeight": 64,
+    "tileX": 16,
+    "tileY": 4,
+    "tileScale": 64,
+    "states": {
+      "sway": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "colosseum_mud_splatter": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "splat": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  }
+}

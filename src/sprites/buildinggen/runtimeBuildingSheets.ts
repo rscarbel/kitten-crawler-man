@@ -73,9 +73,8 @@ export function buildingManifestEntry(spec: BuildingSpec): SpriteManifestEntry {
  * Every facade the game paints for itself.
  *
  * Written out rather than derived from `BUILDING_SPECS`, so the compiler checks
- * each one against the manifest. `overworld_main_tower` and `hoarders_room` are
- * absent on purpose: both are authored art rather than generated, and both keep
- * their files.
+ * each one against the manifest. `overworld_main_tower` is absent on purpose:
+ * it is authored art rather than generated, and keeps its file.
  */
 export const BUILDING_KEYS = [
   'barracks',

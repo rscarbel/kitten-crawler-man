@@ -15,11 +15,13 @@ import { prewarmHoarderBile } from '../sprites/hoarderBileSprite';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
+import type { BossRoomFightListener } from './bossRooms/BossRoomDressing';
 import type { GroundHazardSource } from './GroundHazardSource';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawHoarderAcidPool, drawHoarderBile } from '../sprites/hoarderBileSprite';
+import { bileLobHeight, drawBileShadow, isHoardJunk, stopsBile } from './bossRooms/hoarderBile';
 import {
   KrakarenClone,
   MAX_GUARD_TENTACLES,
@@ -28,6 +30,7 @@ import {
 } from '../creatures/KrakarenClone';
 import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
 import { hasRoomToMove } from '../map/findWalkableTile';
+import { isLabFloodAtPx } from './bossRooms/krakarenLabLayout';
 import {
   drawSlamShadow,
   drawSlamImpact,
@@ -61,6 +64,13 @@ interface VomitProjectile {
    * projectile stored on a mob is deleted in mid-air when that mob dies.
    */
   readonly owner: TheHoarder;
+  /**
+   * The last point of its flight that was over open floor. A bolus flies over
+   * her junk, so where it stops can be above a heap, and the pool it leaves
+   * goes down here instead of on top of the heap.
+   */
+  lastOpenX: number;
+  lastOpenY: number;
 }
 
 interface AcidPuddle {
@@ -155,26 +165,23 @@ function removeOwnedBy(items: Array<{ readonly owner: Mob }>, owner: Mob): void 
   }
 }
 
-const MAX_COCKROACHES = 5;
 /**
  * At `ACID_PUDDLE_RADIUS` each and no two of them overlapping, this is about a
- * fifth of the boss room's floor. Fifteen was over half of it, which is not a
- * hazard to walk around — it is a wall, and the melee half of the party could
- * not reach her through it.
+ * fifth of the boss room's floor. Much more and the pools stop being a hazard
+ * to walk around and become a wall the melee half of the party cannot reach
+ * her through.
  */
 const MAX_ACID_PUDDLES = 6;
 /**
- * Twenty seconds. It was a hundred, from a time when the Hoarder almost never
- * spat: now that the bile is on its own clock, pools at the old lifetime would
- * simply accumulate until they owned the arena.
+ * Twenty seconds. The bile is on its own clock, so a pool that lived much
+ * longer would simply accumulate with the rest until they owned the arena.
  */
 const PUDDLE_TTL = 1200;
 const ACID_DAMAGE_INTERVAL = 20;
 const ACID_DAMAGE = 1;
 /**
- * A direct hit used to do nothing at all — the bolus passed through the player
- * and the only harm was the pool it dropped. Small, because the pool is still
- * the real threat and this is meant to be the easy fight.
+ * A direct hit hurts as well as leaving a pool. Small, because the pool is
+ * still the real threat and this is meant to be the easy fight.
  */
 const VOMIT_IMPACT_DAMAGE = 2;
 const PROJECTILE_TTL = 90;
@@ -186,8 +193,8 @@ const PROJECTILE_HIT_RADIUS = TILE_SIZE * PROJECTILE_HIT_RADIUS_FRACTION;
  * two of them are tangent, so pools never overlap at all and the hazard spreads
  * around the room instead of merging into one wall with no lane through it.
  * Derived rather than written as a distance, because the tangency *is* the
- * reasoning — at a hand-set 2.5 tiles they still overlapped by a tile and a half
- * each and a run of them across an approach was a wall.
+ * reasoning: any closer and a run of overlapping pools across an approach is a
+ * wall.
  */
 const POOLS_TANGENT_MULTIPLIER = 2;
 const PUDDLE_CROWDING_RADIUS = ACID_PUDDLE_RADIUS * POOLS_TANGENT_MULTIPLIER;
@@ -244,107 +251,8 @@ const ADJACENT_TILE_OFFSETS = [
   [-1, -1],
 ] as const;
 
-/** Alpha of the old puke stains painted into the room's floor decoration. */
-const PUKE_STAIN_ALPHA = 0.45;
 /** A quarter of the pool's life, so it visibly recedes rather than vanishing. */
 const PUDDLE_FADE_FRAMES = 300;
-
-// Hoarder room decoration constants
-const GARBAGE_BAG_COUNT = 7;
-const CARDBOARD_BOX_COUNT = 4;
-const CRUSHED_CAN_COUNT = 8;
-const PUKE_STAIN_COUNT = 5;
-const PAPER_SCRAP_COUNT = 10;
-const DECORATION_SCATTER_FRACTION = 0.5;
-
-// Hoarder room: RNG seed factors
-const RNG_SEED_X_FACTOR = 31;
-const RNG_SEED_Y_FACTOR = 17;
-const RNG_NOISE_SCALE = 127.1;
-const RNG_NOISE_LARGE = 43758.5453;
-
-// Garbage bag render
-const GARBAGE_SCATTER_FRACTION = 0.7;
-const GARBAGE_BAG_W_MIN = 0.5;
-const GARBAGE_BAG_W_RANGE = 0.4;
-const GARBAGE_BAG_H_MIN = 0.35;
-const GARBAGE_BAG_H_RANGE = 0.25;
-const GARBAGE_KNOT_RADIUS = 0.08;
-
-// Cardboard box render
-const BOX_SCATTER_FRACTION = 0.65;
-const BOX_W_MIN = 0.4;
-const BOX_W_RANGE = 0.35;
-const BOX_H_MIN = 0.3;
-const BOX_H_RANGE = 0.25;
-
-// Crushed can render
-const CAN_SCATTER_FRACTION = 0.75;
-const CAN_RX_FRACTION = 0.1;
-const CAN_RY_FRACTION = 0.06;
-
-// Puke stain render
-const PUKE_SCATTER_FRACTION = 0.6;
-const PUKE_RX_MIN = 0.28;
-const PUKE_RX_RANGE = 0.2;
-const PUKE_RY_MIN = 0.14;
-const PUKE_RY_RANGE = 0.1;
-
-// Paper scrap render
-const PAPER_SCATTER_FRACTION = 0.8;
-const PAPER_COLOR_THRESHOLD = 0.5;
-const PAPER_HALF_W = 0.12;
-const PAPER_HALF_H = 0.07;
-
-// RNG offset groups for each decoration type
-const RNG_OFFSET_BAGS_10 = 10;
-const RNG_OFFSET_BAGS_20 = 20;
-const RNG_OFFSET_BAGS_30 = 30;
-const RNG_OFFSET_BAGS_40 = 40;
-const RNG_OFFSET_BAGS_5 = 5;
-const RNG_OFFSET_BOXES_50 = 50;
-const RNG_OFFSET_BOXES_60 = 60;
-const RNG_OFFSET_BOXES_70 = 70;
-const RNG_OFFSET_BOXES_80 = 80;
-const RNG_OFFSET_CANS_90 = 90;
-const RNG_OFFSET_CANS_100 = 100;
-const RNG_OFFSET_CANS_110 = 110;
-const RNG_OFFSET_PUKE_120 = 120;
-const RNG_OFFSET_PUKE_130 = 130;
-const RNG_OFFSET_PUKE_140 = 140;
-const RNG_OFFSET_PUKE_150 = 150;
-const RNG_OFFSET_PUKE_160 = 160;
-const RNG_OFFSET_PAPER_170 = 170;
-const RNG_OFFSET_PAPER_180 = 180;
-const RNG_OFFSET_PAPER_190 = 190;
-const RNG_OFFSET_PAPER_200 = 200;
-
-// Krakaren clone room decoration constants
-const WATER_PUDDLE_COUNT = 8;
-const SLIME_TRAIL_COUNT = 6;
-const WATER_SCATTER_FRACTION = 0.7;
-const WATER_PUDDLE_ALPHA = 0.2;
-const WATER_RX_MIN = 0.4;
-const WATER_RX_RANGE = 0.3;
-const WATER_RY_MIN = 0.2;
-const WATER_RY_RANGE = 0.15;
-const SLIME_SCATTER_FRACTION = 0.6;
-const SLIME_ALPHA = 0.25;
-const SLIME_RX_MIN = 0.15;
-const SLIME_RX_RANGE = 0.2;
-const SLIME_RY_MIN = 0.08;
-const SLIME_RY_RANGE = 0.1;
-
-// RNG offset groups for krakaren room
-const RNG_OFFSET_WATER_10 = 10;
-const RNG_OFFSET_WATER_20 = 20;
-const RNG_OFFSET_WATER_30 = 30;
-const RNG_OFFSET_WATER_40 = 40;
-const RNG_OFFSET_SLIME_50 = 50;
-const RNG_OFFSET_SLIME_60 = 60;
-const RNG_OFFSET_SLIME_70 = 70;
-const RNG_OFFSET_SLIME_80 = 80;
-const RNG_OFFSET_SLIME_90 = 90;
 
 // Boss HUD layout constants (desktop)
 const BOSS_BAR_MAX_WIDTH = 360;
@@ -557,6 +465,13 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   readonly newlyDefeatedRooms: Array<{ roomIndex: number; boss: Mob }> = [];
 
   /**
+   * Told each time a room seals, is won, or has its fight unwound. A listener
+   * rather than another drained queue because an abort leaves nothing in room
+   * state to poll: by the next frame the room simply reads as unlocked.
+   */
+  fightListener: BossRoomFightListener | null = null;
+
+  /**
    * @param hasUnopenedChest Whether a room's boss chest has yet to be opened.
    *   Asked of the chests themselves rather than mirrored into room state, so a
    *   checkpoint restore of either system can never leave the seal and the
@@ -600,6 +515,11 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     return this.states[roomIndex].defeated && this.hasUnopenedChest(roomIndex);
   }
 
+  /** Whether a won room still holds the party until its chest is opened. */
+  isRoomLootSealed(roomIndex: number): boolean {
+    return roomIndex >= 0 && roomIndex < this.states.length && this.isSealedForLoot(roomIndex);
+  }
+
   /**
    * Holds the party inside a won room until its chest is opened.
    *
@@ -639,6 +559,20 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   private releaseLootHold(roomIndex: number): void {
     this.humanHeldForLoot[roomIndex] = false;
     this.catHeldForLoot[roomIndex] = false;
+  }
+
+  /** The Hoarder's bile in the air, read by her lair so a bolus can knock a tower over. */
+  bileInFlight(): ReadonlyArray<Readonly<Pick<VomitProjectile, 'x' | 'y' | 'dx' | 'dy'>>> {
+    return this.vomitProjectiles;
+  }
+
+  /**
+   * Whether a room is still shut: locked for its fight, or won and holding the
+   * party until its chest is opened.
+   */
+  isRoomHeldShut(roomIndex: number): boolean {
+    if (roomIndex < 0 || roomIndex >= this.states.length) return false;
+    return this.states[roomIndex].locked || this.isSealedForLoot(roomIndex);
   }
 
   getBossRoomStates(): BossRoomState[] {
@@ -980,6 +914,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           this.catIsInsider[i] = false;
           this.miniMap.revealBossNeighborhood(state.bounds);
           if (boss) this.newlyDefeatedRooms.push({ roomIndex: i, boss });
+          this.fightListener?.onBossDefeated(i);
         } else if (!humanInRoom && !catInRoom && boss !== undefined && bossAlive) {
           // An aborted room is still a room nobody is standing in, so the rule
           // that a boss cannot be emptied from the corridor has to reach it —
@@ -1009,6 +944,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       // Start a new fight when a player enters a room with a living boss.
       if (!state.locked && bossAlive && (humanInRoom || catInRoom)) {
         state.locked = true;
+        this.fightListener?.onSeal(i);
         // They walked in, so the lesson landed. A later retreat and a second
         // poke earns it again.
         this.regenNoticeGiven[i] = false;
@@ -1060,6 +996,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           this.catIsInsider[i] = false;
           this.miniMap.revealBossNeighborhood(state.bounds);
           this.newlyDefeatedRooms.push({ roomIndex: i, boss });
+          this.fightListener?.onBossDefeated(i);
           continue;
         }
         if (boss !== undefined && bossAlive)
@@ -1144,9 +1081,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
       // Boss defeated normally. Nothing is cleaned up: the pools fade on their
       // own clock, a bolus still in the air lands and leaves one more, and the
-      // cockroaches die where they stand rather than blinking out — the moment
-      // the boss dropped, the whole room used to empty itself in one frame,
-      // which reads as the level being reset rather than as a fight ending.
+      // cockroaches die where they stand rather than blinking out — a whole
+      // room emptying itself on the frame the boss drops reads as the level
+      // being reset rather than as a fight ending.
       if (fightOver) {
         state.locked = false;
         state.defeated = true;
@@ -1157,6 +1094,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         this.catIsInsider[i] = false;
         this.miniMap.revealBossNeighborhood(state.bounds);
         if (boss) this.newlyDefeatedRooms.push({ roomIndex: i, boss });
+        this.fightListener?.onBossDefeated(i);
         // Her swarm outlives her by exactly as long as it takes to die. Killed
         // through `justDied` they come apart and leave the mob grid the way
         // anything else does, rather than being spliced out of existence. The
@@ -1191,9 +1129,15 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         // at full health that was still permanently enraged.
         // A boss already dead with its healer still up stays dead: healing it
         // here would stand the corpse back up.
-        if (bossAlive) boss.healAndForgetFight();
         removeOwnedBy(this.vomitProjectiles, boss);
         removeOwnedBy(this.acidPuddles, boss);
+        // The room hears of an abort only when its boss really was put back:
+        // a dead boss's room is still won, and unwinding its dressing would
+        // stand the fight back up around a corpse.
+        if (bossAlive) {
+          boss.healAndForgetFight();
+          this.fightListener?.onFightAborted(i);
+        }
         continue;
       }
     }
@@ -1244,6 +1188,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     if (this.unenteredRegenDelay[roomIndex] < UNENTERED_BOSS_REGEN_DELAY_FRAMES) return;
     this.unenteredRegenDelay[roomIndex] = 0;
     boss.healAndForgetFight();
+    this.fightListener?.onFightAborted(roomIndex);
     // The ground this boss flooded goes with its wounds — a restored Hoarder
     // standing behind a wall of her own acid has sealed the doorway the notice
     // is telling the player to use. Filtered by owner rather than emptied:
@@ -1409,11 +1354,10 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     for (const mob of mobs) {
       if (!(mob instanceof TheHoarder) || !mob.isAlive) continue;
 
-      mob.cockroachAtCap = liveCount >= MAX_COCKROACHES;
+      mob.cockroachAtCap = liveCount >= mob.cockroachCap;
       mob.isAcidCovered = this.isStandingInAcidAt;
 
-      // Enraged she brings up a spread, which is why this is a list rather than
-      // the single slot it used to be.
+      // Enraged she brings up a spread.
       for (const p of mob.pendingVomitProjectiles) {
         this.vomitProjectiles.push({
           x: p.x,
@@ -1423,6 +1367,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           ttl: PROJECTILE_TTL,
           age: 0,
           owner: mob,
+          lastOpenX: p.x,
+          lastOpenY: p.y,
         });
       }
       mob.pendingVomitProjectiles.length = 0;
@@ -1430,9 +1376,18 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       if (mob.cockroachSpawns.length === 0) continue;
       let spawned = liveCount;
       for (const sp of mob.cockroachSpawns) {
-        if (spawned >= MAX_COCKROACHES) break;
-        const tileX = Math.floor(sp.x / TILE_SIZE);
-        const tileY = Math.floor(sp.y / TILE_SIZE);
+        if (spawned >= mob.cockroachCap) break;
+        // A roach brought up over one of her heaps lands at her feet instead:
+        // dropping it would let the junk she stands beside thin her swarm.
+        const overJunk = isHoardJunk(
+          this.gameMap,
+          Math.floor(sp.x / TILE_SIZE),
+          Math.floor(sp.y / TILE_SIZE),
+        );
+        const landX = overJunk ? mob.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET : sp.x;
+        const landY = overJunk ? mob.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET : sp.y;
+        const tileX = Math.floor(landX / TILE_SIZE);
+        const tileY = Math.floor(landY / TILE_SIZE);
         if (this.gameMap.isWalkable(tileX, tileY)) {
           // Through the roster rather than by hand: a roach that never received
           // the scene's spell context walks straight through a protective shell.
@@ -1469,7 +1424,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       const newY = proj.y + proj.dy;
       const tileX = Math.floor(newX / TILE_SIZE);
       const tileY = Math.floor(newY / TILE_SIZE);
-      const hitWall = !this.gameMap.isWalkable(tileX, tileY);
+      const hitWall = stopsBile(this.gameMap, tileX, tileY);
+      const overOpenFloor = this.gameMap.isWalkable(tileX, tileY);
       const humanDist = Math.hypot(
         newX - (human.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
         newY - (human.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
@@ -1489,10 +1445,18 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         if (catHit && cat.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE)) {
           proj.owner.noteStruckPlayer(cat);
         }
-        // A wall hit puddles where the bolus was, a player hit where it now is,
-        // so the pool lands on them.
-        const puddleX = hitWall ? proj.x : newX;
-        const puddleY = hitWall ? proj.y : newY;
+        // Acid only ever pools on open floor. A bolus over open floor pools
+        // where it is — on a player it hits, or where it comes down. One that
+        // hits a player while it is still over a heap pools under that player;
+        // anything else runs off the heap or splashes back off the wall onto
+        // the last open floor it crossed.
+        const landing = this.bileLanding(proj, newX, newY, {
+          overOpenFloor,
+          hitWall,
+          victim: humanHit ? human : catHit ? cat : null,
+        });
+        const puddleX = landing.x;
+        const puddleY = landing.y;
         // Crowding is decided here rather than where the bolus was aimed: it
         // flies until a wall, a player or its lifetime stops it, so the Hoarder
         // cannot know where it will come down, and the enraged spread's flanks
@@ -1509,10 +1473,39 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       } else {
         proj.x = newX;
         proj.y = newY;
+        if (overOpenFloor) {
+          proj.lastOpenX = newX;
+          proj.lastOpenY = newY;
+        }
         proj.ttl--;
         proj.age++;
       }
     }
+  }
+
+  /** Where a bolus that has stopped at (x, y) leaves its pool: always over open floor. */
+  private bileLanding(
+    proj: VomitProjectile,
+    x: number,
+    y: number,
+    stop: { overOpenFloor: boolean; hitWall: boolean; victim: Player | null },
+  ): { x: number; y: number } {
+    if (stop.overOpenFloor && (stop.victim !== null || !stop.hitWall)) return { x, y };
+    if (stop.victim !== null) {
+      const centreX = stop.victim.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+      const centreY = stop.victim.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+      const underVictim = this.gameMap.isWalkable(
+        Math.floor(centreX / TILE_SIZE),
+        Math.floor(centreY / TILE_SIZE),
+      );
+      if (underVictim) return { x: centreX, y: centreY };
+    }
+    return { x: proj.lastOpenX, y: proj.lastOpenY };
+  }
+
+  /** Where the Hoarder's acid lies, read by her lair's gates. */
+  acidPools(): ReadonlyArray<Readonly<Pick<AcidPuddle, 'x' | 'y'>>> {
+    return this.acidPuddles;
   }
 
   /** The pool this player is standing in, if any. */
@@ -1694,6 +1687,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       this.renderSingleBossRoomObjects(ctx, camX, camY, this.states[i].bounds, bossType);
     }
     this.renderAcidPuddles(ctx, camX, camY);
+    for (const proj of this.vomitProjectiles) drawBileShadow(ctx, proj.x - camX, proj.y - camY);
     this.renderKrakarenSlams(ctx, camX, camY);
   }
 
@@ -1702,7 +1696,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       drawHoarderBile(
         ctx,
         proj.x - camX,
-        proj.y - camY,
+        proj.y - camY - bileLobHeight(proj.age, PROJECTILE_TTL),
         TILE_SIZE,
         proj.age,
         Math.atan2(proj.dy, proj.dx),
@@ -1745,7 +1739,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         );
       }
       const impact = boss.slamImpact;
-      if (impact) {
+      // In flood water the room throws a splash ring instead of this dust skirt.
+      if (impact && !isLabFloodAtPx(this.gameMap.structure, impact.x, impact.y)) {
         drawSlamImpact(ctx, impact.x - camX, impact.y - camY, TILE_SIZE, impact.progress);
       }
       if (tentacle) {
@@ -1777,14 +1772,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     bossType: string,
   ): void {
     const ts = TILE_SIZE;
-    const cx = (b.x + b.w * ENTITY_TILE_CENTER_OFFSET) * ts - camX;
-    const cy = (b.y + b.h * ENTITY_TILE_CENTER_OFFSET) * ts - camY;
-
     const meta = BOSS_META[bossType] ?? BOSS_META.the_hoarder;
     const bannerX = (b.x + Math.floor(b.w / 2)) * ts - camX;
     const bannerY = (b.y - 1) * ts - camY;
-    // "BOSS ROOM" world-space label
-    // size=BOSS_LABEL_SIZE, old baseline = bannerY + ts*BOSS_LABEL_BASELINE_FRACTION; top = baseline - BOSS_LABEL_ASCENT_OFFSET
     drawText(ctx, 'BOSS ROOM', {
       ...TEXT_PRESETS.label,
       x: bannerX,
@@ -1794,236 +1784,6 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       color: meta.color,
       align: 'center',
     });
-
-    // Juicer's gym room — decoration handled by JuicerRoomSystem
-    if (bossType === 'juicer') return;
-
-    // Krakaren Clone lair — water puddles and slime
-    if (bossType === 'krakaren_clone') {
-      ctx.save();
-      const kseed = b.x * RNG_SEED_X_FACTOR + b.y * RNG_SEED_Y_FACTOR;
-      const krng = (n: number) => {
-        const sv = Math.sin(kseed + n * RNG_NOISE_SCALE) * RNG_NOISE_LARGE;
-        return sv - Math.floor(sv);
-      };
-      // Water puddles
-      for (let i = 0; i < WATER_PUDDLE_COUNT; i++) {
-        const px = cx + (krng(i) - DECORATION_SCATTER_FRACTION) * b.w * ts * WATER_SCATTER_FRACTION;
-        const py =
-          cy +
-          (krng(i + RNG_OFFSET_WATER_10) - DECORATION_SCATTER_FRACTION) *
-            b.h *
-            ts *
-            WATER_SCATTER_FRACTION;
-        ctx.globalAlpha = WATER_PUDDLE_ALPHA;
-        ctx.fillStyle = '#4080a0';
-        ctx.beginPath();
-        ctx.ellipse(
-          px,
-          py,
-          ts * (WATER_RX_MIN + krng(i + RNG_OFFSET_WATER_20) * WATER_RX_RANGE),
-          ts * (WATER_RY_MIN + krng(i + RNG_OFFSET_WATER_30) * WATER_RY_RANGE),
-          krng(i + RNG_OFFSET_WATER_40) * Math.PI,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-      // Pink slime trails
-      for (let i = 0; i < SLIME_TRAIL_COUNT; i++) {
-        const slx =
-          cx +
-          (krng(i + RNG_OFFSET_SLIME_50) - DECORATION_SCATTER_FRACTION) *
-            b.w *
-            ts *
-            SLIME_SCATTER_FRACTION;
-        const sly =
-          cy +
-          (krng(i + RNG_OFFSET_SLIME_60) - DECORATION_SCATTER_FRACTION) *
-            b.h *
-            ts *
-            SLIME_SCATTER_FRACTION;
-        ctx.globalAlpha = SLIME_ALPHA;
-        ctx.fillStyle = '#d06888';
-        ctx.beginPath();
-        ctx.ellipse(
-          slx,
-          sly,
-          ts * (SLIME_RX_MIN + krng(i + RNG_OFFSET_SLIME_70) * SLIME_RX_RANGE),
-          ts * (SLIME_RY_MIN + krng(i + RNG_OFFSET_SLIME_80) * SLIME_RY_RANGE),
-          krng(i + RNG_OFFSET_SLIME_90) * Math.PI,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      ctx.restore();
-      return;
-    }
-
-    ctx.save();
-
-    const seed = b.x * RNG_SEED_X_FACTOR + b.y * RNG_SEED_Y_FACTOR;
-    const rng = (n: number) => {
-      const s = Math.sin(seed + n * RNG_NOISE_SCALE) * RNG_NOISE_LARGE;
-      return s - Math.floor(s);
-    };
-
-    // Garbage bags
-    for (let i = 0; i < GARBAGE_BAG_COUNT; i++) {
-      const gx = cx + (rng(i) - DECORATION_SCATTER_FRACTION) * b.w * ts * GARBAGE_SCATTER_FRACTION;
-      const gy =
-        cy +
-        (rng(i + RNG_OFFSET_BAGS_10) - DECORATION_SCATTER_FRACTION) *
-          b.h *
-          ts *
-          GARBAGE_SCATTER_FRACTION;
-      const gw = ts * (GARBAGE_BAG_W_MIN + rng(i + RNG_OFFSET_BAGS_20) * GARBAGE_BAG_W_RANGE);
-      const gh = ts * (GARBAGE_BAG_H_MIN + rng(i + RNG_OFFSET_BAGS_30) * GARBAGE_BAG_H_RANGE);
-      ctx.fillStyle = rng(i + RNG_OFFSET_BAGS_5) > PAPER_COLOR_THRESHOLD ? '#1a3018' : '#0f1f0e';
-      ctx.beginPath();
-      ctx.ellipse(
-        gx,
-        gy,
-        gw * DECORATION_SCATTER_FRACTION,
-        gh * DECORATION_SCATTER_FRACTION,
-        rng(i + RNG_OFFSET_BAGS_40) * Math.PI,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.fillStyle = '#4a7a40';
-      ctx.beginPath();
-      ctx.arc(gx, gy - gh * GARBAGE_BAG_H_MIN, gw * GARBAGE_KNOT_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Cardboard boxes
-    for (let i = 0; i < CARDBOARD_BOX_COUNT; i++) {
-      const bx =
-        cx +
-        (rng(i + RNG_OFFSET_BOXES_50) - DECORATION_SCATTER_FRACTION) *
-          b.w *
-          ts *
-          BOX_SCATTER_FRACTION;
-      const by =
-        cy +
-        (rng(i + RNG_OFFSET_BOXES_60) - DECORATION_SCATTER_FRACTION) *
-          b.h *
-          ts *
-          BOX_SCATTER_FRACTION;
-      const bw = ts * (BOX_W_MIN + rng(i + RNG_OFFSET_BOXES_70) * BOX_W_RANGE);
-      const bh = ts * (BOX_H_MIN + rng(i + RNG_OFFSET_BOXES_80) * BOX_H_RANGE);
-      ctx.fillStyle = '#4a3010';
-      ctx.fillRect(
-        bx - bw * DECORATION_SCATTER_FRACTION,
-        by - bh * DECORATION_SCATTER_FRACTION,
-        bw,
-        bh,
-      );
-      ctx.strokeStyle = '#2a1a06';
-      ctx.lineWidth = DECORATION_SCATTER_FRACTION;
-      ctx.strokeRect(
-        bx - bw * DECORATION_SCATTER_FRACTION,
-        by - bh * DECORATION_SCATTER_FRACTION,
-        bw,
-        bh,
-      );
-      ctx.beginPath();
-      ctx.moveTo(bx, by - bh * DECORATION_SCATTER_FRACTION);
-      ctx.lineTo(bx, by + bh * DECORATION_SCATTER_FRACTION);
-      ctx.moveTo(bx - bw * DECORATION_SCATTER_FRACTION, by);
-      ctx.lineTo(bx + bw * DECORATION_SCATTER_FRACTION, by);
-      ctx.stroke();
-    }
-
-    // Crushed cans
-    for (let i = 0; i < CRUSHED_CAN_COUNT; i++) {
-      const canX =
-        cx +
-        (rng(i + RNG_OFFSET_CANS_90) - DECORATION_SCATTER_FRACTION) *
-          b.w *
-          ts *
-          CAN_SCATTER_FRACTION;
-      const canY =
-        cy +
-        (rng(i + RNG_OFFSET_CANS_100) - DECORATION_SCATTER_FRACTION) *
-          b.h *
-          ts *
-          CAN_SCATTER_FRACTION;
-      ctx.fillStyle = '#8a8888';
-      ctx.beginPath();
-      ctx.ellipse(
-        canX,
-        canY,
-        ts * CAN_RX_FRACTION,
-        ts * CAN_RY_FRACTION,
-        rng(i + RNG_OFFSET_CANS_110) * Math.PI,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
-
-    // Puke stains
-    for (let i = 0; i < PUKE_STAIN_COUNT; i++) {
-      const px =
-        cx +
-        (rng(i + RNG_OFFSET_PUKE_120) - DECORATION_SCATTER_FRACTION) *
-          b.w *
-          ts *
-          PUKE_SCATTER_FRACTION;
-      const py =
-        cy +
-        (rng(i + RNG_OFFSET_PUKE_130) - DECORATION_SCATTER_FRACTION) *
-          b.h *
-          ts *
-          PUKE_SCATTER_FRACTION;
-      ctx.globalAlpha = PUKE_STAIN_ALPHA;
-      ctx.fillStyle = '#8fbc14';
-      ctx.beginPath();
-      ctx.ellipse(
-        px,
-        py,
-        ts * (PUKE_RX_MIN + rng(i + RNG_OFFSET_PUKE_140) * PUKE_RX_RANGE),
-        ts * (PUKE_RY_MIN + rng(i + RNG_OFFSET_PUKE_150) * PUKE_RY_RANGE),
-        rng(i + RNG_OFFSET_PUKE_160) * Math.PI,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    // Paper scraps
-    for (let i = 0; i < PAPER_SCRAP_COUNT; i++) {
-      const px =
-        cx +
-        (rng(i + RNG_OFFSET_PAPER_170) - DECORATION_SCATTER_FRACTION) *
-          b.w *
-          ts *
-          PAPER_SCATTER_FRACTION;
-      const py =
-        cy +
-        (rng(i + RNG_OFFSET_PAPER_180) - DECORATION_SCATTER_FRACTION) *
-          b.h *
-          ts *
-          PAPER_SCATTER_FRACTION;
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(rng(i + RNG_OFFSET_PAPER_190) * Math.PI);
-      ctx.fillStyle = rng(i + RNG_OFFSET_PAPER_200) > PAPER_COLOR_THRESHOLD ? '#c8c0a8' : '#d8d0b8';
-      ctx.fillRect(
-        -ts * PAPER_HALF_W,
-        -ts * PAPER_HALF_H,
-        ts * PAPER_HALF_W * 2,
-        ts * PAPER_HALF_H * 2,
-      );
-      ctx.restore();
-    }
-
-    ctx.restore();
   }
 
   /**

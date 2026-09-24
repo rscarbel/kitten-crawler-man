@@ -143,6 +143,13 @@ export class KrakarenTentacle extends Mob {
   private strikePointY = 0;
   private facingLocked = false;
 
+  /**
+   * Set by the room when it brought this tentacle up through one of its drain
+   * grates. The grate's own burst is then the telegraph, drawn by the room over
+   * the grate, and the cracked-floor ring here would be a second, wrong one.
+   */
+  emergesThroughDrain = false;
+
   /** Raised the frame the telegraph ends and the emerge row itself begins. */
   emergeSoundPending = false;
   /** Raised on the strike's damage frame, whether or not it connects. */
@@ -177,6 +184,12 @@ export class KrakarenTentacle extends Mob {
 
   override get cullMarginTiles(): number {
     return KRAKAREN_TENTACLE_CULL_MARGIN_TILES;
+  }
+
+  /** 0–1 through the underground telegraph, or null once it has broken the surface. */
+  get emergeTelegraphProgress(): number | null {
+    if (!this.isUnderground) return null;
+    return 1 - this.telegraphTimer / TENTACLE_EMERGE_TELEGRAPH_FRAMES;
   }
 
   /** True while it is still underground and only the floor telegraph is showing. */
@@ -233,6 +246,7 @@ export class KrakarenTentacle extends Mob {
     this.ttl = GUARD_TENTACLE_TTL_FRAMES;
     this.emergeSoundPending = false;
     this.strikeSoundPending = false;
+    this.emergesThroughDrain = false;
   }
 
   override tickTimers(): void {
@@ -396,7 +410,7 @@ export class KrakarenTentacle extends Mob {
     const sy = this.y - camY;
 
     if (this.isUnderground) {
-      this.drawEmergeTelegraph(ctx, sx, sy, tileSize);
+      if (!this.emergesThroughDrain) this.drawEmergeTelegraph(ctx, sx, sy, tileSize);
       return;
     }
 

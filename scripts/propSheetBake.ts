@@ -48,12 +48,11 @@ const CHANNELS_PER_PIXEL = 4;
  * its contact shadow pools against that line because there is nowhere below it
  * to pool into, and every one of its frames would otherwise be reported forever.
  *
- * It is declared per *family*, not per sheet, which is a real limit: one grounded
- * prop turns that edge off for every frame of every sheet beside it. That is the
- * right granularity today, because a family shares one frame envelope and one
- * anchor convention — a club counter and a club stool stand on the same line. A
- * family whose members stopped sharing that would need the declaration to move
- * onto the plan.
+ * It is declared per *family*, because a family normally shares one frame
+ * envelope and one anchor convention — a club counter and a club stool stand on
+ * the same line. A sheet that does not share its family's envelope, such as a
+ * floor material that fills its whole tile, declares its own on its plan, and
+ * that replaces the family's for its frames alone.
  */
 export function clippedFrames(
   plan: PropSheetPlan,
@@ -77,7 +76,7 @@ export function clippedFrames(
         );
       };
       const inked = (edge: FrameEdge, alpha: number): boolean =>
-        !groundedEdges.has(edge) && alpha > FRAME_EDGE_ALPHA_TOLERANCE;
+        !(plan.groundedEdges ?? groundedEdges).has(edge) && alpha > FRAME_EDGE_ALPHA_TOLERANCE;
       for (let x = left; x <= right; x++) {
         if (inked('top', alphaAt(x, top))) return report('top');
         if (inked('bottom', alphaAt(x, bottom))) return report('bottom');

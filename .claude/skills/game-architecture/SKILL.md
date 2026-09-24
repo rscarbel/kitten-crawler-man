@@ -38,6 +38,19 @@ See the `add-system` skill for the recipe.
 
 Kit fields stay concrete types: `update` signatures are not uniform, so a `GameSystem[]` loop could only be reached through casts. `npm run verify:kits` gates the spine.
 
+### Boss-room dressing
+
+Each boss room's props, slow ground, hazards and interactables belong to a dressing in `src/systems/bossRooms/`, separate from the boss and from the fight owner (`BossRoomSystem`, `SpiderQuestSystem`, `ArenaSystem`): `HoarderRoomSystem`, `JuicerRoomSystem` (in `src/systems/`), `KrakarenRoomSystem`, `SpiderLabDressing` (owned by `SpiderQuestSystem.labDressing`) and `ColosseumDressingSystem`.
+
+- **Contract** — `BossRoomDressing.ts`: `update`, `renderGround`, `renderEntities`, `renderAbove`, `resetForCheckpoint`, `tryInteract`, the `BossFightHooks` (`onSeal`, `onBossDefeated`, `onFightAborted`), `GroundHazardSource.getHazardEscapeVector`, and `CheckpointedDressing` (`captureCheckpoint`/`restoreCheckpoint`, typed per room). Extend `InertBossRoomDressing` and override only the hooks the room uses.
+- **Aggregator** — `BossRoomDressings` holds all five as named fields (not a list, so each checkpoint keeps its type). `buildGauntletRoomDressings` finds gauntlet rooms by boss type, never by index into `gameMap.bossRooms`; `buildColosseumDressing` takes the first arena. It is `BossRoomSystem.fightListener` and one hazard source for companions and mob tactics.
+- **Death path** — the scene calls `resetForCheckpoint` then `restoreCheckpoint` (from `WorldCheckpoint.bossRoomDressing`); the restore has the last word. A death is never an `onFightAborted`, which means only "fight ended, party still playing, boss healed".
+- **Idempotent defeat** — `replayDefeats` re-sends `onBossDefeated` after every build and load for bosses already dead, so the hook must tolerate repeats.
+- **Render slots** (`RenderPipeline`) — `renderGround` right after `bossRoom.renderObjects`; `renderEntities` merged into the Y-sorted pass as prop entries; `renderAbove` in the effects pass, over every body.
+- **Ground and sight** — slow ground is a tile type in `src/map/tileSpeed.ts`, applied by `footingSpeedFactor` in `GameLoopPhases.applyMovement`. Low props are in `SIGHT_TRANSPARENT_TILE_TYPES` (`walkability.ts`): `GameMap.hasLineOfSight` sees over them, so steering straight at a point must ask `GameMap.hasWalkableLine` instead. Room hazards that kill carry their own `DamageSource` (`hoarderAvalanche`, `krakarenLiveWire`, `krakarenTankBurst`).
+- **Layout** — `bossRoomLayout.ts`: doorway-relative templates (`rotateTemplate`, `stampProps`) and the keep-clear sets `approachLaneTiles` / `spawnClearTiles`.
+- **Gates** — `npm run gates:boss-rooms` (`scripts/gates-boss-rooms.ts`, per-room modules in `scripts/bossRooms/`, shared `harness.ts`) checks the tile contract, sheets, and every seed's approach/spawn/reachability, then each room's own gates; `--room=<name>` narrows it and `--fault=<name>` must turn it red. `npm run render:boss-rooms` bakes review images.
+
 ### Cross-cutting getters
 
 Two seams cut across the quest systems instead of living in one owner, because

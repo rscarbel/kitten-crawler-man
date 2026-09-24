@@ -49,7 +49,27 @@ const SKIRT_WAIST_RISE = 0.02;
 export const TORSO_SHOULDER_RISE = 0.025; // how far the shoulder line lifts at center
 
 /** Top styles whose sleeves cover the arms in the shirt color. */
-const SLEEVED_TOPS: ReadonlySet<string> = new Set(['longsleeve', 'jacket', 'hoodie']);
+const SLEEVED_TOPS: ReadonlySet<string> = new Set(['longsleeve', 'jacket', 'hoodie', 'labcoat']);
+/** Tops whose sleeves run all the way to the wrist. */
+const FULL_SLEEVED_TOPS: ReadonlySet<string> = new Set(['longsleeve', 'labcoat']);
+
+/** A lab coat's tails: how far below the hips they hang, as a share of hip-to-knee, and how they flare. */
+const COAT_TAIL_KNEE_SHARE = 0.85;
+const COAT_TAIL_FLARE = 1.35;
+const COAT_TAIL_WAIST_RISE = 0.01;
+/** In profile the tails hang a little behind the legs, which swing through under them. */
+const COAT_TAIL_PROFILE_TRAIL = 0.035;
+const COAT_SEAM_WIDTH = 0.01;
+const COAT_SEAM_DARKEN = 0.25;
+const COAT_LAPEL_DROP = 0.14;
+const COAT_LAPEL_SPREAD = 0.045;
+const COAT_POCKET_W = 0.045;
+const COAT_POCKET_H = 0.035;
+const COAT_POCKET_X = 0.05;
+const COAT_POCKET_Y = 0.07;
+const COAT_PEN_COLORS = ['#2f5fb3', '#c0392b'] as const;
+const COAT_PEN_W = 0.008;
+const COAT_PEN_H = 0.02;
 
 // ── Head, hair and hat silhouette ────────────────────────────────────────────
 //
@@ -244,7 +264,7 @@ function drawArm(dc: DrawContext, arm: Limb): void {
 
   strokeSegment(ctx, arm.root, arm.mid, wUpper, sleeved ? sleeveColor : app.face.skin);
   // Long sleeves reach the wrist; jackets/hoodies stop a touch short, tshirts show bare arm.
-  const forearmColor = app.outfit.top === 'longsleeve' ? sleeveColor : app.face.skin;
+  const forearmColor = FULL_SLEEVED_TOPS.has(app.outfit.top) ? sleeveColor : app.face.skin;
   strokeSegment(ctx, arm.mid, arm.end, wLower, forearmColor);
 
   ctx.fillStyle = app.face.skin;
@@ -286,7 +306,9 @@ function drawTorso(dc: DrawContext, skel: Skeleton): void {
 
   // Front detailing: vests/jackets/hoodies get a center seam; others a collar dab.
   const midX = (shoulderCenter.x + hipCenter.x) / 2;
-  if (outfit.top === 'jacket' || outfit.top === 'hoodie' || outfit.top === 'vest') {
+  if (outfit.top === 'labcoat') {
+    drawCoatFront(dc, skel);
+  } else if (outfit.top === 'jacket' || outfit.top === 'hoodie' || outfit.top === 'vest') {
     strokeSegment(
       ctx,
       { x: shoulderCenter.x, y: shoulderCenter.y },
@@ -309,6 +331,68 @@ function drawTorso(dc: DrawContext, skel: Skeleton): void {
     ctx.closePath();
     ctx.fill();
   }
+}
+
+/** The lab coat's front: open lapels over the shirt, a seam, and a breast pocket of pens. */
+function drawCoatFront(dc: DrawContext, skel: Skeleton): void {
+  const { ctx, app, s } = dc;
+  const { shoulderCenter, hipCenter } = skel;
+  const seam = shade(app.outfit.topColor, COAT_SEAM_DARKEN);
+  strokeSegment(ctx, shoulderCenter, hipCenter, s * COAT_SEAM_WIDTH, seam);
+  ctx.fillStyle = app.outfit.topAccent;
+  ctx.beginPath();
+  ctx.moveTo(shoulderCenter.x - s * COAT_LAPEL_SPREAD, shoulderCenter.y);
+  ctx.lineTo(shoulderCenter.x + s * COAT_LAPEL_SPREAD, shoulderCenter.y);
+  ctx.lineTo(shoulderCenter.x, shoulderCenter.y + s * COAT_LAPEL_DROP);
+  ctx.closePath();
+  ctx.fill();
+  if (dc.facing !== 'down') return;
+  const pocketX = shoulderCenter.x + s * COAT_POCKET_X;
+  const pocketY = shoulderCenter.y + s * COAT_POCKET_Y;
+  COAT_PEN_COLORS.forEach((color, i) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(
+      pocketX + i * s * COAT_PEN_W * 2,
+      pocketY - s * COAT_PEN_H,
+      s * COAT_PEN_W,
+      s * COAT_PEN_H,
+    );
+  });
+  ctx.strokeStyle = seam;
+  ctx.lineWidth = s * COAT_SEAM_WIDTH;
+  ctx.strokeRect(pocketX - s * COAT_PEN_W, pocketY, s * COAT_POCKET_W, s * COAT_POCKET_H);
+}
+
+/**
+ * A lab coat's tails, hung from the hips to just above the knees. Drawn over
+ * both legs, since the coat is outside the trousers, and under the near arm.
+ */
+function drawCoatTails(dc: DrawContext, skel: Skeleton): void {
+  const { ctx, app, s } = dc;
+  const { hipCenter, hipHalf, nearLeg, farLeg } = skel;
+  const kneeY = (nearLeg.mid.y + farLeg.mid.y) / 2;
+  const hemY = hipCenter.y + (kneeY - hipCenter.y) * COAT_TAIL_KNEE_SHARE;
+  const topHalf = Math.max(hipHalf * TORSO_HIP_DRAW_FACTOR, s * TORSO_MIN_HIP_HALF);
+  const hemHalf = topHalf * COAT_TAIL_FLARE;
+  const trail = dc.facing === 'right' ? -s * COAT_TAIL_PROFILE_TRAIL : 0;
+  const waistY = hipCenter.y - s * COAT_TAIL_WAIST_RISE;
+  ctx.fillStyle = app.outfit.topColor;
+  ctx.beginPath();
+  ctx.moveTo(hipCenter.x - topHalf, waistY);
+  ctx.lineTo(hipCenter.x + topHalf, waistY);
+  ctx.lineTo(hipCenter.x + hemHalf + trail, hemY);
+  ctx.lineTo(hipCenter.x - hemHalf + trail, hemY);
+  ctx.closePath();
+  ctx.fill();
+  if (dc.facing === 'right') return;
+  // The opening down the front, or the vent up the back.
+  strokeSegment(
+    ctx,
+    { x: hipCenter.x, y: waistY },
+    { x: hipCenter.x, y: hemY },
+    s * COAT_SEAM_WIDTH,
+    shade(app.outfit.topColor, COAT_SEAM_DARKEN),
+  );
 }
 
 function drawNeck(dc: DrawContext, skel: Skeleton): void {
@@ -815,6 +899,7 @@ export function drawPerson(
   drawNeck(dc, skel);
   drawTorso(dc, skel);
   drawLeg(dc, skel.nearLeg);
+  if (appearance.outfit.top === 'labcoat') drawCoatTails(dc, skel);
   drawArm(dc, skel.nearArm);
   drawHead(dc, skel);
 

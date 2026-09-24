@@ -5,6 +5,8 @@
  * Subscribes to EventBus events instead of being manually orchestrated.
  */
 
+import type { BossFightHooks } from './bossRooms/BossRoomDressing';
+import { clampIntoDrum } from './bossRooms/colosseumSlide';
 import { displayHp } from '../core/crawlerFormulas';
 import { TILE_SIZE } from '../core/constants';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
@@ -39,7 +41,7 @@ const TUSKLING_SPAWN_COUNT = 8;
  * boss that fills a fifth of the arena, not to bury the crawler — an uncapped
  * drip over a long fight ends as a wall of pigs no amount of dodging survives.
  */
-const SHED_MAX_ALIVE = 4;
+export const SHED_MAX_ALIVE = 4;
 /** Frames a shed Tuskling spends tumbling before it can act. */
 const SHED_DAZE_FRAMES = 40;
 /** Tiles from the ball a shed Tuskling is thrown clear. */
@@ -124,6 +126,42 @@ function bossLabel(bos: BallOfSwine): string {
   return 'BALL OF SWINE';
 }
 
+/**
+ * Tusklings the ball has let loose that are still alive — shed from its body
+ * or freed from a cage, one pool with one cap.
+ *
+ * Counted off the live mob list through a flag on the Tuskling itself, rather
+ * than off a list held here. A checkpoint restore deletes every mob spawned
+ * after the safe room, and a list would go on holding those references — each
+ * one permanently occupying a slot in a cap it can never free, because a mob
+ * removed from the scene never stops reporting itself alive.
+ */
+export function liveShedTusklings(mobs: readonly Mob[]): number {
+  return mobs.filter((mob) => mob instanceof Tuskling && mob.shedFromBall && mob.isAlive).length;
+}
+
+/**
+ * A Tuskling the ball's fight lets loose mid-fight at `tile`, dazed for
+ * `dazeFrames`, or null when the spawner will not make one. The caller adds it.
+ */
+export function createBallTuskling(
+  bos: BallOfSwine,
+  tile: { x: number; y: number },
+  gameMap: GameMap,
+  dazeFrames: number,
+): Tuskling | null {
+  const mob = createMob('tuskling', tile.x, tile.y, gameMap);
+  if (!(mob instanceof Tuskling)) return null;
+  // Levelled to its parent: a base-stats Tuskling next to a level-15 boss is a
+  // distraction the crawler can ignore, which is the opposite of the point.
+  mob.applyMobLevel(bos.mobLevel, bos.levelledCurve);
+  applySpawnDifficulty(mob);
+  mob.shedFromBall = true;
+  mob.isBossAdd = true;
+  mob.dazeTimer = dazeFrames;
+  return mob;
+}
+
 export class ArenaSystem implements GameSystem {
   private arenaLocked = false;
   private arenaPhase2Active = false;
@@ -138,6 +176,12 @@ export class ArenaSystem implements GameSystem {
    */
   private humanIsInsider = false;
   private catIsInsider = false;
+
+  /**
+   * The colosseum's dressing, told when the ring seals and when it is won. A
+   * death is not an abort: the scene rewinds the dressing with its checkpoint.
+   */
+  dressing: BossFightHooks | null = null;
 
   constructor(
     private readonly gameMap: GameMap,
@@ -266,6 +310,7 @@ export class ArenaSystem implements GameSystem {
     // Ball of Swine defeated → spawn 8 dazed Tusklings (phase 2)
     this.bus.on('bossDefeated', (e) => {
       if (e.bossType !== 'ball_of_swine' || this.arenaPhase2Active) return;
+      this.dressing?.onBossDefeated();
 
       // hp hits 0 the instant the killing blow lands, but this event — and the
       // Tusklings it spawns below — waits out the whole burst animation first.
@@ -340,6 +385,7 @@ export class ArenaSystem implements GameSystem {
         this.humanIsInsider = humanInside;
         this.catIsInsider = catInside;
         this.bossRoom.newlyLockedBossType = 'ball_of_swine';
+        this.dressing?.onSeal();
         // Sealing the door schedules the whole fight, Tusklings included: the
         // ball sheds them once it is hurt and releases eight more when it comes
         // apart, and no other creature is coming through that door.
@@ -368,6 +414,10 @@ export class ArenaSystem implements GameSystem {
     }
 
     this.confineSwineHealers(mobs, ctx.roster.grid);
+    // Both crawlers, whether or not a fight is on: the drum is round either way,
+    // and the clamp only ever holds a body standing on the drum's own floor.
+    clampIntoDrum(human, arena.centre, this.gameMap);
+    clampIntoDrum(cat, arena.centre, this.gameMap);
 
     // The ball's hard-mode healer is part of the fight it was spawned for, so
     // the stairwell waits on it as it waits on the last Tuskling.
@@ -454,14 +504,7 @@ export class ArenaSystem implements GameSystem {
     const requested = bos.pendingSheds;
     bos.pendingSheds = 0;
 
-    // Counted off the live mob list through a flag on the Tuskling itself, rather
-    // than off a list held here. A checkpoint restore deletes every mob spawned
-    // after the safe room, and a list would go on holding those references — each
-    // one permanently occupying a slot in a cap it can never free, because a mob
-    // removed from the scene never stops reporting itself alive.
-    const alive = this.getMobs().filter(
-      (mob) => mob instanceof Tuskling && mob.shedFromBall && mob.isAlive,
-    ).length;
+    const alive = liveShedTusklings(this.getMobs());
     const spawning = Math.min(requested, SHED_MAX_ALIVE - alive);
 
     for (let i = 0; i < spawning; i++) {
@@ -470,16 +513,8 @@ export class ArenaSystem implements GameSystem {
       const behind = Math.atan2(-bos.facingY, -bos.facingX) + (i - spawning / 2) * SHED_FAN_RADIANS;
       const tile = this.shedTile(behind, bos);
       if (tile === null) continue;
-      const mob = createMob('tuskling', tile.x, tile.y, this.gameMap);
-      if (!(mob instanceof Tuskling)) continue;
-      // Levelled to its parent: a base-stats Tuskling next to a level-15 boss is a
-      // distraction the crawler can ignore, which is the opposite of the point.
-      mob.applyMobLevel(bos.mobLevel, bos.levelledCurve);
-      applySpawnDifficulty(mob);
-      mob.shedFromBall = true;
-      mob.isBossAdd = true;
-      mob.dazeTimer = SHED_DAZE_FRAMES;
-      this.addMob(mob);
+      const mob = createBallTuskling(bos, tile, this.gameMap, SHED_DAZE_FRAMES);
+      if (mob !== null) this.addMob(mob);
     }
   }
 

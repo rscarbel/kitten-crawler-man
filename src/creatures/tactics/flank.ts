@@ -19,7 +19,7 @@ import type { Mob } from '../Mob';
 import { collectPackmates } from '../packAlert';
 import {
   distanceBetween,
-  hasClearLine,
+  hasWalkableLine,
   isOpenWalk,
   type TacticalFrame,
   type TacticalMove,
@@ -146,7 +146,7 @@ export function flankStagingPoint(frame: TacticalFrame, slotAngle: number): Tact
   const direct = distanceBetween(self, target);
   const dogLeg = distanceBetween(self, staging) + distanceBetween(staging, target);
   if (dogLeg > direct * FLANK_MAX_DETOUR_RATIO) return null;
-  if (!hasClearLine(map, tileSize, staging, target)) return null;
+  if (!hasWalkableLine(map, tileSize, staging, target)) return null;
   if (!isOpenWalk(map, tileSize, self, staging)) return null;
   return staging;
 }

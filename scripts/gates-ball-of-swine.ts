@@ -33,7 +33,7 @@ import {
   type RowSpec,
 } from '../src/sprites/art/ballOfSwineFigure.js';
 import { BALL_RADIUS, BODY_REACH, LOBE_BOX_DRIFT } from '../src/sprites/art/ballOfSwineArt.js';
-import { ARENA_PLATE_LIGHT } from '../src/map/tiles/specialFloorTiles.js';
+import { ARENA_SAND_TONE } from '../src/map/tiles/bossRooms/colosseumTiles.js';
 
 const INK_ALPHA_THRESHOLD = 24;
 const OPAQUE_ALPHA_THRESHOLD = 200;
@@ -1012,7 +1012,7 @@ const MIN_FLOOR_CONTRAST = 2.2;
  * rewritten in the same change — leaving the gate demanding contrast against a
  * colour the game had stopped drawing.
  */
-const ARENA_FLOOR_LIGHTNESS = hexLightness(ARENA_PLATE_LIGHT);
+const ARENA_FLOOR_LIGHTNESS = hexLightness(ARENA_SAND_TONE);
 /**
  * Least bone-bright pixels the roll row must hold.
  *

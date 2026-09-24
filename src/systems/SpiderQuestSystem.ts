@@ -7,6 +7,10 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { SpiderLabDressing, type SpiderLabQuestView } from './bossRooms/SpiderLabDressing';
+import type { DressingRenderable } from './bossRooms/BossRoomDressing';
+import { EGG_OPENING_FRAMES } from '../sprites/art/spiderLabArt';
+import { LabScientistFigure } from './bossRooms/labScientistFigure';
 import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
 import type { TrackerEntry } from './questTracker';
 import { clamp, pointInRect } from '../utils';
@@ -24,14 +28,13 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { EventBus } from '../core/EventBus';
 import { SmallSpider } from '../creatures/SmallSpider';
 import { prewarmSmallSpider, prewarmSmallSpiderCombat } from '../sprites/spiderSprite';
-import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
+import { GrotesqueSpider, MAX_LIVE_EGGS_AND_HATCHLINGS } from '../creatures/GrotesqueSpider';
 import type { SpiderBroodContext, SpiderEggTile } from '../creatures/GrotesqueSpider';
 import { EGG_HATCHLINGS_PER_EGG, SpiderEgg } from '../creatures/SpiderEgg';
 import { SpiderHatchling } from '../creatures/SpiderHatchling';
 import { prewarmSpiderEgg } from '../sprites/spiderEggSprite';
 import { isInsideSlamCone, type SlamImpact } from '../creatures/grotesqueSpiderTimeline';
 import { SpiderImpactFeedback } from './SpiderImpactFeedback';
-import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { lifeMachineSacSplitFrame } from '../sprites/lifeMachineTiming';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { KeyboardHeroSystem, type KeyboardHeroCheckpoint } from './KeyboardHeroSystem';
@@ -125,8 +128,6 @@ const CS_SPIT_MIN_TTL = 30;
 
 // Scientist wander timing
 const SCIENTIST_WANDER_FRAMES = 180;
-const SCIENTIST_WALK_ANIM_FRAMES = 8;
-const SCIENTIST_WALK_FRAME_COUNT = 4;
 const SCIENTIST_WANDER_SPREAD_TILES = 3;
 /**
  * Half-width of the scientist's footprint, in tiles. His sprite is drawn
@@ -150,10 +151,6 @@ const MS_PER_SECOND = 1000;
 
 // Additional rendering constants
 const TILE_CENTER_OFFSET_PX = 0.5; // for tile/sprite centering
-const SCIENTIST_DIALOG_COL = 3;
-const SCIENTIST_WALK_COL_1 = 1;
-const SCIENTIST_WALK_COL_2 = 2;
-const SCIENTIST_WALK_COL_IDLE = 0;
 const SCIENTIST_EXCLAMATION_OFFSET_Y = 8;
 const EXCLAMATION_MARK_BOB_AMPLITUDE = 3;
 const EXCLAMATION_MARK_BOB_FREQUENCY = 350;
@@ -168,18 +165,14 @@ const SPEECH_BUBBLE_TAIL_OFFSET = 5;
 const SPEECH_BUBBLE_TAIL_DROP = 6;
 const SPEECH_BUBBLE_CORNER_RADIUS = 4;
 const SPEECH_BUBBLE_STROKE_WIDTH = 1.5;
-const SCIENTIST_GORE_HEAD_OFFSET_X = 0.3;
-const SCIENTIST_GORE_HEAD_OFFSET_Y = 0.5;
-const SCIENTIST_GORE_TORSO_OFFSET_X = 0.1;
-const SCIENTIST_GORE_TORSO_OFFSET_Y = 0.1;
-const COMPUTER_TABLE_DRAW_HEIGHT = 2.0;
+/** How far above the terminal's anchor tile its arrow floats, in tiles: clear of the monitor. */
+const TERMINAL_ARROW_RISE_TILES = 1;
 const ARROW_ANIMATION_FREQUENCY = 3.5;
 const ARROW_SCALE_Y = 0.25;
 const ARROW_SCALE_X = 0.4;
 const ARROW_SCALE_Y_2 = 0.3;
 const ARROW_SCALE_X_2 = 0.2;
 const ARROW_SCALE_X_3 = 0.55;
-const SPIDER_EGG_DRAW_WIDTH = 1.5;
 const LOCKED_ROOM_BORDER_STROKE_WIDTH = 3;
 const LOCKED_ROOM_CORNER_STROKE_WIDTH = 2;
 const LOCKED_ROOM_CORNER_OFFSET = 4;
@@ -217,7 +210,6 @@ const LIGHTANIM_DELAY = 8;
 const LIGHTANIM_FRAME_COUNT = 3;
 /** Ticks per frame for the states that loop rather than play out once. */
 const LIFE_MACHINE_LOOP_DELAY = 10;
-const SCIENTIST_DRAW_HEIGHT = 1.5;
 const SCIENTIST_WALK_DIST_THRESHOLD = 2;
 const SCIENTIST_WALK_SPEED = 0.6;
 const SCIENTIST_WANDER_ATTEMPTS = 8;
@@ -600,10 +592,7 @@ export class SpiderQuestSystem implements GameSystem {
   // Scientist NPC state
   private scientistX = 0;
   private scientistY = 0;
-  private scientistFacingX = 1;
-  private scientistWalkFrame = 0;
-  private scientistWalkTimer = 0;
-  private scientistIsWalking = false;
+  private readonly scientistFigure = new LabScientistFigure();
   private scientistWanderTimer = 0;
   private scientistTargetX = 0;
   private scientistTargetY = 0;
@@ -683,6 +672,9 @@ export class SpiderQuestSystem implements GameSystem {
   private keyboardHero: KeyboardHeroSystem;
   private _songClock: (() => number | null) | null = null;
 
+  /** The lab's furniture and webbing; null on a floor with no lab. */
+  readonly labDressing: SpiderLabDressing | null = null;
+
   // Callbacks
   private addMob: (mob: Mob) => void;
   private gameMap: GameMap;
@@ -696,6 +688,8 @@ export class SpiderQuestSystem implements GameSystem {
 
     if (gameMap.spiderLabRoom !== null) {
       this.roomData = gameMap.spiderLabRoom;
+      this.labDressing = new SpiderLabDressing(gameMap, this.roomData);
+      this.labDressing.attachQuest(this._labView(this.roomData));
       this.phase = 'scientist_waiting';
 
       // His position is the point he is drawn standing on — the draw anchors his
@@ -720,12 +714,10 @@ export class SpiderQuestSystem implements GameSystem {
         gameMap.blockTilePermanently(pt.x, pt.y);
       }
 
-      // Computer table occupies a 2×2 footprint
-      const ct = this.roomData.computerTile;
-      for (let dy = 0; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          gameMap.blockTilePermanently(ct.x + dx, ct.y + dy);
-        }
+      // A generated lab stamps the terminal's bench as bench tiles, which are
+      // solid already; a hand-built one may only list them.
+      for (const tile of this.roomData.computerTableTiles) {
+        if (gameMap.isWalkable(tile.x, tile.y)) gameMap.blockTilePermanently(tile.x, tile.y);
       }
     }
   }
@@ -977,31 +969,80 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   /**
-   * Draws the table only when the active player is south of it (player renders after in the
-   * entity pass, so the player will appear on top). When the player is north of the table,
-   * skip it here — renderTableForeground() draws it after the entity pass so the table
-   * correctly appears in front.
+   * The lab's floor-level pieces: the life machines the party is in front of
+   * and, once her spit has found him, what is left of the scientist. The
+   * furniture, the egg sac and the living scientist are Y-sorted by the lab's
+   * dressing; the prompts are drawn over everything by `renderLabDarkness`.
    */
   render(ctx2d: CanvasRenderingContext2D, camX: number, camY: number, active?: Player): void {
     if (this.phase === 'inactive') return;
     if (!this.roomData) return;
 
     this._renderLifeMachines(ctx2d, camX, camY, active, false);
-    // Y-sort: only draw the table here when the player is at or south of the table foot.
-    // If the player is north, renderTableForeground() handles it after the entity pass.
-    const tableFoot = this.roomData.computerTile.y * TILE_SIZE;
-    if (active === undefined || active.y > tableFoot) {
-      this._renderComputerTable(ctx2d, camX, camY);
-    }
-    this._renderSpiderEgg(ctx2d, camX, camY);
     this.impactFeedback.renderGround(ctx2d, camX, camY);
-
-    if (!this.scientistDead) {
-      this._renderScientist(ctx2d, camX, camY);
-    } else {
-      this._renderScientistGore(ctx2d, camX, camY);
+    if (this.scientistDead) {
+      this.scientistFigure.renderRemains(ctx2d, this.scientistX, this.scientistY, camX, camY);
     }
+  }
 
+  /**
+   * Everything drawn over the room's bodies: the dark her roars bring down
+   * with its ceiling banks, then — above the dark, because the dark must never
+   * hide a warning — her floor telegraphs, her puddles, her eggs and the
+   * brood's eye-shine, and last the lab's prompts and the terminal's arrow.
+   */
+  renderLabDarkness(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active?: Player,
+  ): void {
+    if (this.phase === 'inactive') return;
+    const lab = this.labDressing;
+    if (lab === null || this.roomData === null) return;
+    if (!lab.isInView(camX, camY)) {
+      this._renderLabPrompts(ctx, camX, camY, active);
+      return;
+    }
+    lab.renderDarkness(ctx, camX, camY);
+    lab.renderCeiling(ctx, camX, camY);
+    if (lab.isDark) {
+      this._renderLabWarnings(ctx, camX, camY);
+      lab.renderEyeShine(ctx, camX, camY, this._grotesqueSpider, this.hatchlings);
+    } else {
+      // Lit, her warnings were drawn under the bodies as floor paint; only where
+      // a ceiling bank hangs over them are they drawn back on top.
+      ctx.save();
+      ctx.beginPath();
+      for (const rect of lab.bankScreenRects(camX, camY)) ctx.rect(rect.x, rect.y, rect.w, rect.h);
+      ctx.clip();
+      this._renderLabWarnings(ctx, camX, camY);
+      ctx.restore();
+    }
+    this._renderLabPrompts(ctx, camX, camY, active);
+  }
+
+  /** Everything of hers that warns of danger on the floor: telegraphs, puddles and eggs. */
+  private _renderLabWarnings(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const spider = this._grotesqueSpider;
+    if (spider !== null) {
+      spider.renderSpitGroundTraps(ctx, camX, camY, TILE_SIZE);
+      spider.renderGroundTelegraphs(ctx, camX, camY);
+      spider.renderTelegraphOutlines(ctx, camX, camY);
+    }
+    for (const egg of this.spiderEggs) {
+      if (egg.isAlive) egg.render(ctx, camX, camY, TILE_SIZE);
+    }
+  }
+
+  private _renderLabPrompts(
+    ctx2d: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: Player | undefined,
+  ): void {
+    if (this.roomData === null) return;
+    if (this.phase === 'awaiting_hacking') this._renderTerminalArrow(ctx2d, camX, camY);
     if (this.phase === 'awaiting_hacking' && active !== undefined) {
       const compX = this.roomData.computerTile.x * TILE_SIZE - camX;
       const compY = this.roomData.computerTile.y * TILE_SIZE - camY;
@@ -1051,21 +1092,6 @@ export class SpiderQuestSystem implements GameSystem {
     if (this.phase === 'inactive') return;
     if (!this.roomData) return;
     this._renderLifeMachines(ctx, camX, camY, active, true);
-  }
-
-  /** Draws the computer table on top of the entity pass when the player is north of it. */
-  renderTableForeground(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    active?: Player,
-  ): void {
-    if (this.phase === 'inactive') return;
-    if (!this.roomData) return;
-    const tableFoot = this.roomData.computerTile.y * TILE_SIZE;
-    if (active !== undefined && active.y <= tableFoot) {
-      this._renderComputerTable(ctx, camX, camY);
-    }
   }
 
   renderUI(ctx: CanvasRenderingContext2D, camX = 0, camY = 0): void {
@@ -1282,6 +1308,7 @@ export class SpiderQuestSystem implements GameSystem {
     if (this.phase === 'complete') return;
     this.phase = 'complete';
     this._clearBrood();
+    this.labDressing?.onBossDefeated();
     this.completeOverlayDelay = QUEST_COMPLETE_OVERLAY_DELAY_FRAMES;
     this._playerLocked = false;
     this._roomLocked = false;
@@ -1417,6 +1444,7 @@ export class SpiderQuestSystem implements GameSystem {
       } else {
         this._fightAborted = false;
         this._roomLocked = true;
+        this.labDressing?.onSeal();
         this._takeBossMusic();
         this._entryWindowTimer = SPIDER_ENTRY_WINDOW_FRAMES;
         this._humanIsInsider = humanInRoom;
@@ -1443,6 +1471,7 @@ export class SpiderQuestSystem implements GameSystem {
       if (!catInRoom) this._catLastOutside = { x: cat.x, y: cat.y };
       if (humanInRoom || catInRoom) {
         this._roomLocked = true;
+        this.labDressing?.onSeal();
         this._takeBossMusic();
         this._entryWindowTimer = SPIDER_ENTRY_WINDOW_FRAMES;
         this._humanIsInsider = humanInRoom;
@@ -1532,6 +1561,7 @@ export class SpiderQuestSystem implements GameSystem {
     spider.clearAirborneAttacks();
     spider.resetAttackState();
     this._clearBrood();
+    this.labDressing?.onFightAborted();
   }
 
   // ── Brood ────────────────────────────────────────────────────────────────
@@ -1546,12 +1576,62 @@ export class SpiderQuestSystem implements GameSystem {
     return this.hatchlings;
   }
 
+  /** What the lab's dressing is shown of the quest: the egg sac, the brood, and the scientist. */
+  private _labView(room: SpiderLabRoomData): SpiderLabQuestView {
+    const scientist: DressingRenderable = {
+      x: 0,
+      y: 0,
+      render: (ctx, camX, camY) => this._renderScientist(ctx, camX, camY),
+    };
+    const people: DressingRenderable[] = [];
+    return {
+      eggSacLook: () => this._eggSacLook(),
+      liveBroodCount: () => this._liveBroodCount(),
+      broodCap: () => MAX_LIVE_EGGS_AND_HATCHLINGS,
+      spawnHatchling: (tileX, tileY) => {
+        const hatchling = new SpiderHatchling(tileX, tileY, TILE_SIZE, room.bounds);
+        this.addMob(hatchling);
+        this.hatchlings.push(hatchling);
+        this.eggHatchSoundPending = true;
+      },
+      hatchlingsAllowed: () => this.phase !== 'complete' && this.phase !== 'inactive',
+      people: () => {
+        people.length = 0;
+        if (this.scientistDead || this.phase === 'inactive') return people;
+        // Anchored so the pipeline sorts him by his feet, like any crawler.
+        scientist.x = this.scientistX - TILE_SIZE * CENTER_COLLISION_OFFSET;
+        scientist.y = this.scientistY - TILE_SIZE;
+        people.push(scientist);
+        return people;
+      },
+    };
+  }
+
+  /**
+   * The egg sac: whole until the rumble, tearing across the rumble's frames as
+   * whatever is inside wakes, then burst open for the rest of the floor.
+   */
+  private _eggSacLook(): { state: 'whole' | 'opening' | 'opened'; frame: number } {
+    if (this.spiderEggOpened) return { state: 'opened', frame: 0 };
+    const rumbling = this.phase === 'cutscene' && this.cutsceneTimer >= CS_RUMBLE_FRAME;
+    if (!rumbling) return { state: 'whole', frame: 0 };
+    const progress =
+      (this.cutsceneTimer - CS_RUMBLE_FRAME) / (CS_CAMERA_PAN_FRAME - CS_RUMBLE_FRAME);
+    const frame = Math.min(EGG_OPENING_FRAMES - 1, Math.floor(progress * EGG_OPENING_FRAMES));
+    return { state: 'opening', frame };
+  }
+
+  private _liveBroodCount(): number {
+    return (
+      this.spiderEggs.filter((egg) => egg.isAlive).length +
+      this.hatchlings.filter((hatchling) => hatchling.isAlive).length
+    );
+  }
+
   private _broodContextFor(room: SpiderLabRoomData): SpiderBroodContext {
     this.broodContext ??= {
       bounds: room.bounds,
-      liveBroodCount: () =>
-        this.spiderEggs.filter((egg) => egg.isAlive).length +
-        this.hatchlings.filter((hatchling) => hatchling.isAlive).length,
+      liveBroodCount: () => this._liveBroodCount(),
       eggTiles: () =>
         this.spiderEggs
           .filter((egg) => egg.isAlive)
@@ -1571,9 +1651,12 @@ export class SpiderQuestSystem implements GameSystem {
     spider.setBroodContext(this._fightAborted ? null : this._broodContextFor(room));
     const layRequests = spider.drainEggLayRequests();
     const slamImpacts = spider.drainSlamImpacts();
+    const webTears = spider.drainWebTears();
     if (this._fightAborted) return;
+    for (const tear of webTears) this.labDressing?.tearWeb(tear.x, tear.y, tear.radiusPx);
 
     this._warmBroodArtOnLayTell(spider);
+    this.labDressing?.observeFight(spider, slamImpacts, layRequests.length);
     for (const impact of slamImpacts) this._crushEggsUnder(impact);
     for (const tile of layRequests) this._spawnEgg(tile);
     this._hatchDueEggs(room);
@@ -1971,8 +2054,11 @@ export class SpiderQuestSystem implements GameSystem {
     if (!this.roomData) return;
 
     if (this.phase === 'scientist_dialog') {
-      this.scientistFacingX = active.x >= this.scientistX ? 1 : -1;
-      this.scientistIsWalking = false;
+      this.scientistFigure.faceToward(
+        active.x + TILE_SIZE * CENTER_COLLISION_OFFSET - this.scientistX,
+        active.y + TILE_SIZE * SOLE_COLLISION_OFFSET - this.scientistY,
+      );
+      this.scientistFigure.walk(0, 0);
       return;
     }
 
@@ -2013,22 +2099,14 @@ export class SpiderQuestSystem implements GameSystem {
       const nextX = this.scientistX + (dx / dist) * speed;
       const nextY = this.scientistY + (dy / dist) * speed;
       if (!this.scientistCanStandAt(nextX, nextY)) {
-        this.scientistIsWalking = false;
         this.scientistWanderTimer = 0;
         return;
       }
+      this.scientistFigure.walk(nextX - this.scientistX, nextY - this.scientistY);
       this.scientistX = nextX;
       this.scientistY = nextY;
-      this.scientistFacingX = dx >= 0 ? 1 : -1;
-      this.scientistIsWalking = true;
-
-      this.scientistWalkTimer++;
-      if (this.scientistWalkTimer >= SCIENTIST_WALK_ANIM_FRAMES) {
-        this.scientistWalkTimer = 0;
-        this.scientistWalkFrame = (this.scientistWalkFrame + 1) % SCIENTIST_WALK_FRAME_COUNT;
-      }
     } else {
-      this.scientistIsWalking = false;
+      this.scientistFigure.walk(0, 0);
     }
   }
 
@@ -2251,32 +2329,6 @@ export class SpiderQuestSystem implements GameSystem {
     this._cutsceneGore = this._cutsceneGore.filter((chunk) => chunk.life > 0);
   }
 
-  private _getSpriteDef(name: string) {
-    return getSpriteDefByKey(name);
-  }
-
-  private _drawSpriteFrame(
-    ctx: CanvasRenderingContext2D,
-    spriteName: string,
-    stateName: string,
-    sx: number,
-    sy: number,
-    drawW: number,
-    drawH: number,
-    colOffset?: number,
-  ): void {
-    const def = this._getSpriteDef(spriteName);
-    if (def === undefined) return;
-
-    const state = def.states.get(stateName);
-    if (state === undefined) return;
-
-    const col = colOffset ?? state.colOffset ?? 0;
-    const srcX = col * def.frameWidth;
-    const srcY = state.row * def.frameHeight;
-    ctx.drawImage(def.img, srcX, srcY, def.frameWidth, def.frameHeight, sx, sy, drawW, drawH);
-  }
-
   /** Frames in a state's row, or null if the figure declares no such row. */
   private _lifeMachineFrameCount(state: LifeMachineState): number | null {
     const frames = figureFrameCount(LIFE_MACHINE_FIGURE, LIFE_MACHINE_STATES[state].spriteState);
@@ -2355,57 +2407,12 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   private _renderScientist(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const def = this._getSpriteDef('scientist');
-    if (def === undefined) return;
+    this.scientistFigure.render(ctx, this.scientistX, this.scientistY, camX, camY);
+    const headTop = this.scientistFigure.headTop(this.scientistY, camY);
+    const centreX = this.scientistX - camX;
 
-    const drawH = TILE_SIZE * SCIENTIST_DRAW_HEIGHT;
-    const aspect = def.frameWidth / def.frameHeight;
-    const drawW = drawH * aspect;
-
-    const sx = this.scientistX - camX - drawW * TILE_CENTER_OFFSET_PX;
-    const sy = this.scientistY - camY - drawH;
-
-    let stateName: string;
-    let colOffset = 0;
-
-    if (this.phase === 'scientist_dialog') {
-      stateName = 'speaking';
-      colOffset = SCIENTIST_DIALOG_COL;
-    } else if (this.scientistIsWalking) {
-      // Cycle: walk0 → idle → walk1 → idle (frames 0,2 are walk; 1,3 are idle)
-      if (this.scientistWalkFrame === 0) {
-        stateName = 'walking';
-        colOffset = SCIENTIST_WALK_COL_1;
-      } else if (this.scientistWalkFrame === 2) {
-        stateName = 'walking';
-        colOffset = SCIENTIST_WALK_COL_2;
-      } else {
-        stateName = 'idle';
-        colOffset = SCIENTIST_WALK_COL_IDLE;
-      }
-    } else {
-      stateName = 'idle';
-      colOffset = SCIENTIST_WALK_COL_IDLE;
-    }
-
-    ctx.save();
-    if (this.scientistFacingX > 0) {
-      // Sprite naturally faces left; flip when moving right
-      ctx.translate(sx + drawW, sy);
-      ctx.scale(-1, 1);
-      this._drawSpriteFrame(ctx, 'scientist', stateName, 0, 0, drawW, drawH, colOffset);
-    } else {
-      this._drawSpriteFrame(ctx, 'scientist', stateName, sx, sy, drawW, drawH, colOffset);
-    }
-    ctx.restore();
-
-    // Exclamation marker when scientist_waiting
     if (this.phase === 'scientist_waiting') {
-      this._renderExclamationMark(
-        ctx,
-        sx + drawW * TILE_CENTER_OFFSET_PX,
-        sy - SCIENTIST_EXCLAMATION_OFFSET_Y,
-      );
+      this._renderExclamationMark(ctx, centreX, headTop - SCIENTIST_EXCLAMATION_OFFSET_Y);
     }
 
     // Scientist speech bubble during cutscene frames 102-162
@@ -2415,7 +2422,14 @@ export class SpiderQuestSystem implements GameSystem {
       this.cutsceneTimer < CS_DIALOG_FADE_FRAME
     ) {
       const alpha = this.scientistDialogFadeAlpha;
-      this._renderSpeechBubble(ctx, sx, sy, drawW, 'Oh no! Our creation is escaping!', alpha);
+      this._renderSpeechBubble(
+        ctx,
+        centreX - TILE_SIZE / 2,
+        headTop,
+        TILE_SIZE,
+        'Oh no! Our creation is escaping!',
+        alpha,
+      );
     }
   }
 
@@ -2477,123 +2491,38 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.restore();
   }
 
-  private _renderScientistGore(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const def = this._getSpriteDef('scientist');
-    if (def === undefined) return;
-
-    const tileH = TILE_SIZE;
-    const aspect = def.frameWidth / def.frameHeight;
-    const tileW = tileH * aspect;
-
-    const bx = this.scientistX - camX;
-    const by = this.scientistY - camY;
-
-    // Head (gore_severed_head: row 1, colOffset 0)
-    const headState = def.states.get('gore_severed_head');
-    if (headState !== undefined) {
-      const srcX = 0;
-      const srcY = headState.row * def.frameHeight;
-      ctx.drawImage(
-        def.img,
-        srcX,
-        srcY,
-        def.frameWidth,
-        def.frameHeight,
-        bx - tileW * SCIENTIST_GORE_HEAD_OFFSET_X,
-        by - tileH * SCIENTIST_GORE_HEAD_OFFSET_Y,
-        tileW,
-        tileH,
-      );
-    }
-
-    // Torso (gore_severed_torso: row 1, colOffset 1)
-    const torsoState = def.states.get('gore_severed_torso');
-    if (torsoState !== undefined) {
-      const srcX = (torsoState.colOffset ?? 0) * def.frameWidth;
-      const srcY = torsoState.row * def.frameHeight;
-      ctx.drawImage(
-        def.img,
-        srcX,
-        srcY,
-        def.frameWidth,
-        def.frameHeight,
-        bx + tileW * SCIENTIST_GORE_TORSO_OFFSET_X,
-        by + tileH * SCIENTIST_GORE_TORSO_OFFSET_Y,
-        tileW,
-        tileH,
-      );
-    }
-  }
-
-  private _renderComputerTable(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  /** The bouncing arrow over the terminal while the hack is waiting to be run. */
+  private _renderTerminalArrow(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!this.roomData) return;
-    const worldX = this.roomData.computerTile.x * TILE_SIZE;
-    const worldY = this.roomData.computerTile.y * TILE_SIZE;
+    const t = performance.now() / MS_PER_SECOND;
+    const bounce = Math.abs(Math.sin(t * ARROW_ANIMATION_FREQUENCY)) * TILE_SIZE * ARROW_SCALE_Y;
+    const ax = this.roomData.computerTile.x * TILE_SIZE - camX + TILE_SIZE * TILE_CENTER_OFFSET_PX;
+    const ay =
+      this.roomData.computerTile.y * TILE_SIZE -
+      camY -
+      TILE_SIZE * TERMINAL_ARROW_RISE_TILES -
+      TILE_SIZE * ARROW_SCALE_Y_2 -
+      bounce;
+    const aw = TILE_SIZE * ARROW_SCALE_X;
+    const ah = TILE_SIZE * ARROW_SCALE_Y_2;
 
-    const drawDef = this._getSpriteDef('lab_tables');
-    const drawH = TILE_SIZE * COMPUTER_TABLE_DRAW_HEIGHT;
-    const aspect = drawDef !== undefined ? drawDef.frameWidth / drawDef.frameHeight : 1;
-    const drawW = drawH * aspect;
-
-    const sx = worldX - camX - (drawW - TILE_SIZE) * TILE_CENTER_OFFSET_PX;
-    const sy = worldY - camY - (drawH - TILE_SIZE);
-
-    this._drawSpriteFrame(
-      ctx,
-      'lab_tables',
-      'lab_table_with_computer_on_top',
-      sx,
-      sy,
-      drawW,
-      drawH,
-    );
-
-    // Bouncing objective arrow during awaiting_hacking phase
-    if (this.phase === 'awaiting_hacking') {
-      const t = performance.now() / MS_PER_SECOND;
-      const bounce = Math.abs(Math.sin(t * ARROW_ANIMATION_FREQUENCY)) * TILE_SIZE * ARROW_SCALE_Y;
-      const ax = sx + drawW * TILE_CENTER_OFFSET_PX;
-      const ay = sy - TILE_SIZE * ARROW_SCALE_Y_2 - bounce;
-      const aw = TILE_SIZE * ARROW_SCALE_X;
-      const ah = TILE_SIZE * ARROW_SCALE_Y_2;
-
-      ctx.save();
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 3;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(ax, ay + ah);
-      ctx.lineTo(ax - aw * TILE_CENTER_OFFSET_PX, ay);
-      ctx.lineTo(ax - aw * ARROW_SCALE_X_2, ay);
-      ctx.lineTo(ax - aw * ARROW_SCALE_X_2, ay - ah * ARROW_SCALE_X_3);
-      ctx.lineTo(ax + aw * ARROW_SCALE_X_2, ay - ah * ARROW_SCALE_X_3);
-      ctx.lineTo(ax + aw * ARROW_SCALE_X_2, ay);
-      ctx.lineTo(ax + aw * TILE_CENTER_OFFSET_PX, ay);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.fillStyle = '#facc15';
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  private _renderSpiderEgg(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (!this.roomData) return;
-
-    const def = this._getSpriteDef('spider-egg');
-    if (def === undefined) return;
-
-    const drawW = TILE_SIZE * SPIDER_EGG_DRAW_WIDTH;
-    const aspect = def.frameWidth / def.frameHeight;
-    const drawH = drawW / aspect;
-
-    const worldX = this.roomData.spiderEggTile.x * TILE_SIZE;
-    const worldY = this.roomData.spiderEggTile.y * TILE_SIZE;
-    const sx = worldX - camX - (drawW - TILE_SIZE) * TILE_CENTER_OFFSET_PX;
-    const sy = worldY - camY - (drawH - TILE_SIZE);
-
-    const stateName = this.spiderEggOpened ? 'opened' : 'whole';
-    this._drawSpriteFrame(ctx, 'spider-egg', stateName, sx, sy, drawW, drawH);
+    ctx.save();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(ax, ay + ah);
+    ctx.lineTo(ax - aw * TILE_CENTER_OFFSET_PX, ay);
+    ctx.lineTo(ax - aw * ARROW_SCALE_X_2, ay);
+    ctx.lineTo(ax - aw * ARROW_SCALE_X_2, ay - ah * ARROW_SCALE_X_3);
+    ctx.lineTo(ax + aw * ARROW_SCALE_X_2, ay - ah * ARROW_SCALE_X_3);
+    ctx.lineTo(ax + aw * ARROW_SCALE_X_2, ay);
+    ctx.lineTo(ax + aw * TILE_CENTER_OFFSET_PX, ay);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = '#facc15';
+    ctx.fill();
+    ctx.restore();
   }
 
   private _renderLockedRoomBorder(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {

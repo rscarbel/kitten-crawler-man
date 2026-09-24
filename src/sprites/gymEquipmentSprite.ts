@@ -15,19 +15,19 @@
 const TAU = Math.PI * 2;
 
 /** Dark / mid / light stops for one material, ordered as a lit cylinder reads. */
-interface Shade {
+export interface Shade {
   dark: string;
   mid: string;
   light: string;
 }
 
-const BRUSHED_STEEL: Shade = { dark: '#1c1f24', mid: '#5d656f', light: '#aeb7c2' };
-const POWDER_COAT: Shade = { dark: '#0e1013', mid: '#2b2f35', light: '#5a626c' };
-const CAST_IRON: Shade = { dark: '#101114', mid: '#2b2d32', light: '#565a61' };
-const MOULDED_PLASTIC: Shade = { dark: '#25292e', mid: '#5a626b', light: '#9aa3ad' };
-const RED_VINYL: Shade = { dark: '#3a090e', mid: '#8d1621', light: '#cf3f49' };
-const TREAD_RUBBER: Shade = { dark: '#0b0c0e', mid: '#171a1d', light: '#33383e' };
-const GRIP_RUBBER: Shade = { dark: '#131519', mid: '#2c3138', light: '#565e68' };
+export const BRUSHED_STEEL: Shade = { dark: '#1c1f24', mid: '#5d656f', light: '#aeb7c2' };
+export const POWDER_COAT: Shade = { dark: '#0e1013', mid: '#2b2f35', light: '#5a626c' };
+export const CAST_IRON: Shade = { dark: '#101114', mid: '#2b2d32', light: '#565a61' };
+export const MOULDED_PLASTIC: Shade = { dark: '#25292e', mid: '#5a626b', light: '#9aa3ad' };
+export const RED_VINYL: Shade = { dark: '#3a090e', mid: '#8d1621', light: '#cf3f49' };
+export const TREAD_RUBBER: Shade = { dark: '#0b0c0e', mid: '#171a1d', light: '#33383e' };
+export const GRIP_RUBBER: Shade = { dark: '#131519', mid: '#2c3138', light: '#565e68' };
 
 const CYLINDER_LIGHT_STOP = 0.28;
 const CYLINDER_MID_STOP = 0.62;
@@ -36,13 +36,13 @@ const PANEL_EDGE_STOP = 0.12;
 const PANEL_LIGHT_STOP = 0.34;
 const PANEL_MID_STOP = 0.72;
 
-type Point = readonly [number, number];
+export type Point = readonly [number, number];
 
 /**
  * Shading ramp for a round surface lit from the upper left: dark at the far
  * edge, a specular band a third of the way across, then a slow fall-off.
  */
-function cylinderGradient(
+export function cylinderGradient(
   ctx: CanvasRenderingContext2D,
   x0: number,
   y0: number,
@@ -63,7 +63,7 @@ function cylinderGradient(
  * cylinder ramp would be wrong here: it makes the pad bulge into a sausage
  * instead of sitting flat with darkened edges.
  */
-function panelGradient(
+export function panelGradient(
   ctx: CanvasRenderingContext2D,
   x0: number,
   x1: number,
@@ -83,7 +83,7 @@ function panelGradient(
  * the cylinder ramp runs along: true for an upright post (shading varies left to
  * right), false for a bar lying across the view (shading varies top to bottom).
  */
-function strokeTube(
+export function strokeTube(
   ctx: CanvasRenderingContext2D,
   from: Point,
   to: Point,
@@ -130,7 +130,7 @@ function polygonPath(ctx: CanvasRenderingContext2D, points: readonly Point[]): v
   ctx.closePath();
 }
 
-function fillPolygon(
+export function fillPolygon(
   ctx: CanvasRenderingContext2D,
   points: readonly Point[],
   fill: string | CanvasGradient,
@@ -145,7 +145,7 @@ const CONTACT_SHADOW_OUTER = 'rgba(0,0,0,0)';
 const CONTACT_SHADOW_CORE_STOP = 0.55;
 
 /** Soft grounding blob: without a falloff the equipment reads as floating. */
-function drawContactShadow(
+export function drawContactShadow(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
@@ -177,7 +177,7 @@ const PLATE_SPECULAR_RY_FRAC = 0.3;
 const PLATE_SPECULAR_Y_FRAC = -0.5;
 
 /** One iron plate seen edge-on: a tall thin disc with a raised hub and bore. */
-function drawWeightPlate(
+export function drawWeightPlate(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,

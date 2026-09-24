@@ -13,7 +13,10 @@ import {
 } from '../sprites/juicerSprite';
 import { JUICER_FIGURE } from '../sprites/art/juicerFigure';
 import { prewarmFigureState } from '../sprites/figure/figureFrameCache';
+import { drawGymPlateSprite } from '../sprites/gymRoomSprites';
 import {
+  JUICER_PLATE_ROLL_RELEASE_PROGRESS,
+  JUICER_PLATE_ROLL_WINDUP_FRAMES,
   JUICER_PUNCH_IMPACT_PROGRESS,
   JUICER_SPRINT_FRAMES,
   JUICER_SPRINT_FRAME_HOLD,
@@ -55,6 +58,14 @@ const HIT_RADIUS_TILES = 1.5;
 /** Rounded up from his measured headroom, the largest overhang his art has. */
 const JUICER_ART_MARGIN_TILES = 1.5;
 const BLOCK_XP = 5;
+/** A back-off step that covers less than this share of his stride counts as blocked. */
+const BACK_OFF_BLOCKED_SHARE = 0.25;
+/** Frames a pinned back-off keeps sliding along the wall before trying straight back again. */
+const BACK_OFF_SLIDE_FRAMES = 20;
+/** Headings tried when a back-off is pinned: the eight compass points. */
+const ESCAPE_HEADINGS = 8;
+/** How far ahead of his centre a pinned escape checks for floor, in tiles. */
+const ESCAPE_LOOKAHEAD_TILES = 0.8;
 
 /**
  * How much faster than his walk he covers ground on the way to a dumbbell.
@@ -138,6 +149,60 @@ function throwProgressAt(elapsedFrames: number): number {
   return JUICER_THROW_RELEASE_PROGRESS + followThrough * (1 - JUICER_THROW_RELEASE_PROGRESS);
 }
 
+/** Recorded on a bowled plate's damage so `DeathCauseSystem` can name it. */
+export const PLATE_ROLL_ATTACK_TYPE = 'plate_roll';
+/** A bowled plate hurts exactly as much as a thrown dumbbell. */
+export const PLATE_ROLL_DAMAGE = THROW_DAMAGE;
+/**
+ * How fast the plate rolls, in px per frame. Slower than a thrown dumbbell and
+ * never level-scaled: it is a heavy thing on the floor, and its lane is painted
+ * in chalk for the whole wind-up.
+ */
+export const PLATE_ROLL_SPEED = 4.5;
+/** Reach of the plate's edge from its centre, in tiles. */
+export const PLATE_ROLL_HIT_RADIUS_TILES = 0.7;
+/** The plate roll only comes out when his target stands this far off, in tiles. */
+export const PLATE_ROLL_MIN_RANGE_TILES = 5;
+export const PLATE_ROLL_MAX_RANGE_TILES = 10;
+/** Centre to centre, how near a loaded squat rack he has to be to rip a plate off it. */
+export const PLATE_ROLL_RACK_REACH_TILES = 1.5;
+export const PLATE_ROLL_COOLDOWN_FRAMES = 480;
+/**
+ * The shortest his plate cooldown ever gets, whatever his level. A floor of its
+ * own because the shared cooldown curve would let a high-level Juicer bowl
+ * every few seconds, and a plate lane closes off a whole stripe of the room.
+ */
+const PLATE_ROLL_MIN_COOLDOWN_FRAMES = 360;
+/** Longest a lane is ever planned, in tiles, so a rolling plate always ends. */
+const PLATE_ROLL_MAX_TILES = 30;
+/** Walls a plate bounces off before it topples. */
+const PLATE_ROLL_BOUNCES = 1;
+/** Frames of recovery after the plate leaves his hands. */
+const PLATE_ROLL_RECOVER_FRAMES = THROW_COOLDOWN_FRAMES;
+const PLATE_KNOCKBACK_TILES = 1.4;
+const PLATE_KNOCKBACK_FRAMES = 10;
+/** How high above his tile the plate is held while he winds up, in tiles. */
+const PLATE_HELD_LIFT_TILES = 0.9;
+const PLATE_ROLL_RELEASE_FRAME = Math.max(
+  1,
+  Math.round(JUICER_PLATE_ROLL_WINDUP_FRAMES * JUICER_PLATE_ROLL_RELEASE_PROGRESS),
+);
+
+/** A straight lane with at most one bounce, as world-pixel points from his hands to where it stops. */
+export type PlateLane = ReadonlyArray<{ readonly x: number; readonly y: number }>;
+
+interface RollingPlate {
+  /** Index of the lane segment it is on. */
+  segment: number;
+  /** Pixels along that segment. */
+  along: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+}
+
 const TAUNT_PHRASES = [
   'Bro',
   'I need a spot, bro',
@@ -148,14 +213,23 @@ const TAUNT_PHRASES = [
   'Stop it, bro',
 ];
 
-type JuicerState =
+/** What he says once his boombox is smashed. */
+const NO_MUSIC_TAUNT_PHRASES = [
+  "I CAN'T HEAR MY PUMP-UP MUSIC, BRO",
+  "Who touches a man's playlist?",
+  'That was my PR mix, bro',
+  'Now I have to count my own reps',
+];
+
+export type JuicerState =
   | 'idle'
   | 'seeking_dumbbell'
   | 'pursuing'
   | 'winding_up'
   | 'cooldown'
   | 'punch_windup'
-  | 'punch_recover';
+  | 'punch_recover'
+  | 'plate_windup';
 
 /** Where the ground punch landed and how far its wave has travelled. */
 export interface JuicerShockwaveMarker {
@@ -248,12 +322,46 @@ export class Juicer extends Mob {
 
   override clearAirborneAttacks(): void {
     this.activeThrow = null;
+    this.rollingPlate = null;
+    this.plateLane = null;
   }
+
+  /**
+   * World centres of the squat racks with plates on them, set each frame by the
+   * gym. Empty everywhere but the gym, so the plate roll never happens anywhere else.
+   */
+  loadedSquatRacks: ReadonlyArray<{ readonly x: number; readonly y: number }> = [];
+  /** The rack he just ripped a plate off, for the gym to strip; the gym clears it. */
+  plateTakenFrom: { x: number; y: number } | null = null;
+  /**
+   * The room he is held in, in tiles, set by the gym. His escape from a pin
+   * never picks a heading out through a doorway the room's clamp would undo.
+   */
+  confinedTo: {
+    readonly x: number;
+    readonly y: number;
+    readonly w: number;
+    readonly h: number;
+  } | null = null;
+  /** False once the gym's boombox is smashed; his taunts change to suit. */
+  musicPlaying = true;
+  private plateCooldownTimer = 0;
+  /** Counts `updateAI` calls, so a back-off can tell whether it also backed off last frame. */
+  private aiTick = 0;
+  private lastBackOff: { x: number; y: number; tick: number } | null = null;
+  /** The way out he chose when last pinned: kept for a stretch so he does not dither. */
+  private backOffHeading: { x: number; y: number } | null = null;
+  private backOffSlideFrames = 0;
+  private plateWindupTimer = 0;
+  private plateReleased = false;
+  private plateLane: PlateLane | null = null;
+  private rollingPlate: RollingPlate | null = null;
+
   throwAnim = 0; // 0–1 for sprite animation
 
   // Taunts
-  private tauntPhrases = TAUNT_PHRASES;
   private tauntIndex = 0;
+  private tauntsHadMusic = true;
   private tauntTimer = 0;
   currentTaunt: string | null = null;
 
@@ -297,6 +405,40 @@ export class Juicer extends Mob {
     this.punchImpactSoundPending = false;
     this.tauntTimer = 0;
     this.currentTaunt = null;
+    this.plateCooldownTimer = 0;
+    this.plateWindupTimer = 0;
+    this.plateReleased = false;
+    this.plateLane = null;
+    this.rollingPlate = null;
+    this.plateTakenFrom = null;
+  }
+
+  /**
+   * The chalk lane of a plate roll, from the first frame of the wind-up until
+   * the plate stops. Fixed when the wind-up starts and never revised, so the
+   * line on the floor is exactly where the plate will run.
+   */
+  get plateRollLane(): PlateLane | null {
+    // A dead Juicer's AI no longer runs, so a plate in flight would never
+    // finish: its lane must not outlive him as ground nobody may cross.
+    return this.isAlive ? this.plateLane : null;
+  }
+
+  /** The plate on the floor, centre and velocity in world pixels, or null. */
+  get bowledPlate(): {
+    readonly x: number;
+    readonly y: number;
+    readonly vx: number;
+    readonly vy: number;
+    readonly age: number;
+  } | null {
+    return this.isAlive ? this.rollingPlate : null;
+  }
+
+  /** Share of the plate wind-up gone, or null outside one. */
+  get plateWindupProgress(): number | null {
+    if (this.state !== 'plate_windup') return null;
+    return 1 - this.plateWindupTimer / JUICER_PLATE_ROLL_WINDUP_FRAMES;
   }
 
   /**
@@ -322,8 +464,46 @@ export class Juicer extends Mob {
     };
   }
 
+  /** Which step of his fight he is on — read by the room and by headless fight sims. */
+  get behaviour(): JuicerState {
+    return this.state;
+  }
+
+  /**
+   * The ground-punch disc while he is rearing back, or null outside a wind-up.
+   * The point is the one the fists will land on, fixed when the wind-up began.
+   */
+  get punchTelegraph(): {
+    readonly x: number;
+    readonly y: number;
+    readonly radiusPx: number;
+    readonly framesLeft: number;
+  } | null {
+    if (!this.isAlive || this.state !== 'punch_windup') return null;
+    const point = this.punchPoint;
+    if (point === null) return null;
+    return {
+      x: point.x,
+      y: point.y,
+      radiusPx: this.tileSize * PUNCH_RADIUS_TILES,
+      framesLeft: this.punchTimer,
+    };
+  }
+
+  /** The dumbbell in flight — centre and velocity in world pixels, frames flown — or null. */
+  get thrownDumbbell(): {
+    readonly x: number;
+    readonly y: number;
+    readonly vx: number;
+    readonly vy: number;
+    readonly age: number;
+  } | null {
+    return this.activeThrow;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
+    this.aiTick++;
 
     this.framesSinceLastAttack++;
     // A cooldown, unlike an attack clock, runs whether or not anyone is in
@@ -337,6 +517,8 @@ export class Juicer extends Mob {
     }
 
     this.updateProjectile(targets);
+    this.updateRollingPlate(targets);
+    if (this.plateCooldownTimer > 0) this.plateCooldownTimer--;
 
     const nearest = this.acquireTarget(targets, AGGRO_RANGE_PX);
     const nearestDist = nearest ? this.distanceTo(nearest) : Infinity;
@@ -346,9 +528,16 @@ export class Juicer extends Mob {
     if (nearest) {
       this.tauntTimer++;
       this.bubblePulse++;
-      if (this.tauntTimer >= TAUNT_INTERVAL || this.currentTaunt === null) {
-        this.currentTaunt = this.tauntPhrases[this.tauntIndex];
-        this.tauntIndex = (this.tauntIndex + 1) % this.tauntPhrases.length;
+      // The music stopping is answered at once rather than at the next taunt.
+      const musicChanged = this.musicPlaying !== this.tauntsHadMusic;
+      if (musicChanged) {
+        this.tauntsHadMusic = this.musicPlaying;
+        this.tauntIndex = 0;
+      }
+      if (this.tauntTimer >= TAUNT_INTERVAL || this.currentTaunt === null || musicChanged) {
+        const phrases = this.musicPlaying ? TAUNT_PHRASES : NO_MUSIC_TAUNT_PHRASES;
+        this.currentTaunt = phrases[this.tauntIndex % phrases.length];
+        this.tauntIndex = (this.tauntIndex + 1) % phrases.length;
         this.tauntTimer = 0;
       }
     } else {
@@ -359,6 +548,9 @@ export class Juicer extends Mob {
     // Checked ahead of the state machine, so a target that walks into arm's
     // reach is answered with the fists whatever he was doing about the throw.
     if (nearest !== null && this.canStartPunch(nearestDist)) this.beginPunch(nearest);
+    else if (nearest !== null && this.canStartPlateRoll(nearest, nearestDist)) {
+      this.beginPlateRoll(nearest);
+    }
 
     // Decided once, ahead of the state that acts on it, so the speed the follow
     // is given, the row the sprite draws and the phase that row is sampled at
@@ -387,6 +579,9 @@ export class Juicer extends Mob {
         break;
       case 'punch_recover':
         this.doPunchRecoverState(nearest);
+        break;
+      case 'plate_windup':
+        this.doPlateWindupState(nearest);
         break;
     }
 
@@ -420,7 +615,206 @@ export class Juicer extends Mob {
     if (this.punchCooldownTimer > 0) return false;
     if (this.state === 'winding_up') return false;
     if (this.state === 'punch_windup' || this.state === 'punch_recover') return false;
+    if (this.state === 'plate_windup') return false;
     return nearestDist <= this.tileSize * PUNCH_TRIGGER_TILES;
+  }
+
+  /**
+   * Whether he bowls a plate this frame: enraged, empty-handed, a loaded squat
+   * rack at his elbow, a target at mid range with open floor between them.
+   */
+  private canStartPlateRoll(target: Player, targetDist: number): boolean {
+    if (!this.isEnraged || this.plateCooldownTimer > 0 || this.heldDumbbell) return false;
+    if (this.state !== 'seeking_dumbbell' && this.state !== 'pursuing') return false;
+    if (this.rollingPlate !== null) return false;
+    const minRange = this.tileSize * PLATE_ROLL_MIN_RANGE_TILES;
+    const maxRange = this.tileSize * PLATE_ROLL_MAX_RANGE_TILES;
+    if (targetDist < minRange || targetDist > maxRange) return false;
+    if (this.nearestLoadedSquatRack() === null) return false;
+    const map = this.map;
+    if (map === null) return false;
+    const half = this.tileSize * CENTER_OFFSET;
+    return map.hasWalkableLine(this.x + half, this.y + half, target.x + half, target.y + half);
+  }
+
+  private nearestLoadedSquatRack(): { x: number; y: number } | null {
+    const reach = this.tileSize * PLATE_ROLL_RACK_REACH_TILES;
+    const cx = this.x + this.tileSize * CENTER_OFFSET;
+    const cy = this.y + this.tileSize * CENTER_OFFSET;
+    let best: { x: number; y: number } | null = null;
+    let bestDist = reach;
+    for (const rack of this.loadedSquatRacks) {
+      const dist = Math.hypot(rack.x - cx, rack.y - cy);
+      if (dist > bestDist) continue;
+      bestDist = dist;
+      best = { x: rack.x, y: rack.y };
+    }
+    return best;
+  }
+
+  private beginPlateRoll(target: Player): void {
+    const rack = this.nearestLoadedSquatRack();
+    if (rack === null) return;
+    prewarmAttackRows(THROW_ROWS);
+    this.state = 'plate_windup';
+    this.plateWindupTimer = JUICER_PLATE_ROLL_WINDUP_FRAMES;
+    this.plateReleased = false;
+    this.isMoving = false;
+    this.clearAStarPath();
+    this.faceToward(target);
+    const half = this.tileSize * CENTER_OFFSET;
+    const origin = { x: this.x + half, y: this.y + half };
+    // Locked now: the lane is aimed at where the target stands as the wind-up
+    // begins, and the chalk drawn along it is the whole telegraph.
+    this.plateLane = this.planPlateLane(origin, { x: target.x + half, y: target.y + half });
+    this.plateTakenFrom = rack;
+    this.throwAnim = 0;
+  }
+
+  /**
+   * The plate's whole run, decided before it moves: straight at the aim point,
+   * off the first wall it meets, and on until the next.
+   *
+   * Marched in the plate's own speed so the planned bounce is the one it takes,
+   * reflecting per axis the way a thrown dumbbell does.
+   */
+  private planPlateLane(
+    origin: { x: number; y: number },
+    aim: { x: number; y: number },
+  ): PlateLane {
+    const map = this.map;
+    const length = Math.hypot(aim.x - origin.x, aim.y - origin.y);
+    if (map === null || length === 0) return [origin];
+    let vx = ((aim.x - origin.x) / length) * PLATE_ROLL_SPEED;
+    let vy = ((aim.y - origin.y) / length) * PLATE_ROLL_SPEED;
+    const ts = this.tileSize;
+    // The room's edge stops a plate as a wall does: an open doorway is still
+    // the edge of the fight, and a plate rolling off down a corridor is a lane
+    // that paints danger where nobody is fighting.
+    const room = this.confinedTo;
+    const walkable = (px: number, py: number): boolean => {
+      const tileX = Math.floor(px / ts);
+      const tileY = Math.floor(py / ts);
+      const insideRoom =
+        room === null ||
+        (tileX >= room.x && tileY >= room.y && tileX < room.x + room.w && tileY < room.y + room.h);
+      return insideRoom && map.isWalkable(tileX, tileY);
+    };
+    const points = [{ x: origin.x, y: origin.y }];
+    let x = origin.x;
+    let y = origin.y;
+    let bounces = 0;
+    const maxSteps = Math.ceil((PLATE_ROLL_MAX_TILES * ts) / PLATE_ROLL_SPEED);
+    for (let step = 0; step < maxSteps; step++) {
+      const nx = x + vx;
+      const ny = y + vy;
+      if (walkable(nx, ny)) {
+        x = nx;
+        y = ny;
+        continue;
+      }
+      if (bounces >= PLATE_ROLL_BOUNCES) break;
+      const blockedX = !walkable(x + vx, y);
+      const blockedY = !walkable(x, y + vy);
+      if (blockedX) vx = -vx;
+      if (blockedY) vy = -vy;
+      if (!blockedX && !blockedY) {
+        vx = -vx;
+        vy = -vy;
+      }
+      bounces++;
+      points.push({ x, y });
+    }
+    points.push({ x, y });
+    return points;
+  }
+
+  private doPlateWindupState(nearest: Player | null): void {
+    this.isMoving = false;
+    this.plateWindupTimer--;
+    const elapsed = JUICER_PLATE_ROLL_WINDUP_FRAMES - this.plateWindupTimer;
+    this.throwAnim = throwProgressAt(elapsed);
+    if (!this.plateReleased && elapsed >= PLATE_ROLL_RELEASE_FRAME) this.releasePlate();
+    if (this.plateWindupTimer > 0) return;
+    this.throwAnim = 0;
+    this.state = 'cooldown';
+    this.cooldownTimer = PLATE_ROLL_RECOVER_FRAMES;
+    if (nearest === null) this.state = 'idle';
+  }
+
+  private releasePlate(): void {
+    this.plateReleased = true;
+    this.specialSoundPending = true;
+    this.framesSinceLastAttack = 0;
+    this.plateCooldownTimer = Math.max(
+      PLATE_ROLL_MIN_COOLDOWN_FRAMES,
+      this.scaledCooldownFrames(PLATE_ROLL_COOLDOWN_FRAMES),
+    );
+    const lane = this.plateLane;
+    if (lane === null || lane.length < 2) {
+      this.plateLane = null;
+      return;
+    }
+    this.rollingPlate = { segment: 0, along: 0, x: lane[0].x, y: lane[0].y, vx: 0, vy: 0, age: 0 };
+  }
+
+  /** Walks the plate along its planned lane and lands it on whoever it meets. */
+  private updateRollingPlate(targets: Player[]): void {
+    const plate = this.rollingPlate;
+    const lane = this.plateLane;
+    if (plate === null || lane === null) return;
+    plate.age++;
+    let travel = PLATE_ROLL_SPEED;
+    while (travel > 0) {
+      if (plate.segment + 1 >= lane.length) {
+        this.endPlateRoll();
+        return;
+      }
+      const from = lane[plate.segment];
+      const to = lane[plate.segment + 1];
+      const segmentLength = Math.hypot(to.x - from.x, to.y - from.y);
+      const left = segmentLength - plate.along;
+      if (segmentLength === 0 || left <= travel) {
+        travel -= Math.max(0, left);
+        plate.segment++;
+        plate.along = 0;
+        plate.x = to.x;
+        plate.y = to.y;
+        continue;
+      }
+      plate.along += travel;
+      plate.vx = ((to.x - from.x) / segmentLength) * PLATE_ROLL_SPEED;
+      plate.vy = ((to.y - from.y) / segmentLength) * PLATE_ROLL_SPEED;
+      plate.x = from.x + (plate.vx / PLATE_ROLL_SPEED) * plate.along;
+      plate.y = from.y + (plate.vy / PLATE_ROLL_SPEED) * plate.along;
+      travel = 0;
+    }
+    const hitRadius = this.tileSize * PLATE_ROLL_HIT_RADIUS_TILES;
+    for (const target of targets) {
+      if (!target.isAlive) continue;
+      const tcx = target.x + this.tileSize * CENTER_OFFSET;
+      const tcy = target.y + this.tileSize * CENTER_OFFSET;
+      if (Math.hypot(plate.x - tcx, plate.y - tcy) >= hitRadius) continue;
+      if (this.spells?.isPointInsideShell(tcx, tcy) === true) {
+        this.spells.addBlockXp(BLOCK_XP);
+      } else {
+        this.dealRangedDamage(target, PLATE_ROLL_DAMAGE, PLATE_ROLL_ATTACK_TYPE);
+        target.damageFlash = DAMAGE_FLASH_DUMBBELL;
+        target.applyKnockback(
+          plate.vx,
+          plate.vy,
+          this.tileSize * PLATE_KNOCKBACK_TILES,
+          PLATE_KNOCKBACK_FRAMES,
+        );
+      }
+      this.endPlateRoll();
+      return;
+    }
+  }
+
+  private endPlateRoll(): void {
+    this.rollingPlate = null;
+    this.plateLane = null;
   }
 
   private beginPunch(target: Player): void {
@@ -584,8 +978,7 @@ export class Juicer extends Mob {
       const dx = this.x - nearest.x;
       const dy = this.y - nearest.y;
       if (dx !== 0 || dy !== 0) {
-        const n = normalize(dx, dy);
-        this.moveWithCollision(n.x * this.speed, n.y * this.speed);
+        this.backOff(nearest);
         this.isMoving = true;
       }
       this.faceToward(nearest);
@@ -605,6 +998,81 @@ export class Juicer extends Mob {
     // without this he stands with his back to a player he is squaring up to
     // throw at.
     if (!this.isMoving) this.faceToward(nearest);
+  }
+
+  /**
+   * One step away from `threat`, finding another way out once straight back
+   * has stopped getting him anywhere.
+   *
+   * Straight back is blocked whenever he has retreated to the edge of his room
+   * — and the gym racks his dumbbells against its walls — so a crawler who
+   * followed him there would otherwise pin him in place, backing into the
+   * masonry with nothing to throw at. "Blocked" is judged by where the last
+   * frame's step left him rather than by the step itself, because the room's
+   * clamp undoes a step after the AI has taken it. Once pinned he tries all
+   * eight headings and takes whichever leaves him furthest from the threat,
+   * and keeps it for a stretch: alternating a slide with a step straight back
+   * into the wall cancels out to standing still.
+   */
+  private backOff(threat: Player): void {
+    const step = this.speed;
+    const last = this.lastBackOff;
+    const pinned =
+      last !== null &&
+      last.tick === this.aiTick - 1 &&
+      Math.hypot(this.x - last.x, this.y - last.y) < step * BACK_OFF_BLOCKED_SHARE;
+    this.lastBackOff = { x: this.x, y: this.y, tick: this.aiTick };
+    if (pinned) {
+      this.backOffHeading = this.bestEscapeHeading(threat, step);
+      this.backOffSlideFrames = BACK_OFF_SLIDE_FRAMES;
+    }
+    const heading = this.backOffHeading;
+    if (this.backOffSlideFrames > 0 && heading !== null) {
+      this.backOffSlideFrames--;
+      this.moveWithCollision(heading.x * step, heading.y * step);
+      return;
+    }
+    const away = normalize(this.x - threat.x, this.y - threat.y);
+    this.moveWithCollision(away.x * step, away.y * step);
+  }
+
+  /** Of the eight compass headings, the step that ends furthest from `threat`, or null if none moves him. */
+  private bestEscapeHeading(threat: Player, step: number): { x: number; y: number } | null {
+    const startX = this.x;
+    const startY = this.y;
+    let best: { x: number; y: number } | null = null;
+    let bestDistance = -Infinity;
+    for (let index = 0; index < ESCAPE_HEADINGS; index++) {
+      const angle = (index / ESCAPE_HEADINGS) * Math.PI * 2;
+      const hx = Math.cos(angle);
+      const hy = Math.sin(angle);
+      // Judged by the ground ahead as well as by the step: a step can slide a
+      // few pixels toward a wall that the room's clamp then takes back.
+      const aheadX = startX + this.tileSize * (CENTER_OFFSET + hx * ESCAPE_LOOKAHEAD_TILES);
+      const aheadY = startY + this.tileSize * (CENTER_OFFSET + hy * ESCAPE_LOOKAHEAD_TILES);
+      const aheadTileX = Math.floor(aheadX / this.tileSize);
+      const aheadTileY = Math.floor(aheadY / this.tileSize);
+      const room = this.confinedTo;
+      const insideRoom =
+        room === null ||
+        (aheadTileX >= room.x &&
+          aheadTileY >= room.y &&
+          aheadTileX < room.x + room.w &&
+          aheadTileY < room.y + room.h);
+      const groundAhead = insideRoom && (this.map?.isWalkable(aheadTileX, aheadTileY) ?? true);
+      this.moveWithCollision(hx * step, hy * step);
+      const moved =
+        groundAhead &&
+        Math.hypot(this.x - startX, this.y - startY) >= step * BACK_OFF_BLOCKED_SHARE;
+      const distance = Math.hypot(this.x - threat.x, this.y - threat.y);
+      this.x = startX;
+      this.y = startY;
+      if (moved && distance > bestDistance) {
+        bestDistance = distance;
+        best = { x: hx, y: hy };
+      }
+    }
+    return best;
   }
 
   /**
@@ -826,6 +1294,10 @@ export class Juicer extends Mob {
       isDamageFlashing: this.damageFlash > 0,
       heldDumbbell: this.heldDumbbell,
     });
+
+    if (this.state === 'plate_windup' && !this.plateReleased) {
+      drawGymPlateSprite(ctx, sx, sy - tileSize * PLATE_HELD_LIFT_TILES, tileSize, 0);
+    }
 
     // Speech bubble (drawn outside the sprite's own filter)
     if (this.currentTaunt) {

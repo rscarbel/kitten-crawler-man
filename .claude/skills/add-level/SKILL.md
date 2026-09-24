@@ -33,14 +33,17 @@ Verify layout changes at **`?townmap`** (localhost) — the town is several scre
 ## Tiles
 
 - Constants in `src/map/tileTypes.ts`: floor types via the `FLOOR_TYPES` array; everything else a numbered constant. A map cell is `TileContent { tileId, type, spriteKey?, decorationVariant? }`.
-- Rendering: `TileRenderer.drawTile` tries category renderers in order — `terrainTiles` → `specialFloorTiles` → `buildingTiles` → `decorationTiles` → `interiorTiles` (each is a `switch(type)` in `src/map/tiles/*` returning `true` when handled; first match wins).
+- Rendering: `TileRenderer.drawTile` tries category renderers in order — `terrainTiles` → `specialFloorTiles` → `buildingTiles` → `decorationTiles` → `interiorTiles` → `bossRoomTiles` (each returns `true` when handled; first match wins). `bossRoomTiles.ts` dispatches to one painter per room in `src/map/tiles/bossRooms/`.
 - Ground: floor tiles delegate to `drawGroundTile` (`src/map/tiles/groundTiles.ts`), which resolves a `GroundMaterial` to a frame of the generated tileset and runs the fringe/tone/scatter/AO passes inside the chunk cache. Adding or tuning a material is the `add-ground-tile` skill, not a new `case`.
-- Walkability: `GameMap.isWalkable` is a **negative check** — tiles are walkable unless listed in its non-walkable chain.
+- Walkability: a **negative check** — a tile type is walkable unless listed in `NON_WALKABLE_TILE_TYPES` (`src/map/walkability.ts`), which `GameMap.isWalkable` reads via `isWalkableTileType` after its block-flag checks.
+- Sight: a solid tile blocks sight unless it is in `SIGHT_TRANSPARENT_TILE_TYPES` (same file). `GameMap.hasLineOfSight` sees over those low props; code that steers a body straight at a point must ask `GameMap.hasWalkableLine`.
+- Pace: ground that slows a crawler is listed in `src/map/tileSpeed.ts` and applied by `footingSpeedFactor` in `GameLoopPhases.applyMovement`.
+- Boss-room tiles (`HOARD_*`, `GYM_*`, `KRAKAREN_*`, `LAB_*`, `ARENA_MUD`) are grouped in `tileTypes.ts` as `BOSS_ROOM_PROP_TILE_TYPES` (solid, Y-sorted — spread into both decoration registries in `GameMap.ts` and `TileRenderer.ts`) and `BOSS_ROOM_FLAT_TILE_TYPES` (walkable decals baked into the chunk). The rooms that stamp them are described under "Boss-room dressing" in `game-architecture`; `npm run gates:boss-rooms` checks each type walks, blocks sight and sits in the registries as declared.
 
 ### New tile type checklist
 
 1. Add a numbered constant in `tileTypes.ts`; add it to `SHADOW_TYPES`/`NON_FLOOR_TYPES` in `src/map/tiles/helpers.ts` if opaque.
 2. Add a `case` in the right `src/map/tiles/*` category renderer.
-3. If it blocks movement, add it to the `GameMap.isWalkable` chain; walkable tiles need no change.
+3. If it blocks movement, add it to `NON_WALKABLE_TILE_TYPES` in `src/map/walkability.ts`; walkable tiles need no change. If it is solid but low enough to see over, also add it to `SIGHT_TRANSPARENT_TILE_TYPES`.
 
 Finish with the `dev-workflow` gates (typecheck, lint, format).

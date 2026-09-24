@@ -32,6 +32,7 @@ import {
   DEN_HOLLOW,
 } from '../map/tileTypes';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { bossRoomMinimapColor } from '../map/tiles/bossRoomTiles';
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -583,7 +584,7 @@ export class MobileHUDSystem implements GameSystem {
       case DEN_HOLLOW:
         return '#2e2a26';
       default:
-        return '#555555';
+        return bossRoomMinimapColor(type) ?? '#555555';
     }
   }
 }

@@ -1,0 +1,144 @@
+{
+  "spider_lab_bench": {
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "tileTypeId": 124,
+    "states": {
+      "intact": {
+        "row": 0,
+        "frameCount": 21
+      },
+      "broken": {
+        "row": 1,
+        "frameCount": 21
+      }
+    }
+  },
+  "spider_lab_terminal": {
+    "frameWidth": 64,
+    "frameHeight": 112,
+    "tileX": 0,
+    "tileY": 48,
+    "tileScale": 64,
+    "states": {
+      "slice": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "spider_lab_shelf": {
+    "frameWidth": 64,
+    "frameHeight": 144,
+    "tileX": 0,
+    "tileY": 80,
+    "tileScale": 64,
+    "tileTypeId": 125,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "side": {
+        "row": 1,
+        "frameCount": 6
+      }
+    }
+  },
+  "spider_lab_egg_sac": {
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "whole": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "opening": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "opened": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "spider_lab_cocoon": {
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "hatching": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "burst": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "spider_lab_light_bank": {
+    "frameWidth": 128,
+    "frameHeight": 40,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "lit": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "dim": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "off": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "dead": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "spider_lab_web_growth": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "grow": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "spider_lab_remains": {
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  }
+}

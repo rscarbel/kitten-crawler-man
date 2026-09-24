@@ -65,7 +65,7 @@ const FIXTURE_PATH = resolve('scripts/buildinggen/fixtures/footprints.json');
 const REPLACED_ART_DIR = resolve('scripts/buildinggen/fixtures/replaced');
 
 /** Art that is not a facade and is not being redrawn. */
-const NOT_A_FACADE = new Set(['overworld_main_tower', 'hoarders_room']);
+const NOT_A_FACADE = new Set(['overworld_main_tower']);
 
 export interface FootprintFixtureEntry {
   readonly frameWidth: number;

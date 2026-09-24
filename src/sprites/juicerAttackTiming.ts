@@ -91,3 +91,13 @@ export function juicerImpactFrame(spriteFrames: number, impactProgress: number):
 export function juicerImpactSpriteFrame(spriteFrames: number, impactProgress: number): number {
   return Math.max(0, Math.min(spriteFrames - 1, Math.floor(impactProgress * spriteFrames)));
 }
+
+/**
+ * Game frames he spends ripping a plate off the squat rack and winding up to
+ * bowl it. The same wind-up as a thrown dumbbell, drawn on the same row, so a
+ * crawler who has learned the throw's tell has already learned this one.
+ */
+export const JUICER_PLATE_ROLL_WINDUP_FRAMES = 60;
+
+/** How far through the wind-up the plate leaves his hands — the throw's own release. */
+export const JUICER_PLATE_ROLL_RELEASE_PROGRESS = JUICER_THROW_RELEASE_PROGRESS;

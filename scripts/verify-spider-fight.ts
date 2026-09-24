@@ -24,10 +24,18 @@
  */
 
 import { installCanvasGlobals } from './nodeCanvasGlobals';
+import { setViewportSize } from '../src/core/Viewport';
 import { gameContext } from './nodeGameContext';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { GameMap } from '../src/map/GameMap';
-import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
+import {
+  FloorTypeValue,
+  LAB_WEB,
+  SPIDER_LAB_FLOOR,
+  placeProp,
+  type TileContent,
+} from '../src/map/tileTypes';
+import { isWalkableTileType } from '../src/map/walkability';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { AbilityManager } from '../src/core/AbilityManager';
@@ -48,6 +56,7 @@ import {
   PUDDLE_EVAPORATE_FRAMES,
   REPOSITION_ARRIVAL_PX,
   FIRST_ATTACK_GAP_FRAMES,
+  SLAM_START_RANGE_PX,
   EGG_MIN_DISTANCE_TILES,
   DEATH_ANIM_FRAMES,
   REPOSITION_TIMEOUT_FRAMES,
@@ -98,6 +107,7 @@ import { resolveKills, type CombatContext } from '../src/systems/CombatSystem';
 import { markMobsAtCheckpoint, rewindMobsToCheckpoint } from '../src/systems/mobCheckpoint';
 import { pushPlayerWithCollision } from '../src/systems/playerDisplacement';
 import { DIAGONAL_PENALTY } from '../src/systems/PlayerMovementSystem';
+import { footingSpeedFactor } from '../src/systems/GameLoopPhases';
 import { FairyCorpseLedger } from '../src/creatures/fairies/fairyCorpses';
 import { clamp } from '../src/utils';
 import { makeStuck } from '../src/core/StatusEffect';
@@ -107,6 +117,8 @@ import { SpiderQuestSystem, type SpiderQuestCheckpoint } from '../src/systems/Sp
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { SFX_GROUPS, sfxGroupsForLevelId } from '../src/audio/sfxGroups';
 import type { SoundId } from '../src/audio/sounds';
+import { findBossRoomDoorways, type DoorSide } from '../src/systems/bossRooms/bossRoomLayout';
+import { generateFloor } from './bossRooms/harness';
 
 installCanvasGlobals();
 
@@ -173,6 +185,12 @@ const FAULTS = {
   'puddle-ttl-pops': 'a puddle whose life runs out vanishes without drying (gate 10)',
   'raisable-boss': 'she does not count as a boss kill, so a necro fairy may raise her (gate 10)',
   'no-tell': 'area attacks skip straight to the end of their lock (gate 11)',
+  'web-blind':
+    'her attacks tear no web, and she judges a webbed crawler at full pace (gate 13: web escapes)',
+  'web-abandon':
+    'she tears no web and gives up any slam or screech at its lock while a crawler stands on web (gates 12, 13)',
+  'dark-over-warnings':
+    'the lab dark is drawn after her warnings, and lit, her warnings are left under the banks (gate 14)',
 } as const;
 type Fault = keyof typeof FAULTS;
 
@@ -524,18 +542,69 @@ function seedEverything(seed: number): () => number {
   return mulberry32(seed ^ RUN_SEED);
 }
 
+/**
+ * Where a fight is staged: the synthetic lab every gate is written against by
+ * default, or a lab the generator really built, for the gates that measure the
+ * room itself. The fight code reads the site rather than the synthetic lab's
+ * constants, so the same reader and the same step run in either.
+ */
+interface LabSite {
+  readonly name: string;
+  readonly bounds: Readonly<{ x: number; y: number; w: number; h: number }>;
+  /** The room's middle, which the reader keeps between itself and her. */
+  readonly centre: Vec;
+  /** A fresh map with the lab on it: every fight mutates the one it is given. */
+  buildMap(): GameMap;
+  readonly spiderStart: Vec;
+  readonly humanStart: Vec;
+  readonly catStart: Vec;
+  /** Where the room's web lies, whether or not it is spun there now. */
+  readonly webTiles: readonly Vec[];
+}
+
+/** Where the party walks in, in tiles south of her. */
+const FIGHT_START_OFFSET_TILES = 7;
+
+const SYNTHETIC_SITE: LabSite = {
+  name: 'synthetic lab',
+  bounds: LAB_BOUNDS,
+  centre: LAB_CENTRE_TILE,
+  buildMap: () => {
+    const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: buildLabGrid() });
+    map.spiderLabRoom = {
+      bounds: { ...LAB_BOUNDS },
+      centre: { ...LAB_CENTRE_TILE },
+      entranceTile: { x: LAB_CENTRE_TILE.x, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 1 },
+      scientistTile: { x: LAB_CENTRE_TILE.x - 2, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 },
+      computerTile: { x: LAB_CENTRE_TILE.x + 2, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 },
+      spiderEggTile: { x: LAB_CENTRE_TILE.x, y: LAB_BOUNDS.y + 2 },
+      lifeMachineTiles: [],
+      entranceWall: 'south',
+      computerTableTiles: [0, 1].flatMap((dy) =>
+        [-1, 0, 1].map((dx) => ({
+          x: LAB_CENTRE_TILE.x + 2 + dx,
+          y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 + dy,
+        })),
+      ),
+      benchTiles: [],
+      shelfTiles: [],
+      webTiles: [],
+      cocoonTiles: [],
+    };
+    return map;
+  },
+  spiderStart: LAB_CENTRE_TILE,
+  humanStart: { x: LAB_CENTRE_TILE.x - 2, y: LAB_CENTRE_TILE.y + FIGHT_START_OFFSET_TILES },
+  catStart: { x: LAB_CENTRE_TILE.x + 2, y: LAB_CENTRE_TILE.y + FIGHT_START_OFFSET_TILES },
+  webTiles: [],
+};
+
+/** The site every lab is built on; only the real-lab gate ever changes it, and it puts it back. */
+let labSite: LabSite = SYNTHETIC_SITE;
+
 function buildLab(options: LabOptions): Lab {
   const spiderRng = seedEverything(options.seed);
-  const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: buildLabGrid() });
-  map.spiderLabRoom = {
-    bounds: { ...LAB_BOUNDS },
-    centre: { ...LAB_CENTRE_TILE },
-    entranceTile: { x: LAB_CENTRE_TILE.x, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 1 },
-    scientistTile: { x: LAB_CENTRE_TILE.x - 2, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 },
-    computerTile: { x: LAB_CENTRE_TILE.x + 2, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 },
-    spiderEggTile: { x: LAB_CENTRE_TILE.x, y: LAB_BOUNDS.y + 2 },
-    lifeMachineTiles: [],
-  };
+  const map = labSite.buildMap();
   const human = new HumanPlayer(options.humanTile.x, options.humanTile.y, TILE_SIZE);
   const catTile = options.catTile ?? { x: LAB_BOUNDS.x + 1, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 };
   const cat = new CatPlayer(catTile.x, catTile.y, TILE_SIZE);
@@ -639,7 +708,7 @@ function placeCentre(player: Player, centre: Vec): void {
 
 /** Holds a body inside the lab, as the fight's room lock holds every crawler in it. */
 function clampToLab(body: { x: number; y: number }): void {
-  const b = LAB_BOUNDS;
+  const b = labSite.bounds;
   body.x = clamp(body.x, b.x * TILE_SIZE, (b.x + b.w - 1) * TILE_SIZE);
   body.y = clamp(body.y, b.y * TILE_SIZE, (b.y + b.h - 1) * TILE_SIZE);
 }
@@ -656,10 +725,14 @@ const NO_MOVES: Moves = new Map();
 function step(lab: Lab, moves: Moves = NO_MOVES): void {
   const ctx = lab.ctx();
   lab.quest?.update(ctx);
+  lab.quest?.labDressing?.update(ctx);
   for (const player of [lab.human, lab.cat]) {
     const move = moves.get(player) ?? null;
     const canMove = player.isAlive && !player.hasStatus('stuck') && move !== null;
-    if (canMove) pushPlayerWithCollision(player, move.x, move.y, lab.map);
+    // Slow ground slows every step, the reader's and the escape walk's alike,
+    // exactly as the movement phase scales a real crawler's.
+    const footing = footingSpeedFactor(player, lab.map);
+    if (canMove) pushPlayerWithCollision(player, move.x * footing, move.y * footing, lab.map);
     clampToLab(player);
     player.isMoving = canMove;
   }
@@ -677,6 +750,37 @@ function step(lab: Lab, moves: Moves = NO_MOVES): void {
 
 function applySpiderFaults(spider: GrotesqueSpider): void {
   switch (fault) {
+    case 'web-blind':
+      // Her attacks tear no silk and her spit's escape rule forgets the web.
+      wrapMethod(spider, 'drainWebTears', () => []);
+      wrapMethod(spider, 'escapeFootingAt', () => 1);
+      break;
+    case 'dark-over-warnings':
+      // Broken in the draw-order gate itself: it is the lab's order, not hers.
+      break;
+    case 'web-abandon':
+      wrapMethod(spider, 'drainWebTears', () => []);
+      wrapMethod(spider, 'runAttackFrame', (original, args) => {
+        const [attack, , targets] = args;
+        const isArea = attack === 'slam' || attack === 'screech';
+        const map = readPrivate(spider, 'map');
+        const onWeb =
+          map instanceof GameMap &&
+          Array.isArray(targets) &&
+          targets.some((t: unknown) => {
+            if (!(t instanceof HumanPlayer || t instanceof CatPlayer) || !t.isAlive) return false;
+            const centre = centreOf(t);
+            const tile =
+              map.structure[Math.floor(centre.y / TILE_SIZE)]?.[Math.floor(centre.x / TILE_SIZE)];
+            return tile?.type === LAB_WEB;
+          });
+        if (isArea && onWeb && spider.attackFrame === SPIDER_ATTACK_TIMELINES[attack].tellFrames) {
+          callPrivate(spider, 'finishAttack', [attack]);
+          return undefined;
+        }
+        return original(...args);
+      });
+      break;
     case 'double-strike':
       wrapMethod(spider, 'strike', (original, args) => {
         original(...args);
@@ -1084,6 +1188,7 @@ function runScenario(
   escape: Vec | null,
   seedOffset: number,
   hold: (lab: Lab) => void = () => undefined,
+  withQuest = false,
 ): ScenarioRun {
   const spiderTile = {
     x: Math.floor(scenario.spiderCentre.x / TILE_SIZE),
@@ -1094,7 +1199,7 @@ function runScenario(
     spiderTile,
     humanTile: spiderTile,
     catTile: null,
-    withQuest: false,
+    withQuest,
   });
   const { spider, human } = lab;
   const anchor = { x: scenario.spiderCentre.x - HALF_TILE, y: scenario.spiderCentre.y - HALF_TILE };
@@ -4367,6 +4472,10 @@ interface FightResult {
   readonly eggsSmashed: number;
   readonly hatches: number;
   readonly attacksSeen: Readonly<Record<SpiderAttack, number>>;
+  /** Frames she stood still with nothing to do while a crawler was out of her reach. */
+  readonly stalledFrames: number;
+  /** Slams and screeches that landed on the party. */
+  readonly areaHits: number;
 }
 
 /**
@@ -4374,17 +4483,24 @@ interface FightResult {
  * which is the fastest safe kill and what the time-to-kill is measured with;
  * `whole-kit` alternates that with waiting out at range, so she also spits.
  */
-type ReaderStyle = 'punisher' | 'whole-kit';
+type ReaderStyle = 'punisher' | 'whole-kit' | 'tank' | 'web-camper';
 
-/** Where the party walks in, in tiles south of her. */
-const FIGHT_START_OFFSET_TILES = 7;
+/** Styles that stand in her way reading nothing and never dying, so the blows they take can be counted. */
+const standsInHerWay = (style: ReaderStyle): boolean => style === 'tank' || style === 'web-camper';
+
+/**
+ * How long a `tank` stands in her way. A tank waits where the whole-kit reader
+ * waits but reads nothing and never dies, so the blows it takes measure how
+ * much of her kit the room lets through — cover shows up as blows that miss.
+ */
+const TANK_BUDGET_SECONDS = 120;
 
 function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): FightResult {
   const lab = buildLab({
     seed,
-    spiderTile: LAB_CENTRE_TILE,
-    humanTile: { x: LAB_CENTRE_TILE.x - 2, y: LAB_CENTRE_TILE.y + FIGHT_START_OFFSET_TILES },
-    catTile: { x: LAB_CENTRE_TILE.x + 2, y: LAB_CENTRE_TILE.y + FIGHT_START_OFFSET_TILES },
+    spiderTile: labSite.spiderStart,
+    humanTile: labSite.humanStart,
+    catTile: labSite.catStart,
     withQuest: true,
   });
   const { spider, human, cat } = lab;
@@ -4412,7 +4528,12 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
   const threatsSeen = new Map<Player, Threat[]>();
   let attacksStarted = 0;
   let frame = 0;
-  for (; frame < FIGHT_FRAME_BUDGET && spider.isAlive; frame++) {
+  let stalledFrames = 0;
+  const frameBudget = standsInHerWay(style)
+    ? TANK_BUDGET_SECONDS * SPIDER_FRAMES_PER_SECOND
+    : FIGHT_FRAME_BUDGET;
+  for (; frame < frameBudget && spider.isAlive; frame++) {
+    const herBefore = centreOf(spider);
     const eggs = eggsOf(lab);
     const hatchlings = hatchlingsOf(lab);
     const moves = new Map<Player, Vec | null>();
@@ -4436,7 +4557,7 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
         // Between her and the middle of the room, so the way out of her next
         // attack is open floor rather than a wall.
         const her = centreOf(spider);
-        const roomMiddle = tileCentre(LAB_CENTRE_TILE.x, LAB_CENTRE_TILE.y);
+        const roomMiddle = tileCentre(labSite.centre.x, labSite.centre.y);
         const offset = unit({ x: roomMiddle.x - her.x, y: roomMiddle.y - her.y });
         // Out at range it lets the recovery go rather than walk in: she moves as
         // fast as it does, so range is only ever opened while she cannot follow.
@@ -4446,7 +4567,19 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
           spider.isExposed && closeIn ? meleeReach * PUNISH_REACH_FRACTION : TILE_SIZE * waitAt;
         goal = { x: her.x + offset.x * hover, y: her.y + offset.y * hover };
       }
-      const threats = visibleThreats(spider, me);
+      if (style === 'web-camper') {
+        // Camps on whichever patch of the room's web lies nearest her, the
+        // way a player who thinks the web will save them from her would.
+        const her = centreOf(spider);
+        const camp = firstOf(
+          [...labSite.webTiles].sort(
+            (a, b) => distance(tileCentre(a.x, a.y), her) - distance(tileCentre(b.x, b.y), her),
+          ),
+        );
+        if (camp !== undefined) goal = tileCentre(camp.x, camp.y);
+      }
+      const threats = standsInHerWay(style) ? [] : visibleThreats(spider, me);
+      if (standsInHerWay(style)) player.hp = player.maxHp;
       threatsSeen.set(player, threats);
       moves.set(player, readerStep(lab, player, goal, threats));
 
@@ -4484,6 +4617,17 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
       );
     }
     applyEggFaults(lab);
+    const herMotion = distance(herBefore, centreOf(spider));
+    const nearestCrawler = Math.min(
+      ...party
+        .filter((member) => member.player.isAlive)
+        .map((member) => distance(centreOf(member.player), centreOf(spider))),
+    );
+    const idleOutOfReach =
+      spider.currentAttack === null &&
+      spider.roarFrame === null &&
+      nearestCrawler > SLAM_START_RANGE_PX;
+    if (idleOutOfReach && herMotion < STALL_MOTION_PX) stalledFrames++;
     if (spider.currentAttack !== null && spider.attackFrame === 0) {
       attacksSeen[spider.currentAttack]++;
       attacksStarted++;
@@ -4537,7 +4681,11 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
     (hit) => hit.attackType !== undefined && bossTypes.has(hit.attackType),
   );
   const otherHits = lab.hits.length - bossHits.length;
+  const areaHits = lab.hits.filter(
+    (hit) => hit.attackType === 'slam' || hit.attackType === 'screech',
+  ).length;
   return {
+    areaHits,
     ttkSeconds: frame / SPIDER_FRAMES_PER_SECOND,
     killed: !spider.isAlive,
     bossDamageTaken: bossHits.length,
@@ -4546,8 +4694,12 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
     eggsSmashed,
     hatches: hatchedEggs.size,
     attacksSeen,
+    stalledFrames,
   };
 }
+
+/** Below this many pixels in a tick she counts as standing still. */
+const STALL_MOTION_PX = 0.05;
 
 const PERFECT_RUN_SEEDS = 3;
 
@@ -4602,6 +4754,532 @@ function gatePerfectRun(): void {
   }
 }
 
+// ─────────────────────────────────────────────────────────────── gate 12: the generated lab
+
+/**
+ * The fight measured in labs the generator really builds, one per doorway side,
+ * with the room's own furniture, webbing and dressing in play, against numbers
+ * recorded in the room as it stood before any of that furniture existed: a
+ * room may make her harder to fight, never easier. The synthetic lab the other
+ * gates use has none of the room in it, so it cannot see a bench that pins her
+ * or a shelf that hides a crawler.
+ */
+interface RealLabMetrics {
+  /** Mean seconds the punishing reader takes to kill her. Shorter is easier. */
+  readonly ttkSeconds: number;
+  /** Attacks she starts per minute of fight, lays included. Fewer is easier. */
+  readonly attacksPerMinute: number;
+  /** Blows of any kind landed per minute on a party that stands in her way. Fewer is easier. */
+  readonly hitsOnParty: number;
+  /** Seconds per fight she stood idle with the party out of reach. More is easier. */
+  readonly stalledSeconds: number;
+  /** Slams and screeches landed per minute on a party camped on the web nearest her. More is harder. */
+  readonly campedAreaHits: number;
+}
+
+/**
+ * The generated lab before its furniture: only the life machines and the
+ * terminal stood in it. Time-to-kill, attack rate and stall time were measured
+ * by this gate on those rooms, same seeds, same reader, before the furniture
+ * existed. The tank's hit rate and the web camper's area blows are measured on
+ * the same labs with their furniture and webbing stripped back to floor
+ * (`--bare-lab`), over
+ * `TANK_FIGHT_SEEDS` runs: over two runs it swung by a third either way on
+ * nothing but the seed, which no ten-percent gate can be held to.
+ */
+const REAL_LAB_BASELINE: Readonly<Record<DoorSide, RealLabMetrics>> = {
+  south: {
+    ttkSeconds: 236.0,
+    attacksPerMinute: 17.0,
+    hitsOnParty: 5.5,
+    stalledSeconds: 0.1,
+    campedAreaHits: 25.0,
+  },
+  north: {
+    ttkSeconds: 225.2,
+    attacksPerMinute: 17.1,
+    hitsOnParty: 6.4,
+    stalledSeconds: 0.1,
+    campedAreaHits: 25.0,
+  },
+  east: {
+    ttkSeconds: 233.6,
+    attacksPerMinute: 17.2,
+    hitsOnParty: 6.3,
+    stalledSeconds: 0.1,
+    campedAreaHits: 25.0,
+  },
+  west: {
+    ttkSeconds: 233.1,
+    attacksPerMinute: 17.1,
+    hitsOnParty: 5.5,
+    stalledSeconds: 0.1,
+    campedAreaHits: 25.5,
+  },
+};
+
+/** How far toward "easier" any metric may move from its baseline. */
+const EASIER_TOLERANCE_FRACTION = 0.1;
+/** Stall seconds are near zero, so they get an absolute allowance too. */
+const STALL_TOLERANCE_SECONDS = 1;
+const REAL_LAB_FIRST_SEED = 1;
+const REAL_LAB_SEED_SEARCH = 200;
+const REAL_LAB_FIGHT_SEEDS = 2;
+/**
+ * A tank's blows are few and lumpy — ten or so in two minutes — so it is run
+ * over more seeds than the punisher before its rate means anything.
+ */
+const TANK_FIGHT_SEEDS = 8;
+/**
+ * `--bare-lab` measures the generated labs with their furniture and webbing
+ * stripped back to floor: the room the baselines describe, for re-deriving them.
+ */
+const measureBareLab = process.argv.includes('--bare-lab');
+/** How far inside the doorway the party stands when the fight opens. */
+const PARTY_ENTRY_DEPTH_TILES = 3;
+const REAL_LAB_DOOR_SIDES: readonly DoorSide[] = ['south', 'north', 'east', 'west'];
+const SECONDS_PER_MINUTE = 60;
+
+const INWARD_STEP: Readonly<Record<DoorSide, Vec>> = {
+  south: { x: 0, y: -1 },
+  north: { x: 0, y: 1 },
+  east: { x: -1, y: 0 },
+  west: { x: 1, y: 0 },
+};
+
+function cloneGrid(grid: TileGrid): TileGrid {
+  return grid.map((row) => row.map((tile) => ({ ...tile })));
+}
+
+/** The walkable tile nearest `from`, by rings, skipping any already taken. */
+function nearestOpenTile(map: GameMap, from: Vec, taken: readonly Vec[]): Vec {
+  const SEARCH_RADIUS_TILES = 6;
+  for (let radius = 0; radius <= SEARCH_RADIUS_TILES; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const tile = { x: from.x + dx, y: from.y + dy };
+        const isTaken = taken.some((other) => other.x === tile.x && other.y === tile.y);
+        if (!isTaken && map.isWalkable(tile.x, tile.y)) return tile;
+      }
+    }
+  }
+  throw new Error(`no open tile within ${SEARCH_RADIUS_TILES} of (${from.x}, ${from.y})`);
+}
+
+/** The first generated floor-2 lab whose doorway is on `side`, as a fight site. */
+function generatedLabSite(side: DoorSide): LabSite | null {
+  for (let seed = REAL_LAB_FIRST_SEED; seed < REAL_LAB_FIRST_SEED + REAL_LAB_SEED_SEARCH; seed++) {
+    const { gameMap } = generateFloor(2, seed);
+    const room = gameMap.spiderLabRoom;
+    if (room === null) continue;
+    const doorway = firstOf(findBossRoomDoorways(gameMap.structure, room.bounds));
+    if (doorway?.side !== side) continue;
+    const template = cloneGrid(gameMap.structure);
+    if (measureBareLab) {
+      for (const tile of [...room.benchTiles, ...room.shelfTiles, ...room.webTiles]) {
+        const content = template[tile.y][tile.x];
+        content.type = content.groundType ?? SPIDER_LAB_FLOOR;
+      }
+    }
+    const inward = INWARD_STEP[side];
+    const entry = {
+      x: doorway.tile.x + inward.x * PARTY_ENTRY_DEPTH_TILES,
+      y: doorway.tile.y + inward.y * PARTY_ENTRY_DEPTH_TILES,
+    };
+    const beside = { x: entry.x + Math.abs(inward.y), y: entry.y + Math.abs(inward.x) };
+    // The quest blocks its furniture as it is built, so the party's footing is
+    // judged on a map the quest has already furnished.
+    const probe = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: cloneGrid(template) });
+    probe.spiderLabRoom = room;
+    new SpiderQuestSystem(probe, new EventBus(), () => undefined).dispose();
+    const humanStart = nearestOpenTile(probe, entry, []);
+    const catStart = nearestOpenTile(probe, beside, [humanStart]);
+    return {
+      name: `generated lab (seed ${seed}, door ${side})`,
+      bounds: room.bounds,
+      centre: room.centre,
+      buildMap: () => {
+        const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: cloneGrid(template) });
+        map.spiderLabRoom = room;
+        return map;
+      },
+      spiderStart: room.spiderEggTile,
+      humanStart,
+      catStart,
+      webTiles: room.webTiles,
+    };
+  }
+  return null;
+}
+
+function measureRealLab(site: LabSite): RealLabMetrics {
+  const previous = labSite;
+  labSite = site;
+  try {
+    const runs: FightResult[] = [];
+    const tankRuns: FightResult[] = [];
+    const camperRuns: FightResult[] = [];
+    for (let seed = 0; seed < REAL_LAB_FIGHT_SEEDS; seed++) {
+      runs.push(fightAtLevel(REFERENCE_PARTY_LEVEL, RUN_SEED + seed, 'punisher'));
+    }
+    for (let seed = 0; seed < TANK_FIGHT_SEEDS; seed++) {
+      tankRuns.push(fightAtLevel(REFERENCE_PARTY_LEVEL, RUN_SEED + seed, 'tank'));
+      camperRuns.push(fightAtLevel(REFERENCE_PARTY_LEVEL, RUN_SEED + seed, 'web-camper'));
+    }
+    const mean = (values: readonly number[]): number =>
+      values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
+    for (const run of runs) {
+      record(
+        '12',
+        `${site.name}: the reader kills her`,
+        run.killed,
+        `${run.killed ? 'killed' : 'NOT killed'} in ${fmt(run.ttkSeconds)} s`,
+      );
+    }
+    return {
+      ttkSeconds: mean(runs.map((run) => run.ttkSeconds)),
+      attacksPerMinute: mean(
+        runs.map((run) => {
+          const attacks = Object.values(run.attacksSeen).reduce((a, b) => a + b, 0);
+          return attacks / (run.ttkSeconds / SECONDS_PER_MINUTE);
+        }),
+      ),
+      hitsOnParty: mean(
+        tankRuns.map(
+          (run) =>
+            (run.bossDamageTaken + run.otherDamageTaken) / (run.ttkSeconds / SECONDS_PER_MINUTE),
+        ),
+      ),
+      stalledSeconds: mean(runs.map((run) => run.stalledFrames / SPIDER_FRAMES_PER_SECOND)),
+      campedAreaHits: mean(
+        camperRuns.map((run) => run.areaHits / (run.ttkSeconds / SECONDS_PER_MINUTE)),
+      ),
+    };
+  } finally {
+    labSite = previous;
+  }
+}
+
+function gateGeneratedLab(): void {
+  for (const side of REAL_LAB_DOOR_SIDES) {
+    const site = generatedLabSite(side);
+    record(
+      '12',
+      `a generated lab with its door on the ${side}`,
+      site !== null,
+      site?.name ?? 'none found',
+    );
+    if (site === null) continue;
+    const now = measureRealLab(site);
+    const base = REAL_LAB_BASELINE[side];
+    const describe = (m: RealLabMetrics): string =>
+      `ttk ${fmt(m.ttkSeconds)} s, ${fmt(m.attacksPerMinute)} attacks/min, ` +
+      `${fmt(m.hitsOnParty)} hits/min on a tank, ${fmt(m.stalledSeconds)} s stalled, ` +
+      `${fmt(m.campedAreaHits)} area blows/min on a web camper`;
+    notes.push(`gate 12 ${site.name}: now ${describe(now)}; baseline ${describe(base)}`);
+    const floor = 1 - EASIER_TOLERANCE_FRACTION;
+    const ceiling = 1 + EASIER_TOLERANCE_FRACTION;
+    record(
+      '12',
+      `${side} door: time-to-kill no more than 10% shorter than the bare lab`,
+      now.ttkSeconds >= base.ttkSeconds * floor,
+      `${fmt(now.ttkSeconds)} s vs ${fmt(base.ttkSeconds)} s`,
+    );
+    record(
+      '12',
+      `${side} door: she attacks no more than 10% less often than in the bare lab`,
+      now.attacksPerMinute >= base.attacksPerMinute * floor,
+      `${fmt(now.attacksPerMinute)} vs ${fmt(base.attacksPerMinute)} per minute`,
+    );
+    record(
+      '12',
+      `${side} door: the party is hit no more than 10% less than in the bare lab`,
+      now.hitsOnParty >= base.hitsOnParty * floor,
+      `${fmt(now.hitsOnParty)} vs ${fmt(base.hitsOnParty)} per minute`,
+    );
+    record(
+      '12',
+      `${side} door: she stands idle no longer than in the bare lab`,
+      now.stalledSeconds <= base.stalledSeconds * ceiling + STALL_TOLERANCE_SECONDS,
+      `${fmt(now.stalledSeconds)} s vs ${fmt(base.stalledSeconds)} s`,
+    );
+    record(
+      '12',
+      `${side} door: camping on her web gets a party slammed and screeched no less than bare floor`,
+      now.campedAreaHits >= base.campedAreaHits * floor,
+      `${fmt(now.campedAreaHits)} vs ${fmt(base.campedAreaHits)} per minute`,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────── gate 13: webs
+
+/**
+ * The synthetic lab with every open tile of it spun over with web: the
+ * slowest ground a crawler can stand on in her room, everywhere at once. The
+ * backed-up geometries are the ones slow ground makes harder.
+ */
+const WEB_SITE: LabSite = {
+  ...SYNTHETIC_SITE,
+  name: 'webbed synthetic lab',
+  buildMap: () => {
+    const map = SYNTHETIC_SITE.buildMap();
+    const webTiles: Vec[] = [];
+    for (let y = LAB_BOUNDS.y; y < LAB_BOUNDS.y + LAB_BOUNDS.h; y++) {
+      for (let x = LAB_BOUNDS.x; x < LAB_BOUNDS.x + LAB_BOUNDS.w; x++) {
+        const tile = map.structure[y][x];
+        if (!isWalkableTileType(tile)) continue;
+        placeProp(tile, LAB_WEB);
+        webTiles.push({ x, y });
+      }
+    }
+    // Listed as the room's own web, so the lab's dressing can tear it.
+    if (map.spiderLabRoom !== null) map.spiderLabRoom = { ...map.spiderLabRoom, webTiles };
+    return map;
+  },
+};
+
+const WEB_ATTACKS: readonly DamagingAttack[] = ['slam', 'screech', 'spit'];
+
+/**
+ * Every attack from every start geometry, with the crawler on web and the
+ * lab's own dressing running: she either declines it there or it lands and is
+ * dodged from the first lock tick. Her slam and screech tear the silk round
+ * her, which is what leaves the walk out as fast as her escape rule judges
+ * it. An attack she starts and then never strikes is a failure too: a web
+ * that makes her give attacks up makes the fight easier, not fairer.
+ */
+function gateWebEscapes(): void {
+  const previous = labSite;
+  labSite = WEB_SITE;
+  try {
+    let seedOffset = 0;
+    for (const attack of WEB_ATTACKS) {
+      for (const geometry of GEOMETRIES) {
+        const scenario = buildScenario(attack, geometry);
+        seedOffset++;
+        const label = `${attack} ${geometry} on web`;
+        if (isBackedUp(geometry) && attackDeclinedAt(scenario)) {
+          record('13', `${label}: declined, or dodged from the first lock tick`, true, 'declined');
+          continue;
+        }
+        let best: ScenarioRun | null = null;
+        for (let direction = 0; direction < ESCAPE_DIRECTIONS; direction++) {
+          const run = runScenario(
+            scenario,
+            escapeDirection(direction),
+            seedOffset,
+            () => undefined,
+            true,
+          );
+          if (best === null || run.clearance > best.clearance) best = run;
+        }
+        const reached = best?.startedAttack === attack;
+        const struckAndDodged =
+          best !== null && best.clearance > 0 && Number.isFinite(best.clearance);
+        const outcome = !reached
+          ? 'she never started it'
+          : best !== null && !Number.isFinite(best.clearance)
+            ? 'started, then never struck'
+            : `${fmt(best?.clearance ?? -Infinity)} px clear`;
+        record(
+          '13',
+          `${label}: declined, or struck and dodged from the first lock tick`,
+          reached && struckAndDodged,
+          outcome,
+        );
+      }
+    }
+  } finally {
+    labSite = previous;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────── gate 14: the dark
+
+/** How far beside her the egg the draw-order gate lays sits, in tiles: clear of her body. */
+const DARK_EGG_OFFSET_TILES = 3;
+/** Ticks of the dark fading in before the draw is recorded: well past the fade. */
+const DARK_SETTLE_TICKS = 40;
+/** Frames into a slam's tell the draw is recorded at, while its telegraph shows. */
+const DARK_TELL_FRAME = 10;
+const DARK_VIEW_PX = 2048;
+const RECORDED_DRAW_CALLS = ['drawImage', 'fill', 'stroke', 'fillRect', 'strokeRect'] as const;
+
+/**
+ * In a lab gone dark, every warning is drawn over the dark: the mask's blit
+ * comes first, and every draw call her telegraphs, her puddles and her eggs
+ * make comes after it. The dark exists to make the room harder to read; it must
+ * never make an attack harder to see.
+ */
+interface StagedLabDraw {
+  readonly quest: SpiderQuestSystem;
+  readonly dressing: NonNullable<SpiderQuestSystem['labDressing']>;
+  readonly spider: GrotesqueSpider;
+  readonly human: HumanPlayer;
+  readonly ctx: CanvasRenderingContext2D;
+  /** Every draw call made on `ctx`, in order. */
+  readonly log: Array<{ call: string; source: unknown }>;
+  /** The draw calls each wrapped method made, as index ranges into `log`. */
+  readonly spans: Array<{ what: string; from: number; to: number }>;
+  spanOf(owner: object, key: string, what: string): void;
+}
+
+/**
+ * Her in a slam's tell in the lab, an egg beside her and a puddle under her,
+ * the quest's dressing running, and a recording context ready to draw it on.
+ */
+function stageLabDraw(darken: boolean): StagedLabDraw | null {
+  const lab = buildLab({
+    seed: RUN_SEED,
+    spiderTile: LAB_CENTRE_TILE,
+    humanTile: LAB_CENTRE_TILE,
+    catTile: null,
+    withQuest: true,
+  });
+  const { spider, human, quest } = lab;
+  const dressing = quest?.labDressing ?? null;
+  if (quest === null || dressing === null) return null;
+  const anchor = centreOf(spider);
+  const decision = DECISION_DISTANCE_PX.slam;
+  let ticks = 0;
+  while (
+    !(spider.currentAttack === 'slam' && spider.attackFrame >= DARK_TELL_FRAME) &&
+    ticks < SETUP_FRAME_CEILING
+  ) {
+    teleportMob(lab, spider, anchor.x - HALF_TILE, anchor.y - HALF_TILE);
+    placeCentre(human, { x: anchor.x, y: anchor.y + decision });
+    step(lab);
+    ticks++;
+  }
+  const eggs = readPrivate(quest, 'spiderEggs');
+  if (!Array.isArray(eggs)) throw new Error("lookup failed: the quest's eggs");
+  const egg = new SpiderEgg(
+    LAB_CENTRE_TILE.x + DARK_EGG_OFFSET_TILES,
+    LAB_CENTRE_TILE.y,
+    TILE_SIZE,
+  );
+  eggs.push(egg);
+  const puddles = readPrivate(spider, 'groundTraps');
+  if (!Array.isArray(puddles)) throw new Error('lookup failed: her puddles');
+  const puddle: SpitPuddle = {
+    x: anchor.x,
+    y: anchor.y + TILE_SIZE,
+    phase: 'idle',
+    frameTimer: 0,
+    animFrame: 0,
+    ttl: SETUP_FRAME_CEILING,
+    evaporateFramesLeft: null,
+  };
+  puddles.push(puddle);
+  dressing.onSeal();
+  if (darken) dressing.enterLightPhase(2);
+  for (let i = 0; i < DARK_SETTLE_TICKS; i++) dressing.update(lab.ctx());
+
+  // The lab draws only what the view can see, so the view has to be set.
+  setViewportSize(DARK_VIEW_PX, DARK_VIEW_PX);
+  const ctx = gameContext(DARK_VIEW_PX, DARK_VIEW_PX);
+  const log: Array<{ call: string; source: unknown }> = [];
+  for (const name of RECORDED_DRAW_CALLS) {
+    const original: unknown = Reflect.get(ctx, name);
+    if (typeof original !== 'function') throw new Error(`lookup failed: ctx.${name}`);
+    Reflect.set(ctx, name, (...args: unknown[]): unknown => {
+      log.push({ call: name, source: args[0] });
+      const result: unknown = Reflect.apply(original, ctx, args);
+      return result;
+    });
+  }
+  const spans: Array<{ what: string; from: number; to: number }> = [];
+  const spanOf = (owner: object, key: string, what: string): void => {
+    wrapMethod(owner, key, (original, args) => {
+      const from = log.length;
+      const result = original(...args);
+      spans.push({ what, from, to: log.length });
+      return result;
+    });
+  };
+  spanOf(spider, 'renderGroundTelegraphs', 'her floor telegraph');
+  spanOf(spider, 'renderTelegraphOutlines', 'her telegraph outline');
+  spanOf(spider, 'renderSpitGroundTraps', 'her puddles');
+  spanOf(egg, 'render', 'an egg');
+  return { quest, dressing, spider, human, ctx, log, spans, spanOf };
+}
+
+function gateDarkDrawOrder(): void {
+  const staged = stageLabDraw(true);
+  if (staged === null) {
+    record('14', 'the lab builds its dressing', false, 'no quest or no dressing');
+    return;
+  }
+  const { quest, dressing, spider, human, ctx, log, spans } = staged;
+  const masks = readPrivate(dressing, 'masks');
+  if (!(masks instanceof Map)) throw new Error("lookup failed: the lab's masks");
+  const maskSurfaces = new Set<unknown>(masks.values());
+  if (fault === 'dark-over-warnings') {
+    wrapMethod(dressing, 'renderDarkness', () => undefined);
+    quest.renderLabDarkness(ctx, 0, 0, human);
+    Reflect.deleteProperty(dressing, 'renderDarkness');
+    dressing.renderDarkness(ctx, 0, 0);
+    spider.renderGroundTelegraphs(ctx, 0, 0);
+  } else {
+    quest.renderLabDarkness(ctx, 0, 0, human);
+  }
+  const maskAt = log.findIndex(
+    (entry) => entry.call === 'drawImage' && maskSurfaces.has(entry.source),
+  );
+  record(
+    '14',
+    'a lab gone dark blits its mask',
+    maskAt >= 0,
+    maskAt >= 0 ? `call ${maskAt}` : 'never',
+  );
+  const drawnWarnings = spans.filter((span) => span.to > span.from);
+  const drew = (what: string): boolean => drawnWarnings.some((span) => span.what === what);
+  record(
+    '14',
+    'her telegraph, her puddle and the egg are drawn at all in the dark',
+    drew('her floor telegraph') && drew('her puddles') && drew('an egg'),
+    drawnWarnings.map((span) => span.what).join(', ') || 'nothing drawn',
+  );
+  for (const span of drawnWarnings) {
+    record(
+      '14',
+      `${span.what}: every draw call comes after the dark`,
+      maskAt >= 0 && span.from > maskAt,
+      `calls ${span.from}–${span.to - 1}, mask at ${maskAt}`,
+    );
+  }
+  gateLitCeilingOrder();
+}
+
+/**
+ * Lit, the ceiling's light banks hang over everything — and her warnings are
+ * drawn back over them, so no bank can hide a slam cone or a puddle.
+ */
+function gateLitCeilingOrder(): void {
+  const staged = stageLabDraw(false);
+  if (staged === null) return;
+  const { quest, dressing, human, ctx, spans, spanOf } = staged;
+  spanOf(dressing, 'renderCeiling', 'the ceiling');
+  if (fault === 'dark-over-warnings') wrapMethod(quest, '_renderLabWarnings', () => undefined);
+  quest.renderLabDarkness(ctx, 0, 0, human);
+  const ceiling = spans.find((span) => span.what === 'the ceiling');
+  const warningsAfter = spans.filter(
+    (span) => span.what !== 'the ceiling' && ceiling !== undefined && span.from >= ceiling.to,
+  );
+  record(
+    '14',
+    'lit: her telegraph and puddles are drawn back over the ceiling banks',
+    ceiling !== undefined &&
+      warningsAfter.some((span) => span.what === 'her floor telegraph') &&
+      warningsAfter.some((span) => span.what === 'her puddles'),
+    ceiling === undefined
+      ? 'no ceiling drawn'
+      : warningsAfter.map((span) => span.what).join(', ') || 'nothing after the ceiling',
+  );
+}
+
 // ─────────────────────────────────────────────────────────────── main
 
 const startedAt = Date.now();
@@ -4630,6 +5308,9 @@ if (gateSelected('8')) gateRoots();
 if (gateSelected('9')) gateEggs();
 if (gateSelected('10')) gateCleanup();
 if (gateSelected('11')) gatePerfectRun();
+if (gateSelected('12')) gateGeneratedLab();
+if (gateSelected('13')) gateWebEscapes();
+if (gateSelected('14')) gateDarkDrawOrder();
 
 const GATE_COLUMN = 5;
 const CHECK_COLUMN = 78;

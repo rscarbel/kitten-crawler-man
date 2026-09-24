@@ -45,6 +45,8 @@ export const CAMP_SALT = 7;
 export const PROP_SALT = 8;
 /** Building facade texture grain and lighting jitter. */
 export const BUILDING_SALT = 9;
+/** Boss-room prop sheets. */
+export const BOSS_ROOM_SALT = 10;
 
 let current = DEFAULT_FLOOR_ART_SEED;
 

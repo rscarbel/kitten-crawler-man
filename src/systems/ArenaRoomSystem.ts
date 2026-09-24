@@ -3,7 +3,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { drawBenchPressFloor, drawTreadmillFloor } from '../sprites/gymEquipmentSprite';
+import { drawGymPickupSprite } from '../sprites/gymRoomSprites';
 import type { ArenaExterior } from '../map/DungeonGenerator';
 
 type ArenaGymItemId = 'gym_bench_press' | 'gym_treadmill';
@@ -157,11 +157,13 @@ export class ArenaRoomSystem implements GameSystem {
       const sx = pickup.worldX - camX;
       const sy = pickup.worldY - camY;
 
-      if (pickup.itemId === 'gym_bench_press') {
-        drawBenchPressFloor(ctx, sx, sy, ts);
-      } else {
-        drawTreadmillFloor(ctx, sx, sy, ts);
-      }
+      drawGymPickupSprite(
+        ctx,
+        pickup.itemId === 'gym_bench_press' ? 'bench' : 'treadmill',
+        sx,
+        sy,
+        ts,
+      );
 
       if (activePlayer) {
         const pcx = activePlayer.x + ts * TILE_CENTER_OFFSET;

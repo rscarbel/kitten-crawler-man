@@ -7,9 +7,13 @@ import environmentTownscapeManifest from '../images/environment/townscape/manife
 import environmentTreesManifest from '../images/environment/trees/manifest.json';
 import environmentRocksManifest from '../images/environment/rocks/manifest.json';
 import environmentCampManifest from '../images/environment/camp/manifest.json';
+import environmentBossKrakarenManifest from '../images/environment/boss_krakaren/manifest.json';
+import environmentHoarderManifest from '../images/environment/hoarder/manifest.json';
+import environmentGymManifest from '../images/environment/gym/manifest.json';
+import environmentSpiderLabManifest from '../images/environment/spider_lab/manifest.json';
 import environmentOverCityManifest from '../images/environment/towns/over_city/manifest.json';
 import interfacesManifest from '../images/interfaces/manifest.json';
-import grotesqueSpiderManifest from '../images/bosses/grotesque_spider/manifest.json';
+import environmentColosseumManifest from '../images/environment/colosseum/manifest.json';
 import { TILE_SIZE } from './constants';
 import { ASSET_GROUPS, type AssetGroup } from './assetGroups';
 import { settings } from './Settings';
@@ -35,10 +39,23 @@ const environmentManifest = {
   // The goblin camp's tents and its fire, in their own directory for the same
   // reason: `writeSheets` replaces a directory's whole manifest.
   ...environmentCampManifest,
+  // The Hoarder's lair: its junk, its floor and its toppling towers, painted
+  // at floor load. Its own directory so no other room's sheets share a file.
+  ...environmentHoarderManifest,
+  // The Juicer's gym equipment, painted at floor load, in its own directory for
+  // the same reason.
+  ...environmentGymManifest,
+  // Krakaren Clone's clone lab: its vats and consoles are Y-sorted tile props,
+  // so their reach above the tile must widen the map's cull margin too.
+  ...environmentBossKrakarenManifest,
+  // The Grotesque Spider's lab: benches and shelving are Y-sorted tile props too.
+  ...environmentSpiderLabManifest,
+  // Ball of Swine's Iron Colosseum: its portcullis, cages, crowd and banners,
+  // painted at floor load, in its own directory for the same reason.
+  ...environmentColosseumManifest,
 } as const;
 
 const manifestJson = {
-  ...grotesqueSpiderManifest,
   ...effectsManifest,
   ...environmentManifest,
   ...interfacesManifest,

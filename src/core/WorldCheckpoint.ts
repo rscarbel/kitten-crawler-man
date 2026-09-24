@@ -4,13 +4,13 @@ import type { ArenaRoomCheckpoint } from '../systems/ArenaRoomSystem';
 import type { BarrierCheckpoint } from '../systems/BarrierSystem';
 import type { BopcaCheckpoint } from '../systems/BopcaSystem';
 import type { BossRoomCheckpoint } from '../systems/BossRoomSystem';
+import type { BossRoomDressingCheckpoint } from '../systems/bossRooms/bossRoomDressingCheckpoint';
 import type { BountyCheckpoint } from '../systems/BountySystem';
 import type { CircusQuestCheckpoint } from '../systems/CircusQuestSystem';
 import type { DefendQuestCheckpoint } from '../systems/DefendQuestSystem';
 import type { DestructionCheckpoint } from '../systems/kits/DestructionKit';
 import type { DifficultyTelemetryCheckpoint } from '../systems/DifficultyTelemetrySystem';
 import type { DoomsdayEscapeCheckpoint } from '../systems/DoomsdayEscapeSystem';
-import type { JuicerRoomCheckpoint } from '../systems/JuicerRoomSystem';
 import type { MercenaryCheckpoint } from '../systems/MercenarySystem';
 import type { MiniMapCheckpoint } from '../systems/MiniMapSystem';
 import type { MongoCheckpoint } from '../systems/MongoSystem';
@@ -54,7 +54,8 @@ export interface WorldCheckpoint {
   bossRoom: BossRoomCheckpoint;
   arena: ArenaCheckpoint;
   arenaRoom: ArenaRoomCheckpoint;
-  juicerRoom: JuicerRoomCheckpoint;
+  /** The props, slow ground and room hazards each boss room changes during its fight. */
+  bossRoomDressing: BossRoomDressingCheckpoint;
   barriers: BarrierCheckpoint;
   safeRoom: SafeRoomCheckpoint;
   miniMap: MiniMapCheckpoint;

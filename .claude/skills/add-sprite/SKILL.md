@@ -49,6 +49,12 @@ look at cannot be different art.
   `AssetGroup` the floor declares, and say whether it varies with the floor's art
   seed. Seeded art is repainted whenever a floor's layout changes; unseeded art
   survives the stairs and is released with its asset group.
+  Boss-room families are the exception to registering one by one: each room's
+  plans live in `src/sprites/sheets/bossRooms/<room>Sheets.ts`, keyed by its
+  asset group (`boss_hoarder`, `boss_juicer`, `boss_krakaren`,
+  `boss_grotesque_spider`, `boss_colosseum`) in `bossRoomSheets.ts`, and
+  `requestEnvironmentSheetsForGroups` paints every declared one in a single
+  loop. `npm run gates:boss-rooms` checks those sheets against the manifest.
 - When converting an existing PNG family, prove the port changed nothing:
   snapshot the sheets from git and run
   `npm run parity:props -- --family=<name> --ref=<dir>`. Every sheet must come

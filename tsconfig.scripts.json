@@ -7,6 +7,10 @@
     "types": ["node"]
   },
   "include": [
+    "scripts/render-boss-rooms.ts",
+    "scripts/gates-boss-rooms.ts",
+    "scripts/gates-krakaren-room.ts",
+    "scripts/bossRooms/*.ts",
     "scripts/verify-progression.ts",
     "scripts/verify-quest-choke.ts",
     "scripts/verify-world-seed.ts",
@@ -77,6 +81,8 @@
     "scripts/playtest.ts",
     "scripts/render-townsfolk.ts",
     "scripts/gates-hoarder.ts",
+    "scripts/sim-hoarder-fight.ts",
+    "scripts/bake-hoarder-room-art.ts",
     "scripts/render-hoarder.ts",
     "scripts/render-cockroach.ts",
     "scripts/gates-troglodyte.ts",
@@ -152,6 +158,7 @@
     "scripts/gates-bugaboo.ts",
     "scripts/render-bugaboo.ts",
     "scripts/gates-juicer.ts",
+    "scripts/gates-juicer-gym.ts",
     "scripts/render-juicer.ts",
     "scripts/render-protective-shell.ts",
     "scripts/gates-protective-shell.ts",

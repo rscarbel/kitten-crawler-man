@@ -30,6 +30,7 @@
  */
 
 import type { TileContent } from '../tileTypes';
+import { drawColosseumRim, isColosseumRingTile } from './bossRooms/colosseumTiles';
 import {
   BUILDING_WALL,
   FloorTypeValue,
@@ -1496,8 +1497,13 @@ function drawOcclusion(
   // one per tile, which is only invisible for as long as its art is opaque.
   if (occluderAt(structure, tx, ty)) return;
 
+  // The colosseum's round wall paints its own curved shadow; a square band cast
+  // from any of its tiles would cut straight across the curve.
+  const nearColosseum = drawColosseumRim(ctx, structure, sx, sy, ts, tx, ty);
+
   for (const side of OCCLUSION_SIDES) {
     if (!occluderAt(structure, tx + side.dx, ty + side.dy)) continue;
+    if (nearColosseum && isColosseumRingTile(structure, tx + side.dx, ty + side.dy)) continue;
 
     // The band runs along the axis the occluder is not on; it needs a taper at
     // either end where the next tile along has no occluder to continue it.

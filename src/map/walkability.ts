@@ -64,6 +64,16 @@ import {
   BROKEN_CHAIR,
   BROKEN_BOOKSHELF,
   CRAWLER_SIGN,
+  HOARD_PILE,
+  HOARD_TOWER,
+  HOARD_BAG,
+  GYM_RACK,
+  GYM_SQUAT_RACK,
+  GYM_CABLE_STACK,
+  KRAKAREN_TANK,
+  KRAKAREN_CONSOLE,
+  LAB_BENCH,
+  LAB_SHELF,
 } from './tileTypes';
 
 /** Tile types that cannot be walked on. Everything not listed here is walkable. */
@@ -160,6 +170,31 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   BROKEN_CHAIR,
   BROKEN_BOOKSHELF,
   CRAWLER_SIGN,
+  // Boss-room props. The walkable boss-room decals (`HOARD_RUBBLE`,
+  // `GYM_TREADMILL_BELT`, `KRAKAREN_WADE`, `LAB_WEB`, `ARENA_MUD`) are
+  // deliberately absent: each is ground a fight is meant to cross.
+  HOARD_PILE,
+  HOARD_TOWER,
+  HOARD_BAG,
+  GYM_RACK,
+  GYM_SQUAT_RACK,
+  GYM_CABLE_STACK,
+  KRAKAREN_TANK,
+  KRAKAREN_CONSOLE,
+  LAB_BENCH,
+  LAB_SHELF,
+];
+
+/**
+ * Solid tile types low enough to see and shoot over. A crawler crouched behind
+ * a waist-high bench would otherwise be invisible to a boss's aim, and every
+ * such prop in a boss room would become cover that makes the fight easier.
+ */
+const SIGHT_TRANSPARENT_TILE_TYPES: readonly number[] = [
+  HOARD_BAG,
+  GYM_RACK,
+  KRAKAREN_CONSOLE,
+  LAB_BENCH,
 ];
 
 /**
@@ -172,6 +207,21 @@ const WALKABLE_BY_TILE_TYPE = ((): Uint8Array => {
   for (const type of NON_WALKABLE_TILE_TYPES) table[type] = 0;
   return table;
 })();
+
+const SIGHT_TRANSPARENT_BY_TILE_TYPE = ((): Uint8Array => {
+  const table = new Uint8Array(TILE_TYPE_COUNT);
+  for (const type of SIGHT_TRANSPARENT_TILE_TYPES) table[type] = 1;
+  return table;
+})();
+
+/**
+ * Whether a solid tile's *type* still lets sight through. Only meaningful for a
+ * tile that blocks movement: `GameMap.hasLineOfSight` asks it after a tile has
+ * failed the walkability test.
+ */
+export function isSightTransparentTileType(tile: TileContent): boolean {
+  return SIGHT_TRANSPARENT_BY_TILE_TYPE[tile.type] === 1;
+}
 
 /**
  * Whether a tile's *type* permits walking, ignoring every runtime block bit

@@ -44,6 +44,16 @@ import {
   FLASH_WALL,
   PIGMENT_SHELF,
   GRINDING_SLAB,
+  HOARD_PILE,
+  HOARD_TOWER,
+  HOARD_BAG,
+  GYM_RACK,
+  GYM_SQUAT_RACK,
+  GYM_CABLE_STACK,
+  KRAKAREN_TANK,
+  KRAKAREN_CONSOLE,
+  LAB_BENCH,
+  LAB_SHELF,
 } from '../tileTypes';
 import { BOARD_CENTRE_X, SIGN_ARROW_CENTRE_Y_TILES } from '../../sprites/art/crawlerSignArt';
 import { inferFloorType } from './helpers';
@@ -1180,6 +1190,16 @@ export function drawDecorationTile(
       case FLASH_WALL:
       case PIGMENT_SHELF:
       case GRINDING_SLAB:
+      case HOARD_PILE:
+      case HOARD_TOWER:
+      case HOARD_BAG:
+      case GYM_RACK:
+      case GYM_SQUAT_RACK:
+      case GYM_CABLE_STACK:
+      case KRAKAREN_TANK:
+      case KRAKAREN_CONSOLE:
+      case LAB_BENCH:
+      case LAB_SHELF:
       case MODERN_DECORATION: {
         const floorType = inferFloorType(structure, tx, ty);
         if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {

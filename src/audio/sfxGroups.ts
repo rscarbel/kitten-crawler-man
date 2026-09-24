@@ -239,6 +239,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tuskling_grunt_2',
     'tuskling_grunt_3',
     'tuskling_grunt_4',
+    // The colosseum's portcullis landing.
+    'massive_metal_hit',
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
   ],

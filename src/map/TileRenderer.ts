@@ -32,8 +32,10 @@ import {
   FLASH_WALL,
   PIGMENT_SHELF,
   GRINDING_SLAB,
+  BOSS_ROOM_PROP_TILE_TYPES,
 } from './tileTypes';
 import { drawTerrainTile } from './tiles/terrainTiles';
+import { drawBossRoomTile } from './tiles/bossRoomTiles';
 import { drawSpecialFloorTile } from './tiles/specialFloorTiles';
 import { drawBuildingTile } from './tiles/buildingTiles';
 import { drawDecorationTile, decorationAnimationFrame } from './tiles/decorationTiles';
@@ -47,7 +49,7 @@ import {
   type MapSpriteExtentsPx,
 } from '../core/SpriteLoader';
 
-const CHUNK_TILES = 16;
+export const CHUNK_TILES = 16;
 
 /**
  * Cold-chunk baking allowed per frame, counted in tiles so the budget means the
@@ -126,6 +128,9 @@ const DECORATION_TYPES = new Set([
   FLASH_WALL,
   PIGMENT_SHELF,
   GRINDING_SLAB,
+  // Boss-room props, low ones included: a boss or a crawler north of a garbage
+  // bag must still be drawn behind it.
+  ...BOSS_ROOM_PROP_TILE_TYPES,
 ]);
 
 /**
@@ -191,6 +196,7 @@ function drawTile(
   if (drawBuildingTile(ctx, structure, type, sx, sy, ts, tx, ty)) return;
   if (drawDecorationTile(ctx, structure, type, sx, sy, ts, tx, ty, false)) return;
   if (drawInteriorTile(ctx, structure, type, sx, sy, ts, tx, ty)) return;
+  if (drawBossRoomTile(ctx, structure, type, sx, sy, ts, tx, ty)) return;
 }
 
 /** Set of roof tile types — used when computing BUILDING_WALL gable overhead. */

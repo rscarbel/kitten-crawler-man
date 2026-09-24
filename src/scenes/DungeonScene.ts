@@ -181,7 +181,12 @@ import {
   interactionPromptsDrawnThisFrame,
   setInteractionPromptsSuppressed,
 } from '../ui/InteractionPrompt';
-import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
+import type { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
+import {
+  BossRoomDressings,
+  buildColosseumDressing,
+  buildGauntletRoomDressings,
+} from '../systems/bossRooms/BossRoomDressings';
 import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
@@ -1004,6 +1009,7 @@ export class DungeonScene extends GameplayScene {
   private marketPanel: PricedMenuPanel | null = null;
   private fortuneTeller: FortuneTellerPanel | null = null;
   private juicerRoom: JuicerRoomSystem;
+  private bossRoomDressings: BossRoomDressings;
   private arenaRoom: ArenaRoomSystem;
   private barriers: BarrierSystem;
   private defendQuest!: DefendQuestSystem;
@@ -1480,11 +1486,9 @@ export class DungeonScene extends GameplayScene {
     // After the counter, because the furnishings keep clear of every tile it
     // owns and cannot know them until it is planned.
     stampSafeRoomDecor(this.gameMap);
-    this.bossRoom = new BossRoomSystem(
-      this.gameMap,
-      this.miniMap,
-      levelDef.bossRooms?.map((b) => b.type) ?? [],
-      (roomIndex) => this.treasureChests.hasUnopenedBossChest(roomIndex),
+    const bossTypes = levelDef.bossRooms?.map((b) => b.type) ?? [];
+    this.bossRoom = new BossRoomSystem(this.gameMap, this.miniMap, bossTypes, (roomIndex) =>
+      this.treasureChests.hasUnopenedBossChest(roomIndex),
     );
     for (const bossType of options?.preDefeatedBossTypes ?? []) {
       this.bossRoom.markPreDefeated(bossType);
@@ -1499,7 +1503,8 @@ export class DungeonScene extends GameplayScene {
       gameMap: this.gameMap,
       bossRoom: this.bossRoom,
     };
-    this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
+    const gauntletRoomDressings = buildGauntletRoomDressings(this.gameMap, bossTypes);
+    this.juicerRoom = gauntletRoomDressings.juicer;
     // Anchored to the room he spawns into rather than to where his corpse ends
     // up: a knockback onto a doorway or boundary tile can land his death
     // position outside every tracked boss room, which would otherwise pin
@@ -1532,6 +1537,7 @@ export class DungeonScene extends GameplayScene {
       // something else rebuilds the list.
       if (mob instanceof GrotesqueSpider) this.grotesqueSpiders.push(mob);
     });
+    this.spiderQuest.labDressing?.setLootSink(this.destruction.loot);
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
     this.anchorQuestProgress = options?.anchorQuestProgress ?? createAnchorQuestProgress();
@@ -1562,6 +1568,20 @@ export class DungeonScene extends GameplayScene {
       (mob) => this.world.roster.add(mob),
       this.bossRoom,
     );
+    const colosseumDressing = buildColosseumDressing(this.gameMap);
+    this.arena.dressing = colosseumDressing;
+    this.bossRoomDressings = new BossRoomDressings(
+      {
+        ...gauntletRoomDressings,
+        spiderLab: this.spiderQuest.labDressing,
+        colosseum: colosseumDressing,
+      },
+      bossTypes,
+    );
+    this.bossRoom.fightListener = this.bossRoomDressings;
+    // After the listener exists: a preset's pre-defeated bosses were marked
+    // before there was any room to tell.
+    this.replayBossRoomDefeats();
     // Trees are generated only by `OverworldGenerator`, so every other floor
     // would build a system with nothing on the map to talk to.
     this.trees = levelDef.isOverworld
@@ -1608,7 +1628,9 @@ export class DungeonScene extends GameplayScene {
     this.companion.registerHazardSource(this.bossRoom);
     this.companion.registerHazardSource(this.clownGas);
     this.companion.registerHazardSource(this.fairyFireballs);
+    this.companion.registerHazardSource(this.bossRoomDressings);
     this.combat.mobLoop.registerHazardSource(this.bossRoom);
+    this.combat.mobLoop.registerHazardSource(this.bossRoomDressings);
     this.combat.mobLoop.registerHazardSource(this.clownGas);
     this.combat.mobLoop.registerHazardSource(this.fairyFireballs);
     this.combat.mobLoop.registerHazardSource(this.lavaBalls);
@@ -1630,7 +1652,7 @@ export class DungeonScene extends GameplayScene {
       const dist = Math.hypot(companion.x - caster.x, companion.y - caster.y);
       const hasLOS =
         dist < ts * FOLLOWER_FOLLOW_RANGE_TILES ||
-        this.gameMap.hasLineOfSight(
+        this.gameMap.hasWalkableLine(
           companion.x + ts * TILE_CENTER_OFFSET,
           companion.y + ts * TILE_CENTER_OFFSET,
           caster.x + ts * TILE_CENTER_OFFSET,
@@ -3751,6 +3773,7 @@ export class DungeonScene extends GameplayScene {
     this.skeletonSummons.resetForCheckpoint();
     this.bossRoom.resetForCheckpoint();
     this.arena.resetForCheckpoint();
+    this.bossRoomDressings.resetForCheckpoint();
 
     // Last, so the snapshot has the final word. The two resets above clear the
     // same room locks and entry windows the snapshot describes, and they clear
@@ -3805,7 +3828,7 @@ export class DungeonScene extends GameplayScene {
       bossRoom: this.bossRoom.captureCheckpoint(),
       arena: this.arena.captureCheckpoint(),
       arenaRoom: this.arenaRoom.captureCheckpoint(),
-      juicerRoom: this.juicerRoom.captureCheckpoint(),
+      bossRoomDressing: this.bossRoomDressings.captureCheckpoint(),
       barriers: this.barriers.captureCheckpoint(),
       safeRoom: this.safeRoom.captureCheckpoint(),
       miniMap: this.miniMap.captureCheckpoint(),
@@ -3862,7 +3885,7 @@ export class DungeonScene extends GameplayScene {
     this.bossRoom.restoreCheckpoint(world.bossRoom);
     this.arena.restoreCheckpoint(world.arena);
     this.arenaRoom.restoreCheckpoint(world.arenaRoom);
-    this.juicerRoom.restoreCheckpoint(world.juicerRoom);
+    this.bossRoomDressings.restoreCheckpoint(world.bossRoomDressing);
     this.barriers.restoreCheckpoint(world.barriers);
     this.safeRoom.restoreCheckpoint(world.safeRoom);
     this.miniMap.restoreCheckpoint(world.miniMap);
@@ -3953,12 +3976,22 @@ export class DungeonScene extends GameplayScene {
       mordecaiDebrief: { ...this.mordecaiDebrief },
       tacticsNoticesSeen: [...this.tacticsNoticesSeen],
       doomsday: capturePersistedDoomsday(this.doomsdayQuestProgress, Date.now()),
+      bossRoomDressing: this.bossRoomDressings.captureCheckpoint(),
 
       krakarenKilled: this.krakarenKilled,
       krakarenBossRoomIdx: this.krakarenBossRoomIdx,
       juicerKilled: this.juicerKilled,
       juicerBossRoomIdx: this.juicerBossRoomIdx,
     };
+  }
+
+  /** Tells each boss room whose boss is already dead that it was won. */
+  private replayBossRoomDefeats(): void {
+    this.bossRoomDressings.replayDefeats({
+      gauntletBossTypes: this.bossRoom.defeatedBossTypes,
+      spiderLab: this.spiderQuest.isComplete,
+      colosseum: this.arena.phase2Active,
+    });
   }
 
   /**
@@ -3993,6 +4026,7 @@ export class DungeonScene extends GameplayScene {
       mordecaiDebrief,
       tacticsNoticesSeen,
       doomsday,
+      bossRoomDressing,
       krakarenKilled,
       krakarenBossRoomIdx,
       juicerKilled,
@@ -4019,6 +4053,10 @@ export class DungeonScene extends GameplayScene {
     );
     this.defendQuest.restoreCheckpoint(fromPersistedDefendQuestCheckpoint(defendQuest));
     this.spiderQuest.restoreCheckpoint(fromPersistedSpiderQuestCheckpoint(spiderQuest));
+    if (bossRoomDressing !== undefined) this.bossRoomDressings.restoreCheckpoint(bossRoomDressing);
+    // A save older than the dressings restores none of them, so the rooms
+    // learn of their dead bosses here instead.
+    this.replayBossRoomDefeats();
 
     // Before the quest systems' own restores: they reconcile the NPCs their
     // constructors spawned against this same progress object, and must see the
@@ -5130,7 +5168,7 @@ export class DungeonScene extends GameplayScene {
         return;
       }
       if (
-        this.juicerRoom.tryPickupNear(active) ||
+        this.bossRoomDressings.tryInteract(active) ||
         this.arenaRoom.tryPickupNear(active) ||
         this.barriers.tryPickupNear(active)
       ) {
@@ -5696,7 +5734,7 @@ export class DungeonScene extends GameplayScene {
       bodyPartGore: this.combat.bodyPartGore,
       safeRoom: this.safeRoom,
       bossRoom: this.bossRoom,
-      juicerRoom: this.juicerRoom,
+      bossRoomDressings: this.bossRoomDressings,
       arenaRoom: this.arenaRoom,
       stairwell: this.stairwell,
       building: this.building,
@@ -5743,8 +5781,10 @@ export class DungeonScene extends GameplayScene {
       spider.renderAboveEntities(ctx, camX, camY, [this.human, this.cat]);
     }
     this.murderQuest.renderWellClueOverlay(ctx, camX, camY, this.active());
-    this.spiderQuest.renderTableForeground(ctx, camX, camY, this.active());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
+    // Over every body in the lab and under every warning: the dark her roars
+    // bring down, with her telegraphs, puddles and eggs drawn back over it.
+    this.spiderQuest.renderLabDarkness(ctx, camX, camY, this.active());
     this.bossRoom.renderProjectiles(ctx, camX, camY);
     this.treasureChests.renderLootArrows(ctx, camX, camY);
     // Projectile renders after entities so it flies visually over mobs/players
@@ -6461,7 +6501,13 @@ export class DungeonScene extends GameplayScene {
     }
     this.overworldMusic?.update(ctx);
     this.ambientSound?.update(ctx);
-    this.juicerRoom.update(ctx);
+    this.bossRoomDressings.update(ctx);
+    const colosseumCue = this.bossRoomDressings.parts.colosseum?.takeSoundCue() ?? null;
+    if (colosseumCue !== null) this.audio?.play(colosseumCue);
+    for (const cue of this.juicerRoom.drainSoundCues()) this.audio?.play(cue);
+    for (const cue of this.bossRoomDressings.parts.krakaren?.drainSoundCues() ?? []) {
+      this.audio?.play(cue);
+    }
     this.arenaRoom.update(ctx);
     // Advance tutorial state machine; anchor companion when tutorial requires it
     if (this.tutorial !== null) {
@@ -6858,6 +6904,15 @@ export class DungeonScene extends GameplayScene {
     if (this.spiderQuest.eggHatchSoundPending) {
       this.spiderQuest.eggHatchSoundPending = false;
       this.audio?.play('splat_3');
+    }
+    const lab = this.spiderQuest.labDressing;
+    if (lab?.glassShatterSoundPending === true) {
+      lab.glassShatterSoundPending = false;
+      this.audio?.play('glass_break_1');
+    }
+    if (lab?.cocoonSplatSoundPending === true) {
+      lab.cocoonSplatSoundPending = false;
+      this.audio?.play('splat_2');
     }
     if (this.spiderQuest.bossFightStartPending) {
       this.spiderQuest.bossFightStartPending = false;

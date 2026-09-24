@@ -8,12 +8,18 @@
  * the real tile size on a gym-floor swatch, and again magnified, so proportion
  * defects and 32px silhouette defects are both visible in one picture.
  *
+ * It also bakes the gym's whole painted family (`gymRoomSheets.ts`) — racks,
+ * treadmill belts and consoles, boombox, shutter, plate, chalk, mirror crack —
+ * into review sheets, and fails if any frame is painted outside its cell.
+ *
  *   npx tsx scripts/render-gym-equipment.ts --out=gym.png --scale=6
  */
 
 import { createCanvas } from 'canvas';
 
 import { asGameContext } from './nodeGameContext.js';
+import { bakePropFamily } from './propSheetBake.js';
+import { gymRoomSheetPlans } from '../src/sprites/sheets/bossRooms/gymRoomSheets.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import {
@@ -136,3 +142,7 @@ SUBJECTS.forEach((subject, column) => {
 
 const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
 console.log(`wrote ${writtenPath} (${sheetWidth}x${sheetHeight} @${scale}x)`);
+
+const familyProblems = bakePropFamily('gym', gymRoomSheetPlans(0));
+for (const problem of familyProblems) console.log(`  ${problem}`);
+if (familyProblems.length > 0) process.exit(1);

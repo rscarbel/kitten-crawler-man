@@ -11,6 +11,8 @@ Mechanics live as plain classes in `src/systems/` implementing `GameSystem` (`sr
 
 First check whether an existing system already owns the domain (~30 in `src/systems/` — combat, loot, barriers, dynamite, shops, gore, minimap, ...). Extend it if so.
 
+A boss room's props, slow ground, hazards and interactables are not a new top-level system: they are a `BossRoomDressing` in `src/systems/bossRooms/`, driven through the `BossRoomDressings` aggregator (see "Boss-room dressing" in `game-architecture`).
+
 ## Reference examples
 
 - `DynamiteSystem` — `constructor(private readonly gameMap: GameMap)`, `update(ctx)`, `render(...)`, exposes an `explosionSoundPending` flag the scene drains.

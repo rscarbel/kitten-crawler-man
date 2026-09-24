@@ -1,7 +1,7 @@
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import { VIAL_ATTACK_TYPE } from '../creatures/EvilClown';
 import { KNIGHT_MISSILE_ATTACK_TYPE } from '../creatures/DarkKnight';
-import { GROUND_PUNCH_ATTACK_TYPE } from '../creatures/Juicer';
+import { GROUND_PUNCH_ATTACK_TYPE, PLATE_ROLL_ATTACK_TYPE } from '../creatures/Juicer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { DamageSource } from '../Player';
 import { FROZEN_STATUS } from '../core/StatusEffect';
@@ -83,6 +83,9 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     if (source.hazard === 'clownGas') return 'clownGas';
     if (source.hazard === 'lichFirewall') return 'lichFirewall';
     if (source.hazard === 'lichOrb') return 'lichOrb';
+    if (source.hazard === 'hoarderAvalanche') return 'hoarderAvalanche';
+    if (source.hazard === 'krakarenLiveWire') return 'krakarenLiveWire';
+    if (source.hazard === 'krakarenTankBurst') return 'krakarenTankBurst';
     return 'burningTree';
   }
 
@@ -131,6 +134,7 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   // reading a telegraphed circle up close. Telling both deaths the same way
   // loses the lesson the punch is meant to teach.
   if (mobType === 'Juicer' && attackType === GROUND_PUNCH_ATTACK_TYPE) return 'juicerPunch';
+  if (mobType === 'Juicer' && attackType === PLATE_ROLL_ATTACK_TYPE) return 'juicerPlateRoll';
 
   // The cone is a red shape on the ground the player was given time to leave;
   // the bolts are not. Telling both deaths the same way loses the lesson.

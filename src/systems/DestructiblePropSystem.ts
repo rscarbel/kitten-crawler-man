@@ -8,6 +8,7 @@ import {
   BOOKSHELF,
   BRAZIER,
   CRATE,
+  HOARD_BAG,
   TORCH,
   PROP_DAMAGE_STAGE_CRACKED,
   type TileContent,
@@ -20,6 +21,13 @@ import type { LootSystem } from './LootSystem';
 import { MELEE_POINT_BLANK_RANGE } from './CombatSystem';
 import { tileKey } from './tileKey';
 
+const CARDINAL_NEIGHBOURS = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+] as const;
+
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
 /** Tile center offset as a fraction of tile size. */
@@ -29,7 +37,7 @@ const TWO_PI = Math.PI * 2;
 
 /** The prop tile types a melee swing can break. */
 export type DestructiblePropKind =
-  'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier' | 'bookshelf';
+  'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier' | 'bookshelf' | 'garbage_bag';
 
 /**
  * Everything breakable, which is what a dungeon floor and a building interior
@@ -42,6 +50,7 @@ export const ALL_BREAKABLE_PROPS: ReadonlySet<DestructiblePropKind> = new Set([
   'torch',
   'brazier',
   'bookshelf',
+  'garbage_bag',
 ]);
 
 /**
@@ -60,6 +69,16 @@ const TORCH_HP = 4;
 const BRAZIER_HP = 9;
 /** A joined case standing a whole tile tall — more timber than a crate carries. */
 const BOOKSHELF_HP = 8;
+/** A split bag of rubbish in the Hoarder's lair: two punches and it goes. */
+const GARBAGE_BAG_HP = 2;
+/**
+ * The share of breaks that leave coins. One in ten for a garbage bag — the odd
+ * coin in a bag of rubbish is the find; paying out on every bag would make
+ * seven of them in one room a purse.
+ */
+const COIN_DROP_CHANCE: Readonly<Partial<Record<DestructiblePropKind, number>>> = {
+  garbage_bag: 0.1,
+};
 /**
  * HP a prop that is already wearing its cracked art comes back missing when its
  * health entry has to be rebuilt. It cannot come back at full: `damageStage`
@@ -128,6 +147,7 @@ const SPLINTER_ORIGIN_OFFSET_TILES: Record<DestructiblePropKind, number> = {
   torch: -0.16,
   brazier: -0.06,
   bookshelf: -0.05,
+  garbage_bag: 0,
 };
 const SPLINTER_ORIGIN_SPAN_TILES: Record<DestructiblePropKind, number> = {
   barrel: 0,
@@ -136,6 +156,7 @@ const SPLINTER_ORIGIN_SPAN_TILES: Record<DestructiblePropKind, number> = {
   torch: 1.05,
   brazier: 0.3,
   bookshelf: 0.5,
+  garbage_bag: 0,
 };
 /** Splinters fade over the last third of their life. */
 const SPLINTER_FADE_DIVISOR = 3;
@@ -159,8 +180,12 @@ function materialFor(kind: DestructiblePropKind): PropMaterial {
   return kind === 'brazier' ? 'iron' : 'wood';
 }
 
+/** Torn black plastic and the rubbish it held, for a burst garbage bag. */
+const TRASH_SPLINTER_SHADES = ['#1d1f23', '#34373e', '#d3cbb2', '#b3322b', '#d9a23a'] as const;
+
 /** The debris palette a kind throws when it breaks. */
 function splinterShadesFor(kind: DestructiblePropKind): ReadonlyArray<string> {
+  if (kind === 'garbage_bag') return TRASH_SPLINTER_SHADES;
   return materialFor(kind) === 'iron' ? IRON_SPLINTER_SHADES : WOOD_SPLINTER_SHADES;
 }
 
@@ -255,6 +280,7 @@ function kindForTileType(type: number): DestructiblePropKind | null {
   if (type === TORCH) return 'torch';
   if (type === BRAZIER) return 'brazier';
   if (type === BOOKSHELF) return 'bookshelf';
+  if (type === HOARD_BAG) return 'garbage_bag';
   return null;
 }
 
@@ -264,6 +290,7 @@ function startingHpFor(kind: DestructiblePropKind): number {
   if (kind === 'torch') return TORCH_HP;
   if (kind === 'brazier') return BRAZIER_HP;
   if (kind === 'bookshelf') return BOOKSHELF_HP;
+  if (kind === 'garbage_bag') return GARBAGE_BAG_HP;
   return CRATE_HP;
 }
 
@@ -409,6 +436,13 @@ export class DestructiblePropSystem implements GameSystem {
         hitAnything = true;
         const key = tileKey(tx, ty);
         let health = this.health.get(key);
+        // Any damage cracks the art, so stored damage on a prop wearing whole
+        // art is stale: something stood the prop back up since (a boss room
+        // putting its fight back after an abort), and it starts fresh.
+        if (health !== undefined && tile.damageStage !== PROP_DAMAGE_STAGE_CRACKED) {
+          this.health.delete(key);
+          health = undefined;
+        }
         if (health === undefined) {
           const maxHp = startingHpFor(kind);
           // A prop already wearing its cracked art must not rebuild at full
@@ -550,6 +584,8 @@ export class DestructiblePropSystem implements GameSystem {
     delete tile.damageStage;
     delete tile.groundType;
     this.gameMap.markTileDirty(tileX, tileY);
+    // Neighbours too: a floor painter may shade a tile by what stands beside it.
+    for (const [dx, dy] of CARDINAL_NEIGHBOURS) this.gameMap.markTileDirty(tileX + dx, tileY + dy);
 
     this.bursts.push({ tileX, tileY, kind, frames: 0 });
 
@@ -560,16 +596,19 @@ export class DestructiblePropSystem implements GameSystem {
     this.wreckage.push({ tileX, tileY, kind, life: WRECKAGE_LIFETIME_FRAMES });
     while (this.wreckage.length > MAX_WRECKAGE) this.dropOldestWreckage();
 
-    this.loot.addLoot(
-      centerX,
-      centerY,
-      { coins: randomInt(this.floorNumber, this.floorNumber + COIN_SPREAD), items: [] },
-      attacker,
-      false,
-      // Both players are paid the full amount: floor 1 can roll a single coin,
-      // and splitting that would pay one of them nothing.
-      true,
-    );
+    const coinChance = COIN_DROP_CHANCE[kind] ?? 1;
+    if (Math.random() < coinChance) {
+      this.loot.addLoot(
+        centerX,
+        centerY,
+        { coins: randomInt(this.floorNumber, this.floorNumber + COIN_SPREAD), items: [] },
+        attacker,
+        false,
+        // Both players are paid the full amount: floor 1 can roll a single coin,
+        // and splitting that would pay one of them nothing.
+        true,
+      );
+    }
 
     this.smashCounts[materialFor(kind)]++;
   }
@@ -652,7 +691,11 @@ export class DestructiblePropSystem implements GameSystem {
 
     for (let i = this.wreckage.length - 1; i >= 0; i--) {
       this.wreckage[i].life--;
-      if (this.wreckage[i].life <= 0) {
+      // A prop stood back up where it broke takes its wreckage with it.
+      const { tileX, tileY } = this.wreckage[i];
+      const propStandsAgain =
+        this.breakableKindAt(this.gameMap.structure[tileY][tileX].type) !== null;
+      if (this.wreckage[i].life <= 0 || propStandsAgain) {
         this.wreckage[i] = this.wreckage[this.wreckage.length - 1];
         this.wreckage.pop();
       }

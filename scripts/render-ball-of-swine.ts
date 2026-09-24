@@ -32,7 +32,7 @@ import {
   type RowSpec,
 } from '../src/sprites/art/ballOfSwineFigure.js';
 import { BOS_ROLL_FRAMES } from '../src/sprites/ballOfSwineSheet.js';
-import { ARENA_PLATE_LIGHT } from '../src/map/tiles/specialFloorTiles.js';
+import { ARENA_SAND_TONE } from '../src/map/tiles/bossRooms/colosseumTiles.js';
 
 type Mode = 'contact' | 'onion' | 'composite';
 
@@ -47,7 +47,7 @@ const BACKDROP = '#101218';
  * The arena's own floor colour, imported rather than copied so the backdrop is
  * always the surface the ball is actually seen against.
  */
-const ARENA_FLOOR = ARENA_PLATE_LIGHT;
+const ARENA_FLOOR = ARENA_SAND_TONE;
 const GRID_LINE = 'rgba(120,160,220,0.28)';
 const CENTRE_LINE = 'rgba(255,120,120,0.5)';
 const LABEL_COLOR = '#c8d4e4';

@@ -20,7 +20,10 @@ export type AssetGroup =
   | 'floor1_tileset'
   | 'floor2_tileset'
   | 'boss_hoarder'
-  | 'boss_grotesque_spider';
+  | 'boss_juicer'
+  | 'boss_krakaren'
+  | 'boss_grotesque_spider'
+  | 'boss_colosseum';
 
 /**
  * Every creature/effect/environment sheet a group covers.
@@ -160,11 +163,65 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   floor1_tileset: ['ground_floor1'],
   floor2_tileset: ['ground_floor2'],
 
-  boss_hoarder: ['hoarders_room'],
+  boss_hoarder: [
+    'hoard_pile',
+    'hoard_pile_fill',
+    'hoard_tower',
+    'hoard_tower_fall_east',
+    'hoard_tower_fall_south',
+    'hoard_tower_fall_north',
+    'garbage_bag',
+    'hoarder_floor',
+    'hoarder_nest',
+    'hoard_barricade',
+  ],
   // Level 2's spider lab: the dressing that only exists because the boss does.
   // The boss herself, her spit, the life machines, the small-spider adds and the
   // hacking mini-game's console are all painted.
-  boss_grotesque_spider: ['lab_tables', 'scientist', 'spider-egg', 'spider_room_floor'],
+  boss_grotesque_spider: [
+    'spider_lab_bench',
+    'spider_lab_terminal',
+    'spider_lab_shelf',
+    'spider_lab_egg_sac',
+    'spider_lab_cocoon',
+    'spider_lab_light_bank',
+    'spider_lab_web_growth',
+    'spider_lab_remains',
+  ],
+  // The other boss rooms' painted dressing. Each group also names the sheets
+  // `requestEnvironmentSheetsForGroups` paints for it, so a key listed here is
+  // one `verify:assets` can see belongs to a floor.
+  boss_juicer: [
+    'gym_rack',
+    'gym_squat_rack',
+    'gym_cable_stack',
+    'gym_belt',
+    'gym_console',
+    'gym_boombox',
+    'gym_shutter',
+    'gym_plate',
+    'gym_chalk_puff',
+    'gym_mirror_crack',
+    'gym_pickups',
+  ],
+  boss_krakaren: [
+    'krakaren_vat',
+    'krakaren_console',
+    'krakaren_junction',
+    'krakaren_fx',
+    'krakaren_wash',
+    'krakaren_splash',
+    'krakaren_seal',
+  ],
+  boss_colosseum: [
+    'colosseum_portcullis',
+    'colosseum_cage',
+    'colosseum_cheer',
+    'colosseum_banner',
+    'colosseum_mud_splatter',
+    // The gym kit lying in the ring, borrowed from the gym's own sheet.
+    'gym_pickups',
+  ],
 };
 
 /**
@@ -190,7 +247,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   mantid: [],
   mantis: [],
   rat: [],
-  the_hoarder: ['hoarders_room'],
+  the_hoarder: [],
   cockroach: [],
   juicer: [],
   troglodyte: [],
@@ -199,7 +256,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   krakaren_clone: [],
   brindle_grub: [],
   bugaboo: [],
-  grotesque_spider: ['lab_tables', 'scientist', 'spider-egg', 'spider_room_floor'],
+  grotesque_spider: [],
   small_spider: [],
   ruins_ghoul: [],
   krasue: [],

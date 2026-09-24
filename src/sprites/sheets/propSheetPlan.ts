@@ -44,6 +44,13 @@ export interface PropSheetPlan {
   /** Source pixels per game tile the painters were authored against. */
   readonly tileScale: number;
   readonly rows: ReadonlyArray<PropSheetRow>;
+  /**
+   * Frame edges this one sheet paints against on purpose, overriding its
+   * family's. For a sheet that does not share its family's envelope: a floor
+   * material fills its whole tile, and a prop beside it must still be caught
+   * inking its cell's border.
+   */
+  readonly groundedEdges?: ReadonlySet<FrameEdge>;
 }
 
 /**

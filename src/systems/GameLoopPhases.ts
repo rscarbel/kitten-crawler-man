@@ -5,6 +5,7 @@ import { keybindings } from '../core/Keybindings';
 import { normalize, clamp } from '../utils';
 import { type GameMap } from '../map/GameMap';
 import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
+import { tileSpeedFactor } from '../map/tileSpeed';
 import { type Player } from '../Player';
 import { pushPlayerWithCollision } from './playerDisplacement';
 import { DIAGONAL_PENALTY } from './PlayerMovementSystem';
@@ -122,8 +123,17 @@ export function readMovement(
  * with the splash or with the sprite sinking. Tested on the tile under the
  * player's centre, the same point the renderer uses to decide they are wading.
  */
-function wadeSpeedFactor(player: Player, gameMap: GameMap): number {
-  return isStandingInWater(player, gameMap) ? WADE_SPEED_FACTOR : 1;
+export function footingSpeedFactor(player: Player, gameMap: GameMap): number {
+  const riverFactor = isStandingInWater(player, gameMap) ? WADE_SPEED_FACTOR : 1;
+  const tileX = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
+  const tileY = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
+  const insideMap =
+    tileY >= 0 &&
+    tileY < gameMap.structure.length &&
+    tileX >= 0 &&
+    tileX < gameMap.structure[tileY].length;
+  const groundFactor = insideMap ? tileSpeedFactor(gameMap.structure[tileY][tileX].type) : 1;
+  return riverFactor * groundFactor;
 }
 
 /**
@@ -181,8 +191,9 @@ export function applyMovement(
     dx *= DIAGONAL_PENALTY;
     dy *= DIAGONAL_PENALTY;
   }
-  dx *= PLAYER_SPEED * player.speedMultiplier * wadeSpeedFactor(player, gameMap);
-  dy *= PLAYER_SPEED * player.speedMultiplier * wadeSpeedFactor(player, gameMap);
+  const speed = PLAYER_SPEED * player.speedMultiplier * footingSpeedFactor(player, gameMap);
+  dx *= speed;
+  dy *= speed;
 
   const nextX = clamp(player.x + dx, 0, mapPxW - TILE_SIZE);
   const tileXnext =

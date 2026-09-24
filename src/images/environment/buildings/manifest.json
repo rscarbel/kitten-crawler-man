@@ -190,20 +190,6 @@
       }
     }
   },
-  "hoarders_room": {
-    "path": "environment/buildings/hoarders_room.png",
-    "frameWidth": 512,
-    "frameHeight": 512,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 64,
-    "states": {
-      "default": {
-        "row": 0,
-        "frameCount": 1
-      }
-    }
-  },
   "sleeping_cat_inn": {
     "frameWidth": 384,
     "frameHeight": 288,

@@ -71,8 +71,9 @@ import {
   GRINDING_SLAB,
   QUEST_EXIT_DOOR_CLOSED,
   QUEST_EXIT_DOOR_OPEN,
+  BOSS_ROOM_PROP_TILE_TYPES,
 } from './tileTypes';
-import { isWalkableTileType } from './walkability';
+import { isSightTransparentTileType, isWalkableTileType } from './walkability';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
 import { drawFloorArtSeed } from './ground/floorArtSeed';
 import { MinHeap, HEAP_EMPTY } from '../core/MinHeap';
@@ -360,6 +361,7 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   FLASH_WALL,
   PIGMENT_SHELF,
   GRINDING_SLAB,
+  ...BOSS_ROOM_PROP_TILE_TYPES,
 ]);
 
 /**
@@ -2820,7 +2822,7 @@ export class GameMap {
 
   /**
    * Returns true if there is a clear line of sight between two pixel-space
-   * points — i.e. no non-walkable tiles cross the line segment.
+   * points — i.e. no sight-blocking tile (`blocksSight`) crosses the segment.
    *
    * Walks the grid with an Amanatides–Woo traversal: at each step it crosses
    * whichever tile boundary the ray reaches first, so every tile the segment
@@ -2836,6 +2838,39 @@ export class GameMap {
     y1: number,
     x2: number,
     y2: number,
+    ignore?: { tileX: number; tileY: number },
+  ): boolean {
+    return this.lineClearOf(x1, y1, x2, y2, this.sightBlocker, ignore);
+  }
+
+  /**
+   * Whether a straight walk between two pixel-space points crosses only
+   * walkable tiles — the movement counterpart of `hasLineOfSight`, which sees
+   * over low props a body cannot pass through. Ask this, not sight, before
+   * steering straight at a point instead of pathfinding to it.
+   *
+   * Same traversal and endpoint rule as `hasLineOfSight`.
+   */
+  hasWalkableLine(x1: number, y1: number, x2: number, y2: number): boolean {
+    return this.lineClearOf(x1, y1, x2, y2, this.walkBlocker);
+  }
+
+  // Held as fields so the hot sight query allocates no closure per call.
+  private readonly sightBlocker = (tileX: number, tileY: number): boolean =>
+    this.blocksSight(tileX, tileY);
+  private readonly walkBlocker = (tileX: number, tileY: number): boolean =>
+    !this.isWalkable(tileX, tileY);
+
+  /**
+   * Amanatides–Woo walk from one point to another, false as soon as a crossed
+   * tile (endpoints' own tiles and `ignore` excepted) satisfies `blocks`.
+   */
+  private lineClearOf(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    blocks: (tileX: number, tileY: number) => boolean,
     ignore?: { tileX: number; tileY: number },
   ): boolean {
     const ts = this.tileHeight;
@@ -2875,9 +2910,19 @@ export class GameMap {
       }
       if (tileX === endTileX && tileY === endTileY) return true;
       if (tileX === ignore?.tileX && tileY === ignore.tileY) continue;
-      if (!this.isWalkable(tileX, tileY)) return false;
+      if (blocks(tileX, tileY)) return false;
     }
     return true;
+  }
+
+  /**
+   * Whether a tile stops a line of sight: anything solid, except a prop low
+   * enough to see over (`isSightTransparentTileType`).
+   */
+  blocksSight(tileX: number, tileY: number): boolean {
+    if (this.isWalkable(tileX, tileY)) return false;
+    if (!this.isInsideGrid(tileX, tileY)) return true;
+    return !isSightTransparentTileType(this.structure[tileY][tileX]);
   }
 
   /**

@@ -1,0 +1,166 @@
+{
+  "hoard_pile": {
+    "frameWidth": 64,
+    "frameHeight": 112,
+    "tileX": 0,
+    "tileY": 48,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 16
+      },
+      "rustle": {
+        "row": 1,
+        "frameCount": 3
+      }
+    },
+    "tileTypeId": 113
+  },
+  "hoard_tower": {
+    "frameWidth": 64,
+    "frameHeight": 176,
+    "tileX": 0,
+    "tileY": 112,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "wobble": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "rubble": {
+        "row": 2,
+        "frameCount": 2
+      }
+    },
+    "tileTypeId": 114
+  },
+  "hoard_tower_fall_east": {
+    "frameWidth": 320,
+    "frameHeight": 208,
+    "tileX": 32,
+    "tileY": 112,
+    "tileScale": 64,
+    "states": {
+      "fall": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "hoard_tower_fall_south": {
+    "frameWidth": 128,
+    "frameHeight": 376,
+    "tileX": 32,
+    "tileY": 112,
+    "tileScale": 64,
+    "states": {
+      "fall": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "hoard_tower_fall_north": {
+    "frameWidth": 128,
+    "frameHeight": 288,
+    "tileX": 32,
+    "tileY": 208,
+    "tileScale": 64,
+    "states": {
+      "fall": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "garbage_bag": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "hoarder_floor": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "linoleum": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "grime": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "decal": {
+        "row": 2,
+        "frameCount": 10
+      }
+    }
+  },
+  "hoarder_nest": {
+    "frameWidth": 224,
+    "frameHeight": 176,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "hoard_barricade": {
+    "frameWidth": 64,
+    "frameHeight": 112,
+    "tileX": 0,
+    "tileY": 48,
+    "tileScale": 64,
+    "states": {
+      "slide": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "hoard_pile_fill": {
+    "frameWidth": 64,
+    "frameHeight": 112,
+    "tileX": 0,
+    "tileY": 48,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 16
+      }
+    }
+  }
+}

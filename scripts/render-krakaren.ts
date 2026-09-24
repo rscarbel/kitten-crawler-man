@@ -40,7 +40,7 @@ import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import {
   KRAKAREN_LAIR_STONE_DARK,
   KRAKAREN_LAIR_STONE_LIGHT,
-} from '../src/map/tiles/specialFloorTiles.js';
+} from '../src/map/tiles/bossRooms/krakarenTiles.js';
 
 // A painter that composes on a scratch surface of its own reaches for
 // `document.createElement('canvas')`, which a Node process does not have.

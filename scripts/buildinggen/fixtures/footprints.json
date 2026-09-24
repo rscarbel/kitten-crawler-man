@@ -62,22 +62,6 @@
     },
     "textureRichness": 31.930778317885725
   },
-  "hoarders_room": {
-    "path": "environment/buildings/hoarders_room.png",
-    "frameWidth": 512,
-    "frameHeight": 512,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 64,
-    "footprint": {
-      "dx": 0,
-      "dy": 0,
-      "w": 8,
-      "h": 8
-    },
-    "doorway": null,
-    "textureRichness": null
-  },
   "overworld_main_tower": {
     "path": "environment/buildings/overworld_main_tower.png",
     "frameWidth": 183.833,

@@ -17,6 +17,7 @@ import {
 } from '../sprites/tusklingAttackTiming';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
+import { clampEndedStep, clampIntoDrum, type DrumClamp } from '../systems/bossRooms/colosseumSlide';
 
 const TUSK_HP = 30;
 const TUSK_SPEED = 1.0;
@@ -84,6 +85,9 @@ export class Tuskling extends Mob {
    */
   shedFromBall = false;
 
+  /** What the arena's curved wall did to this body's last step; see `clampIntoDrum`. */
+  private lastDrumClamp: DrumClamp = { pulledPx: 0 };
+
   private state: TuskState = 'idle';
   private windupTimer = 0;
   private chargeTimer = 0;
@@ -121,6 +125,20 @@ export class Tuskling extends Mob {
     this.dazeTimer = 0;
     this.chargeDx = 0;
     this.chargeDy = 0;
+  }
+
+  /**
+   * Every step is held inside the arena's curve, so a Tuskling slides round the
+   * drum the art shows rather than catching on the tiles' stair-steps.
+   */
+  protected override moveWithCollision(dx: number, dy: number): void {
+    super.moveWithCollision(dx, dy);
+    const map = this.map;
+    const arena = map?.arenaExteriors[0];
+    this.lastDrumClamp =
+      map === null || arena === undefined
+        ? { pulledPx: 0 }
+        : clampIntoDrum(this, arena.centre, map);
   }
 
   /** 0–1 through the tusk hook, or null when it is not swinging. */
@@ -277,11 +295,20 @@ export class Tuskling extends Mob {
 
         const prevX = this.x;
         const prevY = this.y;
-        this.moveWithCollision(this.chargeDx * CHARGE_SPEED, this.chargeDy * CHARGE_SPEED);
+        const stepX = this.chargeDx * CHARGE_SPEED;
+        const stepY = this.chargeDy * CHARGE_SPEED;
+        this.moveWithCollision(stepX, stepY);
 
         const movedX = Math.abs(this.x - prevX) > MIN_MOVEMENT_PX;
         const movedY = Math.abs(this.y - prevY) > MIN_MOVEMENT_PX;
-        const wallHit = !movedX && !movedY;
+        const stoppedByCurve = clampEndedStep(
+          this.lastDrumClamp,
+          this.x - prevX,
+          this.y - prevY,
+          stepX,
+          stepY,
+        );
+        const wallHit = (!movedX && !movedY) || stoppedByCurve;
 
         if (wallHit) {
           this.state = 'cooldown';

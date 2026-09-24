@@ -42,7 +42,8 @@ const MELEE_COOLDOWN_FRAMES = 60;
 // Slam special attack (instant kill)
 const SLAM_INTERVAL_BASE = 480; // 8 seconds
 const SLAM_INTERVAL_ENRAGED = 300; // 5 seconds
-const SLAM_SHADOW_FRAMES = 90; // 1.5 second warning shadow
+/** The slam's locked telegraph: the target is fixed when it starts and the kill lands when it ends. */
+export const SLAM_SHADOW_FRAMES = 90;
 const SLAM_IMPACT_FRAMES = 20; // visual impact duration
 const SLAM_KILL_RADIUS_TILE_MULTIPLIER = 1.5;
 export const SLAM_KILL_RADIUS_PX = TILE_SIZE * SLAM_KILL_RADIUS_TILE_MULTIPLIER;

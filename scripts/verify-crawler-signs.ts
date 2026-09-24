@@ -575,6 +575,11 @@ function claimLists(map: GameMap): Array<{ name: string; points: Point[] }> {
               spiderLab.computerTile,
               spiderLab.spiderEggTile,
               ...spiderLab.lifeMachineTiles,
+              ...spiderLab.computerTableTiles,
+              ...spiderLab.benchTiles,
+              ...spiderLab.shelfTiles,
+              ...spiderLab.webTiles,
+              ...spiderLab.cocoonTiles,
             ],
     },
   ];

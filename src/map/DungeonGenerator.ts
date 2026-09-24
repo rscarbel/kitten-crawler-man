@@ -4,7 +4,7 @@ import {
   VOID_TYPE,
   SAFE_ROOM_FLOOR,
   SAFE_ROOM_THRESHOLD,
-  HORDER_BOSS_ROOM_FLOOR,
+  HOARDER_FLOOR,
   JUICER_BOSS_ROOM_FLOOR,
   KRAKAREN_BOSS_ROOM_FLOOR,
   METAL_WALL,
@@ -19,6 +19,9 @@ import {
   BONES,
   BOOKSHELF,
   SPIDER_LAB_FLOOR,
+  LAB_BENCH,
+  LAB_SHELF,
+  LAB_WEB,
   placeProp,
   CRAWLER_SIGN,
 } from './tileTypes';
@@ -65,6 +68,8 @@ import {
   type PlannedCorridor,
 } from './gauntletLayout';
 import { planSpine, type SpinePlan, type SpinePocketRequest } from './spineLayout';
+import { layOutSpiderLab } from './spiderLabLayout';
+import { registerSpiderLabFloorPlan } from './tiles/bossRooms/labFloorPlan';
 import {
   roomDoorways,
   detectRoomEntrance,
@@ -157,12 +162,24 @@ export interface SpiderLabRoomData {
   entranceTile: Point;
   /** Tile where the scientist NPC stands (near entrance). */
   scientistTile: Point;
-  /** Tile where the lab computer table is placed. */
+  /** The terminal the hack is run from: the back-middle tile of its bench. */
   computerTile: Point;
   /** Tile where the spider egg starts (centre of room). */
   spiderEggTile: Point;
   /** Tile positions of the life machines scattered through the room. */
   lifeMachineTiles: Point[];
+  /** Which wall the lab's doorway breaks through; the furniture is laid out against it. */
+  entranceWall: RoomWall;
+  /** The terminal's whole bench, three wide and two deep, stamped `LAB_BENCH`. */
+  computerTableTiles: Point[];
+  /** The waist-high lab benches in the entrance half, stamped `LAB_BENCH`. */
+  benchTiles: Point[];
+  /** The specimen shelving against the side walls, stamped `LAB_SHELF`. */
+  shelfTiles: Point[];
+  /** Webbing spun over the far end of the lab, stamped `LAB_WEB`. */
+  webTiles: Point[];
+  /** Where the cocooned lab staff hang. Walkable: they hang over the floor, not on it. */
+  cocoonTiles: Point[];
 }
 
 export interface SafeRoomData {
@@ -419,8 +436,8 @@ const DEADEND_SHORTCUT_MAX = 65;
 const LAB_WALL_OFFSET = 3; // items placed 3 tiles inside walls
 /** How far inside his own doorway the scientist waits. */
 const LAB_SCIENTIST_DOORWAY_DEPTH = 2;
-const LAB_EGG_NEAR_WALL = 4; // egg/computer offset near entrance
-const LAB_EGG_FAR_WALL = 5; // egg/computer offset far from entrance
+const LAB_EGG_NEAR_WALL = 4; // egg offset from the wall opposite the entrance
+const LAB_EGG_FAR_WALL = 5; // egg offset from the far wall
 const LAB_MACHINE_SPREAD = 10; // life machine lateral spread from center
 const LAB_MACHINE_NS_NEAR_ROW = 12; // near life machine row (N/S entrance)
 const LAB_MACHINE_NS_NEAR_FROM_FAR = 13; // same, from far wall
@@ -827,13 +844,13 @@ const VIGNETTE_CHANCE: Record<Zone, number> = {
 function bossFloorForType(type: string): number {
   switch (type) {
     case 'the_hoarder':
-      return HORDER_BOSS_ROOM_FLOOR;
+      return HOARDER_FLOOR;
     case 'juicer':
       return JUICER_BOSS_ROOM_FLOOR;
     case 'krakaren_clone':
       return KRAKAREN_BOSS_ROOM_FLOOR;
     default:
-      return HORDER_BOSS_ROOM_FLOOR;
+      return HOARDER_FLOOR;
   }
 }
 
@@ -2622,12 +2639,10 @@ function buildDungeon(
       w: slr.w,
       h: slr.h,
     });
-    let computerTile: Point;
     let spiderEggTile: Point;
     let lifeMachineTiles: Point[];
 
     if (entranceWall === 'south') {
-      computerTile = { x: slcx + 2, y: slr.y + slr.h - LAB_EGG_NEAR_WALL };
       spiderEggTile = { x: slcx, y: slr.y + LAB_EGG_NEAR_WALL };
       lifeMachineTiles = [
         { x: slr.x + 2, y: slr.y + 2 },
@@ -2638,7 +2653,6 @@ function buildDungeon(
         { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slr.y + LAB_MACHINE_NS_FAR_ROW },
       ];
     } else if (entranceWall === 'north') {
-      computerTile = { x: slcx + 2, y: slr.y + LAB_WALL_OFFSET };
       spiderEggTile = { x: slcx, y: slr.y + slr.h - LAB_EGG_FAR_WALL };
       lifeMachineTiles = [
         { x: slr.x + 2, y: slr.y + slr.h - LAB_WALL_OFFSET },
@@ -2649,7 +2663,6 @@ function buildDungeon(
         { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slr.y + slr.h - LAB_MACHINE_NS_FAR_FROM_FAR },
       ];
     } else if (entranceWall === 'east') {
-      computerTile = { x: slr.x + slr.w - LAB_EGG_FAR_WALL, y: slcy + 2 };
       spiderEggTile = { x: slr.x + LAB_EGG_NEAR_WALL, y: slcy };
       lifeMachineTiles = [
         { x: slr.x + 2, y: slr.y + 2 },
@@ -2661,7 +2674,6 @@ function buildDungeon(
       ];
     } else {
       // west
-      computerTile = { x: slr.x + LAB_EGG_NEAR_WALL, y: slcy + 2 };
       spiderEggTile = { x: slr.x + slr.w - LAB_EGG_FAR_WALL, y: slcy };
       lifeMachineTiles = [
         { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slr.y + 2 },
@@ -2673,15 +2685,35 @@ function buildDungeon(
       ];
     }
 
+    const labBounds = { x: slr.x, y: slr.y, w: slr.w, h: slr.h };
+    const entranceDoorway = roomDoorways(grid, labBounds).find((doorway) =>
+      doorway.tiles.some((tile) => tile.x === entranceTile.x && tile.y === entranceTile.y),
+    );
+    const furniture = layOutSpiderLab({
+      bounds: labBounds,
+      entranceWall,
+      doorwayTiles: entranceDoorway?.tiles ?? [entranceTile],
+      scientistTile,
+      spiderEggTile,
+      lifeMachineTiles,
+    });
+    for (const tile of [...furniture.computerTableTiles, ...furniture.benchTiles]) {
+      placeProp(grid[tile.y][tile.x], LAB_BENCH);
+    }
+    for (const tile of furniture.shelfTiles) placeProp(grid[tile.y][tile.x], LAB_SHELF);
+    for (const tile of furniture.webTiles) placeProp(grid[tile.y][tile.x], LAB_WEB);
+
     spiderLabRoom = {
-      bounds: { x: slr.x, y: slr.y, w: slr.w, h: slr.h },
+      bounds: labBounds,
       centre: { x: slcx, y: slcy },
       entranceTile,
       scientistTile,
-      computerTile,
       spiderEggTile,
       lifeMachineTiles,
+      entranceWall,
+      ...furniture,
     };
+    registerSpiderLabFloorPlan(grid, spiderLabRoom);
   }
 
   // 7. Stairwells
@@ -3090,8 +3122,11 @@ function buildDungeon(
           const gx = acx + dx;
           const gy = acy + dy;
           if (gy >= 0 && gy < size && gx >= 0 && gx < size) {
-            grid[gy][gx].type =
-              rad > ARENA_RADIUS - ARENA_WALL_THICKNESS ? METAL_WALL : ARENA_FLOOR;
+            const isWall = rad > ARENA_RADIUS - ARENA_WALL_THICKNESS;
+            grid[gy][gx].type = isWall ? METAL_WALL : ARENA_FLOOR;
+            // The ring is drawn as a true circle, so the corners of its outer
+            // wall tiles show the concourse's paving past the curve.
+            if (isWall) grid[gy][gx].groundType = FloorTypeValue.concrete;
           }
         }
       }
@@ -3284,6 +3319,11 @@ function buildDungeon(
             spiderLabRoom.computerTile,
             spiderLabRoom.spiderEggTile,
             ...spiderLabRoom.lifeMachineTiles,
+            ...spiderLabRoom.computerTableTiles,
+            ...spiderLabRoom.benchTiles,
+            ...spiderLabRoom.shelfTiles,
+            ...spiderLabRoom.webTiles,
+            ...spiderLabRoom.cocoonTiles,
           ],
     ]) {
       for (const tile of list) claim(tile);

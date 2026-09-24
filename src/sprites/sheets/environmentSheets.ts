@@ -10,6 +10,7 @@
 import type { AssetGroup } from '../../core/assetGroups';
 import type { TilePoint, TownPlan } from '../../map/town/townPlan';
 import {
+  BOSS_ROOM_SALT,
   BUILDING_SALT,
   CAMP_SALT,
   PROP_SALT,
@@ -17,6 +18,7 @@ import {
   TREE_SALT,
   floorArtSubSeed,
 } from '../../map/ground/floorArtSeed';
+import { BOSS_ROOM_ASSET_GROUPS, bossRoomSheetPlans } from './bossRoomSheets';
 import { campSheetPlans } from './campSheets';
 import { requestBuildingSheets } from '../buildinggen/runtimeBuildingSheets';
 import { clubFurnitureSheetPlans } from './clubFurnitureSheets';
@@ -111,6 +113,15 @@ export function requestEnvironmentSheetsForGroups(
       onSheetPainted,
     });
     requestPropSheets(campSheetPlans(floorArtSubSeed(CAMP_SALT)), {
+      variesWithFloorSeed: true,
+      onSheetPainted,
+    });
+  }
+  // Painted when the floor loads rather than when a room seals: a room's
+  // dressing is on screen from the doorway, long before the fight starts.
+  for (const group of BOSS_ROOM_ASSET_GROUPS) {
+    if (!wanted.has(group)) continue;
+    requestPropSheets(bossRoomSheetPlans(group, floorArtSubSeed(BOSS_ROOM_SALT)), {
       variesWithFloorSeed: true,
       onSheetPainted,
     });

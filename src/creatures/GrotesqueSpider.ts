@@ -24,6 +24,7 @@ import {
 } from './grotesqueSpiderTelegraphs';
 import { makeStuck, makeSpitVenom } from '../core/StatusEffect';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import { tileSpeedFactor } from '../map/tileSpeed';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
 import { hasRoomToMove } from '../map/findWalkableTile';
@@ -549,6 +550,7 @@ export class GrotesqueSpider extends Mob {
   private chainSlamPatience = 0;
   private reachedPhase: SpiderHpPhase = 1;
   private _roarFrame = 0;
+  private webTears: Array<{ x: number; y: number; radiusPx: number }> = [];
 
   private layCooldown = 0;
   private layClutch = 0;
@@ -725,6 +727,7 @@ export class GrotesqueSpider extends Mob {
     this.layDroppedTiles = [];
     this.eggLayRequests = [];
     this.slamImpacts = [];
+    this.webTears = [];
     this.impactEvents = [];
     this.exposedHitFlash = 0;
     this.dashTarget = null;
@@ -1401,7 +1404,11 @@ export class GrotesqueSpider extends Mob {
         for (let frame = 0; frame < lockFrames && !escapes; frame++) {
           const fromX = body.x;
           const fromY = body.y;
-          pushPlayerWithCollision(body, stepX, stepY, map);
+          // Her slam and screech tear the silk they are walked out of; her
+          // spit tears none, so a crawler sidestepping it on web does so at
+          // the web's pace.
+          const footing = attack === 'spit' ? this.escapeFootingAt(body.x, body.y) : 1;
+          pushPlayerWithCollision(body, stepX * footing, stepY * footing, map);
           if (bounds !== null) {
             body.x = clamp(body.x, bounds.x * ts, (bounds.x + bounds.w - 1) * ts);
             body.y = clamp(body.y, bounds.y * ts, (bounds.y + bounds.h - 1) * ts);
@@ -1417,6 +1424,37 @@ export class GrotesqueSpider extends Mob {
       if (!escapes) return false;
     }
     return true;
+  }
+
+  /**
+   * Her slam and her screech shake loose whatever web is spun round her, out
+   * past the attack's own reach by as far as a crawler walks in its lock. A
+   * crawler caught in its reach is then running on bare floor, at the pace
+   * every escape she judges is measured at, rather than wading through silk
+   * the lock was never timed for.
+   */
+  private tearSilkFor(attack: 'slam' | 'screech'): void {
+    const reach = attack === 'slam' ? SLAM_CONE_RADIUS_PX : SCREECH_RADIUS_PX;
+    const escapeBand = SPIDER_ATTACK_TIMELINES[attack].lockFrames * PLAYER_SPEED;
+    this.webTears.push({ x: this.centreX, y: this.centreY, radiusPx: reach + escapeBand });
+  }
+
+  /** The silk her attacks have torn since the last drain, for the room that owns the web. */
+  drainWebTears(): Array<{ x: number; y: number; radiusPx: number }> {
+    const drained = this.webTears;
+    this.webTears = [];
+    return drained;
+  }
+
+  /** The share of walking pace a crawler keeps on the ground under a body at this top-left. */
+  private escapeFootingAt(x: number, y: number): number {
+    const map = this.map;
+    if (map === null) return 1;
+    const tileX = Math.floor((x + this.tileSize * TILE_CENTER) / this.tileSize);
+    const tileY = Math.floor((y + this.tileSize * TILE_CENTER) / this.tileSize);
+    const row = tileY >= 0 && tileY < map.structure.length ? map.structure[tileY] : null;
+    if (row === null || tileX < 0 || tileX >= row.length) return 1;
+    return tileSpeedFactor(row[tileX].type);
   }
 
   /** Whether a crawler's step from one top-left to another presses into her body. */
@@ -1555,6 +1593,7 @@ export class GrotesqueSpider extends Mob {
     this._currentAttack = attack;
     this._attackFrame = 0;
     this.cutsceneDriven = false;
+    if (attack === 'slam' || attack === 'screech') this.tearSilkFor(attack);
     this.prewarmAttackArt(attack);
     this.sameAttackRun = this.lastAttack === attack ? this.sameAttackRun + 1 : 1;
     this.lastAttack = attack;

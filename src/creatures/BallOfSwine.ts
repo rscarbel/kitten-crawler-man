@@ -145,7 +145,7 @@ const WALLOW_CONTACT_FRACTION = 0.28;
  * they can see is not standing next to reads as the boss having reach it does not.
  */
 const TRAMPLE_RANGE_FRACTION_OF_BODY = 0.9;
-const TRAMPLE_RANGE_TILES = BOS_BODY_RADIUS_TILES * TRAMPLE_RANGE_FRACTION_OF_BODY;
+export const TRAMPLE_RANGE_TILES = BOS_BODY_RADIUS_TILES * TRAMPLE_RANGE_FRACTION_OF_BODY;
 
 /** HP fraction below which the ball starts shedding live Tusklings as it rolls. */
 const SHED_HP_FRACTION = 0.6;
@@ -224,7 +224,7 @@ const MIN_HEADING_LENGTH = 1e-4;
  * in `scripts/verify-difficulty.ts`), so the dodge stays possible by movement alone —
  * it just has to be *timed* rather than merely remembered.
  */
-const LUNGE_RANGE_TILES = 6;
+export const LUNGE_RANGE_TILES = 6;
 /** Frames the lunge tell is drawn for. */
 const LUNGE_FLASH_FRAMES = 14;
 const LUNGE_TELL_COLOR = '#f87171';
@@ -415,6 +415,35 @@ export class BallOfSwine extends Mob {
    * deleted mid-flight the moment the mob dies.
    */
   pendingSheds = 0;
+
+  /**
+   * Flat impacts and landed tramples since the ball was made, each with where
+   * the last one happened (world pixels, centre of the ball or of its victim).
+   *
+   * Counters rather than queued events, so any number of watchers — the arena's
+   * dressing, a review harness — can each notice a new one by comparing against
+   * the count they last saw, and none of them can drain it from the others.
+   */
+  private slams = 0;
+  private readonly lastSlamPx = { x: 0, y: 0 };
+  private trampleHits = 0;
+  private readonly lastTramplePx = { x: 0, y: 0 };
+
+  get slamCount(): number {
+    return this.slams;
+  }
+
+  get lastSlamAt(): Readonly<{ x: number; y: number }> {
+    return this.lastSlamPx;
+  }
+
+  get trampleHitCount(): number {
+    return this.trampleHits;
+  }
+
+  get lastTrampleAt(): Readonly<{ x: number; y: number }> {
+    return this.lastTramplePx;
+  }
   pendingStench: StenchBurst | null = null;
 
   override clearAirborneAttacks(): void {
@@ -1026,6 +1055,9 @@ export class BallOfSwine extends Mob {
    * counts as one to 1 for dead-on.
    */
   private slamInto(squareness: number): void {
+    this.slams++;
+    this.lastSlamPx.x = this.x + TILE_SIZE * TILE_CENTER_OFFSET;
+    this.lastSlamPx.y = this.y + TILE_SIZE * TILE_CENTER_OFFSET;
     const clamped = Math.max(0, Math.min(1, squareness));
     this.slamSquareness = clamped;
     const loss =
@@ -1171,6 +1203,9 @@ export class BallOfSwine extends Mob {
       // `takeDamageFrom` is what puts it in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
       else if (target.takeDamage(damage, trampleDamageSource(this.mobType))) {
+        this.trampleHits++;
+        this.lastTramplePx.x = targetX;
+        this.lastTramplePx.y = targetY;
         this.noteStruckPlayer(target);
         // A boulder rolling over someone is contact, so reflect gear bites into
         // it exactly as it does into a swing.

@@ -523,7 +523,7 @@ export function chargeLaneTo(
   const distancePx = Math.hypot(to.x - from.x, to.y - from.y);
   if (distancePx < TILE_SIZE * minTiles || distancePx > TILE_SIZE * maxTiles) return null;
   if (distancePx === 0) return null;
-  if (!merc.hasClearLine(from.x, from.y, to.x, to.y)) return null;
+  if (!merc.hasWalkableLine(from.x, from.y, to.x, to.y)) return null;
   const lane = { dirX: (to.x - from.x) / distancePx, dirY: (to.y - from.y) / distancePx };
   if (friendInLane(ctx, lane, CHARGE_MAX_LENGTH_TILES + LANE_FRIEND_CLEARANCE_TILES)) return null;
   // He must be able to run far enough that the couched point reaches the foe.

@@ -1,4 +1,5 @@
 import type { TileContent } from '../tileTypes';
+import { drawColosseumRim, drawColosseumTile } from './bossRooms/colosseumTiles';
 import {
   BUILDING_WALL,
   ROOF_THATCH,
@@ -1417,7 +1418,10 @@ export function drawBuildingTile(
 
     // Metal wall — dark riveted steel panels for the arena exterior
     case METAL_WALL: {
+      if (drawColosseumTile(ctx, structure, type, sx, sy, ts, tx, ty)) break;
       drawMetalWallPanel(ctx, sx, sy, ts, ty);
+      // A straight wall the ring's curve still reaches into: the door row's seal.
+      drawColosseumRim(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
 
@@ -1427,6 +1431,7 @@ export function drawBuildingTile(
     // the run of wall it sits in: the plate, the weld seams and the lit top edge are
     // the same, and only the middle of the panel is different.
     case ARENA_CAGE: {
+      if (drawColosseumTile(ctx, structure, type, sx, sy, ts, tx, ty)) break;
       drawArenaCage(ctx, sx, sy, ts, tx, ty);
       break;
     }

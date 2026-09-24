@@ -617,7 +617,7 @@ export class MedicKit implements MercenaryKit {
       if (awayComponent < FLEE_MIN_AWAY_COMPONENT) continue;
       const probeX = cx + x * probePx;
       const probeY = cy + y * probePx;
-      if (!merc.canStandAt(probeX, probeY) || !merc.hasClearLine(cx, cy, probeX, probeY)) {
+      if (!merc.canStandAt(probeX, probeY) || !merc.hasWalkableLine(cx, cy, probeX, probeY)) {
         continue;
       }
       let score = awayComponent + FLEE_OWNER_PULL_WEIGHT * (x * toOwner.x + y * toOwner.y);

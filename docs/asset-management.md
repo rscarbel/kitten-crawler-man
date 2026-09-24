@@ -211,6 +211,30 @@ is hung — so it survives the stairs and is released with its asset group. The
 wilderness does carry one, so a floor's trees, rocks and camps are repainted when
 its layout is.
 
+## Boss rooms are painted and baked
+
+The five boss rooms on floors 1 and 2 ship no images. Each room's floor, props,
+toppled and flooded states and effect frames are a sheet family in
+`src/sprites/sheets/bossRooms/<room>Sheets.ts`, keyed by its asset group
+(`boss_hoarder`, `boss_juicer`, `boss_krakaren`, `boss_grotesque_spider`,
+`boss_colosseum`) in `bossRoomSheets.ts`. `requestEnvironmentSheetsForGroups`
+paints them at floor load under `BOSS_ROOM_SALT`, so a room's art variation is
+repainted with its floor, while its collidable layout comes from doorway-relative
+templates that no seed reaches. Seal time warms only the boss figure.
+
+Static art stays out of the frame. Floors, stains and blocking props are tile
+types (`BOSS_ROOM_PROP_TILE_TYPES`, `BOSS_ROOM_FLAT_TILE_TYPES`) painted by
+`src/map/tiles/bossRooms/` into the tile chunk cache; only live objects — a
+wobbling tower, a cracking vat, a rattling cage — are drawn each frame, by the
+room's `BossRoomDressing` (`src/systems/bossRooms/`), as blits of pre-painted
+frames. A room's darkness is the one full-room image, baked at quarter
+resolution when the room seals and scaled up in a single blit.
+
+`npm run gates:boss-rooms` holds the line on real generated floors: no pixel of
+placeholder magenta, no reference to a deleted image key, each room's sheets
+under 6 MB decoded, and no more than 120 dressing `drawImage` calls in a room's
+heaviest frame, counted on a wrapped context.
+
 ## Facades are painted in stages
 
 A building facade is the most expensive picture the game makes — around a
@@ -246,8 +270,7 @@ loader has always understood — took the town's facades from 116 MB resident to
 62 MB. `registerPaintedSprite` and the residency report both size a sheet the way
 `frameOrigin` reads one, so neither can be fooled by the layout.
 
-`overworld_main_tower` and `hoarders_room` stay authored PNGs: neither is a
-generated facade.
+`overworld_main_tower` stays an authored PNG: it is not a generated facade.
 
 ## What the conversion cost and bought
 

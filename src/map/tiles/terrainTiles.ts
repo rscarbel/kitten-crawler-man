@@ -1,4 +1,5 @@
 import type { TileContent } from '../tileTypes';
+import { drawGymWallDressing } from './bossRooms/gymTiles';
 import {
   FloorTypeValue,
   VOID_TYPE,
@@ -275,6 +276,8 @@ export function drawTerrainTile(
     case FloorTypeValue.wall: {
       const theme = dungeonFloorTheme();
       drawGroundMaterialTile(ctx, theme.ground, theme.wallMaterial, sx, sy, ts, tx, ty);
+      // The gym's mirror and whiteboard hang on its walls, baked with them.
+      drawGymWallDressing(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
 

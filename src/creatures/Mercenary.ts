@@ -389,6 +389,14 @@ export class Mercenary extends Mob {
   }
 
   /**
+   * Whether a straight run between two world points crosses only walkable
+   * tiles. A clear line is not enough for a step: it sees over low props.
+   */
+  hasWalkableLine(fromX: number, fromY: number, toX: number, toY: number): boolean {
+    return this.map?.hasWalkableLine(fromX, fromY, toX, toY) ?? true;
+  }
+
+  /**
    * Whether the tile under a world point is ground a step could end on: the
    * same walkable-and-not-a-stairwell test `moveWithCollision` makes. A sight
    * line alone cannot say this — it never tests the tile it ends in.
