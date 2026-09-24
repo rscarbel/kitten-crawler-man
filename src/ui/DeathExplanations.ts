@@ -63,6 +63,15 @@ export type DeathCause =
   | 'cityElfCultist'
   | 'heatherTheBear'
   | 'missQuill'
+  | 'shieldFairy'
+  | 'healingFairy'
+  | 'necroFairy'
+  | 'iceFairyBolt'
+  | 'fireFairyFireball'
+  | 'fireFairyBlast'
+  | 'fireFairyDeathFlame'
+  | 'fireFairyDeathExplosion'
+  | 'frozenSolid'
   | 'burningTree'
   | 'lavaFlames'
   | 'clownGas'
@@ -385,6 +394,51 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'Miss Quill put a soul bolt through you without losing her composure.',
     'The sky fowl schoolteacher killed you. Every krasue in the city passed through her hands first.',
     'Miss Quill finished the lesson. Interrupt her casting next time.',
+  ],
+  shieldFairy: [
+    'A blue fairy was still handing out wards when the fight killed you. Kill the fairy, drop the shields.',
+    'Something you were already hitting was warded by a fairy you never bothered to look for.',
+    'You never found the thing painting hexagons on your target. It kept doing it until you died.',
+  ],
+  healingFairy: [
+    'A green fairy kept topping off the thing you were fighting. You never got around to her.',
+    'You out-damaged the healer right up until you did not. She was the easier kill.',
+    'The fairy healing your target outlasted your patience. She should have died first.',
+  ],
+  necroFairy: [
+    'A black fairy raised the thing you had just killed. It killed you the second time.',
+    'You cleared the room and a fairy un-cleared it. That one was on you.',
+    'Something you had already put down got up again, courtesy of a necro fairy you left alive.',
+  ],
+  iceFairyBolt: [
+    'A white fairy fired an ice bolt at where you stood. It is slower than you. You stood still.',
+    'The ice bolt flies dead straight and never turns. One step sideways and it sails past.',
+    'You took a fairy’s ice bolt to the face. You watched it cross the room to get there.',
+  ],
+  fireFairyFireball: [
+    'A red fairy dropped a fireball on the exact spot you were standing when she threw it.',
+    'The reticle was under your feet before it landed. You had time to not be there.',
+    'You ate a fairy-thrown fireball. The red dot on the ground was not decorative.',
+  ],
+  fireFairyBlast: [
+    'The fireball missed, sat there fizzing, and you stood on it until it went off.',
+    'A landed charge fills its red circle before it blows. You watched it fill.',
+    'The fairy already missed you once. The ground she missed onto did not.',
+  ],
+  fireFairyDeathFlame: [
+    'The fire fairy died and left a patch of flame behind. You never stepped out of it.',
+    'Killing the fairy did not put out what she left burning under you.',
+    'She was already dead. The flame patch she dropped was not.',
+  ],
+  fireFairyDeathExplosion: [
+    'A fire fairy went out with a bang, on a delay, and you were still standing over the ashes.',
+    'The mini-explosion had a countdown lit at the fairy’s death. You did not watch it.',
+    'You killed the fire fairy. The fairy killed you back, a few seconds later.',
+  ],
+  frozenSolid: [
+    'You were encased in ice and could not so much as raise a hand while it finished you.',
+    'Frozen solid, unable to act, while whatever was already hitting you kept hitting you.',
+    'The ice fairy did not need to land another shot. You were already standing still for everyone else.',
   ],
   explosiveFriendlyFire: [
     "Your own dynamite got you. That's a one-way ticket.",

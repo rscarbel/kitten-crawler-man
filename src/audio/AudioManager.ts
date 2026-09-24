@@ -1108,6 +1108,13 @@ export class AudioManager {
         this.play('krakaren_tentacle_death');
         return;
       }
+      // A fairy has no meat either. Its kind's own parting effect — the ward
+      // shatter, the heal wave, the chill, the flame, the wail — is voiced
+      // separately by the fairy systems' cue drains, on top of this pop.
+      if (e.mob.audioTag === 'fairy') {
+        this.play('fairy_death_pop');
+        return;
+      }
       this.playRandom(['splat_1', 'splat_2', 'splat_3']);
     });
 

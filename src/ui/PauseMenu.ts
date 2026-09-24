@@ -128,6 +128,9 @@ export class PauseMenu {
   /** Called when the inventory tab's "Manage Cat" button is pressed. */
   onManageCatInventory: (() => void) | null = null;
 
+  /** Opens Mongo's explainer; the Abilities tab offers it on his page when set. */
+  onHowMongoWorks: (() => void) | null = null;
+
   get isOpen(): boolean {
     return this._isOpen;
   }
@@ -696,6 +699,7 @@ export class PauseMenu {
             cat.inventory,
             mouseX,
             mouseY,
+            this.onHowMongoWorks ?? undefined,
           );
         }
         break;

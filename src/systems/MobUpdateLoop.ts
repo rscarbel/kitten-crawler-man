@@ -13,6 +13,8 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import { setPackAlertGrid } from '../creatures/packAlert';
+import { setVisibleWorldView } from '../core/visibleWorldView';
+import { bossOfHealer } from '../creatures/fairies/bossHealerBond';
 import { setMarkedGroundSources } from '../creatures/tactics/markedGround';
 import type { GroundHazardSource } from './GroundHazardSource';
 import { SeparationGrid } from '../core/SeparationGrid';
@@ -30,6 +32,37 @@ const AI_RADIUS_TILES = 22;
 const AI_RADIUS = TILE_SIZE * AI_RADIUS_TILES;
 /** Effective mass used for players in separation calculations. */
 const PLAYER_MASS = 3;
+
+/**
+ * Whether the mob loop ticks `mob` wherever it stands, not only inside a
+ * crawler's activation radius.
+ *
+ * Mobs that require evasion (e.g. GrotesqueSpider) roam the full map and must
+ * tick even when far off-screen. Same for a mob under forceAggro: a scripted
+ * encounter that ignores aggro range would otherwise freeze the moment the
+ * player outran the radius. And same, for the opposite reason, for a summon
+ * that opted out of the radius entirely: its whole job is to close the gap the
+ * radius measures.
+ */
+export function isExemptFromAiRadius(mob: Mob): boolean {
+  return mob.requiresEvasion || mob.forceAggro || mob.exemptFromAiActivationRadius;
+}
+
+/**
+ * Whether the mob loop ticks `mob` at all: within the activation radius of a
+ * crawler, or opted out of that radius. A mob without it keeps whatever target
+ * it last held, unchanged, for as long as the party stays away — so a target it
+ * holds is a record of the past, not an ongoing fight.
+ *
+ * Must agree with the loop's own activation pass in `MobUpdateLoop.update`: a
+ * mob this calls inattentive while the loop still ticks it would be treated as
+ * a frozen chaser mid-fight, and one this calls attentive while the loop
+ * ignores it pins a hireling's catch-up forever.
+ */
+export function hasAiAttention(mob: Mob, crawlers: readonly Pick<Player, 'x' | 'y'>[]): boolean {
+  if (isExemptFromAiRadius(mob)) return true;
+  return crawlers.some((crawler) => Math.hypot(mob.x - crawler.x, mob.y - crawler.y) <= AI_RADIUS);
+}
 
 /**
  * Handed to a boss that must not engage yet — shared, so holding fire allocates
@@ -107,17 +140,9 @@ export class MobUpdateLoop implements GameSystem {
     const activeMobs = mobGrid.queryCircle(human.x, human.y, AI_RADIUS);
     mobGrid.queryCircle(cat.x, cat.y, AI_RADIUS, activeMobs);
 
-    // Mobs that require evasion (e.g. GrotesqueSpider) always run AI — they roam
-    // the full map and must tick even when far off-screen. Same for a mob under
-    // forceAggro: a scripted encounter that ignores aggro range would otherwise
-    // freeze the moment the player outran the activation radius. And same, for
-    // the opposite reason, for a summon that opted out of the radius entirely:
-    // its whole job is to close the gap the radius measures.
     for (const mob of mobs) {
       if (!mob.isAlive || activeMobs.has(mob)) continue;
-      if (mob.requiresEvasion || mob.forceAggro || mob.exemptFromAiActivationRadius) {
-        activeMobs.add(mob);
-      }
+      if (isExemptFromAiRadius(mob)) activeMobs.add(mob);
     }
 
     perfMonitor.count('activeMobs', activeMobs.size);
@@ -141,6 +166,10 @@ export class MobUpdateLoop implements GameSystem {
 
       if (mob.aiHeld) {
         mob.currentTarget = null;
+        mob.isMoving = false;
+      } else if (mob.isReviving) {
+        // Still standing back up where it fell: it neither acts nor chases
+        // until the rise it is immune through has finished.
         mob.isMoving = false;
       } else if (mob.isConfused) {
         mob.currentTarget = null;
@@ -201,6 +230,8 @@ export class MobUpdateLoop implements GameSystem {
 
       // Keep bosses (specifically the Juicer) confined to their room
       if (mob.isBoss && !(mob instanceof BallOfSwine)) bossRoom?.clampBossToRoom(mob);
+      const healedBoss = bossOfHealer(mob);
+      if (healedBoss !== null) bossRoom?.clampHealerToBossRoom(mob, healedBoss);
       mob.tickTimers();
       mobGrid.move(mob, ox, oy);
     }
@@ -282,9 +313,15 @@ export class MobUpdateLoop implements GameSystem {
     }
   }
 
-  /** Drops the published grid so a torn-down scene's mobs can never be searched. */
+  /**
+   * Drops the published grid so a torn-down scene's mobs can never be
+   * searched, and the published view so its camera is never tested against
+   * another map. The scene publishes its view, but it is dropped here because
+   * this is the one teardown every scene with mobs runs.
+   */
   dispose(): void {
     setPackAlertGrid(null);
+    setVisibleWorldView(null);
     setMarkedGroundSources([]);
     this.hazardSources.length = 0;
   }

@@ -35,6 +35,10 @@ import { ClubCasinoSystem } from './ClubCasinoSystem';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
 import { ClubVipLoungeSystem, type EscortPair } from './ClubVipLoungeSystem';
 import { ClubCrowdSystem, tileBody, playerBody, type CrowdBody } from './ClubCrowdSystem';
+import type { MarketStock } from './market/MarketStock';
+
+/** Keys the club market's stock lines the same way the overworld stalls key theirs. */
+export const DESPERADO_MARKET_VENDOR_ID = 'desperado_market';
 
 const STATION_INTERACT_RANGE = 2.6;
 /**
@@ -183,11 +187,13 @@ const BAR_SHOP_CONFIG: ShopConfig = {
 };
 
 // Market gear — club-exclusive equipment otherwise only won off dangerous foes.
-const STAT_BOOST_PRICE = 80;
+export const STAT_BOOST_PRICE = 1000;
+/** Never restocks: one permanent stat roll per run is what keeps it worth the price. */
+export const STAT_BOOST_STOCK = 1;
 const TROLLSKIN_SHIRT_PRICE = 120;
 const SEPSIS_CROWN_PRICE = 150;
 
-const MARKET_SHOP_CONFIG: ShopConfig = {
+export const MARKET_SHOP_CONFIG: ShopConfig = {
   title: 'The Market',
   items: [
     {
@@ -195,6 +201,7 @@ const MARKET_SHOP_CONFIG: ShopConfig = {
       label: 'Stat Boost',
       price: STAT_BOOST_PRICE,
       desc: '+2-4 to a random stat, permanent',
+      stock: STAT_BOOST_STOCK,
     },
     {
       id: 'trollskin_shirt',
@@ -210,6 +217,19 @@ const MARKET_SHOP_CONFIG: ShopConfig = {
     },
   ],
 };
+
+/**
+ * The one place the club's market shop is built, so a gate that wants to
+ * assert on the Stat Boost row's real price and stock exercises the same
+ * `ShopItem` list and the same `MarketStock` wiring the club actually plays
+ * with, rather than a copy that could drift from it unnoticed.
+ */
+export function createClubMarketShop(marketStock: MarketStock): ShopSystem {
+  return new ShopSystem(CLUB_INTERIOR_W, MARKET_SHOP_CONFIG, {
+    stock: marketStock,
+    vendorId: DESPERADO_MARKET_VENDOR_ID,
+  });
+}
 
 /** Which shared club-NPC sprite each station uses; the casino and the door have their own renderers. */
 const STATION_VARIANT: Record<
@@ -277,13 +297,14 @@ export class DesperadoClubSystem {
     private readonly audio: AudioManager | null,
     hasPassTattoo: boolean,
     arrivingCrawler: Player,
+    marketStock: MarketStock,
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
   ) {
     this.dialog = new QuestDialog(audio);
     this.crowd = new ClubCrowdSystem(map);
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG);
-    this.marketShop = new ShopSystem(CLUB_INTERIOR_W, MARKET_SHOP_CONFIG);
+    this.marketShop = createClubMarketShop(marketStock);
     this.casino = new ClubCasinoSystem(audio, membership);
     this.guild = new MercenaryGuildSystem(roster, audio);
     this.vip = new ClubVipLoungeSystem(audio, roster);

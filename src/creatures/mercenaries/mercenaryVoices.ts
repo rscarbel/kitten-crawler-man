@@ -1,4 +1,5 @@
 import type { MercenaryVoiceId } from '../../core/mercenaryTemplates';
+import { HIRELING_POTION_COOLDOWN_FRAMES } from './hirelingSurvival';
 
 /**
  * What a hired mercenary says, and when.
@@ -23,6 +24,9 @@ import type { MercenaryVoiceId } from '../../core/mercenaryTemplates';
  * - `low_hp`: crossed below a fraction of its health.
  * - `special`: its kit's signature move went off.
  * - `owner_hurt` / `cat_hurt`: the crawler it follows, or the cat, took a wound.
+ * - `downed`: knocked flat, waiting for a crawler to stand over it and revive it.
+ * - `revived`: back on its feet after a revive.
+ * - `potion`: drank one of its own healing draughts mid-fight.
  * - `death`: last words.
  * - `talk`: the player walked up and pressed interact.
  * - `floor_end`: the floor is won and the contract with it.
@@ -36,6 +40,9 @@ export type MercenaryBarkTrigger =
   | 'special'
   | 'owner_hurt'
   | 'cat_hurt'
+  | 'downed'
+  | 'revived'
+  | 'potion'
   | 'death'
   | 'talk'
   | 'floor_end';
@@ -70,6 +77,10 @@ const LOW_HP_BARK_COOLDOWN_FRAMES = 1200;
 const SPECIAL_BARK_COOLDOWN_FRAMES = 240;
 const OWNER_HURT_BARK_COOLDOWN_FRAMES = 900;
 const CAT_HURT_BARK_COOLDOWN_FRAMES = 600;
+const DOWNED_BARK_COOLDOWN_FRAMES = 0;
+const REVIVED_BARK_COOLDOWN_FRAMES = 0;
+/** Twice the draught's own cooldown, so a hireling only comments on every other one. */
+const POTION_BARK_COOLDOWN_FRAMES = HIRELING_POTION_COOLDOWN_FRAMES * 2;
 const DEATH_BARK_COOLDOWN_FRAMES = 0;
 const TALK_BARK_COOLDOWN_FRAMES = 0;
 const FLOOR_END_BARK_COOLDOWN_FRAMES = 0;
@@ -84,6 +95,9 @@ export const BARK_COOLDOWN_FRAMES: Readonly<Record<MercenaryBarkTrigger, number>
   special: SPECIAL_BARK_COOLDOWN_FRAMES,
   owner_hurt: OWNER_HURT_BARK_COOLDOWN_FRAMES,
   cat_hurt: CAT_HURT_BARK_COOLDOWN_FRAMES,
+  downed: DOWNED_BARK_COOLDOWN_FRAMES,
+  revived: REVIVED_BARK_COOLDOWN_FRAMES,
+  potion: POTION_BARK_COOLDOWN_FRAMES,
   death: DEATH_BARK_COOLDOWN_FRAMES,
   talk: TALK_BARK_COOLDOWN_FRAMES,
   floor_end: FLOOR_END_BARK_COOLDOWN_FRAMES,
@@ -95,10 +109,15 @@ export const BARK_COOLDOWN_FRAMES: Readonly<Record<MercenaryBarkTrigger, number>
  * seconds earlier are never heard at all, and a signature move is the one
  * moment its line is for — a finisher lands seconds into a fight, right after
  * the `engage` line that would otherwise swallow it. Each kit's special runs on
- * its own cooldown, so exempting it never makes a wall of bubbles.
+ * its own cooldown, so exempting it never makes a wall of bubbles. The cry for
+ * help on going down is the hireling's own call for a revive, and the thanks on
+ * getting up is its answer; either swallowed by an `engage` line a second
+ * earlier leaves the moment unmarked.
  */
 export const GAP_EXEMPT_TRIGGERS: ReadonlySet<MercenaryBarkTrigger> = new Set([
   'talk',
+  'downed',
+  'revived',
   'death',
   'special',
 ]);
@@ -143,6 +162,18 @@ const SLEDGE: MercenaryVoice = {
       'You hurt Princess. Bad idea.',
       'Princess behind Sledge. Now.',
     ],
+    downed: [
+      'Sledge down. Help Sledge up.',
+      'Sledge... fall over. Come get Sledge.',
+      'Floor cold. Sledge want up.',
+      'Not dead. Sledge wait. Hurry.',
+    ],
+    revived: [
+      'Sledge up. Thank you.',
+      'Back. Sledge protect again.',
+      'Good hands. Sledge owe you.',
+    ],
+    potion: ['Sledge drink. Sledge fine.', 'Tastes bad. Works good.', 'Glug.'],
     death: [
       'Princess... run.',
       'Sledge... tried.',
@@ -204,6 +235,14 @@ const BOMO: MercenaryVoice = {
       'Bomo coming, Princess!',
       'Bad! Bad thing hit Princess!',
     ],
+    downed: [
+      'Bomo fall down! Help Bomo!',
+      'Ow. Bomo on floor. Come get Bomo?',
+      'Bomo lie here. Not long, okay?',
+      'Sledgy would pick Bomo up. You pick Bomo up?',
+    ],
+    revived: ['Bomo up! Bomo up!', 'Thank you! Bomo protect again!', 'Bomo okay now. Mostly.'],
+    potion: ['Bomo drink medicine!', 'Yuck. Bomo better.', 'Glug glug. Bomo good.'],
     death: [
       'Tell Sledgy... Bomo tried.',
       'Bomo... sorry.',
@@ -269,6 +308,22 @@ const DONG_QUIXOTE: MercenaryVoice = {
       'Strike a noble cat? Thou hast chosen poorly.',
       'My lady! Behind my lance!',
       'Treachery against a lady most feline!',
+    ],
+    downed: [
+      'I am unhorsed! A hand, good crawler!',
+      'I merely rest. Help me rise, and swiftly!',
+      'Lend me thy arm! My dignity I shall retrieve myself.',
+      'Fallen, but not vanquished! Not yet!',
+    ],
+    revived: [
+      'Risen! Let the minstrels note it.',
+      'My thanks, friend. Now, where was the villain?',
+      'Up again, as all great knights must be.',
+    ],
+    potion: [
+      'A restorative! Most bracing.',
+      'To thy health! And mine!',
+      'Vile tincture. Splendid effect.',
     ],
     death: [
       'Vale to you all. Vale.',
@@ -341,6 +396,18 @@ const SPLASH_ZONE: MercenaryVoice = {
       'Hang in there, fuzzy!',
       'Cat overboard!',
     ],
+    downed: [
+      'Lifeguard down! Somebody get over here!',
+      'Little help? I am very small and very flat.',
+      'Man overboard! Me! I am the man!',
+      "I'm okay! I'm not okay! Come get me!",
+    ],
+    revived: [
+      'Back on duty! Thanks, pal.',
+      'Mouth-to-mouth not required. Appreciated anyway.',
+      "Whew! Okay, where's the deep end?",
+    ],
+    potion: ['Hydrate!', 'Tastes like pool water. Works, though.', 'Drink break!'],
     death: [
       'Tell Snail Trail... tell her I stuck the landing.',
       "Guess... I'm off duty.",
@@ -412,6 +479,14 @@ const GLUTEUS_MAXX: MercenaryVoice = {
       'Kitty down! Rage up!',
       'That cat is a celebrity, you animal!',
     ],
+    downed: [
+      "I'm DOWN! Get me UP!",
+      'Spot me! SPOT ME!',
+      'This is just a floor stretch! Help me up!',
+      'Nobody saw that. Help me up before somebody sees that.',
+    ],
+    revived: ["BACK! Let's GO!", 'Second set! SECOND SET!', "That's what I call a recovery day!"],
+    potion: ['Pre-workout!', 'Chug! Chug! Chug!', 'Protein shake, baby!'],
     death: [
       'Worth it.',
       'Tell my glutes... they did great.',
@@ -483,6 +558,22 @@ const BUCKET_BOY: MercenaryVoice = {
       "Oh no, not her, she's famous!",
       "I'm coming, kitty! Slowly! But coming!",
     ],
+    downed: [
+      "I fell! I fell and I'm scared! Please come get me!",
+      "Don't leave me here! Please!",
+      "I'm still alive! I think! Help!",
+      "I can't heal myself lying down! Help!",
+    ],
+    revived: [
+      'You came back for me! You actually came back!',
+      "Thank you thank you thank you. I'll be braver. A bit.",
+      "I'm up! Sorry! Thank you! Sorry!",
+    ],
+    potion: [
+      'Medicine! I know about medicine!',
+      'Gulp. Okay. Better.',
+      'This one tastes like my bucket.',
+    ],
     death: [
       'Did... did I help?',
       'Sorry... I dropped my bucket.',
@@ -518,6 +609,8 @@ const TUMBLEDOWN: MercenaryVoice = {
       'Tumbledown says nothing, loudly.',
       'Tumbledown blinks. It takes a while.',
     ],
+    downed: ['Tumbledown slumps into a heap. Something in it still grinds.'],
+    revived: ['Tumbledown heaves itself back together.'],
     death: ['Tumbledown comes apart, one boulder at a time.'],
     floor_end: ['Tumbledown turns and trudges back toward the club.'],
   },
@@ -530,6 +623,9 @@ const TUMBLEDOWN: MercenaryVoice = {
     low_hp: 'frustrated',
     owner_hurt: 'frustrated',
     cat_hurt: 'frustrated',
+    downed: 'frustrated',
+    revived: 'grunt',
+    potion: 'grunt',
     death: 'frustrated',
     floor_end: 'grunt',
   },

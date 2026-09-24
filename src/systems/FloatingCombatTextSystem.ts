@@ -1,7 +1,7 @@
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Player } from '../Player';
 import type { Mob } from '../creatures/Mob';
-import type { FloatingTextStyle } from '../core/FloatingText';
+import type { FloatingTextRequest, FloatingTextStyle } from '../core/FloatingText';
 import { TILE_SIZE } from '../core/constants';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 
@@ -50,6 +50,10 @@ interface FloatingLabel {
  */
 export class FloatingCombatTextSystem implements GameSystem {
   private readonly labels: FloatingLabel[] = [];
+  /** Frames this system has aged its labels through; the clock throttled labels are timed on. */
+  private frame = 0;
+  /** Per body, the frame each throttled text was last shown over it. */
+  private lastThrottledShown = new WeakMap<Player, Map<string, number>>();
 
   /** Add a label at a world position. Also usable directly by systems. */
   spawn(worldX: number, worldY: number, text: string, style: FloatingTextStyle): void {
@@ -73,6 +77,7 @@ export class FloatingCombatTextSystem implements GameSystem {
    * level-up still happens there.
    */
   updateFor(human: Player, cat: Player, mobs: readonly Mob[]): void {
+    this.frame++;
     this.drainPlayer(human);
     this.drainPlayer(cat);
     for (const mob of mobs) this.drainPlayer(mob);
@@ -92,9 +97,25 @@ export class FloatingCombatTextSystem implements GameSystem {
     const queue = player.pendingFloatingText;
     if (queue.length === 0) return;
     for (const request of queue) {
+      if (this.isThrottled(player, request)) continue;
       this.spawn(player.x + TILE_SIZE / 2, player.y, request.text, request.style);
     }
     queue.length = 0;
+  }
+
+  /** True when a throttled request repeats a label still inside its quiet window; records it otherwise. */
+  private isThrottled(player: Player, request: FloatingTextRequest): boolean {
+    const { throttleFrames } = request;
+    if (throttleFrames === undefined) return false;
+    let shownAt = this.lastThrottledShown.get(player);
+    if (shownAt === undefined) {
+      shownAt = new Map();
+      this.lastThrottledShown.set(player, shownAt);
+    }
+    const lastShown = shownAt.get(request.text);
+    if (lastShown !== undefined && this.frame - lastShown < throttleFrames) return true;
+    shownAt.set(request.text, this.frame);
+    return false;
   }
 
   /** Draws every live label in world space. Call during the effects pass. */
@@ -119,5 +140,6 @@ export class FloatingCombatTextSystem implements GameSystem {
 
   dispose(): void {
     this.labels.length = 0;
+    this.lastThrottledShown = new WeakMap();
   }
 }

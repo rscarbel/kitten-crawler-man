@@ -208,7 +208,7 @@ export class AchievementUISystem {
       (box, contents) => {
         mgr.openBox(box.id);
         if (contents.potions) target.inventory.addItem('health_potion', contents.potions);
-        target.coins += contents.coins;
+        target.earnCoins(contents.coins);
         if (contents.bonus && isItemId(contents.bonus.id)) {
           this.human.inventory.addItem(contents.bonus.id, contents.bonus.quantity);
         }

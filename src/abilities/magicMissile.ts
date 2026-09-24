@@ -120,6 +120,9 @@ function renderMagicMissileIcon(
   drawSpriteKey(ctx, 'magic_missile_icon', state, 0, x, y, size);
 }
 
+/** Magic Missile level that earns the cat the slate butterfly talisman. */
+export const MAGIC_MISSILE_TALISMAN_LEVEL = 3;
+
 export const MAGIC_MISSILE_DEF: AbilityDef = {
   id: 'magic_missile',
   name: 'Magic Missile',

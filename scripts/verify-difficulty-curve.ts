@@ -39,7 +39,7 @@ import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { ALL_STATS, type DamageSource } from '../src/Player';
-import { Mob } from '../src/creatures/Mob';
+import { Mob, REVIVE_IN_PLACE_RISE_FRAMES } from '../src/creatures/Mob';
 import { BrindleGrub } from '../src/creatures/BrindleGrub';
 import { GoblinArcher } from '../src/creatures/GoblinArcher';
 import { Llama } from '../src/creatures/Llama';
@@ -110,6 +110,7 @@ import {
   MAX_MOB_PROJECTILE_SPEED_MULTIPLIER,
   MAX_MOB_SPEED_MULTIPLIER,
   projectileSpeedScaleForLevel,
+  scaledCooldownFramesForLevel,
   SHARED_LEVELLED_CURVE,
   type LevelledCurve,
   speedScaleForLevel,
@@ -141,6 +142,59 @@ import {
   TIME_TO_KILL_MAX_SECONDS,
 } from '../src/creatures/mobLevelScaling';
 import { TILE_SIZE } from '../src/core/constants';
+import { EventBus } from '../src/core/EventBus';
+import { Fairy } from '../src/creatures/fairies/Fairy';
+import { FireFairy } from '../src/creatures/fairies/FireFairy';
+import { IceFairy } from '../src/creatures/fairies/IceFairy';
+import { necroSkeletonLevel, shieldWardCount } from '../src/creatures/fairies/fairyPotency';
+import {
+  AEGIS_DAMAGE_SCALE,
+  AEGIS_DURATION_FRAMES,
+  FAIRY_HITS_TO_KILL_MAX,
+  FAIRY_ROOM_FIGHT_FAIRY_COST_MIN,
+  FAIRY_ROOM_FIGHT_WIPES_MAX,
+  HARD_FAIRY_ROOM_FIGHT_WIPES_MAX,
+  HEAL_TRIGGER_HP_FRACTION,
+  NECRO_ARMY,
+  NECRO_ARMY_LAST_STANDING,
+  NECRO_DEATH_ARMY,
+  NECRO_RESUMMON_AFTER_WIPE_MAX_FRAMES,
+  NECRO_RESUMMON_AFTER_WIPE_MIN_FRAMES,
+  NECRO_RESUMMON_LAST_STANDING_FRAMES,
+  NECRO_SKELETON_STRENGTH,
+  OVERHEAL_DURATION_FRAMES,
+  OVERHEAL_MAX_HP_FRACTION,
+  RESURRECT_COOLDOWN_FRAMES,
+  RESURRECT_COOLDOWN_MIN_FRAMES,
+  RESURRECT_HP_FRACTION,
+  SHIELD_BETWEEN_CASTS_FRAMES,
+  SHIELD_BETWEEN_CASTS_MIN_FRAMES,
+  type NecroSkeletonArmy,
+} from '../src/creatures/fairies/fairyTuning';
+import { SKELETON_RISE_FRAMES } from '../src/sprites/skeletonTiming';
+import { makeFairyAegis } from '../src/core/StatusEffect';
+import {
+  healingFairyCooldownFrames,
+  healingFairyHealAmount,
+} from '../src/creatures/fairies/HealingFairy';
+import { RisingSkeleton } from '../src/creatures/RisingSkeleton';
+import type { FairyKind } from '../src/sprites/art/fairyTiming';
+import {
+  DEATH_EXPLOSION_ATTACK_TYPE,
+  DEATH_FLAME_ATTACK_TYPE,
+  FIREBALL_BLAST_ATTACK_TYPE,
+  FairyFireballSystem,
+} from '../src/systems/FairyFireballSystem';
+import { FairyIceBolts } from '../src/systems/fairyIceBolts';
+import {
+  FAIRY_SPAWN_KEYS,
+  MAX_FAIRIES_PER_ROOM,
+  REGULAR_FAIRY_KINDS,
+  fairyRoomRate,
+  needsGuaranteedShield,
+  rollFairyCount,
+} from '../src/levels/fairySpawner';
+import type { FairyRateUpgrade, FairySpawnTable } from '../src/levels/types';
 
 // ── Harness constants ────────────────────────────────────────────────────────
 
@@ -246,20 +300,37 @@ function makeArena(sizeTiles = ARENA_SIZE_TILES): GameMap {
  * undodgeable; a status tick (poison, burn) or other non-mob harm is neither
  * scaled nor dodgeable. Status effects a mob applies run on this crawler's own
  * `tickTimers`, so their ticks arrive here exactly as they would in the game.
+ * A radial burst is kept apart from the blows it is otherwise treated like:
+ * see {@link FLAT_BY_RULE_ATTACK_TYPES}.
  */
 class DamageLedger extends HumanPlayer {
   dodgeable = 0;
   undodgeable = 0;
   unscaled = 0;
+  flat = 0;
 
   override takeDamage(amount: number, source?: DamageSource): boolean {
     if (amount <= 0) return false;
     if (source?.kind !== 'mob') this.unscaled += amount;
     else if (source.undodgeable === true) this.undodgeable += amount;
+    else if (FLAT_BY_RULE_ATTACK_TYPES.has(source.attackType ?? '')) this.flat += amount;
     else this.dodgeable += amount;
     return true;
   }
 }
+
+/**
+ * Blows that are flat by rule: a burst whose radius is telegraphed on the floor
+ * hurts the same at every level (`docs/difficulty-fairness-rules.md`, P2). Like
+ * a status tick it would only dilute the level-ratio checks, so it is left out
+ * of them and counted wherever a real fight is priced. A dodgeable mob blow in
+ * every other respect.
+ */
+const FLAT_BY_RULE_ATTACK_TYPES: ReadonlySet<string> = new Set([
+  FIREBALL_BLAST_ATTACK_TYPE,
+  DEATH_FLAME_ATTACK_TYPE,
+  DEATH_EXPLOSION_ATTACK_TYPE,
+]);
 
 /** A {@link DamageLedger} that also keeps the largest single blow it took. */
 class LargestBlowLedger extends DamageLedger {
@@ -283,6 +354,15 @@ const KNOWN_PROJECTILE_HANDOFFS: ReadonlySet<string> = new Set([
   'takePendingVials',
   'takePendingMissiles',
   'takePendingSummons',
+  // Counted by running `FairyFireballSystem` itself beside the fairy, since
+  // the ball becomes a charge and the charge a burst before it hurts anyone.
+  'takePendingFireballs',
+  // Counted by flying `FairyIceBolts` itself beside the fairy, since a bolt
+  // is a straight shot that lands, frost and all, only when it reaches a body.
+  'takePendingIceBolts',
+  // A raised corpse is a creature the room already priced as a body of its
+  // own; it launches nothing at the crawler.
+  'takePendingResurrections',
 ]);
 
 function projectileDamageLaunched(mob: Mob): number {
@@ -328,6 +408,8 @@ interface CreatureLevelSample {
   readonly undodgeableDamagePerFrame: number;
   /** Status ticks and other harm the game neither scales by difficulty nor lets be dodged. */
   readonly unscaledDamagePerFrame: number;
+  /** Dodgeable blows that never scale with level: {@link FLAT_BY_RULE_ATTACK_TYPES}. */
+  readonly flatDamagePerFrame: number;
 }
 
 interface Creature {
@@ -342,6 +424,25 @@ interface Creature {
   readonly bossCurve?: LevelledCurve;
   /** The band a boss's floor spawns it in. */
   readonly bossBand?: MobLevelRange;
+  /**
+   * Why this creature deals no damage of its own, for one that changes a fight
+   * without hurting anyone. It is priced for how long it takes to kill and
+   * held out of every rule read off the damage it deals.
+   */
+  readonly supportReason?: string;
+  /** The fairy kind this creature is, when it is one. */
+  readonly fairyKind?: FairyKind;
+  /**
+   * Whether each of its attacks goes at every crawler in reach at once, so the
+   * rate measured against the one crawler the harness stands up lands on each
+   * crawler of the party rather than being shared between them.
+   */
+  readonly strikesEachCrawler?: boolean;
+}
+
+/** Whether `creature` is a fairy whose own casts hurt the party. */
+function isDamagingFairy(creature: Creature): boolean {
+  return creature.fairyKind !== undefined && creature.supportReason === undefined;
 }
 
 /** A levelled, warmed-up instance standing in the arena, before any fight. */
@@ -415,6 +516,7 @@ function curvePriced(creature: Creature, level: number, curve: LevelledCurve): C
     dodgeableDamagePerFrame: damageScaleForLevel(level, curve) / cooldownScaleForLevel(level),
     undodgeableDamagePerFrame: 0,
     unscaledDamagePerFrame: 0,
+    flatDamagePerFrame: 0,
   };
 }
 
@@ -434,11 +536,15 @@ function measureBehaviour(
   const crawler = new DamageLedger(MOB_TILE + 1, MOB_TILE, TILE_SIZE);
   if (creature.isBoss) mob.forceAggro = true;
   provoke(mob, crawler);
+  const resolveFireballs = fireballStepper(map, mob, crawler);
+  const flyIceBolts = iceBoltStepper(map, mob, crawler);
 
   let projectileDamage = 0;
   for (let frame = 0; frame < MEASURE_FRAMES; frame++) {
     if (mob instanceof BrindleGrub) mob.tickEvolve();
     mob.updateAI([crawler]);
+    resolveFireballs?.();
+    flyIceBolts?.();
     mob.tickTimers();
     crawler.tickTimers();
     projectileDamage += projectileDamageLaunched(mob);
@@ -448,9 +554,57 @@ function measureBehaviour(
     dodgeableDamagePerFrame: (crawler.dodgeable + projectileDamage) / MEASURE_FRAMES,
     undodgeableDamagePerFrame: crawler.undodgeable / MEASURE_FRAMES,
     unscaledDamagePerFrame: crawler.unscaled / MEASURE_FRAMES,
+    flatDamagePerFrame: crawler.flat / MEASURE_FRAMES,
   };
   sampleCache.set(cacheKey, sample);
   return sample;
+}
+
+/** Where the fireball harness parks the crawler it is not measuring: far outside any blast. */
+const FIREBALL_BYSTANDER_TILE = 1;
+
+/**
+ * A fire fairy's lob hurts nobody until `FairyFireballSystem` lands it, leaves
+ * the charge and sets it off, so the real system runs beside the fairy and
+ * everything it lands on the standing crawler — the direct hit, the burst and
+ * any burn it lights — reaches the ledger as it would in a fight. Null for
+ * every other creature.
+ */
+function fireballStepper(map: GameMap, mob: Mob, crawler: DamageLedger): (() => void) | null {
+  if (!(mob instanceof FireFairy)) return null;
+  const mobRoster = new MobRoster(map, new SpellSystem());
+  mobRoster.add(mob);
+  const bystander = new CatPlayer(FIREBALL_BYSTANDER_TILE, FIREBALL_BYSTANDER_TILE, TILE_SIZE);
+  bystander.godMode = true;
+  const system = new FairyFireballSystem({
+    bus: new EventBus(),
+    gameMap: map,
+    getMobs: () => mobRoster.mobs,
+  });
+  const ctx: SystemContext = {
+    human: crawler,
+    cat: bystander,
+    active: crawler,
+    inactive: bystander,
+    activeIsMoving: false,
+    roster: mobRoster,
+    gameMap: map,
+  };
+  return () => system.update(ctx);
+}
+
+/**
+ * An ice fairy's bolt hurts nobody until `FairyIceBolts` flies it into a body,
+ * so the real flight runs beside the fairy and the blow and frost it lands on
+ * the standing crawler reach the ledger as they would in a fight. Null for
+ * every other creature.
+ */
+function iceBoltStepper(map: GameMap, mob: Mob, crawler: DamageLedger): (() => void) | null {
+  if (!(mob instanceof IceFairy)) return null;
+  const bolts = new FairyIceBolts(map);
+  const mobs: readonly Mob[] = [mob];
+  const party: readonly DamageLedger[] = [crawler];
+  return () => bolts.update(mobs, party);
 }
 
 interface KillCost {
@@ -458,6 +612,12 @@ interface KillCost {
   readonly pressesFractional: number;
   /** Whole presses a real kill takes. */
   readonly pressesWhole: number;
+  /**
+   * Presses to empty the bar under a fairy's aegis. Not the bare count over
+   * the aegis scale: every scaled blow is rounded and floored at one, so a
+   * small blow loses less than the scale says.
+   */
+  readonly aegisPressesFractional: number;
   readonly framesPerPress: number;
 }
 
@@ -496,6 +656,7 @@ function killCost(
     const faceValue: KillCost = {
       pressesFractional,
       pressesWhole: Math.ceil(pressesFractional),
+      aegisPressesFractional: pressesFractional / AEGIS_DAMAGE_SCALE,
       framesPerPress,
     };
     killCache.set(cacheKey, faceValue);
@@ -509,6 +670,14 @@ function killCost(
   });
   const meanDropPerPress =
     dropPerAttack.reduce((sum, drop) => sum + drop, 0) / dropPerAttack.length;
+  probe.applyStatus(makeFairyAegis(AEGIS_DURATION_FRAMES));
+  const aegisDropPerAttack = attacker.attackCycle.map((attack) => {
+    probe.hp = probe.maxHp;
+    probe.takeDamageFrom(attack.damage, crawler, attack.damageType);
+    return probe.maxHp - probe.hp;
+  });
+  const meanAegisDropPerPress =
+    aegisDropPerAttack.reduce((sum, drop) => sum + drop, 0) / aegisDropPerAttack.length;
 
   seedRandom(SIM_SEED);
   const victim = buildWarmed(creature, level, makeArena(), curve);
@@ -519,11 +688,12 @@ function killCost(
     victim.takeDamageFrom(attack.damage, crawler, attack.damageType);
     presses++;
   }
-  if (meanDropPerPress <= 0 || victim.isAlive) return null;
+  if (meanDropPerPress <= 0 || meanAegisDropPerPress <= 0 || victim.isAlive) return null;
 
   const cost: KillCost = {
     pressesFractional: probe.maxHp / meanDropPerPress,
     pressesWhole: presses,
+    aegisPressesFractional: probe.maxHp / meanAegisDropPerPress,
     framesPerPress,
   };
   killCache.set(cacheKey, cost);
@@ -554,12 +724,15 @@ function priceFight(
   const cost = killCost(creature, mobLevel, stats, curve);
   if (cost === null) return null;
   const fightFrames = cost.pressesFractional * cost.framesPerPress;
+  // Status ticks and radial bursts are flat by rule and never scale with
+  // level, so they would only dilute the ratio checks; they are counted where
+  // a single real fight is priced, which is what whole-point counting stands for.
+  const countsFlatHarm = counting === 'whole';
+  const flatBlowsPerFrame = countsFlatHarm ? sample.flatDamagePerFrame : 0;
   const blowDamagePerFrame =
-    sample.dodgeableDamagePerFrame * (1 - stats.dodgeChance) + sample.undodgeableDamagePerFrame;
-  // Status ticks are flat by rule and never scale with level, so they would
-  // only dilute the ratio checks; they are counted where a single real fight
-  // is priced, which is what whole-point counting stands for.
-  const unscaledPerFrame = counting === 'whole' ? sample.unscaledDamagePerFrame : 0;
+    (sample.dodgeableDamagePerFrame + flatBlowsPerFrame) * (1 - stats.dodgeChance) +
+    sample.undodgeableDamagePerFrame;
+  const unscaledPerFrame = countsFlatHarm ? sample.unscaledDamagePerFrame : 0;
   const damageTaken =
     blowDamagePerFrame * fightFrames * profile.incomingMobDamageScale +
     unscaledPerFrame * fightFrames;
@@ -617,7 +790,104 @@ interface Roster {
   readonly bosses: Creature[];
   readonly escorts: Creature[];
   readonly bountyMarks: Creature[];
+  /**
+   * Creatures that only ever enter a fight because another raised them — a
+   * necro fairy's skeletons — and spawn from no table of their own.
+   */
+  readonly raised: Creature[];
   readonly unbuildable: string[];
+}
+
+/** One fairy kind as a floor spawns it, and the band it rolls in there. */
+interface FairySpawn {
+  readonly kind: FairyKind;
+  readonly band: MobLevelRange;
+}
+
+/**
+ * Why each fairy that deals no damage is still a creature to price. None of
+ * them is `harmless`: that would zero damage the game really deals, and the
+ * point of the class is that their threat is time, not blows.
+ */
+const FAIRY_SUPPORT_REASONS: Readonly<Partial<Record<FairyKind, string>>> = {
+  shield: 'it wards its allies and hurts no one; its threat is the time its wards add to theirs',
+  healer: 'it heals its allies and hurts no one; its threat is the time its heals add to theirs',
+  necro:
+    'its shove deals no damage; its harm is the skeletons it summons and the mobs it raises, priced in the fights as bodies of their own',
+};
+
+type NecroSkeletonKind = keyof NecroSkeletonArmy;
+
+/** The kinds a necro fairy's army is made of, in the order `SkeletonSummonSystem` raises them. */
+const NECRO_SKELETON_KINDS: readonly NecroSkeletonKind[] = ['sword', 'archer'];
+
+/** What a necro fairy raises of each kind, as the spawner registers it. */
+const NECRO_SKELETON_TYPES: Readonly<Record<NecroSkeletonKind, string>> = {
+  sword: 'skeleton_sword',
+  archer: 'skeleton_archer',
+};
+
+/**
+ * The roster key of a skeleton a necro fairy raises: lesser than the Skeleton
+ * Lord's escort of the same type, so priced and cached apart from it.
+ */
+function necroSkeletonKey(kind: NecroSkeletonKind): string {
+  return `${NECRO_SKELETON_TYPES[kind]} (raised by a necro fairy)`;
+}
+
+function hasRoomFairies(table: FairySpawnTable): boolean {
+  const anyRegion = table.roomRatesByRegion.some((rate) => rate !== null);
+  return anyRegion || (table.upgrades ?? []).length > 0;
+}
+
+function hasScatterFairies(table: FairySpawnTable): boolean {
+  const chance = table.scatterChance;
+  return chance !== undefined && DIFFICULTIES.some((difficulty) => chance[difficulty] > 0);
+}
+
+/**
+ * Every fairy a floor can put in front of the party, with the bands it rolls
+ * in: a room fairy takes a room rule's band after the floor's largest region
+ * bonus, as the spawner draws it, and an overworld fairy a hallway rule's.
+ */
+function fairySpawns(def: LevelDef): FairySpawn[] {
+  const table = def.fairies;
+  if (table === undefined) return [];
+  const inRooms = hasRoomFairies(table);
+  const inScatter = hasScatterFairies(table);
+  const healers = table.roomHealerChance > 0 || (table.scatterHealerChance ?? 0) > 0;
+  const largestBonus = Math.max(0, ...(def.progression?.regionLevelBonus ?? []));
+  const bands: MobLevelRange[] = [];
+  if (inRooms || table.roomHealerChance > 0) {
+    for (const rule of def.roomMobs) bands.push(regionLevelBand(rule, largestBonus));
+  }
+  if (inScatter || (table.scatterHealerChance ?? 0) > 0) {
+    for (const rule of def.hallwayMobs) bands.push(rule);
+  }
+  const kinds: FairyKind[] = [];
+  if (inRooms || inScatter) kinds.push(...REGULAR_FAIRY_KINDS);
+  if (healers) kinds.push('healer');
+  return kinds.flatMap((kind) => bands.map((band) => ({ kind, band })));
+}
+
+/** The roster key of `kind` as met on `def`: a fairy's HP is authored against its floor's hosts. */
+function fairyCreatureKey(kind: FairyKind, def: LevelDef): string {
+  return `${FAIRY_SPAWN_KEYS[kind]} (${def.id})`;
+}
+
+function fairyCreature(kind: FairyKind, def: LevelDef): Creature {
+  return {
+    key: fairyCreatureKey(kind, def),
+    make: (tileX, tileY, map) => {
+      const mob = createMob(FAIRY_SPAWN_KEYS[kind], tileX, tileY, map);
+      if (mob instanceof Fairy) mob.setHostFloor(def.floorNumber);
+      return mob;
+    },
+    isBoss: false,
+    supportReason: FAIRY_SUPPORT_REASONS[kind],
+    fairyKind: kind,
+    strikesEachCrawler: kind === 'fire',
+  };
 }
 
 /**
@@ -725,6 +995,38 @@ function buildRoster(): Roster {
     const floorCurve = def.levelledCurve ?? SHARED_LEVELLED_CURVE;
     for (const type of arenaBossTypes(def)) admit(type, true, floorCurve);
     for (const rule of def.bossRooms ?? []) admit(rule.type, true, floorCurve, rule);
+    for (const spawn of fairySpawns(def)) {
+      const creature = fairyCreature(spawn.kind, def);
+      if (!regular.has(creature.key)) regular.set(creature.key, creature);
+      const known = encounters.get(creature.key) ?? [];
+      if (!known.some((seen) => bandTop(seen.band) === bandTop(spawn.band))) {
+        known.push({ def, band: spawn.band, curve: floorCurve });
+      }
+      encounters.set(creature.key, known);
+    }
+  }
+
+  const raised: Creature[] = [];
+  const raisesSkeletons = LEVEL_DEFS.some((def) =>
+    fairySpawns(def).some((spawn) => spawn.kind === 'necro'),
+  );
+  if (raisesSkeletons) {
+    for (const kind of NECRO_SKELETON_KINDS) {
+      raised.push({
+        key: necroSkeletonKey(kind),
+        make: (tileX, tileY, map) => {
+          const skeleton = createMob(NECRO_SKELETON_TYPES[kind], tileX, tileY, map);
+          // Staged in `SkeletonSummonSystem.raise`'s order; the harness's warm-up
+          // runs the climb out long before anything is measured.
+          if (skeleton instanceof RisingSkeleton) {
+            skeleton.beginRising();
+            skeleton.raiseAsLesser(NECRO_SKELETON_STRENGTH);
+          }
+          return skeleton;
+        },
+        isBoss: false,
+      });
+    }
   }
 
   const escorts = new Map<string, Creature>();
@@ -757,6 +1059,7 @@ function buildRoster(): Roster {
     bosses: [...bosses.values()],
     escorts: [...escorts.values()],
     bountyMarks: [...bountyMarks.values()],
+    raised,
     unbuildable,
   };
 }
@@ -953,13 +1256,13 @@ function ceilingViolations(rows: readonly PathRow[], ceiling: number): string[] 
     );
 }
 
-function hitsViolations(rows: readonly PathRow[]): string[] {
+function hitsViolations(rows: readonly PathRow[], hitsMax: number): string[] {
   const outside = rows.filter(
-    (row) => row.pressesWhole < HITS_TO_KILL_MIN || row.pressesWhole > HITS_TO_KILL_MAX,
+    (row) => row.pressesWhole < HITS_TO_KILL_MIN || row.pressesWhole > hitsMax,
   );
   return outside.map(
     (row) =>
-      `${row.pressesWhole} hits at party ${row.partyLevel} (want ${HITS_TO_KILL_MIN}–${HITS_TO_KILL_MAX})`,
+      `${row.pressesWhole} hits at party ${row.partyLevel} (want ${HITS_TO_KILL_MIN}–${hitsMax})`,
   );
 }
 
@@ -1128,7 +1431,13 @@ const measurable = new Set<string>();
     check(measuredDamage === 0, `${key} still deals nothing this harness can measure`);
   }
 
-  const everyone = [...roster.regular, ...roster.bosses, ...roster.escorts, ...roster.bountyMarks];
+  const everyone = [
+    ...roster.regular,
+    ...roster.bosses,
+    ...roster.escorts,
+    ...roster.bountyMarks,
+    ...roster.raised,
+  ];
   for (const creature of everyone) {
     let problem: string | null = null;
     try {
@@ -1140,8 +1449,19 @@ const measurable = new Set<string>();
         problem = `launches through ${unknownHandoffs.join(', ')}, which this gate does not count`;
       } else {
         const first = measure(creature, 1);
-        const damage = first.dodgeableDamagePerFrame + first.undodgeableDamagePerFrame;
-        if (damage <= 0) problem = 'dealt no damage in the measured window';
+        const damage =
+          first.dodgeableDamagePerFrame +
+          first.undodgeableDamagePerFrame +
+          first.flatDamagePerFrame;
+        const dealsDamage = damage + first.unscaledDamagePerFrame > 0;
+        // A support creature that turns out to hurt the crawler has been
+        // excused from every damage rule it would now have to meet.
+        if (creature.supportReason !== undefined && dealsDamage)
+          problem = `is priced as support (${creature.supportReason}) but dealt damage`;
+        else if (creature.supportReason !== undefined && probe.harmless)
+          problem = 'is support, and `harmless` would zero damage it may yet deal';
+        else if (creature.supportReason === undefined && damage <= 0)
+          problem = 'dealt no damage in the measured window';
         else if (killCost(creature, 1, referenceStats('human', 'balanced', 1)) === null)
           problem = 'could not be killed by a punch';
       }
@@ -1159,7 +1479,15 @@ const measurable = new Set<string>();
 section(
   `regular creatures, balanced build, normal (party 1–${LAST_SAMPLED_PARTY_LEVEL}, cap at ${NORMAL_CAP_PARTY_LEVEL})`,
 );
+/** The regular creatures whose own blows the damage-share rules read. */
+const damageDealers = roster.regular.filter((creature) => creature.supportReason === undefined);
 for (const creature of roster.regular) {
+  if (creature.supportReason === undefined) continue;
+  console.log(
+    `  note ${creature.key}: support, held to hits and time to kill only — ${creature.supportReason}`,
+  );
+}
+for (const creature of damageDealers) {
   if (!measurable.has(creature.key)) continue;
   for (const crawler of REFERENCE_CRAWLERS) {
     const rows = walkPath(
@@ -1315,17 +1643,50 @@ for (const creature of roster.regular) {
     // it was tuned with, below, including the llama it always took eight
     // blows to drop.
     if (path.curve !== SHARED_LEVELLED_CURVE) {
-      console.log(
-        `  note ${path.label}: on its floor's own curve, held to its tuned fights instead`,
-      );
+      const heldTo = creature.fairyKind === undefined ? 'its tuned fights' : 'the fairy-fight band';
+      console.log(`  note ${path.label}: on its floor's own curve, held to ${heldTo} instead`);
       continue;
     }
-    reportWhereMet(creature, 'hits', path.label, path.rows, hitsViolations);
+    const hitsMax = creature.fairyKind === undefined ? HITS_TO_KILL_MAX : FAIRY_HITS_TO_KILL_MAX;
+    reportWhereMet(creature, 'hits', path.label, path.rows, (rows) =>
+      hitsViolations(rows, hitsMax),
+    );
+  }
+}
+
+section('support creatures where they are met, time to kill (human, balanced)');
+{
+  const supports = roster.regular.filter((creature) => creature.supportReason !== undefined);
+  check(supports.length > 0, `${supports.length} support creatures to price by time to kill`);
+  for (const creature of supports) {
+    for (const encounter of roster.encounters.get(creature.key) ?? []) {
+      const window = floorWindow(encounter.def);
+      const level = bandTop(encounter.band);
+      const slow: string[] = [];
+      for (let partyLevel = window.first; partyLevel <= window.last; partyLevel++) {
+        const kill = killCost(
+          creature,
+          level,
+          referenceStats('human', 'balanced', partyLevel),
+          encounter.curve,
+        );
+        const seconds =
+          kill === null ? Infinity : (kill.pressesWhole * kill.framesPerPress) / FRAMES_PER_SECOND;
+        if (seconds > TIME_TO_KILL_MAX_SECONDS) {
+          slow.push(`${seconds.toFixed(TABLE_DECIMALS)} s at party ${partyLevel}`);
+        }
+      }
+      report(
+        `${creature.key} (level ${level}): the balanced human kills it within ${TIME_TO_KILL_MAX_SECONDS} s`,
+        slow,
+        null,
+      );
+    }
   }
 }
 
 section('regular creatures where they are met, the off-stat build still wins');
-for (const creature of roster.regular) {
+for (const creature of damageDealers) {
   if (!measurable.has(creature.key)) continue;
   for (const crawler of REFERENCE_CRAWLERS) {
     for (const path of encounterPaths(creature, crawler, 'off-stat')) {
@@ -1345,11 +1706,11 @@ section('the harness still sees what it prices');
   // Chaff is a judgement about a creature, not a way out of the ratio rules:
   // if a threshold drifted so that ordinary fights read as chaff, every ratio
   // check would pass having read nothing.
-  const readableRegulars = roster.regular.filter((creature) =>
+  const readableRegulars = damageDealers.filter((creature) =>
     REFERENCE_CRAWLERS.some((crawler) => !chaffPairs.includes(`${creature.key} vs ${crawler}`)),
   );
   check(
-    readableRegulars.length === roster.regular.length,
+    readableRegulars.length === damageDealers.length,
     'every regular creature has a readable ratio path against at least one crawler',
   );
   const statusDealers = roster.regular.filter(
@@ -1358,6 +1719,15 @@ section('the harness still sees what it prices');
   check(
     statusDealers.length > 0,
     `status ticks reach the ledger (${statusDealers.map((c) => c.key).join(', ') || 'none'})`,
+  );
+  // The flat bucket is matched by attack type, so a renamed attack type would
+  // quietly land its burst back among the scaled blows.
+  const flatDealers = roster.regular.filter(
+    (creature) => measurable.has(creature.key) && measure(creature, 1).flatDamagePerFrame > 0,
+  );
+  check(
+    flatDealers.length > 0,
+    `flat radial bursts reach their own bucket (${flatDealers.map((c) => c.key).join(', ') || 'none'})`,
   );
   for (const def of LEVEL_DEFS) {
     if (def.defendQuestWave === undefined) continue;
@@ -1394,6 +1764,9 @@ for (const [key, rules] of AUTHORED_OUTSIDE_WHERE_MET) {
 // through the room in no particular order; and a living mob's blows fall on
 // either crawler alike, each dodged by that crawler's own chance. A room that
 // would empty the pooled bar counts as none left rather than as less than none.
+// A body that only enters the fight partway through — a necro fairy's
+// skeletons and the corpses it raises — is alive from the frame it is on its
+// feet, and cannot be killed before it.
 
 /** Encounters rolled per source at each sampled point, so a rare count still shows up. */
 const ROOM_SAMPLES_PER_RULE = 60;
@@ -1424,7 +1797,21 @@ const ROOM_FIGHT_BUILD: ReferenceBuild = 'balanced';
 const ROOM_FIGHT_STRONG_BUILD: ReferenceBuild = 'offense-heavy';
 const MIDPOINT = 0.5;
 
-interface RoomBody {
+/** How a body that is not standing when a fight opens comes into it. */
+interface FightArrival {
+  /** Names this body for any that rise on its death or answer its summons; unique within one roll. */
+  readonly id?: number;
+  /** The `id` of the body whose death brings this one into the fight. */
+  readonly arrivesOnDeathOf?: number;
+  /**
+   * The `id` of the necro fairy whose standing army this body is one place in:
+   * it climbs out as the fight opens, and the fairy fills the place again
+   * while it lives.
+   */
+  readonly armyOf?: number;
+}
+
+interface RoomBody extends FightArrival {
   readonly creature: Creature;
   readonly level: number;
   /** The spawning floor's `levelledCurve`; absent means the shared curve. */
@@ -1472,7 +1859,7 @@ interface EncounterSource {
   readonly curve: LevelledCurve;
 }
 
-interface BodyRoll {
+interface BodyRoll extends FightArrival {
   readonly type: string;
   readonly level: number;
 }
@@ -1569,12 +1956,23 @@ function rollEncounters(
   );
   const rooms = rolls.map((room) =>
     room.flatMap((body) => {
-      const creature = roster.regular.find((candidate) => candidate.key === body.type);
+      const creature = [...roster.regular, ...roster.raised].find(
+        (candidate) => candidate.key === body.type,
+      );
       if (creature === undefined || !measurable.has(body.type)) {
         unmeasured.push(body.type);
         return [];
       }
-      return [{ creature, level: body.level, curve: source.curve }];
+      return [
+        {
+          creature,
+          level: body.level,
+          curve: source.curve,
+          id: body.id,
+          arrivesOnDeathOf: body.arrivesOnDeathOf,
+          armyOf: body.armyOf,
+        },
+      ];
     }),
   );
   return unmeasured.length > 0 ? null : rooms;
@@ -1583,6 +1981,8 @@ function rollEncounters(
 /** One body's side of a room fight, against one crawler. */
 interface BodyAgainst {
   readonly killFrames: number;
+  /** Frames to kill it with a fairy's aegis on it the whole time. */
+  readonly aegisKillFrames: number;
   readonly damagePerFrame: number;
 }
 
@@ -1596,11 +1996,666 @@ function bodyAgainst(
   if (cost === null) return null;
   const sample = measure(body.creature, body.level, curve);
   const blowsPerFrame =
-    sample.dodgeableDamagePerFrame * (1 - stats.dodgeChance) + sample.undodgeableDamagePerFrame;
+    (sample.dodgeableDamagePerFrame + sample.flatDamagePerFrame) * (1 - stats.dodgeChance) +
+    sample.undodgeableDamagePerFrame;
   return {
     killFrames: cost.pressesFractional * cost.framesPerPress,
+    aegisKillFrames: cost.aegisPressesFractional * cost.framesPerPress,
     damagePerFrame: blowsPerFrame * profile.incomingMobDamageScale + sample.unscaledDamagePerFrame,
   };
+}
+
+/** How long each body lives when the party takes a room of bodies all present from the start in no particular order. */
+function framesAliveInRandomOrder(partyKillFrames: readonly number[]): number[] {
+  const roomKillFrames = partyKillFrames.reduce((sum, frames) => sum + frames, 0);
+  return partyKillFrames.map(
+    (own) => own + (roomKillFrames - own) * RANDOM_ORDER_SHARE_KILLED_FIRST,
+  );
+}
+
+/**
+ * Kill orders sampled for a room the closed form above cannot price: one with
+ * bodies that arrive mid-fight, or supports that change how long a strike
+ * lasts. Enough that the average settles well under a percent.
+ */
+const ARRIVAL_ORDER_SAMPLES = 512;
+/** Seed for those orders, so every run prices the same fights. */
+const ARRIVAL_ORDER_SEED = 0x5ce1_e70d;
+
+// ── Fairies in a fight ───────────────────────────────────────────────────────
+//
+// A shield, healing or necro fairy hurts no one; what it does is keep its
+// side's bodies standing, or bring more of them in, and every frame a body
+// stands is a frame its blows keep landing. A fight with one is therefore not
+// priced by kill times alone: each sampled kill order is played out on a
+// clock, a body the party strikes takes as long as all the HP the supports
+// have put in front of it, and a body that comes in mid-fight counts from the
+// frame it is on its feet.
+//
+// What the clock assumes, each the plainest reading of the fight model above:
+// - Both crawlers finish one body before starting the next, unless a ward
+//   lands on it first, so no living body but the struck one is ever wounded.
+//   A healer's living heals therefore land only on the struck body, and its
+//   death wave heals nobody to full — there is nobody wounded to heal — and
+//   can only overheal the bodies still standing.
+// - A room is small enough that every support reaches every ally and every
+//   corpse: the ward, heal and raise ranges, the aegis chains and the death
+//   wave are not checked against positions the model does not have.
+// - A shield fairy's ward makes its carrier take no damage at all while the
+//   fairy lives, so the party never strikes a warded body: each strike is drawn
+//   from the bodies it can hurt, and a warded ally can only die after the fairy
+//   that warded it. Its blows keep landing the whole time it stands.
+// - A shield fairy casts only while the crawler the camera follows is close
+//   enough to see it, and a party in a brawl is, so it lays nothing before the
+//   fight and its first ward the frame the fight opens. It lays one ward every
+//   between-casts cooldown while it holds fewer than its ward count and an
+//   unwarded ally stands, and a ward is never broken, so it lays a new one only
+//   into a free slot: while its opening set goes up, after a warded ally falls
+//   to another shield fairy's death, or when a body arrives. Every ally in a
+//   brawl is engaged, and the fairy's remaining tie-breaks are distances the
+//   model cannot see, so each ward goes to an unwarded ally drawn at random —
+//   the struck body among them, which turns the party away from it with
+//   whatever it has left. Bodies that come in mid-strike are counted for a
+//   ward from the strike's end.
+// - An aegis slows the party by the aegis-scaled blows each crawler's attack
+//   cycle actually lands on the body, rounding and all.
+// - A heal is cast the frame the struck body is under the heal trigger and the
+//   healer's cooldown has run; it lands only if the body is still being struck,
+//   and restores no more than the body is missing.
+// - Wards, heals, overheal and aegis only ever reach bodies that are not
+//   fairies, except the two death effects, which reach every living body.
+// - A fairy is struck at the party's full rate like any other body. A fairy
+//   that keeps its distance or flees costs the party walking time this clock
+//   does not charge.
+// - A necro fairy's army and raises are described with its rolls below.
+
+/** A shield fairy's ward slots and cast rhythm, at its level. */
+interface ShieldSupport {
+  readonly index: number;
+  readonly wards: number;
+  /** Frames from one ward landing to the next. */
+  readonly cycleFrames: number;
+}
+
+/** A healing fairy's cast timing, at its level. */
+interface HealerSupport {
+  readonly index: number;
+  readonly level: number;
+  readonly curve: LevelledCurve;
+  readonly cooldownFrames: number;
+}
+
+/** A necro fairy's standing army, the army its death leaves, and its raise rhythm. */
+interface NecroSupport {
+  readonly index: number;
+  /** Room bodies that are each one place in its standing army. */
+  readonly armyPlaces: readonly number[];
+  /** Room bodies its death brings into the fight. */
+  readonly deathArmy: readonly number[];
+  /** Frames from one raise to the next. */
+  readonly raiseCycleFrames: number;
+}
+
+/** A support cast's cooldown at `level`, never under its floor, as `Fairy` scales it. */
+function supportCastFrames(baseFrames: number, minFrames: number, level: number): number {
+  return Math.max(scaledCooldownFramesForLevel(baseFrames, level), minFrames);
+}
+
+function shieldSupport(
+  body: RoomBody,
+  index: number,
+  difficulty: Difficulty,
+  extraWards: number,
+): ShieldSupport {
+  return {
+    index,
+    wards: shieldWardCount(body.level, difficulty) + extraWards,
+    cycleFrames: supportCastFrames(
+      SHIELD_BETWEEN_CASTS_FRAMES,
+      SHIELD_BETWEEN_CASTS_MIN_FRAMES,
+      body.level,
+    ),
+  };
+}
+
+function healerSupport(body: RoomBody, index: number): HealerSupport {
+  return {
+    index,
+    level: body.level,
+    curve: body.curve ?? SHARED_LEVELLED_CURVE,
+    cooldownFrames: healingFairyCooldownFrames(body.level),
+  };
+}
+
+function necroSupport(bodies: readonly RoomBody[], index: number): NecroSupport {
+  const necro = bodies[index];
+  const bodiesWhere = (belongs: (body: RoomBody) => boolean): number[] =>
+    bodies.flatMap((body, i) => (necro.id !== undefined && belongs(body) ? [i] : []));
+  return {
+    index,
+    armyPlaces: bodiesWhere((body) => body.armyOf === necro.id),
+    deathArmy: bodiesWhere((body) => body.arrivesOnDeathOf === necro.id),
+    raiseCycleFrames: supportCastFrames(
+      RESURRECT_COOLDOWN_FRAMES,
+      RESURRECT_COOLDOWN_MIN_FRAMES,
+      necro.level,
+    ),
+  };
+}
+
+/** Whether `body` is a fairy whose effect on a fight is time or bodies, not blows. */
+function isSupportFairy(body: RoomBody): boolean {
+  const kind = body.creature.fairyKind;
+  return kind === 'shield' || kind === 'healer' || kind === 'necro';
+}
+
+/** Whether `body` comes into its fight after the fight opens. */
+function arrivesMidFight(body: RoomBody): boolean {
+  return body.arrivesOnDeathOf !== undefined || body.armyOf !== undefined;
+}
+
+/**
+ * Whether a necro fairy may stand `body` back up once it falls: one of the
+ * room's own mobs, and not a boss (`fairyCorpses`'s raisable kinds). A fairy's
+ * own skeletons are summons, and a body already raised has had its one return.
+ */
+function isRaisableHost(body: RoomBody): boolean {
+  return body.creature.fairyKind === undefined && !arrivesMidFight(body) && !body.creature.isBoss;
+}
+
+/** How the party's damage lands on one struck body: its bare rate, and its rate under an aegis. */
+interface StrikeRate {
+  readonly start: number;
+  /** HP per frame the party takes off this body with no aegis on it. */
+  readonly perFrame: number;
+  /** HP per frame the party takes off this body through an aegis, as its blows round. */
+  readonly shieldedPerFrame: number;
+  /** The frame this body's aegis runs out, or earlier than `start` when it has none. */
+  readonly aegisEnd: number;
+}
+
+/** The frame by which the party has done `work` HP of damage to the struck body. */
+function strikeFinish(rate: StrikeRate, work: number): number {
+  if (work <= 0) return rate.start;
+  const shieldedFrames = Math.max(0, rate.aegisEnd - rate.start);
+  const shieldedWork = shieldedFrames * rate.shieldedPerFrame;
+  if (work <= shieldedWork) return rate.start + work / rate.shieldedPerFrame;
+  return rate.start + shieldedFrames + (work - shieldedWork) / rate.perFrame;
+}
+
+/** The HP of damage the party has done to the struck body by `frame`. */
+function strikeWorkBy(rate: StrikeRate, frame: number): number {
+  const shieldedUntil = Math.max(rate.start, Math.min(frame, rate.aegisEnd));
+  const shieldedFrames = shieldedUntil - rate.start;
+  const bareFrames = Math.max(0, frame - shieldedUntil);
+  return shieldedFrames * rate.shieldedPerFrame + bareFrames * rate.perFrame;
+}
+
+/** Marks a body no living shield fairy's ward is on. */
+const UNWARDED = -1;
+
+/** A uniformly drawn entry of a non-empty list, from the seeded world stream. */
+function drawFrom<T>(candidates: readonly T[]): T {
+  const index = Math.floor(worldRandom() * candidates.length);
+  return candidates[Math.min(index, candidates.length - 1)];
+}
+
+/**
+ * Strikes the support clock drew from fewer bodies than were standing because
+ * a ward was on one of them. Zero would mean no ward ever reached the pricer.
+ */
+let strikesTurnedAwayByWards = 0;
+
+/**
+ * Refills the support clock stood a necro fairy's lost army places back up in.
+ * Zero would mean no priced fight ever saw a refill come due.
+ */
+let necroArmyRefills = 0;
+
+/** A ward count the support clock gave a shield fairy it priced as the game spawns it. */
+interface PricedShieldWards {
+  readonly level: number;
+  readonly difficulty: Difficulty;
+  readonly wards: number;
+}
+
+/**
+ * Every distinct ward count the clock priced a real shield fairy with, keyed by
+ * level, difficulty and count, so each can be held to `shieldWardCount` on its
+ * own terms rather than trusted because the price reacts to one more ward.
+ */
+const pricedShieldWards = new Map<string, PricedShieldWards>();
+
+/** The place in a necro fairy's standing army a body fills. */
+interface ArmyPlace {
+  /** Which of the fight's necro fairies it answers to. */
+  readonly necro: number;
+  readonly place: number;
+}
+
+/** A body on the clock: a room body, or another of one that came into the fight later. */
+interface ClockBody {
+  /** The room body this is, or is another of. */
+  readonly template: number;
+  readonly arrivedAt: number;
+  /** Whether a necro fairy may still stand it back up once it falls. */
+  readonly raisable: boolean;
+  readonly armyPlace: ArmyPlace | null;
+  hpLeft: number;
+  diedAt: number | null;
+  wardedBy: number;
+  aegisEnd: number;
+  overheal: number;
+  overhealEnd: number;
+}
+
+/** A body on its way into the fight: climbing out of the ground, or standing back up. */
+interface ClockArrival {
+  readonly template: number;
+  /** The frame it is on its feet and fighting. */
+  readonly at: number;
+  /** Share of its max HP it comes in with. */
+  readonly hpShare: number;
+  readonly raisable: boolean;
+  readonly armyPlace: ArmyPlace | null;
+}
+
+/** A fallen room mob waiting on a necro fairy's next raise. */
+interface WaitingCorpse {
+  readonly template: number;
+  readonly necro: number;
+  readonly castAt: number;
+}
+
+/** A necro fairy's army as `NecroFairy` tracks it between refills. */
+interface ArmyState {
+  /** Whether each army place has a skeleton standing or climbing out in it. */
+  readonly placeFilled: boolean[];
+  /** The frame its refill is due, or null while none is counting down. */
+  refillAt: number | null;
+  refillReason: 'wipe' | 'last_standing' | null;
+  /** The frame of its latest raise, already cast or waiting on its cooldown. */
+  lastRaiseAt: number;
+}
+
+/** What a strike will cost, with the heals that land during it. */
+interface StrikePlan {
+  readonly work: number;
+  readonly finish: number;
+  readonly healerReadyAt: readonly number[];
+}
+
+/**
+ * How long each room body lives, summed over every copy of it that came into
+ * the fight, for a fight with a support fairy or a body that arrives mid-fight:
+ * {@link framesAliveInRandomOrder}'s random order, played out on a clock with
+ * the assumptions above.
+ */
+function framesAliveWithSupport(
+  bodies: readonly RoomBody[],
+  partyKillFrames: readonly number[],
+  partyAegisKillFrames: readonly number[],
+  maxHps: readonly number[],
+  difficulty: Difficulty,
+  extraShieldWards: number,
+): number[] {
+  const isFairy = bodies.map((body) => body.creature.fairyKind !== undefined);
+  const shields = bodies.flatMap((body, i) =>
+    body.creature.fairyKind === 'shield'
+      ? [shieldSupport(body, i, difficulty, extraShieldWards)]
+      : [],
+  );
+  if (extraShieldWards === NO_EXTRA_SHIELD_WARDS) {
+    for (const shield of shields) {
+      const level = bodies[shield.index].level;
+      const key = `${level} ${difficulty} ${shield.wards}`;
+      pricedShieldWards.set(key, { level, difficulty, wards: shield.wards });
+    }
+  }
+  const healers = bodies.flatMap((body, i) =>
+    body.creature.fairyKind === 'healer' ? [healerSupport(body, i)] : [],
+  );
+  const necros = bodies.flatMap((body, i) =>
+    body.creature.fairyKind === 'necro' ? [necroSupport(bodies, i)] : [],
+  );
+  const healAmounts = healers.map((healer) =>
+    bodies.map((body, i) =>
+      healingFairyHealAmount(healer.level, maxHps[i], body.creature.isBoss, healer.curve),
+    ),
+  );
+  const totals = bodies.map(() => 0);
+  withWorldSeed(ARRIVAL_ORDER_SEED, () => {
+    for (let sample = 0; sample < ARRIVAL_ORDER_SAMPLES; sample++) {
+      const onClock: ClockBody[] = [];
+      const arrivals: ClockArrival[] = [];
+      const corpses: WaitingCorpse[] = [];
+      const enter = (arrival: ClockArrival): ClockBody => {
+        const body: ClockBody = {
+          template: arrival.template,
+          arrivedAt: arrival.at,
+          raisable: arrival.raisable,
+          armyPlace: arrival.armyPlace,
+          hpLeft: maxHps[arrival.template] * arrival.hpShare,
+          diedAt: null,
+          wardedBy: UNWARDED,
+          aegisEnd: Number.NEGATIVE_INFINITY,
+          overheal: 0,
+          overhealEnd: Number.NEGATIVE_INFINITY,
+        };
+        onClock.push(body);
+        return body;
+      };
+      const opening = bodies.map((body, i) =>
+        arrivesMidFight(body)
+          ? null
+          : enter({
+              template: i,
+              at: 0,
+              hpShare: 1,
+              raisable: isRaisableHost(body),
+              armyPlace: null,
+            }),
+      );
+      const openingBody = (index: number): ClockBody => {
+        const body = opening[index];
+        if (body === null) throw new Error('a support fairy was priced as arriving mid-fight');
+        return body;
+      };
+      const shieldBodies = shields.map((shield) => openingBody(shield.index));
+      const healerBodies = healers.map((healer) => openingBody(healer.index));
+      const necroBodies = necros.map((necro) => openingBody(necro.index));
+      // The army climbs out the frame the fight opens: the party walking in is
+      // what brings a crawler inside the summon trigger.
+      const armies: ArmyState[] = necros.map((necro, n) => {
+        necro.armyPlaces.forEach((template, place) =>
+          arrivals.push({
+            template,
+            at: SKELETON_RISE_FRAMES,
+            hpShare: 1,
+            raisable: false,
+            armyPlace: { necro: n, place },
+          }),
+        );
+        return {
+          placeFilled: necro.armyPlaces.map(() => true),
+          refillAt: null,
+          refillReason: null,
+          lastRaiseAt: Number.NEGATIVE_INFINITY,
+        };
+      });
+      const wardReadyAt = shields.map(() => 0);
+      /** The frame each shield fairy last found a free slot and an ally to fill it; null while it has neither. */
+      const wardWantedSince: Array<number | null> = shields.map(() => null);
+      let healerReadyAt: readonly number[] = healers.map(() => 0);
+
+      const isStanding = (body: ClockBody): boolean => body.diedAt === null;
+      const isAliveAt = (body: ClockBody, frame: number): boolean =>
+        body.diedAt === null || body.diedAt > frame;
+      const wardsHeldBy = (s: number): number =>
+        onClock.filter((body) => isStanding(body) && body.wardedBy === s).length;
+      const unwardedAllies = (): ClockBody[] =>
+        onClock.filter(
+          (body) => isStanding(body) && !isFairy[body.template] && body.wardedBy === UNWARDED,
+        );
+      const canLayWard = (s: number): boolean =>
+        isStanding(shieldBodies[s]) &&
+        wardsHeldBy(s) < shields[s].wards &&
+        unwardedAllies().length > 0;
+      /** Lays every ward due by `now`, each shield fairy one per between-casts cooldown. */
+      const layWardsDueBy = (now: number): void => {
+        for (let s = 0; s < shields.length; s++) {
+          if (!canLayWard(s)) {
+            wardWantedSince[s] = null;
+            continue;
+          }
+          let wantedSince = wardWantedSince[s] ?? now;
+          while (canLayWard(s) && Math.max(wardReadyAt[s], wantedSince) <= now) {
+            const laidAt = Math.max(wardReadyAt[s], wantedSince);
+            drawFrom(unwardedAllies()).wardedBy = s;
+            wardReadyAt[s] = laidAt + shields[s].cycleFrames;
+            wantedSince = laidAt;
+          }
+          wardWantedSince[s] = canLayWard(s) ? wantedSince : null;
+        }
+      };
+      /** The next ward any shield fairy lays, if one wants a slot filled. */
+      const nextWard = (): { shield: number; at: number } | null => {
+        let next: { shield: number; at: number } | null = null;
+        for (let s = 0; s < shields.length; s++) {
+          const wantedSince = wardWantedSince[s];
+          if (wantedSince === null || !canLayWard(s)) continue;
+          const at = Math.max(wardReadyAt[s], wantedSince);
+          if (next === null || at < next.at) next = { shield: s, at };
+        }
+        return next;
+      };
+
+      /** Queues `template`'s corpse for the soonest raise of a necro fairy alive at `from`. */
+      const awaitRaise = (template: number, from: number): void => {
+        let soonest: WaitingCorpse | null = null;
+        for (let n = 0; n < necros.length; n++) {
+          if (!isAliveAt(necroBodies[n], from)) continue;
+          const last = armies[n].lastRaiseAt;
+          // One raise stands up every eligible corpse at once, so a corpse that
+          // falls while a raise waits on its cooldown rises with it.
+          const castAt = last >= from ? last : Math.max(from, last + necros[n].raiseCycleFrames);
+          if (soonest === null || castAt < soonest.castAt) soonest = { template, necro: n, castAt };
+        }
+        if (soonest === null) return;
+        armies[soonest.necro].lastRaiseAt = soonest.castAt;
+        corpses.push(soonest);
+      };
+      /** Starts, shortens or cancels a necro fairy's refill countdown, as `NecroFairy` does. */
+      const noteArmyLoss = (n: number, now: number): void => {
+        const army = armies[n];
+        const living = army.placeFilled.filter((filled) => filled).length;
+        if (living > NECRO_ARMY_LAST_STANDING) {
+          army.refillAt = null;
+          army.refillReason = null;
+          return;
+        }
+        if (living === 0 && army.refillReason !== 'wipe') {
+          const wipeRefillAt =
+            now +
+            randomCount(NECRO_RESUMMON_AFTER_WIPE_MIN_FRAMES, NECRO_RESUMMON_AFTER_WIPE_MAX_FRAMES);
+          army.refillAt = Math.min(army.refillAt ?? wipeRefillAt, wipeRefillAt);
+          army.refillReason = 'wipe';
+        } else if (army.refillReason === null) {
+          army.refillAt = now + NECRO_RESUMMON_LAST_STANDING_FRAMES;
+          army.refillReason = 'last_standing';
+        }
+      };
+
+      /** The earliest scheduled thing still to happen, and how to make it happen. */
+      const nextEvent = (): { at: number; happen: () => void } | null => {
+        let next: { at: number; happen: () => void } | null = null;
+        const consider = (at: number, happen: () => void): void => {
+          if (next === null || at < next.at) next = { at, happen };
+        };
+        for (const arrival of arrivals) {
+          consider(arrival.at, () => {
+            arrivals.splice(arrivals.indexOf(arrival), 1);
+            enter(arrival);
+          });
+        }
+        for (const corpse of corpses) {
+          consider(corpse.castAt, () => {
+            corpses.splice(corpses.indexOf(corpse), 1);
+            if (!isAliveAt(necroBodies[corpse.necro], corpse.castAt)) {
+              awaitRaise(corpse.template, corpse.castAt);
+              return;
+            }
+            arrivals.push({
+              template: corpse.template,
+              at: corpse.castAt + REVIVE_IN_PLACE_RISE_FRAMES,
+              hpShare: RESURRECT_HP_FRACTION,
+              raisable: false,
+              armyPlace: null,
+            });
+          });
+        }
+        armies.forEach((army, n) => {
+          const refillAt = army.refillAt;
+          if (refillAt === null) return;
+          consider(refillAt, () => {
+            army.refillAt = null;
+            army.refillReason = null;
+            const placesToRefill = army.placeFilled.some((filled) => !filled);
+            if (placesToRefill) necroArmyRefills++;
+            necros[n].armyPlaces.forEach((template, place) => {
+              if (army.placeFilled[place]) return;
+              army.placeFilled[place] = true;
+              arrivals.push({
+                template,
+                at: refillAt + SKELETON_RISE_FRAMES,
+                hpShare: 1,
+                raisable: false,
+                armyPlace: { necro: n, place },
+              });
+            });
+          });
+        });
+        return next;
+      };
+      const settleUpTo = (now: number): void => {
+        for (let event = nextEvent(); event !== null && event.at <= now; event = nextEvent()) {
+          event.happen();
+        }
+      };
+
+      /** The strike on `struck` from `rate.start`, with every heal that lands before `until`. */
+      const planStrike = (
+        struck: ClockBody,
+        rate: StrikeRate,
+        startWork: number,
+        until: number,
+      ): StrikePlan => {
+        const readyAt = [...healerReadyAt];
+        const maxHp = maxHps[struck.template];
+        let work = startWork;
+        let finish = strikeFinish(rate, work);
+        if (!isFairy[struck.template]) {
+          for (let h = 0; h < healers.length; h++) {
+            if (!isStanding(healerBodies[h])) continue;
+            for (;;) {
+              const woundedAt = strikeFinish(rate, work - maxHp * HEAL_TRIGGER_HP_FRACTION);
+              const landsAt = Math.max(readyAt[h], woundedAt);
+              if (landsAt >= Math.min(finish, until)) break;
+              const hpLeft = Math.min(maxHp, work - strikeWorkBy(rate, landsAt));
+              const healed = Math.min(healAmounts[h][struck.template], maxHp - hpLeft);
+              readyAt[h] = landsAt + healers[h].cooldownFrames;
+              if (healed <= 0) break;
+              work += healed;
+              finish = strikeFinish(rate, work);
+            }
+          }
+        }
+        return { work, finish, healerReadyAt: readyAt };
+      };
+
+      const falls = (fallen: ClockBody, clock: number): void => {
+        fallen.diedAt = clock;
+        const standing = onClock.filter(isStanding);
+        const kind = bodies[fallen.template].creature.fairyKind;
+        if (kind === 'shield') {
+          const s = shieldBodies.indexOf(fallen);
+          for (const body of onClock) if (body.wardedBy === s) body.wardedBy = UNWARDED;
+          for (const body of standing) body.aegisEnd = clock + AEGIS_DURATION_FRAMES;
+        }
+        if (kind === 'healer') {
+          for (const body of standing) {
+            if (bodies[body.template].creature.isBoss) continue;
+            body.overheal = Math.max(
+              1,
+              Math.round(maxHps[body.template] * OVERHEAL_MAX_HP_FRACTION),
+            );
+            body.overhealEnd = clock + OVERHEAL_DURATION_FRAMES;
+          }
+        }
+        if (kind === 'necro') {
+          const n = necroBodies.indexOf(fallen);
+          armies[n].refillAt = null;
+          armies[n].refillReason = null;
+          for (const template of necros[n].deathArmy) {
+            arrivals.push({
+              template,
+              at: clock + SKELETON_RISE_FRAMES,
+              hpShare: 1,
+              raisable: false,
+              armyPlace: null,
+            });
+          }
+        }
+        const place = fallen.armyPlace;
+        if (place !== null && isStanding(necroBodies[place.necro])) {
+          armies[place.necro].placeFilled[place.place] = false;
+          noteArmyLoss(place.necro, clock);
+        }
+        if (fallen.raisable) awaitRaise(fallen.template, clock);
+      };
+
+      let clock = 0;
+      for (;;) {
+        settleUpTo(clock);
+        layWardsDueBy(clock);
+        const present = onClock.filter(isStanding);
+        const strikeable = present.filter((body) => body.wardedBy === UNWARDED);
+        if (strikeable.length === 0) {
+          const event = nextEvent();
+          if (event === null) {
+            if (present.length > 0) throw new Error('a fight was left with only warded bodies');
+            break;
+          }
+          clock = event.at;
+          continue;
+        }
+        if (strikeable.length < present.length) strikesTurnedAwayByWards++;
+        const struck = drawFrom(strikeable);
+        const maxHp = maxHps[struck.template];
+        const rate: StrikeRate = {
+          start: clock,
+          perFrame: maxHp / partyKillFrames[struck.template],
+          shieldedPerFrame: maxHp / partyAegisKillFrames[struck.template],
+          aegisEnd: struck.aegisEnd,
+        };
+        const overhealPool = clock < struck.overhealEnd ? struck.overheal : 0;
+        const startWork = struck.hpLeft + overhealPool;
+        const plan = planStrike(struck, rate, startWork, Number.POSITIVE_INFINITY);
+
+        let wardedAt: number | null = null;
+        for (let ward = nextWard(); ward !== null && ward.at < plan.finish; ward = nextWard()) {
+          const s = ward.shield;
+          const target = drawFrom(unwardedAllies());
+          target.wardedBy = s;
+          wardReadyAt[s] = ward.at + shields[s].cycleFrames;
+          wardWantedSince[s] = canLayWard(s) ? ward.at : null;
+          if (target === struck) {
+            wardedAt = ward.at;
+            break;
+          }
+        }
+
+        if (wardedAt === null) {
+          healerReadyAt = plan.healerReadyAt;
+          clock = plan.finish;
+          falls(struck, clock);
+          continue;
+        }
+        const cut = planStrike(struck, rate, startWork, wardedAt);
+        healerReadyAt = cut.healerReadyAt;
+        const done = strikeWorkBy(rate, wardedAt);
+        const overhealLeft = Math.max(0, overhealPool - done);
+        struck.overheal = overhealLeft;
+        struck.hpLeft = Math.min(maxHp, cut.work - done - overhealLeft);
+        clock = wardedAt;
+      }
+      for (const body of onClock) {
+        const diedAt = body.diedAt ?? body.arrivedAt;
+        totals[body.template] += (diedAt - body.arrivedAt) / ARRIVAL_ORDER_SAMPLES;
+      }
+    }
+  });
+  return totals;
 }
 
 /** A room fight against both crawlers of one build: what it costs, and how long each mob lasts. */
@@ -1611,11 +2666,40 @@ interface PartyFight {
   readonly killFrames: readonly number[];
 }
 
+/** How long each body lives, by the cheapest model that sees everything in the fight. */
+function framesAliveFor(
+  bodies: readonly RoomBody[],
+  partyKillFrames: readonly number[],
+  partyAegisKillFrames: readonly number[],
+  profile: DifficultyProfile,
+  extraShieldWards: number,
+): number[] {
+  if (!bodies.some((body) => isSupportFairy(body) || arrivesMidFight(body))) {
+    return framesAliveInRandomOrder(partyKillFrames);
+  }
+  const maxHps = bodies.map((body) => measure(body.creature, body.level, body.curve).maxHp);
+  return framesAliveWithSupport(
+    bodies,
+    partyKillFrames,
+    partyAegisKillFrames,
+    maxHps,
+    difficultyOf(profile),
+    extraShieldWards,
+  );
+}
+
+/**
+ * Wards each shield fairy lays past the count the game gives it, for a probe
+ * that asks whether the pricer sees one more; every real reading lays none.
+ */
+const NO_EXTRA_SHIELD_WARDS = 0;
+
 function partyFight(
   bodies: readonly RoomBody[],
   partyLevel: number,
   build: ReferenceBuild,
   profile: DifficultyProfile,
+  extraShieldWards: number = NO_EXTRA_SHIELD_WARDS,
 ): PartyFight | null {
   const human = referenceStats('human', build, partyLevel);
   const cat = referenceStats('cat', build, partyLevel);
@@ -1629,12 +2713,23 @@ function partyFight(
   const partyKillFrames = sides.map(
     (side) => 1 / (1 / side.human.killFrames + 1 / side.cat.killFrames),
   );
-  const roomKillFrames = partyKillFrames.reduce((sum, frames) => sum + frames, 0);
+  const partyAegisKillFrames = sides.map(
+    (side) => 1 / (1 / side.human.aegisKillFrames + 1 / side.cat.aegisKillFrames),
+  );
+  const framesAlive = framesAliveFor(
+    bodies,
+    partyKillFrames,
+    partyAegisKillFrames,
+    profile,
+    extraShieldWards,
+  );
   const damageTaken = sides.reduce((sum, side, i) => {
-    const othersKillFrames = roomKillFrames - partyKillFrames[i];
-    const framesAlive = partyKillFrames[i] + othersKillFrames * RANDOM_ORDER_SHARE_KILLED_FIRST;
-    const sharedDamagePerFrame = (side.human.damagePerFrame + side.cat.damagePerFrame) / PARTY_SIZE;
-    return sum + sharedDamagePerFrame * framesAlive;
+    const bothCrawlersDamagePerFrame = side.human.damagePerFrame + side.cat.damagePerFrame;
+    // Both crawlers stand in the fight, so an attack thrown at each of them
+    // lands its measured rate on each rather than on one or the other.
+    const crawlersStruckAtOnce = bodies[i].creature.strikesEachCrawler === true ? PARTY_SIZE : 1;
+    const damagePerFrame = (bothCrawlersDamagePerFrame / PARTY_SIZE) * crawlersStruckAtOnce;
+    return sum + damagePerFrame * framesAlive[i];
   }, 0);
   return { hpShare: damageTaken / (human.maxHp + cat.maxHp), killFrames: partyKillFrames };
 }
@@ -1653,6 +2748,12 @@ function roomHpRemaining(
 interface EncounterReading {
   /** HP remaining, averaged over the source's rolls. */
   readonly hpRemaining: number;
+  /**
+   * Share of the pooled max HP the fight deals, averaged over the source's
+   * rolls and not stopped at an empty bar: 1 is one party wipe's worth, and a
+   * fight past it still reads how far past.
+   */
+  readonly hpLost: number;
   readonly bodiesPerFight: number;
 }
 
@@ -1665,13 +2766,15 @@ function readSource(
   const rooms = rollEncounters(source, partyLevel, profile);
   if (rooms === null) return null;
   let hpRemaining = 0;
+  let hpLost = 0;
   for (const room of rooms) {
-    const remaining = roomHpRemaining(room, partyLevel, build, profile);
-    if (remaining === null) return null;
-    hpRemaining += remaining / rooms.length;
+    const fight = partyFight(room, partyLevel, build, profile);
+    if (fight === null) return null;
+    hpRemaining += Math.max(0, 1 - fight.hpShare) / rooms.length;
+    hpLost += fight.hpShare / rooms.length;
   }
   const bodies = rooms.reduce((sum, room) => sum + room.length, 0);
-  return { hpRemaining, bodiesPerFight: bodies / rooms.length };
+  return { hpRemaining, hpLost, bodiesPerFight: bodies / rooms.length };
 }
 
 /** Reads a group of sources as one weighted average: a floor's rooms are one kind of fight. */
@@ -1683,20 +2786,271 @@ function readSources(
 ): EncounterReading | null {
   const totalWeight = sources.reduce((sum, source) => sum + source.weight, 0);
   let hpRemaining = 0;
+  let hpLost = 0;
   let bodiesPerFight = 0;
   for (const source of sources) {
     const reading = readSource(source, partyLevel, build, profile);
     if (reading === null) return null;
-    hpRemaining += (reading.hpRemaining * source.weight) / totalWeight;
-    bodiesPerFight += (reading.bodiesPerFight * source.weight) / totalWeight;
+    const share = source.weight / totalWeight;
+    hpRemaining += reading.hpRemaining * share;
+    hpLost += reading.hpLost * share;
+    bodiesPerFight += reading.bodiesPerFight * share;
   }
-  return { hpRemaining, bodiesPerFight };
+  return { hpRemaining, hpLost, bodiesPerFight };
 }
 
 /** The kinds of regular fight a floor is read by: its rooms together, or each overworld source alone. */
 function fightKinds(def: LevelDef): Array<{ label: string; sources: EncounterSource[] }> {
   if (def.roomMobs.length > 0) return [{ label: 'rooms', sources: roomSources(def) }];
   return overworldSources(def).map((source) => ({ label: source.label, sources: [source] }));
+}
+
+// ── Fights with fairies ──────────────────────────────────────────────────────
+//
+// Fairies are extra to a room's own population, so a room that rolls them is a
+// harder fight than the band above is read over — by design, and a brutal one.
+// They are priced as an encounter class of their own and left out of the host
+// rooms, whose cost (floor 1's especially) stays what it was tuned at. The
+// class is read in party wipes, not HP remaining: several of its fights empty
+// the pooled bar outright, and a floor of zero HP left could never fail. Each
+// fight is held to the class ceiling on normal and hard, to its own tuned cost
+// both ways, and to the fairies adding a real share of it.
+//
+// A fairy room is a host room, rolled exactly as the host rooms are, that won
+// its fairy roll: its region is drawn in proportion to each region's chance on
+// the difficulty being read, its count uniformly from that region's range, its
+// kinds uniformly, its healer on the table's own independent chance, the
+// guaranteed shield fairy whenever what it rolled holds no shield, and each
+// fairy's level from a room rule's band as the spawner draws it.
+//
+// A necro fairy deals no damage itself; what it adds is bodies, each a real
+// lesser sword skeleton or archer at the level the game raises them at, and
+// all of them played out on the support clock:
+// - Its standing army climbs out as the fight opens — a party walking into the
+//   room is what brings a crawler inside the summon trigger — and each place
+//   in it is filled again while the fairy lives, on the fairy's own refill
+//   countdowns: a longer fight with the fairy standing is more skeletons.
+// - Its death army climbs out on its death, by the difficulty it was spawned
+//   under, so those bodies cannot be killed before it and cost nothing while
+//   it lives.
+// - Every room mob that falls while it lives is stood back up at its raise
+//   HP, on the raise cooldown and once only. Which mobs fall first is the
+//   sampled kill order's, so a fight that leaves the fairy for last pays for
+//   every raise it allows. Every corpse is taken to be in its reach and sight.
+// - Its shove is not priced: it costs the party walking time, not HP.
+
+function difficultyOf(profile: DifficultyProfile): Difficulty {
+  const match = DIFFICULTIES.find((difficulty) => DIFFICULTY_PROFILES[difficulty] === profile);
+  if (match === undefined) throw new Error('priced a profile that is none of the difficulties');
+  return match;
+}
+
+/** A region drawn in proportion to its fairy chance on `difficulty`. */
+function pickFairyRegion(
+  table: FairySpawnTable,
+  regions: readonly number[],
+  difficulty: Difficulty,
+): number {
+  const chances = regions.map(
+    (region) => fairyRoomRate(table, region, false)?.chance[difficulty] ?? 0,
+  );
+  const total = chances.reduce((sum, chance) => sum + chance, 0);
+  if (total <= 0) throw new Error(`no region rolls fairies on ${difficulty}`);
+  let roll = worldRandom() * total;
+  let drawn = regions[0];
+  for (let i = 0; i < regions.length; i++) {
+    if (chances[i] <= 0) continue;
+    drawn = regions[i];
+    roll -= chances[i];
+    if (roll <= 0) break;
+  }
+  return drawn;
+}
+
+/** Names each fairy in a roll, so the skeletons its death raises can say whose they are. */
+let nextFairyBodyId = 0;
+
+/**
+ * The bodies one fairy brings into a fight: itself, and for a necro one body
+ * per place in its standing army and one per skeleton its death leaves.
+ */
+function fairyBodies(
+  kind: FairyKind,
+  def: LevelDef,
+  level: number,
+  difficulty: Difficulty,
+): BodyRoll[] {
+  const id = nextFairyBodyId++;
+  const bodies: BodyRoll[] = [{ type: fairyCreatureKey(kind, def), level, id }];
+  if (kind === 'necro') {
+    const skeletonLevel = necroSkeletonLevel(level);
+    const skeletons = (army: NecroSkeletonArmy, arrival: FightArrival): BodyRoll[] =>
+      NECRO_SKELETON_KINDS.flatMap((skeletonKind) =>
+        Array.from({ length: army[skeletonKind] }, () => ({
+          type: necroSkeletonKey(skeletonKind),
+          level: skeletonLevel,
+          ...arrival,
+        })),
+      );
+    bodies.push(
+      ...skeletons(NECRO_ARMY, { armyOf: id }),
+      ...skeletons(NECRO_DEATH_ARMY[difficulty], { arrivesOnDeathOf: id }),
+    );
+  }
+  return bodies;
+}
+
+function pickRegularFairyKind(): FairyKind {
+  const index = Math.floor(worldRandom() * REGULAR_FAIRY_KINDS.length);
+  return REGULAR_FAIRY_KINDS[Math.min(index, REGULAR_FAIRY_KINDS.length - 1)];
+}
+
+/**
+ * How many counted fairies a room holds once `upgrade` has reached it: the
+ * spawner tops a room up to what the upgraded roll wants and never takes one
+ * away, so the room keeps the larger of its build roll and its upgrade roll.
+ * Drawn again until one of them came up, since the class is rooms that hold
+ * fairies.
+ */
+function upgradedFairyCount(
+  table: FairySpawnTable,
+  upgrade: FairyRateUpgrade,
+  difficulty: Difficulty,
+): number {
+  const base = fairyRoomRate(table, upgrade.region, false);
+  for (;;) {
+    const built = base === null ? 0 : rollFairyCount(base, difficulty, worldRandom);
+    const toppedUpTo = rollFairyCount(upgrade.rate, difficulty, worldRandom);
+    const count = Math.max(built, toppedUpTo);
+    if (count > 0) return count;
+  }
+}
+
+/**
+ * Rooms that rolled fairies, once per host rule, weighted as the host rooms
+ * are. With an `upgrade`, only the rooms it reaches once its boss is dead: the
+ * upgrade's own region, and — where the upgrade reaches only rooms past its
+ * boss's safe room — only those, which every room of the region the model
+ * rolls stands for. Every other room keeps its build roll, which the class
+ * without an upgrade prices. With `withFairies` false the very same rolls are
+ * made and the fairy bodies dropped, so the difference between the two
+ * readings is what the fairies alone cost.
+ */
+function fairyRoomSources(
+  def: LevelDef,
+  upgrade: FairyRateUpgrade | null,
+  withFairies = true,
+): EncounterSource[] {
+  const table = def.fairies;
+  if (table === undefined || !hasRoomFairies(table)) return [];
+  const totalChance = def.roomMobs.reduce((sum, rule) => sum + rule.chance, 0);
+  const regions = progressionRegions(def);
+  return def.roomMobs.map((rule) => ({
+    label: `${rule.type} with fairies`,
+    weight: rule.chance / totalChance,
+    unavoidable: true,
+    curve: def.levelledCurve ?? SHARED_LEVELLED_CURVE,
+    roll: (partyLevel: number, profile: DifficultyProfile): BodyRoll[] => {
+      const difficulty = difficultyOf(profile);
+      const region =
+        upgrade === null ? pickFairyRegion(table, regions, difficulty) : upgrade.region;
+      const levelBonus = regionLevelBonusFor(def, region);
+      const levelOf = (band: MobLevelRange): number =>
+        resolveAmbientLevel(regionLevelBand(band, levelBonus), def, partyLevel, profile);
+      const population = rollRoomPopulation(def, rule, region, partyLevel, profile);
+      const hosts: BodyRoll[] = [
+        ...Array.from({ length: population.hostCount }, () => ({
+          type: rule.type,
+          level: levelOf(rule),
+        })),
+        ...population.escorts.map((escort) => ({ type: escort.type, level: levelOf(escort) })),
+      ];
+      const rate = fairyRoomRate(table, region, false);
+      if (rate === null) throw new Error(`${def.id} region ${region} was drawn with no rate`);
+      const rolledCount =
+        upgrade === null
+          ? randomCount(rate.minCount[difficulty], rate.maxCount[difficulty])
+          : upgradedFairyCount(table, upgrade, difficulty);
+      const count = Math.min(rolledCount, MAX_FAIRIES_PER_ROOM);
+      const kinds: FairyKind[] = Array.from({ length: count }, pickRegularFairyKind);
+      if (worldRandom() < table.roomHealerChance) kinds.push('healer');
+      if (needsGuaranteedShield(kinds)) kinds.push('shield');
+      const fairies = kinds.flatMap((kind) =>
+        fairyBodies(kind, def, levelOf(pickWeighted(def.roomMobs, totalChance)), difficulty),
+      );
+      return withFairies ? [...hosts, ...fairies] : hosts;
+    },
+  }));
+}
+
+/**
+ * The overworld's roaming pair with a fairy beside one of them — the only way
+ * a fairy is met there — its healer on the table's own chance, and the
+ * guaranteed shield fairy whenever neither is one.
+ */
+function fairyScatterSources(def: LevelDef, withFairies = true): EncounterSource[] {
+  const table = def.fairies;
+  if (table === undefined || !hasScatterFairies(table) || def.hallwayMobs.length === 0) return [];
+  const totalChance = def.hallwayMobs.reduce((sum, rule) => sum + rule.chance, 0);
+  return [
+    {
+      label: `${OVERWORLD_ENCOUNTER_BODIES} roaming mobs and a fairy`,
+      weight: 1,
+      unavoidable: true,
+      curve: def.levelledCurve ?? SHARED_LEVELLED_CURVE,
+      roll: (partyLevel, profile) => {
+        const difficulty = difficultyOf(profile);
+        const levelOf = (): number =>
+          resolveAmbientLevel(pickWeighted(def.hallwayMobs, totalChance), def, partyLevel, profile);
+        const hosts: BodyRoll[] = Array.from({ length: OVERWORLD_ENCOUNTER_BODIES }, () => {
+          const rule = pickWeighted(def.hallwayMobs, totalChance);
+          return { type: rule.type, level: resolveAmbientLevel(rule, def, partyLevel, profile) };
+        });
+        const kinds: FairyKind[] = [pickRegularFairyKind()];
+        if (worldRandom() < (table.scatterHealerChance ?? 0)) kinds.push('healer');
+        if (needsGuaranteedShield(kinds)) kinds.push('shield');
+        const fairies = kinds.flatMap((kind) => fairyBodies(kind, def, levelOf(), difficulty));
+        return withFairies ? [...hosts, ...fairies] : hosts;
+      },
+    },
+  ];
+}
+
+/** A floor's fights with fairies in them, each with the same rolls priced without the fairies. */
+function fairyFightKinds(
+  def: LevelDef,
+): Array<{ label: string; sources: EncounterSource[]; hostsOnly: EncounterSource[] }> {
+  const kinds: Array<{ label: string; sources: EncounterSource[]; hostsOnly: EncounterSource[] }> =
+    [];
+  const table = def.fairies;
+  if (table === undefined) return kinds;
+  if (hasRoomFairies(table)) {
+    kinds.push({
+      label: 'rooms with fairies',
+      sources: fairyRoomSources(def, null),
+      hostsOnly: fairyRoomSources(def, null, false),
+    });
+    for (const upgrade of table.upgrades ?? []) {
+      const reached =
+        upgrade.onlyPastItsSafeRoom === true
+          ? `rooms past ${upgrade.bossType}'s safe room`
+          : `region ${upgrade.region} rooms`;
+      kinds.push({
+        label: `${reached} with fairies once ${upgrade.bossType} is dead`,
+        sources: fairyRoomSources(def, upgrade),
+        hostsOnly: fairyRoomSources(def, upgrade, false),
+      });
+    }
+  }
+  const scatter = fairyScatterSources(def);
+  if (scatter.length > 0) {
+    kinds.push({
+      label: scatter[0].label,
+      sources: scatter,
+      hostsOnly: fairyScatterSources(def, false),
+    });
+  }
+  return kinds;
 }
 
 section(
@@ -1760,6 +3114,347 @@ section(
     check(
       smaller !== null && larger !== null && larger < smaller,
       `a third ${probeRule.type} costs the party more than two (${smaller === null ? '?' : asPercent(smaller)} → ${larger === null ? '?' : asPercent(larger)} left)`,
+    );
+  }
+}
+
+/** How much harder the probe's fairies hit, for the check that the band can see a fairy at all. */
+const HEAVY_FAIRY_DAMAGE_FACTOR = 10;
+
+/** An ice fairy whose bolt hits far harder than the real one: the probe the fairy band must catch. */
+class HeavyHandedIceFairy extends IceFairy {
+  protected override scaledDamage(baseDamage: number): number {
+    return super.scaledDamage(baseDamage) * HEAVY_FAIRY_DAMAGE_FACTOR;
+  }
+}
+
+function heavyHandedFairy(like: Creature, def: LevelDef): Creature {
+  return {
+    key: `${like.key}, hitting ${HEAVY_FAIRY_DAMAGE_FACTOR}× harder as an ice fairy`,
+    make: (tileX, tileY, map) => {
+      const fairy = new HeavyHandedIceFairy(tileX, tileY, TILE_SIZE);
+      fairy.setMap(map);
+      fairy.setHostFloor(def.floorNumber);
+      return fairy;
+    },
+    isBoss: false,
+    fairyKind: 'ice',
+  };
+}
+
+/** Party wipes over `sources`, with every rolled room priced by `price`. */
+function readPriced(
+  sources: readonly EncounterSource[],
+  partyLevel: number,
+  price: (room: readonly RoomBody[]) => PartyFight | null,
+): number | null {
+  const totalWeight = sources.reduce((sum, source) => sum + source.weight, 0);
+  let hpLost = 0;
+  for (const source of sources) {
+    const rooms = rollEncounters(source, partyLevel, NORMAL);
+    if (rooms === null) return null;
+    for (const room of rooms) {
+      const fight = price(room);
+      if (fight === null) return null;
+      hpLost += (fight.hpShare * source.weight) / totalWeight / rooms.length;
+    }
+  }
+  return hpLost;
+}
+
+/** Party wipes over `sources`, with every body passed through `swap` before it is priced. */
+function readSwapped(
+  sources: readonly EncounterSource[],
+  partyLevel: number,
+  swap: (body: RoomBody) => RoomBody,
+): number | null {
+  return readPriced(sources, partyLevel, (room) =>
+    partyFight(room.map(swap), partyLevel, ROOM_FIGHT_BUILD, NORMAL),
+  );
+}
+
+/** What one fight with fairies cost the reference party when it was tuned, in party wipes. */
+interface FairyFightCost {
+  /** The party level the fight window sampled it at, so a moved window fails instead of comparing unlike fights. */
+  readonly partyLevel: number;
+  readonly normal: number;
+  readonly hard: number;
+}
+
+/**
+ * What each fight with fairies cost the reference party (balanced) when the
+ * class was tuned, keyed by floor and fight, then by where in the floor's
+ * window it was read. Recorded by this section's own pricing. The class band is
+ * loose by nature — its cheapest fight costs a fifth of its harshest — so each
+ * fight is held to its own cost as well, and a change to fairies moves the
+ * fights it touches out of their tolerance long before it reaches the band's
+ * edge.
+ */
+const FAIRY_FIGHT_TUNED_WIPES: ReadonlyMap<string, ReadonlyMap<string, FairyFightCost>> = new Map([
+  [
+    'level1 rooms with fairies',
+    new Map([
+      ['early', { partyLevel: 4, normal: 1.52, hard: 2.263 }],
+      ['mid', { partyLevel: 10, normal: 0.772, hard: 1.162 }],
+      ['late', { partyLevel: 15, normal: 0.538, hard: 0.815 }],
+    ]),
+  ],
+  [
+    'level2 rooms with fairies',
+    new Map([
+      ['early', { partyLevel: 10, normal: 2.004, hard: 3.67 }],
+      ['mid', { partyLevel: 17, normal: 1.603, hard: 3.013 }],
+      ['late', { partyLevel: 24, normal: 1.228, hard: 1.994 }],
+    ]),
+  ],
+  [
+    "level2 rooms past ball_of_swine's safe room with fairies once ball_of_swine is dead",
+    new Map([
+      ['early', { partyLevel: 10, normal: 2.437, hard: 5.425 }],
+      ['mid', { partyLevel: 17, normal: 1.849, hard: 3.885 }],
+      ['late', { partyLevel: 24, normal: 1.289, hard: 2.486 }],
+    ]),
+  ],
+  [
+    'level3 2 roaming mobs and a fairy',
+    new Map([
+      ['early', { partyLevel: 24, normal: 2.134, hard: 4.103 }],
+      ['mid', { partyLevel: 29, normal: 2.177, hard: 3.13 }],
+      ['late', { partyLevel: 34, normal: 1.663, hard: 2.391 }],
+    ]),
+  ],
+]);
+
+/**
+ * How far a fight with fairies may read from its tuned cost, either way, as a
+ * share of that cost: room for a host mob's tactics to nudge it, not for the
+ * fairies themselves to change.
+ */
+const FAIRY_FIGHT_COST_TOLERANCE = 0.1;
+
+function wipes(hpLost: number): string {
+  return `${hpLost.toFixed(TABLE_DECIMALS)} wipes`;
+}
+
+/** Holds one reading of a fight with fairies to its tuned cost, within the tolerance both ways. */
+function checkFairyFightDrift(label: string, reading: number, tuned: number): void {
+  const drift = reading / tuned - 1;
+  check(
+    Math.abs(drift) <= FAIRY_FIGHT_COST_TOLERANCE + EPSILON,
+    `${label}: ${wipes(reading)}, tuned at ${wipes(tuned)} (${asPercent(drift)} drift, want within ±${asPercent(FAIRY_FIGHT_COST_TOLERANCE)})`,
+  );
+}
+
+section(
+  `fights with fairies, the reference party (${ROOM_FIGHT_BUILD}): at most ${wipes(FAIRY_ROOM_FIGHT_WIPES_MAX)} on normal, ${wipes(HARD_FAIRY_ROOM_FIGHT_WIPES_MAX)} on hard`,
+);
+{
+  const fairyFloors = LEVEL_DEFS.filter((def) => fairyFightKinds(def).length > 0);
+  check(
+    fairyFloors.length > 0,
+    `${fairyFloors.length} floors have fights with fairies to price (${fairyFloors.map((def) => def.id).join(', ')})`,
+  );
+  const easy = DIFFICULTY_PROFILES.easy;
+  const hard = DIFFICULTY_PROFILES.hard;
+  const tunedFightsRead = new Set<string>();
+  for (const def of fairyFloors) {
+    for (const kind of fairyFightKinds(def)) {
+      const fightKey = `${def.id} ${kind.label}`;
+      const tunedBySample = FAIRY_FIGHT_TUNED_WIPES.get(fightKey);
+      for (const point of fightSamplePoints(def)) {
+        const label = `${fightKey} ${point.label} (party ${point.partyLevel})`;
+        const normal = readSources(kind.sources, point.partyLevel, ROOM_FIGHT_BUILD, NORMAL);
+        const strong = readSources(kind.sources, point.partyLevel, ROOM_FIGHT_STRONG_BUILD, NORMAL);
+        const onEasy = readSources(kind.sources, point.partyLevel, ROOM_FIGHT_BUILD, easy);
+        const onHard = readSources(kind.sources, point.partyLevel, ROOM_FIGHT_BUILD, hard);
+        const hosts = readSources(kind.hostsOnly, point.partyLevel, ROOM_FIGHT_BUILD, NORMAL);
+        if (
+          normal === null ||
+          strong === null ||
+          onEasy === null ||
+          onHard === null ||
+          hosts === null
+        ) {
+          report(label, ['a fight holds a creature that could not be priced'], null);
+          continue;
+        }
+        check(
+          normal.hpLost <= FAIRY_ROOM_FIGHT_WIPES_MAX + EPSILON,
+          `${label}: ${wipes(normal.hpLost)} (${asPercent(normal.hpRemaining)} left) over ${normal.bodiesPerFight.toFixed(TABLE_DECIMALS)} bodies (want at most ${wipes(FAIRY_ROOM_FIGHT_WIPES_MAX)}; ${ROOM_FIGHT_STRONG_BUILD} takes ${wipes(strong.hpLost)})`,
+        );
+        check(
+          onHard.hpLost <= HARD_FAIRY_ROOM_FIGHT_WIPES_MAX + EPSILON,
+          `${label}: hard deals at most ${wipes(HARD_FAIRY_ROOM_FIGHT_WIPES_MAX)} (${wipes(onHard.hpLost)})`,
+        );
+        // The same rolls with the fairies dropped: if the fairy bodies were
+        // not reaching the pricer, this class would read as the host rooms.
+        const fairyCost = normal.hpLost - hosts.hpLost;
+        check(
+          fairyCost >= FAIRY_ROOM_FIGHT_FAIRY_COST_MIN - EPSILON &&
+            normal.bodiesPerFight > hosts.bodiesPerFight,
+          `${label}: the fairies add ${wipes(fairyCost)} over the same rooms without them, ${wipes(hosts.hpLost)} → ${wipes(normal.hpLost)} (want at least ${wipes(FAIRY_ROOM_FIGHT_FAIRY_COST_MIN)})`,
+        );
+        check(
+          onEasy.hpLost <= normal.hpLost + EPSILON && onHard.hpLost >= normal.hpLost - EPSILON,
+          `${label}: easy deals no more than normal, hard no less (${wipes(onEasy.hpLost)} / ${wipes(normal.hpLost)} / ${wipes(onHard.hpLost)})`,
+        );
+        const tuned = tunedBySample?.get(point.label);
+        if (tuned?.partyLevel !== point.partyLevel) {
+          check(false, `${label}: has a tuned cost recorded at this party level`);
+          continue;
+        }
+        tunedFightsRead.add(`${fightKey}/${point.label}`);
+        checkFairyFightDrift(`${label} on normal`, normal.hpLost, tuned.normal);
+        checkFairyFightDrift(`${label} on hard`, onHard.hpLost, tuned.hard);
+      }
+    }
+
+    // A fairy kind the rolls never produce is one the band never priced.
+    const midParty = fightSamplePoints(def)[1].partyLevel;
+    const seen = new Set<string>();
+    for (const kind of fairyFightKinds(def)) {
+      for (const source of kind.sources) {
+        for (const room of rollEncounters(source, midParty, NORMAL) ?? []) {
+          for (const body of room) seen.add(body.creature.key);
+        }
+      }
+    }
+    const expected = [
+      ...new Set(fairySpawns(def).map((spawn) => fairyCreatureKey(spawn.kind, def))),
+    ];
+    if (seen.has(fairyCreatureKey('necro', def))) {
+      expected.push(...NECRO_SKELETON_KINDS.map(necroSkeletonKey));
+    }
+    const unseen = expected.filter((key) => !seen.has(key));
+    check(
+      unseen.length === 0,
+      `${def.id}: every fairy it spawns turns up in the priced fights${listed(unseen)}`,
+    );
+  }
+
+  // A tuned cost no fight looks up is one that holds nothing.
+  const unread = [...FAIRY_FIGHT_TUNED_WIPES].flatMap(([fightKey, bySample]) =>
+    [...bySample.keys()]
+      .map((sample) => `${fightKey}/${sample}`)
+      .filter((key) => !tunedFightsRead.has(key)),
+  );
+  check(
+    unread.length === 0,
+    `every tuned cost for a fight with fairies is one a priced fight reads${listed(unread)}`,
+  );
+
+  // The band is only worth asserting if it can see a fairy: the same rooms,
+  // with every fairy that hurts swapped for one that hits far harder, must
+  // rise out of their tuned cost.
+  const probeDef = level2;
+  const probeKinds = fairyFightKinds(probeDef);
+  const probePoint = fightSamplePoints(probeDef)[1];
+  if (probeKinds.length === 0) {
+    check(false, `${probeDef.id} has fairy rooms to probe the fairy band with`);
+  } else {
+    const probeKind = probeKinds[0];
+    const tuned = FAIRY_FIGHT_TUNED_WIPES.get(`${probeDef.id} ${probeKind.label}`)?.get(
+      probePoint.label,
+    );
+    const heavy = new Map<string, Creature>();
+    const swap = (body: RoomBody): RoomBody => {
+      if (!isDamagingFairy(body.creature)) return body;
+      const known = heavy.get(body.creature.key) ?? heavyHandedFairy(body.creature, probeDef);
+      heavy.set(body.creature.key, known);
+      return { ...body, creature: known };
+    };
+    const real = readSwapped(probeKind.sources, probePoint.partyLevel, (body) => body);
+    const harder = readSwapped(probeKind.sources, probePoint.partyLevel, swap);
+    const toleratedAtMost =
+      tuned === undefined ? null : tuned.normal * (1 + FAIRY_FIGHT_COST_TOLERANCE);
+    check(
+      heavy.size > 0 &&
+        real !== null &&
+        harder !== null &&
+        toleratedAtMost !== null &&
+        harder > toleratedAtMost + EPSILON,
+      `${probeDef.id} ${probeKind.label}, every fairy hitting ${HEAVY_FAIRY_DAMAGE_FACTOR}× harder, rises past its tuned cost's tolerance (${real === null ? '?' : wipes(real)} → ${harder === null ? '?' : wipes(harder)})`,
+    );
+  }
+
+  // A ward the clock never sees would price a shield fairy as a body and
+  // nothing more: some strike in the priced fights must have been turned away
+  // from a warded ally.
+  check(
+    strikesTurnedAwayByWards > 0,
+    `the support clock turns the party away from warded allies (${strikesTurnedAwayByWards} strikes drawn around a ward)`,
+  );
+
+  // A necro fairy keeps its army standing by refilling the places it loses; a
+  // refill that never comes due prices the army as one wave.
+  check(
+    necroArmyRefills > 0,
+    `the support clock refills a necro fairy's army (${necroArmyRefills} refills over the priced fights)`,
+  );
+
+  // The ward probe below only shows the price reacts to the count; this holds
+  // the count itself to what the game gives a shield fairy.
+  const wrongWards = [...pricedShieldWards.values()].filter(
+    (priced) => priced.wards !== shieldWardCount(priced.level, priced.difficulty),
+  );
+  check(
+    pricedShieldWards.size > 0 && wrongWards.length === 0,
+    `the support clock gives each priced shield fairy the wards shieldWardCount does (${pricedShieldWards.size} level/difficulty readings${listed(wrongWards.map((priced) => `level ${priced.level} ${priced.difficulty}: ${priced.wards} wards, want ${shieldWardCount(priced.level, priced.difficulty)}`))})`,
+  );
+
+  // A fire fairy's lob lands on every crawler it reaches, so alone in a room it
+  // costs the party its measured rate once per crawler.
+  const fireBody = probeKinds
+    .flatMap((kind) => kind.sources)
+    .flatMap((source) => rollEncounters(source, probePoint.partyLevel, NORMAL) ?? [])
+    .flat()
+    .find((body) => body.creature.fairyKind === 'fire');
+  if (fireBody === undefined) {
+    check(false, `${probeDef.id} rolls a fire fairy to price alone`);
+  } else {
+    const oneCrawlerFire: RoomBody = {
+      ...fireBody,
+      creature: { ...fireBody.creature, strikesEachCrawler: false },
+    };
+    const lobbed = partyFight([fireBody], probePoint.partyLevel, ROOM_FIGHT_BUILD, NORMAL);
+    const oneCrawler = partyFight(
+      [oneCrawlerFire],
+      probePoint.partyLevel,
+      ROOM_FIGHT_BUILD,
+      NORMAL,
+    );
+    const expected = oneCrawler === null ? null : oneCrawler.hpShare * PARTY_SIZE;
+    check(
+      lobbed !== null &&
+        expected !== null &&
+        expected > 0 &&
+        Math.abs(lobbed.hpShare - expected) <= expected * EPSILON,
+      `${fireBody.creature.key} alone costs ${PARTY_SIZE}× what one crawler's share would (${lobbed === null ? '?' : wipes(lobbed.hpShare)}, want ${expected === null ? '?' : wipes(expected)})`,
+    );
+  }
+
+  // A shield fairy's threat is its wards: the same rooms, with each shield
+  // fairy laying one ward more than the game gives it, must cost more.
+  const shieldKind = probeKinds.find((kind) =>
+    kind.sources.some((source) =>
+      (rollEncounters(source, probePoint.partyLevel, NORMAL) ?? []).some((room) =>
+        room.some((body) => body.creature.fairyKind === 'shield'),
+      ),
+    ),
+  );
+  if (shieldKind === undefined) {
+    check(false, `${probeDef.id} rolls a shield fairy to probe its wards with`);
+  } else {
+    const oneMoreWard = 1;
+    const asGiven = readPriced(shieldKind.sources, probePoint.partyLevel, (room) =>
+      partyFight(room, probePoint.partyLevel, ROOM_FIGHT_BUILD, NORMAL),
+    );
+    const moreWarded = readPriced(shieldKind.sources, probePoint.partyLevel, (room) =>
+      partyFight(room, probePoint.partyLevel, ROOM_FIGHT_BUILD, NORMAL, oneMoreWard),
+    );
+    check(
+      asGiven !== null && moreWarded !== null && moreWarded > asGiven + EPSILON,
+      `${probeDef.id} ${shieldKind.label}, each shield fairy laying one ward more, costs more (${asGiven === null ? '?' : wipes(asGiven)} → ${moreWarded === null ? '?' : wipes(moreWarded)})`,
     );
   }
 }
@@ -2091,9 +3786,11 @@ section('tracked levels: the off-stat party still wins, and no mob turns sponge'
 {
   const trackingFloors = LEVEL_DEFS.filter((def) => def.ambientTracking !== undefined);
   check(trackingFloors.length > 0, `${trackingFloors.length} floors track the party's level`);
-  const expectedPairs = trackingFloors.flatMap((def) =>
-    [...new Set(ambientSpawns(def).map((spawn) => spawn.type))].map((type) => `${type}@${def.id}`),
-  );
+  const expectedPairs = trackingFloors.flatMap((def) => {
+    const ambient = ambientSpawns(def).map((spawn) => spawn.type);
+    const fairies = fairySpawns(def).map((spawn) => fairyCreatureKey(spawn.kind, def));
+    return [...new Set([...ambient, ...fairies])].map((type) => `${type}@${def.id}`);
+  });
   const checkedPairs = new Set<string>();
   // Hard is held only to a bare win: its ratio tracks the party higher, and a
   // player who chose it and also spent badly has asked for the fight.
@@ -2203,7 +3900,7 @@ section('tracked levels: the off-stat party still wins, and no mob turns sponge'
 }
 
 section('difficulty profiles, balanced build');
-for (const creature of roster.regular) {
+for (const creature of damageDealers) {
   if (!measurable.has(creature.key)) continue;
   for (const crawler of REFERENCE_CRAWLERS) {
     const byProfile = new Map<Difficulty, PathRow[] | null>();

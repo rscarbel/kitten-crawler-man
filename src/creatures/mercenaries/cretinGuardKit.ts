@@ -365,6 +365,9 @@ export class CretinGuardKit extends BasicMeleeKit {
   override clearAirborne(): void {
     super.clearAirborne();
     this.cast = null;
+    // Whatever HP it had before is no baseline for what it has now: a hire
+    // stood up by a revive would otherwise flinch at its own fall.
+    this.lastHp = null;
     this.robotTick = null;
     this.blockThreat = null;
     this.princessFoe = null;
@@ -498,6 +501,8 @@ export class CretinGuardKit extends BasicMeleeKit {
     let closestDistance = Infinity;
     for (const mob of ctx.allMobs) {
       if (mob === ctx.merc || !mob.isAlive || !mob.isHostile) continue;
+      // A held mob threatens nobody yet, and blocking it would be picking a fight.
+      if (mob.offLimitsToAllies) continue;
       const d = centerDistance(mob, owner);
       if (d > releasePx) continue;
       distances.set(mob, d);

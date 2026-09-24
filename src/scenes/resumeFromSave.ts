@@ -11,6 +11,7 @@ import { MONGO_DEF, getMongoStats } from '../abilities/mongo';
 import { createMongoPetState } from '../core/MongoPetState';
 import { parseSavedWorld } from '../core/SavedWorld';
 import { AchievementManager } from '../core/AchievementManager';
+import { GameStats, parseGameStatsSnapshot } from '../core/GameStats';
 
 /**
  * An ability manager carrying a save's progress, or a fresh one at level 1.
@@ -98,6 +99,15 @@ export function sceneSetupFromSave(
     options.spawnAt = savedWorld.safeRoomTile ?? undefined;
     options.levelTimerFrames = savedWorld.levelTimerFrames ?? undefined;
     options.persistedWorldState = savedWorld.persisted;
+  }
+  const savedStats = parseGameStatsSnapshot(progress.gameStats);
+  if (savedStats !== undefined) {
+    const stats = GameStats.fromSnapshot(savedStats);
+    // A death that respawns here hands over the run still in progress, whose
+    // deaths and time played are newer than the save's — including the death
+    // that brought the party back.
+    if (baseOptions.gameStats !== undefined) stats.carryRunHistoryFrom(baseOptions.gameStats);
+    options.gameStats = stats;
   }
   // The scene starts standing on this save, so a death before it takes another
   // comes straight back here rather than to the floor's entry.

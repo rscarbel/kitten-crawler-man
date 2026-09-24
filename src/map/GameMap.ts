@@ -567,6 +567,11 @@ export class GameMap {
   get stairwellTiles(): ReadonlyArray<{ x: number; y: number }> {
     return this._stairwellTiles;
   }
+
+  /** The safe room that is the last stop before `bossType`, or undefined when this map has none. */
+  safeRoomGuarding(bossType: string): (SafeRoomData & { showBed?: boolean }) | undefined {
+    return this.safeRooms.find((room) => room.guardsBossType === bossType);
+  }
   /** Door positions for enterable buildings (overworld only). */
   buildingEntries: BuildingEntry[] = [];
   /** The `TownPlan` the overworld town was generated from. Undefined on other maps. */

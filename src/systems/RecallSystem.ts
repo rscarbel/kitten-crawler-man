@@ -150,6 +150,11 @@ export class RecallSystem implements GameSystem {
     return this.cooldownRemaining;
   }
 
+  /** Whether a channel is running, so the party is about to be moved unless it is given up. */
+  get isChannelling(): boolean {
+    return this.channel !== null;
+  }
+
   captureCheckpoint(): RecallCheckpoint {
     return { cooldownFrames: this.cooldownRemaining };
   }

@@ -320,6 +320,9 @@ export class WaterMageKit implements MercenaryKit {
   clearAirborne(): void {
     this.pending = [];
     this.action = null;
+    // Whatever HP it had before is no baseline for what it has now: a hire
+    // stood up by a revive would otherwise flinch at its own fall.
+    this.lastHp = null;
     this.endRetreat(0);
     this.backingOff = false;
     this.lastSeenAt = [];
@@ -338,6 +341,8 @@ export class WaterMageKit implements MercenaryKit {
     const bearings: number[] = [];
     for (const mob of ctx.allMobs) {
       if (mob === merc || !mob.isAlive || !mob.isHostile) continue;
+      // Held out of its fight by a script, it cannot answer a blow; going for it is a free kill.
+      if (mob.offLimitsToAllies) continue;
       const centre = centreOf(mob);
       const dx = centre.x - origin.x;
       const dy = centre.y - origin.y;

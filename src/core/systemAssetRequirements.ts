@@ -34,8 +34,19 @@ export interface SystemAssetRequirement {
 
 const LEVEL3 = ['level3'];
 const ALL_LEVELS = ['tutorial', 'level1', 'level2', 'level3'];
+/** Every floor whose `LevelDef.fairies` table or boss fights can produce a fairy. */
+const FAIRY_LEVELS = ['level1', 'level2', 'level3'];
 
 export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
+  // The fairy passes in `src/levels/fairySpawner.ts` read `LevelDef.fairies`,
+  // a table the per-floor coverage does not walk, and hard-mode boss fights add
+  // a healer from their own systems. All five are painted.
+  {
+    id: 'fairies',
+    levelIds: FAIRY_LEVELS,
+    mobTypes: ['fairy_shield', 'fairy_healer', 'fairy_ice', 'fairy_fire', 'fairy_necro'],
+    requiredGroups: [],
+  },
   // BountySystem — src/systems/bountyDefs.ts. One entry per BountyDef id.
   {
     id: 'bounty:evil_clown',
@@ -80,10 +91,11 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
   },
 
   // SkeletonSummonSystem (src/systems/SkeletonSummonSystem.ts) raises the two
-  // warriors, both of which are painted rather than baked.
+  // warriors, both of which are painted rather than baked. Floors 1 and 2 as
+  // well as 3, because a necro fairy raises them wherever it spawns.
   {
     id: 'skeleton_summons',
-    levelIds: LEVEL3,
+    levelIds: FAIRY_LEVELS,
     mobTypes: ['skeleton_sword', 'skeleton_archer'],
     requiredGroups: [],
   },

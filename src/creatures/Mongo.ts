@@ -27,6 +27,7 @@ import {
 import { getMongoStats, type MongoAttack, type MongoStats } from '../abilities/mongo';
 import { MONGO_MIN_SUMMON_HP } from '../core/MongoPetState';
 import type { LootDrop, PlayerDamageType } from './Mob';
+import { DamageLedger } from './damageLedger';
 
 /**
  * Mongo — the cat's pet Mongoliensis.
@@ -224,16 +225,6 @@ const PRIORITY_NONE = -1;
  * tuned as the single lever it is.
  */
 const MONGO_DAMAGE_TAKEN_MULTIPLIER = 0.6;
-/** A blow never rounds away to nothing; the resistance softens hits, it does not void them. */
-const MIN_DAMAGE_TAKEN = 1;
-/**
- * The most the softening ledger may ever run in the pet's favour, in hit points.
- *
- * A bound rather than a tuning number — see {@link Mongo.soften}. Without one the
- * ledger is a sink that both voids the resistance on small hits and banks the
- * difference as free hit points to spend later.
- */
-const MAX_SOFTENING_CREDIT = 1;
 
 /**
  * Whether a badly wounded Mongo breaks off and holds at the cat's side.
@@ -456,16 +447,8 @@ export class Mongo extends Mob {
    */
   needsRescue = false;
 
-  /**
-   * Damage the resistance has softened away but not yet charged, in fractions of
-   * a hit point. See {@link soften}.
-   *
-   * Approximate across a dodge or an absorbed blow — the balance is added to
-   * before the base class decides whether the hit landed at all — which is worth
-   * a sentence only to say it does not matter: the drift is under a hit point and
-   * it falls in the pet's favour.
-   */
-  private softenedDamageOwed = 0;
+  /** What his resistance has softened away but not yet charged; see {@link DamageLedger}. */
+  private readonly damageLedger = new DamageLedger(MONGO_DAMAGE_TAKEN_MULTIPLIER);
 
   /**
    * Frames the current run home has been going, for the forced rescue.
@@ -556,48 +539,11 @@ export class Mongo extends Mob {
 
   /**
    * The wound he actually takes; see {@link MONGO_DAMAGE_TAKEN_MULTIPLIER}.
-   *
-   * Applied in *both* damage entry points below, because they are genuinely two
-   * doors rather than one wrapping the other: `takeDamage` is what a mob swinging
-   * at a player-like target calls, `takeDamageFrom` is what a mob swinging at
-   * another *mob* calls — the golem's boulders and the Ball of Swine's charge go
-   * through the second — and it writes hp itself rather than delegating. Softened
-   * in one place only, half the things on the floor would ignore the resistance
-   * entirely, which is exactly the sort of gap that reads as random difficulty.
-   * Because neither method calls the other, softening both cannot double-apply.
-   *
-   * Kept as a running ledger rather than rounded per blow, and that is not
-   * fussiness — rounding gave the resistance a rate that depended on the size of
-   * the hit, and gave it *no effect at all* on the one damage class he cannot
-   * walk away from. Every damage-over-time tick in the game is one point, and one
-   * point softened and rounded is still one point: burn, poison, sepsis and the
-   * rest landed at full strength on the animal who cannot kite and cannot heal in
-   * the field. Charging whole points off an accumulated balance makes a run of
-   * ticks cost 0.6 each on average, which is what the multiplier says.
-   *
-   * The balance is bounded on the credit side, and that bound is the whole
-   * safety of the scheme. A blow forced up to {@link MIN_DAMAGE_TAKEN} bills the
-   * difference back to the ledger, and unbounded that is a sink: a stream of
-   * one-point hits pushes the balance 0.4 further negative every time, so the
-   * resistance stops applying to them *and* the accumulated credit is later
-   * spent as flat immunity — measured at seventy-six free hit points after two
-   * hundred ticks of a shell edge, which is a damage shield rather than a
-   * resistance. Clamped, the most the ledger can ever owe or be owed is one hit
-   * point in either direction.
-   *
-   * @param mayLandForNothing whether the blow is allowed to charge zero. True
-   *   wherever nothing reads a "did not connect" answer — every status tick, and
-   *   `takeDamageFrom`, which returns nothing at all. False only for a blow
-   *   arriving through `takeDamage`, where returning false means "missed" and
-   *   attackers use it to hold back the status riders they swing alongside.
+   * Charged through the ledger at both damage entry points — see
+   * {@link DamageLedger} for why both, and why a ledger rather than rounding.
    */
   private soften(amount: number, mayLandForNothing: boolean): number {
-    if (amount <= 0) return amount;
-    this.softenedDamageOwed += amount * MONGO_DAMAGE_TAKEN_MULTIPLIER;
-    let charged = Math.max(0, Math.floor(this.softenedDamageOwed));
-    if (charged < MIN_DAMAGE_TAKEN && !mayLandForNothing) charged = MIN_DAMAGE_TAKEN;
-    this.softenedDamageOwed = Math.max(-MAX_SOFTENING_CREDIT, this.softenedDamageOwed - charged);
-    return charged;
+    return this.damageLedger.charge(amount, mayLandForNothing);
   }
 
   override takeDamage(amount: number, source?: DamageSource): boolean {
@@ -711,10 +657,11 @@ export class Mongo extends Mob {
   }
 
   /**
-   * AI. The `targets` argument is ignored — he builds his own target list from
-   * `allMobs`, because everything he cares about is a mob rather than a player.
+   * AI. He builds his own target list from `allMobs`, because everything he
+   * fights is a mob rather than a player; `party` — the crawlers and whoever
+   * travels with them — is only what he comes to rest against on the way home.
    */
-  updateAI(_targets: Player[]): void {
+  updateAI(party: Player[]): void {
     if (!this.isAlive) return;
 
     this.syncGaitToDistanceCovered();
@@ -724,7 +671,6 @@ export class Mongo extends Mob {
     if (this.pounceCooldown > 0) this.pounceCooldown--;
     this.animator.tick();
     this.resolvePendingBlow();
-    this.advancePounceLunge();
 
     if (this.recallArrived) {
       this.isMoving = false;
@@ -737,6 +683,13 @@ export class Mongo extends Mob {
       if (!this.animator.isPlaying) this.beginRecall();
       return;
     }
+
+    // Above the recall as well as the fight: "come back" asks him to close the
+    // distance, never to run through a falling ball to do it. A blow already
+    // playing plays on, but his feet are the flee's — a bite he steps out of
+    // reach of whiffs, and a pounce is not carried on into the fire.
+    if (this.stepOffMarkedGround(this.speed)) return;
+    this.advancePounceLunge();
 
     if (this.recalling) {
       this.runHome();
@@ -755,7 +708,7 @@ export class Mongo extends Mob {
     const holdingBack = this.leashed || this.isTooWoundedToFight;
     const target = holdingBack ? null : this.pickTarget();
     if (target === null) {
-      this.standBy(distToCat);
+      this.standBy(distToCat, party);
       return;
     }
 
@@ -1017,6 +970,8 @@ export class Mongo extends Mob {
    */
   private isValidTarget(mob: Mob, radiusTiles: number, rank = PRIORITY_NEAREST): boolean {
     if (mob === this || !mob.isAlive || !mob.isPetAttackable) return false;
+    // Held out of its fight by a script, it cannot answer a blow; going for it is a free kill.
+    if (mob.offLimitsToAllies) return false;
     // A body that has to be dodged rather than fought — the rolling Ball of
     // Swine — tramples for a large share of its victim's health a pass, and he
     // has no dodge. Charging it would spend him before the fight's second
@@ -1081,9 +1036,14 @@ export class Mongo extends Mob {
    * Deliberately not `doWander`, which drifts back toward the *spawn* tile — for
    * a pet that has followed the cat across the floor, that is a constant tug
    * away from the player.
+   *
+   * He passes through the party rather than colliding with it (see
+   * {@link displacesPlayers}), so nothing but this rule stops him walking on
+   * into a crawler who holds the spot he wants and settling half inside her.
    */
-  private standBy(distToCat: number): void {
-    if (distToCat > TILE_SIZE * RETURN_THRESHOLD_TILES) this.following = true;
+  private standBy(distToCat: number, party: readonly Player[]): void {
+    if (this.restsAgainstParty(this.owner, party)) this.following = false;
+    else if (distToCat > TILE_SIZE * RETURN_THRESHOLD_TILES) this.following = true;
     else if (distToCat <= TILE_SIZE * RETURN_STOP_TILES) this.following = false;
 
     if (!this.following) {

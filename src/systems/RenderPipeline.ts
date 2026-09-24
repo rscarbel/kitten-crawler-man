@@ -10,6 +10,7 @@ import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
 import { nightVisionBonusTiles } from '../core/SkillManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import type { WorldSight } from '../core/visibleWorldView';
 import { setQuestBeaconViewer } from '../sprites/questBeacon';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -34,6 +35,8 @@ import type { HirelingBoltSystem } from './HirelingBoltSystem';
 import type { SkeletonProjectileSystem } from './SkeletonProjectileSystem';
 import type { GoblinArrowSystem } from './GoblinArrowSystem';
 import type { ClownGasSystem } from './ClownGasSystem';
+import type { FairySystem } from './FairySystem';
+import type { FairyFireballSystem } from './FairyFireballSystem';
 import type { KnightMissileSystem } from './KnightMissileSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
@@ -130,6 +133,19 @@ export function visibilityRadiusPx(active: HumanPlayer | CatPlayer): number {
   return (VISIBILITY_OUTER_TILES + nightVisionBonusFor(active)) * TILE_SIZE;
 }
 
+/**
+ * The disc around the active crawler that {@link RenderPipeline.renderVisibilityFog}
+ * leaves fully clear, for rules that hold something back until the player can
+ * see it: past it the fog has started, so a body there is already dimming.
+ */
+export function clearSightOf(active: HumanPlayer | CatPlayer): WorldSight {
+  return {
+    x: active.x + TILE_SIZE / 2,
+    y: active.y + TILE_SIZE / 2,
+    radiusPx: (VISIBILITY_INNER_TILES + nightVisionBonusFor(active)) * TILE_SIZE,
+  };
+}
+
 /** A Y-sorted draw entry that avoids per-frame closure allocation. */
 interface DrawEntry {
   sortY: number;
@@ -191,6 +207,9 @@ export interface RenderContext {
   skeletonShots: SkeletonProjectileSystem;
   goblinArrows: GoblinArrowSystem;
   clownGas: ClownGasSystem;
+  /** Absent in scenes no fairy flies in. */
+  fairies?: FairySystem;
+  fairyFireballs?: FairyFireballSystem;
   knightMissiles: KnightMissileSystem;
   /**
    * Always present: a map whose props are architecture rather than scenery
@@ -280,6 +299,9 @@ export class RenderPipeline {
     // player it is burning.
     rc.lavaBalls.renderGround(ctx, camX, camY);
     rc.clownGas.renderGround(ctx, camX, camY);
+    // Rings, reticles, charges and flames are all ground the party walks on.
+    rc.fairies?.renderGround(ctx, camX, camY);
+    rc.fairyFireballs?.renderGround(ctx, camX, camY);
     // The Smush's floor half: its rings and cracks are the ground Carl stamps,
     // and drawn over him they wash out the feet the stamp is read from.
     rc.smushFx.renderGround(ctx, camX, camY);
@@ -522,6 +544,9 @@ export class RenderPipeline {
     rc.skeletonShots.render(ctx, camX, camY);
     rc.goblinArrows.render(ctx, camX, camY);
     rc.clownGas.render(ctx, camX, camY);
+    // Tethers, chains, beams and lobs cross the fight, so none may hide behind a body.
+    rc.fairies?.render(ctx, camX, camY);
+    rc.fairyFireballs?.render(ctx, camX, camY);
     rc.knightMissiles.render(ctx, camX, camY);
     // Last of the world effects: the stamp's air and thrown chips read as being
     // in front of everything it just hit.

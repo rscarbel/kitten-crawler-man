@@ -25,6 +25,7 @@ import { HotbarToast } from '../../ui/HotbarToast';
 import { InventoryPanel } from '../../ui/InventoryPanel';
 import type { InventoryInteraction } from '../../ui/InventoryInteraction';
 import { LevelUpDialog } from '../../ui/LevelUpDialog';
+import { MongoExplainer } from '../../ui/MongoExplainer';
 import { potionEffectNotice, statBoostNotice } from '../../ui/potionNotices';
 import { PauseMenu } from '../../ui/PauseMenu';
 import { RewardGrantedDialog } from '../../ui/RewardGrantedDialog';
@@ -95,6 +96,7 @@ export class MenusKit {
   readonly rewardGrantedDialog = new RewardGrantedDialog();
   readonly skillBookPrompt = new SkillBookPrompt();
   readonly hotbarToast = new HotbarToast();
+  readonly mongoExplainer: MongoExplainer;
 
   private readonly world: SceneWorld;
   private readonly abilityManager: AbilityManager;
@@ -130,10 +132,20 @@ export class MenusKit {
         : new InventoryPanel(deps.inventoryInteraction);
 
     const audio = deps.world.audio;
+    this.mongoExplainer = new MongoExplainer(audio, () => this.abilityManager.getLevel('mongo'));
+    this.pauseMenu.onHowMongoWorks = () => this.mongoExplainer.open();
     this.pauseMenu.audio = audio;
     this.levelUpDialog.audio = audio;
     this.rewardGrantedDialog.audio = audio;
     this.skillBookPrompt.audio = audio;
+  }
+
+  /**
+   * True while a reward or level-up announcement is up. Both draw over the Mongo
+   * explainer, so Escape pressed under one of them is not aimed at it.
+   */
+  get isAwardStackShowing(): boolean {
+    return this.levelUpDialog.isShowing || this.rewardGrantedDialog.isShowing;
   }
 
   /** True while a pausing overlay owns the screen and every raw pointer path must stop. */
@@ -141,7 +153,8 @@ export class MenusKit {
     return (
       this.skillBookPrompt.isOpen ||
       this.levelUpDialog.isShowing ||
-      this.rewardGrantedDialog.isShowing
+      this.rewardGrantedDialog.isShowing ||
+      this.mongoExplainer.isOpen
     );
   }
 
@@ -348,6 +361,10 @@ export class MenusKit {
     bottle: PotionSlot | null,
   ): boolean {
     const audio = this.world.audio;
+    if (!drinker.canAct) {
+      audio?.play('error_taking_action');
+      return false;
+    }
     const consume = (): boolean =>
       bottle === null
         ? drinker.inventory.removeOne(id)
@@ -587,6 +604,7 @@ export class MenusKit {
   /** The award stack, drawn lowest-priority first so draw order matches claim order. */
   renderOverlays(ctx: CanvasRenderingContext2D): void {
     this.skillBookPrompt.render(ctx);
+    this.mongoExplainer.render(ctx);
     this.rewardGrantedDialog.render(ctx);
     this.levelUpDialog.render(ctx);
   }

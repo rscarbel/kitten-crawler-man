@@ -14,6 +14,8 @@ either still satisfies the rule or fails the script:
   band, measured on every floor that spawns rooms.
 - `npm run verify:tactics` — P6: which mobs learn a trait, how likely, and how each
   learned behaviour is bounded once running.
+- `npm run verify:fairies` — the fairy rules below, plus spawn tables, boss healers
+  and flight.
 
 ---
 
@@ -63,7 +65,8 @@ same module:
   exceeds `HP_SHARE_CEILING`. A fight cheaper than `RATIO_CEILING_MIN_HP_SHARE` of max
   HP is exempt from the ratio ceilings only.
 - **Hits to kill.** The `balanced` build kills a regular mob, where that mob is met,
-  in `HITS_TO_KILL_MIN`–`HITS_TO_KILL_MAX` blows. At levels a floor has tracked the
+  in `HITS_TO_KILL_MIN`–`HITS_TO_KILL_MAX` blows (a fairy in up to
+  `FAIRY_HITS_TO_KILL_MAX`; see Fairies). At levels a floor has tracked the
   party up to (below), it kills one within `TIME_TO_KILL_MAX_SECONDS` instead: time is
   what tells a sponge from a tough mob once the mob has out-grown the blow count.
 - **The off-stat build never gets locked out.** A deliberately badly spent build
@@ -159,6 +162,35 @@ Hard rules. Every one of these is asserted by `verify:difficulty`.
 - **Avoidance by movement alone must always remain possible.** Scaling may shrink the
   margin; it may never close it. Damage that is undodgeable once you are already inside
   it — flame patches, radial bursts — stays flat and does not scale at all.
+
+### Dynamite
+
+A stick is a burst item bought and found at a flat price, so it has to stay worth
+throwing on every floor without turning any fight into a shopping list. `DYN_DAMAGE`
+(`src/systems/DynamiteSystem.ts`) sets what an untrained level-1 stick does, to
+enemies and crawlers alike; its enemy damage then grows with the thrower's level
+(capped where mob health stops growing) and with each Explosives Handling level. The
+limits on it live in `scripts/verify-difficulty.ts`, under _explosives handling_:
+
+- **`ON_CURVE_BLAST_MAX_OVERKILL`** — one stick at on-curve Explosives Handling deals
+  at most this many times a same-floor regular's health. It keeps a trained stick a
+  heavy hit rather than a blast that clears a room several times over.
+- **`BOSS_MIN_STICKS_ON_CURVE`** — every arena boss and bounty mark takes at least
+  this many separate blasts to kill at on-curve Explosives Handling, across the
+  party levels from floor 2 to past the boss level cap. A boss fight is decided by
+  how it is played, not by how many sticks were bought.
+- **`BOSS_MIN_STICKS_ALL_IN`** — the same floor for a thrower who put every level-up
+  point into Explosives Handling. The heaviest investment buys a much faster kill,
+  never a one-stick one.
+- **`ESCORT_MAX_HP_SHARE_PER_STICK`** — one untrained stick deals at most this many
+  times a tougher bounty escort's max HP. A single stick may kill a light escort
+  outright; it may not gut a tougher one several times over.
+
+Alongside those, the same section holds that an untrained stick still takes a
+meaningful share of a same-floor regular, that every Explosives Handling point
+raises enemy damage, that an on-curve stick hurts enemies well beyond what it does
+to the crawlers, and that a boss never takes less from a stick than a crawler does.
+Gate: `npm run verify:difficulty`.
 
 ## P3 — Death stays generous
 
@@ -273,6 +305,222 @@ in `src/creatures/tactics/`; every one of these rules is asserted by `verify:tac
 - **Readable.** A mob acting on a trait carries a rank mark by its health bar, a guard shows
   a "Blocked" label, and `TacticsNoticeSystem` announces each trait the first time the
   party fights one. Smarter AI the player cannot see reads as randomness.
+
+## Fairies
+
+A fairy rides along with a room's own population rather than replacing it, so every
+rule above still holds for the mobs it accompanies; these rules cover what the fairy
+itself adds. `npm run verify:fairies` asserts all of them, plus spawn tables, boss
+healers and flight.
+
+- **A fairy keeps its distance, and is always catchable.** Every fairy hovers away
+  from every living member of the party within notice range — both crawlers, the pet
+  and hirelings — preferring spots with a living non-fairy ally between it and them
+  (`FAIRY_COVER_BONUS_TILES`), and backs off within a few frames when one closes in:
+  its hover goal is re-chosen early once a threat closes on it by
+  `FAIRY_THREAT_SHIFT_REPLAN_TILES`, with a switch margin so a crawler pacing at the
+  range boundary cannot make it jitter. Within `FAIRY_FLUTTER_RANGE_TILES` of a threat
+  it flutters away at its top speed, `FAIRY_MAX_SPEED` (0.85 × `PLAYER_SPEED`), which
+  levelling can never raise: a crawler who commits to the chase always closes the gap.
+  Hover goals never land on marked ground, walls, or ground a fairy may not be placed
+  on (inside the town wall, the town's safe radius, the circus grounds) — except a
+  healer bound to a boss (`Fairy.isHoverGoalAllowed`), which is exempt from that
+  ground restriction, since its boss's own room or arena may sit on it.
+- **A fairy left alone runs for the next room.** With no living non-fairy hostile
+  within `FAIRY_ALLY_SEARCH_TILES` (other fairies do not count) and the party in
+  sight, a fairy runs for another room (`chooseFairyRefuge`): one within the path
+  search's reach, preferring rooms that still hold hostiles, never one with no route
+  to it or whose route (`map.findPath`, judged tile by tile, with
+  `ROUTE_GRID_SLACK_TILES` of grid slack) comes within
+  `FAIRY_REFUGE_PARTY_CLEARANCE_TILES` of the party any closer than the fairy already
+  stands. On open ground it runs for the nearest other hostile group
+  instead. It stops running on arrival or once an ally is within
+  `FAIRY_REFUGE_JOIN_TILES`, and gives a refuge up if it stalls. With nowhere to run
+  it keeps `FAIRY_LONE_RANGE_TILES` from the party, inside the reach of its own casts.
+  A running fairy still casts, on the move. A boss's healer never runs: it keeps its
+  distance inside its boss's sealed room or arena, within
+  `FAIRY_BOUND_HEALER_LEASH_TILES` of the boss. A checkpoint rewind returns a fairy
+  that ran to its spawn.
+- **A fairy never stands still to cast.** Every cast resolves on the frame it is
+  chosen, and its row plays out over `FAIRY_CAST_RECOVER_FRAMES` while the fairy keeps
+  moving. Support casts (`WARD_CAST`, `HEAL_CAST`, `NECRO_RESURRECT_CAST`,
+  `NECRO_SUMMON_CAST`) have nothing to dodge, so they need no telegraph and nothing
+  interrupts them. The offensive casts carry their telegraph in the world instead of in
+  a windup:
+  - the **ice bolt** (`ICE_BOLT_CAST`) flies dead straight at where the crawler stood
+    when it was loosed, with no lead, at a fixed `ICE_BOLT_SPEED` =
+    `ICE_BOLT_SPEED_FRACTION_OF_PLAYER` × `PLAYER_SPEED`. The fraction is under one and
+    does not scale with level — P2's projectile-speed cap — so from its firing range a
+    sidestep always escapes it, and walking straight away escapes it only while the
+    crawler is unchilled: a chilled crawler walks at `CHILLED_MOVE_SPEED_FACTOR` × its
+    speed, under the bolt's fraction. It stops at the first wall and
+    strikes only the first party member it meets, never a mob. The bolt is owned by
+    `FairySystem`, so one in flight outlives the fairy that loosed it.
+  - the **fireball** (`FIREBALL_CAST`) is thrown at the crawler's feet with its landing
+    fixed on the throw frame, and the blast's full red danger circle (filling as the
+    ball comes down) marks that spot for the whole `FIREBALL_FLIGHT_FRAMES`, never
+    under `LOCKED_TELEGRAPH_MIN_FRAMES`, then a fuse with its own danger circle. The
+    flight outlasts a reaction and a walk out of the circle:
+    `FIREBALL_DODGE_REACTION_FRAMES + ceil(blast radius px / PLAYER_SPEED) <
+FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
+    walking half a second after the throw is outside the blast radius when it lands.
+    One cast throws a ball at each crawler the fairy may lob at (alive, in range and
+    sight, outside the town's safe zone), each on that crawler's own feet, on one
+    cooldown. From the throw on, every landing is marked ground
+    (`GroundHazardSource`, widened by `FIREBALL_HAZARD_MARGIN_TILES`): the AI
+    companion, Mongo and every hireling leave it before the ball comes down —
+    following, fighting, recalling or mid-swing alike — are steered out of every
+    overlapping circle at once rather than out of one into another, and take no
+    step back onto it until the charge has gone off.
+  - the **telekinetic wave** (`NECRO_TELEKINETIC_CAST`) is exempt from the telegraph
+    rule: it deals no damage and applies no status, only a knockback from where the
+    fairy is on its release frame, and never through a wall. Its recharge,
+    `TK_COOLDOWN_FRAMES`, is flat rather than level-scaled: the wave's rhythm is part
+    of what makes it readable.
+- **A shield fairy's ward is invulnerability, and its counterplay is the fairy.** A mob
+  holding a shield fairy's ward takes no damage from any source for as long as that
+  fairy lives (`Player.isHeldInvulnerable`), and a struck ward-holder shows
+  "Invulnerable" (throttled, so a flurry does not stack). A fairy holds at most
+  `shieldWardCount` wards — its potency plus `SHIELD_EXTRA_WARDS`, the potency ceiling
+  included — one fairy ward per mob, and lays a new one on another ally every
+  `SHIELD_BETWEEN_CASTS_FRAMES` when a warded ally dies or leaves. It lays no ward
+  before it is seen, and none while it is off screen: every cast waits until the fairy
+  is on screen (`Fairy.isOnScreen`) — its body at least half a tile inside the camera
+  view the scene publishes each frame (`setVisibleWorldView`) and inside the fog's
+  clear disc — so the player sees each ward land and hears its sound. The view is the
+  real camera on the live window, the one following the active crawler, pinned at map
+  edges as drawn: a desktop window watches from much farther than a phone, which is
+  the point — a fixed radius small enough for every phone would let a desktop player
+  stand in plain view of the fairy and never be warded against. Walls are not
+  consulted: the view is top-down, so a fairy past a wall but on screen is in plain
+  sight. With no view published, nothing counts as on screen. Wards already laid stay
+  up while nobody watches. No ward is ever laid
+  on a shield fairy (`canTakeWardFrom` refuses one whatever candidate list asked): two
+  shield fairies warding each other would both be invulnerable forever. The wards come
+  off on the frame the fairy dies, and its death aegis (`AEGIS_DAMAGE_SCALE` on every
+  standing body for `AEGIS_DURATION_FRAMES`) follows.
+- **Healers cost time, not blows.** `healingFairyHealPerSecond` never exceeds
+  `HEAL_MAX_SHARE_OF_PARTY_DPS` of the reference party's damage per second, on any
+  target, at any level: the per-heal amount is a share of the target's max HP
+  (`HEAL_FRACTION_OF_TARGET_MAX_HP`, cut to `BOSS_HEAL_SCALE` of that on a boss) capped
+  by `HEAL_AMOUNT_CAP_BASE` scaled through `hpScaleForLevel` on the healer's own curve,
+  and the cooldown alone spaces the heals. A heal never lifts a target past its own
+  `fairyHealCeiling`, so it can never carry a boss back over a phase threshold the
+  party already fought it past. The healer's death wave (`applyHealingWave`) skips any
+  target that `isBoss`. A healer off screen heals, and its death wave heals, exactly
+  as on screen, but neither makes a sound: only on screen are the heal's bloom and the
+  wave's chime played.
+- **A fairy is sturdier than its host.** A fairy's base HP is `FAIRY_BASE_HP_FRACTION`
+  (1.2) of its floor's typical host (`FAIRY_TYPICAL_HOST_HP_BY_FLOOR`), levelled on
+  the same curve, so the share holds at every level — boss healers and cheat-spawned
+  fairies included.
+- **Fairy chances sit 15 points above their design rates.** Every enabled fairy chance —
+  room rates per region and difficulty, the Ball of Swine's upgrade, the room healer, and
+  floor 3's scatter fairy and scatter healer — is its design rate plus 0.15, held to 1;
+  a chance designed off (floor 1 before the Hoarder, floor 1's healer) stays off, and no
+  count range moves (`verify:fairies` spawn rules).
+- **Every fairy group has a shield fairy.** Wherever a room, a rate-upgrade top-up or a
+  floor-3 scatter point leaves at least one fairy (a healer included) and none is a
+  shield fairy, one more shield fairy is added (`needsGuaranteedShield`), on every
+  difficulty alike, outside the rolled count and `MAX_FAIRIES_PER_ROOM`. A boss's
+  healer never brings one.
+- **The Ball of Swine's upgrade reaches only the rooms past it.** Its upgraded rates
+  apply only to the rooms the floor's start cannot reach without crossing the safe room
+  guarding the Swine (`onlyPastItsSafeRoom`, `pastSafeRoomTest`) — the pocket behind
+  the arena. Every earlier room keeps its base rate for good. The Swine is optional:
+  the pocket is reachable round the arena, and its rooms keep their base rates until
+  the Swine dies.
+- **The Smush never hurts a fairy.** A fairy inside the blast takes no damage, stun,
+  knockback or status, and shows "Dodge" instead.
+- **Freeze never guarantees a fireball.** `FROZEN_FRAMES + ceil(blast radius px /
+(PLAYER_SPEED × CHILLED_MOVE_SPEED_FACTOR)) < FIREBALL_FUSE_FRAMES` (blast radius
+  is `FIREBALL_BLAST_RADIUS_TILES` in tiles): a crawler frozen the instant a charge
+  lands thaws and clears the blast, walking at the chilled pace, before it goes off.
+  The walk is measured at the chilled speed, not full speed, because
+  `FREEZE_GRACE_FRAMES` blocks only a second freeze — an ice bolt can still re-chill
+  the crawler on the way out. A frozen crawler's in-progress swing is abandoned
+  (`abandonSwing`), not merely paused.
+- **Flat bursts price outside the level-ratio trend.** The fireball's landed blast
+  (`FIREBALL_BLAST_DAMAGE`), the death flame's tick (`DEATH_FLAME_TICK_DAMAGE`) and
+  the death explosion (`DEATH_EXPLOSION_DAMAGE`) are flat, undodgeable-once-inside
+  damage under P2, and are priced as a flat radial burst rather than held to the
+  HP-share trend a regular attack is. The death flame never applies burn — only the
+  landed blast can roll `FIREBALL_BURN_CHANCE`.
+- **The lob's flight speed is fixed, not level-scaled.** A fireball always flies the
+  same `FIREBALL_FLIGHT_FRAMES`, and its throw range is clamped to
+  `FIREBALL_MAX_RANGE_TILES`, so its horizontal speed never grows with level. The dodge
+  is stepping out of the marked circle before the ball comes down, not outrunning it
+  in flight.
+- **Necro skeletons are bodies, not an XP source.** A necro fairy's skeletons rise
+  `NECRO_SKELETON_LEVELS_BELOW_FAIRY` levels under the fairy, at
+  `NECRO_SKELETON_STRENGTH` of a skeleton's authored HP and damage
+  (`Mob.raiseAsLesser`), swords and archers alike, whether summoned in life or left
+  behind on death. They pay no XP or coin (`paysRewards` is false on anything raised
+  this way), and a resurrected mob pays nothing on its second death either — a necro
+  fairy is a harder fight, never a farm.
+- **A necro's army is fixed in shape; its raises are limited per body, not per life.**
+  It fields `NECRO_ARMY` (two sword skeletons and an archer) once a crawler it has
+  noticed is within `NECRO_SUMMON_TRIGGER_TILES`, and refills to that shape — never
+  past it — `NECRO_RESUMMON_LAST_STANDING_FRAMES` after it is down to its last
+  skeleton, or `NECRO_RESUMMON_AFTER_WIPE_MIN_FRAMES`–`NECRO_RESUMMON_AFTER_WIPE_MAX_FRAMES`
+  after the whole army falls; an army down one of three is not refilled. One raise
+  stands up every eligible corpse in range and sight at once, however long ago it
+  fell, and a mob is raised at most once ever — never a boss, a boss's add, a summon
+  or a fairy. Its death leaves `NECRO_DEATH_ARMY` by the difficulty stamped at spawn:
+  four swords and two archers on easy and normal, seven and three on hard. It raises
+  and summons only while it is on screen, by the same test as the shield fairy, so
+  the player watches every body stand up; a refill that comes due off screen is held
+  and called the first frame the fairy is back in view. The telekinetic shove needs a
+  crawler within reach and is not held. The counterplay is kill priority: no refill or
+  raise outlives the fairy, and the death army is the price of taking it.
+- **Fairy rooms are a deliberately brutal encounter class.** A room, rate-upgrade room
+  or floor-3 roaming pair that rolled fairies is priced apart from the ordinary fights
+  and is exempt from the ordinary room band and the hard floor: it is meant to be the
+  hardest regular fight on its floor, and several of its fights cost the reference
+  party standing and trading blows more than its whole pooled HP — floor 3's roaming
+  pair with a fairy deals about two party wipes on normal, and floor 2's rooms past the
+  Ball of Swine's safe room nearly two and a half early in the floor. The counterplay the price
+  leaves out is what makes the class winnable: **kill priority** — a warded body is
+  invulnerable only while its shield fairy lives, so the shield fairy dies first and
+  the wall comes down with it — and the potions and retreats the pricer never credits.
+  The gate does not price chasing a fleeing fairy: a fairy left alone runs for the next
+  room, and running it down drags the party into that room's fight with the fairy
+  still casting, so a real fight is harder than its priced cost, not easier. A fairy
+  carries more health than its host (`FAIRY_BASE_HP_FRACTION`), which puts it a blow
+  past the ordinary hits-to-kill limit early in a floor's window; it is held to
+  `FAIRY_HITS_TO_KILL_MAX` (8) instead. A fire fairy's twin lob is priced as one ball
+  at each crawler, since the reference party has both in the fight. A necro fairy's
+  bodies are priced as real lesser sword skeletons and archers, each from the frame it
+  is on its feet: its `NECRO_ARMY` climbs out as the fight opens and each place in it is
+  refilled on the fairy's own countdowns while it lives, its `NECRO_DEATH_ARMY` climbs
+  out on its death, and every room mob that falls while it lives stands back up at
+  `RESURRECT_HP_FRACTION` on the raise cooldown, once — so the kill order decides how
+  many bodies it adds. Its shove is not priced.
+  `verify:difficulty-curve` reads the class in **party wipes** — pooled max HP lost,
+  not stopped at an empty bar — because HP remaining stops at zero, and a floor of zero
+  cannot fail. Its band:
+  - at most `FAIRY_ROOM_FIGHT_WIPES_MAX` (2.7) wipes on normal and
+    `HARD_FAIRY_ROOM_FIGHT_WIPES_MAX` (6) on hard, just above the harshest fight priced
+    plus its recorded-cost tolerance;
+  - each fight within `FAIRY_FIGHT_COST_TOLERANCE` (±10%) of its own recorded cost on
+    normal and on hard, both ways, so fairy fights can neither quietly get harsher nor
+    quietly go soft;
+  - the fairies themselves adding at least `FAIRY_ROOM_FIGHT_FAIRY_COST_MIN` (0.2)
+    wipes over the same rolls with the fairies left out.
+- **Support fairies are priced by the time they add.** A fight with a shield, healing
+  or necro fairy is played out on a clock over sampled kill orders, with the party
+  finishing one body before starting the next unless a ward lands on it first. A
+  shield fairy lays nothing before the fight: its first ward goes up as the fight
+  opens and one more every between-casts cooldown until it holds `shieldWardCount`,
+  each on an unwarded ally drawn at random, so unwarded allies can be struck down
+  meanwhile. A warded body cannot be struck down while its shield fairy lives, so the
+  fairy dies before any body it wards. A
+  healer's living heals (`healingFairyHealAmount` on `healingFairyCooldownFrames`,
+  started once the struck body is under `HEAL_TRIGGER_HP_FRACTION` and landing only if
+  it is still alive), the healer's death-wave overheal (`OVERHEAL_MAX_HP_FRACTION` of
+  each standing non-boss's max HP), and the shield fairy's death aegis are charged as
+  the time they add. A room is taken to be small enough that every support reaches
+  every ally.
 
 ---
 

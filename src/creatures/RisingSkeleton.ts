@@ -6,6 +6,12 @@ import { SKELETON_RISE_FRAMES } from '../sprites/skeletonTiming';
 /** The group every risen skeleton answers to; see {@link Mob.packKind}. */
 const SKELETON_PACK_KIND = 'skeleton';
 
+/** A skeleton at its authored HP and bite. */
+const FULL_STRENGTH = 1;
+
+/** A lesser skeleton still takes at least one blow to fell. */
+const MIN_LESSER_MAX_HP = 1;
+
 /**
  * The half of a skeleton warrior that is about climbing out of the ground.
  *
@@ -20,6 +26,22 @@ const SKELETON_PACK_KIND = 'skeleton';
  */
 export abstract class RisingSkeleton extends Mob {
   private riseTimer = 0;
+  protected lesserShare = FULL_STRENGTH;
+
+  /**
+   * Makes this a lesser copy of itself: `share` of its authored max HP and of
+   * every blow it deals. Call before `applyMobLevel`, which then levels the
+   * reduced HP like any other, and never on a live skeleton.
+   */
+  raiseAsLesser(share: number): void {
+    this.lesserShare = share;
+    this.setFixedMaxHp(Math.max(MIN_LESSER_MAX_HP, Math.round(this.maxHp * share)));
+    this.hp = this.maxHp;
+  }
+
+  protected override scaledDamage(baseDamage: number): number {
+    return super.scaledDamage(baseDamage) * this.lesserShare;
+  }
 
   /**
    * Starts this skeleton underground. Called by the summon path, not the

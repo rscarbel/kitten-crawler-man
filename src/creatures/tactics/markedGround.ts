@@ -6,13 +6,20 @@
  * is (see {@link module:creatures/packAlert}): a mob has no reference to the
  * world it lives in, and a tactic is the only mob behaviour that ever asks.
  *
- * Mobs have no hazard-flee of their own, so "hazards outrank tactics" means a
- * tactic refuses or abandons any step onto marked ground, and the mob's
+ * Hostile mobs have no hazard-flee of their own, so "hazards outrank tactics"
+ * means a tactic refuses or abandons any step onto marked ground, and the mob's
  * ordinary fight takes over. Abandoning always spends the tactic's cooldown,
  * so a retreat and the hazard can never take turns on alternate frames.
+ *
+ * The party's allies among the mobs — Mongo and the hirelings — do flee it,
+ * through {@link markedGroundEscape}; see `Mob.avoidsMarkedGround`.
  */
 
-import type { GroundHazardSource } from '../../systems/GroundHazardSource';
+import {
+  hazardEscapeAmong,
+  type GroundHazardSource,
+  type HazardEscape,
+} from '../../systems/GroundHazardSource';
 
 const NO_SOURCES: readonly GroundHazardSource[] = [];
 
@@ -26,12 +33,14 @@ export function setMarkedGroundSources(published: readonly GroundHazardSource[])
   sources = published;
 }
 
+/** Which way out of marked ground a body whose top-left is at (x, y) should go, or null when it stands clear. */
+export function markedGroundEscape(x: number, y: number): HazardEscape | null {
+  return hazardEscapeAmong(sources, x, y);
+}
+
 /** Whether a body whose top-left is at (x, y) would be standing on marked ground. */
 export function isMarkedGround(x: number, y: number): boolean {
-  for (const source of sources) {
-    if (source.getHazardEscapeVector(x, y) !== null) return true;
-  }
-  return false;
+  return markedGroundEscape(x, y) !== null;
 }
 
 /**

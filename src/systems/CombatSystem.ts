@@ -5,6 +5,7 @@ import { Mongo } from '../creatures/Mongo';
 import { MONGO_ASSIST_XP } from '../abilities/mongo';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
+import { Fairy } from '../creatures/fairies/Fairy';
 import type { Player } from '../Player';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
@@ -74,6 +75,16 @@ const SMUSH_HEAL_CHANCE = 0.2;
 const SMUSH_HEAL_FRACTION = 0.5;
 /** Stun duration in frames for smush non-boss stun. */
 const SMUSH_STUN_FRAMES = 150;
+/** Shown over a fairy the stomp passes under. */
+export const SMUSH_DODGE_LABEL = 'Dodge';
+
+/**
+ * A stomp is a shock through the ground, and a fairy hovers clear of it: the
+ * blast deals it nothing and lands nothing on it, and says so over its head.
+ */
+function dodgesSmush(mob: Mob): boolean {
+  return mob instanceof Fairy;
+}
 
 /** Shared context passed to combat resolution functions. */
 export interface CombatContext {
@@ -251,6 +262,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       const mc = centerOf(mob);
       const dist = Math.hypot(mc.x - hc.x, mc.y - hc.y);
       if (dist > outerRadius) continue;
+      if (dodgesSmush(mob)) {
+        mob.queueFloatingText(SMUSH_DODGE_LABEL, 'miss');
+        continue;
+      }
       if (!human.zeroDamage) {
         const isInner = dist <= innerRadius;
         const mult = isInner ? stats.damageMultiplier : stats.outerDamageMultiplier;
@@ -510,16 +525,17 @@ export function resolveKills(ctx: CombatContext): void {
     // The XP split, and only the XP split, needs somebody to have dealt damage.
     // The death itself does not: a mob finished by a burn or a poison — or one
     // the game kills outright, like the Hoarder's swarm when she drops — has an
-    // empty ledger, and bailing here took its gore, its corpse marker and its
-    // `mobKilled` event with the XP it had nobody to give.
+    // empty ledger, and bailing out here would take its gore, its corpse marker
+    // and its `mobKilled` event along with the XP it has nobody to give.
     const hasDamageLedger = totalDmg > 0;
+    // A kill already paid for once, or a body an enemy conjured, still dies,
+    // bleeds and fires `mobKilled`; it just trains and pays nothing.
+    const paysRewards = mob.paysRewards;
 
     // Non-players stay in the running for top dealer without being able to win
     // it: a mob that out-damages both crawlers — friendly fire, confusion fog —
-    // leaves the 85% share unclaimed rather than handing it to whoever came
-    // second. This is a deliberate *change*. The loop this replaced never reset
-    // `topPlayer`, so that case awarded the top share to whichever crawler
-    // happened to be seen first with the lower damage, which is arbitrary.
+    // leaves the top dealer's share unclaimed rather than handing it to
+    // whichever crawler came second, which would reward them for being out-hit.
     let topPlayer: HumanPlayer | CatPlayer | null = null;
     let maxDmg = 0;
     for (const [player, dmg] of creditedDamage) {
@@ -530,7 +546,7 @@ export function resolveKills(ctx: CombatContext): void {
     }
     const otherPlayer = topPlayer === human ? cat : human;
 
-    if (hasDamageLedger) {
+    if (hasDamageLedger && paysRewards) {
       const totalXp = mob.scaledXpValue;
       const topXp = Math.max(1, Math.round(totalXp * XP_TOP_DEALER_FRACTION));
       const shareXp = Math.max(1, totalXp - topXp);
@@ -547,9 +563,9 @@ export function resolveKills(ctx: CombatContext): void {
     // crawler XP through the credit mapping above. A kill he only contributed to
     // pays the smaller assist — see MONGO_ASSIST_XP for why contribution has to
     // pay at all.
-    if (mob.killedByDealer instanceof Mongo) {
+    if (paysRewards && mob.killedByDealer instanceof Mongo) {
       abilityManager.addKillXp('mongo');
-    } else {
+    } else if (paysRewards) {
       for (const dealer of mob.damageTakenBy.keys()) {
         if (!(dealer instanceof Mongo)) continue;
         abilityManager.addXp('mongo', MONGO_ASSIST_XP);
@@ -559,13 +575,13 @@ export function resolveKills(ctx: CombatContext): void {
 
     // Pugilism trains on knockouts, not swings — a landed punch is cheap, a
     // finished fight is not.
-    if (mob.killType === 'melee' && killer === human) {
+    if (paysRewards && mob.killType === 'melee' && killer === human) {
       human.skills.recordUse('pugilism');
     }
 
     // Magic missile kill XP + level-15 death shockwave
     if (mob.killType === 'missile' && killer === cat) {
-      abilityManager.addKillXp('magic_missile');
+      if (paysRewards) abilityManager.addKillXp('magic_missile');
 
       if (cat.getMagicMissileLevel() >= MISSILE_SLOW_BOSS_LEVEL) {
         const shockwaveRadius = TILE_SIZE * MISSILE_SHOCKWAVE_RADIUS_TILES;
@@ -588,7 +604,7 @@ export function resolveKills(ctx: CombatContext): void {
 
     // Smush kill XP + level 14 double gold
     if (mob.killType === 'smush' && killer === human) {
-      abilityManager.addKillXp('smush');
+      if (paysRewards) abilityManager.addKillXp('smush');
       const smushLevel = abilityManager.getLevel('smush');
       if (
         getSmushStats(smushLevel).doubleGoldOnKill &&
@@ -602,7 +618,7 @@ export function resolveKills(ctx: CombatContext): void {
 
     // Protective shell kill XP + level-15 chain lightning
     if (mob.killType === 'shell' && killer === human) {
-      abilityManager.addKillXp('protective_shell');
+      if (paysRewards) abilityManager.addKillXp('protective_shell');
 
       // Level-15 chain lightning: if mob died inside the active shell, queue origin
       if (

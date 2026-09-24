@@ -1,4 +1,4 @@
-import type { MercenaryTemplateId } from './mercenaryTemplates';
+import { getMercenaryTemplate, type MercenaryTemplateId } from './mercenaryTemplates';
 
 /**
  * Cross-scene state for the Desperado Club's "Meat Shields" mercenary desk.
@@ -20,6 +20,12 @@ export interface HiredMercenary {
   contractLevelId: string;
   /** Set once the hire has said hello, so walking out of a shop does not repeat it. */
   introduced: boolean;
+  /**
+   * The hire's health as of the last frame it stood, so walking through a door
+   * is not a free heal. Absent means full: a contract fresh from the desk, or
+   * one saved before health was recorded.
+   */
+  hp?: number;
 }
 
 export interface MercenaryRoster {
@@ -37,6 +43,15 @@ export interface MercenaryRoster {
    * restore reads it to refuse a contract signed on another floor.
    */
   floorLevelId: string | null;
+  /**
+   * The name of a hire that died for good and has not yet been announced.
+   *
+   * On the roster rather than the system because a death at a door happens in
+   * the scene being left, whose toast strip is torn down with it; the scene the
+   * party arrives in announces it instead. Not part of any snapshot: it is a
+   * notice waiting for a screen, not state a save describes.
+   */
+  unannouncedDeath?: string | null;
 }
 
 export function createMercenaryRoster(): MercenaryRoster {
@@ -54,6 +69,17 @@ export function createMercenaryRoster(): MercenaryRoster {
 export interface MercenaryRosterCheckpoint {
   active: HiredMercenary | null;
   lastDeceased: string | null;
+}
+
+/**
+ * The health a hire is stood up with: what it last had, held to at least one
+ * point — a hire the roster still names is alive, whatever a save caught it
+ * at — and at most its template's maximum.
+ */
+export function hirelingStartingHp(hired: HiredMercenary): number {
+  const maxHp = getMercenaryTemplate(hired.id).hp;
+  if (hired.hp === undefined) return maxHp;
+  return Math.min(maxHp, Math.max(1, Math.round(hired.hp)));
 }
 
 function copyHire(hired: HiredMercenary | null): HiredMercenary | null {

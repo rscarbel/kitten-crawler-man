@@ -4,6 +4,7 @@ import type { StatusEffect } from './StatusEffect';
 import type { SkillId, SkillState } from './SkillManager';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { ITEM_DEF, isItemId } from './ItemDefs';
+import { REVIVE_HP_FRACTION } from './reviveRules';
 import type { InventoryItem, ItemId } from './ItemDefs';
 
 /**
@@ -110,9 +111,6 @@ export interface PlayerSnapshot {
 function finiteOr(value: number | undefined, fallback: number): number {
   return value !== undefined && Number.isFinite(value) ? value : fallback;
 }
-
-/** HP a revived crawler comes back with, as a fraction of their max. */
-export const REVIVE_HP_FRACTION = 0.01;
 
 export function snapPlayer(p: Player): PlayerSnapshot {
   const baseStats: Partial<Record<StatName, number>> = {};

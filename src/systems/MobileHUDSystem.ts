@@ -41,6 +41,8 @@ const MOBILE_BTN_HEIGHT = 52;
 const MOBILE_BTN_BOTTOM_MARGIN = 12;
 const MOBILE_BTN_LEFT_MARGIN = 10;
 const MOBILE_BTN_BOTTOM_OFFSET = 8;
+/** Clear space between the Switch button and the Summon button stacked on it. */
+const MOBILE_BTN_STACK_GAP = 6;
 const MOBILE_SMALL_BTN_WIDTH = 80;
 const MOBILE_SMALL_BTN_HEIGHT = 28;
 const MOBILE_GEAR_BAG_X_OFFSET = 88;
@@ -151,6 +153,16 @@ export class MobileHUDSystem implements GameSystem {
     readonly inventoryPanel: InventoryPanel,
     readonly gearPanel: GearPanel,
   ) {}
+
+  /**
+   * Where a scene's Summon button goes on a phone: one row above Switch and the
+   * same size, the way the dungeon stacks them. Read after `renderButtons`,
+   * which places Switch.
+   */
+  get summonButtonRect(): Rect {
+    const below = this._switchBtnRect;
+    return { x: below.x, y: below.y - below.h - MOBILE_BTN_STACK_GAP, w: below.w, h: below.h };
+  }
 
   /**
    * Render the standard mobile buttons: Switch + Gear + Bag,

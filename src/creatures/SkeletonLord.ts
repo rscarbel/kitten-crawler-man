@@ -235,6 +235,11 @@ export class SkeletonLord extends Mob {
   private readonly preferredMaxPx: number;
   private readonly handsRangePx: number;
 
+  /** A named boss wherever it is spawned, not only as a bounty mark. */
+  override get countsAsBossKill(): boolean {
+    return true;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, LORD_HP, LORD_SPEED);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;

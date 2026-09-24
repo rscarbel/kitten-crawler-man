@@ -93,6 +93,11 @@ const ELITE_MARKER_CROSS_ARM = 2.5;
 export type QuestMarkerType = 'exclamation' | 'question' | 'red_x' | 'elite';
 /** Stairwell icon half-size (extra pixels beyond pxPerTile). */
 const STAIRWELL_ICON_HALF_EXTRA = 1;
+/** The escape stairwell spans two tiles each way, and its icon is drawn a little proud of them. */
+const ESCAPE_MARKER_TILES = 2;
+const ESCAPE_MARKER_HALF_EXTRA = 1;
+const ESCAPE_MARKER_PULSE_BASE = 0.75;
+const ESCAPE_MARKER_PULSE_RANGE = 0.25;
 /** Pixels above minimap to render the expand hint text. */
 const MINIMAP_HINT_OFFSET_Y = 3;
 /** Margin from the canvas edge for minimap placement (pixels). */
@@ -146,6 +151,13 @@ export class MiniMapSystem implements GameSystem {
   private _scrollTX = 0;
   private _scrollTY = 0;
   private corpseMarkers: CorpseMarker[] = [];
+  /**
+   * The doomsday escape stairwell, set by the scene each frame while the finale
+   * is live. Its own marker rather than an entry in `stairwellTiles`, which would
+   * make it a floor exit, and drawn through the fog: it is the one tile the
+   * player must be able to find from anywhere on the map.
+   */
+  escapeMarkerTile: { x: number; y: number } | null = null;
   /** Reused result set for the radar's neighbour query. */
   private readonly _radarQuery = new Set<Mob>();
   /** Tile the fog was last revealed around; TILE_NEVER_REVEALED until the first reveal. */
@@ -431,6 +443,25 @@ export class MiniMapSystem implements GameSystem {
       const sy = mmY + (st.y - viewCenterTY + halfTiles) * pxPerTile - STAIRWELL_ICON_HALF_EXTRA;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(sx, sy, pxPerTile + 2, pxPerTile + 2);
+    }
+
+    const escapeTile = this.escapeMarkerTile;
+    if (escapeTile !== null) {
+      const ex = mmX + (escapeTile.x - viewCenterTX + halfTiles) * pxPerTile;
+      const ey = mmY + (escapeTile.y - viewCenterTY + halfTiles) * pxPerTile;
+      const escapePulse =
+        ESCAPE_MARKER_PULSE_BASE +
+        ESCAPE_MARKER_PULSE_RANGE * Math.sin(frameTime * QUEST_MARKER_PULSE_SPEED);
+      ctx.save();
+      ctx.globalAlpha = escapePulse;
+      ctx.fillStyle = '#4ade80';
+      ctx.fillRect(
+        ex - ESCAPE_MARKER_HALF_EXTRA,
+        ey - ESCAPE_MARKER_HALF_EXTRA,
+        pxPerTile * ESCAPE_MARKER_TILES + ESCAPE_MARKER_HALF_EXTRA * 2,
+        pxPerTile * ESCAPE_MARKER_TILES + ESCAPE_MARKER_HALF_EXTRA * 2,
+      );
+      ctx.restore();
     }
 
     ctx.strokeStyle = '#000000';

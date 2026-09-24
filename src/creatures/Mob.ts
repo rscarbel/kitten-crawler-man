@@ -1,6 +1,7 @@
 import { Player, HP_BAR_HEIGHT, HP_BAR_Y_OFFSET } from '../Player';
 import type { DamageSource } from '../Player';
-import type { StatusEffect } from '../core/StatusEffect';
+import { FAIRY_AEGIS_STATUS, type StatusEffect } from '../core/StatusEffect';
+import { AEGIS_DAMAGE_SCALE } from '../core/statusTuning';
 import { MOB_MAX_PATH_DISTANCE_TILES, type GameMap } from '../map/GameMap';
 import { verticalCollisionOffset } from '../map/collisionAnchors';
 import type { ItemId } from '../core/ItemDefs';
@@ -8,6 +9,7 @@ import { randomInt } from '../utils';
 import { AGGRO_PERSIST_MULTIPLIER, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../core/constants';
 import { tryConsumePathfind } from './pathfindBudget';
 import { alertPackAround } from './packAlert';
+import { activeRunStats } from '../core/GameStats';
 import {
   scaledCooldownFramesForLevel,
   scaledDamageForLevel,
@@ -23,6 +25,8 @@ import { knockbackStepPx } from '../core/knockbackEase';
 import { MobTactics } from './tactics/MobTactics';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { retreatTowardHelper } from './tactics/retreat';
+import { isMarkedGround, markedGroundEscape } from './tactics/markedGround';
+import { stepAlongEscape } from '../systems/GroundHazardSource';
 import { SEPARATION_RADIUS } from '../systems/mobSeparation';
 import type { KiteAim, TacticalMove } from './tactics/tacticalFrame';
 import {
@@ -214,6 +218,14 @@ const HEALTH_BAR_VISIBLE_FRAMES = 180;
 const STATUS_TICK_HEALTH_BAR_FRAMES = 90;
 /** Frame count for damage flash. */
 const MOB_DAMAGE_FLASH_FRAMES = 8;
+
+/**
+ * How long a mob brought back where it fell takes to stand up, during which it
+ * refuses all damage and runs no AI. The same beat a summoned skeleton takes to
+ * climb out of the ground, for the same reason: a return that can be cut down
+ * before it has finished reads as never having happened.
+ */
+export const REVIVE_IN_PLACE_RISE_FRAMES = 40;
 /** Frames at which health bar starts fading out. */
 const HEALTH_BAR_FADE_FRAMES = 40;
 
@@ -434,6 +446,86 @@ export abstract class Mob extends Player {
   /** Loot generated when this mob dies; null if nothing dropped. */
   droppedLoot: LootDrop | null = null;
 
+  /**
+   * Set when something brought this mob back where it fell, so the second death
+   * pays nothing. A kill is paid for once: without this, a mob raised over and
+   * over would be an XP and loot farm.
+   */
+  wasResurrected = false;
+
+  /**
+   * Set on a mob whose kill must never pay: XP, coin or loot. For bodies that
+   * exist only because an enemy conjured them mid-fight, where the enemy can
+   * conjure more than the party could ever be meant to earn from.
+   */
+  paysNoRewards = false;
+
+  /** Whether killing this mob pays XP, coin and loot. */
+  get paysRewards(): boolean {
+    return !this.wasResurrected && !this.paysNoRewards;
+  }
+
+  private reviveRiseFramesLeft = 0;
+
+  /** True while a mob brought back by {@link reviveInPlace} is still standing up. */
+  get isReviving(): boolean {
+    return this.reviveRiseFramesLeft > 0;
+  }
+
+  /** 0 to 1 across a {@link reviveInPlace} rise, or null when none is playing. */
+  get reviveRiseProgress(): number | null {
+    if (this.reviveRiseFramesLeft <= 0) return null;
+    return 1 - this.reviveRiseFramesLeft / REVIVE_IN_PLACE_RISE_FRAMES;
+  }
+
+  /**
+   * Brings this dead mob back to life where it fell, at `hpFraction` of its
+   * max HP, already hunting the party, and never paying for a second kill.
+   *
+   * Built on {@link reviveForCheckpoint} so that every subclass's own death
+   * state — a burst animation, a phase latch — is unwound by the same override
+   * that already unwinds it for a checkpoint; only the teleport to the spawn
+   * tile is undone afterward.
+   *
+   * @param grid The mob grid, which the mob left when it died and must rejoin
+   *   to be drawn, targeted and hit again.
+   */
+  reviveInPlace(hpFraction: number, grid: SpatialGrid<Mob>): void {
+    const fellAtX = this.x;
+    const fellAtY = this.y;
+    grid.remove(this);
+    this.reviveForCheckpoint();
+    this.x = fellAtX;
+    this.y = fellAtY;
+    this.hp = Math.max(1, Math.min(this.maxHp, Math.round(this.maxHp * hpFraction)));
+    this.forceAggro = true;
+    this.wasResurrected = true;
+    // A first death nobody in the party earned leaves its roll on the corpse,
+    // and the second death, which pays nothing, must not hand it out.
+    this.droppedLoot = null;
+    this.reviveRiseFramesLeft = REVIVE_IN_PLACE_RISE_FRAMES;
+    grid.insert(this);
+  }
+
+  /**
+   * Whether every route into this mob's health is refusing damage right now:
+   * its own {@link isDamageImmune}, or a {@link reviveInPlace} rise. Public so
+   * a caster outside the class can skip a target a ward or heal would be wasted
+   * on.
+   */
+  get refusesDamage(): boolean {
+    return this.isDamageImmune || this.reviveRiseFramesLeft > 0;
+  }
+
+  /**
+   * The most HP a fairy's heal may lift this mob to. Max HP unless a phased
+   * boss overrides it, so healing can never carry a boss back up across a
+   * phase threshold the party has already fought it through.
+   */
+  get fairyHealCeiling(): number {
+    return this.maxHp;
+  }
+
   /** Coin drop range — subclasses override with their own min/max. */
   protected coinDropMin = 0;
   protected coinDropMax = 0;
@@ -516,6 +608,19 @@ export abstract class Mob extends Player {
 
   /** True for boss-tier mobs — used by DungeonScene to identify which mob belongs to which boss room. */
   isBoss = false;
+
+  /**
+   * Whether killing this counts toward the run's "bosses slain".
+   *
+   * Separate from {@link isBoss}, which commits a mob to a boss room's lock and
+   * clamp: the Lich, the spider-lab spider, the arena's Ball of Swine and the
+   * circus's Terror are bosses to the player without being room bosses, and
+   * setting the flag on them would drag them into machinery they have no room
+   * for. Each overrides this instead.
+   */
+  get countsAsBossKill(): boolean {
+    return this.isBoss;
+  }
 
   /**
    * Knee-high: a blow thrown at chest height passes over it. The crawler's
@@ -723,6 +828,40 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether this mob keeps off the damaging ground the scene's hazard owners
+   * have marked (`tactics/markedGround`): none of its own steps may enter it,
+   * and {@link stepOffMarkedGround} walks it out when it finds itself inside.
+   *
+   * The party's travelling companions only. A hostile mob standing in a
+   * telegraphed blast is part of the fight the player is reading, and its
+   * tactics already refuse marked ground on their own terms.
+   */
+  protected get avoidsMarkedGround(): boolean {
+    return this.yieldsToParty;
+  }
+
+  /**
+   * Walks one step out of marked ground, if this mob is standing on any, and
+   * returns whether it did — the caller then skips every other step it would
+   * have taken this frame. Above following, fighting and recalling alike: none
+   * of those is a reason to wait under a falling ball, and a flee that shares
+   * the frame with a follow step is two rules taking turns on the rim.
+   *
+   * A knockback owns the mob's feet until it ends (`moveWithCollision` refuses
+   * the step), so a shoved companion flees on the frame it lands.
+   */
+  protected stepOffMarkedGround(speed: number): boolean {
+    if (!this.avoidsMarkedGround) return false;
+    const escape = markedGroundEscape(this.x, this.y);
+    if (escape === null) return false;
+    stepAlongEscape(this, escape, speed, (dx, dy) => this.moveWithCollision(dx, dy));
+    this.facingX = escape.dx;
+    this.facingY = escape.dy;
+    this.isMoving = true;
+    return true;
+  }
+
+  /**
    * Whether a companion walking back to `owner` has come up against another of
    * the party standing with her — touching a crawler, or another companion
    * that travels with the party (Mongo), who is nearer the owner than it is and
@@ -780,6 +919,18 @@ export abstract class Mob extends Player {
    * closes that range before the player can answer for it.
    */
   aiHeld = false;
+
+  /**
+   * True while a scripted encounter has this mob in the room but has not begun
+   * its fight, and nothing on the party's side — a companion crawler, Mongo, a
+   * hire — may pick it out to fight.
+   *
+   * Separate from {@link aiHeld}, which only stops the mob's own AI: a staggered
+   * bounty member is held too, and striking it is what lets it loose early. A
+   * mob held for an intro card cannot answer a blow at all, so an ally going for
+   * it would be taking free kills while the player is still reading.
+   */
+  offLimitsToAllies = false;
 
   /**
    * How far this one mob's A* searches may reach, in tiles.
@@ -933,6 +1084,13 @@ export abstract class Mob extends Player {
    * now was killed after the safe room, so the kill is rewound.
    */
   aliveAtCheckpoint = false;
+
+  /**
+   * {@link wasResurrected} as it stood at the last checkpoint. A rewind puts it
+   * back rather than clearing it: a raise the checkpoint already saw has had its
+   * one paid kill, and a rewind must not hand that kill out again.
+   */
+  resurrectedAtCheckpoint = false;
 
   /**
    * When true, the AI-controlled companion will flee from this mob instead of attacking it.
@@ -1316,6 +1474,16 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Waypoints left on the cached A* route, one per tile still to walk; zero
+   * when there is no route or the mob is on its last leg. Unlike the straight
+   * distance to the goal, this falls on every step of a route that first has
+   * to lead away from the goal to get round a wall.
+   */
+  protected get astarWaypointsLeft(): number {
+    return this.astarPath.length;
+  }
+
+  /**
    * Throws away the cached route so the next AI tick searches from where the mob
    * actually stands.
    *
@@ -1657,6 +1825,27 @@ export abstract class Mob extends Player {
     // the shove was meant to give the player. Facing and attack timers are
     // untouched, so the stagger reads as a stumble, not a freeze.
     if (this.knockbackFramesRemaining > 0 && !this.knockbackStepInProgress) return;
+    // Only a step that *enters* marked ground is refused: one taken from inside
+    // it is the flee, and refusing that would pin the mob in the fire. Without
+    // the refusal the flee and the follow take turns — the flee steps it clear,
+    // the follow walks it straight back to the owner standing in the circle.
+    // A shove goes where it goes.
+    const guardsMarkedGround = this.avoidsMarkedGround && !this.knockbackStepInProgress;
+    if (guardsMarkedGround && !isMarkedGround(this.x, this.y)) {
+      const beforeX = this.x;
+      const beforeY = this.y;
+      this.stepThroughWalls(dx, dy);
+      if (isMarkedGround(this.x, this.y)) {
+        this.x = beforeX;
+        this.y = beforeY;
+      }
+      return;
+    }
+    this.stepThroughWalls(dx, dy);
+  }
+
+  /** {@link moveWithCollision} without the knockback and marked-ground rules. */
+  private stepThroughWalls(dx: number, dy: number): void {
     if (!this.map) {
       this.x += dx;
       this.y += dy;
@@ -1671,6 +1860,15 @@ export abstract class Mob extends Player {
     if (this.isWading()) {
       dx *= WADE_SPEED_FACTOR;
       dy *= WADE_SPEED_FACTOR;
+    }
+    // A chill slows a mob's own steps the way it slows a crawler's, and for the
+    // same reason as the wade it is applied here. A shove is not the mob's own
+    // step, so a knockback carries its full distance. Only the party is ever
+    // chilled, so hostile movement never passes through this factor.
+    if (!this.knockbackStepInProgress) {
+      const statusFactor = this.statusMoveFactor;
+      dx *= statusFactor;
+      dy *= statusFactor;
     }
     if (dx !== 0) {
       const nextX = this.x + dx;
@@ -1801,7 +1999,16 @@ export abstract class Mob extends Player {
    */
   private scaleIncomingDamage(amount: number): number {
     if (amount <= 0) return amount;
-    return Math.max(1, Math.round(amount * this.incomingDamageScale));
+    return Math.max(1, Math.round(amount * this.incomingDamageScale * this.statusDamageScale));
+  }
+
+  /**
+   * Damage reduction a status grants, kept apart from
+   * {@link incomingDamageScale} so a creature that overrides that for its own
+   * guard still takes the reduction on top of it.
+   */
+  get statusDamageScale(): number {
+    return this.hasStatus(FAIRY_AEGIS_STATUS) ? AEGIS_DAMAGE_SCALE : 1;
   }
 
   /**
@@ -1813,7 +2020,7 @@ export abstract class Mob extends Player {
    * player watched it apply.
    */
   override applyStatus(effect: StatusEffect): void {
-    if (this.isDamageImmune) return;
+    if (this.refusesDamage) return;
     super.applyStatus(effect);
   }
 
@@ -1850,6 +2057,20 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Counts damage toward the run's "damage dealt".
+   *
+   * Called from the two places a mob's hp is written with a dealer attached —
+   * the blow door and the applied-tick door — and every party weapon reaches
+   * one of them exactly once, so this is the one count. A hireling's blow and a
+   * summon's arrive credited to the crawler they fight for. Harm to an ally
+   * (a crawler's own dynamite catching Mongo) is not damage dealt.
+   */
+  private notePartyDamage(dealer: Player, amount: number): void {
+    if (!this.isHostile || !dealer.xpCreditTarget.isCrawler) return;
+    activeRunStats()?.recordDamageDealt(amount);
+  }
+
+  /**
    * Deal damage and attribute it to an attacker for kill-credit / XP tracking.
    * Also triggers the damage flash and shows the health bar.
    *
@@ -1865,7 +2086,7 @@ export abstract class Mob extends Player {
   ) {
     this._lastBlowWasGuarded = false;
     const striker = this._creditedStrike === null ? attacker : this._creditedStrike.striker;
-    if (this.isDamageImmune) {
+    if (this.refusesDamage) {
       this.onDamageBlocked();
       return;
     }
@@ -1879,9 +2100,9 @@ export abstract class Mob extends Player {
       if (this.tryGuardBlow(amount, attacker, striker, damageType)) return;
     }
     const scaled = this.scaleIncomingDamage(amount);
-    // Only the party's side is ever warded (a hireling's Shield on Mongo); a
-    // hostile carries none, so it skips the pass outright.
-    const unabsorbed = this.isHostile ? scaled : this.soakWithWards(scaled);
+    // Wards on either side soak a struck blow: a hireling's Shield on Mongo, or
+    // overheal on a hostile — and a shield fairy's ward stops it outright.
+    const unabsorbed = this.soakWithWards(scaled);
     if (unabsorbed <= 0 && scaled > 0) return;
     const prev = this.hp;
     this.hp = Math.max(0, this.hp - unabsorbed);
@@ -1894,6 +2115,7 @@ export abstract class Mob extends Player {
       if (damageType !== null && striker !== null) this.tactics.noteCleanHit();
       if (attacker) {
         this.damageTakenBy.set(attacker, (this.damageTakenBy.get(attacker) ?? 0) + actual);
+        this.notePartyDamage(attacker, actual);
         this.noteAttackedBy(attacker);
       }
     }
@@ -1936,6 +2158,14 @@ export abstract class Mob extends Player {
    * when its creature, spawned on a floor in its own right, could.
    */
   isSummon = false;
+
+  /**
+   * Set by the system that stages a boss's own adds — the Hoarder's roaches,
+   * the Krakaren's tentacles, the ball's Tusklings — as it spawns them. Their
+   * number and timing are the boss's script, so a necromancer standing one back
+   * up would be rewriting that fight.
+   */
+  isBossAdd = false;
 
   /**
    * Roll this mob's tactics traits from its level. Call once, at spawn, straight
@@ -2147,6 +2377,8 @@ export abstract class Mob extends Player {
     this.killedBy = credited;
     this.killedByDealer = attacker;
     this.killType = damageType;
+    this.droppedLoot = null;
+    if (!this.paysRewards) return;
     const rolled = this.rollLootDrop(credited);
     if (rolled.coins > 0 || rolled.items.length > 0) {
       this.droppedLoot = rolled;
@@ -2187,7 +2419,7 @@ export abstract class Mob extends Player {
    * `killType` consumer a case for a kill nobody aimed.
    */
   override takeDamage(amount: number, source?: DamageSource): boolean {
-    if (this.isDamageImmune) {
+    if (this.refusesDamage) {
       this.onDamageBlocked();
       return false;
     }
@@ -2207,6 +2439,7 @@ export abstract class Mob extends Player {
       this.healthBarTimer = Math.max(this.healthBarTimer, STATUS_TICK_HEALTH_BAR_FRAMES);
       if (applier !== null) {
         this.damageTakenBy.set(applier, (this.damageTakenBy.get(applier) ?? 0) + dealt);
+        this.notePartyDamage(applier, dealt);
       }
     }
     if (this.hp === 0 && prev > 0 && !this.justDied) {
@@ -2244,6 +2477,10 @@ export abstract class Mob extends Player {
   /** Extends Player.tickTimers to also decrement the health bar visibility timer. */
   tickTimers() {
     super.tickTimers();
+    if (this.reviveRiseFramesLeft > 0) {
+      this.reviveRiseFramesLeft--;
+      this.isMoving = false;
+    }
     if (this.healthBarTimer > 0) this.healthBarTimer--;
     if (this.hitSlowFrames > 0) this.hitSlowFrames--;
     this.tactics.tick();
@@ -2559,6 +2796,7 @@ export abstract class Mob extends Player {
    */
   resetToSpawn(): void {
     this.clearEncounterPhase();
+    this.reviveRiseFramesLeft = 0;
     this.x = this.spawnX;
     this.y = this.spawnY;
     this.hp = this.maxHp;
@@ -2628,8 +2866,26 @@ export abstract class Mob extends Player {
   reviveForCheckpoint(): void {
     this.hp = this.maxHp;
     this.justDied = false;
+    // A checkpoint revive undoes the kill rather than granting a second life,
+    // so the next death pays like the first.
+    this.wasResurrected = false;
     this.reacquireDisposedResources();
     this.resetToSpawn();
+  }
+
+  /**
+   * Puts a mob that was already dead at the checkpoint, then brought back by
+   * something like {@link reviveInPlace}, back to dead — as if the
+   * resurrection had never happened. The checkpoint already recorded this
+   * kill as banked, so a rewind must not hand it out a second time by leaving
+   * the mob standing.
+   */
+  undoResurrectionForCheckpoint(): void {
+    this.hp = 0;
+    this.wasResurrected = false;
+    this.reviveRiseFramesLeft = 0;
+    this.forceAggro = false;
+    this.dispose();
   }
 
   /**

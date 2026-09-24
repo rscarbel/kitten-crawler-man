@@ -434,6 +434,11 @@ export class BallOfSwine extends Mob {
   /** Frames left of the stench ring. Purely cosmetic; the damage is the system's. */
   private stenchFlash = 0;
 
+  /** The arena owns this boss rather than a boss room, so `isBoss` stays false. */
+  override get countsAsBossKill(): boolean {
+    return true;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, BOS_BASE_HP, BOS_BASE_ROLL_SPEED);
     this.isBoss = false; // managed by ArenaSystem, not BossRoomSystem
@@ -473,6 +478,17 @@ export class BallOfSwine extends Mob {
 
   get isShedding(): boolean {
     return this.hp <= this.maxHp * SHED_HP_FRACTION;
+  }
+
+  /**
+   * Shedding and frenzy are read live off HP, so a heal back across either line
+   * would switch the phase off again — the fight would visibly run backward.
+   * The ceiling is the lowest line already crossed.
+   */
+  override get fairyHealCeiling(): number {
+    if (this.isFrenzied) return Math.floor(this.maxHp * FRENZY_HP_FRACTION);
+    if (this.isShedding) return Math.floor(this.maxHp * SHED_HP_FRACTION);
+    return this.maxHp;
   }
 
   get isFrenzied(): boolean {

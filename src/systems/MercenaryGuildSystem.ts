@@ -35,6 +35,7 @@ import {
 } from '../ui/Button';
 import { fitPanel } from '../ui/panelFit';
 import { pointInRect } from '../utils';
+import { activeRunStats } from '../core/GameStats';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { RosemarieDeskIdle } from './RosemarieDeskIdle';
 
@@ -326,6 +327,7 @@ export class MercenaryGuildSystem {
       return;
     }
     player.coins -= template.price;
+    activeRunStats()?.recordHirelingHired();
     // Warmed on the signature rather than on the first frame the hire is
     // drawn: it walks out of the club already moving.
     MERCENARY_ART[template.art].prewarm();

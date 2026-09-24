@@ -65,6 +65,7 @@ import { referenceStats } from '../../src/core/referenceCrawler';
 import { ALL_STATS } from '../../src/Player';
 import { mulberry32 } from '../../src/sprites/person/rng';
 import { findNearbyWalkableTile } from '../../src/map/findWalkableTile';
+import { setViewportSize } from '../../src/core/Viewport';
 import {
   figurePrewarmDepth,
   flushFigureFrameCache,
@@ -837,6 +838,7 @@ function homecoming(
   });
   const merc = scene.system.activeMerc;
   if (merc === null) return null;
+  withoutStuckRescue(merc);
   if (rule !== undefined)
     Object.defineProperty(merc, 'restsAgainstParty', { value: () => rule(merc) });
   const { from } = shape;
@@ -974,7 +976,7 @@ function checkHomecoming(report: LifecycleGateReporter): void {
 
 /** The human waits this far off, out of the huddle, so only Mongo is in the way. */
 const MONGO_HOMECOMING_HUMAN_OFFSET_TILES = 8;
-/** Mongo starts a tile toward the hire from the cat, and settles by his own follow. */
+/** Mongo is summoned a tile toward the hire from the cat, before he is moved to its spot. */
 const MONGO_HOMECOMING_OFFSET_TILES = 1;
 
 /**
@@ -996,9 +998,17 @@ const restsAgainstCrawlersOnly: RestRule = (merc) => {
 };
 
 /**
- * The cat is the active crawler and the hire's owner; Mongo follows her on his
- * own AI and stands between her and the hire, which comes home from further
- * out on that side.
+ * The cat is the active crawler and the hire's owner; Mongo stands between her
+ * and the hire, which comes home from further out on that side.
+ *
+ * He is held on the spot the hire's own walk home would end on — its follow
+ * band's stop distance from the cat — so that spot is taken and walking on to it
+ * means walking into him. His AI is held and he is put back after every frame:
+ * he passes through the crawlers, so the hire's separation shove would
+ * otherwise slide him out of its way and into the cat, and a rule that ignores
+ * him would never be caught. The stop distance, not the start one, because a
+ * body further than {@link PARTY_HUDDLE_TILES} from the owner is not one the
+ * hire rests against at all.
  */
 function homecomingPastMongo(
   id: MercenaryTemplateId,
@@ -1026,9 +1036,22 @@ function homecomingPastMongo(
   scene.system.update(scene.ctx);
   const merc = scene.system.activeMerc;
   if (merc === null) return null;
+  withoutStuckRescue(merc);
   if (rule !== undefined)
     Object.defineProperty(merc, 'restsAgainstParty', { value: () => rule(merc) });
-  const startTiles = MONGO_HOMECOMING_OFFSET_TILES + HOMECOMING_RUN_UP_TILES;
+  const mongoTiles = merc.kit.followBand.stopTiles;
+  const mongoX = scene.cat.x + TILE_SIZE * from.x * mongoTiles;
+  const mongoY = scene.cat.y + TILE_SIZE * from.y * mongoTiles;
+  const holdMongo = (): void => {
+    const oldX = mongo.x;
+    const oldY = mongo.y;
+    mongo.x = mongoX;
+    mongo.y = mongoY;
+    scene.mobs.grid.move(mongo, oldX, oldY);
+  };
+  mongo.aiHeld = true;
+  holdMongo();
+  const startTiles = mongoTiles + HOMECOMING_RUN_UP_TILES;
   merc.x = scene.cat.x + TILE_SIZE * from.x * startTiles;
   merc.y = scene.cat.y + TILE_SIZE * from.y * startTiles;
   let nearest = Number.POSITIVE_INFINITY;
@@ -1038,6 +1061,7 @@ function homecomingPastMongo(
     // What `MongoSystem.update` hands him every frame.
     mongo.allMobs = scene.mobs.mobs;
     step(scene);
+    holdMongo();
     if (f < HOMECOMING_SETTLED_FRAME) continue;
     for (const body of [scene.cat, mongo]) nearest = Math.min(nearest, tilesBetween(merc, body));
     if (wasMoving !== null && merc.isMoving !== wasMoving) toggles++;
@@ -1336,6 +1360,17 @@ function frozen(merc: Mercenary): void {
 }
 
 /**
+ * Holds the stuck-hire catch-up off, for a check that measures walking: a hire
+ * put back beside its owner by the rescue has not got there on its own feet.
+ */
+function withoutStuckRescue(merc: Mercenary): void {
+  Object.defineProperty(merc, 'followStallFrames', {
+    get: () => 0,
+    set: () => undefined,
+  });
+}
+
+/**
  * Whether a hireling catches up with an owner who walks off with nothing
  * hostile about: inside the far edge of its follow band by the end.
  */
@@ -1347,6 +1382,7 @@ function catchesUp(id: MercenaryTemplateId, tamper?: (merc: Mercenary) => void):
   });
   const merc = scene.system.activeMerc;
   if (merc === null) return false;
+  withoutStuckRescue(merc);
   tamper?.(merc);
   placeAtTile(scene.human, FOLLOW_START_TILE + FOLLOW_WALK_TILES, SPAWN_ROOM_TILE_Y);
   placeAtTile(scene.cat, FOLLOW_START_TILE + FOLLOW_WALK_TILES, SPAWN_ROOM_TILE_Y + 1);
@@ -1960,7 +1996,17 @@ function checkSurvivability(report: LifecycleGateReporter): void {
 /** Every random draw the lifecycle checks make replays from this, so two runs print the same. */
 const LIFECYCLE_SEED = 0x11fe_c7c1;
 
+/**
+ * A desktop screen, wide enough that every room these checks build is on it at
+ * once. The follow and leash checks measure a hire walking home, and a hire the
+ * player cannot see is put back beside its owner instead — which would pass
+ * them without a step taken.
+ */
+const DESKTOP_SCREEN_W = 1920;
+const DESKTOP_SCREEN_H = 1080;
+
 export function verifyMercenaryLifecycle(report: LifecycleGateReporter): void {
+  setViewportSize(DESKTOP_SCREEN_W, DESKTOP_SCREEN_H);
   seeded(LIFECYCLE_SEED, () => {
     runLifecycleChecks(report);
   });

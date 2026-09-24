@@ -197,7 +197,8 @@ const CIRCUS_SITE_ATTEMPTS = 30;
 // Ruins ambient-mob spawn scatter
 const RUINS_SPAWN_ATTEMPTS = 220;
 const RUINS_EDGE_MARGIN = 12;
-const RUINS_CIRCUS_BUFFER = 12;
+/** Tiles of ground kept between the circus grounds' edge and any ambient spawn. */
+export const RUINS_CIRCUS_BUFFER = 12;
 /** Tiles of clear ground kept between a camp and the nearest ambient spawn. */
 const RUINS_CAMP_BUFFER = 8;
 

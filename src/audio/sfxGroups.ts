@@ -28,6 +28,45 @@ export type SfxGroup =
   | 'misc';
 
 /**
+ * Every cue a fairy, its spells or its death can raise. Fairies spawn in rooms
+ * on floors 1 and 2, across the floor-3 wilds, and beside hard-mode bosses the
+ * quest systems stage, so each of those groups carries the whole set rather
+ * than leaning on a sibling group happening to be loaded.
+ */
+const FAIRY_SFX_IDS: readonly SoundId[] = [
+  'fairy_beam_crack',
+  'fairy_charge_fizz',
+  'fairy_chill_burst',
+  'fairy_death_explosion',
+  'fairy_death_flame',
+  'fairy_death_pop',
+  'fairy_explosion',
+  'fairy_fireball_whoosh',
+  'fairy_frozen_solid',
+  'fairy_heal_bloom',
+  'fairy_heal_wave',
+  'fairy_ice_shatter',
+  'fairy_necro_wail',
+  'fairy_raise_call',
+  'fairy_resurrection_moan',
+  'fairy_shield_cast',
+  'fairy_shield_shatter',
+  'fairy_telekinetic_thrum',
+];
+
+/**
+ * The rank-and-file skeleton's own cues — its swing and its collapse — that no
+ * boot-loaded group carries. A necro fairy raises skeletons wherever it spawns,
+ * so every floor group it spawns in needs these beside the fairy's own set.
+ */
+const RAISED_SKELETON_SFX_IDS: readonly SoundId[] = [
+  'bones_rattling',
+  'slash_strike_1',
+  'slash_strike_2',
+  'slash_strike_3',
+];
+
+/**
  * Every group's membership. Ids may (and do) repeat across groups — e.g. a
  * bounty boss's attack cue is often a stand-in borrowed from a level1/level2
  * boss (see `GameLoopPhases.playMobAudioCues`), so both the level that
@@ -145,11 +184,11 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'hoarder_damage_2',
     'hoarder_damage_3',
     'hoarder_vomit',
+    'juicer_grunt',
     'juicer_throw',
     'llama_fireball',
     'llama_fireball_explosion',
     'massive_strike_with_dirt_impact',
-    'metal_winding_up',
     'rat_squeak_1',
     'rat_squeak_2',
     'rat_squeak_3',
@@ -157,6 +196,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tuskling_grunt_2',
     'tuskling_grunt_3',
     'tuskling_grunt_4',
+    ...FAIRY_SFX_IDS,
+    ...RAISED_SKELETON_SFX_IDS,
   ],
 
   /** Krakaren clone boss room, Ball of Swine, the spider lab quest, level2's llama/rat/arena. */
@@ -198,6 +239,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tuskling_grunt_2',
     'tuskling_grunt_3',
     'tuskling_grunt_4',
+    ...FAIRY_SFX_IDS,
+    ...RAISED_SKELETON_SFX_IDS,
   ],
 
   /**
@@ -205,7 +248,15 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * Mongo/mercenary escorts, and the Dark Knight's rumble (shared with
    * `murderMysteryQuest`'s tower confrontation).
    */
-  level3: ['skyfowl_1', 'skyfowl_2', 'krasue_attack', 'sword_attack_1', 'rumble'],
+  level3: [
+    'skyfowl_1',
+    'skyfowl_2',
+    'krasue_attack',
+    'sword_attack_1',
+    'rumble',
+    ...FAIRY_SFX_IDS,
+    ...RAISED_SKELETON_SFX_IDS,
+  ],
 
   /**
    * Shady's five bounty bosses (`bountyDefs.ts`/`BountySystem`, floor-3
@@ -290,6 +341,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     // otherwise light a tent full of silent fire.
     'llama_fireball',
     'llama_fireball_explosion',
+    // Heather's and Terror's hard-mode healers.
+    ...FAIRY_SFX_IDS,
   ],
 
   /**
@@ -321,6 +374,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'deep_rumbling',
     'powering_off',
     'charging_up_1',
+    // Miss Quill's and the Lich's hard-mode healers.
+    ...FAIRY_SFX_IDS,
   ],
 
   /**

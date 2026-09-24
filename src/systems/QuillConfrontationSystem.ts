@@ -29,7 +29,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
-import type { DoomsdayProgress } from '../core/DoomsdayProgress';
+import { DOOMSDAY_COUNTDOWN_MS, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { MissQuill } from '../creatures/MissQuill';
 import { Remex } from '../creatures/Remex';
@@ -52,6 +52,8 @@ import { drawOverlay, drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { questMobLevel } from './questMobLevel';
+import { spawnHardModeBossHealer } from '../levels/fairySpawner';
+import { level3 } from '../levels/level3';
 
 const SPAWN_SEARCH_RADIUS_TILES = 6;
 /**
@@ -127,13 +129,6 @@ const VICTORY_SUBTITLE_Y_OFFSET = 8;
 const BANNER_FADE_FRAMES = 60;
 const BOSS_MUSIC_FADE_IN_MS = 1500;
 const VICTORY_MUSIC_FADE_IN_MS = 2000;
-
-const SECONDS_PER_MINUTE = 60;
-const MS_PER_SECOND = 1000;
-const MS_PER_MINUTE = SECONDS_PER_MINUTE * MS_PER_SECOND;
-const CONTAINMENT_MINUTES = 7;
-/** Time to reach and contain the crystal before it levels the city. */
-const CONTAINMENT_DURATION_MS = CONTAINMENT_MINUTES * MS_PER_MINUTE;
 
 /**
  * The beat between the last culprit falling and the reveal's first line.
@@ -216,6 +211,12 @@ export class QuillConfrontationSystem implements GameSystem {
   private remex: Remex | null = null;
   private guards: Mob[] = [];
   private lich: TheLich | null = null;
+  /**
+   * The hardest difficulty's healing fairies, one per boss. Held with the rest
+   * of the room for the intro card; not culprits, so the reveal never waits on
+   * one and the Lich's fight is not won or lost by one.
+   */
+  private readonly healers: Mob[] = [];
 
   private phase: ConfrontationPhase;
   private battle: LichBattleSystem | null = null;
@@ -269,6 +270,16 @@ export class QuillConfrontationSystem implements GameSystem {
       x: centreX + LICH_OFFSET.dx,
       y: centreY + LICH_OFFSET.dy,
     };
+
+    // A countdown already running with nowhere recorded for the crystal would be
+    // a containment nobody can make: stand it where the Lich rises, as the
+    // victory scene does when Quill's position was lost.
+    if (this.doomsdayProgress.stage === 'containment') {
+      this.doomsdayProgress.crystalTile ??= {
+        x: this.lichTile.x * TILE_SIZE,
+        y: this.lichTile.y * TILE_SIZE,
+      };
+    }
 
     this.phase = phaseFor(this.progress);
     if (this.phase === 'office_scene') {
@@ -337,6 +348,7 @@ export class QuillConfrontationSystem implements GameSystem {
       if (this.remex) quill.setCapacitor(this.remex);
       this.addMob(quill);
       this.quill = quill;
+      this.keepHealer(spawnHardModeBossHealer(quill, this.map, this.addMob, level3.floorNumber));
     }
 
     for (const { dx, dy } of GUARD_OFFSETS) {
@@ -353,9 +365,13 @@ export class QuillConfrontationSystem implements GameSystem {
     }
   }
 
+  private keepHealer(healer: Mob | null): void {
+    if (healer !== null) this.healers.push(healer);
+  }
+
   /** Everything this system has put in the room and still owns. */
   private encounterMobs(): Mob[] {
-    const mobs: Mob[] = [...this.guards];
+    const mobs: Mob[] = [...this.guards, ...this.healers];
     if (this.quill !== null) mobs.push(this.quill);
     if (this.remex !== null) mobs.push(this.remex);
     if (this.lich !== null) mobs.push(this.lich);
@@ -372,12 +388,18 @@ export class QuillConfrontationSystem implements GameSystem {
    */
   private holdRoomForBanner(): void {
     this.heldForBanner = true;
-    for (const mob of this.encounterMobs()) mob.aiHeld = true;
+    for (const mob of this.encounterMobs()) {
+      mob.aiHeld = true;
+      mob.offLimitsToAllies = true;
+    }
   }
 
   private releaseRoom(): void {
     this.heldForBanner = false;
-    for (const mob of this.encounterMobs()) mob.aiHeld = false;
+    for (const mob of this.encounterMobs()) {
+      mob.aiHeld = false;
+      mob.offLimitsToAllies = false;
+    }
   }
 
   // ── The examine interaction and the reveal dialog ──────────────────────────
@@ -560,6 +582,7 @@ export class QuillConfrontationSystem implements GameSystem {
     lich.applyMobLevel(questMobLevel(LICH_LEVEL, this.partyLevel));
     applySpawnDifficulty(lich);
     this.addMob(lich);
+    this.keepHealer(spawnHardModeBossHealer(lich, this.map, this.addMob, level3.floorNumber));
     this.lich = lich;
     this.battle = new LichBattleSystem(this.map, lich, this.audio, this.companion, {
       openBark: (pages, onClosed) => this.dialog.open(pages, onClosed),
@@ -621,7 +644,7 @@ export class QuillConfrontationSystem implements GameSystem {
     // the finale must not be strandable by having died once.
     this.doomsdayProgress.crystalTile ??= { x: lich.x, y: lich.y };
     this.doomsdayProgress.stage = 'containment';
-    this.doomsdayProgress.deadlineAt = Date.now() + CONTAINMENT_DURATION_MS;
+    this.doomsdayProgress.deadlineAt = Date.now() + DOOMSDAY_COUNTDOWN_MS;
     this.audio?.play('rumble');
   }
 

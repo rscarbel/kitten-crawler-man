@@ -355,14 +355,14 @@ export class CatPlayer extends Player {
 
   /** Primary Space action: claw swipe (melee). */
   triggerAttack() {
-    if (this.attackTimer > 0) return;
+    if (this.attackTimer > 0 || !this.canAct) return;
     this.attackTimer = this.ATTACK_FRAMES;
     this.animator.play('swipe');
   }
 
   /** Hotbar-triggered magic missile fire. Returns true if a missile was actually launched. */
   triggerMissile(): boolean {
-    if (this.missileCooldown > 0) return false;
+    if (this.missileCooldown > 0 || !this.canAct) return false;
     this.fireMissile();
     this.missileCooldown = this.missileCooldownMax;
     this.animator.play('cast');
@@ -373,13 +373,19 @@ export class CatPlayer extends Player {
   pendingAutoFireSound = false;
 
   updateAttack() {
-    if (this.attackTimer > 0) this.attackTimer--;
+    // See `HumanPlayer.updateAttack`: a chilled swing can hold on its peak
+    // across a skipped frame, so the peak also asks whether it moved.
+    this.swingTimerStepped = this.actionTicksThisFrame > 0;
+    this.attackTimer = this.tickActionTimer(this.attackTimer);
     // Counted down every frame, not only on the frames a target happens to be
     // in reach. The cat kites, so she is inside her own claw range for a few
     // frames at a time; a cooldown that only ran during those would take the
     // best part of a minute of real fighting to clear ninety of them.
-    if (this.autoSwipeCooldown > 0) this.autoSwipeCooldown--;
+    this.autoSwipeCooldown = this.tickActionTimer(this.autoSwipeCooldown);
   }
+
+  /** Whether {@link updateAttack} advanced the swing timer this frame. */
+  private swingTimerStepped = true;
 
   /** Every scene ticks this each frame, which is where her pose timers live. */
   override tickTimers(): void {
@@ -391,9 +397,13 @@ export class CatPlayer extends Player {
     return this.attackTimer > 0;
   }
 
+  protected override abandonSwing(): void {
+    this.attackTimer = 0;
+  }
+
   /** Returns true on the single frame when the claw hits (peak of the swing). */
   isAttackPeak(): boolean {
-    return this.attackTimer === Math.ceil(this.ATTACK_FRAMES / 2);
+    return this.swingTimerStepped && this.attackTimer === Math.ceil(this.ATTACK_FRAMES / 2);
   }
 
   getMissiles(): Missile[] {
@@ -452,7 +462,7 @@ export class CatPlayer extends Player {
     // AI fires at most as fast as an average human could (~3 shots/sec at 60fps).
     // Cooldown is decremented by updateMissiles each frame — don't decrement here too.
     const cooldownMax = Math.max(this.missileCooldownMax, CatPlayer.AI_MIN_COOLDOWN);
-    if (this.missileCooldown !== 0) return false;
+    if (this.missileCooldown !== 0 || !this.canAct) return false;
 
     // Use the same shared cooldown as player-triggered shots
     const offset =
@@ -502,7 +512,7 @@ export class CatPlayer extends Player {
       this.facingY = dy / dist;
     }
 
-    if (dist > this.getMeleeRange() || this.autoSwipeCooldown > 0) return false;
+    if (dist > this.getMeleeRange() || this.autoSwipeCooldown > 0 || !this.canAct) return false;
     this.triggerAttack();
     this.autoSwipeCooldown = CatPlayer.AUTO_SWIPE_COOLDOWN_FRAMES;
     return true;

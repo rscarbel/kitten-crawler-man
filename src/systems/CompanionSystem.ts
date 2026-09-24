@@ -12,7 +12,12 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
-import type { GroundHazardSource } from './GroundHazardSource';
+import {
+  hazardEscapeAmong,
+  stepAlongEscape,
+  type GroundHazardSource,
+  type HazardEscape,
+} from './GroundHazardSource';
 import type { BossRoomSystem } from './BossRoomSystem';
 import { normalize, clamp, randomInt } from '../utils';
 
@@ -77,13 +82,6 @@ const HUMAN_EVADE_ANGLE_SPEED = 0.04;
 
 // Magic number constants
 const TILE_CENTER_OFFSET = 0.5;
-/** The four ways out of a wedge, for {@link CompanionSystem.unwedge}. */
-const CARDINAL_DIRECTIONS = [
-  { dx: 1, dy: 0 },
-  { dx: -1, dy: 0 },
-  { dx: 0, dy: 1 },
-  { dx: 0, dy: -1 },
-] as const;
 
 const COLLISION_BOX_RIGHT_FRACTION = 0.72;
 const COLLISION_BOX_LEFT_FRACTION = 0.28;
@@ -524,10 +522,14 @@ export class CompanionSystem implements GameSystem {
     this.tickTargetBans();
 
     const companion = human.isActive ? cat : human;
-    if (companion.isKnockedOut) {
+    // Encased in ice is handled like being knocked out: no step and no swing.
+    // A companion that walked off while its block was still drawn around it
+    // would read as a bug rather than a freeze.
+    if (companion.isKnockedOut || !companion.canAct) {
       companion.isMoving = false;
       return;
     }
+    this.companionMoveFactor = companion.statusMoveFactor;
     this.avoidGrid = mobGrid;
 
     const chaseBlocked = this.isLeashStretched(human, cat, ctx.bossRoom);
@@ -535,7 +537,16 @@ export class CompanionSystem implements GameSystem {
     this.updateFollower(human, cat, mobGrid, chaseBlocked);
   }
 
-  entityMoveWithCollision(entity: { x: number; y: number }, dx: number, dy: number): void {
+  /**
+   * The companion's walking pace this frame after its statuses, applied to
+   * every step it takes. Every route the follower AI moves by comes through
+   * {@link entityMoveWithCollision}, so scaling there slows all of them at once.
+   */
+  private companionMoveFactor = 1;
+
+  entityMoveWithCollision(entity: { x: number; y: number }, rawDx: number, rawDy: number): void {
+    const dx = rawDx * this.companionMoveFactor;
+    const dy = rawDy * this.companionMoveFactor;
     const mapPxW = (this.gameMap.structure[0]?.length ?? this.gameMap.structure.length) * TILE_SIZE;
     const mapPxH = this.gameMap.structure.length * TILE_SIZE;
     const ts = TILE_SIZE;
@@ -711,6 +722,8 @@ export class CompanionSystem implements GameSystem {
           const nearHuman = mobGrid.queryCircle(human.x, human.y, HUMAN_ENGAGE_RANGE);
           for (const mob of nearHuman) {
             if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+            // Held out of its fight by a script, it cannot answer a blow; going for it is a free kill.
+            if (mob.offLimitsToAllies) continue;
             if (this.targetBans.has(mob)) continue;
             if (isUntriggeredBossRoomMob(mob, cat)) continue;
             const dist = Math.hypot(mob.x - human.x, mob.y - human.y);
@@ -881,6 +894,7 @@ export class CompanionSystem implements GameSystem {
       // ally that has somehow come to hold a crawler as its `currentTarget` —
       // a pack shout, a defend assignment — is not a fight to answer.
       if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+      if (mob.offLimitsToAllies) continue;
       if (mob.currentTarget !== quarry) continue;
       if (this.targetBans.has(mob)) continue;
       if (isUntriggeredBossRoomMob(mob, activePlayer)) continue;
@@ -926,16 +940,17 @@ export class CompanionSystem implements GameSystem {
       companion.y + TILE_SIZE * TILE_CENTER_OFFSET - (closest.y + TILE_SIZE * TILE_CENTER_OFFSET);
     const n = normalize(dx, dy);
     const fleeSpeed = FOLLOWER_SPEED * RECALL_CHASE_SPEED;
-    const beforeX = companion.x;
-    const beforeY = companion.y;
-    this.entityMoveWithCollision(companion, n.x * fleeSpeed, n.y * fleeSpeed);
     // Straight away from a rolling threat is often straight into a wall — the
     // Ball of Swine's arena is a ring she is always backed against — and a
     // vector into a wall stays refused every frame while the threat closes.
-    const pinned = companion.x === beforeX && companion.y === beforeY;
-    if (pinned) this.unwedge(companion, { dx: n.x, dy: n.y }, fleeSpeed, true);
     // Cornered with nowhere away left to go, she stands rather than running on the spot.
-    companion.isMoving = companion.x !== beforeX || companion.y !== beforeY;
+    companion.isMoving = stepAlongEscape(
+      companion,
+      { dx: n.x, dy: n.y },
+      fleeSpeed,
+      this.moverFor(companion),
+      true,
+    );
     return true;
   }
 
@@ -966,12 +981,8 @@ export class CompanionSystem implements GameSystem {
   }
 
   /** Where a hazard source says a body at these coordinates should go, if any. */
-  private hazardEscapeAt(x: number, y: number): { dx: number; dy: number } | null {
-    for (const source of this.hazardSources) {
-      const escape = source.getHazardEscapeVector(x, y);
-      if (escape) return escape;
-    }
-    return null;
+  private hazardEscapeAt(x: number, y: number): HazardEscape | null {
+    return hazardEscapeAmong(this.hazardSources, x, y);
   }
 
   /** Whether a body is standing on ground some hazard has marked. */
@@ -984,51 +995,14 @@ export class CompanionSystem implements GameSystem {
     const escape = this.hazardEscapeAt(companion.x, companion.y);
     if (!escape) return false;
     const speed = FOLLOWER_SPEED * RECALL_CHASE_SPEED;
-    const startX = companion.x;
-    const startY = companion.y;
-    this.entityMoveWithCollision(companion, escape.dx * speed, escape.dy * speed);
-    if (companion.x === startX && companion.y === startY) {
-      this.unwedge(companion, escape, speed);
-    }
+    stepAlongEscape(companion, escape, speed, this.moverFor(companion));
     companion.isMoving = true;
     return true;
   }
 
-  /**
-   * Last resort when a companion that has been told to run cannot move at all.
-   *
-   * Being told to run and not moving is not a stalemate the next frame resolves;
-   * it is permanent. A hazard source answers on tiles, while movement is a
-   * collision box that can straddle two of them — and a shove out of a mob
-   * ignores collision entirely, so a companion can end up with part of its box
-   * inside a wall. From there every move whose leading edge stays in the wall's
-   * column is refused, including the one it is being told to make, and it stands
-   * in the fire until something kills it.
-   *
-   * Tried in order of how well they match the order it was given, so it leaves
-   * as near as the walls allow to the way it was sent. Only the four cardinals:
-   * a diagonal is what it already failed at, and both of its components are
-   * tried here anyway.
-   */
-  private unwedge(
-    companion: HumanPlayer | CatPlayer,
-    escape: { dx: number; dy: number },
-    speed: number,
-    awayOnly = false,
-  ): void {
-    const alignment = (direction: { dx: number; dy: number }): number =>
-      direction.dx * escape.dx + direction.dy * escape.dy;
-    const preferred = [...CARDINAL_DIRECTIONS].sort((a, b) => alignment(b) - alignment(a));
-    for (const direction of preferred) {
-      // Fleeing a mob rather than ground, any step with no component away from
-      // it is a step towards it — and alternating one of those with a step away
-      // is a companion shaking on the spot in a corner.
-      if (awayOnly && alignment(direction) <= 0) return;
-      const beforeX = companion.x;
-      const beforeY = companion.y;
-      this.entityMoveWithCollision(companion, direction.dx * speed, direction.dy * speed);
-      if (companion.x !== beforeX || companion.y !== beforeY) return;
-    }
+  /** The companion's own wall-collided step, in the shape {@link stepAlongEscape} drives. */
+  private moverFor(companion: HumanPlayer | CatPlayer): (dx: number, dy: number) => void {
+    return (dx, dy) => this.entityMoveWithCollision(companion, dx, dy);
   }
 
   /**

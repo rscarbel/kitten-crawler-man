@@ -172,12 +172,19 @@ function load(): SettingsData {
 class Settings {
   private data: SettingsData = load();
 
+  /**
+   * A difficulty that holds for this page load only, over the stored one.
+   * Kept apart from `data` so that saving any other setting never writes it
+   * through to storage.
+   */
+  private sessionDifficulty: Difficulty | null = null;
+
   get quality(): QualityPreset {
     return this.data.quality;
   }
 
   get difficulty(): Difficulty {
-    return this.data.difficulty;
+    return this.sessionDifficulty ?? this.data.difficulty;
   }
 
   get masterVolume(): number {
@@ -198,8 +205,18 @@ class Settings {
   }
 
   setDifficulty(difficulty: Difficulty): void {
+    this.sessionDifficulty = null;
     this.data.difficulty = difficulty;
     this.persist();
+  }
+
+  /**
+   * Plays this page load on `difficulty` without saving it, for dev routes that
+   * must not leave the player's own game changed once they are closed. A later
+   * {@link setDifficulty} is the player choosing, and replaces it.
+   */
+  setDifficultyForSession(difficulty: Difficulty): void {
+    this.sessionDifficulty = difficulty;
   }
 
   setMasterVolume(volume: number): void {

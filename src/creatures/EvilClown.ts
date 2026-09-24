@@ -202,6 +202,11 @@ export class EvilClown extends Mob {
     this.pendingVials = [];
   }
 
+  /** A named boss wherever it is spawned, not only as a bounty mark. */
+  override get countsAsBossKill(): boolean {
+    return true;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, EVIL_CLOWN_HP, EVIL_CLOWN_SPEED);
     // Warmed at construction, which is the moment `BountySystem` schedules the

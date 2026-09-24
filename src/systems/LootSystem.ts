@@ -225,9 +225,9 @@ export class LootSystem implements GameSystem {
     party: ReadonlyArray<HumanPlayer | CatPlayer>,
   ): void {
     if (loot.sharedCoins ?? false) {
-      for (const member of party) member.coins += loot.loot.coins;
+      for (const member of party) member.earnCoins(loot.loot.coins);
     } else {
-      recipient.coins += loot.loot.coins;
+      recipient.earnCoins(loot.loot.coins);
     }
     for (const it of loot.loot.items) {
       recipient.inventory.addItem(it.id, it.quantity);

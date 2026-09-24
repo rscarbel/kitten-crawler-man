@@ -339,6 +339,11 @@ export class DarkKnight extends Mob {
   private readonly aggroRangePx: number;
   private isAggro = false;
 
+  /** A named boss wherever it is spawned, not only as a bounty mark. */
+  override get countsAsBossKill(): boolean {
+    return true;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, KNIGHT_HP, KNIGHT_SPEED);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;

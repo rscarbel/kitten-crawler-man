@@ -134,6 +134,14 @@ const TROGLODYTE_DEN_POPULATION = 3;
 const TROGLODYTE_MIN_LEVEL = 6;
 const TROGLODYTE_MAX_LEVEL = 8;
 
+/**
+ * Fairies beside the wilderness's ambient enemies: one per scatter point that
+ * rolls it, and separately a healer. The town and the circus grounds never get
+ * one.
+ */
+const FLOOR3_FAIRY_SCATTER_CHANCE = { easy: 0.23, normal: 0.27, hard: 0.35 } as const;
+const FLOOR3_FAIRY_SCATTER_HEALER_CHANCE = 0.2;
+
 export const level3: LevelDef = {
   id: 'level3',
   name: 'The Overworld',
@@ -170,6 +178,12 @@ export const level3: LevelDef = {
   bossRooms: [],
   isOverworld: true,
   slingshotDrops: true,
+  fairies: {
+    roomRatesByRegion: [],
+    roomHealerChance: 0,
+    scatterChance: FLOOR3_FAIRY_SCATTER_CHANCE,
+    scatterHealerChance: FLOOR3_FAIRY_SCATTER_HEALER_CHANCE,
+  },
   campSpawns: {
     goblin: [
       {

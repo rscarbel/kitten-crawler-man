@@ -15,9 +15,9 @@ export interface MongoPetState {
   /**
    * Frames since the last recovery tick.
    *
-   * Kept here rather than on `MongoSystem` because that system only exists on
-   * the dungeon scene: parked on it, an hour spent shopping indoors healed the
-   * pet by nothing, and every floor transition threw away most of a tick.
+   * Kept here rather than on `MongoSystem` because every scene builds its own
+   * system: parked on one, every floor transition and every door threw away
+   * most of a tick.
    */
   regenFrames: number;
   /**

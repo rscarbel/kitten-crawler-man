@@ -45,6 +45,13 @@ import { MoldLion } from '../creatures/MoldLion';
 import { TerrorTheClown } from '../creatures/TerrorTheClown';
 import { CityElfCultist } from '../creatures/CityElfCultist';
 import { GoblinArcher } from '../creatures/GoblinArcher';
+import { Fairy } from '../creatures/fairies/Fairy';
+import { ShieldFairy } from '../creatures/fairies/ShieldFairy';
+import { HealingFairy } from '../creatures/fairies/HealingFairy';
+import { IceFairy } from '../creatures/fairies/IceFairy';
+import { FireFairy } from '../creatures/fairies/FireFairy';
+import { NecroFairy } from '../creatures/fairies/NecroFairy';
+import { prewarmFairy } from '../sprites/fairySprite';
 import { clamp, randomInt } from '../utils';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { TILE_SIZE } from '../core/constants';
@@ -88,7 +95,7 @@ const ROOM_BOUNDS_OFFSET = 3;
 const ROOM_FAR_EDGE_INSET = 2;
 
 /** An inclusive rectangle of candidate spawn tiles inside a room's walls. */
-interface SpawnBounds {
+export interface SpawnBounds {
   minTX: number;
   minTY: number;
   maxTX: number;
@@ -104,7 +111,10 @@ interface SpawnBounds {
  * on the spot — but a room that has nothing better is still owed its encounter,
  * so a cramped spawn beats a missing one.
  */
-function findWalkableSpawnTile(map: GameMap, bounds: SpawnBounds): { x: number; y: number } | null {
+export function findWalkableSpawnTile(
+  map: GameMap,
+  bounds: SpawnBounds,
+): { x: number; y: number } | null {
   const roomy = probeSpawnTile(
     map,
     bounds,
@@ -112,6 +122,26 @@ function findWalkableSpawnTile(map: GameMap, bounds: SpawnBounds): { x: number; 
   );
   if (roomy !== null) return roomy;
   return probeSpawnTile(map, bounds, (x, y) => map.isWalkable(x, y));
+}
+
+/**
+ * The tiles a room spawn point's occupants may be dropped on: its rectangle,
+ * inset from the walls. `x`/`y` are the room's centre tile.
+ */
+export function roomSpawnBounds(room: {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}): SpawnBounds {
+  const minTX = room.x - Math.floor(room.w / 2) + ROOM_BOUNDARY_INSET;
+  const minTY = room.y - Math.floor(room.h / 2) + ROOM_BOUNDARY_INSET;
+  return {
+    minTX,
+    minTY,
+    maxTX: minTX + room.w - ROOM_BOUNDS_OFFSET,
+    maxTY: minTY + room.h - ROOM_BOUNDS_OFFSET,
+  };
 }
 
 /**
@@ -164,7 +194,7 @@ function pickGoblinWeapon(): GoblinWeapon {
 }
 
 /** Pick a rule from a weighted list. Weights need not sum to 1. */
-function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
+export function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
   const total = rules.reduce((sum, r) => sum + r.chance, 0);
   let roll = Math.random() * total;
   for (const rule of rules) {
@@ -465,6 +495,11 @@ registerMob('skeleton_archer', (x, y) => new SkeletonArcher(x, y, TILE_SIZE));
 registerMob('skeleton_lord', (x, y) => new SkeletonLord(x, y, TILE_SIZE));
 registerMob('the_lich', (x, y) => new TheLich(x, y, TILE_SIZE));
 registerMob('goblin_archer', (x, y) => new GoblinArcher(x, y, TILE_SIZE));
+registerMob('fairy_shield', (x, y) => new ShieldFairy(x, y, TILE_SIZE));
+registerMob('fairy_healer', (x, y) => new HealingFairy(x, y, TILE_SIZE));
+registerMob('fairy_ice', (x, y) => new IceFairy(x, y, TILE_SIZE));
+registerMob('fairy_fire', (x, y) => new FireFairy(x, y, TILE_SIZE));
+registerMob('fairy_necro', (x, y) => new NecroFairy(x, y, TILE_SIZE));
 registerMob('goblin', (x, y) => {
   return new Goblin(x, y, TILE_SIZE, pickGoblinWeapon());
 });
@@ -484,6 +519,11 @@ function prewarmGoblinBand(): void {
 
 function prewarmGoblinArcher(): void {
   prewarmGoblin('bow');
+}
+
+/** Warms the one kind of fairy that arrived. */
+function prewarmSpawnedFairy(mob: Mob): void {
+  if (mob instanceof Fairy) prewarmFairy(mob.kind);
 }
 
 /** Warms the palette this particular town bird turned out to be wearing. */
@@ -520,6 +560,11 @@ const MOB_PREWARM: ReadonlyMap<string, (mob: Mob) => void> = new Map([
   ['llama', prewarmLlama],
   ['brindle_grub', prewarmBrindleGrub],
   ['sky_fowl', prewarmSpawnedSkyFowl],
+  ['fairy_shield', prewarmSpawnedFairy],
+  ['fairy_healer', prewarmSpawnedFairy],
+  ['fairy_ice', prewarmSpawnedFairy],
+  ['fairy_fire', prewarmSpawnedFairy],
+  ['fairy_necro', prewarmSpawnedFairy],
 ]);
 
 // An unknown mob type otherwise falls back to a Goblin with zero console output —
@@ -795,12 +840,9 @@ export function spawnForLevel(
         partyLevel,
         profile,
       );
-      const minTX = x - Math.floor(w / 2) + ROOM_BOUNDARY_INSET;
-      const minTY = y - Math.floor(h / 2) + ROOM_BOUNDARY_INSET;
-      const maxTX = minTX + w - ROOM_BOUNDS_OFFSET;
-      const maxTY = minTY + h - ROOM_BOUNDS_OFFSET;
+      const bounds = roomSpawnBounds({ x, y, w, h });
       const spawnInRoom = (band: MobLevelRange, type: MobSpawnRule['type']): void => {
-        const tile = findWalkableSpawnTile(map, { minTX, minTY, maxTX, maxTY });
+        const tile = findWalkableSpawnTile(map, bounds);
         if (tile === null) return;
         const mob = createMob(type, tile.x, tile.y, map);
         mob.applyMobLevel(

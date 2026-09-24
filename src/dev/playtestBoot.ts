@@ -12,6 +12,7 @@ import { SMUSH_DEF } from '../abilities/smush';
 import { MONGO_DEF } from '../abilities/mongo';
 import { getLevelDef, type LevelDef } from '../levels/index';
 import type { GameMap } from '../map/GameMap';
+import type { MobSpawnRule } from '../levels/types';
 import type { PlaytestLoadout, PlaytestPreset, PlaytestSpawn } from './playtestPresets';
 
 /**
@@ -28,6 +29,8 @@ export interface PlaytestBoot {
   catSnap: PlayerSnapshot;
   abilityManager: AbilityManager;
   spawn: PlaytestSpawn;
+  preDefeatedBossTypes: readonly MobSpawnRule['type'][];
+  doomsdayStage: PlaytestPreset['doomsdayStage'];
 }
 
 /** Tile a preset's crawlers start on before the real spawn point is resolved. */
@@ -112,6 +115,8 @@ export function buildPlaytestBoot(preset: PlaytestPreset): PlaytestBoot {
     catSnap: catSnapshotFor(preset),
     abilityManager: abilityManagerFor(preset.abilityLevels),
     spawn: preset.spawn,
+    preDefeatedBossTypes: preset.preDefeatedBossTypes ?? [],
+    doomsdayStage: preset.doomsdayStage,
   };
 }
 
@@ -187,9 +192,7 @@ export function resolvePlaytestSpawn(
     case 'mapStart':
       return null;
     case 'safeRoomBefore':
-      return (
-        gameMap.safeRooms.find((room) => room.guardsBossType === spawn.bossType)?.centre ?? null
-      );
+      return gameMap.safeRoomGuarding(spawn.bossType)?.centre ?? null;
     case 'spiderLabEntrance':
       return spiderLabApproachTile(gameMap);
     case 'questRoomEntrance':

@@ -3,7 +3,7 @@ import { platform } from '../core/Platform';
 import { viewportWidth } from '../core/Viewport';
 import type { AudioManager } from '../audio/AudioManager';
 import type { Player } from '../Player';
-import { REVIVE_HP_FRACTION } from '../core/PlayerSnapshot';
+import { REVIVE_FRAMES, REVIVE_HP_FRACTION, REVIVE_RANGE_PX } from '../core/reviveRules';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
@@ -16,15 +16,11 @@ import { drawArrowAbovePlayer } from '../ui/WorldArrow';
  * by the same 5-second stand-close everywhere.
  */
 
-/** How close the active crawler must stand to a downed teammate to revive them. */
-const REVIVE_RANGE_TILE_FRACTION = 0.8;
-export const REVIVE_RANGE_PX = TILE_SIZE * REVIVE_RANGE_TILE_FRACTION;
-/** 5 seconds @ 60fps of standing close before the teammate comes back up. */
-export const REVIVE_FRAMES = 300;
-
 const FRAMES_PER_SECOND = 60;
-/** Seconds left on the bleed-out clock at which the countdown turns red. */
+/** Seconds left on a bleed-out clock at which the countdown turns red. */
 const CRITICAL_SECONDS_LEFT = 10;
+const COUNTDOWN_COLOR = '#fbbf24';
+const COUNTDOWN_CRITICAL_COLOR = '#ef4444';
 
 const BANNER_PULSE_BASE = 0.75;
 const BANNER_PULSE_AMPLITUDE = 0.25;
@@ -39,12 +35,69 @@ const COUNTDOWN_Y_DESKTOP = 70;
 /** Width kept clear beside the minimap so the banner never slides behind it. */
 const MINIMAP_SIDEBAR_WIDTH = 16;
 
-const REVIVE_ARROW_COLOR = '#facc15';
+/** The colour of every arrow pointing at someone waiting for a revive. */
+export const REVIVE_ARROW_COLOR = '#facc15';
 const REVIVE_BAR_WIDTH = 160;
 const REVIVE_BAR_HEIGHT = 18;
 const REVIVE_BAR_Y = 96;
 const REVIVE_BAR_TEXT_SIZE = 11;
 const REVIVE_BAR_TEXT_Y_OFFSET = 3;
+const REVIVE_BAR_BORDER_COLOR = '#ffffff';
+const REVIVE_BAR_TEXT_COLOR = '#fff';
+const REVIVE_BAR_BORDER_WIDTH = 1;
+const REVIVE_BAR_RADIUS = 2;
+
+/**
+ * The slow throb every knockout warning is drawn at, as an alpha. Wall-clock
+ * driven, as a purely cosmetic pulse that must keep moving while the world is
+ * halted under a menu.
+ */
+export function knockoutPulse(): number {
+  return BANNER_PULSE_BASE + BANNER_PULSE_AMPLITUDE * Math.sin(Date.now() * BANNER_PULSE_FREQUENCY);
+}
+
+/** Whole seconds left on a bleed-out clock of `totalFrames`, `elapsedFrames` in. */
+export function knockoutSecondsLeft(totalFrames: number, elapsedFrames: number): number {
+  return Math.max(0, Math.ceil((totalFrames - elapsedFrames) / FRAMES_PER_SECOND));
+}
+
+/** Amber with time to spare, red once the clock is nearly out. */
+export function knockoutCountdownColor(secondsLeft: number): string {
+  return secondsLeft <= CRITICAL_SECONDS_LEFT ? COUNTDOWN_CRITICAL_COLOR : COUNTDOWN_COLOR;
+}
+
+/**
+ * The "REVIVING" bar, centred on `centerX` with its top at `y`, filled to
+ * `progress` (0–1). Every revive in the game draws this one bar.
+ */
+export function drawRevivingBar(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  y: number,
+  progress: number,
+  width = REVIVE_BAR_WIDTH,
+): void {
+  drawProgressBar(ctx, {
+    x: centerX - width / 2,
+    y,
+    width,
+    height: REVIVE_BAR_HEIGHT,
+    value: progress,
+    ...PROGRESS_PRESETS.stamina,
+    border: REVIVE_BAR_BORDER_COLOR,
+    borderWidth: REVIVE_BAR_BORDER_WIDTH,
+    radius: REVIVE_BAR_RADIUS,
+  });
+  drawText(ctx, 'REVIVING', {
+    x: centerX,
+    y: y + REVIVE_BAR_TEXT_Y_OFFSET,
+    align: 'center',
+    size: REVIVE_BAR_TEXT_SIZE,
+    bold: true,
+    color: REVIVE_BAR_TEXT_COLOR,
+    outline: true,
+  });
+}
 
 export interface KnockoutParty {
   /** The crawler being driven. */
@@ -124,8 +177,7 @@ export function renderKnockedOutUI(
 ): void {
   if (!inactive.isKnockedOut) return;
 
-  const t = Date.now();
-  const pulse = BANNER_PULSE_BASE + BANNER_PULSE_AMPLITUDE * Math.sin(t * BANNER_PULSE_FREQUENCY);
+  const pulse = knockoutPulse();
 
   const availW = platform.isMobile
     ? viewportWidth() - miniMapSize - MINIMAP_SIDEBAR_WIDTH
@@ -144,17 +196,14 @@ export function renderKnockedOutUI(
     width: availW - BANNER_MARGIN,
   });
 
-  const secondsLeft = Math.max(
-    0,
-    Math.ceil((KNOCKOUT_TIMEOUT_FRAMES - inactive.knockedOutFrames) / FRAMES_PER_SECOND),
-  );
+  const secondsLeft = knockoutSecondsLeft(KNOCKOUT_TIMEOUT_FRAMES, inactive.knockedOutFrames);
   drawText(ctx, `${secondsLeft}s`, {
     x: cx,
     y: platform.isMobile ? COUNTDOWN_Y_MOBILE : COUNTDOWN_Y_DESKTOP,
     align: 'center',
     ...TEXT_PRESETS.danger,
     size: COUNTDOWN_TEXT_SIZE,
-    color: secondsLeft <= CRITICAL_SECONDS_LEFT ? '#ef4444' : '#fbbf24',
+    color: knockoutCountdownColor(secondsLeft),
     outline: true,
     alpha: pulse,
   });
@@ -173,28 +222,6 @@ export function renderKnockedOutUI(
       REVIVE_ARROW_COLOR,
     );
   } else if (inactive.reviveProgress > 0) {
-    const barX = cx - REVIVE_BAR_WIDTH / 2;
-
-    drawProgressBar(ctx, {
-      x: barX,
-      y: REVIVE_BAR_Y,
-      width: REVIVE_BAR_WIDTH,
-      height: REVIVE_BAR_HEIGHT,
-      value: inactive.reviveProgress / REVIVE_FRAMES,
-      ...PROGRESS_PRESETS.stamina,
-      border: '#ffffff',
-      borderWidth: 1,
-      radius: 2,
-    });
-
-    drawText(ctx, 'REVIVING', {
-      x: cx,
-      y: REVIVE_BAR_Y + REVIVE_BAR_TEXT_Y_OFFSET,
-      align: 'center',
-      size: REVIVE_BAR_TEXT_SIZE,
-      bold: true,
-      color: '#fff',
-      outline: true,
-    });
+    drawRevivingBar(ctx, cx, REVIVE_BAR_Y, inactive.reviveProgress / REVIVE_FRAMES);
   }
 }

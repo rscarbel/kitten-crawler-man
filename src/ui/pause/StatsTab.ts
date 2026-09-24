@@ -2,7 +2,7 @@ import { displayHp } from '../../core/crawlerFormulas';
 import type { Player } from '../../Player';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
-import type { GameStats } from '../../core/GameStats';
+import { formatPlayTime, type GameStats } from '../../core/GameStats';
 import { type ButtonRect, type PauseTab } from './types';
 import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
@@ -45,7 +45,6 @@ const DIVIDER_LENGTH_REDUCTION = 40;
 const DIVIDER_Y_AFTER_HEADER = 14;
 
 const STAT_LABEL_X = 20;
-const STAT_VALUE_X = 140;
 const STAT_VALUE_SIZE = 13;
 const SECOND_STAT_Y = 24;
 const STAT_SPACING = 20;
@@ -156,35 +155,35 @@ export function renderStatsTab(
     drawDivider(ctx, { x: bx + DIVIDER_X_OFFSET, y, length: bw - DIVIDER_LENGTH_REDUCTION });
     y += DIVIDER_Y_AFTER_HEADER;
 
-    drawText(ctx, 'Total Kills:', {
-      x: bx + STAT_LABEL_X,
-      y: y - PLAYER_LABEL_Y_OFFSET,
-      bold: true,
-      size: STAT_VALUE_SIZE,
-      color: '#e2e8f0',
-    });
-    drawText(ctx, `${gameStats.totalKills}`, {
-      x: bx + STAT_VALUE_X,
-      y: y - PLAYER_LABEL_Y_OFFSET,
-      bold: true,
-      size: STAT_VALUE_SIZE,
-      color: '#fbbf24',
-    });
-    y += STAT_SPACING;
-
-    drawText(ctx, 'Potions Used:', {
-      x: bx + STAT_LABEL_X,
-      y: y - PLAYER_LABEL_Y_OFFSET,
-      bold: true,
-      size: STAT_VALUE_SIZE,
-      color: '#e2e8f0',
-    });
-    drawText(ctx, `${gameStats.potionsUsed}`, {
-      x: bx + STAT_VALUE_X,
-      y: y - PLAYER_LABEL_Y_OFFSET,
-      bold: true,
-      size: STAT_VALUE_SIZE,
-      color: '#86efac',
+    const statRows: ReadonlyArray<{ label: string; value: string; color: string }> = [
+      { label: 'Time Played:', value: formatPlayTime(gameStats.framesPlayed), color: '#e2e8f0' },
+      { label: 'Total Kills:', value: `${gameStats.totalKills}`, color: '#fbbf24' },
+      { label: 'Bosses Slain:', value: `${gameStats.bossesDefeated}`, color: '#f472b6' },
+      { label: 'Deaths:', value: `${gameStats.deaths}`, color: '#f87171' },
+      { label: 'Damage Dealt:', value: `${gameStats.damageDealt}`, color: '#fb923c' },
+      { label: 'Damage Taken:', value: `${gameStats.damageTaken}`, color: '#fca5a5' },
+      { label: 'Potions Used:', value: `${gameStats.potionsUsed}`, color: '#86efac' },
+      { label: 'Gold Earned:', value: `${gameStats.goldEarned}`, color: '#fde047' },
+      { label: 'Hirelings Hired:', value: `${gameStats.hirelingsHired}`, color: '#e2e8f0' },
+      { label: 'Hirelings Lost:', value: `${gameStats.hirelingsLost}`, color: '#94a3b8' },
+    ];
+    statRows.forEach((row, index) => {
+      if (index > 0) y += STAT_SPACING;
+      drawText(ctx, row.label, {
+        x: bx + STAT_LABEL_X,
+        y: y - PLAYER_LABEL_Y_OFFSET,
+        bold: true,
+        size: STAT_VALUE_SIZE,
+        color: '#e2e8f0',
+      });
+      drawText(ctx, row.value, {
+        x: bx + bw - STAT_LABEL_X,
+        y: y - PLAYER_LABEL_Y_OFFSET,
+        bold: true,
+        size: STAT_VALUE_SIZE,
+        color: row.color,
+        align: 'right',
+      });
     });
     y += SECOND_STAT_Y;
 

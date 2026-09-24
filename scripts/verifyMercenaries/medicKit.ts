@@ -304,6 +304,8 @@ function checkTriage(): void {
   const self = build();
   if (self !== null) {
     woundTo(self.merc, WOUNDED_HP_FRACTION);
+    // His own draught would reach him first; this measures Triage alone.
+    self.merc.survival.potionCooldownFrames = TRIAGE_WATCH_FRAMES;
     const selfHeal = watchHeal(self, self.merc, TRIAGE_WATCH_FRAMES);
     check(
       selfHeal.restored === selfHeal.expected && selfHeal.expected > 0,

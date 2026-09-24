@@ -70,6 +70,12 @@ export interface LichBattleDriver {
   drivesMovement(): boolean;
   /** Whether to draw the spent, grounded pose. */
   isDazed(): boolean;
+  /**
+   * The share of max HP a heal may lift the Lich to. The phases are driven by
+   * health, so a heal past the line of a phase already entered would put the
+   * fight's bar back where it was before a phase the party has already fought.
+   */
+  healCeilingFraction(): number;
 }
 
 /**
@@ -331,6 +337,11 @@ export class TheLich extends Mob {
   private readonly preferredMaxPx: number;
   private readonly handsRangePx: number;
 
+  /** The murder quest's final boss; its fight is scripted, not a boss room. */
+  override get countsAsBossKill(): boolean {
+    return true;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, LICH_HP, LICH_SPEED);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;
@@ -408,6 +419,11 @@ export class TheLich extends Mob {
 
   protected override get isDamageImmune(): boolean {
     return this.battleDriver?.blocksDamage() === true;
+  }
+
+  override get fairyHealCeiling(): number {
+    const fraction = this.battleDriver?.healCeilingFraction() ?? 1;
+    return Math.floor(this.maxHp * fraction);
   }
 
   protected override onDamageBlocked(): void {

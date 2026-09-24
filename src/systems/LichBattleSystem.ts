@@ -42,6 +42,7 @@ import {
   DODGE_SURVIVAL_FRAMES,
   FIREWALL_TELEGRAPH_FRAMES,
   FIREWALL_GAP_WIDTH_TILES,
+  FIREWALL_TRIGGER_HP_FRACTION,
   FirewallGapPlanner,
   gapCentreColumn,
   LichPhaseMachine,
@@ -403,6 +404,7 @@ export class LichBattleSystem implements GroundHazardSource {
       blocksDamage: () => this.blocksDamage(),
       drivesMovement: () => this.drivesMovement(),
       isDazed: () => this.isDazed(),
+      healCeilingFraction: () => this.healCeilingFraction(),
     };
     // Registration with the companion is deliberately not done here. It happens
     // from `update`, every frame, because a storey change clears the list and
@@ -501,6 +503,18 @@ export class LichBattleSystem implements GroundHazardSource {
   }
 
   // ── The creature's three questions ─────────────────────────────────────────
+
+  /**
+   * Full health while the opening is still being fought above the firewall
+   * line; that line once the fight is past it, or about to be on the next
+   * health check.
+   */
+  private healCeilingFraction(): number {
+    const aboveFirewallLine = this.lich.hp / this.lich.maxHp > FIREWALL_TRIGGER_HP_FRACTION;
+    return this.machine.phase === 'onslaught' && aboveFirewallLine
+      ? 1
+      : FIREWALL_TRIGGER_HP_FRACTION;
+  }
 
   private blocksDamage(): boolean {
     if (this.machine.phase !== 'firewall') return !this.machine.isVulnerable;
@@ -1092,6 +1106,11 @@ export class LichBattleSystem implements GroundHazardSource {
     this.scriptOwnsParty = false;
   }
 
+  /**
+   * Only the crawlers slide. A companion — Mongo, a hire — is left wherever it
+   * is standing: the firewall and the orbs damage `Player` bodies only, so a
+   * companion's position during the set piece has no effect on it.
+   */
   private partyLegsToSouthWall(ctx: SystemContext): SlideLeg[] {
     return livingCrawlers(ctx).map((crawler) => {
       const col = tileOf(crawler).col;

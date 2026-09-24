@@ -43,6 +43,13 @@ The third floor is **the Over City** — the first floor of the "Volcano" storyl
 - Carl contains the exploding crystal inside an **enchanted glass display box** and pulls it into his inventory, where it becomes the item **"Carl's Doomsday Scenario"** — a city-levelling bomb he carries for the rest of the series.
 - A secondary explosion (Remex's body) starts a ~20-minute countdown. They flee for the stairwell, **Katia** detonates pre-planted bombs, and they evacuate dozens of crawlers and thousands of NPCs down to floor 4.
 
+**As the game implements it**, the countdown is one clock with two stages: the crystal
+must be contained first, and only then does the escape stairwell south of the tower door
+become usable — stepping on it before containment shows a warning rather than doing
+anything. The stairwell itself is visible for the whole countdown, so the player always
+knows where to run. Reaching it in the escape stage ends the run: the game saves, then
+shows a summary of the run's stats.
+
 ## The Desperado Club's cast, as the game implements it
 
 The game only reaches floor 3, so every club character gets only what they have
@@ -97,6 +104,20 @@ is a greyed-out entry at the foot of the desk list, and Rosemarie says so.
 - Hirelings talk: each has lines for being hired, idling, engaging, kills, low health,
   their special, the owner or the cat getting hurt, dying, the floor ending, and being
   talked to.
+
+**Hireling survival, as the game implements it.** A hire takes only half of every blow
+(Mongo takes 0.6× on his own contract), including one-point damage-over-time ticks, which
+land at the full multiplier on average rather than being rounded away. Standing with no
+damage taken, no attack started and nothing engaged for 15 seconds snaps it back to full
+HP; below two fifths health, on a cooldown, it drinks a bottomless supply of healing
+draughts. A hire brought to 0 HP goes down instead of dying outright: untargetable and
+unharmable, it waits up to 15 seconds — paused while a crawler stands over it — for
+either crawler to revive it, the same range and channel time a knocked-out crawler is
+revived by. A revive brings it back at a sliver of its health. Leaving the scene, a
+building or a tower storey while a hire is down ends its contract for good; a body cannot
+be carried through a door. A hire and Mongo alike follow the party indoors — into every
+shop, the club, safe rooms and every tower storey, and back out — with health carried
+across on the roster.
 
 ## Supporting cast met on this floor
 

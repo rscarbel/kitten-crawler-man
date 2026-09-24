@@ -11,9 +11,17 @@
  * - The shell: a contract spawns its hireling with a hello, a contract from
  *   another floor spawns nothing, talking gets an answer but never takes a
  *   press while a fight is on, the floor ending ends the contract, and a death
- *   — run through the scene's own interception and kill resolution — ends the
- *   contract, leaves a body that fades to a terminal phase and then leaves the
- *   world, and records who died for the desk.
+ *   — run through the scene's own interception and kill resolution, the hire
+ *   going down first and left there until its revive window runs out — ends
+ *   the contract, leaves a body that fades to a terminal phase and then leaves
+ *   the world, and records who died for the desk.
+ * - How a hire stays alive — half damage, recovery, draughts, going down and
+ *   being revived, and its health across doors and saves — in
+ *   `verifyMercenaries/survival.ts`.
+ * - The club market's Stat Boost row: a purchase charges the price and books
+ *   one unit off the shared `MarketStock`; a second purchase is refused; the
+ *   sold-out state survives a checkpoint capture/restore and a save/parse
+ *   round trip.
  * - Each kit's own rules, one module per kit under `verifyMercenaries/`.
  * - What every hire shares, in `verifyMercenaries/lifecycle.ts`: spawning
  *   behind the owner, following and the leash, kill credit, friendly fire,
@@ -59,13 +67,39 @@ import { resolveKills, type CombatContext } from '../src/systems/CombatSystem';
 import { EventBus } from '../src/core/EventBus';
 import { AbilityManager } from '../src/core/AbilityManager';
 import { createMob } from '../src/levels/spawner';
+import { gameContext } from './nodeGameContext.js';
+import { ShopSystem, type ShopConfig, type ShopItem } from '../src/systems/ShopSystem';
+import {
+  STAT_BOOST_PRICE,
+  STAT_BOOST_STOCK,
+  DESPERADO_MARKET_VENDOR_ID,
+  MARKET_SHOP_CONFIG,
+  createClubMarketShop,
+} from '../src/systems/DesperadoClubSystem';
+import { CLUB_INTERIOR_W } from '../src/core/clubLayout';
+import {
+  createMarketStock,
+  captureMarketStock,
+  restoreMarketStock,
+  remainingFor,
+  type MarketStock,
+} from '../src/systems/market/MarketStock';
+import {
+  toPersistedMarketStockCheckpoint,
+  fromPersistedMarketStockCheckpoint,
+  parsePersistedMarketStockCheckpoint,
+} from '../src/core/PersistedWorldState';
+import { setViewportSize } from '../src/core/Viewport';
 import { verifyBrawlerKit } from './verifyMercenaries/brawler';
 import { verifyWaterMageKit } from './verifyMercenaries/waterMageKit';
 import { verifyLancerKit } from './verifyMercenaries/lancer';
 import { verifyMedicKit } from './verifyMercenaries/medicKit';
 import { verifyCretinGuardKit } from './verifyMercenaries/cretinGuardKit';
 import { verifyMercenaryLifecycle } from './verifyMercenaries/lifecycle';
+import { verifyHirelingSurvival } from './verifyMercenaries/survival';
+import { HIRELING_REVIVE_WINDOW_FRAMES } from '../src/creatures/mercenaries/hirelingSurvival';
 import { mulberry32 } from '../src/sprites/person/rng';
+import { getPlaytestPreset } from '../src/dev/playtestPresets';
 
 // ── Harness ────────────────────────────────────────────────────────────────
 
@@ -375,13 +409,18 @@ function deathEndsEverything(harness: ShellHarness, merc: Mercenary, frame: Deat
   merc.takeDamage(LETHAL_DAMAGE, { kind: 'status', effectType: 'burn', applier: null });
   const killed = !merc.isAlive && merc.justDied;
   frame(harness);
+  // Nobody is close enough to revive it, so it lies there until the window ends.
+  const downFirst = merc.lifePhase === 'downed' && harness.roster.active !== null;
+  for (let waited = 0; waited < HIRELING_REVIVE_WINDOW_FRAMES && merc.isDowned; waited++) {
+    frame(harness);
+  }
   const contractEnded = harness.roster.active === null;
   const recorded = harness.roster.lastDeceased === merc.displayName;
   const unlatched = !merc.justDied;
   const lastWords =
     merc.speech.current !== null || merc.specialSoundPending || merc.damageSoundPending;
   const bodyDrawn = inGrid(harness, merc);
-  const dyingFirst = merc.lifePhase === 'dying';
+  const fallenAlready = merc.lifePhase === 'corpse';
 
   let frames = 0;
   while (harness.mobs.mobs.includes(merc) && frames < CORPSE_FRAME_BUDGET) {
@@ -398,11 +437,24 @@ function deathEndsEverything(harness: ShellHarness, merc: Mercenary, frame: Deat
     unlatched &&
     lastWords &&
     bodyDrawn &&
-    dyingFirst &&
+    downFirst &&
+    fallenAlready &&
     terminal &&
     leftTheWorld &&
     harness.system.activeMerc === null
   );
+}
+
+/**
+ * Runs the frame that downs the hire and every frame of its revive window after
+ * it, with nobody close enough to revive it: the death proper happens on the
+ * last one.
+ */
+function runThroughReviveWindow(harness: ShellHarness, merc: Mercenary, frame: DeathFrame): void {
+  frame(harness);
+  for (let waited = 0; waited < HIRELING_REVIVE_WINDOW_FRAMES && merc.isDowned; waited++) {
+    frame(harness);
+  }
 }
 
 /** A hostile standing close enough that the press belongs to a fight. */
@@ -530,7 +582,7 @@ function checkShell(): void {
   const goreSystem = new BodyPartGoreSystem(goreHarness.map);
   if (goreMerc !== null) {
     goreMerc.takeDamage(LETHAL_DAMAGE, { kind: 'status', effectType: 'burn', applier: null });
-    sceneDeathFrameWithGore(goreSystem)(goreHarness);
+    runThroughReviveWindow(goreHarness, goreMerc, sceneDeathFrameWithGore(goreSystem));
   }
   check(
     goreMerc !== null && goreSystem.liveCount > 0,
@@ -548,11 +600,171 @@ function checkShell(): void {
     });
     // `checkHealth()` with no callback is exactly what clears `justDied` and
     // skips `resolveKills`'s `mobKilled` emit — nothing left to spawn rubble.
-    sceneDeathFrame(unwiredGoreHarness);
+    runThroughReviveWindow(unwiredGoreHarness, unwiredGoreMerc, sceneDeathFrame);
   }
   checkCatches(
     unwiredGoreMerc !== null && unwiredGoreSystem.liveCount > 0,
     'a golem death whose gore callback is never wired up is caught leaving no rubble',
+  );
+}
+
+// ── Club market: Stat Boost price and stock ─────────────────────────────────
+
+/**
+ * The decided values, written out independently of `STAT_BOOST_PRICE` /
+ * `STAT_BOOST_STOCK` rather than imported from them: comparing the real row
+ * to the very constants it was built from can never fail, whatever those
+ * constants say. This is what actually pins the row to 1000 coins for 1 unit.
+ */
+const DECIDED_STAT_BOOST_PRICE = 1000;
+const DECIDED_STAT_BOOST_STOCK = 1;
+
+/** Big enough that `fitPanel` never shrinks the club panel, so screen and design coordinates match. */
+const STOCK_TEST_VIEWPORT_W = 1200;
+const STOCK_TEST_VIEWPORT_H = 900;
+/** Fine enough to land inside a 76×40 Buy button without needing its private layout constants. */
+const BUTTON_SCAN_STEP_PX = 3;
+
+/** The real Stat Boost row, exactly as `DesperadoClubSystem` sells it — never a hand-built copy. */
+function realStatBoostRow(): ShopItem {
+  const row = MARKET_SHOP_CONFIG.items.find((entry) => entry.id === 'stat_boost_potion');
+  if (row === undefined) throw new Error('stat_boost_potion missing from MARKET_SHOP_CONFIG');
+  return row;
+}
+
+/**
+ * The club market config with the Stat Boost row's declared stock overridden,
+ * everything else — price, the other two rows — left exactly as the real
+ * config has it. Only the negative case below needs this; the gate itself
+ * always sells through `createClubMarketShop`, the same factory the club uses.
+ */
+function marketConfigWithStatBoostStock(stockLimit: number): ShopConfig {
+  return {
+    ...MARKET_SHOP_CONFIG,
+    items: MARKET_SHOP_CONFIG.items.map((entry) =>
+      entry.id === 'stat_boost_potion' ? { ...entry, stock: stockLimit } : entry,
+    ),
+  };
+}
+
+/** Renders the shop panel once and hunts the whole canvas for the point that fires a purchase. */
+function findBuyButton(shop: ShopSystem, buyer: HumanPlayer): { x: number; y: number } | null {
+  const ctx = gameContext(STOCK_TEST_VIEWPORT_W, STOCK_TEST_VIEWPORT_H);
+  setViewportSize(STOCK_TEST_VIEWPORT_W, STOCK_TEST_VIEWPORT_H);
+  shop.shopOpen = true;
+  shop.renderShopPanel(ctx, buyer);
+  const coinsBefore = buyer.coins;
+  for (let y = 0; y < STOCK_TEST_VIEWPORT_H; y += BUTTON_SCAN_STEP_PX) {
+    for (let x = 0; x < STOCK_TEST_VIEWPORT_W; x += BUTTON_SCAN_STEP_PX) {
+      shop.handleClick(x, y);
+      if (buyer.coins < coinsBefore) return { x, y };
+    }
+  }
+  return null;
+}
+
+/**
+ * Builds a club market shop with `buildShop`, buys the Stat Boost row (the
+ * topmost, so the button scan always finds it first) twice at the same
+ * button, and answers whether the second attempt was refused: no further
+ * coins spent and no second unit granted.
+ */
+function secondStatBoostPurchaseIsRefused(buildShop: (stock: MarketStock) => ShopSystem): boolean {
+  const stock = createMarketStock();
+  const shop = buildShop(stock);
+  const buyer = new HumanPlayer(0, 0, TILE_SIZE);
+  buyer.coins = STAT_BOOST_PRICE * 2;
+
+  const point = findBuyButton(shop, buyer);
+  if (point === null) return false;
+  const afterFirst = buyer.inventory.countOf('stat_boost_potion');
+  const coinsAfterFirst = buyer.coins;
+
+  shop.handleClick(point.x, point.y);
+  const afterSecond = buyer.inventory.countOf('stat_boost_potion');
+  const coinsAfterSecond = buyer.coins;
+
+  return afterFirst === 1 && afterSecond === 1 && coinsAfterSecond === coinsAfterFirst;
+}
+
+function checkClubStock(): void {
+  section('Club market: Stat Boost price and stock');
+
+  const item = realStatBoostRow();
+  check(
+    item.price === DECIDED_STAT_BOOST_PRICE,
+    "the club market's declared Stat Boost price is 1000",
+  );
+  check(
+    item.stock === DECIDED_STAT_BOOST_STOCK,
+    "the club market's declared Stat Boost stock is 1",
+  );
+
+  const clubStatBoostPreset = getPlaytestPreset('club-stat-boost');
+  check(
+    clubStatBoostPreset !== null &&
+      clubStatBoostPreset.human.coins === STAT_BOOST_PRICE &&
+      clubStatBoostPreset.cat.coins === STAT_BOOST_PRICE,
+    "the 'club-stat-boost' playtest preset gives both crawlers exactly the real Stat Boost price",
+  );
+
+  check(
+    secondStatBoostPurchaseIsRefused(createClubMarketShop),
+    'buying the real club market out of Stat Boost refuses a second purchase',
+  );
+  // A gate that always passes proves nothing: with the row declared with
+  // extra stock, the second purchase must go through, so the assertion above
+  // is shown catching the break rather than passing vacuously.
+  const brokenStockLimit = STAT_BOOST_STOCK + 1;
+  checkCatches(
+    secondStatBoostPurchaseIsRefused(
+      (stock) =>
+        new ShopSystem(CLUB_INTERIOR_W, marketConfigWithStatBoostStock(brokenStockLimit), {
+          stock,
+          vendorId: DESPERADO_MARKET_VENDOR_ID,
+        }),
+    ),
+    'a row declared with more than one unit of stock is caught letting a second sale through',
+  );
+
+  // Persistence: capture before the sale, sell, capture after, and prove both
+  // a checkpoint restore and a save/parse round trip land on the right side
+  // of the sale — through the same factory the club builds its market with.
+  const stock = createMarketStock();
+  const shop = createClubMarketShop(stock);
+  const buyer = new HumanPlayer(0, 0, TILE_SIZE);
+  buyer.coins = STAT_BOOST_PRICE;
+
+  const beforeSaleSnapshot = captureMarketStock(stock);
+  const point = findBuyButton(shop, buyer);
+  check(point !== null, 'the Buy button for Stat Boost is found on the panel');
+  if (point !== null) shop.handleClick(point.x, point.y);
+  const afterSaleSnapshot = captureMarketStock(stock);
+
+  restoreMarketStock(stock, beforeSaleSnapshot);
+  check(
+    remainingFor(stock, DESPERADO_MARKET_VENDOR_ID, item) === 1,
+    'restoring a pre-sale checkpoint undoes the sale (a death rewind gets the stock back)',
+  );
+
+  restoreMarketStock(stock, afterSaleSnapshot);
+  check(
+    remainingFor(stock, DESPERADO_MARKET_VENDOR_ID, item) === 0,
+    'restoring a post-sale checkpoint keeps the row sold out',
+  );
+
+  // The same validating parser a real save load runs through, not a bare cast,
+  // so this proves the sold-out state survives what the disk actually stores.
+  const jsonText = JSON.stringify(toPersistedMarketStockCheckpoint(afterSaleSnapshot));
+  const parsedJson: unknown = JSON.parse(jsonText);
+  const persistedCheckpoint = parsePersistedMarketStockCheckpoint(parsedJson);
+  check(persistedCheckpoint !== undefined, 'the market stock checkpoint parses back out of JSON');
+  if (persistedCheckpoint !== undefined) {
+    restoreMarketStock(stock, fromPersistedMarketStockCheckpoint(persistedCheckpoint));
+  }
+  check(
+    remainingFor(stock, DESPERADO_MARKET_VENDOR_ID, item) === 0,
+    'the sold-out state survives a save/parse round trip',
   );
 }
 
@@ -567,12 +779,14 @@ Math.random = mulberry32(VERIFY_SEED);
 checkTemplateTable();
 checkSave();
 checkShell();
+checkClubStock();
 verifyBrawlerKit({ section, check, checkCatches });
 failures += verifyWaterMageKit();
 verifyLancerKit({ section, check, checkCatches });
 failures += verifyMedicKit();
 verifyCretinGuardKit({ section, check, checkCatches });
 verifyMercenaryLifecycle({ section, check, checkCatches });
+verifyHirelingSurvival({ section, check, checkCatches });
 
 console.log(
   failures === 0 ? '\nverify:mercenaries passed' : `\nverify:mercenaries: ${failures} failed`,

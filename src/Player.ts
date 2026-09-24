@@ -8,7 +8,18 @@ import {
   WHETSTONE_MELEE_DAMAGE_BONUS,
   ABSORB_BREAK_LINGER_TICKS,
   isAbsorbing,
+  CHILLED_STATUS,
+  FROZEN_STATUS,
+  OVERHEAL_STATUS,
+  WARD_STATUSES,
+  CASTER_HELD_STATUSES,
+  FAIRY_WARD_STATUS,
 } from './core/StatusEffect';
+import {
+  CHILLED_ACTION_SPEED_FACTOR,
+  CHILLED_MOVE_SPEED_FACTOR,
+  FREEZE_GRACE_FRAMES,
+} from './core/statusTuning';
 import { Inventory } from './core/Inventory';
 import type { ResistanceType } from './core/ItemDefs';
 import { normalize } from './utils';
@@ -19,6 +30,7 @@ import { computeDodgeChance } from './core/dodge';
 import { xpMultiplierForPlayerLevel, type XpDiminishingTier } from './levels/xpDiminishing';
 import { crawlerMaxHp, STAT_POINTS_PER_LEVEL } from './core/crawlerFormulas';
 import { activeDifficultyProfile } from './core/difficultyProfiles';
+import { activeRunStats } from './core/GameStats';
 import {
   SkillManager,
   cockroachRechargeMs,
@@ -28,7 +40,11 @@ import {
   type CrawlerKind,
   type SkillId,
 } from './core/SkillManager';
-import type { FloatingTextRequest, FloatingTextStyle } from './core/FloatingText';
+import type {
+  FloatingTextOptions,
+  FloatingTextRequest,
+  FloatingTextStyle,
+} from './core/FloatingText';
 import { hitFlashLayer } from './core/hitFlash';
 import { drawWithSilhouetteLayers, type SilhouetteLayer } from './core/silhouetteComposite';
 import {
@@ -154,6 +170,14 @@ const DEFAULT_BASE_HP_OFFSET = 0;
 const DAMAGE_FLASH_FRAMES = 8;
 /** What floats up over a crawler when a ward takes a whole blow for her. */
 const ABSORBED_TEXT = 'ABSORBED';
+/** What floats up over a body a shield fairy's ward is keeping from all harm. */
+const INVULNERABLE_TEXT = 'Invulnerable';
+/**
+ * Least gap between two {@link INVULNERABLE_TEXT} labels over one body: a
+ * flurry of blows, or a burn ticking under the ward, would otherwise stack a
+ * column of them.
+ */
+const INVULNERABLE_TEXT_THROTTLE_FRAMES = 30;
 /**
  * How long a hit holds passive regeneration off, in frames (5 s at 60 fps).
  *
@@ -166,7 +190,8 @@ export const REGEN_SUPPRESS_FRAMES = 300;
 const LEVEL_UP_FLASH_FRAMES = 120;
 const SPEND_POINT_FLASH_FRAMES = 60;
 const XP_PER_LEVEL_MULTIPLIER = 10;
-const POTION_HEAL_FRACTION = 0.5;
+/** Share of max HP a health potion gives back — the crawlers' and the hirelings' alike. */
+export const POTION_HEAL_FRACTION = 0.5;
 /**
  * Half what a health potion gives back. The Dirty Shirley is a cocktail with a
  * drawback attached, not a medicine — matching the pub's Boozy Milk, which is
@@ -217,6 +242,17 @@ const HP_BAR_YELLOW_THRESHOLD = 0.25;
 /** Exported so a mob can size a mark against its own health bar without redrawing it. */
 export const HP_BAR_HEIGHT = 4;
 export const HP_BAR_Y_OFFSET = 7;
+
+/**
+ * The overheal segment drawn past the bar's right end. Pale gold-green so it
+ * reads as "more than full" rather than as a second, differently-hurt bar.
+ */
+const OVERHEAL_BAR_COLOR = '#d9f99d';
+const OVERHEAL_BAR_OUTLINE = '#65a30d';
+/** A darker edge above and below, so the pale fill holds against snow and sand. */
+const OVERHEAL_BAR_OUTLINE_PX = 1;
+/** An overheal worth this share of max HP draws a segment one full bar long. */
+const OVERHEAL_BAR_FULL_SHARE = 1;
 
 /**
  * How far past their tile the crawlers' own art reaches, in tiles — enough to
@@ -423,13 +459,79 @@ export abstract class Player {
   private _baseSpeedMultiplier = 1;
   /** Speed multiplier contributed by active Speed Fizz. Reset to 1 on expiry. */
   private _potionSpeedBoost = 1;
-  /** Movement speed multiplier — product of base and any active potion boost. */
+  /** Movement speed multiplier — product of base, any active potion boost, and any chill. */
   get speedMultiplier(): number {
-    return this._baseSpeedMultiplier * this._potionSpeedBoost;
+    return this._baseSpeedMultiplier * this._potionSpeedBoost * this.statusMoveFactor;
   }
   set speedMultiplier(v: number) {
     this._baseSpeedMultiplier = v;
   }
+
+  /**
+   * The share of normal walking pace a status leaves this character. Separate
+   * from {@link speedMultiplier} for the AI companion, which walks at a fixed
+   * follow speed of its own and has to be slowed by this and nothing else.
+   */
+  get statusMoveFactor(): number {
+    return this.hasStatus(CHILLED_STATUS) ? CHILLED_MOVE_SPEED_FACTOR : 1;
+  }
+
+  /**
+   * How fast swing timers and ability cooldowns run, 1 being normal. Read
+   * through {@link tickActionTimer} and {@link tickCooldown} rather than
+   * directly, because the timers are whole frames and this is a fraction.
+   */
+  get actionSpeedMultiplier(): number {
+    return this.hasStatus(CHILLED_STATUS) ? CHILLED_ACTION_SPEED_FACTOR : 1;
+  }
+
+  /**
+   * Whether this character may attack, cast, or use an item. Every entry point
+   * for those asks, for the active crawler and the AI companion alike, so an
+   * encased crawler cannot be steered into a swing by any route.
+   */
+  get canAct(): boolean {
+    return !this.hasStatus(FROZEN_STATUS);
+  }
+
+  /**
+   * Fractional progress toward the next whole action tick. A slowed timer
+   * skips a frame now and then rather than counting down in fractions, so
+   * every `timer === N` check in the game still fires exactly once.
+   */
+  private actionTickCarry = 0;
+  private _actionTicksThisFrame = 1;
+
+  /**
+   * Whole action ticks this frame: 1 normally, 0 on the frames a slowed
+   * character skips. Settled once a frame in {@link tickTimers}.
+   */
+  get actionTicksThisFrame(): number {
+    return this._actionTicksThisFrame;
+  }
+
+  /**
+   * Counts a swing or action timer down by this frame's action ticks. Use it
+   * wherever a timer that paces attacks would otherwise be decremented by one.
+   */
+  tickActionTimer(current: number): number {
+    if (current <= 0) return current;
+    return Math.max(0, current - this._actionTicksThisFrame);
+  }
+
+  private advanceActionClock(): void {
+    this.actionTickCarry += this.actionSpeedMultiplier;
+    const whole = Math.floor(this.actionTickCarry);
+    this.actionTickCarry -= whole;
+    this._actionTicksThisFrame = whole;
+  }
+
+  /**
+   * Frames left in which ice may chill but not freeze. Internal state rather
+   * than a status: it is a rule about the next hit, not something happening to
+   * the crawler, so it has no pill and no picture.
+   */
+  freezeGraceFrames = 0;
   /** The base speed multiplier before any potion boost is applied. Snapshot this (not speedMultiplier) to avoid baking an active potion boost into the restored base. */
   get baseSpeedMultiplier(): number {
     return this._baseSpeedMultiplier;
@@ -698,16 +800,20 @@ export abstract class Player {
     // game-over check nor the companion knockout path ever sees a dead crawler.
     if (remainingHp === 0 && this.tryCockroach()) {
       this.pendingDamageTaken += hpBeforeBlow - this.hp;
+      if (this.isCrawler) activeRunStats()?.recordDamageTaken(hpBeforeBlow - this.hp);
       return true;
     }
     this.hp = remainingHp;
     this.pendingDamageTaken += hpBeforeBlow - remainingHp;
+    if (this.isCrawler) activeRunStats()?.recordDamageTaken(hpBeforeBlow - remainingHp);
     return true;
   }
 
   /**
-   * Takes `amount` off every absorbing ward in turn, oldest first, and returns
-   * whatever none of them could hold. A ward drained dry stays on only for
+   * Returns what of `amount` gets past this body's wards: nothing at all while a
+   * shield fairy's ward holds it invulnerable ({@link isHeldInvulnerable}),
+   * otherwise whatever is left after taking `amount` off every absorbing ward in
+   * turn, in {@link WARD_STATUSES} order. A ward drained dry stays on only for
    * {@link ABSORB_BREAK_LINGER_TICKS}, so its picture can be seen breaking.
    *
    * Every door damage comes in by — `takeDamage` here, `Mob.takeDamageFrom` for
@@ -715,6 +821,12 @@ export abstract class Player {
    * checks and scaling and before HP is written, and bails out on a zero.
    */
   protected soakWithWards(amount: number): number {
+    if (amount > 0 && this.isHeldInvulnerable) {
+      this.queueFloatingText(INVULNERABLE_TEXT, 'block', {
+        throttleFrames: INVULNERABLE_TEXT_THROTTLE_FRAMES,
+      });
+      return 0;
+    }
     const unabsorbed = this.drainAbsorbingEffects(amount);
     if (amount > 0 && unabsorbed <= 0) this.queueFloatingText(ABSORBED_TEXT, 'block');
     return unabsorbed;
@@ -722,18 +834,44 @@ export abstract class Player {
 
   private drainAbsorbingEffects(amount: number): number {
     let left = amount;
-    for (const effect of this.statusEffects) {
-      if (left <= 0) break;
-      if (!isAbsorbing(effect)) continue;
-      const pool = effect.absorbRemaining ?? 0;
-      const soaked = Math.min(pool, left);
-      effect.absorbRemaining = pool - soaked;
-      left -= soaked;
-      if (effect.absorbRemaining <= 0) {
-        effect.ticksRemaining = Math.min(effect.ticksRemaining, ABSORB_BREAK_LINGER_TICKS);
+    for (const wardType of WARD_STATUSES) {
+      for (const effect of this.statusEffects) {
+        if (left <= 0) return left;
+        if (effect.type !== wardType || !isAbsorbing(effect)) continue;
+        const pool = effect.absorbRemaining ?? 0;
+        const soaked = Math.min(pool, left);
+        effect.absorbRemaining = pool - soaked;
+        left -= soaked;
+        if (effect.absorbRemaining <= 0) {
+          effect.ticksRemaining = Math.min(effect.ticksRemaining, ABSORB_BREAK_LINGER_TICKS);
+        }
       }
     }
     return left;
+  }
+
+  /**
+   * Strips every ward `applier` is holding on this character — the wards a
+   * caster keeps up only for as long as it lives. Returns how many were removed.
+   */
+  removeWardsAppliedBy(applier: Player): number {
+    const before = this.statusEffects.length;
+    this.statusEffects = this.statusEffects.filter(
+      (effect) => !(effect.applier === applier && CASTER_HELD_STATUSES.includes(effect.type)),
+    );
+    return before - this.statusEffects.length;
+  }
+
+  /**
+   * Whether a shield fairy's ward is keeping this body from all harm: one is on
+   * it and the fairy that laid it still lives. Checked against the fairy's life
+   * as well as the ward's presence, so a ward the fairy's death has not yet
+   * been swept off never outlives it by a frame.
+   */
+  get isHeldInvulnerable(): boolean {
+    return this.statusEffects.some(
+      (effect) => effect.type === FAIRY_WARD_STATUS && effect.applier?.isAlive === true,
+    );
   }
 
   /**
@@ -832,10 +970,23 @@ export abstract class Player {
   /**
    * Queue a world-anchored feedback label for `FloatingCombatTextSystem` to draw.
    * Bounded because scenes without that system (non-combat interiors) never drain it.
+   *
+   * With `throttleFrames`, a repeat of the same text over this body is dropped
+   * until that many frames have passed since it was last shown; the system that
+   * drains the queue owns the clock, so the throttle holds across frames.
    */
-  queueFloatingText(text: string, style: FloatingTextStyle): void {
+  queueFloatingText(
+    text: string,
+    style: FloatingTextStyle,
+    options: FloatingTextOptions = {},
+  ): void {
     if (this.pendingFloatingText.length >= MAX_PENDING_FLOATING_TEXT) return;
-    this.pendingFloatingText.push({ text, style });
+    const { throttleFrames } = options;
+    if (throttleFrames !== undefined) {
+      const alreadyQueued = this.pendingFloatingText.some((request) => request.text === text);
+      if (alreadyQueued) return;
+    }
+    this.pendingFloatingText.push({ text, style, throttleFrames });
   }
 
   /** Returns the potion cooldown in frames for the current constitution level. */
@@ -881,6 +1032,7 @@ export abstract class Player {
   usePotion(consume: () => boolean = () => this.inventory.removeOne('health_potion')): boolean {
     if (this.hp >= this.maxHp) return false;
     if (this.potionCooldownFrames > 0) return false;
+    if (!this.canAct) return false;
     if (!consume()) return false;
     this.hp = Math.min(this.maxHp, this.hp + Math.round(this.maxHp * POTION_HEAL_FRACTION));
     this.potionCooldownFrames = this.computePotionCooldown();
@@ -926,6 +1078,18 @@ export abstract class Player {
    */
   get isCrawler(): boolean {
     return false;
+  }
+
+  /**
+   * Coins this crawler has *earned* — a drop, a chest, a reward, a win. Every
+   * gain goes through here so the run's "gold earned" has one place to count
+   * it; a purchase, a refund or a stake returned writes `coins` directly,
+   * because none of those is money the run made.
+   */
+  earnCoins(amount: number): void {
+    if (amount <= 0) return;
+    this.coins += amount;
+    activeRunStats()?.recordGoldEarned(amount);
   }
 
   /**
@@ -1125,6 +1289,16 @@ export abstract class Player {
     // A constitution boon just moved max HP; without this the bar reads against
     // the old maximum until something unrelated happens to reconcile them.
     if (STAT_BOON_BONUSES.has(effect.type)) this.syncHpToMaxHp();
+    if (effect.type === FROZEN_STATUS) this.abandonSwing();
+  }
+
+  /**
+   * Drops any swing already under way. A swing's blow lands off its own timer,
+   * which the freeze merely holds, so a swing started before the ice would
+   * otherwise still land at its peak — mid-freeze, or the moment it thaws.
+   */
+  protected abandonSwing(): void {
+    // Nothing swings by default.
   }
 
   /**
@@ -1178,6 +1352,8 @@ export abstract class Player {
         this.syncHpToMaxHp();
       }
       if (justExpired && STAT_BOON_BONUSES.has(effect.type)) statBoonExpired = true;
+      if (justExpired && effect.type === FROZEN_STATUS)
+        this.freezeGraceFrames = FREEZE_GRACE_FRAMES;
       if (effect.ticksRemaining >= 0) {
         this.statusEffects[kept] = effect;
         kept++;
@@ -1225,6 +1401,7 @@ export abstract class Player {
    * Jugg Juice (which mutates maxHp) are properly reversed.
    */
   clearStatusEffects(): void {
+    this.freezeGraceFrames = 0;
     let hpMovingEffectCleared = false;
     for (const effect of this.statusEffects) {
       if (effect.type === 'speed_fizz') {
@@ -1373,13 +1550,13 @@ export abstract class Player {
   }
 
   /**
-   * Decrement a cooldown counter by one tick per frame, or by two if Cooldown Crisp is active.
+   * Decrement a cooldown counter by this frame's action ticks (see
+   * {@link actionTicksThisFrame}), doubled while Cooldown Crisp is active.
    * Use this instead of manual `counter--` wherever ability speed should affect the timer.
    */
   tickCooldown(current: number): number {
     if (current <= 0) return current;
-    const decremented = current - 1;
-    return this.abilitySpeedMultiplier > 1 && decremented > 0 ? decremented - 1 : decremented;
+    return Math.max(0, current - this._actionTicksThisFrame * this.abilitySpeedMultiplier);
   }
 
   /** Activate Speed Fizz: doubles movement speed for 25 seconds. */
@@ -1428,6 +1605,8 @@ export abstract class Player {
   }
 
   tickTimers() {
+    this.advanceActionClock();
+    if (this.freezeGraceFrames > 0) this.freezeGraceFrames--;
     // Held at the ceiling rather than counted forever: the only question anyone
     // asks of it is whether it has reached that value.
     if (this.framesSinceDamaged < REGEN_SUPPRESS_FRAMES) this.framesSinceDamaged++;
@@ -1601,6 +1780,32 @@ export abstract class Player {
           ? '#facc15'
           : '#ef4444';
     ctx.fillRect(sx, sy - HP_BAR_Y_OFFSET, Math.ceil(barW * ratio), barH);
+    this.renderOverhealSegment(ctx, sx + barW, sy - HP_BAR_Y_OFFSET, barW, barH);
+  }
+
+  /**
+   * Overheal drawn as its own segment hanging off the bar's right end, never
+   * as a longer fill: the base bar still means "share of max HP", and a bar
+   * that could run past full would stop meaning anything.
+   */
+  private renderOverhealSegment(
+    ctx: CanvasRenderingContext2D,
+    left: number,
+    top: number,
+    barW: number,
+    barH: number,
+  ): void {
+    let pool = 0;
+    for (const effect of this.statusEffects) {
+      if (effect.type === OVERHEAL_STATUS) pool += effect.absorbRemaining ?? 0;
+    }
+    if (pool <= 0 || this.maxHp <= 0) return;
+    const share = Math.min(OVERHEAL_BAR_FULL_SHARE, pool / this.maxHp);
+    const segmentW = Math.ceil((barW * share) / OVERHEAL_BAR_FULL_SHARE);
+    ctx.fillStyle = OVERHEAL_BAR_OUTLINE;
+    ctx.fillRect(left, top, segmentW, barH);
+    ctx.fillStyle = OVERHEAL_BAR_COLOR;
+    ctx.fillRect(left, top + OVERHEAL_BAR_OUTLINE_PX, segmentW, barH - OVERHEAL_BAR_OUTLINE_PX * 2);
   }
 
   /**

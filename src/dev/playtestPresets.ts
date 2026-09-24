@@ -3,6 +3,10 @@ import type { StatName } from '../Player';
 import type { SkillId } from '../core/SkillManager';
 import type { AbilityId } from '../core/AbilityManager';
 import type { MobSpawnRule } from '../levels/types';
+import type { Difficulty } from '../core/difficultyProfiles';
+import type { DoomsdayStage } from '../core/DoomsdayProgress';
+import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
+import type { CircusQuestStage } from '../core/CircusQuestProgress';
 
 /**
  * Named starting points for playtesting, each one a floor plus the party that
@@ -61,10 +65,33 @@ export interface PlaytestPreset {
   readonly description: string;
   readonly levelId: string;
   readonly spawn: PlaytestSpawn;
+  /** Applied to `Settings` before the floor is built. Omitted presets keep the player's own choice. */
+  readonly difficulty?: Difficulty;
   /** Ability levels, shared by both crawlers through one AbilityManager. */
   readonly abilityLevels: Partial<Record<AbilityId, number>>;
   readonly human: PlaytestLoadout;
   readonly cat: PlaytestLoadout;
+  /**
+   * Boss types to skip spawning entirely and mark won before the first frame —
+   * for a preset that drops the party past a gauntlet gate it never fought.
+   * Its room seals shut on skip like any other win: revealed on the minimap,
+   * no chest guard, no hard-mode healer spawned for a boss that was never there.
+   */
+  readonly preDefeatedBossTypes?: readonly MobSpawnRule['type'][];
+  /**
+   * Drops the party into the doomsday finale at this stage, with a full
+   * countdown and the Krasue Murders closed behind it at the Lich's death.
+   */
+  readonly doomsdayStage?: Extract<DoomsdayStage, 'containment' | 'escape'>;
+  /** A Meat Shields hire already under contract for this floor, standing beside the party. */
+  readonly hire?: MercenaryTemplateId;
+  /** Mongo already out beside the cat on the first frame, rather than waiting on a summon. */
+  readonly mongoOut?: boolean;
+  /**
+   * "The Show Must Go On" already at this point, with the party put down on the
+   * circus grounds instead of at `spawn`.
+   */
+  readonly circusQuest?: { readonly stage: CircusQuestStage; readonly heatherSlain: boolean };
 }
 
 const HOARDER: PlaytestPreset = {
@@ -538,6 +565,33 @@ const ANCHOR_STONE: PlaytestPreset = {
 };
 
 /**
+ * Each crawler's coins pared down to exactly one Stat Boost's price. What
+ * actually stops a second purchase is the club market's shared stock, not
+ * either wallet — the sold-out row shows up after one sale no matter which
+ * crawler is holding the controls — so this only keeps a fat purse from
+ * masking the point of the preset: a run where the row is worth watching go
+ * from "1000 coins" to sold out, not a shopping trip that happens to include it.
+ *
+ * Kept a literal rather than importing the club's own price constant: this
+ * file's imports stay type-only (see the module doc comment) so the id
+ * validator can run under Node without pulling in browser rendering code.
+ */
+const CLUB_STAT_BOOST_PRICE = 1000;
+
+/**
+ * The town with just enough gold for the club market's one-per-run Stat
+ * Boost, so buying it out and watching the row go sold out doesn't first
+ * require a supply run.
+ */
+const CLUB_STAT_BOOST: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'club-stat-boost',
+  description: 'Third floor town, coins for exactly one Stat Boost at the Desperado Club market',
+  human: { ...LEVEL3.human, coins: CLUB_STAT_BOOST_PRICE },
+  cat: { ...LEVEL3.cat, coins: CLUB_STAT_BOOST_PRICE },
+};
+
+/**
  * The nursery, on floor 1, where the defense quest now sits.
  *
  * Its own preset rather than a note to walk there from the `juicer` one: the
@@ -554,6 +608,67 @@ const NURSERY: PlaytestPreset = {
   spawn: { kind: 'questRoomEntrance' },
 };
 
+/**
+ * Floor 2, past the Krakaren, hard difficulty: the fairy encounter band the
+ * fairness doc gates against. Reuses the `krakaren` party rather than a fresh
+ * one — that gear and level is what a crawler actually has by this point in
+ * the floor, and the fairies are meant to be fought with it, not a party
+ * built to make them trivial.
+ *
+ * The Krakaren's own safe room only ever guards the room before it, so
+ * "past" it is expressed by the safe room the swine gauntlet keeps at its own
+ * gate — the nearest landmark inside the post-Krakaren region — with the
+ * Krakaren itself skipped and marked won so its room reads the same as it
+ * would to a crawler who actually beat it.
+ */
+const FAIRIES: PlaytestPreset = {
+  ...KRAKAREN,
+  id: 'fairies',
+  description: 'Floor 2, past the Krakaren, hard difficulty — the fairy encounter band',
+  spawn: { kind: 'safeRoomBefore', bossType: 'ball_of_swine' },
+  difficulty: 'hard',
+  preDefeatedBossTypes: ['krakaren_clone'],
+};
+
+/**
+ * The countdown after the Lich, with the soul crystal not yet contained: the
+ * escape stairwell by the tower door is showing and sealed, and the crystal
+ * waits on the tower's top floor. Starts in the town square.
+ */
+const DOOMSDAY_CONTAINMENT: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'doomsday-containment',
+  description: 'Third floor town, post-Lich countdown running, soul crystal not yet contained',
+  doomsdayStage: 'containment',
+};
+
+/**
+ * The town with both companions already out — Sledge under contract and Mongo
+ * at the cat's side — for walking them through shop doors, up the tower's
+ * storeys and back out again.
+ */
+const COMPANIONS_INDOORS: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'companions-indoors',
+  description: 'Third floor town, a hire under contract and Mongo out, for taking both indoors',
+  abilityLevels: { ...LEVEL3.abilityLevels, mongo: 5 },
+  hire: 'sledge',
+  mongoOut: true,
+};
+
+/**
+ * A hire under contract on the circus grounds, Heather already dead, so the
+ * next word with Signet starts the sideshow assault — for following the hire
+ * through the assault waves, into the Big Top's maze and back out.
+ */
+const CIRCUS_HIRE: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'circus-hire',
+  description: 'Circus grounds with a hire under contract, one word with Signet from the assault',
+  hire: 'sledge',
+  circusQuest: { stage: 'heather_hunt', heatherSlain: true },
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   HOARDER,
   JUICER,
@@ -566,6 +681,11 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   GEAR,
   ANCHOR_SHARDS,
   ANCHOR_STONE,
+  CLUB_STAT_BOOST,
+  FAIRIES,
+  DOOMSDAY_CONTAINMENT,
+  COMPANIONS_INDOORS,
+  CIRCUS_HIRE,
 ];
 
 export function getPlaytestPreset(id: string): PlaytestPreset | null {

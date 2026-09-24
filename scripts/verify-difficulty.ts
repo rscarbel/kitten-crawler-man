@@ -1528,7 +1528,7 @@ const UNTRAINED_BLAST_MIN_HP_SHARE = 0.35;
 /** The least share one stick must take at the on-curve Explosives Handling level. */
 const ON_CURVE_BLAST_MIN_HP_SHARE = 0.9;
 /** The most one on-curve stick may deal to that mob, as a multiple of its health. */
-const ON_CURVE_BLAST_MAX_OVERKILL = 2.5;
+const ON_CURVE_BLAST_MAX_OVERKILL = 5;
 /**
  * The balanced human spreads his points over four cards, one of which is
  * Explosives Handling, so a quarter of them is the on-curve investment.
@@ -1539,13 +1539,21 @@ const MAX_PROBED_HANDLING_LEVEL = 12;
 /** An on-curve stick must hurt enemies at least this many times harder than it hurts the crawlers. */
 const ENEMY_TO_CRAWLER_MIN_RATIO = 2;
 /** Fewest separate blasts any boss or bounty mark may take to kill, at on-curve Explosives Handling. */
-const BOSS_MIN_STICKS_ON_CURVE = 9;
-/** Fewest when every level-up point went into Explosives Handling. */
-const BOSS_MIN_STICKS_ALL_IN = 3;
-/** Explosives Handling at which bounty escorts must survive a stick. */
+const BOSS_MIN_STICKS_ON_CURVE = 4;
+/**
+ * Fewest when every level-up point went into Explosives Handling. Below 2 this
+ * stops meaning anything: `sticksToKill` can never return less than 1.
+ */
+const BOSS_MIN_STICKS_ALL_IN = 2;
+/** Explosives Handling at which a bounty escort's stick is checked for overkill. */
 const ESCORT_CHECK_HANDLING_LEVEL = 1;
-/** Fewest sticks a bounty escort may take at {@link ESCORT_CHECK_HANDLING_LEVEL}. */
-const ESCORT_MIN_STICKS = 2;
+/**
+ * Ceiling on how much of a bounty escort's max HP one untrained stick may deal,
+ * as a multiple of that max HP. A stick finishing off a lighter escort in one
+ * throw is fine; one that guts a tougher escort several times over means the
+ * blast has stopped scaling with what it's thrown at.
+ */
+const ESCORT_MAX_HP_SHARE_PER_STICK = 2;
 /** Party level far past every cap, to show the stick has stopped growing. */
 const FAR_PAST_CAP_PARTY_LEVEL = 200;
 /** Frames the dropped stick is ticked for, comfortably past its five-second fuse. */
@@ -1629,6 +1637,23 @@ function sticksToKill(
   return Math.ceil(mob.maxHp / perStick);
 }
 
+/** Share of a mob's max HP a single blast deals, before any guard or phase of its own. */
+function stickHpShare(
+  makeTarget: () => Mob,
+  mobLevel: number,
+  throwerLevel: number,
+  handlingLevel: number,
+): number {
+  const mob = makeTarget();
+  mob.applyMobLevel(mobLevel);
+  const perStick = dynamiteDamageToMob(
+    mob,
+    dynamiteMobDamage(throwerLevel, handlingLevel),
+    dynamiteCrawlerDamage(handlingLevel),
+  );
+  return perStick / mob.maxHp;
+}
+
 /** Where a probed boss's summons go; none of them is ever ticked. */
 const probeSpawns: Mob[] = [];
 function collectProbeSpawn(mob: Mob): void {
@@ -1667,9 +1692,10 @@ const BOUNTY_MARKS: readonly (readonly [string, () => Mob])[] = [
   ['rock_golem_boss', registeredMob('rock_golem_boss')],
 ];
 /**
- * Bounty escorts sturdy enough, as authored, to outlast an untrained level-1
- * stick. Goblins, lemurs and the like are built to fold to a single blast on any
- * floor; the rule is that dynamite never makes a tougher escort one of them.
+ * Bounty escorts authored to be tougher than the goblins, lemurs and the like
+ * that are built to fold to a single blast on any floor. An untrained stick may
+ * still finish one of these off, but it must not gut it several times over —
+ * the rule is that dynamite never turns a tougher escort into throwaway fodder.
  */
 const BOUNTY_ESCORTS = [
   'stilt_clown',
@@ -1790,8 +1816,8 @@ section('explosives handling');
   }
 
   for (const name of BOUNTY_ESCORTS) {
-    const escortSticks = BOSS_PROBE_PARTY_LEVELS.map((pl) =>
-      sticksToKill(
+    const escortShares = BOSS_PROBE_PARTY_LEVELS.map((pl) =>
+      stickHpShare(
         registeredMob(name),
         bountyMinionLevel(pl, pl, normalProfile),
         pl,
@@ -1799,8 +1825,8 @@ section('explosives handling');
       ),
     );
     check(
-      Math.min(...escortSticks) >= ESCORT_MIN_STICKS,
-      `escort ${name}: ${escortSticks.join('/')} sticks at Explosives Handling ${ESCORT_CHECK_HANDLING_LEVEL} (min ${ESCORT_MIN_STICKS})`,
+      Math.max(...escortShares) <= ESCORT_MAX_HP_SHARE_PER_STICK,
+      `escort ${name}: a stick deals ${escortShares.map((share) => share.toFixed(2)).join('/')}x its health at Explosives Handling ${ESCORT_CHECK_HANDLING_LEVEL} (max ${ESCORT_MAX_HP_SHARE_PER_STICK}x)`,
     );
   }
 

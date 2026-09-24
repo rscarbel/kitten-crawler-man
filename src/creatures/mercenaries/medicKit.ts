@@ -365,6 +365,9 @@ export class MedicKit implements MercenaryKit {
   clearAirborne(): void {
     this.strike.cancel();
     this.channel = null;
+    // Whatever HP it had before is no baseline for what it has now: a hire
+    // stood up by a revive would otherwise flinch at its own fall.
+    this.lastHp = null;
     this.sparkles.length = 0;
   }
 

@@ -11,7 +11,11 @@ import type { SpiderQuestCheckpoint } from '../systems/SpiderQuestSystem';
 import type { CircusQuestCheckpoint } from '../systems/CircusQuestSystem';
 import type { BountyCheckpoint } from '../systems/BountySystem';
 import type { ClubMembershipCheckpoint } from './ClubMembership';
-import type { HiredMercenary, MercenaryRosterCheckpoint } from './MercenaryRoster';
+import {
+  hirelingStartingHp,
+  type HiredMercenary,
+  type MercenaryRosterCheckpoint,
+} from './MercenaryRoster';
 import type { MongoPetStateCheckpoint } from './MongoPetState';
 import type { TownMemoryCheckpoint } from './TownMemory';
 import type { JournalProgressCheckpoint } from './JournalProgress';
@@ -31,6 +35,7 @@ import type { LifeMachine } from '../systems/SpiderQuestSystem';
 import { allResidents } from '../systems/townResidents';
 import { MERCENARY_TEMPLATE_IDS } from './mercenaryTemplates';
 import { isRecord } from './guards';
+import { parsePersistedDoomsday, type PersistedDoomsdayProgress } from './DoomsdayProgress';
 import {
   debriefBossType,
   type DebriefMemory,
@@ -75,6 +80,11 @@ export interface PersistedWorldState {
    * without it just costs a repeated System notice, not a failed load.
    */
   tacticsNoticesSeen?: readonly TacticsTrait[];
+  /**
+   * The doomsday finale's stage and the time left on its countdown. Optional:
+   * a save without it loads as a finale that has not started.
+   */
+  doomsday?: PersistedDoomsdayProgress;
 
   krakarenKilled: boolean;
   krakarenBossRoomIdx: number;
@@ -942,7 +952,7 @@ function parsePersistedBountyCheckpoint(value: unknown): PersistedBountyCheckpoi
   };
 }
 
-function parsePersistedMarketStockCheckpoint(
+export function parsePersistedMarketStockCheckpoint(
   value: unknown,
 ): PersistedMarketStockCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
@@ -1023,11 +1033,14 @@ function parseClubMembershipCheckpoint(value: unknown): ClubMembershipCheckpoint
  */
 function parseHiredMercenary(value: unknown): HiredMercenary | null {
   if (!isRecord(value)) return null;
-  const { id, name, contractLevelId, introduced } = value;
+  const { id, name, contractLevelId, introduced, hp } = value;
   const parsedId = stringUnion(id, MERCENARY_TEMPLATE_IDS);
   if (parsedId === undefined || !isString(name) || !isString(contractLevelId)) return null;
   if (!isBoolean(introduced)) return null;
-  return { id: parsedId, name, contractLevelId, introduced };
+  const hire: HiredMercenary = { id: parsedId, name, contractLevelId, introduced };
+  // A missing or unreadable health is a hire at full health, not a lost hire.
+  if (isNumber(hp)) hire.hp = hirelingStartingHp({ ...hire, hp });
+  return hire;
 }
 
 export function parseMercenaryRosterCheckpoint(
@@ -1264,6 +1277,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const mongoPetState = parseMongoPetStateCheckpoint(value.mongoPetState);
   const mordecaiDebrief = parseMordecaiDebriefCheckpoint(value.mordecaiDebrief);
   const tacticsNoticesSeen = parseTacticsNoticesSeen(value.tacticsNoticesSeen);
+  const doomsday = parsePersistedDoomsday(value.doomsday);
   const { krakarenKilled, krakarenBossRoomIdx, juicerKilled, juicerBossRoomIdx } = value;
 
   if (
@@ -1314,6 +1328,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     mongoPetState,
     mordecaiDebrief,
     tacticsNoticesSeen,
+    doomsday,
     krakarenKilled,
     krakarenBossRoomIdx,
     juicerKilled,

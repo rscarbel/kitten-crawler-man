@@ -647,6 +647,9 @@ function checkReckless(report: BrawlerGateReporter): void {
   const hurtFight = (hpFraction: number): FightRecord | null =>
     sparWith(DUMMY_MAX_HP, DUMMY_MAX_HP, FIGHT_FRAMES, (harness) => {
       harness.merc.hp = Math.ceil(harness.merc.maxHp * hpFraction);
+      // His own draught would lift him clear of low health on the first frame;
+      // this measures how he fights while still down there.
+      harness.merc.survival.potionCooldownFrames = FIGHT_FRAMES;
     });
   const lowHpLines = MAXX_VOICE.lines.low_hp ?? [];
   const saysLowHp = (record: FightRecord | null): boolean =>

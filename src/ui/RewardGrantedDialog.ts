@@ -61,12 +61,26 @@ export class RewardGrantedDialog {
   private iconPulse = 0;
   private okBtnRect = { x: 0, y: 0, w: 0, h: 0 };
   private cachedDescLines: string[] | null = null;
+  private drainedCallbacks: Array<() => void> = [];
 
   audio: AudioManager | null = null;
 
   /** Returns true while an announcement animation is visible (game should pause). */
   get isShowing(): boolean {
     return this.phase !== 'idle';
+  }
+
+  /**
+   * Runs `callback` once, when the last queued reward has been dismissed — or at
+   * once if nothing is showing. For a follow-up that must not open underneath a
+   * reward the player has not yet read.
+   */
+  afterQueueDrains(callback: () => void): void {
+    if (!this.isShowing) {
+      callback();
+      return;
+    }
+    this.drainedCallbacks.push(callback);
   }
 
   /** Push a new reward onto the queue. */
@@ -80,6 +94,9 @@ export class RewardGrantedDialog {
     if (!next) {
       this.phase = 'idle';
       this.current = null;
+      const drained = this.drainedCallbacks;
+      this.drainedCallbacks = [];
+      for (const callback of drained) callback();
       return;
     }
     this.current = next;

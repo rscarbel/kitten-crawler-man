@@ -298,6 +298,9 @@ export class LancerKit extends BasicMeleeKit {
 
   override clearAirborne(): void {
     this.charge = null;
+    // Whatever HP it had before is no baseline for what it has now: a hire
+    // stood up by a revive would otherwise flinch at its own fall.
+    this.lastHp = null;
     this.plannedLane = null;
     this.thrustVictim = null;
     this.saluteTick = null;

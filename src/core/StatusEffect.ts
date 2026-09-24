@@ -1,4 +1,5 @@
 import type { Player, StatName } from '../Player';
+import { CHILLED_FRAMES, FROZEN_FRAMES } from './statusTuning';
 
 /**
  * A status effect applied to a Player (e.g. Burn, Frozen, Paralyzed).
@@ -38,6 +39,89 @@ export interface StatusEffect {
 
 /** The status every damage-absorbing ward is filed under. */
 export const SHIELD_STATUS = 'shield';
+
+/** A shield fairy's ward, which makes its carrier invulnerable; see {@link makeFairyWard}. */
+export const FAIRY_WARD_STATUS = 'fairy_ward';
+
+/** Surplus health from a healing wave, held as a decaying ward; see {@link makeOverheal}. */
+export const OVERHEAL_STATUS = 'overheal';
+
+/** Halved incoming damage; see {@link makeFairyAegis}. */
+export const FAIRY_AEGIS_STATUS = 'fairy_aegis';
+
+/** Slowed walking and slowed swings; see {@link makeChilled}. */
+export const CHILLED_STATUS = 'chilled';
+
+/** Encased in ice: no walking, attacking, casting or item use; see {@link makeFrozen}. */
+export const FROZEN_STATUS = 'frozen';
+
+/**
+ * Every status that carries an absorb pool, in the order a blow drains them.
+ *
+ * Overheal goes first because it decays on its own clock whatever happens, so
+ * spending it before anything else wastes the least.
+ */
+export const WARD_STATUSES: ReadonlyArray<string> = [OVERHEAL_STATUS, SHIELD_STATUS];
+
+/**
+ * Every status a caster keeps up only while it lives, stripped together by
+ * `removeWardsAppliedBy` on its death.
+ */
+export const CASTER_HELD_STATUSES: ReadonlyArray<string> = [...WARD_STATUSES, FAIRY_WARD_STATUS];
+
+/**
+ * Long enough to outlast any fight. A fairy's ward has no clock of its own: it
+ * ends only when the fairy holding it dies and strips it.
+ */
+const FAIRY_WARD_TICKS = 999999;
+
+/**
+ * A shield fairy's ward: its carrier takes no damage from any source while
+ * `applier`, the fairy, lives. Nothing wears it down, so the only answer is the
+ * fairy — and its death strips exactly the wards it was holding up.
+ */
+export function makeFairyWard(applier: Player): StatusEffect {
+  return {
+    type: FAIRY_WARD_STATUS,
+    ticksRemaining: FAIRY_WARD_TICKS,
+    totalTicks: FAIRY_WARD_TICKS,
+    applier,
+  };
+}
+
+/**
+ * Surplus health beyond max HP, held as a ward that absorbs `amount` of damage
+ * and then decays after `ticks` whether spent or not. A ward rather than extra
+ * HP so the health bar never has to show more than full.
+ */
+export function makeOverheal(amount: number, ticks: number): StatusEffect {
+  return {
+    type: OVERHEAL_STATUS,
+    ticksRemaining: ticks,
+    totalTicks: ticks,
+    applier: null,
+    absorbRemaining: amount,
+    absorbTotal: amount,
+  };
+}
+
+/**
+ * Halves every blow the carrier takes for `ticks`. Re-applied, it replaces
+ * rather than stacks, like every status.
+ */
+export function makeFairyAegis(ticks: number): StatusEffect {
+  return { type: FAIRY_AEGIS_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+}
+
+/** Chilled for `ticks`. Apply through `applyIceHit`/`applyChillOnly` so freezes follow their rules. */
+export function makeChilled(ticks: number = CHILLED_FRAMES): StatusEffect {
+  return { type: CHILLED_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+}
+
+/** Frozen for `ticks`. Apply through `applyIceHit` so the grace window that follows is honoured. */
+export function makeFrozen(ticks: number = FROZEN_FRAMES): StatusEffect {
+  return { type: FROZEN_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+}
 
 /**
  * How long a broken ward stays on the character after its pool runs dry: long
@@ -98,6 +182,8 @@ export const AILMENT_STATUSES: ReadonlyArray<string> = [
   'stuck',
   'stun',
   'drunk',
+  CHILLED_STATUS,
+  FROZEN_STATUS,
 ];
 
 // Preset constructors

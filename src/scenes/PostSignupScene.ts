@@ -5,6 +5,8 @@ import { DungeonScene } from './DungeonScene';
 import type { DungeonSceneOptions } from './DungeonScene';
 import { TutorialController } from '../systems/TutorialController';
 import { getLevelDef } from '../levels';
+import { difficultyStats } from '../core/DifficultyStats';
+import { bindRunStats } from '../core/GameStats';
 import { drawText } from '../ui/TextBox';
 import { drawOverlay } from '../ui/Box';
 import type { ButtonResult } from '../ui/Button';
@@ -181,7 +183,19 @@ export class PostSignupScene extends Scene {
     }
   }
 
+  /**
+   * A new game is a new run, whichever way the player reached this menu. Reset
+   * Game clears the run-scoped counters before it gets here, but the finished
+   * run's Main Menu does not — it keeps the save to continue — so a new game
+   * started from it has to clear them itself.
+   */
+  private beginNewRun(): void {
+    difficultyStats.beginRun();
+    bindRunStats(null);
+  }
+
   private launchTutorial(): void {
+    this.beginNewRun();
     const tutorialDef = getLevelDef('tutorial');
     const tutorialController = TutorialController.createForTutorial();
     this.sceneManager.replace(
@@ -193,6 +207,7 @@ export class PostSignupScene extends Scene {
   }
 
   private launchLevel1(): void {
+    this.beginNewRun();
     const level1Def = getLevelDef('level1');
     this.sceneManager.replace(
       new DungeonScene(level1Def, this.input, this.sceneManager, this.baseOptions),

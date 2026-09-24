@@ -23,6 +23,7 @@ import { TusklingPreviewScene } from '../scenes/TusklingPreviewScene';
 import { KrakarenPreviewScene } from '../scenes/KrakarenPreviewScene';
 import { JuicerPreviewScene } from '../scenes/JuicerPreviewScene';
 import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
+import { FairyPreviewScene } from '../scenes/FairyPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { KeyboardHeroPreviewScene } from '../scenes/KeyboardHeroPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
@@ -38,6 +39,9 @@ import { setFigureCacheStatsRecording } from '../sprites/figure/figureCacheStats
 import { drawPerfOverlay } from './perfOverlay';
 import { drawDifficultyOverlay } from './difficultyOverlay';
 import { getPlaytestPreset } from './playtestPresets';
+import { DOOMSDAY_COUNTDOWN_MS, createDoomsdayProgress } from '../core/DoomsdayProgress';
+import { settings } from '../core/Settings';
+import { getMercenaryTemplate } from '../core/mercenaryTemplates';
 import { buildPlaytestBoot, resolvePlaytestSpawn } from './playtestBoot';
 
 /**
@@ -306,6 +310,11 @@ export function devBootScene(
     return true;
   }
 
+  if (params.get('fairies') !== null) {
+    sceneManager.replace(new FairyPreviewScene());
+    return true;
+  }
+
   if (params.get('ratkin') !== null) {
     sceneManager.replace(new RatKinPreviewScene());
     return true;
@@ -340,6 +349,7 @@ export function devBootScene(
   if (playtestId !== null) {
     const preset = getPlaytestPreset(playtestId);
     if (preset !== null) {
+      if (preset.difficulty !== undefined) settings.setDifficultyForSession(preset.difficulty);
       const boot = buildPlaytestBoot(preset);
       options.humanSnap = boot.humanSnap;
       options.catSnap = boot.catSnap;
@@ -348,6 +358,38 @@ export function devBootScene(
       // and a playtest drop-in that cannot summon him cannot test him.
       options.mongoUnlocked = true;
       options.resolveSpawnTile = (gameMap) => resolvePlaytestSpawn(boot.spawn, gameMap);
+      options.preDefeatedBossTypes = boot.preDefeatedBossTypes;
+      if (preset.hire !== undefined) {
+        options.mercenaryRoster = {
+          active: {
+            id: preset.hire,
+            name: getMercenaryTemplate(preset.hire).name,
+            contractLevelId: preset.levelId,
+            introduced: false,
+          },
+          lastDeceased: null,
+          floorLevelId: null,
+        };
+      }
+      if (preset.mongoOut === true) options.mongoWasOut = true;
+      if (preset.circusQuest !== undefined) {
+        const circus = createCircusQuestProgress();
+        circus.stage = preset.circusQuest.stage;
+        circus.heatherSlain = preset.circusQuest.heatherSlain;
+        options.circusQuestProgress = circus;
+        options.spawnAtCircus = true;
+      }
+      if (boot.doomsdayStage !== undefined) {
+        const doomsday = createDoomsdayProgress();
+        doomsday.stage = boot.doomsdayStage;
+        doomsday.deadlineAt = Date.now() + DOOMSDAY_COUNTDOWN_MS;
+        options.doomsdayQuestProgress = doomsday;
+        // The countdown starts at the Lich's death, so the questline it ends is
+        // already at that beat; the crystal's spot is filled in by the tower's
+        // top floor the first time the party climbs to it.
+        options.murderQuestProgress =
+          parseMurderQuestProgress('lich_slain') ?? options.murderQuestProgress;
+      }
       sceneManager.replace(
         new DungeonScene(boot.levelDef, input, sceneManager, devFloorOptions(options, params)),
       );

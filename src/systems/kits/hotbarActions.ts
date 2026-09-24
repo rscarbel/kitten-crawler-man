@@ -46,6 +46,10 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
   const active = pm.active();
   const slot = active.inventory.actionBar.slots[hotbarIdx];
   if (slot === null) return;
+  if (!active.canAct) {
+    audio?.play('error_taking_action');
+    return;
+  }
 
   if (host.trySceneSlot?.(slot, hotbarIdx) === true) return;
 

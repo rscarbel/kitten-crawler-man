@@ -108,6 +108,10 @@ export class GolemKit implements MercenaryKit {
 
   clearAirborne(): void {
     this.pendingThrows = [];
+    this.attack = null;
+    this.attackFrame = 0;
+    this.attackResolved = false;
+    this.victim = null;
   }
 
   private canThrowAt(merc: Mercenary, victim: Mob, distancePx: number): boolean {

@@ -19,7 +19,15 @@
  */
 
 import type { SilhouetteLayer } from '../../core/silhouetteComposite';
-import { SHIELD_STATUS, type StatusEffect } from '../../core/StatusEffect';
+import {
+  CHILLED_STATUS,
+  FAIRY_AEGIS_STATUS,
+  FAIRY_WARD_STATUS,
+  FROZEN_STATUS,
+  OVERHEAL_STATUS,
+  SHIELD_STATUS,
+  type StatusEffect,
+} from '../../core/StatusEffect';
 import type { StatusVisualFrame } from './statusPaint';
 import { ARCANE_FLAME, NATURAL_FLAME, drawFlames, flameBodyLayers } from './statusFlames';
 import {
@@ -56,6 +64,14 @@ import {
   whetstoneBodyLayer,
 } from './statusBoons';
 import { drawShieldDome } from './statusShield';
+import { chilledBodyLayer, drawChilled, drawFrozen, frozenBodyLayer } from './statusFrost';
+import {
+  aegisBodyLayer,
+  drawAegis,
+  drawFairyWard,
+  drawOverheal,
+  overhealBodyLayer,
+} from './statusFairyWards';
 import { SHIELD_AMBER_DEEP } from '../art/cretinArt';
 
 export type { StatusVisualFrame } from './statusPaint';
@@ -244,6 +260,55 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       color: SHIELD_AMBER_DEEP,
       harmful: false,
       overlay: drawShieldDome,
+    },
+  ],
+  [
+    CHILLED_STATUS,
+    {
+      label: 'CHIL',
+      color: '#7dd3fc',
+      harmful: true,
+      bodyLayers: (f) => [chilledBodyLayer(f)],
+      overlay: drawChilled,
+    },
+  ],
+  [
+    FROZEN_STATUS,
+    {
+      label: 'FRZN',
+      color: '#bae6fd',
+      harmful: true,
+      bodyLayers: (f) => [frozenBodyLayer(f)],
+      overlay: drawFrozen,
+    },
+  ],
+  [
+    FAIRY_WARD_STATUS,
+    {
+      label: 'WARD',
+      color: '#3b82f6',
+      harmful: false,
+      overlay: drawFairyWard,
+    },
+  ],
+  [
+    FAIRY_AEGIS_STATUS,
+    {
+      label: 'AEGS',
+      color: '#93c5fd',
+      harmful: false,
+      bodyLayers: (f) => [aegisBodyLayer(f)],
+      overlay: drawAegis,
+    },
+  ],
+  [
+    OVERHEAL_STATUS,
+    {
+      label: 'OVHL',
+      color: '#d9f99d',
+      harmful: false,
+      bodyLayers: (f) => [overhealBodyLayer(f)],
+      overlay: drawOverheal,
     },
   ],
   [

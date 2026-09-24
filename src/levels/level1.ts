@@ -1,4 +1,4 @@
-import type { LevelDef } from './types';
+import type { FairyRoomRate, LevelDef } from './types';
 import { LEARNING_FLOOR_LEVELLED_CURVE } from '../creatures/mobLevelScaling';
 
 /** Goblin spawn chance (85%). */
@@ -146,6 +146,25 @@ const TROG_SOUTH_X = 0;
 const TROG_SOUTH_Y = 3;
 
 /**
+ * Fairies on the first floor. None before the Hoarder, for the same reason the
+ * archers wait: the opening stretch is a first-time crawler's first dungeon. A
+ * room that rolls one gets exactly one, and the chance climbs past each boss.
+ */
+const LEVEL1_FAIRY_COUNT = 1;
+const POST_HOARDER_FAIRY_RATE: FairyRoomRate = {
+  chance: { easy: 0.23, normal: 0.3, hard: 0.4 },
+  minCount: { easy: LEVEL1_FAIRY_COUNT, normal: LEVEL1_FAIRY_COUNT, hard: LEVEL1_FAIRY_COUNT },
+  maxCount: { easy: LEVEL1_FAIRY_COUNT, normal: LEVEL1_FAIRY_COUNT, hard: LEVEL1_FAIRY_COUNT },
+};
+const POST_JUICER_FAIRY_RATE: FairyRoomRate = {
+  chance: { easy: 0.3, normal: 0.4, hard: 0.65 },
+  minCount: { easy: LEVEL1_FAIRY_COUNT, normal: LEVEL1_FAIRY_COUNT, hard: LEVEL1_FAIRY_COUNT },
+  maxCount: { easy: LEVEL1_FAIRY_COUNT, normal: LEVEL1_FAIRY_COUNT, hard: LEVEL1_FAIRY_COUNT },
+};
+/** Floor 1 never rolls a room healer. */
+const LEVEL1_ROOM_HEALER_CHANCE = 0;
+
+/**
  * Level 1 — "The Dungeon".
  * Rooms spawn goblins (85 %) or llamas (15 %); hallways spawn rats.
  */
@@ -216,6 +235,10 @@ export const level1: LevelDef = {
     regionLevelBonus: [PRE_HOARDER_LEVEL_BONUS, POST_HOARDER_LEVEL_BONUS, POST_JUICER_LEVEL_BONUS],
   },
   defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
+  fairies: {
+    roomRatesByRegion: [null, POST_HOARDER_FAIRY_RATE, POST_JUICER_FAIRY_RATE],
+    roomHealerChance: LEVEL1_ROOM_HEALER_CHANCE,
+  },
   // Floor 1 keeps the curve it was tuned on when the shared one was flattened
   // for the deeper floors, so none of its fights got easier with them.
   levelledCurve: LEARNING_FLOOR_LEVELLED_CURVE,

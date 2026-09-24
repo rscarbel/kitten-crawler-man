@@ -6,6 +6,7 @@ import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { clamp } from '../utils';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
+import { hasLivingBossHealer } from '../creatures/fairies/bossHealerBond';
 import { POINT_BLANK_TILES, TheHoarder } from '../creatures/TheHoarder';
 import { Cockroach } from '../creatures/Cockroach';
 import { prewarmCockroach } from '../sprites/cockroachSprite';
@@ -35,6 +36,14 @@ import {
 } from '../sprites/krakarenSprite';
 import { prewarmKrakarenTentacle } from '../sprites/krakarenTentacleSprite';
 import { viewportWidth } from '../core/Viewport';
+
+/**
+ * The slice of the minimap a boss room reaches for: revealing a room's
+ * surroundings when it locks, and the minimap's size for laying out beside it.
+ * Narrowed so a headless harness can run the seal without a canvas to draw on.
+ */
+export type BossRoomMiniMap = Pick<MiniMapSystem, 'revealBossNeighborhood' | 'isExpanded'> &
+  Record<'EXPANDED_SIZE' | 'NORMAL_SIZE', number>;
 
 interface VomitProjectile {
   x: number;
@@ -354,6 +363,11 @@ const BOSS_MIDLINE_FRACTION = 0.5;
 const FRAMES_PER_SECOND = 60;
 const BOSS_LABEL_BASELINE_FRACTION = 0.65;
 const BOSS_LABEL_SIZE = 10;
+const BOSS_NAME_SIZE = 11;
+const BOSS_HP_TEXT_SIZE = 9;
+/** The line under the bar that says why the room is (or is no longer) sealed. */
+const BOSS_ROOM_STATUS_TEXT_SIZE = 12;
+const BOSS_ENTRY_COUNTDOWN_SIZE = 11;
 const BOSS_LABEL_ASCENT_OFFSET = 8;
 
 /** Alarm red the bar wears while the boss is enraged. */
@@ -364,6 +378,14 @@ const BOSS_MIDLINE_LIVE_STROKE = 'rgba(239,68,68,0.6)';
 const BOSS_MIDLINE_DECEASED_STROKE = 'rgba(148,163,184,0.6)';
 const BOSS_DEFEATED_TEXT = 'DEFEATED';
 const BOSS_DEFEATED_TEXT_COLOR = '#4ade80';
+/**
+ * What a boss fight shows while its hard-mode healer keeps the way out shut.
+ * Shared with the Ball of Swine arena, so every sealed fight words it alike.
+ */
+export const BOSS_HEALER_ALIVE_NOTICE = {
+  text: 'The healer still flies!',
+  color: '#f87171',
+} as const;
 
 interface BossBarStyle {
   readonly nameText: string;
@@ -542,7 +564,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    */
   constructor(
     private readonly gameMap: GameMap,
-    private readonly miniMap: MiniMapSystem,
+    private readonly miniMap: BossRoomMiniMap,
     bossTypes: string[] = [],
     private readonly hasUnopenedChest: (roomIndex: number) => boolean = () => false,
   ) {
@@ -757,6 +779,27 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     return defeated;
   }
 
+  /**
+   * Marks `bossType`'s room already won before the scene's first frame — for a
+   * dev preset that drops the party past a boss it never fought. Matches the
+   * vocabulary a real kill leaves behind ({@link defeatedBossTypes}), so the
+   * room reads the same either way: revealed on the minimap, no chest guard,
+   * no re-lock on a later visit.
+   */
+  markPreDefeated(bossType: string): void {
+    const roomIndex = this.bossTypes.indexOf(bossType);
+    if (roomIndex < 0 || roomIndex >= this.states.length) return;
+    const state = this.states[roomIndex];
+    state.locked = false;
+    state.defeated = true;
+    state.defeatTimer = 0;
+    state.entryWindowTimer = 0;
+    state.fightAborted = false;
+    this.roomHasLivingBoss[roomIndex] = false;
+    this.enteredRooms.add(roomIndex);
+    this.miniMap.revealBossNeighborhood(state.bounds);
+  }
+
   isEntityInRoom(
     entity: { x: number; y: number },
     bounds: { x: number; y: number; w: number; h: number },
@@ -916,6 +959,11 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, state.bounds));
       const bossAlive = boss?.isAlive ?? false;
       this.roomHasLivingBoss[i] = bossAlive;
+      // A boss's hard-mode healer is part of its fight: the room is not won
+      // while it can still fly out of the doorway, and a door that opened on the
+      // boss's death would hand the party a healer to chase across the floor.
+      const healerAlive = this.hasLivingHealer(mobs, state.bounds);
+      const fightOver = !bossAlive && !healerAlive;
 
       const humanInRoom = this.isEntityInRoom(human, state.bounds);
       const catInRoom = this.isEntityInRoom(cat, state.bounds);
@@ -923,7 +971,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       // Resolve fight-aborted state: boss alive but no conscious players were in room.
       // If anyone re-enters, revive the knocked-out companion and restart the fight.
       if (state.fightAborted) {
-        if (!bossAlive) {
+        if (fightOver) {
           // Boss died while aborted (e.g. ranged kill from hallway) — mark defeated.
           state.fightAborted = false;
           state.defeated = true;
@@ -932,7 +980,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           this.catIsInsider[i] = false;
           this.miniMap.revealBossNeighborhood(state.bounds);
           if (boss) this.newlyDefeatedRooms.push({ roomIndex: i, boss });
-        } else if (!humanInRoom && !catInRoom && boss !== undefined) {
+        } else if (!humanInRoom && !catInRoom && boss !== undefined && bossAlive) {
           // An aborted room is still a room nobody is standing in, so the rule
           // that a boss cannot be emptied from the corridor has to reach it —
           // otherwise this is the one state in which it silently does not.
@@ -995,7 +1043,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       }
 
       if (!state.locked) {
-        if (boss !== undefined && !bossAlive) {
+        if (boss !== undefined && fightOver) {
           // A boss can die without its room ever locking — sniped through the
           // doorway, or finished by something the party left burning on it.
           // Everything downstream of a boss room hangs off this transition, so
@@ -1099,7 +1147,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       // cockroaches die where they stand rather than blinking out — the moment
       // the boss dropped, the whole room used to empty itself in one frame,
       // which reads as the level being reset rather than as a fight ending.
-      if (!bossAlive) {
+      if (fightOver) {
         state.locked = false;
         state.defeated = true;
         state.defeatTimer = DEFEAT_TIMER_FRAMES;
@@ -1141,7 +1189,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         // so an aborted fight permanently re-commissioned the companion against
         // a boss standing at full health — and handed the party a Juicer back
         // at full health that was still permanently enraged.
-        boss.healAndForgetFight();
+        // A boss already dead with its healer still up stays dead: healing it
+        // here would stand the corpse back up.
+        if (bossAlive) boss.healAndForgetFight();
         removeOwnedBy(this.vomitProjectiles, boss);
         removeOwnedBy(this.acidPuddles, boss);
         continue;
@@ -1220,6 +1270,27 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     const dx = Math.max(bounds.x - tileX, 0, tileX - (bounds.x + bounds.w));
     const dy = Math.max(bounds.y - tileY, 0, tileY - (bounds.y + bounds.h));
     return Math.hypot(dx, dy) <= REGEN_NOTICE_RANGE_TILES;
+  }
+
+  /** Whether a healer spawned for the boss of the room at `bounds` is still alive. */
+  protected hasLivingHealer(
+    mobs: readonly Mob[],
+    bounds: { x: number; y: number; w: number; h: number },
+  ): boolean {
+    return hasLivingBossHealer(mobs, (boss) => this.isEntityInRoom(boss, bounds));
+  }
+
+  /**
+   * Keeps a boss's healer inside the room its boss stands in, as
+   * {@link clampBossToRoom} keeps the boss. A boss in no room (the arena's, a
+   * quest's) leaves its healer alone rather than dragging it to the nearest one.
+   */
+  clampHealerToBossRoom(healer: Mob, boss: Mob): void {
+    for (const state of this.states) {
+      if (!this.isEntityInRoom(boss, state.bounds)) continue;
+      this.clampToBossRoom(healer, state.bounds);
+      return;
+    }
   }
 
   /** Clamps a boss mob to its own boss room (call after mob AI runs each frame). */
@@ -1365,7 +1436,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         if (this.gameMap.isWalkable(tileX, tileY)) {
           // Through the roster rather than by hand: a roach that never received
           // the scene's spell context walks straight through a protective shell.
-          roster.add(new Cockroach(tileX, tileY, TILE_SIZE));
+          const cockroach = new Cockroach(tileX, tileY, TILE_SIZE);
+          cockroach.isBossAdd = true;
+          roster.add(cockroach);
           spawned++;
         }
       }
@@ -1539,6 +1612,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         const tileY = Math.floor(sp.y / TILE_SIZE);
         if (!hasRoomToMove(this.gameMap, tileX, tileY)) continue;
         const tentacle = new KrakarenTentacle(tileX, tileY, TILE_SIZE, mob);
+        tentacle.isBossAdd = true;
         // Once, at spawn, from the boss that raised it: an add levelled to a
         // weaker curve than the fight it belongs to is free damage reduction.
         tentacle.applyMobLevel(mob.mobLevel, mob.levelledCurve);
@@ -2031,6 +2105,10 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     // recorded, and `isAlive` covers a boss like the Ball of Swine that stays
     // alive through a post-death burst phase.
     const isDeceased = !boss.isAlive || relevantState.defeated;
+    // Dead but sealed: the boss bar alone reads as a bug (the boss is shown
+    // deceased while the room stays locked) without this to explain why.
+    const healerKeepingRoomSealed =
+      !boss.isAlive && this.hasLivingHealer(mobs, relevantState.bounds);
     const barStyle = bossBarStyle(meta, isEnraged, isDeceased, true);
     const hpFrac = Math.max(0, boss.hp / boss.maxHp);
 
@@ -2042,6 +2120,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         meta,
         isEnraged,
         isDeceased,
+        healerKeepingRoomSealed,
         hpFrac,
         mobileTopY,
       );
@@ -2053,7 +2132,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     const barY = BOSS_BAR_TOP_Y;
 
     const showSubText =
-      relevantState.defeated || (relevantState.locked && relevantState.entryWindowTimer > 0);
+      relevantState.defeated ||
+      healerKeepingRoomSealed ||
+      (relevantState.locked && relevantState.entryWindowTimer > 0);
     // Expand container height when sub-text (DEFEATED / countdown) is present so
     // the text is not bisected by the box border.
     const containerH = showSubText ? barH + BOSS_CONTAINER_SUBTEXT_H : barH + BOSS_CONTAINER_BASE_H;
@@ -2079,7 +2160,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     drawText(ctx, barStyle.nameText, {
       x: viewportWidth() / 2,
       y: barY - BOSS_NAME_Y_OFFSET,
-      size: 11,
+      size: BOSS_NAME_SIZE,
       bold: true,
       color: barStyle.color,
       align: 'center',
@@ -2107,7 +2188,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     drawText(ctx, `${displayHp(boss.hp)} / ${boss.maxHp}`, {
       x: viewportWidth() / 2,
       y: barY + barH - BOSS_HP_TEXT_OFFSET,
-      size: 9,
+      size: BOSS_HP_TEXT_SIZE,
       color: '#e2e8f0',
       align: 'center',
     });
@@ -2116,19 +2197,26 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       drawText(ctx, BOSS_DEFEATED_TEXT, {
         x: viewportWidth() / 2,
         y: barY + barH + BOSS_DEFEATED_TEXT_Y,
-        size: 12,
+        size: BOSS_ROOM_STATUS_TEXT_SIZE,
         bold: true,
         color: BOSS_DEFEATED_TEXT_COLOR,
         align: 'center',
       });
-    }
-
-    if (relevantState.locked && relevantState.entryWindowTimer > 0) {
+    } else if (healerKeepingRoomSealed) {
+      drawText(ctx, BOSS_HEALER_ALIVE_NOTICE.text, {
+        x: viewportWidth() / 2,
+        y: barY + barH + BOSS_DEFEATED_TEXT_Y,
+        size: BOSS_ROOM_STATUS_TEXT_SIZE,
+        bold: true,
+        color: BOSS_HEALER_ALIVE_NOTICE.color,
+        align: 'center',
+      });
+    } else if (relevantState.locked && relevantState.entryWindowTimer > 0) {
       const seconds = Math.ceil(relevantState.entryWindowTimer / FRAMES_PER_SECOND);
       drawText(ctx, `Entry closes in ${seconds}s`, {
         x: viewportWidth() / 2,
         y: barY + barH + BOSS_ENTRY_TEXT_Y,
-        size: 11,
+        size: BOSS_ENTRY_COUNTDOWN_SIZE,
         bold: true,
         color: '#fbbf24',
         align: 'center',
@@ -2145,6 +2233,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     meta: { displayName: string; color: string },
     isEnraged: boolean,
     isDeceased: boolean,
+    healerKeepingRoomSealed: boolean,
     hpFrac: number,
     topY: number,
   ): number {
@@ -2161,7 +2250,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     const GAP = MOBILE_GAP;
     const BAR_H = MOBILE_BAR_H;
 
-    const hasSubText = state.defeated || (state.locked && state.entryWindowTimer > 0);
+    const hasSubText =
+      state.defeated || healerKeepingRoomSealed || (state.locked && state.entryWindowTimer > 0);
     const boxH = PAD_V + NAME_H + GAP + BAR_H + (hasSubText ? GAP + NAME_H : 0) + PAD_V;
 
     // Container
@@ -2219,6 +2309,15 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           size: MOBILE_SUBTEXT_SIZE,
           bold: true,
           color: BOSS_DEFEATED_TEXT_COLOR,
+          align: 'center',
+        });
+      } else if (healerKeepingRoomSealed) {
+        drawText(ctx, BOSS_HEALER_ALIVE_NOTICE.text, {
+          x: BOX_X + boxW / 2,
+          y: subY,
+          size: MOBILE_SUBTEXT_SIZE,
+          bold: true,
+          color: BOSS_HEALER_ALIVE_NOTICE.color,
           align: 'center',
         });
       } else if (state.locked && state.entryWindowTimer > 0) {

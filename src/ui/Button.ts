@@ -352,6 +352,17 @@ export function clearButtonMouseState(): void {
 }
 
 /**
+ * Forget every button drawn so far this frame, for a full-screen surface that
+ * covers them. `notifyButtonClick` hit-tests everything drawn this frame, so
+ * without this a press on the covering panel's empty space answers with the
+ * click sound of whatever hidden button sits underneath. Buttons drawn after
+ * the call register as usual.
+ */
+export function occludeRenderedButtons(): void {
+  _renderedButtons.length = 0;
+}
+
+/**
  * Fire the click sound for whichever button is at (mx, my).
  * Call at the TOP of every scene's handleClick — one call covers all buttons.
  * Iterates registered buttons in reverse (topmost drawn = checked first).
@@ -363,15 +374,22 @@ export function clearButtonMouseState(): void {
  *   }
  */
 export function notifyButtonClick(mx: number, my: number): void {
+  const sound = renderedButtonSoundAt(mx, my);
+  if (sound !== null) _audioManager?.play(sound);
+}
+
+/**
+ * The click sound of the topmost button drawn this frame at (mx, my), or null
+ * where a press would land on no button — what `notifyButtonClick` plays.
+ */
+export function renderedButtonSoundAt(mx: number, my: number): SoundId | null {
   for (let i = _renderedButtons.length - 1; i >= 0; i--) {
     const btn = _renderedButtons[i];
     const x = toSpace(mx, btn.space.pivotX, btn.space.scale);
     const y = toSpace(my, btn.space.pivotY, btn.space.scale);
-    if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
-      _audioManager?.play(btn.sound);
-      return;
-    }
+    if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) return btn.sound;
   }
+  return null;
 }
 
 /** Full options for drawButton. x, y, width, height, and label are required. */

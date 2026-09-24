@@ -57,6 +57,10 @@ import {
   BIGTOP_READY_DIALOG,
   buildResolutionDialog,
 } from './circusQuestDialogs';
+import { spawnHardModeBossHealer } from '../levels/fairySpawner';
+import type { HealingFairy } from '../creatures/fairies/HealingFairy';
+import { level3 } from '../levels/level3';
+import { placeCompanionBeside, standingCompanions } from './partyCompanions';
 
 export const CIRCUS_QUEST_ID = 'the_show_must_go_on';
 
@@ -227,6 +231,16 @@ export class CircusQuestSystem implements GameSystem {
 
   private signet: Signet | null = null;
   private heather: HeatherTheBear | null = null;
+  /**
+   * The healer standing guard over the live Heather, tracked separately from
+   * `heather` itself because a checkpoint restore only knows to rebuild her
+   * when the boss reference is null — a healer that outlived an earlier
+   * Heather would otherwise go unnoticed and get a second one spawned
+   * alongside it.
+   */
+  private heatherHealer: HealingFairy | null = null;
+  /** Same tracking as {@link heatherHealer}, for the wave's Terror the Clown. */
+  private terrorHealer: HealingFairy | null = null;
 
   /** Whether the closing conversation has already opened itself. */
   private resolutionAutoOpened = false;
@@ -470,6 +484,16 @@ export class CircusQuestSystem implements GameSystem {
     }
   }
 
+  /**
+   * Whether `healer` is still a living guard worth leaving in place, rather
+   * than a stale reference to one already dead or dropped from the roster by
+   * a checkpoint rewind.
+   */
+  private isHealerStillGuarding(healer: HealingFairy | null): boolean {
+    if (!healer?.isAlive) return false;
+    return this.lastCtx?.roster.mobs.includes(healer) ?? true;
+  }
+
   private spawnHeather(origin: { x: number; y: number }): void {
     // Arena-constrained like a wave mob: outside the grounds the offset can drop
     // her into forest, where a walkable tile fenced in by trunks strands her.
@@ -481,6 +505,17 @@ export class CircusQuestSystem implements GameSystem {
     applySpawnDifficulty(heather);
     this.heather = heather;
     this.addMob(heather);
+    // A checkpoint restore can call this a second time for a Heather whose
+    // earlier healer the roster rewind kept alive rather than dropping — that
+    // healer already has a boss to guard.
+    if (!this.isHealerStillGuarding(this.heatherHealer)) {
+      this.heatherHealer = spawnHardModeBossHealer(
+        heather,
+        this.gameMap,
+        this.addMob,
+        level3.floorNumber,
+      );
+    }
   }
 
   private spawnWave(
@@ -511,6 +546,14 @@ export class CircusQuestSystem implements GameSystem {
       mob.pathDistanceBudgetTiles = CIRCUS_WAVE_PATH_BUDGET_TILES;
       this.addMob(mob);
       this.waveMobs.push(mob);
+      if (mob instanceof TerrorTheClown && !this.isHealerStillGuarding(this.terrorHealer)) {
+        this.terrorHealer = spawnHardModeBossHealer(
+          mob,
+          this.gameMap,
+          this.addMob,
+          level3.floorNumber,
+        );
+      }
     }
     this.stallWatch.clear();
   }
@@ -1025,6 +1068,9 @@ export class CircusQuestSystem implements GameSystem {
     }
     this.startBattleMusic();
     this.spawnWave(ASSAULT_WAVES, 0, this.assaultWaveOrigin());
+    // Null on a scene rebuilt mid-assault: its companions have not spawned yet,
+    // and the per-frame gather catches them on the first assault frame.
+    if (this.lastCtx) this.gatherCompanionsOntoGrounds(this.lastCtx);
   }
 
   private finishQuest(active: Player): void {
@@ -1070,6 +1116,7 @@ export class CircusQuestSystem implements GameSystem {
       case 'assault':
         this.clampToCircus(ctx.human);
         this.clampToCircus(ctx.cat);
+        this.gatherCompanionsOntoGrounds(ctx);
         this.updateAssault(ctx);
         break;
       case 'awaiting_resolution':
@@ -1190,6 +1237,26 @@ export class CircusQuestSystem implements GameSystem {
     if (!clamped) return;
     entity.x = clamped.x;
     entity.y = clamped.y;
+  }
+
+  /**
+   * Brings Mongo and a standing hireling onto the grounds beside the active
+   * crawler whenever they are off them. The crawlers are penned in for the whole
+   * assault, so a companion left outside — lagging behind the walk in, or parked
+   * past the edge of the mob loop's activation radius — would sit out every wave.
+   *
+   * Placed beside the crawler rather than pulled to the nearest boundary point,
+   * because that point can be the far side of the ring from the fight, and a
+   * companion cannot free itself from a tent or a wall the way a crawler can.
+   */
+  private gatherCompanionsOntoGrounds(ctx: SystemContext): void {
+    for (const companion of standingCompanions(ctx.extraTargets)) {
+      const offGrounds = this.boundaryPosition(companion.x, companion.y, this.circusRadiusTiles);
+      if (!offGrounds) continue;
+      placeCompanionBeside(companion, ctx.active, this.gameMap, ctx.roster.grid, (x, y) =>
+        this.isInsideArena(x, y),
+      );
+    }
   }
 
   /**

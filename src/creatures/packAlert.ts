@@ -72,3 +72,30 @@ export function collectPackmates(caller: Mob, radiusPx: number, out: Mob[]): voi
   }
   nearbyScratch.clear();
 }
+
+/**
+ * Fill `out` with every mob this frame's roster holds within `radiusPx` of the
+ * point, living or dead, hostile or not. `out` is emptied first.
+ *
+ * The unfiltered read for a caller whose idea of "ally" is not "same pack" —
+ * a support caster serves every species in the room. Empty when no roster is
+ * published.
+ */
+export function collectMobsNear(x: number, y: number, radiusPx: number, out: Mob[]): void {
+  out.length = 0;
+  if (mobGrid === null) return;
+  nearbyScratch.clear();
+  mobGrid.queryCircle(x, y, radiusPx, nearbyScratch);
+  for (const mob of nearbyScratch) out.push(mob);
+  nearbyScratch.clear();
+}
+
+/**
+ * Whether `mob` is still in this frame's roster. Every path that takes a mob
+ * out of the scene takes it off the grid too, while a mob so removed keeps
+ * whatever HP and statuses it had. True when no roster is published, since a
+ * headless mob has nothing to have left.
+ */
+export function isInPublishedRoster(mob: Mob): boolean {
+  return mobGrid === null || mobGrid.has(mob);
+}

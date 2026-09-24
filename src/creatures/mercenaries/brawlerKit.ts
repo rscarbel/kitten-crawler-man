@@ -166,6 +166,9 @@ export class BrawlerKit extends BasicMeleeKit {
 
   override clearAirborne(): void {
     this.crush = null;
+    // Whatever HP it had before is no baseline for what it has now: a hire
+    // stood up by a revive would otherwise flinch at its own fall.
+    this.lastHp = null;
     super.clearAirborne();
   }
 

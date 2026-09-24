@@ -13,7 +13,7 @@ import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Tuskling } from '../creatures/Tuskling';
-import type { BossRoomSystem } from './BossRoomSystem';
+import { BOSS_HEALER_ALIVE_NOTICE, type BossRoomSystem } from './BossRoomSystem';
 import { createMob } from '../levels/spawner';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -22,6 +22,11 @@ import { drawBox, drawProgressBar } from '../ui/Box';
 import { viewportWidth } from '../core/Viewport';
 import { ARENA_INTERIOR_RADIUS_TILES } from '../map/arenaGeometry';
 import { prewarmTuskling } from '../sprites/tusklingSprite';
+import { spawnHardModeBossHealer } from '../levels/fairySpawner';
+import { bossOfHealer, hasLivingBossHealer } from '../creatures/fairies/bossHealerBond';
+import { settings } from '../core/Settings';
+import type { SpatialGrid } from '../core/SpatialGrid';
+import { level2 } from '../levels/level2';
 
 /** 30 seconds at 60 fps — mirrors BossRoomSystem.ENTRY_WINDOW_FRAMES. */
 const ENTRY_WINDOW_FRAMES = 1800;
@@ -68,6 +73,14 @@ const HP_TEXT_INSET = 4;
 const TUSKLINGS_LABEL_Y_OFFSET = 6;
 /** Phase-2 Tusklings label y relative to the bar y anchor. */
 const PHASE2_LABEL_Y = 78;
+const PHASE2_LABEL_SIZE = 11;
+const PHASE2_PENDING_COLOR = '#f87171';
+const PHASE2_DONE_COLOR = '#4ade80';
+/**
+ * How far inside the ring's wall the ball's healer is held, so it hovers over
+ * the arena floor rather than over the wall.
+ */
+const HEALER_WALL_CLEARANCE_TILES = 1;
 /** Height of the momentum bar under the health bar. */
 const MOMENTUM_BAR_H = 7;
 /** Gap between the health bar and the momentum bar — enough to clear its caption. */
@@ -256,14 +269,13 @@ export class ArenaSystem implements GameSystem {
 
       // hp hits 0 the instant the killing blow lands, but this event — and the
       // Tusklings it spawns below — waits out the whole burst animation first.
-      // Gating a door-unlock on hp === 0 elsewhere in this file used to open the
-      // door during that hold, before a single Tuskling existed to be confined
-      // by it, so an escaping party would already be past it by the time the
-      // Tusklings spawned and could give chase. Resetting the entry-window state
-      // here instead of there ties it to the moment the Tusklings actually
-      // arrive, and the door itself is locked (never unlocked) here — it stays
-      // shut for the whole Tuskling fight, same as a checkpoint respawn expects,
-      // and the phase-2 all-dead block below is the only place it opens again.
+      // A door opened at hp === 0 would stand open through that hold, before a
+      // single Tuskling existed to be confined by it, and an escaping party
+      // would be past it by the time they spawned. So the entry-window state is
+      // reset here, at the moment the Tusklings arrive, and the door is locked
+      // (never unlocked) here — it stays shut for the whole Tuskling fight, as a
+      // checkpoint respawn expects, and the phase-2 all-dead block in `update`
+      // is the only place it opens again.
       this.entryWindowTimer = 0;
       this.humanIsInsider = false;
       this.catIsInsider = false;
@@ -286,6 +298,7 @@ export class ArenaSystem implements GameSystem {
         const ty = acy + Math.round(Math.sin(angle) * r);
         const mob = createMob('tuskling', tx, ty, this.gameMap);
         if (mob instanceof Tuskling) {
+          mob.isBossAdd = true;
           mob.dazeTimer = TUSKLING_DAZE_FRAMES;
           this.addMob(mob);
           this.arenaLiveTusklings.push(mob);
@@ -349,21 +362,21 @@ export class ArenaSystem implements GameSystem {
         if (this.entryWindowTimer === 0) {
           this.arenaLocked = true;
           this.gameMap.lockArenaDoor();
+          this.spawnSwineHealer(bos, mobs);
         }
       }
-
-      // The door unlock that used to fire here, the instant hp hit 0, moved to
-      // the `bossDefeated` handler in `wireEvents` — see the comment there for
-      // why hp === 0 is the wrong moment and the phase-2 all-dead block below is
-      // the only door-unlock left.
     }
 
-    // Phase 2: unlock stairwell when all spawned Tusklings are dead
+    this.confineSwineHealers(mobs, ctx.roster.grid);
+
+    // The ball's hard-mode healer is part of the fight it was spawned for, so
+    // the stairwell waits on it as it waits on the last Tuskling.
     if (
       this.arenaPhase2Active &&
       !this.arenaStairwellUnlocked &&
       this.arenaLiveTusklings.length > 0 &&
-      this.arenaLiveTusklings.every((t) => !t.isAlive)
+      this.arenaLiveTusklings.every((t) => !t.isAlive) &&
+      !this.hasLivingSwineHealer(mobs)
     ) {
       this.arenaStairwellUnlocked = true;
       this.gameMap.unlockArenaStairwell();
@@ -371,6 +384,57 @@ export class ArenaSystem implements GameSystem {
         this.arenaLocked = false;
         this.gameMap.unlockArenaDoor();
       }
+    }
+  }
+
+  protected hasLivingSwineHealer(mobs: readonly Mob[]): boolean {
+    return hasLivingBossHealer(mobs, (boss) => boss instanceof BallOfSwine);
+  }
+
+  /**
+   * The ball's hard-mode healer, placed inside the ring once the door has shut.
+   * Not before: through an open door the ball can see out onto the concourse,
+   * and a healer placed there would stand outside the fight whose stairwell
+   * waits on it. One at a time, because a respawn that unlocks the door starts
+   * the entry window over while the first healer may still be flying.
+   */
+  protected spawnSwineHealer(bos: BallOfSwine, mobs: readonly Mob[]): void {
+    if (this.hasLivingSwineHealer(mobs)) return;
+    spawnHardModeBossHealer(
+      bos,
+      this.gameMap,
+      this.addMob,
+      level2.floorNumber,
+      settings.difficulty,
+      (tileX, tileY) => this.isInsideArena({ x: tileX * TILE_SIZE, y: tileY * TILE_SIZE }),
+    );
+  }
+
+  /**
+   * Holds the ball's healer inside the ring. It flies, and the stairwell waits
+   * on it, so a healer that drifted out over the wall — or through the door in
+   * the moments it stands open — would seal the party in with nothing left to
+   * kill.
+   */
+  protected confineSwineHealers(mobs: readonly Mob[], grid: SpatialGrid<Mob>): void {
+    const arena = this.gameMap.arenaExteriors[0];
+    const centreX = arena.centre.x * TILE_SIZE;
+    const centreY = arena.centre.y * TILE_SIZE;
+    const limitPx = (ARENA_INTERIOR_RADIUS_TILES - HEALER_WALL_CLEARANCE_TILES) * TILE_SIZE;
+    for (const mob of mobs) {
+      if (!mob.isAlive) continue;
+      const boss = bossOfHealer(mob);
+      if (!(boss instanceof BallOfSwine)) continue;
+      const offsetX = mob.x - centreX;
+      const offsetY = mob.y - centreY;
+      const distancePx = Math.hypot(offsetX, offsetY);
+      if (distancePx <= limitPx) continue;
+      const oldX = mob.x;
+      const oldY = mob.y;
+      const pullBack = limitPx / distancePx;
+      mob.x = centreX + offsetX * pullBack;
+      mob.y = centreY + offsetY * pullBack;
+      grid.move(mob, oldX, oldY);
     }
   }
 
@@ -413,6 +477,7 @@ export class ArenaSystem implements GameSystem {
       mob.applyMobLevel(bos.mobLevel, bos.levelledCurve);
       applySpawnDifficulty(mob);
       mob.shedFromBall = true;
+      mob.isBossAdd = true;
       mob.dazeTimer = SHED_DAZE_FRAMES;
       this.addMob(mob);
     }
@@ -608,21 +673,23 @@ export class ArenaSystem implements GameSystem {
       ctx.restore();
     }
 
-    // Phase 2: show how many Tusklings remain
     if (this.arenaPhase2Active && !this.arenaStairwellUnlocked) {
       const alive = this.arenaLiveTusklings.filter((t) => t.isAlive).length;
-      drawText(
-        ctx,
-        alive > 0 ? `Tusklings remaining: ${alive}` : 'All Tusklings defeated! Stairwell unlocked.',
-        {
-          x: viewportWidth() / 2,
-          y: PHASE2_LABEL_Y - LABEL_TEXT_ADJUST,
-          size: 11,
-          bold: true,
-          color: alive > 0 ? '#f87171' : '#4ade80',
-          align: 'center',
-        },
-      );
+      const healerAlive = this.hasLivingSwineHealer(mobs);
+      const notice =
+        alive > 0
+          ? { text: `Tusklings remaining: ${alive}`, color: PHASE2_PENDING_COLOR }
+          : healerAlive
+            ? BOSS_HEALER_ALIVE_NOTICE
+            : { text: 'All Tusklings defeated! Stairwell unlocked.', color: PHASE2_DONE_COLOR };
+      drawText(ctx, notice.text, {
+        x: viewportWidth() / 2,
+        y: PHASE2_LABEL_Y - LABEL_TEXT_ADJUST,
+        size: PHASE2_LABEL_SIZE,
+        bold: true,
+        color: notice.color,
+        align: 'center',
+      });
     }
   }
 }

@@ -153,6 +153,12 @@ const TOGGLE_W_WIDTH_MARGIN = 40;
 const PERK_BADGE_CENTER_Y_OFFSET = 13;
 const DESC_MAX_W_SCROLLBAR_MARGIN = 4;
 
+const MONGO_ABILITY_ID: AbilityId = 'mongo';
+const GUIDE_BUTTON_LABEL = 'How Mongo works';
+const GUIDE_BUTTON_GAP = 8;
+const GUIDE_ROW_BUTTONS = 2;
+const GUIDE_LABEL_SIZE = 12;
+
 type AbilitiesView = 'list' | 'equipped_abilities' | AbilityId;
 
 let currentView: AbilitiesView = 'list';
@@ -224,6 +230,7 @@ export function renderAbilitiesTab(
   catInventory?: Inventory,
   mouseX?: number,
   mouseY?: number,
+  onHowMongoWorks?: () => void,
 ): void {
   if (currentView === 'list') {
     renderListView(ctx, buttons, bx, by, bw, bh, setTab, abilityManager);
@@ -244,7 +251,8 @@ export function renderAbilitiesTab(
   } else {
     const def = abilityManager.getDef(currentView);
     if (def) {
-      renderDetailView(ctx, buttons, bx, by, bw, bh, def, abilityManager);
+      const guide = def.id === MONGO_ABILITY_ID ? onHowMongoWorks : undefined;
+      renderDetailView(ctx, buttons, bx, by, bw, bh, def, abilityManager, guide);
     } else {
       currentView = 'list';
       renderListView(ctx, buttons, bx, by, bw, bh, setTab, abilityManager);
@@ -813,6 +821,7 @@ function renderDetailView(
   bh: number,
   def: AbilityDef,
   abilityManager: AbilityManager,
+  onOpenGuide?: () => void,
 ): void {
   const state = abilityManager.getState(def.id);
   if (!state) return;
@@ -1023,12 +1032,18 @@ function renderDetailView(
     }
   }
 
+  // The guide shares the footer row with Back rather than taking a row of its
+  // own: every Y above is a fixed offset, and a new row would land on the perks.
+  const footerY = by + bh - backBtnH + PERK_AREA_BACK_BTN_Y_OFFSET;
+  const footerW = bw - BACK_BUTTON_MARGIN;
+  const backW =
+    onOpenGuide === undefined ? footerW : (footerW - GUIDE_BUTTON_GAP) / GUIDE_ROW_BUTTONS;
   addButton(ctx, buttons, {
     x: bx + BACK_BTN_X,
-    y: by + bh - backBtnH + PERK_AREA_BACK_BTN_Y_OFFSET,
-    width: bw - BACK_BUTTON_MARGIN,
+    y: footerY,
+    width: backW,
     height: BACK_BUTTON_HEIGHT,
-    label: '← Back to Abilities',
+    label: onOpenGuide === undefined ? '← Back to Abilities' : '← Back',
     ...BUTTON_PRESETS.primary,
     primaryAction: true,
     action: () => {
@@ -1036,4 +1051,16 @@ function renderDetailView(
       touchStartY = null;
     },
   });
+  if (onOpenGuide !== undefined) {
+    addButton(ctx, buttons, {
+      x: bx + BACK_BTN_X + backW + GUIDE_BUTTON_GAP,
+      y: footerY,
+      width: backW,
+      height: BACK_BUTTON_HEIGHT,
+      label: GUIDE_BUTTON_LABEL,
+      labelSize: GUIDE_LABEL_SIZE,
+      ...BUTTON_PRESETS.blue,
+      action: onOpenGuide,
+    });
+  }
 }

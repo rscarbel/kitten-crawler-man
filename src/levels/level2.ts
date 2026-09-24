@@ -1,4 +1,4 @@
-import type { LevelDef } from './types';
+import type { FairyRoomRate, LevelDef } from './types';
 
 /** Branch count leaving the start room toward the Krakaren Clone's gateway. */
 const KRAKAREN_BRANCH_MIN = 2;
@@ -93,6 +93,36 @@ const KRAKAREN_MAX_LEVEL = 10;
 const BALL_OF_SWINE_MIN_LEVEL = 14;
 const BALL_OF_SWINE_MAX_LEVEL = 16;
 
+/** Fairy count bounds on floor 2, excluding any healer. */
+const LEVEL2_FAIRY_MIN = 1;
+const LEVEL2_FAIRY_MAX = 2;
+const LEVEL2_HARD_FAIRY_MAX = 3;
+/**
+ * Once the Ball of Swine is dead, a hard room past the Krakaren holds at least
+ * two fairies: a lone one there is no longer possible.
+ */
+const POST_SWINE_HARD_FAIRY_MIN = 2;
+
+const PRE_KRAKAREN_FAIRY_RATE: FairyRoomRate = {
+  chance: { easy: 0.45, normal: 0.55, hard: 0.75 },
+  minCount: { easy: LEVEL2_FAIRY_MIN, normal: LEVEL2_FAIRY_MIN, hard: LEVEL2_FAIRY_MIN },
+  maxCount: { easy: LEVEL2_FAIRY_MAX, normal: LEVEL2_FAIRY_MAX, hard: LEVEL2_FAIRY_MAX },
+};
+const POST_KRAKAREN_FAIRY_RATE: FairyRoomRate = {
+  chance: { easy: 0.55, normal: 0.65, hard: 0.9 },
+  minCount: { easy: LEVEL2_FAIRY_MIN, normal: LEVEL2_FAIRY_MIN, hard: LEVEL2_FAIRY_MIN },
+  maxCount: { easy: LEVEL2_FAIRY_MAX, normal: LEVEL2_FAIRY_MAX, hard: LEVEL2_HARD_FAIRY_MAX },
+};
+const POST_SWINE_FAIRY_RATE: FairyRoomRate = {
+  chance: { easy: 0.65, normal: 0.85, hard: 1 },
+  minCount: { easy: LEVEL2_FAIRY_MIN, normal: LEVEL2_FAIRY_MIN, hard: POST_SWINE_HARD_FAIRY_MIN },
+  maxCount: { easy: LEVEL2_FAIRY_MAX, normal: LEVEL2_FAIRY_MAX, hard: LEVEL2_HARD_FAIRY_MAX },
+};
+/** Region index 1 is everything past the Krakaren Clone. */
+const POST_KRAKAREN_REGION = 1;
+/** Flat on every difficulty and in every region, rolled apart from the room's other fairies. */
+const LEVEL2_ROOM_HEALER_CHANCE = 0.2;
+
 /**
  * Level 2 — "The Dungeon, Level 2".
  * Runs against the same collapse countdown as floor 1 and guards its treasure
@@ -177,6 +207,18 @@ export const level2: LevelDef = {
   hasArena: true,
   hasSpiderLab: true,
   defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
+  fairies: {
+    roomRatesByRegion: [PRE_KRAKAREN_FAIRY_RATE, POST_KRAKAREN_FAIRY_RATE],
+    roomHealerChance: LEVEL2_ROOM_HEALER_CHANCE,
+    upgrades: [
+      {
+        bossType: 'ball_of_swine',
+        region: POST_KRAKAREN_REGION,
+        rate: POST_SWINE_FAIRY_RATE,
+        onlyPastItsSafeRoom: true,
+      },
+    ],
+  },
   slingshotDrops: true,
   hasCollapseTimer: true,
   hasTreasureRoomGuards: true,

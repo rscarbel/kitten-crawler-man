@@ -46,7 +46,12 @@ export interface GameplayInputActions {
   spaceAction?(): void;
   toggleQuestTracker?(): void;
   mongoSummon?(): void;
-  buildAction?(): void;
+  /**
+   * Spends boards on whatever the active crawler stands at. Returns whether it
+   * did, because it shares its key with Mongo's summon: a press that built
+   * something must not also send the pet in or call him back.
+   */
+  buildAction?(): boolean;
   usePotion(): void;
   toggleInventory(): void;
   toggleGear(): void;
@@ -99,7 +104,7 @@ const SIMPLE_ACTION_HANDLERS: Partial<Record<GameAction, (actions: GameplayInput
     toggleMiniMap: (actions) => actions.toggleMiniMap(),
     toggleQuestTracker: (actions) => actions.toggleQuestTracker?.(),
     buildSummon: (actions) => {
-      actions.buildAction?.();
+      if (actions.buildAction?.() === true) return;
       actions.mongoSummon?.();
     },
   };

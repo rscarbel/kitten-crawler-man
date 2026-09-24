@@ -40,6 +40,11 @@ const SPAWNABLE_MOBS = new Set([
   'sky_fowl',
   'bugaboo',
   'juicer',
+  'fairy_shield',
+  'fairy_healer',
+  'fairy_ice',
+  'fairy_fire',
+  'fairy_necro',
 ]);
 
 const VALID_ITEM_IDS = new Set<string>([

@@ -44,6 +44,20 @@ export class SpatialGrid<T extends { x: number; y: number }> {
   }
 
   /**
+   * Whether `entity` is indexed anywhere. Its own cell answers almost every
+   * call; the whole grid is searched only on a miss, so an entity moved without
+   * {@link move} is still found rather than reported gone.
+   */
+  has(entity: T): boolean {
+    const [cx, cy] = this.cellOf(entity.x, entity.y);
+    if (this.cells.get(this.key(cx, cy))?.has(entity) === true) return true;
+    for (const cell of this.cells.values()) {
+      if (cell.has(entity)) return true;
+    }
+    return false;
+  }
+
+  /**
    * Call this after moving an entity from (oldX, oldY) to its new position.
    * A no-op if the entity is still in the same grid cell.
    */

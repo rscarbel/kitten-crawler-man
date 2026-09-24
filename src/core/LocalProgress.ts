@@ -1,5 +1,6 @@
 import type { GameProgress, GameProgressInput } from '../auth/AuthClient';
 import { parseSavedWorld } from './SavedWorld';
+import { parseGameStatsSnapshot } from './GameStats';
 import { isRecord } from './guards';
 import type { PlayerSnapshot } from './PlayerSnapshot';
 import { AchievementManager } from './AchievementManager';
@@ -62,6 +63,7 @@ function parseProgress(raw: unknown): GameProgress | null {
     humanAchievements: parseAchievements(raw.humanAchievements),
     catAchievements: parseAchievements(raw.catAchievements),
     world: parseSavedWorld(raw.world),
+    gameStats: parseGameStatsSnapshot(raw.gameStats),
   };
 }
 

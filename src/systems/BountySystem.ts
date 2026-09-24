@@ -513,7 +513,7 @@ export class BountySystem implements GameSystem {
     // entry/exit — a mark killed just before a door round-trip must still pay
     // what it was worth, not whatever a fresh instance defaults to.
     const coins = this.progress.pendingPayoutCoins;
-    recipient.coins += coins;
+    recipient.earnCoins(coins);
     this.audio?.play('coin_pouch');
     this.progress.phase = 'available';
     this.progress.currentTypeId = null;

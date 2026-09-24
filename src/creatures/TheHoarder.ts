@@ -205,6 +205,16 @@ export class TheHoarder extends Mob {
     this.vomitTimer = this.isEnraged ? VOMIT_INTERVAL_ENRAGED : VOMIT_INTERVAL;
   }
 
+  /**
+   * Once enraged, never healed back out of it: the enrage is latched, and a
+   * boss that was enraged at full health would read as the fight restarting
+   * harder than it began.
+   */
+  override get fairyHealCeiling(): number {
+    const pastEnrageLine = this.isEnraged || this.hp / this.maxHp <= ENRAGE_THRESHOLD;
+    return pastEnrageLine ? Math.floor(this.maxHp * ENRAGE_THRESHOLD) : this.maxHp;
+  }
+
   protected override clearEncounterPhase(): void {
     this.isEnraged = false;
     this.setBaseSpeed(HOARDER_SPEED);

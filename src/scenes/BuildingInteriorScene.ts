@@ -1,3 +1,4 @@
+import { MONGO_EXPLAINER_FOCUS_ID } from '../ui/MongoExplainer';
 import { displayHp } from '../core/crawlerFormulas';
 import type { XpDiminishingTier } from '../levels/xpDiminishing';
 import { type SceneManager } from '../core/Scene';
@@ -32,7 +33,7 @@ import { renderKnockedOutUI, updateKnockoutState } from '../systems/KnockoutRevi
 import { GameplayScene } from './GameplayScene';
 import { pointInRect } from '../utils';
 import { AchievementManager } from '../core/AchievementManager';
-import { GameStats } from '../core/GameStats';
+import { GameStats, bindRunStats } from '../core/GameStats';
 import { MENU_TAP_DURATION_MS, MENU_TAP_MAX_DISTANCE, type PauseMenu } from '../ui/PauseMenu';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -75,13 +76,18 @@ import { adviceObjective, MordecaiAdvisor, type AdviceSnapshot } from '../system
 import type { MurderQuestProgress, MurderQuestStage } from '../core/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
+import type { MarketStock } from '../systems/market/MarketStock';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import {
   CompanionSystem,
   createCompanionStanceState,
   type CompanionStanceState,
 } from '../systems/CompanionSystem';
-import { createMercenaryRoster, type MercenaryRoster } from '../core/MercenaryRoster';
+import {
+  createMercenaryRoster,
+  type HiredMercenary,
+  type MercenaryRoster,
+} from '../core/MercenaryRoster';
 import { createGodModeState, type GodModeState } from '../core/GodMode';
 import { isWearable, type InventoryItem, type ItemId } from '../core/ItemDefs';
 import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
@@ -140,7 +146,15 @@ import {
 import { CitizenDialog } from '../ui/CitizenDialog';
 import { FortuneTellerPanel, HEDGE_WITCH } from '../ui/FortuneTellerPanel';
 import { ReadablePanel } from '../ui/ReadablePanel';
-import { drawInteractionPrompt, setInteractionPromptsSuppressed } from '../ui/InteractionPrompt';
+import {
+  drawInteractionPrompt,
+  interactionPromptsDrawnThisFrame,
+  setInteractionPromptsSuppressed,
+} from '../ui/InteractionPrompt';
+import { MercenarySystem } from '../systems/MercenarySystem';
+import { RockThrowSystem } from '../systems/RockThrowSystem';
+import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
+import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
 import { SpellSystem } from '../systems/SpellSystem';
 import { MAZE_CAT_SPAWN_TILE, MAZE_HUMAN_SPAWN_TILE } from '../map/bigTopMazeLayout';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
@@ -177,10 +191,28 @@ import { QuillConfrontationSystem } from '../systems/QuillConfrontationSystem';
 import { SoulCrystalSystem } from '../systems/SoulCrystalSystem';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
+import { FairySystem } from '../systems/FairySystem';
+import { playFairySystemCues } from '../systems/fairyAudioCues';
 import type { SystemContext } from '../systems/GameSystem';
 import type { InteriorFigure } from '../core/InteriorFigure';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { tickMongoRegen, type MongoPetState } from '../core/MongoPetState';
+import { cameraWorldView, setVisibleWorldView } from '../core/visibleWorldView';
+import { createMongoPetState, type MongoPetState } from '../core/MongoPetState';
+import { settings } from '../core/Settings';
+import { awardFirstHundred, bindAbilityLevelUps } from '../systems/abilityLevelUps';
+import {
+  MongoSystem,
+  mongoXpFraction,
+  SUMMON_BUTTON_HEIGHT,
+  SUMMON_BUTTON_WIDTH,
+} from '../systems/MongoSystem';
+import {
+  carryCompanions,
+  NO_INTERIOR_COMPANIONS,
+  type CarriedCompanion,
+  type InteriorCompanionArrival,
+  type InteriorCompanionDeparture,
+} from '../systems/companionCarry';
 import { getMongoStats } from '../abilities/mongo';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
@@ -244,6 +276,15 @@ const SAFE_ROOM_PULSE_PERIOD_MS = 600;
 const PULSE_SWING = 0.3;
 const INTERIOR_LABEL_BAR_HEIGHT = 28;
 const INTERIOR_TOP_MARGIN = 8;
+/** Left edge of Mongo's Summon button. */
+const SUMMON_BUTTON_LEFT_PX = 10;
+/** Clearance between the Summon button and the hotbar band it sits above. */
+const SUMMON_BUTTON_HOTBAR_GAP_PX = 8;
+/**
+ * How far the active crawler can see indoors, for the pet's off-screen marker.
+ * Interiors are lit end to end, so only the viewport edge can hide him.
+ */
+const INTERIOR_SIGHT_RADIUS_PX = Number.POSITIVE_INFINITY;
 const MM_TO_PAUSE_BTN_SPACING = 20;
 const GEAR_BTN_SPACING = 34;
 const MOBILE_BUTTONS_EXTRA_Y = 52;
@@ -281,6 +322,8 @@ const INTERIOR_REVIVE_HP_FRACTION = 0.5;
 const GROUND_FLOOR_INDEX = 0;
 /** The Quill confrontation happens in the magistrate's office on the tower's top floor. */
 const TOWER_CONFRONTATION_FLOOR = 3;
+/** Offset from a stair tile's corner to its centre, as a fraction of a tile. */
+const STAIR_TILE_CENTRE = 0.5;
 /**
  * Quest stages that put the magistrate's office on screen.
  *
@@ -352,6 +395,16 @@ interface InteriorFloor {
    */
   readonly skeletonShots: SkeletonProjectileSystem;
   readonly skeletonSummons: SkeletonSummonSystem;
+  /**
+   * A boss fought indoors on the hardest difficulty brings a healing fairy, and
+   * its heals and its death wave are drawn and resolved by this — per storey,
+   * because it reads the storey's roster.
+   */
+  readonly fairies: FairySystem;
+  /** A golem hire's boulders, per storey because each flies over one storey's map. */
+  readonly rockThrows: RockThrowSystem;
+  /** A water mage hire's bolts and waves, per storey for the same reason. */
+  readonly hirelingShots: HirelingBoltSystem;
 }
 
 /**
@@ -464,6 +517,23 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly companionStance: CompanionStanceState;
   private readonly companion: CompanionSystem;
   private readonly followerMenu = new FollowerMenu();
+  /**
+   * Mongo. Owned by the scene rather than by a storey: he climbs a tower's
+   * stairs with the party, and `changeFloor` moves him between storey rosters.
+   */
+  private readonly mongoSystem: MongoSystem;
+  /**
+   * The Meat Shields hire, stood up from the roster on the first frame like
+   * outdoors. Scene-owned for the same reason Mongo is.
+   */
+  private readonly mercenarySystem: MercenarySystem;
+  /**
+   * The contract the standing hire was stood up for. The club's desk can sign
+   * or end one under this roof, and the figure in the room has to follow it.
+   */
+  private hireContract: HiredMercenary | null = null;
+  /** Where the Summon button was drawn this frame, for the click and the tap. */
+  private summonButtonRect: { x: number; y: number; w: number; h: number } | null = null;
 
   // Notif pulse (unused but needed for HUD signature)
   protected readonly notifPulse = { value: 0 };
@@ -602,7 +672,15 @@ export class BuildingInteriorScene extends GameplayScene {
       catSnap: PlayerSnapshot,
       /** True when the exit was a defeat, so the caller can respawn away from the door. */
       defeated: boolean,
+      /** Who walks out of the door with the party. */
+      companions: InteriorCompanionDeparture,
     ) => void,
+    /**
+     * The overworld market's stock counters, threaded by reference like
+     * `clubMembership` so a club line bought out stays sold out on the next
+     * visit and through a checkpoint restore.
+     */
+    private readonly marketStock: MarketStock,
     humanAchievements?: AchievementManager,
     catAchievements?: AchievementManager,
     audio?: AudioManager,
@@ -616,13 +694,12 @@ export class BuildingInteriorScene extends GameplayScene {
     godModeState?: GodModeState,
     companionStance?: CompanionStanceState,
     /**
-     * The pet's shared state, so his off-duty recovery keeps running indoors.
-     *
-     * He cannot follow the party inside, and recovery that only ticked in the
-     * dungeon meant an hour spent shopping healed him by nothing.
+     * The pet's shared state, threaded by reference: he is rebuilt from it when
+     * he walks in with the party, written back into it when he walks out, and
+     * his off-duty recovery keeps ticking on it while he is recalled indoors.
      */
-    private readonly mongoPetState?: MongoPetState,
-    private readonly mongoPetLevel?: () => number,
+    mongoPetState?: MongoPetState,
+    mongoPetLevel?: () => number,
     /** The run's tallies, so the Stats tab reads the same numbers indoors. */
     gameStats?: GameStats,
     /**
@@ -647,6 +724,8 @@ export class BuildingInteriorScene extends GameplayScene {
     tacticsNoticesSeen?: Set<TacticsTrait>,
     /** What the overworld does with a defeat here, so the death screen names it. */
     private readonly defeatRespawnMode: RespawnMode = 'floorRestart',
+    /** Who came through the door with the party. */
+    companionArrival: InteriorCompanionArrival = NO_INTERIOR_COMPANIONS,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
@@ -666,6 +745,28 @@ export class BuildingInteriorScene extends GameplayScene {
     this.mercenaryRoster = mercenaryRoster ?? createMercenaryRoster();
     this.godModeState = godModeState ?? createGodModeState();
     this.companionStance = companionStance ?? createCompanionStanceState();
+    const petLevel = mongoPetLevel ?? ((): number => this.abilityManager.getLevel('mongo'));
+    const petMaxHp = getMongoStats(petLevel()).maxHp;
+    this.mongoSystem = new MongoSystem(
+      mongoPetState ?? createMongoPetState(petMaxHp, petMaxHp),
+      petLevel,
+      (amount) => {
+        this.abilityManager.addXp('mongo', amount);
+      },
+      () => mongoXpFraction(this.abilityManager),
+      (message) => this.menus.hotbarToast.show(message),
+    );
+    this.mongoSystem.unlocked = companionArrival.mongoUnlocked;
+    this.hireContract = this.mercenaryRoster.active;
+    this.mercenarySystem = new MercenarySystem(
+      this.mercenaryRoster,
+      null,
+      (entity) => this.safeRoom?.isEntityInSafeRoom(entity) ?? false,
+      {
+        toast: (message) => this.menus.hotbarToast.show(message),
+        sound: (id) => this.audio?.play(id),
+      },
+    );
 
     const isTower = entry.type === 'tower';
     // Read once and reused below: the room's shape and where the two crawlers are
@@ -784,6 +885,7 @@ export class BuildingInteriorScene extends GameplayScene {
             this.audio,
             this.human.hasDesperadoPassTattoo || this.cat.hasDesperadoPassTattoo,
             this.active(),
+            this.marketStock,
             this.humanAchievements,
             this.catAchievements,
           )
@@ -816,11 +918,26 @@ export class BuildingInteriorScene extends GameplayScene {
         pm: this.pm,
         roster: new MobRoster(floorMap, spells),
       };
+      const skeletonSummons = new SkeletonSummonSystem(floorMap, (mob) => world.roster.add(mob));
       this.floors.push({
         world,
         destruction: new DestructionKit(world, OVERWORLD_FLOOR_NUMBER),
         skeletonShots: new SkeletonProjectileSystem(floorMap),
-        skeletonSummons: new SkeletonSummonSystem(floorMap, (mob) => world.roster.add(mob)),
+        rockThrows: new RockThrowSystem(floorMap),
+        hirelingShots: new HirelingBoltSystem(
+          floorMap,
+          (point) => this.safeRoom?.isEntityInSafeRoom(point) ?? false,
+        ),
+        skeletonSummons,
+        fairies: new FairySystem({
+          bus: this.bus,
+          gameMap: floorMap,
+          ledger: null,
+          getMobs: () => world.roster.mobs,
+          getCrawlers: () => [this.human, this.cat],
+          addMob: (mob) => world.roster.add(mob),
+          skeletonSummons,
+        }),
         combat: new CombatKit({
           world,
           abilityManager: this.abilityManager,
@@ -859,6 +976,14 @@ export class BuildingInteriorScene extends GameplayScene {
     });
     this.chat.applyCarriedCheat();
     this.wirePauseMenu();
+    // No tutorial runs indoors, so the talisman needs none of the overworld's guard.
+    bindAbilityLevelUps({
+      abilityManager: this.abilityManager,
+      menus: this.menus,
+      audio: this.audio,
+      onPetLevelUp: () => this.mongoSystem.onPetLevelUp(),
+      onTalismanLevel: () => awardFirstHundred(this.catAchievements, this.bus),
+    });
     this.wireCombatGore();
     this.initEntryEncounter(this.circus?.progress);
     this.populateHostileRooms();
@@ -910,6 +1035,10 @@ export class BuildingInteriorScene extends GameplayScene {
     this.readingPanel = services.some((service) => service.surface === 'reading')
       ? new FortuneTellerPanel()
       : null;
+
+    // Last, once the party stands where it came in and the entry storey's roster
+    // exists to receive him.
+    if (companionArrival.mongoWasOut) this.carryMongoIn();
   }
 
   /**
@@ -967,9 +1096,24 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.floors[this.currentFloor].skeletonShots;
   }
 
+  /** That floor's hireling boulders. */
+  private get rockThrows(): RockThrowSystem {
+    return this.floors[this.currentFloor].rockThrows;
+  }
+
+  /** That floor's hireling bolts and waves. */
+  private get hirelingShots(): HirelingBoltSystem {
+    return this.floors[this.currentFloor].hirelingShots;
+  }
+
   /** That floor's raised skeletons. */
   private get skeletonSummons(): SkeletonSummonSystem {
     return this.floors[this.currentFloor].skeletonSummons;
+  }
+
+  /** That floor's fairy heals, links and death effects. */
+  private get fairies(): FairySystem {
+    return this.floors[this.currentFloor].fairies;
   }
 
   /**
@@ -1010,6 +1154,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // has to be dismissible.
       modal(this.menus.levelUpDialog.isShowing, 'level-up'),
       modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
+      modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
       modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
       // `locksKeyboard` even though the death screen accepts from the keyboard:
       // its focus ring listens in the capture phase and consumes the press
@@ -1169,7 +1314,9 @@ export class BuildingInteriorScene extends GameplayScene {
       this.combat.spawnGore(e.x, e.y, e.impactDx, e.impactDy);
     });
     this.bus.on('mobKilled', (e) => {
-      this.gameStats.recordKill(e.mob.displayName);
+      this.gameStats.recordMobKilled(e);
+      // A kill the party earned speeds his recovery, indoors as outdoors.
+      if (e.killer !== null) this.mongoSystem.onKill();
       this.combat.spawnKillGore(e.mob, e.killer);
       // Onto the floor, the same as the dungeon, rather than straight into the
       // purse: a pile you have to walk over is how a kill reads as having paid.
@@ -1371,7 +1518,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // A bolt already loosed belongs to the storey it was fired on, and the rise
     // cue belongs to skeletons the player is walking away from.
     departing.skeletonShots.resetForCheckpoint();
+    departing.rockThrows.resetForCheckpoint();
+    departing.hirelingShots.resetForCheckpoint();
     departing.skeletonSummons.resetForCheckpoint();
+    departing.fairies.resetForCheckpoint(departing.world.roster.mobs, new Set<string>());
     // Before `currentFloor` moves, while `activeEncounter` still resolves to the
     // encounter being walked away from.
     this.activeEncounter?.leaveFloor?.(this.buildSystemContext());
@@ -1399,6 +1549,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // and its leash both read the landing they actually arrived on rather than
     // the storey they left.
     this.companion.setMap(this.map, this.human, this.cat);
+    // After the crawlers are placed, since each companion lands beside the one
+    // it follows. The departing storey's roster is not ticked while the party is
+    // elsewhere, so a companion left in it would stand frozen until they return.
+    this.mercenarySystem.leaveStorey(departing.world.roster.mobs, departing.world.roster.grid);
+    carryCompanions(this.carriedCompanions(), departing.world.roster, this.world.roster, this.map);
 
     // Reset menu states
     this.onExitTile = false;
@@ -1428,6 +1583,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onEnter(): void {
+    bindRunStats(this.gameStats);
     // Override the overworld's persisted music with the room's own; the
     // overworld's zone music (OverworldMusicSystem) restores itself on exit.
     const musicTracks = this.interiorMusicTracks();
@@ -1458,6 +1614,10 @@ export class BuildingInteriorScene extends GameplayScene {
         // still owning the screen.
         if (this.chat.isOpen) {
           this.chat.cancel();
+          return true;
+        }
+        if (this.menus.mongoExplainer.isOpen && !this.menus.isAwardStackShowing) {
+          this.menus.mongoExplainer.close();
           return true;
         }
         if (this.menus.skillBookPrompt.isOpen) {
@@ -1567,8 +1727,8 @@ export class BuildingInteriorScene extends GameplayScene {
       // but it is the same key doing the same thing: spending boards on a
       // broken thing you are standing at.
       buildAction: () => this.triggerAnchorRepair(),
-      // No `toggleQuestTracker` or `mongoSummon`: the journal and the pet both
-      // belong to systems the overworld owns.
+      // No `toggleQuestTracker`: the journal belongs to systems the overworld owns.
+      mongoSummon: () => this.toggleMongoSummon(),
       openChat: () => this.openChat(),
       hotbarActivation: (idx) => activateHotbarSlot(this.hotbarHost(), idx),
       dynamiteRelease: (idx) => releaseChargedDynamite(this.hotbarHost(), idx),
@@ -1612,6 +1772,8 @@ export class BuildingInteriorScene extends GameplayScene {
     // player. Idempotent, so running twice costs nothing.
     this.club?.closeAll(this.active());
     this.humanTalk.stop(this.human);
+    // The next scene binds its own; a level-up must never reach this one's menus.
+    this.abilityManager.onLevelUp = null;
     // Same contract as DungeonScene's bus: subscribers are re-wired per scene, so
     // the listeners this scene added must not outlive it.
     this.bus.clear();
@@ -1630,6 +1792,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // interior that exited without this leaves its mobs — and through them its
     // maps — reachable for the rest of the page's life.
     for (const floor of this.floors) floor.combat.dispose();
+    for (const floor of this.floors) floor.fairies.dispose();
     // Drop this scene's hit-rects so the next scene doesn't inherit stale hover.
     clearButtonMouseState();
     this.inputHandler.unbind();
@@ -1701,6 +1864,119 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private get companionLeftBehind(): boolean {
     return this.inactive().isKnockedOut && !this.companionDownIndoors;
+  }
+
+  /**
+   * Every party-side creature this scene moves with the crawlers: up and down
+   * the tower's stairs, and back to their marks when a script resets the party.
+   */
+  private carriedCompanions(): CarriedCompanion[] {
+    return [
+      this.mongoSystem.asCarriedCompanion(this.cat),
+      this.mercenarySystem.asCarriedCompanion(),
+    ];
+  }
+
+  /**
+   * The party-side creatures hostiles may go for this frame, beside the
+   * crawlers. Not Mongo while he is retreating: on one hit point, with the
+   * interception holding him there, further hits are a fight he cannot leave.
+   */
+  private companionTargets(): Player[] {
+    const targets: Player[] = [];
+    const mongo = this.mongoSystem.mongo;
+    if (mongo !== null && !mongo.recalling && !mongo.collapsing) targets.push(mongo);
+    const merc = this.mercenarySystem.activeMerc;
+    if (merc !== null) targets.push(merc);
+    return targets;
+  }
+
+  /** Who walks out of the door with the party. Read before anything is put away. */
+  private companionDeparture(): InteriorCompanionDeparture {
+    return { mongoWasOut: this.mongoSystem.followsThroughDoor };
+  }
+
+  private carryMongoIn(): void {
+    const mongo = this.mongoSystem.carryIn(this.cat, this.map);
+    if (mongo !== null) this.world.roster.add(mongo);
+  }
+
+  /**
+   * The Summon button and the R key are one toggle, exactly as outdoors: out of
+   * play he is summoned, in play he is called back and runs home.
+   */
+  private toggleMongoSummon(): void {
+    if (this.gameOver || this.safeRoom?.isSleeping === true) return;
+    if (!this.cat.isActive || !this.active().canAct) return;
+    if (this.mongoSystem.mongo !== null) {
+      this.mongoSystem.toggleRecall();
+      return;
+    }
+    this.summonMongo();
+  }
+
+  /** Returns whether he came out; a refusal has already been spoken by the cat. */
+  private summonMongo(): boolean {
+    const mongo = this.mongoSystem.summon(this.cat, this.map);
+    if (mongo === null) return false;
+    this.world.roster.add(mongo);
+    this.abilityManager.addUsageXp('mongo');
+    this.audio?.play('mongo_released');
+    return true;
+  }
+
+  /**
+   * The companion cat sends Mongo in on her own when a fight reaches her — only
+   * while the human is being driven, never against a passive stance, and never
+   * from inside a safe room, which is a rest stop rather than a staging ground.
+   */
+  private autoSummonMongo(ctx: SystemContext): void {
+    if (!settings.catAutoSummonsMongo) return;
+    if (!this.human.isActive || this.mongoSystem.mongo !== null) return;
+    if (this.companion.getCombatStance(true) === 'passive') return;
+    if (this.safeRoom !== null && this.pm.isAnySafe(this.safeRoom)) return;
+    if (!this.mongoSystem.catWantsToSummon(ctx)) return;
+    if (!this.summonMongo()) this.mongoSystem.onAutoSummonRefused();
+  }
+
+  /**
+   * Mongo's Summon/Recall button: on a phone stacked on the Switch button as
+   * outdoors, elsewhere bottom-left above the hotbar band the room is already
+   * lifted clear of. Null where it is not drawn, so nothing hit-tests a button
+   * the player cannot see.
+   */
+  private renderSummonButton(
+    ctx: CanvasRenderingContext2D,
+  ): { x: number; y: number; w: number; h: number } | null {
+    if (!this.mongoSystem.canShow || !this.cat.isActive) return null;
+    if (platform.isMobile) {
+      const stacked = this.mobileHUD.summonButtonRect;
+      return this.mongoSystem.renderSummonButton(
+        ctx,
+        stacked.x,
+        stacked.y,
+        stacked.w,
+        stacked.h,
+        this.cat.isActive,
+      );
+    }
+    const hotbarTop = viewportHeight() - this.mobileHUD.inventoryPanel.hotbarBandHeight();
+    return this.mongoSystem.renderSummonButton(
+      ctx,
+      SUMMON_BUTTON_LEFT_PX,
+      hotbarTop - SUMMON_BUTTON_HEIGHT - SUMMON_BUTTON_HOTBAR_GAP_PX,
+      SUMMON_BUTTON_WIDTH,
+      SUMMON_BUTTON_HEIGHT,
+      this.cat.isActive,
+    );
+  }
+
+  /** Whether a press at this point landed on the Summon button, which it then toggles. */
+  private tryPressSummonButton(x: number, y: number): boolean {
+    const rect = this.summonButtonRect;
+    if (rect === null || !pointInRect(x, y, rect)) return false;
+    this.toggleMongoSummon();
+    return true;
   }
 
   /** The companion as a render-list fragment — empty when they were left outside. */
@@ -1875,6 +2151,11 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.chat.isOpen) return;
     if (this.pauseMenu.isOpen) return;
     if (this.followerMenu.isOpen) return;
+    // Asked while the party can still turn back: a door or a stair would leave
+    // a downed hire behind for good.
+    if (this.exitMenuOpen || this.towerStairs?.menuOpen === true) {
+      this.mercenarySystem.warnIfLeavingDowned();
+    }
     if (this.exitMenuOpen) return;
     if (this.towerStairs?.menuOpen) return;
     // The dialogs below advance from the claim registry, on the key event
@@ -1942,6 +2223,7 @@ export class BuildingInteriorScene extends GameplayScene {
       if (this.consumeModalClose()) this.readablePanel.advance();
       return;
     }
+    this.gameStats.recordPlayedFrame();
     // Deliberately does not return: the player has to be able to walk while the
     // box is up, because walking off is what dismisses it.
     this.dismissCitizenDialogIfWalkedAway();
@@ -1964,14 +2246,6 @@ export class BuildingInteriorScene extends GameplayScene {
       this.human.tickTimers();
       this.cat.tickTimers();
       return;
-    }
-
-    // Below every gameplay-halting return above — the blackjack table and the
-    // service panel each have their own, and the pet must not heal on wall-clock
-    // time behind any of them. `DungeonScene` runs its regen inside
-    // `updateGameplay`, which the same halts skip.
-    if (this.mongoPetState !== undefined && this.mongoPetLevel !== undefined) {
-      tickMongoRegen(this.mongoPetState, getMongoStats(this.mongoPetLevel()).maxHp);
     }
 
     const player = this.active();
@@ -2084,6 +2358,17 @@ export class BuildingInteriorScene extends GameplayScene {
     // swing below has to be told about it separately.
     const openedReadable = interactPressed() && this.tryReadNearby(player);
 
+    // Last of the conversations, as outdoors: the hire stands at the party's
+    // shoulder the whole visit, so a counter, a quest giver, a citizen or a page
+    // within reach is what a press is meant for. Refused while a fight is on.
+    if (
+      !openedReadable &&
+      interactPressed() &&
+      this.mercenarySystem.tryTalk(player, this.world.roster.mobs)
+    ) {
+      keybindings.release(this.input, 'attack');
+    }
+
     // Update walk animation
     this.human.tickTimers();
     this.cat.tickTimers();
@@ -2175,6 +2460,7 @@ export class BuildingInteriorScene extends GameplayScene {
       activeIsMoving: active.isMoving,
       roster: this.world.roster,
       gameMap: this.map,
+      extraTargets: this.companionTargets(),
     };
   }
 
@@ -2195,6 +2481,13 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     combat.updatePlayerAttacks();
+    setVisibleWorldView(
+      cameraWorldView(
+        this.computeCamera(this.map),
+        null,
+        viewportHeight() - this.viewportBottomInset(),
+      ),
+    );
     combat.updateMobs(ctx);
     this.activeEncounter?.update(ctx);
     // Beside the update that sets it, and ahead of next frame's companion pass:
@@ -2204,6 +2497,9 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.bigTopMaze?.partyResetPending === true) {
       this.bigTopMaze.partyResetPending = false;
       this.companion.anchorBoth(this.human, this.cat);
+      // Companions go back with the crawlers: a pet left mid-crossing is on the
+      // far side of a curtain the party has just been sent back behind.
+      carryCompanions(this.carriedCompanions(), this.world.roster, this.world.roster, this.map);
       // The party is no longer standing where the offer was made. A burnout can
       // land on the same frame the active crawler steps onto an exit mat — the
       // parked one is what burned — and the menu that opened would then be a
@@ -2215,8 +2511,21 @@ export class BuildingInteriorScene extends GameplayScene {
     combat.drainMobAudioCues(this.audio);
 
     combat.resolvePlayerAttacks({ destructibles: destruction.destructibles });
+    // Before kills are resolved: a companion's lethal hit is intercepted here,
+    // or it runs the whole kill path and pays the party for its own pet.
+    this.mongoSystem.checkHealth();
+    this.mercenarySystem.checkHealth((merc) => combat.spawnKillGore(merc, null));
     combat.resolveKills();
     combat.resolveSpellAftermath();
+    // Also where his off-duty recovery ticks, and so only while he is not out,
+    // and never behind any of the world-halting returns in `update`.
+    this.mongoSystem.update(ctx);
+    this.autoSummonMongo(ctx);
+    if (this.mercenaryRoster.active !== this.hireContract) {
+      this.hireContract = this.mercenaryRoster.active;
+      this.mercenarySystem.onContractChanged(ctx.roster.mobs, ctx.roster.grid);
+    }
+    this.mercenarySystem.update(ctx);
     this.noteHostileRoomsCleared();
     combat.playerTick.tickRegen(this.human, this.cat);
     // Auto-potion only while something in the room is actually trying to kill
@@ -2228,7 +2537,10 @@ export class BuildingInteriorScene extends GameplayScene {
     combat.updatePostCombat(this.audio);
     // Summons first, so a skeleton raised this frame is already in the roster the
     // projectile system walks — a wave and the bolts covering it land on one tick.
+    this.rockThrows.update(ctx);
+    this.hirelingShots.update(ctx);
     this.skeletonSummons.update(ctx);
+    this.fairies.update(ctx);
     this.skeletonShots.update(ctx);
     this.drainCasterAudioCues();
     destruction.update(ctx);
@@ -2251,6 +2563,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * the floor rather than to whoever called them.
    */
   private drainCasterAudioCues(): void {
+    playHirelingProjectileCues(this.rockThrows, this.hirelingShots, this.audio);
     if (this.skeletonShots.burstSoundPending) {
       this.skeletonShots.burstSoundPending = false;
       this.audio?.play('magic_ball_impact');
@@ -2265,17 +2578,45 @@ export class BuildingInteriorScene extends GameplayScene {
       this.skeletonSummons.riseSoundPending = false;
       this.audio?.play('bones_rattling');
     }
+    playFairySystemCues(this.fairies.takeCues(), this.audio);
+  }
+
+  /** The arrow to the loose soul crystal, or to the stairs that climb toward it. */
+  private renderSoulCrystalGuidance(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
+    if (this.gameOver || this.pauseMenu.isOpen || this.entry.type !== 'tower') return;
+    const upTiles = this.map._interiorStairUpTiles;
+    const middleUpTile = upTiles[Math.floor(upTiles.length / 2)];
+    const upStairs =
+      upTiles.length === 0
+        ? null
+        : {
+            x: (middleUpTile.x + STAIR_TILE_CENTRE) * TILE_SIZE,
+            y: (middleUpTile.y + STAIR_TILE_CENTRE) * TILE_SIZE,
+          };
+    this.soulCrystal.renderGuidance(
+      ctx,
+      camX,
+      camY,
+      this.active(),
+      this.currentFloor === TOWER_CONFRONTATION_FLOOR,
+      upStairs,
+    );
   }
 
   /**
    * The interior's own defeat, whatever killed the party: the quest fight that
    * owns the room if there is one, and otherwise the room itself — a building
-   * with a hostile in it can now kill you, and dropping the party back on the
+   * with a hostile in it can kill you, and dropping the party back on the
    * doorstep at nought hit points to die again outside is not an ending.
    */
   private raiseDeathScreen(): void {
     if (this.gameOver) return;
     this.gameOver = true;
+    this.gameStats.recordDeath();
     // A death arrives from the fight, not from a key or a click, so nothing else
     // here has taken the keyboard off a bag left open behind it.
     this.menus.cancelInventoryDragForOverlay();
@@ -2331,6 +2672,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // an OK button there must not reach the screen underneath.
     if (this.menus.levelUpDialog.handleClick(mx, my)) return;
     if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
+    if (this.menus.mongoExplainer.handleClick(mx, my)) return;
     if (this.menus.skillBookPrompt.isOpen) {
       const reader = this.menus.pendingSkillBookReader(this.inventoryPlayer());
       if (resolveSkillBookPrompt(this.menus.skillBookFlowHost(), reader, mx, my) !== null) {
@@ -2419,6 +2761,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.citizenDialog?.handleClick(mx, my) === true) {
       return;
     }
+    if (!this.menus.panelCovers(mx, my) && this.tryPressSummonButton(mx, my)) return;
 
     const invPlayer = this.inventoryPlayer();
     const active = this.active();
@@ -2506,6 +2849,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   handleWheel(deltaY: number): void {
+    if (this.menus.mongoExplainer.isOpen) return;
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleWheel(deltaY);
       return;
@@ -2522,6 +2866,9 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseX = mx;
     this._mouseY = my;
     this._mouseDown = true;
+    // Ahead of everything below: the explainer opens over the pause menu, and a
+    // press there must not start a drag or a scroll in the surface underneath.
+    if (this.menus.mongoExplainer.isOpen) return;
     const openShop = this.scrollableShop;
     if (openShop !== null) {
       openShop.handlePointerDown(mx, my);
@@ -2541,6 +2888,7 @@ export class BuildingInteriorScene extends GameplayScene {
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
+    if (this.menus.mongoExplainer.isOpen) return;
     this.scrollableShop?.handlePointerMove(mx, my);
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleMouseMove(mx, my);
@@ -2555,6 +2903,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseY = my;
     this._mouseDown = false;
     this.scrollableShop?.handlePointerUp();
+    if (this.menus.mongoExplainer.isOpen) return;
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
       return;
@@ -2597,9 +2946,16 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     // God mode rides on top of base stats rather than being folded into them, so
     // snapshots are already clean and the overworld can re-apply its own overlay.
+    // Read before the dismiss that clears it; the dismiss writes his remaining
+    // health into the pet state the next scene rebuilds him from.
+    const companions = this.companionDeparture();
+    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    // Writes the hire's health into the roster the next scene stands it up
+    // from; a hire lying downed at the door is lost with the room.
+    this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
-    this.onExitCallback(humanSnap, catSnap, defeated);
+    this.onExitCallback(humanSnap, catSnap, defeated, companions);
   }
 
   /**
@@ -2620,8 +2976,8 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /** The `R` press indoors: Old Hilda's repairs, and nothing else so far. */
-  private triggerAnchorRepair(): void {
-    this.anchorInterior?.tryRepair(this.active());
+  private triggerAnchorRepair(): boolean {
+    return this.anchorInterior?.tryRepair(this.active()) ?? false;
   }
 
   /**
@@ -3005,6 +3361,21 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
+   * Floats a "Talk" prompt over the hireling when a press would reach it.
+   *
+   * Talking is the last link of the Space chain, so this is drawn after every
+   * surface that raises a prompt of its own — the counters, the desk, the bed,
+   * Mordecai, the Bopca, the readables, the quest fights — and yields to any
+   * of them already on screen: that one takes the press first.
+   */
+  private renderMercenaryPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (interactionPromptsDrawnThisFrame() > 0) return;
+    const merc = this.mercenarySystem.talkTarget(this.active(), this.world.roster.mobs);
+    if (merc === null) return;
+    drawInteractionPrompt(ctx, merc.x - camX, merc.y - camY, TILE_SIZE, 'Talk');
+  }
+
+  /**
    * Floats one interact prompt over whatever the next press would reach: the
    * nearest occupant, or — when nobody is in range — whatever there is to read.
    * One prompt at a time, because two hovering key-caps in a small room read as
@@ -3168,6 +3539,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const destruction = this.destruction;
     destruction.renderGround(ctx, camX, camY);
     combat.renderGround(ctx, camX, camY);
+    this.fairies.renderGround(ctx, camX, camY);
     // Under the figures: the highlight rings sit on the floor around the broken
     // furniture, and a crawler standing at one must not be drawn beneath it.
     this.anchorInterior?.renderObjects(ctx, camX, camY, this.active());
@@ -3185,6 +3557,9 @@ export class BuildingInteriorScene extends GameplayScene {
     combat.renderEffects(ctx, camX, camY, this.cat);
     // Over the creatures, so a shot never disappears behind the one it passes.
     this.skeletonShots.render(ctx, camX, camY);
+    this.rockThrows.render(ctx, camX, camY);
+    this.hirelingShots.render(ctx, camX, camY);
+    this.fairies.render(ctx, camX, camY);
     destruction.renderEffects(ctx, camX, camY, this.human);
     // Over the crawlers, so a column standing between the camera and one of them
     // still reads as fire they are inside rather than fire they are behind.
@@ -3200,6 +3575,13 @@ export class BuildingInteriorScene extends GameplayScene {
 
     combat.floatingText.render(ctx, camX, camY);
     this.chat.renderBubble(ctx, camX, camY);
+    // Mongo's lines are the cat's, said over her head — so not while she lies
+    // outside the door.
+    const catIsInside = this.cat.isActive || !this.companionLeftBehind;
+    if (catIsInside) {
+      this.mongoSystem.renderSpeechBubble(ctx, this.cat.x - camX, this.cat.y - camY);
+    }
+    this.mercenarySystem.renderSpeech(ctx, camX, camY);
 
     // Independent of `combat` — the crystal must still be visible/containable
     // if the player returns to this floor after the encounter was torn down.
@@ -3221,6 +3603,26 @@ export class BuildingInteriorScene extends GameplayScene {
     // Tower stair hints
     this.towerStairs?.renderStairHints(ctx, camX, camY);
 
+    // Before the HUD: the marker is clamped to the screen edge, and a pet off
+    // the top of the room would otherwise sit on top of the health bars.
+    if (!this.gameOver && !this.pauseMenu.isOpen) {
+      this.mongoSystem.renderOffscreenMarker(
+        ctx,
+        camX,
+        camY,
+        this.active(),
+        INTERIOR_SIGHT_RADIUS_PX,
+      );
+      this.mercenarySystem.renderDownedArrow(
+        ctx,
+        camX,
+        camY,
+        this.active(),
+        INTERIOR_SIGHT_RADIUS_PX,
+      );
+    }
+
+    this.renderSoulCrystalGuidance(ctx, camX, camY);
     this.renderHUD(ctx);
 
     if (!this.gameOver && !this.pauseMenu.isOpen && this.companionDownIndoors) {
@@ -3248,6 +3650,7 @@ export class BuildingInteriorScene extends GameplayScene {
     });
 
     // Minimap + right-side buttons (pause, gear, bag)
+    this.summonButtonRect = null;
     if (!this.exitMenuOpen && !this.pauseMenu.isOpen) {
       const mmSize = this.mobileHUD.renderInteriorMiniMap(
         ctx,
@@ -3304,6 +3707,8 @@ export class BuildingInteriorScene extends GameplayScene {
           gearY,
         );
       }
+      // After the mobile buttons, whose Switch it is stacked on.
+      this.summonButtonRect = this.renderSummonButton(ctx);
     }
 
     if (this.safeRoom) {
@@ -3322,6 +3727,8 @@ export class BuildingInteriorScene extends GameplayScene {
       this.bopca.renderUI(ctx, camX, camY, this.active());
       this.bopca.renderDialog(ctx);
     }
+    // Last of the world prompts; see the method for why.
+    this.renderMercenaryPrompt(ctx, camX, camY);
 
     if (this.shop) {
       this.shop.renderUI(ctx, this.active());
@@ -3550,6 +3957,12 @@ export class BuildingInteriorScene extends GameplayScene {
       if (worldHalted(this.overlayClaims)) {
         // The follower menu's rows scroll under a drag, so the release decides
         // whether the press was a click.
+        // Opened over the pause menu from the Abilities tab, where the pause
+        // menu's scroll gesture below would otherwise take the tap.
+        if (this.menus.mongoExplainer.isOpen) {
+          this.handleClick(x, y);
+          continue;
+        }
         if (this.followerMenu.isOpen && !this.pauseMenu.isOpen) {
           this.followerMenu.touchStart(touch.identifier, x, y);
           continue;
@@ -3595,6 +4008,8 @@ export class BuildingInteriorScene extends GameplayScene {
         // banner to click — tapping it is the only route to the Spend screen.
         if (this.menus.tryOpenSpendScreen(x, y, this._hudSkillBannerRect)) continue;
       }
+
+      if (!coveredByPanel && this.tryPressSummonButton(x, y)) continue;
 
       // Mobile button hit-test (Switch, Gear, Bag, Pause, Minimap, Follow)
       if (platform.isMobile && !coveredByPanel) {

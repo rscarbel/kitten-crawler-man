@@ -480,6 +480,11 @@ export class BlackjackTable {
    * the payout animation runs.
    */
   private pendingPayout = 0;
+  /**
+   * The part of `pendingPayout` that is winnings rather than the stake coming
+   * back: only that part is money the run earned.
+   */
+  private pendingWinnings = 0;
 
   private settle(): void {
     const outcome = settleRound(this.playerHand, this.dealerHand);
@@ -488,6 +493,7 @@ export class BlackjackTable {
     this.handsPlayed++;
     const payout = payoutFor(outcome, this.stake);
     this.pendingPayout += payout;
+    this.pendingWinnings += Math.max(0, payout - this.stake);
     if (outcome.kind === 'player_blackjack' && this.stake >= TABLE_MAXIMUM) {
       this.jackpotPending = true;
     }
@@ -505,8 +511,11 @@ export class BlackjackTable {
    */
   collectPayout(player: Player): number {
     const owed = this.pendingPayout;
+    const winnings = Math.min(owed, this.pendingWinnings);
     this.pendingPayout = 0;
-    player.coins += owed;
+    this.pendingWinnings = 0;
+    player.coins += owed - winnings;
+    player.earnCoins(winnings);
     return owed;
   }
 }

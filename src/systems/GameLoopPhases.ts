@@ -26,6 +26,7 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Mongo } from '../creatures/Mongo';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
+import { playFairyCastCues } from './fairyAudioCues';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
@@ -158,7 +159,7 @@ export function applyMovement(
   const mapPxW = (gameMap.structure[0]?.length ?? gameMap.structure.length) * TILE_SIZE;
   const mapPxH = gameMap.structure.length * TILE_SIZE;
 
-  if (player.hasStatus('stuck')) {
+  if (player.hasStatus('stuck') || !player.canAct) {
     player.isMoving = false;
     return;
   }
@@ -210,7 +211,7 @@ export function applyMovement(
  *
  * Eased out by {@link knockbackStepPx}, which mobs share. Distinct from
  * `applyMovement`'s walk input, this is physical displacement and runs even
- * while the player `hasStatus('stuck')`.
+ * while the player `hasStatus('stuck')` or is frozen.
  */
 export function applyKnockbackMotion(player: Player, gameMap: GameMap): void {
   if (player.knockbackFramesRemaining <= 0) return;
@@ -326,6 +327,10 @@ export function triggerPlayerAttack(
   gameMap: GameMap,
   audio: AudioManager | null,
 ): void {
+  // Refused before the facing snap, which would otherwise turn an encased
+  // crawler toward the nearest mob.
+  const attacker = human.isActive ? human : cat;
+  if (!attacker.canAct) return;
   if (human.isActive) {
     const target = snapFacingToNearestMob(
       human,
@@ -575,6 +580,7 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
     playJuicerCues(mob, audio);
     playKrakarenCloneCues(mob, audio);
     playKrakarenTentacleCues(mob, audio);
+    playFairyCastCues(mob, audio);
   }
 }
 
@@ -618,9 +624,7 @@ function playJuicerCues(mob: Mob, audio: AudioManager | null): void {
   if (!(mob instanceof Juicer)) return;
   if (mob.punchWindupSoundPending) {
     mob.punchWindupSoundPending = false;
-    // [STAND-IN] borrowed from the Dark Knight's mace whirl until something
-    // closer to a lizard hauling himself upright is sourced.
-    audio?.play('metal_winding_up');
+    audio?.play('juicer_grunt');
   }
   if (mob.punchImpactSoundPending) {
     mob.punchImpactSoundPending = false;

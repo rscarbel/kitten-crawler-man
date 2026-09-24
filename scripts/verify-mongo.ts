@@ -1335,7 +1335,12 @@ console.log('\na full recovery never takes more than thirty seconds');
     const roster = new MobRoster(map, new SpellSystem());
     const level = 1;
     const mongo = new Mongo(CAT_TILE_X - 1, ROW, TILE_SIZE, cat, level, getMongoStats(level).maxHp);
-    if (!yieldsToParty) Object.defineProperty(mongo, 'yieldsToParty', { value: false });
+    // He passes through the party by design, so the defect this negative stages
+    // is a Mongo that both collides with the party and refuses to yield to it.
+    if (!yieldsToParty) {
+      Object.defineProperty(mongo, 'yieldsToParty', { value: false });
+      Object.defineProperty(mongo, 'displacesPlayers', { value: true });
+    }
     roster.add(mongo);
     const foe = createMob(ATTACKER_MOB_ID, CAT_TILE_X + FOE_OFFSET_TILES, ROW, map);
     foe.x = (CAT_TILE_X + FOE_OFFSET_TILES) * TILE_SIZE;

@@ -216,6 +216,12 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   the_lich: [],
   /** Painted by `skyFowlSprite.ts`, one figure per clothing palette. */
   sky_fowl: [],
+  /** The five fairies are painted, not baked. */
+  fairy_shield: [],
+  fairy_healer: [],
+  fairy_ice: [],
+  fairy_fire: [],
+  fairy_necro: [],
 
   // Not in MOB_REGISTRY — constructed directly by the systems named in each
   // comment, never via `createMob`.

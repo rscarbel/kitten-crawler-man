@@ -380,7 +380,7 @@ export class SpellSystem implements GameSystem {
     mobGrid: SpatialGrid<Mob>,
     abilityLevel: number,
   ): boolean {
-    if (this._shellCooldown > 0) return false;
+    if (this._shellCooldown > 0 || !human.canAct) return false;
 
     const stats = getProtectiveShellStats(abilityLevel);
     const radiusPx = stats.radiusTiles * TILE_SIZE;
@@ -426,6 +426,7 @@ export class SpellSystem implements GameSystem {
   }
 
   castConfusingFog(caster: HumanPlayer | CatPlayer): void {
+    if (!caster.canAct) return;
     if (!caster.inventory.removeOne('scroll_of_confusing_fog')) return;
     const radiusPx = Math.min(
       (FOG_RADIUS_BASE + caster.intelligence * FOG_RADIUS_INT_MULTIPLIER) * TILE_SIZE,

@@ -20,13 +20,14 @@ import { despawnMob, type Mob, type LootDrop } from '../creatures/Mob';
 import type { Player } from '../Player';
 import { PlayerManager } from '../core/PlayerManager';
 import { MobileTouchState } from '../core/MobileTouchState';
-import type { LevelDef } from '../levels/types';
+import type { LevelDef, MobLevelRange, MobSpawnRule } from '../levels/types';
 import {
   spawnForLevel,
   spawnExtraMobs,
   createMob,
   spawnTreasureRoomMobs,
   partyLevelOf,
+  pickRule,
   recommendedPartyLevelFor,
   resolveAmbientLevel,
 } from '../levels/spawner';
@@ -38,6 +39,14 @@ import { getLevelDef } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { LevelCompleteScreen } from '../ui/LevelCompleteScreen';
+import {
+  RUN_COMPLETE_FOCUS_ID,
+  RunCompleteScreen,
+  buildRunSummary,
+  countPartyAchievements,
+  finishRun,
+} from '../ui/RunCompleteScreen';
+import { PostSignupScene } from './PostSignupScene';
 import { MENU_TAP_DURATION_MS, MENU_TAP_MAX_DISTANCE, type PauseMenu } from '../ui/PauseMenu';
 import { SpellSystem } from '../systems/SpellSystem';
 import type { InventoryItem } from '../core/ItemDefs';
@@ -78,10 +87,28 @@ import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
+import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
+import { awardFirstHundred, bindAbilityLevelUps } from '../systems/abilityLevelUps';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
 import { GoblinArrowSystem } from '../systems/GoblinArrowSystem';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
 import { ClownGasSystem } from '../systems/ClownGasSystem';
+import { FairySystem } from '../systems/FairySystem';
+import { FairyFireballSystem } from '../systems/FairyFireballSystem';
+import {
+  playFairyFireballCues,
+  playFairySystemCues,
+  playFrostCues,
+} from '../systems/fairyAudioCues';
+import { Fairy } from '../creatures/fairies/Fairy';
+import { FAIRY_KINDS } from '../sprites/art/fairyTiming';
+import {
+  FAIRY_SPAWN_KEYS,
+  FairyRoomLedger,
+  spawnBossRoomHealers,
+  spawnOverworldFairies,
+  spawnRoomFairies,
+} from '../levels/fairySpawner';
 import { KnightMissileSystem } from '../systems/KnightMissileSystem';
 import { CombatKit } from '../systems/kits/CombatKit';
 import { DestructionKit } from '../systems/kits/DestructionKit';
@@ -96,6 +123,8 @@ import {
   type HotbarHost,
 } from '../systems/kits/hotbarActions';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
+import { markMobsAtCheckpoint, rewindMobsToCheckpoint } from '../systems/mobCheckpoint';
+import { deadFairyUpgradeBosses, replayFairyRateUpgrades } from '../systems/fairyUpgradeBosses';
 import {
   advanceFocusedOverlay,
   auditOverlayFocus,
@@ -211,7 +240,8 @@ import { TreeSystem } from '../systems/TreeSystem';
 import { WaterAnimationSystem } from '../systems/WaterAnimationSystem';
 import { AbilityManager, type AbilityId } from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
-import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
+import { MAGIC_MISSILE_DEF, MAGIC_MISSILE_TALISMAN_LEVEL } from '../abilities/magicMissile';
+import { MONGO_EXPLAINER_FOCUS_ID } from '../ui/MongoExplainer';
 import { MONGO_DEF, getMongoStats } from '../abilities/mongo';
 import {
   captureMongoPetState,
@@ -274,7 +304,13 @@ import { findNearbyWalkableTile, hasRoomToMove } from '../map/findWalkableTile';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
-import { MongoSystem, SUMMON_BUTTON_HEIGHT, SUMMON_BUTTON_WIDTH } from '../systems/MongoSystem';
+import {
+  MongoSystem,
+  mongoXpFraction,
+  SUMMON_BUTTON_HEIGHT,
+  SUMMON_BUTTON_WIDTH,
+} from '../systems/MongoSystem';
+import type { InteriorCompanionArrival } from '../systems/companionCarry';
 import { DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
 import { CircusQuestSystem, CIRCUS_QUEST_ID } from '../systems/CircusQuestSystem';
@@ -286,7 +322,13 @@ import {
   doorwayBeaconTarget,
 } from '../systems/objectiveBeaconTargets';
 import { TINKER_VENDOR_ID } from '../systems/market/vendorDefs';
-import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
+import {
+  capturePersistedDoomsday,
+  createDoomsdayProgress,
+  rearmExpiredDoomsday,
+  restoreDoomsdayProgress,
+  type DoomsdayProgress,
+} from '../core/DoomsdayProgress';
 import {
   captureClubMembership,
   createClubMembership,
@@ -306,11 +348,22 @@ import {
   createMercenaryRoster,
   restoreMercenaryRoster,
   type MercenaryRoster,
+  type MercenaryRosterCheckpoint,
 } from '../core/MercenaryRoster';
 import { createGodModeState, type GodModeState } from '../core/GodMode';
 import { MercenarySystem } from '../systems/MercenarySystem';
-import { DoomsdayEscapeSystem } from '../systems/DoomsdayEscapeSystem';
-import { RenderPipeline, visibilityRadiusPx, type RenderContext } from '../systems/RenderPipeline';
+import {
+  DOOMSDAY_TRACKER_ID,
+  DoomsdayEscapeSystem,
+  STAIRWELL_KNOCKED_OUT_TOAST,
+} from '../systems/DoomsdayEscapeSystem';
+import {
+  clearSightOf,
+  RenderPipeline,
+  visibilityRadiusPx,
+  type RenderContext,
+} from '../systems/RenderPipeline';
+import { cameraWorldView, setVisibleWorldView } from '../core/visibleWorldView';
 import type { SystemContext } from '../systems/GameSystem';
 import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import { GameplayScene } from './GameplayScene';
@@ -354,7 +407,7 @@ import {
 } from '../systems/mordecaiDebrief';
 import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import type { AISceneContext } from '../ai/aiActions';
-import { GameStats } from '../core/GameStats';
+import { GameStats, bindRunStats, type GameStatsSnapshot } from '../core/GameStats';
 import { difficultyStats } from '../core/DifficultyStats';
 import { settings } from '../core/Settings';
 import type { AudioManager } from '../audio/AudioManager';
@@ -428,10 +481,23 @@ export interface DungeonSceneOptions {
    * `Mongo` instance that carries it in play is destroyed on every despawn.
    */
   mongoPetState?: MongoPetState;
+  /**
+   * Whether Mongo was out beside the party at the building door they just came
+   * out of. He is rebuilt beside the cat on the first frame, at the health the
+   * pet state carries.
+   */
+  mongoWasOut?: boolean;
   /** Carry ability leveling progress across floor transitions. */
   abilityManager?: AbilityManager;
   /** Ability state at floor entry — restored on death-restart so level-up progress rewinds to floor-start. */
   floorEntryAbilityManager?: AbilityManager;
+  /** The run's tallies at floor entry — a floor restart rewinds the world's counters to these. */
+  floorEntryGameStats?: GameStatsSnapshot;
+  /**
+   * The hire as it stood at floor entry. A floor restart rewinds the coins a
+   * contract was paid with, so it has to rewind the contract with them.
+   */
+  floorEntryMercenaryRoster?: MercenaryRosterCheckpoint;
   /** Called whenever the game wants to persist progress (e.g. on safe-room entry). */
   saveProgress?: SaveProgressFn;
   /** Shared AudioManager instance — persists across scene transitions. */
@@ -475,6 +541,12 @@ export interface DungeonSceneOptions {
   /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
   spawnAtCircus?: boolean;
   /**
+   * Dev bootstrap only: these boss types never spawn, and their rooms are
+   * marked won before the first frame — a playtest preset dropping the party
+   * past a gauntlet gate it never fought.
+   */
+  preDefeatedBossTypes?: readonly MobSpawnRule['type'][];
+  /**
    * Dev bootstrap only: picks the spawn tile from this floor's freshly generated
    * map — a gateway safe room, the spider lab door. A callback rather than a
    * coordinate because the coordinate does not exist until the constructor has
@@ -513,6 +585,13 @@ export interface DungeonSceneOptions {
 const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
 /** How far outside the mark `!bounty go` lands the party — inside its aggro range. */
 const BOUNTY_WARP_STANDOFF_TILES = 4;
+
+/** Most fairies one `!fairy` spawns. */
+const FAIRY_CHEAT_MAX_COUNT = 8;
+/** Tiles either side of the crawler `!fairy` scatters its fairies across. */
+const FAIRY_CHEAT_SPREAD_TILES = 3;
+/** Random tiles tried before `!fairy` settles for however many it placed. */
+const FAIRY_CHEAT_ATTEMPTS = 40;
 /** Widest ring `!bounty go` will search for somewhere walkable to land. */
 const BOUNTY_WARP_SEARCH_TILES = 20;
 /** A recall lands *on* its destination where it can, so the ring search starts there. */
@@ -559,6 +638,9 @@ interface ChestReward {
   readonly split: ChestLootSplit | null;
   readonly onDismissed?: () => void;
 }
+
+/** The tutorial shares `floorNumber: 1` with this level, so the id is what tells them apart. */
+const FIRST_DUNGEON_LEVEL_ID = 'level1';
 
 const FORCED_TO_HUMAN = new Set<string>([
   'trollskin_shirt',
@@ -673,9 +755,6 @@ const MAX_CONCURRENT_ON_KILL_SPAWNS = 12;
  */
 const ON_KILL_SPAWN_CAP_RADIUS_TILES = 12;
 const ON_KILL_SPAWN_CAP_RADIUS = ON_KILL_SPAWN_CAP_RADIUS_TILES * TILE_SIZE;
-
-/** Magic Missile level that earns the cat the slate butterfly talisman. */
-const MAGIC_MISSILE_TALISMAN_LEVEL = 3;
 
 /** Kills one attack has to land at once to earn the crowd-control award. */
 const MULTIKILL_ACHIEVEMENT_THRESHOLD = 10;
@@ -887,6 +966,8 @@ export class DungeonScene extends GameplayScene {
   private goblinArrows: GoblinArrowSystem;
   private skeletonSummons: SkeletonSummonSystem;
   private clownGas: ClownGasSystem;
+  private readonly fairies: FairySystem;
+  private readonly fairyFireballs: FairyFireballSystem;
   private knightMissiles: KnightMissileSystem;
   private companion: CompanionSystem;
   private trees: TreeSystem | null;
@@ -967,11 +1048,18 @@ export class DungeonScene extends GameplayScene {
   private stairwellHintAnnounced = false;
   private readonly mongoSystem: MongoSystem;
   private readonly mongoPetState: MongoPetState;
+  /**
+   * Mongo walked out of a building with the party and is waiting to be put down
+   * beside the cat. Held for the first gameplay frame rather than done in the
+   * constructor, which runs before the party is placed at the door.
+   */
+  private mongoCarryPending = false;
   private readonly mercenarySystem: MercenarySystem;
   private renderPipeline = new RenderPipeline();
   private bus = new EventBus();
 
   private levelCompleteScreen = new LevelCompleteScreen();
+  private readonly runCompleteScreen = new RunCompleteScreen();
 
   private achievementUI!: AchievementUISystem;
   private humanAchievements: AchievementManager;
@@ -996,6 +1084,8 @@ export class DungeonScene extends GameplayScene {
   private floorEntryHumanAchievements!: AchievementManager;
   private floorEntryCatAchievements!: AchievementManager;
   private floorEntryAbilityManager!: AbilityManager;
+  private readonly floorEntryGameStats: GameStatsSnapshot;
+  private readonly floorEntryMercenaryRoster: MercenaryRosterCheckpoint;
 
   private readonly followerMenu = new FollowerMenu();
 
@@ -1084,6 +1174,7 @@ export class DungeonScene extends GameplayScene {
     this.companionStance = options?.companionStance ?? createCompanionStanceState();
     this.godModeState = options?.godModeState ?? createGodModeState();
     this.gameStats = options?.gameStats ?? new GameStats();
+    this.floorEntryGameStats = options?.floorEntryGameStats ?? this.gameStats.snapshot();
     this.humanAchievements = options?.humanAchievements ?? new AchievementManager();
     this.catAchievements = options?.catAchievements ?? new AchievementManager();
     // Ahead of the kits: `CombatKit` levels abilities off kills and `MenusKit`
@@ -1116,6 +1207,7 @@ export class DungeonScene extends GameplayScene {
      * may reach `this.world.roster.mobs` before it.
      */
     const initialMobs: Mob[] = [];
+    let fairyLedger: FairyRoomLedger | null = null;
     let spawnTileX = 0;
     let spawnTileY = 0;
 
@@ -1222,8 +1314,43 @@ export class DungeonScene extends GameplayScene {
       const clearedCamps = new Set(
         options?.persistedWorldState?.townMemory.clearedCamps ?? options?.townMemory?.clearedCamps,
       );
+      const preDefeatedBossTypes = options?.preDefeatedBossTypes ?? [];
       initialMobs.push(
-        ...spawnForLevel(levelDef, this.gameMap, partyLevel, difficultyProfile, clearedCamps),
+        ...spawnForLevel(
+          levelDef,
+          this.gameMap,
+          partyLevel,
+          difficultyProfile,
+          clearedCamps,
+        ).filter(
+          // Left out of the roster entirely, not just marked dead: a boss
+          // skipped this way never fights, so nothing should ever find it
+          // alive, and the hard-mode healer spawn below only puts one beside a
+          // boss it can find in its room.
+          (mob) => !(mob.isBoss && preDefeatedBossTypes.some((type) => type === mob.spawnTypeKey)),
+        ),
+      );
+      // The difficulty key is read here with the profile, for the same reason:
+      // a fairy's potency is stamped once and a settings flip must not move it.
+      fairyLedger = new FairyRoomLedger(
+        levelDef,
+        partyLevel,
+        difficultyProfile,
+        settings.difficulty,
+      );
+      initialMobs.push(...spawnRoomFairies(this.gameMap, fairyLedger));
+      initialMobs.push(...spawnOverworldFairies(this.gameMap, fairyLedger));
+      // A resumed save's won rooms are still in the save rather than in the
+      // boss-room system, which only learns them once every system exists.
+      const persistedBossRooms = options?.persistedWorldState?.bossRoom.rooms ?? [];
+      initialMobs.push(
+        ...spawnBossRoomHealers(
+          fairyLedger,
+          this.gameMap,
+          initialMobs,
+          (roomIndex) =>
+            roomIndex < persistedBossRooms.length && persistedBossRooms[roomIndex].defeated,
+        ),
       );
       initialMobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel, difficultyProfile));
 
@@ -1359,6 +1486,9 @@ export class DungeonScene extends GameplayScene {
       levelDef.bossRooms?.map((b) => b.type) ?? [],
       (roomIndex) => this.treasureChests.hasUnopenedBossChest(roomIndex),
     );
+    for (const bossType of options?.preDefeatedBossTypes ?? []) {
+      this.bossRoom.markPreDefeated(bossType);
+    }
     this._systemContext = {
       human: this.human,
       cat: this.cat,
@@ -1414,8 +1544,16 @@ export class DungeonScene extends GameplayScene {
     this.townMemory = options?.townMemory ?? createTownMemory();
     this.marketStock = options?.marketStock ?? createMarketStock();
     this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
-    this.mercenarySystem = new MercenarySystem(this.mercenaryRoster, levelDef.id, (entity) =>
-      this.safeRoom.isEntityInSafeRoom(entity),
+    this.floorEntryMercenaryRoster =
+      options?.floorEntryMercenaryRoster ?? captureMercenaryRoster(this.mercenaryRoster);
+    this.mercenarySystem = new MercenarySystem(
+      this.mercenaryRoster,
+      levelDef.id,
+      (entity) => this.safeRoom.isEntityInSafeRoom(entity),
+      {
+        toast: (message) => this.menus.hotbarToast.show(message),
+        sound: (id) => this.audio?.play(id),
+      },
     );
     this.arena = new ArenaSystem(
       this.gameMap,
@@ -1446,6 +1584,20 @@ export class DungeonScene extends GameplayScene {
       this.world.roster.add(mob),
     );
     this.clownGas = new ClownGasSystem(this.gameMap);
+    this.fairies = new FairySystem({
+      bus: this.bus,
+      gameMap: this.gameMap,
+      ledger: fairyLedger,
+      getMobs: () => this.world.roster.mobs,
+      getCrawlers: () => [this.human, this.cat],
+      addMob: (mob) => this.world.roster.add(mob),
+      skeletonSummons: this.skeletonSummons,
+    });
+    this.fairyFireballs = new FairyFireballSystem({
+      bus: this.bus,
+      gameMap: this.gameMap,
+      getMobs: () => this.world.roster.mobs,
+    });
     this.knightMissiles = new KnightMissileSystem(this.gameMap);
     this.companion = new CompanionSystem(
       this.gameMap,
@@ -1455,8 +1607,10 @@ export class DungeonScene extends GameplayScene {
     );
     this.companion.registerHazardSource(this.bossRoom);
     this.companion.registerHazardSource(this.clownGas);
+    this.companion.registerHazardSource(this.fairyFireballs);
     this.combat.mobLoop.registerHazardSource(this.bossRoom);
     this.combat.mobLoop.registerHazardSource(this.clownGas);
+    this.combat.mobLoop.registerHazardSource(this.fairyFireballs);
     this.combat.mobLoop.registerHazardSource(this.lavaBalls);
     if (this.trees !== null) this.combat.mobLoop.registerHazardSource(this.trees);
 
@@ -1582,6 +1736,7 @@ export class DungeonScene extends GameplayScene {
           // player's heel was recording 130.
           mongoPetHp: this.mongoSystem.hp,
           mongoPetResting: this.mongoSystem.restingUntilFull,
+          gameStats: this.gameStats.snapshot(),
           // No `world`: everything in it describes the floor being left, and a
           // reload has to build the next floor fresh, exactly as the stairs do.
         });
@@ -1597,7 +1752,7 @@ export class DungeonScene extends GameplayScene {
         this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
           // Dismiss Mongo and any hired merc before floor transition
           this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-          this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+          this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
           // This is the one genuine floor change among DungeonScene's four
           // `sceneManager.replace` sites, so it's the only one that runs the
           // sprite eviction pass — building enter/exit rebuild the scene around
@@ -1634,6 +1789,9 @@ export class DungeonScene extends GameplayScene {
               // Unlike the journal or the club, this is run-scoped: a trait
               // announced once stays announced for every floor of the run.
               tacticsNoticesSeen: this.tacticsNoticesSeen,
+              // Run-scoped for the same reason: the run-complete screen sums up
+              // every floor, not the last one.
+              gameStats: this.gameStats,
             }),
           );
         });
@@ -1667,11 +1825,18 @@ export class DungeonScene extends GameplayScene {
             x: entry.doorTile.x,
             y: entry.doorTile.y + 1,
           };
-          // Neither Mongo nor a hired merc can follow indoors — dismiss so they
-          // aren't stranded in a stale mob list (the merc respawns from the
-          // roster when the player returns to the overworld).
+          // Read before the dismiss that clears it. The dismiss still has to
+          // happen: this scene's roster is thrown away with it, and the dismiss
+          // is what writes his remaining health into the pet state the interior
+          // rebuilds him from.
+          const companionArrival: InteriorCompanionArrival = {
+            mongoUnlocked: this.mongoSystem.unlocked,
+            mongoWasOut: this.mongoSystem.followsThroughDoor,
+          };
           this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-          this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+          // A standing hire's health goes into the roster the interior stands it
+          // up from; a hire lying downed at the door is lost with this scene.
+          this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
           this.musicPersistsAcrossExit = true;
           const humanSnap = snapPlayer(this.human);
           const catSnap = snapPlayer(this.cat);
@@ -1688,10 +1853,11 @@ export class DungeonScene extends GameplayScene {
               levelDef.xpDiminishingTiers,
               this.input,
               this.sceneManager,
-              (hSnap, cSnap, defeated) => {
+              (hSnap, cSnap, defeated, companionDeparture) => {
                 // A defeat indoors is a death like any other, so it lands on the
                 // last save rather than on the doorstep the party died behind.
                 const lastSave = this.lastSave;
+                if (defeated) rearmExpiredDoomsday(this.doomsdayQuestProgress, Date.now());
                 if (defeated && lastSave !== null) {
                   this.respawnFromSave(lastSave.progress);
                   return;
@@ -1713,6 +1879,8 @@ export class DungeonScene extends GameplayScene {
                     floorEntryHumanAchievements: this.floorEntryHumanAchievements,
                     floorEntryCatAchievements: this.floorEntryCatAchievements,
                     floorEntryAbilityManager: this.floorEntryAbilityManager,
+                    floorEntryGameStats: this.floorEntryGameStats,
+                    floorEntryMercenaryRoster: this.floorEntryMercenaryRoster,
                     // The save, not its checkpoint: the rebuilt scene regenerates the
                     // overworld's creatures, so mob flags captured against this
                     // scene would mean nothing there. An exit inside the town wall
@@ -1727,6 +1895,7 @@ export class DungeonScene extends GameplayScene {
                     catAchievements: this.catAchievements,
                     mongoUnlocked: this.mongoSystem.unlocked,
                     mongoPetState: this.mongoPetState,
+                    mongoWasOut: companionDeparture.mongoWasOut,
                     abilityManager: this._cleanAbilityManager(),
                     saveProgress: this.onSaveProgress,
                     audio: this.audio ?? undefined,
@@ -1749,6 +1918,7 @@ export class DungeonScene extends GameplayScene {
                   }),
                 );
               },
+              this.marketStock,
               this.humanAchievements,
               this.catAchievements,
               this.audio ?? undefined,
@@ -1768,6 +1938,7 @@ export class DungeonScene extends GameplayScene {
               this.gameMap.artSeed,
               this.tacticsNoticesSeen,
               respawnModeFor(respawnRouteFor(this.lastSave)),
+              companionArrival,
             ),
           );
         },
@@ -1890,30 +2061,22 @@ export class DungeonScene extends GameplayScene {
       (amount) => {
         this.abilityManager.addXp('mongo', amount);
       },
-      () => this.mongoXpFraction(),
+      () => mongoXpFraction(this.abilityManager),
       (message) => this.menus.hotbarToast.show(message),
     );
     if (options?.mongoUnlocked) {
       this.mongoSystem.unlocked = true;
     }
+    this.mongoCarryPending = options?.mongoWasOut === true;
     this.floorEntryAbilityManager =
       options?.floorEntryAbilityManager ?? this.abilityManager.clone();
-    this.abilityManager.onLevelUp = (id, newLevel) => {
-      if (id === 'mongo') this.mongoSystem.onPetLevelUp();
-      if (id === 'magic_missile' && newLevel >= MAGIC_MISSILE_TALISMAN_LEVEL) {
-        this.unlockFirstHundred();
-      }
-      const def = this.abilityManager.getDef(id);
-      if (def === null) return;
-      this.menus.cancelInventoryDragForOverlay();
-      this.menus.levelUpDialog.enqueue({
-        name: def.name,
-        newLevel,
-        perkDescription: def.perks.find((p) => p.level === newLevel)?.description ?? null,
-        renderIcon: def.renderIcon,
-      });
-      this.audio?.play('ability_level_up');
-    };
+    bindAbilityLevelUps({
+      abilityManager: this.abilityManager,
+      menus: this.menus,
+      audio: this.audio,
+      onPetLevelUp: () => this.mongoSystem.onPetLevelUp(),
+      onTalismanLevel: () => this.unlockFirstHundred(),
+    });
     this.cat.setAbilityManager(this.abilityManager);
     this.human.setAbilityManager(this.abilityManager);
 
@@ -2021,7 +2184,16 @@ export class DungeonScene extends GameplayScene {
       (message) => this.menus.announce(message),
       this.audio,
     );
-    this.doomsdayEscape = new DoomsdayEscapeSystem(this.gameMap, this.doomsdayQuestProgress);
+    this.doomsdayEscape = new DoomsdayEscapeSystem(
+      this.gameMap,
+      this.doomsdayQuestProgress,
+      (message) => this.menus.hotbarToast.show(message),
+      () => (this.human.isKnockedOut || this.cat.isKnockedOut ? STAIRWELL_KNOCKED_OUT_TOAST : null),
+    );
+    // Y-sorted with the town's fixtures, so the tower above it can never paint over it.
+    if (this.townPropRenderables !== null) {
+      this.townPropRenderables = [...this.townPropRenderables, this.doomsdayEscape.stairwellProp];
+    }
     if (this.tutorial !== null && this.audio !== null) {
       this.tutorial.setAudio(this.audio);
     }
@@ -2109,7 +2281,7 @@ export class DungeonScene extends GameplayScene {
    */
   private checkFloorEntryAchievements(): void {
     if (this.tutorial !== null) return;
-    if (this.human.inventory.equipment.getEquippedItem('Legs:Pants') === null) {
+    if (this.levelDef.id === FIRST_DUNGEON_LEVEL_ID) {
       if (this.humanAchievements.tryUnlock('no_pants')) {
         this.bus.emit('achievementUnlocked', { achievementId: 'no_pants', player: 'Human' });
       }
@@ -2121,9 +2293,7 @@ export class DungeonScene extends GameplayScene {
 
   private unlockFirstHundred(): void {
     if (this.tutorial !== null) return;
-    if (this.catAchievements.tryUnlock('first_hundred')) {
-      this.bus.emit('achievementUnlocked', { achievementId: 'first_hundred', player: 'Cat' });
-    }
+    awardFirstHundred(this.catAchievements, this.bus);
   }
 
   /**
@@ -2225,7 +2395,7 @@ export class DungeonScene extends GameplayScene {
     });
 
     // ── stats tracking ──
-    bus.on('mobKilled', (e) => this.gameStats.recordKill(e.mob.displayName));
+    bus.on('mobKilled', (e) => this.gameStats.recordMobKilled(e));
     bus.on('healingPotionUsed', () => this.gameStats.recordPotionUsed());
 
     // ── difficulty telemetry ──
@@ -2384,6 +2554,10 @@ export class DungeonScene extends GameplayScene {
         for (const rule of this.levelDef.onMobKilledSpawns) {
           if (mob instanceof BrindleGrub && rule.type === 'brindle_grub') continue;
           if (mob instanceof SmallSpider) continue;
+          // A body an enemy conjured is not a kill the party earned, so it
+          // does not seed a swarm either — a necro fairy's skeletons would
+          // otherwise turn every raise into free grubs.
+          if (mob.paysNoRewards) continue;
           const tx = Math.round(mob.x / TILE_SIZE);
           const ty = Math.round(mob.y / TILE_SIZE);
           // Bounded against what is alive *here*, not against the floor. The
@@ -2507,6 +2681,8 @@ export class DungeonScene extends GameplayScene {
       // saved game and the death checkpoint are skipped, so neither one can
       // resume a fight that is still in progress.
       if (this.isBossFightInProgress) return;
+      // Nor while anyone is down: a reload would stand them up for free.
+      if (this.isRevivePending) return;
       // The event fires from `pm.isAnySafe()`, which is true when either crawler
       // is protected, so the active one may still be outside the room; the save
       // point is then the room the companion reached.
@@ -2538,7 +2714,7 @@ export class DungeonScene extends GameplayScene {
       if (e.questId === 'defend_goblin_mother') {
         const def = this.defendQuest.questManager.getDef(e.questId);
         if (def?.rewards.coins) {
-          this.active().coins += def.rewards.coins;
+          this.active().earnCoins(def.rewards.coins);
         }
         this.humanAchievements.grantBox('Silver', 'Adventurer', 'quest_defend_npc');
         this.human.inventory.clearQuestSlot();
@@ -2554,13 +2730,13 @@ export class DungeonScene extends GameplayScene {
       if (e.questId === 'the_show_must_go_on') {
         const def = this.circusQuest.questManager.getDef(e.questId);
         if (def?.rewards.coins) {
-          this.active().coins += def.rewards.coins;
+          this.active().earnCoins(def.rewards.coins);
         }
       }
       if (e.questId === MURDER_QUEST_ID) {
         const def = this.murderQuest.questManager.getDef(e.questId);
         if (def?.rewards.coins) {
-          this.active().coins += def.rewards.coins;
+          this.active().earnCoins(def.rewards.coins);
         }
       }
     });
@@ -2576,6 +2752,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   onEnter(): void {
+    bindRunStats(this.gameStats);
     // Level entry is the one stretch of real rendering the player cannot act
     // during, which is what makes it usable cover for the quality probe.
     renderQuality.requestProbe();
@@ -2627,9 +2804,17 @@ export class DungeonScene extends GameplayScene {
       // pressed under an award overlay cannot queue a second read behind it,
       // stacking a prompt whose Read button the overlay's own OK then swallows.
       isSuppressed: () => keyboardSuppressed(this.overlayClaims),
-      isGameOver: () => this.gameOver,
+      // The two end-of-floor screens count as over for Escape: each owns the
+      // screen until its own button is pressed, and a pause menu opened behind
+      // one would take the keyboard from it.
+      isGameOver: () =>
+        this.gameOver || this.levelCompleteScreen.isActive || this.runCompleteScreen.isActive,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
       dismissDialog: () => {
+        if (this.menus.mongoExplainer.isOpen && !this.menus.isAwardStackShowing) {
+          this.menus.mongoExplainer.close();
+          return true;
+        }
         if (this.menus.skillBookPrompt.isOpen) {
           // Escape declines the read; the book stays in the pack.
           this.menus.skillBookPrompt.close();
@@ -2765,6 +2950,8 @@ export class DungeonScene extends GameplayScene {
     }
     this.spiderQuest.dispose();
     this.bounty?.dispose();
+    this.fairies.dispose();
+    this.fairyFireballs.dispose();
     // Drops any standing order along with the hazard sources that were meant to
     // steer around it. Both name systems this scene is taking with it.
     this.companion.dispose();
@@ -3091,12 +3278,60 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * `!fairy <kind> [count]` — puts fairies beside the active crawler at the
+   * party's ambient level for this floor, through the same roster path and
+   * levelling order as any spawn.
+   */
+  private runFairyCheat(argument: string): string | null {
+    const [kindArgument = '', countArgument = ''] = argument.split(/\s+/);
+    const kind = FAIRY_KINDS.find((candidate) => candidate === kindArgument);
+    if (kind === undefined) {
+      this.audio?.play('error');
+      return `❓ FAIRY KINDS: ${FAIRY_KINDS.join(', ')}`;
+    }
+    const requested = Number.parseInt(countArgument, 10);
+    const count = Number.isNaN(requested)
+      ? 1
+      : Math.min(Math.max(1, requested), FAIRY_CHEAT_MAX_COUNT);
+    const active = this.active();
+    const originX = Math.floor((active.x + TILE_SIZE / 2) / TILE_SIZE);
+    const originY = Math.floor((active.y + TILE_SIZE / 2) / TILE_SIZE);
+    const profile = activeDifficultyProfile();
+    const partyLevel = partyLevelOf(this.human.level, this.cat.level);
+    const floorRules =
+      this.levelDef.roomMobs.length > 0 ? this.levelDef.roomMobs : this.levelDef.hallwayMobs;
+    const band: MobLevelRange = floorRules.length > 0 ? pickRule(floorRules) : {};
+    let spawned = 0;
+    for (let attempt = 0; attempt < FAIRY_CHEAT_ATTEMPTS && spawned < count; attempt++) {
+      const tileX = originX + randomInt(-FAIRY_CHEAT_SPREAD_TILES, FAIRY_CHEAT_SPREAD_TILES);
+      const tileY = originY + randomInt(-FAIRY_CHEAT_SPREAD_TILES, FAIRY_CHEAT_SPREAD_TILES);
+      if (!this.gameMap.isWalkable(tileX, tileY)) continue;
+      const mob = createMob(FAIRY_SPAWN_KEYS[kind], tileX, tileY, this.gameMap);
+      if (!(mob instanceof Fairy)) continue;
+      this.world.roster.add(mob);
+      mob.setHostFloor(this.levelDef.floorNumber);
+      mob.applyMobLevel(
+        resolveAmbientLevel(band, this.levelDef, partyLevel, profile),
+        this.levelDef.levelledCurve,
+      );
+      applySpawnDifficulty(mob, profile);
+      mob.stampPotency(settings.difficulty);
+      spawned++;
+    }
+    return spawned > 0 ? `🧚 ${spawned}× ${kind.toUpperCase()} FAIRY` : null;
+  }
+
+  /**
    * The cheats only this floor can answer. The universal four (`!god`,
    * `!tough`, `!payday`, `!levelup`) live in `ChatKit`; these reach systems that
    * exist nowhere else, so a scene without them simply does not offer them.
    */
   private dungeonChatCommands(): ReadonlyArray<ChatCommand> {
     return [
+      {
+        name: '!fairy',
+        run: (argument) => this.runFairyCheat(argument),
+      },
       {
         name: '!reveal',
         run: () => {
@@ -3235,10 +3470,13 @@ export class DungeonScene extends GameplayScene {
     );
     if (landing === null) return false;
 
-    // Neither can follow a warp, and their own dismissal is what keeps `mobs`
-    // and `mobGrid` in step — the party is moved, they are removed.
+    // Mongo cannot follow a warp — he goes home and waits to be resummoned.
+    // The hire's contract still stands in this same scene, so it respawns
+    // beside the party on the next update; dismissing it first is what keeps
+    // `mobs` and `mobGrid` in step through the jump rather than leaving it
+    // standing where the party no longer is.
     this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-    this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
     this.placePartyAtTile(landing);
     return true;
   }
@@ -3292,21 +3530,10 @@ export class DungeonScene extends GameplayScene {
     return null;
   }
 
-  private triggerBuildAction(): void {
-    this.defendQuest.tryBuildBarrier(this.active());
-  }
-
-  /**
-   * Progress toward the next pet level, 0–1, for the strip on the Summon button.
-   *
-   * Full at the cap rather than empty: `xpToNextLevel` is Infinity there, and a
-   * bar reading zero for a maxed-out pet says the opposite of what is true.
-   */
-  private mongoXpFraction(): number {
-    const state = this.abilityManager.getState('mongo');
-    if (state === null) return 0;
-    if (!Number.isFinite(state.xpToNextLevel) || state.xpToNextLevel <= 0) return 1;
-    return Math.max(0, Math.min(1, state.xp / state.xpToNextLevel));
+  private triggerBuildAction(): boolean {
+    const active = this.active();
+    if (!active.canAct) return false;
+    return this.defendQuest.tryBuildBarrier(active);
   }
 
   /**
@@ -3315,7 +3542,7 @@ export class DungeonScene extends GameplayScene {
    * recalling him mid-fight is a real decision rather than a free undo.
    */
   private toggleMongoSummon(): void {
-    if (!this.cat.isActive) return;
+    if (!this.cat.isActive || !this.active().canAct) return;
     if (this.mongoSystem.mongo) {
       this.mongoSystem.toggleRecall();
       return;
@@ -3338,6 +3565,13 @@ export class DungeonScene extends GameplayScene {
         this.arena.isEntityInUnresolvedArena(crawler, mobs) ||
         this.spiderQuest.isEntityInUnresolvedLab(crawler, mobs),
     );
+  }
+
+  private carryMongoIn(): void {
+    if (!this.mongoCarryPending) return;
+    this.mongoCarryPending = false;
+    const mongo = this.mongoSystem.carryIn(this.cat, this.gameMap);
+    if (mongo !== null) this.world.roster.add(mongo);
   }
 
   /** Returns whether he came out; a refusal has already been spoken by the cat. */
@@ -3380,6 +3614,7 @@ export class DungeonScene extends GameplayScene {
     // the other two throw it away, and the durable record would have survived
     // any of them.
     this.bounty?.abandonBounty(this.world.roster.mobs, this.world.roster.grid);
+    rearmExpiredDoomsday(this.doomsdayQuestProgress, Date.now());
 
     const route = respawnRouteFor(this.lastSave);
     switch (route.kind) {
@@ -3404,8 +3639,9 @@ export class DungeonScene extends GameplayScene {
    * Carries over only what the save does not hold and a reload would not want
    * lost. The doomsday countdown is preserved for the same reason
    * {@link restoreFromCheckpoint} preserves it: rewinding it would make dying a
-   * way to buy back time. The run's tallies are carried as they stand rather
-   * than wiped, because the save has no copy of them to rewind to. Achievements
+   * way to buy back time. The run's tallies rewind to the save's copy, but keep
+   * the deaths and time played of the run in progress; a save with no copy
+   * keeps the live tallies as they stand. Achievements
    * are carried the same way only for a save written before they were
    * persisted; otherwise the save's copy replaces them.
    */
@@ -3429,6 +3665,8 @@ export class DungeonScene extends GameplayScene {
         floorEntryHumanAchievements: sameFloor ? this.floorEntryHumanAchievements : undefined,
         floorEntryCatAchievements: sameFloor ? this.floorEntryCatAchievements : undefined,
         floorEntryAbilityManager: sameFloor ? this.floorEntryAbilityManager : undefined,
+        floorEntryGameStats: sameFloor ? this.floorEntryGameStats : undefined,
+        floorEntryMercenaryRoster: sameFloor ? this.floorEntryMercenaryRoster : undefined,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         godModeState: this.godModeState,
         companionStance: this.companionStance,
@@ -3497,7 +3735,7 @@ export class DungeonScene extends GameplayScene {
     // snapshot can splice the body out of the scene once that reference is gone.
     this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
 
-    this.rewindMobsToCheckpoint();
+    this.rewindRosterToCheckpoint();
 
     this.combat.resetForCheckpoint();
     this.destruction.resetForCheckpoint();
@@ -3507,6 +3745,7 @@ export class DungeonScene extends GameplayScene {
     this.skeletonShots.resetForCheckpoint();
     this.goblinArrows.resetForCheckpoint();
     this.clownGas.resetForCheckpoint();
+    this.fairyFireballs.resetForCheckpoint();
     this.knightMissiles.resetForCheckpoint();
     this.skeletonSummons.resetForCheckpoint();
     this.bossRoom.resetForCheckpoint();
@@ -3516,6 +3755,10 @@ export class DungeonScene extends GameplayScene {
     // same room locks and entry windows the snapshot describes, and they clear
     // them to "no fight in progress" rather than to what was actually captured.
     this.restoreWorldCheckpoint(cp.world);
+    this.fairies.resetForCheckpoint(
+      this.world.roster.mobs,
+      deadFairyUpgradeBosses(this.bossRoom, this.arena),
+    );
     this.forgetDebriefsOfLivingBosses();
 
     this.bossIntro.cancel();
@@ -3708,6 +3951,7 @@ export class DungeonScene extends GameplayScene {
       mongoPetState: captureMongoPetState({ ...this.mongoPetState, hp: this.mongoSystem.hp }),
       mordecaiDebrief: { ...this.mordecaiDebrief },
       tacticsNoticesSeen: [...this.tacticsNoticesSeen],
+      doomsday: capturePersistedDoomsday(this.doomsdayQuestProgress, Date.now()),
 
       krakarenKilled: this.krakarenKilled,
       krakarenBossRoomIdx: this.krakarenBossRoomIdx,
@@ -3747,6 +3991,7 @@ export class DungeonScene extends GameplayScene {
       mongoPetState,
       mordecaiDebrief,
       tacticsNoticesSeen,
+      doomsday,
       krakarenKilled,
       krakarenBossRoomIdx,
       juicerKilled,
@@ -3766,6 +4011,7 @@ export class DungeonScene extends GameplayScene {
       beatenBosses.push(...mobs.filter((mob) => mob instanceof BallOfSwine));
     }
     for (const boss of beatenBosses) despawnMob(boss, mobs, grid);
+    replayFairyRateUpgrades(this.fairies, deadFairyUpgradeBosses(this.bossRoom, this.arena));
 
     this.treasureChests.restoreCheckpoint(
       fromPersistedTreasureChestCheckpoint(treasureChests, this.treasureChests.allChests),
@@ -3804,6 +4050,9 @@ export class DungeonScene extends GameplayScene {
     // system watching the stale, pre-load one.
     this.tacticsNoticesSeen.clear();
     for (const trait of tacticsNoticesSeen ?? []) this.tacticsNoticesSeen.add(trait);
+    if (doomsday !== undefined) {
+      restoreDoomsdayProgress(this.doomsdayQuestProgress, doomsday, Date.now());
+    }
 
     this.krakarenKilled = krakarenKilled;
     this.krakarenBossRoomIdx = krakarenBossRoomIdx;
@@ -3832,6 +4081,7 @@ export class DungeonScene extends GameplayScene {
       mongoPetResting: this.mongoSystem.restingUntilFull,
       humanAchievements: this.humanAchievements.serialize(),
       catAchievements: this.catAchievements.serialize(),
+      gameStats: this.gameStats.snapshot(),
       // The tutorial's hand-built map has no layout to regenerate.
       world:
         this.tutorial === null
@@ -3848,6 +4098,63 @@ export class DungeonScene extends GameplayScene {
     };
     this.lastSave = savePointAfterWrite(progress, checkpoint, this.tutorial !== null);
     this.onSaveProgress?.(progress);
+  }
+
+  /** The party is down the escape stairwell: the game is won. */
+  private completeRun(): void {
+    finishRun(this.runCompleteScreen, {
+      // A hire lying downed cannot follow the party down the stairs, so it dies
+      // here as it would at any door. A standing one keeps walking with them.
+      settleParty: () =>
+        this.mercenarySystem.forfeitDownedHire(this.world.roster.mobs, this.world.roster.grid),
+      unlockAchievements: () => {
+        this.humanAchievements.tryUnlock('city_evacuated');
+        this.catAchievements.tryUnlock('city_evacuated');
+      },
+      save: () => this.captureSavePoint(this.saveTileUnder(this.active()), { announce: false }),
+      summarize: () =>
+        buildRunSummary({
+          stats: this.gameStats,
+          humanLevel: this.human.level,
+          catLevel: this.cat.level,
+          mongoLevel: this.mongoSystem.unlocked ? this.abilityManager.getRealLevel('mongo') : null,
+          achievements: countPartyAchievements(this.humanAchievements, this.catAchievements),
+        }),
+      handlers: {
+        // The stage is already 'complete', which is what leaves the stairwell inert.
+        onKeepExploring: () => undefined,
+        onMainMenu: () => this.returnToMainMenu(),
+      },
+    });
+    this.audio?.play('level_complete');
+  }
+
+  /**
+   * The start menu, with the finished run offered as the save to continue.
+   *
+   * Not the pause menu's Reset Game: that wipes the save, and a run the player
+   * just finished is exactly the one they may want to walk around in again.
+   */
+  private returnToMainMenu(): void {
+    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    const baseOptions: DungeonSceneOptions = {
+      audio: this.audio ?? undefined,
+      saveProgress: this.onSaveProgress,
+      onResetGame: this.onResetGameCallback ?? undefined,
+    };
+    const save = this.lastSave?.progress ?? null;
+    const onContinue =
+      save === null
+        ? undefined
+        : () => {
+            const { levelDef, options } = sceneSetupFromSave(baseOptions, save);
+            this.sceneManager.replace(
+              new DungeonScene(levelDef, this.input, this.sceneManager, options),
+            );
+          };
+    this.sceneManager.replace(
+      new PostSignupScene(this.input, this.sceneManager, baseOptions, onContinue),
+    );
   }
 
   /**
@@ -3868,7 +4175,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   private captureLevelCheckpoint(respawnTile: TilePoint): LevelCheckpoint {
-    this.markMobsAtCheckpoint();
+    markMobsAtCheckpoint(this.world.roster);
     return {
       world: this.captureWorldCheckpoint(),
       humanSnap: checkpointSnapshot(snapPlayer(this.human)),
@@ -3927,9 +4234,10 @@ export class DungeonScene extends GameplayScene {
    * Either crawler, not just the inactive one: the active crawler can be the
    * downed one for a frame around a switch. Both save snapshots stand a downed
    * crawler back up, so saving now would turn a pending revive into a free one.
+   * A downed hireling is the same case: the roster still names it standing.
    */
   private get isRevivePending(): boolean {
-    return this.human.isKnockedOut || this.cat.isKnockedOut;
+    return this.human.isKnockedOut || this.cat.isKnockedOut || this.mercenarySystem.revivePending;
   }
 
   /**
@@ -3960,64 +4268,16 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Records which mobs the floor held, and which of them were alive, so a later
-   * restore can tell a kill the player has already banked from one it scored
-   * after the safe room.
+   * Rewinds the roster to the checkpoint, then the spider list with it:
+   * re-derived rather than filtered, because a spider that spawned after the
+   * checkpoint has just left `mobs`, and this list would otherwise keep
+   * rendering and ticking it.
    */
-  private markMobsAtCheckpoint(): void {
-    for (const mob of this.world.roster.mobs) {
-      mob.presentAtCheckpoint = true;
-      mob.aliveAtCheckpoint = mob.isAlive;
-    }
-  }
-
-  /**
-   * Puts the floor's population back the way the checkpoint found it: anything
-   * that arrived after the safe room is dropped, anything killed after it
-   * stands back up, and the survivors are reset as they always were.
-   *
-   * Dropping a mob is the one thing this scene otherwise never does — `mobs` is
-   * append-only so corpses stay renderable — so the array is rebuilt in place
-   * rather than spliced repeatedly, which keeps the cost linear even after a
-   * summon-heavy fight has added hundreds of bodies.
-   */
-  private rewindMobsToCheckpoint(): void {
-    const kept: Mob[] = [];
-    for (const mob of this.world.roster.mobs) {
-      if (!mob.presentAtCheckpoint) {
-        // Summoned, hired or staged after the safe room, so it has no business
-        // existing. Disposed because it is leaving the array for good — the
-        // other splice sites (bounty abandon, companion despawn, the boss-room
-        // roach compaction) owe the same call.
-        mob.dispose();
-        continue;
-      }
-      if (mob.aliveAtCheckpoint && !mob.isAlive) {
-        mob.reviveForCheckpoint();
-      } else if (mob.isAlive) {
-        if (mob.resetsFullyOnCheckpoint) {
-          mob.resetToSpawn();
-        } else {
-          // Allies (Mongo, hired mercenaries) aren't spawn-anchored encounters
-          // to reposition — their "spawn tile" is wherever they were summoned
-          // or hired, not this safe room — but they can take real damage
-          // fighting alongside the party and must not stay critically wounded
-          // once the party itself is fully healed.
-          mob.healAndForgetFight();
-        }
-      }
-      kept.push(mob);
-    }
-    this.world.roster.replaceAll(kept);
-
-    // Re-derived rather than filtered: a spider that spawned after the
-    // checkpoint has just left `mobs`, and this list would otherwise keep
-    // rendering and ticking it.
+  private rewindRosterToCheckpoint(): void {
+    rewindMobsToCheckpoint(this.world.roster);
     this.grotesqueSpiders = this.world.roster.mobs.filter(
       (mob): mob is GrotesqueSpider => mob instanceof GrotesqueSpider,
     );
-
-    this.world.roster.rebuildGrid();
   }
 
   private restartAtFloorEntry(): void {
@@ -4028,6 +4288,11 @@ export class DungeonScene extends GameplayScene {
     // The restart generates the floor from a fresh seed and rewinds the party
     // to floor entry, so every camp is a new place with fresh XP in it.
     forgetClearedCamps(this.townMemory);
+    // The party is rewound to floor entry, so the kills, gold and damage of the
+    // failed attempt go with it; deaths and time played are the run's and stay.
+    this.gameStats.restore(this.floorEntryGameStats);
+    this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    restoreMercenaryRoster(this.mercenaryRoster, this.floorEntryMercenaryRoster);
     this.sceneManager.replace(
       new DungeonScene(this.levelDef, this.input, this.sceneManager, {
         humanSnap: this.floorEntryHumanSnap,
@@ -4038,6 +4303,8 @@ export class DungeonScene extends GameplayScene {
         catAchievements: this.floorEntryCatAchievements.clone(),
         floorEntryHumanAchievements: this.floorEntryHumanAchievements,
         floorEntryAbilityManager: this.floorEntryAbilityManager,
+        floorEntryGameStats: this.floorEntryGameStats,
+        floorEntryMercenaryRoster: this.floorEntryMercenaryRoster,
         floorEntryCatAchievements: this.floorEntryCatAchievements,
         abilityManager: this.floorEntryAbilityManager.clone(),
         mongoUnlocked: this.mongoSystem.unlocked,
@@ -4067,6 +4334,8 @@ export class DungeonScene extends GameplayScene {
         godModeState: this.godModeState,
         companionStance: this.companionStance,
         tacticsNoticesSeen: this.tacticsNoticesSeen,
+        // The deaths and time the restart cost are the run's; it keeps them.
+        gameStats: this.gameStats,
         suppressArrivalSave: true,
       }),
     );
@@ -4266,6 +4535,7 @@ export class DungeonScene extends GameplayScene {
       // out of it.
       modal(this.menus.levelUpDialog.isShowing, 'level-up'),
       modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
+      modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
       modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
       // Below the award stack because that stack draws over the death screen — a
       // level-up earned by the blow that killed you is still on top and still
@@ -4280,6 +4550,7 @@ export class DungeonScene extends GameplayScene {
         haltsWorld: true,
         focusContext: 'level-complete',
       },
+      modal(this.runCompleteScreen.isActive, RUN_COMPLETE_FOCUS_ID),
       {
         isOpen: this.chat.isOpen,
         space: { kind: 'passThrough' },
@@ -4514,7 +4785,12 @@ export class DungeonScene extends GameplayScene {
     this.safeRoom.openMordecaiPages(pages);
     // Boxes repeat every talk; don't pay a server round trip for a repeat.
     const worthSaving = !sameDebriefMemory(memory, remembered);
-    if (worthSaving && this.tutorial === null && !this.isBossFightInProgress) {
+    if (
+      worthSaving &&
+      this.tutorial === null &&
+      !this.isBossFightInProgress &&
+      !this.isRevivePending
+    ) {
       // `safeRoomEntered` fires once, for whichever crawler got in first. A
       // checkpoint comes with it, so a death here rewinds to after the talk.
       this.captureSavePoint(room.centre, { announce: false });
@@ -4985,12 +5261,16 @@ export class DungeonScene extends GameplayScene {
     if (this.achievementUI.handleClick(mx, my)) return;
     if (this.menus.levelUpDialog.handleClick(mx, my)) return;
     if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
+    if (this.menus.mongoExplainer.handleClick(mx, my)) return;
     if (this.menus.skillBookPrompt.isOpen) {
       const reader = this.menus.pendingSkillBookReader(this.menus.inventoryPlayer());
       const choice = resolveSkillBookPrompt(this.menus.skillBookFlowHost(), reader, mx, my);
       if (choice !== null) this.menus.releaseSkillBookReader();
       return;
     }
+    // Ranked where its overlay claim is: under the award stack, which can land
+    // on the same frame the run ends, and over every panel and HUD button.
+    if (this.runCompleteScreen.handleClick(mx, my)) return;
     if (this.defendQuest.handleClick(mx, my)) return;
     if (this.spiderQuest.handleClick(mx, my, eventTimeStampMs)) return;
     if (this.bounty?.handleClick(mx, my) === true) return;
@@ -5199,6 +5479,9 @@ export class DungeonScene extends GameplayScene {
 
   handleMouseDown(mx: number, my: number): void {
     this._mouseDown = true;
+    // Ahead of the pause menu: the explainer opens over it, and a press there
+    // must not start a drag in the tab hidden underneath.
+    if (this.menus.mongoExplainer.isOpen) return;
     // Delegated rather than swallowed: the pause menu's Equipment tab drags gear
     // between the bag and the doll, and a drag is a press and a release, not a
     // click. Every other tab ignores these.
@@ -5219,6 +5502,7 @@ export class DungeonScene extends GameplayScene {
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
+    if (this.menus.mongoExplainer.isOpen) return;
     if (this.menus.pauseMenu.isOpen) {
       this.menus.pauseMenu.handleMouseMove(mx, my);
       return;
@@ -5235,6 +5519,7 @@ export class DungeonScene extends GameplayScene {
   handleMouseUp(mx: number, my: number): void {
     this._mouseDown = false;
     this._miniMapDragging = false;
+    if (this.menus.mongoExplainer.isOpen) return;
     if (this.menus.pauseMenu.isOpen) {
       this.menus.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
       return;
@@ -5255,6 +5540,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleWheel(deltaY: number): void {
+    if (this.menus.mongoExplainer.isOpen) return;
     if (this.menus.pauseMenu.isOpen) {
       this.menus.pauseMenu.handleWheel(deltaY);
       return;
@@ -5315,9 +5601,14 @@ export class DungeonScene extends GameplayScene {
     }
 
     // Town keeps living through citizen chats and other overlay dialogs — only a
-    // hard stop (game over, the pause menu, or the level-complete screen) should
-    // freeze the streets.
-    if (!this.gameOver && !this.menus.pauseMenu.isOpen && !this.levelCompleteScreen.isActive) {
+    // hard stop (game over, the pause menu, or a level- or run-complete screen)
+    // should freeze the streets.
+    if (
+      !this.gameOver &&
+      !this.menus.pauseMenu.isOpen &&
+      !this.levelCompleteScreen.isActive &&
+      !this.runCompleteScreen.isActive
+    ) {
       this.townLife?.update(this.buildSystemContext());
       this.townProps?.update();
       this.townDecor?.update();
@@ -5356,6 +5647,7 @@ export class DungeonScene extends GameplayScene {
       this.marketPanel?.update();
       return;
     }
+    this.gameStats.recordPlayedFrame();
 
     if (this.safeRoom.isSleeping) {
       this.silenceMovementLoops();
@@ -5417,6 +5709,8 @@ export class DungeonScene extends GameplayScene {
       skeletonShots: this.skeletonShots,
       goblinArrows: this.goblinArrows,
       clownGas: this.clownGas,
+      fairies: this.fairies,
+      fairyFireballs: this.fairyFireballs,
       knightMissiles: this.knightMissiles,
       destructibles: this.destruction.destructibles,
       trees: this.trees,
@@ -5437,7 +5731,6 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.render(ctx, camX, camY, this.active());
     this.circusQuest.render(ctx, camX, camY, this.active());
     this.murderQuest.render(ctx, camX, camY, this.active());
-    this.doomsdayEscape.render(ctx, camX, camY);
     this.combat.floatingText.render(ctx, camX, camY);
     // Puddles render before entities so players/mobs always appear on top of them
     for (const spider of this.grotesqueSpiders) {
@@ -5528,6 +5821,14 @@ export class DungeonScene extends GameplayScene {
         ? this.miniMap.EXPANDED_SIZE
         : this.miniMap.NORMAL_SIZE;
       renderKnockedOutUI(ctx, camX, camY, this.active(), this.inactive(), mmSize);
+      this.mercenarySystem.renderDownedArrow(
+        ctx,
+        camX,
+        camY,
+        this.active(),
+        visibilityRadiusPx(this.active()),
+        this._hudRect,
+      );
       this.renderStairwellRevealArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
       this.bounty?.renderArrow(ctx, this.active(), camX, camY, this._hudRect);
@@ -5538,6 +5839,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
+      this.miniMap.escapeMarkerTile = this.doomsdayEscape.escapeMarkerTile;
       this.miniMap.render(
         ctx,
         this.active(),
@@ -5757,6 +6059,7 @@ export class DungeonScene extends GameplayScene {
     if (this.levelCompleteScreen.isActive) {
       this.levelCompleteScreen.render(ctx);
     }
+    this.runCompleteScreen.render(ctx);
 
     if (this.building?.menuOpen) {
       this.building.renderMenu(ctx);
@@ -5963,6 +6266,7 @@ export class DungeonScene extends GameplayScene {
         this.anchorQuest,
         this.bounty,
         this.townGuide,
+        this.doomsdayEscape,
       ]),
     );
     return entries;
@@ -6137,11 +6441,16 @@ export class DungeonScene extends GameplayScene {
     this.anchorQuest.update();
     this.updateSpeedFizzDiscovery();
     this.doomsdayEscape.update(ctx);
+    if (this.doomsdayEscape.pinRequested) {
+      this.doomsdayEscape.pinRequested = false;
+      this.journalProgress.pinnedTrackerId = DOOMSDAY_TRACKER_ID;
+    }
     if (this.doomsdayEscape.floorEscapedPending) {
       this.doomsdayEscape.floorEscapedPending = false;
-      this.audio?.play('quest_complete');
-      this.humanAchievements.tryUnlock('city_evacuated');
-      this.catAchievements.tryUnlock('city_evacuated');
+      this.completeRun();
+      // The run is saved and over: nothing else may act this frame, or a blow
+      // landing after the save would raise a death screen under the celebration.
+      return;
     }
     this.overworldMusic?.update(ctx);
     this.ambientSound?.update(ctx);
@@ -6192,6 +6501,7 @@ export class DungeonScene extends GameplayScene {
     this.combat.updatePlayerAttacks();
 
     this.bounty?.update(ctx);
+    setVisibleWorldView(cameraWorldView(this.camera(), clearSightOf(this.active())));
     this.combat.updateMobs(ctx);
     for (const name of this.combat.spells.takeFogResistedNames()) {
       this.menus.announce(`${name} sees you through the fog`);
@@ -6288,9 +6598,13 @@ export class DungeonScene extends GameplayScene {
 
     this.combat.resolveSpellAftermath();
 
+    this.carryMongoIn();
     this.mongoSystem.update(ctx);
     this.autoSummonMongo(ctx);
     this.mercenarySystem.update(ctx);
+    if (this.building?.menuOpen === true || this.recall.isChannelling) {
+      this.mercenarySystem.warnIfLeavingDowned();
+    }
     this.pm.tickTimers();
 
     if (this.human.effectDamageSoundPending) {
@@ -6320,13 +6634,18 @@ export class DungeonScene extends GameplayScene {
     // the drain reads the whole list every frame — but this one keeps a wave and
     // the bolts covering it on the same tick.
     this.skeletonSummons.update(ctx);
+    this.fairies.update(ctx);
     this.skeletonShots.update(ctx);
     this.goblinArrows.update(ctx);
     this.clownGas.update(ctx);
+    this.fairyFireballs.update(ctx);
     this.knightMissiles.update(ctx);
     this.trees?.update(ctx);
     this.destruction.update(ctx);
     this.destruction.drainAudioCues(this.audio);
+    playFairySystemCues(this.fairies.takeCues(), this.audio);
+    playFairyFireballCues(this.fairyFireballs.takeCues(), this.audio);
+    playFrostCues([this.human, this.cat], this.audio);
 
     // The llama's own impact cue. It is drained here rather than from
     // `playMobAudioCues` because the ball outlives its llama, and a shot that
@@ -6336,23 +6655,7 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('llama_fireball_explosion');
     }
 
-    // The golem's boulder shatter, drained here for the same reason: the rock
-    // outlives the golem that threw it.
-    if (this.rockThrows.burstSoundPending) {
-      this.rockThrows.burstSoundPending = false;
-      this.audio?.playRandom(['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4']);
-    }
-
-    // Splash Zone's water, drained here for the same reason: a bolt or a wave
-    // outlives the hireling who loosed it.
-    if (this.hirelingShots.impactSoundPending) {
-      this.hirelingShots.impactSoundPending = false;
-      this.audio?.play('arrow_impact');
-    }
-    if (this.hirelingShots.waveSoundPending) {
-      this.hirelingShots.waveSoundPending = false;
-      this.audio?.play('mob_splash');
-    }
+    playHirelingProjectileCues(this.rockThrows, this.hirelingShots, this.audio);
 
     // Drained here rather than from `playMobAudioCues` for the same reason the
     // llama's is: a soul bolt outlives its caster, and one that lands after the
@@ -6434,6 +6737,7 @@ export class DungeonScene extends GameplayScene {
       // else here has taken the keyboard off a bag left open behind it.
       this.menus.cancelInventoryDragForOverlay();
       difficultyStats.recordDeath();
+      this.gameStats.recordDeath();
       this.barriers.cancelConstruct();
       const deathCause = resolveDeathCause(
         this.human,
@@ -6669,7 +6973,10 @@ export class DungeonScene extends GameplayScene {
         this.fortuneTeller?.isOpen === true ||
         this.menus.skillBookPrompt.isOpen ||
         this.menus.levelUpDialog.isShowing ||
-        this.menus.rewardGrantedDialog.isShowing
+        this.menus.rewardGrantedDialog.isShowing ||
+        this.menus.mongoExplainer.isOpen ||
+        this.levelCompleteScreen.isActive ||
+        this.runCompleteScreen.isActive
       ) {
         this.handleClick(x, y, e.timeStamp);
         continue;
@@ -6837,7 +7144,9 @@ export class DungeonScene extends GameplayScene {
 
       if (this.human.isActive) {
         const dynIdx = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
-        if (dynIdx >= 0 && this.human.inventory.actionBar.slots[dynIdx]?.id === 'goblin_dynamite') {
+        const isDynamiteSlot =
+          dynIdx >= 0 && this.human.inventory.actionBar.slots[dynIdx]?.id === 'goblin_dynamite';
+        if (isDynamiteSlot && this.human.canAct) {
           if (this.destruction.dynamite.beginCharge(dynIdx, this.human)) {
             this.touch.dynamiteTouchId = touch.identifier;
           } else {
@@ -7123,6 +7432,9 @@ export class DungeonScene extends GameplayScene {
         onDismissed: () => {
           this.mongoSystem.unlocked = true;
           this.bus.emit('rewardGranted', { rewards: [this._makeMongoReward()] });
+          // Only this first grant explains him: the circus quest hands back a pet
+          // the player already knows, and the Abilities tab reopens it on request.
+          this.menus.rewardGrantedDialog.afterQueueDrains(() => this.menus.mongoExplainer.open());
         },
       };
     }
@@ -7151,11 +7463,11 @@ export class DungeonScene extends GameplayScene {
     for (const item of split.humanLoot.items) {
       this.human.inventory.addItem(item.id, item.quantity);
     }
-    this.human.coins += split.humanLoot.coins;
+    this.human.earnCoins(split.humanLoot.coins);
     for (const item of split.catLoot.items) {
       this.cat.inventory.addItem(item.id, item.quantity);
     }
-    this.cat.coins += split.catLoot.coins;
+    this.cat.earnCoins(split.catLoot.coins);
   }
 
   private _makeMongoReward(): GrantedReward {

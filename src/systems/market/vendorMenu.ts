@@ -11,7 +11,7 @@ import type { Player } from '../../Player';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../../ui/PricedMenuPanel';
 
-const SOLD_OUT_LABEL = 'Sold out';
+export const SOLD_OUT_LABEL = 'Sold out';
 
 /**
  * The pouch reads as a texture layer under `purchase_success` rather than a

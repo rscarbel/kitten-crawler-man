@@ -231,6 +231,11 @@ export class Mantid extends Mob {
   private readonly rageTriggerRangePx: number;
   private isAggro = false;
 
+  /** A named boss wherever it is spawned, not only as a bounty mark. */
+  override get countsAsBossKill(): boolean {
+    return true;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, MANTID_HP, MANTID_SPEED);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;

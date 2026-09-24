@@ -65,6 +65,8 @@ import {
 } from '../sprites/art/grotesqueSpiderSpitFigure';
 import { LIFE_MACHINE_FIGURE, lifeMachineStateName } from '../sprites/art/lifeMachineFigure';
 import { SPIDER_FIGURE } from '../sprites/art/spiderFigure';
+import { fairyFigureOf, fairyStateName } from '../sprites/art/fairyFigure';
+import { FAIRY_KINDS } from '../sprites/art/fairyTiming';
 import { BUGABOO_FIGURE } from '../sprites/art/bugabooFigure';
 import {
   KRAKAREN_FIGURE,
@@ -171,4 +173,8 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: LLAMA_LAVA_FLAME_FIGURE, state: 'burn' },
   { def: VESPA_ACID_SPIT_PROJECTILE_FIGURE, state: SPIT_STATE },
   { def: VESPA_ACID_SPIT_IMPACT_FIGURE, state: SPIT_STATE },
+  ...FAIRY_KINDS.map((kind) => ({
+    def: fairyFigureOf(kind),
+    state: fairyStateName('hover', 'side'),
+  })),
 ];

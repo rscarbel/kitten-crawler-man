@@ -13,4 +13,13 @@ export type FloatingTextStyle = 'miss' | 'buff' | 'trigger' | 'block';
 export interface FloatingTextRequest {
   text: string;
   style: FloatingTextStyle;
+  /**
+   * When set, the label is dropped if the same text was already shown over the
+   * same body within this many frames. For labels a flurry of blows can raise
+   * every frame, which would otherwise stack into an unreadable column.
+   */
+  throttleFrames?: number;
 }
+
+/** Optional behaviour for `Player.queueFloatingText`. */
+export type FloatingTextOptions = Pick<FloatingTextRequest, 'throttleFrames'>;

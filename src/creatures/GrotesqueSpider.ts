@@ -239,6 +239,11 @@ export class GrotesqueSpider extends Mob {
   // True while the spider is chasing to a last-known player position after losing LOS.
   private chasingToLastKnown = false;
 
+  /** The spider lab's boss, run by its quest rather than a boss room. */
+  override get countsAsBossKill(): boolean {
+    return true;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, SPIDER_HP, SPIDER_SPEED);
   }

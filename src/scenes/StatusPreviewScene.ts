@@ -54,6 +54,11 @@ const PREVIEW_STATUSES: readonly string[] = [
   'hearth_warmed',
   'deep_slumber',
   'shield',
+  'chilled',
+  'frozen',
+  'fairy_ward',
+  'fairy_aegis',
+  'overheal',
 ];
 
 /** The grounds a character is actually seen standing on, worst contrast first. */
@@ -77,7 +82,7 @@ const ZOOM_REVIEW = 2;
 const ZOOM_DETAIL = 3;
 const ZOOMS: readonly number[] = [ZOOM_IN_GAME, ZOOM_REVIEW, ZOOM_DETAIL];
 
-const COLUMNS = 4;
+const COLUMNS = 6;
 const CELL_W = 150;
 const CELL_H = 170;
 const GRID_TOP = 96;

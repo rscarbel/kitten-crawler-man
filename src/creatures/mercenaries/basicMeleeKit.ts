@@ -83,7 +83,12 @@ export class BasicMeleeKit implements MercenaryKit {
     return NO_PROJECTILES;
   }
 
+  /**
+   * A swing has nothing in the air, but it is still an attack in flight: a
+   * hireling knocked down or despawned mid-swing must not land it on the
+   * tick it next stands up.
+   */
   clearAirborne(): void {
-    // A swing has nothing in the air.
+    this.strike.cancel();
   }
 }

@@ -54,6 +54,8 @@ import { prewarmGrotesqueSpiderLocomotion } from '../sprites/grotesqueSpiderSpri
 import { LIFE_MACHINE_FIGURE, lifeMachineStateName } from '../sprites/art/lifeMachineFigure';
 import { figureFrameCount } from '../sprites/figure/figureDef';
 import { drawFigureCached } from '../sprites/figure/figureFrameCache';
+import { spawnHardModeBossHealer } from '../levels/fairySpawner';
+import { level2 } from '../levels/level2';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export const SPIDER_QUEST_ID = 'grotesque_spider';
@@ -1528,7 +1530,7 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  private _onHackComplete(): void {
+  protected _onHackComplete(): void {
     // The attempt is over, and the board is not drawn again in any phase that
     // follows — releasing here is what keeps the mini-game's painted art resident
     // only while the mini-game is on screen, rather than for the rest of the floor.
@@ -1930,6 +1932,7 @@ export class SpiderQuestSystem implements GameSystem {
       spider.setMap(this.gameMap);
       this._grotesqueSpider = spider;
       this.addMob(spider);
+      spawnHardModeBossHealer(spider, this.gameMap, this.addMob, level2.floorNumber);
       // The fight starts the moment this cutscene ends, and her locomotion
       // cells are the largest in the game; warming them here spends the
       // cutscene's frames on what the first seconds of the fight will blit.

@@ -26,6 +26,8 @@ import {
 import type { ButtonRect } from '../ui/pause/types';
 import { drawShopkeeper } from '../sprites/shopkeeperSprite';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { consumeStock, remainingFor, type MarketStock } from './market/MarketStock';
+import { SOLD_OUT_LABEL } from './market/vendorMenu';
 
 const WANDER_MIN_TILE_OFFSET = 3;
 const WANDER_MAX_TILE_INSET = 4;
@@ -121,12 +123,25 @@ export interface ShopItem {
   label: string;
   price: number;
   desc: string;
+  /** Units available for the whole run. Omit for an unlimited line, the default for every ShopSystem row. */
+  stock?: number;
 }
 
 /** Optional overrides that turn the default General Store into a bespoke vendor (bar, market, …). */
 export interface ShopConfig {
   title: string;
   items: ReadonlyArray<ShopItem>;
+}
+
+/**
+ * Backs a `ShopSystem`'s limited rows with the same cross-scene counter the
+ * overworld market stalls use, so a line bought out at a club counter stays
+ * sold out through a checkpoint restore or a reload the same way a market
+ * stall does.
+ */
+export interface ShopStockConfig {
+  stock: MarketStock;
+  vendorId: string;
 }
 
 const SHOP_ITEMS: ReadonlyArray<ShopItem> = [
@@ -178,13 +193,21 @@ export class ShopSystem implements GameSystem {
 
   private readonly title: string;
   private readonly items: ReadonlyArray<ShopItem>;
+  private readonly stockConfig?: ShopStockConfig;
 
-  constructor(interiorWidth: number, config?: ShopConfig) {
+  constructor(interiorWidth: number, config?: ShopConfig, stockConfig?: ShopStockConfig) {
     this.title = config?.title ?? DEFAULT_SHOP_TITLE;
     this.items = config?.items ?? SHOP_ITEMS;
+    this.stockConfig = stockConfig;
     this.wanderX = Math.floor(interiorWidth / 2) * TILE_SIZE;
     this.wanderMinX = WANDER_MIN_TILE_OFFSET * TILE_SIZE;
     this.wanderMaxX = (interiorWidth - WANDER_MAX_TILE_INSET) * TILE_SIZE;
+  }
+
+  /** Units left for a row, or `null` when the row is unlimited or this shop has no stock store. */
+  private remainingStock(item: ShopItem): number | null {
+    if (this.stockConfig === undefined) return null;
+    return remainingFor(this.stockConfig.stock, this.stockConfig.vendorId, item);
   }
 
   update(): void {
@@ -369,7 +392,8 @@ export class ShopSystem implements GameSystem {
       const item = this.items[i];
       const rowY = listTop + i * PANEL_ITEM_H - this.scrollY;
       if (rowY + PANEL_ITEM_H <= listTop || rowY >= listBottom) continue;
-      const canAfford = active.coins >= item.price;
+      const soldOut = this.remainingStock(item) === 0;
+      const canAfford = !soldOut && active.coins >= item.price;
 
       ctx.fillStyle =
         i % 2 === 0
@@ -397,7 +421,7 @@ export class ShopSystem implements GameSystem {
         color: canAfford ? '#8a7a50' : '#4a3a28',
       });
 
-      drawText(ctx, `${item.price} coins`, {
+      drawText(ctx, soldOut ? SOLD_OUT_LABEL : `${item.price} coins`, {
         x: panelX + PANEL_W - PANEL_PRICE_X_FROM_RIGHT,
         y: rowY + PANEL_ITEM_NAME_Y - PANEL_ITEM_NAME_BASELINE,
         size: PANEL_ITEM_NAME_SIZE,
@@ -419,13 +443,14 @@ export class ShopSystem implements GameSystem {
         y: btnY,
         width: PANEL_BTN_W,
         height: PANEL_BTN_H,
-        label: 'Buy',
+        label: soldOut ? SOLD_OUT_LABEL : 'Buy',
         fill: canAfford ? BUY_AFFORDABLE_FILL : BUY_UNAFFORDABLE_FILL,
         border: canAfford ? BUY_AFFORDABLE_BORDER : BUY_UNAFFORDABLE_BORDER,
         borderWidth: PANEL_BTN_BORDER_W,
         radius: 0,
         labelSize: PANEL_BTN_TEXT_SIZE,
         labelColor: canAfford ? BUY_AFFORDABLE_LABEL : BUY_UNAFFORDABLE_LABEL,
+        disabled: soldOut,
         action: () => this.tryBuy(itemIdx, active),
       });
     }
@@ -483,6 +508,11 @@ export class ShopSystem implements GameSystem {
 
   private tryBuy(itemIdx: number, player: Player): void {
     const item = this.items[itemIdx];
+    if (this.remainingStock(item) === 0) {
+      this.feedbackMsg = SOLD_OUT_LABEL;
+      this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
+      return;
+    }
     if (player.coins < item.price) {
       this.feedbackMsg = 'Not enough coins!';
       this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
@@ -497,6 +527,9 @@ export class ShopSystem implements GameSystem {
       return;
     }
     player.coins -= item.price;
+    if (this.stockConfig !== undefined) {
+      consumeStock(this.stockConfig.stock, this.stockConfig.vendorId, item);
+    }
     this.feedbackMsg = `Bought ${item.label}!`;
     this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
     this.purchasePending = true;

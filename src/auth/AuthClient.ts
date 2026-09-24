@@ -2,6 +2,7 @@ import type { SavedWorld } from '../core/SavedWorld';
 import type { PlayerSnapshot } from '../core/PlayerSnapshot';
 import type { SerializedAbilityState } from '../core/AbilityManager';
 import type { SerializedAchievements } from '../core/AchievementManager';
+import type { GameStatsSnapshot } from '../core/GameStats';
 
 /** HTTP status code for server error (fallback for API errors). */
 const HTTP_SERVER_ERROR = 500;
@@ -52,6 +53,13 @@ export interface GameProgress {
    * either way the party resumes on a freshly generated floor.
    */
   world?: SavedWorld;
+  /**
+   * The run's tallies for the Stats tab and the run-complete screen. Kept at
+   * the top level rather than inside `world`, because the save a floor change
+   * writes carries no `world` and the run's record has to cross floors.
+   * Unknown until parsed, like the achievements.
+   */
+  gameStats?: GameStatsSnapshot;
   savedAt: string;
 }
 

@@ -4,11 +4,19 @@ import { KNIGHT_MISSILE_ATTACK_TYPE } from '../creatures/DarkKnight';
 import { GROUND_PUNCH_ATTACK_TYPE } from '../creatures/Juicer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { DamageSource } from '../Player';
+import { FROZEN_STATUS } from '../core/StatusEffect';
 import type { DeathCause } from '../ui/DeathExplanations';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
 import { MANTID_FLURRY_ATTACK_TYPE } from '../creatures/Mantid';
 import { ROCK_THROW_ATTACK_TYPE, ROLL_ATTACK_TYPE } from '../creatures/rockGolemAttackTypes';
 import { STENCH_ATTACK_TYPE, TRAMPLE_ATTACK_TYPE } from '../creatures/ballOfSwineAttackTypes';
+import { ICE_BOLT_ATTACK_TYPE } from '../creatures/fairies/IceFairy';
+import {
+  FIREBALL_ATTACK_TYPE,
+  FIREBALL_BLAST_ATTACK_TYPE,
+  DEATH_FLAME_ATTACK_TYPE,
+  DEATH_EXPLOSION_ATTACK_TYPE,
+} from './FairyFireballSystem';
 
 /**
  * Maps a mob's class name (and optional attackType) to a DeathCause key.
@@ -51,6 +59,9 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   CityElfCultist: 'cityElfCultist',
   HeatherTheBear: 'heatherTheBear',
   MissQuill: 'missQuill',
+  ShieldFairy: 'shieldFairy',
+  HealingFairy: 'healingFairy',
+  NecroFairy: 'necroFairy',
 };
 
 /**
@@ -141,6 +152,22 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   // closing — and it can be attributed to a hired golem as well as to a wild one.
   if (attackType === ROCK_THROW_ATTACK_TYPE) return 'rockGolemRock';
 
+  // The fairy is absent from `MOB_TYPE_TO_CAUSE`, so a bolt kill needs this
+  // line to be named at all. Only a crawler killed while still unfrozen gets
+  // here: `resolveDeathCause` calls any death inside the ice `frozenSolid`
+  // before it asks what landed the blow.
+  if (mobType === 'IceFairy' && attackType === ICE_BOLT_ATTACK_TYPE) return 'iceFairyBolt';
+
+  // Four different fires from one fairy: the direct hit is dodged by moving
+  // off the landing mark during the flight, the ground charge by leaving before the fuse ends, and
+  // the two death effects punish lingering by her corpse instead of retreating.
+  if (mobType === 'FireFairy') {
+    if (attackType === FIREBALL_ATTACK_TYPE) return 'fireFairyFireball';
+    if (attackType === FIREBALL_BLAST_ATTACK_TYPE) return 'fireFairyBlast';
+    if (attackType === DEATH_FLAME_ATTACK_TYPE) return 'fireFairyDeathFlame';
+    if (attackType === DEATH_EXPLOSION_ATTACK_TYPE) return 'fireFairyDeathExplosion';
+  }
+
   if (mobType === 'KrakarenTentacle') return 'krakarenTentacleStrike';
 
   if (mobType === 'KrakarenClone') {
@@ -167,6 +194,9 @@ export function resolveDeathCause(
     human.isActive && !human.isAlive ? human : cat.isActive && !cat.isAlive ? cat : null;
 
   if (deadPlayer !== null && deadPlayer.lastDamageSource !== null) {
+    // Encased and unable to act, whatever landed the blow — the lesson is the
+    // ice, not the thing that walked up to a target that could not move.
+    if (deadPlayer.hasStatus(FROZEN_STATUS)) return 'frozenSolid';
     return causeFromDamageSource(deadPlayer.lastDamageSource);
   }
 

@@ -58,7 +58,7 @@ quest behind it at all — it points at the town's own furniture. See `add-quest
 
 ### Companions and hirelings
 
-Mongo (`MongoSystem`) and the Meat Shields hirelings (`MercenarySystem`) are `Mob`s on the party's side, handed to hostiles through `ctx.extraTargets` and crediting their kills to their owner. A hireling is a shell (`Mercenary`) plus a kit (`src/creatures/mercenaries/`), drawn through `MERCENARY_ART` and voiced through `MERCENARY_VOICES`; its shots fly in `RockThrowSystem` and `HirelingBoltSystem`. See the `add-creature` skill.
+Mongo (`MongoSystem`) and the Meat Shields hirelings (`MercenarySystem`) are `Mob`s on the party's side, handed to hostiles through `ctx.extraTargets` and crediting their kills to their owner. A hireling is a shell (`Mercenary`) plus a kit (`src/creatures/mercenaries/`), drawn through `MERCENARY_ART` and voiced through `MERCENARY_VOICES`; its shots fly in `RockThrowSystem` and `HirelingBoltSystem`. Both companions follow the party everywhere, including indoors: `BuildingInteriorScene` owns its own `MongoSystem` and `MercenarySystem` instances the same way `DungeonScene` does. A door dismisses whichever companions are out and the scene on the far side rebuilds them fresh — a hire from the roster's saved HP, Mongo via `mongoWasOut` into `MongoSystem.carryIn`. `src/systems/companionCarry.ts` is narrower: it moves companions that are already out between rosters of the same building, on a tower's `changeFloor` and when a script resets the party to its marks, beside the crawler they follow. See the `add-creature` skill.
 
 ### Carl's animation
 

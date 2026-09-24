@@ -152,6 +152,11 @@ export class RockGolemBoss extends RockGolem {
   private readonly rollHitCooldowns = new Map<Player, number>();
   private readonly rollContactRangePx: number;
 
+  /** A named boss wherever it is spawned, not only as a bounty mark. */
+  override get countsAsBossKill(): boolean {
+    return true;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, BOSS_HP);
     this.rollContactRangePx = tileSize * ROLL_CONTACT_RANGE_TILES;

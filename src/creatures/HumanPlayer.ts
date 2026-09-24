@@ -459,7 +459,7 @@ export class HumanPlayer extends Player {
    * sling. No homing and no splash: the slingshot is aim, and nothing else.
    */
   triggerSlingshot(): boolean {
-    if (this.slingshotCooldown > 0) return false;
+    if (this.slingshotCooldown > 0 || !this.canAct) return false;
 
     const angle = Math.atan2(this.facingY, this.facingX);
     const x = this.x + this.tileSize * HumanPlayer.SPRITE_HORIZONTAL_OFFSET;
@@ -608,7 +608,7 @@ export class HumanPlayer extends Player {
    * swinging at decides which blow it is.
    */
   triggerAttack(target: Mob | null = null) {
-    if (this.attackTimer > 0 || this.smushTimer > 0) return;
+    if (this.attackTimer > 0 || this.smushTimer > 0 || !this.canAct) return;
     // A weapon in hand takes the attack key: bare fists are what the punch and
     // the kick animate, and he cannot swing what he is holding a sling with.
     // Checked after the windup guard above so a sling shot respects the same
@@ -639,6 +639,7 @@ export class HumanPlayer extends Player {
 
   triggerSmush(): boolean {
     if (this.smushCooldown > 0 || this.smushTimer > 0 || this.attackTimer > 0) return false;
+    if (!this.canAct) return false;
     this.smushTimer = this.SMUSH_FRAMES;
     this.animator.beginSmush(this.facingX, this.facingY);
     return true;
@@ -880,24 +881,36 @@ export class HumanPlayer extends Player {
   }
 
   updateAttack() {
-    if (this.attackTimer > 0) this.attackTimer--;
+    // A chilled swing skips frames rather than counting in fractions, so a
+    // peak check alone would hold true across a skipped frame and land the
+    // blow twice. The peaks also ask whether the timer moved this frame.
+    this.swingTimersStepped = this.actionTicksThisFrame > 0;
+    this.attackTimer = this.tickActionTimer(this.attackTimer);
     this.smushCooldown = this.tickCooldown(this.smushCooldown);
     if (this.smushTimer > 0) {
-      this.smushTimer--;
+      this.smushTimer = this.tickActionTimer(this.smushTimer);
       if (this.smushTimer === 0) {
         this.smushCooldown = getSmushStats(this.getSmushLevel()).cooldownFrames;
       }
     }
   }
 
+  /** Whether {@link updateAttack} advanced the swing timers this frame. */
+  private swingTimersStepped = true;
+
+  protected override abandonSwing(): void {
+    this.attackTimer = 0;
+    this.smushTimer = 0;
+  }
+
   /** Returns true on the single frame when the melee hit connects (peak of the swing). */
   isAttackPeak(): boolean {
-    return this.attackTimer === Math.ceil(this.ATTACK_FRAMES / 2);
+    return this.swingTimersStepped && this.attackTimer === Math.ceil(this.ATTACK_FRAMES / 2);
   }
 
   /** Returns true on the single frame when the stamp lands and the blast goes off. */
   isSmushPeak(): boolean {
-    return this.smushTimer === this.SMUSH_HIT_TIMER;
+    return this.swingTimersStepped && this.smushTimer === this.SMUSH_HIT_TIMER;
   }
 
   getMeleeRange(): number {
@@ -959,8 +972,8 @@ export class HumanPlayer extends Player {
 
     if (dist <= this.getMeleeRange()) {
       if (this.autoAttackCooldown > 0) {
-        this.autoAttackCooldown--;
-      } else {
+        this.autoAttackCooldown = this.tickActionTimer(this.autoAttackCooldown);
+      } else if (this.canAct) {
         this.triggerAttack(this.autoTarget);
         this.autoAttackCooldown = this.AUTO_ATTACK_COOLDOWN;
       }

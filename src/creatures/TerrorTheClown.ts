@@ -70,12 +70,27 @@ export class TerrorTheClown extends Mob {
   private swingTimer = 0;
   private isAggro = false;
 
+  /** The circus assault's closing boss, spawned by its quest wave. */
+  override get countsAsBossKill(): boolean {
+    return true;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, TERROR_HP, TERROR_SPEED);
     // Warmed at construction, which is the moment the circus schedules his
     // wave: both palettes, because enrage swaps to a different set of cells
     // mid-fight rather than tinting the ones already warm.
     prewarmTerrorClownStates(TERROR_CLOWN_LOCOMOTION_STATES);
+  }
+
+  /**
+   * Once enraged, never healed back above the enrage line: the enrage is
+   * latched, so a heal past it would hand the party an enraged clown at full
+   * health, harder than the fight they started.
+   */
+  override get fairyHealCeiling(): number {
+    const pastEnrageLine = this.isEnraged || this.hp / this.maxHp <= ENRAGE_HP_FRACTION;
+    return pastEnrageLine ? Math.floor(this.maxHp * ENRAGE_HP_FRACTION) : this.maxHp;
   }
 
   override resetToSpawn(): void {

@@ -4,6 +4,7 @@ import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
 import type { AssetGroup } from '../core/assetGroups';
 import type { LevelledCurve } from '../creatures/mobLevelScaling';
+import type { Difficulty } from '../core/difficultyProfiles';
 
 /**
  * One entry of a camp's roster: a mob type, a count and a level range.
@@ -68,7 +69,12 @@ export interface MobSpawnRule extends MobLevelRange {
     | 'skeleton_archer'
     | 'skeleton_lord'
     | 'the_lich'
-    | 'goblin_archer';
+    | 'goblin_archer'
+    | 'fairy_shield'
+    | 'fairy_healer'
+    | 'fairy_ice'
+    | 'fairy_fire'
+    | 'fairy_necro';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.
@@ -266,6 +272,49 @@ export interface ProgressionDef {
   regionLevelBonus?: number[];
 }
 
+/**
+ * How likely one room is to hold fairies, and how many, per difficulty. Counts
+ * are of the non-healer fairies only: a room's healer is rolled apart from them
+ * and never counts toward them.
+ */
+export interface FairyRoomRate {
+  /** Chance a room gets any non-healer fairies at all. */
+  readonly chance: Readonly<Record<Difficulty, number>>;
+  /** Inclusive count range once the chance succeeds, drawn uniformly. */
+  readonly minCount: Readonly<Record<Difficulty, number>>;
+  readonly maxCount: Readonly<Record<Difficulty, number>>;
+}
+
+/** Rates that replace one region's once a named boss is dead. */
+export interface FairyRateUpgrade {
+  readonly bossType: string;
+  readonly region: number;
+  readonly rate: FairyRoomRate;
+  /**
+   * Narrows the upgrade to the rooms of `region` lying past the safe room that
+   * guards `bossType`: those the floor's start cannot reach without crossing
+   * it. Every other room of the region keeps its base rate for good.
+   */
+  readonly onlyPastItsSafeRoom?: boolean;
+}
+
+/**
+ * Where a floor's fairies come from. Fairies are always extra to a room's own
+ * population: they never count against `MAX_ROOM_SPAWN_COUNT`.
+ */
+export interface FairySpawnTable {
+  /** Indexed by progression region; null (or a missing entry) means no fairies there. */
+  readonly roomRatesByRegion: readonly (FairyRoomRate | null)[];
+  /** Independent per-room healer roll, the same on every difficulty; 0 disables. */
+  readonly roomHealerChance: number;
+  /** Region rates replaced once a named boss is dead, applied to rooms nobody has touched. */
+  readonly upgrades?: readonly FairyRateUpgrade[];
+  /** Chance per ambient scatter point of one non-healer fairy beside it. */
+  readonly scatterChance?: Readonly<Record<Difficulty, number>>;
+  /** Independent per-point healer roll, extra to the scatter fairy; 0 disables. */
+  readonly scatterHealerChance?: number;
+}
+
 /** Data-only description of a dungeon level. No game-logic dependencies. */
 export interface LevelDef {
   id: string;
@@ -404,6 +453,12 @@ export interface LevelDef {
   campSpawns?: Partial<Record<CampKind, CampSpawnRule[]>>;
   /** Mobs to spawn when another mob is killed (event-driven). */
   onMobKilledSpawns?: OnMobKilledSpawn[];
+  /**
+   * Fairies spawned on top of this floor's own population: per room by
+   * progression region, and per ambient scatter point on the overworld. Absent
+   * means none.
+   */
+  fairies?: FairySpawnTable;
   /**
    * Forces an early-floor boss order. When present the generator replaces free
    * room placement with the declared gauntlets — spawn at map centre, branch

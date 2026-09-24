@@ -17,6 +17,8 @@ import {
 import { getMongoStats, MONGO_DAMAGE_PER_XP } from '../abilities/mongo';
 import { drawMongoIcon } from '../sprites/mongoSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { CarriedCompanion } from './companionCarry';
+import type { AbilityManager } from '../core/AbilityManager';
 import { drawText } from '../ui/TextBox';
 import { drawButton } from '../ui/Button';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
@@ -177,6 +179,19 @@ const RECOVERY_TOAST_COLOR = '#4ade80';
 const FRAMES_PER_SECOND = 60;
 /** Decimals on the toast's seconds. One kill is worth well under a second. */
 const RECOVERY_TOAST_DECIMALS = 1;
+
+/**
+ * Progress toward his next level, 0–1, for the strip above the button's HP bar.
+ *
+ * Full at the cap rather than empty: `xpToNextLevel` is Infinity there, and a
+ * bar reading zero for a maxed-out pet says the opposite of what is true.
+ */
+export function mongoXpFraction(abilityManager: AbilityManager): number {
+  const state = abilityManager.getState('mongo');
+  if (state === null) return 0;
+  if (!Number.isFinite(state.xpToNextLevel) || state.xpToNextLevel <= 0) return 1;
+  return Math.max(0, Math.min(1, state.xp / state.xpToNextLevel));
+}
 
 /**
  * A point-in-time copy of the pet's scene-level state, for the in-run safe-room
@@ -355,14 +370,67 @@ export class MongoSystem implements GameSystem {
       this.speak('No room for Mongo!');
       return null;
     }
-    this.mongo = new Mongo(spawn.x, spawn.y, TILE_SIZE, cat, this.petLevel(), this.petState.hp);
-    this.mongo.setMap(gameMap);
+    const mongo = this.spawnAt(spawn, cat, gameMap);
+    this.speech.say('Go Mongo!');
+    return mongo;
+  }
+
+  private spawnAt(tile: { x: number; y: number }, cat: CatPlayer, gameMap: GameMap): Mongo {
+    const mongo = new Mongo(tile.x, tile.y, TILE_SIZE, cat, this.petLevel(), this.petState.hp);
+    mongo.setMap(gameMap);
+    this.mongo = mongo;
     this.petState.regenFrames = 0;
     this.retreatFrames = 0;
+    return mongo;
+  }
 
-    this.speech.say('Go Mongo!');
+  /**
+   * Whether he is out and fighting fit enough to walk through a door with the
+   * party. A pet already running home, collapsing or spent is put away at the
+   * threshold instead: the new scene would build him fresh, and a fresh Mongo
+   * has forgotten the recall he was obeying.
+   */
+  get followsThroughDoor(): boolean {
+    const mongo = this.mongo;
+    if (mongo === null) return false;
+    return !mongo.recalling && !mongo.collapsing && !mongo.exhausted;
+  }
 
-    return this.mongo;
+  /**
+   * Brings him in beside the cat on the far side of a door he walked through
+   * with the party, at the health he left with.
+   *
+   * Not a summon: nobody pressed anything, so there is no call, no usage XP and
+   * no release cry, and the recovery floor a summon demands is not asked again
+   * of a pet who was already out. The story lock and the knockout latch still
+   * refuse him — a door is not a way around either.
+   */
+  carryIn(cat: CatPlayer, gameMap: GameMap): Mongo | null {
+    if (!this.unlocked || this.mongo !== null) return null;
+    if (this.petState.summonLocked || this.petState.restingUntilFull) return null;
+    if (this.petState.hp <= 0) return null;
+    const spawn = this.findSpawnTile(cat, gameMap);
+    if (spawn === null) return null;
+    return this.spawnAt(spawn, cat, gameMap);
+  }
+
+  /** Him, as one of the companions a scene moves with the party. */
+  asCarriedCompanion(cat: CatPlayer): CarriedCompanion {
+    return {
+      body: this.mongo,
+      landingTile: (map) => this.findSpawnTile(cat, map),
+      putAway: (mobs, grid) => this.dismiss(mobs, grid),
+      onPlaced: (mobs) => {
+        const mongo = this.mongo;
+        if (mongo === null) return;
+        mongo.onRescued();
+        // Re-pointed now rather than on the next `update`: the mob loop runs
+        // first, and one AI tick against the storey he left is a bite aimed at a
+        // creature that is no longer in the room.
+        mongo.allMobs = mobs;
+        this.retreatMobs = mobs;
+      },
+    };
   }
 
   /**
@@ -395,6 +463,8 @@ export class MongoSystem implements GameSystem {
     const catCentreY = cat.y + TILE_SIZE * TILE_CENTER;
     for (const mob of nearby) {
       if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+      // Held out of the fight by a script, it is not a threat to send him at.
+      if (mob.offLimitsToAllies) continue;
       // An unstarted boss fight is the player's to start. Sending the pet at it
       // through the doorway would begin it for them with nobody in the room.
       if (bossRoom?.isUntriggeredBossRoomMob(mob, human) === true) continue;
@@ -623,12 +693,11 @@ export class MongoSystem implements GameSystem {
 
   /**
    * Recovery while he is off duty. The clock and the arithmetic live on the pet
-   * state so a building interior can run the identical tick.
+   * state, which outlives every scene, so a door or a staircase never throws a
+   * tick away.
    *
    * Not gated on `unlocked`: a pet nobody has unlocked is at full health by
-   * definition, so the tick is already a no-op there — and the interior scene
-   * has no way to know about the unlock, so a gate here would only make the two
-   * call sites differ.
+   * definition, so the tick is already a no-op there.
    */
   private tickRegen(): void {
     tickMongoRegen(this.petState, this.maxHp);

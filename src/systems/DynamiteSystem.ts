@@ -56,7 +56,7 @@ const HALF_TILE = TILE_SIZE / 2;
 const DYN_RADIUS_TILES = 3;
 const DYN_RADIUS = TILE_SIZE * DYN_RADIUS_TILES;
 /** What an untrained level-1 human's stick does, to crawlers and enemies alike. */
-const DYN_DAMAGE = 8;
+const DYN_DAMAGE = 16;
 /** Bonus speed per extra explosives handling level above 1. */
 const DYN_SPEED_PER_LEVEL = 4;
 /** Flat bonus per explosives handling level above 1 to what a blast does to the crawlers. */
@@ -386,6 +386,14 @@ export class DynamiteSystem implements GameSystem {
 
   release(human: HumanPlayer): void {
     if (!this._charging) return;
+    // A freeze landed mid-charge: the stick goes back in the bag unburned,
+    // the same as walking into the safe room with one lit, rather than
+    // throwing from hands that can no longer act.
+    if (!human.canAct) {
+      this._charging = null;
+      this.stopDynamiteAction(human);
+      return;
+    }
     const { chargeFrames } = this._charging;
     this._charging = null;
 
