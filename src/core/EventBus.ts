@@ -23,7 +23,10 @@ import type { CraftSkillId } from './CraftSkills';
 import type { StructureKind } from './structureKinds';
 import type { PalisadeTier } from '../map/tileTypes';
 import type { ResourceId } from './resourceIds';
+import type { HarvestKind } from './craftPerks';
 import type { VillageQuestPhase } from './villageQuestPhase';
+import type { ToolKind, ToolTier } from './toolTiers';
+import type { ProcessingStationKind } from '../systems/briarHollow/processingStations';
 
 /**
  * Who decides what plays when a boss fight starts or ends.
@@ -45,9 +48,10 @@ export interface GameEvents {
   };
 
   /**
-   * One area-of-effect resolution emptied several mobs' health at once. Counted
-   * at the damage site, because by the time `mobKilled` fires the kills have
-   * already been split into one event each.
+   * One area-of-effect resolution emptied several enemies' health at once.
+   * Counted at the damage site, because by the time `mobKilled` fires the kills
+   * have already been split into one event each. Allies and livestock caught in
+   * it are not counted.
    */
   multiKill: { killer: HumanPlayer; count: number };
 
@@ -96,6 +100,12 @@ export interface GameEvents {
   bossFightInitiated: { bossType: string; music?: BossMusicOwnership };
 
   healingPotionUsed: { player: 'Human' | 'Cat'; hpRestored: number };
+
+  /**
+   * A crawler reached for Hollow Stew while the potion cooldown it shares was
+   * still running, so nothing was eaten. For a cook to explain why.
+   */
+  stewRefusedOnCooldown: { eater: Player };
 
   dynamiteUsed: { player: 'Human' | 'Cat' };
 
@@ -179,6 +189,9 @@ export interface GameEvents {
     y: number;
   };
 
+  /** A tree was felled or a rock crumbled by harvesting, at tile (`x`, `y`). */
+  resourceNodeDepleted: { kind: HarvestKind; x: number; y: number };
+
   /** A structure finished construction. `tier` is set for palisade segments. */
   structureBuilt: { kind: StructureKind; tier?: PalisadeTier };
 
@@ -191,17 +204,42 @@ export interface GameEvents {
   /** A structure's health reached zero. `permanent` is set when it cannot be rebuilt. */
   structureDestroyed: { kind: StructureKind; permanent: boolean };
 
-  /** A crawler petted a village cow. */
+  /** A crawler petted a village cow at world pixel (`x`, `y`). */
   cowPetted: { x: number; y: number };
 
   /** A village cow died. */
   cowKilled: { x: number; y: number };
+
+  /**
+   * An explosion went off at world pixel (`x`, `y`) with a blast radius of
+   * `radiusPx` — heard by anything that reacts to a bang rather than to being
+   * hit, like livestock bolting.
+   */
+  blastLanded: { x: number; y: number; radiusPx: number };
 
   /** The Briar Hollow defense quest moved to a new phase. */
   villageQuestPhaseChanged: { phase: VillageQuestPhase };
 
   /** A wave of the village assault began. `index` counts from 0. */
   villageAssaultWave: { index: number };
+
+  /** Oren handed the party its starter axe and pickaxe and taught both crawlers Resourcing. */
+  toolsGranted: Record<string, never>;
+
+  /** The party's axe or pickaxe went up a tier at the forge, in both crawlers' packs at once. */
+  toolUpgraded: { kind: ToolKind; tier: ToolTier };
+
+  /**
+   * Wood was turned into boards or rope: by hand at one of the sawmill's
+   * machines (`manual`), or in a batch Fenna was paid for (`fenna`). `count`
+   * is what came out, `woodSpent` what went in.
+   */
+  woodProcessed: {
+    output: ProcessingStationKind;
+    count: number;
+    woodSpent: number;
+    via: 'manual' | 'fenna';
+  };
 }
 
 type EventCallback<T> = (data: T) => void;

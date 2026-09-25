@@ -71,7 +71,12 @@ import { createBriarHollowState } from '../src/core/briarHollowState';
 import { createPartyCraftsState } from '../src/core/partyCrafts';
 import { PartyTools } from '../src/core/PartyTools';
 import { keybindings } from '../src/core/Keybindings';
+import { GroundPickupSystem } from '../src/systems/GroundPickupSystem';
+import { DynamiteSystem } from '../src/systems/DynamiteSystem';
 import { focusedOverlay, worldHalted } from '../src/systems/kits/OverlayClaims';
+
+/** The level the kit's militia are raised at; nothing here fights them. */
+const MILITIA_LEVEL = 1;
 
 const HALF_TILE = TILE_SIZE / 2;
 
@@ -875,6 +880,11 @@ console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
     menus,
     audio: null,
     keybindings,
+    groundPickups: new GroundPickupSystem(map),
+    dynamite: new DynamiteSystem(map),
+    noteResourceActivity: () => undefined,
+    onTileChanged: () => undefined,
+    assaultLevel: () => MILITIA_LEVEL,
   });
 
   check(!kit.tryInteract(stage.pm.active()), 'tryInteract claims nothing');

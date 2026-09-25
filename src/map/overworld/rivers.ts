@@ -29,6 +29,7 @@ import {
 import type { BridgeAxis, TileGrid } from '../town/tileGrid';
 import type { TilePoint, TownPlan } from '../town/townPlan';
 import type { ElevationField } from './elevation';
+import type { KeepOut } from './keepOut';
 import { NO_REGION, Reachability } from './reachability';
 import { worldRandom } from '../../core/WorldRandom';
 
@@ -345,7 +346,12 @@ function halfWidthAt(progress: number, step: number): number {
  * and the river runs across grass, highland turf and scree alike — the record is
  * what a bank tile's fringe and any future un-carving would read back.
  */
-function carveChannel(grid: TileGrid, path: ReadonlyArray<TilePoint>, border: number): void {
+function carveChannel(
+  grid: TileGrid,
+  path: ReadonlyArray<TilePoint>,
+  border: number,
+  landmarks: KeepOut,
+): void {
   path.forEach((point, index) => {
     const progress = index / Math.max(1, path.length - 1);
     const halfWidth = halfWidthAt(progress, index);
@@ -364,6 +370,7 @@ function carveChannel(grid: TileGrid, path: ReadonlyArray<TilePoint>, border: nu
         // route is already held well clear of them; this is the backstop that
         // makes that a guarantee rather than a tuning assumption.
         if (grid.isSolid(tx, ty)) continue;
+        if (landmarks.contains(tx, ty)) continue;
         grid.setRiverWater(tx, ty, flowDir);
       }
     }
@@ -382,6 +389,7 @@ export function carveRivers(
   plan: TownPlan,
   elevation: ElevationField,
   border: number,
+  landmarks: KeepOut,
 ): RiverCourse[] {
   // The clearance is applied to the course's *centre line*, so the channel's own
   // half-width has to be added or the water ends up that much closer than the
@@ -393,6 +401,13 @@ export function carveRivers(
       centreTileY: plan.centre.y,
       clearanceTiles: plan.safeRadiusTiles + RIVER_TOWN_CLEARANCE_TILES + widestBank,
     },
+    // Landmarks sited before the carve — Briar Hollow — are steered round the
+    // same way as the town, by the disc that encloses each of their shapes.
+    ...landmarks.enclosingDiscs().map((disc): RiverSite => ({
+      centreTileX: disc.centre.x,
+      centreTileY: disc.centre.y,
+      clearanceTiles: disc.radiusTiles + widestBank,
+    })),
   ];
 
   const rivers: RiverCourse[] = [];
@@ -400,7 +415,7 @@ export function carveRivers(
     for (let attempt = 0; attempt < MAX_RIVER_ATTEMPTS_PER_RIVER; attempt++) {
       const path = routeRiver(elevation, grid.size, border, keepOut);
       if (path === null) continue;
-      carveChannel(grid, path, border);
+      carveChannel(grid, path, border, landmarks);
       rivers.push({ path });
       break;
     }

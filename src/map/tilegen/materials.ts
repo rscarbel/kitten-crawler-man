@@ -77,6 +77,9 @@ import {
   RIVER_WATER_RAMP,
   HIGHLAND_GRASS_RAMP,
   SCREE_RAMP,
+  HOLLOW_PLANK_RAMP,
+  PASTURE_GRASS_RAMP,
+  TILLED_SOIL_RAMP,
 } from './palette';
 
 export interface PaintContext {
@@ -983,6 +986,19 @@ const PLANK_GRAIN_SEEDS: ReadonlyArray<number> = [71, 73];
  * exactly where two variants meet, which the seam audit flags.
  */
 const PLANK_STAGGER_STEPS = 4;
+const PLANK_STAGGER_SALT = 61;
+
+/**
+ * How far one board row's butt joints are shifted along its length. Each row
+ * carries its own offset, so the joints do not line up into one seam running
+ * across the whole floor.
+ */
+function plankStaggerPx(boardIndex: number, structure: number, segmentWidth: number): number {
+  const staggerStep = Math.floor(
+    hashLattice(boardIndex, PLANK_STAGGER_SALT, structure) * PLANK_STAGGER_STEPS,
+  );
+  return ((staggerStep + COURSE_PHASE_OFFSET) / PLANK_STAGGER_STEPS) * segmentWidth;
+}
 
 /**
  * Sawn boards running east–west, with staggered butt joints and a grain line or
@@ -1013,13 +1029,7 @@ function paintPlanks(ctx: PaintContext, options: PlankOptions): void {
     const localY = phasedY - board * boardHeight;
     const boardIndex = positiveMod(board, boardsInPatch);
 
-    // Each board carries its own start offset, so the butt joints do not line up
-    // into one seam running across the whole floor.
-    const staggerStep = Math.floor(
-      hashLattice(boardIndex, 61, ctx.structure) * PLANK_STAGGER_STEPS,
-    );
-    const stagger = ((staggerStep + COURSE_PHASE_OFFSET) / PLANK_STAGGER_STEPS) * segmentWidth;
-    const shiftedX = warped.x + stagger;
+    const shiftedX = warped.x + plankStaggerPx(boardIndex, ctx.structure, segmentWidth);
     const segment = Math.floor(shiftedX / segmentWidth);
     const localX = shiftedX - segment * segmentWidth;
     const segmentIndex = positiveMod(segment, segmentsInPatch);
@@ -2526,6 +2536,268 @@ const bopcaScuff: Material = {
   },
 };
 
+// ── Briar Hollow: the ratkin village ───────────────────────────────────────
+
+const HOLLOW_BOARDS_PER_TILE = 2;
+const HOLLOW_BOARD_LENGTH_TILES = 2;
+const HOLLOW_BOARD_GAP_PX = 1.1;
+const HOLLOW_BOARD_GAP_STRENGTH = 0.42;
+const HOLLOW_BOARD_GAP_DARKEN = 0.72;
+const HOLLOW_BOARD_BEVEL_PX = 1.2;
+const HOLLOW_BOARD_BEVEL_STRENGTH = 0.55;
+const HOLLOW_BOARD_TONE_FLOOR = 0.38;
+const HOLLOW_BOARD_TONE_SPREAD = 0.26;
+const HOLLOW_BOARD_GRAIN_STRENGTH = 0.2;
+/** How far a nail sits back from the butt joint it fastens, in sheet pixels. */
+const HOLLOW_NAIL_INSET_PX = 3.5;
+/** A nail's height off the board's centre line, as a fraction of the board. */
+const HOLLOW_NAIL_OFFSET_SHARE = 0.22;
+const HOLLOW_NAIL_RADIUS_PX = 1.3;
+const HOLLOW_NAIL_ALPHA = 0.6;
+const HOLLOW_NAIL_SOFTNESS = 0.45;
+const HOLLOW_NAIL_DARKEN = 0.7;
+/** Share of board ends that show their nail; the rest are sunk or rusted flush. */
+const HOLLOW_NAIL_SHOWN_SHARE = 0.7;
+const HOLLOW_NAIL_SALT = 89;
+const HOLLOW_OIL_STAIN_COUNT = 4;
+const HOLLOW_OIL_STAIN_MIN_RADIUS = 6;
+const HOLLOW_OIL_STAIN_MAX_RADIUS = 15;
+const HOLLOW_OIL_STAIN_ALPHA = 0.12;
+const HOLLOW_OIL_STAIN_SOFTNESS = 1;
+const HOLLOW_WEAR_COUNT = 5;
+const HOLLOW_WEAR_MIN_RADIUS = 5;
+const HOLLOW_WEAR_MAX_RADIUS = 13;
+const HOLLOW_WEAR_ALPHA = 0.1;
+const HOLLOW_WEAR_SOFTNESS = 1;
+
+/**
+ * One nail at each board end beside a butt joint — the only place a floor's
+ * nails show once the boards have worn in. The joint arithmetic mirrors
+ * `paintPlanks` exactly, so a nail always sits next to a joint rather than
+ * floating mid-board.
+ */
+function paintPlankNails(ctx: PaintContext, ramp: Ramp): void {
+  const tiles = ctx.size / TILE_PX;
+  const boardHeight = TILE_PX / HOLLOW_BOARDS_PER_TILE;
+  const segmentWidth = TILE_PX * HOLLOW_BOARD_LENGTH_TILES;
+  const boardsInPatch = HOLLOW_BOARDS_PER_TILE * tiles;
+  const segmentsInPatch = tiles / HOLLOW_BOARD_LENGTH_TILES;
+  const nailColor = shade(ramp.shadow, HOLLOW_NAIL_DARKEN);
+  const nailOffset = boardHeight * HOLLOW_NAIL_OFFSET_SHARE;
+
+  for (let board = 0; board < boardsInPatch; board++) {
+    // `paintPlanks` shifts every row down half a board, so board `n` is centred
+    // on `n * boardHeight` rather than half a board below it.
+    const centreY = board * boardHeight;
+    const stagger = plankStaggerPx(board, ctx.structure, segmentWidth);
+    for (let segment = 0; segment < segmentsInPatch; segment++) {
+      const jointX = segment * segmentWidth - stagger;
+      const endNails = [
+        { x: jointX - HOLLOW_NAIL_INSET_PX, y: centreY - nailOffset, slot: 0 },
+        { x: jointX + HOLLOW_NAIL_INSET_PX, y: centreY + nailOffset, slot: 1 },
+      ];
+      for (const nail of endNails) {
+        const showHash = hashLattice(
+          board * segmentsInPatch + segment,
+          nail.slot,
+          ctx.detail + HOLLOW_NAIL_SALT,
+        );
+        if (showHash > HOLLOW_NAIL_SHOWN_SHARE) continue;
+        wrappedDisc(
+          ctx.surface,
+          positiveMod(nail.x, ctx.size),
+          positiveMod(nail.y, ctx.size),
+          HOLLOW_NAIL_RADIUS_PX,
+          nailColor,
+          HOLLOW_NAIL_ALPHA,
+          HOLLOW_NAIL_SOFTNESS,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * The floor inside Briar Hollow's roofless buildings: dark-oiled walnut boards
+ * laid east–west. Softer joints than the town's boarding, because the whole
+ * interior is open to view from above and every piece of furniture stands on
+ * it — the floor is backdrop, and its seams only need to say "boards".
+ */
+const hollowPlanks: Material = {
+  id: 'hollow_planks',
+  label: 'Briar Hollow oiled plank floor',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintPlanks(ctx, {
+      boardsPerTile: HOLLOW_BOARDS_PER_TILE,
+      boardLengthTiles: HOLLOW_BOARD_LENGTH_TILES,
+      ramp: HOLLOW_PLANK_RAMP,
+      gapRamp: {
+        ...HOLLOW_PLANK_RAMP,
+        mid: shade(HOLLOW_PLANK_RAMP.shadow, HOLLOW_BOARD_GAP_DARKEN),
+      },
+      gapPx: HOLLOW_BOARD_GAP_PX,
+      gapStrength: HOLLOW_BOARD_GAP_STRENGTH,
+      bevelPx: HOLLOW_BOARD_BEVEL_PX,
+      bevelStrength: HOLLOW_BOARD_BEVEL_STRENGTH,
+      toneFloor: HOLLOW_BOARD_TONE_FLOOR,
+      toneSpread: HOLLOW_BOARD_TONE_SPREAD,
+      grainStrength: HOLLOW_BOARD_GRAIN_STRENGTH,
+    });
+    // Oil soaked in unevenly and traffic has worn it off again elsewhere; both
+    // cross the boards, which keeps the floor from reading as identical strips.
+    paintSpeckles(ctx, ctx.detail + 91, {
+      count: HOLLOW_OIL_STAIN_COUNT,
+      minRadius: HOLLOW_OIL_STAIN_MIN_RADIUS,
+      maxRadius: HOLLOW_OIL_STAIN_MAX_RADIUS,
+      ramp: { ...HOLLOW_PLANK_RAMP, mid: HOLLOW_PLANK_RAMP.shadow },
+      alpha: HOLLOW_OIL_STAIN_ALPHA,
+      softness: HOLLOW_OIL_STAIN_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + 93, {
+      count: HOLLOW_WEAR_COUNT,
+      minRadius: HOLLOW_WEAR_MIN_RADIUS,
+      maxRadius: HOLLOW_WEAR_MAX_RADIUS,
+      ramp: { ...HOLLOW_PLANK_RAMP, mid: HOLLOW_PLANK_RAMP.light },
+      alpha: HOLLOW_WEAR_ALPHA,
+      softness: HOLLOW_WEAR_SOFTNESS,
+    });
+    paintPlankNails(ctx, HOLLOW_PLANK_RAMP);
+  },
+};
+
+const PASTURE_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.5, contrast: 1.05 };
+/** Fewer blades than the meadow's: grazing leaves a short, even sward. */
+const PASTURE_BLADE_COUNT = 700;
+const PASTURE_DEAD_BLADE_SHARE = 0.35;
+const PASTURE_BARE_PATCH_COUNT = 3;
+const PASTURE_BARE_PATCH_MIN_RADIUS = 6;
+const PASTURE_BARE_PATCH_MAX_RADIUS = 13;
+const PASTURE_BARE_PATCH_ALPHA = 0.42;
+const PASTURE_BARE_PATCH_SOFTNESS = 1;
+const PASTURE_HOOF_COUNT = 10;
+const PASTURE_HOOF_MIN_RADIUS = 0.9;
+const PASTURE_HOOF_MAX_RADIUS = 1.8;
+const PASTURE_HOOF_ALPHA = 0.28;
+const PASTURE_HOOF_SOFTNESS = 0.6;
+
+/** Grazed pasture: short yellowed turf, trodden to bare earth in places. */
+const pastureGrass: Material = {
+  id: 'pasture_grass',
+  label: 'Grazed pasture (short turf, hoof-worn earth)',
+  patchTiles: 2,
+  variants: 4,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, PASTURE_GRASS_RAMP, PASTURE_GROUND);
+    paintBlades(ctx, PASTURE_GRASS_RAMP, ctx.detail, PASTURE_BLADE_COUNT);
+    paintBlades(
+      ctx,
+      DEAD_GRASS_RAMP,
+      ctx.detail + 101,
+      PASTURE_BLADE_COUNT * PASTURE_DEAD_BLADE_SHARE,
+    );
+    // Over the blades rather than under them: a trodden patch is where the
+    // sward is gone, so it must hide the grass rather than show through it.
+    paintSpeckles(ctx, ctx.detail + 97, {
+      count: PASTURE_BARE_PATCH_COUNT,
+      minRadius: PASTURE_BARE_PATCH_MIN_RADIUS,
+      maxRadius: PASTURE_BARE_PATCH_MAX_RADIUS,
+      ramp: DIRT_RAMP,
+      alpha: PASTURE_BARE_PATCH_ALPHA,
+      softness: PASTURE_BARE_PATCH_SOFTNESS,
+    });
+    // Hoofprints: small soft pocks, a shade darker than the ground they are
+    // pressed into rather than dark specks.
+    paintSpeckles(ctx, ctx.detail + 103, {
+      count: PASTURE_HOOF_COUNT,
+      minRadius: PASTURE_HOOF_MIN_RADIUS,
+      maxRadius: PASTURE_HOOF_MAX_RADIUS,
+      ramp: { ...DIRT_RAMP, mid: DIRT_RAMP.shadow },
+      alpha: PASTURE_HOOF_ALPHA,
+      softness: PASTURE_HOOF_SOFTNESS,
+    });
+  },
+};
+
+/**
+ * Furrow ridges across one game tile. Exported because the crop overlay
+ * (`src/map/tiles/cropRowTiles.ts`) plants along the crests, so the two must
+ * agree on where a crest is.
+ */
+export const CROP_FURROWS_PER_TILE = 2;
+/**
+ * Where a crest sits within its furrow, as a fraction of the furrow's pitch.
+ * Half way keeps every crest clear of the tile's edges, so a plant drawn on it
+ * never straddles two tiles of the chunk bake.
+ */
+export const CROP_RIDGE_CREST_OFFSET = 0.5;
+const CROP_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.35, contrast: 0.7 };
+const CROP_WANDER_PX = 0.8;
+const CROP_WANDER_PERIOD_PER_TILE = 8;
+/** Lit north faces against shaded south faces of each ridge. */
+const CROP_RIDGE_RELIEF = 0.2;
+/** Crests drier and paler, furrow bottoms damp and darker. */
+const CROP_RIDGE_HEIGHT_TONE = 0.1;
+const CROP_CLOD_COUNT = 18;
+const CROP_CLOD_MIN_RADIUS = 0.7;
+const CROP_CLOD_MAX_RADIUS = 1.8;
+const CROP_CLOD_ALPHA = 0.35;
+const CROP_CLOD_SOFTNESS = 0.5;
+const FULL_TURN = Math.PI * 2;
+
+/**
+ * Tilled soil in east–west furrows. The ridges are shading only — no joint
+ * line — so a field reads as ploughed without ruling the ground into stripes.
+ */
+const cropRows: Material = {
+  id: 'crop_rows',
+  label: 'Tilled crop furrows',
+  patchTiles: 2,
+  variants: 4,
+  paint: (ctx) => {
+    const tiles = ctx.size / TILE_PX;
+    const pitch = TILE_PX / CROP_FURROWS_PER_TILE;
+    const grainPeriod = BASE_GRAIN_PERIOD * tiles;
+    ctx.surface.fill((x, y) => {
+      const patches = ctx.noise.fbm(
+        x,
+        y,
+        ctx.structure,
+        BASE_PATCH_OCTAVES,
+        CROP_GROUND.patchPeriod,
+      );
+      const grain = ctx.noise.fbm(x, y, ctx.detail, BASE_GRAIN_OCTAVES, grainPeriod);
+      const blended = patches * CROP_GROUND.patchWeight + grain * (1 - CROP_GROUND.patchWeight);
+      const warped = ctx.noise.warp(
+        x,
+        y,
+        ctx.structure + 5,
+        CROP_WANDER_PX,
+        CROP_WANDER_PERIOD_PER_TILE * tiles,
+      );
+      const phase = positiveMod(warped.y / pitch - CROP_RIDGE_CREST_OFFSET, 1);
+      const angle = phase * FULL_TURN;
+      const northFacing = -Math.sin(angle);
+      const height = Math.cos(angle);
+      const tone =
+        (blended - 0.5) * CROP_GROUND.contrast +
+        0.5 +
+        northFacing * CROP_RIDGE_RELIEF +
+        height * CROP_RIDGE_HEIGHT_TONE;
+      return sampleRamp(TILLED_SOIL_RAMP, tone);
+    });
+    paintSpeckles(ctx, ctx.detail + 107, {
+      count: CROP_CLOD_COUNT,
+      minRadius: CROP_CLOD_MIN_RADIUS,
+      maxRadius: CROP_CLOD_MAX_RADIUS,
+      ramp: TILLED_SOIL_RAMP,
+      alpha: CROP_CLOD_ALPHA,
+      softness: CROP_CLOD_SOFTNESS,
+    });
+  },
+};
+
 export const MATERIALS: ReadonlyArray<Material> = [
   grass,
   verge,
@@ -2558,6 +2830,9 @@ export const MATERIALS: ReadonlyArray<Material> = [
   bopcaScuff,
   bopcaHearth,
   bopcaTile,
+  hollowPlanks,
+  pastureGrass,
+  cropRows,
 ];
 
 export function getMaterial(id: string): Material {

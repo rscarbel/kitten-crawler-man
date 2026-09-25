@@ -119,6 +119,14 @@ export class CraftSkills {
    */
   readonly pendingEvents: CraftSkillEvent[] = [];
 
+  /**
+   * When > 0, `isLearned`/`getLevel` report both craft skills as learned and at
+   * min(godModeMinLevel, {@link MAX_CRAFT_LEVEL}). Real state is untouched, so
+   * turning this back to 0 (god mode off) reverts to whatever was actually
+   * taught. Mirrors `AbilityManager`'s overlay.
+   */
+  private godModeMinLevel = 0;
+
   constructor(private readonly owner: CrawlerKind | null) {}
 
   /** Which crawler this instance belongs to, or null for a non-crawler `Player`. */
@@ -132,12 +140,29 @@ export class CraftSkills {
   }
 
   isLearned(id: CraftSkillId): boolean {
-    return this.states.get(id)?.learned ?? false;
+    return (this.states.get(id)?.learned ?? false) || this.godModeMinLevel > 0;
   }
 
-  /** Current level, or 0 when the skill has not been taught yet. */
+  /** Current level, or 0 when the skill has not been taught yet. Includes the god-mode overlay, if any. */
   getLevel(id: CraftSkillId): number {
+    return Math.max(
+      this.getRealLevel(id),
+      this.godModeMinLevel > 0 ? Math.min(this.godModeMinLevel, MAX_CRAFT_LEVEL) : 0,
+    );
+  }
+
+  /**
+   * The stored level, ignoring the god-mode overlay — what the crawler actually
+   * earned. Anything that pays out for reaching a level has to read this, or a
+   * cheat hands out the reward.
+   */
+  getRealLevel(id: CraftSkillId): number {
     return this.states.get(id)?.level ?? 0;
+  }
+
+  /** Override the effective level floor for both craft skills (god mode). Pass 0 to clear. */
+  setGodModeMinLevel(minLevel: number): void {
+    this.godModeMinLevel = minLevel;
   }
 
   getXp(id: CraftSkillId): number {

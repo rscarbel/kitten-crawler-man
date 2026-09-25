@@ -48,6 +48,7 @@ const { overCitySheetPlans } = await import('../src/sprites/sheets/overCitySheet
 const { treeSheetPlans } = await import('../src/sprites/sheets/treeSheets.js');
 const { rockSheetPlans } = await import('../src/sprites/sheets/rockSheets.js');
 const { campSheetPlans } = await import('../src/sprites/sheets/campSheets.js');
+const { villageSheetPlans } = await import('../src/sprites/sheets/villageSheets.js');
 const { destructiblePropSheetPlans } =
   await import('../src/sprites/sheets/destructiblePropSheets.js');
 const { clubFurnitureSheetPlans } = await import('../src/sprites/sheets/clubFurnitureSheets.js');
@@ -110,7 +111,20 @@ interface DrainReport {
   readonly problems: ReadonlyArray<string>;
 }
 
-function drainToCompletion(expected: ReadonlyArray<string>): DrainReport {
+/**
+ * Each probe below runs under an art seed no earlier probe used, so a sheet
+ * left resident by one probe can never pass for the next probe's repaint.
+ */
+const BYTES_PER_KILOBYTE = 1024;
+const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
+let nextArtSeedIndex = 1;
+function freshArtSeed(): number {
+  const seed = FLOOR_ART_SEEDS[nextArtSeedIndex];
+  nextArtSeedIndex++;
+  return seed;
+}
+
+function drainToCompletion(): DrainReport {
   let frames = 0;
   let totalMs = 0;
   let worstFrameMs = 0;
@@ -158,6 +172,7 @@ const PROP_FAMILIES = [
   ...treeSheetPlans(0),
   ...rockSheetPlans(0),
   ...campSheetPlans(0),
+  ...villageSheetPlans(0),
   ...destructiblePropSheetPlans(0),
   ...clubFurnitureSheetPlans(0),
   ...allBossRoomSheetPlans(0),
@@ -183,7 +198,7 @@ check(
     `${level3MapSize} tiles across`,
 );
 
-setFloorArtSeed(FLOOR_ART_SEEDS[1]);
+setFloorArtSeed(freshArtSeed());
 requestGroundSheets(GROUND_SHEET_KEYS);
 // The facades go through the queue too, and they are the only family whose
 // sheet is assembled from stages rather than painted whole — so they are the
@@ -208,7 +223,7 @@ for (const key of PAINTED_KEYS) {
   );
 }
 
-const report = drainToCompletion(PAINTED_KEYS);
+const report = drainToCompletion();
 for (const problem of report.problems) failures.push(problem);
 
 check(
@@ -261,7 +276,7 @@ check(environmentArtBytes() < bytesBeforeRelease, 'a floor change gave no memory
 
 // The next floor asks for the same keys under a new seed: the released sheets
 // must queue again rather than be mistaken for still-resident.
-setFloorArtSeed(FLOOR_ART_SEEDS[2]);
+setFloorArtSeed(freshArtSeed());
 requestGroundSheets(GROUND_SHEET_KEYS);
 check(
   environmentPaintDepth() > 0,
@@ -349,7 +364,7 @@ const PROBE_BANDS = 4;
 const PROBE_READY_STEPS = 1;
 
 flushEnvironmentArtCache();
-setFloorArtSeed(FLOOR_ART_SEEDS[3]);
+setFloorArtSeed(freshArtSeed());
 
 // A sheet published before its last step: the ready band must be drawable the
 // moment it is published, and the bands behind it must still be empty. Nothing
@@ -427,7 +442,7 @@ check(environmentPaintDepth() === 0, 'a published sheet that then failed left wo
 // forgotten, its surface given back, and — the part that would be silent — it
 // must not go on to publish itself onto a floor that no longer exists.
 flushEnvironmentArtCache();
-setFloorArtSeed(FLOOR_ART_SEEDS[4]);
+setFloorArtSeed(freshArtSeed());
 requestGroundSheets(GROUND_SHEET_KEYS);
 const MID_PAINT_FRAMES = 3;
 for (let frame = 0; frame < MID_PAINT_FRAMES; frame++) beginEnvironmentArtFrame();
@@ -456,7 +471,7 @@ check(
 // belong to a floor that no longer exists. This is the death-restart path,
 // which builds a new map and never takes the stairs.
 flushEnvironmentArtCache();
-setFloorArtSeed(FLOOR_ART_SEEDS[5]);
+setFloorArtSeed(freshArtSeed());
 requestGroundSheets(GROUND_SHEET_KEYS);
 while (environmentPaintDepth() > 0) beginEnvironmentArtFrame();
 const paintedUnderOldSeed = environmentArtSheetCount();
@@ -464,7 +479,7 @@ check(
   paintedUnderOldSeed > 0,
   'nothing was painted under the first seed, so staleness is untested',
 );
-setFloorArtSeed(FLOOR_ART_SEEDS[6]);
+setFloorArtSeed(freshArtSeed());
 requestGroundSheets(GROUND_SHEET_KEYS);
 check(
   environmentPaintDepth() > 0,
@@ -492,7 +507,7 @@ console.log(
 console.log(
   `  worst frame      ${report.worstFrameMs.toFixed(1)} ms (limit ${WORST_FRAME_LIMIT_MS})`,
 );
-console.log(`  resident         ${(bytesBeforeRelease / (1024 * 1024)).toFixed(1)} MB`);
+console.log(`  resident         ${(bytesBeforeRelease / BYTES_PER_MEGABYTE).toFixed(1)} MB`);
 
 if (failures.length > 0) {
   console.error(`\n[environment-art] FAIL — ${failures.length} problems`);

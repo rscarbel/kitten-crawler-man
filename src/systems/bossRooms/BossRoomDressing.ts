@@ -84,6 +84,8 @@ export interface BossRoomDressing extends GameSystem, GroundHazardSource, BossFi
   resetForCheckpoint(): void;
   /** The Space press, offered to the room. True when the room consumed it. */
   tryInteract(player: HumanPlayer | CatPlayer): boolean;
+  /** Whether {@link tryInteract} would claim a press right now, without acting. */
+  wouldInteract(player: HumanPlayer | CatPlayer): boolean;
 }
 
 /** A dressing whose state rewinds with a death. */

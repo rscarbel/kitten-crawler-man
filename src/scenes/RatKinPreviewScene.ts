@@ -1,5 +1,6 @@
 /**
- * Localhost-only harness for eyeballing Mordecai's Rat Kin art in motion.
+ * Localhost-only harness for eyeballing the ratkin art in motion: Mordecai,
+ * and every Briar Hollow villager through the character picker along the top.
  *
  * A contact sheet cannot show gait speed, whether he floats or plants, or
  * whether the loop seam pops — so this walks him back and forth across the
@@ -16,6 +17,29 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawText } from '../ui/TextBox';
 import { RAT_KIN_TILES_PER_WALK_CYCLE, drawRatKinSprite } from '../sprites/ratKinSprite';
 import { MORDECAI_MAX_PAUSE_FRAMES, MordecaiWanderer } from '../systems/mordecaiWander';
+import { RATKIN_CAST_IDS, type RatkinCastId } from '../sprites/art/ratkin/cast';
+import {
+  type RatkinCastAction,
+  drawRatkinCastSprite,
+  ratkinCastActions,
+  ratkinCastTilesPerWalkCycle,
+} from '../sprites/ratkinCastSprite';
+import { BUTTON_PRESETS, addButton, playButtonSound, setButtonMouseState } from '../ui/Button';
+
+/** Who the picker can show: Mordecai first, then the cast in table order. */
+type PreviewSubject = 'mordecai' | RatkinCastId;
+const SUBJECTS: readonly PreviewSubject[] = ['mordecai', ...RATKIN_CAST_IDS];
+/** Actions the picker cycles through; locomotion follows the wanderer. */
+const WANDER_ACTION = 'wander';
+type PreviewAction = typeof WANDER_ACTION | Exclude<RatkinCastAction, 'walk' | 'idle'>;
+const PICKER_TOP = 36;
+const PICKER_HEIGHT = 24;
+const ARROW_WIDTH = 32;
+const NAME_WIDTH = 150;
+const ACTION_WIDTH = 150;
+const PICKER_GAP = 6;
+/** Frames a one-shot action (strike, down…) takes to play through in the preview. */
+const ONE_SHOT_PREVIEW_FRAMES = 48;
 
 const BG_COLOR = '#20242e';
 const GROUND_COLOR = '#2c3342';
@@ -38,7 +62,7 @@ const FACINGS: ReadonlyArray<{ label: string; facingX: number; facingY: number }
   { label: 'toward', facingX: 0, facingY: 1 },
   { label: 'away', facingX: 0, facingY: -1 },
 ];
-const LANE_TOP = 66;
+const LANE_TOP = 76;
 const LANE_HEIGHT = 132;
 /** Room kept at the right of a lane for its zoom label. */
 const LABEL_GUTTER = 120;
@@ -65,6 +89,16 @@ const MAX_STEP_SKIP = MORDECAI_MAX_PAUSE_FRAMES + 1;
 export class RatKinPreviewScene extends Scene {
   private frame = 0;
   private paused = false;
+  private subjectIndex = 0;
+  private actionIndex = 0;
+  private readonly buttons: Array<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    action?: () => void;
+    label?: string;
+  }> = [];
   private readonly wanderer = new MordecaiWanderer(
     PREVIEW_ROOM,
     PREVIEW_HOME,
@@ -72,8 +106,102 @@ export class RatKinPreviewScene extends Scene {
     () => true,
   );
 
-  handleClick(): void {
+  private get subject(): PreviewSubject {
+    return SUBJECTS[this.subjectIndex];
+  }
+
+  private actionsFor(subject: PreviewSubject): readonly PreviewAction[] {
+    if (subject === 'mordecai') return [WANDER_ACTION];
+    const extra = ratkinCastActions(subject).filter(
+      (action): action is Exclude<RatkinCastAction, 'walk' | 'idle'> =>
+        action !== 'walk' && action !== 'idle',
+    );
+    return [WANDER_ACTION, ...extra];
+  }
+
+  private get action(): PreviewAction {
+    const actions = this.actionsFor(this.subject);
+    return actions[this.actionIndex % actions.length];
+  }
+
+  private stepSubject(delta: number): void {
+    this.subjectIndex = (this.subjectIndex + delta + SUBJECTS.length) % SUBJECTS.length;
+    this.actionIndex = 0;
+  }
+
+  handleMouseMove(mx: number, my: number): void {
+    setButtonMouseState(mx, my);
+  }
+
+  /** A click on the picker picks; anywhere else pauses and resumes. */
+  handleClick(mx: number, my: number): void {
+    for (const button of this.buttons) {
+      const inside =
+        mx >= button.x && mx <= button.x + button.w && my >= button.y && my <= button.y + button.h;
+      if (!inside) continue;
+      playButtonSound(null);
+      button.action?.();
+      return;
+    }
     this.paused = !this.paused;
+  }
+
+  private renderPicker(ctx: CanvasRenderingContext2D): void {
+    this.buttons.length = 0;
+    let x = MARGIN;
+    const control = (width: number, label: string, action: () => void): void => {
+      addButton(ctx, this.buttons, {
+        ...BUTTON_PRESETS.toggle,
+        x,
+        y: PICKER_TOP,
+        width,
+        height: PICKER_HEIGHT,
+        label,
+        action,
+      });
+      x += width + PICKER_GAP;
+    };
+    control(ARROW_WIDTH, '<', () => this.stepSubject(-1));
+    control(NAME_WIDTH, this.subject, () => this.stepSubject(1));
+    control(ARROW_WIDTH, '>', () => this.stepSubject(1));
+    control(ACTION_WIDTH, this.action, () => {
+      this.actionIndex = (this.actionIndex + 1) % this.actionsFor(this.subject).length;
+    });
+  }
+
+  /** Draws the picked subject at one lane position, facing one way. */
+  private drawSubject(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    tile: number,
+    facingX: number,
+    facingY: number,
+  ): void {
+    const wander = this.wanderer.state;
+    const subject = this.subject;
+    if (subject === 'mordecai') {
+      drawRatKinSprite(ctx, x, y, tile, {
+        walkPhase: wander.walkPhase,
+        isWalking: wander.isWalking,
+        facingX,
+        facingY,
+      });
+      return;
+    }
+    const action = this.action;
+    // The wanderer paces a Mordecai-sized stride; a smaller build takes more
+    // cycles over the same ground.
+    const strideRatio = RAT_KIN_TILES_PER_WALK_CYCLE / ratkinCastTilesPerWalkCycle(subject);
+    const castAction: RatkinCastAction =
+      action === WANDER_ACTION ? (wander.isWalking ? 'walk' : 'idle') : action;
+    drawRatkinCastSprite(ctx, subject, x, y, tile, {
+      action: castAction,
+      walkPhase: wander.walkPhase * strideRatio,
+      facingX,
+      facingY,
+      progress: (this.frame % ONE_SHOT_PREVIEW_FRAMES) / ONE_SHOT_PREVIEW_FRAMES,
+    });
   }
 
   /**
@@ -107,7 +235,8 @@ export class RatKinPreviewScene extends Scene {
 
     const wander = this.wanderer.state;
 
-    drawText(ctx, 'Rat Kin — click to pause; paused, the wheel steps frame by frame', {
+    this.renderPicker(ctx);
+    drawText(ctx, 'Ratkin — click to pause; paused, the wheel steps frame by frame', {
       x: MARGIN,
       y: 16,
       size: TITLE_SIZE,
@@ -136,12 +265,17 @@ export class RatKinPreviewScene extends Scene {
         const driftX = (wander.x / TILE_SIZE - PREVIEW_HOME.x) * (facing.facingX < 0 ? -1 : 1);
         const driftY = wander.y / TILE_SIZE - PREVIEW_HOME.y;
         const x = MARGIN + index * slot + driftX * tile;
-        drawRatKinSprite(ctx, x, tileBottom - tile + driftY * tile, tile, {
-          walkPhase: wander.walkPhase,
-          isWalking: wander.isWalking,
-          facingX: facing.facingX,
-          facingY: facing.facingY,
-        });
+        // Only locomotion drifts across the lane; a villager working or
+        // talking stands still where the lane starts.
+        const moving = this.action === WANDER_ACTION;
+        this.drawSubject(
+          ctx,
+          moving ? x : MARGIN + index * slot,
+          tileBottom - tile + (moving ? driftY * tile : 0),
+          tile,
+          facing.facingX,
+          facing.facingY,
+        );
         if (zoom === ZOOMS[0]) {
           drawText(ctx, facing.label, {
             x: MARGIN + index * slot,

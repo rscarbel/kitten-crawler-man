@@ -21,13 +21,18 @@ import type { Mob } from '../creatures/Mob';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { SkeletonArcher } from '../creatures/SkeletonArcher';
 import { TheLich } from '../creatures/TheLich';
-import { TILE_SIZE } from '../core/constants';
+import { Necromancer } from '../creatures/Necromancer';
+import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawSoulBolt, drawSoulBurst, drawBoneArrow } from '../sprites/skeletonEffectsSprite';
+import { drawHollowSoulBolt, drawHollowSoulBurst } from '../sprites/hollowSoulBoltSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 
-/** The two things a skeleton can put in the air. */
-export type SkeletonShotKind = 'soul_bolt' | 'bone_arrow';
+/**
+ * What a skeleton caster can put in the air: the lich's and the lord's green
+ * soul bolt, an archer's bone arrow, and the necromancer's blue soul bolt.
+ */
+export type SkeletonShotKind = 'soul_bolt' | 'bone_arrow' | 'hollow_soul_bolt';
 
 /** One shot, as its caster hands it over. */
 export interface SkeletonShot {
@@ -75,12 +80,37 @@ interface Projectile {
 interface Burst {
   readonly x: number;
   readonly y: number;
+  readonly hollow: boolean;
   tick: number;
 }
 
 /** World pixels per frame. A soul bolt drifts; an arrow snaps. */
 const SOUL_BOLT_SPEED = 2.4;
 const BONE_ARROW_SPEED = 4.6;
+/**
+ * The necromancer's bolt, as a share of the player's walk: slow enough that a
+ * crawler steps off its line with time to spare, whatever the player's speed
+ * is retuned to. It does not scale with level.
+ */
+const HOLLOW_SOUL_BOLT_SPEED_SHARE_OF_PLAYER = 0.7;
+export const HOLLOW_SOUL_BOLT_SPEED = PLAYER_SPEED * HOLLOW_SOUL_BOLT_SPEED_SHARE_OF_PLAYER;
+
+/** A shot's flight speed, in world pixels per frame. */
+function shotSpeed(kind: SkeletonShotKind): number {
+  switch (kind) {
+    case 'soul_bolt':
+      return SOUL_BOLT_SPEED;
+    case 'hollow_soul_bolt':
+      return HOLLOW_SOUL_BOLT_SPEED;
+    case 'bone_arrow':
+      return BONE_ARROW_SPEED;
+  }
+}
+
+/** Whether a shot is a bolt of soul-fire, which bursts where it lands. */
+function isSoulBolt(kind: SkeletonShotKind): boolean {
+  return kind === 'soul_bolt' || kind === 'hollow_soul_bolt';
+}
 
 /** Collision radius of the projectile itself, in world pixels. */
 const SOUL_BOLT_RADIUS_PX = 8;
@@ -118,6 +148,13 @@ export class SkeletonProjectileSystem implements GameSystem {
 
   constructor(private readonly gameMap: GameMap) {}
 
+  /** The shots in the air, for gates and dev readouts. */
+  get shotsInFlight(): ReadonlyArray<
+    Readonly<Pick<Projectile, 'kind' | 'x' | 'y' | 'vx' | 'vy' | 'owner'>>
+  > {
+    return this.projectiles;
+  }
+
   update(ctx: SystemContext): void {
     this.collectShots(ctx.roster.mobs);
     this.advance(ctx);
@@ -136,7 +173,10 @@ export class SkeletonProjectileSystem implements GameSystem {
   private collectShots(mobs: readonly Mob[]): void {
     for (const mob of mobs) {
       const isCaster =
-        mob instanceof SkeletonLord || mob instanceof SkeletonArcher || mob instanceof TheLich;
+        mob instanceof SkeletonLord ||
+        mob instanceof SkeletonArcher ||
+        mob instanceof TheLich ||
+        mob instanceof Necromancer;
       if (!isCaster) continue;
       for (const shot of mob.takePendingShots()) this.launch(shot, mob);
     }
@@ -144,7 +184,7 @@ export class SkeletonProjectileSystem implements GameSystem {
 
   private launch(shot: SkeletonShot, caster: Mob): void {
     const heading = normalize(shot.dirX, shot.dirY);
-    const speed = shot.kind === 'soul_bolt' ? SOUL_BOLT_SPEED : BONE_ARROW_SPEED;
+    const speed = shotSpeed(shot.kind);
     this.projectiles.push({
       kind: shot.kind,
       x: shot.x,
@@ -183,7 +223,7 @@ export class SkeletonProjectileSystem implements GameSystem {
       projectile.y = nextY;
 
       const hitRadius =
-        (projectile.kind === 'soul_bolt' ? SOUL_BOLT_RADIUS_PX : BONE_ARROW_RADIUS_PX) +
+        (isSoulBolt(projectile.kind) ? SOUL_BOLT_RADIUS_PX : BONE_ARROW_RADIUS_PX) +
         TILE_SIZE * TARGET_CENTER_RADIUS_RATIO;
       let struck: Player | null = null;
       for (const target of targets) {
@@ -220,12 +260,12 @@ export class SkeletonProjectileSystem implements GameSystem {
    * archers hit harder from behind cover than the lord does.
    */
   private land(projectile: Projectile, targets: readonly Player[], directHit?: Player): void {
-    if (projectile.kind !== 'soul_bolt') {
+    if (!isSoulBolt(projectile.kind)) {
       this.arrowImpactSoundPending = true;
       return;
     }
     const { x, y } = projectile;
-    this.bursts.push({ x, y, tick: BURST_FRAMES });
+    this.bursts.push({ x, y, hollow: projectile.kind === 'hollow_soul_bolt', tick: BURST_FRAMES });
     this.burstSoundPending = true;
 
     const radius = TILE_SIZE * BURST_RADIUS_TILES;
@@ -269,13 +309,19 @@ export class SkeletonProjectileSystem implements GameSystem {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const burst of this.bursts) {
       const progress = 1 - burst.tick / BURST_FRAMES;
-      drawSoulBurst(ctx, burst.x - camX, burst.y - camY, TILE_SIZE, progress);
+      if (burst.hollow)
+        drawHollowSoulBurst(ctx, burst.x - camX, burst.y - camY, TILE_SIZE, progress);
+      else drawSoulBurst(ctx, burst.x - camX, burst.y - camY, TILE_SIZE, progress);
     }
     for (const projectile of this.projectiles) {
       const sx = projectile.x - camX;
       const sy = projectile.y - camY;
       if (projectile.kind === 'soul_bolt') {
         drawSoulBolt(ctx, sx, sy, TILE_SIZE, projectile.age);
+        continue;
+      }
+      if (projectile.kind === 'hollow_soul_bolt') {
+        drawHollowSoulBolt(ctx, sx, sy, TILE_SIZE, projectile.age);
         continue;
       }
       drawBoneArrow(ctx, sx, sy, TILE_SIZE, Math.atan2(projectile.vy, projectile.vx));

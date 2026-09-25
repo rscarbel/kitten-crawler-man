@@ -69,8 +69,11 @@ export type RevealMode = 'all' | 'sentence' | 'word' | 'letter';
 export interface DialogBoxConfig {
   /** Name displayed as the speaker label. */
   speakerName: string;
-  /** Optional image drawn as a small avatar beside the speaker name. */
-  speakerIcon?: HTMLImageElement;
+  /**
+   * Optional image drawn as a small avatar beside the speaker name — a loaded
+   * image, or a portrait painted onto an off-screen canvas.
+   */
+  speakerIcon?: CanvasImageSource;
   /** How text is progressively revealed. Default: 'all' */
   revealMode?: RevealMode;
   /** Milliseconds between revealed elements. Default: {@link TYPING_CLICK_DURATION_MS}. */
@@ -96,7 +99,7 @@ export class DialogBox {
   /** Null when the scene has no audio manager — the box still works, silently. */
   private readonly _audio: AudioManager | null;
   private readonly _speakerName: string;
-  private readonly _speakerIcon: HTMLImageElement | undefined;
+  private readonly _speakerIcon: CanvasImageSource | undefined;
   private readonly _revealMode: RevealMode;
   private readonly _revealIntervalMs: number;
   private readonly _showFooterHint: boolean;

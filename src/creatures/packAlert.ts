@@ -42,7 +42,9 @@ const nearbyScratch = new Set<Mob>();
  * re-broadcasts, and one shout can never cascade across a floor.
  */
 export function alertPackAround(caller: Mob, radiusPx: number, target: Player): void {
-  if (mobGrid === null) return;
+  // A mob on the party's side (a converted enemy) calls no pack: its kin are
+  // still hostile, and would be sent after one of their own.
+  if (mobGrid === null || !caller.isHostile) return;
   nearbyScratch.clear();
   mobGrid.queryCircle(caller.x, caller.y, radiusPx, nearbyScratch);
   for (const ally of nearbyScratch) {

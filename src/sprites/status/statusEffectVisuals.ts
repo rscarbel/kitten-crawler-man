@@ -24,6 +24,7 @@ import {
   FAIRY_AEGIS_STATUS,
   FAIRY_WARD_STATUS,
   FROZEN_STATUS,
+  HAMBURGER_FED_STATUS,
   OVERHEAL_STATUS,
   SHIELD_STATUS,
   type StatusEffect,
@@ -250,6 +251,15 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       harmful: false,
       bodyLayers: (f) => [deepSlumberBodyLayer(f)],
       overlay: drawDeepSlumber,
+    },
+  ],
+  [
+    HAMBURGER_FED_STATUS,
+    {
+      label: 'FED',
+      // Mustard, the burger's own cheese, so the pill reads as the food that granted it.
+      color: '#e0a526',
+      harmful: false,
     },
   ],
   [

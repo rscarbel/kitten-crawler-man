@@ -145,6 +145,8 @@ import {
 } from '../core/TownMemory';
 import { createPartyCraftsState, type PartyCraftsState } from '../core/partyCrafts';
 import { createBriarHollowState, type BriarHollowState } from '../core/briarHollowState';
+import { partyCount } from '../core/partyResources';
+import { indoorsConstructionSource } from '../systems/briarHollow/ConstructionSystem';
 import { CitizenDialog } from '../ui/CitizenDialog';
 import { FortuneTellerPanel, HEDGE_WITCH } from '../ui/FortuneTellerPanel';
 import { ReadablePanel } from '../ui/ReadablePanel';
@@ -197,6 +199,7 @@ import { FairySystem } from '../systems/FairySystem';
 import { playFairySystemCues } from '../systems/fairyAudioCues';
 import type { SystemContext } from '../systems/GameSystem';
 import type { InteriorFigure } from '../core/InteriorFigure';
+import { shouldShowInteractionPrompts } from '../systems/interactionPromptGate';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { cameraWorldView, setVisibleWorldView } from '../core/visibleWorldView';
 import { createMongoPetState, type MongoPetState } from '../core/MongoPetState';
@@ -1174,12 +1177,14 @@ export class BuildingInteriorScene extends GameplayScene {
       modal(this.menus.levelUpDialog.isShowing, 'level-up'),
       modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
       modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
+      modal(this.menus.craftExplainers.isOpen, this.menus.craftExplainers.focusId),
       modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
       // `locksKeyboard` even though the death screen accepts from the keyboard:
       // its focus ring listens in the capture phase and consumes the press
       // before this handler is reached, so locking here only stops a hotbar key
       // spending a potion the revive is about to throw away.
       modal(this.gameOver, 'death-screen'),
+      this.menus.constructionMenu.overlayClaim(),
       {
         isOpen: this.chat.isOpen,
         space: { kind: 'passThrough' },
@@ -1616,7 +1621,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // the choice that closes it — "leave" — would otherwise land on a hotbar
     // slot on its way out.
     this.bopcaKeyHandler = (e: KeyboardEvent) => {
-      if (this.bopca?.handleKeyDown(e.key) !== true) return;
+      const taken =
+        this.menus.constructionMenu.handleKey(e.key, e.repeat) ||
+        this.bopca?.handleKeyDown(e.key) === true;
+      if (!taken) return;
       e.preventDefault();
       e.stopImmediatePropagation();
     };
@@ -1637,6 +1645,14 @@ export class BuildingInteriorScene extends GameplayScene {
         }
         if (this.menus.mongoExplainer.isOpen && !this.menus.isAwardStackShowing) {
           this.menus.mongoExplainer.close();
+          return true;
+        }
+        if (this.menus.craftExplainers.isOpen && !this.menus.isAwardStackShowing) {
+          this.menus.craftExplainers.close();
+          return true;
+        }
+        if (this.menus.constructionMenu.isOpen) {
+          this.menus.constructionMenu.close();
           return true;
         }
         if (this.menus.skillBookPrompt.isOpen) {
@@ -1771,13 +1787,19 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Stands in for opening the Construction menu indoors, where every build row
-   * is meant to show disabled with "Build outdoors" rather than act. The menu
-   * itself does not exist yet — this is the no-op the key is safe to bind to
-   * until it does.
+   * Opens the Construction menu read-only: indoors nothing can be built, but
+   * the rows still show what is on offer and what it costs, each disabled with
+   * "Build outdoors".
    */
   private openConstructionReadOnly(): void {
-    // The Construction menu does not exist yet.
+    const menu = this.menus.constructionMenu;
+    if (menu.isOpen) {
+      menu.close();
+      return;
+    }
+    const active = this.human.isActive ? this.human : this.cat;
+    if (!active.craftSkills.isLearned('construction')) return;
+    menu.openWith(indoorsConstructionSource(this.human, this.cat), true);
   }
 
   /** The collaborators a hotbar press reaches, resolved against the live floor. */
@@ -2382,6 +2404,10 @@ export class BuildingInteriorScene extends GameplayScene {
       keybindings.release(this.input, 'attack');
     }
 
+    if (interactPressed() && this.tryGroundPickup(player)) {
+      keybindings.release(this.input, 'attack');
+    }
+
     // Ambient occupants: talk to the nearest one with Space
     if (interactPressed() && this.tryTalkToOccupant(player)) {
       keybindings.release(this.input, 'attack');
@@ -2712,6 +2738,8 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.menus.levelUpDialog.handleClick(mx, my)) return;
     if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
     if (this.menus.mongoExplainer.handleClick(mx, my)) return;
+    if (this.menus.craftExplainers.handleClick(mx, my)) return;
+    if (this.menus.constructionMenu.handleClick(mx, my)) return;
     if (this.menus.skillBookPrompt.isOpen) {
       const reader = this.menus.pendingSkillBookReader(this.inventoryPlayer());
       if (resolveSkillBookPrompt(this.menus.skillBookFlowHost(), reader, mx, my) !== null) {
@@ -2888,7 +2916,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   handleWheel(deltaY: number): void {
-    if (this.menus.mongoExplainer.isOpen) return;
+    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleWheel(deltaY);
       return;
@@ -2907,7 +2935,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseDown = true;
     // Ahead of everything below: the explainer opens over the pause menu, and a
     // press there must not start a drag or a scroll in the surface underneath.
-    if (this.menus.mongoExplainer.isOpen) return;
+    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     const openShop = this.scrollableShop;
     if (openShop !== null) {
       openShop.handlePointerDown(mx, my);
@@ -2927,7 +2955,7 @@ export class BuildingInteriorScene extends GameplayScene {
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
-    if (this.menus.mongoExplainer.isOpen) return;
+    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     this.scrollableShop?.handlePointerMove(mx, my);
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleMouseMove(mx, my);
@@ -2942,7 +2970,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseY = my;
     this._mouseDown = false;
     this.scrollableShop?.handlePointerUp();
-    if (this.menus.mongoExplainer.isOpen) return;
+    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
       return;
@@ -3400,6 +3428,15 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
+   * Gathers whatever lies on the floor within reach, unless a hostile is in
+   * attack range — then the press is the swing's, as it is outdoors.
+   */
+  private tryGroundPickup(active: HumanPlayer | CatPlayer): boolean {
+    if (!shouldShowInteractionPrompts(active, this.world.roster.grid)) return false;
+    return this.destruction.groundPickups.tryPickupNear(active);
+  }
+
+  /**
    * Floats a "Talk" prompt over the hireling when a press would reach it.
    *
    * Talking is the last link of the Space chain, so this is drawn after every
@@ -3592,6 +3629,7 @@ export class BuildingInteriorScene extends GameplayScene {
       ...(this.occupants?.people ?? []),
       ...safeRoomFigures,
       ...(this.club?.sortedRenderables() ?? []),
+      ...destruction.groundPickups.renderEntities(),
     ]);
     combat.renderEffects(ctx, camX, camY, this.cat);
     // Over the creatures, so a shot never disappears behind the one it passes.
@@ -3609,6 +3647,9 @@ export class BuildingInteriorScene extends GameplayScene {
     this.activeEncounter?.renderEffects?.(ctx, camX, camY);
     this.bigTopMaze?.renderPrompts(ctx, camX, camY, this.buildSystemContext());
     destruction.renderLoot(ctx, camX, camY, this.active());
+    if (shouldShowInteractionPrompts(this.active(), this.world.roster.grid)) {
+      destruction.groundPickups.renderPrompt(ctx, camX, camY, this.active());
+    }
     // A room hosting a live fight is not offering conversation.
     if (this.activeEncounter === null) this.renderCitizenPrompt(ctx, camX, camY);
 
@@ -3717,6 +3758,7 @@ export class BuildingInteriorScene extends GameplayScene {
         current: this.human.smushCooldown,
         max: Math.max(1, this.human.getSmushCooldownMax()),
       });
+      this.menus.syncPotionCooldownOverlay(invPlayer);
       this.mobileHUD.renderPanels(
         ctx,
         invPlayer.inventory,
@@ -3839,6 +3881,15 @@ export class BuildingInteriorScene extends GameplayScene {
     // screen, because an award earned by the killing blow is still the thing on
     // top. Whichever draws last also takes the focus ring, so three orders that
     // disagree leave the topmost dialog visible and un-activatable.
+    // A death takes the read-only Construction menu down: drawn under the death
+    // screen, it would otherwise still take that screen's first click.
+    if (this.gameOver) this.menus.constructionMenu.close();
+    const menuCrawler = this.human.isActive ? this.human : this.cat;
+    this.menus.constructionMenu.render(
+      ctx,
+      { name: menuCrawler === this.human ? 'Carl' : 'Donut', skills: menuCrawler.craftSkills },
+      (id) => partyCount(this.human, this.cat, id),
+    );
     if (this.gameOver) this.combat.deathScreen.render(ctx);
     this.menus.renderOverlays(ctx);
     this.chat.renderHint(ctx);
@@ -3998,7 +4049,7 @@ export class BuildingInteriorScene extends GameplayScene {
         // whether the press was a click.
         // Opened over the pause menu from the Abilities tab, where the pause
         // menu's scroll gesture below would otherwise take the tap.
-        if (this.menus.mongoExplainer.isOpen) {
+        if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) {
           this.handleClick(x, y);
           continue;
         }
@@ -4293,7 +4344,13 @@ export class BuildingInteriorScene extends GameplayScene {
       // this the tap falls through to the swing below and Carl beats on a vine
       // that cannot be hurt, forever.
       const poured = this.bigTopMaze?.tryInteract(this.buildSystemContext()) ?? false;
-      if (!repaired && !poured && !this.tryTalkToOccupant(active) && !this.tryReadNearby(active)) {
+      if (
+        !repaired &&
+        !poured &&
+        !this.tryGroundPickup(active) &&
+        !this.tryTalkToOccupant(active) &&
+        !this.tryReadNearby(active)
+      ) {
         this.attackTowardTap(active, tapScreenX, tapScreenY);
       }
     }

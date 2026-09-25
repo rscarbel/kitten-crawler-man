@@ -285,6 +285,14 @@ export interface WoodBarrier {
   maxHp: number;
   grateIdx: number;
   hitFlash: number;
+  /**
+   * Spikes a crawler with Construction added to the boards: absent without
+   * any. They take a bugaboo's blows before the boards do, and hand each blow
+   * back to the bugaboo that struck.
+   */
+  spikesHp?: number;
+  /** Which crawler added the spikes, whose kill a thorn death is credited to. */
+  spikesBy?: BarrierBuilderId;
 }
 
 /**
@@ -407,6 +415,8 @@ export class DefendQuestSystem implements GameSystem {
     [];
 
   private addMob: (mob: Mob) => void;
+  /** The crawlers, as of the last update: who a spiked grate's thorns are credited to. */
+  private party: { human: HumanPlayer; cat: CatPlayer } | null = null;
   private bus: EventBus;
   private gameMap: GameMap;
   private resolveWaveLevel: () => number;
@@ -591,11 +601,20 @@ export class DefendQuestSystem implements GameSystem {
 
   readonly isSuppressed = false;
 
-  /** Called when player presses Space near the NPC. */
-  tryInteract(active: Player): boolean {
+  /**
+   * Whether {@link tryInteract} would claim a press from `active` right now,
+   * without doing anything — for a prompt further down the Space chain to
+   * know it would not be reached.
+   */
+  wouldInteract(active: Player): boolean {
     if (!this.npc?.isAlive) return false;
     const dist = Math.hypot(active.x - this.npc.x, active.y - this.npc.y);
     if (dist > INTERACT_RANGE_PX) return false;
+    return this.phase === 'npc_waiting' || this.phase === 'complete_pending';
+  }
+
+  tryInteract(active: Player): boolean {
+    if (!this.wouldInteract(active)) return false;
 
     if (this.phase === 'npc_waiting') {
       this.phase = 'dialog';
@@ -837,11 +856,69 @@ export class DefendQuestSystem implements GameSystem {
     return false;
   }
 
-  /** Check if a barrier exists at a grate position. damage=0 just checks existence. */
-  damageBarrier(grate: { x: number; y: number }, damage: number): boolean {
+  /**
+   * The boarded grate a crawler could spike right now: the nearest barrier in
+   * reach while the wave is on, or null.
+   */
+  spikeableBarrierNear(crawler: { x: number; y: number }): Readonly<WoodBarrier> | null {
+    if (this.phase !== 'defending' && this.phase !== 'countdown') return null;
+    let best: WoodBarrier | null = null;
+    let bestDistance = INTERACT_RANGE_PX;
+    for (const barrier of this.barriers) {
+      const distance = Math.hypot(barrier.worldX - crawler.x, barrier.worldY - crawler.y);
+      if (distance > bestDistance) continue;
+      best = barrier;
+      bestDistance = distance;
+    }
+    return best;
+  }
+
+  /** Whether a barrier still stands on this grate. */
+  hasBarrierAt(grateIdx: number): boolean {
+    return this.barriers.some((barrier) => barrier.grateIdx === grateIdx);
+  }
+
+  /** Nails spikes onto a grate's boards at `hp`, credited to `builder`. */
+  addBarrierSpikes(grateIdx: number, hp: number, builder: BarrierBuilderId): boolean {
+    const barrier = this.barriers.find((b) => b.grateIdx === grateIdx);
+    if (barrier === undefined) return false;
+    barrier.spikesHp = hp;
+    barrier.spikesBy = builder;
+    this.hammerSoundPending = true;
+    return true;
+  }
+
+  /**
+   * Check if a barrier exists at a grate position. damage=0 just checks
+   * existence. A spiked barrier's spikes take the blow first, and `attacker`
+   * — the bugaboo clawing at it — takes the same blow back.
+   */
+  damageBarrier(
+    grate: { x: number; y: number },
+    damage: number,
+    attacker: Mob | null = null,
+  ): boolean {
     const barrier = this.barriers.find((b) => b.tileX === grate.x && b.tileY === grate.y);
     if (!barrier) return false;
     if (damage > 0) {
+      const spikes = barrier.spikesHp ?? 0;
+      if (spikes > 0) {
+        const credited = barrier.spikesBy === 'cat' ? this.party?.cat : this.party?.human;
+        if (attacker?.isAlive === true) {
+          attacker.takeCreditedDamage(damage, credited ?? null, 'melee', null);
+        }
+        const absorbed = Math.min(spikes, damage);
+        const remaining = spikes - absorbed;
+        if (remaining > 0) {
+          barrier.spikesHp = remaining;
+        } else {
+          delete barrier.spikesHp;
+          delete barrier.spikesBy;
+        }
+        barrier.hitFlash = BARRIER_HIT_FLASH_FRAMES;
+        damage -= absorbed;
+        if (damage <= 0) return true;
+      }
       barrier.hp -= damage;
       barrier.hitFlash = BARRIER_HIT_FLASH_FRAMES;
       this.woodBreakSoundPending = true;
@@ -853,6 +930,7 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
+    this.party = { human: ctx.human, cat: ctx.cat };
     this.syncQuestExitDoor();
 
     // Overlay timers tick even after quest ends
@@ -1176,7 +1254,7 @@ export class DefendQuestSystem implements GameSystem {
       const grate = this.roomData.grateTiles[grateIdx];
       if (this.damageBarrier(grate, 0)) {
         bug.assignedGrate = grate;
-        bug.onBarrierAttack = (target, damage) => this.damageBarrier(target, damage);
+        bug.onBarrierAttack = (target, damage) => this.damageBarrier(target, damage, bug);
       } else {
         bug.beginEmerge();
       }
@@ -1326,6 +1404,7 @@ export class DefendQuestSystem implements GameSystem {
       const bx = b.worldX - camX;
       const by = b.worldY - camY;
       drawWoodBarrierSprite(ctx, bx, by, TILE_SIZE, b.hp / b.maxHp);
+      if ((b.spikesHp ?? 0) > 0) drawBarrierSpikes(ctx, bx, by, TILE_SIZE);
       if (b.hitFlash > 0) {
         ctx.save();
         ctx.globalAlpha = (b.hitFlash / BARRIER_HIT_FLASH_FRAMES) * BARRIER_HIT_ALPHA_FRACTION;
@@ -2096,4 +2175,40 @@ export class DefendQuestSystem implements GameSystem {
     this.dialogButtons = [];
     this.tutorialButtons = [];
   }
+}
+
+/** Sharpened stakes nailed round a boarded grate, points out. */
+const BARRIER_SPIKE_COUNT = 8;
+const BARRIER_SPIKE_RING = 0.46;
+const BARRIER_SPIKE_LENGTH = 0.2;
+const BARRIER_SPIKE_WIDTH = 0.06;
+const BARRIER_SPIKE_FILL = '#d8b27a';
+const BARRIER_SPIKE_INK = '#2a1a10';
+
+function drawBarrierSpikes(ctx: CanvasRenderingContext2D, x: number, y: number, ts: number): void {
+  const cx = x + ts * TILE_CENTER_OFFSET;
+  const cy = y + ts * TILE_CENTER_OFFSET;
+  ctx.save();
+  ctx.fillStyle = BARRIER_SPIKE_FILL;
+  ctx.strokeStyle = BARRIER_SPIKE_INK;
+  ctx.lineWidth = 1;
+  for (let spike = 0; spike < BARRIER_SPIKE_COUNT; spike++) {
+    const angle = (spike / BARRIER_SPIKE_COUNT) * Math.PI * 2;
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const rootX = cx + dirX * ts * (BARRIER_SPIKE_RING - BARRIER_SPIKE_LENGTH);
+    const rootY = cy + dirY * ts * (BARRIER_SPIKE_RING - BARRIER_SPIKE_LENGTH);
+    const tipX = cx + dirX * ts * BARRIER_SPIKE_RING;
+    const tipY = cy + dirY * ts * BARRIER_SPIKE_RING;
+    const sideX = -dirY * ts * BARRIER_SPIKE_WIDTH;
+    const sideY = dirX * ts * BARRIER_SPIKE_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(rootX + sideX, rootY + sideY);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(rootX - sideX, rootY - sideY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
 }

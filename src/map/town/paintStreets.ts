@@ -162,6 +162,17 @@ export function connectSiteToNearestGate(
   site: TilePoint,
   keepOut: TileRect,
 ): void {
+  for (const tile of approachRouteTiles(plan, site)) paveTrack(grid, keepOut, tile.x, tile.y);
+}
+
+/**
+ * Every tile `connectSiteToNearestGate` would pave for a site, before its
+ * keep-out is applied: the two legs of the L, at full width.
+ *
+ * Exposed so a site can be rejected *before* its road is laid — the circus is
+ * kept from choosing a spot whose approach would run through Briar Hollow.
+ */
+export function approachRouteTiles(plan: TownPlan, site: TilePoint): TilePoint[] {
   let gate = plan.gates[0];
   let bestDistance = Infinity;
   for (const candidate of plan.gates) {
@@ -172,13 +183,15 @@ export function connectSiteToNearestGate(
   }
 
   const { exit } = gate;
+  const tiles: TilePoint[] = [];
   if (gate.outward.dx !== 0) {
-    paveRowRange(grid, keepOut, site.y, Math.min(site.x, exit.x), Math.max(site.x, exit.x));
-    paveColumnRange(grid, keepOut, exit.x, Math.min(site.y, exit.y), Math.max(site.y, exit.y));
+    rowRange(tiles, site.y, Math.min(site.x, exit.x), Math.max(site.x, exit.x));
+    columnRange(tiles, exit.x, Math.min(site.y, exit.y), Math.max(site.y, exit.y));
   } else {
-    paveColumnRange(grid, keepOut, site.x, Math.min(site.y, exit.y), Math.max(site.y, exit.y));
-    paveRowRange(grid, keepOut, exit.y, Math.min(site.x, exit.x), Math.max(site.x, exit.x));
+    columnRange(tiles, site.x, Math.min(site.y, exit.y), Math.max(site.y, exit.y));
+    rowRange(tiles, exit.y, Math.min(site.x, exit.x), Math.max(site.x, exit.x));
   }
+  return tiles;
 }
 
 /** Approach roads are paved this many tiles either side of their centre line. */
@@ -193,30 +206,18 @@ function paveTrack(grid: TileGrid, keepOut: TileRect, x: number, y: number): voi
   grid.setPaved(x, y, FloorTypeValue.road);
 }
 
-function paveColumnRange(
-  grid: TileGrid,
-  keepOut: TileRect,
-  x: number,
-  yFrom: number,
-  yTo: number,
-): void {
+function columnRange(tiles: TilePoint[], x: number, yFrom: number, yTo: number): void {
   for (let y = yFrom; y <= yTo; y++) {
     for (let dx = -APPROACH_HALF_WIDTH; dx <= APPROACH_HALF_WIDTH; dx++) {
-      paveTrack(grid, keepOut, x + dx, y);
+      tiles.push({ x: x + dx, y });
     }
   }
 }
 
-function paveRowRange(
-  grid: TileGrid,
-  keepOut: TileRect,
-  y: number,
-  xFrom: number,
-  xTo: number,
-): void {
+function rowRange(tiles: TilePoint[], y: number, xFrom: number, xTo: number): void {
   for (let x = xFrom; x <= xTo; x++) {
     for (let dy = -APPROACH_HALF_WIDTH; dy <= APPROACH_HALF_WIDTH; dy++) {
-      paveTrack(grid, keepOut, x, y + dy);
+      tiles.push({ x, y: y + dy });
     }
   }
 }

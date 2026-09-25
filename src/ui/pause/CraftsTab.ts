@@ -18,8 +18,10 @@ import {
   describeResourcingPerk,
   nextConstructionUnlock,
   nextResourcingUnlock,
+  thrallCount,
 } from '../../core/craftPerks';
 import { drawCraftSkillIcon } from '../icons/craftSkillIcons';
+import { thrallCooldownSecondsLeft } from '../../core/thrallCooldowns';
 import { type ButtonRect, type PauseTab } from './types';
 import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText, measureTextBox } from '../TextBox';
@@ -128,6 +130,18 @@ interface CardLayout {
   readonly unlockText: string;
 }
 
+/**
+ * The summon's readiness, under the Resourcing card of a crawler who has the
+ * thrall unlock: each crawler summons on their own cooldown.
+ */
+function thrallStatus(skills: CraftSkills, id: CraftSkillId): string {
+  const crawler = skills.crawlerKind;
+  if (id !== 'resourcing' || crawler === null) return '';
+  if (thrallCount(skills.getLevel(id)) === 0) return '';
+  const wait = thrallCooldownSecondsLeft(crawler);
+  return wait > 0 ? ` · Thrall ready in ${wait}s` : ' · Thrall ready';
+}
+
 function layoutCard(
   ctx: CanvasRenderingContext2D,
   skills: CraftSkills,
@@ -146,12 +160,13 @@ function layoutCard(
 
   const nextUnlock =
     id === 'resourcing' ? nextResourcingUnlock(level) : nextConstructionUnlock(level);
-  const unlockText =
+  const progressText =
     level >= MAX_CRAFT_LEVEL
       ? 'Mastered'
       : nextUnlock === null
         ? 'Mastered'
         : `Next at Lv ${nextUnlock.level}: ${nextUnlock.text}`;
+  const unlockText = `${progressText}${thrallStatus(skills, id)}`;
   const { lineCount: unlockLines } = measureTextBox(ctx, unlockText, {
     size: CARD_UNLOCK_SIZE,
     width: textW,

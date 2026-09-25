@@ -25,10 +25,12 @@ import { Juicer } from '../creatures/Juicer';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
 import { Mantid } from '../creatures/Mantid';
 import { BallOfSwine } from '../creatures/BallOfSwine';
+import { Cow, type CowVoice } from '../creatures/Cow';
 import { Mongo } from '../creatures/Mongo';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
 import { playFairyCastCues } from './fairyAudioCues';
+import { playUndeadCues } from './undeadAudioCues';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
@@ -275,12 +277,16 @@ const SNAP_DOT_PRODUCT_THRESHOLD = 0.25;
 const SNAP_TILE_CENTER_OFFSET = 0.5;
 
 /**
- * Rotate the player to face the nearest live hostile mob in their front cone
- * with line of sight, within `range` pixels, and return it. No-op returning null
- * when nothing qualifies.
+ * The hostile the attack's aim snap would turn to for `player` facing
+ * (`facingX`, `facingY`): the nearest one in range, in sight, and inside the
+ * snap cone. Shared with anything that must know where a press would really
+ * aim before letting it through — a tap on a cow aims at the cow unless this
+ * finds a hostile to turn to instead.
  */
-export function snapFacingToNearestMob(
+export function snapTargetAlong(
   player: HumanPlayer | CatPlayer,
+  facingX: number,
+  facingY: number,
   range: number,
   mobGrid: SpatialGrid<Mob>,
   gameMap: GameMap,
@@ -298,7 +304,7 @@ export function snapFacingToNearestMob(
     const dy = mob.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - py;
     const dist = Math.hypot(dx, dy);
     if (dist > range || dist === 0) continue;
-    const dot = (dx / dist) * player.facingX + (dy / dist) * player.facingY;
+    const dot = (dx / dist) * facingX + (dy / dist) * facingY;
     if (dot < SNAP_DOT_PRODUCT_THRESHOLD) continue;
     if (
       !gameMap.hasLineOfSight(
@@ -314,6 +320,23 @@ export function snapFacingToNearestMob(
       bestMob = mob;
     }
   }
+  return bestMob;
+}
+
+/**
+ * Rotate the player to face the nearest live hostile mob in their front cone
+ * with line of sight, within `range` pixels, and return it. No-op returning null
+ * when nothing qualifies.
+ */
+export function snapFacingToNearestMob(
+  player: HumanPlayer | CatPlayer,
+  range: number,
+  mobGrid: SpatialGrid<Mob>,
+  gameMap: GameMap,
+): Mob | null {
+  const px = player.x + TILE_SIZE * SNAP_TILE_CENTER_OFFSET;
+  const py = player.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET;
+  const bestMob = snapTargetAlong(player, player.facingX, player.facingY, range, mobGrid, gameMap);
   if (bestMob) {
     const dx = bestMob.x + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - px;
     const dy = bestMob.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - py;
@@ -432,6 +455,10 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
           break;
         case 'merc_medic':
           audio?.play('human_punch_weak');
+          break;
+        // Briar Hollow's militia: a spear thrust, on a stand-in until its own is recorded.
+        case 'ratkin_soldier':
+          audio?.play('slash_strike_3');
           break;
         case 'mantis':
         case 'mantid':
@@ -588,12 +615,14 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
     }
     playMantidHiss(mob, audio);
     playSwineSpinup(mob, audio);
+    playCowVoice(mob, audio);
     playCastWindup(mob, audio);
     playDarkKnightCues(mob, audio);
     playJuicerCues(mob, audio);
     playKrakarenCloneCues(mob, audio);
     playKrakarenTentacleCues(mob, audio);
     playFairyCastCues(mob, audio);
+    playUndeadCues(mob, audio);
   }
 }
 
@@ -645,6 +674,26 @@ function playJuicerCues(mob: Mob, audio: AudioManager | null): void {
     // impact into earth.
     audio?.play('massive_strike_with_dirt_impact');
   }
+}
+
+/** What each of a cow's voices plays; `playRandom` picks one of several takes. */
+const COW_VOICE_SOUNDS: Readonly<Record<CowVoice, readonly SoundId[]>> = {
+  ambient: ['cow_ambient_moo_1', 'cow_ambient_moo_2', 'cow_ambient_moo_3'],
+  calf: ['calf_moo_1', 'calf_moo_2', 'calf_moo_3'],
+  angry: ['cow_angry_moo_1', 'cow_angry_moo_2'],
+  happy: ['cow_happy_moo'],
+};
+
+/**
+ * A cow's or calf's moo. One queued voice rather than the shared pending
+ * flags, because a cow has four different things to say and none of them is
+ * an attack.
+ */
+function playCowVoice(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof Cow) || mob.voicePending === null) return;
+  const voice = mob.voicePending;
+  mob.voicePending = null;
+  audio?.playRandom(COW_VOICE_SOUNDS[voice]);
 }
 
 /**

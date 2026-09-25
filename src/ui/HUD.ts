@@ -181,6 +181,16 @@ const PULSE_BASE = 0.5;
 const REMINDER_BORDER_LINE_WIDTH_MAX = REMINDER_BORDER_LINE_WIDTH + PULSE_BASE + PULSE_AMPLITUDE;
 
 /**
+ * The HUD panel's full extent while expanded, collapse toggle included — what
+ * other chrome laid out beside it has to keep clear of.
+ */
+export function expandedHudPanelRect(): HudRect {
+  const toggleRight = platform.showHudCollapseToggle ? TOGGLE_BTN_X + TOGGLE_BTN_W : 0;
+  const width = Math.max(PANEL_WIDTH, toggleRight - PANEL_START_X);
+  return { x: PANEL_START_X, y: PANEL_START_Y, w: width, h: PANEL_HEIGHT };
+}
+
+/**
  * Draws the top-left HUD panel: active-character label, control hints,
  * HP/XP bars for both characters, and the skill-point notification banner.
  *

@@ -93,6 +93,23 @@ const CHEESE_SHADE = '#d9a418';
 const PATTY_COLOR = '#6b4226';
 const PATTY_SHADE = '#4a2c18';
 
+/**
+ * The burger's colours, shared with the burger lying on the ground so the
+ * bag icon and the world sprite read as the same item.
+ */
+export const HAMBURGER_PALETTE = {
+  outline: OUTLINE,
+  bun: BUN_COLOR,
+  bunShade: BUN_SHADE,
+  sesame: SESAME_COLOR,
+  lettuce: LETTUCE_COLOR,
+  lettuceShade: LETTUCE_SHADE,
+  cheese: CHEESE_COLOR,
+  cheeseShade: CHEESE_SHADE,
+  patty: PATTY_COLOR,
+  pattyShade: PATTY_SHADE,
+} as const;
+
 function drawHamburgerIcon(
   ctx: CanvasRenderingContext2D,
   x: number,

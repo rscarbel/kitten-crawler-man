@@ -2,6 +2,7 @@ import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { firstHealingConsumable } from '../core/foods';
 
 const FRAMES_PER_SECOND = 60;
 
@@ -24,13 +25,23 @@ const REGEN_CON_GAIN_HP_PER_SECOND = 0.35;
 const REGEN_CON_HALF = 10;
 
 /**
- * The cat's flat rate, matching what she healed at before this change.
+ * The cat's flat rate.
  *
  * Flat rather than curved because her constitution is locked: a CON term would
  * be a constant dressed up as a formula. Her survivability is dodge and
  * Cockroach, and it should stay that way.
  */
 const CAT_REGEN_HP_PER_SECOND = 0.075;
+
+/**
+ * A companion's unprompted heal: the first potion or stew it carries, through
+ * the same `usePotion` refusals a drink by hand gets.
+ */
+function autoHeal(companion: Player): boolean {
+  const heal = firstHealingConsumable(companion.inventory);
+  if (heal === null) return false;
+  return companion.usePotion(() => companion.inventory.removeOne(heal));
+}
 
 /** Frames for auto-potion cooldown (60 fps: 180 = 3 seconds). */
 const AUTO_POTION_COOLDOWN_FRAMES = 180;
@@ -109,7 +120,7 @@ export class PlayerTickSystem implements GameSystem {
         cat.hp < cat.maxHp * AUTO_POTION_HEALTH_THRESHOLD &&
         this.catAutoPotionCooldown === 0
       ) {
-        if (cat.usePotion()) this.catAutoPotionCooldown = AUTO_POTION_COOLDOWN_FRAMES;
+        if (autoHeal(cat)) this.catAutoPotionCooldown = AUTO_POTION_COOLDOWN_FRAMES;
       }
     } else {
       if (
@@ -117,7 +128,7 @@ export class PlayerTickSystem implements GameSystem {
         human.hp < human.maxHp * AUTO_POTION_HEALTH_THRESHOLD &&
         this.humanAutoPotionCooldown === 0
       ) {
-        if (human.usePotion()) this.humanAutoPotionCooldown = AUTO_POTION_COOLDOWN_FRAMES;
+        if (autoHeal(human)) this.humanAutoPotionCooldown = AUTO_POTION_COOLDOWN_FRAMES;
       }
     }
   }

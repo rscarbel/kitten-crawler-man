@@ -1237,7 +1237,8 @@ export class AudioManager {
         e.questId === 'grotesque_spider' ||
         e.questId === 'the_show_must_go_on' ||
         e.questId === 'krasue_murders' ||
-        e.questId === 'anchor_shards'
+        e.questId === 'anchor_shards' ||
+        e.questId === 'briar_hollow_plea'
       ) {
         this.play('quest_complete');
       }
@@ -1258,6 +1259,12 @@ export class AudioManager {
 
     bus.on('achievementUnlocked', () => {
       this.play('achievement_unlocked');
+    });
+
+    // The hearts' own chime; the cow's contented moo is its own voice, played
+    // with the rest of the mob cues.
+    bus.on('cowPetted', () => {
+      this.play('happy_hearts');
     });
 
     bus.on('questFailed', (e) => {

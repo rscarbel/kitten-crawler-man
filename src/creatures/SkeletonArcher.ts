@@ -19,7 +19,7 @@ import type { KiteAim } from './tactics/tacticalFrame';
  * formation rather than a queue.
  */
 
-const ARCHER_HP = 10;
+export const ARCHER_HP = 10;
 const ARCHER_SPEED = 1.05;
 /** Same reasoning as the goblin archer's cap: a kiter that outruns its pursuer is unkillable. */
 const ARCHER_MAX_SPEED_RATIO = 0.7;
@@ -51,6 +51,8 @@ const SKELETON_ARCHER_CULL_MARGIN_TILES = 1.5;
 
 const ARCHER_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
 
+const ARCHER_SIEGE_STRUCTURE_MULTIPLIER = 0;
+
 export class SkeletonArcher extends RisingSkeleton {
   readonly xpValue = SKELETON_ESCORT_XP;
   protected coinDropMin = COIN_DROP_MIN;
@@ -73,6 +75,11 @@ export class SkeletonArcher extends RisingSkeleton {
 
   override clearAirborneAttacks(): void {
     this.pendingShots = [];
+  }
+
+  /** An archer's quarry in a siege is the defenders; it never batters a wall. */
+  override get siegeStructureMultiplier(): number {
+    return ARCHER_SIEGE_STRUCTURE_MULTIPLIER;
   }
 
   private readonly aggroRangePx: number;

@@ -168,6 +168,11 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
     return this.all.some((dressing) => dressing.tryInteract(player));
   }
 
+  /** Whether any room would claim a press right now, without acting. */
+  wouldInteract(player: HumanPlayer | CatPlayer): boolean {
+    return this.all.some((dressing) => dressing.wouldInteract(player));
+  }
+
   resetForCheckpoint(): void {
     for (const dressing of this.all) dressing.resetForCheckpoint();
   }

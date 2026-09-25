@@ -184,6 +184,46 @@ interface TownFlattening {
 }
 
 /**
+ * Ground held level for a landmark laid out on the assumption of flat ground:
+ * a disc or a rectangle, held flat out to its edge and released back to the
+ * noise over `falloffTiles`.
+ */
+export type FlattenZone =
+  | {
+      readonly kind: 'disc';
+      readonly centreTileX: number;
+      readonly centreTileY: number;
+      readonly radiusTiles: number;
+      readonly falloffTiles: number;
+    }
+  | {
+      readonly kind: 'rect';
+      readonly x: number;
+      readonly y: number;
+      readonly w: number;
+      readonly h: number;
+      readonly falloffTiles: number;
+    };
+
+/** How far outside a zone a tile lies, in tiles; 0 inside it. */
+function distanceOutside(zone: FlattenZone, tx: number, ty: number): number {
+  if (zone.kind === 'disc') {
+    return Math.max(0, Math.hypot(tx - zone.centreTileX, ty - zone.centreTileY) - zone.radiusTiles);
+  }
+  const dx = Math.max(zone.x - tx, 0, tx - (zone.x + zone.w - 1));
+  const dy = Math.max(zone.y - ty, 0, ty - (zone.y + zone.h - 1));
+  return Math.hypot(dx, dy);
+}
+
+/** How much of the raw field survives near one zone: 0 inside, rising to 1 past its falloff. */
+function zoneReliefWeight(zone: FlattenZone, tx: number, ty: number): number {
+  const past = distanceOutside(zone, tx, ty);
+  if (past <= 0) return 0;
+  if (past >= zone.falloffTiles) return 1;
+  return smoothstepUnit(past / zone.falloffTiles);
+}
+
+/**
  * A seeded elevation field over one generated map.
  *
  * Construct once per generation and pass it to every pass that wants to know
@@ -193,12 +233,17 @@ interface TownFlattening {
 export class ElevationField {
   private readonly octaves: readonly NoiseOctave[];
   private readonly amplitudeTotal: number;
-  private readonly flattenRadiusTiles: number;
+  /**
+   * Every zone held flat. The town is always the first; a landmark sited
+   * later adds its own with `flatten`, which must happen before anything reads
+   * the field for painting — the band pass and the river router both do.
+   */
+  private readonly flattenZones: FlattenZone[];
 
   constructor(
     readonly seed: number,
     mapSizeTiles: number,
-    private readonly town: TownFlattening,
+    town: TownFlattening,
   ) {
     const octaves: NoiseOctave[] = [];
     let amplitude = 1;
@@ -211,22 +256,36 @@ export class ElevationField {
     });
     this.octaves = octaves;
     this.amplitudeTotal = amplitudeTotal;
-    this.flattenRadiusTiles = town.safeRadiusTiles + TOWN_FLATTEN_MARGIN_TILES;
+    this.flattenZones = [
+      {
+        kind: 'disc',
+        centreTileX: town.centreTileX,
+        centreTileY: town.centreTileY,
+        radiusTiles: town.safeRadiusTiles + TOWN_FLATTEN_MARGIN_TILES,
+        falloffTiles: TOWN_FLATTEN_FALLOFF_TILES,
+      },
+    ];
+  }
+
+  /** Holds another zone level, at the same meadow height as the town. */
+  flatten(zone: FlattenZone): void {
+    this.flattenZones.push(zone);
   }
 
   /**
-   * How much of the raw field survives at this position: 0 inside the town's
-   * flattened disc, rising smoothly to 1 once past the falloff band.
+   * How much of the raw field survives at this position: 0 inside any
+   * flattened zone, rising smoothly to 1 once past every zone's falloff band.
    */
   private reliefWeightAt(tx: number, ty: number): number {
-    const distance = Math.hypot(tx - this.town.centreTileX, ty - this.town.centreTileY);
-    if (distance <= this.flattenRadiusTiles) return 0;
-    const past = distance - this.flattenRadiusTiles;
-    if (past >= TOWN_FLATTEN_FALLOFF_TILES) return 1;
-    return smoothstepUnit(past / TOWN_FLATTEN_FALLOFF_TILES);
+    let weight = 1;
+    for (const zone of this.flattenZones) {
+      weight = Math.min(weight, zoneReliefWeight(zone, tx, ty));
+      if (weight === 0) return 0;
+    }
+    return weight;
   }
 
-  /** Normalised elevation in [0, 1]. Flat at `MEADOW_LEVEL` over the town. */
+  /** Normalised elevation in [0, 1]. Flat at `MEADOW_LEVEL` over every flattened zone. */
   elevationAt(tx: number, ty: number): number {
     let sum = 0;
     let amplitude = 1;

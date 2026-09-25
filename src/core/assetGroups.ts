@@ -114,7 +114,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'modern_decorations',
   ],
 
-  // Level 3's wilderness: trees, boulders and the goblin camps.
+  // Level 3's wilderness: trees, boulders, the goblin camps and Briar Hollow.
   overworld: [
     'tree_birch_a',
     'tree_birch_b',
@@ -145,11 +145,27 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'boulder_small_f',
     'boulder_small_g',
     'boulder_small_h',
+    'rock_deposit_a',
+    'rock_deposit_b',
+    'rock_deposit_c',
+    'rock_deposit_dressed_a',
+    'rock_deposit_dressed_b',
     'campfire',
     'goblin_tent_a',
     'goblin_tent_b',
     'goblin_tent_c',
     'goblin_tent_d',
+    // Briar Hollow's props.
+    'village_1x1',
+    'village_1x1_variants',
+    'village_1x1_tall',
+    'village_2x1',
+    'village_2x1_variants',
+    'village_3x1',
+    'village_4x1',
+    'village_1x2',
+    'village_2x2',
+    'village_2x3',
   ],
 
   // Shared by every dungeon floor (tutorial, level 1, level 2): the generic
@@ -271,8 +287,17 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   skeleton_archer: [],
   skeleton_lord: [],
   the_lich: [],
+  /** The Briar Hollow assault's undead: all three painted, none holds a sheet. */
+  necromancer: [],
+  raised_ratkin: [],
+  grave_bull: [],
   /** Painted by `skyFowlSprite.ts`, one figure per clothing palette. */
   sky_fowl: [],
+  /** Briar Hollow's herd, painted by `cowSprite.ts`, one figure per coat and age. */
+  cow: [],
+  calf: [],
+  /** Briar Hollow's militia, painted by `ratkinCastSprite.ts` like the rest of the ratkin cast. */
+  ratkin_soldier: [],
   /** The five fairies are painted, not baked. */
   fairy_shield: [],
   fairy_healer: [],

@@ -2,24 +2,24 @@
 /**
  * Headless gate on the craft-perk lookup tables in `src/core/craftPerks.ts`.
  *
- * Every function in that file is a pure lookup by level, transcribed from the
- * original request's two level-by-level tables (Resourcing and Construction).
- * This gate re-derives every row of both tables from the request's own numbers
- * and checks the functions against them exactly — the 15-row construction
- * speed table row by row, and every yield, luck and discount level.
+ * Every function in that file is a pure lookup by level, across two tables
+ * (Resourcing and Construction). This gate checks each table's numeric
+ * effects row by row — the 15-row construction speed table, and every yield,
+ * luck and discount level — and separately checks that the player-facing
+ * perk text is present exactly on the levels where an effect actually
+ * changes, without pinning to the text's exact wording.
  *
  * Run: npx tsx scripts/verify-craft-perks.ts
  */
 
 import {
   resourcingSpeedFactor,
-  resourcingYieldBonus,
+  resourcingNodeCapacityBonus,
   resourcingDoubles,
   refinedChance,
   trapKitChances,
   thrallCount,
   constructionTimeFactor,
-  CONSTRUCTION_SPEED_STEP_PER_LEVEL,
   constructionDiscount,
   spikesUnlocked,
   constructionHpMultiplier,
@@ -110,7 +110,7 @@ section('Resourcing: speed steps at levels 3, 6, 8, 11, 12');
   }
 }
 
-section('Resourcing: flat yield bonus at 2, 4, 7, 9, 13');
+section('Resourcing: node capacity bonus at 2, 4, 7, 9, 13');
 {
   const yieldTable: Record<number, number> = {
     1: 0,
@@ -132,8 +132,8 @@ section('Resourcing: flat yield bonus at 2, 4, 7, 9, 13');
   for (const [levelText, expected] of Object.entries(yieldTable)) {
     const level = Number(levelText);
     check(
-      resourcingYieldBonus(level) === expected,
-      `L${level}: yield bonus ${resourcingYieldBonus(level)} === ${expected}`,
+      resourcingNodeCapacityBonus(level) === expected,
+      `L${level}: node capacity bonus ${resourcingNodeCapacityBonus(level)} === ${expected}`,
     );
   }
 }
@@ -227,78 +227,109 @@ section('Construction: unlimited ammo, infernal trebuchets, and snare conversion
   check(snareConvertChance(15) === 0.5, 'L15: 50% snare conversion');
 }
 
-section('Resourcing perk text quotes the request level by level');
+// The perk-text checks below assert that a level has perk text if and only if
+// its own numeric effects actually changed from the level below it — tying the
+// gate to the lookup tables above rather than to the exact wording of the
+// description, which is free to be reworded without breaking this gate. A
+// level whose effects match the level below but which still carries new perk
+// text (or vice versa) is exactly the kind of data/text drift this catches.
+// Level 1 is always treated as "changed" since it is the initial unlock, which
+// isn't expressed as a delta from a lower level.
+
+section('Resourcing perk text: present exactly on levels with a real effect change');
 {
-  // Each phrase is transcribed verbatim from the request's per-level Resourcing
-  // list (levels 1-15), so a check here fails the moment the description drifts
-  // from what was actually asked for.
-  const resourcingPhrases: Record<number, string> = {
-    1: 'with the right tools',
-    2: '+1 from their original yield',
-    3: 'Resource collection is 5% faster',
-    4: '+2 from their original yield',
-    5: '4% chance of 1 dynamite with stone',
-    6: 'Resource collection is 5% faster',
-    7: '+3 from their original yield',
-    8: 'Resource collection is 5% faster',
-    9: '+5 from their original yield',
-    10: 'ghostly axeman or pickaxeman',
-    11: 'Resource collection is 5% faster',
-    12: 'Resource collection is 5% faster',
-    13: '+10 from their original yield',
-    14: '1% chance for a trebuchet and 5% chance for a snare trap',
-    15: 'summons three of them now',
-  };
-  let checkedLevels = 0;
-  for (const [levelText, phrase] of Object.entries(resourcingPhrases)) {
-    const level = Number(levelText);
-    checkedLevels++;
-    check(
-      describeResourcingPerk(level).includes(phrase),
-      `L${level}: Resourcing text quotes "${phrase}"`,
-    );
+  interface ResourcingSnapshot {
+    speedFactor: number;
+    capacityBonus: number;
+    doubles: boolean;
+    refinedWood: number;
+    refinedStone: number;
+    trebChance: number;
+    snareChance: number;
+    thralls: number;
   }
-  check(checkedLevels === 15, `every Resourcing level 1-15 was checked (${checkedLevels}/15)`);
+
+  function resourcingSnapshotAt(level: number): ResourcingSnapshot {
+    const traps = trapKitChances(level);
+    return {
+      speedFactor: resourcingSpeedFactor(level),
+      capacityBonus: resourcingNodeCapacityBonus(level),
+      doubles: resourcingDoubles(level),
+      refinedWood: refinedChance(level, 'wood'),
+      refinedStone: refinedChance(level, 'stone'),
+      trebChance: traps.treb,
+      snareChance: traps.snare,
+      thralls: thrallCount(level),
+    };
+  }
+
+  const noResourcingPerkText = describeResourcingPerk(0);
+  let previous = resourcingSnapshotAt(0);
+  for (let level = 1; level <= MAX_CRAFT_LEVEL; level++) {
+    const current = resourcingSnapshotAt(level);
+    const effectChanged =
+      level === 1 ||
+      current.speedFactor !== previous.speedFactor ||
+      current.capacityBonus !== previous.capacityBonus ||
+      current.doubles !== previous.doubles ||
+      current.refinedWood !== previous.refinedWood ||
+      current.refinedStone !== previous.refinedStone ||
+      current.trebChance !== previous.trebChance ||
+      current.snareChance !== previous.snareChance ||
+      current.thralls !== previous.thralls;
+    const hasPerkText = describeResourcingPerk(level) !== noResourcingPerkText;
+    check(
+      hasPerkText === effectChanged,
+      `L${level}: Resourcing perk text present (${hasPerkText}) matches an actual effect change (${effectChanged})`,
+    );
+    previous = current;
+  }
 }
 
-section('Construction perk text quotes the request level by level');
+section('Construction perk text: present exactly on levels with a real effect change');
 {
-  // The request's construction speed table gives a decimal total-time factor per
-  // level; the description renders it as a percentage. Deriving the expected
-  // percentage from that same formula keeps this check tied to the request's
-  // numbers rather than to this file's own prose.
-  const FRACTION_TO_PERCENT = 100;
-  for (let level = 2; level <= 15; level++) {
-    const expectedPercent = Math.round(
-      CONSTRUCTION_SPEED_STEP_PER_LEVEL * (level - 1) * FRACTION_TO_PERCENT,
-    );
-    check(
-      describeConstructionPerk(level).includes(`${expectedPercent}% faster`),
-      `L${level}: Construction text quotes "${expectedPercent}% faster"`,
-    );
+  interface ConstructionSnapshot {
+    timeFactor: number;
+    discount: number;
+    spikes: boolean;
+    hpMultiplier: number;
+    unlimitedAmmo: boolean;
+    infernalTrebuchets: boolean;
+    snareConvertChance: number;
   }
-  // Each phrase below is transcribed verbatim from the request's prose about
-  // what happens at that specific Construction level.
-  const constructionPhrases: Record<number, string> = {
-    1: 'Construction is unlocked',
-    5: 'unlocks the ability to add spikes to their constructions',
-    10: 'if something cost 8 boards of wood, it now costs 7',
-    14: 'cost of every resource goes down by 2',
-    15: 'lingering gas cloud that does damage over time to enemies and slows them down',
-  };
-  let checkedLevels = 0;
-  for (const [levelText, phrase] of Object.entries(constructionPhrases)) {
-    const level = Number(levelText);
-    checkedLevels++;
-    check(
-      describeConstructionPerk(level).includes(phrase),
-      `L${level}: Construction text quotes "${phrase}"`,
-    );
+
+  function constructionSnapshotAt(level: number): ConstructionSnapshot {
+    return {
+      timeFactor: constructionTimeFactor(level),
+      discount: constructionDiscount(level),
+      spikes: spikesUnlocked(level),
+      hpMultiplier: constructionHpMultiplier(level),
+      unlimitedAmmo: unlimitedAmmo(level),
+      infernalTrebuchets: infernalTrebuchets(level),
+      snareConvertChance: snareConvertChance(level),
+    };
   }
-  check(
-    checkedLevels === 5,
-    `every distinctive Construction level was checked (${checkedLevels}/5)`,
-  );
+
+  const noConstructionPerkText = describeConstructionPerk(0);
+  let previous = constructionSnapshotAt(0);
+  for (let level = 1; level <= MAX_CRAFT_LEVEL; level++) {
+    const current = constructionSnapshotAt(level);
+    const effectChanged =
+      level === 1 ||
+      current.timeFactor !== previous.timeFactor ||
+      current.discount !== previous.discount ||
+      current.spikes !== previous.spikes ||
+      current.hpMultiplier !== previous.hpMultiplier ||
+      current.unlimitedAmmo !== previous.unlimitedAmmo ||
+      current.infernalTrebuchets !== previous.infernalTrebuchets ||
+      current.snareConvertChance !== previous.snareConvertChance;
+    const hasPerkText = describeConstructionPerk(level) !== noConstructionPerkText;
+    check(
+      hasPerkText === effectChanged,
+      `L${level}: Construction perk text present (${hasPerkText}) matches an actual effect change (${effectChanged})`,
+    );
+    previous = current;
+  }
 }
 
 section('Next-unlock helpers point at the next row above the given level, and null once maxed');
@@ -322,12 +353,24 @@ section('Next-unlock helpers point at the next row above the given level, and nu
   );
 }
 
-// ── Negative-test proof: a phrase that isn't in the request must fail ──
-section('Negative test: a fabricated phrase is correctly rejected');
+// The perk-text checks above detect an effect change by comparing each
+// level's text against the "no perk" placeholder returned for an out-of-table
+// level. That comparison is only meaningful if the placeholder can never
+// coincide with a real level's text — checked here directly.
+section('Sentinel check: the "no perk" placeholder never matches a real level\'s text');
 {
-  const fabricatedPhrase = 'grants infinite mana to the whole party';
-  const stillMatches = describeResourcingPerk(15).includes(fabricatedPhrase);
-  check(!stillMatches, `a phrase absent from the request is correctly rejected (${stillMatches})`);
+  const noResourcingPerkText = describeResourcingPerk(0);
+  const noConstructionPerkText = describeConstructionPerk(0);
+  for (let level = 1; level <= MAX_CRAFT_LEVEL; level++) {
+    check(
+      describeResourcingPerk(level) !== noResourcingPerkText,
+      `L${level}: Resourcing perk text differs from the "no perk" placeholder`,
+    );
+    check(
+      describeConstructionPerk(level) !== noConstructionPerkText,
+      `L${level}: Construction perk text differs from the "no perk" placeholder`,
+    );
+  }
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);

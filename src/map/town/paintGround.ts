@@ -19,6 +19,7 @@ import {
 } from '../tileTypes';
 import type { TileGrid } from './tileGrid';
 import type { TileRect, TownPlan } from './townPlan';
+import type { KeepOut } from '../overworld/keepOut';
 import { worldRandom } from '../../core/WorldRandom';
 
 /** Paints the impassable ring of void that frames the map. */
@@ -60,8 +61,10 @@ export function scatterGroundCover(
   plan: TownPlan,
   borderTiles: number,
   reservedPlots: ReadonlyArray<TileRect>,
+  landmarks: KeepOut,
 ): void {
   const isReserved = (x: number, y: number) =>
+    landmarks.contains(x, y) ||
     reservedPlots.some(
       (plot) => x >= plot.x && x < plot.x + plot.w && y >= plot.y && y < plot.y + plot.h,
     );
@@ -116,11 +119,14 @@ export function scatterWildernessGroundCover(
   grid: TileGrid,
   plan: TownPlan,
   borderTiles: number,
+  landmarks: KeepOut,
 ): void {
   const scatter = (sourceType: number, coverType: number, density: number) => {
     for (let y = borderTiles + 1; y < grid.size - borderTiles - 1; y++) {
       for (let x = borderTiles + 1; x < grid.size - borderTiles - 1; x++) {
         if (grid.typeAt(x, y) !== sourceType) continue;
+        // A landmark dresses its own ground.
+        if (landmarks.contains(x, y)) continue;
         if (Math.hypot(x - plan.centre.x, y - plan.centre.y) <= plan.safeRadiusTiles) continue;
         if (worldRandom() < density) grid.setStanding(x, y, coverType);
       }

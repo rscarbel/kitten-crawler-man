@@ -1,0 +1,312 @@
+{
+  "village_1x1": {
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "bench": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "anvil": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "coal_bin": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "trebuchet_model": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "gear_crate": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "board_stack": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "stone_pile": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "chopping_block": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "feed_bin": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "washbasin": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "stool": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "fabric_bolts": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "bucket": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "oil_cans": {
+        "row": 13,
+        "frameCount": 1
+      },
+      "seed_sacks": {
+        "row": 14,
+        "frameCount": 1
+      }
+    }
+  },
+  "village_1x1_variants": {
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "well": {
+        "row": 0,
+        "frameCount": 2
+      },
+      "crate": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "barrel": {
+        "row": 2,
+        "frameCount": 3
+      },
+      "sack": {
+        "row": 3,
+        "frameCount": 3
+      },
+      "hay_bale": {
+        "row": 4,
+        "frameCount": 2
+      }
+    }
+  },
+  "village_1x1_tall": {
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "notice_board": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "lamp_post": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "scarecrow": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "tool_rack": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "weapon_rack": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "shelf_records": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "shelf_herbs": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "shelf_goods": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "banner": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "hearth": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "tool_pegs": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "lamp_shelf": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "hoe_rack": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "pick_rack": {
+        "row": 13,
+        "frameCount": 1
+      }
+    }
+  },
+  "village_2x1": {
+    "frameWidth": 128,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "quench_trough": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "water_trough": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "cooking_hearth": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "desk": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "drafting_table": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "workbench": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "rope_frame": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "mushroom_log_bed": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "loom": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "half_built_cart": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "broken_cart": {
+        "row": 10,
+        "frameCount": 1
+      }
+    }
+  },
+  "village_2x1_variants": {
+    "frameWidth": 128,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "table": {
+        "row": 0,
+        "frameCount": 2
+      },
+      "log_pile": {
+        "row": 1,
+        "frameCount": 3
+      }
+    }
+  },
+  "village_3x1": {
+    "frameWidth": 192,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "serving_counter": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "village_4x1": {
+    "frameWidth": 256,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "long_table": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "village_1x2": {
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "cot": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "bed": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "bunk": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "village_2x2": {
+    "frameWidth": 128,
+    "frameHeight": 320,
+    "tileX": 0,
+    "tileY": 256,
+    "tileScale": 64,
+    "states": {
+      "bell_tower": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "forge_hearth": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "village_2x3": {
+    "frameWidth": 128,
+    "frameHeight": 320,
+    "tileX": 0,
+    "tileY": 256,
+    "tileScale": 64,
+    "states": {
+      "sawmill_machine": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  }
+}

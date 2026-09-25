@@ -41,17 +41,20 @@ export class GameStats {
    * An ally that dies with nobody credited is not a kill: an ink marauder
    * bleeding back into ink when its lifespan runs out raises the same event,
    * and it would otherwise head the "most slain" list of a run that summoned
-   * a lot of them.
+   * a lot of them. Nor is a death the mob itself says is no kill at all
+   * (`countsAsKill`), like a cow caught in a blast.
    */
   recordMobKilled(event: {
     readonly mob: {
       readonly displayName: string;
       readonly countsAsBossKill: boolean;
       readonly isHostile: boolean;
+      readonly countsAsKill: boolean;
     };
     readonly killer: object | null;
   }): void {
     const { mob, killer } = event;
+    if (!mob.countsAsKill) return;
     if (killer === null && !mob.isHostile) return;
     this.recordKill(mob.displayName, mob.countsAsBossKill);
   }

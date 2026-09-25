@@ -11,6 +11,7 @@ import type {
   BRIDGE_AXIS_EAST_WEST,
   BRIDGE_AXIS_NORTH_SOUTH,
   FenceStyle,
+  PalisadeTier,
   TileContent,
 } from '../tileTypes';
 import {
@@ -197,6 +198,26 @@ export class TileGrid {
     if (!this.inBounds(x, y)) return;
     this.setStanding(x, y, FENCE);
     this.cells[y][x].fenceStyle = style;
+  }
+
+  /**
+   * A prop that stands on the ground and picks its art by sprite key — a
+   * village prop, or a tree planted as a chosen species.
+   *
+   * `setStanding` for the reason that method documents, plus the key, which the
+   * renderer reads off the tile because it is handed a grid and a position.
+   */
+  setStandingSprite(x: number, y: number, type: number, spriteKey: string): void {
+    if (!this.inBounds(x, y)) return;
+    this.setStanding(x, y, type);
+    this.cells[y][x].spriteKey = spriteKey;
+  }
+
+  /** A palisade tile at a tier, remembering the ground it was driven into. */
+  setPalisade(x: number, y: number, type: number, tier: PalisadeTier): void {
+    if (!this.inBounds(x, y)) return;
+    this.setStanding(x, y, type);
+    this.cells[y][x].wallTier = tier;
   }
 
   /**

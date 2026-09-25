@@ -16,6 +16,10 @@ const LABEL_HOLD_FRACTION = 0.45;
 const LABEL_JITTER_PX = 5;
 /** Centres the jitter range on zero. */
 const JITTER_CENTRE = 0.5;
+/** Vertical gap between labels that spawn at the same origin in the same stretch of frames. */
+const LABEL_STACK_OFFSET_PX = 14;
+/** Origins round to this many pixels, so two labels over the same body always share a stack. */
+const ORIGIN_GRID_PX = 4;
 
 interface StyleDef {
   size: number;
@@ -41,6 +45,8 @@ interface FloatingLabel {
   text: string;
   style: FloatingTextStyle;
   framesLeft: number;
+  /** Rounded spawn point, so labels sharing an origin can be told apart from ones that don't. */
+  originKey: string;
 }
 
 /**
@@ -62,12 +68,18 @@ export class FloatingCombatTextSystem implements GameSystem {
   /** Add a label at a world position. Also usable directly by systems. */
   spawn(worldX: number, worldY: number, text: string, style: FloatingTextStyle): void {
     const jitter = (Math.random() - JITTER_CENTRE) * 2 * LABEL_JITTER_PX;
+    const originKey = `${Math.round(worldX / ORIGIN_GRID_PX)},${Math.round(worldY / ORIGIN_GRID_PX)}`;
+    const stackIndex = this.labels.reduce(
+      (count, label) => (label.originKey === originKey ? count + 1 : count),
+      0,
+    );
     this.labels.push({
       worldX: worldX + jitter,
-      worldY,
+      worldY: worldY - stackIndex * LABEL_STACK_OFFSET_PX,
       text,
       style,
       framesLeft: LABEL_FRAMES,
+      originKey,
     });
   }
 

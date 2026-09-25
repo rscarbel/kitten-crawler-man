@@ -45,15 +45,46 @@ const INVENTORY_NAV_HOVER_TOP_OFFSET = 18;
 const INVENTORY_NAV_HOVER_BOTTOM_OFFSET = 22;
 const INVENTORY_NAV_HALF = 0.5;
 
+/** One stack in one of a crawler's two containers, and the item it held when picked. */
+export interface PendingSlotRef {
+  readonly source: 'inv' | 'hotbar';
+  readonly slotIdx: number;
+  readonly id: ItemId;
+}
+
+/**
+ * An entry a system adds to an item's context menu, beyond the actions every
+ * item of its kind has. The bag knows nothing of what it does: the owning
+ * system registers a provider, so village logic never lives in the inventory UI.
+ */
+export interface ExtraContextOption {
+  readonly label: string;
+  /** When set, the entry is shown greyed with this reason beside it and does nothing when picked. */
+  readonly disabledReason?: string;
+  readonly run: () => void;
+}
+
+/**
+ * The label an extra entry is drawn and matched under: its own, or followed by
+ * the reason it is unavailable. The reason has to be terse — the menu is a
+ * fixed width — so a cooldown reads "23s", not "Ready in 23s".
+ */
+function extraOptionLabel(option: ExtraContextOption): string {
+  return option.disabledReason === undefined
+    ? option.label
+    : `${option.label} ${option.disabledReason}`;
+}
+
 /**
  * The one action an item offers on its own, ahead of the generic entries. An
  * item has at most one: a skill book is read, a tome is studied, a potion is
- * drunk, everything else leads with the generic list.
+ * drunk, a food is eaten, everything else leads with the generic list.
  */
 function leadOptionFor(item: InventoryItem): string[] {
   if (item.skillId !== undefined) return ['Read'];
   if (item.explosivesHandlingLevels !== undefined) return ['Study'];
   if (item.drinkable === true) return ['Drink'];
+  if (item.edible === true) return ['Eat'];
   return [];
 }
 
@@ -143,8 +174,10 @@ export class InventoryInteraction {
    * pointed at that should go down. The scene reads and clears this, and decides
    * who drinks — the bag on screen is not always the active crawler's.
    */
-  pendingDrinkSlot: { source: 'inv' | 'hotbar'; slotIdx: number; id: ItemId } | null = null;
-  pendingStudySlot: { source: 'inv' | 'hotbar'; slotIdx: number; id: ItemId } | null = null;
+  pendingDrinkSlot: PendingSlotRef | null = null;
+  /** A food the player asked to eat from the menu; the same contract as {@link pendingDrinkSlot}. */
+  pendingEatSlot: PendingSlotRef | null = null;
+  pendingStudySlot: PendingSlotRef | null = null;
   /** Set when the user confirms a drop; DungeonScene reads and clears this. */
   pendingDropItem: { id: ItemId; quantity: number } | null = null;
   /**
@@ -185,6 +218,23 @@ export class InventoryInteraction {
     this.drag = null;
   }
 
+  /**
+   * Extra entries a system offers for an item — a tool's "Summon Thrall" —
+   * or null when nothing has registered any.
+   */
+  extraContextOptions: ((item: InventoryItem) => readonly ExtraContextOption[]) | null = null;
+
+  private extrasFor(item: InventoryItem): readonly ExtraContextOption[] {
+    return this.extraContextOptions?.(item) ?? [];
+  }
+
+  /** Whether a drawn entry is a system's extra that cannot be used right now, so it is drawn greyed. */
+  isDisabledOption(item: InventoryItem, label: string): boolean {
+    return this.extrasFor(item).some(
+      (option) => option.disabledReason !== undefined && extraOptionLabel(option) === label,
+    );
+  }
+
   contextMenuOptions(
     item: InventoryItem,
     source: 'inv' | 'hotbar',
@@ -192,7 +242,8 @@ export class InventoryInteraction {
   ): string[] {
     // The item's own action leads: it is what the player opened the menu for,
     // and putting it anywhere but first would sit Drop next to the common action.
-    const lead = leadOptionFor(item);
+    // A system's extras follow it, ahead of the generic entries, for the same reason.
+    const lead = [...leadOptionFor(item), ...this.extrasFor(item).map(extraOptionLabel)];
     // Undroppable items (permanent quest gear like the Wayfinder's Anchor, the
     // ability tomes) can still be repositioned freely — only the option to
     // discard them into the world is missing.
@@ -302,10 +353,17 @@ export class InventoryInteraction {
         const idx = Math.floor((my - cmy - CONTEXT_MENU_ITEM_Y_OFFSET) / menuItemH);
         if (idx >= 0 && idx < options.length) {
           const action = options[idx];
-          if (action === 'Read') {
+          const extra = this.extrasFor(cm.item).find(
+            (option) => extraOptionLabel(option) === action,
+          );
+          if (extra !== undefined) {
+            if (extra.disabledReason === undefined) extra.run();
+          } else if (action === 'Read') {
             this.requestSkillBookRead(cm.item);
           } else if (action === 'Drink') {
             this.pendingDrinkSlot = { source: cm.source, slotIdx: cm.slotIdx, id: cm.item.id };
+          } else if (action === 'Eat') {
+            this.pendingEatSlot = { source: cm.source, slotIdx: cm.slotIdx, id: cm.item.id };
           } else if (action === 'Study') {
             this.pendingStudySlot = { source: cm.source, slotIdx: cm.slotIdx, id: cm.item.id };
           } else if (action === 'Equip') {

@@ -121,6 +121,46 @@ export const SCREE_RAMP: Ramp = {
   accent: [176, 172, 164],
 };
 
+// ── Briar Hollow: the ratkin village ───────────────────────────────────────
+
+/**
+ * Oiled walnut boarding inside the village's roofless buildings.
+ *
+ * Held in the middle of the village's wood ramp (dark `#3e2818` up to light
+ * `#8a6038`) rather than spanning it: the furniture standing on these boards
+ * is painted from the dark end, and a floor that reached down there would
+ * swallow it. Deliberately darker and warmer than `INTERIOR_BOARD_RAMP`, the
+ * town's waxed shop floor, which is what sets the village's joinery apart.
+ */
+export const HOLLOW_PLANK_RAMP: Ramp = {
+  shadow: [78, 52, 32],
+  mid: [106, 72, 44],
+  light: [128, 90, 56],
+  accent: [148, 108, 70],
+};
+
+/**
+ * Grazed pasture: the meadow's grass cropped short, which shows more of the
+ * straw-coloured stem base, so the ramp leans yellow of `GRASS_RAMP`.
+ */
+export const PASTURE_GRASS_RAMP: Ramp = {
+  shadow: [68, 74, 34],
+  mid: [112, 114, 54],
+  light: [146, 146, 76],
+  accent: [178, 172, 102],
+};
+
+/**
+ * Freshly turned tilth: darker and richer than `DIRT_RAMP`, which is earth
+ * packed by feet. Tilled soil is loose and holds moisture.
+ */
+export const TILLED_SOIL_RAMP: Ramp = {
+  shadow: [60, 42, 28],
+  mid: [90, 66, 44],
+  light: [116, 88, 62],
+  accent: [138, 108, 80],
+};
+
 // ── floor 1: the cellars ───────────────────────────────────────────────────
 //
 // Everything down here was laid by hand a long time ago out of what the town

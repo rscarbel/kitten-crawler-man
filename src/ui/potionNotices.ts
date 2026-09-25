@@ -1,8 +1,9 @@
 import type { ItemId } from '../core/ItemDefs';
 import type { StatName } from '../Player';
+import { HAMBURGER_FED_DURATION_SECONDS, HAMBURGER_STR_BONUS } from '../core/foodEffects';
 
 /**
- * Toast copy for potions whose effect reads the same every time. Kept apart from
+ * Toast copy for potions and foods whose effect reads the same every time. Kept apart from
  * `ITEM_DEF`'s prose descriptions: these are glanced at mid-fight, so they say
  * only what changed.
  */
@@ -12,6 +13,8 @@ const FIXED_EFFECT_NOTICES: Partial<Record<ItemId, string>> = {
   jugg_juice: 'Max HP temporarily increased',
   cooldown_crisp: 'Cooldowns temporarily halved',
   dirty_shirley: 'Health restored — and you are drunk',
+  hollow_stew: 'Health restored',
+  hamburger: `Health restored — Strength +${HAMBURGER_STR_BONUS} for ${HAMBURGER_FED_DURATION_SECONDS}s`,
 };
 
 /**

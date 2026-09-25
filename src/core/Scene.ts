@@ -193,6 +193,8 @@ export class SceneManager {
       this.heldKeys.clear();
       this.keysHeldWhenMenuOpened.clear();
       this.keysHeldWhenSearchFocused.clear();
+      // Nor the mouseup: a button held as focus left would stay held.
+      this.current?.handleMouseLeave?.();
     });
 
     const getPos = (e: MouseEvent) => {

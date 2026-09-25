@@ -44,6 +44,10 @@
  *                — actions a system plays: the Protective Shell cast, a swig
  *                  from a bottle, a stoop for loot, heaving a chest open, and
  *                  a talking loop
+ *    chop, mine (each ×3 views)
+ *                — working a resource node: a two-handed axe swing into a
+ *                  trunk and an overhead pick swing onto rock, looped; the
+ *                  tool is drawn over the cell by `toolOverlaySprite.ts`
  *
  * The art invariants live in `scripts/gates-human.ts`, which the review harness
  * runs: `npm run render:human`.
@@ -151,6 +155,17 @@ import {
   REPAIR_TICKS_PER_FRAME,
   repairMend,
 } from './human/actionsBuild';
+import {
+  CHOP_FACING_TOOL_BUTTS,
+  CHOP_FRAMES,
+  CHOP_IMPACT_FRAME,
+  CHOP_TICKS_PER_FRAME,
+  chop,
+  MINE_FRAMES,
+  MINE_IMPACT_FRAME,
+  MINE_TICKS_PER_FRAME,
+  mine,
+} from './human/actionsGather';
 import { HUMAN_SCALE, TILE_CENTRE_FRACTION, TILE_SCALE } from './human/figureScale';
 import { sideOfSign } from './human/gaitShared';
 import { travellingEntryPhase } from './human/travelling';
@@ -421,6 +436,12 @@ export const HUMAN_ROW_NAMES = [
   'repair',
   'repair_side',
   'repair_away',
+  'chop',
+  'chop_side',
+  'chop_away',
+  'mine',
+  'mine_side',
+  'mine_away',
 ] as const;
 
 export type HumanRowName = (typeof HUMAN_ROW_NAMES)[number];
@@ -457,8 +478,10 @@ export type HumanGait = 'walk' | 'run';
  * - `lidUp`: a chest's lid is up past his chest.
  * - `strike`: the hammer lands on the board.
  * - `grind`: a Smush's heel, already down, is ground into the floor.
+ * - `impact`: an axe bites a trunk or a pick strikes rock.
  */
-export type HumanRowEvent = 'fuseLit' | 'release' | 'cast' | 'lidUp' | 'strike' | 'grind';
+export type HumanRowEvent =
+  'fuseLit' | 'release' | 'cast' | 'lidUp' | 'strike' | 'grind' | 'impact';
 
 /** What the runtime and the gates know about a row, besides how to pose it. */
 export interface HumanRowMeta {
@@ -525,6 +548,13 @@ export interface HumanRowMeta {
    * sound and its spawn on the picture.
    */
   readonly eventFrames?: Readonly<Partial<Record<HumanRowEvent, readonly number[]>>>;
+  /**
+   * On a row that swings a working tool, which of his fists holds its butt
+   * on each frame; the other grips further up the haft, toward the head. The
+   * overlay draws the tool from this fist through the other. Absent, or a
+   * frame past the list's end, is his left.
+   */
+  readonly toolButt?: readonly BodySide[];
 }
 
 /** The frame a row's first blow lands on, or undefined for a row that strikes nothing. */
@@ -807,6 +837,35 @@ const CHEST_OPEN_EVENTS = { lidUp: [CHEST_LID_UP_FRAME] } as const;
 
 /** The hammer landing on the board, which the build sound is struck on. */
 const BUILD_EVENTS = { strike: BUILD_STRIKE_FRAMES } as const;
+
+/** The axe biting the trunk: chips fly, the tree shakes, the chop sounds. */
+const CHOP_EVENTS = { impact: [CHOP_IMPACT_FRAME] } as const;
+/** The pick's point striking rock. */
+const MINE_EVENTS = { impact: [MINE_IMPACT_FRAME] } as const;
+
+/** A looping swing at a resource node, in one view. */
+function gatherRow(
+  view: CarlView,
+  frames: number,
+  ticksPerFrame: number,
+  events: HumanRowMeta['eventFrames'],
+  pose: (frame: number, view: CarlView) => CarlPose,
+  toolButt?: readonly BodySide[],
+): HumanRowDef {
+  return {
+    ...(toolButt === undefined ? {} : { toolButt }),
+    frameCount: frames,
+    kind: 'loop',
+    view,
+    impactFrames: NO_IMPACT,
+    mirrorable: view === 'side',
+    locomotion: 'planted',
+    role: 'action',
+    ticksPerFrame,
+    eventFrames: events,
+    pose: (f) => pose(f, view),
+  };
+}
 
 /**
  * A guard drop's frames sit strictly between its two ends — the guard's first
@@ -1961,6 +2020,28 @@ export const HUMAN_ROW_TABLE = {
     ticksPerFrame: REPAIR_TICKS_PER_FRAME,
     pose: (f) => repairMend(f, 'back'),
   },
+  // Working a resource node: the tool itself is an overlay, so every tier of
+  // axe or pick shares these cells.
+  chop: gatherRow(
+    'front',
+    CHOP_FRAMES,
+    CHOP_TICKS_PER_FRAME,
+    CHOP_EVENTS,
+    chop,
+    CHOP_FACING_TOOL_BUTTS,
+  ),
+  chop_side: gatherRow('side', CHOP_FRAMES, CHOP_TICKS_PER_FRAME, CHOP_EVENTS, chop),
+  chop_away: gatherRow(
+    'back',
+    CHOP_FRAMES,
+    CHOP_TICKS_PER_FRAME,
+    CHOP_EVENTS,
+    chop,
+    CHOP_FACING_TOOL_BUTTS,
+  ),
+  mine: gatherRow('front', MINE_FRAMES, MINE_TICKS_PER_FRAME, MINE_EVENTS, mine),
+  mine_side: gatherRow('side', MINE_FRAMES, MINE_TICKS_PER_FRAME, MINE_EVENTS, mine),
+  mine_away: gatherRow('back', MINE_FRAMES, MINE_TICKS_PER_FRAME, MINE_EVENTS, mine),
 } satisfies Record<HumanRowName, HumanRowDef>;
 
 /**
@@ -1984,6 +2065,8 @@ export const BUILD_RISE_ROWS: ViewRows = {
 };
 export const PLACE_ROWS: ViewRows = { front: 'place', side: 'place_side', back: 'place_away' };
 export const REPAIR_ROWS: ViewRows = { front: 'repair', side: 'repair_side', back: 'repair_away' };
+export const CHOP_ROWS: ViewRows = { front: 'chop', side: 'chop_side', back: 'chop_away' };
+export const MINE_ROWS: ViewRows = { front: 'mine', side: 'mine_side', back: 'mine_away' };
 
 /** The row table as a list, in sheet order. */
 export const HUMAN_ROWS: readonly RowSpec[] = HUMAN_ROW_NAMES.map((name) => ({

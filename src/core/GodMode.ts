@@ -41,6 +41,8 @@ export function applyGodModeToPlayer(p: Player): void {
   p.hp = p.maxHp;
   p.godMode = true;
   p.speedMultiplier = GOD_MODE_SPEED_MULTIPLIER;
+  p.skills.setGodModeMinLevel(GOD_MODE_ABILITY_LEVEL);
+  p.craftSkills.setGodModeMinLevel(GOD_MODE_ABILITY_LEVEL);
 }
 
 /** Reverse {@link applyGodModeToPlayer}, restoring the pre-god-mode base speed. */
@@ -48,4 +50,6 @@ export function removeGodModeFromPlayer(p: Player, originalSpeedMultiplier: numb
   p.setGodModeStatBonus(0);
   p.speedMultiplier = originalSpeedMultiplier;
   p.godMode = false;
+  p.skills.setGodModeMinLevel(0);
+  p.craftSkills.setGodModeMinLevel(0);
 }

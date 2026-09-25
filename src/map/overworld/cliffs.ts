@@ -22,6 +22,7 @@ import type { TileGrid } from '../town/tileGrid';
 import type { TilePoint, TownPlan } from '../town/townPlan';
 import type { CampSite } from './camps';
 import type { ElevationBand, ElevationField } from './elevation';
+import type { KeepOut } from './keepOut';
 import { NO_REGION, Reachability } from './reachability';
 import { worldRandom } from '../../core/WorldRandom';
 
@@ -118,6 +119,7 @@ export function paintCliffs(
   elevation: ElevationField,
   camps: ReadonlyArray<CampSite>,
   border: number,
+  keepOut: KeepOut,
 ): void {
   const seeds: TilePoint[] = [];
   for (let ty = border + 1; ty < grid.size - border - 1; ty++) {
@@ -142,7 +144,7 @@ export function paintCliffs(
       // which is the leading edge of the drop and is continuous by construction.
       if (!isSouthFacingDrop(elevation, tx, ty, CLIFF_GRADIENT_THRESHOLD)) continue;
       if (isSouthFacingDrop(elevation, tx, ty - 1, CLIFF_GRADIENT_THRESHOLD)) continue;
-      if (!canCarryLedge(grid, camps, tx, ty)) continue;
+      if (!canCarryLedge(grid, camps, keepOut, tx, ty)) continue;
       seeds.push({ x: tx, y: ty });
     }
   }
@@ -156,14 +158,14 @@ export function paintCliffs(
   const placed: TilePoint[] = [];
   for (const seed of seeds) {
     if (claimed.has(seed.y * grid.size + seed.x)) continue;
-    for (const tile of growRun(grid, elevation, camps, seed, claimed)) {
+    for (const tile of growRun(grid, elevation, camps, keepOut, seed, claimed)) {
       grid.setStanding(tile.x, tile.y, CLIFF);
       placed.push(tile);
     }
   }
 
   breakLongRuns(grid, placed);
-  scatterSpoil(grid, camps, placed);
+  scatterSpoil(grid, camps, keepOut, placed);
 }
 
 /**
@@ -197,6 +199,7 @@ function isSouthFacingDrop(
 function canCarryLedge(
   grid: TileGrid,
   camps: ReadonlyArray<CampSite>,
+  keepOut: KeepOut,
   tx: number,
   ty: number,
 ): boolean {
@@ -207,6 +210,8 @@ function canCarryLedge(
   // because their disc is road.
   if (camps.some((camp) => Math.hypot(tx - camp.centre.x, ty - camp.centre.y) <= campKeepOut(camp)))
     return false;
+  // Nor across a landmark's ground, nor with its shade falling on one.
+  if (keepOut.contains(tx, ty) || keepOut.contains(tx, ty + 1)) return false;
   // The tile below is what the shade falls on, and a ledge with a solid
   // immediately south of it has nothing to stand over.
   return !grid.isSolid(tx, ty + 1);
@@ -224,6 +229,7 @@ function growRun(
   grid: TileGrid,
   elevation: ElevationField,
   camps: ReadonlyArray<CampSite>,
+  keepOut: KeepOut,
   seed: TilePoint,
   claimed: Set<number>,
 ): TilePoint[] {
@@ -250,7 +256,7 @@ function growRun(
       const key = ty * grid.size + tx;
       if (claimed.has(key)) break;
       if (!isSouthFacingDrop(elevation, tx, ty, relaxed)) break;
-      if (!canCarryLedge(grid, camps, tx, ty)) break;
+      if (!canCarryLedge(grid, camps, keepOut, tx, ty)) break;
       claimed.add(key);
       run.push({ x: tx, y: ty });
     }
@@ -315,13 +321,14 @@ function breakLongRuns(grid: TileGrid, placed: ReadonlyArray<TilePoint>): void {
 function scatterSpoil(
   grid: TileGrid,
   camps: ReadonlyArray<CampSite>,
+  keepOut: KeepOut,
   placed: ReadonlyArray<TilePoint>,
 ): void {
   for (const tile of placed) {
     if (grid.typeAt(tile.x, tile.y) !== CLIFF) continue;
     if (worldRandom() >= CLIFF_SPOIL_CHANCE) continue;
     const belowY = tile.y + 1;
-    if (!canCarryLedge(grid, camps, tile.x, belowY)) continue;
+    if (!canCarryLedge(grid, camps, keepOut, tile.x, belowY)) continue;
     grid.set(tile.x, belowY, SCREE);
   }
 }

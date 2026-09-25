@@ -81,7 +81,7 @@ const FULL_BAKE_SCALE = 1;
  * the cache exists to make holds even with the cache completely full.
  */
 const CACHE_BUDGET_MEGABYTES = 96;
-const CACHE_BYTE_BUDGET = CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
+export const CACHE_BYTE_BUDGET = CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
 
 /**
  * Default ceiling on one figure's cells.
@@ -701,9 +701,109 @@ export function prewarmFigureState(def: FigureDef, state: string, frameLimit?: n
   prewarmQueue.push({ def, state, frames, capacityRefusals: 0 });
 }
 
+/**
+ * The cache's own frame clock: one tick per rendered frame, the clock
+ * {@link IDLE_FRAMES_BEFORE_RELEASE} is counted on. A caller keeping rows warm
+ * has to pace itself by this rather than by gameplay updates, which run at a
+ * fixed rate however fast the screen refreshes, and not at all while paused.
+ */
+export function figureCacheFrame(): number {
+  return frameCounter;
+}
+
 /** Frames still waiting to be prewarmed. For gates and dev readouts. */
 export function figurePrewarmDepth(): number {
   return prewarmQueue.length;
+}
+
+/**
+ * Marks a row as wanted without drawing it: its last-use frame moves to now,
+ * so the idle sweep passes it over, and it moves to the fresh end of its own
+ * figure's rows. Nothing is baked or queued. Returns whether every frame of
+ * the row is warm at the scale the cache bakes at now — a row baked before a
+ * quality change is dropped at the next draw — so a caller keeping rows alive
+ * knows which to ask for again.
+ *
+ * Less than a hit: the figure keeps its place in the cache's least-recently-
+ * used order, which only draws and bakes move. Under pressure a row that is
+ * only touched therefore goes before the rows of a figure drawn since — a
+ * touch is a hope that a row will be drawn, and must never cost a row that is
+ * on screen its place.
+ *
+ * For keeping rows warm ahead of a moment they will certainly be drawn in — an
+ * assault wave through its countdown — without re-queuing them behind cold
+ * bakes. A re-queued warm row waits its turn behind every cell ahead of it,
+ * and a row that waits past the idle window is swept before it is refreshed.
+ */
+export function touchFigureState(def: FigureDef, state: string): boolean {
+  const entry = entries.get(def.id);
+  if (entry === undefined) return false;
+  const row = entry.rows.get(state);
+  if (row === undefined) return false;
+  entry.rows.delete(state);
+  entry.rows.set(state, row);
+  row.lastFrame = frameCounter;
+  const bakedAtCurrentScale = entry.bakeScale === bakeScaleNow();
+  return bakedAtCurrentScale && row.cells.size >= figureFrameCount(def, state);
+}
+
+/**
+ * Does to the cache what drawing a warm row does, without the blit: the figure
+ * and the row move to the fresh end of the least-recently-used order and the
+ * row is marked drawn this frame. A row that is not held is left alone, not
+ * baked. For headless gates holding a scene's worth of rows on screen through
+ * thousands of frames, where the blits, not the cache, would be the cost.
+ */
+export function markFigureStateDrawn(def: FigureDef, state: string): void {
+  const entry = entries.get(def.id);
+  const heldAtCurrentScale = entry?.bakeScale === bakeScaleNow() && entry.rows.has(state);
+  if (!heldAtCurrentScale) return;
+  rowFor(entryFor(def), state);
+}
+
+/** Bytes still to bake for the first `frames` frames of a row, at the scale the cache bakes at now. */
+function unbakedBytes(def: FigureDef, state: string, frames: number): number {
+  const scale = bakeScaleNow();
+  const cellBytesAtScale =
+    Math.max(1, Math.ceil(def.frameWidth * scale)) *
+    Math.max(1, Math.ceil(def.frameHeight * scale)) *
+    BYTES_PER_PIXEL;
+  const entry = entries.get(def.id);
+  const cells = entry?.bakeScale === scale ? entry.rows.get(state)?.cells : undefined;
+  let missing = 0;
+  for (let frame = 0; frame < frames; frame++) {
+    if (cells?.has(frame) !== true) missing++;
+  }
+  return missing * cellBytesAtScale;
+}
+
+/**
+ * Whether the rest of a row can be baked without evicting anything, once
+ * every request already in the prewarm queue has baked ahead of it: its
+ * missing cells fit under the global ceiling and the figure's own budget.
+ *
+ * For a caller warming rows ahead of need that must never push the rows on
+ * screen out. The prewarm queue drains at the start of a frame, before
+ * anything is drawn in it, so to its eviction every row is stale, and the rows
+ * drawn a frame ago are as likely to go as any — whose rebake on the draw then
+ * evicts the warmed row in turn, every frame. The queue ahead is counted
+ * because it spends the same room first.
+ */
+export function figureRowFitsWithoutEviction(def: FigureDef, state: string): boolean {
+  const neededBytes = unbakedBytes(def, state, figureFrameCount(def, state));
+  if (neededBytes <= 0) return true;
+  let queuedBytes = 0;
+  let queuedFigureBytes = 0;
+  for (const pending of prewarmQueue) {
+    if (pending.def.id === def.id && pending.state === state) continue;
+    const bytes = unbakedBytes(pending.def, pending.state, pending.frames);
+    queuedBytes += bytes;
+    if (pending.def.id === def.id) queuedFigureBytes += bytes;
+  }
+  const entry = entries.get(def.id);
+  const figureBytes = entry?.bakeScale === bakeScaleNow() ? entry.bytes : 0;
+  const fitsFigure = figureBytes + queuedFigureBytes + neededBytes <= figureByteBudgetFor(def);
+  return admitsGlobally(queuedBytes + neededBytes) && fitsFigure;
 }
 
 function runPrewarmQueue(): void {

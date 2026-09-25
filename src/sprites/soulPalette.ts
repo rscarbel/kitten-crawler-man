@@ -33,3 +33,19 @@ export function soulRgba(rgb: SoulRgb, alpha: number): string {
   const [red, green, blue] = rgb;
   return `rgba(${red},${green},${blue},${safe})`;
 }
+
+/**
+ * The hollow-blue ramp: the necromancy of the ruins east of Briar Hollow.
+ *
+ * Built the same way as the green ramp — a near-white core inside a saturated
+ * body, so it reads as light rather than paint — but cold blue, so a player who
+ * has met the Lich can tell at a glance that this is somebody else's magic. The
+ * two must never share a hue: a blue soul-bolt beside a green one is a
+ * different caster, and that is the whole point of the difference.
+ */
+export const hollowSoulPalette = {
+  core: [232, 244, 255],
+  mid: [112, 170, 255],
+  deep: [42, 86, 206],
+  shadow: [10, 22, 72],
+} as const satisfies Readonly<Record<string, SoulRgb>>;

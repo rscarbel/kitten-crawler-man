@@ -1211,11 +1211,28 @@ export class SpiderQuestSystem implements GameSystem {
     return false;
   }
 
-  tryInteract(active: Player): boolean {
+  /**
+   * Whether {@link tryInteract} would claim a press from `active` right now,
+   * without doing anything — for a prompt further down the Space chain to
+   * know it would not be reached.
+   */
+  wouldInteract(active: Player): boolean {
     if (!this.roomData) return false;
+    if (this.phase === 'scientist_waiting') return this.isWithinScientistReach(active);
+    if (this.phase === 'awaiting_hacking') {
+      const dist = Math.hypot(
+        active.x - this.roomData.computerTile.x * TILE_SIZE,
+        active.y - this.roomData.computerTile.y * TILE_SIZE,
+      );
+      return dist <= COMPUTER_INTERACT_RANGE_PX * COMPUTER_INTERACT_MULTIPLIER;
+    }
+    return false;
+  }
+
+  tryInteract(active: Player): boolean {
+    if (!this.wouldInteract(active)) return false;
 
     if (this.phase === 'scientist_waiting') {
-      if (!this.isWithinScientistReach(active)) return false;
       this.phase = 'scientist_dialog';
       this.menuOpenSoundPending = true;
       this.explanationSoundPending = true;
@@ -1223,11 +1240,6 @@ export class SpiderQuestSystem implements GameSystem {
     }
 
     if (this.phase === 'awaiting_hacking') {
-      const dist = Math.hypot(
-        active.x - this.roomData.computerTile.x * TILE_SIZE,
-        active.y - this.roomData.computerTile.y * TILE_SIZE,
-      );
-      if (dist > COMPUTER_INTERACT_RANGE_PX * COMPUTER_INTERACT_MULTIPLIER) return false;
       if (!this.hackStarting) {
         this.hackStarting = true;
         this.hackStartTimer = HACK_START_DELAY_FRAMES;

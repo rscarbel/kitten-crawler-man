@@ -27,6 +27,7 @@ import {
 import type { TileGrid } from '../town/tileGrid';
 import type { TilePoint, TownPlan } from '../town/townPlan';
 import type { ElevationField } from './elevation';
+import type { KeepOut } from './keepOut';
 import { worldRandom } from '../../core/WorldRandom';
 
 /** Which kind of camp a site is. Consumed by `LevelDef.campSpawns`. */
@@ -57,6 +58,12 @@ const CAMP_RADIUS_TILES = 7;
 /** Clearances a camp site must respect, past each site's own radius. */
 const CAMP_TOWN_CLEARANCE_TILES = 10;
 const CAMP_CIRCUS_CLEARANCE_TILES = 10;
+/**
+ * Clear ground between a camp's edge and a landmark's keep-out (Briar Hollow's
+ * is already the palisade plus a margin), so no camp's residents stand in
+ * sight of the village gate.
+ */
+const CAMP_LANDMARK_CLEARANCE_TILES = 10;
 /** Two camps this close would read as one settlement with two halves. */
 const CAMP_SEPARATION_TILES = 50;
 /** A camp needs dry ground under it; the disc is cleared, water cannot be. */
@@ -152,6 +159,7 @@ function pickCampSite(
   exclusions: ReadonlyArray<CampExclusion>,
   townCentre: TilePoint,
   border: number,
+  landmarks: KeepOut,
 ): TilePoint | null {
   const maxDistance = (grid.size / 2) * CAMP_MAX_DISTANCE_FRACTION;
   let best: TilePoint | null = null;
@@ -170,6 +178,9 @@ function pickCampSite(
     if (site.x < margin || site.y < margin) continue;
     if (site.x >= grid.size - margin || site.y >= grid.size - margin) continue;
     if (exclusions.some((zone) => distanceTo(zone, site.x, site.y) < zone.radiusTiles)) continue;
+    if (landmarks.distanceTo(site.x, site.y) < CAMP_RADIUS_TILES + CAMP_LANDMARK_CLEARANCE_TILES) {
+      continue;
+    }
     if (hasWaterWithin(grid, site, CAMP_RADIUS_TILES + CAMP_WATER_CLEARANCE_TILES)) continue;
 
     const score = bandScoreFor(kind, elevation, site);
@@ -288,6 +299,7 @@ export function paintCamps(
   elevation: ElevationField,
   circus: CampExclusion,
   border: number,
+  landmarks: KeepOut,
 ): CampSite[] {
   const exclusions: CampExclusion[] = [
     {
@@ -305,7 +317,7 @@ export function paintCamps(
   const camps: CampSite[] = [];
   const kinds: ReadonlyArray<CampKind> = ['goblin', 'troglodyte'];
   for (const kind of kinds) {
-    const centre = pickCampSite(grid, kind, elevation, exclusions, plan.centre, border);
+    const centre = pickCampSite(grid, kind, elevation, exclusions, plan.centre, border, landmarks);
     if (centre === null) continue;
     if (kind === 'goblin') paintGoblinCamp(grid, centre);
     else paintTroglodyteDen(grid, centre);

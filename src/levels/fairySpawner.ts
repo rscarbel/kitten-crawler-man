@@ -473,6 +473,7 @@ export function isOverworldFairyTileAllowed(map: GameMap, tileX: number, tileY: 
   if (!map.isWalkable(tileX, tileY) || !hasRoomToMove(map, tileX, tileY)) return false;
   if (map.isTileInsideTownWall(tileX, tileY)) return false;
   if (map.isInTownSafeZone(tileX * TILE_SIZE, tileY * TILE_SIZE)) return false;
+  if (map.isTileInBriarHollowSpawnExclusion(tileX, tileY)) return false;
   const circus = map.circusCentre;
   const circusRadius = map.circusRadiusTiles;
   if (circus !== undefined && circusRadius !== undefined) {

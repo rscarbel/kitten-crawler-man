@@ -214,6 +214,17 @@ export const BOX_PRESETS = {
   safeRoom: { fill: 'rgba(20,83,45,0.9)', border: '#4ade80', borderWidth: 1.5 },
   /** Danger / warning red. */
   danger: { fill: 'rgba(127,29,29,0.9)', border: '#ef4444', borderWidth: 1.5 },
+  /**
+   * A see-through HUD strip laid over the world — the resource counters —
+   * in the same dark family as the top-left HUD panel, but light enough that
+   * the ground under it still reads.
+   */
+  hudTranslucent: {
+    fill: 'rgba(0,0,0,0.45)',
+    border: 'rgba(148,163,184,0.35)',
+    borderWidth: 1,
+    radius: 6,
+  },
   /** Boss encounter deep purple. */
   boss: {
     fill: 'rgba(30,10,50,0.95)',
@@ -263,6 +274,18 @@ export const PROGRESS_PRESETS = {
   resourcing: { fill: '#84cc16', background: 'rgba(0,0,0,0.5)', radius: 2 },
   /** Construction's XP bar — amber, distinct from Resourcing's green so the two crawlers' progressions never read as one meter. */
   construction: { fill: '#f59e0b', background: 'rgba(0,0,0,0.5)', radius: 2 },
+  /** A build or repair in progress over its structure — fresh-planed timber on a dark border. */
+  build: {
+    fill: '#fbbf24',
+    background: 'rgba(0,0,0,0.65)',
+    border: '#78350f',
+    borderWidth: 1,
+    radius: 2,
+  },
+  /** A structure's own health in its menu. */
+  structureHp: { fill: '#65a30d', background: 'rgba(0,0,0,0.55)', radius: 2 },
+  /** A structure's spikes, worn down before its own health. */
+  spikes: { fill: '#d6b37a', background: 'rgba(0,0,0,0.55)', radius: 2 },
 } satisfies Record<string, ProgressPreset>;
 
 function resolvePadding(p: Padding | undefined): {

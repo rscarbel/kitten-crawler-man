@@ -17,6 +17,7 @@ import {
   DEATH_FLAME_ATTACK_TYPE,
   DEATH_EXPLOSION_ATTACK_TYPE,
 } from './FairyFireballSystem';
+import { NECRO_PULSE_ATTACK_TYPE } from '../creatures/Necromancer';
 
 /**
  * Maps a mob's class name (and optional attackType) to a DeathCause key.
@@ -51,6 +52,9 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   MantisCrony: 'mantis',
   DarkKnight: 'darkKnight',
   SkeletonLord: 'skeletonLord',
+  RaisedRatkin: 'raisedRatkin',
+  GraveBull: 'graveBull',
+  Necromancer: 'necromancerBolt',
   SkeletonWarrior: 'skeletonWarrior',
   SkeletonArcher: 'skeletonArcher',
   TheLich: 'theLich',
@@ -74,6 +78,7 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
 export function causeFromDamageSource(source: DamageSource): DeathCause {
   if (source.kind === 'dynamite') return 'explosiveFriendlyFire';
   if (source.kind === 'doomsday') return 'doomsdayExplosion';
+  if (source.kind === 'siege') return 'siegeFriendlyFire';
   // Standing hazards. Without this the contact damage — which is what actually
   // kills, well before the eight-second `burn` DoT they also apply gets there —
   // reports an unknown cause on the death screen. An untagged source is a
@@ -139,6 +144,8 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   // The cone is a red shape on the ground the player was given time to leave;
   // the bolts are not. Telling both deaths the same way loses the lesson.
   if (mobType === 'SkeletonLord' && attackType === 'grasping_hands') return 'skeletonLordHands';
+  if (mobType === 'Necromancer' && attackType === NECRO_PULSE_ATTACK_TYPE)
+    return 'necromancerPulse';
   // Same distinction for the Lich: the cone was drawn on the floor and the bolt
   // was not, and one death is a lesson while the other is a fight.
   if (mobType === 'TheLich' && attackType === 'grasping_hands') return 'theLichHands';

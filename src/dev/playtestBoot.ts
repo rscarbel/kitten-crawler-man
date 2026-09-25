@@ -36,6 +36,13 @@ export interface PlaytestBoot {
 /** Tile a preset's crawlers start on before the real spawn point is resolved. */
 const SCRATCH_TILE = 0;
 
+/**
+ * Mongo's pet-ability level a level-3 preset starts at when it doesn't name
+ * one of its own: high enough that a floor-3 playtest sees his grown stats
+ * and sheet rather than the early-game pet, without hand-editing every preset.
+ */
+const LEVEL3_DEFAULT_MONGO_LEVEL = 10;
+
 function skillStatesFor(levels: Partial<Record<SkillId, number>>): SkillState[] {
   const states: SkillState[] = [];
   for (const [id, level] of Object.entries(levels)) {
@@ -72,6 +79,19 @@ function applyLoadout(player: Player, loadout: PlaytestLoadout): void {
   player.coins = loadout.coins;
   player.unspentPoints = 0;
   player.skills.restoreStates(skillStatesFor(loadout.skillLevels));
+  if (loadout.resourcingLevel !== undefined) {
+    const crafts = player.craftSkills.snapshot();
+    player.craftSkills.restore({
+      ...crafts,
+      resourcing: { learned: true, level: loadout.resourcingLevel, xp: 0 },
+    });
+  }
+  if (loadout.constructionLevel !== undefined) {
+    player.craftSkills.restore({
+      ...player.craftSkills.snapshot(),
+      construction: { learned: true, level: loadout.constructionLevel, xp: 0 },
+    });
+  }
 
   player.syncHpToMaxHp();
   player.hp = player.maxHp;
@@ -109,11 +129,15 @@ function abilityManagerFor(levels: Partial<Record<AbilityId, number>>): AbilityM
 }
 
 export function buildPlaytestBoot(preset: PlaytestPreset): PlaytestBoot {
+  const abilityManager = abilityManagerFor(preset.abilityLevels);
+  if (preset.levelId === 'level3' && preset.abilityLevels.mongo === undefined) {
+    abilityManager.setLevel('mongo', LEVEL3_DEFAULT_MONGO_LEVEL);
+  }
   return {
     levelDef: getLevelDef(preset.levelId),
     humanSnap: humanSnapshotFor(preset),
     catSnap: catSnapshotFor(preset),
-    abilityManager: abilityManagerFor(preset.abilityLevels),
+    abilityManager,
     spawn: preset.spawn,
     preDefeatedBossTypes: preset.preDefeatedBossTypes ?? [],
     doomsdayStage: preset.doomsdayStage,
@@ -197,5 +221,7 @@ export function resolvePlaytestSpawn(
       return spiderLabApproachTile(gameMap);
     case 'questRoomEntrance':
       return questRoomApproachTile(gameMap);
+    case 'briarHollowGate':
+      return gameMap.briarHollow?.gate.inside ?? null;
   }
 }

@@ -74,7 +74,7 @@ export interface RockFrame {
 
 const TWO_PI = Math.PI * 2;
 
-interface Palette {
+export interface Palette {
   readonly shadow: string;
   readonly body: string;
   readonly light: string;
@@ -140,8 +140,8 @@ const PALETTES: Readonly<Record<Lithology, Palette>> = {
  * change to the forest a change to the rocks as well. These values must stay
  * inside the 85°–120° hue band that file states its foliage is confined to.
  */
-const MOSS_DARK = '#2c4a1f';
-const MOSS_LIGHT = '#3e6529';
+export const MOSS_DARK = '#2c4a1f';
+export const MOSS_LIGHT = '#3e6529';
 
 /** Light direction. Upper left, like every other prop here. */
 const LIGHT_X = -0.62;
@@ -153,7 +153,7 @@ const LIGHT_Y = -0.79;
  * keeps antialiasing on the outermost edge from bleeding into the neighbouring
  * tile. Every stone in a cluster is placed and normalised inside this.
  */
-const MAX_HALF_WIDTH_TILES = 0.46;
+export const MAX_HALF_WIDTH_TILES = 0.46;
 
 /**
  * Heights, in tiles, measured from the rock's base to its crown.
@@ -522,7 +522,7 @@ function shadeChannels(hex: string, amount: number): readonly [number, number, n
 }
 
 /** Mixes toward white for `amount > 0` and toward black for `amount < 0`. */
-function shade(hex: string, amount: number): string {
+export function shade(hex: string, amount: number): string {
   const [red, green, blue] = shadeChannels(hex, amount);
   return `rgb(${red},${green},${blue})`;
 }
@@ -535,7 +535,7 @@ function shade(hex: string, amount: number): string {
  * half-opaque dark grey and the band reads as a dirty stripe rather than as a
  * fade. Fading to the same RGB at zero alpha is what makes it disappear.
  */
-function shadeAlpha(hex: string, amount: number, alpha: number): string {
+export function shadeAlpha(hex: string, amount: number, alpha: number): string {
   const [red, green, blue] = shadeChannels(hex, amount);
   return `rgba(${red},${green},${blue},${alpha})`;
 }
@@ -1096,6 +1096,15 @@ function paintStone(
   );
   ctx.globalAlpha = 1;
   ctx.restore();
+}
+
+/**
+ * One lithology's master palette, shared with the quarry's worked outcrops
+ * (`rockDepositArt.ts`) so a deposit and a boulder of the same stone are the
+ * same stone.
+ */
+export function rockPalette(lithology: Lithology): Palette {
+  return PALETTES[lithology];
 }
 
 /** Paints one boulder into its cell. */

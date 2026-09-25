@@ -33,6 +33,7 @@ import { snapPlayer, restorePlayer } from '../src/core/PlayerSnapshot';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';
+import { HOLLOW_BELL_MAX_HP } from '../src/systems/briarHollow/hollowBell';
 
 /** Not a valid `StructureRecord`, `onceFlag` or top-level shape — a wrong-typed value used across several checks below. */
 const GARBAGE_NUMBER = 42;
@@ -68,9 +69,11 @@ function populatedState(): BriarHollowState {
   state.quest = {
     phase: 'fortifying',
     gathering: { woodChopped: 10, stoneMined: 10, boardsProcessed: 3, ropeProcessed: 2 },
-    readyToStart: true,
     imminentCountdownFrames: 0,
     assaultWaveIndex: null,
+    bellHp: HOLLOW_BELL_MAX_HP,
+    lastSiege: { segmentsBreached: 3, structuresDestroyed: 1, soldiersDowned: 2 },
+    rewardsGranted: true,
   };
   state.structures = [
     { kind: 'segment', id: 'seg-3', tier: 'stone', hp: 450, spikesHp: 150, builtBy: 'human' },
@@ -158,7 +161,8 @@ function populatedState(): BriarHollowState {
   const parsed = parseBriarHollowStateSnapshot({});
   check(parsed !== undefined, 'an empty object is still a valid (if empty) briarHollow record');
   check(
-    parsed !== undefined && isDeepStrictEqual(parsed, createBriarHollowState()),
+    parsed !== undefined &&
+      isDeepStrictEqual(parsed, captureBriarHollowState(createBriarHollowState())),
     'a record with every sub-field absent parses to the empty defaults',
   );
 }

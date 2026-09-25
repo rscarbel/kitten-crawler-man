@@ -798,8 +798,18 @@ export type TileContent = {
    * mid-channel tiles drew their planks across their own walkway.
    */
   bridgeAxis?: number;
-  /** Set on `HOLLOW_PALISADE` tiles: which of the four palisade tiers this segment is. */
+  /**
+   * Set on `HOLLOW_PALISADE` tiles: which of the four palisade tiers this
+   * segment is. On a `HOLLOW_PALISADE_GAP` tile it is the tier a breach fell
+   * from, which colours the rubble; a gap left by a flattened fence has none.
+   */
   wallTier?: PalisadeTier;
+  /**
+   * Set on a `HOLLOW_PALISADE` tile whose segment carries spikes. On the tile
+   * for the same reason `damageStage` is: the tile painter is pure and cannot
+   * ask the village which segments are spiked.
+   */
+  wallSpiked?: boolean;
 };
 
 /** Which way a bridge deck runs. */
@@ -990,6 +1000,30 @@ export function treeSpriteKey(tx: number, ty: number): TreeSpriteKey {
   );
   const species = TREE_SPRITE_KEYS[groveHash % TREE_SPRITE_KEYS.length];
   return species[positionHash(tx, ty) % species.length];
+}
+
+/** A tree species, as its sheets are grouped. */
+export type TreeSpecies = 'oak' | 'birch' | 'pine';
+const TREE_SPECIES_INDEX: Readonly<Record<TreeSpecies, number>> = { oak: 0, birch: 1, pine: 2 };
+
+/** The sheet variants of one species. */
+export function treeSpriteKeysFor(species: TreeSpecies): readonly TreeSpriteKey[] {
+  return TREE_SPRITE_KEYS[TREE_SPECIES_INDEX[species]];
+}
+
+function isTreeSpriteKey(key: string): key is TreeSpriteKey {
+  return TREE_SPRITE_KEYS.some((species) => species.some((variant) => variant === key));
+}
+
+/**
+ * The sheet a `TREE` tile is drawn from: the key it was planted with when it
+ * carries one — a managed grove is planted by species, not by where the
+ * wild-wood hash happens to fall — and `treeSpriteKey` for every wild tree.
+ */
+export function treeSpriteKeyForTile(tile: TileContent, tx: number, ty: number): TreeSpriteKey {
+  const planted = tile.spriteKey;
+  if (planted !== undefined && isTreeSpriteKey(planted)) return planted;
+  return treeSpriteKey(tx, ty);
 }
 
 const BOULDER_SMALL_SPRITE_KEYS = [

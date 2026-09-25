@@ -7,6 +7,7 @@ import environmentTownscapeManifest from '../images/environment/townscape/manife
 import environmentTreesManifest from '../images/environment/trees/manifest.json';
 import environmentRocksManifest from '../images/environment/rocks/manifest.json';
 import environmentCampManifest from '../images/environment/camp/manifest.json';
+import environmentVillageManifest from '../images/environment/village/manifest.json';
 import environmentBossKrakarenManifest from '../images/environment/boss_krakaren/manifest.json';
 import environmentHoarderManifest from '../images/environment/hoarder/manifest.json';
 import environmentGymManifest from '../images/environment/gym/manifest.json';
@@ -39,6 +40,9 @@ const environmentManifest = {
   // The goblin camp's tents and its fire, in their own directory for the same
   // reason: `writeSheets` replaces a directory's whole manifest.
   ...environmentCampManifest,
+  // Briar Hollow's furniture and street props, painted at floor load. Their own
+  // directory for the same reason as the camp's.
+  ...environmentVillageManifest,
   // The Hoarder's lair: its junk, its floor and its toppling towers, painted
   // at floor load. Its own directory so no other room's sheets share a file.
   ...environmentHoarderManifest,

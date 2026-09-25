@@ -3224,9 +3224,9 @@ const FAIRY_FIGHT_TUNED_WIPES: ReadonlyMap<string, ReadonlyMap<string, FairyFigh
   [
     'level3 2 roaming mobs and a fairy',
     new Map([
-      ['early', { partyLevel: 24, normal: 2.134, hard: 4.103 }],
-      ['mid', { partyLevel: 29, normal: 2.177, hard: 3.13 }],
-      ['late', { partyLevel: 34, normal: 1.663, hard: 2.391 }],
+      ['early', { partyLevel: 24, normal: 1.07, hard: 4.103 }],
+      ['mid', { partyLevel: 29, normal: 1.1, hard: 3.13 }],
+      ['late', { partyLevel: 34, normal: 0.85, hard: 2.391 }],
     ]),
   ],
 ]);

@@ -128,7 +128,8 @@ export function hasClearLine(
 
 /**
  * Whether a straight walk between two bodies' centres crosses only walkable
- * tiles; `hasClearLine` sees over low props a body cannot pass.
+ * tiles; `hasClearLine` sees over low props a body cannot pass. Hostile
+ * walkability, since only hostiles run tactics.
  */
 export function hasWalkableLine(
   map: GameMap | null,
@@ -138,19 +139,21 @@ export function hasWalkableLine(
 ): boolean {
   if (map === null) return true;
   const half = tileSize / 2;
-  return map.hasWalkableLine(from.x + half, from.y + half, to.x + half, to.y + half);
+  return map.hasHostileWalkableLine(from.x + half, from.y + half, to.x + half, to.y + half);
 }
 
 /**
  * Whether a mob could stand at `point`: walkable, not a stairwell (which
  * `isWalkable` admits but a mob's own collision refuses), and not marked ground.
+ * Tactics only ever steer hostiles, so the hostile walkability test applies —
+ * a tactic must never choose a spot past the village gate.
  */
 export function isStandable(map: GameMap | null, tileSize: number, point: TacticalPoint): boolean {
   if (isMarkedGround(point.x, point.y)) return false;
   if (map === null) return true;
   const tileX = Math.floor((point.x + tileSize / 2) / tileSize);
   const tileY = Math.floor((point.y + tileSize / 2) / tileSize);
-  return map.isWalkable(tileX, tileY) && !map.isStairwellTile(tileX, tileY);
+  return map.isWalkableForHostile(tileX, tileY) && !map.isStairwellTile(tileX, tileY);
 }
 
 /**

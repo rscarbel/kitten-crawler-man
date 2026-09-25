@@ -161,7 +161,27 @@ export type DamageSource =
         | 'krakarenLiveWire'
         | 'krakarenTankBurst';
     }
-  | { readonly kind: 'doomsday' };
+  | { readonly kind: 'doomsday' }
+  | {
+      /**
+       * Shrapnel from the party's own siege engine landing close by. Light and
+       * flat — a single point — and, when `dodgeable`, rolled against the
+       * crawler's dexterity like any thrown blow.
+       */
+      readonly kind: 'siege';
+      readonly dodgeable: boolean;
+    };
+
+/**
+ * Whether a blow from `source` can be sidestepped: a swung, thrown or bitten
+ * attack, or dodgeable siege shrapnel. Status ticks, your own dynamite,
+ * standing damage fields and the doomsday clock all land regardless.
+ */
+function isDodgeableSource(source: DamageSource | undefined): boolean {
+  if (source?.kind === 'mob') return source.undodgeable !== true;
+  if (source?.kind === 'siege') return source.dodgeable;
+  return false;
+}
 
 const DEFAULT_POTION_COOLDOWN_SECONDS = 5.75;
 const DENOMINATOR_OFFSET = 30;
@@ -792,9 +812,7 @@ export abstract class Player {
   takeDamage(amount: number, source?: DamageSource): boolean {
     if (amount <= 0 || !this.canBeHarmed) return false;
     const scaledAmount = this.incomingDamage(amount, source);
-    // Only a swung, thrown or bitten attack can be dodged. Status ticks, your own
-    // dynamite, standing damage fields and the doomsday clock all land regardless.
-    if (source?.kind === 'mob' && source.undodgeable !== true && this.rollDodge()) {
+    if (isDodgeableSource(source) && this.rollDodge()) {
       this.onDodged();
       return false;
     }
@@ -1049,10 +1067,23 @@ export abstract class Player {
     if (this.potionCooldownFrames > 0) return false;
     if (!this.canAct) return false;
     if (!consume()) return false;
-    this.hp = Math.min(this.maxHp, this.hp + Math.round(this.maxHp * POTION_HEAL_FRACTION));
+    this.healByFraction(POTION_HEAL_FRACTION);
     this.potionCooldownFrames = this.computePotionCooldown();
     this.recordSwallowed();
     return true;
+  }
+
+  /**
+   * Restores `fraction` of max HP, capped at max. The one heal every consumable
+   * goes through, so a potion and a meal that heal the same fraction heal the
+   * same amount.
+   *
+   * @returns the HP actually restored.
+   */
+  healByFraction(fraction: number): number {
+    const before = this.hp;
+    this.hp = Math.min(this.maxHp, this.hp + Math.round(this.maxHp * fraction));
+    return this.hp - before;
   }
 
   /** Total XP required to advance from the current level to the next. */
@@ -1687,7 +1718,9 @@ export abstract class Player {
     // on screen are neither hurt nor afflicted, and a town crowd would otherwise
     // allocate a layer array per citizen per frame to discover it is empty.
     const needsComposite =
-      (this.wearsStatusPaint && this.statusEffects.length > 0) || this.hitFlashProgress() > 0;
+      (this.wearsStatusPaint && this.statusEffects.length > 0) ||
+      this.hitFlashProgress() > 0 ||
+      this.allegianceRim !== null;
     const layers = needsComposite ? this.silhouetteLayers(sx, sy, tileSize) : [];
 
     if (layers.length === 0) {
@@ -1745,7 +1778,17 @@ export abstract class Player {
       : [];
     const flash = hitFlashLayer(this.hitFlashProgress());
     if (flash !== null) layers.push(flash);
+    const rim = this.allegianceRim;
+    if (rim !== null) layers.push(rim);
     return layers;
+  }
+
+  /**
+   * An outline this body wears to say whose side it is on, or null for none —
+   * a converted enemy's soul-green rim, so it never reads as one still to fight.
+   */
+  protected get allegianceRim(): SilhouetteLayer | null {
+    return null;
   }
 
   /**

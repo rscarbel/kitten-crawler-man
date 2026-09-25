@@ -57,4 +57,8 @@ export abstract class InertBossRoomDressing implements BossRoomDressing {
   tryInteract(_player: HumanPlayer | CatPlayer): boolean {
     return false;
   }
+
+  wouldInteract(_player: HumanPlayer | CatPlayer): boolean {
+    return false;
+  }
 }

@@ -445,7 +445,9 @@ function countMatches(source: string, pattern: RegExp): number {
 
 function checkSpawnSites(): void {
   section('Every spawn site that levels a mob also rolls its traits');
-  const levelCall = /\b\w+\.applyMobLevel\(/g;
+  // `super.applyMobLevel(` is an override handing on to the base — part of how
+  // a class levels itself, like Mob.ts's own definition — not a spawn site.
+  const levelCall = /\b(?!super\b)\w+\.applyMobLevel\(/g;
   const spawnCall = /\bapplySpawnDifficulty\(\s*\w/g;
   const shortfalls: string[] = [];
   let levelledFiles = 0;

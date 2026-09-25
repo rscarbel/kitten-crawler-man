@@ -31,14 +31,11 @@ import { drawGroundTile } from './groundTiles';
 import { drawKrakarenLabFloor } from './bossRooms/krakarenTiles';
 import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';
-import {
-  drawHollowPlankFloorTile,
-  drawHollowThresholdTile,
-  drawHollowDecalTile,
-  drawPastureGrassTile,
-  drawCropFieldTile,
-} from './hollowVillageTiles';
-import { drawHollowPalisadeGapTile } from './hollowWallTiles';
+import { drawHollowDecalTile } from './hollowVillageTiles';
+import { drawHollowThresholdSill, hollowThresholdPalette } from './hollowWallTiles';
+import { drawHollowPalisadeGapTile } from './hollowPalisadeTiles';
+import { OVERWORLD_GROUND } from '../town/groundMaterials';
+import { drawCropRowOverlay } from './cropRowTiles';
 
 const GRATE_BASE_FILL_FRACTION = 0.06;
 const GRATE_GAP_DIVISIONS = 6;
@@ -831,31 +828,34 @@ export function drawSpecialFloorTile(
       break;
     }
 
-    // Briar Hollow ground, walled off in its own file until its real art
-    // lands. Flat colour blocks, no wall shadow: nothing here abuts a solid
-    // tile the way a dungeon corridor does.
+    // Briar Hollow ground. No wall shadow: nothing here abuts a solid tile the
+    // way a dungeon corridor does.
     case HOLLOW_PLANK_FLOOR: {
-      drawHollowPlankFloorTile(ctx, sx, sy, ts);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
       break;
     }
     case HOLLOW_THRESHOLD: {
-      drawHollowThresholdTile(ctx, sx, sy, ts);
+      drawGroundTile(ctx, hollowThresholdPalette(structure, tx, ty), structure, sx, sy, ts, tx, ty);
+      drawHollowThresholdSill(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
     case HOLLOW_DECAL: {
-      drawHollowDecalTile(ctx, sx, sy, ts);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawHollowDecalTile(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
     case HOLLOW_PALISADE_GAP: {
-      drawHollowPalisadeGapTile(ctx, sx, sy, ts);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawHollowPalisadeGapTile(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
     case PASTURE_GRASS: {
-      drawPastureGrassTile(ctx, sx, sy, ts);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
       break;
     }
     case CROP_FIELD: {
-      drawCropFieldTile(ctx, sx, sy, ts);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawCropRowOverlay(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
 

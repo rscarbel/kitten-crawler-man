@@ -317,14 +317,20 @@ export class Troglodyte extends Mob {
             const dot = (dx / dist) * this.facingX + (dy / dist) * this.facingY;
             if (dot < TONGUE_CONE_MIN_DOT) continue;
 
-            if (this.spells?.isPointInsideShell(t.x + ts * TILE_CENTER, t.y + ts * TILE_CENTER)) {
+            // The party's shell turns aside an enemy's tongue, never a turned ally's.
+            const shelled =
+              !this.isConverted &&
+              this.spells?.isPointInsideShell(t.x + ts * TILE_CENTER, t.y + ts * TILE_CENTER) ===
+                true;
+            if (shelled && this.spells !== null) {
               this.spells.addBlockXp(TONGUE_BLOCK_XP);
               continue;
             }
 
             const connected = this.dealRangedDamage(t, TONGUE_DAMAGE);
             if (connected && Math.random() < POISON_CHANCE) {
-              t.applyStatus(makePoison());
+              // A turned ally's poison is its own blow, so a kill it finishes is credited.
+              t.applyStatus(makePoison(this.isConverted ? this : null));
             }
           }
         }

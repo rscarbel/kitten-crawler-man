@@ -145,6 +145,12 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
   ],
 };
 
+/** A tool as it is drawn in someone's hands while they work: which kind, at which tier. */
+export interface WorkingTool {
+  readonly kind: ToolKind;
+  readonly tier: ToolTier;
+}
+
 /** Looks up a tier's data by kind and tier index. */
 export function toolTierDef(kind: ToolKind, tier: ToolTier): ToolTierDef {
   return TOOL_TIERS[kind][tier];
@@ -170,13 +176,13 @@ export const TOOL_TIER_LOOKS: Record<ToolTier, ToolTierLook> = {
     hafColor: '#7a5a3a',
   },
   1: {
-    headColor: '#3d4a5c',
-    edgeColor: '#dde6ef',
+    headColor: '#4f7fb3',
+    edgeColor: '#eaf3ff',
     hafColor: '#6b4a30',
   },
   2: {
-    headColor: '#4a4c50',
-    edgeColor: '#c7cbd0',
+    headColor: '#6a5a4c',
+    edgeColor: '#e6d2b0',
     hafColor: '#79542f',
     longHaft: true,
   },

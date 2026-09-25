@@ -378,14 +378,22 @@ export class MiniMapSystem implements GameSystem {
     halfTiles: number,
   ): void {
     if (!expanded) return;
-    const districts = this.gameMap.townPlan?.districts;
-    if (districts === undefined) return;
+    // Briar Hollow's labels are read beside the town's rather than folded into
+    // `townPlan.districts`: that list is the town's own, and the village is a
+    // separate place with its own record.
+    const labels: Array<{ readonly name: string; readonly tile: { x: number; y: number } }> = [];
+    for (const district of this.gameMap.townPlan?.districts ?? []) {
+      labels.push({ name: district.name, tile: district.label });
+    }
+    for (const district of this.gameMap.briarHollow?.districts ?? []) {
+      if (district.label !== null) labels.push({ name: district.label, tile: district.labelTile });
+    }
     const mapSize = this.gameMap.structure.length;
-    for (const district of districts) {
-      if (!this.fogOfWar[district.label.y * mapSize + district.label.x]) continue;
-      drawText(ctx, district.name, {
-        x: mmX + (district.label.x - viewCenterTX + halfTiles) * pxPerTile,
-        y: mmY + (district.label.y - viewCenterTY + halfTiles) * pxPerTile,
+    for (const label of labels) {
+      if (!this.fogOfWar[label.tile.y * mapSize + label.tile.x]) continue;
+      drawText(ctx, label.name, {
+        x: mmX + (label.tile.x - viewCenterTX + halfTiles) * pxPerTile,
+        y: mmY + (label.tile.y - viewCenterTY + halfTiles) * pxPerTile,
         size: DISTRICT_LABEL_FONT_SIZE,
         color: DISTRICT_LABEL_COLOR,
         outline: DISTRICT_LABEL_OUTLINE_COLOR,

@@ -92,6 +92,14 @@ export type PricedPurchaseHandler = (option: PricedOption, player: Player) => Pr
 /** Builds the current menu. Re-run after every purchase so availability stays honest. */
 export type PricedMenuBuilder = () => PricedMenu;
 
+/**
+ * The seller's answer to a Buy the panel refused, shown in place of the bark;
+ * null leaves the bark as it was. Told which row, because a refusal can mean
+ * different things on different rows — too dear on one, nothing better to
+ * sell on another.
+ */
+export type PricedBlockedLine = (option: PricedOption, player: Player) => string | null;
+
 const PANEL_WIDTH = 400;
 /** Gap kept between the panel and every screen edge. */
 const SCREEN_MARGIN = 8;
@@ -115,8 +123,20 @@ const HEADER_HEIGHT = 58;
 const ROW_HEIGHT = 52;
 const FOOTER_HEIGHT = 52;
 const OPTION_NAME_SIZE = 13;
+/**
+ * Pitch between wrapped label lines, and the gap kept between the label and
+ * the description that follows it (matching the old fixed label-to-desc gap
+ * so a single-line label lands exactly where it always has).
+ */
+const OPTION_NAME_LINE_HEIGHT = 16;
 const OPTION_DESC_SIZE = 10;
-const OPTION_DESC_GAP = 16;
+/**
+ * Pitch between wrapped description lines — the size `drawText` picks for this
+ * font on its own, stated so the row-height measure and the drawing agree.
+ */
+const OPTION_DESC_LINE_HEIGHT = 14;
+/** Space a grown row keeps under its last description line before the next row's name. */
+const ROW_BOTTOM_GAP = 8;
 const PRICE_SIZE = 12;
 const BYLINE_SIZE = 11;
 const BYLINE_GAP = 5;
@@ -166,6 +186,44 @@ function optionTextMaxWidth(contentWidth: number): number {
   return contentWidth - BUY_BTN_WIDTH - PRICE_BTN_GAP * 2;
 }
 
+/**
+ * How many lines a row's label wraps to within the text column left of the
+ * price and Buy button — a long tier name (e.g. "Ratkin Forge Axe") must wrap
+ * there rather than run under the button.
+ */
+function labelLineCount(
+  ctx: CanvasRenderingContext2D,
+  option: PricedOption,
+  contentWidth: number,
+): number {
+  return measureTextBox(ctx, option.label, {
+    size: OPTION_NAME_SIZE,
+    bold: true,
+    width: optionTextMaxWidth(contentWidth),
+    lineHeight: OPTION_NAME_LINE_HEIGHT,
+  }).lineCount;
+}
+
+/**
+ * A row's height: the standard pitch, grown for a label or description that
+ * wraps past the lines the pitch has room for, so a long one never runs into
+ * the row below.
+ */
+function rowHeightFor(
+  ctx: CanvasRenderingContext2D,
+  option: PricedOption,
+  contentWidth: number,
+): number {
+  const descTop = labelLineCount(ctx, option, contentWidth) * OPTION_NAME_LINE_HEIGHT;
+  const descLines = measureTextBox(ctx, option.desc, {
+    size: OPTION_DESC_SIZE,
+    width: optionTextMaxWidth(contentWidth),
+    lineHeight: OPTION_DESC_LINE_HEIGHT,
+  }).lineCount;
+  const descBottom = descTop + descLines * OPTION_DESC_LINE_HEIGHT;
+  return Math.max(ROW_HEIGHT, descBottom + ROW_BOTTOM_GAP);
+}
+
 function closeLabel(questRowIsPrimary: boolean): string {
   if (platform.isMobile) return CLOSE_LABEL_MOBILE;
   return questRowIsPrimary ? CLOSE_LABEL_ESC_ONLY : CLOSE_LABEL_DESKTOP;
@@ -176,6 +234,10 @@ export class PricedMenuPanel {
   private buildMenu: PricedMenuBuilder | null = null;
   private onPurchase: PricedPurchaseHandler | null = null;
   private onBlocked: (() => void) | null = null;
+  private blockedLine: PricedBlockedLine | null = null;
+  /** Frames a Buy stays refused after a sale; 0 for a menu that takes one sale per press. */
+  private rebuyGuardFrames = 0;
+  private rebuyGuardLeft = 0;
   private feedback = '';
   private feedbackTimer = 0;
   private buyButtons: ButtonResult[] = [];
@@ -196,16 +258,26 @@ export class PricedMenuPanel {
    * @param onBlocked Called when the player taps a Buy button the panel refuses
    *   — unaffordable or unavailable. A disabled button is otherwise silent, so
    *   callers that want an audible "no" pass one; the rest stay quiet.
+   * @param blockedLine What the seller says to that refusal, if anything.
+   * @param rebuyGuardFrames For a menu whose row becomes a different, dearer
+   *   product the moment it sells (a tool's next tier), how long after a sale
+   *   a further Buy is ignored — so a double-click buys once, not twice up the
+   *   ladder. Omitted, every press buys.
    */
   open(
     buildMenu: PricedMenuBuilder,
     onPurchase: PricedPurchaseHandler,
     onBlocked?: () => void,
+    blockedLine?: PricedBlockedLine,
+    rebuyGuardFrames = 0,
   ): void {
+    this.rebuyGuardFrames = rebuyGuardFrames;
+    this.rebuyGuardLeft = 0;
     this.buildMenu = buildMenu;
     this.menu = buildMenu();
     this.onPurchase = onPurchase;
     this.onBlocked = onBlocked ?? null;
+    this.blockedLine = blockedLine ?? null;
     this.feedbackTimer = 0;
     this.scrollY = 0;
     // Every priced menu shares one focus context, so a selection the player left
@@ -220,6 +292,7 @@ export class PricedMenuPanel {
     this.buildMenu = null;
     this.onPurchase = null;
     this.onBlocked = null;
+    this.blockedLine = null;
     this.buyButtons = [];
     this.closeButton = null;
     this.modalContains = null;
@@ -229,6 +302,7 @@ export class PricedMenuPanel {
 
   update(): void {
     if (this.feedbackTimer > 0) this.feedbackTimer--;
+    if (this.rebuyGuardLeft > 0) this.rebuyGuardLeft--;
   }
 
   render(ctx: CanvasRenderingContext2D, active: Player): void {
@@ -252,9 +326,9 @@ export class PricedMenuPanel {
     setButtonPointerSpace(fitScale, this.fit.pivotX, this.fit.pivotY);
     const panelWidth = PANEL_WIDTH;
     // Measured before the panel is drawn because the panel's height depends on
-    // it: a resident's own bark is a full sentence in their voice, far longer
-    // than the one line the header used to assume, and the wrapped remainder
-    // has to be paid for in header height or it lands on the first row.
+    // it: a resident's own bark is a full sentence in their voice, often
+    // several lines, and the wrapped remainder has to be paid for in header
+    // height or it lands on the first row.
     const contentWidth = panelWidth - PANEL_PADDING * 2;
     const barkLineCount = measureTextBox(ctx, this.feedbackLine(menu), {
       size: BARK_SIZE,
@@ -267,7 +341,8 @@ export class PricedMenuPanel {
     // long name and a long title would silently overlap.
     const headerHeight =
       HEADER_HEIGHT + extraBarkHeight + (menu.byline === undefined ? 0 : BYLINE_LINE_HEIGHT);
-    const rowsHeight = menu.options.length * ROW_HEIGHT;
+    const rowHeights = menu.options.map((option) => rowHeightFor(ctx, option, contentWidth));
+    const rowsHeight = rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0);
     const height = Math.min(headerHeight + rowsHeight + FOOTER_HEIGHT, maxPanelHeight);
     const visibleRowsHeight = height - headerHeight - FOOTER_HEIGHT;
     this.maxScrollY = Math.max(0, rowsHeight - visibleRowsHeight);
@@ -351,8 +426,9 @@ export class PricedMenuPanel {
         contentRight,
         contentWidth,
         i === questRowIndex,
+        rowHeights[i],
       );
-      rowY += ROW_HEIGHT;
+      rowY += rowHeights[i];
     }
     ctx.restore();
     drawScrollbar(ctx, {
@@ -439,6 +515,7 @@ export class PricedMenuPanel {
     right: number,
     contentWidth: number,
     isPrimaryBuy: boolean,
+    rowHeight: number,
   ): void {
     const isQuestRow = option.isQuestItem === true;
     if (isQuestRow) {
@@ -454,19 +531,23 @@ export class PricedMenuPanel {
       });
     }
 
+    const labelLines = labelLineCount(ctx, option, contentWidth);
     drawText(ctx, option.label, {
       x: left,
       y: rowY,
       size: OPTION_NAME_SIZE,
       bold: true,
       color: isQuestRow ? QUEST_MARKER_GOLD : '#e2e8f0',
+      width: optionTextMaxWidth(contentWidth),
+      lineHeight: OPTION_NAME_LINE_HEIGHT,
     });
     drawText(ctx, option.desc, {
       x: left,
-      y: rowY + OPTION_DESC_GAP,
+      y: rowY + labelLines * OPTION_NAME_LINE_HEIGHT,
       size: OPTION_DESC_SIZE,
       color: '#94a3b8',
       width: optionTextMaxWidth(contentWidth),
+      lineHeight: OPTION_DESC_LINE_HEIGHT,
     });
 
     const canAfford = active.coins >= option.price;
@@ -502,7 +583,7 @@ export class PricedMenuPanel {
     // `handleClick` ignores a click outside the band, so a focus-ring accept
     // or a registered click sound on a clipped row would otherwise fall
     // through to closing the menu.
-    const isReachable = rowY >= this.rowsTop && rowY + ROW_HEIGHT <= this.rowsBottom;
+    const isReachable = rowY >= this.rowsTop && rowY + rowHeight <= this.rowsBottom;
     this.buyButtons.push(
       drawButton(ctx, {
         x: right,
@@ -570,18 +651,47 @@ export class PricedMenuPanel {
     return true;
   }
 
+  /**
+   * Presses the Buy button of the row keyed `key`, exactly as a click on it
+   * would — refused, charged or not by the same rules. For callers with no
+   * pointer: headless checks, and anything that buys on the player's behalf.
+   * Returns whether such a row was on the menu.
+   */
+  pressBuy(key: string, active: Player): boolean {
+    const option = this.menu?.options.find((candidate) => candidate.key === key);
+    if (option === undefined) return false;
+    this.tryBuy(option, active);
+    return true;
+  }
+
+  /** The rows on offer right now, or none while closed. */
+  get options(): ReadonlyArray<PricedOption> {
+    return this.menu?.options ?? [];
+  }
+
+  /** The line the header shows right now: the last purchase's feedback while it lasts, else the bark. */
+  get currentLine(): string {
+    const menu = this.menu;
+    return menu === null ? '' : this.feedbackLine(menu);
+  }
+
   private tryBuy(option: PricedOption, active: Player): void {
     const purchase = this.onPurchase;
-    if (purchase === null) return;
+    if (purchase === null || this.rebuyGuardLeft > 0) return;
     if (option.unavailable !== undefined || active.coins < option.price) {
       this.onBlocked?.();
+      const refusal = this.blockedLine?.(option, active) ?? null;
+      if (refusal !== null) this.showFeedback(refusal);
       return;
     }
     // Deduct only on success: a stall handler can refuse a sale it can't deliver
     // (no room in the inventory), and the player must not be charged for goods
     // they never receive.
     const result = purchase(option, active);
-    if (result.ok) active.coins -= option.price;
+    if (result.ok) {
+      active.coins -= option.price;
+      this.rebuyGuardLeft = this.rebuyGuardFrames;
+    }
     // A purchase can change what's still on offer — the last tattoo, the last
     // wound worth healing, the last unit in stock — so the rows are rebuilt
     // before the next frame draws.

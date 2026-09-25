@@ -126,6 +126,7 @@ function describeSource(source: DamageSource | undefined): string {
     case 'status':
     case 'dynamite':
     case 'doomsday':
+    case 'siege':
       return source.kind;
   }
 }

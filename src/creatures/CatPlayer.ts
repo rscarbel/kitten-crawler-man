@@ -28,6 +28,8 @@ import type { AbilityManager } from '../core/AbilityManager';
 import { getMagicMissileStats } from '../abilities/magicMissile';
 import { TILE_SIZE } from '../core/constants';
 import type { CrawlerKind } from '../core/SkillManager';
+import type { WorkingTool } from '../core/toolTiers';
+import { drawToolAt } from '../sprites/toolOverlaySprite';
 import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/PlayerSnapshot';
 
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
@@ -236,6 +238,25 @@ export class CatPlayer extends Player {
     this.animator.play('dance');
   }
 
+  /**
+   * A contented moment beside an animal she has just greeted: she turns to it
+   * and washes a paw. She has no nuzzle row, and a paw wash is the most
+   * pleased-with-herself thing she already does. Refused on the move and over
+   * any other animation; turning her is safe because a greeting is only ever
+   * offered with no enemy in reach.
+   */
+  playContentGesture(towardX: number, towardY: number): void {
+    if (this.isMoving || this.isKnockedOut || this.animator.current !== null) return;
+    const dx = towardX - this.x;
+    const dy = towardY - this.y;
+    const length = Math.hypot(dx, dy);
+    if (length > 0) {
+      this.facingX = dx / length;
+      this.facingY = dy / length;
+    }
+    this.animator.play('groom_paw');
+  }
+
   getMeleeDamage(): number {
     return bareClawDamage(this.strength) + this.statusMeleeDamageBonus;
   }
@@ -352,6 +373,68 @@ export class CatPlayer extends Player {
   get isMissileSlotted(): boolean {
     return this.inventory.actionBar.slots.some((slot) => slot?.abilityId === 'magic_missile');
   }
+
+  /**
+   * The axe or pickaxe she is drawn working with while she harvests, or null.
+   * She has no tool row of her own: her swipe plays on a work cadence and the
+   * tool is drawn at her paw over it.
+   */
+  private workingTool: WorkingTool | null = null;
+
+  setWorkingTool(tool: WorkingTool | null): void {
+    this.workingTool = tool;
+  }
+
+  /**
+   * One swing of work at a tree or rock — the swipe's picture without its
+   * blow, so it never reads as an attack to anything that asks `isSwinging`.
+   */
+  playWorkSwing(): void {
+    this.animator.play('swipe');
+  }
+
+  /**
+   * The tool at her paw, swung with her swipe: raised while the swipe winds
+   * up, brought down onto the work as it lands, and held raised between.
+   * Head-on and from behind the paw is in front of her chest, so the tool is
+   * drawn over the middle of her; in profile it is out past her shoulder.
+   */
+  private drawWorkingTool(ctx: CanvasRenderingContext2D, sx: number, sy: number, s: number): void {
+    const tool = this.workingTool;
+    if (tool === null) return;
+    const swipe = this.animator.current;
+    const progress = swipe?.action === 'swipe' ? swipe.progress : 0;
+    const swing =
+      CatPlayer.WORK_TOOL_RAISED_ANGLE +
+      (CatPlayer.WORK_TOOL_STRUCK_ANGLE - CatPlayer.WORK_TOOL_RAISED_ANGLE) *
+        Math.sin(progress * Math.PI);
+    const profile = Math.abs(this.facingX) >= Math.abs(this.facingY);
+    const facesLeft = this.facingX < 0;
+    const reach = profile ? CatPlayer.WORK_PAW_REACH : 0;
+    const gripX = sx + s * (CatPlayer.TILE_CENTER_OFFSET + (facesLeft ? -reach : reach));
+    const gripY = sy + s * CatPlayer.WORK_PAW_DOWN;
+    const haftAngle = facesLeft ? Math.PI - swing : swing;
+    drawToolAt(
+      ctx,
+      tool.kind,
+      tool.tier,
+      gripX,
+      gripY,
+      haftAngle,
+      s,
+      facesLeft,
+      CatPlayer.WORK_TOOL_LENGTH_SHARE,
+    );
+  }
+
+  /** Where her working paw is, in tiles: out from her centre in profile, and down from her tile's top. */
+  private static readonly WORK_PAW_REACH = 0.26;
+  private static readonly WORK_PAW_DOWN = 0.72;
+  /** The tool's angle, screen radians as if facing +X, held raised and at the bottom of the swing. */
+  private static readonly WORK_TOOL_RAISED_ANGLE = -2.0;
+  private static readonly WORK_TOOL_STRUCK_ANGLE = 0.45;
+  /** She is half Carl's height, so she swings a shortened grip on the same tool. */
+  private static readonly WORK_TOOL_LENGTH_SHARE = 0.7;
 
   /** Primary Space action: claw swipe (melee). */
   triggerAttack() {
@@ -630,6 +713,7 @@ export class CatPlayer extends Player {
       isKnockedOut: this.isKnockedOut,
       oneShot: this.animator.current,
     });
+    if (this.workingTool !== null) this.drawWorkingTool(ctx, sx, sy, s);
     drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
 
     this.renderHealthBar(ctx, sx, sy - CatPlayer.HEALTH_BAR_RAISE);

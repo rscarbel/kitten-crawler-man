@@ -105,7 +105,9 @@ import {
 } from './DungeonGenerator';
 import { generateOverworld, type BuildingEntry } from './OverworldGenerator';
 import type { CampSite } from './overworld/camps';
-import type { BriarHollowSite } from './overworld/briarHollowSite';
+import type { BriarHollowSite, VillageDistrictId } from './overworld/briarHollowSite';
+import { registerBriarHollowSite } from './tiles/hollowSiteRegistry';
+import { hollowPropDrawsAt } from './tiles/hollowVillageTiles';
 import type { BuildingKind, TownPlan } from './town/townPlan';
 import {
   getBlockedTileOffsets,
@@ -413,6 +415,21 @@ const BLOCK_STAIRWELL = 8;
  * mandatory pass-through.
  */
 const BLOCK_QUEST_EXIT = 16;
+/**
+ * Tile is under a player-built structure's footprint (a trebuchet). Blocking
+ * unconditionally, but kept apart from `BLOCK_PERMANENT` because the structure
+ * can be dismantled, and its owner re-derives the whole set from saved village
+ * state rather than accumulating it.
+ */
+const BLOCK_STRUCTURE = 32;
+/**
+ * Tile turns away hostile mobs only — the village gate. `isWalkable` ignores it
+ * so crawlers, companions, allies and livestock walk straight through, and only
+ * `isWalkableForHostile` (the test every hostile's step and A* use) honours it.
+ * A flag rather than a tile type for the same reason as `BLOCK_QUEST_EXIT`: the
+ * offline reachability validators flood the raw grid.
+ */
+const BLOCK_HOSTILE_ONLY = 64;
 
 /**
  * What the defense quest's onward doorway is doing.
@@ -434,7 +451,7 @@ function questExitDoorTileType(state: QuestExitDoorState, generatedType: number)
   return generatedType;
 }
 /** Bits that block movement regardless of game state. */
-const BLOCK_UNCONDITIONAL = BLOCK_EXTRA | BLOCK_PERMANENT;
+const BLOCK_UNCONDITIONAL = BLOCK_EXTRA | BLOCK_PERMANENT | BLOCK_STRUCTURE;
 
 // ── A* pathfinding constants ──────────────────────────────────────────────────
 /** Movement cost for a diagonal step (√2 approximated to 3 decimal places). */
@@ -620,11 +637,13 @@ export class GameMap {
    */
   camps: ReadonlyArray<CampSite> = [];
   /**
-   * Briar Hollow's site on the overworld, when the village has been generated
-   * onto this map. Null everywhere else, and on every overworld map until its
-   * generator lands — `BriarHollowKit` is built only when this is non-null.
+   * Briar Hollow's site on the overworld: the ratkin village's geometry,
+   * districts and anchors. Null on every other map. `BriarHollowKit` is built
+   * only when this is non-null.
    */
   briarHollow: BriarHollowSite | null = null;
+  /** Palisade tiles by `tileCoordKey`, for `isNearPalisade`. Empty off the overworld. */
+  private briarHollowPalisadeKeys: ReadonlySet<number> = new Set();
   /**
    * Radius (in tiles, from map centre) inside which the overworld town is
    * considered safe — no hostile ambient spawns, and hostile mobs won't
@@ -668,6 +687,8 @@ export class GameMap {
   private readonly arenaDoorTileSet = new Set<number>();
   private readonly permanentBlockedTiles = new Set<number>();
   private readonly stairwellBlockedSet = new Set<number>();
+  private readonly structureBlockedSet = new Set<number>();
+  private readonly hostileOnlyBlockedSet = new Set<number>();
 
   /**
    * Per-tile block flags (`BLOCK_*`) for the current structure, indexed
@@ -774,7 +795,18 @@ export class GameMap {
     this.circusRadiusTiles = data.circusRadiusTiles;
     this.bountySites = data.bountySites;
     this.camps = data.camps;
+    this.briarHollow = data.briarHollow;
+    this.briarHollowPalisadeKeys = new Set(
+      data.briarHollow.palisadePath.map((tile) => tileCoordKey(tile.x, tile.y)),
+    );
     this.doomsdayEscapeTile = data.doomsdayEscapeTile;
+    // Recorded now and applied by `rebuildBlockedMasks` once the grid is
+    // installed: the gate never changes, so it belongs to the map itself and
+    // holds even where no village system is running.
+    for (const tile of data.briarHollow.gate.tiles) {
+      this.hostileOnlyBlockedSet.add(tileCoordKey(tile.x, tile.y));
+    }
+    registerBriarHollowSite(data.grid, data.briarHollow);
     return data.grid;
   }
 
@@ -2456,8 +2488,9 @@ export class GameMap {
     goalX: number,
     goalY: number,
     maxDistanceTiles = MOB_MAX_PATH_DISTANCE_TILES,
+    forHostile = false,
   ): Array<{ x: number; y: number }> {
-    if (!this.isWalkable(goalX, goalY)) return [];
+    if (!this.isWalkableFor(goalX, goalY, forHostile)) return [];
     if (startX === goalX && startY === goalY) return [{ x: goalX, y: goalY }];
 
     const goalDistanceTiles = Math.max(Math.abs(goalX - startX), Math.abs(goalY - startY));
@@ -2501,7 +2534,7 @@ export class GameMap {
 
       for (let i = 0; i < CARDINAL_STEPS.length; i++) {
         const step = CARDINAL_STEPS[i];
-        this.cardinalWalkable[i] = this.isWalkable(cx + step.dx, cy + step.dy);
+        this.cardinalWalkable[i] = this.isWalkableFor(cx + step.dx, cy + step.dy, forHostile);
         if (!this.cardinalWalkable[i]) continue;
         this.relaxNeighbor(
           cx + step.dx,
@@ -2521,7 +2554,7 @@ export class GameMap {
         if (!this.cardinalWalkable[diagonal.vertical]) continue;
         const nx = cx + diagonal.dx;
         const ny = cy + diagonal.dy;
-        if (!this.isWalkable(nx, ny)) continue;
+        if (!this.isWalkableFor(nx, ny, forHostile)) continue;
         this.relaxNeighbor(
           nx,
           ny,
@@ -2628,6 +2661,8 @@ export class GameMap {
     this.applyBlockKeySet(this.arenaDoorTileSet, BLOCK_ARENA_DOOR);
     this.applyBlockKeySet(this.questExitDoorTiles.keys(), BLOCK_QUEST_EXIT);
     this.applyBlockKeySet(this.stairwellBlockedSet, BLOCK_STAIRWELL);
+    this.applyBlockKeySet(this.structureBlockedSet, BLOCK_STRUCTURE);
+    this.applyBlockKeySet(this.hostileOnlyBlockedSet, BLOCK_HOSTILE_ONLY);
   }
 
   private applyBlockKeySet(keys: Iterable<number>, flag: number): void {
@@ -2656,6 +2691,40 @@ export class GameMap {
     return tileX >= 0 && tileY >= 0 && tileX < this.maskWidth && tileY < this.maskHeight;
   }
 
+  /** Reserves a tile under a player-built structure. Undone by {@link unblockStructureTile}. */
+  blockStructureTile(tileX: number, tileY: number): void {
+    this.structureBlockedSet.add(tileCoordKey(tileX, tileY));
+    this.addBlockFlag(tileX, tileY, BLOCK_STRUCTURE);
+  }
+
+  unblockStructureTile(tileX: number, tileY: number): void {
+    this.structureBlockedSet.delete(tileCoordKey(tileX, tileY));
+    this.removeBlockFlag(tileX, tileY, BLOCK_STRUCTURE);
+  }
+
+  /** Whether a structure's footprint reserves this tile. */
+  isStructureTile(tileX: number, tileY: number): boolean {
+    if (!this.isInsideGrid(tileX, tileY)) return false;
+    return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_STRUCTURE) !== 0;
+  }
+
+  /** Every structure-reserved tile, as `tileCoordKey` values. */
+  structureTileKeys(): ReadonlySet<number> {
+    return this.structureBlockedSet;
+  }
+
+  /** Turns a tile into (or back out of) one only hostile mobs cannot enter. */
+  setHostileOnlyBlock(tileX: number, tileY: number, on: boolean): void {
+    const key = tileCoordKey(tileX, tileY);
+    if (on) {
+      this.hostileOnlyBlockedSet.add(key);
+      this.addBlockFlag(tileX, tileY, BLOCK_HOSTILE_ONLY);
+      return;
+    }
+    this.hostileOnlyBlockedSet.delete(key);
+    this.removeBlockFlag(tileX, tileY, BLOCK_HOSTILE_ONLY);
+  }
+
   blockTilePermanently(tileX: number, tileY: number): void {
     this.permanentBlockedTiles.add(tileCoordKey(tileX, tileY));
     this.addBlockFlag(tileX, tileY, BLOCK_PERMANENT);
@@ -2675,6 +2744,7 @@ export class GameMap {
       questExitDoorState: this.questExitDoorState,
       permanentBlockedTiles: [...this.permanentBlockedTiles],
       stairwellTiles: this._stairwellTiles.map((tile) => ({ x: tile.x, y: tile.y })),
+      structureBlockedTiles: [...this.structureBlockedSet],
     };
   }
 
@@ -2703,6 +2773,13 @@ export class GameMap {
     // list. This is what re-hides the arena stairwell that `unlockArenaStairwell`
     // revealed — that method appends and has no inverse of its own.
     this.setStairwellTiles(snapshot.stairwellTiles.map((tile) => ({ x: tile.x, y: tile.y })));
+
+    for (const key of [...this.structureBlockedSet]) {
+      this.unblockStructureTile(tileKeyX(key), tileKeyY(key));
+    }
+    for (const key of snapshot.structureBlockedTiles ?? []) {
+      this.blockStructureTile(tileKeyX(key), tileKeyY(key));
+    }
   }
 
   /**
@@ -2771,6 +2848,83 @@ export class GameMap {
     );
   }
 
+  /**
+   * True when the given world-pixel position is inside Briar Hollow's palisade
+   * (its interior rectangle). Always false off the overworld.
+   *
+   * The village is deliberately **not** a safe zone: this never feeds
+   * `isInTownSafeZone`, and hostiles may follow the party in.
+   */
+  isInBriarHollow(worldX: number, worldY: number): boolean {
+    const interior = this.briarHollow?.interior;
+    if (interior === undefined) return false;
+    const tileX = Math.floor(worldX / this.tileHeight);
+    const tileY = Math.floor(worldY / this.tileHeight);
+    return (
+      tileX >= interior.x &&
+      tileY >= interior.y &&
+      tileX < interior.x + interior.w &&
+      tileY < interior.y + interior.h
+    );
+  }
+
+  /**
+   * Which Briar Hollow district the given world-pixel position is in — the
+   * first listed district whose rectangle contains it — or null outside them
+   * all, and always off the overworld.
+   */
+  briarHollowDistrictAt(worldX: number, worldY: number): VillageDistrictId | null {
+    const districts = this.briarHollow?.districts;
+    if (districts === undefined) return null;
+    const tileX = Math.floor(worldX / this.tileHeight);
+    const tileY = Math.floor(worldY / this.tileHeight);
+    for (const district of districts) {
+      const { rect } = district;
+      const inside =
+        tileX >= rect.x && tileY >= rect.y && tileX < rect.x + rect.w && tileY < rect.y + rect.h;
+      if (inside) return district.id;
+    }
+    return null;
+  }
+
+  /**
+   * True when a Briar Hollow palisade tile (not the gate) lies within `tiles`
+   * tiles of the given world-pixel position, measured centre to centre.
+   * Always false off the overworld.
+   */
+  isNearPalisade(worldX: number, worldY: number, tiles: number): boolean {
+    if (this.briarHollowPalisadeKeys.size === 0) return false;
+    const tileX = worldX / this.tileHeight;
+    const tileY = worldY / this.tileHeight;
+    const reach = Math.ceil(tiles);
+    const centreX = Math.floor(tileX);
+    const centreY = Math.floor(tileY);
+    const halfTile = 0.5;
+    for (let dy = -reach; dy <= reach; dy++) {
+      for (let dx = -reach; dx <= reach; dx++) {
+        const x = centreX + dx;
+        const y = centreY + dy;
+        if (!this.briarHollowPalisadeKeys.has(tileCoordKey(x, y))) continue;
+        if (Math.hypot(x + halfTile - tileX, y + halfTile - tileY) <= tiles) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * True when no hostile may be spawned on this tile for Briar Hollow's sake:
+   * inside its spawn exclusion (the palisade plus a margin) or its keep-out
+   * (roads, quarry, ruins). Always false off the overworld.
+   */
+  isTileInBriarHollowSpawnExclusion(tileX: number, tileY: number): boolean {
+    const site = this.briarHollow;
+    if (site === null) return false;
+    const rect = site.spawnExclusion;
+    const inRect =
+      tileX >= rect.x && tileY >= rect.y && tileX < rect.x + rect.w && tileY < rect.y + rect.h;
+    return inRect || site.keepOut.contains(tileX, tileY);
+  }
+
   /** Tile-coordinate form of {@link isInsideTownWall}. */
   isTileInsideTownWall(tileX: number, tileY: number): boolean {
     const interior = this.townPlan?.interior;
@@ -2800,6 +2954,21 @@ export class GameMap {
     if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
     if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
     return isWalkableTileType(this.structure[tileY][tileX]);
+  }
+
+  /**
+   * {@link isWalkable} for a hostile mob: the same test, plus the tiles only
+   * hostiles are turned away from (the village gate). Every hostile step and
+   * hostile A* search goes through this; line of sight and spawn checks do not.
+   */
+  isWalkableForHostile(tileX: number, tileY: number): boolean {
+    if (!this.isWalkable(tileX, tileY)) return false;
+    return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_HOSTILE_ONLY) === 0;
+  }
+
+  /** {@link isWalkableForHostile} or {@link isWalkable}, whichever the mover's side calls for. */
+  isWalkableFor(tileX: number, tileY: number, forHostile: boolean): boolean {
+    return forHostile ? this.isWalkableForHostile(tileX, tileY) : this.isWalkable(tileX, tileY);
   }
 
   /**
@@ -2875,11 +3044,18 @@ export class GameMap {
     return this.lineClearOf(x1, y1, x2, y2, this.walkBlocker);
   }
 
+  /** {@link hasWalkableLine} for a hostile mob, which the village gate also stops. */
+  hasHostileWalkableLine(x1: number, y1: number, x2: number, y2: number): boolean {
+    return this.lineClearOf(x1, y1, x2, y2, this.hostileWalkBlocker);
+  }
+
   // Held as fields so the hot sight query allocates no closure per call.
   private readonly sightBlocker = (tileX: number, tileY: number): boolean =>
     this.blocksSight(tileX, tileY);
   private readonly walkBlocker = (tileX: number, tileY: number): boolean =>
     !this.isWalkable(tileX, tileY);
+  private readonly hostileWalkBlocker = (tileX: number, tileY: number): boolean =>
+    !this.isWalkableForHostile(tileX, tileY);
 
   /**
    * Amanatides–Woo walk from one point to another, false as soon as a crossed
@@ -3103,6 +3279,14 @@ export class GameMap {
     const tile = this.structure[ty][tx];
     const type = tile.type;
     if (!DECORATION_OVERLAY_TYPES.has(type)) return null;
+    // A village prop is drawn whole from one tile of its footprint; the rest
+    // of the footprint blocks and draws nothing, so it is not sorted either.
+    if (
+      (type === HOLLOW_PROP_LOW || type === HOLLOW_PROP_TALL) &&
+      !hollowPropDrawsAt(this.structure, tx, ty)
+    ) {
+      return null;
+    }
 
     // The same reach the overlay cache sizes its canvases to, so a tile can
     // never be culled while part of its art is still on screen.
@@ -3169,4 +3353,6 @@ export interface GameMapCheckpoint {
   /** `tileCoordKey` values, so the entries survive a structure replacement. */
   permanentBlockedTiles: number[];
   stairwellTiles: ReadonlyArray<{ x: number; y: number }>;
+  /** `tileCoordKey` values of structure footprints; absent in checkpoints taken before structures existed. */
+  structureBlockedTiles?: number[];
 }

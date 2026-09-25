@@ -177,12 +177,22 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     requiredGroups: ['core'],
   },
 
-  // BriarHollowKit (src/systems/briarHollow/BriarHollowKit.ts) — village
-  // creatures aren't spawned yet, so this stays empty until one is.
+  // BriarHollowKit (src/systems/briarHollow/BriarHollowKit.ts) — the ratkin
+  // cast is painted at runtime (`RATKIN_CAST_FIGURES`), so it holds no sheet
+  // key; the kit's `RatkinCastPrewarm` warms each villager's first rows as the
+  // party nears the palisade. Civilians are not mobs, so they add no mob type;
+  // village creatures that are mobs join this entry as they are spawned.
   {
     id: 'briar_hollow',
     levelIds: LEVEL3,
-    mobTypes: [],
+    // The assault's undead are painted too — the necromancer, the three raised
+    // ratkin looks and the Grave Bull — so they need no group either; the
+    // assault warms their figures ahead of each wave (`prewarmAssaultWave`).
+    // The herd (`LivestockSystem`) is painted as well, and warms its own coats
+    // as it spawns.
+    // The militia (`SoldierSystem`) are ratkin cast figures, warmed with the
+    // rest of the cast as the party nears the palisade.
+    mobTypes: ['necromancer', 'raised_ratkin', 'grave_bull', 'cow', 'calf', 'ratkin_soldier'],
     requiredGroups: [],
   },
 

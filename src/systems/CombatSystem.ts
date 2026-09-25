@@ -86,6 +86,12 @@ function dodgesSmush(mob: Mob): boolean {
   return mob instanceof Fairy;
 }
 
+/** Anything a crawler's melee swing can knock down besides mobs, props and trees. */
+export interface MeleeStructureTarget {
+  /** Resolves the swing against the structures in reach and facing; returns whether one was struck. */
+  tryMeleeHit(attacker: Player, rangePx: number): boolean;
+}
+
 /** Shared context passed to combat resolution functions. */
 export interface CombatContext {
   human: HumanPlayer;
@@ -102,10 +108,32 @@ export interface CombatContext {
   destructibles?: DestructiblePropSystem;
   /** Absent everywhere but the overworld, which is the only map that grows trees. */
   trees?: TreeSystem;
+  /** Built structures a crawler's swing can reach — in practice, a village fence it flattens. */
+  structures?: MeleeStructureTarget;
   /** Absent in scenes that draw no world effects (e.g. building interiors). */
   smushFx?: Pick<SmushEffectSystem, 'spawn'>;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
+}
+
+/**
+ * What one of this crawler's basic melee strikes deals: the same number the
+ * swing below lands, Carl's Powerful Strike roll included. Shared so anything
+ * that strikes "as the crawler would" — a spiked snare — cannot drift from
+ * the real blow when the formula is retuned.
+ *
+ * Rolled per call rather than inside `getMeleeDamage`, which stays
+ * deterministic: the companion AI reads it to budget its own damage, and a
+ * random doubling would make that estimate flap frame to frame.
+ */
+export function crawlerMeleeStrikeDamage(crawler: HumanPlayer | CatPlayer): number {
+  const damage = crawler.getMeleeDamage();
+  if (crawler instanceof CatPlayer) return damage;
+  const powerfulStrikeChance =
+    POWERFUL_STRIKE_CHANCE_PER_LEVEL * crawler.effectiveSkillLevel('powerful_strike');
+  const strikeMultiplier =
+    Math.random() < powerfulStrikeChance ? POWERFUL_STRIKE_DAMAGE_MULTIPLIER : 1;
+  return Math.round(damage * strikeMultiplier);
 }
 
 export function resolvePlayerAttacks(ctx: CombatContext): void {
@@ -143,14 +171,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       if (!human.zeroDamage) {
-        // Rolled here rather than inside `getMeleeDamage` so that stays
-        // deterministic: the companion AI reads it to budget its own DPS, and a
-        // random doubling would make that estimate flap frame to frame.
-        const powerfulStrikeChance =
-          POWERFUL_STRIKE_CHANCE_PER_LEVEL * human.effectiveSkillLevel('powerful_strike');
-        const strikeMultiplier =
-          Math.random() < powerfulStrikeChance ? POWERFUL_STRIKE_DAMAGE_MULTIPLIER : 1;
-        mob.takeDamageFrom(Math.round(damage * strikeMultiplier), human, 'melee');
+        mob.takeDamageFrom(crawlerMeleeStrikeDamage(human), human, 'melee');
         ctx.hitLanded = true;
         humanHit = true;
         // A guarded blow never touched the mob, so nothing rides in on it.
@@ -180,6 +201,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     if (!human.zeroDamage) {
       humanHit = (ctx.destructibles?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
       humanHit = (ctx.trees?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
+      humanHit = (ctx.structures?.tryMeleeHit(human, range) ?? false) || humanHit;
     }
     ctx.bus.emit('humanMeleeSwing', { hit: humanHit });
   }
@@ -203,7 +225,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
       if (!gameMap.hasLineOfSight(cc.x, cc.y, mc.x, mc.y)) continue;
       if (!cat.zeroDamage) {
-        mob.takeDamageFrom(damage, cat, 'melee');
+        mob.takeDamageFrom(crawlerMeleeStrikeDamage(cat), cat, 'melee');
         ctx.hitLanded = true;
         catHit = true;
         if (
@@ -218,6 +240,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     if (!cat.zeroDamage) {
       catHit = (ctx.destructibles?.tryMeleeHit(cat, range, damage) ?? false) || catHit;
       catHit = (ctx.trees?.tryMeleeHit(cat, range, damage) ?? false) || catHit;
+      catHit = (ctx.structures?.tryMeleeHit(cat, range) ?? false) || catHit;
     }
     ctx.bus.emit('catMeleeSwing', { hit: catHit });
   }
@@ -276,7 +299,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         // `justDied` flag cannot answer: it stays latched for a whole frame.
         const wasAlive = mob.hp > 0;
         mob.takeDamageFrom(damage, human, 'smush');
-        if (wasAlive && mob.hp <= 0) smushKills++;
+        if (wasAlive && mob.hp <= 0 && mob.isHostile) smushKills++;
         ctx.hitLanded = true;
         smushConnected = true;
         totalSmushDamage += damage;
@@ -500,7 +523,7 @@ export function resolveKills(ctx: CombatContext): void {
   // this frame's kills so a corpse never renders after it has expired.
   for (const mob of mobs) {
     if (mob.isAlive || !mob.rendersWhenDead) continue;
-    if (mob.corpseExpired) continue;
+    if (mob.corpseGone) continue;
     mob.advanceCorpse();
     if (!mob.belongsInMobGrid) mobGrid.remove(mob);
   }

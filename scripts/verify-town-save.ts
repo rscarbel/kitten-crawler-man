@@ -38,6 +38,8 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { snapPlayer } from '../src/core/PlayerSnapshot.js';
 import {
+  carriedSaveRegeneratesFloor,
+  owesArrivalSave,
   respawnModeFor,
   respawnRouteFor,
   savePointAfterWrite,
@@ -330,11 +332,77 @@ function checkRespawnRoutes(): void {
   );
 }
 
+/**
+ * A carried save the floor cannot be rebuilt from — no world at all (the
+ * level-complete save, or one from before saves carried one) or a world from an
+ * older generator — regenerates the floor from a fresh seed, so the first frame
+ * owes an arrival save; without one a death resumes the same save and draws
+ * another floor. A save that does rebuild its floor owes none.
+ */
+function checkArrivalSaves(): void {
+  const withWorld = townSave({ x: 0, y: 0 });
+  const { world: _dropped, ...withoutWorld } = withWorld;
+  const olderGenerator: GameProgressInput = {
+    ...withWorld,
+    world: {
+      generatorVersion: WORLD_GENERATOR_VERSION - 1,
+      worldSeed: RESPAWN_CHECK_SEED,
+      artSeed: RESPAWN_CHECK_ART_SEED,
+      safeRoomTile: null,
+      levelTimerFrames: null,
+    },
+  };
+
+  check(!carriedSaveRegeneratesFloor(undefined), 'no carried save reads as a regenerated floor');
+  check(
+    !carriedSaveRegeneratesFloor(withWorld),
+    'a save with a current world reads as a regenerated floor',
+  );
+  check(
+    carriedSaveRegeneratesFloor(withoutWorld),
+    'a save with no world does not read as a regenerated floor',
+  );
+  check(
+    carriedSaveRegeneratesFloor(olderGenerator),
+    'a save from an older generator does not read as a regenerated floor',
+  );
+
+  check(
+    owesArrivalSave(withoutWorld, false, false),
+    'a resume from a save with no world owes no arrival save',
+  );
+  check(
+    owesArrivalSave(withoutWorld, true, false),
+    'a death restart from a save with no world owes no arrival save',
+  );
+  check(
+    owesArrivalSave(olderGenerator, false, false),
+    'a resume from an older-generator save owes no arrival save',
+  );
+  check(
+    !owesArrivalSave(withWorld, false, false),
+    'a resume that rebuilds its saved floor still owes an arrival save',
+  );
+  check(owesArrivalSave(undefined, false, false), 'a fresh floor owes no arrival save');
+  check(
+    !owesArrivalSave(undefined, true, false),
+    'a fresh floor that opted out still owes an arrival save',
+  );
+  check(!owesArrivalSave(withoutWorld, false, true), 'the tutorial owes an arrival save');
+
+  const { options } = sceneSetupFromSave({ skipIntro: true }, withoutWorld);
+  check(
+    options.worldSeed === undefined && options.spawnAt === undefined,
+    'a save with no world pins a seed or a spawn tile',
+  );
+}
+
 for (const seed of SEEDS) {
   checkOverworld(seed);
   checkDungeon(seed);
 }
 checkRespawnRoutes();
+checkArrivalSaves();
 
 console.log(`${checks - failures}/${checks} checks passed`);
 if (failures > 0) process.exit(1);

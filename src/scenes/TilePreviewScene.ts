@@ -330,6 +330,11 @@ export class TilePreviewScene extends Scene {
     ['water', 'highland'],
     ['grass', 'highland'],
     ['highland', 'scree'],
+    // Briar Hollow's soft joints: the pasture's fence line against the
+    // meadow, and a field's ploughed edge. Its plank floor is absent because
+    // it is hard-edged and never blends.
+    ['pasture_grass', 'grass'],
+    ['grass', 'crop_rows'],
     // The joints each dungeon floor actually draws: its calm bulk material
     // against each of the three surfaces `ZONE_FLOORS` lays beside it.
     ['f1_flagstone', 'f1_flags'],

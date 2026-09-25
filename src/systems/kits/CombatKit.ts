@@ -23,7 +23,12 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { AbilityManager } from '../../core/AbilityManager';
 import { DeathScreen } from '../../ui/DeathScreen';
 import { BodyPartGoreSystem } from '../BodyPartGoreSystem';
-import { resolveKills, resolvePlayerAttacks, type CombatContext } from '../CombatSystem';
+import {
+  resolveKills,
+  resolvePlayerAttacks,
+  type CombatContext,
+  type MeleeStructureTarget,
+} from '../CombatSystem';
 import { FloatingCombatTextSystem } from '../FloatingCombatTextSystem';
 import { playMobAudioCues } from '../GameLoopPhases';
 import type { SystemContext } from '../GameSystem';
@@ -70,6 +75,8 @@ export interface CombatResolutionExtras {
   readonly destructibles?: DestructiblePropSystem;
   /** Absent everywhere but the overworld, which is the only map that grows trees. */
   readonly trees?: TreeSystem;
+  /** Absent everywhere but a map with a village palisade. */
+  readonly structures?: MeleeStructureTarget;
 }
 
 /** What the scene needs back out of a resolved frame of combat. */
@@ -187,6 +194,7 @@ export class CombatKit {
     ctx.mobGrid = this.world.roster.grid;
     ctx.destructibles = extras.destructibles;
     ctx.trees = extras.trees;
+    ctx.structures = extras.structures;
     resolvePlayerAttacks(ctx);
     this.world.pm.cat.flushPendingSubMissiles();
     return { hitLanded: ctx.hitLanded };

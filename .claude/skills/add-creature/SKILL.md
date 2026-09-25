@@ -11,7 +11,7 @@ A mob is a `Player` with AI: `Mob` (`src/creatures/Mob.ts`) extends `Player` (`s
 
 - `readonly xpValue: number` (abstract).
 - `updateAI(targets: Player[]): void` (abstract) — called each frame by `MobUpdateLoop`. Pattern: guard `if (!this.isAlive) return` → tick cooldowns → find nearest living target in aggro range → `updateLastKnown(target)` + `followTargetAStar(...)` → attack in range via `this.dealDamage(target, base)` → else `doWander()`.
-- `render(ctx, camX, camY, tileSize)` (abstract from `Player`) — compute `sx = this.x - camX`, `sy = this.y - camY`, call your sprite draw fn, then `renderMobHealthBar` + `renderDamageFlash` (and `renderAggroIndicator` if aggro'd).
+- `protected override drawSelf(ctx, camX, camY, tileSize)` (abstract on `Player`) — compute `sx = this.x - camX`, `sy = this.y - camY`, call your sprite draw fn, then `renderMobHealthBar` (and `renderAggroIndicator` if aggro'd). Never override `render`: `Player.render` is sealed and wraps `drawSelf` so the hit flash and status paint land on the figure's own silhouette.
 - Constructor: `constructor(tileX, tileY, tileSize) { super(tileX, tileY, tileSize, MAX_HP, SPEED); }` — extract HP/speed/ranges into named module-level constants (CLAUDE.md: no magic numbers).
 
 ## Optional overrides (all have base defaults)
@@ -46,6 +46,25 @@ Levelled mobs can learn `flank`, `block`, `kite`, `regroup` and `riposte` (`src/
 ## Runtime spawning
 
 Any mob added mid-game joins through the scene's roster: `world.roster.add(mob)` (or `ctx.roster.add(mob)` inside a system). That is the only spawn path — it inserts into the list _and_ the spatial grid _and_ hands the mob the scene's map and spell context, and a mob that misses the last of those walks straight through a protective shell. AI only runs within `AI_RADIUS` of players via `roster.grid.queryCircle` unless `requiresEvasion` is set. `CombatSystem.resolveKills` removes dead mobs from the grid.
+
+## Friendly mobs (livestock, militia)
+
+A creature that must be hit by the world's damage pipeline but is not an enemy is still a `Mob`: `Cow` (`src/creatures/Cow.ts`) and `RatkinSoldier` (`src/creatures/RatkinSoldier.ts`) are the examples.
+
+- `isHostile` false. `isPetAttackable` follows it by default; override it false too if the base would say otherwise. Mongo, hirelings, auto-aim, homing missiles and friendly fire then pass it by.
+- `takesPlayerDamage(type)` is an allow-list of the crawler damage types that may hurt it (a cow takes only `explosion`, `smush`, `missile` — Space pets it instead of swinging).
+- `countsAsKill` false and `paysNoRewards` true, so its death pays no XP (otherwise `resolveKills` pays at least 1), counts toward no achievement and no multi-kill.
+- Hostiles only fight what they are handed: an ally that should be attacked is pushed into `ctx.extraTargets` (see `BriarHollowKit.pushAlliedDefenders`). Never set `isDefendTarget` on it — hostiles skip defend targets.
+- A soldier is knocked down, not killed: it zeroes out inside its own damage doors, keeps `rendersWhenDead`, and overrides `undoResurrectionForCheckpoint`.
+- Any "for every mob" sweep you write must filter on `isHostile` explicitly.
+
+**Hostile-only walkability.** `GameMap.isWalkableForHostile` also honours `BLOCK_HOSTILE_ONLY` (Briar Hollow's gate). Mob movement (`stepThroughWalls`, `findPath(..., forHostile)`, tactical steps) uses it when the mob is hostile; line of sight and spawn checks do not. A custom mover must use the same test, or hostiles walk through the gate.
+
+**Root.** `Mob.root(frames, source)` / `releaseRoot` / `isRooted`: `moveWithCollision` refuses the mob's own steps (knockback still moves it) but it keeps attacking. Unlike `aiHeld`, it does not clear the target. A charger must end its charge when rooted.
+
+**Siege opt-in.** Any mob can fight the village assault without changing its AI: `enlistInSiege(mob, world, seed)` (`src/creatures/siege/siegeCapability.ts`) sets `mob.siegeCapable`; `Mob.siegeStructureMultiplier` (default 1, archers 0) scales its blows on walls; `playStructureStrike(onImpact)` plays the strike on the real swing row; `siegeAdvance(mob)` strikes or takes one flow step when there is nobody to fight. `MobUpdateLoop` consults `mob.siegeDirective` before `updateAI`; a mob that moves itself (Grave Bull, Necromancer) returns true from `ownsSiegeMovement`.
+
+**Conversion.** A level-15 snare can turn a hostile into an ally: `canBeConverted()` (never bosses or constant-`isHostile` subclasses) plus membership of `CONVERTIBLE_MOB_TYPES` (`src/creatures/convertibleMobs.ts`), which lists only types whose AI is proven against mob targets. `convertToAlly(owner)` flips `isHostile`; every `isHostile` reader must then treat it as an ally, and a rewind reverts it.
 
 ## Don't forget
 

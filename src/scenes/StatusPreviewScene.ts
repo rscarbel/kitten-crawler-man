@@ -53,6 +53,7 @@ const PREVIEW_STATUSES: readonly string[] = [
   'well_rested',
   'hearth_warmed',
   'deep_slumber',
+  'hamburger_fed',
   'shield',
   'chilled',
   'frozen',

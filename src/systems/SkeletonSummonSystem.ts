@@ -33,6 +33,13 @@ import { necroSkeletonLevel } from '../creatures/fairies/fairyPotency';
 import type { LevelledCurve } from '../creatures/mobLevelScaling';
 import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
 import { RisingSkeleton } from '../creatures/RisingSkeleton';
+import { RaisedRatkin } from '../creatures/RaisedRatkin';
+import {
+  NECRO_ESCORT_CAP,
+  Necromancer,
+  type NecromancerRaiseRequest,
+} from '../creatures/Necromancer';
+import { enlistInSiege } from '../creatures/siege/siegeCapability';
 import { TILE_SIZE } from '../core/constants';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
@@ -95,6 +102,9 @@ interface RaiseStaging {
   readonly ignoresTownSafeZone: boolean;
   readonly paysNoRewards: boolean;
 }
+
+/** Folds a raise tile into one spread seed; any stride past the map's height keeps them distinct. */
+const RAISE_SPREAD_ROW_STRIDE = 4096;
 
 /** A boss's escort rises at the strength it was authored with. */
 const ESCORT_STRENGTH = 1;
@@ -171,14 +181,18 @@ export class SkeletonSummonSystem implements GameSystem {
 
   update(ctx: SystemContext): void {
     this.drainRaiseRequests();
+    this.raiseForNecromancers(ctx.roster.mobs);
     const summoners = ctx.roster.mobs.filter(
       (mob): mob is SkeletonSummoner => isSkeletonSummoner(mob) && mob.isAlive,
     );
     if (summoners.length === 0) return;
 
     const escortRadiusPx = TILE_SIZE * ESCORT_RADIUS_TILES;
+    // A raised ratkin climbs out the way a skeleton does, but it is the
+    // necromancer's and answers to his cap, never a skeleton caster's.
     const skeletons = ctx.roster.mobs.filter(
-      (mob): mob is RisingSkeleton => mob instanceof RisingSkeleton && mob.isAlive,
+      (mob): mob is RisingSkeleton =>
+        mob instanceof RisingSkeleton && !(mob instanceof RaisedRatkin) && mob.isAlive,
     );
 
     for (const summoner of summoners) {
@@ -238,6 +252,86 @@ export class SkeletonSummonSystem implements GameSystem {
       living[request.kind]++;
     }
     fairy.reportArmy(living);
+  }
+
+  /**
+   * Raises each living necromancer's queued dead on the sigils he chose,
+   * holding him to {@link NECRO_ESCORT_CAP} living raises — counted by who
+   * raised them, so the wave's own raised ratkin never forbid his — and tells
+   * him what he fields. A sigil that has become unfit ground since he chose it
+   * is moved to the nearest open ground rather than dropped. A dead
+   * necromancer's last requests are dropped: nobody is left to raise them.
+   */
+  private raiseForNecromancers(mobs: readonly Mob[]): void {
+    for (const necromancer of mobs) {
+      if (!(necromancer instanceof Necromancer)) continue;
+      let living = 0;
+      for (const mob of mobs) {
+        // A raise a snare turned to the party's side no longer marches for him.
+        if (mob.isAlive && mob.isHostile && this.necromancerRaises.get(mob) === necromancer) {
+          living++;
+        }
+      }
+      const pending = necromancer.takePendingRaises();
+      if (necromancer.isAlive) {
+        const taken = new Set<string>();
+        for (const request of pending) {
+          if (living >= NECRO_ESCORT_CAP) break;
+          const tile = this.raiseTileFor(request, taken);
+          if (tile === null) continue;
+          this.raiseForNecromancer(necromancer, tile.x, tile.y, request.look);
+          living++;
+        }
+      }
+      necromancer.escortLiving = living;
+      necromancer.escortAtCap = living >= NECRO_ESCORT_CAP;
+    }
+  }
+
+  private raiseTileFor(
+    request: NecromancerRaiseRequest,
+    taken: Set<string>,
+  ): { x: number; y: number } | null {
+    const key = tileKey(request.tileX, request.tileY);
+    if (!taken.has(key) && this.gameMap.isWalkableForHostile(request.tileX, request.tileY)) {
+      taken.add(key);
+      return { x: request.tileX, y: request.tileY };
+    }
+    return this.findSpawnTile(
+      request.tileX * TILE_SIZE + TILE_SIZE / 2,
+      request.tileY * TILE_SIZE + TILE_SIZE / 2,
+      taken,
+    );
+  }
+
+  /** Which necromancer raised each of his dead; see {@link raiseForNecromancers}. */
+  private readonly necromancerRaises = new WeakMap<Mob, Necromancer>();
+
+  private raiseForNecromancer(
+    necromancer: Necromancer,
+    tileX: number,
+    tileY: number,
+    look: NecromancerRaiseRequest['look'],
+  ): void {
+    const risen = new RaisedRatkin(tileX, tileY, TILE_SIZE, look);
+    risen.setMap(this.gameMap);
+    // Before the roll: a body raised mid-fight is a summon and learns nothing.
+    risen.beginRising();
+    risen.applyMobLevel(necromancer.mobLevel, necromancer.levelledCurve);
+    applySpawnDifficulty(risen);
+    risen.raisedByNecromancer = true;
+    risen.ignoresTownSafeZone = true;
+    risen.blowCapShareOfTargetHp = necromancer.blowCapShareOfTargetHp;
+    // He can raise far more than the party could ever be meant to earn from.
+    risen.paysNoRewards = true;
+    const siege = necromancer.siegeCapable;
+    // Seeded by where it rose, so a batch of raises fans out rather than
+    // queueing behind one another on the same line to the wall.
+    if (siege !== null) enlistInSiege(risen, siege.world, tileX * RAISE_SPREAD_ROW_STRIDE + tileY);
+    else risen.forceAggro = true;
+    this.necromancerRaises.set(risen, necromancer);
+    this.addMob(risen);
+    this.riseSoundPending = true;
   }
 
   private drainRaiseRequests(): void {

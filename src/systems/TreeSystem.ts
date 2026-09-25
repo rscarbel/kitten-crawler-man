@@ -452,8 +452,10 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
    *
    * The tile sweep is O(map) and runs once per safe-room entry, the same order
    * and the same rarity as the constructor's `adoptTreesInProgress`. Only tiles
-   * that *are* trees at capture time are recorded: nothing in the game plants
-   * one, so a tile that is not a tree now can never become one to be rewound.
+   * that *are* trees at capture time are recorded. The one thing that plants a
+   * tree is Briar Hollow's grove regrowth (`NodeRegrowth`), and its own rewind,
+   * `reconcileAfterRestore`, takes away any grove tree planted after the
+   * checkpoint, so this restore never has to.
    */
   captureCheckpoint(): TreeCheckpoint {
     const health = new Map<string, TreeHealth>();
@@ -653,7 +655,40 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
     return hitAnything;
   }
 
-  private beginFelling(health: TreeHealth, feller: HumanPlayer | CatPlayer): void {
+  /**
+   * Brings a tree down because it was chopped out for its wood rather than
+   * beaten down: the same collapse and stump as a melee felling, but no coins,
+   * because the wood was the pay. Returns false for a tile that is not a tree
+   * or is already coming down.
+   */
+  fellByHarvest(tileX: number, tileY: number): boolean {
+    if (!this.isTreeTile(tileX, tileY)) return false;
+    const health = this.healthFor(tileX, tileY);
+    if (isFellingStage(health.stage)) return false;
+    this.beginFelling(health, null);
+    return true;
+  }
+
+  /**
+   * The struck-bark flash on a tree, for an axe biting it without hurting it —
+   * a harvest spends the tree's wood, not its health.
+   */
+  flashStruck(tileX: number, tileY: number): void {
+    if (!this.isTreeTile(tileX, tileY)) return;
+    const health = this.healthFor(tileX, tileY);
+    health.hitFlashFrames = HIT_FLASH_FRAMES;
+    this.flashing.add(tileKey(tileX, tileY));
+  }
+
+  private isTreeTile(tileX: number, tileY: number): boolean {
+    const structure = this.gameMap.structure;
+    if (tileY < 0 || tileY >= structure.length) return false;
+    const row = structure[tileY];
+    if (tileX < 0 || tileX >= row.length) return false;
+    return row[tileX].type === TREE;
+  }
+
+  private beginFelling(health: TreeHealth, feller: HumanPlayer | CatPlayer | null): void {
     // A tree with nothing green left comes down as a husk. `burning_late` counts
     // as burnt out for this: its crown is already consumed, so dropping it as a
     // leafy tree would be the same inversion.

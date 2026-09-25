@@ -77,6 +77,12 @@ const MAX_BTN_GAP_BELOW = 16;
 const COST_LINE_SIZE = 12;
 const COST_LINE_GAP_BELOW = 16;
 
+/** The optional "what you get" line under the cost, and the optional note under that. */
+const DETAIL_LINE_SIZE = 12;
+const DETAIL_LINE_GAP_BELOW = 18;
+const NOTE_LINE_SIZE = 10;
+const NOTE_LINE_GAP_BELOW = 20;
+
 const FOOTER_BTN_HEIGHT = 44;
 const FOOTER_BTN_WIDTH = 120;
 const FOOTER_GAP = 12;
@@ -98,6 +104,10 @@ interface QuantityPickerOptions {
   /** Shown after the cost figure, e.g. "coins". Only used when `costPerUnit` is set. */
   currencyLabel?: string;
   confirmLabel: string;
+  /** A live line under the cost describing what this many buys, e.g. "→ 20 Boards". */
+  detail?: (qty: number) => string;
+  /** A fixed note under everything else — why the cap is lower than the player might expect. */
+  note?: string;
   /**
    * Currency the player currently holds. Checked against `costPerUnit × qty`
    * to colour the cost line and disable Confirm when unaffordable. Omit when
@@ -117,6 +127,8 @@ export class QuantityPicker {
   private unitLabel = '';
   private currencyLabel = '';
   private confirmLabel = '';
+  private detail: ((qty: number) => string) | null = null;
+  private note: string | null = null;
   private onConfirm: ((qty: number) => void) | null = null;
   private onCancel: (() => void) | null = null;
 
@@ -147,6 +159,8 @@ export class QuantityPicker {
     this.unitLabel = options.unitLabel;
     this.currencyLabel = options.currencyLabel ?? '';
     this.confirmLabel = options.confirmLabel;
+    this.detail = options.detail ?? null;
+    this.note = options.note ?? null;
     this.onConfirm = options.onConfirm;
     this.onCancel = options.onCancel;
     this.heldStep = null;
@@ -157,8 +171,20 @@ export class QuantityPicker {
     clearMenuFocus();
   }
 
+  /** The quantity currently chosen, or 0 while closed. */
+  get value(): number {
+    return this.state?.value ?? 0;
+  }
+
+  /** The largest quantity this opening allows, or 0 while closed. */
+  get max(): number {
+    return this.state?.max ?? 0;
+  }
+
   close(): void {
     this.state = null;
+    this.detail = null;
+    this.note = null;
     this.onConfirm = null;
     this.onCancel = null;
     this.modalContains = null;
@@ -347,6 +373,28 @@ export class QuantityPicker {
       y += COST_LINE_GAP_BELOW;
     }
 
+    if (this.detail !== null) {
+      drawText(ctx, this.detail(state.value), {
+        x: centerX,
+        y,
+        align: 'center',
+        ...TEXT_PRESETS.value,
+        size: DETAIL_LINE_SIZE,
+      });
+      y += DETAIL_LINE_GAP_BELOW;
+    }
+
+    if (this.note !== null) {
+      drawText(ctx, this.note, {
+        x: centerX,
+        y,
+        align: 'center',
+        ...TEXT_PRESETS.muted,
+        size: NOTE_LINE_SIZE,
+      });
+      y += NOTE_LINE_GAP_BELOW;
+    }
+
     const footerY = modal.y + height - PANEL_PADDING - FOOTER_BTN_HEIGHT;
     const footerLeft = centerX - FOOTER_BTN_WIDTH - FOOTER_GAP / 2;
     const footerRight = centerX + FOOTER_GAP / 2;
@@ -381,6 +429,8 @@ export class QuantityPicker {
   private designHeight(): number {
     const state = this.state;
     const costLineHeight = state?.costPerUnit !== undefined ? COST_LINE_GAP_BELOW : 0;
+    const detailLineHeight = this.detail !== null ? DETAIL_LINE_GAP_BELOW : 0;
+    const noteLineHeight = this.note !== null ? NOTE_LINE_GAP_BELOW : 0;
     return (
       PANEL_PADDING +
       TITLE_GAP +
@@ -390,6 +440,8 @@ export class QuantityPicker {
       MAX_BTN_HEIGHT +
       MAX_BTN_GAP_BELOW +
       costLineHeight +
+      detailLineHeight +
+      noteLineHeight +
       FOOTER_BTN_HEIGHT +
       PANEL_PADDING
     );

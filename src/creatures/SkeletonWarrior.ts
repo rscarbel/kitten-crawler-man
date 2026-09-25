@@ -5,6 +5,8 @@ import { SWORD_SLASH_FRAMES, swordSlashImpactFrame } from '../sprites/skeletonTi
 import { PLAYER_SPEED } from '../core/constants';
 import { riposteCooldown } from './tactics/riposte';
 import type { TacticsTrait } from './tactics/tacticsTraits';
+import type { StructureStrikeTiming } from './Mob';
+import { siegeAdvance, siegeCanEngage } from './siege/siegeCapability';
 
 /**
  * A sword-and-shield skeleton.
@@ -15,7 +17,7 @@ import type { TacticsTrait } from './tactics/tacticsTraits';
  * reads the lord.
  */
 
-const SKELETON_HP = 14;
+export const SKELETON_HP = 14;
 const SKELETON_SPEED = 0.95;
 /** A levelled warrior's walk is capped at this fraction of the player's. */
 const SKELETON_MAX_SPEED_RATIO = 0.8;
@@ -43,6 +45,13 @@ const SLASH_IMPACT_TIMER = SWORD_SLASH_FRAMES - swordSlashImpactFrame();
 
 const SKELETON_WARRIOR_CULL_MARGIN_TILES = 2;
 const SKELETON_WARRIOR_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
+
+/** A blow on a structure is the sword's own slash, landing on the slash's own impact frame. */
+const SKELETON_STRUCTURE_STRIKE_TIMING: StructureStrikeTiming = {
+  swingFrames: SWORD_SLASH_FRAMES,
+  impactFrame: swordSlashImpactFrame(),
+  cooldownFrames: ATTACK_COOLDOWN_FRAMES,
+};
 
 export class SkeletonWarrior extends RisingSkeleton {
   readonly xpValue = SKELETON_ESCORT_XP;
@@ -80,6 +89,14 @@ export class SkeletonWarrior extends RisingSkeleton {
     return SKELETON_MAX_SPEED;
   }
 
+  protected override get structureStrikeTiming(): StructureStrikeTiming {
+    return SKELETON_STRUCTURE_STRIKE_TIMING;
+  }
+
+  protected override get structureStrikeBaseDamage(): number {
+    return SLASH_DAMAGE;
+  }
+
   /**
    * A sword-and-shield brawler: it can learn to come at its quarry from an
    * angle, turn a blow aside with the shield and answer it, and fall back on
@@ -105,8 +122,14 @@ export class SkeletonWarrior extends RisingSkeleton {
     if (!this.isAlive) return;
     if (this.tickRise()) return;
     if (this.attackCooldown > 0) this.attackCooldown--;
+    if (this.isStrikingStructure) {
+      this.isMoving = false;
+      return;
+    }
 
-    const nearest = this.acquireTarget(targets, this.aggroRangePx);
+    const nearest = this.acquireTarget(targets, this.aggroRangePx, (target) =>
+      siegeCanEngage(this, target),
+    );
     this.currentTarget = nearest;
     if (this.tactics.claimRiposte()) {
       this.attackCooldown = riposteCooldown(this.attackCooldown, this.slashTimer);
@@ -126,6 +149,7 @@ export class SkeletonWarrior extends RisingSkeleton {
       this.isAggro = false;
       this.tactics.disengage();
       this.clearAStarPath();
+      if (siegeAdvance(this)) return;
       // Not `doWander`: an un-aggroed bounty escort is leashed to its site, and
       // only this path consults the leash.
       this.returnHomeOrWander();
@@ -196,7 +220,10 @@ export class SkeletonWarrior extends RisingSkeleton {
       isMoving: this.isMoving,
       facingX: this.facingX,
       facingY: this.facingY,
-      attackProgress: this.slashTimer > 0 ? 1 - this.slashTimer / SWORD_SLASH_FRAMES : null,
+      attackProgress:
+        this.slashTimer > 0
+          ? 1 - this.slashTimer / SWORD_SLASH_FRAMES
+          : this.structureStrikeProgress,
       riseProgress: rise,
     });
 

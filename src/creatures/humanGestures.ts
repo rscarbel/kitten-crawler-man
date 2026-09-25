@@ -166,6 +166,19 @@ export function playPickupGesture(picker: Player, item: Pt): void {
 }
 
 /**
+ * A low reach to scratch an animal's head, turned toward it — the stoop he
+ * makes for a pickup, aimed at the head instead of the ground, which at a
+ * cow's height reads as a hand to the brow. Refused on the move and over
+ * another gesture, like the stoop.
+ */
+export function playPetGesture(petter: Player, head: Pt): void {
+  if (!(petter instanceof HumanPlayer)) return;
+  if (petter.isMoving || petter.isActing) return;
+  const { row, faceX, faceY } = gestureRow(petter, 'grab', facingToward(petter, head));
+  petter.playAction(row, { faceX, faceY });
+}
+
+/**
  * How a chest's lid came up, for the reward shown on it:
  * - `shown`: he is standing at the open chest, and the reward can be shown.
  * - `unseen`: he went down before the lid was up. Nobody is there to be shown

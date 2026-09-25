@@ -1,5 +1,6 @@
 import type { Player, StatName } from '../Player';
 import { CHILLED_FRAMES, FROZEN_FRAMES } from './statusTuning';
+import { HAMBURGER_FED_DURATION_SECONDS, HAMBURGER_STR_BONUS } from './foodEffects';
 
 /**
  * A status effect applied to a Player (e.g. Burn, Frozen, Paralyzed).
@@ -300,6 +301,7 @@ export const STAT_BOON_BONUSES: ReadonlyMap<string, Partial<Record<StatName, num
   ['well_rested', { constitution: 2 }],
   ['hearth_warmed', { strength: 2 }],
   ['deep_slumber', { dexterity: 2, intelligence: 2 }],
+  ['hamburger_fed', { strength: HAMBURGER_STR_BONUS }],
 ]);
 
 const TICKS_PER_SECOND = 60;
@@ -346,4 +348,25 @@ export function makeHearthWarmed(): StatusEffect {
 /** Deep Slumber: the cat's own room's boon. */
 export function makeDeepSlumber(): StatusEffect {
   return makeRoomBoon(DEEP_SLUMBER_STATUS);
+}
+
+// -- Food boons -----------------------------------------------------------------
+
+/** The strength a Hamburger lends; see {@link makeHamburgerFed}. */
+export const HAMBURGER_FED_STATUS = 'hamburger_fed';
+
+export const HAMBURGER_FED_TICKS = HAMBURGER_FED_DURATION_SECONDS * TICKS_PER_SECOND;
+
+/**
+ * Hamburger Fed: a short strength boon. Eating another while fed refreshes the
+ * timer rather than adding a second bonus, because `applyStatus` replaces an
+ * effect of the same type and {@link STAT_BOON_BONUSES} reads each type once.
+ */
+export function makeHamburgerFed(): StatusEffect {
+  return {
+    type: HAMBURGER_FED_STATUS,
+    ticksRemaining: HAMBURGER_FED_TICKS,
+    totalTicks: HAMBURGER_FED_TICKS,
+    applier: null,
+  };
 }

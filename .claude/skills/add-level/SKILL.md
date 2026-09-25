@@ -30,6 +30,14 @@ A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize,
 
 Verify layout changes at **`?townmap`** (localhost) — the town is several screens wide, so no in-game screenshot can show whether one worked.
 
+### Briar Hollow and keep-outs
+
+Every floor-3 world also has **Briar Hollow**, the ratkin village east of the town: sited by `src/map/overworld/briarHollowSite.ts`, laid out from the authored template in `briarHollowLayout.ts`, stamped by `paintBriarHollow.ts`, and checked by `briarHollowChecks.ts`. Its record is `gameMap.briarHollow` (null on every other map). The durable description — siting, layout contract, roofless walls, palisade segmentation (a save-format contract), the hostile-only gate, the siege flow field and persistence — is the "Briar Hollow" section of **`docs/town.md`**. `?townmap` cycles town → world → Briar Hollow.
+
+Any wilderness pass that places something (rivers, forests, ruins, camps, cliffs, spawn scatter, bounty sites, boulders, fairies) must stay off the landmarks laid out before it by asking one `KeepOut` (`src/map/overworld/keepOut.ts`, disc and rect shapes with `contains(x, y)`), never by restating a geometry test. A new landmark is a new shape added to the keep-out, not an edit to every pass. `npm run verify:briar-hollow-site` proves the village over 200 seeds.
+
+Village tile types (`tileTypes.ts`): `HOLLOW_WALL` (roofless, neighbour-aware, Y-sorted), `HOLLOW_THRESHOLD`, `HOLLOW_PLANK_FLOOR`, `HOLLOW_PROP_LOW` (solid, sight-transparent) / `HOLLOW_PROP_TALL` (solid, blocks sight) — which prop is keyed by `spriteKey` (`hollow:<propId>` on the drawing tile, `hollow_part:<dx>,<dy>` on the rest of the footprint) — `HOLLOW_DECAL`, `HOLLOW_PALISADE` / `HOLLOW_PALISADE_GAP`, `HOLLOW_GATE` (walkable by type; hostiles are turned away by the `BLOCK_HOSTILE_ONLY` runtime flag, which `GameMap.isWalkableForHostile` reads), `ROCK_DEPOSIT`, `PASTURE_GRASS`, `CROP_FIELD`. Tile painters are handed the grid, not the map, so village painters read the site through `hollowSiteRegistry.ts`.
+
 ## Tiles
 
 - Constants in `src/map/tileTypes.ts`: floor types via the `FLOOR_TYPES` array; everything else a numbered constant. A map cell is `TileContent { tileId, type, spriteKey?, decorationVariant? }`.

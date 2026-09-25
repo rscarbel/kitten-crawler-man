@@ -35,50 +35,43 @@ type Ctx = CanvasRenderingContext2D;
 // maths with no Carl in them, and a fourth transcription of `lerp` in this repo
 // is a fourth place for it to drift.
 import { type Pt, clamp01, deg, lerp, mix, rgba } from './carlArt';
-
-const TWO_PI = Math.PI * 2;
-const HALF_PI = Math.PI / 2;
-/** Midpoint of a span, for shapes built symmetrically about their centre. */
-const MIDPOINT = 0.5;
-
-function pt(x: number, y: number): Pt {
-  return { x, y };
-}
-
-function offset(base: Pt, dx: number, dy: number): Pt {
-  return { x: base.x + dx, y: base.y + dy };
-}
-
-function mixPt(a: Pt, b: Pt, t: number): Pt {
-  return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) };
-}
-
-function rotate(p: Pt, angle: number): Pt {
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  return { x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos };
-}
-
-function angleBetween(from: Pt, to: Pt): number {
-  return Math.atan2(to.y - from.y, to.x - from.x);
-}
-
-/** A three-stop value ramp for one material. */
-interface Ramp {
-  readonly dark: string;
-  readonly mid: string;
-  readonly light: string;
-}
+import {
+  BODY_OUTLINE_WIDTH,
+  HALF_PI,
+  MIDPOINT,
+  MIN_VISIBLE_ALPHA,
+  OUTLINE,
+  type Ramp,
+  SHEEN_ALPHA,
+  TWO_PI,
+  angleBetween,
+  fillCapsule,
+  fillOutlined,
+  mixPt,
+  offset,
+  outlineCapsule,
+  pt,
+  rotate,
+  sheenSegment,
+  traceFurEdge,
+} from './ratkin/paint';
+import {
+  type ArmFrame,
+  type GarmentFrame,
+  type GarmentLayer,
+  type HeadGeometry,
+  type HeldPropKind,
+  type HemShape,
+  type LegFrame,
+  RATKIN_BUILDS,
+  type RatkinBuildSpec,
+  type RatkinOutfit,
+} from './ratkin/outfit';
+import { PROP_CARRY, drawHeldProp } from './ratkin/props';
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-const OUTLINE = '#160f0a';
-
-/** Dusty brown-grey back and limbs, the colour a sewer rat actually is. */
-const FUR: Ramp = { dark: '#3b3128', mid: '#6c5b49', light: '#93806a' };
-/** The paler underside: throat, chest, belly, cheek, underjaw. */
-const BELLY_FUR: Ramp = { dark: '#6a5b4c', mid: '#9d8c77', light: '#c0af98' };
-/** Bare rodent skin — ear membranes, paws, toes, nose. */
+/** Bare rodent skin — ear membranes, paws, toes, nose — unless an outfit says otherwise. */
 const SKIN: Ramp = { dark: '#7d5551', mid: '#ab7d78', light: '#cb9c93' };
 /**
  * The tail is duskier than the rest of his bare skin. Painted at the ear's own
@@ -87,10 +80,6 @@ const SKIN: Ramp = { dark: '#7d5551', mid: '#ab7d78', light: '#cb9c93' };
  * meant to walk up to and talk to.
  */
 const TAIL_SKIN: Ramp = { dark: '#6a4b47', mid: '#93706a', light: '#b18a82' };
-/** A mossy, much-mended tunic. Light enough to hold its own on a dark floor. */
-const TUNIC: Ramp = { dark: '#26382e', mid: '#405f4b', light: '#5a8064' };
-/** Belt, satchel strap and pouch. */
-const LEATHER: Ramp = { dark: '#3a2a1c', mid: '#6c4a2e', light: '#916a41' };
 
 const EYE_BEAD = '#140d09';
 const EYE_GLINT = '#e2d8c4';
@@ -98,17 +87,12 @@ const EYE_GLINT = '#e2d8c4';
 const INCISOR = '#f2e8cf';
 const WHISKER = '#ded4c0';
 const CLAW = '#241b14';
-const BUCKLE = '#c2a24e';
 
 /** Cool bounce light along the figure's back edge, unifying the parts. */
 const RIM_LIGHT = '#d6c6a6';
 const RIM_ALPHA = 0.2;
 const RIM_WIDTH = 0.015;
-const SHEEN_ALPHA = 0.28;
 const CONTACT_SHADOW_ALPHA = 0.38;
-
-/** Unit vector the key light arrives from, in figure space. */
-const LIGHT: Pt = { x: -0.6, y: -0.8 };
 
 // ── Proportions ──────────────────────────────────────────────────────────────
 
@@ -172,7 +156,7 @@ const PROFILE_ARM_ROOT_FORWARD = 0.045;
  * belly, deepest at the rump where the tail roots. Head-on he is narrower than
  * that and very nearly symmetric.
  */
-interface TorsoSpan {
+export interface TorsoSpan {
   readonly shoulderLead: number;
   readonly shoulderTrail: number;
   readonly chestLead: number;
@@ -491,6 +475,25 @@ export interface RatKinPose {
    * chest swelling changes the silhouette's area, which survives the downsample.
    */
   breath: number;
+  /**
+   * The axis of whatever the right paw holds, radians, screen space — the
+   * direction from the grip to the prop's working end. Unset, the prop rides
+   * at its own resting carry (upright for a staff, plumb for a lantern).
+   */
+  propAxis?: number;
+  /**
+   * How far the held prop sits along its own axis from where the paw would
+   * naturally grip it, in figure units. Negative draws the shaft back through
+   * the paw (a spear gripped near its middle for a thrust), positive runs it
+   * forward (the butt choked short as he falls on it).
+   */
+  propShift?: number;
+  /**
+   * Head tilt toward a shoulder, radians, head-on views only — the cock of the
+   * head a talker gives a listener. Edge-on a tilt is a rotation about the
+   * viewing axis and shows as nothing.
+   */
+  headRoll?: number;
 }
 
 /**
@@ -586,7 +589,7 @@ export function restingPose(): RatKinPose {
 
 // ── Skeleton ─────────────────────────────────────────────────────────────────
 
-interface BoneChain {
+export interface BoneChain {
   readonly root: Pt;
   readonly joint: Pt;
   readonly end: Pt;
@@ -696,7 +699,7 @@ function foreshortenLeg(chain: BoneChain, amount: number): BoneChain {
   return { ...chain, joint: mixPt(chain.joint, straightKnee, clamp01(amount)) };
 }
 
-interface Skeleton {
+export interface Skeleton {
   readonly hip: Pt;
   readonly waist: Pt;
   readonly chest: Pt;
@@ -813,86 +816,10 @@ export function measureLegs(
 
 // ── Low-level painting ───────────────────────────────────────────────────────
 
-/** Traces a capsule: a quad between two circles, with both caps rounded. */
-function traceCapsule(ctx: Ctx, a: Pt, b: Pt, wa: number, wb: number): void {
-  const normal = angleBetween(a, b) + HALF_PI;
-  const nx = Math.cos(normal);
-  const ny = Math.sin(normal);
-  ctx.beginPath();
-  ctx.arc(a.x, a.y, wa, normal, normal + Math.PI);
-  ctx.lineTo(b.x - nx * wb, b.y - ny * wb);
-  ctx.arc(b.x, b.y, wb, normal + Math.PI, normal + TWO_PI);
-  ctx.lineTo(a.x + nx * wa, a.y + ny * wa);
-  ctx.closePath();
-}
-
-function fillCapsule(ctx: Ctx, a: Pt, b: Pt, wa: number, wb: number, fill: string): void {
-  traceCapsule(ctx, a, b, wa, wb);
-  ctx.fillStyle = fill;
-  ctx.fill();
-}
-
-/** Dark silhouette laid under a form so it separates from what is behind it. */
-const OUTLINE_BLEED = 0.013;
-
-function outlineCapsule(ctx: Ctx, a: Pt, b: Pt, wa: number, wb: number): void {
-  fillCapsule(ctx, a, b, wa + OUTLINE_BLEED, wb + OUTLINE_BLEED, OUTLINE);
-}
-
-const SHEEN_OFFSET = 0.45;
-const SHEEN_WIDTH = 0.34;
-const SHEEN_TAPER = 0.7;
-
-/** Runs a light stroke down the lit side of a segment. */
-function sheenSegment(ctx: Ctx, a: Pt, b: Pt, width: number, colour: string, alpha: number): void {
-  const normal = angleBetween(a, b) + HALF_PI;
-  const facing = Math.cos(normal) * LIGHT.x + Math.sin(normal) * LIGHT.y;
-  const push = width * SHEEN_OFFSET * (facing >= 0 ? 1 : -1);
-  const nx = Math.cos(normal) * push;
-  const ny = Math.sin(normal) * push;
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  fillCapsule(
-    ctx,
-    offset(a, nx, ny),
-    offset(b, nx, ny),
-    width * SHEEN_WIDTH,
-    width * SHEEN_WIDTH * SHEEN_TAPER,
-    colour,
-  );
-  ctx.restore();
-}
-
-/**
- * Strokes then fills a closed path, so the outline shows only where the fill
- * does not cover it — half the stroke width, all the way round the silhouette.
- */
-function fillOutlined(ctx: Ctx, trace: () => void, fill: string, outlineWidth: number): void {
-  ctx.save();
-  trace();
-  ctx.strokeStyle = OUTLINE;
-  ctx.lineWidth = outlineWidth;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.restore();
-}
-
-const BODY_OUTLINE_WIDTH = 0.026;
-const DETAIL_OUTLINE_WIDTH = 0.016;
-
 const SHADOW_RX = 0.34;
 const SHADOW_FLATTEN = 0.34;
 /** How much of the stance's own sideways travel the shadow tracks. */
 const SHADOW_FOLLOW = 0.5;
-
-/**
- * Below this an alpha serialises in exponent notation (`5e-17`), which
- * node-canvas silently discards along with the whole `rgba()` — baking a solid
- * black smear where a shadow should have faded out.
- */
-const MIN_VISIBLE_ALPHA = 1e-4;
 
 /** Soft elliptical shadow under the figure. */
 function drawGroundShadow(ctx: Ctx, centreX: number, radiusX: number, alpha: number): void {
@@ -919,43 +846,6 @@ function drawGroundShadow(ctx: Ctx, centreX: number, radiusX: number, alpha: num
  */
 const FAR_LIMB_SHADE = 0.34;
 const UNSHADED = 0;
-
-/**
- * Walks a fur edge from `a` to `b`, bowed out by `bulge` and broken into
- * `tufts` shallow scallops. `outward` is +1 to bow toward the *right* of the
- * a→b direction and −1 toward its left — screen space has +Y down, so adding a
- * quarter turn rotates clockwise on screen, not anticlockwise.
- *
- * Fur is one soft mass with an uneven edge, not a ring of spikes: many shallow
- * scallops read as fur, few tall ones read as a crown of thorns. The path must
- * already sit on `a`.
- */
-function traceFurEdge(
-  ctx: Ctx,
-  a: Pt,
-  b: Pt,
-  bulge: number,
-  tufts: number,
-  tuft: number,
-  outward: number,
-): void {
-  const along = angleBetween(a, b);
-  const outX = Math.cos(along + HALF_PI) * outward;
-  const outY = Math.sin(along + HALF_PI) * outward;
-  const swell = (t: number): number => bulge * Math.sin(t * Math.PI);
-  for (let i = 1; i <= tufts; i++) {
-    const t = i / tufts;
-    const midT = (i - MIDPOINT) / tufts;
-    const anchor = mixPt(a, b, t);
-    const control = mixPt(a, b, midT);
-    ctx.quadraticCurveTo(
-      control.x + outX * (swell(midT) + tuft),
-      control.y + outY * (swell(midT) + tuft),
-      anchor.x + outX * swell(t),
-      anchor.y + outY * swell(t),
-    );
-  }
-}
 
 // ── Limbs ────────────────────────────────────────────────────────────────────
 
@@ -1011,6 +901,31 @@ function legShapeFor(nearness: number): LimbShape {
     tip: lerp(LEG_SHAPE.tip, NEAR_LEG_SHAPE.tip, t),
     bellyAt: lerp(LEG_SHAPE.bellyAt, NEAR_LEG_SHAPE.bellyAt, t),
   };
+}
+
+/**
+ * A limb thickened or thinned by a build. Returns the shape itself when the
+ * build leaves it alone, so the standard rig paints exactly the widths above.
+ */
+function widenedLimb(shape: LimbShape, widthScale: number): LimbShape {
+  if (widthScale === 1) return shape;
+  return {
+    root: shape.root * widthScale,
+    joint: shape.joint * widthScale,
+    belly: shape.belly * widthScale,
+    tip: shape.tip * widthScale,
+    bellyAt: shape.bellyAt,
+  };
+}
+
+/** The widths an arm is drawn at under a build — for a sleeve that has to cover it. */
+export function ratkinArmWidths(widthScale: number): Omit<LimbShape, 'bellyAt'> {
+  return widenedLimb(ARM_SHAPE, widthScale);
+}
+
+/** The widths a leg is drawn at under a build — for trousers that have to cover it. */
+export function ratkinLegWidths(nearness: number, widthScale: number): Omit<LimbShape, 'bellyAt'> {
+  return widenedLimb(legShapeFor(nearness), widthScale);
 }
 
 /**
@@ -1102,13 +1017,13 @@ function drawFootFacing(
   foot: FootPose,
   view: ViewSpec,
   outward: number,
-  ramp: Ramp,
+  look: Look,
   shade: number,
 ): void {
   const ball = foot.ball;
-  const fur = mix(ramp.mid, OUTLINE, shade);
-  const furLight = mix(ramp.light, OUTLINE, shade);
-  const skin = mix(SKIN.mid, OUTLINE, shade);
+  const fur = mix(look.fur.mid, OUTLINE, shade);
+  const furLight = mix(look.fur.light, OUTLINE, shade);
+  const skin = mix(look.skin.mid, OUTLINE, shade);
 
   outlineCapsule(ctx, hock, ball, HOCK_WIDTH, METATARSUS_WIDTH);
   fillCapsule(ctx, hock, ball, HOCK_WIDTH, METATARSUS_WIDTH, fur);
@@ -1149,11 +1064,11 @@ const TOE_FACING_DROP_SHARE = 0.28;
  * forward along the ground, because that fore-aft L is the shape a digitigrade
  * foot makes and the part of it a viewer reads as "not a human foot".
  */
-function drawFootProfile(ctx: Ctx, hock: Pt, foot: FootPose, ramp: Ramp, shade: number): void {
+function drawFootProfile(ctx: Ctx, hock: Pt, foot: FootPose, look: Look, shade: number): void {
   const ball = foot.ball;
-  const fur = mix(ramp.mid, OUTLINE, shade);
-  const furLight = mix(ramp.light, OUTLINE, shade);
-  const skin = mix(SKIN.mid, OUTLINE, shade);
+  const fur = mix(look.fur.mid, OUTLINE, shade);
+  const furLight = mix(look.fur.light, OUTLINE, shade);
+  const skin = mix(look.skin.mid, OUTLINE, shade);
 
   outlineCapsule(ctx, hock, ball, HOCK_WIDTH, METATARSUS_WIDTH);
   fillCapsule(ctx, hock, ball, HOCK_WIDTH, METATARSUS_WIDTH, fur);
@@ -1208,11 +1123,18 @@ const PAW_CLAW_LENGTH = 0.018;
  * A four-digit rodent hand. Every digit reads `curl`: a thumb pinned at its open
  * fan throws a stub sideways out of a closed paw that reads as a spare finger.
  */
-function drawPaw(ctx: Ctx, wrist: Pt, angle: number, curl: number, shade: number): void {
+function drawPaw(
+  ctx: Ctx,
+  wrist: Pt,
+  angle: number,
+  curl: number,
+  shade: number,
+  pawSkin: Ramp,
+): void {
   const closed = clamp01(curl);
   const palmReach = PAW_LENGTH * (1 - closed * PAW_CURL_PALM);
   const palmEnd = offset(wrist, Math.cos(angle) * palmReach, Math.sin(angle) * palmReach);
-  const skin = mix(SKIN.mid, OUTLINE, shade);
+  const skin = mix(pawSkin.mid, OUTLINE, shade);
 
   outlineCapsule(ctx, wrist, palmEnd, WRIST_WIDTH, PAW_WIDTH / 2);
   fillCapsule(ctx, wrist, palmEnd, WRIST_WIDTH, PAW_WIDTH / 2, skin);
@@ -1257,42 +1179,50 @@ function wristAngle(chain: BoneChain): number {
   return lerp(alongArm, alongForearm, WRIST_FOLLOW);
 }
 
-/** How far down the upper arm the tunic's cap sleeve reaches. */
-const SLEEVE_END = 0.55;
-/** The sleeve is padded over the arm inside it, which is what makes it cloth. */
-const SLEEVE_BULK = 0.012;
-const SLEEVE_TAPER = 0.75;
+/** Where a held prop's grip sits along the paw, from the wrist. */
+const PROP_GRIP_AT = PAW_LENGTH * 0.6;
 
 /**
- * The arm, with the tunic's cap sleeve over the top of it.
+ * The arm, its paw, anything held in it, and every garment's arm layer over the
+ * top — sleeves most of all. A sleeve is drawn with the arm rather than with the
+ * garment because it has to follow the arm through its swing: without it the
+ * shoulder is an unbroken column of fur running out of a coloured shape, and the
+ * eye reads no arm at all.
  *
- * The sleeve is drawn here rather than with the garment because it has to follow
- * the arm through its swing: without it the shoulder is an unbroken column of
- * fur running out of a green shape, and the eye reads no arm at all.
+ * The prop goes under the paw so the fingers close round the shaft.
  */
-function drawArm(ctx: Ctx, chain: BoneChain, curl: number, shade: number): void {
-  drawLimb(ctx, chain, ARM_SHAPE, FUR, shade);
-  drawPaw(ctx, chain.end, wristAngle(chain), curl, shade);
-
-  const cuff = mixPt(chain.root, chain.joint, SLEEVE_END);
-  const rootWidth = ARM_SHAPE.root + SLEEVE_BULK;
-  const cuffWidth = lerp(ARM_SHAPE.root, ARM_SHAPE.joint, SLEEVE_END) + SLEEVE_BULK * SLEEVE_TAPER;
-  outlineCapsule(ctx, chain.root, cuff, rootWidth, cuffWidth);
-  fillCapsule(ctx, chain.root, cuff, rootWidth, cuffWidth, mix(TUNIC.mid, OUTLINE, shade));
-  sheenSegment(ctx, chain.root, cuff, rootWidth, mix(TUNIC.light, OUTLINE, shade), SHEEN_ALPHA);
+function drawArm(frame: GarmentFrame, look: Look, arm: ArmFrame, curl: number): void {
+  const { ctx } = frame;
+  const { chain, shade } = arm;
+  drawLimb(ctx, chain, widenedLimb(ARM_SHAPE, arm.widthScale), look.fur, shade);
+  const angle = wristAngle(chain);
+  if (arm.right && look.heldProp !== 'none') {
+    const axis = frame.pose.propAxis ?? PROP_CARRY[look.heldProp].axis;
+    const shift = frame.pose.propShift ?? 0;
+    const grip = offset(
+      chain.end,
+      Math.cos(angle) * PROP_GRIP_AT + Math.cos(axis) * shift,
+      Math.sin(angle) * PROP_GRIP_AT + Math.sin(axis) * shift,
+    );
+    drawHeldProp(ctx, look.heldProp, grip, axis);
+  }
+  drawPaw(ctx, chain.end, angle, curl, shade, look.pawTint ?? look.skin);
+  for (const layer of look.garments) layer.arm?.(frame, arm);
 }
 
 function drawLeg(
-  ctx: Ctx,
-  chain: BoneChain,
-  foot: FootPose,
+  frame: GarmentFrame,
+  look: Look,
+  leg: LegFrame,
   view: ViewSpec,
   outward: number,
-  shade: number,
 ): void {
-  drawLimb(ctx, chain, legShapeFor(foot.nearness), FUR, shade);
-  if (view.profile) drawFootProfile(ctx, chain.end, foot, FUR, shade);
-  else drawFootFacing(ctx, chain.end, foot, view, outward, FUR, shade);
+  const { ctx } = frame;
+  const { chain, foot, shade } = leg;
+  drawLimb(ctx, chain, widenedLimb(legShapeFor(foot.nearness), leg.widthScale), look.fur, shade);
+  if (view.profile) drawFootProfile(ctx, chain.end, foot, look, shade);
+  else drawFootFacing(ctx, chain.end, foot, view, outward, look, shade);
+  for (const layer of look.garments) layer.leg?.(frame, leg);
 }
 
 // ── Tail ─────────────────────────────────────────────────────────────────────
@@ -1420,7 +1350,13 @@ function tailSpine(root: Pt, tail: TailPose, lengthScale: number): Pt[] {
   return points;
 }
 
-function drawTail(ctx: Ctx, root: Pt, tail: TailPose, carriage: TailCarriage): void {
+function drawTail(
+  ctx: Ctx,
+  root: Pt,
+  tail: TailPose,
+  carriage: TailCarriage,
+  tailSkin: Ramp,
+): void {
   const spine = tailSpine(root, tail, carriage.lengthScale);
   const lastIndex = spine.length - 1;
   const widthAt = (i: number): number =>
@@ -1430,20 +1366,20 @@ function drawTail(ctx: Ctx, root: Pt, tail: TailPose, carriage: TailCarriage): v
     outlineCapsule(ctx, spine[i], spine[i + 1], widthAt(i), widthAt(i + 1));
   }
   for (let i = 0; i < lastIndex; i++) {
-    fillCapsule(ctx, spine[i], spine[i + 1], widthAt(i), widthAt(i + 1), TAIL_SKIN.mid);
+    fillCapsule(ctx, spine[i], spine[i + 1], widthAt(i), widthAt(i + 1), tailSkin.mid);
   }
   sheenSegment(
     ctx,
     spine[0],
     spine[Math.floor(lastIndex / 2)],
     widthAt(0),
-    TAIL_SKIN.light,
+    tailSkin.light,
     SHEEN_ALPHA,
   );
 
   ctx.save();
   ctx.globalAlpha = TAIL_RING_ALPHA;
-  ctx.strokeStyle = TAIL_SKIN.dark;
+  ctx.strokeStyle = tailSkin.dark;
   ctx.lineWidth = TAIL_RING_WIDTH;
   for (let i = 0; i < TAIL_RINGS; i++) {
     const t = TAIL_RING_START + (i / TAIL_RINGS) * (1 - TAIL_RING_START);
@@ -1477,12 +1413,11 @@ const BELLY_INSET = 0.32;
 const BOW_LEFT = -1;
 
 /**
- * The bare torso under the tunic: throat, chest, belly and rump, so the tunic's
- * neck and hem open onto fur rather than onto nothing.
+ * The bare torso under the clothes: throat, chest, belly and rump, so a
+ * garment's neck and hem open onto fur rather than onto nothing.
  */
-function drawTorsoFur(ctx: Ctx, skeleton: Skeleton, pose: RatKinPose, view: ViewSpec): void {
+function drawTorsoFur(ctx: Ctx, skeleton: Skeleton, span: TorsoSpan, look: Look): void {
   const { hip, waist, chest, neck } = skeleton;
-  const span = breathed(view.torso, pose.breath);
   const throatFront = pt(neck.x + span.shoulderLead * NECK_NARROW, neck.y);
   const throatBack = pt(neck.x - span.shoulderTrail * NECK_NARROW, neck.y);
   const bellyFront = pt(hip.x + span.hipLead, hip.y);
@@ -1506,7 +1441,7 @@ function drawTorsoFur(ctx: Ctx, skeleton: Skeleton, pose: RatKinPose, view: View
       traceFurEdge(ctx, rumpBack, throatBack, RUMP_BULGE, RUMP_TUFTS, RUMP_TUFT, BOW_LEFT);
       ctx.closePath();
     },
-    FUR.mid,
+    look.fur.mid,
     BODY_OUTLINE_WIDTH,
   );
 
@@ -1518,146 +1453,9 @@ function drawTorsoFur(ctx: Ctx, skeleton: Skeleton, pose: RatKinPose, view: View
   ctx.quadraticCurveTo(bellyFront.x, bellyFront.y, hip.x + span.hipLead * BELLY_INSET, hip.y);
   ctx.quadraticCurveTo(waist.x + span.waistLead * BELLY_INSET, waist.y, chest.x, chest.y);
   ctx.closePath();
-  ctx.fillStyle = BELLY_FUR.mid;
+  ctx.fillStyle = look.belly.mid;
   ctx.fill();
   ctx.restore();
-}
-
-const TUNIC_HEM_DROP = 0.3;
-const TUNIC_COLLAR_RISE = 0.045;
-const TUNIC_HEM_FLARE = 1.24;
-const TUNIC_HEM_SWAY = 0.05;
-const TUNIC_HEM_SAG = 0.03;
-/** A shadow down the far side, so the tunic wraps a body instead of facing one. */
-const TUNIC_SHADE_ALPHA = 0.55;
-const TUNIC_SHADE_WIDTH = 0.055;
-const STRAP_WIDTH = 0.024;
-const STRAP_AT = 0.5;
-const STRAP_DROP = 0.06;
-const BELT_AT = 0.52;
-const BELT_HEIGHT = 0.042;
-const BUCKLE_WIDTH = 0.045;
-const BUCKLE_INSET = 0.62;
-const POUCH_WIDTH = 0.075;
-const POUCH_HEIGHT = 0.085;
-const POUCH_BACK = 0.1;
-const POUCH_ROUND = 0.3;
-
-/** Traces a rounded rectangle; `roundRect` is not on node-canvas' context. */
-function traceRoundRect(
-  ctx: Ctx,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-): void {
-  const r = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + width - r, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
-  ctx.lineTo(x + width, y + height - r);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
-  ctx.lineTo(x + r, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
-/** A patched, belted tunic ending above the knee so the legs stay legible. */
-function drawTunic(ctx: Ctx, skeleton: Skeleton, pose: RatKinPose, view: ViewSpec): void {
-  const { hip, waist, chest, shoulder } = skeleton;
-  const span = breathed(view.torso, pose.breath);
-  const hemY = hip.y + TUNIC_HEM_DROP;
-  const sway = pose.hemSway * TUNIC_HEM_SWAY;
-  const hemFront = hip.x + span.hipLead * TUNIC_HEM_FLARE + sway;
-  const hemBack = hip.x - span.hipTrail * TUNIC_HEM_FLARE + sway;
-  const collarY = shoulder.y - TUNIC_COLLAR_RISE;
-
-  fillOutlined(
-    ctx,
-    () => {
-      ctx.beginPath();
-      ctx.moveTo(shoulder.x + span.shoulderLead, collarY);
-      ctx.quadraticCurveTo(chest.x + span.chestLead, chest.y, waist.x + span.waistLead, waist.y);
-      ctx.lineTo(hemFront, hemY);
-      ctx.quadraticCurveTo(hip.x + sway, hemY + TUNIC_HEM_SAG, hemBack, hemY);
-      ctx.lineTo(waist.x - span.waistTrail, waist.y);
-      ctx.quadraticCurveTo(
-        chest.x - span.chestTrail,
-        chest.y,
-        shoulder.x - span.shoulderTrail,
-        collarY,
-      );
-      ctx.closePath();
-    },
-    TUNIC.mid,
-    BODY_OUTLINE_WIDTH,
-  );
-
-  ctx.save();
-  ctx.globalAlpha = TUNIC_SHADE_ALPHA;
-  ctx.beginPath();
-  ctx.moveTo(shoulder.x - span.shoulderTrail, shoulder.y);
-  ctx.quadraticCurveTo(chest.x - span.chestTrail, chest.y, waist.x - span.waistTrail, waist.y);
-  ctx.lineTo(hemBack, hemY);
-  ctx.lineTo(hemBack + TUNIC_SHADE_WIDTH, hemY);
-  ctx.quadraticCurveTo(
-    chest.x - span.chestTrail + TUNIC_SHADE_WIDTH,
-    chest.y,
-    shoulder.x - span.shoulderTrail + TUNIC_SHADE_WIDTH,
-    shoulder.y,
-  );
-  ctx.closePath();
-  ctx.fillStyle = TUNIC.dark;
-  ctx.fill();
-  ctx.restore();
-
-  // Mirrored from behind: the shoulder the strap crosses from is a fixed side of
-  // his body, so it has to appear on the opposite side of the screen when the
-  // camera goes round him. Left alone it reads as the strap jumping shoulders.
-  const strapSide = view.showsBack ? -1 : 1;
-  const strapTop = offset(shoulder, span.shoulderLead * STRAP_AT * strapSide, 0);
-  const strapBottom = pt(waist.x - span.waistTrail * STRAP_AT * strapSide, waist.y + STRAP_DROP);
-  outlineCapsule(ctx, strapTop, strapBottom, STRAP_WIDTH, STRAP_WIDTH);
-  fillCapsule(ctx, strapTop, strapBottom, STRAP_WIDTH, STRAP_WIDTH, LEATHER.mid);
-
-  const beltY = lerp(waist.y, hemY, BELT_AT);
-  const beltFront = lerp(waist.x + span.waistLead, hemFront, BELT_AT);
-  const beltBack = lerp(waist.x - span.waistTrail, hemBack, BELT_AT);
-  fillOutlined(
-    ctx,
-    () => {
-      ctx.beginPath();
-      ctx.rect(beltBack, beltY - BELT_HEIGHT / 2, beltFront - beltBack, BELT_HEIGHT);
-    },
-    LEATHER.mid,
-    DETAIL_OUTLINE_WIDTH,
-  );
-  ctx.fillStyle = BUCKLE;
-  ctx.fillRect(
-    beltFront - BUCKLE_WIDTH,
-    beltY - (BELT_HEIGHT * BUCKLE_INSET) / 2,
-    BUCKLE_WIDTH,
-    BELT_HEIGHT * BUCKLE_INSET,
-  );
-
-  fillOutlined(
-    ctx,
-    () =>
-      traceRoundRect(
-        ctx,
-        beltBack + POUCH_BACK,
-        beltY,
-        POUCH_WIDTH,
-        POUCH_HEIGHT,
-        POUCH_HEIGHT * POUCH_ROUND,
-      ),
-    LEATHER.dark,
-    DETAIL_OUTLINE_WIDTH,
-  );
 }
 
 // ── Head ─────────────────────────────────────────────────────────────────────
@@ -1781,6 +1579,7 @@ const SNIFF_LIFT = 0.022;
 /** One ear: an outer disc, an inner membrane, and a rim of fur outside it. */
 function drawEar(
   ctx: Ctx,
+  look: Look,
   centre: Pt,
   tilt: number,
   scale: number,
@@ -1797,7 +1596,7 @@ function drawEar(
       ctx.beginPath();
       ctx.ellipse(0, 0, EAR_R, EAR_R * EAR_FLATTEN, EAR_LEAN, 0, TWO_PI);
     },
-    mix(FUR.mid, OUTLINE, shade),
+    mix(look.fur.mid, OUTLINE, shade),
     BODY_OUTLINE_WIDTH,
   );
   ctx.beginPath();
@@ -1812,12 +1611,12 @@ function drawEar(
   );
   ctx.save();
   ctx.globalAlpha = membraneAlpha;
-  ctx.fillStyle = mix(SKIN.mid, OUTLINE, shade);
+  ctx.fillStyle = mix(look.skin.mid, OUTLINE, shade);
   ctx.fill();
   ctx.restore();
   ctx.save();
   ctx.globalAlpha = EAR_RIM_ALPHA;
-  ctx.strokeStyle = mix(FUR.light, OUTLINE, shade);
+  ctx.strokeStyle = mix(look.fur.light, OUTLINE, shade);
   ctx.lineWidth = EAR_RIM_WIDTH;
   ctx.beginPath();
   ctx.ellipse(
@@ -1838,7 +1637,7 @@ function drawEar(
  * The head seen edge-on, painted about its own centre with +X forward. Rotating
  * and placing it is the caller's job.
  */
-function drawHeadProfile(ctx: Ctx, pose: RatKinPose): void {
+function drawHeadProfile(ctx: Ctx, pose: RatKinPose, look: Look): void {
   const sniff = clamp01(pose.sniff);
   const noseX = MUZZLE_LENGTH + sniff * SNIFF_REACH;
   const noseY = MUZZLE_DROP - sniff * SNIFF_LIFT;
@@ -1851,6 +1650,7 @@ function drawHeadProfile(ctx: Ctx, pose: RatKinPose): void {
 
   drawEar(
     ctx,
+    look,
     pt(EAR_X - FAR_EAR_BACK, EAR_Y - FAR_EAR_RISE),
     pose.earFar,
     FAR_EAR_SHRINK,
@@ -1883,7 +1683,7 @@ function drawHeadProfile(ctx: Ctx, pose: RatKinPose): void {
       ctx.quadraticCurveTo(-SKULL_RX, -SKULL_RY, 0, -SKULL_RY);
       ctx.closePath();
     },
-    FUR.mid,
+    look.fur.mid,
     BODY_OUTLINE_WIDTH,
   );
 
@@ -1900,7 +1700,7 @@ function drawHeadProfile(ctx: Ctx, pose: RatKinPose): void {
     jawY - CHEEK_BAND,
   );
   ctx.closePath();
-  ctx.fillStyle = BELLY_FUR.mid;
+  ctx.fillStyle = look.belly.mid;
   ctx.fill();
   ctx.restore();
 
@@ -1911,8 +1711,8 @@ function drawHeadProfile(ctx: Ctx, pose: RatKinPose): void {
   );
   const incisorTip = offset(
     incisorRoot,
-    Math.sin(INCISOR_LEAN) * INCISOR_LENGTH,
-    Math.cos(INCISOR_LEAN) * INCISOR_LENGTH,
+    Math.sin(INCISOR_LEAN) * INCISOR_LENGTH * look.incisorScale,
+    Math.cos(INCISOR_LEAN) * INCISOR_LENGTH * look.incisorScale,
   );
   // A *pair*, with a dark split down the middle. One block reads as a boar's
   // tusk or as a chip of bone stuck to his lip; the split is what says rodent.
@@ -1929,7 +1729,7 @@ function drawHeadProfile(ctx: Ctx, pose: RatKinPose): void {
 
   ctx.beginPath();
   ctx.arc(noseX, noseY, NOSE_R, 0, TWO_PI);
-  ctx.fillStyle = SKIN.dark;
+  ctx.fillStyle = look.skin.dark;
   ctx.fill();
 
   ctx.save();
@@ -1960,7 +1760,7 @@ function drawHeadProfile(ctx: Ctx, pose: RatKinPose): void {
   if (open > EYE_SHUT_THRESHOLD) {
     ctx.beginPath();
     ctx.ellipse(EYE_X, EYE_Y, EYE_R, EYE_R * open, 0, 0, TWO_PI);
-    ctx.fillStyle = EYE_BEAD;
+    ctx.fillStyle = look.eye;
     ctx.fill();
     ctx.beginPath();
     ctx.arc(EYE_X - EYE_GLINT_OFFSET, EYE_Y - EYE_GLINT_OFFSET, EYE_GLINT_R * open, 0, TWO_PI);
@@ -1975,7 +1775,7 @@ function drawHeadProfile(ctx: Ctx, pose: RatKinPose): void {
     ctx.stroke();
   }
 
-  drawEar(ctx, pt(EAR_X, EAR_Y), pose.earNear, 1, UNSHADED);
+  drawEar(ctx, look, pt(EAR_X, EAR_Y), pose.earNear, 1, UNSHADED);
 }
 
 /**
@@ -2030,7 +1830,7 @@ const NAPE_BULGE = 0.018;
  * The head seen head-on or from behind. `toward` is +1 for the face and −1 for
  * the back of the head, and it is what mirrors the parts that are not symmetric.
  */
-function drawHeadFacing(ctx: Ctx, pose: RatKinPose, view: ViewSpec): void {
+function drawHeadFacing(ctx: Ctx, pose: RatKinPose, view: ViewSpec, look: Look): void {
   const sniff = clamp01(pose.sniff);
   const muzzleTipY = SKULL_RY * MUZZLE_FACING_DROP + MUZZLE_FACING_LENGTH - sniff * SNIFF_LIFT;
 
@@ -2041,6 +1841,7 @@ function drawHeadFacing(ctx: Ctx, pose: RatKinPose, view: ViewSpec): void {
     const tilt = side === FACING_RIGHT_EAR ? pose.earNear : pose.earFar;
     drawEar(
       ctx,
+      look,
       pt(EAR_FACING_X * side, EAR_FACING_Y),
       (tilt + EAR_FACING_SPLAY) * side,
       EAR_FACING_SCALE,
@@ -2090,7 +1891,7 @@ function drawHeadFacing(ctx: Ctx, pose: RatKinPose, view: ViewSpec): void {
       ctx.quadraticCurveTo(-SKULL_FACING_RX, -SKULL_RY, 0, -SKULL_RY);
       ctx.closePath();
     },
-    FUR.mid,
+    look.fur.mid,
     BODY_OUTLINE_WIDTH,
   );
 
@@ -2105,7 +1906,7 @@ function drawHeadFacing(ctx: Ctx, pose: RatKinPose, view: ViewSpec): void {
   ctx.quadraticCurveTo(0, muzzleTipY + MUZZLE_FACING_TIP_HALF, -MUZZLE_FACING_TIP_HALF, muzzleTipY);
   ctx.lineTo(-MUZZLE_FACING_HALF, SKULL_RY * MUZZLE_FACING_DROP);
   ctx.closePath();
-  ctx.fillStyle = BELLY_FUR.mid;
+  ctx.fillStyle = look.belly.mid;
   ctx.fill();
   ctx.restore();
 
@@ -2133,7 +1934,7 @@ function drawHeadFacing(ctx: Ctx, pose: RatKinPose, view: ViewSpec): void {
   for (const side of [-1, 1]) {
     const x = (INCISOR_WIDTH + INCISOR_FACING_SPLIT) * side;
     const root = pt(x, incisorTop);
-    const tip = pt(x, incisorTop + INCISOR_LENGTH);
+    const tip = pt(x, incisorTop + INCISOR_LENGTH * look.incisorScale);
     // Outlined like every other detail: against the pale muzzle band an
     // unoutlined tooth is a low-contrast smudge once the sheet is halved.
     outlineCapsule(ctx, root, tip, INCISOR_WIDTH, INCISOR_WIDTH * INCISOR_TAPER);
@@ -2150,7 +1951,7 @@ function drawHeadFacing(ctx: Ctx, pose: RatKinPose, view: ViewSpec): void {
     0,
     TWO_PI,
   );
-  ctx.fillStyle = SKIN.dark;
+  ctx.fillStyle = look.skin.dark;
   ctx.fill();
 
   const open = 1 - clamp01(pose.blink);
@@ -2159,7 +1960,7 @@ function drawHeadFacing(ctx: Ctx, pose: RatKinPose, view: ViewSpec): void {
     if (open > EYE_SHUT_THRESHOLD) {
       ctx.beginPath();
       ctx.ellipse(eyeX, EYE_FACING_Y, EYE_R, EYE_R * open, 0, 0, TWO_PI);
-      ctx.fillStyle = EYE_BEAD;
+      ctx.fillStyle = look.eye;
       ctx.fill();
       ctx.beginPath();
       ctx.arc(
@@ -2195,30 +1996,40 @@ const NOSE_FACING_FLATTEN = 0.8;
 /** How much of the torso's lean the head copies; a level head reads alert. */
 const HEAD_LEAN_FOLLOW = 0.35;
 
+/** The rim of a figure wearing nothing on its torso: the bare fur's own edge. */
+const BARE_HEM: HemShape = { drop: 0, flare: 1, collarRise: 0, sway: 0 };
+
 /**
  * Rim light down the figure's trailing edge, unifying the parts into one body.
  *
- * It traces the *tunic's* outline, not the bare torso's. Drawn after the garment
- * but measured off the body underneath, the highlight lands somewhere in the
- * middle of the cloth — a stripe rather than a rim — because the hem is flared
- * and the collar raised.
+ * It traces the outermost *garment's* outline, not the bare torso's. Drawn after
+ * the garment but measured off the body underneath, the highlight lands
+ * somewhere in the middle of the cloth — a stripe rather than a rim — because a
+ * hem is flared and a collar raised.
  */
-function drawRimLight(ctx: Ctx, skeleton: Skeleton, pose: RatKinPose, view: ViewSpec): void {
-  const span = view.torso;
+function drawRimLight(
+  ctx: Ctx,
+  skeleton: Skeleton,
+  pose: RatKinPose,
+  span: TorsoSpan,
+  hem: HemShape,
+  profile: boolean,
+): void {
   const { hip, chest, shoulder } = skeleton;
-  const sway = pose.hemSway * TUNIC_HEM_SWAY;
+  const sway = pose.hemSway * hem.sway;
+  const trailFlare = profile ? (hem.profileTrailFlare ?? hem.flare) : hem.flare;
   ctx.save();
   ctx.globalAlpha = RIM_ALPHA;
   ctx.strokeStyle = RIM_LIGHT;
   ctx.lineWidth = RIM_WIDTH;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(shoulder.x - span.shoulderTrail, shoulder.y - TUNIC_COLLAR_RISE);
+  ctx.moveTo(shoulder.x - span.shoulderTrail, shoulder.y - hem.collarRise);
   ctx.quadraticCurveTo(
     chest.x - span.chestTrail,
     chest.y,
-    hip.x - span.hipTrail * TUNIC_HEM_FLARE + sway,
-    hip.y + TUNIC_HEM_DROP,
+    hip.x - span.hipTrail * trailFlare + sway,
+    hip.y + hem.drop,
   );
   ctx.stroke();
   ctx.restore();
@@ -2229,16 +2040,121 @@ const NEAR_FOOT_OUT = 1;
 const FAR_FOOT_OUT = -1;
 
 /**
- * The Rat Kin in one view.
+ * An outfit resolved into what the painter reads: defaults filled in, and the
+ * garment stack's rim and paw tint picked out once rather than per part.
+ */
+interface Look {
+  readonly fur: Ramp;
+  readonly belly: Ramp;
+  readonly skin: Ramp;
+  readonly tailSkin: Ramp;
+  readonly eye: string;
+  readonly incisorScale: number;
+  readonly build: RatkinBuildSpec;
+  readonly garments: readonly GarmentLayer[];
+  readonly heldProp: HeldPropKind;
+  readonly hem: HemShape;
+  readonly pawTint: Ramp | undefined;
+}
+
+function lookOf(outfit: RatkinOutfit): Look {
+  let hem = BARE_HEM;
+  let pawTint: Ramp | undefined;
+  for (const layer of outfit.garments) {
+    if (layer.hem !== undefined) hem = layer.hem;
+    if (layer.pawTint !== undefined) pawTint = layer.pawTint;
+  }
+  return {
+    fur: outfit.fur,
+    belly: outfit.belly,
+    skin: outfit.skin ?? SKIN,
+    tailSkin: outfit.tailSkin ?? TAIL_SKIN,
+    eye: outfit.eyeTint ?? EYE_BEAD,
+    incisorScale: outfit.incisorScale ?? 1,
+    build: RATKIN_BUILDS[outfit.build],
+    garments: outfit.garments,
+    heldProp: outfit.heldProp ?? 'none',
+    hem,
+    pawTint,
+  };
+}
+
+/** The torso's spans widened by a build; the spans themselves when it leaves them alone. */
+function widenedTorso(span: TorsoSpan, bodyWidth: number): TorsoSpan {
+  if (bodyWidth === 1) return span;
+  return {
+    shoulderLead: span.shoulderLead * bodyWidth,
+    shoulderTrail: span.shoulderTrail * bodyWidth,
+    chestLead: span.chestLead * bodyWidth,
+    chestTrail: span.chestTrail * bodyWidth,
+    waistLead: span.waistLead * bodyWidth,
+    waistTrail: span.waistTrail * bodyWidth,
+    hipLead: span.hipLead * bodyWidth,
+    hipTrail: span.hipTrail * bodyWidth,
+  };
+}
+
+/** The pose with the build's stoop and tired knees folded in. */
+function builtPose(pose: RatKinPose, build: RatkinBuildSpec): RatKinPose {
+  if (build.stoop === 0 && build.crouch === 0) return pose;
+  return { ...pose, lean: pose.lean + build.stoop, crouch: pose.crouch + build.crouch };
+}
+
+/** The head's geometry in this view, for the layers painted over it. */
+function headGeometryFor(view: ViewSpec, pose: RatKinPose): HeadGeometry {
+  if (view.profile) {
+    return {
+      skullHalfWidth: SKULL_RX,
+      skullHalfHeight: SKULL_RY,
+      ear: pt(EAR_X, EAR_Y),
+      earRadius: EAR_R,
+      eye: pt(EYE_X, EYE_Y),
+      eyeRadius: EYE_R,
+      nose: pt(MUZZLE_LENGTH, MUZZLE_DROP),
+    };
+  }
+  const sniff = clamp01(pose.sniff);
+  return {
+    skullHalfWidth: SKULL_FACING_RX,
+    skullHalfHeight: SKULL_RY,
+    ear: pt(EAR_FACING_X, EAR_FACING_Y),
+    earRadius: EAR_R * EAR_FACING_SCALE,
+    eye: pt(EYE_FACING_X, EYE_FACING_Y),
+    eyeRadius: EYE_R,
+    nose: pt(0, SKULL_RY * MUZZLE_FACING_DROP + MUZZLE_FACING_LENGTH - sniff * SNIFF_LIFT),
+  };
+}
+
+/**
+ * Which side of the picture the wearer's right is on. Head-on he faces the
+ * camera, so his right is on the picture's left; from behind, and in a profile
+ * facing +X with the near side toward the viewer, it is on the picture's right.
+ */
+function rightSideOf(view: ViewSpec): number {
+  return view.showsFace && !view.profile ? -1 : 1;
+}
+
+/**
+ * A ratkin in one view, wearing `outfit`.
  *
  * Draw order is depth order. Edge-on: the tail behind everything, then the far
  * limbs, the near leg over them, the clothed torso over the thighs, the head
- * over the collar, and the near arm last so it hangs in front of the tunic.
+ * over the collar, and the near arm last so it hangs in front of the clothes.
  * Head-on *both* arms hang in front of the torso — drawing the far one early,
  * which is correct in profile, makes him look one-armed. Walking away, both go
  * behind the back, which is what hides the forward half of an arm swing.
+ *
+ * Garment layers slot into that order at fixed depths; see `GarmentLayer`.
  */
-function drawFigure(ctx: Ctx, view: ViewSpec, pose: RatKinPose): void {
+function drawFigure(
+  ctx: Ctx,
+  view: ViewSpec,
+  authoredPose: RatKinPose,
+  outfit: RatkinOutfit,
+): void {
+  const look = lookOf(outfit);
+  const { build } = look;
+  const pose = builtPose(authoredPose, build);
   const skeleton = buildSkeleton(pose, view);
   // Centred between his feet, which is where his weight is. The hip is not a
   // candidate: it never moves sideways in any pose this figure has, so a
@@ -2250,7 +2166,13 @@ function drawFigure(ctx: Ctx, view: ViewSpec, pose: RatKinPose): void {
   const stanceCentre = (pose.nearFoot.ball.x + pose.farFoot.ball.x) / 2;
   drawGroundShadow(ctx, stanceCentre * SHADOW_FOLLOW, SHADOW_RX, CONTACT_SHADOW_ALPHA);
 
-  const carriage = TAIL_CARRIAGE[viewNameOf(view)];
+  const viewName = viewNameOf(view);
+  const baseCarriage = TAIL_CARRIAGE[viewName];
+  const carriage: TailCarriage = {
+    ...baseCarriage,
+    girth: baseCarriage.girth * build.tailGirth,
+    lengthScale: baseCarriage.lengthScale * build.tailLength,
+  };
   // The sway is carried across from the pose as a *deviation* from its own rest,
   // so a view that aims the tail differently still gets the same motion.
   const tail: TailPose = {
@@ -2259,43 +2181,101 @@ function drawFigure(ctx: Ctx, view: ViewSpec, pose: RatKinPose): void {
     wave: pose.tail.wave,
     phase: pose.tail.phase,
   };
+  // Mirrored about the spine when the tail sweeps past the other hip: every
+  // angle reflects, and every turn along it runs the other way.
+  const mirrored = !view.profile && outfit.tailHip === 'left';
+  const tailRoot = offset(
+    skeleton.hip,
+    mirrored ? -carriage.root.x : carriage.root.x,
+    carriage.root.y,
+  );
+  const sweptTail: TailPose = mirrored
+    ? { base: Math.PI - tail.base, curl: -tail.curl, wave: -tail.wave, phase: tail.phase }
+    : tail;
   // Behind everything, in every view. From directly behind him a tail really
   // does hang between the viewer and his legs, but drawn that way it crosses
   // both of them and stops reading as a tail — so all three views sweep it out
   // to one side, where the body never occludes it in the first place.
-  drawTail(ctx, offset(skeleton.hip, carriage.root.x, carriage.root.y), tail, carriage);
+  drawTail(ctx, tailRoot, sweptTail, carriage, look.tailSkin);
+
+  const rightSide = rightSideOf(view);
+  const frame: GarmentFrame = {
+    ctx,
+    pose,
+    skeleton,
+    view: viewName,
+    span: widenedTorso(breathed(view.torso, pose.breath), build.bodyWidth),
+    rightSide,
+    build,
+    head: headGeometryFor(view, pose),
+  };
+  for (const layer of look.garments) layer.back?.(frame);
 
   // Edge-on the far arm is genuinely behind the body; head-on it is beside it.
   const farBehind = view.profile || pose.farArmBehind;
   const nearBehind = !view.profile && pose.nearArmBehind;
-  const farArmShade = view.profile ? FAR_LIMB_SHADE : UNSHADED;
-  if (farBehind) drawArm(ctx, skeleton.farArm, pose.farPaw, farArmShade);
-  if (nearBehind) drawArm(ctx, skeleton.nearArm, pose.nearPaw, UNSHADED);
+  const farArm: ArmFrame = {
+    chain: skeleton.farArm,
+    near: false,
+    right: rightSide < 0,
+    shade: view.profile ? FAR_LIMB_SHADE : UNSHADED,
+    widthScale: build.limbWidth,
+  };
+  const nearArm: ArmFrame = {
+    chain: skeleton.nearArm,
+    near: true,
+    right: rightSide > 0,
+    shade: UNSHADED,
+    widthScale: build.limbWidth,
+  };
+  if (farBehind) drawArm(frame, look, farArm, pose.farPaw);
+  if (nearBehind) drawArm(frame, look, nearArm, pose.nearPaw);
 
   // No depth shade on a head-on limb: it does not read as depth, it reads as two
   // different colours of fur. Only a true profile puts one limb behind the body.
-  const farLegShade = view.profile ? FAR_LIMB_SHADE : UNSHADED;
-  drawLeg(ctx, skeleton.farLeg, pose.farFoot, view, FAR_FOOT_OUT, farLegShade);
-  drawLeg(ctx, skeleton.nearLeg, pose.nearFoot, view, NEAR_FOOT_OUT, UNSHADED);
+  const farLeg: LegFrame = {
+    chain: skeleton.farLeg,
+    foot: pose.farFoot,
+    near: false,
+    shade: view.profile ? FAR_LIMB_SHADE : UNSHADED,
+    widthScale: build.limbWidth,
+  };
+  const nearLeg: LegFrame = {
+    chain: skeleton.nearLeg,
+    foot: pose.nearFoot,
+    near: true,
+    shade: UNSHADED,
+    widthScale: build.limbWidth,
+  };
+  drawLeg(frame, look, farLeg, view, FAR_FOOT_OUT);
+  drawLeg(frame, look, nearLeg, view, NEAR_FOOT_OUT);
 
-  drawTorsoFur(ctx, skeleton, pose, view);
-  drawTunic(ctx, skeleton, pose, view);
-  drawRimLight(ctx, skeleton, pose, view);
+  drawTorsoFur(ctx, skeleton, frame.span, look);
+  for (const layer of look.garments) layer.torso?.(frame);
+  drawRimLight(
+    ctx,
+    skeleton,
+    pose,
+    widenedTorso(view.torso, build.bodyWidth),
+    look.hem,
+    view.profile,
+  );
 
-  // The neck is drawn after the tunic so its fur sits over the collar, which is
-  // what a head thrust forward out of a garment actually does.
-  const neckTop = offset(skeleton.headCentre, 0, SKULL_RY * NECK_INTO_SKULL);
-  outlineCapsule(ctx, skeleton.neck, neckTop, NECK_WIDTH, NECK_WIDTH * NECK_TAPER);
-  // Part-way to the fur's own mid, not the full shadow: painted at `FUR.dark`
-  // the collar is far darker than anything around it and punches a hole between
-  // head and body at tile size, which reads as a detached head.
+  // The neck is drawn after the clothes so its fur sits over the collar, which
+  // is what a head thrust forward out of a garment actually does.
+  const neckWidth = NECK_WIDTH * build.headScale;
+  const neckTop = offset(skeleton.headCentre, 0, SKULL_RY * NECK_INTO_SKULL * build.headScale);
+  outlineCapsule(ctx, skeleton.neck, neckTop, neckWidth, neckWidth * NECK_TAPER);
+  // Part-way to the fur's own mid, not the full shadow: painted at the fur's
+  // dark the collar is far darker than anything around it and punches a hole
+  // between head and body at tile size, which reads as a detached head.
   fillCapsule(
     ctx,
     skeleton.neck,
     neckTop,
-    NECK_WIDTH,
-    NECK_WIDTH * NECK_TAPER,
-    mix(FUR.dark, FUR.mid, NECK_SHADE_LIFT),
+    neckWidth,
+    neckWidth * NECK_TAPER,
+    mix(look.fur.dark, look.fur.mid, NECK_SHADE_LIFT),
   );
 
   ctx.save();
@@ -2303,16 +2283,18 @@ function drawFigure(ctx: Ctx, view: ViewSpec, pose: RatKinPose): void {
   // Only the profile can show a nod or a lean: head-on both are rotations about
   // an axis pointing at the camera, and applying them there tips his whole head
   // sideways instead.
-  if (view.profile) {
-    ctx.rotate(pose.headPitch + pose.lean * HEAD_LEAN_FOLLOW);
-    drawHeadProfile(ctx, pose);
-  } else {
-    drawHeadFacing(ctx, pose, view);
-  }
+  if (view.profile) ctx.rotate(pose.headPitch + pose.lean * HEAD_LEAN_FOLLOW);
+  else if (pose.headRoll !== undefined) ctx.rotate(pose.headRoll);
+  if (build.headScale !== 1) ctx.scale(build.headScale, build.headScale);
+  if (view.profile) drawHeadProfile(ctx, pose, look);
+  else drawHeadFacing(ctx, pose, view, look);
+  for (const layer of look.garments) layer.head?.(frame);
   ctx.restore();
 
-  if (!farBehind) drawArm(ctx, skeleton.farArm, pose.farPaw, farArmShade);
-  if (!nearBehind) drawArm(ctx, skeleton.nearArm, pose.nearPaw, UNSHADED);
+  if (!farBehind) drawArm(frame, look, farArm, pose.farPaw);
+  if (!nearBehind) drawArm(frame, look, nearArm, pose.nearPaw);
+
+  for (const layer of look.garments) layer.front?.(frame);
 }
 
 /** Which entry of `VIEWS` a spec came from, for the tables keyed by view name. */
@@ -2321,17 +2303,34 @@ function viewNameOf(view: ViewSpec): RatKinView {
   return view.showsBack ? 'away' : 'front';
 }
 
-/** The Rat Kin walking toward the camera. */
-export function drawRatKinFront(ctx: Ctx, pose: RatKinPose): void {
-  drawFigure(ctx, VIEWS.front, pose);
+/**
+ * Paints a ratkin wearing `outfit` in one view, about his own ground point with
+ * +Y down and one figure unit per tile. The side view is always drawn facing
+ * +X; the runtime mirrors it for the left.
+ *
+ * Deterministic in `(view, pose, outfit)`: it reads nothing else, so any
+ * outfit can be baked into cached cells.
+ */
+export function drawRatkin(
+  ctx: Ctx,
+  view: RatKinView,
+  pose: RatKinPose,
+  outfit: RatkinOutfit,
+): void {
+  drawFigure(ctx, VIEWS[view], pose, outfit);
 }
 
-/** The Rat Kin walking away from the camera. */
-export function drawRatKinAway(ctx: Ctx, pose: RatKinPose): void {
-  drawFigure(ctx, VIEWS.away, pose);
+/** A ratkin walking toward the camera. */
+export function drawRatKinFront(ctx: Ctx, pose: RatKinPose, outfit: RatkinOutfit): void {
+  drawFigure(ctx, VIEWS.front, pose, outfit);
 }
 
-/** The Rat Kin edge-on, always drawn facing +X; the runtime mirrors for the left. */
-export function drawRatKinSide(ctx: Ctx, pose: RatKinPose): void {
-  drawFigure(ctx, VIEWS.side, pose);
+/** A ratkin walking away from the camera. */
+export function drawRatKinAway(ctx: Ctx, pose: RatKinPose, outfit: RatkinOutfit): void {
+  drawFigure(ctx, VIEWS.away, pose, outfit);
+}
+
+/** A ratkin edge-on, always drawn facing +X; the runtime mirrors for the left. */
+export function drawRatKinSide(ctx: Ctx, pose: RatKinPose, outfit: RatkinOutfit): void {
+  drawFigure(ctx, VIEWS.side, pose, outfit);
 }

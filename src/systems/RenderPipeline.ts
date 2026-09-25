@@ -42,6 +42,7 @@ import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
 import type { WaterAnimationSystem } from './WaterAnimationSystem';
 import type { LootSystem } from './LootSystem';
+import type { GroundPickupSystem } from './GroundPickupSystem';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
 import type { MercenarySystem } from './MercenarySystem';
@@ -222,6 +223,12 @@ export interface RenderContext {
   /** Null on every map but the overworld, which is the only one with rivers. */
   water: WaterAnimationSystem | null;
   loot: LootSystem;
+  groundPickups: GroundPickupSystem;
+  /**
+   * Whether world prompts may show this frame — false while a hostile is in
+   * the active crawler's attack range, when Space swings instead.
+   */
+  interactionPromptsAllowed: boolean;
   treasureChests: TreasureChestSystem;
   miniMap: MiniMapSystem;
   mongoSystem: MongoSystem;
@@ -331,7 +338,7 @@ export class RenderPipeline {
     safeRoom.renderObjects(ctx, camX, camY, active);
     bossRoom.renderObjects(ctx, camX, camY);
     bossRoomDressings.renderGround(ctx, camX, camY, active);
-    arenaRoom.render(ctx, camX, camY, active);
+    arenaRoom.render(ctx, camX, camY, rc.interactionPromptsAllowed ? active : undefined);
     stairwell.renderStairwells(ctx, camX, camY);
     building?.renderDoorHints(ctx, camX, camY);
   }
@@ -475,6 +482,7 @@ export class RenderPipeline {
       for (const prop of townProps) this._pushPropEntry(prop, camX, camY);
     }
     for (const prop of rc.bossRoomDressings.renderEntities()) this._pushPropEntry(prop, camX, camY);
+    for (const pickup of rc.groundPickups.renderEntities()) this._pushPropEntry(pickup, camX, camY);
 
     // Sort only the active portion of the pool
     const items = this._drawPool;

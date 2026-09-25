@@ -18,6 +18,7 @@ import type { GameStats } from '../../core/GameStats';
 import { displayHp } from '../../core/crawlerFormulas';
 import { ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
 import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../../core/timedPotions';
+import { eatFood, isFoodId } from '../../core/foods';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import { GearPanel } from '../../ui/GearPanel';
@@ -26,6 +27,10 @@ import { InventoryPanel } from '../../ui/InventoryPanel';
 import type { InventoryInteraction } from '../../ui/InventoryInteraction';
 import { LevelUpDialog } from '../../ui/LevelUpDialog';
 import { MongoExplainer } from '../../ui/MongoExplainer';
+import { CraftExplainers } from '../../ui/CraftExplainers';
+import { ResourcingExplainer } from '../../ui/ResourcingExplainer';
+import { ConstructionExplainer } from '../../ui/ConstructionExplainer';
+import { ConstructionMenu } from '../../ui/ConstructionMenu';
 import { potionEffectNotice, statBoostNotice } from '../../ui/potionNotices';
 import { PauseMenu } from '../../ui/PauseMenu';
 import { RewardGrantedDialog } from '../../ui/RewardGrantedDialog';
@@ -49,6 +54,12 @@ function slotContentsAt(
   const container = source === 'hotbar' ? holder.inventory.actionBar : holder.inventory.bag;
   return container.slots[slotIdx];
 }
+
+/** What a hamburger refusal says: the one refusal with a reason worth reading. */
+const ALREADY_FULL_NOTICE = "You're already full.";
+
+/** Every item gated by the potion cooldown, so each wears the same hotbar sweep. */
+const POTION_COOLDOWN_ITEMS: readonly ItemId[] = ['health_potion', 'hollow_stew'];
 
 /** A cue waiting out its beat behind the gulp that earned it. */
 interface DelayedSound {
@@ -97,6 +108,14 @@ export class MenusKit {
   readonly skillBookPrompt = new SkillBookPrompt();
   readonly hotbarToast = new HotbarToast();
   readonly mongoExplainer: MongoExplainer;
+  /** The craft skills' "how it works" explainers, opened from the Crafts tab and by the teachers. */
+  readonly craftExplainers = new CraftExplainers();
+  /**
+   * The Construction menu. Held here rather than by the village because both
+   * scenes open it — indoors it comes up read-only — and whichever scene is
+   * live supplies what it lists.
+   */
+  readonly constructionMenu: ConstructionMenu;
 
   private readonly world: SceneWorld;
   private readonly abilityManager: AbilityManager;
@@ -134,6 +153,10 @@ export class MenusKit {
     const audio = deps.world.audio;
     this.mongoExplainer = new MongoExplainer(audio, () => this.abilityManager.getLevel('mongo'));
     this.pauseMenu.onHowMongoWorks = () => this.mongoExplainer.open();
+    this.craftExplainers.register('resourcing', new ResourcingExplainer(audio));
+    this.craftExplainers.register('construction', new ConstructionExplainer(audio));
+    this.constructionMenu = new ConstructionMenu(audio);
+    this.pauseMenu.onHowCraftWorks = (id) => void this.craftExplainers.open(id);
     this.pauseMenu.audio = audio;
     this.levelUpDialog.audio = audio;
     this.rewardGrantedDialog.audio = audio;
@@ -154,7 +177,8 @@ export class MenusKit {
       this.skillBookPrompt.isOpen ||
       this.levelUpDialog.isShowing ||
       this.rewardGrantedDialog.isShowing ||
-      this.mongoExplainer.isOpen
+      this.mongoExplainer.isOpen ||
+      this.craftExplainers.isOpen
     );
   }
 
@@ -431,6 +455,68 @@ export class MenusKit {
   }
 
   /**
+   * Eats one `id` from `eater`'s pack — the single place food goes down, so the
+   * bag's Eat entry, a long-press menu and a hotbar key cannot drift on
+   * refusals, sounds or what the meal announces.
+   *
+   * Hollow Stew is a potion in everything but its sound: it answers to the same
+   * cooldown and raises the same `healingPotionUsed`, so every listener that
+   * counts potions counts the stew too.
+   *
+   * @param dish Which stack to spend, or null for the first one anywhere.
+   * @returns whether the food was actually eaten. A refusal has already been
+   *   sounded by the time this returns false.
+   */
+  eatFood(eater: HumanPlayer | CatPlayer, id: ItemId, dish: PotionSlot | null): boolean {
+    const audio = this.world.audio;
+    if (!isFoodId(id)) return false;
+    const consume = (): boolean =>
+      dish === null
+        ? eater.inventory.removeOne(id)
+        : eater.inventory.removeOneFromSlot(dish.source, dish.slotIdx, id);
+    const hpBefore = eater.hp;
+    const outcome = eatFood(eater, id, consume);
+
+    if (outcome !== 'eaten') {
+      audio?.play('error_taking_action');
+      if (outcome === 'full' && id === 'hamburger') this.announce(ALREADY_FULL_NOTICE);
+      if (outcome === 'cooldown' && id === 'hollow_stew') {
+        this.world.bus.emit('stewRefusedOnCooldown', { eater });
+      }
+      return false;
+    }
+
+    if (id === 'hamburger') {
+      audio?.play('bopca_eating');
+    } else {
+      audio?.play('slurping_soup');
+      this.world.bus.emit('healingPotionUsed', {
+        player: eater === this.world.pm.human ? 'Human' : 'Cat',
+        hpRestored: displayHp(eater.hp) - displayHp(hpBefore),
+      });
+      // A bowl tipped to the mouth: the closest gesture Carl has to a spoon.
+      playDrinkGesture(eater);
+    }
+    this.showPotionEffectNotice(id);
+    return true;
+  }
+
+  /**
+   * Feeds the hotbar's cooldown sweep for every item that answers to the
+   * potion cooldown, read off `holder` — the crawler whose hotbar is on screen.
+   * Stew and potions share one timer, so they wear the same sweep.
+   */
+  syncPotionCooldownOverlay(holder: HumanPlayer | CatPlayer): void {
+    const overlay = {
+      current: holder.potionCooldownFrames,
+      max: Math.max(1, holder.computePotionCooldown()),
+    };
+    for (const id of POTION_COOLDOWN_ITEMS) {
+      this.inventoryPanel.abilityCooldowns.set(id, overlay);
+    }
+  }
+
+  /**
    * Studies one tome from `reader`'s pack, spending it for the Explosives
    * Handling it teaches. Only the human can study one; the cat is refused and
    * keeps nothing, since the tome can never reach her pack in the first place.
@@ -469,7 +555,7 @@ export class MenusKit {
   }
 
   /**
-   * Everything the bag's context menu queued: a drink, an equip, an unequip, a
+   * Everything the bag's context menu queued: a drink, a meal, an equip, an unequip, a
    * drop. Drained from the scene's frame rather than from the menu's own click
    * handler, because acting on a slot can raise an overlay over the very panel
    * that click landed in.
@@ -492,6 +578,16 @@ export class MenusKit {
       // again. Closed through toggle() rather than the flag so the panel's own
       // teardown runs.
       if (this.drinkPotion(holder, bottle.id, bottle) && this.inventoryPanel.isOpen) {
+        this.inventoryPanel.toggle();
+      }
+    }
+
+    const dish = interaction.pendingEatSlot;
+    if (dish !== null) {
+      interaction.pendingEatSlot = null;
+      this.cancelInventoryDragForOverlay();
+      // Same rule as a drink: only a meal that went down closes the bag.
+      if (this.eatFood(holder, dish.id, dish) && this.inventoryPanel.isOpen) {
         this.inventoryPanel.toggle();
       }
     }
@@ -605,6 +701,7 @@ export class MenusKit {
   renderOverlays(ctx: CanvasRenderingContext2D): void {
     this.skillBookPrompt.render(ctx);
     this.mongoExplainer.render(ctx);
+    this.craftExplainers.render(ctx);
     this.rewardGrantedDialog.render(ctx);
     this.levelUpDialog.render(ctx);
   }

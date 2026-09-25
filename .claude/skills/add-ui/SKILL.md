@@ -22,6 +22,16 @@ All UI is immediate-mode canvas drawing, redrawn every frame. **Never use raw `c
 
 Prefer reaching for `DialogBox` (single speaker line, revealed live) or `QuestDialog` (paged announcement with a button) over rolling a new bespoke modal — a bespoke panel is only justified when the content is genuinely interactive (multiple buttons/choices per screen, like a shop or casino panel), not for plain narrative text.
 
+### Standalone widgets and worked examples
+
+- **`src/ui/QuantityPicker.ts`** — a "how many?" modal (−10/−1/+1/+10/Max, live cost line, hold-to-repeat, optional `detail(qty)`). Its header lists the handful of hooks an owner wires, including `overlayClaim()`.
+- **`src/ui/ConfirmModal.ts`** — a yes/no modal; Esc answers No, Enter Yes. Use it for anything destructive (the trebuchet/snare Destroy confirm).
+- **`src/ui/ConstructionMenu.ts`** — a full panel with a resource row, option rows that stay visible when disabled (with the reason), a world placement ghost while a row is hovered or focused, and a compact two-column layout on short screens. **`src/ui/StructureMenu.ts`** — a small presenter anchored over a world object whose model is rebuilt every frame by its owner; it owns its own confirm and picker.
+- **`src/ui/VillagerConversation.ts`** — a `DialogBox` plus a choice row assembled from topic providers. The choice row joins **no focus ring**, so arrow keys stay movement; choices are picked by number key, click or tap, so keep every menu to **nine choices or fewer** ("Goodbye"/"Back" count).
+- **Explainers.** Craft explainers are `HowToPlayOverlay` wrappers hosted by `MenusKit.craftExplainers` (`src/ui/CraftExplainers.ts`): `register(id, explainer)` once, `open(id)` from anywhere; the host already wires claim, Esc and click in both scenes.
+- **Crafts pause tab** — `src/ui/pause/CraftsTab.ts`: both crawlers' Resourcing and Construction levels, with "How it works" reopening the explainers.
+- **Top-centre HUD strip.** A HUD element in the top band takes its slot from `topCentreStripSlot` (`src/systems/DungeonUIRenderer.ts`), which fits it between the HUD panel and the minimap and drops it under the panel on a narrow phone; `BOX_PRESETS.hudTranslucent` is the resource HUD's look.
+
 ## Button plumbing (per frame / per click)
 
 1. In render, call `setButtonMouseState(mx, my, isDown)` once before drawing buttons; `setButtonAudio(audio)` once at setup.

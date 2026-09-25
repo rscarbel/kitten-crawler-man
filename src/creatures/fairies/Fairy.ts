@@ -928,7 +928,7 @@ export abstract class Fairy extends Mob {
     const ts = this.tileSize;
     const tileX = Math.floor((x + ts / 2) / ts);
     const tileY = Math.floor((y + ts / 2) / ts);
-    if (!map.isWalkable(tileX, tileY)) return false;
+    if (!map.isWalkableFor(tileX, tileY, this.isHostile)) return false;
     return boundToBoss || !isFairyGroundForbidden(map, tileX, tileY);
   }
 

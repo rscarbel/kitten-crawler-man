@@ -1581,6 +1581,10 @@ export function drawGroundMaterialTile(
   applyWorldNoise(ctx, sx, sy, ts, tx, ty);
 }
 
+function isHardEdged(palette: GroundPalette, material: string): boolean {
+  return palette.hardEdgeMaterials?.has(material) ?? false;
+}
+
 /**
  * Draws the ground at (tx, ty), blended into its neighbours.
  *
@@ -1643,18 +1647,24 @@ export function drawGroundTile(
     if (occluderAt(structure, atX, atY) && !hasDeclaredGround(palette, structure, atX, atY)) {
       return fringeMaterial(palette, material);
     }
-    return fringeMaterial(
-      palette,
-      groundMaterialUnder(palette, structure, atX, atY) ?? palette.fringeStandIn,
-    );
+    const found = groundMaterialUnder(palette, structure, atX, atY) ?? palette.fringeStandIn;
+    // A hard-edged neighbour draws no fringe of its own, so this side must not
+    // blend toward it either: seeing it as more of itself keeps the boundary a
+    // straight tile edge, drawn once, by the hard-edged tile's full frame.
+    if (found !== material && isHardEdged(palette, found)) {
+      return fringeMaterial(palette, material);
+    }
+    return fringeMaterial(palette, found);
   };
 
   drawResolved(ctx, resolved, sx, sy, ts);
-  drawFringe(ctx, fringeMaterial(palette, material), materialAt, sx, sy, ts, tx, ty);
-  // Before the scatter, so tufts from the soft side spill over the kerb rather
-  // than being buried by it — which is what grass at a kerb actually does.
-  drawKerb(ctx, palette, structure, material, sx, sy, ts, tx, ty);
-  drawScatter(ctx, palette, structure, material, sx, sy, ts, tx, ty);
+  if (!isHardEdged(palette, material)) {
+    drawFringe(ctx, fringeMaterial(palette, material), materialAt, sx, sy, ts, tx, ty);
+    // Before the scatter, so tufts from the soft side spill over the kerb rather
+    // than being buried by it — which is what grass at a kerb actually does.
+    drawKerb(ctx, palette, structure, material, sx, sy, ts, tx, ty);
+    drawScatter(ctx, palette, structure, material, sx, sy, ts, tx, ty);
+  }
   applyWorldNoise(ctx, sx, sy, ts, tx, ty);
   drawOcclusion(ctx, structure, sx, sy, ts, tx, ty);
 }

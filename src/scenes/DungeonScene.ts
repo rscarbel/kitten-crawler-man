@@ -9,7 +9,7 @@ import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
 import type { GameProgressInput } from '../auth/AuthClient';
-import { WORLD_GENERATOR_VERSION } from '../core/SavedWorld';
+import { parseSavedWorld, WORLD_GENERATOR_VERSION } from '../core/SavedWorld';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { groundSheetKeysAmong, requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { releaseEnvironmentArt } from '../map/environmentArtCache';
@@ -113,6 +113,12 @@ import {
 import { KnightMissileSystem } from '../systems/KnightMissileSystem';
 import { CombatKit } from '../systems/kits/CombatKit';
 import { DestructionKit } from '../systems/kits/DestructionKit';
+import type { GroundPickupCheckpoint } from '../systems/GroundPickupSystem';
+import {
+  hostileWithinAttackRange,
+  hostileWithinRadius,
+  shouldShowInteractionPrompts,
+} from '../systems/interactionPromptGate';
 import { ALL_BREAKABLE_PROPS, NO_BREAKABLE_PROPS } from '../systems/DestructiblePropSystem';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit, type ChatCommand } from '../systems/kits/ChatKit';
@@ -212,6 +218,8 @@ import {
 } from '../core/PlayerSnapshot';
 import type { LevelCheckpoint } from '../core/LevelCheckpoint';
 import {
+  carriedSaveRegeneratesFloor,
+  owesArrivalSave,
   respawnModeFor,
   respawnRouteFor,
   savePointAfterWrite,
@@ -271,8 +279,6 @@ import {
   checkDeath,
   revealMinimap,
   triggerPlayerAttack,
-  HUMAN_ATTACK_RANGE_TILES,
-  CAT_ATTACK_RANGE_TILES,
 } from '../systems/GameLoopPhases';
 import { OverworldMusicSystem } from '../systems/OverworldMusicSystem';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
@@ -367,6 +373,15 @@ import {
   BriarHollowKit,
   type BriarHollowKitCheckpoint,
 } from '../systems/briarHollow/BriarHollowKit';
+import { resolveVillageAssaultLevel } from '../systems/briarHollow/villageAssaultLevel';
+import { GatheringKit, type GatheringCheckpoint } from '../systems/briarHollow/GatheringKit';
+import { GrateSpikesMenu } from '../systems/GrateSpikesMenu';
+import { StructureHold } from '../systems/briarHollow/structureHold';
+import {
+  anyResourceZone,
+  inGatheringDistrict,
+  nearPalisade,
+} from '../systems/briarHollow/resourceZones';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
@@ -488,6 +503,12 @@ export interface DungeonSceneOptions {
    * anchor tile it names is only still real ground on the same map instance.
    */
   existingRecallState?: RecallSceneRebuildState;
+  /**
+   * Whatever was lying on the ground to be picked up, carried across a
+   * building-exit rebuild — only meaningful alongside `existingMap`, since the
+   * spots they lie on are only still open ground on the same map instance.
+   */
+  existingGroundPickups?: GroundPickupCheckpoint;
   /** Carry achievement managers across floor transitions. */
   humanAchievements?: AchievementManager;
   catAchievements?: AchievementManager;
@@ -620,6 +641,8 @@ export interface DungeonSceneOptions {
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
 /** Building whose forge fires supply the town's fire-crackle ambience. */
 const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
+/** The key the necromancer's boss intro is played under: his spawn key. */
+const NECROMANCER_BOSS_TYPE = 'necromancer';
 /** How far outside the mark `!bounty go` lands the party — inside its aggro range. */
 const BOUNTY_WARP_STANDOFF_TILES = 4;
 
@@ -838,6 +861,8 @@ const TOUCH_DRAG_THRESHOLD = 10;
 const MINIMAP_DRAG_THRESHOLD = 5;
 /** How close two world taps must land, in time, to read as the village kit's double-tap gesture. */
 const BRIAR_HOLLOW_DOUBLE_TAP_WINDOW_MS = 300;
+/** A hold that moved the crawler further than this was a walk, not a long-press. */
+const HOLD_WALK_TOLERANCE_PX = 4;
 
 // Health visual feedback
 const HEALTH_BAR_COLOR_THRESHOLD = 0.78;
@@ -1040,6 +1065,8 @@ export class DungeonScene extends GameplayScene {
   private townGuide: TownGuideSystem | null = null;
   /** Screen rect of the Journal's compass button, or null on floors without one. */
   private journalButtonRect: UIRenderer.Rect | null = null;
+  /** The HUD's Build button, while it shows. */
+  private buildButtonRect: UIRenderer.Rect | null = null;
   private townDecor: TownDecorSystem | null = null;
   private market: MarketSystem | null = null;
   /**
@@ -1064,6 +1091,12 @@ export class DungeonScene extends GameplayScene {
   private arenaRoom: ArenaRoomSystem;
   private barriers: BarrierSystem;
   private defendQuest!: DefendQuestSystem;
+  /** The Structure menu over a boarded grate, for a crawler who can spike it. */
+  private readonly grateSpikes: GrateSpikesMenu;
+  /** Whether the current world touch came down on a structure, making it a long-press rather than a walk. */
+  private readonly structureHold = new StructureHold();
+  /** Where the active crawler stood when the current world touch began. */
+  private holdStartActivePos: { x: number; y: number } | null = null;
   private spiderQuest!: SpiderQuestSystem;
   private circusQuest!: CircusQuestSystem;
   private murderQuest!: MurderMysteryQuestSystem;
@@ -1092,9 +1125,7 @@ export class DungeonScene extends GameplayScene {
   private readonly briarHollowState: BriarHollowState;
   /**
    * Built only on the floor-3 overworld, and only once its village site has
-   * been generated onto the map (`gameMap.briarHollow`). Null everywhere else,
-   * which is every save today — the generator that fills that field has not
-   * landed yet.
+   * been generated onto the map (`gameMap.briarHollow`). Null everywhere else.
    */
   private briarHollowKit: BriarHollowKit | null = null;
   /**
@@ -1103,6 +1134,14 @@ export class DungeonScene extends GameplayScene {
    * door-rebuild or a fresh load starts the kit with nothing to restore.
    */
   private briarHollowKitCheckpoint: BriarHollowKitCheckpoint | null = null;
+  /**
+   * Chopping, mining, thralls and the resource HUD. Built on every overworld
+   * floor, village or not, because any tree or boulder can be worked; null
+   * elsewhere.
+   */
+  private gathering: GatheringKit | null = null;
+  /** The gathering kit's own checkpoint, taken and put back beside the village kit's. */
+  private gatheringCheckpoint: GatheringCheckpoint | null = null;
   /** When the last world tap resolved, so a second one close behind it reads as the kit's double-tap gesture. */
   private briarHollowLastWorldTapAt: number | null = null;
   private readonly marketStock: MarketStock;
@@ -1194,6 +1233,13 @@ export class DungeonScene extends GameplayScene {
    * point, so a new floor saves where the party stands the moment it arrives.
    */
   private arrivalSavePending = false;
+  /**
+   * The carried save when this floor could not be rebuilt from it — it has no
+   * world, or one from an older generator — and was generated fresh in its
+   * place; null otherwise. While it is still the last save, the arrival save
+   * replaces it.
+   */
+  private staleCarriedSave: GameProgressInput | null = null;
   private speechBubblePulse = 0;
 
   private readonly inputHandler = new GameplayInputHandler();
@@ -1598,6 +1644,16 @@ export class DungeonScene extends GameplayScene {
       },
       levelDef.levelledCurve,
     );
+    // The column's layout state is module-level and outlives a scene; a new
+    // one starts from nothing until its first frame says otherwise.
+    UIRenderer.resetColumnLayoutState();
+    this.grateSpikes = new GrateSpikesMenu({
+      defendQuest: this.defendQuest,
+      human: this.human,
+      cat: this.cat,
+      audio: this.audio,
+      announce: (message) => this.menus.announce(message),
+    });
     this.spiderQuest = new SpiderQuestSystem(this.gameMap, this.bus, (mob) => {
       this.world.roster.add(mob);
       // The lab's boss arrives through this closure rather than the level's
@@ -1908,7 +1964,7 @@ export class DungeonScene extends GameplayScene {
       levelDef,
       this.bus,
       () => this.bossRoom.anyLocked,
-      (player, rangePx) => this.hasNearbyEnemy(player, rangePx),
+      (player, rangePx) => hostileWithinRadius(player, this.world.roster.grid, rangePx),
       (tile) => this.warpPartyForRecall(tile),
       (message) => this.menus.hotbarToast.show(message),
       this.audio,
@@ -1917,6 +1973,9 @@ export class DungeonScene extends GameplayScene {
     // against — a building-exit rebuild, never a floor change or a death.
     if (options?.existingMap !== undefined && options.existingRecallState !== undefined) {
       this.recall.restoreFromSceneRebuild(options.existingRecallState);
+    }
+    if (options?.existingMap !== undefined && options.existingGroundPickups !== undefined) {
+      this.destruction.groundPickups.restoreCheckpoint(options.existingGroundPickups);
     }
 
     if (levelDef.isOverworld) {
@@ -1995,6 +2054,7 @@ export class DungeonScene extends GameplayScene {
                     existingMap: this.gameMap,
                     existingMiniMap: this.miniMap,
                     existingRecallState: this.recall.captureForSceneRebuild(),
+                    existingGroundPickups: this.destruction.groundPickups.captureCheckpoint(),
                     humanAchievements: this.humanAchievements,
                     catAchievements: this.catAchievements,
                     mongoUnlocked: this.mongoSystem.unlocked,
@@ -2119,6 +2179,31 @@ export class DungeonScene extends GameplayScene {
         this.townProps.boardTile,
         this.journalProgress,
       );
+      this.gathering = new GatheringKit({
+        gameMap: this.gameMap,
+        bus: this.bus,
+        audio: this.audio,
+        human: this.human,
+        cat: this.cat,
+        tools: this.partyCrafts.tools,
+        partyTools: this.partyTools,
+        nodes: this.briarHollowState.nodes,
+        trees: this.trees,
+        onTileChanged: (tileX, tileY) => this.miniMap.markTileChanged(tileX, tileY),
+        announce: (message) => this.menus.announce(message),
+        bagOwner: () => this.menus.inventoryPlayer(),
+        inResourceZone: anyResourceZone(
+          inGatheringDistrict(this.gameMap),
+          nearPalisade(this.gameMap),
+        ),
+        otherBodies: () => [
+          ...(this.briarHollowKit?.villagers?.villagers ?? []),
+          ...this.world.roster.mobs.filter((mob) => mob.isAlive),
+        ],
+      });
+      const gathering = this.gathering;
+      this.menus.inventoryPanel.interaction.extraContextOptions = (item) =>
+        gathering.contextOptionsFor(item);
       this.briarHollowKit =
         this.gameMap.briarHollow !== null
           ? new BriarHollowKit(this.world, {
@@ -2130,8 +2215,37 @@ export class DungeonScene extends GameplayScene {
               menus: this.menus,
               audio: this.audio,
               keybindings,
+              groundPickups: this.destruction.groundPickups,
+              dynamite: this.destruction.dynamite,
+              noteResourceActivity: () => gathering.hud.noteActivity(),
+              onTileChanged: (tileX, tileY) => this.miniMap.markTileChanged(tileX, tileY),
+              worldHalted: () => this.gameplayHalted,
+              isInSafeRoom: (point) => this.safeRoom.isEntityInSafeRoom(point),
+              music: () => this.overworldMusic,
+              bossIntro: (name, color) => {
+                this.bossIntro.trigger(NECROMANCER_BOSS_TYPE, name, color);
+              },
+              dropItems: (x, y, items) =>
+                this.destruction.loot.addLoot(
+                  x,
+                  y,
+                  { coins: 0, items: [...items] },
+                  this.active(),
+                  true,
+                ),
+              assaultLevel: () =>
+                resolveVillageAssaultLevel(
+                  levelDef,
+                  partyLevelOf(this.human.level, this.cat.level),
+                  activeDifficultyProfile(),
+                ),
             })
           : null;
+      // Regrowth must never stand a rock or a tree back up under a trebuchet or a snare.
+      gathering.setStructureClaims(this.briarHollowKit?.defences?.defense ?? null);
+      // So an ordinary hostile (not just the assault's own wave) can notice
+      // and attack a live trebuchet the way it notices a crawler.
+      this.combat.mobLoop.setTrebuchetDefense(this.briarHollowKit?.defences?.defense ?? null);
     }
 
     this.achievementUI = new AchievementUISystem(
@@ -2212,13 +2326,23 @@ export class DungeonScene extends GameplayScene {
     if (carriedSave !== undefined) {
       this.lastSave = { progress: carriedSave, checkpoint: null };
       // A safe-room save with no room under either crawler names no tile of its
-      // own, so it keeps the resume tile the carried save already had.
-      this.lastSavePointTile = carriedSave.world?.safeRoomTile ?? null;
+      // own, so it keeps the resume tile the carried save already had. Parsed,
+      // not read raw: a save from before a generator change names a tile on a
+      // map that no longer exists, and re-saving it would stamp that tile as
+      // belonging to the new one.
+      this.lastSavePointTile = parseSavedWorld(carriedSave.world)?.safeRoomTile ?? null;
     }
     // The tutorial is left out because its scripted flow saves at its own safe
     // rooms, and a save of a tutorial just begun would resume without the script.
-    this.arrivalSavePending =
-      carriedSave === undefined && options?.suppressArrivalSave !== true && this.tutorial === null;
+    // A carried save this floor could not be rebuilt from — see
+    // `carriedSaveRegeneratesFloor` — is replaced by the arrival save, so a
+    // death returns to this floor rather than drawing another.
+    this.staleCarriedSave = carriedSaveRegeneratesFloor(carriedSave) ? (carriedSave ?? null) : null;
+    this.arrivalSavePending = owesArrivalSave(
+      carriedSave,
+      options?.suppressArrivalSave === true,
+      this.tutorial !== null,
+    );
     this.wasInTown = options?.suppressArrivalSave === true;
     this.onResetGameCallback = options?.onResetGame ?? null;
     // Additive and cheap even on a re-entry: `preload` skips any id already in
@@ -2565,20 +2689,23 @@ export class DungeonScene extends GameplayScene {
 
       // Only a kill the party earned. Mobs kill each other — friendly fire, a
       // confusion fog, a bounty boss clearing the room it spawned into — and
-      // none of that is the player pressing forward.
-      if (killer !== null) this.mongoSystem.onKill();
+      // none of that is the player pressing forward. Nor is a death that is no
+      // kill at all (a cow caught in a blast): it earns nothing below but its
+      // gore and its corpse marker.
+      const creditedKiller = mob.countsAsKill ? killer : null;
+      if (creditedKiller !== null) this.mongoSystem.onKill();
 
       this.combat.spawnKillGore(mob, killer);
       this.miniMap.addCorpseMarker(cx, cy);
       noteCampCasualty(this.townMemory, mob, this.world.roster.mobs);
 
-      if (killer === this.human && this.humanAchievements.tryUnlock('first_blood')) {
+      if (creditedKiller === this.human && this.humanAchievements.tryUnlock('first_blood')) {
         bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Human' });
         if (this.tutorial !== null) {
           this.humanAchievements.grantBox('Gold', 'Tutorial', 'first_blood');
         }
       }
-      if (killer === this.cat && this.catAchievements.tryUnlock('first_blood')) {
+      if (creditedKiller === this.cat && this.catAchievements.tryUnlock('first_blood')) {
         bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Cat' });
         if (this.tutorial !== null) {
           this.cat.inventory.addItem('health_potion', FIRST_BLOOD_POTION_REWARD);
@@ -2587,7 +2714,7 @@ export class DungeonScene extends GameplayScene {
 
       if (
         this.tutorial === null &&
-        killer === this.human &&
+        creditedKiller === this.human &&
         (mob.killType === 'melee' || mob.killType === 'smush')
       ) {
         if (this.humanAchievements.tryUnlock('smush')) {
@@ -2595,7 +2722,7 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      if (this.tutorial === null && killer === this.cat && mob.killType === 'missile') {
+      if (this.tutorial === null && creditedKiller === this.cat && mob.killType === 'missile') {
         if (this.catAchievements.tryUnlock('magic_touch')) {
           bus.emit('achievementUnlocked', { achievementId: 'magic_touch', player: 'Cat' });
         }
@@ -2605,7 +2732,7 @@ export class DungeonScene extends GameplayScene {
       // rather than from `Goblin`, so it is named alongside it.
       if (
         this.tutorial === null &&
-        killer === this.human &&
+        creditedKiller === this.human &&
         mob.killType === 'smush' &&
         (mob instanceof Goblin || mob instanceof GoblinArcher)
       ) {
@@ -2918,6 +3045,17 @@ export class DungeonScene extends GameplayScene {
         e.stopImmediatePropagation();
         return;
       }
+      if (this.grateSpikes.handleKeyDown(e.key, e.repeat)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      // A villager's numbered choices, stopped for the same reason as the Bopca's.
+      if (this.briarHollowKit?.handleKeyDown(e.key, e.repeat) === true) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
       this.spiderQuest.handleKeyDown(e.key, e.timeStamp);
     };
     window.addEventListener('keydown', this._spiderKeyHandler);
@@ -2938,6 +3076,10 @@ export class DungeonScene extends GameplayScene {
           this.menus.mongoExplainer.close();
           return true;
         }
+        if (this.menus.craftExplainers.isOpen && !this.menus.isAwardStackShowing) {
+          this.menus.craftExplainers.close();
+          return true;
+        }
         if (this.menus.skillBookPrompt.isOpen) {
           // Escape declines the read; the book stays in the pack.
           this.menus.skillBookPrompt.close();
@@ -2949,6 +3091,7 @@ export class DungeonScene extends GameplayScene {
           return true;
         }
         if (this.defendQuest.dismissDialog()) return true;
+        if (this.grateSpikes.close()) return true;
         if (this.spiderQuest.dismissDialog()) return true;
         if (this.bounty?.dismissDialog() === true) return true;
         if (this.circusQuest.dismissDialog()) return true;
@@ -2982,6 +3125,7 @@ export class DungeonScene extends GameplayScene {
           this.citizenDialog.close();
           return true;
         }
+        if (!this.gameplayHalted && this.briarHollowKit?.dismissDialog() === true) return true;
         if (this.signDialog?.isOpen === true && !this.gameplayHalted) {
           this.signDialog.close();
           return true;
@@ -3047,8 +3191,11 @@ export class DungeonScene extends GameplayScene {
       buildAction: () => this.triggerBuildAction(),
       hotbarActivation: (idx) => activateHotbarSlot(this.hotbarHost(), idx),
       dynamiteRelease: (idx) => releaseChargedDynamite(this.hotbarHost(), idx),
-      onConstruction: () => this.briarHollowKit?.openConstruction(false),
-      onStructureMenu: () => void this.briarHollowKit?.tryStructureMenu(),
+      onConstruction: () => this.briarHollowKit?.openConstruction(),
+      onStructureMenu: () => {
+        if (this.briarHollowKit?.tryStructureMenu() === true) return;
+        this.grateSpikes.tryOpen();
+      },
       onQuickLoad: () => this.briarHollowKit?.quickLoad(),
     });
   }
@@ -3077,6 +3224,7 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.dispose();
     this.bounty?.dispose();
     this.briarHollowKit?.dispose();
+    this.gathering?.dispose();
     this.fairies.dispose();
     this.fairyFireballs.dispose();
     // Drops any standing order along with the hazard sources that were meant to
@@ -3478,6 +3626,20 @@ export class DungeonScene extends GameplayScene {
         run: () => this.spriteMissReport(),
       },
       {
+        // Just inside Briar Hollow's gate, so the village can be playtested
+        // without the walk out from town.
+        name: '!village',
+        run: () => {
+          const gate = this.gameMap.briarHollow?.gate.inside;
+          if (gate === undefined) {
+            this.audio?.play('error');
+            return null;
+          }
+          this.placePartyAtTile(gate);
+          return '🏘 WARPED TO BRIAR HOLLOW';
+        },
+      },
+      {
         name: '!spider',
         run: () => {
           if (this.gameMap.spiderLabRoom === null) {
@@ -3835,6 +3997,9 @@ export class DungeonScene extends GameplayScene {
     // Its pending callback grants a chest's reward against a world that is
     // about to be rewound to before the chest was opened.
     this.chestRewardDialog.discard();
+    // The same for granted-reward cards and whatever waits on them (the
+    // Resourcing explainer after Oren's tools): the rewind takes the grant back.
+    this.menus.rewardGrantedDialog.discard();
 
     restorePlayer(this.human, cp.humanSnap);
     restorePlayer(this.cat, cp.catSnap);
@@ -3901,6 +4066,9 @@ export class DungeonScene extends GameplayScene {
     this.restoreWorldCheckpoint(cp.world);
     if (this.briarHollowKitCheckpoint !== null) {
       this.briarHollowKit?.restoreCheckpoint(this.briarHollowKitCheckpoint);
+    }
+    if (this.gatheringCheckpoint !== null) {
+      this.gathering?.restoreCheckpoint(this.gatheringCheckpoint);
     }
     this.fairies.resetForCheckpoint(
       this.world.roster.mobs,
@@ -4347,6 +4515,7 @@ export class DungeonScene extends GameplayScene {
   private captureLevelCheckpoint(respawnTile: TilePoint): LevelCheckpoint {
     markMobsAtCheckpoint(this.world.roster);
     this.briarHollowKitCheckpoint = this.briarHollowKit?.captureCheckpoint() ?? null;
+    this.gatheringCheckpoint = this.gathering?.captureCheckpoint() ?? null;
     return {
       world: this.captureWorldCheckpoint(),
       humanSnap: checkpointSnapshot(snapPlayer(this.human)),
@@ -4435,7 +4604,8 @@ export class DungeonScene extends GameplayScene {
     return (
       this.bossRoom.anyLocked ||
       this.arena.isBossFightInProgress ||
-      this.spiderQuest.isBossFightInProgress
+      this.spiderQuest.isBossFightInProgress ||
+      this.briarHollowKit?.assault?.inSiege === true
     );
   }
 
@@ -4519,15 +4689,46 @@ export class DungeonScene extends GameplayScene {
     );
   }
 
-  private hasNearbyEnemy(player: HumanPlayer | CatPlayer, range: number): boolean {
-    const px = player.x + TILE_SIZE * TILE_CENTER_OFFSET;
-    const py = player.y + TILE_SIZE * TILE_CENTER_OFFSET;
-    const nearby = this.world.roster.grid.queryCircle(px, py, range);
-    for (const mob of nearby) {
-      // Allies (Signet, Ink Marauders) must not force attack-priority over talking.
-      if (mob.isAlive && mob.isHostile) return true;
-    }
-    return false;
+  /** See {@link shouldShowInteractionPrompts}: a hostile in attack range takes the press. */
+  private shouldShowInteractionPrompts(active: HumanPlayer | CatPlayer): boolean {
+    return shouldShowInteractionPrompts(active, this.world.roster.grid);
+  }
+
+  /**
+   * Whether a link ahead of the ground pickups in `triggerSpaceAction` would
+   * claim a press from `active`. Asks each link's own `wouldInteract`, the
+   * predicate its `tryInteract` is built on, so this cannot drift from the chain.
+   */
+  private earlierSpaceLinkClaims(active: HumanPlayer | CatPlayer): boolean {
+    return (
+      this.treasureChests.wouldInteract(active) ||
+      this.defendQuest.wouldInteract(active) ||
+      this.spiderQuest.wouldInteract(active) ||
+      this.circusQuest.wouldInteract(active) ||
+      this.murderQuest.wouldInteract(active) ||
+      this.bossRoomDressings.wouldInteract(active)
+    );
+  }
+
+  /**
+   * Floats "Pick up" over the nearest ground pickup, only when a press would
+   * actually reach it. Returns whether it drew, because every link after it in
+   * the Space chain (market, props, signs, the village, citizens, the hireling)
+   * is then out of reach and must not float a prompt of its own.
+   */
+  private renderGroundPickupPrompt(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): boolean {
+    // `triggerSpaceAction` hands the press to whatever overlay owns the screen.
+    if (this.focusedOverlay !== null) return false;
+    const active = this.active();
+    // The safe room's Space chain ends at its own fixtures and never reaches a pickup.
+    if (this.safeRoom.isEntityInSafeRoom(active)) return false;
+    if (!this.shouldShowInteractionPrompts(active)) return false;
+    if (this.earlierSpaceLinkClaims(active)) return false;
+    return this.destruction.groundPickups.renderPrompt(ctx, camX, camY, active);
   }
 
   private townDialogContext(): TownDialogContext {
@@ -4592,10 +4793,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     const active = this.active();
-    const attackRange = this.human.isActive
-      ? TILE_SIZE * HUMAN_ATTACK_RANGE_TILES
-      : TILE_SIZE * CAT_ATTACK_RANGE_TILES;
-    if (this.hasNearbyEnemy(active, attackRange)) return;
+    if (!this.shouldShowInteractionPrompts(active)) return;
     // Same order as the Space chain in `tryInteract`, so the prompt always names
     // the thing that press would actually reach.
     if (this.market?.renderPrompt(ctx, camX, camY, active) === true) return;
@@ -4609,10 +4807,7 @@ export class DungeonScene extends GameplayScene {
     if (this.citizenDialog === null || this.townLife === null) return;
     if (this.citizenDialog.isOpen) return;
     const active = this.active();
-    const attackRange = this.human.isActive
-      ? TILE_SIZE * HUMAN_ATTACK_RANGE_TILES
-      : TILE_SIZE * CAT_ATTACK_RANGE_TILES;
-    if (this.hasNearbyEnemy(active, attackRange)) return;
+    if (!this.shouldShowInteractionPrompts(active)) return;
     const target = this.townLife.findTalkTarget(active.x, active.y);
     if (target === null) return;
     drawInteractionPrompt(ctx, target.x - camX, target.y - camY, TILE_SIZE, 'Talk');
@@ -4630,6 +4825,13 @@ export class DungeonScene extends GameplayScene {
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) return;
     if (interactionPromptsDrawnThisFrame() > 0) return;
+    // Gathering sits ahead of the hireling in the Space chain but draws no
+    // prompt of its own, so it has to be asked whether it would take the press.
+    if (this.gathering?.wouldStartHarvest(active) === true) return;
+    // The village's own prompt normally answers first, but only while it is
+    // drawn; asking it directly keeps a cow or villager in reach from ever
+    // sharing the press with the hireling.
+    if (this.briarHollowKit?.wouldInteract(active) === true) return;
     const merc = this.mercenarySystem.talkTarget(active, this.world.roster.mobs);
     if (merc === null) return;
     drawInteractionPrompt(ctx, merc.x - camX, merc.y - camY, TILE_SIZE, 'Talk');
@@ -4714,6 +4916,7 @@ export class DungeonScene extends GameplayScene {
       modal(this.menus.levelUpDialog.isShowing, 'level-up'),
       modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
       modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
+      modal(this.menus.craftExplainers.isOpen, this.menus.craftExplainers.focusId),
       modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
       // Below the award stack because that stack draws over the death screen — a
       // level-up earned by the blow that killed you is still on top and still
@@ -4791,6 +4994,7 @@ export class DungeonScene extends GameplayScene {
       },
       modal(this.stairwell.menuOpen, 'stairwell'),
       modal(this.building?.menuOpen === true, 'building-entry'),
+      this.grateSpikes.overlayClaim(),
       ...(this.briarHollowKit?.overlayClaims() ?? []),
       {
         isOpen: this.followerMenu.isOpen,
@@ -4827,6 +5031,7 @@ export class DungeonScene extends GameplayScene {
         haltsWorld: false,
         focusContext: null,
       },
+      ...(this.briarHollowKit?.conversationClaims() ?? []),
     ];
   }
 
@@ -4888,6 +5093,44 @@ export class DungeonScene extends GameplayScene {
     if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) dialog.close();
   }
 
+  /** What the right-hand HUD column has to lay itself out around this frame. */
+  private syncColumnLayoutState(): void {
+    UIRenderer.setBuildSlotReserved(this.briarHollowKit?.defences?.buildButtonVisible === true);
+    UIRenderer.setLevelTimerShown(this.levelDef.hasCollapseTimer === true);
+    const banner = this.achievementUI.lootBoxIconRect;
+    UIRenderer.setLootBoxBannerRect(banner.w > 0 ? banner : null);
+  }
+
+  /** Whether the finger held on the world walked the crawler toward it. */
+  private crawlerWalkedDuringHold(): boolean {
+    const start = this.holdStartActivePos;
+    if (start === null) return false;
+    const active = this.active();
+    return Math.hypot(active.x - start.x, active.y - start.y) > HOLD_WALK_TOLERANCE_PX;
+  }
+
+  /**
+   * Whether the finger held on the world is a long-press on a structure the
+   * active crawler can work on, which must not walk them toward it. Decided
+   * where the finger came down (see `StructureHold`).
+   */
+  private holdRestsOnStructure(): boolean {
+    const target = this.touch.moveTarget;
+    if (target === null) return false;
+    return this.structureHold.suppressesWalk(target.x, target.y, MENU_TAP_MAX_DISTANCE);
+  }
+
+  /** Whether a finger coming down here lands on something the Structure menu can open on. */
+  private fingerOnWorkableStructure(screenX: number, screenY: number): boolean {
+    const cam = this.camera();
+    if (this.briarHollowKit?.isStructureUnderFinger(screenX, screenY, cam.x, cam.y) === true) {
+      return true;
+    }
+    const tileX = Math.floor((screenX + cam.x) / TILE_SIZE);
+    const tileY = Math.floor((screenY + cam.y) / TILE_SIZE);
+    return this.grateSpikes.isSpikeableGrateAt(tileX, tileY);
+  }
+
   /**
    * Small talk loses to anything that seized the frame — a quest interjection
    * the player walked into, a level-up, the death screen. Without this the two
@@ -4897,6 +5140,19 @@ export class DungeonScene extends GameplayScene {
   private yieldCitizenDialogToInterruption(): void {
     if (this.citizenDialog?.isOpen === true && this.gameplayHalted) this.citizenDialog.close();
     if (this.signDialog?.isOpen === true && this.gameplayHalted) this.signDialog.close();
+    if (this.gameplayHalted) this.briarHollowKit?.dismissDialog();
+    // Death, or anything else that halts the world over them, takes the
+    // construction panels down with it: drawn over a death screen they would
+    // take its first click. Their own dismantle confirm is the one halt they
+    // raise themselves, and it must not close itself.
+    const kitHaltsItself = this.briarHollowKit?.haltsWorldItself === true;
+    if (this.gameOver || (this.gameplayHalted && !kitHaltsItself)) {
+      this.briarHollowKit?.closeConstructionPanels();
+      this.grateSpikes.close();
+    }
+    // Only on death: the shops' priced menu halts the world itself, so any
+    // halt would have it closing itself the moment it opened.
+    if (this.gameOver) this.briarHollowKit?.closeServicePanels();
   }
 
   /** Same walk-away rule as a street conversation, measured to the sign's tile. */
@@ -5285,10 +5541,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     // If an enemy is within attack range, prefer attacking over interacting
-    const attackRange = this.human.isActive
-      ? TILE_SIZE * HUMAN_ATTACK_RANGE_TILES
-      : TILE_SIZE * CAT_ATTACK_RANGE_TILES;
-    if (this.hasNearbyEnemy(active, attackRange)) {
+    if (hostileWithinAttackRange(active, this.world.roster.grid)) {
       // fall through to attack logic below
     } else {
       // Chest interaction
@@ -5308,6 +5561,9 @@ export class DungeonScene extends GameplayScene {
         return;
       }
       if (this.bossRoomDressings.tryInteract(active)) {
+        return;
+      }
+      if (this.destruction.groundPickups.tryPickupNear(active)) {
         return;
       }
       if (this.arenaRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
@@ -5332,6 +5588,11 @@ export class DungeonScene extends GameplayScene {
         return;
       }
       if (this.tryTalkToCitizen(active)) {
+        return;
+      }
+      // After citizen talk: a townsperson in range is who a press is meant for,
+      // and a tree beside them is scenery until nobody is there to answer.
+      if (this.gathering?.tryStartHarvest(active) === true) {
         return;
       }
       // Last in the chain: the hireling stands at the party's shoulder all
@@ -5444,6 +5705,7 @@ export class DungeonScene extends GameplayScene {
     if (this.menus.levelUpDialog.handleClick(mx, my)) return;
     if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
     if (this.menus.mongoExplainer.handleClick(mx, my)) return;
+    if (this.menus.craftExplainers.handleClick(mx, my)) return;
     if (this.menus.skillBookPrompt.isOpen) {
       const reader = this.menus.pendingSkillBookReader(this.menus.inventoryPlayer());
       const choice = resolveSkillBookPrompt(this.menus.skillBookFlowHost(), reader, mx, my);
@@ -5454,6 +5716,7 @@ export class DungeonScene extends GameplayScene {
     // on the same frame the run ends, and over every panel and HUD button.
     if (this.runCompleteScreen.handleClick(mx, my)) return;
     if (this.defendQuest.handleClick(mx, my)) return;
+    if (this.grateSpikes.handleClick(mx, my)) return;
     if (this.spiderQuest.handleClick(mx, my, eventTimeStampMs)) return;
     if (this.bounty?.handleClick(mx, my) === true) return;
     if (this.circusQuest.handleClick(mx, my)) return;
@@ -5463,6 +5726,7 @@ export class DungeonScene extends GameplayScene {
     // world, so the bag can be open underneath it and its slots must stay live.
     if (this.citizenDialog?.handleClick(mx, my) === true) return;
     if (this.signDialog?.handleClick(mx, my) === true) return;
+    if (this.briarHollowKit?.handleClick(mx, my) === true) return;
     if (this.noticeBoard?.isOpen === true) {
       this.noticeBoard.handleClick();
       return;
@@ -5603,6 +5867,10 @@ export class DungeonScene extends GameplayScene {
       this.openQuestJournal();
       return;
     }
+    if (this.buildButtonRect !== null && pointInRect(mx, my, this.buildButtonRect)) {
+      this.briarHollowKit?.openConstruction();
+      return;
+    }
 
     const wasInventoryOpen = this.menus.inventoryPanel.isOpen;
     if (this.menus.inventoryPanel.handleClick(mx, my, invPlayer.inventory)) {
@@ -5663,7 +5931,7 @@ export class DungeonScene extends GameplayScene {
     this._mouseDown = true;
     // Ahead of the pause menu: the explainer opens over it, and a press there
     // must not start a drag in the tab hidden underneath.
-    if (this.menus.mongoExplainer.isOpen) return;
+    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     // Delegated rather than swallowed: the pause menu's Equipment tab drags gear
     // between the bag and the doll, and a drag is a press and a release, not a
     // click. Every other tab ignores these.
@@ -5672,6 +5940,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     if (this.gameOver || this.isOverlayBlockingPointer) return;
+    this.briarHollowKit?.handlePointerDown(mx, my);
     if (this.miniMap.isExpanded && pointInRect(mx, my, this.touch.miniMapRect)) {
       this._miniMapDragging = true;
       this._miniMapDragLastX = mx;
@@ -5684,7 +5953,7 @@ export class DungeonScene extends GameplayScene {
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
-    if (this.menus.mongoExplainer.isOpen) return;
+    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     if (this.menus.pauseMenu.isOpen) {
       this.menus.pauseMenu.handleMouseMove(mx, my);
       return;
@@ -5701,7 +5970,8 @@ export class DungeonScene extends GameplayScene {
   handleMouseUp(mx: number, my: number): void {
     this._mouseDown = false;
     this._miniMapDragging = false;
-    if (this.menus.mongoExplainer.isOpen) return;
+    this.briarHollowKit?.handlePointerUp();
+    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     if (this.menus.pauseMenu.isOpen) {
       this.menus.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
       return;
@@ -5712,6 +5982,7 @@ export class DungeonScene extends GameplayScene {
 
   handleMouseLeave(): void {
     this._mouseDown = false;
+    this.briarHollowKit?.handlePointerUp();
     this._miniMapDragging = false;
     clearButtonMouseState();
   }
@@ -5722,7 +5993,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleWheel(deltaY: number): void {
-    if (this.menus.mongoExplainer.isOpen) return;
+    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     if (this.menus.pauseMenu.isOpen) {
       this.menus.pauseMenu.handleWheel(deltaY);
       return;
@@ -5733,6 +6004,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.noticeBoard?.handleWheel(deltaY);
     this.marketPanel?.handleWheel(deltaY);
+    this.briarHollowKit?.handleWheel(deltaY);
   }
 
   update(): void {
@@ -5782,6 +6054,12 @@ export class DungeonScene extends GameplayScene {
       this._processSpiderQuestSounds();
     }
 
+    // A harvest does not outlast the pause menu: the block below stops ticking
+    // under it, so without this the swing would pick straight back up on close.
+    if (this.menus.pauseMenu.isOpen) this.gathering?.harvest.stop();
+    // The village is not ticked under either, so its loops would play on unattended.
+    if (this.menus.pauseMenu.isOpen || this.gameOver) this.briarHollowKit?.silenceLoops();
+
     // Town keeps living through citizen chats and other overlay dialogs — only a
     // hard stop (game over, the pause menu, or a level- or run-complete screen)
     // should freeze the streets.
@@ -5793,6 +6071,7 @@ export class DungeonScene extends GameplayScene {
     ) {
       this.townLife?.update(this.buildSystemContext());
       this.briarHollowKit?.update(this.buildSystemContext());
+      this.gathering?.update(this.buildSystemContext(), this.focusedOverlay !== null);
       this.townProps?.update();
       this.townDecor?.update();
       this.market?.update();
@@ -5872,8 +6151,12 @@ export class DungeonScene extends GameplayScene {
       mobGrid: this.world.roster.grid,
       townsfolk: this.townLife?.people,
       townProps:
-        this.briarHollowKit !== null
-          ? [...(this.townPropRenderables ?? []), ...this.briarHollowKit.renderEntities()]
+        this.briarHollowKit !== null || this.gathering !== null
+          ? [
+              ...(this.townPropRenderables ?? []),
+              ...(this.briarHollowKit?.renderEntities() ?? []),
+              ...(this.gathering?.renderEntities() ?? []),
+            ]
           : (this.townPropRenderables ?? undefined),
       gameOver: this.gameOver,
       pauseMenuOpen: this.menus.pauseMenu.isOpen,
@@ -5902,6 +6185,8 @@ export class DungeonScene extends GameplayScene {
       trees: this.trees,
       water: this.water,
       loot: this.destruction.loot,
+      groundPickups: this.destruction.groundPickups,
+      interactionPromptsAllowed: this.shouldShowInteractionPrompts(this.active()),
       treasureChests: this.treasureChests,
       miniMap: this.miniMap,
       mongoSystem: this.mongoSystem,
@@ -5911,6 +6196,7 @@ export class DungeonScene extends GameplayScene {
 
     this.renderPipeline.renderWorld(ctx, rc);
     this.briarHollowKit?.renderGround(ctx, camX, camY);
+    this.gathering?.renderGround(ctx, camX, camY);
     this.bopca.renderObjects(ctx, camX, camY, this.active(), this.inactive());
     this.tutorial?.renderGatesAndLedge(ctx, camX, camY);
     const activeCrawler = this.active();
@@ -5941,6 +6227,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.spiderQuest.renderCutsceneEffects(ctx, camX, camY);
     this.briarHollowKit?.renderAbove(ctx, camX, camY);
+    this.gathering?.renderAbove(ctx, camX, camY);
     // Over the entities: a label spawned on a large body (a boss) would
     // otherwise rise out of sight behind its own sprite.
     this.combat.floatingText.render(ctx, camX, camY);
@@ -5995,10 +6282,14 @@ export class DungeonScene extends GameplayScene {
     );
     this._hudToggleRect = hudResult.toggleRect;
     this._hudRect = hudResult.hudRect;
+    UIRenderer.setHudPanelRect(this._hudRect);
     if (!platform.isMobile) {
       this._hudSkillBannerRect = hudResult.notifRect;
     }
-    this.briarHollowKit?.renderHud(ctx);
+    this.briarHollowKit?.renderHud(ctx, this.miniMap, this._hudRect);
+    if (this.briarHollowKit?.hidesResourceStrip(this.miniMap, this._hudRect) !== true) {
+      this.gathering?.renderHud(ctx, this.miniMap, this._hudRect, this.active());
+    }
 
     // Rebuilt once here, above every consumer: the pinned world arrow, the
     // minimap's extra marker and the Journal tab all resolve the pin against
@@ -6097,6 +6388,9 @@ export class DungeonScene extends GameplayScene {
 
     this.destruction.loot.render(ctx, camX, camY, this.active());
 
+    // Told before anything in the right-hand column is placed — the chip just
+    // below is the first — so the whole column lays out from this frame's HUD.
+    this.syncColumnLayoutState();
     const showAchievUI = this.tutorial === null || this.tutorial.showAchievementUI;
     if (showAchievUI) {
       this.achievementUI.drawAchievementIcon(
@@ -6124,6 +6418,7 @@ export class DungeonScene extends GameplayScene {
         current: this.human.smushCooldown,
         max: Math.max(1, this.human.getSmushCooldownMax()),
       });
+      this.menus.syncPotionCooldownOverlay(invPlayer);
       // Keyed by item id rather than ability id — the stone is a plain item that
       // happens to have a cooldown; `renderSlot` falls back to the id for it.
       this.menus.inventoryPanel.abilityCooldowns.set('wayfinders_anchor', {
@@ -6144,6 +6439,16 @@ export class DungeonScene extends GameplayScene {
       } else {
         this.journalButtonRect = null;
       }
+      const defences = this.briarHollowKit?.defences ?? null;
+      this.buildButtonRect =
+        defences?.buildButtonVisible === true
+          ? UIRenderer.drawBuildButton(
+              ctx,
+              this.miniMap,
+              defences.constructionMenuOpen,
+              defences.buildButtonPulseSeconds,
+            )
+          : null;
       if (platform.isMobile)
         UIRenderer.renderMobileButtons(ctx, this.touch, {
           human: this.human,
@@ -6230,11 +6535,16 @@ export class DungeonScene extends GameplayScene {
         this.bopca.hasInteraction(this.active()),
       );
       this.bopca.renderUI(ctx, camX, camY, this.active());
-      this.renderCitizenPrompt(ctx, camX, camY);
+      const pickupPromptShown = this.renderGroundPickupPrompt(ctx, camX, camY);
+      if (!pickupPromptShown) this.renderCitizenPrompt(ctx, camX, camY);
       this.bounty?.renderShadyOverlay(ctx, camX, camY, this.active());
-      this.renderPropPrompt(ctx, camX, camY);
-      this.briarHollowKit?.renderPrompt(ctx, camX, camY, this.active());
-      this.renderMercenaryPrompt(ctx, camX, camY);
+      if (!pickupPromptShown) {
+        this.renderPropPrompt(ctx, camX, camY);
+        if (!this.earlierSpaceLinkClaims(this.active())) {
+          this.briarHollowKit?.renderPrompt(ctx, camX, camY, this.active());
+        }
+        this.renderMercenaryPrompt(ctx, camX, camY);
+      }
     }
 
     if (this.safeRoom.mordecaiDialogOpen) {
@@ -6246,6 +6556,8 @@ export class DungeonScene extends GameplayScene {
     this.bounty?.renderDialog(ctx);
     this.citizenDialog?.render(ctx);
     this.signDialog?.render(ctx);
+    this.briarHollowKit?.renderDialog(ctx, camX, camY);
+    this.grateSpikes.render(ctx, camX, camY);
     this.noticeBoard?.render(ctx);
     this.marketPanel?.render(ctx, this.active());
     this.fortuneTeller?.render(ctx, this.active());
@@ -6487,6 +6799,7 @@ export class DungeonScene extends GameplayScene {
     const mongo = this.mongoSystem.mongo;
     if (mongo && !mongo.recalling && !mongo.collapsing) targets.push(mongo);
     if (this.mercenarySystem.activeMerc) targets.push(this.mercenarySystem.activeMerc);
+    this.briarHollowKit?.pushAlliedDefenders(targets);
     const npc = this.defendQuest.questNPC;
     if (npc?.isAlive) targets.push(npc);
 
@@ -6508,7 +6821,7 @@ export class DungeonScene extends GameplayScene {
 
     const move = readMovement(
       this.input,
-      this.touch.moveTarget,
+      this.holdRestsOnStructure() ? null : this.touch.moveTarget,
       this.touch.tapStart,
       player,
       this.camera(),
@@ -6574,7 +6887,10 @@ export class DungeonScene extends GameplayScene {
     // in one is saved once, by that check, rather than twice.
     if (this.arrivalSavePending) {
       this.arrivalSavePending = false;
-      if (this.lastSave === null) this.captureSavePoint(this.saveTileUnder(player));
+      const onlyStaleSave =
+        this.lastSave !== null && this.lastSave.progress === this.staleCarriedSave;
+      if (this.lastSave === null || onlyStaleSave)
+        this.captureSavePoint(this.saveTileUnder(player));
     }
 
     const ctx = this.buildSystemContext();
@@ -6614,6 +6930,8 @@ export class DungeonScene extends GameplayScene {
 
     this.barriers.update(ctx);
     this.defendQuest.update(ctx);
+    this.briarHollowKit?.updateSiege(ctx);
+    this.grateSpikes.update();
     if (this.defendQuest.hammerSoundPending) {
       this.defendQuest.hammerSoundPending = false;
       this.audio?.play('hammer_strike');
@@ -6765,6 +7083,7 @@ export class DungeonScene extends GameplayScene {
     const outcome = this.combat.resolvePlayerAttacks({
       destructibles: this.destruction.destructibles,
       trees: this.trees ?? undefined,
+      structures: this.briarHollowKit?.defences?.defense,
     });
 
     if (outcome.hitLanded) {
@@ -7179,6 +7498,7 @@ export class DungeonScene extends GameplayScene {
     const shakeOffset = this.spiderQuest.cameraOffset;
     const smushShake = this.combat.smushFx.cameraOffset;
     const juicerShake = this.juicerRoom.cameraOffset;
+    const villageShake = this.briarHollowKit?.cameraOffset ?? { x: 0, y: 0 };
     // Applied after the clamp so the sway can drift past the map edge rather than
     // being flattened to nothing whenever the camera is already against a border.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
@@ -7188,13 +7508,15 @@ export class DungeonScene extends GameplayScene {
         shakeOffset.x +
         sway.x +
         smushShake.x +
-        juicerShake.x,
+        juicerShake.x +
+        villageShake.x,
       y:
         clamp(camY, 0, mapPxH - viewportHeight()) +
         shakeOffset.y +
         sway.y +
         smushShake.y +
-        juicerShake.y,
+        juicerShake.y +
+        villageShake.y,
     };
   }
 
@@ -7217,9 +7539,20 @@ export class DungeonScene extends GameplayScene {
         this.menus.levelUpDialog.isShowing ||
         this.menus.rewardGrantedDialog.isShowing ||
         this.menus.mongoExplainer.isOpen ||
+        this.menus.craftExplainers.isOpen ||
         this.levelCompleteScreen.isActive ||
         this.runCompleteScreen.isActive
       ) {
+        this.handleClick(x, y, e.timeStamp);
+        continue;
+      }
+
+      // A village or grate panel owns every finger while it is up, for the same
+      // reason: its rows sit over the Bag, Build and Journal buttons on a phone,
+      // and a tap on one must neither press what is drawn beneath it nor start
+      // a walk that re-aims the placement the row is about to build.
+      if (this.briarHollowKit?.isMenuOpen === true || this.grateSpikes.isOpen) {
+        this.briarHollowKit?.handlePointerDown(x, y);
         this.handleClick(x, y, e.timeStamp);
         continue;
       }
@@ -7299,6 +7632,19 @@ export class DungeonScene extends GameplayScene {
       ) {
         notifyButtonClick(x, y);
         this.openQuestJournal();
+        continue;
+      }
+      // The Build button, for the same reason as the compass above.
+      if (
+        platform.isMobile &&
+        !this.gameOver &&
+        !this.menus.pauseMenu.isOpen &&
+        !coveredByPanel &&
+        this.buildButtonRect !== null &&
+        pointInRect(x, y, this.buildButtonRect)
+      ) {
+        notifyButtonClick(x, y);
+        this.briarHollowKit?.openConstruction();
         continue;
       }
 
@@ -7418,6 +7764,9 @@ export class DungeonScene extends GameplayScene {
         this.touch.moveTouchId = touch.identifier;
         this.touch.moveTarget = { x, y };
         this.touch.tapStart = { x, y, time: Date.now() };
+        this.structureHold.begin(this.fingerOnWorkableStructure(x, y), x, y);
+        const starter = this.active();
+        this.holdStartActivePos = { x: starter.x, y: starter.y };
         this.menus.pauseMenu.touchScrollStart(x, y, this.human, this.cat);
       }
     }
@@ -7462,6 +7811,9 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleTouchEnd(e: TouchEvent, rect: DOMRect): void {
+    // Any lifted finger ends a held picker step; a picker's own buttons never
+    // start a move or a drag, so there is nothing else to match it to.
+    this.briarHollowKit?.handlePointerUp();
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
@@ -7568,7 +7920,12 @@ export class DungeonScene extends GameplayScene {
               const dialogWasOpen =
                 this.safeRoom.mordecaiDialogOpen ||
                 this.citizenDialog?.isOpen === true ||
-                this.signDialog?.isOpen === true;
+                this.signDialog?.isOpen === true ||
+                this.briarHollowKit?.isConversationOpen === true;
+              // Also captured first: a menu or dialog that owned the screen had
+              // this tap, and the village behind it must not open a
+              // conversation or pet a cow underneath it.
+              const overlayWasFocused = this.focusedOverlay !== null;
               this.handleClick(x, y, e.timeStamp);
               if (
                 !dialogWasOpen &&
@@ -7578,7 +7935,7 @@ export class DungeonScene extends GameplayScene {
               ) {
                 const cam = this.camera();
                 let villageConsumed = false;
-                if (this.briarHollowKit !== null) {
+                if (this.briarHollowKit !== null && !overlayWasFocused) {
                   const now = Date.now();
                   const isDoubleTap =
                     this.briarHollowLastWorldTapAt !== null &&
@@ -7588,7 +7945,8 @@ export class DungeonScene extends GameplayScene {
                     ? this.briarHollowKit.handleDoubleTap(x, y, cam.x, cam.y, this.active())
                     : this.briarHollowKit.handleTap(x, y, cam.x, cam.y, this.active());
                 }
-                if (!villageConsumed) {
+                // A tap a menu took is spent: the world behind it must not also swing at it.
+                if (!villageConsumed && !overlayWasFocused) {
                   const grateHandled = this.defendQuest.tryMobileTapOnGrate(
                     x,
                     y,
@@ -7603,20 +7961,27 @@ export class DungeonScene extends GameplayScene {
               }
             }
           } else if (
-            this.briarHollowKit !== null &&
             elapsed >= MENU_TAP_DURATION_MS &&
-            moved < MENU_TAP_MAX_DISTANCE
+            moved < MENU_TAP_MAX_DISTANCE &&
+            !this.crawlerWalkedDuringHold()
           ) {
-            // Held roughly in place past tap duration, rather than dragged —
-            // the village kit's long-press gesture.
+            // Held roughly in place past tap duration, rather than dragged — and
+            // without the hold having walked the crawler, which is just the end
+            // of a walk with the finger resting somewhere: the Structure menu's
+            // gesture. A village structure under the finger
+            // wins; otherwise a boarded grate in reach, for a crawler who can
+            // spike it. With neither, the press means nothing, as it always has.
             const cam = this.camera();
-            this.briarHollowKit.handleLongPress(x, y, cam.x, cam.y, this.active());
+            const villageTook =
+              this.briarHollowKit?.handleLongPress(x, y, cam.x, cam.y, this.active()) === true;
+            if (!villageTook) this.grateSpikes.tryOpen();
           }
         }
         this.menus.pauseMenu.touchScrollEnd(x, y, this.human, this.cat);
         this.touch.moveTouchId = null;
         this.touch.moveTarget = null;
         this.touch.tapStart = null;
+        this.structureHold.end();
       }
     }
   }

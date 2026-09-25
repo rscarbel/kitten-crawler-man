@@ -108,6 +108,7 @@ export type Circumstance =
   | 'low_supplies'
   | 'manual_processing_instructions'
   | 'no_logs'
+  | 'orders_need_mayor'
   | 'patrol_active'
   | 'patrol_return'
   | 'pickaxe_task'
@@ -120,7 +121,6 @@ export type Circumstance =
   | 'quest_offer'
   | 'resourcing_skill_already_granted'
   | 'resourcing_skill_granted'
-  | 'resourcing_tutorial_trigger'
   | 'resourcing_unlocked'
   | 'service_menu'
   | 'shared_upgrade_explanation'
@@ -427,10 +427,6 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
         text: "I already taught you the basics. You don't need the lesson twice.",
       },
       {
-        circumstance: 'resourcing_tutorial_trigger',
-        text: "Watch the explanation that just popped up. It'll show you exactly how harvesting works.",
-      },
-      {
         circumstance: 'directions_to_lumber_yard',
         text: 'Take that axe to the lumber yard. Or find any trees out on the map. Any tree will give you wood.',
       },
@@ -686,6 +682,10 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       'Sedge is one of the younger members of the village militia. He joined after losing his older brother in an early necromancer raid. He is fast, alert, and eager to prove that he can protect the village.',
     dialogueOptions: [
       { circumstance: 'first_meeting', text: "I'm on watch. Keep moving." },
+      {
+        circumstance: 'orders_need_mayor',
+        text: "I don't take orders from strangers. Talk to the Mayor first.",
+      },
       { circumstance: 'command_follow', text: "Understood. I'll follow." },
       { circumstance: 'command_stay', text: "I'll hold this position." },
       { circumstance: 'command_patrol', text: "I'll patrol the area." },
@@ -708,6 +708,10 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       'Hobb has served as a village guard for most of his adult life. He is quiet, dependable, and particularly protective of the main gate, which he has repaired after every previous attack.',
     dialogueOptions: [
       { circumstance: 'first_meeting', text: 'State your business, then keep clear of the gate.' },
+      {
+        circumstance: 'orders_need_mayor',
+        text: 'Orders come from the Mayor, not from you. Not yet, anyway.',
+      },
       { circumstance: 'command_follow', text: "Aye. I'll follow." },
       { circumstance: 'command_stay', text: "I'll hold here." },
       { circumstance: 'command_patrol', text: 'Patrolling.' },
@@ -727,6 +731,10 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       {
         circumstance: 'first_meeting',
         text: "You want to help? Then listen when you're given an order.",
+      },
+      {
+        circumstance: 'orders_need_mayor',
+        text: "You don't give the orders here. Get the Mayor's word first, then we'll talk.",
       },
       { circumstance: 'command_follow', text: "I'll follow your lead." },
       { circumstance: 'command_stay', text: "I'll defend this position." },
@@ -748,6 +756,10 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       'Pru worked at the lumber yard before joining the militia. She is physically strong, practical, and still carries a spear with a shaft she made herself.',
     dialogueOptions: [
       { circumstance: 'first_meeting', text: "Don't mind the spear. It's mostly for monsters." },
+      {
+        circumstance: 'orders_need_mayor',
+        text: 'I take my orders from the Mayor. Square things with him first.',
+      },
       { circumstance: 'command_follow', text: 'Right behind you.' },
       { circumstance: 'command_stay', text: "I'll stay here." },
       { circumstance: 'command_patrol', text: "I'll check the perimeter." },

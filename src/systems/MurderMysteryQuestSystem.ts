@@ -911,12 +911,30 @@ export class MurderMysteryQuestSystem implements GameSystem {
 
   /** Space-key interaction: GumGum's hook, then clue investigation. */
   tryInteract(active: Player): boolean {
-    if (this.dialog.isOpen) return false;
+    const conversation = this.pendingConversation(active);
+    if (conversation === null) return false;
+    this.dialog.open(conversation.pages, conversation.onFinish);
+    return true;
+  }
+
+  /**
+   * Whether {@link tryInteract} would claim a press from `active` right now,
+   * without doing anything — for a prompt further down the Space chain to
+   * know it would not be reached.
+   */
+  wouldInteract(active: Player): boolean {
+    return this.pendingConversation(active) !== null;
+  }
+
+  /** The conversation a press from `active` would open — GumGum's hook, then a clue — or null. */
+  private pendingConversation(
+    active: Player,
+  ): { pages: ReadonlyArray<DialogPage>; onFinish: () => void } | null {
+    if (this.dialog.isOpen) return null;
 
     if (this.phase === 'gumgum_waiting' && this.gumgum && this.gumgumTile) {
       if (this.distToTile(active, this.gumgumTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
-        this.dialog.open(HOOK_DIALOG, () => this.finishHook());
-        return true;
+        return { pages: HOOK_DIALOG, onFinish: () => this.finishHook() };
       }
     }
 
@@ -924,13 +942,12 @@ export class MurderMysteryQuestSystem implements GameSystem {
       for (const clue of this.clues) {
         if (this.isClueFound(clue.id)) continue;
         if (this.distToTile(active, clue.tile) <= TILE_SIZE * CLUE_INTERACT_RANGE_TILES) {
-          this.dialog.open(clue.pages, () => this.finishClue(clue.id));
-          return true;
+          return { pages: clue.pages, onFinish: () => this.finishClue(clue.id) };
         }
       }
     }
 
-    return false;
+    return null;
   }
 
   /** Esc closes an open dialog without advancing the quest. Returns true if handled. */

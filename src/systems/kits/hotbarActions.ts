@@ -59,6 +59,12 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
     return;
   }
 
+  if (slot.edible === true) {
+    const dish: PotionSlot = { source: 'hotbar', slotIdx: hotbarIdx };
+    host.menus.eatFood(active, slot.id, dish);
+    return;
+  }
+
   if (slot.abilityId === 'magic_missile' && !pm.human.isActive) {
     if (pm.cat.triggerMissile()) audio?.play('cat_missile_fire');
     return;

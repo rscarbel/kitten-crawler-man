@@ -83,6 +83,11 @@ export type DeathCause =
   | 'krakarenLiveWire'
   | 'krakarenTankBurst'
   | 'explosiveFriendlyFire'
+  | 'siegeFriendlyFire'
+  | 'raisedRatkin'
+  | 'graveBull'
+  | 'necromancerBolt'
+  | 'necromancerPulse'
   | 'doomsdayExplosion'
   | 'unknown';
 
@@ -469,6 +474,26 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     "Your own dynamite got you. That's a one-way ticket.",
     'You blew yourself up. No one else to blame here.',
     'Self-inflicted dynamite death. At least you took the blast personally.',
+  ],
+  raisedRatkin: [
+    'One of Briar Hollow’s own dead clawed you down. It was slower than you.',
+    'A raised ratkin got its claws in. They shamble; you did not have to stand there.',
+  ],
+  graveBull: [
+    'The Grave Bull pawed the ground for a full second, then ran straight through you.',
+    'It lowered its head, scraped the dirt and charged in a straight line. One step aside was enough.',
+  ],
+  necromancerBolt: [
+    'Vordrick’s blue soul bolts flew exactly where the fan on the ground said they would.',
+    'The necromancer’s volley is slower than you walk. You walked into it.',
+  ],
+  necromancerPulse: [
+    'You stood in the lit ground between the necromancer’s staff and the wall until it went off.',
+    'The Grave Pulse glows for a second and a half before it bursts. You were still in the glow.',
+  ],
+  siegeFriendlyFire: [
+    "Flattened by your own trebuchet's shrapnel.",
+    'A single chip of your own boulder was all it took. Stand clear of the landing next time.',
   ],
   doomsdayExplosion: [
     'You were standing next to a city-sized bomb.',

@@ -1,7 +1,7 @@
 /**
  * DestructionKit — the things a place lets you break, and what falls out of
- * them: smashable props, the loot they and the dead leave on the floor, and
- * thrown dynamite.
+ * them: smashable props, the loot they and the dead leave on the floor, the
+ * visible pickups lying about to be gathered by hand, and thrown dynamite.
  *
  * A scene constructs one of these and barrels start having hit points. Building
  * interiors generate `BARREL` and `CRATE` tiles and never built any of this, so
@@ -21,6 +21,7 @@ import type { DestructiblePropCheckpoint, DestructiblePropKind } from '../Destru
 import { DynamiteSystem } from '../DynamiteSystem';
 import type { SystemContext } from '../GameSystem';
 import { LootSystem } from '../LootSystem';
+import { GroundPickupSystem, type GroundPickupCheckpoint } from '../GroundPickupSystem';
 import type { LootCheckpoint } from '../LootSystem';
 import type { TreeSystem } from '../TreeSystem';
 import type { SceneWorld } from './SceneWorld';
@@ -46,12 +47,18 @@ export interface DestructionKitOptions {
 export interface DestructionCheckpoint {
   readonly loot: LootCheckpoint;
   readonly destructibles: DestructiblePropCheckpoint;
+  readonly groundPickups: GroundPickupCheckpoint;
 }
 
 export class DestructionKit {
   readonly loot: LootSystem;
   readonly destructibles: DestructiblePropSystem;
   readonly dynamite: DynamiteSystem;
+  /**
+   * Visible things lying in the world to be picked up by hand. Here beside the
+   * loot because anything that can die can drop one, wherever it dies.
+   */
+  readonly groundPickups: GroundPickupSystem;
 
   /** Which of the two smash samples plays next. */
   private woodSmashSoundIdx = 0;
@@ -66,12 +73,14 @@ export class DestructionKit {
       options.breakableProps ?? ALL_BREAKABLE_PROPS,
     );
     this.dynamite = new DynamiteSystem(world.gameMap, this.destructibles, options.trees, world.bus);
+    this.groundPickups = new GroundPickupSystem(world.gameMap);
   }
 
   update(ctx: SystemContext): void {
     this.loot.update(ctx);
     this.destructibles.update();
     this.dynamite.update(ctx);
+    this.groundPickups.update();
   }
 
   /**
@@ -103,6 +112,10 @@ export class DestructionKit {
     if (pickups.withItems > 0) {
       audio?.playRandom(['pickup_1', 'pickup_2']);
     }
+
+    const groundCues = this.groundPickups.drainPickupCues();
+    if (groundCues.pickedUp) audio?.play('picking_up_ground_object');
+    if (groundCues.refused) audio?.play('error_taking_action');
 
     if (this.dynamite.explosionSoundPending) {
       this.dynamite.explosionSoundPending = false;
@@ -143,12 +156,14 @@ export class DestructionKit {
     return {
       loot: this.loot.captureCheckpoint(),
       destructibles: this.destructibles.captureCheckpoint(),
+      groundPickups: this.groundPickups.captureCheckpoint(),
     };
   }
 
   restoreCheckpoint(snapshot: DestructionCheckpoint): void {
     this.loot.restoreCheckpoint(snapshot.loot);
     this.destructibles.restoreCheckpoint(snapshot.destructibles);
+    this.groundPickups.restoreCheckpoint(snapshot.groundPickups);
   }
 
   /** Drops any charging or airborne stick, so a rewound world has none mid-flight. */

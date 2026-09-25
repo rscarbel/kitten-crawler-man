@@ -589,8 +589,7 @@ export class SpellSystem implements GameSystem {
           const nx = dist > 0 ? dx / dist : 1;
           const ny = dist > 0 ? dy / dist : 0;
           const push = miniRadius - dist + SHELL_EXPAND_BUFFER;
-          mob.x += nx * push;
-          mob.y += ny * push;
+          mob.shoveTo(mob.x + nx * push, mob.y + ny * push);
           mobGrid.move(mob, ox, oy);
         }
       }
@@ -668,8 +667,7 @@ export class SpellSystem implements GameSystem {
         const nx = dist > 0 ? dx / dist : 1;
         const ny = dist > 0 ? dy / dist : 0;
         const push = radiusPx - dist + SHELL_EXPAND_BUFFER;
-        mob.x += nx * push;
-        mob.y += ny * push;
+        mob.shoveTo(mob.x + nx * push, mob.y + ny * push);
 
         // Expansion damage: only on the very first push frame (initial cast).
         // Allies are still shoved clear — the shell is a wall to everyone — but
@@ -695,8 +693,8 @@ export class SpellSystem implements GameSystem {
         const oy = mob.y;
         const nx = dist > 0 ? dx / dist : 1;
         const ny = dist > 0 ? dy / dist : 0;
-        mob.x += nx * (radiusPx + SHELL_OUTER_BUFFER_BASE - dist);
-        mob.y += ny * (radiusPx + SHELL_OUTER_BUFFER_BASE - dist);
+        const outerPush = radiusPx + SHELL_OUTER_BUFFER_BASE - dist;
+        mob.shoveTo(mob.x + nx * outerPush, mob.y + ny * outerPush);
         mobGrid.move(mob, ox, oy);
       }
     }

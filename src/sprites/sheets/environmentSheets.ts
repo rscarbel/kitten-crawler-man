@@ -16,6 +16,7 @@ import {
   PROP_SALT,
   ROCK_SALT,
   TREE_SALT,
+  VILLAGE_SALT,
   floorArtSubSeed,
 } from '../../map/ground/floorArtSeed';
 import { BOSS_ROOM_ASSET_GROUPS, bossRoomSheetPlans } from './bossRoomSheets';
@@ -29,6 +30,7 @@ import { requestPropSheets } from './runtimePropSheets';
 import { rockSheetPlans } from './rockSheets';
 import { TREE_READY_ROWS, treeSheetPlans } from './treeSheets';
 import { townscapeSheetPlans } from './townscapeSheets';
+import { villageSheetPlans } from './villageSheets';
 
 /**
  * The art seed the destructible props are painted at: none.
@@ -113,6 +115,12 @@ export function requestEnvironmentSheetsForGroups(
       onSheetPainted,
     });
     requestPropSheets(campSheetPlans(floorArtSubSeed(CAMP_SALT)), {
+      variesWithFloorSeed: true,
+      onSheetPainted,
+    });
+    // Every floor-3 world has the village, so its furniture is overworld art
+    // rather than a group of its own.
+    requestPropSheets(villageSheetPlans(floorArtSubSeed(VILLAGE_SALT)), {
       variesWithFloorSeed: true,
       onSheetPainted,
     });

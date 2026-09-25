@@ -15,6 +15,10 @@ All audio is **pre-recorded mp3 files** — no synthesis. WebAudio is only the p
 4. `src/audio/sfxGroups.ts` — add the id to every `SFX_GROUPS` group whose context can trigger it (the `universal` group for menu, UI and the party's own cues; a `level1`/`level2`/`level3` group; a `bounty`/quest/interior group). Preloading is **not** automatic: only the groups a scene declares are decoded, and `AudioManager.play` returns silently when the buffer is absent — so an id in no group is a cue that simply never sounds, with no error and no failing gate. Ids may appear in several groups; `preload` de-dupes against `buffers`. Music and ambience ids are the exception: they're in `STREAMING_SOUND_IDS`, play through a media element, and are never preloaded at all.
 5. Play it (see below).
 
+**Never register a `SoundId` whose file does not exist yet.** A feature waiting on a recording plays an existing stand-in through a named cue — `src/audio/villageSoundCues.ts` maps each Briar Hollow cue (bell alarm, bell struck, …) to the id standing in for it — so when the file lands the change is its registration plus one line there.
+
+**Briar Hollow's group.** Every village-only id, stand-ins included, goes in the `briarHollow` group, which floor 3 loads through `LEVEL3_SFX_GROUPS`. The village's shops are outdoors, so an id that is otherwise only in an interior group (`purchase_success`) must be added to `briarHollow` too, or it never plays there.
+
 ## Playing sounds
 
 `AudioManager` (`src/audio/AudioManager.ts`):
@@ -27,7 +31,7 @@ All audio is **pre-recorded mp3 files** — no synthesis. WebAudio is only the p
 ## Where to trigger from
 
 - **Preferred**: wire to a game event in `AudioManager.wireEvents(bus)` — the central subscriber mapping EventBus events (`mobKilled`, `bossFightInitiated`, `questCompleted`, ...) to sounds/music. Cleaner than sprinkling `audio.play` at emit sites. Note the bus is cleared on scene teardown, so `wireEvents` runs once per scene.
-- **Mob sounds**: set the creature's `audioTag` and add a `case` in the audio switch in `DungeonScene` (search `audioTag`). `dealDamage` sets `attackSoundPending` automatically; set `projectileSoundPending` for ranged attacks. Boss-specific sounds use `instanceof` checks there.
+- **Mob sounds**: set the creature's `audioTag` and add a `case` in the `mob.audioTag` switch in `playMobAudioCues` (`src/systems/GameLoopPhases.ts`). `dealDamage` sets `attackSoundPending` automatically; set `projectileSoundPending` for ranged attacks. Boss-specific sounds use `instanceof` checks there. A creature with more voices than the boolean pending flags can carry queues a typed field instead (`Cow.voicePending`, drained by `playCowVoice` in the same file), or a cue queue drained by its own player (`src/systems/undeadAudioCues.ts` for the village assault's undead).
 - **Systems** don't hold an audio reference — they set pending flags (e.g. `explosionSoundPending`) the scene drains.
 - **UI buttons**: handled by `setButtonAudio` + `notifyButtonClick` (see `add-ui`) — don't add per-button play calls.
 

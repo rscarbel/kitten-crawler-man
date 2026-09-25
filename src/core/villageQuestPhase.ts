@@ -15,3 +15,19 @@ export type VillageQuestPhase =
   | 'repelled_failed'
   | 'victory'
   | 'complete';
+
+/** The quest's phases before the Mayor's offer has been accepted. */
+const PHASES_BEFORE_MAYOR_ACCEPTED: ReadonlySet<VillageQuestPhase> = new Set([
+  'unmet',
+  'offered',
+  'declined',
+]);
+
+/**
+ * Whether the party has agreed to help the Mayor yet. Gates anything that
+ * should only be available once the village has vouched for the crawlers,
+ * such as the militia taking orders.
+ */
+export function hasAcceptedMayorRequest(phase: VillageQuestPhase): boolean {
+  return !PHASES_BEFORE_MAYOR_ACCEPTED.has(phase);
+}

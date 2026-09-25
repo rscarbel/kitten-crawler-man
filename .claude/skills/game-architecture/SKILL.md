@@ -38,6 +38,15 @@ See the `add-system` skill for the recipe.
 
 Kit fields stay concrete types: `update` signatures are not uniform, so a `GameSystem[]` loop could only be reached through casts. `npm run verify:kits` gates the spine.
 
+`DestructionKit` also owns `GroundPickupSystem` (`src/systems/GroundPickupSystem.ts`): visible world pickups such as a dead cow's burgers, collected all at once by one Space press, carried through door visits and death rewinds.
+
+**Floor-3 kits.** Two more kits hang off `DungeonScene` as one field each, with one-line call sites:
+
+- `GatheringKit` (`src/systems/briarHollow/GatheringKit.ts`) — harvesting any tree or boulder, thralls, the resource HUD and the village's node regrowth. Built on every overworld floor, village or not. It owns exactly one link in the Space chain, after citizen and village talk.
+- `BriarHollowKit` (`src/systems/briarHollow/BriarHollowKit.ts`) — Briar Hollow: villagers, the herd, services (`VillageServices`), construction and the siege engines (`ConstructionKit`, held as `defences`), soldiers, the quest and the assault. Built only when `gameMap.briarHollow` is non-null (every floor-3 world). It is rebuilt on every door visit, so its systems keep nothing durable themselves: they read and write the `BriarHollowState` threaded by reference through both scenes (`src/core/briarHollowState.ts`), the same way `TownMemory` is. Its render hooks (`renderGround`, `renderEntities` merged into the Y-sort, `renderAbove`, `renderHud`), `tryInteract`, overlay claims, quest markers and tracker entries follow the boss-room dressing slots below.
+
+`EmoteEffectSystem` (`src/systems/EmoteEffectSystem.ts`) draws floating emotes (a petted cow's hearts) and is built to take other emote kinds.
+
 ### Boss-room dressing
 
 Each boss room's props, slow ground, hazards and interactables belong to a dressing in `src/systems/bossRooms/`, separate from the boss and from the fight owner (`BossRoomSystem`, `SpiderQuestSystem`, `ArenaSystem`): `HoarderRoomSystem`, `JuicerRoomSystem` (in `src/systems/`), `KrakarenRoomSystem`, `SpiderLabDressing` (owned by `SpiderQuestSystem.labDressing`) and `ColosseumDressingSystem`.
@@ -68,6 +77,8 @@ quest behind it at all — it points at the town's own furniture. See `add-quest
 ## Entity hierarchy
 
 `Player` (`src/Player.ts`, abstract: position, HP, stats, status effects, walk animation) → `HumanPlayer`, `CatPlayer`, and `Mob` (`src/creatures/Mob.ts`, abstract: aggro, A* pathfinding, LOS, health bar, loot). All enemies extend `Mob`. See the `add-creature` skill.
+
+**Crawler progress.** Combat skills live in `SkillManager` and spells in `AbilityManager`. The craft skills (Resourcing, Construction) are per crawler: `Player.craftSkills` (`src/core/CraftSkills.ts`), saved in `PlayerSnapshot`; `teachBoth` teaches both crawlers at once, and every perk reads the acting crawler's own level. Tool tiers are shared: `PartyTools` (`src/core/PartyTools.ts`) swaps both crawlers' tool items in place, and it lives with the explainer flags in `partyCrafts` (`GameProgress.crafts`). `src/core/partyResources.ts` counts and spends a resource across both inventories.
 
 ### Companions and hirelings
 

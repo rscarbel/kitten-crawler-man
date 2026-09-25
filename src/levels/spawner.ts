@@ -21,6 +21,7 @@ import { Troglodyte } from '../creatures/Troglodyte';
 import { Tuskling } from '../creatures/Tuskling';
 import { prewarmTuskling } from '../sprites/tusklingSprite';
 import { prewarmSkyFowl } from '../sprites/skyFowlSprite';
+import { COW_COATS, type CowCoatId, prewarmCow } from '../sprites/cowSprite';
 import { prewarmLlama } from '../sprites/llamaSprite';
 import { prewarmBrindleGrub } from '../sprites/brindleGrubSprite';
 import { prewarmSmallSpider } from '../sprites/spiderSprite';
@@ -30,6 +31,13 @@ import { prewarmRat } from '../sprites/ratSprite';
 import { prewarmTroglodyte } from '../sprites/troglodyteSprite';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { SkyFowl } from '../creatures/SkyFowl';
+import { Cow } from '../creatures/Cow';
+import { Necromancer } from '../creatures/Necromancer';
+import { RaisedRatkin } from '../creatures/RaisedRatkin';
+import { GraveBull } from '../creatures/GraveBull';
+import { prewarmNecromancerArrival } from '../sprites/necromancerSprite';
+import { prewarmGraveBull } from '../sprites/graveBullSprite';
+import { RatkinSoldier } from '../creatures/RatkinSoldier';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { Bugaboo } from '../creatures/Bugaboo';
@@ -475,6 +483,18 @@ registerMob('juicer', (x, y) => new Juicer(x, y, TILE_SIZE));
 registerMob('troglodyte', (x, y) => new Troglodyte(x, y, TILE_SIZE));
 registerMob('tuskling', (x, y) => new Tuskling(x, y, TILE_SIZE));
 registerMob('sky_fowl', (x, y) => new SkyFowl(x, y, TILE_SIZE));
+// The herd itself is spawned by `LivestockSystem`, which picks every coat and
+// pairs every calf; these keys serve anything spawning one by name, which gets
+// a coat at random.
+registerMob('cow', (x, y) => new Cow(x, y, TILE_SIZE, randomCowCoat(), 'adult'));
+registerMob('calf', (x, y) => new Cow(x, y, TILE_SIZE, randomCowCoat(), 'calf'));
+// The village assault's undead: spawned only by the assault, never by a floor's tables.
+registerMob('necromancer', (x, y) => new Necromancer(x, y, TILE_SIZE));
+registerMob('raised_ratkin', (x, y) => new RaisedRatkin(x, y, TILE_SIZE));
+registerMob('grave_bull', (x, y) => new GraveBull(x, y, TILE_SIZE));
+// The militia are spawned by `SoldierSystem`, each as themselves; a soldier
+// spawned by name is Marta, the captain, standing where she was put.
+registerMob('ratkin_soldier', (x, y) => new RatkinSoldier(x, y, TILE_SIZE, 'marta'));
 registerMob('ball_of_swine', (x, y) => new BallOfSwine(x, y, TILE_SIZE));
 registerMob('krakaren_clone', (x, y) => new KrakarenClone(x, y, TILE_SIZE));
 registerMob('brindle_grub', (x, y) => new BrindleGrub(x, y, TILE_SIZE));
@@ -526,6 +546,15 @@ function prewarmSpawnedFairy(mob: Mob): void {
   if (mob instanceof Fairy) prewarmFairy(mob.kind);
 }
 
+function randomCowCoat(): CowCoatId {
+  return COW_COATS[randomInt(0, COW_COATS.length - 1)];
+}
+
+/** Warms the coat and age this particular cow turned out to be. */
+function prewarmSpawnedCow(mob: Mob): void {
+  if (mob instanceof Cow) prewarmCow(mob.coat, mob.age);
+}
+
 /** Warms the palette this particular town bird turned out to be wearing. */
 function prewarmSpawnedSkyFowl(mob: Mob): void {
   if (mob instanceof SkyFowl) prewarmSkyFowl(mob.paletteIndex);
@@ -560,6 +589,15 @@ const MOB_PREWARM: ReadonlyMap<string, (mob: Mob) => void> = new Map([
   ['llama', prewarmLlama],
   ['brindle_grub', prewarmBrindleGrub],
   ['sky_fowl', prewarmSpawnedSkyFowl],
+  ['cow', prewarmSpawnedCow],
+  ['calf', prewarmSpawnedCow],
+  // Backstops only: the assault's countdown keeps each wave's arrival rows
+  // warm. The raised ratkin has none here — its spawn-time set (the idle and
+  // the head-on shamble besides the arrival rows) is more than the third
+  // wave's cache headroom holds, so its other rows are warmed only as each
+  // one engages.
+  ['necromancer', prewarmNecromancerArrival],
+  ['grave_bull', prewarmGraveBull],
   ['fairy_shield', prewarmSpawnedFairy],
   ['fairy_healer', prewarmSpawnedFairy],
   ['fairy_ice', prewarmSpawnedFairy],

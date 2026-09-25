@@ -1,15 +1,16 @@
-import { Mob } from './Mob';
+import { Mob, type StructureStrikeTiming } from './Mob';
 import type { Player } from '../Player';
 import { drawRuinsGhoulSprite } from '../sprites/ruinsGhoulSprite';
 import { riposteCooldown } from './tactics/riposte';
 import type { TacticsTrait } from './tactics/tacticsTraits';
+import { siegeAdvance, siegeCanEngage } from './siege/siegeCapability';
 
-const GHOUL_HP = 16;
-const GHOUL_SPEED = 1.1;
+export const GHOUL_HP = 16;
+export const GHOUL_SPEED = 1.1;
 const AGGRO_RANGE_TILES = 7;
 const ATTACK_RANGE_TILES = 1.2;
 /** Frames between bite attacks (~1.7 s at 60 fps). */
-const ATTACK_COOLDOWN = 100;
+export const GHOUL_ATTACK_COOLDOWN_FRAMES = 100;
 /** Frames the bite/claw animation plays. */
 const ATTACK_ANIM_FRAMES = 26;
 /**
@@ -17,13 +18,21 @@ const ATTACK_ANIM_FRAMES = 26;
  * so that a badly built party can still walk away from the pair it cannot
  * avoid, which `verify:difficulty-curve` holds.
  */
-const ATTACK_DAMAGE = 4;
+export const GHOUL_ATTACK_DAMAGE = 4;
 const COIN_DROP_MAX = 2;
 /** Fraction of attack range used as follow stop distance. */
 const FOLLOW_STOP_FRACTION = 0.8;
 /** Frames of windup before the first strike of an engagement. */
 const FIRST_HIT_WINDUP_FRAMES = 18;
 const GHOUL_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
+/** A ghoul's claws tear at a palisade harder than a skeleton's sword hacks it. */
+const GHOUL_SIEGE_STRUCTURE_MULTIPLIER = 1.2;
+/** A blow on a structure is the bite's own swing, landing where the bite's windup ends. */
+const GHOUL_STRUCTURE_STRIKE_TIMING: StructureStrikeTiming = {
+  swingFrames: ATTACK_ANIM_FRAMES,
+  impactFrame: FIRST_HIT_WINDUP_FRAMES,
+  cooldownFrames: GHOUL_ATTACK_COOLDOWN_FRAMES,
+};
 
 /**
  * A former Over City citizen twisted by Scolopendra's poison catastrophe into
@@ -61,6 +70,18 @@ export class RuinsGhoul extends Mob {
     return GHOUL_TACTICS;
   }
 
+  override get siegeStructureMultiplier(): number {
+    return GHOUL_SIEGE_STRUCTURE_MULTIPLIER;
+  }
+
+  protected override get structureStrikeTiming(): StructureStrikeTiming {
+    return GHOUL_STRUCTURE_STRIKE_TIMING;
+  }
+
+  protected override get structureStrikeBaseDamage(): number {
+    return GHOUL_ATTACK_DAMAGE;
+  }
+
   override resetToSpawn(): void {
     super.resetToSpawn();
     this.attackCooldown = 0;
@@ -75,6 +96,10 @@ export class RuinsGhoul extends Mob {
 
     if (this.attackCooldown > 0) this.attackCooldown--;
     if (this.attackAnimTimer > 0) this.attackAnimTimer--;
+    if (this.isStrikingStructure) {
+      this.isMoving = false;
+      return;
+    }
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
@@ -82,7 +107,9 @@ export class RuinsGhoul extends Mob {
     const nearest = this.acquireTarget(
       targets,
       aggroRangePx,
-      (t) => this.ignoresTownSafeZone || this.map?.isInTownSafeZone(t.x, t.y) !== true,
+      (t) =>
+        siegeCanEngage(this, t) &&
+        (this.ignoresTownSafeZone || this.map?.isInTownSafeZone(t.x, t.y) !== true),
     );
 
     this.currentTarget = nearest;
@@ -93,6 +120,7 @@ export class RuinsGhoul extends Mob {
       this.attackWindupTimer = 0;
       this.tactics.disengage();
       this.clearAStarPath();
+      if (siegeAdvance(this)) return;
       this.doWander();
       return;
     }
@@ -142,8 +170,8 @@ export class RuinsGhoul extends Mob {
       this.attackWindupTimer === 0 &&
       (this.hasLOS(nearest) || this.onSameTile(nearest))
     ) {
-      this.dealDamage(nearest, ATTACK_DAMAGE);
-      this.attackCooldown = this.scaledCooldownFrames(ATTACK_COOLDOWN);
+      this.dealDamage(nearest, GHOUL_ATTACK_DAMAGE);
+      this.attackCooldown = this.scaledCooldownFrames(GHOUL_ATTACK_COOLDOWN_FRAMES);
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
     }
   }
@@ -167,7 +195,11 @@ export class RuinsGhoul extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    const attackAnim = this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES : 0;
+    const structureStrike = this.structureStrikeProgress;
+    const attackAnim =
+      this.attackAnimTimer > 0
+        ? 1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES
+        : (structureStrike ?? 0);
 
     drawRuinsGhoulSprite(
       ctx,

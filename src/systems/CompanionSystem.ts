@@ -625,7 +625,11 @@ export class CompanionSystem implements GameSystem {
     );
 
     if (human.isActive) {
-      if (cat.autoTarget && (!cat.autoTarget.isAlive || cat.autoTarget.avoidInstead))
+      // A target that changed sides (a snare turned it) is dropped like a dead one.
+      if (
+        cat.autoTarget &&
+        (!cat.autoTarget.isAlive || cat.autoTarget.avoidInstead || !cat.autoTarget.isHostile)
+      )
         cat.autoTarget = null;
 
       if (cat.autoTarget && isUntriggeredBossRoomMob(cat.autoTarget, human)) cat.autoTarget = null;
@@ -699,7 +703,10 @@ export class CompanionSystem implements GameSystem {
         }
       }
     } else {
-      if (human.autoTarget && (!human.autoTarget.isAlive || human.autoTarget.avoidInstead))
+      if (
+        human.autoTarget &&
+        (!human.autoTarget.isAlive || human.autoTarget.avoidInstead || !human.autoTarget.isHostile)
+      )
         human.autoTarget = null;
 
       if (human.autoTarget && isUntriggeredBossRoomMob(human.autoTarget, cat))

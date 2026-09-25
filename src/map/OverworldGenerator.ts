@@ -45,6 +45,7 @@ import {
   towerDoorwaySpan,
 } from './town/paintPlots';
 import {
+  approachRouteTiles,
   connectSiteToNearestGate,
   paintBuildingBypassRoutes,
   paintDoorApron,
@@ -76,6 +77,20 @@ import { Reachability } from './overworld/reachability';
 import { hasWaterWithin, paintCamps, type CampSite } from './overworld/camps';
 import { openCliffRamps, paintCliffs } from './overworld/cliffs';
 import { worldRandom } from '../core/WorldRandom';
+import { grownRect, type KeepOut } from './overworld/keepOut';
+import {
+  briarHollowFlattenRects,
+  briarHollowKeepOut,
+  buildBriarHollowSite,
+  pickBriarHollowSite,
+  rectContains,
+  type BriarHollowSite,
+} from './overworld/briarHollowSite';
+import { paintBriarHollow, paveRoadToTown } from './overworld/paintBriarHollow';
+import {
+  assertBriarHollowIsIntact,
+  assertBriarHollowIsReachable,
+} from './overworld/briarHollowChecks';
 
 export interface BuildingEntry {
   doorTile: TilePoint;
@@ -181,6 +196,12 @@ export interface OverworldData {
    * camps from this, and it is the seam a future quest would use to find one.
    */
   camps: CampSite[];
+  /**
+   * Briar Hollow, the ratkin village east of the town: its geometry, districts,
+   * anchors and keep-out. Carried out of the generator like the camps and the
+   * circus, and for the same reason — a system reads a landmark off the map.
+   */
+  briarHollow: BriarHollowSite;
 }
 
 /** Impassable void frame around the whole map. */
@@ -193,6 +214,13 @@ const CIRCUS_RADIUS = 14;
 /** Tiles of dry ground kept between the fairground's edge and any river. */
 const CIRCUS_WATER_CLEARANCE = 8;
 const CIRCUS_SITE_ATTEMPTS = 30;
+/**
+ * Candidates tried, beyond the first `CIRCUS_SITE_ATTEMPTS`, to find a spot
+ * clear of Briar Hollow when every one of those was too close to it.
+ */
+const CIRCUS_LANDMARK_EXTRA_ATTEMPTS = 120;
+/** Tiles of ground kept between the circus grounds' edge and a landmark's keep-out. */
+const CIRCUS_LANDMARK_CLEARANCE = 6;
 
 // Ruins ambient-mob spawn scatter
 const RUINS_SPAWN_ATTEMPTS = 220;
@@ -201,6 +229,11 @@ const RUINS_EDGE_MARGIN = 12;
 export const RUINS_CIRCUS_BUFFER = 12;
 /** Tiles of clear ground kept between a camp and the nearest ambient spawn. */
 const RUINS_CAMP_BUFFER = 8;
+/**
+ * Falloff, in tiles, over which the ground rises back from the flattened
+ * village to the wilderness's own relief.
+ */
+const VILLAGE_FLATTEN_FALLOFF_TILES = 10;
 
 // Bounty encounter sites — the clearings Shady's marks are found in.
 /** How many sites the scatter aims for; the wilderness is big enough for this many well-spread ones. */
@@ -290,11 +323,27 @@ export function generateOverworld(size: number): OverworldData {
     centreTileY: plan.centre.y,
     safeRadiusTiles: plan.safeRadiusTiles,
   });
+  // Briar Hollow is sited before anything natural is laid, so every later pass
+  // can keep off it, and the land under it is levelled before the bands are
+  // painted from the field. It is painted much later — see `paintBriarHollow`.
+  const villageCentre = pickBriarHollowSite(grid, plan, elevation, BORDER);
+  const villageFlat = briarHollowFlattenRects(villageCentre);
+  for (const rect of villageFlat.rects) {
+    elevation.flatten({ kind: 'rect', ...rect, falloffTiles: VILLAGE_FLATTEN_FALLOFF_TILES });
+  }
+  elevation.flatten({
+    kind: 'disc',
+    centreTileX: villageFlat.ruins.centre.x,
+    centreTileY: villageFlat.ruins.centre.y,
+    radiusTiles: villageFlat.ruins.radiusTiles,
+    falloffTiles: VILLAGE_FLATTEN_FALLOFF_TILES,
+  });
+  const villageKeepOut = briarHollowKeepOut(villageCentre);
   paintElevationBands(grid, elevation);
   // Before the circus, the forests and the ruins, so every one of them sees the
   // channel as solid ground it has to keep off. The bridges are laid much later
   // — see `paintRiverCrossings`.
-  const rivers = carveRivers(grid, plan, elevation, BORDER);
+  const rivers = carveRivers(grid, plan, elevation, BORDER, villageKeepOut);
 
   const buildingEntries: BuildingEntry[] = [];
 
@@ -375,9 +424,9 @@ export function generateOverworld(size: number): OverworldData {
   // placement pass reads this list back as it goes, to keep tents off each other.
   const circusStructures: TileRect[] = [];
   const tracksInTownBefore = countTracksInsideTown(grid, plan);
-  const circus = paintCircus(grid, plan, circusStructures, buildingEntries);
-  paintForests(grid, plan);
-  paintRuins(grid, plan, circus);
+  const circus = paintCircus(grid, plan, circusStructures, buildingEntries, villageKeepOut);
+  paintForests(grid, plan, villageKeepOut);
+  paintRuins(grid, plan, circus, villageKeepOut);
   // After the forests and the ruins so a camp can clear its own ground — a camp
   // is a place people have cleared — and before the spawn scatter, which
   // excludes the camps so ambient ghouls do not loiter in somebody else's.
@@ -387,8 +436,16 @@ export function generateOverworld(size: number): OverworldData {
     elevation,
     { centreX: circus.centre.x, centreY: circus.centre.y, radiusTiles: circus.radius },
     BORDER,
+    villageKeepOut,
   );
-  const hallwaySpawnPoints = scatterRuinsSpawnPoints(grid, plan, circus, camps);
+  // After the camps, so within its own footprint the village wins over anything
+  // that slipped through the keep-out, and before the spawn scatter and the
+  // road passes: the road to town is routed round everything already standing,
+  // and bridged by `paintRiverCrossings` like every other road.
+  const briarHollow = buildBriarHollowSite(villageCentre);
+  paintBriarHollow(grid, briarHollow);
+  paveRoadToTown(grid, plan, briarHollow, BORDER);
+  const hallwaySpawnPoints = scatterRuinsSpawnPoints(grid, plan, circus, camps, briarHollow);
 
   paintBuildingBypassRoutes(grid, circusStructures, BORDER);
   // After every road pass, and only after: `TileGrid.setPaved` refuses to write
@@ -419,14 +476,14 @@ export function generateOverworld(size: number): OverworldData {
   assertYardsStandOnTheirOwnSurface(grid, plan, buildingArt);
   paintYardFences(grid, plan, buildingArt);
   plantGardens(grid, plan, buildingArt);
-  scatterGroundCover(grid, plan, BORDER, [...buildingPlots, ...yardPlots(plan)]);
-  scatterWildernessGroundCover(grid, plan, BORDER);
+  scatterGroundCover(grid, plan, BORDER, [...buildingPlots, ...yardPlots(plan)], villageKeepOut);
+  scatterWildernessGroundCover(grid, plan, BORDER, villageKeepOut);
   // After the ground cover, so a boulder is never scattered onto a wildflower
   // clump and never has one scattered onto it.
-  scatterBoulders(grid, plan, elevation, buildingEntries);
+  scatterBoulders(grid, plan, elevation, buildingEntries, villageKeepOut);
   // Last of the natural passes: a cliff defers to everything — roads, water,
   // camps, forests, the town — so it runs once all of them are on the grid.
-  paintCliffs(grid, plan, elevation, camps, BORDER);
+  paintCliffs(grid, plan, elevation, camps, BORDER, villageKeepOut);
   // Both checks run over the *finished* grid, which is load-bearing rather than
   // tidy. The scatter pass is itself something that can put the wrong material
   // inside the walls, and `paintTownProps` is the only writer of the wells and
@@ -440,6 +497,11 @@ export function generateOverworld(size: number): OverworldData {
     y: plan.plaza.y + Math.floor(plan.plaza.h / 2),
   };
   assertTownIsFullyReachable(grid, plan, townSquareCentre, buildingEntries);
+  // Before the repair passes as well as after them: a village that is only
+  // whole because a ramp was cut or a bridge thrown is a village the natural
+  // passes broke, and the repair is hiding it.
+  assertBriarHollowIsIntact(grid, briarHollow);
+  assertBriarHollowIsReachable(grid, briarHollow, townSquareCentre);
   // Last of all, because a bank can be walled off by a forest or a ruin as
   // easily as by the water itself, and only the finished grid shows that.
   bridgeMaroonedRegions(grid, townSquareCentre, BORDER);
@@ -447,10 +509,12 @@ export function generateOverworld(size: number): OverworldData {
   // After every deck is down: a rock is not water, so one placed earlier would
   // stop a crossing's span dead in the middle of the channel.
   scatterRiverRocks(grid, rivers, BORDER);
+  assertBriarHollowIsIntact(grid, briarHollow);
+  assertBriarHollowIsReachable(grid, briarHollow, townSquareCentre);
   // Sampled here rather than beside the ambient scatter: a site's whole job is
   // to be somewhere a fight fits, and the cliffs, boulders and river rocks that
   // decide that are only all on the grid once the natural passes have finished.
-  const bountySiteCandidates = scatterBountySites(grid, plan, circus, camps);
+  const bountySiteCandidates = scatterBountySites(grid, plan, circus, camps, briarHollow);
   const { spawnPoints: reachableSpawnPoints, bountySites } = assertWildernessIsReachable(
     grid,
     townSquareCentre,
@@ -484,6 +548,7 @@ export function generateOverworld(size: number): OverworldData {
     bountySites,
     rivers,
     camps,
+    briarHollow,
   };
 }
 
@@ -1157,18 +1222,37 @@ function placeTileBuilding(
  * stream through one corner is a much smaller defect than a map that never
  * finishes generating.
  */
-function pickCircusCentre(grid: TileGrid, townX: number, townY: number): TilePoint {
+function pickCircusCentre(grid: TileGrid, plan: TownPlan, landmarks: KeepOut): TilePoint {
+  const { x: townX, y: townY } = plan.centre;
   let candidate: TilePoint = { x: townX, y: townY };
-  for (let attempt = 0; attempt < CIRCUS_SITE_ATTEMPTS; attempt++) {
+  let clearOfLandmarks: TilePoint | null = null;
+  const attempts = CIRCUS_SITE_ATTEMPTS + CIRCUS_LANDMARK_EXTRA_ATTEMPTS;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    // Past the ordinary attempts, only a landmark-clear spot is still worth a draw.
+    if (attempt >= CIRCUS_SITE_ATTEMPTS && clearOfLandmarks !== null) break;
     const angle = worldRandom() * Math.PI * 2;
     const distance = CIRCUS_MIN_DIST + worldRandom() * CIRCUS_DIST_VARIANCE;
     candidate = {
       x: Math.round(townX + Math.cos(angle) * distance),
       y: Math.round(townY + Math.sin(angle) * distance),
     };
+    if (!isCircusClearOf(plan, landmarks, candidate)) continue;
+    clearOfLandmarks ??= candidate;
     if (!hasWaterWithin(grid, candidate, CIRCUS_RADIUS + CIRCUS_WATER_CLEARANCE)) return candidate;
   }
-  return candidate;
+  return clearOfLandmarks ?? candidate;
+}
+
+/**
+ * Whether a circus pitched here, with its approach road, stays off every
+ * landmark: the grounds themselves, and the L the road to the nearest gate
+ * takes — a road run through Briar Hollow would be cut in two by the palisade.
+ */
+function isCircusClearOf(plan: TownPlan, landmarks: KeepOut, centre: TilePoint): boolean {
+  if (landmarks.distanceTo(centre.x, centre.y) <= CIRCUS_RADIUS + CIRCUS_LANDMARK_CLEARANCE) {
+    return false;
+  }
+  return !approachRouteTiles(plan, centre).some((tile) => landmarks.contains(tile.x, tile.y));
 }
 
 /** Cluster of tents 70+ tiles from the town, well outside the safe radius. */
@@ -1177,11 +1261,11 @@ function paintCircus(
   plan: TownPlan,
   circusStructures: TileRect[],
   buildingEntries: BuildingEntry[],
+  landmarks: KeepOut,
 ): CircusGrounds {
-  const { x: cx, y: cy } = plan.centre;
   const size = grid.size;
 
-  const centre = pickCircusCentre(grid, cx, cy);
+  const centre = pickCircusCentre(grid, plan, landmarks);
 
   // Circus ground: a roughly circular paved area.
   for (let dy = -CIRCUS_RADIUS; dy <= CIRCUS_RADIUS; dy++) {
@@ -1320,6 +1404,7 @@ function scatterBoulders(
   plan: TownPlan,
   elevation: ElevationField,
   entries: ReadonlyArray<BuildingEntry>,
+  landmarks: KeepOut,
 ): void {
   const nearADoor = (tx: number, ty: number): boolean =>
     entries.some(
@@ -1331,6 +1416,7 @@ function scatterBoulders(
     for (let tx = BORDER + 1; tx < grid.size - BORDER - 1; tx++) {
       if (!isOpenWildernessGround(grid.typeAt(tx, ty))) continue;
       if (Math.hypot(tx - plan.centre.x, ty - plan.centre.y) <= plan.safeRadiusTiles) continue;
+      if (landmarks.contains(tx, ty)) continue;
       const band = elevation.bandAt(tx, ty);
       if (worldRandom() >= BOULDER_DENSITY_BY_BAND[band]) continue;
       if (nearADoor(tx, ty)) continue;
@@ -1365,7 +1451,7 @@ function paintElevationBands(grid: TileGrid, elevation: ElevationField): void {
 }
 
 /** Forest blobs in the wilderness, well outside town and never over a road. */
-function paintForests(grid: TileGrid, plan: TownPlan): void {
+function paintForests(grid: TileGrid, plan: TownPlan, landmarks: KeepOut): void {
   const size = grid.size;
   for (let i = 0; i < NUM_FORESTS; i++) {
     const angle = worldRandom() * Math.PI * 2;
@@ -1385,6 +1471,9 @@ function paintForests(grid: TileGrid, plan: TownPlan): void {
         if (tx < BORDER || tx >= size - BORDER || ty < BORDER || ty >= size - BORDER) continue;
         if (grid.isSolid(tx, ty)) continue;
         if (grid.isPaved(tx, ty)) continue;
+        // A landmark plants its own trees — Briar Hollow's grove is laid out
+        // by the village painter, in rows.
+        if (landmarks.contains(tx, ty)) continue;
         // Nothing takes root on bare ridge rock. Highland turf is left open to
         // forest on purpose — a wood climbing a hillside is what makes the band
         // read as a slope rather than as a stripe.
@@ -1420,7 +1509,12 @@ function isOpenWildernessGround(type: number | undefined): boolean {
  * Broken wall shells and loose rubble beyond the town's safe zone, so the land
  * outside the walls reads as a destroyed city rather than open countryside.
  */
-function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void {
+function paintRuins(
+  grid: TileGrid,
+  plan: TownPlan,
+  circus: CircusGrounds,
+  landmarks: KeepOut,
+): void {
   const size = grid.size;
   const { x: cx, y: cy } = plan.centre;
   const isRuinsGround = (tx: number, ty: number) =>
@@ -1428,6 +1522,7 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
     tx < size - BORDER &&
     ty > BORDER &&
     ty < size - BORDER &&
+    !landmarks.contains(tx, ty) &&
     isOpenWildernessGround(grid.typeAt(tx, ty));
 
   // Shells can be up to RUIN_SHELL_MIN_SIZE + RUIN_SHELL_SIZE_RANGE tiles wide, so
@@ -1481,6 +1576,7 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
     for (let x = BORDER + 1; x < size - BORDER - 1; x++) {
       if (!isOpenWildernessGround(grid.typeAt(x, y))) continue;
       if (Math.hypot(x - cx, y - cy) <= plan.safeRadiusTiles) continue;
+      if (landmarks.contains(x, y)) continue;
       if (worldRandom() < RUBBLE_DENSITY) grid.setStanding(x, y, RUBBLE);
     }
   }
@@ -1495,6 +1591,7 @@ function scatterRuinsSpawnPoints(
   plan: TownPlan,
   circus: CircusGrounds,
   camps: ReadonlyArray<CampSite>,
+  village: BriarHollowSite,
 ): TilePoint[] {
   const size = grid.size;
   const { x: cx, y: cy } = plan.centre;
@@ -1522,11 +1619,35 @@ function scatterRuinsSpawnPoints(
       )
     )
       continue;
+    // Briar Hollow is not a safe zone — hostiles may wander in — but none is
+    // ever spawned inside it or on its doorstep.
+    if (isVillageSpawnExcluded(village, tx, ty)) continue;
     const type = grid.typeAt(tx, ty);
     if (!isOpenWildernessGround(type) && type !== FloorTypeValue.road && type !== RUBBLE) continue;
     points.push({ x: tx, y: ty });
   }
   return points;
+}
+
+/**
+ * How far from its spawn point an ambient group is placed — the fairies'
+ * scatter ring is the widest. A point this close to the village's exclusion
+ * would have part of its ring refused, and a group that loses its guaranteed
+ * shield to the palisade's margin is a harder fight than the table rolled.
+ */
+const SPAWN_GROUP_REACH_TILES = 2;
+
+/**
+ * Whether a hostile may not be spawned on this tile for Briar Hollow's sake:
+ * inside the palisade or its doorstep margin, or anywhere in the village's
+ * keep-out (its roads, the quarry, the ruins) — each widened by the reach of
+ * the group a point seeds.
+ */
+function isVillageSpawnExcluded(village: BriarHollowSite, x: number, y: number): boolean {
+  return (
+    rectContains(grownRect(village.spawnExclusion, SPAWN_GROUP_REACH_TILES), x, y) ||
+    village.keepOut.distanceTo(x, y) <= SPAWN_GROUP_REACH_TILES
+  );
 }
 
 /** Ground a bounty encounter can be fought on: open wilderness, road or rubble. */
@@ -1568,6 +1689,7 @@ function scatterBountySites(
   plan: TownPlan,
   circus: CircusGrounds,
   camps: ReadonlyArray<CampSite>,
+  village: BriarHollowSite,
 ): TilePoint[] {
   const size = grid.size;
   const { x: cx, y: cy } = plan.centre;
@@ -1596,6 +1718,12 @@ function scatterBountySites(
     )
       continue;
     if (sites.some((site) => (site.x - tx) ** 2 + (site.y - ty) ** 2 < minSpacingSq)) continue;
+    // A bounty's fight needs its whole clearing outside the village's doorstep.
+    if (
+      isVillageSpawnExcluded(village, tx, ty) ||
+      village.keepOut.distanceTo(tx, ty) <= BOUNTY_CLEARANCE_RADIUS_TILES
+    )
+      continue;
     if (!isBountyFightableGround(grid.typeAt(tx, ty))) continue;
     if (openGroundFraction(grid, tx, ty) < BOUNTY_CLEARANCE_MIN_OPEN_FRACTION) continue;
     sites.push({ x: tx, y: ty });

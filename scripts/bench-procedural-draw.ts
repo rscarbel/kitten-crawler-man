@@ -27,6 +27,7 @@ import {
 } from '../src/sprites/art/hoarderArt.js';
 import { drawJuicerFront, restingPose as juicerRestingPose } from '../src/sprites/art/juicerArt.js';
 import { drawRatKinFront, restingPose as ratKinRestingPose } from '../src/sprites/art/ratKinArt.js';
+import { MORDECAI_OUTFIT } from '../src/sprites/art/ratkin/cast.js';
 import { drawShady, restingPose as shadyRestingPose } from '../src/sprites/art/shadyArt.js';
 import {
   KRAKAREN_FIGURE,
@@ -198,7 +199,7 @@ const SUBJECTS: readonly Subject[] = [
   {
     name: 'rat_kin',
     frameSize: 96,
-    paint: (ctx) => drawRatKinFront(asGameContext(ctx), ratKinPose),
+    paint: (ctx) => drawRatKinFront(asGameContext(ctx), ratKinPose, MORDECAI_OUTFIT),
   },
   {
     name: 'shady',

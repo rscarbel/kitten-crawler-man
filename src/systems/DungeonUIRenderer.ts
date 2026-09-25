@@ -15,11 +15,14 @@ import type { MobileTouchState } from '../core/MobileTouchState';
 import type { CompanionSystem } from './CompanionSystem';
 import type { MongoSystem } from './MongoSystem';
 import type { InventoryPanel } from '../ui/InventoryPanel';
+import { hotbarStripRect } from '../ui/InventoryPanel';
 import type { GearPanel } from '../ui/GearPanel';
 import type { PlayerManager } from '../core/PlayerManager';
 import { drawText } from '../ui/TextBox';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 import { drawCompassIcon } from '../ui/icons/compassIcon';
+import { drawConstructionIcon } from '../ui/icons/constructionIcon';
+import { keybindings } from '../core/Keybindings';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -210,6 +213,21 @@ function vignetteGradient(
   return gradient;
 }
 
+/** Where the level's collapse timer stands, on floors that have one. */
+export function levelTimerRect(miniMap: MiniMapSystem): Rect {
+  if (platform.isMobile) {
+    const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
+    return {
+      x: viewportWidth() - RIGHT_COL_MARGIN - TIMER_W,
+      y: MINIMAP_Y + mmSize + BELOW_MAP_GAP,
+      w: TIMER_W,
+      h: TIMER_H,
+    };
+  }
+  const pauseBtn = pauseButtonRect(miniMap);
+  return { x: pauseBtn.x - TIMER_PAUSE_GAP - TIMER_W, y: pauseBtn.y, w: TIMER_W, h: TIMER_H };
+}
+
 export function renderLevelTimer(
   ctx: CanvasRenderingContext2D,
   miniMap: MiniMapSystem,
@@ -223,19 +241,7 @@ export function renderLevelTimer(
   const urgent = totalSec <= URGENT_SECONDS_THRESHOLD;
   const warning = totalSec <= WARNING_SECONDS_THRESHOLD;
 
-  const w = TIMER_W;
-  const h = TIMER_H;
-  let x: number;
-  let y: number;
-  if (platform.isMobile) {
-    const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
-    x = viewportWidth() - RIGHT_COL_MARGIN - w;
-    y = MINIMAP_Y + mmSize + BELOW_MAP_GAP;
-  } else {
-    const pauseBtn = pauseButtonRect(miniMap);
-    x = pauseBtn.x - TIMER_PAUSE_GAP - w;
-    y = pauseBtn.y;
-  }
+  const { x, y, w, h } = levelTimerRect(miniMap);
 
   const urgentAlpha = urgent
     ? URGENT_OPACITY + Math.sin(Date.now() / URGENT_WAVE_PERIOD) * URGENT_WAVE_AMP
@@ -472,10 +478,73 @@ export function renderMobileButtons(
   }
 }
 
+/** The Bag button's slot, directly under Pause. */
+const BAG_SLOTS_BELOW_PAUSE = 1;
+/** The Build button's slot: directly under the Bag button. */
+const BUILD_SLOTS_BELOW_PAUSE = 2;
+
+/**
+ * Whether the column holds the Build button's slot this frame. Only a map
+ * where the button can appear reserves it; every other floor has no Build slot
+ * in the column.
+ */
+let buildSlotReserved = false;
+
+/** Called by the scene once a frame, before the column is laid out. */
+export function setBuildSlotReserved(reserved: boolean): void {
+  buildSlotReserved = reserved;
+}
+
+/** The Build button's icon, inset from the button's left edge. */
+const BUILD_ICON_INSET = 4;
+const BUILD_LABEL_GAP = 4;
+const BUILD_LABEL_SIZE = 12;
+/** How fast the Build button pulses when it first appears, in pulses per second. */
+const BUILD_PULSE_HZ = 1.5;
+const BUILD_PULSE_GLOW = '#fbbf24';
+
+/** Where the Build button stands: under Bag, or beside the column when it won't fit. */
+export function buildButtonRect(miniMap: MiniMapSystem): Rect {
+  return columnLayout(miniMap).build;
+}
+
+/**
+ * The Build button: the Construction menu's HUD entry. `pulseSeconds` counts
+ * down the attention pulse it gets the first time it appears.
+ */
+export function drawBuildButton(
+  ctx: CanvasRenderingContext2D,
+  miniMap: MiniMapSystem,
+  menuOpen: boolean,
+  pulseSeconds: number,
+): Rect {
+  const r = buildButtonRect(miniMap);
+  const pulsing = pulseSeconds > 0 && Math.sin(pulseSeconds * Math.PI * 2 * BUILD_PULSE_HZ) > 0;
+  drawButton(ctx, {
+    x: r.x,
+    y: r.y,
+    width: r.w,
+    height: r.h,
+    label: '',
+    sound: 'menu_open',
+    ...(menuOpen || pulsing ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+    ...(pulsing ? { glow: BUILD_PULSE_GLOW } : {}),
+  });
+  const iconSize = r.h - BUILD_ICON_INSET * 2;
+  drawConstructionIcon(ctx, r.x + BUILD_ICON_INSET, r.y + BUILD_ICON_INSET, iconSize);
+  const label = platform.isMobile ? 'Build' : `Build [${keybindings.labelFor('construction')}]`;
+  drawText(ctx, label, {
+    x: r.x + BUILD_ICON_INSET + iconSize + BUILD_LABEL_GAP,
+    y: r.y + (r.h - BUILD_LABEL_SIZE) / 2,
+    size: BUILD_LABEL_SIZE,
+    color: '#e2e8f0',
+  });
+  return r;
+}
+
 /**
  * The chip's own geometry, in the right-hand HUD column below the pause button.
  */
-const CHIP_SLOTS_BELOW_PAUSE = 2;
 const CHIP_HEIGHT = 26;
 
 /**
@@ -484,19 +553,156 @@ const CHIP_HEIGHT = 26;
  *
  * Lives here rather than with the system that paints it, because it is a slot in
  * *this* module's column: everything else that column holds is measured here,
- * and the Journal has to know how far down it reaches. Keeping the arithmetic in
- * one place is also what stops the two drifting — a second copy of it is how the
- * Journal ended up drawn over the top of the chip in the first place.
+ * and the Journal has to know how far down it reaches. When the column has no
+ * room it follows `columnLayout`'s fallback order.
  */
 export function achievementChipRect(miniMap: MiniMapSystem): Rect {
-  const width = rightColBtnW();
+  return columnLayout(miniMap).chip;
+}
+
+/** Whether the level's collapse timer is on screen this frame, which the column must keep clear of. */
+let levelTimerShown = false;
+/** The party's HUD panel, top left, which a spilled-over column piece must not land on. */
+let hudPanelRect: Rect | null = null;
+
+/** Called by the scene once a frame, before the column is laid out. */
+export function setLevelTimerShown(shown: boolean): void {
+  levelTimerShown = shown;
+}
+
+/** Called by the scene once the HUD panel has been drawn and measured. */
+export function setHudPanelRect(rect: Rect | null): void {
+  hudPanelRect = rect;
+}
+
+/** The unopened-loot-box banner, while it shows. */
+let lootBoxBannerRect: Rect | null = null;
+
+/** Called by the scene once a frame, before the column is laid out. */
+export function setLootBoxBannerRect(rect: Rect | null): void {
+  lootBoxBannerRect = rect;
+}
+
+/** Clears every piece of column layout state, for a scene starting fresh. */
+export function resetColumnLayoutState(): void {
+  buildSlotReserved = false;
+  levelTimerShown = false;
+  hudPanelRect = null;
+  lootBoxBannerRect = null;
+}
+
+interface ColumnLayout {
+  readonly build: Rect;
+  readonly chip: Rect;
+  readonly journal: Rect;
+}
+
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** How many extra columns the right-hand column may spill into on a very short window. */
+const MAX_OVERFLOW_COLUMNS = 4;
+
+/**
+ * The right-hand column under Pause and Bag, laid out once for everything
+ * that hangs in it: the Build button (where it is reserved), the achievement
+ * chip's slot and the Journal.
+ *
+ * Each takes the next slot down the column while that slot is clear of the
+ * rest of the HUD — the hotbar strip, Pause, the Bag row, the minimap, the
+ * Follower button, the level timer, the loot-box banner and the HUD panel —
+ * and of the bottom of the screen. Once one piece has had to leave the column,
+ * the pieces after it leave too. A piece that leaves goes to the first slot
+ * that is clear, searching up to {@link MAX_OVERFLOW_COLUMNS} columns to the
+ * left, each from the Bag's row down and then upward:
+ *
+ * 1. first a slot clear of everything, the HUD panel included;
+ * 2. failing that, a slot clear of everything but the HUD panel;
+ * 3. failing both, beside the Bag, whatever it overlaps — only on a screen too
+ *    small for any of the above.
+ */
+function columnLayout(miniMap: MiniMapSystem): ColumnLayout {
   const pause = pauseButtonRect(miniMap);
-  return {
-    x: viewportWidth() - RIGHT_COL_MARGIN - width,
-    y: pause.y + CHIP_SLOTS_BELOW_PAUSE * (PAUSE_BTN_H + MOBILE_BUTTON_GAP),
-    w: width,
-    h: CHIP_HEIGHT,
+  const width = rightColBtnW();
+  const slotStep = PAUSE_BTN_H + MOBILE_BUTTON_GAP;
+  const screenFloor = viewportHeight() - RIGHT_COL_MARGIN;
+  const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
+  const occupied: Rect[] = [
+    hotbarStripRect(),
+    pause,
+    { x: viewportWidth() - RIGHT_COL_MARGIN - mmSize, y: MINIMAP_Y, w: mmSize, h: mmSize },
+  ];
+  if (platform.isMobile) {
+    // On a phone the Follower button stands above Pause in the column itself.
+    occupied.push({
+      x: pause.x,
+      y: MINIMAP_Y + mmSize + BELOW_MAP_GAP + TIMER_H + MOBILE_BUTTON_GAP,
+      w: MOBILE_BTN_W,
+      h: MOBILE_BTN_H,
+    });
+  } else {
+    occupied.push(followerButtonRect());
+  }
+  if (levelTimerShown) occupied.push(levelTimerRect(miniMap));
+  if (lootBoxBannerRect !== null) occupied.push(lootBoxBannerRect);
+  const bagRow = pause.y + BAG_SLOTS_BELOW_PAUSE * slotStep;
+  occupied.push({ x: pause.x, y: bagRow, w: width, h: PAUSE_BTN_H });
+  const panel = hudPanelRect;
+  const isClear = (rect: Rect, avoidHudPanel: boolean): boolean =>
+    rect.x >= 0 &&
+    rect.y >= 0 &&
+    rect.y + rect.h <= screenFloor &&
+    occupied.every((other) => !rectsOverlap(rect, other)) &&
+    !(avoidHudPanel && panel !== null && rectsOverlap(rect, panel));
+
+  let nextColumnSlot = BAG_SLOTS_BELOW_PAUSE + 1;
+  let columnOpen = true;
+  let columnBottom = bagRow + PAUSE_BTN_H;
+  const take = (rect: Rect): Rect => {
+    occupied.push(rect);
+    return rect;
   };
+  // Rows nearest the Bag first: down from its row, then up toward the top.
+  const overflowRows: number[] = [];
+  for (let y = bagRow; y <= screenFloor; y += slotStep) overflowRows.push(y);
+  for (let y = bagRow - slotStep; y >= MINIMAP_Y; y -= slotStep) overflowRows.push(y);
+  const overflow = (w: number, h: number): Rect => {
+    // Clear of the HUD panel if the screen allows it; on the very smallest a
+    // corner of the panel is the only room left that is not another button.
+    for (const avoidHudPanel of [true, false]) {
+      for (let column = 1; column <= MAX_OVERFLOW_COLUMNS; column++) {
+        const right = pause.x - (column - 1) * (width + MOBILE_BUTTON_GAP) - MOBILE_BUTTON_GAP;
+        for (const y of overflowRows) {
+          const rect = { x: right - w, y, w, h };
+          if (isClear(rect, avoidHudPanel)) return take(rect);
+        }
+      }
+    }
+    // Nowhere clear on a screen this small: beside the Bag, as the least bad place.
+    return take({ x: pause.x - MOBILE_BUTTON_GAP - w, y: bagRow, w, h });
+  };
+  const place = (h: number, w: number = width, gapAbove = 0): Rect => {
+    if (columnOpen) {
+      const y = gapAbove > 0 ? columnBottom + gapAbove : pause.y + nextColumnSlot * slotStep;
+      const rect = { x: pause.x + width - w, y, w, h };
+      if (isClear(rect, true)) {
+        nextColumnSlot++;
+        columnBottom = y + h;
+        return take(rect);
+      }
+      // Once one piece has had to step out of the column, everything below it
+      // does too: nothing hangs in the column past a gap.
+      columnOpen = false;
+    }
+    return overflow(w, h);
+  };
+  const build = buildSlotReserved
+    ? place(PAUSE_BTN_H)
+    : { x: pause.x, y: pause.y + BUILD_SLOTS_BELOW_PAUSE * slotStep, w: width, h: PAUSE_BTN_H };
+  const chip = place(CHIP_HEIGHT);
+  const journal = place(JOURNAL_BTN_SIZE, JOURNAL_BTN_SIZE, JOURNAL_BTN_GAP);
+  return { build, chip, journal };
 }
 
 /** The Journal button is a square, big enough that the rose reads at a glance. */
@@ -521,37 +727,19 @@ const JOURNAL_BADGE_SIZE = 11;
  * the moment an achievement was earned, and the chip is hit-tested first — so it
  * would also quietly swallow the clicks aimed at the compass.
  *
- * - Desktop: the pause button, then the achievement chip's slot; the floor is
- *   the Follower button above the hotbar.
+ * - Desktop: the pause button, the Bag slot, the Build slot where it is
+ *   reserved, then the achievement chip's slot; the Follower button stands
+ *   below the column.
  * - Mobile: the Follower and Pause buttons are both up in the column and the Bag
- *   button sits under them; the floor is the hotbar itself.
+ *   (and Build) buttons sit under them.
  *
  * On a window too short to hold the whole column — a phone in landscape, an
- * expanded minimap on a small desktop — the button rides up against that floor
- * rather than off the bottom of the screen. It can then land on the achievement
- * chip's slot, which is the lesser of the two failures: the chip is only there
- * when something is unread, whereas a button below the hotbar is unreachable
- * every frame.
+ * expanded minimap on a small desktop — it goes to a clear slot beside the
+ * column instead, following `columnLayout`'s fallback order; only on a screen
+ * with no clear slot at all can it land on other chrome.
  */
 export function journalButtonRect(miniMap: MiniMapSystem): Rect {
-  const chip = achievementChipRect(miniMap);
-  let topY = chip.y + chip.h;
-  let floorY = followerButtonRect().y;
-  if (platform.isMobile) {
-    const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
-    const followerY = MINIMAP_Y + mmSize + BELOW_MAP_GAP + TIMER_H + MOBILE_BUTTON_GAP;
-    const pauseY = followerY + MOBILE_BTN_H + MOBILE_BUTTON_GAP;
-    const bagBottom = pauseY + PAUSE_BTN_H + MOBILE_BUTTON_GAP + PAUSE_BTN_H;
-    topY = Math.max(bagBottom, topY);
-    floorY = viewportHeight() - SLOT_HEIGHT - BOTTOM_MARGIN;
-  }
-  const highestAllowed = floorY - JOURNAL_BTN_GAP - JOURNAL_BTN_SIZE;
-  return {
-    x: viewportWidth() - RIGHT_COL_MARGIN - JOURNAL_BTN_SIZE,
-    y: Math.min(topY + JOURNAL_BTN_GAP, highestAllowed),
-    w: JOURNAL_BTN_SIZE,
-    h: JOURNAL_BTN_SIZE,
-  };
+  return columnLayout(miniMap).journal;
 }
 
 /**
@@ -600,9 +788,10 @@ export function drawJournalButton(
  * Where the Follower button stands when nothing overrides it: bottom-right,
  * clear of the hotbar.
  *
- * Exported because it is the *floor* of the right-hand HUD column — anything
- * hung under the minimap has to stop above it, and re-deriving that arithmetic
- * anywhere else is how two pieces of chrome end up on the same pixels.
+ * Exported because the right-hand HUD column has to keep clear of it —
+ * anything hung under the minimap stops above it or steps aside — and
+ * re-deriving that arithmetic anywhere else is how two pieces of chrome end up
+ * on the same pixels.
  */
 export function followerButtonRect(): Rect {
   return {
@@ -654,4 +843,50 @@ export function renderFollowerButton(
     color: nonDefault ? '#facc15' : '#94a3b8',
     align: 'center',
   });
+}
+
+/** Clear space kept between a top strip and the HUD pieces either side of it. */
+const TOP_STRIP_SIDE_GAP = 12;
+/** Top edge of a strip sharing the minimap's row. */
+const TOP_STRIP_Y = MINIMAP_Y;
+/** Below this scale a strip squeezed between the HUD and the minimap is unreadable, so it drops under the HUD instead. */
+const TOP_STRIP_MIN_SCALE = 0.75;
+/** Clear space between the top-left HUD's bottom edge and a strip dropped under it. */
+const UNDER_HUD_GAP = 8;
+
+/** Where a strip of HUD chrome goes, and the scale it is drawn at to fit there. */
+export interface StripSlot {
+  readonly x: number;
+  readonly y: number;
+  readonly scale: number;
+}
+
+/**
+ * The slot for a `width` × `height` strip centred at the top of the screen,
+ * between the top-left HUD panel (`hudRect`, however it is laid out — full,
+ * collapsed or mobile) and the minimap. Narrower than that gap it is scaled
+ * down to fit; too narrow to scale readably — a phone in portrait — it moves
+ * under the HUD panel on the left instead, which is the one place in the top
+ * band nothing else claims.
+ */
+export function topCentreStripSlot(
+  miniMap: MiniMapSystem,
+  hudRect: Rect,
+  width: number,
+): StripSlot {
+  const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
+  const leftBound = hudRect.x + hudRect.w + TOP_STRIP_SIDE_GAP;
+  const rightBound = viewportWidth() - RIGHT_COL_MARGIN - mmSize - TOP_STRIP_SIDE_GAP;
+  const available = rightBound - leftBound;
+  const squeeze = Math.min(1, available / width);
+  if (squeeze >= TOP_STRIP_MIN_SCALE) {
+    const drawnWidth = width * squeeze;
+    const centred = viewportWidth() / 2 - drawnWidth / 2;
+    const x = Math.min(Math.max(centred, leftBound), rightBound - drawnWidth);
+    return { x, y: TOP_STRIP_Y, scale: squeeze };
+  }
+  const underHudWidth =
+    viewportWidth() - RIGHT_COL_MARGIN - mmSize - TOP_STRIP_SIDE_GAP - hudRect.x;
+  const underHudScale = Math.min(1, Math.max(TOP_STRIP_MIN_SCALE, underHudWidth / width));
+  return { x: hudRect.x, y: hudRect.y + hudRect.h + UNDER_HUD_GAP, scale: underHudScale };
 }

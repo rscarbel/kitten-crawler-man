@@ -1,7 +1,7 @@
 /**
  * Which pictures the Level 3 wilderness's boulders carry.
  *
- * Two families — `boulder_small_*` and `boulder_large_*`, eight seeded variants
+ * Two boulder families — `boulder_small_*` and `boulder_large_*`, eight seeded variants
  * each, all painted by one boulder engine (`src/sprites/art/rockArt.ts`) from
  * one master palette per lithology, so a scree slope reads as a slope of
  * different rocks rather than one rock repeated.
@@ -9,6 +9,9 @@
  * Both families share the geometry contract every prop sheet here uses:
  * `SpriteLoader` maps a tile type to exactly one geometry, so a variant with its
  * own envelope would overwrite the family's sort anchor and cull extents.
+ *
+ * The quarry's `rock_deposit_*` sheets ride along: they are painted from the
+ * same palettes (`src/sprites/art/rockDepositArt.ts`) and live on the same floor.
  *
  * `RIVER_ROCK` is deliberately **not** here. A mid-channel stone is three lobes
  * and a waterline at 32 px a tile, and it has to draw *under* the wake
@@ -19,6 +22,7 @@
  */
 
 import { drawBoulder, type Lithology, type RockForm, type RockSize } from '../art/rockArt';
+import { drawRockDeposit, type DepositForm } from '../art/rockDepositArt';
 import type { PropSheetPlan, PropSheetRow, FramePainter } from './propSheetPlan';
 import type { SpriteKey } from '../../core/SpriteLoader';
 
@@ -169,6 +173,59 @@ function rockSheet(variant: RockVariant, seedTerm: number): PropSheetPlan {
 }
 
 /**
+ * The quarry's minable stone. One envelope for every variant, because
+ * `SpriteLoader` maps `ROCK_DEPOSIT` to one geometry: the small boulder's, a
+ * tile of headroom over the one tile it blocks. Each sheet carries the intact
+ * look and the worked one, which `drawRockDepositTile` picks by the tile's
+ * `damageStage`.
+ */
+interface DepositVariant {
+  readonly key: SpriteKey;
+  readonly form: DepositForm;
+  readonly lithology: Lithology;
+  readonly seed: number;
+}
+
+/**
+ * Fixed literal seeds, for the same reason as the boulders'. The quarry stands
+ * on grey scree, so its stone is grey: tan sandstone strata, seen in the
+ * quarry, read as a stack of planks.
+ */
+const DEPOSIT_VARIANTS: ReadonlyArray<DepositVariant> = [
+  { key: 'rock_deposit_a', form: 'outcrop', lithology: 'granite', seed: 0x5e7a21 },
+  { key: 'rock_deposit_b', form: 'outcrop', lithology: 'granite', seed: 0x2b90d4 },
+  { key: 'rock_deposit_c', form: 'outcrop', lithology: 'basalt', seed: 0xc4163f },
+  { key: 'rock_deposit_dressed_a', form: 'dressed', lithology: 'limestone', seed: 0x71e8b5 },
+  { key: 'rock_deposit_dressed_b', form: 'dressed', lithology: 'granite', seed: 0x9d3c62 },
+];
+
+/** Row order of a deposit sheet; the manifest's states must agree. */
+const DEPOSIT_STATES = ['idle', 'worked'] as const;
+
+function depositSheet(variant: DepositVariant, seedTerm: number): PropSheetPlan {
+  const envelope = envelopeFor('small');
+  const rows: PropSheetRow[] = DEPOSIT_STATES.map((state) => {
+    const paint: FramePainter = (ctx, originX, originY) => {
+      const spec = { form: variant.form, lithology: variant.lithology, worked: state === 'worked' };
+      drawRockDeposit(ctx, spec, variant.seed + seedTerm, {
+        originX,
+        originY,
+        bottomY: originY + (envelope.frameHeight - envelope.tileY),
+        tileScale: ROCK_TILE_SCALE,
+      });
+    };
+    return { state, frames: [paint] };
+  });
+  return {
+    key: variant.key,
+    file: `${variant.key}.png`,
+    tileScale: ROCK_TILE_SCALE,
+    ...envelope,
+    rows,
+  };
+}
+
+/**
  * Fails loudly on the sort anchor every boulder depends on.
  *
  * `SpriteLoader` reads a sprite's visual foot as `frameHeight - tileY`, and a
@@ -196,5 +253,8 @@ export function assertRockEnvelopes(): void {
  */
 export function rockSheetPlans(seedTerm: number): PropSheetPlan[] {
   assertRockEnvelopes();
-  return VARIANTS.map((variant) => rockSheet(variant, seedTerm));
+  return [
+    ...VARIANTS.map((variant) => rockSheet(variant, seedTerm)),
+    ...DEPOSIT_VARIANTS.map((variant) => depositSheet(variant, seedTerm)),
+  ];
 }

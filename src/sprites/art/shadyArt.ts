@@ -874,20 +874,6 @@ function drawMantle(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
   ctx.fillStyle = MANTLE_DARK;
   ctx.fill();
 
-  ctx.save();
-  ctx.strokeStyle = '#ff00ff';
-  ctx.lineWidth = 0.012;
-  ctx.beginPath();
-  ctx.moveTo(sx - MANTLE_HALF * MANTLE_HEM_FLARE, hemY);
-  ctx.quadraticCurveTo(sx, hemY + MANTLE_HEM_DIP, sx + MANTLE_HALF * MANTLE_HEM_FLARE, hemY);
-  ctx.stroke();
-  ctx.strokeStyle = '#00ffff';
-  ctx.beginPath();
-  ctx.moveTo(sx - MANTLE_HALF, hemY + MANTLE_HEM_DIP);
-  ctx.lineTo(sx + MANTLE_HALF, hemY + MANTLE_HEM_DIP);
-  ctx.stroke();
-  ctx.restore();
-
   // A centre seam and one fold either side of it. Without them the lit plane
   // bakes as a single hard-edged pale ellipse across his chest, and at a 32px
   // tile that oval — not the hood, not the coat — is the shape the eye takes

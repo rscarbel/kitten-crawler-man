@@ -9,6 +9,7 @@ import { HumanPreviewScene } from '../scenes/HumanPreviewScene';
 import { GoblinPreviewScene } from '../scenes/GoblinPreviewScene';
 import { RatPreviewScene } from '../scenes/RatPreviewScene';
 import { LlamaPreviewScene } from '../scenes/LlamaPreviewScene';
+import { CowPreviewScene } from '../scenes/CowPreviewScene';
 import { RockGolemPreviewScene } from '../scenes/RockGolemPreviewScene';
 import { SkeletonPreviewScene } from '../scenes/SkeletonPreviewScene';
 import { MongoPreviewScene } from '../scenes/MongoPreviewScene';
@@ -17,6 +18,7 @@ import { MantidPreviewScene } from '../scenes/MantidPreviewScene';
 import { DarkKnightPreviewScene } from '../scenes/DarkKnightPreviewScene';
 import { RatKinPreviewScene } from '../scenes/RatKinPreviewScene';
 import { ShadyPreviewScene } from '../scenes/ShadyPreviewScene';
+import { NecromancerPreviewScene } from '../scenes/NecromancerPreviewScene';
 import { BugabooPreviewScene } from '../scenes/BugabooPreviewScene';
 import { TroglodytePreviewScene } from '../scenes/TroglodytePreviewScene';
 import { TusklingPreviewScene } from '../scenes/TusklingPreviewScene';
@@ -245,6 +247,11 @@ export function devBootScene(
     return true;
   }
 
+  if (params.get('cows') !== null) {
+    sceneManager.replace(new CowPreviewScene());
+    return true;
+  }
+
   if (params.get('golem') !== null) {
     sceneManager.replace(new RockGolemPreviewScene());
     return true;
@@ -325,6 +332,11 @@ export function devBootScene(
     return true;
   }
 
+  if (params.get('necromancer') !== null) {
+    sceneManager.replace(new NecromancerPreviewScene());
+    return true;
+  }
+
   if (params.get('casino') !== null) {
     sceneManager.replace(new CasinoPreviewScene());
     return true;
@@ -372,6 +384,9 @@ export function devBootScene(
         };
       }
       if (preset.mongoOut === true) options.mongoWasOut = true;
+      if (preset.toolTiers !== undefined) {
+        options.partyCrafts = { tools: { ...preset.toolTiers }, explainersSeen: [] };
+      }
       if (preset.circusQuest !== undefined) {
         const circus = createCircusQuestProgress();
         circus.stage = preset.circusQuest.stage;

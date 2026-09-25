@@ -20,14 +20,19 @@ const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
   [-1, 0],
 ];
 
+/**
+ * The part of a grid a flood fill reads. A generated `TileGrid` is one; so is a
+ * finished `GameMap`'s structure, which a harness can wrap without a copy.
+ */
+export type GridView = Pick<TileGrid, 'size' | 'cells' | 'typeAt'>;
+
 /** Which walkable tiles a walker starting at one tile can reach. */
 export class Reachability {
   private readonly reachedFlags: Uint8Array;
   readonly reachedCount: number;
-  readonly walkableCount: number;
 
   constructor(
-    private readonly grid: TileGrid,
+    private readonly grid: GridView,
     from: TilePoint,
   ) {
     const size = grid.size;
@@ -54,12 +59,24 @@ export class Reachability {
       }
     }
     this.reachedCount = reached;
+  }
 
+  private walkableTotal: number | null = null;
+
+  /**
+   * How many tiles of the whole grid are walkable. Counted on first ask, not in
+   * the constructor: most callers only ever ask `reached`, and the count is a
+   * second sweep of every tile on the map.
+   */
+  get walkableCount(): number {
+    if (this.walkableTotal !== null) return this.walkableTotal;
+    const size = this.grid.size;
     let walkable = 0;
     for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) if (isWalkableAt(grid, x, y)) walkable++;
+      for (let x = 0; x < size; x++) if (isWalkableAt(this.grid, x, y)) walkable++;
     }
-    this.walkableCount = walkable;
+    this.walkableTotal = walkable;
+    return walkable;
   }
 
   reached(x: number, y: number): boolean {
@@ -156,7 +173,7 @@ export const NO_REGION = -1;
  * regions this still finds are the ones cliffs and dense scenery make, and
  * `bridgeMaroonedRegions` now earns its keep only on those.
  */
-function isWalkableAt(grid: TileGrid, x: number, y: number): boolean {
+function isWalkableAt(grid: GridView, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= grid.size || y >= grid.size) return false;
   return isWalkableTileType(grid.cells[y][x]);
 }

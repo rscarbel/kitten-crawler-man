@@ -102,6 +102,9 @@ const OVERHANG_STROKE = 'rgba(255, 214, 102, 0.28)';
 const DOOR_MARKER_COLOR = '#ff5d8f';
 const SAFE_RADIUS_STROKE = 'rgba(94, 234, 212, 0.7)';
 const CIRCUS_STROKE = 'rgba(196, 132, 252, 0.8)';
+/** Briar Hollow's footprints and ruins: warm, to read against the town's cool strokes. */
+const VILLAGE_STROKE = 'rgba(251, 191, 36, 0.85)';
+const VILLAGE_DISTRICT_LABEL_COLOR = '#fcd34d';
 const START_TILE_COLOR = '#38bdf8';
 const ESCAPE_TILE_COLOR = '#f97316';
 const UNKNOWN_TILE_COLOR = '#ff00ff';
@@ -189,6 +192,8 @@ const METRICS_BOTTOM_GAP = 18;
 
 /** Tiles of empty ground kept around the town when framing the town view. */
 const TOWN_VIEW_MARGIN_TILES = 8;
+/** Margin round the village's bounds in the village view — wide enough to take in the quarry and ruins. */
+const VILLAGE_VIEW_MARGIN_TILES = 26;
 
 /** Zoom limits and the multiplier one wheel notch applies. */
 const MIN_PX_PER_TILE = 0.5;
@@ -220,7 +225,20 @@ const FOOTPRINT_LINE_WIDTH = 1;
 const OVERLAY_LINE_WIDTH = 1.5;
 const FULL_CIRCLE_RADIANS = Math.PI * 2;
 
-type MapView = 'town' | 'world';
+type MapView = 'town' | 'world' | 'village';
+
+/** Click order through the views. */
+const NEXT_VIEW: Readonly<Record<MapView, MapView>> = {
+  town: 'world',
+  world: 'village',
+  village: 'town',
+};
+
+const VIEW_TITLES: Readonly<Record<MapView, string>> = {
+  town: 'town',
+  world: 'whole world',
+  village: 'Briar Hollow',
+};
 
 export class TownMapScene extends Scene {
   private readonly data: OverworldData;
@@ -247,7 +265,7 @@ export class TownMapScene extends Scene {
 
   handleClick(): void {
     if (this.dragDistancePx > DRAG_THRESHOLD_PX) return;
-    this.view = this.view === 'town' ? 'world' : 'town';
+    this.view = NEXT_VIEW[this.view];
     this.frameView();
   }
 
@@ -325,7 +343,9 @@ export class TownMapScene extends Scene {
     const region =
       this.view === 'world'
         ? { x: 0, y: 0, w: this.size, h: this.size }
-        : expandRect(this.metrics.bounds, TOWN_VIEW_MARGIN_TILES);
+        : this.view === 'village'
+          ? expandRect(this.data.briarHollow.palisadeBounds, VILLAGE_VIEW_MARGIN_TILES)
+          : expandRect(this.metrics.bounds, TOWN_VIEW_MARGIN_TILES);
     const viewport = this.viewportSize();
     const fit = Math.min(viewport.width / region.w, viewport.height / region.h);
     this.pxPerTile = clamp(fit, MIN_PX_PER_TILE, MAX_PX_PER_TILE);
@@ -339,7 +359,7 @@ export class TownMapScene extends Scene {
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
-    drawText(ctx, `Town map — ${this.view === 'town' ? 'town' : 'whole world'}`, {
+    drawText(ctx, `Town map — ${VIEW_TITLES[this.view]}`, {
       x: MARGIN,
       y: TITLE_Y,
       size: TITLE_SIZE,
@@ -452,12 +472,59 @@ export class TownMapScene extends Scene {
 
     this.markTile(ctx, this.data.startTile, START_TILE_COLOR);
     this.markTile(ctx, this.data.doomsdayEscapeTile, ESCAPE_TILE_COLOR);
+    this.renderVillageOverlay(ctx);
 
     if (px < NAME_LABEL_MIN_PX_PER_TILE) return;
     for (const plot of this.plots) {
       drawText(ctx, plot.name, {
         x: (plot.rect.x + plot.rect.w / 2) * px,
         y: (plot.rect.y + plot.rect.h / 2) * px,
+        size: NAME_LABEL_SIZE,
+        color: LABEL_COLOR,
+        align: 'center',
+        outline: true,
+      });
+    }
+  }
+
+  /** Briar Hollow: its building footprints, its ruins disc, and its district and building names. */
+  private renderVillageOverlay(ctx: CanvasRenderingContext2D): void {
+    const px = this.pxPerTile;
+    const village = this.data.briarHollow;
+    ctx.lineWidth = FOOTPRINT_LINE_WIDTH;
+    ctx.strokeStyle = VILLAGE_STROKE;
+    for (const building of village.buildings) {
+      const { rect } = building;
+      ctx.strokeRect(rect.x * px, rect.y * px, rect.w * px, rect.h * px);
+    }
+    ctx.lineWidth = OVERLAY_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.arc(
+      (village.ruins.centre.x + TILE_CENTRE) * px,
+      (village.ruins.centre.y + TILE_CENTRE) * px,
+      village.ruins.radiusTiles * px,
+      0,
+      FULL_CIRCLE_RADIANS,
+    );
+    ctx.stroke();
+
+    if (px < NAME_LABEL_MIN_PX_PER_TILE) return;
+    for (const district of village.districts) {
+      if (district.label === null) continue;
+      drawText(ctx, district.label, {
+        x: (district.labelTile.x + TILE_CENTRE) * px,
+        y: (district.labelTile.y + TILE_CENTRE) * px,
+        size: NAME_LABEL_SIZE,
+        bold: true,
+        color: VILLAGE_DISTRICT_LABEL_COLOR,
+        align: 'center',
+        outline: true,
+      });
+    }
+    for (const building of village.buildings) {
+      drawText(ctx, building.name, {
+        x: (building.rect.x + building.rect.w / 2) * px,
+        y: (building.rect.y + building.rect.h / 2) * px,
         size: NAME_LABEL_SIZE,
         color: LABEL_COLOR,
         align: 'center',

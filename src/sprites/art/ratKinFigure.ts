@@ -37,6 +37,7 @@ import {
   restingPose,
 } from './ratKinArt';
 import { type FigureDef, figureStates } from '../figure/figureDef';
+import { MORDECAI_OUTFIT } from './ratkin/cast';
 
 // ── Cell geometry ───────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ function pt(x: number, y: number): Pt {
 }
 
 /** Piecewise linear interpolation through a set of (t, value) keys. */
-function keyed(t: number, keys: readonly (readonly [number, number])[]): number {
+export function keyed(t: number, keys: readonly (readonly [number, number])[]): number {
   for (let i = 1; i < keys.length; i++) {
     const [prevT, prevV] = keys[i - 1];
     const [nextT, nextV] = keys[i];
@@ -107,7 +108,7 @@ function keyed(t: number, keys: readonly (readonly [number, number])[]): number 
  * half the window on either side and the whole thing plays inside out — two
  * flutters with the eye wide open at the moment it should be shut.
  */
-function pulseAt(phase: number, at: number, width: number): number {
+export function pulseAt(phase: number, at: number, width: number): number {
   const distance = Math.abs(((phase - at + 1.5) % 1) - 0.5);
   return distance > width ? 0 : hump(HUMP_PEAK * (1 - distance / width));
 }
@@ -116,11 +117,11 @@ function pulseAt(phase: number, at: number, width: number): number {
 const HUMP_PEAK = 0.5;
 
 /** Loops sample the cycle evenly, so the last frame does not repeat the first. */
-function cyclePhase(frame: number, frameCount: number): number {
+export function cyclePhase(frame: number, frameCount: number): number {
   return frame / frameCount;
 }
 
-function wave(phase: number): number {
+export function wave(phase: number): number {
   return Math.sin(phase * Math.PI * 2);
 }
 
@@ -134,7 +135,7 @@ function wave(phase: number): number {
  * swing 90° out of step with the legs, which reads as a shuffle even though
  * every individual limb is moving correctly.
  */
-function armSwingDrive(phase: number): number {
+export function armSwingDrive(phase: number): number {
   return -Math.cos(phase * Math.PI * 2);
 }
 
@@ -414,7 +415,7 @@ const ARM_BACKSWING_SHARE = 0.55;
 /** How much of the shoulder's swing the forearm inherits. */
 const FOREARM_FOLLOW = 0.22;
 /** Standing, the arms drift by a fraction of the walk's swing. */
-const IDLE_ARM_DRIFT = 0.12;
+export const IDLE_ARM_DRIFT = 0.12;
 
 /**
  * One profile arm, driven from its joints. `forward` is −1 at the back of the
@@ -425,7 +426,7 @@ const IDLE_ARM_DRIFT = 0.12;
  * cannot do that — both segments are forced to swing together and the forearm
  * ends up flailing at the full amplitude of the shoulder.
  */
-function sideArmAngles(forward: number): ArmAngles {
+export function sideArmAngles(forward: number): ArmAngles {
   const signedSwing = forward >= 0 ? forward : forward * ARM_BACKSWING_SHARE;
   // Centred on the rest hang, exactly as the head-on swing is. Left uncentred
   // the whole cycle sits forward of where he stands and his arms visibly shift
@@ -480,7 +481,7 @@ const FACING_FOREARM_FORESHORTEN = 0.16;
  * negative half back up gives each arm two peaks per stride and the swing reads
  * at double speed however small the amplitude.
  */
-function facingArmAngles(side: number, swing: number, forward: number): ArmAngles {
+export function facingArmAngles(side: number, swing: number, forward: number): ArmAngles {
   return {
     upper: side * (FACING_UPPER_TILT + swing * FACING_UPPER_SWING),
     fore: side * (FACING_FOREARM_TILT + swing * FACING_FOREARM_SWING),
@@ -503,10 +504,10 @@ function facingArmSwing(phase: number, side: number): ArmAngles {
 }
 
 /** The average of `forward` over a cycle, which is where a standing arm sits. */
-const FACING_SWING_MIDPOINT = 0.5;
+export const FACING_SWING_MIDPOINT = 0.5;
 
 /** How tightly the paws are held; a scurrying rodent's are half-curled. */
-const WALK_PAW_CURL = 0.55;
+export const WALK_PAW_CURL = 0.55;
 const IDLE_PAW_CURL = 0.35;
 
 // ── The tail ─────────────────────────────────────────────────────────────────
@@ -586,7 +587,7 @@ function walkBase(phase: number): RatKinPose {
   return pose;
 }
 
-function walkSide(phase: number): RatKinPose {
+export function walkSide(phase: number): RatKinPose {
   const pose = walkBase(phase);
   pose.nearFoot = gaitFootSide(phase);
   pose.farFoot = gaitFootSide(phase + CONTRALATERAL_PHASE);
@@ -600,7 +601,7 @@ function walkSide(phase: number): RatKinPose {
   return pose;
 }
 
-function walkFacing(phase: number, away: boolean): RatKinPose {
+export function walkFacing(phase: number, away: boolean): RatKinPose {
   const pose = walkBase(phase);
   pose.nearFoot = gaitFootFacing(phase, NEAR_SIDE);
   pose.farFoot = gaitFootFacing(phase + CONTRALATERAL_PHASE, FAR_SIDE);
@@ -619,8 +620,8 @@ function walkFacing(phase: number, away: boolean): RatKinPose {
 }
 
 /** Which side of the drawing a limb is on, head-on. */
-const NEAR_SIDE = 1;
-const FAR_SIDE = -1;
+export const NEAR_SIDE = 1;
+export const FAR_SIDE = -1;
 
 /**
  * Standing still has to read as *alive*, not as swaying: every term here is
@@ -666,7 +667,7 @@ function idlePose(phase: number): RatKinPose {
   return pose;
 }
 
-function idleSide(phase: number): RatKinPose {
+export function idleSide(phase: number): RatKinPose {
   const pose = idlePose(phase);
   const drift = wave(phase) * IDLE_ARM_DRIFT;
   // The same joint angles the walk swings around, so stepping off from standing
@@ -700,7 +701,7 @@ function standingFootFacing(side: number): FootPose {
  */
 const REST_FOOT_PITCH_FACING = REST_FOOT_PITCH * FACING_PITCH_SHARE;
 
-function idleFacing(phase: number, away: boolean): RatKinPose {
+export function idleFacing(phase: number, away: boolean): RatKinPose {
   const pose = idlePose(phase);
   const drift = wave(phase) * IDLE_ARM_DRIFT;
   pose.nearFoot = standingFootFacing(NEAR_SIDE);
@@ -802,9 +803,9 @@ function paintRatKinFrame(ctx: CanvasRenderingContext2D, state: string, frame: n
   ctx.translate(0, GROUND_Y);
   ctx.scale(RAT_KIN_SCALE, RAT_KIN_SCALE);
   ctx.translate(0, -GROUND_Y);
-  if (row.view === 'front') drawRatKinFront(ctx, pose);
-  else if (row.view === 'away') drawRatKinAway(ctx, pose);
-  else drawRatKinSide(ctx, pose);
+  if (row.view === 'front') drawRatKinFront(ctx, pose, MORDECAI_OUTFIT);
+  else if (row.view === 'away') drawRatKinAway(ctx, pose, MORDECAI_OUTFIT);
+  else drawRatKinSide(ctx, pose, MORDECAI_OUTFIT);
   ctx.restore();
 }
 

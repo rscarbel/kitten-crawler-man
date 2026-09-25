@@ -1,14 +1,15 @@
 /**
  * What a floor art seed must not do to the prop families that carry one.
  *
- * Trees, boulders, goblin camps and the club's furniture are painted from their
- * own literal seeds plus the floor's term, and the one property their art has to
- * keep is that every frame stays inside the cell it was sized for. A frame is
+ * Trees, boulders, goblin camps, the club's furniture and Briar Hollow's props
+ * are painted from their own literal seeds plus the floor's term, and the one
+ * property their art has to keep is that every frame stays inside the cell it
+ * was sized for. A frame is
  * clipped to that cell wherever it is painted, so a seed that pushes a canopy or
  * a tent shadow past the edge does not merely look different — it is sheared off
  * along a straight line, permanently, in the frame the game draws.
  *
- * Cheap enough to run over the whole alphabet: the four families together are
+ * Cheap enough to run over the whole alphabet: the families together are
  * under a second a seed, almost all of it the forest.
  */
 
@@ -21,11 +22,13 @@ import {
   CLUB_GROUNDED_EDGES,
   clubFurnitureSheetPlans,
 } from '../src/sprites/sheets/clubFurnitureSheets.js';
+import { VILLAGE_GROUNDED_EDGES, villageSheetPlans } from '../src/sprites/sheets/villageSheets.js';
 import {
   CAMP_SALT,
   PROP_SALT,
   ROCK_SALT,
   TREE_SALT,
+  VILLAGE_SALT,
   floorArtSubSeed,
   setFloorArtSeed,
 } from '../src/map/ground/floorArtSeed.js';
@@ -61,6 +64,11 @@ function seededFamilies(): SeededFamily[] {
       name: 'club',
       plans: clubFurnitureSheetPlans(floorArtSubSeed(PROP_SALT)),
       groundedEdges: CLUB_GROUNDED_EDGES,
+    },
+    {
+      name: 'village',
+      plans: villageSheetPlans(floorArtSubSeed(VILLAGE_SALT)),
+      groundedEdges: VILLAGE_GROUNDED_EDGES,
     },
   ];
 }

@@ -55,6 +55,8 @@ import {
   carriedSlingshotOf,
   drawCarriedSlingshot,
 } from '../sprites/slingshotCarrySprite';
+import { drawToolOverlay, toolOverlayOf } from '../sprites/toolOverlaySprite';
+import type { WorkingTool } from '../core/toolTiers';
 import type { CrawlerKind } from '../core/SkillManager';
 import {
   bareFistDamage,
@@ -398,6 +400,17 @@ export class HumanPlayer extends Player {
   /** The weapon held in hand, or null for bare fists. */
   get wieldedWeaponId(): ItemId | null {
     return this.heldWeaponId;
+  }
+
+  /**
+   * The axe or pick in his fists while he works a resource node, drawn over
+   * the swing rows only — a cell is shared by every tier, so the tier he
+   * holds cannot be painted into it. Null when he is not working one.
+   */
+  private workingTool: WorkingTool | null = null;
+
+  setWorkingTool(tool: WorkingTool | null): void {
+    this.workingTool = tool;
   }
 
   /** True while the slingshot is in hand, which redirects the attack key. */
@@ -1001,9 +1014,17 @@ export class HumanPlayer extends Player {
     this.syncAppearance();
     const selection = this.spriteSelection();
     const carry = this.isWieldingSlingshot && this.isAlive ? carriedSlingshotOf(selection) : null;
+    const tool = this.workingTool;
+    const toolPlacement = tool !== null && this.isAlive ? toolOverlayOf(selection) : null;
     if (carry?.behindFigure === true) drawCarriedSlingshot(ctx, carry, sx, sy, s);
+    if (tool !== null && toolPlacement?.behindFigure === true) {
+      drawToolOverlay(ctx, tool.kind, tool.tier, toolPlacement, sx, sy, s);
+    }
     drawHumanSelection(ctx, sx, sy, s, selection);
     if (carry?.behindFigure === false) drawCarriedSlingshot(ctx, carry, sx, sy, s);
+    if (tool !== null && toolPlacement?.behindFigure === false) {
+      drawToolOverlay(ctx, tool.kind, tool.tier, toolPlacement, sx, sy, s);
+    }
 
     drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
 

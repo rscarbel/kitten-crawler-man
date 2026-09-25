@@ -63,7 +63,8 @@ export interface VendorDef {
   placement: { dx: number; dy: number };
 }
 
-const HEALTH_POTION_PRICE = 5;
+/** What a health potion costs at a stall — the yardstick every other heal on the floor is priced against. */
+export const HEALTH_POTION_PRICE = 5;
 const SPEED_FIZZ_PRICE = 12;
 const COOLDOWN_CRISP_PRICE = 15;
 const JUGG_JUICE_PRICE = 22;

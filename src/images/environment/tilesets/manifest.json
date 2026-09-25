@@ -99,6 +99,24 @@
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Scree (broken hillside rock)"
+      },
+      "hollow_planks": {
+        "row": 10,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Briar Hollow oiled plank floor"
+      },
+      "pasture_grass": {
+        "row": 11,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Grazed pasture (short turf, hoof-worn earth)"
+      },
+      "crop_rows": {
+        "row": 12,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Tilled crop furrows"
       }
     }
   },

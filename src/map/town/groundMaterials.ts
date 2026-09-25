@@ -25,6 +25,10 @@ import {
   SCREE,
   WILDFLOWER_TUFT,
   RIVER_ROCK,
+  HOLLOW_PLANK_FLOOR,
+  HOLLOW_THRESHOLD,
+  PASTURE_GRASS,
+  CROP_FIELD,
 } from '../tileTypes';
 
 /** Sheet holding every overworld ground material, one material per row. */
@@ -51,20 +55,30 @@ const GROUND_BLEND_ORDER = {
   // through the corner masks — and that soft, irregular, diagonal-capable edge
   // *is* the riverbank. Nothing else draws one.
   water: 0,
-  grass: 1,
+  // Grazed turf gives way to the meadow at a pasture's fence: the taller,
+  // uncropped grass leans over the short sward, not the other way round.
+  pasture_grass: 1,
+  grass: 2,
   // The two upland bands sit between the field and the town's made surfaces:
   // turf creeps up into the highland and the highland's own rock creeps down
   // over the turf, which is what a hillside does. They never meet the town's
   // materials — the elevation field is flattened inside the safe radius — so
   // their order relative to `verge` and above is unobservable.
-  highland: 2,
-  scree: 3,
-  verge: 4,
-  dirt: 5,
-  gravel: 6,
-  lane: 7,
-  cobble: 8,
-  plaza: 9,
+  highland: 3,
+  scree: 4,
+  verge: 5,
+  // A ploughed edge cuts into the meadow around it, but a track run along a
+  // field's headland is trodden over the furrows' ends.
+  crop_rows: 6,
+  dirt: 7,
+  gravel: 8,
+  lane: 9,
+  cobble: 10,
+  plaza: 11,
+  // Unobservable, since a hard-edged material never blends (see
+  // `HARD_EDGE_MATERIALS`); highest because a floor is the most made surface
+  // here, so it is the right answer should that ever change.
+  hollow_planks: 12,
 } as const satisfies Record<GroundMaterial, number>;
 
 /**
@@ -84,6 +98,9 @@ export const GROUND_FALLBACK_COLOR = {
   lane: '#736149',
   cobble: '#5f5850',
   plaza: '#8f8679',
+  hollow_planks: '#68472b',
+  pasture_grass: '#74743b',
+  crop_rows: '#59412c',
 } as const satisfies Record<GroundMaterial, string>;
 
 /**
@@ -112,6 +129,12 @@ const GROUND_SPILL = {
   lane: null,
   cobble: null,
   plaza: null,
+  // A floor indoors throws nothing onto the ground beside it; being hard-edged
+  // it would never be asked anyway.
+  hollow_planks: null,
+  pasture_grass: { kind: 'blades', color: '#6a6b34' },
+  // Clods kicked off a furrow's end onto the headland track.
+  crop_rows: { kind: 'grit', color: '#74583e' },
 } as const satisfies Record<GroundMaterial, GroundSpill | null>;
 
 /**
@@ -154,6 +177,13 @@ const KERB_SOFT_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>
  * outdoor tile beside it falls back to grass here.
  */
 const FRINGE_STAND_IN_MATERIAL: GroundMaterial = 'grass';
+
+/**
+ * Briar Hollow's boards are a floor inside walls, and every wall around them
+ * records the outdoor ground it stands on — so a blended boundary would pull
+ * the meadow in over the boards at every inside corner.
+ */
+const HARD_EDGE_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>(['hollow_planks']);
 
 /**
  * The material a tile type stands on, or undefined when the tile is not
@@ -245,6 +275,16 @@ function groundMaterialForTileType(type: number): GroundMaterial | undefined {
       return 'cobble';
     case PLAZA_STONE:
       return 'plaza';
+    // A threshold is the doorway's board run, so the floor carries on through
+    // it: the fringe then sees one plank surface from the room out to the wall
+    // line rather than a seam at the door.
+    case HOLLOW_PLANK_FLOOR:
+    case HOLLOW_THRESHOLD:
+      return 'hollow_planks';
+    case PASTURE_GRASS:
+      return 'pasture_grass';
+    case CROP_FIELD:
+      return 'crop_rows';
     default:
       return undefined;
   }
@@ -258,5 +298,6 @@ export const OVERWORLD_GROUND: GroundPalette = {
   kerbedMaterials: KERBED_MATERIALS,
   kerbSoftMaterials: KERB_SOFT_MATERIALS,
   fringeStandIn: FRINGE_STAND_IN_MATERIAL,
+  hardEdgeMaterials: HARD_EDGE_MATERIALS,
   materialForTileType: groundMaterialForTileType,
 };

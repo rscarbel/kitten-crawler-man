@@ -36,7 +36,7 @@ import {
   RUBBLE,
   TOWN_WALL,
   propSpriteState,
-  treeSpriteKey,
+  treeSpriteKeyForTile,
   treeSpriteState,
   TRAINING_DUMMY,
   WEAPON_RACK,
@@ -61,8 +61,9 @@ import {
   HOLLOW_GATE,
   ROCK_DEPOSIT,
 } from '../tileTypes';
-import { drawHollowWallTile, drawHollowGateTile, drawHollowPalisadeTile } from './hollowWallTiles';
-import { drawHollowPropLowTile, drawHollowPropTallTile } from './hollowVillageTiles';
+import { drawHollowWallTile } from './hollowWallTiles';
+import { drawHollowGateTile, drawHollowPalisadeTile } from './hollowPalisadeTiles';
+import { drawHollowPropTile } from './hollowVillageTiles';
 import { drawRockDepositTile } from './rockDepositTiles';
 import { BOARD_CENTRE_X, SIGN_ARROW_CENTRE_Y_TILES } from '../../sprites/art/crawlerSignArt';
 import { inferFloorType } from './helpers';
@@ -1180,6 +1181,11 @@ export function drawDecorationTile(
       case HOLLOW_WALL:
       case HOLLOW_PALISADE:
       case HOLLOW_GATE:
+      // A village prop stands on a plank floor, beaten earth or a lane, and
+      // records which; inferring it from the neighbours fails in the middle of
+      // a stack of hay bales, where every neighbour is another bale.
+      case HOLLOW_PROP_LOW:
+      case HOLLOW_PROP_TALL:
         // Routed through the outdoor ground path; which material actually gets
         // drawn is resolved by `groundMaterialUnder` from the `groundType` the
         // tile recorded, not from the type passed here.
@@ -1215,8 +1221,6 @@ export function drawDecorationTile(
       case KRAKAREN_CONSOLE:
       case LAB_BENCH:
       case LAB_SHELF:
-      case HOLLOW_PROP_LOW:
-      case HOLLOW_PROP_TALL:
       case ROCK_DEPOSIT:
       case MODERN_DECORATION: {
         const floorType = inferFloorType(structure, tx, ty);
@@ -1237,7 +1241,7 @@ export function drawDecorationTile(
       const tile = structure[ty][tx];
       drawSpriteKey(
         ctx,
-        treeSpriteKey(tx, ty),
+        treeSpriteKeyForTile(tile, tx, ty),
         treeSpriteState(tile.treeStage),
         tile.treeAnimFrame ?? 0,
         sx,
@@ -1732,9 +1736,9 @@ export function drawDecorationTile(
       return true;
     }
 
-    // Briar Hollow, walled off in its own file until its real art lands.
+    // Briar Hollow: the roofless walls, the palisade and the props, each in its own file.
     case HOLLOW_WALL: {
-      drawHollowWallTile(ctx, sx, sy, ts);
+      drawHollowWallTile(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }
     case HOLLOW_PALISADE: {
@@ -1742,19 +1746,16 @@ export function drawDecorationTile(
       return true;
     }
     case HOLLOW_GATE: {
-      drawHollowGateTile(ctx, sx, sy, ts);
+      drawHollowGateTile(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }
-    case HOLLOW_PROP_LOW: {
-      drawHollowPropLowTile(ctx, sx, sy, ts);
-      return true;
-    }
+    case HOLLOW_PROP_LOW:
     case HOLLOW_PROP_TALL: {
-      drawHollowPropTallTile(ctx, sx, sy, ts);
+      drawHollowPropTile(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }
     case ROCK_DEPOSIT: {
-      drawRockDepositTile(ctx, sx, sy, ts);
+      drawRockDepositTile(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }
 

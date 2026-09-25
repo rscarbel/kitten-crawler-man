@@ -95,14 +95,16 @@ export function describeItemEffects(item: InventoryItem): string[] {
     lines.push(`Efficiency ×${def.efficiency}`);
   }
 
+  // Kept to short lines: effect lines are not wrapped the way the prose is.
   if (item.id === 'hamburger') {
-    lines.push(
-      `Heals ${asPercent(HAMBURGER_HEAL_FRACTION)}% max HP, +${HAMBURGER_STR_BONUS} STR for ${HAMBURGER_FED_DURATION_SECONDS}s`,
-    );
+    lines.push(`Heals ${asPercent(HAMBURGER_HEAL_FRACTION)}% max HP`);
+    lines.push(`+${HAMBURGER_STR_BONUS} Strength for ${HAMBURGER_FED_DURATION_SECONDS} seconds`);
+    lines.push("Another refreshes it; doesn't stack");
   }
 
   if (item.id === 'hollow_stew') {
-    lines.push(`Heals ${asPercent(POTION_HEAL_FRACTION)}% max HP`);
+    lines.push(`Heals ${asPercent(POTION_HEAL_FRACTION)}% max HP, like a potion`);
+    lines.push('Shares the health potion cooldown');
   }
 
   return lines;

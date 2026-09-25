@@ -7,6 +7,8 @@ import type { Difficulty } from '../core/difficultyProfiles';
 import type { DoomsdayStage } from '../core/DoomsdayProgress';
 import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
 import type { CircusQuestStage } from '../core/CircusQuestProgress';
+import type { PartyToolsState } from '../core/PartyTools';
+import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/toolTiers';
 
 /**
  * Named starting points for playtesting, each one a floor plus the party that
@@ -27,7 +29,9 @@ export type PlaytestSpawn =
   /** The corridor tile immediately outside the spider lab's door. */
   | { readonly kind: 'spiderLabEntrance' }
   /** The tile just inside the goblin mother's nursery, by the way in. */
-  | { readonly kind: 'questRoomEntrance' };
+  | { readonly kind: 'questRoomEntrance' }
+  /** Just inside Briar Hollow's gate, on the main street. */
+  | { readonly kind: 'briarHollowGate' };
 
 /** One stack of items placed in a fixed slot. */
 export interface PlaytestStack {
@@ -53,6 +57,10 @@ export interface PlaytestLoadout {
   /** Human only; the cat has no explosives training. */
   readonly explosivesHandling?: number;
   readonly skillLevels: Partial<Record<SkillId, number>>;
+  /** This crawler's own Resourcing level, taught and set. Omitted leaves it unlearned. */
+  readonly resourcingLevel?: number;
+  /** This crawler's own Construction level, taught and set. Omitted leaves it unlearned. */
+  readonly constructionLevel?: number;
   /** Hotbar contents from slot 0 up. */
   readonly hotbar: readonly PlaytestStack[];
   /** Bag contents from slot 0 up. */
@@ -92,6 +100,12 @@ export interface PlaytestPreset {
    * circus grounds instead of at `spawn`.
    */
   readonly circusQuest?: { readonly stage: CircusQuestStage; readonly heatherSlain: boolean };
+  /**
+   * The party's axe and pickaxe tiers. The tool items in the loadouts are only
+   * what the bags hold; this is what says the party owns them, and the scene
+   * reconciles the bags to it on entry.
+   */
+  readonly toolTiers?: PartyToolsState;
 }
 
 const HOARDER: PlaytestPreset = {
@@ -683,8 +697,10 @@ const BRIAR_HOLLOW_KIT: PlaytestPreset = {
   ...LEVEL3,
   id: 'briar-hollow-kit',
   description: 'Third floor town, starter tools and a Briar Hollow resource stockpile',
+  toolTiers: { axeTier: TOOL_TIER_BASIC, pickaxeTier: TOOL_TIER_BASIC },
   human: {
     ...LEVEL3.human,
+    resourcingLevel: 1,
     bag: [
       ...LEVEL3.human.bag,
       { id: 'basic_axe', quantity: 1 },
@@ -698,10 +714,105 @@ const BRIAR_HOLLOW_KIT: PlaytestPreset = {
   },
   cat: {
     ...LEVEL3.cat,
+    resourcingLevel: 1,
     bag: [
       ...LEVEL3.cat.bag,
       { id: 'basic_axe', quantity: 1 },
       { id: 'basic_pickaxe', quantity: 1 },
+    ],
+  },
+};
+
+/** The Briar Hollow kit, arriving inside the village's gate rather than in town. */
+const BRIAR_HOLLOW_VILLAGE: PlaytestPreset = {
+  ...BRIAR_HOLLOW_KIT,
+  id: 'briar-hollow-village',
+  description: 'Briar Hollow, just inside the gate, with starter tools and a stockpile',
+  spawn: { kind: 'briarHollowGate' },
+};
+
+/** Carl's Construction in the builders preset: the level spikes unlock at. */
+const BUILDERS_PRESET_HUMAN_CONSTRUCTION = 5;
+/** Donut's: the top level, where her walls double and her trebuchets never run dry. */
+const BUILDERS_PRESET_CAT_CONSTRUCTION = 15;
+
+/**
+ * Briar Hollow's gate with both crawlers taught Construction at very
+ * different levels, a stockpile to spend, and a kit of each trap — for
+ * building, upgrading, spiking and loading, and for watching the two
+ * crawlers' own costs, times and perks side by side.
+ */
+const BRIAR_HOLLOW_BUILDERS: PlaytestPreset = {
+  ...BRIAR_HOLLOW_VILLAGE,
+  id: 'briar-hollow-builders',
+  description: 'Briar Hollow gate, Carl at Construction 5 and Donut at 15, with materials and kits',
+  human: {
+    ...BRIAR_HOLLOW_VILLAGE.human,
+    constructionLevel: BUILDERS_PRESET_HUMAN_CONSTRUCTION,
+    bag: [
+      ...BRIAR_HOLLOW_VILLAGE.human.bag,
+      { id: 'trebuchet_kit', quantity: 1 },
+      { id: 'snare_kit', quantity: 1 },
+    ],
+  },
+  cat: { ...BRIAR_HOLLOW_VILLAGE.cat, constructionLevel: BUILDERS_PRESET_CAT_CONSTRUCTION },
+};
+
+/** Both crawlers' Construction in the siege preset: the top, for every level-15 extra. */
+const SIEGE_PRESET_CONSTRUCTION = 15;
+
+/**
+ * Briar Hollow's gate with both crawlers at Construction 15, a stockpile and a
+ * kit of each trap — for watching infernal boulders, bottomless ammunition and
+ * snares that turn what they catch. The `spawn` cheat brings the hostiles.
+ */
+const BRIAR_HOLLOW_SIEGE: PlaytestPreset = {
+  ...BRIAR_HOLLOW_VILLAGE,
+  id: 'briar-hollow-siege',
+  description: 'Briar Hollow gate, both crawlers at Construction 15, materials and trap kits',
+  human: {
+    ...BRIAR_HOLLOW_VILLAGE.human,
+    constructionLevel: SIEGE_PRESET_CONSTRUCTION,
+    bag: [
+      ...BRIAR_HOLLOW_VILLAGE.human.bag,
+      { id: 'trebuchet_kit', quantity: 1 },
+      { id: 'snare_kit', quantity: 1 },
+    ],
+  },
+  cat: { ...BRIAR_HOLLOW_VILLAGE.cat, constructionLevel: SIEGE_PRESET_CONSTRUCTION },
+};
+
+/** Carl's Resourcing in the thralls preset: the level the summon unlocks at. */
+const THRALL_PRESET_HUMAN_RESOURCING = 10;
+/** Donut's: the top level, which summons three at once. */
+const THRALL_PRESET_CAT_RESOURCING = 15;
+
+/**
+ * Third floor town with Lumberjack's tools, Carl at Resourcing 10 and Donut at
+ * 15 — for summoning one thrall and three, and for watching the two crawlers'
+ * separate perks and cooldowns side by side.
+ */
+const RESOURCING_THRALLS: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'resourcing-thralls',
+  description: 'Third floor town, long-haft tools, Carl at Resourcing 10 and Donut at 15',
+  toolTiers: { axeTier: TOOL_TIER_LONG_HAFT, pickaxeTier: TOOL_TIER_LONG_HAFT },
+  human: {
+    ...LEVEL3.human,
+    resourcingLevel: THRALL_PRESET_HUMAN_RESOURCING,
+    bag: [
+      ...LEVEL3.human.bag,
+      { id: 'lumberjacks_axe', quantity: 1 },
+      { id: 'quarrymans_pick', quantity: 1 },
+    ],
+  },
+  cat: {
+    ...LEVEL3.cat,
+    resourcingLevel: THRALL_PRESET_CAT_RESOURCING,
+    bag: [
+      ...LEVEL3.cat.bag,
+      { id: 'lumberjacks_axe', quantity: 1 },
+      { id: 'quarrymans_pick', quantity: 1 },
     ],
   },
 };
@@ -724,6 +835,10 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   COMPANIONS_INDOORS,
   CIRCUS_HIRE,
   BRIAR_HOLLOW_KIT,
+  BRIAR_HOLLOW_VILLAGE,
+  BRIAR_HOLLOW_BUILDERS,
+  BRIAR_HOLLOW_SIEGE,
+  RESOURCING_THRALLS,
 ];
 
 export function getPlaytestPreset(id: string): PlaytestPreset | null {

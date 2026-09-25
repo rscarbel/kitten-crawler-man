@@ -249,23 +249,35 @@ export class TreasureChestSystem {
     chest.unlockFrame = 0;
   }
 
-  tryInteract(player: HumanPlayer | CatPlayer): boolean {
-    const px = player.x;
-    const py = player.y;
-    const rangeThreshold = CHEST_INTERACTION_RANGE;
-
+  /** The closest unopened chest within reach of `player`, or null. */
+  private nearestClosedChest(player: HumanPlayer | CatPlayer): TreasureChest | null {
     let closestChest: TreasureChest | null = null;
-    let closestDist = rangeThreshold;
-
+    let closestDist = CHEST_INTERACTION_RANGE;
     for (const chest of this.chests) {
       if (chest.state === 'opened') continue;
-      const dist = Math.hypot(px - chest.tileX * TILE_SIZE, py - chest.tileY * TILE_SIZE);
+      const dist = Math.hypot(
+        player.x - chest.tileX * TILE_SIZE,
+        player.y - chest.tileY * TILE_SIZE,
+      );
       if (dist < closestDist) {
         closestDist = dist;
         closestChest = chest;
       }
     }
+    return closestChest;
+  }
 
+  /**
+   * Whether {@link tryInteract} would claim a press from `player` right now,
+   * without doing anything — for a prompt further down the Space chain to
+   * know it would not be reached.
+   */
+  wouldInteract(player: HumanPlayer | CatPlayer): boolean {
+    return this.nearestClosedChest(player) !== null;
+  }
+
+  tryInteract(player: HumanPlayer | CatPlayer): boolean {
+    const closestChest = this.nearestClosedChest(player);
     if (closestChest === null) return false;
 
     if (!isChestOpenable(closestChest)) {

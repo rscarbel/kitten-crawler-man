@@ -6,9 +6,11 @@ import { isRecord } from './guards';
  * Bumped whenever a change to map generation would make an old seed produce a
  * different floor. A save from before the bump keeps its party but loses its
  * place, because a seed replayed through changed code lands the saved safe-room
- * tile inside a wall.
+ * tile inside a wall: `parseSavedWorld` drops the whole world, so the floor is
+ * regenerated from a fresh seed, its per-floor state starts over, and the
+ * party arrives at the floor's start tile.
  */
-export const WORLD_GENERATOR_VERSION = 1;
+export const WORLD_GENERATOR_VERSION = 2;
 
 interface TilePoint {
   x: number;

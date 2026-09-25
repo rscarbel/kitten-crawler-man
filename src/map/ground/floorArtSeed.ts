@@ -47,6 +47,8 @@ export const PROP_SALT = 8;
 export const BUILDING_SALT = 9;
 /** Boss-room prop sheets. */
 export const BOSS_ROOM_SALT = 10;
+/** Briar Hollow's props: wood grain, stone lay and wear. */
+export const VILLAGE_SALT = 11;
 
 let current = DEFAULT_FLOOR_ART_SEED;
 

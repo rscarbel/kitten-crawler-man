@@ -29,6 +29,8 @@ import { isMarkedGround, markedGroundEscape } from './tactics/markedGround';
 import { stepAlongEscape } from '../systems/GroundHazardSource';
 import { SEPARATION_RADIUS } from '../systems/mobSeparation';
 import type { KiteAim, TacticalMove } from './tactics/tacticalFrame';
+import type { SilhouetteLayer } from '../core/silhouetteComposite';
+import type { SiegeCapable, SiegeDirective } from './siege/siegeTypes';
 import {
   GUARD_KNOCKBACK_FRAMES,
   GUARD_KNOCKBACK_TILES,
@@ -211,8 +213,40 @@ export const FACING_FLIP_DEADZONE_TILE_RATIO = 0.12;
 /** Speed multiplier while mob is slowed. */
 export const MOB_SLOWED_SPEED_FRACTION = 0.35;
 
+/** The outline a converted mob wears: soul green, so it never reads as an enemy still to fight. */
+const CONVERTED_RIM: SilhouetteLayer = { rimColor: '#6ee7b7', rimAlpha: 0.95 };
+/**
+ * A converted mob heads back to its rally point once this far outside it, and
+ * stops once it is this share of the radius inside — so it does not turn round
+ * on the line and shuffle there.
+ */
+const ALLY_RALLY_SETTLE_FRACTION = 0.6;
+
 /** Lifetime of a hit-applied slow — one frame, refreshed by each new impact. */
 const HIT_SLOW_FRAMES = 1;
+
+/**
+ * How a creature with no swing of its own strikes a structure: the frames the
+ * blow takes, the frame into it that the blow lands on, and the frames before
+ * it may strike again, counted from the start of the swing.
+ */
+export interface StructureStrikeTiming {
+  readonly swingFrames: number;
+  readonly impactFrame: number;
+  readonly cooldownFrames: number;
+}
+
+const DEFAULT_STRUCTURE_STRIKE_TIMING: StructureStrikeTiming = {
+  swingFrames: 24,
+  impactFrame: 12,
+  cooldownFrames: 60,
+};
+
+/** What one generic blow on a structure deals at level 1, before the siege multiplier. */
+const DEFAULT_STRUCTURE_STRIKE_BASE_DAMAGE = 2;
+
+/** An assault creature's blow on a structure lands at its own full weight unless it says otherwise. */
+const DEFAULT_SIEGE_STRUCTURE_MULTIPLIER = 1;
 
 /** Tile edge fractions for wall collision (leading edge ahead/behind). */
 const MOB_COLLISION_FRONT_FRACTION = 0.72;
@@ -474,6 +508,16 @@ export abstract class Mob extends Player {
    */
   paysNoRewards = false;
 
+  /**
+   * Whether this mob's death counts as a kill — in the run's kill tally and
+   * toward kill achievements. False only for something whose death is never a
+   * feat, like a village cow caught in a blast.
+   */
+  get countsAsKill(): boolean {
+    // An ally's death is a loss, not a feat.
+    return !this.isConverted;
+  }
+
   /** Whether killing this mob pays XP, coin and loot. */
   get paysRewards(): boolean {
     return !this.wasResurrected && !this.paysNoRewards;
@@ -691,7 +735,77 @@ export abstract class Mob extends Player {
    * stored flag left each of them able to strand the mob at reduced speed.
    */
   get isSlowed(): boolean {
-    return this.slowedByBarrier || this.hitSlowFrames > 0 || this.hasStatus('electrified');
+    return (
+      this.slowedByBarrier ||
+      this.hitSlowFrames > 0 ||
+      this.hazardSlowFrames > 0 ||
+      this.hasStatus('electrified')
+    );
+  }
+
+  /** Frames left on a slow laid by standing in hazard ground; see {@link applyHazardSlow}. */
+  private hazardSlowFrames = 0;
+
+  /**
+   * Slows this mob for `frames` because it is standing in something that
+   * drags at it — a cloud or a mire an ally laid. The owner of the ground
+   * refreshes it every frame the mob stays inside, so the slow lifts a moment
+   * after it walks out rather than needing anyone to clear it.
+   */
+  applyHazardSlow(frames: number): void {
+    this.hazardSlowFrames = Math.max(this.hazardSlowFrames, frames);
+  }
+
+  /** Frames left on a root; see {@link root}. */
+  private rootFrames = 0;
+  /** Whatever rooted this mob, so only it can release the hold early. */
+  private rootSource: object | null = null;
+
+  /**
+   * Holds this mob in place for `frames`: its own steps — chase, wander,
+   * separation — are refused, the way a knockback refuses them, while it may
+   * still attack anything in reach and a knockback still carries it. A snare
+   * stopping an enemy in place, where the party's defences can reach it.
+   *
+   * Deliberately not {@link aiHeld}: that stops the AI outright, dropping the
+   * target and every attack with it, which would turn a snare into a stun. A
+   * rooted undead on the wall line keeps clawing at the wall, and that is the
+   * point — it is held where the trebuchets can hit it.
+   *
+   * A longer hold already running is kept; `source` is recorded so only the
+   * thing that rooted the mob can let it go early ({@link releaseRoot}).
+   */
+  root(frames: number, source: object): void {
+    if (frames <= 0) return;
+    if (frames >= this.rootFrames) this.rootSource = source;
+    this.rootFrames = Math.max(this.rootFrames, frames);
+  }
+
+  /** Ends a hold early, if `source` is what is holding this mob. */
+  releaseRoot(source: object): void {
+    if (this.rootSource !== source) return;
+    this.rootFrames = 0;
+    this.rootSource = null;
+  }
+
+  /** Whether this mob is held in place. */
+  get isRooted(): boolean {
+    return this.rootFrames > 0;
+  }
+
+  /** What is holding this mob in place, or null. */
+  get rootedBy(): object | null {
+    return this.rootFrames > 0 ? this.rootSource : null;
+  }
+
+  /**
+   * Whether separation must leave this mob where it stands and push its
+   * neighbours the whole way instead. A rooted mob refuses the step anyway;
+   * without this its share of the push is simply lost, and a body pressed
+   * against it overlaps it for the whole hold.
+   */
+  get separationAnchored(): boolean {
+    return this.rootFrames > 0;
   }
 
   /**
@@ -700,6 +814,134 @@ export abstract class Mob extends Player {
    */
   applyHitSlow(): void {
     this.hitSlowFrames = HIT_SLOW_FRAMES;
+  }
+
+  /**
+   * Set only on a mob the village assault enlisted (`enlistInSiege` in
+   * `src/creatures/siege/siegeCapability.ts`); null everywhere else, which
+   * leaves every creature's behaviour outside the siege exactly as it was.
+   */
+  siegeCapable: SiegeCapable | null = null;
+
+  /**
+   * What the assault has this mob doing instead of its own AI this frame —
+   * marching on the wall, holding off it, or walking back out after a lost
+   * siege. The mob loop asks it before `updateAI`. Null outside the assault.
+   */
+  siegeDirective: SiegeDirective | null = null;
+
+  /**
+   * How hard this creature's blows land on a structure, as a multiple of the
+   * blow itself, when the assault enlists it. A creature that must never
+   * batter walls — an archer, whose job is the defenders — answers zero.
+   */
+  get siegeStructureMultiplier(): number {
+    return DEFAULT_SIEGE_STRUCTURE_MULTIPLIER;
+  }
+
+  /**
+   * Whether this mob walks the siege itself from its own `updateAI` rather
+   * than being marched by a siege directive: the Grave Bull, whose march ends
+   * in a telegraphed charge, and the necromancer, who never approaches at all.
+   */
+  get ownsSiegeMovement(): boolean {
+    return false;
+  }
+
+  private structureStrikeFramesLeft = 0;
+  private structureStrikeTotalFrames = 0;
+  private structureStrikeFramesToImpact = 0;
+  private structureStrikeCooldownFrames = 0;
+  private structureStrikeImpact: (() => void) | null = null;
+
+  /** How this creature's blow on a structure is timed; its own swing where it has one. */
+  protected get structureStrikeTiming(): StructureStrikeTiming {
+    return DEFAULT_STRUCTURE_STRIKE_TIMING;
+  }
+
+  /** The level-1 damage of one blow on a structure, before the siege multiplier. */
+  protected get structureStrikeBaseDamage(): number {
+    return DEFAULT_STRUCTURE_STRIKE_BASE_DAMAGE;
+  }
+
+  /**
+   * One blow on a structure, before the siege multiplier. Not levelled: a
+   * wall's health is fixed by its tier and never grows with the party, so a
+   * blow that grew with the mob would make the same stone wall worth less
+   * the further the party had come.
+   */
+  get structureStrikeDamage(): number {
+    return this.structureStrikeBaseDamage;
+  }
+
+  /** Whether a blow on a structure is being swung right now. */
+  get isStrikingStructure(): boolean {
+    return this.structureStrikeFramesLeft > 0;
+  }
+
+  /** 0 to 1 through a blow on a structure, or null when none is being swung. For the sprite. */
+  protected get structureStrikeProgress(): number | null {
+    if (this.structureStrikeFramesLeft <= 0 || this.structureStrikeTotalFrames <= 0) return null;
+    return 1 - this.structureStrikeFramesLeft / this.structureStrikeTotalFrames;
+  }
+
+  /**
+   * Starts one blow at a structure, calling `onImpact` on the frame it lands.
+   * Refused while a blow is already swinging or its cooldown runs. Driven from
+   * `tickTimers`, which every active mob gets each frame whichever branch the
+   * mob loop takes, so a siege directive that skips `updateAI` still lands it.
+   */
+  playStructureStrike(onImpact: () => void): boolean {
+    if (this.structureStrikeFramesLeft > 0 || this.structureStrikeCooldownFrames > 0) return false;
+    const timing = this.structureStrikeTiming;
+    this.structureStrikeTotalFrames = timing.swingFrames;
+    this.structureStrikeFramesLeft = timing.swingFrames;
+    this.structureStrikeFramesToImpact = Math.max(1, timing.impactFrame);
+    this.structureStrikeCooldownFrames = Math.max(
+      timing.swingFrames,
+      this.scaledCooldownFrames(timing.cooldownFrames),
+    );
+    this.structureStrikeImpact = onImpact;
+    this.isMoving = false;
+    return true;
+  }
+
+  private tickStructureStrike(): void {
+    if (this.structureStrikeCooldownFrames > 0) this.structureStrikeCooldownFrames--;
+    if (this.structureStrikeFramesLeft <= 0) return;
+    this.structureStrikeFramesLeft--;
+    this.isMoving = false;
+    if (this.structureStrikeFramesToImpact <= 0) return;
+    this.structureStrikeFramesToImpact--;
+    if (this.structureStrikeFramesToImpact > 0) return;
+    const impact = this.structureStrikeImpact;
+    this.structureStrikeImpact = null;
+    if (this.isAlive) impact?.();
+  }
+
+  private clearStructureStrike(): void {
+    this.structureStrikeFramesLeft = 0;
+    this.structureStrikeTotalFrames = 0;
+    this.structureStrikeFramesToImpact = 0;
+    this.structureStrikeCooldownFrames = 0;
+    this.structureStrikeImpact = null;
+  }
+
+  /**
+   * One step of a siege march in direction (`dirX`, `dirY`) at this mob's own
+   * walk speed, through the same collision, root and slow rules as a chase.
+   */
+  marchStep(dirX: number, dirY: number): void {
+    const length = Math.hypot(dirX, dirY);
+    if (length === 0) {
+      this.isMoving = false;
+      return;
+    }
+    const speed = this.isSlowed ? this.speed * MOB_SLOWED_SPEED_FRACTION : this.speed;
+    this.facingX = dirX / length;
+    this.facingY = dirY / length;
+    this.moveWithCollision((dirX / length) * speed, (dirY / length) * speed);
+    this.isMoving = true;
   }
 
   /** True for airborne mobs that pass over ground mobs without physical collision. */
@@ -803,7 +1045,28 @@ export abstract class Mob extends Player {
    * always do, the dead only while a corpse is still on screen.
    */
   get belongsInMobGrid(): boolean {
-    return this.isAlive || (this.rendersWhenDead && !this.corpseExpired);
+    return this.isAlive || (this.rendersWhenDead && !this.corpseGone);
+  }
+
+  /** Set by {@link vanish}: the body left no corpse at all. */
+  private vanished = false;
+
+  /**
+   * Takes a dead body out of the world with no corpse to play out — a turned
+   * ally crumbling to dust when its borrowed life runs out. A checkpoint
+   * revive clears it with the rest of the death.
+   */
+  vanish(): void {
+    this.vanished = true;
+  }
+
+  /**
+   * Whether a dead mob's corpse is finished: it has played out, or the body
+   * vanished without one. Read in place of {@link corpseExpired}, which
+   * creatures override without knowing about a vanish.
+   */
+  get corpseGone(): boolean {
+    return this.vanished || this.corpseExpired;
   }
 
   /**
@@ -865,7 +1128,7 @@ export abstract class Mob extends Player {
    * collision: a rooted one blocking a doorway may be the point of it.
    */
   get yieldsToParty(): boolean {
-    return false;
+    return this.isConverted;
   }
 
   /**
@@ -1061,9 +1324,123 @@ export abstract class Mob extends Player {
     return this._lastBlowWasGuarded;
   }
 
-  /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
+  /**
+   * Which side this mob is on. Every mob starts hostile; {@link convertToAlly}
+   * turns one to the party's side for the rest of its life.
+   */
+  private allegiance: 'hostile' | 'party' = 'hostile';
+  /** The crawler who turned this mob, while it is converted. */
+  private _convertedBy: Player | null = null;
+  /** Whether it paid rewards as an enemy, restored if a rewind turns it back into one. */
+  private paidRewardsBeforeConversion = true;
+
+  /**
+   * The bodies a converted mob fights, handed to its `updateAI` in place of
+   * the party. Refilled every frame by whoever keeps the ally; empty for a mob
+   * that was never converted.
+   */
+  readonly allyTargets: Player[] = [];
+
+  /**
+   * Where a converted mob idles when nothing is left to fight: back within
+   * `radiusPx` of `anchor`, rather than wandering round its old spawn.
+   */
+  allyRally: { readonly anchor: Player; readonly radiusPx: number } | null = null;
+
+  /**
+   * Whether this mob is currently hostile toward players. True unless it has
+   * been converted; override for neutral NPCs.
+   *
+   * Every system re-reads this each frame, which is what lets a conversion
+   * carry through the whole game at once: auto-aim, friendly fire, the pet,
+   * the hirelings and their bolts all stop treating a converted mob as prey
+   * the frame it turns.
+   */
   get isHostile(): boolean {
-    return true;
+    return this.allegiance === 'hostile';
+  }
+
+  /** The crawler who converted this mob, or null for one that was never turned. */
+  get convertedBy(): Player | null {
+    return this._convertedBy;
+  }
+
+  get isConverted(): boolean {
+    return this._convertedBy !== null;
+  }
+
+  /**
+   * Whether {@link convertToAlly} may turn this mob. Only an enemy — never
+   * the party's own (a cow, a soldier, the pet, a hireling), a boss or a
+   * boss's scripted add, a quest bystander, or one already turned.
+   *
+   * A subclass that overrides `isHostile` with a constant ignores allegiance
+   * entirely, so turning one would be a lie; the caller holds an allow-list of
+   * the creatures proven to fight well on the party's side
+   * (`CONVERTIBLE_MOB_TYPES`), and none of those overrides it.
+   */
+  canBeConverted(): boolean {
+    return (
+      this.isAlive &&
+      this.isHostile &&
+      this.allegiance === 'hostile' &&
+      !this.isBoss &&
+      !this.countsAsBossKill &&
+      !this.isBossAdd &&
+      this.isDefendTarget !== true
+    );
+  }
+
+  /**
+   * Turns this mob to the party's side for the rest of its life: it stops
+   * fighting the party, forgets who it was chasing and every alert it heard,
+   * answers to nobody's pack, and credits whatever it kills to `owner`.
+   */
+  convertToAlly(owner: Player): void {
+    if (!this.canBeConverted()) return;
+    this.allegiance = 'party';
+    this._convertedBy = owner;
+    this.creditTarget = owner;
+    // Whatever the party dealt it as an enemy is forgiven: an ally that falls
+    // is a loss, and must not pay out as a kill to whoever wounded it first.
+    this.damageTakenBy.clear();
+    // The party's own burns, poisons and the like would go on hurting its new
+    // ally; whatever an enemy laid on it stays.
+    this.statusEffects = this.statusEffects.filter(
+      (effect) => effect.applier?.xpCreditTarget.isCrawler !== true,
+    );
+    this.paidRewardsBeforeConversion = !this.paysNoRewards;
+    this.paysNoRewards = true;
+    this.currentTarget = null;
+    this.retaliateMob = null;
+    this.forceAggro = false;
+    this.isDefendTarget = false;
+    this.alertedTo.clear();
+    this.noticeCache.clear();
+    this.rootFrames = 0;
+    this.rootSource = null;
+    // It deserts the siege it was marching in: no directive may walk an ally at the wall.
+    this.siegeCapable = null;
+    this.tactics.disengage();
+    this.clearAStarPath();
+  }
+
+  /**
+   * Undoes a conversion, for a rewind to before it happened: the checkpoint
+   * saw an enemy, so the restored floor has one.
+   */
+  private revertConversion(): void {
+    if (this._convertedBy === null) return;
+    this.allegiance = 'hostile';
+    this._convertedBy = null;
+    this.creditTarget = this;
+    this.paysNoRewards = !this.paidRewardsBeforeConversion;
+    this.allyTargets.length = 0;
+    this.allyRally = null;
+  }
+
+  protected override get allegianceRim(): SilhouetteLayer | null {
+    return this._convertedBy === null ? null : CONVERTED_RIM;
   }
 
   /**
@@ -1104,7 +1481,9 @@ export abstract class Mob extends Player {
    * they happened to be summoned or hired.
    */
   get resetsFullyOnCheckpoint(): boolean {
-    return this.isHostile;
+    // A converted mob was an enemy when the checkpoint was taken, and
+    // `resetToSpawn` turns it back into one.
+    return this.isHostile || this.isConverted;
   }
 
   /**
@@ -1162,7 +1541,10 @@ export abstract class Mob extends Player {
    * mob for as long as it is in the world.
    */
   get exemptFromAiActivationRadius(): boolean {
-    return false;
+    // A converted mob follows the crawler who turned it, so it must keep
+    // thinking when she walks off — like any other summon. An assault mob
+    // advances from its lane whether or not anyone is near to watch it.
+    return this.isConverted || this.siegeCapable !== null;
   }
 
   /** Whether this mob is currently in an enraged state. Subclasses (e.g. Juicer) set this. */
@@ -1414,13 +1796,32 @@ export abstract class Mob extends Player {
         y: this.y + this.tileSize * MOB_TILE_CENTER,
       },
     });
-    const connected = target.takeDamage(damage, source);
+    const connected =
+      this.isConverted && target instanceof Mob
+        ? this.strikeAsAlly(target, damage)
+        : target.takeDamage(damage, source);
     if (connected) {
       this.noteStruckPlayer(target);
       if (delivery === 'contact') this.reflectMeleeDamage(target, damage);
     }
     this.attackSoundPending = true;
     return connected;
+  }
+
+  /**
+   * A converted mob's blow on an enemy, landed in its own name the way the
+   * party's pet lands his: the damage ledger records this mob, which credits
+   * its converter through `xpCreditTarget`, and the victim turns on it rather
+   * than on the crawler standing behind it.
+   *
+   * No weapon type: the converter swung nothing, so the kill must not train
+   * her pugilism or count toward a weapon's kill achievements.
+   */
+  private strikeAsAlly(target: Mob, damage: number): boolean {
+    const before = target.hp;
+    target.takeDamageFrom(damage, this, null);
+    if (target.isAlive) target.retaliateMob = this;
+    return target.hp < before;
   }
 
   /**
@@ -1596,6 +1997,7 @@ export abstract class Mob extends Player {
           goalTileX,
           goalTileY,
           this.pathDistanceBudgetTiles,
+          this.isHostile,
         );
         this.astarPath = foundPath;
         // Drop the first waypoint — that's the tile we're already on
@@ -1656,6 +2058,22 @@ export abstract class Mob extends Player {
     this.losCacheTarget = target;
     this.losCacheAge = 0;
     return this.losCacheResult;
+  }
+
+  /**
+   * True if there is a clear line of sight from this mob's centre to a bare
+   * world point, for a target that keeps no `Player` interface of its own —
+   * a trebuchet a hostile has noticed and gone to attack.
+   */
+  hasSightOfPoint(x: number, y: number): boolean {
+    if (!this.map) return true;
+    const ts = this.tileSize;
+    return this.map.hasLineOfSight(
+      this.x + ts * MOB_TILE_CENTER,
+      this.y + ts * MOB_TILE_CENTER,
+      x,
+      y,
+    );
   }
 
   /**
@@ -1742,7 +2160,14 @@ export abstract class Mob extends Player {
     // The frame a fight starts is the only frame worth shouting on: a mob that
     // was already engaged has an `engagedTarget`, so the search below runs a
     // handful of times per fight rather than once per mob per frame.
-    if (nearest !== null && engagedTarget === null && this.packAlertRadiusTiles > 0) {
+    // A converted mob answers to no pack: its old packmates would be called
+    // onto the enemy it just picked — one of their own.
+    if (
+      nearest !== null &&
+      engagedTarget === null &&
+      this.isHostile &&
+      this.packAlertRadiusTiles > 0
+    ) {
       alertPackAround(this, this.packAlertRadiusTiles * this.tileSize, nearest);
     }
     return nearest;
@@ -1866,6 +2291,43 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Puts the mob at (`x`, `y`) for an outside push that ignores walls — the
+   * edge of a protective shell — unless the mob refuses that ground
+   * ({@link acceptsShove}), in which case each axis is tried on its own so it
+   * still slides as far as it may.
+   */
+  shoveTo(x: number, y: number): void {
+    if (this.acceptsShove(x, y)) {
+      this.x = x;
+      this.y = y;
+      return;
+    }
+    if (this.acceptsShove(x, this.y)) {
+      this.x = x;
+      return;
+    }
+    if (this.acceptsShove(this.x, y)) this.y = y;
+  }
+
+  /**
+   * Whether an outside push may leave this mob's top-left at (`x`, `y`). Every
+   * mob accepts by default; one that must stay on its own ground (livestock
+   * in its pen) refuses the rest.
+   */
+  protected acceptsShove(_x: number, _y: number): boolean {
+    return true;
+  }
+
+  /**
+   * Whether {@link shoveTo} would set this mob down at (`x`, `y`) — for a
+   * caller choosing between several places to push it, which must pick one
+   * the mob will take rather than find out after the push.
+   */
+  canBeShovedTo(x: number, y: number): boolean {
+    return this.acceptsShove(x, y);
+  }
+
+  /**
    * Moves by (dx, dy) with per-axis wall collision, mirroring the player's
    * movement so mobs can slide along walls instead of passing through them.
    */
@@ -1875,6 +2337,8 @@ export abstract class Mob extends Player {
     // the shove was meant to give the player. Facing and attack timers are
     // untouched, so the stagger reads as a stumble, not a freeze.
     if (this.knockbackFramesRemaining > 0 && !this.knockbackStepInProgress) return;
+    // A root holds the mob's own feet the same way; a shove still carries it.
+    if (this.rootFrames > 0 && !this.knockbackStepInProgress) return;
     // Only a step that *enters* marked ground is refused: one taken from inside
     // it is the flee, and refusing that would pin the mob in the fire. Without
     // the refusal the flee and the follow take turns — the flee steps it clear,
@@ -1928,7 +2392,7 @@ export abstract class Mob extends Player {
           : Math.floor((nextX + ts * MOB_COLLISION_BACK_FRACTION) / ts);
       const tileYcur = Math.floor((this.y + ts / 2) / ts);
       if (
-        this.map.isWalkable(tileXnext, tileYcur) &&
+        this.map.isWalkableFor(tileXnext, tileYcur, this.isHostile) &&
         !this.map.isStairwellTile(tileXnext, tileYcur)
       )
         this.x = nextX;
@@ -1941,7 +2405,7 @@ export abstract class Mob extends Player {
       // wall and stands with its whole lower half on the masonry.
       const tileYnext = Math.floor((nextY + ts * verticalCollisionOffset(dy)) / ts);
       if (
-        this.map.isWalkable(tileXcur, tileYnext) &&
+        this.map.isWalkableFor(tileXcur, tileYnext, this.isHostile) &&
         !this.map.isStairwellTile(tileXcur, tileYnext)
       )
         this.y = nextY;
@@ -2188,7 +2652,7 @@ export abstract class Mob extends Player {
     // Only while unengaged. A mob already fighting shouted when it acquired
     // its target, so repeating it here would buy nothing and would run a
     // spatial query per damage tick for the whole of every fight.
-    if (this.currentTarget === null && this.packAlertRadiusTiles > 0) {
+    if (this.currentTarget === null && this.isHostile && this.packAlertRadiusTiles > 0) {
       alertPackAround(this, this.packAlertRadiusTiles * this.tileSize, attacker);
     }
   }
@@ -2533,7 +2997,13 @@ export abstract class Mob extends Player {
     }
     if (this.healthBarTimer > 0) this.healthBarTimer--;
     if (this.hitSlowFrames > 0) this.hitSlowFrames--;
+    if (this.hazardSlowFrames > 0) this.hazardSlowFrames--;
+    if (this.rootFrames > 0) {
+      this.rootFrames--;
+      if (this.rootFrames === 0) this.rootSource = null;
+    }
     this.tactics.tick();
+    this.tickStructureStrike();
     // Saturating rather than wrapping: this counter is only ever compared
     // against a small window, and a mob that has not hit anybody for two years
     // of game time must not roll back around to "just did".
@@ -2589,6 +3059,11 @@ export abstract class Mob extends Player {
    * four to eighteen tiles from home, i.e. often still outside its own camp.
    */
   protected returnHomeOrWander(): void {
+    // A converted mob's home is whoever turned it; `doWander` rallies to them.
+    if (this.isConverted) {
+      this.doWander();
+      return;
+    }
     const home = this.homePoint;
     const radiusTiles = this.leashRadiusTiles;
     if (home === undefined || radiusTiles === undefined) {
@@ -2633,6 +3108,7 @@ export abstract class Mob extends Player {
    * a 4-tile radius of the spawn point.
    */
   doWander() {
+    if (this.walkToAllyRally()) return;
     if (this.wanderTimer > 0) {
       this.wanderTimer--;
     } else {
@@ -2676,6 +3152,30 @@ export abstract class Mob extends Player {
       this.isMoving = false;
     }
   }
+
+  /**
+   * Walks a converted mob back toward its rally point when it has strayed
+   * past it, and reports whether it did — the wander is skipped that frame.
+   * Latched on the way in so it settles well inside the radius instead of
+   * stopping on the line.
+   */
+  private walkToAllyRally(): boolean {
+    const rally = this.allyRally;
+    if (rally?.anchor.isAlive !== true) return false;
+    const distance = Math.hypot(rally.anchor.x - this.x, rally.anchor.y - this.y);
+    if (!this.rallyReturning && distance <= rally.radiusPx) return false;
+    const settlePx = rally.radiusPx * ALLY_RALLY_SETTLE_FRACTION;
+    if (distance <= settlePx) {
+      this.rallyReturning = false;
+      return false;
+    }
+    this.rallyReturning = true;
+    this.followTargetAStar(rally.anchor.x, rally.anchor.y, this.speed, settlePx);
+    return true;
+  }
+
+  /** Whether a converted mob is on its way back to its rally point; see {@link walkToAllyRally}. */
+  private rallyReturning = false;
 
   protected renderAggroIndicator(
     ctx: CanvasRenderingContext2D,
@@ -2869,6 +3369,11 @@ export abstract class Mob extends Player {
     // white of the blow that killed it.
     this.damageFlash = 0;
     this.hitSlowFrames = 0;
+    this.hazardSlowFrames = 0;
+    this.rootFrames = 0;
+    this.rootSource = null;
+    this.clearStructureStrike();
+    this.revertConversion();
     this.forceAggro = false;
     this.wanderDx = 0;
     this.wanderDy = 0;
@@ -2914,6 +3419,7 @@ export abstract class Mob extends Player {
    * then call `super.reviveForCheckpoint()`.
    */
   reviveForCheckpoint(): void {
+    this.vanished = false;
     this.hp = this.maxHp;
     this.justDied = false;
     // A checkpoint revive undoes the kill rather than granting a second life,
@@ -2955,6 +3461,10 @@ export abstract class Mob extends Player {
    */
   healAndForgetFight(): void {
     this.clearEncounterPhase();
+    this.revertConversion();
+    this.rootFrames = 0;
+    this.rootSource = null;
+    this.hazardSlowFrames = 0;
     this.hp = this.maxHp;
     this.currentTarget = null;
     this.retaliateMob = null;

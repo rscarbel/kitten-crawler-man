@@ -313,6 +313,201 @@ instantly.
 
 ---
 
+## Briar Hollow
+
+A small, wooden ratkin farming village in the eastern wilderness of every floor-3
+world. It is **not** a safe zone and has **no autosave**: nothing in the village calls
+`captureSavePoint`, adds a safe room or extends `isInTownSafeZone`, and
+`isInsideTownWall` is false on every village tile (it tests `townPlan.interior` only).
+Ambient hostiles may wander in; they only never **spawn** inside the palisade bounds
+plus `SPAWN_EXCLUSION_MARGIN_TILES` (6).
+
+The site record is `BriarHollowSite` (`src/map/overworld/briarHollowSite.ts`), carried
+on `OverworldData.briarHollow` and `GameMap.briarHollow`. It is derived entirely from
+the world seed, so it is never saved. Map queries: `isInBriarHollow`,
+`briarHollowDistrictAt` (null outside every district rect, and always off the overworld),
+`isNearPalisade`, `isTileInBriarHollowSpawnExclusion`.
+
+```
+src/map/overworld/
+  briarHollowSite.ts     siting, the site record, palisade path + segmentation, keep-out
+  briarHollowLayout.ts   the authored template, site-relative: buildings, districts, props
+  paintBriarHollow.ts    stamps the template into the TileGrid
+  briarHollowChecks.ts   check* (returns sentences) / assert* (throws) — intact + reachable
+  keepOut.ts             the one shape every wilderness pass stays off
+src/map/tiles/
+  hollowWallTiles.ts     roofless building walls
+  hollowPalisadeTiles.ts palisade tiers, damage stages, breach/gap, the gate
+  hollowSiteRegistry.ts  structure grid → site, for painters that are handed only a grid
+src/systems/briarHollow/ everything that lives in the village (BriarHollowKit owns it)
+```
+
+### Siting and keep-outs
+
+`pickBriarHollowSite` samples centres **68–80 tiles** from the map centre within
+**±60° of due east**, falling back to ±90° and then 64–84 tiles. It rejects a footprint
+that crosses the void border (with a margin, including the ruins disc), touches a town
+wall or gate-highway tile, or puts any palisade tile within the town safe radius plus 2. It scores flatness with its own band weights (lowland 1, meadow 0.7, highland 0.2).
+
+The site is **picked early** (right after the `ElevationField`, which then flattens it
+through `ElevationField.flatten(zone)` alongside the town) and **painted late** (after
+`paintCamps`), so every pass in between can avoid it and anything that slips through is
+cleared. Rivers do not exist when the site is picked, so `carveRivers` is steered by
+the village keep-out rather than the site avoiding water.
+
+A `KeepOut` (`keepOut.ts`) holds disc and rect shapes and answers `contains(x, y)`.
+Rivers, forests, ruins, camps, spawn scatter, bounty sites, boulders, cliffs, ground
+cover and the fairy spawner all consult it; no pass restates the village's geometry.
+The circus is sited after the village and avoids it and its approach road. The road to
+town is routed (`paveRoadToTown`, a cost-weighted Dijkstra that rides existing roads
+and never crosses the palisade, quarry, ruins or town wall), not an L-shaped stub,
+because an L would cut through the palisade for many sites.
+
+### Layout contract
+
+The village is an authored template, not a scatter; the seed varies only dressing
+(crop kinds, the laundry home, clutter, household colours), never geometry.
+
+- The palisade bounds are **58 × 40** with **chamfered corners**. The **gate is on the
+  south wall**, 3 tiles wide, west of centre. The main street runs north from it to the
+  square (bell tower, wells, notice board).
+- Districts: **lumber yard** NW (grove, sawmill), **farm and pasture** NE (farmhouse,
+  barn whose open side faces the pasture gate, crop fields), **workshops** (forge,
+  guardhouse beside the gate, engineer's workshop, cookhouse, store, infirmary),
+  **homes** along the south side, mostly south-east (Wicker's to the west). Outside: the **quarry** to the SE (deposits,
+  Garn's hut, dressed-stone stubs) and the **ruins** disc beyond it, whose clear centre
+  is the necromancer's arrival point. `site.assaultLanes` holds an east and a south
+  spawn/approach pair.
+- District rects never include palisade tiles. Every building doorway is a gap in
+  `HOLLOW_WALL` filled with `HOLLOW_THRESHOLD`, never a `buildingEntries` door, so the
+  village never triggers `BuildingSystem`. There is a 1-tile walkway round every
+  building and 2 tiles in front of every doorway; no furniture sits on a doorway's inner
+  tile.
+
+`npm run verify:briar-hollow-site` holds all of this over 200 seeds, running the intact
+and reachable checks both before and after the generator's repair passes (a repair pass
+must never be what makes them pass).
+
+### Roofless walls
+
+Village buildings have no roofs: you walk through the doorway and see the whole room.
+In the 3/4 projection that only works with the walls nearest the camera cut down
+(`hollowWallTiles.ts`):
+
+- The **north** wall stands full height (`HOLLOW_WALL_FACE_TILES` 1.1), its inner face
+  hanging below its cap into the row above — outside the building, so nothing it hides
+  matters.
+- The **south** wall is a cutaway, `HOLLOW_WALL_CUTAWAY_TILES` **0.35** tall. At full
+  height it would hide the room and everyone in it; at 0.35 it still reads as a wall and
+  its cap covers the feet of anyone standing right behind it, which is what sells
+  "inside".
+- The **east and west** walls are cut to the same 0.35. A full-height side wall's cap
+  sits a whole tile north of the ground it stands on, so every side doorway would appear
+  a tile north of where it is walkable, and a crawler standing in it would vanish.
+- **Y-sort:** every wall sorts at its own tile's foot. A crawler inside, south of the
+  north wall, draws in front of it; a crawler one tile north of the south wall draws
+  behind the cutaway, which overlaps their feet.
+- Every wall is half a tile thick on the inner half of its tile, on a fieldstone footing
+  that fills the outer half, so a blocked tile never shows walkable-looking ground. Which
+  side is indoors comes from the building rect via `hollowSiteRegistry`, never a per-tile
+  flag. Wall looks are cached per wall piece (not through `OverlayTileCache`, which keys
+  on position). Open-sided buildings (forge, sawmill, barn) get posts only — a rail
+  across a walkable opening reads as a barrier.
+
+Props (`HOLLOW_PROP_LOW` is sight-transparent, `HOLLOW_PROP_TALL` blocks sight) draw
+from their footprint's bottom-left tile so they sort on their foot; the other footprint
+tiles carry a `hollow_part:` key and block without drawing. Their sheets are painted at
+runtime with the overworld group (`villageSheets.ts`), about 4.3 MB decoded.
+
+### The palisade
+
+The palisade is `HOLLOW_PALISADE` tiles cut into **segments**, the unit you upgrade
+(fence → wood → stone → fortified), damage and repair. A segment at 0 HP becomes
+`HOLLOW_PALISADE_GAP` (a walkable breach that remembers its tier; a broken fence is a
+plain gap). An untouched segment has no record at all: it is a 1-HP fence.
+
+**The segmentation is a save-format contract** (`segmentLengths`, `palisadeSegmentId`).
+Persisted wall state is keyed by segment id, and an id is only its index
+(`palisade_<index>`). The path starts at the tile east of the gate and walks east along
+the south wall; it is cut into runs of `SEGMENT_TILES` (3), a remainder of one
+lengthening the last run and a remainder of two also lengthening the first. Changing
+that rule, the ring's shape or where the path starts orphans every saved wall. The
+current ring is 63 segments of exactly 3.
+
+The palisade and the gate are **sight-transparent**, so enemies outside are visible and
+trebuchets aim over the walls. A crawler just behind a tall wall is redrawn at half
+opacity over it (`occludedCrawlers.ts`).
+
+### The hostile-only gate
+
+The gate is indestructible and swings open for friendly bodies, but that swing is
+visual only (`VillageGate.ts`). What actually stops hostiles is `GameMap`'s
+`BLOCK_HOSTILE_ONLY` flag, set on the gate tiles whenever the overworld loads, with or
+without the village kit. `isWalkable` ignores it; `isWalkableForHostile`,
+`isWalkableFor(x, y, forHostile)`, `hasHostileWalkableLine` and
+`findPath(..., forHostile)` honour it. Every **movement** test for a hostile mob uses
+the hostile variant — `Mob.stepThroughWalls` on both axes (which covers chasing,
+wandering, separation and knockback), A* in `followTargetAStar`, the tactics frame's
+standability and walk lines, and the fairies' hover goals — so a hostile knocked into
+the gate stops at its face. Line-of-sight, projectile and spawn checks keep plain
+`isWalkable`. Crawlers, companions, soldiers, cows and villagers pass freely.
+
+Trebuchet footprints use a separate flag, `BLOCK_STRUCTURE`
+(`blockStructureTile` / `unblockStructureTile`), carried in the map checkpoint.
+
+### The siege flow field
+
+The assault's undead navigate with `SiegeFlowField`, not A*. The ring is closed and the
+gate is shut to hostiles, so a plain search from outside to the bell **fails**, and a
+failed search latches (`astarSearchFailed` holds a mob off pathing for a while), dropping
+it to straight-line movement that scrapes along the wall. One Dijkstra outward from the
+Hollow Bell, over the palisade bounds plus `FLOW_MARGIN_TILES` (32), prices open ground
+at 1, a standing structure at `1 + (remaining HP + spikes HP) / SIEGE_DPS_ESTIMATE_PER_TILE` (so a mob
+detours to a weaker section but never walks the whole ring), a visible snare at +2, and
+the gate as impassable (it reads `isWalkableForHostile`). It is recomputed when a tier,
+a breach or a quarter-band of a structure's health changes, debounced to 0.5 s. Mobs
+choose among neighbours within 5% of the cheapest by their own seed, so a wave spreads
+across a breach instead of walking single file. `Mob.siegeDirective` is consulted by
+`MobUpdateLoop` before `updateAI`.
+
+### Persistence
+
+Village state is split by who owns it:
+
+| What                                                                | Where                                                                  | Scope         |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------- |
+| Quest phase, structures, soldier orders, merchant stock, once-flags | `BriarHollowState` → `PersistedWorldState` / `WorldCheckpoint`         | per floor     |
+| Tool tiers, explainers seen                                         | `PartyCraftsState` → `GameProgress.crafts` / `LevelCheckpoint`         | party         |
+| Resourcing and Construction levels and XP                           | `Player.craftSkills` → `PlayerSnapshot`                                | per crawler   |
+| Harvest-node capacity and regrowth                                  | threaded `BriarHollowState`, checkpointed by `GatheringKit`, not saved | page lifetime |
+| Villager memory                                                     | threaded `BriarHollowState`, neither checkpointed nor saved            | page lifetime |
+| Session harvest tallies, thrall cooldowns                           | module state                                                           | page lifetime |
+
+`BriarHollowState` is threaded by reference through `DungeonScene` and
+`BuildingInteriorScene`, like `TownMemory`, because both scenes are rebuilt on every
+door visit; systems read from it and never hold their own copy.
+
+**`imminent` and `assault` are never persisted.** `captureBriarHollowState`, which both
+the save and the checkpoint go through, records a siege under way as `fortifying` with
+the bell at full health (and `parse` reads a stray siege phase the same way). A death or
+a reload during the siege therefore rewinds to before it, and no half-fought wave can be
+resumed — a death always returns to the last save, and the last save cannot have been
+taken mid-wave. The village has no autosave, so a death also loses anything built or
+damaged since the party last saved in town.
+
+### Harnesses
+
+- `?townmap` cycles town → whole world → Briar Hollow (building outlines, the ruins
+  disc, district labels).
+- `npm run render:briar-hollow` renders the village with the real art, Y-sorted like
+  `RenderPipeline`, including three Carl-at-a-wall probes; `--labels=off` for blind
+  review, `--frame=world` for the whole map.
+- `npm run render:village-siege` renders siege states (bell struck, cracked, poster).
+- `?playtest=briar-hollow-kit`, `briar-hollow-village`, `briar-hollow-builders` and
+  `briar-hollow-siege` are playtest presets; the `!village` chat cheat warps the party inside the gate.
+
+---
+
 ## Dev routes
 
 Both are localhost-only, registered in `src/game.ts`.

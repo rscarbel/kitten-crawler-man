@@ -320,6 +320,12 @@ export class DynamiteSystem implements GameSystem {
   private blastCount = 0;
   /** Set each time a stick goes off; `DestructionKit` reads and clears it to sound the blast. */
   explosionSoundPending = false;
+  /**
+   * Told of every blast's centre and radius, in world pixels, so built
+   * structures — walls, trebuchets, snares — take their share. Any bomb goes
+   * through here, the party's own included.
+   */
+  onStructureBlast: ((cx: number, cy: number, radiusPx: number) => void) | null = null;
 
   /** Counts {@link update} calls, so a blast cooldown can be read against it. */
   private frame = 0;
@@ -358,6 +364,33 @@ export class DynamiteSystem implements GameSystem {
     this.explosions = [];
     this.scorches = [];
     this.lastBlastFrame = new WeakMap<Mob, number>();
+  }
+
+  /**
+   * Where a blast may soon go off: every stick alight in the world, and the
+   * thrower himself while he holds one lit or is about to let it go — a
+   * warning for anything that has to get ready for the bang before it lands.
+   * `radiusPx` is how far the blast reaches from where it goes off; a stick
+   * still in hand has not chosen where that is.
+   */
+  pendingBlastPoints(
+    human: HumanPlayer,
+  ): Array<{ x: number; y: number; inHand: boolean; radiusPx: number }> {
+    const points = this.liveDynamites.map((stick) => ({
+      x: stick.x,
+      y: stick.y,
+      inHand: false,
+      radiusPx: DYN_RADIUS,
+    }));
+    if (this._charging !== null || this.pendingThrow !== null) {
+      points.push({
+        x: human.x + HALF_TILE,
+        y: human.y + HALF_TILE,
+        inHand: true,
+        radiusPx: DYN_RADIUS,
+      });
+    }
+    return points;
   }
 
   get isCharging(): boolean {
@@ -642,9 +675,9 @@ export class DynamiteSystem implements GameSystem {
   ): void {
     const { x: cx, y: cy, radius } = blast;
     this.explosionSoundPending = true;
+    this.onStructureBlast?.(cx, cy, radius);
     const nearBlast = mobGrid.queryCircle(cx, cy, radius + TILE_SIZE);
     if (!human.zeroDamage) {
-      let blastKills = 0;
       let enemyKills = 0;
       let bossKilled = false;
       for (const mob of nearBlast) {
@@ -663,15 +696,16 @@ export class DynamiteSystem implements GameSystem {
           // `justDied` flag cannot answer: it stays latched for a whole frame.
           const wasAlive = mob.hp > 0;
           mob.takeDamageFrom(damage, human, 'explosion');
-          if (wasAlive && mob.hp <= 0) {
-            blastKills++;
-            if (mob.isHostile) enemyKills++;
-            if (mob.isHostile && mob.isBoss) bossKilled = true;
+          // Only an enemy is a kill: an ally or a village cow caught in the
+          // blast is a casualty, and a multi-kill of livestock is no feat.
+          if (wasAlive && mob.hp <= 0 && mob.isHostile) {
+            enemyKills++;
+            if (mob.isBoss) bossKilled = true;
           }
         }
       }
-      if (blastKills > 0) {
-        this.bus?.emit('multiKill', { killer: human, count: blastKills });
+      if (enemyKills > 0) {
+        this.bus?.emit('multiKill', { killer: human, count: enemyKills });
       }
       if (enemyKills > 0) {
         this.bus?.emit('dynamiteKills', { killer: human, kills: enemyKills, bossKilled });
@@ -693,6 +727,7 @@ export class DynamiteSystem implements GameSystem {
     // radius, and setting fire to the trees first would leave the ones inside it
     // burning as they came down.
     trees?.igniteRadius(cx, cy, radius + EXPLOSION_IGNITE_RING_TILES * TILE_SIZE);
+    this.bus?.emit('blastLanded', { x: cx, y: cy, radiusPx: radius });
   }
 
   /** Whether a blast-resistant mob is still inside its window from the last blast; stamps a new one if not. */

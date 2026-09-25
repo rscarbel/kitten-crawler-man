@@ -83,6 +83,19 @@ export class RewardGrantedDialog {
     this.drainedCallbacks.push(callback);
   }
 
+  /**
+   * Drops every queued and showing reward, and the follow-ups waiting on them,
+   * without running any of it. For a death rewind: whatever the cards announce
+   * was granted in a world the rewind has just undone.
+   */
+  discard(): void {
+    this.queue = [];
+    this.current = null;
+    this.phase = 'idle';
+    this.drainedCallbacks = [];
+    this.cachedDescLines = null;
+  }
+
   /** Push a new reward onto the queue. */
   enqueue(reward: GrantedReward): void {
     this.queue.push(reward);

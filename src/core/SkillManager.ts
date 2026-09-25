@@ -211,6 +211,14 @@ export class SkillManager {
   private readonly states = new Map<SkillId, SkillState>();
 
   /**
+   * When > 0, `isUnlocked`/`getLevel` report every eligible skill as unlocked
+   * and at min(godModeMinLevel, that skill's own maxLevel). Real state is
+   * untouched, so turning this back to 0 (god mode off) reverts every skill to
+   * whatever the crawler actually earned. Mirrors `AbilityManager`'s overlay.
+   */
+  private godModeMinLevel = 0;
+
+  /**
    * Which crawler this manager belongs to, or null for anything that isn't a
    * crawler (mobs and NPCs also extend `Player`). Eligibility is enforced here
    * rather than at each acquisition channel so a channel added later — a quest
@@ -232,12 +240,32 @@ export class SkillManager {
 
   /** True once the skill has been found; every effect is gated on this. */
   isUnlocked(id: SkillId): boolean {
-    return this.states.has(id);
+    return this.states.has(id) || this.godModeOverlayLevel(id) > 0;
   }
 
-  /** Current level, or 0 when the skill is still locked. */
+  /** Current level, or 0 when the skill is still locked. Includes the god-mode overlay, if any. */
   getLevel(id: SkillId): number {
+    return Math.max(this.getRealLevel(id), this.godModeOverlayLevel(id));
+  }
+
+  /**
+   * The stored level, ignoring the god-mode overlay — what the crawler actually
+   * earned. Anything that pays out for reaching a level has to read this, or a
+   * cheat hands out the reward.
+   */
+  getRealLevel(id: SkillId): number {
     return this.states.get(id)?.level ?? 0;
+  }
+
+  private godModeOverlayLevel(id: SkillId): number {
+    if (this.godModeMinLevel <= 0) return 0;
+    if (this.owner === null || !isEligible(SKILL_DEFS[id], this.owner)) return 0;
+    return Math.min(this.godModeMinLevel, SKILL_DEFS[id].maxLevel);
+  }
+
+  /** Override the effective level floor for every eligible skill (god mode). Pass 0 to clear. */
+  setGodModeMinLevel(minLevel: number): void {
+    this.godModeMinLevel = minLevel;
   }
 
   /** Every skill this crawler has discovered, in roster order. */

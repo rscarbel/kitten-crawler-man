@@ -65,6 +65,10 @@ import {
 } from '../sprites/krakarenTentacleSprite';
 import { KRAKAREN_BODY_PART_KEY, KRAKAREN_GORE_PARTS } from '../sprites/krakarenSprite';
 import { KRAKAREN_FIGURE, KRAKAREN_TENTACLE_FIGURE } from '../sprites/art/krakarenFigure';
+import { COW_FIGURE_ENTRIES } from '../sprites/art/cowFigure';
+import { COW_GORE_PARTS, cowBodyPartKey } from '../sprites/cowSprite';
+import { GRAVE_BULL_FIGURE } from '../sprites/art/graveBullFigure';
+import { GRAVE_BULL_BODY_PART_KEY, GRAVE_BULL_GORE_PARTS } from '../sprites/graveBullSprite';
 
 interface MobBodyPartConfig {
   readonly art: FigureDef;
@@ -140,6 +144,14 @@ const DARK_KNIGHT_CONFIG: MobBodyPartConfig = {
   art: DARK_KNIGHT_FIGURE,
   parts: DARK_KNIGHT_GORE_PARTS,
 };
+
+/**
+ * One config per coat and age: a cow's pieces wear the coat they came off and a
+ * calf's are painted at a calf's size, so each figure carries its own set.
+ */
+const COW_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = COW_FIGURE_ENTRIES.map(
+  (entry) => [cowBodyPartKey(entry.coat, entry.age), { art: entry.figure, parts: COW_GORE_PARTS }],
+);
 
 /**
  * The seven loose bones each skeleton variant scatters.
@@ -227,6 +239,12 @@ const KRAKAREN_CONFIG: MobBodyPartConfig = {
   parts: KRAKAREN_GORE_PARTS,
 };
 
+/** The Grave Bull's bones and chain: a raised carcass has no quarters of meat to drop. */
+const GRAVE_BULL_CONFIG: MobBodyPartConfig = {
+  art: GRAVE_BULL_FIGURE,
+  parts: GRAVE_BULL_GORE_PARTS,
+};
+
 const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ...ROCK_GOLEM_CONFIGS,
   ...GOBLIN_CONFIGS,
@@ -245,6 +263,8 @@ const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   [KRAKAREN_TENTACLE_BODY_PART_KEY, KRAKAREN_TENTACLE_CONFIG],
   [KRAKAREN_BODY_PART_KEY, KRAKAREN_CONFIG],
   ...SKELETON_CONFIGS,
+  ...COW_CONFIGS,
+  [GRAVE_BULL_BODY_PART_KEY, GRAVE_BULL_CONFIG],
 ]);
 
 const PART_LIFETIME = 6000; // 100s @ 60fps

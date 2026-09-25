@@ -1010,12 +1010,21 @@ export class CircusQuestSystem implements GameSystem {
     active.inventory.addItem(BIGTOP_POTION_ITEM_ID, BIGTOP_POTION_QUANTITY);
   }
 
-  /** Space-key interaction: opens Signet's dialog for the current stage when in range. */
-  tryInteract(active: Player): boolean {
+  /**
+   * Whether {@link tryInteract} would try to claim a press from `active` right now,
+   * without doing anything — for a prompt further down the Space chain to
+   * know it would not be reached.
+   */
+  wouldInteract(active: Player): boolean {
     if (this.dialog.isOpen) return false;
     if (!this.signet?.isAlive || !this.hasPendingDialog()) return false;
     const dist = Math.hypot(this.signet.x - active.x, this.signet.y - active.y);
-    if (dist > TILE_SIZE * INTERACT_RANGE_TILES) return false;
+    return dist <= TILE_SIZE * INTERACT_RANGE_TILES;
+  }
+
+  /** Space-key interaction: opens Signet's dialog for the current stage when in range. */
+  tryInteract(active: Player): boolean {
+    if (!this.wouldInteract(active)) return false;
     return this.openDialogForCurrentPhase(active);
   }
 

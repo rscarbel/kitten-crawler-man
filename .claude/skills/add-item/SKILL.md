@@ -20,6 +20,13 @@ Master registry: `src/core/ItemDefs.ts`. Items are ids in the `ItemId` union wit
 5. **Loot** (if dropped by mobs): add to the base drop table in `Mob.rollLootItems` (`src/creatures/Mob.ts`) or override `rollLootItems` in a specific creature (see `Goblin`'s dynamite). `LootSystem` handles ground TTL and proximity/click pickup automatically. Boss drops flow through the `mobKilled` handler in `DungeonScene`.
 6. **Shop** (if purchasable): add a `{ id, label, price, desc }` entry to `SHOP_ITEMS` in `src/systems/ShopSystem.ts`, with the price as a named constant. Buying already guards on coins and inventory space.
 
+## Food, tools, resources and ground pickups
+
+- **Food.** `edible: true` gives the bag an "Eat" lead option (`leadOptionFor`) and the hotbar an `edible` branch; both call `MenusKit.eatFood`, the one eating path. The rules per food are pure functions in `src/core/foods.ts` (`eatHamburger`, `eatHollowStew`, add yours to `eatFood`) returning an outcome that `MenusKit` turns into sound, toast and bus events. A food that heals like a potion goes through `Player.usePotion` so it shares the potion cooldown; `firstHealingConsumable` is what the companion's auto-heal asks.
+- **Tools.** `type: 'tool'` with `tool: { kind, tier }`, `canDrop: false`, not hotlistable, never equipped or sold, never consumed. Tiers are party state: `PartyTools.grantStarterTools` / `PartyTools.upgrade` (`src/core/PartyTools.ts`) swap the item **in place, in the same slot**, in both crawlers' inventories. A tool's extra bag actions (Summon Thrall) come through `InventoryInteraction.extraContextOptions`, not hard-coded in the panel.
+- **Resources** (`wood`, `stone`, `wood_board`, `rope`) go into the gathering crawler's own bag; every spend counts both bags through `src/core/partyResources.ts` (`partyCount`, `canAfford`, `spend`, `applyDiscount`), taking from the active crawler first.
+- **Ground pickups.** An item that should lie visibly on the ground and be collected all at once with Space is a `GroundPickupKind` in `src/systems/GroundPickupSystem.ts`, mapped to its `ItemId` in `PICKUP_ITEM` and spawned with `groundPickups.spawn(kind, cx, cy, count)` (on `DestructionKit`). It checks `hasRoomFor` before picking up and leaves what does not fit.
+
 ## Storage mechanics (usually no changes needed)
 
 `Inventory` (`src/core/Inventory.ts`) is a facade over `ItemBag` (32 slots), `Hotbar` (8 slots), and equipment. `addItem` routes quest items to the reserved quest slot, otherwise stacks hotbar → bag → first empty. `stackable` and `canHotlist` in the item def drive stacking and hotbar placement.

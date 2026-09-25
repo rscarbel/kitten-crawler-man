@@ -52,6 +52,16 @@ export function interactionPromptsDrawnThisFrame(): number {
   return _promptsDrawnThisFrame;
 }
 
+/**
+ * Whether prompts are suppressed for the frame — a dialog has the screen, or
+ * the game is over. For a prompt drawn with something other than
+ * {@link drawInteractionPrompt} itself (a structure's own hint text, say)
+ * that still needs to honor the same one answer everything else does.
+ */
+export function interactionPromptsSuppressed(): boolean {
+  return _promptsSuppressed;
+}
+
 /** The highest pixel a prompt anchored at `sy` reaches, bob included, for UI stacked above it. */
 export function interactionPromptTop(sy: number): number {
   return sy - LABEL_Y_OFFSET - KEY_HEIGHT - BOB_AMPLITUDE;

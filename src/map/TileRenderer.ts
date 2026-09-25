@@ -47,6 +47,9 @@ import { drawBuildingTile } from './tiles/buildingTiles';
 import { drawDecorationTile, decorationAnimationFrame } from './tiles/decorationTiles';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
 import { drawInteriorTile } from './tiles/interiorTiles';
+import { hollowPropExtentsPx } from './tiles/hollowVillageTiles';
+import { hollowWallExtentsPx } from './tiles/hollowWallTiles';
+import { hollowGateExtentsPx, hollowPalisadeExtentsPx } from './tiles/hollowPalisadeTiles';
 import { tileIndex } from './tileIndex';
 import {
   getMapSpriteExtentsPx,
@@ -491,6 +494,14 @@ export function decorationTileExtentsPx(
   // sprite fallback below would grow each cached canvas ninefold — and the
   // per-frame blit with it — for slack that can never be drawn into.
   if (ROOF_TILE_TYPES.has(type)) return NO_DECORATION_EXTENTS;
+  // A village prop is drawn whole from one tile of its footprint; the rest of
+  // the footprint reaches nowhere.
+  if (type === HOLLOW_PROP_LOW || type === HOLLOW_PROP_TALL) {
+    return hollowPropExtentsPx(structure, tx, ty);
+  }
+  if (type === HOLLOW_WALL) return hollowWallExtentsPx(structure, tx, ty, ts);
+  if (type === HOLLOW_PALISADE) return hollowPalisadeExtentsPx(ts);
+  if (type === HOLLOW_GATE) return hollowGateExtentsPx(structure, tx, ty, ts);
   if (type === SPRITE_BUILDING) {
     const spriteKey = structure[ty][tx].spriteKey;
     const extents = spriteKey === undefined ? undefined : getSpriteExtentsPxByKey(spriteKey);

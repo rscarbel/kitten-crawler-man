@@ -74,7 +74,12 @@ export interface MobSpawnRule extends MobLevelRange {
     | 'fairy_healer'
     | 'fairy_ice'
     | 'fairy_fire'
-    | 'fairy_necro';
+    | 'fairy_necro'
+    | 'cow'
+    | 'calf'
+    | 'necromancer'
+    | 'raised_ratkin'
+    | 'grave_bull';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.

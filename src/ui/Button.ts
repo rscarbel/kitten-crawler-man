@@ -342,6 +342,18 @@ export function setButtonMouseState(mx: number, my: number, isDown = false): voi
 }
 
 /**
+ * Whether this frame's pointer is over a rectangle in the current pointer
+ * space — the same test a button's hover uses. For a surface that has to
+ * react to hover over something that is not a live button, such as a
+ * disabled menu row that still previews what it would do.
+ */
+export function pointerOverRect(x: number, y: number, width: number, height: number): boolean {
+  const pointerX = toSpace(_mouseX, _pointerSpace.pivotX, _pointerSpace.scale);
+  const pointerY = toSpace(_mouseY, _pointerSpace.pivotY, _pointerSpace.scale);
+  return pointerX >= x && pointerX <= x + width && pointerY >= y && pointerY <= y + height;
+}
+
+/**
  * Clear mouse state — call when the mouse leaves the canvas or on touch end.
  */
 export function clearButtonMouseState(): void {
@@ -544,6 +556,14 @@ export const BUTTON_PRESETS = {
   },
   /** Safe-room / entry prompt — green tint. */
   safeRoom: { fill: 'rgba(20,83,45,0.9)', border: '#4ade80', borderWidth: 1.5, radius: 4 },
+  /** A topic under a Briar Hollow villager's conversation — the dialog box's own candlelit brass. */
+  villagerTopic: {
+    fill: 'rgba(38,28,14,0.94)',
+    border: '#c8a860',
+    borderWidth: 1.5,
+    radius: 4,
+    labelColor: '#f0e4c4',
+  },
   /** Desktop HUD toggle button — inactive state. */
   toggle: { fill: 'rgba(0,0,0,0.55)', border: '#475569', borderWidth: 1, radius: 2, labelSize: 12 },
   /** Desktop HUD toggle button — open/active state. */
@@ -717,6 +737,28 @@ function fitLabelSize(
   ctx.restore();
   if (textWidth <= maxWidth) return baseSize;
   return Math.max(MIN_FITTED_LABEL_SIZE, Math.floor(baseSize * (maxWidth / textWidth)));
+}
+
+/**
+ * Whether a single-line bold monospace label, shrunk the way `drawButton`
+ * shrinks it, fits inside a button `width` wide — false when even the
+ * smallest fitted size still runs past the button's padding. For layouts and
+ * gates that must not squeeze a button so narrow its label spills out.
+ */
+export function buttonLabelFits(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  width: number,
+  labelSize = DEFAULT_LABEL_SIZE,
+): boolean {
+  const maxWidth = width - LABEL_SIDE_PAD * 2;
+  const font = 'monospace';
+  const size = fitLabelSize(ctx, label, labelSize, true, font, maxWidth);
+  ctx.save();
+  ctx.font = `bold ${size}px ${font}`;
+  const fitted = ctx.measureText(label).width;
+  ctx.restore();
+  return fitted <= maxWidth;
 }
 
 /**

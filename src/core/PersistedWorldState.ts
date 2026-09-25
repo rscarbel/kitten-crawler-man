@@ -604,7 +604,13 @@ function parseWoodBarrier(value: unknown): WoodBarrier | undefined {
   ) {
     return undefined;
   }
-  return { tileX, tileY, worldX, worldY, hp, maxHp, grateIdx, hitFlash };
+  const barrier: WoodBarrier = { tileX, tileY, worldX, worldY, hp, maxHp, grateIdx, hitFlash };
+  if (isNumber(value.spikesHp) && value.spikesHp > 0) {
+    barrier.spikesHp = value.spikesHp;
+    const spikesBy = stringUnion(value.spikesBy, ['human', 'cat'] as const);
+    if (spikesBy !== undefined) barrier.spikesBy = spikesBy;
+  }
+  return barrier;
 }
 
 function parsePendingBuild(value: unknown): PendingBuild | undefined {

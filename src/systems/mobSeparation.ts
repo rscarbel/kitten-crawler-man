@@ -19,6 +19,22 @@ export interface SeparationBody {
   readonly x: number;
   readonly y: number;
   readonly mass: number;
+  /**
+   * Held where it stands (a rooted mob): it takes none of a push, and whatever
+   * it overlaps takes all of it, so the two still come apart.
+   */
+  readonly separationAnchored?: boolean;
+}
+
+/**
+ * The share of a pair's push that `self` takes: the other body's share of the
+ * pair's mass, so the heavier moves less — all of it against an anchored body,
+ * none of it when `self` is the anchored one.
+ */
+function pushShare(self: SeparationBody, other: SeparationBody): number {
+  if (self.separationAnchored === true) return 0;
+  if (other.separationAnchored === true) return 1;
+  return other.mass / (self.mass + other.mass);
 }
 
 /**
@@ -101,10 +117,8 @@ export function accumulateFromAllPairs(
       const dy = a.y - b.y;
       const scale = separationPushScale(dx * dx + dy * dy);
       if (scale === 0) continue;
-      const totalMass = a.mass + b.mass;
-      // Heavier body moves less — force is proportional to the other's share of total mass.
-      const aShare = b.mass / totalMass;
-      const bShare = a.mass / totalMass;
+      const aShare = pushShare(a, b);
+      const bShare = pushShare(b, a);
       outDx[i] += dx * scale * aShare;
       outDy[i] += dy * scale * aShare;
       outDx[j] -= dx * scale * bShare;
@@ -150,7 +164,7 @@ export function accumulateFromGrid<T extends SeparationBody>(
       const dy = a.y - b.y;
       const scale = separationPushScale(dx * dx + dy * dy);
       if (scale === 0) continue;
-      const aShare = b.mass / (a.mass + b.mass);
+      const aShare = pushShare(a, b);
       pushX += dx * scale * aShare;
       pushY += dy * scale * aShare;
     }

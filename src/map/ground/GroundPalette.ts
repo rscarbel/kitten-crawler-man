@@ -55,6 +55,15 @@ export interface GroundPalette {
    * property of the palette rather than something invented per tile.
    */
   readonly fringeStandIn: string;
+  /**
+   * Materials laid inside walls — a floor rather than ground — which meet
+   * everything around them at a straight tile edge: no corner-mask fringe, no
+   * kerb and no scatter in either direction. The mask model only knows soft
+   * edges, and a floor ringed by walls that stand on outdoor ground would
+   * otherwise grow a lawn wedge in every inside corner and tufts along every
+   * wall base. Absent means none.
+   */
+  readonly hardEdgeMaterials?: ReadonlySet<string>;
   /** The material a tile type stands on, or undefined when it is not this palette's ground. */
   materialForTileType(type: number): string | undefined;
 }

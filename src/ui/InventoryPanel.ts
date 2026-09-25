@@ -21,6 +21,7 @@ import {
 import type { InventoryItem, ItemId } from '../core/ItemDefs';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { platform } from '../core/Platform';
+import { keybindings } from '../core/Keybindings';
 import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
 import {
   drawDumbbellInventoryIcon,
@@ -63,6 +64,8 @@ const HEADER_H = SEARCH_FIELD_Y + SEARCH_FIELD_H + SEARCH_FIELD_BOTTOM_PAD;
 const HOTBAR_SLOT_SIZE = 52;
 const HOTBAR_GAP = 4;
 const HOTBAR_BOTTOM_MARGIN = 12;
+/** Clearance either side of the hotbar before its slots shrink to fit a narrow screen. */
+const HOTBAR_SIDE_MARGIN = 20;
 
 // Toggle button dimensions
 const DESKTOP_BTN_W = 104;
@@ -77,6 +80,8 @@ const HOTBAR_HIT_MARGIN = 12;
 
 // Context menu layout
 const CONTEXT_MENU_W = 120;
+/** A context entry that exists but cannot be used right now, such as a summon still cooling down. */
+const CONTEXT_DISABLED_COLOR = '#64748b';
 const CONTEXT_MENU_V_PAD = 4;
 const CONTEXT_LABEL_SIZE = 11;
 
@@ -178,6 +183,8 @@ const PANEL_COINS_Y = 16;
 const QTY_BADGE_MIN_FONT = 7;
 const QTY_BADGE_FONT_SCALE = 0.22;
 const QTY_BADGE_MARGIN = 3;
+/** Thin outline — a full-weight one at this font size would swallow the digits. */
+const QTY_BADGE_OUTLINE_WIDTH = 1.5;
 
 // Close/back button in panel header
 const CLOSE_BTN_W = 16;
@@ -653,22 +660,8 @@ export class InventoryPanel {
     return Math.max(1, Math.floor(Math.min(MAX_SLOT_SIZE, byHeight, byWidth) - SLOT_GAP));
   }
 
-  private computedHotbarSlotSize(): number {
-    const margin = 20;
-    const available = viewportWidth() - margin * 2 - HOTBAR_GAP * (HOTBAR_COUNT - 1);
-    return Math.min(HOTBAR_SLOT_SIZE, Math.floor(available / HOTBAR_COUNT));
-  }
-
   private hotbarRect() {
-    const s = this.computedHotbarSlotSize();
-    const w = HOTBAR_COUNT * (s + HOTBAR_GAP) - HOTBAR_GAP;
-    return {
-      x: Math.floor((viewportWidth() - w) / 2),
-      y: viewportHeight() - s - HOTBAR_BOTTOM_MARGIN,
-      w,
-      h: s,
-      slotSize: s,
-    };
+    return hotbarLayout();
   }
 
   /** Screen rect for a slot in the paginated grid. `i` is position on current page (0–15). */
@@ -822,8 +815,14 @@ export class InventoryPanel {
         ctx.fillStyle = 'rgba(59,130,246,0.3)';
         ctx.fillRect(mx + 1, oy, menuW - 2, menuItemH);
       }
-      const color =
-        options[i] === 'Equip' ? '#4ade80' : options[i] === 'Unequip' ? '#f87171' : '#e2e8f0';
+      const disabled = this.interaction.isDisabledOption(cm.item, options[i]);
+      const color = disabled
+        ? CONTEXT_DISABLED_COLOR
+        : options[i] === 'Equip'
+          ? '#4ade80'
+          : options[i] === 'Unequip'
+            ? '#f87171'
+            : '#e2e8f0';
       // baseline_y=oy+15, size=11 → top_y = oy+15-9 = oy+6
       drawText(ctx, options[i], {
         x: mx + INFO_LABEL_X_OFFSET,
@@ -1031,7 +1030,7 @@ export class InventoryPanel {
       y: btn.y,
       width: btn.w,
       height: btn.h,
-      label: 'Bag [I]',
+      label: `Bag [${keybindings.labelFor('toggleInventory')}]`,
       ...(this.isOpen ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
     });
   }
@@ -1452,6 +1451,34 @@ export class InventoryPanel {
   }
 }
 
+/** Screen space the hotbar's slots take, from which every hotbar rect is derived. */
+function hotbarLayout(): { x: number; y: number; w: number; h: number; slotSize: number } {
+  const available = viewportWidth() - HOTBAR_SIDE_MARGIN * 2 - HOTBAR_GAP * (HOTBAR_COUNT - 1);
+  const s = Math.min(HOTBAR_SLOT_SIZE, Math.floor(available / HOTBAR_COUNT));
+  const w = HOTBAR_COUNT * (s + HOTBAR_GAP) - HOTBAR_GAP;
+  return {
+    x: Math.floor((viewportWidth() - w) / 2),
+    y: viewportHeight() - s - HOTBAR_BOTTOM_MARGIN,
+    w,
+    h: s,
+    slotSize: s,
+  };
+}
+
+/**
+ * The hotbar's whole strip on screen, backing panel included — what other HUD
+ * chrome has to keep clear of.
+ */
+export function hotbarStripRect(): { x: number; y: number; w: number; h: number } {
+  const hb = hotbarLayout();
+  return {
+    x: hb.x - HOTBAR_STRIP_PAD,
+    y: hb.y - HOTBAR_STRIP_PAD,
+    w: hb.w + HOTBAR_STRIP_PAD * 2,
+    h: hb.h + HOTBAR_STRIP_EXTRA_H,
+  };
+}
+
 /**
  * The per-item procedural icon, drawn into a square of `size` at (x, y).
  *
@@ -1468,6 +1495,23 @@ export function drawItemIcon(
   y: number,
   size: number,
   alpha = 1,
+): void {
+  drawItemArt(ctx, item, x, y, size, alpha);
+  drawQuantityBadge(ctx, item, x, y, size, alpha);
+}
+
+/**
+ * The item picture alone. Many icon families finish early with their own
+ * `return`, so the quantity badge lives in {@link drawQuantityBadge} where no
+ * branch here can skip it.
+ */
+function drawItemArt(
+  ctx: CanvasRenderingContext2D,
+  item: InventoryItem,
+  x: number,
+  y: number,
+  size: number,
+  alpha: number,
 ): void {
   ctx.save();
   ctx.globalAlpha = ctx.globalAlpha * alpha;
@@ -2117,20 +2161,31 @@ export function drawItemIcon(
     drawTreadmillInventoryIcon(ctx, x, y, size);
   }
 
-  // Quantity badge (bottom-right) — sprite icon text, leave as ctx.fillText
-  // Uses textAlign='right' where x is the RIGHT edge; dynamic font size
-  if (item.quantity > 1) {
-    const fontSize = Math.max(QTY_BADGE_MIN_FONT, Math.floor(size * QTY_BADGE_FONT_SCALE));
-    ctx.font = `bold ${fontSize}px monospace`;
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'right';
-    ctx.fillText(
-      item.quantity.toString(),
-      x + size - QTY_BADGE_MARGIN,
-      y + size - QTY_BADGE_MARGIN,
-    );
-    ctx.textAlign = 'left';
-  }
+  ctx.restore();
+}
 
+/** Bottom-right stack count, shown for any stack the player holds more than one of. */
+function drawQuantityBadge(
+  ctx: CanvasRenderingContext2D,
+  item: InventoryItem,
+  x: number,
+  y: number,
+  size: number,
+  alpha: number,
+): void {
+  if (item.quantity <= 1) return;
+  ctx.save();
+  ctx.globalAlpha = ctx.globalAlpha * alpha;
+  const fontSize = Math.max(QTY_BADGE_MIN_FONT, Math.floor(size * QTY_BADGE_FONT_SCALE));
+  drawText(ctx, item.quantity.toString(), {
+    x: x + size - QTY_BADGE_MARGIN,
+    y: y + size - QTY_BADGE_MARGIN - fontSize,
+    size: fontSize,
+    bold: true,
+    color: '#fff',
+    align: 'right',
+    outline: true,
+    outlineWidth: QTY_BADGE_OUTLINE_WIDTH,
+  });
   ctx.restore();
 }

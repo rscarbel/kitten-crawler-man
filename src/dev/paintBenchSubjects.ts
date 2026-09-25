@@ -23,6 +23,7 @@ import { JUICER_FIGURE } from '../sprites/art/juicerFigure';
 import { MONGO_FIGURES } from '../sprites/art/mongoFigure';
 import { BALL_OF_SWINE_FIGURE } from '../sprites/art/ballOfSwineFigure';
 import { RAT_KIN_FIGURE } from '../sprites/art/ratKinFigure';
+import { ratkinCastFigure } from '../sprites/art/ratkinCastFigure';
 import { SHADY_FIGURE } from '../sprites/art/shadyFigure';
 import { SKY_FOWL_FIGURES } from '../sprites/art/skyFowlFigure';
 import {
@@ -42,6 +43,7 @@ import {
 import { LICH_FIGURE } from '../sprites/art/lichFigure';
 import { TUSKLING_FIGURE } from '../sprites/art/tusklingFigure';
 import { LLAMA_FIGURE } from '../sprites/art/llamaFigure';
+import { cowFigure } from '../sprites/art/cowFigure';
 import { BRINDLE_GRUB_FIGURE, COW_TAILED_GRUB_FIGURE } from '../sprites/art/grubFigure';
 import { BRINDLED_VESPA_FIGURE } from '../sprites/art/brindledVespaFigure';
 import { GOBLIN_FIGURES } from '../sprites/art/goblinFigure';
@@ -114,6 +116,10 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: JUICER_FIGURE, state: 'idle' },
   { def: DARK_KNIGHT_FIGURE, state: 'idle' },
   { def: RAT_KIN_FIGURE, state: 'idle' },
+  // The heaviest-dressed villager (coat, chain, spectacles, ledger) and the
+  // militia's thrust, which paints the cast's widest cell.
+  { def: ratkinCastFigure('bramblewick'), state: 'idle' },
+  { def: ratkinCastFigure('hobb'), state: 'strike_side' },
   { def: SHADY_FIGURE, state: 'idle' },
   { def: SKY_FOWL_FIGURES[0], state: 'walk' },
   { def: MONGO_FIGURES.adult, state: 'walk_side' },
@@ -134,6 +140,9 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: GOLEM_ROCK_BURST_FIGURE, state: 'spin' },
   { def: TUSKLING_FIGURE, state: 'walk_side' },
   { def: LLAMA_FIGURE, state: 'walk_side' },
+  // The highland's shag makes it the costliest of the six cattle figures.
+  { def: cowFigure('dun', 'adult'), state: 'walk_side' },
+  { def: cowFigure('holstein', 'adult'), state: 'graze_side' },
   { def: BRINDLE_GRUB_FIGURE, state: 'walk_side' },
   { def: COW_TAILED_GRUB_FIGURE, state: 'walk_side' },
   { def: BRINDLED_VESPA_FIGURE, state: 'hover_side' },

@@ -182,6 +182,15 @@ tears. `buildMaskSet` handles this; don't reseed per tile.
 Bake composited tiles into the chunk cache (`src/map/TileRenderer.ts`), never
 per frame.
 
+**Hard edges.** A built floor (boards, a laid floor inside walls) should not grow
+a neighbour's fringe into its corners. List it in the palette's
+`hardEdgeMaterials` (`GroundPalette`, honoured by `drawGroundTile`) rather than
+relying on blend order alone: walls record the ground under them, so a floor
+ringed by walls still gets wedges of that ground in every inside corner.
+`hollow_planks` (Briar Hollow's building floors) is the example. The village's
+`hollow_planks`, `pasture_grass` and `crop_rows` were appended to the
+`ground_overworld` sheet, never inserted — a material's index is its seed.
+
 ## Verifying
 
 - `npx tsx scripts/generate-ground-tileset.ts [artSeed]` — writes review sheets to

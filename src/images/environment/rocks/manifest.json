@@ -208,5 +208,91 @@
         "frameCount": 1
       }
     }
+  },
+  "rock_deposit_a": {
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "worked": {
+        "row": 1,
+        "frameCount": 1
+      }
+    },
+    "tileTypeId": 137
+  },
+  "rock_deposit_b": {
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "worked": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "rock_deposit_c": {
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "worked": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "rock_deposit_dressed_a": {
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "worked": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "rock_deposit_dressed_b": {
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "worked": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
   }
 }

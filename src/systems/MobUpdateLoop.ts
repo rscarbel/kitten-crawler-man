@@ -13,6 +13,11 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import { setPackAlertGrid } from '../creatures/packAlert';
+import {
+  setTrebuchetThreatDefense,
+  tryThreatenTrebuchet,
+} from '../creatures/siege/trebuchetThreat';
+import type { DefenseStructures } from './briarHollow/DefenseStructures';
 import { setVisibleWorldView } from '../core/visibleWorldView';
 import { bossOfHealer } from '../creatures/fairies/bossHealerBond';
 import { setMarkedGroundSources } from '../creatures/tactics/markedGround';
@@ -108,6 +113,13 @@ export class MobUpdateLoop implements GameSystem {
   private readonly separationGrid = new SeparationGrid<Mob>();
   /** Whose damaging ground a mob's tactics must never walk it onto. */
   private readonly hazardSources: GroundHazardSource[] = [];
+  /**
+   * The village's defenses, so an ordinary hostile can notice and attack a
+   * live trebuchet the same way it notices a crawler. Null outside Briar
+   * Hollow. Re-registered by the scene on every door visit, since the kit
+   * that owns it is rebuilt then too.
+   */
+  private trebuchetDefense: DefenseStructures | null = null;
 
   /**
    * Registers a system whose damaging ground no tactic may walk a mob onto.
@@ -117,6 +129,11 @@ export class MobUpdateLoop implements GameSystem {
   registerHazardSource(source: GroundHazardSource): void {
     if (this.hazardSources.includes(source)) return;
     this.hazardSources.push(source);
+  }
+
+  /** Registers (or clears, with null) the village's defenses for trebuchet threat. */
+  setTrebuchetDefense(defense: DefenseStructures | null): void {
+    this.trebuchetDefense = defense;
   }
 
   /**
@@ -130,6 +147,7 @@ export class MobUpdateLoop implements GameSystem {
     resetPathfindBudget();
     setPackAlertGrid(mobGrid);
     setMarkedGroundSources(this.hazardSources);
+    setTrebuchetThreatDefense(this.trebuchetDefense);
 
     // Tick BrindleGrub evolution for ALL alive grubs (not just those in AI radius)
     for (const mob of mobs) {
@@ -213,13 +231,27 @@ export class MobUpdateLoop implements GameSystem {
           mob.retaliateMob = null;
         }
         let aiTargets = playerTargets;
-        if (mob.retaliateMob && !(mob instanceof BrindleGrub)) {
+        // A converted mob fights the enemies it is handed by whoever keeps it,
+        // never the party list.
+        if (mob.isConverted) {
+          aiTargets = mob.allyTargets;
+        } else if (mob.retaliateMob && !(mob instanceof BrindleGrub)) {
           this.aiTargets.length = 0;
           this.aiTargets.push(...playerTargets, mob.retaliateMob);
           aiTargets = this.aiTargets;
         }
 
-        mob.updateAI(holdsFire ? NO_TARGETS : aiTargets);
+        // A siege directive has first say over an assault mob's frame; when it
+        // hands the frame back, the mob's own AI runs as usual.
+        const directed = mob.siegeDirective?.steer(mob, aiTargets) === true;
+        // An ordinary hostile weighs a live trebuchet against the same
+        // candidates its own AI would fight — whichever is nearest wins —
+        // ahead of running that AI at all. A boss held from fighting
+        // (`holdsFire`) is held from this too — it has not started its
+        // encounter yet.
+        const threatenedTrebuchet =
+          !directed && !holdsFire && !mob.isBoss && tryThreatenTrebuchet(mob, aiTargets);
+        if (!directed && !threatenedTrebuchet) mob.updateAI(holdsFire ? NO_TARGETS : aiTargets);
       }
 
       // Between the `ox`/`oy` capture and the `mobGrid.move` below, so a shove
@@ -323,6 +355,8 @@ export class MobUpdateLoop implements GameSystem {
     setPackAlertGrid(null);
     setVisibleWorldView(null);
     setMarkedGroundSources([]);
+    setTrebuchetThreatDefense(null);
+    this.trebuchetDefense = null;
     this.hazardSources.length = 0;
   }
 
