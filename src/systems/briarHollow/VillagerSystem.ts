@@ -212,6 +212,8 @@ export class VillagerSystem {
   private consumedTopicKeys = new Set<string>();
   /** Bumped by every `showRootTopics`/`showSubmenu`, so a picked row's wrapper can tell whether its own `run` already moved the conversation on, or whether it must repaint the screen it is still standing on. */
   private menuGeneration = 0;
+  /** Bumped by every `say`, so a picked row's wrapper can tell whether its `run` answered with lines of its own. */
+  private pagesShown = 0;
   private currentTopicsSource: (() => readonly ConversationTopic[]) | null = null;
   private currentMenuIsSubmenu = false;
   private _lastOpening: OpeningLine | null = null;
@@ -611,6 +613,7 @@ export class VillagerSystem {
       texts.push(text);
     }
     this.conversation.showPages(texts);
+    this.pagesShown++;
     return true;
   }
 
@@ -637,10 +640,17 @@ export class VillagerSystem {
         run: () => {
           if (topic.repeatable !== true) this.consumedTopicKeys.add(topic.key);
           const generationBeforeRun = this.menuGeneration;
+          const pagesBeforeRun = this.pagesShown;
           topic.run(session.controller);
-          if (this.session !== null && this.menuGeneration === generationBeforeRun) {
-            this.renderCurrentMenu();
-          }
+          const menuUnchanged = this.menuGeneration === generationBeforeRun;
+          if (this.session === null || !menuUnchanged) return;
+          this.renderCurrentMenu();
+          // A topic that answers and moves on to nothing else has said its
+          // piece: reading its last page ends the talk, so whatever it queued
+          // for after the conversation (a reward card, an explainer) follows
+          // straight on instead of the menu coming back up in its way.
+          const answered = this.pagesShown !== pagesBeforeRun;
+          if (answered) this.conversation.endAfterPages(() => this.closeConversation());
         },
       }));
   }

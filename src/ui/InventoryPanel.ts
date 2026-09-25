@@ -97,30 +97,6 @@ const INFO_DIVIDER_OFFSET_X = 4;
 const INFO_DIVIDER_MARGIN_X = 8;
 const INFO_LABEL_X_OFFSET = 8;
 
-// Drop dialog
-const DROP_DIALOG_MAX_W = 200;
-const DROP_DIALOG_MARGIN = 32;
-const DROP_DIALOG_H = 130;
-const DROP_TITLE_Y = 22;
-const DROP_TITLE_Y_CORRECTION = 9;
-const DROP_TITLE_SIZE = 11;
-const DROP_CLOSE_BTN_OFFSET_X = 34;
-const DROP_CLOSE_BTN_Y = 6;
-const DROP_CLOSE_BTN_W = 28;
-const DROP_CLOSE_BTN_H = 28;
-const DROP_MINUS_BTN_X_PAD = 20;
-const DROP_MINUS_BTN_Y = 38;
-const DROP_PM_BTN_SIZE = 36;
-const DROP_PLUS_BTN_OFFSET = 56;
-const DROP_QTY_FONT_SIZE = 16;
-const DROP_HINT_X_OFFSET = 14;
-const DROP_QTY_Y_OFFSET = 10;
-const DROP_HINT_Y_OFFSET = 16;
-const DROP_HINT_SIZE = 9;
-const DROP_CONFIRM_OFFSET = 44;
-const DROP_CONFIRM_BTN_H = 34;
-const DROP_CONFIRM_SIDE_PAD = 40;
-
 // Panel header
 const PANEL_HEADER_COINS_OFFSET = 36;
 const PANEL_CLOSE_OFFSET_X = 20;
@@ -492,7 +468,7 @@ function drawRoundFlask(
 }
 
 export class InventoryPanel {
-  isOpen = false;
+  private _isOpen = false;
   private page = 0;
   /** Whether the panel was open on the previous frame — the edge that clears `unseenUpgrades`. */
   private _wasOpenLastFrame = false;
@@ -512,6 +488,16 @@ export class InventoryPanel {
    */
   onClose: (() => void) | null = null;
 
+  /**
+   * Notified right after the panel closes, once its own sub-menus (context
+   * menu, description popup, drag, a queued quantity prompt) have already been
+   * reset. A host that opened its own overlay in response to one of those
+   * items — the shared quantity picker — wires this to close it too, so
+   * nothing spawned from an item action can outlive the panel it was opened
+   * from, whichever of the several routes actually closed it.
+   */
+  onClosingSubPanels: (() => void) | null = null;
+
   /** Interaction handler — owns drag, context menu, and pending action state. */
   readonly interaction: InventoryInteraction;
 
@@ -526,6 +512,28 @@ export class InventoryPanel {
       return true;
     };
     this.interaction.canInteractWithBagSlot = (item) => this.matchesSearch(item);
+  }
+
+  get isOpen(): boolean {
+    return this._isOpen;
+  }
+
+  /**
+   * The single choke point every close route passes through — a direct
+   * assignment (`panel.isOpen = false`), `toggle()`, and the close-button
+   * click all end up here. Closing tears down the panel's own sub-menus and
+   * notifies {@link onClosingSubPanels}, so a right-click menu, a description
+   * popup, an item mid-drag or a host-owned overlay spawned from one of them
+   * can never survive the panel closing out from under it.
+   */
+  set isOpen(open: boolean) {
+    if (this._isOpen === open) return;
+    this._isOpen = open;
+    if (!open) {
+      this.resetSearch();
+      this.interaction.closeSubmenus();
+      this.onClosingSubPanels?.();
+    }
   }
 
   private hitsSearchField(mx: number, my: number): boolean {
@@ -580,9 +588,6 @@ export class InventoryPanel {
   private get contextMenuHover() {
     return this.interaction.contextMenuHover;
   }
-  private get dropDialog() {
-    return this.interaction.dropDialog;
-  }
 
   cancelDrag(): void {
     this.interaction.cancelDrag();
@@ -604,7 +609,6 @@ export class InventoryPanel {
   toggle(): void {
     if (this.isOpen) {
       this.isOpen = false;
-      this.resetSearch();
       this.returnToMenuCallback = null;
       this.onClose?.();
     } else {
@@ -802,9 +806,6 @@ export class InventoryPanel {
     if (this.interaction.pendingInfoItem) {
       this.renderInfoPopup(ctx, this.interaction.pendingInfoItem);
     }
-    if (this.dropDialog) {
-      this.renderDropDialog(ctx);
-    }
   }
 
   private renderContextMenu(ctx: CanvasRenderingContext2D): void {
@@ -938,114 +939,6 @@ export class InventoryPanel {
       size: INFO_POPUP_HINT_SIZE,
       color: '#475569',
       align: 'center',
-    });
-
-    ctx.restore();
-  }
-
-  private renderDropDialog(ctx: CanvasRenderingContext2D): void {
-    const dd = this.dropDialog;
-    if (!dd) return;
-    const dlgW = Math.min(DROP_DIALOG_MAX_W, viewportWidth() - DROP_DIALOG_MARGIN);
-    const dlgH = DROP_DIALOG_H;
-    const dlgX = Math.floor((viewportWidth() - dlgW) / 2);
-    const dlgY = Math.floor((viewportHeight() - dlgH) / 2);
-
-    ctx.save();
-    // Background
-    drawBox(ctx, {
-      x: dlgX,
-      y: dlgY,
-      width: dlgW,
-      height: dlgH,
-      fill: 'rgba(8,10,20,0.97)',
-      border: '#475569',
-      borderWidth: 1.5,
-    });
-
-    // Title: baseline_y=dlgY+22, size=11 → top_y = dlgY+22-9 = dlgY+13
-    drawText(ctx, 'Drop how many?', {
-      x: dlgX + dlgW / 2,
-      y: dlgY + DROP_TITLE_Y - DROP_TITLE_Y_CORRECTION,
-      size: DROP_TITLE_SIZE,
-      bold: true,
-      color: '#e2e8f0',
-      align: 'center',
-    });
-
-    // Cancel [X]
-    drawButton(ctx, {
-      x: dlgX + dlgW - DROP_CLOSE_BTN_OFFSET_X,
-      y: dlgY + DROP_CLOSE_BTN_Y,
-      width: DROP_CLOSE_BTN_W,
-      height: DROP_CLOSE_BTN_H,
-      label: 'x',
-      fill: '#374151',
-      border: '#475569',
-      borderWidth: 1,
-      radius: 2,
-      labelSize: 11,
-      labelColor: '#ef4444',
-    });
-
-    // [-] button
-    const minusBtnX = dlgX + DROP_MINUS_BTN_X_PAD;
-    const minusBtnY = dlgY + DROP_MINUS_BTN_Y;
-    drawButton(ctx, {
-      x: minusBtnX,
-      y: minusBtnY,
-      width: DROP_PM_BTN_SIZE,
-      height: DROP_PM_BTN_SIZE,
-      label: '-',
-      ...BUTTON_PRESETS.primary,
-      border: '#475569',
-      labelSize: 11,
-    });
-
-    // [+] button
-    const plusBtnX = dlgX + dlgW - DROP_PLUS_BTN_OFFSET;
-    drawButton(ctx, {
-      x: plusBtnX,
-      y: minusBtnY,
-      width: DROP_PM_BTN_SIZE,
-      height: DROP_PM_BTN_SIZE,
-      label: '+',
-      ...BUTTON_PRESETS.primary,
-      border: '#475569',
-      labelSize: 11,
-    });
-
-    // Quantity display: baseline_y=minusBtnY+18, size=16 → top_y = minusBtnY+18-13 = minusBtnY+5
-    drawText(ctx, dd.selectedQty.toString(), {
-      x: dlgX + dlgW / 2,
-      y: minusBtnY + DROP_QTY_Y_OFFSET,
-      size: DROP_QTY_FONT_SIZE,
-      bold: true,
-      color: '#fbbf24',
-      align: 'center',
-    });
-
-    // Max hint: baseline_y=minusBtnY+18, size=9 → top_y = minusBtnY+18-7 = minusBtnY+11
-    drawText(ctx, `/ ${dd.maxQty}`, {
-      x: dlgX + dlgW / 2 + DROP_HINT_X_OFFSET,
-      y: minusBtnY + DROP_HINT_Y_OFFSET,
-      size: DROP_HINT_SIZE,
-      color: '#64748b',
-    });
-
-    // [Drop] confirm button
-    const confirmY = dlgY + dlgH - DROP_CONFIRM_OFFSET;
-    drawButton(ctx, {
-      x: dlgX + DROP_MINUS_BTN_X_PAD,
-      y: confirmY,
-      width: dlgW - DROP_CONFIRM_SIDE_PAD,
-      height: DROP_CONFIRM_BTN_H,
-      label: 'Drop',
-      fill: '#1d4ed8',
-      border: '#3b82f6',
-      borderWidth: 1.5,
-      radius: 4,
-      labelSize: 11,
     });
 
     ctx.restore();
@@ -1477,7 +1370,6 @@ export class InventoryPanel {
       },
       (o) => {
         if (!o) {
-          this.resetSearch();
           if (this.returnToMenuCallback !== null) {
             const cb = this.returnToMenuCallback;
             this.returnToMenuCallback = null;

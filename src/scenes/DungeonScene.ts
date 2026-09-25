@@ -2298,6 +2298,7 @@ export class DungeonScene extends GameplayScene {
         ],
       });
       const gathering = this.gathering;
+      this.companion.registerHarvestSource(gathering);
       this.menus.inventoryPanel.interaction.extraContextOptions = (item) =>
         gathering.contextOptionsFor(item);
       this.briarHollowKit =
@@ -3199,6 +3200,13 @@ export class DungeonScene extends GameplayScene {
       }
       // A villager's numbered choices, stopped for the same reason as the Bopca's.
       if (this.briarHollowKit?.handleKeyDown(e.key, e.repeat) === true) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      // The bag's Drop/Trade quantity prompt: digits edit the amount directly,
+      // so they must never also reach the hotbar or the movement keys.
+      if (this.menus.itemQuantityPicker.handleKey(e.key)) {
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
@@ -5269,6 +5277,7 @@ export class DungeonScene extends GameplayScene {
       modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
       modal(this.menus.craftExplainers.isOpen, this.menus.craftExplainers.focusId),
       modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
+      this.menus.itemQuantityPicker.overlayClaim(),
       // Below the award stack because that stack draws over the death screen — a
       // level-up earned by the blow that killed you is still on top and still
       // has to be dismissible. `locksKeyboard` even so: the screen's own focus
@@ -6063,6 +6072,13 @@ export class DungeonScene extends GameplayScene {
       if (choice !== null) this.menus.releaseSkillBookReader();
       return;
     }
+    if (this.menus.itemQuantityPicker.handleClick(mx, my)) {
+      const invPlayer = this.menus.inventoryPlayer();
+      this.menus.resolvePendingInventoryActions(invPlayer, (id, quantity) =>
+        this.destruction.loot.addPlayerDrop(invPlayer.x, invPlayer.y, id, quantity, invPlayer),
+      );
+      return;
+    }
     // Ranked where its overlay claim is: under the award stack, which can land
     // on the same frame the run ends, and over every panel and HUD button.
     if (this.runCompleteScreen.handleClick(mx, my)) return;
@@ -6290,6 +6306,13 @@ export class DungeonScene extends GameplayScene {
       this.menus.pauseMenu.handleMouseDown(mx, my, this.human, this.cat);
       return;
     }
+    // Ahead of the blocking-overlay return below, which the picker's own
+    // `isOpen` feeds into: without this branch a press on its step buttons
+    // would never reach them.
+    if (this.menus.itemQuantityPicker.isOpen) {
+      this.menus.itemQuantityPicker.handlePointerDown(mx, my);
+      return;
+    }
     if (this.gameOver || this.isOverlayBlockingPointer) return;
     this.briarHollowKit?.handlePointerDown(mx, my);
     if (this.miniMap.isExpanded && pointInRect(mx, my, this.touch.miniMapRect)) {
@@ -6322,6 +6345,7 @@ export class DungeonScene extends GameplayScene {
     this._mouseDown = false;
     this._miniMapDragging = false;
     this.briarHollowKit?.handlePointerUp();
+    this.menus.itemQuantityPicker.handlePointerUp();
     if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     if (this.menus.pauseMenu.isOpen) {
       this.menus.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
@@ -6334,6 +6358,7 @@ export class DungeonScene extends GameplayScene {
   handleMouseLeave(): void {
     this._mouseDown = false;
     this.briarHollowKit?.handlePointerUp();
+    this.menus.itemQuantityPicker.handlePointerUp();
     this._miniMapDragging = false;
     clearButtonMouseState();
   }
@@ -6408,7 +6433,7 @@ export class DungeonScene extends GameplayScene {
 
     // A harvest does not outlast the pause menu: the block below stops ticking
     // under it, so without this the swing would pick straight back up on close.
-    if (this.menus.pauseMenu.isOpen) this.gathering?.harvest.stop();
+    if (this.menus.pauseMenu.isOpen) this.gathering?.harvest.stopAll();
     // The village is not ticked under either, so its loops would play on unattended.
     if (this.menus.pauseMenu.isOpen || this.gameOver) this.briarHollowKit?.silenceLoops();
 
@@ -7940,6 +7965,16 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
+      // The bag's Drop/Trade "how many?" prompt, ahead of every mobile HUD hit
+      // test below: its step buttons sit over the same screen band as the bag,
+      // build and minimap buttons, and a tap on one must neither press what's
+      // drawn beneath it nor start hold-to-repeat on the wrong control.
+      if (this.menus.itemQuantityPicker.isOpen) {
+        this.menus.itemQuantityPicker.handlePointerDown(x, y);
+        this.handleClick(x, y, e.timeStamp);
+        continue;
+      }
+
       // A village or grate panel owns every finger while it is up, for the same
       // reason: its rows sit over the Bag, Build and Journal buttons on a phone,
       // and a tap on one must neither press what is drawn beneath it nor start
@@ -8202,6 +8237,7 @@ export class DungeonScene extends GameplayScene {
     // Any lifted finger ends a held picker step; a picker's own buttons never
     // start a move or a drag, so there is nothing else to match it to.
     this.briarHollowKit?.handlePointerUp();
+    this.menus.itemQuantityPicker.handlePointerUp();
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;

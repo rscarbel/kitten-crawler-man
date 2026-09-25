@@ -20,7 +20,6 @@
  */
 
 import {
-  drawBox,
   drawModal,
   beginModalFit,
   endModalFit,
@@ -66,6 +65,9 @@ const VALUE_BOX_WIDTH = 76;
 const STEP_ROW_HEIGHT = STEP_BTN_SIZE;
 const STEP_ROW_GAP_BELOW = 14;
 const VALUE_TEXT_SIZE = 22;
+/** Border the value box takes once focused — the same blue the search field uses. */
+const VALUE_BOX_FOCUS_BORDER = '#3b82f6';
+const VALUE_BOX_FOCUS_BORDER_WIDTH = 2;
 
 const UNIT_LABEL_SIZE = 10;
 const UNIT_LABEL_HEIGHT = 16;
@@ -137,6 +139,7 @@ export class QuantityPicker {
   private confirmButton: ButtonResult | null = null;
   private cancelButton: ButtonResult | null = null;
   private maxButton: ButtonResult | null = null;
+  private valueButton: ButtonResult | null = null;
   private stepButtons: Array<{ delta: number; button: ButtonResult }> = [];
 
   private heldStep: HeldStep = null;
@@ -182,6 +185,12 @@ export class QuantityPicker {
   }
 
   close(): void {
+    // A no-op past the first call: this runs unconditionally every frame the
+    // world is halted for any reason (a scene's per-frame panel sweep), and
+    // without this guard it would call `clearMenuFocus()` below on every one of
+    // those frames, wiping the focus ring of whatever unrelated menu — a craft
+    // explainer, another dialog — is actually on screen and keyboard-focused.
+    if (this.state === null) return;
     this.state = null;
     this.detail = null;
     this.note = null;
@@ -191,6 +200,7 @@ export class QuantityPicker {
     this.confirmButton = null;
     this.cancelButton = null;
     this.maxButton = null;
+    this.valueButton = null;
     this.stepButtons = [];
     this.heldStep = null;
     clearMenuFocus();
@@ -292,26 +302,29 @@ export class QuantityPicker {
     const valueBoxIndex = stepDeltas.length / 2;
     for (let i = 0; i < stepDeltas.length; i++) {
       if (i === valueBoxIndex) {
-        drawBox(ctx, {
+        // A trailing caret marks that the field is live and ready to type into:
+        // digits already in progress, a click that explicitly focused it, or the
+        // picker's own focus ring having landed here on the *previous* frame —
+        // read a frame late because `drawButton` only reports whether an entry
+        // is ring-focused once it has actually been drawn, and this box is the
+        // one drawing it. The lag is imperceptible; it's a blinking caret.
+        const tabFocused = this.valueButton?.focused === true;
+        const showsCaret = state.isTyping || state.focused || tabFocused;
+        const valueLabel = showsCaret ? `${state.value}|` : state.value.toString();
+        this.valueButton = addButton(ctx, buttons, {
           x: stepX,
           y,
           width: VALUE_BOX_WIDTH,
           height: STEP_ROW_HEIGHT,
+          label: valueLabel,
+          labelSize: VALUE_TEXT_SIZE,
+          labelColor: '#facc15',
           radius: 4,
           ...BOX_PRESETS.panel,
-        });
-        // A trailing caret marks that digits typed so far are still live — the
-        // shown number can otherwise look identical to a value reached with the
-        // step buttons, with no way to tell whether another digit would append
-        // or replace it.
-        const valueLabel = state.isTyping ? `${state.value}|` : state.value.toString();
-        drawText(ctx, valueLabel, {
-          x: stepX + VALUE_BOX_WIDTH / 2,
-          y: y + (STEP_ROW_HEIGHT - VALUE_TEXT_SIZE) / 2,
-          size: VALUE_TEXT_SIZE,
-          bold: true,
-          color: '#facc15',
-          align: 'center',
+          border: state.focused ? VALUE_BOX_FOCUS_BORDER : BOX_PRESETS.panel.border,
+          borderWidth: state.focused ? VALUE_BOX_FOCUS_BORDER_WIDTH : BOX_PRESETS.panel.borderWidth,
+          sound: 'menu_click',
+          action: () => state.focus(),
         });
         stepX += VALUE_BOX_WIDTH + STEP_BTN_GAP;
       }
@@ -469,6 +482,11 @@ export class QuantityPicker {
       state.setToMax();
       return true;
     }
+    if (this.valueButton?.contains(mx, my) === true) {
+      playButtonSound(this.audio);
+      state.focus();
+      return true;
+    }
     for (const { delta, button } of this.stepButtons) {
       if (button.contains(mx, my)) {
         playButtonSound(this.audio);
@@ -476,7 +494,12 @@ export class QuantityPicker {
         return true;
       }
     }
-    if (this.modalContains?.(mx, my) === true) return true;
+    if (this.modalContains?.(mx, my) === true) {
+      // A click anywhere else in the modal moves away from the field, the same
+      // way clicking outside a real text input drops its caret.
+      state.blur();
+      return true;
+    }
     this.cancel();
     return true;
   }

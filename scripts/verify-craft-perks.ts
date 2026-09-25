@@ -82,9 +82,9 @@ section('Construction: the 15-row speed table, exactly');
   }
 }
 
-section('Resourcing: speed steps at levels 3, 6, 8, 11, 12');
+section('Resourcing: speed steps at levels 2, 3, 4, 6, 7, 8, 9, 11, 12, 13');
 {
-  const speedLevels = [3, 6, 8, 11, 12];
+  const speedLevels = [2, 3, 4, 6, 7, 8, 9, 11, 12, 13];
   let expectedFactor = 1;
   let previousLevel = 0;
   for (const level of speedLevels) {

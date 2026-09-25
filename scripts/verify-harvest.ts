@@ -41,7 +41,7 @@ import { TreeSystem } from '../src/systems/TreeSystem';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { HarvestEffects } from '../src/systems/briarHollow/HarvestEffects';
-import { HarvestSystem } from '../src/systems/briarHollow/HarvestSystem';
+import { HARVEST_REACH_TILES, HarvestSystem } from '../src/systems/briarHollow/HarvestSystem';
 import { NodeLedger } from '../src/systems/briarHollow/NodeLedger';
 import { ThrallSystem } from '../src/systems/briarHollow/ThrallSystem';
 import {
@@ -89,14 +89,23 @@ const EXPECTED_CAPACITY_BONUS: readonly number[] = [
   // index = level; level 0 is never harvested at.
   0, 0, 1, 1, 2, 2, 2, 3, 3, 5, 5, 5, 5, 10, 10, 10,
 ];
-/** The five speed levels, 5% each, additively. */
+/**
+ * The ten speed levels, 5% each, additively: the dedicated speed perks (3, 6,
+ * 8, 11, 12) and the node-duration perks (2, 4, 7, 9, 13), which grant the
+ * same speed step alongside their duration bonus.
+ */
 const EXPECTED_SPEED: ReadonlyMap<number, number> = new Map([
   [1, 1.0],
-  [3, 0.95],
-  [6, 0.9],
-  [8, 0.85],
-  [11, 0.8],
-  [12, 0.75],
+  [2, 0.95],
+  [3, 0.9],
+  [4, 0.85],
+  [6, 0.8],
+  [7, 0.75],
+  [8, 0.7],
+  [9, 0.65],
+  [11, 0.6],
+  [12, 0.55],
+  [13, 0.5],
 ]);
 const DOUBLING_LEVEL = 15;
 const EXPECTED_WOOD_BASE_SECONDS = 1.0;
@@ -120,7 +129,7 @@ const KIT_LEVEL = 14;
 const SUMMON_LEVEL = 10;
 const BELOW_SUMMON_LEVEL = SUMMON_LEVEL - 1;
 const TOP_LEVEL = 15;
-/** The last speed level, where Carl works a quarter faster than a novice. */
+/** A speed level partway up the table, used to check Carl's own pace differs from Donut's unleveled one. */
 const FAST_LEVEL = 12;
 /** The Ratkin Forge tier: three times the basic tool's efficiency. */
 const FORGE_TIER: ToolTier = 3;
@@ -198,7 +207,7 @@ section('Award table: every tier × level × kind, 1,000 ticks, exact');
 
 // ── Speed ──────────────────────────────────────────────────────────────────
 
-section('Speed: interval at the five speed levels');
+section('Speed: interval at the ten speed levels');
 for (const [level, factor] of EXPECTED_SPEED) {
   const wood = harvestIntervalTicks('wood', level) / TICKS_PER_SECOND;
   const stone = harvestIntervalTicks('stone', level) / TICKS_PER_SECOND;
@@ -594,7 +603,7 @@ section('Skills are never shared: each crawler harvests at their own level');
     JSON.stringify(rig.cat.craftSkills.snapshot()) === catBefore,
     "Carl's XP never touches Donut's Resourcing",
   );
-  rig.harvest.stop();
+  rig.harvest.stop(rig.human);
 
   check(rig.harvest.tryStart(rig.cat), 'Donut starts chopping');
   const donut = nextAward(rig, rig.cat, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
@@ -606,7 +615,7 @@ section('Skills are never shared: each crawler harvests at their own level');
     donut !== null && donut.amount === 1,
     `Donut at L1 gets ${donut?.amount ?? 'nothing'} wood (expected 1)`,
   );
-  rig.harvest.stop();
+  rig.harvest.stop(rig.cat);
 }
 
 section('XP: a tier-3 tool trains three times as fast as the basic one');
@@ -619,7 +628,7 @@ section('XP: a tier-3 tool trains three times as fast as the basic one');
     rig.harvest.tryStart(rig.human);
     const before = rig.human.craftSkills.getXp('resourcing');
     nextAward(rig, rig.human, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
-    rig.harvest.stop();
+    rig.harvest.stop(rig.human);
     return rig.human.craftSkills.getXp('resourcing') - before;
   };
   const basic = xpPerTick(0);
@@ -646,10 +655,6 @@ section('Channel: moving, a full bag and a hostile each end it');
   check(!rig.harvest.isHarvesting(rig.human), 'a 1 px move ends the channel');
   stand(rig.human, tree);
 
-  rig.harvest.tryStart(rig.human);
-  rig.harvest.update(ctx, true);
-  check(!rig.harvest.isHarvesting(rig.human), 'a menu opening ends the channel');
-
   const filler = ITEM_DEF.basic_pickaxe;
   rig.human.inventory.removeItems('wood', rig.human.inventory.countOf('wood'));
   const slots = rig.human.inventory.bag.slots;
@@ -673,6 +678,48 @@ section('Channel: moving, a full bag and a hostile each end it');
   rig.roster.add(rat);
   rig.harvest.update(ctx, false);
   check(!rig.harvest.isHarvesting(rig.human), 'a hostile in attack range ends the channel');
+}
+
+section('Channel: a modal pauses it rather than ending it');
+{
+  const rig = makeRig();
+  teach(rig.human, 1);
+  const tree = takeTree();
+  stand(rig.human, tree);
+  const ctx = contextFor(rig, rig.human);
+  rig.harvest.tryStart(rig.human);
+
+  const level = rig.human.craftSkills.getLevel('resourcing');
+  const interval = harvestIntervalTicks('wood', level);
+  const before = woodHeld(rig.human);
+  for (let i = 0; i < interval * 2; i++) rig.harvest.update(ctx, true);
+  check(
+    rig.harvest.isHarvesting(rig.human),
+    'still running behind a modal, however long it stays up',
+  );
+  check(woodHeld(rig.human) === before, 'no award lands while paused');
+
+  const resumed = nextAward(rig, rig.human, 'wood', interval + 1);
+  check(
+    resumed !== null && resumed.ticks === interval,
+    `closing the modal picks the channel back up exactly where it left off: first award after ${resumed?.ticks ?? 'no'} ticks (expected ${interval})`,
+  );
+  rig.harvest.stop(rig.human);
+
+  const rock = takeRock();
+  stand(rig.human, rock);
+  rig.harvest.tryStart(rig.human);
+  const rockState = rig.ledger.stateAt(rock.tileX, rock.tileY, UNPERKED_LEVEL);
+  const rockCapacity = rockState?.capacity ?? 0;
+  // Spent directly on the ledger, not through the channel: a thrall on the
+  // same node keeps ticking through a modal that halts the crawlers, so the
+  // node can still run out from under a paused channel.
+  for (let i = 0; i < rockCapacity; i++) rig.ledger.spend(rock.tileX, rock.tileY, UNPERKED_LEVEL);
+  rig.harvest.update(ctx, true);
+  check(
+    !rig.harvest.isHarvesting(rig.human),
+    'a node worked out by something else while paused still ends the channel',
+  );
 }
 
 section('No Resourcing or no tool');
@@ -865,6 +912,169 @@ section('Thralls glide straight, through whatever is in the way');
   }
   check(measured > 0, `ran ${measured} glides`);
   check(proven, 'a thrall crossed a solid tile on its way to work');
+}
+
+// ── Concurrent harvesting: two crawlers, one channel each ──────────────────
+
+section("Concurrent harvesting: Carl starting his own never stops Donut's");
+{
+  // A second walkable side of the same tree, clear of any other node within
+  // reach from there, so Carl and Donut can work one tile from two tiles at
+  // once without either one's `nodeInReach` picking something else instead.
+  function onlyNodeNear(
+    standTileX: number,
+    standTileY: number,
+    tileX: number,
+    tileY: number,
+  ): boolean {
+    const searchTiles = Math.ceil(HARVEST_REACH_TILES);
+    for (let ty = standTileY - searchTiles; ty <= standTileY + searchTiles; ty++) {
+      for (let tx = standTileX - searchTiles; tx <= standTileX + searchTiles; tx++) {
+        if (tx === tileX && ty === tileY) continue;
+        if (harvestKindAt(gameMap, tx, ty) === null) continue;
+        const dx = (tx + TILE_CENTRE) * TILE_SIZE - (standTileX + TILE_CENTRE) * TILE_SIZE;
+        const dy = (ty + TILE_CENTRE) * TILE_SIZE - (standTileY + TILE_CENTRE) * TILE_SIZE;
+        if (Math.hypot(dx, dy) <= HARVEST_REACH_TILES * TILE_SIZE) return false;
+      }
+    }
+    return true;
+  }
+
+  function secondStand(spot: Spot): { x: number; y: number } | null {
+    for (const [dx, dy] of NEIGHBOURS) {
+      const sx = spot.tileX + dx;
+      const sy = spot.tileY + dy;
+      if (sx === spot.standX && sy === spot.standY) continue;
+      if (!gameMap.isWalkable(sx, sy)) continue;
+      if (!onlyNodeNear(sx, sy, spot.tileX, spot.tileY)) continue;
+      return { x: sx, y: sy };
+    }
+    return null;
+  }
+
+  // Drawn through `takeTree()`, not indexed into `TREE_SPOTS` directly: earlier
+  // sections have already felled some of these tiles for real on the shared
+  // `gameMap`, and a raw index could land back on one of those stumps.
+  let sharedSpot: Spot | null = null;
+  let sharedSecond: { x: number; y: number } | null = null;
+  for (const _attempt of TREE_SPOTS) {
+    const spot = takeTree();
+    if (harvestKindAt(gameMap, spot.tileX, spot.tileY) !== 'wood') continue;
+    const candidate = secondStand(spot);
+    if (candidate === null) continue;
+    sharedSpot = spot;
+    sharedSecond = candidate;
+    break;
+  }
+  check(sharedSpot !== null && sharedSecond !== null, 'found a tree workable from two sides');
+
+  if (sharedSpot !== null && sharedSecond !== null) {
+    const spot = sharedSpot;
+    const second = sharedSecond;
+    const rig = makeRig();
+    teach(rig.human, 1);
+    teach(rig.cat, 1);
+    stand(rig.cat, spot);
+    rig.human.x = second.x * TILE_SIZE;
+    rig.human.y = second.y * TILE_SIZE;
+
+    check(rig.harvest.tryStart(rig.cat), 'Donut starts working the tree first');
+    const ctx = contextFor(rig, rig.human);
+    rig.harvest.update(ctx, false);
+    check(rig.harvest.isHarvesting(rig.cat), 'Donut is mid-channel');
+
+    rig.harvest.tryStart(rig.human);
+    check(
+      rig.harvest.isHarvesting(rig.cat),
+      "Carl starting his own harvest never cancels Donut's — the reported regression",
+    );
+    check(rig.harvest.isHarvesting(rig.human), 'and Carl is now working the same tree too');
+
+    const state = rig.ledger.knownStateAt(spot.tileX, spot.tileY);
+    check(state !== null, 'the shared node has a known capacity');
+    const capacity = state?.capacity ?? 0;
+    const interval = harvestIntervalTicks('wood', 1);
+    const soloTicksToDeplete = capacity * interval;
+    // Donut got one extra tick's head start above (the update that proved she
+    // was already mid-channel before Carl joined), so the two channels are not
+    // in perfect lockstep — this brackets "roughly half the solo time" rather
+    // than asserting an exact tick, which the offset would otherwise break.
+    const COMBINED_RATE_LOWER_FRACTION = 0.4;
+    const COMBINED_RATE_UPPER_FRACTION = 0.6;
+    const combinedLowerBound = soloTicksToDeplete * COMBINED_RATE_LOWER_FRACTION - interval;
+    const combinedUpperBound = soloTicksToDeplete * COMBINED_RATE_UPPER_FRACTION + interval;
+
+    const carlWoodBefore = rig.human.inventory.countOf('wood');
+    const donutWoodBefore = rig.cat.inventory.countOf('wood');
+    const maxTicks = soloTicksToDeplete + interval;
+    let tick = 0;
+    for (; tick < maxTicks; tick++) {
+      rig.harvest.update(ctx, false);
+      if (!rig.harvest.isHarvesting(rig.human) && !rig.harvest.isHarvesting(rig.cat)) break;
+    }
+    check(
+      !rig.harvest.isHarvesting(rig.human) && !rig.harvest.isHarvesting(rig.cat),
+      `the shared node depletes with both still on it (stopped after ${tick} ticks)`,
+    );
+    check(
+      tick >= combinedLowerBound && tick <= combinedUpperBound,
+      `the combined rate empties it in ${tick} ticks — roughly half the ${soloTicksToDeplete} a lone harvester would take (expected between ${combinedLowerBound} and ${combinedUpperBound})`,
+    );
+    const woodGained =
+      rig.human.inventory.countOf('wood') -
+      carlWoodBefore +
+      (rig.cat.inventory.countOf('wood') - donutWoodBefore);
+    check(
+      woodGained === capacity,
+      `the node's whole capacity (${capacity}) landed between the two bags, none lost or doubled (got ${woodGained})`,
+    );
+
+    const carlWoodAfterDepletion = rig.human.inventory.countOf('wood');
+    const donutWoodAfterDepletion = rig.cat.inventory.countOf('wood');
+    for (let i = 0; i < interval * 2; i++) rig.harvest.update(ctx, false);
+    check(
+      !rig.harvest.isHarvesting(rig.human) &&
+        !rig.harvest.isHarvesting(rig.cat) &&
+        rig.human.inventory.countOf('wood') === carlWoodAfterDepletion &&
+        rig.cat.inventory.countOf('wood') === donutWoodAfterDepletion,
+      'neither auto-restarts on another node once this one is spent',
+    );
+  }
+}
+
+section('Concurrent harvesting: different nodes each progress on their own');
+{
+  const rig = makeRig();
+  teach(rig.human, 1);
+  teach(rig.cat, 1);
+  const carlTree = takeTree();
+  const donutTree = takeTree();
+  stand(rig.human, carlTree);
+  stand(rig.cat, donutTree);
+
+  check(rig.harvest.tryStart(rig.human), 'Carl starts his own tree');
+  check(rig.harvest.tryStart(rig.cat), "Donut starts hers, unaffected by Carl's channel");
+  check(
+    rig.harvest.isHarvesting(rig.human) && rig.harvest.isHarvesting(rig.cat),
+    'both are mid-channel at once',
+  );
+
+  const ctx = contextFor(rig, rig.human);
+  const interval = harvestIntervalTicks('wood', 1);
+  const carlWoodBefore = rig.human.inventory.countOf('wood');
+  const donutWoodBefore = rig.cat.inventory.countOf('wood');
+  for (let tick = 0; tick < interval; tick++) rig.harvest.update(ctx, false);
+  check(
+    rig.human.inventory.countOf('wood') === carlWoodBefore + 1 &&
+      rig.cat.inventory.countOf('wood') === donutWoodBefore + 1,
+    'each lands their own first award on schedule, independent of the other',
+  );
+  check(
+    rig.harvest.isHarvesting(rig.human) && rig.harvest.isHarvesting(rig.cat),
+    'and both keep working their own node afterward',
+  );
+  rig.harvest.stop(rig.human);
+  rig.harvest.stop(rig.cat);
 }
 
 console.log(`\n${checks - failures}/${checks} harvest checks passed.`);

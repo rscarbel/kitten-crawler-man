@@ -53,6 +53,12 @@ export class QuantityPickerState {
   private _value: number;
   /** Raw digits of the entry in progress, or null while nothing is being typed. */
   private _typedDigits: string | null = null;
+  /**
+   * Whether the value field itself has keyboard focus, as opposed to one of
+   * the step buttons — drives the caret and the field's focus outline even
+   * before the player has typed a digit.
+   */
+  private _focused = false;
 
   constructor(config: QuantityPickerStateConfig) {
     this.max = Math.max(0, Math.floor(config.max));
@@ -69,6 +75,28 @@ export class QuantityPickerState {
   /** Whether a typed entry is in progress (digits typed since the last step/Max). */
   get isTyping(): boolean {
     return this._typedDigits !== null;
+  }
+
+  /** Whether the value field has keyboard focus right now. */
+  get focused(): boolean {
+    return this._focused;
+  }
+
+  /**
+   * Gives the value field keyboard focus — clicking it, or landing the
+   * picker's own focus ring on it and pressing the activation key. Clears any
+   * in-progress typed entry first, the field's version of a text input's
+   * select-all-on-focus: the next digit replaces the shown value rather than
+   * extending it.
+   */
+  focus(): void {
+    this._focused = true;
+    this._typedDigits = null;
+  }
+
+  /** Drops the field's focus outline and caret without touching the value. */
+  blur(): void {
+    this._focused = false;
   }
 
   /** Total cost of the current quantity, or undefined when this picker has no price. */
@@ -91,6 +119,10 @@ export class QuantityPickerState {
   private setValue(next: number): void {
     this._value = clamp(next, this.min, this.max);
     this._typedDigits = null;
+    // A step or Max button is a different control taking the action, not the
+    // field — its own outline (drawn from the picker's ring, independent of
+    // this state) already shows where the press landed.
+    this._focused = false;
   }
 
   /** −10 / −1 / +1 / +10. A step abandons any in-progress typed entry. */
@@ -115,6 +147,10 @@ export class QuantityPickerState {
     const nextDigits = ((this._typedDigits ?? '') + digit).slice(0, MAX_TYPED_DIGITS);
     this._typedDigits = nextDigits;
     this._value = clamp(parseInt(nextDigits, 10), this.min, this.max);
+    // Typing works whether or not the field was clicked first — this just
+    // brings the caret up to match, so a keyboard-only player sees the same
+    // focus outline a mouse click would have given them.
+    this._focused = true;
   }
 
   /**
@@ -128,5 +164,6 @@ export class QuantityPickerState {
     const next = digits.slice(0, -1);
     this._typedDigits = next;
     this._value = next === '' ? this.min : clamp(parseInt(next, 10), this.min, this.max);
+    this._focused = true;
   }
 }

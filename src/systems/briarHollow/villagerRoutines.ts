@@ -75,10 +75,13 @@ const SERVICE = { service: true } as const;
 const CHILD = { followsCat: true } as const;
 
 export const VILLAGER_ROUTINES: Readonly<Record<CivilianCastId, VillagerRoutine>> = {
+  // Notice board and bell are themselves inside the square's own rect; the
+  // cookhouse tables are not, and sent him the length of the village to sit
+  // down — leashed to the square, he never leaves it once he steps out of the hall.
   bramblewick: routine(
     'hall',
     TOWNSFOLK_POST_SHARE,
-    ['square', 'notice_board', 'bell', 'cookhouse_tables'],
+    ['square', 'notice_board', 'bell'],
     'hall_shelter',
     ELDER_SPEED,
   ),

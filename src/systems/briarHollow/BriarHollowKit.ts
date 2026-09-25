@@ -75,6 +75,7 @@ import type { Rect } from '../DungeonUIRenderer';
 import { siegeHudSlot } from './siegeHudLayout';
 import { VillageAssaultSystem, type SiegeMusicClaim } from './VillageAssaultSystem';
 import { VillageQuestSystem } from './VillageQuestSystem';
+import { RecruiterSystem } from './RecruiterSystem';
 
 /** The live `Keybindings` singleton's own type, which the class itself does not export. */
 type KeybindingsHost = typeof keybindings;
@@ -175,6 +176,8 @@ export class BriarHollowKit {
   readonly assault: VillageAssaultSystem | null;
   /** "Briar Hollow's Plea", the questline; null on a map with no village. */
   readonly quest: VillageQuestSystem | null;
+  /** The recruiter posted in the Over City's own square; null on a map with no village. */
+  readonly recruiter: RecruiterSystem | null;
 
   constructor(sceneWorld: SceneWorld, deps: BriarHollowKitDeps) {
     this.world = sceneWorld;
@@ -293,6 +296,18 @@ export class BriarHollowKit {
             onCoinsGranted: (coins, worldX, worldY) => deps.onCoinsGranted?.(coins, worldX, worldY),
             onItemGranted: (id, quantity, worldX, worldY) =>
               deps.onItemGranted?.(id, quantity, worldX, worldY),
+            // Lazy: the recruiter is built after the questline it reads from.
+            recruiter: () => this.recruiter?.post ?? null,
+          });
+    this.recruiter =
+      site === null || this.quest === null
+        ? null
+        : new RecruiterSystem({
+            gameMap: sceneWorld.gameMap,
+            bus: sceneWorld.bus,
+            state: deps.state,
+            audio: deps.audio,
+            quest: this.quest,
           });
     const soldiers = this.soldiers;
     this.assault =
@@ -389,6 +404,7 @@ export class BriarHollowKit {
     this.defences?.update();
     this.services?.update();
     this.soldiers?.update({ human: ctx.human, cat: ctx.cat, active: ctx.active });
+    this.recruiter?.update();
     const tools = this.deps.partyCrafts.tools;
     this.ambience.setToolTiers(nextToolTier(tools.axeTier), nextToolTier(tools.pickaxeTier));
     this.ambience.update(ctx.gameMap, SECONDS_PER_UPDATE);
@@ -415,6 +431,7 @@ export class BriarHollowKit {
     const buffer = this.entityBuffer;
     buffer.length = 0;
     for (const villager of this.villagers?.villagers ?? []) buffer.push(villager);
+    for (const piece of this.recruiter?.renderEntities() ?? []) buffer.push(piece);
     for (const piece of this.ambience.renderEntities()) buffer.push(piece);
     for (const piece of this.defences?.renderEntities() ?? []) buffer.push(piece);
     return buffer;
@@ -487,6 +504,7 @@ export class BriarHollowKit {
     // Same order as `tryInteract`, so the prompt names what the press reaches.
     if (this.livestock?.renderPrompt(ctx, camX, camY, active) === true) return true;
     if (this.services?.renderPrompt(ctx, camX, camY, active) === true) return true;
+    if (this.recruiter?.renderPrompt(ctx, camX, camY, active) === true) return true;
     if (this.soldierIsNearer(active)) {
       return this.soldiers?.renderPrompt(ctx, camX, camY, active) === true;
     }
@@ -513,6 +531,7 @@ export class BriarHollowKit {
     // A machine at the sawmill before whoever works beside it, unless that
     // villager stands nearer than the machine does.
     if (this.services?.tryInteract(active) === true) return true;
+    if (this.recruiter?.tryInteract(active) === true) return true;
     const soldier = this.soldierIsNearer(active) ? this.soldiers?.talkTarget(active) : null;
     if (soldier !== null && soldier !== undefined) {
       this.soldiers?.talkTo(soldier.soldier, active);
@@ -560,6 +579,7 @@ export class BriarHollowKit {
     if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
     if (this.livestock?.wouldPet(active) === true) return true;
     if (this.services?.wouldInteract(active) === true) return true;
+    if (this.recruiter?.wouldInteract(active) === true) return true;
     const villagers = this.villagers;
     return (
       villagers !== null &&
@@ -691,6 +711,7 @@ export class BriarHollowKit {
     if (this.tapCow(screenX + camX, screenY + camY, active)) return true;
     if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
     if (this.services?.handleTap(screenX + camX, screenY + camY, active) === true) return true;
+    if (this.handleRecruiterTap(screenX + camX, screenY + camY, active)) return true;
     const tappedSoldier = this.soldiers?.soldierAtPoint(screenX + camX, screenY + camY) ?? null;
     if (tappedSoldier !== null) {
       const soldierTiles =
@@ -705,6 +726,21 @@ export class BriarHollowKit {
     if (tilesAway > VILLAGER_TALK_RANGE_TILES) return false;
     villagers.talkTo(tapped, active);
     return true;
+  }
+
+  /**
+   * A single world tap's mobile equivalent of `tryInteract`, for the recruiter
+   * specifically: a tap on his own body, in his talking range, talks to him
+   * rather than falling through to whoever else the tap might also reach.
+   * Returns whether it was consumed.
+   */
+  private handleRecruiterTap(
+    worldX: number,
+    worldY: number,
+    active: HumanPlayer | CatPlayer,
+  ): boolean {
+    if (this.recruiter?.atPoint(worldX, worldY) !== true) return false;
+    return this.recruiter.tryInteract(active);
   }
 
   /** Whether a villager conversation is on screen. */
@@ -728,6 +764,7 @@ export class BriarHollowKit {
   /** A click or tap on a village panel. Returns whether it landed on one. */
   handleClick(mx: number, my: number): boolean {
     if (this.quest?.handleClick(mx, my) === true) return true;
+    if (this.recruiter?.handleClick(mx, my) === true) return true;
     if (this.defences?.handleClick(mx, my) === true) return true;
     if (this.services?.handleClick(mx, my) === true) return true;
     return this.villagers?.conversation.handleClick(mx, my) === true;
@@ -781,6 +818,7 @@ export class BriarHollowKit {
   /** Escape: closes the conversation. Returns whether there was one to close. */
   dismissDialog(): boolean {
     if (this.defences?.dismissDialog() === true) return true;
+    if (this.recruiter?.dismissDialog() === true) return true;
     const villagers = this.villagers;
     if (villagers?.isConversationOpen !== true) return false;
     villagers.closeConversation();
@@ -792,6 +830,7 @@ export class BriarHollowKit {
     this.villagers?.conversation.render(ctx);
     this.defences?.renderDialog(ctx, camX, camY);
     this.services?.renderDialog(ctx);
+    this.recruiter?.renderDialog(ctx);
     // Last: the "We're ready" confirm sits over everything else the village draws.
     this.quest?.renderDialog(ctx);
   }
@@ -807,6 +846,7 @@ export class BriarHollowKit {
     // whole ninety seconds.
     return [
       ...(this.quest === null ? [] : [this.quest.overlayClaim()]),
+      ...(this.recruiter === null ? [] : [this.recruiter.overlayClaim()]),
       ...(this.defences?.overlayClaims() ?? []),
       ...(this.services?.overlayClaims() ?? []),
     ];
@@ -859,6 +899,7 @@ export class BriarHollowKit {
     this.services?.onRewind();
     this.soldiers?.onRewind();
     this.quest?.closeConfirm();
+    this.recruiter?.dismissDialog();
     this.assault?.onRewind();
   }
 

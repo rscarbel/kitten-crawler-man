@@ -1,7 +1,8 @@
 /**
  * OverworldMusicSystem — zone-based background music for the Over City
  * overworld: a shuffled town playlist inside the town safe zone, circus_theme
- * on the circus grounds, Briar Hollow's own zone inside its palisade, and
+ * on the circus grounds, Briar Hollow's own zone inside its palisade, a
+ * harvest theme out at the village quarry, and
  * forest_path in the wilds between. Quest systems set
  * `battleMusicActive` while they own the track (e.g. circus_battle during
  * circus fights); zone switching pauses until it clears.
@@ -14,13 +15,14 @@ import type { SoundId } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
 
-type MusicZone = 'town' | 'wilds' | 'circus' | 'village';
+type MusicZone = 'town' | 'wilds' | 'circus' | 'village' | 'quarry';
 
 const ZONE_TRACKS: Record<MusicZone, ReadonlyArray<SoundId>> = {
   town: TOWN_MUSIC_TRACKS,
   wilds: ['forest_path'],
   circus: ['circus_theme'],
   village: ['briar_hollow_theme'],
+  quarry: ['medieval_harvest_theme'],
 };
 
 const ZONE_FADE_MS = 1500;
@@ -66,6 +68,7 @@ export class OverworldMusicSystem implements GameSystem {
     }
     if (this.map.isInTownSafeZone(worldX, worldY)) return 'town';
     if (this.map.isInBriarHollow(worldX, worldY)) return 'village';
+    if (this.map.briarHollowDistrictAt(worldX, worldY) === 'quarry') return 'quarry';
     return 'wilds';
   }
 }

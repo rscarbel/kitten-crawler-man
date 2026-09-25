@@ -179,12 +179,26 @@ export class GatheringKit {
     return this.harvest.tryStart(active);
   }
 
+  /**
+   * Whether `crawler` is mid-channel, active or companion. What
+   * `CompanionSystem` asks before deciding to leave a harvesting companion
+   * standing at its node.
+   */
+  isHarvesting(crawler: Crawler): boolean {
+    return this.harvest.isHarvesting(crawler);
+  }
+
+  /** Ends `crawler`'s own channel, if it has one, leaving the other crawler's untouched — the leash or a fight taking over from `CompanionSystem`. */
+  stopHarvest(crawler: Crawler): void {
+    this.harvest.stop(crawler);
+  }
+
   /** See {@link HarvestSystem.wouldStartHarvest}. */
   wouldStartHarvest(active: Crawler): boolean {
     return this.harvest.wouldStartHarvest(active);
   }
 
-  /** `menuOpen`: whether any overlay owns the screen, which ends a channel. */
+  /** `menuOpen`: whether any overlay owns the screen, which pauses a channel rather than ending it. */
   update(ctx: SystemContext, menuOpen: boolean): void {
     this.harvest.update(ctx, menuOpen);
     this.thralls.update();
@@ -236,8 +250,19 @@ export class GatheringKit {
   }
 
   private renderCapacityArc(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const node = this.harvest.workedNode;
-    if (node === null) return;
+    // De-duplicated by `workedNodes` itself: two crawlers on the same tile
+    // draw one ring, not two stacked on top of each other.
+    for (const node of this.harvest.workedNodes) {
+      this.renderOneCapacityArc(ctx, camX, camY, node);
+    }
+  }
+
+  private renderOneCapacityArc(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    node: { readonly tileX: number; readonly tileY: number },
+  ): void {
     const state = this.ledger.knownStateAt(node.tileX, node.tileY);
     if (state === null) return;
     const left = state.remaining / state.capacity;
@@ -282,14 +307,14 @@ export class GatheringKit {
   }
 
   restoreCheckpoint(checkpoint: GatheringCheckpoint): void {
-    this.harvest.stop();
+    this.harvest.stopAll();
     this.thralls.dismissAll();
     this.ledger.restoreCheckpoint(checkpoint.nodes);
     this.regrowth.reconcileAfterRestore();
   }
 
   dispose(): void {
-    this.harvest.stop();
+    this.harvest.stopAll();
     this.thralls.dismissAll();
   }
 }

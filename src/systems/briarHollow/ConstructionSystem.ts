@@ -20,6 +20,7 @@ import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { PalisadeTier } from '../../map/tileTypes';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
+import { tileCoordKey } from '../../map/tileIndex';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { CrawlerKind } from '../../core/SkillManager';
@@ -898,28 +899,71 @@ export class ConstructionSystem {
   /**
    * A wall segment can turn what was walkable — a fallen fence's gap, or a
    * breach — back into solid palisade. Raising or repairing one can only ever
-   * be started facing it in reach, so a crawler standing in the opening when
-   * the job finishes is trapped by the very wall they just built, unless
-   * whoever is caught there is moved out first. Checked against every body the
-   * village knows about, not only the builder: an ally or a companion can be
-   * standing in the gap too.
+   * be started facing it in reach, so a body standing in the opening when the
+   * job finishes is trapped by the very wall that just went up, unless
+   * whoever is caught there is moved out first. Checked against every body
+   * the village knows about, not only the builder: an ally, a companion or a
+   * sieging hostile can be standing in the gap too — which is why the fix can
+   * never default to "put them inside the village": that is exactly backwards
+   * for a hostile caught on the outside.
+   *
+   * "Trapped" means the body's own standing tile — the tile its centre is
+   * on, the same test movement collision uses — is one of the segment's
+   * tiles and that tile is no longer walkable. A body merely hugging a solid
+   * wall from its legal neighbouring tile is not trapped and is left exactly
+   * where it is: collision already tests movement against the body's centre
+   * (`applyMovement`'s north–south check uses the centre, not the leading
+   * edge), so a body walked flush against any standing wall has always had
+   * its sprite box read half a tile into the wall's own row — that overlap
+   * is normal wall-hugging, not entrapment, and re-happens at every tier.
+   *
+   * A body that is truly trapped is put back on the side of the wall its own
+   * centre was already leaning toward — compared against the wall tile's
+   * centre along whichever axis the offset is larger on, which is the wall's
+   * short axis for a body standing anywhere but dead centre of the tile.
+   * Dead centre (no lean either way) falls back to the village's interior,
+   * and a search that finds nothing on the preferred side falls back to any
+   * walkable tile at all, so this can only ever return a body somewhere, never
+   * strand it forever.
    */
   private freeTrappedOccupants(ref: StructureRef): void {
     if (ref.kind !== 'segment') return;
     const gameMap = this.deps.gameMap;
+    const blockedTiles = new Map<number, { x: number; y: number }>();
     for (const tile of this.deps.defense.footprintOf(ref)) {
-      if (gameMap.isWalkable(tile.x, tile.y)) continue;
-      const footprint: TileFootprint = { x: tile.x, y: tile.y, w: 1, h: 1 };
-      for (const body of this.deps.bodies()) {
-        if (!bodyOverlaps(body, footprint)) continue;
-        const safe = findNearbyWalkableTile(
+      if (!gameMap.isWalkable(tile.x, tile.y)) blockedTiles.set(tileCoordKey(tile.x, tile.y), tile);
+    }
+    if (blockedTiles.size === 0) return;
+    const interior = this.deps.site.interior;
+    const isInterior = (x: number, y: number): boolean =>
+      x >= interior.x &&
+      y >= interior.y &&
+      x < interior.x + interior.w &&
+      y < interior.y + interior.h;
+    for (const body of this.deps.bodies()) {
+      const standingTile = bodyTile(body);
+      const wallTile = blockedTiles.get(tileCoordKey(standingTile.x, standingTile.y));
+      if (wallTile === undefined) continue;
+      const leansToward = leanFromTileCentre(body, wallTile);
+      const safe =
+        (leansToward === null
+          ? null
+          : findNearbyWalkableTile(
+              gameMap,
+              wallTile.x,
+              wallTile.y,
+              WALL_UNSTICK_SEARCH_RADIUS_TILES,
+              leansToward,
+            )) ??
+        findNearbyWalkableTile(
           gameMap,
-          tile.x,
-          tile.y,
+          wallTile.x,
+          wallTile.y,
           WALL_UNSTICK_SEARCH_RADIUS_TILES,
-        );
-        if (safe !== null) body.place(safe.x * TILE_SIZE, safe.y * TILE_SIZE);
-      }
+          isInterior,
+        ) ??
+        findNearbyWalkableTile(gameMap, wallTile.x, wallTile.y, WALL_UNSTICK_SEARCH_RADIUS_TILES);
+      if (safe !== null) body.place(safe.x * TILE_SIZE, safe.y * TILE_SIZE);
     }
   }
 
@@ -1058,6 +1102,30 @@ export class ConstructionSystem {
 
 function timeFactor(level: number): number {
   return constructionTimeFactor(level);
+}
+
+/**
+ * Which side of `wallTile` a body's centre already leans toward, as an
+ * acceptance test for {@link findNearbyWalkableTile} — true for a candidate
+ * tile that sits further out along that lean than `wallTile` itself. Compares
+ * whichever axis the body's off-centre offset is larger on, since that is the
+ * wall's short axis wherever the body is not standing dead centre of the
+ * tile; ties (dead centre) return null so the caller can fall back to another
+ * tiebreak instead of guessing an axis.
+ */
+function leanFromTileCentre(
+  body: { x: number; y: number },
+  wallTile: { x: number; y: number },
+): ((x: number, y: number) => boolean) | null {
+  const dx = body.x + TILE_SIZE / 2 - (wallTile.x + TILE_CENTRE) * TILE_SIZE;
+  const dy = body.y + TILE_SIZE / 2 - (wallTile.y + TILE_CENTRE) * TILE_SIZE;
+  if (dx === 0 && dy === 0) return null;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    const sign = Math.sign(dx);
+    return (x: number): boolean => Math.sign(x - wallTile.x) === sign;
+  }
+  const sign = Math.sign(dy);
+  return (_x: number, y: number): boolean => Math.sign(y - wallTile.y) === sign;
 }
 
 /** The tile of `tiles` nearest to the world pixel (`originX`, `originY`), or null when the list is empty. */

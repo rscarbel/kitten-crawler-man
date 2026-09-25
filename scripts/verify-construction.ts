@@ -48,6 +48,7 @@ import {
   HOLLOW_PALISADE,
   HOLLOW_PALISADE_GAP,
   HOLLOW_THRESHOLD,
+  type PalisadeTier,
   type TileContent,
 } from '../src/map/tileTypes';
 import { tileCoordKey } from '../src/map/tileIndex';
@@ -472,6 +473,163 @@ section('Segments');
   // Put the ring back as it was generated for the sections below.
   const reset = makeRig();
   reset.defense.syncMap();
+}
+
+// ── Wall upgrades never eject an occupant to the far side ──────────────────
+
+section('Wall upgrades keep occupants on their own side');
+/**
+ * A north-perimeter wall tile with `clearRows` of open ground on both sides
+ * of it — enough room to actually walk a body up against either face
+ * through real movement collision, not just teleport it there.
+ */
+function northWallSegment(clearRows: number): { id: string; tile: { x: number; y: number } } {
+  const top = site.palisadeBounds.y;
+  for (const segment of site.segments) {
+    for (const segTile of segment.tiles) {
+      if (segTile.y !== top) continue;
+      let clear = true;
+      for (let dy = 1; dy <= clearRows && clear; dy++) {
+        if (!gameMap.isWalkable(segTile.x, segTile.y + dy)) clear = false;
+        if (!gameMap.isWalkable(segTile.x, segTile.y - dy)) clear = false;
+      }
+      if (!clear) continue;
+      const nearGate = site.gate.tiles.some((gate) => Math.abs(gate.x - segTile.x) < 6);
+      if (nearGate) continue;
+      return { id: segment.id, tile: segTile };
+    }
+  }
+  throw new Error('no north wall segment with open ground on both sides of it');
+}
+
+/** Raises `id` from fence through every tier up to (and including) `to`. */
+function raiseWall(rig: Rig, id: string, to: PalisadeTier): void {
+  for (const tier of ['wood', 'stone', 'fortified'] as const) {
+    rig.defense.applyUpgrade({ kind: 'segment', id }, 'human');
+    if (tier === to) return;
+  }
+}
+
+{
+  // (a) The user's exact case: a crawler walks north into the wall from
+  // inside the village — real movement collision, not a teleport — and comes
+  // to rest touching it. Fortifying the wall must not move them: their own
+  // standing tile (their centre, which is what movement collision itself
+  // tests) was never inside the wall's footprint, so they were never trapped
+  // — the pre-fix code moved them anyway because it judged "trapped" by a
+  // looser test (a quarter-tile-inset footing box) that standing flush
+  // against any solid wall already satisfies.
+  const { id, tile } = northWallSegment(4);
+  const rig = makeRig();
+  give(rig.human, 'wood_board', 20);
+  give(rig.human, 'stone', 20);
+  raiseWall(rig, id, 'stone');
+  rig.human.x = tile.x * TILE_SIZE;
+  rig.human.y = (tile.y + 4) * TILE_SIZE;
+  for (let frame = 0; frame < UPDATES_PER_SECOND * 3; frame++) {
+    applyMovement(rig.human, { dx: 0, dy: -1, isMobile: false }, gameMap);
+  }
+  rig.human.isMoving = false;
+  const beforeX = rig.human.x;
+  const beforeY = rig.human.y;
+  const beforeTileY = Math.floor((beforeY + TILE_SIZE / 2) / TILE_SIZE);
+  check(
+    beforeTileY === tile.y + 1,
+    `walking north comes to rest on the wall's own south neighbour (row ${beforeTileY})`,
+  );
+  const started = rig.construction.startOption('fortified');
+  check(started, '(a) the fortified job starts facing the wall from inside');
+  runJob(rig);
+  check(
+    rig.defense.segmentTier(id) === 'fortified' &&
+      rig.human.x === beforeX &&
+      rig.human.y === beforeY,
+    `(a) a crawler standing legally south of the wall is not moved at all when it fortifies (before ${beforeX},${beforeY} / after ${rig.human.x},${rig.human.y})`,
+  );
+}
+
+{
+  // (b) The mirror of (a): a companion pressed against the wall's OUTER face
+  // (standing north of it, walking south into it) must stay outside. Nothing
+  // standing legally outside is on the village's business — it could just as
+  // well be a sieging hostile — so the fix must never default to "put it
+  // inside".
+  const { id, tile } = northWallSegment(4);
+  const rig = makeRig();
+  give(rig.human, 'wood_board', 20);
+  give(rig.human, 'stone', 20);
+  raiseWall(rig, id, 'stone');
+  rig.cat.x = tile.x * TILE_SIZE;
+  rig.cat.y = (tile.y - 4) * TILE_SIZE;
+  for (let frame = 0; frame < UPDATES_PER_SECOND * 3; frame++) {
+    applyMovement(rig.cat, { dx: 0, dy: 1, isMobile: false }, gameMap);
+  }
+  rig.cat.isMoving = false;
+  const beforeX = rig.cat.x;
+  const beforeY = rig.cat.y;
+  const beforeTileY = Math.floor((beforeY + TILE_SIZE / 2) / TILE_SIZE);
+  check(
+    beforeTileY === tile.y - 1,
+    `walking south comes to rest on the wall's own north neighbour (row ${beforeTileY})`,
+  );
+  standAt(rig.human, tile.x, tile.y + 1, 0, -1);
+  const started = rig.construction.startOption('fortified');
+  check(started, '(b) the fortified job starts facing the wall from inside');
+  runJob(rig);
+  check(
+    rig.defense.segmentTier(id) === 'fortified' && rig.cat.x === beforeX && rig.cat.y === beforeY,
+    `(b) a companion pressed against the outer face is not pulled inside when the wall fortifies (before ${beforeX},${beforeY} / after ${rig.cat.x},${rig.cat.y})`,
+  );
+}
+
+{
+  // (c) A body whose centre is genuinely inside the wall's own tile — the
+  // breach/gap-standing case `freeTrappedOccupants` exists for — is put back
+  // on the side its own centre was already leaning toward. Run with a
+  // hostile leaning north: a sieging mob caught this way must come out on
+  // its own (outside) side, never be pulled into the village.
+  const { id, tile } = northWallSegment(2);
+  const rigSouth = makeRig();
+  give(rigSouth.human, 'wood_board', 20);
+  give(rigSouth.human, 'stone', 20);
+  raiseWall(rigSouth, id, 'stone');
+  rigSouth.human.x = tile.x * TILE_SIZE;
+  rigSouth.human.y = tile.y * TILE_SIZE + TILE_SIZE / 4; // leaning toward the south half of the tile
+  rigSouth.human.facingX = 0;
+  rigSouth.human.facingY = -1;
+  rigSouth.human.isMoving = false;
+  check(
+    rigSouth.construction.startOption('fortified'),
+    '(c) the fortified job starts with the crawler standing on the wall tile, leaning south',
+  );
+  runJob(rigSouth);
+  const southFinalY = Math.floor((rigSouth.human.y + TILE_SIZE / 2) / TILE_SIZE);
+  check(
+    rigSouth.defense.segmentTier(id) === 'fortified' && southFinalY > tile.y,
+    `(c) leaning south lands south of the wall (row ${southFinalY}, wall at ${tile.y})`,
+  );
+
+  const { id: id2, tile: tile2 } = northWallSegment(2);
+  const rigNorth = makeRig();
+  give(rigNorth.human, 'wood_board', 20);
+  give(rigNorth.human, 'stone', 20);
+  raiseWall(rigNorth, id2, 'stone');
+  standAt(rigNorth.human, tile2.x, tile2.y + 1, 0, -1);
+  const rat = new Rat(tile2.x, tile2.y, TILE_SIZE);
+  rat.x = tile2.x * TILE_SIZE;
+  rat.y = tile2.y * TILE_SIZE - TILE_SIZE / 4; // leaning toward the north half of the tile
+  rigNorth.roster.add(rat);
+  check(
+    rigNorth.construction.startOption('fortified'),
+    '(c) the fortified job starts with a hostile standing on the wall tile, leaning north',
+  );
+  runJob(rigNorth);
+  const northFinalY = Math.floor((rat.y + TILE_SIZE / 2) / TILE_SIZE);
+  check(
+    rigNorth.defense.segmentTier(id2) === 'fortified' && northFinalY < tile2.y,
+    `(c) a hostile leaning north lands north of the wall, not pulled into the village (row ${northFinalY}, wall at ${tile2.y})`,
+  );
+  rat.hp = 0;
 }
 
 // ── The gate ──────────────────────────────────────────────────────────────

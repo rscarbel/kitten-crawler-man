@@ -10,13 +10,23 @@ interface SpeedStepLevel {
   readonly level: number;
 }
 
-/** Levels at which Resourcing collection speed steps up by another 5%. */
+/**
+ * Levels at which Resourcing collection speed steps up by another 5%: the
+ * dedicated speed perks (3, 6, 8, 11, 12) plus the node-duration perks (2, 4,
+ * 7, 9, 13), which grant the same speed step in addition to their duration
+ * bonus.
+ */
 const RESOURCING_SPEED_LEVELS: readonly SpeedStepLevel[] = [
+  { level: 2 },
   { level: 3 },
+  { level: 4 },
   { level: 6 },
+  { level: 7 },
   { level: 8 },
+  { level: 9 },
   { level: 11 },
   { level: 12 },
+  { level: 13 },
 ];
 
 /** Fraction shaved off harvest time at each Resourcing speed level. */
@@ -202,12 +212,12 @@ const RESOURCING_PERK_ROWS: readonly PerkUnlock[] = [
   { level: 1, text: 'Players can collect wood and stone with the right tools.' },
   {
     level: 2,
-    text: 'Resources yield more harvest before expiring',
+    text: 'Resources yield more harvest before expiring, and resource collection is faster.',
   },
   { level: 3, text: 'Resource collection is faster.' },
   {
     level: 4,
-    text: 'Resources yield more harvest before expiring',
+    text: 'Resources yield more harvest before expiring, and resource collection is faster.',
   },
   {
     level: 5,
@@ -216,12 +226,12 @@ const RESOURCING_PERK_ROWS: readonly PerkUnlock[] = [
   { level: 6, text: 'Resource collection is faster.' },
   {
     level: 7,
-    text: 'Resources yield more harvest before expiring',
+    text: 'Resources yield more harvest before expiring, and resource collection is faster.',
   },
   { level: 8, text: 'Resource collection is faster.' },
   {
     level: 9,
-    text: 'Resources yield more harvest before expiring',
+    text: 'Resources yield more harvest before expiring, and resource collection is faster.',
   },
   {
     level: 10,
@@ -231,7 +241,7 @@ const RESOURCING_PERK_ROWS: readonly PerkUnlock[] = [
   { level: 12, text: 'Resource collection is faster.' },
   {
     level: 13,
-    text: 'Resources yield more harvest before expiring',
+    text: 'Resources yield more harvest before expiring, and resource collection is faster.',
   },
   {
     level: 14,

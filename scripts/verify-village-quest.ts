@@ -213,7 +213,10 @@ function partyXp(): number {
 
 section('1. The Mayor');
 {
-  check(kit.trackerEntries().length === 0, 'no journal row before the Mayor has been met');
+  check(
+    objective() === `Speak with ${kit.recruiter?.post?.name} in the town square`,
+    'before the Mayor has been met, the journal points at the recruiter',
+  );
   rig.step();
   check(
     villagers.villagerFor('bramblewick')?.marker === 'exclamation',
@@ -225,10 +228,17 @@ section('1. The Mayor');
     same(choose('About the village'), expected('bramblewick', ['ask_about_village'])),
     '"About the village" answers ask_about_village',
   );
+  // A plain answer — one that neither opens a submenu nor moves back to the
+  // root — is the conversation's last word: reading it closes the whole
+  // talk, so asking about something else means talking to the Mayor again.
+  check(!conversation.isOpen, 'and that answer ends the conversation');
+  talk('bramblewick');
   check(
     same(choose('About the necromancer'), expected('bramblewick', ['ask_about_necromancer'])),
     '"About the necromancer" answers ask_about_necromancer',
   );
+  check(!conversation.isOpen, 'and this answer ends the conversation too');
+  talk('bramblewick');
   check(
     same(choose('How can we help?'), expected('bramblewick', ['quest_offer'])),
     '"How can we help?" makes the offer',
@@ -275,7 +285,7 @@ section('2. Tikka and Oren');
   talk('oren');
   const tools = choose('Tools');
   check(tools !== null, 'Oren offers "Tools"');
-  choose('Goodbye');
+  check(!conversation.isOpen, 'and the grant ends the conversation');
   check(
     human.inventory.countOf('basic_axe') === 1 && cat.inventory.countOf('basic_axe') === 1,
     'both crawlers carry the axe',

@@ -5,24 +5,6 @@ import type { SkillId } from '../core/SkillManager';
 import { pointInRect } from '../utils';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
-// Drop dialog layout dimensions
-const DROP_DIALOG_WIDTH = 200;
-const DROP_DIALOG_HEIGHT = 130;
-const DROP_DIALOG_CLOSE_BTN_RIGHT = 34;
-const DROP_DIALOG_CLOSE_BTN_LEFT = 6;
-const DROP_DIALOG_CLOSE_BTN_TOP = 6;
-const DROP_DIALOG_CLOSE_BTN_HEIGHT = 34;
-const DROP_DIALOG_BUTTON_WIDTH = 36;
-const DROP_DIALOG_BUTTON_HEIGHT = 36;
-const DROP_DIALOG_MINUS_BTN_X = 20;
-const DROP_DIALOG_MINUS_BTN_Y = 38;
-const DROP_DIALOG_PLUS_BTN_X_OFFSET = 56;
-const DROP_DIALOG_PLUS_BTN_Y = 38;
-const DROP_DIALOG_CONFIRM_X = 20;
-const DROP_DIALOG_CONFIRM_Y_OFFSET = 44;
-const DROP_DIALOG_CONFIRM_WIDTH_MARGIN = 40;
-const DROP_DIALOG_CONFIRM_HEIGHT = 34;
-
 // Context menu layout
 const CONTEXT_MENU_WIDTH = 120;
 export const CONTEXT_MENU_ITEM_HEIGHT = 34;
@@ -125,6 +107,20 @@ export interface ContextMenu {
 }
 
 /**
+ * A Drop or Trade queued against a stack bigger than one, awaiting the
+ * quantity the player actually wants — the host opens the shared
+ * {@link QuantityPicker} in response and writes the chosen amount back as
+ * {@link InventoryInteraction.pendingDropItem} or
+ * {@link InventoryInteraction.pendingTradeItem}.
+ */
+export interface PendingQuantityPrompt {
+  readonly kind: 'drop' | 'trade';
+  readonly id: ItemId;
+  readonly itemName: string;
+  readonly maxQty: number;
+}
+
+/**
  * Handles all InventoryPanel interaction logic: drag-and-drop, click handling,
  * context menus, and drop dialogs. Separated from rendering so each concern
  * can be understood and modified independently.
@@ -180,19 +176,27 @@ export class InventoryInteraction {
   pendingStudySlot: PendingSlotRef | null = null;
   /** Set when the user confirms a drop; DungeonScene reads and clears this. */
   pendingDropItem: { id: ItemId; quantity: number } | null = null;
+  /** Set when the user confirms a trade; the host reads and clears this. */
+  pendingTradeItem: { id: ItemId; quantity: number } | null = null;
   /**
    * A skill book the player asked to read, awaiting confirmation. Raised by a
    * plain left click on the slot or by the context menu's Read entry — the
    * scene reads and clears this.
    */
   pendingSkillBookRead: SkillBookReadRequest | null = null;
-  /** Active drop-quantity dialog (for stackable items with qty > 1). */
-  dropDialog: {
-    slotIdx: number;
-    id: ItemId;
-    maxQty: number;
-    selectedQty: number;
-  } | null = null;
+  /**
+   * A Drop or Trade queued against a stack bigger than one — the host opens
+   * the shared quantity picker in response and clears this.
+   */
+  pendingQuantityPrompt: PendingQuantityPrompt | null = null;
+
+  /**
+   * Host-supplied test for whether `item` could be handed to the other
+   * crawler right now. Null hides the Trade entry entirely — a bag with no
+   * partner to trade with (a tutorial, a solo preview) offers no menu item
+   * with nothing to do.
+   */
+  canTradeItem: ((item: InventoryItem) => boolean) | null = null;
 
   get isDragging(): boolean {
     return this.drag !== null;
@@ -215,6 +219,20 @@ export class InventoryInteraction {
   }
 
   cancelDrag(): void {
+    this.drag = null;
+  }
+
+  /**
+   * Drops every sub-menu and in-flight action queued against the bag: the
+   * right-click menu, the description popup, an item mid-drag, and a queued
+   * quantity prompt. Called whenever the panel hosting them closes, so none of
+   * these can survive on screen with no panel left to belong to.
+   */
+  closeSubmenus(): void {
+    this.contextMenu = null;
+    this.contextMenuHover = -1;
+    this.pendingInfoItem = null;
+    this.pendingQuantityPrompt = null;
     this.drag = null;
   }
 
@@ -248,18 +266,19 @@ export class InventoryInteraction {
     // ability tomes) can still be repositioned freely — only the option to
     // discard them into the world is missing.
     const drop = item.canDrop === false ? [] : ['Drop'];
+    const trade = this.canTradeItem?.(item) === true ? ['Trade'] : [];
     if (source === 'hotbar') {
       if (item.type === 'armor') {
         const label = isEquipped ? 'Unequip' : 'Equip';
-        return [...lead, label, 'Move to Bag', 'Description', ...drop];
+        return [...lead, label, 'Move to Bag', 'Description', ...trade, ...drop];
       }
-      return [...lead, 'Move to Bag', 'Description', ...drop];
+      return [...lead, 'Move to Bag', 'Description', ...trade, ...drop];
     }
     if (item.type === 'armor') {
       const label = isEquipped ? 'Unequip' : 'Equip';
-      return [...lead, label, 'Description', ...drop];
+      return [...lead, label, 'Description', ...trade, ...drop];
     }
-    return [...lead, 'Description', ...drop];
+    return [...lead, 'Description', ...trade, ...drop];
   }
 
   /**
@@ -277,64 +296,6 @@ export class InventoryInteraction {
     setPage: (p: number) => void,
     setOpen: (o: boolean) => void,
   ): boolean {
-    // Drop quantity dialog takes priority
-    if (this.dropDialog) {
-      const dd = this.dropDialog;
-      const dlgW = DROP_DIALOG_WIDTH;
-      const dlgH = DROP_DIALOG_HEIGHT;
-      const dlgX = Math.floor((viewportWidth() - dlgW) / 2);
-      const dlgY = Math.floor((viewportHeight() - dlgH) / 2);
-
-      if (
-        mx >= dlgX + dlgW - DROP_DIALOG_CLOSE_BTN_RIGHT &&
-        mx <= dlgX + dlgW - DROP_DIALOG_CLOSE_BTN_LEFT &&
-        my >= dlgY + DROP_DIALOG_CLOSE_BTN_TOP &&
-        my <= dlgY + DROP_DIALOG_CLOSE_BTN_HEIGHT
-      ) {
-        this.dropDialog = null;
-        return true;
-      }
-      const minusBtnX = dlgX + DROP_DIALOG_MINUS_BTN_X;
-      const minusBtnY = dlgY + DROP_DIALOG_MINUS_BTN_Y;
-      if (
-        mx >= minusBtnX &&
-        mx <= minusBtnX + DROP_DIALOG_BUTTON_WIDTH &&
-        my >= minusBtnY &&
-        my <= minusBtnY + DROP_DIALOG_BUTTON_HEIGHT
-      ) {
-        this.dropDialog = { ...dd, selectedQty: Math.max(1, dd.selectedQty - 1) };
-        return true;
-      }
-      const plusBtnX = dlgX + dlgW - DROP_DIALOG_PLUS_BTN_X_OFFSET;
-      const plusBtnY = dlgY + DROP_DIALOG_PLUS_BTN_Y;
-      if (
-        mx >= plusBtnX &&
-        mx <= plusBtnX + DROP_DIALOG_BUTTON_WIDTH &&
-        my >= plusBtnY &&
-        my <= plusBtnY + DROP_DIALOG_BUTTON_HEIGHT
-      ) {
-        this.dropDialog = { ...dd, selectedQty: Math.min(dd.maxQty, dd.selectedQty + 1) };
-        return true;
-      }
-      const confirmX = dlgX + DROP_DIALOG_CONFIRM_X;
-      const confirmY = dlgY + dlgH - DROP_DIALOG_CONFIRM_Y_OFFSET;
-      if (
-        mx >= confirmX &&
-        mx <= confirmX + dlgW - DROP_DIALOG_CONFIRM_WIDTH_MARGIN &&
-        my >= confirmY &&
-        my <= confirmY + DROP_DIALOG_CONFIRM_HEIGHT
-      ) {
-        this.pendingDropItem = { id: dd.id, quantity: dd.selectedQty };
-        this.dropDialog = null;
-        return true;
-      }
-      if (mx >= dlgX && mx <= dlgX + dlgW && my >= dlgY && my <= dlgY + dlgH) {
-        return true;
-      }
-      this.dropDialog = null;
-      return true;
-    }
-
     if (this.pendingInfoItem) {
       this.pendingInfoItem = null;
       return true;
@@ -381,14 +342,31 @@ export class InventoryInteraction {
                 : inventory.bag.slots[cm.slotIdx];
             if (item) {
               if (item.stackable && item.quantity > 1) {
-                this.dropDialog = {
-                  slotIdx: cm.slotIdx,
+                this.pendingQuantityPrompt = {
+                  kind: 'drop',
                   id: item.id,
+                  itemName: item.name,
                   maxQty: item.quantity,
-                  selectedQty: 1,
                 };
               } else {
                 this.pendingDropItem = { id: item.id, quantity: 1 };
+              }
+            }
+          } else if (action === 'Trade') {
+            const item =
+              cm.source === 'hotbar'
+                ? inventory.actionBar.slots[cm.slotIdx]
+                : inventory.bag.slots[cm.slotIdx];
+            if (item) {
+              if (item.stackable && item.quantity > 1) {
+                this.pendingQuantityPrompt = {
+                  kind: 'trade',
+                  id: item.id,
+                  itemName: item.name,
+                  maxQty: item.quantity,
+                };
+              } else {
+                this.pendingTradeItem = { id: item.id, quantity: 1 };
               }
             }
           } else {

@@ -202,6 +202,11 @@ export interface VillageQuestSystemDeps {
   readonly onCoinsGranted?: (coins: number, worldX: number, worldY: number) => void;
   /** A quest item reward was just granted straight into the bag (not dropped) — for a fly-to-HUD effect. */
   readonly onItemGranted?: (id: ItemId, quantity: number, worldX: number, worldY: number) => void;
+  /**
+   * The soldier posted in the Over City's square who can start this questline
+   * before the party has ever reached the village; null when none is posted.
+   */
+  readonly recruiter: () => { readonly name: string; readonly tile: TilePoint } | null;
 }
 
 function itemReward(id: ItemId, quantity: number): GrantedReward {
@@ -599,9 +604,20 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
 
   // ── Markers and the journal ───────────────────────────────────────────────
 
-  /** The glyph over a villager's head. */
+  /**
+   * The glyph over a villager's head.
+   *
+   * Bramblewick wears '!' only while nobody has been sent his way yet
+   * (`unmet`) or the party turned him down (`declined`) — both states where he
+   * has an offer nobody has taken up. Once the offer is on the table
+   * (`offered`, whether reached by talking to him or by the recruiter sending
+   * the party his way) he falls through to `targetVillager`, which already
+   * names him as the turn-in target and reads '?'.
+   */
   markerFor(villager: VillagerId, _ctx: VillagerContext): NPCMarkerType {
-    if (villager === 'bramblewick' && !hasAcceptedMayorRequest(this.phase)) return 'exclamation';
+    if (villager === 'bramblewick' && (this.phase === 'unmet' || this.phase === 'declined')) {
+      return 'exclamation';
+    }
     return this.targetVillager() === villager ? 'question' : 'none';
   }
 
@@ -630,7 +646,10 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private villagerTarget(id: VillagerId): TrackerTarget | undefined {
     const villager = this.deps.villagers.villagerFor(id);
     if (villager === null) return undefined;
-    return { x: villager.tile.x, y: villager.tile.y, wearsOwnMarker: true };
+    // The Mayor gets the beacon despite his own marker: he strolls a busy
+    // square, and the questline's givers elsewhere (Voss, Shady) are lit too.
+    const wearsOwnMarker = id !== 'bramblewick';
+    return { x: villager.tile.x, y: villager.tile.y, wearsOwnMarker };
   }
 
   private anchorTarget(tiles: readonly TilePoint[] | undefined): TrackerTarget | undefined {
@@ -671,14 +690,24 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     const base = { id: BRIAR_HOLLOW_QUEST_ID, name: BRIAR_HOLLOW_QUEST_NAME } as const;
     const mayor = (): TrackerTarget | undefined => this.villagerTarget('bramblewick');
     switch (phase) {
-      case 'unmet':
-        if (this.deps.state.talkCounts.bramblewick === 0) return null;
+      case 'unmet': {
+        if (this.deps.state.talkCounts.bramblewick === 0) {
+          const recruiter = this.deps.recruiter();
+          if (recruiter === null) return null;
+          return {
+            ...base,
+            status: 'available',
+            objective: `Speak with ${recruiter.name} in the town square`,
+            target: { x: recruiter.tile.x, y: recruiter.tile.y },
+          };
+        }
         return {
           ...base,
           status: 'available',
           objective: 'Speak with Mayor Bramblewick',
           target: mayor(),
         };
+      }
       case 'offered':
       case 'declined':
         return {

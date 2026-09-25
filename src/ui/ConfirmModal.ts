@@ -79,6 +79,12 @@ export class ConfirmModal {
   }
 
   close(): void {
+    // A no-op past the first call: this runs unconditionally every frame the
+    // world is halted for any reason (a scene's per-frame panel sweep), and
+    // without this guard it would call `clearMenuFocus()` below on every one of
+    // those frames, wiping the focus ring of whatever unrelated menu — a craft
+    // explainer, another dialog — is actually on screen and keyboard-focused.
+    if (this.options === null) return;
     this.options = null;
     this.modalContains = null;
     this.yesButton = null;

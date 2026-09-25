@@ -17,6 +17,8 @@ import type { AchievementManager } from '../../core/AchievementManager';
 import type { GameStats } from '../../core/GameStats';
 import { displayHp } from '../../core/crawlerFormulas';
 import { ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
+import { itemIsTradable } from '../../core/itemTrade';
+import { CRAWLER_NAMES } from '../../core/SkillManager';
 import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../../core/timedPotions';
 import { eatFood, isFoodId } from '../../core/foods';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -31,6 +33,8 @@ import { CraftExplainers } from '../../ui/CraftExplainers';
 import { ResourcingExplainer } from '../../ui/ResourcingExplainer';
 import { ConstructionExplainer } from '../../ui/ConstructionExplainer';
 import { ConstructionMenu } from '../../ui/ConstructionMenu';
+import { QuantityPicker } from '../../ui/QuantityPicker';
+import { playButtonSound } from '../../ui/Button';
 import { potionEffectNotice, statBoostNotice } from '../../ui/potionNotices';
 import { PauseMenu } from '../../ui/PauseMenu';
 import { RewardGrantedDialog } from '../../ui/RewardGrantedDialog';
@@ -116,6 +120,13 @@ export class MenusKit {
    * live supplies what it lists.
    */
   readonly constructionMenu: ConstructionMenu;
+  /**
+   * "How many?" for the bag's Drop and Trade entries, shared with every other
+   * quantity picker in the game rather than the bag rolling its own — a
+   * digit typed into it edits the amount directly, the same as anywhere else
+   * one of these opens.
+   */
+  readonly itemQuantityPicker: QuantityPicker;
 
   private readonly world: SceneWorld;
   private readonly abilityManager: AbilityManager;
@@ -161,6 +172,13 @@ export class MenusKit {
     this.levelUpDialog.audio = audio;
     this.rewardGrantedDialog.audio = audio;
     this.skillBookPrompt.audio = audio;
+
+    this.itemQuantityPicker = new QuantityPicker(audio);
+    // The picker is a host-owned overlay spawned from an item action, not one
+    // of the panel's own fields, so it has to be told explicitly to close
+    // alongside the bag rather than surviving underneath it.
+    this.inventoryPanel.onClosingSubPanels = () => this.itemQuantityPicker.close();
+    this.inventoryPanel.interaction.canTradeItem = (item) => this.itemIsTradableNow(item);
   }
 
   /**
@@ -178,7 +196,8 @@ export class MenusKit {
       this.levelUpDialog.isShowing ||
       this.rewardGrantedDialog.isShowing ||
       this.mongoExplainer.isOpen ||
-      this.craftExplainers.isOpen
+      this.craftExplainers.isOpen ||
+      this.itemQuantityPicker.isOpen
     );
   }
 
@@ -186,7 +205,37 @@ export class MenusKit {
     this.hotbarToast.update();
     this.levelUpDialog.update();
     this.rewardGrantedDialog.update();
+    this.itemQuantityPicker.update();
+    this.syncItemQuantityPrompt();
     this.tickDelayedSounds();
+  }
+
+  /**
+   * Raises the shared quantity picker when the bag queued a Drop or Trade
+   * against a stack bigger than one, so both actions ask "how many?" through
+   * the same widget instead of each owning a bespoke one.
+   */
+  private syncItemQuantityPrompt(): void {
+    if (this.itemQuantityPicker.isOpen) return;
+    const interaction = this.inventoryPanel.interaction;
+    const prompt = interaction.pendingQuantityPrompt;
+    if (prompt === null) return;
+    interaction.pendingQuantityPrompt = null;
+    this.itemQuantityPicker.open({
+      title: prompt.kind === 'drop' ? `Drop ${prompt.itemName}` : `Trade ${prompt.itemName}`,
+      max: prompt.maxQty,
+      initial: 1,
+      unitLabel: prompt.itemName,
+      confirmLabel: prompt.kind === 'drop' ? 'Drop' : 'Trade',
+      onConfirm: (qty) => {
+        if (prompt.kind === 'drop') {
+          interaction.pendingDropItem = { id: prompt.id, quantity: qty };
+        } else {
+          interaction.pendingTradeItem = { id: prompt.id, quantity: qty };
+        }
+      },
+      onCancel: () => undefined,
+    });
   }
 
   dispose(): void {
@@ -633,6 +682,12 @@ export class MenusKit {
       interaction.pendingDropItem = null;
       this.dropItem(holder, dropped.id, dropped.quantity, dropLoot);
     }
+
+    const traded = interaction.pendingTradeItem;
+    if (traded !== null) {
+      interaction.pendingTradeItem = null;
+      this.tradeItem(holder, traded.id, traded.quantity);
+    }
   }
 
   /**
@@ -654,6 +709,53 @@ export class MenusKit {
     holder.onInventoryChanged();
     dropLoot(id, quantity);
     this.world.audio?.play('menu_drop_item');
+  }
+
+  /** `holder`'s partner: whichever of the two crawlers isn't `holder`. */
+  private partnerOf(holder: HumanPlayer | CatPlayer): HumanPlayer | CatPlayer {
+    return holder === this.world.pm.human ? this.world.pm.cat : this.world.pm.human;
+  }
+
+  /**
+   * Whether the bag's current owner could hand `item` to their partner right
+   * now — the context menu's Trade eligibility test, wired once here rather
+   * than at each place the menu is opened.
+   */
+  private itemIsTradableNow(item: InventoryItem): boolean {
+    const partner = this.partnerOf(this.inventoryPlayer());
+    return itemIsTradable(item, partner instanceof HumanPlayer ? 'human' : 'cat');
+  }
+
+  /**
+   * Hands up to `quantity` of `id` from `holder`'s pack to their partner's.
+   * Worn gear comes off first, the same rule {@link dropItem} follows, so a
+   * traded piece can't keep paying out its bonus from a slot it just left.
+   * Refused whole — nothing is removed — when the partner's pack has no room
+   * for it, so a full bag never costs the sender the item.
+   *
+   * Clamped to what `holder` still actually holds: the picker's confirm fires
+   * on a later frame than the click that opened it, and something else
+   * (a potion drunk, a tool spent) can have eaten into the stack in between.
+   * Handing the partner the picker's stale, higher number would mint items
+   * out of nothing.
+   */
+  private tradeItem(holder: HumanPlayer | CatPlayer, id: ItemId, quantity: number): void {
+    const heldQuantity = holder.inventory.countOf(id);
+    const trade = Math.min(quantity, heldQuantity);
+    if (trade <= 0) return;
+    const partner = this.partnerOf(holder);
+    if (!partner.inventory.hasRoomFor(id)) {
+      const partnerName = partner === this.world.pm.human ? CRAWLER_NAMES.human : CRAWLER_NAMES.cat;
+      this.announce(`${partnerName}'s pack is full.`);
+      this.world.audio?.play('error_taking_action');
+      return;
+    }
+    if (holder.inventory.unequipById(id) !== null) holder.onEquipmentChanged();
+    holder.inventory.removeItems(id, trade);
+    holder.onInventoryChanged();
+    partner.inventory.addItem(id, trade);
+    partner.onInventoryChanged();
+    playButtonSound(this.world.audio);
   }
 
   /**
@@ -704,5 +806,6 @@ export class MenusKit {
     this.craftExplainers.render(ctx);
     this.rewardGrantedDialog.render(ctx);
     this.levelUpDialog.render(ctx);
+    this.itemQuantityPicker.render(ctx);
   }
 }

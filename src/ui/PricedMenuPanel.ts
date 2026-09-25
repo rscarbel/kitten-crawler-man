@@ -178,6 +178,18 @@ const QUEST_TAG_SIZE = 9;
 const QUEST_TAG_TOP_GAP = 18;
 
 /**
+ * How far a row's own content reaches above its `rowY` — the Buy button and
+ * the quest plate both float above the row's text baseline rather than
+ * starting flush with it. Between rows this overhang lands in the gap the
+ * previous row already leaves under its description, so it's invisible; the
+ * first row has no previous row to borrow that gap from, so the row list
+ * carries this much dead space of its own above row zero — keeping the rows
+ * clip flush with the viewport's top edge while still giving the first row's
+ * button and plate room to float above `rowY` without being sheared off flat.
+ */
+const ROW_TOP_INSET = Math.max(BUY_BTN_Y_LIFT, QUEST_ROW_PLATE_LIFT);
+
+/**
  * Width the label/description column gets before word-wrap kicks in — the row's
  * content width minus the price and Buy button on the right. Without the cap, a
  * long description runs underneath the button.
@@ -343,9 +355,14 @@ export class PricedMenuPanel {
       HEADER_HEIGHT + extraBarkHeight + (menu.byline === undefined ? 0 : BYLINE_LINE_HEIGHT);
     const rowHeights = menu.options.map((option) => rowHeightFor(ctx, option, contentWidth));
     const rowsHeight = rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0);
-    const height = Math.min(headerHeight + rowsHeight + FOOTER_HEIGHT, maxPanelHeight);
+    // The scrollable content is the rows plus the dead space `ROW_TOP_INSET`
+    // reserves above row zero — folded in here so a menu short enough to need
+    // no scrolling still grows the panel to show that inset, rather than
+    // permanently owing 8px of scroll before the last row is reachable.
+    const totalRowsHeight = ROW_TOP_INSET + rowsHeight;
+    const height = Math.min(headerHeight + totalRowsHeight + FOOTER_HEIGHT, maxPanelHeight);
     const visibleRowsHeight = height - headerHeight - FOOTER_HEIGHT;
-    this.maxScrollY = Math.max(0, rowsHeight - visibleRowsHeight);
+    this.maxScrollY = Math.max(0, totalRowsHeight - visibleRowsHeight);
     this.scrollY = Math.min(this.scrollY, this.maxScrollY);
     const modal = drawModal(ctx, {
       canvasWidth: viewportWidth(),
@@ -413,9 +430,15 @@ export class PricedMenuPanel {
     this.rowsBottom = this.rowsTop + visibleRowsHeight;
     ctx.save();
     ctx.beginPath();
+    // Flush with the viewport edge — nothing painted above `rowsTop` is ever
+    // shown, scrolled or not. Room for the first row's overhanging button and
+    // quest plate comes from `ROW_TOP_INSET` below, not from opening the clip.
     ctx.rect(modal.x, this.rowsTop, modal.width, visibleRowsHeight);
     ctx.clip();
-    let rowY = this.rowsTop - this.scrollY;
+    // Row zero starts `ROW_TOP_INSET` below the viewport edge rather than flush
+    // with it, so its button/plate — which float that far above their own
+    // `rowY` — land exactly on the clip edge instead of past it.
+    let rowY = this.rowsTop + ROW_TOP_INSET - this.scrollY;
     for (let i = 0; i < menu.options.length; i++) {
       this.renderRow(
         ctx,
@@ -435,7 +458,7 @@ export class PricedMenuPanel {
       x: modal.x + modal.width - SCROLLBAR_INSET,
       trackY: this.rowsTop,
       trackH: visibleRowsHeight,
-      contentH: rowsHeight,
+      contentH: totalRowsHeight,
       scrollY: this.scrollY,
     });
 
@@ -576,13 +599,13 @@ export class PricedMenuPanel {
     const buyTop = rowY - BUY_BTN_Y_LIFT;
     // Reachability is checked against the row's own bounds, not the Buy
     // button's: the button sits lifted above `rowY` to centre on the row, so
-    // its rect starts a few pixels above the row even when the row itself is
-    // flush with the top of the list — testing the lifted rect against
-    // `rowsTop` would falsely disable the topmost visible row. A row scrolled
-    // out of the band is still drawn (clipped) and must stay inert:
-    // `handleClick` ignores a click outside the band, so a focus-ring accept
-    // or a registered click sound on a clipped row would otherwise fall
-    // through to closing the menu.
+    // its rect starts a few pixels above the row — `ROW_TOP_INSET` reserves
+    // exactly that much space above row zero so this holds there too, rather
+    // than the lifted rect being tested against `rowsTop` and falsely
+    // disabling the topmost visible row. A row scrolled out of the band is
+    // still drawn (clipped) and must stay inert: `handleClick` ignores a click
+    // outside the band, so a focus-ring accept or a registered click sound on
+    // a clipped row would otherwise fall through to closing the menu.
     const isReachable = rowY >= this.rowsTop && rowY + rowHeight <= this.rowsBottom;
     this.buyButtons.push(
       drawButton(ctx, {

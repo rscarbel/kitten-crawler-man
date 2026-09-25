@@ -127,9 +127,11 @@ const LOOT_COIN_PILE_BACK_Y_SHARE = 0.1;
 
 // A kill or a break must be *seen* to pay out: coins and items burst from the
 // body, arc up, fall with gravity, land with a small bounce, and only then
-// settle into the collectable pile above. `PendingLoot.pickupDelay` already
-// blocks both auto-collect and click-collect while it counts down, so the
-// fall's whole duration rides on it — nothing can be picked up mid-flight.
+// settle into the pile above. `PendingLoot.pickupDelay` blocks every kind of
+// collection while it counts down, so the fall's whole duration rides on it —
+// nothing can be picked up mid-flight. Once it lands, the pile pays out on its
+// own: making the player walk back over ground they just fought on is a chore,
+// not a reward.
 /** How many coins one falling piece stands in for, before capping how many piece the burst spawns. */
 const DROP_COINS_PER_PIECE = 6;
 const DROP_MIN_COIN_PIECES = 1;
@@ -220,6 +222,12 @@ export interface PendingLoot {
   dropPieces?: DropPiece[];
   /** How many frames the whole fall (stagger + arc + bounce + settle beat) takes; `pickupDelay` counts down from this. */
   dropTotalFrames?: number;
+  /**
+   * Credit the pile to `owner` the moment it lands, without anyone walking to
+   * it. Survives a landed checkpoint clone, unlike the fall itself, so a pile
+   * restored mid-fall still pays out on its own.
+   */
+  collectsOnLanding?: boolean;
 }
 
 export interface FloorItem {
@@ -257,6 +265,7 @@ function clonePendingLoot(pile: PendingLoot, landed = false): PendingLoot {
     sharedCoins: pile.sharedCoins,
     dropPieces: landed ? undefined : pile.dropPieces?.map((p) => ({ ...p })),
     dropTotalFrames: landed ? undefined : pile.dropTotalFrames,
+    collectsOnLanding: pile.collectsOnLanding,
   };
 }
 
@@ -299,8 +308,9 @@ export class LootSystem implements GameSystem {
 
   /**
    * @param animateDrop Whether this pile came from a kill or a break, and so
-   *   must fall and land before it can be collected. Chest and quest rewards
-   *   (no body to fall from) pass `false` and appear already settled.
+   *   must fall and land — and is then collected automatically. Chest and
+   *   quest rewards (no body to fall from) pass `false` and appear already
+   *   settled, waiting to be walked over or clicked.
    */
   addLoot(
     x: number,
@@ -325,6 +335,7 @@ export class LootSystem implements GameSystem {
       sharedCoins,
       dropPieces: dropPieces.length > 0 ? dropPieces : undefined,
       dropTotalFrames: dropTotalFrames > 0 ? dropTotalFrames : undefined,
+      collectsOnLanding: animateDrop,
     });
   }
 
@@ -517,6 +528,8 @@ export class LootSystem implements GameSystem {
       if (!loot.collected) {
         if (loot.pickupDelay > 0) {
           loot.pickupDelay--;
+        } else if (loot.collectsOnLanding ?? false) {
+          this.creditLoot(loot, loot.owner, party);
         } else if (loot.droppedByPlayer) {
           for (const player of party) {
             if (this.isWithinPickupRange(player, loot, DROPPED_PICKUP_RANGE)) {

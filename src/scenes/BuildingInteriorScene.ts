@@ -1217,6 +1217,7 @@ export class BuildingInteriorScene extends GameplayScene {
       modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
       modal(this.menus.craftExplainers.isOpen, this.menus.craftExplainers.focusId),
       modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
+      this.menus.itemQuantityPicker.overlayClaim(),
       // `locksKeyboard` even though the death screen accepts from the keyboard:
       // its focus ring listens in the capture phase and consumes the press
       // before this handler is reached, so locking here only stops a hotbar key
@@ -1396,7 +1397,7 @@ export class BuildingInteriorScene extends GameplayScene {
       if (e.killer !== null) this.mongoSystem.onKill();
       this.combat.spawnKillGore(e.mob, e.killer);
       // Onto the floor, the same as the dungeon, rather than straight into the
-      // purse: a pile you have to walk over is how a kill reads as having paid.
+      // purse: seeing the loot fall and land is how a kill reads as having paid.
       // Nothing is lost by the door — `doExit` sweeps whatever is still lying
       // there into the pack on the way out.
       const owner = e.topDamageDealer ?? e.killer;
@@ -1692,6 +1693,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.bopcaKeyHandler = (e: KeyboardEvent) => {
       const taken =
         this.menus.constructionMenu.handleKey(e.key, e.repeat) ||
+        this.menus.itemQuantityPicker.handleKey(e.key) ||
         this.bopca?.handleKeyDown(e.key) === true;
       if (!taken) return;
       e.preventDefault();
@@ -2811,6 +2813,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.menus.mongoExplainer.handleClick(mx, my)) return;
     if (this.menus.craftExplainers.handleClick(mx, my)) return;
     if (this.menus.constructionMenu.handleClick(mx, my)) return;
+    if (this.menus.itemQuantityPicker.handleClick(mx, my)) return;
     if (this.menus.skillBookPrompt.isOpen) {
       const reader = this.menus.pendingSkillBookReader(this.inventoryPlayer());
       if (resolveSkillBookPrompt(this.menus.skillBookFlowHost(), reader, mx, my) !== null) {
@@ -3019,6 +3022,13 @@ export class BuildingInteriorScene extends GameplayScene {
       this.pauseMenu.handleMouseDown(mx, my, this.human, this.cat);
       return;
     }
+    // Ahead of the blocking-overlay return below, which the picker's own
+    // `isOpen` feeds into: without this branch a press on its step buttons
+    // would never reach them.
+    if (this.menus.itemQuantityPicker.isOpen) {
+      this.menus.itemQuantityPicker.handlePointerDown(mx, my);
+      return;
+    }
     if (this.isOverlayBlockingPointer) return;
     this.mobileHUD.handleMouseDown(mx, my, this.inventoryPlayer().inventory);
   }
@@ -3041,6 +3051,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseY = my;
     this._mouseDown = false;
     this.scrollableShop?.handlePointerUp();
+    this.menus.itemQuantityPicker.handlePointerUp();
     if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
@@ -3065,6 +3076,8 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   handleMouseLeave(): void {
     this._mouseDown = false;
+    this.scrollableShop?.handlePointerUp();
+    this.menus.itemQuantityPicker.handlePointerUp();
     clearButtonMouseState();
   }
 
@@ -4165,6 +4178,17 @@ export class BuildingInteriorScene extends GameplayScene {
           continue;
         }
         this.handleClick(x, y);
+        continue;
+      }
+
+      // The bag's Drop/Trade "how many?" prompt: not world-halting (it can open
+      // mid-shop, same as everywhere else it's used), so it falls outside the
+      // block above. Routed through `handleMouseDown` rather than straight to
+      // `handleClick` so a held step button starts repeating under a finger the
+      // same way it does under a held mouse button.
+      if (this.menus.itemQuantityPicker.isOpen) {
+        this.handleMouseDown(x, y);
+        this.mobileHUD.inventoryDragTouchId ??= touch.identifier;
         continue;
       }
 

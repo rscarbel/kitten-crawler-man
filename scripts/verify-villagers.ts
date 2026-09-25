@@ -410,18 +410,16 @@ function verifyConversation(): void {
   check(!system.conversation.isShowingChoices, 'and the answer is shown');
   system.conversation.advance();
   system.update(frame);
-  check(system.conversation.isShowingChoices, 'and the choices return after it');
-  check(
-    !system.conversation.choiceLabels.some((label) => label.includes('About the axe')),
-    'the picked topic does not come back this conversation',
-  );
-  check(system.conversation.choiceLabels.length === 4, 'the other three topics and Goodbye remain');
+  system.conversation.advance();
+  check(!system.isConversationOpen, 'the conversation ends after the answer');
+  check(oren.state !== 'talking', 'and Oren goes back to his day');
 
-  // Answering every remaining topic leaves nothing but Goodbye, and the
-  // conversation then ends on its own once that last answer is dismissed —
-  // no click on Goodbye required. Some answers span more than one page, so
-  // each round reads however many pages it takes to reach the next choice
-  // row, or the auto-close, whichever comes first.
+  // Asking about something else means talking to Oren again — each answer
+  // closes the whole conversation, and reopening brings every topic back,
+  // since a picked row is only dropped for the conversation that consumed
+  // it. Some answers span more than one page, so each round reads however
+  // many pages it takes to reach the next choice row, or the auto-close,
+  // whichever comes first.
   const readUntilChoicesOrClosed = (): void => {
     for (
       let guard = 0;
@@ -433,16 +431,23 @@ function verifyConversation(): void {
     }
   };
   for (let round = 0; round < 3; round++) {
-    check(system.conversation.handleKeyDown('1'), `picks the next topic (round ${round + 1})`);
+    check(system.tryTalk(talker), `talks again for round ${round + 1}`);
     readUntilChoicesOrClosed();
+    check(
+      system.conversation.choiceLabels.length === 5,
+      `every topic is back, Goodbye included (round ${round + 1})`,
+    );
+    check(system.conversation.handleKeyDown('1'), `picks a topic (round ${round + 1})`);
+    readUntilChoicesOrClosed();
+    check(
+      !system.isConversationOpen,
+      `the conversation ends after the answer (round ${round + 1})`,
+    );
   }
-  check(
-    !system.isConversationOpen,
-    'once every topic is answered, the conversation ends on its own, without picking Goodbye',
-  );
   check(oren.state !== 'talking', 'and Oren goes back to his day');
 
   check(system.tryTalk(talker), 'a fresh conversation reopens, topics restored');
+  readUntilChoicesOrClosed();
   check(
     system.conversation.choiceLabels.some((label) => label.includes('About the axe')),
     'the earlier conversation’s picks do not carry over to a new one',
@@ -460,6 +465,10 @@ function verifyConversation(): void {
   check(system.lastOpening?.rule === 'fallback', 'on a rotating line rather than the greeting');
   system.conversation.advance();
   system.update(frame);
+  // A choice row only accepts Space to leave once it has actually been drawn
+  // — the same tick that reveals it must not also be the tick that leaves it.
+  const goodbyeScratch = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
+  system.conversation.render(asGameContext(goodbyeScratch.getContext('2d')));
   system.conversation.advance();
   check(!system.isConversationOpen, 'Space on the choice row says goodbye');
 

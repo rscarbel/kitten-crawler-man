@@ -69,6 +69,24 @@ export class VillagerConversation {
   private pageIndex = 0;
   private choices: readonly ConversationChoice[] = [];
   private choiceRects: ChoiceRect[] = [];
+  /**
+   * Whether the current choice list has actually been drawn on screen. The
+   * tick that first puts a set of choices up (a root menu just refreshed
+   * after a grant, a submenu just opened) and the tick a fast reader's next
+   * press lands on can be the very same one — Space finishing the last line
+   * and Space leaving the row it opens onto are otherwise indistinguishable,
+   * so a reader who never slows down never sees "Shop" before the
+   * conversation picks "Goodbye" for them. Gating the exit on a render in
+   * between costs one frame, not a press: the row is still there next tick
+   * either way.
+   */
+  private choiceRowRendered = false;
+  /**
+   * Set when the pages showing are a topic's answer: the conversation ends on
+   * the last of them instead of bringing the choice row back up, so the press
+   * that finishes reading is the press that leaves.
+   */
+  private endOnLastPage: (() => void) | null = null;
 
   constructor(private readonly audio: AudioManager | null) {}
 
@@ -95,6 +113,8 @@ export class VillagerConversation {
     this.pages = [];
     this.pageIndex = 0;
     this.choices = [];
+    this.choiceRowRendered = false;
+    this.endOnLastPage = null;
   }
 
   /** Shows `pages` one after another; the choices return after the last. */
@@ -103,11 +123,27 @@ export class VillagerConversation {
     this.pages = pages;
     this.pageIndex = 0;
     this.phase = 'line';
+    this.choiceRowRendered = false;
+    this.endOnLastPage = null;
     this.showCurrentPage();
+  }
+
+  /**
+   * Makes the pages now showing the conversation's last word: once the final
+   * one is read, the next advance runs `end` rather than offering the choices.
+   */
+  endAfterPages(end: () => void): void {
+    if (this.phase !== 'line') return;
+    this.endOnLastPage = end;
   }
 
   setChoices(choices: readonly ConversationChoice[]): void {
     this.choices = choices;
+    // A fresh list — root topics refreshed after a grant, a submenu just
+    // opened — has never been drawn under this exact set of choices, so the
+    // guard in `advance()` needs a render of *this* list before Space can
+    // act on it, the same as the very first choice row of the conversation.
+    this.choiceRowRendered = false;
   }
 
   close(): void {
@@ -117,6 +153,8 @@ export class VillagerConversation {
     this.pages = [];
     this.choices = [];
     this.choiceRects = [];
+    this.choiceRowRendered = false;
+    this.endOnLastPage = null;
   }
 
   private showCurrentPage(): void {
@@ -149,7 +187,8 @@ export class VillagerConversation {
     const box = this.box;
     if (box === null || this.phase !== 'line') return;
     box.update();
-    if (this.onLastPage && box.isFullyRevealed() && this.hasSelectableChoice) {
+    const endsHere = this.endOnLastPage !== null;
+    if (this.onLastPage && box.isFullyRevealed() && this.hasSelectableChoice && !endsHere) {
       this.phase = 'choices';
     }
   }
@@ -165,6 +204,18 @@ export class VillagerConversation {
     if (!this.onLastPage) {
       this.pageIndex++;
       this.showCurrentPage();
+      return;
+    }
+    // The same press that reveals the choice row must not also leave it: a
+    // fast reader's next Space lands before `render()` has ever drawn the
+    // row they are about to be asked about, so this press turns into "look
+    // at what's here" rather than "leave" — the choice below `advance()`
+    // returns to is now visible, and it takes its own, later press to exit.
+    if (this.phase === 'choices' && !this.choiceRowRendered) return;
+    const end = this.endOnLastPage;
+    if (end !== null) {
+      playButtonSound(this.audio);
+      end();
       return;
     }
     const exit = this.choices.find((choice) => choice.isExit === true);
@@ -230,6 +281,7 @@ export class VillagerConversation {
     box.render(ctx);
     this.choiceRects = [];
     if (this.phase !== 'choices') return;
+    this.choiceRowRendered = true;
 
     // Bounded by the box's own width, and wrapped into rows, rather than laid
     // out at a fixed width: a phone canvas is under 400 px, and there the

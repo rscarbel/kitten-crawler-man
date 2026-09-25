@@ -1,13 +1,33 @@
 /**
- * Chopping and mining: the active crawler works the tree or rock in front of
- * them with the party's axe or pickaxe, and resources land in their own bag.
+ * Chopping and mining: a crawler works the tree or rock in front of them with
+ * the party's axe or pickaxe, and resources land in their own bag.
  *
  * One press starts a channel that carries on without the key held, the way a
- * lumberjack keeps swinging, until the crawler moves, fights, opens a menu,
- * gets hurt, fills their bag, or works the node out. Awards come on a fixed
- * interval counted in update ticks — never off the swing animation, so the
- * rate cannot depend on how the swing is drawn, and never off wall time, so a
- * frame that runs two updates cannot skip one.
+ * lumberjack keeps swinging, until the crawler moves, fights, gets hurt, fills
+ * their bag, or works the node out. Awards come on a fixed interval counted in
+ * update ticks — never off the swing animation, so the rate cannot depend on
+ * how the swing is drawn, and never off wall time, so a frame that runs two
+ * updates cannot skip one.
+ *
+ * A modal that halts the world — a level-up ceremony, a reward dialog —
+ * freezes the channel rather than ending it: no ticks, no swing, and the
+ * picture is already frozen because the halted world never advances the
+ * crawler's own animation. It resumes exactly where it left off once the
+ * modal closes, unless the node it was working ran out from under it in the
+ * meantime (a thrall on the same node still ticks through the modal). Only
+ * the pause menu and a real interruption — moving, fighting, taking a hit —
+ * end a channel outright.
+ *
+ * A channel outlives a character switch: the harvester keeps swinging as the
+ * companion, and `CompanionSystem` is what cuts it short — when the leash
+ * needs the companion's feet back, or a target hands its combat reaction the
+ * wheel — rather than this system reacting to who is currently controlled.
+ *
+ * Both crawlers can run a channel at once, on the same node or different
+ * ones — one channel per harvester, keyed by the crawler themselves, so
+ * starting or ending one never touches the other's. Two channels on the same
+ * node each spend it independently through the shared `NodeLedger`, so it
+ * empties at their combined rate without either one double-counting a swing.
  *
  * Works on any overworld tree or boulder: it needs no village, only a map.
  */
@@ -112,7 +132,8 @@ interface Channel {
 type ChannelEnd = 'moved' | 'interrupted' | 'depleted' | 'bagFull' | 'hostile';
 
 export class HarvestSystem {
-  private channel: Channel | null = null;
+  /** One channel per harvester — starting or ending a crawler's own never reaches the other's. */
+  private readonly channels = new Map<Crawler, Channel>();
   /**
    * Fractional yield carried between ticks, per crawler and per node kind: a
    * 1.5× axe alternates 1 and 2 across trees rather than losing the half each
@@ -122,14 +143,26 @@ export class HarvestSystem {
 
   constructor(private readonly deps: HarvestSystemDeps) {}
 
-  /** The node being worked, for the progress arc and the HUD, or null. */
-  get workedNode(): { readonly tileX: number; readonly tileY: number } | null {
-    return this.channel;
+  /**
+   * Every node currently being worked, for the progress arc and the HUD —
+   * de-duplicated by tile, so two crawlers on the same node draw one ring
+   * rather than two stacked on top of each other.
+   */
+  get workedNodes(): ReadonlyArray<{ readonly tileX: number; readonly tileY: number }> {
+    const seen = new Set<string>();
+    const nodes: Array<{ tileX: number; tileY: number }> = [];
+    for (const channel of this.channels.values()) {
+      const key = `${channel.tileX},${channel.tileY}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      nodes.push({ tileX: channel.tileX, tileY: channel.tileY });
+    }
+    return nodes;
   }
 
   /** Whether `crawler` is mid-channel. */
   isHarvesting(crawler: Crawler): boolean {
-    return this.channel?.harvester === crawler;
+    return this.channels.has(crawler);
   }
 
   /**
@@ -162,16 +195,14 @@ export class HarvestSystem {
       return true;
     }
 
-    const running = this.channel;
-    if (
-      running !== null &&
-      running.harvester === active &&
-      running.tileX === node.tileX &&
-      running.tileY === node.tileY
-    ) {
+    const running = this.channels.get(active);
+    if (running?.tileX === node.tileX && running.tileY === node.tileY) {
       return true;
     }
-    this.stop();
+    // Only this crawler's own channel, if any — never the other one's, so a
+    // crawler starting a fresh harvest can never cancel a companion working
+    // elsewhere.
+    this.stop(active);
     const level = active.craftSkills.getLevel('resourcing');
     if (this.deps.ledger.stateAt(node.tileX, node.tileY, level) === null) return false;
 
@@ -183,7 +214,7 @@ export class HarvestSystem {
       active.facingY = faceY / faceLength;
     }
 
-    this.channel = {
+    const channel: Channel = {
       harvester: active,
       kind: node.kind,
       tileX: node.tileX,
@@ -195,54 +226,77 @@ export class HarvestSystem {
       catSwingTicks: 0,
       animating: false,
     };
-    this.showWorking(this.channel);
+    this.channels.set(active, channel);
+    this.showWorking(channel);
     this.deps.noteActivity();
     return true;
   }
 
   /**
-   * Advances the channel one fixed tick. `menuOpen` is whether any overlay
-   * owns the screen: a menu ends the work rather than leaving it running
-   * behind the panel.
+   * Advances every running channel one fixed tick. `menuOpen` is whether any
+   * overlay owns the screen: a channel behind it pauses — no ticks, no swing
+   * — rather than ending, so dismissing the modal picks the swing straight
+   * back up. It still has to notice a node depleted out from under it while
+   * paused (a thrall on the same node keeps ticking through the modal), so
+   * that check runs even while frozen.
    */
   update(ctx: SystemContext, menuOpen: boolean): void {
-    const channel = this.channel;
-    if (channel === null) return;
-    const ended = this.interruption(channel, ctx, menuOpen);
-    if (ended !== null) {
-      this.end(ended);
-      return;
-    }
-    this.deps.noteActivity();
-    this.keepSwinging(channel);
+    if (this.channels.size === 0) return;
+    // Copied first: ending a channel mid-loop (depletion, a hit, ...) must
+    // not skip or re-visit another crawler's entry in the live map.
+    for (const channel of [...this.channels.values()]) {
+      if (menuOpen) {
+        if (harvestKindAt(this.deps.gameMap, channel.tileX, channel.tileY) !== channel.kind) {
+          this.end(channel, 'depleted');
+        }
+        continue;
+      }
+      const ended = this.interruption(channel, ctx);
+      if (ended !== null) {
+        this.end(channel, ended);
+        continue;
+      }
+      this.deps.noteActivity();
+      this.keepSwinging(channel);
 
-    const level = channel.harvester.craftSkills.getLevel('resourcing');
-    channel.ticks += 1;
-    const interval = harvestIntervalTicks(channel.kind, level);
-    if (channel.ticks < interval) return;
-    channel.ticks -= interval;
-    this.award(channel, level);
+      const level = channel.harvester.craftSkills.getLevel('resourcing');
+      channel.ticks += 1;
+      const interval = harvestIntervalTicks(channel.kind, level);
+      if (channel.ticks < interval) continue;
+      channel.ticks -= interval;
+      this.award(channel, level);
+    }
   }
 
-  /** Ends any channel quietly, for a scene teardown or a system that takes the crawler over. */
-  stop(): void {
-    const channel = this.channel;
-    if (channel === null) return;
-    this.channel = null;
+  /** Ends `crawler`'s channel quietly, if it has one, leaving any other harvester's untouched. */
+  stop(crawler: Crawler): void {
+    const channel = this.channels.get(crawler);
+    if (channel === undefined) return;
+    this.channels.delete(crawler);
     this.hideWorking(channel);
   }
 
-  private end(reason: ChannelEnd): void {
+  /** Ends every channel at once, for a scene teardown, the pause menu or a checkpoint restore. */
+  stopAll(): void {
+    for (const harvester of [...this.channels.keys()]) this.stop(harvester);
+  }
+
+  private end(channel: Channel, reason: ChannelEnd): void {
     if (reason === 'bagFull') {
       this.deps.announce('Your bag is full.');
       this.deps.audio?.play('error');
     }
-    this.stop();
+    this.stop(channel.harvester);
   }
 
-  private interruption(channel: Channel, ctx: SystemContext, menuOpen: boolean): ChannelEnd | null {
+  private interruption(channel: Channel, ctx: SystemContext): ChannelEnd | null {
     const harvester = channel.harvester;
-    if (ctx.active !== harvester || !harvester.isAlive || menuOpen) return 'interrupted';
+    // Deliberately not gated on `ctx.active === harvester`: a channel started
+    // by the controlled crawler must survive a switch to the other one, so
+    // the harvester who becomes the companion keeps working the same node.
+    // `CompanionSystem` is what ends it early when the leash or a fight needs
+    // that crawler's feet back.
+    if (!harvester.isAlive) return 'interrupted';
     const moved = Math.hypot(harvester.x - channel.startX, harvester.y - channel.startY);
     if (moved > CHANNEL_MOTION_TOLERANCE_PX) return 'moved';
     if (harvester.isSwinging) return 'interrupted';
@@ -259,7 +313,7 @@ export class HarvestSystem {
     const harvester = channel.harvester;
     const resource = resourceForHarvestKind(channel.kind);
     if (!harvester.inventory.hasRoomFor(resource)) {
-      this.end('bagFull');
+      this.end(channel, 'bagFull');
       return;
     }
     const toolKind = toolForHarvestKind(channel.kind);
@@ -270,7 +324,7 @@ export class HarvestSystem {
 
     const spent = this.deps.ledger.spend(channel.tileX, channel.tileY, level);
     if (!spent) {
-      this.end('depleted');
+      this.end(channel, 'depleted');
       return;
     }
     grantResource(harvester, resource, amount);
@@ -286,7 +340,7 @@ export class HarvestSystem {
     this.rollLuck(harvester, channel.kind, level);
 
     if (harvestKindAt(this.deps.gameMap, channel.tileX, channel.tileY) !== channel.kind) {
-      this.end('depleted');
+      this.end(channel, 'depleted');
     }
   }
 
@@ -397,7 +451,7 @@ export class HarvestSystem {
       onFrame: impacts.map((frame) => ({
         frame,
         run: (): void => {
-          if (this.channel === channel) this.strikeFeedback(channel);
+          if (this.channels.get(channel.harvester) === channel) this.strikeFeedback(channel);
         },
       })),
       onEnd: () => {

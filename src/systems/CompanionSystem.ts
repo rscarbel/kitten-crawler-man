@@ -35,6 +35,22 @@ export type MovementMode = 'follow' | 'anchored';
 export type CombatStance = 'aggressive' | 'passive';
 
 /**
+ * How the companion system asks whether the inactive crawler is mid-harvest,
+ * and ends that channel once the leash or a fight needs its feet back.
+ *
+ * A companion left harvesting through a character switch holds the node it
+ * was working rather than drifting back toward the follow drive — the
+ * gathering system is the one place that knows a channel is running, so the
+ * follower has to ask it rather than infer harvesting from anything of its
+ * own.
+ */
+export interface CompanionHarvestSource {
+  isHarvesting(crawler: HumanPlayer | CatPlayer): boolean;
+  /** Ends `crawler`'s own channel, never the other crawler's. */
+  stopHarvest(crawler: HumanPlayer | CatPlayer): void;
+}
+
+/**
  * Combat stance that survives scene transitions. Threaded by reference through
  * scene options (like club membership) so choosing "passive" persists when the
  * players duck into a building and come back — unlike the movement mode, which
@@ -253,6 +269,9 @@ export class CompanionSystem implements GameSystem {
   >();
 
   private readonly hazardSources: GroundHazardSource[] = [];
+
+  /** The gathering system, so a harvesting companion can be left alone or cut off. See {@link CompanionHarvestSource}. */
+  private harvestSource: CompanionHarvestSource | null = null;
 
   constructor(
     private gameMap: GameMap,
@@ -533,7 +552,24 @@ export class CompanionSystem implements GameSystem {
     this.avoidGrid = mobGrid;
 
     const chaseBlocked = this.isLeashStretched(human, cat, ctx.bossRoom);
+
+    // A harvesting companion is left standing at its node rather than driven
+    // by the follow logic below, unless the leash needs its feet back or the
+    // target this same tick's `updateAutoAI` hands it means the existing
+    // combat reaction has to take over. Either way the channel is cut before
+    // the follower runs, so its walk to the leash or the fight starts on the
+    // same frame rather than one behind.
+    const wasHarvesting = this.harvestSource?.isHarvesting(companion) === true;
+    if (wasHarvesting && chaseBlocked) this.harvestSource?.stopHarvest(companion);
+
     this.updateAutoAI(human, cat, mobGrid, ctx.bossRoom, chaseBlocked);
+
+    if (wasHarvesting && !chaseBlocked) {
+      const engaged = (human.isActive ? cat.autoTarget : human.autoTarget) !== null;
+      if (!engaged) return;
+      this.harvestSource?.stopHarvest(companion);
+    }
+
     this.updateFollower(human, cat, mobGrid, chaseBlocked);
   }
 
@@ -1062,6 +1098,15 @@ export class CompanionSystem implements GameSystem {
   registerHazardSource(source: GroundHazardSource): void {
     if (this.hazardSources.includes(source)) return;
     this.hazardSources.push(source);
+  }
+
+  /**
+   * Wires the gathering system in, so a companion working a tree or a
+   * boulder holds still there instead of the follow drive walking it off the
+   * node the moment control switches away from it.
+   */
+  registerHarvestSource(source: CompanionHarvestSource): void {
+    this.harvestSource = source;
   }
 
   /** Where a hazard source says a body at these coordinates should go, if any. */
