@@ -133,6 +133,10 @@ export interface BriarHollowKitDeps {
     y: number,
     items: ReadonlyArray<{ id: ItemId; quantity: number }>,
   ) => void;
+  /** A quest coin reward was just granted — for a fly-to-HUD effect. */
+  readonly onCoinsGranted?: (coins: number, worldX: number, worldY: number) => void;
+  /** A quest item reward was just granted straight into the bag (not dropped) — for a fly-to-HUD effect. */
+  readonly onItemGranted?: (id: ItemId, quantity: number, worldX: number, worldY: number) => void;
 }
 
 export class BriarHollowKit {
@@ -286,6 +290,9 @@ export class BriarHollowKit {
             announce: (message) => deps.menus.announce(message),
             groundPickups: deps.groundPickups,
             dropItems: (x, y, items) => deps.dropItems?.(x, y, items),
+            onCoinsGranted: (coins, worldX, worldY) => deps.onCoinsGranted?.(coins, worldX, worldY),
+            onItemGranted: (id, quantity, worldX, worldY) =>
+              deps.onItemGranted?.(id, quantity, worldX, worldY),
           });
     const soldiers = this.soldiers;
     this.assault =

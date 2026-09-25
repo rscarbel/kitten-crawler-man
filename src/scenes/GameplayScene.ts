@@ -26,6 +26,7 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import type { SystemContext } from '../systems/GameSystem';
+import type { RewardFlySystem } from '../systems/RewardFlySystem';
 
 const CAMERA_CENTER_OFFSET_MULTIPLIER = 0.5;
 const HUD_SKILL_BADGE_GAP = 4;
@@ -53,6 +54,8 @@ export abstract class GameplayScene extends Scene {
   /** Each concrete scene owns its own instance — it has its own mob roster to check. */
   protected abstract readonly skillPointReminder: SkillPointReminderSystem;
   protected abstract readonly audio: AudioManager | null;
+  /** Coins/items flying to this scene's own HUD — each concrete scene owns its own instance. */
+  protected abstract readonly rewardFly: RewardFlySystem;
 
   constructor(
     protected readonly input: InputManager,
@@ -143,6 +146,10 @@ export abstract class GameplayScene extends Scene {
       this._hudCollapsed,
       this.skillPointReminderActive,
       this.skillPointsSuppressed,
+      {
+        pendingAmount: this.rewardFly.pendingCoinAmount(),
+        pulse: this.rewardFly.coinCounterPulse(),
+      },
     );
     this._hudToggleRect = hud.toggleRect;
     this._hudRect = hud.hudRect;

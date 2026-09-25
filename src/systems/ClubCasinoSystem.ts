@@ -295,12 +295,53 @@ export class ClubCasinoSystem {
   /** Shown once per club visit, and again on demand from the panel's button. */
   private hasSeenRules = false;
 
+  /**
+   * Fired once, when the panel closes, with the whole session's net winnings
+   * and the tray's current screen position — never per hand. The panel stays
+   * open under its own dim overlay for many hands in a row, and the in-panel
+   * chip-to-tray sweep is already that hand's feedback; a coin landing on the
+   * HUD counter behind the overlay every hand would be a second, half-hidden
+   * effect nobody can actually watch land. One fly for the whole visit, once
+   * the overlay is gone, is the one a player can see.
+   */
+  onWinnings: ((coins: number, screenX: number, screenY: number) => void) | null = null;
+
+  /** Summed net winnings across every settled hand since the panel opened, flown as one on close. */
+  private pendingSessionWinnings = 0;
+
   constructor(
     private readonly audio: AudioManager | null,
     private readonly membership: ClubMembership,
   ) {
     this.table = new BlackjackTable(membership.casinoShoe);
     this.rules = new BlackjackRulesOverlay(audio);
+    this.table.onWinnings = (winnings) => {
+      if (winnings > 0) this.pendingSessionWinnings += winnings;
+    };
+  }
+
+  /**
+   * The chip tray's current on-screen centre, in real canvas pixels rather
+   * than the panel's design-sized space — `this.fit` is whatever the last
+   * `renderPanel` call measured, which is always at least one frame old by
+   * the time a hand can settle.
+   */
+  private trayScreenPosition(): { x: number; y: number } {
+    const layout = computeCasinoLayout(viewportWidth(), viewportHeight(), this.fit.scale);
+    const trayCentre = rectCentre(layout.chipTray);
+    return {
+      x: this.fit.pivotX + (trayCentre.x - this.fit.pivotX) * this.fit.scale,
+      y: this.fit.pivotY + (trayCentre.y - this.fit.pivotY) * this.fit.scale,
+    };
+  }
+
+  /** Flies the whole session's accumulated winnings as one, then clears the tally. Safe to call on a session with nothing to fly. */
+  private flySessionWinnings(): void {
+    const winnings = this.pendingSessionWinnings;
+    this.pendingSessionWinnings = 0;
+    if (winnings <= 0) return;
+    const { x, y } = this.trayScreenPosition();
+    this.onWinnings?.(winnings, x, y);
   }
 
   /** Total coins staked since entering the club — the free-security perk hook. */
@@ -337,6 +378,8 @@ export class ClubCasinoSystem {
     this.open = true;
     this.lastFrameStamp = null;
     this.displayedCoins = player.coins;
+    // A fresh tally for a fresh sit-down — see `flySessionWinnings`.
+    this.pendingSessionWinnings = 0;
     this.table.sitDown(player);
     // Sitting down settles any leftover from the last session; those events
     // belong to a hand the player is no longer looking at.
@@ -368,6 +411,13 @@ export class ClubCasinoSystem {
     this.table.drainEvents();
     this.rules.dismiss();
     this.open = false;
+    // The one fly for the whole visit — see `flySessionWinnings`. Reached both
+    // from the player actually leaving the table and from a scene teardown
+    // that force-closes every panel underneath it (`DesperadoClubSystem.closeAll`),
+    // so a building exit with the panel still open still tallies correctly;
+    // whether that flight is ever seen depends only on whether the scene it
+    // was queued in is still around to draw it.
+    this.flySessionWinnings();
   }
 
   private persistShoe(): void {

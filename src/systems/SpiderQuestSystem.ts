@@ -68,6 +68,7 @@ import { LIFE_MACHINE_FIGURE, lifeMachineStateName } from '../sprites/art/lifeMa
 import { figureFrameCount } from '../sprites/figure/figureDef';
 import { drawFigureCached } from '../sprites/figure/figureFrameCache';
 import { spawnHardModeBossHealer } from '../levels/fairySpawner';
+import type { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { level2 } from '../levels/level2';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -561,6 +562,19 @@ export class SpiderQuestSystem implements GameSystem {
   completeOverlayTimer = 0;
   /** Frames until the quest-complete banner opens; the quest itself is already complete. */
   completeOverlayDelay = 0;
+  /**
+   * What the completion banner reads off, set by `DungeonScene`'s
+   * `questCompleted` handler right after it calls `awardXp` for each crawler —
+   * the amount that actually landed on the XP bar, not the flat award.
+   */
+  private humanXpApplied = 0;
+  private catXpApplied = 0;
+
+  /** Records what each crawler actually gained, for the completion banner. */
+  setAwardedXp(humanXpApplied: number, catXpApplied: number): void {
+    this.humanXpApplied = humanXpApplied;
+    this.catXpApplied = catXpApplied;
+  }
 
   // Boss intro trigger — set when the cutscene ends and the fight begins
   bossFightStartPending = false;
@@ -615,6 +629,8 @@ export class SpiderQuestSystem implements GameSystem {
 
   // Boss
   private _grotesqueSpider: GrotesqueSpider | null = null;
+  /** The spider's hard-mode healer, so it can be confined to the lab independently of the fight phase. */
+  private _spiderHealer: HealingFairy | null = null;
 
   // Set when hacking completes — machines go offline and switch to red lamps
   private _hackingDone = false;
@@ -758,6 +774,21 @@ export class SpiderQuestSystem implements GameSystem {
       this.phase === 'hacking_failed' ||
       this.phase === 'keyboard_hero_tutorial'
     );
+  }
+
+  /**
+   * The completion banner, which a press dismisses early. It rides over live
+   * play rather than pausing it, so it is not part of `isDialogOpen`.
+   */
+  get isOutcomeOverlayShowing(): boolean {
+    return this.completeOverlayTimer > 0;
+  }
+
+  /** Space/tap on the banner: dismiss early rather than wait out the timer. */
+  advanceOutcomeOverlay(): boolean {
+    if (this.completeOverlayTimer <= 0) return false;
+    this.completeOverlayTimer = 0;
+    return true;
   }
 
   get isDungeonPaused(): boolean {
@@ -1127,10 +1158,7 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   handleClick(mx: number, my: number, eventTimeStampMs?: number): boolean {
-    if (this.completeOverlayTimer > 0) {
-      this.completeOverlayTimer = 0;
-      return true;
-    }
+    if (this.advanceOutcomeOverlay()) return true;
 
     if (this.phase === 'scientist_dialog') {
       for (const btn of this.dialogButtons) {
@@ -1437,6 +1465,7 @@ export class SpiderQuestSystem implements GameSystem {
    * and re-locking when a player re-enters after an abort.
    */
   applyRoomLock(human: HumanPlayer, cat: CatPlayer): void {
+    this._confineSpiderHealer();
     if (this.phase !== 'boss_fight') return;
     if (this.roomData === null) return;
     const spider = this._grotesqueSpider;
@@ -1466,12 +1495,14 @@ export class SpiderQuestSystem implements GameSystem {
           human.isKnockedOut = false;
           human.knockedOutFrames = 0;
           human.reviveProgress = 0;
+          this.bus.emit('crawlerRevived', { player: human });
         }
         if (!cat.isAlive && catInRoom) {
           cat.hp = Math.max(1, Math.floor(cat.maxHp * SPIDER_LAB_ENTRY_HP_THRESHOLD));
           cat.isKnockedOut = false;
           cat.knockedOutFrames = 0;
           cat.reviveProgress = 0;
+          this.bus.emit('crawlerRevived', { player: cat });
         }
       }
       return;
@@ -1753,6 +1784,32 @@ export class SpiderQuestSystem implements GameSystem {
     const tx = Math.floor((entity.x + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
     const ty = Math.floor((entity.y + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
     return tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h;
+  }
+
+  /**
+   * Confines the spider's own healer to the lab, independently of the fight
+   * phase and whether the spider is still alive: a healer belongs to the room
+   * it was spawned in for as long as it lives there, not only while the fight
+   * that spawned it is still open. Called from the top of {@link applyRoomLock}
+   * so it keeps running past the early returns that stop clamping the players
+   * once the spider is dead.
+   */
+  private _confineSpiderHealer(): void {
+    const healer = this._spiderHealer;
+    const room = this.roomData;
+    if (healer === null || room === null || !healer.isAlive || !healer.respectsConfinement) return;
+    // Unconditional, not gated on already standing inside: the lab is the only
+    // room this healer ever belongs to, so a shove that carried it just past
+    // the strict bounds is snapped straight back rather than let go.
+    const b = room.bounds;
+    this._clampToRoom(healer, b);
+    healer.confineTo({
+      containsPoint: (x, y) =>
+        x >= b.x * TILE_SIZE &&
+        x <= (b.x + b.w - 1) * TILE_SIZE &&
+        y >= b.y * TILE_SIZE &&
+        y <= (b.y + b.h - 1) * TILE_SIZE,
+    });
   }
 
   private _clampToRoom(
@@ -2227,7 +2284,12 @@ export class SpiderQuestSystem implements GameSystem {
       spider.setMap(this.gameMap);
       this._grotesqueSpider = spider;
       this.addMob(spider);
-      spawnHardModeBossHealer(spider, this.gameMap, this.addMob, level2.floorNumber);
+      this._spiderHealer = spawnHardModeBossHealer(
+        spider,
+        this.gameMap,
+        this.addMob,
+        level2.floorNumber,
+      );
       // The fight starts the moment this cutscene ends, and her locomotion
       // cells are the largest in the game; warming them here spends the
       // cutscene's frames on what the first seconds of the fight will blit.
@@ -3239,15 +3301,19 @@ export class SpiderQuestSystem implements GameSystem {
       align: 'center',
       alpha,
     });
-    drawText(ctx, `+${SPIDER_QUEST_COMPLETION_XP.toLocaleString()} EXP (each)`, {
-      x: cw / 2,
-      y: ch / 2 + OVERLAY_REWARD_1_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
-      size: OVERLAY_REWARD_SIZE,
-      color: '#e2e8f0',
-      align: 'center',
-      alpha,
-    });
-    drawText(ctx, 'Click to dismiss', {
+    drawText(
+      ctx,
+      `Carl +${this.humanXpApplied.toLocaleString()} EXP · Donut +${this.catXpApplied.toLocaleString()} EXP`,
+      {
+        x: cw / 2,
+        y: ch / 2 + OVERLAY_REWARD_1_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
+        size: OVERLAY_REWARD_SIZE,
+        color: '#e2e8f0',
+        align: 'center',
+        alpha,
+      },
+    );
+    drawText(ctx, 'Space or click to dismiss', {
       x: cw / 2,
       y: ch / 2 + OVERLAY_DISMISS_Y_OFFSET - OVERLAY_DISMISS_ASCENT,
       size: OVERLAY_DISMISS_SIZE,

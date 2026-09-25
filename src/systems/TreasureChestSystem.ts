@@ -9,6 +9,10 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { cloneLootDrop } from '../core/lootDrop';
 import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
+import { countsTowardRoomClear } from '../creatures/roomClear';
+
+/** Half a tile, in pixels — how far a mob's top-left position sits from its centre. */
+const HALF_TILE_PX = TILE_SIZE / 2;
 
 export type ChestType = 'wooden' | 'silver';
 
@@ -323,15 +327,14 @@ export class TreasureChestSystem {
         const roomMaxX = (gb.x + gb.w) * TILE_SIZE;
         const roomMaxY = (gb.y + gb.h) * TILE_SIZE;
 
-        const liveMobsInRoom = mobs.filter(
-          (m) =>
-            !m.justDied &&
-            m.hp > 0 &&
-            m.x >= roomMinX &&
-            m.x < roomMaxX &&
-            m.y >= roomMinY &&
-            m.y < roomMaxY,
-        );
+        const liveMobsInRoom = mobs.filter((m) => {
+          if (!countsTowardRoomClear(m)) return false;
+          const centreX = m.x + HALF_TILE_PX;
+          const centreY = m.y + HALF_TILE_PX;
+          return (
+            centreX >= roomMinX && centreX < roomMaxX && centreY >= roomMinY && centreY < roomMaxY
+          );
+        });
 
         if (liveMobsInRoom.length > 0) {
           chest.hadMobs = true;

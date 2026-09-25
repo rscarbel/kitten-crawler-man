@@ -32,6 +32,7 @@ import { isWalkableTileType } from './walkability';
 import { mordecaiAndBedTiles } from './safeRoomFixtures';
 import type { ProgressionDef } from '../levels/types';
 import {
+  ARENA_ANTECHAMBER_MIN_DEPTH,
   ARENA_ANTECHAMBER_MIN_WIDTH,
   ARENA_CONCOURSE_REACH,
   ARENA_DOOR_COLUMN_OFFSETS,
@@ -67,6 +68,22 @@ import {
   type GauntletPlan,
   type PlannedCorridor,
 } from './gauntletLayout';
+import {
+  validateProgression,
+  distanceToRect,
+  SCATTER_SAFE_ROOM_SEPARATION,
+  ARENA_BOSS_TYPE,
+  STAIRWELL_MIN_SEPARATION,
+  STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT,
+  STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT,
+  BEYOND_STAIRWELL_MIN_SEPARATION,
+  buildRoomGraph,
+  nearestHopDistance,
+  OUTSKIRTS_SAFE_ROOM_MIN_HOPS,
+  OUTSKIRTS_SAFE_ROOM_MAX_HOPS,
+  type InvariantFailure,
+  type ProgressionExpectations,
+} from './progressionValidation';
 import { planSpine, type SpinePlan, type SpinePocketRequest } from './spineLayout';
 import { layOutSpiderLab } from './spiderLabLayout';
 import { registerSpiderLabFloorPlan } from './tiles/bossRooms/labFloorPlan';
@@ -77,18 +94,6 @@ import {
   type RoomDoorway,
   type RoomWall,
 } from './roomDoorways';
-import {
-  validateProgression,
-  distanceToRect,
-  SCATTER_SAFE_ROOM_SEPARATION,
-  ARENA_BOSS_TYPE,
-  STAIRWELL_MIN_SEPARATION,
-  STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT,
-  STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT,
-  BEYOND_STAIRWELL_MIN_SEPARATION,
-  type InvariantFailure,
-  type ProgressionExpectations,
-} from './progressionValidation';
 import { worldRandom } from '../core/WorldRandom';
 
 /**
@@ -109,6 +114,13 @@ type Room = {
   guardsBossType?: string;
   /** Set on an exit safe room: the gauntlet boss whose room's only onward exit leads here. */
   followsBossType?: string;
+  /**
+   * Set on a mandatory safe-access pocket seated off a gauntlet branch or the
+   * spine chain. Distinguishes those from the free region's own scatter safe
+   * rooms, which otherwise carry the same `guardsBossType`/`followsBossType`
+   * of `undefined` and would be indistinguishable by any other field.
+   */
+  isSafeAccessPocket?: boolean;
 };
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -198,6 +210,15 @@ export interface SafeRoomData {
    * apart from gateway and scatter rooms without relying on placement order.
    */
   followsBossType?: string;
+  /**
+   * Set when this safe room is a mandatory safe-access pocket seated off a
+   * gauntlet branch or the spine chain, rather than one of the free region's
+   * own scatter safe rooms. Both carry `guardsBossType`/`followsBossType` of
+   * `undefined`, so this is the only field that tells them apart — needed by
+   * the outskirts hop-spacing invariant, which must not judge a pocket's
+   * spacing along its own mandatory route by the free region's rule.
+   */
+  isSafeAccessPocket?: boolean;
 }
 
 /**
@@ -237,6 +258,14 @@ export interface ProgressionLayoutData {
   gauntletRoomBounds: Rect[][];
   /** Rooms per branch, per gauntlet, excluding the entry and gateway rooms. */
   branchRoomCounts: number[][];
+  /**
+   * Each branch's own room sequence in walking order, per gauntlet, excluding
+   * the branch's fan point and gateway safe room — the same span
+   * `safeAccessPocketIndices` seats mandatory safe-access pockets against.
+   * Lets the validator walk a branch in the order the run-limit rule was
+   * applied to, rather than reconstruct it from the flat `gauntletRoomBounds`.
+   */
+  gauntletBranchChains: Rect[][][];
   /** Whole-map attempts the accepted layout took, including the accepted one. */
   attempts: number;
   /**
@@ -503,6 +532,12 @@ const TREASURE_ROOM_RATIO = 0.05;
 // Hallway spawn point density: count ≈ HALLWAY_SPAWNS_SCALE * (size / SIZE_SCALE_BASE)²
 const HALLWAY_SPAWNS_SCALE = 10;
 const HALLWAY_SPAWN_MIN_GAP = 3;
+/**
+ * Tiles of clearance kept around the start room's own bounds for hallway
+ * spawns, on every floor. Exported so a headless check can assert the same
+ * boundary the generator enforces rather than restating it.
+ */
+export const START_ROOM_HALLWAY_SPAWN_MARGIN_TILES = 4;
 
 // Arena placement
 const ARENA_PLACEMENT_ATTEMPTS = 800;
@@ -531,7 +566,7 @@ const ANTECHAMBER_W_MIN = ARENA_ANTECHAMBER_MIN_WIDTH;
 /** Slack above the floor, so every antechamber is not the same shape. */
 const ANTECHAMBER_WIDTH_SLACK = 3;
 const ANTECHAMBER_W_MAX = ARENA_ANTECHAMBER_MIN_WIDTH + ANTECHAMBER_WIDTH_SLACK;
-const ANTECHAMBER_H_MIN = 8;
+const ANTECHAMBER_H_MIN = ARENA_ANTECHAMBER_MIN_DEPTH;
 const ANTECHAMBER_H_MAX = 12;
 
 /**
@@ -1474,6 +1509,7 @@ function buildDungeon(
     role: RoomRole,
     guardsBossType?: string,
     followsBossType?: string,
+    isSafeAccessPocket?: boolean,
   ): number => {
     rooms.push({
       x: rect.x,
@@ -1484,6 +1520,7 @@ function buildDungeon(
       role,
       guardsBossType,
       followsBossType,
+      isSafeAccessPocket,
     });
     carveRoomFloor(rect, floor);
     return rooms.length - 1;
@@ -1531,6 +1568,7 @@ function buildDungeon(
 
     const gauntletRoomBounds: Rect[][] = [];
     const branchRoomCounts: number[][] = [];
+    const gauntletBranchChains: Rect[][][] = [];
     let entryRoom = startRoom;
     let previousHeading: number | null = null;
 
@@ -1571,6 +1609,7 @@ function buildDungeon(
                 chokeSlot === undefined
                   ? undefined
                   : { w: QUEST_ROOM_W, h: QUEST_ROOM_H, slot: chokeSlot },
+              pocketSize: () => ({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) }),
               pickCorridorKind,
             });
             if (plan === null) segments.rollback(snapshot);
@@ -1595,6 +1634,9 @@ function buildDungeon(
       for (const rect of plan.chainRooms) {
         addRoom(rect, randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(rect))]), 'chain');
       }
+      for (const rect of plan.pockets) {
+        addRoom(rect, SAFE_ROOM_FLOOR, 'safe', undefined, undefined, true);
+      }
       const chokeRooms: Rect[] = [];
       if (plan.chokeRoom !== null && plan.chokeSlot !== null) {
         addRoom(plan.chokeRoom, FloorTypeValue.tile_floor, 'quest');
@@ -1617,8 +1659,10 @@ function buildDungeon(
         plan.exitSafeRoom,
         ...chokeRooms,
         ...plan.chainRooms,
+        ...plan.pockets,
       ]);
       branchRoomCounts.push(plan.branchRoomCounts);
+      gauntletBranchChains.push(plan.branchChains);
       entryRoom = plan.exitSafeRoom;
       previousHeading = plan.heading;
     }
@@ -1742,18 +1786,12 @@ function buildDungeon(
       return { rects, corridors };
     };
 
-    // Dead ends hanging off the chain: the floor's scatter safe rooms, and a few
-    // ordinary rooms for the treasure-room pass to draw from.
+    // A few ordinary dead ends hanging off the chain for the treasure-room pass
+    // to draw from. The chain's mandatory safe-access pockets are seated by
+    // `planSpine` itself, sized through `safeRoomSize` below.
     const spinePockets: SpinePocketRequest[] = [];
-    for (let index = 0; index < progression.scatterSafeRooms; index++) {
-      spinePockets.push({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H), role: 'safe' });
-    }
     for (let index = 0; index < SPINE_TREASURE_POCKETS; index++) {
-      spinePockets.push({
-        w: randomInt(MIN_W, MAX_W),
-        h: randomInt(MIN_H, MAX_H),
-        role: 'regular',
-      });
+      spinePockets.push({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) });
     }
 
     // On a spine floor the arena and the spine are planned together, because the
@@ -1803,6 +1841,7 @@ function buildDungeon(
             questRoom: { w: QUEST_ROOM_W, h: QUEST_ROOM_H },
             labRoom: hasSpiderLab ? { w: SPIDER_LAB_W, h: SPIDER_LAB_H } : null,
             pockets: spinePockets,
+            safeRoomSize: () => ({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) }),
             safeRoomKeepAway: [
               ...rooms
                 .filter((room) => room.role === 'safe')
@@ -1976,8 +2015,11 @@ function buildDungeon(
       }
       for (const pocket of spinePlan.pockets) {
         const centre = rectCentre(pocket.rect);
-        if (pocket.role === 'safe') addRoom(pocket.rect, SAFE_ROOM_FLOOR, 'safe');
-        else addRoom(pocket.rect, randomFromArray(ZONE_FLOORS[zoneOf(centre)]), 'regular');
+        if (pocket.role === 'safe') {
+          addRoom(pocket.rect, SAFE_ROOM_FLOOR, 'safe', undefined, undefined, true);
+        } else {
+          addRoom(pocket.rect, randomFromArray(ZONE_FLOORS[zoneOf(centre)]), 'regular');
+        }
       }
       for (const corridor of spinePlan.corridors) carvePlannedCorridor(corridor);
     }
@@ -2044,30 +2086,10 @@ function buildDungeon(
         if (placedLab === null) return reject('spider lab');
       }
 
-      const gatewaySafeCentres = rooms
-        .filter((r) => r.role === 'safe')
-        .map((r) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) }));
-      const scatterSafeCentres: Point[] = [];
-      for (let i = 0; i < progression.scatterSafeRooms; i++) {
-        const placedSafe = placeFreeRoom(
-          randomInt(MIN_W, MAX_W),
-          randomInt(MIN_H, MAX_H),
-          'safe',
-          () => SAFE_ROOM_FLOOR,
-          (centre) =>
-            [...gatewaySafeCentres, ...scatterSafeCentres].every(
-              (other) =>
-                Math.hypot(centre.x - other.x, centre.y - other.y) >= SCATTER_SAFE_ROOM_SEPARATION,
-            ),
-        );
-        if (placedSafe === null) return reject('scatter safe room');
-        const placedRoom = rooms[placedSafe];
-        scatterSafeCentres.push({
-          x: Math.floor(placedRoom.x + placedRoom.w / 2),
-          y: Math.floor(placedRoom.y + placedRoom.h / 2),
-        });
-      }
-
+      // The outskirts' own safe rooms (floor 1 only) are promoted out of this
+      // fill once the free region — loop shortcuts included — is finished, so
+      // they can be chosen against the hop distances the player actually walks
+      // rather than against a guess made before the last shortcut was cut.
       fillWithRegularRooms(maxRooms);
       if (freeRegularRooms < MIN_FREE_REGULAR_ROOMS) return reject('free region too thin');
 
@@ -2179,12 +2201,48 @@ function buildDungeon(
         if (dist < EXTRA_LOOP_MIN_DIST || dist > EXTRA_LOOP_MAX_DIST) continue;
         if (tryFreeShortcut(firstIdx, secondIdx)) extraAdded++;
       }
+
+      // ── Outskirts safe rooms (floor 1 only) ────────────────────────────────
+      //
+      // Rather than seating dedicated safe-shaped rooms up front — before the
+      // loop shortcuts above could shorten a hop count they'd have to guess at
+      // — ordinary free rooms already carved are promoted to safe once the
+      // region's graph is final, chosen so every outskirts safe room's nearest
+      // other one sits within the required hop band, spreading outward from
+      // the last gateway's own exit safe room rather than clustering near it.
+      if (progression.outskirtsSafeRoomHops === true) {
+        const outskirtsGraph = buildRoomGraph(grid, rooms.map(rectOfRoom));
+        const outskirtsSafeIndices = new Set<number>([lastGauntletExitIndex]);
+        const candidates = new Set<number>(freeRegularIndices);
+        for (;;) {
+          let best: { index: number; hops: number } | null = null;
+          for (const candidateIndex of candidates) {
+            const hops = nearestHopDistance(outskirtsGraph, candidateIndex, outskirtsSafeIndices);
+            if (hops < OUTSKIRTS_SAFE_ROOM_MIN_HOPS || hops > OUTSKIRTS_SAFE_ROOM_MAX_HOPS)
+              continue;
+            if (best === null || hops > best.hops) best = { index: candidateIndex, hops };
+          }
+          if (best === null) break;
+          outskirtsSafeIndices.add(best.index);
+          candidates.delete(best.index);
+        }
+        outskirtsSafeIndices.delete(lastGauntletExitIndex);
+        if (outskirtsSafeIndices.size < (progression.scatterSafeRooms ?? 0)) {
+          return reject('outskirts safe room hops');
+        }
+        for (const index of outskirtsSafeIndices) {
+          rooms[index].role = 'safe';
+          rooms[index].floor = SAFE_ROOM_FLOOR;
+          carveRoomFloor(rectOfRoom(rooms[index]), SAFE_ROOM_FLOOR);
+        }
+      }
     }
 
     progressionLayout = {
       startRoom,
       gauntletRoomBounds,
       branchRoomCounts,
+      gauntletBranchChains,
       roomBounds: rooms.map(rectOfRoom),
       attempts: mapAttempt,
       // Filled in once stairwells have been sited, further down the pipeline.
@@ -2485,6 +2543,7 @@ function buildDungeon(
       centre: { x: Math.floor(sr.x + sr.w / 2), y: Math.floor(sr.y + sr.h / 2) },
       guardsBossType: sr.guardsBossType,
       followsBossType: sr.followsBossType,
+      isSafeAccessPocket: sr.isSafeAccessPocket,
     }));
   antechamberSafeRoom = safeRooms.find((r) => r.guardsBossType === ARENA_BOSS_TYPE) ?? null;
 
@@ -2852,6 +2911,76 @@ function buildDungeon(
 
   // ── Room decorations ──────────────────────────────────────────────────────
 
+  /** The four tile-adjacent steps, used only to test a room's own floor connectivity. */
+  const ROOM_FLOOD_STEPS: ReadonlyArray<Point> = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+  ];
+
+  /**
+   * Margin a room's own floor-connectivity test is padded by, so a corridor's
+   * approach tile just outside the room's wall is part of what the test proves
+   * stays connected — a corridor is one tile wide and its doorway can funnel
+   * straight into a room's centre with no lateral spread, so testing the room's
+   * interior alone would miss a decoration that seals that sole approach.
+   */
+  const ROOM_CONNECTIVITY_MARGIN = 2;
+
+  /**
+   * Whether making `(blockedX, blockedY)` solid would cut apart the walkable
+   * tiles around a room — its own floor, plus a short reach past each wall for
+   * the corridors that approach it — judged by 4-connectivity.
+   *
+   * A room's doorways, and the corridor tiles just outside them, are all
+   * ordinary walkable tiles this test walks, so a region that stays one piece
+   * without the blocked tile keeps every doorway reachable from every other —
+   * which is what a decoration must never cost a room whose only route in and
+   * out threads through it, on the smallest chain rooms the layout ever seats.
+   */
+  const blockingTileWouldSplitRoom = (
+    room: { x: number; y: number; w: number; h: number },
+    blockedX: number,
+    blockedY: number,
+  ): boolean => {
+    const minX = Math.max(0, room.x - ROOM_CONNECTIVITY_MARGIN);
+    const maxX = Math.min(grid[0].length - 1, room.x + room.w - 1 + ROOM_CONNECTIVITY_MARGIN);
+    const minY = Math.max(0, room.y - ROOM_CONNECTIVITY_MARGIN);
+    const maxY = Math.min(grid.length - 1, room.y + room.h - 1 + ROOM_CONNECTIVITY_MARGIN);
+    const inRegion = (x: number, y: number): boolean =>
+      x >= minX && x <= maxX && y >= minY && y <= maxY;
+
+    const floorTiles: Point[] = [];
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        if (x === blockedX && y === blockedY) continue;
+        if (isWalkableTileType(grid[y][x])) floorTiles.push({ x, y });
+      }
+    }
+    if (floorTiles.length === 0) return false;
+    const seen = new Set<number>();
+    const start = floorTiles[0];
+    const stack: Point[] = [start];
+    seen.add(tileCoordKey(start.x, start.y));
+    while (stack.length > 0) {
+      const tile = stack.pop();
+      if (tile === undefined) continue;
+      for (const step of ROOM_FLOOD_STEPS) {
+        const nx = tile.x + step.x;
+        const ny = tile.y + step.y;
+        if (nx === blockedX && ny === blockedY) continue;
+        if (!inRegion(nx, ny)) continue;
+        const key = tileCoordKey(nx, ny);
+        if (seen.has(key)) continue;
+        if (!isWalkableTileType(grid[ny][nx])) continue;
+        seen.add(key);
+        stack.push({ x: nx, y: ny });
+      }
+    }
+    return seen.size < floorTiles.length;
+  };
+
   for (let ordinal = 0; ordinal < populatedRoomIndices.length; ordinal++) {
     const i = populatedRoomIndices[ordinal];
     const r = rooms[i];
@@ -2948,8 +3077,13 @@ function buildDungeon(
     if (cycle === DECO_CYCLE_BRAZIER && r.w >= CYCLE3_MIN_SIZE && r.h >= CYCLE3_MIN_SIZE) {
       const bx = Math.floor(r.x + r.w / 2);
       const by = Math.floor(r.y + r.h / 2);
-      if (grid[by]?.[bx]?.type === r.floor && !stairwellBlockedSet.has(`${bx},${by}`))
+      if (
+        grid[by]?.[bx]?.type === r.floor &&
+        !stairwellBlockedSet.has(`${bx},${by}`) &&
+        !blockingTileWouldSplitRoom(r, bx, by)
+      ) {
         placeProp(grid[by][bx], BRAZIER);
+      }
       if (zone === 'deep') {
         const ring = [
           { x: bx - 1, y: by },
@@ -3088,7 +3222,21 @@ function buildDungeon(
       }
     }
   }
-  const validHallway = hallwayTiles.filter((t) => !nearRoomSet.has(t.y * size + t.x));
+  // The radius above is measured from every room's centre, which clears a
+  // square start room but not a rectangular one: a corner doorway can sit
+  // outside a 5-tile circle from centre while still being a step off the
+  // room's own wall, close enough that a hallway rat spawned there wanders in
+  // before the floor's arrival beat has finished playing. `rooms[0]` is always
+  // the start room in both the forced-progression and the free-roam builder.
+  const startRoom = rooms[0];
+  const inStartRoomMargin = (x: number, y: number): boolean =>
+    x >= startRoom.x - START_ROOM_HALLWAY_SPAWN_MARGIN_TILES &&
+    x < startRoom.x + startRoom.w + START_ROOM_HALLWAY_SPAWN_MARGIN_TILES &&
+    y >= startRoom.y - START_ROOM_HALLWAY_SPAWN_MARGIN_TILES &&
+    y < startRoom.y + startRoom.h + START_ROOM_HALLWAY_SPAWN_MARGIN_TILES;
+  const validHallway = hallwayTiles.filter(
+    (t) => !nearRoomSet.has(t.y * size + t.x) && !inStartRoomMargin(t.x, t.y),
+  );
   for (let i = validHallway.length - 1; i > 0; i--) {
     const j = randomInt(0, i);
     [validHallway[i], validHallway[j]] = [validHallway[j], validHallway[i]];
@@ -3443,6 +3591,7 @@ export function progressionExpectations(options: GenerateDungeonOptions): Progre
     spiderLabIsDeadEnd: (options.hasSpiderLab ?? false) && progression?.spine !== undefined,
     spineMinRooms: progression?.spine?.rooms.min ?? 0,
     scatterSafeRooms: progression?.scatterSafeRooms ?? 0,
+    outskirtsSafeRoomHops: progression?.outskirtsSafeRoomHops === true,
   };
 }
 

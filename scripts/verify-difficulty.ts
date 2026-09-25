@@ -709,6 +709,8 @@ section('re-levelling');
   const ball = new BallOfSwine(0, 0, TILE_SIZE);
   ball.setArena(0, 0);
   ball.applyMobLevel(BOSS_TEST_LEVEL);
+  // The ball is inert until ArenaSystem opens the fight; this harness has no arena.
+  ball.fightStarted = true;
   const ballMaxHp = ball.maxHp;
   // Multiplied up past the reduction a rolling ball applies to everything that hits
   // it, so this is a killing blow rather than a scratch — at double its max HP it
@@ -740,6 +742,7 @@ section('re-levelling');
   const septic = new BallOfSwine(0, 0, TILE_SIZE);
   septic.setArena(0, 0);
   septic.applyMobLevel(BOSS_TEST_LEVEL);
+  septic.fightStarted = true;
   septic.applyStatus(makeSepsis());
   let septicTicks = 0;
   while (septic.hp > 0 && septicTicks < SEPSIS_SETTLE_FRAMES) {

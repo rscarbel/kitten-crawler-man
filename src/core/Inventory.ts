@@ -1,7 +1,14 @@
 import { ItemBag } from './ItemBag';
 import { Hotbar } from './Hotbar';
 import { EquipmentManager, type StatBonuses } from './EquipmentManager';
-import { SLOT_COUNT, HOTBAR_COUNT, QUEST_SLOT_IDX, ITEM_DEF, itemCanHotlist } from './ItemDefs';
+import {
+  SLOT_COUNT,
+  HOTBAR_COUNT,
+  QUEST_SLOT_IDX,
+  ITEM_DEF,
+  isItemId,
+  itemCanHotlist,
+} from './ItemDefs';
 import type { InventoryItem, ItemId } from './ItemDefs';
 import type { CrawlerKind } from './SkillManager';
 
@@ -10,10 +17,26 @@ export class Inventory {
   readonly actionBar: Hotbar;
   readonly equipment: EquipmentManager;
 
+  /**
+   * Items granted since the bag was last opened that beat what's worn — the
+   * "new upgrade" badge's backing set. Keyed by item id rather than by bag
+   * slot: a stack's slot moves freely (drag, sort, save/restore) but its id
+   * doesn't, so the badge can't be lost to a swap.
+   */
+  readonly unseenUpgrades = new Set<ItemId>();
+
   constructor(ownerKind: CrawlerKind | null = null) {
     this.bag = new ItemBag(SLOT_COUNT);
     this.actionBar = new Hotbar(HOTBAR_COUNT);
     this.equipment = new EquipmentManager((id) => this.findItemById(id), ownerKind);
+  }
+
+  /** Replace `unseenUpgrades` from a snapshot, dropping any id retired since it was written. */
+  restoreUnseenUpgrades(ids: ReadonlyArray<string>): void {
+    this.unseenUpgrades.clear();
+    for (const id of ids) {
+      if (isItemId(id)) this.unseenUpgrades.add(id);
+    }
   }
 
   // ── Item storage (delegates to bag + actionBar) ──
@@ -23,6 +46,9 @@ export class Inventory {
     if (ITEM_DEF[id].isQuestItem) {
       this.addToQuestSlot(id, quantity);
       return;
+    }
+    if (this.equipment.isUpgradeOverEquipped({ ...ITEM_DEF[id], quantity })) {
+      this.unseenUpgrades.add(id);
     }
     if (this.actionBar.stackInto(id, quantity)) return;
     if (this.bag.stackInto(id, quantity)) return;
@@ -265,6 +291,7 @@ export class Inventory {
   equip(slotIdx: number, targetKey?: string): InventoryItem | null {
     const item = this.bag.slots[slotIdx];
     if (!item) return null;
+    this.unseenUpgrades.delete(item.id);
     return this.equipment.equip(item, targetKey);
   }
 
@@ -276,6 +303,7 @@ export class Inventory {
   equipHotbarSlot(hotbarIdx: number): InventoryItem | null {
     const item = this.actionBar.slots[hotbarIdx];
     if (!item) return null;
+    this.unseenUpgrades.delete(item.id);
     return this.equipment.equip(item);
   }
 

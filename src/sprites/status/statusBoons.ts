@@ -72,17 +72,31 @@ function drawRisingMotes(
 const FIZZ_CYAN: Rgb = [86, 216, 255];
 const FIZZ_WHITE: Rgb = [226, 250, 255];
 
-const TRAIL_COUNT = 4;
-/** Chevrons stack up behind the runner, the nearest one tightest to the body. */
-const TRAIL_SPACING = 0.42;
-const TRAIL_HALF_WIDTH = 0.55;
-const TRAIL_DEPTH = 0.35;
-const TRAIL_LINE_WIDTH = 2;
-const TRAIL_ALPHA = 0.6;
-/** Chevrons slide backward and recycle, so the trail streams rather than sits. */
-const TRAIL_SCROLL_RATE_PER_MS = 0.0022;
-const TRAIL_ORIGIN_UP = 0.55;
+/** Speed lines stack up behind the runner, the nearest one tightest to the body. */
+const STREAK_COUNT = 5;
+const STREAK_SPACING = 0.34;
+const STREAK_LENGTH = 0.5;
+const STREAK_LATERAL_SPREAD = 0.42;
+const STREAK_LINE_WIDTH = 2;
+const STREAK_ALPHA = 0.55;
+const STREAK_ORIGIN_UP = 0.55;
+/** Streaks slide backward and recycle, so the trail streams rather than sits. */
+const STREAK_SCROLL_RATE_PER_MS = 0.0026;
 const FIZZ_RIM_ALPHA = 0.45;
+
+/** Dust kicked up at the heels while actually covering ground. */
+const DUST_KICK_COUNT = 3;
+const DUST_KICK_RATE_PER_MS = 0.0016;
+const DUST_KICK_LATERAL_SPREAD = 0.5;
+const DUST_KICK_RADIUS = 0.16;
+const DUST_KICK_ALPHA = 0.5;
+const DUST_KICK_RISE = 0.18;
+const DUST_KICK_LEAD = 0.15;
+const DUST_KICK_LEAD_SPREAD = 0.4;
+const DUST_TAN: Rgb = [196, 172, 132];
+const DUST_PALE: Rgb = [226, 212, 188];
+/** Keeps the dust kicks' particle phase out of the rising-motes' index range. */
+const DUST_KICK_PHASE_OFFSET = 20;
 
 export function speedFizzBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
   return {
@@ -91,42 +105,65 @@ export function speedFizzBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
   };
 }
 
-export function drawSpeedFizz(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
+/** Ambient cyan motes, drawn in front like every other boon's rising particles. */
+export function drawSpeedFizzMotes(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
   ctx.globalCompositeOperation = 'lighter';
   drawRisingMotes(ctx, f, FIZZ_CYAN, 0);
-
-  if (f.moving) {
-    const originY = bodyY(f, TRAIL_ORIGIN_UP);
-    const behindX = -f.facingX;
-    const behindY = -f.facingY;
-    const scroll = (f.timeMs * TRAIL_SCROLL_RATE_PER_MS) % 1;
-
-    ctx.lineWidth = TRAIL_LINE_WIDTH;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = rgba(FIZZ_WHITE, 1);
-    for (let i = 0; i < TRAIL_COUNT; i++) {
-      const distance = (i + scroll) * TRAIL_SPACING;
-      const alpha = (1 - distance / (TRAIL_COUNT * TRAIL_SPACING)) * TRAIL_ALPHA * f.fade;
-      if (alpha <= 0) continue;
-
-      const baseX = f.centerX + behindX * f.width * distance;
-      const baseY = originY + behindY * f.height * distance;
-      // The chevron opens across the direction of travel, so its arms are the
-      // facing vector turned ninety degrees.
-      const armX = -behindY * f.width * TRAIL_HALF_WIDTH;
-      const armY = behindX * f.height * TRAIL_HALF_WIDTH;
-      const tipX = baseX + behindX * f.width * TRAIL_DEPTH;
-      const tipY = baseY + behindY * f.height * TRAIL_DEPTH;
-
-      ctx.globalAlpha = alpha;
-      ctx.beginPath();
-      ctx.moveTo(baseX + armX, baseY + armY);
-      ctx.lineTo(tipX, tipY);
-      ctx.lineTo(baseX - armX, baseY - armY);
-      ctx.stroke();
-    }
-  }
   ctx.globalCompositeOperation = 'source-over';
+}
+
+/**
+ * Motion streaks and dust kicks, drawn *behind* the body (a pre-sprite hook —
+ * see {@link Player.render}) so they read as trailing the runner rather than
+ * pasted over her.
+ */
+export function drawSpeedFizzTrail(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
+  if (!f.moving) return;
+
+  const behindX = -f.facingX;
+  const behindY = -f.facingY;
+  const lateralX = -f.facingY;
+  const lateralY = f.facingX;
+
+  const originY = bodyY(f, STREAK_ORIGIN_UP);
+  const scroll = (f.timeMs * STREAK_SCROLL_RATE_PER_MS) % 1;
+
+  ctx.lineCap = 'round';
+  ctx.lineWidth = STREAK_LINE_WIDTH;
+  ctx.strokeStyle = rgba(FIZZ_WHITE, 1);
+  for (let i = 0; i < STREAK_COUNT; i++) {
+    const lane = i / (STREAK_COUNT - 1) - HALF;
+    const distance = (i * (1 - STREAK_SPACING) + scroll) * STREAK_SPACING + STREAK_SPACING * HALF;
+    const alpha =
+      Math.max(0, 1 - distance / (STREAK_COUNT * STREAK_SPACING)) * STREAK_ALPHA * f.fade;
+    if (alpha <= 0) continue;
+
+    const baseX =
+      f.centerX + behindX * f.width * distance + lateralX * f.width * lane * STREAK_LATERAL_SPREAD;
+    const baseY =
+      originY + behindY * f.height * distance + lateralY * f.height * lane * STREAK_LATERAL_SPREAD;
+    const tipX = baseX + behindX * f.width * STREAK_LENGTH;
+    const tipY = baseY + behindY * f.height * STREAK_LENGTH;
+
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.moveTo(baseX, baseY);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  for (let i = 0; i < DUST_KICK_COUNT; i++) {
+    const phase = particlePhase(f, i + DUST_KICK_PHASE_OFFSET, DUST_KICK_RATE_PER_MS);
+    const alpha = Math.sin(phase * Math.PI) * DUST_KICK_ALPHA * f.fade;
+    if (alpha <= 0) continue;
+    const key = f.seed + i * PARTICLE_KEY_STRIDE + DUST_KICK_PHASE_OFFSET;
+    const lateral = hashRange(key, -DUST_KICK_LATERAL_SPREAD, DUST_KICK_LATERAL_SPREAD);
+    const lead = DUST_KICK_LEAD + phase * DUST_KICK_LEAD_SPREAD;
+    const x = f.centerX + behindX * f.width * lead + lateralX * f.width * lateral;
+    const y = f.footY + lateralY * f.height * lateral - f.height * DUST_KICK_RISE * phase;
+    drawEmbermote(ctx, DUST_TAN, DUST_PALE, x, y, f.width * DUST_KICK_RADIUS, alpha);
+  }
 }
 
 // -- jugg_juice: more of you to kill ----------------------------------------

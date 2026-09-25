@@ -14,6 +14,7 @@
  * one run, so a run is reproducible from its seed and door side.
  */
 
+import { EventBus } from '../../src/core/EventBus.js';
 import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants.js';
 import { referenceStats } from '../../src/core/referenceCrawler.js';
 import { CatPlayer } from '../../src/creatures/CatPlayer.js';
@@ -216,7 +217,7 @@ function fight(found: FoundRoom, options: JuicerFightSimOptions): JuicerFightMet
     { ...parts, spiderLab: null, colosseum: null },
     bossTypes,
   );
-  const bossRoom = new BossRoomSystem(gameMap, HEADLESS_MINIMAP, bossTypes);
+  const bossRoom = new BossRoomSystem(gameMap, HEADLESS_MINIMAP, new EventBus(), bossTypes);
   bossRoom.fightListener = dressings;
 
   const doorway = room.doorways[0]?.tile ?? room.spawn;

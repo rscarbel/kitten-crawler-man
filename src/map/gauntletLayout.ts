@@ -197,6 +197,92 @@ const FULL_TURN_RADIANS = Math.PI * 2;
 /** Half-width of the 5×5 alcove a `nook` corridor carves at its bend. */
 const NOOK_HALF_SIZE = 2;
 
+/**
+ * Longest run of consecutive rooms a pre-planned path (a gauntlet branch or the
+ * floor-2 spine) may hold without its own safe-room access. A chain this long
+ * with no respawn point turns one bad pull into a walk all the way back to the
+ * last gateway.
+ */
+export const SAFE_ACCESS_RUN_LIMIT = 7;
+/** Room within a run that gets the safe pocket once the run reaches {@link SAFE_ACCESS_RUN_LIMIT}. */
+export const SAFE_ACCESS_POCKET_ROOM = 4;
+
+/**
+ * 0-based positions within a walking-order room sequence — bounded by safe-room
+ * access at both ends — that need a safe pocket of their own.
+ *
+ * A run of {@link SAFE_ACCESS_RUN_LIMIT} consecutive rooms without access gets one
+ * seated after its {@link SAFE_ACCESS_POCKET_ROOM}th room; the room carrying the
+ * pocket counts as access in its own right, so the scan resumes from the room
+ * after it and repeats for whatever run is left over past that point.
+ */
+export function safeAccessPocketIndices(roomCount: number): number[] {
+  const indices: number[] = [];
+  let runStart = 0;
+  while (roomCount - runStart >= SAFE_ACCESS_RUN_LIMIT) {
+    const index = runStart + SAFE_ACCESS_POCKET_ROOM - 1;
+    indices.push(index);
+    runStart = index + 1;
+  }
+  return indices;
+}
+
+/** Perpendicular directions a dead-end pocket may be seated in, tried in a random order. */
+const POCKET_SIDE_SIGNS = [-1, 1] as const;
+/** How far a branch's safe pocket is seated off its host chain room. */
+const BRANCH_POCKET_OFFSET_MIN = 20;
+const BRANCH_POCKET_OFFSET_MAX = 28;
+/** Widening jitter applied on each successive attempt to seat a branch pocket. */
+const BRANCH_POCKET_JITTER_STEP = 3;
+const BRANCH_POCKET_SEAT_ATTEMPTS = 10;
+
+/** The unit direction along a room sequence at an index, from its neighbours. */
+function sequenceHeadingAt(centres: ReadonlyArray<Point>, index: number): Point {
+  const before = centres[Math.max(index - 1, 0)];
+  const after = centres[Math.min(index + 1, centres.length - 1)];
+  const dx = after.x - before.x;
+  const dy = after.y - before.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return { x: 1, y: 0 };
+  return { x: dx / length, y: dy / length };
+}
+
+/** Seats a branch's dead-end safe pocket to one side of its host room, trying both flanks. */
+function seatBranchPocket(
+  segments: SegmentMap,
+  segment: number,
+  anchor: Point,
+  heading: Point,
+  offset: number,
+  w: number,
+  h: number,
+): Rect | null {
+  const signs =
+    worldRandom() < EVEN_CHANCE ? POCKET_SIDE_SIGNS : [POCKET_SIDE_SIGNS[1], POCKET_SIDE_SIGNS[0]];
+  for (const sign of signs) {
+    const waypoint = {
+      x: Math.round(anchor.x - heading.y * offset * sign),
+      y: Math.round(anchor.y + heading.x * offset * sign),
+    };
+    for (let attempt = 0; attempt < BRANCH_POCKET_SEAT_ATTEMPTS; attempt++) {
+      const spread = attempt * BRANCH_POCKET_JITTER_STEP;
+      const rect = rectCentredOn(
+        {
+          x: waypoint.x + randomInt(-spread, spread),
+          y: waypoint.y + randomInt(-spread, spread),
+        },
+        w,
+        h,
+      );
+      if (segments.canPlaceRoom(rect, segment)) {
+        segments.addRoom(rect, segment);
+        return rect;
+      }
+    }
+  }
+  return null;
+}
+
 /** Probability of either outcome in a fair coin flip. */
 const EVEN_CHANCE = 0.5;
 
@@ -556,6 +642,8 @@ export interface GauntletRequest {
    * onto whichever slot happens to seat more easily.
    */
   choke?: { w: number; h: number; slot: ChokeSlot };
+  /** Dimensions drawn for a branch's mandatory safe-access pocket. */
+  pocketSize: () => { w: number; h: number };
   pickCorridorKind: (isSpecial: boolean, target: Point) => CorridorKind;
 }
 
@@ -586,6 +674,15 @@ export interface GauntletPlan {
   chainRooms: Rect[];
   corridors: PlannedCorridor[];
   branchRoomCounts: number[];
+  /**
+   * Each branch's own room sequence in walking order, excluding the branch's
+   * fan point and the gateway safe room — the same span
+   * {@link safeAccessPocketIndices} seats mandatory safe-access pockets
+   * against. One entry per branch.
+   */
+  branchChains: Rect[][];
+  /** Mandatory safe-access pockets seated off the branches. */
+  pockets: Rect[];
   /** Set only when the request asked for a choke room. */
   chokeRoom: Rect | null;
   chokeSlot: ChokeSlot | null;
@@ -828,6 +925,8 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
 
   const chainRooms: Rect[] = [];
   const branchRoomCounts: number[] = [];
+  const branchChains: Rect[][] = [];
+  const pockets: Rect[] = [];
 
   for (const exitAngle of exitAngles) {
     const branch = planBranch(segments, request, {
@@ -843,6 +942,8 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
     chainRooms.push(...branch.rooms);
     corridors.push(...branch.corridors);
     branchRoomCounts.push(branch.rooms.length);
+    branchChains.push(branch.rooms);
+    pockets.push(...branch.pockets);
   }
 
   if (request.choke !== undefined && chokeRoom === null) return null;
@@ -853,8 +954,10 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
     bossRoom,
     exitSafeRoom,
     chainRooms,
+    branchChains,
     corridors,
     branchRoomCounts,
+    pockets,
     chokeRoom,
     chokeSlot: chokeRoom === null ? null : chokeSlot,
     chokeEntryCorridor,
@@ -874,6 +977,8 @@ interface BranchRequest {
 interface BranchPlan {
   rooms: Rect[];
   corridors: PlannedCorridor[];
+  /** Mandatory safe-access pockets seated off this branch's own chain. */
+  pockets: Rect[];
 }
 
 function planBranch(
@@ -928,7 +1033,40 @@ function attemptBranch(
     segments.claimCorridor(corridor.tiles, branch.segment);
     corridors.push(corridor);
   }
-  return { rooms, corridors };
+
+  // A branch this long without its own safe-room access is a bad pull away from
+  // a walk back to the last gateway, so a qualifying run's pocket is mandatory:
+  // failing to seat one fails the whole branch attempt rather than shipping
+  // without it.
+  const pockets: Rect[] = [];
+  const sequenceCentres = [branch.entryCentre, ...rooms.map(rectCentre), branch.gatewayCentre];
+  for (const roomIndex of safeAccessPocketIndices(rooms.length)) {
+    const hostRect = rooms[roomIndex];
+    const pocketSize = request.pocketSize();
+    const seated = seatBranchPocket(
+      segments,
+      branch.segment,
+      rectCentre(hostRect),
+      sequenceHeadingAt(sequenceCentres, roomIndex + 1),
+      randomInt(BRANCH_POCKET_OFFSET_MIN, BRANCH_POCKET_OFFSET_MAX),
+      pocketSize.w,
+      pocketSize.h,
+    );
+    if (seated === null) return null;
+    const corridor = planCorridorBetween(
+      segments,
+      branch.segment,
+      hostRect,
+      seated,
+      request.pickCorridorKind(false, rectCentre(seated)),
+    );
+    if (corridor === null) return null;
+    segments.claimCorridor(corridor.tiles, branch.segment);
+    corridors.push(corridor);
+    pockets.push(seated);
+  }
+
+  return { rooms, corridors, pockets };
 }
 
 function seatChainRoom(segments: SegmentMap, segment: number, waypoint: Point): Rect | null {

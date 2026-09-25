@@ -3,6 +3,7 @@ import {
   planCorridorBetween,
   rectCentre,
   rectCentredOn,
+  safeAccessPocketIndices,
   type CorridorKind,
   type SegmentMap,
   type PlannedCorridor,
@@ -112,8 +113,8 @@ const POCKET_OFFSET_MAX = 30;
  */
 const LAB_OFFSET_MIN = 34;
 const LAB_OFFSET_MAX = 44;
-/** Chain rooms the mid-spine station tries before the whole spine is given up on. */
-const STATION_HOST_ATTEMPTS = 5;
+/** Widest room-index departure from a safe-access pocket's nominal host tried before giving up. */
+const SAFE_ACCESS_HOST_SEARCH_STEPS = 2;
 /** Offsets tried per candidate host before the lab moves on to the next room. */
 const LAB_OFFSETS_PER_HOST = 3;
 /** The lab hangs off the earlier part of the spine, so the option is seen early. */
@@ -188,10 +189,10 @@ export interface SpinePlan {
   corridors: PlannedCorridor[];
 }
 
+/** A dead-end treasure pocket hung off a chain room, decoration rather than access. */
 export interface SpinePocketRequest {
   w: number;
   h: number;
-  role: 'safe' | 'regular';
 }
 
 export interface SpineRequest {
@@ -205,15 +206,21 @@ export interface SpineRequest {
   /** Null on a floor with no spider lab. */
   labRoom: { w: number; h: number } | null;
   /**
-   * Dead ends to hang off chain rooms. Best-effort: a pocket that will not seat
-   * is dropped rather than failing the spine, because a pocket adds exploration
-   * and takes nothing away from the route if it is missing.
+   * Dead-end treasure pockets to hang off chain rooms. Best-effort: a pocket
+   * that will not seat is dropped rather than failing the spine, because it
+   * adds exploration and takes nothing away from the route if it is missing.
+   *
+   * The chain's mandatory safe-access pockets are not requested here — their
+   * count and rough position are derived from the chain's own length, not
+   * configured by the caller.
    */
   pockets: ReadonlyArray<SpinePocketRequest>;
+  /** Dimensions drawn for a mandatory safe-access pocket. */
+  safeRoomSize: () => { w: number; h: number };
   /**
    * Centres every safe pocket must keep {@link safeRoomSeparation} away from —
-   * the floor's gateway safe rooms and its antechamber. A station seated a dozen
-   * tiles from the one the player just left is not a mid-journey anchor.
+   * the floor's gateway safe rooms and its antechamber. A safe pocket seated a
+   * dozen tiles from the one the player just left is not a mid-journey anchor.
    */
   safeRoomKeepAway: ReadonlyArray<Point>;
   safeRoomSeparation: number;
@@ -508,77 +515,81 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
     if (!link(chain[labHostIndex].rect, labRoom, true)) return null;
   }
 
-  // ── Dead-end pockets ────────────────────────────────────────────────────
+  // ── Safe-room access along the chain ─────────────────────────────────────
   //
-  // A dead end is not a route to the antechamber, so these buy exploration back
-  // without buying a second way through. Seated last, *after* the route's own
-  // corridors are threaded, and each one seated and linked inside a snapshot: a
-  // pocket is optional, and one that seats but cannot be reached has to give its
-  // ground back rather than leaving an invisible claimed blob — plus its
-  // clearance halo — in the way of everything still to be placed.
+  // A run of SAFE_ACCESS_RUN_LIMIT consecutive chain rooms without their own
+  // safe-room access gets one seated after the run's SAFE_ACCESS_POCKET_ROOM-th
+  // room. Mandatory: a one-way journey this long with no respawn point turns
+  // one bad pull into a walk all the way back to the last gateway.
   const pockets: SpinePocket[] = [];
   const usedHosts = new Set<number>([questIndex]);
-  const chainMiddle = Math.floor(roomCount / 2);
-  const spreadHosts = shuffled(chain.map((_, index) => index));
-  for (const pocket of request.pockets) {
-    // A safe room takes the middle of the chain, and takes it on the near side
-    // of the nursery where it can. The nursery is a real fight in the middle of
-    // a one-way journey, and a station the player passes *before* it is what
-    // makes losing it a cheap retry rather than a walk back to the boss room.
-    const byPreference =
-      pocket.role === 'safe'
-        ? [...spreadHosts].sort((a, b) => {
-            const sideA = a < questIndex ? 0 : 1;
-            const sideB = b < questIndex ? 0 : 1;
-            if (sideA !== sideB) return sideA - sideB;
-            return Math.abs(a - chainMiddle) - Math.abs(b - chainMiddle);
-          })
-        : spreadHosts;
-    const isStation = pocket.role === 'safe';
-    // The station gets several hosts before the spine is given up on; a treasure
-    // pocket gets one and is dropped, because it is decoration and the station
-    // is not. A one-way journey of a dozen rooms with a real fight in the middle
-    // needs its mid-journey respawn anchor.
-    const hostBudget = isStation ? STATION_HOST_ATTEMPTS : 1;
-    const candidates = byPreference.filter((index) => !usedHosts.has(index));
-    if (candidates.length === 0) {
-      if (isStation) return null;
-      break;
-    }
-
+  const hostSearchOffsets = alternatingOffsets(1, SAFE_ACCESS_HOST_SEARCH_STEPS);
+  for (const nominalHost of safeAccessPocketIndices(roomCount)) {
     let placed = false;
-    for (const hostIndex of candidates.slice(0, hostBudget)) {
-      // Spent whether or not the room seats. A chain room with no ground beside
-      // it is no better a host for the next pocket than it was for this one, and
-      // leaving it in the pool means one cramped room swallows every request.
-      usedHosts.add(hostIndex);
+    for (const offset of hostSearchOffsets) {
+      const hostIndex = nominalHost + offset;
+      if (hostIndex < 0 || hostIndex >= roomCount || usedHosts.has(hostIndex)) continue;
       const snapshot = segments.snapshot();
       const corridorCount = corridors.length;
+      const size = request.safeRoomSize();
       const seated = seatBesideChain(
         segments,
         claimSegment(),
         centres[hostIndex],
         chainHeadingAt(centres, hostIndex),
         randomInt(POCKET_OFFSET_MIN, POCKET_OFFSET_MAX),
-        pocket.w,
-        pocket.h,
-        isStation
-          ? (centre) =>
-              request.safeRoomKeepAway.every(
-                (other) =>
-                  Math.hypot(centre.x - other.x, centre.y - other.y) >= request.safeRoomSeparation,
-              )
-          : undefined,
+        size.w,
+        size.h,
+        (centre) =>
+          request.safeRoomKeepAway.every(
+            (other) =>
+              Math.hypot(centre.x - other.x, centre.y - other.y) >= request.safeRoomSeparation,
+          ),
       );
-      if (seated !== null && link(chain[hostIndex].rect, seated, isStation)) {
-        pockets.push({ rect: seated, role: pocket.role });
+      if (seated !== null && link(chain[hostIndex].rect, seated, true)) {
+        pockets.push({ rect: seated, role: 'safe' });
+        usedHosts.add(hostIndex);
         placed = true;
         break;
       }
       segments.rollback(snapshot);
       corridors.length = corridorCount;
     }
-    if (!placed && isStation) return null;
+    if (!placed) return null;
+  }
+
+  // ── Dead-end treasure pockets ────────────────────────────────────────────
+  //
+  // A dead end is not a route to the antechamber, so these buy exploration back
+  // without buying a second way through. Best-effort: a pocket that will not
+  // seat is dropped rather than failing the spine, since it is decoration and
+  // takes nothing away from the route if it is missing.
+  const spreadHosts = shuffled(chain.map((_, index) => index));
+  for (const pocket of request.pockets) {
+    const candidates = spreadHosts.filter((index) => !usedHosts.has(index));
+    if (candidates.length === 0) break;
+    const hostIndex = candidates[0];
+    // Spent whether or not the room seats. A chain room with no ground beside
+    // it is no better a host for the next pocket than it was for this one, and
+    // leaving it in the pool means one cramped room swallows every request.
+    usedHosts.add(hostIndex);
+    const snapshot = segments.snapshot();
+    const corridorCount = corridors.length;
+    const seated = seatBesideChain(
+      segments,
+      claimSegment(),
+      centres[hostIndex],
+      chainHeadingAt(centres, hostIndex),
+      randomInt(POCKET_OFFSET_MIN, POCKET_OFFSET_MAX),
+      pocket.w,
+      pocket.h,
+    );
+    if (seated !== null && link(chain[hostIndex].rect, seated, false)) {
+      pockets.push({ rect: seated, role: 'regular' });
+    } else {
+      segments.rollback(snapshot);
+      corridors.length = corridorCount;
+    }
   }
 
   return { chain, questEntryCorridor, lanes, labRoom, pockets, corridors };

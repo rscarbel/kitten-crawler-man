@@ -1,5 +1,5 @@
 /**
- * The safe room's bed — the one place in the dungeon the party can sleep.
+ * The safe room's bed — decoration only; nothing in the room is driven by it.
  *
  * Drawn to the game's oblique projection rather than flat from above: flat
  * top-down rectangles read as a decal painted on the floor, while what makes a
@@ -30,7 +30,7 @@ const QUILT_FOLD = '#efe8d6';
 const PILLOW = '#f4efe2';
 const PILLOW_SHADE = '#d6cdb8';
 const CONTACT_SHADOW = 'rgba(0,0,0,0.3)';
-/** Warm pulse shown while the player is close enough to sleep. */
+/** Warm pulse shown while the player is standing near the bed. */
 const RESTED_GLOW = '255,214,140';
 
 // ── Geometry ──────────────────────────────────────────────────────────────────
@@ -80,9 +80,8 @@ const RESTED_GLOW_RADIUS_FRACTION = 0.9;
 /**
  * Draws the bed at the top-left of its tile.
  *
- * `nearPulse` is a 0..1 breath used for the "you can sleep here" cue; pass 0 when
- * the player is out of range. It only reinforces the existing `Sleep` prompt —
- * sleeping itself is still driven entirely by `SafeRoomSystem`.
+ * `nearPulse` is a 0..1 breath, purely cosmetic, that warms the bed while a
+ * crawler stands close to it; pass 0 when the player is out of range.
  */
 export function drawSafeRoomBed(
   ctx: CanvasRenderingContext2D,
@@ -273,7 +272,7 @@ function drawMattressAndBedding(
   );
 }
 
-/** The bed's "you can sleep here" breath, as a 0..1 value. */
+/** The bed's ambient warm-glow breath, as a 0..1 value. */
 export function restedPulse(frames: number): number {
   return (1 - Math.cos((frames / RESTED_PULSE_PERIOD_FRAMES) * Math.PI * 2)) / 2;
 }

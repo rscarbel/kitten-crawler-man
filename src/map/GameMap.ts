@@ -80,10 +80,14 @@ import {
   ROCK_DEPOSIT,
 } from './tileTypes';
 import { isSightTransparentTileType, isWalkableTileType } from './walkability';
+import type { Rect } from './roomDoorways';
+import type { Mob } from '../creatures/Mob';
+import { countsTowardRoomClear } from '../creatures/roomClear';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
 import { drawFloorArtSeed } from './ground/floorArtSeed';
 import { MinHeap, HEAP_EMPTY } from '../core/MinHeap';
 import { drawWorldSeed, withWorldSeed } from '../core/WorldRandom';
+import { TILE_SIZE } from '../core/constants';
 import {
   CLUB_INTERIOR_W,
   CLUB_INTERIOR_H,
@@ -91,6 +95,11 @@ import {
   CLUB_DIVIDER_WALLS,
 } from '../core/clubLayout';
 import { CLUB_FURNITURE_TILES } from '../core/clubProps';
+import { ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
+import {
+  COLOSSEUM_RIM_PAINT_REACH_TILES,
+  colosseumRimCoversTile,
+} from './tiles/bossRooms/colosseumGeometry';
 import {
   generateDungeon,
   type DungeonLevelOptions,
@@ -130,6 +139,8 @@ const DEFAULT_MAP_SIZE = 100;
 const DEFAULT_TILE_HEIGHT = 10;
 /** Boss rooms carved when a caller supplies no dungeon settings at all. */
 const DEFAULT_BOSS_ROOM_COUNT = 1;
+/** An entity's pixel position is its top-left corner; this offset reaches its centre. */
+const ENTITY_TILE_CENTER_OFFSET = 0.5;
 
 // ── Interior building dimensions (width × height in tiles) ────────────────────
 export const TOWER_INTERIOR_W = 20;
@@ -661,6 +672,58 @@ export class GameMap {
    * position would prove nothing on the floors where it guessed wrong.
    */
   progressionLayout: ProgressionLayoutData | undefined;
+  /**
+   * Every room this map's dungeon generator placed, in placement order — the
+   * same list the generator used to seat encounters. Empty on any map that
+   * isn't a forced-progression dungeon floor (overworld, tutorial, building
+   * interiors, and a free-roam dungeon floor, which doesn't record one).
+   * Room membership checks (`roomIndexAt`, `roomBoundsContaining`,
+   * `hostilesInRoom`) all read this list, so they degrade to "no room found"
+   * wherever it is empty.
+   */
+  roomBounds: ReadonlyArray<Rect> = [];
+
+  /** Index into {@link roomBounds} of the room containing this tile, or `-1` when none does. */
+  roomIndexAt(tileX: number, tileY: number): number {
+    return this.roomBounds.findIndex(
+      (room) =>
+        tileX >= room.x && tileX < room.x + room.w && tileY >= room.y && tileY < room.y + room.h,
+    );
+  }
+
+  /** An entity's pixel position is its top-left corner; this converts to the tile under its centre. */
+  private entityCentreTile(entity: { x: number; y: number }): { x: number; y: number } {
+    return {
+      x: Math.floor((entity.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET) / TILE_SIZE),
+      y: Math.floor((entity.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET) / TILE_SIZE),
+    };
+  }
+
+  /**
+   * The room containing an entity's centre, or `null` when it isn't inside any
+   * room this map recorded (a hallway, or a map with no {@link roomBounds} at
+   * all). `entity` is a pixel-space top-left position, matching `Player`/`Mob`.
+   */
+  roomBoundsContaining(entity: { x: number; y: number }): Rect | null {
+    const tile = this.entityCentreTile(entity);
+    const roomIndex = this.roomIndexAt(tile.x, tile.y);
+    return roomIndex === -1 ? null : this.roomBounds[roomIndex];
+  }
+
+  /**
+   * Every mob in `mobs` whose centre falls in room `roomIndex` and that
+   * {@link countsTowardRoomClear}. Empty when `roomIndex` is out of range,
+   * which includes every map with no {@link roomBounds} at all.
+   */
+  hostilesInRoom(roomIndex: number, mobs: readonly Mob[]): Mob[] {
+    if (roomIndex < 0 || roomIndex >= this.roomBounds.length) return [];
+    return mobs.filter((mob) => {
+      if (!countsTowardRoomClear(mob)) return false;
+      const tile = this.entityCentreTile(mob);
+      return this.roomIndexAt(tile.x, tile.y) === roomIndex;
+    });
+  }
+
   /** Spider lab room, if generated (spider quest boss encounter). */
   spiderLabRoom: SpiderLabRoomData | null = null;
   /** Treasure rooms generated in the dungeon (chest encounters). */
@@ -817,6 +880,7 @@ export class GameMap {
     this.bossRooms = data.bossRooms;
     this.questRooms = data.questRooms;
     this.progressionLayout = data.progressionLayout;
+    this.roomBounds = data.progressionLayout?.roomBounds ?? [];
     // The flag goes on now and stays on; what changes is whether it is being
     // honoured. Every floor starts `clear`: the nursery is a room on the way,
     // not a toll gate, and nothing is shut until the player takes the wave.
@@ -833,6 +897,7 @@ export class GameMap {
     this.setStairwellTiles(data.stairwellTiles);
     this.arenaExteriors = data.arenaExteriors;
     for (const arena of data.arenaExteriors) {
+      this.blockColosseumRimOverhang(data.grid, arena);
       const { x: doorX, y: doorY } = arena.doorTile;
       for (const dy of [0, -1]) {
         for (const dx of [-1, 0]) {
@@ -904,6 +969,120 @@ export class GameMap {
   private addArenaDoorTile(tileX: number, tileY: number): void {
     this.arenaDoorTileSet.add(tileCoordKey(tileX, tileY));
     this.addBlockFlag(tileX, tileY, BLOCK_ARENA_DOOR);
+  }
+
+  /**
+   * How far past the rim's own paint reach the connectivity check's local graph
+   * extends — far enough to cover the whole concourse ring and a slice of the
+   * antechamber, so a route around a blocked tile via the ring's other lane, or
+   * down into the antechamber and back out its other link, is always visible to
+   * the flood fill below.
+   */
+  private static readonly RIM_GRAPH_MARGIN_TILES = 4;
+
+  /**
+   * Blocks every concourse tile the colosseum's painted rim reaches into,
+   * without ever cutting the concourse ring off from its own door.
+   *
+   * The rim is drawn against a true circle, so its iron and shadow land partway
+   * across the first ring of concourse tiles outside the carved wall — the
+   * generator only walls tiles up to `ARENA_RADIUS`, by tile centre, which is
+   * short of where the continuous circle's paint actually stops. Left alone, a
+   * crawler standing on the concourse can reach in and stand with their feet on
+   * painted iron.
+   *
+   * A tile the paint reaches is not always safe to block, though: on a
+   * progression floor the door row is sealed but for two single-tile flank
+   * links down into the antechamber (`linkConcourseToAntechamber` in
+   * `DungeonGenerator.ts`), and the tiles the ring needs to get from a link back
+   * out into its own two-tile-wide band sit well within the rim's reach too.
+   * Rather than hand-deriving every such pinch point from the carve constants,
+   * this floods the local graph once before touching anything, floods it again
+   * with every rim-covered tile provisionally blocked, and for any tile that
+   * lost its way to the door as a result, walks the (guaranteed-connected)
+   * baseline path back and reinstates whichever blocked tiles sit on it. What
+   * is left blocked afterward can never disconnect anything the door could
+   * already reach. Permanent because the geometry never changes once an arena
+   * is placed.
+   */
+  private blockColosseumRimOverhang(grid: TileContent[][], arena: ArenaExterior): void {
+    const centre = arena.centre;
+    const reachRadius = Math.ceil(COLOSSEUM_RIM_PAINT_REACH_TILES);
+    const graphRadius = ARENA_CONCOURSE_REACH + GameMap.RIM_GRAPH_MARGIN_TILES;
+    const gridHeight = grid.length;
+    const gridWidth = grid[0]?.length ?? 0;
+
+    const isOpenGraphTile = (x: number, y: number): boolean =>
+      x >= 0 &&
+      x < gridWidth &&
+      y >= 0 &&
+      y < gridHeight &&
+      Math.hypot(x - centre.x, y - centre.y) <= graphRadius &&
+      isWalkableTileType(grid[y][x]);
+
+    const candidates = new Set<number>();
+    for (let dy = -reachRadius; dy <= reachRadius; dy++) {
+      for (let dx = -reachRadius; dx <= reachRadius; dx++) {
+        if (Math.hypot(dx, dy) <= ARENA_RADIUS) continue;
+        if (!colosseumRimCoversTile(dx, dy)) continue;
+        const x = centre.x + dx;
+        const y = centre.y + dy;
+        if (isOpenGraphTile(x, y)) candidates.add(tileCoordKey(x, y));
+      }
+    }
+    if (candidates.size === 0) return;
+
+    const neighborsOf = (x: number, y: number): Array<[number, number]> => [
+      [x + 1, y],
+      [x - 1, y],
+      [x, y + 1],
+      [x, y - 1],
+    ];
+
+    const floodFill = (
+      root: { x: number; y: number },
+      blocked: ReadonlySet<number>,
+      parents?: Map<number, number>,
+    ): Set<number> => {
+      const rootKey = tileCoordKey(root.x, root.y);
+      const seen = new Set<number>([rootKey]);
+      const stack: Array<{ x: number; y: number }> = [root];
+      while (stack.length > 0) {
+        const cur = stack.pop();
+        if (cur === undefined) break;
+        const curKey = tileCoordKey(cur.x, cur.y);
+        for (const [nx, ny] of neighborsOf(cur.x, cur.y)) {
+          const key = tileCoordKey(nx, ny);
+          if (seen.has(key) || blocked.has(key)) continue;
+          if (!isOpenGraphTile(nx, ny)) continue;
+          seen.add(key);
+          parents?.set(key, curKey);
+          stack.push({ x: nx, y: ny });
+        }
+      }
+      return seen;
+    };
+
+    const parents = new Map<number, number>();
+    const baseline = floodFill(arena.doorTile, new Set(), parents);
+
+    const blocked = new Set(candidates);
+    const reachableAfter = floodFill(arena.doorTile, blocked);
+
+    for (const key of baseline) {
+      if (candidates.has(key) || reachableAfter.has(key)) continue;
+      // This tile is required (not itself up for blocking) and the provisional
+      // block cut it off. Walk its baseline path back to the door — a path that
+      // only ever crosses tiles the flood above already proved open — freeing
+      // every candidate on it.
+      let walk: number | undefined = key;
+      while (walk !== undefined) {
+        blocked.delete(walk);
+        walk = parents.get(walk);
+      }
+    }
+
+    for (const key of blocked) this.permanentBlockedTiles.add(key);
   }
 
   /**
@@ -3030,6 +3209,35 @@ export class GameMap {
     ignore?: { tileX: number; tileY: number },
   ): boolean {
     return this.lineClearOf(x1, y1, x2, y2, this.sightBlocker, ignore);
+  }
+
+  /**
+   * {@link hasLineOfSight}, but a tile whose type is in `transparentTypes` never
+   * blocks, whatever `blocksSight` would say about it. Lets a smash-everything
+   * blast see past a crate standing between it and the crate behind it, while a
+   * real wall still shadows both.
+   */
+  hasLineOfSightIgnoringTypes(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    transparentTypes: ReadonlySet<number>,
+    ignore?: { tileX: number; tileY: number },
+  ): boolean {
+    return this.lineClearOf(
+      x1,
+      y1,
+      x2,
+      y2,
+      (tileX, tileY) => {
+        if (!this.blocksSight(tileX, tileY)) return false;
+        // Off the grid blocks sight too, and has no tile to read a type from.
+        if (!this.isInsideGrid(tileX, tileY)) return true;
+        return !transparentTypes.has(this.structure[tileY][tileX].type);
+      },
+      ignore,
+    );
   }
 
   /**

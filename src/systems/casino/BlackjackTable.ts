@@ -103,6 +103,13 @@ export class BlackjackTable {
   jackpotPending = false;
   handsPlayed = 0;
 
+  /**
+   * Fired from `collectPayout` with the net winnings actually credited (not
+   * the stake returned alongside them) — `ClubCasinoSystem` uses this for a
+   * fly-to-HUD effect, launched from the chip tray.
+   */
+  onWinnings: ((winnings: number, player: Player) => void) | null = null;
+
   /** The last completed stack, for the "Same Bet" button. */
   private lastBet: number[] = [];
   private feedback: TableRefusal = null;
@@ -516,6 +523,7 @@ export class BlackjackTable {
     this.pendingWinnings = 0;
     player.coins += owed - winnings;
     player.earnCoins(winnings);
+    if (winnings > 0) this.onWinnings?.(winnings, player);
     return owed;
   }
 }

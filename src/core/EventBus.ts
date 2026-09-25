@@ -65,6 +65,9 @@ export interface GameEvents {
   /** A player entered a safe room (fires on each entry). */
   safeRoomEntered: Record<string, never>;
 
+  /** Every hostile that counts toward the room-clear rule is gone from this room. */
+  roomCleared: { roomIndex: number };
+
   /** A boss room was locked (player entered). */
   bossRoomLocked: { bossType: string };
 
@@ -111,6 +114,21 @@ export interface GameEvents {
 
   /** A player's HP dropped below 25 % of max. */
   healthLow: { player: 'Human' | 'Cat'; hp: number; maxHp: number };
+
+  /**
+   * A crawler dropped to 0 HP and went down. The single source of truth for a
+   * knockout, fired once per knockout regardless of which scene or fight
+   * system drove it there.
+   */
+  crawlerKnockedOut: { player: Player };
+
+  /**
+   * A downed crawler is back on their feet from the proximity revive or a
+   * boss-room re-entry. Fired once per revive. Paid services that call
+   * `Player.reviveToFull` (temple, inn room, infirmary) do not fire it, since
+   * they run from menu callbacks with no bus in reach.
+   */
+  crawlerRevived: { player: Player };
 
   /** Players stepped onto a stairwell for the first time (menu just opened). */
   stairwellFound: Record<string, never>;

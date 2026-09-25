@@ -95,6 +95,9 @@ export class PauseMenu {
   private achievementsScrollY = 0;
   private achievementsContentH = 0;
   private touchScrollStartY: number | null = null;
+  /** The crawlers handed to the touch drag currently in progress, if any — see `touchScrollStart`. */
+  private touchHuman: HumanPlayer | null = null;
+  private touchCat: CatPlayer | null = null;
 
   /**
    * The Equipment tab's drag, filter, page, crawler choice and search field.
@@ -284,6 +287,10 @@ export class PauseMenu {
    */
   touchScrollStart(x: number, y: number, human: HumanPlayer, cat: CatPlayer): void {
     if (!this._isOpen) return;
+    // Kept for `touchScrollMove`, which fires many times over one drag and
+    // isn't itself handed the crawlers on every call.
+    this.touchHuman = human;
+    this.touchCat = cat;
     if (this.tab === 'equipment') {
       this.handleMouseDown(x, y, human, cat);
       return;
@@ -308,7 +315,7 @@ export class PauseMenu {
   touchScrollMove(x: number, y: number): void {
     if (!this._isOpen) return;
     if (this.tab === 'equipment') {
-      this.handleMouseMove(x, y);
+      this.handleMouseMove(x, y, this.touchHuman ?? undefined, this.touchCat ?? undefined);
       return;
     }
     if (this.tab === 'abilities') {
@@ -373,9 +380,9 @@ export class PauseMenu {
     this.equipment.handleMouseDown(mx, my, human, cat);
   }
 
-  handleMouseMove(mx: number, my: number): void {
+  handleMouseMove(mx: number, my: number, human?: HumanPlayer, cat?: CatPlayer): void {
     if (!this._isOpen || this.tab !== 'equipment') return;
-    this.equipment.handleMouseMove(mx, my);
+    this.equipment.handleMouseMove(mx, my, human, cat);
   }
 
   handleMouseUp(mx: number, my: number, human: HumanPlayer, cat: CatPlayer): void {

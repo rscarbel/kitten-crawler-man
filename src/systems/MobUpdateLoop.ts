@@ -19,7 +19,7 @@ import {
 } from '../creatures/siege/trebuchetThreat';
 import type { DefenseStructures } from './briarHollow/DefenseStructures';
 import { setVisibleWorldView } from '../core/visibleWorldView';
-import { bossOfHealer } from '../creatures/fairies/bossHealerBond';
+import { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { setMarkedGroundSources } from '../creatures/tactics/markedGround';
 import type { GroundHazardSource } from './GroundHazardSource';
 import { SeparationGrid } from '../core/SeparationGrid';
@@ -262,8 +262,9 @@ export class MobUpdateLoop implements GameSystem {
 
       // Keep bosses (specifically the Juicer) confined to their room
       if (mob.isBoss && !(mob instanceof BallOfSwine)) bossRoom?.clampBossToRoom(mob);
-      const healedBoss = bossOfHealer(mob);
-      if (healedBoss !== null) bossRoom?.clampHealerToBossRoom(mob, healedBoss);
+      // Any healer fairy standing in a boss room is held to it, bonded or not
+      // — see confineHealerToBossRoom's own comment for why bond is not the test.
+      if (mob instanceof HealingFairy) bossRoom?.confineHealerToBossRoom(mob);
       mob.tickTimers();
       mobGrid.move(mob, ox, oy);
     }
@@ -274,7 +275,7 @@ export class MobUpdateLoop implements GameSystem {
     const separationStartedAt = perfMonitor.begin();
     this.runSeparationPass(
       activeMobs,
-      (mob) => !mob.isFlying,
+      (mob) => !mob.isFlying && !mob.ignoresMobCollision,
       this.separationMobs,
       this.separationSeen,
       this.separationPreX,
@@ -285,7 +286,7 @@ export class MobUpdateLoop implements GameSystem {
     );
     this.runSeparationPass(
       activeMobs,
-      (mob) => mob.isFlying,
+      (mob) => mob.isFlying && !mob.ignoresMobCollision,
       this.flyingSeparationMobs,
       this.flyingSeparationSeen,
       this.flyingSeparationPreX,

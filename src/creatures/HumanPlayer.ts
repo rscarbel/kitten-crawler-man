@@ -659,6 +659,16 @@ export class HumanPlayer extends Player {
   }
 
   /**
+   * Whether a `triggerSmush` refusal right now is *because of* the cooldown,
+   * as opposed to being mid-swing or unable to act — the two refusals a
+   * refusal cue should stay silent for, since they are not the player
+   * mistiming a press against a timer they can watch.
+   */
+  get smushRefusedByCooldown(): boolean {
+    return this.smushCooldown > 0 && this.smushTimer <= 0 && this.attackTimer <= 0 && this.canAct;
+  }
+
+  /**
    * The direction a blow in flight lands along: the facing it was thrown with,
    * latched when it began, so steering mid-swing cannot turn the hit away
    * from the fist that is drawn throwing it. Between blows, his facing.

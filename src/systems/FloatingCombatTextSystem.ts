@@ -25,6 +25,8 @@ interface StyleDef {
   size: number;
   color: string;
   bold: boolean;
+  /** Flanking glyph drawn on both sides of the word, in the label's own colour. */
+  icon?: 'shield';
 }
 
 const STYLE_DEFS: Record<FloatingTextStyle, StyleDef> = {
@@ -37,7 +39,77 @@ const STYLE_DEFS: Record<FloatingTextStyle, StyleDef> = {
   // Gold and larger than any hit label: a blow landed in a boss's punish
   // window, and it matches the halo she wears while that window is open.
   exposed: { size: 18, color: '#facc15', bold: true },
+  // Ward blue/white and the biggest hit label of the lot: a mob wearing a
+  // shield fairy's ward is not merely dodging, it cannot be touched at all,
+  // and the flanking shields say why without the player having to notice the
+  // ward's tether.
+  immune: { size: 15, color: '#bfe3ff', bold: true, icon: 'shield' },
 };
+
+/** Gap between the word and each flanking icon, in pixels. */
+const ICON_GAP_PX = 7;
+/**
+ * Flanking icon size, in pixels. Sized to read as a shield at the game's own
+ * pixel density, not just at a zoomed-in review size — anything much smaller
+ * than this collapses to an unreadable dot at 1x.
+ */
+const ICON_SIZE_PX = 16;
+
+/** Where the shield's shoulders flare out to, as a fraction of its half-height above centre. */
+const SHIELD_SHOULDER_FRACTION = 0.55;
+/** Where the shield's sides start curving in to its point, as a fraction of its half-height below centre. */
+const SHIELD_TAPER_FRACTION = 0.15;
+/** Outline width as a fraction of the icon's size, so it scales with {@link ICON_SIZE_PX}. */
+const SHIELD_OUTLINE_WIDTH_SHARE = 0.18;
+/** The pale vertical spine painted down the shield's face, as a fraction of its half-width. */
+const SHIELD_SPINE_HALF_WIDTH_SHARE = 0.12;
+
+/**
+ * Paints a small shield glyph centred on `(cx, cy)`, for a flanking icon. A
+ * heavy dark outline and a pale spine down the middle are what keep the shape
+ * reading as a shield rather than a blob at the size a floating label draws
+ * it — both scale with `size`, so a bigger icon in a future style still
+ * reads the same way.
+ */
+function drawShieldIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+  alpha: number,
+): void {
+  const halfW = size / 2;
+  const halfH = size / 2;
+  const shoulderY = cy - halfH * SHIELD_SHOULDER_FRACTION;
+  const taperY = cy + halfH * SHIELD_TAPER_FRACTION;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - halfH);
+  ctx.lineTo(cx + halfW, shoulderY);
+  ctx.lineTo(cx + halfW, taperY);
+  ctx.quadraticCurveTo(cx + halfW, cy + halfH, cx, cy + halfH);
+  ctx.quadraticCurveTo(cx - halfW, cy + halfH, cx - halfW, taperY);
+  ctx.lineTo(cx - halfW, shoulderY);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = size * SHIELD_OUTLINE_WIDTH_SHARE;
+  ctx.strokeStyle = 'rgba(8, 18, 38, 0.95)';
+  ctx.stroke();
+
+  const spineHalfWidth = halfW * SHIELD_SPINE_HALF_WIDTH_SHARE;
+  ctx.beginPath();
+  ctx.moveTo(cx - spineHalfWidth, cy - halfH);
+  ctx.lineTo(cx + spineHalfWidth, cy - halfH);
+  ctx.lineTo(cx + spineHalfWidth, cy + halfH);
+  ctx.lineTo(cx - spineHalfWidth, cy + halfH);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.fill();
+  ctx.restore();
+}
 
 interface FloatingLabel {
   worldX: number;
@@ -140,17 +212,31 @@ export class FloatingCombatTextSystem implements GameSystem {
       const style = STYLE_DEFS[label.style];
       const progress = 1 - label.framesLeft / LABEL_FRAMES;
       const fadeProgress = Math.max(0, progress - LABEL_HOLD_FRACTION) / (1 - LABEL_HOLD_FRACTION);
+      const alpha = 1 - fadeProgress;
+      const screenX = label.worldX - camX;
+      const screenY = label.worldY - camY - TILE_SIZE * LABEL_RISE_TILES * progress;
       drawText(ctx, label.text, {
         ...TEXT_PRESETS.value,
-        x: label.worldX - camX,
-        y: label.worldY - camY - TILE_SIZE * LABEL_RISE_TILES * progress,
+        x: screenX,
+        y: screenY,
         size: style.size,
         bold: style.bold,
         color: style.color,
-        alpha: 1 - fadeProgress,
+        alpha,
         align: 'center',
         outline: true,
+        glow: style.icon !== undefined ? style.color : false,
       });
+
+      if (style.icon === 'shield') {
+        ctx.save();
+        ctx.font = `${style.bold ? 'bold ' : ''}${style.size}px monospace`;
+        const halfTextWidth = ctx.measureText(label.text).width / 2;
+        ctx.restore();
+        const iconOffset = halfTextWidth + ICON_GAP_PX + ICON_SIZE_PX / 2;
+        drawShieldIcon(ctx, screenX - iconOffset, screenY, ICON_SIZE_PX, style.color, alpha);
+        drawShieldIcon(ctx, screenX + iconOffset, screenY, ICON_SIZE_PX, style.color, alpha);
+      }
     }
   }
 

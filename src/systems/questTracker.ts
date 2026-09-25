@@ -60,6 +60,14 @@ export interface TrackerEntry {
   readonly hint?: string;
   /** Tile to point a chevron and the world arrow at. */
   readonly target?: TrackerTarget;
+  /**
+   * The id of this entry's quest header, when this entry is one of several
+   * live steps within a single quest. The Journal renders it indented under
+   * that header rather than as its own top-level row — the anchor questline is
+   * the source that needs this: with three shards outstanding it would
+   * otherwise print "The Anchor is Broken" three times.
+   */
+  readonly parentId?: string;
 }
 
 /** Anything the scene can ask for journal lines. */
@@ -107,6 +115,40 @@ function isFollowable(entry: TrackerEntry): boolean {
   return entry.target !== undefined && isOutstanding(entry.status);
 }
 
+/** A tile position, for ranking a header's sub-steps by distance. */
+export interface TilePosition {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * Among `header`'s own sub-steps (`parentId === header.id`), the followable one
+ * whose target sits closest to `fromTile` — squared distance, since only the
+ * ordering matters. Null when the header has no followable sub-steps of its
+ * own, which is what lets a plain (non-multi-step) pin fall through unchanged.
+ */
+function nearestFollowableStep(
+  header: TrackerEntry,
+  entries: ReadonlyArray<TrackerEntry>,
+  fromTile: TilePosition,
+): TrackerEntry | null {
+  let nearest: TrackerEntry | null = null;
+  let nearestDistSq = Infinity;
+  for (const entry of entries) {
+    if (entry.parentId !== header.id || !isFollowable(entry) || entry.target === undefined) {
+      continue;
+    }
+    const dx = entry.target.x - fromTile.x;
+    const dy = entry.target.y - fromTile.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < nearestDistSq) {
+      nearestDistSq = distSq;
+      nearest = entry;
+    }
+  }
+  return nearest;
+}
+
 /**
  * The entry the world arrow should point at, or null.
  *
@@ -121,14 +163,25 @@ function isFollowable(entry: TrackerEntry): boolean {
  * something to offer but has not been accepted advertises itself through
  * {@link availableTargets} instead, which carries no implication that
  * anything is under way.
+ *
+ * `fromTile`, when given, breaks the tie for a pin that names a multi-step
+ * quest's header rather than one of its steps: the header itself is swapped
+ * for whichever of its outstanding sub-steps is nearest, so the arrow, the
+ * beacon and the minimap chevron all send the player somewhere reachable
+ * rather than always the first step in authoring order. Every caller that
+ * points at something should pass it; omitting it (as the "is this pin still
+ * live" check does) just keeps the header as the answer.
  */
 export function resolvePinnedEntry(
   pinnedId: string | null,
   entries: ReadonlyArray<TrackerEntry>,
+  fromTile?: TilePosition,
 ): TrackerEntry | null {
   if (pinnedId === null) return null;
   const pinned = entries.find((entry) => pinMatchesEntry(pinnedId, entry) && isFollowable(entry));
-  return pinned ?? null;
+  if (pinned === undefined) return null;
+  if (fromTile === undefined) return pinned;
+  return nearestFollowableStep(pinned, entries, fromTile) ?? pinned;
 }
 
 /**

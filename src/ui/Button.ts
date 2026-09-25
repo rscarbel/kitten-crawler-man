@@ -51,16 +51,29 @@ const _renderedButtons: Array<{
  * The coordinate space a button was drawn in. Everything is canvas-space by
  * default; a modal shrunk to fit a short viewport draws its buttons in its own
  * design-sized space instead, and the pointer has to be mapped into that space
- * or every hover and click sound misses by the shrink.
+ * or every hover and click sound misses by the shrink. `offsetX`/`offsetY` do
+ * the same for a `ctx.translate` — a scrolling list draws its rows in local
+ * coordinates, so the pointer must be un-translated before it can be compared
+ * against them, and a synthesized keyboard click must be translated back.
  */
 interface PointerSpace {
   scale: number;
   pivotX: number;
   pivotY: number;
+  offsetX: number;
+  offsetY: number;
 }
 
-const CANVAS_POINTER_SPACE: PointerSpace = { scale: 1, pivotX: 0, pivotY: 0 };
+const CANVAS_POINTER_SPACE: PointerSpace = {
+  scale: 1,
+  pivotX: 0,
+  pivotY: 0,
+  offsetX: 0,
+  offsetY: 0,
+};
 let _pointerSpace: PointerSpace = CANVAS_POINTER_SPACE;
+/** LIFO record of what {@link pushButtonPointerOffset} applied, for {@link popButtonPointerOffset}. */
+const _pointerOffsetStack: Array<{ dx: number; dy: number }> = [];
 
 /** Gold, so the ring reads as focus against every preset's own border colour. */
 const FOCUS_RING_COLOR = '#facc15';
@@ -261,10 +274,10 @@ export function focusMenuButton(contextId: string, index: number): void {
 
 /** Canvas coordinates of a ring entry's centre — where a synthesized click lands. */
 function entryCenterInCanvasSpace(entry: FocusEntry): { x: number; y: number } {
-  const { scale, pivotX, pivotY } = entry.space;
+  const { scale, pivotX, pivotY, offsetX, offsetY } = entry.space;
   return {
-    x: pivotX + (entry.x + entry.w / 2 - pivotX) * scale,
-    y: pivotY + (entry.y + entry.h / 2 - pivotY) * scale,
+    x: pivotX + (entry.x + entry.w / 2 - pivotX) * scale + offsetX,
+    y: pivotY + (entry.y + entry.h / 2 - pivotY) * scale + offsetY,
   };
 }
 
@@ -292,15 +305,43 @@ export function focusedButtonClickPoint(): { x: number; y: number } | null {
  * panel is drawn; the next `setButtonMouseState` resets it too.
  */
 export function setButtonPointerSpace(scale: number, pivotX: number, pivotY: number): void {
-  _pointerSpace = { scale, pivotX, pivotY };
+  _pointerSpace = { scale, pivotX, pivotY, offsetX: 0, offsetY: 0 };
 }
 
 export function resetButtonPointerSpace(): void {
   _pointerSpace = CANVAS_POINTER_SPACE;
+  _pointerOffsetStack.length = 0;
 }
 
-function toSpace(coord: number, pivot: number, scale: number): number {
-  return pivot + (coord - pivot) / scale;
+/**
+ * Declare that buttons drawn from here on sit under a `ctx.translate(dx, dy)`
+ * — a scrolling band's rows, drawn in local coordinates the pointer has to be
+ * un-translated into. Pair with {@link popButtonPointerOffset} right after the
+ * matching `ctx.restore()`; nesting is a stack, so an inner scroll band inside
+ * an outer one pops back to the outer offset rather than to zero.
+ */
+export function pushButtonPointerOffset(dx: number, dy: number): void {
+  _pointerOffsetStack.push({ dx, dy });
+  _pointerSpace = {
+    ..._pointerSpace,
+    offsetX: _pointerSpace.offsetX + dx,
+    offsetY: _pointerSpace.offsetY + dy,
+  };
+}
+
+/** Undo the most recent {@link pushButtonPointerOffset}. */
+export function popButtonPointerOffset(): void {
+  const last = _pointerOffsetStack.pop();
+  if (!last) return;
+  _pointerSpace = {
+    ..._pointerSpace,
+    offsetX: _pointerSpace.offsetX - last.dx,
+    offsetY: _pointerSpace.offsetY - last.dy,
+  };
+}
+
+function toSpace(coord: number, pivot: number, scale: number, offset: number): number {
+  return pivot + (coord - offset - pivot) / scale;
 }
 
 /**
@@ -348,8 +389,18 @@ export function setButtonMouseState(mx: number, my: number, isDown = false): voi
  * disabled menu row that still previews what it would do.
  */
 export function pointerOverRect(x: number, y: number, width: number, height: number): boolean {
-  const pointerX = toSpace(_mouseX, _pointerSpace.pivotX, _pointerSpace.scale);
-  const pointerY = toSpace(_mouseY, _pointerSpace.pivotY, _pointerSpace.scale);
+  const pointerX = toSpace(
+    _mouseX,
+    _pointerSpace.pivotX,
+    _pointerSpace.scale,
+    _pointerSpace.offsetX,
+  );
+  const pointerY = toSpace(
+    _mouseY,
+    _pointerSpace.pivotY,
+    _pointerSpace.scale,
+    _pointerSpace.offsetY,
+  );
   return pointerX >= x && pointerX <= x + width && pointerY >= y && pointerY <= y + height;
 }
 
@@ -397,8 +448,8 @@ export function notifyButtonClick(mx: number, my: number): void {
 export function renderedButtonSoundAt(mx: number, my: number): SoundId | null {
   for (let i = _renderedButtons.length - 1; i >= 0; i--) {
     const btn = _renderedButtons[i];
-    const x = toSpace(mx, btn.space.pivotX, btn.space.scale);
-    const y = toSpace(my, btn.space.pivotY, btn.space.scale);
+    const x = toSpace(mx, btn.space.pivotX, btn.space.scale, btn.space.offsetX);
+    const y = toSpace(my, btn.space.pivotY, btn.space.scale, btn.space.offsetY);
     if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) return btn.sound;
   }
   return null;
@@ -803,8 +854,18 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
   if (alignY === 'middle') y -= height / 2;
   else if (alignY === 'bottom') y -= height;
 
-  const pointerX = toSpace(_mouseX, _pointerSpace.pivotX, _pointerSpace.scale);
-  const pointerY = toSpace(_mouseY, _pointerSpace.pivotY, _pointerSpace.scale);
+  const pointerX = toSpace(
+    _mouseX,
+    _pointerSpace.pivotX,
+    _pointerSpace.scale,
+    _pointerSpace.offsetX,
+  );
+  const pointerY = toSpace(
+    _mouseY,
+    _pointerSpace.pivotY,
+    _pointerSpace.scale,
+    _pointerSpace.offsetY,
+  );
   const hovered =
     !disabled && pointerX >= x && pointerX <= x + width && pointerY >= y && pointerY <= y + height;
   const pressed = hovered && _isDown;

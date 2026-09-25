@@ -5,6 +5,9 @@ import { drawText } from './TextBox';
 import { drawOverlay, drawBox, drawDivider, drawProgressBar } from './Box';
 import { suppressMenuFocus } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import type { AudioManager } from '../audio/AudioManager';
+
+type ParticleShape = 'circle' | 'confetti';
 
 interface Particle {
   x: number;
@@ -15,6 +18,11 @@ interface Particle {
   color: string;
   life: number;
   maxLife: number;
+  shape: ParticleShape;
+  /** Current facing, in radians. Confetti only — circles look the same at any angle. */
+  spin: number;
+  /** Radians added to `spin` per tick. */
+  spinRate: number;
 }
 
 const PARTICLE_COLORS = [
@@ -63,6 +71,10 @@ const BOX_SHAKE_AMPLITUDE_FRAMES = 1.8;
 const BOX_SHAKE_COS_FREQ = 2.1;
 const BOX_SHAKE_COS_AMP = 2;
 const BOX_LID_ANGLE = -0.9;
+/** Extra rotation past `BOX_LID_ANGLE`, so the lid overshoots into a blown-off pose rather than settling gently. */
+const BOX_LID_SPIN_EXTRA = -0.6;
+/** How far the lid lifts as it blows off, in px at the box's own small scale. */
+const BOX_LID_FLING_DISTANCE = 10;
 const BOX_LID_PAD = 4;
 const BOX_LID_HEIGHT_FRAC = 0.18;
 const BOX_GLOW_OPEN_ALPHA = 0.6;
@@ -117,8 +129,15 @@ const CONTENT_WIDTH_REDUCTION = 40;
 // Particle spread — centering the random range around zero
 const PARTICLE_CENTER_OFFSET = 0.5;
 
-const BURST_COUNT_OPEN = 30;
-const BURST_COUNT_REVEAL = 50;
+const BURST_COUNT_OPEN = 60;
+const BURST_COUNT_REVEAL = 90;
+/** Share of a burst that flies as confetti rectangles rather than round sparks. */
+const CONFETTI_SHARE = 0.4;
+const CONFETTI_SIZE_BASE = 3;
+const CONFETTI_SIZE_RANGE = 4;
+const CONFETTI_SPIN_RANGE = 0.3;
+/** Confetti rectangles are taller than they are wide, so a spin reads as a tumbling ribbon. */
+const CONFETTI_ASPECT = 2.2;
 
 const HEADER_PROGRESS_Y_CORRECTION = 9;
 
@@ -130,6 +149,46 @@ const TIER_ORDER: Record<string, number> = {
   Legendary: 3,
   Celestial: 4,
 };
+
+/**
+ * How much bigger a burst reads for a rarer tier: 1x for Bronze up to
+ * roughly 3x for Celestial. Every burst-scaled effect below reads this once.
+ */
+function tierIntensity(tier: string): number {
+  const TIER_INTENSITY_STEP = 0.5;
+  const BASE_INTENSITY = 1;
+  return BASE_INTENSITY + (TIER_ORDER[tier] ?? 0) * TIER_INTENSITY_STEP;
+}
+
+// Anticipation: the shake crescendos and the lid seams start leaking light.
+const SHAKE_CRESCENDO_MIN_SHARE = 0.25;
+const SEAM_LEAK_ALPHA = 0.55;
+const SEAM_LEAK_HEIGHT_FRAC = 0.05;
+/** Volume of the rising hum played once as the shake begins. */
+const SHAKE_HUM_VOLUME = 0.4;
+
+// Burst: full-screen flash, screen shake, rotating god rays, shockwave ring.
+const BURST_FLASH_FRAMES = 10;
+const BURST_FLASH_ALPHA = 0.85;
+const BURST_SHAKE_FRAMES = 14;
+const BURST_SHAKE_MAGNITUDE_PX = 6;
+const GOD_RAY_COUNT = 8;
+const GOD_RAY_SPIN_PER_FRAME = 0.012;
+const GOD_RAY_LENGTH = 220;
+const GOD_RAY_HALF_ANGLE = 0.09;
+const GOD_RAY_ALPHA = 0.16;
+const SHOCKWAVE_FRAMES = 22;
+const SHOCKWAVE_MAX_RADIUS = 170;
+const SHOCKWAVE_LINE_WIDTH = 4;
+const SHOCKWAVE_ALPHA = 0.55;
+
+// Reveal: each reward line pops in with an overshoot scale bounce.
+const REVEAL_LINE_STAGGER_FRAMES = 6;
+const REVEAL_POP_FRAMES = 14;
+const REVEAL_POP_START_SCALE = 0.2;
+const REVEAL_POP_OVERSHOOT_SCALE = 1.25;
+/** Sparkle particles fired at a card's own position the instant it starts popping in. */
+const CARD_SPARKLE_COUNT = 10;
 
 export class LootBoxOpener {
   private active = false;
@@ -149,6 +208,21 @@ export class LootBoxOpener {
   private onBoxOpened: ((box: LootBox, contents: BoxContents) => void) | null = null;
   private onAllDone: (() => void) | null = null;
   private onEachBoxOpening: (() => void) | null = null;
+
+  private audio: AudioManager | null = null;
+  /** Countdown driving the full-screen flash at the moment the lid blows off. */
+  private burstFlashFrames = 0;
+  /** Countdown driving the brief screen shake that rides along with the burst. */
+  private burstShakeFrames = 0;
+  private shakeX = 0;
+  private shakeY = 0;
+  /** Reward lines that have already fired their pop-in sparkle burst, so a re-render of the same frame can't double it up. */
+  private sparkledLineIndices = new Set<number>();
+
+  /** Lets the owner wire a rising hum into the anticipation phase. */
+  setAudio(audio: AudioManager | null): void {
+    this.audio = audio;
+  }
 
   /** True while the opener is running through its queue. */
   get isOpen(): boolean {
@@ -222,12 +296,16 @@ export class LootBoxOpener {
       if (this.frame % SPARKLE_INTERVAL === 0) this.spawnParticle();
     }
 
+    const intensity = tierIntensity(this.box.tier);
+
     switch (this.phase) {
       case 'shaking':
         if (this.frame >= SHAKE_FRAMES) {
           this.phase = 'opening';
           this.frame = 0;
-          this.burstParticles(BURST_COUNT_OPEN);
+          this.burstFlashFrames = BURST_FLASH_FRAMES;
+          this.burstShakeFrames = BURST_SHAKE_FRAMES;
+          this.burstParticles(Math.round(BURST_COUNT_OPEN * intensity));
           this.onEachBoxOpening?.();
           if (!this.rewardGranted && this.onBoxOpened && this.contents) {
             this.rewardGranted = true;
@@ -239,7 +317,7 @@ export class LootBoxOpener {
         if (this.frame >= OPEN_FRAMES) {
           this.phase = 'revealing';
           this.frame = 0;
-          this.burstParticles(BURST_COUNT_REVEAL);
+          this.burstParticles(Math.round(BURST_COUNT_REVEAL * intensity));
         }
         break;
       case 'revealing':
@@ -254,10 +332,24 @@ export class LootBoxOpener {
         break;
     }
 
+    if (this.burstFlashFrames > 0) this.burstFlashFrames--;
+    if (this.burstShakeFrames > 0) {
+      this.burstShakeFrames--;
+      const shakeFalloff = this.burstShakeFrames / BURST_SHAKE_FRAMES;
+      this.shakeX =
+        (Math.random() - PARTICLE_CENTER_OFFSET) * 2 * BURST_SHAKE_MAGNITUDE_PX * shakeFalloff;
+      this.shakeY =
+        (Math.random() - PARTICLE_CENTER_OFFSET) * 2 * BURST_SHAKE_MAGNITUDE_PX * shakeFalloff;
+    } else {
+      this.shakeX = 0;
+      this.shakeY = 0;
+    }
+
     for (const p of this.particles) {
       p.x += p.vx;
       p.y += p.vy;
       p.vy += PARTICLE_GRAVITY;
+      p.spin += p.spinRate;
       p.life--;
     }
     this.particles = this.particles.filter((p) => p.life > 0);
@@ -278,6 +370,21 @@ export class LootBoxOpener {
     const cx = cw / 2;
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.7 });
+
+    if (this.burstFlashFrames > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      drawOverlay(ctx, {
+        canvasWidth: cw,
+        canvasHeight: ch,
+        color: '#ffffff',
+        alpha: (this.burstFlashFrames / BURST_FLASH_FRAMES) * BURST_FLASH_ALPHA,
+      });
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.translate(this.shakeX, this.shakeY);
 
     const tierColor = this.tierColor(this.box.tier);
     drawBox(ctx, {
@@ -327,7 +434,14 @@ export class LootBoxOpener {
       color: `${tierColor}55`,
     });
 
-    this.drawAnimatedBox(ctx, cx, by + boxH / 2 - HEADER_TITLE_FONT_CORRECTION, tierColor);
+    const boxCenterY = by + boxH / 2 - HEADER_TITLE_FONT_CORRECTION;
+    if (this.phase === 'opening' || this.phase === 'revealing') {
+      this.renderGodRays(ctx, cx, boxCenterY, tierColor);
+    }
+    if (this.phase === 'opening' && this.frame < SHOCKWAVE_FRAMES) {
+      this.renderShockwave(ctx, cx, boxCenterY, tierColor);
+    }
+    this.drawAnimatedBox(ctx, cx, boxCenterY, tierColor);
 
     if (this.phase === 'revealing' || this.phase === 'done') {
       const revealAlpha =
@@ -384,12 +498,71 @@ export class LootBoxOpener {
       const ratio = p.life / p.maxLife;
       ctx.globalAlpha = ratio;
       ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.radius * ratio, 0, Math.PI * 2);
-      ctx.fill();
+      if (p.shape === 'confetti') {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.spin);
+        const size = p.radius * ratio;
+        ctx.fillRect(-size / 2, -size / 2, size, size * CONFETTI_ASPECT);
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius * ratio, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.globalAlpha = 1;
 
+    ctx.restore();
+  }
+
+  /** Additive rotating shafts of light behind the box, brightening the burst and reveal. */
+  private renderGodRays(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    color: string,
+  ): void {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(this.frame * GOD_RAY_SPIN_PER_FRAME);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = GOD_RAY_ALPHA;
+    ctx.fillStyle = color;
+    for (let i = 0; i < GOD_RAY_COUNT; i++) {
+      const angle = (i / GOD_RAY_COUNT) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(
+        Math.cos(angle - GOD_RAY_HALF_ANGLE) * GOD_RAY_LENGTH,
+        Math.sin(angle - GOD_RAY_HALF_ANGLE) * GOD_RAY_LENGTH,
+      );
+      ctx.lineTo(
+        Math.cos(angle + GOD_RAY_HALF_ANGLE) * GOD_RAY_LENGTH,
+        Math.sin(angle + GOD_RAY_HALF_ANGLE) * GOD_RAY_LENGTH,
+      );
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** A single expanding ring at the instant the lid blows off, in the box's own tier colour. */
+  private renderShockwave(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    color: string,
+  ): void {
+    const t = this.frame / SHOCKWAVE_FRAMES;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = SHOCKWAVE_ALPHA * (1 - t);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = SHOCKWAVE_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.arc(cx, cy, SHOCKWAVE_MAX_RADIUS * t, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -401,6 +574,12 @@ export class LootBoxOpener {
     this.nextTimer = 0;
     this.particles = [];
     this.rewardGranted = false;
+    this.burstFlashFrames = 0;
+    this.burstShakeFrames = 0;
+    this.shakeX = 0;
+    this.shakeY = 0;
+    this.sparkledLineIndices = new Set();
+    this.audio?.play('rumble', { volume: SHAKE_HUM_VOLUME });
   }
 
   private advance(): void {
@@ -415,28 +594,35 @@ export class LootBoxOpener {
     }
   }
 
-  private burstParticles(count: number): void {
-    for (let i = 0; i < count; i++) this.spawnParticle(true);
+  private burstParticles(count: number, origin?: { x: number; y: number }): void {
+    for (let i = 0; i < count; i++) this.spawnParticle(true, origin);
   }
 
-  private spawnParticle(burst = false): void {
+  private spawnParticle(burst = false, origin?: { x: number; y: number }): void {
     // Particles are drawn onto the canvas, so they spawn in the CSS-pixel
-    // viewport the box is laid out in, not in window coordinates.
-    const cx = viewportWidth() / 2;
-    const cy = viewportHeight() / 2;
+    // viewport the box is laid out in, not in window coordinates — unless a
+    // caller hands over a specific spot (a reward card popping in).
+    const cx = origin?.x ?? viewportWidth() / 2;
+    const cy = origin?.y ?? viewportHeight() / 2;
     const angle = Math.random() * Math.PI * 2;
     const speed = burst
       ? PARTICLE_BURST_SPEED_BASE + Math.random() * PARTICLE_BURST_SPEED_RANGE
       : PARTICLE_IDLE_SPEED_BASE + Math.random() * PARTICLE_IDLE_SPEED_RANGE;
+    const isConfetti = burst && Math.random() < CONFETTI_SHARE;
     this.particles.push({
       x: cx + (Math.random() - PARTICLE_CENTER_OFFSET) * PARTICLE_BURST_SPREAD_X,
       y: cy + (Math.random() - PARTICLE_CENTER_OFFSET) * PARTICLE_BURST_SPREAD_X,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - (burst ? PARTICLE_BURST_LIFT : 0),
-      radius: PARTICLE_RADIUS_BASE + Math.random() * PARTICLE_RADIUS_RANGE,
+      radius: isConfetti
+        ? CONFETTI_SIZE_BASE + Math.random() * CONFETTI_SIZE_RANGE
+        : PARTICLE_RADIUS_BASE + Math.random() * PARTICLE_RADIUS_RANGE,
       color: randomFromArray(PARTICLE_COLORS),
       life: randomInt(PARTICLE_LIFE_MIN, PARTICLE_LIFE_MAX),
       maxLife: PARTICLE_MAX_LIFE,
+      shape: isConfetti ? 'confetti' : 'circle',
+      spin: Math.random() * Math.PI * 2,
+      spinRate: (Math.random() - PARTICLE_CENTER_OFFSET) * 2 * CONFETTI_SPIN_RANGE,
     });
   }
 
@@ -450,13 +636,16 @@ export class LootBoxOpener {
 
     let shakeX = 0;
     let shakeY = 0;
+    // Grows from a fraction of full strength up to full strength, so the shake
+    // reads as building tension rather than starting at its final intensity.
+    let shakeCrescendo = 0;
     if (this.phase === 'shaking') {
       const t = this.frame / SHAKE_FRAMES;
+      shakeCrescendo = SHAKE_CRESCENDO_MIN_SHARE + (1 - SHAKE_CRESCENDO_MIN_SHARE) * t;
       const intensity =
-        Math.sin(this.frame * BOX_SHAKE_AMPLITUDE_FRAMES) * PARTICLE_BURST_LIFT +
-        2 * (1 - t * REVEAL_FADE_FRACTION);
+        Math.sin(this.frame * BOX_SHAKE_AMPLITUDE_FRAMES) * PARTICLE_BURST_LIFT * shakeCrescendo;
       shakeX = intensity;
-      shakeY = Math.cos(this.frame * BOX_SHAKE_COS_FREQ) * BOX_SHAKE_COS_AMP;
+      shakeY = Math.cos(this.frame * BOX_SHAKE_COS_FREQ) * BOX_SHAKE_COS_AMP * shakeCrescendo;
     }
 
     const bx = cx - size / 2 + shakeX;
@@ -464,9 +653,12 @@ export class LootBoxOpener {
 
     if (this.phase === 'opening' || this.phase === 'revealing' || this.phase === 'done') {
       const t = this.phase === 'opening' ? Math.min(1, this.frame / OPEN_FRAMES) : 1;
-      const lidAngle = t * BOX_LID_ANGLE;
+      // The lid overshoots its resting angle and lifts as it blows off, rather
+      // than simply rotating open, so the burst reads as an impact.
+      const lidAngle = t * (BOX_LID_ANGLE + BOX_LID_SPIN_EXTRA);
+      const lidLift = t * BOX_LID_FLING_DISTANCE;
       ctx.save();
-      ctx.translate(bx + size / 2, by + size * BOX_BODY_Y_FRAC);
+      ctx.translate(bx + size / 2, by + size * BOX_BODY_Y_FRAC - lidLift);
       ctx.rotate(lidAngle);
       ctx.fillStyle = color;
       const LID_FILL_ALPHA = 0.25;
@@ -525,6 +717,21 @@ export class LootBoxOpener {
       ctx.fillRect(bx - BOX_LID_PAD, by, size + BOX_LID_PAD * 2, size * BOX_SHAKE_FILL_Y_FRAC);
       ctx.globalAlpha = 1;
       ctx.strokeRect(bx - BOX_LID_PAD, by, size + BOX_LID_PAD * 2, size * BOX_SHAKE_FILL_Y_FRAC);
+
+      // Light leaking from the lid seam, brightening with the shake — the
+      // anticipation that something is about to force its way out.
+      const seamY = by + size * BOX_SHAKE_FILL_Y_FRAC;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = SEAM_LEAK_ALPHA * shakeCrescendo;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(
+        bx - BOX_LID_PAD,
+        seamY - (size * SEAM_LEAK_HEIGHT_FRAC) / 2,
+        size + BOX_LID_PAD * 2,
+        size * SEAM_LEAK_HEIGHT_FRAC,
+      );
+      ctx.restore();
     }
 
     ctx.strokeStyle = `${color}cc`;
@@ -559,6 +766,8 @@ export class LootBoxOpener {
     });
     y += CONTENT_ADVANCE_Y;
 
+    let lineIndex = 0;
+
     if (this.contents.displayLines !== undefined) {
       const lines = this.contents.displayLines;
       const itemFontSize =
@@ -566,14 +775,16 @@ export class LootBoxOpener {
       const lineStep =
         itemFontSize <= CONTENT_FONT_SMALL ? CONTENT_LINE_STEP_SMALL : CONTENT_LINE_STEP_NORMAL;
       for (const line of lines) {
-        drawText(ctx, line, {
-          x: leftX,
-          y: y - CONTENT_ITEM_Y_OFFSET,
-          size: itemFontSize,
-          color: '#4ade80',
-          align: 'center',
-          width: maxW,
-        });
+        this.drawPoppingLine(
+          ctx,
+          line,
+          leftX,
+          y - CONTENT_ITEM_Y_OFFSET,
+          itemFontSize,
+          '#4ade80',
+          maxW,
+          lineIndex++,
+        );
         y += lineStep;
       }
       return;
@@ -592,25 +803,29 @@ export class LootBoxOpener {
       itemFontSize <= CONTENT_FONT_SMALL ? CONTENT_LINE_STEP_SMALL : CONTENT_LINE_STEP_NORMAL;
 
     if (potionCount > 0) {
-      drawText(ctx, `+${potionCount} Health Potion${potionCount !== 1 ? 's' : ''}`, {
-        x: leftX,
-        y: y - CONTENT_ITEM_Y_OFFSET,
-        size: itemFontSize,
-        color: '#4ade80',
-        align: 'center',
-        width: maxW,
-      });
+      this.drawPoppingLine(
+        ctx,
+        `+${potionCount} Health Potion${potionCount !== 1 ? 's' : ''}`,
+        leftX,
+        y - CONTENT_ITEM_Y_OFFSET,
+        itemFontSize,
+        '#4ade80',
+        maxW,
+        lineIndex++,
+      );
       y += lineStep;
     }
     if (this.contents.coins > 0) {
-      drawText(ctx, `+${this.contents.coins} Coins`, {
-        x: leftX,
-        y: y - CONTENT_ITEM_Y_OFFSET,
-        size: itemFontSize,
-        color: '#fbbf24',
-        align: 'center',
-        width: maxW,
-      });
+      this.drawPoppingLine(
+        ctx,
+        `+${this.contents.coins} Coins`,
+        leftX,
+        y - CONTENT_ITEM_Y_OFFSET,
+        itemFontSize,
+        '#fbbf24',
+        maxW,
+        lineIndex++,
+      );
       y += lineStep;
     }
     if (this.contents.bonus) {
@@ -619,27 +834,82 @@ export class LootBoxOpener {
       // The shared tier/category bonus always goes to the human, regardless of
       // which player's box granted it.
       const bonusRecipient = this.playerName !== 'Human' ? ' → Human' : '';
-      drawText(ctx, `+${this.contents.bonus.quantity} ${name}${bonusRecipient}`, {
-        x: leftX,
-        y: y - CONTENT_ITEM_Y_OFFSET,
-        size: itemFontSize,
-        color: '#fb923c',
-        align: 'center',
-        width: maxW,
-      });
+      this.drawPoppingLine(
+        ctx,
+        `+${this.contents.bonus.quantity} ${name}${bonusRecipient}`,
+        leftX,
+        y - CONTENT_ITEM_Y_OFFSET,
+        itemFontSize,
+        '#fb923c',
+        maxW,
+        lineIndex++,
+      );
       y += lineStep;
     }
     for (const { id, quantity } of this.contents.itemRewards ?? []) {
-      drawText(ctx, `+${quantity} ${ITEM_DEF[id].name}`, {
-        x: leftX,
-        y: y - CONTENT_ITEM_Y_OFFSET,
-        size: itemFontSize,
-        color: '#fb923c',
-        align: 'center',
-        width: maxW,
-      });
+      this.drawPoppingLine(
+        ctx,
+        `+${quantity} ${ITEM_DEF[id].name}`,
+        leftX,
+        y - CONTENT_ITEM_Y_OFFSET,
+        itemFontSize,
+        '#fb923c',
+        maxW,
+        lineIndex++,
+      );
       y += lineStep;
     }
+  }
+
+  /**
+   * One reward line, popping in with an overshoot scale bounce staggered by
+   * `lineIndex` — rarer boxes call this with more lines and bigger bursts
+   * around it, which is what makes a Celestial box feel heavier than a Bronze
+   * one without this function needing to know about tiers at all.
+   */
+  private drawPoppingLine(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    size: number,
+    color: string,
+    width: number,
+    lineIndex: number,
+  ): void {
+    const scale = this.phase === 'revealing' ? this.revealPopScale(lineIndex) : 1;
+    if (scale <= 0) return;
+    // drawText's `align: 'center'` centres the glyphs at x + width/2, not at
+    // x — pivoting the scale around x alone made every line slide sideways as
+    // it popped in instead of growing in place.
+    const pivotX = x + width / 2;
+    if (this.phase === 'revealing' && !this.sparkledLineIndices.has(lineIndex)) {
+      const local = this.frame - lineIndex * REVEAL_LINE_STAGGER_FRAMES;
+      if (local > 0) {
+        this.sparkledLineIndices.add(lineIndex);
+        this.burstParticles(CARD_SPARKLE_COUNT, { x: pivotX, y });
+      }
+    }
+    ctx.save();
+    ctx.translate(pivotX, y);
+    ctx.scale(scale, scale);
+    ctx.translate(-pivotX, -y);
+    drawText(ctx, text, { x, y, size, color, align: 'center', width });
+    ctx.restore();
+  }
+
+  /** Scale envelope for the `lineIndex`-th reveal line: 0 until its turn, an overshoot bounce, then settles at 1. */
+  private revealPopScale(lineIndex: number): number {
+    const local = this.frame - lineIndex * REVEAL_LINE_STAGGER_FRAMES;
+    if (local <= 0) return 0;
+    if (local >= REVEAL_POP_FRAMES) return 1;
+    const half = REVEAL_POP_FRAMES / 2;
+    if (local < half) {
+      const t = local / half;
+      return REVEAL_POP_START_SCALE + (REVEAL_POP_OVERSHOOT_SCALE - REVEAL_POP_START_SCALE) * t;
+    }
+    const t = (local - half) / half;
+    return REVEAL_POP_OVERSHOOT_SCALE + (1 - REVEAL_POP_OVERSHOOT_SCALE) * t;
   }
 
   private tierColor(tier: string): string {

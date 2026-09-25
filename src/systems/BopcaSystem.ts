@@ -595,10 +595,10 @@ export class BopcaSystem implements GameSystem {
    * press, so the scene can fall through to its other interactions.
    *
    * This is the mobile path too. Routing it through a contextual action button
-   * on `MobileHUDSystem`, alongside the existing Talk/Sleep actions, is not an
-   * option: there is no such button and those actions were never surfaced
+   * on `MobileHUDSystem`, alongside the existing Talk action, is not an
+   * option: there is no such button and that action was never surfaced
    * there either — `MobileHUDSystem.hitTest` knows only
-   * minimap, pause, switch, gear and bag. On mobile, Talk and Sleep are reached by
+   * minimap, pause, switch, gear and bag. On mobile, Talk is reached by
    * tapping the world, which routes here through both scenes' touch handlers, and
    * `drawInteractionPrompt` already renders its key cap as "TAP". Adding a sixth
    * HUD button for one fixture would be the odd one out, not the consistent move.

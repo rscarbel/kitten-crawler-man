@@ -48,6 +48,11 @@ export const MONGO_POUNCE_AIRBORNE_END = 0.74;
 /** Sprite frames in the collapse row, played once when his HP hits zero. */
 export const MONGO_COLLAPSE_FRAMES = 10;
 
+/** Sprite frames in the happy-jump row, played once when he is petted. */
+export const MONGO_HAPPY_JUMP_FRAMES = 10;
+/** Sprite frames in the wing-flap row that follows a happy jump. */
+export const MONGO_FLAP_FRAMES = 8;
+
 /** Game frames each sprite frame of a one-shot row is held for. */
 export const MONGO_FRAME_HOLD = 3;
 

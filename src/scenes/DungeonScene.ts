@@ -67,6 +67,7 @@ import {
   availableTargets,
   collectTrackerEntries,
   isOutstanding,
+  pinMatchesEntry,
   resolvePinnedEntry,
   type TrackerEntry,
   type TrackerTarget,
@@ -83,7 +84,7 @@ import { getSkillDef, type CrawlerKind } from '../core/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
-import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
+import { drawHUD, renderMobileSkillBadge, hudCoinCounterScreenPos } from '../ui/HUD';
 import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
@@ -205,6 +206,8 @@ import {
 import { HumanTalkDriver, openChestWithGesture } from '../creatures/humanGestures';
 import { type Pt } from '../sprites/art/carlArt';
 import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
+import { RewardFlySystem, type RewardFlyHold } from '../systems/RewardFlySystem';
+import type { PendingLoot } from '../systems/LootSystem';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Goblin } from '../creatures/Goblin';
 import { GoblinArcher } from '../creatures/GoblinArcher';
@@ -269,6 +272,11 @@ import { SMUSH_DEF } from '../abilities/smush';
 import type { GrantedReward } from '../core/GrantedReward';
 import { drawMongoIcon } from '../sprites/mongoSprite';
 import { EventBus } from '../core/EventBus';
+import {
+  CrawlerBarkSystem,
+  DONUT_KNOCKOUT_BARK,
+  WARD_EXPLAINER_BARK_LINES,
+} from '../systems/CrawlerBarkSystem';
 import { DifficultyTelemetrySystem } from '../systems/DifficultyTelemetrySystem';
 import {
   readMovement,
@@ -310,7 +318,7 @@ import {
   restoreBountyProgress,
   type BountyProgress,
 } from '../core/BountyProgress';
-import { BountySystem } from '../systems/BountySystem';
+import { BountySystem, BOUNTY_TRACKER_ID } from '../systems/BountySystem';
 import { findBountyDef } from '../systems/bountyDefs';
 import { findNearbyWalkableTile, hasRoomToMove } from '../map/findWalkableTile';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
@@ -1172,6 +1180,7 @@ export class DungeonScene extends GameplayScene {
   private readonly mercenarySystem: MercenarySystem;
   private renderPipeline = new RenderPipeline();
   private bus = new EventBus();
+  private readonly crawlerBarks = new CrawlerBarkSystem();
 
   private levelCompleteScreen = new LevelCompleteScreen();
   private readonly runCompleteScreen = new RunCompleteScreen();
@@ -1193,6 +1202,10 @@ export class DungeonScene extends GameplayScene {
   private arena!: ArenaSystem;
   private readonly treasureChests = new TreasureChestSystem();
   private readonly chestRewardDialog = new ChestRewardDialog();
+  /** Coins/items flying to the HUD from wherever they were earned. Screen-space; ticks and draws every frame regardless of what else is on screen. */
+  protected readonly rewardFly = new RewardFlySystem();
+  /** The chest reward dialog's own hold, if one is outstanding — set in `showChestReward`, cleared on release. */
+  private chestRewardFlyHold: RewardFlyHold | null = null;
 
   private floorEntryHumanSnap!: PlayerSnapshot;
   private floorEntryCatSnap!: PlayerSnapshot;
@@ -1210,7 +1223,13 @@ export class DungeonScene extends GameplayScene {
   private gameOver = false;
   protected readonly notifPulse = { value: 0 };
   private levelTimerFrames = 0;
-  private readonly LEVEL_TIME_LIMIT = 216_000; // 1 hour @ 60 fps
+  /**
+   * The tutorial has no `LevelDef` collapse timer of its own — it isn't built
+   * from one — so it keeps the hour every timed floor used to run on, named
+   * here rather than repeating the literal. Also the fallback clamp for a
+   * timed `LevelDef` that omits `collapseTimeLimitFrames`.
+   */
+  private readonly TUTORIAL_TIME_LIMIT_FRAMES = 216_000; // 1 hour @ 60 fps
   private wasInSafeRoom = false;
   /**
    * Whether the active crawler stood inside the town wall last frame. Starts
@@ -1233,6 +1252,46 @@ export class DungeonScene extends GameplayScene {
    * point, so a new floor saves where the party stands the moment it arrives.
    */
   private arrivalSavePending = false;
+  /**
+   * Room indices (into `gameMap.roomBounds`) that have already taken their
+   * one-time stairwell save, so clearing a room that keeps producing grub
+   * spawns doesn't resave it every kill. Never cleared: it is scoped to this
+   * floor's `DungeonScene` instance, same as `lastSave`.
+   */
+  private readonly stairwellRoomsSaved = new Set<number>();
+  /**
+   * Stairwell rooms that already held zero counted hostiles the moment this
+   * floor's mobs finished their initial spawn — set once in the constructor
+   * and never touched again.
+   *
+   * This is the only set the *entry* save (walking into an already-quiet room)
+   * is allowed to fire from. A room a guard was later chased out of is not in
+   * it, even once the last of those guards dies somewhere else, so dashing
+   * into the room one step ahead of a pursuer can never bank a checkpoint —
+   * only a kill that actually happens *in* the room, through `mobKilled`, can
+   * clear a room that started this floor occupied.
+   *
+   * A same-instance checkpoint rewind (`restoreFromCheckpoint`) never touches
+   * this: it replays combat outcomes on the roster the floor already spawned,
+   * not a new spawn, so the floor's true starting occupancy hasn't changed. A
+   * save/floor-restart route instead builds a brand new `DungeonScene`, whose
+   * own constructor computes its own fresh set from its own fresh spawn.
+   */
+  private roomsClearAtFloorStart: ReadonlySet<number> = new Set();
+  /**
+   * A stairwell room whose guards are all dead but whose save was withheld
+   * because a hostile was still engaged near the active crawler — retried
+   * every frame (cheap: a no-op past the first two guards) until the
+   * engagement clears or the room is saved by some other route.
+   */
+  private pendingStairwellSaveRoomIndex: number | null = null;
+  /**
+   * The active crawler's room index as of last frame, so the per-frame
+   * stairwell entry-save check — which walks every mob in the room — only
+   * runs on the frame that index actually changes, plus any frame a save is
+   * still pending.
+   */
+  private lastActiveRoomIndexForStairwellSave: number | null = null;
   /**
    * The carried save when this floor could not be rebuilt from it — it has no
    * world, or one from an older generator — and was generated fresh in its
@@ -1337,7 +1396,7 @@ export class DungeonScene extends GameplayScene {
       const tutMap = new TutorialMap();
       this.gameMap = tutMap;
       this.tutorial = tutorialController;
-      this.levelTimerFrames = this.LEVEL_TIME_LIMIT;
+      this.levelTimerFrames = this.TUTORIAL_TIME_LIMIT_FRAMES;
 
       spawnTileX = tutMap.humanStartTile.x;
       spawnTileY = tutMap.humanStartTile.y;
@@ -1371,10 +1430,18 @@ export class DungeonScene extends GameplayScene {
           worldSeed: options?.worldSeed,
           artSeed: options?.artSeed,
         });
-      this.levelTimerFrames =
-        levelDef.hasCollapseTimer === true
-          ? Math.min(options?.levelTimerFrames ?? this.LEVEL_TIME_LIMIT, this.LEVEL_TIME_LIMIT)
-          : 0;
+      if (levelDef.hasCollapseTimer === true) {
+        const floorTimeLimit = levelDef.collapseTimeLimitFrames ?? this.TUTORIAL_TIME_LIMIT_FRAMES;
+        // Clamped to this floor's own limit even for a resumed save: a save
+        // written on a floor with a longer limit must not hand a shorter one
+        // more time than it is supposed to have.
+        this.levelTimerFrames = Math.min(
+          options?.levelTimerFrames ?? floorTimeLimit,
+          floorTimeLimit,
+        );
+      } else {
+        this.levelTimerFrames = 0;
+      }
 
       // Dev bootstrap: spawn on the southern circus grounds so quest stages
       // can be exercised without the walk from town.
@@ -1532,6 +1599,18 @@ export class DungeonScene extends GameplayScene {
     };
     for (const mob of initialMobs) this.world.roster.add(mob);
 
+    // After the initial spawn, and only ever here: this is the floor's true
+    // starting occupancy, which a stairwell room's *entry* save is gated on.
+    this.roomsClearAtFloorStart = new Set(
+      this.gameMap.roomBounds
+        .map((_room, roomIndex) => roomIndex)
+        .filter(
+          (roomIndex) =>
+            this.roomIndexOfStairwellRoom(roomIndex) &&
+            this.gameMap.hostilesInRoom(roomIndex, this.world.roster.mobs).length === 0,
+        ),
+    );
+
     this.grotesqueSpiders = this.world.roster.mobs.filter(
       (m): m is GrotesqueSpider => m instanceof GrotesqueSpider,
     );
@@ -1587,6 +1666,14 @@ export class DungeonScene extends GameplayScene {
       breakableProps: levelDef.isOverworld ? NO_BREAKABLE_PROPS : ALL_BREAKABLE_PROPS,
       trees: () => this.trees,
     });
+    this.destruction.loot.onCredited = (loot) => this.flyLootReward(loot);
+    this.destruction.groundPickups.onCollected = (itemId, quantity, worldX, worldY) => {
+      const cam = this.camera();
+      const name = ITEM_DEF[itemId].name;
+      for (let i = 0; i < quantity; i++) {
+        this.rewardFly.enqueueItem(itemId, name, worldX - cam.x, worldY - cam.y);
+      }
+    };
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.hotbarToast);
     // The safe-room counter is stamped here rather than in the generators: it
     // belongs to every safe room on every map, and this and BuildingInteriorScene
@@ -1603,8 +1690,12 @@ export class DungeonScene extends GameplayScene {
     // owns and cannot know them until it is planned.
     stampSafeRoomDecor(this.gameMap);
     const bossTypes = levelDef.bossRooms?.map((b) => b.type) ?? [];
-    this.bossRoom = new BossRoomSystem(this.gameMap, this.miniMap, bossTypes, (roomIndex) =>
-      this.treasureChests.hasUnopenedBossChest(roomIndex),
+    this.bossRoom = new BossRoomSystem(
+      this.gameMap,
+      this.miniMap,
+      this.bus,
+      bossTypes,
+      (roomIndex) => this.treasureChests.hasUnopenedBossChest(roomIndex),
     );
     for (const bossType of options?.preDefeatedBossTypes ?? []) {
       this.bossRoom.markPreDefeated(bossType);
@@ -1618,6 +1709,7 @@ export class DungeonScene extends GameplayScene {
       roster: this.world.roster,
       gameMap: this.gameMap,
       bossRoom: this.bossRoom,
+      crawlerBarks: this.crawlerBarks,
     };
     const gauntletRoomDressings = buildGauntletRoomDressings(this.gameMap, bossTypes);
     this.juicerRoom = gauntletRoomDressings.juicer;
@@ -2160,6 +2252,10 @@ export class DungeonScene extends GameplayScene {
         this.bountyProgress,
         (mob) => this.world.roster.add(mob),
         this.audio,
+        (coins, worldX, worldY) => {
+          const cam = this.camera();
+          this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
+        },
       );
       if (bountyGiverTile !== null) {
         this.bounty.placeShady(bountyGiverTile);
@@ -2233,6 +2329,16 @@ export class DungeonScene extends GameplayScene {
                   this.active(),
                   true,
                 ),
+              onCoinsGranted: (coins, worldX, worldY) => {
+                const cam = this.camera();
+                this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
+              },
+              onItemGranted: (id, quantity, worldX, worldY) => {
+                const cam = this.camera();
+                for (let i = 0; i < quantity; i++) {
+                  this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
+                }
+              },
               assaultLevel: () =>
                 resolveVillageAssaultLevel(
                   levelDef,
@@ -2253,6 +2359,7 @@ export class DungeonScene extends GameplayScene {
       this.catAchievements,
       this.human,
       this.cat,
+      this.rewardFly,
       this.audio,
     );
     // Boss-style so the pile never fades: an achievement pays out once, and a
@@ -2407,6 +2514,12 @@ export class DungeonScene extends GameplayScene {
       this.audio,
       this.active(),
     );
+    this.circusQuest.onItemGranted = (id, quantity, worldX, worldY) => {
+      const cam = this.camera();
+      for (let i = 0; i < quantity; i++) {
+        this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
+      }
+    };
     this.murderQuest = new MurderMysteryQuestSystem(
       this.gameMap,
       this.bus,
@@ -2430,6 +2543,12 @@ export class DungeonScene extends GameplayScene {
       (message) => this.menus.announce(message),
       this.audio,
     );
+    this.anchorQuest.onItemGranted = (id, quantity, worldX, worldY) => {
+      const cam = this.camera();
+      for (let i = 0; i < quantity; i++) {
+        this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
+      }
+    };
     this.doomsdayEscape = new DoomsdayEscapeSystem(
       this.gameMap,
       this.doomsdayQuestProgress,
@@ -2681,6 +2800,13 @@ export class DungeonScene extends GameplayScene {
       this.anchorQuestProgress.recallEverUsed = true;
     });
 
+    bus.on('crawlerKnockedOut', (e) => {
+      e.player.applyCockroachKnockoutRelief();
+      if (e.player === this.cat && this.human.isAlive && !this.human.isKnockedOut) {
+        this.crawlerBarks.say(this.human, [DONUT_KNOCKOUT_BARK]);
+      }
+    });
+
     // ── mobKilled: corpse marker, achievements, loot, grub spawns ──
     bus.on('mobKilled', (e) => {
       const { mob, killer, topDamageDealer } = e;
@@ -2698,6 +2824,10 @@ export class DungeonScene extends GameplayScene {
       this.combat.spawnKillGore(mob, killer);
       this.miniMap.addCorpseMarker(cx, cy);
       noteCampCasualty(this.townMemory, mob, this.world.roster.mobs);
+
+      this.attemptStairwellSave(
+        this.gameMap.roomIndexAt(Math.floor(cx / TILE_SIZE), Math.floor(cy / TILE_SIZE)),
+      );
 
       if (creditedKiller === this.human && this.humanAchievements.tryUnlock('first_blood')) {
         bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Human' });
@@ -2803,6 +2933,9 @@ export class DungeonScene extends GameplayScene {
         for (const rule of this.levelDef.onMobKilledSpawns) {
           if (mob instanceof BrindleGrub && rule.type === 'brindle_grub') continue;
           if (mob instanceof SmallSpider) continue;
+          // A boss's own staged add (a guard tentacle, a roach, a tuskling) is not
+          // a kill the party earned against the floor's population.
+          if (mob.isBossAdd) continue;
           if (!mob.seedsOnKillSpawns) continue;
           // A body an enemy conjured is not a kill the party earned, so it
           // does not seed a swarm either — a necro fairy's skeletons would
@@ -2957,7 +3090,16 @@ export class DungeonScene extends GameplayScene {
     // shard's row would die the moment that shard was found. `pinMatchesEntry`
     // is what lets the shorter id keep resolving.
     bus.on('questStarted', (e) => {
+      // A player pin keeps the arrow as long as what it names is still
+      // outstanding — only a pin left dangling on something finished gets
+      // taken over automatically, the same as if nothing had been pinned.
+      if (this.journalProgress.pinSource === 'player') {
+        const stillActive =
+          resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries) !== null;
+        if (stillActive) return;
+      }
       this.journalProgress.pinnedTrackerId = e.questId;
+      this.journalProgress.pinSource = 'auto';
     });
 
     bus.on('questCompleted', (e) => {
@@ -2965,28 +3107,33 @@ export class DungeonScene extends GameplayScene {
         const def = this.defendQuest.questManager.getDef(e.questId);
         if (def?.rewards.coins) {
           this.active().earnCoins(def.rewards.coins);
+          this.flyQuestCoins(def.rewards.coins);
         }
         this.humanAchievements.grantBox('Silver', 'Adventurer', 'quest_defend_npc');
         this.human.inventory.clearQuestSlot();
         this.cat.inventory.clearQuestSlot();
       }
       if (e.questId === 'grotesque_spider') {
-        awardXp(this.human, SPIDER_QUEST_COMPLETION_XP, this.bus);
-        awardXp(this.cat, SPIDER_QUEST_COMPLETION_XP, this.bus);
+        const humanXpApplied = awardXp(this.human, SPIDER_QUEST_COMPLETION_XP, this.bus);
+        const catXpApplied = awardXp(this.cat, SPIDER_QUEST_COMPLETION_XP, this.bus);
+        this.spiderQuest.setAwardedXp(humanXpApplied, catXpApplied);
         // Straight to the cat: the lab's dark is what the book is about, and she
         // is the only crawler who can read it.
         this.cat.inventory.addItem('skill_book_night_vision', 1);
+        this.flyQuestItem('skill_book_night_vision');
       }
       if (e.questId === 'the_show_must_go_on') {
         const def = this.circusQuest.questManager.getDef(e.questId);
         if (def?.rewards.coins) {
           this.active().earnCoins(def.rewards.coins);
+          this.flyQuestCoins(def.rewards.coins);
         }
       }
       if (e.questId === MURDER_QUEST_ID) {
         const def = this.murderQuest.questManager.getDef(e.questId);
         if (def?.rewards.coins) {
           this.active().earnCoins(def.rewards.coins);
+          this.flyQuestCoins(def.rewards.coins);
         }
       }
     });
@@ -3201,6 +3348,11 @@ export class DungeonScene extends GameplayScene {
   }
 
   onExit(): void {
+    // Every floor is a fresh `DungeonScene`, which would already start this
+    // fresh too — reset defensively anyway, so a hold left outstanding by a
+    // dialog that never got its close callback can never surface as a
+    // permanently-low coin counter on whatever replaces this scene.
+    this.rewardFly.reset();
     this.humanTalk.stop(this.human);
     this.audio?.stopWalkingLoop();
     // Walking into a building mid-river must not leave the wading loop running
@@ -3433,10 +3585,43 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
+  /** The active crawler's own tile, for ranking a pinned header's sub-steps by distance. */
+  private get activeTile(): { x: number; y: number } {
+    const active = this.active();
+    return { x: Math.floor(active.x / TILE_SIZE), y: Math.floor(active.y / TILE_SIZE) };
+  }
+
+  /** The Journal entry the pin resolves to right now, or null when nothing is pinned. */
+  private get pinnedObjectiveEntry(): TrackerEntry | null {
+    return resolvePinnedEntry(
+      this.journalProgress.pinnedTrackerId,
+      this._trackerEntries,
+      this.activeTile,
+    );
+  }
+
   /** The tile the pinned Journal entry points at, or null when nothing is pinned. */
   private get pinnedObjectiveTile(): TrackerTarget | null {
-    const pinned = resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries);
-    return pinned?.target ?? null;
+    return this.pinnedObjectiveEntry?.target ?? null;
+  }
+
+  /**
+   * Whether Shady's own guidance arrow should draw this frame.
+   *
+   * An explicit pin — quest or bounty — always wins: if it names the bounty,
+   * the bounty draws its own arrow (colour keyed to hunt-vs-collect); if it
+   * names anything else, the bounty stays off the screen entirely rather than
+   * stacking a second arrow under the pinned one. With nothing pinned, the
+   * bounty only shows once every other quest is done — starting a quest while
+   * a bounty is active takes the arrow, and accepting a bounty while a quest
+   * is active does nothing visible.
+   */
+  private shouldShowBountyArrow(): boolean {
+    const pinned = this.pinnedObjectiveEntry;
+    if (pinned !== null) return pinMatchesEntry(BOUNTY_TRACKER_ID, pinned);
+    return !this._trackerEntries.some(
+      (entry) => entry.status === 'active' && !pinMatchesEntry(BOUNTY_TRACKER_ID, entry),
+    );
   }
 
   /**
@@ -3508,7 +3693,12 @@ export class DungeonScene extends GameplayScene {
     camX: number,
     camY: number,
   ): void {
-    const target = this.pinnedObjectiveTile;
+    const pinned = this.pinnedObjectiveEntry;
+    // A pin on the bounty is drawn by the bounty's own arrow, which knows
+    // whether it is a hunt or a collect and colours itself accordingly — this
+    // generic arrow would otherwise stack a second one under it.
+    if (pinned !== null && pinMatchesEntry(BOUNTY_TRACKER_ID, pinned)) return;
+    const target = pinned?.target ?? null;
     if (target === null) return;
 
     const player = this.active();
@@ -3863,6 +4053,22 @@ export class DungeonScene extends GameplayScene {
     if (mongo !== null) this.world.roster.add(mongo);
   }
 
+  /**
+   * `Player.noteWardBlockedHit` has no scene to bark through, so it raises a
+   * pending flag instead; this is the one place both crawlers' flags are
+   * drained into the actual bark.
+   */
+  private drainWardExplainerBarks(): void {
+    if (this.human.pendingWardExplainerBark) {
+      this.human.pendingWardExplainerBark = false;
+      this.crawlerBarks.say(this.human, WARD_EXPLAINER_BARK_LINES);
+    }
+    if (this.cat.pendingWardExplainerBark) {
+      this.cat.pendingWardExplainerBark = false;
+      this.crawlerBarks.say(this.cat, WARD_EXPLAINER_BARK_LINES);
+    }
+  }
+
   /** Returns whether he came out; a refusal has already been spoken by the cat. */
   private summonMongo(): boolean {
     const mongo = this.mongoSystem.summon(this.cat, this.gameMap);
@@ -3995,7 +4201,13 @@ export class DungeonScene extends GameplayScene {
     this.combat.deathScreen.reset();
     this.gameOver = false;
     // Its pending callback grants a chest's reward against a world that is
-    // about to be rewound to before the chest was opened.
+    // about to be rewound to before the chest was opened. Cancelling by this
+    // hold's own handle drops only its own queued grants, leaving any other
+    // hold outstanding at the same time (an achievement reveal, say) untouched.
+    if (this.chestRewardFlyHold !== null) {
+      this.rewardFly.cancel(this.chestRewardFlyHold);
+      this.chestRewardFlyHold = null;
+    }
     this.chestRewardDialog.discard();
     // The same for granted-reward cards and whatever waits on them (the
     // Resourcing explainer after Oren's tools): the rewind takes the grant back.
@@ -4121,7 +4333,6 @@ export class DungeonScene extends GameplayScene {
       arenaRoom: this.arenaRoom.captureCheckpoint(),
       bossRoomDressing: this.bossRoomDressings.captureCheckpoint(),
       barriers: this.barriers.captureCheckpoint(),
-      safeRoom: this.safeRoom.captureCheckpoint(),
       miniMap: this.miniMap.captureCheckpoint(),
       stairwell: this.stairwell.captureCheckpoint(),
       recall: this.recall.captureCheckpoint(),
@@ -4179,7 +4390,6 @@ export class DungeonScene extends GameplayScene {
     this.arenaRoom.restoreCheckpoint(world.arenaRoom);
     this.bossRoomDressings.restoreCheckpoint(world.bossRoomDressing);
     this.barriers.restoreCheckpoint(world.barriers);
-    this.safeRoom.restoreCheckpoint(world.safeRoom);
     this.miniMap.restoreCheckpoint(world.miniMap);
     this.stairwell.restoreCheckpoint(world.stairwell);
     this.recall.restoreCheckpoint(world.recall);
@@ -4572,6 +4782,121 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * How far a stairwell room's save point may drift from the room's exact
+   * centre to land on ground with room to stand in — the seat computed by the
+   * dungeon generator is usually clear, but a room whose centre falls on a
+   * prop or a wall segment still needs a nearby, spawnable substitute.
+   */
+  private static readonly STAIRWELL_SAVE_TILE_SEARCH_RADIUS = 6;
+  /**
+   * A hostile this close to the active crawler blocks a stairwell save,
+   * whatever the room's own guard count reads: a crawler fleeing a pursuer can
+   * cross into an already-quiet room one step ahead of it, and the room's
+   * count says nothing about a threat that hasn't entered yet.
+   */
+  private static readonly STAIRWELL_SAVE_ENGAGEMENT_RADIUS_TILES = 4;
+
+  /**
+   * Every room the floor's dungeon generator recorded that also holds a
+   * stairwell — the boundary a fresh kill or a quiet entry checks against.
+   */
+  private roomIndexOfStairwellRoom(roomIndex: number): boolean {
+    if (roomIndex < 0 || roomIndex >= this.gameMap.roomBounds.length) return false;
+    const room = this.gameMap.roomBounds[roomIndex];
+    return this.gameMap.stairwellTiles.some(
+      (tile) =>
+        tile.x >= room.x &&
+        tile.x < room.x + room.w &&
+        tile.y >= room.y &&
+        tile.y < room.y + room.h,
+    );
+  }
+
+  /** Whether a living hostile is close enough to the active crawler to call the fight still on. */
+  private hasEngagedHostileNearActive(): boolean {
+    return hostileWithinRadius(
+      this.active(),
+      this.world.roster.grid,
+      TILE_SIZE * DungeonScene.STAIRWELL_SAVE_ENGAGEMENT_RADIUS_TILES,
+    );
+  }
+
+  /**
+   * Takes the once-per-room stairwell save the moment a room holding a
+   * stairwell has no hostiles left in it — whether that is because the last
+   * guard just died or because the room was already quiet — and no hostile is
+   * engaged near the active crawler. Guarded the same way `safeRoomEntered` is:
+   * never mid-boss-fight, never with a revive pending, so a reload can't skip
+   * either.
+   *
+   * Callers, not this method, decide *when* a room qualifies: the per-frame
+   * entry check only calls this for a room in `roomsClearAtFloorStart`, while
+   * `mobKilled` and the pending retry call it for any room, because a kill
+   * that actually happens in the room is always allowed to clear it.
+   */
+  private attemptStairwellSave(roomIndex: number): void {
+    if (roomIndex < 0) return;
+    if (this.stairwellRoomsSaved.has(roomIndex)) {
+      if (this.pendingStairwellSaveRoomIndex === roomIndex)
+        this.pendingStairwellSaveRoomIndex = null;
+      return;
+    }
+    if (this.isBossFightInProgress || this.isRevivePending) return;
+    if (!this.roomIndexOfStairwellRoom(roomIndex)) return;
+    if (this.gameMap.hostilesInRoom(roomIndex, this.world.roster.mobs).length > 0) return;
+
+    if (this.hasEngagedHostileNearActive()) {
+      // The room itself is clear, but the fight that cleared it hasn't — keep
+      // this room queued so a later, quieter frame can finish the save.
+      this.pendingStairwellSaveRoomIndex = roomIndex;
+      return;
+    }
+
+    this.stairwellRoomsSaved.add(roomIndex);
+    if (this.pendingStairwellSaveRoomIndex === roomIndex) this.pendingStairwellSaveRoomIndex = null;
+    const room = this.gameMap.roomBounds[roomIndex];
+    const centreTileX = room.x + Math.floor(room.w / 2);
+    const centreTileY = room.y + Math.floor(room.h / 2);
+    const respawnTile = findNearbyWalkableTile(
+      this.gameMap,
+      centreTileX,
+      centreTileY,
+      DungeonScene.STAIRWELL_SAVE_TILE_SEARCH_RADIUS,
+    ) ?? { x: centreTileX, y: centreTileY };
+    this.bus.emit('roomCleared', { roomIndex });
+    this.captureSavePoint(respawnTile, { announce: false });
+  }
+
+  /**
+   * The per-frame half of the stairwell save: only fires the (mob-scanning)
+   * attempt when the active crawler's room actually changed this frame, or a
+   * save is still pending from an earlier engagement — never on every frame
+   * regardless, which would walk the roster for nothing every time the party
+   * stands still in a room that already has its save.
+   */
+  private updateStairwellEntrySave(active: Pick<Mob, 'x' | 'y'>): void {
+    const activeRoomIndex = this.gameMap.roomIndexAt(
+      Math.floor((active.x + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE),
+      Math.floor((active.y + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE),
+    );
+    const roomChanged = activeRoomIndex !== this.lastActiveRoomIndexForStairwellSave;
+    this.lastActiveRoomIndexForStairwellSave = activeRoomIndex;
+
+    if (roomChanged && this.roomsClearAtFloorStart.has(activeRoomIndex)) {
+      this.attemptStairwellSave(activeRoomIndex);
+    }
+    // Retried only while the crawler is standing in the pending room itself —
+    // a kill landed near its doorway does not bank a save for a room the party
+    // has already walked away from.
+    if (
+      this.pendingStairwellSaveRoomIndex !== null &&
+      activeRoomIndex === this.pendingStairwellSaveRoomIndex
+    ) {
+      this.attemptStairwellSave(this.pendingStairwellSaveRoomIndex);
+    }
+  }
+
+  /**
    * Either crawler, not just the inactive one: the active crawler can be the
    * downed one for a frame around a switch. Both save snapshots stand a downed
    * crawler back up, so saving now would turn a pending revive into a free one.
@@ -4814,6 +5139,32 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * Floats a "Pet" prompt over Mongo when a press would reach him.
+   *
+   * Sits just ahead of the hireling in the Space chain, so it draws just ahead
+   * of it too: it yields to a chest, a quest giver, a citizen or a harvest
+   * already claiming the press, the same way `renderMercenaryPrompt` yields to
+   * this one.
+   */
+  private renderMongoPetPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const active = this.active();
+    if (this.safeRoom.isEntityInSafeRoom(active)) return;
+    if (interactionPromptsDrawnThisFrame() > 0) return;
+    if (this.gathering?.wouldStartHarvest(active) === true) return;
+    if (this.briarHollowKit?.wouldInteract(active) === true) return;
+    this.mongoSystem.renderPetPrompt(
+      ctx,
+      camX,
+      camY,
+      active,
+      this.gameMap,
+      this.world.roster.mobs,
+      this.world.roster.grid,
+      this.levelDef.isOverworld === true,
+    );
+  }
+
+  /**
    * Floats a "Talk" prompt over the hireling when a press would reach it.
    *
    * Talking is the last link of the Space chain, so this draws last of all the
@@ -4973,6 +5324,9 @@ export class DungeonScene extends GameplayScene {
       floatingDialog(this.anchorQuest.isOutcomeOverlayShowing, () =>
         this.dismissOutcomeOverlay(this.anchorQuest.advanceOutcomeOverlay()),
       ),
+      floatingDialog(this.spiderQuest.isOutcomeOverlayShowing, () =>
+        this.dismissOutcomeOverlay(this.spiderQuest.advanceOutcomeOverlay()),
+      ),
       // The quest systems below own their own window listener for Space, so the
       // claim here only has to keep the press away from the world behind them.
       modal(this.spiderQuest.isDialogOpen, 'spider-quest'),
@@ -4981,17 +5335,6 @@ export class DungeonScene extends GameplayScene {
       modal(this.murderQuest.isDialogOpen, 'quest-dialog'),
       modal(this.anchorQuest.isDialogOpen, 'quest-dialog'),
       floatingDialog(this.safeRoom.mordecaiDialogOpen, () => this.safeRoom.advanceMordecaiDialog()),
-      // Not world-halting for the same reason: `update`'s sleep branch is the
-      // only thing that ticks the sleep down, and the only thing that ever ends
-      // it. Halting here would leave the player asleep for good.
-      {
-        isOpen: this.safeRoom.isSleeping,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: false,
-        // A timed fade with no buttons; the sleep ends itself.
-        focusContext: null,
-      },
       modal(this.stairwell.menuOpen, 'stairwell'),
       modal(this.building?.menuOpen === true, 'building-entry'),
       this.grateSpikes.overlayClaim(),
@@ -5527,15 +5870,12 @@ export class DungeonScene extends GameplayScene {
 
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) {
-      // Beside the Mordecai and bed checks rather than above them: each fixture
-      // owns its own corner of the room, so only one of the three can ever be in
-      // range, and the order between them is not a priority decision.
+      // Beside the Mordecai check rather than above it: each fixture owns its
+      // own corner of the room, so only one of the two can ever be in range.
       if (this.bopca.tryInteract(active)) {
         return;
       }
-      if (this.safeRoom.isNearBed(active)) {
-        this.safeRoom.startSleep();
-      } else if (this.safeRoom.isNearMordecai(active)) {
+      if (this.safeRoom.isNearMordecai(active)) {
         this.talkToMordecai(active);
       }
       return;
@@ -5593,6 +5933,17 @@ export class DungeonScene extends GameplayScene {
       // After citizen talk: a townsperson in range is who a press is meant for,
       // and a tree beside them is scenery until nobody is there to answer.
       if (this.gathering?.tryStartHarvest(active) === true) {
+        return;
+      }
+      if (
+        this.mongoSystem.tryPet(
+          active,
+          this.gameMap,
+          this.world.roster.mobs,
+          this.world.roster.grid,
+          this.levelDef.isOverworld === true,
+        )
+      ) {
         return;
       }
       // Last in the chain: the hireling stands at the party's shoulder all
@@ -5955,7 +6306,7 @@ export class DungeonScene extends GameplayScene {
     this._mouseY = my;
     if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
     if (this.menus.pauseMenu.isOpen) {
-      this.menus.pauseMenu.handleMouseMove(mx, my);
+      this.menus.pauseMenu.handleMouseMove(mx, my, this.human, this.cat);
       return;
     }
     if (this._miniMapDragging) {
@@ -5963,7 +6314,7 @@ export class DungeonScene extends GameplayScene {
       this._miniMapDragLastX = mx;
       this._miniMapDragLastY = my;
     }
-    this.menus.inventoryPanel.handleMouseMove(mx, my);
+    this.menus.inventoryPanel.handleMouseMove(mx, my, this.menus.inventoryPlayer().inventory);
     this.menus.gearPanel.handleMouseMove(mx, my);
   }
 
@@ -6026,6 +6377,7 @@ export class DungeonScene extends GameplayScene {
       }
     }
     this.achievementUI.tick();
+    this.rewardFly.update();
     // Above the boss-intro return below: an award overlay raised on the frame a
     // boss room locks would otherwise sit frozen at its first frame for the
     // length of the intro, and a potion's effect cue would be held with it.
@@ -6111,13 +6463,6 @@ export class DungeonScene extends GameplayScene {
     }
     this.gameStats.recordPlayedFrame();
 
-    if (this.safeRoom.isSleeping) {
-      this.silenceMovementLoops();
-      const deduct = this.safeRoom.updateSleep(this.human, this.cat);
-      this.levelTimerFrames = Math.max(0, this.levelTimerFrames - deduct);
-      return;
-    }
-
     if (this.tutorial?.showNearGoblinDialog === true) {
       this.silenceMovementLoops();
       return;
@@ -6191,6 +6536,7 @@ export class DungeonScene extends GameplayScene {
       miniMap: this.miniMap,
       mongoSystem: this.mongoSystem,
       mercenarySystem: this.mercenarySystem,
+      crawlerBarks: this.crawlerBarks,
       speechBubblePulse: this.speechBubblePulse,
     };
 
@@ -6236,9 +6582,10 @@ export class DungeonScene extends GameplayScene {
 
     this.renderPipeline.renderTowerBalconyOverlay(ctx, rc);
 
-    this.renderPipeline.renderEffects(ctx, rc, (c, cx, cy) =>
-      UIRenderer.renderLevelUpFlash(c, cx, cy, this.pm),
-    );
+    this.renderPipeline.renderEffects(ctx, rc, (c, cx, cy) => {
+      UIRenderer.renderLevelUpFlash(c, cx, cy, this.pm);
+      UIRenderer.renderStatBoostFlash(c, cx, cy, this.pm);
+    });
 
     this.renderPipeline.renderVisibilityFog(ctx, rc);
 
@@ -6279,6 +6626,10 @@ export class DungeonScene extends GameplayScene {
       this._hudCollapsed,
       this.skillPointReminderActive,
       this.skillPointsSuppressed,
+      {
+        pendingAmount: this.rewardFly.pendingCoinAmount(),
+        pulse: this.rewardFly.coinCounterPulse(),
+      },
     );
     this._hudToggleRect = hudResult.toggleRect;
     this._hudRect = hudResult.hudRect;
@@ -6319,7 +6670,9 @@ export class DungeonScene extends GameplayScene {
       );
       this.renderStairwellRevealArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
-      this.bounty?.renderArrow(ctx, this.active(), camX, camY, this._hudRect);
+      if (this.shouldShowBountyArrow()) {
+        this.bounty?.renderArrow(ctx, this.active(), camX, camY, this._hudRect);
+      }
       this.renderAvailableQuestBeacons(ctx, camX, camY);
       this.renderPinnedObjectiveBeacon(ctx, camX, camY);
       this.renderPinnedObjectiveArrow(ctx, camX, camY);
@@ -6427,6 +6780,7 @@ export class DungeonScene extends GameplayScene {
       });
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.menus.inventoryPanel.mmSize = mmSz;
+      this.menus.inventoryPanel.bagBouncePulse = this.rewardFly.bagBouncePulse();
 
       // Render persistent HUD buttons before panels so open menus and context menus paint over them.
       UIRenderer.drawPauseButton(ctx, this.miniMap, this.gameOver, this.menus.pauseMenu.isOpen);
@@ -6460,6 +6814,8 @@ export class DungeonScene extends GameplayScene {
           gearPanel: this.menus.gearPanel,
           hideSwitchButton: this.tutorial !== null && !this.tutorial.showSwitchButton,
           hideFollowerButton: this.tutorial !== null && !this.tutorial.showFollowerButton,
+          hasUnseenUpgrade: this.menus.inventoryPlayer().inventory.unseenUpgrades.size > 0,
+          bagBouncePulse: this.rewardFly.bagBouncePulse(),
         });
       else if (this.tutorial === null || this.tutorial.showFollowerButton)
         UIRenderer.renderFollowerButton(ctx, this.touch, this.companion, this.human.isActive);
@@ -6543,6 +6899,7 @@ export class DungeonScene extends GameplayScene {
         if (!this.earlierSpaceLinkClaims(this.active())) {
           this.briarHollowKit?.renderPrompt(ctx, camX, camY, this.active());
         }
+        this.renderMongoPetPrompt(ctx, camX, camY);
         this.renderMercenaryPrompt(ctx, camX, camY);
       }
     }
@@ -6575,10 +6932,6 @@ export class DungeonScene extends GameplayScene {
       this.building.renderMenu(ctx);
     }
 
-    if (this.safeRoom.isSleeping) {
-      this.safeRoom.renderSleepOverlay(ctx);
-    }
-
     if (this.followerMenu.isOpen) {
       this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
       this.followerMenu.render(
@@ -6600,6 +6953,18 @@ export class DungeonScene extends GameplayScene {
     if (this.chestRewardDialog.isOpen) {
       this.chestRewardDialog.render(ctx);
     }
+
+    // Flies over every dialog above: it is reporting a grant that already
+    // happened, not asking for input, so nothing on screen should be able to
+    // hide it mid-flight.
+    const coinTarget = hudCoinCounterScreenPos(this._hudCollapsed);
+    this.rewardFly.render(ctx, {
+      coinX: coinTarget.x,
+      coinY: coinTarget.y,
+      bagRect: platform.isMobile
+        ? this.touch.bagBtnRect
+        : this.menus.inventoryPanel.toggleBtnRect(),
+    });
 
     // Hidden behind the pause menu, like every other overlay above: the intro
     // card is drawn last and would otherwise cover the menu it was opened over,
@@ -6752,7 +7117,11 @@ export class DungeonScene extends GameplayScene {
     if (this.bounty !== null) markers.push(...this.bounty.questMarkers);
     if (this.briarHollowKit !== null) markers.push(...this.briarHollowKit.questMarkers);
     markers.push(...this.safeRoom.mordecaiMarkers);
-    const pinned = resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries);
+    const pinned = resolvePinnedEntry(
+      this.journalProgress.pinnedTrackerId,
+      this._trackerEntries,
+      this.activeTile,
+    );
     // The pinned objective gets a marker of its own on top of whatever its own
     // system already contributes. That is not redundant: a quest can be pinned
     // while its system's marker rules say nothing (a bounty being collected,
@@ -6883,6 +7252,11 @@ export class DungeonScene extends GameplayScene {
     if (nowInTown && !this.wasInTown) this.onTownEntered(player);
     this.wasInTown = nowInTown;
 
+    // A stairwell room that was already empty of hostiles the moment this
+    // floor's mobs first spawned — no last guard to die and trigger the
+    // `mobKilled` path — still earns its save on this, its first quiet visit.
+    this.updateStairwellEntrySave(player);
+
     // After the safe-room and town checks, so an arrival that already stands
     // in one is saved once, by that check, rather than twice.
     if (this.arrivalSavePending) {
@@ -6969,6 +7343,10 @@ export class DungeonScene extends GameplayScene {
     if (this.doomsdayEscape.pinRequested) {
       this.doomsdayEscape.pinRequested = false;
       this.journalProgress.pinnedTrackerId = DOOMSDAY_TRACKER_ID;
+      // Not an auto-pin: the escape is the floor's own emergency, and must not
+      // be quietly handed back to whatever quest is active when the next one
+      // starts.
+      this.journalProgress.pinSource = 'player';
     }
     if (this.doomsdayEscape.floorEscapedPending) {
       this.doomsdayEscape.floorEscapedPending = false;
@@ -6984,7 +7362,7 @@ export class DungeonScene extends GameplayScene {
     if (colosseumCue !== null) this.audio?.play(colosseumCue);
     for (const cue of this.juicerRoom.drainSoundCues()) this.audio?.play(cue);
     for (const cue of this.bossRoomDressings.parts.krakaren?.drainSoundCues() ?? []) {
-      this.audio?.play(cue);
+      this.audio?.play(cue.id, { volume: cue.volume });
     }
     this.arenaRoom.update(ctx);
     // Advance tutorial state machine; anchor companion when tutorial requires it
@@ -7138,6 +7516,8 @@ export class DungeonScene extends GameplayScene {
     this.mongoSystem.update(ctx);
     this.autoSummonMongo(ctx);
     this.mercenarySystem.update(ctx);
+    this.drainWardExplainerBarks();
+    this.crawlerBarks.update();
     if (this.building?.menuOpen === true || this.recall.isChannelling) {
       this.mercenarySystem.warnIfLeavingDowned();
     }
@@ -7257,6 +7637,7 @@ export class DungeonScene extends GameplayScene {
       inactive: this.inactive(),
       inactiveIsHuman: this.inactive() === this.human,
       audio: this.audio,
+      bus: this.bus,
     });
 
     if (
@@ -7428,6 +7809,8 @@ export class DungeonScene extends GameplayScene {
         { coins: loot.coins, items: sharedItems },
         defaultRecipient,
         isBossLoot,
+        false,
+        true,
       );
     }
     if (humanItems.length > 0) {
@@ -7437,10 +7820,20 @@ export class DungeonScene extends GameplayScene {
         { coins: 0, items: humanItems },
         this.human,
         isBossLoot,
+        false,
+        true,
       );
     }
     if (catItems.length > 0) {
-      this.destruction.loot.addLoot(cx, cy, { coins: 0, items: catItems }, this.cat, isBossLoot);
+      this.destruction.loot.addLoot(
+        cx,
+        cy,
+        { coins: 0, items: catItems },
+        this.cat,
+        isBossLoot,
+        false,
+        true,
+      );
     }
   }
 
@@ -7657,7 +8050,7 @@ export class DungeonScene extends GameplayScene {
       ) {
         const mb = this.touch.summonBtnRect;
         if (pointInRect(x, y, mb)) {
-          if (!this.safeRoom.isSleeping && !this.gameOver) this.toggleMongoSummon();
+          if (!this.gameOver) this.toggleMongoSummon();
           continue;
         }
       }
@@ -7665,22 +8058,17 @@ export class DungeonScene extends GameplayScene {
       if (platform.isMobile && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
         const sb = this.touch.switchBtnRect;
         if (pointInRect(x, y, sb)) {
-          if (!this.safeRoom.isSleeping && !this.gameOver) this.triggerSwitchCharacter();
+          if (!this.gameOver) this.triggerSwitchCharacter();
           continue;
         }
         const fb = this.touch.followBtnRect;
         if (pointInRect(x, y, fb)) {
-          if (!this.safeRoom.isSleeping && !this.gameOver) this.triggerCompanionFollow();
+          if (!this.gameOver) this.triggerCompanionFollow();
           continue;
         }
       }
 
-      if (
-        !this.menus.pauseMenu.isOpen &&
-        !this.safeRoom.isSleeping &&
-        !this.gameOver &&
-        !coveredByPanel
-      ) {
+      if (!this.menus.pauseMenu.isOpen && !this.gameOver && !coveredByPanel) {
         const hi = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
         if (hi >= 0) {
           this.touch.inventoryDragTouchId = touch.identifier;
@@ -7878,7 +8266,6 @@ export class DungeonScene extends GameplayScene {
             // this one is still down.
             !this.isOverlayBlockingPointer &&
             !this.menus.pauseMenu.isOpen &&
-            !this.safeRoom.isSleeping &&
             !this.gameOver
           ) {
             activateHotbarSlot(this.hotbarHost(), hi);
@@ -7899,7 +8286,6 @@ export class DungeonScene extends GameplayScene {
               this.destruction.dynamite.isCharging &&
               this.human.isActive &&
               !this.menus.pauseMenu.isOpen &&
-              !this.safeRoom.isSleeping &&
               !this.gameOver
             ) {
               const cam = this.camera();
@@ -7927,12 +8313,7 @@ export class DungeonScene extends GameplayScene {
               // conversation or pet a cow underneath it.
               const overlayWasFocused = this.focusedOverlay !== null;
               this.handleClick(x, y, e.timeStamp);
-              if (
-                !dialogWasOpen &&
-                !this.menus.pauseMenu.isOpen &&
-                !this.safeRoom.isSleeping &&
-                !this.gameOver
-              ) {
+              if (!dialogWasOpen && !this.menus.pauseMenu.isOpen && !this.gameOver) {
                 const cam = this.camera();
                 let villageConsumed = false;
                 if (this.briarHollowKit !== null && !overlayWasFocused) {
@@ -8085,8 +8466,59 @@ export class DungeonScene extends GameplayScene {
 
   /** A chest's lid is up: show what came out of it. */
   private showChestReward(chest: TreasureChest, reward: ChestReward): void {
-    this.chestRewardDialog.open(chest, reward.split, reward.onDismissed);
+    // The loot was already granted the moment the chest was pressed
+    // (`grantChestContents`); this only shows it, so the fly is queued here and
+    // held until the dialog the player is looking at actually closes. Kept as
+    // its own handle (not shared with any other hold) so a `restoreFromCheckpoint`
+    // that rewinds this exact chest can cancel only this queue.
+    const flyHold = this.rewardFly.hold();
+    this.chestRewardFlyHold = flyHold;
+    const dialogCenter = { x: viewportWidth() / 2, y: viewportHeight() / 2 };
+    const split = reward.split;
+    if (split !== null) {
+      this.rewardFly.enqueueCoins(split.humanLoot.coins, dialogCenter.x, dialogCenter.y, flyHold);
+      this.rewardFly.enqueueCoins(split.catLoot.coins, dialogCenter.x, dialogCenter.y, flyHold);
+      for (const item of [...split.humanLoot.items, ...split.catLoot.items]) {
+        this.rewardFly.enqueueItem(
+          item.id,
+          ITEM_DEF[item.id].name,
+          dialogCenter.x,
+          dialogCenter.y,
+          flyHold,
+        );
+      }
+    }
+    this.chestRewardDialog.open(chest, reward.split, () => {
+      this.rewardFly.release(flyHold);
+      this.chestRewardFlyHold = null;
+      reward.onDismissed?.();
+    });
     this.audio?.play('opening_treasure_chest');
+  }
+
+  /** Flies a quest's coin reward from the active crawler's own position. */
+  private flyQuestCoins(coins: number): void {
+    const active = this.active();
+    const cam = this.camera();
+    this.rewardFly.enqueueCoins(coins, active.x - cam.x, active.y - cam.y);
+  }
+
+  /** Flies a quest's item reward from the active crawler's own position. */
+  private flyQuestItem(id: ItemId): void {
+    const active = this.active();
+    const cam = this.camera();
+    this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, active.x - cam.x, active.y - cam.y);
+  }
+
+  /** From a ground pile's world position, to wherever the HUD's coin/bag targets sit this frame. */
+  private flyLootReward(loot: PendingLoot): void {
+    const cam = this.camera();
+    const screenX = loot.x - cam.x;
+    const screenY = loot.y - cam.y;
+    this.rewardFly.enqueueCoins(loot.loot.coins, screenX, screenY);
+    for (const item of loot.loot.items) {
+      this.rewardFly.enqueueItem(item.id, ITEM_DEF[item.id].name, screenX, screenY);
+    }
   }
 
   private _grantChestLootSplit(split: { humanLoot: LootDrop; catLoot: LootDrop } | null): void {

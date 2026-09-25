@@ -18,6 +18,7 @@
 import { awardXp } from '../core/awardXp';
 import { TILE_SIZE } from '../core/constants';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import type { ItemId } from '../core/ItemDefs';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { EventBus } from '../core/EventBus';
@@ -223,6 +224,10 @@ export interface CircusQuestCheckpoint {
 
 export class CircusQuestSystem implements GameSystem {
   readonly questManager: QuestManager;
+
+  /** Fired whenever a quest item is actually handed to a crawler — for a fly-to-bag effect. */
+  onItemGranted: ((id: ItemId, quantity: number, worldX: number, worldY: number) => void) | null =
+    null;
 
   private phase: CircusQuestPhase = 'awaiting_intro';
   private readonly circusCentre: { x: number; y: number } | null;
@@ -587,6 +592,37 @@ export class CircusQuestSystem implements GameSystem {
       this.rescueStalledMob(mob, mobGrid, active);
     }
     this.forgetDeadStallWatches();
+    // Heather's and Terror's healers are not wave mobs — nothing else ever
+    // holds them to the grounds — so each is confined here directly, bonded
+    // or not and whether or not the boss it was spawned for still lives.
+    this.confineCircusHealer(this.heatherHealer, mobGrid);
+    this.confineCircusHealer(this.terrorHealer, mobGrid);
+  }
+
+  /**
+   * Confines one of the circus's hard-mode healers to the grounds, the same
+   * radius {@link holdMobOnGrounds} holds wave mobs to. Positional rather than
+   * bond-based, so a healer stripped of its bond — or fleeing after its boss
+   * is dead — is held exactly the same as one still healing the fight.
+   */
+  private confineCircusHealer(healer: HealingFairy | null, mobGrid: SpatialGrid<Mob>): void {
+    if (healer === null || !healer.isAlive || !healer.respectsConfinement) return;
+    const centre = this.circusCentre;
+    if (centre === null) return;
+    const clamped = this.boundaryPosition(healer.x, healer.y, this.arenaSpawnRadiusTiles);
+    if (clamped) {
+      const oldX = healer.x;
+      const oldY = healer.y;
+      healer.x = clamped.x;
+      healer.y = clamped.y;
+      mobGrid.move(healer, oldX, oldY);
+    }
+    const centreX = centre.x * TILE_SIZE;
+    const centreY = centre.y * TILE_SIZE;
+    const limitPx = this.arenaSpawnRadiusTiles * TILE_SIZE;
+    healer.confineTo({
+      containsPoint: (x, y) => Math.hypot(x - centreX, y - centreY) <= limitPx,
+    });
   }
 
   /**
@@ -1008,6 +1044,7 @@ export class CircusQuestSystem implements GameSystem {
     if (this.progress.bigTopPotionGiven) return;
     this.progress.bigTopPotionGiven = true;
     active.inventory.addItem(BIGTOP_POTION_ITEM_ID, BIGTOP_POTION_QUANTITY);
+    this.onItemGranted?.(BIGTOP_POTION_ITEM_ID, BIGTOP_POTION_QUANTITY, active.x, active.y);
   }
 
   /**

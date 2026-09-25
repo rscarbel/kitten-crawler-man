@@ -237,9 +237,12 @@ export function makeStun(ticks: number): StatusEffect {
   return { type: 'stun', ticksRemaining: ticks, totalTicks: ticks, applier: null };
 }
 
+/** The status filed under a Speed Fizz potion — its own constant because {@link Player} checks for it by name to draw motion afterimages. */
+export const SPEED_FIZZ_STATUS = 'speed_fizz';
+
 /** Speed Fizz: doubles movement speed for 25 seconds (1500 ticks at 60 fps). */
 export function makeSpeedFizz(): StatusEffect {
-  return { type: 'speed_fizz', ticksRemaining: 1500, totalTicks: 1500, applier: null };
+  return { type: SPEED_FIZZ_STATUS, ticksRemaining: 1500, totalTicks: 1500, applier: null };
 }
 
 /** Jugg Juice: temporarily boosts max HP by 50% + 5 for 30 seconds (1800 ticks at 60 fps). */

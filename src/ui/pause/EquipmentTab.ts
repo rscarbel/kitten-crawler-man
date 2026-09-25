@@ -94,6 +94,9 @@ const SUBSLOT_LABEL_SIDE_PAD = 2;
 
 /** Icons leave the cell's rim visible, so the border still reads as a slot. */
 const ICON_INSET = 4;
+/** The "NEW" pip on a bag cell holding an unseen upgrade. */
+const NEW_PIP_RADIUS = 4;
+const NEW_PIP_INSET = 4;
 
 /** Matches the bag panel's dim, so a filtered-out slot reads the same on both screens. */
 const CELL_INERT_ALPHA = 0.35;
@@ -677,6 +680,23 @@ export class EquipmentTabController {
           1,
         );
         ctx.restore();
+        if (inventory.unseenUpgrades.has(item.id)) {
+          ctx.save();
+          ctx.fillStyle = '#4ade80';
+          ctx.strokeStyle = '#052e16';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(
+            x + bagCellSize - NEW_PIP_INSET,
+            y + NEW_PIP_INSET,
+            NEW_PIP_RADIUS,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     }
 
@@ -862,7 +882,12 @@ export class EquipmentTabController {
     this.startPressTimer(cell.slotIdx, item, mx, my);
   }
 
-  handleMouseMove(mx: number, my: number): void {
+  /**
+   * @param human,cat Only needed to clear a hovered bag cell's "unseen
+   *   upgrade" pip, the same as `InventoryPanel`'s hover does — optional so a
+   *   caller without both players handy doesn't have to fake them.
+   */
+  handleMouseMove(mx: number, my: number, human?: HumanPlayer, cat?: CatPlayer): void {
     this.pointerX = mx;
     this.pointerY = my;
     const layout = this.layout;
@@ -882,6 +907,12 @@ export class EquipmentTabController {
     this.hoverKey = equipSlotKeyAt(mx, my, layout.slotInfos, layout.slotSize);
     this.hoverBagIdx =
       this.hoverKey === null ? (this.bagCellAt(mx, my, layout)?.slotIdx ?? null) : null;
+
+    if (this.hoverBagIdx !== null && human !== undefined && cat !== undefined) {
+      const inventory = this.selectedPlayer(human, cat).inventory;
+      const item = inventory.bag.slots[this.hoverBagIdx];
+      if (item !== null) inventory.unseenUpgrades.delete(item.id);
+    }
   }
 
   handleMouseUp(mx: number, my: number, human: HumanPlayer, cat: CatPlayer): void {

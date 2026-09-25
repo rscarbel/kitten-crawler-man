@@ -14,28 +14,39 @@
  * device. A new game should have its own town to find its way around.
  */
 
+/**
+ * Who set the current pin. A player pin (tapped in the Journal) always keeps
+ * the world arrow; an auto-pin (set when a quest starts) yields to whichever
+ * quest is active and never overrides a player pin that is still outstanding.
+ * Meaningless while `pinnedTrackerId` is null.
+ */
+export type PinSource = 'auto' | 'player';
+
 /** The stops the Town Guide can point at, by the ids `TownGuideSystem` states. */
 export interface JournalProgress {
   /** Guide stop ids the player has stood near. */
   visitedGuideStops: Set<string>;
   /** `TrackerEntry.id` of the pinned objective, or null. */
   pinnedTrackerId: string | null;
+  pinSource: PinSource | null;
 }
 
 export function createJournalProgress(): JournalProgress {
-  return { visitedGuideStops: new Set<string>(), pinnedTrackerId: null };
+  return { visitedGuideStops: new Set<string>(), pinnedTrackerId: null, pinSource: null };
 }
 
 /** A point-in-time copy, for the in-run safe-room checkpoint. */
 export interface JournalProgressCheckpoint {
   readonly visitedGuideStops: ReadonlyArray<string>;
   readonly pinnedTrackerId: string | null;
+  readonly pinSource: PinSource | null;
 }
 
 export function captureJournalProgress(progress: JournalProgress): JournalProgressCheckpoint {
   return {
     visitedGuideStops: [...progress.visitedGuideStops],
     pinnedTrackerId: progress.pinnedTrackerId,
+    pinSource: progress.pinSource,
   };
 }
 
@@ -53,4 +64,5 @@ export function restoreJournalProgress(
 ): void {
   progress.visitedGuideStops = new Set(snapshot.visitedGuideStops);
   progress.pinnedTrackerId = snapshot.pinnedTrackerId;
+  progress.pinSource = snapshot.pinSource;
 }

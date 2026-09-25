@@ -341,6 +341,20 @@ healers and flight.
   distance inside its boss's sealed room or arena, within
   `FAIRY_BOUND_HEALER_LEASH_TILES` of the boss. A checkpoint rewind returns a fairy
   that ran to its spawn.
+- **A boss-room healer never leaves the room, whatever else is true of it.** Every
+  healer standing in a boss room or the colosseum arena is confined to it
+  (`Fairy.confineTo`/`respectsConfinement`) by whichever room owns it — `BossRoomSystem`
+  for a gauntlet boss's room, `ArenaSystem` for the ring (a circle, not a rectangle: see
+  `docs/town.md`'s cousin note on the colosseum's own shape), `SpiderQuestSystem` for
+  the lab, `CircusQuestSystem` for Heather's and Terror's grounds. Positional, not
+  bond-based: a healer stripped of its bond to a dead boss, or with no bond at all, is
+  held exactly the same as one still healing a live fight — before, during and after,
+  whether the boss is alive or dead. Confinement rules out every way a healer could
+  otherwise cross the boundary: its hover goals and its refuge search
+  (`Fairy.isHoverGoalAllowed`, `refugeQuery`) only ever offer a point inside the room,
+  and a hard position clamp — the same shape as the room, applied every frame after AI
+  and knockback resolve — catches whatever a shove or a stray teleport might otherwise
+  carry across it.
 - **A fairy never stands still to cast.** Every cast resolves on the frame it is
   chosen, and its row plays out over `FAIRY_CAST_RECOVER_FRAMES` while the fairy keeps
   moving. Support casts (`WARD_CAST`, `HEAL_CAST`, `NECRO_RESURRECT_CAST`,
@@ -380,10 +394,20 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
 - **A shield fairy's ward is invulnerability, and its counterplay is the fairy.** A mob
   holding a shield fairy's ward takes no damage from any source for as long as that
   fairy lives (`Player.isHeldInvulnerable`), and a struck ward-holder shows
-  "Invulnerable" (throttled, so a flurry does not stack). A fairy holds at most
+  "Invulnerable" (throttled, so a flurry does not stack) — except on easy, where
+  `DifficultyProfile.wardDamageReduction` lets a quarter of the blow through and the
+  label reads "Resist" instead; normal and hard keep the ward absolute. Either way, a
+  crawler whose blows keep landing on a warded body without doing their job is told
+  why: after `WARD_EXPLAINER_HIT_THRESHOLD` such hits in one floor,
+  `Player.noteWardBlockedHit` fires an explainer bark naming the shield fairy, once per
+  floor per crawler. A fairy holds at most
   `shieldWardCount` wards — its potency plus `SHIELD_EXTRA_WARDS`, the potency ceiling
   included — one fairy ward per mob, and lays a new one on another ally every
-  `SHIELD_BETWEEN_CASTS_FRAMES` when a warded ally dies or leaves. It lays no ward
+  `SHIELD_BETWEEN_CASTS_FRAMES` when a warded ally dies or leaves. No grub of any stage
+  ever takes this ward (`BrindleGrub.acceptsWards` is false): a shield fairy instead
+  turns its rarer, longer-cooldown crushing ward on a hatched Brindled Vespa in reach,
+  which snaps shut over `SHIELD_CRUSH_IMPLODE_FRAMES` and kills it outright, crediting
+  no player kill. It lays no ordinary ward
   before it is seen, and none while it is off screen: every cast waits until the fairy
   is on screen (`Fairy.isOnScreen`) — its body at least half a tile inside the camera
   view the scene publishes each frame (`setVisibleWorldView`) and inside the fog's
@@ -398,7 +422,8 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
   on a shield fairy (`canTakeWardFrom` refuses one whatever candidate list asked): two
   shield fairies warding each other would both be invulnerable forever. The wards come
   off on the frame the fairy dies, and its death aegis (`AEGIS_DAMAGE_SCALE` on every
-  standing body for `AEGIS_DURATION_FRAMES`) follows.
+  standing body for `AEGIS_DURATION_FRAMES`) follows; an in-flight crush is cancelled
+  the same frame rather than finishing on its own.
 - **Healers cost time, not blows.** `healingFairyHealPerSecond` never exceeds
   `HEAL_MAX_SHARE_OF_PARTY_DPS` of the reference party's damage per second, on any
   target, at any level: the per-heal amount is a share of the target's max HP

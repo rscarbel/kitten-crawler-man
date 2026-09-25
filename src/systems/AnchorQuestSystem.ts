@@ -68,6 +68,13 @@ const SHARD_REMINDERS: Record<(typeof ANCHOR_SHARD_IDS)[number], string> = {
   anchor_shard_temple: 'The temple, and their rat problem.',
 };
 
+/** Short label for a shard's own Journal row, so it reads as a step rather than repeating the quest name. */
+const SHARD_STEP_NAMES: Record<(typeof ANCHOR_SHARD_IDS)[number], string> = {
+  anchor_shard_tinker: "The Tinker's Shard",
+  anchor_shard_hilda: "Hilda's Shard",
+  anchor_shard_temple: "The Temple's Shard",
+};
+
 /** Which conversation is on screen, so its completion knows what it agreed to. */
 type AnchorDialogKind = 'offer' | 'progress' | 'assembly' | 'cannot_afford';
 
@@ -82,6 +89,10 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
    */
   private dialogOpener: Player | null = null;
   private completeOverlayTimer = 0;
+
+  /** Fired whenever the assembly reward actually hands a crawler an item — for a fly-to-bag effect. */
+  onItemGranted: ((id: ItemId, quantity: number, worldX: number, worldY: number) => void) | null =
+    null;
 
   constructor(
     private readonly bus: EventBus,
@@ -332,6 +343,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
         ANCHOR_REWARD_POTIONS_MIN +
         Math.floor(Math.random() * (ANCHOR_REWARD_POTIONS_MAX - ANCHOR_REWARD_POTIONS_MIN + 1));
       payer.inventory.addItem('health_potion', potionCount);
+      this.onItemGranted?.('health_potion', potionCount, payer.x, payer.y);
     }
 
     // Presented, not merely deposited: a permanent item that appears silently on
@@ -364,10 +376,12 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     for (let slot = 0; slot < QUEST_SLOT_IDX; slot++) {
       if (bar.slots[slot] === null) {
         bar.slots[slot] = { ...ITEM_DEF.wayfinders_anchor, quantity: 1 };
+        this.onItemGranted?.('wayfinders_anchor', 1, crawler.x, crawler.y);
         return;
       }
     }
     crawler.inventory.addItem('wayfinders_anchor', 1);
+    this.onItemGranted?.('wayfinders_anchor', 1, crawler.x, crawler.y);
   }
 
   private anchorReward(): GrantedReward {
@@ -440,14 +454,26 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
       ];
     }
     const held = SHARDS_REQUIRED - outstanding.length;
-    return outstanding.map((shardId, index) => ({
-      id: `${ANCHOR_QUEST_ID}:${shardId}`,
+    // The header's own target follows the first outstanding step, so pinning
+    // the header (rather than one shard specifically) still points the arrow
+    // somewhere useful instead of nowhere.
+    const header: TrackerEntry = {
+      id: ANCHOR_QUEST_ID,
       name,
+      status: 'active',
+      objective: `Recover the Wayfinder's shards (${held}/${SHARDS_REQUIRED})`,
+      target: this.stepTarget(outstanding[0]),
+    };
+    const steps: TrackerEntry[] = outstanding.map((shardId, index) => ({
+      id: `${ANCHOR_QUEST_ID}:${shardId}`,
+      parentId: ANCHOR_QUEST_ID,
+      name: SHARD_STEP_NAMES[shardId],
       status: 'active' as const,
       objective: SHARD_OBJECTIVES[shardId],
       hint: `Shard ${held + index + 1} of ${SHARDS_REQUIRED} — Voss joins them once you have all three.`,
       target: this.stepTarget(shardId),
     }));
+    return [header, ...steps];
   }
 
   /** Where a given shard's step sends the player. */

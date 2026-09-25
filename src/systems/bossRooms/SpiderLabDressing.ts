@@ -501,6 +501,7 @@ export class SpiderLabDressing
       attacker,
       false,
       true,
+      true,
     );
   }
 

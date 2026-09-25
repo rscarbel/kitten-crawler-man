@@ -301,6 +301,16 @@ export const SHIELD_BETWEEN_CASTS_MIN_FRAMES = 60;
  */
 export const SHIELD_WARD_LINK_RANGE_TILES = 7;
 /**
+ * Gap between any two crushing-ward casts on a vespa. Longer than the ordinary
+ * ward's cooldown: this cast ends a fight outright rather than merely
+ * prolonging one, so it should not be the fairy's default answer to every
+ * vespa it sees.
+ */
+export const SHIELD_CRUSH_COOLDOWN_FRAMES = 600;
+export const SHIELD_CRUSH_MIN_COOLDOWN_FRAMES = 480;
+/** How long the ward bubble takes to snap shut on a vespa once cast: roughly half a second. */
+export const SHIELD_CRUSH_IMPLODE_FRAMES = 30;
+/**
  * An ally that struck a crawler this recently counts as in the fight, for
  * choosing whom to ward first.
  */

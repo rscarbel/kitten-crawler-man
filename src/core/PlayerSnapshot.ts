@@ -106,6 +106,8 @@ export interface PlayerSnapshot {
    * a save opened tomorrow should find the skill ready, not still counting down.
    */
   cockroachReadyAt?: number | null;
+  /** Unseen "new upgrade" item ids, so the bag badge survives a scene round-trip. Absent on saves predating it. */
+  unseenUpgrades?: ItemId[];
 }
 
 /**
@@ -157,6 +159,7 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     skillStates: p.skills.snapshotStates(),
     craftSkillStates: p.craftSkills.snapshot(),
     cockroachReadyAt: p.cockroachReadyAt,
+    unseenUpgrades: [...p.inventory.unseenUpgrades],
   };
   if (p instanceof HumanPlayer) {
     snap.explosivesHandling = p.explosivesHandling;
@@ -315,6 +318,7 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   // kept unified still carries a split one. Folding here catches every restore
   // path at once rather than at each of the scenes that call this.
   p.inventory.consolidateStacks();
+  p.inventory.restoreUnseenUpgrades(snap.unseenUpgrades ?? []);
   // Equipment first: the stat getters — and therefore max HP — read from it.
   p.inventory.equipment.replaceAll(snap.equippedEntries);
   // A scene change builds a fresh player before restoring him, so this is the

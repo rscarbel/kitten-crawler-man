@@ -8,6 +8,7 @@ import type { GameMap } from '../map/GameMap';
 import type { GameSystem } from './GameSystem';
 import { pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
+import { drawSatchelIcon } from '../ui/icons/satchelIcon';
 import {
   INTERIOR_BOARD_FLOOR,
   INTERIOR_RUSH_FLOOR,
@@ -61,6 +62,10 @@ const MOBILE_SMALL_BTN_HEIGHT = 28;
 const MOBILE_GEAR_BAG_X_OFFSET = 88;
 const MOBILE_GEAR_BAG_Y_DEFAULT = 38;
 const MOBILE_GEAR_BAG_Y_OFFSET = 34;
+const BAG_ICON_SIZE = 12;
+const BAG_ICON_PAD = 3;
+const BAG_BADGE_RADIUS = 3.5;
+const BAG_BOUNCE_SCALE_AMOUNT = 0.18;
 
 // Minimap constants
 const MINIMAP_EXPANDED_SIZE = 180;
@@ -177,6 +182,11 @@ export class MobileHUDSystem implements GameSystem {
     return { x: below.x, y: below.y - below.h - MOBILE_BTN_STACK_GAP, w: below.w, h: below.h };
   }
 
+  /** The Bag button's own rect, read after `renderButtons` has placed it — a fly-to-bag target. */
+  get bagBtnRect(): Rect {
+    return this._bagBtnRect;
+  }
+
   /**
    * Render the standard mobile buttons: Switch + Gear + Bag,
    * plus any extra buttons passed in (e.g. Follow for DungeonScene).
@@ -193,6 +203,8 @@ export class MobileHUDSystem implements GameSystem {
     extraButtons: MobileHUDButton[] = [],
     hotbarHeight = MOBILE_BTN_HEIGHT,
     topRightY?: number,
+    hasUnseenUpgrade = false,
+    bagBouncePulse = 0,
   ): void {
     if (!platform.isMobile) return;
 
@@ -244,7 +256,39 @@ export class MobileHUDSystem implements GameSystem {
       h: MOBILE_SMALL_BTN_HEIGHT,
     };
     this.drawSmallBtn(ctx, this._gearBtnRect, 'Gear', this.gearPanel.isOpen);
+
+    const bagBounceScale = 1 + Math.sin(bagBouncePulse * Math.PI) * BAG_BOUNCE_SCALE_AMOUNT;
+    const bagCx = this._bagBtnRect.x + this._bagBtnRect.w / 2;
+    const bagCy = this._bagBtnRect.y + this._bagBtnRect.h / 2;
+    ctx.save();
+    ctx.translate(bagCx, bagCy);
+    ctx.scale(bagBounceScale, bagBounceScale);
+    ctx.translate(-bagCx, -bagCy);
     this.drawSmallBtn(ctx, this._bagBtnRect, 'Bag', this.inventoryPanel.isOpen);
+    drawSatchelIcon(
+      ctx,
+      this._bagBtnRect.x + BAG_ICON_PAD,
+      this._bagBtnRect.y + (this._bagBtnRect.h - BAG_ICON_SIZE) / 2,
+      BAG_ICON_SIZE,
+    );
+    if (hasUnseenUpgrade) {
+      ctx.save();
+      ctx.fillStyle = '#4ade80';
+      ctx.strokeStyle = '#052e16';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(
+        this._bagBtnRect.x + this._bagBtnRect.w - BAG_BADGE_RADIUS,
+        this._bagBtnRect.y + BAG_BADGE_RADIUS,
+        BAG_BADGE_RADIUS,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   /**
@@ -457,8 +501,8 @@ export class MobileHUDSystem implements GameSystem {
     this.inventoryPanel.handleMouseDown(mx, my, inventory);
   }
 
-  handleMouseMove(mx: number, my: number): void {
-    this.inventoryPanel.handleMouseMove(mx, my);
+  handleMouseMove(mx: number, my: number, inventory: Inventory | null = null): void {
+    this.inventoryPanel.handleMouseMove(mx, my, inventory);
     this.gearPanel.handleMouseMove(mx, my);
   }
 

@@ -86,6 +86,11 @@ const HINT_LINE_BOX = 14;
 /** Marks the row the world arrow is following. */
 const PIN_GLYPH = '📌';
 
+/** How far a quest's sub-step rows sit in from its header. */
+const SUBSTEP_INDENT = 20;
+/** A sub-step is always shown unchecked: a finished one drops out of the list entirely. */
+const SUBSTEP_CHECKBOX = '☐';
+
 const EMPTY_TEXT_Y = 12;
 
 const SCROLLBAR_X_INSET = 7;
@@ -179,10 +184,12 @@ function isPinnedRow(progress: JournalProgress, entry: TrackerEntry): boolean {
 function togglePin(progress: JournalProgress, entry: TrackerEntry): void {
   if (isPinnedRow(progress, entry)) {
     progress.pinnedTrackerId = null;
+    progress.pinSource = null;
     return;
   }
   if (!canPin(entry)) return;
   progress.pinnedTrackerId = entry.id;
+  progress.pinSource = 'player';
 }
 
 /** Whether any part of a row at this y falls inside the visible band. */
@@ -228,17 +235,20 @@ function renderRow(
     drawButton(ctx, { ...rowButton, disabled: true });
   }
 
-  const textX = rowX + ROW_PADDING_X;
+  const isSubstep = entry.parentId !== undefined;
+  const indent = isSubstep ? SUBSTEP_INDENT : 0;
+  const textX = rowX + ROW_PADDING_X + indent;
   // `width` word-wraps; `lineHeight` and `height` together hold what wrapped to
   // one line, so a long quest name is cut rather than pushed down onto the
   // objective under it.
-  const lineWidth = rowWidth - ROW_PADDING_X - ROW_TEXT_RIGHT_INSET;
+  const lineWidth = rowWidth - ROW_PADDING_X - ROW_TEXT_RIGHT_INSET - indent;
   const lineBox = (box: number) => ({ width: lineWidth, lineHeight: box, height: box });
 
-  drawText(ctx, isPinned ? `${PIN_GLYPH} ${entry.name}` : entry.name, {
+  const namePrefix = `${isSubstep ? SUBSTEP_CHECKBOX : ''}${isPinned ? PIN_GLYPH : ''}`.trim();
+  drawText(ctx, namePrefix === '' ? entry.name : `${namePrefix} ${entry.name}`, {
     x: textX,
     y: rowY + ROW_NAME_Y,
-    ...TEXT_PRESETS[STATUS_TEXT[entry.status]],
+    ...TEXT_PRESETS[isSubstep ? 'value' : STATUS_TEXT[entry.status]],
     ...lineBox(NAME_LINE_BOX),
   });
   drawText(ctx, entry.objective, {

@@ -29,6 +29,10 @@ const INACTIVE_PLAYER_Y = 128;
 const CONTROL_HINTS_Y1 = 36;
 const CONTROL_HINTS_Y2 = 52;
 const COINS_Y = 176;
+/** Roughly the coin readout's own text height — used to aim a flying coin at its visual centre, not its top-left. */
+const COIN_ICON_CENTER_OFFSET = 6;
+/** Peak scale of the coin counter's brief landing pulse. */
+const COIN_PULSE_SCALE = 0.25;
 const HINT_SIZE = 12;
 const CONTROL_HINT_X = 16;
 const CONTROL_HINT_Y_OFFSET = 18;
@@ -58,6 +62,17 @@ const COLLAPSED_HP_THRESHOLD_LOW = 0.25;
 const COLLAPSED_CAT_ICON_X = 90;
 const COLLAPSED_CAT_HP_X = 106;
 const COLLAPSED_TOGGLE_X_OFFSET = COLLAPSED_BAR_W;
+// Transient coin readout shown above the collapsed bar while a coin is in
+// flight or has just landed — the collapsed layout has no permanent room for
+// one, but a flying coin still needs a number to visibly tick up.
+const COLLAPSED_COIN_BADGE_X_OFFSET = COLLAPSED_ICON_X;
+const COLLAPSED_COIN_BADGE_Y_OFFSET = -14;
+const COLLAPSED_COIN_BADGE_H = 18;
+const COLLAPSED_COIN_BADGE_MIN_W = 50;
+const COLLAPSED_COIN_BADGE_CHAR_W = 6;
+const COLLAPSED_COIN_BADGE_PAD = 10;
+const COLLAPSED_COIN_BADGE_TEXT_SIZE = 11;
+const COLLAPSED_COIN_BADGE_TEXT_Y_ADJUST = 4;
 
 // Skill badge constants
 const BADGE_X = 8;
@@ -200,6 +215,21 @@ export function expandedHudPanelRect(): HudRect {
  * @param pulseRef - Mutable object holding the oscillation counter for the
  *   notification pulse. Pass `{ value: 0 }` from the scene and keep it stable.
  */
+/**
+ * Where a flying coin sprite should land. The collapsed bar has no permanent
+ * coin readout, but it always has this spot — {@link drawHUDCollapsed} paints
+ * a transient readout there for as long as coins are still arriving.
+ */
+export function hudCoinCounterScreenPos(collapsed: boolean): { x: number; y: number } {
+  if (platform.showHudCollapseToggle && collapsed) {
+    return {
+      x: COLLAPSED_X + COLLAPSED_COIN_BADGE_X_OFFSET,
+      y: COLLAPSED_Y + COLLAPSED_COIN_BADGE_Y_OFFSET,
+    };
+  }
+  return { x: CONTROL_HINT_X + COIN_ICON_CENTER_OFFSET, y: COINS_Y + COIN_ICON_CENTER_OFFSET };
+}
+
 export function drawHUD(
   ctx: CanvasRenderingContext2D,
   human: HumanPlayer,
@@ -208,9 +238,10 @@ export function drawHUD(
   collapsed = false,
   reminderActive = false,
   skillPointsHidden = false,
+  coinFly: { pendingAmount: number; pulse: number } = { pendingAmount: 0, pulse: 0 },
 ): HudResult {
   if (platform.showHudCollapseToggle && collapsed) {
-    return drawHUDCollapsed(ctx, human, cat, pulseRef);
+    return drawHUDCollapsed(ctx, human, cat, pulseRef, coinFly);
   }
 
   const activeLabel = human.isActive ? 'Human' : 'Cat';
@@ -255,13 +286,26 @@ export function drawHUD(
   drawHUDPlayerBlock(ctx, activeLabel, activePlayer, CONTROL_HINT_X, ACTIVE_PLAYER_Y);
   drawHUDPlayerBlock(ctx, inactiveLabel, inactivePlayer, CONTROL_HINT_X, INACTIVE_PLAYER_Y);
 
-  // Coins row
-  drawText(ctx, `\u{1FA99} ${human.coins + cat.coins}  coins`, {
+  // Coins row — the displayed total lags the real one by whatever is still
+  // mid-flight, so it visibly ticks up as each coin sprite lands rather than
+  // jumping the instant the coins are actually earned.
+  const displayedCoins = Math.max(0, human.coins + cat.coins - Math.round(coinFly.pendingAmount));
+  ctx.save();
+  if (coinFly.pulse > 0) {
+    const scale = 1 + coinFly.pulse * COIN_PULSE_SCALE;
+    const pivotX = CONTROL_HINT_X;
+    const pivotY = COINS_Y + COIN_ICON_CENTER_OFFSET;
+    ctx.translate(pivotX, pivotY);
+    ctx.scale(scale, scale);
+    ctx.translate(-pivotX, -pivotY);
+  }
+  drawText(ctx, `\u{1FA99} ${displayedCoins}  coins`, {
     x: CONTROL_HINT_X,
     y: COINS_Y,
     size: 11,
-    color: '#fbbf24',
+    color: coinFly.pulse > 0 ? '#fde68a' : '#fbbf24',
   });
+  ctx.restore();
 
   // Hidden rather than drawn inert: a hidden rect is also what disarms the
   // banner's click-to-spend, so nothing invisible can be tapped.
@@ -301,6 +345,7 @@ function drawHUDCollapsed(
   human: HumanPlayer,
   cat: CatPlayer,
   _pulseRef: { value: number },
+  coinFly: { pendingAmount: number; pulse: number },
 ): HudResult {
   const BAR_W = COLLAPSED_BAR_W;
   const BAR_H = COLLAPSED_BAR_H;
@@ -392,6 +437,44 @@ function drawHUDCollapsed(
     color: '#94a3b8',
     align: 'center',
   });
+
+  // The collapsed bar has no permanent room for a coin readout, but a coin
+  // still needs somewhere to visibly land — this transient pill appears only
+  // while one is in flight or has just arrived, at the same spot
+  // `hudCoinCounterScreenPos` reports for the collapsed layout.
+  if (coinFly.pendingAmount > 0 || coinFly.pulse > 0) {
+    const totalCoins = human.coins + cat.coins;
+    const displayedCoins = Math.max(0, totalCoins - Math.round(coinFly.pendingAmount));
+    const badgeScale = 1 + coinFly.pulse * COIN_PULSE_SCALE;
+    const badgeCx = x + COLLAPSED_COIN_BADGE_X_OFFSET;
+    const badgeCy = y + COLLAPSED_COIN_BADGE_Y_OFFSET;
+    ctx.save();
+    ctx.translate(badgeCx, badgeCy);
+    ctx.scale(badgeScale, badgeScale);
+    ctx.translate(-badgeCx, -badgeCy);
+    const label = `\u{1FA99} ${displayedCoins}`;
+    const badgeW = Math.max(
+      COLLAPSED_COIN_BADGE_MIN_W,
+      label.length * COLLAPSED_COIN_BADGE_CHAR_W + COLLAPSED_COIN_BADGE_PAD,
+    );
+    drawBox(ctx, {
+      x: badgeCx - badgeW / 2,
+      y: badgeCy - COLLAPSED_COIN_BADGE_H / 2,
+      width: badgeW,
+      height: COLLAPSED_COIN_BADGE_H,
+      fill: 'rgba(0,0,0,0.75)',
+      border: '#facc15',
+      borderWidth: 1,
+    });
+    drawText(ctx, label, {
+      x: badgeCx,
+      y: badgeCy - COLLAPSED_COIN_BADGE_TEXT_Y_ADJUST,
+      size: COLLAPSED_COIN_BADGE_TEXT_SIZE,
+      color: coinFly.pulse > 0 ? '#fde68a' : '#fbbf24',
+      align: 'center',
+    });
+    ctx.restore();
+  }
 
   // Skill badge is rendered separately by the caller so it can be positioned
   // below any boss UI that stacks below this bar.

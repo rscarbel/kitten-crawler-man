@@ -16,7 +16,6 @@ import type { MiniMapCheckpoint } from '../systems/MiniMapSystem';
 import type { MongoCheckpoint } from '../systems/MongoSystem';
 import type { MurderMysteryQuestCheckpoint } from '../systems/MurderMysteryQuestSystem';
 import type { RecallCheckpoint } from '../systems/RecallSystem';
-import type { SafeRoomCheckpoint } from '../systems/SafeRoomSystem';
 import type { SpiderQuestCheckpoint } from '../systems/SpiderQuestSystem';
 import type { StairwellCheckpoint } from '../systems/StairwellSystem';
 import type { TreasureChestCheckpoint } from '../systems/TreasureChestSystem';
@@ -58,7 +57,6 @@ export interface WorldCheckpoint {
   /** The props, slow ground and room hazards each boss room changes during its fight. */
   bossRoomDressing: BossRoomDressingCheckpoint;
   barriers: BarrierCheckpoint;
-  safeRoom: SafeRoomCheckpoint;
   miniMap: MiniMapCheckpoint;
   stairwell: StairwellCheckpoint;
   /**

@@ -597,6 +597,48 @@ export function drawWardGlyph(
   ctx.restore();
 }
 
+/** How large the crush bubble snaps to, as a share of a tile. */
+const CRUSH_BUBBLE_RADIUS_TILE_SHARE = 0.62;
+const CRUSH_BUBBLE_RIM_WIDTH_PX = 3;
+const CRUSH_BUBBLE_CORE_ALPHA = 0.3;
+const CRUSH_BUBBLE_RIM_ALPHA = 0.9;
+/** How hard the bubble's shrink accelerates: a higher power holds it near full size longer. */
+const CRUSH_BUBBLE_SHRINK_EXPONENT = 2;
+/** Share of the shrink, from the end, over which the implosion flashes white. */
+const CRUSH_BUBBLE_FLASH_SHARE = 0.15;
+const CRUSH_BUBBLE_FLASH_ALPHA = 0.85;
+
+/**
+ * A shield fairy's crushing ward: a bubble that snaps around a hatched vespa
+ * at full size, then shrinks hard onto it and flashes white on the frame it
+ * implodes. `progress` is 0 → 1 across the whole crush.
+ */
+export function drawWardCrushBubble(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  tileSize: number,
+  progress: number,
+): void {
+  const p = clamp01(progress);
+  const maxRadius = tileSize * CRUSH_BUBBLE_RADIUS_TILE_SHARE;
+  const radius = maxRadius * Math.pow(1 - p, CRUSH_BUBBLE_SHRINK_EXPONENT);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, TAU);
+  ctx.fillStyle = rgba(WARD_BLUE, CRUSH_BUBBLE_CORE_ALPHA);
+  ctx.fill();
+  ctx.lineWidth = CRUSH_BUBBLE_RIM_WIDTH_PX;
+  ctx.strokeStyle = rgba(WARD_PALE, CRUSH_BUBBLE_RIM_ALPHA);
+  ctx.stroke();
+  const flareStart = 1 - CRUSH_BUBBLE_FLASH_SHARE;
+  if (p > flareStart) {
+    const flare = (p - flareStart) / CRUSH_BUBBLE_FLASH_SHARE;
+    drawGlow(ctx, WARD_PALE, cx, cy, maxRadius, CRUSH_BUBBLE_FLASH_ALPHA * flare);
+  }
+  ctx.restore();
+}
+
 // ── Healer: the death wave and the living heal stream ────────────────────────
 
 const WAVE_LEAF_COUNT = 22;

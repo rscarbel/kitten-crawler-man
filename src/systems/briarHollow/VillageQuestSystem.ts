@@ -198,6 +198,10 @@ export interface VillageQuestSystemDeps {
     y: number,
     items: ReadonlyArray<{ id: ItemId; quantity: number }>,
   ) => void;
+  /** A quest coin reward was just granted — for a fly-to-HUD effect. */
+  readonly onCoinsGranted?: (coins: number, worldX: number, worldY: number) => void;
+  /** A quest item reward was just granted straight into the bag (not dropped) — for a fly-to-HUD effect. */
+  readonly onItemGranted?: (id: ItemId, quantity: number, worldX: number, worldY: number) => void;
 }
 
 function itemReward(id: ItemId, quantity: number): GrantedReward {
@@ -564,6 +568,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     const active = this.deps.active();
     awardXp(active, BRIAR_HOLLOW_QUEST_XP, this.deps.bus);
     active.earnCoins(BRIAR_HOLLOW_QUEST_COINS);
+    this.deps.onCoinsGranted?.(BRIAR_HOLLOW_QUEST_COINS, active.x, active.y);
     this.giveOrDrop(active, 'hamburger', BRIAR_HOLLOW_REWARD_BURGERS);
     this.giveOrDrop(active, 'hollow_stew', BRIAR_HOLLOW_REWARD_STEW);
     this.questManager.startQuest(BRIAR_HOLLOW_QUEST_ID);
@@ -579,6 +584,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private giveOrDrop(crawler: HumanPlayer | CatPlayer, id: ItemId, quantity: number): void {
     if (crawler.inventory.hasRoomFor(id)) {
       crawler.inventory.addItem(id, quantity);
+      this.deps.onItemGranted?.(id, quantity, crawler.x, crawler.y);
       return;
     }
     const mayor = this.deps.villagers.villagerFor('bramblewick');

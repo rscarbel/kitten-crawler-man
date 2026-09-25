@@ -34,6 +34,80 @@ const GAUNTLET_STUN_TICKS = 90;
 export const MELEE_POINT_BLANK_RANGE = TILE_SIZE * 1;
 /** Fraction of total kill XP awarded to the top damage dealer. */
 const XP_TOP_DEALER_FRACTION = 0.85;
+
+/**
+ * Minimum share of a kill's XP the lower-levelled crawler is guaranteed, by
+ * how many levels separate the two crawlers. A floor, not the dealer share:
+ * the top dealer still keeps {@link XP_TOP_DEALER_FRACTION} when that is
+ * larger, which it always is, since no floor here reaches it.
+ */
+const XP_CATCH_UP_LEVEL_GAP_1 = 1;
+const XP_CATCH_UP_LEVEL_GAP_2 = 2;
+const XP_CATCH_UP_LEVEL_GAP_3 = 3;
+const XP_CATCH_UP_FLOOR_GAP_1 = 0.25;
+const XP_CATCH_UP_FLOOR_GAP_2 = 0.4;
+const XP_CATCH_UP_FLOOR_GAP_3 = 0.5;
+const XP_CATCH_UP_FLOOR_GAP_4_PLUS = 0.75;
+
+/** The catch-up floor for a given level gap between the two crawlers (0 at no gap). */
+export function xpCatchUpFloorFraction(levelGap: number): number {
+  if (levelGap <= 0) return 0;
+  if (levelGap === XP_CATCH_UP_LEVEL_GAP_1) return XP_CATCH_UP_FLOOR_GAP_1;
+  if (levelGap === XP_CATCH_UP_LEVEL_GAP_2) return XP_CATCH_UP_FLOOR_GAP_2;
+  if (levelGap === XP_CATCH_UP_LEVEL_GAP_3) return XP_CATCH_UP_FLOOR_GAP_3;
+  return XP_CATCH_UP_FLOOR_GAP_4_PLUS;
+}
+
+export interface KillXpSplitInput {
+  readonly totalXp: number;
+  readonly humanLevel: number;
+  readonly catLevel: number;
+  /** Which crawler dealt the most credited damage, or null when neither did. */
+  readonly topDealer: 'human' | 'cat' | null;
+}
+
+export interface KillXpSplit {
+  readonly human: number;
+  readonly cat: number;
+}
+
+/**
+ * How one kill's XP splits between the two crawlers. Pure so
+ * `scripts/verify-xp-split.ts` can assert every gap and dealer ordering
+ * headlessly, against exactly the arithmetic `resolveKills` uses.
+ *
+ * At equal levels this is today's shipped 85/15 dealer split, unclaimed
+ * top-dealer share and all — a non-crawler top dealer (friendly fire, a
+ * hireling) leaves the 85% on the table, same as before this feature existed.
+ * Once the crawlers' levels differ, the lower-levelled one is guaranteed
+ * {@link xpCatchUpFloorFraction} of the kill no matter who gets credit for it,
+ * and the other crawler always gets the rest — so a non-crawler top dealer no
+ * longer leaves anything unclaimed once there is a gap to close.
+ */
+export function splitKillXp(input: KillXpSplitInput): KillXpSplit {
+  const { totalXp, humanLevel, catLevel, topDealer } = input;
+  const levelGap = Math.abs(humanLevel - catLevel);
+
+  if (levelGap === 0) {
+    const topXp = Math.max(1, Math.round(totalXp * XP_TOP_DEALER_FRACTION));
+    const shareXp = Math.max(1, totalXp - topXp);
+    if (topDealer === 'human') return { human: topXp, cat: shareXp };
+    if (topDealer === 'cat') return { human: shareXp, cat: topXp };
+    return { human: shareXp, cat: 0 };
+  }
+
+  const lowerLevelled: 'human' | 'cat' = humanLevel <= catLevel ? 'human' : 'cat';
+  const floorFraction = xpCatchUpFloorFraction(levelGap);
+  const lowerFraction =
+    topDealer === lowerLevelled ? Math.max(floorFraction, XP_TOP_DEALER_FRACTION) : floorFraction;
+  // The lower-levelled crawler is the one catching up, so on a kill too small
+  // to split it takes the lone point; the higher one gets exactly the rest.
+  const lowerXp = Math.min(totalXp, Math.max(1, Math.round(totalXp * lowerFraction)));
+  const higherXp = totalXp - lowerXp;
+  return lowerLevelled === 'human'
+    ? { human: lowerXp, cat: higherXp }
+    : { human: higherXp, cat: lowerXp };
+}
 /** Minimum missile level to trigger AoE splash damage. */
 const MISSILE_SPLASH_LEVEL = 5;
 /** Splash damage as a fraction of direct missile damage. */
@@ -76,7 +150,7 @@ const SMUSH_HEAL_FRACTION = 0.5;
 /** Stun duration in frames for smush non-boss stun. */
 const SMUSH_STUN_FRAMES = 150;
 /** Shown over a fairy the stomp passes under. */
-export const SMUSH_DODGE_LABEL = 'Dodge';
+export const SMUSH_IMMUNE_LABEL = 'Immune';
 
 /**
  * A stomp is a shock through the ground, and a fairy hovers clear of it: the
@@ -286,7 +360,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       const dist = Math.hypot(mc.x - hc.x, mc.y - hc.y);
       if (dist > outerRadius) continue;
       if (dodgesSmush(mob)) {
-        mob.queueFloatingText(SMUSH_DODGE_LABEL, 'miss');
+        mob.queueFloatingText(SMUSH_IMMUNE_LABEL, 'immune');
         continue;
       }
       if (!human.zeroDamage) {
@@ -320,17 +394,17 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
     }
 
-    // Props take the outer-ring multiplier: a stomp that reaches a crate at the
-    // edge of the blast should still splinter it, and unlike a mob a crate has
-    // no reason to care whether it was in the inner ring.
+    // A stomp flattens every breakable in reach outright, crates and trees
+    // alike, rather than merely chipping them like a normal hit: no health left
+    // to compare between an inner and outer ring, and no wall of crates left
+    // standing to shield the ones behind it.
     if (!human.zeroDamage) {
-      const propDamage = Math.max(1, Math.round(baseDamage * stats.outerDamageMultiplier));
       // Assigned rather than OR-ed on each line so neither call is skipped by
       // short-circuiting: a stomp splinters the crate *and* the sapling.
-      if (ctx.destructibles?.tryAreaHit(human, outerRadius, propDamage) ?? false) {
+      if (ctx.destructibles?.smashAllInRadius(human, outerRadius) ?? false) {
         smushConnected = true;
       }
-      if (ctx.trees?.tryAreaHit(human, outerRadius, propDamage) ?? false) {
+      if (ctx.trees?.smashAllInRadius(human, outerRadius) ?? false) {
         smushConnected = true;
       }
     }
@@ -567,14 +641,17 @@ export function resolveKills(ctx: CombatContext): void {
         topPlayer = player instanceof HumanPlayer || player instanceof CatPlayer ? player : null;
       }
     }
-    const otherPlayer = topPlayer === human ? cat : human;
 
     if (hasDamageLedger && paysRewards) {
-      const totalXp = mob.scaledXpValue;
-      const topXp = Math.max(1, Math.round(totalXp * XP_TOP_DEALER_FRACTION));
-      const shareXp = Math.max(1, totalXp - topXp);
-      if (topPlayer !== null) awardXp(topPlayer, topXp, bus);
-      awardXp(otherPlayer, shareXp, bus);
+      const topDealer = topPlayer === human ? 'human' : topPlayer === cat ? 'cat' : null;
+      const split = splitKillXp({
+        totalXp: mob.scaledXpValue,
+        humanLevel: human.level,
+        catLevel: cat.level,
+        topDealer,
+      });
+      awardXp(human, split.human, bus);
+      awardXp(cat, split.cat, bus);
     }
 
     const killer =

@@ -7,6 +7,7 @@ import { clamp } from '../utils';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import { hasLivingBossHealer } from '../creatures/fairies/bossHealerBond';
+import type { Fairy, FairyConfinement } from '../creatures/fairies/Fairy';
 import { POINT_BLANK_TILES, TheHoarder } from '../creatures/TheHoarder';
 import { Cockroach } from '../creatures/Cockroach';
 import { prewarmCockroach } from '../sprites/cockroachSprite';
@@ -19,6 +20,7 @@ import type { BossRoomFightListener } from './bossRooms/BossRoomDressing';
 import type { GroundHazardSource } from './GroundHazardSource';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
+import type { EventBus } from '../core/EventBus';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawHoarderAcidPool, drawHoarderBile } from '../sprites/hoarderBileSprite';
 import { bileLobHeight, drawBileShadow, isHoardJunk, stopsBile } from './bossRooms/hoarderBile';
@@ -163,6 +165,17 @@ function removeOwnedBy(items: Array<{ readonly owner: Mob }>, owner: Mob): void 
   for (let i = items.length - 1; i >= 0; i--) {
     if (items[i].owner === owner) items.splice(i, 1);
   }
+}
+
+/** A boss room's own rectangle, in tiles, as a {@link FairyConfinement}. */
+function rectConfinement(bounds: { x: number; y: number; w: number; h: number }): FairyConfinement {
+  const minPx = bounds.x * TILE_SIZE;
+  const minPy = bounds.y * TILE_SIZE;
+  const maxPx = (bounds.x + bounds.w - 1) * TILE_SIZE;
+  const maxPy = (bounds.y + bounds.h - 1) * TILE_SIZE;
+  return {
+    containsPoint: (x, y) => x >= minPx && x <= maxPx && y >= minPy && y <= maxPy,
+  };
 }
 
 /**
@@ -480,6 +493,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   constructor(
     private readonly gameMap: GameMap,
     private readonly miniMap: BossRoomMiniMap,
+    private readonly bus: EventBus,
     bossTypes: string[] = [],
     private readonly hasUnopenedChest: (roomIndex: number) => boolean = () => false,
   ) {
@@ -930,12 +944,14 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
             human.isKnockedOut = false;
             human.knockedOutFrames = 0;
             human.reviveProgress = 0;
+            this.bus.emit('crawlerRevived', { player: human });
           }
           if (!cat.isAlive && catInRoom) {
             cat.hp = Math.max(1, Math.floor(cat.maxHp * BOSS_REVIVE_HP_FRACTION));
             cat.isKnockedOut = false;
             cat.knockedOutFrames = 0;
             cat.reviveProgress = 0;
+            this.bus.emit('crawlerRevived', { player: cat });
           }
         }
         continue;
@@ -1226,16 +1242,32 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   }
 
   /**
-   * Keeps a boss's healer inside the room its boss stands in, as
-   * {@link clampBossToRoom} keeps the boss. A boss in no room (the arena's, a
-   * quest's) leaves its healer alone rather than dragging it to the nearest one.
+   * Confines a healer fairy to whichever boss room it is currently standing
+   * in, exactly as {@link clampBossToRoom} confines the boss itself — before,
+   * during and after that room's fight, whether or not the healer is still
+   * bonded to a living boss. Positional rather than bond-based: a healer
+   * belongs to the room it is in, bond or no bond, so one stripped of its
+   * bond (or spawned with none) is held exactly as a bonded one is. Also sets
+   * the fairy's own confinement (see {@link Fairy.confineTo}), so its hover
+   * goals and refuge search stop offering it a way out, not just its position.
+   * A healer in no boss room has its confinement cleared and is left alone
+   * rather than dragged into the nearest one.
    */
-  clampHealerToBossRoom(healer: Mob, boss: Mob): void {
+  confineHealerToBossRoom(healer: Fairy): void {
+    if (!healer.respectsConfinement) return;
     for (const state of this.states) {
-      if (!this.isEntityInRoom(boss, state.bounds)) continue;
+      if (!this.isEntityInRoom(healer, state.bounds)) continue;
       this.clampToBossRoom(healer, state.bounds);
+      healer.confineTo(rectConfinement(state.bounds));
       return;
     }
+    // Not strictly inside one of *this* system's rooms. Unlike a boss, a
+    // healer's confinement can belong to a different owner entirely — the
+    // arena, the spider lab, the circus — each running its own confinement
+    // pass over every healer fairy the same way this one does. Clearing here
+    // on a miss would erase whatever one of those owners set for a healer
+    // that belongs to them, so a healer not in one of ours is left exactly as
+    // it is; the room that does own it is responsible for its own clamp.
   }
 
   /** Clamps a boss mob to its own boss room (call after mob AI runs each frame). */
@@ -1249,10 +1281,16 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       }
     }
     // Mob outside all rooms (shouldn't normally happen): clamp to nearest by center.
+    const nearest = this.nearestRoomState(mob);
+    if (nearest) this.clampToBossRoom(mob, nearest.bounds);
+  }
+
+  /** The room state whose bounds' centre lies closest to `entity`, or null when there are none. */
+  private nearestRoomState(entity: { x: number; y: number }): BossRoomState | null {
     let bestState: BossRoomState | null = null;
     let bestDist = Infinity;
-    const mx = mob.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
-    const my = mob.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+    const mx = entity.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+    const my = entity.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
     for (const state of this.states) {
       const b = state.bounds;
       const cx = (b.x + b.w * ENTITY_TILE_CENTER_OFFSET) * TILE_SIZE;
@@ -1263,7 +1301,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         bestState = state;
       }
     }
-    if (bestState) this.clampToBossRoom(mob, bestState.bounds);
+    return bestState;
   }
 
   /**

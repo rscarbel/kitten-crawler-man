@@ -1,6 +1,6 @@
 import type { StatName } from '../Player';
 import { ALL_STATS } from '../Player';
-import { EQUIP_SUBSLOTS, ITEM_DEF, isItemId, itemFitsSubSlot } from './ItemDefs';
+import { EQUIP_SUBSLOTS, ITEM_DEF, isItemId, isWearable, itemFitsSubSlot } from './ItemDefs';
 import type { EquipSlot, InventoryItem, ItemId, ResistanceType, WearableItem } from './ItemDefs';
 import type { CrawlerKind, SkillId } from './SkillManager';
 
@@ -12,6 +12,38 @@ export type StatBonuses = Record<StatName, number>;
 
 function emptyStatBonuses(): StatBonuses {
   return { strength: 0, intelligence: 0, constitution: 0, dexterity: 0 };
+}
+
+// Weights for `gearScore`, below — chosen so a single resistance or a
+// meaningful regen boost reads as roughly as valuable as a few points of a
+// raw stat, rather than every field counting for one point flat.
+const GEAR_SCORE_STAT_WEIGHT = 1;
+const GEAR_SCORE_RESISTANCE_WEIGHT = 3;
+const GEAR_SCORE_REGEN_WEIGHT = 10;
+const GEAR_SCORE_SKILL_LEVEL_WEIGHT = 2;
+
+/**
+ * A rough, comparable "how good is this gear" score, used only to decide
+ * whether a newly granted item beats what's already worn — never for combat
+ * math, which reads each field on its own.
+ */
+function gearScore(
+  item: Pick<InventoryItem, 'statBonus' | 'resistances' | 'regenMultiplier' | 'skillLevelBonus'>,
+): number {
+  let score = 0;
+  if (item.statBonus) {
+    for (const stat of ALL_STATS) score += (item.statBonus[stat] ?? 0) * GEAR_SCORE_STAT_WEIGHT;
+  }
+  score += (item.resistances?.length ?? 0) * GEAR_SCORE_RESISTANCE_WEIGHT;
+  if (item.regenMultiplier !== undefined) {
+    score += (item.regenMultiplier - 1) * GEAR_SCORE_REGEN_WEIGHT;
+  }
+  if (item.skillLevelBonus) {
+    for (const bonus of Object.values(item.skillLevelBonus)) {
+      score += bonus * GEAR_SCORE_SKILL_LEVEL_WEIGHT;
+    }
+  }
+  return score;
 }
 
 /**
@@ -67,6 +99,31 @@ export class EquipmentManager {
     // The equipped map is id-keyed, so the same id worn in two ring slots would
     // make every lookup ambiguous and leave one slot un-unequippable.
     return !this.isEquipped(item.id);
+  }
+
+  /**
+   * True when granting `item` would either fill an empty sub-slot it fits, or
+   * beat whatever it would otherwise displace — the "new upgrade" badge's test.
+   *
+   * Mirrors {@link resolveSubSlotKey}'s own placement rule (empty slot first,
+   * else the first fitting one) so the item this compares against is the same
+   * one `equip` would actually hand back as displaced.
+   */
+  isUpgradeOverEquipped(item: InventoryItem): boolean {
+    if (!isWearable(item) || !this.canEquip(item)) return false;
+    const candidates = EQUIP_SUBSLOTS[item.equipSlot].filter((subSlot) =>
+      itemFitsSubSlot(item, subSlot),
+    );
+    if (candidates.length === 0) return false;
+    const hasEmptyCandidate = candidates.some(
+      (subSlot) => !this.equipped.has(`${item.equipSlot}:${subSlot}`),
+    );
+    if (hasEmptyCandidate) return true;
+    const wornId = this.equipped.get(`${item.equipSlot}:${candidates[0]}`);
+    if (wornId === undefined) return true;
+    const worn = this.findItem(wornId);
+    if (!worn) return true;
+    return gearScore(item) > gearScore(worn);
   }
 
   /**

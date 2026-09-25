@@ -284,6 +284,17 @@ function kindForTileType(type: number): DestructiblePropKind | null {
   return null;
 }
 
+/** Tile type for each breakable kind, the inverse of {@link kindForTileType}. */
+const TILE_TYPE_FOR_KIND: Record<DestructiblePropKind, number> = {
+  barrel: BARREL,
+  barrel_side: BARREL_SIDE,
+  crate: CRATE,
+  torch: TORCH,
+  brazier: BRAZIER,
+  bookshelf: BOOKSHELF,
+  garbage_bag: HOARD_BAG,
+};
+
 function startingHpFor(kind: DestructiblePropKind): number {
   if (kind === 'barrel') return BARREL_HP;
   if (kind === 'barrel_side') return BARREL_SIDE_HP;
@@ -309,6 +320,8 @@ export class DestructiblePropSystem implements GameSystem {
   private readonly wreckage: Wreckage[] = [];
   private readonly splinters: Splinter[] = [];
   private readonly smashCounts: SmashCounts = { wood: 0, iron: 0 };
+  /** Tile types of every breakable prop kind this map allows, for the smash-through sight test. */
+  private readonly breakableTileTypes: ReadonlySet<number>;
 
   constructor(
     private readonly gameMap: GameMap,
@@ -321,7 +334,9 @@ export class DestructiblePropSystem implements GameSystem {
      * carry a null.
      */
     private readonly breakable: ReadonlySet<DestructiblePropKind> = ALL_BREAKABLE_PROPS,
-  ) {}
+  ) {
+    this.breakableTileTypes = new Set(Array.from(breakable, (kind) => TILE_TYPE_FOR_KIND[kind]));
+  }
 
   /** The kind of breakable prop on this tile, or null when there is nothing to break. */
   private breakableKindAt(type: number): DestructiblePropKind | null {
@@ -386,6 +401,25 @@ export class DestructiblePropSystem implements GameSystem {
     return this.damagePropsInRange(x, y, radius, INSTANT_DESTROY_DAMAGE, owner, null);
   }
 
+  /**
+   * Flatten every prop in radius the way {@link destroyInRadius} does, but from
+   * a crawler's own centre rather than an arbitrary blast point, and with the
+   * sight test treating every other breakable prop as glass: a crate standing
+   * behind a barrel is still in reach of the same stomp that just splintered
+   * the barrel. A real wall still shadows both.
+   */
+  smashAllInRadius(attacker: HumanPlayer | CatPlayer, radius: number): boolean {
+    return this.damagePropsInRange(
+      attacker.x + HALF_TILE,
+      attacker.y + HALF_TILE,
+      radius,
+      INSTANT_DESTROY_DAMAGE,
+      attacker,
+      null,
+      true,
+    );
+  }
+
   private damagePropsInRange(
     originX: number,
     originY: number,
@@ -393,6 +427,7 @@ export class DestructiblePropSystem implements GameSystem {
     damage: number,
     owner: HumanPlayer | CatPlayer,
     facing: { x: number; y: number } | null,
+    ignoreBreakableSight = false,
   ): boolean {
     const originTileX = Math.floor(originX / TILE_SIZE);
     const originTileY = Math.floor(originY / TILE_SIZE);
@@ -428,10 +463,20 @@ export class DestructiblePropSystem implements GameSystem {
         // through a wall — without this the player could pop crates in a room
         // they have not entered. The prop's own tile is named as exempt so the
         // test stays correct however the ray decides to treat its end tile.
-        if (
-          !this.gameMap.hasLineOfSight(originX, originY, centerX, centerY, { tileX: tx, tileY: ty })
-        )
-          continue;
+        const inSight = ignoreBreakableSight
+          ? this.gameMap.hasLineOfSightIgnoringTypes(
+              originX,
+              originY,
+              centerX,
+              centerY,
+              this.breakableTileTypes,
+              { tileX: tx, tileY: ty },
+            )
+          : this.gameMap.hasLineOfSight(originX, originY, centerX, centerY, {
+              tileX: tx,
+              tileY: ty,
+            });
+        if (!inSight) continue;
 
         hitAnything = true;
         const key = tileKey(tx, ty);
@@ -606,6 +651,9 @@ export class DestructiblePropSystem implements GameSystem {
         false,
         // Both players are paid the full amount: floor 1 can roll a single coin,
         // and splitting that would pay one of them nothing.
+        true,
+        // A prop's coins fall and bounce the same as a kill's — the drop is a
+        // beat the player is meant to see, not a pile that simply exists.
         true,
       );
     }

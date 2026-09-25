@@ -108,7 +108,7 @@ const SHADY_BUBBLE_LIFT_TILES = 0.85;
  * registers one — but the Journal pins by id, and a pin has to survive the
  * bounty it was placed on being paid out and replaced.
  */
-const BOUNTY_TRACKER_ID = 'shady_bounties';
+export const BOUNTY_TRACKER_ID = 'shady_bounties';
 
 /** The glyph over Shady's head for each phase of the loop. */
 const SHADY_MARKER_BY_PHASE: Record<BountyPhase, ShadyMarker> = {
@@ -270,6 +270,9 @@ export class BountySystem implements GameSystem {
     private readonly progress: BountyProgress,
     private readonly addMob: (mob: Mob) => void,
     private readonly audio: AudioManager | null = null,
+    /** Fired with the payout and the recipient's world position, for a fly-to-HUD effect. */
+    private readonly onPayout:
+      ((coins: number, worldX: number, worldY: number) => void) | null = null,
   ) {
     this.dialog = new QuestDialog(audio);
     this.unsubscribeMobKilled = this.bus.on('mobKilled', (e) => this.onMobKilled(e.mob));
@@ -514,6 +517,7 @@ export class BountySystem implements GameSystem {
     // what it was worth, not whatever a fresh instance defaults to.
     const coins = this.progress.pendingPayoutCoins;
     recipient.earnCoins(coins);
+    this.onPayout?.(coins, recipient.x, recipient.y);
     this.audio?.play('coin_pouch');
     this.progress.phase = 'available';
     this.progress.currentTypeId = null;

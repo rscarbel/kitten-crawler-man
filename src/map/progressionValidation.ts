@@ -4,6 +4,7 @@ import type { DungeonData, QuestChokeData } from './DungeonGenerator';
 import { QUEST_EXIT_DOOR_CLOSED } from './tileTypes';
 import { roomDoorways } from './roomDoorways';
 import { MIN_CHAIN_ROOMS, SPLIT_LANE_MAX_ROOMS } from './spineLayout';
+import { SAFE_ACCESS_RUN_LIMIT } from './gauntletLayout';
 import { arenaReserveRect, ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
 
 /** Boss the arena's antechamber warns the player about. */
@@ -51,6 +52,13 @@ export interface ProgressionExpectations {
    * all would satisfy all of them by having nothing to compare.
    */
   scatterSafeRooms: number;
+  /**
+   * Whether the free region's own safe rooms (past a floor's last boss) are held
+   * to the hop-spacing rule rather than just I5's plain-distance one. Stated by
+   * the caller: it only holds on a floor whose last boss hands off to a genuine
+   * free region, which today is floor 1 alone.
+   */
+  outskirtsSafeRoomHops: boolean;
 }
 
 /** How far `startTile` may sit from the exact map centre (I1). */
@@ -80,6 +88,9 @@ export const STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT = 35;
 export const STAIRWELL_MAX_DIST_FROM_GAUNTLET_EXIT = 90;
 /** Pairwise scatter-safe-room distance, and their distance from gateway safe rooms (I5). */
 export const SCATTER_SAFE_ROOM_SEPARATION = 30;
+/** Nearest-neighbour room-hop band the outskirts' own safe rooms must keep, inclusive (I9). */
+export const OUTSKIRTS_SAFE_ROOM_MIN_HOPS = 4;
+export const OUTSKIRTS_SAFE_ROOM_MAX_HOPS = 9;
 /**
  * Room-disjoint routes allowed between two consecutive spine rooms (S2).
  *
@@ -504,6 +515,36 @@ function roomsBetween(
   return between;
 }
 
+/**
+ * Room hops from `start` to the nearest room in `targets`, or `Infinity` if none
+ * is reachable. Shared by generation (choosing where to promote a room to safe)
+ * and validation (I9), so the two can never disagree about what a "hop" is.
+ */
+export function nearestHopDistance(
+  graph: RoomGraph,
+  start: number,
+  targets: ReadonlySet<number>,
+): number {
+  if (targets.has(start)) return 0;
+  const seen = new Set<number>([start]);
+  let frontier = [start];
+  let hops = 0;
+  while (frontier.length > 0) {
+    hops++;
+    const next: number[] = [];
+    for (const room of frontier) {
+      for (const neighbour of graph[room].keys()) {
+        if (seen.has(neighbour)) continue;
+        seen.add(neighbour);
+        if (targets.has(neighbour)) return hops;
+        next.push(neighbour);
+      }
+    }
+    frontier = next;
+  }
+  return Infinity;
+}
+
 function reachableWithin(
   graph: RoomGraph,
   start: number,
@@ -563,6 +604,7 @@ export function validateProgression(
     spiderLabIsDeadEnd,
     spineMinRooms,
     scatterSafeRooms: expectedScatterSafeRooms,
+    outskirtsSafeRoomHops,
   } = expectations;
   const layout = data.progressionLayout;
 
@@ -599,6 +641,16 @@ export function validateProgression(
     fail('I8', 'progression floor generated without gauntlet layout data');
     return failures;
   }
+
+  const roomIndexOf = (rect: Rect): number =>
+    layout.roomBounds.findIndex(
+      (bounds) =>
+        bounds.x === rect.x && bounds.y === rect.y && bounds.w === rect.w && bounds.h === rect.h,
+    );
+
+  // Built once and shared by every gate that needs room-to-room adjacency (I9,
+  // I10, S1, S2, S3), rather than walking the whole map again per gate.
+  const fullRoomGraph = buildRoomGraph(grid, layout.roomBounds);
 
   // I1 — the player spawns at the middle of the map, inside the start room.
   const mapCentre: Point = { x: Math.floor(mapSize / 2), y: Math.floor(mapSize / 2) };
@@ -642,8 +694,15 @@ export function validateProgression(
     return failures;
   }
   const antechamber = safeRooms.find((room) => room.guardsBossType === ARENA_BOSS_TYPE);
+  // Excludes the mandatory safe-access pockets seated inside gauntlet branches
+  // and the spine chain: they carry no guardsBossType/followsBossType either,
+  // but they answer to their own path's run-limit rule (I10), not to the free
+  // region's pairwise spacing rule (I5) or its hop-spacing rule (I9).
   const scatterSafeRooms = safeRooms.filter(
-    (room) => room.guardsBossType === undefined && room.followsBossType === undefined,
+    (room) =>
+      room.guardsBossType === undefined &&
+      room.followsBossType === undefined &&
+      room.isSafeAccessPocket !== true,
   );
 
   for (const [index, room] of gatewaySafeRooms.entries()) {
@@ -832,6 +891,78 @@ export function validateProgression(
     }
   }
 
+  // I9 — the outskirts' own safe rooms (floor 1 only) sit an even hop apart: every
+  // one of them, the last gateway's own exit safe room included, keeps its
+  // nearest other one between OUTSKIRTS_SAFE_ROOM_MIN_HOPS and
+  // OUTSKIRTS_SAFE_ROOM_MAX_HOPS room hops away.
+  if (outskirtsSafeRoomHops) {
+    const outskirtsRooms = [lastExitSafeRoom, ...scatterSafeRooms];
+    const outskirtsGraph = fullRoomGraph;
+    const outskirtsIndices = outskirtsRooms.map((room) => roomIndexOf(room.bounds));
+    for (const [position, index] of outskirtsIndices.entries()) {
+      if (index < 0) {
+        fail('I9', `outskirts safe room ${position} is missing from the floor’s room list`);
+        continue;
+      }
+      const others = new Set(
+        outskirtsIndices.filter((_, otherPosition) => otherPosition !== position),
+      );
+      const hops = nearestHopDistance(outskirtsGraph, index, others);
+      if (hops < OUTSKIRTS_SAFE_ROOM_MIN_HOPS || hops > OUTSKIRTS_SAFE_ROOM_MAX_HOPS) {
+        const description = hops === Infinity ? 'unreachable from' : `${hops} hops from`;
+        fail(
+          'I9',
+          `outskirts safe room ${position} is ${description} its nearest other outskirts safe ` +
+            `room (want ${OUTSKIRTS_SAFE_ROOM_MIN_HOPS}-${OUTSKIRTS_SAFE_ROOM_MAX_HOPS})`,
+        );
+      }
+    }
+  }
+
+  // I10 — no pre-planned path (a gauntlet branch, on either floor, or the
+  // floor-2 spine chain) runs SAFE_ACCESS_RUN_LIMIT or more consecutive rooms
+  // without safe access: the room is itself safe, or a safe dead-end pocket
+  // hangs directly off it. Walked against the mandatory pockets' *actual*
+  // seated positions rather than their nominal ones, so a host-search drift
+  // that pushed a pocket away from where the run-limit math expected it is
+  // judged by where it actually landed.
+  const preplannedChains: Rect[][] = layout.gauntletBranchChains.flat();
+  if (layout.spine !== null) preplannedChains.push(layout.spine.chain);
+  if (preplannedChains.length > 0) {
+    const pocketIndices = new Set(
+      safeRooms
+        .filter((room) => room.isSafeAccessPocket === true)
+        .map((room) => roomIndexOf(room.bounds))
+        .filter((index) => index >= 0),
+    );
+    const hasSafeAccess = (index: number): boolean =>
+      pocketIndices.has(index) ||
+      [...fullRoomGraph[index].keys()].some((neighbour) => pocketIndices.has(neighbour));
+
+    for (const [pathIndex, chain] of preplannedChains.entries()) {
+      let run = 0;
+      let runStart = 0;
+      for (const [position, rect] of chain.entries()) {
+        const index = roomIndexOf(rect);
+        const accessible = index >= 0 && hasSafeAccess(index);
+        if (accessible) {
+          run = 0;
+          continue;
+        }
+        if (run === 0) runStart = position;
+        run++;
+        if (run >= SAFE_ACCESS_RUN_LIMIT) {
+          fail(
+            'I10',
+            `pre-planned path ${pathIndex}: ${run} consecutive rooms from position ${runStart} ` +
+              `have no safe access (max ${SAFE_ACCESS_RUN_LIMIT - 1})`,
+          );
+          break;
+        }
+      }
+    }
+  }
+
   // S4 — the defense quest's room is a choke the player cannot walk around, and
   // S5 — walking through it is the whole of what it asks. The wave inside is
   // the goblin mother's to offer and the player's to decline, so nothing about
@@ -899,16 +1030,7 @@ export function validateProgression(
   // Armed from the floor's own definition rather than from what got built, so a
   // floor that fell back to a free region fails red here instead of skipping
   // three gates in silence.
-  //
-  // The room-adjacency graph is built once here rather than inside a gate,
-  // because two of them need it and building it twice would be two walks of the
-  // whole map for one answer.
-  const roomGraph = hasSpine || spiderLabIsDeadEnd ? buildRoomGraph(grid, layout.roomBounds) : null;
-  const roomIndexOf = (rect: Rect): number =>
-    layout.roomBounds.findIndex(
-      (bounds) =>
-        bounds.x === rect.x && bounds.y === rect.y && bounds.w === rect.w && bounds.h === rect.h,
-    );
+  const roomGraph = fullRoomGraph;
 
   if (hasSpine) {
     const spine = layout.spine;
@@ -939,7 +1061,7 @@ export function validateProgression(
       // S2 — at most two routes between consecutive chain rooms, and any second
       // one holds at most `SPLIT_LANE_MAX_ROOMS`. Measured on the carved map's
       // room graph, not on the plan: the plan can be wrong about what got cut.
-      const graph = roomGraph ?? [];
+      const graph = roomGraph;
       const chainIndices = spine.chain.map(roomIndexOf);
       if (chainIndices.some((index) => index < 0)) {
         fail('S2', 'a spine chain room is missing from the floor’s room list');
@@ -997,7 +1119,7 @@ export function validateProgression(
       // that fails on a lab standing in open ground, which the doorway count
       // deliberately reports as a single very wide opening.
       const labIndex = roomIndexOf(labBounds);
-      if (labIndex < 0 || roomGraph === null) {
+      if (labIndex < 0) {
         fail('S3', 'the spider lab is missing from the floor’s room list');
       } else {
         const neighbours = roomGraph[labIndex];

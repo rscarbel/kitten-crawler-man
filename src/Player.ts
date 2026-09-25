@@ -14,6 +14,7 @@ import {
   WARD_STATUSES,
   CASTER_HELD_STATUSES,
   FAIRY_WARD_STATUS,
+  SPEED_FIZZ_STATUS,
 } from './core/StatusEffect';
 import {
   CHILLED_ACTION_SPEED_FACTOR,
@@ -54,6 +55,7 @@ import {
   statusVisual,
   type StatusVisualFrame,
 } from './sprites/status/statusEffectVisuals';
+import { allocCanvas, surfaceContext, type CanvasSurface } from './core/canvasSurface';
 
 /**
  * Every stat a crawler carries — the single vocabulary the whole stat system
@@ -197,16 +199,58 @@ export const MIN_STAT_VALUE = 1;
 /** Species HP floor used when a subclass doesn't declare one (mobs, which pass a fixed maxHp). */
 const DEFAULT_BASE_HP_OFFSET = 0;
 const DAMAGE_FLASH_FRAMES = 8;
+/** Below this per-update displacement, a crawler is treated as stopped even if its input intent says otherwise (e.g. shoving into a wall). */
+const ACTUAL_MOVEMENT_EPSILON_PX = 0.05;
+/** How many game updates the "actually moving" latch stays true after the last update that covered ground — bridges a single skipped/catch-up update. */
+const ACTUAL_MOVEMENT_LATCH_TICKS = 3;
+/**
+ * A per-update jump longer than this is a warp (recall stone, stair spawn, checkpoint
+ * respawn), not a stride, so it must not light a speed trail across the gap.
+ */
+const WARP_DISPLACEMENT_PX = 32;
+/** Speed Fizz afterimage trail: how many ghost copies trail the runner. */
+const SPEED_AFTERIMAGE_COUNT = 3;
+/** Gap between successive afterimages, in screen pixels. */
+const SPEED_AFTERIMAGE_SPACING_PX = 10;
+/** Opacity of the nearest afterimage; each one further back falls off linearly from this. */
+const SPEED_AFTERIMAGE_BASE_ALPHA = 0.4;
+
+/**
+ * The one offscreen surface every crawler's Speed Fizz afterimages are painted
+ * into, reused frame to frame and grown only when a bigger figure needs it —
+ * allocating fresh canvases per frame is the one thing this effect cannot
+ * afford at speed-boosted framerates.
+ */
+let afterimageCanvasSurface: CanvasSurface | null = null;
+let afterimageCanvasSize = 0;
+
+function afterimageSurface(minSize: number): CanvasSurface {
+  if (afterimageCanvasSurface === null || afterimageCanvasSize < minSize) {
+    afterimageCanvasSize = Math.max(afterimageCanvasSize, minSize);
+    afterimageCanvasSurface = allocCanvas(afterimageCanvasSize, afterimageCanvasSize);
+  }
+  return afterimageCanvasSurface;
+}
 /** What floats up over a crawler when a ward takes a whole blow for her. */
 const ABSORBED_TEXT = 'ABSORBED';
 /** What floats up over a body a shield fairy's ward is keeping from all harm. */
 const INVULNERABLE_TEXT = 'Invulnerable';
+/** What floats up over a warded body on easy, where some of the blow still gets through. */
+const RESIST_TEXT = 'Resist';
 /**
- * Least gap between two {@link INVULNERABLE_TEXT} labels over one body: a
- * flurry of blows, or a burn ticking under the ward, would otherwise stack a
- * column of them.
+ * Least gap between two {@link INVULNERABLE_TEXT} (or {@link RESIST_TEXT})
+ * labels over one body: a flurry of blows, or a burn ticking under the ward,
+ * would otherwise stack a column of them.
  */
 const INVULNERABLE_TEXT_THROTTLE_FRAMES = 30;
+/**
+ * How many of this crawler's blows a shield fairy's ward has to swallow or
+ * blunt before Carl explains it aloud — a hit that landed on a warded body and
+ * did nothing (or, on easy, far less than it should have) counts the same
+ * either way, since what the player watched was their damage not doing its
+ * job, whichever reason.
+ */
+const WARD_EXPLAINER_HIT_THRESHOLD = 6;
 /**
  * How long a hit holds passive regeneration off, in frames (5 s at 60 fps).
  *
@@ -218,6 +262,8 @@ const INVULNERABLE_TEXT_THROTTLE_FRAMES = 30;
 export const REGEN_SUPPRESS_FRAMES = 300;
 const LEVEL_UP_FLASH_FRAMES = 120;
 const SPEND_POINT_FLASH_FRAMES = 60;
+/** How long the stat-boost-potion fanfare holds before fading — about 1.5s at 60fps. */
+export const STAT_BOOST_FLASH_FRAMES = 90;
 const XP_PER_LEVEL_MULTIPLIER = 10;
 /** Share of max HP a health potion gives back — the crawlers' and the hirelings' alike. */
 export const POTION_HEAL_FRACTION = 0.5;
@@ -298,6 +344,13 @@ let nextVisualSeed = 1;
 /** Coprime-ish stride, so consecutive spawns land far apart in the hash. */
 const VISUAL_SEED_STRIDE = 97;
 
+/** What {@link Player.gainXp} bought with an award. */
+export interface XpGainResult {
+  readonly leveledUp: boolean;
+  /** XP actually placed on the bar, after {@link Player.xpCurve}'s diminishing multiplier. */
+  readonly xpApplied: number;
+}
+
 /**
  * Where a character's drawn figure sits relative to its own tile, in tile
  * fractions. See {@link Player.statusFigureBox}.
@@ -363,6 +416,13 @@ export abstract class Player {
   levelUpStat: string | null = null;
   levelUpFlash = 0;
   /**
+   * A stat-boost potion's own fanfare, kept separate from {@link levelUpFlash}
+   * so the potion never gets rendered as a level-up.
+   */
+  statBoostFlashStat: StatName | null = null;
+  statBoostFlashAmount = 0;
+  statBoostFlashFrame = 0;
+  /**
    * The diminishing-returns curve of the floor this character is on, or none
    * for full XP. Set by the floor's scene; every award through {@link gainXp}
    * reads it, so kill, boss and quest XP all pass through the same curve.
@@ -370,6 +430,31 @@ export abstract class Player {
   xpCurve: readonly XpDiminishingTier[] | undefined = undefined;
   damageFlash = 0;
   isMoving = false;
+  /**
+   * Where this character stood as of the last {@link tickTimers}, so
+   * motion-dependent status art (Speed Fizz's trail) can tell ground actually
+   * covered from mere movement intent — `isMoving` is set from input before
+   * collision is resolved, so a crawler shoving uselessly into a wall still
+   * reads as "moving".
+   *
+   * Measured once per game update rather than in {@link render}: a crawler
+   * hidden behind village structures (`occludedCrawlers.ts`) is rendered a
+   * second time per frame into a scratch canvas, and a render-time measurement
+   * would see zero displacement on that second call and blink the effect off.
+   */
+  private actualMoveLastX: number | null = null;
+  private actualMoveLastY: number | null = null;
+  /**
+   * Ticks remaining before "actually moving" reads false. Latched rather than
+   * a plain per-tick bool so a single skipped or catch-up update (`Scene.loop`
+   * can run two updates per rendered frame) can't read zero displacement and
+   * flicker the effect off for one frame.
+   */
+  private actualMovementLatchTicks = 0;
+  /** Ground actually covered as of the last game update — see {@link actualMoveLastX}. */
+  protected get actuallyMoving(): boolean {
+    return this.actualMovementLatchTicks > 0;
+  }
   walkFrame = 0;
   /**
    * Radians of walk cycle added per moving frame. Subclasses whose figure is
@@ -855,14 +940,44 @@ export abstract class Player {
    */
   protected soakWithWards(amount: number): number {
     if (amount > 0 && this.isHeldInvulnerable) {
-      this.queueFloatingText(INVULNERABLE_TEXT, 'block', {
+      const allowedShare = 1 - activeDifficultyProfile().wardDamageReduction;
+      // At least one point through whenever the share is positive at all: a
+      // rounded-down zero on a small hit would show "Resist" for a blow that
+      // changed nothing, which is the label {@link INVULNERABLE_TEXT} promises.
+      const allowed = allowedShare > 0 ? Math.max(1, Math.round(amount * allowedShare)) : 0;
+      this.queueFloatingText(allowed > 0 ? RESIST_TEXT : INVULNERABLE_TEXT, 'block', {
         throttleFrames: INVULNERABLE_TEXT_THROTTLE_FRAMES,
       });
-      return 0;
+      return allowed;
     }
     const unabsorbed = this.drainAbsorbingEffects(amount);
     if (amount > 0 && unabsorbed <= 0) this.queueFloatingText(ABSORBED_TEXT, 'block');
     return unabsorbed;
+  }
+
+  /** How many of this crawler's blows have landed on a warded body without doing their job, this floor. */
+  private wardExplainerHits = 0;
+  /** Whether {@link noteWardBlockedHit} has already told the explainer to fire, this floor. */
+  private wardExplainerBarked = false;
+  /**
+   * Set once {@link noteWardBlockedHit} crosses {@link WARD_EXPLAINER_HIT_THRESHOLD}, for
+   * a scene to drain into a bark over this crawler's head. Cleared once drained.
+   */
+  pendingWardExplainerBark = false;
+
+  /**
+   * Records one of this crawler's blows landing on a warded body — fully
+   * blocked, or merely blunted on easy — and raises {@link pendingWardExplainerBark}
+   * the one time the count crosses {@link WARD_EXPLAINER_HIT_THRESHOLD}. A new
+   * `Player` is built for every floor from the last one's snapshot, so the
+   * count resets on its own with no floor-change hook to remember to call.
+   */
+  noteWardBlockedHit(): void {
+    if (this.wardExplainerBarked) return;
+    this.wardExplainerHits++;
+    if (this.wardExplainerHits < WARD_EXPLAINER_HIT_THRESHOLD) return;
+    this.wardExplainerBarked = true;
+    this.pendingWardExplainerBark = true;
   }
 
   private drainAbsorbingEffects(amount: number): number {
@@ -954,6 +1069,20 @@ export abstract class Player {
     this.cockroachReadyAt = Date.now() + cockroachRechargeMs(this.skills.getLevel('cockroach'));
     this.queueFloatingText('COCKROACH!', 'trigger');
     return true;
+  }
+
+  /**
+   * A knockout consolation: Cockroach was too cold to catch the blow that put
+   * this crawler down, so its own recharge gets a break — the difficulty
+   * profile's relief comes off whatever is left, never past `Date.now()`.
+   * Kitten's relief outsizes any recharge the skill can hold, so it always
+   * completes it outright.
+   */
+  applyCockroachKnockoutRelief(): void {
+    if (!this.skills.isUnlocked('cockroach')) return;
+    if (this.cockroachReadyAt === null) return;
+    const reliefMs = activeDifficultyProfile().cockroachKnockoutReliefMs;
+    this.cockroachReadyAt = Math.max(Date.now(), this.cockroachReadyAt - reliefMs);
   }
 
   /** True once Cockroach has finished recharging (or was never spent). */
@@ -1140,7 +1269,10 @@ export abstract class Player {
 
   /**
    * Awards XP, levelling as many times as it pays for. Returns whether any
-   * level was gained.
+   * level was gained and how much of the award actually landed on the bar,
+   * which can be less than `amount` once {@link xpCurve}'s diminishing
+   * multiplier is applied — the difference between what a reward screen
+   * quotes and what a crawler's XP bar actually moves by.
    *
    * Every level is bought at {@link xpCurve}'s multiplier for the level being
    * bought, not the level the award arrived at, so one large boss or quest
@@ -1148,25 +1280,29 @@ export abstract class Player {
    * else lets an award earned just under a tier carry a crawler past it at
    * full value. Call it through `awardXp`, which announces the level-up.
    */
-  gainXp(amount: number): boolean {
-    if (amount <= 0) return false;
+  gainXp(amount: number): XpGainResult {
+    if (amount <= 0) return { leveledUp: false, xpApplied: 0 };
     let unconverted = amount;
     let leveled = false;
+    let xpApplied = 0;
     while (unconverted > 0) {
       const multiplier = xpMultiplierForPlayerLevel(this.xpCurve, this.level);
       if (multiplier <= 0) break;
       const missing = this.xpRemainingToNextLevel;
       const worth = unconverted * multiplier;
       if (worth < missing) {
-        this.xp += Math.round(worth);
+        const applied = Math.round(worth);
+        this.xp += applied;
+        xpApplied += applied;
         break;
       }
       unconverted -= missing / multiplier;
       this.xp += missing;
+      xpApplied += missing;
       this.advanceLevel();
       leveled = true;
     }
-    return leveled;
+    return { leveledUp: leveled, xpApplied };
   }
 
   /** Spends one level's worth of XP on the next level, whatever curve the floor has. */
@@ -1626,15 +1762,22 @@ export abstract class Player {
     this.applyStatus(makeCooldownCrisp());
   }
 
+  /** Raises one stat's base value. The one place a permanent stat change lands. */
+  private raiseBaseStat(stat: StatName, amount: number): void {
+    this.baseStats[stat] += amount;
+    this.syncHpToMaxHp();
+  }
+
   /**
    * Permanently raise one stat, flashing the same feedback a spent level-up point
-   * does. Shared by the stat-boost potion and the Quiet Needle's tattoos.
+   * does. Used by the Drill Yard and the Quiet Needle's tattoos — the stat-boost
+   * potion has its own fanfare via {@link applyStatBoost} instead, so a potion is
+   * never announced as a level-up.
    */
   applyPermanentStat(stat: StatName, amount: number): void {
-    this.baseStats[stat] += amount;
+    this.raiseBaseStat(stat, amount);
     this.levelUpStat = STAT_CODE[stat];
     this.levelUpFlash = SPEND_POINT_FLASH_FRAMES;
-    this.syncHpToMaxHp();
   }
 
   /**
@@ -1646,7 +1789,10 @@ export abstract class Player {
   applyStatBoost(): { stat: StatName; amount: number } {
     const stat = ALL_STATS[Math.floor(Math.random() * ALL_STATS.length)];
     const amount = STAT_BOOST_MIN + Math.floor(Math.random() * STAT_BOOST_RANGE);
-    this.applyPermanentStat(stat, amount);
+    this.raiseBaseStat(stat, amount);
+    this.statBoostFlashStat = stat;
+    this.statBoostFlashAmount = amount;
+    this.statBoostFlashFrame = STAT_BOOST_FLASH_FRAMES;
     return { stat, amount };
   }
 
@@ -1658,8 +1804,10 @@ export abstract class Player {
     if (this.framesSinceDamaged < REGEN_SUPPRESS_FRAMES) this.framesSinceDamaged++;
     if (this.invulnerableFrames > 0) this.invulnerableFrames--;
     if (this.levelUpFlash > 0) this.levelUpFlash--;
+    if (this.statBoostFlashFrame > 0) this.statBoostFlashFrame--;
     if (this.damageFlash > 0) this.damageFlash--;
     this.potionCooldownFrames = this.tickCooldown(this.potionCooldownFrames);
+    this.updateActualMovementLatch();
     if (this.isMoving) {
       this.walkFrame = (this.walkFrame + this.walkFrameSpeed) % (Math.PI * 2);
     } else {
@@ -1667,6 +1815,27 @@ export abstract class Player {
     }
     this.tickStatusEffects();
     this.tickTempStatMods();
+  }
+
+  /**
+   * Measures ground actually covered since the last update and refreshes the
+   * {@link actuallyMoving} latch from it. Called once per game update, after
+   * movement has already been applied for this tick.
+   */
+  private updateActualMovementLatch(): void {
+    const coveredPx =
+      this.actualMoveLastX === null
+        ? 0
+        : Math.hypot(this.x - this.actualMoveLastX, this.y - (this.actualMoveLastY ?? this.y));
+    this.actualMoveLastX = this.x;
+    this.actualMoveLastY = this.y;
+    if (coveredPx > WARP_DISPLACEMENT_PX) {
+      this.actualMovementLatchTicks = 0;
+    } else if (coveredPx > ACTUAL_MOVEMENT_EPSILON_PX) {
+      this.actualMovementLatchTicks = ACTUAL_MOVEMENT_LATCH_TICKS;
+    } else if (this.actualMovementLatchTicks > 0) {
+      this.actualMovementLatchTicks--;
+    }
   }
 
   /**
@@ -1714,6 +1883,11 @@ export abstract class Player {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
+    // Behind everything drawn below: a status that wants to sit under the body
+    // (Speed Fizz's trail and afterimages) has to land before the sprite is
+    // blitted, not after.
+    this.renderPreSpriteEffects(ctx, camX, camY, tileSize, sx, sy);
+
     // Checked before building anything: the overwhelming majority of characters
     // on screen are neither hurt nor afflicted, and a town crowd would otherwise
     // allocate a layer array per citizen per frame to discover it is empty.
@@ -1744,6 +1918,78 @@ export abstract class Player {
     // character's outline, turn red under a hit flash, and be clipped to the
     // composite's box mid-plume.
     this.drawWorldFeedback(ctx, sx, sy);
+  }
+
+  /**
+   * World-space status art that has to land behind the sprite: each active
+   * status's registered `preOverlay`, plus Speed Fizz's afterimages (which need
+   * {@link drawSelf} itself rather than free-form paint, so they can't be
+   * expressed as a registry `preOverlay`).
+   */
+  private renderPreSpriteEffects(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+    sx: number,
+    sy: number,
+  ): void {
+    if (!this.wearsStatusPaint || this.statusEffects.length === 0) return;
+    for (const effect of this.statusEffects) {
+      const preOverlay = statusVisual(effect.type)?.preOverlay;
+      if (preOverlay !== undefined) {
+        preOverlay(ctx, this.statusFrameAt(effect, sx, sy, tileSize), effect);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      if (effect.type === SPEED_FIZZ_STATUS && this.actuallyMoving) {
+        this.renderSpeedAfterimages(ctx, camX, camY, tileSize, statusFade(effect));
+      }
+    }
+  }
+
+  /**
+   * Faint copies of the figure trailing behind the direction of travel. The
+   * figure is painted opaque into a small reused offscreen surface exactly
+   * once, then that raster is blitted back several times at falling alpha —
+   * {@link render} composites hit flashes and status coats onto the live
+   * silhouette by drawing straight to `ctx`, so a `ctx.globalAlpha` wrapped
+   * around a second, third, fourth live `drawSelf` call would both repaint the
+   * figure that many more times a frame and still not fade reliably, since a
+   * subclass's `drawSelf` is free to reset alpha itself. A single blitted
+   * raster respects the caller's alpha unconditionally.
+   */
+  private renderSpeedAfterimages(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+    fade: number,
+  ): void {
+    const margin = this.silhouetteMarginTiles * tileSize;
+    const boxSize = Math.ceil(tileSize + margin * 2);
+    const surface = afterimageSurface(boxSize);
+    const surfaceCtx = surfaceContext(surface);
+
+    const sx = this.x - camX;
+    const sy = this.y - camY;
+
+    surfaceCtx.clearRect(0, 0, boxSize, boxSize);
+    surfaceCtx.save();
+    surfaceCtx.translate(margin - sx, margin - sy);
+    this.drawSelf(surfaceCtx, camX, camY, tileSize);
+    surfaceCtx.restore();
+
+    for (let i = 0; i < SPEED_AFTERIMAGE_COUNT; i++) {
+      const stepBack = (i + 1) * SPEED_AFTERIMAGE_SPACING_PX;
+      const alpha = SPEED_AFTERIMAGE_BASE_ALPHA * (1 - i / SPEED_AFTERIMAGE_COUNT) * fade;
+      if (alpha <= 0) continue;
+      const drawX = sx - margin - this.facingX * stepBack;
+      const drawY = sy - margin - this.facingY * stepBack;
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(surface, 0, 0, boxSize, boxSize, drawX, drawY, boxSize, boxSize);
+    }
+    ctx.globalAlpha = 1;
   }
 
   /**
@@ -1912,7 +2158,7 @@ export abstract class Player {
       timeMs: Date.now(),
       seed: this.visualSeed,
       fade: statusFade(effect),
-      moving: this.isMoving,
+      moving: this.actuallyMoving,
       facingX: this.facingX,
       facingY: this.facingY,
     };

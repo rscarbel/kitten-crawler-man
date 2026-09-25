@@ -1,5 +1,11 @@
 import type { FairyRoomRate, LevelDef } from './types';
 
+const FRAMES_PER_SECOND = 60;
+const SECONDS_PER_MINUTE = 60;
+const LEVEL2_COLLAPSE_TIME_LIMIT_MINUTES = 60;
+export const LEVEL2_COLLAPSE_TIME_LIMIT_FRAMES =
+  LEVEL2_COLLAPSE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+
 /** Branch count leaving the start room toward the Krakaren Clone's gateway. */
 const KRAKAREN_BRANCH_MIN = 2;
 const KRAKAREN_BRANCH_MAX = 3;
@@ -7,9 +13,6 @@ const KRAKAREN_BRANCH_MAX = 3;
 /** Rooms along each pre-Krakaren branch. */
 const KRAKAREN_BRANCH_ROOMS_MIN = 3;
 const KRAKAREN_BRANCH_ROOMS_MAX = 9;
-
-/** Safe rooms hung off the post-Krakaren spine, roughly halfway along it. */
-const LEVEL2_SCATTER_SAFE_ROOMS = 1;
 
 /**
  * Rooms walked between the Krakaren Clone's lair and the arena's antechamber.
@@ -208,7 +211,8 @@ export const level2: LevelDef = {
       rooms: { min: SPINE_ROOMS_MIN, max: SPINE_ROOMS_MAX },
       splits: { min: SPINE_SPLITS_MIN, max: SPINE_SPLITS_MAX },
     },
-    scatterSafeRooms: LEVEL2_SCATTER_SAFE_ROOMS,
+    // No scatterSafeRooms: the spine's safe-access pockets come entirely from
+    // its own mandatory pocket count, not a configured minimum.
     regionSpawnBonus: [PRE_KRAKAREN_SPAWN_BONUS, POST_KRAKAREN_SPAWN_BONUS],
   },
   hasArena: true,
@@ -228,6 +232,7 @@ export const level2: LevelDef = {
   },
   slingshotDrops: true,
   hasCollapseTimer: true,
+  collapseTimeLimitFrames: LEVEL2_COLLAPSE_TIME_LIMIT_FRAMES,
   hasTreasureRoomGuards: true,
   nextLevelId: 'level3',
   numStairwells: 2,

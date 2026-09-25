@@ -2,6 +2,7 @@ import { TILE_SIZE } from '../core/constants';
 import { platform } from '../core/Platform';
 import { viewportWidth } from '../core/Viewport';
 import type { AudioManager } from '../audio/AudioManager';
+import type { EventBus } from '../core/EventBus';
 import type { Player } from '../Player';
 import { REVIVE_FRAMES, REVIVE_HP_FRACTION, REVIVE_RANGE_PX } from '../core/reviveRules';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
@@ -107,6 +108,8 @@ export interface KnockoutParty {
   /** Chooses between the human and cat knockout/revive sounds. */
   inactiveIsHuman: boolean;
   audio: AudioManager | null;
+  /** Carries `crawlerKnockedOut` / `crawlerRevived` to whoever wants to react. */
+  bus: EventBus;
 }
 
 /**
@@ -116,7 +119,7 @@ export interface KnockoutParty {
  * {@link KNOCKOUT_TIMEOUT_FRAMES} means (game over, in every scene so far).
  */
 export function updateKnockoutState(party: KnockoutParty): void {
-  const { active, inactive, inactiveIsHuman, audio } = party;
+  const { active, inactive, inactiveIsHuman, audio, bus } = party;
 
   if (!inactive.isAlive && !inactive.isKnockedOut) {
     inactive.isKnockedOut = true;
@@ -125,6 +128,7 @@ export function updateKnockoutState(party: KnockoutParty): void {
     inactive.clearStatusEffects();
     inactive.clearKnockback();
     audio?.play(inactiveIsHuman ? 'human_knocked_out' : 'cat_knocked_out');
+    bus.emit('crawlerKnockedOut', { player: inactive });
   }
 
   if (!inactive.isKnockedOut) return;
@@ -133,11 +137,9 @@ export function updateKnockoutState(party: KnockoutParty): void {
   // a night's sleep bought while they lay there, a lingering regen effect —
   // brings them round without the usual proximity revive.
   if (inactive.hp > 0) {
-    finishRevival(inactive, inactiveIsHuman, audio);
+    finishRevival(inactive, inactiveIsHuman, audio, bus);
     return;
   }
-
-  inactive.knockedOutFrames++;
 
   const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
   if (dist <= REVIVE_RANGE_PX) {
@@ -146,20 +148,27 @@ export function updateKnockoutState(party: KnockoutParty): void {
     }
     inactive.reviveProgress++;
     if (inactive.reviveProgress >= REVIVE_FRAMES) {
-      finishRevival(inactive, inactiveIsHuman, audio);
+      finishRevival(inactive, inactiveIsHuman, audio, bus);
     }
   } else {
     inactive.reviveProgress = 0;
+    inactive.knockedOutFrames++;
   }
 }
 
 /** Clears the downed state and puts the crawler back on their feet with a sliver of HP. */
-export function finishRevival(player: Player, isHuman: boolean, audio: AudioManager | null): void {
+export function finishRevival(
+  player: Player,
+  isHuman: boolean,
+  audio: AudioManager | null,
+  bus: EventBus,
+): void {
   player.isKnockedOut = false;
   player.knockedOutFrames = 0;
   player.reviveProgress = 0;
   player.hp = Math.max(player.hp, Math.ceil(player.maxHp * REVIVE_HP_FRACTION));
   audio?.play(isHuman ? 'human_revived' : 'cat_revived');
+  bus.emit('crawlerRevived', { player });
 }
 
 /**

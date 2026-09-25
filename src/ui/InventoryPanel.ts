@@ -36,6 +36,7 @@ import { drawText, measureTextBox } from './TextBox';
 import { pointInRect } from '../utils';
 import { drawBox, drawDivider, BOX_PRESETS } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
+import { drawSatchelIcon } from './icons/satchelIcon';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Layout constants
@@ -147,6 +148,18 @@ const SLOT_BADGE_LETTER_OPACITY = 0.55;
 
 // Drag icon opacity
 const DRAG_ICON_ALPHA = 0.75;
+
+// Bag button icon and unseen-upgrade badge
+const TOGGLE_ICON_SIZE = 16;
+const TOGGLE_ICON_PAD = 6;
+const UNSEEN_BADGE_RADIUS = 5;
+/** Peak scale of the bag button's landing squash-bounce. */
+const BAG_BOUNCE_SCALE_AMOUNT = 0.18;
+/** The "NEW" pip drawn on a bag slot holding an unseen upgrade. */
+const NEW_PIP_RADIUS = 4;
+const NEW_PIP_INSET = 4;
+/** Clearance kept between the hovered item's name and the coins figure sharing the header strip. */
+const PANEL_HEADER_COINS_TITLE_GAP = 6;
 
 /**
  * What a slot fades to when it is not really available: the slot an item was
@@ -481,6 +494,10 @@ function drawRoundFlask(
 export class InventoryPanel {
   isOpen = false;
   private page = 0;
+  /** Whether the panel was open on the previous frame — the edge that clears `unseenUpgrades`. */
+  private _wasOpenLastFrame = false;
+  /** The bag or hotbar item currently under the cursor, named in the header strip while hovered. */
+  private hoveredItem: InventoryItem | null = null;
 
   /**
    * When set, the panel's close button becomes a "Back to Menu" button.
@@ -622,6 +639,12 @@ export class InventoryPanel {
   abilityCooldowns = new Map<string, { current: number; max: number }>();
 
   /**
+   * 0 (settled) to 1 (an item just landed) — set by DungeonScene each frame
+   * from `RewardFlySystem.bagBouncePulse()` to squash-bounce the bag button.
+   */
+  bagBouncePulse = 0;
+
+  /**
    * Returns the inventory slot index if (mx, my) is on an inventory slot in the
    * currently-visible page, or null otherwise. Used by DungeonScene for equip-on-click.
    */
@@ -746,7 +769,13 @@ export class InventoryPanel {
     coins: number,
     wieldedWeaponId: ItemId | null = null,
   ): void {
-    this.renderToggleButton(ctx);
+    // The bag clears its own unseen-upgrade set the moment it is actually
+    // opened, rather than at the click that opened it — so a scene that opens
+    // the panel programmatically (a tutorial step) still clears it correctly.
+    if (this.isOpen && !this._wasOpenLastFrame) inventory.unseenUpgrades.clear();
+    this._wasOpenLastFrame = this.isOpen;
+
+    this.renderToggleButton(ctx, inventory.unseenUpgrades.size > 0);
     this.renderHotbar(ctx, inventory, wieldedWeaponId);
     if (this.isOpen) {
       this.renderPanel(ctx, inventory, playerName, coins);
@@ -1022,9 +1051,16 @@ export class InventoryPanel {
     ctx.restore();
   }
 
-  private renderToggleButton(ctx: CanvasRenderingContext2D): void {
+  private renderToggleButton(ctx: CanvasRenderingContext2D, hasUnseenUpgrade: boolean): void {
     if (!platform.showDesktopToggleButtons) return;
     const btn = this.toggleBtnRect();
+    const cx = btn.x + btn.w / 2;
+    const cy = btn.y + btn.h / 2;
+    const bounceScale = 1 + Math.sin(this.bagBouncePulse * Math.PI) * BAG_BOUNCE_SCALE_AMOUNT;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(bounceScale, bounceScale);
+    ctx.translate(-cx, -cy);
     drawButton(ctx, {
       x: btn.x,
       y: btn.y,
@@ -1033,6 +1069,37 @@ export class InventoryPanel {
       label: `Bag [${keybindings.labelFor('toggleInventory')}]`,
       ...(this.isOpen ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
     });
+    drawSatchelIcon(
+      ctx,
+      btn.x + TOGGLE_ICON_PAD,
+      btn.y + (btn.h - TOGGLE_ICON_SIZE) / 2,
+      TOGGLE_ICON_SIZE,
+    );
+    if (hasUnseenUpgrade) this.renderUnseenUpgradeBadge(ctx, btn.x + btn.w, btn.y);
+    ctx.restore();
+  }
+
+  /** The small pip that says the bag holds gear better than what's worn. */
+  private renderUnseenUpgradeBadge(
+    ctx: CanvasRenderingContext2D,
+    right: number,
+    top: number,
+  ): void {
+    ctx.save();
+    ctx.fillStyle = '#4ade80';
+    ctx.strokeStyle = '#052e16';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(
+      right - UNSEEN_BADGE_RADIUS,
+      top + UNSEEN_BADGE_RADIUS,
+      UNSEEN_BADGE_RADIUS,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   /**
@@ -1071,6 +1138,7 @@ export class InventoryPanel {
         true,
         hotbarItem !== null &&
           (inventory.hasEquipped(hotbarItem.id) || hotbarItem.id === wieldedWeaponId),
+        hotbarItem !== null && inventory.unseenUpgrades.has(hotbarItem.id),
       );
 
       // Separator line before quest slot
@@ -1150,13 +1218,15 @@ export class InventoryPanel {
       borderWidth: 1.5,
     });
 
-    // Header — player name: baseline_y=p.y+25, size=12 → top_y = p.y+25-10 = p.y+15
-    drawText(ctx, `${playerName} Inventory`, {
+    // Header — the hovered item's name takes over the strip, falling back to
+    // the player/inventory label the rest of the time.
+    drawText(ctx, this.hoveredItem ? this.hoveredItem.name : `${playerName} Inventory`, {
       x: p.x + PANEL_PAD,
       y: p.y + PANEL_NAME_Y,
       bold: true,
       size: PANEL_HEADER_NAME_SIZE,
-      color: '#e2e8f0',
+      color: this.hoveredItem ? '#facc15' : '#e2e8f0',
+      width: p.w - PANEL_PAD - PANEL_HEADER_COINS_OFFSET - PANEL_HEADER_COINS_TITLE_GAP,
     });
 
     // Coins: baseline_y=p.y+25, size=11 → top_y = p.y+25-9 = p.y+16
@@ -1234,6 +1304,7 @@ export class InventoryPanel {
         isDragged || filteredOut,
         false,
         inventory.isSlotEquipped(slotIdx),
+        item !== null && inventory.unseenUpgrades.has(item.id),
       );
     }
 
@@ -1278,6 +1349,7 @@ export class InventoryPanel {
     dimmed: boolean,
     isHotbar: boolean,
     isEquipped = false,
+    isUnseenUpgrade = false,
   ): void {
     ctx.save();
     if (dimmed) ctx.globalAlpha = SLOT_DIMMED_ALPHA;
@@ -1327,6 +1399,20 @@ export class InventoryPanel {
         color: '#fff',
         align: 'left',
       });
+      ctx.restore();
+    }
+
+    // "NEW" pip (top-right corner) — an unseen upgrade sitting in this slot
+    if (isUnseenUpgrade && item && !dimmed) {
+      ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#4ade80';
+      ctx.strokeStyle = '#052e16';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(x + size - NEW_PIP_INSET, y + NEW_PIP_INSET, NEW_PIP_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
       ctx.restore();
     }
 
@@ -1433,8 +1519,26 @@ export class InventoryPanel {
     );
   }
 
-  handleMouseMove(mx: number, my: number): void {
+  handleMouseMove(mx: number, my: number, inventory: Inventory | null = null): void {
     this.interaction.handleMouseMove(mx, my);
+    this.hoveredItem = inventory ? this.itemAt(mx, my, inventory) : null;
+    if (this.hoveredItem) inventory?.unseenUpgrades.delete(this.hoveredItem.id);
+  }
+
+  /** The bag or hotbar item under `(mx, my)`, or null. Drives hover naming and clears its "NEW" pip. */
+  private itemAt(mx: number, my: number, inventory: Inventory): InventoryItem | null {
+    for (let i = 0; i < HOTBAR_COUNT; i++) {
+      if (pointInRect(mx, my, this.hotbarSlotRect(i))) return inventory.actionBar.slots[i];
+    }
+    if (!this.isOpen) return null;
+    const p = this.panelRect();
+    const pageStart = this.page * SLOTS_PER_PAGE;
+    for (let i = 0; i < SLOTS_PER_PAGE; i++) {
+      const slotIdx = pageStart + i;
+      if (slotIdx >= inventory.bag.slots.length) break;
+      if (pointInRect(mx, my, this.invSlotRect(i, p))) return inventory.bag.slots[slotIdx];
+    }
+    return null;
   }
 
   handleMouseUp(mx: number, my: number, inventory: Inventory): void {

@@ -1014,10 +1014,20 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
 
 function parseJournalProgressCheckpoint(value: unknown): JournalProgressCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { visitedGuideStops, pinnedTrackerId } = value;
+  const { visitedGuideStops, pinnedTrackerId, pinSource } = value;
   if (!isStringArray(visitedGuideStops)) return undefined;
   if (pinnedTrackerId !== null && !isString(pinnedTrackerId)) return undefined;
-  return { visitedGuideStops, pinnedTrackerId };
+  // Absent on a save written before the quest-vs-bounty arrow arbitration
+  // existed. Treated as an auto-pin rather than a player one, so an old save's
+  // pin can still be taken over by whichever quest is active — the behaviour
+  // that save was written under.
+  const resolvedPinSource =
+    pinSource === 'auto' || pinSource === 'player'
+      ? pinSource
+      : pinnedTrackerId === null
+        ? null
+        : 'auto';
+  return { visitedGuideStops, pinnedTrackerId, pinSource: resolvedPinSource };
 }
 
 function parseCard(

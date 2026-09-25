@@ -70,10 +70,11 @@ export interface CrawlerSignInput {
 }
 
 /**
- * Openings a room needs before its exits can be a real choice. Counted twice over:
- * as distinct doorways in the wall, and as distinct rooms they lead to, so a
- * fork that opens out of a single doorway, or three corridors that reach only two
- * neighbours, never reads as a three-way choice.
+ * Distinct rooms a room needs to reach, each down its own plain hallway, before
+ * its exits can be a real choice — so three corridors that reach only two
+ * neighbours never read as a three-way choice. Counted by neighbouring room,
+ * not by wall opening: two of those hallways are free to leave through the same
+ * wall run without the fork stopping being a fork.
  */
 const MIN_JUNCTION_OPENINGS = 3;
 
@@ -510,16 +511,22 @@ function walkableTileKeys(input: CrawlerSignInput, room: Rect): Set<number> {
 /**
  * Picks the junction rooms and hallway junctions that get a sign, and where each stands.
  *
- * A room qualifies when it has at least {@link MIN_JUNCTION_OPENINGS} doorways
- * leading to at least that many distinct rooms, each down a plain hallway that
- * joins only two rooms, it lies on the forced path, and exactly one neighbour is
- * strictly nearer that leg's goal. A second corridor to a neighbour does not
- * disqualify the room; the sign names the shorter corridor to the onward one. It is signed only if a wrong turn
- * costs something: with the room taken out of the level (see
+ * A room qualifies when it reaches at least {@link MIN_JUNCTION_OPENINGS} distinct
+ * rooms, each down a plain hallway that joins only two rooms, it lies on the
+ * forced path, and exactly one neighbour is strictly nearer that leg's goal. Two
+ * of those hallways are free to leave through the same wall run — a wide
+ * doorway that happens to carry two corridors is still two distinct ways out,
+ * so counting rooms rather than physical wall openings is what keeps a fork
+ * from reading as a plain corridor merely because its mouth is shared — and a
+ * second corridor to the same neighbour does not disqualify the room either;
+ * the sign names the shorter one. It is signed only if a wrong turn costs
+ * something: with the room taken out of the level (see
  * {@link classifyTrapBranches}), some branch must lead round a loop or into a
- * dead-end region of at least {@link MIN_TRAP_REGION_ROOMS} rooms. A junction whose
- * only wrong answers are short stubs is left bare, because a sign there points the
- * player away from something they would see the end of anyway. Pure: the grid is
+ * dead-end region of at least {@link MIN_TRAP_REGION_ROOMS} rooms. A junction
+ * whose only wrong answers are short stubs — a single dead-end safe-access
+ * pocket among them — is left bare, because a sign there points the player
+ * away from something they would see the end of anyway (and away from a
+ * respawn point, which is never actually a wrong answer). Pure: the grid is
  * read, never written.
  */
 export function planCrawlerSigns(input: CrawlerSignInput): PlannedCrawlerSign[] {
@@ -569,8 +576,6 @@ export function planCrawlerSigns(input: CrawlerSignInput): PlannedCrawlerSign[] 
     if (stage === NO_STAGE) continue;
     const toGoal = forced.stages[stage].distance;
     if (neighbours.size < MIN_JUNCTION_OPENINGS) continue;
-    const doorways = roomDoorways(grid, bounds[room]);
-    if (doorways.length < MIN_JUNCTION_OPENINGS) continue;
     if (!hasOnlyPlainHallways(room)) continue;
     const closer = [...neighbours.keys()].filter((neighbour) => toGoal[neighbour] < toGoal[room]);
     const hasWrongAnswer = neighbours.size > closer.length;

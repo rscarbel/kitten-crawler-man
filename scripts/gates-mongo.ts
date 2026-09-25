@@ -991,6 +991,12 @@ const EXPECTED_ROWS: ReadonlyArray<readonly [string, number]> = [
   ['pounce_side', 14],
   ['pounce_away', 14],
   ['collapse', 10],
+  ['happy_jump', 10],
+  ['happy_jump_side', 10],
+  ['happy_jump_away', 10],
+  ['flap', 8],
+  ['flap_side', 8],
+  ['flap_away', 8],
 ];
 
 function gateTimingTable(source: string): void {
@@ -1404,7 +1410,15 @@ function gateStrideSync(source: string): void {
  * Both draw paths return silently on an unknown state, so a pose name assembled
  * by template literal that no figure paints is an invisible pet and no log line.
  */
-const RUNTIME_BASES: readonly string[] = ['idle', 'walk', 'bite', 'slash', 'pounce'];
+const RUNTIME_BASES: readonly string[] = [
+  'idle',
+  'walk',
+  'bite',
+  'slash',
+  'pounce',
+  'happy_jump',
+  'flap',
+];
 const RUNTIME_VIEW_SUFFIXES: readonly string[] = ['', '_side', '_away'];
 /** The row the collapse plays, which has no head-on or from-behind view. */
 const RUNTIME_SINGLETON_STATES: readonly string[] = ['collapse'];

@@ -1,7 +1,8 @@
 import type { Mob } from '../Mob';
 import type { Player } from '../../Player';
 import { isInPublishedRoster } from '../packAlert';
-import { drawWardGlyph } from '../../sprites/art/fairyEffectsArt';
+import { BrindleGrub } from '../BrindleGrub';
+import { drawWardCrushBubble, drawWardGlyph } from '../../sprites/art/fairyEffectsArt';
 import {
   Fairy,
   type ActiveFairyCast,
@@ -17,6 +18,9 @@ import {
   SHIELD_BETWEEN_CASTS_FRAMES,
   SHIELD_BETWEEN_CASTS_MIN_FRAMES,
   SHIELD_BASE_SPEED,
+  SHIELD_CRUSH_COOLDOWN_FRAMES,
+  SHIELD_CRUSH_IMPLODE_FRAMES,
+  SHIELD_CRUSH_MIN_COOLDOWN_FRAMES,
   SHIELD_ENGAGED_RECENT_FRAMES,
   SHIELD_MAX_SPEED,
   SHIELD_PREFERRED_RANGE_TILES,
@@ -30,8 +34,8 @@ const POSITIONING: FairyPositioning = {
 };
 
 /**
- * The one spell, laid the frame it is chosen. Its cooldown is the short gap
- * between any two casts.
+ * The one ordinary spell, laid the frame it is chosen. Its cooldown is the
+ * short gap between any two casts.
  */
 export const WARD_CAST: FairyCast = {
   id: 'ward',
@@ -40,7 +44,20 @@ export const WARD_CAST: FairyCast = {
   minCooldownFrames: SHIELD_BETWEEN_CASTS_MIN_FRAMES,
 };
 
-const SHIELD_CASTS: readonly FairyCast[] = [WARD_CAST];
+/**
+ * The fairy's other spell: a ward that never protects, laid on a hatched
+ * vespa instead of an ally, and crushed shut around it a moment later. Reuses
+ * the ward's own cast row — the hands motion of laying one on a body is the
+ * same whichever kind of ward it turns out to be.
+ */
+export const CRUSH_CAST: FairyCast = {
+  id: 'crush',
+  row: 'cast_ward',
+  cooldownFrames: SHIELD_CRUSH_COOLDOWN_FRAMES,
+  minCooldownFrames: SHIELD_CRUSH_MIN_COOLDOWN_FRAMES,
+};
+
+const SHIELD_CASTS: readonly FairyCast[] = [WARD_CAST, CRUSH_CAST];
 
 /** Height above the warded ally's ground point at which its glyph forms, in tiles. */
 const GLYPH_LIFT_TILES = 0.25;
@@ -98,6 +115,16 @@ export class ShieldFairy extends Fairy {
 
   private readonly glyphSeed = Math.floor(Math.random() * GLYPH_SEED_RANGE);
 
+  /** The vespa a crushing ward is currently closing on, or null between casts. */
+  private crushTarget: BrindleGrub | null = null;
+  /** Frames left before {@link crushTarget} implodes; counts down from {@link SHIELD_CRUSH_IMPLODE_FRAMES}. */
+  private crushFramesLeft = 0;
+
+  /** Whether a crushing ward is currently closing on a vespa. Read by `FairySystem` and gates. */
+  get hasInFlightCrush(): boolean {
+    return this.crushTarget !== null;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, SHIELD_BASE_SPEED);
   }
@@ -121,8 +148,43 @@ export class ShieldFairy extends Fairy {
   }
 
   override updateAI(targets: Player[]): void {
-    if (this.isAlive) this.forgetLostWards();
+    if (this.isAlive) {
+      this.forgetLostWards();
+      this.advanceCrush();
+    }
     super.updateAI(targets);
+  }
+
+  /**
+   * Counts an in-flight crush down and resolves it on the frame it reaches
+   * zero, killing the vespa outright. `killOutright` rather than a damage
+   * number: a vespa the fairy's own death aegis (`FAIRY_AEGIS_STATUS`) is
+   * shielding would otherwise take this "hit" at half value through
+   * `scaleIncomingDamage` and survive the implosion at half HP. This also
+   * keeps the crash a verdict, not a blow, so it still earns the player no XP
+   * for a kill they did not land.
+   */
+  private advanceCrush(): void {
+    if (this.crushTarget === null) return;
+    if (!this.crushTarget.isAlive) {
+      this.cancelCrush();
+      return;
+    }
+    this.crushFramesLeft--;
+    if (this.crushFramesLeft > 0) return;
+    this.crushTarget.killOutright();
+    this.crushTarget = null;
+  }
+
+  /**
+   * Drops an in-flight crush without finishing it — called when this fairy
+   * dies, alongside stripping the wards it holds, so a crush already snapped
+   * around a vespa does not go on to kill it after the fairy that cast it is
+   * gone.
+   */
+  cancelCrush(): void {
+    this.crushTarget = null;
+    this.crushFramesLeft = 0;
   }
 
   /**
@@ -190,8 +252,33 @@ export class ShieldFairy extends Fairy {
     return best?.mob ?? null;
   }
 
+  /** The nearest hatched vespa in reach to crush, or null when none qualifies. */
+  private bestCrushTarget(): BrindleGrub | null {
+    let best: BrindleGrub | null = null;
+    let bestDistance = Infinity;
+    for (const ally of this.allies) {
+      if (!(ally instanceof BrindleGrub) || !ally.isVespa || !this.canReach(ally)) continue;
+      const distance = this.distanceTo(ally);
+      if (distance < bestDistance) {
+        best = ally;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
   protected override chooseCast(_crawler: Player | null): FairyCastIntent | null {
-    if (!this.isWatched || !this.isCastReady(WARD_CAST)) return null;
+    if (!this.isWatched) return null;
+    // The crush is checked first: it is the rarer, longer-cooldown cast, and a
+    // vespa in reach is worth interrupting the ordinary ward rotation for.
+    if (this.crushTarget === null && this.isCastReady(CRUSH_CAST)) {
+      const vespa = this.bestCrushTarget();
+      if (vespa !== null) {
+        const ts = this.tileSize;
+        return { cast: CRUSH_CAST, target: vespa, aimX: vespa.x + ts / 2, aimY: vespa.y + ts / 2 };
+      }
+    }
+    if (!this.isCastReady(WARD_CAST)) return null;
     const target = this.bestWardTarget();
     if (target === null) return null;
     const ts = this.tileSize;
@@ -199,6 +286,14 @@ export class ShieldFairy extends Fairy {
   }
 
   protected override onCastReleased(cast: ActiveFairyCast): void {
+    if (cast.cast === CRUSH_CAST) {
+      const vespa = cast.target;
+      if (!(vespa instanceof BrindleGrub) || !vespa.isVespa || !vespa.isAlive) return;
+      this.crushTarget = vespa;
+      this.crushFramesLeft = SHIELD_CRUSH_IMPLODE_FRAMES;
+      this.glyphTarget = vespa;
+      return;
+    }
     const target = cast.target;
     if (!target?.isAlive) return;
     const ally = this.allies.find((mob) => mob === target);
@@ -218,6 +313,7 @@ export class ShieldFairy extends Fairy {
     super.clearEncounterPhase();
     this.warded.length = 0;
     this.glyphTarget = null;
+    this.cancelCrush();
   }
 
   /** The glyph forms over the newly warded ally while the cast row plays out. */
@@ -229,16 +325,30 @@ export class ShieldFairy extends Fairy {
   ): void {
     const cast = this.activeCast;
     const target = this.glyphTarget;
-    if (cast?.cast !== WARD_CAST || target?.isAlive !== true) return;
-    const ts = this.tileSize;
-    const recoverPlayed =
-      cast.phase === 'recover' ? FAIRY_CAST_RECOVER_FRAMES - cast.framesLeft + 1 : 0;
-    const progress = Math.min(1, recoverPlayed / FAIRY_CAST_RECOVER_FRAMES);
-    const glyphX = target.x + ts / 2 - camX;
-    const glyphY = target.y - ts * GLYPH_LIFT_TILES - camY;
-    const hands = this.castOrigin;
-    const handsX = hands.x - camX;
-    const handsY = hands.y - camY;
-    drawWardGlyph(ctx, glyphX, glyphY, handsX, handsY, ts, progress, frame, this.glyphSeed);
+    if ((cast?.cast === WARD_CAST || cast?.cast === CRUSH_CAST) && target?.isAlive === true) {
+      const ts = this.tileSize;
+      const recoverPlayed =
+        cast.phase === 'recover' ? FAIRY_CAST_RECOVER_FRAMES - cast.framesLeft + 1 : 0;
+      const progress = Math.min(1, recoverPlayed / FAIRY_CAST_RECOVER_FRAMES);
+      const glyphX = target.x + ts / 2 - camX;
+      const glyphY = target.y - ts * GLYPH_LIFT_TILES - camY;
+      const hands = this.castOrigin;
+      const handsX = hands.x - camX;
+      const handsY = hands.y - camY;
+      drawWardGlyph(ctx, glyphX, glyphY, handsX, handsY, ts, progress, frame, this.glyphSeed);
+    }
+
+    // The crush bubble telegraphs on its own timer once the cast row has
+    // finished playing, independent of the glyph above: the glyph is "a ward
+    // is being laid" and plays out over the recover phase, while the crush's
+    // implosion is "the ward is now closing" and runs for its own, longer
+    // {@link SHIELD_CRUSH_IMPLODE_FRAMES}.
+    if (this.crushTarget?.isAlive === true) {
+      const ts = this.tileSize;
+      const bubbleX = this.crushTarget.x + ts / 2 - camX;
+      const bubbleY = this.crushTarget.y + ts / 2 - camY;
+      const shrinkProgress = 1 - this.crushFramesLeft / SHIELD_CRUSH_IMPLODE_FRAMES;
+      drawWardCrushBubble(ctx, bubbleX, bubbleY, ts, shrinkProgress);
+    }
   }
 }

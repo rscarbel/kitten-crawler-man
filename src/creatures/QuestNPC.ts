@@ -1,9 +1,10 @@
-import { Player } from '../Player';
+import { Player, HP_BAR_Y_OFFSET } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import {
   drawQuestNPCSprite,
   drawQuestMarker,
   questMarkerColorFor,
+  questMarkerAnchorAbove,
   QUEST_MARKER_GOLD,
   QUEST_MARKER_GREEN,
   type QuestMarkerState,
@@ -66,13 +67,17 @@ export class QuestNPC extends Player {
 
     drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX, this.hurtTimer);
 
+    const hpBarVisible = this.hp < this.maxHp;
+    // The marker anchors above the bar's top edge when it's showing, so the two never overlap.
+    const markerSy = hpBarVisible ? questMarkerAnchorAbove(sy - HP_BAR_Y_OFFSET, tileSize) : sy;
+
     if (this.markerType === 'exclamation') {
-      drawQuestMarker(ctx, sx, sy, tileSize, '!', QUEST_MARKER_GOLD);
+      drawQuestMarker(ctx, sx, markerSy, tileSize, '!', QUEST_MARKER_GOLD);
     } else if (this.markerType === 'question') {
-      drawQuestMarker(ctx, sx, sy, tileSize, '?', QUEST_MARKER_GREEN);
+      drawQuestMarker(ctx, sx, markerSy, tileSize, '?', QUEST_MARKER_GREEN);
     }
 
-    if (this.hp < this.maxHp) {
+    if (hpBarVisible) {
       this.renderHealthBar(ctx, sx, sy);
     }
   }

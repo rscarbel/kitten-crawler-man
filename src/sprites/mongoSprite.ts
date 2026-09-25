@@ -4,6 +4,8 @@ import { MONGO_FIGURES } from './art/mongoFigure';
 import {
   MONGO_BITE_FRAMES,
   MONGO_COLLAPSE_FRAMES,
+  MONGO_FLAP_FRAMES,
+  MONGO_HAPPY_JUMP_FRAMES,
   MONGO_POUNCE_FRAMES,
   MONGO_SLASH_FRAMES,
   mongoActionFrames,
@@ -42,7 +44,13 @@ type MongoState =
   | 'pounce'
   | 'pounce_side'
   | 'pounce_away'
-  | 'collapse';
+  | 'collapse'
+  | 'happy_jump'
+  | 'happy_jump_side'
+  | 'happy_jump_away'
+  | 'flap'
+  | 'flap_side'
+  | 'flap_away';
 
 /** Sprite frames in one full stride of any walk row. */
 export const MONGO_WALK_FRAMES = 8;
@@ -90,6 +98,12 @@ const FRAME_COUNT: Record<MongoState, number> = {
   pounce_side: MONGO_POUNCE_FRAMES,
   pounce_away: MONGO_POUNCE_FRAMES,
   collapse: MONGO_COLLAPSE_FRAMES,
+  happy_jump: MONGO_HAPPY_JUMP_FRAMES,
+  happy_jump_side: MONGO_HAPPY_JUMP_FRAMES,
+  happy_jump_away: MONGO_HAPPY_JUMP_FRAMES,
+  flap: MONGO_FLAP_FRAMES,
+  flap_side: MONGO_FLAP_FRAMES,
+  flap_away: MONGO_FLAP_FRAMES,
 };
 
 /** Loop speed for the idle, which is driven by the clock rather than by a timer. */
@@ -131,13 +145,15 @@ export const MONGO_HEAD_CLEARANCE_TILES: Record<MongoStage, number> = {
 };
 
 /** The one-shot rows, and how many sprite frames each holds. */
-export type MongoAction = 'bite' | 'slash' | 'pounce' | 'collapse';
+export type MongoAction = 'bite' | 'slash' | 'pounce' | 'collapse' | 'happy_jump' | 'flap';
 
 const ACTION_SPRITE_FRAMES: Record<MongoAction, number> = {
   bite: MONGO_BITE_FRAMES,
   slash: MONGO_SLASH_FRAMES,
   pounce: MONGO_POUNCE_FRAMES,
   collapse: MONGO_COLLAPSE_FRAMES,
+  happy_jump: MONGO_HAPPY_JUMP_FRAMES,
+  flap: MONGO_FLAP_FRAMES,
 };
 
 /** Game frames a given one-shot runs for. */
@@ -212,6 +228,12 @@ export function prewarmMongoCombat(stage: MongoStage): void {
   for (const state of COMBAT_STATES) prewarmFigureState(figure, state);
 }
 
+/** The happy-jump/flap rows, warmed the moment a pet press becomes reachable. */
+export function prewarmMongoPet(stage: MongoStage): void {
+  const figure = MONGO_FIGURES[stage];
+  for (const state of PET_STATES) prewarmFigureState(figure, state);
+}
+
 const ARRIVAL_STATES: readonly MongoState[] = [
   'walk',
   'walk_side',
@@ -234,6 +256,15 @@ const COMBAT_STATES: readonly MongoState[] = [
   'collapse',
 ];
 
+const PET_STATES: readonly MongoState[] = [
+  'happy_jump',
+  'happy_jump_side',
+  'happy_jump_away',
+  'flap',
+  'flap_side',
+  'flap_away',
+];
+
 /** Views split on whichever axis Mongo is facing hardest along. */
 function viewFor(facingX: number, facingY: number): MongoView {
   if (Math.abs(facingY) <= Math.abs(facingX)) return 'side';
@@ -241,7 +272,7 @@ function viewFor(facingX: number, facingY: number): MongoView {
 }
 
 function stateFor(
-  base: 'walk' | 'idle' | 'bite' | 'slash' | 'pounce',
+  base: 'walk' | 'idle' | 'bite' | 'slash' | 'pounce' | 'happy_jump' | 'flap',
   view: MongoView,
 ): MongoState {
   if (view === 'side') return `${base}_side`;

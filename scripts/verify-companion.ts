@@ -14,6 +14,7 @@
  *
  * Run: npx tsx scripts/verify-companion.ts
  */
+import { EventBus } from '../src/core/EventBus';
 import { createCanvas } from 'canvas';
 
 import { TILE_SIZE, COMPANION_LEASH_PX } from '../src/core/constants';
@@ -22,7 +23,9 @@ import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Mob } from '../src/creatures/Mob';
+import { Mongo } from '../src/creatures/Mongo';
 import { createMob } from '../src/levels/spawner';
+import { BallOfSwine } from '../src/creatures/BallOfSwine';
 import { makeSepsis, makeBurn } from '../src/core/StatusEffect';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { MELEE_POINT_BLANK_RANGE } from '../src/systems/CombatSystem';
@@ -85,6 +88,8 @@ const BOSS_ROOM_UNDER_TEST = 0;
 const CHEST_TILE = 10;
 /** How far outside the boss room's wall the party waits in the corridor. */
 const PARTY_STANDOFF_TILES = 2;
+/** Comfortably above any level-1 Mongo's max HP, so the constructor clamp never bites. */
+const MONGO_TEST_STARTING_HP = 999;
 /** One frame past the un-entered regen delay, mirrored from `BossRoomSystem`. */
 const EXPECTED_UNENTERED_REGEN_FRAMES = 302;
 /** Enough to be unambiguously a wound, and nowhere near a kill. */
@@ -437,6 +442,8 @@ console.log('\nThe one boss with its own death path credits the same crawler');
   // used to credit whichever crawler it happened to be charging, which handed
   // the human a melee kill — and the boss chest — off the cat's crown.
   const swine = addMob(party, 'ball_of_swine', party.map.startTile.x + 3, party.map.startTile.y);
+  // The ball is inert until ArenaSystem opens the fight; this harness has no arena.
+  if (swine instanceof BallOfSwine) swine.fightStarted = true;
   swine.currentTarget = party.human;
   swine.applyStatus(makeSepsis(party.cat));
   tickUntilDead(swine);
@@ -576,7 +583,9 @@ console.log('\nThe companion holds fire on a boss nobody has touched or walked i
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
-    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), ['krakaren_clone']);
+    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), new EventBus(), [
+      'krakaren_clone',
+    ]);
     const companion = new CompanionSystem(map, map.startTile.x, map.startTile.y);
 
     // Boss just inside the room's west wall and the party just outside it: a
@@ -609,7 +618,9 @@ console.log('\nA boss the party pokes from the corridor and abandons goes back t
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
-    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), ['krakaren_clone']);
+    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), new EventBus(), [
+      'krakaren_clone',
+    ]);
     const boss = addMob(party, 'krakaren_clone', room.centre.x, room.centre.y);
     party.human.x = (room.bounds.x - PARTY_STANDOFF_TILES) * TILE_SIZE;
     party.human.y = room.centre.y * TILE_SIZE;
@@ -664,7 +675,9 @@ console.log('\nAn opener thrown from the threshold still counts for the player w
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
-    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), ['krakaren_clone']);
+    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), new EventBus(), [
+      'krakaren_clone',
+    ]);
     const boss = addMob(party, 'krakaren_clone', room.centre.x, room.centre.y);
     party.human.x = (room.bounds.x - PARTY_STANDOFF_TILES) * TILE_SIZE;
     party.human.y = room.centre.y * TILE_SIZE;
@@ -696,7 +709,9 @@ console.log('\nA boss killed without its room ever locking still counts as defea
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
-    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), ['krakaren_clone']);
+    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), new EventBus(), [
+      'krakaren_clone',
+    ]);
     const boss = addMob(party, 'krakaren_clone', room.centre.x, room.centre.y);
     party.human.x = (room.bounds.x - PARTY_STANDOFF_TILES) * TILE_SIZE;
     party.human.y = room.centre.y * TILE_SIZE;
@@ -726,7 +741,9 @@ console.log('\nThe leash does not cut the companion loose inside a locked boss r
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
-    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), ['krakaren_clone']);
+    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), new EventBus(), [
+      'krakaren_clone',
+    ]);
     const companion = new CompanionSystem(map, map.startTile.x, map.startTile.y);
     const boss = addMob(party, 'krakaren_clone', room.centre.x, room.centre.y);
 
@@ -759,7 +776,9 @@ console.log('\nA boss room stops being a no-go zone once its fight is over');
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
-    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), ['krakaren_clone']);
+    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), new EventBus(), [
+      'krakaren_clone',
+    ]);
     const companion = new CompanionSystem(map, map.startTile.x, map.startTile.y);
     const boss = addMob(party, 'krakaren_clone', room.bounds.x + 1, room.centre.y);
     party.human.x = (room.bounds.x - PARTY_STANDOFF_TILES) * TILE_SIZE;
@@ -793,7 +812,9 @@ console.log('\nThe leash is off inside a boss room, not across the whole floor')
     check(false, 'a generated dungeon offered a boss room to test with');
   } else {
     const party = makeParty(map);
-    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), ['krakaren_clone']);
+    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), new EventBus(), [
+      'krakaren_clone',
+    ]);
     const companion = new CompanionSystem(map, map.startTile.x, map.startTile.y);
     addMob(party, 'krakaren_clone', room.centre.x, room.centre.y);
     const quarry = addMob(party, 'goblin', map.startTile.x + 2, map.startTile.y);
@@ -1751,6 +1772,7 @@ console.log('\nA won boss room holds the party until its chest is opened');
     const bossRoom = new BossRoomSystem(
       map,
       new MiniMapSystem(map),
+      new EventBus(),
       ['krakaren_clone'],
       (roomIndex) => chests.hasUnopenedBossChest(roomIndex),
     );
@@ -1817,6 +1839,40 @@ console.log('\nA wooden chest still makes the party wait for its lock to fall');
   check(!isChestOpenable(chest), 'but it cannot be opened mid-animation');
 }
 
+console.log(
+  "\nA wooden chest's room-clear check answers to hostiles alone, not to Mongo or a grub",
+);
+{
+  const map = new GameMap(MAP_OPTIONS);
+  const party = makeParty(map);
+  const bounds = { x: CHEST_TILE, y: CHEST_TILE, w: 4, h: 4 };
+  const chests = new TreasureChestSystem();
+  chests.addWoodenChest(CHEST_TILE, CHEST_TILE, bounds, { coins: 1, items: [] });
+  const [chest] = chests.allChests;
+
+  const mongo = new Mongo(
+    bounds.x + 1,
+    bounds.y + 1,
+    TILE_SIZE,
+    party.cat,
+    1,
+    MONGO_TEST_STARTING_HP,
+  );
+  party.roster.add(mongo);
+  addMob(party, 'brindle_grub', bounds.x + 2, bounds.y + 1);
+  const guard = addMob(party, 'goblin', bounds.x + 2, bounds.y + 2);
+
+  chests.update(party.roster.mobs);
+  check(chest.state === 'locked', 'stays locked while the last guard is still alive');
+
+  guard.takeDamageFrom(guard.maxHp, party.human, 'melee');
+  chests.update(party.roster.mobs);
+  check(
+    chest.state !== 'locked',
+    'unlocks once the guard is dead, even with Mongo and a grub still standing in the room',
+  );
+}
+
 console.log('\nA companion that wanders into an unlooted room is not stranded there');
 {
   const map = makeBossRoomMap();
@@ -1830,6 +1886,7 @@ console.log('\nA companion that wanders into an unlooted room is not stranded th
     const bossRoom = new BossRoomSystem(
       map,
       new MiniMapSystem(map),
+      new EventBus(),
       ['krakaren_clone'],
       (roomIndex) => chests.hasUnopenedBossChest(roomIndex),
     );

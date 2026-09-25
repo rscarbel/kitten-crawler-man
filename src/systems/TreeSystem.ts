@@ -13,6 +13,13 @@ import {
   TREE_STAGE_CHARRED,
   TREE_STAGE_FELLING,
   TREE_STAGE_FELLING_CHARRED,
+  BARREL,
+  BARREL_SIDE,
+  CRATE,
+  TORCH,
+  BRAZIER,
+  BOOKSHELF,
+  HOARD_BAG,
   type TileContent,
 } from '../map/tileTypes';
 import { inferFloorType } from '../map/tiles/helpers';
@@ -31,6 +38,23 @@ const HALF_TILE = TILE_SIZE / 2;
 const TILE_CENTER_OFFSET = 0.5;
 /** Full turn in radians. */
 const TWO_PI = Math.PI * 2;
+
+/**
+ * Tile types a smash-everything blast can see straight through: every other
+ * tree it might be reaching past, and every breakable prop, so a sapling
+ * standing behind a barrel is still in reach of the same stomp that just
+ * splintered it. A real wall is never in this set, so it still shadows both.
+ */
+const SMASH_SIGHT_TRANSPARENT_TYPES: ReadonlySet<number> = new Set([
+  TREE,
+  BARREL,
+  BARREL_SIDE,
+  CRATE,
+  TORCH,
+  BRAZIER,
+  BOOKSHELF,
+  HOARD_BAG,
+]);
 
 /**
  * A healthy tree's health. Roughly four and a half times a crate's 6, which is
@@ -399,7 +423,26 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
    * blast has no line of sight to respect anyway.
    */
   destroyInRadius(x: number, y: number, radius: number, owner: HumanPlayer | CatPlayer): boolean {
-    return this.damageTreesInRange(x, y, radius, INSTANT_DESTROY_DAMAGE, owner, null, false);
+    return this.damageTreesInRange(x, y, radius, INSTANT_DESTROY_DAMAGE, owner, null, 'none');
+  }
+
+  /**
+   * Flatten every tree in radius from a crawler's own centre, the way a smush
+   * flattens every breakable prop: unlike {@link destroyInRadius}, a real wall
+   * still shadows the blast — only trees and breakable props
+   * ({@link SMASH_SIGHT_TRANSPARENT_TYPES}) are transparent to it, so a sapling
+   * behind a wall survives a stomp on the far side of it.
+   */
+  smashAllInRadius(attacker: HumanPlayer | CatPlayer, radius: number): boolean {
+    return this.damageTreesInRange(
+      attacker.x + HALF_TILE,
+      attacker.y + HALF_TILE,
+      radius,
+      INSTANT_DESTROY_DAMAGE,
+      attacker,
+      null,
+      'ignoreBreakables',
+    );
   }
 
   /**
@@ -599,7 +642,13 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
     damage: number,
     owner: HumanPlayer | CatPlayer,
     facing: { x: number; y: number } | null,
-    requiresLineOfSight = true,
+    /**
+     * `'blocked'` (default): a normal sight test, walls and trees alike.
+     * `'ignoreBreakables'`: walls still block, but trees and breakable props
+     * do not — the smash-everything mode. `'none'`: no sight test at all — the
+     * blast mode, which has no line of sight to respect anyway.
+     */
+    sightMode: 'blocked' | 'ignoreBreakables' | 'none' = 'blocked',
   ): boolean {
     let hitAnything = false;
     this.forEachTreeInRange(originX, originY, range, (tx, ty, distance) => {
@@ -618,12 +667,20 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
       // Melee reaches nearly two tiles, far enough to clip a tree through a
       // wall. The tree's own tile is named as exempt so the test stays correct
       // however the ray decides to treat its end tile.
-      if (
-        requiresLineOfSight &&
-        !this.gameMap.hasLineOfSight(originX, originY, centerX, centerY, { tileX: tx, tileY: ty })
-      ) {
-        return;
-      }
+      const ignore = { tileX: tx, tileY: ty };
+      const inSight =
+        sightMode === 'none' ||
+        (sightMode === 'blocked'
+          ? this.gameMap.hasLineOfSight(originX, originY, centerX, centerY, ignore)
+          : this.gameMap.hasLineOfSightIgnoringTypes(
+              originX,
+              originY,
+              centerX,
+              centerY,
+              SMASH_SIGHT_TRANSPARENT_TYPES,
+              ignore,
+            ));
+      if (!inSight) return;
 
       const health = this.healthFor(tx, ty);
       // A tree already coming down cannot be hit again: it is no longer an
@@ -735,6 +792,8 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
       false,
       // Both crawlers are paid in full rather than splitting the drop, matching
       // how a smashed prop pays out.
+      true,
+      // Falls and bounces the same as a kill's or a prop's coins.
       true,
     );
   }

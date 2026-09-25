@@ -20,10 +20,7 @@ const ZONE_TRACKS: Record<MusicZone, ReadonlyArray<SoundId>> = {
   town: TOWN_MUSIC_TRACKS,
   wilds: ['forest_path'],
   circus: ['circus_theme'],
-  // Briar Hollow has no track of its own yet, so it keeps the wilderness's.
-  // Its own zone means the village's theme is a one-line change here, and
-  // because the two lists match, walking through the gate never restarts it.
-  village: ['forest_path'],
+  village: ['briar_hollow_theme'],
 };
 
 const ZONE_FADE_MS = 1500;

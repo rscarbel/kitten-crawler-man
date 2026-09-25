@@ -121,6 +121,11 @@ export class KrakarenTentacle extends Mob {
     "A thick tentacle rooted through the floor. While it lives, the Krakaren's hide holds.";
   mass = GUARD_TENTACLE_MASS;
 
+  /** A boss's own conjured guard is not a kill the party earned, so it seeds no swarm. */
+  override get seedsOnKillSpawns(): boolean {
+    return false;
+  }
+
   /** Frames until it gives up and pulls itself back under. Ticked by BossRoomSystem. */
   ttl = GUARD_TENTACLE_TTL_FRAMES;
 

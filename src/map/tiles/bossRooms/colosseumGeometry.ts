@@ -9,6 +9,10 @@
  */
 
 import {
+  ARENA_ANTECHAMBER_MIN_DEPTH,
+  ARENA_ANTECHAMBER_MIN_WIDTH,
+  ARENA_CONCOURSE_LINK_INNER_DX,
+  ARENA_CONCOURSE_LINK_OUTER_DX,
   ARENA_CONCOURSE_REACH,
   ARENA_DOOR_COLUMN_OFFSETS,
   ARENA_INTERIOR_RADIUS_TILES,
@@ -36,6 +40,221 @@ export const COLOSSEUM_SAND_RADIUS_TILES = Math.sqrt(
 );
 /** Where the iron meets the concourse: the outside of the wall, as drawn. */
 export const COLOSSEUM_OUTER_RADIUS_TILES = Math.sqrt(ARENA_RADIUS ** 2 + HALF_SQUARED_STEP);
+
+/** How far past the outer radius the iron's shadow on the concourse still reaches. */
+export const COLOSSEUM_OUTER_SHADOW_DEPTH_TILES = 0.55;
+
+/**
+ * How far from the arena centre the rim's iron and shadow may still be painted.
+ *
+ * Shared with the walkability pass: a concourse tile whose nearest corner falls
+ * inside this reach gets iron or shadow painted over some of it, so it is blocked
+ * for movement the same way the wall itself is — see `colosseumNearRadius`.
+ */
+export const COLOSSEUM_RIM_PAINT_REACH_TILES =
+  COLOSSEUM_OUTER_RADIUS_TILES + COLOSSEUM_OUTER_SHADOW_DEPTH_TILES;
+
+/**
+ * The closest the square tile at `(dx, dy)` tile-offsets from the arena centre
+ * ever comes to that centre — distance from a point to an axis-aligned box,
+ * with the box being the tile's own 1×1 footprint. This is what a tile painter
+ * asks to decide whether a continuous circle reaches into a square cell at all.
+ */
+export function colosseumNearRadius(dx: number, dy: number): number {
+  const clampedX = Math.max(dx - HALF_TILE, Math.min(dx + HALF_TILE, 0));
+  const clampedY = Math.max(dy - HALF_TILE, Math.min(dy + HALF_TILE, 0));
+  return Math.hypot(clampedX, clampedY);
+}
+
+/**
+ * Whether `(dx, dy)` sits in the doorway's mouth — the swath south of the door
+ * that `clipAwayDoorway` (the tile painter) cuts the iron and its shadow away
+ * from entirely, all the way out past the rim's reach, so the entrance stays
+ * clear ground however wide the rim's paint runs elsewhere.
+ */
+function colosseumInDoorSwath(dx: number, dy: number): boolean {
+  const door = COLOSSEUM_DOOR_OPENING;
+  return dx >= door.left && dx <= door.right && dy >= door.top;
+}
+
+/**
+ * Whether `(dx, dy)` is one of the two flank links `linkConcourseToAntechamber`
+ * (`DungeonGenerator.ts`) punches through the door row's seal to join the
+ * concourse ring to the antechamber.
+ *
+ * Each is a single tile wide with no parallel lane beside it — unlike the ring
+ * itself, which is two tiles wide everywhere else — so it is the *only* way
+ * through the wall at its bearing. The seal (and the link back through it) only
+ * exists at exactly the door's own row, `ARENA_RADIUS` tiles out, which is why
+ * this checks that row precisely rather than a wider swath.
+ */
+function colosseumOnConcourseLink(dx: number, dy: number): boolean {
+  if (dy !== ARENA_RADIUS) return false;
+  const abs = Math.abs(dx);
+  return abs === ARENA_CONCOURSE_LINK_INNER_DX || abs === ARENA_CONCOURSE_LINK_OUTER_DX;
+}
+
+// ── Which concourse tiles the ring genuinely needs, near the door ──────────
+
+/**
+ * Half the guaranteed-minimum antechamber width, rounded down the same way
+ * `DungeonGenerator.ts` rounds it when it plants the antechamber's northern
+ * edge under the door column — so the synthetic apron below lines up with
+ * where a real antechamber's edge always is, regardless of how much wider a
+ * given map's antechamber ends up.
+ */
+const ANTECHAMBER_HALF_WIDTH_FLOOR = Math.floor(ARENA_ANTECHAMBER_MIN_WIDTH / 2);
+
+/**
+ * A synthetic, seed-independent model of what's guaranteed open near an
+ * arena's door: the concourse ring, sealed at the door row but for the door's
+ * own columns and the two flank links, sitting over a rectangle of antechamber
+ * floor no map ever makes narrower or shallower than `ARENA_ANTECHAMBER_MIN_WIDTH`/
+ * `_DEPTH`. Every real antechamber is this shape or bigger, so a route this
+ * model finds is a route every real map has too.
+ *
+ * Deliberately ignorant of anything past the door — the beyond pocket's north
+ * gate, other rooms — because those never come within the rim's paint reach
+ * and can't affect which near-wall tiles need to stay open.
+ */
+function isRingFloorTemplateTile(dx: number, dy: number): boolean {
+  // The door mouth is carved open across both of the wall's rows regardless of
+  // the disc radius test below — the generator overwrites the wall there
+  // unconditionally.
+  if ((dy === ARENA_RADIUS || dy === ARENA_RADIUS - 1) && ARENA_DOOR_COLUMN_OFFSETS.includes(dx)) {
+    return true;
+  }
+  const rad = Math.hypot(dx, dy);
+  if (rad > ARENA_RADIUS && rad <= ARENA_CONCOURSE_REACH) {
+    if (dy === ARENA_RADIUS) return colosseumOnConcourseLink(dx, dy);
+    return true;
+  }
+  return (
+    dy > ARENA_RADIUS &&
+    dy <= ARENA_RADIUS + ARENA_ANTECHAMBER_MIN_DEPTH &&
+    dx >= -ANTECHAMBER_HALF_WIDTH_FLOOR &&
+    dx < ARENA_ANTECHAMBER_MIN_WIDTH - ANTECHAMBER_HALF_WIDTH_FLOOR
+  );
+}
+
+/** Whether `(dx, dy)` is open ground the rim's paint reaches, and so a tile worth blocking at all. */
+function isRingFloorTemplateCandidate(dx: number, dy: number): boolean {
+  if (!isRingFloorTemplateTile(dx, dy)) return false;
+  if (Math.hypot(dx, dy) <= ARENA_RADIUS) return false;
+  if (colosseumInDoorSwath(dx, dy) || colosseumOnConcourseLink(dx, dy)) return false;
+  return colosseumNearRadius(dx, dy) <= COLOSSEUM_RIM_PAINT_REACH_TILES;
+}
+
+/** Local packing for the small graph the 0-1 BFS below walks; well clear of its real range. */
+const OFFSET_BIAS = 64;
+const OFFSET_STRIDE = 128;
+const packOffset = (dx: number, dy: number): number =>
+  (dy + OFFSET_BIAS) * OFFSET_STRIDE + (dx + OFFSET_BIAS);
+const unpackOffsetDx = (key: number): number => (key % OFFSET_STRIDE) - OFFSET_BIAS;
+const unpackOffsetDy = (key: number): number => Math.floor(key / OFFSET_STRIDE) - OFFSET_BIAS;
+
+const OFFSET_NEIGHBOUR_STEPS: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/**
+ * Every rim-covered tile that a shortest, minimum-candidate-cost route from
+ * the door to some tile the ring can't do without needs kept open.
+ *
+ * A 0-1 BFS over {@link isRingFloorTemplateTile}: crossing a tile the rim would
+ * otherwise be free to paint over costs 1, crossing anything else costs 0. For
+ * every open tile that isn't itself up for blocking, its cheapest path back to
+ * the door is retraced and every rim-covered tile on that path is kept open —
+ * the smallest set of exceptions that still lets every tile the ring is
+ * carved with stay reachable, rather than reinstating a whole arbitrary
+ * detour's worth the way a plain first-found-path walk would.
+ */
+function computeForcedWalkableOffsets(): ReadonlySet<number> {
+  const dist = new Map<number, number>();
+  const parent = new Map<number, number>();
+  const deque: number[] = [];
+  const rootKey = packOffset(0, ARENA_RADIUS);
+  dist.set(rootKey, 0);
+  deque.push(rootKey);
+
+  while (deque.length > 0) {
+    const key = deque.shift();
+    if (key === undefined) continue;
+    const d = dist.get(key);
+    if (d === undefined) continue;
+    const dx = unpackOffsetDx(key);
+    const dy = unpackOffsetDy(key);
+    for (const [stepX, stepY] of OFFSET_NEIGHBOUR_STEPS) {
+      const nx = dx + stepX;
+      const ny = dy + stepY;
+      if (!isRingFloorTemplateTile(nx, ny)) continue;
+      const edgeCost = isRingFloorTemplateCandidate(nx, ny) ? 1 : 0;
+      const nextDist = d + edgeCost;
+      const nKey = packOffset(nx, ny);
+      const existing = dist.get(nKey);
+      if (existing !== undefined && existing <= nextDist) continue;
+      dist.set(nKey, nextDist);
+      parent.set(nKey, key);
+      if (edgeCost === 0) deque.unshift(nKey);
+      else deque.push(nKey);
+    }
+  }
+
+  const forced = new Set<number>();
+  for (const key of dist.keys()) {
+    if (isRingFloorTemplateCandidate(unpackOffsetDx(key), unpackOffsetDy(key))) continue;
+    let cur: number | undefined = key;
+    while (cur !== undefined) {
+      if (isRingFloorTemplateCandidate(unpackOffsetDx(cur), unpackOffsetDy(cur))) forced.add(cur);
+      cur = parent.get(cur);
+    }
+  }
+  return forced;
+}
+
+/**
+ * Computed once, lazily: a pure function of fixed geometry, so it never varies
+ * by seed and both {@link colosseumRimCoversTile} (walkability) and the rim's
+ * own painter can call it and always agree exactly on which tiles are
+ * exceptions. Lazy because it reads {@link COLOSSEUM_DOOR_OPENING}, declared
+ * later in this module — computing it eagerly here would run into that
+ * binding before its own line has executed.
+ */
+let forcedWalkableOffsetsCache: ReadonlySet<number> | null = null;
+function forcedWalkableOffsets(): ReadonlySet<number> {
+  forcedWalkableOffsetsCache ??= computeForcedWalkableOffsets();
+  return forcedWalkableOffsetsCache;
+}
+
+/**
+ * Whether `(dx, dy)` is a rim-covered tile the concourse ring genuinely needs
+ * kept open — the minimum reinstatement {@link computeForcedWalkableOffsets}
+ * found, near the two flank links.
+ */
+export function colosseumRimForcedWalkable(dx: number, dy: number): boolean {
+  return forcedWalkableOffsets().has(packOffset(dx, dy));
+}
+
+/**
+ * Whether the tile at `(dx, dy)` tile-offsets from the arena centre is one the
+ * rim's iron or shadow paints over, even partially.
+ *
+ * Never true for a tile the generator carves as the *only* passage through a
+ * sealed stretch of wall — the door's own mouth, a flank link, or one of the
+ * tiles a link needs to reach the ring's own two-tile band — because
+ * walkability built from this must not block the one way through even where
+ * the paint's continuous circle happens to reach that far. The painter honours
+ * the same exception (see `colosseumRimCoversTile` callers in
+ * `colosseumTiles.ts`), so a tile kept walkable here is never drawn as iron.
+ */
+export function colosseumRimCoversTile(dx: number, dy: number): boolean {
+  if (colosseumInDoorSwath(dx, dy) || colosseumOnConcourseLink(dx, dy)) return false;
+  if (colosseumRimForcedWalkable(dx, dy)) return false;
+  return colosseumNearRadius(dx, dy) <= COLOSSEUM_RIM_PAINT_REACH_TILES;
+}
 
 /**
  * Depth of the wall's inner face where it faces the viewer head-on (due north),

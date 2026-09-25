@@ -12,6 +12,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameMap } from '../map/GameMap';
 import type { BossRoomSystem } from './BossRoomSystem';
+import type { CrawlerBarkSystem } from './CrawlerBarkSystem';
 import type { MobRoster } from './kits/SceneWorld';
 
 /** Per-frame shared state passed to every system's update(). */
@@ -32,6 +33,8 @@ export interface SystemContext {
   bossRoom?: BossRoomSystem;
   /** Additional player-like targets (e.g. Mongo). Used by MobUpdateLoop. */
   extraTargets?: Player[];
+  /** The scene's crawler bark system, for any system that wants a crawler to say something. */
+  crawlerBarks?: CrawlerBarkSystem;
 }
 
 export interface GameSystem {

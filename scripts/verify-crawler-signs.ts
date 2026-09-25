@@ -1565,8 +1565,16 @@ function walkDistanceToGoal(model: FloorModel, stage: number): Map<number, numbe
 }
 
 /**
- * Fills each branch's rank against the leg's goal and returns the goal-reaching
- * branches tied for the best rank: fewest room-steps, then the shortest walk.
+ * Fills each branch's rank against the leg's goal and returns the goal-reaching,
+ * non-trap branches tied for the best rank: fewest room-steps, then the
+ * shortest walk.
+ *
+ * A branch flagged `trap` is excluded from the running even when it reaches the
+ * goal: room-hops and tile-walk can disagree (a branch can cross fewer rooms
+ * while covering far more ground, which is exactly what a large detour is), and
+ * a branch the trap flood already called a costly detour must never still win
+ * on room-hops and get named as the right way onward — that would recommend
+ * the wrong turn a sign exists to warn against.
  */
 function bestBranches(
   model: FloorModel,
@@ -1586,7 +1594,9 @@ function bestBranches(
       ...branch.mouth.map((tile) => walked.get(tileKeyOf(tile)) ?? Number.POSITIVE_INFINITY),
     );
   }
-  const candidates = branches.filter((_, index) => outcomes[index]?.reachesGoal === true);
+  const candidates = branches.filter(
+    (_, index) => outcomes[index]?.reachesGoal && !outcomes[index]?.trap,
+  );
   const worse = (a: JunctionBranch, b: JunctionBranch): boolean =>
     a.hops > b.hops || (a.hops === b.hops && a.walk > b.walk);
   return candidates.filter((candidate) => !candidates.some((other) => worse(candidate, other)));

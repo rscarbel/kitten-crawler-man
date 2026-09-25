@@ -12,7 +12,7 @@ import type { FairyFireballCue } from './FairyFireballSystem';
 const CAST_RELEASE_SOUNDS: Record<FairyCastRow, SoundId> = {
   cast_ward: 'fairy_shield_cast',
   cast_heal: 'fairy_heal_bloom',
-  cast_beam: 'fairy_beam_crack',
+  cast_beam: 'fairy_ice_cast',
   cast_lob: 'fairy_fireball_whoosh',
   cast_raise: 'fairy_raise_call',
   cast_push: 'fairy_telekinetic_thrum',
@@ -29,17 +29,18 @@ const ON_SCREEN_ONLY_CAST_ROWS: ReadonlySet<FairyCastRow> = new Set<FairyCastRow
 const SYSTEM_CUE_SOUNDS: Record<FairySystemCue, SoundId> = {
   shieldDeath: 'fairy_shield_shatter',
   healWave: 'fairy_heal_wave',
-  chillBlast: 'fairy_chill_burst',
+  chillBlast: 'fairy_ice_death',
   necroDeath: 'fairy_necro_wail',
   resurrection: 'fairy_resurrection_moan',
-  iceBoltShatter: 'fairy_ice_shatter',
+  iceBoltShatter: 'fairy_ice_hits_ground',
+  iceBoltHit: 'fairy_ice_chill',
 };
 
 /** The one call the cast and system cue drains make, so a gate can hand in a recorder. */
 export type FairyCuePlayer = Pick<AudioManager, 'play'>;
 
 const DEATH_FLAME_SOUND: SoundId = 'fairy_death_flame';
-const FROZEN_SOLID_SOUND: SoundId = 'fairy_frozen_solid';
+const FROZEN_SOLID_SOUND: SoundId = 'fairy_ice_freeze';
 
 /** Every fireball cue but the one that only ends a sound. */
 const FIREBALL_CUE_SOUNDS: Record<Exclude<FairyFireballCue, 'deathFlamesOut'>, SoundId> = {
@@ -133,7 +134,7 @@ export function playFrostCues(crawlers: readonly Player[], audio: AudioManager |
     anyFrozenBefore ||= frozenBefore;
     anyFrozenNow ||= frozen;
     const thawed = frozenBefore && !frozen;
-    if (thawed && crawler.isAlive) audio?.play('fairy_ice_shatter');
+    if (thawed && crawler.isAlive) audio?.play('fairy_ice_cracking');
   }
   if (anyFrozenNow && !anyFrozenBefore) audio?.play(FROZEN_SOLID_SOUND);
   if (anyFrozenBefore && !anyFrozenNow) audio?.stopSound(FROZEN_SOLID_SOUND);

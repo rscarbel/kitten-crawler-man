@@ -19,7 +19,7 @@ import {
 } from '../sprites/ballOfSwineSheet';
 import { STENCH_ATTACK_TYPE, TRAMPLE_ATTACK_TYPE } from './ballOfSwineAttackTypes';
 import { ARENA_INTERIOR_RADIUS_TILES, ARENA_REACH } from '../map/arenaGeometry';
-import { makePoison } from '../core/StatusEffect';
+import { makePoison, type StatusEffect } from '../core/StatusEffect';
 import { prewarmTuskling } from '../sprites/tusklingSprite';
 import type { LootDrop, PlayerDamageType } from './Mob';
 
@@ -373,6 +373,12 @@ export class BallOfSwine extends Mob {
   private rollPhase = 0;
 
   private phase: BosPhase = 'rolling';
+  /**
+   * Set by `ArenaSystem` when the entry window opens. Before that, the ball is
+   * a prop: it takes no damage, ignores stuns, and idles at the drum centre
+   * rather than reaching for anyone stood in the concourse or the antechamber.
+   */
+  fightStarted = false;
   private slamTimer = 0;
   /**
    * The direction the ball was travelling when it hit, kept for the slam pose.
@@ -547,6 +553,17 @@ export class BallOfSwine extends Mob {
     return this.currentTarget !== null && this.phase !== 'wallowing';
   }
 
+  /** A prop until the fight begins: nothing lands on it, blade or blast. */
+  protected override get isDamageImmune(): boolean {
+    return !this.fightStarted;
+  }
+
+  /** No hit lands before the fight starts, so no rider it carries should either. */
+  override applyStatus(effect: StatusEffect): void {
+    if (!this.fightStarted && effect.type === 'stun') return;
+    super.applyStatus(effect);
+  }
+
   override get cullMarginTiles(): number {
     return CULL_MARGIN_TILES;
   }
@@ -675,6 +692,9 @@ export class BallOfSwine extends Mob {
     if (this.isDying || this.hp === 0) return;
     super.resetToSpawn();
     this.phase = 'rolling';
+    // A checkpoint rewind undoes the door sealing too (ArenaSystem.resetForCheckpoint
+    // reopens it), so the ball goes back to waiting inert for the entry window.
+    this.fightStarted = false;
     this.momentum = 1;
     this.heading = Math.random() * Math.PI * 2;
     this.rollPhase = 0;
@@ -749,6 +769,13 @@ export class BallOfSwine extends Mob {
   }
 
   private updateRolling(targets: Player[]): void {
+    if (!this.fightStarted) {
+      // Idle at the drum centre with nobody to charge, so `requiresEvasion`
+      // never force-activates it before there is a fight to be in.
+      this.currentTarget = null;
+      return;
+    }
+
     const target = this.nearestInArena(targets);
     this.currentTarget = target;
 

@@ -612,8 +612,28 @@ export class CompanionSystem implements GameSystem {
       return;
     }
 
-    const isUntriggeredBossRoomMob = (m: Mob, activePlayer: { x: number; y: number }): boolean =>
-      bossRoom?.isUntriggeredBossRoomMob(m, activePlayer) ?? false;
+    // Both crawlers, sealed into the same locked boss room together: the
+    // companion cannot leave it, so a target outside it is not a fight it can
+    // actually take, whatever its own aggro range says.
+    const sealedCompanion = human.isActive ? cat : human;
+    const sealedActivePlayer = human.isActive ? human : cat;
+    const sealedBounds = this.sealedRoomBounds(sealedCompanion, sealedActivePlayer, bossRoom);
+
+    const isUntriggeredBossRoomMob = (m: Mob, activePlayer: { x: number; y: number }): boolean => {
+      if (bossRoom?.isUntriggeredBossRoomMob(m, activePlayer) === true) return true;
+      return (
+        sealedBounds !== null && bossRoom !== undefined && !bossRoom.isEntityInRoom(m, sealedBounds)
+      );
+    };
+
+    // Catches a target `findAggroDrawingMobNear` picked, which never runs
+    // through `isUntriggeredBossRoomMob` above.
+    const rejectSealedOutOfRoomTarget = (target: Mob | null): Mob | null =>
+      target !== null && sealedBounds !== null && bossRoom !== undefined
+        ? bossRoom.isEntityInRoom(target, sealedBounds)
+          ? target
+          : null
+        : target;
 
     this.breakStretchedLeash(human, cat, chaseBlocked);
     // Capped at the leash, because a job the companion has to break its leash to
@@ -675,7 +695,9 @@ export class CompanionSystem implements GameSystem {
           this.catStance.combatStance === 'aggressive' &&
           !chaseBlocked
         ) {
-          cat.autoTarget = this.findAggroDrawingMobNear(mobGrid, human, nearPlayerRange);
+          cat.autoTarget = rejectSealedOutOfRoomTarget(
+            this.findAggroDrawingMobNear(mobGrid, human, nearPlayerRange),
+          );
         }
       }
 
@@ -755,7 +777,11 @@ export class CompanionSystem implements GameSystem {
           // Beyond his own engage range, the same on-sight rule the cat uses: a
           // mob that never targets anybody (a ticking egg) is left to hatch
           // otherwise.
-          human.autoTarget = closest ?? this.findAggroDrawingMobNear(mobGrid, cat, nearPlayerRange);
+          human.autoTarget =
+            closest ??
+            rejectSealedOutOfRoomTarget(
+              this.findAggroDrawingMobNear(mobGrid, cat, nearPlayerRange),
+            );
         }
       }
 
@@ -835,17 +861,32 @@ export class CompanionSystem implements GameSystem {
     activePlayer: HumanPlayer | CatPlayer,
     bossRoom: BossRoomSystem | undefined,
   ): boolean {
-    if (!bossRoom) return false;
+    return this.sealedRoomBounds(companion, activePlayer, bossRoom) !== null;
+  }
+
+  /**
+   * The bounds of the locked boss room both crawlers are sealed inside
+   * together, or null when they are not sealed in one. Companion AI uses this
+   * to keep a sealed-in companion from reaching for a target outside the room
+   * it cannot leave — a brindled vespa's aggro range reaches walls a locked
+   * door does not.
+   */
+  private sealedRoomBounds(
+    companion: HumanPlayer | CatPlayer,
+    activePlayer: HumanPlayer | CatPlayer,
+    bossRoom: BossRoomSystem | undefined,
+  ): { x: number; y: number; w: number; h: number } | null {
+    if (!bossRoom) return null;
     for (const state of bossRoom.getBossRoomStates()) {
       if (!state.locked) continue;
       if (
         bossRoom.isEntityInRoom(activePlayer, state.bounds) &&
         bossRoom.isEntityInRoom(companion, state.bounds)
       ) {
-        return true;
+        return state.bounds;
       }
     }
-    return false;
+    return null;
   }
 
   private breakStretchedLeash(human: HumanPlayer, cat: CatPlayer, stretched: boolean): void {

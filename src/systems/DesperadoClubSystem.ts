@@ -290,6 +290,9 @@ export class DesperadoClubSystem {
   /** Built with the escort itself; empty until the VIP lounge hires one. */
   private escortFigureList: ReadonlyArray<InteriorFigure> = [];
 
+  /** Passed straight through from the casino's own `onWinnings` — see there for the flight's origin and timing. */
+  onCasinoWinnings: ((coins: number, screenX: number, screenY: number) => void) | null = null;
+
   constructor(
     map: GameMap,
     private readonly membership: ClubMembership,
@@ -306,6 +309,8 @@ export class DesperadoClubSystem {
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG);
     this.marketShop = createClubMarketShop(marketStock);
     this.casino = new ClubCasinoSystem(audio, membership);
+    this.casino.onWinnings = (coins, screenX, screenY) =>
+      this.onCasinoWinnings?.(coins, screenX, screenY);
     this.guild = new MercenaryGuildSystem(roster, audio);
     this.vip = new ClubVipLoungeSystem(audio, roster);
     prewarmClarabelle();

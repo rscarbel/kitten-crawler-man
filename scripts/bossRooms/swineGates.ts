@@ -19,7 +19,11 @@ import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
 import { Tuskling } from '../../src/creatures/Tuskling.js';
 import { level2 } from '../../src/levels/level2.js';
 import { spawnExtraMobs } from '../../src/levels/spawner.js';
-import { ARENA_DOOR_COLUMN_OFFSETS, ARENA_RADIUS } from '../../src/map/arenaGeometry.js';
+import {
+  ARENA_CONCOURSE_REACH,
+  ARENA_DOOR_COLUMN_OFFSETS,
+  ARENA_RADIUS,
+} from '../../src/map/arenaGeometry.js';
 import type { GameMap } from '../../src/map/GameMap.js';
 import { ARENA_FLOOR, ARENA_MUD } from '../../src/map/tileTypes.js';
 import { buildColosseumDressing } from '../../src/systems/bossRooms/BossRoomDressings.js';
@@ -30,7 +34,10 @@ import {
   type ColosseumDressingCheckpoint,
 } from '../../src/systems/bossRooms/ColosseumDressingSystem.js';
 import { PORTCULLIS_FRAMES } from '../../src/sprites/art/colosseumArt.js';
-import { COLOSSEUM_FOOTING_RADIUS_TILES } from '../../src/map/tiles/bossRooms/colosseumGeometry.js';
+import {
+  COLOSSEUM_FOOTING_RADIUS_TILES,
+  colosseumRimCoversTile,
+} from '../../src/map/tiles/bossRooms/colosseumGeometry.js';
 import { liveShedTusklings, SHED_MAX_ALIVE } from '../../src/systems/ArenaSystem.js';
 import { applyMovement } from '../../src/systems/GameLoopPhases.js';
 import { ARENA_SLIDE_LIMIT_PX, clampIntoDrum } from '../../src/systems/bossRooms/colosseumSlide.js';
@@ -198,6 +205,133 @@ export function reportConcourse(report: GateReport, walk: ConcourseWalk): void {
   }
   if (walk.jumps > 0)
     report.fail(`a crawler walking in from the concourse jumped on ${walk.jumps} frames`);
+}
+
+// ── The concourse ring stays one piece ──────────────────────────────────────
+
+export interface ConcourseConnectivity {
+  readonly walkableConcourseTiles: number;
+  readonly orphanedTiles: number;
+}
+
+/**
+ * Floods the live map from the arena's door tile and checks every walkable
+ * concourse tile is still reachable from it.
+ *
+ * This is the one check here that runs against the built `GameMap` rather than
+ * against the generator's own room graph, on purpose: a runtime block flag (the
+ * colosseum rim's collision fix in `GameMap.blockColosseumRimOverhang`, or
+ * anything future that permanently blocks a tile after generation) is invisible
+ * to `verify:progression`'s room-graph model, which only ever sees the tiles
+ * the generator itself laid down. A grid validator cannot see a runtime block
+ * flag — only a walk of the live map, `isWalkable` and all, can catch one that
+ * happens to sever the ring.
+ */
+export function checkConcourseConnectivity(map: GameMap): ConcourseConnectivity {
+  if (map.arenaExteriors.length === 0) return { walkableConcourseTiles: 0, orphanedTiles: 0 };
+  const arena = map.arenaExteriors[0];
+  const centre = arena.centre;
+
+  const concourseTiles: Array<{ x: number; y: number }> = [];
+  for (let dy = -ARENA_CONCOURSE_REACH; dy <= ARENA_CONCOURSE_REACH; dy++) {
+    for (let dx = -ARENA_CONCOURSE_REACH; dx <= ARENA_CONCOURSE_REACH; dx++) {
+      const rad = Math.hypot(dx, dy);
+      if (rad <= ARENA_RADIUS || rad > ARENA_CONCOURSE_REACH) continue;
+      concourseTiles.push({ x: centre.x + dx, y: centre.y + dy });
+    }
+  }
+  const walkableConcourseTiles = concourseTiles.filter((t) => map.isWalkable(t.x, t.y));
+
+  const key = (x: number, y: number): number => y * CONCOURSE_FLOOD_KEY_STRIDE + x;
+  const reachable = new Set<number>([key(arena.doorTile.x, arena.doorTile.y)]);
+  const stack: Array<{ x: number; y: number }> = [arena.doorTile];
+  while (stack.length > 0) {
+    const cur = stack.pop();
+    if (cur === undefined) break;
+    for (const [dx, dy] of NEIGHBOR_OFFSETS) {
+      const nx = cur.x + dx;
+      const ny = cur.y + dy;
+      const k = key(nx, ny);
+      if (reachable.has(k) || !map.isWalkable(nx, ny)) continue;
+      reachable.add(k);
+      stack.push({ x: nx, y: ny });
+    }
+  }
+
+  const orphanedTiles = walkableConcourseTiles.filter((t) => !reachable.has(key(t.x, t.y))).length;
+  return { walkableConcourseTiles: walkableConcourseTiles.length, orphanedTiles };
+}
+
+/** Larger than any generated map dimension, so the flood's keys never collide. */
+const CONCOURSE_FLOOD_KEY_STRIDE = 100000;
+const NEIGHBOR_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+export function reportConcourseConnectivity(
+  report: GateReport,
+  connectivity: ConcourseConnectivity,
+): void {
+  report.note(
+    `concourse connectivity: ${connectivity.walkableConcourseTiles} walkable ring tiles, ` +
+      `${connectivity.orphanedTiles} unreachable from the door`,
+  );
+  if (connectivity.orphanedTiles > 0) {
+    report.fail(
+      `${connectivity.orphanedTiles} walkable concourse tiles are cut off from the arena door`,
+    );
+  }
+}
+
+// ── Art and collision agree on the rim's overhang ───────────────────────────
+
+export interface RimPaintAgreement {
+  readonly concourseTilesChecked: number;
+  /** Walkable tiles the rim's iron, shadow or crowd still paints over — a collision bug, not decoration. */
+  readonly paintedButWalkable: number;
+}
+
+/**
+ * Checks every concourse tile against `colosseumRimCoversTile` — the same
+ * predicate both `GameMap.blockColosseumRimOverhang` (collision) and
+ * `drawColosseumRim` (the painter) call — and fails if a tile it says the rim
+ * paints over is nonetheless walkable. The two sides share one function
+ * precisely so this can never happen, but a future edit to either the block
+ * flags or the painter that stops calling it would still leave the picture and
+ * the ground crawlers can stand on in agreement; this is what would catch it.
+ */
+export function checkRimPaintAgreement(map: GameMap): RimPaintAgreement {
+  if (map.arenaExteriors.length === 0) return { concourseTilesChecked: 0, paintedButWalkable: 0 };
+  const centre = map.arenaExteriors[0].centre;
+
+  let concourseTilesChecked = 0;
+  let paintedButWalkable = 0;
+  for (let dy = -ARENA_CONCOURSE_REACH; dy <= ARENA_CONCOURSE_REACH; dy++) {
+    for (let dx = -ARENA_CONCOURSE_REACH; dx <= ARENA_CONCOURSE_REACH; dx++) {
+      const rad = Math.hypot(dx, dy);
+      if (rad <= ARENA_RADIUS || rad > ARENA_CONCOURSE_REACH) continue;
+      concourseTilesChecked++;
+      if (!colosseumRimCoversTile(dx, dy)) continue;
+      if (map.isWalkable(centre.x + dx, centre.y + dy)) paintedButWalkable++;
+    }
+  }
+  return { concourseTilesChecked, paintedButWalkable };
+}
+
+export function reportRimPaintAgreement(report: GateReport, agreement: RimPaintAgreement): void {
+  report.note(
+    `rim paint vs collision: ${agreement.concourseTilesChecked} concourse tiles checked, ` +
+      `${agreement.paintedButWalkable} painted but walkable`,
+  );
+  if (agreement.paintedButWalkable > 0) {
+    report.fail(
+      `${agreement.paintedButWalkable} walkable concourse tiles still have the rim's iron, ` +
+        'shadow or crowd painted over them',
+    );
+  }
 }
 
 // ── A Tuskling charging the curve ───────────────────────────────────────────
@@ -557,6 +691,8 @@ export function rollThroughMud(map: GameMap): { onMud: number; onSand: number } 
     const ball = new BallOfSwine(fromX, fromY, TILE_SIZE);
     ball.setMap(map);
     ball.setArena(arena.centre.x, arena.centre.y);
+    // Inert until ArenaSystem opens the fight; this rig drives it directly.
+    ball.fightStarted = true;
     Reflect.set(ball, 'heading', 0);
     const startX = ball.x;
     for (let frame = 0; frame < ROLL_FRAMES; frame++) ball.updateAI([]);

@@ -406,6 +406,16 @@ export class AchievementManager {
   }
 
   /**
+   * Clear the pause-menu badge for one achievement, read through the safe-room
+   * notification overlay rather than the Achievements tab. Reading a
+   * notification there is exactly as much "seen" as opening the tab, so it
+   * must not leave "(n new)" standing for an award the player already watched.
+   */
+  clearMenuUnseenOne(): void {
+    this.menuUnseen = Math.max(0, this.menuUnseen - 1);
+  }
+
+  /**
    * Attempt to unlock an achievement. Returns true if it was newly unlocked,
    * false if it was already unlocked (each achievement is one-time).
    */

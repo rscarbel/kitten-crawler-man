@@ -7,6 +7,8 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
+import { drawItemIcon } from '../ui/InventoryPanel';
+import { ITEM_DEF } from '../core/ItemDefs';
 import { drawRadialGlow } from '../sprites/radialGlow';
 import { cloneLootDrop } from '../core/lootDrop';
 
@@ -94,6 +96,109 @@ const DROP_SEARCH_MIN_RADIUS = 2;
 /** Maximum drop-search radius (tiles from dropper). */
 const DROP_SEARCH_MAX_RADIUS = 4;
 
+// Ground loot presentation: a gentle bob, a glow disc, a periodic shine,
+// and the pile's actual contents drawn on the floor.
+/** Arbitrary irrational-ish multipliers so a pile's bob/shine phase looks seeded, not periodic across piles. */
+const LOOT_PHASE_SEED_X = 0.013;
+const LOOT_PHASE_SEED_Y = 0.017;
+const LOOT_BOB_TIME_DIVISOR = 260;
+const LOOT_BOB_SPEED = 1;
+const LOOT_BOB_AMPLITUDE_PX = 3;
+const LOOT_GLOW_RADIUS = 20;
+const LOOT_GLOW_INNER_ALPHA = 0.35;
+const LOOT_GLOW_CORE_FRACTION = 0.15;
+/** How many seconds pass, on average, between one shine sweep and the next. */
+const LOOT_SWEEP_PERIOD = 4;
+const LOOT_SWEEP_SPEED = 1;
+/** The fraction of `LOOT_SWEEP_PERIOD` the sweep is actually visible for. */
+const LOOT_SWEEP_ACTIVE_FRACTION = 0.25;
+const LOOT_SWEEP_MAX_ALPHA = 0.35;
+const LOOT_SWEEP_RADIUS = 10;
+const LOOT_CONTENT_SPACING = 16;
+const LOOT_ITEM_ICON_SIZE = 22;
+const LOOT_EXTRA_ITEMS_BADGE_SIZE = 9;
+const LOOT_EXTRA_ITEMS_BADGE_OFFSET = 4;
+const LOOT_COIN_RADIUS = 5;
+/** How far the coin pile's three discs sit from its centre, as a share of one coin's own radius. */
+const LOOT_COIN_PILE_FRONT_Y_SHARE = 0.3;
+const LOOT_COIN_PILE_SIDE_X_SHARE = 0.7;
+const LOOT_COIN_PILE_SIDE_Y_SHARE = 0.2;
+const LOOT_COIN_PILE_BACK_Y_SHARE = 0.1;
+
+// A kill or a break must be *seen* to pay out: coins and items burst from the
+// body, arc up, fall with gravity, land with a small bounce, and only then
+// settle into the collectable pile above. `PendingLoot.pickupDelay` already
+// blocks both auto-collect and click-collect while it counts down, so the
+// fall's whole duration rides on it — nothing can be picked up mid-flight.
+/** How many coins one falling piece stands in for, before capping how many piece the burst spawns. */
+const DROP_COINS_PER_PIECE = 6;
+const DROP_MIN_COIN_PIECES = 1;
+const DROP_MAX_COIN_PIECES = 6;
+/** At most this many of a pile's item stacks fall individually — a boss dropping a dozen items bursts the first few, not all of them. */
+const DROP_MAX_ITEM_PIECES = 3;
+/** Frames between one piece launching and the next, within one burst. */
+const DROP_PIECE_STAGGER_FRAMES = 4;
+/** The up-and-over arc: how long it takes, and how high it peaks. */
+const DROP_ARC_FRAMES = 16;
+const DROP_ARC_HEIGHT_PX = 26;
+/** The small settle bounce once a piece first touches ground. */
+const DROP_BOUNCE_FRAMES = 10;
+const DROP_BOUNCE_HEIGHT_PX = 6;
+/** A readable pause once every piece has settled, before the pile becomes collectable. */
+const DROP_SETTLE_BEAT_FRAMES = 10;
+/** How far from the pile's centre a piece can scatter before landing, at most. */
+const DROP_SCATTER_RADIUS_FRACTION = 0.35;
+const DROP_SCATTER_RADIUS_PX = TILE_SIZE * DROP_SCATTER_RADIUS_FRACTION;
+/** Shrinking fractions of the scatter radius tried in turn until one lands on walkable ground. */
+const DROP_SCATTER_SCALE_FULL = 1;
+const DROP_SCATTER_SCALE_MEDIUM = 0.6;
+const DROP_SCATTER_SCALE_SMALL = 0.3;
+const DROP_SCATTER_SCALE_NONE = 0;
+const DROP_SCATTER_FALLBACK_SCALES = [
+  DROP_SCATTER_SCALE_FULL,
+  DROP_SCATTER_SCALE_MEDIUM,
+  DROP_SCATTER_SCALE_SMALL,
+  DROP_SCATTER_SCALE_NONE,
+] as const;
+const DROP_ITEM_ICON_SIZE = 18;
+const DROP_SHADOW_COLOR = 'rgba(0,0,0,0.35)';
+const DROP_SHADOW_RX = 6;
+const DROP_SHADOW_RY = 2.5;
+/** The shadow shrinks toward this fraction of its size at the top of the arc. */
+const DROP_SHADOW_MIN_SCALE = 0.5;
+/** Parabola `t(1-t)` peaks at a quarter, so this scales it to peak at exactly the named height. */
+const DROP_ARC_PARABOLA_SCALE = 4;
+
+/** Width in characters of one `#rrggbb` colour channel. */
+const HEX_CHANNEL_WIDTH = 2;
+/** Base for parsing a hex colour channel. */
+const HEX_RADIX = 16;
+
+/** `#rrggbb` plus an alpha, for a glow whose color is picked at runtime (owner gold vs. blue). */
+function withAlpha(hexColor: string, alpha: number): string {
+  const channel = (index: number): number =>
+    parseInt(
+      hexColor.slice(1 + index * HEX_CHANNEL_WIDTH, 1 + (index + 1) * HEX_CHANNEL_WIDTH),
+      HEX_RADIX,
+    );
+  return `rgba(${channel(0)},${channel(1)},${channel(2)},${alpha})`;
+}
+
+/**
+ * One coin or item bursting out of a kill/break and falling to its landed
+ * spot. Purely a visual — what it pays out is already decided by the pile
+ * it belongs to; this only describes the trip there.
+ */
+interface DropPiece {
+  readonly kind: 'coin' | 'item';
+  readonly itemId?: ItemId;
+  /** Offset from the pile's (x, y) once landed, already clamped to walkable ground. */
+  readonly landX: number;
+  readonly landY: number;
+  /** Frames after the pile spawns before this piece starts moving — staggers a burst. */
+  readonly startDelay: number;
+}
+
 export interface PendingLoot {
   x: number;
   y: number;
@@ -111,6 +216,10 @@ export interface PendingLoot {
    * that pays one player nothing.
    */
   sharedCoins?: boolean;
+  /** Set only while the pile is still falling; `render` reads this instead of the landed pile art. */
+  dropPieces?: DropPiece[];
+  /** How many frames the whole fall (stagger + arc + bounce + settle beat) takes; `pickupDelay` counts down from this. */
+  dropTotalFrames?: number;
 }
 
 export interface FloorItem {
@@ -128,8 +237,13 @@ export interface LootCheckpoint {
 /**
  * `owner` stays a bare reference — it identifies which player the pile pays,
  * and copying the Player would hand the credit to a detached clone.
+ *
+ * @param landed Finalises an in-flight drop animation to its landed state
+ *   instead of copying it verbatim — for `restoreCheckpoint`, where a pile
+ *   captured mid-fall must come back as an ordinary collectable pile rather
+ *   than resuming a fall whose timing no longer means anything.
  */
-function clonePendingLoot(pile: PendingLoot): PendingLoot {
+function clonePendingLoot(pile: PendingLoot, landed = false): PendingLoot {
   return {
     x: pile.x,
     y: pile.y,
@@ -137,10 +251,12 @@ function clonePendingLoot(pile: PendingLoot): PendingLoot {
     owner: pile.owner,
     collected: pile.collected,
     ttl: pile.ttl,
-    pickupDelay: pile.pickupDelay,
+    pickupDelay: landed ? 0 : pile.pickupDelay,
     droppedByPlayer: pile.droppedByPlayer,
     isBossLoot: pile.isBossLoot,
     sharedCoins: pile.sharedCoins,
+    dropPieces: landed ? undefined : pile.dropPieces?.map((p) => ({ ...p })),
+    dropTotalFrames: landed ? undefined : pile.dropTotalFrames,
   };
 }
 
@@ -155,6 +271,14 @@ export class LootSystem implements GameSystem {
   readonly floorItems: FloorItem[] = [];
   private _itemPickupsThisFrame = 0;
   private _coinPickupsThisFrame = 0;
+
+  /**
+   * Fired the moment a pile is actually credited, so the scene can fly its
+   * coins and items to the HUD from the pile's own world position. Not fired
+   * for a `sweepUncollected` payout — there is nowhere on the ground left to
+   * fly from once the party has already left the room.
+   */
+  onCredited: ((loot: PendingLoot) => void) | null = null;
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -173,6 +297,11 @@ export class LootSystem implements GameSystem {
     return drained;
   }
 
+  /**
+   * @param animateDrop Whether this pile came from a kill or a break, and so
+   *   must fall and land before it can be collected. Chest and quest rewards
+   *   (no body to fall from) pass `false` and appear already settled.
+   */
   addLoot(
     x: number,
     y: number,
@@ -180,7 +309,10 @@ export class LootSystem implements GameSystem {
     owner: HumanPlayer | CatPlayer,
     isBossLoot = false,
     sharedCoins = false,
+    animateDrop = false,
   ): void {
+    const dropPieces = animateDrop ? this.buildDropPieces(x, y, loot) : [];
+    const dropTotalFrames = this.dropAnimationFrames(dropPieces);
     this.pendingLoots.push({
       x,
       y,
@@ -188,10 +320,81 @@ export class LootSystem implements GameSystem {
       owner,
       collected: false,
       ttl: LOOT_DEFAULT_TTL,
-      pickupDelay: 0,
+      pickupDelay: dropTotalFrames,
       isBossLoot,
       sharedCoins,
+      dropPieces: dropPieces.length > 0 ? dropPieces : undefined,
+      dropTotalFrames: dropTotalFrames > 0 ? dropTotalFrames : undefined,
     });
+  }
+
+  /** Total frames a burst takes: its latest piece's own stagger plus the fall, bounce and settle beat. */
+  private dropAnimationFrames(pieces: ReadonlyArray<DropPiece>): number {
+    if (pieces.length === 0) return 0;
+    const maxStartDelay = pieces.reduce((max, p) => Math.max(max, p.startDelay), 0);
+    return maxStartDelay + DROP_ARC_FRAMES + DROP_BOUNCE_FRAMES + DROP_SETTLE_BEAT_FRAMES;
+  }
+
+  /**
+   * One falling piece per handful of coins and per item stack (capped), each
+   * scattered to a nearby walkable landing spot so a burst doesn't read as a
+   * single object multiplied.
+   */
+  private buildDropPieces(x: number, y: number, loot: LootDrop): DropPiece[] {
+    const pieces: DropPiece[] = [];
+    let pieceIndex = 0;
+
+    if (loot.coins > 0) {
+      const count = Math.min(
+        DROP_MAX_COIN_PIECES,
+        Math.max(DROP_MIN_COIN_PIECES, Math.round(loot.coins / DROP_COINS_PER_PIECE)),
+      );
+      for (let i = 0; i < count; i++) {
+        const land = this.scatterLandingSpot(x, y);
+        pieces.push({
+          kind: 'coin',
+          landX: land.x,
+          landY: land.y,
+          startDelay: pieceIndex * DROP_PIECE_STAGGER_FRAMES,
+        });
+        pieceIndex++;
+      }
+    }
+
+    for (const item of loot.items.slice(0, DROP_MAX_ITEM_PIECES)) {
+      const land = this.scatterLandingSpot(x, y);
+      pieces.push({
+        kind: 'item',
+        itemId: item.id,
+        landX: land.x,
+        landY: land.y,
+        startDelay: pieceIndex * DROP_PIECE_STAGGER_FRAMES,
+      });
+      pieceIndex++;
+    }
+
+    return pieces;
+  }
+
+  /**
+   * A random offset from `(x, y)` within {@link DROP_SCATTER_RADIUS_PX}, shrunk
+   * toward the centre until it lands on walkable ground — `(x, y)` itself is
+   * always tried last and is assumed walkable, since it's already a resolved
+   * death or drop position.
+   */
+  private scatterLandingSpot(x: number, y: number): { x: number; y: number } {
+    const angle = Math.random() * Math.PI * 2;
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    for (const scale of DROP_SCATTER_FALLBACK_SCALES) {
+      const offsetX = dirX * DROP_SCATTER_RADIUS_PX * scale;
+      const offsetY = dirY * DROP_SCATTER_RADIUS_PX * scale;
+      if (scale === 0) return { x: offsetX, y: offsetY };
+      const tileX = Math.floor((x + offsetX) / TILE_SIZE);
+      const tileY = Math.floor((y + offsetY) / TILE_SIZE);
+      if (this.gameMap.isWalkable(tileX, tileY)) return { x: offsetX, y: offsetY };
+    }
+    return { x: 0, y: 0 };
   }
 
   addPlayerDrop(
@@ -237,6 +440,7 @@ export class LootSystem implements GameSystem {
     // gets its pickup cue too, not just the walk-over one.
     if (loot.loot.coins > 0) this._coinPickupsThisFrame++;
     if (loot.loot.items.length > 0) this._itemPickupsThisFrame++;
+    this.onCredited?.(loot);
   }
 
   /**
@@ -367,6 +571,9 @@ export class LootSystem implements GameSystem {
     inactive: HumanPlayer | CatPlayer,
   ): boolean {
     for (const loot of this.pendingLoots) {
+      // Still falling — nothing is drawn to click on yet, and letting a click
+      // reach through to `creditLoot` here would collect it before it lands.
+      if (loot.pickupDelay > 0) continue;
       const dist = Math.hypot(active.x + HALF_TILE - loot.x, active.y + HALF_TILE - loot.y);
       if (dist > LOOT_CLICK_RANGE_TILES * TILE_SIZE) continue;
 
@@ -391,15 +598,21 @@ export class LootSystem implements GameSystem {
       const sx = loot.x - camX;
       const sy = loot.y - camY;
 
-      const fullLabel = this.lootLabel(loot, active);
-
       ctx.save();
 
       if (!loot.isBossLoot && !loot.droppedByPlayer && loot.ttl < LOOT_FADE_START_FRAMES) {
         ctx.globalAlpha = Math.max(LOOT_MIN_ALPHA, loot.ttl / LOOT_FADE_START_FRAMES);
       }
 
-      const { bx, by, bw, bh } = this.labelBox(loot, fullLabel, camX, camY);
+      // Still falling: the burst is most of the show. No label, no glow, no
+      // pile art — none of that is true yet, and `pickupDelay` already
+      // refuses collection until it lands, so nothing here needs to invite a
+      // click. Boss loot keeps its sparkle running underneath regardless —
+      // it's decoration, not an invitation to collect.
+      const isFalling = loot.pickupDelay > 0 && (loot.dropPieces?.length ?? 0) > 0;
+      if (isFalling) {
+        this.renderDropPieces(ctx, loot, sx, sy);
+      }
 
       if (loot.isBossLoot) {
         const t = performance.now() / BOSS_LOOT_TIME_DIVISOR;
@@ -459,26 +672,75 @@ export class LootSystem implements GameSystem {
         ctx.globalAlpha = 1;
       }
 
-      ctx.fillStyle = 'rgba(15,23,42,0.85)';
-      ctx.fillRect(bx, by, bw, bh);
-      ctx.strokeStyle = loot.isBossLoot ? '#ffd700' : loot.owner === active ? '#fbbf24' : '#60a5fa';
-      ctx.lineWidth = loot.isBossLoot ? 2 : 1;
-      ctx.strokeRect(bx, by, bw, bh);
+      if (isFalling) {
+        ctx.restore();
+        continue;
+      }
 
-      ctx.fillStyle = loot.isBossLoot ? '#ffd700' : loot.owner === active ? '#fbbf24' : '#60a5fa';
-      ctx.beginPath();
-      ctx.arc(bx + LOOT_DOT_RADIUS * 2, by + bh / 2, LOOT_DOT_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-
-      drawText(ctx, fullLabel, {
-        x: bx + LOOT_LABEL_TEXT_OFFSET_X,
-        y: by + bh / 2 - LOOT_LABEL_TEXT_OFFSET_Y,
-        size: LOOT_LABEL_FONT_SIZE,
-        color: loot.isBossLoot ? '#fff8dc' : loot.owner === active ? '#fde68a' : '#93c5fd',
-      });
-
+      const fullLabel = this.lootLabel(loot, active);
+      const ownColor = loot.isBossLoot ? '#ffd700' : loot.owner === active ? '#fbbf24' : '#60a5fa';
       const dist = Math.hypot(active.x + HALF_TILE - loot.x, active.y + HALF_TILE - loot.y);
-      if (dist <= LOOT_CLICK_RANGE_TILES * TILE_SIZE) {
+      const isNear = dist <= LOOT_CLICK_RANGE_TILES * TILE_SIZE;
+
+      // A per-pile phase, seeded off its own position, keeps a room's worth of
+      // loot from bobbing and shining in lockstep.
+      const phase = (loot.x * LOOT_PHASE_SEED_X + loot.y * LOOT_PHASE_SEED_Y) % (Math.PI * 2);
+      const t = performance.now() / LOOT_BOB_TIME_DIVISOR;
+      const bobY = Math.sin(t * LOOT_BOB_SPEED + phase) * LOOT_BOB_AMPLITUDE_PX;
+      const iconY = sy + bobY;
+
+      if (!loot.isBossLoot) {
+        drawRadialGlow(
+          ctx,
+          sx,
+          iconY,
+          LOOT_GLOW_RADIUS,
+          [
+            { offset: 0, color: withAlpha(ownColor, LOOT_GLOW_INNER_ALPHA) },
+            { offset: 1, color: withAlpha(ownColor, 0) },
+          ],
+          LOOT_GLOW_CORE_FRACTION,
+        );
+      }
+
+      this.renderContents(ctx, loot, sx, iconY);
+
+      // A soft diagonal sweep of light crosses the pile every few seconds,
+      // rather than a constant sparkle, so a room full of loot doesn't shimmer
+      // uniformly all the time.
+      const sweepT = ((t * LOOT_SWEEP_SPEED + phase) % LOOT_SWEEP_PERIOD) / LOOT_SWEEP_PERIOD;
+      if (sweepT < LOOT_SWEEP_ACTIVE_FRACTION) {
+        const sweepAlpha =
+          Math.sin((sweepT / LOOT_SWEEP_ACTIVE_FRACTION) * Math.PI) * LOOT_SWEEP_MAX_ALPHA;
+        ctx.save();
+        ctx.globalAlpha *= sweepAlpha;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(sx, iconY, LOOT_SWEEP_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      if (isNear) {
+        const { bx, by, bw, bh } = this.labelBox(loot, fullLabel, camX, camY);
+        ctx.fillStyle = 'rgba(15,23,42,0.85)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeStyle = ownColor;
+        ctx.lineWidth = loot.isBossLoot ? 2 : 1;
+        ctx.strokeRect(bx, by, bw, bh);
+
+        ctx.fillStyle = ownColor;
+        ctx.beginPath();
+        ctx.arc(bx + LOOT_DOT_RADIUS * 2, by + bh / 2, LOOT_DOT_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+
+        drawText(ctx, fullLabel, {
+          x: bx + LOOT_LABEL_TEXT_OFFSET_X,
+          y: by + bh / 2 - LOOT_LABEL_TEXT_OFFSET_Y,
+          size: LOOT_LABEL_FONT_SIZE,
+          color: loot.isBossLoot ? '#fff8dc' : loot.owner === active ? '#fde68a' : '#93c5fd',
+        });
+
         drawText(ctx, '[click]', {
           x: sx,
           y: by - LOOT_CLICK_HINT_ABOVE_PX,
@@ -492,9 +754,154 @@ export class LootSystem implements GameSystem {
     }
   }
 
+  /**
+   * The pile's actual contents on the ground: a small coin heap when it holds
+   * coins, and the first item's icon (with a "+N" badge for the rest) when it
+   * holds items. Both can show at once for a mixed pile.
+   */
+  private renderContents(
+    ctx: CanvasRenderingContext2D,
+    loot: PendingLoot,
+    cx: number,
+    cy: number,
+  ): void {
+    const hasCoins = loot.loot.coins > 0;
+    const hasItems = loot.loot.items.length > 0;
+    const coinCx = hasItems ? cx - LOOT_CONTENT_SPACING / 2 : cx;
+    const itemCx = hasCoins ? cx + LOOT_CONTENT_SPACING / 2 : cx;
+
+    if (hasCoins) this.renderCoinPile(ctx, coinCx, cy);
+
+    if (hasItems) {
+      const first = loot.loot.items[0];
+      const size = LOOT_ITEM_ICON_SIZE;
+      drawItemIcon(
+        ctx,
+        { ...ITEM_DEF[first.id], quantity: first.quantity },
+        itemCx - size / 2,
+        cy - size / 2,
+        size,
+      );
+      if (loot.loot.items.length > 1) {
+        drawText(ctx, `+${loot.loot.items.length - 1}`, {
+          x: itemCx + size / 2,
+          y: cy + size / 2 - LOOT_EXTRA_ITEMS_BADGE_OFFSET,
+          size: LOOT_EXTRA_ITEMS_BADGE_SIZE,
+          bold: true,
+          color: '#e2e8f0',
+          outline: true,
+        });
+      }
+    }
+  }
+
+  /** A handful of overlapping coin discs, standing in for the pile's actual count. */
+  private renderCoinPile(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    const positions: ReadonlyArray<[number, number]> = [
+      [0, LOOT_COIN_RADIUS * LOOT_COIN_PILE_FRONT_Y_SHARE],
+      [
+        -LOOT_COIN_RADIUS * LOOT_COIN_PILE_SIDE_X_SHARE,
+        -LOOT_COIN_RADIUS * LOOT_COIN_PILE_SIDE_Y_SHARE,
+      ],
+      [
+        LOOT_COIN_RADIUS * LOOT_COIN_PILE_SIDE_X_SHARE,
+        -LOOT_COIN_RADIUS * LOOT_COIN_PILE_BACK_Y_SHARE,
+      ],
+    ];
+    for (const [dx, dy] of positions) this.drawSingleCoin(ctx, cx + dx, cy + dy);
+  }
+
+  private drawSingleCoin(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    ctx.fillStyle = '#facc15';
+    ctx.strokeStyle = '#b45309';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, LOOT_COIN_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  /**
+   * A pile's burst of falling pieces: each arcs from the pile's centre out to
+   * its landing spot, bounces once, then sits still for the settle beat.
+   * World-space throughout, so the whole burst pans and lands with the camera
+   * exactly where the pile itself will end up.
+   */
+  private renderDropPieces(
+    ctx: CanvasRenderingContext2D,
+    loot: PendingLoot,
+    originX: number,
+    originY: number,
+  ): void {
+    const pieces = loot.dropPieces;
+    const total = loot.dropTotalFrames;
+    if (!pieces || total === undefined) return;
+    const elapsed = total - loot.pickupDelay;
+
+    for (const piece of pieces) {
+      const pieceElapsed = elapsed - piece.startDelay;
+      if (pieceElapsed < 0) continue; // Not launched yet.
+
+      let groundX: number;
+      let groundY: number;
+      let height: number;
+      if (pieceElapsed < DROP_ARC_FRAMES) {
+        const t = pieceElapsed / DROP_ARC_FRAMES;
+        groundX = piece.landX * t;
+        groundY = piece.landY * t;
+        height = DROP_ARC_HEIGHT_PX * DROP_ARC_PARABOLA_SCALE * t * (1 - t);
+      } else if (pieceElapsed < DROP_ARC_FRAMES + DROP_BOUNCE_FRAMES) {
+        const t = (pieceElapsed - DROP_ARC_FRAMES) / DROP_BOUNCE_FRAMES;
+        groundX = piece.landX;
+        groundY = piece.landY;
+        height = DROP_BOUNCE_HEIGHT_PX * DROP_ARC_PARABOLA_SCALE * t * (1 - t);
+      } else {
+        groundX = piece.landX;
+        groundY = piece.landY;
+        height = 0;
+      }
+
+      const px = originX + groundX;
+      const py = originY + groundY;
+
+      // The shadow lives on the ground plane regardless of height, and
+      // shrinks while the piece is airborne so the two read as connected.
+      const airFraction = Math.min(1, height / DROP_ARC_HEIGHT_PX);
+      const shadowScale = 1 - airFraction * (1 - DROP_SHADOW_MIN_SCALE);
+      ctx.save();
+      ctx.fillStyle = DROP_SHADOW_COLOR;
+      ctx.beginPath();
+      ctx.ellipse(
+        px,
+        py,
+        DROP_SHADOW_RX * shadowScale,
+        DROP_SHADOW_RY * shadowScale,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.restore();
+
+      const drawY = py - height;
+      if (piece.kind === 'coin') {
+        this.drawSingleCoin(ctx, px, drawY);
+      } else if (piece.itemId !== undefined) {
+        const size = DROP_ITEM_ICON_SIZE;
+        drawItemIcon(
+          ctx,
+          { ...ITEM_DEF[piece.itemId], quantity: 1 },
+          px - size / 2,
+          drawY - size / 2,
+          size,
+        );
+      }
+    }
+  }
+
   captureCheckpoint(): LootCheckpoint {
     return {
-      pendingLoots: this.pendingLoots.map(clonePendingLoot),
+      pendingLoots: this.pendingLoots.map((pile) => clonePendingLoot(pile)),
       floorItems: this.floorItems.map(cloneFloorItem),
     };
   }
@@ -505,7 +912,11 @@ export class LootSystem implements GameSystem {
    * bank the loot and then kill the same mob again.
    */
   restoreCheckpoint(snapshot: LootCheckpoint): void {
-    this.pendingLoots = snapshot.pendingLoots.map(clonePendingLoot);
+    // Landed rather than replayed: a checkpoint can be captured mid-fall and
+    // restored long after, when the animation's own timing no longer means
+    // anything. Coming back as an ordinary settled pile is instant, safe, and
+    // loses nothing the checkpoint owes the player.
+    this.pendingLoots = snapshot.pendingLoots.map((pile) => clonePendingLoot(pile, true));
     // `floorItems` is a public readonly array other code may already hold, so
     // it is emptied and refilled rather than reassigned.
     this.floorItems.length = 0;

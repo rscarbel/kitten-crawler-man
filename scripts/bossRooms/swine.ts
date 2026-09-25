@@ -20,14 +20,18 @@ import {
 import { approachLaneTiles, spawnClearTiles } from '../../src/systems/bossRooms/bossRoomLayout.js';
 import {
   FIGHT_SEEDS,
+  checkConcourseConnectivity,
   checkPaintAgreement,
   checkRewinds,
+  checkRimPaintAgreement,
   measureFights,
   minutesOf,
   reportConcourse,
+  reportConcourseConnectivity,
   reportMud,
   reportPaint,
   reportRim,
+  reportRimPaintAgreement,
   rollThroughMud,
   simulateConcourseWalks,
   simulateMudEscapes,
@@ -127,6 +131,8 @@ export const swineRoom: BossRoomHarness = {
     simulationsRun = true;
     reportRim(report, simulateRimSlide(env.gameMap), simulateTusklingCharges(env.gameMap));
     reportConcourse(report, simulateConcourseWalks(env.gameMap));
+    reportConcourseConnectivity(report, checkConcourseConnectivity(env.gameMap));
+    reportRimPaintAgreement(report, checkRimPaintAgreement(env.gameMap));
     reportMud(report, simulateMudEscapes(env.gameMap));
     const roll = rollThroughMud(env.gameMap);
     report.note(

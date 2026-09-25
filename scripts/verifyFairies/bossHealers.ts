@@ -399,6 +399,7 @@ function arenaRun(
     const bossRoom = new BossRoomSystem(
       map,
       undrawnMiniMap,
+      new EventBus(),
       (level2.bossRooms ?? []).map((rule) => rule.type),
     );
     const getMobs = (): Mob[] => roster.mobs;
@@ -1015,9 +1016,9 @@ class HealerBlindBossRoom extends BossRoomSystem {
 
 type BossRoomFactory = (map: GameMap, bossTypes: string[]) => BossRoomSystem;
 const realBossRoom: BossRoomFactory = (map, bossTypes) =>
-  new BossRoomSystem(map, undrawnMiniMap, bossTypes);
+  new BossRoomSystem(map, undrawnMiniMap, new EventBus(), bossTypes);
 const healerBlindBossRoom: BossRoomFactory = (map, bossTypes) =>
-  new HealerBlindBossRoom(map, undrawnMiniMap, bossTypes);
+  new HealerBlindBossRoom(map, undrawnMiniMap, new EventBus(), bossTypes);
 
 /** How one boss room behaved with its boss dead and its bound healer alive, then dead. */
 interface RoomSeal {
@@ -1199,15 +1200,36 @@ class UnleashedHealingFairy extends HealingFairy {
 }
 
 /**
- * A healer at `bound`'s tile and level that no boss is bonded to, put in its
- * place in `roster`: the defect under test in the chase negatives.
+ * The same unleashed stand-in, plus confinement itself switched off: the
+ * defect under test in the "confinement disabled" negative — a boss-room or
+ * arena healer must be held to its room by something, and this proves it is
+ * the confinement mechanism doing that work, not some other coincidence (the
+ * ordinary leash is already broken by {@link UnleashedHealingFairy} alone).
  */
-function swapForUnboundHealer(
+class UnconfinedHealingFairy extends UnleashedHealingFairy {
+  override get respectsConfinement(): boolean {
+    return false;
+  }
+}
+
+/** Which stand-in `swapForHealerVariant` puts in a bonded healer's place. */
+type HealerVariant = 'bound' | 'unbound' | 'unconfined';
+
+/**
+ * A healer at `bound`'s tile and level, standing in for it in `roster` per
+ * `variant`: unchanged for `'bound'`, or the defect under test for the other
+ * two — a healer no boss is bonded to, and one with confinement itself
+ * switched off besides.
+ */
+function swapForHealerVariant(
   bound: HealingFairy,
   map: GameMap,
   roster: MobRoster,
+  variant: HealerVariant,
 ): HealingFairy | null {
-  const stray = new UnleashedHealingFairy(
+  if (variant === 'bound') return bound;
+  const StandIn = variant === 'unbound' ? UnleashedHealingFairy : UnconfinedHealingFairy;
+  const stray = new StandIn(
     Math.floor(bound.x / TILE_SIZE),
     Math.floor(bound.y / TILE_SIZE),
     TILE_SIZE,
@@ -1268,14 +1290,14 @@ function chaseHealer(scene: {
 
 /**
  * Every boss room of a hard floor in turn: the party walks in, the boss is
- * killed, and a crawler chases the boss's healer — or, with `unbound`, an
- * unbonded healer put in its place — round the room.
+ * killed, and a crawler chases the boss's healer — or, per `variant`, a
+ * stand-in for one of the defects under test — round the room.
  */
 function bossRoomChases(
   def: LevelDef,
   partyLevel: number,
   seed: number,
-  unbound: boolean,
+  variant: HealerVariant,
 ): HealerChase[] {
   return underDifficulty(HEALER_DIFFICULTY, seed, () => {
     const floor = buildFloor(def, HEALER_DIFFICULTY, partyLevel, seed);
@@ -1295,7 +1317,7 @@ function bossRoomChases(
       if (state === undefined || boss === null || bound === undefined) {
         return unstagedChase(rule.type);
       }
-      const healer = unbound ? swapForUnboundHealer(bound, floor.map, roster) : bound;
+      const healer = swapForHealerVariant(bound, floor.map, roster, variant);
       if (healer === null) return unstagedChase(rule.type);
       const { bounds } = state;
       const party = partyAt(
@@ -1315,7 +1337,7 @@ function bossRoomChases(
         updateFight: () => bossRoom.update(ctx),
         holds: (chased) => bossRoom.isEntityInRoom(chased, bounds),
         bossFell: boss.hp <= 0,
-        crawlerPaceFraction: unbound ? STRAY_CHASE_PACE_FRACTION : 1,
+        crawlerPaceFraction: variant === 'bound' ? 1 : STRAY_CHASE_PACE_FRACTION,
       });
       // A room left sealed on its living healer would hold on to this party's
       // crawlers as insiders and pull the next room's party back into it.
@@ -1353,9 +1375,10 @@ function moveToDoorside(
 /**
  * The arena on hard: the door locks and the Swine's healer arrives, the Swine
  * falls and every Tuskling it sheds is killed, and a crawler chases the healer
- * — or, with `unbound`, an unbonded healer put in its place — round the ring.
+ * — or, per `variant`, a stand-in for one of the defects under test — round
+ * the ring.
  */
-function arenaChase(seed: number, unbound: boolean): HealerChase {
+function arenaChase(seed: number, variant: HealerVariant): HealerChase {
   return underDifficulty(HEALER_DIFFICULTY, seed, () => {
     const map = buildDungeon(level2, seed);
     const profile = DIFFICULTY_PROFILES[HEALER_DIFFICULTY];
@@ -1406,7 +1429,7 @@ function arenaChase(seed: number, unbound: boolean): HealerChase {
       if (mob instanceof Tuskling) mob.takeDamageFrom(OVERKILL_DAMAGE, party.human);
     }
     moveToDoorside(bound, exterior, roster);
-    const healer = unbound ? swapForUnboundHealer(bound, map, roster) : bound;
+    const healer = swapForHealerVariant(bound, map, roster, variant);
     if (healer === null) return unstagedChase(SWINE_BOSS_TYPE);
     return chaseHealer({
       name: SWINE_BOSS_TYPE,
@@ -1417,7 +1440,7 @@ function arenaChase(seed: number, unbound: boolean): HealerChase {
       updateFight: () => arena.update(ctx),
       holds: (chased) => arena.isInsideArena(chased),
       bossFell: !bos.isAlive,
-      crawlerPaceFraction: unbound ? STRAY_CHASE_PACE_FRACTION : 1,
+      crawlerPaceFraction: variant === 'bound' ? 1 : STRAY_CHASE_PACE_FRACTION,
     });
   });
 }
@@ -1433,18 +1456,32 @@ function describeChase(chase: HealerChase): string {
 const heldThroughChase = (chase: HealerChase): boolean =>
   chase.staged && chase.framesOutside === 0 && chase.framesFleeing === 0;
 
+/**
+ * Every boss room and the arena, each run three ways: the healer the fight
+ * actually spawned, an otherwise-identical healer with no bond to the boss,
+ * and that same unbonded healer with confinement itself switched off besides.
+ * A boss room belongs to whoever stands in it, bond or no bond — so the first
+ * two must both stay; the third exists only to prove the first two staying is
+ * the confinement mechanism's doing, by breaking it in isolation and watching
+ * the gate go red.
+ */
 function checkHealerStaysInFight(report: FairyGateReport, seed: number): void {
-  const pairs: [HealerChase, HealerChase | undefined][] = [];
+  const pairs: [HealerChase, HealerChase | undefined, HealerChase | undefined][] = [];
   for (const [def, partyLevel] of [
     [level1, FLOOR1_PARTY_LEVEL],
     [level2, FLOOR2_PARTY_LEVEL],
   ] as const) {
-    const chases = bossRoomChases(def, partyLevel, seed, false);
-    const strays = bossRoomChases(def, partyLevel, seed, true);
-    chases.forEach((chase, index) => pairs.push([chase, strays[index]]));
+    const chases = bossRoomChases(def, partyLevel, seed, 'bound');
+    const strays = bossRoomChases(def, partyLevel, seed, 'unbound');
+    const broken = bossRoomChases(def, partyLevel, seed, 'unconfined');
+    chases.forEach((chase, index) => pairs.push([chase, strays[index], broken[index]]));
   }
-  pairs.push([arenaChase(seed, false), arenaChase(seed, true)]);
-  for (const [chase, stray] of pairs) {
+  pairs.push([
+    arenaChase(seed, 'bound'),
+    arenaChase(seed, 'unbound'),
+    arenaChase(seed, 'unconfined'),
+  ]);
+  for (const [chase, stray, broken] of pairs) {
     report.check(
       heldThroughChase(chase),
       `hard: ${chase.name}'s healer, its boss dead and a crawler chasing it, never leaves the fight or runs for another room`,
@@ -1455,10 +1492,20 @@ function checkHealerStaysInFight(report: FairyGateReport, seed: number): void {
       `the unbonded healer at ${chase.name}'s fight is chased with the boss dead, and lives`,
       stray === undefined ? 'no run' : describeChase(stray),
     );
-    report.checkCatches(
+    report.check(
       stray !== undefined && heldThroughChase(stray),
-      `an unbonded healer in the same spot at ${chase.name}'s fight is caught leaving it`,
+      `hard: an unbonded healer in the same spot at ${chase.name}'s fight also never leaves the fight or runs for another room`,
       stray === undefined ? 'no run' : describeChase(stray),
+    );
+    report.precondition(
+      broken?.staged === true,
+      `an unconfined healer at ${chase.name}'s fight is chased with the boss dead, and lives`,
+      broken === undefined ? 'no run' : describeChase(broken),
+    );
+    report.checkCatches(
+      broken !== undefined && heldThroughChase(broken),
+      `an unconfined healer in the same spot at ${chase.name}'s fight is caught leaving it`,
+      broken === undefined ? 'no run' : describeChase(broken),
     );
   }
 }

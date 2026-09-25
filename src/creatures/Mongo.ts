@@ -12,6 +12,7 @@ import {
   prewarmMongoCombat,
   prewarmMongoWalk,
   type MongoAction,
+  type MongoStage,
 } from '../sprites/mongoSprite';
 import {
   MONGO_BITE_FRAMES,
@@ -434,6 +435,16 @@ export class Mongo extends Mob {
   recallArrived = false;
   /** Counts down through the despawn fade once the recall has arrived. */
   fadeFrames = 0;
+  /** The row queued to play once the happy-jump one-shot finishes; see {@link celebratePet}. */
+  private pendingPetChain: MongoAction | null = null;
+
+  /**
+   * While collapsing or recalling he is running a straight line home and must
+   * not be shoved off it by, or shove aside, the mobs he is retreating through.
+   */
+  override get ignoresMobCollision(): boolean {
+    return this.collapsing || this.recalling;
+  }
 
   constructor(
     tileX: number,
@@ -569,6 +580,43 @@ export class Mongo extends Mob {
     this.damageFlash = GROWTH_FLASH_FRAMES;
   }
 
+  /**
+   * Whether a pet press would do anything right now — idle, not mid-blow, not
+   * retreating or despawning. `MongoSystem` gates the room/overworld safety
+   * checks on top of this; this is only what the creature itself can accept.
+   */
+  get acceptsPet(): boolean {
+    return (
+      !this.exhausted &&
+      !this.collapsing &&
+      !this.recalling &&
+      !this.recallArrived &&
+      !this.animator.isPlaying &&
+      this.target === null
+    );
+  }
+
+  /** Plays the happy jump, then the flap once it lands. Caller checks {@link acceptsPet} first. */
+  celebratePet(): void {
+    if (!this.acceptsPet) return;
+    this.isMoving = false;
+    this.pendingPetChain = 'flap';
+    this.animator.play('happy_jump');
+  }
+
+  /** His current growth stage, for anything outside this file that draws or measures him. */
+  get stage(): MongoStage {
+    return this.stats.stage;
+  }
+
+  /** World-space point over his head, where the pet hearts and the "Pet" prompt anchor. */
+  headAnchor(): { x: number; y: number } {
+    return {
+      x: this.x + TILE_SIZE * CENTER_OFFSET,
+      y: this.y - TILE_SIZE * MONGO_HEAD_CLEARANCE_TILES[this.stats.stage],
+    };
+  }
+
   /** Begin the collapse one-shot; the recall run starts when it finishes. */
   beginCollapse(): void {
     if (this.collapsing || this.recalling) return;
@@ -621,6 +669,15 @@ export class Mongo extends Mob {
     if (this.pounceCooldown > 0) this.pounceCooldown--;
     this.animator.tick();
     this.resolvePendingBlow();
+
+    // The happy jump lands and the flap takes over — one continuous celebration
+    // out of two one-shot rows, chained rather than authored as a single longer
+    // row so each half can be reused (a future gesture could play just the flap).
+    if (!this.animator.isPlaying && this.pendingPetChain !== null) {
+      const next = this.pendingPetChain;
+      this.pendingPetChain = null;
+      this.animator.play(next);
+    }
 
     if (this.recallArrived) {
       this.isMoving = false;

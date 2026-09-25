@@ -10,8 +10,6 @@ import { mordecaiAndBedTiles } from '../map/safeRoomFixtures';
 import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
-import type { HumanPlayer } from '../creatures/HumanPlayer';
-import type { CatPlayer } from '../creatures/CatPlayer';
 import {
   drawMordecaiForLevel,
   mordecaiHeadTop,
@@ -32,7 +30,7 @@ import {
 import type { InteriorFigure } from '../core/InteriorFigure';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt, interactionPromptTop } from '../ui/InteractionPrompt';
-import { randomFromArray, clamp, frameTime } from '../utils';
+import { randomFromArray, frameTime } from '../utils';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { DialogBox } from '../ui/DialogBox';
 import type { AudioManager } from '../audio/AudioManager';
@@ -109,11 +107,6 @@ function propTilesOfType(
     .map((prop) => ({ x: prop.x, y: prop.y }));
 }
 
-/** The safe room's only piece of run progress: whether the current sleep has already healed. */
-export interface SafeRoomCheckpoint {
-  sleepHealed: boolean;
-}
-
 export class SafeRoomSystem implements GameSystem {
   private readonly entries: SafeRoomEntry[];
 
@@ -157,13 +150,6 @@ export class SafeRoomSystem implements GameSystem {
   private _hasBeenInSafeRoom = false;
   private markerSource: MordecaiMarkerSource | null = null;
   private readonly _dialogBox: DialogBox | null;
-  private _isSleeping = false;
-  private sleepTimer = 0;
-  private sleepHealed = false;
-
-  private readonly SLEEP_TOTAL = 150;
-  private readonly SLEEP_FADEIN = 30;
-  private readonly SLEEP_HOLD = 90;
 
   // Magic number constants
   /**
@@ -190,12 +176,10 @@ export class SafeRoomSystem implements GameSystem {
     SafeRoomSystem.MORDECAI_NEAR_DISTANCE * SafeRoomSystem.MORDECAI_WALK_AWAY_MULTIPLE;
   private static readonly BED_NEAR_DISTANCE = 1.8;
   private static readonly MARKER_GAP_PX = 3;
-  private static readonly SLEEP_HEAL_TRIGGER = 5;
   /** Reach and strength of one standing lantern's pool of light. */
   private static readonly LANTERN_LIGHT_RADIUS_TILES = 3.2;
   private static readonly LANTERN_LIGHT_ALPHA = 0.16;
   private static readonly LANTERN_LIGHT_COLOR = '255,204,128';
-  private static readonly SLEEP_FRAMES_DEDUCTED = 10800;
   private static readonly BANNER_TEXT_SIZE = 10;
   private static readonly BANNER_TILE_Y_OFFSET = -1;
   private static readonly BANNER_Y_BASELINE_OFFSET = 0.65;
@@ -204,10 +188,6 @@ export class SafeRoomSystem implements GameSystem {
   private static readonly HUD_BANNER_Y_OFFSET = 18;
   private static readonly HUD_BANNER_TEXT_TOP_OFFSET = 10;
   private static readonly HUD_BANNER_ALPHA = 0.85;
-  private static readonly SLEEP_TEXT_Y_OFFSET = 10;
-  private static readonly SLEEP_TEXT_TOP_OFFSET = 21;
-  private static readonly ZZZ_Y_OFFSET = 18;
-  private static readonly ZZZ_TEXT_TOP_OFFSET = 11;
 
   /**
    * Free-running frame counter. Drives the bed's rested pulse and the two
@@ -303,10 +283,6 @@ export class SafeRoomSystem implements GameSystem {
 
   setMarkerSource(source: MordecaiMarkerSource): void {
     this.markerSource = source;
-  }
-
-  get isSleeping(): boolean {
-    return this._isSleeping;
   }
 
   get mordecaiDialogOpen(): boolean {
@@ -536,10 +512,7 @@ export class SafeRoomSystem implements GameSystem {
     );
   }
 
-  isNearBed(entity: { x: number; y: number }): boolean {
-    return this.entries.some((e) => this.isNearThisBed(e, entity));
-  }
-
+  /** Whether the bed's rested pulse should animate — purely cosmetic, no gameplay hangs off it. */
   private isNearThisBed(entry: SafeRoomEntry, entity: { x: number; y: number }): boolean {
     if (!entry.showBed) return false;
     const bx = entry.bedTileX * TILE_SIZE;
@@ -579,55 +552,6 @@ export class SafeRoomSystem implements GameSystem {
         }
       }
     }
-  }
-
-  /**
-   * Snapshots the sleep-heal latch.
-   *
-   * The latch is genuinely per *sleep*, not per visit: `startSleep` clears it
-   * unconditionally, so its value at any moment outside a sleep says nothing
-   * about what the next one will do. That is what makes this safe to rewind —
-   * capture happens on safe-room entry, when nobody is asleep, so the value
-   * stored is a leftover from the last completed sleep, and restoring it cannot
-   * hand the player a second free heal: a death followed by another sleep runs
-   * `startSleep` again and the latch is cleared there whatever this wrote.
-   *
-   * Captured all the same rather than skipped, so that if the latch ever becomes
-   * the once-per-visit thing its name suggests, the rewind is already correct
-   * instead of silently letting a player farm full health by dying in bed.
-   */
-  captureCheckpoint(): SafeRoomCheckpoint {
-    return { sleepHealed: this.sleepHealed };
-  }
-
-  restoreCheckpoint(snapshot: SafeRoomCheckpoint): void {
-    this.sleepHealed = snapshot.sleepHealed;
-  }
-
-  startSleep(): void {
-    this._isSleeping = true;
-    this.sleepTimer = this.SLEEP_TOTAL;
-    this.sleepHealed = false;
-  }
-
-  /** Returns frames to deduct from the level timer when sleep ends (10800), else 0. */
-  updateSleep(human: HumanPlayer, cat: CatPlayer): number {
-    this.sleepTimer--;
-
-    if (
-      !this.sleepHealed &&
-      this.sleepTimer <= this.SLEEP_HOLD + this.SLEEP_FADEIN - SafeRoomSystem.SLEEP_HEAL_TRIGGER
-    ) {
-      human.hp = human.maxHp;
-      cat.hp = cat.maxHp;
-      this.sleepHealed = true;
-    }
-
-    if (this.sleepTimer <= 0) {
-      this._isSleeping = false;
-      return SafeRoomSystem.SLEEP_FRAMES_DEDUCTED; // 3 minutes at 60 fps
-    }
-    return 0;
   }
 
   renderObjects(
@@ -749,14 +673,13 @@ export class SafeRoomSystem implements GameSystem {
   }
 
   /**
-   * Safe-room HUD: the room banner, plus the `Sleep` / `Talk` world prompts.
+   * Safe-room HUD: the room banner, plus the `Talk` world prompt.
    *
-   * `suppressWorldPrompt` exists because a safe room now holds three things worth
-   * pressing Space at — the bed, Mordecai, and the Bopca's counter — and in a
-   * small room two of them can be in range at once. The Bopca has first claim on
-   * Space, so the scene silences this system's prompt when the counter is in
-   * reach; without it the player saw two `Talk` prompts and only one of them did
-   * anything.
+   * `suppressWorldPrompt` exists because a safe room now holds two things worth
+   * pressing Space at — Mordecai and the Bopca's counter — and in a small room
+   * both can be in range at once. The Bopca has first claim on Space, so the
+   * scene silences this system's prompt when the counter is in reach; without it
+   * the player saw two `Talk` prompts and only one of them did anything.
    */
   renderUI(
     ctx: CanvasRenderingContext2D,
@@ -768,19 +691,6 @@ export class SafeRoomSystem implements GameSystem {
     // Guards the prompt loop only — the HUD banner below it still draws when the
     // Bopca's counter has claimed Space.
     for (const e of suppressWorldPrompt ? [] : this.entries) {
-      // Sleep prompt near bed
-      if (
-        e.showBed &&
-        this.isEntityInSafeRoom(active) &&
-        this.isNearBed(active) &&
-        !this._isSleeping
-      ) {
-        const bsx = e.bedTileX * TILE_SIZE - camX;
-        const bsy = e.bedTileY * TILE_SIZE - camY;
-        drawInteractionPrompt(ctx, bsx, bsy, TILE_SIZE, 'Sleep');
-        break; // only prompt for the first nearby bed
-      }
-
       // Talk prompt near Mordecai
       const wander = e.wanderer.state;
       const mx = wander.x - camX;
@@ -856,51 +766,5 @@ export class SafeRoomSystem implements GameSystem {
 
   renderMordecaiDialog(ctx: CanvasRenderingContext2D): void {
     this._dialogBox?.render(ctx);
-  }
-
-  renderSleepOverlay(ctx: CanvasRenderingContext2D): void {
-    const t = this.sleepTimer;
-    const fadeIn = this.SLEEP_FADEIN;
-    const hold = this.SLEEP_HOLD;
-
-    let alpha: number;
-    if (t > hold + fadeIn) {
-      alpha = 1 - (t - hold - fadeIn) / fadeIn;
-    } else if (t > fadeIn) {
-      alpha = 1;
-    } else {
-      alpha = t / fadeIn;
-    }
-
-    ctx.save();
-    ctx.globalAlpha = clamp(alpha, 0, 1);
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
-    ctx.restore();
-
-    if (t > fadeIn && t <= hold + fadeIn) {
-      // "Sleeping..." size=26, old baseline = canvas.height/2 - 10
-      // top = (canvas.height/2 - 10) - round(26*0.8) = (canvas.height/2 - 10) - 21
-      drawText(ctx, 'Sleeping...', {
-        x: viewportWidth() / 2,
-        y:
-          viewportHeight() / 2 -
-          SafeRoomSystem.SLEEP_TEXT_Y_OFFSET -
-          SafeRoomSystem.SLEEP_TEXT_TOP_OFFSET,
-        size: 26,
-        bold: true,
-        color: '#e2e8f0',
-        align: 'center',
-      });
-      // "zZz" size=14, old baseline = canvas.height/2 + 18
-      // top = (canvas.height/2 + 18) - round(14*0.8) = (canvas.height/2 + 18) - 11
-      drawText(ctx, 'zZz', {
-        x: viewportWidth() / 2,
-        y: viewportHeight() / 2 + SafeRoomSystem.ZZZ_Y_OFFSET - SafeRoomSystem.ZZZ_TEXT_TOP_OFFSET,
-        size: 14,
-        color: '#94a3b8',
-        align: 'center',
-      });
-    }
   }
 }

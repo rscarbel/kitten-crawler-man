@@ -27,6 +27,7 @@ import type { ResidentId } from './townResidents';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { TILE_SIZE } from '../core/constants';
 import { QUEST_SLOT_IDX } from '../core/ItemDefs';
+import type { ItemId } from '../core/ItemDefs';
 import {
   BOOKSHELF,
   BROKEN_BOOKSHELF,
@@ -137,6 +138,10 @@ export class AnchorInteriorSystem {
 
   /** Vermin this visit put in the nave, pruned as they die. */
   private vermin: ShrineVermin[] = [];
+
+  /** Fired whenever a wood-board pickup or a shard is actually handed over — for a fly-to-bag effect. */
+  onItemGranted: ((id: ItemId, quantity: number, worldX: number, worldY: number) => void) | null =
+    null;
 
   private constructor(
     private readonly buildingName: string,
@@ -378,6 +383,7 @@ export class AnchorInteriorSystem {
       // it. Left for the other crawler, or the pile itself, to try instead.
       if (this.questSlotBlocksBoards(crawler)) continue;
       crawler.inventory.addItem('quest_wood_board', BOARDS_PER_PICKUP);
+      this.onItemGranted?.('quest_wood_board', BOARDS_PER_PICKUP, crawler.x, crawler.y);
       this.woodPileAvailable = false;
       this.woodPileRespawnTimer = WOOD_PILE_RESPAWN_FRAMES;
       this.audio?.play('picking_up_ground_object');
@@ -668,6 +674,7 @@ export class AnchorInteriorSystem {
       return false;
     }
     taker.inventory.addItem(shardId, 1);
+    this.onItemGranted?.(shardId, 1, taker.x, taker.y);
     this.audio?.play('pickup_1');
     return true;
   }

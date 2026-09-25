@@ -948,6 +948,16 @@ export abstract class Mob extends Player {
   isFlying = false;
 
   /**
+   * True while a mob should be excluded from the ground separation pass, both
+   * as pusher and as pushed — a companion mid-collapse or mid-recall that
+   * needs to close on its owner in a straight line rather than being shoved
+   * around whatever it is running past.
+   */
+  get ignoresMobCollision(): boolean {
+    return false;
+  }
+
+  /**
    * Opt-in for mobs that swing and threaten but can never actually hurt anyone —
    * the tutorial's goblins. Gated here rather than by zeroing `attackDamage`,
    * because subclasses re-read their damage from a weapon table on every swing.
@@ -1358,6 +1368,17 @@ export abstract class Mob extends Player {
    */
   get isHostile(): boolean {
     return this.allegiance === 'hostile';
+  }
+
+  /**
+   * Whether this mob's presence should be treated as an unfinished fight by
+   * room membership checks (the safe-descent gate, a chest's lock, Mongo's pet
+   * button). Defaults to alive-and-hostile; a subclass overrides it when a
+   * mob shouldn't hold a room "in combat" on its own. See `countsTowardRoomClear`
+   * in `creatures/roomClear.ts`, the shared entry point every such check uses.
+   */
+  get countsTowardRoomClear(): boolean {
+    return this.isAlive && this.isHostile;
   }
 
   /** The crawler who converted this mob, or null for one that was never turned. */
@@ -2614,9 +2635,16 @@ export abstract class Mob extends Player {
       if (this.tryGuardBlow(amount, attacker, striker, damageType)) return;
     }
     const scaled = this.scaleIncomingDamage(amount);
+    const wasHeldInvulnerable = this.isHeldInvulnerable;
     // Wards on either side soak a struck blow: a hireling's Shield on Mongo, or
     // overheal on a hostile — and a shield fairy's ward stops it outright.
     const unabsorbed = this.soakWithWards(scaled);
+    // Counted the moment the ward is reached at all, blocked outright or only
+    // blunted (easy mode's `Resist`): either way the crawler just watched a
+    // hit not do its job, which is the thing the explainer bark answers.
+    if (wasHeldInvulnerable && scaled > 0 && attacker !== null && !(attacker instanceof Mob)) {
+      attacker.noteWardBlockedHit();
+    }
     if (unabsorbed <= 0 && scaled > 0) return;
     const prev = this.hp;
     this.hp = Math.max(0, this.hp - unabsorbed);
@@ -2634,6 +2662,25 @@ export abstract class Mob extends Player {
       }
     }
     if (this.hp === 0 && prev > 0) this._resolveDeath(attacker, damageType);
+  }
+
+  /**
+   * Ends this mob's life outright, for an effect that is a verdict rather than
+   * a blow — a shield fairy's crushing ward closing on a vespa. Skips every
+   * door a blow goes through (`scaleIncomingDamage`, wards, `refusesDamage`):
+   * those all exist to answer "how much of this damage gets through", and this
+   * carries no damage number to scale down or absorb in the first place. Still
+   * runs the one path that matters afterward — `_resolveDeath` sets `justDied`,
+   * which is what `resolveKills` reads to remove the mob from the mob grid,
+   * play its death and (were there a ledger) pay out a kill; with `attacker`
+   * null here there is no ledger, so no XP or coin credit is possible. A no-op
+   * on a mob already dead, so a kill that lands twice in one frame cannot fire
+   * `_resolveDeath` twice.
+   */
+  killOutright(): void {
+    if (!this.isAlive) return;
+    this.hp = 0;
+    this._resolveDeath(null, null);
   }
 
   /**

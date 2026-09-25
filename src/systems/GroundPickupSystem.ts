@@ -171,6 +171,10 @@ export class GroundPickupSystem {
   private pickedUpThisFrame = false;
   private refusedThisFrame = false;
 
+  /** Fired once per item id collected in a single press, for a fly-to-bag effect. */
+  onCollected: ((itemId: ItemId, quantity: number, worldX: number, worldY: number) => void) | null =
+    null;
+
   /**
    * @param random Source of scatter directions and distances. Injectable so a
    *   gate can make a scatter repeatable.
@@ -329,6 +333,7 @@ export class GroundPickupSystem {
       playPickupGesture(player, nearest);
       for (const [itemId, count] of countByItem) {
         player.queueFloatingText(`+${count} ${ITEM_DEF[itemId].name}`, 'buff');
+        this.onCollected?.(itemId, count, player.x, player.y);
       }
       this.pickedUpThisFrame = true;
     }

@@ -104,7 +104,7 @@ Both abilities level independently through gameplay, unlocking new perks at each
 
 ### Buildings & Interiors
 
-Walk up to a building door in the overworld to enter. Interiors include houses, a tower, and a restaurant that doubles as a safe room with Mordecai the NPC, a bed for sleeping, and a shop (potions, dynamite, fog scrolls).
+Walk up to a building door in the overworld to enter. Interiors include houses, a tower, and a restaurant that doubles as a safe room with Mordecai the NPC and a shop (potions, dynamite, fog scrolls).
 
 ### Quests
 
@@ -159,7 +159,7 @@ src/
 │   ├── PlayerTickSystem.ts    ← status effect ticks, HP regen
 │   ├── MobUpdateLoop.ts       ← mob AI update and pathfinding
 │   ├── MiniMapSystem.ts       ← fog of war, corpse markers
-│   ├── SafeRoomSystem.ts      ← rest, sleep, Mordecai NPC
+│   ├── SafeRoomSystem.ts      ← save point, Mordecai NPC
 │   ├── BossRoomSystem.ts      ← boss room state, cockroach spawning
 │   ├── ArenaSystem.ts         ← Ball of Swine arena encounters
 │   ├── DynamiteSystem.ts      ← charge, throw, bounce, explode

@@ -36,6 +36,7 @@ import {
 } from '../sprites/questNPCSprite';
 import { drawText } from '../ui/TextBox';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
+import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import {
   BUILD_KNEEL_ROWS,
@@ -67,6 +68,12 @@ const BUILD_FRAMES = BUILD_SECONDS * FRAMES_PER_SECOND;
  */
 const CAT_BUILD_TIME_MULTIPLIER = 3;
 const BARRIER_MAX_HP = 36;
+/** Distinct from the quest-marker green (`#4ade80`), so the two beacons never read as the same objective. */
+const GRATE_NEEDS_WORK_BEACON_COLOR = '#fb923c';
+const GRATE_NEEDS_WORK_OUTLINE_PULSE_PERIOD_MS = 900;
+const GRATE_NEEDS_WORK_OUTLINE_MIN_ALPHA = 0.35;
+const GRATE_NEEDS_WORK_OUTLINE_MAX_ALPHA = 0.85;
+const GRATE_NEEDS_WORK_OUTLINE_LINE_WIDTH = 3;
 const SPAWN_INTERVAL_MIN = 180; // 3 seconds
 const SPAWN_INTERVAL_MAX = 300; // 5 seconds
 const ENTRANCE_SPAWN_CHANCE = 0.15;
@@ -407,6 +414,9 @@ export class DefendQuestSystem implements GameSystem {
   private completeOverlayTimer = 0;
   private failOverlayTimer = 0;
   private xpFloatTimer = 0;
+  /** What the completion banner reads off, filled in by {@link triggerQuestComplete}. */
+  private completionXpApplied = 0;
+  private completionCrawlerName = '';
 
   private dialogButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> = [];
 
@@ -707,6 +717,32 @@ export class DefendQuestSystem implements GameSystem {
       return true;
     }
     return false;
+  }
+
+  /** True when a grate has no barrier yet, or its barrier is below full HP. */
+  private grateNeedsWork(grateIdx: number): boolean {
+    const existing = this.barriers.find((b) => b.grateIdx === grateIdx);
+    return !existing || existing.hp < existing.maxHp;
+  }
+
+  /** A pulsing outline around a grate tile that still needs a barrier built or repaired. */
+  private renderGrateNeedsWorkHighlight(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    nowMs: number,
+  ): void {
+    const pulseSpan = GRATE_NEEDS_WORK_OUTLINE_MAX_ALPHA - GRATE_NEEDS_WORK_OUTLINE_MIN_ALPHA;
+    const pulse =
+      GRATE_NEEDS_WORK_OUTLINE_MIN_ALPHA +
+      (pulseSpan / 2) *
+        (1 + Math.sin((nowMs / GRATE_NEEDS_WORK_OUTLINE_PULSE_PERIOD_MS) * Math.PI * 2));
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = GRATE_NEEDS_WORK_BEACON_COLOR;
+    ctx.lineWidth = GRATE_NEEDS_WORK_OUTLINE_LINE_WIDTH;
+    ctx.strokeRect(sx, sy, TILE_SIZE, TILE_SIZE);
+    ctx.restore();
   }
 
   /** Try to build or repair a wood barrier. The cat can, at {@link CAT_BUILD_TIME_MULTIPLIER} the cost. */
@@ -1316,7 +1352,8 @@ export class DefendQuestSystem implements GameSystem {
 
     const def = this.questManager.getDef(DEFEND_QUEST_ID);
     if (!def) return;
-    awardXp(active, def.rewards.xp, this.bus);
+    this.completionXpApplied = awardXp(active, def.rewards.xp, this.bus);
+    this.completionCrawlerName = active instanceof CatPlayer ? 'Donut' : 'Carl';
     this.xpFloatTimer = XP_FLOAT_FRAMES;
 
     this.bus.emit('questCompleted', { questId: DEFEND_QUEST_ID });
@@ -1394,10 +1431,28 @@ export class DefendQuestSystem implements GameSystem {
   ): void {
     if (this.phase === 'inactive') return;
 
-    if (this.woodPileAvailable && this.roomData) {
-      const wpx = this.roomData.woodPileTile.x * TILE_SIZE - camX;
-      const wpy = this.roomData.woodPileTile.y * TILE_SIZE - camY;
-      drawWoodPileSprite(ctx, wpx, wpy, TILE_SIZE);
+    if (this.roomData) {
+      const anyGrateNeedsWork = this.roomData.grateTiles.some((_, gi) => this.grateNeedsWork(gi));
+      const hasEnoughWood =
+        (activeCrawler?.inventory.countOf('quest_wood_board') ?? 0) >= BOARDS_PER_BUILD;
+
+      if (this.woodPileAvailable) {
+        const wpx = this.roomData.woodPileTile.x * TILE_SIZE - camX;
+        const wpy = this.roomData.woodPileTile.y * TILE_SIZE - camY;
+        drawWoodPileSprite(ctx, wpx, wpy, TILE_SIZE, anyGrateNeedsWork && !hasEnoughWood);
+      }
+
+      if (anyGrateNeedsWork && hasEnoughWood) {
+        const nowMs = performance.now();
+        for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
+          if (!this.grateNeedsWork(gi)) continue;
+          const g = this.roomData.grateTiles[gi];
+          const gx = g.x * TILE_SIZE - camX;
+          const gy = g.y * TILE_SIZE - camY;
+          this.renderGrateNeedsWorkHighlight(ctx, gx, gy, nowMs);
+          drawObjectiveBeacon(ctx, gx, gy, TILE_SIZE, GRATE_NEEDS_WORK_BEACON_COLOR, nowMs);
+        }
+      }
     }
 
     for (const b of this.barriers) {
@@ -1809,7 +1864,11 @@ export class DefendQuestSystem implements GameSystem {
       align: 'center',
       alpha,
     });
-    drawText(ctx, '+500 EXP', {
+    const rewardXpLabel =
+      this.completionCrawlerName === ''
+        ? `+${this.completionXpApplied.toLocaleString()} EXP`
+        : `${this.completionCrawlerName} +${this.completionXpApplied.toLocaleString()} EXP`;
+    drawText(ctx, rewardXpLabel, {
       x: cw / 2,
       y: ch / 2 + OVERLAY_REWARD_1_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
       size: OVERLAY_REWARD_SIZE,
@@ -1817,7 +1876,8 @@ export class DefendQuestSystem implements GameSystem {
       align: 'center',
       alpha,
     });
-    drawText(ctx, '+50 Gold', {
+    const rewardCoins = this.questManager.getDef(DEFEND_QUEST_ID)?.rewards.coins ?? 0;
+    drawText(ctx, `+${rewardCoins} Gold`, {
       x: cw / 2,
       y: ch / 2 + OVERLAY_REWARD_2_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
       size: OVERLAY_REWARD_SIZE,
@@ -1833,7 +1893,7 @@ export class DefendQuestSystem implements GameSystem {
       align: 'center',
       alpha,
     });
-    drawText(ctx, 'Click to dismiss', {
+    drawText(ctx, 'Space or click to dismiss', {
       x: cw / 2,
       y: ch / 2 + OVERLAY_DISMISS_Y_OFFSET - OVERLAY_DISMISS_ASCENT,
       size: OVERLAY_DISMISS_SIZE,
@@ -1878,7 +1938,7 @@ export class DefendQuestSystem implements GameSystem {
       glow: '#ef4444',
       glowBlur: 15,
     });
-    drawText(ctx, 'Click to dismiss', {
+    drawText(ctx, 'Space or click to dismiss', {
       x: cw / 2,
       y: ch / 2 + OVERLAY_FAIL_DISMISS_Y_OFFSET - OVERLAY_DISMISS_ASCENT,
       size: OVERLAY_DISMISS_SIZE,

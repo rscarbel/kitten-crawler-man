@@ -75,6 +75,16 @@ export const ARENA_CONCOURSE_LINK_INNER_DX = ARENA_CONCOURSE_LINK_OUTER_DX - 1;
 export const ARENA_ANTECHAMBER_MIN_WIDTH = ARENA_CONCOURSE_LINK_OUTER_DX * 2 + 1;
 
 /**
+ * Least depth the antechamber may be, south of the door row.
+ *
+ * Shared with the rim's walkability fix (`colosseumGeometry.ts`): a synthetic,
+ * seed-independent model of the antechamber's guaranteed floor — never wider or
+ * deeper than this in the worst case — is what that fix walks to work out which
+ * concourse tiles near the two links the ring genuinely needs kept open.
+ */
+export const ARENA_ANTECHAMBER_MIN_DEPTH = 8;
+
+/**
  * Radius of the walkable interior — the floor the fight happens on.
  *
  * Shared rather than re-derived, because the boss caroms off a circle of this radius

@@ -9,10 +9,13 @@ import {
   COLOSSEUM_DOOR_OPENING,
   COLOSSEUM_FOOTING_RADIUS_TILES,
   COLOSSEUM_OUTER_RADIUS_TILES,
+  COLOSSEUM_OUTER_SHADOW_DEPTH_TILES,
+  COLOSSEUM_RIM_PAINT_REACH_TILES,
   COLOSSEUM_SAND_RADIUS_TILES,
   colosseumCapInnerRadius,
   colosseumCapOuterRadius,
   colosseumLayoutAt,
+  colosseumRimForcedWalkable,
   type ColosseumLayout,
   type ColosseumSpectatorSeat,
 } from './colosseumGeometry';
@@ -1030,12 +1033,13 @@ function drawThreshold(ctx: CanvasRenderingContext2D, frame: CellFrame): void {
 // ── The concourse's edge ────────────────────────────────────────────────────
 
 /** The iron's shadow thrown onto the concourse, deepest right at its foot. */
-const OUTER_SHADOW_DEPTH_TILES = 0.55;
 const OUTER_SHADOW_ALPHA = 0.5;
 
 function drawOuterShadow(ctx: CanvasRenderingContext2D, frame: CellFrame): void {
   const outer = COLOSSEUM_OUTER_RADIUS_TILES;
-  if (frame.farRadius < outer || frame.nearRadius > outer + OUTER_SHADOW_DEPTH_TILES) return;
+  if (frame.farRadius < outer || frame.nearRadius > outer + COLOSSEUM_OUTER_SHADOW_DEPTH_TILES) {
+    return;
+  }
   ctx.save();
   clipAwayDoorway(ctx);
   traceBand(
@@ -1043,9 +1047,16 @@ function drawOuterShadow(ctx: CanvasRenderingContext2D, frame: CellFrame): void 
     frame.angleFrom,
     frame.angleTo,
     () => outer,
-    () => outer + OUTER_SHADOW_DEPTH_TILES,
+    () => outer + COLOSSEUM_OUTER_SHADOW_DEPTH_TILES,
   );
-  const shade = ctx.createRadialGradient(0, 0, outer, 0, 0, outer + OUTER_SHADOW_DEPTH_TILES);
+  const shade = ctx.createRadialGradient(
+    0,
+    0,
+    outer,
+    0,
+    0,
+    outer + COLOSSEUM_OUTER_SHADOW_DEPTH_TILES,
+  );
   shade.addColorStop(0, `rgba(0,0,0,${OUTER_SHADOW_ALPHA})`);
   shade.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = shade;
@@ -1377,10 +1388,15 @@ export function drawColosseumRim(
   const layout = colosseumLayoutAt(structure, tx, ty);
   if (layout === null) return false;
   const frame = cellFrame(layout, tx, ty);
-  const reach = COLOSSEUM_OUTER_RADIUS_TILES + OUTER_SHADOW_DEPTH_TILES;
-  if (frame.nearRadius > reach) return false;
+  if (frame.nearRadius > COLOSSEUM_RIM_PAINT_REACH_TILES) return false;
+  // Walkability keeps a handful of rim-covered tiles open near the two flank
+  // links (see `colosseumRimForcedWalkable`) — the ring would be severed
+  // otherwise. Paint has to agree exactly: iron over ground a crawler can
+  // stand on reads as a collision bug, not decoration.
+  const paintsIron = !colosseumRimForcedWalkable(tx - layout.centreTileX, ty - layout.centreTileY);
   inArenaFrame(ctx, frame, sx, sy, ts, () => {
     drawThreshold(ctx, frame);
+    if (!paintsIron) return;
     drawIron(ctx, frame);
     drawOuterShadow(ctx, frame);
     drawCrowd(ctx, frame);

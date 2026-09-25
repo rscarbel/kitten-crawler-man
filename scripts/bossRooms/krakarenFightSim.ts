@@ -13,6 +13,7 @@
  * of a run, and the floor comes from a world seed.
  */
 
+import { EventBus } from '../../src/core/EventBus.js';
 import { TILE_SIZE } from '../../src/core/constants.js';
 import { referenceStats } from '../../src/core/referenceCrawler.js';
 import { KrakarenClone } from '../../src/creatures/KrakarenClone.js';
@@ -150,6 +151,7 @@ function runSeededFight(options: RunOptions): FightMetrics {
       EXPANDED_SIZE: MINIMAP_EXPANDED_SIZE,
       NORMAL_SIZE: MINIMAP_NORMAL_SIZE,
     },
+    new EventBus(),
     bossTypes,
   );
   bossRoom.fightListener = dressings;

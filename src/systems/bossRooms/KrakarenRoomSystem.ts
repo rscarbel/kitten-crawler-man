@@ -117,6 +117,21 @@ const JUNCTION_DEAD_SOUND: SoundId = 'powering_off';
 /** Cues left undrained past this are dropped, so a scene with no audio cannot grow the list. */
 const MAX_PENDING_SOUNDS = 8;
 
+/**
+ * Machinery cues sit under the fight's real sounds — a spark is background
+ * texture, a vat burst or a dead junction box is a one-off event worth hearing
+ * over it.
+ */
+const SPARK_SOUND_VOLUME = 0.25;
+const BURST_SOUND_VOLUME = 0.5;
+const JUNCTION_DEAD_SOUND_VOLUME = 0.5;
+
+/**
+ * Two live puddles can enter their sparking phase within a few frames of each
+ * other, which would otherwise stack the same buzz on top of itself.
+ */
+const SPARK_SOUND_MIN_GAP_FRAMES = 20;
+
 /** How near a painted grate a guard tentacle must come up to be brought up through it, in tiles. */
 const DRAIN_SNAP_REACH_TILES = 1.5;
 /**
@@ -218,7 +233,9 @@ export class KrakarenRoomSystem
   private cat: CatPlayer | null = null;
   private readonly entities: DressingRenderable[] = [];
   /** Sounds raised this frame, for the scene to play: systems never play audio themselves. */
-  private readonly soundCues: SoundId[] = [];
+  private readonly soundCues: Array<{ id: SoundId; volume: number }> = [];
+  /** Frames left before another spark buzz may be queued; see {@link SPARK_SOUND_MIN_GAP_FRAMES}. */
+  private sparkSoundCooldown = 0;
   private readonly pristine: KrakarenRoomCheckpoint;
   /** Water tiles still to paint ahead of need; see `buildWaterPrewarm`. */
   private waterPrewarm: WaterPrewarmJob[];
@@ -330,6 +347,7 @@ export class KrakarenRoomSystem
   override update(ctx: SystemContext): void {
     this.prewarmWater();
     if (this.soundCues.length > MAX_PENDING_SOUNDS) this.soundCues.length = 0;
+    if (this.sparkSoundCooldown > 0) this.sparkSoundCooldown--;
     this.human = ctx.human;
     this.cat = ctx.cat;
     this.boss = this.findBoss(ctx);
@@ -412,7 +430,7 @@ export class KrakarenRoomSystem
     vat.phase = 'bursting';
     vat.timer = 0;
     this.setVatStage(index, VAT_STAGE_BURSTING);
-    this.soundCues.push(BURST_SOUND);
+    this.soundCues.push({ id: BURST_SOUND, volume: BURST_SOUND_VOLUME });
     const slot = this.layout.vats[index];
     for (const player of this.crawlers()) {
       if (isInBurstZone(slot, player.x + TILE_SIZE * HALF, player.y + TILE_SIZE * HALF, 0)) {
@@ -572,7 +590,10 @@ export class KrakarenRoomSystem
           if (this.slamLockOverlaps(puddle, wire)) return;
           wire.phase = 'sparking';
           wire.timer = LIVE_WIRE_SPARK_FRAMES;
-          this.soundCues.push(SPARK_SOUND);
+          if (this.sparkSoundCooldown <= 0) {
+            this.soundCues.push({ id: SPARK_SOUND, volume: SPARK_SOUND_VOLUME });
+            this.sparkSoundCooldown = SPARK_SOUND_MIN_GAP_FRAMES;
+          }
           return;
         case 'sparking':
           // A slam locked onto this water calls the cycle off: an arc must
@@ -651,7 +672,7 @@ export class KrakarenRoomSystem
         wire.junctionHits++;
         if (wire.junctionHits < JUNCTION_BOX_HITS) return;
         wire.phase = 'idle';
-        this.soundCues.push(JUNCTION_DEAD_SOUND);
+        this.soundCues.push({ id: JUNCTION_DEAD_SOUND, volume: JUNCTION_DEAD_SOUND_VOLUME });
       });
     }
   }
@@ -1014,7 +1035,7 @@ export class KrakarenRoomSystem
   }
 
   /** The sounds the room raised since the last call, emptied as they are handed over. */
-  drainSoundCues(): SoundId[] {
+  drainSoundCues(): Array<{ id: SoundId; volume: number }> {
     const cues = this.soundCues.slice();
     this.soundCues.length = 0;
     return cues;

@@ -78,7 +78,7 @@ export function drawQuestCompleteOverlay(
     glow: '#4ade80',
     glowBlur: OVERLAY_GLOW_BLUR,
   });
-  drawText(ctx, 'Click to dismiss', {
+  drawText(ctx, 'Space or click to dismiss', {
     x: viewportWidth() / 2,
     y: viewportHeight() / 2 + OVERLAY_DISMISS_Y_OFFSET,
     size: OVERLAY_DISMISS_SIZE,

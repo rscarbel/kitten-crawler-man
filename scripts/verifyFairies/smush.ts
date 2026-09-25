@@ -10,7 +10,7 @@ import type { FloatingTextStyle } from '../../src/core/FloatingText';
 import type { Mob } from '../../src/creatures/Mob';
 import { CombatKit } from '../../src/systems/kits/CombatKit';
 import { FloatingCombatTextSystem } from '../../src/systems/FloatingCombatTextSystem';
-import { SMUSH_DODGE_LABEL } from '../../src/systems/CombatSystem';
+import { SMUSH_IMMUNE_LABEL } from '../../src/systems/CombatSystem';
 import type { FairyGateReport } from './report';
 import { buildStage, placeOnTile, withDodgesOff, type Stage } from './stage';
 
@@ -62,7 +62,7 @@ function spared(mob: Mob, before: BodySnapshot): boolean {
 }
 
 function showsDodge(mob: Mob): boolean {
-  return mob.pendingFloatingText.some((request) => request.text === SMUSH_DODGE_LABEL);
+  return mob.pendingFloatingText.some((request) => request.text === SMUSH_IMMUNE_LABEL);
 }
 
 function describe(mob: Mob, before: BodySnapshot): string {
@@ -127,7 +127,7 @@ function checkEveryKind(report: FairyGateReport): void {
     );
     report.check(
       showsDodge(fairy),
-      `${kind}: a "${SMUSH_DODGE_LABEL}" label is raised over the fairy`,
+      `${kind}: a "${SMUSH_IMMUNE_LABEL}" label is raised over the fairy`,
     );
     report.checkCatches(
       spared(goblin, goblinBefore) && showsDodge(goblin),

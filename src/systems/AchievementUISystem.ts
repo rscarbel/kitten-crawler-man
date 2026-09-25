@@ -16,7 +16,9 @@ import type { AudioManager } from '../audio/AudioManager';
 import { isItemId } from '../core/ItemDefs';
 import { drawText } from '../ui/TextBox';
 import { achievementChipRect } from './DungeonUIRenderer';
-import { viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { ITEM_DEF } from '../core/ItemDefs';
+import type { RewardFlySystem } from './RewardFlySystem';
 
 interface QueueEntry {
   def: AchievementDef;
@@ -54,9 +56,11 @@ export class AchievementUISystem {
     private readonly catAchievements: AchievementManager,
     private readonly human: HumanPlayer,
     private readonly cat: CatPlayer,
+    private readonly rewardFly: RewardFlySystem,
     private readonly audio: AudioManager | null = null,
   ) {
     this.achievementNotif.audio = audio;
+    this.lootBoxOpener.setAudio(audio);
   }
 
   /** True when a blocking overlay (notification or loot box opener) is active. */
@@ -104,6 +108,7 @@ export class AchievementUISystem {
     if (shown) {
       const idx = shown.mgr.pendingNotifications.indexOf(shown.def);
       if (idx >= 0) shown.mgr.pendingNotifications.splice(idx, 1);
+      shown.mgr.clearMenuUnseenOne();
     }
     if (this._notifQueue.length > 0) {
       this.achievementNotif.reset();
@@ -201,22 +206,57 @@ export class AchievementUISystem {
     if (boxes.length === 0) return;
     onClose();
     const playerName = player === 'human' ? 'Human' : 'Cat';
+    // Held for this player's whole reveal sequence: every box's coins/items
+    // queue up and fly together once the opener actually closes, rather than
+    // streaming in behind the cards while they're still being read. Passed
+    // explicitly to every enqueue call below so a chest or another system's
+    // overlapping hold can never end up owning this queue.
+    const flyHold = this.rewardFly.hold();
+    const origin = { x: viewportWidth() / 2, y: viewportHeight() / 2 };
     this.lootBoxOpener.startQueue(
       boxes,
       playerName,
       (box) => this.contentsFor(box),
       (box, contents) => {
         mgr.openBox(box.id);
-        if (contents.potions) target.inventory.addItem('health_potion', contents.potions);
-        target.earnCoins(contents.coins);
+        if (contents.potions) {
+          target.inventory.addItem('health_potion', contents.potions);
+          this.rewardFly.enqueueItem(
+            'health_potion',
+            ITEM_DEF.health_potion.name,
+            origin.x,
+            origin.y,
+            flyHold,
+          );
+        }
+        if (contents.coins > 0) {
+          target.earnCoins(contents.coins);
+          this.rewardFly.enqueueCoins(contents.coins, origin.x, origin.y, flyHold);
+        }
         if (contents.bonus && isItemId(contents.bonus.id)) {
           this.human.inventory.addItem(contents.bonus.id, contents.bonus.quantity);
+          this.rewardFly.enqueueItem(
+            contents.bonus.id,
+            ITEM_DEF[contents.bonus.id].name,
+            origin.x,
+            origin.y,
+            flyHold,
+          );
         }
         for (const reward of contents.itemRewards ?? []) {
-          this.grantItemReward(target, reward.id, reward.quantity);
+          if (this.grantItemReward(target, reward.id, reward.quantity)) {
+            this.rewardFly.enqueueItem(
+              reward.id,
+              ITEM_DEF[reward.id].name,
+              origin.x,
+              origin.y,
+              flyHold,
+            );
+          }
         }
       },
       () => {
+        this.rewardFly.release(flyHold);
         const otherPlayer = player === 'human' ? 'cat' : 'human';
         const otherMgr = player === 'human' ? this.catAchievements : this.humanAchievements;
         if (otherMgr.pendingBoxes.length > 0) {
@@ -245,12 +285,14 @@ export class AchievementUISystem {
     return { ...base, itemRewards: itemRewards.map((reward) => ({ ...reward })) };
   }
 
-  private grantItemReward(target: HumanPlayer | CatPlayer, id: ItemId, quantity: number): void {
+  /** @returns whether the item actually landed in the bag, rather than overflowing to the ground. */
+  private grantItemReward(target: HumanPlayer | CatPlayer, id: ItemId, quantity: number): boolean {
     if (target.inventory.hasRoomFor(id)) {
       target.inventory.addItem(id, quantity);
-      return;
+      return true;
     }
     this.onRewardOverflow?.(target, id, quantity);
+    return false;
   }
 
   // ── Rendering ──

@@ -46,6 +46,7 @@ import type { GroundPickupSystem } from './GroundPickupSystem';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
 import type { MercenarySystem } from './MercenarySystem';
+import type { CrawlerBarkSystem } from './CrawlerBarkSystem';
 import type { PlayerManager } from '../core/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
@@ -233,6 +234,7 @@ export interface RenderContext {
   miniMap: MiniMapSystem;
   mongoSystem: MongoSystem;
   mercenarySystem: MercenarySystem;
+  crawlerBarks: CrawlerBarkSystem;
 
   // Pulse counters
   speechBubblePulse: number;
@@ -526,8 +528,19 @@ export class RenderPipeline {
     rc: RenderContext,
     renderLevelUpFlash: (ctx: CanvasRenderingContext2D, camX: number, camY: number) => void,
   ): void {
-    const { camX, camY, gore, bodyPartGore, barriers, spells, dynamite, mongoSystem, active, pm } =
-      rc;
+    const {
+      camX,
+      camY,
+      gore,
+      bodyPartGore,
+      barriers,
+      spells,
+      dynamite,
+      mongoSystem,
+      crawlerBarks,
+      active,
+      pm,
+    } = rc;
 
     gore.renderParticles(ctx, camX, camY);
     // Droplets go over the entities: water thrown up by a crawler stepping into
@@ -570,7 +583,9 @@ export class RenderPipeline {
 
     // Cat speech bubble for Mongo summon/recall
     mongoSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);
+    mongoSystem.renderPetEmotes(ctx, camX, camY);
     rc.mercenarySystem.renderSpeech(ctx, camX, camY);
+    crawlerBarks.render(ctx, camX, camY, pm.human, pm.cat);
   }
 
   /**

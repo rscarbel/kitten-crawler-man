@@ -163,11 +163,12 @@ function renderPlayerSection(
     const shown = allItems.slice(0, MAX_ITEMS_SHOWN);
     for (const item of shown) {
       const qty = item.quantity > 1 ? ` ×${item.quantity}` : '';
-      drawText(ctx, `  ${item.name}${qty}`, {
+      const isNew = inventory.unseenUpgrades.has(item.id);
+      drawText(ctx, `${isNew ? '\u{1F7E2} ' : '  '}${item.name}${qty}`, {
         x: indentX,
         y,
         size: BAG_ITEM_SIZE,
-        color: '#e2e8f0',
+        color: isNew ? '#86efac' : '#e2e8f0',
         width: contentW,
       });
       y += BAG_ITEM_Y_SPACING;

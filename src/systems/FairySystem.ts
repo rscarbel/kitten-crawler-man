@@ -84,7 +84,13 @@ export interface FairySystemDeps {
 
 /** A sound this system asks the scene to play; drained with {@link FairySystem.takeCues}. */
 export type FairySystemCue =
-  'shieldDeath' | 'healWave' | 'chillBlast' | 'necroDeath' | 'resurrection' | 'iceBoltShatter';
+  | 'shieldDeath'
+  | 'healWave'
+  | 'chillBlast'
+  | 'necroDeath'
+  | 'resurrection'
+  | 'iceBoltShatter'
+  | 'iceBoltHit';
 
 /** Offset from a tile's origin to its centre, as a share of a tile. */
 const TILE_CENTRE = 0.5;
@@ -248,7 +254,12 @@ export class FairySystem implements GameSystem {
     if (!(mob instanceof Fairy)) return;
     // Stripped on the kill itself rather than on the next update: a blow landing
     // later this frame on a mob the fairy was warding must already hit bare HP.
-    if (mob instanceof ShieldFairy) stripWardsHeldBy(mob, this.deps.getMobs());
+    // A crush already snapped around a vespa is cancelled the same way, so it
+    // cannot go on to kill the vespa after the fairy that cast it is gone.
+    if (mob instanceof ShieldFairy) {
+      stripWardsHeldBy(mob, this.deps.getMobs());
+      mob.cancelCrush();
+    }
     this.pendingDeaths.push(mob);
   }
 
@@ -423,7 +434,9 @@ export class FairySystem implements GameSystem {
     collectFairyPartyTargets(ctx, this.partyScratch);
     this.iceBolts.update(ctx.roster.mobs, this.partyScratch);
     this.partyScratch.length = 0;
-    if (this.iceBolts.takeImpacts().length > 0) this.cues.add('iceBoltShatter');
+    for (const impact of this.iceBolts.takeImpacts()) {
+      this.cues.add(impact === 'body' ? 'iceBoltHit' : 'iceBoltShatter');
+    }
     this.advanceHealWaves();
     this.chains = ageOut(this.chains, AEGIS_CHAIN_FRAMES);
     this.shieldBursts = ageOut(this.shieldBursts, SHIELD_BURST_FRAMES);

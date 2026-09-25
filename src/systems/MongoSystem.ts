@@ -2,10 +2,14 @@ import { displayHp } from '../core/crawlerFormulas';
 import { TILE_SIZE } from '../core/constants';
 import { Mongo } from '../creatures/Mongo';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { HumanPlayer } from '../creatures/HumanPlayer';
+import { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
+import { EmoteEffectSystem } from './EmoteEffectSystem';
+import { hostileWithinRadius } from './interactionPromptGate';
+import { playPetGesture } from '../creatures/humanGestures';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import {
   advanceMongoRecovery,
   MONGO_KILL_RECOVERY_FRAMES,
@@ -16,7 +20,7 @@ import {
   type MongoPetState,
 } from '../core/MongoPetState';
 import { getMongoStats, MONGO_DAMAGE_PER_XP } from '../abilities/mongo';
-import { drawMongoIcon } from '../sprites/mongoSprite';
+import { drawMongoIcon, prewarmMongoPet } from '../sprites/mongoSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { CarriedCompanion } from './companionCarry';
 import type { AbilityManager } from '../core/AbilityManager';
@@ -63,6 +67,15 @@ const AUTO_SUMMON_THREAT_RADIUS_TILES = 7;
  * each refusal re-raises the "No room" line over her head.
  */
 const AUTO_SUMMON_RETRY_FRAMES = 120;
+
+/** How close, centre to centre, a crawler must be to pet Mongo. */
+export const MONGO_PET_RANGE_TILES = 1.4;
+/**
+ * On the overworld no room list exists, so the pet is instead refused with a
+ * hostile anywhere within this many tiles — the same shape `hostileWithinRadius`
+ * gives every other "is it safe to stand still here" check.
+ */
+const MONGO_PET_OVERWORLD_CLEAR_RADIUS_TILES = 10;
 
 // Rendering constants
 /**
@@ -264,6 +277,8 @@ export class MongoSystem implements GameSystem {
   private autoSummonRetryFrames = 0;
   /** Reused every frame by {@link catWantsToSummon}, which runs whenever he is off duty. */
   private readonly threatQuery = new Set<Mob>();
+  /** The hearts a pet press raises over him. */
+  private readonly emotes = new EmoteEffectSystem();
 
   /**
    * @param petState  HP and the quest lock, threaded by reference across scenes
@@ -538,6 +553,7 @@ export class MongoSystem implements GameSystem {
     this.retreatMobs = mobs;
 
     this.speech.tick();
+    this.emotes.update(1 / FRAMES_PER_SECOND);
 
     // Above the summoned/not-summoned branch below: a toast raised by the last
     // kill before he came up would otherwise hang on screen forever.
@@ -560,19 +576,9 @@ export class MongoSystem implements GameSystem {
     // he keeps the juvenile's stats and sheet until the next time he is summoned.
     this.mongo.applyLevel(this.petLevel());
 
-    // The cat going down spends him, by the player's ruling: he goes down with
-    // her, and comes back owing the same full recovery a knockout costs, so a
-    // wipe cannot be walked off by re-summoning the raptor on the next screen.
-    // Set outside the recall guard below, which exists only to keep from
-    // re-issuing the order — a Mongo already running home is spent just the same.
-    if (!cat.isAlive) this.mongo.exhausted = true;
-
-    // The cat going down calls him home, exactly as running out of health does.
-    if (!cat.isAlive && !this.mongo.recalling && !this.mongo.collapsing) {
-      this.speak('Mongo, come back!');
-      this.mongo.beginRecall();
-      this.releaseTargeting(mobs, this.mongo);
-    }
+    // Donut going down does not spend him: he keeps fighting, guarding her
+    // fallen body the same way he guards her standing, because `this.owner`
+    // (his leash and follow anchor) is her position either way.
 
     // After the AI has run — the mob loop ticks before this system, and the latch
     // is set inside `updateAI` — so a stall decided this frame is answered this
@@ -737,6 +743,88 @@ export class MongoSystem implements GameSystem {
     this.speak('Mongo, come back!');
     this.mongo.beginCollapse();
     this.releaseTargeting(this.retreatMobs, this.mongo);
+  }
+
+  private centreDistanceTiles(active: HumanPlayer | CatPlayer, mongo: Mongo): number {
+    const dx = active.x + TILE_SIZE * TILE_CENTER - (mongo.x + TILE_SIZE * TILE_CENTER);
+    const dy = active.y + TILE_SIZE * TILE_CENTER - (mongo.y + TILE_SIZE * TILE_CENTER);
+    return Math.hypot(dx, dy) / TILE_SIZE;
+  }
+
+  /**
+   * Whether a pet press from `active` would land on Mongo right now: in range,
+   * idle, and with no unfinished fight around either of them. On a dungeon
+   * floor "around" means the room the crawler stands in ({@link GameMap.hostilesInRoom});
+   * with no room list at all — the overworld, or a hallway — it means nobody
+   * hostile within `isOverworld`'s wider clearance radius.
+   */
+  wouldPet(
+    active: HumanPlayer | CatPlayer,
+    gameMap: GameMap,
+    mobs: readonly Mob[],
+    mobGrid: SpatialGrid<Mob>,
+    isOverworld: boolean,
+  ): boolean {
+    const mongo = this.mongo;
+    if (!mongo?.acceptsPet) return false;
+    if (this.centreDistanceTiles(active, mongo) > MONGO_PET_RANGE_TILES) return false;
+    if (isOverworld) {
+      return !hostileWithinRadius(
+        active,
+        mobGrid,
+        TILE_SIZE * MONGO_PET_OVERWORLD_CLEAR_RADIUS_TILES,
+      );
+    }
+    const activeTileX = Math.floor((active.x + TILE_SIZE * TILE_CENTER) / TILE_SIZE);
+    const activeTileY = Math.floor((active.y + TILE_SIZE * TILE_CENTER) / TILE_SIZE);
+    const roomIndex = gameMap.roomIndexAt(activeTileX, activeTileY);
+    return gameMap.hostilesInRoom(roomIndex, mobs).length === 0;
+  }
+
+  /** Pets Mongo if a press from `active` would reach him. Returns whether it did. */
+  tryPet(
+    active: HumanPlayer | CatPlayer,
+    gameMap: GameMap,
+    mobs: readonly Mob[],
+    mobGrid: SpatialGrid<Mob>,
+    isOverworld: boolean,
+  ): boolean {
+    if (!this.wouldPet(active, gameMap, mobs, mobGrid, isOverworld)) return false;
+    const mongo = this.mongo;
+    // `wouldPet` already required this, but the null check has to be repeated
+    // for the type system to carry it past the call it cannot see through.
+    if (mongo === null) return false;
+    mongo.celebratePet();
+    const head = mongo.headAnchor();
+    this.emotes.spawnHearts(head.x, head.y);
+    if (active instanceof HumanPlayer) playPetGesture(active, head);
+    else active.playContentGesture(mongo.x, mongo.y);
+    return true;
+  }
+
+  /** Floats "Pet" over Mongo when a press from `active` would reach him. Returns whether it drew. */
+  renderPetPrompt(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: HumanPlayer | CatPlayer,
+    gameMap: GameMap,
+    mobs: readonly Mob[],
+    mobGrid: SpatialGrid<Mob>,
+    isOverworld: boolean,
+  ): boolean {
+    const mongo = this.mongo;
+    if (mongo === null) return false;
+    if (!this.wouldPet(active, gameMap, mobs, mobGrid, isOverworld)) return false;
+    // The press that would pet him is one step away: warm the row it plays.
+    prewarmMongoPet(mongo.stage);
+    drawInteractionPrompt(ctx, mongo.x - camX, mongo.y - camY, TILE_SIZE, 'Pet');
+    return true;
+  }
+
+  /** The hearts a pet raises, drawn over every body. */
+  renderPetEmotes(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    this.emotes.render(ctx, camX, camY);
   }
 
   /**

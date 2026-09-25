@@ -126,6 +126,15 @@ interface MutableActiveCast extends FairyCastIntent {
   framesLeft: number;
 }
 
+/**
+ * A region a fairy may be confined to — a boss room's rectangle, or the
+ * colosseum's circle (memory note: a boss arena is not a rectangle) — tested
+ * in world pixels.
+ */
+export interface FairyConfinement {
+  containsPoint(x: number, y: number): boolean;
+}
+
 interface Point {
   readonly x: number;
   readonly y: number;
@@ -278,6 +287,15 @@ export abstract class Fairy extends Mob {
   private refugeSearchFailedFrames = 0;
   private refugeRetryFrames = 0;
 
+  /**
+   * Set by a boss room or the arena while this fairy stands inside it: every
+   * hover goal must fall inside it and no refuge outside it is ever sought,
+   * so a healer that belongs to the room never picks a target that would walk
+   * or fly it out — the room's own owner clears this the moment the fairy is
+   * no longer inside, so a fairy that has genuinely left is free again.
+   */
+  private confinementRegion: FairyConfinement | null = null;
+
   constructor(
     tileX: number,
     tileY: number,
@@ -347,6 +365,50 @@ export abstract class Fairy extends Mob {
   /** The place this fairy is running to, or null while it is not running. */
   get fleeingTo(): FairyRefuge | null {
     return this.refuge;
+  }
+
+  /**
+   * Whether this fairy honours a confinement set on it at all — read by
+   * {@link confineTo} and by whichever room or arena would otherwise clamp
+   * this fairy's position, so overriding it false disables confinement
+   * completely rather than only the half of it {@link confineTo} owns. A seam
+   * for a fixture that must prove confinement is doing the work, by breaking
+   * it in isolation from every other mechanism (matching
+   * {@link spawnLeashTiles}); every shipped fairy respects it.
+   */
+  get respectsConfinement(): boolean {
+    return true;
+  }
+
+  /**
+   * Confines this fairy to `region`: every hover goal it picks must fall
+   * inside it, and it never starts a run for a refuge outside it. Called every
+   * frame by whichever boss room or arena the fairy currently stands in;
+   * calling it again with a new region simply replaces the old one. A no-op
+   * against {@link respectsConfinement} overridden false.
+   */
+  confineTo(region: FairyConfinement): void {
+    if (!this.respectsConfinement) return;
+    this.confinementRegion = region;
+    if (this.refuge !== null && !region.containsPoint(this.refuge.x, this.refuge.y)) {
+      this.refuge = null;
+      this.clearAStarPath();
+    }
+  }
+
+  /** Releases a confinement set by {@link confineTo}. Idempotent. */
+  clearConfinement(): void {
+    this.confinementRegion = null;
+  }
+
+  /**
+   * Whether a confinement is currently set. Read by a room's own confinement
+   * check to tell "this healer was ours and a shove just carried it clear of
+   * the strict bounds test" from "this fairy was never in this room at all" —
+   * the first is snapped back, the second is left alone.
+   */
+  get isConfined(): boolean {
+    return this.confinementRegion !== null;
   }
 
   // ── What a kind supplies ──────────────────────────────────────────────────
@@ -737,6 +799,9 @@ export abstract class Fairy extends Mob {
 
   /** What the refuge choice reads about the world and this fairy; null off a map. */
   protected refugeQuery(): FairyRefugeQuery | null {
+    // A confined healer never runs for another room's refuge, whatever it
+    // thinks of its own — there is nowhere outside the room it belongs to.
+    if (this.confinementRegion !== null) return null;
     const map = this.map;
     if (map === null) return null;
     return {
@@ -920,6 +985,9 @@ export abstract class Fairy extends Mob {
    * goals a boss that has moved across its arena still needs it to reach.
    */
   protected isHoverGoalAllowed(x: number, y: number): boolean {
+    if (this.confinementRegion !== null && !this.confinementRegion.containsPoint(x, y)) {
+      return false;
+    }
     if (isMarkedGround(x, y)) return false;
     const boundToBoss = bossOfHealer(this) !== null;
     if (!boundToBoss && !this.isWithinSpawnLeash(x, y)) return false;

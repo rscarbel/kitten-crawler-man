@@ -14,6 +14,8 @@
  *    slash   — wings flare, a one-two rake with both hands
  *    pounce  — crouch, leap, two-footed sickle strike, recovery hop
  *    collapse — legs buckle at 0 HP (side only; he is never gored)
+ *    happy_jump — a joyful hop when he is petted, arms thrown open
+ *    flap    — wings out and beating, played once he lands the happy jump
  *
  * The three stages are one animation of one animal at three sizes: the same row
  * table, sampled against each stage's own proportions, so the juvenile, the
@@ -59,6 +61,8 @@ import {
   MONGO_BITE_FRAMES,
   MONGO_BITE_IMPACT_PROGRESS,
   MONGO_COLLAPSE_FRAMES,
+  MONGO_FLAP_FRAMES,
+  MONGO_HAPPY_JUMP_FRAMES,
   MONGO_POUNCE_AIRBORNE_END,
   MONGO_POUNCE_AIRBORNE_START,
   MONGO_POUNCE_FRAMES,
@@ -959,6 +963,188 @@ const COLLAPSE_FLATTEN = 0.4;
 const COLLAPSE_SETTLE = 0.55;
 const COLLAPSE_SETTLE_RISE = 0.03;
 
+// ── Happy jump ───────────────────────────────────────────────────────────────
+//
+// Played once when he is petted, before `flap`. The pounce's air arc with
+// nothing to strike at the end of it: he leaves the ground, throws his arms
+// open, and lands square rather than reaching for a target.
+
+const HAPPY_AIRBORNE_START = 0.2;
+const HAPPY_AIRBORNE_END = 0.8;
+const HAPPY_LEAP_SHARE = 0.2;
+const HAPPY_FLARE_START = 0.05;
+const HAPPY_FLARE_PEAK = 0.35;
+const HAPPY_SETTLE_START = 0.8;
+const HAPPY_ARM_UPPER = deg(150);
+const HAPPY_PITCH = deg(6);
+const HAPPY_ARCH = 0.35;
+const HAPPY_TAIL_LIFT = deg(18);
+const HAPPY_TAIL_WAG = deg(18);
+/** Whole cycles of tail wag over the jump — see `IDLE_SCAN_CYCLES` for why an integer. */
+const HAPPY_TAIL_WAG_CYCLES = 2;
+const HAPPY_GAPE = 0.35;
+const HAPPY_HEAD_TILT = deg(10);
+const HAPPY_SHADOW_SHRINK = 0.5;
+const HAPPY_SWAY = 0.015;
+const HAPPY_TAIL_SWAY_AXIAL = deg(12);
+
+function happyAirArc(progress: number): number {
+  const arc = hump(ramp(progress, HAPPY_AIRBORNE_START, HAPPY_AIRBORNE_END));
+  return arc * arc;
+}
+
+function happyLeg(prop: MongoProportions, toeBase: number, air: number, nearness: number): LegPose {
+  return {
+    toeX: toeBase * prop.femur,
+    lift: air * prop.hipHeight * HAPPY_LEAP_SHARE,
+    meta: lerp(REST_META_WALK, POUNCE_TUCK_META, air),
+    roll: 0,
+    sickle: 0,
+    lateral: 0,
+    nearness,
+  };
+}
+
+function happyJumpBase(progress: number, prop: MongoProportions): MongoPose {
+  const air = happyAirArc(progress);
+  const spread =
+    easeInOut(ramp(progress, HAPPY_FLARE_START, HAPPY_FLARE_PEAK)) *
+    (1 - easeInOut(ramp(progress, HAPPY_SETTLE_START, 1)));
+  const rest = restPose();
+  return {
+    ...rest,
+    rise: -prop.hipHeight * HAPPY_LEAP_SHARE * air,
+    pitch: HAPPY_PITCH * air,
+    arch: lerp(IDLE_ARCH, HAPPY_ARCH, air),
+    headTilt: HAPPY_HEAD_TILT * Math.sin(progress * TWO_PI),
+    gape: HAPPY_GAPE * air,
+    eyeOpen: 1,
+    tailLift: REST_TAIL_LIFT + HAPPY_TAIL_LIFT * air,
+    tailCurve: HAPPY_TAIL_WAG * Math.sin(progress * TWO_PI * HAPPY_TAIL_WAG_CYCLES),
+    breathe: air,
+    nearArm: { ...restArm(), spread, upper: lerp(restArm().upper, HAPPY_ARM_UPPER, spread) },
+    farArm: { ...restArm(), spread, upper: lerp(restArm().upper, HAPPY_ARM_UPPER, spread) },
+    nearLeg: happyLeg(prop, REST_NEAR_TOE, air, 0.75),
+    farLeg: happyLeg(prop, REST_FAR_TOE, air, 0.3),
+    shadow: 1 - HAPPY_SHADOW_SHRINK * air,
+    time: progress,
+  };
+}
+
+function happyJumpSide(frame: number, prop: MongoProportions): MongoPose {
+  return happyJumpBase(shotProgress(frame, MONGO_HAPPY_JUMP_FRAMES), prop);
+}
+
+function happyJumpFront(frame: number, prop: MongoProportions): MongoPose {
+  const progress = shotProgress(frame, MONGO_HAPPY_JUMP_FRAMES);
+  const air = happyAirArc(progress);
+  const base = happyJumpBase(progress, prop);
+  return {
+    ...base,
+    headLift: -base.rise * POUNCE_AXIAL_HEAD_SHARE,
+    sway: HAPPY_SWAY * Math.sin(progress * TWO_PI),
+    tailSway: HAPPY_TAIL_SWAY_AXIAL * air,
+  };
+}
+
+function happyJumpBack(frame: number, prop: MongoProportions): MongoPose {
+  const progress = shotProgress(frame, MONGO_HAPPY_JUMP_FRAMES);
+  const air = happyAirArc(progress);
+  const base = happyJumpBase(progress, prop);
+  return {
+    ...base,
+    gape: 0,
+    headLift: -base.rise * POUNCE_AXIAL_HEAD_SHARE,
+    sway: -HAPPY_SWAY * Math.sin(progress * TWO_PI),
+    tailSway: -HAPPY_TAIL_SWAY_AXIAL * air,
+  };
+}
+
+// ── Flap ─────────────────────────────────────────────────────────────────────
+//
+// Follows the happy jump once he has landed: feet planted, wings thrown out
+// and beating, tail wagging — the part of "happy jump and wing flap" that
+// happens after he is back on the ground.
+
+/**
+ * Whole flap beats over the row.
+ *
+ * One beat across all eight frames, not two: at eight frames a second beat
+ * would sample only four frames per cycle, which is too coarse for a smooth
+ * wingbeat and reads as a strobe (see the Nyquist note on sprite animation
+ * cadence). One beat, plus `flapEnvelope` below breaking the sine's own
+ * `sin(θ) === sin(180° − θ)` mirror, is what keeps all eight frames distinct
+ * without aliasing the motion.
+ */
+const FLAP_CYCLES = 1;
+const FLAP_ARM_UPPER = deg(140);
+const FLAP_ARM_SPREAD = 1.0;
+const FLAP_ARM_OSCILLATION = deg(20);
+const FLAP_ARCH_SWING = 0.2;
+const FLAP_TAIL_LIFT = deg(10);
+const FLAP_TAIL_WAG = deg(12);
+const FLAP_GAPE = 0.25;
+const FLAP_BOB = 0.02;
+const FLAP_BREATHE = 0.4;
+const FLAP_SWAY = 0.012;
+const FLAP_TAIL_SWAY = deg(10);
+
+/** The flap building in vigor over the row, so no two frames share an amplitude. */
+const FLAP_ENVELOPE_START = 0.6;
+
+function flapEnvelope(progress: number): number {
+  return FLAP_ENVELOPE_START + (1 - FLAP_ENVELOPE_START) * progress;
+}
+
+function flapCycle(progress: number): number {
+  return flapEnvelope(progress) * Math.sin(progress * TWO_PI * FLAP_CYCLES);
+}
+
+function flapBase(progress: number, prop: MongoProportions): MongoPose {
+  const cycle = flapCycle(progress);
+  const rest = restPose();
+  const armUpper = FLAP_ARM_UPPER + FLAP_ARM_OSCILLATION * cycle;
+  return {
+    ...rest,
+    rise: -FLAP_BOB * Math.abs(cycle),
+    arch: IDLE_ARCH + FLAP_ARCH_SWING * cycle,
+    gape: FLAP_GAPE * clamp01(cycle),
+    tailLift: REST_TAIL_LIFT + FLAP_TAIL_LIFT,
+    tailCurve: FLAP_TAIL_WAG * cycle,
+    breathe: FLAP_BREATHE * cycle,
+    nearArm: { ...restArm(), spread: FLAP_ARM_SPREAD, upper: armUpper },
+    farArm: { ...restArm(), spread: FLAP_ARM_SPREAD, upper: armUpper },
+    nearLeg: { ...restLeg(REST_NEAR_TOE * prop.femur), nearness: 0.75 },
+    farLeg: { ...restLeg(REST_FAR_TOE * prop.femur), nearness: 0.3 },
+    time: progress,
+  };
+}
+
+function flapSide(frame: number, prop: MongoProportions): MongoPose {
+  return flapBase(shotProgress(frame, MONGO_FLAP_FRAMES), prop);
+}
+
+function flapFront(frame: number, prop: MongoProportions): MongoPose {
+  const progress = shotProgress(frame, MONGO_FLAP_FRAMES);
+  const cycle = flapCycle(progress);
+  return {
+    ...flapBase(progress, prop),
+    sway: FLAP_SWAY * cycle,
+    tailSway: FLAP_TAIL_SWAY * cycle,
+  };
+}
+
+function flapBack(frame: number, prop: MongoProportions): MongoPose {
+  const progress = shotProgress(frame, MONGO_FLAP_FRAMES);
+  const cycle = flapCycle(progress);
+  return {
+    ...flapBase(progress, prop),
+    gape: 0,
+    sway: -FLAP_SWAY * cycle,
+    tailSway: -FLAP_TAIL_SWAY * cycle,
+  };
+}
+
 // ── Row manifest ─────────────────────────────────────────────────────────────
 
 export type View = 'front' | 'side' | 'back';
@@ -1042,6 +1228,48 @@ export const MONGO_ROWS: readonly RowSpec[] = [
     kind: 'oneShot',
     view: 'side',
     pose: collapseSide,
+  },
+  {
+    name: 'happy_jump',
+    frameCount: MONGO_HAPPY_JUMP_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    pose: happyJumpFront,
+  },
+  {
+    name: 'happy_jump_side',
+    frameCount: MONGO_HAPPY_JUMP_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    pose: happyJumpSide,
+  },
+  {
+    name: 'happy_jump_away',
+    frameCount: MONGO_HAPPY_JUMP_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    pose: happyJumpBack,
+  },
+  {
+    name: 'flap',
+    frameCount: MONGO_FLAP_FRAMES,
+    kind: 'oneShot',
+    view: 'front',
+    pose: flapFront,
+  },
+  {
+    name: 'flap_side',
+    frameCount: MONGO_FLAP_FRAMES,
+    kind: 'oneShot',
+    view: 'side',
+    pose: flapSide,
+  },
+  {
+    name: 'flap_away',
+    frameCount: MONGO_FLAP_FRAMES,
+    kind: 'oneShot',
+    view: 'back',
+    pose: flapBack,
   },
 ];
 

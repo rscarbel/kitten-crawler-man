@@ -90,7 +90,11 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
   }
 
   if (slot.abilityId === 'smush' && pm.human.isActive) {
-    if (pm.human.triggerSmush()) audio?.play('human_smush');
+    if (pm.human.triggerSmush()) {
+      audio?.play('human_smush');
+    } else if (pm.human.smushRefusedByCooldown) {
+      audio?.play('error_taking_action');
+    }
     return;
   }
 

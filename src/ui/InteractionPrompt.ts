@@ -79,7 +79,7 @@ export function interactionPromptTop(sy: number): number {
  * @param sx       Screen-x of the object's top-left corner
  * @param sy       Screen-y of the object's top-left corner
  * @param objW     Width of the object in pixels (prompt is centered above it)
- * @param label    Optional action label shown to the right of the key, e.g. "Sleep"
+ * @param label    Optional action label shown to the right of the key, e.g. "Talk"
  * @param keyOverride  Optional key text override (default: "SPACE" / "TAP")
  */
 export function drawInteractionPrompt(

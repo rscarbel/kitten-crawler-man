@@ -245,8 +245,24 @@ export interface ProgressionDef {
    * on a floor that has an arena, which is what supplies the far endpoint.
    */
   spine?: SpineDef;
-  /** Extra safe rooms scattered in the free region (gateway safe rooms are additional). */
-  scatterSafeRooms: number;
+  /**
+   * The minimum count of extra safe rooms the free region must carry, beyond its
+   * gateway safe rooms. Meaningful only on a floor with {@link outskirtsSafeRoomHops}
+   * set, where it is the floor the hop rule's own promotion pass is held to —
+   * that pass may seat more than this to satisfy the rule, never fewer. A spine
+   * floor's safe-access pockets come entirely from its own mandatory pocket
+   * count (`safeAccessPocketIndices`) instead, so it has nothing for this to
+   * configure and may omit it.
+   */
+  scatterSafeRooms?: number;
+  /**
+   * Spaces the free region's own safe rooms by room hops rather than by plain
+   * distance: every one of them, the last gateway's exit safe room included,
+   * keeps its nearest other safe room between 4 and 9 hops away. Stated by the
+   * floor rather than inferred, because it only holds past a floor's *last*
+   * boss when nothing past it replaces the free region with a forced spine.
+   */
+  outskirtsSafeRoomHops?: boolean;
   /**
    * Extra mobs added to each room's rolled count, indexed by progression region
    * — one entry per gauntlet, then one more for the free-roam region beyond the
@@ -371,6 +387,11 @@ export interface LevelDef {
    * kills the party. Absent means the floor is untimed.
    */
   hasCollapseTimer?: boolean;
+  /**
+   * How long the countdown `hasCollapseTimer` runs against, in frames at
+   * 60fps. Only meaningful alongside `hasCollapseTimer`; ignored otherwise.
+   */
+  collapseTimeLimitFrames?: number;
   /**
    * Spawns extra mobs guarding treasure rooms. Room, hallway and boss spawns are
    * unaffected. Absent means treasure rooms are unguarded.

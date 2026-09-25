@@ -4,7 +4,13 @@ import { DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL } from '../../systems/Dynami
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { type ButtonRect, type PauseTab } from './types';
-import { addButton, drawButton, BUTTON_PRESETS } from '../Button';
+import {
+  addButton,
+  drawButton,
+  BUTTON_PRESETS,
+  pushButtonPointerOffset,
+  popButtonPointerOffset,
+} from '../Button';
 import { drawText } from '../TextBox';
 import { drawDivider, drawScrollbar } from '../Box';
 
@@ -326,6 +332,10 @@ export function renderSpendTab(
   ctx.rect(bx, scrollTop, bw, scrollH);
   ctx.clip();
   ctx.translate(0, scrollTop - scrollY);
+  // Buttons below are drawn in this translated space; without this, hover,
+  // the focus ring and keyboard activation all read against untranslated
+  // canvas coordinates and land on the wrong card.
+  pushButtonPointerOffset(0, scrollTop - scrollY);
 
   let y = 8;
 
@@ -396,6 +406,7 @@ export function renderSpendTab(
   }
 
   const contentHeight = y;
+  popButtonPointerOffset();
   ctx.restore();
 
   drawScrollbar(ctx, {

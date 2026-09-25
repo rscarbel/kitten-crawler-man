@@ -116,6 +116,30 @@ export class BrindleGrub extends Mob {
     return true;
   }
 
+  /**
+   * A larva or cow-tail is harmless litter from the last kill and never holds a room "in combat";
+   * a hatched vespa is a real fight, so it does.
+   */
+  override get countsTowardRoomClear(): boolean {
+    return this.stage === STAGE_VESPA && super.countsTowardRoomClear;
+  }
+
+  /**
+   * No stage of the lifecycle takes an ordinary ward: a shield fairy that
+   * warded a larva would spend a ward slot on litter, and warding a vespa
+   * would make the one thing meant to threaten it untouchable. A vespa is
+   * still eligible for the fairy's separate crushing ward — see
+   * {@link isVespa} — which is not `acceptsWards` at all.
+   */
+  override get acceptsWards(): boolean {
+    return false;
+  }
+
+  /** Whether this grub has hatched into its hornet stage — the only stage a crushing ward targets. */
+  get isVespa(): boolean {
+    return this.stage === STAGE_VESPA;
+  }
+
   stage: GrubStage = STAGE_LARVA;
   private evolveTimer: number;
   private spitCooldown = 0;

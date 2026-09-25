@@ -22,10 +22,12 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 import { drawBox, drawProgressBar } from '../ui/Box';
 import { viewportWidth } from '../core/Viewport';
-import { ARENA_INTERIOR_RADIUS_TILES } from '../map/arenaGeometry';
+import { ARENA_INTERIOR_RADIUS_TILES, ARENA_REACH } from '../map/arenaGeometry';
 import { prewarmTuskling } from '../sprites/tusklingSprite';
 import { spawnHardModeBossHealer } from '../levels/fairySpawner';
-import { bossOfHealer, hasLivingBossHealer } from '../creatures/fairies/bossHealerBond';
+import { hasLivingBossHealer } from '../creatures/fairies/bossHealerBond';
+import { HealingFairy } from '../creatures/fairies/HealingFairy';
+import type { FairyConfinement } from '../creatures/fairies/Fairy';
 import { settings } from '../core/Settings';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import { level2 } from '../levels/level2';
@@ -384,6 +386,7 @@ export class ArenaSystem implements GameSystem {
         this.entryWindowTimer = ENTRY_WINDOW_FRAMES;
         this.humanIsInsider = humanInside;
         this.catIsInsider = catInside;
+        bos.fightStarted = true;
         this.bossRoom.newlyLockedBossType = 'ball_of_swine';
         this.dressing?.onSeal();
         // Sealing the door schedules the whole fight, Tusklings included: the
@@ -461,23 +464,45 @@ export class ArenaSystem implements GameSystem {
   }
 
   /**
-   * Holds the ball's healer inside the ring. It flies, and the stairwell waits
+   * Holds any healer fairy inside the ring. It flies, and the stairwell waits
    * on it, so a healer that drifted out over the wall — or through the door in
    * the moments it stands open — would seal the party in with nothing left to
-   * kill.
+   * kill. Positional rather than bond-based: a healer belongs to the arena
+   * because it is standing in it, not because it still holds a bond to a
+   * living Ball of Swine — one stripped of its bond, or fleeing after the
+   * boss is dead, is held exactly the same as one still healing the fight.
+   * The arena's own bounds are a circle (memory note: a boss arena is not a
+   * rectangle), so this pulls a healer back along the radius rather than
+   * clamping to a box.
+   *
+   * Gated by {@link ARENA_REACH} rather than applied to every healer fairy on
+   * the floor: the pull-back only ever fires past the tighter `limitPx`, but
+   * without an outer bound a healer fairy going about its business rooms away
+   * would be swept toward the arena the instant it drifted from `limitPx` to
+   * infinity being "farther than the limit". `ARENA_REACH` already covers the
+   * whole structure plus its reserve margin, generous enough that a healer
+   * fleeing out through the door is always caught within the same frame it
+   * crosses `limitPx` — it can never travel far enough to approach it.
    */
   protected confineSwineHealers(mobs: readonly Mob[], grid: SpatialGrid<Mob>): void {
     const arena = this.gameMap.arenaExteriors[0];
     const centreX = arena.centre.x * TILE_SIZE;
     const centreY = arena.centre.y * TILE_SIZE;
     const limitPx = (ARENA_INTERIOR_RADIUS_TILES - HEALER_WALL_CLEARANCE_TILES) * TILE_SIZE;
+    const catchPx = ARENA_REACH * TILE_SIZE;
+    const confinement: FairyConfinement = {
+      containsPoint: (x, y) => Math.hypot(x - centreX, y - centreY) <= limitPx,
+    };
     for (const mob of mobs) {
-      if (!mob.isAlive) continue;
-      const boss = bossOfHealer(mob);
-      if (!(boss instanceof BallOfSwine)) continue;
+      if (!mob.isAlive || !(mob instanceof HealingFairy) || !mob.respectsConfinement) continue;
       const offsetX = mob.x - centreX;
       const offsetY = mob.y - centreY;
       const distancePx = Math.hypot(offsetX, offsetY);
+      if (distancePx > catchPx) {
+        mob.clearConfinement();
+        continue;
+      }
+      mob.confineTo(confinement);
       if (distancePx <= limitPx) continue;
       const oldX = mob.x;
       const oldY = mob.y;

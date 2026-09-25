@@ -16,6 +16,7 @@
 import { settings } from './Settings';
 import { worldRandom } from './WorldRandom';
 import type { Mob } from '../creatures/Mob';
+import { COCKROACH_RECHARGE_MS } from './SkillManager';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -39,11 +40,44 @@ export interface DifficultyProfile {
    * them behaves identically on every profile.
    */
   tacticsChanceScale: number;
+  /**
+   * Milliseconds cut from Cockroach's remaining recharge when its owner is
+   * knocked out — a consolation for the fatal blow it was too cold to catch.
+   * Clamped so the recharge never goes negative, so Kitten's relief is simply
+   * set larger than any recharge could be, which completes it outright
+   * through the same arithmetic rather than as a special case. Nightmare's is
+   * a token amount rather than a real relief, kept strictly positive because
+   * `verify:difficulty` requires every profile axis to be.
+   */
+  cockroachKnockoutReliefMs: number;
+  /**
+   * Share of a blow taken off a mob a shield fairy's ward is holding
+   * invulnerable — 1 keeps the ward absolute, as it always was; under 1 lets
+   * the rest of the blow through, so easy mode never asks a player to hunt
+   * down and kill the fairy before their hits on its allies count for
+   * anything.
+   */
+  wardDamageReduction: number;
 }
 
 /** The shipped ambient/boss level ratios, before any difficulty axis existed. */
 export const NORMAL_AMBIENT_LEVEL_RATIO = 0.7;
 export const NORMAL_BOSS_LEVEL_RATIO = 0.8;
+
+/** Milliseconds cut from a knocked-out crawler's own Cockroach recharge, on Crawler difficulty. */
+const COCKROACH_KNOCKOUT_RELIEF_MS_NORMAL = 15_000;
+/**
+ * Kitten's relief completes the recharge outright: set past the longest
+ * recharge the skill can ever hold, so clamping the result at "now" is always
+ * what fires, with no separate "completed" case to keep in sync.
+ */
+const COCKROACH_KNOCKOUT_RELIEF_MS_EASY = COCKROACH_RECHARGE_MS + 1;
+/**
+ * Nightmare's Cockroach relief is unchanged in every way that matters — the
+ * recharge itself runs minutes long — but the field can't be zero because
+ * `verify:difficulty` requires every profile axis to be strictly positive.
+ */
+const COCKROACH_KNOCKOUT_RELIEF_MS_HARD_TOKEN = 1;
 
 /**
  * UI labels for each tier, per the Dungeon Crawler Carl framing. The single
@@ -66,6 +100,8 @@ export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     rewardCoinScale: 1.0,
     bountyPayoutScale: 0.85,
     tacticsChanceScale: 0.6,
+    cockroachKnockoutReliefMs: COCKROACH_KNOCKOUT_RELIEF_MS_EASY,
+    wardDamageReduction: 0.75,
   },
   normal: {
     incomingMobDamageScale: 1.0,
@@ -76,6 +112,8 @@ export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     rewardCoinScale: 1.0,
     bountyPayoutScale: 1.0,
     tacticsChanceScale: 1.0,
+    cockroachKnockoutReliefMs: COCKROACH_KNOCKOUT_RELIEF_MS_NORMAL,
+    wardDamageReduction: 1,
   },
   hard: {
     incomingMobDamageScale: 1.3,
@@ -86,6 +124,8 @@ export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     rewardCoinScale: 1.25,
     bountyPayoutScale: 1.5,
     tacticsChanceScale: 1.3,
+    cockroachKnockoutReliefMs: COCKROACH_KNOCKOUT_RELIEF_MS_HARD_TOKEN,
+    wardDamageReduction: 1,
   },
 };
 

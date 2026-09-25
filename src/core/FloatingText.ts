@@ -8,7 +8,7 @@
  */
 
 /** Visual treatment for a floating label. */
-export type FloatingTextStyle = 'miss' | 'buff' | 'trigger' | 'block' | 'exposed';
+export type FloatingTextStyle = 'miss' | 'buff' | 'trigger' | 'block' | 'exposed' | 'immune';
 
 export interface FloatingTextRequest {
   text: string;

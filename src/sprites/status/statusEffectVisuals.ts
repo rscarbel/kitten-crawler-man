@@ -27,6 +27,7 @@ import {
   HAMBURGER_FED_STATUS,
   OVERHEAL_STATUS,
   SHIELD_STATUS,
+  SPEED_FIZZ_STATUS,
   type StatusEffect,
 } from '../../core/StatusEffect';
 import type { StatusVisualFrame } from './statusPaint';
@@ -54,7 +55,8 @@ import {
   drawDrunk,
   drawHearthWarmed,
   drawJuggJuice,
-  drawSpeedFizz,
+  drawSpeedFizzMotes,
+  drawSpeedFizzTrail,
   drawWellRested,
   drawWhetstone,
   drunkBodyLayer,
@@ -97,6 +99,17 @@ export interface StatusVisual {
    * on, breaking when it runs out.
    */
   readonly overlay?: (
+    ctx: CanvasRenderingContext2D,
+    frame: StatusVisualFrame,
+    effect: StatusEffect,
+  ) => void;
+  /**
+   * World-space art drawn *before* the sprite, so it reads as sitting behind
+   * the body rather than pasted over it — motion streaks trailing a runner,
+   * dust kicked up at the feet. Most statuses have no reason to draw here;
+   * `overlay` is the default.
+   */
+  readonly preOverlay?: (
     ctx: CanvasRenderingContext2D,
     frame: StatusVisualFrame,
     effect: StatusEffect,
@@ -184,13 +197,16 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
     },
   ],
   [
-    'speed_fizz',
+    SPEED_FIZZ_STATUS,
     {
       label: 'FIZZ',
       color: '#0284c7',
       harmful: false,
       bodyLayers: (f) => [speedFizzBodyLayer(f)],
-      overlay: drawSpeedFizz,
+      // The trail sits behind the body, opposite the direction of travel;
+      // the ambient motes stay in front like every other boon's.
+      preOverlay: drawSpeedFizzTrail,
+      overlay: drawSpeedFizzMotes,
     },
   ],
   [

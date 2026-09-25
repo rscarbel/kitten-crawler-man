@@ -196,6 +196,7 @@ export function buildSwineFight(seed: number): SwineFight {
   const bossRoom = new BossRoomSystem(
     map,
     undrawnMiniMap,
+    bus,
     (level2.bossRooms ?? []).map((rule) => rule.type),
   );
   const arena = new ArenaSystem(

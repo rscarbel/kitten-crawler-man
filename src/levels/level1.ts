@@ -1,6 +1,13 @@
 import type { FairyRoomRate, LevelDef } from './types';
 import { LEARNING_FLOOR_LEVELLED_CURVE } from '../creatures/mobLevelScaling';
 
+const FRAMES_PER_SECOND = 60;
+const SECONDS_PER_MINUTE = 60;
+/** Floor 1 is the shorter of the two timed floors — a first-time crawler's own dungeon. */
+const LEVEL1_COLLAPSE_TIME_LIMIT_MINUTES = 40;
+export const LEVEL1_COLLAPSE_TIME_LIMIT_FRAMES =
+  LEVEL1_COLLAPSE_TIME_LIMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+
 /** Goblin spawn chance (85%). */
 const GOBLIN_CHANCE = 0.85;
 
@@ -231,6 +238,7 @@ export const level1: LevelDef = {
       },
     ],
     scatterSafeRooms: LEVEL1_SCATTER_SAFE_ROOMS,
+    outskirtsSafeRoomHops: true,
     regionSpawnBonus: [PRE_HOARDER_SPAWN_BONUS, POST_HOARDER_SPAWN_BONUS, POST_JUICER_SPAWN_BONUS],
     regionLevelBonus: [PRE_HOARDER_LEVEL_BONUS, POST_HOARDER_LEVEL_BONUS, POST_JUICER_LEVEL_BONUS],
   },
@@ -243,6 +251,7 @@ export const level1: LevelDef = {
   // for the deeper floors, so none of its fights got easier with them.
   levelledCurve: LEARNING_FLOOR_LEVELLED_CURVE,
   hasCollapseTimer: true,
+  collapseTimeLimitFrames: LEVEL1_COLLAPSE_TIME_LIMIT_FRAMES,
   hasTreasureRoomGuards: true,
   nextLevelId: 'level2',
   stairwellCountMultiplier: LEVEL1_STAIRWELL_MULTIPLIER,
