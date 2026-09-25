@@ -3,6 +3,9 @@
  * image and audio file the game actually loads, so the service worker can
  * pre-cache the full game on install for offline play.
  *
+ * The worker never answers from its cache while the network is reachable; see
+ * the fetch handler below. sw.js is a build output, not a tracked file.
+ *
  * Called automatically from build.js after esbuild finishes.
  * Also runnable directly: node scripts/generate-sw.js
  */
@@ -37,7 +40,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      .then((cache) =>
+        cache.addAll(PRECACHE_ASSETS.map((asset) => new Request(asset, { cache: 'no-cache' }))),
+      )
       .then(() => self.skipWaiting()),
   );
 });
@@ -53,40 +58,54 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+/**
+ * Network-first for everything: a player online always gets the build that is
+ * deployed right now. The cache exists only so an installed app still starts
+ * with no connection at all.
+ *
+ * \`cache: 'no-cache'\` makes the browser revalidate with the server even when
+ * its HTTP cache holds a copy it still considers fresh (GitHub Pages serves
+ * everything with a ten-minute max-age). Navigations cannot be re-issued with a
+ * different cache mode, but HTML is always served no-cache anyway.
+ *
+ * An offline navigation falls back to the precached index.html, because the
+ * very first visit — the one that installed this worker — was not routed
+ * through it, so the start URL itself was never cached.
+ */
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  const isHtml = event.request.headers.get('accept')?.includes('text/html') ?? false;
+  const networkRequest =
+    event.request.mode === 'navigate'
+      ? event.request
+      : new Request(event.request, { cache: 'no-cache' });
 
-  if (isHtml) {
-    // Network-first for HTML so that game updates reach the user.
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
-        })
-        .catch(() => caches.match(event.request)),
-    );
-    return;
-  }
-
-  // Cache-first for all other assets (JS, images, audio, CSS).
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached !== undefined) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok) {
+    fetch(networkRequest)
+      .then((response) => {
+        // Audio elements issue Range requests; a 206 is a slice, and
+        // Cache.put rejects partial responses outright.
+        const isCompleteResponse = response.status === 200;
+        if (isCompleteResponse) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          event.waitUntil(
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)),
+          );
         }
         return response;
-      });
-    }),
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached !== undefined) return cached;
+        if (event.request.mode === 'navigate') {
+          const shell = await caches.match('./index.html');
+          if (shell !== undefined) return shell;
+        }
+        return Response.error();
+      }),
   );
 });
 `;

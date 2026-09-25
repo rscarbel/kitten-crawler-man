@@ -101,23 +101,26 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
-      # `no-cache` throughout, because no filename here is content-hashed: it
-      # means "revalidate", not "don't store", so an unchanged asset still costs
-      # only a 304. A real max-age would be actively harmful — the service
-      # worker precaches with plain `cache.addAll`, which reads through the HTTP
-      # cache, so a freshly installed worker would fill itself with stale bytes.
+      # Browsers and CloudFront get different lifetimes from one header. No
+      # filename here is content-hashed, so a browser must revalidate every load
+      # (`max-age=0, must-revalidate`); that costs an edge round trip and a 304,
+      # never a stale game. CloudFront reads `s-maxage` instead and holds each
+      # file until the invalidation below replaces it, so S3 only sees traffic
+      # once per deploy. `no-cache` is deliberately absent: the distribution's
+      # cache policy would then hold each file for its one-second minimum TTL.
       - name: Publish to S3
         env:
           TARGET: s3://${{ secrets.AWS_SITE_BUCKET }}/kitten-crawler-man
+          CACHE_CONTROL: public, max-age=0, must-revalidate, s-maxage=31536000
         run: |
           aws s3 sync _site/ "$TARGET/" \
             --delete \
             --exclude "kitten-crawler-man.zip" \
-            --cache-control "no-cache" \
+            --cache-control "$CACHE_CONTROL" \
             --only-show-errors
           aws s3 cp dist/kitten-crawler-man.zip "$TARGET/kitten-crawler-man.zip" \
             --content-type application/zip \
-            --cache-control "no-cache" \
+            --cache-control "$CACHE_CONTROL" \
             --only-show-errors
 
       - name: Invalidate CloudFront

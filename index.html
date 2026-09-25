@@ -28,9 +28,24 @@
     <script src="dist/bundle.js" defer></script>
     <link rel="stylesheet" href="main.css" />
     <script>
+      // Localhost is the dev server and the offline ZIP's launcher, both on port
+      // 8080 and so one origin: a worker there would hand one of them the
+      // other's files. Neither needs offline caching, so any worker left behind
+      // is torn down, with one reload to leave its control.
+      const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]'];
+      const isLocalhost = LOCAL_HOSTNAMES.includes(location.hostname);
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').catch(() => {});
+        window.addEventListener('load', async () => {
+          if (!isLocalhost) {
+            navigator.serviceWorker.register('./sw.js').catch(() => {});
+            return;
+          }
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          if (registrations.length === 0) return;
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map((name) => caches.delete(name)));
+          if (navigator.serviceWorker.controller !== null) location.reload();
         });
       }
     </script>

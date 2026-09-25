@@ -15,6 +15,7 @@ import { CORE_SFX_IDS } from './audio/sfxGroups';
 import { showLoadingScreen } from './ui/LoadingScreen';
 import { difficultyStats } from './core/DifficultyStats';
 import { clearLocalProgress, readLocalProgress, writeLocalProgress } from './core/LocalProgress';
+import { stampGameProgress } from './core/saveFormat';
 import { setSearchCaptureHeldKeyRelease } from './ui/SearchField';
 
 declare const __AI_ENABLED__: boolean;
@@ -97,7 +98,7 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
   const progress = await authClient.loadProgress().catch(() => null);
 
   const saveProgress = (data: GameProgressInput) => {
-    authClient.saveProgress({ ...data, savedAt: new Date().toISOString() }).catch(() => {
+    authClient.saveProgress(stampGameProgress(data)).catch(() => {
       void 0;
     });
   };

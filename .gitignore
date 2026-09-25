@@ -8,3 +8,4 @@ game.db*
 .DS_Store
 _site
 preview
+sw.js

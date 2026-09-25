@@ -4,6 +4,7 @@ import type { SerializedAbilityState } from '../core/AbilityManager';
 import type { SerializedAchievements } from '../core/AchievementManager';
 import type { GameStatsSnapshot } from '../core/GameStats';
 import type { PartyCraftsState } from '../core/partyCrafts';
+import { parseGameProgress } from '../core/saveFormat';
 
 /** HTTP status code for server error (fallback for API errors). */
 const HTTP_SERVER_ERROR = 500;
@@ -14,6 +15,11 @@ export interface AuthUser {
 }
 
 export interface GameProgress {
+  /**
+   * The payload's shape, as a semantic version — see `SAVE_FORMAT_VERSION` for
+   * what each part promises. Saves written before it existed load as `1.0.0`.
+   */
+  version: string;
   levelId: string;
   humanSnap: PlayerSnapshot;
   catSnap: PlayerSnapshot;
@@ -71,8 +77,8 @@ export interface GameProgress {
   savedAt: string;
 }
 
-/** A save as the scene hands it over — the timestamp is stamped on write. */
-export type GameProgressInput = Omit<GameProgress, 'savedAt'>;
+/** A save as the scene hands it over — the version and timestamp are stamped on write. */
+export type GameProgressInput = Omit<GameProgress, 'version' | 'savedAt'>;
 
 class ApiError extends Error {
   constructor(
@@ -153,10 +159,7 @@ export class AuthClient {
   async loadProgress(): Promise<GameProgress | null> {
     const raw = await apiFetch('/api/progress');
     if (typeof raw !== 'object' || raw === null || !('data' in raw)) return null;
-    if (raw.data === null) return null;
-    // Trusted API contract — full nested PlayerSnapshot validation is disproportionate
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    return raw.data as GameProgress;
+    return parseGameProgress(raw.data);
   }
 
   async deleteProgress(): Promise<void> {
