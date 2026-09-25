@@ -1205,7 +1205,7 @@ section('Every soldier line is heard');
   listen(1);
   barkRig.state.quest.phase = 'fortifying';
   listen(1);
-  barkRig.defense.strikeGate();
+  barkRig.defense.strikeGate(null);
   listen(1);
   const sedge = soldierOf(barkRig, 'sedge');
   const sedgeHome = tileOf(sedge);

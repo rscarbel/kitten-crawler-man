@@ -231,7 +231,7 @@ export class FairyRoomLedger {
  * uses: host HP, level, difficulty, then the potency the level and difficulty
  * decide.
  */
-function finishFairySpawn(
+export function finishFairySpawn(
   fairy: Fairy,
   level: number,
   curve: LevelledCurve | undefined,
@@ -246,7 +246,12 @@ function finishFairySpawn(
 }
 
 /** A fairy of `kind` on the tile, or null if the registry handed back something else. */
-function createFairy(kind: FairyKind, tileX: number, tileY: number, map: GameMap): Fairy | null {
+export function createFairy(
+  kind: FairyKind,
+  tileX: number,
+  tileY: number,
+  map: GameMap,
+): Fairy | null {
   const mob = createMob(FAIRY_SPAWN_KEYS[kind], tileX, tileY, map);
   return mob instanceof Fairy ? mob : null;
 }

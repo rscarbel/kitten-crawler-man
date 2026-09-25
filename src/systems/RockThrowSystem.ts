@@ -144,8 +144,12 @@ export class RockThrowSystem implements GameSystem {
   private rocks: Rock[] = [];
   private bursts: Burst[] = [];
 
-  /** Set when a rock lands; `DungeonScene` reads and clears it to play the crack. */
-  burstSoundPending = false;
+  /**
+   * Who threw each rock that landed since the scene last played the crack:
+   * the scene empties it, and plays the crack if any of them is a creature
+   * it can hear.
+   */
+  readonly landedThrowers: Mob[] = [];
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -176,12 +180,12 @@ export class RockThrowSystem implements GameSystem {
           age: 0,
           spin: 0,
           damage: thrown.damage,
-          source: mob.stampBlowCap({
+          source: mob.stampHarmLimits({
             kind: 'mob',
             mobType: thrown.mobType,
             attackType: ROCK_THROW_ATTACK_TYPE,
           }),
-          burstSource: mob.stampBlowCap({
+          burstSource: mob.stampHarmLimits({
             kind: 'mob',
             mobType: thrown.mobType,
             attackType: ROCK_THROW_ATTACK_TYPE,
@@ -239,7 +243,7 @@ export class RockThrowSystem implements GameSystem {
   private land(rock: Rock, targets: readonly Player[], directHit?: Player): void {
     if (this.bursts.length >= MAX_BURSTS) this.bursts.shift();
     this.bursts.push({ x: rock.x, y: rock.y, tick: BURST_FRAMES });
-    this.burstSoundPending = true;
+    this.landedThrowers.push(rock.attacker);
 
     const radius = TILE_SIZE * BURST_RADIUS_TILES;
     for (const target of targets) {
@@ -342,6 +346,6 @@ export class RockThrowSystem implements GameSystem {
   resetForCheckpoint(): void {
     this.rocks = [];
     this.bursts = [];
-    this.burstSoundPending = false;
+    this.landedThrowers.length = 0;
   }
 }

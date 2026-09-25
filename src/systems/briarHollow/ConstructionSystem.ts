@@ -341,21 +341,32 @@ export class ConstructionSystem {
   }
 
   /**
-   * What the build key would raise the faced wall to, and what it would cost,
-   * for the contextual world prompt — null when there is no segment in reach,
-   * it is already a breach awaiting repair, or it is already fortified.
+   * What the build key would do to the faced wall, and what it would cost,
+   * for the contextual world prompt: repair it when it is hurt or breached
+   * (a breach stands back up at the tier it fell from), otherwise raise it a
+   * tier. Null when there is no segment in reach, or a whole fortified one.
    */
-  wallBuildPrompt(
-    crawler: Crawler = this.active(),
-  ): { readonly tier: PalisadeTier; readonly cost: ResourceCost } | null {
+  wallBuildPrompt(crawler: Crawler = this.active()): {
+    readonly tier: PalisadeTier;
+    readonly cost: ResourceCost;
+    readonly repair: boolean;
+  } | null {
     const segment = this.facedSegment(crawler);
     if (segment === null) return null;
     const ref: StructureRef = { kind: 'segment', id: segment };
+    const repairCost = this.repairCostFor(ref, crawler);
+    const current = this.deps.defense.segmentTier(segment);
+    const standingTier =
+      this.deps.defense.breachedTier(segment) ??
+      (current === 'gap' || current === 'breach' ? null : current);
+    if (repairCost !== null && standingTier !== null) {
+      return { tier: standingTier, cost: repairCost, repair: true };
+    }
     const tier = this.deps.defense.upgradeTarget(ref);
     if (tier === null) return null;
     const cost = this.upgradeCostFor(ref, crawler);
     if (cost === null) return null;
-    return { tier, cost };
+    return { tier, cost, repair: false };
   }
 
   /** The wall tile a build prompt anchors to: the faced segment's tile nearest the crawler. */
@@ -367,13 +378,24 @@ export class ConstructionSystem {
   }
 
   /**
-   * The build key over a faced wall: raises it the same way choosing the row
-   * in the Construction menu would. Returns whether a job started.
+   * The build key over a faced wall: repairs it when it is hurt or breached,
+   * and otherwise raises it the same way choosing the row in the Construction
+   * menu would. Returns whether a job started.
    */
   tryBuildFacedWall(): boolean {
     const segment = this.facedSegment(this.active());
     if (segment === null) return false;
-    return this.startUpgrade({ kind: 'segment', id: segment });
+    return this.repairOrUpgrade({ kind: 'segment', id: segment });
+  }
+
+  /**
+   * Repairs a structure with anything to mend — a breach stands back up at
+   * the tier it fell from — or raises a whole wall a tier. Returns whether a
+   * job started.
+   */
+  repairOrUpgrade(ref: StructureRef): boolean {
+    if (this.repairCostFor(ref) !== null) return this.startRepair(ref);
+    return this.startUpgrade(ref);
   }
 
   private kitCount(kind: 'trebuchet' | 'snare'): number {
@@ -444,8 +466,25 @@ export class ConstructionSystem {
     const segment = this.facedSegment(crawler);
     if (segment === null) return { ...base, enabled: false, status: WALL_OPTION_NEEDS[option] };
     const current = this.deps.defense.segmentTier(segment);
-    if (current === 'breach')
-      return { ...base, enabled: false, status: 'Repair this breach first' };
+    const fallenFrom = this.deps.defense.breachedTier(segment);
+    if (fallenFrom !== null) {
+      if (fallenFrom !== tier) {
+        return { ...base, enabled: false, status: `Repair it as ${tierPhrase(fallenFrom)} first` };
+      }
+      const breach: StructureRef = { kind: 'segment', id: segment };
+      const repairCost = this.repairCostFor(breach, crawler) ?? cost;
+      const canRepair = canAfford(this.deps.human, this.deps.cat, repairCost);
+      const repair = {
+        ...base,
+        cost: repairCost,
+        baseCost: this.deps.defense.repairCost(breach) ?? baseCost,
+        affordable: canRepair,
+        seconds: this.repairSeconds(breach, crawler),
+      };
+      if (busy) return { ...repair, enabled: false, status: 'Already building' };
+      if (!canRepair) return { ...repair, enabled: false, status: 'Not enough materials' };
+      return { ...repair, enabled: true, status: 'Ready — repairs the breach' };
+    }
     const target = this.deps.defense.upgradeTarget({ kind: 'segment', id: segment });
     if (target !== tier) {
       const alreadyThere = tierRank(current) >= tierRank(tier);
@@ -487,6 +526,9 @@ export class ConstructionSystem {
       return this.startPlacement(crawler, option, status);
     const segment = this.facedSegment(crawler);
     if (segment === null) return false;
+    if (this.deps.defense.breachedTier(segment) !== null) {
+      return this.startRepair({ kind: 'segment', id: segment });
+    }
     const tier = WALL_OPTION_TIER[option];
     return this.beginJob(crawler, {
       action: 'upgrade',
@@ -658,6 +700,26 @@ export class ConstructionSystem {
     this.deps.audio?.play(LOAD_SOUND);
     this.deps.noteResourceActivity();
     return moved;
+  }
+
+  /**
+   * The repair key: mends the nearest structure in reach that needs it — a
+   * hurt or breached wall, a hurt or broken trebuchet or snare, the bell —
+   * and with nothing in reach to mend, Quick Loads the nearest trebuchet.
+   */
+  repairOrLoad(reachTiles: number): void {
+    const hurt = this.nearestNeedingRepair(reachTiles);
+    if (hurt !== null) {
+      this.startRepair(hurt);
+      return;
+    }
+    this.quickLoad(reachTiles);
+  }
+
+  /** The nearest structure in reach with something to repair, or null. */
+  nearestNeedingRepair(reachTiles: number, crawler: Crawler = this.active()): StructureRef | null {
+    const defense = this.deps.defense;
+    return defense.nearestInReach(crawler, reachTiles, (ref) => defense.repairCost(ref) !== null);
   }
 
   /** Quick Load: as much stone as fits into the nearest trebuchet in reach. */

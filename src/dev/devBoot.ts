@@ -42,6 +42,7 @@ import { setFigureCacheStatsRecording } from '../sprites/figure/figureCacheStats
 import { drawPerfOverlay } from './perfOverlay';
 import { drawDifficultyOverlay } from './difficultyOverlay';
 import { getPlaytestPreset } from './playtestPresets';
+import { fortifyBriarHollow, parseTrebuchetCount, parseWallTier } from './briarHollowFortify';
 import { DOOMSDAY_COUNTDOWN_MS, createDoomsdayProgress } from '../core/DoomsdayProgress';
 import { settings } from '../core/Settings';
 import { getMercenaryTemplate } from '../core/mercenaryTemplates';
@@ -385,6 +386,18 @@ export function devBootScene(
         };
       }
       if (preset.mongoOut === true) options.mongoWasOut = true;
+      const defences = preset.briarHollowDefences;
+      if (defences !== undefined) {
+        const wallsFlag = params.get('walls');
+        const trebuchetsFlag = params.get('trebuchets');
+        const wallTier = parseWallTier(wallsFlag) ?? defences.wallTier;
+        const trebuchets = parseTrebuchetCount(trebuchetsFlag) ?? defences.trebuchets;
+        if (wallsFlag !== null && parseWallTier(wallsFlag) === null) {
+          console.error(`Unknown walls "${wallsFlag}"; standing the ring at ${defences.wallTier}`);
+        }
+        options.prepareBriarHollow = (kit, gameMap) =>
+          fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
+      }
       if (preset.toolTiers !== undefined) {
         options.partyCrafts = { ...createPartyCraftsState(), tools: { ...preset.toolTiers } };
       }

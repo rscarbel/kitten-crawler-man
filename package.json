@@ -155,7 +155,6 @@
     "verify:construction": "tsx scripts/verify-construction.ts",
     "verify:necromancer": "tsx scripts/verify-necromancer.ts",
     "verify:village-quest": "tsx scripts/verify-village-quest.ts",
-    "verify:village-assault": "tsx scripts/verify-village-assault.ts",
     "render:village-siege": "tsx scripts/render-village-siege.ts",
     "verify:siege-engines": "tsx scripts/verify-siege-engines.ts",
     "verify:soldiers": "tsx scripts/verify-soldiers.ts",

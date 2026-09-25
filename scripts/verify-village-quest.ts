@@ -9,7 +9,7 @@
  *
  * Steps: the Mayor's offer (declined, then accepted); Tikka and Oren; the
  * gathering tasks with the journal after each; Construction from Tikka; a
- * wooden wall and "We're ready."; the ninety-second countdown; a lost siege
+ * wooden wall and "We're ready."; the countdown; a lost siege
  * (the dead withdraw, the bell is mended, the damage stays, the Mayor's word
  * returns the quest to fortifying); a won retry (the rest crumble, paying
  * nothing); the turn-in (every reward once; a second pays nothing). A
@@ -38,6 +38,7 @@ import {
 } from '../src/systems/briarHollow/ratkinDialogue';
 import { HOLLOW_BELL_MAX_HP } from '../src/systems/briarHollow/hollowBell';
 import {
+  ASSAULT_WAVE_COUNT,
   IMMINENT_FRAMES,
   type SiegeMusicClaim,
 } from '../src/systems/briarHollow/VillageAssaultSystem';
@@ -72,7 +73,7 @@ const SEED = 7919;
 const ASSAULT_LEVEL = 6;
 const UPDATES_PER_SECOND = 60;
 /** The request's numbers, written out so a drifted constant fails here. */
-const REQUEST_IMMINENT_SECONDS = 90;
+const REQUEST_IMMINENT_SECONDS = 45;
 const REQUEST_BELL_HP = 600;
 const REQUEST_COINS = 500;
 const REQUEST_TIKKA_WOOD = 10;
@@ -441,7 +442,7 @@ section('6. The countdown');
   check(
     state.quest.imminentCountdownFrames === REQUEST_IMMINENT_SECONDS * UPDATES_PER_SECOND &&
       IMMINENT_FRAMES === REQUEST_IMMINENT_SECONDS * UPDATES_PER_SECOND,
-    'ninety seconds of it',
+    `${REQUEST_IMMINENT_SECONDS} seconds of it`,
   );
   check(kit.ambience.noticeBoard.callToArms, 'the call to arms goes up on the notice board');
   checkpointStep('imminent');
@@ -450,7 +451,7 @@ section('6. The countdown');
   check(state.quest.phase === 'imminent', 'still counting down a frame before the end');
   check(kit.ambience.bell.ringing, 'the bell rings through the countdown');
   rig.step();
-  check(state.quest.phase === 'assault', 'the assault starts when the ninety seconds are up');
+  check(state.quest.phase === 'assault', 'the assault starts when the countdown is up');
   check(
     events.some((e) => e.name === 'wave' && e.detail === '0'),
     'villageAssaultWave announces the first wave',
@@ -534,20 +535,42 @@ section('8. The retry and the turn-in');
   choose("We're ready.");
   kit.handleKeyDown('Enter');
   check(state.quest.phase === 'imminent', 'the siege can be tried again');
+  const introsBeforeRetry = rig.bossIntros;
   stepUntil(() => state.quest.phase === 'assault', REQUEST_IMMINENT_SECONDS + 1);
   const killedEarly = new Set<Mob>();
-  // Clear every body the first two waves send, as soon as it is out, until the necromancer comes.
+  const beatenEarly = new Set<Necromancer>();
+  const killEvents = new Set<Mob>();
+  bus.on('mobKilled', ({ mob }) => killEvents.add(mob));
+  const lastWaveIndex = ASSAULT_WAVE_COUNT - 1;
+  // Clear every body the earlier waves send, as soon as it is out, and beat
+  // down the necromancer who leads each, until he comes with the last.
   const reachedNecro = stepUntil(() => {
     for (const mob of rig.world.roster.mobs) {
       if (!mob.isAlive || !mob.isHostile || mob.siegeCapable === null) continue;
-      if (mob instanceof Necromancer) return true;
+      if (mob instanceof Necromancer) {
+        if (state.quest.assaultWaveIndex === lastWaveIndex) return true;
+        if (!mob.isFadingAway) mob.takeDamageFrom(OVERKILL, human, 'melee');
+        beatenEarly.add(mob);
+        continue;
+      }
       mob.takeDamageFrom(OVERKILL, human, 'melee');
       killedEarly.add(mob);
     }
     return false;
   });
-  check(reachedNecro, 'the necromancer arrives with the last wave');
-  check(rig.bossIntros === 1, 'his boss intro plays');
+  check(reachedNecro, 'the necromancer leads the last wave');
+  check(
+    beatenEarly.size === lastWaveIndex,
+    `he led every wave before it too (${beatenEarly.size} of ${lastWaveIndex})`,
+  );
+  check(
+    [...beatenEarly].every((early) => !early.isAlive && !killEvents.has(early)),
+    'beaten in those, he faded away rather than dying',
+  );
+  check(
+    rig.bossIntros - introsBeforeRetry === 1,
+    'his boss intro plays once in the siege, when he first comes',
+  );
   stepFrames(NECRO_WAVE_RUN_SECONDS * UPDATES_PER_SECOND);
   const necro = assault.activeNecromancer;
   check(necro !== null, 'he is in the field');

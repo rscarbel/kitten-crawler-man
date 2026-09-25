@@ -7,6 +7,12 @@
  *        npm run playtest -- spider     (plain argument, same result)
  *        npm run playtest               (lists the presets and exits)
  *
+ * A preset that reads flags takes them either way:
+ *        npm run playtest -- briar-hollow-assault --walls=fortified --trebuchets=4
+ *        npm run playtest --briar-hollow-assault --walls=wood
+ * `--walls` is fence, wood, stone or fortified (or 1–4 in that order);
+ * `--trebuchets` is how many loaded engines stand inside the ring.
+ *
  * Presets live in src/dev/playtestPresets.ts; the browser side of the handoff is
  * `?playtest=<id>` in src/game.ts.
  */
@@ -51,9 +57,37 @@ function requestedPresetId(): string | null {
   if (fromArgs !== undefined) return fromArgs;
 
   for (const id of PRESET_IDS) {
+    // npm writes a dashed flag's name with underscores: `--briar-hollow-assault`
+    // arrives as `npm_config_briar_hollow_assault`.
+    const underscored = id.replace(/-/g, '_');
     if (process.env[`npm_config_${id}`] !== undefined) return id;
+    if (process.env[`npm_config_${underscored}`] !== undefined) return id;
   }
   return null;
+}
+
+/** The flags a preset may read, handed on to the browser as query parameters of the same name. */
+const PRESET_FLAGS = ['walls', 'trebuchets'] as const;
+
+/**
+ * `--name=value` from the arguments, or npm's `npm_config_name` when the flag
+ * was given before the `--` and npm took it as one of its own settings.
+ */
+function flagValue(name: string): string | null {
+  const prefix = `--${name}=`;
+  const fromArgs = process.argv.slice(2).find((arg) => arg.startsWith(prefix));
+  if (fromArgs !== undefined) return fromArgs.slice(prefix.length);
+  return process.env[`npm_config_${name}`] ?? null;
+}
+
+/** The preset flags that were given, as a query string to append (`&walls=stone`), or ''. */
+function flagQuery(): string {
+  const parts: string[] = [];
+  for (const name of PRESET_FLAGS) {
+    const value = flagValue(name);
+    if (value !== null) parts.push(`&${name}=${encodeURIComponent(value)}`);
+  }
+  return parts.join('');
 }
 
 function portIsInUse(port: number): Promise<boolean> {
@@ -134,7 +168,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const url = `http://localhost:${SERVER_PORT}/?playtest=${presetId}`;
+  const url = `http://localhost:${SERVER_PORT}/?playtest=${presetId}${flagQuery()}`;
   console.log(`Playtesting "${presetId}" — ${url}`);
   openBrowser(url);
 }

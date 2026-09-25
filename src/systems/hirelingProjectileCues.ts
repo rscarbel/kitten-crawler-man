@@ -16,9 +16,11 @@ export function playHirelingProjectileCues(
   hirelingShots: HirelingBoltSystem,
   audio: AudioManager | null,
 ): void {
-  if (rockThrows.burstSoundPending) {
-    rockThrows.burstSoundPending = false;
-    audio?.playRandom(['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4']);
+  const throwers = rockThrows.landedThrowers;
+  if (throwers.length > 0) {
+    const heard = throwers.some((thrower) => audio?.hearsCreature(thrower) === true);
+    throwers.length = 0;
+    if (heard) audio?.playRandom(['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4']);
   }
   if (hirelingShots.impactSoundPending) {
     hirelingShots.impactSoundPending = false;

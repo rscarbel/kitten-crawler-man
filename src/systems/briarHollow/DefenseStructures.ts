@@ -60,6 +60,7 @@ import type {
 import type { CrawlerKind } from '../../core/SkillManager';
 import type { EventBus } from '../../core/EventBus';
 import type { AudioManager } from '../../audio/AudioManager';
+import type { SoundId } from '../../audio/sounds';
 import type { Player } from '../../Player';
 import type { Mob } from '../../creatures/Mob';
 import type { MobRoster } from '../kits/SceneWorld';
@@ -77,6 +78,7 @@ import {
   SNARE_REPAIR_COST,
   SPIKES_BASE_HP,
   SPIKES_COST,
+  SPIKES_THORNS_MAX_SHARE,
   STRUCTURE_BLAST_DAMAGE,
   TREBUCHET_BASE_HP,
   TREBUCHET_HEIGHT_TILES,
@@ -362,6 +364,13 @@ export class DefenseStructures {
     return this.findSegmentRecord(id)?.tier ?? 'fence';
   }
 
+  /** The tier a breached segment stood at before it fell, or null when it is not a breach. */
+  breachedTier(id: string): PalisadeTier | null {
+    const record = this.findSegmentRecord(id);
+    if (record?.tier !== 'breach') return null;
+    return record.formerTier ?? 'wood';
+  }
+
   trebuchet(key: string): TrebuchetStructureRecord | null {
     for (const record of this.deps.state.structures) {
       if (record.kind === 'trebuchet' && structureKey(record.x, record.y) === key) return record;
@@ -527,7 +536,7 @@ export class DefenseStructures {
   ): void {
     if (amount <= 0) return;
     if (ref.kind === 'gate') {
-      this.strikeGate();
+      this.strikeGate(attacker);
       return;
     }
     if (ref.kind === 'segment') {
@@ -576,10 +585,10 @@ export class DefenseStructures {
   }
 
   /** Strikes the gate: it shakes and thuds, and takes no damage. */
-  strikeGate(): void {
+  strikeGate(attacker: Mob | null): void {
     this.gateShakeSecondsLeft = GATE_SHAKE_SECONDS;
     this._gateStruckAtSeconds = this.deps.clockSeconds();
-    this.deps.audio?.play(GATE_THUD_SOUND);
+    this.playBlowSound(GATE_THUD_SOUND, attacker);
   }
 
   /**
@@ -639,7 +648,7 @@ export class DefenseStructures {
     const anchor = segment?.tiles[0];
     if (anchor !== undefined) this.emitDamaged('segment', anchor.x, anchor.y);
     if (record.hp > 0) {
-      this.deps.audio?.play(tier === 'wood' ? WOOD_WALL_HIT_SOUND : STONE_WALL_HIT_SOUND);
+      this.playBlowSound(tier === 'wood' ? WOOD_WALL_HIT_SOUND : STONE_WALL_HIT_SOUND, attacker);
       this.syncMap();
       return;
     }
@@ -667,14 +676,27 @@ export class DefenseStructures {
     if (spikes === null || spikes <= 0) return amount;
     if (source === 'melee' && attacker !== null && attacker.isHostile && attacker.isAlive) {
       const credited = this.deps.crawler(record.spikesBy ?? 'human');
-      attacker.takeCreditedDamage(amount, credited, 'melee', null);
-      this.deps.audio?.play(SPIKES_IMPALE_SOUND);
+      const thorns = Math.min(amount, attacker.maxHp * SPIKES_THORNS_MAX_SHARE);
+      attacker.takeCreditedDamage(thorns, credited, 'melee', null);
+      this.playBlowSound(SPIKES_IMPALE_SOUND, attacker);
     }
     const absorbed = Math.min(spikes, amount);
     const remaining = spikes - absorbed;
     record.spikesHp = remaining > 0 ? remaining : null;
     if (record.spikesHp === null) record.spikesBy = undefined;
     return amount - absorbed;
+  }
+
+  /**
+   * The sound of one blow landing, when the audio manager can hear the
+   * creature that struck it: with a wave at the wall, every swing voiced
+   * at once is a roar. What a blow breaks is voiced whoever struck it.
+   */
+  private playBlowSound(id: SoundId, attacker: Mob | null): void {
+    const audio = this.deps.audio;
+    if (audio === null) return;
+    if (attacker !== null && !audio.hearsCreature(attacker)) return;
+    audio.play(id);
   }
 
   private emitDamaged(kind: 'segment' | 'trebuchet' | 'snare', tileX: number, tileY: number): void {
@@ -992,8 +1014,15 @@ export class DefenseStructures {
 
   // ── Reach ─────────────────────────────────────────────────────────────────
 
-  /** The nearest structure (gate included) whose tiles come within `reachTiles` of the crawler. */
-  nearestInReach(active: { x: number; y: number }, reachTiles: number): StructureRef | null {
+  /**
+   * The nearest structure (gate included) whose tiles come within `reachTiles`
+   * of the crawler, of those `accept` lets through.
+   */
+  nearestInReach(
+    active: { x: number; y: number },
+    reachTiles: number,
+    accept: (ref: StructureRef) => boolean = () => true,
+  ): StructureRef | null {
     const originX = active.x + HALF_TILE;
     const originY = active.y + HALF_TILE;
     const reachPx = reachTiles * TILE_SIZE;
@@ -1001,7 +1030,7 @@ export class DefenseStructures {
     let bestDistance = Infinity;
     const consider = (ref: StructureRef, footprint: TileFootprint): void => {
       const distance = distanceToFootprintPx(originX, originY, footprint);
-      if (distance > reachPx || distance >= bestDistance) return;
+      if (distance > reachPx || distance >= bestDistance || !accept(ref)) return;
       best = ref;
       bestDistance = distance;
     };

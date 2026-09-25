@@ -263,6 +263,8 @@ export class BriarHollowKit {
             human: deps.human,
             cat: deps.cat,
             level: deps.assaultLevel,
+            // Lazy: the assault is built after the militia it moves.
+            battleLane: () => this.assault?.attackSide ?? null,
             worldHalted: () => deps.worldHalted?.() === true,
           });
     const defense = this.defences?.defense ?? null;
@@ -604,9 +606,12 @@ export class BriarHollowKit {
     this.defences?.openConstruction();
   }
 
-  /** Deposits as much stone as fits into the nearest trebuchet in reach (`X`). */
-  quickLoad(): void {
-    this.defences?.quickLoad();
+  /**
+   * The repair key (`X`): mends the nearest hurt structure in reach, or with
+   * nothing to mend, deposits as much stone as fits into the nearest trebuchet.
+   */
+  repairOrLoad(): void {
+    this.defences?.repairOrLoad();
   }
 
   /**
@@ -843,7 +848,7 @@ export class BriarHollowKit {
   overlayClaims(): OverlayInputClaim[] {
     // The siege's countdown banner claims nothing: it floats over live play,
     // and an open claim would hold the Space chain and the attack for the
-    // whole ninety seconds.
+    // whole countdown.
     return [
       ...(this.quest === null ? [] : [this.quest.overlayClaim()]),
       ...(this.recruiter === null ? [] : [this.recruiter.overlayClaim()]),

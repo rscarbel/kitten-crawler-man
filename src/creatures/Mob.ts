@@ -707,10 +707,38 @@ export abstract class Mob extends Player {
    */
   blowCapShareOfTargetHp: number | null = null;
 
-  /** `source` with this mob's blow cap on it, if it has one. */
-  stampBlowCap(source: MobDamageSource): MobDamageSource {
-    if (this.blowCapShareOfTargetHp === null) return source;
-    return { ...source, maxShareOfTargetHp: this.blowCapShareOfTargetHp };
+  /**
+   * Multiplies every blow this mob lands, carried on the same sources as
+   * {@link blowCapShareOfTargetHp}, so a share-of-HP attack that skips level
+   * scaling is softened as well. A scripted encounter fielding a weaker copy
+   * of a creature (a bounty mark in the village siege) lowers it; 1 elsewhere.
+   */
+  outgoingDamageScale = 1;
+
+  /**
+   * When true no blow or tick takes this mob below 1 HP: it is beaten, never
+   * killed, and whatever staged the fight decides what becomes of it.
+   */
+  cannotBeKilled = false;
+
+  /** `source` with this mob's blow cap and outgoing damage scale on it. */
+  stampHarmLimits(source: MobDamageSource): MobDamageSource {
+    const capped =
+      this.blowCapShareOfTargetHp === null
+        ? source
+        : { ...source, maxShareOfTargetHp: this.blowCapShareOfTargetHp };
+    if (this.outgoingDamageScale === 1) return capped;
+    return { ...capped, damageScale: this.outgoingDamageScale };
+  }
+
+  /**
+   * Scales max HP by `share` and fills the bar: a scripted encounter fielding
+   * a weaker (or tougher) copy of a creature. Call after {@link applyMobLevel},
+   * which would otherwise level the scaled figure again.
+   */
+  scaleMaxHp(share: number): void {
+    this.setFixedMaxHp(this.maxHp * share);
+    this.hp = this.maxHp;
   }
 
   /**
@@ -919,7 +947,8 @@ export abstract class Mob extends Player {
     if (this.isAlive) impact?.();
   }
 
-  private clearStructureStrike(): void {
+  /** Drops a blow on a structure mid-swing: it lands on nothing. */
+  abandonStructureStrike(): void {
     this.structureStrikeFramesLeft = 0;
     this.structureStrikeTotalFrames = 0;
     this.structureStrikeFramesToImpact = 0;
@@ -1808,7 +1837,7 @@ export abstract class Mob extends Player {
       this.attackSoundPending = true;
       return false;
     }
-    const source = this.stampBlowCap({
+    const source = this.stampHarmLimits({
       kind: 'mob',
       mobType: this.mobType,
       attackType,
@@ -2534,7 +2563,13 @@ export abstract class Mob extends Player {
    */
   private scaleIncomingDamage(amount: number): number {
     if (amount <= 0) return amount;
-    return Math.max(1, Math.round(amount * this.incomingDamageScale * this.statusDamageScale));
+    const scaled = Math.max(
+      1,
+      Math.round(amount * this.incomingDamageScale * this.statusDamageScale),
+    );
+    if (!this.cannotBeKilled) return scaled;
+    const survivableDamage = Math.max(0, this.hp - 1);
+    return Math.min(scaled, survivableDamage);
   }
 
   /**
@@ -3419,7 +3454,7 @@ export abstract class Mob extends Player {
     this.hazardSlowFrames = 0;
     this.rootFrames = 0;
     this.rootSource = null;
-    this.clearStructureStrike();
+    this.abandonStructureStrike();
     this.revertConversion();
     this.forceAggro = false;
     this.wanderDx = 0;

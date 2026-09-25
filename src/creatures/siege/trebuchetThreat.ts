@@ -107,7 +107,9 @@ export function engageTrebuchet(
     mob.facingY = dy / distance;
   }
   mob.isMoving = false;
-  const damage = mob.structureStrikeDamage * mob.siegeStructureMultiplier;
+  // An enlisted mob strikes at the siege's scale, the same as it would a wall.
+  const multiplier = mob.siegeCapable?.structureDamageMultiplier ?? mob.siegeStructureMultiplier;
+  const damage = mob.structureStrikeDamage * multiplier;
   const ref = target.ref;
   mob.playStructureStrike(() => {
     if (mob.isHostile && isStandingStructure(activeDefense, ref)) {

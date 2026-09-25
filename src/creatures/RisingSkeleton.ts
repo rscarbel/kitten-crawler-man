@@ -27,6 +27,12 @@ const MIN_LESSER_MAX_HP = 1;
 export abstract class RisingSkeleton extends Mob {
   private riseTimer = 0;
   protected lesserShare = FULL_STRENGTH;
+  /**
+   * Set when the necromancer called this one up mid-fight. It counts against
+   * his cap of living raises and never against the assault's own live cap, so
+   * his raises can never crowd the wave's scripted spawns out.
+   */
+  raisedByNecromancer = false;
 
   /**
    * Makes this a lesser copy of itself: `share` of its authored max HP and of

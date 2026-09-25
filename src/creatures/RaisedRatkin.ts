@@ -87,12 +87,6 @@ export class RaisedRatkin extends RisingSkeleton {
   description = 'One of Briar Hollow’s own dead, dragged back up with blue light in its eyes.';
 
   readonly look: RaisedRatkinLook;
-  /**
-   * Set when the necromancer called this one up mid-fight. It counts against
-   * his cap of living raises and never against the assault's own live cap, so
-   * his raises can never crowd the wave's scripted spawns out.
-   */
-  raisedByNecromancer = false;
   /** Sounds waiting for the audio pass. */
   readonly cues = new UndeadCueQueue();
 

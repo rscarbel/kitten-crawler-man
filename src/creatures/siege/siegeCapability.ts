@@ -26,12 +26,18 @@ const HALF_TILE = TILE_SIZE / 2;
 
 /**
  * Enlists `mob` in the assault on `world`: it batters structures at its own
- * multiplier from now on. `spreadSeed` is its own tie-break among equally
- * good steps, so a wave does not walk single file.
+ * multiplier from now on, times `structureScale` for a body the assault
+ * fields as stronger than its kind (a bounty mark). `spreadSeed` is its own
+ * tie-break among equally good steps, so a wave does not walk single file.
  */
-export function enlistInSiege(mob: Mob, world: SiegeWorld, spreadSeed = 0): void {
+export function enlistInSiege(
+  mob: Mob,
+  world: SiegeWorld,
+  spreadSeed = 0,
+  structureScale = 1,
+): void {
   mob.siegeCapable = {
-    structureDamageMultiplier: mob.siegeStructureMultiplier,
+    structureDamageMultiplier: mob.siegeStructureMultiplier * structureScale,
     siegeTarget: null,
     world,
     spreadSeed,
@@ -92,9 +98,10 @@ export function nearestStructurePoint(
 /**
  * Strikes the structure in `mob`'s way, if there is one.
  *
- * Asks the flow which structure the step out of the mob's tile enters. With
- * none — or one already opened — the mob's target is cleared and this answers
- * false, so the caller marches on. Otherwise the mob turns to the structure
+ * Asks the flow which structure the step out of the mob's tile enters; with
+ * none, a mob outside the ring still takes the wall right beside it when no
+ * opening is near enough to walk to. With neither, the mob's target is
+ * cleared and this answers false, so the caller marches on. Otherwise the mob turns to the structure
  * and swings its own blow at it, and the blow lands on the swing's impact
  * frame as `structureStrikeDamage × structureDamageMultiplier` through
  * `defense.damage(…, 'melee')`. The structure is re-checked on that frame: a
@@ -116,8 +123,12 @@ export function trySiegeStrike(
     return false;
   }
   if (mob.isStrikingStructure) return true;
-  const ref = flow.blockingStructure(tileUnder(mob), siege.spreadSeed);
-  if (ref === null || !isStandingStructure(defense, ref)) {
+  const inTheWay = flow.blockingStructure(tileUnder(mob), siege.spreadSeed);
+  const ref =
+    inTheWay !== null && isStandingStructure(defense, inTheWay)
+      ? inTheWay
+      : wallAlongside(mob, defense, siege.world.site);
+  if (ref === null) {
     siege.siegeTarget = null;
     return false;
   }
@@ -142,6 +153,61 @@ export function trySiegeStrike(
     }
   });
   return true;
+}
+
+/**
+ * How near an opening in the ring must be for an attacker pressed against the
+ * wall to go round to it rather than batter the stone in front of it.
+ */
+const WALL_SWARM_OPENING_TILES = 6;
+
+const ORTHOGONAL_STEPS: readonly SiegeTile[] = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+];
+
+/**
+ * A standing wall segment right beside an attacker outside the ring, with no
+ * opening near enough to walk through instead. The flow sends a whole wave at
+ * the one cheapest segment; without this, every body that reaches the wall
+ * anywhere else walks along it into the crowd at that one section, and only
+ * the front row ever swings.
+ */
+function wallAlongside(
+  mob: Mob,
+  defense: DefenseStructures,
+  site: BriarHollowSite,
+): StructureRef | null {
+  if (isInsidePalisade(site, mob)) return null;
+  const tile = tileUnder(mob);
+  let beside: StructureRef | null = null;
+  for (const step of ORTHOGONAL_STEPS) {
+    const segment = defense.segmentAtTile(tile.x + step.x, tile.y + step.y);
+    if (segment === null || defense.isOpening(segment.id)) continue;
+    beside = { kind: 'segment', id: segment.id };
+    break;
+  }
+  if (beside === null || openingWithin(defense, site, tile, WALL_SWARM_OPENING_TILES)) {
+    return null;
+  }
+  return beside;
+}
+
+function openingWithin(
+  defense: DefenseStructures,
+  site: BriarHollowSite,
+  from: SiegeTile,
+  tiles: number,
+): boolean {
+  for (const segment of site.segments) {
+    if (!defense.isOpening(segment.id)) continue;
+    for (const tile of segment.tiles) {
+      if (Math.hypot(tile.x - from.x, tile.y - from.y) <= tiles) return true;
+    }
+  }
+  return false;
 }
 
 /**

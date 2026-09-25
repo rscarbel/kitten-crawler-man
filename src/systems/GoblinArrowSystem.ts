@@ -150,7 +150,7 @@ export class GoblinArrowSystem implements GameSystem {
       age: 0,
       damage: shot.damage,
       // An arrow crossing open ground is exactly what dodge is for.
-      source: archer.stampBlowCap({ kind: 'mob', mobType: shot.mobType }),
+      source: archer.stampHarmLimits({ kind: 'mob', mobType: shot.mobType }),
       aimedAt: shot.aimedAt,
       owner: archer,
     });

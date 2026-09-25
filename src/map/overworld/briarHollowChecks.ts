@@ -12,7 +12,13 @@ import { HOLLOW_GATE, HOLLOW_PALISADE, HOLLOW_THRESHOLD, type TileContent } from
 import { isWalkableTileType } from '../walkability';
 import type { TilePoint } from '../town/townPlan';
 import { OUTSIDE_BUILDINGS, propFootprint } from './briarHollowLayout';
-import { isInsideRing, rectCentre, rectContains, type BriarHollowSite } from './briarHollowSite';
+import {
+  ASSAULT_LANE_SPAWN_SEARCH_TILES,
+  isInsideRing,
+  rectCentre,
+  rectContains,
+  type BriarHollowSite,
+} from './briarHollowSite';
 import { Reachability, type GridView } from './reachability';
 
 const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
@@ -145,6 +151,16 @@ function reachedBeside(reach: Reachability, tiles: readonly TilePoint[]): boolea
   return tiles.some((tile) => neighbours(tile).some((next) => reach.reached(next.x, next.y)));
 }
 
+/** Whether any tile within `radius` tiles (Chebyshev) of `centre` was reached. */
+function reachedNear(reach: Reachability, centre: TilePoint, radius: number): boolean {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      if (reach.reached(centre.x + dx, centre.y + dy)) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * The village's reachability: from the town a walker reaches the gate, and
  * through it every threshold, anchor, the square, the pasture gate, the grove
@@ -218,10 +234,15 @@ export function checkBriarHollowIsReachable(
     problems.push(`the ruins centre ${describe(site.ruins.centre)} cannot be reached`);
   }
   for (const lane of site.assaultLanes) {
-    for (const tile of [lane.spawn, lane.approach]) {
-      if (!fromTown.reached(tile.x, tile.y)) {
-        problems.push(`assault lane ${lane.id} tile ${describe(tile)} cannot be reached`);
-      }
+    if (!fromTown.reached(lane.approach.x, lane.approach.y)) {
+      problems.push(
+        `assault lane ${lane.id} approach ${describe(lane.approach)} cannot be reached`,
+      );
+    }
+    // A lane's spawn is where its wave is searched for room, not the one tile
+    // it must stand on: the flank lanes' spawns are out in the wilderness.
+    if (!reachedNear(fromTown, lane.spawn, ASSAULT_LANE_SPAWN_SEARCH_TILES)) {
+      problems.push(`assault lane ${lane.id} has no reachable ground near ${describe(lane.spawn)}`);
     }
   }
   return problems;

@@ -747,7 +747,7 @@ export class DarkKnight extends Mob {
     const damage = this.scaledDamage(PUNCH_DAMAGE);
     const connected = target.takeDamage(
       damage,
-      this.stampBlowCap({
+      this.stampHarmLimits({
         kind: 'mob',
         mobType: this.mobType,
         attackType: 'gauntlet',

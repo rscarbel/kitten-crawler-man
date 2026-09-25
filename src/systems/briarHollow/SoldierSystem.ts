@@ -32,7 +32,7 @@ import {
 } from '../../creatures/RatkinSoldier';
 import type { Player } from '../../Player';
 import type { GameMap } from '../../map/GameMap';
-import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
+import type { AssaultLaneId, BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import { RATKIN_SOLDIER_IDS, type RatkinSoldierId } from '../../sprites/art/ratkin/cast';
@@ -175,6 +175,11 @@ export interface SoldierSystemDeps {
   readonly cat: CatPlayer;
   /** The level the siege's undead come at, which the militia is levelled to meet. */
   readonly level: () => number;
+  /**
+   * The side the coming or current assault wave attacks from, which the
+   * militia's battle posts line; null keeps each soldier on their own lane.
+   */
+  readonly battleLane?: () => AssaultLaneId | null;
   /** Whether the world is stopped under a menu; the soldiers' clocks wait with it. */
   readonly worldHalted?: () => boolean;
   /** Defaults to `Math.random`; the gates pass a seeded stream. */
@@ -304,7 +309,9 @@ export class SoldierSystem {
   private postStation(id: RatkinSoldierId): SoldierPosts['post'][RatkinSoldierId] {
     const inSiege = SIEGE_PHASES.has(this.deps.state.quest.phase);
     if (inSiege && this.fallenBack) return this.bellStations[id];
-    return inSiege ? this.posts.battlePost[id] : this.posts.post[id];
+    if (!inSiege) return this.posts.post[id];
+    const lane = this.deps.battleLane?.() ?? null;
+    return lane === null ? this.posts.battlePost[id] : this.posts.battlePostByLane[lane][id];
   }
 
   /**

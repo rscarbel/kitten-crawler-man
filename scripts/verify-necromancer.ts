@@ -120,7 +120,13 @@ const REQUEST_ESCORT_CAP = 8;
 const REQUEST_MIN_WALL_DISTANCE_TILES = 3;
 const REQUEST_PULSE_CHANNEL_FRAMES = 90;
 const REQUEST_PULSE_STONE_SHARE = 0.25;
-const REQUEST_BULL_STRUCTURE_MULTIPLE = 6;
+const REQUEST_BULL_STRUCTURE_MULTIPLE = 3;
+/**
+ * Where along the south wall, east of the gate, the charge test's bull stands:
+ * far enough that its charge at the bell meets a wall segment, not the gate,
+ * which only shakes.
+ */
+const BULL_WALL_OFFSET_FROM_GATE_TILES = 14;
 const REQUEST_BULL_PAW_FRAMES = 60;
 const REQUEST_BULL_MAX_CHARGE_TILES = 8;
 
@@ -952,7 +958,7 @@ section('Death: a held terminal phase, and justDied latches once');
 
 // ── 6. Grave Bull ─────────────────────────────────────────────────────────
 
-section('Grave Bull: a charge into a wooden wall deals six times its weight');
+section('Grave Bull: a charge into a wooden wall deals three times its weight');
 {
   Math.random = mulberry32(7);
   const rig = makeRig();
@@ -960,7 +966,7 @@ section('Grave Bull: a charge into a wooden wall deals six times its weight');
   upgradeSegmentsTo(rig, (id) => southIds.has(id));
   rig.flow.rebuild();
   const southRow = site.palisadeBounds.y + site.palisadeBounds.h - 1;
-  const wallX = site.gate.tiles[2].x + 6;
+  const wallX = site.gate.tiles[2].x + BULL_WALL_OFFSET_FROM_GATE_TILES;
   const bull = new GraveBull(wallX, southRow + 5, TILE_SIZE);
   bull.applyMobLevel(TEST_LEVEL);
   enlistInSiege(bull, rig.world);
@@ -996,7 +1002,7 @@ section('Grave Bull: a charge into a wooden wall deals six times its weight');
   );
   check(
     Math.abs(struckLoss - expected) < 1e-6,
-    `the wall lost ${struckLoss}, six times the bull's ${bull.structureStrikeDamage}`,
+    `the wall lost ${struckLoss}, ${REQUEST_BULL_STRUCTURE_MULTIPLE} times the bull's ${bull.structureStrikeDamage}`,
   );
   check(pawFrames >= GRAVE_BULL_PAW_TELEGRAPH_FRAMES, `it pawed ${pawFrames} frames first`);
   check(headingHeld, 'the heading stayed locked through the paw');

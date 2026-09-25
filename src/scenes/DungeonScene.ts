@@ -590,6 +590,12 @@ export interface DungeonSceneOptions {
    * inert off floor 3.
    */
   briarHollowState?: BriarHollowState;
+  /**
+   * Dev-only: run once on Briar Hollow's systems as soon as they are built,
+   * before the first frame — a playtest preset standing the village up
+   * part-way through its questline.
+   */
+  prepareBriarHollow?: (kit: BriarHollowKit, gameMap: GameMap) => void;
   /** Market-stall stock, threaded by reference so a shop trip can't restock a stall. */
   marketStock?: MarketStock;
   /** Hired-mercenary roster, threaded by reference across building/scene transitions. */
@@ -2364,6 +2370,9 @@ export class DungeonScene extends GameplayScene {
       // So an ordinary hostile (not just the assault's own wave) can notice
       // and attack a live trebuchet the way it notices a crawler.
       this.combat.mobLoop.setTrebuchetDefense(this.briarHollowKit?.defences?.defense ?? null);
+      if (this.briarHollowKit !== null) {
+        options?.prepareBriarHollow?.(this.briarHollowKit, this.gameMap);
+      }
     }
 
     this.achievementUI = new AchievementUISystem(
@@ -3363,7 +3372,7 @@ export class DungeonScene extends GameplayScene {
         if (this.briarHollowKit?.tryStructureMenu() === true) return;
         this.grateSpikes.tryOpen();
       },
-      onQuickLoad: () => this.briarHollowKit?.quickLoad(),
+      onQuickLoad: () => this.briarHollowKit?.repairOrLoad(),
     });
   }
 

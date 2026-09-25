@@ -196,8 +196,12 @@ export class SkeletonProjectileSystem implements GameSystem {
       // A shot crossing open ground is exactly what dodge is for, so it stays
       // dodgeable. The burst it makes on landing is not — there is no
       // sidestepping a blast you are already standing in.
-      source: caster.stampBlowCap({ kind: 'mob', mobType: shot.mobType }),
-      burstSource: caster.stampBlowCap({ kind: 'mob', mobType: shot.mobType, undodgeable: true }),
+      source: caster.stampHarmLimits({ kind: 'mob', mobType: shot.mobType }),
+      burstSource: caster.stampHarmLimits({
+        kind: 'mob',
+        mobType: shot.mobType,
+        undodgeable: true,
+      }),
       aimedAt: shot.aimedAt,
       owner: caster,
     });

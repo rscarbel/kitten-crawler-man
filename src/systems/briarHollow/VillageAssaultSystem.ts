@@ -1,10 +1,19 @@
 /**
  * VillageAssaultSystem — the siege of Briar Hollow, from the warning bell to
- * the last of the dead: the ninety-second countdown, the three waves up the
- * east and south lanes, Vordrick Boneharrow with the third, and how it ends.
+ * the last of the dead: the forty-five-second countdown, four waves each up one
+ * side of the village (every side once, in an order drawn when the bell
+ * rings, and announced before each wave), and how it ends.
  *
- * - **Won** when the necromancer dies. Every undead still standing crumbles,
- *   released rather than killed, so the crumbling pays nothing.
+ * Every wave raises its undead all at once, and brings along a handful of the
+ * crawl's other hostiles, one of Shady's bounty marks fielded weaker than a
+ * real bounty, and a fairy — a different one each wave, the healer never, and
+ * every earlier wave's fairy with it. Vordrick Boneharrow leads every wave:
+ * in the first three he comes with less than his full health and cannot die,
+ * fading away when beaten; in the fourth he fights to the end.
+ *
+ * - **Won** when the necromancer dies in the last wave. Every undead still
+ *   standing crumbles, released rather than killed, so the crumbling pays
+ *   nothing.
  * - **Lost** when the Hollow Bell is beaten to nothing, or when the active
  *   crawler stays away from the village too long. The dead walk back up their
  *   lanes and are released out of sight; the walls stay as broken as they
@@ -31,8 +40,13 @@ import {
   applySpawnDifficulty,
 } from '../../core/difficultyProfiles';
 import type { GameMap } from '../../map/GameMap';
-import type { AssaultLane, BriarHollowSite } from '../../map/overworld/briarHollowSite';
-import { findNearbyWalkableTile } from '../../map/findWalkableTile';
+import {
+  ASSAULT_LANE_SPAWN_SEARCH_TILES,
+  type AssaultLane,
+  type AssaultLaneId,
+  type BriarHollowSite,
+} from '../../map/overworld/briarHollowSite';
+import { findNearbyWalkableTile, hasRoomToMove } from '../../map/findWalkableTile';
 import type { Mob } from '../../creatures/Mob';
 import type { Player } from '../../Player';
 import { RaisedRatkin } from '../../creatures/RaisedRatkin';
@@ -42,9 +56,21 @@ import { SkeletonWarrior } from '../../creatures/SkeletonWarrior';
 import { SkeletonArcher } from '../../creatures/SkeletonArcher';
 import { GraveBull } from '../../creatures/GraveBull';
 import { Necromancer } from '../../creatures/Necromancer';
+import { SkyFowl } from '../../creatures/SkyFowl';
+import type { Fairy } from '../../creatures/fairies/Fairy';
+import { BOUNTY_MAX_BLOW_HP_SHARE } from '../../creatures/mobLevelScaling';
+import { createMob } from '../../levels/spawner';
+import {
+  REGULAR_FAIRY_KINDS,
+  createFairy,
+  finishFairySpawn,
+  type RegularFairyKind,
+} from '../../levels/fairySpawner';
+import { level3 } from '../../levels/level3';
 import {
   enlistInSiege,
   isInsidePalisade,
+  isInsidePalisadeTile,
   siegeAdvance,
   siegeCanEngage,
   tileUnder,
@@ -53,7 +79,11 @@ import { livingAssaultSpawns } from '../../creatures/siege/assaultCaps';
 import { INSIDE_PALISADE, palisadeDistanceFor } from '../../creatures/siege/palisadeDistance';
 import type { SiegeDirective, SiegeWorld } from '../../creatures/siege/siegeTypes';
 import { engageTrebuchet, nearestLiveTrebuchetTo } from '../../creatures/siege/trebuchetThreat';
-import { AssaultWavePrewarm, type AssaultWave } from '../../sprites/assaultPrewarm';
+import {
+  ASSAULT_WAVE_NUMBERS,
+  AssaultWavePrewarm,
+  type AssaultWave,
+} from '../../sprites/assaultPrewarm';
 import { drawCrumble } from '../../sprites/art/siegeEffectsArt';
 import { BOX_PRESETS, PROGRESS_PRESETS, drawBox, drawProgressBar } from '../../ui/Box';
 import { TEXT_PRESETS, drawText } from '../../ui/TextBox';
@@ -76,23 +106,15 @@ import {
 } from './siegeHudLayout';
 import { HOLLOW_BELL_MAX_HP } from './hollowBell';
 import { UPDATES_PER_SECOND } from './structureRules';
+import { ASSAULT_BOUNTY_KINDS, createBountyMark, type AssaultBountyKind } from './siegeBountyMarks';
 
 // ── The siege's pacing ──────────────────────────────────────────────────────
 
 /** The warning the village gets once the party says it is ready. */
-export const IMMINENT_SECONDS = 90;
+export const IMMINENT_SECONDS = 45;
 export const IMMINENT_FRAMES = IMMINENT_SECONDS * UPDATES_PER_SECOND;
-/** Three waves; the necromancer comes with the last. */
-export const ASSAULT_WAVE_COUNT = 3;
-/**
- * A wave's spawns trickle in over its first this-many seconds, not all at
- * once. Slow enough that a floor-level party meets them a few at a time: the
- * siege simulation (`verify:village-assault`) loses the party, then the bell,
- * when a wave lands inside a quarter of a minute. It is also most of the
- * siege's fighting time, which the simulation holds to two minutes or more.
- */
-export const WAVE_TRICKLE_SECONDS = 60;
-const WAVE_TRICKLE_FRAMES = WAVE_TRICKLE_SECONDS * UPDATES_PER_SECOND;
+/** Four waves, one up each side of the village. */
+export const ASSAULT_WAVE_COUNT = 4;
 /** The next wave comes after this long, whatever is left of the current one. */
 export const WAVE_MAX_SECONDS = 120;
 const WAVE_MAX_FRAMES = WAVE_MAX_SECONDS * UPDATES_PER_SECOND;
@@ -108,11 +130,13 @@ export const WAVE_ADVANCE_REMAINING_SHARE = 0.2;
 export const WAVE_LULL_SECONDS = 45;
 const WAVE_LULL_FRAMES = WAVE_LULL_SECONDS * UPDATES_PER_SECOND;
 /**
- * The most of the waves' own undead alive at once. A real cap on the living,
+ * The most of the waves' own bodies alive at once. A real cap on the living,
  * checked before every spawn: anything over it waits its turn in the queue.
- * The necromancer's raises are held to his own cap instead (`assaultCaps.ts`).
+ * Sized over a nightmare wave raised all at once, with a straggler or two left
+ * from the wave before. The necromancer's raises are held to his own cap
+ * instead (`assaultCaps.ts`).
  */
-export const ASSAULT_LIVE_CAP = 22;
+export const ASSAULT_LIVE_CAP = 40;
 /** How far the active crawler may stray from the palisade before the siege counts them as gone. */
 export const ASSAULT_ABANDON_TILES = 45;
 /** How long they may stay gone before the siege is lost. */
@@ -150,10 +174,10 @@ const BELL_CRACK_SHOWN_FRAMES = BELL_CRACK_SHOWN_SECONDS * UPDATES_PER_SECOND;
 /** How long the "bell has fallen" banner stays up. */
 const OUTCOME_BANNER_SECONDS = 6;
 const OUTCOME_BANNER_FRAMES = OUTCOME_BANNER_SECONDS * UPDATES_PER_SECOND;
-/** How far round a lane's spawn tile a body may appear. */
-const SPAWN_SCATTER_TILES = 3;
+/** How far round a lane's spawn tile a body may appear: room for a whole wave raised at once. */
+const SPAWN_SCATTER_TILES = 5;
 /** How far a crowded spawn may be nudged to open ground. */
-const SPAWN_SEARCH_TILES = 5;
+const SPAWN_SEARCH_TILES = ASSAULT_LANE_SPAWN_SEARCH_TILES;
 /**
  * With no camera published (a headless run), a spawn counts as out of sight
  * past this many tiles from both crawlers — about half a desktop screen's
@@ -195,50 +219,165 @@ const TWO_DIGITS = 2;
 /** The spread seeds handed to each spawn are drawn from this many values. */
 const SPREAD_SEED_RANGE = 0x7fffffff;
 
-/** The waves' bodies scale with the difficulty: fewer on easy, more on hard. */
-const ASSAULT_COUNT_SCALE: Readonly<Record<Difficulty, number>> = {
-  easy: 0.75,
-  normal: 1,
-  hard: 1.25,
-};
-
-/** What a difficulty profile does to the size of each wave. */
-export function assaultCountScale(profile: DifficultyProfile): number {
-  const difficulties: readonly Difficulty[] = ['easy', 'normal', 'hard'];
-  const match = difficulties.find((difficulty) => DIFFICULTY_PROFILES[difficulty] === profile);
-  return ASSAULT_COUNT_SCALE[match ?? 'normal'];
-}
-
-// ── The waves ───────────────────────────────────────────────────────────────
-
-/** Which kind of undead a wave spawns. */
-export type AssaultSpawnKind =
-  'raised_ratkin' | 'ruins_ghoul' | 'skeleton_warrior' | 'skeleton_archer' | 'grave_bull';
-
-export interface AssaultWaveSpec {
-  readonly lanes: readonly AssaultLane['id'][];
-  readonly spawns: Readonly<Partial<Record<AssaultSpawnKind, number>>>;
-  /** Whether Vordrick Boneharrow comes with this wave, by the east lane. */
-  readonly necromancer: boolean;
+/** What a difficulty does to the siege, on top of the waves as authored. */
+export interface AssaultTuning {
+  /** Multiplies every wave's undead and other hostiles. */
+  readonly bodyScale: number;
+  /** The share of a bounty mark's own levelled health it brings. */
+  readonly bountyHealthShare: number;
+  /** Multiplies every blow a bounty mark lands. */
+  readonly bountyDamageScale: number;
+  /** Multiplies the necromancer's health share in every wave. */
+  readonly necromancerHealthScale: number;
+  /**
+   * Multiplies every attacker's blow on a structure. A creature's own blow
+   * is sized for the open floor, where nothing it hits has a wall's health.
+   */
+  readonly wallDamageScale: number;
 }
 
 /**
- * Each wave's base counts, before the difficulty's scale. Sized against the
- * floor's reference party, whose crawlers carry a couple of dozen hit points
- * or fewer: at twice these counts the siege simulation loses more runs than it
- * wins, the party falling to the raised before the bell does.
+ * The waves as authored are normal's; nightmare turns everything up from
+ * there, and easy eases it off. A bounty mark is never as hard as its bounty.
  */
+export const ASSAULT_TUNING: Readonly<Record<Difficulty, AssaultTuning>> = {
+  easy: {
+    bodyScale: 0.75,
+    bountyHealthShare: 0.35,
+    bountyDamageScale: 0.5,
+    necromancerHealthScale: 0.8,
+    wallDamageScale: 2,
+  },
+  normal: {
+    bodyScale: 1,
+    bountyHealthShare: 0.5,
+    bountyDamageScale: 0.6,
+    necromancerHealthScale: 1,
+    wallDamageScale: 3,
+  },
+  hard: {
+    bodyScale: 1.5,
+    bountyHealthShare: 0.75,
+    bountyDamageScale: 0.8,
+    necromancerHealthScale: 1.25,
+    wallDamageScale: 4.5,
+  },
+};
+
+const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
+
+/** Which difficulty a profile is; normal for one that is none of them. */
+export function assaultDifficulty(profile: DifficultyProfile): Difficulty {
+  return DIFFICULTIES.find((difficulty) => DIFFICULTY_PROFILES[difficulty] === profile) ?? 'normal';
+}
+
+/**
+ * How long one attacker keeps the siege's voice before the one nearest the
+ * party may take it over: long enough that its swing, cry and death are
+ * heard whole, short enough that the fight in front of the player is the
+ * one they hear.
+ */
+const SIEGE_VOICE_HOLD_SECONDS = 2;
+const SIEGE_VOICE_HOLD_FRAMES = SIEGE_VOICE_HOLD_SECONDS * UPDATES_PER_SECOND;
+
+/** The fewest undead any wave raises, whatever the difficulty takes off it. */
+export const MIN_UNDEAD_PER_WAVE = 10;
+/**
+ * How much harder a bounty mark strikes a wall than a common body of its
+ * kind: a mark's swing is sized to fell a crawler, not to batter stone.
+ */
+const BOUNTY_MARK_STRUCTURE_SCALE = 4;
+
+// ── The waves ───────────────────────────────────────────────────────────────
+
+/** The necromancer's own army: the undead every wave raises. */
+export type AssaultUndeadKind =
+  'raised_ratkin' | 'ruins_ghoul' | 'skeleton_warrior' | 'skeleton_archer' | 'grave_bull';
+
+/**
+ * The crawl's other hostiles he drives before him, by spawn-registry key:
+ * across the four waves, every regular enemy there is but the spiders and the
+ * grubs. The rock golems come with the last.
+ */
+export type AssaultHostileKind =
+  | 'goblin'
+  | 'goblin_archer'
+  | 'rat'
+  | 'cockroach'
+  | 'sky_fowl'
+  | 'troglodyte'
+  | 'llama'
+  | 'circus_lemur'
+  | 'fat_clown'
+  | 'stilt_clown'
+  | 'tuskling'
+  | 'mold_lion'
+  | 'krasue'
+  | 'city_elf_cultist'
+  | 'mantis'
+  | 'bugaboo'
+  | 'rock_golem';
+
+/** Which kind of body a wave spawns. */
+export type AssaultSpawnKind = AssaultUndeadKind | AssaultHostileKind;
+
+export interface AssaultWaveSpec {
+  /** Raised all at once as the wave begins; never fewer than {@link MIN_UNDEAD_PER_WAVE}. */
+  readonly undead: Readonly<Partial<Record<AssaultUndeadKind, number>>>;
+  readonly hostiles: Readonly<Partial<Record<AssaultHostileKind, number>>>;
+  /**
+   * The share of his full health Vordrick comes with. Below 1 he cannot be
+   * killed, and fades away when beaten; at 1 his death wins the siege.
+   */
+  readonly necromancerHealthShare: number;
+}
+
+/** Each wave's base counts, before the difficulty's {@link AssaultTuning.bodyScale}. */
 export const ASSAULT_WAVES: readonly AssaultWaveSpec[] = [
-  { lanes: ['east'], spawns: { raised_ratkin: 4, ruins_ghoul: 1 }, necromancer: false },
   {
-    lanes: ['east', 'south'],
-    spawns: { raised_ratkin: 4, skeleton_warrior: 2, skeleton_archer: 1, grave_bull: 1 },
-    necromancer: false,
+    undead: { raised_ratkin: 5, ruins_ghoul: 2, skeleton_warrior: 2, skeleton_archer: 1 },
+    hostiles: { goblin: 2, goblin_archer: 1, rat: 2, cockroach: 2, sky_fowl: 1 },
+    necromancerHealthShare: 0.4,
   },
   {
-    lanes: ['east', 'south'],
-    spawns: { raised_ratkin: 3, skeleton_warrior: 2, skeleton_archer: 1, grave_bull: 1 },
-    necromancer: true,
+    undead: {
+      raised_ratkin: 4,
+      ruins_ghoul: 2,
+      skeleton_warrior: 2,
+      skeleton_archer: 2,
+      grave_bull: 1,
+    },
+    hostiles: {
+      troglodyte: 1,
+      llama: 1,
+      circus_lemur: 1,
+      fat_clown: 1,
+      stilt_clown: 1,
+      tuskling: 2,
+    },
+    necromancerHealthShare: 0.55,
+  },
+  {
+    undead: {
+      raised_ratkin: 4,
+      ruins_ghoul: 3,
+      skeleton_warrior: 2,
+      skeleton_archer: 2,
+      grave_bull: 1,
+    },
+    hostiles: { mold_lion: 1, krasue: 2, city_elf_cultist: 1, mantis: 2, bugaboo: 1 },
+    necromancerHealthShare: 0.7,
+  },
+  {
+    undead: {
+      raised_ratkin: 5,
+      ruins_ghoul: 3,
+      skeleton_warrior: 3,
+      skeleton_archer: 2,
+      grave_bull: 1,
+    },
+    hostiles: { rock_golem: 2, goblin: 2, krasue: 1, troglodyte: 1, stilt_clown: 1 },
+    necromancerHealthShare: 1,
   },
 ];
 
@@ -247,16 +386,94 @@ function waveSpec(index: number): AssaultWaveSpec | null {
   return index >= 0 && index < ASSAULT_WAVES.length ? ASSAULT_WAVES[index] : null;
 }
 
-/** The lane the necromancer walks in by. */
-const NECROMANCER_LANE: AssaultLane['id'] = 'east';
-
-const SPAWN_ORDER: readonly AssaultSpawnKind[] = [
+const UNDEAD_ORDER: readonly AssaultUndeadKind[] = [
   'raised_ratkin',
   'ruins_ghoul',
   'skeleton_warrior',
   'skeleton_archer',
   'grave_bull',
 ];
+
+const HOSTILE_ORDER: readonly AssaultHostileKind[] = [
+  'goblin',
+  'goblin_archer',
+  'rat',
+  'cockroach',
+  'sky_fowl',
+  'troglodyte',
+  'llama',
+  'circus_lemur',
+  'fat_clown',
+  'stilt_clown',
+  'tuskling',
+  'mold_lion',
+  'krasue',
+  'city_elf_cultist',
+  'mantis',
+  'bugaboo',
+  'rock_golem',
+];
+
+/** The four sides, in the order the HUD names them. */
+export const ASSAULT_SIDES: readonly AssaultLaneId[] = ['north', 'south', 'east', 'west'];
+
+const SIDE_NAMES: Readonly<Record<AssaultLaneId, string>> = {
+  north: 'North',
+  south: 'South',
+  east: 'East',
+  west: 'West',
+};
+
+/** The banner that names the side a wave is coming from. */
+export function attackSideBanner(side: AssaultLaneId): string {
+  return `Attack coming from the ${SIDE_NAMES[side]}`;
+}
+
+/**
+ * What one siege draws when the bell rings: which side each wave comes from,
+ * which bounty mark it brings, and the order its fairies join. Every side and
+ * every regular fairy kind once each; four of the five marks.
+ */
+export interface SiegeCampaign {
+  readonly sides: readonly AssaultLaneId[];
+  readonly bounties: readonly AssaultBountyKind[];
+  readonly fairies: readonly RegularFairyKind[];
+}
+
+function shuffled<T>(items: readonly T[], random: () => number): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.min(i, Math.floor(random() * (i + 1)));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+/** Draws a fresh {@link SiegeCampaign}. */
+export function planSiegeCampaign(random: () => number): SiegeCampaign {
+  return {
+    sides: shuffled(ASSAULT_SIDES, random),
+    bounties: shuffled(ASSAULT_BOUNTY_KINDS, random).slice(0, ASSAULT_WAVE_COUNT),
+    fairies: shuffled(REGULAR_FAIRY_KINDS, random),
+  };
+}
+
+/**
+ * Each village's current draw, keyed by its state, which is threaded by
+ * reference through every scene rebuild: the system is built afresh on every
+ * door visit, and a countdown resumed after one must still come from the side
+ * it announced. Never saved — no save or checkpoint records a siege in
+ * progress, and the bell rung again draws anew.
+ */
+const campaigns = new WeakMap<BriarHollowState, SiegeCampaign>();
+
+function campaignFor(state: BriarHollowState, random: () => number): SiegeCampaign {
+  const existing = campaigns.get(state);
+  if (existing !== undefined) return existing;
+  const drawn = planSiegeCampaign(random);
+  campaigns.set(state, drawn);
+  return drawn;
+}
 
 /** One body still to come, and when. */
 interface PendingSpawn {
@@ -267,7 +484,26 @@ interface PendingSpawn {
   readonly wave: number;
 }
 
-function createSpawn(kind: AssaultSpawnKind, tileX: number, tileY: number): Mob {
+/**
+ * One of a wave's leaders still to appear: Vordrick, the wave's bounty mark,
+ * or a fairy. Not held by the live cap, and not counted in the wave's bodies.
+ */
+type Arrival =
+  | { readonly kind: 'necromancer' }
+  | { readonly kind: 'bounty'; readonly mark: AssaultBountyKind }
+  | { readonly kind: 'fairy'; readonly fairy: RegularFairyKind };
+
+interface PendingArrival {
+  readonly arrival: Arrival;
+  readonly lane: AssaultLane;
+  waitedFrames: number;
+}
+
+function isUndeadKind(kind: AssaultSpawnKind): kind is AssaultUndeadKind {
+  return UNDEAD_ORDER.some((undead) => undead === kind);
+}
+
+function createUndead(kind: AssaultUndeadKind, tileX: number, tileY: number): Mob {
   switch (kind) {
     case 'raised_ratkin':
       return new RaisedRatkin(tileX, tileY, TILE_SIZE);
@@ -280,6 +516,14 @@ function createSpawn(kind: AssaultSpawnKind, tileX: number, tileY: number): Mob 
     case 'grave_bull':
       return new GraveBull(tileX, tileY, TILE_SIZE);
   }
+}
+
+function createSpawn(kind: AssaultSpawnKind, tileX: number, tileY: number, map: GameMap): Mob {
+  if (isUndeadKind(kind)) return createUndead(kind, tileX, tileY);
+  const mob = createMob(kind, tileX, tileY, map);
+  // A town bird is calm until struck; one the necromancer drives is not.
+  if (mob instanceof SkyFowl) mob.provoke();
+  return mob;
 }
 
 /** The countdown as a clock face: 1:30, 0:07. */
@@ -324,7 +568,11 @@ class MarchDirective implements SiegeDirective {
     // A trebuchet is weighed as a peer of the defenders above, at the same
     // notice range, so a mob does not detour to one across the yard while a
     // defender stands right beside it — and never for an archer, which never
-    // batters anything (`structureDamageMultiplier` of 0).
+    // batters anything (`structureDamageMultiplier` of 0). Only one on the
+    // mob's own side of the ring counts: the palisade does not block sight,
+    // so an engine just inside the wall would otherwise hold every attacker
+    // outside it pressed against the stone, walking at an engine it cannot
+    // reach instead of battering the wall between them.
     if (siege.structureDamageMultiplier > 0) {
       const trebuchet = nearestLiveTrebuchetTo(
         mob,
@@ -334,6 +582,7 @@ class MarchDirective implements SiegeDirective {
       if (
         trebuchet !== null &&
         trebuchet.distance < defenderDistance &&
+        this.onSameSide(mob, trebuchet) &&
         mob.hasSightOfPoint(trebuchet.x, trebuchet.y)
       ) {
         mob.currentTarget = null;
@@ -344,6 +593,16 @@ class MarchDirective implements SiegeDirective {
     if (defenderDistance < Infinity) return false;
     if (siege.structureDamageMultiplier <= 0) return this.holdOffTheWall(mob, targets);
     return siegeAdvance(mob);
+  }
+
+  /** Whether a point in the world stands on the same side of the ring as the mob. */
+  private onSameSide(mob: Mob, point: { readonly x: number; readonly y: number }): boolean {
+    const pointInside = isInsidePalisadeTile(
+      this.site,
+      Math.floor(point.x / TILE_SIZE),
+      Math.floor(point.y / TILE_SIZE),
+    );
+    return isInsidePalisade(this.site, mob) === pointInside;
   }
 
   /** The nearest defender within `tiles` this mob may fight, or Infinity when none qualify. */
@@ -542,21 +801,26 @@ export class VillageAssaultSystem {
   private world: SiegeWorld | null = null;
   private readonly unsubscribers: Array<() => void> = [];
 
+  private campaign: SiegeCampaign;
   private pending: PendingSpawn[] = [];
+  private arrivals: PendingArrival[] = [];
   private readonly waveOf = new Map<Mob, number>();
   private readonly laneOf = new Map<Mob, AssaultLane>();
+  /** Every fairy the siege has put out, alive or not, by kind: the next wave calls back the fallen. */
+  private readonly fairies = new Map<RegularFairyKind, Fairy>();
   private wavePlanned = 0;
   private waveFrames = 0;
   private lullFrames = 0;
-  /** Lanes the current wave has put at least one body out on. */
-  private readonly lanesOut = new Set<AssaultLane['id']>();
+  /** Whether the current wave has put its first body out yet. */
+  private waveBodiesOut = false;
   private necromancer: Necromancer | null = null;
   private necromancerOut = false;
-  /** Set from the start of his wave until he has somewhere to appear. */
-  private necromancerDue = false;
-  /** How long the necromancer, and the spawn at the head of the queue, have waited for a place. */
-  private necromancerWaitFrames = 0;
+  /** The bounty mark of the current or an earlier wave, while one still stands. */
+  private bountyMark: Mob | null = null;
+  /** How long the spawn at the head of the queue has waited for a place. */
   private headSpawnWaitFrames = 0;
+  /** The "Attack coming from…" banner across the middle of the screen, while it shows. */
+  private sideBanner: { text: string; framesLeft: number } | null = null;
   private abandonFrames = 0;
   private bellRingFrames = 0;
   private bellTollGap = 0;
@@ -569,6 +833,17 @@ export class VillageAssaultSystem {
   private structuresDestroyed = 0;
   private readonly crumbles: ScheduledCrumble[] = [];
   private readonly effects: CrumbleEffect[] = [];
+  /** The one attacker whose sounds play; every other attacker is silent. */
+  private voice: Mob | null = null;
+  private voiceHeldFrames = 0;
+  /**
+   * The audio manager's hearing rule while the waves are in: anything that
+   * is not the siege's own is heard as ever, the siege's attackers only
+   * through their voice. The voice is asked first, so the one that just died
+   * is still heard dying.
+   */
+  private readonly hearing = (mob: Mob): boolean =>
+    mob === this.voice || !this.isSiegeAttacker(mob);
 
   /** Every body the waves have spawned, for the gates. */
   spawnedTotal = 0;
@@ -577,6 +852,7 @@ export class VillageAssaultSystem {
 
   constructor(private readonly deps: VillageAssaultSystemDeps) {
     this.random = deps.random ?? Math.random;
+    this.campaign = campaignFor(deps.state, this.random);
     this.prewarm = deps.prewarm ?? new AssaultWavePrewarm();
     this.march = new MarchDirective(deps.site);
     this.withdraw = new WithdrawDirective(deps.gameMap, deps.site);
@@ -614,6 +890,40 @@ export class VillageAssaultSystem {
   /** Whether the breather before the next wave is on. */
   get inLull(): boolean {
     return this.lullFrames > 0;
+  }
+
+  /** The side the wave `index` (from 0) attacks from. */
+  sideOfWave(index: number): AssaultLaneId {
+    const sides = this.campaign.sides;
+    return sides[Math.max(0, Math.min(sides.length - 1, index))];
+  }
+
+  /**
+   * The side the coming wave will attack from, through the countdown and each
+   * lull, and the side the wave under way is attacking from; null outside the
+   * siege.
+   */
+  get attackSide(): AssaultLaneId | null {
+    if (this.phase === 'imminent') return this.sideOfWave(0);
+    if (this.phase !== 'assault') return null;
+    const index = this.deps.state.quest.assaultWaveIndex ?? 0;
+    return this.sideOfWave(this.inLull ? index + 1 : index);
+  }
+
+  /** The siege's draw: each wave's side, bounty mark and fairy. */
+  get siegeCampaign(): SiegeCampaign {
+    return this.campaign;
+  }
+
+  /** The bounty mark in the field, while one stands. */
+  get activeBountyMark(): Mob | null {
+    const mark = this.bountyMark;
+    return mark?.isAlive === true && mark.isHostile ? mark : null;
+  }
+
+  /** The siege's fairies still in the air. */
+  get livingFairies(): Fairy[] {
+    return [...this.fairies.values()].filter((fairy) => fairy.isAlive);
   }
 
   /** The bell's health as a share of its whole. */
@@ -656,6 +966,11 @@ export class VillageAssaultSystem {
     return this.pending.length > 0 && this.pending[0].dueFrame <= this.waveFrames;
   }
 
+  /** Whether one of the wave's leaders is still waiting for somewhere to appear. */
+  get arrivalWaiting(): boolean {
+    return this.arrivals.length > 0;
+  }
+
   /** Whether a mob was spawned by this siege's waves. */
   isAssaultSpawn(mob: Mob): boolean {
     return this.waveOf.has(mob);
@@ -680,10 +995,13 @@ export class VillageAssaultSystem {
     }
   }
 
-  /** "We're ready": the bell rings and the ninety seconds start. */
+  /** "We're ready": the bell rings and the countdown starts. */
   begin(): void {
     if (this.phase !== 'fortifying') return;
     this.resetSiegeCounters();
+    this.campaign = planSiegeCampaign(this.random);
+    campaigns.set(this.deps.state, this.campaign);
+    this.announceSide(0);
     this.deps.state.quest.imminentCountdownFrames = IMMINENT_FRAMES;
     this.deps.state.quest.assaultWaveIndex = null;
     this.deps.defense.restoreBell();
@@ -694,14 +1012,16 @@ export class VillageAssaultSystem {
 
   private resetSiegeCounters(): void {
     this.pending = [];
+    this.arrivals = [];
     this.waveOf.clear();
     this.laneOf.clear();
-    this.lanesOut.clear();
+    this.fairies.clear();
+    this.waveBodiesOut = false;
     this.necromancer = null;
     this.necromancerOut = false;
-    this.necromancerDue = false;
-    this.necromancerWaitFrames = 0;
+    this.bountyMark = null;
     this.headSpawnWaitFrames = 0;
+    this.sideBanner = null;
     this.abandonFrames = 0;
     this.breachCalled = false;
     this.downedSeen.clear();
@@ -746,12 +1066,60 @@ export class VillageAssaultSystem {
       this.outcomeBanner.framesLeft--;
       if (this.outcomeBanner.framesLeft <= 0) this.outcomeBanner = null;
     }
+    if (this.sideBanner !== null) {
+      this.sideBanner.framesLeft--;
+      if (this.sideBanner.framesLeft <= 0) this.sideBanner = null;
+    }
     this.tickWithdrawals();
     this.tickCrumbles();
 
     if (this.phase === 'imminent') this.updateImminent(frame);
     else if (this.phase === 'assault') this.updateAssault(frame);
     else this.prewarm.update(null);
+    this.updateVoice(frame);
+  }
+
+  /**
+   * Hands the siege's voice to the attacker nearest the active crawler
+   * whenever the last holder falls silent, dies, or has had its turn.
+   */
+  private updateVoice(frame: VillageAssaultFrame): void {
+    const underAssault = this.phase === 'assault';
+    this.deps.audio?.setCreatureHearing(underAssault ? this.hearing : null);
+    if (!underAssault) {
+      this.voice = null;
+      return;
+    }
+    if (this.voiceHeldFrames > 0) this.voiceHeldFrames--;
+    const current = this.voice;
+    const holding =
+      current !== null &&
+      current.isAlive &&
+      this.isSiegeAttacker(current) &&
+      this.voiceHeldFrames > 0;
+    if (holding) return;
+    this.voice = this.nearestAttackerTo(frame.active);
+    this.voiceHeldFrames = SIEGE_VOICE_HOLD_FRAMES;
+  }
+
+  /** Whether a mob is one of the siege's own: a wave's body, a raise of the necromancer's, or a fairy. */
+  private isSiegeAttacker(mob: Mob): boolean {
+    if (!mob.isHostile) return false;
+    if (mob.siegeCapable !== null || this.waveOf.has(mob)) return true;
+    return [...this.fairies.values()].some((fairy) => fairy === mob);
+  }
+
+  private nearestAttackerTo(point: { readonly x: number; readonly y: number }): Mob | null {
+    let nearest: Mob | null = null;
+    let nearestDistance = Infinity;
+    for (const mob of this.deps.roster.mobs) {
+      if (!mob.isAlive || !this.isSiegeAttacker(mob)) continue;
+      const distance = Math.hypot(mob.x - point.x, mob.y - point.y);
+      if (distance >= nearestDistance) continue;
+      nearest = mob;
+      nearestDistance = distance;
+    }
+    return nearest;
   }
 
   private updateImminent(frame: VillageAssaultFrame): void {
@@ -775,36 +1143,52 @@ export class VillageAssaultSystem {
     this.deps.state.quest.assaultWaveIndex = index;
     this.waveFrames = 0;
     this.lullFrames = 0;
-    this.lanesOut.clear();
+    this.waveBodiesOut = false;
+    const lane = this.laneFor(this.sideOfWave(index));
+    if (lane === null) return;
     // Anything the live cap held back from the wave before still comes, first.
     const leftovers = this.pending.map((spawn) => ({ ...spawn, dueFrame: 0 }));
-    const planned = this.planWave(spec, index);
+    const planned = this.planWave(spec, index, lane);
     this.pending = [...leftovers, ...planned];
     this.wavePlanned = planned.length;
+    this.arrivals = this.planArrivals(index, lane);
     this.deps.bus.emit('villageAssaultWave', { index });
     this.playCue('necroWarHorn');
-    if (spec.necromancer) {
-      this.necromancerDue = true;
-      this.necromancerWaitFrames = 0;
-      this.spawnNecromancer();
-    }
+    this.spawnArrivals();
   }
 
-  /** The wave's bodies, scaled for the difficulty, dealt round its lanes and trickled over its opening seconds. */
-  private planWave(spec: AssaultWaveSpec, wave: number): PendingSpawn[] {
-    const scale = assaultCountScale(this.deps.difficulty());
-    const counts = new Map<AssaultSpawnKind, number>();
-    for (const kind of SPAWN_ORDER) {
-      const base = spec.spawns[kind] ?? 0;
-      if (base > 0) counts.set(kind, Math.max(1, Math.round(base * scale)));
+  /** The assault lane on `side`, or null on a site that has none there. */
+  private laneFor(side: AssaultLaneId): AssaultLane | null {
+    return this.deps.site.assaultLanes.find((lane) => lane.id === side) ?? null;
+  }
+
+  /** The wave's bodies, scaled for the difficulty and raised all at once up its lane. */
+  private planWave(spec: AssaultWaveSpec, wave: number, lane: AssaultLane): PendingSpawn[] {
+    const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
+    const scaledCount = (base: number | undefined): number =>
+      base === undefined || base <= 0 ? 0 : Math.max(1, Math.round(base * tuning.bodyScale));
+    const undeadCounts = new Map<AssaultUndeadKind, number>();
+    for (const kind of UNDEAD_ORDER) undeadCounts.set(kind, scaledCount(spec.undead[kind]));
+    let undeadTotal = [...undeadCounts.values()].reduce((sum, count) => sum + count, 0);
+    // The shortfall is made up in raised ratkin, the army's rank and file.
+    if (undeadTotal < MIN_UNDEAD_PER_WAVE) {
+      const shortfall = MIN_UNDEAD_PER_WAVE - undeadTotal;
+      undeadCounts.set('raised_ratkin', (undeadCounts.get('raised_ratkin') ?? 0) + shortfall);
+      undeadTotal = MIN_UNDEAD_PER_WAVE;
     }
-    // Round-robin through the kinds, so the trickle mixes them rather than
-    // sending every raised ratkin before the first skeleton.
+    const counts = new Map<AssaultSpawnKind, number>(undeadCounts);
+    for (const kind of HOSTILE_ORDER) {
+      const count = scaledCount(spec.hostiles[kind]);
+      if (count > 0) counts.set(kind, count);
+    }
+    // Round-robin through the kinds, so if the live cap holds some back it
+    // holds back a mix rather than every one of the last kind.
+    const kinds: readonly AssaultSpawnKind[] = [...UNDEAD_ORDER, ...HOSTILE_ORDER];
     const order: AssaultSpawnKind[] = [];
     let added = true;
     while (added) {
       added = false;
-      for (const kind of SPAWN_ORDER) {
+      for (const kind of kinds) {
         const left = counts.get(kind) ?? 0;
         if (left <= 0) continue;
         order.push(kind);
@@ -812,24 +1196,33 @@ export class VillageAssaultSystem {
         added = true;
       }
     }
-    const lanes = spec.lanes
-      .map((id) => this.deps.site.assaultLanes.find((lane) => lane.id === id))
-      .filter((lane): lane is AssaultLane => lane !== undefined);
-    if (lanes.length === 0) return [];
-    return order.map((kind, index) => ({
-      kind,
-      lane: lanes[index % lanes.length],
-      dueFrame: Math.floor((index * WAVE_TRICKLE_FRAMES) / order.length),
-      wave,
-    }));
+    return order.map((kind) => ({ kind, lane, dueFrame: 0, wave }));
+  }
+
+  /**
+   * The wave's leaders: Vordrick, its bounty mark, its new fairy, and every
+   * earlier wave's fairy that has fallen since — so from the last wave on,
+   * one of every kind is out.
+   */
+  private planArrivals(index: number, lane: AssaultLane): PendingArrival[] {
+    const arrivals: Arrival[] = [{ kind: 'necromancer' }];
+    const { bounties } = this.campaign;
+    if (index < bounties.length) arrivals.push({ kind: 'bounty', mark: bounties[index] });
+    for (const fairy of this.campaign.fairies.slice(0, index + 1)) {
+      if (this.fairies.get(fairy)?.isAlive === true) continue;
+      arrivals.push({ kind: 'fairy', fairy });
+    }
+    return arrivals.map((arrival) => ({ arrival, lane, waitedFrames: 0 }));
   }
 
   private updateAssault(frame: VillageAssaultFrame): void {
     const quest = this.deps.state.quest;
     const index = quest.assaultWaveIndex ?? 0;
+    const isLastWave = index >= ASSAULT_WAVE_COUNT - 1;
     this.noteDownedSoldiers();
 
-    if (this.necromancer !== null && !this.necromancer.isAlive && this.necromancerOut) {
+    const necro = this.necromancer;
+    if (necro !== null && !necro.isAlive && this.necromancerOut) {
       this.win();
       return;
     }
@@ -838,6 +1231,7 @@ export class VillageAssaultSystem {
       return;
     }
     if (this.checkAbandon(frame)) return;
+    this.tickNecromancerRetreat();
 
     if (this.lullFrames > 0) {
       this.prewarm.update(this.prewarmWaveFor(index + 1));
@@ -847,39 +1241,72 @@ export class VillageAssaultSystem {
     }
 
     this.waveFrames++;
+    this.spawnArrivals();
     this.spawnDue();
     this.peakLiving = Math.max(this.peakLiving, livingAssaultSpawns(this.deps.roster.mobs));
-    this.prewarm.update(this.waveStillArriving(index) ? this.prewarmWaveFor(index) : null);
+    this.prewarm.update(this.waveStillArriving() ? this.prewarmWaveFor(index) : null);
 
-    const isLastWave = index >= ASSAULT_WAVE_COUNT - 1;
     if (isLastWave) return;
     const remaining = this.remainingInWave(index);
     const fewLeft = remaining <= Math.floor(this.wavePlanned * WAVE_ADVANCE_REMAINING_SHARE);
+    if (fewLeft || this.waveFrames >= WAVE_MAX_FRAMES) this.beginLull(index + 1);
+  }
+
+  /**
+   * The breather before wave `next` (from 0): its side is announced, and a
+   * Vordrick still in the field fades away — he leads every wave, and
+   * returns with the next.
+   */
+  private beginLull(next: number): void {
     // The next wave's lead-in starts here; its rows are warmed through the lull from the next update.
-    if (fewLeft || this.waveFrames >= WAVE_MAX_FRAMES) this.lullFrames = WAVE_LULL_FRAMES;
+    this.lullFrames = WAVE_LULL_FRAMES;
+    this.announceSide(next);
+    this.necromancer?.beginFadingAway();
+  }
+
+  private announceSide(wave: number): void {
+    this.sideBanner = {
+      text: attackSideBanner(this.sideOfWave(wave)),
+      framesLeft: SIDE_BANNER_FRAMES,
+    };
+  }
+
+  /**
+   * A Vordrick who may not die fades away once he is beaten, and is taken off
+   * the field when the fade has run: no death, no kill paid, no win.
+   */
+  private tickNecromancerRetreat(): void {
+    const necro = this.necromancer;
+    if (!necro?.isAlive) return;
+    if (necro.isBeaten) necro.beginFadingAway();
+    if (!necro.hasFadedAway) return;
+    this.release(necro, VANISH_IN_A_WISP);
+    this.necromancer = null;
+    this.necromancerOut = false;
   }
 
   private prewarmWaveFor(index: number): AssaultWave | null {
     const wave = index + 1;
-    return wave === 1 || wave === 2 || wave === THIRD_WAVE ? wave : null;
+    return ASSAULT_WAVE_NUMBERS.find((number) => number === wave) ?? null;
   }
 
   /**
-   * Whether the wave's lead-in is still running: some lane it uses has not
-   * put a body out yet, or its necromancer has not appeared. After that the
-   * arrivals draw their own rows, and warming them only competes with the fight.
+   * Whether the wave's lead-in is still running: its bodies or its leaders
+   * have not all appeared. After that the arrivals draw their own rows, and
+   * warming them only competes with the fight.
    */
-  private waveStillArriving(index: number): boolean {
-    const spec = waveSpec(index);
-    if (spec === null) return false;
-    if (spec.necromancer && !this.necromancerOut) return true;
-    return spec.lanes.some((lane) => !this.lanesOut.has(lane));
+  private waveStillArriving(): boolean {
+    return !this.waveBodiesOut || this.arrivals.length > 0;
   }
 
-  /** The wave's bodies not yet beaten: still to come, or alive and on the enemy's side. */
+  /**
+   * The wave's bodies not yet beaten: still to come, or alive and on the
+   * enemy's side. Vordrick is not one of them: he fades when the lull begins.
+   */
   private remainingInWave(index: number): number {
     let remaining = this.pending.filter((spawn) => spawn.wave === index).length;
     for (const [mob, wave] of this.waveOf) {
+      if (mob instanceof Necromancer) continue;
       // A converted ally no longer counts: it fights for the village now.
       if (wave === index && mob.isAlive && mob.isHostile) remaining++;
     }
@@ -887,7 +1314,6 @@ export class VillageAssaultSystem {
   }
 
   private spawnDue(): void {
-    if (this.necromancerDue) this.spawnNecromancer();
     while (this.pending.length > 0) {
       const next = this.pending[0];
       if (next.dueFrame > this.waveFrames) return;
@@ -901,6 +1327,39 @@ export class VillageAssaultSystem {
       this.pending.shift();
       this.headSpawnWaitFrames = 0;
       this.spawn(next.kind, place.lane, place.tile, next.wave);
+    }
+  }
+
+  /** Puts out every leader of the wave that has somewhere to appear; the rest wait. */
+  private spawnArrivals(): void {
+    const wave = this.deps.state.quest.assaultWaveIndex ?? 0;
+    this.arrivals = this.arrivals.filter((pending) => {
+      const place = this.placeFor([pending.lane], pending.waitedFrames);
+      if (place === null) {
+        pending.waitedFrames++;
+        return true;
+      }
+      this.bringOut(pending.arrival, place.lane, place.tile, wave);
+      return false;
+    });
+  }
+
+  private bringOut(
+    arrival: Arrival,
+    lane: AssaultLane,
+    tile: { x: number; y: number },
+    wave: number,
+  ): void {
+    switch (arrival.kind) {
+      case 'necromancer':
+        this.spawnNecromancer(lane, tile, wave);
+        return;
+      case 'bounty':
+        this.spawnBountyMark(arrival.mark, lane, tile, wave);
+        return;
+      case 'fairy':
+        this.spawnFairy(arrival.fairy, tile);
+        return;
     }
   }
 
@@ -954,7 +1413,10 @@ export class VillageAssaultSystem {
         lane.spawn.x + jitterX,
         lane.spawn.y + jitterY,
         SPAWN_SEARCH_TILES,
-        (x, y) => gameMap.isWalkableForHostile(x, y),
+        // Room to move, not just walkable: a gap between trunks is walkable
+        // ground a body comes up in and never leaves.
+        (x, y) =>
+          gameMap.isWalkableForHostile(x, y) && hasRoomToMove(gameMap, x, y) && this.hasWayIn(x, y),
       );
       if (tile === null) continue;
       const away = nearestCrawlerTiles(tile);
@@ -966,17 +1428,22 @@ export class VillageAssaultSystem {
   }
 
   /**
-   * `own` first, then the other lanes the wave now under way comes by — for
-   * a spawn held over from an earlier wave too, which may take a lane its own
-   * wave never had.
+   * `own` first, then the lane the wave now under way comes by — for a spawn
+   * held over from an earlier wave, which may take the new wave's lane.
    */
   private lanesFor(own: AssaultLane): AssaultLane[] {
-    const current = this.deps.state.quest.assaultWaveIndex ?? 0;
-    const others = (waveSpec(current)?.lanes ?? [])
-      .filter((id) => id !== own.id)
-      .map((id) => this.deps.site.assaultLanes.find((lane) => lane.id === id))
-      .filter((lane): lane is AssaultLane => lane !== undefined);
-    return [own, ...others];
+    const current = this.laneFor(this.sideOfWave(this.deps.state.quest.assaultWaveIndex ?? 0));
+    return current === null || current.id === own.id ? [own] : [own, current];
+  }
+
+  /**
+   * Whether the flow field has a way from the tile to the bell: the flank
+   * lanes' spawns stand out in the wilderness, where a pocket of open ground
+   * can be closed in by trees.
+   */
+  private hasWayIn(tileX: number, tileY: number): boolean {
+    const flow = this.flow;
+    return flow === null || Number.isFinite(flow.costAt({ x: tileX, y: tileY }));
   }
 
   private isUnseen(tile: { x: number; y: number }, tilesFromParty: number): boolean {
@@ -987,18 +1454,31 @@ export class VillageAssaultSystem {
     return !isWorldPointInView(centreX, centreY, outsideByPx);
   }
 
-  /** Levels, stages and enlists one assault body, and joins it to the scene. */
-  private enlist(mob: Mob, lane: AssaultLane, wave: number): void {
+  /**
+   * Levels, stages and enlists one assault body, and joins it to the scene.
+   * `levelled` is false for a body the caller has levelled and scaled itself.
+   */
+  private enlist(
+    mob: Mob,
+    lane: AssaultLane,
+    wave: number,
+    options: { readonly levelled?: boolean; readonly structureScale?: number } = {},
+  ): void {
     const world = this.ensureFlow();
-    mob.applyMobLevel(this.deps.waveLevel());
+    if (options.levelled !== true) mob.applyMobLevel(this.deps.waveLevel());
     applySpawnDifficulty(mob, this.deps.difficulty());
-    enlistInSiege(mob, world, Math.floor(this.random() * SPREAD_SEED_RANGE));
+    const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
+    enlistInSiege(
+      mob,
+      world,
+      Math.floor(this.random() * SPREAD_SEED_RANGE),
+      (options.structureScale ?? 1) * tuning.wallDamageScale,
+    );
     mob.ignoresTownSafeZone = true;
     mob.siegeDirective = this.march;
     this.deps.roster.add(mob);
     this.waveOf.set(mob, wave);
     this.laneOf.set(mob, lane);
-    this.lanesOut.add(lane.id);
     this.spawnedTotal++;
   }
 
@@ -1008,30 +1488,74 @@ export class VillageAssaultSystem {
     tile: { x: number; y: number },
     wave: number,
   ): void {
-    const mob = createSpawn(kind, tile.x, tile.y);
+    const mob = createSpawn(kind, tile.x, tile.y, this.deps.gameMap);
     // They claw their way up out of the ground at the lane's head: the row
     // each wave's rows are warmed for.
     if (mob instanceof RaisedRatkin) mob.beginRising();
     this.enlist(mob, lane, wave);
+    this.waveBodiesOut = true;
   }
 
-  private spawnNecromancer(): void {
-    const lane = this.deps.site.assaultLanes.find((candidate) => candidate.id === NECROMANCER_LANE);
-    if (lane === undefined) return;
-    // He always comes up his own lane: his arrival is staged there.
-    const place = this.placeFor([lane], this.necromancerWaitFrames);
-    if (place === null) {
-      this.necromancerWaitFrames++;
-      return;
-    }
-    this.necromancerDue = false;
-    const { tile } = place;
+  private spawnNecromancer(lane: AssaultLane, tile: { x: number; y: number }, wave: number): void {
+    const spec = waveSpec(wave);
+    const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
+    const healthShare = (spec?.necromancerHealthShare ?? 1) * tuning.necromancerHealthScale;
     const necro = new Necromancer(tile.x, tile.y, TILE_SIZE);
-    this.enlist(necro, lane, this.deps.state.quest.assaultWaveIndex ?? 0);
+    necro.applyMobLevel(this.deps.waveLevel());
+    necro.scaleMaxHp(healthShare);
+    necro.cannotBeKilled = wave < ASSAULT_WAVE_COUNT - 1;
+    this.enlist(necro, lane, wave, { levelled: true });
     this.necromancer = necro;
     this.necromancerOut = true;
-    this.deps.bossIntro(necro.displayName, NECROMANCER_INTRO_COLOR);
+    // His name card once, when he first comes; after that he is expected.
+    if (wave === 0) this.deps.bossIntro(necro.displayName, NECROMANCER_INTRO_COLOR);
     this.playCue('necromancerArrival');
+  }
+
+  /** The wave's bounty mark: its own fight, on weaker terms than its bounty. */
+  private spawnBountyMark(
+    kind: AssaultBountyKind,
+    lane: AssaultLane,
+    tile: { x: number; y: number },
+    wave: number,
+  ): void {
+    const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
+    const mark = createBountyMark(kind, tile.x, tile.y, this.deps.gameMap);
+    mark.applyMobLevel(this.deps.waveLevel());
+    mark.scaleMaxHp(tuning.bountyHealthShare);
+    mark.outgoingDamageScale = tuning.bountyDamageScale;
+    mark.blowCapShareOfTargetHp = BOUNTY_MAX_BLOW_HP_SHARE;
+    mark.isBoss = true;
+    mark.immuneToConfusion = true;
+    this.enlist(mark, lane, wave, {
+      levelled: true,
+      structureScale: BOUNTY_MARK_STRUCTURE_SCALE,
+    });
+    this.bountyMark = mark;
+  }
+
+  /**
+   * A fairy for the siege: not enlisted — it marches nowhere and strikes no
+   * wall — but flies with the wave it came up with, and stays out until the
+   * siege ends.
+   */
+  private spawnFairy(kind: RegularFairyKind, tile: { x: number; y: number }): void {
+    const { gameMap } = this.deps;
+    const fairy = createFairy(kind, tile.x, tile.y, gameMap);
+    if (fairy === null) return;
+    const profile = this.deps.difficulty();
+    finishFairySpawn(
+      fairy,
+      this.deps.waveLevel(),
+      level3.levelledCurve,
+      profile,
+      assaultDifficulty(profile),
+      level3.floorNumber,
+    );
+    fairy.ignoresTownSafeZone = true;
+    this.deps.roster.add(fairy);
+    this.fairies.set(kind, fairy);
+    this.spawnedTotal++;
   }
 
   // ── Abandoning ────────────────────────────────────────────────────────────
@@ -1069,15 +1593,24 @@ export class VillageAssaultSystem {
     };
   }
 
+  /** The siege's fairies still flying, which leave with the dead however it ends. */
+  private releaseFairies(): void {
+    for (const fairy of this.livingFairies) this.release(fairy, VANISH_IN_A_WISP);
+  }
+
   /** Vordrick Boneharrow is dead: the rest of the dead crumble, and the village is saved. */
   private win(): void {
     this.recordSummary();
     this.deps.state.quest.assaultWaveIndex = null;
     this.pending = [];
+    this.arrivals = [];
     this.lullFrames = 0;
+    this.sideBanner = null;
+    this.releaseFairies();
     const living = this.livingSiegeMobs();
     for (const mob of living) {
       // Beaten: it stands where it is until it falls, and fights no more.
+      mob.abandonStructureStrike();
       mob.siegeDirective = HOLD_STILL;
       mob.currentTarget = null;
       this.crumbles.push({
@@ -1095,9 +1628,15 @@ export class VillageAssaultSystem {
     this.recordSummary();
     this.deps.state.quest.assaultWaveIndex = null;
     this.pending = [];
+    this.arrivals = [];
     this.lullFrames = 0;
+    this.sideBanner = null;
+    this.releaseFairies();
     const fell = this.deps.defense.bellCracked;
     for (const mob of this.livingSiegeMobs()) {
+      // A swing already under way would land on the bell the siege's end
+      // just mended.
+      mob.abandonStructureStrike();
       if (mob instanceof Necromancer) {
         // He does not walk anywhere: he is simply gone, the way he blinks.
         this.release(mob, VANISH_IN_A_WISP);
@@ -1315,8 +1854,9 @@ export class VillageAssaultSystem {
     const width = SIEGE_HUD_PANEL_WIDTH * scale;
     const { x, y } = slot;
     const necro = this.activeNecromancer;
+    const mark = this.activeBountyMark;
     const inAssault = this.phase === 'assault';
-    const barRows = (inAssault ? 1 : 0) + (necro !== null ? 1 : 0);
+    const barRows = (inAssault ? 1 : 0) + (necro !== null ? 1 : 0) + (mark !== null ? 1 : 0);
     // Compact: every bar shares the one row under the headline.
     const rows = 1 + (slot.compact ? Math.min(1, barRows) : barRows);
     const height = siegeHudPanelHeight(rows) * scale;
@@ -1324,12 +1864,14 @@ export class VillageAssaultSystem {
     const innerX = x + SIEGE_HUD_PANEL_PAD * scale;
     const innerW = width - SIEGE_HUD_PANEL_PAD * 2 * scale;
     let rowY = y + SIEGE_HUD_PANEL_PAD * scale;
+    const side = this.attackSide;
+    const sideName = side === null ? '' : SIDE_NAMES[side];
     const headline =
       this.phase === 'imminent'
-        ? `The dead are coming — ${countdownLabel(this.countdownFrames)}`
+        ? `The dead are coming from the ${sideName} — ${countdownLabel(this.countdownFrames)}`
         : this.inLull
-          ? `Wave ${this.waveNumber + 1} approaches — ${countdownLabel(this.lullFrames)}`
-          : `Defend Briar Hollow — Wave ${this.waveNumber}/${ASSAULT_WAVE_COUNT}`;
+          ? `Wave ${this.waveNumber + 1} from the ${sideName} — ${countdownLabel(this.lullFrames)}`
+          : `Defend Briar Hollow — Wave ${this.waveNumber}/${ASSAULT_WAVE_COUNT} (${sideName})`;
     drawText(ctx, headline, {
       ...TEXT_PRESETS.danger,
       x: x + width / 2,
@@ -1356,6 +1898,14 @@ export class VillageAssaultSystem {
         flash: false,
       });
     }
+    if (mark !== null) {
+      bars.push({
+        label: mark.displayName,
+        value: mark.hp / mark.maxHp,
+        preset: 'boss',
+        flash: false,
+      });
+    }
     const perRow = slot.compact ? Math.max(1, bars.length) : 1;
     const barGap = SIEGE_HUD_PANEL_PAD * scale;
     const barWidth = (innerW - barGap * (perRow - 1)) / perRow;
@@ -1378,6 +1928,23 @@ export class VillageAssaultSystem {
       if (column === perRow - 1) rowY += SIEGE_HUD_ROW_HEIGHT * scale;
     });
     this.renderAbandonWarning(ctx);
+    this.renderSideBanner(ctx);
+  }
+
+  private renderSideBanner(ctx: CanvasRenderingContext2D): void {
+    const banner = this.sideBanner;
+    // The abandon warning holds the same place on screen, and matters more.
+    if (banner === null || this.abandonSecondsLeft !== null) return;
+    drawText(ctx, banner.text, {
+      ...TEXT_PRESETS.title,
+      color: TEXT_PRESETS.danger.color,
+      x: viewportWidth() / 2,
+      y: viewportHeight() * CENTRE_BANNER_HEIGHT_SHARE,
+      width: Math.min(OUTCOME_BANNER_MAX_WIDTH, viewportWidth() - BANNER_SIDE_MARGIN * 2),
+      align: 'center',
+      outline: true,
+      alpha: Math.min(1, banner.framesLeft / BANNER_FADE_FRAMES),
+    });
   }
 
   private renderBar(
@@ -1448,12 +2015,14 @@ export class VillageAssaultSystem {
       for (const mob of this.deps.roster.mobs) {
         if (mob.isAlive && mob.siegeCapable !== null) this.release(mob, VANISH_UNSEEN);
       }
+      for (const fairy of this.livingFairies) this.release(fairy, VANISH_UNSEEN);
     }
     this.resetSiegeCounters();
     this.crumbles.length = 0;
     this.effects.length = 0;
     this.withdraw.walks.clear();
     this.outcomeBanner = null;
+    this.sideBanner = null;
     this.bellRingFrames = 0;
     this.bellFlashFrames = 0;
     this.bellCrackFrames = 0;
@@ -1474,6 +2043,7 @@ export class VillageAssaultSystem {
   }
 
   dispose(): void {
+    this.deps.audio?.setCreatureHearing(null);
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
     this.prewarm.update(null);
@@ -1483,8 +2053,9 @@ export class VillageAssaultSystem {
 
 /** A tile's centre, as a share of the tile from its corner. */
 const TILE_CENTRE = 0.5;
-/** The last wave, as the wave prewarm numbers them. */
-const THIRD_WAVE = 3;
+/** How long the "Attack coming from…" banner stays up at the start of a countdown or a lull. */
+const SIDE_BANNER_SECONDS = 6;
+const SIDE_BANNER_FRAMES = SIDE_BANNER_SECONDS * UPDATES_PER_SECOND;
 const SIEGE_MUSIC_FADE_MS = 1000;
 const BELL_FALLEN_BANNER = 'The bell has fallen. The dead withdraw…';
 const ABANDONED_BANNER = 'You left Briar Hollow to the dead. They withdraw…';

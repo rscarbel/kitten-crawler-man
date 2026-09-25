@@ -57,12 +57,16 @@ const IMPACT_ROW_TICKS = GRAVE_BULL_IMPACT_FRAMES * GRAVE_BULL_TICKS_PER_FRAME.i
 export const GRAVE_BULL_WALL_RECOVERY_FRAMES = 120;
 /** After a charge that ran out, was held by a snare, or struck a body. */
 const GRAVE_BULL_RECOVERY_FRAMES = 90;
-/** The level-1 weight of the charge: what it does to a body, and what a wall takes six times over. */
-export const GRAVE_BULL_CHARGE_DAMAGE = 8;
+/**
+ * The level-1 weight of the charge: what it does to a body, and what a wall
+ * takes three times over. A charge is telegraphed by the paw and can be
+ * stepped aside from, so one that connects is meant to hurt badly.
+ */
+export const GRAVE_BULL_CHARGE_DAMAGE = 20;
 /** A charge that meets a structure lands at this multiple of its weight. */
-export const GRAVE_BULL_STRUCTURE_MULTIPLIER = 6;
+export const GRAVE_BULL_STRUCTURE_MULTIPLIER = 3;
 /** The most of a victim's bar one charge may take, whatever the level and difficulty. */
-const GRAVE_BULL_BLOW_CAP_SHARE = 0.4;
+const GRAVE_BULL_BLOW_CAP_SHARE = 0.55;
 /** How far a charge flings a body it meets, in tiles, and over how many frames. */
 const CHARGE_KNOCKBACK_TILES = 1.6;
 const CHARGE_KNOCKBACK_FRAMES = 16;

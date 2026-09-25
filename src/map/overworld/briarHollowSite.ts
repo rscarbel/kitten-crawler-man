@@ -11,7 +11,7 @@
 import type { TileGrid } from '../town/tileGrid';
 import type { TilePoint, TileRect, TownPlan } from '../town/townPlan';
 import type { ElevationField } from './elevation';
-import { grownRect, KeepOut, type KeepOutDisc } from './keepOut';
+import { grownRect, KeepOut, type KeepOutDisc, type KeepOutRect } from './keepOut';
 import {
   BELL_TOWER,
   BUILDINGS,
@@ -22,6 +22,9 @@ import {
   DISTRICTS,
   doorwayTiles,
   EAST_LANE_APPROACH,
+  FLANK_LANE_SPAWN_DISTANCE_TILES,
+  NORTH_LANE_APPROACH,
+  WEST_LANE_APPROACH,
   FARM_PROPS,
   GATE_APPROACH_TILES,
   GATE_WIDTH_TILES,
@@ -137,9 +140,25 @@ export interface BriarHollowDressing {
   readonly householdColours: ReadonlyMap<VillageBuildingId, HouseholdColour>;
 }
 
+/**
+ * How far round a lane's spawn tile the assault looks for open ground to
+ * raise a body on, and how far the generator's reachability check looks for
+ * reachable ground round it.
+ */
+export const ASSAULT_LANE_SPAWN_SEARCH_TILES = 6;
+
+/** The four sides of the village an assault wave can come from. */
+export type AssaultLaneId = 'north' | 'south' | 'east' | 'west';
+
 export interface AssaultLane {
-  readonly id: 'east' | 'south';
-  /** Where the lane's attackers appear. Nothing spawns there until the assault. */
+  readonly id: AssaultLaneId;
+  /**
+   * Where the lane's attackers appear. Nothing spawns there until the assault.
+   * The east and south lanes' spawns stand on ground the generator keeps
+   * clear; the north and west lanes' are nominal, out in whatever the
+   * wilderness grew there, and the assault spawns on the nearest open ground
+   * with a way to the wall.
+   */
   readonly spawn: TilePoint;
   /** The tile just outside the palisade the lane heads for. */
   readonly approach: TilePoint;
@@ -467,6 +486,32 @@ function coreFootprint(origin: TilePoint): {
   };
 }
 
+/**
+ * Half the width of the open ground kept from the north and west walls out to
+ * their lanes' spawns, so no forest, cliff or river the wilderness grows can
+ * shut a wave in where it rises.
+ */
+const FLANK_LANE_HALF_WIDTH_TILES = 2;
+
+/** The north and west lanes' corridors, from each lane's spawn in to its wall. */
+function flankLaneCorridors(origin: TilePoint): TileRect[] {
+  const corridorWidth = FLANK_LANE_HALF_WIDTH_TILES * 2 + 1;
+  const corridorLength = FLANK_LANE_SPAWN_DISTANCE_TILES + FLANK_LANE_HALF_WIDTH_TILES + 1;
+  const north = shiftRect(origin, {
+    x: NORTH_LANE_APPROACH.x - FLANK_LANE_HALF_WIDTH_TILES,
+    y: -FLANK_LANE_SPAWN_DISTANCE_TILES - FLANK_LANE_HALF_WIDTH_TILES,
+    w: corridorWidth,
+    h: corridorLength,
+  });
+  const west = shiftRect(origin, {
+    x: -FLANK_LANE_SPAWN_DISTANCE_TILES - FLANK_LANE_HALF_WIDTH_TILES,
+    y: WEST_LANE_APPROACH.y - FLANK_LANE_HALF_WIDTH_TILES,
+    w: corridorLength,
+    h: corridorWidth,
+  });
+  return [north, west];
+}
+
 function keepOutFor(origin: TilePoint): KeepOut {
   const core = coreFootprint(origin);
   return new KeepOut([
@@ -479,6 +524,7 @@ function keepOutFor(origin: TilePoint): KeepOut {
     },
     { kind: 'rect', rect: grownRect(core.southRoad, ROAD_KEEP_OUT_MARGIN_TILES) },
     { kind: 'rect', rect: grownRect(core.spur, ROAD_KEEP_OUT_MARGIN_TILES) },
+    ...flankLaneCorridors(origin).map((rect): KeepOutRect => ({ kind: 'rect', rect })),
   ]);
 }
 
@@ -564,6 +610,12 @@ function isSiteUsable(grid: TileGrid, plan: TownPlan, origin: TilePoint, border:
   // the town wall.
   for (const rect of [core.southRoad, core.spur]) {
     if (!forEachTile(rect, (x, y) => !grid.isSolid(x, y))) return false;
+  }
+  // The flank lanes are open ground a wave walks in by, so they may cross a
+  // highway, but neither leave the map nor run into the town.
+  for (const rect of flankLaneCorridors(origin)) {
+    if (!withinBorder(rect)) return false;
+    if (!forEachTile(rect, (x, y) => !grid.isSolid(x, y) && outsideSafeZone(x, y))) return false;
   }
   return true;
 }
@@ -846,6 +898,22 @@ export function buildBriarHollowSite(centre: TilePoint): BriarHollowSite {
         id: 'south',
         spawn: { x: gateOutside.x, y: gateOutside.y + SOUTH_LANE_SPAWN_DISTANCE_TILES },
         approach: { x: gateOutside.x, y: gateOutside.y + 1 },
+      },
+      {
+        id: 'north',
+        spawn: shiftPoint(origin, {
+          x: NORTH_LANE_APPROACH.x,
+          y: -FLANK_LANE_SPAWN_DISTANCE_TILES,
+        }),
+        approach: shiftPoint(origin, NORTH_LANE_APPROACH),
+      },
+      {
+        id: 'west',
+        spawn: shiftPoint(origin, {
+          x: -FLANK_LANE_SPAWN_DISTANCE_TILES,
+          y: WEST_LANE_APPROACH.y,
+        }),
+        approach: shiftPoint(origin, WEST_LANE_APPROACH),
       },
     ],
     villagerAnchors: buildAnchors(origin, buildings),

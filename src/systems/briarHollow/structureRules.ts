@@ -207,6 +207,12 @@ export function trebuchetRepairCost(hp: number, maxHp: number, broken: boolean):
 export const SPIKES_BASE_HP = 150;
 export const SPIKES_COST: ResourceCost = { wood_board: 1 };
 export const SPIKES_SECONDS = 1;
+/**
+ * The most of an attacker's own health one blow's thorns may take. Spikes
+ * send the whole blow back, and a siege's blows are sized to break walls: in
+ * full they would kill a charging bull on its first impact.
+ */
+export const SPIKES_THORNS_MAX_SHARE = 0.25;
 
 // ── Blasts ──────────────────────────────────────────────────────────────────
 

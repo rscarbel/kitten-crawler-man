@@ -127,7 +127,7 @@ export const ACTION_LABELS: Record<GameAction, string> = {
   buildSummon: 'Build / Summon Pet',
   construction: 'Construction',
   structureMenu: 'Structure Menu',
-  quickLoad: 'Quick Load Trebuchet',
+  quickLoad: 'Repair / Quick Load Trebuchet',
   openChat: 'Open Chat',
   hotbar1: 'Hotbar Slot 1',
   hotbar2: 'Hotbar Slot 2',

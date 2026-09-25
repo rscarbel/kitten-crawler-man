@@ -792,6 +792,20 @@ export const TOWN_ROAD_START: TilePoint = {
 export const SOUTH_LANE_SPAWN_DISTANCE_TILES = 20;
 /** The east lane approaches the palisade here, three tiles off its east wall. */
 export const EAST_LANE_APPROACH: TilePoint = { x: VILLAGE_BOUNDS_W + 2, y: VILLAGE_BOUNDS_H / 2 };
+/** How far off the north and west walls those lanes' spawns stand, in tiles. */
+export const FLANK_LANE_SPAWN_DISTANCE_TILES = 16;
+/** Tiles between a flank lane's approach and the wall it heads for, as the east lane stands off its wall. */
+const FLANK_LANE_APPROACH_OFFSET_TILES = 3;
+/** The north lane approaches the middle of the north wall. */
+export const NORTH_LANE_APPROACH: TilePoint = {
+  x: VILLAGE_BOUNDS_W / 2,
+  y: -FLANK_LANE_APPROACH_OFFSET_TILES,
+};
+/** The west lane approaches the middle of the west wall. */
+export const WEST_LANE_APPROACH: TilePoint = {
+  x: -FLANK_LANE_APPROACH_OFFSET_TILES,
+  y: VILLAGE_BOUNDS_H / 2,
+};
 
 // ── Districts ─────────────────────────────────────────────────────────────────
 

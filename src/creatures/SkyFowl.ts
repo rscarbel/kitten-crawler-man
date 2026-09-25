@@ -122,10 +122,14 @@ export class SkyFowl extends Mob {
     damageType: PlayerDamageType | null = 'melee',
   ) {
     super.takeDamageFrom(amount, attacker, damageType);
-    if (amount > 0 && !this.isAggressive) {
-      this.isAggressive = true;
-      this.setBaseSpeed(FOWL_SPEED_AGGRO);
-    }
+    if (amount > 0) this.provoke();
+  }
+
+  /** Turns this fowl aggressive for the rest of its life, at the angry sprint. */
+  provoke(): void {
+    if (this.isAggressive) return;
+    this.isAggressive = true;
+    this.setBaseSpeed(FOWL_SPEED_AGGRO);
   }
 
   /**

@@ -431,7 +431,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
     y: number,
     undodgeable: boolean,
   ): DamageSource {
-    return owner.stampBlowCap({
+    return owner.stampHarmLimits({
       kind: 'mob',
       mobType: owner.mobType,
       attackType,

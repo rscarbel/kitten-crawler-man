@@ -188,11 +188,11 @@ export class SkeletonSummonSystem implements GameSystem {
     if (summoners.length === 0) return;
 
     const escortRadiusPx = TILE_SIZE * ESCORT_RADIUS_TILES;
-    // A raised ratkin climbs out the way a skeleton does, but it is the
-    // necromancer's and answers to his cap, never a skeleton caster's.
+    // The necromancer's raises climb out the way a caster's skeletons do,
+    // but they are his and answer to his cap, never a skeleton caster's.
     const skeletons = ctx.roster.mobs.filter(
       (mob): mob is RisingSkeleton =>
-        mob instanceof RisingSkeleton && !(mob instanceof RaisedRatkin) && mob.isAlive,
+        mob instanceof RisingSkeleton && !mob.raisedByNecromancer && mob.isAlive,
     );
 
     for (const summoner of summoners) {
@@ -279,7 +279,7 @@ export class SkeletonSummonSystem implements GameSystem {
           if (living >= NECRO_ESCORT_CAP) break;
           const tile = this.raiseTileFor(request, taken);
           if (tile === null) continue;
-          this.raiseForNecromancer(necromancer, tile.x, tile.y, request.look);
+          this.raiseForNecromancer(necromancer, tile.x, tile.y, request);
           living++;
         }
       }
@@ -311,9 +311,9 @@ export class SkeletonSummonSystem implements GameSystem {
     necromancer: Necromancer,
     tileX: number,
     tileY: number,
-    look: NecromancerRaiseRequest['look'],
+    request: NecromancerRaiseRequest,
   ): void {
-    const risen = new RaisedRatkin(tileX, tileY, TILE_SIZE, look);
+    const risen = raisedBody(request, tileX, tileY);
     risen.setMap(this.gameMap);
     // Before the roll: a body raised mid-fight is a summon and learns nothing.
     risen.beginRising();
@@ -458,4 +458,20 @@ function pickAtRandom<T>(options: readonly T[]): T {
 
 function kindOf(skeleton: RisingSkeleton): SkeletonKind {
   return skeleton instanceof SkeletonArcher ? 'archer' : 'sword';
+}
+
+/** The body a necromancer's raise request climbs out as. */
+function raisedBody(
+  request: NecromancerRaiseRequest,
+  tileX: number,
+  tileY: number,
+): RisingSkeleton {
+  switch (request.kind) {
+    case 'ratkin':
+      return new RaisedRatkin(tileX, tileY, TILE_SIZE, request.look);
+    case 'skeleton_warrior':
+      return new SkeletonWarrior(tileX, tileY, TILE_SIZE);
+    case 'skeleton_archer':
+      return new SkeletonArcher(tileX, tileY, TILE_SIZE);
+  }
 }

@@ -8,6 +8,7 @@ import type { DoomsdayStage } from '../core/DoomsdayProgress';
 import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
 import type { CircusQuestStage } from '../core/CircusQuestProgress';
 import type { PartyToolsState } from '../core/PartyTools';
+import type { PalisadeTier } from '../map/tileTypes';
 import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/toolTiers';
 
 /**
@@ -106,6 +107,16 @@ export interface PlaytestPreset {
    * reconciles the bags to it on entry.
    */
   readonly toolTiers?: PartyToolsState;
+  /**
+   * Briar Hollow ready for its siege: "Briar Hollow's Plea" already at
+   * fortifying, the whole palisade at `wallTier`, and `trebuchets` loaded
+   * engines inside it. `?walls=` and `?trebuchets=` on the URL override both
+   * (`npm run playtest -- <id> --walls=fortified --trebuchets=4`).
+   */
+  readonly briarHollowDefences?: {
+    readonly wallTier: PalisadeTier;
+    readonly trebuchets: number;
+  };
 }
 
 const HOARDER: PlaytestPreset = {
@@ -782,6 +793,58 @@ const BRIAR_HOLLOW_SIEGE: PlaytestPreset = {
   cat: { ...BRIAR_HOLLOW_VILLAGE.cat, constructionLevel: SIEGE_PRESET_CONSTRUCTION },
 };
 
+/** The assault preset's stockpile: enough to rebuild the ring more than once over. */
+const ASSAULT_PRESET_WOOD = 400;
+const ASSAULT_PRESET_STONE = 400;
+const ASSAULT_PRESET_BOARDS = 200;
+const ASSAULT_PRESET_ROPE = 200;
+const ASSAULT_PRESET_DYNAMITE = 100;
+const ASSAULT_PRESET_SPEED_FIZZES = 25;
+/** Both crawlers' Construction in the assault preset: past spikes, short of the level-15 doubling. */
+const ASSAULT_PRESET_CONSTRUCTION = 5;
+/** Two engines behind each wall. */
+const ASSAULT_PRESET_TREBUCHETS = 8;
+
+/**
+ * `stacks` with each id in `quantities` holding that quantity instead. Only
+ * restocks: an id the stacks do not already hold is not added.
+ */
+function withQuantities(
+  stacks: readonly PlaytestStack[],
+  quantities: Partial<Record<ItemId, number>>,
+): PlaytestStack[] {
+  return stacks.map((stack) => ({ ...stack, quantity: quantities[stack.id] ?? stack.quantity }));
+}
+
+/**
+ * Briar Hollow with the questline done up to the siege — the Mayor's asks
+ * met, the bell ready to ring — the ring built to a tier (`--walls`, stone
+ * unless told), eight loaded trebuchets, and Carl carrying a stockpile and a
+ * crate of dynamite for the fight.
+ */
+const BRIAR_HOLLOW_ASSAULT: PlaytestPreset = {
+  ...BRIAR_HOLLOW_VILLAGE,
+  id: 'briar-hollow-assault',
+  description:
+    'Briar Hollow ready for the siege: walls built (--walls=fence|wood|stone|fortified), trebuchets up',
+  briarHollowDefences: { wallTier: 'stone', trebuchets: ASSAULT_PRESET_TREBUCHETS },
+  human: {
+    ...BRIAR_HOLLOW_VILLAGE.human,
+    constructionLevel: ASSAULT_PRESET_CONSTRUCTION,
+    hotbar: withQuantities(BRIAR_HOLLOW_VILLAGE.human.hotbar, {
+      goblin_dynamite: ASSAULT_PRESET_DYNAMITE,
+    }),
+    bag: withQuantities(BRIAR_HOLLOW_VILLAGE.human.bag, {
+      wood: ASSAULT_PRESET_WOOD,
+      stone: ASSAULT_PRESET_STONE,
+      wood_board: ASSAULT_PRESET_BOARDS,
+      rope: ASSAULT_PRESET_ROPE,
+      speed_fizz: ASSAULT_PRESET_SPEED_FIZZES,
+    }),
+  },
+  cat: { ...BRIAR_HOLLOW_VILLAGE.cat, constructionLevel: ASSAULT_PRESET_CONSTRUCTION },
+};
+
 /** Carl's Resourcing in the thralls preset: the level the summon unlocks at. */
 const THRALL_PRESET_HUMAN_RESOURCING = 10;
 /** Donut's: the top level, which summons three at once. */
@@ -838,6 +901,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   BRIAR_HOLLOW_VILLAGE,
   BRIAR_HOLLOW_BUILDERS,
   BRIAR_HOLLOW_SIEGE,
+  BRIAR_HOLLOW_ASSAULT,
   RESOURCING_THRALLS,
 ];
 

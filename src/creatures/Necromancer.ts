@@ -9,6 +9,7 @@ import type { AssaultLane } from '../map/overworld/briarHollowSite';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import {
   isInsidePalisade,
+  isInsidePalisadeTile,
   isStandingStructure,
   nearestStructurePoint,
   tileUnder,
@@ -22,6 +23,7 @@ import type { SiegeTile } from './siege/siegeTypes';
 import { UndeadCueQueue } from './siege/undeadCues';
 import { RAISED_RATKIN_LOOKS, type RaisedRatkinLook } from '../sprites/art/raisedRatkinArt';
 import { prewarmRaisedRatkin } from '../sprites/raisedRatkinSprite';
+import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
 import {
   BLINK_FRAMES,
   CAST_BOLT_FRAMES,
@@ -64,7 +66,7 @@ import {
 
 /**
  * Vordrick's HP at level 1, before the boss curve levels it to the wave. Sized
- * by the siege simulation (`verify:village-assault`): he stands back from the
+ * by the siege simulation, he stands back from the
  * walls behind his raises, so he is hurt only when he comes within a missile's
  * clear flight of the gate or a breach, and by the trebuchets, which rank him
  * last — at much more than this the siege stalls with him alive and the walls
@@ -119,6 +121,32 @@ const PROCESSION_LEAD_SLACK = 1.05;
 
 export const NECRO_RAISE_COOLDOWN_FRAMES = 720;
 export const NECRO_RAISE_BATCH = 3;
+/** A raise in a siege calls up this many at once. */
+export const NECRO_SIEGE_RAISE_BATCH = 4;
+/**
+ * Of a siege raise, how many sigils open inside the palisade. The village's
+ * own dead are buried within it: a wall keeps out what comes up the lanes,
+ * not what climbs out of the ground behind it.
+ */
+export const NECRO_INNER_RAISES = 3;
+/** An inner sigil opens no nearer a defender than this, so it is seen and met rather than rising underfoot. */
+const NECRO_INNER_RAISE_MIN_DEFENDER_TILES = 3;
+/** Inner sigils open within this many tiles of the bell, where the dead inside have their business. */
+const NECRO_INNER_RAISE_BELL_TILES = 12;
+/**
+ * How a siege raise's bodies are drawn, as weights: the village's ratkin
+ * most often, then its skeletons. Outside a siege he raises only ratkin.
+ */
+const SIEGE_RAISE_KIND_WEIGHTS: Readonly<Record<NecromancerRaiseKind, number>> = {
+  ratkin: 0.5,
+  skeleton_warrior: 0.3,
+  skeleton_archer: 0.2,
+};
+const SIEGE_RAISE_KINDS: readonly NecromancerRaiseKind[] = [
+  'ratkin',
+  'skeleton_warrior',
+  'skeleton_archer',
+];
 /** Living raises he may field at once. The wave's own spawns are counted separately. */
 export const NECRO_ESCORT_CAP = 8;
 /** Corpses within this many tiles rise first. */
@@ -170,8 +198,16 @@ export const NECRO_BLINK_TRIGGER_TILES = 2;
 export const NECRO_BLINK_TRIGGER_FRAMES = 120;
 export const NECRO_BLINK_COOLDOWN_FRAMES = 480;
 export const NECRO_BLINK_MIN_TILES = 6;
+/**
+ * How long a walk to where he means to stand may make no headway before he
+ * blinks there instead: long enough that a body in his way can step aside,
+ * short enough that a stand of trees never holds him out of the fight.
+ */
+export const NECRO_STUCK_BLINK_FRAMES = 120;
+/** How far round his post an unsticking blink may look for open ground, in tiles. */
+const NECRO_UNSTICK_SEARCH_TILES = 6;
 export const NECRO_BLINK_MAX_TILES = 8;
-/** How far either side of the line to the ruins a blink may land, in radians: about sixty degrees. */
+/** How far either side of the line back to his lane a blink may land, in radians: about sixty degrees. */
 const BLINK_ARC_HALF = 1.05;
 const BLINK_ARC_SAMPLES = 9;
 /** The blink warning is re-armed once every crawler is this much further out. */
@@ -223,16 +259,23 @@ export const NECRO_BOLT_TELEGRAPH_FRAMES = releaseTicks(
 /** How long the heap lies before it fades, and the fade. */
 const NECRO_CORPSE_HOLD_FRAMES = 3600;
 const NECRO_CORPSE_FADE_FRAMES = 120;
+/** How long he takes to fade out of a siege wave he was beaten in but not killed in. */
+export const NECRO_RETREAT_FADE_FRAMES = 90;
 
 const HALF = 0.5;
 const NO_TACTICS: readonly TacticsTrait[] = [];
 const NO_SHOTS: readonly SkeletonShot[] = [];
 const NO_RAISES: readonly NecromancerRaiseRequest[] = [];
 
-/** One raised ratkin he has called up, on the sigil it will climb out of. */
+/** What one of his raises climbs out as. */
+export type NecromancerRaiseKind = 'ratkin' | 'skeleton_warrior' | 'skeleton_archer';
+
+/** One body he has called up, on the sigil it will climb out of. */
 export interface NecromancerRaiseRequest {
   readonly tileX: number;
   readonly tileY: number;
+  readonly kind: NecromancerRaiseKind;
+  /** The ratkin's look; unused for a skeleton. */
   readonly look: RaisedRatkinLook;
 }
 
@@ -279,6 +322,15 @@ function pickLook(): RaisedRatkinLook {
   return RAISED_RATKIN_LOOKS[Math.floor(Math.random() * RAISED_RATKIN_LOOKS.length)] ?? 'smock';
 }
 
+function pickSiegeRaiseKind(): NecromancerRaiseKind {
+  let roll = Math.random();
+  for (const kind of SIEGE_RAISE_KINDS) {
+    roll -= SIEGE_RAISE_KIND_WEIGHTS[kind];
+    if (roll < 0) return kind;
+  }
+  return 'ratkin';
+}
+
 /**
  * Vordrick Boneharrow, the necromancer who brings Briar Hollow's own dead
  * back against it.
@@ -298,7 +350,7 @@ function pickLook(): RaisedRatkinLook {
  * - **Grave Pulse** — a channel into the weakest wall or trebuchet in reach;
  *   enough damage during it, a trebuchet's direct hit always among it, breaks
  *   it.
- * - **Blink** — away toward the ruins when a crawler has crowded him too long.
+ * - **Blink** — back toward his lane when a crawler has crowded him too long.
  *
  * His death plays out as a corpse (`rendersWhenDead`), so `isAlive` falls with
  * his health and `justDied` latches exactly once.
@@ -337,6 +389,8 @@ export class Necromancer extends Mob {
     cast_pulse: null,
   };
   private crowdedFrames = 0;
+  /** Updates his walk to his goal has made no headway. */
+  private walkStalledFrames = 0;
   private blinkWarned = false;
   private standingWarmed = false;
   /** His own tick count when his standing set was warmed, or null before. */
@@ -346,6 +400,7 @@ export class Necromancer extends Mob {
   private deathWarmed = false;
 
   private raiseSites: SiegeTile[] = [];
+  private raiseKinds: NecromancerRaiseKind[] = [];
   private raiseLooks: RaisedRatkinLook[] = [];
   private boltAngle = 0;
   private boltTarget: Player | null = null;
@@ -368,6 +423,8 @@ export class Necromancer extends Mob {
   private idleTicks = 0;
   private hurtTimer = 0;
   private corpseFrames = 0;
+  /** Frames into his fade-out after a beating he survives, or null while he fights. */
+  private retreatFadeFrames: number | null = null;
   private lastX: number;
   private lastY: number;
 
@@ -426,7 +483,7 @@ export class Necromancer extends Mob {
    * dodging him from anywhere.
    */
   override get requiresEvasion(): boolean {
-    if (!this.isAlive) return false;
+    if (!this.isAlive || this.isFadingAway) return false;
     if (this.phase === 'cast_bolt' || this.phase === 'cast_pulse' || this.phase === 'cast_raise') {
       return true;
     }
@@ -437,6 +494,43 @@ export class Necromancer extends Mob {
   /** His loot is the boss chest's, granted by the fight's owner, not a floor drop. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     return [];
+  }
+
+  // ── Beaten, not killed ─────────────────────────────────────────────────────
+
+  /** Whether he has been beaten down in a fight he is not allowed to die in (`cannotBeKilled`). */
+  get isBeaten(): boolean {
+    return this.isAlive && this.cannotBeKilled && this.hp <= 1;
+  }
+
+  /** Whether he is fading out of the fight: no casting, no moving, and nothing lands on him. */
+  get isFadingAway(): boolean {
+    return this.retreatFadeFrames !== null;
+  }
+
+  /** Whether his fade has run its course, and he can be taken off the field. */
+  get hasFadedAway(): boolean {
+    return this.retreatFadeFrames !== null && this.retreatFadeFrames >= NECRO_RETREAT_FADE_FRAMES;
+  }
+
+  /** Stops him where he stands and starts him fading out; whatever he had in the air is dropped. */
+  beginFadingAway(): void {
+    if (this.retreatFadeFrames !== null) return;
+    this.retreatFadeFrames = 0;
+    // A blink half done would leave him drawn mid-vanish for the whole fade.
+    this.endCast();
+    this.clearAirborneAttacks();
+    this.currentTarget = null;
+    this.isMoving = false;
+  }
+
+  override get refusesDamage(): boolean {
+    return super.refusesDamage || this.isFadingAway;
+  }
+
+  private get retreatAlpha(): number {
+    if (this.retreatFadeFrames === null) return 1;
+    return Math.max(0, 1 - this.retreatFadeFrames / NECRO_RETREAT_FADE_FRAMES);
   }
 
   // ── Queues drained by systems ──────────────────────────────────────────────
@@ -538,7 +632,9 @@ export class Necromancer extends Mob {
     this.castWarmedAt.cast_bolt = null;
     this.castWarmedAt.cast_pulse = null;
     this.crowdedFrames = 0;
+    this.walkStalledFrames = 0;
     this.raiseSites = [];
+    this.raiseKinds = [];
     this.raiseLooks = [];
     this.pulseTarget = null;
     this.pulsePoint = null;
@@ -615,6 +711,11 @@ export class Necromancer extends Mob {
 
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
+    if (this.retreatFadeFrames !== null) {
+      this.retreatFadeFrames++;
+      this.isMoving = false;
+      return;
+    }
     this.warmStandingOnSetOut();
     this.latestTargets = targets;
     this.phaseTicks++;
@@ -767,7 +868,11 @@ export class Necromancer extends Mob {
     ) {
       return false;
     }
-    return this.map?.isWalkableForHostile(tileX, tileY) !== false;
+    const map = this.map;
+    if (map === null) return true;
+    // Room to move as well as walkable: a single-tile gap between trunks is
+    // walkable ground he could be sent to and never leave.
+    return map.isWalkableForHostile(tileX, tileY) && hasRoomToMove(map, tileX, tileY);
   }
 
   /**
@@ -901,14 +1006,57 @@ export class Necromancer extends Mob {
       this.y === this.lastY &&
       toGoal <= this.tileSize * ARRIVE_RELEASE_TILES;
     if (toGoal <= this.tileSize * arriveTiles || stalledClose) {
+      this.walkStalledFrames = 0;
       this.arrivedAtGoal = true;
       this.isMoving = false;
       if (watched !== null) this.faceToward(watched);
       return;
     }
     this.arrivedAtGoal = false;
+    if (this.walkStalledFrames >= NECRO_STUCK_BLINK_FRAMES && this.beginUnstickBlink()) return;
     const pace = inProcession ? this.processionPace : this.speed;
+    const fromX = this.x;
+    const fromY = this.y;
     this.followTargetAStar(goalX, goalY, pace, this.tileSize * ARRIVE_TILES);
+    const heldInPlace = this.x === fromX && this.y === fromY;
+    this.walkStalledFrames = heldInPlace ? this.walkStalledFrames + 1 : 0;
+    if (this.walkStalledFrames === Math.floor(NECRO_STUCK_BLINK_FRAMES / 2))
+      prewarmNecromancerBlink();
+  }
+
+  /**
+   * Blinks him to open ground at his post, once his walk there has gone
+   * nowhere for {@link NECRO_STUCK_BLINK_FRAMES}. Returns whether the blink
+   * began. Allowed in procession too: arriving with his standing rows still
+   * baking beats never arriving at all.
+   */
+  private beginUnstickBlink(): boolean {
+    this.walkStalledFrames = 0;
+    const destination = this.unstickDestination();
+    if (destination === null) return false;
+    this.blinkDestination = destination;
+    this.isMoving = false;
+    this.faceFront();
+    this.cues.push({ id: 'teleport' });
+    this.enterPhase('blink_out');
+    return true;
+  }
+
+  /** The open tile nearest his post that a blink may land on, or null outside the siege. */
+  private unstickDestination(): SiegeTile | null {
+    const anchor = this.homeAnchor();
+    if (anchor === null) return null;
+    for (let radius = 0; radius <= NECRO_UNSTICK_SEARCH_TILES; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          const tileX = anchor.x + dx;
+          const tileY = anchor.y + dy;
+          if (this.isInHomeZone(tileX, tileY)) return { x: tileX, y: tileY };
+        }
+      }
+    }
+    return null;
   }
 
   /**
@@ -993,6 +1141,7 @@ export class Necromancer extends Mob {
     this.pulsePoint = null;
     this.channelDamage = 0;
     this.raiseSites = [];
+    this.raiseKinds = [];
     this.raiseLooks = [];
     this.boltTarget = null;
   }
@@ -1001,13 +1150,19 @@ export class Necromancer extends Mob {
 
   private beginRaise(): boolean {
     const room = Math.max(0, NECRO_ESCORT_CAP - this.escortLiving);
-    const count = Math.min(NECRO_RAISE_BATCH, room);
+    const inSiege = this.siegeCapable !== null;
+    const count = Math.min(inSiege ? NECRO_SIEGE_RAISE_BATCH : NECRO_RAISE_BATCH, room);
     if (count === 0) return false;
-    const sites = this.chooseRaiseSites(count);
+    const inner = this.chooseInnerRaiseSites(Math.min(NECRO_INNER_RAISES, count));
+    const sites = [...inner, ...this.chooseRaiseSites(count - inner.length)];
     if (sites.length === 0) return false;
     this.raiseSites = sites;
+    this.raiseKinds = sites.map(() => (inSiege ? pickSiegeRaiseKind() : 'ratkin'));
     this.raiseLooks = sites.map(() => pickLook());
-    for (const look of new Set(this.raiseLooks)) prewarmRaisedRatkin(look);
+    this.raiseKinds.forEach((kind, index) => {
+      if (kind === 'ratkin') prewarmRaisedRatkin(this.raiseLooks[index] ?? pickLook());
+    });
+    if (this.raiseKinds.some((kind) => kind !== 'ratkin')) prewarmSkeletonEscortSprites();
     this.isMoving = false;
     this.faceFront();
     this.cues.push({ id: 'fairy_raise_call' });
@@ -1022,6 +1177,7 @@ export class Necromancer extends Mob {
         this.pendingRaises.push({
           tileX: site.x,
           tileY: site.y,
+          kind: this.raiseKinds[index] ?? 'ratkin',
           look: this.raiseLooks[index] ?? pickLook(),
         });
       });
@@ -1033,8 +1189,7 @@ export class Necromancer extends Mob {
   /**
    * Where the dead will rise, in order of preference: corpses near him, then
    * graves in the ruins, then open ground around him. Only ground outside the
-   * palisade — the dead come from outside, and a sigil the defenders cannot
-   * reach before it opens would be a raise they could never answer.
+   * palisade: the raises inside it are {@link chooseInnerRaiseSites}'.
    */
   private chooseRaiseSites(count: number): SiegeTile[] {
     const sites: SiegeTile[] = [];
@@ -1101,6 +1256,46 @@ export class Necromancer extends Mob {
         const [tile] = ring.splice(index, 1);
         accept(tile.x, tile.y);
       }
+    }
+    return sites;
+  }
+
+  /**
+   * Up to `count` sigils inside the palisade, in a siege: open ground near
+   * the bell, clear of every defender by
+   * {@link NECRO_INNER_RAISE_MIN_DEFENDER_TILES}. Drawn at random, so the
+   * dead come up somewhere new each time.
+   */
+  private chooseInnerRaiseSites(count: number): SiegeTile[] {
+    const siege = this.siegeCapable;
+    const map = this.map;
+    if (siege === null || map === null || count <= 0) return [];
+    const { site } = siege.world;
+    const bell = site.square.bellTile;
+    const defenders = this.latestTargets.filter((target) => target.isAlive);
+    const clearOfDefenders = (tileX: number, tileY: number): boolean =>
+      defenders.every((defender) => {
+        const tile = tileUnder(defender);
+        return Math.hypot(tile.x - tileX, tile.y - tileY) >= NECRO_INNER_RAISE_MIN_DEFENDER_TILES;
+      });
+    const reach = NECRO_INNER_RAISE_BELL_TILES;
+    const candidates: SiegeTile[] = [];
+    for (let dy = -reach; dy <= reach; dy++) {
+      for (let dx = -reach; dx <= reach; dx++) {
+        if (Math.hypot(dx, dy) > reach) continue;
+        const tileX = bell.x + dx;
+        const tileY = bell.y + dy;
+        if (!isInsidePalisadeTile(site, tileX, tileY)) continue;
+        if (!map.isWalkableForHostile(tileX, tileY) || !hasRoomToMove(map, tileX, tileY)) continue;
+        if (!clearOfDefenders(tileX, tileY)) continue;
+        candidates.push({ x: tileX, y: tileY });
+      }
+    }
+    const sites: SiegeTile[] = [];
+    while (candidates.length > 0 && sites.length < count) {
+      const index = Math.floor(Math.random() * candidates.length);
+      const [tile] = candidates.splice(index, 1);
+      sites.push(tile);
     }
     return sites;
   }
@@ -1252,7 +1447,7 @@ export class Necromancer extends Mob {
     const segX = point.x - fromX;
     const segY = point.y - fromY;
     const lengthSq = segX * segX + segY * segY || 1;
-    const source = this.stampBlowCap({
+    const source = this.stampHarmLimits({
       kind: 'mob',
       mobType: this.mobType,
       attackType: NECRO_PULSE_ATTACK_TYPE,
@@ -1315,23 +1510,24 @@ export class Necromancer extends Mob {
   }
 
   /**
-   * Six to eight tiles away, toward the ruins: walkable, with room around it,
-   * outside the palisade by the wall minimum, and inside his home zone where
-   * the arc reaches it.
+   * Six to eight tiles away, back toward where his lane's dead rise (the
+   * ruins, for the east lane): walkable, with room around it, outside the
+   * palisade by the wall minimum, and inside his home zone where the arc
+   * reaches it.
    */
   chooseBlinkDestination(): SiegeTile | null {
     const here = tileUnder(this);
     const siege = this.siegeCapable;
-    const ruins = siege?.world.site.ruins.centre ?? null;
+    const retreat = this.homeLane()?.spawn ?? siege?.world.site.ruins.centre ?? null;
     const baseAngle =
-      ruins === null
+      retreat === null
         ? Math.atan2(this.facingY, this.facingX)
-        : Math.atan2(ruins.y - here.y, ruins.x - here.x);
+        : Math.atan2(retreat.y - here.y, retreat.x - here.x);
     const field = this.field;
     const map = this.map;
     let fallback: SiegeTile | null = null;
     for (let sample = 0; sample < BLINK_ARC_SAMPLES; sample++) {
-      // Straight at the ruins first, then fanning out either side.
+      // Straight back first, then fanning out either side.
       const side = sample % 2 === 0 ? 1 : -1;
       const offset = Math.ceil(sample / 2) / Math.ceil(BLINK_ARC_SAMPLES / 2);
       const angle = baseAngle + side * offset * BLINK_ARC_HALF;
@@ -1501,9 +1697,9 @@ export class Necromancer extends Mob {
       sy,
       tileSize,
       this.facingX < 0,
-      this.isAlive ? 1 : this.corpseAlpha,
+      this.isAlive ? this.retreatAlpha : this.corpseAlpha,
     );
-    if (this.isAlive) {
+    if (this.isAlive && !this.isFadingAway) {
       this.renderMobHealthBar(ctx, sx, sy - tileSize * NECROMANCER_HEAD_ABOVE_TILE_TILES);
     }
   }

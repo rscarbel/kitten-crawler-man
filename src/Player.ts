@@ -122,10 +122,16 @@ export type DamageSource =
       /**
        * The most of the victim's own max HP this one blow may take, applied
        * after the difficulty's incoming-damage scale so it holds on every
-       * setting and against every crawler. Stamped by `Mob.stampBlowCap` for
+       * setting and against every crawler. Stamped by `Mob.stampHarmLimits` for
        * encounters that promise no blow kills from full.
        */
       readonly maxShareOfTargetHp?: number;
+      /**
+       * Multiplies the blow before the cap: the striker's
+       * `Mob.outgoingDamageScale`, stamped by `Mob.stampHarmLimits` when it
+       * is not 1.
+       */
+      readonly damageScale?: number;
       /**
        * Where the blow came from — the centre of the striker's tile, in world
        * pixels — when the source knows it. The victim reads it only to flinch
@@ -883,7 +889,8 @@ export abstract class Player {
     // Status ticks and self-inflicted dynamite are unscaled — re-pricing a burn
     // that is already running would re-price a hit after the dodge/avoid
     // decision was already made.
-    const difficultyScaled = amount * activeDifficultyProfile().incomingMobDamageScale;
+    const difficultyScaled =
+      amount * activeDifficultyProfile().incomingMobDamageScale * (source.damageScale ?? 1);
     if (source.maxShareOfTargetHp === undefined) return difficultyScaled;
     return Math.min(difficultyScaled, this.maxHp * source.maxShareOfTargetHp);
   }

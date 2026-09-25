@@ -145,7 +145,7 @@ export class FairyIceBolts {
    */
   private strike(bolt: IceBolt, target: Player, x: number, y: number): void {
     const damage = target.resistedDamage(bolt.damage, 'ice');
-    const source: DamageSource = bolt.owner.stampBlowCap({
+    const source: DamageSource = bolt.owner.stampHarmLimits({
       kind: 'mob',
       mobType: bolt.owner.mobType,
       attackType: ICE_BOLT_ATTACK_TYPE,

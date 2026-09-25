@@ -42,11 +42,13 @@ import { GRAVE_BULL_ARRIVAL_ROWS } from './graveBullSprite';
 import { NECROMANCER_ARRIVAL_ROWS } from './necromancerSprite';
 import { RAISED_ARRIVAL_ROWS } from './raisedRatkinSprite';
 
-/** Which assault wave: the first brings raised ratkin, the second adds a bull, the third him. */
-export type AssaultWave = 1 | 2 | 3;
+/** Which assault wave: every one brings raised ratkin and him, the second on add a bull. */
+export type AssaultWave = 1 | 2 | 3 | 4;
+
+/** Every wave, in order. */
+export const ASSAULT_WAVE_NUMBERS: readonly AssaultWave[] = [1, 2, 3, 4];
 
 const FIRST_BULL_WAVE = 2;
-const NECROMANCER_WAVE = 3;
 
 /** One row of one figure. */
 export interface AssaultRow {
@@ -67,10 +69,8 @@ export function assaultWaveRows(wave: AssaultWave): AssaultRow[] {
       rows.push({ def: GRAVE_BULL_FIGURE, state: graveBullStateName(row.action, row.view) });
     }
   }
-  if (wave >= NECROMANCER_WAVE) {
-    for (const row of NECROMANCER_ARRIVAL_ROWS) {
-      rows.push({ def: NECROMANCER_FIGURE, state: necromancerStateName(row.action, row.view) });
-    }
+  for (const row of NECROMANCER_ARRIVAL_ROWS) {
+    rows.push({ def: NECROMANCER_FIGURE, state: necromancerStateName(row.action, row.view) });
   }
   return rows;
 }
@@ -91,8 +91,8 @@ function rowFits(row: AssaultRow): boolean {
  * Tick once per gameplay update with the number of the wave coming next, from
  * the start of its lead-in until its spawns have emerged, and `null` otherwise:
  *
- * - wave 1 from the start of the 90 s imminent countdown;
- * - waves 2 and 3 from the moment the wave before triggers the advance, through
+ * - wave 1 from the start of the imminent countdown;
+ * - waves 2 to 4 from the moment the wave before triggers the advance, through
  *   the lull before them;
  * - `null` once the wave's first spawns are out on every lane it uses. From
  *   then on the rows are drawn by the creatures playing them, which keeps them

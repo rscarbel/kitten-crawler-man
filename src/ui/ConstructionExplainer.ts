@@ -185,7 +185,7 @@ export function buildConstructionExplainerPages(isMobile: boolean): HowToPlayPag
       drawIllustration: drawWallsScene,
       lines: [
         `Face a section of the fence and ${openMenu}. Fence → Wooden Wall → Stone Wall  → Fortified.`,
-        'A wall knocked down becomes a breach you can repair. Repairs cost less than rebuilding.',
+        `A wall knocked down leaves a breach. Face it and ${isMobile ? 'double tap' : `press ${keybindings.labelFor('attack')}`} to repair it; the same goes for a damaged wall.`,
       ],
     },
     {
@@ -201,6 +201,11 @@ export function buildConstructionExplainerPages(isMobile: boolean): HowToPlayPag
       drawIllustration: drawCareScene,
       lines: [
         `${structureMenu.charAt(0).toUpperCase()}${structureMenu.slice(1)} any construction to repair it, add spikes (from Construction level 5), or destroy it.`,
+        ...(isMobile
+          ? []
+          : [
+              `Press ${keybindings.labelFor('quickLoad')} by a damaged wall or trebuchet to repair it.`,
+            ]),
         'You build faster with every level.',
       ],
     },

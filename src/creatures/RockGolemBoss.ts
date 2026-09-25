@@ -413,7 +413,7 @@ export class RockGolemBoss extends RockGolem {
       // plain `takeDamage` dies unattributed — the boulder has a thrower, and
       // `takeDamageFrom` is what puts him in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
-      else if (target.takeDamage(damage, this.stampBlowCap(rollDamageSource(this.mobType)))) {
+      else if (target.takeDamage(damage, this.stampHarmLimits(rollDamageSource(this.mobType)))) {
         this.noteStruckPlayer(target);
         // A boulder rolling over someone is contact, so reflect gear bites into
         // it exactly as it does into a swing.

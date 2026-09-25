@@ -1,4 +1,5 @@
 import type { EventBus } from '../core/EventBus';
+import type { Mob } from '../creatures/Mob';
 import { DISH_DEF } from '../systems/bopcaDialog';
 import { settings } from '../core/Settings';
 import type { SoundId } from './sounds';
@@ -433,6 +434,23 @@ export class AudioManager {
     if (id === 'tech_machinery_running') return this.machinerySource !== null;
     if (id === 'keyboard_hero_music_track_1') return this.keyboardHeroMusicSource !== null;
     return false;
+  }
+
+  /**
+   * Which creatures may be heard, or null for all of them. A battle with
+   * dozens of attackers sets one so their cries, blows and deaths do not
+   * pile into a single roar.
+   */
+  private creatureHearing: ((mob: Mob) => boolean) | null = null;
+
+  /** Installs the rule {@link hearsCreature} answers by; null hears every creature. */
+  setCreatureHearing(rule: ((mob: Mob) => boolean) | null): void {
+    this.creatureHearing = rule;
+  }
+
+  /** Whether a sound this creature makes should play. */
+  hearsCreature(mob: Mob): boolean {
+    return this.creatureHearing?.(mob) ?? true;
   }
 
   /** Play a one-shot sound effect. Silently skips if the buffer is not yet loaded. */
@@ -1088,6 +1106,7 @@ export class AudioManager {
    */
   wireEvents(bus: EventBus, defaultMusicId: SoundId = 'bg_level_1'): void {
     bus.on('mobKilled', (e) => {
+      if (!this.hearsCreature(e.mob)) return;
       // A skeleton has no meat to make a splat. The lord gets his own send-off
       // and the rank and file collapse into a heap of bones.
       if (e.mob.audioTag === 'skeleton_lord' || e.mob.audioTag === 'the_lich') {

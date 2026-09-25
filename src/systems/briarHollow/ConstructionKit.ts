@@ -421,9 +421,10 @@ export class ConstructionKit {
     this.structureMenu.close();
   }
 
-  quickLoad(): void {
+  /** The repair key: mends the nearest hurt structure in reach, or else Quick Loads a trebuchet. */
+  repairOrLoad(): void {
     if (!this.learned) return;
-    this.construction.quickLoad(STRUCTURE_REACH_TILES);
+    this.construction.repairOrLoad(STRUCTURE_REACH_TILES);
   }
 
   /**
@@ -439,9 +440,9 @@ export class ConstructionKit {
 
   /**
    * The contextual "press the build key" prompt over a wall the active
-   * crawler faces: what it would raise the wall to and what that costs (the
-   * same information the Structure menu's Upgrade row shows), then how to
-   * open that menu for repairs and the rest.
+   * crawler faces: the repair it would make, or with nothing to mend, what
+   * it would raise the wall to, and what either costs (the same information
+   * the Structure menu's rows show), then how to open that menu for the rest.
    * Returns whether it drew one, for the scene's prompt chain.
    */
   renderWallBuildPrompt(
@@ -457,9 +458,11 @@ export class ConstructionKit {
     if (prompt === null || tile === null) return false;
     const sx = (tile.x + TILE_CENTRE) * TILE_SIZE - camX;
     const topY = tile.y * TILE_SIZE - camY - WALL_PROMPT_LIFT_TILES * TILE_SIZE;
+    const tierLabel = WALL_TIERS[prompt.tier].label;
+    const deed = prompt.repair ? `repair ${tierLabel}` : `build ${tierLabel}`;
     const buildLine = platform.isMobile
-      ? `Double tap to build ${WALL_TIERS[prompt.tier].label}`
-      : `Press ${keybindings.labelFor('attack')} to build ${WALL_TIERS[prompt.tier].label}`;
+      ? `Double tap to ${deed}`
+      : `Press ${keybindings.labelFor('attack')} to ${deed}`;
     drawText(ctx, buildLine, { x: sx, y: topY, align: 'center', ...TEXT_PRESETS.label });
     drawText(ctx, `Cost: ${formatCost(prompt.cost)}.`, {
       x: sx,
@@ -513,7 +516,7 @@ export class ConstructionKit {
       return true;
     }
     if (target.kind === 'segment' && !this.isMenuOpen)
-      return this.construction.startUpgrade(target);
+      return this.construction.repairOrUpgrade(target);
     return false;
   }
 
@@ -610,8 +613,10 @@ export class ConstructionKit {
           room <= 0 ? 'The trebuchet is full' : stone <= 0 ? 'You have no stone' : undefined,
         action: () => this.openLoadPicker(trebuchetKey),
       });
+      // The key mends before it loads, so it is shown on whichever row it would choose.
+      const keyLoads = construction.repairCostFor(target) === null;
       options.push({
-        label: `Quick Load [${keybindings.labelFor('quickLoad')}]`,
+        label: keyLoads ? `Quick Load [${keybindings.labelFor('quickLoad')}]` : 'Quick Load',
         disabledReason:
           room <= 0 ? 'The trebuchet is full' : stone <= 0 ? 'You have no stone' : undefined,
         action: () => {
@@ -623,7 +628,7 @@ export class ConstructionKit {
     const repairCost = construction.repairCostFor(target);
     if (repairCost !== null) {
       options.push({
-        label: 'Repair',
+        label: `Repair [${keybindings.labelFor('quickLoad')}]`,
         cost: repairCost,
         disabledReason: affordReason(repairCost),
         action: act(() => construction.startRepair(target)),
@@ -874,9 +879,10 @@ export class ConstructionKit {
     const menuLine = platform.isMobile
       ? 'Long-press to open menu'
       : `Press ${keybindings.labelFor('structureMenu')} to open menu`;
+    const needsRepair = this.construction.repairCostFor(target) !== null;
     const reloadLine = platform.isMobile
       ? 'Double tap to reload'
-      : `Press ${keybindings.labelFor('quickLoad')} to reload`;
+      : `Press ${keybindings.labelFor('quickLoad')} to ${needsRepair ? 'repair' : 'reload'}`;
     drawText(ctx, menuLine, { x, y, align: 'center', ...TEXT_PRESETS.label });
     drawText(ctx, reloadLine, {
       x,
