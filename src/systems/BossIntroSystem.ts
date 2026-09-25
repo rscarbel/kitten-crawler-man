@@ -3,6 +3,11 @@ import { drawCatSprite } from '../sprites/catSprite';
 import { drawJuicerSprite, JUICER_HEAD_CLEARANCE_TILES } from '../sprites/juicerSprite';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
 import {
+  drawNecromancerSprite,
+  necromancerArtHeightTiles,
+  necromancerArtTopTiles,
+} from '../sprites/necromancerSprite';
+import {
   drawKrakarenSprite,
   krakarenArtHeightTiles,
   krakarenArtTopTiles,
@@ -178,6 +183,19 @@ const BOSS_PANEL_BACKGROUNDS: Partial<Record<string, string>> = {
 
 /** The `bossRooms[].type` the Krakaren Clone is spawned under. */
 const KRAKAREN_BOSS_TYPE = 'krakaren_clone';
+/** The boss type the Briar Hollow siege passes for Vordrick Boneharrow. */
+const NECROMANCER_BOSS_TYPE = 'necromancer';
+
+/**
+ * Total pixel height of the necromancer's portrait cell — sized larger than
+ * the Krakaren Clone's, since his cell is proportionally taller and the same
+ * pixel budget reads him too small to recognize at panel scale.
+ */
+const NECROMANCER_SPRITE_SIZE = 140;
+/** Clear panel kept above the top of his cell. */
+const NECROMANCER_PANEL_TOP_PAD = 18;
+/** A portrait holds one pose rather than breathing through the intro. */
+const NECROMANCER_INTRO_IDLE_FRAME = 0;
 
 export class BossIntroSystem implements GameSystem {
   private static readonly INTRO_TITLE = 'B-B-B-B-BOSS BATTLE!';
@@ -418,6 +436,19 @@ export class BossIntroSystem implements GameSystem {
           tileCentreY - spS / 2,
           spS,
           { kind: 'idle', time: t / SPIDER_FRAMES_PER_SECOND },
+        );
+      } else if (intro.bossType === NECROMANCER_BOSS_TYPE) {
+        const nS = NECROMANCER_SPRITE_SIZE / necromancerArtHeightTiles();
+        const nY = panelY + NECROMANCER_PANEL_TOP_PAD + nS * necromancerArtTopTiles();
+        drawNecromancerSprite(
+          ctx,
+          'idle',
+          'front',
+          NECROMANCER_INTRO_IDLE_FRAME,
+          rightX + panelW / 2 - nS / 2,
+          nY,
+          nS,
+          false,
         );
       } else {
         const hS = HOARDER_SPRITE_SIZE;

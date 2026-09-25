@@ -240,8 +240,12 @@ const SITE_ARC_HALF_DEGREES = 60;
 const FALLBACK_ARC_HALF_DEGREES = 90;
 const FALLBACK_MIN_DISTANCE_TILES = 64;
 const FALLBACK_MAX_DISTANCE_TILES = 84;
-/** Candidates tried per band before falling back. */
-const SITE_ATTEMPTS_PER_BAND = 80;
+/**
+ * Candidates tried per band before falling back. Raised alongside the
+ * palisade's size: a bigger footprint has fewer usable candidates per band,
+ * so it needs more samples to find one as reliably as the old, smaller ring did.
+ */
+const SITE_ATTEMPTS_PER_BAND = 240;
 const DEGREES_PER_HALF_TURN = 180;
 
 /** Every how many tiles the footprint is sampled when scoring a candidate. */
@@ -270,7 +274,7 @@ export const SEGMENT_MAX_TILES = SEGMENT_TILES + 1;
  * this to drop stale wall records from an older save rather than misapply
  * them to the wrong stretch of wall.
  */
-export const PALISADE_SEGMENT_SCHEME_VERSION = 2;
+export const PALISADE_SEGMENT_SCHEME_VERSION = 3;
 
 // ── Geometry helpers ──────────────────────────────────────────────────────────
 

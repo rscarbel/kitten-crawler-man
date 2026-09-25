@@ -12,13 +12,17 @@ import type { CrawlerKind } from './SkillManager';
 const TICKS_PER_SECOND = 60;
 /** How long after a summon the same crawler can summon again. */
 export const THRALL_COOLDOWN_SECONDS = 60;
-const THRALL_COOLDOWN_TICKS = THRALL_COOLDOWN_SECONDS * TICKS_PER_SECOND;
+/** How long a crawler must wait after their thralls run out of work before summoning again. */
+export const THRALL_DEPLETION_COOLDOWN_SECONDS = 15;
 
 const ticksLeft = new Map<CrawlerKind, number>();
 
-/** Starts `crawler`'s cooldown from now. */
-export function startThrallCooldown(crawler: CrawlerKind): void {
-  ticksLeft.set(crawler, THRALL_COOLDOWN_TICKS);
+/** Starts `crawler`'s cooldown from now, for `seconds` (a fresh summon's full wait by default). */
+export function startThrallCooldown(
+  crawler: CrawlerKind,
+  seconds: number = THRALL_COOLDOWN_SECONDS,
+): void {
+  ticksLeft.set(crawler, seconds * TICKS_PER_SECOND);
 }
 
 /** Counts every cooldown down one fixed tick. */

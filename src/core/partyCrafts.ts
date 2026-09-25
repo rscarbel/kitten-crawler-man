@@ -11,20 +11,38 @@ import { isRecord } from './guards';
 import type { CraftSkillId } from './CraftSkills';
 import { isCraftSkillId } from './CraftSkills';
 import { createPartyToolsState, parsePartyToolsState, type PartyToolsState } from './PartyTools';
+import type { CrawlerKind } from './SkillManager';
+
+/** Whether resourcing thralls join automatically when a crawler starts harvesting, keyed per crawler. */
+export type AutoSummonThralls = Record<CrawlerKind, boolean>;
+
+function defaultAutoSummonThralls(): AutoSummonThralls {
+  return { human: true, cat: true };
+}
 
 export interface PartyCraftsState {
   tools: PartyToolsState;
   /** Craft skills whose "how it works" explainer has already played. */
   explainersSeen: CraftSkillId[];
+  /** The auto-summon toggle from the axe/pickaxe context menu, on by default. */
+  autoSummonThralls: AutoSummonThralls;
 }
 
 export function createPartyCraftsState(): PartyCraftsState {
-  return { tools: createPartyToolsState(), explainersSeen: [] };
+  return {
+    tools: createPartyToolsState(),
+    explainersSeen: [],
+    autoSummonThralls: defaultAutoSummonThralls(),
+  };
 }
 
 /** A value-equal copy, safe to hand to a checkpoint that must not alias the live object. */
 export function clonePartyCraftsState(state: PartyCraftsState): PartyCraftsState {
-  return { tools: { ...state.tools }, explainersSeen: [...state.explainersSeen] };
+  return {
+    tools: { ...state.tools },
+    explainersSeen: [...state.explainersSeen],
+    autoSummonThralls: { ...state.autoSummonThralls },
+  };
 }
 
 /**
@@ -39,6 +57,7 @@ export function restorePartyCraftsState(
   target.tools.axeTier = snapshot.tools.axeTier;
   target.tools.pickaxeTier = snapshot.tools.pickaxeTier;
   target.explainersSeen = [...snapshot.explainersSeen];
+  target.autoSummonThralls = { ...snapshot.autoSummonThralls };
 }
 
 /**
@@ -54,5 +73,15 @@ export function parsePartyCraftsState(value: unknown): PartyCraftsState | undefi
         (id): id is CraftSkillId => typeof id === 'string' && isCraftSkillId(id),
       )
     : [];
-  return { tools, explainersSeen };
+  const autoSummonThralls = parseAutoSummonThralls(value.autoSummonThralls);
+  return { tools, explainersSeen, autoSummonThralls };
+}
+
+function parseAutoSummonThralls(value: unknown): AutoSummonThralls {
+  const fallback = defaultAutoSummonThralls();
+  if (!isRecord(value)) return fallback;
+  return {
+    human: typeof value.human === 'boolean' ? value.human : fallback.human,
+    cat: typeof value.cat === 'boolean' ? value.cat : fallback.cat,
+  };
 }

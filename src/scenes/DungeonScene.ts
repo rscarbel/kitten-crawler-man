@@ -1240,6 +1240,13 @@ export class DungeonScene extends GameplayScene {
    */
   private wasInTown = false;
   /**
+   * Whether the active crawler stood in Briar Hollow's square last frame —
+   * the same first-frame convention as {@link wasInTown}, so a scene built
+   * with the party already standing there (a building exit, a loaded save)
+   * counts as entering it and takes a save.
+   */
+  private wasInBriarHollowSquare = false;
+  /**
    * The last save point entered — a safe room's centre, or the tile where the
    * party entered town — which is where a resume puts them.
    */
@@ -2296,6 +2303,10 @@ export class DungeonScene extends GameplayScene {
           ...(this.briarHollowKit?.villagers?.villagers ?? []),
           ...this.world.roster.mobs.filter((mob) => mob.isAlive),
         ],
+        isAutoSummonEnabled: (crawler) => this.partyCrafts.autoSummonThralls[crawler],
+        setAutoSummonEnabled: (crawler, enabled) => {
+          this.partyCrafts.autoSummonThralls[crawler] = enabled;
+        },
       });
       const gathering = this.gathering;
       this.companion.registerHarvestSource(gathering);
@@ -2452,6 +2463,7 @@ export class DungeonScene extends GameplayScene {
       this.tutorial !== null,
     );
     this.wasInTown = options?.suppressArrivalSave === true;
+    this.wasInBriarHollowSquare = options?.suppressArrivalSave === true;
     this.onResetGameCallback = options?.onResetGame ?? null;
     // Additive and cheap even on a re-entry: `preload` skips any id already in
     // `buffers`, so this just tops up whatever this floor needs without
@@ -4322,6 +4334,7 @@ export class DungeonScene extends GameplayScene {
     // rewound world over itself.
     this.wasInSafeRoom = true;
     this.wasInTown = this.isInsideTownWall(this.active());
+    this.wasInBriarHollowSquare = this.isInBriarHollowSquare(this.active());
   }
 
   /**
@@ -4769,6 +4782,42 @@ export class DungeonScene extends GameplayScene {
   private onTownEntered(active: Pick<Mob, 'x' | 'y'>): void {
     if (!this.canSaveInTown) return;
     this.captureSavePoint(this.saveTileUnder(active));
+  }
+
+  /** Whether a body's centre stands inside Briar Hollow's square district. */
+  private isInBriarHollowSquare(body: Pick<Mob, 'x' | 'y'>): boolean {
+    return (
+      this.gameMap.briarHollowDistrictAt(
+        body.x + TILE_SIZE * TILE_CENTRE_FRACTION,
+        body.y + TILE_SIZE * TILE_CENTRE_FRACTION,
+      ) === 'square'
+    );
+  }
+
+  /**
+   * Briar Hollow's square, with its bell tower, is a save point the same way
+   * the walled town's gate is: walking in is what saves. Guarded the same way
+   * — never mid-siege, never with a hostile still fighting in the village, so
+   * a reload can't skip either.
+   */
+  private onBriarHollowSquareEntered(active: Pick<Mob, 'x' | 'y'>): void {
+    if (!this.canSaveInBriarHollowSquare) return;
+    this.captureSavePoint(this.saveTileUnder(active));
+  }
+
+  /**
+   * A hostile inside the palisade that has actually traded blows with the
+   * party — mirrors {@link isTownUnderAttack} for Briar Hollow's own walls,
+   * since a fight in the main town says nothing about the village being safe.
+   */
+  private get isBriarHollowUnderAttack(): boolean {
+    return this.world.roster.mobs.some(
+      (mob) => mob.isHostile && isEngagedInFight(mob) && this.gameMap.isInBriarHollow(mob.x, mob.y),
+    );
+  }
+
+  private get canSaveInBriarHollowSquare(): boolean {
+    return !this.isRevivePending && !this.isBriarHollowUnderAttack && !this.isBossFightInProgress;
   }
 
   /**
@@ -7276,6 +7325,12 @@ export class DungeonScene extends GameplayScene {
     const nowInTown = this.isInsideTownWall(player);
     if (nowInTown && !this.wasInTown) this.onTownEntered(player);
     this.wasInTown = nowInTown;
+
+    const nowInBriarHollowSquare = this.isInBriarHollowSquare(player);
+    if (nowInBriarHollowSquare && !this.wasInBriarHollowSquare) {
+      this.onBriarHollowSquareEntered(player);
+    }
+    this.wasInBriarHollowSquare = nowInBriarHollowSquare;
 
     // A stairwell room that was already empty of hostiles the moment this
     // floor's mobs first spawned — no last guard to die and trigger the

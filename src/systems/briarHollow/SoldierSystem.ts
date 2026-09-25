@@ -79,7 +79,7 @@ export const SOLDIER_FOLLOW_MAX_TILES_OUTSIDE = 30;
 const LEASH_CHECK_FRAMES = UPDATES_PER_SECOND;
 
 /** Outside the siege, a downed soldier gets back up by itself after this long. */
-export const SOLDIER_DOWNED_RECOVERY_SECONDS = 90;
+export const SOLDIER_DOWNED_RECOVERY_SECONDS = 60;
 const SOLDIER_DOWNED_RECOVERY_FRAMES = SOLDIER_DOWNED_RECOVERY_SECONDS * UPDATES_PER_SECOND;
 /** A soldier who gets back up after the siege, or by themselves, has this share of their health. */
 export const SOLDIER_RISE_HP_FRACTION = 0.5;
@@ -821,7 +821,11 @@ export class SoldierSystem {
     };
     // Orders are standing controls, not questions asked once: a soldier can
     // be given a new one, or the same one again, as often as the conversation
-    // needs, so every row here stays on offer after it is picked.
+    // needs, so every row here stays on offer after it is picked. The `run`
+    // below only acknowledges the order — it never reopens the topic list,
+    // so the conversation ends itself on the acknowledgement line the same
+    // way any other answered topic does, instead of leaving the order menu
+    // sitting open after a command has already been issued.
     const topics: ConversationTopic[] = [
       {
         key: SOLDIER_TOPIC_KEYS.follow,
@@ -830,7 +834,6 @@ export class SoldierSystem {
         run: (ctl) => {
           this.orderFollow(id, talker);
           acknowledge();
-          ctl.showRootTopics();
           ctl.say('command_follow');
         },
       },
@@ -841,7 +844,6 @@ export class SoldierSystem {
         run: (ctl) => {
           this.orderHold(id);
           acknowledge();
-          ctl.showRootTopics();
           ctl.say('command_stay');
         },
       },
@@ -853,7 +855,6 @@ export class SoldierSystem {
           // Nowhere walkable to patrol: the soldier holds where they stand instead.
           if (!this.orderPatrol(id)) this.orderHold(id);
           acknowledge();
-          ctl.showRootTopics();
           ctl.say('command_patrol');
         },
       },
@@ -866,7 +867,6 @@ export class SoldierSystem {
         run: (ctl) => {
           this.orderPost(id);
           acknowledge();
-          ctl.showRootTopics();
           // No line of their own for it; the plainest acknowledgement they have.
           ctl.say('command_stay');
         },

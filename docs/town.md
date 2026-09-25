@@ -368,7 +368,7 @@ because an L would cut through the palisade for many sites.
 The village is an authored template, not a scatter; the seed varies only dressing
 (crop kinds, the laundry home, clutter, household colours), never geometry.
 
-- The palisade bounds are **58 × 40** with **chamfered corners**. The **gate is on the
+- The palisade bounds are **70 × 52** with **chamfered corners**. The **gate is on the
   south wall**, 3 tiles wide, west of centre. The main street runs north from it to the
   square (bell tower, wells, notice board).
 - Districts: **lumber yard** NW (grove, sawmill), **farm and pasture** NE (farmhouse,
@@ -429,10 +429,12 @@ plain gap). An untouched segment has no record at all: it is a 1-HP fence.
 **The segmentation is a save-format contract** (`segmentLengths`, `palisadeSegmentId`).
 Persisted wall state is keyed by segment id, and an id is only its index
 (`palisade_<index>`). The path starts at the tile east of the gate and walks east along
-the south wall; it is cut into runs of `SEGMENT_TILES` (3), a remainder of one
-lengthening the last run and a remainder of two also lengthening the first. Changing
-that rule, the ring's shape or where the path starts orphans every saved wall. The
-current ring is 63 segments of exactly 3.
+the south wall; it is cut into as many runs of `SEGMENT_TILES` (12) as the path divides
+into evenly, with any leftover tiles spread one apiece across the runs starting from the
+gate's east post, so every run is `SEGMENT_TILES` or one tile longer. Changing that rule,
+the ring's shape or where the path starts orphans every saved wall — `briarHollowState`'s
+segment-scheme version exists for exactly that. The current ring is 20 segments, 17 of 12
+tiles and 3 of 11.
 
 The palisade and the gate are **sight-transparent**, so enemies outside are visible and
 trebuchets aim over the walls. A crawler just behind a tall wall is redrawn at half

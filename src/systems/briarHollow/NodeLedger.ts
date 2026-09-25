@@ -49,7 +49,38 @@ export interface NodeLedgerDeps {
 }
 
 export class NodeLedger {
+  /**
+   * Who is working which node right now — a crawler's own harvest channel or a
+   * thrall — keyed by tile and, within a tile, by the claimant's own object
+   * identity, so a crawler and their thrall can share one node without either
+   * looking "free" to somebody else.
+   */
+  private readonly claims = new Map<string, Set<object>>();
+
   constructor(private readonly deps: NodeLedgerDeps) {}
+
+  /** Marks `owner` as working the node at this tile. */
+  claim(tileX: number, tileY: number, owner: object): void {
+    const key = tileKey(tileX, tileY);
+    const claimants = this.claims.get(key) ?? new Set<object>();
+    claimants.add(owner);
+    this.claims.set(key, claimants);
+  }
+
+  /** Clears every claim `owner` holds, wherever it was working. */
+  releaseClaim(owner: object): void {
+    for (const claimants of this.claims.values()) claimants.delete(owner);
+  }
+
+  /** Whether some claimant other than `exceptOwner` is already working this tile. */
+  isOccupied(tileX: number, tileY: number, exceptOwner?: object): boolean {
+    const claimants = this.claims.get(tileKey(tileX, tileY));
+    if (claimants === undefined) return false;
+    for (const owner of claimants) {
+      if (owner !== exceptOwner) return true;
+    }
+    return false;
+  }
 
   /**
    * The state of the node at a tile, rolled the first time anyone asks, or

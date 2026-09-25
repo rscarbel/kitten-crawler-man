@@ -109,7 +109,7 @@ const EXPECTED_SPEED: ReadonlyMap<number, number> = new Map([
 ]);
 const DOUBLING_LEVEL = 15;
 const EXPECTED_WOOD_BASE_SECONDS = 1.0;
-const EXPECTED_STONE_BASE_SECONDS = 1.5;
+const EXPECTED_STONE_BASE_SECONDS = 2.25;
 const EXPECTED_REFINED_WOOD = 0.07;
 const EXPECTED_REFINED_STONE = 0.04;
 const EXPECTED_TREB_KIT = 0.01;
@@ -355,6 +355,7 @@ function makeRig(luckSeed = 1): Rig {
     announce: (message) => announcements.push(message),
     noteActivity: () => undefined,
     onTreeStruck: () => undefined,
+    harvestedNodeFor: (crawler) => harvest.nodeFor(crawler),
   });
   const roster = new MobRoster(gameMap, new SpellSystem());
   return { human, cat, tools, nodes, ledger, harvest, thralls, trees, roster, announcements };

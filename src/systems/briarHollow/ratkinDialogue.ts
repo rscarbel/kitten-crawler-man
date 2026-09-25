@@ -91,9 +91,7 @@ export type Circumstance =
   | 'directions_to_quarry'
   | 'enemy_breach'
   | 'enemy_spotted'
-  | 'explain_boards'
   | 'explain_resource_gathering'
-  | 'explain_rope'
   | 'first_meeting'
   | 'follow_active'
   | 'fortifications_advanced'
@@ -588,14 +586,6 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       {
         circumstance: 'manual_processing_instructions',
         text: 'Put your wood into the mill, choose boards or rope, and process it. One wood makes two boards. One wood makes one rope.',
-      },
-      {
-        circumstance: 'explain_boards',
-        text: "Boards are the sturdy stuff. They're used for wooden walls, trebuchets, repairs, and other construction.",
-      },
-      {
-        circumstance: 'explain_rope',
-        text: "Rope is for the moving parts. You'll need it for trebuchets and snare traps.",
       },
       {
         circumstance: 'bulk_processing_service',

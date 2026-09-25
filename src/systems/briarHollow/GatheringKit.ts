@@ -18,6 +18,7 @@ import type { EventBus } from '../../core/EventBus';
 import type { InventoryItem } from '../../core/ItemDefs';
 import type { PartyTools, PartyToolsState } from '../../core/PartyTools';
 import type { HarvestNodeState } from '../../core/briarHollowState';
+import type { CrawlerKind } from '../../core/SkillManager';
 import type { ToolKind, ToolTier } from '../../core/toolTiers';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -29,6 +30,8 @@ import type { SystemContext } from '../GameSystem';
 import type { MiniMapSystem } from '../MiniMapSystem';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { TreeSystem } from '../TreeSystem';
+import { harvestKindAt } from './harvestNodes';
+import { toolForHarvestKind } from '../../core/harvestYield';
 import type { DefenseStructures } from './DefenseStructures';
 import { HarvestEffects } from './HarvestEffects';
 import { HarvestSystem } from './HarvestSystem';
@@ -55,6 +58,10 @@ const TILE_CENTER_OFFSET = 0.5;
 
 /** The "Summon Thrall" entry on a tool's bag menu. */
 const SUMMON_THRALL_LABEL = 'Summon Thrall';
+/** Dismisses the active thralls for that tool. */
+const UNSUMMON_THRALL_LABEL = 'Unsummon';
+/** Toggles whether starting to harvest with that tool summons thralls automatically. */
+const TOGGLE_AUTO_SUMMON_LABEL = 'Toggle Auto-Summon';
 
 export interface GatheringKitDeps {
   readonly gameMap: GameMap;
@@ -82,6 +89,9 @@ export interface GatheringKitDeps {
    * up around someone.
    */
   readonly otherBodies: () => Iterable<StandingBody>;
+  /** Whether `crawler`'s tools currently auto-summon thralls when a harvest starts. */
+  readonly isAutoSummonEnabled: (crawler: CrawlerKind) => boolean;
+  readonly setAutoSummonEnabled: (crawler: CrawlerKind, enabled: boolean) => void;
 }
 
 /** What regrowth asks of the village's constructions: is a tile built on, or claimed for a build. */
@@ -152,6 +162,7 @@ export class GatheringKit {
       announce: deps.announce,
       noteActivity,
       onTreeStruck,
+      harvestedNodeFor: (crawler) => this.harvest.nodeFor(crawler),
     });
   }
 
@@ -174,9 +185,30 @@ export class GatheringKit {
     return tool === 'axe' ? this.deps.tools.axeTier : this.deps.tools.pickaxeTier;
   }
 
-  /** The Space chain's entry. See {@link HarvestSystem.tryStart}. */
+  /**
+   * The Space chain's entry. See {@link HarvestSystem.tryStart}. A press that
+   * starts a fresh channel — not one that resumes an already-running one, and
+   * not one the crawler lacked the tool for — also tries the matching tool's
+   * auto-summon, if the crawler has it on.
+   */
   tryStartHarvest(active: Crawler): boolean {
-    return this.harvest.tryStart(active);
+    const wasHarvesting = this.harvest.isHarvesting(active);
+    const claimed = this.harvest.tryStart(active);
+    if (claimed && !wasHarvesting && this.harvest.isHarvesting(active)) {
+      this.autoSummonFor(active);
+    }
+    return claimed;
+  }
+
+  private autoSummonFor(active: Crawler): void {
+    if (!this.deps.isAutoSummonEnabled(active.crawlerKind)) return;
+    const node = this.harvest.nodeFor(active);
+    if (node === null) return;
+    const kind = harvestKindAt(this.deps.gameMap, node.tileX, node.tileY);
+    if (kind === null) return;
+    const tool = toolForHarvestKind(kind);
+    if (this.thralls.anyFor(active, tool)) return;
+    if (this.thralls.trySummon(active, tool) === 'summoned') this.hud.noteActivity();
   }
 
   /**
@@ -284,22 +316,44 @@ export class GatheringKit {
   }
 
   /**
-   * "Summon Thrall" on a tool's bag menu, offered only when the crawler whose
-   * bag it is has the unlock — a skill is never borrowed from the other crawler
-   * — and greyed with the wait while their summon is cooling down.
+   * "Summon Thrall", "Unsummon" and "Toggle Auto-Summon" on a tool's bag menu.
+   * Offered only when the crawler whose bag it is has the unlock — a skill is
+   * never borrowed from the other crawler — with Summon greyed while their
+   * summon is cooling down and Unsummon shown only while thralls for that
+   * tool are actually out.
    */
   contextOptionsFor(item: InventoryItem): readonly ExtraContextOption[] {
     const tool = item.tool;
     if (tool === undefined) return [];
     const owner = this.deps.bagOwner();
     if (!this.thralls.canSummon(owner)) return [];
+
     const wait = thrallCooldownSecondsLeft(owner.crawlerKind);
-    const run = (): void => {
-      if (this.thralls.trySummon(owner, tool.kind) === 'summoned') this.hud.noteActivity();
+    const summonRun = (): void => {
+      if (this.thralls.trySummon(owner, tool.kind) === 'summoned') {
+        this.hud.noteActivity();
+      } else if (thrallCooldownSecondsLeft(owner.crawlerKind) > 0) {
+        this.deps.announce('Your thralls need to rest a little longer.');
+      }
     };
-    return wait > 0
-      ? [{ label: SUMMON_THRALL_LABEL, disabledReason: `${wait}s`, run }]
-      : [{ label: SUMMON_THRALL_LABEL, run }];
+    const summon: ExtraContextOption =
+      wait > 0
+        ? { label: SUMMON_THRALL_LABEL, disabledReason: `${wait}s`, run: summonRun }
+        : { label: SUMMON_THRALL_LABEL, run: summonRun };
+
+    const options: ExtraContextOption[] = [summon];
+    if (this.thralls.anyFor(owner, tool.kind)) {
+      options.push({
+        label: UNSUMMON_THRALL_LABEL,
+        run: () => this.thralls.dismiss(owner, tool.kind),
+      });
+    }
+    const autoOn = this.deps.isAutoSummonEnabled(owner.crawlerKind);
+    options.push({
+      label: `${TOGGLE_AUTO_SUMMON_LABEL} (${autoOn ? 'On' : 'Off'})`,
+      run: () => this.deps.setAutoSummonEnabled(owner.crawlerKind, !autoOn),
+    });
+    return options;
   }
 
   captureCheckpoint(): GatheringCheckpoint {

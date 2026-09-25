@@ -264,3 +264,23 @@ export function drawNecromancerSprite(
 export function necromancerFrameCount(action: NecromancerAction): number {
   return figureFrameCount(NECROMANCER_FIGURE, necromancerStateName(action, 'front'));
 }
+
+/**
+ * How far his painted cell reaches around his tile.
+ *
+ * Read off the figure's own declared geometry rather than copied, because
+ * every one of these numbers moves whenever the cell is resized — and a
+ * stale copy fails silently, as a portrait cropped through his lantern.
+ */
+const NECROMANCER_ART_TOP_TILES = NECROMANCER_FIGURE.tileY / NECROMANCER_FIGURE.tileScale;
+const NECROMANCER_ART_HEIGHT_TILES = NECROMANCER_FIGURE.frameHeight / NECROMANCER_FIGURE.tileScale;
+
+/** Tiles his art rises above his tile origin. */
+export function necromancerArtTopTiles(): number {
+  return NECROMANCER_ART_TOP_TILES;
+}
+
+/** Height of one baked cell in tiles — the divisor for sizing a portrait. */
+export function necromancerArtHeightTiles(): number {
+  return NECROMANCER_ART_HEIGHT_TILES;
+}

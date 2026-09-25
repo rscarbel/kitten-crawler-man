@@ -23,7 +23,7 @@ import type { ToolKind } from './toolTiers';
 /** Seconds between wood awards at Resourcing speed factor 1. */
 export const WOOD_HARVEST_INTERVAL_SECONDS = 1.0;
 /** Seconds between stone awards at Resourcing speed factor 1. */
-export const STONE_HARVEST_INTERVAL_SECONDS = 1.5;
+export const STONE_HARVEST_INTERVAL_SECONDS = 2.25;
 
 /** The fixed update rate harvest intervals are counted in, so a doubled `Scene.loop` catch-up cannot speed them up. */
 const HARVEST_TICKS_PER_SECOND = 60;

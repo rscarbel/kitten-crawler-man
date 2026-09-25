@@ -129,8 +129,6 @@ export const BUILT_IN_TOPICS: TopicProvider = {
             'ask_how_lumber_yard_works',
             'manual_processing_instructions',
           ),
-          answer('explain_boards', 'Boards?', 'explain_boards'),
-          answer('explain_rope', 'Rope?', 'explain_rope'),
         ];
       case 'garn':
         return [

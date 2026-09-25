@@ -30,4 +30,4 @@ export const VILLAGE_CUES = {
 export type VillageCue = keyof typeof VILLAGE_CUES;
 
 /** The siege's music, while the countdown runs and the waves come in. */
-export const VILLAGE_SIEGE_MUSIC: SoundId = 'defense_quest_music';
+export const VILLAGE_SIEGE_MUSIC: SoundId = 'siege_theme';

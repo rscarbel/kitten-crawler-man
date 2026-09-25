@@ -225,6 +225,7 @@ const SOUND_IDS_TUPLE = [
   'scientist_exclaiming_about_an_escape',
   'scientist_explaining_request',
   'shooting_an_arrow',
+  'siege_theme',
   'skeleton_lord_chant',
   'skeleton_lord_death',
   'skillpoint_reminder',
@@ -519,6 +520,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   scientist_explaining_request:
     './src/audio/bosses/grotesque_spider/scientist_explaining_request.mp3',
   shooting_an_arrow: './src/audio/effects/shooting_an_arrow.mp3',
+  siege_theme: './src/audio/background_music/siege_theme.mp3',
   skeleton_lord_chant: './src/audio/bosses/skeleton_lord/skeleton_lord_latin_chant.mp3',
   skeleton_lord_death: './src/audio/bosses/skeleton_lord/skeleton_lord_death.mp3',
   skillpoint_reminder: './src/audio/events/skillpoint_reminder.mp3',
@@ -614,6 +616,7 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'desperado_club_4',
   'forest_path',
   'medieval_harvest_theme',
+  'siege_theme',
   'tavern_music_1',
   'tavern_music_2',
   'temple_music',

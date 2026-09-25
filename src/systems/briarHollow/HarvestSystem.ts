@@ -165,6 +165,12 @@ export class HarvestSystem {
     return this.channels.has(crawler);
   }
 
+  /** The node `crawler` is currently working, or null when they aren't harvesting — a thrall's fallback target. */
+  nodeFor(crawler: Crawler): { readonly tileX: number; readonly tileY: number } | null {
+    const channel = this.channels.get(crawler);
+    return channel === undefined ? null : { tileX: channel.tileX, tileY: channel.tileY };
+  }
+
   /**
    * Whether a Space press from `active` would be claimed by {@link tryStart} —
    * the same conditions, without starting anything — so a prompt drawn for
@@ -227,6 +233,7 @@ export class HarvestSystem {
       animating: false,
     };
     this.channels.set(active, channel);
+    this.deps.ledger.claim(node.tileX, node.tileY, channel);
     this.showWorking(channel);
     this.deps.noteActivity();
     return true;
@@ -273,6 +280,7 @@ export class HarvestSystem {
     const channel = this.channels.get(crawler);
     if (channel === undefined) return;
     this.channels.delete(crawler);
+    this.deps.ledger.releaseClaim(channel);
     this.hideWorking(channel);
   }
 

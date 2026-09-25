@@ -235,7 +235,7 @@ const RESOURCING_PERK_ROWS: readonly PerkUnlock[] = [
   },
   {
     level: 10,
-    text: 'A ghostly thrall can be summoned to harvest on your behalf; by right-clicking or long-pressing the axe or the pickaxe, a "summon" option appears, causing a translucent ghostly axeman or pickaxeman to appear and start harvesting the appropriate resources at the same rate as the player. The thralls do not get the level-5 bonus of a refined material. Collected resources automatically appear in the player\'s inventory.',
+    text: "Ghostly thralls now join you automatically whenever you start harvesting with the axe or the pickaxe, appearing as translucent ghostly axemen or pickaxemen who work the appropriate resources at the same rate as you. Right-click or long-press the axe or the pickaxe for Summon, Unsummon and Toggle Auto-Summon options. The thralls do not get the level-5 bonus of a refined material. Collected resources automatically appear in the player's inventory.",
   },
   { level: 11, text: 'Resource collection is faster.' },
   { level: 12, text: 'Resource collection is faster.' },

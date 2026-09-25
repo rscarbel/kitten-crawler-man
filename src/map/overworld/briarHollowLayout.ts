@@ -23,13 +23,23 @@ import type { TilePoint, TileRect } from '../town/townPlan';
 /**
  * Outer size of the palisade ring, walls included.
  *
- * A little smaller than the town's 57 x 45 walled footprint, which is what the
- * village is meant to read as — and the smallest rectangle that seats fifteen
- * buildings, a fenced pasture, two crop fields, a grove and a square with a
- * tile of walkway round every building and two in front of every door.
+ * Close to the town's 57 x 45 walled footprint, which is what the village is
+ * meant to read as. The authored buildings, streets and fields fill a smaller
+ * rectangle in the middle (see `PALISADE_GROWTH_MARGIN_TILES`); the ring is
+ * grown past that on every side to leave open ground a trebuchet can stand
+ * on, with room to walk past it, all the way round.
  */
-export const VILLAGE_BOUNDS_W = 58;
-export const VILLAGE_BOUNDS_H = 40;
+export const VILLAGE_BOUNDS_W = 70;
+export const VILLAGE_BOUNDS_H = 52;
+
+/**
+ * Open ground added between the authored village and the palisade, on every
+ * side: half of `SEGMENT_TILES` (`briarHollowSite.ts`), so the extra ring
+ * length splits evenly across the two walls it lengthens. Kept in sync with
+ * that constant by hand — `verify:briar-hollow-site` and the trebuchet
+ * placement checks both fail loudly if the two drift apart.
+ */
+export const PALISADE_GROWTH_MARGIN_TILES = 6;
 
 /**
  * Depth of the 45° chamfer cut from each corner of the ring, in tiles. The
@@ -39,7 +49,7 @@ export const VILLAGE_BOUNDS_H = 40;
 export const PALISADE_CHAMFER_TILES = 3;
 
 /** The gate: three tiles of the south wall, west of centre so the main street lines up with the square. */
-export const GATE_X0 = 22;
+export const GATE_X0 = 28;
 export const GATE_WIDTH_TILES = 3;
 /** How far outside and inside the wall the gate's approach tiles sit, from its middle tile. */
 export const GATE_APPROACH_TILES = 2;
@@ -47,24 +57,24 @@ export const GATE_APPROACH_TILES = 2;
 // ── Streets ───────────────────────────────────────────────────────────────────
 
 /** Main street: from the gate north to the square, as wide as the gate. */
-export const MAIN_STREET: TileRect = { x: GATE_X0, y: 26, w: GATE_WIDTH_TILES, h: 13 };
+export const MAIN_STREET: TileRect = { x: GATE_X0, y: 32, w: GATE_WIDTH_TILES, h: 19 };
 /** The cross lane between the north band (yard, farm, pasture) and the village's middle. */
-export const CROSS_LANE: TileRect = { x: 2, y: 13, w: 54, h: 2 };
+export const CROSS_LANE: TileRect = { x: 8, y: 19, w: 54, h: 2 };
 /** The square the main street opens into; the bell tower stands in its middle. */
-export const SQUARE: TileRect = { x: 16, y: 16, w: 15, h: 10 };
+export const SQUARE: TileRect = { x: 22, y: 22, w: 15, h: 10 };
 
 /** Worn footpaths, drawn as `DIRT_PATCH`: the desire lines between doors and the lanes. */
 export const WORN_PATHS: ReadonlyArray<TileRect> = [
   // Store and forge up to the lane.
-  { x: 11, y: 15, w: 1, h: 16 },
+  { x: 17, y: 21, w: 1, h: 16 },
   // From the square's east edge past the infirmary to the homes.
-  { x: 31, y: 24, w: 2, h: 1 },
-  { x: 32, y: 24, w: 1, h: 8 },
-  { x: 32, y: 31, w: 18, h: 1 },
+  { x: 37, y: 30, w: 2, h: 1 },
+  { x: 38, y: 30, w: 1, h: 8 },
+  { x: 38, y: 37, w: 18, h: 1 },
   // The farmhouse's door down to the lane.
-  { x: 26, y: 8, w: 1, h: 5 },
+  { x: 32, y: 14, w: 1, h: 5 },
   // The hall's door down to the infirmary path.
-  { x: 39, y: 23, w: 2, h: 1 },
+  { x: 45, y: 29, w: 2, h: 1 },
 ];
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -296,7 +306,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Bramblewick.
     id: 'hall',
     name: "Mayor's Hall",
-    rect: { x: 34, y: 15, w: 12, h: 8 },
+    rect: { x: 40, y: 21, w: 12, h: 8 },
     doorways: [{ side: 'south', offset: 5, width: 2 }],
     floor: 'planks',
     occupantAnchors: [{ x: 8, y: 2 }],
@@ -317,7 +327,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // a three-tile opening.
     id: 'forge',
     name: 'Ironwhisker Forge',
-    rect: { x: 2, y: 15, w: 9, h: 7 },
+    rect: { x: 8, y: 21, w: 9, h: 7 },
     doorways: [{ side: 'south', offset: 3, width: 3 }],
     floor: 'working',
     occupantAnchors: [{ x: 4, y: 3 }],
@@ -334,7 +344,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Pipkin.
     id: 'cookhouse',
     name: "Pipkin's Cookhouse",
-    rect: { x: 12, y: 28, w: 10, h: 7 },
+    rect: { x: 18, y: 34, w: 10, h: 7 },
     doorways: [
       { side: 'south', offset: 3, width: 2 },
       { side: 'east', offset: 3, width: 1 },
@@ -355,7 +365,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Sella.
     id: 'infirmary',
     name: 'Infirmary',
-    rect: { x: 33, y: 25, w: 8, h: 6 },
+    rect: { x: 39, y: 31, w: 8, h: 6 },
     doorways: [{ side: 'west', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 4, y: 2 }],
@@ -372,7 +382,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Vetch.
     id: 'store',
     name: 'Nibnose Trading Post',
-    rect: { x: 2, y: 24, w: 8, h: 6 },
+    rect: { x: 8, y: 30, w: 8, h: 6 },
     doorways: [{ side: 'east', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 1 }],
@@ -390,7 +400,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Tikka.
     id: 'workshop',
     name: "Engineer's Workshop",
-    rect: { x: 43, y: 24, w: 8, h: 7 },
+    rect: { x: 49, y: 30, w: 8, h: 7 },
     doorways: [{ side: 'west', offset: 3, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
@@ -407,7 +417,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // from; the sawmill machine is the manual processing station.
     id: 'sawmill',
     name: 'Splintertail Sawmill',
-    rect: { x: 9, y: 7, w: 10, h: 6 },
+    rect: { x: 15, y: 13, w: 10, h: 6 },
     doorways: [{ side: 'north', offset: 1, width: 8 }],
     floor: 'working',
     occupantAnchors: [{ x: 3, y: 3 }],
@@ -424,7 +434,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // The militia's post, beside the gate and facing the main street.
     id: 'guardhouse',
     name: 'Guardhouse',
-    rect: { x: 25, y: 32, w: 7, h: 6 },
+    rect: { x: 31, y: 38, w: 7, h: 6 },
     doorways: [{ side: 'west', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [
@@ -442,7 +452,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Merrit.
     id: 'farmhouse',
     name: 'Roottail Farmhouse',
-    rect: { x: 23, y: 2, w: 7, h: 6 },
+    rect: { x: 29, y: 8, w: 7, h: 6 },
     doorways: [{ side: 'south', offset: 3, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
@@ -459,7 +469,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // walk from the paddock straight in under cover.
     id: 'barn',
     name: 'Barn',
-    rect: { x: 32, y: 3, w: 9, h: 7 },
+    rect: { x: 38, y: 9, w: 9, h: 7 },
     doorways: [{ side: 'east', offset: 2, width: 3 }],
     floor: 'working',
     occupantAnchors: [{ x: 4, y: 3 }],
@@ -475,7 +485,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Nella.
     id: 'home_nella',
     name: 'Softstep Cottage',
-    rect: { x: 33, y: 32, w: 6, h: 5 },
+    rect: { x: 39, y: 38, w: 6, h: 5 },
     doorways: [{ side: 'south', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
@@ -490,7 +500,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Cricket.
     id: 'home_cricket',
     name: 'Mudwhisk Cottage',
-    rect: { x: 41, y: 32, w: 6, h: 5 },
+    rect: { x: 47, y: 38, w: 6, h: 5 },
     doorways: [{ side: 'west', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
@@ -505,7 +515,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Wicker: a workshop-home, with the half-built cart outside.
     id: 'home_wicker',
     name: 'Longtooth Workshop',
-    rect: { x: 3, y: 32, w: 7, h: 5 },
+    rect: { x: 9, y: 38, w: 7, h: 5 },
     doorways: [{ side: 'north', offset: 3, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 4, y: 2 }],
@@ -520,7 +530,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Midge, with the lamp shed.
     id: 'home_midge',
     name: 'Candleear Cottage',
-    rect: { x: 49, y: 32, w: 6, h: 5 },
+    rect: { x: 55, y: 38, w: 6, h: 5 },
     doorways: [{ side: 'north', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
@@ -535,7 +545,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // Garn, out in the quarry.
     id: 'garn_hut',
     name: 'Quarry Hut',
-    rect: { x: 51, y: 43, w: 5, h: 4 },
+    rect: { x: 57, y: 55, w: 5, h: 4 },
     doorways: [{ side: 'west', offset: 1, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 2, y: 2 }],
@@ -589,46 +599,46 @@ export function outwardStep(side: WallSide): { readonly dx: number; readonly dy:
 // ── The square ────────────────────────────────────────────────────────────────
 
 /** The bell tower's north-west tile: the middle of the square, on the main street's line. */
-export const BELL_TOWER: TilePoint = { x: 23, y: 19 };
+export const BELL_TOWER: TilePoint = { x: 29, y: 25 };
 export const WELLS: ReadonlyArray<TilePoint> = [
-  { x: 18, y: 18 },
-  { x: 28, y: 23 },
+  { x: 24, y: 24 },
+  { x: 34, y: 29 },
 ];
-export const NOTICE_BOARD: TilePoint = { x: 27, y: 17 };
+export const NOTICE_BOARD: TilePoint = { x: 33, y: 23 };
 /** Lamp posts at the square's corners and along the main street. */
 export const LAMP_POSTS: ReadonlyArray<TilePoint> = [
-  { x: 16, y: 16 },
-  { x: 30, y: 16 },
-  { x: 16, y: 25 },
-  { x: 30, y: 25 },
-  { x: 21, y: 26 },
-  { x: 25, y: 29 },
-  { x: 21, y: 36 },
+  { x: 22, y: 22 },
+  { x: 36, y: 22 },
+  { x: 22, y: 31 },
+  { x: 36, y: 31 },
+  { x: 27, y: 32 },
+  { x: 31, y: 35 },
+  { x: 27, y: 42 },
 ];
 /** The sheltered bench, and the bench by the other well. */
 export const SQUARE_BENCHES: ReadonlyArray<TilePoint> = [
-  { x: 19, y: 24 },
-  { x: 27, y: 21 },
+  { x: 25, y: 30 },
+  { x: 33, y: 27 },
 ];
 
 // ── The farm ──────────────────────────────────────────────────────────────────
 
 /** The paddock, fence line included. */
-export const PASTURE: TileRect = { x: 42, y: 3, w: 13, h: 10 };
+export const PASTURE: TileRect = { x: 48, y: 9, w: 13, h: 10 };
 /** The gap in the pasture fence, facing the barn's open side. */
-export const PASTURE_FENCE_GATES: ReadonlyArray<TilePoint> = [{ x: 42, y: 6 }];
+export const PASTURE_FENCE_GATES: ReadonlyArray<TilePoint> = [{ x: 48, y: 12 }];
 export const CROP_FIELDS: ReadonlyArray<TileRect> = [
-  { x: 47, y: 15, w: 8, h: 3 },
-  { x: 47, y: 20, w: 8, h: 3 },
+  { x: 53, y: 21, w: 8, h: 3 },
+  { x: 53, y: 26, w: 8, h: 3 },
 ];
 /** The farmhouse's kitchen garden; the column in line with its door stays a path. */
-export const KITCHEN_GARDEN: TileRect = { x: 23, y: 9, w: 7, h: 3 };
-export const KITCHEN_GARDEN_PATH_X = 26;
+export const KITCHEN_GARDEN: TileRect = { x: 29, y: 15, w: 7, h: 3 };
+export const KITCHEN_GARDEN_PATH_X = 32;
 export const FARM_PROPS: ReadonlyArray<PropTemplate> = [
-  { prop: 'mushroom_log_bed', x: 48, y: 18 },
-  { prop: 'scarecrow', x: 51, y: 16 },
-  { prop: 'water_trough', x: 46, y: 9 },
-  { prop: 'hay_bale', x: 52, y: 5 },
+  { prop: 'mushroom_log_bed', x: 54, y: 24 },
+  { prop: 'scarecrow', x: 57, y: 22 },
+  { prop: 'water_trough', x: 52, y: 15 },
+  { prop: 'hay_bale', x: 58, y: 11 },
 ];
 
 // ── The lumber yard ───────────────────────────────────────────────────────────
@@ -638,41 +648,41 @@ export const FARM_PROPS: ReadonlyArray<PropTemplate> = [
  * the walkway along the north wall because the north-west chamfer's inner step
  * sits at (2, 2), and a district never holds a palisade tile.
  */
-export const LUMBER_YARD: TileRect = { x: 2, y: 3, w: 19, h: 10 };
+export const LUMBER_YARD: TileRect = { x: 8, y: 9, w: 19, h: 10 };
 /**
  * The managed grove: loose rows, an orchard rather than a wild wood, every tree
  * with open ground beside it so it can be felled from a walkable tile.
  */
 export const GROVE_TREES: ReadonlyArray<TilePoint> = [
-  { x: 4, y: 3 },
-  { x: 6, y: 3 },
-  { x: 8, y: 3 },
-  { x: 10, y: 3 },
-  { x: 12, y: 3 },
-  { x: 14, y: 3 },
-  { x: 16, y: 3 },
-  { x: 18, y: 3 },
-  { x: 20, y: 3 },
-  { x: 3, y: 6 },
-  { x: 5, y: 6 },
-  { x: 4, y: 8 },
-  { x: 6, y: 8 },
-  { x: 3, y: 10 },
-  { x: 5, y: 10 },
+  { x: 10, y: 9 },
+  { x: 12, y: 9 },
+  { x: 14, y: 9 },
+  { x: 16, y: 9 },
+  { x: 18, y: 9 },
+  { x: 20, y: 9 },
+  { x: 22, y: 9 },
+  { x: 24, y: 9 },
+  { x: 26, y: 9 },
+  { x: 9, y: 12 },
+  { x: 11, y: 12 },
+  { x: 10, y: 14 },
+  { x: 12, y: 14 },
+  { x: 9, y: 16 },
+  { x: 11, y: 16 },
 ];
 export const LUMBER_YARD_PROPS: ReadonlyArray<PropTemplate> = [
-  { prop: 'log_pile', x: 2, y: 12 },
-  { prop: 'log_pile', x: 5, y: 12 },
-  { prop: 'log_pile', x: 19, y: 5 },
-  { prop: 'board_stack', x: 20, y: 8 },
-  { prop: 'board_stack', x: 20, y: 10 },
-  { prop: 'chopping_block', x: 8, y: 5 },
+  { prop: 'log_pile', x: 8, y: 18 },
+  { prop: 'log_pile', x: 11, y: 18 },
+  { prop: 'log_pile', x: 25, y: 11 },
+  { prop: 'board_stack', x: 26, y: 14 },
+  { prop: 'board_stack', x: 26, y: 16 },
+  { prop: 'chopping_block', x: 14, y: 11 },
 ];
 export const LUMBER_YARD_DECALS: ReadonlyArray<PropTemplate> = [
-  { prop: 'sawdust', x: 11, y: 5 },
-  { prop: 'sawdust', x: 14, y: 6 },
-  { prop: 'sawdust', x: 16, y: 5 },
-  { prop: 'sawdust', x: 7, y: 6 },
+  { prop: 'sawdust', x: 17, y: 11 },
+  { prop: 'sawdust', x: 20, y: 12 },
+  { prop: 'sawdust', x: 22, y: 11 },
+  { prop: 'sawdust', x: 13, y: 12 },
 ];
 
 // ── Everywhere else inside the walls ──────────────────────────────────────────
@@ -682,74 +692,74 @@ export const LUMBER_YARD_DECALS: ReadonlyArray<PropTemplate> = [
  * each spot is seeded dressing; the spot is not.
  */
 export const CLUTTER_SPOTS: ReadonlyArray<TilePoint> = [
-  { x: 12, y: 26 },
-  { x: 20, y: 26 },
-  { x: 32, y: 21 },
-  { x: 52, y: 26 },
-  { x: 54, y: 30 },
+  { x: 18, y: 32 },
+  { x: 26, y: 32 },
+  { x: 38, y: 27 },
+  { x: 58, y: 32 },
+  { x: 60, y: 36 },
 ];
 
 /** Tables out front of the cookhouse. */
 export const COOKHOUSE_TABLES: ReadonlyArray<PropTemplate> = [
-  { prop: 'table', x: 12, y: 36 },
-  { prop: 'table', x: 18, y: 36 },
+  { prop: 'table', x: 18, y: 42 },
+  { prop: 'table', x: 24, y: 42 },
 ];
-export const MISC_PROPS: ReadonlyArray<PropTemplate> = [{ prop: 'half_built_cart', x: 11, y: 37 }];
+export const MISC_PROPS: ReadonlyArray<PropTemplate> = [{ prop: 'half_built_cart', x: 17, y: 43 }];
 export const MISC_DECALS: ReadonlyArray<PropTemplate> = [
-  { prop: 'soot', x: 5, y: 22 },
-  { prop: 'soot', x: 7, y: 22 },
-  { prop: 'straw', x: 41, y: 5 },
-  { prop: 'straw', x: 41, y: 7 },
+  { prop: 'soot', x: 11, y: 28 },
+  { prop: 'soot', x: 13, y: 28 },
+  { prop: 'straw', x: 47, y: 11 },
+  { prop: 'straw', x: 47, y: 13 },
   // A child's wooden cart left in the lane behind the homes.
-  { prop: 'toy', x: 40, y: 37 },
+  { prop: 'toy', x: 46, y: 43 },
   // Leaves blown out of the grove.
-  { prop: 'leaves', x: 7, y: 12 },
-  { prop: 'leaves', x: 15, y: 13 },
-  { prop: 'leaves', x: 20, y: 6 },
+  { prop: 'leaves', x: 13, y: 18 },
+  { prop: 'leaves', x: 21, y: 19 },
+  { prop: 'leaves', x: 26, y: 12 },
   // Bare earth where feet turn in at a door, off the planned paths.
-  { prop: 'path_wear', x: 10, y: 26 },
-  { prop: 'path_wear', x: 4, y: 22 },
-  { prop: 'path_wear', x: 42, y: 27 },
-  { prop: 'path_wear', x: 40, y: 34 },
-  { prop: 'path_wear', x: 51, y: 31 },
-  { prop: 'path_wear', x: 6, y: 31 },
-  { prop: 'path_wear', x: 15, y: 35 },
-  { prop: 'path_wear', x: 16, y: 35 },
+  { prop: 'path_wear', x: 16, y: 32 },
+  { prop: 'path_wear', x: 10, y: 28 },
+  { prop: 'path_wear', x: 48, y: 33 },
+  { prop: 'path_wear', x: 46, y: 40 },
+  { prop: 'path_wear', x: 57, y: 37 },
+  { prop: 'path_wear', x: 12, y: 37 },
+  { prop: 'path_wear', x: 21, y: 41 },
+  { prop: 'path_wear', x: 22, y: 41 },
 ];
 
 // ── Outside the walls ─────────────────────────────────────────────────────────
 
 /** The quarry, south-east of the palisade on the ruins side. */
-export const QUARRY: TileRect = { x: 44, y: 42, w: 14, h: 10 };
+export const QUARRY: TileRect = { x: 50, y: 54, w: 14, h: 10 };
 /** Minable outcrops, in clusters of one to three, each with open ground on two sides. */
 export const QUARRY_DEPOSITS: ReadonlyArray<TilePoint> = [
-  { x: 46, y: 44 },
-  { x: 47, y: 44 },
-  { x: 45, y: 48 },
-  { x: 45, y: 49 },
-  { x: 46, y: 49 },
-  { x: 49, y: 49 },
-  { x: 50, y: 49 },
-  { x: 53, y: 49 },
-  { x: 54, y: 49 },
-  { x: 54, y: 50 },
-  { x: 48, y: 46 },
+  { x: 52, y: 56 },
+  { x: 53, y: 56 },
+  { x: 51, y: 60 },
+  { x: 51, y: 61 },
+  { x: 52, y: 61 },
+  { x: 55, y: 61 },
+  { x: 56, y: 61 },
+  { x: 59, y: 61 },
+  { x: 60, y: 61 },
+  { x: 60, y: 62 },
+  { x: 54, y: 58 },
 ];
 export const QUARRY_PROPS: ReadonlyArray<PropTemplate> = [
-  { prop: 'stone_pile', x: 44, y: 43 },
-  { prop: 'stone_pile', x: 51, y: 51 },
-  { prop: 'broken_cart', x: 47, y: 51 },
+  { prop: 'stone_pile', x: 50, y: 55 },
+  { prop: 'stone_pile', x: 57, y: 63 },
+  { prop: 'broken_cart', x: 53, y: 63 },
 ];
 /** Half-buried ruined wall stubs along the quarry's ruins side. */
 export const QUARRY_WALL_STUBS: ReadonlyArray<TilePoint> = [
-  { x: 57, y: 44 },
-  { x: 57, y: 45 },
-  { x: 57, y: 49 },
-  { x: 56, y: 50 },
+  { x: 63, y: 56 },
+  { x: 63, y: 57 },
+  { x: 63, y: 61 },
+  { x: 62, y: 62 },
 ];
 
 /** The necromancer's ruins: a reserved disc east-south-east of the palisade, beyond the quarry. */
-export const RUINS_CENTRE: TilePoint = { x: 70, y: 46 };
+export const RUINS_CENTRE: TilePoint = { x: 76, y: 58 };
 export const RUINS_RADIUS_TILES = 8;
 /** Half-width of the clear patch at the ruins' centre that the necromancer arrives on. */
 export const RUINS_CLEAR_HALF_TILES = 2;
@@ -758,17 +768,30 @@ export const RUINS_WALL_RING_TILES = 5;
 /** Every how-many tiles of the ruin ring a gap is broken through. */
 export const RUINS_WALL_GAP_PERIOD = 3;
 
+/** How far south of the gate the quarry spur crosses the south road. */
+const QUARRY_SPUR_OFFSET_TILES = 6;
+/** How far south of the gate the road to town forks off the south road. */
+const TOWN_ROAD_FORK_OFFSET_TILES = 12;
+
 /** The south road: from the gate outside, south past the quarry turn, twenty tiles beyond the gate. */
-export const SOUTH_ROAD: TileRect = { x: GATE_X0, y: 40, w: GATE_WIDTH_TILES, h: 23 };
+export const SOUTH_ROAD: TileRect = { x: GATE_X0, y: VILLAGE_BOUNDS_H, w: GATE_WIDTH_TILES, h: 23 };
 /** The spur east from the south road into the quarry. */
-export const QUARRY_SPUR: TileRect = { x: 25, y: 46, w: 19, h: 2 };
+export const QUARRY_SPUR: TileRect = {
+  x: GATE_X0 + GATE_WIDTH_TILES,
+  y: VILLAGE_BOUNDS_H + QUARRY_SPUR_OFFSET_TILES,
+  w: 19,
+  h: 2,
+};
 /** Where the road to town leaves the south road: just west of it, below the gate. */
-export const TOWN_ROAD_START: TilePoint = { x: GATE_X0 - 1, y: 52 };
+export const TOWN_ROAD_START: TilePoint = {
+  x: GATE_X0 - 1,
+  y: VILLAGE_BOUNDS_H + TOWN_ROAD_FORK_OFFSET_TILES,
+};
 
 /** How far beyond the gate's outside tile the south assault lane's spawn stands. */
 export const SOUTH_LANE_SPAWN_DISTANCE_TILES = 20;
 /** The east lane approaches the palisade here, three tiles off its east wall. */
-export const EAST_LANE_APPROACH: TilePoint = { x: 60, y: 20 };
+export const EAST_LANE_APPROACH: TilePoint = { x: VILLAGE_BOUNDS_W + 2, y: VILLAGE_BOUNDS_H / 2 };
 
 // ── Districts ─────────────────────────────────────────────────────────────────
 
@@ -791,12 +814,12 @@ export const DISTRICTS: ReadonlyArray<DistrictTemplate> = [
   { id: 'square', label: 'Briar Hollow', rect: SQUARE },
   { id: 'pasture', label: null, rect: PASTURE },
   { id: 'lumber_yard', label: 'Lumber Yard', rect: LUMBER_YARD },
-  { id: 'farm', label: 'Farm', rect: { x: 22, y: 1, w: 20, h: 12 } },
-  { id: 'farm', label: null, rect: { x: 46, y: 15, w: 10, h: 9 } },
-  { id: 'workshops', label: null, rect: { x: 1, y: 15, w: 11, h: 16 } },
-  { id: 'workshops', label: null, rect: { x: 33, y: 24, w: 19, h: 8 } },
-  { id: 'homes', label: null, rect: { x: 33, y: 32, w: 22, h: 6 } },
-  { id: 'homes', label: null, rect: { x: 3, y: 31, w: 8, h: 7 } },
+  { id: 'farm', label: 'Farm', rect: { x: 28, y: 7, w: 20, h: 12 } },
+  { id: 'farm', label: null, rect: { x: 52, y: 21, w: 10, h: 9 } },
+  { id: 'workshops', label: null, rect: { x: 7, y: 21, w: 11, h: 16 } },
+  { id: 'workshops', label: null, rect: { x: 39, y: 30, w: 19, h: 8 } },
+  { id: 'homes', label: null, rect: { x: 39, y: 38, w: 22, h: 6 } },
+  { id: 'homes', label: null, rect: { x: 9, y: 37, w: 8, h: 7 } },
   { id: 'quarry', label: 'Quarry', rect: QUARRY },
   {
     id: 'ruins',
@@ -840,9 +863,9 @@ export type VillagerAnchorKind =
  * the doorway's inner tiles. Site coordinates.
  */
 export const HALL_SHELTER_SPOTS: ReadonlyArray<TilePoint> = [
-  { x: 36, y: 21 },
-  { x: 37, y: 21 },
-  { x: 43, y: 21 },
+  { x: 42, y: 27 },
+  { x: 43, y: 27 },
+  { x: 49, y: 27 },
 ];
 
 /** Open-air anchors, in site coordinates. Each is a walkable tile. */
@@ -850,47 +873,47 @@ export const OPEN_AIR_ANCHORS: Readonly<
   Record<Exclude<VillagerAnchorKind, VillageBuildingId | 'homes' | 'hall_shelter'>, TilePoint[]>
 > = {
   square: [
-    { x: 20, y: 19 },
-    { x: 26, y: 19 },
-    { x: 21, y: 23 },
-    { x: 25, y: 23 },
+    { x: 26, y: 25 },
+    { x: 32, y: 25 },
+    { x: 27, y: 29 },
+    { x: 31, y: 29 },
   ],
   well: [
-    { x: 18, y: 19 },
-    { x: 28, y: 22 },
+    { x: 24, y: 25 },
+    { x: 34, y: 28 },
   ],
   bench: [
-    { x: 19, y: 23 },
-    { x: 27, y: 20 },
+    { x: 25, y: 29 },
+    { x: 33, y: 26 },
   ],
-  notice_board: [{ x: 27, y: 18 }],
-  bell: [{ x: 22, y: 21 }],
+  notice_board: [{ x: 33, y: 24 }],
+  bell: [{ x: 28, y: 27 }],
   cookhouse_tables: [
-    { x: 14, y: 36 },
-    { x: 17, y: 37 },
+    { x: 20, y: 42 },
+    { x: 23, y: 43 },
   ],
   kitchen_garden: [
-    { x: 26, y: 10 },
-    { x: 24, y: 12 },
+    { x: 32, y: 16 },
+    { x: 30, y: 18 },
   ],
   crop_fields: [
-    { x: 50, y: 18 },
-    { x: 53, y: 19 },
+    { x: 56, y: 24 },
+    { x: 59, y: 25 },
   ],
   pasture_fence: [
-    { x: 41, y: 8 },
-    { x: 48, y: 13 },
+    { x: 47, y: 14 },
+    { x: 54, y: 19 },
   ],
   lumber_yard: [
-    { x: 9, y: 5 },
-    { x: 12, y: 4 },
+    { x: 15, y: 11 },
+    { x: 18, y: 10 },
   ],
   quarry: [
-    { x: 48, y: 44 },
-    { x: 51, y: 48 },
+    { x: 54, y: 56 },
+    { x: 57, y: 60 },
   ],
   gate: [
-    { x: 21, y: 37 },
-    { x: 25, y: 38 },
+    { x: 27, y: 43 },
+    { x: 31, y: 44 },
   ],
 };

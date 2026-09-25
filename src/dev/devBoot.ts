@@ -31,6 +31,7 @@ import { KeyboardHeroPreviewScene } from '../scenes/KeyboardHeroPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
 import { getLevelDef } from '../levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from '../core/CircusQuestProgress';
+import { createPartyCraftsState } from '../core/partyCrafts';
 import {
   createMurderQuestProgress,
   type MurderQuestProgress,
@@ -385,7 +386,7 @@ export function devBootScene(
       }
       if (preset.mongoOut === true) options.mongoWasOut = true;
       if (preset.toolTiers !== undefined) {
-        options.partyCrafts = { tools: { ...preset.toolTiers }, explainersSeen: [] };
+        options.partyCrafts = { ...createPartyCraftsState(), tools: { ...preset.toolTiers } };
       }
       if (preset.circusQuest !== undefined) {
         const circus = createCircusQuestProgress();

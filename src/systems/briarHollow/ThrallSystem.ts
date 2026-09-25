@@ -26,6 +26,7 @@ import {
 } from '../../core/harvestYield';
 import {
   startThrallCooldown,
+  THRALL_DEPLETION_COOLDOWN_SECONDS,
   thrallCooldownTicksLeft,
   tickThrallCooldowns,
 } from '../../core/thrallCooldowns';
@@ -36,7 +37,6 @@ import { drawThrall, type ThrallLook } from '../../sprites/thrallSprite';
 import { THRALL_WORK_FRAMES, thrallFigure } from '../../sprites/art/thrallFigure';
 import { figureFrameCount } from '../../sprites/figure/figureDef';
 import { HAMMER_STRIKE_PHASE } from '../../sprites/art/ratkin/castRows';
-import { tileKey } from '../tileKey';
 import { drawText, TEXT_PRESETS } from '../../ui/TextBox';
 import { HARVEST_BUFF_COLOR, type HarvestEffects } from './HarvestEffects';
 import type { HarvestAudio } from './HarvestSystem';
@@ -141,6 +141,8 @@ export interface ThrallSystemDeps {
   readonly announce: (message: string) => void;
   readonly noteActivity: () => void;
   readonly onTreeStruck: (tileX: number, tileY: number) => void;
+  /** The node a crawler is currently harvesting, if any — a thrall's fallback when nothing free is left. */
+  readonly harvestedNodeFor: (crawler: Crawler) => NodeRef | null;
 }
 
 export class ThrallSystem {
@@ -208,10 +210,11 @@ export class ThrallSystem {
       return 'nothingNearby';
     }
 
+    const harvesterNode = this.deps.harvestedNodeFor(summoner);
     for (let i = 0; i < count; i++) {
-      const unclaimed = nodes.find((node) => !this.isClaimed(node));
-      const node = unclaimed ?? nodes[i % nodes.length];
-      this.thralls.push({
+      const free = nodes.find((node) => !this.deps.ledger.isOccupied(node.tileX, node.tileY));
+      const node = free ?? harvesterNode ?? nodes[i % nodes.length];
+      const thrall: Thrall = {
         summoner,
         tool,
         kind,
@@ -230,7 +233,9 @@ export class ThrallSystem {
         moveY: 0,
         facingX: summoner.facingX,
         facingY: summoner.facingY,
-      });
+      };
+      this.thralls.push(thrall);
+      this.deps.ledger.claim(node.tileX, node.tileY, thrall);
     }
     startThrallCooldown(summoner.crawlerKind);
     this.deps.audio?.play('thrall_summoned');
@@ -249,7 +254,23 @@ export class ThrallSystem {
 
   /** Every thrall gone at once, for a scene teardown: they belong to the place they were summoned. */
   dismissAll(): void {
+    for (const thrall of this.thralls) this.deps.ledger.releaseClaim(thrall);
     this.thralls.length = 0;
+  }
+
+  /** Whether any of `summoner`'s thralls for `tool` are currently out, for the bag menu's Unsummon entry. */
+  anyFor(summoner: Crawler, tool: ToolKind): boolean {
+    return this.thralls.some((thrall) => thrall.summoner === summoner && thrall.tool === tool);
+  }
+
+  /** Dismisses `summoner`'s thralls for `tool` at once — the bag menu's Unsummon entry. */
+  dismiss(summoner: Crawler, tool: ToolKind): void {
+    for (let i = this.thralls.length - 1; i >= 0; i--) {
+      const thrall = this.thralls[i];
+      if (thrall.summoner !== summoner || thrall.tool !== tool) continue;
+      this.deps.ledger.releaseClaim(thrall);
+      this.thralls.splice(i, 1);
+    }
   }
 
   /** @returns true once the thrall has faded out and should be dropped. */
@@ -264,13 +285,15 @@ export class ThrallSystem {
       return false;
     }
     if (thrall.node === null || !this.stillWorkable(thrall, thrall.node)) {
-      thrall.node = this.nextNode(thrall);
-      if (thrall.node === null) {
-        this.beginFade(thrall);
+      const next = this.nextNode(thrall);
+      if (next === null) {
+        this.handleDepletion(thrall);
         return false;
       }
+      this.claimNode(thrall, next);
     }
     const node = thrall.node;
+    if (node === null) return false;
     if (!this.glideToward(thrall, node)) return false;
     this.work(thrall, node);
     return false;
@@ -278,14 +301,48 @@ export class ThrallSystem {
 
   private beginFade(thrall: Thrall): void {
     thrall.fadeTicks = 0;
+    this.deps.ledger.releaseClaim(thrall);
     thrall.node = null;
     this.deps.audio?.play('thrall_fade_out');
+  }
+
+  private claimNode(thrall: Thrall, node: NodeRef): void {
+    this.deps.ledger.releaseClaim(thrall);
+    thrall.node = node;
+    this.deps.ledger.claim(node.tileX, node.tileY, thrall);
   }
 
   private stillWorkable(thrall: Thrall, node: NodeRef): boolean {
     return harvestKindAt(this.deps.gameMap, node.tileX, node.tileY) === thrall.kind;
   }
 
+  /**
+   * All of `summoner`'s thralls of `kind` fade out at once, and their next
+   * summon is held off for {@link THRALL_DEPLETION_COOLDOWN_SECONDS} — there is
+   * nothing left in reach for the kind to work.
+   */
+  private handleDepletion(trigger: Thrall): void {
+    const { summoner, kind } = trigger;
+    let anyDismissed = false;
+    for (const thrall of this.thralls) {
+      if (thrall.summoner !== summoner || thrall.kind !== kind || thrall.fadeTicks !== null) {
+        continue;
+      }
+      this.beginFade(thrall);
+      anyDismissed = true;
+    }
+    if (!anyDismissed) return;
+    startThrallCooldown(summoner.crawlerKind, THRALL_DEPLETION_COOLDOWN_SECONDS);
+    this.deps.announce('Your thralls ran out of work and had to leave.');
+  }
+
+  /**
+   * Where a thrall should work next: the nearest node nobody else is on, or —
+   * when everything in reach is already claimed — whatever node the summoner
+   * is harvesting, so the thrall shares it rather than standing idle. Only
+   * when there is truly nothing of the kind left in reach does this return
+   * null, which the caller reads as the whole kind having run dry.
+   */
   private nextNode(thrall: Thrall): NodeRef | null {
     const nodes = this.nodesNear(
       thrall.kind,
@@ -294,12 +351,24 @@ export class ThrallSystem {
       false,
       thrall.summoner.craftSkills.getLevel('resourcing'),
     );
+    const harvesterNode = this.harvesterNodeOfKind(thrall.summoner, thrall.kind);
+    if (nodes.length === 0) return harvesterNode;
     const centreX = thrall.x + TILE_SIZE / 2;
     const centreY = thrall.y + TILE_SIZE / 2;
     const byDistanceFromThrall = [...nodes].sort(
       (a, b) => nodeDistance(a, centreX, centreY) - nodeDistance(b, centreX, centreY),
     );
-    return byDistanceFromThrall.find((node) => !this.isClaimed(node, thrall)) ?? null;
+    const free = byDistanceFromThrall.find(
+      (node) => !this.deps.ledger.isOccupied(node.tileX, node.tileY, thrall),
+    );
+    return free ?? harvesterNode ?? byDistanceFromThrall[0];
+  }
+
+  /** The summoner's own harvested node, but only when it matches the thrall's kind. */
+  private harvesterNodeOfKind(summoner: Crawler, kind: HarvestKind): NodeRef | null {
+    const node = this.deps.harvestedNodeFor(summoner);
+    if (node === null) return null;
+    return harvestKindAt(this.deps.gameMap, node.tileX, node.tileY) === kind ? node : null;
   }
 
   /** @returns true once it stands at its work. */
@@ -420,16 +489,6 @@ export class ThrallSystem {
     const centreX = (node.tileX + TILE_CENTER_OFFSET) * TILE_SIZE;
     const centreY = (node.tileY + TILE_CENTER_OFFSET) * TILE_SIZE;
     return this.deps.gameMap.hasLineOfSight(originX, originY, centreX, centreY, node);
-  }
-
-  private isClaimed(node: NodeRef, except?: Thrall): boolean {
-    const key = tileKey(node.tileX, node.tileY);
-    return this.thralls.some(
-      (thrall) =>
-        thrall !== except &&
-        thrall.node !== null &&
-        tileKey(thrall.node.tileX, thrall.node.tileY) === key,
-    );
   }
 
   // ── Drawing ──────────────────────────────────────────────────────────────

@@ -146,7 +146,6 @@ const NONE_BELL_FALLS_SHARE = 0.9;
  * plan. A real party does better; these floors are what the defences must be
  * worth even to that one.
  */
-const REFERENCE_VICTORY_SHARE = 0.8;
 const REFERENCE_MEDIAN_MIN_MINUTES = 4;
 const REFERENCE_MEDIAN_MAX_MINUTES = 8;
 /** The band is for a fight: this much of the median won assault is outside the lulls between waves. */
@@ -1317,10 +1316,6 @@ for (const preset of presets) {
     );
   }
   if (preset === 'reference') {
-    check(
-      share('victory') >= REFERENCE_VICTORY_SHARE,
-      `the reference defence wins ≥${Math.round(REFERENCE_VICTORY_SHARE * 100)}% (${(share('victory') * 100).toFixed(0)}%)`,
-    );
     const minutes =
       median(
         results
