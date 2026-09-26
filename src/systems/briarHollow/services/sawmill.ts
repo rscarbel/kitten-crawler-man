@@ -1,6 +1,6 @@
 /**
  * Processing wood by hand at the sawmill's two machines: the saw makes
- * boards, the rope frame makes rope. Each machine does one job, so walking up
+ * boards, the rope walk makes rope. Each machine does one job, so walking up
  * to one is already the choice of output.
  *
  * One press works one wood, over {@link MANUAL_PROCESS_SECONDS}. Holding the
@@ -93,7 +93,7 @@ const FAR_ICON_BOB_AMPLITUDE = 3;
 const FAR_ICON_GAP_ABOVE_ART = 4;
 /**
  * How far above the machine's actual art-top row (per station, via
- * `stationArtTopTileY` — a "tall" sawmill and a "low" rope frame reach different
+ * `stationArtTopTileY` — a "tall" sawmill and a "low" rope walk reach different
  * heights) the badge's centre floats, so that even at the lowest point of its
  * bob the whole badge sits clear above the tallest ink the prop's sheet paints.
  */

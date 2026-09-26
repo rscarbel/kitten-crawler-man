@@ -120,7 +120,7 @@ export const VILLAGE_SHEETS: ReadonlyArray<VillageSheetSpec> = [
       'desk',
       'drafting_table',
       'workbench',
-      'rope_frame',
+      'rope_walk',
       'mushroom_log_bed',
       'loom',
       'half_built_cart',

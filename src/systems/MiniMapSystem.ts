@@ -132,7 +132,7 @@ const DISTRICT_LABEL_FONT_SIZE = 9;
 const DISTRICT_LABEL_COLOR = '#e8d9a0';
 const DISTRICT_LABEL_OUTLINE_COLOR = '#000000';
 
-/** A processing station's glyph on the minimap: a saw blade for the mill, a coil for the rope frame. */
+/** A processing station's glyph on the minimap: a saw blade for the mill, a coil for the rope walk. */
 const STATION_MARKER_GLYPH: Readonly<
   Record<
     ProcessingStationKind,

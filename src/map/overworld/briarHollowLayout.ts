@@ -241,7 +241,7 @@ export const VILLAGE_PROPS = {
   workbench: { kind: 'low', w: 2, h: 1 },
   gear_crate: { kind: 'low', w: 1, h: 1 },
   sawmill_machine: { kind: 'tall', w: 2, h: 3 },
-  rope_frame: { kind: 'low', w: 2, h: 1 },
+  rope_walk: { kind: 'low', w: 2, h: 1 },
   log_pile: { kind: 'low', w: 2, h: 1 },
   board_stack: { kind: 'low', w: 1, h: 1 },
   stone_pile: { kind: 'low', w: 1, h: 1 },
@@ -540,7 +540,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     occupantAnchors: [{ x: 3, y: 3 }],
     furniture: [
       { prop: 'sawmill_machine', x: 1, y: 2 },
-      { prop: 'rope_frame', x: 5, y: 4 },
+      { prop: 'rope_walk', x: 5, y: 4 },
       { prop: 'log_pile', x: 7, y: 2 },
       { prop: 'board_stack', x: 8, y: 4 },
       { prop: 'sawdust', x: 3, y: 2 },

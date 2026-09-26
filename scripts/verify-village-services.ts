@@ -705,7 +705,7 @@ function checkSawmill(): void {
   );
 
   teachBoth(human, rig.cat, 'construction');
-  check(standAt(rig, 'rope'), 'a spot beside the rope frame exists');
+  check(standAt(rig, 'rope'), 'a spot beside the rope walk exists');
   sawmill.press(human);
   tick(rig, MANUAL_FRAMES);
   check(human.inventory.countOf('rope') === EXPECTED_ROPE_PER_WOOD, '1 wood becomes 1 rope');

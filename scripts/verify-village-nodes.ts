@@ -583,7 +583,7 @@ section('HUD zones: the lumber yard and the quarry keep the HUD up');
   check(!anyResourceZone(zone, () => false)(human), 'and an OR of false zones is false');
 }
 
-section('Processing machines: the sawmill and the rope frame, within reach');
+section('Processing machines: the sawmill and the rope walk, within reach');
 {
   const stations = processingStationsOf(site);
   const saw = stations.find((station) => station.kind === 'boards');

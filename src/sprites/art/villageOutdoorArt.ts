@@ -4383,16 +4383,16 @@ function paintSawBlade(ctx: Ctx, g: Grid, cx: number, up: number, radius: number
   fillInked(ctx, g, BRASS.light);
 }
 
-// ── Rope frame ────────────────────────────────────────────────────────────────
+// ── Rope walk ────────────────────────────────────────────────────────────────
 
 /**
  * A hand-crank rope walk: at the west a crank wheel on a braced post turns
  * three hooks, at the east a braced post holds the finished end; three thick
  * hemp strands run from the hooks into the grooved wooden top that lays them,
  * and the laid rope runs on to the east post. Coils of finished rope sit at
- * the frame's feet.
+ * the rope walk's feet.
  */
-const ROPE_FRAME = {
+const ROPE_WALK = {
   shadowUp: 0.4,
   shadowRx: 0.94,
   shadowRy: 0.2,
@@ -4437,8 +4437,8 @@ const ROPE_FRAME = {
 } as const;
 const HEMP_TONES = [ROPE.body, STRAW.light, ROPE.body];
 
-function paintRopeFrame(ctx: Ctx, g: Grid): void {
-  const r = ROPE_FRAME;
+function paintRopeWalk(ctx: Ctx, g: Grid): void {
+  const r = ROPE_WALK;
   shadow(ctx, g, 1, r.shadowUp, r.shadowRx, r.shadowRy);
   const brace = r.brace;
   strut(
@@ -4567,5 +4567,5 @@ export const OUTDOOR_PROP_ART: Record<OutdoorPropId, VillagePropArt> = {
   broken_cart: { variants: 1, paint: painter(paintBrokenCart) },
   bucket: { variants: 1, paint: painter(paintBucketProp) },
   sawmill_machine: { variants: 1, paint: painter(paintSawmill) },
-  rope_frame: { variants: 1, paint: painter(paintRopeFrame) },
+  rope_walk: { variants: 1, paint: painter(paintRopeWalk) },
 };

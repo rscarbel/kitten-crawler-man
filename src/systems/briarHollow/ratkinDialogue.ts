@@ -406,7 +406,7 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       },
       {
         circumstance: 'grant_basic_tools',
-        text: "These are yours. Basic Axe. Basic Pickaxe. They'll get you started.",
+        text: "Mayor Bramblewick told me you have agreed to help us defend against Vordrick Boneharrow, the Necromancer. If you're going to help us build some defenses, you'll need to collect some resources to get started. Here, take a Basic Axe and a Basic Pickaxe. They'll get you started.",
       },
       {
         circumstance: 'basic_tools_already_owned',

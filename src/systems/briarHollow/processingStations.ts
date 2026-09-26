@@ -1,6 +1,6 @@
 /**
  * The village's two wood-processing machines, found from the site: the
- * sawmill machine that turns wood into boards and the rope frame that turns it
+ * sawmill machine that turns wood into boards and the rope walk that turns it
  * into rope. One machine per job, so a press on a machine is already the
  * choice of output.
  *
@@ -21,7 +21,7 @@ export const PROCESSING_REACH_TILES = 1.5;
 
 const STATION_PROPS: ReadonlyArray<{ prop: VillageStandingPropId; kind: ProcessingStationKind }> = [
   { prop: 'sawmill_machine', kind: 'boards' },
-  { prop: 'rope_frame', kind: 'rope' },
+  { prop: 'rope_walk', kind: 'rope' },
 ];
 
 export interface ProcessingStation {
