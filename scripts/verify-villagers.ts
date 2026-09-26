@@ -27,9 +27,18 @@ import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { asGameContext } from './nodeGameContext';
 import { createCanvas } from 'canvas';
 import { setViewportSize } from '../src/core/Viewport';
-import { VILLAGER_CHOICE_LABEL_SIZE, VillagerConversation } from '../src/ui/VillagerConversation';
+import {
+  type ConversationChoice,
+  VILLAGER_CHOICE_LABEL_SIZE,
+  VillagerConversation,
+} from '../src/ui/VillagerConversation';
 import { buttonLabelFits } from '../src/ui/Button';
-import { BUILT_IN_TOPICS, GOODBYE_LABEL } from '../src/systems/briarHollow/villagerTopics';
+import {
+  ASK_QUESTION_LABEL,
+  BACK_LABEL,
+  BUILT_IN_TOPICS,
+  GOODBYE_LABEL,
+} from '../src/systems/briarHollow/villagerTopics';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { createBriarHollowState } from '../src/core/briarHollowState';
 import { Mob } from '../src/creatures/Mob';
@@ -406,7 +415,13 @@ function verifyConversation(): void {
   system.conversation.advance();
   system.update(frame);
   check(system.conversation.isShowingChoices, 'the choices come up once the line is read');
-  check(system.conversation.handleKeyDown('1'), 'a number key picks a choice');
+  check(
+    system.conversation.choiceLabels.length === 2,
+    'only "I have a question" and Goodbye sit at the root',
+  );
+  check(system.conversation.handleKeyDown('1'), 'a number key opens "I have a question"');
+  check(system.conversation.isShowingChoices, 'and the question submenu comes up');
+  check(system.conversation.handleKeyDown('1'), 'a number key picks a question');
   check(!system.conversation.isShowingChoices, 'and the answer is shown');
   system.conversation.advance();
   system.update(frame);
@@ -417,9 +432,11 @@ function verifyConversation(): void {
   // Asking about something else means talking to Oren again — each answer
   // closes the whole conversation, and reopening brings every topic back,
   // since a picked row is only dropped for the conversation that consumed
-  // it. Some answers span more than one page, so each round reads however
-  // many pages it takes to reach the next choice row, or the auto-close,
-  // whichever comes first.
+  // it. Every lore row about Oren is `isQuestion`, so the root always offers
+  // only "I have a question" and Goodbye; the questions themselves live one
+  // level down, in the submenu it opens. Some answers span more than one
+  // page, so each round reads however many pages it takes to reach the next
+  // choice row, or the auto-close, whichever comes first.
   const readUntilChoicesOrClosed = (): void => {
     for (
       let guard = 0;
@@ -434,10 +451,15 @@ function verifyConversation(): void {
     check(system.tryTalk(talker), `talks again for round ${round + 1}`);
     readUntilChoicesOrClosed();
     check(
-      system.conversation.choiceLabels.length === 5,
-      `every topic is back, Goodbye included (round ${round + 1})`,
+      system.conversation.choiceLabels.length === 2,
+      `only "I have a question" and Goodbye at the root (round ${round + 1})`,
     );
-    check(system.conversation.handleKeyDown('1'), `picks a topic (round ${round + 1})`);
+    check(system.conversation.handleKeyDown('1'), `opens "I have a question" (round ${round + 1})`);
+    check(
+      system.conversation.choiceLabels.length === 5,
+      `every question is back, Back included (round ${round + 1})`,
+    );
+    check(system.conversation.handleKeyDown('1'), `picks a question (round ${round + 1})`);
     readUntilChoicesOrClosed();
     check(
       !system.isConversationOpen,
@@ -448,6 +470,7 @@ function verifyConversation(): void {
 
   check(system.tryTalk(talker), 'a fresh conversation reopens, topics restored');
   readUntilChoicesOrClosed();
+  check(system.conversation.handleKeyDown('1'), 'opens "I have a question" once more');
   check(
     system.conversation.choiceLabels.some((label) => label.includes('About the axe')),
     'the earlier conversation’s picks do not carry over to a new one',
@@ -500,38 +523,46 @@ function verifyConversation(): void {
     `and every one of them is on the ${SHORT_PHONE_WIDTH}×${SHORT_PHONE_HEIGHT} screen`,
   );
 
-  // Oren's real choices on the same phone: every label must fit its button.
-  const orenChoices = [
+  // Oren's real choices on the same phone: every label must fit its button,
+  // at the root (his actions plus "I have a question") and in the question
+  // submenu it opens (his built-in lore, every row of it, plus "Back").
+  const checkPhoneFit = (level: string, choices: readonly ConversationChoice[]): void => {
+    const panel = new VillagerConversation(null);
+    panel.open('Oren Ironwhisker', undefined);
+    panel.setChoices(choices);
+    panel.showPages(['A line.']);
+    panel.advance();
+    panel.update();
+    const screen = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
+    const ctx = asGameContext(screen.getContext('2d'));
+    panel.render(ctx);
+    const overflowing = panel.choiceBounds.filter(
+      (rect) => !buttonLabelFits(ctx, rect.label, rect.w, VILLAGER_CHOICE_LABEL_SIZE),
+    );
+    check(
+      panel.choiceBounds.length === choices.length,
+      `all ${choices.length} of Oren's ${level} choices are drawn on a short phone`,
+    );
+    check(
+      overflowing.length === 0,
+      `and every ${level} label fits its button (overflowing: ${overflowing.map((rect) => rect.label).join(', ') || 'none'})`,
+    );
+    check(
+      panel.choiceBounds.every((rect) => rect.y >= 0 && rect.y + rect.h <= SHORT_PHONE_HEIGHT),
+      `and every ${level} choice is on screen`,
+    );
+  };
+  checkPhoneFit('root', [
+    { label: ASK_QUESTION_LABEL, run: () => undefined },
+    { label: GOODBYE_LABEL, isExit: true, run: () => undefined },
+  ]);
+  checkPhoneFit('question', [
     ...BUILT_IN_TOPICS.topics('oren', system.contextFor('oren', oren, null)).map((topic) => ({
       label: topic.label,
       run: () => undefined,
     })),
-    { label: GOODBYE_LABEL, isExit: true, run: () => undefined },
-  ];
-  const orenPanel = new VillagerConversation(null);
-  orenPanel.open('Oren Ironwhisker', undefined);
-  orenPanel.setChoices(orenChoices);
-  orenPanel.showPages(['A line.']);
-  orenPanel.advance();
-  orenPanel.update();
-  const orenScreen = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
-  const orenCtx = asGameContext(orenScreen.getContext('2d'));
-  orenPanel.render(orenCtx);
-  const overflowing = orenPanel.choiceBounds.filter(
-    (rect) => !buttonLabelFits(orenCtx, rect.label, rect.w, VILLAGER_CHOICE_LABEL_SIZE),
-  );
-  check(
-    orenPanel.choiceBounds.length === orenChoices.length,
-    `all ${orenChoices.length} of Oren's choices are drawn on a short phone`,
-  );
-  check(
-    overflowing.length === 0,
-    `and every label fits its button (overflowing: ${overflowing.map((rect) => rect.label).join(', ') || 'none'})`,
-  );
-  check(
-    orenPanel.choiceBounds.every((rect) => rect.y >= 0 && rect.y + rect.h <= SHORT_PHONE_HEIGHT),
-    'and every one of them is on screen',
-  );
+    { label: BACK_LABEL, isExit: true, run: () => undefined },
+  ]);
 
   const beside = { x: elder.x + TILE_SIZE, y: elder.y };
   const elderFrame = { human: beside, cat: far, active: beside };

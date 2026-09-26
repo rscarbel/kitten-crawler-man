@@ -67,6 +67,8 @@ import {
 } from '../map/tileTypes';
 import { viewportWidth } from '../core/Viewport';
 import { bossRoomMinimapColor } from '../map/tiles/bossRoomTiles';
+import type { ProcessingStationKind } from './briarHollow/processingStations';
+import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../ui/icons/stationGlyphs';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -129,6 +131,29 @@ const CORPSE_MARKER_TTL = 1800;
 const DISTRICT_LABEL_FONT_SIZE = 9;
 const DISTRICT_LABEL_COLOR = '#e8d9a0';
 const DISTRICT_LABEL_OUTLINE_COLOR = '#000000';
+
+/** A processing station's glyph on the minimap: a saw blade for the mill, a coil for the rope frame. */
+const STATION_MARKER_GLYPH: Readonly<
+  Record<
+    ProcessingStationKind,
+    (ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) => void
+  >
+> = {
+  boards: drawSawBladeGlyph,
+  rope: drawRopeCoilGlyph,
+};
+/** Glyph radius for a processing station's minimap marker (pixels). */
+const STATION_MARKER_GLYPH_RADIUS = 4;
+/** Radius of the dark backing disc behind a station glyph, so it reads over any tile colour. */
+const STATION_MARKER_BACKING_RADIUS = 5;
+const STATION_MARKER_BACKING_COLOR = 'rgba(20, 16, 12, 0.85)';
+
+/** `$` marker over anyone who sells something. */
+const VENDOR_MARKER_FONT_SIZE = 8;
+const VENDOR_MARKER_COLOR = '#4ade80';
+const VENDOR_MARKER_OUTLINE_COLOR = '#0a2010';
+/** Lifts the `$` a little above the dot a plain NPC or mob marker would sit on. */
+const VENDOR_MARKER_Y_OFFSET = -4;
 
 /** Sprite-building footprints read as solid masonry on the minimap, like wall tiles. */
 const SPRITE_BUILDING_MINIMAP_COLOR = '#3a3028';
@@ -410,6 +435,8 @@ export class MiniMapSystem implements GameSystem {
     mordecaiPositions: Array<{ x: number; y: number }>,
     questMarkers: Array<{ x: number; y: number; type: QuestMarkerType }> = [],
     pet: { x: number; y: number } | null = null,
+    resourceStations: Array<{ x: number; y: number; kind: ProcessingStationKind }> = [],
+    vendors: Array<{ x: number; y: number }> = [],
   ): void {
     const mapSize = this.gameMap.structure.length;
     const expanded = this._expanded;
@@ -625,6 +652,43 @@ export class MiniMapSystem implements GameSystem {
         ctx.stroke();
         ctx.restore();
       }
+    }
+
+    // Processing stations — a saw blade for the mill, a rope coil for the frame, over a dark backing disc.
+    for (const station of resourceStations) {
+      if (!this.fogOfWar[station.y * mapSize + station.x]) continue;
+      const ssx =
+        mmX + (station.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const ssy =
+        mmY + (station.y - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      ctx.beginPath();
+      ctx.arc(ssx, ssy, STATION_MARKER_BACKING_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = STATION_MARKER_BACKING_COLOR;
+      ctx.fill();
+      STATION_MARKER_GLYPH[station.kind](ctx, ssx, ssy, STATION_MARKER_GLYPH_RADIUS);
+    }
+
+    // Vendors — a `$` over anyone who sells something, derived from the shops themselves.
+    for (const vendor of vendors) {
+      const vendorTX = Math.floor((vendor.x + HALF_TILE) / TILE_SIZE);
+      const vendorTY = Math.floor((vendor.y + HALF_TILE) / TILE_SIZE);
+      if (!this.fogOfWar[vendorTY * mapSize + vendorTX]) continue;
+      const vsx =
+        mmX + (vendorTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const vsy =
+        mmY +
+        (vendorTY - viewCenterTY + halfTiles) * pxPerTile +
+        Math.floor(pxPerTile / 2) +
+        VENDOR_MARKER_Y_OFFSET;
+      drawText(ctx, '$', {
+        x: vsx,
+        y: vsy,
+        size: VENDOR_MARKER_FONT_SIZE,
+        bold: true,
+        color: VENDOR_MARKER_COLOR,
+        outline: VENDOR_MARKER_OUTLINE_COLOR,
+        align: 'center',
+      });
     }
 
     // Active player — green dot (at centre when unscrolled; offset when panned)

@@ -19,12 +19,16 @@ import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import { BUILD_ROWS } from '../../../sprites/art/humanFigure';
 import { viewForFacing } from '../../../sprites/humanSprite';
 import { drawProgressBar, PROGRESS_PRESETS } from '../../../ui/Box';
-import { drawInteractionPrompt } from '../../../ui/InteractionPrompt';
+import { drawInteractionPrompt, interactionPromptsSuppressed } from '../../../ui/InteractionPrompt';
+import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../../../ui/icons/stationGlyphs';
 import {
+  PROCESSING_REACH_TILES,
   type ProcessingStation,
   type ProcessingStationKind,
+  footprintCentreTile,
   processingStationInReach,
   processingStationsOf,
+  stationArtTopTileY,
 } from '../processingStations';
 import { BAG_FULL_LINE, type Crawler, type ServiceParty } from './serviceContext';
 import {
@@ -57,10 +61,73 @@ const PROMPT_LABELS: Readonly<Record<ProcessingStationKind, string>> = {
   rope: 'Twist',
 };
 
+/**
+ * The far indicator's glyph, matching the minimap's: a saw blade for the mill,
+ * a rope coil for the frame, so a glance from across the yard already answers
+ * "what does this make?" the same way the minimap does.
+ */
+const STATION_GLYPH: Readonly<
+  Record<
+    ProcessingStationKind,
+    (ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) => void
+  >
+> = {
+  boards: drawSawBladeGlyph,
+  rope: drawRopeCoilGlyph,
+};
+
 const PROGRESS_BAR_WIDTH = 40;
 const PROGRESS_BAR_HEIGHT = 5;
 const PROGRESS_BAR_LIFT = 10;
 const TILE_CENTRE = 0.5;
+
+/** Glyph radius inside the far indicator's badge. */
+const FAR_ICON_GLYPH_RADIUS = 7;
+/** Badge padding around the glyph. */
+const FAR_ICON_PADDING = 5;
+const FAR_ICON_BADGE_SIZE = FAR_ICON_GLYPH_RADIUS * 2 + FAR_ICON_PADDING * 2;
+const FAR_ICON_BADGE_RADIUS = 5;
+const FAR_ICON_BOB_PERIOD_MS = 1100;
+const FAR_ICON_BOB_AMPLITUDE = 3;
+/** Clear air kept between the badge's lowest point and the prop's own art, at rest. */
+const FAR_ICON_GAP_ABOVE_ART = 4;
+/**
+ * How far above the machine's actual art-top row (per station, via
+ * `stationArtTopTileY` — a "tall" sawmill and a "low" rope frame reach different
+ * heights) the badge's centre floats, so that even at the lowest point of its
+ * bob the whole badge sits clear above the tallest ink the prop's sheet paints.
+ */
+const FAR_ICON_LIFT = FAR_ICON_BOB_AMPLITUDE + FAR_ICON_BADGE_SIZE / 2 + FAR_ICON_GAP_ABOVE_ART;
+/**
+ * The badge fades in over this band as the crawler approaches, fully gone by
+ * the time the SPACE prompt takes over — so the two affordances never double up.
+ */
+const FAR_ICON_FADE_START_TILES = 5;
+const FAR_ICON_FADE_END_TILES = PROCESSING_REACH_TILES + 1;
+/** Opacity floor for the badge when the party is out of wood to feed the machine. */
+const FAR_ICON_NO_WOOD_ALPHA = 0.4;
+const FAR_ICON_BADGE_FILL = 'rgba(30, 30, 30, 0.78)';
+const FAR_ICON_BADGE_BORDER = 'rgba(200, 200, 200, 0.55)';
+
+/**
+ * A pulsing glow on the ground under a machine while a crawler is close
+ * enough to work it: a soft filled ellipse plus a brighter rim, squashed to
+ * read as a mark on the floor rather than a shape floating in the air.
+ */
+const REACH_GLOW_COLOR = '#f0c85a';
+const REACH_GLOW_PULSE_PERIOD_MS = 700;
+const REACH_GLOW_PULSE_MIN = 0.35;
+const REACH_GLOW_PULSE_RANGE = 0.4;
+const REACH_GLOW_LINE_WIDTH = 2;
+/** How far the glow's ring extends past the footprint's own edge, in tiles. */
+const REACH_GLOW_PADDING_TILES = 0.6;
+/** Ground-plane perspective: the ellipse's vertical radius as a fraction of its horizontal one. */
+const REACH_GLOW_GROUND_SQUASH = 0.55;
+const REACH_GLOW_FILL_ALPHA = 0.22;
+const REACH_GLOW_EDGE_ALPHA = 0.55;
+/** Recentres the glow's sine term (range -1..1) to a 0..1 fraction. */
+const SINE_TO_UNIT_SCALE = 0.5;
+const SINE_TO_UNIT_OFFSET = 0.5;
 
 export interface SawmillDeps {
   readonly party: ServiceParty;
@@ -112,6 +179,14 @@ export class SawmillService {
   stationFor(crawler: Crawler): ProcessingStation | null {
     const centre = bodyCentre(crawler);
     return processingStationInReach(this.stations, centre.x, centre.y);
+  }
+
+  /** Every machine's tile position and output, for the minimap. */
+  minimapStations(): Array<{ x: number; y: number; kind: ProcessingStationKind }> {
+    return this.stations.map((station) => {
+      const tile = footprintCentreTile(station.footprint);
+      return { x: tile.x, y: tile.y, kind: station.kind };
+    });
   }
 
   /** How far `crawler` stands from the nearest machine's footprint, in tiles; Infinity with none. */
@@ -287,6 +362,109 @@ export class SawmillService {
       PROMPT_LABELS[station.kind],
     );
     return true;
+  }
+
+  /**
+   * A pulsing ground glow around the footprint, so being close enough to work
+   * the machine is visible before the SPACE prompt appears. Drawn in the
+   * ground pass — under the station's own sprite, the player and every mob —
+   * so it reads as a mark on the floor rather than an outline stroked over
+   * whoever is standing on it.
+   */
+  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Crawler): void {
+    if (this.job !== null) return;
+    const station = this.stationFor(active);
+    if (station === null) return;
+    const { x, y, w, h } = station.footprint;
+    const pulse =
+      REACH_GLOW_PULSE_MIN +
+      REACH_GLOW_PULSE_RANGE *
+        (SINE_TO_UNIT_OFFSET +
+          SINE_TO_UNIT_SCALE * Math.sin(performance.now() / REACH_GLOW_PULSE_PERIOD_MS));
+    const groundCx = (x + w / 2) * TILE_SIZE - camX;
+    const groundCy = (y + h) * TILE_SIZE - camY;
+    const radiusX = (Math.max(w, h) / 2 + REACH_GLOW_PADDING_TILES) * TILE_SIZE;
+    const radiusY = radiusX * REACH_GLOW_GROUND_SQUASH;
+
+    ctx.save();
+    ctx.globalAlpha = pulse * REACH_GLOW_FILL_ALPHA;
+    ctx.fillStyle = REACH_GLOW_COLOR;
+    ctx.beginPath();
+    ctx.ellipse(groundCx, groundCy, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = pulse * REACH_GLOW_EDGE_ALPHA;
+    ctx.strokeStyle = REACH_GLOW_COLOR;
+    ctx.lineWidth = REACH_GLOW_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.ellipse(groundCx, groundCy, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * A bobbing badge of the machine's output above every station in view, so a
+   * player who has never stood on this tile still knows it does something —
+   * fading out as the crawler nears, handing off to the SPACE prompt.
+   */
+  renderFarIndicators(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: Crawler,
+  ): void {
+    if (interactionPromptsSuppressed()) return;
+    const activeCentre = bodyCentre(active);
+    for (const station of this.stations) {
+      if (this.job?.station === station) continue;
+      this.renderFarIndicator(ctx, camX, camY, activeCentre, station);
+    }
+  }
+
+  private renderFarIndicator(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    activeCentre: { x: number; y: number },
+    station: ProcessingStation,
+  ): void {
+    const centre = footprintCentre(station);
+    const distanceTiles =
+      Math.hypot(centre.x - activeCentre.x, centre.y - activeCentre.y) / TILE_SIZE;
+    const fade = Math.min(
+      1,
+      Math.max(
+        0,
+        (distanceTiles - FAR_ICON_FADE_END_TILES) /
+          (FAR_ICON_FADE_START_TILES - FAR_ICON_FADE_END_TILES),
+      ),
+    );
+    if (fade <= 0) return;
+    const hasWood = partyWood(this.deps.party) >= 1;
+    const alpha = fade * (hasWood ? 1 : FAR_ICON_NO_WOOD_ALPHA);
+    const bob = Math.sin(performance.now() / FAR_ICON_BOB_PERIOD_MS) * FAR_ICON_BOB_AMPLITUDE;
+    const sx = centre.x - camX;
+    const sy = stationArtTopTileY(station) * TILE_SIZE - camY - FAR_ICON_LIFT + bob;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    const bx = sx - FAR_ICON_BADGE_SIZE / 2;
+    const by = sy - FAR_ICON_BADGE_SIZE / 2;
+    const r = FAR_ICON_BADGE_RADIUS;
+    ctx.moveTo(bx + r, by);
+    ctx.arcTo(bx + FAR_ICON_BADGE_SIZE, by, bx + FAR_ICON_BADGE_SIZE, by + FAR_ICON_BADGE_SIZE, r);
+    ctx.arcTo(bx + FAR_ICON_BADGE_SIZE, by + FAR_ICON_BADGE_SIZE, bx, by + FAR_ICON_BADGE_SIZE, r);
+    ctx.arcTo(bx, by + FAR_ICON_BADGE_SIZE, bx, by, r);
+    ctx.arcTo(bx, by, bx + FAR_ICON_BADGE_SIZE, by, r);
+    ctx.closePath();
+    ctx.fillStyle = FAR_ICON_BADGE_FILL;
+    ctx.fill();
+    ctx.strokeStyle = FAR_ICON_BADGE_BORDER;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    STATION_GLYPH[station.kind](ctx, sx, sy, FAR_ICON_GLYPH_RADIUS);
+    ctx.restore();
   }
 
   /** The cut's progress over the machine, in world space. */

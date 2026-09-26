@@ -46,7 +46,7 @@ export const BOARD_PRICE = 4;
 export const STONE_PRICE = 3;
 
 const TRADING_POST_TITLE = 'Nibnose Trading Post';
-const MERCHANT = 'vetch';
+export const MERCHANT = 'vetch';
 
 export interface TradingPostLine {
   readonly id: ItemId;

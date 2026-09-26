@@ -229,7 +229,9 @@ export class DefenseStructures {
         this.segmentByTile.set(tileCoordKey(tile.x, tile.y), segment);
       }
     }
-    for (const tile of deps.site.gate.tiles) this.gateTileKeys.add(tileCoordKey(tile.x, tile.y));
+    for (const gate of deps.site.gates) {
+      for (const tile of gate.tiles) this.gateTileKeys.add(tileCoordKey(tile.x, tile.y));
+    }
     const bellTile = deps.site.square.bellTile;
     this.bellFootprint = {
       x: bellTile.x,
@@ -431,7 +433,7 @@ export class DefenseStructures {
       case 'segment':
         return this.segmentById.get(ref.id)?.tiles ?? [];
       case 'gate':
-        return this.deps.site.gate.tiles;
+        return this.deps.site.gates.flatMap((gate) => gate.tiles);
       case 'bell':
         return this.bellTiles;
       case 'trebuchet': {
@@ -1038,8 +1040,10 @@ export class DefenseStructures {
         consider({ kind: 'segment', id: segment.id }, { x: tile.x, y: tile.y, w: 1, h: 1 });
       }
     }
-    for (const tile of this.deps.site.gate.tiles) {
-      consider({ kind: 'gate' }, { x: tile.x, y: tile.y, w: 1, h: 1 });
+    for (const gate of this.deps.site.gates) {
+      for (const tile of gate.tiles) {
+        consider({ kind: 'gate' }, { x: tile.x, y: tile.y, w: 1, h: 1 });
+      }
     }
     for (const record of this.trebuchets) {
       consider(
@@ -1097,11 +1101,13 @@ export class DefenseStructures {
         this.deps.onTileChanged(tile.x, tile.y);
       }
     }
-    for (const tile of this.deps.site.gate.tiles) {
-      const content = contentAt(structure, tile.x, tile.y);
-      if (content !== undefined && content.type !== HOLLOW_GATE) {
-        content.type = HOLLOW_GATE;
-        this.markTileAndNeighboursDirty(tile.x, tile.y);
+    for (const gate of this.deps.site.gates) {
+      for (const tile of gate.tiles) {
+        const content = contentAt(structure, tile.x, tile.y);
+        if (content !== undefined && content.type !== HOLLOW_GATE) {
+          content.type = HOLLOW_GATE;
+          this.markTileAndNeighboursDirty(tile.x, tile.y);
+        }
       }
     }
     this.syncStructureBlocks();

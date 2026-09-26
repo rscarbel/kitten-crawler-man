@@ -521,6 +521,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       {
         key: TEACH_AGAIN_TOPIC_KEY,
         label: 'Teach me again',
+        isQuestion: true,
         run: (ctl) => {
           // Either crawler who somehow lacks it learns it now, as both were taught together.
           teachBoth(this.deps.human, this.deps.cat, 'construction');

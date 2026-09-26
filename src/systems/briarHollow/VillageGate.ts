@@ -1,6 +1,7 @@
 /**
- * The village gate's doors: they swing open when a friendly body comes near
- * and close a moment after the last one leaves.
+ * One village gate's doors: they swing open when a friendly body comes near
+ * and close a moment after the last one leaves. Every gate gets its own
+ * instance, so each opens and closes independently of the others.
  *
  * Purely a picture. Whether anybody can walk through is the map's business —
  * the gate tiles are walkable for friendlies and turned away for hostiles by a
@@ -10,7 +11,7 @@
  */
 
 import type { TileContent } from '../../map/tileTypes';
-import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
+import type { BriarHollowGate } from '../../map/overworld/briarHollowSite';
 import type { AudioManager } from '../../audio/AudioManager';
 import { TILE_SIZE } from '../../core/constants';
 import { setGateAnimation } from '../../map/tiles/hollowPalisadeTiles';
@@ -41,12 +42,17 @@ export class VillageGate {
 
   constructor(
     private readonly structure: TileContent[][],
-    site: BriarHollowSite,
+    private readonly gate: BriarHollowGate,
     private readonly audio: AudioManager | null,
   ) {
-    const middle = site.gate.tiles[Math.floor(site.gate.tiles.length / 2)] ?? site.gate.inside;
+    const middle = gate.tiles[Math.floor(gate.tiles.length / 2)] ?? gate.inside;
     this.centreX = middle.x * TILE_SIZE + HALF_TILE;
     this.centreY = middle.y * TILE_SIZE + HALF_TILE;
+  }
+
+  /** Whether this gate's picture stands on (tileX, tileY): any of its own tiles. */
+  containsTile(tileX: number, tileY: number): boolean {
+    return this.gate.tiles.some((tile) => tile.x === tileX && tile.y === tileY);
   }
 
   /** 0 shut, 1 fully open. */
@@ -87,7 +93,7 @@ export class VillageGate {
     this.open = this.opening ? Math.min(1, this.open + step) : Math.max(0, this.open - step);
     const shakePx =
       shake * GATE_SHAKE_PX * Math.sin(this.clockSeconds * Math.PI * 2 * GATE_SHAKE_HZ);
-    setGateAnimation(this.structure, { open: easeInOut(this.open), shakePx });
+    setGateAnimation(this.structure, this.gate.facing, { open: easeInOut(this.open), shakePx });
   }
 }
 

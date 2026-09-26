@@ -33,6 +33,7 @@ import {
   type HumanRowName,
   ORIGIN_X,
   ORIGIN_Y,
+  type StrikeReachLimb,
   TILE_X,
   TILE_Y,
 } from '../humanFigure';
@@ -374,6 +375,33 @@ export function handTipInTile(
   const probe = probeHumanJoints(row, frame);
   const arm = side === 'left' ? probe.leftArm : probe.rightArm;
   return cellPointInTile(arm.handTip, flipX);
+}
+
+/**
+ * Where a strike's own `reachLimb` lands on one drawn cell, in tile fractions
+ * from the sprite's tile origin — a fist's knuckles, a boot's toe, a driven
+ * knee, the lead shoulder of a barge — read off the same solved rig the
+ * painter draws, so an impact effect starts from the limb the picture
+ * actually threw rather than a fixed offset that only matches some strikes.
+ */
+export function strikeContactInTile(
+  row: HumanRowName,
+  frame: number,
+  flipX: boolean,
+  reachLimb: StrikeReachLimb,
+): Pt {
+  const isLeft = reachLimb.startsWith('left');
+  if (reachLimb === 'hand' || reachLimb === 'leftHand') {
+    return handTipInTile(row, frame, flipX, isLeft ? 'left' : 'right');
+  }
+  const probe = probeHumanJoints(row, frame);
+  if (reachLimb === 'shoulder') {
+    // A profile-only blow; in profile his right arm is always the lead one.
+    return cellPointInTile(probe.rightArm.shoulder, flipX);
+  }
+  const leg = isLeft ? probe.leftLeg : probe.rightLeg;
+  const point = reachLimb === 'knee' || reachLimb === 'leftKnee' ? leg.knee : leg.toe;
+  return cellPointInTile(point, flipX);
 }
 
 /** Where one of his fists closes round a haft on one drawn cell. */

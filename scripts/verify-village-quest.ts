@@ -37,6 +37,7 @@ import {
   type VillagerId,
 } from '../src/systems/briarHollow/ratkinDialogue';
 import { HOLLOW_BELL_MAX_HP } from '../src/systems/briarHollow/hollowBell';
+import { ASK_QUESTION_LABEL } from '../src/systems/briarHollow/villagerTopics';
 import {
   ASSAULT_WAVE_COUNT,
   IMMINENT_FRAMES,
@@ -169,9 +170,18 @@ function talk(villager: VillagerId): string[] {
   return shown.slice(before);
 }
 
-/** Picks the choice labelled `label` by its number key. Returns the pages it said. */
+/**
+ * Picks the choice labelled `label` by its number key. Returns the pages it
+ * said. Lore rows live one level down, under "I have a question" — when
+ * `label` is not on offer at the current level but that row is, this opens
+ * it first (picking it says nothing, so `shown` is untouched) and looks again.
+ */
 function choose(label: string): string[] | null {
-  const index = conversation.choiceLabels.indexOf(label);
+  let index = conversation.choiceLabels.indexOf(label);
+  if (index < 0 && conversation.choiceLabels.includes(ASK_QUESTION_LABEL)) {
+    if (choose(ASK_QUESTION_LABEL) === null) return null;
+    index = conversation.choiceLabels.indexOf(label);
+  }
   if (index < 0) return null;
   const before = shown.length;
   conversation.handleKeyDown(String(index + 1));

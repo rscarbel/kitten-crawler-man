@@ -15,7 +15,12 @@ import type { AbilityManager } from '../core/AbilityManager';
 import type { SpellSystem } from './SpellSystem';
 import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
 import { getSmushStats } from '../abilities/smush';
+import { getMagicMissileVisualTier } from '../abilities/magicMissile';
+import type { ExplosionVariant } from '../sprites/art/magicMissileArt';
+import type { MagicMissileImpactEffectSystem } from './MagicMissileImpactEffectSystem';
+import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
 import type { SmushEffectSystem } from './SmushEffectSystem';
+import type { Missile } from '../sprites/catSprite';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
 import {
@@ -177,8 +182,21 @@ export interface CombatContext {
   structures?: MeleeStructureTarget;
   /** Absent in scenes that draw no world effects (e.g. building interiors). */
   smushFx?: Pick<SmushEffectSystem, 'spawn'>;
+  /** Absent in scenes that draw no world effects (e.g. building interiors). */
+  meleeFx?: Pick<MeleeImpactEffectSystem, 'spawn'>;
+  /** Absent in scenes that draw no world effects (e.g. building interiors). */
+  missileFx?: Pick<MagicMissileImpactEffectSystem, 'spawn'>;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
+}
+
+/**
+ * The tier a missile's flung sparks and ground dust should match — the same
+ * lookup its baked explosion animation uses, so the live debris always reads
+ * as the same blast rather than a mismatched colour or size.
+ */
+function missileExplosionVariant(missile: Missile): ExplosionVariant {
+  return missile.isSubMissile ? 'sub_missile' : getMagicMissileVisualTier(missile.abilityLevel);
 }
 
 /**
@@ -267,6 +285,15 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       humanHit = (ctx.destructibles?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
       humanHit = (ctx.trees?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
       humanHit = (ctx.structures?.tryMeleeHit(human, range) ?? false) || humanHit;
+    }
+    // Read off the rig rather than the target: the same dust puff belongs at
+    // the fist or foot that threw the blow whatever it happened to connect
+    // with, and a swing that lands on several things still throws only one.
+    if (humanHit) {
+      const contact = human.strikeContactWorldPosition();
+      if (contact !== null) {
+        ctx.meleeFx?.spawn(contact.x, contact.y, human.strikeFacingX, human.strikeFacingY);
+      }
     }
     ctx.bus.emit('humanMeleeSwing', { hit: humanHit });
   }
@@ -434,6 +461,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         ctx.bus.emit('missileImpact', {});
         missile.hit = true;
         missile.state = 'exploding';
+        ctx.missileFx?.spawn(missile.x, missile.y, missileExplosionVariant(missile));
         continue;
       }
 
@@ -450,6 +478,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         ctx.bus.emit('missileImpact', {});
         missile.hit = true;
         missile.state = 'exploding';
+        ctx.missileFx?.spawn(missile.x, missile.y, missileExplosionVariant(missile));
         // Every missile that connects with a tree sets it alight, including each
         // sub-missile from a burst — `igniteRadius` is a no-op on a tree that is
         // already burning, so a second or third hit on the same trunk costs
@@ -516,6 +545,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 
           missile.hit = true;
           missile.state = 'exploding';
+          ctx.missileFx?.spawn(missile.x, missile.y, missileExplosionVariant(missile));
           break;
         }
       }

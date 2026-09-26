@@ -4,7 +4,7 @@
  * commands from outside and never comes in.
  *
  * Built once per site by a breadth-first walk outward from the ring's own
- * tiles (the palisade and the gate), eight-connected, so a distance is the
+ * tiles (the palisade and every gate), eight-connected, so a distance is the
  * number of king's moves to the nearest ring tile. It measures the ring as
  * generated: a breach is still ring for this purpose, because stepping into a
  * breach is stepping into the village.
@@ -54,7 +54,7 @@ export class PalisadeDistanceField {
       queue.push(index);
     };
     for (const tile of site.palisadePath) seed(tile.x, tile.y);
-    for (const tile of site.gate.tiles) seed(tile.x, tile.y);
+    for (const gate of site.gates) for (const tile of gate.tiles) seed(tile.x, tile.y);
 
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {

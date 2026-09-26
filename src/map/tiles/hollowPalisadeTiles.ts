@@ -69,7 +69,26 @@ const GATE_REACH_UP_TILES = 1.6;
 /** The gate is drawn whole from its middle tile, a tile and a half each way plus the posts. */
 const GATE_HALF_SPAN_TILES = 1.5;
 const GATE_POST_WIDTH_TILES = 0.44;
+/** How far the gate reaches along the wall it stands in, past its middle tile. */
 const GATE_REACH_SIDE_TILES = GATE_HALF_SPAN_TILES + GATE_POST_WIDTH_TILES;
+/** How far open the doors swing, at full: nearly square to the wall. */
+const GATE_OPEN_ANGLE = (80 * Math.PI) / 180;
+/** A north/south gate's doors swing toward the village; that depth reads as a reduced climb up the screen. */
+const GATE_DEPTH_FORESHORTEN = 0.5;
+const GATE_DOOR_HEIGHT = 1.35;
+const GATE_BEAM_HEIGHT = 1.72;
+const GATE_BEAM_DEPTH = 0.22;
+const GATE_BAND_AT = [0.2, 0.75] as const;
+/** How thick a closed east/west door reads as, standing on its own edge along the wall line. */
+const GATE_EW_DOOR_THICKNESS_TILES = 0.12;
+const GATE_EW_LEAF_LENGTH_TILES = GATE_HALF_SPAN_TILES - 0.12;
+/** How far an open east/west door's face swings sideways, unforeshortened: it turns square to the camera, not away from it. */
+const GATE_EW_REACH_ACROSS_TILES =
+  GATE_EW_LEAF_LENGTH_TILES * Math.sin(GATE_OPEN_ANGLE) + GATE_POST_WIDTH_TILES;
+/** Where a post's own ground line sits, off the gate's middle tile, along the wall it stands in. */
+const GATE_POST_SPAN_TILES = GATE_HALF_SPAN_TILES + GATE_POST_WIDTH_TILES / 2 - 0.18;
+/** A capstone's rise above its post, and a contact shadow's dip below its post's ground line. */
+const GATE_POST_TOP_MARGIN_TILES = 0.1;
 
 /** Posts along an arm, as offsets from the tile centre: spaced a quarter tile, so runs join seamlessly. */
 const STAKE_OFFSETS = [0.125, 0.375] as const;
@@ -149,8 +168,15 @@ const DIR_WEST = 8;
 
 // ── Site lookup ───────────────────────────────────────────────────────────────
 
+/** A gate's middle tile, which draws the whole gate, and which wall it stands in. */
+interface GateMiddle {
+  readonly x: number;
+  readonly y: number;
+  readonly side: Side;
+}
+
 interface PalisadeLayout {
-  /** Palisade path and gate tiles, by `tileCoordKey`. */
+  /** Palisade path and every gate's tiles, by `tileCoordKey`. */
   readonly ring: ReadonlySet<number>;
   /** A tile's index along the palisade path, for the fortified wall's buttress rhythm. */
   readonly pathIndex: ReadonlyMap<number, number>;
@@ -158,8 +184,8 @@ interface PalisadeLayout {
   readonly centreY: number;
   readonly halfW: number;
   readonly halfH: number;
-  /** The gate's middle tile, which draws the whole gate. */
-  readonly gateMiddle: { readonly x: number; readonly y: number } | null;
+  /** Every gate's middle tile, one per wall it stands in. */
+  readonly gateMiddles: readonly GateMiddle[];
 }
 
 const layouts = new WeakMap<TileContent[][], PalisadeLayout>();
@@ -183,16 +209,21 @@ function layoutFor(structure: TileContent[][]): PalisadeLayout {
         if (isRingType(row[tx].type)) ring.add(tileCoordKey(tx, ty));
       }
     }
-    layout = { ring, pathIndex, centreX: 0, centreY: 0, halfW: 1, halfH: 1, gateMiddle: null };
+    layout = { ring, pathIndex, centreX: 0, centreY: 0, halfW: 1, halfH: 1, gateMiddles: [] };
   } else {
     site.palisadePath.forEach((tile, index) => {
       const key = tileCoordKey(tile.x, tile.y);
       ring.add(key);
       pathIndex.set(key, index);
     });
-    for (const tile of site.gate.tiles) ring.add(tileCoordKey(tile.x, tile.y));
+    for (const gate of site.gates) {
+      for (const tile of gate.tiles) ring.add(tileCoordKey(tile.x, tile.y));
+    }
     const bounds = site.palisadeBounds;
-    const gateMiddle = site.gate.tiles[Math.floor(site.gate.tiles.length / 2)] ?? null;
+    const gateMiddles = site.gates.map((gate): GateMiddle => {
+      const middle = gate.tiles[Math.floor(gate.tiles.length / 2)];
+      return { x: middle.x, y: middle.y, side: gate.facing };
+    });
     layout = {
       ring,
       pathIndex,
@@ -200,7 +231,7 @@ function layoutFor(structure: TileContent[][]): PalisadeLayout {
       centreY: bounds.y + bounds.h / 2,
       halfW: bounds.w / 2,
       halfH: bounds.h / 2,
-      gateMiddle,
+      gateMiddles,
     };
   }
   layouts.set(structure, layout);
@@ -1437,35 +1468,75 @@ export interface GateAnimation {
 }
 
 const CLOSED_GATE: GateAnimation = { open: 0, shakePx: 0 };
-const gateAnimations = new WeakMap<TileContent[][], GateAnimation>();
+/** Each structure's gates' animation, by wall side. */
+const gateAnimations = new WeakMap<TileContent[][], Map<Side, GateAnimation>>();
 
 /**
- * Sets how the gate painted onto `structure` is drawn this frame. The painter
- * is pure and has no handle on the village, so the gate system hands its
- * state over here, keyed by the grid like the site record is.
+ * Sets how the gate standing in `side`'s wall of `structure` is drawn this
+ * frame. The painter is pure and has no handle on the village, so the gate
+ * system hands its state over here, keyed by the grid like the site record is.
  */
-export function setGateAnimation(structure: TileContent[][], animation: GateAnimation): void {
-  gateAnimations.set(structure, animation);
+export function setGateAnimation(
+  structure: TileContent[][],
+  side: Side,
+  animation: GateAnimation,
+): void {
+  let bySide = gateAnimations.get(structure);
+  if (bySide === undefined) {
+    bySide = new Map();
+    gateAnimations.set(structure, bySide);
+  }
+  bySide.set(side, animation);
 }
 
-/** How far the gate's middle tile's art reaches: a tile and a half each way, and up for the posts. */
+/** The gate whose middle tile is (tx, ty), or null for any other tile. */
+function gateMiddleAt(structure: TileContent[][], tx: number, ty: number): GateMiddle | null {
+  const middles = layoutFor(structure).gateMiddles;
+  // A hand-built test map has no site, and so no recorded gate middle: every
+  // `HOLLOW_GATE` tile paints, oriented as the south gate's own wall.
+  if (middles.length === 0) return { x: tx, y: ty, side: 'south' };
+  return middles.find((middle) => middle.x === tx && middle.y === ty) ?? null;
+}
+
+/**
+ * How far a gate's middle tile's art reaches. A north or south gate's wall
+ * runs east–west, so its posts flank the middle tile left and right, and only
+ * its height reaches up. An east or west gate's wall runs north–south, so its
+ * posts flank the middle tile up and down instead (the run itself, same as a
+ * wall's own end-on column), its height adds to the up reach on the near
+ * (north) post, and its doors swing sideways rather than up.
+ */
 export function hollowGateExtentsPx(
   structure: TileContent[][],
   tx: number,
   ty: number,
   ts: number,
 ): MapSpriteExtentsPx {
-  const middle = layoutFor(structure).gateMiddle;
-  const isMiddle = middle === null || (middle.x === tx && middle.y === ty);
-  if (!isMiddle) return { left: 0, up: 0, right: 0, down: 0 };
-  const side = Math.ceil(ts * GATE_REACH_SIDE_TILES);
-  return { left: side, up: Math.ceil(ts * GATE_REACH_UP_TILES), right: side, down: 0 };
+  const middle = gateMiddleAt(structure, tx, ty);
+  if (middle === null) return { left: 0, up: 0, right: 0, down: 0 };
+  if (middle.side === 'north' || middle.side === 'south') {
+    const along = Math.ceil(ts * GATE_REACH_SIDE_TILES);
+    const up = Math.ceil(ts * GATE_REACH_UP_TILES);
+    return { left: along, up, right: along, down: 0 };
+  }
+  const across = Math.ceil(ts * GATE_EW_REACH_ACROSS_TILES);
+  const alongPost = Math.ceil(ts * (GATE_POST_SPAN_TILES + GATE_POST_TOP_MARGIN_TILES));
+  const upPost = Math.ceil(ts * (GATE_POST_HEIGHT_TILES + GATE_POST_TOP_MARGIN_TILES));
+  return { left: across, up: alongPost + upPost, right: across, down: alongPost };
 }
 
 /**
  * Draws the gate. Only the middle gate tile paints (the whole gate, posts to
  * posts), so the doors are one picture that can swing as one; the outer gate
  * tiles draw only their ground.
+ *
+ * A north or south gate stands in a wall that runs east–west and faces the
+ * camera, so its posts sit left and right of the middle tile and its doors
+ * swing up into the village. An east or west gate stands in a wall that runs
+ * north–south, seen end-on like the wall's own posts: its posts sit up and
+ * down the middle tile along that run, standing tall the same way, and its
+ * doors swing sideways to open, so a closed one reads as a thin edge along
+ * the wall line and an open one turns its full face toward the camera.
  */
 export function drawHollowGateTile(
   ctx: CanvasRenderingContext2D,
@@ -1476,19 +1547,19 @@ export function drawHollowGateTile(
   tx: number,
   ty: number,
 ): void {
-  const middle = layoutFor(structure).gateMiddle;
-  if (middle !== null && (middle.x !== tx || middle.y !== ty)) return;
-  paintGate(ctx, sx + ts * 0.5, sy, ts, gateAnimations.get(structure) ?? CLOSED_GATE);
+  const middle = gateMiddleAt(structure, tx, ty);
+  if (middle === null) return;
+  const animation = gateAnimations.get(structure)?.get(middle.side) ?? CLOSED_GATE;
+  const centreX = sx + ts * 0.5;
+  if (middle.side === 'north' || middle.side === 'south') {
+    paintGate(ctx, centreX, sy, ts, animation);
+    return;
+  }
+  const centreY = sy + ts * GROUND_Y;
+  // Swing inward, toward the village's centre, so both walls open the same visual way.
+  const swingSign: 1 | -1 = middle.side === 'west' ? 1 : -1;
+  paintGateEW(ctx, centreX, centreY, ts, animation, swingSign);
 }
-
-/** How far open the doors swing, at full: nearly square to the wall. */
-const GATE_OPEN_ANGLE = (80 * Math.PI) / 180;
-/** Moving north is moving up the screen, foreshortened. */
-const GATE_DEPTH_FORESHORTEN = 0.5;
-const GATE_DOOR_HEIGHT = 1.35;
-const GATE_BEAM_HEIGHT = 1.72;
-const GATE_BEAM_DEPTH = 0.22;
-const GATE_BAND_AT = [0.2, 0.75] as const;
 
 interface CachedGate {
   readonly surface: CanvasSurface;
@@ -1629,6 +1700,217 @@ function paintGateLeaves(
     ctx.closePath();
     ctx.fill();
     // Vertical planks.
+    ctx.strokeStyle = WOOD.deep;
+    ctx.lineWidth = Math.max(1, ts * 0.02);
+    const planks = 5;
+    for (let plank = 1; plank < planks; plank++) {
+      const bottom = lerp(corners.hingeBottom, corners.freeBottom, plank / planks);
+      const top = lerp(corners.hingeTop, corners.freeTop, plank / planks);
+      ctx.beginPath();
+      ctx.moveTo(bottom.x, bottom.y);
+      ctx.lineTo(top.x, top.y);
+      ctx.stroke();
+    }
+    // Iron bands across the leaf.
+    for (const at of GATE_BAND_AT) {
+      const a = lerp(corners.hingeBottom, corners.hingeTop, at);
+      const b = lerp(corners.freeBottom, corners.freeTop, at);
+      ctx.strokeStyle = IRON.body;
+      ctx.lineWidth = ts * 0.07;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.strokeStyle = IRON.glint;
+      ctx.lineWidth = ts * 0.015;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y - ts * 0.025);
+      ctx.lineTo(b.x, b.y - ts * 0.025);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = ts * INK_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(corners.hingeBottom.x, corners.hingeBottom.y);
+    ctx.lineTo(corners.freeBottom.x, corners.freeBottom.y);
+    ctx.lineTo(corners.freeTop.x, corners.freeTop.y);
+    ctx.lineTo(corners.hingeTop.x, corners.hingeTop.y);
+    ctx.closePath();
+    ctx.stroke();
+    // A ring handle near the meeting edge, only while the doors face the camera.
+    if (angle < GATE_OPEN_ANGLE * 0.5) {
+      const handle = lerp(
+        lerp(corners.hingeBottom, corners.freeBottom, 0.85),
+        lerp(corners.hingeTop, corners.freeTop, 0.85),
+        0.45,
+      );
+      ctx.strokeStyle = IRON.light;
+      ctx.lineWidth = ts * 0.02;
+      ctx.beginPath();
+      ctx.arc(handle.x, handle.y, ts * 0.05, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+}
+
+// ── The east/west gate ───────────────────────────────────────────────────────
+//
+// A north or south gate's wall runs east–west and faces the camera, so its
+// posts flank the doorway left and right, its beam spans left to right, and
+// an open door swings up into the village. An east or west gate's wall runs
+// north–south instead: it is seen the way the wall painter's own end-on
+// columns are, so its posts flank the doorway up and down (the wall's own
+// run), its beam runs the same way, and a door swings *sideways* to open. A
+// closed door then lies flat along the wall's line and reads as a thin edge;
+// an open one has swung square to the camera and reads as a full plank face.
+
+interface CachedGateEW {
+  readonly surface: CanvasSurface;
+  readonly padAcross: number;
+  readonly padAlong: number;
+  readonly padUp: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+const gatePostCacheEW = new Map<number, CachedGateEW>();
+
+/** Paints an east/west gate centred on `centreX`, ground line `centreY`. For the map and the review sheet. */
+export function paintGateEW(
+  ctx: CanvasRenderingContext2D,
+  centreX: number,
+  centreY: number,
+  ts: number,
+  animation: GateAnimation,
+  swingSign: 1 | -1,
+): void {
+  const frame = gatePostsEW(ts);
+  // Posts and beam behind the doors' outer edge, doors in front: an open door
+  // swings back behind the beam line, so draw the doors, then the frame over them.
+  paintGateLeavesEW(ctx, centreX, centreY + animation.shakePx, ts, animation.open, swingSign);
+  ctx.drawImage(
+    frame.surface,
+    centreX - frame.padAcross,
+    centreY - frame.padAlong - frame.padUp,
+    frame.width,
+    frame.height,
+  );
+}
+
+function gatePostsEW(ts: number): CachedGateEW {
+  const hit = gatePostCacheEW.get(ts);
+  if (hit !== undefined) return hit;
+  const padAcross = Math.ceil(ts * GATE_EW_REACH_ACROSS_TILES);
+  const padAlong = Math.ceil(ts * (GATE_POST_SPAN_TILES + GATE_POST_TOP_MARGIN_TILES));
+  const padUp = Math.ceil(ts * (GATE_POST_HEIGHT_TILES + GATE_POST_TOP_MARGIN_TILES));
+  const width = padAcross * 2;
+  const height = padAlong * 2 + padUp;
+  const surface = allocCanvas(width * CACHE_DENSITY, height * CACHE_DENSITY);
+  const ctx = surfaceContext(surface);
+  ctx.scale(CACHE_DENSITY, CACHE_DENSITY);
+  const centreX = padAcross;
+  const centreY = padUp + padAlong;
+  const rng = mulberry32(ts);
+  for (const side of [-1, 1]) {
+    const postCentre = centreY + side * GATE_POST_SPAN_TILES * ts;
+    const w = GATE_POST_WIDTH_TILES * ts;
+    const h = GATE_POST_HEIGHT_TILES * ts;
+    drawContactShadow(ctx, centreX, postCentre, w * 0.7, ts * 0.1);
+    drawFieldstones(ctx, centreX - w / 2, postCentre - h, w, h, rng, ts * 0.16, 0.1);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = ts * INK_WIDTH;
+    ctx.strokeRect(centreX - w / 2, postCentre - h, w, h);
+    // A capstone a little wider than the post.
+    fillRoundRect(
+      ctx,
+      centreX - w * 0.6,
+      postCentre - h - ts * 0.1,
+      w * 1.2,
+      ts * 0.14,
+      ts * 0.03,
+      STONE.light,
+    );
+    ctx.strokeRect(centreX - w * 0.6, postCentre - h - ts * 0.1, w * 1.2, ts * 0.14);
+  }
+  // The carved beam tying the posts, with the village's briar knot in the middle.
+  const beamNear = centreY - GATE_HALF_SPAN_TILES * ts - GATE_BEAM_HEIGHT * ts;
+  const beamFar = centreY + GATE_HALF_SPAN_TILES * ts - GATE_BEAM_HEIGHT * ts;
+  const beamLeft = centreX - (GATE_BEAM_DEPTH * ts) / 2;
+  fillRoundRect(
+    ctx,
+    beamLeft,
+    beamNear,
+    GATE_BEAM_DEPTH * ts,
+    beamFar - beamNear,
+    ts * 0.04,
+    WOOD.body,
+  );
+  ctx.fillStyle = WOOD.light;
+  ctx.fillRect(beamLeft, beamNear, ts * 0.04, beamFar - beamNear);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = ts * INK_WIDTH;
+  ctx.strokeRect(beamLeft, beamNear, GATE_BEAM_DEPTH * ts, beamFar - beamNear);
+  fillRoundRect(
+    ctx,
+    beamLeft - ts * 0.08,
+    centreY - ts * 0.2,
+    GATE_BEAM_DEPTH * ts + ts * 0.16,
+    ts * 0.4,
+    ts * 0.06,
+    WOOD.mid,
+  );
+  drawBriarKnot(
+    ctx,
+    beamLeft + (GATE_BEAM_DEPTH * ts) / 2,
+    centreY,
+    ts * 0.14,
+    WOOD.deep,
+    ts * 0.03,
+  );
+  const entry: CachedGateEW = { surface, padAcross, padAlong, padUp, width, height };
+  gatePostCacheEW.set(ts, entry);
+  return entry;
+}
+
+function paintGateLeavesEW(
+  ctx: CanvasRenderingContext2D,
+  centreX: number,
+  centreY: number,
+  ts: number,
+  open: number,
+  swingSign: 1 | -1,
+): void {
+  const angle = Math.max(0, Math.min(1, open)) * GATE_OPEN_ANGLE;
+  const leafLength = GATE_EW_LEAF_LENGTH_TILES * ts;
+  const leafHeight = GATE_DOOR_HEIGHT * ts;
+  // Closed, the leaf shows only its thickness (a plank edge along the wall
+  // line); open, it swings to its full length turned toward the camera. The
+  // swing itself is not foreshortened — sideways is the screen's own axis.
+  const minAcross = GATE_EW_DOOR_THICKNESS_TILES * ts;
+  for (const side of [-1, 1]) {
+    const hingeY = centreY + side * leafLength;
+    const freeY = hingeY - side * leafLength * Math.cos(angle);
+    const across = swingSign * Math.max(minAcross, leafLength * Math.sin(angle));
+    const corners = {
+      hingeBottom: { x: centreX, y: hingeY },
+      freeBottom: { x: centreX + across, y: freeY },
+      freeTop: { x: centreX + across, y: freeY - leafHeight },
+      hingeTop: { x: centreX, y: hingeY - leafHeight },
+    };
+    const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, t: number) => ({
+      x: a.x + (b.x - a.x) * t,
+      y: a.y + (b.y - a.y) * t,
+    });
+    ctx.fillStyle = angle > 0.9 ? WOOD.dark : WOOD.body;
+    ctx.beginPath();
+    ctx.moveTo(corners.hingeBottom.x, corners.hingeBottom.y);
+    ctx.lineTo(corners.freeBottom.x, corners.freeBottom.y);
+    ctx.lineTo(corners.freeTop.x, corners.freeTop.y);
+    ctx.lineTo(corners.hingeTop.x, corners.hingeTop.y);
+    ctx.closePath();
+    ctx.fill();
+    // The plank seams, visible as ticks along the top edge when the door is
+    // closed, opening out into full boards as it turns to face the camera.
     ctx.strokeStyle = WOOD.deep;
     ctx.lineWidth = Math.max(1, ts * 0.02);
     const planks = 5;

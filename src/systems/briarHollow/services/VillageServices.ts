@@ -28,17 +28,26 @@ import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import { PricedMenuPanel } from '../../../ui/PricedMenuPanel';
 import { QuantityPicker } from '../../../ui/QuantityPicker';
 import type { OverlayInputClaim } from '../../kits/OverlayClaims';
-import type { Circumstance } from '../ratkinDialogue';
+import type { ProcessingStationKind } from '../processingStations';
+import type { Circumstance, VillagerId } from '../ratkinDialogue';
 import type { VillagerSystem } from '../VillagerSystem';
 import type { ConversationController } from '../villagerTopics';
-import { cookhouseTopics } from './cookhouse';
-import { forgeTopics, type ForgeHost } from './forge';
-import { infirmaryTopics, type InfirmaryHost } from './infirmary';
+import { COOK, cookhouseTopics } from './cookhouse';
+import { SMITH, forgeTopics, type ForgeHost } from './forge';
+import { DOCTOR, infirmaryTopics, type InfirmaryHost } from './infirmary';
 import { lumberForemanTopics, type LumberForemanHost } from './lumberForeman';
 import { SawmillService } from './sawmill';
 import type { Crawler, ServiceParty, ShopDefinition } from './serviceContext';
-import { tradingPostTopics } from './tradingPost';
+import { MERCHANT, tradingPostTopics } from './tradingPost';
 import { renderTreatmentShimmer } from './treatmentShimmer';
+
+/**
+ * Every villager who takes coin over a counter, read off the same ids each
+ * shop module barks its own lines through — a villager added to a shop's
+ * topics without joining this list is a contradiction the typechecker cannot
+ * catch, so keep it beside the imports it is built from rather than hand-rolled.
+ */
+const VENDOR_VILLAGER_IDS: readonly VillagerId[] = [COOK, DOCTOR, MERCHANT, SMITH];
 
 /** What the services need from the scene's menus: the reward cards, the explainer and the notice strip. */
 export interface ServiceMenus {
@@ -302,7 +311,17 @@ export class VillageServices {
   }
 
   private get isAnyPanelOpen(): boolean {
-    return this.panel.isOpen || this.picker.isOpen || this.deps.villagers.isConversationOpen;
+    return this.isShopBusy || this.deps.villagers.isConversationOpen;
+  }
+
+  /**
+   * Whether the priced menu or the quantity picker is still up, independent
+   * of the conversation that opened it — the conversation closes first, so
+   * `VillagerSystem` reads this to know its villager is still mid-transaction
+   * and should not yet be sent back to work.
+   */
+  get isShopBusy(): boolean {
+    return this.panel.isOpen || this.picker.isOpen;
   }
 
   // ── The Space chain and taps ───────────────────────────────────────────
@@ -355,6 +374,13 @@ export class VillageServices {
 
   // ── Drawing ────────────────────────────────────────────────────────────
 
+  /** The sawmill's reach glow: ground-layer, so it never draws over the machine, the player or a mob. */
+  renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const active = this.party.active();
+    if (!this.machineTakesPress(active)) return;
+    this.sawmill.renderGround(ctx, camX, camY, active);
+  }
+
   renderPrompt(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -368,6 +394,7 @@ export class VillageServices {
   }
 
   renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    this.sawmill.renderFarIndicators(ctx, camX, camY, this.party.active());
     this.sawmill.renderAbove(ctx, camX, camY);
     if (this.treatmentFramesLeft <= 0) return;
     const progress = 1 - this.treatmentFramesLeft / TREATMENT_FRAMES;
@@ -384,6 +411,22 @@ export class VillageServices {
   renderDialog(ctx: CanvasRenderingContext2D): void {
     this.panel.render(ctx, this.party.active());
     this.picker.render(ctx);
+  }
+
+  /** The sawmill's two machines, in tile coordinates with their output, for the minimap. */
+  minimapProcessingStations(): Array<{ x: number; y: number; kind: ProcessingStationKind }> {
+    return this.sawmill.minimapStations();
+  }
+
+  /** Every present vendor villager's tile position, for the minimap's `$` markers. */
+  minimapVendorPositions(): Array<{ x: number; y: number }> {
+    const positions: Array<{ x: number; y: number }> = [];
+    for (const id of VENDOR_VILLAGER_IDS) {
+      const villager = this.deps.villagers.villagerFor(id);
+      if (villager === null) continue;
+      positions.push({ x: villager.x, y: villager.y });
+    }
+    return positions;
   }
 
   // ── Input ──────────────────────────────────────────────────────────────

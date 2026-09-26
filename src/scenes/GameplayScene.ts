@@ -27,6 +27,8 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import type { SystemContext } from '../systems/GameSystem';
 import type { RewardFlySystem } from '../systems/RewardFlySystem';
+import { SaveIndicator } from '../ui/SaveIndicator';
+import type { EventBus } from '../core/EventBus';
 
 const CAMERA_CENTER_OFFSET_MULTIPLIER = 0.5;
 const HUD_SKILL_BADGE_GAP = 4;
@@ -56,6 +58,8 @@ export abstract class GameplayScene extends Scene {
   protected abstract readonly audio: AudioManager | null;
   /** Coins/items flying to this scene's own HUD — each concrete scene owns its own instance. */
   protected abstract readonly rewardFly: RewardFlySystem;
+  /** The "Saving... / Game Saved" banner — shared so it renders identically in every scene a save can happen in. */
+  protected readonly saveIndicator = new SaveIndicator();
 
   constructor(
     protected readonly input: InputManager,
@@ -126,6 +130,16 @@ export abstract class GameplayScene extends Scene {
     };
   }
 
+  /** Subscribes the save banner to the scene's own bus — call once per scene setup. */
+  protected wireSaveIndicator(bus: EventBus): void {
+    bus.on('gameSaved', () => this.saveIndicator.trigger());
+  }
+
+  /** Advances the save banner's fade/phase timing — call once per update tick. */
+  protected tickSaveIndicator(): void {
+    this.saveIndicator.update();
+  }
+
   /** Advances the shared skill-point nag and drains its sound cue into `audio`. */
   protected tickSkillPointReminder(ctx: SystemContext): void {
     this.skillPointReminder.update(ctx);
@@ -168,6 +182,7 @@ export abstract class GameplayScene extends Scene {
     } else {
       this._hudSkillBannerRect = hud.notifRect;
     }
+    this.saveIndicator.render(ctx);
   }
 
   protected handleHudToggleTap(x: number, y: number): boolean {

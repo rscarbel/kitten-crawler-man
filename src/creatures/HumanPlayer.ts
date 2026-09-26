@@ -4,6 +4,7 @@ import {
   handTipInTile,
   type HumanHandSide,
   standingHipAboveSolePx,
+  strikeContactInTile,
 } from '../sprites/art/human/probe';
 import type { Mob } from './Mob';
 import {
@@ -777,6 +778,20 @@ export class HumanPlayer extends Player {
   handWorldPosition(side: HumanHandSide): Pt {
     const drawn = this.spriteSelection();
     const inTile = handTipInTile(drawn.row, drawn.frame, drawn.flipX, side);
+    return { x: this.x + inTile.x * this.tileSize, y: this.y + inTile.y * this.tileSize };
+  }
+
+  /**
+   * Where the limb landing his current blow meets the world this tick — a
+   * fist's knuckles on a punch, a boot's toe on a kick — read off the strike's
+   * own `reachLimb` and the solved rig of the cell being drawn. Null off any
+   * row that is not a strike, so a whiff or a non-combat action spawns nothing.
+   */
+  strikeContactWorldPosition(): Pt | null {
+    const drawn = this.spriteSelection();
+    const row: HumanRowMeta = HUMAN_ROW_TABLE[drawn.row];
+    if (row.role !== 'strike' || row.strike === undefined) return null;
+    const inTile = strikeContactInTile(drawn.row, drawn.frame, drawn.flipX, row.strike.reachLimb);
     return { x: this.x + inTile.x * this.tileSize, y: this.y + inTile.y * this.tileSize };
   }
 

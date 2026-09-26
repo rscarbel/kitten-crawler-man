@@ -149,6 +149,13 @@ export interface GameEvents {
   /** Player descended to the next floor via a stairwell. */
   levelComplete: Record<string, never>;
 
+  /**
+   * A game-progress save was written — a checkpoint, a safe room, or a floor
+   * transition. Never fired for a settings-only write (volume, keybindings),
+   * which has no checkpoint and isn't something a death or reload returns to.
+   */
+  gameSaved: Record<string, never>;
+
   /** A mission objective was completed (e.g. goblin child returned to mother). */
   objectiveComplete: { objectiveId: string };
 

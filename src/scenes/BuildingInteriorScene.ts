@@ -886,6 +886,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.audio?.wireEvents(this.bus);
+    this.wireSaveIndicator(this.bus);
 
     // The same companion drive the overworld runs, sharing the overworld stance
     // so movement mode and combat stance are consistent everywhere. It owns the
@@ -2609,6 +2610,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const destruction = this.destruction;
 
     this.tickSkillPointReminder(ctx);
+    this.tickSaveIndicator();
 
     // Ahead of the swings it decides on.
     this.companion.update(ctx);

@@ -24,6 +24,7 @@
  */
 
 import type { SpriteKey } from '../../core/SpriteLoader';
+import { allocReadableCanvas, surfaceContext } from '../../core/canvasSurface';
 import { VILLAGE_PROPS } from '../../map/overworld/briarHollowLayout';
 import { mulberry32, subSeed } from '../person/rng';
 import {
@@ -183,6 +184,72 @@ export function villagePropVariants(prop: VillageStandingPropId): number {
 
 function frameHeightPx(sheet: VillageSheetSpec): number {
   return (sheet.h + sheet.headroomTiles) * VILLAGE_TILE_SCALE;
+}
+
+/** Alpha (0-255) a pixel must clear to count as "painted" rather than antialiasing fringe. */
+const ART_TOP_ALPHA_THRESHOLD = 12;
+
+/** One measurement per prop, since none of these painters change their silhouette's top edge by seed or variant. */
+const measuredArtTopCache = new Map<VillageStandingPropId, number>();
+
+/**
+ * Tiles above the footprint's own top row that `prop`'s painted pixels
+ * actually reach, measured from a scratch render of the prop rather than
+ * trusted from its sheet's declared headroom.
+ *
+ * Headroom is only the space a sheet *allows* for art above the footprint —
+ * chosen per sheet shape, not per prop — so a prop painted shorter than its
+ * sheet's ceiling would otherwise report a gap well above its own ink. A UI
+ * element that must clear a prop's tallest point (a bobbing badge, say) needs
+ * this, not the sheet's allowance.
+ */
+export function villagePropArtTopTilesAboveFootprint(prop: VillageStandingPropId): number {
+  const cached = measuredArtTopCache.get(prop);
+  if (cached !== undefined) return cached;
+  const measured = measureArtTopTilesAboveFootprint(prop);
+  measuredArtTopCache.set(prop, measured);
+  return measured;
+}
+
+/**
+ * Paints one representative frame (variant 0, the family's own base seed) into
+ * a scratch canvas the size of its sheet's frame envelope, then scans down
+ * from the top for the first row carrying a painted pixel. The row before the
+ * footprint's own top row is headroom the sheet allows but the prop's variant
+ * or seed may never fill — measuring the actual paint is the only way to know
+ * how much of it this prop uses.
+ */
+function measureArtTopTilesAboveFootprint(prop: VillageStandingPropId): number {
+  const sheet = sheetByProp.get(prop);
+  if (sheet === undefined) throw new Error(`village prop ${prop} has no sheet`);
+  const frameWidth = sheet.w * VILLAGE_TILE_SCALE;
+  const frameHeight = frameHeightPx(sheet);
+  const surface = allocReadableCanvas(frameWidth, frameHeight);
+  const ctx = surfaceContext(surface);
+  const art = VILLAGE_PROP_ART[prop];
+  const propSeed = subSeed(VILLAGE_PROP_SEED, hashPropId(prop));
+  art.paint(
+    ctx,
+    {
+      originX: 0,
+      originY: frameHeight - VILLAGE_TILE_SCALE,
+      tileScale: VILLAGE_TILE_SCALE,
+      footprintW: sheet.w,
+      footprintH: sheet.h,
+    },
+    0,
+    mulberry32(subSeed(propSeed, 0)),
+  );
+  const { data } = ctx.getImageData(0, 0, frameWidth, frameHeight);
+  const footprintTopPx = sheet.headroomTiles * VILLAGE_TILE_SCALE;
+  for (let y = 0; y < frameHeight; y++) {
+    for (let x = 0; x < frameWidth; x++) {
+      const alpha = data[(y * frameWidth + x) * 4 + 3];
+      if (alpha <= ART_TOP_ALPHA_THRESHOLD) continue;
+      return Math.max(0, (footprintTopPx - y) / VILLAGE_TILE_SCALE);
+    }
+  }
+  return 0;
 }
 
 function sheetPlan(sheet: VillageSheetSpec, seedTerm: number): PropSheetPlan {

@@ -154,6 +154,7 @@ import {
   type RecallSceneRebuildState,
 } from '../systems/RecallSystem';
 import { BuildingSystem, type BuildingEntry } from '../systems/BuildingSystem';
+import { interiorSellsSomething } from '../systems/townServices';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CONVERSATION_WALK_AWAY_TILES } from '../creatures/townInteraction';
@@ -702,9 +703,6 @@ const VILLAGE_AMBIENT_VOLUME = 0.4;
 const VILLAGE_WORKSHOP_AMBIENT_RADIUS_TILES = 9;
 const VILLAGE_WORKSHOP_AMBIENT_VOLUME = 0.5;
 
-/** Shown via `HotbarToast` on safe-room entry, once a checkpoint is actually captured. */
-const PROGRESS_SAVED_TOAST_TEXT = 'Progress Saved...';
-
 /** Toast shown the moment the Juicer falls and both crawlers take the ink. */
 const DESPERADO_TATTOO_NOTICE = 'New tattoo: the Desperado Pass. The Club will know you.';
 /** Its line in the Juicer chest's reward columns — an award, not an inventory item. */
@@ -1042,6 +1040,8 @@ export class DungeonScene extends GameplayScene {
   private readonly _extraTargets: Player[] = [];
   /** Reused per-frame array of the minimap's quest markers. */
   private readonly _questMarkers: Array<{ x: number; y: number; type: QuestMarkerType }> = [];
+  /** Reused per-frame array of the minimap's `$` vendor markers. */
+  private readonly _vendorMinimapPositions: Array<{ x: number; y: number }> = [];
   /** Reused per-frame array of the Journal's entries, for the same reason. */
   private readonly _trackerEntries: TrackerEntry[] = [];
   private readonly _systemContext: SystemContext;
@@ -2011,7 +2011,7 @@ export class DungeonScene extends GameplayScene {
 
         // Save progress immediately so the floor is recorded as complete even if
         // the player closes the browser during the celebration screen.
-        this.onSaveProgress?.({
+        this.dispatchSaveProgress({
           humanSnap: revivedSnapshot(snapPlayer(this.human)),
           catSnap: revivedSnapshot(snapPlayer(this.cat)),
           levelId: levelDef.nextLevelId,
@@ -3194,6 +3194,7 @@ export class DungeonScene extends GameplayScene {
     });
 
     this.audio?.wireEvents(bus, this.levelDef.music);
+    this.wireSaveIndicator(bus);
   }
 
   onEnter(): void {
@@ -4730,7 +4731,19 @@ export class DungeonScene extends GameplayScene {
           : undefined,
     };
     this.lastSave = savePointAfterWrite(progress, checkpoint, this.tutorial !== null);
+    this.dispatchSaveProgress(progress);
+  }
+
+  /**
+   * The one place a game-progress write actually leaves the scene — every
+   * caller routes through here (or through `saveProgress` above, which calls
+   * this) rather than `onSaveProgress` directly, so the save banner and its
+   * cue fire for every checkpoint, safe-room save and floor-complete save
+   * without each call site having to remember to announce itself.
+   */
+  private dispatchSaveProgress(progress: GameProgressInput): void {
     this.onSaveProgress?.(progress);
+    this.bus.emit('gameSaved', {});
   }
 
   /** The party is down the escape stairwell: the game is won. */
@@ -4744,7 +4757,7 @@ export class DungeonScene extends GameplayScene {
         this.humanAchievements.tryUnlock('city_evacuated');
         this.catAchievements.tryUnlock('city_evacuated');
       },
-      save: () => this.captureSavePoint(this.saveTileUnder(this.active()), { announce: false }),
+      save: () => this.captureSavePoint(this.saveTileUnder(this.active())),
       summarize: () =>
         buildRunSummary({
           stats: this.gameStats,
@@ -4794,17 +4807,14 @@ export class DungeonScene extends GameplayScene {
    * Takes a save point at `respawnTile`: the persisted game, which resumes on
    * that tile, and — outside the tutorial — the in-run checkpoint that rewinds
    * a death to the same moment in place. Callers own the guards; this never
-   * refuses. `announce: false` is for a save the player did nothing to trigger
-   * beyond what already told them they were safe.
+   * refuses.
    *
-   * The tutorial takes no checkpoint and shows no toast: its hand-scripted flow
-   * cannot be rewound in place, and a death there restarts it rather than
-   * returning here.
+   * The tutorial takes no checkpoint: its hand-scripted flow cannot be
+   * rewound in place, and a death there restarts it rather than returning here.
    */
-  private captureSavePoint(respawnTile: TilePoint, { announce = true } = {}): void {
+  private captureSavePoint(respawnTile: TilePoint): void {
     this.lastSavePointTile = respawnTile;
     this.saveProgress(this.tutorial === null ? this.captureLevelCheckpoint(respawnTile) : null);
-    if (announce && this.tutorial === null) this.menus.hotbarToast.show(PROGRESS_SAVED_TOAST_TEXT);
   }
 
   private captureLevelCheckpoint(respawnTile: TilePoint): LevelCheckpoint {
@@ -4985,7 +4995,7 @@ export class DungeonScene extends GameplayScene {
       DungeonScene.STAIRWELL_SAVE_TILE_SEARCH_RADIUS,
     ) ?? { x: centreTileX, y: centreTileY };
     this.bus.emit('roomCleared', { roomIndex });
-    this.captureSavePoint(respawnTile, { announce: false });
+    this.captureSavePoint(respawnTile);
     this.audio?.play('stairwell_save_chime');
   }
 
@@ -5694,7 +5704,7 @@ export class DungeonScene extends GameplayScene {
     ) {
       // `safeRoomEntered` fires once, for whichever crawler got in first. A
       // checkpoint comes with it, so a death here rewinds to after the talk.
-      this.captureSavePoint(room.centre, { announce: false });
+      this.captureSavePoint(room.centre);
     }
     return true;
   }
@@ -6660,6 +6670,8 @@ export class DungeonScene extends GameplayScene {
       spells: this.combat.spells,
       dynamite: this.destruction.dynamite,
       smushFx: this.combat.smushFx,
+      meleeFx: this.combat.meleeFx,
+      missileFx: this.combat.missileFx,
       lavaBalls: this.lavaBalls,
       rockThrows: this.rockThrows,
       hirelingShots: this.hirelingShots,
@@ -6777,6 +6789,7 @@ export class DungeonScene extends GameplayScene {
     this._hudToggleRect = hudResult.toggleRect;
     this._hudRect = hudResult.hudRect;
     UIRenderer.setHudPanelRect(this._hudRect);
+    this.saveIndicator.render(ctx);
     if (!platform.isMobile) {
       this._hudSkillBannerRect = hudResult.notifRect;
     }
@@ -6832,6 +6845,8 @@ export class DungeonScene extends GameplayScene {
         this.safeRoom.mordecaiPositions,
         this.collectQuestMarkers(),
         this.mongoSystem.mongo,
+        this.briarHollowKit?.minimapProcessingStations ?? [],
+        this.collectVendorMinimapPositions(),
       );
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.touch.miniMapRect = {
@@ -7249,6 +7264,23 @@ export class DungeonScene extends GameplayScene {
     return isBigTopSealed(this.circusQuestProgress.stage) ? BIG_TOP_SEALED_MESSAGE : null;
   }
 
+  /**
+   * Gathers every seller's minimap position into one reused array: Briar
+   * Hollow's shop villagers plus every town building that takes coin over a
+   * counter, read off `interiorSellsSomething` rather than a hand-kept list of
+   * building names — a shop added to `townServices.ts` shows up here for free.
+   */
+  private collectVendorMinimapPositions(): Array<{ x: number; y: number }> {
+    const positions = this._vendorMinimapPositions;
+    positions.length = 0;
+    if (this.briarHollowKit !== null) positions.push(...this.briarHollowKit.minimapVendorPositions);
+    for (const entry of this.gameMap.buildingEntries) {
+      if (!interiorSellsSomething(entry.name)) continue;
+      positions.push({ x: entry.doorTile.x * TILE_SIZE, y: entry.doorTile.y * TILE_SIZE });
+    }
+    return positions;
+  }
+
   /** Gathers every quest's minimap markers into one reused array. */
   private collectQuestMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
     const markers = this._questMarkers;
@@ -7420,6 +7452,7 @@ export class DungeonScene extends GameplayScene {
 
     this.safeRoom.update(ctx);
     this.tickSkillPointReminder(ctx);
+    this.tickSaveIndicator();
     // Straight after the context is built, so the move-cancel it watches for is
     // this frame's movement rather than the previous frame's.
     this.recall.update(ctx);

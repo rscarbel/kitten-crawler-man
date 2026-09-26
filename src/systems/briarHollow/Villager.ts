@@ -52,10 +52,58 @@ const OVERHEAD_GAP_PX = 2;
 const NAME_LABEL_DROP_PX = 1;
 /** How far a step must lean one way before the villager turns to face it. */
 const FACING_DEADZONE = 0.05;
+
+/**
+ * The dominant-axis facing for a heading (`dx`, `dy`), or `null` inside the
+ * deadzone — a heading too small to commit a direction to. Shared by
+ * `Villager.face` and anything outside the class that must know a facing
+ * without mutating one (`VillagerSystem` checking whether Oren is actually
+ * squared up to the anvil before it lets the hammer land).
+ */
+export function facingFor(
+  dx: number,
+  dy: number,
+): { readonly x: number; readonly y: number } | null {
+  if (Math.abs(dx) < FACING_DEADZONE && Math.abs(dy) < FACING_DEADZONE) return null;
+  return Math.abs(dx) >= Math.abs(dy) ? { x: Math.sign(dx), y: 0 } : { x: 0, y: Math.sign(dy) };
+}
+
 /** A villager's bubble: warm, like the village's own conversation panel. */
 const VILLAGER_BUBBLE_STYLE: TimedBubbleStyle = { border: '#c8a860', text: '#f5ecd7' };
 /** The "…" bubble's pulse runs on frames. */
 const ELLIPSIS_PULSE_PER_FRAME = 1;
+
+/** The sim's fixed update rate, matching `VillagerSystem`'s own tick. */
+const SIM_UPDATES_PER_SECOND = 60;
+/** For advancing spark particles by a whole tick's worth at a time. */
+const TICK_SECONDS = 1 / SIM_UPDATES_PER_SECOND;
+/** How many sparks a hammer strike throws. */
+const SPARK_BURST_COUNT = 10;
+/** How long a spark lives before it burns out, in seconds. */
+const SPARK_LIFE_SECONDS = 0.35;
+/** Sideways speed range a spark is thrown at, in pixels per second. */
+const SPARK_SPEED_MIN_PX = 40;
+const SPARK_SPEED_MAX_PX = 110;
+/** A third of a turn either side of straight up: a spark is thrown mostly upward off the anvil's face, fanning out. */
+const SPARK_CONE_HALF_ANGLE_DIVISOR = 3;
+const SPARK_CONE_HALF_ANGLE = Math.PI / SPARK_CONE_HALF_ANGLE_DIVISOR;
+/** Sparks fall back down under this, in pixels per second squared. */
+const SPARK_GRAVITY_PX = 420;
+/** Spark size shrinks from this down to nothing as it burns out, in pixels. */
+const SPARK_RADIUS_PX = 2.2;
+const SPARK_COLOR_HOT = '#fff2c0';
+const SPARK_COLOR_COOL = '#ff8a1e';
+/** A spark reads white-hot for the first half of its life, then cools to orange. */
+const SPARK_COOL_THRESHOLD = 0.5;
+
+interface SparkParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** Seconds remaining before it burns out. */
+  life: number;
+}
 
 export class Villager implements TownPropRenderable {
   x: number;
@@ -94,10 +142,12 @@ export class Villager implements TownPropRenderable {
 
   private walkPhase = 0;
   private moving = false;
-  private readonly loopOffsetSeconds: number;
+  /** Phase offset for this villager's clock-driven loops; read externally to stay in sync with a loop's own events (Oren's hammer strike). */
+  readonly loopOffsetSeconds: number;
   private readonly tilesPerWalkCycle: number;
   private readonly hasWorkRow: boolean;
   private ellipsisPulse = 0;
+  private sparks: SparkParticle[] = [];
 
   constructor(
     readonly id: CivilianCastId,
@@ -220,14 +270,10 @@ export class Villager implements TownPropRenderable {
 
   /** Turns to the dominant axis of a heading. */
   face(dx: number, dy: number): void {
-    if (Math.abs(dx) < FACING_DEADZONE && Math.abs(dy) < FACING_DEADZONE) return;
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      this.facingX = Math.sign(dx);
-      this.facingY = 0;
-    } else {
-      this.facingX = 0;
-      this.facingY = Math.sign(dy);
-    }
+    const facing = facingFor(dx, dy);
+    if (facing === null) return;
+    this.facingX = facing.x;
+    this.facingY = facing.y;
   }
 
   faceToward(worldX: number, worldY: number): void {
@@ -238,6 +284,7 @@ export class Villager implements TownPropRenderable {
   tick(): void {
     this.bark.tick();
     this.ellipsisPulse += ELLIPSIS_PULSE_PER_FRAME;
+    this.tickSparks();
   }
 
   private get action(): RatkinCastAction {
@@ -246,6 +293,50 @@ export class Villager implements TownPropRenderable {
     if (this.state === 'sheltering') return 'cower';
     if (this.state === 'working' && this.hasWorkRow) return 'work';
     return 'idle';
+  }
+
+  /** True while this villager is drawn in their work loop — the row a strike event is timed against. */
+  get isWorking(): boolean {
+    return this.action === 'work';
+  }
+
+  /** Throws a burst of sparks from `(worldX, worldY)`, outward and mostly up. */
+  burstSparksAt(worldX: number, worldY: number): void {
+    for (let i = 0; i < SPARK_BURST_COUNT; i++) {
+      const angle = -Math.PI / 2 + (Math.random() * 2 - 1) * SPARK_CONE_HALF_ANGLE;
+      const speed = SPARK_SPEED_MIN_PX + Math.random() * (SPARK_SPEED_MAX_PX - SPARK_SPEED_MIN_PX);
+      this.sparks.push({
+        x: worldX,
+        y: worldY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: SPARK_LIFE_SECONDS,
+      });
+    }
+  }
+
+  private tickSparks(): void {
+    if (this.sparks.length === 0) return;
+    for (const spark of this.sparks) {
+      spark.vy += SPARK_GRAVITY_PX * TICK_SECONDS;
+      spark.x += spark.vx * TICK_SECONDS;
+      spark.y += spark.vy * TICK_SECONDS;
+      spark.life -= TICK_SECONDS;
+    }
+    this.sparks = this.sparks.filter((spark) => spark.life > 0);
+  }
+
+  private renderSparks(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const spark of this.sparks) {
+      const lifeFraction = spark.life / SPARK_LIFE_SECONDS;
+      ctx.globalAlpha = lifeFraction;
+      ctx.fillStyle = lifeFraction > SPARK_COOL_THRESHOLD ? SPARK_COLOR_HOT : SPARK_COLOR_COOL;
+      const radius = SPARK_RADIUS_PX * lifeFraction;
+      ctx.beginPath();
+      ctx.arc(spark.x - camX, spark.y - camY, Math.max(radius, 0), 0, FULL_TURN);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
 
   /** The highest point of the art, for anything drawn over the head. */
@@ -292,5 +383,7 @@ export class Villager implements TownPropRenderable {
     } else if (this.hushed) {
       drawSpeechBubble(ctx, sx, sy, tileSize, this.ellipsisPulse);
     }
+
+    this.renderSparks(ctx, camX, camY);
   }
 }

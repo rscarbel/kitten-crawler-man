@@ -56,6 +56,12 @@ const DODGE_WHIFF_RATE = 1.35;
 const BOSS_MUSIC_FADE_IN_MS = 1500;
 /** Crossfade back to the level track once the boss is down. */
 const BOSS_MUSIC_RESTORE_FADE_MS = 2000;
+/**
+ * A checkpoint save and a safe-room save can land on the same frame (entering
+ * a safe room takes both), so the cue is suppressed if one already played
+ * within this window rather than firing once per write.
+ */
+const GAME_SAVED_DEBOUNCE_MS = 1000;
 
 export interface PlayOptions {
   /** Volume multiplier (0–1). Default: 1. */
@@ -1140,6 +1146,14 @@ export class AudioManager {
 
     bus.on('safeRoomEntered', () => {
       this.play('entered_safe_room');
+    });
+
+    let lastGameSavedCueAt = 0;
+    bus.on('gameSaved', () => {
+      const now = Date.now();
+      if (now - lastGameSavedCueAt < GAME_SAVED_DEBOUNCE_MS) return;
+      lastGameSavedCueAt = now;
+      this.play('game_saving');
     });
 
     bus.on('healingPotionUsed', () => {

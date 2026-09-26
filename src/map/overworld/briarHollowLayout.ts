@@ -48,11 +48,126 @@ export const PALISADE_GROWTH_MARGIN_TILES = 6;
  */
 export const PALISADE_CHAMFER_TILES = 3;
 
-/** The gate: three tiles of the south wall, west of centre so the main street lines up with the square. */
+/**
+ * The village has a gate in every wall: the south gate (the main entrance,
+ * where the road to town and the main street meet), and one centred in each
+ * of the other three, each three tiles wide.
+ */
 export const GATE_X0 = 28;
 export const GATE_WIDTH_TILES = 3;
 /** How far outside and inside the wall the gate's approach tiles sit, from its middle tile. */
 export const GATE_APPROACH_TILES = 2;
+/** Site-relative x of the north gate's west tile: centred on the wall. */
+export const NORTH_GATE_X0 = Math.floor(VILLAGE_BOUNDS_W / 2) - 1;
+/** Site-relative y of the east and west gates' north tile: centred on their walls. */
+export const EAST_GATE_Y0 = Math.floor(VILLAGE_BOUNDS_H / 2) - 1;
+export const WEST_GATE_Y0 = EAST_GATE_Y0;
+
+/**
+ * How deep the paved apron reaches outside the east gate, and how deep it
+ * reaches outside the north and west gates before their roads join the
+ * flank assault lanes' own cleared corridors (`flankLaneCorridors` in
+ * `briarHollowSite.ts`), which reach much further than the general
+ * clearance around the ring. Kept inside those margins so the wilderness
+ * never grows over the road before it is painted.
+ */
+const GATE_STUB_DEPTH_TILES = 3;
+const FLANK_GATE_STUB_DEPTH_TILES = 8;
+/** How deep a gate's own paved apron reaches inside the wall, before its road bends to reach the street network. */
+const GATE_APRON_DEPTH_TILES = 4;
+
+export const NORTH_GATE_ROAD_OUTSIDE: TileRect = {
+  x: NORTH_GATE_X0,
+  y: -FLANK_GATE_STUB_DEPTH_TILES,
+  w: GATE_WIDTH_TILES,
+  h: FLANK_GATE_STUB_DEPTH_TILES,
+};
+/** The apron just inside the north gate, widened to reach the gap between the farmhouse and the barn. */
+export const NORTH_GATE_ROAD_INSIDE: TileRect = {
+  x: NORTH_GATE_X0,
+  y: 0,
+  w: GATE_WIDTH_TILES + 1,
+  h: GATE_APRON_DEPTH_TILES,
+};
+/** Site-relative y the cross lane starts at — repeated here so the north gate's lane meets it exactly. */
+const CROSS_LANE_Y = 19;
+
+/**
+ * The lane through the farmhouse–barn gap, from the north gate's apron down
+ * to the east–west cross lane. `NORTH_GATE_X0 + 2` is the gap's own column —
+ * one east of the farmhouse's east wall, one west of the barn's — so the
+ * lane threads between the two without touching either.
+ */
+export const NORTH_GATE_LANE: TileRect = {
+  x: NORTH_GATE_X0 + 2,
+  y: GATE_APRON_DEPTH_TILES,
+  w: 2,
+  h: CROSS_LANE_Y - GATE_APRON_DEPTH_TILES + 1,
+};
+
+export const EAST_GATE_ROAD_OUTSIDE: TileRect = {
+  x: VILLAGE_BOUNDS_W,
+  y: EAST_GATE_Y0,
+  w: GATE_STUB_DEPTH_TILES,
+  h: GATE_WIDTH_TILES,
+};
+export const EAST_GATE_ROAD_INSIDE: TileRect = {
+  x: VILLAGE_BOUNDS_W - 1 - GATE_APRON_DEPTH_TILES,
+  y: EAST_GATE_Y0,
+  w: GATE_APRON_DEPTH_TILES,
+  h: GATE_WIDTH_TILES,
+};
+/** From the east gate's apron south to clear ground below the Mayor's Hall and the farm plots. */
+export const EAST_GATE_LANE_SOUTH: TileRect = {
+  x: VILLAGE_BOUNDS_W - 1 - GATE_APRON_DEPTH_TILES,
+  y: EAST_GATE_Y0 + GATE_WIDTH_TILES - 1,
+  w: GATE_APRON_DEPTH_TILES,
+  h: 3,
+};
+/** Site-relative x of the Mayor's Hall's south doorway — where the existing worn path down from it starts. */
+const HALL_SOUTH_DOORWAY_X = 45;
+/** Site-relative y clear of both the hall and the farm plots, level with the top of the workshop. */
+const SOUTH_HALL_CLEARANCE_Y = 29;
+
+/** West along that clear ground to the worn path down from the Mayor's Hall's south door. */
+export const EAST_GATE_LANE_WEST: TileRect = {
+  x: HALL_SOUTH_DOORWAY_X,
+  y: SOUTH_HALL_CLEARANCE_Y,
+  w: VILLAGE_BOUNDS_W - GATE_APRON_DEPTH_TILES - HALL_SOUTH_DOORWAY_X,
+  h: 1,
+};
+
+export const WEST_GATE_ROAD_OUTSIDE: TileRect = {
+  x: -FLANK_GATE_STUB_DEPTH_TILES,
+  y: WEST_GATE_Y0,
+  w: FLANK_GATE_STUB_DEPTH_TILES,
+  h: GATE_WIDTH_TILES,
+};
+export const WEST_GATE_ROAD_INSIDE: TileRect = {
+  x: 0,
+  y: WEST_GATE_Y0,
+  w: GATE_APRON_DEPTH_TILES,
+  h: GATE_WIDTH_TILES,
+};
+/** From the west gate's apron south to clear ground below the forge. */
+export const WEST_GATE_LANE_SOUTH: TileRect = {
+  x: 0,
+  y: WEST_GATE_Y0 + GATE_WIDTH_TILES - 1,
+  w: GATE_APRON_DEPTH_TILES,
+  h: 2,
+};
+/** Site-relative x of the existing worn path up to the store and the forge's own door. */
+const FORGE_STORE_PATH_X = 17;
+/** Site-relative y clear of the forge, one row south of its wall. */
+const SOUTH_FORGE_CLEARANCE_Y = 28;
+
+/** East along that clear ground to the worn path up to the store and the forge's own door. */
+export const WEST_GATE_LANE_EAST: TileRect = {
+  x: GATE_APRON_DEPTH_TILES - 1,
+  y: SOUTH_FORGE_CLEARANCE_Y,
+  w: FORGE_STORE_PATH_X - (GATE_APRON_DEPTH_TILES - 1) + 1,
+  h: 1,
+};
 
 // ── Streets ───────────────────────────────────────────────────────────────────
 
@@ -330,7 +445,9 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     rect: { x: 8, y: 21, w: 9, h: 7 },
     doorways: [{ side: 'south', offset: 3, width: 3 }],
     floor: 'working',
-    occupantAnchors: [{ x: 4, y: 3 }],
+    // North of the anvil, facing south toward it (and the camera): the anvil
+    // sits between Oren and the doorway, where the hammer swing lands.
+    occupantAnchors: [{ x: 4, y: 1 }],
     furniture: [
       { prop: 'forge_hearth', x: 1, y: 1 },
       { prop: 'anvil', x: 4, y: 2 },

@@ -202,6 +202,7 @@ export function lumberForemanTopics(host: LumberForemanHost): TopicProvider {
       const fee: ConversationTopic = {
         key: 'fee',
         label: "What's the fee?",
+        isQuestion: true,
         run: (ctl) => void ctl.say('bulk_processing_fee_explanation'),
       };
       if (!shopTrades(ctx.quest.phase)) return [fee];

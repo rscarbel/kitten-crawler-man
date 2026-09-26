@@ -21,9 +21,12 @@ import {
   CROP_FIELDS,
   DISTRICTS,
   doorwayTiles,
+  EAST_GATE_Y0,
   EAST_LANE_APPROACH,
   FLANK_LANE_SPAWN_DISTANCE_TILES,
+  NORTH_GATE_X0,
   NORTH_LANE_APPROACH,
+  WEST_GATE_Y0,
   WEST_LANE_APPROACH,
   FARM_PROPS,
   GATE_APPROACH_TILES,
@@ -64,6 +67,7 @@ import {
   type VillageDistrictId,
   type VillageFloor,
   type VillagerAnchorKind,
+  type WallSide,
 } from './briarHollowLayout';
 import { worldRandom } from '../../core/WorldRandom';
 
@@ -164,6 +168,16 @@ export interface AssaultLane {
   readonly approach: TilePoint;
 }
 
+/** One gate through the palisade: its tiles, and the apron tiles either side of it. */
+export interface BriarHollowGate {
+  readonly tiles: readonly TilePoint[];
+  /** Two tiles outward of the gate's middle tile. */
+  readonly outside: TilePoint;
+  /** Two tiles inward of the gate's middle tile. */
+  readonly inside: TilePoint;
+  readonly facing: WallSide;
+}
+
 /** Briar Hollow's site on the overworld map, in tile coordinates. */
 export interface BriarHollowSite {
   /** Centre of the palisade's bounding rectangle. */
@@ -180,14 +194,10 @@ export interface BriarHollowSite {
    */
   readonly palisadePath: readonly TilePoint[];
   readonly segments: readonly PalisadeSegmentDef[];
-  readonly gate: {
-    readonly tiles: readonly TilePoint[];
-    /** Two tiles south of the gate's middle tile. */
-    readonly outside: TilePoint;
-    /** Two tiles north of the gate's middle tile. */
-    readonly inside: TilePoint;
-    readonly facing: 'south';
-  };
+  /** The south gate — the main entrance, where the road to town and the main street meet. Also `gates[0]`. */
+  readonly gate: BriarHollowGate;
+  /** Every gate, one per wall: south (the main entrance), east, north, west. */
+  readonly gates: readonly BriarHollowGate[];
   readonly districts: readonly VillageDistrict[];
   readonly buildings: readonly VillageBuildingDef[];
   readonly square: {
@@ -293,7 +303,7 @@ export const SEGMENT_MAX_TILES = SEGMENT_TILES + 1;
  * this to drop stale wall records from an older save rather than misapply
  * them to the wrong stretch of wall.
  */
-export const PALISADE_SEGMENT_SCHEME_VERSION = 3;
+export const PALISADE_SEGMENT_SCHEME_VERSION = 4;
 
 // ── Geometry helpers ──────────────────────────────────────────────────────────
 
@@ -365,13 +375,34 @@ export function isInsideRing(x: number, y: number): boolean {
   return cornerDistance(x, y) > PALISADE_CHAMFER_TILES + 1;
 }
 
-/** Site-relative gate tiles, west to east. */
-function gateTilesRelative(): TilePoint[] {
+/** Every wall a gate stands in, south (the main entrance) first. */
+const GATE_SIDES: readonly WallSide[] = ['south', 'east', 'north', 'west'];
+
+/** Site-relative tiles of the gate on `side`, `GATE_WIDTH_TILES` wide. */
+function gateTilesRelative(side: WallSide): TilePoint[] {
   const tiles: TilePoint[] = [];
   for (let i = 0; i < GATE_WIDTH_TILES; i++) {
-    tiles.push({ x: GATE_X0 + i, y: VILLAGE_BOUNDS_H - 1 });
+    switch (side) {
+      case 'south':
+        tiles.push({ x: GATE_X0 + i, y: VILLAGE_BOUNDS_H - 1 });
+        break;
+      case 'north':
+        tiles.push({ x: NORTH_GATE_X0 + i, y: 0 });
+        break;
+      case 'east':
+        tiles.push({ x: VILLAGE_BOUNDS_W - 1, y: EAST_GATE_Y0 + i });
+        break;
+      case 'west':
+        tiles.push({ x: 0, y: WEST_GATE_Y0 + i });
+        break;
+    }
   }
   return tiles;
+}
+
+/** Every gate's site-relative tiles, in `GATE_SIDES` order. */
+function allGateTilesRelative(): TilePoint[] {
+  return GATE_SIDES.flatMap((side) => gateTilesRelative(side));
 }
 
 const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
@@ -382,15 +413,16 @@ const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
 ];
 
 /**
- * The palisade's tiles in path order, site-relative.
+ * Every ring tile in path order, site-relative, gate tiles included.
  *
- * Walks the ring from the gate's east post, stepping first to the east, and
- * always to the one ring neighbour not yet visited — every ring tile has
- * exactly two, which `isRingTile`'s staircase guarantees.
+ * Walks the whole ring from the south gate's east post, stepping first to
+ * the east, and always to the one ring neighbour not yet visited — every
+ * ring tile has exactly two, which `isRingTile`'s staircase guarantees. Gate
+ * tiles are ordinary ring tiles for this walk, so the four gaps a gate cuts
+ * into the ring never break the walk's adjacency; {@link palisadeArcsRelative}
+ * splits them out into wall arcs afterward.
  */
-function palisadePathRelative(): TilePoint[] {
-  const gate = new Set(gateTilesRelative().map((tile) => `${tile.x},${tile.y}`));
-  const isPath = (x: number, y: number) => isRingTile(x, y) && !gate.has(`${x},${y}`);
+function fullRingPathRelative(): TilePoint[] {
   const start: TilePoint = { x: GATE_X0 + GATE_WIDTH_TILES, y: VILLAGE_BOUNDS_H - 1 };
   const path: TilePoint[] = [start];
   const visited = new Set<string>([`${start.x},${start.y}`]);
@@ -399,7 +431,7 @@ function palisadePathRelative(): TilePoint[] {
     let next: TilePoint | null = null;
     for (const [dx, dy] of CARDINAL_STEPS) {
       const candidate = { x: current.x + dx, y: current.y + dy };
-      if (!isPath(candidate.x, candidate.y)) continue;
+      if (!isRingTile(candidate.x, candidate.y)) continue;
       if (visited.has(`${candidate.x},${candidate.y}`)) continue;
       next = candidate;
       break;
@@ -413,15 +445,36 @@ function palisadePathRelative(): TilePoint[] {
 }
 
 /**
- * The palisade's segment lengths, in path order.
+ * The palisade's own tiles, site-relative, as the arcs of wall between one
+ * gate and the next — the whole ring minus every gate's tiles, split where
+ * each gate cuts it so a segment (below) never spans a gate's gap.
+ */
+function palisadeArcsRelative(): TilePoint[][] {
+  const gate = new Set(allGateTilesRelative().map((tile) => `${tile.x},${tile.y}`));
+  const arcs: TilePoint[][] = [];
+  let current: TilePoint[] = [];
+  for (const tile of fullRingPathRelative()) {
+    if (gate.has(`${tile.x},${tile.y}`)) {
+      if (current.length > 0) arcs.push(current);
+      current = [];
+      continue;
+    }
+    current.push(tile);
+  }
+  if (current.length > 0) arcs.push(current);
+  return arcs;
+}
+
+/**
+ * The palisade's segment lengths for one arc of wall, in path order.
  *
  * **This is a save-format contract.** Persisted wall state is keyed by segment
  * id, and an id is only its index, so the same ring must always cut into the
  * same runs. The rule: `pathLength` split into as many runs of `SEGMENT_TILES`
  * as it divides into evenly, with any leftover tiles spread one apiece across
- * the runs starting from the gate's east post, so every run is `SEGMENT_TILES`
+ * the runs starting from the arc's first tile, so every run is `SEGMENT_TILES`
  * or one tile longer rather than one run absorbing the whole remainder.
- * Changing this, the ring's shape, or where the path starts orphans every
+ * Changing this, the ring's shape, or where an arc starts orphans every
  * saved wall — `briarHollowState`'s segment-scheme version exists for exactly
  * that.
  */
@@ -438,17 +491,22 @@ export function palisadeSegmentId(index: number): string {
   return `palisade_${index}`;
 }
 
-function cutSegments(path: readonly TilePoint[]): PalisadeSegmentDef[] {
+/** Cuts every arc of wall between one gate and the next into segments, numbered continuously across all of them. */
+function cutSegments(arcs: readonly TilePoint[][]): PalisadeSegmentDef[] {
   const segments: PalisadeSegmentDef[] = [];
-  let cursor = 0;
-  segmentLengths(path.length).forEach((length, index) => {
-    segments.push({
-      id: palisadeSegmentId(index),
-      index,
-      tiles: path.slice(cursor, cursor + length),
-    });
-    cursor += length;
-  });
+  let index = 0;
+  for (const arc of arcs) {
+    let cursor = 0;
+    for (const length of segmentLengths(arc.length)) {
+      segments.push({
+        id: palisadeSegmentId(index),
+        index,
+        tiles: arc.slice(cursor, cursor + length),
+      });
+      cursor += length;
+      index++;
+    }
+  }
   return segments;
 }
 
@@ -711,6 +769,43 @@ export function briarHollowFlattenRects(centre: TilePoint): {
 
 // ── The record ────────────────────────────────────────────────────────────────
 
+/** A gate's apron tiles, `GATE_APPROACH_TILES` outward and inward of its middle, for the wall it stands in. */
+function gateApron(
+  side: WallSide,
+  middle: TilePoint,
+): { readonly outside: TilePoint; readonly inside: TilePoint } {
+  switch (side) {
+    case 'south':
+      return {
+        outside: { x: middle.x, y: middle.y + GATE_APPROACH_TILES },
+        inside: { x: middle.x, y: middle.y - GATE_APPROACH_TILES },
+      };
+    case 'north':
+      return {
+        outside: { x: middle.x, y: middle.y - GATE_APPROACH_TILES },
+        inside: { x: middle.x, y: middle.y + GATE_APPROACH_TILES },
+      };
+    case 'east':
+      return {
+        outside: { x: middle.x + GATE_APPROACH_TILES, y: middle.y },
+        inside: { x: middle.x - GATE_APPROACH_TILES, y: middle.y },
+      };
+    case 'west':
+      return {
+        outside: { x: middle.x - GATE_APPROACH_TILES, y: middle.y },
+        inside: { x: middle.x + GATE_APPROACH_TILES, y: middle.y },
+      };
+  }
+}
+
+/** The gate through `side`, in map coordinates. */
+function buildGate(origin: TilePoint, side: WallSide): BriarHollowGate {
+  const tiles = gateTilesRelative(side).map((tile) => shiftPoint(origin, tile));
+  const middle = tiles[Math.floor(tiles.length / 2)] ?? shiftPoint(origin, { x: 0, y: 0 });
+  const { outside, inside } = gateApron(side, middle);
+  return { tiles, outside, inside, facing: side };
+}
+
 function pick<T>(options: readonly T[]): T {
   const index = Math.min(options.length - 1, Math.floor(worldRandom() * options.length));
   return options[index];
@@ -832,10 +927,11 @@ export function buildBriarHollowSite(centre: TilePoint): BriarHollowSite {
     w: VILLAGE_BOUNDS_W,
     h: VILLAGE_BOUNDS_H,
   });
-  const palisadePath = palisadePathRelative().map((tile) => shiftPoint(origin, tile));
-  const gateTiles = gateTilesRelative().map((tile) => shiftPoint(origin, tile));
-  const gateMiddle = gateTiles[Math.floor(gateTiles.length / 2)];
-  const gateOutside: TilePoint = { x: gateMiddle.x, y: gateMiddle.y + GATE_APPROACH_TILES };
+  const arcs = palisadeArcsRelative().map((arc) => arc.map((tile) => shiftPoint(origin, tile)));
+  const palisadePath = arcs.flat();
+  const gates = GATE_SIDES.map((side) => buildGate(origin, side));
+  const [southGate] = gates;
+  const gateOutside = southGate.outside;
   const buildings = buildBuildings(origin);
   const sawmill = buildings.find((building) => building.id === 'sawmill');
   const sawmillMachine = sawmill?.furniture.find((prop) => prop.prop === 'sawmill_machine');
@@ -847,13 +943,9 @@ export function buildBriarHollowSite(centre: TilePoint): BriarHollowSite {
     palisadeBounds,
     interior: insetRect(palisadeBounds),
     palisadePath,
-    segments: cutSegments(palisadePath),
-    gate: {
-      tiles: gateTiles,
-      outside: gateOutside,
-      inside: { x: gateMiddle.x, y: gateMiddle.y - GATE_APPROACH_TILES },
-      facing: 'south',
-    },
+    segments: cutSegments(arcs),
+    gate: southGate,
+    gates,
     districts: DISTRICTS.map((district) => {
       const rect = shiftRect(origin, district.rect);
       return { id: district.id, label: district.label, rect, labelTile: rectCentre(rect) };

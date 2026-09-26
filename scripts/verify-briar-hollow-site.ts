@@ -9,9 +9,9 @@
  *  - the village is intact and reachable — the generator already asserts both
  *    before and after its repair passes, so a map that constructs has passed
  *    both; they are re-run here over the finished map;
- *  - the ring is closed except at its three gate tiles, and is cut into at
- *    least `MIN_SEGMENTS` runs of `SEGMENT_MIN_TILES` to `SEGMENT_MAX_TILES`
- *    tiles that cover it exactly;
+ *  - the ring is closed except at its four gates (three tiles each, one
+ *    centred in each wall), and is cut into at least `MIN_SEGMENTS` runs of
+ *    `SEGMENT_MIN_TILES` to `SEGMENT_MAX_TILES` tiles that cover it exactly;
  *  - no village tile is in the town's safe zone or inside its wall;
  *  - no hostile spawn point, bounty site, camp or fairy-allowed tile lies in
  *    the palisade bounds plus the spawn margin;
@@ -67,6 +67,7 @@ const TILE_CENTRE = 0.5;
 /** Problems printed per failing map before the rest are summarised. */
 const MAX_PROBLEMS_SHOWN = 6;
 const GATE_TILES = 3;
+const GATE_COUNT = 4;
 const DEPOSITS_MIN = 8;
 const DEPOSITS_MAX = 12;
 const GROVE_MIN = 14;
@@ -271,9 +272,14 @@ function checkMap(seed: number, fault: Fault): string[] {
   problems.push(...checkBriarHollowIsIntact(grid, site));
   problems.push(...checkBriarHollowIsReachable(grid, site, town));
 
-  // The ring: path + gate are every ring tile, and the path is cut exactly.
-  if (site.gate.tiles.length !== GATE_TILES) {
-    problems.push(`gate is ${site.gate.tiles.length} tiles, not ${GATE_TILES}`);
+  // The ring: path + gates are every ring tile, and the path is cut exactly.
+  if (site.gates.length !== GATE_COUNT) {
+    problems.push(`village has ${site.gates.length} gates, not ${GATE_COUNT}`);
+  }
+  for (const gate of site.gates) {
+    if (gate.tiles.length !== GATE_TILES) {
+      problems.push(`the ${gate.facing} gate is ${gate.tiles.length} tiles, not ${GATE_TILES}`);
+    }
   }
   if (site.segments.length < MIN_SEGMENTS) {
     problems.push(`only ${site.segments.length} palisade segments`);
@@ -294,7 +300,7 @@ function checkMap(seed: number, fault: Fault): string[] {
     if (!onRing) continue;
     const listed =
       site.palisadePath.some((p) => p.x === tile.x && p.y === tile.y) ||
-      site.gate.tiles.some((g) => g.x === tile.x && g.y === tile.y);
+      site.gates.some((gate) => gate.tiles.some((g) => g.x === tile.x && g.y === tile.y));
     if (!listed)
       problems.push(`ring tile (${tile.x}, ${tile.y}) is in neither the path nor the gate`);
   }

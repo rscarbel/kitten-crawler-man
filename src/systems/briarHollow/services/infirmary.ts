@@ -29,7 +29,7 @@ export const SELLA_FEE_PER_MISSING_HP = 0.7;
 export const SELLA_MIN_FEE = HEALTH_POTION_PRICE;
 
 const INFIRMARY_TITLE = 'The Infirmary';
-const DOCTOR = 'sella';
+export const DOCTOR = 'sella';
 const TREATMENT_KEY = 'treat_party';
 const UNHURT_LABEL = 'Unhurt';
 

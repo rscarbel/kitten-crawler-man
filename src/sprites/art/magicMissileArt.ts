@@ -85,7 +85,7 @@ function rgba(color: Rgb, alpha: number): string {
   return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${safeAlpha})`;
 }
 
-interface ArcanePalette {
+export interface ArcanePalette {
   /** The hottest point of the head — near white at every tier. */
   readonly core: Rgb;
   readonly inner: Rgb;
@@ -336,6 +336,36 @@ const EXPLOSION_VISUALS: Record<ExplosionVariant, ExplosionVisuals> = {
     hasVoidRim: false,
   },
 };
+
+/** What a variant's flung debris — sparks and ground dust, both live particles
+ * rather than baked frames — should look like: the same palette the baked
+ * blast paints with, its blast radius as the distance those particles scale
+ * against, and how loud this variant is relative to the loudest one there is.
+ */
+export interface ImpactDebrisConfig {
+  readonly palette: ArcanePalette;
+  readonly maxRadius: number;
+  /** 0-1, tier1's share of tier4's `sparkCount` up to 1 at tier4 itself. */
+  readonly scale: number;
+}
+
+const LOUDEST_EXPLOSION_SPARK_COUNT = Math.max(
+  ...Object.values(EXPLOSION_VISUALS).map((visuals) => visuals.sparkCount),
+);
+
+/**
+ * Config for the live sparks and dust `MagicMissileImpactEffectSystem` flings
+ * outward once, on top of the baked blast this file draws in place — read
+ * from the same tier table so a retuned tier never drifts the two apart.
+ */
+export function impactDebrisConfigOf(variant: ExplosionVariant): ImpactDebrisConfig {
+  const visuals = EXPLOSION_VISUALS[variant];
+  return {
+    palette: visuals.palette,
+    maxRadius: visuals.maxRadius,
+    scale: visuals.sparkCount / LOUDEST_EXPLOSION_SPARK_COUNT,
+  };
+}
 
 /** Fixed so the two sheets' seeded detail is stable across bakes. */
 const PROJECTILE_SEED = 0x5eed_1a11;

@@ -146,6 +146,8 @@ const TILE_CENTRE = 0.5;
 const WALL_FACE_SAMPLES = [TILE_CENTRE, 1, WALL_REACH_TILES] as const;
 
 const HAMMER_SOUND = 'hammer_strike';
+const REPAIR_LOOP_SOUND: SoundId = 'repairing_loop';
+const REPAIR_LOOP_VOLUME = 0.7;
 const COMPLETE_SOUND = 'construction_complete';
 const STONE_UPGRADE_SOUND = 'wall_upgrade_stone';
 const SPIKES_ADDED_SOUND = 'spikes_add';
@@ -839,6 +841,24 @@ export class ConstructionSystem {
   update(): void {
     this.updatePushes();
     if (this.hammering !== null && this._job === null) this.endHammering();
+    this.advanceJob();
+    this.syncRepairLoop();
+  }
+
+  /**
+   * Keyed off the live job rather than started and stopped at each call site,
+   * because a repair ends in several ways (finished, walked off, target gone,
+   * dispose) and every one of them must silence the loop.
+   */
+  private syncRepairLoop(): void {
+    const audio = this.deps.audio;
+    if (audio === null) return;
+    const repairing = this._job?.action === 'repair';
+    if (repairing) audio.startAmbientLoop(REPAIR_LOOP_SOUND, REPAIR_LOOP_VOLUME);
+    else audio.stopAmbientLoop(REPAIR_LOOP_SOUND);
+  }
+
+  private advanceJob(): void {
     const job = this._job;
     if (job === null) return;
     if (this.jobShouldEnd(job)) {
@@ -1163,6 +1183,7 @@ export class ConstructionSystem {
   dispose(): void {
     this.cancelJob();
     this.endHammering();
+    this.syncRepairLoop();
   }
 }
 

@@ -28,6 +28,8 @@ import type { BuildingSystem } from './BuildingSystem';
 import type { BarrierSystem } from './BarrierSystem';
 import type { SpellSystem } from './SpellSystem';
 import type { DynamiteSystem } from './DynamiteSystem';
+import type { MagicMissileImpactEffectSystem } from './MagicMissileImpactEffectSystem';
+import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
 import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { LavaBallSystem } from './LavaBallSystem';
 import type { RockThrowSystem } from './RockThrowSystem';
@@ -203,6 +205,8 @@ export interface RenderContext {
   spells: SpellSystem;
   dynamite: DynamiteSystem;
   smushFx: SmushEffectSystem;
+  meleeFx: MeleeImpactEffectSystem;
+  missileFx: MagicMissileImpactEffectSystem;
   lavaBalls: LavaBallSystem;
   rockThrows: RockThrowSystem;
   /** Absent in scenes a hireling never fights in. */
@@ -580,6 +584,8 @@ export class RenderPipeline {
     // Last of the world effects: the stamp's air and thrown chips read as being
     // in front of everything it just hit.
     rc.smushFx.render(ctx, camX, camY);
+    rc.meleeFx.render(ctx, camX, camY);
+    rc.missileFx.render(ctx, camX, camY);
 
     // Cat speech bubble for Mongo summon/recall
     mongoSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);

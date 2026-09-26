@@ -63,16 +63,20 @@ export function checkBriarHollowIsIntact(grid: GridView, site: BriarHollowSite):
       problems.push(`palisade tile ${describe(tile)} is type ${grid.typeAt(tile.x, tile.y)}`);
     }
   }
-  for (const tile of site.gate.tiles) {
-    if (grid.typeAt(tile.x, tile.y) !== HOLLOW_GATE) {
-      problems.push(`gate tile ${describe(tile)} is type ${grid.typeAt(tile.x, tile.y)}`);
+  for (const gate of site.gates) {
+    for (const tile of gate.tiles) {
+      if (grid.typeAt(tile.x, tile.y) !== HOLLOW_GATE) {
+        problems.push(`gate tile ${describe(tile)} is type ${grid.typeAt(tile.x, tile.y)}`);
+      }
     }
   }
 
-  // Closed: a walker starting inside, with the gate shut, never steps on a
+  // Closed: a walker starting inside, with every gate shut, never steps on a
   // tile outside the ring. Confined to the bounds so a leak is caught at the
   // first ring tile it crosses rather than wherever the wilderness takes it.
-  const gateKeys = new Set(site.gate.tiles.map((tile) => `${tile.x},${tile.y}`));
+  const gateKeys = new Set(
+    site.gates.flatMap((gate) => gate.tiles.map((tile) => `${tile.x},${tile.y}`)),
+  );
   const seen = new Set<string>([`${site.gate.inside.x},${site.gate.inside.y}`]);
   const queue: TilePoint[] = [site.gate.inside];
   let leak: TilePoint | null = null;
@@ -177,21 +181,23 @@ export function checkBriarHollowIsReachable(
 ): string[] {
   const problems: string[] = [];
   const fromTown = new Reachability(grid, from);
-  if (!fromTown.reached(site.gate.outside.x, site.gate.outside.y)) {
-    problems.push(
-      `the gate's outside tile ${describe(site.gate.outside)} cannot be reached from town`,
-    );
-  }
-
-  // One flood serves inside and outside alike. The gate is walkable, so a
-  // walker that reaches its outside tile walks straight in, and
+  // One flood serves inside and outside alike. Every gate is walkable, so a
+  // walker that reaches any gate's outside tile walks straight in, and
   // `checkBriarHollowIsIntact` is what proves the ring has no other way in —
-  // a second flood from the inside tile would reach exactly the same tiles.
+  // a second flood from an inside tile would reach exactly the same tiles.
   const expectInside = (what: string, tile: TilePoint) => {
     if (!fromTown.reached(tile.x, tile.y)) {
       problems.push(`${what} ${describe(tile)} cannot be reached through the gate`);
     }
   };
+  for (const gate of site.gates) {
+    if (!fromTown.reached(gate.outside.x, gate.outside.y)) {
+      problems.push(
+        `the ${gate.facing} gate's outside tile ${describe(gate.outside)} cannot be reached from town`,
+      );
+    }
+    expectInside(`the ${gate.facing} gate's inside tile`, gate.inside);
+  }
   for (const building of site.buildings) {
     for (const door of building.doorways) {
       if (!fromTown.reached(door.x, door.y)) {

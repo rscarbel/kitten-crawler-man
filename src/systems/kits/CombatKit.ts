@@ -33,6 +33,8 @@ import { FloatingCombatTextSystem } from '../FloatingCombatTextSystem';
 import { playMobAudioCues } from '../GameLoopPhases';
 import type { SystemContext } from '../GameSystem';
 import { GoreSystem } from '../GoreSystem';
+import { MagicMissileImpactEffectSystem } from '../MagicMissileImpactEffectSystem';
+import { MeleeImpactEffectSystem } from '../MeleeImpactEffectSystem';
 import { MobUpdateLoop } from '../MobUpdateLoop';
 import { PlayerTickSystem } from '../PlayerTickSystem';
 import type { SafeRoomSystem } from '../SafeRoomSystem';
@@ -103,6 +105,8 @@ export class CombatKit {
   readonly floatingText = new FloatingCombatTextSystem();
   readonly playerTick = new PlayerTickSystem();
   readonly smushFx = new SmushEffectSystem();
+  readonly meleeFx = new MeleeImpactEffectSystem();
+  readonly missileFx = new MagicMissileImpactEffectSystem();
   readonly deathScreen = new DeathScreen();
 
   private readonly world: SceneWorld;
@@ -131,6 +135,8 @@ export class CombatKit {
       abilityManager: deps.abilityManager,
       spells: this.spells,
       smushFx: this.smushFx,
+      meleeFx: this.meleeFx,
+      missileFx: this.missileFx,
       hitLanded: false,
     };
   }
@@ -270,6 +276,8 @@ export class CombatKit {
     this.gore.update();
     this.bodyPartGore.update();
     this.smushFx.update();
+    this.meleeFx.update();
+    this.missileFx.update();
     if (this.smushFx.blastSoundPending) {
       this.smushFx.blastSoundPending = false;
       // `human_smush` plays when the ability fires, a third of a second before
@@ -308,6 +316,8 @@ export class CombatKit {
     this.spells.renderShockwaveRipples(ctx, camX, camY);
     this.spells.renderFogs(ctx, camX, camY);
     this.smushFx.render(ctx, camX, camY);
+    this.meleeFx.render(ctx, camX, camY);
+    this.missileFx.render(ctx, camX, camY);
   }
 
   /**
@@ -319,6 +329,8 @@ export class CombatKit {
   leaveFloor(): void {
     this.spells.dropWorldEffects();
     this.smushFx.resetForCheckpoint();
+    this.meleeFx.resetForCheckpoint();
+    this.missileFx.resetForCheckpoint();
     // A damage number frozen mid-fade is a number the player reads on the way
     // back in, minutes after the hit it belonged to.
     this.floatingText.dispose();
@@ -337,6 +349,8 @@ export class CombatKit {
   resetForCheckpoint(): void {
     this.spells.resetForCheckpoint();
     this.smushFx.resetForCheckpoint();
+    this.meleeFx.resetForCheckpoint();
+    this.missileFx.resetForCheckpoint();
     this.gore.resetForCheckpoint();
     this.bodyPartGore.resetForCheckpoint();
     // Mob-owned shots too: a bolt is advanced from its caster's own AI, so one

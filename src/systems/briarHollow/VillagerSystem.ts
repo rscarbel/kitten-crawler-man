@@ -10,6 +10,7 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
+import type { SoundId } from '../../audio/sounds';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import type { BriarHollowState, VillagerMemory } from '../../core/briarHollowState';
@@ -18,6 +19,7 @@ import { CONVERSATION_WALK_AWAY_TILES } from '../../creatures/townInteraction';
 import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite, VillagerAnchorKind } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
+import { ratkinCastEventFrame, ratkinCastLoopFrame } from '../../sprites/ratkinCastSprite';
 import { ratkinPortrait } from '../../sprites/ratkinPortrait';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import { type ConversationChoice, VillagerConversation } from '../../ui/VillagerConversation';
@@ -29,7 +31,7 @@ import {
   villagerEntry,
 } from './ratkinDialogue';
 import { VillageNavigator } from './villageNavigator';
-import { Villager } from './Villager';
+import { Villager, facingFor } from './Villager';
 import {
   DEPOSIT_NOTICE_RADIUS_TILES,
   type OpeningLine,
@@ -40,6 +42,8 @@ import {
   openingLine,
 } from './villagerCircumstances';
 import {
+  ASK_QUESTION_LABEL,
+  ASK_QUESTION_TOPIC_KEY,
   BACK_LABEL,
   BACK_TOPIC_KEY,
   BUILT_IN_TOPICS,
@@ -54,6 +58,7 @@ import { SHELTERING_LINE, UNNAMED_VILLAGER_LINES, isUnnamedVillager } from './un
 const UPDATES_PER_SECOND = 60;
 const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
 const TILE_CENTRE = 0.5;
+const MS_PER_SECOND = 1000;
 
 /** How close, centre to centre, a crawler must be to talk to a villager. Facing is not required. */
 export const VILLAGER_TALK_RANGE_TILES = 1.6;
@@ -128,6 +133,20 @@ const AMBIENT_BARK_CHANCE_PER_FRAME = 1 / (AMBIENT_BARK_MEAN_WAIT_SECONDS * UPDA
 
 const SIEGE_PHASES: ReadonlySet<VillageQuestPhase> = new Set(['imminent', 'assault']);
 
+/** Oren's hammer, read one at a time so a random draw does not fire twice on the same strike. */
+const ANVIL_STRIKE_SOUNDS: readonly SoundId[] = [
+  'anvil_strike_1',
+  'anvil_strike_2',
+  'anvil_strike_3',
+];
+/** Beyond this the forge is out of earshot. */
+const ANVIL_STRIKE_AUDIBLE_RADIUS_TILES = 11;
+/** Loudest at zero distance, before the radius falloff. */
+const ANVIL_STRIKE_VOLUME = 0.85;
+/** The anvil's face sits centred over its tile, a little above the ground like the village's other low props. */
+const ANVIL_FACE_X_FRACTION = 0.5;
+const ANVIL_FACE_Y_FRACTION = 0.55;
+
 /** Someone in the party, by the top-left of their tile-sized body. */
 export interface VillagerCrawler {
   readonly x: number;
@@ -151,6 +170,13 @@ export interface VillagerSystemDeps {
   readonly party: () => VillagerPartyState;
   /** Defaults to `Math.random`; the gates pass a seeded stream. */
   readonly random?: () => number;
+  /**
+   * Whether a menu the conversation handed off to — a shop, a quantity
+   * picker — is still open. While it is, a villager who just finished
+   * talking is held rather than sent back to their post: the shop and the
+   * villager behind its counter close together, not the villager first.
+   */
+  readonly isVillagerBusy?: () => boolean;
 }
 
 /**
@@ -220,6 +246,18 @@ export class VillagerSystem {
   private lastPhase: VillageQuestPhase;
   private lastCatPosition: VillagerCrawler | null = null;
   private readonly unsubscribers: Array<() => void> = [];
+  private readonly oren: Villager | null;
+  private readonly orenAnvilPoint: VillagerCrawler | null;
+  /** The work loop's frame as of the last update, so a strike is caught on the tick the loop reaches it rather than every tick it stays there. */
+  private orenLastWorkFrame = -1;
+  /**
+   * Set when a conversation ends while `deps.isVillagerBusy` still says yes —
+   * a shop just opened in the conversation's place. Cleared, and the villager
+   * sent back to their post, once the menu actually closes; also cleared the
+   * moment a fresh conversation with them begins, so a stale hold can never
+   * cut a new conversation short.
+   */
+  private pendingResume: CivilianCastId | null = null;
 
   constructor(private readonly deps: VillagerSystemDeps) {
     this.random = deps.random ?? Math.random;
@@ -227,8 +265,49 @@ export class VillagerSystem {
     this.quarry = new VillageNavigator(deps.gameMap, deps.site.quarry.rect);
     this.conversation = new VillagerConversation(deps.audio);
     this.lastPhase = deps.state.quest.phase;
+    // Computed before `populate()` so a working villager's first pose (Oren's
+    // included) is already faced correctly, not corrected a tick later.
+    this.orenAnvilPoint = this.findAnvilPoint();
     this.villagers = this.populate();
+    this.oren = this.villagers.find((villager) => villager.id === 'oren') ?? null;
     this.subscribe();
+  }
+
+  /** Where the hammer needs to land: the forge's anvil, read off the site's own furniture placement. */
+  private findAnvilPoint(): VillagerCrawler | null {
+    const forge = this.deps.site.buildings.find((building) => building.id === 'forge');
+    const anvil = forge?.furniture.find((prop) => prop.prop === 'anvil');
+    if (anvil === undefined) return null;
+    return {
+      x: (anvil.x + ANVIL_FACE_X_FRACTION) * TILE_SIZE,
+      y: (anvil.y + ANVIL_FACE_Y_FRACTION) * TILE_SIZE,
+    };
+  }
+
+  /**
+   * The facing Oren should hold at his post, computed from the anvil's real
+   * position relative to him rather than assumed — a layout change moves the
+   * anvil and his facing follows it, instead of silently pointing his swing
+   * at empty air. `null` when the site has no anvil to read.
+   */
+  private orenWorkFacing(oren: Villager): { readonly x: number; readonly y: number } | null {
+    const anvil = this.orenAnvilPoint;
+    if (anvil === null) return null;
+    return facingFor(anvil.x - oren.x, anvil.y - oren.y);
+  }
+
+  /** Faces a villager toward their work as they enter the work loop: Oren toward the anvil, everyone else the village's south-facing convention. */
+  private faceWork(villager: Villager): void {
+    if (villager.id === 'oren') {
+      const facing = this.orenWorkFacing(villager);
+      if (facing !== null) {
+        villager.facingX = facing.x;
+        villager.facingY = facing.y;
+        return;
+      }
+    }
+    villager.facingX = 0;
+    villager.facingY = 1;
   }
 
   private get memory(): VillagerMemory {
@@ -302,6 +381,7 @@ export class VillagerSystem {
         index,
       );
       villager.state = inSiege ? 'sheltering' : 'working';
+      if (villager.state === 'working') this.faceWork(villager);
       villager.standFrames = inSiege
         ? SHELTER_HOLD_FRAMES
         : this.randomFrames(0, POST_DWELL_MAX_FRAMES);
@@ -552,6 +632,7 @@ export class VillagerSystem {
       },
       soldierStance: null,
       beginTalk: (partner) => {
+        if (this.pendingResume === villager.id) this.pendingResume = null;
         villager.state = 'talking';
         villager.talkPartner = partner;
         villager.clearPath();
@@ -560,6 +641,13 @@ export class VillagerSystem {
       },
       endTalk: () => {
         villager.talkPartner = null;
+        // A shop or picker the conversation just handed off to may still be
+        // open (`closeConversation` runs `afterClose` before this): keep the
+        // villager attending rather than starting them back to work under it.
+        if (this.deps.isVillagerBusy?.() === true) {
+          this.pendingResume = villager.id;
+          return;
+        }
         this.resumeAfterTalk(villager);
       },
     };
@@ -661,9 +749,35 @@ export class VillagerSystem {
     this.menuGeneration++;
     const { id, soldierStance } = session.speaker;
     this.currentTopicsSource = () =>
-      this.rootTopicsFor(id, this.contextFor(id, session.speaker, soldierStance));
+      this.withQuestionsGrouped(
+        this.rootTopicsFor(id, this.contextFor(id, session.speaker, soldierStance)),
+      );
     this.currentMenuIsSubmenu = false;
     this.renderCurrentMenu();
+  }
+
+  /**
+   * Pulls every `isQuestion` row out of a villager's own top-level rows and
+   * files them under one "I have a question" row instead — the actions a
+   * conversation is actually for (buy, teach, accept) stay on the surface,
+   * and lore or how-it-works small talk is a click away rather than crowding
+   * the same row of buttons. Only the root menu is grouped this way: a
+   * topic's own submenu (Tikka's build kinds, Fenna's boards or rope) is
+   * already a short, deliberate list and is left as its author built it.
+   */
+  private withQuestionsGrouped(topics: readonly ConversationTopic[]): readonly ConversationTopic[] {
+    const questions = topics.filter((topic) => topic.isQuestion === true);
+    if (questions.length === 0) return topics;
+    const actions = topics.filter((topic) => topic.isQuestion !== true);
+    const askQuestion: ConversationTopic = {
+      key: ASK_QUESTION_TOPIC_KEY,
+      label: ASK_QUESTION_LABEL,
+      // A navigation hub, not a thing said once: it must keep coming back
+      // after "Back" so every question can be reached more than once.
+      repeatable: true,
+      run: (ctl) => ctl.showTopics(questions),
+    };
+    return [...actions, askQuestion];
   }
 
   private showSubmenu(topics: readonly ConversationTopic[]): void {
@@ -700,13 +814,33 @@ export class VillagerSystem {
     );
   }
 
+  /**
+   * Escape's own hook: from an open question submenu it backs out to the
+   * root topics the way "Back" does, and only closes the conversation
+   * outright from the root itself. Returns whether there was a conversation
+   * open to act on.
+   */
+  escapeConversation(): boolean {
+    if (this.session === null) return false;
+    if (this.currentMenuIsSubmenu && this.conversation.isShowingChoices) {
+      this.showRootTopics();
+      return true;
+    }
+    this.closeConversation();
+    return true;
+  }
+
   closeConversation(): void {
     const session = this.session;
     if (session === null) return;
     this.session = null;
     this.conversation.close();
-    session.speaker.endTalk();
+    // Run before `endTalk`: a topic that hands off to a shop (`shopTopic`)
+    // opens it from here, so `endTalk`'s busy check sees it already open
+    // rather than deciding a tick too early that nothing is keeping the
+    // villager at their post.
     for (const run of session.afterClose) run();
+    session.speaker.endTalk();
   }
 
   // ── Routines ───────────────────────────────────────────────────────────
@@ -789,8 +923,7 @@ export class VillagerSystem {
         return;
       case 'returning':
         villager.state = 'working';
-        villager.facingX = 0;
-        villager.facingY = 1;
+        this.faceWork(villager);
         villager.standFrames = this.randomFrames(POST_DWELL_MIN_FRAMES, POST_DWELL_MAX_FRAMES);
         return;
       case 'sheltering':
@@ -844,11 +977,26 @@ export class VillagerSystem {
       return;
     }
     if (sameTile(villager.tile, villager.post)) {
+      // Snapped exactly rather than trusting the tile check alone: talking
+      // never moves a villager, but this is also the "may still be there
+      // stale from a route" fallback everywhere else `arrive` is not.
+      villager.x = villager.post.x * TILE_SIZE;
+      villager.y = villager.post.y * TILE_SIZE;
       villager.state = 'working';
+      this.faceWork(villager);
       villager.standFrames = this.randomFrames(POST_DWELL_MIN_FRAMES, POST_DWELL_MAX_FRAMES);
       return;
     }
     this.goToPost(villager, false);
+  }
+
+  /** Lets a villager held mid-transaction go back to their post once the menu that held them there has actually closed. */
+  private checkPendingResume(): void {
+    const id = this.pendingResume;
+    if (id === null || this.deps.isVillagerBusy?.() === true) return;
+    this.pendingResume = null;
+    const villager = this.villagerById(id);
+    if (villager !== undefined) this.resumeAfterTalk(villager);
   }
 
   /** A crawler standing just ahead of a walking villager. */
@@ -1034,6 +1182,54 @@ export class VillagerSystem {
     this.decide(villager, frame);
   }
 
+  /**
+   * Fires the hammer's strike the tick the work loop's own clock reaches it —
+   * the same clock `Villager.render` draws the swing from, so the sparks, the
+   * sound and the frame the hammer head is down on the anvil never drift
+   * apart. Silent and effect-free once the crawler is out of earshot.
+   */
+  private updateOrenHammer(frame: VillagerFrame): void {
+    const oren = this.oren;
+    const anvil = this.orenAnvilPoint;
+    if (oren === null || anvil === null || !oren.isWorking) {
+      this.orenLastWorkFrame = -1;
+      return;
+    }
+    // Only while he is actually squared up to the anvil — not, say, still
+    // turned toward wherever the player was standing a moment ago — does the
+    // swing land on anything.
+    const facing = this.orenWorkFacing(oren);
+    if (facing === null) {
+      this.orenLastWorkFrame = -1;
+      return;
+    }
+    if (oren.facingX !== facing.x || oren.facingY !== facing.y) {
+      this.orenLastWorkFrame = -1;
+      return;
+    }
+    const nowSeconds = performance.now() / MS_PER_SECOND;
+    const strikeFrame = ratkinCastEventFrame('oren', 'work', oren.facingX, oren.facingY, 'strike');
+    const currentFrame = ratkinCastLoopFrame(
+      'oren',
+      'work',
+      oren.facingX,
+      oren.facingY,
+      oren.loopOffsetSeconds,
+      nowSeconds,
+    );
+    if (strikeFrame === undefined || currentFrame === undefined) return;
+    const justStruck = currentFrame === strikeFrame && this.orenLastWorkFrame !== strikeFrame;
+    this.orenLastWorkFrame = currentFrame;
+    if (!justStruck) return;
+
+    oren.burstSparksAt(anvil.x, anvil.y);
+
+    const distanceTiles = tileDistance(anvil, frame.active);
+    if (distanceTiles > ANVIL_STRIKE_AUDIBLE_RADIUS_TILES) return;
+    const falloff = 1 - distanceTiles / ANVIL_STRIKE_AUDIBLE_RADIUS_TILES;
+    this.deps.audio?.playRandom(ANVIL_STRIKE_SOUNDS, { volume: ANVIL_STRIKE_VOLUME * falloff });
+  }
+
   update(frame: VillagerFrame): void {
     this.memory.clockSeconds += SECONDS_PER_UPDATE;
     const phase = this.deps.state.quest.phase;
@@ -1042,7 +1238,9 @@ export class VillagerSystem {
       this.lastPhase = phase;
       this.onPhaseChanged(from, phase);
     }
+    this.checkPendingResume();
     for (const villager of this.villagers) this.updateVillager(villager, frame);
+    this.updateOrenHammer(frame);
     this.lastCatPosition = { x: frame.cat.x, y: frame.cat.y };
 
     const session = this.session;

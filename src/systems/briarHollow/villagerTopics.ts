@@ -43,6 +43,14 @@ export interface ConversationTopic {
    * again, "Back" itself — sets this so it keeps coming back.
    */
   readonly repeatable?: boolean;
+  /**
+   * Lore or how-it-works small talk, as opposed to a thing the conversation
+   * is actually for (buying, teaching a skill, accepting a quest). The root
+   * menu collects every root-level row with this set under one "I have a
+   * question" row, so a shop's or a questline's own actions are not lost in
+   * a wall of trivia.
+   */
+  readonly isQuestion?: boolean;
 }
 
 export interface TopicProvider {
@@ -52,6 +60,15 @@ export interface TopicProvider {
 /** A topic that answers with one or more lines and returns to the choices. */
 function answer(key: string, label: string, ...lines: readonly Circumstance[]): ConversationTopic {
   return { key, label, run: (ctl) => void ctl.say(...lines) };
+}
+
+/** Lore or how-it-works small talk: an `answer` the root menu tucks under "I have a question". */
+function question(
+  key: string,
+  label: string,
+  ...lines: readonly Circumstance[]
+): ConversationTopic {
+  return { ...answer(key, label, ...lines), isQuestion: true };
 }
 
 /** Tikka's "What can I build?" submenu, one row per kind of structure. */
@@ -90,40 +107,40 @@ export const BUILT_IN_TOPICS: TopicProvider = {
     switch (villager) {
       case 'bramblewick':
         return [
-          answer('ask_about_village', 'About the village', 'ask_about_village'),
-          answer('ask_about_necromancer', 'About the necromancer', 'ask_about_necromancer'),
+          question('ask_about_village', 'About the village', 'ask_about_village'),
+          question('ask_about_necromancer', 'About the necromancer', 'ask_about_necromancer'),
         ];
       case 'merrit':
         return [
-          answer('ask_about_farm', 'About the farm', 'ask_about_farm'),
-          answer('ask_about_cows', 'About the cows', 'ask_about_cows'),
+          question('ask_about_farm', 'About the farm', 'ask_about_farm'),
+          question('ask_about_cows', 'About the cows', 'ask_about_cows'),
         ];
       case 'pipkin':
         return [
-          answer('ask_about_burgers', 'About the burgers', 'ask_about_burgers'),
-          answer('ask_about_stew', 'About the stew', 'ask_about_stew'),
+          question('ask_about_burgers', 'About the burgers', 'ask_about_burgers'),
+          question('ask_about_stew', 'About the stew', 'ask_about_stew'),
         ];
       case 'sella':
-        return [answer('ask_about_healing', 'About treatment', 'ask_about_healing')];
+        return [question('ask_about_healing', 'About treatment', 'ask_about_healing')];
       case 'vetch':
       case 'nella':
-        return [answer('ask_about_town', "How's the town?", 'ask_about_town')];
+        return [question('ask_about_town', "How's the town?", 'ask_about_town')];
       case 'oren':
         if (!partyOwnsTools(ctx)) return [];
         return [
-          answer('ask_about_axe', 'About the axe', 'ask_about_axe'),
-          answer('ask_about_pickaxe', 'About the pickaxe', 'ask_about_pickaxe'),
-          answer(
+          question('ask_about_axe', 'About the axe', 'ask_about_axe'),
+          question('ask_about_pickaxe', 'About the pickaxe', 'ask_about_pickaxe'),
+          question(
             'where_to_use_tools',
             'Where do I use these?',
             'directions_to_lumber_yard',
             'directions_to_quarry',
           ),
-          answer('why_one_upgrade', 'Why only one upgrade?', 'shared_upgrade_explanation'),
+          question('why_one_upgrade', 'Why only one upgrade?', 'shared_upgrade_explanation'),
         ];
       case 'fenna':
         return [
-          answer(
+          question(
             'ask_how_lumber_yard_works',
             'How does the mill work?',
             'ask_how_lumber_yard_works',
@@ -132,9 +149,9 @@ export const BUILT_IN_TOPICS: TopicProvider = {
         ];
       case 'garn':
         return [
-          answer('ask_how_to_gather', 'How do I gather stone?', 'ask_how_to_gather'),
-          answer('collection_speed', 'How fast?', 'collection_speed'),
-          answer(
+          question('ask_how_to_gather', 'How do I gather stone?', 'ask_how_to_gather'),
+          question('collection_speed', 'How fast?', 'collection_speed'),
+          question(
             'ask_about_trebuchet_ammunition',
             'Trebuchet ammo?',
             'ask_about_trebuchet_ammunition',
@@ -146,13 +163,16 @@ export const BUILT_IN_TOPICS: TopicProvider = {
           {
             key: 'what_can_i_build',
             label: 'What can I build?',
+            isQuestion: true,
             run: (ctl) => ctl.showTopics(tikkaBuildTopics()),
           },
         ];
       case 'cricket':
-        return [answer('ask_about_village', "How's the village?", 'ask_about_village')];
+        return [question('ask_about_village', "How's the village?", 'ask_about_village')];
       case 'midge':
-        return [answer('ask_about_necromancer', 'About the necromancer', 'ask_about_necromancer')];
+        return [
+          question('ask_about_necromancer', 'About the necromancer', 'ask_about_necromancer'),
+        ];
       // The militia's rows come from their own orders; Wicker has no questions to answer.
       case 'sedge':
       case 'hobb':
@@ -169,3 +189,6 @@ export const GOODBYE_LABEL = 'Goodbye';
 /** The last row of every submenu. */
 export const BACK_TOPIC_KEY = 'back';
 export const BACK_LABEL = 'Back';
+/** The root menu's row for every `isQuestion` topic, collected under one submenu. */
+export const ASK_QUESTION_TOPIC_KEY = 'ask_question';
+export const ASK_QUESTION_LABEL = 'I have a question';

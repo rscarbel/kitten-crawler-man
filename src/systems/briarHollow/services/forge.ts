@@ -47,7 +47,7 @@ import {
 } from './serviceContext';
 
 const FORGE_TITLE = 'Ironwhisker Forge';
-const SMITH = 'oren';
+export const SMITH = 'oren';
 /** Shown in the price column of a tool already at its best tier. */
 const FINEST_LABEL = 'Finest';
 
@@ -273,6 +273,7 @@ export function forgeTopics(host: ForgeHost): TopicProvider {
       const teachAgain: ConversationTopic = {
         key: 'teach_again',
         label: 'Teach me again',
+        isQuestion: true,
         run: (ctl) => {
           ctl.say('resourcing_skill_already_granted');
           ctl.afterClose(() => {

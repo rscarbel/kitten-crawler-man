@@ -31,7 +31,7 @@ export const HOLLOW_STEW_PRICE = HEALTH_POTION_PRICE;
 export const HAMBURGER_PRICE = Math.round(HEALTH_POTION_PRICE * HAMBURGER_PRICE_SHARE_OF_POTION);
 
 const COOKHOUSE_TITLE = "Pipkin's Cookhouse";
-const COOK = 'pipkin';
+export const COOK = 'pipkin';
 
 const MENU_ITEMS: ReadonlyArray<{ readonly id: ItemId; readonly price: number }> = [
   { id: 'hamburger', price: HAMBURGER_PRICE },

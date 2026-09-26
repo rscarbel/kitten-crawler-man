@@ -233,6 +233,15 @@ export const BOX_PRESETS = {
     glow: '#a855f7',
     glowBlur: 24,
   },
+  /** Save-in-progress banner — opaque enough to read over any scene behind it. */
+  saveIndicator: {
+    fill: 'rgba(6,18,12,0.94)',
+    border: '#4ade80',
+    borderWidth: 2,
+    radius: 10,
+    glow: '#4ade80',
+    glowBlur: 18,
+  },
 } satisfies Record<string, BoxPreset>;
 
 /**

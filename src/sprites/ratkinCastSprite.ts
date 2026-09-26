@@ -81,6 +81,11 @@ export interface RatkinCastSpriteState {
 const LOOP_FPS = 8;
 const MS_PER_SECOND = 1000;
 
+/** The frame a clock-driven loop is showing, given how many frames it has. */
+function loopFrameIndex(frames: number, loopOffsetSeconds: number, nowSeconds: number): number {
+  return timeFrameIndex(nowSeconds + loopOffsetSeconds, LOOP_FPS, frames);
+}
+
 function facingView(facingX: number, facingY: number): RatKinView {
   if (Math.abs(facingY) <= Math.abs(facingX)) return 'side';
   return facingY < 0 ? 'away' : 'front';
@@ -144,6 +149,30 @@ export function ratkinCastEventFrame(
 }
 
 /**
+ * The frame of a clock-driven loop (idle, talk, work, cower) at a moment in
+ * time — the same computation `drawRatkinCastSprite` draws from, so a caller
+ * that must land something on a specific frame of the loop (Oren's hammer
+ * meeting the anvil) reads the loop off this rather than a clock of its own,
+ * and the two can never drift apart. `undefined` for a one-shot action, a
+ * walk, or a figure with no such row.
+ */
+export function ratkinCastLoopFrame(
+  id: RatkinCastId,
+  action: RatkinCastAction,
+  facingX: number,
+  facingY: number,
+  loopOffsetSeconds: number,
+  nowSeconds: number,
+): number | undefined {
+  if (action === 'walk' || ONE_SHOT_ACTIONS.has(action)) return undefined;
+  const figure = ratkinCastFigure(id);
+  const view = viewFor(action, facingX, facingY);
+  const frames = figureFrameCount(figure, castStateName(action, view));
+  if (frames === 0) return undefined;
+  return loopFrameIndex(frames, loopOffsetSeconds, nowSeconds);
+}
+
+/**
  * Draws one cast member. Only the profile is mirrored: flipping a head-on
  * view would swap the side a satchel or a sash is worn on every time they
  * turned round.
@@ -169,8 +198,7 @@ export function drawRatkinCastSprite(
   } else if (ONE_SHOT_ACTIONS.has(state.action)) {
     frame = progressFrameIndex(state.progress ?? 0, frames);
   } else {
-    const seconds = performance.now() / MS_PER_SECOND + (state.loopOffsetSeconds ?? 0);
-    frame = timeFrameIndex(seconds, LOOP_FPS, frames);
+    frame = loopFrameIndex(frames, state.loopOffsetSeconds ?? 0, performance.now() / MS_PER_SECOND);
   }
   drawFigureCached(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
 }

@@ -866,8 +866,10 @@ export class GameMap {
     // Recorded now and applied by `rebuildBlockedMasks` once the grid is
     // installed: the gate never changes, so it belongs to the map itself and
     // holds even where no village system is running.
-    for (const tile of data.briarHollow.gate.tiles) {
-      this.hostileOnlyBlockedSet.add(tileCoordKey(tile.x, tile.y));
+    for (const gate of data.briarHollow.gates) {
+      for (const tile of gate.tiles) {
+        this.hostileOnlyBlockedSet.add(tileCoordKey(tile.x, tile.y));
+      }
     }
     registerBriarHollowSite(data.grid, data.briarHollow);
     return data.grid;

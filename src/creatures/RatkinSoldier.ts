@@ -262,7 +262,7 @@ export class RatkinSoldier extends Mob {
   allMobs: readonly Mob[] = [];
   /** The crawlers, set each frame, so a follower rests against whoever is in the way. */
   party: readonly Player[] = [];
-  /** The tiles either side of the gate, for a walk that has to go through it. */
+  /** The tiles either side of the militia's own gate, for a walk that has to go through it. */
   gateRoute: { readonly inside: TilePoint; readonly outside: TilePoint } | null = null;
   /** The palisade's outer rectangle, which a walk crosses only at the gate. */
   villageBounds: TileRect | null = null;
@@ -368,14 +368,15 @@ export class RatkinSoldier extends Mob {
   }
 
   /**
-   * Out past the ground its duty lets it fight on, walking back. It thinks
-   * wherever the party is until it gets there — a follower sent home from far
-   * outside the palisade would otherwise stand frozen in the wilds — and it
-   * picks no fight on the way, so thinking off screen never meets a hostile
-   * the activation radius has frozen.
+   * Walking back to its post, wherever that walk started or however far it
+   * runs — a follower sent home from far outside the palisade, or round a
+   * building a straight line cannot cross, would otherwise stand frozen off
+   * screen once its combat leash alone said it was "close enough". It thinks
+   * the whole way and picks no fight on the way, so thinking off screen never
+   * meets a hostile the activation radius has frozen.
    */
   private get isHeadingHome(): boolean {
-    return this.duty.kind === 'stand' && this.strayedTooFar();
+    return this.duty.kind === 'stand' && this.returningToStand;
   }
 
   /** Walks with the party, so it steps around the crawlers rather than shoving them. */
@@ -913,9 +914,12 @@ export class RatkinSoldier extends Mob {
   /**
    * The next place to walk to on the way to `goal`: the goal itself, unless
    * the palisade stands between them, in which case the near side of the
-   * gate and then its far side. A route round the whole palisade is longer
-   * than a path search will look, and a soldier left to steer straight at
-   * the goal walks into the wall and stays there.
+   * home gate and then its far side. A route round the whole palisade is
+   * longer than a path search will look, and a soldier left to steer
+   * straight at the goal walks into the wall and stays there. Always the
+   * militia's own gate (south, the main entrance) rather than whichever is
+   * nearest: every post's street connects to it, so a soldier crossing there
+   * is never left to find its own way through a stranger's district.
    */
   private legToward(goal: TilePoint): TilePoint {
     const gate = this.gateRoute;

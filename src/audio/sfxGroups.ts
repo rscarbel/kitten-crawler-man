@@ -122,6 +122,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'entered_safe_room',
     'error',
     'error_taking_action',
+    // The save indicator can fire from any floor or interior a checkpoint is
+    // taken on, so its cue has to be decoded before the first one can play.
+    'game_saving',
     'gate_opening',
     // Goblin and troglodyte spawn on every one of level1/level2/level3 (see
     // each level's MobSpawnRule table), so their cues live here rather than
@@ -369,6 +372,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'boulder_impact_3',
     'boulder_impact_4',
     'construction_complete',
+    'repairing_loop',
     'fence_break',
     'gate_thud',
     'grave_bull_bellow',

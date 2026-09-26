@@ -45,6 +45,7 @@ import type { SystemContext } from '../GameSystem';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { QuestMarkerType } from '../MiniMapSystem';
 import type { TrackerEntry } from '../questTracker';
+import type { ProcessingStationKind } from './processingStations';
 import { RatkinCastPrewarm } from './ratkinCastPrewarm';
 import { VillageAmbience } from './VillageAmbience';
 import { viewportHeight, viewportWidth } from '../../core/Viewport';
@@ -193,6 +194,10 @@ export class BriarHollowKit {
             bus: sceneWorld.bus,
             audio: deps.audio,
             party: () => this.partyState(),
+            // `this.services` does not exist yet at this line — it is built
+            // right after `this.villagers` below — but this closure only
+            // runs during gameplay, well after the constructor returns.
+            isVillagerBusy: () => this.services?.isShopBusy === true,
           });
     this.livestock =
       site === null
@@ -419,6 +424,7 @@ export class BriarHollowKit {
    */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.defences?.renderGround(ctx, camX, camY);
+    this.services?.renderGround(ctx, camX, camY);
     renderNecromancerTelegraphs(ctx, camX, camY, this.world.roster.mobs);
   }
 
@@ -820,14 +826,14 @@ export class BriarHollowKit {
     this.services?.handleWheel(deltaY);
   }
 
-  /** Escape: closes the conversation. Returns whether there was one to close. */
+  /**
+   * Escape: backs a question submenu out to the root topics, or closes the
+   * conversation from the root. Returns whether there was one to act on.
+   */
   dismissDialog(): boolean {
     if (this.defences?.dismissDialog() === true) return true;
     if (this.recruiter?.dismissDialog() === true) return true;
-    const villagers = this.villagers;
-    if (villagers?.isConversationOpen !== true) return false;
-    villagers.closeConversation();
-    return true;
+    return this.villagers?.escapeConversation() ?? false;
   }
 
   /** The conversation panel and the construction menus, drawn with the scene's other dialogs. */
@@ -883,6 +889,20 @@ export class BriarHollowKit {
   /** Minimap pips for anything the village quest wants pointed at. */
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
     return this.quest?.questMarkers ?? [];
+  }
+
+  /** The sawmill's machines, in tile coordinates with their output, for the minimap. */
+  get minimapProcessingStations(): Array<{
+    x: number;
+    y: number;
+    kind: ProcessingStationKind;
+  }> {
+    return this.services?.minimapProcessingStations() ?? [];
+  }
+
+  /** Every present vendor villager's world position, for the minimap's `$` markers. */
+  get minimapVendorPositions(): Array<{ x: number; y: number }> {
+    return this.services?.minimapVendorPositions() ?? [];
   }
 
   /** Quest Journal rows for the village's own questline. */

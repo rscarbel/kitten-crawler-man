@@ -42,15 +42,26 @@ import type { TilePoint, TileRect, TownPlan } from '../town/townPlan';
 import { grownRect } from './keepOut';
 import {
   CROSS_LANE,
+  EAST_GATE_LANE_SOUTH,
+  EAST_GATE_LANE_WEST,
+  EAST_GATE_ROAD_INSIDE,
+  EAST_GATE_ROAD_OUTSIDE,
   KITCHEN_GARDEN,
   KITCHEN_GARDEN_PATH_X,
   MAIN_STREET,
+  NORTH_GATE_LANE,
+  NORTH_GATE_ROAD_INSIDE,
+  NORTH_GATE_ROAD_OUTSIDE,
   QUARRY_SPUR,
   RUINS_CLEAR_HALF_TILES,
   RUINS_WALL_GAP_PERIOD,
   RUINS_WALL_RING_TILES,
   SOUTH_ROAD,
   TOWN_ROAD_START,
+  WEST_GATE_LANE_EAST,
+  WEST_GATE_LANE_SOUTH,
+  WEST_GATE_ROAD_INSIDE,
+  WEST_GATE_ROAD_OUTSIDE,
   WORN_PATHS,
   propFootprint,
   villagePropPartSpriteKey,
@@ -153,6 +164,22 @@ function paintStreets(grid: TileGrid, site: BriarHollowSite): void {
   fillGround(grid, origin, MAIN_STREET, FloorTypeValue.road);
   fillGround(grid, origin, CROSS_LANE, FloorTypeValue.road);
   for (const path of WORN_PATHS) fillGround(grid, origin, path, DIRT_PATCH);
+  // Worn tracks in from the north, east and west gates, the same way the
+  // south gate's main street ties it to the square: an apron just inside
+  // each gate, then a lane bent round whatever building stands in its way
+  // to reach the existing street network.
+  for (const stub of [
+    NORTH_GATE_ROAD_INSIDE,
+    NORTH_GATE_LANE,
+    EAST_GATE_ROAD_INSIDE,
+    EAST_GATE_LANE_SOUTH,
+    EAST_GATE_LANE_WEST,
+    WEST_GATE_ROAD_INSIDE,
+    WEST_GATE_LANE_SOUTH,
+    WEST_GATE_LANE_EAST,
+  ]) {
+    fillGround(grid, origin, stub, DIRT_PATCH);
+  }
   grid.fill(site.square.rect, YARD_GRAVEL);
   grid.fill(site.pasture.rect, PASTURE_GRASS);
   for (const field of site.cropFields) grid.fill(field, CROP_FIELD);
@@ -188,9 +215,11 @@ function paintPalisade(grid: TileGrid, site: BriarHollowSite): void {
   for (const tile of site.palisadePath) {
     grid.setPalisade(tile.x, tile.y, HOLLOW_PALISADE, 'fence');
   }
-  for (const tile of site.gate.tiles) {
-    grid.set(tile.x, tile.y, FloorTypeValue.road);
-    grid.setStanding(tile.x, tile.y, HOLLOW_GATE);
+  for (const gate of site.gates) {
+    for (const tile of gate.tiles) {
+      grid.set(tile.x, tile.y, FloorTypeValue.road);
+      grid.setStanding(tile.x, tile.y, HOLLOW_GATE);
+    }
   }
 }
 
@@ -296,6 +325,11 @@ export function paintBriarHollow(grid: TileGrid, site: BriarHollowSite): void {
   paintStreets(grid, site);
   paveRect(grid, origin, SOUTH_ROAD);
   paveRect(grid, origin, QUARRY_SPUR);
+  // Worn tracks out from the north, east and west gates, so each reads as an
+  // used entrance rather than a hole cut in the wall.
+  for (const stub of [NORTH_GATE_ROAD_OUTSIDE, EAST_GATE_ROAD_OUTSIDE, WEST_GATE_ROAD_OUTSIDE]) {
+    paveRect(grid, origin, stub);
+  }
   paintBuildings(grid, site);
   paintPastureFence(grid, site);
   paintPalisade(grid, site);

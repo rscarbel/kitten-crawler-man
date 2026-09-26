@@ -153,7 +153,8 @@ export interface ConstructionKitDeps {
 
 export class ConstructionKit {
   readonly defense: DefenseStructures;
-  readonly gate: VillageGate;
+  /** One instance per gate in the palisade, each opening and closing on its own. */
+  readonly gates: readonly VillageGate[];
   readonly construction: ConstructionSystem;
   /** What the trebuchets do once built: aim, throw, and what lands. */
   readonly trebuchets: TrebuchetSystem;
@@ -188,7 +189,7 @@ export class ConstructionKit {
       onTileChanged: deps.onTileChanged,
       clockSeconds: deps.clockSeconds,
     });
-    this.gate = new VillageGate(world.gameMap.structure, site, audio);
+    this.gates = site.gates.map((gate) => new VillageGate(world.gameMap.structure, gate, audio));
     this.construction = new ConstructionSystem({
       gameMap: world.gameMap,
       site,
@@ -335,7 +336,9 @@ export class ConstructionKit {
     this.buildPulseSecondsLeft = Math.max(0, this.buildPulseSecondsLeft - SECONDS_PER_UPDATE);
     this.secondsSinceNothingNote += SECONDS_PER_UPDATE;
     this.defense.update(SECONDS_PER_UPDATE);
-    this.gate.update(this.friendlies(), this.defense.gateShake, SECONDS_PER_UPDATE);
+    const friendlies = this.friendlies();
+    for (const gate of this.gates)
+      gate.update(friendlies, this.defense.gateShake, SECONDS_PER_UPDATE);
     this.construction.update();
     if (!this.deps.worldHalted()) {
       // Snares first: a hostile caught this frame is held where the boulder aimed at it lands.
@@ -907,7 +910,10 @@ export class ConstructionKit {
     // than they are: a knee-high fence hides nobody.
     const below = tileX >= 0 && tileX < row.length ? row[tileX] : undefined;
     if (below?.type === HOLLOW_PALISADE && below.wallTier !== 'fence') return true;
-    if (below?.type === HOLLOW_GATE && this.gate.openFraction < GATE_SEE_THROUGH_OPEN) return true;
+    if (below?.type === HOLLOW_GATE) {
+      const gate = this.gates.find((candidate) => candidate.containsTile(tileX, southY));
+      if ((gate?.openFraction ?? 0) < GATE_SEE_THROUGH_OPEN) return true;
+    }
     for (const record of this.defense.trebuchets) {
       const footprint = trebuchetFootprint(record.x, record.y);
       const coversColumn = tileX >= footprint.x && tileX < footprint.x + footprint.w;

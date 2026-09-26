@@ -249,13 +249,15 @@ export function isInsidePalisadeTile(site: BriarHollowSite, tileX: number, tileY
 
 const ringKeysBySite = new WeakMap<BriarHollowSite, ReadonlySet<number>>();
 
-/** The palisade's own tiles and the gate's, keyed by `tileCoordKey`, built once per site. */
+/** The palisade's own tiles and every gate's, keyed by `tileCoordKey`, built once per site. */
 function ringTileKeys(site: BriarHollowSite): ReadonlySet<number> {
   const cached = ringKeysBySite.get(site);
   if (cached !== undefined) return cached;
   const keys = new Set<number>();
   for (const tile of site.palisadePath) keys.add(tileCoordKey(tile.x, tile.y));
-  for (const tile of site.gate.tiles) keys.add(tileCoordKey(tile.x, tile.y));
+  for (const gate of site.gates) {
+    for (const tile of gate.tiles) keys.add(tileCoordKey(tile.x, tile.y));
+  }
   ringKeysBySite.set(site, keys);
   return keys;
 }
@@ -275,11 +277,11 @@ export function siegeCanEngage(mob: Mob, target: Player): boolean {
   return isInsidePalisade(siege.world.site, mob) === isInsidePalisade(siege.world.site, target);
 }
 
-/** Whether a body's centre stands on one of the gate's tiles. */
+/** Whether a body's centre stands on one of any gate's tiles. */
 function isOnGateTile(
   site: BriarHollowSite,
   body: { readonly x: number; readonly y: number },
 ): boolean {
   const tile = tileUnder(body);
-  return site.gate.tiles.some((gate) => gate.x === tile.x && gate.y === tile.y);
+  return site.gates.some((gate) => gate.tiles.some((g) => g.x === tile.x && g.y === tile.y));
 }
