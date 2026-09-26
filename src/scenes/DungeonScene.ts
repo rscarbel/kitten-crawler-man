@@ -65,6 +65,7 @@ import { drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
 import {
   availableTargets,
+  characterTarget,
   collectTrackerEntries,
   isOutstanding,
   pinMatchesEntry,
@@ -338,11 +339,7 @@ import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/Spider
 import { CircusQuestSystem, CIRCUS_QUEST_ID } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { AnchorQuestSystem } from '../systems/AnchorQuestSystem';
-import {
-  propBeaconTarget,
-  stallBeaconTarget,
-  doorwayBeaconTarget,
-} from '../systems/objectiveBeaconTargets';
+import { stallBeaconTarget, doorwayBeaconTarget } from '../systems/objectiveBeaconTargets';
 import { TINKER_VENDOR_ID } from '../systems/market/vendorDefs';
 import {
   capturePersistedDoomsday,
@@ -2582,7 +2579,10 @@ export class DungeonScene extends GameplayScene {
       this.bus,
       this.anchorQuestProgress,
       () => [this.human, this.cat],
-      () => propBeaconTarget(this.townProps?.fortuneTellerTile ?? null),
+      () => {
+        const tile = this.townProps?.fortuneTellerTile ?? null;
+        return tile === null ? null : characterTarget(tile);
+      },
       () => stallBeaconTarget(this.market?.stallTileFor(TINKER_VENDOR_ID) ?? null),
       (buildingName) =>
         doorwayBeaconTarget(

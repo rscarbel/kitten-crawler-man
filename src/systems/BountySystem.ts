@@ -34,7 +34,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
 import type { BountyNoticeState } from './townNotices';
-import type { TrackerEntry } from './questTracker';
+import { characterTarget, type TrackerEntry, type TrackerTarget } from './questTracker';
 import type { ArrowAvoidRect } from '../ui/WorldArrow';
 import { drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -683,7 +683,10 @@ export class BountySystem implements GameSystem {
       const boss = this.boss;
       const target =
         boss?.isAlive === true
-          ? { x: Math.floor(boss.x / TILE_SIZE), y: Math.floor(boss.y / TILE_SIZE) }
+          ? characterTarget({
+              x: Math.floor(boss.x / TILE_SIZE),
+              y: Math.floor(boss.y / TILE_SIZE),
+            })
           : this.currentSite();
       if (target !== null) markers.push({ x: target.x, y: target.y, type: 'red_x' });
       return markers;
@@ -738,7 +741,10 @@ export class BountySystem implements GameSystem {
           hint: 'Out in the wilds, well past the walls.',
           target:
             boss?.isAlive === true
-              ? { x: Math.floor(boss.x / TILE_SIZE), y: Math.floor(boss.y / TILE_SIZE) }
+              ? characterTarget({
+                  x: Math.floor(boss.x / TILE_SIZE),
+                  y: Math.floor(boss.y / TILE_SIZE),
+                })
               : (site ?? undefined),
         },
       ];
@@ -756,10 +762,13 @@ export class BountySystem implements GameSystem {
   }
 
   /** Shady's own tile, or null before he has been placed on this floor. */
-  private shadyTile(): { x: number; y: number } | null {
+  private shadyTile(): TrackerTarget | null {
     const shady = this.shady;
     if (shady === null) return null;
-    return { x: Math.floor(shady.x / TILE_SIZE), y: Math.floor(shady.y / TILE_SIZE) };
+    return characterTarget({
+      x: Math.floor(shady.x / TILE_SIZE),
+      y: Math.floor(shady.y / TILE_SIZE),
+    });
   }
 
   /**

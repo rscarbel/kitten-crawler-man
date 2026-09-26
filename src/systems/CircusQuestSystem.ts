@@ -30,7 +30,7 @@ import type { Player } from '../Player';
 import { QuestManager, type QuestStatus } from '../core/QuestManager';
 import { partyLevelOf } from '../levels/spawner';
 import { questMobLevel } from './questMobLevel';
-import type { TrackerEntry } from './questTracker';
+import { characterTarget, type TrackerEntry } from './questTracker';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { OverworldMusicSystem } from './OverworldMusicSystem';
 import { Signet } from '../creatures/Signet';
@@ -898,8 +898,7 @@ export class CircusQuestSystem implements GameSystem {
    */
   trackerEntries(): ReadonlyArray<TrackerEntry> {
     const name = this.questManager.getDef(CIRCUS_QUEST_ID)?.name ?? 'The Show Must Go On';
-    const atSignet =
-      this.signet?.isAlive === true ? { ...this.signetTile(), wearsOwnMarker: true } : undefined;
+    const atSignet = this.signet?.isAlive === true ? characterTarget(this.signetTile()) : undefined;
     const base = { id: CIRCUS_QUEST_ID, name };
 
     switch (this.phase) {
@@ -941,10 +940,10 @@ export class CircusQuestSystem implements GameSystem {
             hint: 'She bolted into the wilds. Follow the red mark.',
             target:
               this.heather?.isAlive === true
-                ? {
+                ? characterTarget({
                     x: Math.round(this.heather.x / TILE_SIZE),
                     y: Math.round(this.heather.y / TILE_SIZE),
-                  }
+                  })
                 : atSignet,
           },
         ];

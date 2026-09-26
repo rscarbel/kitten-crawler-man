@@ -7,6 +7,10 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
  * player is close. This answers "which one of these" — the last few tiles, where
  * a bearing is useless because the thing is already on screen among a dozen
  * others that look like it.
+ *
+ * Only for places: this is painted over the whole world, so it must never mark a
+ * character. A character draws `drawQuestBeacon` from its own render, behind its
+ * body, and its tracker target is built with `characterTarget`.
  */
 
 const BEAM_HEIGHT_TILES = 2.6;

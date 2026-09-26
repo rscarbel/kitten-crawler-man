@@ -9,7 +9,7 @@
  * their south edge — and a cart is the exception, being a counter the shopper
  * stands in front of rather than a thing rooted at its front face.
  *
- * Kept together here, rather than spread across the scene's wiring, so the three
+ * Kept together here, rather than spread across the scene's wiring, so the
  * shapes can be compared against each other.
  */
 
@@ -18,20 +18,6 @@ import { plannedBuildingSpriteKey } from '../map/town/townPlan';
 import { STALL_CANOPY_HEIGHT_TILES, STALL_WIDTH_TILES } from '../sprites/marketStall';
 import { doorwaySpan, type BuildingEntry } from './BuildingSystem';
 import type { TrackerTarget } from './questTracker';
-
-/**
- * No backset: a town prop stands on its tile's south edge, same as a facade.
- *
- * A baked town sheet is blitted with the anchor tile's top-left as the sprite's
- * anchor point, and every fixture in `townFixtures.ts` is drawn from that origin
- * downward into one tile — Madame Voss's seat line is at 0.96 of a tile below
- * it, the deepest ink she has. The frame around her is larger only to hold the
- * `shadowBlur` halos on her eyes and her orb, and the manifest's `tileX`/`tileY`
- * cancel that margin back out; they are not a claim that she is centred in the
- * frame. Lifting the pool half a tile therefore put it at her waist rather than
- * at her feet.
- */
-const PROP_BACKSET_TILES = 0;
 
 /** The counter's own face, rather than the street the shopper stands in. */
 const STALL_BACKSET_TILES = 0.5;
@@ -129,12 +115,6 @@ function facadeExtent(entry: BuildingEntry): FacadeExtent | null {
     widthTiles: footprint.w,
     roofRise: entry.doorTile.y - (anchorY + footprint.dy),
   };
-}
-
-/** A single-tile fixture such as the fortune teller's table. */
-export function propBeaconTarget(tile: { x: number; y: number } | null): TrackerTarget | null {
-  if (tile === null) return null;
-  return { x: tile.x, y: tile.y, backsetTiles: PROP_BACKSET_TILES };
 }
 
 /**

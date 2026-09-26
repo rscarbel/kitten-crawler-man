@@ -29,7 +29,7 @@ import { QuestManager, type QuestStatus } from '../core/QuestManager';
 import type { ItemId } from '../core/ItemDefs';
 import { partyLevelOf } from '../levels/spawner';
 import { questMobLevel } from './questMobLevel';
-import type { TrackerEntry, TrackerTarget } from './questTracker';
+import { characterTarget, type TrackerEntry, type TrackerTarget } from './questTracker';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import type { OverworldMusicSystem } from './OverworldMusicSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
@@ -799,8 +799,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
             status: 'available',
             objective: 'Hear GumGum out',
             hint: 'The jittery street elf outside the Desperado Club.',
-            target:
-              this.gumgumTile === null ? undefined : { ...this.gumgumTile, wearsOwnMarker: true },
+            target: this.gumgumTile === null ? undefined : characterTarget(this.gumgumTile),
           },
         ];
       case 'body_waiting':
@@ -836,7 +835,10 @@ export class MurderMysteryQuestSystem implements GameSystem {
             target:
               alive.length === 0
                 ? undefined
-                : { x: Math.round(alive[0].x / TILE_SIZE), y: Math.round(alive[0].y / TILE_SIZE) },
+                : characterTarget({
+                    x: Math.round(alive[0].x / TILE_SIZE),
+                    y: Math.round(alive[0].y / TILE_SIZE),
+                  }),
           },
         ];
       }

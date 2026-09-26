@@ -31,7 +31,12 @@ import { ConfirmModal } from '../../ui/ConfirmModal';
 import { drawItemIcon } from '../../ui/InventoryPanel';
 import type { OverlayInputClaim } from '../kits/OverlayClaims';
 import type { QuestMarkerType } from '../MiniMapSystem';
-import { secondsLabel, type TrackerEntry, type TrackerTarget } from '../questTracker';
+import {
+  characterTarget,
+  secondsLabel,
+  type TrackerEntry,
+  type TrackerTarget,
+} from '../questTracker';
 import type { GroundPickupSystem } from '../GroundPickupSystem';
 import type { DefenseStructures } from './DefenseStructures';
 import type { Circumstance, VillagerId } from './ratkinDialogue';
@@ -647,7 +652,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private villagerTarget(id: VillagerId): TrackerTarget | undefined {
     const villager = this.deps.villagers.villagerFor(id);
     if (villager === null) return undefined;
-    return { x: villager.tile.x, y: villager.tile.y, wearsOwnMarker: true };
+    return characterTarget(villager.tile);
   }
 
   private anchorTarget(tiles: readonly TilePoint[] | undefined): TrackerTarget | undefined {
@@ -696,7 +701,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
             ...base,
             status: 'available',
             objective: `Speak with ${recruiter.name} in the town square`,
-            target: { x: recruiter.tile.x, y: recruiter.tile.y, wearsOwnMarker: true },
+            target: characterTarget(recruiter.tile),
           };
         }
         return {

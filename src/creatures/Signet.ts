@@ -23,8 +23,10 @@ import {
   drawQuestMarker,
   QUEST_MARKER_GOLD,
   QUEST_MARKER_GREEN,
+  questMarkerColorFor,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
+import { drawQuestBeacon } from '../sprites/questBeacon';
 
 const SIGNET_HP = 80;
 const SIGNET_SPEED = 1.6;
@@ -479,6 +481,14 @@ export class Signet extends Mob {
       this.attackAnimTimer > 0
         ? (ATTACK_ANIM_FRAMES - this.attackAnimTimer) / (ATTACK_ANIM_FRAMES - 1)
         : 0;
+
+    // Beacon first, so the column stands behind her. Given her own tile rather
+    // than her double-scale figure, whose size would stretch the beam and its
+    // near-fade radius.
+    const markerColor = questMarkerColorFor(this.markerType);
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+    }
 
     drawSignetSprite(ctx, sx, sy, tileSize, {
       walkFrame: this.walkFrame,

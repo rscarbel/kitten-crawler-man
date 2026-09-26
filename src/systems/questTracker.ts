@@ -37,16 +37,22 @@ export interface TrackerTarget extends ObjectiveBeaconFootprint {
   readonly x: number;
   readonly y: number;
   /**
-   * Set for a target that already wears an overhead quest marker of its own.
+   * Set for a target that is a character rather than a place.
    *
-   * The beacon exists to pick one thing out of a dozen that look like it — a
-   * doorway among doorways, a stall among stalls. A quest giver bouncing a '!'
-   * over her head has answered that question already, and standing a second,
-   * far larger light on her only washes her out as she walks through it. The
-   * world arrow and the minimap chevron still point at her: they answer "which
-   * way", which a glyph on an off-screen character cannot.
+   * **Rule: the overlay beacon is never drawn over a character.** It is painted
+   * after every world entity, so on a person, bear or boss it stands in front of
+   * them and washes them out, and it samples a tile that lags their movement.
+   * A character marks itself instead: its own render draws `drawQuestBeacon`
+   * behind its body, Y-sorted and at its exact position. Build every such target
+   * with {@link characterTarget} so the flag cannot be forgotten. The world arrow
+   * and the minimap chevron still point at it.
    */
   readonly wearsOwnMarker?: boolean;
+}
+
+/** A tile target for a character, which the scene will not stand the overlay beacon on. */
+export function characterTarget(tile: { readonly x: number; readonly y: number }): TrackerTarget {
+  return { x: tile.x, y: tile.y, wearsOwnMarker: true };
 }
 
 export interface TrackerEntry {
