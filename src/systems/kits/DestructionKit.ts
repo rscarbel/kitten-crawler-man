@@ -30,6 +30,7 @@ import type { SceneWorld } from './SceneWorld';
 const COIN_PICKUP_VOLUME = 0.55;
 
 /** Splitting planks, alternated so back-to-back breaks never sound identical. */
+const GARBAGE_BAG_BURST_SOUNDS = ['garbage_bag_burst_1', 'garbage_bag_burst_2'] as const;
 const WOOD_SMASH_SOUNDS = ['wood_smashing_1', 'wood_smashing_2'] as const;
 
 export interface DestructionKitOptions {
@@ -105,6 +106,10 @@ export class DestructionKit {
       audio?.play('hammer_strike');
     }
 
+    if (smashes.trash > 0) {
+      audio?.playRandom(GARBAGE_BAG_BURST_SOUNDS);
+    }
+
     const pickups = this.loot.drainPickups();
     if (pickups.withCoins > 0) {
       audio?.play('coin_pouch', { volume: COIN_PICKUP_VOLUME });
@@ -122,7 +127,7 @@ export class DestructionKit {
       audio?.play('dynamite_explosion');
     }
 
-    return smashes.wood > 0 || smashes.iron > 0;
+    return smashes.wood > 0 || smashes.iron > 0 || smashes.trash > 0;
   }
 
   /** Wreckage lies on the floor, so it draws under everything that walks on it. */

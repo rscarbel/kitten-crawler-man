@@ -174,10 +174,12 @@ const WOOD_SPLINTER_SHADES = ['#3a2413', '#5a3a1e', '#7a5028', '#9a6a38', '#c090
 const IRON_SPLINTER_SHADES = ['#3a4048', '#4a5058', '#6b7480', '#ff8a1e', '#e2450f'] as const;
 
 /** What a prop is chiefly made of, which decides how its break sounds and looks. */
-type PropMaterial = 'wood' | 'iron';
+type PropMaterial = 'wood' | 'iron' | 'trash';
 
 function materialFor(kind: DestructiblePropKind): PropMaterial {
-  return kind === 'brazier' ? 'iron' : 'wood';
+  if (kind === 'brazier') return 'iron';
+  if (kind === 'garbage_bag') return 'trash';
+  return 'wood';
 }
 
 /** Torn black plastic and the rubbish it held, for a burst garbage bag. */
@@ -319,7 +321,7 @@ export class DestructiblePropSystem implements GameSystem {
   private readonly bursts: ShatterBurst[] = [];
   private readonly wreckage: Wreckage[] = [];
   private readonly splinters: Splinter[] = [];
-  private readonly smashCounts: SmashCounts = { wood: 0, iron: 0 };
+  private readonly smashCounts: SmashCounts = { wood: 0, iron: 0, trash: 0 };
   /** Tile types of every breakable prop kind this map allows, for the smash-through sight test. */
   private readonly breakableTileTypes: ReadonlySet<number>;
 
@@ -577,6 +579,7 @@ export class DestructiblePropSystem implements GameSystem {
 
     this.smashCounts.wood = snapshot.smashCounts.wood;
     this.smashCounts.iron = snapshot.smashCounts.iron;
+    this.smashCounts.trash = snapshot.smashCounts.trash;
 
     this.wreckage.length = 0;
     for (const decal of snapshot.wreckage) this.wreckage.push({ ...decal });
@@ -613,6 +616,7 @@ export class DestructiblePropSystem implements GameSystem {
     const counts = { ...this.smashCounts };
     this.smashCounts.wood = 0;
     this.smashCounts.iron = 0;
+    this.smashCounts.trash = 0;
     return counts;
   }
 

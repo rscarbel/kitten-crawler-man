@@ -26,9 +26,8 @@ const GATE_SHAKE_PX = 2.5;
 /** Rattles per second while shaking. */
 const GATE_SHAKE_HZ = 18;
 
-/** Stand-ins until the gate's own open and close sounds are recorded. */
-const GATE_OPEN_SOUND = 'gate_opening';
-const GATE_CLOSE_SOUND = 'gate_opening';
+const GATE_OPEN_SOUND = 'village_gate_open';
+const GATE_CLOSE_SOUND = 'village_gate_close';
 
 const HALF_TILE = TILE_SIZE / 2;
 

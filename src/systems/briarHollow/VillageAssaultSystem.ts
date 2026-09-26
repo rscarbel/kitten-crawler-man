@@ -30,7 +30,12 @@
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import type { AudioManager } from '../../audio/AudioManager';
-import { VILLAGE_CUES, VILLAGE_SIEGE_MUSIC, type VillageCue } from '../../audio/villageSoundCues';
+import {
+  VILLAGE_CUES,
+  VILLAGE_SIEGE_MUSIC,
+  VILLAGE_VICTORY_MUSIC,
+  type VillageCue,
+} from '../../audio/villageSoundCues';
 import type { BriarHollowState } from '../../core/briarHollowState';
 import type { VillageQuestPhase } from '../../core/villageQuestPhase';
 import {
@@ -832,6 +837,8 @@ export class VillageAssaultSystem {
   private segmentsBreached = 0;
   private structuresDestroyed = 0;
   private readonly crumbles: ScheduledCrumble[] = [];
+  /** Frames the victory track still owns the music; the track loops, so the village music must cut in as it ends. */
+  private victoryMusicFrames = 0;
   private readonly effects: CrumbleEffect[] = [];
   /** The one attacker whose sounds play; every other attacker is silent. */
   private voice: Mob | null = null;
@@ -1039,6 +1046,7 @@ export class VillageAssaultSystem {
     ambience.noticeBoard.callToArms = true;
     ambience.bell.cracked = false;
     this.ensureFlow();
+    this.victoryMusicFrames = 0;
     const music = this.deps.music();
     if (music !== null) music.battleMusicActive = true;
     this.deps.audio?.playMusic(VILLAGE_SIEGE_MUSIC, { fadeInMs: SIEGE_MUSIC_FADE_MS });
@@ -1072,6 +1080,7 @@ export class VillageAssaultSystem {
     }
     this.tickWithdrawals();
     this.tickCrumbles();
+    this.tickVictoryMusic();
 
     if (this.phase === 'imminent') this.updateImminent(frame);
     else if (this.phase === 'assault') this.updateAssault(frame);
@@ -1621,6 +1630,21 @@ export class VillageAssaultSystem {
     this.deps.setPhase('victory');
     this.endSiege();
     this.playCue('bellVictoryPeal');
+    this.startVictoryMusic();
+  }
+
+  private startVictoryMusic(): void {
+    const music = this.deps.music();
+    if (music === null) return;
+    music.battleMusicActive = true;
+    this.victoryMusicFrames = VICTORY_MUSIC_FRAMES;
+    this.deps.audio?.playMusic(VILLAGE_VICTORY_MUSIC, { fadeInMs: SIEGE_MUSIC_FADE_MS });
+  }
+
+  private tickVictoryMusic(): void {
+    if (this.victoryMusicFrames <= 0) return;
+    this.victoryMusicFrames--;
+    if (this.victoryMusicFrames === 0) this.releaseMusic();
   }
 
   /** The bell fell, or the party left: the dead walk back out, and the walls stay as they are. */
@@ -2019,6 +2043,10 @@ export class VillageAssaultSystem {
     }
     this.resetSiegeCounters();
     this.crumbles.length = 0;
+    if (this.victoryMusicFrames > 0) {
+      this.victoryMusicFrames = 0;
+      this.releaseMusic();
+    }
     this.effects.length = 0;
     this.withdraw.walks.clear();
     this.outcomeBanner = null;
@@ -2057,6 +2085,9 @@ const TILE_CENTRE = 0.5;
 const SIDE_BANNER_SECONDS = 6;
 const SIDE_BANNER_FRAMES = SIDE_BANNER_SECONDS * UPDATES_PER_SECOND;
 const SIEGE_MUSIC_FADE_MS = 1000;
+/** The victory track is 12 s long and plays once through before the village's own music returns. */
+const VICTORY_MUSIC_SECONDS = 12;
+const VICTORY_MUSIC_FRAMES = VICTORY_MUSIC_SECONDS * UPDATES_PER_SECOND;
 const BELL_FALLEN_BANNER = 'The bell has fallen. The dead withdraw…';
 const ABANDONED_BANNER = 'You left Briar Hollow to the dead. They withdraw…';
 

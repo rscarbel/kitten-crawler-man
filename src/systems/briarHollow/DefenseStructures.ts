@@ -149,17 +149,16 @@ export const REPATH_RADIUS_TILES = 20;
 /** Seconds the gate shakes after a blow. */
 export const GATE_SHAKE_SECONDS = 0.35;
 
-/** Stand-in cues until the village's own construction sounds are recorded. */
-const FENCE_BREAK_SOUND = 'wood_breaking_1';
-const WOOD_WALL_BREAK_SOUND = 'wood_breaking_3';
-const STONE_WALL_BREAK_SOUND = 'deep_rumbling';
-const WOOD_WALL_HIT_SOUND = 'wood_smashing_1';
-const STONE_WALL_HIT_SOUND = 'rock_thud_3';
-const GATE_THUD_SOUND = 'massive_strike_with_dirt_impact';
-const SPIKES_IMPALE_SOUND = 'slash_strike_2';
-const TREBUCHET_BREAK_SOUND = 'wood_breaking_3';
-const SNARE_BREAK_SOUND = 'wood_breaking_1';
-const DISMANTLE_SOUND = 'wood_breaking_2';
+const FENCE_BREAK_SOUND = 'fence_break';
+const WOOD_WALL_BREAK_SOUND = 'wall_break_wood';
+const STONE_WALL_BREAK_SOUND = 'wall_break_stone';
+const WOOD_WALL_HIT_SOUND = 'wall_hit_wood';
+const STONE_WALL_HIT_SOUND = 'wall_hit_stone';
+const GATE_THUD_SOUND = 'gate_thud';
+const SPIKES_IMPALE_SOUND = 'spikes_impale';
+const TREBUCHET_BREAK_SOUND = 'trebuchet_break';
+const SNARE_BREAK_SOUND = 'snare_break';
+const DISMANTLE_SOUND = 'structure_dismantle';
 
 const BELL_REF: StructureRef = { kind: 'bell' };
 

@@ -207,6 +207,7 @@ import { HumanTalkDriver, openChestWithGesture } from '../creatures/humanGesture
 import { type Pt } from '../sprites/art/carlArt';
 import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
 import { RewardFlySystem, type RewardFlyHold } from '../systems/RewardFlySystem';
+import { playRewardLandingCues } from '../systems/rewardFlyAudio';
 import type { PendingLoot } from '../systems/LootSystem';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Goblin } from '../creatures/Goblin';
@@ -693,6 +694,8 @@ const TOWN_SQUARE_AMBIENT_VOLUME = 0.28;
  */
 const CITY_CROWD_AMBIENT_FALLBACK_RADIUS_TILES = 40;
 const CITY_CROWD_AMBIENT_VOLUME = 0.35;
+/** Briar Hollow's bed is a constant, palisade-wide emitter: full inside the wall, silent outside it. */
+const VILLAGE_AMBIENT_VOLUME = 0.4;
 
 /** Shown via `HotbarToast` on safe-room entry, once a checkpoint is actually captured. */
 const PROGRESS_SAVED_TOAST_TEXT = 'Progress Saved...';
@@ -903,6 +906,15 @@ const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
 const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
+const TREE_FALL_SOUNDS = ['tree_fall_1', 'tree_fall_2', 'tree_fall_3', 'tree_fall_4'] as const;
+const MONGO_HAPPY_SQUAWKS = [
+  'happy_mongo_squawk_1',
+  'happy_mongo_squawk_2',
+  'happy_mongo_squawk_3',
+  'happy_mongo_squawk_4',
+] as const;
+/** The five-minute alarm is the ten-minute one pitched up, so the escalation is audible. */
+const FIVE_MINUTE_WARNING_PLAYBACK_RATE = 1.3;
 
 /**
  * Mob-attack and hazard one-shots long enough to still be sounding when a
@@ -1125,6 +1137,8 @@ export class DungeonScene extends GameplayScene {
    * mechanism.
    */
   private riverAmbientEmitter: AmbientEmitter | null = null;
+  /** Briar Hollow's bed, held so `updateVillageAmbience` can switch it with the player's position. */
+  private villageAmbientEmitter: AmbientEmitter | null = null;
   private readonly circusQuestProgress: CircusQuestProgress;
   private readonly murderQuestProgress: MurderQuestProgress;
   private readonly anchorQuestProgress: AnchorQuestProgress;
@@ -3438,6 +3452,16 @@ export class DungeonScene extends GameplayScene {
     };
     this.riverAmbientEmitter = river;
     emitters.push(river);
+    const village: AmbientEmitter = {
+      soundId: 'ambient_village',
+      x: 0,
+      y: 0,
+      radiusTiles: 0,
+      maxVolume: 0,
+      constant: true,
+    };
+    this.villageAmbientEmitter = village;
+    emitters.push(village);
     const fountain = this.gameMap.fountainCentre;
     if (fountain !== undefined) {
       emitters.push({
@@ -4931,6 +4955,7 @@ export class DungeonScene extends GameplayScene {
     ) ?? { x: centreTileX, y: centreTileY };
     this.bus.emit('roomCleared', { roomIndex });
     this.captureSavePoint(respawnTile, { announce: false });
+    this.audio?.play('stairwell_save_chime');
   }
 
   /**
@@ -6011,6 +6036,8 @@ export class DungeonScene extends GameplayScene {
           this.levelDef.isOverworld === true,
         )
       ) {
+        this.audio?.play('happy_hearts');
+        this.audio?.playRandom(MONGO_HAPPY_SQUAWKS);
         return;
       }
       // Last in the chain: the hireling stands at the party's shoulder all
@@ -6460,7 +6487,7 @@ export class DungeonScene extends GameplayScene {
       }
     }
     this.achievementUI.tick();
-    this.rewardFly.update();
+    playRewardLandingCues(this.audio, this.rewardFly.update());
     // Above the boss-intro return below: an award overlay raised on the frame a
     // boss room locks would otherwise sit frozen at its first frame for the
     // length of the intro, and a potion's effect cue would be held with it.
@@ -7406,12 +7433,9 @@ export class DungeonScene extends GameplayScene {
       this.woodBreakSoundIdx++;
     }
     if ((this.trees?.drainFelled() ?? 0) > 0) {
-      // Splitting timber is splitting timber, so a tree coming down reuses the
-      // prop break cue rather than shipping an audio file for one event. One
-      // cue however many trees fell together, for the reason above.
-      const treeFallSounds = ['wood_breaking_1', 'wood_breaking_2', 'wood_breaking_3'] as const;
-      this.audio?.play(treeFallSounds[this.woodBreakSoundIdx % treeFallSounds.length]);
-      this.woodBreakSoundIdx++;
+      // One cue however many trees land together: overlapping copies of the
+      // same sample stack into a blast rather than a fall.
+      this.audio?.playRandom(TREE_FALL_SOUNDS);
     }
     if (this.defendQuest.menuOpenSoundPending) {
       this.defendQuest.menuOpenSoundPending = false;
@@ -7445,6 +7469,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     this.overworldMusic?.update(ctx);
+    this.updateVillageAmbience(ctx.active);
     this.ambientSound?.update(ctx);
     this.bossRoomDressings.update(ctx);
     const colosseumCue = this.bossRoomDressings.parts.colosseum?.takeSoundCue() ?? null;
@@ -7706,7 +7731,9 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.levelDef.hasCollapseTimer === true && this.levelTimerFrames > 0) {
+      const framesBefore = this.levelTimerFrames;
       this.levelTimerFrames--;
+      this.playLevelTimerCue(UIRenderer.levelTimerCue(framesBefore, this.levelTimerFrames));
     }
 
     revealMinimap(player, this.miniMap);
@@ -7755,6 +7782,16 @@ export class DungeonScene extends GameplayScene {
         pickDeathExplanation(deathCause),
         respawnModeFor(respawnRouteFor(this.lastSave)),
       );
+    }
+  }
+
+  private playLevelTimerCue(cue: UIRenderer.LevelTimerCue | null): void {
+    if (cue === 'final_minute_heartbeat') {
+      this.audio?.play('level_timer_final_minute_heartbeat');
+    } else if (cue === 'five_minute_warning') {
+      this.audio?.play('level_timer_warning', { playbackRate: FIVE_MINUTE_WARNING_PLAYBACK_RATE });
+    } else if (cue === 'ten_minute_warning') {
+      this.audio?.play('level_timer_warning');
     }
   }
 
@@ -8697,6 +8734,13 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.updateRiverAmbience(listener);
+  }
+
+  private updateVillageAmbience(listener: Pick<Player, 'x' | 'y'>): void {
+    const emitter = this.villageAmbientEmitter;
+    if (emitter === null) return;
+    const inVillage = this.gameMap.isInBriarHollow(listener.x, listener.y);
+    emitter.maxVolume = inVillage ? VILLAGE_AMBIENT_VOLUME : 0;
   }
 
   /**

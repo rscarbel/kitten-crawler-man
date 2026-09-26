@@ -58,6 +58,12 @@ const COIN_EDGE_WIDTH = 1.5;
 /** How much a flying item shrinks over its final fade, as a fraction of its size. */
 const ITEM_LANDING_SHRINK = 0.4;
 
+/** What arrived at the HUD during one `update()`, for the owning scene to voice. */
+export interface RewardLandings {
+  coins: number;
+  items: number;
+}
+
 interface FlyingCoin {
   fromX: number;
   fromY: number;
@@ -266,14 +272,16 @@ export class RewardFlySystem {
     this.inFlightItemCount++;
   }
 
-  /** Advance every animation. Call once per frame regardless of hold state. */
-  update(): void {
+  /** Advance every animation. Call once per frame regardless of hold state. Returns what landed this frame. */
+  update(): RewardLandings {
+    const landings: RewardLandings = { coins: 0, items: 0 };
     for (let i = this.coins.length - 1; i >= 0; i--) {
       const coin = this.coins[i];
       coin.age++;
       if (coin.age >= coin.delay + COIN_FLY_DURATION_FRAMES) {
         this.pendingCoinTotal = Math.max(0, this.pendingCoinTotal - coin.value);
         this.coinPulseFrames = COIN_PULSE_DECAY_FRAMES;
+        landings.coins++;
         this.coins[i] = this.coins[this.coins.length - 1];
         this.coins.pop();
       }
@@ -284,6 +292,7 @@ export class RewardFlySystem {
       item.age++;
       if (item.age >= item.delay + ITEM_FLY_DURATION_FRAMES) {
         this.bagBounceFrames = BAG_BOUNCE_DECAY_FRAMES;
+        landings.items++;
         this.inFlightItemCount = Math.max(0, this.inFlightItemCount - 1);
         this.items[i] = this.items[this.items.length - 1];
         this.items.pop();
@@ -303,6 +312,7 @@ export class RewardFlySystem {
 
     if (this.coinPulseFrames > 0) this.coinPulseFrames--;
     if (this.bagBounceFrames > 0) this.bagBounceFrames--;
+    return landings;
   }
 
   /** Coin amount not yet visually landed — subtract from a displayed total so it ticks up as sprites arrive. */

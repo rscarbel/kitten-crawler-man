@@ -196,6 +196,7 @@ import {
 } from '../systems/kits/OverlayClaims';
 import { DestructionKit } from '../systems/kits/DestructionKit';
 import { RewardFlySystem } from '../systems/RewardFlySystem';
+import { playRewardLandingCues } from '../systems/rewardFlyAudio';
 import type { PendingLoot } from '../systems/LootSystem';
 import { BigTopMazeSystem } from '../systems/BigTopMazeSystem';
 import { CultHideoutSystem } from '../systems/CultHideoutSystem';
@@ -2222,7 +2223,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // party is still drawn on top of the screen announcing it, and a dialog that
     // is not ticked sits frozen at its first frame with its accept button inert.
     this.menus.update();
-    this.rewardFly.update();
+    playRewardLandingCues(this.audio, this.rewardFly.update());
 
     // The death screen accepts through its own focus ring, which reaches
     // `handleClick` — nothing to poll for here. The fall he died in still

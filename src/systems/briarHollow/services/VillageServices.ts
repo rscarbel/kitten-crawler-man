@@ -82,8 +82,7 @@ const IDLE_SAWING_RANGE_TILES = 10;
 const SAWING_LOOP = 'loopable_sawing';
 /** The treatment's cue until a dedicated one is recorded. */
 const TREATMENT_SOUND = 'healing_potion';
-/** The upgrade's anvil ring; the purchase chime plays with every sale. */
-const UPGRADE_SOUND = 'hammer_strike';
+const UPGRADE_SOUND = 'tool_upgrade';
 
 /** The claim the priced menu has always had wherever it is shown; its buttons are ringed under this id. */
 const PRICED_MENU_FOCUS_ID = 'priced-menu';

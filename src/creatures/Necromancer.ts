@@ -1165,7 +1165,7 @@ export class Necromancer extends Mob {
     if (this.raiseKinds.some((kind) => kind !== 'ratkin')) prewarmSkeletonEscortSprites();
     this.isMoving = false;
     this.faceFront();
-    this.cues.push({ id: 'fairy_raise_call' });
+    this.cues.push({ id: 'necromancer_raise' });
     this.enterPhase('cast_raise');
     return true;
   }
@@ -1361,7 +1361,7 @@ export class Necromancer extends Mob {
     }
     this.boltCooldown = this.scaledCooldownFrames(NECRO_BOLT_COOLDOWN_FRAMES);
     this.projectileSoundPending = true;
-    this.cues.push({ id: 'magic_ball_launch' });
+    this.cues.push({ id: 'necromancer_bolt' });
   }
 
   // Grave Pulse
@@ -1412,7 +1412,7 @@ export class Necromancer extends Mob {
     const half = this.tileSize * HALF;
     this.faceToward({ x: chosen.point.x - half, y: chosen.point.y - half });
     this.isMoving = false;
-    this.cues.push({ id: 'charging_up_1' });
+    this.cues.push({ id: 'necromancer_pulse_charge' });
     this.pulseCooldown = this.scaledCooldownFrames(NECRO_PULSE_COOLDOWN_FRAMES);
     this.enterPhase('cast_pulse');
     return true;
@@ -1433,7 +1433,7 @@ export class Necromancer extends Mob {
     this.strikeBand();
     this.pulsesLanded++;
     this.lastPulseTarget = target;
-    this.cues.push({ id: 'deep_rumbling' });
+    this.cues.push({ id: 'necromancer_pulse_release' });
     this.endCast();
   }
 
@@ -1560,7 +1560,7 @@ export class Necromancer extends Mob {
   // ── Death ──────────────────────────────────────────────────────────────────
 
   override tickCorpse(): void {
-    if (this.corpseFrames === 0) this.cues.push({ id: 'skeleton_lord_death' });
+    if (this.corpseFrames === 0) this.cues.push({ id: 'necromancer_death' });
     this.corpseFrames++;
   }
 

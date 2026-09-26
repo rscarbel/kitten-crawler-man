@@ -339,12 +339,37 @@ function renderCriticalCountdown(
   });
 }
 
+export type LevelTimerCue = 'ten_minute_warning' | 'five_minute_warning' | 'final_minute_heartbeat';
+
+const secondsShown = (timerFrames: number): number =>
+  Math.max(0, Math.ceil(timerFrames / FRAMES_PER_SECOND));
+
+/**
+ * The audible cue owed for one frame of countdown, judged on the whole seconds
+ * the readout shows so the sound lands on the same beat as the display. Null
+ * when nothing was crossed; a timer rewound by a checkpoint restore never
+ * passes through here, so it cannot re-announce a tier.
+ */
+export function levelTimerCue(framesBefore: number, framesAfter: number): LevelTimerCue | null {
+  const before = secondsShown(framesBefore);
+  const after = secondsShown(framesAfter);
+  if (before === after) return null;
+  if (after <= ONE_MINUTE_CRITICAL_SECONDS) return 'final_minute_heartbeat';
+  if (before > FIVE_MINUTE_WARNING_SECONDS && after <= FIVE_MINUTE_WARNING_SECONDS) {
+    return 'five_minute_warning';
+  }
+  if (before > TEN_MINUTE_WARNING_SECONDS && after <= TEN_MINUTE_WARNING_SECONDS) {
+    return 'ten_minute_warning';
+  }
+  return null;
+}
+
 export function renderLevelTimer(
   ctx: CanvasRenderingContext2D,
   miniMap: MiniMapSystem,
   timerFrames: number,
 ): void {
-  const totalSec = Math.max(0, Math.ceil(timerFrames / FRAMES_PER_SECOND));
+  const totalSec = secondsShown(timerFrames);
   const min = Math.floor(totalSec / SECONDS_PER_MINUTE);
   const sec = totalSec % SECONDS_PER_MINUTE;
   const display = `${min}:${sec.toString().padStart(2, '0')}`;

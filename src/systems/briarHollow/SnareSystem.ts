@@ -50,7 +50,7 @@ export const SNARE_REARM_FRAMES = UPDATES_PER_SECOND;
 /** A spiked snare cuts its catch on the spring and again this far through the hold. */
 const SPIKE_SECOND_STRIKE_FRACTION = 0.5;
 
-const SNARE_TRIGGER_SOUND = 'slash_strike_1';
+const SNARE_TRIGGER_SOUND = 'snare_trigger';
 const HALF_TILE = TILE_SIZE / 2;
 /** A body's feet sit this far down its tile, where the noose is drawn round them. */
 const FEET_DEPTH_TILES = 0.85;

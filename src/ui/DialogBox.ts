@@ -14,6 +14,7 @@
 import { drawBox } from './Box';
 import { drawText, measureTextBox } from './TextBox';
 import type { AudioManager } from '../audio/AudioManager';
+import type { SoundId } from '../audio/sounds';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 /** Default ms between revealed elements — matches the typing_click sound length. */
@@ -83,6 +84,11 @@ export interface DialogBoxConfig {
    * that auto-dismiss and have no user interaction. Default: true
    */
   showFooterHint?: boolean;
+  /**
+   * Takes the place of the typing click: one of these plays once, as the
+   * speaker's voice, when the box first shows text, and the reveal is silent.
+   */
+  voiceSounds?: ReadonlyArray<SoundId>;
 }
 
 /** Options passed to show() to configure per-message behaviour. */
@@ -112,6 +118,8 @@ export class DialogBox {
   private _revealedCount = 0;
   private _lastRevealTime = 0;
   private _pageIndicator: { readonly current: number; readonly total: number } | null = null;
+  private readonly _voiceSounds: ReadonlyArray<SoundId> | null;
+  private _voiceSpoken = false;
 
   constructor(audio: AudioManager | null, config: DialogBoxConfig) {
     this._audio = audio;
@@ -120,6 +128,17 @@ export class DialogBox {
     this._revealMode = config.revealMode ?? 'all';
     this._revealIntervalMs = config.revealIntervalMs ?? TYPING_CLICK_DURATION_MS;
     this._showFooterHint = config.showFooterHint ?? true;
+    this._voiceSounds = config.voiceSounds ?? null;
+  }
+
+  private _playRevealSound(): void {
+    if (this._voiceSounds === null) {
+      this._audio?.play('typing_click');
+      return;
+    }
+    if (this._voiceSpoken) return;
+    this._voiceSpoken = true;
+    this._audio?.playRandom(this._voiceSounds);
   }
 
   /**
@@ -136,12 +155,12 @@ export class DialogBox {
     if (this._revealMode === 'all' || this._tokens.length === 0) {
       this._revealedCount = this._tokens.length;
       if (this._tokens.length > 0) {
-        this._audio?.play('typing_click');
+        this._playRevealSound();
       }
     } else {
       this._revealedCount = 1;
       this._lastRevealTime = performance.now();
-      this._audio?.play('typing_click');
+      this._playRevealSound();
     }
   }
 
@@ -155,7 +174,7 @@ export class DialogBox {
 
     this._lastRevealTime = now;
     this._revealedCount++;
-    this._audio?.play('typing_click');
+    this._playRevealSound();
   }
 
   /** True once all text has been revealed. */

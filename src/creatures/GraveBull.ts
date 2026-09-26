@@ -276,7 +276,7 @@ export class GraveBull extends Mob {
     if (target !== null) {
       if (!this.isAggro) {
         this.isAggro = true;
-        this.cues.push({ id: 'bear_growl_1' });
+        this.cues.push({ id: 'grave_bull_bellow' });
       }
       this.warmAttack();
       const toX = target.x - this.x;
@@ -374,7 +374,7 @@ export class GraveBull extends Mob {
     this.chargeStructure = structure;
     this.isMoving = false;
     this.warmAttack();
-    this.cues.push({ id: 'bear_growl_1' });
+    this.cues.push({ id: 'grave_bull_bellow' });
     this.enterPhase('paw');
   }
 
@@ -390,7 +390,7 @@ export class GraveBull extends Mob {
       this.deathWarmed = true;
       prewarmGraveBullDeath();
     }
-    this.cues.push({ id: 'rolling_earth_ball' });
+    this.cues.push({ id: 'grave_bull_charge' });
     this.enterPhase('charge');
   }
 

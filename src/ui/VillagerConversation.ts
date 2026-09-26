@@ -18,6 +18,7 @@
  */
 
 import type { AudioManager } from '../audio/AudioManager';
+import type { SoundId } from '../audio/sounds';
 import { DialogBox } from './DialogBox';
 import { BUTTON_PRESETS, drawButton, playButtonSound } from './Button';
 
@@ -47,6 +48,15 @@ const MAX_CHOICES_PER_ROW = 3;
 const CHOICES_MIN_TOP = 8;
 /** Number keys reach this many choices. */
 const MAX_NUMBERED_CHOICES = 9;
+/** A ratkin's chatter stands in for the typing click, as the villager's voice. */
+const RATKIN_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
+  'ratkin_chatter_1',
+  'ratkin_chatter_2',
+  'ratkin_chatter_3',
+  'ratkin_chatter_4',
+  'ratkin_chatter_5',
+  'ratkin_chatter_6',
+];
 /** What the typing reveals at a time. */
 const REVEAL_MODE = 'sentence';
 
@@ -108,6 +118,7 @@ export class VillagerConversation {
       speakerName,
       speakerIcon: portrait,
       revealMode: REVEAL_MODE,
+      voiceSounds: RATKIN_VOICE_SOUNDS,
     });
     this.phase = 'line';
     this.pages = [];

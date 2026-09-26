@@ -186,10 +186,14 @@ const SHAKE_FRAMES = 14;
 const SHAKE_WOBBLE_X = 1.9;
 const SHAKE_WOBBLE_Y = 2.3;
 
-const TREBUCHET_FIRE_SOUND = 'shooting_an_arrow';
-const TREBUCHET_FIRE_RUMBLE_SOUND = 'rolling_earth_ball';
+const TREBUCHET_FIRE_SOUNDS = ['trebuchet_fire_1', 'trebuchet_fire_2'] as const;
 const INFERNAL_WHOOSH_SOUND = 'llama_fireball';
-const BOULDER_IMPACT_SOUND = 'massive_strike_with_dirt_impact';
+const BOULDER_IMPACT_SOUNDS = [
+  'boulder_impact_1',
+  'boulder_impact_2',
+  'boulder_impact_3',
+  'boulder_impact_4',
+] as const;
 
 const HALF_TILE = TILE_SIZE / 2;
 const FULL_TURN = Math.PI * 2;
@@ -513,8 +517,7 @@ export class TrebuchetSystem {
     if (!unlimitedAmmo(builderLevel)) record.ammo = Math.max(0, record.ammo - 1);
     state.sinceRelease = 0;
     state.returnLeft = ARM_RETURN_FRAMES;
-    this.deps.audio?.play(TREBUCHET_FIRE_SOUND);
-    this.deps.audio?.play(TREBUCHET_FIRE_RUMBLE_SOUND);
+    this.deps.audio?.playRandom(TREBUCHET_FIRE_SOUNDS);
     if (infernal) this.deps.audio?.play(INFERNAL_WHOOSH_SOUND);
     const random = this.deps.random ?? Math.random;
     if (random() < TREBUCHET_BREAK_CHANCE && this.deps.defense.breakTrebuchet(key)) {
@@ -808,7 +811,7 @@ export class TrebuchetSystem {
       }
     }
     this.deps.bus.emit('blastLanded', { x: toX, y: toY, radiusPx: shatterPx });
-    this.deps.audio?.play(BOULDER_IMPACT_SOUND);
+    this.deps.audio?.playRandom(BOULDER_IMPACT_SOUNDS);
     this.addBurst(toX, toY, boulder.infernal);
     if (boulder.infernal) this.addCloud(toX, toY, boulder.builtBy);
     const active = centreOf(this.deps.active());

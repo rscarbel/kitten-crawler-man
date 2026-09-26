@@ -223,7 +223,7 @@ export class RaisedRatkin extends RisingSkeleton {
 
     if (!this.isAggro) {
       this.isAggro = true;
-      this.cues.push({ id: 'bones_rattling' });
+      this.cues.push({ id: 'raised_ratkin_groan' });
     }
     if (!this.fightWarmed) {
       this.fightWarmed = true;
@@ -261,14 +261,14 @@ export class RaisedRatkin extends RisingSkeleton {
       this.groanTimer--;
       return;
     }
-    this.cues.push({ id: 'bones_rattling' });
+    this.cues.push({ id: 'raised_ratkin_groan' });
     this.groanTimer =
       GROAN_MIN_FRAMES + Math.floor(Math.random() * (GROAN_MAX_FRAMES - GROAN_MIN_FRAMES));
   }
 
   override tickCorpse(): void {
     if (this.corpseFrames === 0) {
-      this.cues.push({ id: 'bones_rattling' });
+      this.cues.push({ id: 'raised_ratkin_death' });
       this.cues.push({ id: 'rat_squeak_2', playbackRate: DEATH_SQUEAK_PLAYBACK_RATE });
     }
     this.corpseFrames++;

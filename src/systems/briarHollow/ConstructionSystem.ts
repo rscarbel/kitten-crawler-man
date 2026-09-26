@@ -25,6 +25,7 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { CrawlerKind } from '../../core/SkillManager';
 import type { AudioManager } from '../../audio/AudioManager';
+import type { SoundId } from '../../audio/sounds';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { ResourceCost } from '../../core/partyResources';
 import { canAfford, spend } from '../../core/partyResources';
@@ -145,11 +146,11 @@ const TILE_CENTRE = 0.5;
 const WALL_FACE_SAMPLES = [TILE_CENTRE, 1, WALL_REACH_TILES] as const;
 
 const HAMMER_SOUND = 'hammer_strike';
-/** Stand-in, played quietly, until the village's own completion chime is recorded. */
-const COMPLETE_SOUND = 'objective_complete';
-const COMPLETE_VOLUME = 0.35;
+const COMPLETE_SOUND = 'construction_complete';
+const STONE_UPGRADE_SOUND = 'wall_upgrade_stone';
+const SPIKES_ADDED_SOUND = 'spikes_add';
 const ERROR_SOUND = 'error';
-const LOAD_SOUND = 'rock_thud_1';
+const LOAD_SOUND = 'trebuchet_load';
 
 const MATERIALS_GONE_MESSAGE = 'You no longer have the materials.';
 const TARGET_CHANGED_MESSAGE = 'The structure changed while you worked on it.';
@@ -883,6 +884,7 @@ export class ConstructionSystem {
     }
     let xp = 0;
     const target = job.target;
+    let completionSound: SoundId = COMPLETE_SOUND;
     if (isPlannedFootprint(target)) {
       if (target.kind === 'trebuchet') {
         defense.placeTrebuchet(target.x, target.y, job.builder);
@@ -894,6 +896,7 @@ export class ConstructionSystem {
     } else if (job.action === 'upgrade') {
       const tier = defense.upgradeTarget(target);
       defense.applyUpgrade(target, job.builder);
+      if (tier === 'stone') completionSound = STONE_UPGRADE_SOUND;
       xp = tier === null ? 0 : wallTierXp(tier);
       this.freeTrappedOccupants(target);
     } else if (job.action === 'repair') {
@@ -904,10 +907,11 @@ export class ConstructionSystem {
       this.freeTrappedOccupants(target);
     } else {
       defense.applySpikes(target, job.builder);
+      completionSound = SPIKES_ADDED_SOUND;
       xp = CONSTRUCTION_XP.spikes;
     }
     if (xp > 0) builder.craftSkills.addXp('construction', xp);
-    this.deps.audio?.play(COMPLETE_SOUND, { volume: COMPLETE_VOLUME });
+    this.deps.audio?.play(completionSound);
     builder.queueFloatingText(job.label, 'buff');
     this.deps.noteResourceActivity();
   }

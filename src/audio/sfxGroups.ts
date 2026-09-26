@@ -324,30 +324,18 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'rat_squeak_3',
     'thrall_fade_out',
     'thrall_summoned',
-    // Construction's stand-ins that belong to other floors' groups, preloaded
-    // here too so the village never depends on which quests share the floor.
+    // Library sounds the village still borrows for cues with no recording: the
+    // stone-wall break and the necromancer's pulse release (`deep_rumbling`), an
+    // infernal boulder's whoosh, the grave bull's collapse, a fairy's raise call
+    // and the necromancer's blink.
     'deep_rumbling',
-    'massive_strike_with_dirt_impact',
-    'rock_thud_1',
-    'rock_thud_3',
-    'slash_strike_2',
-    // The siege engines' stand-ins: a snare springing, a trebuchet's rumble
-    // and an infernal boulder's whoosh.
-    'slash_strike_1',
-    'rolling_earth_ball',
     'llama_fireball',
-    // The assault's undead, on stand-ins until their own recordings land.
     'bones_rattling',
-    'bear_growl_1',
     'fairy_raise_call',
-    'magic_ball_launch',
-    'charging_up_1',
     'teleport',
-    'skeleton_lord_death',
-    // The siege's own stand-ins (`VILLAGE_CUES`): the bell struck and cracking,
-    // and the dead's war horn at each wave.
+    // The bell struck and the dead's chant at the necromancer's arrival
+    // (`VILLAGE_CUES`).
     'massive_metal_hit',
-    'glass_break_1',
     'skeleton_lord_chant',
     // Recorded village sounds.
     'bell_alarm',

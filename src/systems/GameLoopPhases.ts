@@ -466,9 +466,12 @@ function playCuesOf(mob: Mob, audio: AudioManager | null): void {
       case 'merc_medic':
         audio?.play('human_punch_weak');
         break;
-      // Briar Hollow's militia: a spear thrust, on a stand-in until its own is recorded.
       case 'ratkin_soldier':
-        audio?.play('slash_strike_3');
+        audio?.playRandom([
+          'ratkin_soldier_strike_1',
+          'ratkin_soldier_strike_2',
+          'ratkin_soldier_strike_3',
+        ]);
         break;
       case 'mantis':
       case 'mantid':

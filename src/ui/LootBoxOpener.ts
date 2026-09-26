@@ -305,6 +305,7 @@ export class LootBoxOpener {
           this.frame = 0;
           this.burstFlashFrames = BURST_FLASH_FRAMES;
           this.burstShakeFrames = BURST_SHAKE_FRAMES;
+          this.audio?.play('loot_box_lid_burst');
           this.burstParticles(Math.round(BURST_COUNT_OPEN * intensity));
           this.onEachBoxOpening?.();
           if (!this.rewardGranted && this.onBoxOpened && this.contents) {
