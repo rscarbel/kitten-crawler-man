@@ -376,8 +376,11 @@ The village is an authored template, not a scatter; the seed varies only dressin
   guardhouse beside the gate, engineer's workshop, cookhouse, store, infirmary),
   **homes** along the south side, mostly south-east (Wicker's to the west). Outside: the **quarry** to the SE (deposits,
   Garn's hut, dressed-stone stubs) and the **ruins** disc beyond it, whose clear centre
-  is the necromancer's arrival point. `site.assaultLanes` holds an east and a south
-  spawn/approach pair.
+  is the necromancer's arrival point. `site.assaultLanes` holds a spawn/approach pair
+  for each side: east (spawning in the ruins), south (down the road), and north and
+  west (out in the wilderness, down corridors the village's keep-out holds clear; the
+  assault raises bodies on the nearest open ground with a flow-field route in, within
+  `ASSAULT_LANE_SPAWN_SEARCH_TILES`).
 - District rects never include palisade tiles. Every building doorway is a gap in
   `HOLLOW_WALL` filled with `HOLLOW_THRESHOLD`, never a `buildingEntries` door, so the
   village never triggers `BuildingSystem`. There is a 1-tile walkway round every
@@ -472,6 +475,66 @@ choose among neighbours within 5% of the cheapest by their own seed, so a wave s
 across a breach instead of walking single file. `Mob.siegeDirective` is consulted by
 `MobUpdateLoop` before `updateAI`.
 
+### The assault
+
+`VillageAssaultSystem` runs four waves after a 45 s countdown, each up one side of the
+village. When the bell rings it draws a `SiegeCampaign`: the order of the four sides,
+four of the five bounty marks (`siegeBountyMarks.ts`), and the order of the four
+regular fairy kinds. It is keyed by the `BriarHollowState` object, so a door visit
+mid-countdown keeps the side that was announced. An "Attack coming from the …" banner
+names the side at the countdown and at each lull, and the militia's battle posts line
+that side's wall (`battlePostByLane`).
+
+Each wave (`ASSAULT_WAVES`) raises all its undead at once, never fewer than
+`MIN_UNDEAD_PER_WAVE`. Every other regular hostile of the crawl comes along across the
+four waves; spiders, grubs and bosses are the exceptions, and rock golems come with
+the last. The bounty mark comes levelled to the siege, with a share of its health and
+an `outgoingDamageScale`. The wave's fairy comes too, along with every earlier wave's
+fairy that has fallen since. Fairies are not enlisted: they fly with the wave and leave
+when the siege ends.
+
+Vordrick leads every wave. In the first three he comes with a share of his health and
+`cannotBeKilled`: beaten to 1 HP, or still standing when the lull begins, he fades away
+(`Necromancer.beginFadingAway`) and is released with nothing paid. His death in the
+fourth wave wins the siege.
+
+In a siege, each of his raises calls up `NECRO_SIEGE_RAISE_BATCH` bodies: raised ratkin,
+skeleton warriors and skeleton archers (`SIEGE_RAISE_KIND_WEIGHTS`). Up to
+`NECRO_INNER_RAISES` of their sigils open **inside the palisade**, near the bell and clear
+of every defender, so the walls do not keep the whole fight outside. His raises of every
+kind count against his escort cap (`RisingSkeleton.raisedByNecromancer`). His home zone
+only takes tiles with room to move, and the assault only spawns bodies on such tiles
+(`hasRoomToMove`), because a gap between trunks is walkable but inescapable. A walk to his
+post that makes no headway for `NECRO_STUCK_BLINK_FRAMES` ends in a blink to open ground
+there.
+
+`ASSAULT_TUNING` holds what each difficulty does on top of
+the waves as authored: normal is as written, nightmare turns it up, and easy eases it
+off. That includes `wallDamageScale`, which multiplies every attacker's blow on a
+structure, because a creature's own blow is sized for the open floor.
+
+Only the flow's front row would ever swing if the wave followed the flow alone: the
+field sends everyone at the one cheapest segment. So `trySiegeStrike` also lets an
+attacker outside the ring strike a standing segment right beside it, unless an opening
+is within `WALL_SWARM_OPENING_TILES`. An attacker weighs a trebuchet only on its own
+side of the ring. The palisade does not block sight, so an engine just inside would
+otherwise hold the whole wave against the stone. Spike thorns are capped at
+`SPIKES_THORNS_MAX_SHARE` of the attacker's health per blow.
+
+The assault gives one attacker **the siege's voice**. It is the one nearest the active
+crawler, held for `SIEGE_VOICE_HOLD_SECONDS`. The system installs a hearing rule with
+`AudioManager.setCreatureHearing`. `playMobAudioCues`, the `mobKilled` death sounds, the
+golems' landing thuds (`RockThrowSystem.landedThrowers`), and the blow sounds on walls,
+spikes and the gate all ask `hearsCreature`, so every other attacker is silent. Structure
+breaks, the bell and the village's own cues are not creatures and always play.
+
+Over a hurt or breached wall, the build key (Space) and a double tap repair it
+(`ConstructionSystem.repairOrUpgrade`); they only upgrade a wall that is whole. A breach
+stands back up at the tier it fell from, at its full repair cost, and that tier's
+Construction-menu row repairs it too. The repair key (`quickLoad`, X by default) mends the
+nearest hurt structure in reach, walls and trebuchets alike, and only Quick Loads a
+trebuchet when nothing needs mending.
+
 ### Persistence
 
 Village state is split by who owns it:
@@ -505,8 +568,12 @@ damaged since the party last saved in town.
   `RenderPipeline`, including three Carl-at-a-wall probes; `--labels=off` for blind
   review, `--frame=world` for the whole map.
 - `npm run render:village-siege` renders siege states (bell struck, cracked, poster).
-- `?playtest=briar-hollow-kit`, `briar-hollow-village`, `briar-hollow-builders` and
-  `briar-hollow-siege` are playtest presets; the `!village` chat cheat warps the party inside the gate.
+- `?playtest=briar-hollow-kit`, `briar-hollow-village`, `briar-hollow-builders`,
+  `briar-hollow-siege` and `briar-hollow-assault` are playtest presets; the `!village`
+  chat cheat warps the party inside the gate. `briar-hollow-assault` starts with the
+  questline at `fortifying`, the whole ring at a tier and loaded trebuchets inside it:
+  `npm run playtest -- briar-hollow-assault --walls=fence|wood|stone|fortified
+--trebuchets=N` (walls also take 1–4).
 
 ---
 
