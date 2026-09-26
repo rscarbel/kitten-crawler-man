@@ -799,7 +799,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
             status: 'available',
             objective: 'Hear GumGum out',
             hint: 'The jittery street elf outside the Desperado Club.',
-            target: this.gumgumTile ?? undefined,
+            target:
+              this.gumgumTile === null ? undefined : { ...this.gumgumTile, wearsOwnMarker: true },
           },
         ];
       case 'body_waiting':

@@ -647,10 +647,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private villagerTarget(id: VillagerId): TrackerTarget | undefined {
     const villager = this.deps.villagers.villagerFor(id);
     if (villager === null) return undefined;
-    // The Mayor gets the beacon despite his own marker: he strolls a busy
-    // square, and the questline's givers elsewhere (Voss, Shady) are lit too.
-    const wearsOwnMarker = id !== 'bramblewick';
-    return { x: villager.tile.x, y: villager.tile.y, wearsOwnMarker };
+    return { x: villager.tile.x, y: villager.tile.y, wearsOwnMarker: true };
   }
 
   private anchorTarget(tiles: readonly TilePoint[] | undefined): TrackerTarget | undefined {
@@ -699,7 +696,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
             ...base,
             status: 'available',
             objective: `Speak with ${recruiter.name} in the town square`,
-            target: { x: recruiter.tile.x, y: recruiter.tile.y },
+            target: { x: recruiter.tile.x, y: recruiter.tile.y, wearsOwnMarker: true },
           };
         }
         return {

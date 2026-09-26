@@ -17,6 +17,7 @@ import { hasAcceptedMayorRequest } from '../../core/villageQuestPhase';
 import type { GameMap } from '../../map/GameMap';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import type { TilePoint } from '../../map/town/townPlan';
+import { drawQuestBeacon } from '../../sprites/questBeacon';
 import { drawRatkinCastSprite } from '../../sprites/ratkinCastSprite';
 import {
   drawQuestMarker,
@@ -64,13 +65,16 @@ class RecruiterNPC implements TownPropRenderable {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
+    const markerColor = questMarkerColorFor(this.marker);
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+    }
     drawRatkinCastSprite(ctx, RECRUITER_SPRITE_ID, sx, sy, tileSize, {
       action: 'idle',
       walkPhase: 0,
       facingX: 0,
       facingY: 1,
     });
-    const markerColor = questMarkerColorFor(this.marker);
     if (markerColor === undefined) return;
     const headTop = sy - VILLAGER_HEAD_CLEARANCE_TILES * tileSize;
     const markerY = questMarkerAnchorAbove(headTop - OVERHEAD_GAP_PX, tileSize);

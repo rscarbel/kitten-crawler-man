@@ -31,6 +31,7 @@ import {
   questMarkerAnchorAbove,
   questMarkerColorFor,
 } from '../../sprites/questNPCSprite';
+import { drawQuestBeacon } from '../../sprites/questBeacon';
 import { drawText, TEXT_PRESETS } from '../../ui/TextBox';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { CivilianCastId, VillagerRoutine } from './villagerRoutines';
@@ -347,6 +348,12 @@ export class Villager implements TownPropRenderable {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
+    const markerColor = this.state === 'talking' ? undefined : questMarkerColorFor(this.marker);
+    // Beacon first, so the column stands behind the villager and follows them
+    // frame by frame, rather than trailing a tile position sampled elsewhere.
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+    }
     drawRatkinCastSprite(ctx, this.id, sx, sy, tileSize, {
       action: this.action,
       walkPhase: this.walkPhase,
@@ -356,7 +363,6 @@ export class Villager implements TownPropRenderable {
     });
 
     const headTop = this.headTop(sy, tileSize);
-    const markerColor = this.state === 'talking' ? undefined : questMarkerColorFor(this.marker);
     if (markerColor !== undefined) {
       const glyph = this.marker === 'question' ? '?' : '!';
       const markerY = questMarkerAnchorAbove(headTop - OVERHEAD_GAP_PX, tileSize);
