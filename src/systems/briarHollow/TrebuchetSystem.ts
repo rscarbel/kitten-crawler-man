@@ -39,6 +39,7 @@ import { LOCKED_TELEGRAPH_MIN_FRAMES, levelledMaxHp } from '../../creatures/mobL
 import type { MobRoster } from '../kits/SceneWorld';
 import type { EventBus } from '../../core/EventBus';
 import type { AudioManager } from '../../audio/AudioManager';
+import { VILLAGE_CUES } from '../../audio/villageSoundCues';
 import type { CrawlerKind } from '../../core/SkillManager';
 import type { TrebuchetStructureRecord } from '../../core/briarHollowState';
 import type { VillageQuestPhase } from '../../core/villageQuestPhase';
@@ -187,7 +188,6 @@ const SHAKE_WOBBLE_X = 1.9;
 const SHAKE_WOBBLE_Y = 2.3;
 
 const TREBUCHET_FIRE_SOUNDS = ['trebuchet_fire_1', 'trebuchet_fire_2'] as const;
-const INFERNAL_WHOOSH_SOUND = 'llama_fireball';
 const BOULDER_IMPACT_SOUNDS = [
   'boulder_impact_1',
   'boulder_impact_2',
@@ -518,7 +518,7 @@ export class TrebuchetSystem {
     state.sinceRelease = 0;
     state.returnLeft = ARM_RETURN_FRAMES;
     this.deps.audio?.playRandom(TREBUCHET_FIRE_SOUNDS);
-    if (infernal) this.deps.audio?.play(INFERNAL_WHOOSH_SOUND);
+    if (infernal) this.deps.audio?.playRandom(VILLAGE_CUES.infernalBoulderWhoosh);
     const random = this.deps.random ?? Math.random;
     if (random() < TREBUCHET_BREAK_CHANCE && this.deps.defense.breakTrebuchet(key)) {
       this.callouts.add(
@@ -839,6 +839,7 @@ export class TrebuchetSystem {
 
   private addCloud(x: number, y: number, builtBy: CrawlerKind): void {
     if (this.clouds.length >= MAX_MIASMA_CLOUDS) this.clouds.shift();
+    this.deps.audio?.playRandom(VILLAGE_CUES.miasmaHiss);
     this.clouds.push({ x, y, builtBy, seed: this.frame, age: 0 });
   }
 

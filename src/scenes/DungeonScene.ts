@@ -907,11 +907,18 @@ const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 const TREE_FALL_SOUNDS = ['tree_fall_1', 'tree_fall_2', 'tree_fall_3', 'tree_fall_4'] as const;
-const MONGO_HAPPY_SQUAWKS = [
-  'happy_mongo_squawk_1',
-  'happy_mongo_squawk_2',
-  'happy_mongo_squawk_3',
-  'happy_mongo_squawk_4',
+const MONGO_ADULT_SQUAWK_MIN_LEVEL = 5;
+const MONGO_ADULT_HAPPY_SQUAWKS = [
+  'happy_adult_mongo_squawk_1',
+  'happy_adult_mongo_squawk_2',
+  'happy_adult_mongo_squawk_3',
+  'happy_adult_mongo_squawk_4',
+] as const;
+const MONGO_BABY_HAPPY_SQUAWKS = [
+  'happy_baby_mongo_squawk_1',
+  'happy_baby_mongo_squawk_2',
+  'happy_baby_mongo_squawk_3',
+  'happy_baby_mongo_squawk_4',
 ] as const;
 /** The five-minute alarm is the ten-minute one pitched up, so the escalation is audible. */
 const FIVE_MINUTE_WARNING_PLAYBACK_RATE = 1.3;
@@ -6037,7 +6044,9 @@ export class DungeonScene extends GameplayScene {
         )
       ) {
         this.audio?.play('happy_hearts');
-        this.audio?.playRandom(MONGO_HAPPY_SQUAWKS);
+        const isGrownUp =
+          (this.mongoSystem.mongo?.growthLevel ?? 0) >= MONGO_ADULT_SQUAWK_MIN_LEVEL;
+        this.audio?.playRandom(isGrownUp ? MONGO_ADULT_HAPPY_SQUAWKS : MONGO_BABY_HAPPY_SQUAWKS);
         return;
       }
       // Last in the chain: the hireling stands at the party's shoulder all

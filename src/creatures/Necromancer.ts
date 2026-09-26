@@ -235,6 +235,14 @@ const RAISE_ROW_TICKS = CAST_RAISE_FRAMES * NECROMANCER_TICKS_PER_FRAME.cast_rai
 const BOLT_ROW_TICKS = CAST_BOLT_FRAMES * NECROMANCER_TICKS_PER_FRAME.cast_bolt;
 const BLINK_ROW_TICKS = BLINK_FRAMES * NECROMANCER_TICKS_PER_FRAME.blink_out;
 const HURT_ROW_TICKS = HURT_FRAMES * NECROMANCER_TICKS_PER_FRAME.hurt;
+const HURT_SOUNDS = [
+  'necromancer_hurt_1',
+  'necromancer_hurt_2',
+  'necromancer_hurt_3',
+  'necromancer_hurt_4',
+] as const;
+/** Continuous damage (a beam, a burn) would otherwise voice a grunt every tick. */
+const HURT_SOUND_GAP_TICKS = 45;
 const DEATH_ROW_TICKS = DEATH_FRAMES * NECROMANCER_TICKS_PER_FRAME.death;
 
 function releaseTicks(state: string, fallbackFrame: number, ticksPerFrame: number): number {
@@ -422,6 +430,8 @@ export class Necromancer extends Mob {
   private driftFrame = 0;
   private idleTicks = 0;
   private hurtTimer = 0;
+  private hurtSoundCooldown = 0;
+  private hurtSoundIndex = 0;
   private corpseFrames = 0;
   /** Frames into his fade-out after a beating he survives, or null while he fights. */
   private retreatFadeFrames: number | null = null;
@@ -669,6 +679,7 @@ export class Necromancer extends Mob {
       this.driftFrame = advanceDriftFrame(this.driftFrame, moved, this.tileSize);
     }
     if (this.hurtTimer > 0) this.hurtTimer--;
+    if (this.hurtSoundCooldown > 0) this.hurtSoundCooldown--;
     this.idleTicks++;
   }
 
@@ -691,8 +702,17 @@ export class Necromancer extends Mob {
     return connected;
   }
 
+  private voiceHurt(): void {
+    if (this.hurtSoundCooldown > 0) return;
+    this.hurtSoundCooldown = HURT_SOUND_GAP_TICKS;
+    const id = HURT_SOUNDS[this.hurtSoundIndex % HURT_SOUNDS.length];
+    this.hurtSoundIndex++;
+    this.cues.push({ id });
+  }
+
   private noteHurt(dealt: number): void {
     if (dealt <= 0 || !this.isAlive) return;
+    this.voiceHurt();
     if (this.phase === 'hold' && !this.inProcession) this.hurtTimer = HURT_ROW_TICKS;
     if (!this.deathWarmed && this.hp <= this.maxHp * NECRO_DEATH_PREWARM_HP_SHARE) {
       this.deathWarmed = true;
@@ -1037,7 +1057,7 @@ export class Necromancer extends Mob {
     this.blinkDestination = destination;
     this.isMoving = false;
     this.faceFront();
-    this.cues.push({ id: 'teleport' });
+    this.cues.push({ id: 'necromancer_blink' });
     this.enterPhase('blink_out');
     return true;
   }
@@ -1483,7 +1503,7 @@ export class Necromancer extends Mob {
     this.blinkDestination = destination;
     this.isMoving = false;
     this.faceFront();
-    this.cues.push({ id: 'teleport' });
+    this.cues.push({ id: 'necromancer_blink' });
     this.enterPhase('blink_out');
     return true;
   }

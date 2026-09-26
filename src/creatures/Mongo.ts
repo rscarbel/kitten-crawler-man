@@ -123,6 +123,10 @@ const POUNCE_MIN_TILES = 2.0;
 const POUNCE_MAX_TILES = 4.2;
 const POUNCE_COOLDOWN_FRAMES = 220;
 const POUNCE_LANDING_RANGE_TILES = 1.1;
+const FRAMES_PER_SECOND = 60;
+/** Standing by this long makes the next fight a fresh one worth announcing. */
+const IDLE_BEFORE_CHITTER_SECONDS = 5;
+const IDLE_BEFORE_CHITTER_FRAMES = IDLE_BEFORE_CHITTER_SECONDS * FRAMES_PER_SECOND;
 /**
  * How much faster than his walk he travels through the airborne window.
  *
@@ -321,6 +325,10 @@ export class Mongo extends Mob {
    * reads this to tell them apart.
    */
   lastAttack: MongoAttack = 'bite';
+  /** Raised on the frame he picks a fight after a long lull; drained by `playCuesOf`. */
+  targetChitterPending = false;
+  /** Frames spent with nothing to fight since the last target, counted while standing by. */
+  private idleFrames = 0;
   private biteCooldown = 0;
   private slashCooldown = 0;
   private pounceCooldown = 0;
@@ -713,10 +721,13 @@ export class Mongo extends Mob {
 
     const target = this.leashed ? null : this.pickTarget();
     if (target === null) {
+      this.idleFrames++;
       this.standBy(distToCat, party);
       return;
     }
 
+    if (this.idleFrames > IDLE_BEFORE_CHITTER_FRAMES) this.targetChitterPending = true;
+    this.idleFrames = 0;
     this.following = false;
     this.engage(target);
   }

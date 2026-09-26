@@ -16,6 +16,7 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
+import { VILLAGE_CUES } from '../../audio/villageSoundCues';
 import { TILE_SIZE } from '../../core/constants';
 import type { BriarHollowState, SoldierOrderRecord } from '../../core/briarHollowState';
 import type { CrawlerKind } from '../../core/SkillManager';
@@ -112,10 +113,6 @@ const OVERHEAD_GAP_PX = 2;
 /** The militia's bubbles: steel and straw, apart from the civilians' warm ones. */
 const SOLDIER_BUBBLE_STYLE: TimedBubbleStyle = { border: '#8fa3b8', text: '#eef2f6' };
 
-/** Stand-ins until the militia's own voices are recorded. */
-const ORDER_ACK_SOUND = 'rat_squeak_1';
-const HURT_SOUND = 'rat_squeak_2';
-const DOWN_SOUND = 'rat_squeak_3';
 /** A soldier being worn down yelps no more often than this. */
 const HURT_SOUND_GAP_FRAMES = 40;
 
@@ -559,7 +556,7 @@ export class SoldierSystem {
       if (mob.currentTarget === soldier) mob.currentTarget = null;
       if (mob.retaliateMob === soldier) mob.retaliateMob = null;
     }
-    this.deps.audio?.play(DOWN_SOUND);
+    this.deps.audio?.playRandom(VILLAGE_CUES.soldierDown);
   }
 
   private tickDowned(soldier: RatkinSoldier, frame: SoldierFrame): void {
@@ -601,7 +598,7 @@ export class SoldierSystem {
     this.framesSinceWound.set(soldier, sinceWound);
     const gap = Math.max(0, (this.hurtSoundGap.get(soldier) ?? 0) - 1);
     if (wounded && gap === 0) {
-      this.deps.audio?.play(HURT_SOUND);
+      this.deps.audio?.playRandom(VILLAGE_CUES.soldierHurt);
       this.hurtSoundGap.set(soldier, HURT_SOUND_GAP_FRAMES);
     } else {
       this.hurtSoundGap.set(soldier, gap);
@@ -824,7 +821,7 @@ export class SoldierSystem {
     const { soldier, talker } = talk;
     const id = soldier.soldierId;
     const acknowledge = (): void => {
-      this.deps.audio?.play(ORDER_ACK_SOUND);
+      this.deps.audio?.playRandom(VILLAGE_CUES.soldierAck);
     };
     // Orders are standing controls, not questions asked once: a soldier can
     // be given a new one, or the same one again, as often as the conversation

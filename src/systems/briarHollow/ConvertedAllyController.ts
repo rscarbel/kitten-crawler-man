@@ -23,6 +23,7 @@ import { RaisedRatkin } from '../../creatures/RaisedRatkin';
 import { isUndeadConvertible } from '../../creatures/convertibleMobs';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { AudioManager } from '../../audio/AudioManager';
+import { VILLAGE_CUES } from '../../audio/villageSoundCues';
 import { UPDATES_PER_SECOND } from './structureRules';
 import { drawConvertFlash, drawCrumble, drawPartyMarker } from '../../sprites/art/siegeEffectsArt';
 
@@ -34,7 +35,6 @@ export const CONVERTED_RALLY_TILES = 4;
 const CONVERTED_ALLY_LIFETIME_SECONDS = 120;
 export const CONVERTED_ALLY_LIFETIME_FRAMES = CONVERTED_ALLY_LIFETIME_SECONDS * UPDATES_PER_SECOND;
 
-const CONVERT_SOUND = 'new_unlock';
 const FLASH_FRAMES = 28;
 const CRUMBLE_FRAMES = 40;
 /** The party mark floats this far above the top of an ally's tile. */
@@ -82,7 +82,7 @@ export class ConvertedAllyController {
     mob.allyRally = { anchor: owner, radiusPx: CONVERTED_RALLY_TILES * TILE_SIZE };
     this.allies.push({ mob, framesLeft: CONVERTED_ALLY_LIFETIME_FRAMES });
     this.effects.push({ x: mob.x + HALF_TILE, y: mob.y + HALF_TILE, kind: 'flash', age: 0 });
-    this.audio?.play(CONVERT_SOUND);
+    this.audio?.playRandom(VILLAGE_CUES.snareConvert);
     return true;
   }
 

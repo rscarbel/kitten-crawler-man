@@ -55,6 +55,7 @@ const FAIRY_SFX_IDS: readonly SoundId[] = [
   'fairy_shield_cast',
   'fairy_shield_shatter',
   'fairy_telekinetic_thrum',
+  'fairy_ward_crush_implode',
 ];
 
 /**
@@ -194,15 +195,21 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'coin_land_tick',
     'garbage_bag_burst_1',
     'garbage_bag_burst_2',
-    'happy_mongo_squawk_1',
-    'happy_mongo_squawk_2',
-    'happy_mongo_squawk_3',
-    'happy_mongo_squawk_4',
+    'happy_adult_mongo_squawk_1',
+    'happy_adult_mongo_squawk_2',
+    'happy_adult_mongo_squawk_3',
+    'happy_adult_mongo_squawk_4',
+    'happy_baby_mongo_squawk_1',
+    'happy_baby_mongo_squawk_2',
+    'happy_baby_mongo_squawk_3',
+    'happy_baby_mongo_squawk_4',
     'item_bag_pop',
     'level_timer_final_minute_heartbeat',
     'level_timer_warning',
     'loot_box_lid_burst',
+    'loot_box_tier_stinger',
     'stairwell_save_chime',
+    'velociraptor_chitter',
   ],
 
   /** The Hoarder + Juicer boss rooms, level1's llama/rat, and its dungeon-generated arena. */
@@ -318,26 +325,39 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'rock_breaking_1',
     'rock_breaking_2',
     'rope_tightening',
-    // The militia's stand-in voices: an order taken, a wound, a fall.
+    // The raised ratkin's squeak layer under its recorded death.
     'rat_squeak_1',
     'rat_squeak_2',
     'rat_squeak_3',
     'thrall_fade_out',
     'thrall_summoned',
     // Library sounds the village still borrows for cues with no recording: the
-    // stone-wall break and the necromancer's pulse release (`deep_rumbling`), an
-    // infernal boulder's whoosh, the grave bull's collapse, a fairy's raise call
-    // and the necromancer's blink.
+    // stone-wall break and the necromancer's pulse release (`deep_rumbling`), the
+    // grave bull's collapse and a fairy's raise call.
     'deep_rumbling',
-    'llama_fireball',
     'bones_rattling',
     'fairy_raise_call',
-    'teleport',
-    // The bell struck and the dead's chant at the necromancer's arrival
-    // (`VILLAGE_CUES`).
-    'massive_metal_hit',
-    'skeleton_lord_chant',
     // Recorded village sounds.
+    'anvil_strike_1',
+    'anvil_strike_2',
+    'anvil_strike_3',
+    'bell_toll_hit',
+    'boulder_fire_whoosh',
+    'doctor_treatment',
+    'miasma_hiss',
+    'necromancer_arrival',
+    'necromancer_blink',
+    'necromancer_hurt_1',
+    'necromancer_hurt_2',
+    'necromancer_hurt_3',
+    'necromancer_hurt_4',
+    'ratkin_soldier_ack_1',
+    'ratkin_soldier_ack_2',
+    'ratkin_soldier_ack_3',
+    'ratkin_soldier_down',
+    'ratkin_soldier_hurt_1',
+    'ratkin_soldier_hurt_2',
+    'snare_convert',
     'bell_alarm',
     'bell_crack',
     'bell_victory_peal',

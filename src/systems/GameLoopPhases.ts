@@ -417,6 +417,10 @@ function playCuesOf(mob: Mob, audio: AudioManager | null): void {
     mob.guardSoundPending = false;
     audio?.play(GUARD_SOUND);
   }
+  if (mob instanceof Mongo && mob.targetChitterPending) {
+    mob.targetChitterPending = false;
+    audio?.play('velociraptor_chitter');
+  }
   if (mob.attackSoundPending) {
     mob.attackSoundPending = false;
     switch (mob.audioTag) {

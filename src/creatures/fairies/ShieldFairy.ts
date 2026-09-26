@@ -120,6 +120,9 @@ export class ShieldFairy extends Fairy {
   /** Frames left before {@link crushTarget} implodes; counts down from {@link SHIELD_CRUSH_IMPLODE_FRAMES}. */
   private crushFramesLeft = 0;
 
+  /** Set on the frame the ward finishes closing; the audio pass reads and clears it. */
+  crushImplodeSoundPending = false;
+
   /** Whether a crushing ward is currently closing on a vespa. Read by `FairySystem` and gates. */
   get hasInFlightCrush(): boolean {
     return this.crushTarget !== null;
@@ -173,6 +176,7 @@ export class ShieldFairy extends Fairy {
     this.crushFramesLeft--;
     if (this.crushFramesLeft > 0) return;
     this.crushTarget.killOutright();
+    this.crushImplodeSoundPending = true;
     this.crushTarget = null;
   }
 

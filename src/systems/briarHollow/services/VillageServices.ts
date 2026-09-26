@@ -15,6 +15,7 @@
  */
 
 import type { AudioManager } from '../../../audio/AudioManager';
+import { VILLAGE_CUES } from '../../../audio/villageSoundCues';
 import { TILE_SIZE } from '../../../core/constants';
 import type { EventBus } from '../../../core/EventBus';
 import type { GrantedReward } from '../../../core/GrantedReward';
@@ -80,8 +81,6 @@ const IDLE_SAWING_VOLUME = 0.18;
 /** How far from the saw her working can still be heard, fading to nothing at the edge. */
 const IDLE_SAWING_RANGE_TILES = 10;
 const SAWING_LOOP = 'loopable_sawing';
-/** The treatment's cue until a dedicated one is recorded. */
-const TREATMENT_SOUND = 'healing_potion';
 const UPGRADE_SOUND = 'tool_upgrade';
 
 /** The claim the priced menu has always had wherever it is shown; its buttons are ringed under this id. */
@@ -223,7 +222,7 @@ export class VillageServices {
     const active = this.party.active();
     this.deps.villagers.villagerFor('sella')?.faceToward(active.x, active.y);
     this.deps.villagers.bark('sella', 'buy_healing', true);
-    this.deps.audio?.play(TREATMENT_SOUND);
+    this.deps.audio?.playRandom(VILLAGE_CUES.doctorTreatment);
   }
 
   /** Whether Sella's bandaging is still playing over the party. */

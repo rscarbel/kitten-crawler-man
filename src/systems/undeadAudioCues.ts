@@ -4,9 +4,7 @@
  * necromancer's casts and death.
  *
  * The ids are preloaded with the village (`briarHollow` in `sfxGroups.ts`), so
- * none of them depends on which other floor-3 groups happen to be loaded. The
- * Grave Bull's collapse and the necromancer's blink still borrow library
- * sounds because they have no recording of their own.
+ * none of them depends on which other floor-3 groups happen to be loaded.
  */
 
 import type { AudioManager } from '../audio/AudioManager';

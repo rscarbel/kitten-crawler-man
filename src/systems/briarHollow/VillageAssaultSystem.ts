@@ -1847,7 +1847,7 @@ export class VillageAssaultSystem {
   private playCue(cue: VillageCue): void {
     const audio = this.deps.audio;
     if (audio === null) return;
-    for (const id of VILLAGE_CUES[cue]) audio.play(id);
+    audio.playRandom(VILLAGE_CUES[cue]);
   }
 
   // ── Drawing ───────────────────────────────────────────────────────────────

@@ -189,6 +189,11 @@ const REVEAL_POP_START_SCALE = 0.2;
 const REVEAL_POP_OVERSHOOT_SCALE = 1.25;
 /** Sparkle particles fired at a card's own position the instant it starts popping in. */
 const CARD_SPARKLE_COUNT = 10;
+// One recording serves every tier: a rarer box plays it lower and louder.
+const CARD_STINGER_BASE_VOLUME = 0.35;
+const CARD_STINGER_VOLUME_PER_INTENSITY = 0.2;
+const CARD_STINGER_MAX_VOLUME = 1;
+const CARD_STINGER_RATE_DROP_PER_INTENSITY = 0.1;
 
 export class LootBoxOpener {
   private active = false;
@@ -889,6 +894,7 @@ export class LootBoxOpener {
       if (local > 0) {
         this.sparkledLineIndices.add(lineIndex);
         this.burstParticles(CARD_SPARKLE_COUNT, { x: pivotX, y });
+        this.playCardStinger();
       }
     }
     ctx.save();
@@ -897,6 +903,17 @@ export class LootBoxOpener {
     ctx.translate(-pivotX, -y);
     drawText(ctx, text, { x, y, size, color, align: 'center', width });
     ctx.restore();
+  }
+
+  private playCardStinger(): void {
+    if (!this.box) return;
+    const intensity = tierIntensity(this.box.tier);
+    const volume = Math.min(
+      CARD_STINGER_MAX_VOLUME,
+      CARD_STINGER_BASE_VOLUME + intensity * CARD_STINGER_VOLUME_PER_INTENSITY,
+    );
+    const playbackRate = 1 - (intensity - 1) * CARD_STINGER_RATE_DROP_PER_INTENSITY;
+    this.audio?.play('loot_box_tier_stinger', { volume, playbackRate });
   }
 
   /** Scale envelope for the `lineIndex`-th reveal line: 0 until its turn, an overshoot bounce, then settles at 1. */
