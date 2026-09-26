@@ -460,6 +460,8 @@ import { difficultyStats } from '../core/DifficultyStats';
 import { settings } from '../core/Settings';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
+import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
+import { rectCentre } from '../map/overworld/briarHollowSite';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
 import { drawText } from '../ui/TextBox';
 import { renderKnockedOutUI, updateKnockoutState } from '../systems/KnockoutRevive';
@@ -696,6 +698,9 @@ const CITY_CROWD_AMBIENT_FALLBACK_RADIUS_TILES = 40;
 const CITY_CROWD_AMBIENT_VOLUME = 0.35;
 /** Briar Hollow's bed is a constant, palisade-wide emitter: full inside the wall, silent outside it. */
 const VILLAGE_AMBIENT_VOLUME = 0.4;
+/** The forge and cookhouse beds swell as you walk up to their doors, then fade out across the square. */
+const VILLAGE_WORKSHOP_AMBIENT_RADIUS_TILES = 9;
+const VILLAGE_WORKSHOP_AMBIENT_VOLUME = 0.5;
 
 /** Shown via `HotbarToast` on safe-room entry, once a checkpoint is actually captured. */
 const PROGRESS_SAVED_TOAST_TEXT = 'Progress Saved...';
@@ -3469,6 +3474,25 @@ export class DungeonScene extends GameplayScene {
     };
     this.villageAmbientEmitter = village;
     emitters.push(village);
+    const villageSite = this.gameMap.briarHollow;
+    if (villageSite !== null) {
+      const workshopBeds: ReadonlyArray<{ id: VillageBuildingId; soundId: SoundId }> = [
+        { id: 'forge', soundId: 'ambient_forge' },
+        { id: 'cookhouse', soundId: 'ambient_cookhouse' },
+      ];
+      for (const bed of workshopBeds) {
+        const building = villageSite.buildings.find((candidate) => candidate.id === bed.id);
+        if (building === undefined) continue;
+        const centre = rectCentre(building.interior);
+        emitters.push({
+          soundId: bed.soundId,
+          x: centre.x,
+          y: centre.y,
+          radiusTiles: VILLAGE_WORKSHOP_AMBIENT_RADIUS_TILES,
+          maxVolume: VILLAGE_WORKSHOP_AMBIENT_VOLUME,
+        });
+      }
+    }
     const fountain = this.gameMap.fountainCentre;
     if (fountain !== undefined) {
       emitters.push({

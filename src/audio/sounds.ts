@@ -5,7 +5,9 @@ const SOUND_IDS_TUPLE = [
   'achievement_unlocked',
   'ambient_bar_crowd',
   'ambient_city_crowd_chatting',
+  'ambient_cookhouse',
   'ambient_fire_crackling',
+  'ambient_forge',
   'ambient_fountain',
   'ambient_magic_shop',
   'ambient_pouring_a_drink',
@@ -184,7 +186,10 @@ const SOUND_IDS_TUPLE = [
   'juicer_throw',
   'keyboard_hero_music_track_1',
   'krakaren_ground_slam',
+  'krakaren_junction_burst',
+  'krakaren_junction_dead',
   'krakaren_slam_rise',
+  'krakaren_spark_buzz',
   'krakaren_tentacle_death',
   'krakaren_tentacle_emerge',
   'krakaren_tentacle_strike',
@@ -373,7 +378,9 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   achievement_unlocked: './src/audio/events/achievement_unlocked.mp3',
   ambient_bar_crowd: './src/audio/ambient/bar_crowd.mp3',
   ambient_city_crowd_chatting: './src/audio/ambient/city_crowd_chatting.mp3',
+  ambient_cookhouse: './src/audio/ambient/cookhouse_loop.mp3',
   ambient_fire_crackling: './src/audio/ambient/fire_crackling.mp3',
+  ambient_forge: './src/audio/ambient/forge_loop.mp3',
   ambient_fountain: './src/audio/ambient/fountain.mp3',
   ambient_magic_shop: './src/audio/ambient/magic_shop.mp3',
   ambient_pouring_a_drink: './src/audio/ambient/pouring_a_drink.mp3',
@@ -562,10 +569,13 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   keyboard_hero_music_track_1:
     './src/audio/bosses/grotesque_spider/keyboard_hero_music_track_1.mp3',
   krakaren_ground_slam: './src/audio/bosses/krakaren/krakaren_ground_slam.mp3',
+  krakaren_junction_burst: './src/audio/bosses/krakaren/junction_burst.mp3',
+  krakaren_junction_dead: './src/audio/bosses/krakaren/junction_dead.mp3',
   // [STAND-IN] The Ball of Swine's charge rumble — the library's closest "look
   // at the boss, something is coming" cue — until a rising-water dread sound is sourced.
   krakaren_slam_rise: './src/audio/effects/deep_rumbling.mp3',
   // [STAND-IN] A generic wet death splat, reused until the tentacle has its own.
+  krakaren_spark_buzz: './src/audio/bosses/krakaren/spark_buzz.mp3',
   krakaren_tentacle_death: './src/audio/enemies/splat_2.mp3',
   // [STAND-IN] The Rock Golem's fist-into-dirt impact, the closest thing in the
   // library to something bursting up out of the floor.
@@ -809,7 +819,9 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   // ambient/
   'ambient_bar_crowd',
   'ambient_city_crowd_chatting',
+  'ambient_cookhouse',
   'ambient_fire_crackling',
+  'ambient_forge',
   'ambient_fountain',
   'ambient_magic_shop',
   'ambient_pouring_a_drink',
