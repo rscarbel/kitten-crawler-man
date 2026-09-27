@@ -660,6 +660,8 @@ export interface DungeonSceneOptions {
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
 /** Building whose forge fires supply the town's fire-crackle ambience. */
 const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
+/** Building whose muffled beat leaks out of its front door into the street. */
+const DESPERADO_CLUB_BUILDING_NAME = 'The Desperado Club';
 /** The key the necromancer's boss intro is played under: his spawn key. */
 const NECROMANCER_BOSS_TYPE = 'necromancer';
 /** How far outside the mark `!bounty go` lands the party — inside its aggro range. */
@@ -684,6 +686,12 @@ const FOUNTAIN_AMBIENT_RADIUS_TILES = 10;
 const FOUNTAIN_AMBIENT_VOLUME = 0.5;
 const FORGE_AMBIENT_RADIUS_TILES = 8;
 const FORGE_AMBIENT_VOLUME = 0.45;
+/**
+ * The club's beat is heard through its walls, so it carries a street's width
+ * past the door but dies out well before the square's crowd bed takes over.
+ */
+const DESPERADO_CLUB_EXTERIOR_AMBIENT_RADIUS_TILES = 10;
+const DESPERADO_CLUB_EXTERIOR_AMBIENT_VOLUME = 0.55;
 /**
  * The plaza's murmur is a wide, quiet bed rather than a wall of crowd noise —
  * wide enough to carry a little way up every lane off the 17 x 16 slab, which is
@@ -3486,8 +3494,8 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Ambient emitters for the overworld town: the fountain and the smithy's forges
-   * swell as you approach them, a quiet crowd bed fills the square, and city
+   * Ambient emitters for the overworld town: the fountain, the smithy's forges and
+   * the Desperado Club's muffled beat swell as you approach them, a quiet crowd bed fills the square, and city
    * chatter carries across the whole town, fading out at its edge.
    */
   private buildTownAmbientEmitters(): AmbientEmitter[] {
@@ -3570,6 +3578,16 @@ export class DungeonScene extends GameplayScene {
         y: smithy.doorTile.y,
         radiusTiles: FORGE_AMBIENT_RADIUS_TILES,
         maxVolume: FORGE_AMBIENT_VOLUME,
+      });
+    }
+    const club = this.gameMap.buildingEntries.find((e) => e.name === DESPERADO_CLUB_BUILDING_NAME);
+    if (club !== undefined) {
+      emitters.push({
+        soundId: 'ambient_desperado_club_exterior',
+        x: club.doorTile.x,
+        y: club.doorTile.y,
+        radiusTiles: DESPERADO_CLUB_EXTERIOR_AMBIENT_RADIUS_TILES,
+        maxVolume: DESPERADO_CLUB_EXTERIOR_AMBIENT_VOLUME,
       });
     }
     return emitters;
