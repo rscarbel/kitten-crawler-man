@@ -121,28 +121,28 @@ export const HILDA_REWARD: NonEmpty<DialogLine> = [
 // Deacon Aviel
 
 export const AVIEL_REQUEST_INTRO = aviel.button(
-  'So?',
-  'The stone set in the altar face. You are the third person this year to ask, and the first two were thieves, so you can understand my hesitation. It comes out easily enough. It was never holy. It was here first and we built around it, which is most of theology.',
+  'Is there anything you would to to part with it?',
+  'Thou dost mean the stone set within the face of the altar? It is neither gold nor precious metal, but a tithe given unto this temple by a devout soul. It is our duty to give faithfully unto the gods, and when a man hath no coin to offer, he may give of the treasures he possesseth.',
 );
 
 /** The last beat: `Ending.confirm` carries the accept/decline labels, so this line's own advance is never shown. */
-export const AVIEL_REQUEST_TERMS = aviel.line(
-  'So there are rats in my nave, and the congregation has noticed. I cannot bless a room I am apologising for. They will not fight you. They will run, and they are quick, and that is the entire difficulty. Clear them out and the shard is yours with my blessing, which I will also throw in free.',
+export const AVIEL_REQUEST_TERMS = aviel.button(
+  'We have a deal',
+  'Well, since thou hast asked, there is indeed a matter wherein thou mayest aid us. We have of late suffered a plague of rats within the sanctuary. The congregation hath taken notice, though I confess I have had little success in ridding the temple of them. They are swift, and clever enough to elude every trap I have set. Clear this place of the vermin, and I shall deem the stone a fair exchange.',
 );
 
 /** Asked again with vermin still loose. */
 export const AVIEL_PROGRESS = aviel.fn((a: { readonly verminRemaining: number }): LineText => {
   const tally =
     a.verminRemaining === 1
-      ? 'There is one left. I can hear it behind the third pew.'
-      : 'There are still a few left, and I can hear all of them.';
-  return `${tally} Take your time. The dome has stood eighty years. It can stand another quarter of an hour of this.`;
+      ? 'There is but one remaining. I can hear the wretched thing.'
+      : 'There are yet a few remaining, and I can hear them scurrying about.';
+  return `${tally} Take thy time. This dome hath stood for eighty years. Surely it can endure another quarter hour of thy efforts.`;
 });
 
-/** The nave is quiet; the altar gives up its stone. */
 export const AVIEL_REWARD: NonEmpty<DialogLine> = [
   aviel.button(
     'Take the shard',
-    'Listen to that. Nothing. Eighty years and I do not think this room has ever once been quiet. Take it. It came loose the moment I touched it, which I choose not to think about. Tell Madame Voss the temple says hello, and that we know exactly what she charges.',
+    'Hallelujah! Hearken to that—silence at last. Eighty years hath this temple stood, and I know not that I have ever heard it so quiet. Take the stone. And when thou seest Madame Voss, tell her the temple sends its regards—and that we know precisely what she charges.',
   ),
 ];
