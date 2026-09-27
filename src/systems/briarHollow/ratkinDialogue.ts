@@ -765,7 +765,7 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       { circumstance: 'first_meeting', text: 'State your business, then keep clear of the gate.' },
       {
         circumstance: 'orders_need_mayor',
-        text: 'Orders come from the Mayor, not from you. Not yet, anyway.',
+        text: 'Orders come from the Mayor, not from you.',
       },
       { circumstance: 'command_follow', text: "Aye. I'll follow." },
       { circumstance: 'command_stay', text: "I'll hold here." },
