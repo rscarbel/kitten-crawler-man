@@ -3,25 +3,29 @@ import { speakerLines } from '../../line';
 const say = speakerLines('fenna');
 
 const ASK_HOW_LUMBER_YARD_WORKS_TEXT =
-  'Bring me raw wood. From there, you can process it yourself one piece at a time, or pay me to process a whole batch.';
+  'You bring me the raw wood. From there, you can run it through the mill yourself, one piece at a time, or pay me to handle the whole batch for you.';
+
 const MANUAL_PROCESSING_INSTRUCTIONS_TEXT =
-  'Put your wood into the mill, choose boards or rope, and process it. One wood makes two boards. One wood makes one rope.';
+  "Put your wood in the mill, choose whether you want boards or rope, and let it do its work. One piece of wood'll make two boards, or one length of rope.";
 
 const askHowLumberYardWorks = say.line(ASK_HOW_LUMBER_YARD_WORKS_TEXT);
 
 export const FENNA = {
   backstory:
-    "Fenna runs the village lumber yard and sawmill. She teaches workers how to use the machinery to process wood into boards or rope, and she offers a paid bulk-processing service for anyone who doesn't want to process each piece manually.",
+    "Fenna runs the village lumber yard and sawmill. She teaches folks how to use the machinery to turn wood into boards or rope, and she'll do bulk processing for anybody who's got the coin and would rather not feed every piece through the mill themselves.",
 
   firstMeeting: say.line(
-    "Logs go in there. Finished material comes out over here. Stand clear unless you want sawdust in places sawdust shouldn't be.",
+    "Logs go in yonder, finished material comes out over here. Mind where you're standin', though. I'd hate for you to wind up wearin' sawdust in places sawdust has no business bein'.",
   ),
+
   attackImminent: say.bark(
-    "We're shutting down the mill. Get whatever materials you've got inside the walls.",
+    "We're closin' up the mill! Get whatever materials you've got inside the walls and don't dawdle!",
   ),
+
   questActive: say.line(
-    "You keep bringing me wood and I'll keep turning it into something Tikka can use.",
+    "You keep bringin' me wood, and I'll keep turnin' it into somethin' Tikka can put to good use.",
   ),
+
   fallbackQuestions: [askHowLumberYardWorks],
 
   askHowLumberYardWorks,
@@ -29,28 +33,39 @@ export const FENNA = {
     ASK_HOW_LUMBER_YARD_WORKS_TEXT,
     MANUAL_PROCESSING_INSTRUCTIONS_TEXT,
   ]),
+
   bulkProcessingService: say.line(
-    "Or give me the wood and pay one coin per piece. I'll process as much as you tell me to, up to what you've got in your inventory.",
+    "Or hand me the wood, pay one coin apiece, and I'll run through as much of it as you tell me to. Long as you've got it in your pack, I'll get it done.",
   ),
+
   bulkProcessingBoardsSelected: say.bark(
-    "Boards it is. Tell me how many you want processed and I'll handle the batch.",
+    "Boards, then. Just tell me how many you want, and I'll take care of the whole batch.",
   ),
+
   bulkProcessingRopeSelected: say.bark(
-    "Rope it is. Tell me how much you want processed and I'll handle the batch.",
+    "Rope it is. Tell me how much you need, and I'll get it run through.",
   ),
+
   bulkProcessingFeeExplanation: say.line(
-    'The fee is one coin per piece of wood processed. So ten wood costs ten coins.',
+    "It's one coin for every piece of wood I process. Ten pieces'll run you ten coins. Fair enough, I'd say.",
   ),
-  bulkProcessingComplete: say.bark('Finished. Your processed materials are ready.'),
+
+  bulkProcessingComplete: say.bark('There we are. All finished. Your materials are ready to go.'),
+
   bulkProcessingInsufficientFee: say.bark(
-    "That's not enough coin for the amount you've asked me to process.",
+    "Now hold on a minute. You ain't got enough coin to pay for all that. Cut back the order some, or come back with more money.",
   ),
-  noLogs: say.bark("Come back with some wood. The mill isn't powered by optimism."),
+
+  noLogs: say.bark(
+    "Come back when you've got some wood. Ain't much I can do with an empty mill but stare at it.",
+  ),
+
   constructionExperience: say.bark(
-    "Every bit of processing teaches you something. Don't tell Oren I said gathering counts as construction.",
+    "Every bit you process teaches you somethin'. Just don't go tellin' Oren I said haulin' lumber counts as construction.",
   ),
+
   grantsAccess: say.line([
-    "Tikka says you need access to my saw and rope walk huh? I don't normally let strangers touch my equipment, but considering this is literally a life or death situation for us, I think it will be okay if you use it.",
-    "Just put in raw wood to either one of them and you can process the material into boards of wood with the saw, or rope with the rope walk. Why don't you go give it a try.",
+    "Tikka says you need to use my saw and rope walk, huh? I don't usually let strangers anywhere near my equipment, but seein' as how we're all tryin' to stay alive, I reckon I can make an exception.",
+    "Just put your raw wood in either one. The saw'll turn it into boards, and the rope walk'll make rope. Go on, give it a try.",
   ]),
 } as const;
