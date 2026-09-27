@@ -50,6 +50,13 @@ const DIALOG_PADDING = 14;
  * silently swallowing whatever it was there to say.
  */
 const DIALOG_MIN_TOP = 8;
+/**
+ * Ceiling on body lines per page, however tall the viewport. A big screen
+ * could fit dozens, but a wall of text reads badly in a speech box; past
+ * this the line pages instead. Six is what `DIALOG_HEIGHT` already holds
+ * with the footer, so a full page never grows the box.
+ */
+const MAX_LINES_PER_PAGE = 6;
 const HOTBAR_SLOT_SIZE = 52;
 const HOTBAR_BOTTOM_MARGIN = 12;
 
@@ -132,19 +139,40 @@ export function perLinePageIndicator(box: DialogBox): () => string | null {
  * always agrees with that box's own `pageCount()`.
  */
 export function countDisplayPages(paragraphs: Paragraphs, showFooterHint: boolean): number {
-  const width = Math.min(DIALOG_MAX_WIDTH, viewportWidth() - DIALOG_SIDE_MARGIN * 2);
-  const maxWidth = width - DIALOG_PADDING * 2;
+  const { maxWidth, maxLines } = layoutBudget(showFooterHint);
+  const ctx = measuringContext();
+  ctx.font = `${TEXT_SIZE}px monospace`;
+  const measure = (text: string): number => ctx.measureText(text).width;
+  return paginate(paragraphs, measure, maxWidth, maxLines).length;
+}
+
+/**
+ * The room available to the body text against the live viewport: the
+ * width a line wraps to, the most lines a page may ever hold, the
+ * chrome (speaker row, footer) that leaves the rest for text, and the
+ * box's own absolute ceiling. Shared by `countDisplayPages` and
+ * `DialogBox` so both always paginate identically.
+ */
+function layoutBudget(showFooterHint: boolean): {
+  maxWidth: number;
+  maxLines: number;
+  maxHeight: number;
+  chrome: number;
+} {
+  const maxWidth = dialogWidth() - DIALOG_PADDING * 2;
   const footerReserve = showFooterHint
     ? FOOTER_Y_FROM_BOTTOM + TEXT_AREA_BOTTOM_GAP
     : TEXT_AREA_BOTTOM_GAP;
   const chrome = TEXT_AREA_Y + footerReserve;
   const hotbarTop = viewportHeight() - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN;
   const maxHeight = Math.max(DIALOG_HEIGHT, hotbarTop - GAP_ABOVE_HOTBAR - DIALOG_MIN_TOP);
-  const maxLines = Math.max(1, Math.floor((maxHeight - chrome) / TEXT_LINE_HEIGHT));
-  const ctx = measuringContext();
-  ctx.font = `${TEXT_SIZE}px monospace`;
-  const measure = (text: string): number => ctx.measureText(text).width;
-  return paginate(paragraphs, measure, maxWidth, maxLines).length;
+  const linesThatFit = Math.floor((maxHeight - chrome) / TEXT_LINE_HEIGHT);
+  const maxLines = Math.max(1, Math.min(MAX_LINES_PER_PAGE, linesThatFit));
+  return { maxWidth, maxLines, maxHeight, chrome };
+}
+
+function dialogWidth(): number {
+  return Math.min(DIALOG_MAX_WIDTH, viewportWidth() - DIALOG_SIDE_MARGIN * 2);
 }
 
 interface PageCache {
@@ -347,7 +375,7 @@ export class DialogBox {
 
     this._sync();
 
-    const { maxWidth, maxHeight, chrome } = this._layoutBudget();
+    const { maxWidth, maxHeight, chrome } = layoutBudget(this._showFooterHint);
     const pageText = this._currentPage()?.text ?? '';
     const { totalHeight } = measureTextBox(ctx, pageText, {
       size: TEXT_SIZE,
@@ -410,7 +438,7 @@ export class DialogBox {
    */
   layout(): DialogLayout {
     this._sync();
-    const { maxWidth, maxLines } = this._layoutBudget();
+    const { maxWidth, maxLines } = layoutBudget(this._showFooterHint);
     return {
       textWidth: maxWidth,
       maxLines,
@@ -427,31 +455,6 @@ export class DialogBox {
   }
 
   /**
-   * The room available to the body text against the live viewport: the
-   * width a line wraps to, the most lines a page may ever hold, the
-   * chrome (speaker row, footer) that leaves the rest for text, and the
-   * box's own absolute ceiling. None of this depends on which `ctx` (if
-   * any) has drawn the box yet.
-   */
-  private _layoutBudget(): {
-    maxWidth: number;
-    maxLines: number;
-    maxHeight: number;
-    chrome: number;
-  } {
-    const { width: measuringWidth } = this._computeRect();
-    const maxWidth = measuringWidth - DIALOG_PADDING * 2;
-    const footerReserve = this._showFooterHint
-      ? FOOTER_Y_FROM_BOTTOM + TEXT_AREA_BOTTOM_GAP
-      : TEXT_AREA_BOTTOM_GAP;
-    const chrome = TEXT_AREA_Y + footerReserve;
-    const hotbarTop = viewportHeight() - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN;
-    const maxHeight = Math.max(DIALOG_HEIGHT, hotbarTop - GAP_ABOVE_HOTBAR - DIALOG_MIN_TOP);
-    const maxLines = Math.max(1, Math.floor((maxHeight - chrome) / TEXT_LINE_HEIGHT));
-    return { maxWidth, maxLines, maxHeight, chrome };
-  }
-
-  /**
    * Recomputes pages when the content or the layout budget has changed. On a
    * pure layout change (a resize, mid-reading) the reader's place is kept by
    * finding the page that now contains the old page's `startOffset`.
@@ -460,7 +463,7 @@ export class DialogBox {
     const paragraphs = this._paragraphs;
     if (paragraphs === null) return;
 
-    const { maxWidth, maxLines } = this._layoutBudget();
+    const { maxWidth, maxLines } = layoutBudget(this._showFooterHint);
     const cache = this._pageCache;
     const sameContent = cache !== null && cache.paragraphs === paragraphs;
     const sameLayout = cache !== null && cache.maxWidth === maxWidth && cache.maxLines === maxLines;
@@ -590,7 +593,7 @@ export class DialogBox {
 
   private _computeRect(): { x: number; y: number; width: number } {
     const hotbarTop = viewportHeight() - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN;
-    const width = Math.min(DIALOG_MAX_WIDTH, viewportWidth() - DIALOG_SIDE_MARGIN * 2);
+    const width = dialogWidth();
     const x = (viewportWidth() - width) / 2;
     const y = Math.max(DIALOG_MIN_TOP, hotbarTop - GAP_ABOVE_HOTBAR - this._height);
     return { x, y, width };
