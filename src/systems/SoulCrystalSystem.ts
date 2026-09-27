@@ -25,7 +25,12 @@ import {
 } from '../core/DoomsdayProgress';
 import { drawText } from '../ui/TextBox';
 import { viewportWidth } from '../core/Viewport';
-import { drawArrowAbovePlayer, type ArrowAvoidRect } from '../ui/WorldArrow';
+import {
+  ARROW_PRIORITY,
+  drawArrowAbovePlayer,
+  type ArrowAvoidRect,
+  type ArrowCandidate,
+} from '../ui/WorldArrow';
 
 /** How close the player must walk to auto-contain the crystal. */
 const CONTAIN_RANGE_TILES = 2.5;
@@ -138,7 +143,7 @@ export class SoulCrystalSystem {
    * @param upStairs world-pixel centre of this storey's stairs up, or null where
    *   there are none (the top floor, or a building that is not the tower)
    */
-  renderGuidance(
+  guidanceArrowCandidate(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
@@ -146,29 +151,33 @@ export class SoulCrystalSystem {
     isOnCrystalFloor: boolean,
     upStairs: { x: number; y: number } | null,
     avoidRect?: ArrowAvoidRect,
-  ): void {
-    if (this.progress.stage !== 'containment') return;
+  ): ArrowCandidate | null {
+    if (this.progress.stage !== 'containment') return null;
     const crystal = this.progress.crystalTile;
     const target =
       isOnCrystalFloor && crystal !== null
         ? { x: crystal.x + TILE_SIZE / 2, y: crystal.y + TILE_SIZE / 2 }
         : upStairs;
-    if (target === null) return;
+    if (target === null) return null;
     const distanceTiles =
       Math.hypot(target.x - (active.x + TILE_SIZE / 2), target.y - (active.y + TILE_SIZE / 2)) /
       TILE_SIZE;
-    if (distanceTiles < GUIDE_ARROW_SUPPRESS_TILES) return;
-    drawArrowAbovePlayer(
-      ctx,
-      active.x,
-      active.y,
-      target.x,
-      target.y,
-      camX,
-      camY,
-      GUIDE_ARROW_COLOR,
-      avoidRect === undefined ? undefined : { avoidRect },
-    );
+    if (distanceTiles < GUIDE_ARROW_SUPPRESS_TILES) return null;
+    return {
+      priority: ARROW_PRIORITY.SOUL_CRYSTAL,
+      draw: () =>
+        drawArrowAbovePlayer(
+          ctx,
+          active.x,
+          active.y,
+          target.x,
+          target.y,
+          camX,
+          camY,
+          GUIDE_ARROW_COLOR,
+          avoidRect === undefined ? undefined : { avoidRect },
+        ),
+    };
   }
 
   /** Countdown HUD — shown from anywhere while a doomsday countdown is running, not just the crystal's floor. */

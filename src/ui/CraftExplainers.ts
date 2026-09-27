@@ -1,16 +1,22 @@
 /**
- * The "how it works" explainers for the craft skills, behind one handle.
+ * The "how it works" explainers for the craft skills and the village
+ * processes that sit alongside them, behind one handle.
  *
- * Each craft skill has its own paged explainer, but only one is ever up at a
- * time, and every scene has to treat whichever it is the same way: claim the
- * screen, route clicks and Escape to it, draw it over the pause menu. Holding
- * them here means a scene wires that once, and a craft skill that gains an
- * explainer later only registers it.
+ * Each has its own paged explainer, but only one is ever up at a time, and
+ * every scene has to treat whichever it is the same way: claim the screen,
+ * route clicks and Escape to it, draw it over the pause menu. Holding them
+ * here means a scene wires that once, and anything that gains an explainer
+ * later only registers it — whether or not it is itself a leveled craft
+ * skill, which is why registration is keyed by a plain id rather than
+ * `CraftSkillId`.
  */
 
 import type { CraftSkillId } from '../core/CraftSkills';
 
-/** What a craft skill's explainer has to offer to be hosted here. */
+/** A craft skill's own id, or another village process hosted the same way. */
+export type ExplainerId = CraftSkillId | 'processing';
+
+/** What an explainer has to offer to be hosted here. */
 export interface CraftExplainer {
   readonly isOpen: boolean;
   /** The focus-ring id its buttons register under, which the scene's overlay claim names. */
@@ -26,14 +32,14 @@ export interface CraftExplainer {
 const NO_EXPLAINER_FOCUS_ID = 'craft-explainer';
 
 export class CraftExplainers {
-  private readonly explainers = new Map<CraftSkillId, CraftExplainer>();
+  private readonly explainers = new Map<ExplainerId, CraftExplainer>();
 
-  register(id: CraftSkillId, explainer: CraftExplainer): void {
+  register(id: ExplainerId, explainer: CraftExplainer): void {
     this.explainers.set(id, explainer);
   }
 
-  /** Opens the explainer for `id`. Returns false when that skill has none. */
-  open(id: CraftSkillId): boolean {
+  /** Opens the explainer for `id`. Returns false when none is registered under it. */
+  open(id: ExplainerId): boolean {
     const explainer = this.explainers.get(id);
     if (explainer === undefined) return false;
     this.close();

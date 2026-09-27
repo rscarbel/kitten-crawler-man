@@ -30,6 +30,7 @@ export const INTRO_DIALOG: ReadonlyArray<DialogPage> = [
       'Well, hello there. How fortunate that you walked by. I could really use some help from someone like you.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: DONUT,
@@ -54,6 +55,7 @@ export const INTRO_DIALOG: ReadonlyArray<DialogPage> = [
       'I need your help for a spell casting. Mold Lions approach, and I think they will do just fine for my purposes.',
     ],
     button: 'Defend yoursef',
+    questRelated: true,
   },
 ];
 
@@ -70,6 +72,7 @@ const RITUAL_FAILED_CLOSING_PAGES = [
       "You're quite the fighter. I underestimated you and now my spell failed as a result of that mistake. You owe me now.",
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: SIGNET,
@@ -79,6 +82,7 @@ const RITUAL_FAILED_CLOSING_PAGES = [
       'I need you to kill her.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: CARL,
@@ -92,11 +96,13 @@ const RITUAL_FAILED_CLOSING_PAGES = [
       'That is what this place has become. They cannot die, and they cannot leave.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: CARL,
     lines: ['...Fine.'],
     button: 'Kill Heather',
+    questRelated: true,
   },
 ] as const satisfies ReadonlyArray<DialogPage>;
 
@@ -111,6 +117,7 @@ export const HEATHER_RETURN_DIALOG = [
     title: SIGNET,
     lines: ['It is done ...Good. I can feel my spell coming to life now.'],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: SIGNET,
@@ -119,6 +126,7 @@ export const HEATHER_RETURN_DIALOG = [
       "It's time to end this.",
     ],
     button: 'Begin the assault',
+    questRelated: true,
   },
 ] as const satisfies ReadonlyArray<DialogPage>;
 
@@ -140,6 +148,7 @@ export const BIGTOP_READY_DIALOG = [
       'Go and stop my former husband. I cannot bear to see what he has become, but he needs to be stopped. I love him, but Grimaldi would never have wanted this for his family.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: MORDECAI,
@@ -160,6 +169,7 @@ export const BIGTOP_READY_DIALOG = [
     lines: ['Take this. Go. Finish the show.'],
     button: 'Enter the Big Top',
     reward: BIGTOP_POTION_REWARD,
+    questRelated: true,
   },
 ] as const satisfies ReadonlyArray<DialogPage>;
 
@@ -269,6 +279,7 @@ export const LAST_ACT_DIALOG = [
       'We walk up to him. No attacking. No sudden moves. I talk to him. You keep your paws to yourself.',
     ],
     button: 'Ready',
+    questRelated: true,
   },
 ] as const satisfies ReadonlyArray<DialogPage>;
 
@@ -336,6 +347,7 @@ export const GRIMALDI_CURE_DIALOG = [
       "Donut, watch the doors. I'm giving him the potion.",
     ],
     button: 'Pour the potion',
+    questRelated: true,
   },
 ] as const satisfies ReadonlyArray<DialogPage>;
 
@@ -369,6 +381,7 @@ export const GRIMALDI_FREED_DIALOG = [
       'Outside, the doors of the big top swing open.',
     ],
     button: 'Leave the tent',
+    questRelated: true,
   },
 ] as const satisfies ReadonlyArray<DialogPage>;
 
@@ -380,6 +393,7 @@ export function buildResolutionDialog(mongoKidnapped: boolean): DialogPage[] {
       title: SIGNET,
       lines: ['Is it over? Did you kill him?'],
       button: 'Continue',
+      questRelated: true,
     },
     {
       title: `${GRIMALDI} (from within the tent)`,
@@ -398,6 +412,7 @@ export function buildResolutionDialog(mongoKidnapped: boolean): DialogPage[] {
         "I don't know what to do with the fact that I was wrong.",
       ],
       button: 'Continue',
+      questRelated: true,
     },
     {
       title: SIGNET,
@@ -407,6 +422,7 @@ export function buildResolutionDialog(mongoKidnapped: boolean): DialogPage[] {
         'But Signet does not forget a debt, crawlers. She will never forget this one.',
       ],
       button: 'Continue',
+      questRelated: true,
     },
   ];
 
@@ -419,6 +435,7 @@ export function buildResolutionDialog(mongoKidnapped: boolean): DialogPage[] {
         'I think I will miss him.',
       ],
       button: 'Continue',
+      questRelated: true,
     });
   }
 
@@ -429,6 +446,7 @@ export function buildResolutionDialog(mongoKidnapped: boolean): DialogPage[] {
       'TYPICAL. I WILL BE ACCEPTING APPLAUSE AT THE EXIT.',
     ],
     button: 'Finish',
+    questRelated: true,
   });
 
   return pages;

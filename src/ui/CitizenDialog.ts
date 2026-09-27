@@ -14,6 +14,7 @@ export class CitizenDialog {
   private box: DialogBox | null = null;
   private lines: string[] = [];
   private index = 0;
+  private questRelated = false;
 
   constructor(
     private readonly audio: AudioManager,
@@ -25,11 +26,27 @@ export class CitizenDialog {
     return this.box?.isVisible() ?? false;
   }
 
-  /** Begin a conversation. Advancing steps through `lines`, then closes. No-op on an empty list. */
-  open(speakerName: string, lines: ReadonlyArray<string>, speakerIcon?: HTMLImageElement): void {
+  /** The line on screen right now, or null while nothing is open. */
+  get currentText(): string | null {
+    return this.isOpen ? (this.lines[this.index] ?? null) : null;
+  }
+
+  /**
+   * Begin a conversation. Advancing steps through `lines`, then closes. No-op
+   * on an empty list. `questRelated` shows the quest badge on every page —
+   * for a conversation an active quest needs but that offers no choice of
+   * its own.
+   */
+  open(
+    speakerName: string,
+    lines: ReadonlyArray<string>,
+    speakerIcon?: HTMLImageElement,
+    questRelated = false,
+  ): void {
     if (lines.length === 0) return;
     this.lines = [...lines];
     this.index = 0;
+    this.questRelated = questRelated;
     this.box = new DialogBox(this.audio, {
       speakerName,
       speakerIcon,
@@ -42,10 +59,10 @@ export class CitizenDialog {
   private showCurrent(): void {
     if (!this.box) return;
     const total = this.lines.length;
-    this.box.show(
-      this.lines[this.index],
-      total > 1 ? { pageIndicator: { current: this.index + 1, total } } : undefined,
-    );
+    this.box.show(this.lines[this.index], {
+      ...(total > 1 ? { pageIndicator: { current: this.index + 1, total } } : {}),
+      questRelated: this.questRelated,
+    });
   }
 
   /** Space/click: reveal in full, advance to the next line, or close after the last. */

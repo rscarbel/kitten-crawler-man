@@ -26,6 +26,70 @@ const ARROW_FOOTPRINT_HALF_WIDTH = ARROW_LENGTH_PIXELS + ARROW_BOUNCE_AMPLITUDE;
 export type ArrowAvoidRect = { x: number; y: number; w: number; h: number };
 
 /**
+ * A world/edge arrow competing for the one arrow slot a frame is allowed to
+ * show (see {@link drawTopArrowCandidate}). Lower `priority` wins.
+ */
+export interface ArrowCandidate {
+  readonly priority: number;
+  readonly draw: () => void;
+}
+
+/**
+ * The one ranking every world/edge arrow in the game shares, so a downed
+ * companion always wins the slot and every other arrow has a fixed place
+ * behind it. Lower runs first.
+ */
+export const ARROW_PRIORITY = {
+  DOWNED_COMPANION: 0,
+  CHEAT_REVEAL: 1,
+  PINNED_OBJECTIVE: 2,
+  BOUNTY: 3,
+  RECALL_TRAIL: 4,
+  SOUL_CRYSTAL: 5,
+} as const;
+
+/**
+ * Draws only the highest-priority arrow among this frame's candidates —
+ * the arbiter every screen with more than one arrow source must call instead
+ * of drawing each source directly, so two arrows never appear at once.
+ */
+export function drawTopArrowCandidate(candidates: ReadonlyArray<ArrowCandidate | null>): void {
+  let winner: ArrowCandidate | null = null;
+  for (const candidate of candidates) {
+    if (candidate !== null && (winner === null || candidate.priority < winner.priority)) {
+      winner = candidate;
+    }
+  }
+  winner?.draw();
+}
+
+/** Margin kept past the viewport's edge before a target counts as "in view". */
+const VIEWPORT_VISIBILITY_MARGIN_PX = TILE_SIZE;
+
+/**
+ * Whether a world point is close enough to the visible screen that an arrow
+ * pointing at it would be telling the player something they can already see.
+ */
+export function isWorldPointOnScreen(
+  worldX: number,
+  worldY: number,
+  camX: number,
+  camY: number,
+  viewportW: number,
+  viewportH: number,
+  marginPx = VIEWPORT_VISIBILITY_MARGIN_PX,
+): boolean {
+  const screenX = worldX - camX;
+  const screenY = worldY - camY;
+  return (
+    screenX >= -marginPx &&
+    screenY >= -marginPx &&
+    screenX <= viewportW + marginPx &&
+    screenY <= viewportH + marginPx
+  );
+}
+
+/**
  * Pushes the arrow's screen Y below `avoidRect` when it would otherwise land
  * inside it — the arrow tracks the active player, who can be scrolled into the
  * HUD's screen corner when the camera clamps at a map edge.

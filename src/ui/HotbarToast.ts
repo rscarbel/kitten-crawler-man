@@ -21,6 +21,11 @@ const FONT_SIZE = 13;
 const TEXT_COLOR = '#f8fafc';
 const OUTLINE_COLOR = 'rgba(0,0,0,0.9)';
 const OUTLINE_WIDTH = 4;
+/** An urgent notice draws at this multiple of the usual size, to be seen over a busy screen. */
+const URGENT_SCALE = 2;
+
+/** How hard a notice must compete for the player's eye. */
+export type NoticeProminence = 'normal' | 'urgent';
 
 export class HotbarToast {
   private readonly stack = new ToastStack({
@@ -39,8 +44,8 @@ export class HotbarToast {
    * its timer rather than stacking a second copy of the same words — these are
    * sentences, and the same sentence twice is the same information twice.
    */
-  show(text: string): void {
-    this.stack.show(text, true);
+  show(text: string, prominence: NoticeProminence = 'normal'): void {
+    this.stack.show(text, true, prominence === 'urgent' ? URGENT_SCALE : 1);
   }
 
   update(): void {

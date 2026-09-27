@@ -8,7 +8,7 @@ import { REVIVE_FRAMES, REVIVE_HP_FRACTION, REVIVE_RANGE_PX } from '../core/revi
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
-import { drawArrowAbovePlayer } from '../ui/WorldArrow';
+import { ARROW_PRIORITY, drawArrowAbovePlayer, type ArrowCandidate } from '../ui/WorldArrow';
 
 /**
  * The downed-teammate state machine and its HUD, shared by every scene a
@@ -172,15 +172,45 @@ export function finishRevival(
 }
 
 /**
- * Renders the knocked-out warning banner, the arrow pointing at the downed
- * teammate, and the revival progress bar. `miniMapSize` is the top-right
- * minimap's edge length, which on mobile is what the banner must stay clear of.
+ * The downed-teammate arrow, as a candidate for the one shared arrow slot
+ * (`drawTopArrowCandidate`) rather than drawn directly — a downed companion
+ * always wins that slot over any quest or siege arrow.
+ */
+export function downedCompanionArrowCandidate(
+  ctx: CanvasRenderingContext2D,
+  active: Player,
+  inactive: Player,
+  camX: number,
+  camY: number,
+): ArrowCandidate | null {
+  if (!inactive.isKnockedOut) return null;
+  const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
+  if (dist <= REVIVE_RANGE_PX) return null;
+  return {
+    priority: ARROW_PRIORITY.DOWNED_COMPANION,
+    draw: () =>
+      drawArrowAbovePlayer(
+        ctx,
+        active.x,
+        active.y,
+        inactive.x + TILE_SIZE / 2,
+        inactive.y + TILE_SIZE / 2,
+        camX,
+        camY,
+        REVIVE_ARROW_COLOR,
+      ),
+  };
+}
+
+/**
+ * Renders the knocked-out warning banner and the revival progress bar.
+ * `miniMapSize` is the top-right minimap's edge length, which on mobile is
+ * what the banner must stay clear of. The arrow pointing at the downed
+ * teammate is drawn separately, through {@link downedCompanionArrowCandidate}
+ * and the shared arrow arbiter.
  */
 export function renderKnockedOutUI(
   ctx: CanvasRenderingContext2D,
-  camX: number,
-  camY: number,
-  active: Player,
   inactive: Player,
   miniMapSize: number,
 ): void {
@@ -217,20 +247,10 @@ export function renderKnockedOutUI(
     alpha: pulse,
   });
 
-  const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
-
-  if (dist > REVIVE_RANGE_PX) {
-    drawArrowAbovePlayer(
-      ctx,
-      active.x,
-      active.y,
-      inactive.x + TILE_SIZE / 2,
-      inactive.y + TILE_SIZE / 2,
-      camX,
-      camY,
-      REVIVE_ARROW_COLOR,
-    );
-  } else if (inactive.reviveProgress > 0) {
+  // Only ticks up while the reviver is in range (see `updateKnockoutState`),
+  // so a positive value on its own means the pair are already close enough
+  // that the arrow above would have nothing left to point out.
+  if (inactive.reviveProgress > 0) {
     drawRevivingBar(ctx, cx, REVIVE_BAR_Y, inactive.reviveProgress / REVIVE_FRAMES);
   }
 }

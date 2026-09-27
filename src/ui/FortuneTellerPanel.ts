@@ -34,6 +34,7 @@ import {
 import { drawText } from './TextBox';
 import { drawFortune, drawHildaReading } from '../systems/townFortunes';
 import type { Player } from '../Player';
+import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
 import type { TownDialogContext } from '../systems/townDialog';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -130,7 +131,7 @@ export class FortuneTellerPanel {
     this.modalContains = null;
   }
 
-  render(ctx: CanvasRenderingContext2D, active: Player): void {
+  render(ctx: CanvasRenderingContext2D, active: Player, companion: Player): void {
     if (!this.open) return;
 
     drawOverlay(ctx, {
@@ -162,7 +163,7 @@ export class FortuneTellerPanel {
       align: 'center',
       outline: true,
     });
-    drawText(ctx, `Coins: ${active.coins}`, {
+    drawText(ctx, `Coins: ${partyCoins(active, companion)}`, {
       x: modal.x + PANEL_WIDTH - PANEL_PADDING,
       y: modal.inner.y + PANEL_PADDING,
       size: COINS_SIZE,
@@ -171,7 +172,7 @@ export class FortuneTellerPanel {
       align: 'right',
     });
 
-    const canAfford = active.coins >= this.reader.cost;
+    const canAfford = canAffordCoins(active, companion, this.reader.cost);
     beginMenuFocus('fortune-teller');
     if (this.fortune === null) {
       this.renderCards(ctx, modal.inner.y, centerX, canAfford);
@@ -289,21 +290,21 @@ export class FortuneTellerPanel {
    * and swallows other in-modal taps without closing. Returns whether consumed
    * (always true while open, so the tap can't fall through to move/attack).
    */
-  handleClick(canvasX: number, canvasY: number, active: Player): boolean {
+  handleClick(canvasX: number, canvasY: number, active: Player, companion: Player): boolean {
     if (!this.open) return false;
     const { x: mx, y: my } = modalFitPoint(this.fit, canvasX, canvasY);
 
     if (this.fortune === null) {
       for (const card of this.cardButtons) {
         if (card.contains(mx, my)) {
-          this.payAndReveal(active);
+          this.payAndReveal(active, companion);
           return true;
         }
       }
     } else {
       for (const btn of this.actionButtons) {
         if (btn.contains(mx, my)) {
-          this.payAndReveal(active);
+          this.payAndReveal(active, companion);
           return true;
         }
       }
@@ -320,9 +321,9 @@ export class FortuneTellerPanel {
     return true;
   }
 
-  private payAndReveal(active: Player): void {
-    if (active.coins < this.reader.cost || this.context === null) return;
-    active.coins -= this.reader.cost;
+  private payAndReveal(active: Player, companion: Player): void {
+    if (!canAffordCoins(active, companion, this.reader.cost) || this.context === null) return;
+    spendPartyCoins(active, companion, this.reader.cost, active);
     this.fortune = this.reader.draw(this.context);
   }
 }

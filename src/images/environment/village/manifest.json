@@ -293,6 +293,10 @@
       "forge_hearth": {
         "row": 1,
         "frameCount": 1
+      },
+      "bell_tower_broken": {
+        "row": 2,
+        "frameCount": 1
       }
     }
   },

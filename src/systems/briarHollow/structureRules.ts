@@ -202,6 +202,12 @@ export function trebuchetRepairCost(hp: number, maxHp: number, broken: boolean):
   return capCost(scaleCost(TREBUCHET_REPAIR_UNIT, units), TREBUCHET_BUILD_COST);
 }
 
+// ── Bell tower repair ───────────────────────────────────────────────────────
+
+/** What rebuilding the clock tower after a lost siege costs, in materials and coin. */
+export const BELL_TOWER_REPAIR_COST: ResourceCost = { wood_board: 30, rope: 5, stone: 20 };
+export const BELL_TOWER_REPAIR_COINS = 30;
+
 // ── Spikes ──────────────────────────────────────────────────────────────────
 
 export const SPIKES_BASE_HP = 150;

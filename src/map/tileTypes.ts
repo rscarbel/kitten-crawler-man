@@ -810,6 +810,16 @@ export type TileContent = {
    * ask the village which segments are spiked.
    */
   wallSpiked?: boolean;
+  /**
+   * Set on the bell tower's anchor tile once a lost siege has broken it, so
+   * the prop renderer draws the snapped tower rather than the whole one.
+   * On the tile for the same reason `wallTier` is: the renderer is pure and
+   * has no handle on the village's quest state, and the anchor tile is
+   * rebuilt fresh every time `DungeonScene` regenerates the overworld map, so
+   * `DefenseStructures.syncMap` reapplies it from `quest.bellTowerBroken`
+   * the same way it reapplies every wall's tier.
+   */
+  bellTowerBroken?: boolean;
 };
 
 /** Which way a bridge deck runs. */

@@ -16,6 +16,7 @@
  * does not end it: building under fire is the point of a siege.
  */
 
+import type { NoticeProminence } from '../../ui/HotbarToast';
 import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { PalisadeTier } from '../../map/tileTypes';
@@ -29,6 +30,7 @@ import type { SoundId } from '../../audio/sounds';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { ResourceCost } from '../../core/partyResources';
 import { canAfford, spend } from '../../core/partyResources';
+import { canAffordCoins, spendPartyCoins } from '../../core/partyCoins';
 import { constructionTimeFactor, spikesUnlocked } from '../../core/craftPerks';
 import { TILE_SIZE } from '../../core/constants';
 import { drawProgressBar, PROGRESS_PRESETS } from '../../ui/Box';
@@ -50,6 +52,7 @@ import {
   trebuchetFootprint,
 } from './DefenseStructures';
 import {
+  BELL_TOWER_REPAIR_COINS,
   CONSTRUCTION_XP,
   SNARE_BUILD_COST,
   SNARE_BUILD_SECONDS,
@@ -84,6 +87,11 @@ import {
 } from './constructionPlacement';
 import { unlimitedAmmo } from '../../core/craftPerks';
 import type { ConstructionMenuSource } from '../../ui/ConstructionMenu';
+import {
+  hasConstructionUnlock,
+  type ConstructionUnlockId,
+  type VillageUnlocks,
+} from '../../core/villageUnlocks';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -123,6 +131,9 @@ export interface ConstructionJob {
 
 /** A job's move tolerance: a pixel of drift from a shove or a separation push is not walking off. */
 const JOB_MOTION_TOLERANCE_PX = 0.5;
+/** How long a "no room" silhouette holds before fading out on its own. */
+const NO_ROOM_GHOST_SECONDS = 3;
+const NO_ROOM_GHOST_FRAMES = UPDATES_PER_SECOND * NO_ROOM_GHOST_SECONDS;
 /**
  * How far a body sealed inside a just-raised or just-repaired wall may be
  * moved to reach open ground. Generous: the village interior is wide open, so
@@ -157,6 +168,7 @@ const LOAD_SOUND = 'trebuchet_load';
 const MATERIALS_GONE_MESSAGE = 'You no longer have the materials.';
 const TARGET_CHANGED_MESSAGE = 'The structure changed while you worked on it.';
 const NOTHING_TO_REPAIR_MESSAGE = 'There is nothing left to repair.';
+const INSUFFICIENT_MONEY_MESSAGE = 'Insufficient money.';
 
 const PROGRESS_BAR_WIDTH = 36;
 const PROGRESS_BAR_HEIGHT = 5;
@@ -179,6 +191,17 @@ export interface OptionStatus {
   /** Kits of this kind the party owns. */
   readonly kits: number;
   readonly usesKit: boolean;
+  /**
+   * True when lack of room is the only thing stopping this row: the menu
+   * keeps the row pressable so choosing it shows where it would have gone.
+   */
+  readonly roomBlocked: boolean;
+}
+
+/** A "no room" attempt's silhouette, fading out in the world where the build was tried. */
+export interface NoRoomGhost {
+  readonly footprint: PlannedFootprint;
+  readonly alpha: number;
 }
 
 /** What the world ghost shows while a menu row is hovered or focused. */
@@ -213,13 +236,15 @@ export interface ConstructionSystemDeps {
   readonly cat: CatPlayer;
   readonly roster: MobRoster;
   readonly audio: AudioManager | null;
-  readonly announce: (message: string) => void;
+  readonly announce: (message: string, prominence?: NoticeProminence) => void;
   /** Keeps the resource strip up while a job runs. */
   readonly noteResourceActivity: () => void;
   /** Every body a trebuchet may have to push clear, crawlers included. */
   readonly bodies: () => ReadonlyArray<PushableBody>;
   /** Whether this scene is indoors, where nothing can be built. */
   readonly indoors: boolean;
+  /** Which construction plans the party currently holds. Read live: a quest can grant one mid-scene. */
+  readonly unlocks: () => VillageUnlocks;
 }
 
 interface Hammering {
@@ -242,6 +267,22 @@ const WALL_OPTION_TIER: Readonly<Record<'wood' | 'stone' | 'fortified', Palisade
   wood: 'wood',
   stone: 'stone',
   fortified: 'fortified',
+};
+
+/** Which plan a menu row spends, mapped onto `VillageUnlocks.construction`. */
+const BUILD_OPTION_UNLOCK: Readonly<Record<BuildOption, ConstructionUnlockId>> = {
+  wood: 'wooden_wall',
+  stone: 'stone_wall',
+  fortified: 'fortified_wall',
+  trebuchet: 'trebuchet',
+  snare: 'snare',
+};
+
+/** The plan a wall tier's upgrade spends. A wall can never upgrade onto `fence`, so it has none. */
+const WALL_TIER_UNLOCK: Readonly<Partial<Record<PalisadeTier, ConstructionUnlockId>>> = {
+  wood: 'wooden_wall',
+  stone: 'stone_wall',
+  fortified: 'fortified_wall',
 };
 
 /** The rows the menu only makes sense to offer while facing a wall at all. */
@@ -276,6 +317,13 @@ export class ConstructionSystem {
   private jobFrameCount = 0;
   private hammering: Hammering | null = null;
   private readonly pushes: PendingPush[] = [];
+  private noRoomAttempt: {
+    readonly footprint: PlannedFootprint;
+    readonly builder: Crawler;
+    refX: number;
+    refY: number;
+    framesLeft: number;
+  } | null = null;
 
   /** Set by gates to prove the corridor check is what stops a sealing build. */
   skipCorridorCheck = false;
@@ -292,6 +340,38 @@ export class ConstructionSystem {
 
   get job(): Readonly<ConstructionJob> | null {
     return this._job;
+  }
+
+  /** The silhouette of a trebuchet or snare that had no room, fading where the build was tried. */
+  get noRoomGhost(): NoRoomGhost | null {
+    const attempt = this.noRoomAttempt;
+    if (attempt === null) return null;
+    return { footprint: attempt.footprint, alpha: attempt.framesLeft / NO_ROOM_GHOST_FRAMES };
+  }
+
+  /** Clears the "no room" silhouette outright: the build menu opening again is one such moment. */
+  clearNoRoomGhost(): void {
+    this.noRoomAttempt = null;
+  }
+
+  private showNoRoomGhost(crawler: Crawler, footprint: PlannedFootprint): void {
+    this.noRoomAttempt = {
+      footprint,
+      builder: crawler,
+      refX: crawler.x,
+      refY: crawler.y,
+      framesLeft: NO_ROOM_GHOST_FRAMES,
+    };
+  }
+
+  private updateNoRoomGhost(): void {
+    const attempt = this.noRoomAttempt;
+    if (attempt === null) return;
+    const moved =
+      Math.hypot(attempt.builder.x - attempt.refX, attempt.builder.y - attempt.refY) >
+      JOB_MOTION_TOLERANCE_PX;
+    attempt.framesLeft--;
+    if (moved || attempt.framesLeft <= 0) this.noRoomAttempt = null;
   }
 
   private crawlerOf(kind: CrawlerKind): Crawler {
@@ -311,6 +391,27 @@ export class ConstructionSystem {
     return crawler.craftSkills.isLearned('construction')
       ? crawler.craftSkills.getLevel('construction')
       : 0;
+  }
+
+  /**
+   * The single check every menu row, prompt and hotkey runs before it lets a
+   * NEW build or upgrade through. Repairing a structure already standing is
+   * never gated by this — only what would add something the party has not
+   * yet been taught to make.
+   */
+  isActionUnlocked(id: ConstructionUnlockId): boolean {
+    return hasConstructionUnlock(this.deps.unlocks(), id);
+  }
+
+  /** Whether a Construction menu row's build is unlocked. */
+  isOptionUnlocked(option: BuildOption): boolean {
+    return this.isActionUnlocked(BUILD_OPTION_UNLOCK[option]);
+  }
+
+  /** Whether raising a wall to `tier` is unlocked. `fence` is the starting tier and needs no plan. */
+  isWallTierUnlocked(tier: PalisadeTier): boolean {
+    const id = WALL_TIER_UNLOCK[tier];
+    return id === undefined || this.isActionUnlocked(id);
   }
 
   // ── Targets ─────────────────────────────────────────────────────────────
@@ -366,7 +467,7 @@ export class ConstructionSystem {
       return { tier: standingTier, cost: repairCost, repair: true };
     }
     const tier = this.deps.defense.upgradeTarget(ref);
-    if (tier === null) return null;
+    if (tier === null || !this.isWallTierUnlocked(tier)) return null;
     const cost = this.upgradeCostFor(ref, crawler);
     if (cost === null) return null;
     return { tier, cost, repair: false };
@@ -432,6 +533,21 @@ export class ConstructionSystem {
   optionStatus(option: BuildOption, crawler: Crawler = this.active()): OptionStatus {
     const level = this.levelOf(crawler);
     const label = OPTION_LABELS[option];
+    if (!this.isOptionUnlocked(option)) {
+      return {
+        option,
+        label,
+        enabled: false,
+        status: 'Not yet unlocked',
+        cost: {},
+        baseCost: {},
+        affordable: false,
+        seconds: 0,
+        kits: 0,
+        usesKit: false,
+        roomBlocked: false,
+      };
+    }
     const busy = this._job !== null;
     if (option === 'trebuchet' || option === 'snare') {
       const baseCost = option === 'trebuchet' ? TREBUCHET_BUILD_COST : SNARE_BUILD_COST;
@@ -444,6 +560,7 @@ export class ConstructionSystem {
         timeFactor(level);
       let status = 'Ready — builds in front of you';
       let enabled = true;
+      let roomBlocked = false;
       if (this.deps.indoors) {
         status = 'Build outdoors';
         enabled = false;
@@ -453,18 +570,41 @@ export class ConstructionSystem {
       } else if (!this.plannedFootprint(crawler, option).valid) {
         status = 'No room in front of you';
         enabled = false;
+        roomBlocked = true;
       } else if (!affordable) {
         status = 'Not enough materials';
         enabled = false;
       }
-      return { option, label, enabled, status, cost, baseCost, affordable, seconds, kits, usesKit };
+      return {
+        option,
+        label,
+        enabled,
+        status,
+        cost,
+        baseCost,
+        affordable,
+        seconds,
+        kits,
+        usesKit,
+        roomBlocked,
+      };
     }
     const tier = WALL_OPTION_TIER[option];
     const baseCost = WALL_TIERS[tier].upgradeCost ?? {};
     const cost = discountedCost(baseCost, level);
     const affordable = canAfford(this.deps.human, this.deps.cat, cost);
     const seconds = WALL_TIERS[tier].buildSeconds * timeFactor(level);
-    const base = { option, label, cost, baseCost, affordable, seconds, kits: 0, usesKit: false };
+    const base = {
+      option,
+      label,
+      cost,
+      baseCost,
+      affordable,
+      seconds,
+      kits: 0,
+      usesKit: false,
+      roomBlocked: false,
+    };
     if (this.deps.indoors) return { ...base, enabled: false, status: 'Build outdoors' };
     const segment = this.facedSegment(crawler);
     if (segment === null) return { ...base, enabled: false, status: WALL_OPTION_NEEDS[option] };
@@ -521,8 +661,12 @@ export class ConstructionSystem {
   startOption(option: BuildOption): boolean {
     const crawler = this.active();
     const status = this.optionStatus(option, crawler);
+    if ((option === 'trebuchet' || option === 'snare') && status.roomBlocked) {
+      this.denyForNoRoom(crawler, this.plannedFootprint(crawler, option).footprint);
+      return false;
+    }
     if (!status.enabled) {
-      this.refuse(option === 'trebuchet' || option === 'snare' ? NO_SPACE_MESSAGE : status.status);
+      this.refuse(status.status);
       return false;
     }
     if (option === 'trebuchet' || option === 'snare')
@@ -550,7 +694,7 @@ export class ConstructionSystem {
   ): boolean {
     const { footprint, valid } = this.plannedFootprint(crawler, kind);
     if (!valid) {
-      this.refuse(NO_SPACE_MESSAGE);
+      this.denyForNoRoom(crawler, footprint);
       return false;
     }
     const bodies = this.deps.bodies();
@@ -558,7 +702,7 @@ export class ConstructionSystem {
     if (kind === 'snare') {
       // A snare needs a free tile: anybody standing on it makes it not free.
       if (bodies.some((body) => bodyOverlaps(body, footprint))) {
-        this.refuse(NO_SPACE_MESSAGE);
+        this.denyForNoRoom(crawler, footprint);
         return false;
       }
     } else {
@@ -572,7 +716,7 @@ export class ConstructionSystem {
         },
       );
       if (plan === null) {
-        this.refuse(NO_SPACE_MESSAGE);
+        this.denyForNoRoom(crawler, footprint);
         return false;
       }
       this.deps.defense.reserve(key, footprint);
@@ -630,21 +774,31 @@ export class ConstructionSystem {
     const cost = this.repairCostFor(ref, crawler);
     if (cost === null) return false;
     if (!this.affordOrRefuse(cost)) return false;
+    // The tower's rebuild is the one repair the village charges coin for, on
+    // top of its materials — nothing else in Construction touches the purse.
+    if (
+      ref.kind === 'bellTower' &&
+      !canAffordCoins(this.deps.human, this.deps.cat, BELL_TOWER_REPAIR_COINS)
+    ) {
+      this.refuse(INSUFFICIENT_MONEY_MESSAGE);
+      return false;
+    }
     return this.beginJob(crawler, {
       action: 'repair',
       target: ref,
       seconds: repairBaseSeconds(this.deps.defense, ref),
       cost,
       fromKit: false,
-      label: 'Repaired',
+      label: ref.kind === 'bellTower' ? 'Bell Tower Repaired' : 'Repaired',
     });
   }
 
   startUpgrade(ref: StructureRef): boolean {
     const crawler = this.active();
     const target = this.deps.defense.upgradeTarget(ref);
+    if (target === null || !this.isWallTierUnlocked(target)) return false;
     const cost = this.upgradeCostFor(ref, crawler);
-    if (target === null || cost === null) return false;
+    if (cost === null) return false;
     if (!this.affordOrRefuse(cost)) return false;
     return this.beginJob(crawler, {
       action: 'upgrade',
@@ -656,9 +810,15 @@ export class ConstructionSystem {
     });
   }
 
+  /** Whether `ref` has never carried spikes at all, as opposed to worn spikes needing a repair. */
+  spikesAreNew(ref: StructureRef): boolean {
+    return (this.deps.defense.record(ref)?.spikesHp ?? null) === null;
+  }
+
   startSpikes(ref: StructureRef): boolean {
     const crawler = this.active();
     if (!this.spikesAvailable(crawler) || !this.deps.defense.canTakeSpikes(ref)) return false;
+    if (this.spikesAreNew(ref) && !this.isActionUnlocked('spikes')) return false;
     const cost = this.spikesCostFor(crawler);
     if (!this.affordOrRefuse(cost)) return false;
     return this.beginJob(crawler, {
@@ -768,9 +928,17 @@ export class ConstructionSystem {
     return false;
   }
 
-  private refuse(message: string): void {
-    this.deps.announce(message);
+  private refuse(message: string, prominence: NoticeProminence = 'normal'): void {
+    this.deps.announce(message, prominence);
     this.deps.audio?.play(ERROR_SOUND);
+  }
+
+  /** A trebuchet or snare refused for lack of room: shows the silhouette, spends and builds nothing. */
+  private denyForNoRoom(crawler: Crawler, footprint: PlannedFootprint): void {
+    this.showNoRoomGhost(crawler, footprint);
+    // The builder is reading the build menu and its prompts when this lands,
+    // so the refusal has to shout over them to be noticed at all.
+    this.refuse(NO_SPACE_MESSAGE, 'urgent');
   }
 
   // ── The job ─────────────────────────────────────────────────────────────
@@ -840,6 +1008,7 @@ export class ConstructionSystem {
 
   update(): void {
     this.updatePushes();
+    this.updateNoRoomGhost();
     if (this.hammering !== null && this._job === null) this.endHammering();
     this.advanceJob();
     this.syncRepairLoop();
@@ -920,9 +1089,15 @@ export class ConstructionSystem {
       xp = tier === null ? 0 : wallTierXp(tier);
       this.freeTrappedOccupants(target);
     } else if (job.action === 'repair') {
-      const max = defense.maxHp(target);
-      const before = defense.hp(target);
-      xp = repairXp(buildXpOf(defense, target), max <= 0 ? 1 : (max - before) / max);
+      if (target.kind === 'bellTower') {
+        // Whole or broken, not a fraction restored: the tower earns a flat
+        // trebuchet's worth rather than a share of some buildXp it has none of.
+        xp = CONSTRUCTION_XP.trebuchet;
+      } else {
+        const max = defense.maxHp(target);
+        const before = defense.hp(target);
+        xp = repairXp(buildXpOf(defense, target), max <= 0 ? 1 : (max - before) / max);
+      }
       defense.applyRepair(target);
       this.freeTrappedOccupants(target);
     } else {
@@ -974,8 +1149,16 @@ export class ConstructionSystem {
       holder.inventory.removeItems(id, 1);
       return true;
     }
-    if (isFreeCost(cost)) return true;
-    return spend(this.deps.human, this.deps.cat, cost, builder);
+    const needsCoins = !isPlannedFootprint(job.target) && job.target.kind === 'bellTower';
+    // Checked before either purse is touched: resources and coins must both
+    // clear, or neither is spent.
+    if (needsCoins && !canAffordCoins(this.deps.human, this.deps.cat, BELL_TOWER_REPAIR_COINS)) {
+      return false;
+    }
+    if (!isFreeCost(cost) && !spend(this.deps.human, this.deps.cat, cost, builder)) return false;
+    if (needsCoins)
+      spendPartyCoins(this.deps.human, this.deps.cat, BELL_TOWER_REPAIR_COINS, builder);
+    return true;
   }
 
   private otherCrawler(crawler: Crawler): Crawler {
@@ -1277,6 +1460,10 @@ function buildXpOf(defense: DefenseStructures, ref: StructureRef): number {
       return wallTierXp('wood');
     case 'gate':
       return 0;
+    // Never reached: `finishJob` awards the tower's repair XP itself, fixed
+    // at a trebuchet's, rather than through this share-of-buildXp formula.
+    case 'bellTower':
+      return CONSTRUCTION_XP.trebuchet;
   }
 }
 
@@ -1299,6 +1486,10 @@ function repairBaseSeconds(defense: DefenseStructures, ref: StructureRef): numbe
       return HOLLOW_BELL_REPAIR_SECONDS;
     case 'gate':
       return 0;
+    // Rebuilding the whole frame is worth as much as a trebuchet and takes as
+    // long as one to raise.
+    case 'bellTower':
+      return TREBUCHET_BUILD_SECONDS;
   }
 }
 
@@ -1332,6 +1523,7 @@ export function indoorsConstructionSource(
         seconds: baseSeconds * timeFactor(level),
         kits: 0,
         usesKit: false,
+        roomBlocked: false,
       };
     });
   };

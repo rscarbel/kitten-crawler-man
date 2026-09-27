@@ -82,6 +82,8 @@ export interface SiegeRig {
   readonly droppedItems: Array<{ id: ItemId; quantity: number }>;
   /** How many times each craft explainer was opened. */
   readonly explainerOpens: Map<string, number>;
+  /** Every line a crawler chat-bubble bark said, in order. */
+  readonly crawlerBarks: string[];
   /** How many boss intros played. */
   bossIntros: number;
   context(): SystemContext;
@@ -114,6 +116,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
   const announced: string[] = [];
   const droppedItems: Array<{ id: ItemId; quantity: number }> = [];
   const explainerOpens = new Map<string, number>();
+  const crawlerBarks: string[] = [];
   // Reward cards halt the world in the scene and wait on a click; here they
   // are recorded and read at once, so whatever waits on them runs.
   menus.rewardGrantedDialog.enqueue = (reward: GrantedReward) => {
@@ -192,6 +195,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
     announced,
     droppedItems,
     explainerOpens,
+    crawlerBarks,
     bossIntros: 0,
     context,
     step: () => {

@@ -16,6 +16,12 @@ import type { EventBus } from '../../core/EventBus';
 import type { BriarHollowState, VillagerMemory } from '../../core/briarHollowState';
 import type { VillageQuestPhase } from '../../core/villageQuestPhase';
 import { CONVERSATION_WALK_AWAY_TILES } from '../../creatures/townInteraction';
+import {
+  pickByTalkPriority,
+  TALK_TIER_AMBIENT,
+  TALK_TIER_NAMED,
+  TALK_TIER_QUEST,
+} from '../../creatures/talkPriority';
 import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite, VillagerAnchorKind } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
@@ -53,7 +59,12 @@ import {
   type TopicProvider,
 } from './villagerTopics';
 import { CIVILIAN_CAST_IDS, type CivilianCastId, VILLAGER_ROUTINES } from './villagerRoutines';
-import { SHELTERING_LINE, UNNAMED_VILLAGER_LINES, isUnnamedVillager } from './unnamedVillagerLines';
+import {
+  SHELTERING_LINE,
+  UNNAMED_VILLAGER_DESCRIPTIONS,
+  UNNAMED_VILLAGER_LINES,
+  isUnnamedVillager,
+} from './unnamedVillagerLines';
 
 const UPDATES_PER_SECOND = 60;
 const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
@@ -62,8 +73,8 @@ const MS_PER_SECOND = 1000;
 
 /** How close, centre to centre, a crawler must be to talk to a villager. Facing is not required. */
 export const VILLAGER_TALK_RANGE_TILES = 1.6;
-/** Within this many tiles a villager's name shows under their feet. */
-const NAME_LABEL_RANGE_TILES = 4;
+/** Tooltip body for a civilian who is neither a named villager nor one of the four unnamed regulars. */
+const UNNAMED_VILLAGER_FALLBACK_DESCRIPTION = 'One of Briar Hollow’s ratkin villagers.';
 
 /** A shop or service stays behind its counter while the party is this close to it. */
 export const SERVICE_AT_POST_TILES = 6;
@@ -203,6 +214,12 @@ interface ConversationSession {
 
 function tileDistance(a: VillagerCrawler, b: VillagerCrawler): number {
   return Math.hypot(a.x - b.x, a.y - b.y) / TILE_SIZE;
+}
+
+/** A villager the current quest has business with always outranks one that doesn't; a named villager with their own service or lines outranks one of the unnamed four. */
+function villagerTalkTier(villager: Villager) {
+  if (villager.marker !== 'none') return TALK_TIER_QUEST;
+  return isUnnamedVillager(villager.id) ? TALK_TIER_AMBIENT : TALK_TIER_NAMED;
 }
 
 function tileOf(body: VillagerCrawler): TilePoint {
@@ -371,10 +388,17 @@ export class VillagerSystem {
         sheltersTaken,
       );
       const named = asVillagerId(id);
+      const description =
+        named !== null
+          ? villagerEntry(named).backstory
+          : isUnnamedVillager(id)
+            ? UNNAMED_VILLAGER_DESCRIPTIONS[id]
+            : UNNAMED_VILLAGER_FALLBACK_DESCRIPTION;
       const villager = new Villager(
         id,
         routine,
         named === null ? null : villagerEntry(named).name,
+        description,
         post,
         shelter,
         inSiege ? shelter : post,
@@ -552,6 +576,7 @@ export class VillagerSystem {
       woodenWallStanding: segments.some((segment) => segment.tier === 'wood'),
       lowestStock: stocks.length === 0 ? null : Math.min(...stocks),
       soldierStance,
+      unlocks: state.unlocks,
     };
   }
 
@@ -573,18 +598,19 @@ export class VillagerSystem {
     return { x: session.speaker.x, y: session.speaker.y };
   }
 
-  /** The nearest villager within talking range of `crawler`, or null. */
+  /**
+   * The best villager to talk to within `VILLAGER_TALK_RANGE_TILES` of
+   * `crawler`: a quest-marked villager first, then a named villager with
+   * their own service or lines, then whoever is closest. `null` when nobody
+   * is close enough.
+   */
   talkTarget(crawler: VillagerCrawler): Villager | null {
-    let best: Villager | null = null;
-    let bestDistance = VILLAGER_TALK_RANGE_TILES;
-    for (const villager of this.villagers) {
-      const distance = tileDistance(villager, crawler);
-      if (distance <= bestDistance) {
-        best = villager;
-        bestDistance = distance;
-      }
-    }
-    return best;
+    return pickByTalkPriority(
+      this.villagers,
+      villagerTalkTier,
+      (villager) => tileDistance(villager, crawler),
+      VILLAGER_TALK_RANGE_TILES,
+    );
   }
 
   /** The Space chain's entry: talk to the nearest villager in range. Returns whether a press was taken. */
@@ -683,24 +709,29 @@ export class VillagerSystem {
       showTopics: (topics) => this.showSubmenu(topics),
       showRootTopics: () => this.showRootTopics(),
       close: () => this.closeConversation(),
+      endAfterPages: (run) => this.conversation.endAfterPages(run),
       afterClose: (run) => afterClose.push(run),
     };
     this.session = { speaker, talker, controller, afterClose };
     speaker.beginTalk(talker);
     this.conversation.open(villagerEntry(id).name, ratkinPortrait(id));
     this.showRootTopics();
-    this.sayInConversation(id, opening.pages);
+    this.sayInConversation(id, opening.pages, opening.questRelated === true);
     opening.onShown?.(controller);
   }
 
-  private sayInConversation(id: VillagerId, circumstances: readonly Circumstance[]): boolean {
+  private sayInConversation(
+    id: VillagerId,
+    circumstances: readonly Circumstance[],
+    questRelated = false,
+  ): boolean {
     const texts: string[] = [];
     for (const circumstance of circumstances) {
       const text = line(id, circumstance);
       if (text === undefined) return false;
       texts.push(text);
     }
-    this.conversation.showPages(texts);
+    this.conversation.showPages(texts, questRelated);
     this.pagesShown++;
     return true;
   }
@@ -725,6 +756,7 @@ export class VillagerSystem {
       .filter((topic) => topic.repeatable === true || !this.consumedTopicKeys.has(topic.key))
       .map((topic) => ({
         label: topic.label,
+        questRelated: topic.questRelated === true,
         run: () => {
           if (topic.repeatable !== true) this.consumedTopicKeys.add(topic.key);
           const generationBeforeRun = this.menuGeneration;
@@ -1250,13 +1282,12 @@ export class VillagerSystem {
       if (walkedOff) this.closeConversation();
     }
     this.conversation.update();
-    this.refreshMarkers(frame.active);
+    this.refreshMarkers();
   }
 
-  private refreshMarkers(active: VillagerCrawler): void {
+  private refreshMarkers(): void {
     const questLines = this.questLines;
     for (const villager of this.villagers) {
-      villager.showName = tileDistance(villager, active) <= NAME_LABEL_RANGE_TILES;
       const named = asVillagerId(villager.id);
       villager.marker =
         named === null || questLines?.markerFor === undefined
@@ -1281,6 +1312,15 @@ export class VillagerSystem {
     if (target === null) return false;
     drawInteractionPrompt(ctx, target.x - camX, target.y - camY, TILE_SIZE, 'Talk');
     return true;
+  }
+
+  /**
+   * Every villager's bark bubble, drawn after the Y-sorted entity pass so a
+   * tall standing prop sorted later — a sawmill machine, the rope walk —
+   * never paints over a bubble floating above the villager's head.
+   */
+  renderBarks(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const villager of this.villagers) villager.renderBark(ctx, camX, camY, TILE_SIZE);
   }
 
   dispose(): void {

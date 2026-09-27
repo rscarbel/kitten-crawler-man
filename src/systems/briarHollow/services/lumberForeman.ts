@@ -18,7 +18,8 @@ import type { Circumstance } from '../ratkinDialogue';
 import type { ProcessingStationKind } from '../processingStations';
 import { onceFlagFor } from '../villagerCircumstances';
 import type { ConversationController, ConversationTopic, TopicProvider } from '../villagerTopics';
-import { BAG_FULL_LINE, type ServiceParty, shopTrades } from './serviceContext';
+import { BAG_FULL_LINE, otherCrawler, type ServiceParty, shopTrades } from './serviceContext';
+import { canAffordCoins, spendPartyCoins } from '../../../core/partyCoins';
 import {
   FENNA_FEE_PER_WOOD,
   outputFor,
@@ -108,8 +109,9 @@ export function runBatch(
   wood: number,
 ): readonly Circumstance[] | null {
   const payer = host.party.active();
+  const companion = otherCrawler(host.party, payer);
   const fee = wood * FENNA_FEE_PER_WOOD;
-  if (payer.coins < fee) return null;
+  if (!canAffordCoins(payer, companion, fee)) return null;
   // The goods are delivered before the coins move: a batch that cannot be
   // carried away must never cost anything.
   const result = processWood(host.party, payer, output, wood);
@@ -117,7 +119,7 @@ export function runBatch(
     host.announce(BAG_FULL_LINE);
     return [];
   }
-  payer.coins -= fee;
+  spendPartyCoins(payer, companion, fee, payer);
   host.audio?.play('purchase_success');
   host.noteResourceActivity();
   host.bus?.emit('woodProcessed', {
@@ -205,7 +207,7 @@ export function lumberForemanTopics(host: LumberForemanHost): TopicProvider {
         isQuestion: true,
         run: (ctl) => void ctl.say('bulk_processing_fee_explanation'),
       };
-      if (!shopTrades(ctx.quest.phase)) return [fee];
+      if (!shopTrades(ctx.quest.phase) || !ctx.unlocks.processingStations) return [fee];
       const batch: ConversationTopic = {
         key: 'process_batch',
         label: 'Process a batch',

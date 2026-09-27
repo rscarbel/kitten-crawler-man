@@ -61,6 +61,7 @@ export const HOOK_DIALOG: ReadonlyArray<DialogPage> = [
       '*Walk away from this one. A stranger with a sad story on this floor is bait, and you two bite on everything. ...You’re going to do it anyway, aren’t you. Fine. Then do me one favor. If you find anything on a dead body down here, leave it on the dead body. I mean it.*',
     ],
     button: 'After dark, then',
+    questRelated: true,
   },
 ];
 
@@ -92,6 +93,7 @@ export const BODY_FOUND_DIALOG: ReadonlyArray<DialogPage> = [
       'Two papers, tucked where a pickpocket wouldn’t bother to look. The first is a magistrate’s writ, the ink barely dry: ‘The bearer acts on my authority and is not to be detained.’ Signed, Magistrate Featherfall.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: 'The Alley',
@@ -99,6 +101,7 @@ export const BODY_FOUND_DIALOG: ReadonlyArray<DialogPage> = [
       'The second is a letter in no alphabet you know. Squiggles and triangles, written in a brown ink you are choosing not to think about.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: MORDECAI,
@@ -123,6 +126,7 @@ export const WELL_CLUE_DIALOG: ReadonlyArray<DialogPage> = [
       'Deep gouges score the well’s rim. Talons, and drag marks where something heavy was hauled up out of hiding. Crushed into the mud beside them: a stick of schoolroom chalk, worn to a stub.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: DONUT,
@@ -140,6 +144,7 @@ export const HOME_CLUE_DIALOG: ReadonlyArray<DialogPage> = [
       'Claw furrows rake the paving outside Hilda’s cottage, ending in a pool and a few torn scraps of a visitor’s shawl. The door stands latched from the inside, untouched. Tucked under the knocker, a note in a neat schoolteacher hand: ‘Evening lessons. Come alone.’ It is unsigned.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: CARL,
@@ -157,6 +162,7 @@ export const ROOST_CLUE_DIALOG: ReadonlyArray<DialogPage> = [
       'Beneath the magistrate’s tower, moulted skyfowl feathers lie arranged in a careful ring. A shrine: elf-made candles, fresh wax. Something burst through it since. The feathers are flung wide, and blood is thrown in an arc up the tower stone. Whatever took the victim went up.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: CARL,
@@ -215,6 +221,7 @@ export const TAUNT_AND_NIGHTFALL_DIALOG: ReadonlyArray<DialogPage> = [
       'The sun drops behind the ruins. Somewhere over the rooftops a wet shriek answers the dusk bell, then a dozen more, closing from every quarter. They are not hunting the town tonight. They are hunting you. Survive it.',
     ],
     button: 'Defend yourselves',
+    questRelated: true,
   },
 ];
 
@@ -225,6 +232,7 @@ export const AFTERMATH_DIALOG: ReadonlyArray<DialogPage> = [
       'The last head bursts in a spray of ichor. Tangled in its trailing hair: a brass button stamped with the Blackwood Barracks crest, and a reek of candle wax and cellar damp.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: CARL,
@@ -249,6 +257,7 @@ export const HIDEOUT_CLEARED_DIALOG: ReadonlyArray<DialogPage> = [
       'In the cellar, under the guttered candles: a duty ledger of names. Low-street names, GumGum’s among them, each struck through in a neat schoolteacher hand. The final page is an instruction: ‘Bring the next lessons to my capacitor at the top of the magistrate’s tower.’ It is signed ‘Miss Quill’, and sealed with a feather pressed into black wax.',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: CARL,
@@ -288,6 +297,7 @@ export const FEATHERFALL_EXAMINE_DIALOG: ReadonlyArray<DialogPage> = [
       '"He’s been dead for weeks. Then who has been signing the magistrate’s letters?"',
     ],
     button: 'Back away',
+    questRelated: true,
   },
 ];
 
@@ -316,6 +326,7 @@ export const QUILL_OFFICE_DIALOG: ReadonlyArray<DialogPage> = [
       'We’re done with appointments. People are dying in the low streets, your cult burned down last night, and your name is signed at the bottom of their duty ledger. Where’s Featherfall?',
     ],
     button: 'Continue',
+    questRelated: true,
   },
   {
     title: QUILL,
@@ -344,6 +355,7 @@ export const QUILL_OFFICE_DIALOG: ReadonlyArray<DialogPage> = [
       'The thing beside the desk unfolds. A skyfowl shape with no feathers left, eyes like black glass, something pale steaming off it like heat off a summer road. It does not want to be here. It does what she says anyway.',
     ],
     button: 'Ready weapons',
+    questRelated: true,
   },
 ];
 
@@ -390,6 +402,7 @@ export const LICH_REVEAL_DIALOG: ReadonlyArray<DialogPage> = [
       '*That’s a lich. The letter, the writs, the harvest. You were never chasing the schoolteacher. You were chasing the thing that holds her leash. Kill it, and don’t count it dead until the fire in that hood goes out.*',
     ],
     button: 'Ready weapons',
+    questRelated: true,
   },
 ];
 
@@ -452,5 +465,6 @@ export const VICTORY_DIALOG: ReadonlyArray<DialogPage> = [
       'AND THE PRINCESS POSSE HAS CLOSED THE CASE, CARL. I WILL BE ACCEPTING AWARDS SHORTLY.',
     ],
     button: 'It’s not over',
+    questRelated: true,
   },
 ];

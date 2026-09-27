@@ -174,7 +174,22 @@ function partyState(
   };
 }
 
-function buildRig(state = createBriarHollowState(), crafts = createPartyCraftsState()): Rig | null {
+/**
+ * A state whose machines are already open: every service test here is about
+ * the shops and the machines themselves, not the unlock questline, so a
+ * fresh rig starts past it. A test of the unlock gate itself builds its own
+ * state and leaves this unset.
+ */
+function unlockedState(): BriarHollowState {
+  const state = createBriarHollowState();
+  state.unlocks.processingStations = true;
+  return state;
+}
+
+function buildRig(
+  state: BriarHollowState = unlockedState(),
+  crafts = createPartyCraftsState(),
+): Rig | null {
   const map = new GameMap({
     mapSize: MAP_SIZE,
     mapType: 'overworld',
@@ -280,6 +295,7 @@ function recorder(villager: VillagerId): Recording {
         recording.closed = true;
         for (const run of afterClose) run();
       },
+      endAfterPages: (run) => run(),
       afterClose: (run) => afterClose.push(run),
     },
   };
@@ -345,7 +361,7 @@ function setPhase(rig: Rig, phase: VillageQuestPhase): void {
 
 function checkCook(rig: Rig): void {
   section('Cook');
-  const { human } = rig;
+  const { human, cat } = rig;
   const menu = cookShop(() => undefined).build();
   const price = (key: string): number | undefined =>
     menu.options.find((option) => option.key === key)?.price;
@@ -358,22 +374,22 @@ function checkCook(rig: Rig): void {
 
   human.coins = 0;
   const broke = openShop(cookShop(() => undefined));
-  broke.pressBuy('hamburger', human);
+  broke.pressBuy('hamburger', human, cat);
   check(human.inventory.countOf('hamburger') === 0 && human.coins === 0, 'no coins buys nothing');
   check(broke.currentLine === say('pipkin', 'cannot_afford'), 'no coins hears cannot_afford');
 
   human.coins = PLENTY_OF_COINS;
   const panel = openShop(cookShop(() => undefined));
-  panel.pressBuy('hamburger', human);
+  panel.pressBuy('hamburger', human, cat);
   check(human.inventory.countOf('hamburger') === 1, 'a burger lands in the pack');
   check(human.coins === PLENTY_OF_COINS - EXPECTED_BURGER_PRICE, 'and costs its price');
   check(panel.currentLine === say('pipkin', 'buy_burger'), 'with buy_burger');
 
   human.potionCooldownFrames = 0;
-  panel.pressBuy('hollow_stew', human);
+  panel.pressBuy('hollow_stew', human, cat);
   check(panel.currentLine === say('pipkin', 'buy_stew'), 'stew off cooldown hears buy_stew');
   human.potionCooldownFrames = 100;
-  panel.pressBuy('hollow_stew', human);
+  panel.pressBuy('hollow_stew', human, cat);
   check(human.inventory.countOf('hollow_stew') === 2, 'stew on cooldown still sells');
   check(
     panel.currentLine === say('pipkin', 'stew_cooldown_active'),
@@ -386,12 +402,12 @@ function checkFullBagRefused(): void {
   section('Full bag');
   const rig = buildRig();
   if (rig === null) return;
-  const { human } = rig;
+  const { human, cat } = rig;
   fillPack(human);
   human.coins = PLENTY_OF_COINS;
   const announced: string[] = [];
   const panel = openShop(cookShop((message) => announced.push(message)));
-  panel.pressBuy('hamburger', human);
+  panel.pressBuy('hamburger', human, cat);
   check(human.inventory.countOf('hamburger') === 0, 'a full bag takes no burger');
   check(human.coins === PLENTY_OF_COINS, 'and the buyer is not charged for it');
   check(announced.includes('Your bag is full.'), 'and is told the bag is full');
@@ -410,7 +426,7 @@ function checkDoctor(rig: Rig): void {
   const host = { openShop: () => undefined, beginTreatment: () => treatments++ };
   human.coins = PLENTY_OF_COINS;
   const panel = openShop(infirmaryShop(party, host));
-  panel.pressBuy('treat_party', human);
+  panel.pressBuy('treat_party', human, cat);
   check(human.hp === human.maxHp && cat.hp === cat.maxHp, 'both crawlers end at full HP');
   check(human.coins === PLENTY_OF_COINS - expected, 'the fee is charged once');
   check(treatments === 1, 'the treatment plays');
@@ -442,6 +458,14 @@ function checkDoctor(rig: Rig): void {
 
 function checkMerchant(): void {
   section('Merchant');
+  const lockedState = createBriarHollowState();
+  lockedState.unlocks.processingStations = false;
+  const lockedOptions = buildTradingPostMenu(lockedState).options;
+  check(
+    !lockedOptions.some((option) => option.key === 'rope' || option.key === 'wood_board'),
+    'the shelf carries no rope or boards before Fenna opens the machines up',
+  );
+
   const rig = buildRig();
   if (rig === null) return;
   const { human, state } = rig;
@@ -450,7 +474,7 @@ function checkMerchant(): void {
     buildTradingPostMenu(state).options.find((option) => option.key === 'rope');
   check(ropeRow()?.price === EXPECTED_ROPE_PRICE, 'rope costs 6');
   const panel = openShop(tradingPostShop(state, () => undefined));
-  panel.pressBuy('rope', human);
+  panel.pressBuy('rope', human, rig.cat);
   check(state.merchantStock.rope === EXPECTED_ROPE_BASE - 1, 'a sale takes one off the shelf');
   check(human.inventory.countOf('rope') === 1, 'and hands it over');
 
@@ -485,7 +509,7 @@ function checkMerchant(): void {
   state.merchantStock.rope = 0;
   check(ropeRow()?.unavailable === 'Sold out', 'an empty shelf is sold out');
   const before = human.coins;
-  openShop(tradingPostShop(state, () => undefined)).pressBuy('rope', human);
+  openShop(tradingPostShop(state, () => undefined)).pressBuy('rope', human, rig.cat);
   check(human.coins === before, 'and sells nothing');
 
   restockTradingPost(state);
@@ -494,10 +518,10 @@ function checkMerchant(): void {
       ropeRow()?.price === EXPECTED_ROPE_PRICE,
     'entering the floor restocks every shelf',
   );
+  const freshState = createBriarHollowState();
+  freshState.unlocks.processingStations = true;
   check(
-    buildTradingPostMenu(createBriarHollowState()).options[2].desc.includes(
-      `${EXPECTED_ROPE_BASE} left`,
-    ),
+    buildTradingPostMenu(freshState).options[2].desc.includes(`${EXPECTED_ROPE_BASE} left`),
     "a new floor's village starts fully stocked",
   );
 }
@@ -594,7 +618,7 @@ function checkForge(): void {
     panel.currentLine === say('oren', 'axe_upgrade_available'),
     'an affordable axe is announced first',
   );
-  panel.pressBuy('axe', human);
+  panel.pressBuy('axe', human, cat);
   check(
     slotIndexOf(human, 'hardened_axe') === humanSlot,
     `the buyer's axe is swapped in place (${humanSlot})`,
@@ -623,7 +647,7 @@ function checkForge(): void {
   );
   human.coins = PLENTY_OF_COINS;
   for (let frame = 0; frame < UPGRADE_REBUY_GUARD_FRAMES; frame++) panel.update();
-  panel.pressBuy('pickaxe', human);
+  panel.pressBuy('pickaxe', human, cat);
   check(panel.currentLine === say('oren', 'upgrade_purchased'), 'the explanation is a one-shot');
 
   rig.crafts.tools.axeTier = 5;
@@ -637,7 +661,7 @@ function checkForge(): void {
   );
   const coins = human.coins;
   const topPanel = openShop(forgeShop(host));
-  topPanel.pressBuy('axe', human);
+  topPanel.pressBuy('axe', human, cat);
   check(
     human.coins === coins && rig.crafts.tools.axeTier === 5,
     'buying past the top tier is refused',
@@ -663,6 +687,21 @@ function standAt(rig: Rig, kind: ProcessingStationKind): boolean {
 
 function tick(rig: Rig, frames: number): void {
   for (let frame = 0; frame < frames; frame++) rig.services.update();
+}
+
+function checkSawmillLocked(): void {
+  section('Sawmill, before Fenna opens the machines up');
+  const lockedState = createBriarHollowState();
+  lockedState.unlocks.processingStations = false;
+  const rig = buildRig(lockedState);
+  if (rig === null) return;
+  const { human } = rig;
+  const sawmill = rig.services.sawmill;
+  human.inventory.addItem('wood', 5);
+  check(!standAt(rig, 'boards'), 'no tile in the yard offers the saw');
+  check(!standAt(rig, 'rope'), 'no tile in the yard offers the rope walk');
+  check(sawmill.press(human) === null, 'a press at the machine reaches nothing');
+  check(human.craftSkills.getXp('construction') === 0, 'no Construction XP is earned');
 }
 
 function checkSawmill(): void {
@@ -751,6 +790,16 @@ function fennaHost(
 
 function checkFenna(): void {
   section('Fenna');
+  const lockedState = createBriarHollowState();
+  lockedState.unlocks.processingStations = false;
+  const lockedRig = buildRig(lockedState);
+  if (lockedRig !== null) {
+    check(
+      !topicKeys(lockedRig, 'fenna').includes('process_batch'),
+      'no batch-processing row before the machines are open',
+    );
+  }
+
   const rig = buildRig();
   if (rig === null) return;
   const { human, cat } = rig;
@@ -862,17 +911,17 @@ function checkDoublePress(): void {
   const startingCoins = 3000;
   human.coins = startingCoins;
   const panel = openShop(forgeShop(forgeHostFor(rig, rig.partyTools)));
-  panel.pressBuy('axe', human);
-  panel.pressBuy('axe', human);
+  panel.pressBuy('axe', human, cat);
+  panel.pressBuy('axe', human, cat);
   check(
     rig.crafts.tools.axeTier === 1 && human.coins === startingCoins - HARDENED_AXE_PRICE,
     'two presses inside the window upgrade once',
   );
   for (let frame = 0; frame < UPGRADE_REBUY_GUARD_FRAMES - 1; frame++) panel.update();
-  panel.pressBuy('axe', human);
+  panel.pressBuy('axe', human, cat);
   check(rig.crafts.tools.axeTier === 1, "a press on the window's last frame is still refused");
   panel.update();
-  panel.pressBuy('axe', human);
+  panel.pressBuy('axe', human, cat);
   check(rig.crafts.tools.axeTier === 2, 'a press after the window buys the next tier');
   const town = new PricedMenuPanel();
   let sales = 0;
@@ -883,8 +932,8 @@ function checkDoublePress(): void {
       return { ok: true, line: '' };
     },
   );
-  town.pressBuy('x', human);
-  town.pressBuy('x', human);
+  town.pressBuy('x', human, cat);
+  town.pressBuy('x', human, cat);
   check(sales === 2, 'a menu that asks for no guard still sells on every press');
 }
 
@@ -966,7 +1015,7 @@ function checkSiegeClosure(): void {
     { villager: 'oren', key: 'upgrades' },
     { villager: 'fenna', key: 'process_batch' },
   ];
-  setPhase(rig, 'gathering');
+  setPhase(rig, 'gather_wood');
   for (const { villager, key } of shopRows) {
     check(topicKeys(rig, villager).includes(key), `${villager} trades while gathering`);
   }
@@ -986,7 +1035,7 @@ function checkSiegeClosure(): void {
 
 function checkForgeTopicsAreServices(rig: Rig): void {
   section('Registration');
-  setPhase(rig, 'gathering');
+  setPhase(rig, 'gather_wood');
   const host = forgeHostFor(rig, rig.partyTools);
   const direct = forgeTopics(host).topics(
     'oren',
@@ -1008,6 +1057,7 @@ if (rig !== null) {
 }
 checkMerchant();
 checkForge();
+checkSawmillLocked();
 checkSawmill();
 checkFenna();
 checkSiegeClosure();

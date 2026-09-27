@@ -1810,6 +1810,7 @@ export class DefendQuestSystem implements GameSystem {
       label: 'Yes',
       ...BUTTON_PRESETS.success,
       labelSize: DIALOG_BTN_LABEL_SIZE,
+      questRelated: true,
     });
     this.dialogButtons.push({ x: yesX, y: btnY, w: btnW, h: btnH, action: 'accept' });
 

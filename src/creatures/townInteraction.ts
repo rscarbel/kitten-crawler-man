@@ -7,6 +7,12 @@
  */
 
 import type { Townsperson } from './Townsperson';
+import {
+  pickByTalkPriority,
+  TALK_TIER_AMBIENT,
+  TALK_TIER_NAMED,
+  TALK_TIER_QUEST,
+} from './talkPriority';
 
 /**
  * How far from the person the player must get before an open conversation
@@ -16,10 +22,17 @@ import type { Townsperson } from './Townsperson';
  */
 export const CONVERSATION_WALK_AWAY_TILES = 3.5;
 
+/** A citizen a questline has business with always outranks one that doesn't; a named resident with their own dialog outranks an anonymous one. */
+function talkTierOf(person: Townsperson) {
+  if (person.markerType !== 'none') return TALK_TIER_QUEST;
+  return person.residentId !== null ? TALK_TIER_NAMED : TALK_TIER_AMBIENT;
+}
+
 /**
- * The nearest citizen whose center lies within `maxDist` pixels of the point
- * `(x, y)` (the player's origin — the half-tile draw offsets cancel), or `null`
- * when nobody is close enough to talk to.
+ * The best citizen to talk to within `maxDist` pixels of the point `(x, y)`
+ * (the player's origin — the half-tile draw offsets cancel): a quest-marked
+ * citizen first, then a named resident, then whoever is closest. `null` when
+ * nobody is close enough to talk to.
  */
 export function findNearestTownsperson(
   people: Iterable<Townsperson>,
@@ -27,16 +40,10 @@ export function findNearestTownsperson(
   y: number,
   maxDist: number,
 ): Townsperson | null {
-  let best: Townsperson | null = null;
-  let bestDistSq = maxDist * maxDist;
-  for (const person of people) {
-    const dx = person.x - x;
-    const dy = person.y - y;
-    const distSq = dx * dx + dy * dy;
-    if (distSq <= bestDistSq) {
-      bestDistSq = distSq;
-      best = person;
-    }
-  }
-  return best;
+  return pickByTalkPriority(
+    people,
+    talkTierOf,
+    (person) => Math.hypot(person.x - x, person.y - y),
+    maxDist,
+  );
 }

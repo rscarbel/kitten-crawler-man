@@ -296,7 +296,21 @@ export class VillageAmbience {
       this.renderables.length = 0;
       return;
     }
-    if (this.anchors?.site !== site) this.rebuild(gameMap, site);
+    if (this.forceRebuild || this.anchors?.site !== site) this.rebuild(gameMap, site);
+    this.forceRebuild = false;
+  }
+
+  private forceRebuild = false;
+
+  /**
+   * Forces the next `update()` to re-read the village's props even though its
+   * `BriarHollowSite` object hasn't changed. Anchors are otherwise cached per
+   * site, so a live change to something the map itself carries — the bell
+   * tower's `bellTowerBroken` tile flag, on a siege lost or a repair finished
+   * — would go unseen until the map is next rebuilt without this.
+   */
+  invalidate(): void {
+    this.forceRebuild = true;
   }
 
   /** The tools Oren would sell next, one tier past what the party carries. */
@@ -313,7 +327,13 @@ export class VillageAmbience {
     const ofKind = (prop: VillagePropId): PropPlacement[] =>
       placements.filter((placement) => placement.prop === prop);
     const bellPlacement = placements.find((placement) => placement.prop === 'bell_tower');
-    const bellFoot = bellPlacement === undefined ? null : footOf(bellPlacement);
+    // A broken tower already shows its bell fallen on the ground, baked into
+    // the prop's own art; the live swinging bell over it would draw a second
+    // one hanging in the air above the wreck.
+    const bellBroken =
+      bellPlacement !== undefined &&
+      gameMap.structure[bellPlacement.y]?.[bellPlacement.x]?.bellTowerBroken === true;
+    const bellFoot = bellPlacement === undefined || bellBroken ? null : footOf(bellPlacement);
     const hearths: Hearth[] = [];
     const addHearth = (
       prop: VillagePropId,

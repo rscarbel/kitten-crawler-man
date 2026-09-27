@@ -41,6 +41,7 @@ import type { keybindings } from '../../core/Keybindings';
 import type { SceneWorld } from '../kits/SceneWorld';
 import type { MenusKit } from '../kits/MenusKit';
 import type { OverlayInputClaim } from '../kits/OverlayClaims';
+import { CitizenDialog } from '../../ui/CitizenDialog';
 import type { SystemContext } from '../GameSystem';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { QuestMarkerType } from '../MiniMapSystem';
@@ -76,6 +77,7 @@ import type { Rect } from '../DungeonUIRenderer';
 import { siegeHudSlot } from './siegeHudLayout';
 import { VillageAssaultSystem, type SiegeMusicClaim } from './VillageAssaultSystem';
 import { VillageQuestSystem } from './VillageQuestSystem';
+import { VillageQuestGuide } from './VillageQuestGuide';
 import { RecruiterSystem } from './RecruiterSystem';
 
 /** The live `Keybindings` singleton's own type, which the class itself does not export. */
@@ -85,6 +87,13 @@ type KeybindingsHost = typeof keybindings;
 interface WorldPoint {
   readonly x: number;
   readonly y: number;
+}
+
+/** A narrated line queued for `questLineDialog`, and what to run once it has been dismissed. */
+interface PendingQuestLine {
+  readonly speaker: string;
+  readonly text: string;
+  readonly onClosed?: () => void;
 }
 
 /**
@@ -145,6 +154,7 @@ export class BriarHollowKit {
   private readonly world: SceneWorld;
   private readonly deps: BriarHollowKitDeps;
   private readonly castPrewarm = new RatkinCastPrewarm();
+  private readonly unsubscribeBellTowerRepaired: () => void;
   /**
    * The village's moving dressing — the bell, the sawmill blade, hearth fires,
    * smoke, lamp glow, laundry. `ambience.sawmill.working` and
@@ -153,6 +163,20 @@ export class BriarHollowKit {
   readonly ambience = new VillageAmbience();
   /** Reused every frame so the merged entity list costs no allocation. */
   private readonly entityBuffer: TownPropRenderable[] = [];
+  /**
+   * The questline's own dialog box for a narrated line — Carl or Donut heading
+   * back to Tikka, the Mayor's shouted summons — as opposed to a topic choice.
+   * Null when the scene has no audio manager, matching every other
+   * `CitizenDialog` in the game.
+   */
+  private readonly questLineDialog: CitizenDialog | null;
+  /**
+   * Narrated lines waiting for a villager conversation, a village menu or the
+   * quest's own confirm to clear, so this dialog never opens on top of one.
+   */
+  private readonly pendingQuestLines: PendingQuestLine[] = [];
+  /** The line `questLineDialog` is currently showing, so its own close can be told apart from never having opened. */
+  private activeQuestLine: PendingQuestLine | null = null;
 
   /** The sawmill's switch: set `working` while it processes, and the blade spins. */
   get sawmill(): { working: boolean } {
@@ -177,12 +201,27 @@ export class BriarHollowKit {
   readonly assault: VillageAssaultSystem | null;
   /** "Briar Hollow's Plea", the questline; null on a map with no village. */
   readonly quest: VillageQuestSystem | null;
+  /**
+   * The questline's in-world "how": the highlighted tree, rock, station, wall
+   * segment or trebuchet a step means, and the arrow and caption over it.
+   * Null on a map with no village.
+   */
+  readonly questGuide: VillageQuestGuide | null;
   /** The recruiter posted in the Over City's own square; null on a map with no village. */
   readonly recruiter: RecruiterSystem | null;
+
+  /** The village's durable state, for a dev preset that jumps the questline ahead of where it opens unlocks. */
+  get state(): BriarHollowState {
+    return this.deps.state;
+  }
 
   constructor(sceneWorld: SceneWorld, deps: BriarHollowKitDeps) {
     this.world = sceneWorld;
     this.deps = deps;
+    // 'all' reveal: nothing ticks this box's `update()` each frame, so a
+    // word-by-word reveal would sit on its first word until Space skipped it
+    // to the end.
+    this.questLineDialog = deps.audio === null ? null : new CitizenDialog(deps.audio, 'all');
     const site = sceneWorld.gameMap.briarHollow;
     this.villagers =
       site === null
@@ -295,6 +334,14 @@ export class BriarHollowKit {
             assault: () => this.assault,
             active: () => (deps.human.isActive ? deps.human : deps.cat),
             openConstructionExplainer: () => void deps.menus.craftExplainers.open('construction'),
+            isConstructionExplainerOpen: () => deps.menus.craftExplainers.isOpen,
+            openProcessingExplainer: () => {
+              deps.partyCrafts.processingExplainerSeen = true;
+              void deps.menus.craftExplainers.open('processing');
+            },
+            // Lazy: `questGuide` is built after the questline it reads from.
+            guideTarget: () => this.questGuide?.target() ?? null,
+            showQuestLine: (speaker, text, onClosed) => this.showQuestLine(speaker, text, onClosed),
             enqueueReward: (reward) => deps.menus.rewardGrantedDialog.enqueue(reward),
             afterRewardsDrain: (run) => deps.menus.rewardGrantedDialog.afterQueueDrains(run),
             announce: (message) => deps.menus.announce(message),
@@ -303,8 +350,26 @@ export class BriarHollowKit {
             onCoinsGranted: (coins, worldX, worldY) => deps.onCoinsGranted?.(coins, worldX, worldY),
             onItemGranted: (id, quantity, worldX, worldY) =>
               deps.onItemGranted?.(id, quantity, worldX, worldY),
+            grantOrenTools: (ctl) => this.services?.grantOrenTools(ctl),
             // Lazy: the recruiter is built after the questline it reads from.
             recruiter: () => this.recruiter?.post ?? null,
+          });
+    this.questGuide =
+      site === null || villagers === null || defense === null
+        ? null
+        : new VillageQuestGuide({
+            gameMap: sceneWorld.gameMap,
+            site,
+            state: deps.state,
+            defense,
+            human: deps.human,
+            cat: deps.cat,
+            onTileChanged: deps.onTileChanged,
+            // Lazy: read fresh every tick, since the quest is rebuilt with the kit.
+            guidance: () => this.quest?.guidance() ?? null,
+            isDefaultTrebuchetPromptShowing: (at) =>
+              this.defences?.isTrebuchetPromptShowing(at) ?? false,
+            isDefaultWallPromptShowing: () => this.defences?.isWallPromptShowing() ?? false,
           });
     this.recruiter =
       site === null || this.quest === null
@@ -338,6 +403,12 @@ export class BriarHollowKit {
             music: () => deps.music?.() ?? null,
             crawlers: () => [deps.human, deps.cat],
           });
+    // The tower's art is baked once per map build; a repair mid-visit has to
+    // force the live scene to redraw it without waiting for a door to do that
+    // rebuild for free.
+    this.unsubscribeBellTowerRepaired = sceneWorld.bus.on('bellTowerRepaired', () => {
+      this.ambience.invalidate();
+    });
   }
 
   /**
@@ -412,9 +483,77 @@ export class BriarHollowKit {
     this.services?.update();
     this.soldiers?.update({ human: ctx.human, cat: ctx.cat, active: ctx.active });
     this.recruiter?.update();
+    this.quest?.update();
+    this.questGuide?.update();
+    this.drainQuestLineQueue();
+    this.services?.sawmill.setQuestForcedKinds(this.questGuide?.activeProcessStationKinds() ?? []);
     const tools = this.deps.partyCrafts.tools;
     this.ambience.setToolTiers(nextToolTier(tools.axeTier), nextToolTier(tools.pickaxeTier));
     this.ambience.update(ctx.gameMap, SECONDS_PER_UPDATE);
+  }
+
+  /**
+   * Queues a narrated line from `speaker` — the questline's own beat, not a
+   * topic choice — as a dialog box. Shown once any villager conversation or
+   * open village menu clears, never stacked on top of one. `onClosed`, when
+   * given, runs once the box the line opened has been dismissed.
+   */
+  showQuestLine(speaker: string, text: string, onClosed?: () => void): void {
+    // A scene with no audio manager never builds `questLineDialog` (every
+    // headless harness in this shape); with nothing to show the line on,
+    // treat it as read at once rather than stalling whatever waits on it.
+    if (this.questLineDialog === null) {
+      onClosed?.();
+      return;
+    }
+    this.pendingQuestLines.push({ speaker, text, onClosed });
+  }
+
+  /**
+   * Opens the next queued narrated line once nothing else is claiming the
+   * village's dialogs, and runs the line just dismissed on its way out.
+   */
+  private drainQuestLineQueue(): void {
+    const dialog = this.questLineDialog;
+    if (dialog === null) return;
+    if (this.activeQuestLine !== null && !dialog.isOpen) {
+      const dismissed = this.activeQuestLine;
+      this.activeQuestLine = null;
+      dismissed.onClosed?.();
+    }
+    if (dialog.isOpen) return;
+    if (this.isConversationOpen || this.isMenuOpen) return;
+    if (this.quest?.isConfirmOpen === true) return;
+    if (this.recruiter?.isDialogOpen === true) return;
+    const next = this.pendingQuestLines.shift();
+    if (next === undefined) return;
+    this.activeQuestLine = next;
+    dialog.open(next.speaker, [next.text], undefined, true);
+  }
+
+  /**
+   * Steps the narrated line box now on screen to its end, the way Space
+   * would — for a headless harness driving the world one press at a time.
+   */
+  dismissQuestLine(): void {
+    const dialog = this.questLineDialog;
+    for (
+      let attempt = 0;
+      attempt < QUEST_LINE_DISMISS_ATTEMPTS && dialog?.isOpen === true;
+      attempt++
+    ) {
+      dialog.advance();
+    }
+  }
+
+  /** Whether a narrated line is on screen right now. */
+  get isQuestLineOpen(): boolean {
+    return this.questLineDialog?.isOpen === true;
+  }
+
+  /** The narrated line on screen right now, or null while nothing is open. */
+  get questLineText(): string | null {
+    return this.questLineDialog?.currentText ?? null;
   }
 
   /**
@@ -425,6 +564,7 @@ export class BriarHollowKit {
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.defences?.renderGround(ctx, camX, camY);
     this.services?.renderGround(ctx, camX, camY);
+    this.questGuide?.renderGround(ctx, camX, camY);
     renderNecromancerTelegraphs(ctx, camX, camY, this.world.roster.mobs);
   }
 
@@ -452,16 +592,16 @@ export class BriarHollowKit {
    */
   renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.ambience.renderAbove(ctx, camX, camY, viewportWidth(), viewportHeight());
+    this.villagers?.renderBarks(ctx, camX, camY);
     this.livestock?.renderAbove(ctx, camX, camY);
     this.defences?.renderAbove(ctx, camX, camY);
     this.services?.renderAbove(ctx, camX, camY);
     this.assault?.renderAbove(ctx, camX, camY);
-    this.soldiers?.renderAbove(
-      ctx,
-      camX,
-      camY,
-      this.deps.human.isActive ? this.deps.human : this.deps.cat,
-    );
+    this.soldiers?.renderAbove(ctx, camX, camY);
+    // A downed crawler's arrow is the only arrow the game allows on screen, so
+    // the quest guide's arrows and captions stand down until they are revived.
+    const crawlerDown = this.deps.human.isKnockedOut || this.deps.cat.isKnockedOut;
+    if (!crawlerDown) this.questGuide?.renderAbove(ctx, camX, camY);
   }
 
   /**
@@ -479,6 +619,7 @@ export class BriarHollowKit {
    */
   renderHud(ctx: CanvasRenderingContext2D, miniMap: MiniMapSystem, hudRect: Rect): void {
     this.assault?.renderHud(ctx, siegeHudSlot(miniMap, hudRect));
+    this.questGuide?.renderConstructionHint(ctx, miniMap);
   }
 
   /**
@@ -774,6 +915,7 @@ export class BriarHollowKit {
 
   /** A click or tap on a village panel. Returns whether it landed on one. */
   handleClick(mx: number, my: number): boolean {
+    if (this.questLineDialog?.handleClick(mx, my) === true) return true;
     if (this.quest?.handleClick(mx, my) === true) return true;
     if (this.recruiter?.handleClick(mx, my) === true) return true;
     if (this.defences?.handleClick(mx, my) === true) return true;
@@ -798,6 +940,7 @@ export class BriarHollowKit {
   /** Whether the village's own dismantle confirm is what has halted the world. */
   get haltsWorldItself(): boolean {
     if (this.quest?.isConfirmOpen === true) return true;
+    if (this.questLineDialog?.isOpen === true) return true;
     return this.defences?.haltsWorldItself === true;
   }
 
@@ -842,8 +985,10 @@ export class BriarHollowKit {
     this.defences?.renderDialog(ctx, camX, camY);
     this.services?.renderDialog(ctx);
     this.recruiter?.renderDialog(ctx);
-    // Last: the "We're ready" confirm sits over everything else the village draws.
+    // The "We're ready" confirm sits over everything else the village draws.
     this.quest?.renderDialog(ctx);
+    // Topmost: a narrated line takes the frame over every other village panel.
+    this.questLineDialog?.render(ctx);
   }
 
   /**
@@ -857,10 +1002,26 @@ export class BriarHollowKit {
     // whole countdown.
     return [
       ...(this.quest === null ? [] : [this.quest.overlayClaim()]),
+      ...(this.questLineDialog === null ? [] : [this.questLineDialogClaim(this.questLineDialog)]),
       ...(this.recruiter === null ? [] : [this.recruiter.overlayClaim()]),
       ...(this.defences?.overlayClaims() ?? []),
       ...(this.services?.overlayClaims() ?? []),
     ];
+  }
+
+  /**
+   * The questline's narrated dialog box, ranked with the village's other
+   * menus. It halts the world outright while it is up, so nothing else in the
+   * village — a soldier's orders, a shop — can be reached until it is read.
+   */
+  private questLineDialogClaim(dialog: CitizenDialog): OverlayInputClaim {
+    return {
+      isOpen: dialog.isOpen,
+      space: { kind: 'advance', advance: () => dialog.advance() },
+      locksKeyboard: true,
+      haltsWorld: true,
+      focusContext: null,
+    };
   }
 
   /**
@@ -924,6 +1085,9 @@ export class BriarHollowKit {
     this.services?.onRewind();
     this.soldiers?.onRewind();
     this.quest?.closeConfirm();
+    this.questLineDialog?.close();
+    this.pendingQuestLines.length = 0;
+    this.activeQuestLine = null;
     this.recruiter?.dismissDialog();
     this.assault?.onRewind();
   }
@@ -938,6 +1102,8 @@ export class BriarHollowKit {
 
   /** Torn down when the scene exits. Safe to call even though nothing is held yet. */
   dispose(): void {
+    this.unsubscribeBellTowerRepaired();
+    this.questLineDialog?.close();
     // Before the villagers: closing a conversation runs its after-close
     // steps, and a shop must not open over a scene that is being torn down.
     this.services?.dispose();
@@ -962,6 +1128,9 @@ const TILE_CENTRE_FRACTION = 0.5;
 /** The kit is ticked by the fixed-step loop, this many times a second. */
 const UPDATES_PER_SECOND = 60;
 const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
+
+/** Enough presses to reveal a narrated line's text and then dismiss it, however many words it has. */
+const QUEST_LINE_DISMISS_ATTEMPTS = 4;
 
 /** The tier Oren would sell next: one past what the party carries, or the best there is. */
 function nextToolTier(current: ToolTier | null): ToolTier {

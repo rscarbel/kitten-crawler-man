@@ -41,9 +41,11 @@ import {
   type ButtonResult,
 } from './Button';
 import { QUEST_MARKER_GOLD } from '../sprites/questNPCSprite';
+import { drawQuestIcon } from './QuestIcon';
 import { drawText, measureTextBox } from './TextBox';
 import type { Player } from '../Player';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
 
 export interface PricedOption {
   /** Stable identifier for the row, so a handler can act on a rebuilt menu. */
@@ -173,9 +175,9 @@ const QUEST_ROW_PLATE_SIDE_PAD = 6;
 const QUEST_ROW_PLATE_RADIUS = 5;
 const QUEST_ROW_PLATE_FILL = 'rgba(251,191,36,0.10)';
 const QUEST_ROW_PLATE_BORDER_WIDTH = 1.5;
-const QUEST_TAG_TEXT = 'QUEST';
-const QUEST_TAG_SIZE = 9;
-const QUEST_TAG_TOP_GAP = 18;
+/** Sits where the row's old "QUEST" text tag used to run, under the price. */
+const QUEST_ROW_ICON_SIZE = 14;
+const QUEST_ROW_ICON_TOP_GAP = 18;
 
 /**
  * How far a row's own content reaches above its `rowY` — the Buy button and
@@ -317,7 +319,7 @@ export class PricedMenuPanel {
     if (this.rebuyGuardLeft > 0) this.rebuyGuardLeft--;
   }
 
-  render(ctx: CanvasRenderingContext2D, active: Player): void {
+  render(ctx: CanvasRenderingContext2D, active: Player, companion: Player): void {
     const menu = this.menu;
     if (menu === null) return;
 
@@ -418,7 +420,9 @@ export class PricedMenuPanel {
     // was sent here for is what an accept press should answer. It is also shown
     // focused from the first frame, so the key the panel is about to obey is
     // visible before anything is pressed.
-    const questRowIndex = menu.options.findIndex((option) => this.isQuestDefault(option, active));
+    const questRowIndex = menu.options.findIndex((option) =>
+      this.isQuestDefault(option, active, companion),
+    );
     const questRowIsPrimary = questRowIndex !== -1;
 
     this.buyButtons = [];
@@ -444,6 +448,7 @@ export class PricedMenuPanel {
         ctx,
         menu.options[i],
         active,
+        companion,
         contentLeft,
         rowY,
         contentRight,
@@ -479,7 +484,7 @@ export class PricedMenuPanel {
     endMenuFocus();
     // The purse shares the footer rather than the header: a centred title on a
     // narrow phone panel grows into the top-right corner and hides it.
-    drawText(ctx, `Coins: ${active.coins}`, {
+    drawText(ctx, `Coins: ${partyCoins(active, companion)}`, {
       x: contentRight,
       y: footerCenterY - PRICE_SIZE / 2,
       size: PRICE_SIZE,
@@ -533,6 +538,7 @@ export class PricedMenuPanel {
     ctx: CanvasRenderingContext2D,
     option: PricedOption,
     active: Player,
+    companion: Player,
     left: number,
     rowY: number,
     right: number,
@@ -573,7 +579,7 @@ export class PricedMenuPanel {
       lineHeight: OPTION_DESC_LINE_HEIGHT,
     });
 
-    const canAfford = active.coins >= option.price;
+    const canAfford = canAffordCoins(active, companion, option.price);
     const blockedReason = option.unavailable;
     const isAvailable = blockedReason === undefined;
     drawText(ctx, blockedReason ?? `${option.price}c`, {
@@ -586,14 +592,12 @@ export class PricedMenuPanel {
     });
 
     if (isQuestRow) {
-      drawText(ctx, QUEST_TAG_TEXT, {
-        x: right - BUY_BTN_WIDTH - PRICE_BTN_GAP,
-        y: rowY + QUEST_TAG_TOP_GAP,
-        size: QUEST_TAG_SIZE,
-        bold: true,
-        color: QUEST_MARKER_GOLD,
-        align: 'right',
-      });
+      drawQuestIcon(
+        ctx,
+        right - BUY_BTN_WIDTH - PRICE_BTN_GAP - QUEST_ROW_ICON_SIZE / 2,
+        rowY + QUEST_ROW_ICON_TOP_GAP + QUEST_ROW_ICON_SIZE / 2,
+        QUEST_ROW_ICON_SIZE,
+      );
     }
 
     const buyTop = rowY - BUY_BTN_Y_LIFT;
@@ -628,11 +632,11 @@ export class PricedMenuPanel {
    * player cannot act on — sold out, or beyond their purse — never takes the
    * primary, so Close keeps it and Space still does the harmless thing.
    */
-  private isQuestDefault(option: PricedOption, active: Player): boolean {
+  private isQuestDefault(option: PricedOption, active: Player, companion: Player): boolean {
     return (
       option.isQuestItem === true &&
       option.unavailable === undefined &&
-      active.coins >= option.price
+      canAffordCoins(active, companion, option.price)
     );
   }
 
@@ -643,7 +647,7 @@ export class PricedMenuPanel {
    * dismiss a menu the player is mid-order in. Returns whether consumed (always
    * true while open, so the tap can't fall through to move/attack).
    */
-  handleClick(canvasX: number, canvasY: number, active: Player): boolean {
+  handleClick(canvasX: number, canvasY: number, active: Player, companion: Player): boolean {
     const menu = this.menu;
     if (menu === null) return false;
     const { x: mx, y: my } = modalFitPoint(this.fit, canvasX, canvasY);
@@ -661,7 +665,7 @@ export class PricedMenuPanel {
     const inRowsBand = my >= this.rowsTop && my <= this.rowsBottom;
     for (let i = 0; i < this.buyButtons.length; i++) {
       if (inRowsBand && this.buyButtons[i].contains(mx, my)) {
-        this.tryBuy(menu.options[i], active);
+        this.tryBuy(menu.options[i], active, companion);
         return true;
       }
     }
@@ -680,10 +684,10 @@ export class PricedMenuPanel {
    * pointer: headless checks, and anything that buys on the player's behalf.
    * Returns whether such a row was on the menu.
    */
-  pressBuy(key: string, active: Player): boolean {
+  pressBuy(key: string, active: Player, companion: Player): boolean {
     const option = this.menu?.options.find((candidate) => candidate.key === key);
     if (option === undefined) return false;
-    this.tryBuy(option, active);
+    this.tryBuy(option, active, companion);
     return true;
   }
 
@@ -698,10 +702,10 @@ export class PricedMenuPanel {
     return menu === null ? '' : this.feedbackLine(menu);
   }
 
-  private tryBuy(option: PricedOption, active: Player): void {
+  private tryBuy(option: PricedOption, active: Player, companion: Player): void {
     const purchase = this.onPurchase;
     if (purchase === null || this.rebuyGuardLeft > 0) return;
-    if (option.unavailable !== undefined || active.coins < option.price) {
+    if (option.unavailable !== undefined || !canAffordCoins(active, companion, option.price)) {
       this.onBlocked?.();
       const refusal = this.blockedLine?.(option, active) ?? null;
       if (refusal !== null) this.showFeedback(refusal);
@@ -712,7 +716,7 @@ export class PricedMenuPanel {
     // they never receive.
     const result = purchase(option, active);
     if (result.ok) {
-      active.coins -= option.price;
+      spendPartyCoins(active, companion, option.price, active);
       this.rebuyGuardLeft = this.rebuyGuardFrames;
     }
     // A purchase can change what's still on offer — the last tattoo, the last

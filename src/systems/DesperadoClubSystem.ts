@@ -383,7 +383,10 @@ export class DesperadoClubSystem {
     this.crowd.update(this.staticCrowdBodies(active, companion));
     this.barShop.update();
     this.marketShop.update();
-    this.casino.update(active);
+    // Only the coin-pool total this drives matters, and the casino is never open
+    // while this update runs — an open table routes through `tickOpenModals`
+    // instead — so a missing companion here falls back to the active crawler alone.
+    this.casino.update(active, companion ?? active);
     if (this.barShop.purchasePending || this.marketShop.purchasePending) {
       // A round at the bar pours; gear off the market rack does not.
       if (this.barShop.purchasePending) this.audio?.play('ambient_pouring_a_drink');
@@ -402,10 +405,10 @@ export class DesperadoClubSystem {
    * its own clock — the casino's dealing and dealer beats — has to be pumped
    * from here instead.
    */
-  tickOpenModals(active: Player): void {
+  tickOpenModals(active: Player, companion: Player): void {
     this.animTime++;
     this.guild.updateDesk();
-    this.casino.update(active);
+    this.casino.update(active, companion);
     // A natural can settle while the panel is still open, and that panel can be
     // the last thing the player touches before leaving — so the flags are
     // drained here too, or the achievement is lost with the system.
@@ -531,7 +534,7 @@ export class DesperadoClubSystem {
    * stands beside. Returns whether the press was consumed, so a press with no
    * station in range can still fall through to whoever else is standing there.
    */
-  handleInteract(player: Player): boolean {
+  handleInteract(player: Player, companion: Player): boolean {
     if (this.dialog.isOpen) {
       this.dialog.advance();
       return true;
@@ -555,7 +558,7 @@ export class DesperadoClubSystem {
       return true;
     }
     if (station.id === 'casino') {
-      this.casino.openTable(player);
+      this.casino.openTable(player, companion);
       return true;
     }
     if (station.id === 'mercenary') {
@@ -568,22 +571,22 @@ export class DesperadoClubSystem {
   }
 
   /** Route clicks to an open shop panel's buy buttons, else advance the modal; returns true when a modal/shop was open. */
-  handleClick(mx: number, my: number, active: Player): boolean {
+  handleClick(mx: number, my: number, active: Player, companion: Player): boolean {
     const shop = this.activeShop();
     if (shop) {
       shop.handleClick(mx, my);
       return true;
     }
     if (this.casino.open) {
-      this.casino.handleClick(mx, my, active);
+      this.casino.handleClick(mx, my, active, companion);
       return true;
     }
     if (this.guild.open) {
-      this.guild.handleClick(mx, my, active);
+      this.guild.handleClick(mx, my, active, companion);
       return true;
     }
     if (this.vip.open) {
-      this.vip.handleClick(mx, my, active);
+      this.vip.handleClick(mx, my, active, companion);
       return true;
     }
     if (!this.dialog.isOpen) return false;
@@ -847,26 +850,26 @@ export class DesperadoClubSystem {
     return this.vip.escortActive ? this.escortFigureList : [];
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, active: Player): void {
+  renderUI(ctx: CanvasRenderingContext2D, active: Player, companion: Player): void {
     const shop = this.activeShop();
     if (shop) {
       shop.renderUI(ctx, active);
-      shop.renderShopPanel(ctx, active);
+      shop.renderShopPanel(ctx, active, companion);
       return;
     }
 
     if (this.casino.open) {
-      this.casino.renderPanel(ctx, active);
+      this.casino.renderPanel(ctx, active, companion);
       return;
     }
 
     if (this.guild.open) {
-      this.guild.renderPanel(ctx, active);
+      this.guild.renderPanel(ctx, active, companion);
       return;
     }
 
     if (this.vip.open) {
-      this.vip.renderPanel(ctx, active);
+      this.vip.renderPanel(ctx, active, companion);
       return;
     }
 

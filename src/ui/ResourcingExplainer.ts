@@ -23,7 +23,6 @@ import {
 } from './HowToPlayOverlay';
 import { drawText } from './TextBox';
 import type { CraftExplainer } from './CraftExplainers';
-import { drawResourceIcon } from './icons/resourceIcons';
 import { drawToolIcon, isToolIconId } from './icons/toolIcons';
 
 /** The focus-ring id, which the scenes' overlay claims name as well. */
@@ -69,7 +68,6 @@ const POP_FRAMES = 40;
 const POP_RISE_PX = 28;
 const POP_COLOR = '#4ade80';
 const ARROW_COLOR = '#e2e8f0';
-const ICON_SIZE = 48;
 const TOOL_ICON_SIZE = 40;
 const LABEL_GAP = 6;
 const TOOL_ROW_GAP = 10;
@@ -81,19 +79,12 @@ const CHOPPED_TREE_OFFSET_TILES = 0.55;
 const POP_TEXT_SIZE = 13;
 const ARROW_TEXT_SIZE = 22;
 const LABEL_TEXT_SIZE = 11;
-/** The two outputs stand this many icon heights above and below the wood. */
-const OUTPUT_SPREAD_ICONS = 0.7;
-const OUTPUT_LABEL_GAP = 2;
-/** The arrow's text box sits this share of an icon above the icons' centre line. */
-const ARROW_RAISE_ICONS = 0.25;
 /** Rubble sits a hair above the ground line, the way the stones rest on it. */
 const RUBBLE_LIFT_PX = 2;
 const RUBBLE_SHADOW_DROP_PX = 1;
 /** Tree, stump, rock, rubble — one column each, left to right. */
 const WHERE_COLUMN_COUNT = 4;
 const COLUMN_CENTRE = 0.5;
-/** Wood, the arrow, and what it becomes. */
-const PROCESSING_COLUMNS = 3;
 
 function groundY(rect: IllustrationRect): number {
   return rect.y + rect.height * GROUND_FRACTION;
@@ -200,24 +191,6 @@ function drawArrow(ctx: CanvasRenderingContext2D, x: number, y: number): void {
   });
 }
 
-/** Wood into two boards, or into one rope. */
-function drawProcessingScene(ctx: CanvasRenderingContext2D, rect: IllustrationRect): void {
-  const centreY = rect.y + rect.height / 2 - ICON_SIZE / 2;
-  const column = rect.width / PROCESSING_COLUMNS;
-  const woodX = rect.x + column * COLUMN_CENTRE - ICON_SIZE / 2;
-  const outX = rect.x + column * (PROCESSING_COLUMNS - 1 + COLUMN_CENTRE) - ICON_SIZE / 2;
-  drawResourceIcon(ctx, 'wood', woodX, centreY, ICON_SIZE);
-  drawLabel(ctx, '1 Wood', woodX + ICON_SIZE / 2, centreY + ICON_SIZE + LABEL_GAP);
-
-  const boardsY = centreY - ICON_SIZE * OUTPUT_SPREAD_ICONS;
-  const ropeY = centreY + ICON_SIZE * OUTPUT_SPREAD_ICONS;
-  drawResourceIcon(ctx, 'wood_board', outX, boardsY, ICON_SIZE);
-  drawLabel(ctx, '2 Boards', outX + ICON_SIZE / 2, boardsY + ICON_SIZE + OUTPUT_LABEL_GAP);
-  drawResourceIcon(ctx, 'rope', outX, ropeY, ICON_SIZE);
-  drawLabel(ctx, 'or 1 Rope', outX + ICON_SIZE / 2, ropeY + ICON_SIZE + OUTPUT_LABEL_GAP);
-  drawArrow(ctx, rect.x + rect.width / 2, rect.y + rect.height / 2 - ICON_SIZE * ARROW_RAISE_ICONS);
-}
-
 function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number): void {
   drawText(ctx, text, {
     x,
@@ -282,14 +255,6 @@ export function buildResourcingExplainerPages(isMobile: boolean): HowToPlayPage[
       lines: [
         'The lumber yard and the quarry are closest, but any tree or boulder will do.',
         "Trees fall after enough time harvesting and rocks crumble when you've mined all the stone they have.",
-      ],
-    },
-    {
-      subtitle: 'Boards and rope',
-      drawIllustration: (ctx, rect) => drawProcessingScene(ctx, rect),
-      lines: [
-        "You don't build with raw wood. At the sawmill, turn 1 wood into 2 boards or 1 rope.",
-        'Or pay Fenna 1 coin per wood to do a batch for you.',
       ],
     },
     {

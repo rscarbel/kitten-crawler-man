@@ -933,6 +933,189 @@ function paintTowerRoof(ctx: Ctx, g: Grid, rng: Rng): void {
   drawBriarKnot(ctx, knotX, knotY, g.s(t.knotRadius), BRASS.light, g.s(t.knotLine));
 }
 
+/**
+ * The bell tower after a lost siege: its stone plinth stands (nothing there
+ * for an attacker to reach), but the timber frame above it is snapped off
+ * partway up, the belfry and roof have come down across the stumps, and the
+ * bell itself lies cracked on the stone where it fell.
+ */
+const BROKEN_BELL_TOWER = {
+  /** Where the timber legs give out, short of the belfry floor they used to carry. */
+  snapHeight: 1.55,
+  /** One stump splinters higher than the other, so the break reads as violent, not sawn. */
+  leftSnapRise: 0.14,
+  rightSnapRise: -0.16,
+  /** A shard of the lower cladding, still nailed to the left stump, hanging loose. */
+  splitBoard: [
+    [0.5, 1.1],
+    [0.66, 1.14],
+    [0.6, 0.7],
+    [0.46, 0.66],
+  ],
+  splitBoardWidth: 0.05,
+  /** The collapsed belfry and roof, tipped across the stumps and the plinth's rear edge. */
+  roofPivot: { x: 1, up: 1.62 },
+  roofTiltRadians: -0.46,
+  roofApexReach: 0.6,
+  roofHalfWidth: 0.65,
+  roofDepth: 0.3,
+  /** The bell, thrown clear and lying on its side on the plinth top. */
+  bell: { x: 0.7, up: 0.46, radiusX: 0.46, radiusY: 0.22 },
+  bellCrackTurns: [
+    [-0.3, 0.5],
+    [0.1, 0.25],
+    [-0.15, -0.05],
+    [0.25, -0.28],
+  ],
+  /** What is left of the bell rope, cut short and trailing off the taller stump. */
+  ropeFrom: { x: 1.36, up: 1.55 + 0.14 },
+  ropeTo: { x: 1.5, up: 0.9 },
+  /** Splinters and stones thrown clear of the frame. */
+  debrisPlanks: [
+    [0.3, 0.86, 0.72, 0.62],
+    [1.62, 0.5, 1.4, 0.72],
+  ],
+  rubbleStones: [
+    [0.42, 0.28, 0.08],
+    [1.5, 0.24, 0.07],
+    [1.16, 0.66, 0.06],
+  ],
+  dustX: 1,
+  dustUp: 0.3,
+  dustRx: 0.85,
+  dustRy: 0.32,
+} as const;
+
+function paintBellTowerBroken(ctx: Ctx, g: Grid, _variant: number, rng: Rng): void {
+  const t = BELL_TOWER;
+  const b = BROKEN_BELL_TOWER;
+  const c = t.centre;
+  shadow(ctx, g, c, t.plinth.front + t.plinth.depth / 2, t.shadowRx, t.shadowRy);
+
+  const plinth = boxFaces(g, t.plinth);
+  ctx.fillStyle = STONE.body;
+  ctx.fillRect(plinth.top.x, plinth.top.y, plinth.top.w, plinth.top.h);
+  paintFlagstones(ctx, plinth.top, g.s(t.flagstone), forkRng(rng));
+  drawFieldstones(
+    ctx,
+    plinth.front.x,
+    plinth.front.y,
+    plinth.front.w,
+    plinth.front.h,
+    forkRng(rng),
+    g.s(t.plinth.height / 2),
+  );
+  inkBox(ctx, g, plinth);
+  for (const [mx, mu, rx, ry] of t.plinthMoss) mossTuft(ctx, g, mx, mu, rx, ry);
+
+  fillSoftEllipse(
+    ctx,
+    g.x(b.dustX),
+    g.y(b.dustUp),
+    g.s(b.dustRx),
+    g.s(b.dustRy),
+    STONE.dark,
+    DUST_ALPHA,
+  );
+
+  const legLeftFoot = c - t.legFootHalfWidth;
+  const legRightFoot = c + t.legFootHalfWidth;
+  const leftSnap = b.snapHeight + b.leftSnapRise;
+  const rightSnap = b.snapHeight + b.rightSnapRise;
+  const leftStumpX = c - towerHalfWidth(leftSnap);
+  const rightStumpX = c + towerHalfWidth(rightSnap);
+  strut(ctx, g, legLeftFoot, t.legFoot, leftStumpX, leftSnap, t.legWidth, BARK_TONE);
+  strut(ctx, g, legRightFoot, t.legFoot, rightStumpX, rightSnap, t.legWidth, BARK_TONE);
+
+  for (const [fromX, fromUp, toX, toUp] of b.debrisPlanks) {
+    strut(ctx, g, fromX, fromUp, toX, toUp, b.splitBoardWidth, WOOD_TONE);
+  }
+  polygon(
+    ctx,
+    b.splitBoard.map(([x, up]): Point => [g.x(x), g.y(up)]),
+  );
+  fillInked(ctx, g, WOOD.light);
+
+  const rubbleRng = forkRng(rng);
+  for (const [sx, su, radius] of b.rubbleStones) {
+    ellipseT(ctx, g, sx, su, radius, radius * STONE_SQUASH);
+    fillInked(ctx, g, rubbleRng() < STONE_LIGHT_CHANCE ? STONE.light : STONE.body);
+  }
+
+  ctx.save();
+  try {
+    const pivotX = g.x(b.roofPivot.x);
+    const pivotY = g.y(b.roofPivot.up);
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate(b.roofTiltRadians);
+    ctx.translate(-pivotX, -pivotY);
+    const roof: Point[] = [
+      [g.x(b.roofPivot.x - b.roofHalfWidth), g.y(b.roofPivot.up)],
+      [g.x(b.roofPivot.x + b.roofApexReach), g.y(b.roofPivot.up + b.roofDepth)],
+      [g.x(b.roofPivot.x + b.roofHalfWidth), g.y(b.roofPivot.up)],
+      [g.x(b.roofPivot.x), g.y(b.roofPivot.up - b.roofDepth)],
+    ];
+    withClip(
+      ctx,
+      () => polygon(ctx, roof),
+      () => {
+        ctx.fillStyle = WOOD.dark;
+        ctx.fillRect(
+          g.x(b.roofPivot.x - b.roofHalfWidth),
+          g.y(b.roofPivot.up + b.roofDepth),
+          g.s(b.roofHalfWidth * 2),
+          g.s(b.roofDepth * 2),
+        );
+        ctx.strokeStyle = WOOD.deep;
+        ctx.lineWidth = g.ink * SHINGLE_LINE_SHARE;
+        for (let course = 1; course < BROKEN_ROOF_SHINGLE_COURSES; course++) {
+          const along = course / BROKEN_ROOF_SHINGLE_COURSES;
+          const y = g.y(b.roofPivot.up + b.roofDepth * (1 - 2 * along));
+          ctx.beginPath();
+          ctx.moveTo(g.x(b.roofPivot.x - b.roofHalfWidth * (1 - along)), y);
+          ctx.lineTo(g.x(b.roofPivot.x + b.roofHalfWidth * (1 - along)), y);
+          ctx.stroke();
+        }
+      },
+    );
+    polygon(ctx, roof);
+    outline(ctx, g);
+  } finally {
+    ctx.restore();
+  }
+
+  const rope = b.ropeFrom;
+  cord(
+    ctx,
+    g,
+    [
+      [rope.x, rope.up],
+      [b.ropeTo.x, b.ropeTo.up],
+    ],
+    ROPE_WIDTH_TILES,
+    ROPE.dark,
+  );
+
+  const bell = b.bell;
+  ellipseT(ctx, g, bell.x, bell.up, bell.radiusX, bell.radiusY);
+  fillInked(ctx, g, BRASS.body);
+  litSpot(ctx, g, bell.x, bell.up, bell.radiusX, bell.radiusY, BRASS.light, SHEEN.medium);
+  ctx.beginPath();
+  ctx.moveTo(g.x(bell.x - bell.radiusX), g.y(bell.up));
+  for (const [dx, du] of b.bellCrackTurns) {
+    ctx.lineTo(g.x(bell.x + dx * bell.radiusX), g.y(bell.up + du * bell.radiusY));
+  }
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = g.ink;
+  ctx.stroke();
+}
+/** The dust a collapse leaves settling over the plinth. */
+const DUST_ALPHA = 0.3;
+/** Shingle lap lines drawn across the fallen roof's shorter, simpler silhouette. */
+const BROKEN_ROOF_SHINGLE_COURSES = 4;
+/** The stub of bell rope left dangling after the tower comes down. */
+const ROPE_WIDTH_TILES = 0.02;
+
 /** Flat paving over a top face: irregular flags with dark joints. */
 function paintFlagstones(ctx: Ctx, rect: PxRect, flagPx: number, rng: Rng): void {
   withClip(
@@ -4547,6 +4730,7 @@ function paintRopeWalk(ctx: Ctx, g: Grid): void {
 
 export const OUTDOOR_PROP_ART: Record<OutdoorPropId, VillagePropArt> = {
   bell_tower: { variants: 1, paint: painter(paintBellTower) },
+  bell_tower_broken: { variants: 1, paint: painter(paintBellTowerBroken) },
   well: { variants: 2, paint: painter(paintWell) },
   notice_board: { variants: 1, paint: painter(paintNoticeBoard) },
   lamp_post: { variants: 1, paint: painter(paintLampPost) },

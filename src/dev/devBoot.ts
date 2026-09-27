@@ -42,7 +42,12 @@ import { setFigureCacheStatsRecording } from '../sprites/figure/figureCacheStats
 import { drawPerfOverlay } from './perfOverlay';
 import { drawDifficultyOverlay } from './difficultyOverlay';
 import { getPlaytestPreset } from './playtestPresets';
-import { fortifyBriarHollow, parseTrebuchetCount, parseWallTier } from './briarHollowFortify';
+import {
+  fortifyBriarHollow,
+  parseTrebuchetCount,
+  parseWallTier,
+  unlockEverythingForPlaytest,
+} from './briarHollowFortify';
 import { DOOMSDAY_COUNTDOWN_MS, createDoomsdayProgress } from '../core/DoomsdayProgress';
 import { settings } from '../core/Settings';
 import { getMercenaryTemplate } from '../core/mercenaryTemplates';
@@ -397,6 +402,8 @@ export function devBootScene(
         }
         options.prepareBriarHollow = (kit, gameMap) =>
           fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
+      } else if (preset.briarHollowUnlockAll === true) {
+        options.prepareBriarHollow = (kit) => unlockEverythingForPlaytest(kit.state.unlocks);
       }
       if (preset.toolTiers !== undefined) {
         options.partyCrafts = { ...createPartyCraftsState(), tools: { ...preset.toolTiers } };

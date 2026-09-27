@@ -22,6 +22,14 @@ export const UNNAMED_VILLAGER_LINES: Readonly<Record<UnnamedVillagerId, readonly
 /** All any of them says while hiding from the siege. */
 export const SHELTERING_LINE = '…';
 
+/** Shown in the hover tooltip for a villager with no name of their own. */
+export const UNNAMED_VILLAGER_DESCRIPTIONS: Readonly<Record<UnnamedVillagerId, string>> = {
+  elder_bracken: "One of Briar Hollow's elders. Minds the cows and remembers quieter seasons.",
+  elder_thistle: "One of Briar Hollow's elders. Has sat through twelve years of town meetings.",
+  child_nib: 'A Briar Hollow child, endlessly curious about the Crawlers.',
+  child_burr: 'A Briar Hollow child, warned to stay well clear of the quarry.',
+};
+
 const UNNAMED_VILLAGER_IDS: readonly UnnamedVillagerId[] = [
   'elder_bracken',
   'elder_thistle',

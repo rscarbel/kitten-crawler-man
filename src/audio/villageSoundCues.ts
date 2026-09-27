@@ -38,6 +38,8 @@ export const VILLAGE_CUES = {
   necroWarHorn: ['necro_war_horn'],
   /** The necromancer's arrival, under his boss intro. */
   necromancerArrival: ['necromancer_arrival'],
+  /** A withdrawing siege mob released because its walk back out is stuck or has taken too long. */
+  withdrawalWarp: ['necromancer_blink'],
 } as const satisfies Record<string, readonly SoundId[]>;
 
 export type VillageCue = keyof typeof VILLAGE_CUES;

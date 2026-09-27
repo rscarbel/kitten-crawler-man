@@ -28,7 +28,12 @@ import type { LevelDef } from '../levels/types';
 import { TILE_SIZE } from '../core/constants';
 import { PROGRESS_PRESETS, drawProgressBar } from '../ui/Box';
 import { drawText } from '../ui/TextBox';
-import { drawArrowAbovePlayer, type ArrowAvoidRect } from '../ui/WorldArrow';
+import {
+  ARROW_PRIORITY,
+  drawArrowAbovePlayer,
+  type ArrowAvoidRect,
+  type ArrowCandidate,
+} from '../ui/WorldArrow';
 
 /**
  * Three seconds at 60 fps — long enough that a fight interrupts it.
@@ -340,15 +345,8 @@ export class RecallSystem implements GameSystem {
     };
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    active: HumanPlayer | CatPlayer,
-    camX: number,
-    camY: number,
-    avoidRect: ArrowAvoidRect,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.renderChannelBar(ctx, camX, camY);
-    this.renderTrailArrow(ctx, active, camX, camY, avoidRect);
   }
 
   private renderChannelBar(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -376,25 +374,30 @@ export class RecallSystem implements GameSystem {
     });
   }
 
-  private renderTrailArrow(
+  /** A candidate for the shared arrow arbiter: the brief trail back after a recall. */
+  trailArrowCandidate(
     ctx: CanvasRenderingContext2D,
     active: HumanPlayer | CatPlayer,
     camX: number,
     camY: number,
     avoidRect: ArrowAvoidRect,
-  ): void {
+  ): ArrowCandidate | null {
     const anchor = this.trailAnchorTile;
-    if (anchor === null || this.trailHintFramesLeft <= 0) return;
-    drawArrowAbovePlayer(
-      ctx,
-      active.x,
-      active.y,
-      (anchor.x + TILE_CENTRE_FRACTION) * TILE_SIZE,
-      (anchor.y + TILE_CENTRE_FRACTION) * TILE_SIZE,
-      camX,
-      camY,
-      TRAIL_ARROW_COLOR,
-      { avoidRect },
-    );
+    if (anchor === null || this.trailHintFramesLeft <= 0) return null;
+    return {
+      priority: ARROW_PRIORITY.RECALL_TRAIL,
+      draw: () =>
+        drawArrowAbovePlayer(
+          ctx,
+          active.x,
+          active.y,
+          (anchor.x + TILE_CENTRE_FRACTION) * TILE_SIZE,
+          (anchor.y + TILE_CENTRE_FRACTION) * TILE_SIZE,
+          camX,
+          camY,
+          TRAIL_ARROW_COLOR,
+          { avoidRect },
+        ),
+    };
   }
 }

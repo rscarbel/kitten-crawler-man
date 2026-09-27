@@ -409,6 +409,119 @@ function nextAward(
   return null;
 }
 
+// ── Grove tree immunity ──────────────────────────────────────────────────────
+
+section('Grove trees: immune to combat damage, fire and blasts; the axe still fells one');
+{
+  const rig = makeRig();
+  const groveTiles = gameMap.briarHollow?.lumberYard.groveTiles ?? [];
+  check(groveTiles.length > 0, 'the village has a lumber yard grove to test against');
+
+  // Never drawn from `TREE_SPOTS`: that pool is shared with every later
+  // section through `takeTree()`'s own running counter, and felling one of its
+  // entries here — to prove combat can still fell an *unprotected* tree —
+  // would silently hand a later section a stump instead of a tree.
+  const reservedElsewhere = new Set(TREE_SPOTS.map((spot) => `${spot.tileX},${spot.tileY}`));
+
+  function findStandingTree(
+    predicate: (tileX: number, tileY: number) => boolean,
+  ): { tileX: number; tileY: number } | null {
+    const structure = gameMap.structure;
+    for (let ty = 1; ty < structure.length - 1; ty++) {
+      for (let tx = 1; tx < structure[ty].length - 1; tx++) {
+        if (structure[ty][tx].type !== TREE) continue;
+        if (reservedElsewhere.has(`${tx},${ty}`)) continue;
+        if (!predicate(tx, ty)) continue;
+        return { tileX: tx, tileY: ty };
+      }
+    }
+    return null;
+  }
+
+  const isGroveTile = (tileX: number, tileY: number): boolean =>
+    groveTiles.some((tile) => tile.x === tileX && tile.y === tileY);
+
+  const standingGroveSpot = findStandingTree(isGroveTile);
+  const standingGrove =
+    standingGroveSpot === null
+      ? undefined
+      : { x: standingGroveSpot.tileX, y: standingGroveSpot.tileY };
+  check(standingGrove !== undefined, 'found a standing grove tree outside the shared test pool');
+
+  function freshNonGroveTree(): { tileX: number; tileY: number } | null {
+    return findStandingTree((tileX, tileY) => !isGroveTile(tileX, tileY));
+  }
+
+  // Well under one tile: every check here is about the one tile under test,
+  // and a wider radius would reach whatever real (unprotected) tree happens to
+  // stand next to it — including one `TREE_SPOTS` is still going to draw from
+  // in a later section — and fell that one for real as collateral.
+  const BLAST_TEST_RADIUS = TILE_SIZE * 0.25;
+  const OVERWHELMING_DAMAGE = 1_000_000;
+
+  if (standingGrove !== undefined) {
+    const worldX = (standingGrove.x + TILE_CENTRE) * TILE_SIZE;
+    const worldY = (standingGrove.y + TILE_CENTRE) * TILE_SIZE;
+
+    rig.trees.tryProjectileHit(worldX, worldY, BLAST_TEST_RADIUS, OVERWHELMING_DAMAGE, rig.cat);
+    rig.trees.igniteRadius(worldX, worldY, BLAST_TEST_RADIUS);
+    check(
+      gameMap.structure[standingGrove.y][standingGrove.x].type === TREE &&
+        gameMap.structure[standingGrove.y][standingGrove.x].treeStage === undefined,
+      "a magic missile's hit and its ignite ring never damage or burn the grove tree",
+    );
+
+    rig.trees.destroyInRadius(worldX, worldY, BLAST_TEST_RADIUS, rig.human);
+    check(
+      gameMap.structure[standingGrove.y][standingGrove.x].type === TREE,
+      'a dynamite blast never flattens the grove tree',
+    );
+
+    rig.human.x = standingGrove.x * TILE_SIZE;
+    rig.human.y = standingGrove.y * TILE_SIZE;
+    rig.trees.smashAllInRadius(rig.human, BLAST_TEST_RADIUS);
+    check(
+      gameMap.structure[standingGrove.y][standingGrove.x].type === TREE,
+      'a smush stomp never flattens the grove tree',
+    );
+
+    const meleeHit = rig.trees.tryMeleeHit(rig.human, BLAST_TEST_RADIUS, OVERWHELMING_DAMAGE);
+    check(
+      meleeHit && gameMap.structure[standingGrove.y][standingGrove.x].type === TREE,
+      'a melee punch lands on the grove tree (the thud still plays) but never damages it',
+    );
+  }
+
+  // The same attack fells an ordinary tree outside the grove: without this, a
+  // lookup that never finds the lumber yard would leave every check above
+  // vacuously true instead of proving the immunity is real.
+  const ctx = contextFor(rig, rig.human);
+  const FELLING_SETTLE_TICKS = 120;
+
+  const control = freshNonGroveTree();
+  check(control !== null, 'found an ordinary tree outside the grove to test against');
+  if (control !== null) {
+    const worldX = (control.tileX + TILE_CENTRE) * TILE_SIZE;
+    const worldY = (control.tileY + TILE_CENTRE) * TILE_SIZE;
+    rig.trees.destroyInRadius(worldX, worldY, BLAST_TEST_RADIUS, rig.human);
+    for (let i = 0; i < FELLING_SETTLE_TICKS; i++) rig.trees.update(ctx);
+    check(
+      gameMap.structure[control.tileY][control.tileX].type !== TREE,
+      'the same blast fells an ordinary tree outside the grove',
+    );
+  }
+
+  if (standingGrove !== undefined) {
+    const felled = rig.trees.fellByHarvest(standingGrove.x, standingGrove.y);
+    check(felled, 'the axe still claims a grove tree normally');
+    for (let i = 0; i < FELLING_SETTLE_TICKS; i++) rig.trees.update(ctx);
+    check(
+      gameMap.structure[standingGrove.y][standingGrove.x].type !== TREE,
+      'and chopping it down for wood still fells it to ground',
+    );
+  }
+}
+
 // ── Capacity and depletion ────────────────────────────────────────────────
 
 section('Capacity: trees hold 5–15 harvests, rocks 20–50, both extremes seen');

@@ -25,6 +25,23 @@ import {
   TREBUCHET_MAX_AMMO,
   TREBUCHET_WIDTH_TILES,
 } from '../systems/briarHollow/structureRules';
+import {
+  grantConstructionUnlocks,
+  TIKKA_PLANS_UNLOCKS,
+  type VillageUnlocks,
+} from '../core/villageUnlocks';
+
+/**
+ * Grants what the Mayor's, Fenna's and Tikka's own scenes would have opened
+ * up by now, for a preset that drops the party into Briar Hollow past those
+ * scenes: a build/siege playtest with the machines locked and the militia
+ * refusing orders would test nothing real.
+ */
+export function unlockEverythingForPlaytest(unlocks: VillageUnlocks): void {
+  unlocks.processingStations = true;
+  unlocks.soldierCommands = true;
+  grantConstructionUnlocks(unlocks, TIKKA_PLANS_UNLOCKS);
+}
 
 /** The tiers in the order a wall is upgraded through them, for `--walls=1` to `--walls=4`. */
 const WALL_TIERS_IN_ORDER: readonly PalisadeTier[] = ['fence', 'wood', 'stone', 'fortified'];
@@ -90,6 +107,7 @@ export function fortifyBriarHollow(
   raiseWholeRing(defense, site, fortification.wallTier);
   placeTrebuchets(defense, gameMap, site, fortification.trebuchets);
   quest.setPhase('fortifying');
+  unlockEverythingForPlaytest(kit.state.unlocks);
 }
 
 function raiseWholeRing(

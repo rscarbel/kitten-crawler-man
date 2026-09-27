@@ -18,6 +18,7 @@ import { setViewportSize, viewportWidth, viewportHeight } from '../core/Viewport
 import { drawText } from '../ui/TextBox';
 import { drawButton, BUTTON_PRESETS, setButtonMouseState, type ButtonResult } from '../ui/Button';
 import { HumanPlayer } from '../creatures/HumanPlayer';
+import { CatPlayer } from '../creatures/CatPlayer';
 import { TILE_SIZE } from '../core/constants';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
 import { ClubCasinoSystem } from '../systems/ClubCasinoSystem';
@@ -268,6 +269,7 @@ function checkAceHandling(): InvariantResult {
  */
 function checkMoneyConservation(): InvariantResult {
   const player = new HumanPlayer(0, 0, TILE_SIZE);
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
   const table = new BlackjackTable(null);
   let drift = 0;
   let rounds = 0;
@@ -279,18 +281,19 @@ function checkMoneyConservation(): InvariantResult {
     // Topped up every round so a losing streak can never starve the run down to
     // the handful of rounds a fixed bankroll would allow.
     player.coins = PREVIEW_STARTING_COINS;
-    table.sitDown(player);
+    companion.coins = 0;
+    table.sitDown(player, companion);
     const before = player.coins;
-    table.addChip(CHIP_DENOMINATIONS[round % CHIP_DENOMINATIONS.length], player);
+    table.addChip(CHIP_DENOMINATIONS[round % CHIP_DENOMINATIONS.length], player, companion);
     let staked = table.betTotal;
     table.deal();
 
     for (let frame = 0; frame < SIM_MAX_FRAMES_PER_ROUND && table.phase !== 'settled'; frame++) {
       table.update(SIM_FRAME_MS);
       if (table.phase !== 'player_turn') continue;
-      if (round % DOUBLE_EVERY === 0 && table.canDoubleDown(player)) {
+      if (round % DOUBLE_EVERY === 0 && table.canDoubleDown(player, companion)) {
         staked += table.stake;
-        table.doubleDown(player);
+        table.doubleDown(player, companion);
         doubles++;
       } else if (round % HIT_EVERY === 0) {
         table.hit();
@@ -308,7 +311,7 @@ function checkMoneyConservation(): InvariantResult {
     // amount, so the payout is also checked against what the outcome owes.
     if (outcome === null || payout !== payoutFor(outcome, staked)) mispaid++;
     rounds++;
-    table.nextHand(player);
+    table.nextHand(player, companion);
   }
 
   return {
@@ -322,9 +325,10 @@ function checkMoneyConservation(): InvariantResult {
 function checkBetRefund(): InvariantResult {
   const player = new HumanPlayer(0, 0, TILE_SIZE);
   player.coins = PREVIEW_STARTING_COINS;
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
   const table = new BlackjackTable(null);
-  table.sitDown(player);
-  for (const denomination of CHIP_DENOMINATIONS) table.addChip(denomination, player);
+  table.sitDown(player, companion);
+  for (const denomination of CHIP_DENOMINATIONS) table.addChip(denomination, player, companion);
   const midBet = player.coins;
   table.leaveTable(player);
   return {
@@ -338,10 +342,11 @@ function checkBetRefund(): InvariantResult {
 function checkClearedBetsAreNotWagered(): InvariantResult {
   const player = new HumanPlayer(0, 0, TILE_SIZE);
   player.coins = PREVIEW_STARTING_COINS;
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
   const table = new BlackjackTable(null);
-  table.sitDown(player);
+  table.sitDown(player, companion);
   for (let cycle = 0; cycle < CLEAR_CYCLES; cycle++) {
-    for (const denomination of CHIP_DENOMINATIONS) table.addChip(denomination, player);
+    for (const denomination of CHIP_DENOMINATIONS) table.addChip(denomination, player, companion);
     table.clearBet(player);
   }
   return {
@@ -363,10 +368,11 @@ function checkEveryExitRefunds(): InvariantResult {
   for (const closes of closeCounts) {
     const player = new HumanPlayer(0, 0, TILE_SIZE);
     player.coins = PREVIEW_STARTING_COINS;
+    const companion = new CatPlayer(1, 0, TILE_SIZE);
     const casino = new ClubCasinoSystem(null, createClubMembership());
-    casino.openTable(player);
+    casino.openTable(player, companion);
     casino.dismissRules();
-    casino.placeChip(CHIP_DENOMINATIONS[CHIP_DENOMINATIONS.length - 1], player);
+    casino.placeChip(CHIP_DENOMINATIONS[CHIP_DENOMINATIONS.length - 1], player, companion);
     if (player.coins >= PREVIEW_STARTING_COINS) {
       failures.push(`${closes}× close: the chip never left the tray`);
     }
@@ -391,6 +397,7 @@ function checkEveryExitRefunds(): InvariantResult {
  */
 function checkMidHandExitResolves(): InvariantResult {
   const player = new HumanPlayer(0, 0, TILE_SIZE);
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
 
   // A player natural, or the dealer's peek, settles the round before it ever
   // reaches `player_turn` — about one deal in ten. Those rounds exercise none of
@@ -401,8 +408,8 @@ function checkMidHandExitResolves(): InvariantResult {
   for (let attempt = 0; attempt < MID_HAND_DEAL_ATTEMPTS; attempt++) {
     const table = new BlackjackTable(null);
     player.coins = PREVIEW_STARTING_COINS;
-    table.sitDown(player);
-    table.addChip(CHIP_DENOMINATIONS[CHIP_DENOMINATIONS.length - 1], player);
+    table.sitDown(player, companion);
+    table.addChip(CHIP_DENOMINATIONS[CHIP_DENOMINATIONS.length - 1], player, companion);
     const stake = table.betTotal;
     table.deal();
     // Pump until the table stops moving on its own. Guarding on `dealing` alone
@@ -475,12 +482,13 @@ export class CasinoPreviewScene extends Scene {
 
   private readonly membership: ClubMembership = createClubMembership();
   private readonly player = new HumanPlayer(0, 0, TILE_SIZE);
+  private readonly companion = new CatPlayer(1, 0, TILE_SIZE);
   private readonly casino = new ClubCasinoSystem(null, this.membership);
 
   constructor() {
     super();
     this.player.coins = PREVIEW_STARTING_COINS;
-    this.casino.openTable(this.player);
+    this.casino.openTable(this.player, this.companion);
     this.casino.dismissRules();
   }
 
@@ -504,7 +512,7 @@ export class CasinoPreviewScene extends Scene {
         }
       }
       const inset = this.panelInset();
-      this.casino.handleClick(mx - inset.x, my - inset.y, this.player);
+      this.casino.handleClick(mx - inset.x, my - inset.y, this.player, this.companion);
       return;
     }
     if (this.tab === 'Deck' && this.runButton?.contains(mx, my) === true) {
@@ -515,9 +523,9 @@ export class CasinoPreviewScene extends Scene {
   update(): void {
     this.frames += 1;
     if (this.tab !== 'Panel') return;
-    if (!this.casino.open) this.casino.openTable(this.player);
+    if (!this.casino.open) this.casino.openTable(this.player, this.companion);
     if (this.player.coins < TABLE_MINIMUM) this.player.coins = PREVIEW_STARTING_COINS;
-    this.casino.update(this.player);
+    this.casino.update(this.player, this.companion);
   }
 
   render(ctx: CanvasRenderingContext2D): void {
@@ -641,7 +649,7 @@ export class CasinoPreviewScene extends Scene {
     ctx.clip();
     setViewportSize(viewport.width, viewport.height);
     setButtonMouseState(this.mouseX - inset.x, this.mouseY - inset.y);
-    this.casino.renderPanel(ctx, this.player);
+    this.casino.renderPanel(ctx, this.player, this.companion);
     setViewportSize(width, height);
     ctx.restore();
     setButtonMouseState(this.mouseX, this.mouseY);

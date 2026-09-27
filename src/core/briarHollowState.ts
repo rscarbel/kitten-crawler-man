@@ -13,7 +13,14 @@
 import { isRecord } from './guards';
 import type { PalisadeTier } from '../map/tileTypes';
 import type { CrawlerKind } from './SkillManager';
-import type { VillageQuestPhase } from './villageQuestPhase';
+import { VILLAGE_QUEST_PHASE_ORDER, type VillageQuestPhase } from './villageQuestPhase';
+import {
+  CONSTRUCTION_UNLOCK_IDS,
+  createVillageUnlocks,
+  unlocksImpliedByPhase,
+  type ConstructionUnlockId,
+  type VillageUnlocks,
+} from './villageUnlocks';
 import type { VillagerId } from '../systems/briarHollow/ratkinDialogue';
 import { VILLAGER_IDS } from '../systems/briarHollow/ratkinDialogue';
 import type { RatkinCastId } from '../sprites/art/ratkin/cast';
@@ -49,6 +56,11 @@ export interface VillageQuestState {
   lastSiege: VillageSiegeSummary | null;
   /** Set the moment the Mayor's rewards are handed over, so a second turn-in pays nothing. */
   rewardsGranted: boolean;
+  /**
+   * The bell tower lies broken after a lost siege, until the crawlers rebuild
+   * it. Distinct from `bellHp`, which only ever runs down during a siege.
+   */
+  bellTowerBroken: boolean;
 }
 
 function createVillageGatheringProgress(): VillageGatheringProgress {
@@ -64,6 +76,7 @@ function createVillageQuestState(): VillageQuestState {
     bellHp: HOLLOW_BELL_MAX_HP,
     lastSiege: null,
     rewardsGranted: false,
+    bellTowerBroken: false,
   };
 }
 
@@ -186,6 +199,7 @@ function copySoldierOrder(order: SoldierOrderRecord): SoldierOrderRecord {
 
 export interface BriarHollowState {
   quest: VillageQuestState;
+  unlocks: VillageUnlocks;
   structures: StructureRecord[];
   soldierOrders: SoldierOrderRecord[];
   talkCounts: Record<VillagerId, number>;
@@ -297,6 +311,7 @@ function emptyTalkCounts(): Record<VillagerId, number> {
 export function createBriarHollowState(): BriarHollowState {
   return {
     quest: createVillageQuestState(),
+    unlocks: createVillageUnlocks(),
     structures: [],
     soldierOrders: [],
     talkCounts: emptyTalkCounts(),
@@ -328,6 +343,7 @@ export type BriarHollowStateSnapshot = Omit<BriarHollowState, 'nodes' | 'village
 export function captureBriarHollowState(state: BriarHollowState): BriarHollowStateSnapshot {
   return {
     quest: persistableQuest(state.quest),
+    unlocks: copyUnlocks(state.unlocks),
     structures: state.structures.map((structure) => ({ ...structure })),
     soldierOrders: state.soldierOrders.map(copySoldierOrder),
     talkCounts: { ...state.talkCounts },
@@ -347,11 +363,16 @@ export function restoreBriarHollowState(
   snapshot: BriarHollowStateSnapshot,
 ): void {
   target.quest = persistableQuest(snapshot.quest);
+  target.unlocks = copyUnlocks(snapshot.unlocks);
   target.structures = snapshot.structures.map((structure) => ({ ...structure }));
   target.soldierOrders = snapshot.soldierOrders.map(copySoldierOrder);
   target.talkCounts = { ...snapshot.talkCounts };
   target.onceFlags = [...snapshot.onceFlags];
   target.merchantStock = { ...snapshot.merchantStock };
+}
+
+function copyUnlocks(unlocks: VillageUnlocks): VillageUnlocks {
+  return { ...unlocks, construction: [...unlocks.construction] };
 }
 
 // ── Parsing untrusted JSON ───────────────────────────────────────────────
@@ -377,19 +398,19 @@ function isVillagerId(value: unknown): value is VillagerId {
   return typeof value === 'string' && VILLAGER_IDS.some((id) => id === value);
 }
 
-const VILLAGE_QUEST_PHASES: readonly VillageQuestPhase[] = [
-  'unmet',
-  'offered',
-  'declined',
-  'need_tools',
-  'gathering',
-  'fortifying',
-  'imminent',
-  'assault',
-  'repelled_failed',
-  'victory',
-  'complete',
-];
+/**
+ * Phase names a save may hold that no longer exist, and the phase each now
+ * reads as. The single `gathering` step became the guided wood → stone → Tikka
+ * run, whose own progress checks carry a party that already holds the
+ * materials straight through it.
+ */
+const LEGACY_PHASES: Readonly<Record<string, VillageQuestPhase>> = { gathering: 'gather_wood' };
+
+function parsePhase(value: unknown): VillageQuestPhase | undefined {
+  const current = stringUnion(value, VILLAGE_QUEST_PHASE_ORDER);
+  if (current !== undefined) return current;
+  return typeof value === 'string' ? LEGACY_PHASES[value] : undefined;
+}
 
 const PALISADE_TIERS: readonly PalisadeTier[] = ['fence', 'wood', 'stone', 'fortified'];
 const WALL_SEGMENT_TIERS: readonly WallSegmentTier[] = [...PALISADE_TIERS, 'breach', 'gap'];
@@ -416,7 +437,7 @@ function parseVillageGatheringProgress(value: unknown): VillageGatheringProgress
 function parseVillageQuestState(value: unknown): VillageQuestState {
   const defaults = createVillageQuestState();
   if (!isRecord(value)) return defaults;
-  const parsedPhase = stringUnion(value.phase, VILLAGE_QUEST_PHASES) ?? defaults.phase;
+  const parsedPhase = parsePhase(value.phase) ?? defaults.phase;
   // A save never holds a siege; one that claims to is read as the fortifying
   // it would have begun from, like the capture writes it.
   const phase = UNPERSISTED_SIEGE_PHASES.has(parsedPhase) ? 'fortifying' : parsedPhase;
@@ -438,6 +459,26 @@ function parseVillageQuestState(value: unknown): VillageQuestState {
     rewardsGranted: isBoolean(value.rewardsGranted)
       ? value.rewardsGranted
       : defaults.rewardsGranted,
+    bellTowerBroken: isBoolean(value.bellTowerBroken)
+      ? value.bellTowerBroken
+      : defaults.bellTowerBroken,
+  };
+}
+
+function isConstructionUnlockId(value: unknown): value is ConstructionUnlockId {
+  return typeof value === 'string' && CONSTRUCTION_UNLOCK_IDS.some((id) => id === value);
+}
+
+/** A save from before unlocks were recorded is granted what its phase had earned. */
+function parseVillageUnlocks(value: unknown, phase: VillageQuestPhase): VillageUnlocks {
+  if (!isRecord(value)) return unlocksImpliedByPhase(phase);
+  const construction = Array.isArray(value.construction)
+    ? value.construction.filter(isConstructionUnlockId)
+    : [];
+  return {
+    processingStations: isBoolean(value.processingStations) ? value.processingStations : false,
+    soldierCommands: isBoolean(value.soldierCommands) ? value.soldierCommands : false,
+    construction,
   };
 }
 
@@ -649,8 +690,10 @@ export function parseBriarHollowStateSnapshot(
       if (parsed !== undefined) soldierOrders.push(parsed);
     }
   }
+  const quest = parseVillageQuestState(value.quest);
   return {
-    quest: parseVillageQuestState(value.quest),
+    quest,
+    unlocks: parseVillageUnlocks(value.unlocks, quest.phase),
     structures,
     soldierOrders,
     talkCounts: parseTalkCounts(value.talkCounts),

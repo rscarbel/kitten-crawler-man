@@ -117,6 +117,13 @@ export interface PlaytestPreset {
     readonly wallTier: PalisadeTier;
     readonly trebuchets: number;
   };
+  /**
+   * Grants every questline unlock (the machines, the militia's orders, every
+   * construction plan) without walking the Mayor's, Fenna's and Tikka's own
+   * scenes — for a preset built to test building or the militia directly,
+   * where the level and stockpile already stand in for having done the quest.
+   */
+  readonly briarHollowUnlockAll?: boolean;
 }
 
 const HOARDER: PlaytestPreset = {
@@ -757,6 +764,7 @@ const BRIAR_HOLLOW_BUILDERS: PlaytestPreset = {
   ...BRIAR_HOLLOW_VILLAGE,
   id: 'briar-hollow-builders',
   description: 'Briar Hollow gate, Carl at Construction 5 and Donut at 15, with materials and kits',
+  briarHollowUnlockAll: true,
   human: {
     ...BRIAR_HOLLOW_VILLAGE.human,
     constructionLevel: BUILDERS_PRESET_HUMAN_CONSTRUCTION,
@@ -781,6 +789,7 @@ const BRIAR_HOLLOW_SIEGE: PlaytestPreset = {
   ...BRIAR_HOLLOW_VILLAGE,
   id: 'briar-hollow-siege',
   description: 'Briar Hollow gate, both crawlers at Construction 15, materials and trap kits',
+  briarHollowUnlockAll: true,
   human: {
     ...BRIAR_HOLLOW_VILLAGE.human,
     constructionLevel: SIEGE_PRESET_CONSTRUCTION,

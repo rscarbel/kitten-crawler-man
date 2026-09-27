@@ -1,23 +1,32 @@
 /**
  * VillageQuestSystem — "Briar Hollow's Plea", the village's questline from
  * the Mayor's first word to his thanks: who says what at each step, the
- * gathering tasks, the journal line and the markers pointing the way, the
- * "We're ready" confirm, and the reward.
+ * guided build-up (tools, wood, stone, processing, the first trebuchet and
+ * wall), the journal line and the markers pointing the way, the siege itself,
+ * and the reward.
  *
  * The phase itself lives in `BriarHollowState.quest`, threaded by reference
  * and rebuilt around on every door visit; this class reads it and moves it
  * on, and holds nothing of its own that a rebuild could lose. The siege is
  * `VillageAssaultSystem`'s; this system starts it and hears how it ended.
+ * Some steps only move once the party has done something in the world (held
+ * enough of a resource, built a trebuchet, loaded it) rather than said
+ * anything to anybody — `update()` polls for those every gameplay frame.
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
 import type { EventBus } from '../../core/EventBus';
-import type { BriarHollowState, VillageQuestState } from '../../core/briarHollowState';
+import type {
+  BriarHollowState,
+  TrebuchetStructureRecord,
+  VillageQuestState,
+} from '../../core/briarHollowState';
 import { hasAcceptedMayorRequest, type VillageQuestPhase } from '../../core/villageQuestPhase';
+import { grantConstructionUnlocks, TIKKA_PLANS_UNLOCKS } from '../../core/villageUnlocks';
 import { QuestManager, type QuestDef } from '../../core/QuestManager';
 import { teachBoth } from '../../core/CraftSkills';
 import type { PartyCraftsState } from '../../core/partyCrafts';
-import { partyCount } from '../../core/partyResources';
+import { canAfford, partyCount, type ResourceCost } from '../../core/partyResources';
 import { awardXp } from '../../core/awardXp';
 import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
 import type { GrantedReward } from '../../core/GrantedReward';
@@ -29,6 +38,7 @@ import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import { ConfirmModal } from '../../ui/ConfirmModal';
 import { drawItemIcon } from '../../ui/InventoryPanel';
+import { drawCraftSkillIcon } from '../../ui/icons/craftSkillIcons';
 import type { OverlayInputClaim } from '../kits/OverlayClaims';
 import type { QuestMarkerType } from '../MiniMapSystem';
 import {
@@ -39,13 +49,20 @@ import {
 } from '../questTracker';
 import type { GroundPickupSystem } from '../GroundPickupSystem';
 import type { DefenseStructures } from './DefenseStructures';
-import type { Circumstance, VillagerId } from './ratkinDialogue';
+import type { QuestGuidance, StationGuidance, TileRect } from './questGuidance';
+import {
+  BELL_TOWER_REPAIR_COST,
+  TREBUCHET_BUILD_COST,
+  TREBUCHET_HEIGHT_TILES,
+  WALL_TIERS,
+} from './structureRules';
+import { CRAWLER_NAMES } from '../../core/SkillManager';
+import type { VillagerId } from './ratkinDialogue';
 import {
   type OpeningPages,
   type QuestLineProvider,
   type QuestOpening,
   type VillagerContext,
-  onceFlagFor,
 } from './villagerCircumstances';
 import type { ConversationController, ConversationTopic, TopicProvider } from './villagerTopics';
 import type { VillagerSystem } from './VillagerSystem';
@@ -66,75 +83,42 @@ export const BRIAR_HOLLOW_QUEST_COINS = 500;
 export const BRIAR_HOLLOW_REWARD_BURGERS = 5;
 export const BRIAR_HOLLOW_REWARD_STEW = 3;
 
-/** Tikka's gathering tasks: what she wants to see before she will teach Construction. */
-export const TIKKA_WOOD_TARGET = 10;
-export const TIKKA_STONE_TARGET = 10;
-export const TIKKA_BOARDS_TARGET = 1;
-export const TIKKA_ROPE_TARGET = 1;
+/** Wood held before the lumber yard sends the party on to the quarry. */
+export const WOOD_TARGET = 15;
+/** Stone held before the quarry sends the party to report to Tikka. */
+export const STONE_TARGET = 10;
+/** Boards Tikka needs before she can draw up her plans. */
+export const PROCESSING_BOARDS_TARGET = 20;
+/** Rope Tikka needs alongside the boards. */
+export const PROCESSING_ROPE_TARGET = 5;
+/** One wood becomes this many boards at the saw. */
+const WOOD_TO_BOARDS_YIELD = 2;
 
-/** Segments at wood or better, alongside stone or a trebuchet, before the Mayor calls it advanced. */
-export const FORTIFICATIONS_ADVANCED_WALLS = 8;
-
-const READY_TOPIC_KEY = 'quest_ready';
 const HELP_TOPIC_KEY = 'quest_how_can_we_help';
 const ACCEPT_TOPIC_KEY = 'quest_accept';
 const DECLINE_TOPIC_KEY = 'quest_decline';
 const TEACH_AGAIN_TOPIC_KEY = 'quest_construction_again';
+const MORE_TIME_TOPIC_KEY = 'quest_more_time';
+const READY_FOR_ASSAULT_TOPIC_KEY = 'quest_ready_for_assault';
 
-const CONFIRM_MESSAGE =
-  "The necromancer's forces will march on Briar Hollow once you give the word. Everything you've built is what you'll have. Begin?";
+/** What the active crawler says once processing is done, before heading back to Tikka. */
+export const PROCESSING_DONE_LINE =
+  "Alright, now let's bring this back to Tikka and see what she has for us.";
 
-type TaskId = 'wood' | 'stone' | 'boards' | 'rope';
+/** What the active crawler says once enough wood is held, before heading to the quarry. */
+export const QUARRY_SPOTTED_LINE =
+  'I think I saw a quarry by the southern gate. We should test our pickaxe out there.';
 
-/** A gathering task: the counter it reads, what the party may already hold, and the target. */
-interface GatheringTask {
-  readonly id: TaskId;
-  readonly label: string;
-  readonly resource: 'wood' | 'stone' | 'wood_board' | 'rope';
-  readonly target: number;
-  readonly counted: (quest: VillageQuestState) => number;
-}
+/** What the active crawler says once enough stone is held, before heading back to Tikka. */
+export const STONE_GATHERED_LINE =
+  "Oren mentioned we should speak with Tikka once we've collected some wood and stone. We should go see what she has for us.";
 
-const GATHERING_TASKS: readonly GatheringTask[] = [
-  {
-    id: 'wood',
-    label: 'Wood',
-    resource: 'wood',
-    target: TIKKA_WOOD_TARGET,
-    counted: (quest) => quest.gathering.woodChopped,
-  },
-  {
-    id: 'stone',
-    label: 'Stone',
-    resource: 'stone',
-    target: TIKKA_STONE_TARGET,
-    counted: (quest) => quest.gathering.stoneMined,
-  },
-  {
-    id: 'boards',
-    label: 'Boards',
-    resource: 'wood_board',
-    target: TIKKA_BOARDS_TARGET,
-    counted: (quest) => quest.gathering.boardsProcessed,
-  },
-  {
-    id: 'rope',
-    label: 'Rope',
-    resource: 'rope',
-    target: TIKKA_ROPE_TARGET,
-    counted: (quest) => quest.gathering.ropeProcessed,
-  },
-];
+/** What the Mayor shouts once the wall is up, summoning both crawlers to hear his ask. */
+export const MAYOR_SHOUT_SUMMONS_SPEAKER = 'Mayor Bramblewick [shouting]';
+export const MAYOR_SHOUT_SUMMONS_TEXT =
+  'Carl, Donut, come and speak with me. I have something for you.';
 
-/** Tikka's line for the first task still undone, in the order she gives them. */
-const TASK_LINE: Readonly<Record<TaskId, Circumstance>> = {
-  wood: 'axe_task',
-  stone: 'pickaxe_task',
-  boards: 'wood_processing_task',
-  rope: 'wood_processing_task',
-};
-
-/** What the fortifications stand at, for the Mayor's lines and the journal. */
+/** What the fortifications stand at, for the journal's fortifying-phase tally. */
 export interface FortificationTally {
   readonly wooden: number;
   readonly stone: number;
@@ -159,21 +143,9 @@ export function tallyFortifications(state: BriarHollowState): FortificationTally
   return { wooden, stone, fortified, trebuchets, snares };
 }
 
-/** Any segment at a wooden wall or better: the Mayor will hear "We're ready". */
+/** Any segment at a wooden wall or better. */
 export function hasWoodenWall(tally: FortificationTally): boolean {
   return tally.wooden + tally.stone + tally.fortified > 0;
-}
-
-/** Walls, a trebuchet or a snare built: the village has started to fortify. */
-function fortificationsStarted(tally: FortificationTally): boolean {
-  return hasWoodenWall(tally) || tally.trebuchets > 0 || tally.snares > 0;
-}
-
-/** Most of a wall's length, and something heavier than wood: the village has changed. */
-function fortificationsAdvanced(tally: FortificationTally): boolean {
-  const walls = tally.wooden + tally.stone + tally.fortified;
-  const heavier = tally.stone + tally.fortified > 0 || tally.trebuchets > 0;
-  return walls >= FORTIFICATIONS_ADVANCED_WALLS && heavier;
 }
 
 export interface VillageQuestSystemDeps {
@@ -190,6 +162,24 @@ export interface VillageQuestSystemDeps {
   readonly active: () => HumanPlayer | CatPlayer;
   /** Opens the Construction explainer. */
   readonly openConstructionExplainer: () => void;
+  /** Whether the Construction explainer is still on screen. */
+  readonly isConstructionExplainerOpen: () => boolean;
+  /** Opens the Processing explainer — the saw and rope walk's own "how it works". */
+  readonly openProcessingExplainer: () => void;
+  /**
+   * Where `VillageQuestGuide` is currently highlighting in the world — the
+   * tree, rock, station or wall it picked for the guidance this frame — for
+   * the tracker's own arrow. Null when the guide has nothing picked, in which
+   * case the tracker falls back to an area anchor.
+   */
+  readonly guideTarget: () => TrackerTarget | null;
+  /**
+   * A one-off narrated line — never a topic choice — shown as a dialog box
+   * from `speaker`. `onClosed`, when given, runs once the box has been
+   * dismissed — the place to move a phase whose arrow must not jump while
+   * the line is still on screen.
+   */
+  readonly showQuestLine: (speaker: string, text: string, onClosed?: () => void) => void;
   /** Queues a "New Item!" card; cards halt the world, so they are only raised after a conversation. */
   readonly enqueueReward: (reward: GrantedReward) => void;
   /** Runs once every queued card has been read. */
@@ -207,9 +197,12 @@ export interface VillageQuestSystemDeps {
   readonly onCoinsGranted?: (coins: number, worldX: number, worldY: number) => void;
   /** A quest item reward was just granted straight into the bag (not dropped) — for a fly-to-HUD effect. */
   readonly onItemGranted?: (id: ItemId, quantity: number, worldX: number, worldY: number) => void;
+  /** Grants Oren's starter tools and the Resourcing lesson, as the questline's own opening line for him. */
+  readonly grantOrenTools: (ctl: ConversationController) => void;
   /**
-   * The soldier posted in the Over City's square who can start this questline
-   * before the party has ever reached the village; null when none is posted.
+   * The soldier posted in the Over City's own square who can start this
+   * questline before the party has ever reached the village; null when none
+   * is posted.
    */
   readonly recruiter: () => { readonly name: string; readonly tile: TilePoint } | null;
 }
@@ -224,10 +217,32 @@ function itemReward(id: ItemId, quantity: number): GrantedReward {
   };
 }
 
+/** The skill-unlocked card Tikka's plans are announced with. */
+function constructionUnlockedReward(): GrantedReward {
+  return {
+    kind: 'skill',
+    name: 'Construction',
+    description:
+      'You have unlocked the Construction skill. You may now earn construction experience.',
+    renderIcon: (ctx, x, y, size) => drawCraftSkillIcon(ctx, 'construction', x, y, size),
+  };
+}
+
 export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private readonly questManager = new QuestManager();
+  /** Never opened: "I'm ready" starts the siege directly. Kept for API parity. */
   private readonly confirm: ConfirmModal;
   private readonly unsubscribers: Array<() => void> = [];
+  /** Set while waiting for the Construction explainer, opened after Tikka hands over her plans, to close. */
+  private awaitingPlansExplainerClose = false;
+  /** Set while the quarry-spotted line is queued or on screen, so the wood target can't re-queue it. */
+  private quarryLineRequested = false;
+  /** Set while the processing-done line is queued or on screen, so a held target can't re-queue it. */
+  private processingLineRequested = false;
+  /** Set while the stone-gathered line is queued or on screen, so the stone target can't re-queue it. */
+  private stoneLineRequested = false;
+  /** Set while the Mayor's summons is queued or on screen, so a standing wall can't re-queue it. */
+  private mayorSummonsRequested = false;
 
   constructor(private readonly deps: VillageQuestSystemDeps) {
     this.confirm = new ConfirmModal(deps.audio);
@@ -244,10 +259,11 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     const { bus } = deps;
     this.unsubscribers.push(
       bus.on('toolsGranted', () => {
-        if (this.phase === 'need_tools') this.setPhase('gathering');
+        if (this.phase === 'need_tools') this.setPhase('gather_wood');
       }),
-      bus.on('resourceHarvested', ({ id, amount }) => this.noteHarvest(id, amount)),
-      bus.on('woodProcessed', ({ output, count }) => this.noteProcessed(output, count)),
+      bus.on('bellTowerRepaired', () => {
+        if (this.phase === 'repair_bell') this.setPhase('fortifying');
+      }),
     );
   }
 
@@ -281,41 +297,246 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     return this.questManager.getStatus(BRIAR_HOLLOW_QUEST_ID);
   }
 
-  // ── Gathering ─────────────────────────────────────────────────────────────
+  // ── Held resources ───────────────────────────────────────────────────────
 
-  private noteHarvest(id: string, amount: number): void {
-    if (this.phase !== 'gathering') return;
-    if (id === 'wood') this.quest.gathering.woodChopped += amount;
-    else if (id === 'stone') this.quest.gathering.stoneMined += amount;
+  private woodHeld(): number {
+    return partyCount(this.deps.human, this.deps.cat, 'wood');
   }
 
-  private noteProcessed(output: string, count: number): void {
-    if (this.phase !== 'gathering') return;
-    if (output === 'boards') this.quest.gathering.boardsProcessed += count;
-    else if (output === 'rope') this.quest.gathering.ropeProcessed += count;
+  private stoneHeld(): number {
+    return partyCount(this.deps.human, this.deps.cat, 'stone');
+  }
+
+  private boardsHeld(): number {
+    return partyCount(this.deps.human, this.deps.cat, 'wood_board');
+  }
+
+  private ropeHeld(): number {
+    return partyCount(this.deps.human, this.deps.cat, 'rope');
+  }
+
+  private canAfford(cost: ResourceCost): boolean {
+    return canAfford(this.deps.human, this.deps.cat, cost);
+  }
+
+  private firstTrebuchet(): TrebuchetStructureRecord | null {
+    for (const record of this.deps.state.structures) {
+      if (record.kind === 'trebuchet') return record;
+    }
+    return null;
+  }
+
+  /** The display name for whichever crawler is currently active. */
+  private activeCrawlerName(): string {
+    return this.deps.active() === this.deps.human ? CRAWLER_NAMES.human : CRAWLER_NAMES.cat;
+  }
+
+  // ── Polling: steps the world itself finishes, not a conversation ─────────
+
+  /**
+   * Every gameplay frame: moves a phase on the moment its world condition is
+   * met, whether that happened through gathering, processing, building or a
+   * conversation elsewhere in the village.
+   */
+  update(): void {
+    switch (this.phase) {
+      case 'gather_wood':
+        if (!this.quarryLineRequested && this.woodHeld() >= WOOD_TARGET) {
+          this.quarryLineRequested = true;
+          this.deps.showQuestLine(this.activeCrawlerName(), QUARRY_SPOTTED_LINE, () => {
+            this.quarryLineRequested = false;
+            this.setPhase('gather_stone');
+          });
+        }
+        return;
+      case 'gather_stone':
+        if (!this.stoneLineRequested && this.stoneHeld() >= STONE_TARGET) {
+          this.stoneLineRequested = true;
+          this.deps.showQuestLine(this.activeCrawlerName(), STONE_GATHERED_LINE, () => {
+            this.stoneLineRequested = false;
+            this.setPhase('report_tikka');
+          });
+        }
+        return;
+      case 'processing':
+        if (
+          !this.processingLineRequested &&
+          this.boardsHeld() >= PROCESSING_BOARDS_TARGET &&
+          this.ropeHeld() >= PROCESSING_ROPE_TARGET
+        ) {
+          this.processingLineRequested = true;
+          this.deps.showQuestLine(this.activeCrawlerName(), PROCESSING_DONE_LINE, () => {
+            this.processingLineRequested = false;
+            this.setPhase('return_tikka');
+          });
+        }
+        return;
+      case 'return_tikka':
+        if (this.awaitingPlansExplainerClose && !this.deps.isConstructionExplainerOpen()) {
+          this.awaitingPlansExplainerClose = false;
+          this.setPhase('build_trebuchet');
+        }
+        return;
+      case 'build_trebuchet':
+        if (this.firstTrebuchet() !== null) this.setPhase('load_trebuchet');
+        return;
+      case 'load_trebuchet': {
+        const trebuchet = this.firstTrebuchet();
+        if (trebuchet === null) {
+          this.setPhase('build_trebuchet');
+        } else if (trebuchet.ammo > 0) {
+          this.setPhase('build_wall');
+        }
+        return;
+      }
+      case 'build_wall':
+        if (!this.mayorSummonsRequested && hasWoodenWall(tallyFortifications(this.deps.state))) {
+          this.mayorSummonsRequested = true;
+          this.deps.showQuestLine(MAYOR_SHOUT_SUMMONS_SPEAKER, MAYOR_SHOUT_SUMMONS_TEXT, () => {
+            this.mayorSummonsRequested = false;
+            this.setPhase('summoned_by_mayor');
+          });
+        }
+        return;
+      case 'unmet':
+      case 'offered':
+      case 'declined':
+      case 'need_tools':
+      case 'report_tikka':
+      case 'see_fenna':
+      case 'summoned_by_mayor':
+      case 'fortifying':
+      case 'imminent':
+      case 'assault':
+      case 'repelled_failed':
+      case 'victory':
+      case 'complete':
+        return;
+      case 'repair_bell':
+        // Normally the repair event moves the quest on; this covers a tower that
+        // is already whole when the step begins, which would otherwise wait on
+        // an event that can never fire again.
+        if (!this.deps.state.quest.bellTowerBroken) this.setPhase('fortifying');
+        return;
+    }
+  }
+
+  // ── Guidance: what the guide should highlight in the world ───────────────
+
+  /** A resource shortfall while trying to build or repair something: process what wood is held, or chop for more. */
+  private shortfallGuidance(cost: ResourceCost): QuestGuidance {
+    const stoneNeeded = Math.max(0, (cost.stone ?? 0) - this.stoneHeld());
+    if (stoneNeeded > 0) {
+      return { kind: 'mine', progress: { have: this.stoneHeld(), target: cost.stone ?? 0 } };
+    }
+    const boards = this.boardsHeld();
+    const rope = this.ropeHeld();
+    const boardsNeeded = Math.max(0, (cost.wood_board ?? 0) - boards);
+    const ropeNeeded = Math.max(0, (cost.rope ?? 0) - rope);
+    const woodNeeded = Math.ceil(boardsNeeded / WOOD_TO_BOARDS_YIELD) + ropeNeeded;
+    if (woodNeeded > 0 && this.woodHeld() === 0) {
+      return { kind: 'chop', progress: { have: 0, target: woodNeeded } };
+    }
+    const stations: StationGuidance[] = [];
+    if (boardsNeeded > 0)
+      stations.push({ station: 'saw', progress: { have: boards, target: cost.wood_board ?? 0 } });
+    if (ropeNeeded > 0)
+      stations.push({ station: 'rope_walk', progress: { have: rope, target: cost.rope ?? 0 } });
+    return { kind: 'process', stations };
+  }
+
+  private processingGuidance(): QuestGuidance {
+    const boards = this.boardsHeld();
+    const rope = this.ropeHeld();
+    const boardsNeeded = Math.max(0, PROCESSING_BOARDS_TARGET - boards);
+    const ropeNeeded = Math.max(0, PROCESSING_ROPE_TARGET - rope);
+    const woodNeeded = Math.ceil(boardsNeeded / WOOD_TO_BOARDS_YIELD) + ropeNeeded;
+    if (woodNeeded > 0 && this.woodHeld() === 0) {
+      return { kind: 'chop', progress: { have: 0, target: woodNeeded } };
+    }
+    const stations: StationGuidance[] = [];
+    if (boardsNeeded > 0) {
+      stations.push({
+        station: 'saw',
+        progress: { have: boards, target: PROCESSING_BOARDS_TARGET },
+      });
+    }
+    if (ropeNeeded > 0) {
+      stations.push({
+        station: 'rope_walk',
+        progress: { have: rope, target: PROCESSING_ROPE_TARGET },
+      });
+    }
+    return { kind: 'process', stations };
   }
 
   /**
-   * A task's progress: what was gathered since the tasks were set, or what
-   * the party already holds, whichever is more — Tikka wants to see the
-   * materials, and does not mind where they came from.
+   * A few open patches hugging the inside of the south wall, suggested for
+   * the first trebuchet: an engine set back deep in the village would still
+   * have to fire over the same wall, so pressing it right up against the
+   * palisade is what buys it the extra reach against anything approaching
+   * the gate.
    */
-  taskProgress(task: GatheringTask): number {
-    const held = partyCount(this.deps.human, this.deps.cat, task.resource);
-    return Math.max(task.counted(this.quest), held);
+  private trebuchetZones(): readonly TileRect[] {
+    const gate = this.deps.site.gate.inside;
+    const wallY = this.deps.site.gate.tiles[0].y;
+    const zoneWidth = 3;
+    // Tall enough for the trebuchet's fixed 2×3 footprint regardless of which way the builder faces it.
+    const zoneHeight = TREBUCHET_HEIGHT_TILES;
+    const gap = 2;
+    const y = wallY - zoneHeight;
+    return [
+      { x: gate.x - zoneWidth - gap, y, width: zoneWidth, height: zoneHeight },
+      { x: gate.x + gap, y, width: zoneWidth, height: zoneHeight },
+    ];
   }
 
-  private taskDone(task: GatheringTask): boolean {
-    return this.taskProgress(task) >= task.target;
-  }
-
-  /** Whether every one of Tikka's tasks is done. */
-  get gatheringComplete(): boolean {
-    return GATHERING_TASKS.every((task) => this.taskDone(task));
-  }
-
-  private firstUndoneTask(): GatheringTask | null {
-    return GATHERING_TASKS.find((task) => !this.taskDone(task)) ?? null;
+  /** What the guide should highlight right now; null while the step is purely a conversation. */
+  guidance(): QuestGuidance | null {
+    switch (this.phase) {
+      case 'gather_wood':
+        return { kind: 'chop', progress: { have: this.woodHeld(), target: WOOD_TARGET } };
+      case 'gather_stone':
+        return { kind: 'mine', progress: { have: this.stoneHeld(), target: STONE_TARGET } };
+      case 'processing':
+        return this.processingGuidance();
+      case 'build_trebuchet':
+        return this.canAfford(TREBUCHET_BUILD_COST)
+          ? { kind: 'build_trebuchet', zones: this.trebuchetZones() }
+          : this.shortfallGuidance(TREBUCHET_BUILD_COST);
+      case 'load_trebuchet': {
+        const trebuchet = this.firstTrebuchet();
+        if (trebuchet === null) return null;
+        if (this.stoneHeld() === 0) {
+          return { kind: 'mine', progress: { have: 0, target: STONE_TARGET } };
+        }
+        return { kind: 'load_trebuchet', at: { x: trebuchet.x, y: trebuchet.y } };
+      }
+      case 'build_wall': {
+        if (this.mayorSummonsRequested) return null;
+        const cost = WALL_TIERS.wood.upgradeCost ?? {};
+        return this.canAfford(cost) ? { kind: 'upgrade_wall' } : this.shortfallGuidance(cost);
+      }
+      case 'repair_bell':
+        return this.canAfford(BELL_TOWER_REPAIR_COST)
+          ? { kind: 'repair_bell' }
+          : this.shortfallGuidance(BELL_TOWER_REPAIR_COST);
+      case 'unmet':
+      case 'offered':
+      case 'declined':
+      case 'need_tools':
+      case 'report_tikka':
+      case 'see_fenna':
+      case 'return_tikka':
+      case 'summoned_by_mayor':
+      case 'fortifying':
+      case 'imminent':
+      case 'assault':
+      case 'repelled_failed':
+      case 'victory':
+      case 'complete':
+        return null;
+    }
   }
 
   // ── Who says what ─────────────────────────────────────────────────────────
@@ -323,11 +544,24 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   lineFor(villager: VillagerId, ctx: VillagerContext): QuestOpening | null {
     if (villager === 'bramblewick') return this.mayorLine(ctx);
     if (villager === 'tikka') return this.tikkaLine(ctx);
+    if (villager === 'fenna') return this.fennaLine(ctx);
+    if (villager === 'oren') return this.orenLine(ctx);
     return null;
   }
 
+  private orenLine(ctx: VillagerContext): QuestOpening | null {
+    if (ctx.quest.phase !== 'need_tools') return null;
+    return {
+      pages: ['grant_basic_tools'],
+      questRelated: true,
+      onShown: (ctl) => {
+        ctl.endAfterPages(() => ctl.close());
+        ctl.afterClose(() => this.deps.grantOrenTools(ctl));
+      },
+    };
+  }
+
   private mayorLine(ctx: VillagerContext): QuestOpening | null {
-    const once = (circumstance: Circumstance): string => onceFlagFor('bramblewick', circumstance);
     switch (ctx.quest.phase) {
       case 'unmet':
         // The greeting, and then the rest of what he has to say, come from the
@@ -338,36 +572,54 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
         return { pages: ['quest_offer'] };
       case 'need_tools':
         return { pages: ['before_tools'] };
-      case 'gathering': {
-        const flag = once('tools_obtained');
-        if (!ctx.onceFlags.includes(flag)) return { pages: ['tools_obtained'], onceFlag: flag };
-        return { pages: ['resourcing_unlocked'] };
-      }
-      case 'fortifying': {
-        const flag = once('construction_unlocked');
-        if (!ctx.onceFlags.includes(flag)) {
-          return { pages: ['construction_unlocked'], onceFlag: flag };
-        }
-        const tally = tallyFortifications(this.deps.state);
-        if (fortificationsAdvanced(tally)) return { pages: ['fortifications_advanced'] };
-        if (fortificationsStarted(tally)) return { pages: ['fortifications_started'] };
-        return { pages: ['construction_unlocked'] };
-      }
+      case 'summoned_by_mayor':
+        return {
+          pages: [
+            'mayor_briefing_reason',
+            'mayor_briefing_scouts',
+            'mayor_briefing_life_stone',
+            'mayor_briefing_threat',
+            'mayor_briefing_command',
+          ],
+          questRelated: true,
+          onShown: (ctl) => {
+            ctl.endAfterPages(() => ctl.close());
+            ctl.afterClose(() => {
+              this.deps.state.unlocks.soldierCommands = true;
+              this.setPhase('fortifying');
+            });
+          },
+        };
+      case 'fortifying':
+        return { pages: ['fortifying_awaiting_word'] };
+      case 'repelled_failed':
+        return {
+          pages: ['mayor_loss_unprepared', 'mayor_loss_facsimile'],
+          questRelated: true,
+          onShown: (ctl) => {
+            ctl.endAfterPages(() => ctl.close());
+            ctl.afterClose(() => this.setPhase('repair_bell'));
+          },
+        };
+      case 'repair_bell':
+        return { pages: ['repair_bell_reminder'] };
       case 'victory':
         return {
           pages: this.victoryPages(),
+          questRelated: true,
           onShown: (ctl) => this.turnIn(ctl),
-        };
-      case 'repelled_failed':
-        return {
-          pages: ['after_village_damage'],
-          onShown: (ctl) => {
-            this.setPhase('fortifying');
-            ctl.showRootTopics();
-          },
         };
       case 'complete':
         return { pages: ctx.talkCount % 2 === 0 ? ['quest_complete'] : ['after_victory'] };
+      case 'gather_wood':
+      case 'gather_stone':
+      case 'report_tikka':
+      case 'see_fenna':
+      case 'processing':
+      case 'return_tikka':
+      case 'build_trebuchet':
+      case 'load_trebuchet':
+      case 'build_wall':
       case 'imminent':
       case 'assault':
         return null;
@@ -395,22 +647,33 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
           : { pages: ['quest_explanation'] };
       case 'need_tools':
         return { pages: ['tools_required'] };
-      case 'gathering': {
-        const task = this.firstUndoneTask();
-        if (task !== null) return { pages: [TASK_LINE[task.id]] };
+      case 'gather_wood':
+        return { pages: ['axe_task'] };
+      case 'gather_stone':
+        return { pages: ['pickaxe_task'] };
+      case 'report_tikka':
         return {
-          pages: [
-            'construction_explanation',
-            'construction_skill_granted',
-            'construction_tutorial_trigger',
-            'wooden_wall_explanation',
-          ],
-          onShown: (ctl) => this.teachConstruction(ctl),
+          pages: ['tikka_plans_intro', 'tikka_send_to_fenna', 'tikka_needs_boards_rope'],
+          questRelated: true,
+          onShown: (ctl) => this.teachConstructionAndSendToFenna(ctl),
         };
-      }
+      case 'see_fenna':
+      case 'processing':
+        return { pages: ['wood_processing_task'] };
+      case 'return_tikka':
+        return {
+          pages: ['tikka_materials_received', 'tikka_plans_handoff'],
+          questRelated: true,
+          onShown: (ctl) => this.handOverPlans(ctl),
+        };
       case 'fortifying':
       case 'repelled_failed':
+      case 'repair_bell':
         return { pages: ['construction_skill_already_granted'] };
+      case 'build_trebuchet':
+      case 'load_trebuchet':
+      case 'build_wall':
+      case 'summoned_by_mayor':
       case 'imminent':
       case 'assault':
       case 'victory':
@@ -419,23 +682,61 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     }
   }
 
+  private fennaLine(ctx: VillagerContext): QuestOpening | null {
+    if (ctx.quest.phase !== 'see_fenna') return null;
+    return {
+      pages: ['fenna_grants_access', 'fenna_explains_stations'],
+      questRelated: true,
+      onShown: (ctl) => this.grantProcessingAccess(ctl),
+    };
+  }
+
   /**
-   * Tikka teaches both crawlers Construction as she says so, the village
-   * moves on to fortifying, and the explainer opens once the conversation
-   * has closed — it halts the world, and a halted world closes a street
-   * conversation mid-lesson.
+   * Tikka teaches both crawlers Construction as she says so and sends the
+   * party on to Fenna. The skill-unlocked card is raised once the
+   * conversation has closed — it halts the world, and a halted world closes a
+   * street conversation mid-lesson.
    */
-  private teachConstruction(ctl: ConversationController): void {
+  private teachConstructionAndSendToFenna(ctl: ConversationController): void {
     teachBoth(this.deps.human, this.deps.cat, 'construction');
-    this.setPhase('fortifying');
-    ctl.showRootTopics();
+    ctl.endAfterPages(() => ctl.close());
     ctl.afterClose(() => {
+      this.setPhase('see_fenna');
       if (!this.deps.active().isAlive) return;
-      this.deps.afterRewardsDrain(() => this.showConstructionExplainer());
+      this.deps.enqueueReward(constructionUnlockedReward());
     });
   }
 
-  private showConstructionExplainer(): void {
+  /** Fenna opens the saw and the rope walk, then the Processing explainer once the talk has closed. */
+  private grantProcessingAccess(ctl: ConversationController): void {
+    this.deps.state.unlocks.processingStations = true;
+    ctl.endAfterPages(() => ctl.close());
+    ctl.afterClose(() => {
+      this.setPhase('processing');
+      if (!this.deps.active().isAlive) return;
+      this.deps.afterRewardsDrain(() => this.deps.openProcessingExplainer());
+    });
+  }
+
+  /**
+   * Tikka's plans open every recipe Construction knows. The explainer waits
+   * for the conversation to close, and the phase waits for the explainer:
+   * `update()` moves it on to `build_trebuchet` once the explainer itself closes.
+   */
+  private handOverPlans(ctl: ConversationController): void {
+    grantConstructionUnlocks(this.deps.state.unlocks, TIKKA_PLANS_UNLOCKS);
+    ctl.endAfterPages(() => ctl.close());
+    ctl.afterClose(() => {
+      if (!this.deps.active().isAlive) return;
+      this.deps.afterRewardsDrain(() => {
+        this.awaitingPlansExplainerClose = true;
+        this.openConstructionExplainer();
+      });
+    });
+  }
+
+  /** Opens the Construction explainer and records that it has been shown. */
+  private openConstructionExplainer(): void {
     const seen = this.deps.partyCrafts.explainersSeen;
     if (!seen.includes('construction')) seen.push('construction');
     this.deps.openConstructionExplainer();
@@ -472,13 +773,22 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       ];
     }
     if (phase === 'offered' || phase === 'declined') return this.offerChoices();
-    if (phase === 'fortifying' && hasWoodenWall(tallyFortifications(this.deps.state))) {
+    if (phase === 'fortifying') {
       return [
         {
-          key: READY_TOPIC_KEY,
-          label: "We're ready.",
-          run: (ctl) => {
-            ctl.afterClose(() => this.confirmReady());
+          key: MORE_TIME_TOPIC_KEY,
+          label: 'I need more time',
+          run: (ctl: ConversationController) => {
+            ctl.say('mayor_more_time_granted');
+            ctl.showRootTopics();
+          },
+        },
+        {
+          key: READY_FOR_ASSAULT_TOPIC_KEY,
+          label: "I'm ready",
+          questRelated: true,
+          run: (ctl: ConversationController) => {
+            ctl.afterClose(() => this.deps.assault()?.begin());
             ctl.close();
           },
         },
@@ -492,6 +802,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       {
         key: ACCEPT_TOPIC_KEY,
         label: 'Accept',
+        questRelated: true,
         run: (ctl) => this.accept(ctl),
       },
       {
@@ -519,6 +830,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     const teachable =
       phase === 'fortifying' ||
       phase === 'repelled_failed' ||
+      phase === 'repair_bell' ||
       phase === 'victory' ||
       phase === 'complete';
     if (!teachable || !this.constructionLearnedByAnyone()) return [];
@@ -532,24 +844,11 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
           teachBoth(this.deps.human, this.deps.cat, 'construction');
           ctl.say('construction_skill_already_granted');
           ctl.afterClose(() => {
-            if (this.deps.active().isAlive) this.showConstructionExplainer();
+            if (this.deps.active().isAlive) this.openConstructionExplainer();
           });
         },
       },
     ];
-  }
-
-  // ── "We're ready" ─────────────────────────────────────────────────────────
-
-  private confirmReady(): void {
-    if (this.phase !== 'fortifying' || !this.deps.active().isAlive) return;
-    this.confirm.open({
-      message: CONFIRM_MESSAGE,
-      yesLabel: 'Begin',
-      noLabel: 'Not yet',
-      onYes: () => this.deps.assault()?.begin(),
-      onNo: () => undefined,
-    });
   }
 
   // ── The reward ────────────────────────────────────────────────────────────
@@ -610,43 +909,26 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
 
   // ── Markers and the journal ───────────────────────────────────────────────
 
-  /**
-   * The glyph over a villager's head.
-   *
-   * Bramblewick wears '!' only while nobody has been sent his way yet
-   * (`unmet`) or the party turned him down (`declined`) — both states where he
-   * has an offer nobody has taken up. Once the offer is on the table
-   * (`offered`, whether reached by talking to him or by the recruiter sending
-   * the party his way) he falls through to `targetVillager`, which already
-   * names him as the turn-in target and reads '?'.
-   */
+  /** The glyph over a villager's head. */
   markerFor(villager: VillagerId, _ctx: VillagerContext): NPCMarkerType {
-    if (villager === 'bramblewick' && (this.phase === 'unmet' || this.phase === 'declined')) {
-      return 'exclamation';
+    const phase = this.phase;
+    if (villager === 'bramblewick') {
+      if (phase === 'unmet' || phase === 'declined') return 'exclamation';
+      const question: readonly VillageQuestPhase[] = [
+        'offered',
+        'summoned_by_mayor',
+        'fortifying',
+        'repelled_failed',
+        'victory',
+      ];
+      return question.includes(phase) ? 'question' : 'none';
     }
-    return this.targetVillager() === villager ? 'question' : 'none';
-  }
-
-  /** Whoever the questline wants the party to talk to next, if it is somebody. */
-  private targetVillager(): VillagerId | null {
-    switch (this.phase) {
-      case 'need_tools':
-        return 'oren';
-      case 'gathering':
-        return this.gatheringComplete ? 'tikka' : null;
-      case 'fortifying':
-        return hasWoodenWall(tallyFortifications(this.deps.state)) ? 'bramblewick' : null;
-      case 'offered':
-      case 'declined':
-      case 'victory':
-      case 'repelled_failed':
-        return 'bramblewick';
-      case 'unmet':
-      case 'imminent':
-      case 'assault':
-      case 'complete':
-        return null;
+    if (villager === 'oren') return phase === 'need_tools' ? 'question' : 'none';
+    if (villager === 'tikka') {
+      return phase === 'report_tikka' || phase === 'return_tikka' ? 'question' : 'none';
     }
+    if (villager === 'fenna') return phase === 'see_fenna' ? 'question' : 'none';
+    return 'none';
   }
 
   private villagerTarget(id: VillagerId): TrackerTarget | undefined {
@@ -660,27 +942,17 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     return tile === undefined ? undefined : { x: tile.x, y: tile.y };
   }
 
-  /** Where a gathering task is done: the lumber yard, the quarry, then the sawmill. */
-  private taskTarget(task: GatheringTask): TrackerTarget | undefined {
-    const anchors = this.deps.site.villagerAnchors;
-    switch (task.id) {
-      case 'wood':
-        return this.anchorTarget(anchors.lumber_yard);
-      case 'stone':
-        return this.anchorTarget(anchors.quarry);
-      case 'boards':
-      case 'rope': {
-        const saw = this.deps.site.lumberYard.sawmillAnchor;
-        return { x: saw.x, y: saw.y };
-      }
-    }
+  /** The guide's own pick for this frame, or `fallback` when it has nothing highlighted yet. */
+  private guidedTarget(fallback: TrackerTarget | undefined): TrackerTarget | undefined {
+    return this.deps.guideTarget() ?? fallback;
   }
 
-  private gatheringObjective(): string {
-    const parts = GATHERING_TASKS.map(
-      (task) => `${task.label} ${Math.min(task.target, this.taskProgress(task))}/${task.target}`,
+  private fortifyingObjective(): string {
+    const tally = tallyFortifications(this.deps.state);
+    return (
+      `Fortify Briar Hollow — ${tally.wooden} wooden · ${tally.stone} stone · ` +
+      `${tally.fortified} fortified · ${tally.trebuchets} trebuchets · ${tally.snares} snares`
     );
-    return `Gather for Tikka — ${parts.join(' · ')}`;
   }
 
   trackerEntries(): ReadonlyArray<TrackerEntry> {
@@ -726,45 +998,113 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
           objective: 'Get tools from Oren at the forge',
           target: this.villagerTarget('oren'),
         };
-      case 'gathering': {
-        const task = this.firstUndoneTask();
-        if (task === null) {
-          return {
-            ...base,
-            status: 'active',
-            objective: 'Report to Tikka',
-            target: this.villagerTarget('tikka'),
-          };
-        }
+      case 'gather_wood':
         return {
           ...base,
           status: 'active',
-          objective: this.gatheringObjective(),
-          target: this.taskTarget(task),
+          objective: `Chop wood in the lumber yard — ${Math.min(this.woodHeld(), WOOD_TARGET)}/${WOOD_TARGET}`,
+          target: this.guidedTarget(this.anchorTarget(this.deps.site.villagerAnchors.lumber_yard)),
+        };
+      case 'gather_stone':
+        return {
+          ...base,
+          status: 'active',
+          objective: `Mine stone in the quarry — ${Math.min(this.stoneHeld(), STONE_TARGET)}/${STONE_TARGET}`,
+          target: this.guidedTarget(this.anchorTarget(this.deps.site.villagerAnchors.quarry)),
+        };
+      case 'report_tikka':
+        return {
+          ...base,
+          status: 'active',
+          objective: "Report to Tikka at the Engineer's Workshop",
+          target: this.villagerTarget('tikka'),
+        };
+      case 'see_fenna':
+        return {
+          ...base,
+          status: 'active',
+          objective: 'Ask Fenna for the saw and rope walk',
+          target: this.villagerTarget('fenna'),
+        };
+      case 'processing': {
+        const boards = Math.min(this.boardsHeld(), PROCESSING_BOARDS_TARGET);
+        const rope = Math.min(this.ropeHeld(), PROCESSING_ROPE_TARGET);
+        const saw = this.deps.site.lumberYard.sawmillAnchor;
+        return {
+          ...base,
+          status: 'active',
+          objective: `Process wood — Boards ${boards}/${PROCESSING_BOARDS_TARGET} · Rope ${rope}/${PROCESSING_ROPE_TARGET}`,
+          target: this.guidedTarget({ x: saw.x, y: saw.y }),
         };
       }
-      case 'fortifying': {
-        const tally = tallyFortifications(this.deps.state);
-        const objective =
-          `Fortify Briar Hollow — ${tally.wooden} wooden · ${tally.stone} stone · ` +
-          `${tally.fortified} fortified · ${tally.trebuchets} trebuchets · ${tally.snares} snares`;
+      case 'return_tikka':
+        return {
+          ...base,
+          status: 'active',
+          objective: 'Bring the materials to Tikka',
+          target: this.villagerTarget('tikka'),
+        };
+      case 'build_trebuchet': {
         const gate = this.deps.site.gate.inside;
         return {
           ...base,
           status: 'active',
-          objective,
-          hint: "Tell the Mayor when you're ready.",
-          target: hasWoodenWall(tally) ? mayor() : { x: gate.x, y: gate.y },
+          objective: 'Build a trebuchet',
+          target: this.guidedTarget({ x: gate.x, y: gate.y }),
         };
       }
+      case 'load_trebuchet': {
+        const trebuchet = this.firstTrebuchet();
+        const gate = this.deps.site.gate.inside;
+        const fallback =
+          trebuchet === null ? { x: gate.x, y: gate.y } : { x: trebuchet.x, y: trebuchet.y };
+        return {
+          ...base,
+          status: 'active',
+          objective: 'Load the trebuchet with stone',
+          target: this.guidedTarget(fallback),
+        };
+      }
+      case 'build_wall': {
+        if (this.mayorSummonsRequested) {
+          return {
+            ...base,
+            status: 'active',
+            objective: 'Speak with Mayor Bramblewick',
+            target: mayor(),
+          };
+        }
+        const gate = this.deps.site.gate.inside;
+        return {
+          ...base,
+          status: 'active',
+          objective: 'Upgrade a fence to a wooden wall',
+          target: this.guidedTarget({ x: gate.x, y: gate.y }),
+        };
+      }
+      case 'summoned_by_mayor':
+        return {
+          ...base,
+          status: 'active',
+          objective: 'Speak with Mayor Bramblewick',
+          target: mayor(),
+        };
+      case 'fortifying':
+        return {
+          ...base,
+          status: 'active',
+          objective: this.fortifyingObjective(),
+          hint: "Tell the Mayor when you're ready.",
+          target: undefined,
+        };
       case 'imminent': {
+        // No target: there is nothing to do at the bell, and an arrow there
+        // would draw the party away from the walls they are about to defend.
         const frames = this.quest.imminentCountdownFrames;
-        const bell = this.deps.site.square.bellTile;
         return {
           ...base,
           status: 'active',
           objective: `The dead are coming — ${secondsLabel(frames)}`,
-          target: { x: bell.x, y: bell.y },
         };
       }
       case 'assault':
@@ -780,9 +1120,18 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
         return {
           ...base,
           status: 'active',
-          objective: 'The bell fell. Speak with Mayor Bramblewick.',
+          objective: 'Speak with Mayor Bramblewick',
           target: mayor(),
         };
+      case 'repair_bell': {
+        const bell = this.deps.site.square.bellTile;
+        return {
+          ...base,
+          status: 'active',
+          objective: 'Repair the bell tower',
+          target: this.guidedTarget({ x: bell.x, y: bell.y }),
+        };
+      }
       case 'complete':
         return { ...base, status: 'completed', objective: 'Briar Hollow is safe.' };
     }
@@ -794,16 +1143,18 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     const bellPercent = Math.round((assault?.bellFraction ?? 1) * PERCENT);
     const necro = assault?.activeNecromancer ?? null;
     const lastWave = wave >= ASSAULT_WAVE_COUNT;
-    const bell = this.deps.site.square.bellTile;
     const objective = lastWave
       ? 'Defeat Vordrick Boneharrow'
       : `Defend Briar Hollow — Wave ${wave}/${ASSAULT_WAVE_COUNT} · Bell ${bellPercent}%`;
-    const target: TrackerTarget =
+    // Only Vordrick is worth an arrow. Between his appearances the bell would
+    // be the fallback, but standing by it defends nothing.
+    const target: TrackerTarget | undefined =
       necro === null
-        ? { x: bell.x, y: bell.y }
+        ? undefined
         : {
             x: Math.floor(necro.x / TILE_SIZE + TILE_CENTRE),
             y: Math.floor(necro.y / TILE_SIZE + TILE_CENTRE),
+            hidesArrowOnScreen: true,
           };
     return {
       ...base,
@@ -824,6 +1175,8 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   }
 
   // ── The confirm modal ─────────────────────────────────────────────────────
+  // Kept for API parity with `BriarHollowKit`; "I'm ready"
+  // starts the siege directly, so the modal is never opened.
 
   get isConfirmOpen(): boolean {
     return this.confirm.isOpen;

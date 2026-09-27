@@ -48,6 +48,12 @@ export interface TrackerTarget extends ObjectiveBeaconFootprint {
    * and the minimap chevron still point at it.
    */
   readonly wearsOwnMarker?: boolean;
+  /**
+   * The world arrow stands down as soon as the target is anywhere on screen,
+   * rather than only once the player is nearly on top of it. For a target
+   * that is plain to see from a distance, like an army on the march.
+   */
+  readonly hidesArrowOnScreen?: boolean;
 }
 
 /** A tile target for a character, which the scene will not stand the overlay beacon on. */

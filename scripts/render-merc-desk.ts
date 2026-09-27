@@ -75,6 +75,8 @@ interface Desk {
   readonly guild: MercenaryGuildSystem;
   readonly roster: MercenaryRoster;
   readonly purse: { coins: number };
+  /** The companion's own coins — empty here, since this harness only ever spends the seated crawler's own. */
+  readonly companionPurse: { coins: number };
 }
 
 function openDesk(coins: number, setup?: (roster: MercenaryRoster) => void): Desk {
@@ -85,7 +87,7 @@ function openDesk(coins: number, setup?: (roster: MercenaryRoster) => void): Des
   for (let i = 0; i < WARM_FRAMES; i++) guild.updateDesk();
   clearMenuFocus();
   guild.openPanel();
-  const desk = { guild, roster, purse: { coins } };
+  const desk = { guild, roster, purse: { coins }, companionPurse: { coins: 0 } };
   // The first frame is the one that puts focus on the selected row.
   render(desk, SMALLEST);
   return desk;
@@ -98,7 +100,7 @@ function render(desk: Desk, viewport: Viewport): ReturnType<typeof createCanvas>
   setButtonMouseState(POINTER_OFF_CANVAS, POINTER_OFF_CANVAS);
   ctx.fillStyle = BACKDROP;
   ctx.fillRect(0, 0, viewport.width, viewport.height);
-  desk.guild.renderPanel(ctx, desk.purse);
+  desk.guild.renderPanel(ctx, desk.purse, desk.companionPurse);
   return canvas;
 }
 
@@ -192,7 +194,7 @@ function rowCentre(
   desk: Desk,
   viewport: Viewport,
   row: number,
-): [number, number, { coins: number }] {
+): [number, number, { coins: number }, { coins: number }] {
   clearMenuFocus();
   stepFocus(desk, viewport, row + 1);
   const point = focusedButtonClickPoint();
@@ -200,9 +202,9 @@ function rowCentre(
   render(desk, viewport);
   if (point === null) {
     failures.push(`${viewport.name}: row ${row} not in the ring`);
-    return [-1, -1, desk.purse];
+    return [-1, -1, desk.purse, desk.companionPurse];
   }
-  return [point.x, point.y, desk.purse];
+  return [point.x, point.y, desk.purse, desk.companionPurse];
 }
 
 /** An Enter press: a click where the focused (or primary) button is, then the next frame. */
@@ -213,7 +215,7 @@ function enter(desk: Desk, viewport: Viewport): void {
     failures.push(`${viewport.name}: Enter found nothing to press`);
     return;
   }
-  desk.guild.handleClick(point.x, point.y, desk.purse);
+  desk.guild.handleClick(point.x, point.y, desk.purse, desk.companionPurse);
   render(desk, viewport);
 }
 
@@ -258,9 +260,19 @@ function checkKeyboard(viewport: Viewport): void {
   if (rowPoint === null) failures.push(`${name}: no focused row to click`);
   else {
     // The pointer lands exactly where the keyboard would, on the row the ring is on.
-    focusedRow.guild.handleClick(rowPoint.x, rowPoint.y, focusedRow.purse);
+    focusedRow.guild.handleClick(
+      rowPoint.x,
+      rowPoint.y,
+      focusedRow.purse,
+      focusedRow.companionPurse,
+    );
     render(focusedRow, viewport);
-    focusedRow.guild.handleClick(rowPoint.x, rowPoint.y, focusedRow.purse);
+    focusedRow.guild.handleClick(
+      rowPoint.x,
+      rowPoint.y,
+      focusedRow.purse,
+      focusedRow.companionPurse,
+    );
     check(focusedRow.roster.active === null, `${name}: clicking a focused row hired it`);
   }
 
@@ -291,9 +303,9 @@ function checkPointerDoubleHire(viewport: Viewport): void {
     failures.push(`${viewport.name}: Enter on a row did not focus Hire`);
     return;
   }
-  desk.guild.handleClick(hirePoint.x, hirePoint.y, desk.purse);
+  desk.guild.handleClick(hirePoint.x, hirePoint.y, desk.purse, desk.companionPurse);
   render(desk, viewport);
-  desk.guild.handleClick(hirePoint.x, hirePoint.y, desk.purse);
+  desk.guild.handleClick(hirePoint.x, hirePoint.y, desk.purse, desk.companionPurse);
   render(desk, viewport);
   check(
     hiredId(desk) === 'bucket_boy' && desk.purse.coins === RICH_PURSE - BUCKET_BOY_PRICE,

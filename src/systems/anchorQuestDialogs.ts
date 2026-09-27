@@ -59,6 +59,7 @@ export function buildOfferDialog(reward: DialogReward): DialogPage[] {
       button: 'Find the shards',
       declineButton: 'Not today',
       reward,
+      questRelated: true,
     },
   ];
 }
@@ -102,6 +103,7 @@ export function buildAssemblyDialog(feeCoins: number, reward: DialogReward): Dia
       button: `Pay ${feeCoins}c`,
       declineButton: 'Keep the coins',
       reward,
+      questRelated: true,
     },
     {
       title: VOSS,
@@ -113,6 +115,7 @@ export function buildAssemblyDialog(feeCoins: number, reward: DialogReward): Dia
         'It will not work underground, it will not work with something snarling at you, and it will absolutely not work in a boss room, so do not embarrass us both.',
       ],
       button: 'Take the stone',
+      questRelated: true,
     },
   ];
 }
@@ -168,6 +171,7 @@ export function buildHildaRequestDialog(
       ],
       button: "I'll do it",
       declineButton: 'Later',
+      questRelated: true,
     },
   ];
 }
@@ -202,6 +206,7 @@ export function buildHildaRewardDialog(): DialogPage[] {
         'Here, take it before I get used to the quiet and change my mind. Thirty years under a chair leg and it hasn’t so much as dulled. Whatever that thing is, dearie, it isn’t a rock.',
       ],
       button: 'Take the shard',
+      questRelated: true,
     },
   ];
 }
@@ -235,6 +240,7 @@ export function buildAvielRequestDialog(): DialogPage[] {
       ],
       button: 'Consider it done',
       declineButton: 'Not now',
+      questRelated: true,
     },
   ];
 }
@@ -269,6 +275,7 @@ export function buildAvielRewardDialog(): DialogPage[] {
         'Take it. It came loose the moment I touched it, which I choose not to think about. Tell Madame Voss the temple says hello, and that we know exactly what she charges.',
       ],
       button: 'Take the shard',
+      questRelated: true,
     },
   ];
 }

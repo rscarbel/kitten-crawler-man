@@ -11,6 +11,7 @@
  */
 
 import type { Player } from '../../Player';
+import { canAffordCoins, partyCoins, spendPartyCoins } from '../../core/partyCoins';
 import { Deck, type Card, type ShoeState } from './Deck';
 import {
   BLACKJACK_TOTAL,
@@ -150,9 +151,9 @@ export class BlackjackTable {
     return this.coinsWagered > HIGH_ROLLER_UNLOCK_WAGERED ? HIGH_ROLLER_MAXIMUM : TABLE_MAXIMUM;
   }
 
-  /** The most that can sit on the felt, also bounded by what the player actually holds. */
-  effectiveMaximum(player: Player): number {
-    return Math.min(this.tableMaximum, player.coins + this.betTotal);
+  /** The most that can sit on the felt, also bounded by what the party purse actually holds. */
+  effectiveMaximum(player: Player, companion: Player): number {
+    return Math.min(this.tableMaximum, partyCoins(player, companion) + this.betTotal);
   }
 
   get betTotal(): number {
@@ -170,8 +171,8 @@ export class BlackjackTable {
     return this.phase === 'dealing' || this.phase === 'player_turn' || this.phase === 'dealer_turn';
   }
 
-  /** Sitting down: a player who cannot cover the minimum is turned away, warmly. */
-  sitDown(player: Player): void {
+  /** Sitting down: a party that cannot cover the minimum is turned away, warmly. */
+  sitDown(player: Player, companion: Player): void {
     this.feedback = null;
     // Settle up whatever the last session left — chips on the felt, a hand still
     // live, a payout not yet collected — before wiping the table. Clearing state
@@ -184,7 +185,7 @@ export class BlackjackTable {
     this.holeCardRevealed = false;
     this.stake = 0;
     this.doubled = false;
-    this.phase = player.coins < TABLE_MINIMUM ? 'turned_away' : 'betting';
+    this.phase = canAffordCoins(player, companion, TABLE_MINIMUM) ? 'betting' : 'turned_away';
   }
 
   /**
@@ -237,20 +238,20 @@ export class BlackjackTable {
 
   // ── Betting ───────────────────────────────────────────────────────────────
 
-  addChip(denomination: ChipDenomination, player: Player): void {
+  addChip(denomination: ChipDenomination, player: Player, companion: Player): void {
     if (this.phase !== 'betting') return;
-    if (player.coins < denomination) {
-      this.feedback = `You're ${denomination - player.coins} coins short of that chip.`;
+    if (!canAffordCoins(player, companion, denomination)) {
+      this.feedback = `You're ${denomination - partyCoins(player, companion)} coins short of that chip.`;
       return;
     }
-    const ceiling = this.effectiveMaximum(player);
+    const ceiling = this.effectiveMaximum(player, companion);
     if (this.betTotal + denomination > ceiling) {
       this.feedback = `Table maximum is ${this.tableMaximum}.`;
       return;
     }
     // Coins move the instant a chip leaves the tray — the tray and the felt are
     // the same money, so there is no separate balance that could drift.
-    player.coins -= denomination;
+    spendPartyCoins(player, companion, denomination, player);
     this.pendingBet.push(denomination);
     this.feedback = null;
     this.emit({ kind: 'chip_added', denomination });
@@ -272,14 +273,14 @@ export class BlackjackTable {
     this.feedback = null;
   }
 
-  /** Re-stack the previous hand's chips, dropping any the player can no longer afford. */
-  repeatLastBet(player: Player): void {
+  /** Re-stack the previous hand's chips, dropping any the party can no longer afford. */
+  repeatLastBet(player: Player, companion: Player): void {
     if (this.phase !== 'betting') return;
     this.refundPendingBet(player);
     for (const chip of this.lastBet) {
-      if (player.coins < chip) break;
-      if (this.betTotal + chip > this.effectiveMaximum(player)) break;
-      player.coins -= chip;
+      if (!canAffordCoins(player, companion, chip)) break;
+      if (this.betTotal + chip > this.effectiveMaximum(player, companion)) break;
+      spendPartyCoins(player, companion, chip, player);
       this.pendingBet.push(chip);
       this.emit({ kind: 'chip_added', denomination: chip });
     }
@@ -339,22 +340,22 @@ export class BlackjackTable {
     this.enterDealerTurn();
   }
 
-  canDoubleDown(player: Player): boolean {
+  canDoubleDown(player: Player, companion: Player): boolean {
     return (
       this.phase === 'player_turn' &&
       this.playerHand.length === 2 &&
       !this.doubled &&
-      player.coins >= this.stake
+      canAffordCoins(player, companion, this.stake)
     );
   }
 
-  doubleDown(player: Player): void {
+  doubleDown(player: Player, companion: Player): void {
     if (this.phase !== 'player_turn') return;
-    if (!this.canDoubleDown(player)) {
+    if (!this.canDoubleDown(player, companion)) {
       this.feedback = `Doubling costs another ${this.stake} coins.`;
       return;
     }
-    player.coins -= this.stake;
+    spendPartyCoins(player, companion, this.stake, player);
     this.coinsWagered += this.stake;
     this.stake *= 2;
     this.doubled = true;
@@ -365,8 +366,8 @@ export class BlackjackTable {
     this.enterDealerTurn();
   }
 
-  /** Start the next hand, or show the turn-away screen if the tray is empty. */
-  nextHand(player: Player): void {
+  /** Start the next hand, or show the turn-away screen if the party can't cover the minimum. */
+  nextHand(player: Player, companion: Player): void {
     if (this.phase !== 'settled') return;
     this.outcome = null;
     this.playerHand = [];
@@ -375,7 +376,7 @@ export class BlackjackTable {
     this.stake = 0;
     this.doubled = false;
     this.feedback = null;
-    this.phase = player.coins < TABLE_MINIMUM ? 'turned_away' : 'betting';
+    this.phase = canAffordCoins(player, companion, TABLE_MINIMUM) ? 'betting' : 'turned_away';
   }
 
   // ── Frame-driven beats ────────────────────────────────────────────────────

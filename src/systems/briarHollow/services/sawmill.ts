@@ -142,6 +142,8 @@ export interface SawmillDeps {
   readonly fennaTilesFrom: (crawler: Crawler) => number | null;
   /** Has Fenna say she needs wood to work with. */
   readonly fennaNoWood: () => void;
+  /** Whether Fenna has let the crawlers use the machines yet. */
+  readonly unlocked: () => boolean;
 }
 
 interface ManualJob {
@@ -170,13 +172,25 @@ export class SawmillService {
   private keyHeld = false;
   /** A long-press asked for the run to carry on until something stops it. */
   private keepGoing = false;
+  /**
+   * Station kinds a quest guidance step is currently pointing at. Their far
+   * indicator stays lit at close range too — a step that names a station
+   * needs its badge visible while the player stands at it, not just while
+   * approaching.
+   */
+  private questForcedKinds: ReadonlySet<ProcessingStationKind> = new Set();
 
   constructor(private readonly deps: SawmillDeps) {
     this.stations = processingStationsOf(deps.site);
   }
 
-  /** The machine `crawler` can work from where they stand, or null. */
+  /**
+   * The machine `crawler` can work from where they stand, or null. Before
+   * Fenna has opened the machines up, this is always null — no prompt, glow,
+   * far badge, or press ever reaches a station downstream of this one check.
+   */
   stationFor(crawler: Crawler): ProcessingStation | null {
+    if (!this.deps.unlocked()) return null;
     const centre = bodyCentre(crawler);
     return processingStationInReach(this.stations, centre.x, centre.y);
   }
@@ -216,6 +230,11 @@ export class SawmillService {
   /** The interact key went down (`true`) or up (`false`). Only a held key carries a run on. */
   setKeyHeld(held: boolean): void {
     this.keyHeld = held;
+  }
+
+  /** Which station kinds a quest guidance step wants kept visible up close, if any. */
+  setQuestForcedKinds(kinds: readonly ProcessingStationKind[]): void {
+    this.questForcedKinds = new Set(kinds);
   }
 
   /**
@@ -413,7 +432,7 @@ export class SawmillService {
     camY: number,
     active: Crawler,
   ): void {
-    if (interactionPromptsSuppressed()) return;
+    if (interactionPromptsSuppressed() || !this.deps.unlocked()) return;
     const activeCentre = bodyCentre(active);
     for (const station of this.stations) {
       if (this.job?.station === station) continue;
@@ -431,14 +450,16 @@ export class SawmillService {
     const centre = footprintCentre(station);
     const distanceTiles =
       Math.hypot(centre.x - activeCentre.x, centre.y - activeCentre.y) / TILE_SIZE;
-    const fade = Math.min(
-      1,
-      Math.max(
-        0,
-        (distanceTiles - FAR_ICON_FADE_END_TILES) /
-          (FAR_ICON_FADE_START_TILES - FAR_ICON_FADE_END_TILES),
-      ),
-    );
+    const fade = this.questForcedKinds.has(station.kind)
+      ? 1
+      : Math.min(
+          1,
+          Math.max(
+            0,
+            (distanceTiles - FAR_ICON_FADE_END_TILES) /
+              (FAR_ICON_FADE_START_TILES - FAR_ICON_FADE_END_TILES),
+          ),
+        );
     if (fade <= 0) return;
     const hasWood = partyWood(this.deps.party) >= 1;
     const alpha = fade * (hasWood ? 1 : FAR_ICON_NO_WOOD_ALPHA);

@@ -25,6 +25,7 @@ import { QuestManager, type QuestStatus } from '../core/QuestManager';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { Player } from '../Player';
+import { canAffordCoins, spendPartyCoins } from '../core/partyCoins';
 import type { GrantedReward } from '../core/GrantedReward';
 import type { AnchorQuestProgress } from '../core/AnchorQuestProgress';
 import { ANCHOR_SHARD_IDS, ITEM_DEF, QUEST_SLOT_IDX, type ItemId } from '../core/ItemDefs';
@@ -237,6 +238,12 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     return true;
   }
 
+  /** The other crawler, for a purchase that draws from the party's shared purse. */
+  private companionOf(active: Player): Player {
+    const companion = this.crawlers().find((crawler) => crawler !== active);
+    return companion ?? active;
+  }
+
   /** What Voss says right now, or null when she has nothing left but the cards. */
   private pagesFor(active: Player): DialogPage[] | null {
     const reward = buildAnchorReward(ANCHOR_QUEST_XP);
@@ -253,7 +260,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
         this.outstandingShards.map((id) => SHARD_REMINDERS[id]),
       );
     }
-    if (active.coins < ANCHOR_ASSEMBLY_FEE_COINS) {
+    if (!canAffordCoins(active, this.companionOf(active), ANCHOR_ASSEMBLY_FEE_COINS)) {
       this.dialogKind = 'cannot_afford';
       return buildCannotAffordDialog(ANCHOR_ASSEMBLY_FEE_COINS);
     }
@@ -299,7 +306,8 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
   // ── The assembly ──────────────────────────────────────────────────────────
 
   private assemble(payer: Player): void {
-    if (payer.coins < ANCHOR_ASSEMBLY_FEE_COINS) {
+    const companion = this.companionOf(payer);
+    if (!canAffordCoins(payer, companion, ANCHOR_ASSEMBLY_FEE_COINS)) {
       this.audio?.play('error_taking_action');
       this.toast(`Madame Voss wants ${ANCHOR_ASSEMBLY_FEE_COINS} coins.`);
       return;
@@ -323,7 +331,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
         if (crawler.inventory.removeOne(shardId)) break;
       }
     }
-    payer.coins -= ANCHOR_ASSEMBLY_FEE_COINS;
+    spendPartyCoins(payer, companion, ANCHOR_ASSEMBLY_FEE_COINS, payer);
 
     for (const crawler of crawlers) this.grantAnchor(crawler);
 

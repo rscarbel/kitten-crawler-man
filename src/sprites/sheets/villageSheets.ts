@@ -137,7 +137,13 @@ export const VILLAGE_SHEETS: ReadonlyArray<VillageSheetSpec> = [
   { key: 'village_3x1', w: 3, h: 1, headroomTiles: 1, props: ['serving_counter'] },
   { key: 'village_4x1', w: 4, h: 1, headroomTiles: 1, props: ['long_table'] },
   { key: 'village_1x2', w: 1, h: 2, headroomTiles: 1, props: ['cot', 'bed', 'bunk'] },
-  { key: 'village_2x2', w: 2, h: 2, headroomTiles: 3, props: ['bell_tower', 'forge_hearth'] },
+  {
+    key: 'village_2x2',
+    w: 2,
+    h: 2,
+    headroomTiles: 3,
+    props: ['bell_tower', 'forge_hearth', 'bell_tower_broken'],
+  },
   { key: 'village_2x3', w: 2, h: 3, headroomTiles: 2, props: ['sawmill_machine'] },
 ];
 

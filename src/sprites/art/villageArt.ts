@@ -771,6 +771,7 @@ export function drawBox(
  */
 export const OUTDOOR_PROPS = [
   'bell_tower',
+  'bell_tower_broken',
   'well',
   'notice_board',
   'lamp_post',

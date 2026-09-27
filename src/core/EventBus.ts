@@ -245,6 +245,9 @@ export interface GameEvents {
   /** The Briar Hollow defense quest moved to a new phase. */
   villageQuestPhaseChanged: { phase: VillageQuestPhase };
 
+  /** The bell tower, broken by a lost siege, was rebuilt. */
+  bellTowerRepaired: Record<string, never>;
+
   /** A wave of the village assault began. `index` counts from 0. */
   villageAssaultWave: { index: number };
 

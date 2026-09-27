@@ -67,6 +67,8 @@ export interface ConstructionMenuSource {
   start(option: BuildOption): boolean;
   /** The row whose ghost the world should draw, or null for none. */
   setPreview(option: BuildOption | null): void;
+  /** Called when the menu opens, so anything left over from a prior attempt (a "no room" silhouette) clears. */
+  onOpen?(): void;
 }
 
 /** The active crawler's header line. */
@@ -156,7 +158,8 @@ interface MenuLayout {
 
 interface RowHit {
   readonly option: BuildOption;
-  readonly enabled: boolean;
+  /** Whether a click here should choose the row — true both when it would start a job and when it is only room-blocked. */
+  readonly clickable: boolean;
   readonly x: number;
   readonly y: number;
   readonly w: number;
@@ -193,6 +196,7 @@ export class ConstructionMenu {
     this.tappedPreview = null;
     clearMenuFocus();
     this.audio?.play('menu_open');
+    source.onOpen?.();
   }
 
   close(): void {
@@ -311,6 +315,8 @@ export class ConstructionMenu {
     const columnWidth = (innerWidth - COMPACT_COLUMN_GAP * (COMPACT_COLUMNS - 1)) / COMPACT_COLUMNS;
     rows.forEach((row, index) => {
       const enabled = row.enabled && !this.readOnly;
+      // A row blocked only by room stays pressable: choosing it shows where the build was tried and why not.
+      const clickable = (row.enabled || row.roomBlocked) && !this.readOnly;
       const column = layout.compact ? Math.floor(index / rowsPerColumn) : 0;
       const rowInColumn = layout.compact ? index % rowsPerColumn : index;
       const rowHeight = layout.compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
@@ -324,13 +330,13 @@ export class ConstructionMenu {
         width: rowWidth,
         height: rowHeight,
         label: '',
-        disabled: !enabled,
+        disabled: !clickable,
         ...BUTTON_PRESETS.trackerRow,
         action: () => this.choose(row.option),
       });
       this.rowHits.push({
         option: row.option,
-        enabled,
+        clickable,
         x: rowX,
         y: rowY,
         w: rowWidth,
@@ -613,7 +619,7 @@ export class ConstructionMenu {
     for (const hit of this.rowHits) {
       const inside = mx >= hit.x && mx <= hit.x + hit.w && my >= hit.y && my <= hit.y + hit.h;
       if (!inside) continue;
-      if (hit.enabled) this.choose(hit.option);
+      if (hit.clickable) this.choose(hit.option);
       // A disabled row still shows where it would go and why it cannot.
       else this.tappedPreview = hit.option;
       return true;

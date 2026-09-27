@@ -37,6 +37,7 @@ import { isInsideSlamCone, type SlamImpact } from '../creatures/grotesqueSpiderT
 import { SpiderImpactFeedback } from './SpiderImpactFeedback';
 import { lifeMachineSacSplitFrame } from '../sprites/lifeMachineTiming';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
+import { drawQuestIcon } from '../ui/QuestIcon';
 import { KeyboardHeroSystem, type KeyboardHeroCheckpoint } from './KeyboardHeroSystem';
 import { HIT_ZONE_IMG_CENTER, MAX_PLAYABLE_GAP_MS } from './keyboardHeroGeometry';
 import {
@@ -197,6 +198,8 @@ const DIALOG_BUTTON_HEIGHT = 30;
 const DIALOG_BUTTON_OFFSET_BOTTOM = 46;
 const DIALOG_BUTTON_SPACING = 10;
 const DIALOG_BUTTON_LABEL_SIZE = 12;
+const DIALOG_QUEST_ICON_SIZE = 16;
+const DIALOG_QUEST_ICON_TITLE_GAP = 8;
 const FAILED_DIALOG_WIDTH_MIN = 400;
 const FAILED_DIALOG_HEIGHT = 160;
 const FAILED_DIALOG_TITLE_OFFSET_Y = 26;
@@ -2660,9 +2663,16 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.strokeRect(dx, dy, dw, dh);
     ctx.restore();
 
+    const titleY = dy + DIALOG_TITLE_OFFSET_Y - DIALOG_TITLE_OFFSET_Y_ADJUSTMENT;
+    drawQuestIcon(
+      ctx,
+      dx + DIALOG_TITLE_OFFSET_X + DIALOG_QUEST_ICON_SIZE / 2,
+      titleY + DIALOG_QUEST_ICON_SIZE / 2,
+      DIALOG_QUEST_ICON_SIZE,
+    );
     drawText(ctx, 'Scientist', {
-      x: dx + DIALOG_TITLE_OFFSET_X,
-      y: dy + DIALOG_TITLE_OFFSET_Y - DIALOG_TITLE_OFFSET_Y_ADJUSTMENT,
+      x: dx + DIALOG_TITLE_OFFSET_X + DIALOG_QUEST_ICON_SIZE + DIALOG_QUEST_ICON_TITLE_GAP,
+      y: titleY,
       size: 13,
       bold: true,
       color: '#fbbf24',
@@ -2704,6 +2714,7 @@ export class SpiderQuestSystem implements GameSystem {
       ...BUTTON_PRESETS.success,
       labelSize: DIALOG_BUTTON_LABEL_SIZE,
       primaryAction: true,
+      questRelated: true,
     });
     this.dialogButtons.push({ x: helpX, y: btnY, w: btnW, h: btnH, action: 'accept' });
 

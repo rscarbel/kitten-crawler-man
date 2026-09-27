@@ -27,6 +27,8 @@ export interface ConversationChoice {
   run(): void;
   /** The row's way out — what Space picks on the choice row. */
   readonly isExit?: boolean;
+  /** Picking this choice moves an active quest on; the button wears the quest badge. */
+  readonly questRelated?: boolean;
 }
 
 const CHOICE_BUTTON_WIDTH = 200;
@@ -97,6 +99,7 @@ export class VillagerConversation {
    * that finishes reading is the press that leaves.
    */
   private endOnLastPage: (() => void) | null = null;
+  private pagesQuestRelated = false;
 
   constructor(private readonly audio: AudioManager | null) {}
 
@@ -126,16 +129,22 @@ export class VillagerConversation {
     this.choices = [];
     this.choiceRowRendered = false;
     this.endOnLastPage = null;
+    this.pagesQuestRelated = false;
   }
 
-  /** Shows `pages` one after another; the choices return after the last. */
-  showPages(pages: readonly string[]): void {
+  /**
+   * Shows `pages` one after another; the choices return after the last.
+   * `questRelated` shows the quest badge on every page — for pages an active
+   * quest needs that offer no choice of their own.
+   */
+  showPages(pages: readonly string[], questRelated = false): void {
     if (this.box === null || pages.length === 0) return;
     this.pages = pages;
     this.pageIndex = 0;
     this.phase = 'line';
     this.choiceRowRendered = false;
     this.endOnLastPage = null;
+    this.pagesQuestRelated = questRelated;
     this.showCurrentPage();
   }
 
@@ -166,16 +175,17 @@ export class VillagerConversation {
     this.choiceRects = [];
     this.choiceRowRendered = false;
     this.endOnLastPage = null;
+    this.pagesQuestRelated = false;
   }
 
   private showCurrentPage(): void {
     const box = this.box;
     if (box === null) return;
     const total = this.pages.length;
-    box.show(
-      this.pages[this.pageIndex],
-      total > 1 ? { pageIndicator: { current: this.pageIndex + 1, total } } : undefined,
-    );
+    box.show(this.pages[this.pageIndex], {
+      ...(total > 1 ? { pageIndicator: { current: this.pageIndex + 1, total } } : {}),
+      questRelated: this.pagesQuestRelated,
+    });
   }
 
   private get onLastPage(): boolean {
@@ -344,6 +354,7 @@ export class VillagerConversation {
         ...(choice.isExit === true ? BUTTON_PRESETS.primary : BUTTON_PRESETS.villagerTopic),
         labelSize: VILLAGER_CHOICE_LABEL_SIZE,
         primaryAction: choice.isExit === true,
+        questRelated: choice.questRelated === true,
       });
       this.choiceRects.push({ index, x, y, w: buttonWidth, h: CHOICE_BUTTON_HEIGHT, label });
     });

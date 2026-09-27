@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
 import { CLUB_MERC_DESK_TILE } from '../core/clubLayout';
@@ -308,25 +309,25 @@ export class MercenaryGuildSystem {
   }
 
   /** Rosemarie's reason not to sign `template` right now, or null when she will. */
-  private hireRefusal(template: MercenaryTemplate, player: Purse): string | null {
+  private hireRefusal(template: MercenaryTemplate, player: Purse, companion: Purse): string | null {
     // Only a harness builds the desk with no floor under it; a contract with
     // no floor to run to would never end.
     if (this.roster.floorLevelId === null) return NO_FLOOR;
     if (this.roster.active !== null) return CONTRACT_ACTIVE;
-    if (player.coins < template.price) return NOT_ENOUGH_COINS;
+    if (!canAffordCoins(player, companion, template.price)) return NOT_ENOUGH_COINS;
     return null;
   }
 
-  private hire(id: MercenaryTemplateId, player: Purse): void {
+  private hire(id: MercenaryTemplateId, player: Purse, companion: Purse): void {
     const template = getMercenaryTemplate(id);
-    const refusal = this.hireRefusal(template, player);
+    const refusal = this.hireRefusal(template, player, companion);
     const contractLevelId = this.roster.floorLevelId;
     if (refusal !== null || contractLevelId === null) {
       this.say(refusal ?? NO_FLOOR);
       this.audio?.play('error');
       return;
     }
-    player.coins -= template.price;
+    spendPartyCoins(player, companion, template.price, player);
     activeRunStats()?.recordHirelingHired();
     // Warmed on the signature rather than on the first frame the hire is
     // drawn: it walks out of the club already moving.
@@ -359,7 +360,7 @@ export class MercenaryGuildSystem {
    * Enter on the selected row: move into its pane when there is something to
    * do there, or hear from Rosemarie why there isn't. Never signs anything.
    */
-  private activateEntry(index: number, player: Purse): void {
+  private activateEntry(index: number, player: Purse, companion: Purse): void {
     const entry = DESK_ENTRIES[index];
     if (entry.kind === 'refusal') {
       this.say(DAMASCUS_REFUSAL);
@@ -367,7 +368,7 @@ export class MercenaryGuildSystem {
       return;
     }
     const underContract = this.roster.active?.id === entry.template.id;
-    const refusal = underContract ? null : this.hireRefusal(entry.template, player);
+    const refusal = underContract ? null : this.hireRefusal(entry.template, player, companion);
     if (refusal !== null) {
       this.say(refusal);
       this.audio?.play('error');
@@ -382,7 +383,7 @@ export class MercenaryGuildSystem {
     this.confirmingDismiss = false;
   }
 
-  handleClick(mx: number, my: number, player: Purse): void {
+  handleClick(mx: number, my: number, player: Purse, companion: Purse): void {
     const point = modalFitPoint(this.fit, mx, my);
     for (const btn of this.buttons) {
       if (!pointInRect(point.x, point.y, btn)) continue;
@@ -391,13 +392,13 @@ export class MercenaryGuildSystem {
         case 'select':
           // A press on the row the ring is on is Enter; any other only selects.
           if (action.index === this.selected && action.index === this.focusedRow) {
-            this.activateEntry(action.index, player);
+            this.activateEntry(action.index, player, companion);
           } else {
             this.select(action.index);
           }
           return;
         case 'hire':
-          this.hire(action.id, player);
+          this.hire(action.id, player, companion);
           return;
         case 'askDismiss':
           if (this.roster.active === null) return;
@@ -419,7 +420,7 @@ export class MercenaryGuildSystem {
     }
   }
 
-  renderPanel(ctx: CanvasRenderingContext2D, player: Purse): void {
+  renderPanel(ctx: CanvasRenderingContext2D, player: Purse, companion: Purse): void {
     if (!this.open) return;
     this.buttons = [];
 
@@ -480,13 +481,13 @@ export class MercenaryGuildSystem {
       this.pendingFocus = null;
     }
     this.renderList(ctx, listRect);
-    this.renderPane(ctx, paneRect, player);
+    this.renderPane(ctx, paneRect, player, companion);
     endMenuFocus();
 
     const speechY = bodyY + listRect.h + SPEECH_GAP;
     this.renderSpeech(ctx, { x: inner.x, y: speechY, w: inner.width, h: SPEECH_H });
 
-    drawText(ctx, `Coins: ${player.coins}`, {
+    drawText(ctx, `Coins: ${partyCoins(player, companion)}`, {
       x: inner.x + inner.width,
       y: inner.y + COINS_Y,
       size: COINS_SIZE,
@@ -589,7 +590,12 @@ export class MercenaryGuildSystem {
     this.buttons.push({ x: result.x, y: result.y, w: result.width, h: result.height, action });
   }
 
-  private renderPane(ctx: CanvasRenderingContext2D, rect: Rect, player: Purse): void {
+  private renderPane(
+    ctx: CanvasRenderingContext2D,
+    rect: Rect,
+    player: Purse,
+    companion: Purse,
+  ): void {
     this.paneHadFocus = false;
     drawBox(ctx, {
       x: rect.x,
@@ -683,10 +689,10 @@ export class MercenaryGuildSystem {
     const actionX = rect.x + PANE_PAD;
     const noteY = buttonY - NOTE_GAP - NOTE_SIZE;
     if (!hiredHere) {
-      this.renderNote(ctx, this.hireNote(template, player), actionX, noteY);
+      this.renderNote(ctx, this.hireNote(template, player, companion), actionX, noteY);
       // Drawn disabled, which keeps it off the ring, but still hit-tested: a
       // click on it is how a player hears why they can't sign.
-      const disabled = this.hireRefusal(template, player) !== null;
+      const disabled = this.hireRefusal(template, player, companion) !== null;
       this.paneButton(
         ctx,
         {
@@ -763,13 +769,13 @@ export class MercenaryGuildSystem {
   }
 
   /** Why the Hire button is dimmed, or null when it isn't. */
-  private hireNote(template: MercenaryTemplate, player: Purse): string | null {
+  private hireNote(template: MercenaryTemplate, player: Purse, companion: Purse): string | null {
     const active = this.roster.active;
     if (active !== null && active.id !== template.id) {
       return `${active.name} holds your contract. Dismiss them first.`;
     }
-    if (active === null && player.coins < template.price) {
-      return `You're ${template.price - player.coins} coins short.`;
+    if (active === null && !canAffordCoins(player, companion, template.price)) {
+      return `You're ${template.price - partyCoins(player, companion)} coins short.`;
     }
     return null;
   }

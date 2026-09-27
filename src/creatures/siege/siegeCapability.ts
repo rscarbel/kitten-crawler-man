@@ -70,6 +70,9 @@ export function isStandingStructure(defense: DefenseStructures, ref: StructureRe
       return defense.snare(ref.key)?.broken === false;
     case 'bell':
       return !defense.bellCracked;
+    // Never targeted: a siege cannot even start while the tower is broken.
+    case 'bellTower':
+      return false;
   }
 }
 

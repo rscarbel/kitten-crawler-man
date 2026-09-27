@@ -17,10 +17,12 @@
  * - **Lost** when the Hollow Bell is beaten to nothing, or when the active
  *   crawler stays away from the village too long. The dead walk back up their
  *   lanes and are released out of sight; the walls stay as broken as they
- *   are, for the party to rebuild and try again.
+ *   are, for the party to rebuild and try again. Losing to the bell itself
+ *   falling leaves the tower broken — no alarm, no save point — until the
+ *   party repairs it and the questline can call another siege.
  *
- * Either way the villagers mend their bell. There is no death and no reset in
- * a lost siege: it is a setback, not a game over.
+ * There is no death and no reset in a lost siege: it is a setback, not a
+ * game over.
  *
  * Nothing here is durable. The phase, the countdown and the bell live in the
  * quest state, and a save or a checkpoint never records a siege in progress
@@ -160,6 +162,14 @@ export const WITHDRAW_RELEASE_TILES = 20;
 /** Or after this long, wherever it has got to — a withdrawal must end. */
 const WITHDRAW_TIMEOUT_SECONDS = 30;
 const WITHDRAW_TIMEOUT_FRAMES = WITHDRAW_TIMEOUT_SECONDS * UPDATES_PER_SECOND;
+/**
+ * Vordrick is the one figure of the retreat the banner names, so a longer
+ * hold-up than this reads as the boss stuck on scenery rather than the
+ * villain making his escape; a rank-and-file straggler can afford the full
+ * {@link WITHDRAW_TIMEOUT_SECONDS} unnoticed.
+ */
+const VORDRICK_WITHDRAW_TIMEOUT_SECONDS = 12;
+const VORDRICK_WITHDRAW_TIMEOUT_FRAMES = VORDRICK_WITHDRAW_TIMEOUT_SECONDS * UPDATES_PER_SECOND;
 /** How far a withdrawal's path search may reach: across the village and back out a lane. */
 const WITHDRAW_PATH_SEARCH_TILES = 140;
 /** Withdrawal paths planned per update, so a whole wave turning round costs no single frame. */
@@ -663,7 +673,12 @@ interface Withdrawal {
   path: Array<{ x: number; y: number }> | null;
   step: number;
   frames: number;
+  /** How long this mob gets before it counts as stuck rather than still walking. */
+  readonly timeoutFrames: number;
 }
+
+/** How a withdrawal has gone so far. */
+type WithdrawalStatus = 'walking' | 'left' | 'stuck';
 
 /**
  * The dead's frame after the bell falls: no more fighting, just the walk back
@@ -720,14 +735,24 @@ class WithdrawDirective implements SiegeDirective {
     return true;
   }
 
-  /** Whether a withdrawing mob is out far enough, or has walked long enough, to be let go. */
-  isDone(mob: Mob): boolean {
+  /**
+   * How a withdrawal has gone: `left` once it has actually reached the lane's
+   * spawn point or is far enough outside the palisade to let go of quietly;
+   * `stuck` once no route out was ever found, or it has been walking this
+   * long without reaching either — release it with the warp the same way a
+   * blocked one is; `walking` otherwise.
+   */
+  status(mob: Mob): WithdrawalStatus {
     const walk = this.walks.get(mob);
-    if (walk === undefined) return true;
-    if (walk.frames >= WITHDRAW_TIMEOUT_FRAMES) return true;
-    if (walk.path !== null && walk.step >= walk.path.length) return true;
+    if (walk === undefined) return 'left';
+    const blocked = walk.path !== null && walk.path.length === 0;
+    const reachedLaneExit =
+      walk.path !== null && walk.path.length > 0 && walk.step >= walk.path.length;
     const tile = tileUnder(mob);
-    return tilesOutsidePalisade(this.site, tile.x, tile.y) >= WITHDRAW_RELEASE_TILES;
+    const farEnough = tilesOutsidePalisade(this.site, tile.x, tile.y) >= WITHDRAW_RELEASE_TILES;
+    if (reachedLaneExit || farEnough) return 'left';
+    if (blocked || walk.frames >= walk.timeoutFrames) return 'stuck';
+    return 'walking';
   }
 }
 
@@ -1005,6 +1030,9 @@ export class VillageAssaultSystem {
   /** "We're ready": the bell rings and the countdown starts. */
   begin(): void {
     if (this.phase !== 'fortifying') return;
+    // A broken tower has no bell left to sound the alarm on, and nothing to
+    // fall a second time before it is even mended from the first.
+    if (this.deps.state.quest.bellTowerBroken) return;
     this.resetSiegeCounters();
     this.campaign = planSiegeCampaign(this.random);
     campaigns.set(this.deps.state, this.campaign);
@@ -1236,7 +1264,7 @@ export class VillageAssaultSystem {
       return;
     }
     if (this.deps.defense.bellCracked) {
-      this.lose(BELL_FALLEN_BANNER);
+      this.lose(VORDRICK_FLEES_BANNER);
       return;
     }
     if (this.checkAbandon(frame)) return;
@@ -1661,17 +1689,14 @@ export class VillageAssaultSystem {
       // A swing already under way would land on the bell the siege's end
       // just mended.
       mob.abandonStructureStrike();
-      if (mob instanceof Necromancer) {
-        // He does not walk anywhere: he is simply gone, the way he blinks.
-        this.release(mob, VANISH_IN_A_WISP);
-        continue;
-      }
       const lane = this.laneOf.get(mob) ?? this.nearestLane(mob);
       if (lane === null) {
         this.release(mob, VANISH_IN_A_WISP);
         continue;
       }
-      this.withdraw.walks.set(mob, { lane, path: null, step: 0, frames: 0 });
+      const timeoutFrames =
+        mob instanceof Necromancer ? VORDRICK_WITHDRAW_TIMEOUT_FRAMES : WITHDRAW_TIMEOUT_FRAMES;
+      this.withdraw.walks.set(mob, { lane, path: null, step: 0, frames: 0, timeoutFrames });
       mob.siegeDirective = this.withdraw;
       mob.currentTarget = null;
     }
@@ -1680,6 +1705,8 @@ export class VillageAssaultSystem {
       this.deps.ambience.bell.cracked = true;
       this.bellCrackFrames = BELL_CRACK_SHOWN_FRAMES;
       this.playCue('bellCrack');
+      this.deps.state.quest.bellTowerBroken = true;
+      this.deps.defense.syncMap();
     }
     this.deps.setPhase('repelled_failed');
     this.endSiege();
@@ -1788,8 +1815,16 @@ export class VillageAssaultSystem {
         this.withdraw.walks.delete(mob);
         continue;
       }
-      if (this.withdraw.isDone(mob)) this.release(mob, VANISH_UNSEEN);
+      const status = this.withdraw.status(mob);
+      if (status === 'left') this.release(mob, VANISH_UNSEEN);
+      else if (status === 'stuck') this.releaseStuck(mob);
     }
+  }
+
+  /** A withdrawal that never found a way out, or took too long: gone with the warp it never had to make. */
+  private releaseStuck(mob: Mob): void {
+    this.release(mob, VANISH_IN_A_WISP);
+    this.playCue('withdrawalWarp');
   }
 
   private tickEffects(): void {
@@ -1818,7 +1853,17 @@ export class VillageAssaultSystem {
     if (this.bellFlashFrames > 0) this.bellFlashFrames--;
     if (this.bellCrackFrames > 0) {
       this.bellCrackFrames--;
-      if (this.bellCrackFrames === 0) this.deps.ambience.bell.cracked = false;
+      if (this.bellCrackFrames === 0) {
+        // A bell struck to nothing mid-siege swings dead a few seconds, then
+        // (unless it stays broken for the questline to find) rings again the
+        // next time the alarm calls it. A broken tower has no bell left to
+        // swing at all — the wreck the prop now paints replaces it outright.
+        if (this.deps.state.quest.bellTowerBroken) {
+          this.deps.ambience.invalidate();
+        } else {
+          this.deps.ambience.bell.cracked = false;
+        }
+      }
     }
     // Rung the whole countdown, then in bursts whenever it is struck.
     this.deps.ambience.bell.ringing =
@@ -1892,7 +1937,7 @@ export class VillageAssaultSystem {
     const sideName = side === null ? '' : SIDE_NAMES[side];
     const headline =
       this.phase === 'imminent'
-        ? `The dead are coming from the ${sideName} — ${countdownLabel(this.countdownFrames)}`
+        ? `The army is coming from the ${sideName} — ${countdownLabel(this.countdownFrames)}`
         : this.inLull
           ? `Wave ${this.waveNumber + 1} from the ${sideName} — ${countdownLabel(this.lullFrames)}`
           : `Defend Briar Hollow — Wave ${this.waveNumber}/${ASSAULT_WAVE_COUNT} (${sideName})`;
@@ -2088,7 +2133,7 @@ const SIEGE_MUSIC_FADE_MS = 1000;
 /** The victory track is 12 s long and plays once through before the village's own music returns. */
 const VICTORY_MUSIC_SECONDS = 12;
 const VICTORY_MUSIC_FRAMES = VICTORY_MUSIC_SECONDS * UPDATES_PER_SECOND;
-const BELL_FALLEN_BANNER = 'The bell has fallen. The dead withdraw…';
+const VORDRICK_FLEES_BANNER = 'Vordrick steals the life stone and retreats.';
 const ABANDONED_BANNER = 'You left Briar Hollow to the dead. They withdraw…';
 
 const HUD_LABEL_SIZE = 10;

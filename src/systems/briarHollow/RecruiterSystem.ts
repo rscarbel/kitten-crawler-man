@@ -185,7 +185,11 @@ export class RecruiterSystem {
       this.deps.quest.setPhase('offered');
       this.deps.bus.emit('questStarted', { questId: BRIAR_HOLLOW_QUEST_ID });
     }
-    this.dialog.show(alreadyAccepted ? THANKS_LINE : RECRUIT_LINE);
+    this.dialog.show(alreadyAccepted ? THANKS_LINE : RECRUIT_LINE, {
+      // Only the line that actually starts the questline matters for it — his
+      // return greeting once it is already under way is flavor.
+      questRelated: !alreadyAccepted,
+    });
     return true;
   }
 

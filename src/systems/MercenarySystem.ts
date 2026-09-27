@@ -17,8 +17,8 @@ import { REVIVE_RANGE_PX } from '../core/reviveRules';
 import { activeRunStats } from '../core/GameStats';
 import type { SoundId } from '../audio/sounds';
 import { prewarmTriageSparkle } from '../sprites/crocodilianSprite';
-import { renderHirelingDownedArrow, renderHirelingDownedMarker } from '../ui/HirelingDownedUI';
-import type { ArrowAvoidRect } from '../ui/WorldArrow';
+import { hirelingDownedArrowCandidate, renderHirelingDownedMarker } from '../ui/HirelingDownedUI';
+import type { ArrowAvoidRect, ArrowCandidate } from '../ui/WorldArrow';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import { hasAiAttention } from './MobUpdateLoop';
@@ -469,18 +469,18 @@ export class MercenarySystem implements GameSystem {
     this.corpse?.renderSpeech(ctx, camX, camY);
   }
 
-  /** Points the active crawler at a downed hire it cannot see. Screen space, over the fog. */
-  renderDownedArrow(
+  /** A candidate for the shared arrow arbiter, pointing at a downed hire it cannot see. */
+  downedArrowCandidate(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
     active: Player,
     visibleRadiusPx: number,
     avoidRect?: ArrowAvoidRect,
-  ): void {
+  ): ArrowCandidate | null {
     const merc = this.downedMerc;
-    if (merc === null) return;
-    renderHirelingDownedArrow(ctx, merc, active, camX, camY, visibleRadiusPx, avoidRect);
+    if (merc === null) return null;
+    return hirelingDownedArrowCandidate(ctx, merc, active, camX, camY, visibleRadiusPx, avoidRect);
   }
 
   captureCheckpoint(): MercenaryCheckpoint {

@@ -70,6 +70,7 @@ export function buildBountyOfferDialog(
       ],
       button: 'Take the job',
       declineButton: 'Walk away',
+      questRelated: true,
     },
   ];
 }
@@ -105,6 +106,7 @@ export function buildBountyPayoutDialog(name: string, coins: number): DialogPage
         'There’s always another one.',
       ],
       button: 'Take the coin',
+      questRelated: true,
     },
   ];
 }

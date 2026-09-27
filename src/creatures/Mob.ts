@@ -1400,6 +1400,19 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Tiles this mob's current movement will actually cross, for a village
+   * gate deciding whether to open. Undefined means the gate should fall back
+   * to opening for mere proximity, which is right for a mob with no route of
+   * its own to consult (an ally, a mercenary, a pet); a subclass whose
+   * movement is a route — a patrol, a beat, a post — overrides this so
+   * standing or pacing near a gate without a reason to pass through it never
+   * swings the gate open.
+   */
+  get routeTiles(): ReadonlyArray<{ readonly x: number; readonly y: number }> | undefined {
+    return undefined;
+  }
+
+  /**
    * Whether this mob's presence should be treated as an unfinished fight by
    * room membership checks (the safe-descent gate, a chest's lock, Mongo's pet
    * button). Defaults to alive-and-hostile; a subclass overrides it when a

@@ -24,6 +24,13 @@ export interface PartyCraftsState {
   tools: PartyToolsState;
   /** Craft skills whose "how it works" explainer has already played. */
   explainersSeen: CraftSkillId[];
+  /**
+   * Whether the processing explainer (the saw, the rope walk, and Fenna's
+   * batch service) has already played. Kept apart from `explainersSeen`
+   * because processing is not itself a leveled craft skill, so it has no
+   * `CraftSkillId` to sit alongside there.
+   */
+  processingExplainerSeen: boolean;
   /** The auto-summon toggle from the axe/pickaxe context menu, on by default. */
   autoSummonThralls: AutoSummonThralls;
 }
@@ -32,6 +39,7 @@ export function createPartyCraftsState(): PartyCraftsState {
   return {
     tools: createPartyToolsState(),
     explainersSeen: [],
+    processingExplainerSeen: false,
     autoSummonThralls: defaultAutoSummonThralls(),
   };
 }
@@ -41,6 +49,7 @@ export function clonePartyCraftsState(state: PartyCraftsState): PartyCraftsState
   return {
     tools: { ...state.tools },
     explainersSeen: [...state.explainersSeen],
+    processingExplainerSeen: state.processingExplainerSeen,
     autoSummonThralls: { ...state.autoSummonThralls },
   };
 }
@@ -57,6 +66,7 @@ export function restorePartyCraftsState(
   target.tools.axeTier = snapshot.tools.axeTier;
   target.tools.pickaxeTier = snapshot.tools.pickaxeTier;
   target.explainersSeen = [...snapshot.explainersSeen];
+  target.processingExplainerSeen = snapshot.processingExplainerSeen;
   target.autoSummonThralls = { ...snapshot.autoSummonThralls };
 }
 
@@ -73,8 +83,9 @@ export function parsePartyCraftsState(value: unknown): PartyCraftsState | undefi
         (id): id is CraftSkillId => typeof id === 'string' && isCraftSkillId(id),
       )
     : [];
+  const processingExplainerSeen = value.processingExplainerSeen === true;
   const autoSummonThralls = parseAutoSummonThralls(value.autoSummonThralls);
-  return { tools, explainersSeen, autoSummonThralls };
+  return { tools, explainersSeen, processingExplainerSeen, autoSummonThralls };
 }
 
 function parseAutoSummonThralls(value: unknown): AutoSummonThralls {

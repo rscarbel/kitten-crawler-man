@@ -84,7 +84,6 @@ export type Circumstance =
   | 'construction_skill_already_granted'
   | 'construction_skill_granted'
   | 'construction_tutorial_trigger'
-  | 'construction_unlocked'
   | 'cow_petted_nearby'
   | 'deposit_depleted'
   | 'directions_to_lumber_yard'
@@ -94,8 +93,6 @@ export type Circumstance =
   | 'explain_resource_gathering'
   | 'first_meeting'
   | 'follow_active'
-  | 'fortifications_advanced'
-  | 'fortifications_started'
   | 'fortified_stone_explanation'
   | 'fully_healthy'
   | 'gate_under_attack'
@@ -119,7 +116,6 @@ export type Circumstance =
   | 'quest_offer'
   | 'resourcing_skill_already_granted'
   | 'resourcing_skill_granted'
-  | 'resourcing_unlocked'
   | 'service_menu'
   | 'shared_upgrade_explanation'
   | 'shop_open'
@@ -130,7 +126,6 @@ export type Circumstance =
   | 'stone_delivered'
   | 'stone_upgrade_available'
   | 'stone_wall_explanation'
-  | 'tools_obtained'
   | 'tools_required'
   | 'trebuchet_ammo_explanation'
   | 'trebuchet_explanation'
@@ -139,7 +134,25 @@ export type Circumstance =
   | 'wall_repair_explanation'
   | 'wood_processing_task'
   | 'wooden_wall_built'
-  | 'wooden_wall_explanation';
+  | 'wooden_wall_explanation'
+  | 'tikka_plans_intro'
+  | 'tikka_send_to_fenna'
+  | 'tikka_needs_boards_rope'
+  | 'tikka_materials_received'
+  | 'tikka_plans_handoff'
+  | 'fenna_grants_access'
+  | 'fenna_explains_stations'
+  | 'mayor_shout_summons'
+  | 'mayor_briefing_reason'
+  | 'mayor_briefing_scouts'
+  | 'mayor_briefing_life_stone'
+  | 'mayor_briefing_threat'
+  | 'mayor_briefing_command'
+  | 'mayor_more_time_granted'
+  | 'mayor_loss_unprepared'
+  | 'mayor_loss_facsimile'
+  | 'fortifying_awaiting_word'
+  | 'repair_bell_reminder';
 
 interface DialogueLine {
   readonly circumstance: Circumstance;
@@ -191,26 +204,6 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
         text: "You'll need an axe and a pickaxe before you can gather what we need. Oren keeps them at the forge.",
       },
       {
-        circumstance: 'tools_obtained',
-        text: 'Good. Now you can actually do something useful with all that enthusiasm.',
-      },
-      {
-        circumstance: 'resourcing_unlocked',
-        text: 'Oren has explained the work? Then you know what we need. Every load of wood and stone buys us a little more time.',
-      },
-      {
-        circumstance: 'construction_unlocked',
-        text: "Tikka says you're ready to build. Then perhaps our little town finally has a chance.",
-      },
-      {
-        circumstance: 'fortifications_started',
-        text: "It's beginning to look like a fortress. A very small fortress, but I'll take what I can get.",
-      },
-      {
-        circumstance: 'fortifications_advanced',
-        text: 'Wooden walls, stone walls, siege equipment... I hardly recognize the place anymore.',
-      },
-      {
         circumstance: 'attack_imminent',
         text: "They're coming. Get everyone behind the defenses and prepare yourselves.",
       },
@@ -229,6 +222,50 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       {
         circumstance: 'quest_complete',
         text: "You saved Briar Hollow. I don't know what a village like ours can possibly offer Crawlers, but you have our gratitude.",
+      },
+      {
+        circumstance: 'mayor_shout_summons',
+        text: '[shouting] Carl, Donut, come and speak with me. I have something for you.',
+      },
+      {
+        circumstance: 'mayor_briefing_reason',
+        text: "Tikka, Fenna, and Oren have told me about all the great work you've been doing to help setup stronger defenses around Briar Hollow.",
+      },
+      {
+        circumstance: 'mayor_briefing_scouts',
+        text: 'I hope it is enough. Scouts have spotted Vordrick Boneharrow gathering allies for a massive assault. He wants to take the life stone hidden in our clocktower.',
+      },
+      {
+        circumstance: 'mayor_briefing_life_stone',
+        text: 'The life stone is imbued with powerful healing spells, and it radiates to this village, keeping us alive and well in this harsh world.',
+      },
+      {
+        circumstance: 'mayor_briefing_threat',
+        text: 'Vordrick means to take it from us and use it to empower the dead minions he raises. I fear if he gets his hands on it, no one can stop him.',
+      },
+      {
+        circumstance: 'mayor_briefing_command',
+        text: "I am placing my soldiers under your command. Help us fortify the walls and setup enough defenses to repel his attacks. Let me know when you're ready. We're counting on you!",
+      },
+      {
+        circumstance: 'fortifying_awaiting_word',
+        text: "Keep fortifying the walls. Let me know when you're ready.",
+      },
+      {
+        circumstance: 'mayor_more_time_granted',
+        text: "That's fine, we have a little more time. Come back to me when you're ready.",
+      },
+      {
+        circumstance: 'mayor_loss_unprepared',
+        text: 'It seems we were not as prepared as we thought.',
+      },
+      {
+        circumstance: 'mayor_loss_facsimile',
+        text: 'Fortunately, I was able to switch out the true life stone with a facsimile. The magic imbued in the false stone will wear off soon and Vordrick will be back. We should repair our clock tower and rebuild our defenses before that happens.',
+      },
+      {
+        circumstance: 'repair_bell_reminder',
+        text: 'The bell tower still needs repairing. Vordrick will be back once the facsimile wears off.',
       },
     ],
   },
@@ -406,7 +443,7 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       },
       {
         circumstance: 'grant_basic_tools',
-        text: "Mayor Bramblewick told me you have agreed to help us defend against Vordrick Boneharrow, the Necromancer. If you're going to help us build some defenses, you'll need to collect some resources to get started. Here, take a Basic Axe and a Basic Pickaxe. They'll get you started.",
+        text: "Mayor Bramblewick told me you have agreed to help us defend against Vordrick Boneharrow, the Necromancer. If you're going to help us build some defenses, you'll need to collect some resources to get started. Here, take a Basic Axe and a Basic Pickaxe. They'll get you started. Why don't you collect some wood from the lumber yard, some stone from the quarry, and then talk to Tikka to see what she can do with that.",
       },
       {
         circumstance: 'basic_tools_already_owned',
@@ -566,6 +603,26 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
         text: "That's all the preparation we're getting. Whatever we've built is what we have.",
       },
       { circumstance: 'after_victory', text: "The walls held. Mostly. I'll take mostly." },
+      {
+        circumstance: 'tikka_plans_intro',
+        text: "If you have the resources and skill, I'd like to show you some plans for a few contraptions I've designed that will rattle Vordrick Boneharrow.",
+      },
+      {
+        circumstance: 'tikka_send_to_fenna',
+        text: "While I get those plans together, why don't you go over to Fenna Splintertail, and tell her we need you to be able to access the saw and rope walk.",
+      },
+      {
+        circumstance: 'tikka_needs_boards_rope',
+        text: "I can't do much with just the raw lumber you have. It needs to be refined into boards of wood and rope for me to do anything useful with it. Go there and bring me back 20 boards of wood and 5 rope.",
+      },
+      {
+        circumstance: 'tikka_materials_received',
+        text: 'Wonderful! This is exactly what we needed to get started.',
+      },
+      {
+        circumstance: 'tikka_plans_handoff',
+        text: "Here, take a look at the plans I've drawn up, this should help you build up defenses around Briar Hollow. Why don't you try upgrading our fence to a wall and build some trebuchets to keep our village safe.",
+      },
     ],
   },
   fenna: {
@@ -626,6 +683,14 @@ const VILLAGER_TABLE: Readonly<Record<VillagerId, VillagerEntry>> = {
       {
         circumstance: 'attack_imminent',
         text: "We're shutting down the mill. Get whatever materials you've got inside the walls.",
+      },
+      {
+        circumstance: 'fenna_grants_access',
+        text: "Tikka says you need access to my saw and rope walk huh? I don't normally let strangers touch my equipment, but considering this is literally a life or death situation for us, I think it will be okay if you use it.",
+      },
+      {
+        circumstance: 'fenna_explains_stations',
+        text: "Just put in raw wood to either one of them and you can process the material into boards of wood with the saw, or rope with the rope walk. Why don't you go give it a try.",
       },
     ],
   },

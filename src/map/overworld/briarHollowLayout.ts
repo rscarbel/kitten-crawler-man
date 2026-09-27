@@ -214,6 +214,13 @@ interface VillagePropSpec {
  */
 export const VILLAGE_PROPS = {
   bell_tower: { kind: 'tall', w: 2, h: 2 },
+  /**
+   * Never stamped on the map: the square keeps its one `bell_tower` footprint
+   * always, and the renderer swaps in this look while the tile itself records
+   * the tower as broken. It still needs its own row here, because every art
+   * lookup — the sheet, the manifest, `VillagePropArt` — is keyed by prop id.
+   */
+  bell_tower_broken: { kind: 'tall', w: 2, h: 2 },
   well: { kind: 'low', w: 1, h: 1 },
   notice_board: { kind: 'tall', w: 1, h: 1 },
   lamp_post: { kind: 'low', w: 1, h: 1 },
@@ -520,7 +527,14 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     rect: { x: 49, y: 30, w: 8, h: 7 },
     doorways: [{ side: 'west', offset: 3, width: 1 }],
     floor: 'planks',
-    occupantAnchors: [{ x: 3, y: 2 }],
+    // Tikka never leaves this room, so she needs somewhere to pace besides
+    // the one work post: two more open floor tiles clear of the furniture
+    // and the doorway.
+    occupantAnchors: [
+      { x: 3, y: 2 },
+      { x: 2, y: 3 },
+      { x: 5, y: 3 },
+    ],
     furniture: [
       { prop: 'drafting_table', x: 3, y: 1 },
       { prop: 'gear_crate', x: 6, y: 1 },

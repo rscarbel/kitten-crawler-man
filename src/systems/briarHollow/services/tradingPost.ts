@@ -95,8 +95,16 @@ export function restockTradingPost(state: BriarHollowState): void {
   state.merchantStock = {};
 }
 
+/** Machine-processed goods the shelf carries only once Fenna has let the crawlers run the mill. */
+const PROCESSED_GOODS: ReadonlySet<ItemId> = new Set<ItemId>(['rope', 'wood_board']);
+
+function tradingPostLinesFor(state: BriarHollowState): readonly TradingPostLine[] {
+  if (state.unlocks.processingStations) return TRADING_POST_LINES;
+  return TRADING_POST_LINES.filter((entry) => !PROCESSED_GOODS.has(entry.id));
+}
+
 export function buildTradingPostMenu(state: BriarHollowState): PricedMenu {
-  const options = TRADING_POST_LINES.map((entry): PricedOption => {
+  const options = tradingPostLinesFor(state).map((entry): PricedOption => {
     const remaining = remainingStock(state, entry);
     const option: PricedOption = {
       key: entry.id,
@@ -121,7 +129,7 @@ export function tradingPostPurchase(
   buyer: Player,
   announce: (message: string) => void,
 ): PricedPurchaseResult {
-  const entry = TRADING_POST_LINES.find((candidate) => candidate.id === option.key);
+  const entry = tradingPostLinesFor(state).find((candidate) => candidate.id === option.key);
   if (entry === undefined) return { ok: false, line: '' };
   const remaining = remainingStock(state, entry);
   if (remaining <= 0) return { ok: false, line: SOLD_OUT_LABEL };

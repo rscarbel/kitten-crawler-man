@@ -28,6 +28,7 @@ import { drawShopkeeper } from '../sprites/shopkeeperSprite';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { consumeStock, remainingFor, type MarketStock } from './market/MarketStock';
 import { SOLD_OUT_LABEL } from './market/vendorMenu';
+import { partyCoins, canAffordCoins, spendPartyCoins } from '../core/partyCoins';
 
 const WANDER_MIN_TILE_OFFSET = 3;
 const WANDER_MAX_TILE_INSET = 4;
@@ -315,7 +316,7 @@ export class ShopSystem implements GameSystem {
     this.pressY = null;
   }
 
-  renderShopPanel(ctx: CanvasRenderingContext2D, active: Player): void {
+  renderShopPanel(ctx: CanvasRenderingContext2D, active: Player, inactive: Player): void {
     if (!this.shopOpen) return;
     const cw = viewportWidth();
     const ch = viewportHeight();
@@ -373,7 +374,7 @@ export class ShopSystem implements GameSystem {
     ctx.lineTo(panelX + PANEL_W - PANEL_SEPARATOR_X_MARGIN, panelY + PANEL_SEPARATOR_Y);
     ctx.stroke();
 
-    drawText(ctx, `Coins: ${active.coins}`, {
+    drawText(ctx, `Coins: ${partyCoins(active, inactive)}`, {
       x: cw / 2,
       y: panelY + PANEL_COINS_Y - PANEL_COINS_BASELINE,
       size: PANEL_COINS_TEXT_SIZE,
@@ -393,7 +394,7 @@ export class ShopSystem implements GameSystem {
       const rowY = listTop + i * PANEL_ITEM_H - this.scrollY;
       if (rowY + PANEL_ITEM_H <= listTop || rowY >= listBottom) continue;
       const soldOut = this.remainingStock(item) === 0;
-      const canAfford = !soldOut && active.coins >= item.price;
+      const canAfford = !soldOut && canAffordCoins(active, inactive, item.price);
 
       ctx.fillStyle =
         i % 2 === 0
@@ -451,7 +452,7 @@ export class ShopSystem implements GameSystem {
         labelSize: PANEL_BTN_TEXT_SIZE,
         labelColor: canAfford ? BUY_AFFORDABLE_LABEL : BUY_UNAFFORDABLE_LABEL,
         disabled: soldOut,
-        action: () => this.tryBuy(itemIdx, active),
+        action: () => this.tryBuy(itemIdx, active, inactive),
       });
     }
     ctx.restore();
@@ -506,14 +507,14 @@ export class ShopSystem implements GameSystem {
     }
   }
 
-  private tryBuy(itemIdx: number, player: Player): void {
+  private tryBuy(itemIdx: number, player: Player, companion: Player): void {
     const item = this.items[itemIdx];
     if (this.remainingStock(item) === 0) {
       this.feedbackMsg = SOLD_OUT_LABEL;
       this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
       return;
     }
-    if (player.coins < item.price) {
+    if (!canAffordCoins(player, companion, item.price)) {
       this.feedbackMsg = 'Not enough coins!';
       this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
       return;
@@ -526,7 +527,7 @@ export class ShopSystem implements GameSystem {
       this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
       return;
     }
-    player.coins -= item.price;
+    spendPartyCoins(player, companion, item.price, player);
     if (this.stockConfig !== undefined) {
       consumeStock(this.stockConfig.stock, this.stockConfig.vendorId, item);
     }

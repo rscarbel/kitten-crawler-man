@@ -15,6 +15,7 @@ import {
   BUTTON_PRESETS,
 } from './Button';
 import { drawBox, drawModal, BOX_PRESETS } from './Box';
+import { drawQuestIcon } from './QuestIcon';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawItemIcon } from './InventoryPanel';
 import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
@@ -58,6 +59,12 @@ export interface DialogPage {
    * {@link DialogPage.declineButton}.
    */
   reward?: DialogReward;
+  /**
+   * Marks this page as mattering for an active quest. Draws the shared quest
+   * badge in the panel's corner, and — when the page offers both an accept
+   * and a decline button — on the accept button alone, never the decline.
+   */
+  questRelated?: boolean;
 }
 
 const DIALOG_WIDTH = 460;
@@ -83,6 +90,8 @@ const DIALOG_MIN_LINE_SPACING = 13;
 const DIALOG_LINE_SHRINK_STEP = 1;
 const DIALOG_LINE_SPACING_RATIO = DIALOG_LINE_SPACING / DIALOG_LINE_SIZE;
 const DIALOG_PAGE_COUNTER_SIZE = 10;
+const QUEST_ICON_SIZE = 16;
+const QUEST_ICON_TITLE_GAP = 8;
 /**
  * Gap kept between the panel's foot and the bottom of the viewport.
  *
@@ -358,8 +367,20 @@ export class QuestDialog {
       ...BOX_PRESETS.modal,
     });
 
+    const titleX =
+      box.x +
+      DIALOG_PAD_X +
+      (page.questRelated === true ? QUEST_ICON_SIZE + QUEST_ICON_TITLE_GAP : 0);
+    if (page.questRelated === true) {
+      drawQuestIcon(
+        ctx,
+        box.x + DIALOG_PAD_X + QUEST_ICON_SIZE / 2,
+        box.y + DIALOG_TITLE_Y_OFFSET + DIALOG_TITLE_SIZE / 2,
+        QUEST_ICON_SIZE,
+      );
+    }
     drawText(ctx, page.title, {
-      x: box.x + DIALOG_PAD_X,
+      x: titleX,
       y: box.y + DIALOG_TITLE_Y_OFFSET,
       size: DIALOG_TITLE_SIZE,
       bold: true,
@@ -410,6 +431,7 @@ export class QuestDialog {
         ...BUTTON_PRESETS.primary,
         labelSize: DIALOG_BTN_LABEL_SIZE,
         primaryAction: true,
+        questRelated: page.questRelated === true,
       });
       endMenuFocus();
       this.buttonRect = { x: btnX, y: btnY, w: btnW, h: DIALOG_BTN_H };
@@ -441,6 +463,7 @@ export class QuestDialog {
       ...BUTTON_PRESETS.primary,
       labelSize: DIALOG_BTN_LABEL_SIZE,
       primaryAction: true,
+      questRelated: page.questRelated === true,
     });
     endMenuFocus();
     this.declineRect = { x: declineX, y: btnY, w: btnW, h: DIALOG_BTN_H };

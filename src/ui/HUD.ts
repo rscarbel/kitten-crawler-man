@@ -8,6 +8,8 @@ import { drawText } from './TextBox';
 import { drawBox, drawProgressBar } from './Box';
 import { viewportWidth } from '../core/Viewport';
 import { statusBadge } from '../sprites/status/statusEffectVisuals';
+import { partyCoins } from '../core/partyCoins';
+import { CRAWLER_NAMES } from '../core/SkillManager';
 
 export type HudRect = { x: number; y: number; w: number; h: number };
 type HudResult = {
@@ -29,6 +31,8 @@ const INACTIVE_PLAYER_Y = 128;
 const CONTROL_HINTS_Y1 = 36;
 const CONTROL_HINTS_Y2 = 52;
 const COINS_Y = 176;
+/** Keeps the per-crawler split clear of the panel's own right edge. */
+const COIN_SPLIT_RIGHT_MARGIN = 8;
 /** Roughly the coin readout's own text height — used to aim a flying coin at its visual centre, not its top-left. */
 const COIN_ICON_CENTER_OFFSET = 6;
 /** Peak scale of the coin counter's brief landing pulse. */
@@ -289,7 +293,7 @@ export function drawHUD(
   // Coins row — the displayed total lags the real one by whatever is still
   // mid-flight, so it visibly ticks up as each coin sprite lands rather than
   // jumping the instant the coins are actually earned.
-  const displayedCoins = Math.max(0, human.coins + cat.coins - Math.round(coinFly.pendingAmount));
+  const displayedCoins = Math.max(0, partyCoins(human, cat) - Math.round(coinFly.pendingAmount));
   ctx.save();
   if (coinFly.pulse > 0) {
     const scale = 1 + coinFly.pulse * COIN_PULSE_SCALE;
@@ -306,6 +310,17 @@ export function drawHUD(
     color: coinFly.pulse > 0 ? '#fde68a' : '#fbbf24',
   });
   ctx.restore();
+
+  // The shared purse is one number to spend from, but each crawler's own
+  // haul is still worth knowing at a glance — earning stays per-crawler even
+  // though every purchase draws from both.
+  drawText(ctx, `(${CRAWLER_NAMES.human} ${human.coins} · ${CRAWLER_NAMES.cat} ${cat.coins})`, {
+    x: PANEL_START_X + PANEL_WIDTH - COIN_SPLIT_RIGHT_MARGIN,
+    y: COINS_Y,
+    size: 9,
+    color: '#94a3b8',
+    align: 'right',
+  });
 
   // Hidden rather than drawn inert: a hidden rect is also what disarms the
   // banner's click-to-spend, so nothing invisible can be tapped.
@@ -443,7 +458,7 @@ function drawHUDCollapsed(
   // while one is in flight or has just arrived, at the same spot
   // `hudCoinCounterScreenPos` reports for the collapsed layout.
   if (coinFly.pendingAmount > 0 || coinFly.pulse > 0) {
-    const totalCoins = human.coins + cat.coins;
+    const totalCoins = partyCoins(human, cat);
     const displayedCoins = Math.max(0, totalCoins - Math.round(coinFly.pendingAmount));
     const badgeScale = 1 + coinFly.pulse * COIN_PULSE_SCALE;
     const badgeCx = x + COLLAPSED_COIN_BADGE_X_OFFSET;

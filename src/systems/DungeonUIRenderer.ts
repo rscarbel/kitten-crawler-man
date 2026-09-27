@@ -9,6 +9,7 @@ import { STAT_BOOST_FLASH_FRAMES, type Player, type StatName } from '../Player';
 import { drawEmbermote, drawGlow, rgba } from '../sprites/status/statusPaint';
 import { STAT_BOOST_COLOR, STAT_BOOST_MOTE_HEAT } from '../sprites/statBoostColors';
 import type { Mob } from '../creatures/Mob';
+import type { Villager } from './briarHollow/Villager';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -20,7 +21,7 @@ import type { InventoryPanel } from '../ui/InventoryPanel';
 import { hotbarStripRect } from '../ui/InventoryPanel';
 import type { GearPanel } from '../ui/GearPanel';
 import type { PlayerManager } from '../core/PlayerManager';
-import { drawText } from '../ui/TextBox';
+import { drawText, wrapText } from '../ui/TextBox';
 import { drawBox } from '../ui/Box';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 import { drawSatchelIcon } from '../ui/icons/satchelIcon';
@@ -164,7 +165,15 @@ const TOOLTIP_CORNER_RADIUS = 4;
 const TOOLTIP_BORDER_WIDTH = 1.5;
 const TOOLTIP_ALPHA = 0.88;
 const TOOLTIP_NAME_Y_ADJUST = 10;
+const TOOLTIP_SUBTITLE_SIZE = 10;
+const TOOLTIP_SUBTITLE_Y_ADJUST = 8;
+const TOOLTIP_SUBTITLE_COLOR = '#9ca3af';
 const TOOLTIP_DESC_Y_ADJUST = 9;
+/** Descriptions wrap past this width, so a villager's backstory stays a readable card. */
+const TOOLTIP_MAX_DESC_WIDTH = 260;
+const TOOLTIP_DESC_LINE_HEIGHT = 14;
+/** How far a cursor can sit from a villager's tile origin and still count as hovering it — matches the mob hit-test radius. */
+const TOOLTIP_HOVER_RADIUS = TILE_SIZE * Math.SQRT2;
 
 // Mobile buttons
 const SLOT_HEIGHT = 52;
@@ -529,56 +538,63 @@ export function renderStatBoostFlash(
   }
 }
 
-export function renderEntityTooltip(
+/** Content shown in the hover tooltip, common to a mob and a Briar Hollow villager. */
+interface EntityTooltipContent {
+  name: string;
+  subtitle?: string;
+  description: string;
+  /** Red border/name when true (a hostile mob), green otherwise (an ally or villager). */
+  hostile: boolean;
+}
+
+function drawEntityTooltipBox(
   ctx: CanvasRenderingContext2D,
-  camX: number,
-  camY: number,
   mouseX: number,
   mouseY: number,
-  mobGrid: SpatialGrid<Mob>,
+  content: EntityTooltipContent,
 ): void {
-  const wx = mouseX + camX;
-  const wy = mouseY + camY;
-
-  // A mob can only be hovered when the cursor is inside its tile square, so
-  // every candidate has its origin within that square's diagonal of the cursor.
-  let hovered: Mob | null = null;
-  for (const mob of mobGrid.queryCircle(wx, wy, TILE_SIZE * Math.SQRT2)) {
-    if (!mob.isAlive) continue;
-    if (wx >= mob.x && wx <= mob.x + TILE_SIZE && wy >= mob.y && wy <= mob.y + TILE_SIZE) {
-      hovered = mob;
-      break;
-    }
-  }
-
-  if (!hovered) return;
-
-  const name = hovered.displayName;
-  const desc = hovered.description;
+  const { name, subtitle, description, hostile } = content;
 
   ctx.font = 'bold 13px sans-serif';
   const nameW = ctx.measureText(name).width;
-  ctx.font = '11px sans-serif';
-  const descW = ctx.measureText(desc).width;
-  const boxW = Math.max(nameW, descW) + TOOLTIP_PAD * 2;
-  const boxH = TOOLTIP_NAME_SIZE + TOOLTIP_LINE_GAP + TOOLTIP_DESC_SIZE + TOOLTIP_PAD * 2;
+  ctx.font = `${TOOLTIP_DESC_SIZE}px sans-serif`;
+  const screenLimitedDescWidth = viewportWidth() - TOOLTIP_MARGIN_X * 2 - TOOLTIP_PAD * 2;
+  const descWrapWidth = Math.min(TOOLTIP_MAX_DESC_WIDTH, screenLimitedDescWidth);
+  const descLines = description ? wrapText(ctx, description, descWrapWidth) : [];
+  const descW = Math.max(0, ...descLines.map((line) => ctx.measureText(line).width));
+  let subtitleW = 0;
+  if (subtitle !== undefined) {
+    ctx.font = `${TOOLTIP_SUBTITLE_SIZE}px sans-serif`;
+    subtitleW = ctx.measureText(subtitle).width;
+  }
+  const boxW = Math.max(nameW, descW, subtitleW) + TOOLTIP_PAD * 2;
+  const subtitleBlockHeight = subtitle === undefined ? 0 : TOOLTIP_SUBTITLE_SIZE + TOOLTIP_LINE_GAP;
+  const boxH =
+    TOOLTIP_NAME_SIZE +
+    TOOLTIP_LINE_GAP +
+    subtitleBlockHeight +
+    TOOLTIP_DESC_SIZE +
+    Math.max(0, descLines.length - 1) * TOOLTIP_DESC_LINE_HEIGHT +
+    TOOLTIP_PAD * 2;
 
   let tx = mouseX + TOOLTIP_OFFSET_X;
   let ty = mouseY - boxH - TOOLTIP_OFFSET_Y;
   if (tx + boxW > viewportWidth() - TOOLTIP_MARGIN_X)
     tx = viewportWidth() - boxW - TOOLTIP_MARGIN_X;
+  if (tx < TOOLTIP_MARGIN_X) tx = TOOLTIP_MARGIN_X;
   if (ty < TOOLTIP_MARGIN_X) ty = mouseY + TOOLTIP_MARGIN_Y;
 
-  ctx.save();
-  ctx.globalAlpha = TOOLTIP_ALPHA;
-  ctx.fillStyle = '#1a1a2e';
-  ctx.strokeStyle = hovered.isHostile ? '#ef4444' : '#4ade80';
-  ctx.lineWidth = TOOLTIP_BORDER_WIDTH;
-  ctx.beginPath();
-  ctx.roundRect(tx, ty, boxW, boxH, TOOLTIP_CORNER_RADIUS);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+  drawBox(ctx, {
+    x: tx,
+    y: ty,
+    width: boxW,
+    height: boxH,
+    fill: '#1a1a2e',
+    border: hostile ? '#ef4444' : '#4ade80',
+    borderWidth: TOOLTIP_BORDER_WIDTH,
+    radius: TOOLTIP_CORNER_RADIUS,
+    alpha: TOOLTIP_ALPHA,
+  });
 
   drawText(ctx, name, {
     x: tx + TOOLTIP_PAD,
@@ -586,23 +602,85 @@ export function renderEntityTooltip(
     size: TOOLTIP_NAME_SIZE,
     bold: true,
     font: 'sans-serif',
-    color: hovered.isHostile ? '#fca5a5' : '#86efac',
+    color: hostile ? '#fca5a5' : '#86efac',
   });
 
-  if (desc) {
-    drawText(ctx, desc, {
+  let nextTop = ty + TOOLTIP_PAD + TOOLTIP_NAME_SIZE + TOOLTIP_LINE_GAP;
+  if (subtitle !== undefined) {
+    drawText(ctx, subtitle, {
       x: tx + TOOLTIP_PAD,
-      y:
-        ty +
-        TOOLTIP_PAD +
-        TOOLTIP_NAME_SIZE +
-        TOOLTIP_LINE_GAP +
-        TOOLTIP_DESC_SIZE -
-        TOOLTIP_DESC_Y_ADJUST,
+      y: nextTop + TOOLTIP_SUBTITLE_SIZE - TOOLTIP_SUBTITLE_Y_ADJUST,
+      size: TOOLTIP_SUBTITLE_SIZE,
+      italic: true,
+      font: 'sans-serif',
+      color: TOOLTIP_SUBTITLE_COLOR,
+    });
+    nextTop += TOOLTIP_SUBTITLE_SIZE + TOOLTIP_LINE_GAP;
+  }
+
+  descLines.forEach((line, index) => {
+    drawText(ctx, line, {
+      x: tx + TOOLTIP_PAD,
+      y: nextTop + TOOLTIP_DESC_SIZE - TOOLTIP_DESC_Y_ADJUST + index * TOOLTIP_DESC_LINE_HEIGHT,
       size: TOOLTIP_DESC_SIZE,
       font: 'sans-serif',
       color: '#d1d5db',
     });
+  });
+}
+
+/** A villager's tooltip name and body, or null when nothing should show for them. */
+function villagerTooltipContent(villager: Villager): EntityTooltipContent {
+  return {
+    name: villager.displayName ?? 'Ratkin Villager',
+    subtitle: 'Ratkin',
+    description: villager.description,
+    hostile: false,
+  };
+}
+
+export function renderEntityTooltip(
+  ctx: CanvasRenderingContext2D,
+  camX: number,
+  camY: number,
+  mouseX: number,
+  mouseY: number,
+  mobGrid: SpatialGrid<Mob>,
+  villagers: readonly Villager[] = [],
+): void {
+  const wx = mouseX + camX;
+  const wy = mouseY + camY;
+
+  // An entity can only be hovered when the cursor is inside its tile square,
+  // so every candidate has its origin within that square's diagonal of the
+  // cursor.
+  let hoveredMob: Mob | null = null;
+  for (const mob of mobGrid.queryCircle(wx, wy, TOOLTIP_HOVER_RADIUS)) {
+    if (!mob.isAlive) continue;
+    if (wx >= mob.x && wx <= mob.x + TILE_SIZE && wy >= mob.y && wy <= mob.y + TILE_SIZE) {
+      hoveredMob = mob;
+      break;
+    }
+  }
+
+  if (hoveredMob !== null) {
+    drawEntityTooltipBox(ctx, mouseX, mouseY, {
+      name: hoveredMob.displayName,
+      description: hoveredMob.description,
+      hostile: hoveredMob.isHostile,
+    });
+    return;
+  }
+
+  const hoveredVillager = villagers.find(
+    (villager) =>
+      wx >= villager.x &&
+      wx <= villager.x + TILE_SIZE &&
+      wy >= villager.y &&
+      wy <= villager.y + TILE_SIZE,
+  );
+  if (hoveredVillager !== undefined) {
+    drawEntityTooltipBox(ctx, mouseX, mouseY, villagerTooltipContent(hoveredVillager));
   }
 }
 

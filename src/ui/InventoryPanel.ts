@@ -167,6 +167,9 @@ const NAV_BAR_SIZE = 11;
 // Panel header y-offsets
 const PANEL_NAME_Y = 15;
 const PANEL_COINS_Y = 16;
+/** Below the coin total, where the per-crawler split is small enough not to fight the title. */
+const PANEL_COIN_SPLIT_Y = 28;
+const PANEL_COIN_SPLIT_SIZE = 9;
 
 // Quantity badge minimum font
 const QTY_BADGE_MIN_FONT = 7;
@@ -772,6 +775,7 @@ export class InventoryPanel {
     playerName: string,
     coins: number,
     wieldedWeaponId: ItemId | null = null,
+    coinSplit: string | null = null,
   ): void {
     // The bag clears its own unseen-upgrade set the moment it is actually
     // opened, rather than at the click that opened it — so a scene that opens
@@ -782,7 +786,7 @@ export class InventoryPanel {
     this.renderToggleButton(ctx, inventory.unseenUpgrades.size > 0);
     this.renderHotbar(ctx, inventory, wieldedWeaponId);
     if (this.isOpen) {
-      this.renderPanel(ctx, inventory, playerName, coins);
+      this.renderPanel(ctx, inventory, playerName, coins, coinSplit);
     }
     // Dragged item floats on top of everything
     if (this.drag) {
@@ -1097,6 +1101,7 @@ export class InventoryPanel {
     inventory: Inventory,
     playerName: string,
     coins: number,
+    coinSplit: string | null = null,
   ): void {
     const p = this.panelRect();
 
@@ -1130,6 +1135,15 @@ export class InventoryPanel {
       color: '#fbbf24',
       align: 'right',
     });
+    if (coinSplit !== null) {
+      drawText(ctx, coinSplit, {
+        x: p.x + p.w - PANEL_HEADER_COINS_OFFSET,
+        y: p.y + PANEL_COIN_SPLIT_Y,
+        size: PANEL_COIN_SPLIT_SIZE,
+        color: '#94a3b8',
+        align: 'right',
+      });
+    }
 
     // Close / Back button — always in the top-right corner
     const closeX = p.x + p.w - PANEL_CLOSE_OFFSET_X;

@@ -74,6 +74,7 @@ function populatedState(): BriarHollowState {
     bellHp: HOLLOW_BELL_MAX_HP,
     lastSiege: { segmentsBreached: 3, structuresDestroyed: 1, soldiersDowned: 2 },
     rewardsGranted: true,
+    bellTowerBroken: false,
   };
   state.structures = [
     { kind: 'segment', id: 'seg-3', tier: 'stone', hp: 450, spikesHp: 150, builtBy: 'human' },

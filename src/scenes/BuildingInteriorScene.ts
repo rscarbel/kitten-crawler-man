@@ -29,7 +29,12 @@ import {
   triggerPlayerAttack,
   KNOCKOUT_TIMEOUT_FRAMES,
 } from '../systems/GameLoopPhases';
-import { renderKnockedOutUI, updateKnockoutState } from '../systems/KnockoutRevive';
+import {
+  downedCompanionArrowCandidate,
+  renderKnockedOutUI,
+  updateKnockoutState,
+} from '../systems/KnockoutRevive';
+import { drawTopArrowCandidate, type ArrowCandidate } from '../ui/WorldArrow';
 import { GameplayScene } from './GameplayScene';
 import { hudCoinCounterScreenPos } from '../ui/HUD';
 import { pointInRect } from '../utils';
@@ -1872,6 +1877,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     const active = this.human.isActive ? this.human : this.cat;
     if (!active.craftSkills.isLearned('construction')) return;
+    if (this.briarHollowState.unlocks.construction.length === 0) return;
     menu.openWith(indoorsConstructionSource(this.human, this.cat), true);
   }
 
@@ -2322,7 +2328,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // The blackjack table deals, flips and settles on its own clock, so it has
       // to keep ticking through its own panel — the same reason the Bopca's cook
       // timer runs through her dialog above.
-      this.club.tickOpenModals(this.active());
+      this.club.tickOpenModals(this.active(), this.inactive());
       return;
     }
     // The tower's own conversation: the office scene, the reveal, the Lich's
@@ -2465,7 +2471,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // Club: talk to a station NPC (Clarabelle, bar, casino, …) with Space.
     // Only consume when a station actually answered, so a press beside an
     // ambient occupant still reaches the conversation below.
-    if (this.club !== null && interactPressed() && this.club.handleInteract(player)) {
+    if (
+      this.club !== null &&
+      interactPressed() &&
+      this.club.handleInteract(player, this.inactive())
+    ) {
       keybindings.release(this.input, 'attack');
     }
 
@@ -2722,13 +2732,16 @@ export class BuildingInteriorScene extends GameplayScene {
     playFairySystemCues(this.fairies.takeCues(), this.audio);
   }
 
-  /** The arrow to the loose soul crystal, or to the stairs that climb toward it. */
-  private renderSoulCrystalGuidance(
+  /**
+   * A candidate for the shared arrow arbiter: the arrow to the loose soul
+   * crystal, or to the stairs that climb toward it.
+   */
+  private soulCrystalArrowCandidate(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
-  ): void {
-    if (this.gameOver || this.pauseMenu.isOpen || this.entry.type !== 'tower') return;
+  ): ArrowCandidate | null {
+    if (this.gameOver || this.pauseMenu.isOpen || this.entry.type !== 'tower') return null;
     const upTiles = this.map._interiorStairUpTiles;
     const middleUpTile = upTiles[Math.floor(upTiles.length / 2)];
     const upStairs =
@@ -2738,7 +2751,7 @@ export class BuildingInteriorScene extends GameplayScene {
             x: (middleUpTile.x + STAIR_TILE_CENTRE) * TILE_SIZE,
             y: (middleUpTile.y + STAIR_TILE_CENTRE) * TILE_SIZE,
           };
-    this.soulCrystal.renderGuidance(
+    return this.soulCrystal.guidanceArrowCandidate(
       ctx,
       camX,
       camY,
@@ -2864,7 +2877,7 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (this.club?.modalOpen) {
-      this.club.handleClick(mx, my, this.active());
+      this.club.handleClick(mx, my, this.active(), this.inactive());
       return;
     }
     if (this.bigTopMaze?.isDialogOpen === true) {
@@ -2880,11 +2893,11 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (this.servicePanel?.isOpen === true) {
-      this.servicePanel.handleClick(mx, my, this.active());
+      this.servicePanel.handleClick(mx, my, this.active(), this.inactive());
       return;
     }
     if (this.readingPanel?.isOpen === true) {
-      this.readingPanel.handleClick(mx, my, this.active());
+      this.readingPanel.handleClick(mx, my, this.active(), this.inactive());
       return;
     }
     if (this.readablePanel.handleClick()) {
@@ -3783,27 +3796,30 @@ export class BuildingInteriorScene extends GameplayScene {
         this.active(),
         INTERIOR_SIGHT_RADIUS_PX,
       );
-      this.mercenarySystem.renderDownedArrow(
-        ctx,
-        camX,
-        camY,
-        this.active(),
-        INTERIOR_SIGHT_RADIUS_PX,
-      );
     }
 
-    this.renderSoulCrystalGuidance(ctx, camX, camY);
     this.renderHUD(ctx);
 
+    if (!this.gameOver && !this.pauseMenu.isOpen) {
+      // Only one of these may be on screen at once — a downed companion always
+      // wins the slot, and every other kind has a fixed place behind it.
+      drawTopArrowCandidate([
+        this.companionDownIndoors
+          ? downedCompanionArrowCandidate(ctx, this.active(), this.inactive(), camX, camY)
+          : null,
+        this.mercenarySystem.downedArrowCandidate(
+          ctx,
+          camX,
+          camY,
+          this.active(),
+          INTERIOR_SIGHT_RADIUS_PX,
+        ),
+        this.soulCrystalArrowCandidate(ctx, camX, camY),
+      ]);
+    }
+
     if (!this.gameOver && !this.pauseMenu.isOpen && this.companionDownIndoors) {
-      renderKnockedOutUI(
-        ctx,
-        camX,
-        camY,
-        this.active(),
-        this.inactive(),
-        this.mobileHUD.miniMapSize,
-      );
+      renderKnockedOutUI(ctx, this.inactive(), this.mobileHUD.miniMapSize);
     }
 
     // Interior label
@@ -3905,16 +3921,16 @@ export class BuildingInteriorScene extends GameplayScene {
 
     if (this.shop) {
       this.shop.renderUI(ctx, this.active());
-      this.shop.renderShopPanel(ctx, this.active());
+      this.shop.renderShopPanel(ctx, this.active(), this.inactive());
     }
 
     if (this.club) {
-      this.club.renderUI(ctx, this.active());
+      this.club.renderUI(ctx, this.active(), this.inactive());
     }
 
     this.citizenDialog?.render(ctx);
-    this.servicePanel?.render(ctx, this.active());
-    this.readingPanel?.render(ctx, this.active());
+    this.servicePanel?.render(ctx, this.active(), this.inactive());
+    this.readingPanel?.render(ctx, this.active(), this.inactive());
     this.readablePanel.render(ctx);
     // Last of this group, because it outranks all three above it in
     // `overlayClaims` and the focus ring goes to whoever declares it last. They
@@ -4428,7 +4444,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.currentFloor === TOWER_CONFRONTATION_FLOOR) {
       this.towerConfrontation?.tryExamine(this.active());
     }
-    this.club?.handleInteract(this.active());
+    this.club?.handleInteract(this.active(), this.inactive());
     // Talk to a nearby occupant only when nothing else claimed the tap: no
     // shop/club panel is up (the store has both a shop and shelf-browsers), and
     // the safe room didn't just open Mordecai (that building has both Mordecai

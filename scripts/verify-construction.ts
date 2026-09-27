@@ -27,6 +27,7 @@ import {
   type BriarHollowState,
 } from '../src/core/briarHollowState';
 import { spend } from '../src/core/partyResources';
+import { CONSTRUCTION_UNLOCK_IDS, grantConstructionUnlocks } from '../src/core/villageUnlocks';
 import { PlayerManager } from '../src/core/PlayerManager';
 import { AbilityManager } from '../src/core/AbilityManager';
 import { MenusKit } from '../src/systems/kits/MenusKit';
@@ -63,7 +64,11 @@ import {
   ConstructionSystem,
   type PushableBody,
 } from '../src/systems/briarHollow/ConstructionSystem';
-import { crawlerPushBody, mobPushBody } from '../src/systems/briarHollow/ConstructionKit';
+import {
+  crawlerPushBody,
+  mobPushBody,
+  STRUCTURE_REACH_TILES,
+} from '../src/systems/briarHollow/ConstructionKit';
 import {
   NO_SPACE_MESSAGE,
   doorwayTiles,
@@ -184,6 +189,10 @@ function teach(crawler: HumanPlayer | CatPlayer, level: number): void {
 }
 
 function makeRig(state: BriarHollowState = createBriarHollowState(), map: GameMap = gameMap): Rig {
+  // Every plan granted, so this rig exercises the same builds a fully
+  // progressed questline would offer, not the empty-menu state a fresh save
+  // starts from.
+  grantConstructionUnlocks(state.unlocks, CONSTRUCTION_UNLOCK_IDS);
   const bus = new EventBus();
   const roster = new MobRoster(map, new SpellSystem());
   const human = new HumanPlayer(site.gate.inside.x, site.gate.inside.y, TILE_SIZE);
@@ -224,6 +233,7 @@ function makeRig(state: BriarHollowState = createBriarHollowState(), map: GameMa
       return bodies;
     },
     indoors: false,
+    unlocks: () => state.unlocks,
   });
   if (fault === 'skip-corridor') construction.skipCorridorCheck = true;
   if (fault === 'spend-at-start') {
@@ -845,6 +855,58 @@ function openPatch(): { x: number; y: number } {
 }
 
 {
+  // No candidate footprint fits anywhere round the builder: the menu row
+  // stays pressable, and pressing it must spend nothing, build nothing, and
+  // stand up the "no room" silhouette over the same spot the attempt used.
+  const patch = openPatch();
+  const checkpoint = gameMap.captureCheckpoint();
+  const rig = makeRig();
+  give(rig.human, 'wood_board', 60);
+  give(rig.human, 'rope', 20);
+  standAt(rig.human, patch.x, patch.y, 0, -1);
+  const boardsBefore = boardsHeld(rig);
+  const ropeBefore = rig.human.inventory.countOf('rope') + rig.cat.inventory.countOf('rope');
+  const wallRadius = 6;
+  for (let y = patch.y - wallRadius; y <= patch.y + 2; y++) {
+    for (let x = patch.x - wallRadius; x <= patch.x + wallRadius; x++) {
+      if (x === patch.x && y === patch.y) continue;
+      gameMap.blockTilePermanently(x, y);
+    }
+  }
+  const attempted = rig.construction.plannedFootprint(rig.human, 'trebuchet').footprint;
+  rig.messages.length = 0;
+  const started = rig.construction.startOption('trebuchet');
+  check(!started, 'a trebuchet with nowhere to fit never starts');
+  check(rig.messages.includes(NO_SPACE_MESSAGE), `it is refused with "${NO_SPACE_MESSAGE}"`);
+  check(rig.construction.job === null, 'no job is left running');
+  check(boardsHeld(rig) === boardsBefore, 'no boards are spent on a no-room attempt');
+  check(
+    rig.human.inventory.countOf('rope') + rig.cat.inventory.countOf('rope') === ropeBefore,
+    'no rope is spent on a no-room attempt',
+  );
+  check(
+    rig.defense.at(attempted.x, attempted.y) === null,
+    'nothing is built where the attempt was made',
+  );
+  const ghost = rig.construction.noRoomGhost;
+  check(
+    ghost !== null &&
+      ghost.footprint.x === attempted.x &&
+      ghost.footprint.y === attempted.y &&
+      ghost.footprint.w === attempted.w &&
+      ghost.footprint.h === attempted.h,
+    'the no-room silhouette is set up over the same footprint the attempt used',
+  );
+  check(ghost !== null && ghost.alpha > 0, 'the silhouette starts faded fully in');
+  rig.construction.clearNoRoomGhost();
+  check(
+    rig.construction.noRoomGhost === null,
+    'the silhouette clears on demand, the same way reopening the build menu does',
+  );
+  gameMap.restoreCheckpoint(checkpoint);
+}
+
+{
   // A body whose only push-out tile is walled in.
   const patch = openPatch();
   const checkpoint = gameMap.captureCheckpoint();
@@ -1248,6 +1310,7 @@ section('Long-press');
   };
   const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
   const state = createBriarHollowState();
+  grantConstructionUnlocks(state.unlocks, CONSTRUCTION_UNLOCK_IDS);
   teach(pm.human, 1);
   pm.human.isActive = true;
   pm.cat.isActive = false;
@@ -1467,6 +1530,79 @@ section('Defend-quest grate spikes');
     barrierNow()?.spikesHp === undefined && barrierNow()?.hp === barrierMaxHp - overflow,
     'once the spikes are gone the overflow reaches the boards',
   );
+}
+
+// ── Bell tower repair ────────────────────────────────────────────────────
+
+section('Bell tower repair');
+{
+  const rig = makeRig();
+  rig.state.quest.bellTowerBroken = true;
+  rig.state.quest.phase = 'repair_bell';
+  const bellTile = site.square.bellTile;
+  // Just outside the tower's own footprint, but within repair reach of it.
+  standAt(rig.human, bellTile.x - 1, bellTile.y, 1, 0);
+  give(rig.human, 'wood_board', 30);
+  give(rig.human, 'rope', 5);
+  give(rig.human, 'stone', 20);
+  rig.human.coins = 30;
+
+  // The same entry point the repair key calls.
+  rig.construction.repairOrLoad(STRUCTURE_REACH_TILES);
+  runJob(rig);
+
+  check(!rig.state.quest.bellTowerBroken, 'the repair key mends a broken tower it stands beside');
+  check(boardsHeld(rig) === 0, 'the repair spends the 30 boards');
+  check(rig.human.inventory.countOf('rope') === 0, 'the repair spends the 5 rope');
+  check(rig.human.inventory.countOf('stone') === 0, 'the repair spends the 20 stone');
+  check(rig.human.coins + rig.cat.coins === 0, 'the repair spends the 30 coins from the purse');
+}
+{
+  // A player short on coins alone: the repair must not silently succeed, and
+  // must not spend the materials it could not finish paying for.
+  const rig = makeRig();
+  rig.state.quest.bellTowerBroken = true;
+  rig.state.quest.phase = 'repair_bell';
+  const bellTile = site.square.bellTile;
+  standAt(rig.human, bellTile.x - 1, bellTile.y, 1, 0);
+  give(rig.human, 'wood_board', 30);
+  give(rig.human, 'rope', 5);
+  give(rig.human, 'stone', 20);
+  rig.human.coins = 0;
+  rig.cat.coins = 0;
+
+  rig.construction.repairOrLoad(STRUCTURE_REACH_TILES);
+  runJob(rig);
+
+  check(rig.state.quest.bellTowerBroken, 'short on coins, the tower stays broken');
+  check(boardsHeld(rig) === 30, 'short on coins, the boards are not spent');
+  check(
+    rig.messages.includes('Insufficient money.'),
+    'short on coins, the party is told why the repair failed',
+  );
+}
+{
+  // Lost, but the Mayor has not yet asked for the rebuild: mending it now
+  // would leave the quest's repair step waiting on a tower already whole.
+  const rig = makeRig();
+  rig.state.quest.bellTowerBroken = true;
+  rig.state.quest.phase = 'repelled_failed';
+  const bellTile = site.square.bellTile;
+  standAt(rig.human, bellTile.x - 1, bellTile.y, 1, 0);
+  give(rig.human, 'wood_board', 30);
+  give(rig.human, 'rope', 5);
+  give(rig.human, 'stone', 20);
+  rig.human.coins = 30;
+
+  rig.construction.repairOrLoad(STRUCTURE_REACH_TILES);
+  runJob(rig);
+
+  check(
+    rig.state.quest.bellTowerBroken,
+    'before the Mayor asks, the repair key leaves the tower broken',
+  );
+  check(boardsHeld(rig) === 30, 'before the Mayor asks, nothing is spent');
+  check(!rig.defense.bellTowerRepairable, 'before the Mayor asks, the tower is not repairable');
 }
 
 console.log(

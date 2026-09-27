@@ -164,6 +164,19 @@ const QUILT_VARIANT: Readonly<Record<ClothColour, number>> = {
   linen: 0,
 };
 
+/**
+ * Which prop id a placement actually draws as. The bell tower is never
+ * stamped as anything but `bell_tower` — its footprint, its Y-sort and its
+ * `hollow:` sprite key never change — but its anchor tile's own
+ * `bellTowerBroken` flag (set by `DefenseStructures.syncMap` from the quest's
+ * `bellTowerBroken`) swaps in the snapped look while the village rebuilds it.
+ */
+function renderedPropId(structure: TileContent[][], placement: DrawnProp): VillageStandingPropId {
+  if (placement.prop !== 'bell_tower') return placement.prop;
+  const anchor = structure[placement.anchorY][placement.anchorX];
+  return anchor.bellTowerBroken === true ? 'bell_tower_broken' : 'bell_tower';
+}
+
 /** Draws a `HOLLOW_PROP_LOW` / `HOLLOW_PROP_TALL` tile: the whole prop from its bottom-left tile, nothing elsewhere. */
 export function drawHollowPropTile(
   ctx: CanvasRenderingContext2D,
@@ -176,8 +189,9 @@ export function drawHollowPropTile(
 ): void {
   const placement = standingPropDrawnAt(structure, tx, ty);
   if (placement === null) return;
-  const def = getSpriteDefByKey(villagePropSheetKey(placement.prop));
-  const stateDef = def?.states.get(placement.prop);
+  const propId = renderedPropId(structure, placement);
+  const def = getSpriteDefByKey(villagePropSheetKey(propId));
+  const stateDef = def?.states.get(propId);
   if (def === undefined || stateDef === undefined) return;
   const variant = variantFor(structure, placement, stateDef.frameCount);
   drawSprite(ctx, def, stateDef, variant, sx, sy, ts);
@@ -196,7 +210,8 @@ export function hollowPropExtentsPx(
 ): MapSpriteExtentsPx {
   const placement = standingPropDrawnAt(structure, tx, ty);
   if (placement === null) return NO_EXTENTS;
-  return getSpriteExtentsPxByKey(villagePropSheetKey(placement.prop)) ?? NO_EXTENTS;
+  const propId = renderedPropId(structure, placement);
+  return getSpriteExtentsPxByKey(villagePropSheetKey(propId)) ?? NO_EXTENTS;
 }
 
 // ── Flat dressing ─────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 
 import { drawBox } from './Box';
 import { drawText } from './TextBox';
+import { drawQuestIcon } from './QuestIcon';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
 
@@ -27,6 +28,10 @@ const PRESSED_HEIGHT_REDUCTION = 2;
 const PRESS_DARKENING_ALPHA = 0.18;
 /** Radius large enough that any button using it reads as a pill, whatever its size. */
 const CHIP_WELL_RADIUS = 999;
+/** The quest badge's diameter, as a fraction of the button's shorter side. */
+const QUEST_ICON_SIZE_RATIO = 0.4;
+/** How far the badge's centre sits inside the button's top-right corner. */
+const QUEST_ICON_CORNER_INSET_RATIO = 0.5;
 
 let _mouseX = RESET_MOUSE_POSITION;
 let _mouseY = RESET_MOUSE_POSITION;
@@ -551,6 +556,14 @@ export interface ButtonOptions {
    * anything destructive or wagering never is.
    */
   primaryAction?: boolean;
+
+  /**
+   * Marks this button as the thing an active quest needs — accepting it,
+   * turning it in, or otherwise moving a quest forward. Draws the shared
+   * quest badge in the button's top-right corner. Never set on a decline/no
+   * button alongside an accept/yes one; only the committing choice wears it.
+   */
+  questRelated?: boolean;
 }
 
 /** Return value from drawButton. */
@@ -844,6 +857,7 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     sound = BUTTON_CLICK_SOUND,
     focusable = true,
     primaryAction = false,
+    questRelated = false,
     label,
   } = opts;
 
@@ -968,6 +982,16 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     alpha: effectiveAlpha,
     ...(labelWrap ? { width: width - LABEL_WRAP_WIDTH_PAD * 2, lineHeight } : {}),
   });
+
+  if (questRelated && !disabled) {
+    const iconSize = Math.min(width, height) * QUEST_ICON_SIZE_RATIO;
+    drawQuestIcon(
+      ctx,
+      x + width - iconSize * QUEST_ICON_CORNER_INSET_RATIO,
+      y + iconSize * QUEST_ICON_CORNER_INSET_RATIO,
+      iconSize,
+    );
+  }
 
   const rx = x;
   const ry = y;

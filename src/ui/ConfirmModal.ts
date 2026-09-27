@@ -46,6 +46,9 @@ const MESSAGE_SIZE = 13;
 const MESSAGE_LINE_HEIGHT = 18;
 const TITLE_GAP = 26;
 const MESSAGE_TOP_GAP = 8;
+const SUBTEXT_SIZE = 10;
+const SUBTEXT_LINE_HEIGHT = 14;
+const SUBTEXT_TOP_GAP = 10;
 const FOOTER_GAP_ABOVE = 20;
 const FOOTER_BTN_HEIGHT = 44;
 const FOOTER_BTN_WIDTH = 130;
@@ -54,10 +57,14 @@ const FOOTER_GAP = 14;
 export interface ConfirmModalOptions {
   title?: string;
   message: string;
+  /** Small muted line under the message — a caveat or a pointer to where the choice can be revisited. */
+  subtext?: string;
   yesLabel: string;
   noLabel: string;
   onYes: () => void;
   onNo: () => void;
+  /** Marks the Yes button as the thing an active quest needs; never set on No. */
+  yesQuestRelated?: boolean;
 }
 
 export class ConfirmModal {
@@ -118,11 +125,22 @@ export class ConfirmModal {
     }).lineCount;
     const titleHeight = options.title === undefined ? 0 : TITLE_GAP;
     const messageHeight = messageLineCount * MESSAGE_LINE_HEIGHT;
+    const subtextLineCount =
+      options.subtext === undefined
+        ? 0
+        : measureTextBox(ctx, options.subtext, {
+            size: SUBTEXT_SIZE,
+            width: contentWidth,
+            lineHeight: SUBTEXT_LINE_HEIGHT,
+          }).lineCount;
+    const subtextHeight =
+      options.subtext === undefined ? 0 : SUBTEXT_TOP_GAP + subtextLineCount * SUBTEXT_LINE_HEIGHT;
     const height =
       PANEL_PADDING +
       titleHeight +
       MESSAGE_TOP_GAP +
       messageHeight +
+      subtextHeight +
       FOOTER_GAP_ABOVE +
       FOOTER_BTN_HEIGHT +
       PANEL_PADDING;
@@ -166,7 +184,21 @@ export class ConfirmModal {
       lineHeight: MESSAGE_LINE_HEIGHT,
       color: '#e2e8f0',
     });
-    y += MESSAGE_TOP_GAP + messageHeight + FOOTER_GAP_ABOVE;
+    y += MESSAGE_TOP_GAP + messageHeight;
+
+    if (options.subtext !== undefined) {
+      drawText(ctx, options.subtext, {
+        ...TEXT_PRESETS.hint,
+        x: contentLeft,
+        y: y + SUBTEXT_TOP_GAP,
+        align: 'center',
+        width: contentWidth,
+        lineHeight: SUBTEXT_LINE_HEIGHT,
+      });
+      y += subtextHeight;
+    }
+
+    y += FOOTER_GAP_ABOVE;
 
     const buttons: Array<{ x: number; y: number; w: number; h: number; action?: () => void }> = [];
     beginMenuFocus(CONFIRM_MODAL_FOCUS_CONTEXT, true);
@@ -189,6 +221,7 @@ export class ConfirmModal {
       height: FOOTER_BTN_HEIGHT,
       label: options.yesLabel,
       ...BUTTON_PRESETS.success,
+      questRelated: options.yesQuestRelated === true,
       action: () => this.answerYes(),
     });
     endMenuFocus();
@@ -216,14 +249,14 @@ export class ConfirmModal {
     return true;
   }
 
-  /** Esc = No, Enter = Yes. Returns whether the key was consumed. */
+  /** Esc/N = No, Enter/Y = Yes. Returns whether the key was consumed. */
   handleKey(key: string): boolean {
     if (this.options === null) return false;
-    if (key === 'Escape') {
+    if (key === 'Escape' || key === 'n' || key === 'N') {
       this.answerNo();
       return true;
     }
-    if (key === 'Enter') {
+    if (key === 'Enter' || key === 'y' || key === 'Y') {
       this.answerYes();
       return true;
     }

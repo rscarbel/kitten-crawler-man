@@ -147,6 +147,9 @@ export class PauseMenu {
   /** Opens a craft skill's explainer; the Crafts tab offers it per skill card when set. */
   onHowCraftWorks: ((id: CraftSkillId) => void) | null = null;
 
+  /** Opens the processing explainer; the Crafts tab offers it on the Resourcing card when set. */
+  onHowProcessingWorks: (() => void) | null = null;
+
   get isOpen(): boolean {
     return this._isOpen;
   }
@@ -606,6 +609,7 @@ export class PauseMenu {
           human,
           cat,
           this.onHowCraftWorks ?? undefined,
+          this.onHowProcessingWorks ?? undefined,
         );
         break;
       case 'journal':

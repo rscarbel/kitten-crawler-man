@@ -13,6 +13,7 @@
 
 import { drawBox } from './Box';
 import { drawText, measureTextBox } from './TextBox';
+import { drawQuestIcon } from './QuestIcon';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -53,6 +54,8 @@ const FOOTER_HINT_SIZE = 10;
 const FOOTER_Y_FROM_BOTTOM = 18;
 const BORDER_RADIUS = 4;
 const TEXT_AREA_BOTTOM_GAP = 4;
+const QUEST_ICON_SIZE = 16;
+const QUEST_ICON_MARGIN = 10;
 /** Minimum preceding-word length before a period is treated as a sentence boundary. */
 const MIN_SENTENCE_WORD_LEN = 3;
 
@@ -99,6 +102,13 @@ export interface ShowOptions {
    * right-side hint to "Close" on the last page instead of "Continue".
    */
   pageIndicator?: { readonly current: number; readonly total: number };
+  /**
+   * Shows the shared quest badge in the box's top-right corner. Set when the
+   * conversation on screen matters for an active quest but offers the player
+   * no choice — a choice that matters wears the badge itself instead (see
+   * {@link ButtonOptions.questRelated}).
+   */
+  questRelated?: boolean;
 }
 
 export class DialogBox {
@@ -118,6 +128,7 @@ export class DialogBox {
   private _revealedCount = 0;
   private _lastRevealTime = 0;
   private _pageIndicator: { readonly current: number; readonly total: number } | null = null;
+  private _questRelated = false;
   private readonly _voiceSounds: ReadonlyArray<SoundId> | null;
   private _voiceSpoken = false;
 
@@ -151,6 +162,7 @@ export class DialogBox {
     this._tokens = this._tokenize(text);
     this._visible = true;
     this._pageIndicator = options?.pageIndicator ?? null;
+    this._questRelated = options?.questRelated ?? false;
 
     if (this._revealMode === 'all' || this._tokens.length === 0) {
       this._revealedCount = this._tokens.length;
@@ -196,6 +208,7 @@ export class DialogBox {
   hide(): void {
     this._visible = false;
     this._pageIndicator = null;
+    this._questRelated = false;
   }
 
   /**
@@ -225,6 +238,9 @@ export class DialogBox {
     this._renderSpeakerRow(ctx, dx, dy);
     this._renderBodyText(ctx, dx, dy, dw);
     this._renderFooterHint(ctx, dx, dy, dw);
+    if (this._questRelated) {
+      drawQuestIcon(ctx, dx + dw - QUEST_ICON_MARGIN, dy + QUEST_ICON_MARGIN, QUEST_ICON_SIZE);
+    }
 
     ctx.restore();
   }

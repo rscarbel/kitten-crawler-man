@@ -239,11 +239,21 @@ const PHASES: readonly VillageQuestPhase[] = [
   'offered',
   'declined',
   'need_tools',
-  'gathering',
+  'gather_wood',
+  'gather_stone',
+  'report_tikka',
+  'see_fenna',
+  'processing',
+  'return_tikka',
+  'build_trebuchet',
+  'load_trebuchet',
+  'build_wall',
+  'summoned_by_mayor',
   'fortifying',
   'imminent',
   'assault',
   'repelled_failed',
+  'repair_bell',
   'victory',
   'complete',
 ];
@@ -292,6 +302,7 @@ function baseContext(phase: VillageQuestPhase, talkCount: number): VillagerConte
     woodenWallStanding: false,
     lowestStock: null,
     soldierStance: null,
+    unlocks: createBriarHollowState().unlocks,
   };
 }
 
@@ -340,7 +351,16 @@ function representativeContexts(
     });
   }
   if (SOLDIER_IDS.has(villager)) {
-    for (const stance of SOLDIER_STANCES) contexts.push({ ...base, soldierStance: stance });
+    for (const stance of SOLDIER_STANCES) {
+      contexts.push({ ...base, soldierStance: stance });
+      // Orders are gated on the unlock now, not the phase, so a soldier's
+      // standing-order lines need their own unlocked context to be reachable.
+      contexts.push({
+        ...base,
+        soldierStance: stance,
+        unlocks: { ...base.unlocks, soldierCommands: true },
+      });
+    }
   }
   return contexts;
 }
@@ -377,6 +397,7 @@ function exerciseTopics(
     showTopics: (topics) => pending.push(...topics),
     showRootTopics: () => undefined,
     close: () => undefined,
+    endAfterPages: () => undefined,
     afterClose: () => undefined,
   };
   // A submenu pushes its rows behind the one being run; for-of reaches them too.

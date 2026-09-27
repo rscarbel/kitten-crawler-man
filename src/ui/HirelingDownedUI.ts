@@ -13,7 +13,13 @@ import {
   REVIVE_ARROW_COLOR,
 } from '../systems/KnockoutRevive';
 import { drawText, TEXT_PRESETS } from './TextBox';
-import { drawArrowAbovePlayer, type ArrowAvoidRect } from './WorldArrow';
+import {
+  ARROW_PRIORITY,
+  drawArrowAbovePlayer,
+  isWorldPointOnScreen,
+  type ArrowAvoidRect,
+  type ArrowCandidate,
+} from './WorldArrow';
 
 /**
  * The world-space half of a downed hireling's UI: a countdown over the body and
@@ -89,9 +95,11 @@ export function renderHirelingDownedMarker(
 /**
  * The knockout's revive arrow over the active crawler, pointing at a downed
  * hireling the player cannot see: off the screen, or out past the fog's
- * reach, where the body is drawn but painted over.
+ * reach, where the body is drawn but painted over. Returned as a candidate
+ * for the shared arrow arbiter rather than drawn directly, so it never
+ * appears alongside a downed crawler's own arrow.
  */
-export function renderHirelingDownedArrow(
+export function hirelingDownedArrowCandidate(
   ctx: CanvasRenderingContext2D,
   body: DownedBody,
   active: Player,
@@ -99,25 +107,36 @@ export function renderHirelingDownedArrow(
   camY: number,
   visibleRadiusPx: number,
   avoidRect?: ArrowAvoidRect,
-): void {
-  if (!body.survival.downed) return;
+): ArrowCandidate | null {
+  if (!body.survival.downed) return null;
   const bodyCenterX = body.x + TILE_SIZE * CENTER_OFFSET;
   const bodyCenterY = body.y + TILE_SIZE * CENTER_OFFSET;
-  const screenX = bodyCenterX - camX;
-  const screenY = bodyCenterY - camY;
-  const insideViewport =
-    screenX >= 0 && screenY >= 0 && screenX <= viewportWidth() && screenY <= viewportHeight();
-  const distanceFromActive = Math.hypot(body.x - active.x, body.y - active.y);
-  if (insideViewport && distanceFromActive <= visibleRadiusPx) return;
-  drawArrowAbovePlayer(
-    ctx,
-    active.x,
-    active.y,
+  const insideViewport = isWorldPointOnScreen(
     bodyCenterX,
     bodyCenterY,
     camX,
     camY,
-    REVIVE_ARROW_COLOR,
-    { avoidRect },
+    viewportWidth(),
+    viewportHeight(),
+    0,
   );
+  const distanceFromActive = Math.hypot(body.x - active.x, body.y - active.y);
+  if (insideViewport && distanceFromActive <= visibleRadiusPx) return null;
+  return {
+    priority: ARROW_PRIORITY.DOWNED_COMPANION,
+    draw: () =>
+      drawArrowAbovePlayer(
+        ctx,
+        active.x,
+        active.y,
+        bodyCenterX,
+        bodyCenterY,
+        camX,
+        camY,
+        REVIVE_ARROW_COLOR,
+        {
+          avoidRect,
+        },
+      ),
+  };
 }

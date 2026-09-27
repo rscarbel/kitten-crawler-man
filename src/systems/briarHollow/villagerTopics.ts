@@ -27,6 +27,12 @@ export interface ConversationController {
   /** Returns to the conversation's top-level choices. */
   showRootTopics(): void;
   close(): void;
+  /**
+   * Ends the conversation once the pages now showing finish, instead of
+   * bringing the choice row up after them — for an opening whose lines are
+   * the whole conversation, with no menu to follow.
+   */
+  endAfterPages(run: () => void): void;
   /** Runs once the conversation has closed, however it closed — the place to open a shop panel. */
   afterClose(run: () => void): void;
 }
@@ -51,6 +57,8 @@ export interface ConversationTopic {
    * a wall of trivia.
    */
   readonly isQuestion?: boolean;
+  /** Picking this row moves a quest on; the row wears the quest icon. */
+  readonly questRelated?: boolean;
 }
 
 export interface TopicProvider {

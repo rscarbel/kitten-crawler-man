@@ -264,6 +264,8 @@ export class RatkinSoldier extends Mob {
   party: readonly Player[] = [];
   /** The tiles either side of the militia's own gate, for a walk that has to go through it. */
   gateRoute: { readonly inside: TilePoint; readonly outside: TilePoint } | null = null;
+  /** The home gate's own tiles, crossed only by a follower actually commuting through it. */
+  homeGateTiles: readonly TilePoint[] = [];
   /** The palisade's outer rectangle, which a walk crosses only at the gate. */
   villageBounds: TileRect | null = null;
   /** The gate's middle, in world pixels, for the soldier who guards it. */
@@ -546,6 +548,30 @@ export class RatkinSoldier extends Mob {
       x: Math.floor((this.x + TILE_SIZE * CENTER_OFFSET) / TILE_SIZE),
       y: Math.floor((this.y + TILE_SIZE * CENTER_OFFSET) / TILE_SIZE),
     };
+  }
+
+  /**
+   * The tiles the soldier's own duty will actually walk it across: a post
+   * never leaves its anchor, a patrol or beat crosses only its own waypoints
+   * (which a post is placed clear of the palisade's gates), and a follower
+   * crosses the home gate only while actually commuting between inside and
+   * outside the village with its owner. A body pacing beside a gate without
+   * a reason to pass through it never opens the gate this way.
+   */
+  override get routeTiles(): readonly TilePoint[] {
+    const duty = this.duty;
+    if (duty.kind === 'patrol') return [this.tile, ...duty.route];
+    if (duty.kind === 'follow') {
+      const bounds = this.villageBounds;
+      if (bounds === null) return [this.tile];
+      const ownerTile = {
+        x: Math.floor((duty.owner.x + TILE_SIZE * CENTER_OFFSET) / TILE_SIZE),
+        y: Math.floor((duty.owner.y + TILE_SIZE * CENTER_OFFSET) / TILE_SIZE),
+      };
+      const crossing = rectHolds(bounds, this.tile) !== rectHolds(bounds, ownerTile);
+      return crossing ? [this.tile, ...this.homeGateTiles] : [this.tile];
+    }
+    return [this.tile];
   }
 
   /** Says a line over its head for long enough to read it. */

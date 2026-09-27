@@ -32,6 +32,20 @@ const GATE_CLOSE_SOUND = 'village_gate_close';
 
 const HALF_TILE = TILE_SIZE / 2;
 
+/** A friendly body the gate considers when deciding whether to open. */
+export interface GateFriendly {
+  readonly x: number;
+  readonly y: number;
+  /**
+   * The tiles this body's current route still crosses (underfoot tile plus
+   * remaining waypoints), in tile coordinates. When present, proximity alone
+   * no longer opens the gate — the route must actually cross one of the
+   * gate's own tiles. Leave unset for a body with no route to consult, such
+   * as the player, whose proximity alone should keep opening it as before.
+   */
+  readonly routeTiles?: ReadonlyArray<{ readonly x: number; readonly y: number }>;
+}
+
 export class VillageGate {
   private open = 0;
   private opening = false;
@@ -64,18 +78,17 @@ export class VillageGate {
    * @param friendlies Every friendly body this frame, by top-left world pixel.
    * @param shake 0–1 of the gate's shake after a blow.
    */
-  update(
-    friendlies: ReadonlyArray<{ readonly x: number; readonly y: number }>,
-    shake: number,
-    dtSeconds: number,
-  ): void {
+  update(friendlies: ReadonlyArray<GateFriendly>, shake: number, dtSeconds: number): void {
     this.clockSeconds += dtSeconds;
     const radiusPx = GATE_OPEN_RADIUS_TILES * TILE_SIZE;
-    const someoneNear = friendlies.some(
-      (body) =>
+    const someoneNear = friendlies.some((body) => {
+      const withinRadius =
         Math.hypot(body.x + HALF_TILE - this.centreX, body.y + HALF_TILE - this.centreY) <=
-        radiusPx,
-    );
+        radiusPx;
+      if (!withinRadius) return false;
+      if (body.routeTiles === undefined) return true;
+      return body.routeTiles.some((tile) => this.containsTile(tile.x, tile.y));
+    });
     if (someoneNear) {
       this.closeDelaySeconds = GATE_CLOSE_DELAY_SECONDS;
       if (!this.opening) {

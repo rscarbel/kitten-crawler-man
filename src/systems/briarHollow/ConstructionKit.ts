@@ -26,6 +26,9 @@ import type { Player } from '../../Player';
 import type { CrawlerKind } from '../../core/SkillManager';
 import type { ResourceCost } from '../../core/partyResources';
 import { canAfford, formatCost, partyCount } from '../../core/partyResources';
+import { partyCoins } from '../../core/partyCoins';
+import { RESOURCE_IDS } from '../../core/resourceIds';
+import { ITEM_DEF } from '../../core/ItemDefs';
 import { TILE_SIZE } from '../../core/constants';
 import { keybindings } from '../../core/Keybindings';
 import { platform } from '../../core/Platform';
@@ -45,14 +48,14 @@ import {
   TREBUCHET_COCKED_ANGLE,
   TREBUCHET_REACH_UP_TILES,
 } from '../../sprites/art/trebuchetArt';
-import { drawSnare } from '../../sprites/art/snareArt';
+import { drawSnare, SNARE_REACH_UP_TILES } from '../../sprites/art/snareArt';
 import {
   DefenseStructures,
   type StructureRef,
   structureKey,
   trebuchetFootprint,
 } from './DefenseStructures';
-import { VillageGate } from './VillageGate';
+import { VillageGate, type GateFriendly } from './VillageGate';
 import { TrebuchetSystem } from './TrebuchetSystem';
 import { SnareSystem } from './SnareSystem';
 import { ConvertedAllyController } from './ConvertedAllyController';
@@ -66,9 +69,11 @@ import {
   ConstructionSystem,
   isWallOption,
   type BuildOption,
+  type PlannedFootprint,
   type PushableBody,
 } from './ConstructionSystem';
 import {
+  BELL_TOWER_REPAIR_COINS,
   TREBUCHET_MAX_AMMO,
   UPDATES_PER_SECOND,
   WALL_TIERS,
@@ -85,8 +90,11 @@ export const STRUCTURE_REACH_TILES = 1.6;
 const STRUCTURE_MENU_WALK_AWAY_TILES = 3;
 /** "Nothing to work on here." is said at most this often, so a held key does not spam it. */
 const NOTHING_NOTE_COOLDOWN_SECONDS = 3;
-/** Clear of the ammo pill above a trebuchet, whether or not the pill is stacked with a neighbor's. */
-const TREBUCHET_HINT_LIFT_TILES = 2.65;
+/**
+ * Clear of the ammo pill above a trebuchet: high enough that both hint lines,
+ * not just the first, sit above the pill's top edge.
+ */
+const TREBUCHET_HINT_LIFT_TILES = 3.3;
 /** Vertical gap between the hint's two lines. */
 const TREBUCHET_HINT_LINE_GAP_PX = 13;
 const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
@@ -103,6 +111,10 @@ const GHOST_EDGE_WIDTH = 2;
 const HIGHLIGHT_EDGE = 'rgba(253,230,138,0.95)';
 /** How far outside its tile a segment's highlight is drawn, so it reads over the wall art. */
 const HIGHLIGHT_INSET = 1;
+/** The "no room" silhouette's own tint, over the failed build's exact sprite shape. */
+const NO_ROOM_GHOST_TINT = '#ef4444';
+/** The silhouette never reads as solid, even at full strength, so it never looks like a real structure. */
+const NO_ROOM_GHOST_MAX_ALPHA = 0.6;
 
 /** How long the Build button pulses the first time it appears. */
 const BUILD_BUTTON_PULSE_SECONDS = 5;
@@ -111,6 +123,16 @@ const BUILD_BUTTON_PULSE_SECONDS = 5;
 const WALL_PROMPT_LIFT_TILES = 1.35;
 /** The cost line sits this far below the first line. */
 const WALL_PROMPT_LINE_GAP_PX = 13;
+
+/**
+ * How far above the bell tower's own tiles its broken-tower prompt floats.
+ * The tower's art stands several tiles taller than its 2×2 footprint, and the
+ * prompt stacks a repair line over one line per required resource, so this
+ * clears both the art and that whole stack.
+ */
+const BELL_TOWER_PROMPT_LIFT_TILES = 5.2;
+/** Vertical gap between the broken-tower prompt's stacked lines. */
+const BELL_TOWER_PROMPT_LINE_GAP_PX = 13;
 /**
  * Whether the Build button has been shown yet this page. Module state, like
  * the session's resource tally: a door visit rebuilds the kit, and the pulse
@@ -168,6 +190,8 @@ export class ConstructionKit {
   private readonly picker: QuantityPicker;
   private structureTarget: StructureRef | null = null;
   private preview: BuildOption | null = null;
+  /** Reused across frames so a fading "no room" silhouette doesn't allocate a canvas every draw. */
+  private noRoomGhostCanvas: HTMLCanvasElement | null = null;
   private secondsSinceNothingNote = NOTHING_NOTE_COOLDOWN_SECONDS;
   private buildPulseSecondsLeft = 0;
   private timeSeconds = 0;
@@ -198,10 +222,11 @@ export class ConstructionKit {
       cat: deps.cat,
       roster: world.roster,
       audio,
-      announce: (message) => deps.menus.announce(message),
+      announce: (message, prominence) => deps.menus.announce(message, prominence),
       noteResourceActivity: deps.noteResourceActivity,
       bodies: () => this.pushableBodies(),
       indoors: false,
+      unlocks: () => deps.state.unlocks,
     });
     this.allies = new ConvertedAllyController(world.roster, audio);
     this.trebuchets = new TrebuchetSystem({
@@ -240,14 +265,16 @@ export class ConstructionKit {
       // away from the wall, the menu shows only what can be built anywhere.
       rows: () => {
         const nearWall = this.construction.isNearWall();
-        return BUILD_OPTIONS.filter((option) => nearWall || !isWallOption(option)).map((option) =>
-          this.construction.optionStatus(option),
-        );
+        return BUILD_OPTIONS.filter(
+          (option) =>
+            (nearWall || !isWallOption(option)) && this.construction.isOptionUnlocked(option),
+        ).map((option) => this.construction.optionStatus(option));
       },
       start: (option) => this.construction.startOption(option),
       setPreview: (option) => {
         this.preview = option;
       },
+      onOpen: () => this.construction.clearNoRoomGhost(),
     };
   }
 
@@ -268,11 +295,22 @@ export class ConstructionKit {
     return this.active().craftSkills.isLearned('construction');
   }
 
-  /** Whether the HUD's Build button shows: once either crawler has learned Construction. */
+  /**
+   * Whether the party holds a plan for anything at all. Construction is
+   * taught in one lesson but its plans are handed out across the questline,
+   * so a crawler can know the craft with nothing yet to spend it on — that
+   * keeps every build panel shut until there is something in it to show.
+   */
+  private get hasAnyConstructionUnlock(): boolean {
+    return this.deps.state.unlocks.construction.length > 0;
+  }
+
+  /** Whether the HUD's Build button shows: once either crawler has learned Construction and holds a plan. */
   get buildButtonVisible(): boolean {
     return (
-      this.deps.human.craftSkills.isLearned('construction') ||
-      this.deps.cat.craftSkills.isLearned('construction')
+      (this.deps.human.craftSkills.isLearned('construction') ||
+        this.deps.cat.craftSkills.isLearned('construction')) &&
+      this.hasAnyConstructionUnlock
     );
   }
 
@@ -315,13 +353,19 @@ export class ConstructionKit {
     return bodies;
   }
 
-  /** Every friendly body the gate opens for: the party, their allies and the villagers. */
-  private friendlies(): Array<{ x: number; y: number }> {
-    const friends: Array<{ x: number; y: number }> = [this.deps.human, this.deps.cat];
+  /**
+   * Every friendly body the gate opens for: the party and their allies open it
+   * by proximity alone, same as always; a villager or soldier only opens it
+   * when their current route actually crosses the gate, so one pacing a beat
+   * nearby without a reason to pass through does not swing it open.
+   */
+  private friendlies(): GateFriendly[] {
+    const friends: GateFriendly[] = [this.deps.human, this.deps.cat];
     for (const mob of this.deps.world.roster.mobs) {
       if (mob.isAlive && !mob.isHostile) friends.push(mob);
     }
-    for (const villager of this.deps.villagers()) friends.push(villager);
+    for (const villager of this.deps.villagers())
+      friends.push({ x: villager.x, y: villager.y, routeTiles: villager.remainingRoute });
     return friends;
   }
 
@@ -386,6 +430,10 @@ export class ConstructionKit {
       this.deps.menus.announce('You have not learned Construction yet.');
       return;
     }
+    if (!this.hasAnyConstructionUnlock) {
+      this.deps.menus.announce("You don't have any construction plans yet.");
+      return;
+    }
     this.closeStructureMenu();
     menu.openWith(this.menuSource, false);
   }
@@ -396,7 +444,7 @@ export class ConstructionKit {
       this.closeStructureMenu();
       return true;
     }
-    if (!this.learned) return false;
+    if (!this.learned || !this.hasAnyConstructionUnlock) return false;
     const target = this.defense.nearestInReach(this.active(), STRUCTURE_REACH_TILES);
     return this.openStructureMenuOn(target);
   }
@@ -442,6 +490,17 @@ export class ConstructionKit {
   }
 
   /**
+   * Whether {@link renderWallBuildPrompt} would draw its own prompt for
+   * `active` right now — the rule `VillageQuestGuide`'s wall-upgrade caption
+   * yields to, so the two never stack over the same fence.
+   */
+  isWallPromptShowing(active: Crawler = this.active()): boolean {
+    if (!this.learned || this.isMenuOpen || this.construction.job !== null) return false;
+    if (interactionPromptsSuppressed()) return false;
+    return this.construction.wallBuildPrompt(active) !== null;
+  }
+
+  /**
    * The contextual "press the build key" prompt over a wall the active
    * crawler faces: the repair it would make, or with nothing to mend, what
    * it would raise the wall to, and what either costs (the same information
@@ -454,8 +513,7 @@ export class ConstructionKit {
     camY: number,
     active: Crawler,
   ): boolean {
-    if (!this.learned || this.isMenuOpen || this.construction.job !== null) return false;
-    if (interactionPromptsSuppressed()) return false;
+    if (!this.isWallPromptShowing(active)) return false;
     const prompt = this.construction.wallBuildPrompt(active);
     const tile = this.construction.wallPromptTile(active);
     if (prompt === null || tile === null) return false;
@@ -490,7 +548,7 @@ export class ConstructionKit {
   /** Long-press on a construction: its Structure menu. Only a structure under the finger claims the press. */
   handleLongPress(screenX: number, screenY: number, camX: number, camY: number): boolean {
     const target = this.structureAtScreen(screenX, screenY, camX, camY);
-    if (target === null || !this.learned) return false;
+    if (target === null || !this.learned || !this.hasAnyConstructionUnlock) return false;
     if (!this.inReach(target)) {
       this.deps.menus.announce('Get closer to work on that.');
       return true;
@@ -505,12 +563,16 @@ export class ConstructionKit {
    * toward it, or the press would be rejected as the end of a walk.
    */
   isStructureUnderFinger(screenX: number, screenY: number, camX: number, camY: number): boolean {
-    if (!this.learned) return false;
+    if (!this.learned || !this.hasAnyConstructionUnlock) return false;
     const target = this.structureAtScreen(screenX, screenY, camX, camY);
     return target !== null && target.kind !== 'gate' && this.inReach(target);
   }
 
-  /** Double-tap on a trebuchet: Quick Load it. Double-tap on a wall: build it, the mobile equivalent of the build key. */
+  /**
+   * Double-tap on a trebuchet: Quick Load it. Double-tap on a wall: build it,
+   * the mobile equivalent of the build key. Double-tap on the broken bell
+   * tower: repair it, the mobile equivalent of the repair key.
+   */
   handleDoubleTap(screenX: number, screenY: number, camX: number, camY: number): boolean {
     const target = this.structureAtScreen(screenX, screenY, camX, camY);
     if (target === null || !this.learned || !this.inReach(target)) return false;
@@ -520,6 +582,8 @@ export class ConstructionKit {
     }
     if (target.kind === 'segment' && !this.isMenuOpen)
       return this.construction.repairOrUpgrade(target);
+    if (target.kind === 'bellTower' && !this.isMenuOpen)
+      return this.construction.startRepair(target);
     return false;
   }
 
@@ -598,7 +662,11 @@ export class ConstructionKit {
 
     const upgradeCost = construction.upgradeCostFor(target);
     const upgradeTier = defense.upgradeTarget(target);
-    if (upgradeCost !== null && upgradeTier !== null) {
+    if (
+      upgradeCost !== null &&
+      upgradeTier !== null &&
+      construction.isWallTierUnlocked(upgradeTier)
+    ) {
       options.push({
         label: `Upgrade to ${WALL_TIERS[upgradeTier].label}`,
         cost: upgradeCost,
@@ -637,10 +705,15 @@ export class ConstructionKit {
         action: act(() => construction.startRepair(target)),
       });
     }
-    if (construction.spikesAvailable() && defense.spikesNeedWork(target)) {
+    const spikesWouldBeNew = construction.spikesAreNew(target);
+    if (
+      construction.spikesAvailable() &&
+      defense.spikesNeedWork(target) &&
+      (!spikesWouldBeNew || construction.isActionUnlocked('spikes'))
+    ) {
       const cost = construction.spikesCostFor();
       options.push({
-        label: record?.spikesHp === null || record === null ? 'Add Spikes' : 'Repair Spikes',
+        label: spikesWouldBeNew ? 'Add Spikes' : 'Repair Spikes',
         cost,
         disabledReason: affordReason(cost),
         action: act(() => construction.startSpikes(target)),
@@ -690,6 +763,8 @@ export class ConstructionKit {
         return 'The Gate';
       case 'bell':
         return HOLLOW_BELL_LABEL;
+      case 'bellTower':
+        return 'The Bell Tower — broken';
     }
   }
 
@@ -738,6 +813,7 @@ export class ConstructionKit {
   /** The placement ghost for a hovered Construction row, and the targeted segment's outline. */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.trebuchets.renderGround(ctx, camX, camY);
+    this.renderNoRoomGhost(ctx, camX, camY);
     const option = this.preview;
     if (option !== null && this.deps.menus.constructionMenu.isOpen) {
       const preview = this.construction.previewFor(option);
@@ -768,6 +844,56 @@ export class ConstructionKit {
         );
       }
     }
+  }
+
+  /**
+   * A trebuchet or snare that had no room, drawn as its own sprite silhouette
+   * tinted red over the exact footprint the failed build tried, fading as
+   * `ConstructionSystem` counts it down.
+   */
+  private renderNoRoomGhost(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const ghost = this.construction.noRoomGhost;
+    if (ghost === null) return;
+    const { footprint, alpha } = ghost;
+    const reachUpTiles =
+      footprint.kind === 'trebuchet' ? TREBUCHET_REACH_UP_TILES : SNARE_REACH_UP_TILES;
+    const width = Math.ceil(footprint.w * TILE_SIZE);
+    const height = Math.ceil((footprint.h + reachUpTiles) * TILE_SIZE);
+    const canvas = this.noRoomGhostCanvas ?? document.createElement('canvas');
+    this.noRoomGhostCanvas = canvas;
+    canvas.width = width;
+    canvas.height = height;
+    const sctx = canvas.getContext('2d');
+    if (sctx === null) return;
+    const originY = reachUpTiles * TILE_SIZE;
+    this.paintNoRoomFootprint(sctx, footprint, originY);
+    sctx.globalCompositeOperation = 'source-in';
+    sctx.fillStyle = NO_ROOM_GHOST_TINT;
+    sctx.fillRect(0, 0, width, height);
+    ctx.save();
+    ctx.globalAlpha = alpha * NO_ROOM_GHOST_MAX_ALPHA;
+    ctx.drawImage(canvas, footprint.x * TILE_SIZE - camX, footprint.y * TILE_SIZE - camY - originY);
+    ctx.restore();
+  }
+
+  private paintNoRoomFootprint(
+    sctx: CanvasRenderingContext2D,
+    footprint: PlannedFootprint,
+    originY: number,
+  ): void {
+    if (footprint.kind === 'trebuchet') {
+      drawTrebuchet(sctx, 0, originY, TILE_SIZE, {
+        armAngle: TREBUCHET_COCKED_ANGLE,
+        slingPhase: 0,
+        broken: false,
+        damageStage: 0,
+        spikes: false,
+        ammoFraction: 0,
+        infernal: false,
+      });
+      return;
+    }
+    drawSnare(sctx, 0, originY, TILE_SIZE, { look: 'set', spikes: false, timeSeconds: 0 });
   }
 
   /** Trebuchets and snares, Y-sorted with every body. */
@@ -860,6 +986,19 @@ export class ConstructionKit {
     this.trebuchets.renderAbove(ctx, camX, camY);
     this.construction.renderJob(ctx, camX, camY);
     this.renderTrebuchetHint(ctx, camX, camY);
+    this.renderBellTowerRepairPrompt(ctx, camX, camY);
+  }
+
+  /**
+   * Whether {@link renderTrebuchetHint} would draw its own prompt for the
+   * trebuchet at `at` right now — the rule `VillageQuestGuide`'s load-with-
+   * stone caption yields to, so the two never stack over the same trebuchet.
+   */
+  isTrebuchetPromptShowing(at: { readonly x: number; readonly y: number }): boolean {
+    if (this.structureMenu.isOpen || this.deps.menus.constructionMenu.isOpen) return false;
+    if (interactionPromptsSuppressed()) return false;
+    const target = this.defense.nearestInReach(this.active(), STRUCTURE_REACH_TILES);
+    return target?.kind === 'trebuchet' && target.key === structureKey(at.x, at.y);
   }
 
   /**
@@ -892,6 +1031,73 @@ export class ConstructionKit {
       y: y + TREBUCHET_HINT_LINE_GAP_PX,
       align: 'center',
       ...TEXT_PRESETS.label,
+    });
+  }
+
+  /**
+   * While the bell tower stands broken, its repair prompt and materials tally
+   * float over it at any distance: a hurt wall only shows its cost up close
+   * because the wall is right there to look at, but the tower's boards, rope,
+   * stone and coin are back at a stockpile, so the player needs the tally
+   * without first walking over to find out what is missing. It stays up
+   * whether or not the party can afford the repair yet, and disappears the
+   * moment the tower is whole.
+   */
+  private renderBellTowerRepairPrompt(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
+    if (!this.defense.bellTowerRepairable) return;
+    if (!this.learned || this.isMenuOpen || this.construction.job !== null) return;
+    if (interactionPromptsSuppressed()) return;
+    const ref: StructureRef = { kind: 'bellTower' };
+    const cost = this.construction.repairCostFor(ref);
+    if (cost === null) return;
+    const tiles = this.defense.footprintOf(ref);
+    if (tiles.length === 0) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    for (const tile of tiles) {
+      minX = Math.min(minX, tile.x);
+      minY = Math.min(minY, tile.y);
+      maxX = Math.max(maxX, tile.x + 1);
+    }
+    const sx = ((minX + maxX) / 2) * TILE_SIZE - camX;
+    const topY = minY * TILE_SIZE - camY - BELL_TOWER_PROMPT_LIFT_TILES * TILE_SIZE;
+
+    const repairLine = platform.isMobile
+      ? 'Double tap to repair'
+      : `Repair (${keybindings.labelFor('quickLoad')})`;
+    drawText(ctx, repairLine, { x: sx, y: topY, align: 'center', ...TEXT_PRESETS.label });
+
+    const human = this.deps.human;
+    const cat = this.deps.cat;
+    let lineY = topY + BELL_TOWER_PROMPT_LINE_GAP_PX;
+    for (const id of RESOURCE_IDS) {
+      const need = cost[id] ?? 0;
+      if (need <= 0) continue;
+      const have = partyCount(human, cat, id);
+      const style = have >= need ? TEXT_PRESETS.label : TEXT_PRESETS.danger;
+      drawText(ctx, `${ITEM_DEF[id].name} ${have}/${need}`, {
+        x: sx,
+        y: lineY,
+        align: 'center',
+        outline: true,
+        ...style,
+      });
+      lineY += BELL_TOWER_PROMPT_LINE_GAP_PX;
+    }
+    const coinsHave = partyCoins(human, cat);
+    const coinsStyle =
+      coinsHave >= BELL_TOWER_REPAIR_COINS ? TEXT_PRESETS.label : TEXT_PRESETS.danger;
+    drawText(ctx, `Coins ${coinsHave}/${BELL_TOWER_REPAIR_COINS}`, {
+      x: sx,
+      y: lineY,
+      align: 'center',
+      outline: true,
+      ...coinsStyle,
     });
   }
 

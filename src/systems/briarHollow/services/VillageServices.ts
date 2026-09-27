@@ -33,11 +33,16 @@ import type { Circumstance, VillagerId } from '../ratkinDialogue';
 import type { VillagerSystem } from '../VillagerSystem';
 import type { ConversationController } from '../villagerTopics';
 import { COOK, cookhouseTopics } from './cookhouse';
-import { SMITH, forgeTopics, type ForgeHost } from './forge';
+import { SMITH, forgeTopics, runOrenAutoGrant, type ForgeHost } from './forge';
 import { DOCTOR, infirmaryTopics, type InfirmaryHost } from './infirmary';
 import { lumberForemanTopics, type LumberForemanHost } from './lumberForeman';
 import { SawmillService } from './sawmill';
-import type { Crawler, ServiceParty, ShopDefinition } from './serviceContext';
+import {
+  otherCrawler,
+  type Crawler,
+  type ServiceParty,
+  type ShopDefinition,
+} from './serviceContext';
 import { MERCHANT, tradingPostTopics } from './tradingPost';
 import { renderTreatmentShimmer } from './treatmentShimmer';
 
@@ -123,6 +128,7 @@ export class VillageServices {
       noteResourceActivity: deps.noteResourceActivity,
       fennaTilesFrom: (crawler) => this.fennaTilesFrom(crawler),
       fennaNoWood: () => void deps.villagers.bark('fenna', 'no_logs', true),
+      unlocked: () => deps.state.unlocks.processingStations,
     });
     const counter = { openShop: (shop: ShopDefinition): void => this.openShop(shop) };
     const announce = (message: string): void => deps.menus.announce(message);
@@ -134,6 +140,16 @@ export class VillageServices {
     // "Process a batch" leads Fenna's list ahead of the built-in "How does the mill work?" small talk.
     deps.villagers.addTopicProvider(lumberForemanTopics(this.lumberForemanHost()), { first: true });
     this.removeKeyListeners = this.listenForInteractKey();
+  }
+
+  /**
+   * Grants Oren's starter tools and the Resourcing lesson as the questline's
+   * own opening line for him — the pages are already on screen by the time
+   * this runs, so it never says them itself.
+   */
+  grantOrenTools(ctl: ConversationController): void {
+    const counter = { openShop: (shop: ShopDefinition): void => this.openShop(shop) };
+    runOrenAutoGrant(this.forgeHost(counter), ctl);
   }
 
   // ── Hosts the shop modules act through ─────────────────────────────────
@@ -409,7 +425,8 @@ export class VillageServices {
   }
 
   renderDialog(ctx: CanvasRenderingContext2D): void {
-    this.panel.render(ctx, this.party.active());
+    const active = this.party.active();
+    this.panel.render(ctx, active, otherCrawler(this.party, active));
     this.picker.render(ctx);
   }
 
@@ -442,7 +459,8 @@ export class VillageServices {
 
   handleClick(mx: number, my: number): boolean {
     if (this.picker.handleClick(mx, my)) return true;
-    return this.panel.handleClick(mx, my, this.party.active());
+    const active = this.party.active();
+    return this.panel.handleClick(mx, my, active, otherCrawler(this.party, active));
   }
 
   handleWheel(deltaY: number): void {

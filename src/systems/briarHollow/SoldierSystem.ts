@@ -20,7 +20,7 @@ import { VILLAGE_CUES } from '../../audio/villageSoundCues';
 import { TILE_SIZE } from '../../core/constants';
 import type { BriarHollowState, SoldierOrderRecord } from '../../core/briarHollowState';
 import type { CrawlerKind } from '../../core/SkillManager';
-import { hasAcceptedMayorRequest, type VillageQuestPhase } from '../../core/villageQuestPhase';
+import type { VillageQuestPhase } from '../../core/villageQuestPhase';
 import { applySpawnDifficulty } from '../../core/difficultyProfiles';
 import { REVIVE_RANGE_PX } from '../../core/reviveRules';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -39,7 +39,6 @@ import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import { RATKIN_SOLDIER_IDS, type RatkinSoldierId } from '../../sprites/art/ratkin/cast';
 import { drawTimedSpeechBubble, type TimedBubbleStyle } from '../../sprites/speechBubble';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
-import { TEXT_PRESETS, drawText } from '../../ui/TextBox';
 import type { MobRoster } from '../kits/SceneWorld';
 import { hostileWithinAttackRange } from '../interactionPromptGate';
 import type { DefenseStructures } from './DefenseStructures';
@@ -106,9 +105,6 @@ const PATROL_RETURN_CHANCE = 0.25;
 /** Marta's rally reaches soldiers this close to her. */
 const RALLY_RADIUS_TILES = 6;
 
-/** Within this many tiles a soldier's name shows under their feet, as a villager's does. */
-const NAME_LABEL_RANGE_TILES = 4;
-const NAME_LABEL_DROP_PX = 1;
 const OVERHEAD_GAP_PX = 2;
 /** The militia's bubbles: steel and straw, apart from the civilians' warm ones. */
 const SOLDIER_BUBBLE_STYLE: TimedBubbleStyle = { border: '#8fa3b8', text: '#eef2f6' };
@@ -468,6 +464,7 @@ export class SoldierSystem {
       inside: this.deps.site.gate.inside,
       outside: this.deps.site.gate.outside,
     };
+    soldier.homeGateTiles = this.deps.site.gate.tiles;
     soldier.villageBounds = this.deps.site.palisadeBounds;
     const gateTiles = this.deps.site.gate.tiles;
     if (gateTiles.length > 0) {
@@ -808,16 +805,16 @@ export class SoldierSystem {
   }
 
   /**
-   * The order rows under a soldier's conversation. Empty until the Mayor's
-   * request is accepted: the militia takes no orders from a crawler the
-   * village hasn't vouched for, which the opening line says in their own
-   * words instead.
+   * The order rows under a soldier's conversation. Empty until the Mayor has
+   * placed the militia under the crawlers' command: the militia takes no
+   * orders from a crawler the village hasn't vouched for, which the opening
+   * line says in their own words instead.
    */
   private topicsFor(villager: VillagerId): readonly ConversationTopic[] {
     if (!isSoldierId(villager)) return [];
     const talk = this.talk;
     if (talk?.soldier.soldierId !== villager) return [];
-    if (!hasAcceptedMayorRequest(this.deps.state.quest.phase)) return [];
+    if (!this.deps.state.unlocks.soldierCommands) return [];
     const { soldier, talker } = talk;
     const id = soldier.soldierId;
     const acknowledge = (): void => {
@@ -907,25 +904,11 @@ export class SoldierSystem {
 
   // ── Drawing ────────────────────────────────────────────────────────────
 
-  /** Names under the feet and call-outs over the heads, drawn over every body. */
-  renderAbove(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    active: { readonly x: number; readonly y: number },
-  ): void {
+  /** Call-outs over the heads, drawn over every body. */
+  renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const soldier of this.soldiers) {
       const sx = soldier.x - camX;
       const sy = soldier.y - camY;
-      const tiles = Math.hypot(soldier.x - active.x, soldier.y - active.y) / TILE_SIZE;
-      if (tiles <= NAME_LABEL_RANGE_TILES) {
-        drawText(ctx, soldier.displayName, {
-          ...TEXT_PRESETS.label,
-          x: sx + TILE_SIZE * TILE_CENTRE,
-          y: sy + TILE_SIZE + NAME_LABEL_DROP_PX,
-          align: 'center',
-        });
-      }
       drawTimedSpeechBubble(
         ctx,
         soldier.speech,

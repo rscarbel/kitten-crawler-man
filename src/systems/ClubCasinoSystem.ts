@@ -12,6 +12,7 @@
  */
 
 import type { Player } from '../Player';
+import { canAffordCoins, partyCoins } from '../core/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
 import type { ClubMembership } from '../core/ClubMembership';
 import { drawText } from '../ui/TextBox';
@@ -370,17 +371,17 @@ export class ClubCasinoSystem {
    * and it is the entry point the preview harness uses to build a bet without a
    * rendered layout to click.
    */
-  placeChip(denomination: ChipDenomination, player: Player): void {
-    this.table.addChip(denomination, player);
+  placeChip(denomination: ChipDenomination, player: Player, companion: Player): void {
+    this.table.addChip(denomination, player, companion);
   }
 
-  openTable(player: Player): void {
+  openTable(player: Player, companion: Player): void {
     this.open = true;
     this.lastFrameStamp = null;
-    this.displayedCoins = player.coins;
+    this.displayedCoins = partyCoins(player, companion);
     // A fresh tally for a fresh sit-down — see `flySessionWinnings`.
     this.pendingSessionWinnings = 0;
-    this.table.sitDown(player);
+    this.table.sitDown(player, companion);
     // Sitting down settles any leftover from the last session; those events
     // belong to a hand the player is no longer looking at.
     this.table.drainEvents();
@@ -435,7 +436,7 @@ export class ClubCasinoSystem {
 
   // ── Frame ────────────────────────────────────────────────────────────────
 
-  update(player: Player): void {
+  update(player: Player, companion: Player): void {
     const dtMs = this.tickClock();
 
     if (!this.open) return;
@@ -443,7 +444,7 @@ export class ClubCasinoSystem {
     this.table.update(dtMs);
     this.consumeEvents(player);
     this.expireAnimations();
-    this.tickCoinTicker(player);
+    this.tickCoinTicker(player, companion);
     this.maybeOfferHintRetirement();
   }
 
@@ -458,10 +459,11 @@ export class ClubCasinoSystem {
     return dtMs;
   }
 
-  private tickCoinTicker(player: Player): void {
-    const gap = player.coins - this.displayedCoins;
+  private tickCoinTicker(player: Player, companion: Player): void {
+    const total = partyCoins(player, companion);
+    const gap = total - this.displayedCoins;
     if (Math.abs(gap) <= COIN_TICKER_SNAP) {
-      this.displayedCoins = player.coins;
+      this.displayedCoins = total;
       return;
     }
     this.displayedCoins += gap * COIN_TICKER_RATE;
@@ -656,7 +658,7 @@ export class ClubCasinoSystem {
 
   // ── Input ────────────────────────────────────────────────────────────────
 
-  handleClick(mx: number, my: number, player: Player): void {
+  handleClick(mx: number, my: number, player: Player, companion: Player): void {
     if (this.rules.isOpen) {
       this.rules.handleClick(mx, my, () => this.toggleHints());
       return;
@@ -665,15 +667,15 @@ export class ClubCasinoSystem {
     for (let i = this.buttons.length - 1; i >= 0; i--) {
       const button = this.buttons[i];
       if (!button.result.contains(point.x, point.y)) continue;
-      this.runAction(button.action, player);
+      this.runAction(button.action, player, companion);
       return;
     }
   }
 
-  private runAction(action: PanelAction, player: Player): void {
+  private runAction(action: PanelAction, player: Player, companion: Player): void {
     switch (action.kind) {
       case 'chip':
-        this.placeChip(action.denomination, player);
+        this.placeChip(action.denomination, player, companion);
         return;
       case 'remove_chip':
         this.table.removeTopChip(player);
@@ -682,7 +684,7 @@ export class ClubCasinoSystem {
         this.table.clearBet(player);
         return;
       case 'same_bet':
-        this.table.repeatLastBet(player);
+        this.table.repeatLastBet(player, companion);
         return;
       case 'deal':
         this.table.deal();
@@ -694,17 +696,17 @@ export class ClubCasinoSystem {
         this.table.stand();
         return;
       case 'double':
-        this.table.doubleDown(player);
+        this.table.doubleDown(player, companion);
         return;
       case 'next_hand':
-        this.table.nextHand(player);
+        this.table.nextHand(player, companion);
         if (this.table.phase === 'turned_away') this.say('turned_away');
         this.outcomeShownAt = null;
         return;
       case 'repeat_hand':
-        this.table.nextHand(player);
+        this.table.nextHand(player, companion);
         if (this.table.phase === 'turned_away') this.say('turned_away');
-        else this.table.repeatLastBet(player);
+        else this.table.repeatLastBet(player, companion);
         this.outcomeShownAt = null;
         return;
       case 'help':
@@ -718,7 +720,7 @@ export class ClubCasinoSystem {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  renderPanel(ctx: CanvasRenderingContext2D, player: Player): void {
+  renderPanel(ctx: CanvasRenderingContext2D, player: Player, companion: Player): void {
     if (!this.open) return;
     this.buttons = [];
 
@@ -753,8 +755,8 @@ export class ClubCasinoSystem {
     this.renderHands(ctx, layout);
     if (this.table.phase === 'turned_away') this.renderTurnedAwayNotice(ctx, layout);
     this.renderStatus(ctx, layout);
-    this.renderChips(ctx, layout, player);
-    this.renderActions(ctx, layout, player);
+    this.renderChips(ctx, layout, player, companion);
+    this.renderActions(ctx, layout, player, companion);
     this.renderHint(ctx, layout);
     this.renderFooter(ctx, layout);
     this.renderFlights(ctx, layout);
@@ -1150,14 +1152,22 @@ export class ClubCasinoSystem {
     }
   }
 
-  private renderChips(ctx: CanvasRenderingContext2D, layout: CasinoLayout, player: Player): void {
+  private renderChips(
+    ctx: CanvasRenderingContext2D,
+    layout: CasinoLayout,
+    player: Player,
+    companion: Player,
+  ): void {
     const tray = layout.chipTray;
     const trayCentre = rectCentre(tray);
     const radius = tray.height * TRAY_CHIP_RADIUS_FRACTION;
     const baseY = tray.y + tray.height - radius;
     // The label owns the top of the rect, so the stack is capped to whatever is
     // left under it — an uncapped stack grows straight through its own caption.
-    const chips = trayChips(player.coins).slice(0, visibleChipCapacity(tray.height, radius));
+    const chips = trayChips(partyCoins(player, companion)).slice(
+      0,
+      visibleChipCapacity(tray.height, radius),
+    );
 
     if (chips.length === 0) drawEmptyTrayOutline(ctx, trayCentre.x, baseY, radius);
     else drawChipStack(ctx, trayCentre.x, baseY, radius, chips);
@@ -1212,7 +1222,12 @@ export class ClubCasinoSystem {
     return trayChips(this.table.stake);
   }
 
-  private renderActions(ctx: CanvasRenderingContext2D, layout: CasinoLayout, player: Player): void {
+  private renderActions(
+    ctx: CanvasRenderingContext2D,
+    layout: CasinoLayout,
+    player: Player,
+    companion: Player,
+  ): void {
     const row = layout.actionRow;
     switch (this.table.phase) {
       case 'turned_away':
@@ -1220,14 +1235,14 @@ export class ClubCasinoSystem {
       case 'dealer_turn':
         return;
       case 'betting':
-        this.renderBettingActions(ctx, layout, row, player);
+        this.renderBettingActions(ctx, layout, row, player, companion);
         return;
       case 'player_turn':
         // Only the two decision phases join a ring. The betting row deliberately
         // does not: a stray accept press must never place a wager the player did
         // not aim at.
         beginMenuFocus('casino-turn');
-        this.renderTurnActions(ctx, layout, row, player);
+        this.renderTurnActions(ctx, layout, row, player, companion);
         endMenuFocus();
         return;
       case 'settled':
@@ -1289,14 +1304,16 @@ export class ClubCasinoSystem {
     layout: CasinoLayout,
     row: Rect,
     player: Player,
+    companion: Player,
   ): void {
     const cells = this.actionCells(layout, row, CHIP_DENOMINATIONS.length + BETTING_CONTROL_COUNT);
-    const ceiling = this.table.effectiveMaximum(player);
+    const ceiling = this.table.effectiveMaximum(player, companion);
 
     CHIP_DENOMINATIONS.forEach((denomination, i) => {
       const cell = cells[i];
       const affordable =
-        player.coins >= denomination && this.table.betTotal + denomination <= ceiling;
+        canAffordCoins(player, companion, denomination) &&
+        this.table.betTotal + denomination <= ceiling;
       this.addButton(
         ctx,
         cell,
@@ -1351,6 +1368,7 @@ export class ClubCasinoSystem {
     layout: CasinoLayout,
     row: Rect,
     player: Player,
+    companion: Player,
   ): void {
     const cells = this.actionCells(layout, row, TURN_CONTROL_COUNT);
     this.addButton(ctx, cells[0], 'Hit', BUTTON_PRESETS.success, { kind: 'hit' });
@@ -1361,7 +1379,7 @@ export class ClubCasinoSystem {
       `Double (${this.table.stake})`,
       BUTTON_PRESETS.gold,
       { kind: 'double' },
-      !this.table.canDoubleDown(player),
+      !this.table.canDoubleDown(player, companion),
     );
   }
 

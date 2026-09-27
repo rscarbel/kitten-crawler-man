@@ -1,5 +1,7 @@
 /**
- * The Journal's compass rose — the HUD button that opens the Quest Journal.
+ * The compass rose — the HUD button that opens the Quest Journal, and also the
+ * shape `QuestIcon` scales down for the quest-relevance badge on dialogs, quest
+ * pages, and shop rows, so both surfaces read as the same icon.
  *
  * Baked once into an offscreen texture rather than stroked every frame. The
  * emblem is a dozen fills and strokes and it never changes, so paying for it on
@@ -122,7 +124,11 @@ function bake(): CanvasSurface {
   return surface;
 }
 
-/** Draws the compass rose into a square region of the screen. */
+/**
+ * Draws the compass rose into a square region of the screen, `(x, y)` being
+ * its top-left corner. The texture is baked well above button size, so this
+ * stays a downscale even at the small badge sizes `QuestIcon` uses.
+ */
 export function drawCompassIcon(
   ctx: CanvasRenderingContext2D,
   x: number,

@@ -7,18 +7,20 @@
  *
  *   npm run verify:village-quest
  *
- * Steps: the Mayor's offer (declined, then accepted); Tikka and Oren; the
- * gathering tasks with the journal after each; Construction from Tikka; a
- * wooden wall and "We're ready."; the countdown; a lost siege
- * (the dead withdraw, the bell is mended, the damage stays, the Mayor's word
- * returns the quest to fortifying); a won retry (the rest crumble, paying
- * nothing); the turn-in (every reward once; a second pays nothing). A
- * checkpoint is round-tripped at every step, and one taken mid-siege must
- * come back as fortifying.
+ * Steps: the Mayor's offer (declined, then accepted); Oren's tools, granted
+ * as the conversation opens rather than through a topic; chopping wood then
+ * mining stone; Tikka's plans and Construction; Fenna's saw and rope walk;
+ * processing boards and rope; Tikka's plans handed over; the first trebuchet,
+ * loading it, and the first wooden wall; the Mayor's summons and briefing; a
+ * lost siege (the dead withdraw, the bell is mended, the Mayor's word sends
+ * the party to repair the bell tower, which returns the quest to fortifying);
+ * a won retry (the rest crumble, paying nothing); the turn-in (every reward
+ * once; a second pays nothing). A checkpoint is round-tripped at every step,
+ * and one taken mid-siege must come back as fortifying.
  *
  * Harvesting and wood processing have their own gates (`verify:harvest`,
- * `verify:village-services`); here the party's stock is filled and the events
- * those systems raise are raised, and the quest's answer to them is checked.
+ * `verify:village-services`); here the party's held resources are set
+ * directly and the quest's answer to them is checked.
  */
 
 import { installCanvasGlobals } from './nodeCanvasGlobals';
@@ -48,7 +50,16 @@ import {
   BRIAR_HOLLOW_QUEST_ID,
   BRIAR_HOLLOW_REWARD_BURGERS,
   BRIAR_HOLLOW_REWARD_STEW,
+  MAYOR_SHOUT_SUMMONS_SPEAKER,
+  MAYOR_SHOUT_SUMMONS_TEXT,
+  PROCESSING_BOARDS_TARGET,
+  PROCESSING_DONE_LINE,
+  PROCESSING_ROPE_TARGET,
+  QUARRY_SPOTTED_LINE,
+  STONE_TARGET,
+  WOOD_TARGET,
 } from '../src/systems/briarHollow/VillageQuestSystem';
+import { TREBUCHET_BUILD_COST } from '../src/systems/briarHollow/structureRules';
 import { buildSiegeRig, standAt } from './villageSiegeHarness';
 
 installCanvasGlobals();
@@ -77,11 +88,11 @@ const UPDATES_PER_SECOND = 60;
 const REQUEST_IMMINENT_SECONDS = 45;
 const REQUEST_BELL_HP = 600;
 const REQUEST_COINS = 500;
-const REQUEST_TIKKA_WOOD = 10;
-const REQUEST_TIKKA_STONE = 10;
-const REQUEST_BOARDS = 1;
-const REQUEST_ROPE = 1;
 const WOODEN_WALL_BOARDS = 5;
+/** Enough stone to load a trebuchet from empty. */
+const TREBUCHET_AMMO_LOADED = 1;
+/** Clear of the gate itself, and within its footprint's build zones. */
+const TREBUCHET_TEST_OFFSET_TILES = 4;
 /** Long enough for the first wave to reach and chew the east wall. */
 const FIRST_WAVE_SECONDS = 40;
 /** Long enough for every withdrawal to end, released or timed out. */
@@ -126,6 +137,15 @@ conversation.showPages = (pages: readonly string[]) => {
   showPages(pages);
 };
 
+// Every narrated line the questline queues outside a conversation — Carl or
+// Donut's own beats, the Mayor's shout — in order.
+const questLines: Array<{ speaker: string; text: string }> = [];
+const showQuestLine = kit.showQuestLine.bind(kit);
+kit.showQuestLine = (speaker: string, text: string, onClosed?: () => void) => {
+  questLines.push({ speaker, text });
+  showQuestLine(speaker, text, onClosed);
+};
+
 const events: Array<{ name: string; detail: string }> = [];
 bus.on('questStarted', ({ questId }) => events.push({ name: 'questStarted', detail: questId }));
 bus.on('questCompleted', ({ questId }) => events.push({ name: 'questCompleted', detail: questId }));
@@ -150,9 +170,15 @@ function expected(villager: VillagerId, circumstances: readonly Circumstance[]):
 
 /** Reads the conversation to its choices: skips the typing and turns every page. */
 function readThrough(): void {
+  // `update()` runs first so a one-sentence page that reveals in full the
+  // instant it is shown gets the chance to flip to its choice row before
+  // `advance()` ever sees a fully-revealed last page — which, with nothing
+  // else pending, reads as "leave" and picks Goodbye out from under the
+  // choices this same tick would otherwise have put up.
   for (let i = 0; i < 40 && conversation.isOpen && !conversation.isShowingChoices; i++) {
-    conversation.advance();
     conversation.update();
+    if (!conversation.isOpen || conversation.isShowingChoices) break;
+    conversation.advance();
   }
 }
 
@@ -286,17 +312,19 @@ section('1. The Mayor');
   choose('Goodbye');
 }
 
-// ── 2. Tikka and Oren ─────────────────────────────────────────────────────
+// ── 2. Tools ──────────────────────────────────────────────────────────────
 
-section('2. Tikka and Oren');
+section('2. Tools');
 {
   check(objective() === 'Get tools from Oren at the forge', 'the journal sends the party to Oren');
   check(same(talk('tikka'), expected('tikka', ['tools_required'])), 'Tikka says tools_required');
   choose('Goodbye');
-  talk('oren');
-  const tools = choose('Tools');
-  check(tools !== null, 'Oren offers "Tools"');
-  check(!conversation.isOpen, 'and the grant ends the conversation');
+  const opening = talk('oren');
+  check(
+    same(opening, expected('oren', ['grant_basic_tools'])),
+    'Oren opens onto the grant, and only the grant — no lesson, no directions, no menu',
+  );
+  check(!conversation.isOpen, 'and the conversation closes on its own');
   check(
     human.inventory.countOf('basic_axe') === 1 && cat.inventory.countOf('basic_axe') === 1,
     'both crawlers carry the axe',
@@ -309,146 +337,233 @@ section('2. Tikka and Oren');
     human.craftSkills.isLearned('resourcing') && cat.craftSkills.isLearned('resourcing'),
     'both crawlers learned Resourcing',
   );
-  check(rig.explainerOpens.get('resourcing') === 1, 'the Resourcing explainer opened once');
-  check(state.quest.phase === 'gathering', 'toolsGranted moved the phase to gathering');
-  checkpointStep('gathering');
+  check(state.quest.phase === 'gather_wood', 'toolsGranted moved the phase to gather_wood');
+  choose('Goodbye');
+  check(
+    rig.explainerOpens.get('resourcing') === 1,
+    'the Resourcing explainer opened once the talk closed',
+  );
+  checkpointStep('gather_wood');
 }
 
-// ── 3. Gathering ──────────────────────────────────────────────────────────
+// ── 3. Wood, then stone ───────────────────────────────────────────────────
 
-section('3. Gathering');
+section('3. Wood, then stone');
 {
-  const wantedObjective = (w: number, s: number, b: number, r: number): string =>
-    `Gather for Tikka — Wood ${w}/${REQUEST_TIKKA_WOOD} · Stone ${s}/${REQUEST_TIKKA_STONE} · ` +
-    `Boards ${b}/${REQUEST_BOARDS} · Rope ${r}/${REQUEST_ROPE}`;
-  check(objective() === wantedObjective(0, 0, 0, 0), 'the journal starts every task at nothing');
-  check(same(talk('tikka'), expected('tikka', ['axe_task'])), 'Tikka sets the axe task first');
-  choose('Goodbye');
-  for (let chop = 1; chop <= REQUEST_TIKKA_WOOD; chop++) {
-    human.inventory.addItem('wood', 1);
-    bus.emit('resourceHarvested', { id: 'wood', amount: 1, byThrall: false, x: 0, y: 0 });
-    if (objective() !== wantedObjective(chop, 0, 0, 0)) {
-      check(false, `the journal follows the wood at ${chop}`);
-    }
-  }
-  check(objective() === wantedObjective(REQUEST_TIKKA_WOOD, 0, 0, 0), 'ten wood chopped');
-  // Gathered wood still counts once it has been spent: the chopping happened.
-  human.inventory.removeItems('wood', REQUEST_TIKKA_WOOD);
   check(
-    objective() === wantedObjective(REQUEST_TIKKA_WOOD, 0, 0, 0),
-    'the chopped wood still counts once it has been spent',
+    objective() === `Chop wood in the lumber yard — 0/${WOOD_TARGET}`,
+    'the journal starts the wood count at nothing',
   );
-  check(same(talk('tikka'), expected('tikka', ['pickaxe_task'])), 'then the pickaxe task');
-  choose('Goodbye');
+  human.inventory.addItem('wood', WOOD_TARGET - 1);
+  rig.step();
+  check(
+    objective() === `Chop wood in the lumber yard — ${WOOD_TARGET - 1}/${WOOD_TARGET}`,
+    'the journal follows the wood held',
+  );
+  check(state.quest.phase === 'gather_wood', 'one short of the target, still chopping');
+  human.inventory.addItem('wood', 1);
+  rig.step();
+  check(
+    questLines.some((q) => q.text === QUARRY_SPOTTED_LINE),
+    'the active crawler mentions the quarry once the wood target is held',
+  );
+  check(state.quest.phase === 'gather_stone', `${WOOD_TARGET} wood held moves on to the quarry`);
+  check(
+    objective() === `Mine stone in the quarry — 0/${STONE_TARGET}`,
+    'the journal starts the stone count at nothing',
+  );
   // Stone already in the packs counts with no mining at all.
-  cat.inventory.addItem('stone', REQUEST_TIKKA_STONE);
+  cat.inventory.addItem('stone', STONE_TARGET);
+  rig.step();
   check(
-    objective() === wantedObjective(REQUEST_TIKKA_WOOD, REQUEST_TIKKA_STONE, 0, 0),
-    'ten stone already held counts, with nothing mined',
+    state.quest.phase === 'report_tikka',
+    `${STONE_TARGET} stone held sends the party to Tikka`,
   );
-  check(state.quest.gathering.stoneMined === 0, 'and nothing was counted as mined');
-  check(same(talk('tikka'), expected('tikka', ['wood_processing_task'])), 'then processing');
-  choose('Goodbye');
-  human.inventory.addItem('wood_board', 2);
-  bus.emit('woodProcessed', { output: 'boards', count: 2, woodSpent: 1, via: 'manual' });
-  check(
-    objective() === wantedObjective(REQUEST_TIKKA_WOOD, REQUEST_TIKKA_STONE, 1, 0),
-    'a board sawn',
-  );
-  // Rope bought or found counts as well as rope twisted.
-  human.inventory.addItem('rope', 1);
-  check(objective() === 'Report to Tikka', 'every task done: the journal sends the party to Tikka');
   rig.step();
   check(villagers.villagerFor('tikka')?.marker === 'question', 'Tikka wears the ?');
-  checkpointStep('gathering done');
+  checkpointStep('report_tikka');
 }
 
-// ── 4. Construction ───────────────────────────────────────────────────────
+// ── 4. Report to Tikka ────────────────────────────────────────────────────
 
-section('4. Construction');
+section('4. Report to Tikka');
 {
   const pages = talk('tikka');
   check(
     same(
       pages,
-      expected('tikka', [
-        'construction_explanation',
-        'construction_skill_granted',
-        'construction_tutorial_trigger',
-        'wooden_wall_explanation',
-      ]),
+      expected('tikka', ['tikka_plans_intro', 'tikka_send_to_fenna', 'tikka_needs_boards_rope']),
     ),
-    'Tikka explains and teaches Construction',
+    'Tikka teases her plans and sends the party to Fenna',
   );
+  check(!conversation.isOpen, 'and the conversation closes on its own, no menu after');
   check(
     human.craftSkills.isLearned('construction') && cat.craftSkills.isLearned('construction'),
-    'both crawlers learned Construction',
+    'both crawlers learned Construction, on the spot',
   );
-  check(state.quest.phase === 'fortifying', 'the phase is fortifying');
-  check(!rig.explainerOpens.has('construction'), 'the explainer waits for the conversation');
-  choose('Goodbye');
-  check(rig.explainerOpens.get('construction') === 1, 'and opens once it closes');
-  check(rig.crafts.explainersSeen.includes('construction'), 'and is recorded as seen');
-  const teachAgain = talk('tikka');
+  check(state.quest.phase === 'see_fenna', 'the phase is see_fenna');
   check(
-    same(teachAgain, expected('tikka', ['construction_skill_already_granted'])),
-    'Tikka then says construction_skill_already_granted',
+    objective() === 'Ask Fenna for the saw and rope walk',
+    'the journal sends the party to Fenna',
   );
   choose('Goodbye');
   check(
-    same(talk('bramblewick'), expected('bramblewick', ['construction_unlocked'])),
-    'the Mayor hears construction is unlocked',
+    rig.rewardCards.includes('Construction'),
+    'the skill-unlocked card is queued once the talk closes',
   );
-  check(!conversation.choiceLabels.includes("We're ready."), 'no "We\'re ready." without a wall');
-  choose('Goodbye');
-  checkpointStep('fortifying');
+  checkpointStep('see_fenna');
 }
 
-// ── 5. A wooden wall ──────────────────────────────────────────────────────
+// ── 5. Fenna, processing, and Tikka's plans ───────────────────────────────
+
+section("5. Fenna, processing, and Tikka's plans");
+{
+  check(!state.unlocks.processingStations, 'the stations are still shut before Fenna is asked');
+  const opening = talk('fenna');
+  check(
+    same(opening, expected('fenna', ['fenna_grants_access', 'fenna_explains_stations'])),
+    'Fenna grants the saw and the rope walk',
+  );
+  check(
+    !conversation.isOpen,
+    'and the conversation closes on its own, no "How does the mill work?" after',
+  );
+  check(state.unlocks.processingStations, 'the stations unlock the moment she says so');
+  check(state.quest.phase === 'processing', 'the phase is processing');
+  choose('Goodbye');
+  check(
+    rig.explainerOpens.get('processing') === 1,
+    'the Processing explainer opens once the talk closes',
+  );
+  human.inventory.addItem('wood_board', PROCESSING_BOARDS_TARGET - 1);
+  rig.step();
+  check(state.quest.phase === 'processing', 'one board short, still processing');
+  human.inventory.addItem('wood_board', 1);
+  human.inventory.addItem('rope', PROCESSING_ROPE_TARGET);
+  rig.step();
+  check(
+    questLines.some((q) => q.text === PROCESSING_DONE_LINE),
+    'the active crawler suggests heading back to Tikka once processing is done',
+  );
+  check(
+    state.quest.phase === 'return_tikka',
+    'boards and rope both met send the party back to Tikka',
+  );
+  checkpointStep('return_tikka');
+  const plans = talk('tikka');
+  check(
+    same(plans, expected('tikka', ['tikka_materials_received', 'tikka_plans_handoff'])),
+    'Tikka takes the materials and hands over her plans',
+  );
+  check(!conversation.isOpen, 'and the conversation closes on its own');
+  check(
+    rig.explainerOpens.get('construction') === 1,
+    'the Construction explainer opens once the talk closes',
+  );
+  check(rig.crafts.explainersSeen.includes('construction'), 'and is recorded as seen');
+  check(
+    human.inventory.countOf('wood_board') === PROCESSING_BOARDS_TARGET &&
+      human.inventory.countOf('rope') === PROCESSING_ROPE_TARGET,
+    'the boards and rope are not spent — they are needed to build',
+  );
+  // The phase waits for the explainer to close before moving on; the test
+  // harness closes it synchronously, so the next update sees it shut.
+  rig.step();
+  check(
+    state.quest.phase === 'build_trebuchet',
+    'the plans move the phase on to building a trebuchet',
+  );
+  checkpointStep('build_trebuchet');
+}
+
+// ── 6. A trebuchet, loading it, and a wooden wall ─────────────────────────
 
 const eastSegment = rig.site.segments.find((segment) =>
   segment.tiles.every(
     (tile) => tile.x === rig.site.palisadeBounds.x + rig.site.palisadeBounds.w - 1,
   ),
 );
-section('5. A wooden wall');
+section('6. A trebuchet, loading it, and a wooden wall');
 {
+  check(
+    human.inventory.countOf('wood_board') >= (TREBUCHET_BUILD_COST.wood_board ?? 0) &&
+      human.inventory.countOf('rope') >= (TREBUCHET_BUILD_COST.rope ?? 0),
+    'the party already holds enough to build the first trebuchet',
+  );
+  const gate = rig.site.gate.inside;
+  const trebuchetRef = defences.defense.placeTrebuchet(
+    gate.x - TREBUCHET_TEST_OFFSET_TILES,
+    gate.y - TREBUCHET_TEST_OFFSET_TILES,
+    'human',
+  );
+  rig.step();
+  check(state.quest.phase === 'load_trebuchet', 'a trebuchet in the field moves on to loading it');
+  const record =
+    trebuchetRef.kind === 'trebuchet' ? defences.defense.trebuchet(trebuchetRef.key) : null;
+  check(record !== null, 'the trebuchet has a record to load');
+  if (record !== null) record.ammo = TREBUCHET_AMMO_LOADED;
+  rig.step();
+  check(state.quest.phase === 'build_wall', 'loaded ammunition moves on to the wall');
   check(eastSegment !== undefined, 'the east wall has a segment to build on');
   if (eastSegment !== undefined) {
-    human.inventory.addItem('wood_board', WOODEN_WALL_BOARDS);
-    const tile = eastSegment.tiles[0];
-    standAt(human, tile.x - 1, tile.y);
-    const started = defences.construction.startUpgrade({ kind: 'segment', id: eastSegment.id });
-    check(started, 'the upgrade starts');
-    stepUntil(() => defences.construction.job === null);
+    defences.defense.applyUpgrade({ kind: 'segment', id: eastSegment.id }, 'human');
     check(defences.defense.segmentTier(eastSegment.id) === 'wood', 'the segment is a wooden wall');
   }
-  const opening = talk('bramblewick');
+  rig.step();
   check(
-    same(opening, expected('bramblewick', ['fortifications_started'])),
-    'the Mayor says fortifications_started',
+    questLines.some(
+      (q) => q.speaker === MAYOR_SHOUT_SUMMONS_SPEAKER && q.text === MAYOR_SHOUT_SUMMONS_TEXT,
+    ),
+    'the Mayor shouts his summons once a wooden wall stands',
   );
-  check(conversation.choiceLabels.includes("We're ready."), '"We\'re ready." is on offer');
-  check(
-    objective().startsWith('Fortify Briar Hollow — 1 wooden · 0 stone'),
-    'the journal counts the wall',
-  );
+  check(state.quest.phase === 'summoned_by_mayor', 'a wooden wall summons the party to the Mayor');
+  checkpointStep('summoned_by_mayor');
 }
 
-// ── 6. "We're ready." and the countdown ───────────────────────────────────
+// ── 7. Summoned by the Mayor, and the countdown ───────────────────────────
 
-section('6. The countdown');
+section('7. Summoned by the Mayor, and the countdown');
 {
-  choose("We're ready.");
-  check(!conversation.isOpen, 'the conversation closes');
-  check(quest.isConfirmOpen, 'the confirm modal is up');
-  check(kit.haltsWorldItself, 'and it is the kit halting the world');
-  kit.handleKeyDown('Escape');
-  check(!quest.isConfirmOpen && state.quest.phase === 'fortifying', '"Not yet" changes nothing');
+  check(!state.unlocks.soldierCommands, "the militia is still not under the party's command");
+  const briefing = talk('bramblewick');
+  check(
+    same(
+      briefing,
+      expected('bramblewick', [
+        'mayor_briefing_reason',
+        'mayor_briefing_scouts',
+        'mayor_briefing_life_stone',
+        'mayor_briefing_threat',
+        'mayor_briefing_command',
+      ]),
+    ),
+    'the Mayor briefs the party and places the militia under their command',
+  );
+  check(
+    !conversation.isOpen,
+    'and the conversation closes on its own, not onto the fortifying choices yet',
+  );
+  check(state.unlocks.soldierCommands, 'soldierCommands unlocks the moment he says so');
+  check(state.quest.phase === 'fortifying', 'the phase is fortifying');
+  choose('Goodbye');
+  checkpointStep('fortifying');
+
   talk('bramblewick');
-  choose("We're ready.");
-  kit.handleKeyDown('Enter');
-  check(state.quest.phase === 'imminent', '"Begin" starts the countdown');
+  check(
+    conversation.choiceLabels[0] === 'I need more time',
+    '"I need more time" is the first row, so Space picks it',
+  );
+  check(
+    same(choose('I need more time'), expected('bramblewick', ['mayor_more_time_granted'])),
+    'and he grants it',
+  );
+  choose('Goodbye');
+
+  talk('bramblewick');
+  check(!conversation.choiceLabels.includes("We're ready."), 'the old "We\'re ready." row is gone');
+  choose("I'm ready");
+  check(!conversation.isOpen, 'choosing it closes the conversation and starts the siege directly');
+  check(state.quest.phase === 'imminent', '"I\'m ready for the assault" starts the countdown');
   check(
     state.quest.imminentCountdownFrames === REQUEST_IMMINENT_SECONDS * UPDATES_PER_SECOND &&
       IMMINENT_FRAMES === REQUEST_IMMINENT_SECONDS * UPDATES_PER_SECOND,
@@ -469,10 +584,10 @@ section('6. The countdown');
   checkpointStep('assault');
 }
 
-// ── 7. A lost siege ───────────────────────────────────────────────────────
+// ── 8. A lost siege ───────────────────────────────────────────────────────
 
 let breachedBeforeRetry = 0;
-section('7. A lost siege');
+section('8. A lost siege');
 {
   stepFrames(FIRST_WAVE_SECONDS * UPDATES_PER_SECOND);
   check(assault.spawnedTotal > 0, `the first wave came (${assault.spawnedTotal} spawned)`);
@@ -496,28 +611,38 @@ section('7. A lost siege');
   check(!kit.ambience.noticeBoard.callToArms, 'the poster comes down');
   check(state.quest.lastSiege !== null, 'the siege recorded its damage');
   breachedBeforeRetry = state.quest.lastSiege?.segmentsBreached ?? 0;
-  check(
-    objective() === 'The bell fell. Speak with Mayor Bramblewick.',
-    'the journal sends the party to the Mayor',
-  );
+  check(objective() === 'Speak with Mayor Bramblewick', 'the journal sends the party to the Mayor');
   checkpointStep('repelled_failed');
   const words = talk('bramblewick');
   check(
-    same(words, expected('bramblewick', ['after_village_damage'])),
-    'the Mayor says after_village_damage',
+    same(words, expected('bramblewick', ['mayor_loss_unprepared', 'mayor_loss_facsimile'])),
+    'the Mayor explains the facsimile bought them time',
   );
-  check(state.quest.phase === 'fortifying', 'and the quest returns to fortifying');
+  check(!conversation.isOpen, 'and the conversation closes on its own');
+  check(state.quest.phase === 'repair_bell', 'and the quest moves on to repairing the bell tower');
+  check(objective() === 'Repair the bell tower', 'the journal now asks for the bell tower');
   choose('Goodbye');
+  checkpointStep('repair_bell');
+  // The bell tower's own repair action belongs to a different system; here
+  // only the questline's answer to it is under test — so the repair's other
+  // effect (standing the tower back up) is simulated alongside the event a
+  // real repair would raise once it finishes.
+  state.quest.bellTowerBroken = false;
+  bus.emit('bellTowerRepaired', {});
+  check(
+    state.quest.phase === 'fortifying',
+    'a repaired bell tower returns the quest to fortifying',
+  );
   console.log(`  ..   segments breached in the lost siege: ${breachedBeforeRetry}`);
 }
 
-// ── 8. A won retry, and the turn-in ───────────────────────────────────────
+// ── 9. A won retry, and the turn-in ───────────────────────────────────────
 
-section('8. The retry and the turn-in');
+section('9. The retry and the turn-in');
 {
-  // A breached wall is no wall: the Mayor will not hear "We're ready" until
-  // one stands again. The only wall is knocked down here on purpose, so the
-  // check never rides on where the siege happened to break through.
+  // A wall breached in the first siege is knocked down again here on
+  // purpose, so the repair below never rides on where that siege happened to
+  // break through.
   if (eastSegment !== undefined) {
     const ref = { kind: 'segment', id: eastSegment.id } as const;
     for (
@@ -528,12 +653,6 @@ section('8. The retry and the turn-in');
       defences.defense.damage(ref, OVERKILL, null, 'blast');
     }
     check(defences.defense.segmentTier(eastSegment.id) === 'breach', 'the only wall is breached');
-    talk('bramblewick');
-    check(
-      !conversation.choiceLabels.includes("We're ready."),
-      'with the only wall breached, "We\'re ready." is withdrawn',
-    );
-    choose('Goodbye');
     human.inventory.addItem('wood_board', WOODEN_WALL_BOARDS);
     const tile = eastSegment.tiles[0];
     standAt(human, tile.x - 1, tile.y);
@@ -542,8 +661,7 @@ section('8. The retry and the turn-in');
     check(defences.defense.segmentTier(eastSegment.id) === 'wood', 'the wooden wall stands again');
   }
   talk('bramblewick');
-  choose("We're ready.");
-  kit.handleKeyDown('Enter');
+  choose("I'm ready");
   check(state.quest.phase === 'imminent', 'the siege can be tried again');
   const introsBeforeRetry = rig.bossIntros;
   stepUntil(() => state.quest.phase === 'assault', REQUEST_IMMINENT_SECONDS + 1);
@@ -670,9 +788,9 @@ section('8. The retry and the turn-in');
 
 rig.dispose();
 
-// ── 9. A scene rebuilt mid-siege ──────────────────────────────────────────
+// ── 10. A scene rebuilt mid-siege ──────────────────────────────────────────
 
-section('9. A scene rebuilt in the middle of the siege');
+section('10. A scene rebuilt in the middle of the siege');
 {
   // A door visit rebuilds the scene; the wave in the field is not carried
   // through the door, so the siege must be settled as lost, not resumed.

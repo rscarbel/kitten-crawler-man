@@ -13,7 +13,8 @@
 
 import type { ToolTier } from '../../core/toolTiers';
 import type { SoldierOrder, VillageQuestState } from '../../core/briarHollowState';
-import { hasAcceptedMayorRequest, type VillageQuestPhase } from '../../core/villageQuestPhase';
+import type { VillageQuestPhase } from '../../core/villageQuestPhase';
+import type { VillageUnlocks } from '../../core/villageUnlocks';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import { type Circumstance, type VillagerId, line, villagerEntry } from './ratkinDialogue';
 import type { ConversationController } from './villagerTopics';
@@ -44,7 +45,16 @@ const TIKKA_CONSTRUCTION_MILESTONES: ReadonlyArray<{
 /** Phases in which the village is working toward the siege: everyone's `quest_active`. */
 const QUEST_ACTIVE_PHASES: ReadonlySet<VillageQuestPhase> = new Set([
   'need_tools',
-  'gathering',
+  'gather_wood',
+  'gather_stone',
+  'report_tikka',
+  'see_fenna',
+  'processing',
+  'return_tikka',
+  'build_trebuchet',
+  'load_trebuchet',
+  'build_wall',
+  'summoned_by_mayor',
   'fortifying',
 ]);
 
@@ -104,6 +114,8 @@ export interface VillagerContext {
   readonly lowestStock: number | null;
   /** This villager's standing orders when they are a soldier; null for civilians. */
   readonly soldierStance: SoldierStance | null;
+  /** What the questline has opened up so far, for a topic that only makes sense once something is. */
+  readonly unlocks: Readonly<VillageUnlocks>;
 }
 
 /** Which rung of the ladder an opening came from. The gate asserts every rung is reachable. */
@@ -129,6 +141,8 @@ export interface OpeningLine {
   readonly onceFlag?: string;
   /** What the questline does as this opening is shown; see {@link QuestOpening.onShown}. */
   readonly onShown?: (ctl: ConversationController) => void;
+  /** Set when these pages matter for an active quest but offer the player no choice. */
+  readonly questRelated?: boolean;
 }
 
 /**
@@ -152,6 +166,8 @@ export interface QuestOpening {
    * moves the phase on. Never run by the resolver, which only ever picks.
    */
   readonly onShown?: (ctl: ConversationController) => void;
+  /** These pages belong to the quest being run; the conversation box wears the quest icon. */
+  readonly questRelated?: boolean;
 }
 
 /** The flag a one-shot line is recorded under once spoken. */
@@ -293,6 +309,7 @@ export function openingLine(
       rule: 'quest',
       ...(quest.onceFlag === undefined ? {} : { onceFlag: quest.onceFlag }),
       ...(quest.onShown === undefined ? {} : { onShown: quest.onShown }),
+      ...(quest.questRelated === undefined ? {} : { questRelated: quest.questRelated }),
     };
   }
 
@@ -308,7 +325,7 @@ export function openingLine(
   }
 
   if (ctx.soldierStance !== null) {
-    if (!hasAcceptedMayorRequest(ctx.quest.phase) && has(villager, 'orders_need_mayor')) {
+    if (!ctx.unlocks.soldierCommands && has(villager, 'orders_need_mayor')) {
       return single('orders_need_mayor', 'orders_need_mayor');
     }
     const stance = soldierStanceLine(villager, ctx.soldierStance);

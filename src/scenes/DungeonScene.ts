@@ -61,7 +61,13 @@ import {
   type JournalProgress,
 } from '../core/JournalProgress';
 import { TownGuideSystem } from '../systems/TownGuideSystem';
-import { drawArrowAbovePlayer } from '../ui/WorldArrow';
+import {
+  ARROW_PRIORITY,
+  drawArrowAbovePlayer,
+  drawTopArrowCandidate,
+  isWorldPointOnScreen,
+  type ArrowCandidate,
+} from '../ui/WorldArrow';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
 import {
   availableTargets,
@@ -81,7 +87,7 @@ import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
 import { resolveSkillBookPrompt } from '../systems/skillBookUse';
-import { getSkillDef, type CrawlerKind } from '../core/SkillManager';
+import { getSkillDef, CRAWLER_NAMES, type CrawlerKind } from '../core/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
@@ -185,6 +191,7 @@ import { buildTownNotices, type TownNoticeContext } from '../systems/townNotices
 import { CitizenDialog } from '../ui/CitizenDialog';
 import { NoticeBoardPanel } from '../ui/NoticeBoardPanel';
 import { PricedMenuPanel } from '../ui/PricedMenuPanel';
+import { partyCoins } from '../core/partyCoins';
 import { FortuneTellerPanel } from '../ui/FortuneTellerPanel';
 import {
   drawInteractionPrompt,
@@ -208,6 +215,7 @@ import {
 import { HumanTalkDriver, openChestWithGesture } from '../creatures/humanGestures';
 import { type Pt } from '../sprites/art/carlArt';
 import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import { RewardFlySystem, type RewardFlyHold } from '../systems/RewardFlySystem';
 import { playRewardLandingCues } from '../systems/rewardFlyAudio';
 import type { PendingLoot } from '../systems/LootSystem';
@@ -462,7 +470,11 @@ import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { rectCentre } from '../map/overworld/briarHollowSite';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
 import { drawText } from '../ui/TextBox';
-import { renderKnockedOutUI, updateKnockoutState } from '../systems/KnockoutRevive';
+import {
+  downedCompanionArrowCandidate,
+  renderKnockedOutUI,
+  updateKnockoutState,
+} from '../systems/KnockoutRevive';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { renderQuality } from '../core/RenderQuality';
 import {
@@ -1365,6 +1377,14 @@ export class DungeonScene extends GameplayScene {
 
   protected readonly audio: AudioManager | null;
   private readonly tutorial: TutorialController | null = null;
+  private readonly questSwitchConfirm: ConfirmModal;
+  /**
+   * A quest started while the player was already tracking a different active
+   * one. Held until every other modal on screen has closed, so the prompt
+   * never lands on top of the conversation or reward cards that started the
+   * quest in the first place.
+   */
+  private pendingQuestSwitch: { fromId: string; fromName: string; toId: string } | null = null;
 
   constructor(
     private readonly levelDef: LevelDef,
@@ -1388,6 +1408,7 @@ export class DungeonScene extends GameplayScene {
     // Both are needed before the roster below, which hands every mob it accepts
     // the spell context, and by the level spawners' audio-carrying siblings.
     this.audio = options?.audio ?? null;
+    this.questSwitchConfirm = new ConfirmModal(this.audio);
     this.companionStance = options?.companionStance ?? createCompanionStanceState();
     this.godModeState = options?.godModeState ?? createGodModeState();
     this.gameStats = options?.gameStats ?? new GameStats();
@@ -3131,20 +3152,26 @@ export class DungeonScene extends GameplayScene {
 
     // Whatever the player just picked up is what they mean to do next, so the
     // Journal opens already showing it and the world arrow already points at it,
-    // rather than waiting for a pin the player has to know exists.
+    // rather than waiting for a pin the player has to know exists — unless that
+    // would knock a still-active quest off the arrow, in which case the player
+    // is asked first (see `pendingQuestSwitch` and `resolvePendingQuestSwitch`).
     //
     // The quest's own id, not the id of whichever step is being tracked right
     // now: the anchor questline re-keys its entry per shard, and a pin on one
     // shard's row would die the moment that shard was found. `pinMatchesEntry`
     // is what lets the shorter id keep resolving.
     bus.on('questStarted', (e) => {
-      // A player pin keeps the arrow as long as what it names is still
-      // outstanding — only a pin left dangling on something finished gets
-      // taken over automatically, the same as if nothing had been pinned.
-      if (this.journalProgress.pinSource === 'player') {
-        const stillActive =
-          resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries) !== null;
-        if (stillActive) return;
+      const pinnedId = this.journalProgress.pinnedTrackerId;
+      if (pinnedId !== null && pinnedId !== e.questId) {
+        const trackedEntry = resolvePinnedEntry(pinnedId, this._trackerEntries);
+        if (trackedEntry !== null) {
+          this.pendingQuestSwitch = {
+            fromId: pinnedId,
+            fromName: trackedEntry.name,
+            toId: e.questId,
+          };
+          return;
+        }
       }
       this.journalProgress.pinnedTrackerId = e.questId;
       this.journalProgress.pinSource = 'auto';
@@ -3231,6 +3258,11 @@ export class DungeonScene extends GameplayScene {
     }
 
     this._spiderKeyHandler = (e: KeyboardEvent) => {
+      if (this.questSwitchConfirm.handleKey(e.key)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
       // The Bopca's three-way choice is picked with 1/2/3, which the hotbar also
       // owns. Stopped rather than merely defaulted: the shared handler's
       // suppression gate reads whether her dialog is open *after* this ran, and
@@ -3558,36 +3590,48 @@ export class DungeonScene extends GameplayScene {
     this.companion.isFollowOverride = false;
   }
 
-  /** The `!reveal` cheat: an exact, unquantized bearing to the nearest stairwell. */
-  private renderStairwellRevealArrow(
+  /**
+   * The `!reveal` cheat: an exact, unquantized bearing to the nearest
+   * stairwell. A candidate for the shared arrow arbiter — a debug aid, but
+   * still only one arrow may be on screen at a time.
+   */
+  private stairwellRevealArrowCandidate(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
-  ): void {
-    if (!this._revealStairwell) return;
+  ): ArrowCandidate | null {
+    if (!this._revealStairwell) return null;
     const player = this.active();
     const target = this.stairwell.nearestStairwellCenter(player);
-    if (target === null) return;
+    if (target === null) return null;
 
-    drawArrowAbovePlayer(
-      ctx,
-      player.x,
-      player.y,
-      target.x,
-      target.y,
-      camX,
-      camY,
-      STAIRWELL_ARROW_COLOR,
-      {
-        avoidRect: this._hudRect,
-      },
-    );
+    return {
+      priority: ARROW_PRIORITY.CHEAT_REVEAL,
+      draw: () =>
+        drawArrowAbovePlayer(
+          ctx,
+          player.x,
+          player.y,
+          target.x,
+          target.y,
+          camX,
+          camY,
+          STAIRWELL_ARROW_COLOR,
+          {
+            avoidRect: this._hudRect,
+          },
+        ),
+    };
   }
 
-  private renderSpiderLabArrow(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (!this._revealSpiderLab) return;
+  private spiderLabArrowCandidate(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): ArrowCandidate | null {
+    if (!this._revealSpiderLab) return null;
     const lab = this.gameMap.spiderLabRoom;
-    if (lab === null) return;
+    if (lab === null) return null;
 
     const player = this.active();
     const px = player.x + TILE_SIZE / 2;
@@ -3599,27 +3643,32 @@ export class DungeonScene extends GameplayScene {
     const dy = targetY - py;
     const angle = Math.atan2(dy, dx);
 
-    const t = Date.now();
-    const bounce = Math.sin(t * ARROW_BOUNCE_FREQUENCY) * ARROW_BOUNCE_AMPLITUDE;
-    const len = ARROW_LENGTH_PIXELS;
-    const arrowX = player.x - camX + TILE_SIZE / 2;
-    const arrowY = player.y - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
+    return {
+      priority: ARROW_PRIORITY.CHEAT_REVEAL,
+      draw: () => {
+        const t = Date.now();
+        const bounce = Math.sin(t * ARROW_BOUNCE_FREQUENCY) * ARROW_BOUNCE_AMPLITUDE;
+        const len = ARROW_LENGTH_PIXELS;
+        const arrowX = player.x - camX + TILE_SIZE / 2;
+        const arrowY = player.y - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
 
-    ctx.save();
-    ctx.translate(arrowX, arrowY);
-    ctx.rotate(angle);
-    ctx.fillStyle = '#a855f7';
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = ARROW_LINE_WIDTH;
-    ctx.beginPath();
-    ctx.moveTo(len, 0);
-    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, -len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
-    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_CENTER, 0);
-    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+        ctx.save();
+        ctx.translate(arrowX, arrowY);
+        ctx.rotate(angle);
+        ctx.fillStyle = '#a855f7';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = ARROW_LINE_WIDTH;
+        ctx.beginPath();
+        ctx.moveTo(len, 0);
+        ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, -len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
+        ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_CENTER, 0);
+        ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      },
+    };
   }
 
   /**
@@ -3767,46 +3816,57 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * The world arrow for whichever Journal entry the player pinned.
+   * The world arrow for whichever Journal entry the player pinned — including
+   * the Briar Hollow siege's assault entry, whose target becomes Vordrick
+   * Boneharrow's own position for as long as he is in the field.
    *
-   * Suppressed within a few tiles of the target, as the bounty arrow is: past
-   * that point the thing is on screen, and an arrow still insisting on a
-   * direction is telling the player something they can see.
+   * Suppressed within a few tiles of the target, where the thing is plainly
+   * in front of the player. A target flagged `hidesArrowOnScreen` — Vordrick
+   * leading his army — stands the arrow down as soon as it is anywhere in
+   * view, since an army is visible from much further off than a doorway.
    */
-  private renderPinnedObjectiveArrow(
+  private pinnedObjectiveArrowCandidate(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
-  ): void {
+  ): ArrowCandidate | null {
     const pinned = this.pinnedObjectiveEntry;
     // A pin on the bounty is drawn by the bounty's own arrow, which knows
     // whether it is a hunt or a collect and colours itself accordingly — this
     // generic arrow would otherwise stack a second one under it.
-    if (pinned !== null && pinMatchesEntry(BOUNTY_TRACKER_ID, pinned)) return;
+    if (pinned !== null && pinMatchesEntry(BOUNTY_TRACKER_ID, pinned)) return null;
     const target = pinned?.target ?? null;
-    if (target === null) return;
+    if (target === null) return null;
 
     const player = this.active();
     const targetX = (target.x + TILE_CENTRE_FRACTION) * TILE_SIZE;
     const targetY = (target.y + TILE_CENTRE_FRACTION) * TILE_SIZE;
-    const distanceTiles =
-      Math.hypot(targetX - (player.x + TILE_SIZE / 2), targetY - (player.y + TILE_SIZE / 2)) /
-      TILE_SIZE;
-    if (distanceTiles < PINNED_ARROW_SUPPRESS_TILES) return;
+    const viewport = { width: viewportWidth(), height: viewportHeight() };
+    const suppressed =
+      target.hidesArrowOnScreen === true
+        ? isWorldPointOnScreen(targetX, targetY, camX, camY, viewport.width, viewport.height)
+        : Math.hypot(targetX - (player.x + TILE_SIZE / 2), targetY - (player.y + TILE_SIZE / 2)) /
+            TILE_SIZE <
+          PINNED_ARROW_SUPPRESS_TILES;
+    if (suppressed) return null;
 
-    drawArrowAbovePlayer(
-      ctx,
-      player.x,
-      player.y,
-      targetX,
-      targetY,
-      camX,
-      camY,
-      PINNED_ARROW_COLOR,
-      {
-        avoidRect: this._hudRect,
-      },
-    );
+    return {
+      priority: ARROW_PRIORITY.PINNED_OBJECTIVE,
+      draw: () =>
+        drawArrowAbovePlayer(
+          ctx,
+          player.x,
+          player.y,
+          targetX,
+          targetY,
+          camX,
+          camY,
+          PINNED_ARROW_COLOR,
+          {
+            avoidRect: this._hudRect,
+          },
+        ),
+    };
   }
 
   private triggerCompanionFollow(): void {
@@ -4872,7 +4932,8 @@ export class DungeonScene extends GameplayScene {
    * Briar Hollow's square, with its bell tower, is a save point the same way
    * the walled town's gate is: walking in is what saves. Guarded the same way
    * — never mid-siege, never with a hostile still fighting in the village, so
-   * a reload can't skip either.
+   * a reload can't skip either. A broken bell tower doesn't ring for a save
+   * either: the village needs its bell whole to call the crawlers back to it.
    */
   private onBriarHollowSquareEntered(active: Pick<Mob, 'x' | 'y'>): void {
     if (!this.canSaveInBriarHollowSquare) return;
@@ -4891,7 +4952,12 @@ export class DungeonScene extends GameplayScene {
   }
 
   private get canSaveInBriarHollowSquare(): boolean {
-    return !this.isRevivePending && !this.isBriarHollowUnderAttack && !this.isBossFightInProgress;
+    return (
+      !this.isRevivePending &&
+      !this.isBriarHollowUnderAttack &&
+      !this.isBossFightInProgress &&
+      !this.briarHollowState.quest.bellTowerBroken
+    );
   }
 
   /**
@@ -5376,6 +5442,7 @@ export class DungeonScene extends GameplayScene {
     });
     return [
       modal(this.chestRewardDialog.isOpen, 'chest-reward'),
+      this.questSwitchConfirm.overlayClaim(),
       floatingDialog(tutorial?.showNearGoblinDialog === true, () =>
         tutorial?.dismissNearGoblinDialog(),
       ),
@@ -5523,6 +5590,37 @@ export class DungeonScene extends GameplayScene {
   /** The overlay that currently owns input, or null when play has the floor. */
   private get focusedOverlay(): OverlayInputClaim | null {
     return focusedOverlay(this.overlayClaims);
+  }
+
+  /**
+   * Opens the tracked-quest switch confirm once the new quest has a tracker
+   * line to name it, and only once nothing else — the conversation or reward
+   * cards that started the quest, a menu, the death screen — is already
+   * asking for the player's attention.
+   */
+  private resolvePendingQuestSwitch(): void {
+    const pending = this.pendingQuestSwitch;
+    if (pending === null || this.questSwitchConfirm.isOpen) return;
+    if (this.gameOver || this.focusedOverlay !== null) return;
+    // The exact id first — the quest's own header row, which is what carries the
+    // quest's name — falling back to a sub-step for a source that never emits one.
+    const toEntry =
+      this._trackerEntries.find((entry) => entry.id === pending.toId) ??
+      this._trackerEntries.find((entry) => pinMatchesEntry(pending.toId, entry));
+    if (toEntry === undefined) return;
+    this.pendingQuestSwitch = null;
+    this.questSwitchConfirm.open({
+      title: 'NEW QUEST',
+      message: `Would you like to stop tracking ${pending.fromName} and start tracking ${toEntry.name}?`,
+      subtext: '*you can always change this via the quest menu by clicking the blue quest icon',
+      yesLabel: 'Yes',
+      noLabel: 'No',
+      onYes: () => {
+        this.journalProgress.pinnedTrackerId = pending.toId;
+        this.journalProgress.pinSource = 'player';
+      },
+      onNo: () => undefined,
+    });
   }
 
   /**
@@ -6185,6 +6283,7 @@ export class DungeonScene extends GameplayScene {
       this.chestRewardDialog.handleClick(mx, my);
       return;
     }
+    if (this.questSwitchConfirm.handleClick(mx, my)) return;
     // Ranked here rather than below the panels, matching where `overlayClaims`
     // puts it: the award overlays swallow every click while they are up, so a
     // menu that outranked them here would take a press aimed at their OK button
@@ -6227,11 +6326,11 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     if (this.marketPanel?.isOpen === true) {
-      this.marketPanel.handleClick(mx, my, this.active());
+      this.marketPanel.handleClick(mx, my, this.active(), this.inactive());
       return;
     }
     if (this.fortuneTeller?.isOpen === true) {
-      this.fortuneTeller.handleClick(mx, my, this.active());
+      this.fortuneTeller.handleClick(mx, my, this.active(), this.inactive());
       return;
     }
     if (this.followerMenu.isOpen) {
@@ -6530,6 +6629,7 @@ export class DungeonScene extends GameplayScene {
       }
     }
     this.achievementUI.tick();
+    this.resolvePendingQuestSwitch();
     playRewardLandingCues(this.audio, this.rewardFly.update());
     // Above the boss-intro return below: an award overlay raised on the frame a
     // boss room locks would otherwise sit frozen at its first frame for the
@@ -6815,24 +6915,31 @@ export class DungeonScene extends GameplayScene {
       const mmSize = this.miniMap.isExpanded
         ? this.miniMap.EXPANDED_SIZE
         : this.miniMap.NORMAL_SIZE;
-      renderKnockedOutUI(ctx, camX, camY, this.active(), this.inactive(), mmSize);
-      this.mercenarySystem.renderDownedArrow(
-        ctx,
-        camX,
-        camY,
-        this.active(),
-        visibilityRadiusPx(this.active()),
-        this._hudRect,
-      );
-      this.renderStairwellRevealArrow(ctx, camX, camY);
-      this.renderSpiderLabArrow(ctx, camX, camY);
-      if (this.shouldShowBountyArrow()) {
-        this.bounty?.renderArrow(ctx, this.active(), camX, camY, this._hudRect);
-      }
+      renderKnockedOutUI(ctx, this.inactive(), mmSize);
       this.renderAvailableQuestBeacons(ctx, camX, camY);
       this.renderPinnedObjectiveBeacon(ctx, camX, camY);
-      this.renderPinnedObjectiveArrow(ctx, camX, camY);
-      this.recall.render(ctx, this.active(), camX, camY, this._hudRect);
+      this.recall.render(ctx, camX, camY);
+
+      // Only one of these may be on screen at once — a downed companion always
+      // wins the slot, and every other kind has a fixed place behind it.
+      drawTopArrowCandidate([
+        downedCompanionArrowCandidate(ctx, this.active(), this.inactive(), camX, camY),
+        this.mercenarySystem.downedArrowCandidate(
+          ctx,
+          camX,
+          camY,
+          this.active(),
+          visibilityRadiusPx(this.active()),
+          this._hudRect,
+        ),
+        this.stairwellRevealArrowCandidate(ctx, camX, camY),
+        this.spiderLabArrowCandidate(ctx, camX, camY),
+        this.pinnedObjectiveArrowCandidate(ctx, camX, camY),
+        this.shouldShowBountyArrow()
+          ? (this.bounty?.arrowCandidate(ctx, this.active(), camX, camY, this._hudRect) ?? null)
+          : null,
+        this.recall.trailArrowCandidate(ctx, this.active(), camX, camY, this._hudRect),
+      ]);
     }
 
     if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
@@ -6982,8 +7089,9 @@ export class DungeonScene extends GameplayScene {
         ctx,
         invPlayer.inventory,
         invName,
-        invPlayer.coins,
+        partyCoins(this.human, this.cat),
         this.menus.inventoryWieldedWeaponId(),
+        `${CRAWLER_NAMES.human} ${this.human.coins} · ${CRAWLER_NAMES.cat} ${this.cat.coins}`,
       );
       const activeName = this.human.isActive ? 'Human' : 'Cat';
       this.menus.gearPanel.render(ctx, active.inventory, activeName);
@@ -7074,8 +7182,8 @@ export class DungeonScene extends GameplayScene {
     this.briarHollowKit?.renderDialog(ctx, camX, camY);
     this.grateSpikes.render(ctx, camX, camY);
     this.noticeBoard?.render(ctx);
-    this.marketPanel?.render(ctx, this.active());
-    this.fortuneTeller?.render(ctx, this.active());
+    this.marketPanel?.render(ctx, this.active(), this.inactive());
+    this.fortuneTeller?.render(ctx, this.active(), this.inactive());
 
     if (this.stairwell.menuOpen) {
       this.stairwell.renderMenu(ctx);
@@ -7110,6 +7218,9 @@ export class DungeonScene extends GameplayScene {
     this.achievementUI.renderOverlays(ctx);
     if (this.chestRewardDialog.isOpen) {
       this.chestRewardDialog.render(ctx);
+    }
+    if (this.questSwitchConfirm.isOpen) {
+      this.questSwitchConfirm.render(ctx);
     }
 
     // Flies over every dialog above: it is reporting a grant that already
@@ -7183,6 +7294,7 @@ export class DungeonScene extends GameplayScene {
         this._mouseX,
         this._mouseY,
         this.world.roster.grid,
+        this.briarHollowKit?.villagers?.villagers ?? [],
       );
     }
 

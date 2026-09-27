@@ -32,6 +32,8 @@ export interface ToastStackStyle {
 
 interface Toast {
   readonly text: string;
+  /** Multiplier on the stack's font size and row pitch for this one line. */
+  readonly scale: number;
   ticksLeft: number;
 }
 
@@ -55,12 +57,12 @@ export class ToastStack {
    *   identical `-1.2s` flags mean three kills, and merging them would report
    *   one.
    */
-  show(text: string, mergeDuplicates = false): void {
+  show(text: string, mergeDuplicates = false, scale = 1): void {
     if (mergeDuplicates) {
       const showingIndex = this.toasts.findIndex((toast) => toast.text === text);
       if (showingIndex !== -1) this.toasts.splice(showingIndex, 1);
     }
-    this.toasts.push({ text, ticksLeft: this.style.displayTicks });
+    this.toasts.push({ text, scale, ticksLeft: this.style.displayTicks });
     while (this.toasts.length > this.style.maxVisible) this.toasts.shift();
   }
 
@@ -75,21 +77,23 @@ export class ToastStack {
 
   /**
    * @param centerX      Horizontal centre every row is aligned on.
-   * @param bottomRowTopY Top edge of the bottom (newest) row. Rows above it are
-   *   drawn one `lineHeight` apart, so the stack grows away from whatever this
-   *   is anchored to rather than over it.
+   * @param bottomRowTopY Top edge of an unscaled bottom (newest) row. Rows
+   *   stack upward from its bottom edge, each one `lineHeight` × its own scale
+   *   tall, so the stack grows away from whatever this is anchored to rather
+   *   than over it — a scaled-up line included.
    */
   render(ctx: CanvasRenderingContext2D, centerX: number, bottomRowTopY: number): void {
-    const newestIndex = this.toasts.length - 1;
-    this.toasts.forEach((toast, index) => {
-      // Newest closest to the anchor, so an arriving line never shoves the one
-      // the player is mid-way through reading.
-      const rowsAboveBottom = newestIndex - index;
+    let rowBottomY = bottomRowTopY + this.style.fontSize;
+    // Newest closest to the anchor, so an arriving line never shoves the one
+    // the player is mid-way through reading.
+    for (let index = this.toasts.length - 1; index >= 0; index--) {
+      const toast = this.toasts[index];
+      const fontSize = this.style.fontSize * toast.scale;
       const fading = toast.ticksLeft < this.style.fadeTicks;
       drawText(ctx, toast.text, {
         x: centerX,
-        y: bottomRowTopY - rowsAboveBottom * this.style.lineHeight,
-        size: this.style.fontSize,
+        y: rowBottomY - fontSize,
+        size: fontSize,
         bold: true,
         align: 'center',
         color: this.style.color,
@@ -97,7 +101,8 @@ export class ToastStack {
         outlineWidth: this.style.outlineWidth,
         alpha: fading ? toast.ticksLeft / this.style.fadeTicks : 1,
       });
-    });
+      rowBottomY -= this.style.lineHeight * toast.scale;
+    }
   }
 
   /** Drop everything on screen — used on scene teardown. */

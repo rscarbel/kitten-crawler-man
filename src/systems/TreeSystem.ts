@@ -23,6 +23,7 @@ import {
   type TileContent,
 } from '../map/tileTypes';
 import { inferFloorType } from '../map/tiles/helpers';
+import type { VillageDistrictId } from '../map/overworld/briarHollowSite';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { makeBurn } from '../core/StatusEffect';
 import { randomInt } from '../utils';
@@ -160,6 +161,9 @@ const FIRE_GLOW_PULSE_DEPTH = 0.22;
  * which have no business merely bruising a tree.
  */
 const INSTANT_DESTROY_DAMAGE = Number.MAX_SAFE_INTEGER;
+
+/** The district whose trees are the village's timber supply, never a punching bag. */
+const PROTECTED_GROVE_DISTRICT: VillageDistrictId = 'lumber_yard';
 
 /** Live state for one tree tile. Created lazily — see the class doc. */
 export interface TreeHealth {
@@ -457,6 +461,7 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
     if (tileX < 0 || tileX >= row.length) return;
     const tile = row[tileX];
     if (tile.type !== TREE) return;
+    if (this.isProtectedGroveTree(tileX, tileY)) return;
     const stage = tile.treeStage ?? TREE_STAGE_HEALTHY;
     if (stage !== TREE_STAGE_HEALTHY && stage !== TREE_STAGE_DAMAGED) return;
 
@@ -615,6 +620,18 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
     }
   }
 
+  /**
+   * Whether a tile is a lumber-yard grove tree: the village's planted timber
+   * supply, which every combat and fire path must leave standing untouched. An
+   * axe still fells one — {@link fellByHarvest} never calls this — because
+   * chopping it down for wood is the point of planting it there.
+   */
+  private isProtectedGroveTree(tileX: number, tileY: number): boolean {
+    const worldX = (tileX + TILE_CENTER_OFFSET) * TILE_SIZE;
+    const worldY = (tileY + TILE_CENTER_OFFSET) * TILE_SIZE;
+    return this.gameMap.briarHollowDistrictAt(worldX, worldY) === PROTECTED_GROVE_DISTRICT;
+  }
+
   private healthFor(tileX: number, tileY: number): TreeHealth {
     const key = tileKey(tileX, tileY);
     const existing = this.health.get(key);
@@ -681,6 +698,14 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
               ignore,
             ));
       if (!inSight) return;
+
+      // A grove tree is still solid wood — a swing or a shot still lands on it
+      // and stops there — but it never takes damage, catches fire or comes
+      // down from anything but an axe.
+      if (this.isProtectedGroveTree(tx, ty)) {
+        hitAnything = true;
+        return;
+      }
 
       const health = this.healthFor(tx, ty);
       // A tree already coming down cannot be hit again: it is no longer an

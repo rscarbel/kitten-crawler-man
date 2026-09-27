@@ -124,13 +124,9 @@ export const VILLAGER_ROUTINES: Readonly<Record<CivilianCastId, VillagerRoutine>
     ADULT_SPEED,
     SERVICE,
   ),
-  tikka: routine(
-    'workshop',
-    WORKER_POST_SHARE,
-    ['notice_board', 'bell', 'lumber_yard', 'square'],
-    'workshop',
-    BRISK_SPEED,
-  ),
+  // Tikka never leaves the workshop — her strolls stay inside its own anchors
+  // rather than the wider village, and her shelter is the same building.
+  tikka: routine('workshop', WORKER_POST_SHARE, ['workshop'], 'workshop', BRISK_SPEED),
   fenna: routine(
     'sawmill',
     SERVICE_POST_SHARE,

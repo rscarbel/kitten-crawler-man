@@ -1,6 +1,7 @@
 import { playDrinkGesture } from '../creatures/humanGestures';
 import { displayHp } from '../core/crawlerFormulas';
 import type { Player } from '../Player';
+import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
 import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
@@ -204,24 +205,24 @@ export class ClubVipLoungeSystem {
     return this.escortIsFree ? 0 : BODYGUARD_PAIR_PRICE;
   }
 
-  private heal(player: Player): void {
+  private heal(player: Player, companion: Player): void {
     if (player.hp >= player.maxHp) {
       this.feedbackMsg = "You're already at full health.";
       this.audio?.play('error');
       return;
     }
-    if (player.coins < VIP_HEAL_PRICE) {
+    if (!canAffordCoins(player, companion, VIP_HEAL_PRICE)) {
       this.feedbackMsg = 'Not enough coins for the medic.';
       this.audio?.play('error');
       return;
     }
-    player.coins -= VIP_HEAL_PRICE;
+    spendPartyCoins(player, companion, VIP_HEAL_PRICE, player);
     player.hp = player.maxHp;
     this.feedbackMsg = 'Patched up. Good as new.';
     this.audio?.play('potion_drink');
   }
 
-  private buff(player: Player): void {
+  private buff(player: Player, companion: Player): void {
     const speedActive = player.hasStatus('speed_fizz');
     const cooldownActive = player.hasStatus('cooldown_crisp');
     if (speedActive && cooldownActive) {
@@ -229,12 +230,12 @@ export class ClubVipLoungeSystem {
       this.audio?.play('error');
       return;
     }
-    if (player.coins < VIP_COCKTAIL_PRICE) {
+    if (!canAffordCoins(player, companion, VIP_COCKTAIL_PRICE)) {
       this.feedbackMsg = 'Not enough coins for the cocktail.';
       this.audio?.play('error');
       return;
     }
-    player.coins -= VIP_COCKTAIL_PRICE;
+    spendPartyCoins(player, companion, VIP_COCKTAIL_PRICE, player);
     if (!speedActive) player.activateSpeedFizz();
     if (!cooldownActive) player.activateCooldownCrisp();
     this.feedbackMsg = 'The VIP Cocktail hits. You feel unstoppable.';
@@ -242,15 +243,15 @@ export class ClubVipLoungeSystem {
     playDrinkGesture(player);
   }
 
-  private hireEscort(player: Player): void {
+  private hireEscort(player: Player, companion: Player): void {
     if (this.escortHired) return;
     const cost = this.escortCost();
-    if (player.coins < cost) {
+    if (!canAffordCoins(player, companion, cost)) {
       this.feedbackMsg = 'The escort costs more coins than you carry.';
       this.audio?.play('error');
       return;
     }
-    player.coins -= cost;
+    spendPartyCoins(player, companion, cost, player);
     this.escortHired = true;
     this.escortPending = true;
     this.feedbackMsg = this.escortIsFree
@@ -259,20 +260,20 @@ export class ClubVipLoungeSystem {
     this.audio?.play('purchase_success');
   }
 
-  handleClick(mx: number, my: number, player: Player): void {
+  handleClick(mx: number, my: number, player: Player, companion: Player): void {
     const point = modalFitPoint(this.fit, mx, my);
     for (const btn of this.buttons) {
       if (!pointInRect(point.x, point.y, btn)) continue;
       const action = btn.action;
       switch (action.kind) {
         case 'heal':
-          this.heal(player);
+          this.heal(player, companion);
           return;
         case 'buff':
-          this.buff(player);
+          this.buff(player, companion);
           return;
         case 'escort':
-          this.hireEscort(player);
+          this.hireEscort(player, companion);
           return;
         case 'close':
           this.close();
@@ -281,7 +282,7 @@ export class ClubVipLoungeSystem {
     }
   }
 
-  renderPanel(ctx: CanvasRenderingContext2D, player: Player): void {
+  renderPanel(ctx: CanvasRenderingContext2D, player: Player, companion: Player): void {
     if (!this.open) return;
     this.buttons = [];
 
@@ -329,7 +330,7 @@ export class ClubVipLoungeSystem {
       align: 'center',
     });
 
-    drawText(ctx, `Coins: ${player.coins}`, {
+    drawText(ctx, `Coins: ${partyCoins(player, companion)}`, {
       x: centerX,
       y: panel.inner.y + SUBTITLE_GAP + COINS_GAP,
       size: COINS_SIZE,
@@ -341,7 +342,7 @@ export class ClubVipLoungeSystem {
     // the ring has to end on a way out, and that way out has to be the primary.
     // Without it a bare Space in here buys something.
     beginMenuFocus('club-vip');
-    this.renderServiceCards(ctx, panel.x, panel.y, panelW, player);
+    this.renderServiceCards(ctx, panel.x, panel.y, panelW, player, companion);
     this.renderLeaveButton(ctx, panel.y, centerX);
     endMenuFocus();
 
@@ -399,6 +400,7 @@ export class ClubVipLoungeSystem {
     panelY: number,
     panelW: number,
     player: Player,
+    companion: Player,
   ): void {
     const x = panelX + PANEL_PADDING;
     const w = panelW - PANEL_PADDING * 2;
@@ -433,7 +435,11 @@ export class ClubVipLoungeSystem {
         align: 'left',
       });
 
-      const { label, disabled, statusLine } = this.buttonStateFor(service.action, player);
+      const { label, disabled, statusLine } = this.buttonStateFor(
+        service.action,
+        player,
+        companion,
+      );
       if (statusLine !== '') {
         drawText(ctx, statusLine, {
           x: x + CARD_PAD,
@@ -472,13 +478,14 @@ export class ClubVipLoungeSystem {
   private buttonStateFor(
     action: VipAction,
     player: Player,
+    companion: Player,
   ): { label: string; disabled: boolean; statusLine: string } {
     switch (action.kind) {
       case 'heal': {
         const atFull = player.hp >= player.maxHp;
         return {
           label: `Buy — ${VIP_HEAL_PRICE}`,
-          disabled: atFull || player.coins < VIP_HEAL_PRICE,
+          disabled: atFull || !canAffordCoins(player, companion, VIP_HEAL_PRICE),
           statusLine: atFull
             ? 'Already at full health.'
             : `${displayHp(player.hp)} / ${player.maxHp} HP`,
@@ -488,7 +495,7 @@ export class ClubVipLoungeSystem {
         const bothActive = player.hasStatus('speed_fizz') && player.hasStatus('cooldown_crisp');
         return {
           label: `Buy — ${VIP_COCKTAIL_PRICE}`,
-          disabled: bothActive || player.coins < VIP_COCKTAIL_PRICE,
+          disabled: bothActive || !canAffordCoins(player, companion, VIP_COCKTAIL_PRICE),
           statusLine: bothActive ? 'Cocktail already active.' : '',
         };
       }
@@ -504,7 +511,7 @@ export class ClubVipLoungeSystem {
         const cost = this.escortCost();
         return {
           label: free ? 'Hire — FREE' : `Hire — ${cost}`,
-          disabled: player.coins < cost,
+          disabled: !canAffordCoins(player, companion, cost),
           statusLine: free ? 'Comped: your table play covers it.' : '',
         };
       }

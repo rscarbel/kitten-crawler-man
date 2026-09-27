@@ -648,11 +648,15 @@ function marketConfigWithStatBoostStock(stockLimit: number): ShopConfig {
 }
 
 /** Renders the shop panel once and hunts the whole canvas for the point that fires a purchase. */
-function findBuyButton(shop: ShopSystem, buyer: HumanPlayer): { x: number; y: number } | null {
+function findBuyButton(
+  shop: ShopSystem,
+  buyer: HumanPlayer,
+  companion: CatPlayer,
+): { x: number; y: number } | null {
   const ctx = gameContext(STOCK_TEST_VIEWPORT_W, STOCK_TEST_VIEWPORT_H);
   setViewportSize(STOCK_TEST_VIEWPORT_W, STOCK_TEST_VIEWPORT_H);
   shop.shopOpen = true;
-  shop.renderShopPanel(ctx, buyer);
+  shop.renderShopPanel(ctx, buyer, companion);
   const coinsBefore = buyer.coins;
   for (let y = 0; y < STOCK_TEST_VIEWPORT_H; y += BUTTON_SCAN_STEP_PX) {
     for (let x = 0; x < STOCK_TEST_VIEWPORT_W; x += BUTTON_SCAN_STEP_PX) {
@@ -674,8 +678,9 @@ function secondStatBoostPurchaseIsRefused(buildShop: (stock: MarketStock) => Sho
   const shop = buildShop(stock);
   const buyer = new HumanPlayer(0, 0, TILE_SIZE);
   buyer.coins = STAT_BOOST_PRICE * 2;
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
 
-  const point = findBuyButton(shop, buyer);
+  const point = findBuyButton(shop, buyer, companion);
   if (point === null) return false;
   const afterFirst = buyer.inventory.countOf('stat_boost_potion');
   const coinsAfterFirst = buyer.coins;
@@ -734,9 +739,10 @@ function checkClubStock(): void {
   const shop = createClubMarketShop(stock);
   const buyer = new HumanPlayer(0, 0, TILE_SIZE);
   buyer.coins = STAT_BOOST_PRICE;
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
 
   const beforeSaleSnapshot = captureMarketStock(stock);
-  const point = findBuyButton(shop, buyer);
+  const point = findBuyButton(shop, buyer, companion);
   check(point !== null, 'the Buy button for Stat Boost is found on the panel');
   if (point !== null) shop.handleClick(point.x, point.y);
   const afterSaleSnapshot = captureMarketStock(stock);

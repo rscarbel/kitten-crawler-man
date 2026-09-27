@@ -75,6 +75,8 @@ const CARD_HOW_BUTTON_GAP = 8;
 const CARD_HOW_BUTTON_H = 20;
 const CARD_HOW_BUTTON_LABEL_SIZE = 9;
 const CARD_BOTTOM_PAD = 8;
+/** The gap between Resourcing's "How it works" button and its extra "How Processing Works" one. */
+const CARD_SECOND_HOW_BUTTON_GAP = 6;
 
 const BACK_BUTTON_Y_OFFSET = 7;
 const BACK_BUTTON_HEIGHT = 34;
@@ -147,6 +149,7 @@ function layoutCard(
   skills: CraftSkills,
   id: CraftSkillId,
   columnW: number,
+  hasProcessingButton: boolean,
 ): CardLayout {
   const level = skills.getLevel(id);
   const perkText =
@@ -175,12 +178,14 @@ function layoutCard(
 
   const perkBlockH = perkLines * CARD_PERK_LINE_H;
   const unlockBlockH = CARD_UNLOCK_GAP + unlockLines * CARD_UNLOCK_LINE_H;
+  const secondButtonH = hasProcessingButton ? CARD_SECOND_HOW_BUTTON_GAP + CARD_HOW_BUTTON_H : 0;
   const height =
     CARD_PERK_Y_OFFSET +
     perkBlockH +
     unlockBlockH +
     CARD_HOW_BUTTON_GAP +
     CARD_HOW_BUTTON_H +
+    secondButtonH +
     CARD_BOTTOM_PAD;
 
   return { id, height, perkText, perkLines, unlockText };
@@ -195,6 +200,7 @@ function drawCard(
   layout: CardLayout,
   skills: CraftSkills,
   onHowCraftWorks: ((id: CraftSkillId) => void) | undefined,
+  onHowProcessingWorks: (() => void) | undefined,
   progressPreset: typeof PROGRESS_PRESETS.resourcing,
   clipTop: number,
   clipBottom: number,
@@ -272,7 +278,9 @@ function drawCard(
     lineHeight: CARD_UNLOCK_LINE_H,
   });
 
-  const howBtnY = y + height - CARD_HOW_BUTTON_H;
+  const hasProcessingButton = id === 'resourcing' && onHowProcessingWorks !== undefined;
+  const secondButtonH = hasProcessingButton ? CARD_SECOND_HOW_BUTTON_GAP + CARD_HOW_BUTTON_H : 0;
+  const howBtnY = y + height - secondButtonH - CARD_HOW_BUTTON_H;
   // The hit-rect is clamped to what the scroll clip actually shows: a card
   // scrolled half off the visible band must not take clicks meant for
   // whatever real button now occupies the erased pixels above or below it.
@@ -311,6 +319,27 @@ function drawCard(
       align: 'center',
     });
   }
+
+  if (hasProcessingButton) {
+    const processingBtnY = howBtnY + CARD_HOW_BUTTON_H + CARD_SECOND_HOW_BUTTON_GAP;
+    const processingVisibleTop = Math.max(processingBtnY, clipTop);
+    const processingVisibleBottom = Math.min(processingBtnY + CARD_HOW_BUTTON_H, clipBottom);
+    if (processingVisibleBottom > processingVisibleTop) {
+      addButton(ctx, buttons, {
+        x: barX,
+        y: processingBtnY,
+        width: barW,
+        height: CARD_HOW_BUTTON_H,
+        label: 'How Processing Works',
+        labelSize: CARD_HOW_BUTTON_LABEL_SIZE,
+        ...BUTTON_PRESETS.blue,
+        action: onHowProcessingWorks,
+      });
+      const processingHitRect = buttons[buttons.length - 1];
+      processingHitRect.y = processingVisibleTop;
+      processingHitRect.h = processingVisibleBottom - processingVisibleTop;
+    }
+  }
 }
 
 function progressPresetFor(id: CraftSkillId): typeof PROGRESS_PRESETS.resourcing {
@@ -328,6 +357,7 @@ export function renderCraftsTab(
   human: HumanPlayer,
   cat: CatPlayer,
   onHowCraftWorks?: (id: CraftSkillId) => void,
+  onHowProcessingWorks?: () => void,
 ): void {
   drawText(ctx, 'Crafts', {
     x: bx + bw / 2,
@@ -346,11 +376,24 @@ export function renderCraftsTab(
   const leftX = bx + COLUMN_PAD;
   const rightX = leftX + columnW + COLUMN_GAP;
 
+  const hasProcessingButton = onHowProcessingWorks !== undefined;
   const leftLayouts = CRAFT_SKILL_ORDER.filter((id) => human.craftSkills.isLearned(id)).map((id) =>
-    layoutCard(ctx, human.craftSkills, id, columnW - SCROLLBAR_W),
+    layoutCard(
+      ctx,
+      human.craftSkills,
+      id,
+      columnW - SCROLLBAR_W,
+      id === 'resourcing' && hasProcessingButton,
+    ),
   );
   const rightLayouts = CRAFT_SKILL_ORDER.filter((id) => cat.craftSkills.isLearned(id)).map((id) =>
-    layoutCard(ctx, cat.craftSkills, id, columnW - SCROLLBAR_W),
+    layoutCard(
+      ctx,
+      cat.craftSkills,
+      id,
+      columnW - SCROLLBAR_W,
+      id === 'resourcing' && hasProcessingButton,
+    ),
   );
 
   const leftContentH =
@@ -410,6 +453,7 @@ export function renderCraftsTab(
         layout,
         human.craftSkills,
         onHowCraftWorks,
+        onHowProcessingWorks,
         progressPresetFor(layout.id),
         areaTop,
         areaTop + areaH,
@@ -439,6 +483,7 @@ export function renderCraftsTab(
         layout,
         cat.craftSkills,
         onHowCraftWorks,
+        onHowProcessingWorks,
         progressPresetFor(layout.id),
         areaTop,
         areaTop + areaH,

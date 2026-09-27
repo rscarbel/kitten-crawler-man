@@ -35,8 +35,8 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
 import type { BountyNoticeState } from './townNotices';
 import { characterTarget, type TrackerEntry, type TrackerTarget } from './questTracker';
-import type { ArrowAvoidRect } from '../ui/WorldArrow';
-import { drawArrowAbovePlayer } from '../ui/WorldArrow';
+import type { ArrowAvoidRect, ArrowCandidate } from '../ui/WorldArrow';
+import { ARROW_PRIORITY, drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
 import { QuestDialog } from '../ui/QuestDialog';
@@ -639,37 +639,38 @@ export class BountySystem implements GameSystem {
     if (this.commitment.update(this.encounter)) this.onEncounterCommitted();
   }
 
-  /**
-   * Draws the guidance arrow over the active player. Called from the scene's
-   * render pass in the same guarded slot as the stairwell reveal arrow.
-   */
-  renderArrow(
+  /** A candidate for the shared arrow arbiter: the guidance arrow over the active player. */
+  arrowCandidate(
     ctx: CanvasRenderingContext2D,
     activePlayer: HumanPlayer | CatPlayer,
     camX: number,
     camY: number,
     hudRect: ArrowAvoidRect,
-  ): void {
+  ): ArrowCandidate | null {
     const target = this.arrowTargetWorld();
-    if (target === null) return;
+    if (target === null) return null;
     const playerCx = activePlayer.x + TILE_SIZE * TILE_CENTER_OFFSET;
     const playerCy = activePlayer.y + TILE_SIZE * TILE_CENTER_OFFSET;
     const suppressPx = TILE_SIZE * ARROW_SUPPRESS_TILES;
-    if (Math.hypot(target.x - playerCx, target.y - playerCy) <= suppressPx) return;
+    if (Math.hypot(target.x - playerCx, target.y - playerCy) <= suppressPx) return null;
     const color = this.progress.phase === 'active' ? ARROW_COLOR : COLLECT_ARROW_COLOR;
-    drawArrowAbovePlayer(
-      ctx,
-      activePlayer.x,
-      activePlayer.y,
-      target.x,
-      target.y,
-      camX,
-      camY,
-      color,
-      {
-        avoidRect: hudRect,
-      },
-    );
+    return {
+      priority: ARROW_PRIORITY.BOUNTY,
+      draw: () =>
+        drawArrowAbovePlayer(
+          ctx,
+          activePlayer.x,
+          activePlayer.y,
+          target.x,
+          target.y,
+          camX,
+          camY,
+          color,
+          {
+            avoidRect: hudRect,
+          },
+        ),
+    };
   }
 
   /** Minimap markers: the mark's site while hunting, Shady otherwise. */

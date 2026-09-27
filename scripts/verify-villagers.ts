@@ -53,6 +53,8 @@ import {
 } from '../src/systems/briarHollow/VillagerSystem';
 import type { Villager } from '../src/systems/briarHollow/Villager';
 import type { VillagerPartyState } from '../src/systems/briarHollow/villagerCircumstances';
+import { GATE_SWING_SECONDS, VillageGate } from '../src/systems/briarHollow/VillageGate';
+import type { BriarHollowGate } from '../src/map/overworld/briarHollowSite';
 
 const MAP_SIZE = 280;
 const DEFAULT_SEEDS = 3;
@@ -266,6 +268,8 @@ function simulate(seed: number): void {
   const boundsOf = (villager: Villager): TileRect =>
     villager.routine.bounds === 'quarry' ? site.quarry.rect : site.interior;
 
+  const workshopRect = site.buildings.find((building) => building.id === 'workshop')?.rect ?? null;
+
   const problems = new Set<string>();
   let servicePostChecks = 0;
   let shelteredBy: number | null = null;
@@ -293,6 +297,10 @@ function simulate(seed: number): void {
 
       if (!inside(boundsOf(villager), tile)) {
         note(`${villager.id} left its bounds at (${tile.x}, ${tile.y})`);
+      }
+
+      if (villager.id === 'tikka' && workshopRect !== null && !inside(workshopRect, tile)) {
+        note(`tikka left the workshop at (${tile.x}, ${tile.y})`);
       }
 
       const onThreshold = village.isThreshold(tile.x, tile.y);
@@ -571,8 +579,70 @@ function verifyConversation(): void {
   system.update(elderFrame);
 }
 
+/**
+ * A body merely near the gate, with no route through it, must never open it —
+ * only a body whose route crosses one of the gate's own tiles does. A body
+ * with no route at all (the player) still opens it by proximity, as always.
+ */
+function verifyGateOpensOnlyForARouteThroughIt(): void {
+  const gateTiles: TilePoint[] = [
+    { x: 10, y: 10 },
+    { x: 11, y: 10 },
+    { x: 12, y: 10 },
+  ];
+  const gateDef: BriarHollowGate = {
+    tiles: gateTiles,
+    outside: { x: 11, y: 8 },
+    inside: { x: 11, y: 12 },
+    facing: 'south',
+  };
+  const middle = gateTiles[1];
+  const middleWorld = { x: middle.x * TILE_SIZE, y: middle.y * TILE_SIZE };
+  const framesToOpen = Math.ceil(GATE_SWING_SECONDS * FRAMES_PER_SECOND);
+
+  const openFractionAfter = (
+    friendlies: ReadonlyArray<{
+      readonly x: number;
+      readonly y: number;
+      readonly routeTiles?: ReadonlyArray<TilePoint>;
+    }>,
+    frames: number,
+  ): number => {
+    const gate = new VillageGate([], gateDef, null);
+    let fraction = 0;
+    for (let frame = 0; frame < frames; frame++) {
+      gate.update(friendlies, 0, 1 / FRAMES_PER_SECOND);
+      fraction = gate.openFraction;
+    }
+    return fraction;
+  };
+
+  const pacingGuard = { x: middleWorld.x, y: middleWorld.y, routeTiles: [{ x: 11, y: 9 }] };
+  check(
+    openFractionAfter([pacingGuard], framesToOpen) === 0,
+    'a guard pacing beside the gate without a route through it leaves the gate shut',
+  );
+
+  const crossingVillager = {
+    x: middleWorld.x,
+    y: middleWorld.y,
+    routeTiles: [{ x: 11, y: 9 }, middle, { x: 11, y: 11 }],
+  };
+  check(
+    openFractionAfter([crossingVillager], framesToOpen) > 0,
+    "a villager whose route crosses the gate's own tile opens it in time",
+  );
+
+  const player = { x: middleWorld.x, y: middleWorld.y };
+  check(
+    openFractionAfter([player], framesToOpen) > 0,
+    'the player still opens the gate by proximity alone, with no route to consult',
+  );
+}
+
 for (let seed = 1; seed <= seedCount(); seed++) simulate(seed);
 verifyConversation();
+verifyGateOpensOnlyForARouteThroughIt();
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED.\n`);

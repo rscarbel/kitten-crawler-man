@@ -24,7 +24,7 @@ import { eatFood, isFoodId } from '../../core/foods';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import { GearPanel } from '../../ui/GearPanel';
-import { HotbarToast } from '../../ui/HotbarToast';
+import { HotbarToast, type NoticeProminence } from '../../ui/HotbarToast';
 import { InventoryPanel } from '../../ui/InventoryPanel';
 import type { InventoryInteraction } from '../../ui/InventoryInteraction';
 import { LevelUpDialog } from '../../ui/LevelUpDialog';
@@ -32,6 +32,7 @@ import { MongoExplainer } from '../../ui/MongoExplainer';
 import { CraftExplainers } from '../../ui/CraftExplainers';
 import { ResourcingExplainer } from '../../ui/ResourcingExplainer';
 import { ConstructionExplainer } from '../../ui/ConstructionExplainer';
+import { ProcessingExplainer } from '../../ui/ProcessingExplainer';
 import { ConstructionMenu } from '../../ui/ConstructionMenu';
 import { QuantityPicker } from '../../ui/QuantityPicker';
 import { playButtonSound } from '../../ui/Button';
@@ -112,7 +113,7 @@ export class MenusKit {
   readonly skillBookPrompt = new SkillBookPrompt();
   readonly hotbarToast = new HotbarToast();
   readonly mongoExplainer: MongoExplainer;
-  /** The craft skills' "how it works" explainers, opened from the Crafts tab and by the teachers. */
+  /** The craft skills' and processing's "how it works" explainers, opened from the Crafts tab and by the teachers. */
   readonly craftExplainers = new CraftExplainers();
   /**
    * The Construction menu. Held here rather than by the village because both
@@ -166,8 +167,10 @@ export class MenusKit {
     this.pauseMenu.onHowMongoWorks = () => this.mongoExplainer.open();
     this.craftExplainers.register('resourcing', new ResourcingExplainer(audio));
     this.craftExplainers.register('construction', new ConstructionExplainer(audio));
+    this.craftExplainers.register('processing', new ProcessingExplainer(audio));
     this.constructionMenu = new ConstructionMenu(audio);
     this.pauseMenu.onHowCraftWorks = (id) => void this.craftExplainers.open(id);
+    this.pauseMenu.onHowProcessingWorks = () => void this.craftExplainers.open('processing');
     this.pauseMenu.audio = audio;
     this.levelUpDialog.audio = audio;
     this.rewardGrantedDialog.audio = audio;
@@ -243,8 +246,8 @@ export class MenusKit {
   }
 
   /** Announces something in the toast strip above the hotbar. */
-  announce(message: string): void {
-    this.hotbarToast.show(message);
+  announce(message: string, prominence: NoticeProminence = 'normal'): void {
+    this.hotbarToast.show(message, prominence);
   }
 
   /**

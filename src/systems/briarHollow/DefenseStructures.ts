@@ -69,6 +69,7 @@ import { constructionHpMultiplier } from '../../core/craftPerks';
 import { TILE_SIZE } from '../../core/constants';
 import { tileCoordKey, tileKeyX, tileKeyY } from '../../map/tileIndex';
 import {
+  BELL_TOWER_REPAIR_COST,
   DAMAGE_STAGE_INTACT,
   FENCE_HP,
   NEXT_WALL_TIER,
@@ -107,7 +108,14 @@ export type StructureRef =
   | { readonly kind: 'trebuchet'; readonly key: string }
   | { readonly kind: 'snare'; readonly key: string }
   | { readonly kind: 'gate' }
-  | { readonly kind: 'bell' };
+  | { readonly kind: 'bell' }
+  /**
+   * The bell tower once a lost siege has broken it: unlike `bell`, which is
+   * the bell's own health during a fight, this is the tower itself, on or off
+   * the same footprint, with nothing in between whole and broken to have HP
+   * over.
+   */
+  | { readonly kind: 'bellTower' };
 
 /**
  * What delivered a blow. `melee` from a hostile is reflected by spikes;
@@ -161,6 +169,7 @@ const SNARE_BREAK_SOUND = 'snare_break';
 const DISMANTLE_SOUND = 'structure_dismantle';
 
 const BELL_REF: StructureRef = { kind: 'bell' };
+const BELL_TOWER_REF: StructureRef = { kind: 'bellTower' };
 
 /** Key for a trebuchet or snare at its north-west tile. */
 export function structureKey(tileX: number, tileY: number): string {
@@ -283,6 +292,17 @@ export class DefenseStructures {
     return this.deps.state.quest.bellHp;
   }
 
+  /**
+   * Whether the broken bell tower may be rebuilt yet. Not until the Mayor has
+   * explained the loss: the questline only waits for the rebuild once he has
+   * asked for it, so a tower mended before then would leave that step with
+   * nothing left to wait for.
+   */
+  get bellTowerRepairable(): boolean {
+    const quest = this.deps.state.quest;
+    return quest.bellTowerBroken && quest.phase === 'repair_bell';
+  }
+
   /** Whether the bell has been beaten down to nothing. */
   get bellCracked(): boolean {
     return this.deps.state.quest.bellHp <= 0;
@@ -300,7 +320,9 @@ export class DefenseStructures {
   /** The one construction on a tile: a segment, a trebuchet, a snare, the gate or the bell. */
   at(tileX: number, tileY: number): StructureRef | null {
     if (this.isGateTile(tileX, tileY)) return { kind: 'gate' };
-    if (this.isBellTile(tileX, tileY)) return BELL_REF;
+    if (this.isBellTile(tileX, tileY)) {
+      return this.deps.state.quest.bellTowerBroken ? BELL_TOWER_REF : BELL_REF;
+    }
     const segment = this.segmentAtTile(tileX, tileY);
     if (segment !== null) return { kind: 'segment', id: segment.id };
     for (const record of this.deps.state.structures) {
@@ -409,6 +431,7 @@ export class DefenseStructures {
         return this.snare(ref.key);
       case 'gate':
       case 'bell':
+      case 'bellTower':
         return null;
     }
   }
@@ -420,6 +443,7 @@ export class DefenseStructures {
         return this.segmentById.has(ref.id);
       case 'gate':
       case 'bell':
+      case 'bellTower':
         return true;
       case 'trebuchet':
       case 'snare':
@@ -435,6 +459,7 @@ export class DefenseStructures {
       case 'gate':
         return this.deps.site.gates.flatMap((gate) => gate.tiles);
       case 'bell':
+      case 'bellTower':
         return this.bellTiles;
       case 'trebuchet': {
         const record = this.trebuchet(ref.key);
@@ -466,6 +491,9 @@ export class DefenseStructures {
   maxHp(ref: StructureRef): number {
     switch (ref.kind) {
       case 'gate':
+        return 0;
+      // Whole or broken, never partway: the tower has no HP bar to show.
+      case 'bellTower':
         return 0;
       case 'bell':
         return HOLLOW_BELL_MAX_HP;
@@ -563,6 +591,10 @@ export class DefenseStructures {
       }
       return;
     }
+    // A broken tower is never in a live siege to begin with — `begin()`
+    // refuses to start one while it stands broken — so nothing ever calls
+    // this for it, but the type still has to be narrowed past it.
+    if (ref.kind === 'bellTower') return;
     const record = this.snare(ref.key);
     if (record === null || record.broken) return;
     record.hp = Math.max(0, record.hp - amount);
@@ -808,6 +840,10 @@ export class DefenseStructures {
         const chunks = repairChunks(HOLLOW_BELL_MAX_HP - this.bellHp, HOLLOW_BELL_MAX_HP);
         return chunks === 0 ? null : scaleCost(HOLLOW_BELL_REPAIR_CHUNK_COST, chunks);
       }
+      // Fixed and flat, unlike every other repair here: there is no partial
+      // damage to price by the fifth, only broken or not.
+      case 'bellTower':
+        return this.bellTowerRepairable ? { ...BELL_TOWER_REPAIR_COST } : null;
       case 'segment': {
         const record = this.findSegmentRecord(ref.id);
         if (record === null) return null;
@@ -863,7 +899,7 @@ export class DefenseStructures {
    * above a fence, and every trebuchet and snare.
    */
   canTakeSpikes(ref: StructureRef): boolean {
-    if (ref.kind === 'gate' || ref.kind === 'bell') return false;
+    if (ref.kind === 'gate' || ref.kind === 'bell' || ref.kind === 'bellTower') return false;
     if (ref.kind === 'segment') {
       const tier = this.segmentTier(ref.id);
       return tier === 'wood' || tier === 'stone' || tier === 'fortified';
@@ -884,6 +920,12 @@ export class DefenseStructures {
     if (ref.kind === 'bell') {
       this.restoreBell();
       this.deps.bus.emit('structureRepaired', { kind: 'bell' });
+      return;
+    }
+    if (ref.kind === 'bellTower') {
+      this.deps.state.quest.bellTowerBroken = false;
+      this.deps.bus.emit('bellTowerRepaired', {});
+      this.syncMap();
       return;
     }
     const record = this.record(ref);
@@ -986,7 +1028,14 @@ export class DefenseStructures {
    * purpose — so a segment or the gate is refused.
    */
   destroy(ref: StructureRef): boolean {
-    if (ref.kind === 'segment' || ref.kind === 'gate' || ref.kind === 'bell') return false;
+    if (
+      ref.kind === 'segment' ||
+      ref.kind === 'gate' ||
+      ref.kind === 'bell' ||
+      ref.kind === 'bellTower'
+    ) {
+      return false;
+    }
     const record = this.record(ref);
     if (record === null) return false;
     this.removeRecord(record);
@@ -1059,7 +1108,8 @@ export class DefenseStructures {
     }
     // Only a hurt bell is something to work on; a whole one would stand in
     // front of whatever else the crawler meant at the square.
-    if (this.bellHp < HOLLOW_BELL_MAX_HP) consider(BELL_REF, this.bellFootprint);
+    if (this.bellTowerRepairable) consider(BELL_TOWER_REF, this.bellFootprint);
+    else if (this.bellHp < HOLLOW_BELL_MAX_HP) consider(BELL_REF, this.bellFootprint);
     return best;
   }
 
@@ -1110,7 +1160,27 @@ export class DefenseStructures {
         }
       }
     }
+    this.syncBellTower(structure);
     this.syncStructureBlocks();
+  }
+
+  /**
+   * The bell tower's own footprint is never rewritten as tile types the way a
+   * palisade segment is — it stays one `bell_tower` prop always — so this only
+   * carries the quest's `bellTowerBroken` flag onto the prop's anchor tile,
+   * for `drawHollowPropTile` to pick the snapped look off. The anchor tile is
+   * a fresh object every time the overworld map regenerates, so this has to
+   * run on every sync, the same as every wall tier below it.
+   */
+  private syncBellTower(structure: TileContent[][]): void {
+    const bellTile = this.deps.site.square.bellTile;
+    const content = contentAt(structure, bellTile.x, bellTile.y);
+    if (content === undefined) return;
+    const broken = this.deps.state.quest.bellTowerBroken;
+    if ((content.bellTowerBroken === true) === broken) return;
+    content.bellTowerBroken = broken ? true : undefined;
+    this.markTileAndNeighboursDirty(bellTile.x, bellTile.y);
+    this.deps.onTileChanged(bellTile.x, bellTile.y);
   }
 
   private segmentLook(id: string): {

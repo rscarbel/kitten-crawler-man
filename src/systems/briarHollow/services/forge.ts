@@ -32,6 +32,7 @@ import {
 } from '../../../core/toolTiers';
 import { drawItemIcon } from '../../../ui/InventoryPanel';
 import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
+import { partyCoins } from '../../../core/partyCoins';
 import type { Circumstance } from '../ratkinDialogue';
 import { villagerEntry } from '../ratkinDialogue';
 import type { ConversationController, ConversationTopic, TopicProvider } from '../villagerTopics';
@@ -52,7 +53,7 @@ export const SMITH = 'oren';
 const FINEST_LABEL = 'Finest';
 
 /** The grant and the lesson, as Oren says them, in order. */
-const GRANT_AND_LESSON: readonly Circumstance[] = [
+export const GRANT_AND_LESSON: readonly Circumstance[] = [
   'grant_basic_tools',
   'explain_resource_gathering',
   'resourcing_skill_granted',
@@ -148,15 +149,34 @@ function partyStillListening(host: ForgeHost): boolean {
   return host.party.active().isAlive && partyOwnsTools(host.tools);
 }
 
+/**
+ * The grant's follow-up: the reward cards and the explainer, once the
+ * conversation showing {@link GRANT_AND_LESSON} has closed.
+ */
+function queueGrantFollowUp(host: ForgeHost, ctl: ConversationController): void {
+  ctl.afterClose(() => {
+    if (!partyStillListening(host)) return;
+    for (const kind of TOOL_KINDS) host.enqueueReward(toolReward(kind));
+    showExplainer(host);
+  });
+}
+
+/**
+ * Grants the tools as the questline's own opening line for Oren, whose pages
+ * are {@link GRANT_AND_LESSON} — already shown by the conversation panel
+ * before this runs, so unlike {@link runToolsTopic} this never says them again.
+ */
+export function runOrenAutoGrant(host: ForgeHost, ctl: ConversationController): void {
+  if (partyOwnsTools(host.tools)) return;
+  grantToolsAndLesson(host);
+  queueGrantFollowUp(host, ctl);
+}
+
 function runToolsTopic(host: ForgeHost, ctl: ConversationController): void {
   if (!partyOwnsTools(host.tools)) {
     grantToolsAndLesson(host);
     ctl.say(...GRANT_AND_LESSON);
-    ctl.afterClose(() => {
-      if (!partyStillListening(host)) return;
-      for (const kind of TOOL_KINDS) host.enqueueReward(toolReward(kind));
-      showExplainer(host);
-    });
+    queueGrantFollowUp(host, ctl);
     return;
   }
   const pages: Circumstance[] = ['basic_tools_already_owned'];
@@ -245,7 +265,7 @@ export function forgePurchase(host: ForgeHost, option: PricedOption): PricedPurc
 
 export function forgeShop(host: ForgeHost): ShopDefinition {
   return {
-    build: () => buildForgeMenu(host.tools, host.party.active().coins),
+    build: () => buildForgeMenu(host.tools, partyCoins(host.party.human, host.party.cat)),
     purchase: (option) => forgePurchase(host, option),
     rebuyGuardFrames: UPGRADE_REBUY_GUARD_FRAMES,
     blockedLine: (option) => {

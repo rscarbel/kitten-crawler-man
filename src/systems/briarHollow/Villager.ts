@@ -32,7 +32,6 @@ import {
   questMarkerColorFor,
 } from '../../sprites/questNPCSprite';
 import { drawQuestBeacon } from '../../sprites/questBeacon';
-import { drawText, TEXT_PRESETS } from '../../ui/TextBox';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { CivilianCastId, VillagerRoutine } from './villagerRoutines';
 
@@ -49,8 +48,6 @@ const TILE_CENTRE = 0.5;
 export const VILLAGER_HEAD_CLEARANCE_TILES = 0.5;
 /** Gap between the head and a marker or bubble above it. */
 const OVERHEAD_GAP_PX = 2;
-/** The name sits under the feet, clear of the prompt, marker and bubbles above. */
-const NAME_LABEL_DROP_PX = 1;
 /** How far a step must lean one way before the villager turns to face it. */
 const FACING_DEADZONE = 0.05;
 
@@ -118,8 +115,6 @@ export class Villager implements TownPropRenderable {
   readonly bark = new TimedSpeech();
   /** Shows the wordless "…" bubble while set — the unnamed four in hiding. */
   hushed = false;
-  /** Set each frame by the system: the active crawler is close enough to read the name. */
-  showName = false;
 
   /** The planned route, walked tile centre to tile centre. */
   path: TilePoint[] = [];
@@ -154,6 +149,8 @@ export class Villager implements TownPropRenderable {
     readonly id: CivilianCastId,
     readonly routine: VillagerRoutine,
     readonly displayName: string | null,
+    /** Shown in the hover tooltip's body. */
+    readonly description: string,
     /** Where they work. */
     readonly post: TilePoint,
     /** Where they hide during the siege. */
@@ -191,6 +188,11 @@ export class Villager implements TownPropRenderable {
   /** The tile the villager is walking toward next, or null when standing. */
   get nextWaypoint(): TilePoint | null {
     return this.isTravelling ? this.path[this.pathIndex] : null;
+  }
+
+  /** The tile underfoot plus every waypoint still ahead on the current route. */
+  get remainingRoute(): readonly TilePoint[] {
+    return [this.tile, ...this.path.slice(this.pathIndex)];
   }
 
   /** The end of the current route, or null when standing. */
@@ -369,15 +371,20 @@ export class Villager implements TownPropRenderable {
       drawQuestMarker(ctx, sx, markerY, tileSize, glyph, markerColor);
     }
 
-    if (this.displayName !== null && this.showName) {
-      drawText(ctx, this.displayName, {
-        ...TEXT_PRESETS.label,
-        x: sx + tileSize * TILE_CENTRE,
-        y: sy + tileSize + NAME_LABEL_DROP_PX,
-        align: 'center',
-      });
-    }
+    this.renderSparks(ctx, camX, camY);
+  }
 
+  /**
+   * The bark bubble (or the wordless "…" while hushed), drawn in a pass over
+   * every Y-sorted body and prop. A tall standing prop this villager stands
+   * near — a sawmill machine, the rope walk — can sort after them in the
+   * entity pass and paint over a bubble drawn inline with their own body, so
+   * this is called separately once every entity is down.
+   */
+  renderBark(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    const sx = this.x - camX;
+    const sy = this.y - camY;
+    const headTop = this.headTop(sy, tileSize);
     if (this.bark.current !== null) {
       drawTimedSpeechBubble(
         ctx,
@@ -389,7 +396,5 @@ export class Villager implements TownPropRenderable {
     } else if (this.hushed) {
       drawSpeechBubble(ctx, sx, sy, tileSize, this.ellipsisPulse);
     }
-
-    this.renderSparks(ctx, camX, camY);
   }
 }

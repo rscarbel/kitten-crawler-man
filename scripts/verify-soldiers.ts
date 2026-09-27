@@ -55,6 +55,7 @@ import { MobUpdateLoop } from '../src/systems/MobUpdateLoop';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { DefenseStructures } from '../src/systems/briarHollow/DefenseStructures';
 import { SoldierSystem } from '../src/systems/briarHollow/SoldierSystem';
+import { VillageGate } from '../src/systems/briarHollow/VillageGate';
 import {
   routeIsWalkable,
   tilesFromPalisade,
@@ -132,7 +133,7 @@ const BALANCE_RATE = 0.8;
  */
 const HOLDS_ONE_HP_LEFT_SHARE = 0.5;
 /** Downed soldiers get up by themselves after this long, outside the siege. */
-const DOWNED_RECOVERY_SECONDS = 90;
+const DOWNED_RECOVERY_SECONDS = 60;
 /** A soldier who gets back up after the siege has half their health. */
 const RISE_HP_SHARE = 0.5;
 /** A crawler standing over a downed soldier helps them up in this long, to 30% health. */
@@ -157,6 +158,10 @@ const HOME_WALK_SECONDS = 60;
 const AT_POST_TILES = 2;
 /** From the far side of the village the walk home goes round to the gate first. */
 const FAR_SIDE_HOME_WALK_SECONDS = 90;
+/** How far open a gate must swing to count as "open" for a flap count. */
+const GATE_FLAP_OPEN_THRESHOLD = 0.5;
+/** How many tiles clear of Sedge's beat line the watching party stands, so it activates without blocking his walk. */
+const GATE_FLAP_WATCH_CLEARANCE_TILES = 3;
 /** A held soldier is fought at for this long. */
 const HOLD_FIGHT_SECONDS = 60;
 /** Undead thrown at a held soldier, one at a time. */
@@ -233,10 +238,11 @@ function makeRig(
   random: () => number = mulberry32(WORLD_SEED),
   level = TEST_LEVEL,
 ): Rig {
-  // Every order/duty test here is about the militia's mechanics, not the Mayor
-  // gate, so a fresh rig starts past it; the one test that exercises the gate
-  // itself sets the phase back down before talking to a soldier.
+  // Every order/duty test here is about the militia's mechanics, not the
+  // Mayor gate, so a fresh rig starts past it; the one test that exercises
+  // the gate itself clears the unlock back off before talking to a soldier.
   if (!hasAcceptedMayorRequest(state.quest.phase)) state.quest.phase = 'need_tools';
+  state.unlocks.soldierCommands = true;
   const bus = new EventBus();
   const roster = new MobRoster(gameMap, new SpellSystem());
   const human = new HumanPlayer(site.gate.inside.x, site.gate.inside.y - 1, TILE_SIZE);
@@ -375,6 +381,7 @@ function recorder(said: Circumstance[], villager: RatkinSoldierId): Conversation
     showTopics: () => undefined,
     showRootTopics: () => undefined,
     close: () => undefined,
+    endAfterPages: () => undefined,
     afterClose: () => undefined,
   };
 }
@@ -904,6 +911,63 @@ section('Patrol routes are walks a soldier can take');
   );
 }
 
+section('A beat beside a gate does not flap it open and shut');
+{
+  // Sedge's post sits on the east wall right beside the east gate, and his
+  // default beat (outside the siege, no order given) paces up and down that
+  // stretch of wall, repeatedly passing within the gate's own opening
+  // radius without his route ever crossing the gate's tiles. A friendly
+  // counted by proximity alone would swing the gate open and shut on every
+  // pass; one counted by its actual route should never open it at all.
+  const eastGateDef = site.gates.find((gate) => gate.facing === 'east');
+  if (eastGateDef === undefined) {
+    check(false, 'the site has an east gate');
+  } else {
+    const rig = makeRig();
+    const sedge = soldierOf(rig, 'sedge');
+    check(sedge.duty.kind === 'patrol', "Sedge's default duty is his east-wall beat");
+    // A patroller off screen is frozen by the activation radius, same as any
+    // mob; a crawler standing watch nearby (as one would to notice a gate
+    // flickering) is what lets Sedge actually walk his beat here. Standing
+    // a few tiles clear of his beat's own line keeps the party from
+    // blocking the walk they are there to activate.
+    const sedgePost = rig.soldiers.posts.post.sedge.tile;
+    const watchFrom = { x: sedgePost.x - GATE_FLAP_WATCH_CLEARANCE_TILES, y: sedgePost.y };
+    standAt(rig.human, watchFrom);
+    standAt(rig.cat, watchFrom);
+
+    const routeAwareGate = new VillageGate([], eastGateDef, null);
+    const proximityOnlyGate = new VillageGate([], eastGateDef, null);
+    let routeAwareEverOpened = false;
+    let proximityTransitions = 0;
+    let proximityWasOpen = false;
+
+    for (let frame = 0; frame < PATROL_LOOP_SECONDS * UPDATES_PER_SECOND; frame++) {
+      tick(rig);
+      const nonHostile = rig.roster.mobs.filter((mob) => mob.isAlive && !mob.isHostile);
+      routeAwareGate.update(nonHostile, 0, 1 / UPDATES_PER_SECOND);
+      proximityOnlyGate.update(
+        nonHostile.map((mob) => ({ x: mob.x, y: mob.y })),
+        0,
+        1 / UPDATES_PER_SECOND,
+      );
+      if (routeAwareGate.openFraction > 0) routeAwareEverOpened = true;
+      const proximityOpen = proximityOnlyGate.openFraction >= GATE_FLAP_OPEN_THRESHOLD;
+      if (proximityOpen && !proximityWasOpen) proximityTransitions++;
+      proximityWasOpen = proximityOpen;
+    }
+
+    check(
+      proximityTransitions >= 2,
+      `counted by proximity alone, Sedge's beat really would flap the gate (control: ${proximityTransitions} openings)`,
+    );
+    check(
+      !routeAwareEverOpened,
+      "counted by its route, Sedge's beat — which never crosses the gate's own tiles — never opens it",
+    );
+  }
+}
+
 section('Orders survive a rebuild and a save');
 {
   const rig = makeRig();
@@ -1142,6 +1206,7 @@ section('Every soldier line is heard');
     const gateState = createBriarHollowState();
     const gateRig = makeRig(gateState, () => 0);
     gateState.quest.phase = 'unmet';
+    gateState.unlocks.soldierCommands = false;
     for (const id of RATKIN_SOLDIER_IDS) {
       const soldier = soldierOf(gateRig, id);
       gateRig.soldiers.talkTo(soldier, gateRig.human);
