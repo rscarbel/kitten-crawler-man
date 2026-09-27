@@ -151,47 +151,55 @@ export const RESIDENT_LINES = {
   },
   wendell: {
     ambient: [
-      'Forty-one head. Was forty-three. I count them twice now, out of spite.',
-      'Dog’s better at this than I am. Do not tell him.',
-      'You can sleep out there if you like. I will not, and I have the wall.',
-      'Grass is greener past the wall. So is everything else, and that is the trouble.',
-      'A shepherd who stops counting is a butcher who does not know it yet.',
+      'A house is never finished, strictly speaking. There is always a hinge that may be improved, a board that may be better fitted, or a client who has changed his mind.',
+      'I was once told that farming was a simple profession. I have since discovered that so is drowning, provided one does not object to the particulars.',
+      "I spent several years building other people's houses. It is a curious thing, to know precisely how a room ought to be arranged and yet never be invited to choose one's own.",
+      'I had thought that owning a pasture would make me a gentleman. At present it has chiefly made me a man who is forever repairing fences.',
+      'There are few things more discouraging than a poorly built wall. There are, naturally, many things more discouraging than a well-built wall that belongs to someone else.',
+      "I studied architecture for years. I have built considerably more houses than I have designed, which is perhaps the universe's rather indirect way of offering its opinion.",
+      'The trouble with plans is that they are terribly reasonable before construction begins.',
+      'A proper foundation will outlast nearly anything. This is why I have given mine rather more attention than my neighbors believe strictly necessary.',
+      'I have discovered that cows possess very definite opinions about fences, and none of them coincide with mine.',
+      'My ambition at present is to become a respectable farmer. I was an architect once, and I see no reason not to make another questionable decision.',
     ],
     lore: [
       [
-        'Lost two to the ruins in the spring. Everyone says that like it is weather.',
-        'It is not weather. I walked the line after and there was no blood. None. Sheep make a mess when something eats them.',
-        'These were taken tidy. Gate opened, gate closed. Whatever came through has hands and it has manners.',
-        'I would rather it had been wolves. I know what to do about wolves.',
+        'I did, in fact, train as an architect. Quite seriously, too. I learned proportions, load calculations, drafting, all the respectable subjects.',
+        'Unfortunately, there was remarkably little demand for an architect who was not already important enough to be worth hiring.',
+        'So I went into construction. It was not what I had imagined for myself, but it proved rather pleasant in one respect: when a roof stood properly, no one could dispute that I had done something useful.',
+        "I built houses, repaired walls, replaced floors, corrected other men's mistakes, and occasionally corrected mistakes they insisted were not mistakes at all.",
+        'One becomes philosophical about these things when one has enough years and enough badly hung doors.',
       ],
       [
-        'Do not tell the guard I told you. They have started writing me down as "the excitable one".',
-        'Two weeks back, near the south wall, past the last verge post. Moonlight, near enough.',
-        'Something crossed the field on too many legs. Not a spider — I know spiders, we have them the size of dogs now.',
-        'This one was long. It went over the rubble the way water goes over a step, and it did not hurry, and I have not slept right since.',
-      ],
-      [
-        'The old boundary stones are out there still, half a day past the wall.',
-        'My grandfather’s flock grazed all of it. There was a lane, and hedges, and a chapel with a bell.',
-        'I have seen the bell. It is in a heap with a lot of other bells, and something built the heap on purpose.',
-        'That is what I cannot get past. Something out there is tidying.',
+        'I have always wanted a bit of land of my own. Not an estate, you understand. I have no desire to spend my mornings managing six hundred acres and a man who lies about fences.',
+        'A pasture, a respectable cottage, a few cows. Something modest that I might improve with my own hands.',
+        'After years of constructing houses for other people, the idea of growing something instead of merely building it had its appeal.',
+        'The cows did not agree with the timetable, unfortunately. Every one I had died.',
+        'I miss them rather more than I care to admit. There is something humiliating about becoming attached to an animal whose principal contribution to the household is standing in the same field every day.',
+        'There is also the matter of the milk. I had begun selling it to the inns and taverns here, and a farmer whose dairy produces nothing is a farmer chiefly in theory.',
       ],
     ],
     reactive: (ctx) => {
       if (murderOpen(ctx)) {
         return [
-          'They are calling the killings beasts. I keep beasts. That was not beasts.',
-          'A beast takes the soft parts and leaves the rest in the mud. Ask anyone who has actually buried a lamb.',
+          "There has been enough disorder lately without people pretending it is ordinary. I have spent too many years repairing the consequences of other people's carelessness.",
+          'A person leaves evidence, whether they intend to or not. Broken hinges, disturbed ground, a door opened the wrong way—everything leaves a mark.',
+          'I should think the guards ought to pay rather more attention to such details. Then again, no one ever asks the carpenter until after the house has fallen down.',
         ];
       }
       if (circusUnderway(ctx)) {
         return [
-          'Whatever is stirring out at the old circus has the flock stupid with fright. They will not go near the south fence.',
+          'The circus has attracted rather more excitement than I care for. I have nothing against entertainment, provided it remains where one expects to find it.',
+          'My animals have been unsettled by all the noise. I am beginning to suspect they possess better judgment than some of our visitors.',
         ];
       }
       if (ctx.doomsday === 'complete') {
-        return ['Not one lost the night the tower nearly went. Not one. I counted twice.'];
+        return [
+          'The tower has fallen, and yet my pasture remains standing. I confess this has restored some of my confidence in foundations.',
+          'I inspected the fence twice afterward. Every post was still where I had put it. There are moments when a builder is permitted a little satisfaction.',
+        ];
       }
+
       return null;
     },
   },
