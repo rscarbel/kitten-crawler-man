@@ -12,7 +12,7 @@ const askHowLumberYardWorks = say.line(ASK_HOW_LUMBER_YARD_WORKS_TEXT);
 
 export const FENNA = {
   backstory:
-    "Fenna runs the village lumber yard and sawmill. She teaches folks how to use the machinery to turn wood into boards or rope, and she'll do bulk processing for anybody who's got the coin and would rather not feed every piece through the mill themselves.",
+    "Fenna runs the village lumber yard and sawmill. She teaches workers how to use the machinery to process wood into boards or rope, and she offers a paid bulk-processing service for anyone who doesn't want to process each piece manually.",
 
   firstMeeting: say.line(
     "Logs go in yonder, finished material comes out over here. Mind where you're standin', though. I'd hate for you to wind up wearin' sawdust in places sawdust has no business bein'.",
