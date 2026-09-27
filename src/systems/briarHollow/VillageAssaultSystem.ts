@@ -4,12 +4,14 @@
  * side of the village (every side once, in an order drawn when the bell
  * rings, and announced before each wave), and how it ends.
  *
- * Every wave raises its undead all at once, and brings along a handful of the
- * crawl's other hostiles, one of Shady's bounty marks fielded weaker than a
- * real bounty, and a fairy — a different one each wave, the healer never, and
- * every earlier wave's fairy with it. Vordrick Boneharrow leads every wave:
- * in the first three he comes with less than his full health and cannot die,
- * fading away when beaten; in the fourth he fights to the end.
+ * A wave's own bodies rise one after another up its lane rather than all at
+ * once, spaced out so a single blow never catches the whole roster. From the
+ * second wave on, a wave is itself a run of mini-waves: every earlier wave's
+ * roster in order, each fought down to a fraction of its own count before the
+ * next rises, and the wave's own roster — with Vordrick, its bounty mark and
+ * its fairy — only leading the last of them. Vordrick Boneharrow leads every
+ * wave this way: in the first three he comes with less than his full health
+ * and cannot die, fading away when beaten; in the fourth he fights to the end.
  *
  * - **Won** when the necromancer dies in the last wave. Every undead still
  *   standing crumbles, released rather than killed, so the crumbling pays
@@ -127,6 +129,20 @@ export const WAVE_MAX_SECONDS = 120;
 const WAVE_MAX_FRAMES = WAVE_MAX_SECONDS * UPDATES_PER_SECOND;
 /** Or sooner, once no more than this share of the wave's bodies still stands. */
 export const WAVE_ADVANCE_REMAINING_SHARE = 0.2;
+/**
+ * How long a wave's own bodies take to finish rising, one after another, so
+ * a blow that lands where they came up catches only the first few rather
+ * than the whole roster in one clump.
+ */
+const SPAWN_STAGGER_SECONDS = 0.6;
+const SPAWN_STAGGER_FRAMES = Math.round(SPAWN_STAGGER_SECONDS * UPDATES_PER_SECOND);
+/**
+ * Wave `index` (from 1) strings together every roster from the first through
+ * its own, one mini-wave at a time. The next mini-wave rises once no more
+ * than this share of the current one's bodies still stands; the wave itself
+ * is cleared only once its own (last) mini-wave is beaten.
+ */
+export const MINI_WAVE_ADVANCE_REMAINING_SHARE = 0.3;
 /**
  * The breather between waves, under a banner counting down to the one
  * coming: time to mend the bell, reload the engines and drink before the
@@ -497,6 +513,8 @@ interface PendingSpawn {
   readonly dueFrame: number;
   /** The wave it belongs to, which it keeps if it is still queued when the next wave begins. */
   readonly wave: number;
+  /** The mini-wave roster it was raised for, which it keeps if still queued when the next mini-wave begins. */
+  readonly rosterIndex: number;
 }
 
 /**
@@ -838,10 +856,27 @@ export class VillageAssaultSystem {
   private readonly laneOf = new Map<Mob, AssaultLane>();
   /** Every fairy the siege has put out, alive or not, by kind: the next wave calls back the fallen. */
   private readonly fairies = new Map<RegularFairyKind, Fairy>();
-  private wavePlanned = 0;
+  /**
+   * Which of the wave's rosters is on the field right now: wave `index`
+   * plays every roster from 0 through `index` in turn, reinforcements first
+   * and its own roster last. Tagged separately from {@link waveOf}'s real
+   * wave index, since several mini-waves share one real wave.
+   */
+  private readonly miniWaveOf = new Map<Mob, number>();
+  private miniWaveRoster = 0;
+  /** Bodies planned for the mini-wave now in the field, for the mini-wave-advance gate. */
+  private miniWavePlanned = 0;
+  /** Every mini-wave's planned bodies summed, for the real wave's own clear gate. */
+  private waveTotalPlanned = 0;
+  /**
+   * Frames since the current real wave began — reset once per real wave, not
+   * per mini-wave. Every mini-wave gets a fair share of {@link WAVE_MAX_FRAMES}
+   * to force its own advance, so a wave stuck with nowhere to spawn still
+   * reaches its own roster within the same ceiling a single-roster wave would.
+   */
   private waveFrames = 0;
   private lullFrames = 0;
-  /** Whether the current wave has put its first body out yet. */
+  /** Whether the current mini-wave has put its first body out yet. */
   private waveBodiesOut = false;
   private necromancer: Necromancer | null = null;
   private necromancerOut = false;
@@ -1050,6 +1085,10 @@ export class VillageAssaultSystem {
     this.arrivals = [];
     this.waveOf.clear();
     this.laneOf.clear();
+    this.miniWaveOf.clear();
+    this.miniWaveRoster = 0;
+    this.miniWavePlanned = 0;
+    this.waveTotalPlanned = 0;
     this.fairies.clear();
     this.waveBodiesOut = false;
     this.necromancer = null;
@@ -1175,21 +1214,35 @@ export class VillageAssaultSystem {
   }
 
   private startWave(index: number): void {
-    const spec = waveSpec(index);
-    if (spec === null) return;
+    if (waveSpec(index) === null) return;
     this.deps.state.quest.assaultWaveIndex = index;
-    this.waveFrames = 0;
     this.lullFrames = 0;
-    this.waveBodiesOut = false;
-    const lane = this.laneFor(this.sideOfWave(index));
-    if (lane === null) return;
-    // Anything the live cap held back from the wave before still comes, first.
-    const leftovers = this.pending.map((spawn) => ({ ...spawn, dueFrame: 0 }));
-    const planned = this.planWave(spec, index, lane);
-    this.pending = [...leftovers, ...planned];
-    this.wavePlanned = planned.length;
-    this.arrivals = this.planArrivals(index, lane);
+    this.waveFrames = 0;
+    this.waveTotalPlanned = 0;
     this.deps.bus.emit('villageAssaultWave', { index });
+    this.launchMiniWave(index, 0);
+  }
+
+  /**
+   * Wave `realWaveIndex` plays as a run of mini-waves, one for every wave's
+   * roster from the first through its own, in order: reinforcements arrive
+   * first, and the wave's own force — with Vordrick, its bounty mark and its
+   * fairy — leads only the last. That keeps a wave from ever landing as one
+   * clump: an early AoE only ever meets one roster's worth at a time.
+   */
+  private launchMiniWave(realWaveIndex: number, rosterIndex: number): void {
+    const spec = waveSpec(rosterIndex);
+    const lane = this.laneFor(this.sideOfWave(realWaveIndex));
+    if (spec === null || lane === null) return;
+    this.miniWaveRoster = rosterIndex;
+    this.waveBodiesOut = false;
+    // Anything the live cap held back from the mini-wave before still comes, first.
+    const leftovers = this.pending.map((spawn) => ({ ...spawn, dueFrame: this.waveFrames }));
+    const planned = this.planWave(spec, realWaveIndex, rosterIndex, lane, this.waveFrames);
+    this.pending = [...leftovers, ...planned];
+    this.miniWavePlanned = planned.length;
+    this.waveTotalPlanned += planned.length;
+    if (rosterIndex === realWaveIndex) this.arrivals = this.planArrivals(realWaveIndex, lane);
     this.playCue('necroWarHorn');
     this.spawnArrivals();
   }
@@ -1199,8 +1252,17 @@ export class VillageAssaultSystem {
     return this.deps.site.assaultLanes.find((lane) => lane.id === side) ?? null;
   }
 
-  /** The wave's bodies, scaled for the difficulty and raised all at once up its lane. */
-  private planWave(spec: AssaultWaveSpec, wave: number, lane: AssaultLane): PendingSpawn[] {
+  /**
+   * A mini-wave's bodies, scaled for the difficulty and raised one after
+   * another up its lane, each {@link SPAWN_STAGGER_FRAMES} behind the last.
+   */
+  private planWave(
+    spec: AssaultWaveSpec,
+    wave: number,
+    rosterIndex: number,
+    lane: AssaultLane,
+    baseFrame: number,
+  ): PendingSpawn[] {
     const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
     const scaledCount = (base: number | undefined): number =>
       base === undefined || base <= 0 ? 0 : Math.max(1, Math.round(base * tuning.bodyScale));
@@ -1233,7 +1295,13 @@ export class VillageAssaultSystem {
         added = true;
       }
     }
-    return order.map((kind) => ({ kind, lane, dueFrame: 0, wave }));
+    return order.map((kind, i) => ({
+      kind,
+      lane,
+      dueFrame: baseFrame + i * SPAWN_STAGGER_FRAMES,
+      wave,
+      rosterIndex,
+    }));
   }
 
   /**
@@ -1271,7 +1339,8 @@ export class VillageAssaultSystem {
     this.tickNecromancerRetreat();
 
     if (this.lullFrames > 0) {
-      this.prewarm.update(this.prewarmWaveFor(index + 1));
+      // The next real wave always opens on its first mini-wave, the first wave's own roster.
+      this.prewarm.update(this.prewarmWaveFor(0));
       this.lullFrames--;
       if (this.lullFrames === 0) this.startWave(index + 1);
       return;
@@ -1281,12 +1350,28 @@ export class VillageAssaultSystem {
     this.spawnArrivals();
     this.spawnDue();
     this.peakLiving = Math.max(this.peakLiving, livingAssaultSpawns(this.deps.roster.mobs));
-    this.prewarm.update(this.waveStillArriving() ? this.prewarmWaveFor(index) : null);
+    this.prewarm.update(this.waveStillArriving() ? this.prewarmWaveFor(this.miniWaveRoster) : null);
+
+    // Every mini-wave through this real wave shares one WAVE_MAX_FRAMES clock:
+    // a wave with nowhere to spawn still reaches its own roster and advances
+    // in the same worst-case time a single-roster wave always has.
+    const miniWaveCount = index + 1;
+    const stageDeadline = Math.floor(((this.miniWaveRoster + 1) * WAVE_MAX_FRAMES) / miniWaveCount);
+    const onWavesOwnRoster = this.miniWaveRoster === index;
+    if (!onWavesOwnRoster) {
+      const remainingInMini = this.remainingInMiniWave(this.miniWaveRoster);
+      const miniWaveDone =
+        remainingInMini <= Math.floor(this.miniWavePlanned * MINI_WAVE_ADVANCE_REMAINING_SHARE);
+      if (miniWaveDone || this.waveFrames >= stageDeadline) {
+        this.launchMiniWave(index, this.miniWaveRoster + 1);
+      }
+      return;
+    }
 
     if (isLastWave) return;
     const remaining = this.remainingInWave(index);
-    const fewLeft = remaining <= Math.floor(this.wavePlanned * WAVE_ADVANCE_REMAINING_SHARE);
-    if (fewLeft || this.waveFrames >= WAVE_MAX_FRAMES) this.beginLull(index + 1);
+    const fewLeft = remaining <= Math.floor(this.waveTotalPlanned * WAVE_ADVANCE_REMAINING_SHARE);
+    if (fewLeft || this.waveFrames >= stageDeadline) this.beginLull(index + 1);
   }
 
   /**
@@ -1350,6 +1435,15 @@ export class VillageAssaultSystem {
     return remaining;
   }
 
+  /** The current mini-wave's own bodies not yet beaten: still to come, or alive and hostile. */
+  private remainingInMiniWave(rosterIndex: number): number {
+    let remaining = this.pending.filter((spawn) => spawn.rosterIndex === rosterIndex).length;
+    for (const [mob, roster] of this.miniWaveOf) {
+      if (roster === rosterIndex && mob.isAlive && mob.isHostile) remaining++;
+    }
+    return remaining;
+  }
+
   private spawnDue(): void {
     while (this.pending.length > 0) {
       const next = this.pending[0];
@@ -1363,7 +1457,7 @@ export class VillageAssaultSystem {
       }
       this.pending.shift();
       this.headSpawnWaitFrames = 0;
-      this.spawn(next.kind, place.lane, place.tile, next.wave);
+      this.spawn(next.kind, place.lane, place.tile, next.wave, next.rosterIndex);
     }
   }
 
@@ -1524,12 +1618,14 @@ export class VillageAssaultSystem {
     lane: AssaultLane,
     tile: { x: number; y: number },
     wave: number,
+    rosterIndex: number,
   ): void {
     const mob = createSpawn(kind, tile.x, tile.y, this.deps.gameMap);
     // They claw their way up out of the ground at the lane's head: the row
     // each wave's rows are warmed for.
     if (mob instanceof RaisedRatkin) mob.beginRising();
     this.enlist(mob, lane, wave);
+    this.miniWaveOf.set(mob, rosterIndex);
     this.waveBodiesOut = true;
   }
 
@@ -1789,6 +1885,7 @@ export class VillageAssaultSystem {
       this.deps.roster.grid.remove(mob);
     }
     this.waveOf.delete(mob);
+    this.miniWaveOf.delete(mob);
     this.laneOf.delete(mob);
     this.withdraw.walks.delete(mob);
   }

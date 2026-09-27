@@ -415,19 +415,20 @@ export class ThrallSystem {
     if (thrall.bagFull) return;
 
     thrall.harvestTicks += 1;
-    const interval = harvestIntervalTicks(thrall.kind, level);
+    const toolSpeedBonus = this.deps.partyTools.toolSpeedBonus(thrall.tool);
+    const interval = harvestIntervalTicks(thrall.kind, level, toolSpeedBonus);
     if (thrall.harvestTicks < interval) return;
     thrall.harvestTicks -= interval;
 
-    const efficiency = this.deps.partyTools.efficiency(thrall.tool);
-    const { amount, carry } = harvestAward(efficiency, thrall.carry, level);
+    const yieldMultiplier = this.deps.partyTools.yieldMultiplier(thrall.tool);
+    const { amount, carry } = harvestAward(yieldMultiplier, thrall.carry, level);
     thrall.carry = carry;
     if (!this.deps.ledger.spend(node.tileX, node.tileY, level)) {
       thrall.node = null;
       return;
     }
     grantResource(summoner, resource, amount);
-    summoner.craftSkills.addXp('resourcing', thrallHarvestXp(efficiency));
+    summoner.craftSkills.addXp('resourcing', thrallHarvestXp(yieldMultiplier));
     this.deps.bus?.emit('resourceHarvested', {
       id: resource,
       amount,

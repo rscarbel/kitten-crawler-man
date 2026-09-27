@@ -86,7 +86,7 @@ const ASSAULT_LEVEL = 6;
 const UPDATES_PER_SECOND = 60;
 /** The request's numbers, written out so a drifted constant fails here. */
 const REQUEST_IMMINENT_SECONDS = 45;
-const REQUEST_BELL_HP = 600;
+const REQUEST_BELL_HP = 120;
 const REQUEST_COINS = 500;
 const WOODEN_WALL_BOARDS = 5;
 /** Enough stone to load a trebuchet from empty. */
@@ -596,7 +596,7 @@ section('8. A lost siege');
   for (let blow = 0; blow < REQUEST_BELL_HP && !defences.defense.bellCracked; blow++) {
     defences.defense.damage({ kind: 'bell' }, REQUEST_BELL_HP, null, 'melee');
   }
-  check(HOLLOW_BELL_MAX_HP === REQUEST_BELL_HP, 'the bell has 600 health');
+  check(HOLLOW_BELL_MAX_HP === REQUEST_BELL_HP, `the bell has ${REQUEST_BELL_HP} health`);
   rig.step();
   check(state.quest.phase === 'repelled_failed', 'the bell at zero loses the siege');
   check(state.quest.bellHp === REQUEST_BELL_HP, 'the villagers restore the bell');

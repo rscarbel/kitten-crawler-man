@@ -10,8 +10,12 @@
 
 import type { ResourceCost } from '../../core/partyResources';
 
-/** The bell's health. The assault is lost the moment it reaches zero. */
-export const HOLLOW_BELL_MAX_HP = 600;
+/**
+ * The bell's health. The assault is lost the moment it reaches zero. Low
+ * enough that a wave left unchecked at the wall genuinely threatens it,
+ * rather than only Vordrick's own crowd at the square ever getting close.
+ */
+export const HOLLOW_BELL_MAX_HP = 120;
 
 /**
  * The most one blow may take off the bell, as a share of its health. A Grave

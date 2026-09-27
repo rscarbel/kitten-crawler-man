@@ -630,6 +630,12 @@ export class DefenseStructures {
    */
   private damageBell(amount: number): void {
     const quest = this.deps.state.quest;
+    // A blow already swinging when the siege ends must not land on the bell
+    // the ending just mended: the mob loop that stands attackers down and
+    // the frame that resolves their swings are two different systems, so a
+    // swing whose damage was already committed this frame can still arrive
+    // here after `restoreBell` has run.
+    if (quest.phase !== 'assault') return;
     if (quest.bellHp <= 0) return;
     const blow = Math.min(
       amount * HOLLOW_BELL_DAMAGE_TAKEN_SCALE,

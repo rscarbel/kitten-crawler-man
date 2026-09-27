@@ -10,11 +10,10 @@
  */
 
 import type { Mob } from '../Mob';
-import { RisingSkeleton } from '../RisingSkeleton';
 
 /** Whether `mob` is one of the necromancer's raises rather than one of the wave's own spawns. */
 export function isNecromancerRaise(mob: Mob): boolean {
-  return mob instanceof RisingSkeleton && mob.raisedByNecromancer;
+  return mob.raisedByNecromancer;
 }
 
 /**

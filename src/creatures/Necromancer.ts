@@ -24,6 +24,7 @@ import { UndeadCueQueue } from './siege/undeadCues';
 import { RAISED_RATKIN_LOOKS, type RaisedRatkinLook } from '../sprites/art/raisedRatkinArt';
 import { prewarmRaisedRatkin } from '../sprites/raisedRatkinSprite';
 import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
+import { prewarmGraveBull } from '../sprites/graveBullSprite';
 import {
   BLINK_FRAMES,
   CAST_BOLT_FRAMES,
@@ -65,15 +66,15 @@ import {
 // ── Body ─────────────────────────────────────────────────────────────────────
 
 /**
- * Vordrick's HP at level 1, before the boss curve levels it to the wave. Sized
- * by the siege simulation, he stands back from the
- * walls behind his raises, so he is hurt only when he comes within a missile's
- * clear flight of the gate or a breach, and by the trebuchets, which rank him
- * last — at much more than this the siege stalls with him alive and the walls
- * pulsed down.
+ * Vordrick's HP at level 1, before the boss curve levels it to the wave and
+ * the wave's own share fades it further (`AssaultWaveSpec.necromancerHealthShare`).
+ * He stands back from the walls behind his raises, so he is hurt only when he
+ * comes within a missile's clear flight of the gate or a breach, and by the
+ * trebuchets, which rank him last: a fight sized to outlast the walls falling
+ * around him, not to end the moment a crawler reaches him.
  */
-export const NECRO_HP = 60;
-const NECRO_DRIFT_SPEED = 0.7;
+export const NECRO_HP = 100;
+const NECRO_DRIFT_SPEED = 1.8;
 const NECRO_XP = 1100;
 const COIN_DROP_MIN = 90;
 const COIN_DROP_MAX = 160;
@@ -119,36 +120,53 @@ const PROCESSION_LEAD_SLACK = 1.05;
 
 // ── Raise the Dead ───────────────────────────────────────────────────────────
 
-export const NECRO_RAISE_COOLDOWN_FRAMES = 720;
+/** A raise outside a siege — never seen in play, only the preview harness — calls up this many. */
 export const NECRO_RAISE_BATCH = 3;
-/** A raise in a siege calls up this many at once. */
-export const NECRO_SIEGE_RAISE_BATCH = 4;
+/** A raise in a siege calls up this many troops, drawn from his usual kinds by weight. */
+export const NECRO_SIEGE_TROOPS_PER_RAISE = 10;
+/** Every siege raise also calls up one Grave Bull, never drawn from the weights below. */
+export const NECRO_SIEGE_BULLS_PER_RAISE = 1;
 /**
- * Of a siege raise, how many sigils open inside the palisade. The village's
- * own dead are buried within it: a wall keeps out what comes up the lanes,
- * not what climbs out of the ground behind it.
+ * Of a siege raise's troops, how many sigils open inside the palisade. The
+ * village's own dead are buried within it: a wall keeps out what comes up the
+ * lanes, not what climbs out of the ground behind it. The bull never opens
+ * inside — there is nothing for it to charge there.
  */
-export const NECRO_INNER_RAISES = 3;
+const NECRO_INNER_RAISE_SHARE = 0.75;
+export const NECRO_INNER_RAISES = Math.round(
+  NECRO_SIEGE_TROOPS_PER_RAISE * NECRO_INNER_RAISE_SHARE,
+);
 /** An inner sigil opens no nearer a defender than this, so it is seen and met rather than rising underfoot. */
 const NECRO_INNER_RAISE_MIN_DEFENDER_TILES = 3;
 /** Inner sigils open within this many tiles of the bell, where the dead inside have their business. */
 const NECRO_INNER_RAISE_BELL_TILES = 12;
+/** The kinds his weighted draw can pick; the Grave Bull is guaranteed separately, never drawn. */
+type NecromancerTroopKind = Exclude<NecromancerRaiseKind, 'grave_bull'>;
 /**
- * How a siege raise's bodies are drawn, as weights: the village's ratkin
+ * How a siege raise's troops are drawn, as weights: the village's ratkin
  * most often, then its skeletons. Outside a siege he raises only ratkin.
  */
-const SIEGE_RAISE_KIND_WEIGHTS: Readonly<Record<NecromancerRaiseKind, number>> = {
+const SIEGE_RAISE_KIND_WEIGHTS: Readonly<Record<NecromancerTroopKind, number>> = {
   ratkin: 0.5,
   skeleton_warrior: 0.3,
   skeleton_archer: 0.2,
 };
-const SIEGE_RAISE_KINDS: readonly NecromancerRaiseKind[] = [
+const SIEGE_RAISE_KINDS: readonly NecromancerTroopKind[] = [
   'ratkin',
   'skeleton_warrior',
   'skeleton_archer',
 ];
-/** Living raises he may field at once. The wave's own spawns are counted separately. */
-export const NECRO_ESCORT_CAP = 8;
+/**
+ * Living raises he may field at once: a full siege batch, troops and bull
+ * together. He never has two raises' worth out at once — see
+ * {@link NECRO_RAISE_REARM_FRAMES} — so this is a ceiling rather than a
+ * throttle. The wave's own spawns are counted separately.
+ */
+export const NECRO_ESCORT_CAP = NECRO_SIEGE_TROOPS_PER_RAISE + NECRO_SIEGE_BULLS_PER_RAISE;
+/** How long he waits after every body from his last raise is dead before raising again. */
+const NECRO_RAISE_REARM_SECONDS = 5;
+const FRAMES_PER_SECOND = 60;
+export const NECRO_RAISE_REARM_FRAMES = NECRO_RAISE_REARM_SECONDS * FRAMES_PER_SECOND;
 /** Corpses within this many tiles rise first. */
 const NECRO_CORPSE_SEARCH_TILES = 10;
 /** Graves are ruins tiles within this many tiles of him. */
@@ -170,10 +188,12 @@ export const NECRO_PULSE_RANGE_TILES = 7;
 /** The channel, start to payload: the pulse's whole telegraph. */
 export const NECRO_PULSE_CHANNEL_FRAMES = 90;
 export const NECRO_PULSE_COOLDOWN_FRAMES = 600;
-/** A quarter of a stone wall's base health, rounded. */
+/** A quarter of a stone wall's base health, before the siege multiplier below. */
 const NECRO_PULSE_STONE_WALL_SHARE = 0.25;
+/** His one blow against the defences hits this many times its base share. */
+const NECRO_PULSE_WALL_DAMAGE_MULTIPLIER = 4;
 export const NECRO_PULSE_STRUCTURE_DAMAGE = Math.round(
-  WALL_TIERS.stone.baseHp * NECRO_PULSE_STONE_WALL_SHARE,
+  WALL_TIERS.stone.baseHp * NECRO_PULSE_STONE_WALL_SHARE * NECRO_PULSE_WALL_DAMAGE_MULTIPLIER,
 );
 /**
  * The damage during a channel that breaks it, as a share of what a same-level
@@ -276,14 +296,14 @@ const NO_SHOTS: readonly SkeletonShot[] = [];
 const NO_RAISES: readonly NecromancerRaiseRequest[] = [];
 
 /** What one of his raises climbs out as. */
-export type NecromancerRaiseKind = 'ratkin' | 'skeleton_warrior' | 'skeleton_archer';
+export type NecromancerRaiseKind = 'ratkin' | 'skeleton_warrior' | 'skeleton_archer' | 'grave_bull';
 
 /** One body he has called up, on the sigil it will climb out of. */
 export interface NecromancerRaiseRequest {
   readonly tileX: number;
   readonly tileY: number;
   readonly kind: NecromancerRaiseKind;
-  /** The ratkin's look; unused for a skeleton. */
+  /** The ratkin's look; unused for anything else. */
   readonly look: RaisedRatkinLook;
 }
 
@@ -330,7 +350,7 @@ function pickLook(): RaisedRatkinLook {
   return RAISED_RATKIN_LOOKS[Math.floor(Math.random() * RAISED_RATKIN_LOOKS.length)] ?? 'smock';
 }
 
-function pickSiegeRaiseKind(): NecromancerRaiseKind {
+function pickSiegeRaiseKind(): NecromancerTroopKind {
   let roll = Math.random();
   for (const kind of SIEGE_RAISE_KINDS) {
     roll -= SIEGE_RAISE_KIND_WEIGHTS[kind];
@@ -377,15 +397,16 @@ export class Necromancer extends Mob {
   readonly cues = new UndeadCueQueue();
 
   /**
-   * Written by `SkeletonSummonSystem` each frame: how many of his raises
-   * stand, and whether that is his cap — so he stops casting at the cap
-   * rather than casting into nothing.
+   * Written by `SkeletonSummonSystem` each frame: how many of his last
+   * raise still stand. He raises again only once this reaches zero — see
+   * {@link tickCooldowns} — never merely because some cap allows another.
    */
   escortLiving = 0;
-  escortAtCap = false;
 
   private phase: NecroPhase = 'hold';
   private phaseTicks = 0;
+  /** `escortLiving` as of the previous frame, to catch the moment it reaches zero. */
+  private lastEscortLiving = 0;
   private raiseCooldown = OPENING_RAISE_FRAMES;
   private boltCooldown = OPENING_BOLT_FRAMES;
   private pulseCooldown = OPENING_PULSE_FRAMES;
@@ -655,6 +676,8 @@ export class Necromancer extends Mob {
     this.pendingRaises = [];
     this.goal = null;
     this.hurtTimer = 0;
+    this.escortLiving = 0;
+    this.lastEscortLiving = 0;
   }
 
   override resetToSpawn(): void {
@@ -779,6 +802,13 @@ export class Necromancer extends Mob {
   }
 
   private tickCooldowns(): void {
+    // The rearm only starts counting the moment the last of his raise falls;
+    // arming it on every frame they are alive would let it run out mid-fight
+    // and re-raise into a cohort still standing.
+    if (this.escortLiving === 0 && this.lastEscortLiving > 0) {
+      this.raiseCooldown = this.scaledCooldownFrames(NECRO_RAISE_REARM_FRAMES);
+    }
+    this.lastEscortLiving = this.escortLiving;
     if (this.raiseCooldown > 0) this.raiseCooldown--;
     if (this.boltCooldown > 0) this.boltCooldown--;
     if (this.pulseCooldown > 0) this.pulseCooldown--;
@@ -1145,7 +1175,7 @@ export class Necromancer extends Mob {
 
   private beginACast(targets: readonly Player[]): boolean {
     if (this.pulseCooldown === 0 && this.beginPulse()) return true;
-    if (this.raiseCooldown === 0 && !this.escortAtCap && this.beginRaise()) return true;
+    if (this.raiseCooldown === 0 && this.escortLiving === 0 && this.beginRaise()) return true;
     if (this.boltCooldown === 0 && this.beginBolt(targets)) return true;
     return false;
   }
@@ -1168,21 +1198,37 @@ export class Necromancer extends Mob {
 
   // Raise the Dead
 
+  /**
+   * Fills one siege raise: troops first — some inside the palisade, the rest
+   * outside — then the one Grave Bull, all from ground his search actually
+   * finds. If the ground runs short, the bull is the first left out: it is
+   * the least essential body of the batch, not the choke the troops give the
+   * defenders. Outside a siege (only the preview harness reaches this) he
+   * raises a small ratkin-only batch and fields no bull at all.
+   */
   private beginRaise(): boolean {
-    const room = Math.max(0, NECRO_ESCORT_CAP - this.escortLiving);
     const inSiege = this.siegeCapable !== null;
-    const count = Math.min(inSiege ? NECRO_SIEGE_RAISE_BATCH : NECRO_RAISE_BATCH, room);
-    if (count === 0) return false;
-    const inner = this.chooseInnerRaiseSites(Math.min(NECRO_INNER_RAISES, count));
-    const sites = [...inner, ...this.chooseRaiseSites(count - inner.length)];
+    const troopTarget = inSiege ? NECRO_SIEGE_TROOPS_PER_RAISE : NECRO_RAISE_BATCH;
+    const bullTarget = inSiege ? NECRO_SIEGE_BULLS_PER_RAISE : 0;
+    const inner = this.chooseInnerRaiseSites(Math.min(NECRO_INNER_RAISES, troopTarget));
+    const outerTroopsNeeded = troopTarget - inner.length;
+    const outer = this.chooseRaiseSites(outerTroopsNeeded + bullTarget);
+    const troopSites = [...inner, ...outer.slice(0, outerTroopsNeeded)];
+    const bullSites = outer.slice(outerTroopsNeeded);
+    const sites = [...troopSites, ...bullSites];
     if (sites.length === 0) return false;
     this.raiseSites = sites;
-    this.raiseKinds = sites.map(() => (inSiege ? pickSiegeRaiseKind() : 'ratkin'));
+    this.raiseKinds = sites.map((_, index) =>
+      index < troopSites.length ? (inSiege ? pickSiegeRaiseKind() : 'ratkin') : 'grave_bull',
+    );
     this.raiseLooks = sites.map(() => pickLook());
     this.raiseKinds.forEach((kind, index) => {
       if (kind === 'ratkin') prewarmRaisedRatkin(this.raiseLooks[index] ?? pickLook());
     });
-    if (this.raiseKinds.some((kind) => kind !== 'ratkin')) prewarmSkeletonEscortSprites();
+    if (this.raiseKinds.some((kind) => kind === 'skeleton_warrior' || kind === 'skeleton_archer')) {
+      prewarmSkeletonEscortSprites();
+    }
+    if (this.raiseKinds.some((kind) => kind === 'grave_bull')) prewarmGraveBull();
     this.isMoving = false;
     this.faceFront();
     this.cues.push({ id: 'necromancer_raise' });
@@ -1201,7 +1247,8 @@ export class Necromancer extends Mob {
           look: this.raiseLooks[index] ?? pickLook(),
         });
       });
-      this.raiseCooldown = this.scaledCooldownFrames(NECRO_RAISE_COOLDOWN_FRAMES);
+      // The next raise is armed only once every body from this one is dead;
+      // see tickCooldowns.
     }
     if (this.phaseTicks >= RAISE_ROW_TICKS) this.endCast();
   }

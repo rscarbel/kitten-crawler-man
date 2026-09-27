@@ -20,10 +20,10 @@ import type { ItemId } from './ItemDefs';
 import type { ResourceId } from './resourceIds';
 import type { ToolKind } from './toolTiers';
 
-/** Seconds between wood awards at Resourcing speed factor 1. */
-export const WOOD_HARVEST_INTERVAL_SECONDS = 1.0;
-/** Seconds between stone awards at Resourcing speed factor 1. */
-export const STONE_HARVEST_INTERVAL_SECONDS = 2.25;
+/** Seconds between wood awards at Resourcing speed factor 1 and no tool speed bonus. */
+export const WOOD_HARVEST_INTERVAL_SECONDS = 1.5;
+/** Seconds between stone awards at Resourcing speed factor 1 and no tool speed bonus. */
+export const STONE_HARVEST_INTERVAL_SECONDS = 2.75;
 
 /** The fixed update rate harvest intervals are counted in, so a doubled `Scene.loop` catch-up cannot speed them up. */
 const HARVEST_TICKS_PER_SECOND = 60;
@@ -43,10 +43,22 @@ export function resourceForHarvestKind(kind: HarvestKind): ResourceId {
   return kind === 'wood' ? 'wood' : 'stone';
 }
 
-/** Seconds between awards on a node of `kind` for a harvester at `level`. */
-export function harvestIntervalSeconds(kind: HarvestKind, level: number): number {
+/**
+ * Seconds between awards on a node of `kind` for a harvester at `level`,
+ * carrying a tool with `toolSpeedBonus`.
+ *
+ * The tool's speed bonus stacks additively with Resourcing's own speed steps
+ * rather than multiplying with them: `resourcingSpeedFactor` is already
+ * `1 - skillBonus`, so subtracting the tool's bonus from it gives
+ * `1 - skillBonus - toolBonus` directly.
+ */
+export function harvestIntervalSeconds(
+  kind: HarvestKind,
+  level: number,
+  toolSpeedBonus: number,
+): number {
   const base = kind === 'wood' ? WOOD_HARVEST_INTERVAL_SECONDS : STONE_HARVEST_INTERVAL_SECONDS;
-  return base * resourcingSpeedFactor(level);
+  return base * (resourcingSpeedFactor(level) - toolSpeedBonus);
 }
 
 /**
@@ -54,8 +66,12 @@ export function harvestIntervalSeconds(kind: HarvestKind, level: number): number
  * rounded: a channel accumulates ticks and subtracts this, so 85.5 ticks
  * really does award twice every 171 ticks rather than drifting to 85 or 86.
  */
-export function harvestIntervalTicks(kind: HarvestKind, level: number): number {
-  return harvestIntervalSeconds(kind, level) * HARVEST_TICKS_PER_SECOND;
+export function harvestIntervalTicks(
+  kind: HarvestKind,
+  level: number,
+  toolSpeedBonus: number,
+): number {
+  return harvestIntervalSeconds(kind, level, toolSpeedBonus) * HARVEST_TICKS_PER_SECOND;
 }
 
 /** One tick's award and the fractional remainder carried into the next. */
@@ -67,26 +83,26 @@ export interface HarvestAward {
 /**
  * Units awarded by one harvest tick.
  *
- * The tool's efficiency multiplies each action, and a fractional efficiency is
- * not rounded away: the remainder is carried to the next tick, so a 1.5× tool
- * yields 1, 2, 1, 2 … rather than always 1. The level-15 doubling applies to
- * the whole units.
+ * The tool's yield multiplier scales each action, and a fractional multiplier
+ * is not rounded away: the remainder is carried to the next tick, so a 1.5×
+ * multiplier yields 1, 2, 1, 2 … rather than always 1. The level-15 doubling
+ * applies to the whole units.
  */
-export function harvestAward(efficiency: number, carry: number, level: number): HarvestAward {
-  const raw = efficiency + carry;
+export function harvestAward(yieldMultiplier: number, carry: number, level: number): HarvestAward {
+  const raw = yieldMultiplier + carry;
   const base = Math.floor(raw);
   const amount = resourcingDoubles(level) ? base * 2 : base;
   return { amount, carry: raw - base };
 }
 
 /** Resourcing XP one crawler harvest is worth: better tools train faster in proportion to what they gather. */
-export function harvestXp(efficiency: number): number {
-  return RESOURCING_XP_PER_BASIC_HARVEST * efficiency;
+export function harvestXp(yieldMultiplier: number): number {
+  return RESOURCING_XP_PER_BASIC_HARVEST * yieldMultiplier;
 }
 
 /** Resourcing XP a summoner earns when a thrall performs the same harvest. */
-export function thrallHarvestXp(efficiency: number): number {
-  return harvestXp(efficiency) * THRALL_XP_FRACTION;
+export function thrallHarvestXp(yieldMultiplier: number): number {
+  return harvestXp(yieldMultiplier) * THRALL_XP_FRACTION;
 }
 
 /** Something extra a lucky harvest tick turns up. */

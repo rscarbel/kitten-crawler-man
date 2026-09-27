@@ -31,9 +31,9 @@ import { crumbleRock, regrowTree, restoreRock, tileAt, unplantTree } from './har
 /** A worked-out quarry deposit stands again after this long. */
 export const DEPOSIT_REGROW_SECONDS = 300;
 /** A felled grove tree puts up a sapling after this long… */
-export const GROVE_REGROW_SECONDS = 240;
+export const GROVE_REGROW_SECONDS = 120;
 /** …and the sapling is a full tree this long after that. */
-export const SAPLING_GROW_SECONDS = 60;
+export const SAPLING_GROW_SECONDS = 30;
 /** A regrowth blocked by someone standing on the tile tries again after this long. */
 export const REGROW_RETRY_SECONDS = 10;
 

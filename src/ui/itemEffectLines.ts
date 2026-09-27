@@ -27,7 +27,7 @@ const RESISTANCE_LABELS: Record<ResistanceType, string> = {
 const WEARER_LABELS = { cat: 'Cat only', human: 'Human only' } as const;
 
 /** Rounded to whole percent because a tooltip is read, not calculated against. */
-function asPercent(fraction: number): number {
+export function asPercent(fraction: number): number {
   return Math.round(fraction * PERCENT);
 }
 
@@ -92,7 +92,8 @@ export function describeItemEffects(item: InventoryItem): string[] {
   const tool = item.tool;
   if (tool) {
     const def = toolTierDef(tool.kind, tool.tier);
-    lines.push(`Efficiency ×${def.efficiency}`);
+    if (def.speedBonus > 0) lines.push(`+${asPercent(def.speedBonus)}% gathering speed`);
+    if (def.yieldMultiplier > 1) lines.push(`${def.yieldMultiplier}× yield per swing`);
   }
 
   // Kept to short lines: effect lines are not wrapped the way the prose is.

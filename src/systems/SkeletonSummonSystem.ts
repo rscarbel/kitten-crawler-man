@@ -34,6 +34,7 @@ import type { LevelledCurve } from '../creatures/mobLevelScaling';
 import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
 import { RisingSkeleton } from '../creatures/RisingSkeleton';
 import { RaisedRatkin } from '../creatures/RaisedRatkin';
+import { GraveBull } from '../creatures/GraveBull';
 import {
   NECRO_ESCORT_CAP,
   Necromancer,
@@ -284,7 +285,6 @@ export class SkeletonSummonSystem implements GameSystem {
         }
       }
       necromancer.escortLiving = living;
-      necromancer.escortAtCap = living >= NECRO_ESCORT_CAP;
     }
   }
 
@@ -316,7 +316,10 @@ export class SkeletonSummonSystem implements GameSystem {
     const risen = raisedBody(request, tileX, tileY);
     risen.setMap(this.gameMap);
     // Before the roll: a body raised mid-fight is a summon and learns nothing.
-    risen.beginRising();
+    // A Grave Bull has no underground rise animation, so it simply appears
+    // once the sigil's telegraph completes.
+    if (risen instanceof RisingSkeleton) risen.beginRising();
+    else risen.isSummon = true;
     risen.applyMobLevel(necromancer.mobLevel, necromancer.levelledCurve);
     applySpawnDifficulty(risen);
     risen.raisedByNecromancer = true;
@@ -461,11 +464,7 @@ function kindOf(skeleton: RisingSkeleton): SkeletonKind {
 }
 
 /** The body a necromancer's raise request climbs out as. */
-function raisedBody(
-  request: NecromancerRaiseRequest,
-  tileX: number,
-  tileY: number,
-): RisingSkeleton {
+function raisedBody(request: NecromancerRaiseRequest, tileX: number, tileY: number): Mob {
   switch (request.kind) {
     case 'ratkin':
       return new RaisedRatkin(tileX, tileY, TILE_SIZE, request.look);
@@ -473,5 +472,7 @@ function raisedBody(
       return new SkeletonWarrior(tileX, tileY, TILE_SIZE);
     case 'skeleton_archer':
       return new SkeletonArcher(tileX, tileY, TILE_SIZE);
+    case 'grave_bull':
+      return new GraveBull(tileX, tileY, TILE_SIZE);
   }
 }

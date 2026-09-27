@@ -509,6 +509,14 @@ export abstract class Mob extends Player {
   paysNoRewards = false;
 
   /**
+   * Set on a body a necromancer called up mid-fight, of any kind — a raised
+   * ratkin, a skeleton, or a Grave Bull. Counted against his own escort
+   * cohort rather than a wave's scripted spawns, and against nobody's cap
+   * once he is dead: see `assaultCaps.ts`.
+   */
+  raisedByNecromancer = false;
+
+  /**
    * Whether this mob's death counts as a kill — in the run's kill tally and
    * toward kill achievements. False only for something whose death is never a
    * feat, like a village cow caught in a blast.

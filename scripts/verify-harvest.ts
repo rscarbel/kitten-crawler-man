@@ -23,7 +23,7 @@ import {
 import { type HarvestKind, resourcingNodeCapacityBonus } from '../src/core/craftPerks';
 import { MAX_CRAFT_LEVEL } from '../src/core/CraftSkills';
 import { PartyTools, type PartyToolsState } from '../src/core/PartyTools';
-import { TOOL_TIERS, type ToolTier } from '../src/core/toolTiers';
+import { isToolTier, MAX_TOOL_TIER, TOOL_TIERS, type ToolTier } from '../src/core/toolTiers';
 import { createBriarHollowState, type HarvestNodeState } from '../src/core/briarHollowState';
 import { ITEM_DEF, type ItemId } from '../src/core/ItemDefs';
 import { resetThrallCooldownsForTests, thrallCooldownTicksLeft } from '../src/core/thrallCooldowns';
@@ -71,6 +71,7 @@ function section(name: string): void {
 }
 
 const EPSILON = 1e-9;
+const PERCENT_MULTIPLIER = 100;
 const TICKS_PER_SECOND = 60;
 const WORLD_SEED = 424242;
 const TILE_CENTRE = 0.5;
@@ -108,8 +109,26 @@ const EXPECTED_SPEED: ReadonlyMap<number, number> = new Map([
   [13, 0.5],
 ]);
 const DOUBLING_LEVEL = 15;
-const EXPECTED_WOOD_BASE_SECONDS = 1.0;
-const EXPECTED_STONE_BASE_SECONDS = 2.25;
+const EXPECTED_WOOD_BASE_SECONDS = 1.5;
+const EXPECTED_STONE_BASE_SECONDS = 2.75;
+/** Every tool tier's speed bonus, written out flat so the gate cannot agree with a wrong derivation in the module under test. */
+const EXPECTED_TOOL_SPEED_BONUS: ReadonlyMap<ToolTier, number> = new Map([
+  [0, 0],
+  [1, 0.05],
+  [2, 0.1],
+  [3, 0.15],
+  [4, 0.15],
+  [5, 0.15],
+]);
+/** Every tool tier's yield multiplier, written out flat for the same reason. */
+const EXPECTED_TOOL_YIELD_MULTIPLIER: ReadonlyMap<ToolTier, number> = new Map([
+  [0, 1],
+  [1, 1],
+  [2, 1],
+  [3, 1],
+  [4, 2],
+  [5, 4],
+]);
 const EXPECTED_REFINED_WOOD = 0.07;
 const EXPECTED_REFINED_STONE = 0.04;
 const EXPECTED_TREB_KIT = 0.01;
@@ -131,13 +150,15 @@ const BELOW_SUMMON_LEVEL = SUMMON_LEVEL - 1;
 const TOP_LEVEL = 15;
 /** A speed level partway up the table, used to check Carl's own pace differs from Donut's unleveled one. */
 const FAST_LEVEL = 12;
-/** The Ratkin Forge tier: three times the basic tool's efficiency. */
+/** The Ratkin Forge tier: on the speed ladder, same yield as the basic tool. */
 const FORGE_TIER: ToolTier = 3;
-const FORGE_EFFICIENCY_MULTIPLE = 3;
-const HARDENED_TIER: ToolTier = 1;
-/** Four ticks shows the 1.5× carry alternate twice. */
+/** The top tier: quadruples the basic tool's yield. */
+const TOP_TIER: ToolTier = MAX_TOOL_TIER;
+const TOP_TIER_YIELD_MULTIPLE = 4;
+/** Four ticks shows a 1.5× carry alternate twice. Every real tier's yield is a whole number, so the carry mechanic is exercised against a synthetic multiplier. */
 const CARRY_SEQUENCE_TICKS = 4;
 const EXPECTED_CARRY_SEQUENCE = '1,2,1,2';
+const FRACTIONAL_YIELD_MULTIPLIER_FOR_CARRY_TEST = 1.5;
 /** Summons at the top level bring this many thralls. */
 const TOP_LEVEL_THRALLS = 3;
 /** Independent luck streams, one per rate measured. */
@@ -160,6 +181,27 @@ const SHARE_DIGITS = 3;
 
 // ── Award table ────────────────────────────────────────────────────────────
 
+section('Tool ladder: every tier’s speed bonus and yield multiplier match the request');
+{
+  for (const kind of ['axe', 'pickaxe'] as const) {
+    for (const [tier, def] of TOOL_TIERS[kind].entries()) {
+      if (!isToolTier(tier)) {
+        check(false, `${def.id}: tier index ${tier} is a valid ToolTier`);
+        continue;
+      }
+      const expectedSpeedBonus = EXPECTED_TOOL_SPEED_BONUS.get(tier) ?? 0;
+      check(
+        Math.abs(def.speedBonus - expectedSpeedBonus) < EPSILON,
+        `${def.id}: speed bonus +${def.speedBonus * PERCENT_MULTIPLIER}%`,
+      );
+      check(
+        def.yieldMultiplier === EXPECTED_TOOL_YIELD_MULTIPLIER.get(tier),
+        `${def.id}: yield ×${def.yieldMultiplier}`,
+      );
+    }
+  }
+}
+
 section('Award table: every tier × level × kind, 1,000 ticks, exact');
 {
   const TICKS = 1000;
@@ -171,11 +213,11 @@ section('Award table: every tier × level × kind, 1,000 ticks, exact');
         let carry = 0;
         let total = 0;
         for (let tick = 0; tick < TICKS; tick++) {
-          const award = harvestAward(def.efficiency, carry, level);
+          const award = harvestAward(def.yieldMultiplier, carry, level);
           carry = award.carry;
           total += award.amount;
         }
-        const baseUnits = Math.floor(TICKS * def.efficiency + EPSILON);
+        const baseUnits = Math.floor(TICKS * def.yieldMultiplier + EPSILON);
         const expected = level >= DOUBLING_LEVEL ? baseUnits * 2 : baseUnits;
         rows++;
         if (total !== expected) {
@@ -191,31 +233,49 @@ section('Award table: every tier × level × kind, 1,000 ticks, exact');
     `every row matches the request's yield rule (perk bonuses never add to it) (${mismatches} mismatched)`,
   );
 
-  const hardenedEfficiency = TOOL_TIERS.axe[HARDENED_TIER].efficiency;
+  // Every real tier's yield is a whole number, so the carry mechanic is
+  // exercised against a synthetic multiplier.
   const sequence: number[] = [];
   let carry = 0;
   for (let tick = 0; tick < CARRY_SEQUENCE_TICKS; tick++) {
-    const award = harvestAward(hardenedEfficiency, carry, 1);
+    const award = harvestAward(FRACTIONAL_YIELD_MULTIPLIER_FOR_CARRY_TEST, carry, 1);
     carry = award.carry;
     sequence.push(award.amount);
   }
   check(
     sequence.join(',') === EXPECTED_CARRY_SEQUENCE,
-    `a 1.5× tool at level 1 yields 1, 2, 1, 2 (got ${sequence.join(', ')})`,
+    `a 1.5× yield multiplier carries its remainder: 1, 2, 1, 2 (got ${sequence.join(', ')})`,
   );
 }
 
 // ── Speed ──────────────────────────────────────────────────────────────────
 
-section('Speed: interval at the ten speed levels');
+/** No tool bonus: the basic tier's speedBonus is 0. */
+const NO_TOOL_SPEED_BONUS = 0;
+
+section('Speed: interval at the ten speed levels, basic tool');
 for (const [level, factor] of EXPECTED_SPEED) {
-  const wood = harvestIntervalTicks('wood', level) / TICKS_PER_SECOND;
-  const stone = harvestIntervalTicks('stone', level) / TICKS_PER_SECOND;
+  const wood = harvestIntervalTicks('wood', level, NO_TOOL_SPEED_BONUS) / TICKS_PER_SECOND;
+  const stone = harvestIntervalTicks('stone', level, NO_TOOL_SPEED_BONUS) / TICKS_PER_SECOND;
   check(
     Math.abs(wood - EXPECTED_WOOD_BASE_SECONDS * factor) < EPSILON &&
       Math.abs(stone - EXPECTED_STONE_BASE_SECONDS * factor) < EPSILON,
     `level ${level}: ${factor}× base (wood ${wood.toFixed(SHARE_DIGITS)} s, stone ${stone.toFixed(SHARE_DIGITS)} s)`,
   );
+}
+
+section('Speed: a tool’s speed bonus stacks additively with Resourcing’s own steps');
+{
+  const level = FAST_LEVEL;
+  const skillFactor = EXPECTED_SPEED.get(level) ?? 1;
+  for (const [tier, def] of TOOL_TIERS.axe.entries()) {
+    const expectedFactor = skillFactor - def.speedBonus;
+    const seconds = harvestIntervalTicks('wood', level, def.speedBonus) / TICKS_PER_SECOND;
+    check(
+      Math.abs(seconds - EXPECTED_WOOD_BASE_SECONDS * expectedFactor) < EPSILON,
+      `L${level} ${def.name} (tier ${tier}): ${expectedFactor.toFixed(SHARE_DIGITS)}× base (${seconds.toFixed(SHARE_DIGITS)} s)`,
+    );
+  }
 }
 
 // ── The map ────────────────────────────────────────────────────────────────
@@ -704,7 +764,9 @@ section('Skills are never shared: each crawler harvests at their own level');
   check(rig.harvest.tryStart(rig.human), 'Carl starts chopping');
   const catBefore = JSON.stringify(rig.cat.craftSkills.snapshot());
   const carl = nextAward(rig, rig.human, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
-  const carlExpectedTicks = Math.ceil(TICKS_PER_SECOND * (EXPECTED_SPEED.get(FAST_LEVEL) ?? 0));
+  const carlExpectedTicks = Math.ceil(
+    TICKS_PER_SECOND * EXPECTED_WOOD_BASE_SECONDS * (EXPECTED_SPEED.get(FAST_LEVEL) ?? 0),
+  );
   check(
     carl !== null && carl.ticks === carlExpectedTicks,
     `Carl at L12 lands his first wood after ${carl?.ticks ?? 'no'} ticks (expected ${carlExpectedTicks})`,
@@ -721,9 +783,10 @@ section('Skills are never shared: each crawler harvests at their own level');
 
   check(rig.harvest.tryStart(rig.cat), 'Donut starts chopping');
   const donut = nextAward(rig, rig.cat, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
+  const donutExpectedTicks = TICKS_PER_SECOND * EXPECTED_WOOD_BASE_SECONDS;
   check(
-    donut !== null && donut.ticks === TICKS_PER_SECOND,
-    `Donut at L1 lands her first wood after ${donut?.ticks ?? 'no'} ticks (expected ${TICKS_PER_SECOND})`,
+    donut !== null && donut.ticks === donutExpectedTicks,
+    `Donut at L1 lands her first wood after ${donut?.ticks ?? 'no'} ticks (expected ${donutExpectedTicks})`,
   );
   check(
     donut !== null && donut.amount === 1,
@@ -732,7 +795,7 @@ section('Skills are never shared: each crawler harvests at their own level');
   rig.harvest.stop(rig.cat);
 }
 
-section('XP: a tier-3 tool trains three times as fast as the basic one');
+section('XP: the top-tier tool trains four times as fast as the basic one');
 {
   const rig = makeRig();
   teach(rig.human, 1);
@@ -746,11 +809,11 @@ section('XP: a tier-3 tool trains three times as fast as the basic one');
     return rig.human.craftSkills.getXp('resourcing') - before;
   };
   const basic = xpPerTick(0);
-  const forge = xpPerTick(FORGE_TIER);
+  const top = xpPerTick(TOP_TIER);
   check(basic > 0, `a basic-axe tick gives XP (${basic})`);
   check(
-    Math.abs(forge - basic * FORGE_EFFICIENCY_MULTIPLE) < EPSILON,
-    `a tier-3 tick gives ${forge} = 3 × ${basic}`,
+    Math.abs(top - basic * TOP_TIER_YIELD_MULTIPLE) < EPSILON,
+    `a top-tier tick gives ${top} = 4 × ${basic}`,
   );
 }
 
@@ -804,7 +867,7 @@ section('Channel: a modal pauses it rather than ending it');
   rig.harvest.tryStart(rig.human);
 
   const level = rig.human.craftSkills.getLevel('resourcing');
-  const interval = harvestIntervalTicks('wood', level);
+  const interval = harvestIntervalTicks('wood', level, NO_TOOL_SPEED_BONUS);
   const before = woodHeld(rig.human);
   for (let i = 0; i < interval * 2; i++) rig.harvest.update(ctx, true);
   check(
@@ -976,12 +1039,12 @@ section('Thralls: a quarter of the XP, to the summoner alone');
       gained = rig.human.craftSkills.getXp('resourcing') - xpBefore;
     }
   }
-  const efficiency = TOOL_TIERS.axe[FORGE_TIER].efficiency;
-  const expected = harvestXp(efficiency) * EXPECTED_THRALL_XP_SHARE;
+  const yieldMultiplier = TOOL_TIERS.axe[FORGE_TIER].yieldMultiplier;
+  const expected = harvestXp(yieldMultiplier) * EXPECTED_THRALL_XP_SHARE;
   check(
     Math.abs(gained - expected) < EPSILON &&
-      Math.abs(thrallHarvestXp(efficiency) - expected) < EPSILON,
-    `a thrall harvest gives the summoner ${gained} XP = 25% of ${harvestXp(efficiency)}`,
+      Math.abs(thrallHarvestXp(yieldMultiplier) - expected) < EPSILON,
+    `a thrall harvest gives the summoner ${gained} XP = 25% of ${harvestXp(yieldMultiplier)}`,
   );
   check(
     JSON.stringify(rig.cat.craftSkills.snapshot()) === catBefore,
@@ -1107,7 +1170,7 @@ section("Concurrent harvesting: Carl starting his own never stops Donut's");
     const state = rig.ledger.knownStateAt(spot.tileX, spot.tileY);
     check(state !== null, 'the shared node has a known capacity');
     const capacity = state?.capacity ?? 0;
-    const interval = harvestIntervalTicks('wood', 1);
+    const interval = harvestIntervalTicks('wood', 1, NO_TOOL_SPEED_BONUS);
     const soloTicksToDeplete = capacity * interval;
     // Donut got one extra tick's head start above (the update that proved she
     // was already mid-channel before Carl joined), so the two channels are not
@@ -1174,7 +1237,7 @@ section('Concurrent harvesting: different nodes each progress on their own');
   );
 
   const ctx = contextFor(rig, rig.human);
-  const interval = harvestIntervalTicks('wood', 1);
+  const interval = harvestIntervalTicks('wood', 1, NO_TOOL_SPEED_BONUS);
   const carlWoodBefore = rig.human.inventory.countOf('wood');
   const donutWoodBefore = rig.cat.inventory.countOf('wood');
   for (let tick = 0; tick < interval; tick++) rig.harvest.update(ctx, false);

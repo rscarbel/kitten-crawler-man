@@ -119,9 +119,14 @@ export class PartyTools {
     }
   }
 
-  /** The multiplier a harvest tick gets from the party's current tool of this kind. */
-  efficiency(kind: ToolKind): number {
-    return toolTierDef(kind, this.tierOf(kind)).efficiency;
+  /** The fraction of harvest time the party's current tool of this kind shaves off, additive with Resourcing's own speed steps. */
+  toolSpeedBonus(kind: ToolKind): number {
+    return toolTierDef(kind, this.tierOf(kind)).speedBonus;
+  }
+
+  /** The multiplier a harvest tick's yield gets from the party's current tool of this kind. */
+  yieldMultiplier(kind: ToolKind): number {
+    return toolTierDef(kind, this.tierOf(kind)).yieldMultiplier;
   }
 
   /** The item id currently carried for this tool kind. */

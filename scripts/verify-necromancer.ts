@@ -116,10 +116,11 @@ const HALF = TILE_SIZE / 2;
 // ── The request's own numbers ─────────────────────────────────────────────
 // Written out rather than imported, so a constant that drifts from what was
 // asked for fails here instead of agreeing with itself.
-const REQUEST_ESCORT_CAP = 8;
+const REQUEST_ESCORT_CAP = 11;
 const REQUEST_MIN_WALL_DISTANCE_TILES = 3;
 const REQUEST_PULSE_CHANNEL_FRAMES = 90;
 const REQUEST_PULSE_STONE_SHARE = 0.25;
+const REQUEST_PULSE_WALL_MULTIPLIER = 4;
 const REQUEST_BULL_STRUCTURE_MULTIPLE = 3;
 /**
  * Where along the south wall, east of the gate, the charge test's bull stands:
@@ -387,8 +388,9 @@ check(
   `pulse channel ${NECRO_PULSE_CHANNEL_FRAMES}`,
 );
 check(
-  NECRO_PULSE_STRUCTURE_DAMAGE === Math.round(WALL_TIERS.stone.baseHp * REQUEST_PULSE_STONE_SHARE),
-  `pulse damage ${NECRO_PULSE_STRUCTURE_DAMAGE}, a quarter of a stone wall`,
+  NECRO_PULSE_STRUCTURE_DAMAGE ===
+    Math.round(WALL_TIERS.stone.baseHp * REQUEST_PULSE_STONE_SHARE * REQUEST_PULSE_WALL_MULTIPLIER),
+  `pulse damage ${NECRO_PULSE_STRUCTURE_DAMAGE}, ${REQUEST_PULSE_WALL_MULTIPLIER}× a quarter of a stone wall`,
 );
 check(
   GRAVE_BULL_STRUCTURE_MULTIPLIER === REQUEST_BULL_STRUCTURE_MULTIPLE,
@@ -907,7 +909,7 @@ section('Grave Pulse: the lowest-health structure in reach, broken by a direct h
   check(pickedLowest, 'the pulse went for the lowest share of health in reach');
   check(
     landedDamage,
-    `the pulse took exactly ${NECRO_PULSE_STRUCTURE_DAMAGE} (a quarter of a stone wall's ${WALL_TIERS.stone.baseHp})`,
+    `the pulse took exactly ${NECRO_PULSE_STRUCTURE_DAMAGE} (${REQUEST_PULSE_WALL_MULTIPLIER}× a quarter of a stone wall's ${WALL_TIERS.stone.baseHp})`,
   );
   check(
     interruptChecked && interruptWorked,

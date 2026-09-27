@@ -183,12 +183,16 @@ function newCrawlers(): { human: HumanPlayer; cat: CatPlayer } {
   tools.upgrade('axe', human, cat);
 
   check(
-    tools.efficiency('axe') === toolTierDef('axe', 1).efficiency,
-    'efficiency reads the current tier',
+    tools.toolSpeedBonus('axe') === toolTierDef('axe', 1).speedBonus,
+    'toolSpeedBonus reads the current tier',
+  );
+  check(
+    tools.yieldMultiplier('axe') === toolTierDef('axe', 1).yieldMultiplier,
+    'yieldMultiplier reads the current tier',
   );
   check(tools.toolItemId('axe') === 'hardened_axe', 'toolItemId reads the current tier');
   check(
-    tools.efficiency('pickaxe') === toolTierDef('pickaxe', 0).efficiency,
+    tools.toolSpeedBonus('pickaxe') === toolTierDef('pickaxe', 0).speedBonus,
     'an un-upgraded kind stays at tier 0',
   );
 }

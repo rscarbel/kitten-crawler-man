@@ -29,8 +29,10 @@ import {
   toolTierDef,
   type ToolKind,
   type ToolTier,
+  type ToolTierDef,
 } from '../../../core/toolTiers';
 import { drawItemIcon } from '../../../ui/InventoryPanel';
+import { asPercent } from '../../../ui/itemEffectLines';
 import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
 import { partyCoins } from '../../../core/partyCoins';
 import type { Circumstance } from '../ratkinDialogue';
@@ -192,8 +194,12 @@ function runToolsTopic(host: ForgeHost, ctl: ConversationController): void {
   }
 }
 
-function formatEfficiency(efficiency: number): string {
-  return `×${efficiency}`;
+/** What a tier gets you, in the player's own terms: how much faster, and how much more per swing. */
+function describeToolTierGain(def: ToolTierDef): string {
+  const parts: string[] = [];
+  if (def.speedBonus > 0) parts.push(`+${asPercent(def.speedBonus)}% gathering speed`);
+  if (def.yieldMultiplier > 1) parts.push(`${def.yieldMultiplier}× yield per swing`);
+  return parts.length > 0 ? parts.join(', ') : 'no bonus';
 }
 
 function upgradeOption(tools: PartyToolsState, kind: ToolKind): PricedOption {
@@ -209,9 +215,7 @@ function upgradeOption(tools: PartyToolsState, kind: ToolKind): PricedOption {
     };
   }
   const next = toolTierDef(kind, nextTier);
-  const gain =
-    `Gathers ${formatEfficiency(next.efficiency)} per swing ` +
-    `(now ${formatEfficiency(current.efficiency)}). Applies to Carl and Donut.`;
+  const gain = `${describeToolTierGain(next)} (now ${describeToolTierGain(current)}). Applies to Carl and Donut.`;
   return {
     key: kind,
     label: next.name,

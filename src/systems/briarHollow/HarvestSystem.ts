@@ -268,7 +268,8 @@ export class HarvestSystem {
 
       const level = channel.harvester.craftSkills.getLevel('resourcing');
       channel.ticks += 1;
-      const interval = harvestIntervalTicks(channel.kind, level);
+      const toolSpeedBonus = this.deps.partyTools.toolSpeedBonus(toolForHarvestKind(channel.kind));
+      const interval = harvestIntervalTicks(channel.kind, level, toolSpeedBonus);
       if (channel.ticks < interval) continue;
       channel.ticks -= interval;
       this.award(channel, level);
@@ -325,9 +326,9 @@ export class HarvestSystem {
       return;
     }
     const toolKind = toolForHarvestKind(channel.kind);
-    const efficiency = this.deps.partyTools.efficiency(toolKind);
+    const yieldMultiplier = this.deps.partyTools.yieldMultiplier(toolKind);
     const carries = this.carryOf(harvester.crawlerKind);
-    const { amount, carry } = harvestAward(efficiency, carries[channel.kind], level);
+    const { amount, carry } = harvestAward(yieldMultiplier, carries[channel.kind], level);
     carries[channel.kind] = carry;
 
     const spent = this.deps.ledger.spend(channel.tileX, channel.tileY, level);
@@ -344,7 +345,7 @@ export class HarvestSystem {
       x: channel.tileX,
       y: channel.tileY,
     });
-    harvester.craftSkills.addXp('resourcing', harvestXp(efficiency));
+    harvester.craftSkills.addXp('resourcing', harvestXp(yieldMultiplier));
     this.rollLuck(harvester, channel.kind, level);
 
     if (harvestKindAt(this.deps.gameMap, channel.tileX, channel.tileY) !== channel.kind) {

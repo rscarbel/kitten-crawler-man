@@ -215,7 +215,7 @@ function drawToolTiersScene(ctx: CanvasRenderingContext2D, rect: IllustrationRec
   }
   drawLabel(
     ctx,
-    'Better tools gather more with every swing',
+    'Better tools work faster, and the best ones gather more per swing',
     rect.x + rect.width / 2,
     top + TOOL_ICON_SIZE + LABEL_GAP * 2,
   );
@@ -261,7 +261,7 @@ export function buildResourcingExplainerPages(isMobile: boolean): HowToPlayPage[
       subtitle: 'Getting better',
       drawIllustration: (ctx, rect) => drawToolTiersScene(ctx, rect),
       lines: [
-        'Resourcing levels up with every harvest. Better tools from Oren gather more per swing and train you faster.',
+        'Resourcing levels up with every harvest. Better tools from Oren gather faster, and the finest ones gather more per swing too.',
       ],
     },
   ];
