@@ -34,21 +34,20 @@ export function buildAnchorReward(xp: number): DialogReward {
   };
 }
 
-// ── Madame Voss ──────────────────────────────────────────────────────────────
+//  Madame Voss
 
 export const VOSS_OFFER_INTRO = voss.button(
   'Go on',
-  'Sit. No, do not pay me yet. The cards are already out and they are being rude about you. Ah. Not about you. About the road behind you. You have walked it, what, four times now? Five? The same road. Both ways.',
+  "Come dear children; sit and listen to this old woman. Don't be shy, I'm not here to take your money, I'm here to tell you a story. A story about a stone imbued with great power, who's lost pieces have been turning up in this very town the past few weeks.",
 );
 
-export const VOSS_OFFER_HISTORY = voss.button(
-  'And now?',
-  'There was a stone, once. Long before any of this, before the lights, before the little flying eyes, a wayfinder carried it, and it carried them right back. Anywhere to home. Home to anywhere. Then somebody dropped it. Or the management dropped it. The cards are vague, and the management is litigious.',
+export const VOSS_OFFER_HISTORY = voss.line(
+  "Long before this to town was settled, before a brick had been laid or a drop of ale spilled, there was a sorceress who made her home in the woods right here. She lived peacefully, and would guide lost travelers through the forest, warding against the dangers that lurk within. However, in this world, no kindness or good deed goes unpunished. Word of her powers and deeds spread to neighboring towns and villages, and the words found quarter with the greed of one man who sought to have some of her power for himself. He pretended to be a weary traveler who could take not one step further without rest. He begged the sorceress for a place to lay and regain his strength and she offered him protection through the night. When she was preparing him a meal that evening, he stepped away to relieve himself, taking a sick from the fire for light. Not two minutes later, he raced back to their camp and in a frenzy relayed that he lost his footing and set ablaze to the forest floor and could not put it out. The sorceress, not interested in moving their camp rushed in the dark, departed to put out the flame before it could rage out of control. She sealed the flame with a spell until it was quenched. When she returned to camp, she found the traveler had gone missing. Fled in the night, robing her of any possession he could find. Most was useless to him, but he had taken a stone which she had laid years of work imbuing her good will towards travelers and her kindness into. It remembers any location for which its wielder has shown kindness and for which they have great significance in. It allowed near instant travel to such locations. It was named Wayfinder's Anchor, because it can bring you to the places that are most dear no matter how far you are. The sorceress was hurt deeply by the betrayal. She was not naive to believe that no one would ever take advantage of her kindness, but she weighed the cost of betrayal worth the purchase of the joy, safety, and freedom it bought for many. Instead of abandoning her commitment to help travelers thorough these woods, she laid down a spell of sabotage against the stone. When her casting was complete, the stone shattered, so that it would be of no use to anyone without magically repairing it. She did not see that stone again, but she made sure a thief in the night would not benefit from his betrayal.",
 );
 
 /** The last beat: `Ending.confirm` carries the accept/decline labels, so this line's own advance is never shown. */
 export const VOSS_OFFER_PITCH = voss.line(
-  'Three pieces. Three neighbours, none of whom know what they are sitting on. The tinker has one priced as scrap. Old Hilda has one under a chair leg. The temple has one in the altar, and a rat problem they will want discussing first. Bring me all three and I will make it whole. Then you never walk that road again, and I never have to watch you do it.',
+  "My cards tell me that the all pieces of this stone have returned home. They are here, in these city walls. Funny how that works; the magic is so powerful that the pieces of the broken stone all still found themselves in the very place they were so deeply attached to. I suppose the name Wayfinder's Anchor came about. It has come to be that one piece was dropped at Old Hilda's by a visitor. The temple recieved another as an offering. The third I saw changing hands at the market stall just here next to me. Bring me all three parts and I am one of few remaining people left who know how to invoke the magic to restore it.",
 );
 
 /** Shown when she is asked again with the errand still unfinished. */
@@ -59,37 +58,31 @@ export const VOSS_PROGRESS = voss.fn(
     readonly outstanding: ReadonlyArray<string>;
   }): LineText => {
     const tally = `${a.shardsHeld} of ${a.shardsRequired}.`;
-    const intro =
-      'Back already. Let me guess. You want me to tell you again where the stones are, even though I already told you.';
+    const intro = 'Back already. Let me guess. You want me to tell you again where the stones are.';
     if (a.outstanding.length === 0) {
-      return `${intro} ${tally} All of them. Put them on the table and stop looking so pleased. You are about to pay a fee.`;
+      return `${intro} ${tally} You have all of them. Put them on the table.`;
     }
-    return `${intro} ${tally} Still outstanding: ${a.outstanding.join(', ')}.`;
+    return `${intro} ${tally} Still remaining: ${a.outstanding.join(', ')}.`;
   },
 );
 
 /** The assembly's first beat: `Ending.confirm` again carries the pay/decline labels. */
 export const VOSS_ASSEMBLY_OFFER = voss.fn(
   (a: { readonly feeCoins: number }): LineText =>
-    `All three. Good. Hold them still. No, still. The joining does not care how brave you are. My fee is ${a.feeCoins} coins. Yes, for four seconds of work. You are paying for the thirty years I spent knowing which four seconds.`,
+    `All three. Magnificent. If you would, please show this poor old woman the same kindness that went into this stone to begin with. It was made with the magic of warmth towards a stranger, and your act is the needed piece to bring these back together. ${a.feeCoins} coins will do.`,
 );
 
 export const VOSS_ASSEMBLY_DONE = voss.button(
   'Take the stone',
-  'There. Feel that? That is the stone deciding you are home. Out in the city it drags you back to the square. Standing in the square it drags you back where you were. A minute to catch its breath between. It will not work underground, it will not work with something snarling at you, and it will absolutely not work in a boss room, so do not embarrass us both.',
+  'There. Incredible! Feel that? That warmth is the stone at home; this very town square lays on top of the same clearing in the woods that the sorceress once lived. If you use this when you are out in the wild, it will bring you back here, where it is anchored. It cannot be used in rapid succession, and there are spells that can block it, but it should help you travel around much faster.',
 );
 
-/** She cannot make change, and she will not be doing it on credit. */
 export const VOSS_CANNOT_AFFORD = voss.fn(
   (a: { readonly feeCoins: number }): LineText =>
-    `${a.feeCoins} coins. You have counted twice now and it has not improved. Go and be violent at something with pockets. The shards keep. So does my fee.`,
+    `${a.feeCoins} coins. You don't seem to have enough my dear. Come back to me once you have the coin for this..`,
 );
 
-// No "questline complete" line on purpose: once the stone exists Voss has
-// nothing left to say about it, so consulting her falls through to the card
-// reading she was always there to give.
-
-// ── Old Hilda ────────────────────────────────────────────────────────────────
+// ── Old Hilda
 
 export const HILDA_REQUEST_INTRO = hilda.button(
   'What do you want?',
