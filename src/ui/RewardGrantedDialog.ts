@@ -1,7 +1,7 @@
 import type { GrantedReward, GrantedRewardKind } from '../core/GrantedReward';
 import type { AudioManager } from '../audio/AudioManager';
-import { wrapTextLines, drawPowerUpIcon } from './canvasUtils';
-import { drawText } from './TextBox';
+import { drawPowerUpIcon } from './canvasUtils';
+import { drawText, wrapLines } from './TextBox';
 import { drawOverlay, drawBox } from './Box';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -152,14 +152,12 @@ export class RewardGrantedDialog {
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.72 });
 
     const boxW = Math.min(DIALOG_MAX_WIDTH, cw - DIALOG_PADDING_HORIZONTAL);
-    if (this.cachedDescLines === null) {
-      ctx.font = `${DIALOG_DESC_SIZE}px monospace`;
-      this.cachedDescLines = wrapTextLines(
-        ctx,
-        current.description,
-        boxW - DIALOG_DESC_WIDTH_MARGIN,
-      );
-    }
+    this.cachedDescLines ??= wrapLines(
+      ctx,
+      current.description,
+      boxW - DIALOG_DESC_WIDTH_MARGIN,
+      `${DIALOG_DESC_SIZE}px monospace`,
+    );
     const descLines = this.cachedDescLines;
     const boxH = Math.min(
       Math.max(DIALOG_MIN_HEIGHT, DIALOG_BASE_HEIGHT + descLines.length * DIALOG_DESC_LINE_HEIGHT),

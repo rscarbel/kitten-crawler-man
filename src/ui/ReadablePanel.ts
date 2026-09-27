@@ -10,7 +10,7 @@
  * paragraph (the embossed column of names, the feather in black wax, "I write
  * them down"), so hiding the overflow would quietly throw away the only line
  * that mattered. Instead the body is broken across as many pages as it takes and
- * advancing walks them, the way `CitizenDialog` walks a conversation.
+ * advancing walks them, the way a `Conversation` walks its own pages.
  *
  * The owning scene drives open/close and routes Space/Esc/click here through its
  * dialog-priority chain; Escape closes outright, wherever the player has got to.

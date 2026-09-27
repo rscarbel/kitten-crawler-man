@@ -24,6 +24,8 @@
  */
 
 import { installCanvasGlobals } from './nodeCanvasGlobals';
+import { setViewportSize } from '../src/core/Viewport';
+import type { ConversationRequest } from '../src/dialog/request';
 import { TILE_SIZE } from '../src/core/constants';
 import {
   captureBriarHollowState,
@@ -34,10 +36,13 @@ import type { VillageQuestPhase } from '../src/core/villageQuestPhase';
 import type { Mob } from '../src/creatures/Mob';
 import { Necromancer } from '../src/creatures/Necromancer';
 import {
-  line,
-  type Circumstance,
+  BRAMBLEWICK,
+  FENNA,
+  OREN,
+  TIKKA,
   type VillagerId,
-} from '../src/systems/briarHollow/ratkinDialogue';
+} from '../src/dialog/scripts/briarHollow';
+import type { DialogLine } from '../src/dialog/line';
 import { HOLLOW_BELL_MAX_HP } from '../src/systems/briarHollow/hollowBell';
 import { ASK_QUESTION_LABEL } from '../src/systems/briarHollow/villagerTopics';
 import {
@@ -63,6 +68,10 @@ import { TREBUCHET_BUILD_COST } from '../src/systems/briarHollow/structureRules'
 import { buildSiegeRig, standAt } from './villageSiegeHarness';
 
 installCanvasGlobals();
+// The villager conversation paginates its text against the live viewport;
+// without a size set, DialogBox measures against a zero-width box and splits
+// every line into one page per word.
+setViewportSize(1280, 720);
 
 let failures = 0;
 let checks = 0;
@@ -131,10 +140,21 @@ cat.godMode = true;
 
 // Every page the panel shows, in order.
 const shown: string[] = [];
-const showPages = conversation.showPages.bind(conversation);
-conversation.showPages = (pages: readonly string[]) => {
-  shown.push(...pages);
-  showPages(pages);
+function captureLines(request: ConversationRequest): void {
+  for (const dialogLine of request.lines) {
+    if ('paragraphs' in dialogLine) shown.push(...dialogLine.paragraphs);
+  }
+}
+const realOpen = conversation.open.bind(conversation);
+conversation.open = (request) => {
+  captureLines(request);
+  const handle = realOpen(request);
+  const realPlay = handle.play.bind(handle);
+  handle.play = (nextRequest) => {
+    captureLines(nextRequest);
+    realPlay(nextRequest);
+  };
+  return handle;
 };
 
 // Every narrated line the questline queues outside a conversation — Carl or
@@ -164,8 +184,8 @@ function stepUntil(done: () => boolean, limitSeconds = STEP_LIMIT_SECONDS): bool
   return done();
 }
 
-function expected(villager: VillagerId, circumstances: readonly Circumstance[]): string[] {
-  return circumstances.map((c) => line(villager, c) ?? `<missing ${villager}:${c}>`);
+function expected(...lines: readonly DialogLine[]): string[] {
+  return lines.flatMap((entry) => [...entry.paragraphs]);
 }
 
 /** Reads the conversation to its choices: skips the typing and turns every page. */
@@ -176,7 +196,7 @@ function readThrough(): void {
   // else pending, reads as "leave" and picks Goodbye out from under the
   // choices this same tick would otherwise have put up.
   for (let i = 0; i < 40 && conversation.isOpen && !conversation.isShowingChoices; i++) {
-    conversation.update();
+    conversation.update(null);
     if (!conversation.isOpen || conversation.isShowingChoices) break;
     conversation.advance();
   }
@@ -260,9 +280,9 @@ section('1. The Mayor');
     'the Mayor wears the ! before he is met',
   );
   const opening = talk('bramblewick');
-  check(same(opening, expected('bramblewick', ['first_meeting'])), 'he opens with first_meeting');
+  check(same(opening, expected(BRAMBLEWICK.firstMeeting)), 'he opens with first_meeting');
   check(
-    same(choose('About the village'), expected('bramblewick', ['ask_about_village'])),
+    same(choose('About the village'), expected(BRAMBLEWICK.askAboutVillage)),
     '"About the village" answers ask_about_village',
   );
   // A plain answer — one that neither opens a submenu nor moves back to the
@@ -271,13 +291,13 @@ section('1. The Mayor');
   check(!conversation.isOpen, 'and that answer ends the conversation');
   talk('bramblewick');
   check(
-    same(choose('About the necromancer'), expected('bramblewick', ['ask_about_necromancer'])),
+    same(choose('About the necromancer'), expected(BRAMBLEWICK.askAboutNecromancer)),
     '"About the necromancer" answers ask_about_necromancer',
   );
   check(!conversation.isOpen, 'and this answer ends the conversation too');
   talk('bramblewick');
   check(
-    same(choose('How can we help?'), expected('bramblewick', ['quest_offer'])),
+    same(choose('How can we help?'), expected(BRAMBLEWICK.questOffer)),
     '"How can we help?" makes the offer',
   );
   check(state.quest.phase === 'offered', 'the phase is offered');
@@ -286,7 +306,7 @@ section('1. The Mayor');
     'Accept and Decline are on offer',
   );
   check(
-    same(choose('Decline'), expected('bramblewick', ['quest_declined'])),
+    same(choose('Decline'), expected(BRAMBLEWICK.questDeclined)),
     'Decline answers quest_declined',
   );
   check(state.quest.phase === 'declined', 'the phase is declined');
@@ -296,9 +316,9 @@ section('1. The Mayor');
   check(!conversation.isOpen, 'Goodbye closes the conversation');
 
   const again = talk('bramblewick');
-  check(same(again, expected('bramblewick', ['quest_offer'])), 'talking again re-offers');
+  check(same(again, expected(BRAMBLEWICK.questOffer)), 'talking again re-offers');
   check(
-    same(choose('Accept'), expected('bramblewick', ['quest_accepted'])),
+    same(choose('Accept'), expected(BRAMBLEWICK.questAccepted)),
     'Accept answers quest_accepted',
   );
   check(state.quest.phase === 'need_tools', 'the phase is need_tools');
@@ -317,17 +337,33 @@ section('1. The Mayor');
 section('2. Tools');
 {
   check(objective() === 'Get tools from Oren at the forge', 'the journal sends the party to Oren');
-  check(same(talk('tikka'), expected('tikka', ['tools_required'])), 'Tikka says tools_required');
+  check(same(talk('tikka'), expected(TIKKA.toolsRequired)), 'Tikka says tools_required');
   choose('Goodbye');
-  const opening = talk('oren');
+  const orenBody = villagers.villagerFor('oren');
+  check(orenBody !== null, 'Oren is on the map');
+  let opening: string[] = [];
+  if (orenBody !== null) {
+    if (conversation.isOpen) villagers.closeConversation();
+    standAt(human, Math.round(orenBody.x / TILE_SIZE), Math.round(orenBody.y / TILE_SIZE));
+    human.x = orenBody.x;
+    human.y = orenBody.y;
+    const before = shown.length;
+    kit.tryInteract(human);
+    check(
+      human.inventory.countOf('basic_axe') === 0 && cat.inventory.countOf('basic_axe') === 0,
+      "the tools aren't granted merely from opening onto the grant page",
+    );
+    readThrough();
+    opening = shown.slice(before);
+  }
   check(
-    same(opening, expected('oren', ['grant_basic_tools'])),
+    same(opening, expected(OREN.grantBasicTools)),
     'Oren opens onto the grant, and only the grant — no lesson, no directions, no menu',
   );
   check(!conversation.isOpen, 'and the conversation closes on its own');
   check(
     human.inventory.countOf('basic_axe') === 1 && cat.inventory.countOf('basic_axe') === 1,
-    'both crawlers carry the axe',
+    'both crawlers carry the axe, once the page has been read',
   );
   check(
     human.inventory.countOf('basic_pickaxe') === 1 && cat.inventory.countOf('basic_pickaxe') === 1,
@@ -390,10 +426,7 @@ section('4. Report to Tikka');
 {
   const pages = talk('tikka');
   check(
-    same(
-      pages,
-      expected('tikka', ['tikka_plans_intro', 'tikka_send_to_fenna', 'tikka_needs_boards_rope']),
-    ),
+    same(pages, expected(TIKKA.reportPlans)),
     'Tikka teases her plans and sends the party to Fenna',
   );
   check(!conversation.isOpen, 'and the conversation closes on its own, no menu after');
@@ -420,10 +453,7 @@ section("5. Fenna, processing, and Tikka's plans");
 {
   check(!state.unlocks.processingStations, 'the stations are still shut before Fenna is asked');
   const opening = talk('fenna');
-  check(
-    same(opening, expected('fenna', ['fenna_grants_access', 'fenna_explains_stations'])),
-    'Fenna grants the saw and the rope walk',
-  );
+  check(same(opening, expected(FENNA.grantsAccess)), 'Fenna grants the saw and the rope walk');
   check(
     !conversation.isOpen,
     'and the conversation closes on its own, no "How does the mill work?" after',
@@ -452,7 +482,7 @@ section("5. Fenna, processing, and Tikka's plans");
   checkpointStep('return_tikka');
   const plans = talk('tikka');
   check(
-    same(plans, expected('tikka', ['tikka_materials_received', 'tikka_plans_handoff'])),
+    same(plans, expected(TIKKA.plansHandoff)),
     'Tikka takes the materials and hands over her plans',
   );
   check(!conversation.isOpen, 'and the conversation closes on its own');
@@ -527,16 +557,7 @@ section('7. Summoned by the Mayor, and the countdown');
   check(!state.unlocks.soldierCommands, "the militia is still not under the party's command");
   const briefing = talk('bramblewick');
   check(
-    same(
-      briefing,
-      expected('bramblewick', [
-        'mayor_briefing_reason',
-        'mayor_briefing_scouts',
-        'mayor_briefing_life_stone',
-        'mayor_briefing_threat',
-        'mayor_briefing_command',
-      ]),
-    ),
+    same(briefing, expected(BRAMBLEWICK.briefing)),
     'the Mayor briefs the party and places the militia under their command',
   );
   check(
@@ -554,7 +575,7 @@ section('7. Summoned by the Mayor, and the countdown');
     '"I need more time" is the first row, so Space picks it',
   );
   check(
-    same(choose('I need more time'), expected('bramblewick', ['mayor_more_time_granted'])),
+    same(choose('I need more time'), expected(BRAMBLEWICK.moreTimeGranted)),
     'and he grants it',
   );
   choose('Goodbye');
@@ -615,7 +636,7 @@ section('8. A lost siege');
   checkpointStep('repelled_failed');
   const words = talk('bramblewick');
   check(
-    same(words, expected('bramblewick', ['mayor_loss_unprepared', 'mayor_loss_facsimile'])),
+    same(words, expected(BRAMBLEWICK.repelledFailed)),
     'the Mayor explains the facsimile bought them time',
   );
   check(!conversation.isOpen, 'and the conversation closes on its own');
@@ -736,13 +757,10 @@ section('9. The retry and the turn-in');
   const damaged =
     siege !== null && siege.segmentsBreached + siege.structuresDestroyed + siege.soldiersDowned > 0;
   const thanks = talk('bramblewick');
-  const wanted: Circumstance[] = damaged
-    ? ['after_victory', 'after_village_damage', 'quest_complete']
-    : ['after_victory', 'quest_complete'];
-  check(
-    same(thanks, expected('bramblewick', wanted)),
-    `the Mayor thanks them (${wanted.join(' → ')})`,
-  );
+  const wanted: readonly DialogLine[] = damaged
+    ? [BRAMBLEWICK.afterVictory, BRAMBLEWICK.afterVillageDamage, BRAMBLEWICK.questComplete]
+    : [BRAMBLEWICK.afterVictory, BRAMBLEWICK.questComplete];
+  check(same(thanks, expected(...wanted)), `the Mayor thanks them (damaged: ${damaged})`);
   check(state.quest.phase === 'complete', 'the quest is complete');
   check(quest.status === 'completed', 'the quest manager agrees');
   check(human.coins - coinsBefore === REQUEST_COINS, `the purse pays ${REQUEST_COINS} coins`);

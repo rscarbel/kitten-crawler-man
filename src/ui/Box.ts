@@ -468,8 +468,8 @@ export function drawBox(ctx: CanvasRenderingContext2D, opts: BoxOptions): BoxRes
  * can never render wider than the viewport (a recurring mobile bug — fixed
  * pixel widths that overflow a narrow phone canvas). This is a floor, not a
  * design choice: for a nicer side margin, clamp your own ideal width against
- * `canvasWidth` before calling (e.g. `Math.min(IDEAL_WIDTH, canvasWidth - 40)`)
- * — see `QuestDialog.ts`. Either way, read the returned `width`/`inner.width`
+ * `canvasWidth` before calling (e.g. `Math.min(IDEAL_WIDTH, canvasWidth - 40)`).
+ * Either way, read the returned `width`/`inner.width`
  * for any further layout math (centering child content, card widths, etc.);
  * reusing the original unclamped constant is the mistake that reintroduces
  * the overflow one line down even when the box itself was clamped correctly.

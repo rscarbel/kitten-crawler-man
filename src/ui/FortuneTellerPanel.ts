@@ -1,7 +1,8 @@
 /**
  * The fortune teller's panel. The player pays a coin per reading: three face-down
  * cards are shown, tapping one flips it and reveals a fortune (see
- * `townFortunes.ts`), then they can Draw Again (another coin) or Close. Built on
+ * `src/dialog/scripts/fortuneTeller.ts`), then they can Draw Again (another coin)
+ * or Close. Built on
  * the shared Button/Box/TextBox utilities so mouse and touch both work — cards
  * and buttons are hit-tested rects, a tap outside the modal closes it, and the
  * close hint adapts to the platform.
@@ -32,7 +33,7 @@ import {
   type ButtonResult,
 } from './Button';
 import { drawText } from './TextBox';
-import { drawFortune, drawHildaReading } from '../systems/townFortunes';
+import { drawFortune, drawHildaReading } from '../dialog/scripts/fortuneTeller';
 import type { Player } from '../Player';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
 import type { TownDialogContext } from '../systems/townDialog';

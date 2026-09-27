@@ -72,6 +72,7 @@ import {
   type TilePos,
 } from '../src/systems/lichBattleRules';
 import { mulberry32 } from '../src/sprites/person/rng';
+import { Conversation } from '../src/dialog/Conversation';
 
 const failures: string[] = [];
 
@@ -883,6 +884,7 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
     doomsday,
     partyLevelOf(human.level, cat.level),
     companion,
+    new Conversation(null),
   );
 
   const lich = spawned.find((mob) => mob.displayName === 'The Lich') ?? null;
@@ -958,6 +960,8 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
   let barkHaltBreaches = 0;
   /** Frames of update pushed at the fight with a bark up — a phase clock would move. */
   const BARK_HALT_PROBE_FRAMES = 120;
+  /** A one-line bark never needs more than skip-reveal plus turn-the-page. */
+  const BARK_MAX_TURNS_PER_PAGE = 4;
   let swingsThatFoundTheLich = 0;
   let swingsThatMissedTheGrid = 0;
   /** Damage the party took, per phase, so a hazard that stopped biting is visible. */
@@ -1151,7 +1155,15 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
       }
       barksProbed++;
       if (describeFightState(confrontation) !== beforeBark) barkHaltBreaches++;
-      confrontation.advanceDialog();
+      // Two presses, same frame: the first skips the sentence reveal instead of
+      // closing the page, and only the second actually turns it — the harness
+      // has to spend both here or the reveal's own frames would leak into the
+      // phase-timing budget below.
+      let turnsSpent = 0;
+      while (confrontation.isDialogOpen && turnsSpent < BARK_MAX_TURNS_PER_PAGE) {
+        confrontation.advanceDialog();
+        turnsSpent++;
+      }
       barksRead++;
       continue;
     }

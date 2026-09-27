@@ -1,7 +1,7 @@
 import type { LevelUpEntry } from '../core/LevelUpEntry';
 import type { AudioManager } from '../audio/AudioManager';
-import { wrapTextLines, drawPowerUpIcon } from './canvasUtils';
-import { drawText } from './TextBox';
+import { drawPowerUpIcon } from './canvasUtils';
+import { drawText, wrapLines } from './TextBox';
 import { drawOverlay, drawBox } from './Box';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -128,10 +128,16 @@ export class LevelUpDialog {
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.72 });
 
     const boxW = Math.min(DIALOG_MAX_WIDTH, cw - DIALOG_PADDING_HORIZONTAL);
-    ctx.font = `${PERK_DESCRIPTION_SIZE}px monospace`;
     const perk = current.perkDescription;
     const perkLines =
-      perk === null ? [] : wrapTextLines(ctx, perk, boxW - PERK_DESCRIPTION_WIDTH_MARGIN);
+      perk === null
+        ? []
+        : wrapLines(
+            ctx,
+            perk,
+            boxW - PERK_DESCRIPTION_WIDTH_MARGIN,
+            `${PERK_DESCRIPTION_SIZE}px monospace`,
+          );
     const boxH = Math.min(
       Math.max(DIALOG_MIN_HEIGHT, DIALOG_BASE_HEIGHT + perkLines.length * DIALOG_PERK_LINE_HEIGHT),
       ch - DIALOG_PADDING_HORIZONTAL,

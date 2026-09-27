@@ -3,8 +3,7 @@
  * Play" button and shown automatically the first time a player sits down in a
  * club visit.
  *
- * Borrows `QuestDialog`'s conventions — paged title + lines, a `typing_click` on
- * every page turn, `advance` / `dismiss` / `handleClick` — and adds an
+ * Paged title + lines, a `typing_click` on every page turn, `advance` / `dismiss` / `handleClick` — and adds an
  * illustration band per page, because the rules that matter (a soft 17, a bust,
  * the hole-card flip) are far clearer shown than described. On a short viewport
  * the band collapses and the text takes the space.

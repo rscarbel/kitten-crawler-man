@@ -77,6 +77,7 @@ import { HirelingBoltSystem } from '../src/systems/HirelingBoltSystem';
 import { MongoSystem } from '../src/systems/MongoSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
+import { Conversation } from '../src/dialog/Conversation';
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 
@@ -934,6 +935,8 @@ function checkQuillHealerHeld(): void {
     null,
     createDoomsdayProgress(),
     CONFRONTATION_PARTY_LEVEL,
+    undefined,
+    new Conversation(null),
   );
   settings.setDifficultyForSession(previous);
   const healers = spawned.filter((mob) => mob instanceof HealingFairy);

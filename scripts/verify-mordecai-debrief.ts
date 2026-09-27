@@ -22,7 +22,6 @@ import {
   ALL_DEBRIEF_BOSS_TYPES,
   BOSS_DISPLAY_NAMES,
   EMPTY_DEBRIEF_MEMORY,
-  HUSHED_ONLY_LINE,
   MAX_ITEMS_PER_DEBRIEF_PAGE,
   debriefBossType,
   debriefHasNews,
@@ -38,6 +37,7 @@ import {
   type DebriefMemory,
   type DebriefState,
 } from '../src/systems/mordecaiDebrief.js';
+import { MORDECAI_DEBRIEF_HUSHED_ONLY_LINE } from '../src/dialog/scripts/mordecai.js';
 
 const failures: string[] = [];
 let checks = 0;
@@ -276,7 +276,10 @@ check(debriefBossType(undefined) === null, 'debriefBossType(undefined) is not nu
   const crownOnlyState = stateOf(inventoryOf('human', []), donutCrownOnly);
   const crownOnlyText = spoken(CONGRATULATED, crownOnlyState);
   check(lists('cat', donutCrownOnly, CROWN_ID), 'the crown is not counted as unworn gear');
-  check(crownOnlyText.includes(HUSHED_ONLY_LINE), 'crown alone: the vague line is missing');
+  check(
+    crownOnlyText.includes(MORDECAI_DEBRIEF_HUSHED_ONLY_LINE),
+    'crown alone: the vague line is missing',
+  );
   check(!crownOnlyText.includes(CROWN_WORD), 'crown alone: Mordecai names the crown to Donut');
 
   const carlCrownText = spoken(
@@ -321,7 +324,7 @@ check(debriefBossType(undefined) === null, 'debriefBossType(undefined) is not nu
   );
   check(
     spoken(CONGRATULATED, stateOf(inventoryOf('human', []), donutWellHatted)).includes(
-      HUSHED_ONLY_LINE,
+      MORDECAI_DEBRIEF_HUSHED_ONLY_LINE,
     ),
     'a better-hatted Donut with the crown in her bag hears no vague line',
   );

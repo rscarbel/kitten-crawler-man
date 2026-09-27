@@ -42,7 +42,9 @@ import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import { doorwaySpan, type BuildingEntry } from './BuildingSystem';
 import { doorwayBeaconTarget } from './objectiveBeaconTargets';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { QuestDialog, type DialogPage } from '../ui/QuestDialog';
+import type { Conversation } from '../dialog/Conversation';
+import type { DialogLine, NonEmpty } from '../dialog/line';
+import type { ConversationHandle } from '../dialog/request';
 import {
   drawQuestBanner,
   drawQuestCompleteOverlay,
@@ -50,15 +52,15 @@ import {
   QUEST_COMPLETE_OVERLAY_FRAMES,
 } from '../ui/QuestBanners';
 import {
-  HOOK_DIALOG,
-  BODY_FOUND_DIALOG,
-  WELL_CLUE_DIALOG,
-  HOME_CLUE_DIALOG,
-  ROOST_CLUE_DIALOG,
-  TAUNT_AND_NIGHTFALL_DIALOG,
-  AFTERMATH_DIALOG,
-  HIDEOUT_CLEARED_DIALOG,
-} from './murderQuestDialogs';
+  MURDER_HOOK,
+  MURDER_BODY_FOUND,
+  MURDER_WELL_CLUE,
+  MURDER_HOME_CLUE,
+  MURDER_ROOST_CLUE,
+  MURDER_TAUNT_AND_NIGHTFALL,
+  MURDER_AFTERMATH,
+  MURDER_HIDEOUT_CLEARED,
+} from '../dialog/scripts/scenes/murder';
 
 export const MURDER_QUEST_ID = 'krasue_murders';
 
@@ -218,7 +220,7 @@ type CluePropDrawer = (
 interface CluePoint {
   id: ClueId;
   tile: { x: number; y: number };
-  pages: ReadonlyArray<DialogPage>;
+  lines: NonEmpty<DialogLine>;
   drawProp: CluePropDrawer;
 }
 
@@ -238,7 +240,13 @@ export class MurderMysteryQuestSystem implements GameSystem {
   readonly questManager: QuestManager;
 
   private phase: MurderQuestPhase;
-  private readonly dialog: QuestDialog;
+  /** The handle this quest's own conversation last opened with, or null before any beat has opened. */
+  private conversationHandle: ConversationHandle | null = null;
+
+  /** Whether the shared conversation is currently showing one of this quest's beats, rather than someone else's. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
 
   private gumgum: GumGum | null = null;
   /**
@@ -286,6 +294,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     private readonly progress: MurderQuestProgress,
     private readonly overworldMusic: OverworldMusicSystem | null = null,
     private readonly audio: AudioManager | null = null,
+    private readonly conversation: Conversation,
   ) {
     this.questManager = new QuestManager();
     this.questManager.register({
@@ -301,8 +310,6 @@ export class MurderMysteryQuestSystem implements GameSystem {
         coins: 150,
       },
     });
-    this.dialog = new QuestDialog(this.audio ?? null);
-
     const pubDoor = this.doorTileOf('The Sunken Stump Pub');
     // Book-accurate hook: GumGum approaches at the Desperado Club when it exists
     // on this floor, else the pub (Carl's Doomsday Scenario). Gated on the pub
@@ -330,7 +337,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
       this.clues.push({
         id: WELL_CLUE_ID,
         tile: wellTile,
-        pages: WELL_CLUE_DIALOG,
+        lines: MURDER_WELL_CLUE,
         drawProp: drawWellClueProp,
       });
     }
@@ -345,7 +352,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
       this.clues.push({
         id: 'home',
         tile: homeTile,
-        pages: HOME_CLUE_DIALOG,
+        lines: MURDER_HOME_CLUE,
         drawProp: drawHomeClueProp,
       });
     }
@@ -359,7 +366,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
         this.clues.push({
           id: 'roost',
           tile: roostTile,
-          pages: ROOST_CLUE_DIALOG,
+          lines: MURDER_ROOST_CLUE,
           drawProp: drawRoostClueProp,
         });
       }
@@ -580,7 +587,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
   // ── Public surface consumed by DungeonScene ───────────────────────────────
 
   get isDialogOpen(): boolean {
-    return this.dialog.isOpen;
+    return this.conversationOwned;
   }
 
   /**
@@ -644,6 +651,10 @@ export class MurderMysteryQuestSystem implements GameSystem {
     mobs: Mob[],
     mobGrid: SpatialGrid<Mob>,
   ): void {
+    // A conversation cannot survive the rewind: its closures may read state
+    // (the phase, the swarm) that this restore is about to change out from
+    // under it.
+    if (this.conversationOwned) this.conversation.close();
     this.questManager.restoreStatuses(snapshot.questStatuses);
     this.phase = snapshot.phase;
     this.swarmCleared = snapshot.swarmCleared;
@@ -721,7 +732,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     // The same condition her glyph is drawn under in `render`, held on the
     // creature so her beacon — drawn a pass earlier, by her — agrees with it.
     this.gumgum.markerType =
-      this.phase === 'gumgum_waiting' && !this.dialog.isOpen ? 'exclamation' : 'none';
+      this.phase === 'gumgum_waiting' && !this.conversationOwned ? 'exclamation' : 'none';
   }
 
   /** Returns quest markers for the minimap. */
@@ -916,7 +927,11 @@ export class MurderMysteryQuestSystem implements GameSystem {
   tryInteract(active: Player): boolean {
     const conversation = this.pendingConversation(active);
     if (conversation === null) return false;
-    this.dialog.open(conversation.pages, conversation.onFinish);
+    this.openDismissibleConversation(
+      conversation.lines,
+      conversation.onFinish,
+      conversation.questRelated,
+    );
     return true;
   }
 
@@ -932,12 +947,12 @@ export class MurderMysteryQuestSystem implements GameSystem {
   /** The conversation a press from `active` would open — GumGum's hook, then a clue — or null. */
   private pendingConversation(
     active: Player,
-  ): { pages: ReadonlyArray<DialogPage>; onFinish: () => void } | null {
-    if (this.dialog.isOpen) return null;
+  ): { lines: NonEmpty<DialogLine>; onFinish: () => void; questRelated: boolean } | null {
+    if (this.conversationOwned) return null;
 
     if (this.phase === 'gumgum_waiting' && this.gumgum && this.gumgumTile) {
       if (this.distToTile(active, this.gumgumTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
-        return { pages: HOOK_DIALOG, onFinish: () => this.finishHook() };
+        return { lines: MURDER_HOOK, onFinish: () => this.finishHook(), questRelated: true };
       }
     }
 
@@ -945,7 +960,11 @@ export class MurderMysteryQuestSystem implements GameSystem {
       for (const clue of this.clues) {
         if (this.isClueFound(clue.id)) continue;
         if (this.distToTile(active, clue.tile) <= TILE_SIZE * CLUE_INTERACT_RANGE_TILES) {
-          return { pages: clue.pages, onFinish: () => this.finishClue(clue.id) };
+          return {
+            lines: clue.lines,
+            onFinish: () => this.finishClue(clue.id),
+            questRelated: true,
+          };
         }
       }
     }
@@ -953,14 +972,61 @@ export class MurderMysteryQuestSystem implements GameSystem {
     return null;
   }
 
-  /** Esc closes an open dialog without advancing the quest. Returns true if handled. */
+  /** Opens a beat on the shared conversation. `onClosed` fires once the last page is read; Esc closes without it. */
+  private openDismissibleConversation(
+    lines: NonEmpty<DialogLine>,
+    onClosed: () => void,
+    questRelated: boolean,
+  ): void {
+    this.conversationHandle = this.conversation.open({
+      lines,
+      reward: null,
+      questRelated,
+      ending: {
+        kind: 'close',
+        onClosed,
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
+  /** Opens a load-bearing beat: Esc and walking away do nothing until it is read. */
+  private openBlockingConversation(
+    lines: NonEmpty<DialogLine>,
+    onClosed: () => void,
+    questRelated: boolean,
+  ): void {
+    this.conversationHandle = this.conversation.open({
+      lines,
+      reward: null,
+      questRelated,
+      ending: {
+        kind: 'close',
+        onClosed,
+      },
+      dismiss: { kind: 'blocked' },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
+  /** Esc closes a dismissible beat without advancing the quest. Returns true if handled. */
   dismissDialog(): boolean {
-    return this.dialog.dismiss();
+    if (!this.conversationOwned) return false;
+    return this.conversation.dismiss();
   }
 
   handleClick(mx: number, my: number): boolean {
     if (this.advanceOutcomeOverlay()) return true;
-    return this.dialog.handleClick(mx, my);
+    if (!this.conversationOwned) return false;
+    return this.conversation.handleClick(mx, my);
   }
 
   // ── Phase transitions ─────────────────────────────────────────────────────
@@ -978,15 +1044,19 @@ export class MurderMysteryQuestSystem implements GameSystem {
   }
 
   private discoverBody(): void {
-    this.dialog.open(BODY_FOUND_DIALOG, () => {
-      this.phase = 'investigation';
-      this.progress.stage = 'investigation';
-      this.questManager.startQuest(MURDER_QUEST_ID);
-      this.bus.emit('questStarted', { questId: MURDER_QUEST_ID });
-      // The dialog strip only ever previews these — Carl pockets the writ and the
-      // letter off the body here, in code, or neither ever reaches the bag.
-      this.progress.evidenceOwed = [...ALLEY_EVIDENCE];
-    });
+    this.openDismissibleConversation(
+      MURDER_BODY_FOUND,
+      () => {
+        this.phase = 'investigation';
+        this.progress.stage = 'investigation';
+        this.questManager.startQuest(MURDER_QUEST_ID);
+        this.bus.emit('questStarted', { questId: MURDER_QUEST_ID });
+        // The dialog strip only ever previews these — Carl pockets the writ and the
+        // letter off the body here, in code, or neither ever reaches the bag.
+        this.progress.evidenceOwed = [...ALLEY_EVIDENCE];
+      },
+      true,
+    );
   }
 
   /**
@@ -1137,7 +1207,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
     switch (this.phase) {
       case 'body_waiting':
         if (
-          !this.dialog.isOpen &&
+          !this.conversationOwned &&
+          !this.conversation.isOpen &&
           this.alleyTile &&
           this.distToTile(ctx.active, this.alleyTile) <= TILE_SIZE * BODY_DISCOVERY_RANGE_TILES
         ) {
@@ -1148,7 +1219,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
         // Entry-idempotent: a scene rebuild mid-attack resumes the wave rather
         // than restarting it — `spawnNightSwarm` reads how many are already
         // owed dead from `progress.swarmKrasueDefeated`.
-        if (!this.swarmStarted && !this.dialog.isOpen) {
+        if (!this.swarmStarted && !this.conversationOwned) {
           this.swarmStarted = true;
           this.startNightAttackMusic();
           this.spawnNightSwarm(ctx.active);
@@ -1169,32 +1240,45 @@ export class MurderMysteryQuestSystem implements GameSystem {
           this.swarm.every((m) => !m.isAlive)
         ) {
           this.handleSwarmCleared();
-          // Re-offered every frame the dialog is closed, so an Esc dismissal
-          // can't strand the quest before the stage advances.
-          if (!this.dialog.isOpen) {
-            this.dialog.open(AFTERMATH_DIALOG, () => {
-              this.phase = 'cult_hideout';
-              this.progress.stage = 'cult_hideout';
-            });
+          // Load-bearing: opened once, and neither Esc nor walking away can
+          // close it before the stage advances. Waits for the box to be free
+          // rather than stomping whatever non-quest chat is on screen, so it
+          // opens on the frame after that chat closes instead of on this one.
+          if (!this.conversationOwned && !this.conversation.isOpen) {
+            this.openBlockingConversation(
+              MURDER_AFTERMATH,
+              () => {
+                this.phase = 'cult_hideout';
+                this.progress.stage = 'cult_hideout';
+              },
+              false,
+            );
           }
         }
         break;
       case 'confrontation':
         // The hideout letter names Quill the first time we're back on the streets.
-        if (!this.progress.quillNamed && !this.dialog.isOpen) {
-          this.dialog.open(HIDEOUT_CLEARED_DIALOG, () => {
-            this.progress.quillNamed = true;
-          });
+        if (!this.progress.quillNamed && !this.conversationOwned && !this.conversation.isOpen) {
+          this.openBlockingConversation(
+            MURDER_HIDEOUT_CLEARED,
+            () => {
+              this.progress.quillNamed = true;
+            },
+            false,
+          );
         }
         break;
       case 'awaiting_rewards':
         this.finishQuest(ctx.active);
         break;
       case 'investigation':
-        // Opens once the last clue's dialog closes, and re-offers after an
-        // Esc dismissal — otherwise the quest would strand here forever.
-        if (this.allCluesFound() && !this.dialog.isOpen) {
-          this.dialog.open(TAUNT_AND_NIGHTFALL_DIALOG, () => this.beginNightAttack());
+        // Opened once every clue is found.
+        if (this.allCluesFound() && !this.conversationOwned && !this.conversation.isOpen) {
+          this.openBlockingConversation(
+            MURDER_TAUNT_AND_NIGHTFALL,
+            () => this.beginNightAttack(),
+            true,
+          );
         }
         break;
       case 'gumgum_waiting':
@@ -1265,7 +1349,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
       }
     }
 
-    if (this.dialog.isOpen) return;
+    if (this.conversationOwned) return;
 
     if (this.phase === 'gumgum_waiting' && this.gumgum && this.gumgumTile) {
       if (this.distToTile(active, this.gumgumTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
@@ -1298,7 +1382,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     if (!clue) return;
 
     if (this.cluePropsVisible) this.renderClueProp(ctx, camX, camY, clue);
-    if (this.dialog.isOpen) return;
+    if (this.conversationOwned) return;
     if (this.phase === 'investigation') this.renderClueAttention(ctx, camX, camY, active, clue);
   }
 
@@ -1360,7 +1444,6 @@ export class MurderMysteryQuestSystem implements GameSystem {
   }
 
   renderUI(ctx: CanvasRenderingContext2D): void {
-    this.dialog.render(ctx);
     drawQuestBanner(ctx, this.bannerText, this.bannerTimer, '#f47c7c', '#6a2a2a');
     drawQuestCompleteOverlay(ctx, 'THE KRASUE MURDERS — SOLVED', this.completeOverlayTimer);
   }

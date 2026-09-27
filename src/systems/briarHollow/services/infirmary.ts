@@ -14,7 +14,8 @@
 import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
 import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
 import type { TopicProvider } from '../villagerTopics';
-import { villagerEntry } from '../ratkinDialogue';
+import { SPEAKERS } from '../../../dialog/speakers';
+import { SELLA } from '../../../dialog/scripts/briarHollow';
 import {
   type Crawler,
   type ServiceParty,
@@ -64,8 +65,8 @@ export function buildInfirmaryMenu(party: ServiceParty): PricedMenu {
   if (partyIsUnhurt(party)) option.unavailable = UNHURT_LABEL;
   return {
     title: INFIRMARY_TITLE,
-    bark: sellerLine(DOCTOR, 'service_menu'),
-    byline: villagerEntry(DOCTOR).name,
+    bark: sellerLine(SELLA.shopOpen),
+    byline: SPEAKERS.sella.name ?? undefined,
     options: [option],
   };
 }
@@ -86,35 +87,40 @@ export function infirmaryShop(party: ServiceParty, host: InfirmaryHost): ShopDef
     build: () => buildInfirmaryMenu(party),
     purchase: (option): PricedPurchaseResult => {
       if (option.key !== TREATMENT_KEY || partyIsUnhurt(party)) {
-        return { ok: false, line: sellerLine(DOCTOR, 'fully_healthy') };
+        return { ok: false, line: sellerLine(SELLA.fullyHealthy) };
       }
       treatParty(party);
       host.beginTreatment();
-      return { ok: true, line: sellerLine(DOCTOR, 'buy_healing') };
+      return { ok: true, line: sellerLine(SELLA.buyHealing) };
     },
     blockedLine: (option) =>
       option.unavailable === undefined
-        ? sellerLine(DOCTOR, 'cannot_afford')
-        : sellerLine(DOCTOR, 'fully_healthy'),
+        ? sellerLine(SELLA.cannotAfford)
+        : sellerLine(SELLA.fullyHealthy),
   };
 }
 
 /** "Treatment" under Sella's conversation — open through the siege, when it matters most. */
 export function infirmaryTopics(party: ServiceParty, host: InfirmaryHost): TopicProvider {
   return {
-    topics(villager) {
+    topics(villager, _ctx, flow) {
       if (villager !== DOCTOR) return [];
-      const treatment = shopTopic('treatment', 'Treatment', host, () => infirmaryShop(party, host));
+      const treatment = shopTopic(
+        'treatment',
+        'Treatment',
+        host,
+        () => infirmaryShop(party, host),
+        flow,
+      );
       return [
         {
-          key: treatment.key,
-          label: treatment.label,
-          run: (ctl) => {
+          ...treatment,
+          run: (convo) => {
             if (partyIsUnhurt(party)) {
-              ctl.say('fully_healthy');
+              convo.play(flow.answer([SELLA.fullyHealthy]));
               return;
             }
-            treatment.run(ctl);
+            treatment.run(convo);
           },
         },
       ];

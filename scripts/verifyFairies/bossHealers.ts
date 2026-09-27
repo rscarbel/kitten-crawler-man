@@ -75,6 +75,7 @@ import type { Player } from '../../src/Player';
 import { mulberry32 } from '../../src/sprites/person/rng';
 import type { FairyGateReport } from './report';
 import { ARENA_TILES, makeArena } from './stage';
+import { Conversation } from '../../src/dialog/Conversation';
 
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
 const SWINE_BOSS_TYPE = 'ball_of_swine';
@@ -567,7 +568,12 @@ function spiderSighting(difficulty: Difficulty, seed: number): BossSighting {
   return underDifficulty(difficulty, seed, () => {
     const map = buildDungeon(level2, seed);
     const roster = new MobRoster(map, new SpellSystem());
-    const quest = new HackedSpiderQuest(map, new EventBus(), (mob) => roster.add(mob));
+    const quest = new HackedSpiderQuest(
+      map,
+      new EventBus(),
+      (mob) => roster.add(mob),
+      new Conversation(null),
+    );
     const lab = map.spiderLabRoom;
     const party = partyAt(
       lab?.spiderEggTile.x ?? map.startTile.x,
@@ -610,6 +616,7 @@ function heatherSighting(difficulty: Difficulty, seed: number): BossSighting {
       null,
       null,
       party.human,
+      new Conversation(null),
     );
     return {
       name: 'heather_the_bear',
@@ -642,6 +649,7 @@ function assaultRun(difficulty: Difficulty, seed: number): AssaultRun {
       null,
       null,
       party.human,
+      new Conversation(null),
     );
     const ctx = contextFor(party, roster, map);
     const terror = (): Mob | null =>
@@ -686,6 +694,8 @@ function towerSighting(
       null,
       createDoomsdayProgress(),
       partyLevelOf(FLOOR3_PARTY_LEVEL, FLOOR3_PARTY_LEVEL),
+      undefined,
+      new Conversation(null),
     );
     const boss =
       stage === 'confrontation'

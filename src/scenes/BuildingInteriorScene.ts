@@ -47,6 +47,7 @@ import { HumanTalkDriver } from '../creatures/humanGestures';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { AbilityManager } from '../core/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
+import { Conversation } from '../dialog/Conversation';
 import {
   CLUB_MUSIC_TRACKS,
   DEFAULT_BUILDING_MUSIC_TRACKS,
@@ -63,11 +64,8 @@ import { drawBox, drawOverlay } from '../ui/Box';
 import { addButton, beginMenuFocus, endMenuFocus, menuFocusContextId } from '../ui/Button';
 import type { ButtonRect } from '../ui/pause/types';
 import { EventBus } from '../core/EventBus';
-import {
-  CrawlerBarkSystem,
-  DONUT_KNOCKOUT_BARK,
-  WARD_EXPLAINER_BARK_LINES,
-} from '../systems/CrawlerBarkSystem';
+import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
+import { CRAWLER_BARKS, barkTexts } from '../dialog/scripts/crawlerBarks';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
@@ -108,7 +106,6 @@ import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSound
 import {
   buildCitizenConversation,
   isTownInDanger,
-  roleDisplayName,
   type TownDialogContext,
 } from '../systems/townDialog';
 import {
@@ -118,6 +115,7 @@ import {
   type ResidentDef,
   type ResidentHost,
 } from '../systems/townResidents';
+import { residentLinesFor } from '../dialog/scripts/residents';
 import { buildApothecaryMenu, serveRemedy } from '../systems/townApothecary';
 import { buildSmithyMenu, sharpenEdges } from '../systems/townSmithy';
 import { buildInnMenu, serveInn } from '../systems/townInn';
@@ -158,7 +156,6 @@ import { createPartyCraftsState, type PartyCraftsState } from '../core/partyCraf
 import { createBriarHollowState, type BriarHollowState } from '../core/briarHollowState';
 import { partyCount } from '../core/partyResources';
 import { indoorsConstructionSource } from '../systems/briarHollow/ConstructionSystem';
-import { CitizenDialog } from '../ui/CitizenDialog';
 import { FortuneTellerPanel, HEDGE_WITCH } from '../ui/FortuneTellerPanel';
 import { ReadablePanel } from '../ui/ReadablePanel';
 import {
@@ -526,7 +523,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * The Bopca's own number keys. Bound separately because her dialog is the one
    * surface that reads 1/2/3 as a menu choice rather than as hotbar slots.
    */
-  private bopcaKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+  private conversationKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   // Shared mobile HUD (buttons, touch state) — the panels it draws are the kit's.
   private readonly mobileHUD: MobileHUDSystem;
@@ -637,20 +634,12 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly anchorQuestProgress: AnchorQuestProgress;
   /** The anchor questline's business in this room; null in every other room. */
   private readonly anchorInterior: AnchorInteriorSystem | null;
-  // Talk surface for ambient occupants; null when there are no occupants or no audio.
-  private readonly citizenDialog: CitizenDialog | null;
+  /** The one conversation panel every speaking system in this room shares. */
+  private readonly conversation: Conversation;
   /** Occupant the open conversation belongs to; used to notice the player walking off. */
   private citizenDialogTarget: Townsperson | null = null;
   /** Keeps Carl talking, turned to whoever he is in conversation with. */
   private readonly humanTalk = new HumanTalkDriver();
-  /**
-   * A service NPC whose story is playing, and the turn their menu should open
-   * on. The turn is captured here rather than re-read later: `noteTalk` runs the
-   * moment the story starts, so re-reading it after the story ends would rotate
-   * the shopkeeper's greeting one line further than the same visit's direct
-   * talk does.
-   */
-  private pendingServiceTalk: { target: Townsperson; turn: number; role: TownRole } | null = null;
   /** Frames left in which a freshly-opened interior modal ignores the interact key. */
   private modalGraceFrames = 0;
   /**
@@ -766,6 +755,7 @@ export class BuildingInteriorScene extends GameplayScene {
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
+    this.conversation = new Conversation(this.audio);
     // Additive and cheap on repeat entry: preloading the same interior's SFX
     // group twice is a no-op, so re-entering a shop never re-pays the decode
     // cost (see the DungeonScene equivalent for the matching per-floor case).
@@ -902,11 +892,18 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.safeRoom =
       entry.hasSafeRoom === true
-        ? new SafeRoomSystem(this.map, sx, sy, 'level3', this.audio)
+        ? new SafeRoomSystem(this.map, sx, sy, this.conversation, 'level3')
         : null;
 
     if (entry.hasSafeRoom === true) {
-      this.bopca = new BopcaSystem(this.map, stampSafeRoomCounters(this.map), this.bus, this.audio);
+      this.bopca = new BopcaSystem(
+        this.map,
+        stampSafeRoomCounters(this.map),
+        this.bus,
+        this.conversation,
+        this.audio,
+        true,
+      );
       // After the counter, because the furnishings keep clear of every tile it
       // owns and cannot know them until it is planned.
       stampSafeRoomDecor(this.map);
@@ -922,6 +919,7 @@ export class BuildingInteriorScene extends GameplayScene {
             this.map,
             this.clubMembership,
             this.mercenaryRoster,
+            this.conversation,
             this.audio,
             this.human.hasDesperadoPassTattoo || this.cat.hasDesperadoPassTattoo,
             this.active(),
@@ -1059,6 +1057,7 @@ export class BuildingInteriorScene extends GameplayScene {
       () => [this.human, this.cat],
       (mob) => ground.roster.add(mob),
       (message) => this.menus.hotbarToast.show(message),
+      this.conversation,
       this.audio,
     );
     if (this.anchorInterior !== null) {
@@ -1076,8 +1075,6 @@ export class BuildingInteriorScene extends GameplayScene {
       this.encounter === null
         ? InteriorOccupantSystem.forBuilding(this.map, entry.type, entry.name)
         : null;
-    this.citizenDialog =
-      this.occupants !== null && this.audio !== null ? new CitizenDialog(this.audio) : null;
     // Suppressed for the same reason occupants are: a room hosting a live quest
     // encounter is a fight, not a library.
     this.readables =
@@ -1204,7 +1201,6 @@ export class BuildingInteriorScene extends GameplayScene {
    * this one list, so none of them can drift apart.
    */
   private get overlayClaims(): readonly OverlayInputClaim[] {
-    const citizenDialog = this.citizenDialog;
     const servicePanel = this.servicePanel;
     const readingPanel = this.readingPanel;
     /** Every modal in this room stops the world; only the shop-floor chat does not. */
@@ -1239,26 +1235,7 @@ export class BuildingInteriorScene extends GameplayScene {
         // The DOM input owns every key while it is up, the ring included.
         focusContext: null,
       },
-      {
-        isOpen: this.bopca?.isDialogOpen === true,
-        space: { kind: 'advance', advance: () => this.bopca?.advanceDialog() },
-        locksKeyboard: true,
-        haltsWorld: true,
-        focusContext: 'bopca-dialog',
-      },
-      {
-        isOpen: this.safeRoom?.mordecaiDialogOpen === true,
-        space: { kind: 'advance', advance: () => this.safeRoom?.advanceMordecaiDialog() },
-        // Floating, matching the dungeon's copy of this claim, because the
-        // conversation ends *because* the player walked out of the safe room. A
-        // halting claim froze the room under his box, so the distance that is
-        // supposed to close it could never change and the box outlived the
-        // conversation forever.
-        locksKeyboard: false,
-        haltsWorld: false,
-        // Advance-anywhere for the keyboard: one speaker line, no buttons.
-        focusContext: null,
-      },
+      // Mordecai's own conversation opens on the shared one below, so it needs no claim of its own here.
       modal(this.shop?.shopOpen === true, 'shop'),
       {
         isOpen: this.club?.modalOpen === true,
@@ -1268,36 +1245,6 @@ export class BuildingInteriorScene extends GameplayScene {
         // One claim over five stations — shop, casino, guild, VIP lounge, quest
         // dialog — so the club answers for whichever of them is drawn.
         focusContext: this.club?.focusContext ?? null,
-      },
-      // The tower's own conversation: the magistrate's body, and the reveal
-      // that ends with a boss in the room. Ahead of the ambient surfaces below
-      // for the same reason the anchor questline is — a quest box is always the
-      // one being read.
-      {
-        isOpen:
-          this.currentFloor === TOWER_CONFRONTATION_FLOOR &&
-          this.towerConfrontation?.isDialogOpen === true,
-        space: { kind: 'advance', advance: () => this.towerConfrontation?.advanceDialog() },
-        locksKeyboard: true,
-        haltsWorld: true,
-        focusContext: 'quest-dialog',
-      },
-      // The tent's own conversation, at the moment the potion lands on the vine.
-      {
-        isOpen: this.bigTopMaze?.isDialogOpen === true,
-        space: { kind: 'advance', advance: () => this.bigTopMaze?.advanceDialog() },
-        locksKeyboard: true,
-        haltsWorld: true,
-        focusContext: 'quest-dialog',
-      },
-      // Ahead of both service surfaces it can intercept: while the anchor
-      // questline has something to say, its box is the one that is drawn.
-      {
-        isOpen: this.anchorInterior?.isDialogOpen === true,
-        space: { kind: 'advance', advance: () => this.anchorInterior?.advanceDialog() },
-        locksKeyboard: true,
-        haltsWorld: true,
-        focusContext: 'quest-dialog',
       },
       modal(servicePanel?.isOpen === true, 'priced-menu'),
       modal(readingPanel?.isOpen === true, 'fortune-teller'),
@@ -1312,14 +1259,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // an occupant is what ends the conversation — and the one every other
       // surface here is drawn over. Ranking it above them would hand Space and
       // Escape to the box underneath whatever the player is looking at.
-      {
-        isOpen: citizenDialog?.isOpen === true,
-        space: { kind: 'advance', advance: () => citizenDialog?.advance() },
-        locksKeyboard: true,
-        haltsWorld: false,
-        // Advance-anywhere: one speaker line, no buttons to reach.
-        focusContext: null,
-      },
+      this.conversation.overlayClaim(),
     ];
   }
 
@@ -1395,7 +1335,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.bus.on('crawlerKnockedOut', (e) => {
       e.player.applyCockroachKnockoutRelief();
       if (e.player === this.cat && this.human.isAlive && !this.human.isKnockedOut) {
-        this.crawlerBarks.say(this.human, [DONUT_KNOCKOUT_BARK]);
+        this.crawlerBarks.say(this.human, [CRAWLER_BARKS.donutKnockedOut.paragraphs[0]]);
       }
     });
     this.bus.on('mobKilled', (e) => {
@@ -1453,11 +1393,11 @@ export class BuildingInteriorScene extends GameplayScene {
   private drainWardExplainerBarks(): void {
     if (this.human.pendingWardExplainerBark) {
       this.human.pendingWardExplainerBark = false;
-      this.crawlerBarks.say(this.human, WARD_EXPLAINER_BARK_LINES);
+      this.crawlerBarks.say(this.human, barkTexts(CRAWLER_BARKS.wardExplainer.carl));
     }
     if (this.cat.pendingWardExplainerBark) {
       this.cat.pendingWardExplainerBark = false;
-      this.crawlerBarks.say(this.cat, WARD_EXPLAINER_BARK_LINES);
+      this.crawlerBarks.say(this.cat, barkTexts(CRAWLER_BARKS.wardExplainer.donut));
     }
   }
 
@@ -1482,7 +1422,14 @@ export class BuildingInteriorScene extends GameplayScene {
   private initEntryEncounter(circusProgress: CircusQuestProgress | undefined): void {
     if (this.entry.name === BIG_TOP_BUILDING_NAME && circusProgress?.stage === 'bigtop_ready') {
       this.startEncounter(GROUND_FLOOR_INDEX, (bus, addMob) => {
-        const maze = new BigTopMazeSystem(this.map, bus, addMob, circusProgress, this.audio);
+        const maze = new BigTopMazeSystem(
+          this.map,
+          bus,
+          addMob,
+          circusProgress,
+          this.audio,
+          this.conversation,
+        );
         this.bigTopMaze = maze;
         // The maze's fire is ground the companion has to be steered out of, the
         // same as a gas cloud or a boss's puddle.
@@ -1599,6 +1546,7 @@ export class BuildingInteriorScene extends GameplayScene {
         this.doomsdayProgress,
         this.partyLevel,
         this.companion,
+        this.conversation,
       );
       this.towerConfrontation = confrontation;
       return confrontation;
@@ -1692,21 +1640,21 @@ export class BuildingInteriorScene extends GameplayScene {
       this.audio?.playMusicPlaylist(musicTracks, { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS });
     }
 
-    // The Bopca's three-way order is picked with 1/2/3, which the hotbar also
-    // owns. Stopped rather than merely defaulted: the shared handler's
-    // suppression gate reads whether her dialog is open *after* this ran, and
-    // the choice that closes it — "leave" — would otherwise land on a hotbar
-    // slot on its way out.
-    this.bopcaKeyHandler = (e: KeyboardEvent) => {
+    // A conversation's numbered choices are picked with 1/2/3, which the hotbar
+    // also owns. Stopped rather than merely defaulted: the shared handler's
+    // suppression gate reads whether it is open *after* this ran, and the
+    // choice that closes it — "leave" — would otherwise land on a hotbar slot
+    // on its way out.
+    this.conversationKeyHandler = (e: KeyboardEvent) => {
       const taken =
         this.menus.constructionMenu.handleKey(e.key, e.repeat) ||
         this.menus.itemQuantityPicker.handleKey(e.key) ||
-        this.bopca?.handleKeyDown(e.key) === true;
+        this.conversation.handleKeyDown(e.key);
       if (!taken) return;
       e.preventDefault();
       e.stopImmediatePropagation();
     };
-    window.addEventListener('keydown', this.bopcaKeyHandler);
+    window.addEventListener('keydown', this.conversationKeyHandler);
 
     this.inputHandler.bind({
       isSuppressed: () => keyboardSuppressed(this.overlayClaims),
@@ -1743,7 +1691,7 @@ export class BuildingInteriorScene extends GameplayScene {
         if (this.bigTopMaze?.dismissDialog() === true) return true;
         if (this.towerConfrontation?.dismissDialog() === true) return true;
         if (this.safeRoom?.mordecaiDialogOpen === true) {
-          this.safeRoom.mordecaiDialogOpen = false;
+          this.conversation.dismiss();
           return true;
         }
         if (this.shop?.shopOpen === true) {
@@ -1772,12 +1720,11 @@ export class BuildingInteriorScene extends GameplayScene {
         // callback, so this branch has to decline while any of them is up —
         // otherwise Escape silently shuts the conversation underneath the modal
         // the player is actually looking at.
-        if (this.citizenDialog?.isOpen === true && !worldHalted(this.overlayClaims)) {
-          this.citizenDialog.close();
-          // Escape is a refusal, not a page turn: a menu queued behind the
-          // story must not open on the way out of it.
-          this.pendingServiceTalk = null;
-          this.releaseCitizenDialogTarget();
+        if (this.citizenDialogTarget !== null && !worldHalted(this.overlayClaims)) {
+          // `dismiss` rather than `close`: a service queued behind the story
+          // must not open on the way out of it, and `onDismissed` is what
+          // skips straight to unfreezing the target instead.
+          this.conversation.dismiss();
           return true;
         }
         return false;
@@ -1942,9 +1889,9 @@ export class BuildingInteriorScene extends GameplayScene {
     // A real <input> on document.body, which swallows every key it is focused
     // for. Left behind, it makes the scene that replaces this one unplayable.
     this.chat.dispose();
-    if (this.bopcaKeyHandler !== null) {
-      window.removeEventListener('keydown', this.bopcaKeyHandler);
-      this.bopcaKeyHandler = null;
+    if (this.conversationKeyHandler !== null) {
+      window.removeEventListener('keydown', this.conversationKeyHandler);
+      this.conversationKeyHandler = null;
     }
   }
 
@@ -1958,7 +1905,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private canOpenFollowerMenu(): boolean {
     if (this.followDisabled) return false;
-    return !worldHalted(this.overlayClaims) && this.citizenDialog?.isOpen !== true;
+    return !worldHalted(this.overlayClaims) && this.citizenDialogTarget === null;
   }
 
   /**
@@ -2155,7 +2102,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // a distance the player never walked. Ending the conversation outright is
     // what the dungeon does, and the mobile Switch button reaches this same
     // method, so both roads agree.
-    if (this.safeRoom !== null) this.safeRoom.mordecaiDialogOpen = false;
+    this.safeRoom?.closeMordecaiDialog();
     const wasHumanActive = this.human.isActive;
     this.pm.switchActive();
     // The crawler who just stopped being driven is now standing somewhere new,
@@ -2221,7 +2168,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private humanTalkSpeaker(): { x: number; y: number } | null {
     const citizen = this.citizenDialogTarget;
-    if (this.citizenDialog?.isOpen === true && citizen !== null) return citizen;
+    if (citizen !== null) return citizen;
     return this.safeRoom?.speakingMordecaiPosition ?? null;
   }
 
@@ -2311,6 +2258,10 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.exitMenuOpen) return;
     if (this.towerStairs?.menuOpen) return;
+    // Above every modal branch below: a conversation that halts the world is
+    // still the one thing that has to keep revealing and counting walk-away,
+    // and the branches below return before the world's own tick.
+    this.conversation.update({ x: this.active().x, y: this.active().y });
     // The dialogs below advance from the claim registry, on the key event
     // rather than from the held-key set: a polled advance on top of the handler's
     // would turn one press into two pages.
@@ -2378,19 +2329,11 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     this.gameStats.recordPlayedFrame();
     // Deliberately does not return: the player has to be able to walk while the
-    // box is up, because walking off is what dismisses it.
-    this.dismissCitizenDialogIfWalkedAway();
-    // Mordecai's conversation is the same shape, and ticked here for the same
-    // reason: the frame that moves the player is the frame that measures how far
-    // they have walked from him.
-    const talkingSafeRoom = this.safeRoom?.mordecaiDialogOpen === true ? this.safeRoom : null;
-    talkingSafeRoom?.tickDialog(this.active());
-    // Both conversations that reach here leave the world running, so his
-    // talking is advanced by his own tick below.
+    // box is up, because walking off is what dismisses it. Mordecai's own
+    // conversation is the shared one, already ticked above; this only measures
+    // whether the player has walked out of his room.
+    this.safeRoom?.tickMordecaiWalkAway(this.active());
     this.humanTalk.update(this.human, this.humanTalkSpeaker(), false);
-    if (this.resolvePendingServiceTalk()) return;
-    const conversationOpen = this.citizenDialog?.isOpen === true;
-    if (conversationOpen) this.citizenDialog.update();
 
     const player = this.active();
     // A cutscene drives both bodies itself. Every input below is withheld for
@@ -2416,7 +2359,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // its walk-away check has no way to be told the body changed, unlike
     // Mordecai's, which trySwitchActive closes on the way through.
     if (
-      !conversationOpen &&
+      this.citizenDialogTarget === null &&
       !scriptOwnsParty &&
       keybindings.isHeld(this.input, 'switchCharacter')
     ) {
@@ -2456,7 +2399,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     if (this.safeRoom && interactPressed() && this.safeRoom.isNearMordecai(player)) {
       keybindings.release(this.input, 'attack');
-      this.talkToMordecai();
+      this.talkToMordecai(player);
     }
 
     // Store: open the shop when standing at the counter. Closing is the ladder's
@@ -2903,19 +2846,9 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.readablePanel.handleClick()) {
       return;
     }
-    if (this.bopca?.handleClick(mx, my) === true) {
-      return;
-    }
-    // His own box only, for the reason the citizen dialog below gives: his
-    // conversation floats over a live room, and on a phone a press on open
-    // ground is the move order the player leaves the room with.
-    if (this.safeRoom?.mordecaiDialogContains(mx, my) === true) {
-      this.safeRoom.advanceMordecaiDialog();
-      return;
-    }
     // Only the dialog's own box is consumed: a conversation does not halt the
     // world, so the bag can be open underneath it and its slots must stay live.
-    if (this.citizenDialog?.handleClick(mx, my) === true) {
+    if (this.conversation.handleClick(mx, my)) {
       return;
     }
     if (!this.menus.panelCovers(mx, my) && this.tryPressSummonButton(mx, my)) return;
@@ -3155,12 +3088,12 @@ export class BuildingInteriorScene extends GameplayScene {
    * are talkable on both.
    *
    * A named resident who also runs the service tells their story first: the
-   * lore conversation plays, and `pendingServiceTalk` opens the menu the moment
-   * it ends, so a player who came in for a drink is never more than one
+   * lore conversation plays, and its `ending` opens the menu the moment it is
+   * read, so a player who came in for a drink is never more than one
    * dismissal from one.
    */
   private tryTalkToOccupant(player: ReturnType<BuildingInteriorScene['active']>): boolean {
-    if (this.citizenDialog === null || this.occupants === null) return false;
+    if (this.occupants === null) return false;
     const target = this.occupants.findTalkTarget(player.x, player.y);
     if (target === null) return false;
     target.faceToward(player.x, player.y);
@@ -3188,16 +3121,33 @@ export class BuildingInteriorScene extends GameplayScene {
       return true;
     }
 
-    const lines =
+    const line =
       resident !== null
         ? buildResidentConversation(resident, turn, ctx)
         : buildCitizenConversation(target.role, target.appearance.seed, turn, ctx);
-    this.citizenDialog.open(resident?.name ?? roleDisplayName(target.role), lines);
     // Pinned for the same reason street citizens are: the conversation ends when
     // the *player* walks off, which only holds if the other party stays put.
     target.frozen = true;
     this.citizenDialogTarget = target;
-    this.pendingServiceTalk = sellsHere ? { target, turn, role: target.role } : null;
+    this.conversation.open({
+      lines: [line],
+      reward: null,
+      questRelated: false,
+      ending: {
+        kind: 'close',
+        onClosed: () => {
+          this.releaseCitizenDialogTarget();
+          if (sellsHere) this.openService(turn, resident, target.role);
+        },
+      },
+      dismiss: { kind: 'allowed', onDismissed: () => this.releaseCitizenDialogTarget() },
+      haltsWorld: false,
+      anchor: {
+        position: () => ({ x: target.x, y: target.y }),
+        radius: CONVERSATION_WALK_AWAY_TILES,
+      },
+      locksKeyboard: true,
+    });
     this.noteTalk(target, inDanger);
     return true;
   }
@@ -3231,33 +3181,6 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Opens the service menu queued behind a resident's story as soon as that
-   * story is dismissed. `SERVICE_MENU_GRACE_FRAMES` is what stops the press that
-   * closed the last page from also closing the menu it just opened.
-   *
-   * Returns whether it opened one, so `update` can end the frame there rather
-   * than running movement and exit-tile detection behind a modal that is now up.
-   */
-  private resolvePendingServiceTalk(): boolean {
-    const queued = this.pendingServiceTalk;
-    if (queued === null) return false;
-    if (this.citizenDialog?.isOpen === true) return false;
-
-    const target = queued.target;
-    this.pendingServiceTalk = null;
-    // Re-checked rather than assumed: the story can be dismissed on one side of
-    // the room and the key released on the other, and a counter you have walked
-    // away from should not throw its menu at you.
-    const player = this.active();
-    const distance = Math.hypot(player.x - target.x, player.y - target.y);
-    if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) return false;
-
-    const resident = target.residentId === null ? null : residentById(target.residentId);
-    this.openService(queued.turn, resident, queued.role);
-    return true;
-  }
-
-  /**
    * Whether the interact key is asking to close the open interior modal.
    *
    * Edge-triggered rather than level-triggered: the key must be seen released
@@ -3279,25 +3202,6 @@ export class BuildingInteriorScene extends GameplayScene {
     // just closed. Only a real release or a new press re-arms.
     this.interactArmed = false;
     return true;
-  }
-
-  /** Ends an occupant conversation once the player has plainly walked off. */
-  private dismissCitizenDialogIfWalkedAway(): void {
-    const target = this.citizenDialogTarget;
-    if (target === null) return;
-    if (this.citizenDialog?.isOpen !== true) {
-      this.releaseCitizenDialogTarget();
-      return;
-    }
-    const player = this.active();
-    const distance = Math.hypot(player.x - target.x, player.y - target.y);
-    if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) {
-      this.citizenDialog.close();
-      // Walking out mid-story is a refusal, not a queue: the shop must not
-      // ambush a player who left the counter.
-      this.pendingServiceTalk = null;
-      this.releaseCitizenDialogTarget();
-    }
   }
 
   private releaseCitizenDialogTarget(): void {
@@ -3474,12 +3378,12 @@ export class BuildingInteriorScene extends GameplayScene {
    * The tutorial's Mordecai never runs in here — it only exists in the dungeon —
    * so this is the two-way version of the dungeon's three-way chain.
    */
-  private talkToMordecai(): void {
+  private talkToMordecai(active: { x: number; y: number }): void {
     if (this.safeRoom === null) return;
 
-    const pages = this.mordecaiAdvisor.nextAdvice(this.circusAdviceSnapshot());
-    if (pages !== null) {
-      this.safeRoom.openMordecaiPages(pages);
+    const line = this.mordecaiAdvisor.nextAdvice(this.circusAdviceSnapshot());
+    if (line !== null) {
+      this.safeRoom.openMordecaiLine(active, line);
       return;
     }
 
@@ -3489,6 +3393,7 @@ export class BuildingInteriorScene extends GameplayScene {
       .sort((a, b) => a.secondsAgo - b.secondsAgo)
       .slice(0, RECENT_EVENTS_LIMIT);
     this.safeRoom.openMordecaiDialog(
+      active,
       aiAdapter.chatWithMordecai({
         recentEvents: merged,
         humanLevel: this.human.level,
@@ -3558,13 +3463,10 @@ export class BuildingInteriorScene extends GameplayScene {
    * a bug rather than as two options.
    */
   private renderCitizenPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.citizenDialog?.isOpen === true) return;
+    if (this.citizenDialogTarget !== null) return;
     if (worldHalted(this.overlayClaims)) return;
     const active = this.active();
-    const target =
-      this.citizenDialog === null
-        ? null
-        : (this.occupants?.findTalkTarget(active.x, active.y) ?? null);
+    const target = this.occupants?.findTalkTarget(active.x, active.y) ?? null;
     if (target !== null) {
       drawInteractionPrompt(
         ctx,
@@ -3586,7 +3488,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private tryReadNearby(player: ReturnType<BuildingInteriorScene['active']>): boolean {
     if (this.readables === null || this.readablePanel.isOpen) return false;
-    if (this.citizenDialog?.isOpen === true) return false;
+    if (this.citizenDialogTarget !== null) return false;
     const page = this.readables.findReadTarget(player.x, player.y);
     if (page === null) return false;
     this.readablePanel.openWith(page.readable);
@@ -3615,7 +3517,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private hasUntoldLore(target: Townsperson): boolean {
     if (target.residentId === null) return false;
     if (isTownInDanger(this.townDialogContext())) return false;
-    return this.turnFor(target) < residentById(target.residentId).lore.length;
+    return this.turnFor(target) < residentLinesFor(target.residentId).lore.length;
   }
 
   /**
@@ -3909,12 +3811,10 @@ export class BuildingInteriorScene extends GameplayScene {
         this.active(),
         this.bopca?.hasInteraction(this.active()) === true,
       );
-      if (this.safeRoom.mordecaiDialogOpen) this.safeRoom.renderMordecaiDialog(ctx);
     }
 
     if (this.bopca !== null) {
       this.bopca.renderUI(ctx, camX, camY, this.active());
-      this.bopca.renderDialog(ctx);
     }
     // Last of the world prompts; see the method for why.
     this.renderMercenaryPrompt(ctx, camX, camY);
@@ -3928,16 +3828,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.club.renderUI(ctx, this.active(), this.inactive());
     }
 
-    this.citizenDialog?.render(ctx);
+    this.conversation.render(ctx);
     this.servicePanel?.render(ctx, this.active(), this.inactive());
     this.readingPanel?.render(ctx, this.active(), this.inactive());
     this.readablePanel.render(ctx);
-    // Last of this group, because it outranks all three above it in
-    // `overlayClaims` and the focus ring goes to whoever declares it last. They
-    // are mutually exclusive in practice — the questline takes the counter
-    // before either service surface opens — but the two orders still have to
-    // agree, or the audit is measuring a coincidence.
-    this.anchorInterior?.renderUI(ctx);
 
     this.activeEncounter?.renderUI(ctx);
     this.soulCrystal.renderUI(ctx);
@@ -4381,7 +4275,7 @@ export class BuildingInteriorScene extends GameplayScene {
           const mordecaiWasOpen = this.safeRoom?.mordecaiDialogOpen === true;
           const dialogWasOpen =
             mordecaiWasOpen ||
-            this.citizenDialog?.isOpen === true ||
+            this.citizenDialogTarget !== null ||
             this.servicePanel?.isOpen === true ||
             this.readingPanel?.isOpen === true ||
             this.readablePanel.isOpen;
@@ -4435,7 +4329,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.bopca.tryInteract(this.active());
     }
     if (this.safeRoom !== null && !mordecaiWasOpen && this.safeRoom.isNearMordecai(this.active())) {
-      this.talkToMordecai();
+      this.talkToMordecai(this.active());
     }
     if (this.shop?.isNearShopkeeper(this.active()) === true) {
       this.shop.shopOpen = true;

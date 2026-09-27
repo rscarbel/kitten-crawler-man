@@ -3,8 +3,7 @@ import { getSkillDef } from '../core/SkillManager';
 import type { ItemId } from '../core/ItemDefs';
 import type { SkillBookReadRequest } from './InventoryInteraction';
 import type { AudioManager } from '../audio/AudioManager';
-import { wrapTextLines } from './canvasUtils';
-import { drawText } from './TextBox';
+import { drawText, wrapLines } from './TextBox';
 import { drawOverlay, drawModal } from './Box';
 import {
   beginMenuFocus,
@@ -156,10 +155,9 @@ export class SkillBookPrompt {
     // Re-wrapped when the panel width changes, so a window resize while the
     // prompt is up cannot leave the warning line floating off the body text.
     if (this.cachedBody?.width !== boxW) {
-      ctx.font = `${BODY_SIZE}px monospace`;
       this.cachedBody = {
         width: boxW,
-        lines: wrapTextLines(ctx, bodyText, boxW - BODY_WIDTH_MARGIN),
+        lines: wrapLines(ctx, bodyText, boxW - BODY_WIDTH_MARGIN, `${BODY_SIZE}px monospace`),
       };
     }
     const bodyLineCount = this.cachedBody.lines.length;

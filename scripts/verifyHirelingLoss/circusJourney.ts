@@ -57,6 +57,7 @@ import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
+import { Conversation } from '../../src/dialog/Conversation';
 
 /** How a gate reports; the caller owns the failure count. */
 export interface JourneyGateReporter {
@@ -304,6 +305,7 @@ function rebuildQuest(
     null,
     null,
     party.human,
+    new Conversation(null),
   );
 }
 

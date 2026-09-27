@@ -12,6 +12,18 @@ import {
   type WearableItem,
 } from '../core/ItemDefs';
 import { CRAWLER_NAMES, type CrawlerKind } from '../core/SkillManager';
+import {
+  MORDECAI_DEBRIEF_GEAR_CLOSING,
+  MORDECAI_DEBRIEF_HOARDER_CONGRATS,
+  MORDECAI_DEBRIEF_HUSHED_ALSO_LINE,
+  MORDECAI_DEBRIEF_HUSHED_ONLY_LINE,
+  MORDECAI_DEBRIEF_JUICER_CONGRATS,
+  MORDECAI_DEBRIEF_KRAKAREN_CONGRATS,
+  mordecaiDebriefBothBoxesLine,
+  mordecaiDebriefGearFirstSentence,
+  mordecaiDebriefGearMoreSentence,
+  mordecaiDebriefOneBoxLine,
+} from '../dialog/scripts/mordecai';
 
 /** In the order the spine meets them; {@link isSupersededDebrief} relies on it. */
 const DEBRIEF_BOSS_TYPES = ['the_hoarder', 'juicer', 'krakaren_clone'] as const;
@@ -253,31 +265,17 @@ export function reconcileDebriefMemory(memory: DebriefMemory, boxes: BoxCounts):
 }
 
 const CONGRATULATIONS = {
-  the_hoarder: [
-    "So. The Hoarder is dead, and the two of you aren't. I'll admit I had my doubts.",
-    "Don't let it go to your heads. She was a neighborhood boss. The dungeon noticed all the same, and the dungeon doesn't reward being noticed.",
-  ],
-  juicer: [
-    "The Juicer is dead. I'll admit I had my doubts about that one. He had help, and you still walked out.",
-    "Don't let it go to your heads. The dungeon noticed, and the dungeon doesn't reward being noticed. If either of you is still carrying that poison, sit down for a while.",
-  ],
-  krakaren_clone: [
-    "You killed the Krakaren Clone. I'll admit I had my doubts. That was no neighborhood nuisance.",
-    "It was only a copy. I'd keep that to yourselves if you ever meet anyone who remembers the original. And don't let it go to your heads. The dungeon noticed, and the dungeon doesn't reward being noticed.",
-  ],
+  the_hoarder: MORDECAI_DEBRIEF_HOARDER_CONGRATS,
+  juicer: MORDECAI_DEBRIEF_JUICER_CONGRATS,
+  krakaren_clone: MORDECAI_DEBRIEF_KRAKAREN_CONGRATS,
 } as const satisfies Record<DebriefBossType, ReadonlyArray<string>>;
-
-const WHERE_BOXES_OPEN = "They're under Achievements in the menu.";
 
 function boxesPage(boxes: BoxCounts): string {
   if (boxes.human > 0 && boxes.cat > 0) {
-    return `You both have loot boxes you haven't opened. You're in a safe room. This is the one place you can open them, so open them. ${WHERE_BOXES_OPEN}`;
+    return mordecaiDebriefBothBoxesLine();
   }
   const owner: CrawlerKind = boxes.human > 0 ? 'human' : 'cat';
-  const count = boxes[owner];
-  const sittingOn = count === 1 ? 'an unopened loot box' : 'unopened loot boxes';
-  const pronoun = count === 1 ? 'it' : 'them';
-  return `${CRAWLER_NAMES[owner]}, you're sitting on ${sittingOn}. Open ${pronoun} while you're somewhere nothing can kill you. ${WHERE_BOXES_OPEN}`;
+  return mordecaiDebriefOneBoxLine(CRAWLER_NAMES[owner], boxes[owner]);
 }
 
 function itemList(items: ReadonlyArray<UnwornItem>): string {
@@ -307,8 +305,8 @@ function gearSentences(recommendable: ReadonlyArray<UnwornItem>): GearSentence[]
       const name = CRAWLER_NAMES[owner];
       const text =
         index === 0
-          ? `${name} has ${itemList(group)} in ${CRAWLER_POSSESSIVES[owner]} bag.`
-          : `${name} is also carrying ${itemList(group)}.`;
+          ? mordecaiDebriefGearFirstSentence(name, CRAWLER_POSSESSIVES[owner], itemList(group))
+          : mordecaiDebriefGearMoreSentence(name, itemList(group));
       sentences.push({ text, itemCount: group.length });
     });
   }
@@ -331,20 +329,16 @@ function packGearPages(sentences: ReadonlyArray<GearSentence>): GearSentence[] {
   return pages;
 }
 
-export const HUSHED_ONLY_LINE = 'Donut, it looks like you have some unequipped items in your bag.';
-const HUSHED_ALSO_LINE = "Donut, there's something else unworn in your bag as well.";
-
 function gearPages(unworn: ReadonlyArray<UnwornItem>): string[] {
   const recommendable = unworn.filter((item) => !isHushed(item));
   const hasHushed = recommendable.length < unworn.length;
 
-  if (recommendable.length === 0) return hasHushed ? [HUSHED_ONLY_LINE] : [];
+  if (recommendable.length === 0) return hasHushed ? [MORDECAI_DEBRIEF_HUSHED_ONLY_LINE] : [];
 
   const packed = packGearPages(gearSentences(recommendable));
   // Count-neutral wording: many armour names are plural ("the Marching Boots").
-  const closing =
-    "Wear what you're carrying. The stat boosts are the point. Gear in a bag does nothing for anyone.";
-  const tail = hasHushed ? `${closing} ${HUSHED_ALSO_LINE}` : closing;
+  const closing = MORDECAI_DEBRIEF_GEAR_CLOSING;
+  const tail = hasHushed ? `${closing} ${MORDECAI_DEBRIEF_HUSHED_ALSO_LINE}` : closing;
 
   const pages = packed.map((page) => page.text);
   const lastPage = packed.length > 0 ? packed[packed.length - 1] : undefined;

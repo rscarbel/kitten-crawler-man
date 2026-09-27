@@ -2,22 +2,33 @@
  * Which line a Briar Hollow villager opens a conversation with, right now.
  *
  * Pure: the resolver reads a {@link VillagerContext} snapshot and returns the
- * circumstance to say, never touching the state it was built from. The
- * villager system builds the context, shows the line and then records what
- * the line spent (a one-shot flag, Wicker's hint cooldown) — which keeps the
+ * lines to say, never touching the state it was built from. The villager
+ * system builds the context, shows the lines and then records what the
+ * opening spent (a one-shot flag, Wicker's hint cooldown) — which keeps the
  * whole rule ladder drivable headlessly by the dialogue gate.
  *
- * Every line is looked up by circumstance in `ratkinDialogue.ts`; nothing here
- * types a word of dialogue.
+ * Every line is a property of a villager's own script under
+ * `src/dialog/scripts/briarHollow/`; nothing here types a word of dialogue.
  */
 
+import type { DialogLine, NonEmpty } from '../../dialog/line';
+import {
+  GARN,
+  MERRIT,
+  TIKKA,
+  VETCH,
+  WICKER,
+  isSoldierId,
+  type SoldierId,
+  type VillagerId,
+} from '../../dialog/scripts/briarHollow';
+import { SOLDIER_SCRIPTS, VILLAGER_SCRIPTS } from '../../dialog/villagerRegistry';
+import type { SoldierLines } from '../../dialog/roles';
 import type { ToolTier } from '../../core/toolTiers';
 import type { SoldierOrder, VillageQuestState } from '../../core/briarHollowState';
 import type { VillageQuestPhase } from '../../core/villageQuestPhase';
 import type { VillageUnlocks } from '../../core/villageUnlocks';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
-import { type Circumstance, type VillagerId, line, villagerEntry } from './ratkinDialogue';
-import type { ConversationController } from './villagerTopics';
 
 /** Seconds after an event during which a villager still brings it up. */
 export const RECENT_EVENT_SECONDS = 30;
@@ -35,11 +46,12 @@ export const LOW_SUPPLIES_THRESHOLD = 3;
 /** Construction levels at which Tikka remarks on what the builder can now do, lowest first. */
 const TIKKA_CONSTRUCTION_MILESTONES: ReadonlyArray<{
   readonly level: number;
-  readonly circumstance: Circumstance;
+  readonly flagSlug: string;
+  readonly line: DialogLine;
 }> = [
-  { level: 5, circumstance: 'spikes_unlocked' },
-  { level: 10, circumstance: 'level_10_construction' },
-  { level: 15, circumstance: 'level_15_construction' },
+  { level: 5, flagSlug: 'spikes_unlocked', line: TIKKA.spikesUnlocked },
+  { level: 10, flagSlug: 'level_10_construction', line: TIKKA.level10Construction },
+  { level: 15, flagSlug: 'level_15_construction', line: TIKKA.level15Construction },
 ];
 
 /** Phases in which the village is working toward the siege: everyone's `quest_active`. */
@@ -63,7 +75,7 @@ const SIEGE_PHASES: ReadonlySet<VillageQuestPhase> = new Set(['imminent', 'assau
 const VICTORY_PHASES: ReadonlySet<VillageQuestPhase> = new Set(['victory', 'complete']);
 
 /** The soldiers who call out a breach instead of the general alarm. */
-const BREACH_CALLERS: ReadonlySet<VillagerId> = new Set(['marta', 'hobb']);
+const BREACH_CALLERS: ReadonlySet<SoldierId> = new Set(['marta', 'hobb']);
 
 /** What a soldier is doing, as the resolver reads it: the standing orders, or at their post. */
 export type SoldierStance = SoldierOrder | 'post';
@@ -131,24 +143,43 @@ export type OpeningRule =
   | 'quest_active'
   | 'fallback';
 
-/** At least one page: an opening is always something to say. */
-export type OpeningPages = readonly [Circumstance, ...Circumstance[]];
+/** The lines an opening shows, in order — always at least one. */
+export type OpeningPages = NonEmpty<DialogLine>;
+
+/**
+ * What happens once an opening's pages have been read.
+ *   'root'  → the villager's own topics come up, freshly rebuilt.
+ *             `onEventualClose` runs whenever a later "Goodbye", walk-away or
+ *             Escape eventually ends the conversation; `null` when nothing does.
+ *   'close' → the conversation ends right there, with no menu after.
+ *             `onClosed` runs at that moment.
+ * Required on every opening, so a rung that needs a side effect once the
+ * conversation is done cannot forget to say when.
+ */
+export type OpeningAfter =
+  | { readonly kind: 'root'; readonly onEventualClose: (() => void) | null }
+  | { readonly kind: 'close'; readonly onClosed: () => void };
+
+/** An opening that says its pages and lets the villager's own topics come back up, with nothing to run once the talk eventually ends. */
+export const KEEP_TALKING: OpeningAfter = { kind: 'root', onEventualClose: null };
 
 export interface OpeningLine {
   readonly pages: OpeningPages;
   readonly rule: OpeningRule;
   /** The one-shot flag this opening spends, written once it has been shown. */
   readonly onceFlag?: string;
-  /** What the questline does as this opening is shown; see {@link QuestOpening.onShown}. */
-  readonly onShown?: (ctl: ConversationController) => void;
   /** Set when these pages matter for an active quest but offer the player no choice. */
   readonly questRelated?: boolean;
+  readonly after: OpeningAfter;
 }
 
 /**
  * The questline's say in who opens with what. Consulted after the siege lines
  * and the one-shots, before everything else; returning null leaves the
- * villager to the rest of the ladder.
+ * villager to the rest of the ladder. Any effect the questline does the
+ * instant this opening is chosen — teaching a skill, handing over an item —
+ * is the provider's own statement, run before it returns the opening, not a
+ * closure carried on the returned value.
  */
 export interface QuestLineProvider {
   lineFor(villager: VillagerId, ctx: VillagerContext): QuestOpening | null;
@@ -160,27 +191,18 @@ export interface QuestOpening {
   readonly pages: OpeningPages;
   /** Set when the opening must only ever be spoken once; recorded as it is shown. */
   readonly onceFlag?: string;
-  /**
-   * Runs once the conversation has opened on these pages: where the questline
-   * does what the lines announce — teaches the skill, hands over the reward,
-   * moves the phase on. Never run by the resolver, which only ever picks.
-   */
-  readonly onShown?: (ctl: ConversationController) => void;
   /** These pages belong to the quest being run; the conversation box wears the quest icon. */
   readonly questRelated?: boolean;
+  readonly after: OpeningAfter;
 }
 
 /** The flag a one-shot line is recorded under once spoken. */
-export function onceFlagFor(villager: VillagerId, circumstance: Circumstance): string {
-  return `${villager}:${circumstance}`;
+export function onceFlagFor(villager: VillagerId, flagSlug: string): string {
+  return `${villager}:${flagSlug}`;
 }
 
-function has(villager: VillagerId, circumstance: Circumstance): boolean {
-  return line(villager, circumstance) !== undefined;
-}
-
-function single(circumstance: Circumstance, rule: OpeningRule): OpeningLine {
-  return { pages: [circumstance], rule };
+function single(line: DialogLine, rule: OpeningRule): OpeningLine {
+  return { pages: [line], rule, after: KEEP_TALKING };
 }
 
 function secondsSince(ctx: VillagerContext, at: number | null): number | null {
@@ -192,16 +214,26 @@ function isRecent(ctx: VillagerContext, at: number | null): boolean {
   return elapsed !== null && elapsed <= RECENT_EVENT_SECONDS;
 }
 
-function siegeLine(villager: VillagerId, ctx: VillagerContext): Circumstance | null {
+function soldierScriptFor(villager: VillagerId): SoldierLines | null {
+  return isSoldierId(villager) ? SOLDIER_SCRIPTS[villager] : null;
+}
+
+function siegeLine(villager: VillagerId, ctx: VillagerContext): DialogLine | null {
   const phase = ctx.quest.phase;
   if (!SIEGE_PHASES.has(phase)) return null;
+  const script = VILLAGER_SCRIPTS[villager];
   if (phase === 'assault') {
-    if (has(villager, 'attack_started')) return 'attack_started';
-    if (ctx.breachExists && BREACH_CALLERS.has(villager) && has(villager, 'enemy_breach')) {
-      return 'enemy_breach';
+    if (script.attackStarted !== undefined) return script.attackStarted;
+    if (
+      ctx.breachExists &&
+      isSoldierId(villager) &&
+      BREACH_CALLERS.has(villager) &&
+      script.enemyBreach !== undefined
+    ) {
+      return script.enemyBreach;
     }
   }
-  return has(villager, 'attack_imminent') ? 'attack_imminent' : null;
+  return script.attackImminent ?? null;
 }
 
 /** Whether anyone in the party has reached `level` in Construction — a milestone, not a perk. */
@@ -209,68 +241,70 @@ function someoneReachedConstruction(party: VillagerPartyState, level: number): b
   return party.constructionLevels.human >= level || party.constructionLevels.cat >= level;
 }
 
-function pendingOneShot(villager: VillagerId, ctx: VillagerContext): Circumstance | null {
-  const unspent = (circumstance: Circumstance): boolean =>
-    !ctx.onceFlags.includes(onceFlagFor(villager, circumstance));
+function pendingOneShot(
+  villager: VillagerId,
+  ctx: VillagerContext,
+): { readonly line: DialogLine; readonly onceFlag: string } | null {
+  const unspent = (flagSlug: string): boolean =>
+    !ctx.onceFlags.includes(onceFlagFor(villager, flagSlug));
   if (villager === 'wicker' && ctx.events.firstWoodenWallBuilt && unspent('wooden_wall_built')) {
-    return 'wooden_wall_built';
+    return { line: WICKER.woodenWallBuilt, onceFlag: onceFlagFor(villager, 'wooden_wall_built') };
   }
   if (villager === 'tikka') {
     for (const milestone of TIKKA_CONSTRUCTION_MILESTONES) {
-      if (
-        someoneReachedConstruction(ctx.party, milestone.level) &&
-        unspent(milestone.circumstance)
-      ) {
-        return milestone.circumstance;
+      if (someoneReachedConstruction(ctx.party, milestone.level) && unspent(milestone.flagSlug)) {
+        return { line: milestone.line, onceFlag: onceFlagFor(villager, milestone.flagSlug) };
       }
     }
   }
   return null;
 }
 
-function recentEventLine(villager: VillagerId, ctx: VillagerContext): Circumstance | null {
+function recentEventLine(villager: VillagerId, ctx: VillagerContext): DialogLine | null {
   const { events, party } = ctx;
   if (villager === 'merrit') {
-    return isRecent(ctx, events.lastCowPetNearbyAt) ? 'cow_petted_nearby' : null;
+    return isRecent(ctx, events.lastCowPetNearbyAt) ? MERRIT.cowPettedNearby : null;
   }
   if (villager === 'garn') {
-    if (isRecent(ctx, events.lastDepositDepletedNearAt)) return 'deposit_depleted';
+    if (isRecent(ctx, events.lastDepositDepletedNearAt)) return GARN.depositDepleted;
     const lastStone = events.stoneAtLastTalk;
     const deliveredMore = lastStone !== null && party.stone > lastStone;
-    return party.stone >= STONE_DELIVERED_MIN && deliveredMore ? 'stone_delivered' : null;
+    return party.stone >= STONE_DELIVERED_MIN && deliveredMore ? GARN.stoneDelivered : null;
   }
   if (villager === 'wicker') {
     const sinceHint = secondsSince(ctx, events.lastStoneUpgradeHintAt);
     const hintCooledDown = sinceHint === null || sinceHint >= STONE_UPGRADE_HINT_COOLDOWN_SECONDS;
     const canUpgrade = ctx.woodenWallStanding && party.stone >= STONE_UPGRADE_HINT_MIN_STONE;
-    return canUpgrade && hintCooledDown ? 'stone_upgrade_available' : null;
+    return canUpgrade && hintCooledDown ? WICKER.stoneUpgradeAvailable : null;
   }
   if (villager === 'vetch') {
     const running = ctx.lowestStock !== null && ctx.lowestStock <= LOW_SUPPLIES_THRESHOLD;
-    return running ? 'low_supplies' : null;
+    return running ? VETCH.lowSupplies : null;
   }
   return null;
 }
 
 /** A soldier's line for their standing orders, falling back to the order's own command line. */
-function soldierStanceLine(villager: VillagerId, stance: SoldierStance): Circumstance | null {
-  const candidates: Readonly<Record<SoldierStance, readonly Circumstance[]>> = {
-    post: [],
-    follow: ['follow_active', 'command_follow'],
-    hold: ['stay_active', 'command_stay'],
-    patrol: ['patrol_active', 'command_patrol'],
-  };
-  return candidates[stance].find((circumstance) => has(villager, circumstance)) ?? null;
+function soldierStanceLine(script: SoldierLines, stance: SoldierStance): DialogLine | null {
+  switch (stance) {
+    case 'post':
+      return null;
+    case 'follow':
+      return script.followActive;
+    case 'hold':
+      return script.stayActive ?? script.commandStay;
+    case 'patrol':
+      return script.patrolActive ?? script.commandPatrol;
+  }
 }
 
 /**
  * The lines a villager says with no particular reason: their greeting and
  * their answers to the questions anyone might ask.
  */
-export function fallbackPool(villager: VillagerId): readonly Circumstance[] {
-  return villagerEntry(villager)
-    .dialogueOptions.map((option) => option.circumstance)
-    .filter((circumstance) => circumstance === 'first_meeting' || circumstance.startsWith('ask_'));
+export function fallbackPool(villager: VillagerId): OpeningPages {
+  const script = VILLAGER_SCRIPTS[villager];
+  return [script.firstMeeting, ...(script.fallbackQuestions ?? [])];
 }
 
 /**
@@ -299,7 +333,12 @@ export function openingLine(
 
   const oneShot = pendingOneShot(villager, ctx);
   if (oneShot !== null) {
-    return { pages: [oneShot], rule: 'one_shot', onceFlag: onceFlagFor(villager, oneShot) };
+    return {
+      pages: [oneShot.line],
+      rule: 'one_shot',
+      onceFlag: oneShot.onceFlag,
+      after: KEEP_TALKING,
+    };
   }
 
   const quest = questLines?.lineFor(villager, ctx) ?? null;
@@ -308,35 +347,35 @@ export function openingLine(
       pages: quest.pages,
       rule: 'quest',
       ...(quest.onceFlag === undefined ? {} : { onceFlag: quest.onceFlag }),
-      ...(quest.onShown === undefined ? {} : { onShown: quest.onShown }),
       ...(quest.questRelated === undefined ? {} : { questRelated: quest.questRelated }),
+      after: quest.after,
     };
   }
 
-  if (VICTORY_PHASES.has(ctx.quest.phase) && has(villager, 'after_victory')) {
-    return single('after_victory', 'victory');
+  const script = VILLAGER_SCRIPTS[villager];
+  if (VICTORY_PHASES.has(ctx.quest.phase) && script.afterVictory !== undefined) {
+    return single(script.afterVictory, 'victory');
   }
 
   const recent = recentEventLine(villager, ctx);
   if (recent !== null) return single(recent, 'recent');
 
-  if (ctx.talkCount === 0 && has(villager, 'first_meeting')) {
-    return single('first_meeting', 'first_meeting');
-  }
+  if (ctx.talkCount === 0) return single(script.firstMeeting, 'first_meeting');
 
   if (ctx.soldierStance !== null) {
-    if (!ctx.unlocks.soldierCommands && has(villager, 'orders_need_mayor')) {
-      return single('orders_need_mayor', 'orders_need_mayor');
+    const soldierScript = soldierScriptFor(villager);
+    if (soldierScript !== null) {
+      if (!ctx.unlocks.soldierCommands)
+        return single(soldierScript.ordersNeedMayor, 'orders_need_mayor');
+      const stance = soldierStanceLine(soldierScript, ctx.soldierStance);
+      if (stance !== null) return single(stance, 'soldier_stance');
     }
-    const stance = soldierStanceLine(villager, ctx.soldierStance);
-    if (stance !== null) return single(stance, 'soldier_stance');
   }
 
-  if (QUEST_ACTIVE_PHASES.has(ctx.quest.phase) && has(villager, 'quest_active')) {
-    return single('quest_active', 'quest_active');
+  if (QUEST_ACTIVE_PHASES.has(ctx.quest.phase) && script.questActive !== undefined) {
+    return single(script.questActive, 'quest_active');
   }
 
   const pool = fallbackPool(villager);
-  if (pool.length === 0) return single('first_meeting', 'fallback');
   return single(pool[ctx.talkCount % pool.length], 'fallback');
 }

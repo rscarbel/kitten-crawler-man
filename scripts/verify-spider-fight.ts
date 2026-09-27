@@ -114,6 +114,7 @@ import { makeStuck } from '../src/core/StatusEffect';
 import { SEPARATION_RADIUS } from '../src/systems/mobSeparation';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { SpiderQuestSystem, type SpiderQuestCheckpoint } from '../src/systems/SpiderQuestSystem';
+import { Conversation } from '../src/dialog/Conversation';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { SFX_GROUPS, sfxGroupsForLevelId } from '../src/audio/sfxGroups';
 import type { SoundId } from '../src/audio/sounds';
@@ -623,9 +624,14 @@ function buildLab(options: LabOptions): Lab {
 
   let quest: SpiderQuestSystem | null = null;
   if (options.withQuest) {
-    quest = new SpiderQuestSystem(map, bus, (mob) => {
-      roster.add(mob);
-    });
+    quest = new SpiderQuestSystem(
+      map,
+      bus,
+      (mob) => {
+        roster.add(mob);
+      },
+      new Conversation(null),
+    );
     const base = quest.captureCheckpoint();
     const fightCheckpoint: SpiderQuestCheckpoint = {
       ...base,
@@ -1500,9 +1506,14 @@ function cutsceneSpitPlaysThrough(): void {
     withQuest: false,
   });
   lab.spider.hp = 0;
-  const quest = new SpiderQuestSystem(lab.map, new EventBus(), (mob) => {
-    lab.roster.add(mob);
-  });
+  const quest = new SpiderQuestSystem(
+    lab.map,
+    new EventBus(),
+    (mob) => {
+      lab.roster.add(mob);
+    },
+    new Conversation(null),
+  );
   Reflect.set(quest, 'phase', 'cutscene');
   let spider: GrotesqueSpider | null = null;
   const framesInFlight: number[] = [];
@@ -4892,7 +4903,7 @@ function generatedLabSite(side: DoorSide): LabSite | null {
     // judged on a map the quest has already furnished.
     const probe = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: cloneGrid(template) });
     probe.spiderLabRoom = room;
-    new SpiderQuestSystem(probe, new EventBus(), () => undefined).dispose();
+    new SpiderQuestSystem(probe, new EventBus(), () => undefined, new Conversation(null)).dispose();
     const humanStart = nearestOpenTile(probe, entry, []);
     const catStart = nearestOpenTile(probe, beside, [humanStart]);
     return {

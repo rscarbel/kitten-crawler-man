@@ -40,7 +40,9 @@ import { MazeBlockTarget } from '../creatures/MazeBlockTarget';
 import type { MazePropTarget } from '../creatures/MazePropTarget';
 import { MazeBellTarget } from '../creatures/MazeBellTarget';
 import { MazeMirrorTarget } from '../creatures/MazeMirrorTarget';
-import { QuestDialog, type DialogPage } from '../ui/QuestDialog';
+import type { Conversation } from '../dialog/Conversation';
+import type { ConversationHandle } from '../dialog/request';
+import type { DialogLine, NonEmpty } from '../dialog/line';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawText } from '../ui/TextBox';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -118,15 +120,15 @@ import {
   type VentSchedule,
 } from '../map/bigTopMazeLayout';
 import {
-  ACT_TWO_CARD,
-  ACT_THREE_CARD,
-  BURNOUT_FIRE_DIALOG,
-  BURNOUT_LIMELIGHT_DIALOG,
-  BURNOUT_SPOTLIGHT_DIALOG,
-  GRIMALDI_CURE_DIALOG,
-  GRIMALDI_FREED_DIALOG,
-  LAST_ACT_DIALOG,
-} from './circusQuestDialogs';
+  BIGTOP_ACT_TWO_CARD,
+  BIGTOP_ACT_THREE_CARD,
+  BIGTOP_BURNOUT_FIRE,
+  BIGTOP_BURNOUT_LIMELIGHT,
+  BIGTOP_BURNOUT_SPOTLIGHT,
+  BIGTOP_GRIMALDI_CURE,
+  BIGTOP_GRIMALDI_FREED,
+  BIGTOP_LAST_ACT,
+} from '../dialog/scripts/scenes/bigTop';
 import { SAWDUST_FLOOR } from '../map/tileTypes';
 import { drawOverlay } from '../ui/Box';
 
@@ -301,17 +303,22 @@ const ACT_ONE_BOARD_ROW = 86;
 /** What put a crawler back at the top of the act. */
 type BurnoutCause = 'fire' | 'spotlight' | 'limelight';
 
-const BURNOUT_DIALOGS: Readonly<Record<BurnoutCause, ReadonlyArray<DialogPage>>> = {
-  fire: BURNOUT_FIRE_DIALOG,
-  spotlight: BURNOUT_SPOTLIGHT_DIALOG,
-  limelight: BURNOUT_LIMELIGHT_DIALOG,
+interface MazeConversationBeat {
+  readonly lines: NonEmpty<DialogLine>;
+  readonly questRelated: boolean;
+}
+
+const BURNOUT_DIALOGS: Readonly<Record<BurnoutCause, MazeConversationBeat>> = {
+  fire: { lines: BIGTOP_BURNOUT_FIRE, questRelated: false },
+  spotlight: { lines: BIGTOP_BURNOUT_SPOTLIGHT, questRelated: false },
+  limelight: { lines: BIGTOP_BURNOUT_LIMELIGHT, questRelated: false },
 };
 
-/** The one-page card each act opens with, shown once as its curtains part. */
-const ACT_CARDS: Readonly<Partial<Record<MazeSectionId, ReadonlyArray<DialogPage>>>> = {
-  menagerie: ACT_TWO_CARD,
-  mirrors: ACT_THREE_CARD,
-  finale: LAST_ACT_DIALOG,
+/** The card each act opens with, shown once as its curtains part. */
+const ACT_CARDS: Readonly<Partial<Record<MazeSectionId, MazeConversationBeat>>> = {
+  menagerie: { lines: BIGTOP_ACT_TWO_CARD, questRelated: false },
+  mirrors: { lines: BIGTOP_ACT_THREE_CARD, questRelated: false },
+  finale: { lines: BIGTOP_LAST_ACT, questRelated: true },
 };
 
 /**
@@ -421,13 +428,22 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
   private bannerTitle = BIGTOP_ENTRY_BANNER;
   private bannerSubtitle: string | null = BIGTOP_ENTRY_SUBTITLE;
 
-  private readonly dialog: QuestDialog;
+  /** Which kind of beat `openBeatHandle` belongs to, once opened. */
+  private openBeatKind: 'none' | 'interlude' | 'cure' = 'none';
+  /** The handle the currently-open beat was returned, if any. */
+  private openBeatHandle: ConversationHandle | null = null;
+
   /**
-   * Kept apart from the cure's box rather than shared with it, because the two
-   * answer Escape in opposite ways: the cure may not be dismissed at all, and
-   * this one is nothing but a dismissal.
+   * Which kind of beat, if any, is currently showing on the shared
+   * conversation — `'none'` once it has closed, however it closed. Kept
+   * apart from a plain open/closed flag because the two answer Escape in
+   * opposite ways: `'cure'` may not be dismissed at all, and `'interlude'`
+   * is nothing but a dismissal.
    */
-  private readonly interludeDialog: QuestDialog;
+  private get openBeat(): 'none' | 'interlude' | 'cure' {
+    if (this.openBeatHandle === null) return 'none';
+    return this.conversation.isActive(this.openBeatHandle) ? this.openBeatKind : 'none';
+  }
 
   /** Polled and cleared by the scene, which owns the door out. */
   exitPending = false;
@@ -447,9 +463,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     private readonly addMob: (mob: Mob) => void,
     private readonly progress: CircusQuestProgress,
     private readonly audio: AudioManager | null,
+    private readonly conversation: Conversation,
   ) {
-    this.dialog = new QuestDialog(audio);
-    this.interludeDialog = new QuestDialog(audio);
     this.hotBeamTiles = this.computeHotSpans();
     this.hotBeamKeys = new Set(this.hotBeamTiles.map((tile) => tileKeyOf(tile.x, tile.y)));
     this.dressing = buildBigTopDressing(bigTopWallAt(this.map));
@@ -500,11 +515,13 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
   // ── Public surface consumed by BuildingInteriorScene ───────────────────────
 
   get isDialogOpen(): boolean {
-    return this.dialog.isOpen || this.interludeDialog.isOpen;
+    return this.openBeat !== 'none';
   }
 
   advanceDialog(): boolean {
-    return this.interludeDialog.advance() || this.dialog.advance();
+    if (this.openBeat === 'none') return false;
+    this.conversation.advance();
+    return true;
   }
 
   /**
@@ -518,11 +535,42 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
    * party has already been moved, and it is pure explanation.
    */
   dismissDialog(): boolean {
-    return this.interludeDialog.dismiss();
+    if (this.openBeat !== 'interlude') return false;
+    return this.conversation.dismiss();
   }
 
   handleClick(mx: number, my: number): boolean {
-    return this.interludeDialog.handleClick(mx, my) || this.dialog.handleClick(mx, my);
+    if (this.openBeat === 'none') return false;
+    return this.conversation.handleClick(mx, my);
+  }
+
+  /** Opens a beat on the shared conversation. `onClosed` fires once its last page is read. */
+  private openConversation(
+    kind: 'interlude' | 'cure',
+    lines: NonEmpty<DialogLine>,
+    onClosed: () => void,
+    questRelated: boolean,
+  ): void {
+    this.openBeatKind = kind;
+    this.openBeatHandle = this.conversation.open({
+      lines,
+      reward: null,
+      questRelated,
+      ending: {
+        kind: 'close',
+        onClosed,
+      },
+      dismiss:
+        kind === 'interlude'
+          ? {
+              kind: 'allowed',
+              onDismissed: () => undefined,
+            }
+          : { kind: 'blocked' },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
   }
 
   /**
@@ -763,7 +811,13 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     // [STAND-IN] The llama's fireball burst is the library's closest thing to a
     // body going up, until a scorch-and-drop cue is sourced.
     this.cue('llama_fireball_explosion');
-    this.interludeDialog.open(BURNOUT_DIALOGS[cause], () => undefined);
+    const burnoutBeat = BURNOUT_DIALOGS[cause];
+    this.openConversation(
+      'interlude',
+      burnoutBeat.lines,
+      () => undefined,
+      burnoutBeat.questRelated,
+    );
   }
 
   /**
@@ -881,7 +935,9 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       this.currentSectionId = curtain.opens;
       this.showBanner(this.currentSection.banner, null);
       const card = ACT_CARDS[curtain.opens];
-      if (card !== undefined) this.interludeDialog.open(card, () => undefined);
+      if (card !== undefined) {
+        this.openConversation('interlude', card.lines, () => undefined, card.questRelated);
+      }
       return;
     }
   }
@@ -1046,7 +1102,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     // every frame and long stale by the time the box closes.
     const human = ctx.human;
     const cat = ctx.cat;
-    this.dialog.open(GRIMALDI_CURE_DIALOG, () => this.beginCure(human, cat));
+    this.openConversation('cure', BIGTOP_GRIMALDI_CURE, () => this.beginCure(human, cat), true);
   }
 
   private beginCure(human: HumanPlayer, cat: Player): void {
@@ -1088,7 +1144,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     // and a reset notice are closed by the player, and everything below would
     // otherwise run behind one: a vent whooshes on the frame the box goes away
     // for fire that finished burning long before.
-    if (this.interludeDialog.isOpen) return;
+    if (this.openBeat === 'interlude') return;
 
     this.updateCurtains(ctx);
 
@@ -1222,7 +1278,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
         if (this.beatFrame >= CS_CURE_FRAMES) {
           this.beat = 'freed';
           this.beatFrame = 0;
-          this.dialog.open(GRIMALDI_FREED_DIALOG, () => this.leaveTheTent());
+          this.openConversation('cure', BIGTOP_GRIMALDI_FREED, () => this.leaveTheTent(), true);
         }
         break;
       }
@@ -1848,8 +1904,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
         alpha: (this.flashFrames / BURNOUT_FLASH_FRAMES) * BURNOUT_FLASH_PEAK_ALPHA,
       });
     }
-    this.dialog.render(ctx);
-    this.interludeDialog.render(ctx);
+    // Drawn through the scene's shared conversation panel.
 
     if (this.bannerTimer > 0) {
       const alpha =

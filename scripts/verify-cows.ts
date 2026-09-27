@@ -78,6 +78,7 @@ import {
   LivestockSystem,
   PANIC_RADIUS_TILES,
 } from '../src/systems/briarHollow/LivestockSystem';
+import { Conversation } from '../src/dialog/Conversation';
 import { cowFigure } from '../src/sprites/art/cowFigure';
 import type { CowAge, CowCoatId } from '../src/sprites/cowSprite';
 import {
@@ -1050,6 +1051,7 @@ function routingSection(): void {
     state: createBriarHollowState(),
     menus: new MenusKit({ world: sceneWorld, abilityManager: new AbilityManager() }),
     audio: null,
+    conversation: new Conversation(null),
     keybindings,
     groundPickups: new GroundPickupSystem(map),
     dynamite: new DynamiteSystem(map),

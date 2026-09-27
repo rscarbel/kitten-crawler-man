@@ -61,9 +61,11 @@ import {
   tilesFromPalisade,
   tilesOutsideRect,
 } from '../src/systems/briarHollow/soldierPosts';
-import { type Circumstance, line, villagerEntry } from '../src/systems/briarHollow/ratkinDialogue';
-import type { ConversationController } from '../src/systems/briarHollow/villagerTopics';
+import { SOLDIER_SCRIPTS } from '../src/dialog/villagerRegistry';
+import type { DialogLine } from '../src/dialog/line';
+import type { ConversationHandle } from '../src/dialog/request';
 import { VillagerSystem } from '../src/systems/briarHollow/VillagerSystem';
+import { Conversation } from '../src/dialog/Conversation';
 
 installCanvasGlobals();
 
@@ -170,8 +172,6 @@ const HOLD_ATTACKERS = 4;
 const HOLD_SHOVE_SLACK_TILES = 0.5;
 /** How long a patroller is given to walk its whole loop at least once. */
 const PATROL_LOOP_SECONDS = 90;
-/** How long each patroller is listened to for its remark on finishing a loop. */
-const PATROL_RETURN_LISTEN_SECONDS = 45;
 /** How long a fight may run before it is called a draw — and a draw is not a win. */
 const FIGHT_TIMEOUT_SECONDS = 120;
 /** Where the undead start, tiles from the soldier. */
@@ -256,6 +256,7 @@ function makeRig(
     state,
     bus,
     audio: null,
+    conversation: new Conversation(null),
     party: () => ({
       hpFractions: { human: 1, cat: 1 },
       stone: 0,
@@ -370,19 +371,13 @@ function openPatch(): TilePoint {
   throw new Error('no open patch of ground near the village');
 }
 
-/** A recording controller: every circumstance a topic says, in order. */
-function recorder(said: Circumstance[], villager: RatkinSoldierId): ConversationController {
+/** A recording handle: every line a topic plays, in order. */
+function recorder(said: DialogLine[]): ConversationHandle {
   return {
-    villager,
-    say: (...circumstances) => {
-      said.push(...circumstances);
-      return true;
+    play: (request) => {
+      for (const line of request.lines) if ('paragraphs' in line) said.push(line);
     },
-    showTopics: () => undefined,
-    showRootTopics: () => undefined,
     close: () => undefined,
-    endAfterPages: () => undefined,
-    afterClose: () => undefined,
   };
 }
 
@@ -392,17 +387,17 @@ function giveOrder(
   id: RatkinSoldierId,
   key: string,
   talker: HumanPlayer | CatPlayer = rig.human,
-): Circumstance[] {
+): DialogLine[] {
   const soldier = soldierOf(rig, id);
   rig.soldiers.talkTo(soldier, talker);
   const ctx = rig.villagers.contextFor(id, soldier, rig.soldiers.stanceOf(id));
   const topic = rig.villagers.rootTopicsFor(id, ctx).find((candidate) => candidate.key === key);
-  const said: Circumstance[] = [];
+  const said: DialogLine[] = [];
   if (topic === undefined) {
     check(false, `${id} offers the "${key}" order`);
     return said;
   }
-  topic.run(recorder(said, id));
+  topic.run(recorder(said));
   rig.villagers.closeConversation();
   return said;
 }
@@ -648,7 +643,10 @@ section('Follow: through the gate and out, within the band');
   place(rig, soldier, { x: site.gate.inside.x, y: site.gate.inside.y - 1 });
   tick(rig);
   const said = giveOrder(rig, id, 'soldier_follow');
-  check(said.includes('command_follow'), 'the follow order is answered with command_follow');
+  check(
+    said.includes(SOLDIER_SCRIPTS[id].commandFollow),
+    'the follow order is answered with command_follow',
+  );
   check(rig.soldiers.orderFor(id)?.followCrawler === 'human', 'the order follows whoever gave it');
   const out = { x: site.gate.outside.x, y: site.gate.outside.y + FOLLOW_WALK_OUT_TILES };
   const goal = gameMap.isWalkable(out.x, out.y) ? out : tileOutside(FOLLOW_WALK_OUT_TILES);
@@ -741,7 +739,10 @@ section('Follow: the village leash');
     releasedAt < 0 || crossedAt < 0 || releasedAt >= crossedAt,
     'and not before the crawler is past it',
   );
-  check(bark === line(id, 'follow_active'), `and says its follow line ("${bark ?? 'nothing'}")`);
+  check(
+    bark === SOLDIER_SCRIPTS[id].followActive.paragraphs[0],
+    `and says its follow line ("${bark ?? 'nothing'}")`,
+  );
   const post = rig.soldiers.posts.post[id].tile;
   tick(rig, HOME_WALK_SECONDS * UPDATES_PER_SECOND);
   check(
@@ -836,7 +837,10 @@ section('Hold never drifts');
   standAt(rig.human, { x: patch.x, y: patch.y - 1 });
   tick(rig);
   const said = giveOrder(rig, id, 'soldier_hold');
-  check(said.includes('command_stay'), 'the hold order is answered with command_stay');
+  check(
+    said.includes(SOLDIER_SCRIPTS[id].commandStay),
+    'the hold order is answered with command_stay',
+  );
   standAt(rig.human, { x: patch.x, y: patch.y - CRAWLER_CLEARANCE_TILES });
   standAt(rig.cat, { x: patch.x + 1, y: patch.y - CRAWLER_CLEARANCE_TILES });
   const anchor = { x: patch.x * TILE_SIZE, y: patch.y * TILE_SIZE };
@@ -872,7 +876,10 @@ section('Patrol routes are walks a soldier can take');
     const post = rig.soldiers.posts.post[id].tile;
     place(rig, soldier, post);
     const said = giveOrder(rig, id, 'soldier_patrol');
-    check(said.includes('command_patrol'), `${id}'s patrol order is answered with command_patrol`);
+    check(
+      said.includes(SOLDIER_SCRIPTS[id].commandPatrol),
+      `${id}'s patrol order is answered with command_patrol`,
+    );
     const order = rig.soldiers.orderFor(id);
     const route = order?.patrolRoute ?? [];
     check(order?.order === 'patrol', `${id} is on patrol`);
@@ -1182,142 +1189,6 @@ section('Knocked down, never killed');
   check(
     Math.abs(soldier.hp - Math.round(soldier.maxHp * HELP_UP_HP_SHARE)) <= 1,
     `with 30% of their health (${soldier.hp}/${soldier.maxHp})`,
-  );
-}
-
-// ── Lines ─────────────────────────────────────────────────────────────────
-
-section('Every soldier line is heard');
-{
-  const heard = new Set<string>();
-  const hear = (id: RatkinSoldierId, circumstance: Circumstance): void => {
-    heard.add(`${id}:${circumstance}`);
-  };
-  const hearBark = (soldier: RatkinSoldier): void => {
-    const text = soldier.speech.current;
-    if (text === null) return;
-    for (const option of villagerEntry(soldier.soldierId).dialogueOptions) {
-      if (option.text === text) hear(soldier.soldierId, option.circumstance);
-    }
-  };
-
-  // Before the Mayor's request is accepted, a soldier refuses orders outright.
-  {
-    const gateState = createBriarHollowState();
-    const gateRig = makeRig(gateState, () => 0);
-    gateState.quest.phase = 'unmet';
-    gateState.unlocks.soldierCommands = false;
-    for (const id of RATKIN_SOLDIER_IDS) {
-      const soldier = soldierOf(gateRig, id);
-      gateRig.soldiers.talkTo(soldier, gateRig.human);
-      // A first talk says "first_meeting" instead; talk again to reach the gate line.
-      gateRig.villagers.closeConversation();
-      gateRig.soldiers.talkTo(soldier, gateRig.human);
-      for (const page of gateRig.villagers.lastOpening?.pages ?? []) hear(id, page);
-      const ctx = gateRig.villagers.contextFor(id, soldier, gateRig.soldiers.stanceOf(id));
-      const offered = gateRig.villagers.rootTopicsFor(id, ctx);
-      check(offered.length === 0, `${id} offers no orders before the Mayor's request is accepted`);
-      gateRig.villagers.closeConversation();
-    }
-  }
-
-  // Openings through the real conversation: first meeting, then each stance.
-  const rig = makeRig(createBriarHollowState(), () => 0);
-  for (const id of RATKIN_SOLDIER_IDS) {
-    const soldier = soldierOf(rig, id);
-    const open = (): void => {
-      rig.soldiers.talkTo(soldier, rig.human);
-      for (const page of rig.villagers.lastOpening?.pages ?? []) hear(id, page);
-      rig.villagers.closeConversation();
-    };
-    open();
-    for (const key of ['soldier_follow', 'soldier_hold', 'soldier_patrol', 'soldier_post']) {
-      for (const said of giveOrder(rig, id, key)) hear(id, said);
-      open();
-    }
-  }
-  for (const phase of ['imminent', 'assault', 'victory'] as const) {
-    rig.state.quest.phase = phase;
-    if (phase === 'assault') {
-      rig.state.structures.push({
-        kind: 'segment',
-        id: site.segments[0].id,
-        tier: 'breach',
-        formerTier: 'wood',
-        builtBy: 'human',
-        hp: 0,
-        spikesHp: null,
-      });
-    }
-    for (const id of RATKIN_SOLDIER_IDS) {
-      rig.soldiers.talkTo(soldierOf(rig, id), rig.human);
-      for (const page of rig.villagers.lastOpening?.pages ?? []) hear(id, page);
-      rig.villagers.closeConversation();
-    }
-  }
-
-  // Barks, each from what raises it.
-  const barkRig = makeRig(createBriarHollowState(), () => 0);
-  const listen = (frames: number): void => {
-    for (let frame = 0; frame < frames; frame++) {
-      tick(barkRig);
-      for (const soldier of barkRig.soldiers.soldiers) hearBark(soldier);
-    }
-  };
-  barkRig.state.quest.phase = 'imminent';
-  listen(1);
-  barkRig.state.quest.phase = 'victory';
-  listen(1);
-  barkRig.state.quest.phase = 'fortifying';
-  listen(1);
-  barkRig.defense.strikeGate(null);
-  listen(1);
-  const sedge = soldierOf(barkRig, 'sedge');
-  const sedgeHome = tileOf(sedge);
-  const spotted = ghoulAt(barkRig, { x: sedgeHome.x + 2, y: sedgeHome.y });
-  standAt(barkRig.human, { x: sedgeHome.x, y: sedgeHome.y - 2 });
-  listen(UPDATES_PER_SECOND);
-  spotted.hp = 0;
-  barkRig.state.quest.phase = 'assault';
-  const inside = site.square.rect;
-  const intruder = ghoulAt(barkRig, { x: inside.x + 1, y: inside.y + 1 });
-  listen(UPDATES_PER_SECOND * 2);
-  intruder.hp = 0;
-  barkRig.state.quest.phase = 'fortifying';
-  // One at a time, with a crawler beside each: a patrol far from the party is
-  // frozen by the activation radius, as every soldier off screen is.
-  for (const id of RATKIN_SOLDIER_IDS) {
-    const soldier = soldierOf(barkRig, id);
-    const post = barkRig.soldiers.posts.post[id].tile;
-    place(barkRig, soldier, post);
-    standAt(barkRig.human, post);
-    barkRig.soldiers.orderPatrol(id);
-    listen(PATROL_RETURN_LISTEN_SECONDS * UPDATES_PER_SECOND);
-  }
-
-  const followRig = makeRig();
-  standAt(followRig.human, site.gate.inside);
-  place(followRig, soldierOf(followRig, 'pru'), {
-    x: site.gate.inside.x,
-    y: site.gate.inside.y - 1,
-  });
-  for (const id of RATKIN_SOLDIER_IDS) followRig.soldiers.orderFollow(id, followRig.human);
-  const far = tileOutside(VILLAGE_LEASH_TILES + LEASH_OVERSHOOT_TILES);
-  if (far !== null) standAt(followRig.human, far);
-  for (let frame = 0; frame < LEASH_REACTION_SECONDS * UPDATES_PER_SECOND; frame++) {
-    tick(followRig);
-    for (const soldier of followRig.soldiers.soldiers) hearBark(soldier);
-  }
-
-  const unheard: string[] = [];
-  for (const id of RATKIN_SOLDIER_IDS) {
-    for (const option of villagerEntry(id).dialogueOptions) {
-      if (!heard.has(`${id}:${option.circumstance}`)) unheard.push(`${id}:${option.circumstance}`);
-    }
-  }
-  check(
-    unheard.length === 0,
-    `every soldier circumstance is spoken (unheard: ${unheard.join(', ') || 'none'})`,
   );
 }
 

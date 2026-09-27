@@ -19,8 +19,23 @@ import {
 import { drawText } from '../ui/TextBox';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
-import { DialogBox } from '../ui/DialogBox';
-import type { AudioManager } from '../audio/AudioManager';
+import type { Conversation } from '../dialog/Conversation';
+import type { ConversationHandle, ConversationRequest } from '../dialog/request';
+import type { DialogLine } from '../dialog/line';
+import {
+  MORDECAI_TUTORIAL_FAREWELL,
+  MORDECAI_TUTORIAL_REMINDER_CALL_CAT,
+  MORDECAI_TUTORIAL_REMINDER_EQUIP_ABILITIES,
+  MORDECAI_TUTORIAL_REMINDER_FIND_STAIRWELL,
+  MORDECAI_TUTORIAL_REMINDER_FIRE_MISSILE,
+  MORDECAI_TUTORIAL_REMINDER_OPEN_ACHIEVEMENT,
+  MORDECAI_TUTORIAL_REMINDER_OPEN_CHEST,
+  MORDECAI_TUTORIAL_REMINDER_SET_UP_ITEMS,
+  MORDECAI_TUTORIAL_REMINDER_SMUSH_GUARDS,
+  MORDECAI_TUTORIAL_REMINDER_THROUGH_OPENING,
+  MORDECAI_TUTORIAL_REMINDER_TREASURE_ROOM,
+  MORDECAI_TUTORIAL_WELCOME,
+} from '../dialog/scripts/mordecai';
 import { drawArrowAbovePlayer, drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import type { ItemId } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
@@ -172,31 +187,33 @@ const GUIDE_ARROW_SIZE = 14;
 const GUIDE_ARROW_BOUNCE = 8;
 const GUIDE_ARROW_SPEED = 0.05;
 
-const MORDECAI_TUTORIAL_PAGES: ReadonlyArray<string> = [
-  'Welcome, adventurer! I am Mordecai, a changeling, and your guide through these dungeons. My form may shift from room to room, but I will be with you every step of your journey.',
-  'You will find me in every safe room you encounter. While inside a safe room, you cannot be harmed by any new attacks. Any enemy that strikes at you here will be instantly teleported back outside.',
-  'Walking into any safe room immediately saves your progress, so if you die, you will return to the state you were in when you last entered a safe room on that level.',
-  'This is a rather new addition to the dungeon that we have never seen before in previous games. They said it has something to do with this being a videogame or whatever.',
-  'Achievement rewards can only be opened inside a safe room. And it looks like you have one waiting right now! Go ahead and open it before pressing on.',
-];
-
-const MORDECAI_FAREWELL_PAGES: ReadonlyArray<string> = [
-  'Great job! Now I think you two are ready to take on the dungeon. Stay alive and find the stairwells to progress floors. You can find your first one just below this room. Good luck!',
-];
-
-// Short reminder Mordecai delivers when the player talks to him at a non-required step.
-const MORDECAI_REMINDER_TEXTS: Partial<Record<TutorialState, string>> = {
-  HUMAN_TALKED_TO_MORDECAI:
-    'Open your achievement notification first — tap the 🏆 banner on the left!',
-  HUMAN_OPENED_ACHIEVEMENT: 'Set up your items from the inventory menu, then come find me.',
-  HUMAN_EQUIPPED_SMUSH: 'Head east and use Smush (slot 1) to clear the guards.',
-  HUMAN_SMUSHED_GUARDS: 'Head through the opening. Your partner is waiting!',
-  USED_HEALTH_POTION: 'Head to the treasure room.',
-  CAT_INSIDE_TREASURE_ROOM: 'Open the chest!',
-  CAT_OPENED_TREASURE_BOX: 'Equip your new abilities from the inventory first.',
-  CAT_EQUIPPED_MAGIC_MISSILE: 'Fire your magic missile at the goblin through the gate!',
-  SWITCHED_TO_HUMAN: 'Use the Follower button to call the cat to you first.',
-  TALKED_TO_MORDECAI_AGAIN: 'Find the stairwell below this room and descend to begin!',
+/**
+ * The short reminder Mordecai delivers when the player talks to him at a
+ * non-required step — `null` at every step with a reminder of its own
+ * (`HUMAN_GETS_TO_SAFE_ROOM`, `CAT_ARRIVED`) or none intended at all.
+ */
+const MORDECAI_REMINDERS: Record<TutorialState, DialogLine | null> = {
+  SEPARATE_ROOMS: null,
+  HUMAN_MOVED: null,
+  HUMAN_NEAR_GOBLIN: null,
+  HUMAN_KILLED_GOBLIN: null,
+  HUMAN_GETS_TO_SAFE_ROOM: null,
+  HUMAN_TALKED_TO_MORDECAI: MORDECAI_TUTORIAL_REMINDER_OPEN_ACHIEVEMENT,
+  HUMAN_OPENED_ACHIEVEMENT: MORDECAI_TUTORIAL_REMINDER_SET_UP_ITEMS,
+  HUMAN_EQUIPPED_SMUSH: MORDECAI_TUTORIAL_REMINDER_SMUSH_GUARDS,
+  HUMAN_SMUSHED_GUARDS: MORDECAI_TUTORIAL_REMINDER_THROUGH_OPENING,
+  CAMERA_PAN_TO_CAT: null,
+  SWITCHED_TO_CAT: null,
+  CAT_MOVED: null,
+  USED_HEALTH_POTION: MORDECAI_TUTORIAL_REMINDER_TREASURE_ROOM,
+  CAT_INSIDE_TREASURE_ROOM: MORDECAI_TUTORIAL_REMINDER_OPEN_CHEST,
+  CAT_OPENED_TREASURE_BOX: MORDECAI_TUTORIAL_REMINDER_EQUIP_ABILITIES,
+  CAT_EQUIPPED_MAGIC_MISSILE: MORDECAI_TUTORIAL_REMINDER_FIRE_MISSILE,
+  CAT_SHOT_GUARD: null,
+  SWITCHED_TO_HUMAN: MORDECAI_TUTORIAL_REMINDER_CALL_CAT,
+  CAT_ARRIVED: null,
+  TALKED_TO_MORDECAI_AGAIN: MORDECAI_TUTORIAL_REMINDER_FIND_STAIRWELL,
+  COMPLETE: null,
 };
 
 // How far to raise the hint box above the hotbar on mobile for SWITCHED_TO_HUMAN,
@@ -436,11 +453,15 @@ export class TutorialController {
   // Near-goblin dialog state
   private _nearGoblinDialogDismissed = false;
 
-  // Tutorial Mordecai multi-page dialog state; null when not open
-  private _tutorialMordecaiPage: number | null = null;
+  // Which kind of Mordecai beat the handle below belongs to, so a shared
+  // `onMordecaiConversationClosed` can tell a tutorial page from a reminder.
+  private _mordecaiKind: 'none' | 'tutorial' | 'reminder' = 'none';
+  // The handle the open Mordecai conversation was returned, if any — `conversation.isActive`
+  // on it says whether that beat is still the one on screen.
+  private _mordecaiHandle: ConversationHandle | null = null;
 
-  // Shared dialog box — created once audio is available via setAudio()
-  private _dialogBox: DialogBox | null = null;
+  // The shared conversation this system opens Mordecai's lines on — wired in via setConversation()
+  private _conversation: Conversation | null = null;
 
   // Menu-guide step for HUMAN_OPENED_ACHIEVEMENT phase
   private _menuGuideStep: MenuGuideStep = 'drag_smush';
@@ -453,10 +474,6 @@ export class TutorialController {
 
   // True when the farewell Mordecai dialog is showing (CAT_ARRIVED → TALKED_TO_MORDECAI_AGAIN)
   private _inFarewellDialog = false;
-
-  // Short reminder Mordecai shows when the player talks to him at a non-required step
-  private _mordecaiReminderPages: ReadonlyArray<string> = [];
-  private _mordecaiReminderPage: number | null = null;
 
   private _pendingGateSound = false;
 
@@ -495,9 +512,9 @@ export class TutorialController {
     return new TutorialController(TutorialController.createMobs(TILE_SIZE));
   }
 
-  /** Wire in audio so the Mordecai dialog box can play typing sounds. */
-  setAudio(audio: AudioManager): void {
-    this._dialogBox = new DialogBox(audio, { speakerName: 'Mordecai', revealMode: 'sentence' });
+  /** Wire in the scene's shared conversation, which Mordecai's tutorial lines open on. */
+  setConversation(conversation: Conversation): void {
+    this._conversation = conversation;
   }
 
   // ── Public state accessors ────────────────────────────────────────────────
@@ -548,12 +565,19 @@ export class TutorialController {
 
   /** True when the tutorial multi-page Mordecai dialog should be shown (pauses game). */
   get showTutorialMordecaiDialog(): boolean {
-    return this._tutorialMordecaiPage !== null;
+    return this._mordecaiKind === 'tutorial' && this.isMordecaiConversationActive();
   }
 
   /** True when the short Mordecai reminder dialog is showing (pauses game). */
   get showMordecaiReminderDialog(): boolean {
-    return this._mordecaiReminderPage !== null;
+    return this._mordecaiKind === 'reminder' && this.isMordecaiConversationActive();
+  }
+
+  /** Whether the Mordecai beat this system opened is still the one on the shared box. */
+  private isMordecaiConversationActive(): boolean {
+    return (
+      this._mordecaiHandle !== null && (this._conversation?.isActive(this._mordecaiHandle) ?? false)
+    );
   }
 
   /** False until the player has spoken to Mordecai the second time (farewell). */
@@ -704,49 +728,35 @@ export class TutorialController {
     this._nearGoblinDialogDismissed = true;
   }
 
-  /** Close the current reminder page, or advance to the next page if multi-page. */
-  advanceMordecaiReminderDialog(): void {
-    if (this._mordecaiReminderPage === null) return;
-
-    if (this._dialogBox !== null && !this._dialogBox.isFullyRevealed()) {
-      this._dialogBox.skipToEnd();
-      return;
-    }
-
-    if (this._mordecaiReminderPage < this._mordecaiReminderPages.length - 1) {
-      this._mordecaiReminderPage++;
-      this._dialogBox?.show(this._mordecaiReminderPages[this._mordecaiReminderPage] ?? '');
+  /**
+   * The request's `ending.onClosed`: runs once the open conversation's last
+   * page has been read.
+   */
+  private onMordecaiConversationClosed(): void {
+    const kind = this._mordecaiKind;
+    this._mordecaiKind = 'none';
+    this._mordecaiHandle = null;
+    if (kind !== 'tutorial') return;
+    if (this._inFarewellDialog) {
+      this._inFarewellDialog = false;
+      this.advance('TALKED_TO_MORDECAI_AGAIN');
     } else {
-      this._mordecaiReminderPage = null;
-      this._dialogBox?.hide();
+      this.advance('HUMAN_TALKED_TO_MORDECAI');
     }
   }
 
-  /** Advance to the next Mordecai page, or close and advance state on the last page. */
-  advanceTutorialMordecaiDialog(): void {
-    if (this._tutorialMordecaiPage === null) return;
-
-    if (this._dialogBox !== null && !this._dialogBox.isFullyRevealed()) {
-      this._dialogBox.skipToEnd();
-      return;
-    }
-
-    const pages = this._inFarewellDialog ? MORDECAI_FAREWELL_PAGES : MORDECAI_TUTORIAL_PAGES;
-    if (this._tutorialMordecaiPage < pages.length - 1) {
-      this._tutorialMordecaiPage++;
-      this._dialogBox?.show(pages[this._tutorialMordecaiPage] ?? '', {
-        pageIndicator: { current: this._tutorialMordecaiPage + 1, total: pages.length },
-      });
-    } else {
-      this._tutorialMordecaiPage = null;
-      this._dialogBox?.hide();
-      if (this._inFarewellDialog) {
-        this._inFarewellDialog = false;
-        this.advance('TALKED_TO_MORDECAI_AGAIN');
-      } else {
-        this.advance('HUMAN_TALKED_TO_MORDECAI');
-      }
-    }
+  private mordecaiRequest(line: DialogLine): ConversationRequest {
+    return {
+      lines: [line],
+      reward: null,
+      questRelated: false,
+      ending: { kind: 'close', onClosed: () => this.onMordecaiConversationClosed() },
+      dismiss: { kind: 'blocked' },
+      haltsWorld: false,
+      anchor: null,
+      // A dialog the player pages through, over a floor that keeps running.
+      locksKeyboard: false,
+    };
   }
 
   private clearForTutorial(player: HumanPlayer | CatPlayer): void {
@@ -764,15 +774,9 @@ export class TutorialController {
     player.onInventoryChanged();
   }
 
-  /** Tick the dialog animation without running the full state machine update. */
-  tickDialog(): void {
-    this._dialogBox?.update();
-  }
-
   // ── Per-frame update
 
   update(human: HumanPlayer, cat: CatPlayer): void {
-    this._dialogBox?.update();
     this.stateFrames++;
     this.animFrame++;
     if (this._boxersDragHintTimer > 0) {
@@ -893,27 +897,24 @@ export class TutorialController {
   }
 
   onMordecaiInteracted(): boolean {
+    const conversation = this._conversation;
+    if (conversation === null) return false;
     if (this._state === 'HUMAN_GETS_TO_SAFE_ROOM') {
-      this._tutorialMordecaiPage = 0;
-      this._dialogBox?.show(MORDECAI_TUTORIAL_PAGES[0] ?? '', {
-        pageIndicator: { current: 1, total: MORDECAI_TUTORIAL_PAGES.length },
-      });
+      this._mordecaiKind = 'tutorial';
+      this._mordecaiHandle = conversation.open(this.mordecaiRequest(MORDECAI_TUTORIAL_WELCOME));
       return true;
     }
     if (this._state === 'CAT_ARRIVED') {
       this._inFarewellDialog = true;
-      this._tutorialMordecaiPage = 0;
-      this._dialogBox?.show(MORDECAI_FAREWELL_PAGES[0] ?? '', {
-        pageIndicator: { current: 1, total: MORDECAI_FAREWELL_PAGES.length },
-      });
+      this._mordecaiKind = 'tutorial';
+      this._mordecaiHandle = conversation.open(this.mordecaiRequest(MORDECAI_TUTORIAL_FAREWELL));
       return true;
     }
     // For all other tutorial states, show a short reminder instead of the regular AI dialog.
-    const reminderText = MORDECAI_REMINDER_TEXTS[this._state];
-    if (reminderText !== undefined) {
-      this._mordecaiReminderPages = [reminderText];
-      this._mordecaiReminderPage = 0;
-      this._dialogBox?.show(reminderText);
+    const reminder = MORDECAI_REMINDERS[this._state];
+    if (reminder !== null) {
+      this._mordecaiKind = 'reminder';
+      this._mordecaiHandle = conversation.open(this.mordecaiRequest(reminder));
       return true;
     }
     return false;
@@ -1346,7 +1347,7 @@ export class TutorialController {
     }
 
     if (this.showTutorialMordecaiDialog || this.showMordecaiReminderDialog) {
-      this._dialogBox?.render(ctx);
+      // Drawn by the scene's shared `Conversation`, not by this overlay.
       return;
     }
 

@@ -32,6 +32,7 @@ import { ToastStack } from '../ui/ToastStack';
 import { CAT_SPEECH_STYLE, TimedSpeech, drawTimedSpeechBubble } from '../sprites/speechBubble';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { MONGO_LINES } from '../dialog/scripts/mongo';
 
 /**
  * Mongo's lifecycle: summoning, recall, off-duty recovery and the summon button.
@@ -379,11 +380,11 @@ export class MongoSystem implements GameSystem {
     if (spawn === null) {
       // `canSummon` is true here, so the button looks live and the key is armed.
       // Refusing in silence is indistinguishable from a dropped input.
-      this.speak('No room for Mongo!');
+      this.speak(MONGO_LINES.noRoom.paragraphs[0]);
       return null;
     }
     const mongo = this.spawnAt(spawn, cat, gameMap);
-    this.speech.say('Go Mongo!');
+    this.speech.say(MONGO_LINES.summon.paragraphs[0]);
     return mongo;
   }
 
@@ -629,7 +630,7 @@ export class MongoSystem implements GameSystem {
       // off-duty-regen line, which is a speech bubble too, and the first of two
       // bubbles set on one frame is replaced before it is ever drawn.
       const despawned = this.finishDespawn(mobs, mobGrid);
-      this.speak('Mongo, come back!');
+      this.speak(MONGO_LINES.recall.paragraphs[0]);
       return despawned;
     }
 
@@ -645,7 +646,7 @@ export class MongoSystem implements GameSystem {
     // Whatever was chasing him was chasing him *there*. Left alone they beeline
     // to a tile he is no longer on for the rest of the floor.
     this.releaseTargeting(mobs, mongo);
-    this.speak('Mongo!');
+    this.speak(MONGO_LINES.arrived.paragraphs[0]);
     return false;
   }
 
@@ -740,7 +741,7 @@ export class MongoSystem implements GameSystem {
     this.mongo.killType = null;
     this.mongo.damageTakenBy.clear();
     if (alreadyRetreating) return;
-    this.speak('Mongo, come back!');
+    this.speak(MONGO_LINES.recall.paragraphs[0]);
     this.mongo.beginCollapse();
     this.releaseTargeting(this.retreatMobs, this.mongo);
   }
@@ -875,7 +876,7 @@ export class MongoSystem implements GameSystem {
       if (!this.mongo.recallArrived) this.mongo.requestRescue();
       return;
     }
-    this.speak('Mongo, come back!');
+    this.speak(MONGO_LINES.recall.paragraphs[0]);
     this.mongo.beginRecall();
     this.releaseTargeting(this.retreatMobs, this.mongo);
   }
@@ -969,7 +970,7 @@ export class MongoSystem implements GameSystem {
     if (this.hasExplainedOffDutyRegen) return;
     if (mongo.hp >= mongo.maxHp) return;
     this.hasExplainedOffDutyRegen = true;
-    this.speak('Rest up, Mongo.');
+    this.speak(MONGO_LINES.restUp.paragraphs[0]);
     this.announce('Mongo heals only while recalled');
   }
 

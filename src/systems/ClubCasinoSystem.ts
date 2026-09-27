@@ -70,7 +70,7 @@ import {
   CHIP_STACK_STEP as CHIP_STACK_STEP_FRACTION,
 } from '../ui/casino/ChipStack';
 import { BlackjackRulesOverlay } from '../ui/casino/BlackjackRulesOverlay';
-import { pickDeuceLine, type BanterTrigger } from '../ui/casino/deuceLines';
+import { pickDeuceLine, type BanterTrigger } from '../dialog/scripts/deuce';
 import { drawDeucePortrait, dealerStateFor, type DealerState } from '../sprites/casinoDealerSprite';
 
 const OVERLAY_ALPHA = 0.7;

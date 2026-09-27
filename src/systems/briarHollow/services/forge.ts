@@ -35,9 +35,10 @@ import { drawItemIcon } from '../../../ui/InventoryPanel';
 import { asPercent } from '../../../ui/itemEffectLines';
 import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
 import { partyCoins } from '../../../core/partyCoins';
-import type { Circumstance } from '../ratkinDialogue';
-import { villagerEntry } from '../ratkinDialogue';
-import type { ConversationController, ConversationTopic, TopicProvider } from '../villagerTopics';
+import { SPEAKERS } from '../../../dialog/speakers';
+import { OREN } from '../../../dialog/scripts/briarHollow';
+import type { ConversationRequest, ConversationTopic } from '../../../dialog/request';
+import type { TopicProvider, VillagerConversationFlow } from '../villagerTopics';
 import { onceFlagFor } from '../villagerCircumstances';
 import {
   type ServiceParty,
@@ -53,15 +54,6 @@ const FORGE_TITLE = 'Ironwhisker Forge';
 export const SMITH = 'oren';
 /** Shown in the price column of a tool already at its best tier. */
 const FINEST_LABEL = 'Finest';
-
-/** The grant and the lesson, as Oren says them, in order. */
-export const GRANT_AND_LESSON: readonly Circumstance[] = [
-  'grant_basic_tools',
-  'explain_resource_gathering',
-  'resourcing_skill_granted',
-  'directions_to_lumber_yard',
-  'directions_to_quarry',
-];
 
 /** The one-shot for Oren explaining, after the first upgrade, why one purchase serves both crawlers. */
 export const SHARED_UPGRADE_ONCE_FLAG = onceFlagFor(SMITH, 'shared_upgrade_explanation');
@@ -153,45 +145,43 @@ function partyStillListening(host: ForgeHost): boolean {
 
 /**
  * The grant's follow-up: the reward cards and the explainer, once the
- * conversation showing {@link GRANT_AND_LESSON} has closed.
+ * conversation showing {@link OREN.grantAndLesson} has closed.
  */
-function queueGrantFollowUp(host: ForgeHost, ctl: ConversationController): void {
-  ctl.afterClose(() => {
+function grantFollowUp(host: ForgeHost): () => void {
+  return () => {
     if (!partyStillListening(host)) return;
     for (const kind of TOOL_KINDS) host.enqueueReward(toolReward(kind));
     showExplainer(host);
-  });
+  };
 }
 
 /**
- * Grants the tools as the questline's own opening line for Oren, whose pages
- * are {@link GRANT_AND_LESSON} — already shown by the conversation panel
- * before this runs, so unlike {@link runToolsTopic} this never says them again.
+ * Grants the tools as the questline's own opening line for Oren, whose page
+ * is {@link OREN.grantBasicTools} — already shown by the conversation panel
+ * before this runs, so unlike {@link runToolsTopic} this never says it again.
+ * Returns the follow-up to run once the conversation eventually closes, or
+ * `null` when the party already had its tools and nothing was granted.
  */
-export function runOrenAutoGrant(host: ForgeHost, ctl: ConversationController): void {
-  if (partyOwnsTools(host.tools)) return;
+export function runOrenAutoGrant(host: ForgeHost): (() => void) | null {
+  if (partyOwnsTools(host.tools)) return null;
   grantToolsAndLesson(host);
-  queueGrantFollowUp(host, ctl);
+  return grantFollowUp(host);
 }
 
-function runToolsTopic(host: ForgeHost, ctl: ConversationController): void {
+function runToolsTopic(host: ForgeHost, flow: VillagerConversationFlow): ConversationRequest {
   if (!partyOwnsTools(host.tools)) {
     grantToolsAndLesson(host);
-    ctl.say(...GRANT_AND_LESSON);
-    queueGrantFollowUp(host, ctl);
-    return;
+    return flow.closeAfter([OREN.grantAndLesson], grantFollowUp(host));
   }
-  const pages: Circumstance[] = ['basic_tools_already_owned'];
-  if (!resourcingLearnedByBoth(host.party)) {
-    teachBoth(host.party.human, host.party.cat, 'resourcing');
-    pages.push('resourcing_skill_granted');
+  if (resourcingLearnedByBoth(host.party)) {
+    return flow.answer([OREN.basicToolsAlreadyOwned]);
   }
-  ctl.say(...pages);
-  if (!host.crafts.explainersSeen.includes('resourcing')) {
-    ctl.afterClose(() => {
-      if (partyStillListening(host)) showExplainer(host);
-    });
-  }
+  teachBoth(host.party.human, host.party.cat, 'resourcing');
+  const alreadySeen = host.crafts.explainersSeen.includes('resourcing');
+  if (alreadySeen) return flow.answer([OREN.basicToolsAlreadyOwned, OREN.resourcingSkillGranted]);
+  return flow.closeAfter([OREN.basicToolsAlreadyOwned, OREN.resourcingSkillGranted], () => {
+    if (partyStillListening(host)) showExplainer(host);
+  });
 }
 
 /** What a tier gets you, in the player's own terms: how much faster, and how much more per swing. */
@@ -230,16 +220,16 @@ function forgeBark(tools: PartyToolsState, buyerCoins: number): string {
     const next = nextToolTier(tools, kind);
     return next !== null && buyerCoins >= toolTierDef(kind, next).costCoins;
   };
-  if (affordable('axe')) return sellerLine(SMITH, 'axe_upgrade_available');
-  if (affordable('pickaxe')) return sellerLine(SMITH, 'pickaxe_upgrade_available');
-  return sellerLine(SMITH, 'shop_open');
+  if (affordable('axe')) return sellerLine(OREN.axeUpgradeAvailable);
+  if (affordable('pickaxe')) return sellerLine(OREN.pickaxeUpgradeAvailable);
+  return sellerLine(OREN.shopOpen);
 }
 
 export function buildForgeMenu(tools: PartyToolsState, buyerCoins: number): PricedMenu {
   return {
     title: FORGE_TITLE,
     bark: forgeBark(tools, buyerCoins),
-    byline: villagerEntry(SMITH).name,
+    byline: SPEAKERS.oren.name ?? undefined,
     options: TOOL_KINDS.map((kind) => upgradeOption(tools, kind)),
   };
 }
@@ -249,7 +239,7 @@ function kindOfOption(option: PricedOption): ToolKind | null {
 }
 
 function alreadyMaxLine(kind: ToolKind): string {
-  return sellerLine(SMITH, kind === 'axe' ? 'already_max_axe' : 'already_max_pickaxe');
+  return sellerLine(kind === 'axe' ? OREN.alreadyMaxAxe : OREN.alreadyMaxPickaxe);
 }
 
 export function forgePurchase(host: ForgeHost, option: PricedOption): PricedPurchaseResult {
@@ -260,11 +250,11 @@ export function forgePurchase(host: ForgeHost, option: PricedOption): PricedPurc
   host.partyTools.upgrade(kind, host.party.human, host.party.cat);
   host.playUpgradeSound();
   host.bus?.emit('toolUpgraded', { kind, tier: next });
-  const purchased = sellerLine(SMITH, 'upgrade_purchased');
+  const purchased = sellerLine(OREN.upgradePurchased);
   const onceFlags = host.state.onceFlags;
   if (onceFlags.includes(SHARED_UPGRADE_ONCE_FLAG)) return { ok: true, line: purchased };
   onceFlags.push(SHARED_UPGRADE_ONCE_FLAG);
-  return { ok: true, line: `${purchased} ${sellerLine(SMITH, 'shared_upgrade_explanation')}` };
+  return { ok: true, line: `${purchased} ${sellerLine(OREN.sharedUpgradeExplanation)}` };
 }
 
 export function forgeShop(host: ForgeHost): ShopDefinition {
@@ -275,7 +265,7 @@ export function forgeShop(host: ForgeHost): ShopDefinition {
     blockedLine: (option) => {
       const kind = kindOfOption(option);
       if (kind !== null && option.unavailable !== undefined) return alreadyMaxLine(kind);
-      return sellerLine(SMITH, 'cannot_afford_upgrade');
+      return sellerLine(OREN.cannotAffordUpgrade);
     },
   };
 }
@@ -287,25 +277,36 @@ export function forgeShop(host: ForgeHost): ShopDefinition {
  */
 export function forgeTopics(host: ForgeHost): TopicProvider {
   return {
-    topics(villager, ctx): readonly ConversationTopic[] {
+    topics(villager, ctx, flow): readonly ConversationTopic[] {
       if (villager !== SMITH) return [];
       const phase = ctx.quest.phase;
       if (!questAccepted(phase) || !shopTrades(phase)) return [];
       if (!partyOwnsTools(host.tools)) {
-        return [{ key: 'tools', label: 'Tools', run: (ctl) => runToolsTopic(host, ctl) }];
+        return [
+          {
+            key: 'tools',
+            label: 'Tools',
+            tone: 'normal',
+            repeatable: false,
+            grouping: 'root',
+            run: (convo) => convo.play(runToolsTopic(host, flow)),
+          },
+        ];
       }
       const teachAgain: ConversationTopic = {
         key: 'teach_again',
         label: 'Teach me again',
-        isQuestion: true,
-        run: (ctl) => {
-          ctl.say('resourcing_skill_already_granted');
-          ctl.afterClose(() => {
-            if (partyStillListening(host)) showExplainer(host);
-          });
-        },
+        tone: 'normal',
+        repeatable: false,
+        grouping: 'question',
+        run: (convo) =>
+          convo.play(
+            flow.closeAfter([OREN.resourcingSkillAlreadyGranted], () => {
+              if (partyStillListening(host)) showExplainer(host);
+            }),
+          ),
       };
-      return [shopTopic('upgrades', 'Shop', host, () => forgeShop(host)), teachAgain];
+      return [shopTopic('upgrades', 'Shop', host, () => forgeShop(host), flow), teachAgain];
     },
   };
 }

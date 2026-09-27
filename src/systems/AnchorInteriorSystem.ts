@@ -44,18 +44,22 @@ import { viewForFacing } from '../sprites/humanSprite';
 import { distinctSpawnTiles } from './interiorHostiles';
 import { ShrineVermin } from '../creatures/ShrineVermin';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
-import { QuestDialog, type DialogPage } from '../ui/QuestDialog';
+import type { Conversation } from '../dialog/Conversation';
+import type { DialogLine, NonEmpty } from '../dialog/line';
+import type { ConversationHandle } from '../dialog/request';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawWoodPileSprite } from '../sprites/questNPCSprite';
 import { platform } from '../core/Platform';
 import {
-  buildAvielProgressDialog,
-  buildAvielRequestDialog,
-  buildAvielRewardDialog,
-  buildHildaProgressDialog,
-  buildHildaRequestDialog,
-  buildHildaRewardDialog,
-} from './anchorQuestDialogs';
+  AVIEL_PROGRESS,
+  AVIEL_REQUEST_INTRO,
+  AVIEL_REQUEST_TERMS,
+  AVIEL_REWARD,
+  HILDA_PROGRESS,
+  HILDA_REQUEST_INTRO,
+  HILDA_REQUEST_TERMS,
+  HILDA_REWARD,
+} from '../dialog/scripts/scenes/anchor';
 
 export const HILDA_COTTAGE_NAME = "Old Hilda's Cottage";
 export const SKY_TEMPLE_NAME = 'Temple of the Sky';
@@ -122,13 +126,9 @@ const HIGHLIGHT_ALPHA_AMPLITUDE = 0.3;
 const HIGHLIGHT_PULSE_HZ = 2.2;
 const MS_PER_SECOND = 1000;
 
-/** Which conversation is on screen, so its completion knows what it agreed to. */
-type InteriorDialogKind = 'hilda_request' | 'hilda_reward' | 'aviel_request' | 'aviel_reward';
-
 export class AnchorInteriorSystem {
-  private readonly dialog: QuestDialog;
-  private dialogKind: InteriorDialogKind | null = null;
-  private dialogTaker: Player | null = null;
+  /** The handle this room's beat opened with, so `conversationOwned` can ask the shared box directly instead of tracking its own copy of that answer. */
+  private conversationHandle: ConversationHandle | null = null;
 
   /** Wrecks still standing broken in this visit, front of the list first. */
   private readonly wrecks: RepairableFurnishing[] = [];
@@ -150,9 +150,9 @@ export class AnchorInteriorSystem {
     private readonly crawlers: () => ReadonlyArray<Player>,
     private readonly addMob: (mob: Mob) => void,
     private readonly toast: (message: string) => void,
+    private readonly conversation: Conversation,
     private readonly audio: AudioManager | null,
   ) {
-    this.dialog = new QuestDialog(audio);
     if (this.buildingName === HILDA_COTTAGE_NAME) {
       this.breakHildasFurniture();
       // The pile is placed on the step starting, but the room is torn down and
@@ -180,11 +180,21 @@ export class AnchorInteriorSystem {
     crawlers: () => ReadonlyArray<Player>,
     addMob: (mob: Mob) => void,
     toast: (message: string) => void,
+    conversation: Conversation,
     audio: AudioManager | null,
   ): AnchorInteriorSystem | null {
     if (floor !== 0) return null;
     if (buildingName !== HILDA_COTTAGE_NAME && buildingName !== SKY_TEMPLE_NAME) return null;
-    return new AnchorInteriorSystem(buildingName, progress, map, crawlers, addMob, toast, audio);
+    return new AnchorInteriorSystem(
+      buildingName,
+      progress,
+      map,
+      crawlers,
+      addMob,
+      toast,
+      conversation,
+      audio,
+    );
   }
 
   // ── Hilda's room, on entry ────────────────────────────────────────────────
@@ -550,20 +560,92 @@ export class AnchorInteriorSystem {
 
   // ── The conversations ─────────────────────────────────────────────────────
 
+  /** Whether the shared conversation is currently showing one of this room's beats, rather than someone else's. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
+
   get isDialogOpen(): boolean {
-    return this.dialog.isOpen;
+    return this.conversationOwned;
   }
 
   advanceDialog(): boolean {
-    return this.dialog.advance();
+    if (!this.conversationOwned) return false;
+    this.conversation.advance();
+    return true;
   }
 
   dismissDialog(): boolean {
-    return this.dialog.dismiss();
+    if (!this.conversationOwned) return false;
+    return this.conversation.dismiss();
   }
 
   handleClick(mx: number, my: number): boolean {
-    return this.dialog.handleClick(mx, my);
+    if (!this.conversationOwned) return false;
+    return this.conversation.handleClick(mx, my);
+  }
+
+  /** Opens a beat on the shared conversation. Esc closes it without agreeing to anything. */
+  private openConversation(lines: NonEmpty<DialogLine>, onClosed: () => void): void {
+    this.conversationHandle = this.conversation.open({
+      lines,
+      reward: null,
+      questRelated: true,
+      ending: {
+        kind: 'close',
+        onClosed,
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
+  /**
+   * Opens a terms beat that ends on an accept/decline pair rather than a plain
+   * close: accepting runs `onAccepted`, declining leaves the step exactly where
+   * it was. Esc and walking away both decline without side effect.
+   */
+  private openTermsConversation(
+    lines: NonEmpty<DialogLine>,
+    accept: { readonly label: string; readonly onAccepted: () => void },
+    declineLabel: string,
+  ): void {
+    this.conversationHandle = this.conversation.open({
+      lines,
+      reward: null,
+      questRelated: true,
+      ending: {
+        kind: 'confirm',
+        keyboardDefault: 'accept',
+        accept: {
+          label: accept.label,
+          tone: 'quest',
+          run: (convo) => {
+            convo.close();
+            accept.onAccepted();
+          },
+        },
+        decline: {
+          label: declineLabel,
+          tone: 'exit',
+          run: (convo) => {
+            convo.close();
+          },
+        },
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
   }
 
   /**
@@ -572,89 +654,95 @@ export class AnchorInteriorSystem {
    * player gets when this returns false.
    */
   tryOpenDialog(residentId: ResidentId, talker: Player): boolean {
-    if (this.dialog.isOpen) return false;
+    if (this.conversationOwned) return false;
     if (this.progress.status !== 'active') return false;
-    const pages = this.pagesFor(residentId);
-    if (pages === null) return false;
-    this.dialogTaker = talker;
-    this.dialog.open(pages, () => this.onDialogComplete());
-    return true;
-  }
-
-  private pagesFor(residentId: ResidentId): DialogPage[] | null {
     if (residentId === 'old_hilda' && this.buildingName === HILDA_COTTAGE_NAME) {
-      return this.hildaPages();
+      return this.tryOpenHildaDialog(talker);
     }
     if (residentId === 'deacon_aviel' && this.buildingName === SKY_TEMPLE_NAME) {
-      return this.avielPages();
+      return this.tryOpenAvielDialog(talker);
     }
-    return null;
+    return false;
   }
 
-  private hildaPages(): DialogPage[] | null {
+  private tryOpenHildaDialog(talker: Player): boolean {
     if (this.progress.hilda === 'offered') {
-      this.dialogKind = 'hilda_request';
-      return buildHildaRequestDialog(HILDA_REPAIRS_REQUIRED, BOARDS_PER_REPAIR);
+      this.openTermsConversation(
+        [
+          HILDA_REQUEST_INTRO,
+          HILDA_REQUEST_TERMS({
+            boardsPerRepair: BOARDS_PER_REPAIR,
+            repairsRequired: HILDA_REPAIRS_REQUIRED,
+          }),
+        ],
+        {
+          label: "I'll do it",
+          onAccepted: () => {
+            this.progress.hilda = 'in_progress';
+            this.placeWoodPile();
+          },
+        },
+        'Later',
+      );
+      return true;
     }
     if (this.progress.hilda === 'in_progress') {
-      this.dialogKind = null;
-      return buildHildaProgressDialog(
-        this.progress.hildaRepairedTypes.length,
-        HILDA_REPAIRS_REQUIRED,
-        this.boardsHeld >= BOARDS_PER_REPAIR,
+      this.openConversation(
+        [
+          HILDA_PROGRESS({
+            repairsDone: this.progress.hildaRepairedTypes.length,
+            repairsRequired: HILDA_REPAIRS_REQUIRED,
+            holdsEnoughBoards: this.boardsHeld >= BOARDS_PER_REPAIR,
+          }),
+        ],
+        () => undefined,
       );
+      return true;
     }
     if (this.progress.hilda === 'shard_owed') {
-      this.dialogKind = 'hilda_reward';
-      return buildHildaRewardDialog();
+      this.openConversation(HILDA_REWARD, () => {
+        if (this.grantShard(talker, 'anchor_shard_hilda')) this.progress.hilda = 'done';
+      });
+      return true;
     }
-    return null;
+    return false;
   }
 
-  private avielPages(): DialogPage[] | null {
+  private tryOpenAvielDialog(talker: Player): boolean {
     if (this.progress.temple === 'offered') {
-      this.dialogKind = 'aviel_request';
-      return buildAvielRequestDialog();
+      this.openTermsConversation(
+        [AVIEL_REQUEST_INTRO, AVIEL_REQUEST_TERMS],
+        {
+          label: 'Consider it done',
+          onAccepted: () => {
+            this.progress.temple = 'in_progress';
+            this.spawnVermin(TEMPLE_VERMIN_COUNT);
+            // Read back how many actually found floor to stand on rather than
+            // trusting the count asked for — a nave with no room for any of
+            // them must not leave the step stuck at "in progress" with
+            // nothing left to hunt.
+            this.progress.templeVerminRemaining = this.vermin.length;
+            if (this.vermin.length === 0) this.progress.temple = 'shard_owed';
+          },
+        },
+        'Not now',
+      );
+      return true;
     }
     if (this.progress.temple === 'in_progress') {
-      this.dialogKind = null;
-      return buildAvielProgressDialog(this.progress.templeVerminRemaining);
+      this.openConversation(
+        [AVIEL_PROGRESS({ verminRemaining: this.progress.templeVerminRemaining })],
+        () => undefined,
+      );
+      return true;
     }
     if (this.progress.temple === 'shard_owed') {
-      this.dialogKind = 'aviel_reward';
-      return buildAvielRewardDialog();
+      this.openConversation(AVIEL_REWARD, () => {
+        if (this.grantShard(talker, 'anchor_shard_temple')) this.progress.temple = 'done';
+      });
+      return true;
     }
-    return null;
-  }
-
-  private onDialogComplete(): void {
-    const kind = this.dialogKind;
-    const taker = this.dialogTaker;
-    this.dialogKind = null;
-    this.dialogTaker = null;
-    if (kind === 'hilda_request') {
-      this.progress.hilda = 'in_progress';
-      this.placeWoodPile();
-      return;
-    }
-    if (kind === 'aviel_request') {
-      this.progress.temple = 'in_progress';
-      this.spawnVermin(TEMPLE_VERMIN_COUNT);
-      // Read back how many actually found floor to stand on rather than trusting
-      // the count asked for — a nave with no room for any of them must not leave
-      // the step stuck at "in progress" with nothing left to hunt.
-      this.progress.templeVerminRemaining = this.vermin.length;
-      if (this.vermin.length === 0) this.progress.temple = 'shard_owed';
-      return;
-    }
-    if (taker === null) return;
-    if (kind === 'hilda_reward') {
-      if (this.grantShard(taker, 'anchor_shard_hilda')) this.progress.hilda = 'done';
-      return;
-    }
-    if (kind === 'aviel_reward') {
-      if (this.grantShard(taker, 'anchor_shard_temple')) this.progress.temple = 'done';
-    }
+    return false;
   }
 
   /**
@@ -754,10 +842,6 @@ export class AnchorInteriorSystem {
       platform.isMobile ? 'Tap to repair' : 'Repair',
       platform.isMobile ? undefined : 'R',
     );
-  }
-
-  renderUI(ctx: CanvasRenderingContext2D): void {
-    this.dialog.render(ctx);
   }
 }
 

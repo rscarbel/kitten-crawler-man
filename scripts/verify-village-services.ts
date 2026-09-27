@@ -42,23 +42,27 @@ import { PricedMenuPanel } from '../src/ui/PricedMenuPanel';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
 import { QuantityPicker } from '../src/ui/QuantityPicker';
 import {
-  line,
-  type Circumstance,
+  FENNA,
+  OREN,
+  PIPKIN,
+  SELLA,
+  VETCH,
   type VillagerId,
-} from '../src/systems/briarHollow/ratkinDialogue';
+} from '../src/dialog/scripts/briarHollow';
+import type { BarkLine, DialogLine } from '../src/dialog/line';
 import { VillagerSystem } from '../src/systems/briarHollow/VillagerSystem';
+import { Conversation } from '../src/dialog/Conversation';
 import {
   openingLine,
   type VillagerPartyState,
 } from '../src/systems/briarHollow/villagerCircumstances';
-import type {
-  ConversationController,
-  ConversationTopic,
-} from '../src/systems/briarHollow/villagerTopics';
+import type { Choice, ConversationHandle, ConversationTopic } from '../src/dialog/request';
+import { testConversationFlow } from './dialogFlowTestHelpers';
 import { VillageServices } from '../src/systems/briarHollow/services/VillageServices';
-import type {
-  ServiceParty,
-  ShopDefinition,
+import {
+  sellerLine,
+  type ServiceParty,
+  type ShopDefinition,
 } from '../src/systems/briarHollow/services/serviceContext';
 import { cookShop } from '../src/systems/briarHollow/services/cookhouse';
 import {
@@ -83,6 +87,7 @@ import {
   initialBatch,
   lumberForemanTopics,
   runBatch,
+  CONSTRUCTION_EXPERIENCE_ONCE_FLAG,
   type LumberForemanHost,
 } from '../src/systems/briarHollow/services/lumberForeman';
 import { NEED_WOOD_LINE } from '../src/systems/briarHollow/services/sawmill';
@@ -111,10 +116,6 @@ function section(name: string): void {
 
 function last<T>(items: readonly T[]): T | undefined {
   return items[items.length - 1];
-}
-
-function say(villager: VillagerId, circumstance: Circumstance): string {
-  return line(villager, circumstance) ?? `<missing ${villager}:${circumstance}>`;
 }
 
 // ── The request's own numbers ─────────────────────────────────────────────
@@ -209,6 +210,7 @@ function buildRig(
     state,
     bus,
     audio: null,
+    conversation: new Conversation(null),
     party: () => partyState(human, cat, crafts),
     random: () => 0,
   });
@@ -263,47 +265,60 @@ function buildRig(
   return rig;
 }
 
-/** A controller that records what a topic says and does, instead of drawing it. */
+/** What a topic said and did, from a single `play(request)` on a recording handle. */
 interface Recording {
-  readonly ctl: ConversationController;
-  readonly said: Circumstance[];
-  submenu: readonly ConversationTopic[] | null;
+  readonly said: DialogLine[];
+  /** The choice row the play's ending brought up, or null when it closed instead. */
+  choices: readonly Choice[] | null;
+  /** Whether the box the topic played closes once its pages are read — true the instant a `close` ending is played, since the pages here are always one line. */
   closed: boolean;
-  backToRoot: number;
+  /** Simulates reading through to the end: runs the close ending's own `onClosed`, if it played one. */
+  close(): void;
 }
 
-function recorder(villager: VillagerId): Recording {
-  const afterClose: Array<() => void> = [];
+/** Runs `topic` (or a `Choice`'s own `run`) on a fresh recording handle and reports what it said and did. */
+function runRecorded(run: (handle: ConversationHandle) => void): Recording {
+  let onClosed: (() => void) | null = null;
   const recording: Recording = {
     said: [],
-    submenu: null,
+    choices: null,
     closed: false,
-    backToRoot: 0,
-    ctl: {
-      villager,
-      say: (...circumstances) => {
-        recording.said.push(...circumstances);
-        return true;
-      },
-      showTopics: (topics) => {
-        recording.submenu = topics;
-      },
-      showRootTopics: () => {
-        recording.backToRoot++;
-      },
-      close: () => {
-        recording.closed = true;
-        for (const run of afterClose) run();
-      },
-      endAfterPages: (run) => run(),
-      afterClose: (run) => afterClose.push(run),
+    close: () => {
+      recording.closed = true;
+      onClosed?.();
     },
   };
+  const handle: ConversationHandle = {
+    play: (request) => {
+      for (const line of request.lines) if ('paragraphs' in line) recording.said.push(line);
+      if (request.ending.kind === 'choices') {
+        recording.choices = request.ending.choices;
+      } else if (request.ending.kind === 'close') {
+        recording.closed = true;
+        onClosed = request.ending.onClosed;
+      }
+    },
+    close: () => {
+      recording.closed = true;
+    },
+  };
+  run(handle);
   return recording;
 }
 
+function runRecordedTopic(topic: ConversationTopic): Recording {
+  return runRecorded((handle) => topic.run(handle));
+}
+
+/**
+ * Root topics build their `run` through the villager's own live conversation
+ * flow, which needs an actual session open to anchor a beat to — so reading
+ * the menu, or running one of its rows, first talks to the villager for real.
+ */
 function topicsFor(rig: Rig, villager: VillagerId): ConversationTopic[] {
-  const speaker = rig.villagers.villagerFor(villager) ?? rig.human;
+  const target = rig.villagers.villagerFor(villager);
+  if (target !== null) rig.villagers.talkTo(target, rig.human);
+  const speaker = target ?? rig.human;
   const ctx = rig.villagers.contextFor(villager, speaker, null);
   return rig.villagers.rootTopicsFor(villager, ctx);
 }
@@ -314,10 +329,7 @@ function topicKeys(rig: Rig, villager: VillagerId): string[] {
 
 function runTopic(rig: Rig, villager: VillagerId, key: string): Recording | null {
   const topic = topicsFor(rig, villager).find((candidate) => candidate.key === key);
-  if (topic === undefined) return null;
-  const recording = recorder(villager);
-  topic.run(recording.ctl);
-  return recording;
+  return topic === undefined ? null : runRecordedTopic(topic);
 }
 
 /** Opens a shop on a fresh panel, applying the gate's fault when one is asked for. */
@@ -370,29 +382,29 @@ function checkCook(rig: Rig): void {
     `stew costs a potion (${price('hollow_stew')})`,
   );
   check(price('hamburger') === EXPECTED_BURGER_PRICE, `a burger costs ${price('hamburger')}`);
-  check(menu.bark === say('pipkin', 'shop_open'), 'the menu opens on shop_open');
+  check(menu.bark === sellerLine(PIPKIN.shopOpen), 'the menu opens on shop_open');
 
   human.coins = 0;
   const broke = openShop(cookShop(() => undefined));
   broke.pressBuy('hamburger', human, cat);
   check(human.inventory.countOf('hamburger') === 0 && human.coins === 0, 'no coins buys nothing');
-  check(broke.currentLine === say('pipkin', 'cannot_afford'), 'no coins hears cannot_afford');
+  check(broke.currentLine === sellerLine(PIPKIN.cannotAfford), 'no coins hears cannot_afford');
 
   human.coins = PLENTY_OF_COINS;
   const panel = openShop(cookShop(() => undefined));
   panel.pressBuy('hamburger', human, cat);
   check(human.inventory.countOf('hamburger') === 1, 'a burger lands in the pack');
   check(human.coins === PLENTY_OF_COINS - EXPECTED_BURGER_PRICE, 'and costs its price');
-  check(panel.currentLine === say('pipkin', 'buy_burger'), 'with buy_burger');
+  check(panel.currentLine === sellerLine(PIPKIN.buyBurger), 'with buy_burger');
 
   human.potionCooldownFrames = 0;
   panel.pressBuy('hollow_stew', human, cat);
-  check(panel.currentLine === say('pipkin', 'buy_stew'), 'stew off cooldown hears buy_stew');
+  check(panel.currentLine === sellerLine(PIPKIN.buyStew), 'stew off cooldown hears buy_stew');
   human.potionCooldownFrames = 100;
   panel.pressBuy('hollow_stew', human, cat);
   check(human.inventory.countOf('hollow_stew') === 2, 'stew on cooldown still sells');
   check(
-    panel.currentLine === say('pipkin', 'stew_cooldown_active'),
+    panel.currentLine === sellerLine(PIPKIN.stewCooldownActive),
     'stew on cooldown hears stew_cooldown_active',
   );
   human.potionCooldownFrames = 0;
@@ -430,19 +442,19 @@ function checkDoctor(rig: Rig): void {
   check(human.hp === human.maxHp && cat.hp === cat.maxHp, 'both crawlers end at full HP');
   check(human.coins === PLENTY_OF_COINS - expected, 'the fee is charged once');
   check(treatments === 1, 'the treatment plays');
-  check(panel.currentLine === say('sella', 'buy_healing'), 'Sella says buy_healing');
+  check(panel.currentLine === sellerLine(SELLA.buyHealing), 'Sella says buy_healing');
 
   const unhurt = buildInfirmaryMenu(party).options[0];
   check(unhurt.unavailable === 'Unhurt', 'the row is disabled at full HP');
   const topic = infirmaryTopics(party, host).topics(
     'sella',
     rig.villagers.contextFor('sella', human, null),
+    testConversationFlow(),
   )[0];
-  const recording = recorder('sella');
-  topic.run(recording.ctl);
+  const recording = runRecordedTopic(topic);
   check(
-    recording.said.join() === 'fully_healthy' && !recording.closed,
-    'Treatment at full HP says fully_healthy and opens nothing',
+    recording.said.length === 1 && recording.said[0] === SELLA.fullyHealthy && recording.closed,
+    'Treatment at full HP says fully_healthy and closes',
   );
 
   const floorLevel = 15;
@@ -498,7 +510,7 @@ function checkMerchant(): void {
   if (vetch !== null) {
     state.talkCounts.vetch = 1;
     const opening = openingLine('vetch', rig.villagers.contextFor('vetch', vetch, null));
-    check(opening.pages[0] === 'low_supplies', 'and Vetch opens on low_supplies');
+    check(opening.pages[0] === VETCH.lowSupplies, 'and Vetch opens on low_supplies');
   }
   const burgers = buildTradingPostMenu(state).options.find((option) => option.key === 'hamburger');
   check(
@@ -559,14 +571,10 @@ function checkForge(): void {
   check(topicKeys(rig, 'oren').join() === 'tools', 'once accepted, "Tools" is his only row');
 
   const grant = runTopic(rig, 'oren', 'tools');
-  const grantOrder = [
-    'grant_basic_tools',
-    'explain_resource_gathering',
-    'resourcing_skill_granted',
-    'directions_to_lumber_yard',
-    'directions_to_quarry',
-  ];
-  check(grant?.said.join() === grantOrder.join(), 'the grant and lesson play in order');
+  check(
+    grant?.said.length === 1 && grant.said[0] === OREN.grantAndLesson,
+    'the grant and lesson play as one line',
+  );
   const holds = (owner: ToolOwner, id: ItemId): boolean => owner.inventory.countOf(id) === 1;
   check(
     holds(human, 'basic_axe') &&
@@ -584,7 +592,7 @@ function checkForge(): void {
     'toolsGranted fires',
   );
   check(rig.explainerOpens === 0, 'the explainer waits for the conversation to close');
-  grant?.ctl.close();
+  grant?.close();
   check(rig.rewards.join() === 'Basic Axe,Basic Pickaxe', 'the two tools are shown as rewards');
   check(rig.explainerOpens === 1, 'the Resourcing explainer opens after the grant');
   check(rig.crafts.explainersSeen.includes('resourcing'), 'and is recorded as seen');
@@ -599,9 +607,11 @@ function checkForge(): void {
   );
   check(rig.explainerOpens === 1, 'the explainer opens exactly once on its own');
   const teach = runTopic(rig, 'oren', 'teach_again');
-  teach?.ctl.close();
+  teach?.close();
   check(
-    teach?.said.join() === 'resourcing_skill_already_granted' && rig.explainerOpens === 2,
+    teach?.said.length === 1 &&
+      teach.said[0] === OREN.resourcingSkillAlreadyGranted &&
+      rig.explainerOpens === 2,
     '"Teach me again" reopens the explainer',
   );
   const keys = topicKeys(rig, 'oren');
@@ -615,7 +625,7 @@ function checkForge(): void {
   human.coins = HARDENED_AXE_PRICE;
   const panel = openShop(forgeShop(host));
   check(
-    panel.currentLine === say('oren', 'axe_upgrade_available'),
+    panel.currentLine === sellerLine(OREN.axeUpgradeAvailable),
     'an affordable axe is announced first',
   );
   panel.pressBuy('axe', human, cat);
@@ -638,7 +648,7 @@ function checkForge(): void {
   check(human.coins === 0, 'the buyer pays');
   check(
     panel.currentLine ===
-      `${say('oren', 'upgrade_purchased')} ${say('oren', 'shared_upgrade_explanation')}`,
+      `${sellerLine(OREN.upgradePurchased)} ${sellerLine(OREN.sharedUpgradeExplanation)}`,
     'the first upgrade explains the sharing',
   );
   check(
@@ -648,7 +658,7 @@ function checkForge(): void {
   human.coins = PLENTY_OF_COINS;
   for (let frame = 0; frame < UPGRADE_REBUY_GUARD_FRAMES; frame++) panel.update();
   panel.pressBuy('pickaxe', human, cat);
-  check(panel.currentLine === say('oren', 'upgrade_purchased'), 'the explanation is a one-shot');
+  check(panel.currentLine === sellerLine(OREN.upgradePurchased), 'the explanation is a one-shot');
 
   rig.crafts.tools.axeTier = 5;
   rig.partyTools.reconcile(human, cat);
@@ -666,7 +676,7 @@ function checkForge(): void {
     human.coins === coins && rig.crafts.tools.axeTier === 5,
     'buying past the top tier is refused',
   );
-  check(topPanel.currentLine === say('oren', 'already_max_axe'), 'with already_max_axe');
+  check(topPanel.currentLine === sellerLine(OREN.alreadyMaxAxe), 'with already_max_axe');
 }
 
 /** Stands `crawler` where it can work the machine making `kind`. */
@@ -771,10 +781,19 @@ function checkSawmill(): void {
   );
 }
 
+/**
+ * A `LumberForemanHost` whose `respond`/`returnToRoot` mirror
+ * `VillageServices`'s own: while `conversationOpen()` says the conversation
+ * is still there, they play through the `convo`/`flow` the picker was opened
+ * over; once it says otherwise, `respond` only barks the first line and
+ * `returnToRoot` does nothing, the way a picker outliving a walked-away
+ * conversation would find it.
+ */
 function fennaHost(
   rig: Rig,
   picker: QuantityPicker,
-  responses: Circumstance[][],
+  responses: BarkLine[][],
+  conversationOpen: () => boolean = () => true,
 ): LumberForemanHost {
   return {
     party: rig.party,
@@ -782,7 +801,15 @@ function fennaHost(
     bus: rig.bus,
     audio: null,
     openPicker: (options) => picker.open(options),
-    respond: (_ctl, lines) => responses.push([...lines]),
+    respond: (convo, flow, lines) => {
+      responses.push([...lines]);
+      if (!conversationOpen()) return false;
+      convo.play(flow.sayKeepingMenu(lines));
+      return true;
+    },
+    returnToRoot: (convo, flow) => {
+      if (conversationOpen()) convo.play(flow.returnToRoot());
+    },
     announce: (message) => rig.announced.push(message),
     noteResourceActivity: () => undefined,
   };
@@ -804,7 +831,7 @@ function checkFenna(): void {
   if (rig === null) return;
   const { human, cat } = rig;
   const picker = new QuantityPicker(null);
-  const responses: Circumstance[][] = [];
+  const responses: BarkLine[][] = [];
   const host = fennaHost(rig, picker, responses);
 
   const fennaKeys = topicKeys(rig, 'fenna');
@@ -859,39 +886,59 @@ function checkFenna(): void {
   const topics = lumberForemanTopics(host).topics(
     'fenna',
     rig.villagers.contextFor('fenna', human, null),
+    testConversationFlow(),
   );
   const batch = topics.find((topic) => topic.key === 'process_batch');
-  const recording = recorder('fenna');
-  batch?.run(recording.ctl);
-  check(recording.said.join() === 'bulk_processing_service', 'the offer first');
-  const choice = recording.submenu?.find((topic) => topic.key === 'rope');
+  const recording = batch === undefined ? null : runRecordedTopic(batch);
   check(
-    recording.submenu?.map((topic) => topic.key).join() === 'boards,rope',
+    recording?.said.length === 1 && recording.said[0] === FENNA.bulkProcessingService,
+    'the offer first',
+  );
+  const choice = recording?.choices?.find((candidate) => candidate.label === 'Rope');
+  check(
+    recording?.choices?.map((candidate) => candidate.label).join() === 'Boards,Rope,Back',
     'then Boards or Rope',
   );
   human.coins = 0;
-  choice?.run(recording.ctl);
-  check(last(recording.said) === 'bulk_processing_rope_selected', 'Rope it is');
+  const ropeRecording = choice === undefined ? null : runRecorded((handle) => choice.run(handle));
+  check(last(ropeRecording?.said ?? []) === FENNA.bulkProcessingRopeSelected, 'Rope it is');
   check(picker.isOpen && picker.max === 7, 'the picker opens capped at the wood');
   picker.handleKey('Enter');
   check(
-    last(responses)?.join() === 'bulk_processing_insufficient_fee' && picker.isOpen,
+    last(responses)?.length === 1 &&
+      last(responses)?.[0] === FENNA.bulkProcessingInsufficientFee &&
+      picker.isOpen,
     'short of coin: she says so and the picker comes back',
   );
   human.coins = PLENTY_OF_COINS;
   picker.handleKey('Enter');
-  check(last(responses)?.join() === 'bulk_processing_complete', 'paid: bulk_processing_complete');
+  check(last(responses)?.[0] === FENNA.bulkProcessingComplete, 'paid: bulk_processing_complete');
   check(!picker.isOpen, 'and the picker closes');
 
   teachBoth(human, cat, 'construction');
   human.inventory.addItem('wood', 2);
   const first = runBatch(host, 'boards', 1);
-  const second = runBatch(host, 'boards', 1);
   check(
-    first?.join() === 'bulk_processing_complete,construction_experience',
+    first !== null &&
+      first.constructionExperienceEarned &&
+      first.lines.length === 2 &&
+      first.lines[0] === FENNA.bulkProcessingComplete &&
+      first.lines[1] === FENNA.constructionExperience,
     'the first batch after learning Construction remarks on it',
   );
-  check(second?.join() === 'bulk_processing_complete', 'once only');
+  // runBatch itself never spends the once-flag — only the caller does, once
+  // it knows the remark was actually shown (see checkFennaConversationFlow);
+  // simulate that here so a second direct call still proves "once only".
+  if (first !== null && first.constructionExperienceEarned) {
+    rig.state.onceFlags.push(CONSTRUCTION_EXPERIENCE_ONCE_FLAG);
+  }
+  const second = runBatch(host, 'boards', 1);
+  check(
+    second !== null &&
+      second.lines.length === 1 &&
+      second.lines[0] === FENNA.bulkProcessingComplete,
+    'once only',
+  );
   check(
     human.craftSkills.getXp('construction') === 0,
     'paying Fenna to run a batch grants no Construction XP, even once the skill is learned',
@@ -899,6 +946,80 @@ function checkFenna(): void {
   check(
     rig.events.filter((event) => event.name === 'woodProcessed').length >= 3,
     'every batch fires woodProcessed',
+  );
+}
+
+/**
+ * Fenna's batch through her real, still-open conversation: picking an
+ * output opens the picker over the villager box rather than closing it,
+ * the batch's result — including the construction-experience one-shot,
+ * when it is due — plays inside that same open conversation, and
+ * cancelling the picker brings the box back to its root topics.
+ */
+function checkFennaConversationFlow(): void {
+  section('Fenna: the picker over the still-open conversation');
+  const rig = buildRig();
+  if (rig === null) return;
+  const { human, cat } = rig;
+  teachBoth(human, cat, 'construction');
+  human.inventory.addItem('wood', 20);
+  human.coins = PLENTY_OF_COINS;
+
+  const fenna = rig.villagers.villagerFor('fenna');
+  if (fenna === null) {
+    check(false, 'Fenna is on the map');
+    return;
+  }
+  const conversation = rig.villagers.conversation;
+  const ADVANCE_GUARD = 40;
+  /** Reads the conversation to its choices: skips the typing and turns every page, the same way the real per-frame loop does. */
+  const advanceToChoices = (): void => {
+    for (
+      let guard = 0;
+      guard < ADVANCE_GUARD && rig.villagers.isConversationOpen && !conversation.isShowingChoices;
+      guard++
+    ) {
+      conversation.update(null);
+      if (!rig.villagers.isConversationOpen || conversation.isShowingChoices) break;
+      conversation.advance();
+    }
+  };
+
+  rig.villagers.talkTo(fenna, human);
+  advanceToChoices();
+  const processBatchIndex = conversation.choiceLabels.indexOf('Process a batch');
+  check(processBatchIndex === 0, '"Process a batch" leads the root menu');
+  conversation.handleKeyDown(String(processBatchIndex + 1));
+  advanceToChoices();
+  check(conversation.choiceLabels.join() === 'Boards,Rope,Back', 'the offer, then Boards or Rope');
+
+  conversation.handleKeyDown('1'); // Boards
+  check(rig.services.picker.isOpen, 'the picker opens over the still-open conversation');
+  check(!conversation.isShowingChoices, 'the selected-output line, not the submenu, is on screen');
+
+  rig.services.picker.handleKey('Enter');
+  advanceToChoices();
+  check(
+    rig.villagers.isConversationOpen,
+    'the conversation is still open once the batch is answered',
+  );
+  check(
+    rig.state.onceFlags.includes(CONSTRUCTION_EXPERIENCE_ONCE_FLAG),
+    'the construction-experience remark was actually read, not skipped — its one-shot flag is spent',
+  );
+  check(
+    conversation.choiceLabels.join() === 'Boards,Rope,Back',
+    'and the boards/rope submenu — not the root — is what comes back',
+  );
+
+  human.inventory.addItem('wood', 20);
+  conversation.handleKeyDown('2'); // Rope
+  check(rig.services.picker.isOpen, 'picking again reopens the picker');
+  rig.services.picker.handleKey('Escape');
+  check(!rig.services.picker.isOpen, 'Escape cancels the picker');
+  check(
+    !conversation.choiceLabels.includes('Boards') && conversation.choiceLabels.includes('Goodbye'),
+    'cancelling the picker returns the conversation to its root topics',
   );
 }
 
@@ -944,7 +1065,7 @@ function checkDeathDuringLesson(): void {
     setPhase(dead, 'need_tools');
     const lesson = runTopic(dead, 'oren', 'tools');
     dead.human.hp = 0;
-    lesson?.ctl.close();
+    lesson?.close();
     check(
       dead.rewards.length === 0 && dead.explainerOpens === 0,
       'a lesson closed by death queues no cards and no explainer',
@@ -956,7 +1077,7 @@ function checkDeathDuringLesson(): void {
     const lesson = runTopic(rewound, 'oren', 'tools');
     rewound.crafts.tools.axeTier = null;
     rewound.crafts.tools.pickaxeTier = null;
-    lesson?.ctl.close();
+    lesson?.close();
     check(
       rewound.rewards.length === 0 && rewound.explainerOpens === 0,
       'a lesson whose grant was rewound queues nothing',
@@ -1040,6 +1161,7 @@ function checkForgeTopicsAreServices(rig: Rig): void {
   const direct = forgeTopics(host).topics(
     'oren',
     rig.villagers.contextFor('oren', rig.human, null),
+    testConversationFlow(),
   );
   check(direct.length > 0, 'the forge offers rows once the quest is under way');
   check(topicKeys(rig, 'pipkin').includes('buy_food'), 'the services register with the village');
@@ -1060,6 +1182,7 @@ checkForge();
 checkSawmillLocked();
 checkSawmill();
 checkFenna();
+checkFennaConversationFlow();
 checkSiegeClosure();
 checkDoublePress();
 checkDeathDuringLesson();

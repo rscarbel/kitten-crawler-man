@@ -11,6 +11,7 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants';
+import { Conversation } from '../src/dialog/Conversation';
 import { EventBus } from '../src/core/EventBus';
 import { createBriarHollowState, type BriarHollowState } from '../src/core/briarHollowState';
 import { createPartyCraftsState, type PartyCraftsState } from '../src/core/partyCrafts';
@@ -142,6 +143,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
     state,
     menus,
     audio: null,
+    conversation: new Conversation(null),
     keybindings,
     groundPickups: new GroundPickupSystem(map),
     dynamite: new DynamiteSystem(map),
@@ -207,6 +209,10 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
       projectiles.update(ctx);
       combat.resolveKills();
       combat.playerTick.update(ctx);
+      // The real scene is the one caller of `conversation.update`; a harness
+      // with no scene has to drive that same tick itself, or a conversation
+      // never notices the player walking away from it.
+      kit.villagers?.conversation.update({ x: ctx.active.x, y: ctx.active.y });
     },
     dispose: () => {
       kit.dispose();

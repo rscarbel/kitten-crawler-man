@@ -1,8 +1,17 @@
 // Renders transient System AI messages using the shared DialogBox component.
 import { drawText } from '../ui/TextBox';
-import { DialogBox } from '../ui/DialogBox';
+import { DialogBox, type ResolvedSpeaker } from '../ui/DialogBox';
 import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { resolveSpeaker } from '../dialog/speakers';
+
+const SYSTEM_AI_NAME = '⚙ System AI';
+
+const SYSTEM_AI_SPEAKER: ResolvedSpeaker = resolveSpeaker({
+  kind: 'transient',
+  name: SYSTEM_AI_NAME,
+  style: 'system',
+});
 
 interface AIMessage {
   text: string;
@@ -39,18 +48,17 @@ export class AIMessageDisplay {
 
   /** Wire in audio to enable the DialogBox typing animation for incoming messages. */
   setAudio(audio: AudioManager): void {
-    this._dialogBox = new DialogBox(audio, {
-      speakerName: '⚙ System AI',
-      revealMode: 'sentence',
-      showFooterHint: false,
-    });
+    this._dialogBox = new DialogBox(audio, { showFooterHint: false });
   }
 
   add(text: string): void {
     const ttl = calcTtl(text);
     // New message immediately replaces any existing ones
     this.messages = [{ text, ttl }];
-    this._dialogBox?.show(text);
+    this._dialogBox?.show([text], SYSTEM_AI_SPEAKER, {
+      questRelated: false,
+      pageIndicator: () => null,
+    });
   }
 
   addAction(text: string): void {

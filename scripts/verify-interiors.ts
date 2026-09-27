@@ -43,6 +43,7 @@ import type { AnchorKind } from '../src/systems/InteriorOccupantSystem';
 import { BIG_TOP_ENTRY_NAME, BIG_TOP_ENTRY_KIND } from '../src/map/OverworldGenerator';
 import { InteriorReadableSystem } from '../src/systems/InteriorReadableSystem';
 import { allResidents, residentById } from '../src/systems/townResidents';
+import { RESIDENT_LINES } from '../src/dialog/scripts/residents';
 import { interiorServiceBuildings, interiorServicesFor } from '../src/systems/townServices';
 import { readableBuildings, readablesFor } from '../src/systems/townReadables';
 import { STAT_BOON_BONUSES } from '../src/core/StatusEffect';
@@ -74,6 +75,7 @@ import { parseTownMemoryCheckpoint } from '../src/core/PersistedWorldState';
 import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles';
 import type { Mob } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
+import { Conversation } from '../src/dialog/Conversation';
 
 /** Any size that produces the full plan; nothing here reads the wilderness. */
 const PLAN_SIZE = 220;
@@ -292,10 +294,11 @@ for (const resident of allResidents()) {
   if (spec !== undefined) {
     check(spec.role === resident.role, `${resident.name}'s roster role matches their def`);
   }
-  check(resident.ambient.length > 0, `${resident.name} has ambient lines to fall back on`);
-  check(resident.lore.length > 0, `${resident.name} has at least one lore conversation`);
+  const lines = RESIDENT_LINES[resident.id];
+  check(lines.ambient.length > 0, `${resident.name} has ambient lines to fall back on`);
+  check(lines.lore.length > 0, `${resident.name} has at least one lore conversation`);
   check(
-    resident.lore.every((conversation) => conversation.length > 0),
+    lines.lore.every((conversation) => conversation.length > 0),
     `${resident.name}'s lore conversations all have pages`,
   );
 }
@@ -675,6 +678,8 @@ console.log('\nThe tower confrontation opens on safe ground');
     null,
     createDoomsdayProgress(),
     partyLevelOf(human.level, cat.level),
+    undefined,
+    new Conversation(null),
   );
 
   // By name and by count, not merely "something spawned": `spawnEncounter` skips
@@ -794,6 +799,8 @@ console.log('\nThe office scene holds the room until it is read');
     null,
     createDoomsdayProgress(),
     partyLevelOf(human.level, cat.level),
+    undefined,
+    new Conversation(null),
   );
 
   check(confrontation.isDialogOpen, 'arriving fresh opens the office scene');

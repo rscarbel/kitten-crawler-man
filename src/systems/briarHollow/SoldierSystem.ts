@@ -41,8 +41,10 @@ import { drawTimedSpeechBubble, type TimedBubbleStyle } from '../../sprites/spee
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import type { MobRoster } from '../kits/SceneWorld';
 import { hostileWithinAttackRange } from '../interactionPromptGate';
+import type { BarkLine } from '../../dialog/line';
+import { HOBB, type VillagerId } from '../../dialog/scripts/briarHollow';
+import { SOLDIER_SCRIPTS } from '../../dialog/villagerRegistry';
 import type { DefenseStructures } from './DefenseStructures';
-import { type Circumstance, type VillagerId, line } from './ratkinDialogue';
 import {
   type SoldierPosts,
   buildPatrolRoute,
@@ -50,7 +52,8 @@ import {
   tilesOutsideRect,
 } from './soldierPosts';
 import type { SoldierStance } from './villagerCircumstances';
-import type { ConversationTopic, TopicProvider } from './villagerTopics';
+import type { ConversationTopic } from '../../dialog/request';
+import type { TopicProvider, VillagerConversationFlow } from './villagerTopics';
 import { VILLAGER_HEAD_CLEARANCE_TILES } from './Villager';
 import {
   VILLAGER_TALK_RANGE_TILES,
@@ -203,7 +206,7 @@ export class SoldierSystem {
   private frame = 0;
   private lastPhase: VillageQuestPhase;
   private talk: SoldierTalk | null = null;
-  private readonly barkReadyAt = new Map<string, number>();
+  private readonly barkReadyAt = new Map<BarkLine, number>();
   private readonly helpUpFrames = new Map<RatkinSoldier, number>();
   private readonly lastLoops = new Map<RatkinSoldier, number>();
   private readonly lastKills = new Map<RatkinSoldier, number>();
@@ -225,7 +228,9 @@ export class SoldierSystem {
     this.breachedSegments = this.currentBreaches();
     this.lastGateStruck = deps.defense()?.gateStruckAtSeconds ?? null;
     this.soldiers = RATKIN_SOLDIER_IDS.map((id) => this.spawn(id));
-    const provider: TopicProvider = { topics: (villager) => this.topicsFor(villager) };
+    const provider: TopicProvider = {
+      topics: (villager, _ctx, flow) => this.topicsFor(villager, flow),
+    };
     deps.villagers.addTopicProvider(provider);
   }
 
@@ -539,9 +544,9 @@ export class SoldierSystem {
       if (soldier !== null && this.orderFor(id) === undefined) soldier.setDuty(this.dutyFor(id));
     }
     if (to === 'imminent') {
-      this.barkAll(['sedge', 'marta'], 'attack_imminent');
+      this.barkAll(['sedge', 'marta'], (id) => SOLDIER_SCRIPTS[id].attackImminent);
     } else if (to === 'victory') {
-      this.barkAll(['marta', 'pru'], 'after_victory');
+      this.barkAll(['marta', 'pru'], (id) => SOLDIER_SCRIPTS[id].afterVictory);
     }
   }
 
@@ -619,7 +624,11 @@ export class SoldierSystem {
     if (soldier.engagedFreshThisFrame) {
       soldier.engagedFreshThisFrame = false;
       if (!SIEGE_PHASES.has(phase)) {
-        this.bark(soldier, 'enemy_spotted', ENEMY_SPOTTED_COOLDOWN_SECONDS);
+        this.bark(
+          soldier,
+          SOLDIER_SCRIPTS[soldier.soldierId].enemySpotted,
+          ENEMY_SPOTTED_COOLDOWN_SECONDS,
+        );
       }
     }
 
@@ -629,7 +638,11 @@ export class SoldierSystem {
       this.lastLoops.set(soldier, soldier.loopsCompleted);
       const onOrderedPatrol = this.orderFor(soldier.soldierId)?.order === 'patrol';
       if (onOrderedPatrol && this.random() < PATROL_RETURN_CHANCE) {
-        this.bark(soldier, 'patrol_return', PATROL_RETURN_COOLDOWN_SECONDS);
+        this.bark(
+          soldier,
+          SOLDIER_SCRIPTS[soldier.soldierId].patrolReturn,
+          PATROL_RETURN_COOLDOWN_SECONDS,
+        );
       }
     }
 
@@ -662,7 +675,7 @@ export class SoldierSystem {
       const tile = centreTile(crawler);
       const outside = tilesOutsideRect(this.deps.site.palisadeBounds, tile.x, tile.y);
       if (outside <= SOLDIER_FOLLOW_MAX_TILES_OUTSIDE) continue;
-      this.bark(soldier, 'follow_active', 0, true);
+      this.bark(soldier, SOLDIER_SCRIPTS[soldier.soldierId].followActive, 0, true);
       this.orderPost(soldier.soldierId);
     }
   }
@@ -680,7 +693,7 @@ export class SoldierSystem {
     const struck = this.deps.defense()?.gateStruckAtSeconds ?? null;
     if (struck !== null && struck !== this.lastGateStruck) {
       const hobb = this.soldierById('hobb');
-      if (hobb !== null) this.bark(hobb, 'gate_under_attack', GATE_UNDER_ATTACK_COOLDOWN_SECONDS);
+      if (hobb !== null) this.bark(hobb, HOBB.gateUnderAttack, GATE_UNDER_ATTACK_COOLDOWN_SECONDS);
     }
     this.lastGateStruck = struck;
 
@@ -702,37 +715,40 @@ export class SoldierSystem {
     if (!freshBreach && !hostileInside) return;
     for (const id of ['hobb', 'marta'] as const) {
       const soldier = this.soldierById(id);
-      if (soldier !== null) this.bark(soldier, 'enemy_breach', ENEMY_BREACH_COOLDOWN_SECONDS);
+      if (soldier !== null) {
+        this.bark(soldier, SOLDIER_SCRIPTS[id].enemyBreach, ENEMY_BREACH_COOLDOWN_SECONDS);
+      }
     }
   }
 
   // ── Call-outs ──────────────────────────────────────────────────────────
 
-  private barkAll(ids: readonly RatkinSoldierId[], circumstance: Circumstance): void {
+  private barkAll(
+    ids: readonly RatkinSoldierId[],
+    lineFor: (id: RatkinSoldierId) => BarkLine | undefined,
+  ): void {
     for (const id of ids) {
       const soldier = this.soldierById(id);
-      if (soldier !== null) this.bark(soldier, circumstance, 0, true);
+      if (soldier !== null) this.bark(soldier, lineFor(id), 0, true);
     }
   }
 
   /**
-   * Has a soldier call out their verbatim line for `circumstance` over their
-   * head. Never a line they do not have, never while they are down or talking,
-   * and not again for `cooldownSeconds` unless `force`d. Returns whether it
-   * was said.
+   * Has a soldier call out `line` over their head. Never while they are down
+   * or talking, and not again for `cooldownSeconds` unless `force`d. Returns
+   * whether it was said. `line` is undefined for a moment this particular
+   * soldier has nothing of their own to say for.
    */
   bark(
     soldier: RatkinSoldier,
-    circumstance: Circumstance,
+    line: BarkLine | undefined,
     cooldownSeconds: number,
     force = false,
   ): boolean {
-    const text = line(soldier.soldierId, circumstance);
-    if (text === undefined || soldier.isDowned || soldier.talkPartner !== null) return false;
-    const cooldownKey = `${soldier.soldierId}:${circumstance}`;
-    if (!force && this.clockSeconds < (this.barkReadyAt.get(cooldownKey) ?? 0)) return false;
-    soldier.say(text);
-    this.barkReadyAt.set(cooldownKey, this.clockSeconds + cooldownSeconds);
+    if (line === undefined || soldier.isDowned || soldier.talkPartner !== null) return false;
+    if (!force && this.clockSeconds < (this.barkReadyAt.get(line) ?? 0)) return false;
+    soldier.say(line.paragraphs[0]);
+    this.barkReadyAt.set(line, this.clockSeconds + cooldownSeconds);
     return true;
   }
 
@@ -810,7 +826,10 @@ export class SoldierSystem {
    * orders from a crawler the village hasn't vouched for, which the opening
    * line says in their own words instead.
    */
-  private topicsFor(villager: VillagerId): readonly ConversationTopic[] {
+  private topicsFor(
+    villager: VillagerId,
+    flow: VillagerConversationFlow,
+  ): readonly ConversationTopic[] {
     if (!isSoldierId(villager)) return [];
     const talk = this.talk;
     if (talk?.soldier.soldierId !== villager) return [];
@@ -831,32 +850,38 @@ export class SoldierSystem {
       {
         key: SOLDIER_TOPIC_KEYS.follow,
         label: TOPIC_LABELS.follow,
+        tone: 'normal',
         repeatable: true,
-        run: (ctl) => {
+        grouping: 'root',
+        run: (convo) => {
           this.orderFollow(id, talker);
           acknowledge();
-          ctl.say('command_follow');
+          convo.play(flow.answer([SOLDIER_SCRIPTS[id].commandFollow]));
         },
       },
       {
         key: SOLDIER_TOPIC_KEYS.hold,
         label: TOPIC_LABELS.hold,
+        tone: 'normal',
         repeatable: true,
-        run: (ctl) => {
+        grouping: 'root',
+        run: (convo) => {
           this.orderHold(id);
           acknowledge();
-          ctl.say('command_stay');
+          convo.play(flow.answer([SOLDIER_SCRIPTS[id].commandStay]));
         },
       },
       {
         key: SOLDIER_TOPIC_KEYS.patrol,
         label: TOPIC_LABELS.patrol,
+        tone: 'normal',
         repeatable: true,
-        run: (ctl) => {
+        grouping: 'root',
+        run: (convo) => {
           // Nowhere walkable to patrol: the soldier holds where they stand instead.
           if (!this.orderPatrol(id)) this.orderHold(id);
           acknowledge();
-          ctl.say('command_patrol');
+          convo.play(flow.answer([SOLDIER_SCRIPTS[id].commandPatrol]));
         },
       },
     ];
@@ -864,12 +889,14 @@ export class SoldierSystem {
       topics.push({
         key: SOLDIER_TOPIC_KEYS.post,
         label: TOPIC_LABELS.post,
+        tone: 'normal',
         repeatable: true,
-        run: (ctl) => {
+        grouping: 'root',
+        run: (convo) => {
           this.orderPost(id);
           acknowledge();
           // No line of their own for it; the plainest acknowledgement they have.
-          ctl.say('command_stay');
+          convo.play(flow.answer([SOLDIER_SCRIPTS[id].commandStay]));
         },
       });
     }

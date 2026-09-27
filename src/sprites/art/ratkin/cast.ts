@@ -9,7 +9,7 @@
  * cloak, Marta's sash, Midge's lantern.
  */
 
-import { VILLAGER_IDS, type VillagerId } from '../../../systems/briarHollow/ratkinDialogue';
+import { VILLAGER_IDS, type VillagerId } from '../../../dialog/scripts/briarHollow';
 import type { RatkinOutfit } from './outfit';
 import {
   SHIRT_HEM,

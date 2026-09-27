@@ -58,6 +58,7 @@ import { createMob } from '../src/levels/spawner';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
 import { setPackAlertGrid } from '../src/creatures/packAlert';
 import { SafeRoomSystem } from '../src/systems/SafeRoomSystem';
+import { Conversation } from '../src/dialog/Conversation';
 
 const MAP_SIZE = 220;
 
@@ -1243,7 +1244,7 @@ console.log('\na safe room lets its allies in');
       ignoreAnnouncement,
     );
     system.unlocked = true;
-    const safeRoom = new SafeRoomSystem(map, room.centre.x, room.centre.y);
+    const safeRoom = new SafeRoomSystem(map, room.centre.x, room.centre.y, new Conversation(null));
     const ctx = makeContext(human, cat, map, roster);
     const mongo = system.summon(cat, map);
     if (mongo === null) {

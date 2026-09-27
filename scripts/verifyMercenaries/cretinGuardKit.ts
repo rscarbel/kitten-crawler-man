@@ -397,7 +397,7 @@ function checkSledgeShield(report: CretinGuardGateReporter): void {
   );
   const specialLines = MERCENARY_VOICES.sledge.lines.special ?? [];
   report.check(
-    outcome.line !== null && specialLines.includes(outcome.line),
+    outcome.line !== null && specialLines.some((special) => special.paragraphs[0] === outcome.line),
     `he says so: "${outcome.line ?? ''}"`,
   );
   const catBefore = h.cat.hp;

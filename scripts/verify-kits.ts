@@ -74,6 +74,7 @@ import { keybindings } from '../src/core/Keybindings';
 import { GroundPickupSystem } from '../src/systems/GroundPickupSystem';
 import { DynamiteSystem } from '../src/systems/DynamiteSystem';
 import { focusedOverlay, worldHalted } from '../src/systems/kits/OverlayClaims';
+import { Conversation } from '../src/dialog/Conversation';
 
 /** The level the kit's militia are raised at; nothing here fights them. */
 const MILITIA_LEVEL = 1;
@@ -879,6 +880,7 @@ console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
     state: createBriarHollowState(),
     menus,
     audio: null,
+    conversation: new Conversation(null),
     keybindings,
     groundPickups: new GroundPickupSystem(map),
     dynamite: new DynamiteSystem(map),

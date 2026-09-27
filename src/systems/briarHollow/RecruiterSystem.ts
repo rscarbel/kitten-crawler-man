@@ -25,11 +25,13 @@ import {
   questMarkerColorFor,
   type QuestMarkerState,
 } from '../../sprites/questNPCSprite';
-import { DialogBox } from '../../ui/DialogBox';
+import type { Conversation } from '../../dialog/Conversation';
+import type { ConversationHandle } from '../../dialog/request';
+import { RECRUITER } from '../../dialog/scripts/briarHollow/recruiter';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import type { Player } from '../../Player';
-import type { OverlayInputClaim } from '../kits/OverlayClaims';
 import type { TownPropRenderable } from '../townPropRenderable';
+import { CONVERSATION_WALK_AWAY_TILES } from '../../creatures/townInteraction';
 import { VILLAGER_HEAD_CLEARANCE_TILES } from './Villager';
 import { BRIAR_HOLLOW_QUEST_ID, type VillageQuestSystem } from './VillageQuestSystem';
 
@@ -45,11 +47,6 @@ const INTERACT_RANGE_PX = TILE_SIZE * INTERACT_RANGE_TILES;
 const SPAWN_SEARCH_TILES = 6;
 const OVERHEAD_GAP_PX = 2;
 const TILE_CENTRE = 0.5;
-
-const RECRUIT_LINE =
-  'Please help us. Our small village nearby is in grave danger. Go and speak with our mayor for more details.';
-const THANKS_LINE =
-  "I'm in town looking for more recruits to help us. I got word that you're helping defend the town, thank you so much! We are very grateful!";
 
 /** The recruiter's own drawn body — stationary, facing the square he stands in. */
 class RecruiterNPC implements TownPropRenderable {
@@ -89,16 +86,18 @@ export interface RecruiterSystemDeps {
   readonly audio: AudioManager | null;
   /** Moves the Mayor's own questline along and answers what it currently reads. */
   readonly quest: VillageQuestSystem;
+  /** The one conversation panel the whole game shares — never this system's own. */
+  readonly conversation: Conversation;
 }
 
 export class RecruiterSystem {
   private readonly npc: RecruiterNPC | null;
-  private readonly dialog: DialogBox;
   /** Who he is and where he stands, for the questline's tracker; null when no tile was free. */
   readonly post: { readonly name: string; readonly tile: TilePoint } | null;
+  /** The handle his open conversation was returned, if any. */
+  private talkingHandle: ConversationHandle | null = null;
 
   constructor(private readonly deps: RecruiterSystemDeps) {
-    this.dialog = new DialogBox(deps.audio, { speakerName: RECRUITER_NAME, revealMode: 'word' });
     const centre = deps.gameMap.townSquareCentre;
     const tile =
       centre === undefined
@@ -119,22 +118,18 @@ export class RecruiterSystem {
     this.npc.marker = this.deps.state.quest.phase === 'unmet' ? 'exclamation' : 'none';
   }
 
-  /** Runs every gameplay frame: keeps the marker current and the dialog's reveal animating. */
+  /** Runs every gameplay frame: keeps the marker current. */
   update(): void {
     this.syncMarker();
-    this.dialog.update();
   }
 
   renderEntities(): ReadonlyArray<TownPropRenderable> {
     return this.npc === null ? [] : [this.npc];
   }
 
-  renderDialog(ctx: CanvasRenderingContext2D): void {
-    this.dialog.render(ctx);
-  }
-
+  /** Whether the conversation currently open on the shared panel is his own. */
   get isDialogOpen(): boolean {
-    return this.dialog.isVisible();
+    return this.talkingHandle !== null && this.deps.conversation.isActive(this.talkingHandle);
   }
 
   private inRange(active: { readonly x: number; readonly y: number }): boolean {
@@ -179,48 +174,30 @@ export class RecruiterSystem {
    * which is enough for the Journal and the world arrow to point the way.
    */
   tryInteract(active: Player): boolean {
-    if (this.isDialogOpen || !this.inRange(active)) return false;
+    if (this.isDialogOpen || this.npc === null || !this.inRange(active)) return false;
     const alreadyAccepted = hasAcceptedMayorRequest(this.deps.state.quest.phase);
     if (!alreadyAccepted && this.deps.state.quest.phase === 'unmet') {
       this.deps.quest.setPhase('offered');
       this.deps.bus.emit('questStarted', { questId: BRIAR_HOLLOW_QUEST_ID });
     }
-    this.dialog.show(alreadyAccepted ? THANKS_LINE : RECRUIT_LINE, {
+    const npc = this.npc;
+    this.talkingHandle = this.deps.conversation.open({
+      lines: [alreadyAccepted ? RECRUITER.thanks : RECRUITER.recruit],
+      reward: null,
       // Only the line that actually starts the questline matters for it — his
       // return greeting once it is already under way is flavor.
       questRelated: !alreadyAccepted,
-    });
-    return true;
-  }
-
-  /** Skips the reveal, or closes the dialog once fully shown. */
-  private advance(): void {
-    if (this.dialog.isFullyRevealed()) this.dialog.hide();
-    else this.dialog.skipToEnd();
-  }
-
-  /** A click landing on his dialog box. Returns whether it did. */
-  handleClick(mx: number, my: number): boolean {
-    if (!this.isDialogOpen || !this.dialog.contains(mx, my)) return false;
-    this.advance();
-    return true;
-  }
-
-  dismissDialog(): boolean {
-    if (!this.isDialogOpen) return false;
-    this.dialog.hide();
-    return true;
-  }
-
-  overlayClaim(): OverlayInputClaim {
-    return {
-      isOpen: this.isDialogOpen,
-      space: { kind: 'advance', advance: () => this.advance() },
-      focusContext: null,
-      locksKeyboard: false,
+      ending: { kind: 'close', onClosed: () => undefined },
+      dismiss: { kind: 'allowed', onDismissed: () => undefined },
+      haltsWorld: false,
+      anchor: {
+        position: () => ({ x: npc.x, y: npc.y }),
+        radius: CONVERSATION_WALK_AWAY_TILES,
+      },
       // A street conversation, like the village's own: it ends because the
       // player walked away or clicked through, not because anything paused.
-      haltsWorld: false,
-    };
+      locksKeyboard: false,
+    });
+    return true;
   }
 }

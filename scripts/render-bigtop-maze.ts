@@ -21,6 +21,7 @@ import { CatPlayer } from '../src/creatures/CatPlayer';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { createCircusQuestProgress } from '../src/core/CircusQuestProgress';
+import { Conversation } from '../src/dialog/Conversation';
 import { BigTopMazeSystem } from '../src/systems/BigTopMazeSystem';
 import { setViewportSize } from '../src/core/Viewport';
 import type { Mob, PlayerDamageType } from '../src/creatures/Mob';
@@ -327,6 +328,7 @@ function smokeTestTheTent(): string[] {
     },
     progress,
     null,
+    new Conversation(null),
   );
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
@@ -438,6 +440,7 @@ function checkOpenedWaysLookOpen(): string[] {
     },
     progress,
     null,
+    new Conversation(null),
   );
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);

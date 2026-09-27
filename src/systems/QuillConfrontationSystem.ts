@@ -39,13 +39,15 @@ import { drawSkyFowlCorpse } from '../sprites/skyFowlSprite';
 import { drawSoulBurst, prewarmLichFightEffects } from '../sprites/skeletonEffectsSprite';
 import { drawRadialGlow } from '../sprites/radialGlow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { QuestDialog } from '../ui/QuestDialog';
+import type { Conversation } from '../dialog/Conversation';
+import type { BarkLine, DialogLine, NonEmpty } from '../dialog/line';
+import type { ConversationHandle } from '../dialog/request';
 import {
-  FEATHERFALL_EXAMINE_DIALOG,
-  LICH_REVEAL_DIALOG,
-  QUILL_OFFICE_DIALOG,
-  VICTORY_DIALOG,
-} from './murderQuestDialogs';
+  QUILL_FEATHERFALL_EXAMINE,
+  QUILL_OFFICE,
+  QUILL_VICTORY,
+} from '../dialog/scripts/scenes/quill';
+import { LICH_REVEAL } from '../dialog/scripts/scenes/lich';
 import { LichBattleSystem, type CompanionDirector } from './LichBattleSystem';
 import { drawText } from '../ui/TextBox';
 import { drawOverlay, drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
@@ -235,7 +237,8 @@ export class QuillConfrontationSystem implements GameSystem {
   private materialiseTimer = 0;
   private dimTimer = 0;
   private heldForBanner = false;
-  private readonly dialog: QuestDialog;
+  /** The handle this encounter's beat opened with, so `conversationOwned` can ask the shared box directly instead of tracking its own copy of that answer. */
+  private conversationHandle: ConversationHandle | null = null;
 
   private readonly corpseTile: { x: number; y: number };
   private readonly lichTile: { x: number; y: number };
@@ -255,8 +258,8 @@ export class QuillConfrontationSystem implements GameSystem {
      * has no companion, and the fight has to work without one.
      */
     private readonly companion: CompanionDirector | null = null,
+    private readonly conversation: Conversation,
   ) {
-    this.dialog = new QuestDialog(this.audio);
     const centreY = Math.floor(this.map.structure.length / 2);
     const centreX = Math.floor((this.map.structure[0]?.length ?? 0) / 2);
     this.corpseTile = this.findSpawnTile(
@@ -289,7 +292,7 @@ export class QuillConfrontationSystem implements GameSystem {
       // dialog and the boss.
       this.spawnEncounter(centreX, centreY);
       this.holdRoomForBanner();
-      this.dialog.open(QUILL_OFFICE_DIALOG, () => this.beginQuillFight());
+      this.openBlockingConversation(QUILL_OFFICE, () => this.beginQuillFight(), true);
     } else if (this.phase === 'quill_fight') {
       this.spawnEncounter(centreX, centreY);
       this.openQuillFight();
@@ -404,12 +407,19 @@ export class QuillConfrontationSystem implements GameSystem {
 
   // ── The examine interaction and the reveal dialog ──────────────────────────
 
+  /** Whether the shared conversation is currently showing one of this encounter's beats, rather than someone else's. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
+
   get isDialogOpen(): boolean {
-    return this.dialog.isOpen;
+    return this.conversationOwned;
   }
 
   advanceDialog(): boolean {
-    return this.dialog.advance();
+    if (!this.conversationOwned) return false;
+    this.conversation.advance();
+    return true;
   }
 
   /**
@@ -419,11 +429,38 @@ export class QuillConfrontationSystem implements GameSystem {
    * by releasing a boss fight into a held room, the reveal ends by putting the
    * Lich in it, and the victory scene ends by arming the containment clock. A
    * dismissal at any of those strands the encounter halfway through a beat that
-   * has no other exit.
+   * has no other exit — so those are opened with `dismiss: blocked` and Escape
+   * has nothing to do there.
    */
   dismissDialog(): boolean {
-    if (this.phase !== 'quill_fight') return false;
-    return this.dialog.dismiss();
+    if (!this.conversationOwned) return false;
+    return this.conversation.dismiss();
+  }
+
+  /** Opens a beat whose Escape and walk-away do nothing until it is read. */
+  private openBlockingConversation(
+    lines: NonEmpty<DialogLine>,
+    onClosed: () => void,
+    questRelated: boolean,
+  ): void {
+    this.conversationHandle = this.conversation.open({
+      lines,
+      reward: null,
+      questRelated,
+      ending: {
+        kind: 'close',
+        onClosed,
+      },
+      dismiss: { kind: 'blocked' },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
+  /** Opens a bark: one blocking line, read over a paused fight. */
+  private openBark(line: BarkLine, onClosed: () => void): void {
+    this.openBlockingConversation([line], onClosed, false);
   }
 
   /**
@@ -448,16 +485,32 @@ export class QuillConfrontationSystem implements GameSystem {
   }
 
   handleClick(mx: number, my: number): boolean {
-    return this.dialog.handleClick(mx, my);
+    if (!this.conversationOwned) return false;
+    return this.conversation.handleClick(mx, my);
   }
 
   /** Space on the body: one page of what the party can now see. Optional. */
   tryExamine(active: Player): boolean {
-    if (this.dialog.isOpen) return false;
+    if (this.conversationOwned) return false;
     if (!this.corpseExaminable) return false;
     if (this.distanceToCorpse(active) > TILE_SIZE * EXAMINE_RANGE_TILES) return false;
-    this.dialog.open(FEATHERFALL_EXAMINE_DIALOG, () => {
-      this.corpseExamined = true;
+    this.conversationHandle = this.conversation.open({
+      lines: QUILL_FEATHERFALL_EXAMINE,
+      reward: null,
+      questRelated: true,
+      ending: {
+        kind: 'close',
+        onClosed: () => {
+          this.corpseExamined = true;
+        },
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
     });
     return true;
   }
@@ -514,7 +567,7 @@ export class QuillConfrontationSystem implements GameSystem {
         // check in particular would replace the open bark with the victory
         // dialog, throwing away the callback that raises the phase's banner and
         // starts its slide.
-        if (!this.dialog.isOpen) {
+        if (!this.conversationOwned) {
           this.battle?.update(ctx);
           if (this.lich !== null && !this.lich.isAlive) this.beginVictoryScene(this.lich);
         }
@@ -562,7 +615,7 @@ export class QuillConfrontationSystem implements GameSystem {
     // starts the instant the last dialog page closes, with nowhere left to warm
     // anything, and the materialising burst is drawn before that even.
     prewarmLichFightEffects();
-    this.dialog.open(LICH_REVEAL_DIALOG, () => this.beginMaterialise());
+    this.openBlockingConversation(LICH_REVEAL, () => this.beginMaterialise(), true);
   }
 
   private beginMaterialise(): void {
@@ -585,7 +638,7 @@ export class QuillConfrontationSystem implements GameSystem {
     this.keepHealer(spawnHardModeBossHealer(lich, this.map, this.addMob, level3.floorNumber));
     this.lich = lich;
     this.battle = new LichBattleSystem(this.map, lich, this.audio, this.companion, {
-      openBark: (pages, onClosed) => this.dialog.open(pages, onClosed),
+      openBark: (line, onClosed) => this.openBark(line, onClosed),
       showBanner: (title, subtitle) => this.showBanner(lichPhaseBanner(title, subtitle)),
     });
     this.showBanner(LICH_BANNER);
@@ -608,7 +661,7 @@ export class QuillConfrontationSystem implements GameSystem {
     // over an office the party has already won.
     this.battle?.dispose();
     this.battle = null;
-    this.dialog.open(VICTORY_DIALOG, () => this.finishConfrontation(lich));
+    this.openBlockingConversation(QUILL_VICTORY, () => this.finishConfrontation(lich), true);
   }
 
   private finishConfrontation(lich: TheLich): void {
@@ -715,7 +768,7 @@ export class QuillConfrontationSystem implements GameSystem {
 
     if (
       this.corpseExaminable &&
-      !this.dialog.isOpen &&
+      !this.conversationOwned &&
       this.distanceToCorpse(active) <= TILE_SIZE * EXAMINE_RANGE_TILES
     ) {
       drawInteractionPrompt(ctx, corpseX, corpseY, TILE_SIZE, 'Examine');
@@ -740,7 +793,7 @@ export class QuillConfrontationSystem implements GameSystem {
     this.battle?.renderUI(ctx);
     this.renderBanner(ctx);
     this.renderVictory(ctx);
-    this.dialog.render(ctx);
+    // Drawn through the scene's shared conversation panel.
   }
 
   private renderBossBar(ctx: CanvasRenderingContext2D): void {

@@ -36,6 +36,7 @@ import { StructureHold } from '../src/systems/briarHollow/structureHold';
 import type { SceneWorld } from '../src/systems/kits/SceneWorld';
 import { Bugaboo } from '../src/creatures/Bugaboo';
 import { DefendQuestSystem } from '../src/systems/DefendQuestSystem';
+import { Conversation } from '../src/dialog/Conversation';
 import { GRATE_SPIKES_BASE_HP, GrateSpikesMenu } from '../src/systems/GrateSpikesMenu';
 import type { CrawlerKind } from '../src/core/SkillManager';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
@@ -1445,6 +1446,7 @@ section('Defend-quest grate spikes');
     dungeon,
     new EventBus(),
     () => undefined,
+    new Conversation(null),
     () => 1,
     undefined,
   );

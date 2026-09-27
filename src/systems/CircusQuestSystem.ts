@@ -44,7 +44,8 @@ import { HeatherTheBear, HEATHER_LEVEL } from '../creatures/HeatherTheBear';
 import type { MongoSystem } from './MongoSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { QuestDialog } from '../ui/QuestDialog';
+import type { Conversation } from '../dialog/Conversation';
+import type { ConversationHandle, ConversationRequest } from '../dialog/request';
 import {
   drawQuestBanner,
   drawQuestCompleteOverlay,
@@ -52,12 +53,13 @@ import {
   QUEST_COMPLETE_OVERLAY_FRAMES,
 } from '../ui/QuestBanners';
 import {
-  INTRO_DIALOG,
-  buildRitualFailedDialog,
-  HEATHER_RETURN_DIALOG,
-  BIGTOP_READY_DIALOG,
-  buildResolutionDialog,
-} from './circusQuestDialogs';
+  CIRCUS_INTRO,
+  CIRCUS_RITUAL_FAILED,
+  CIRCUS_HEATHER_RETURN,
+  CIRCUS_BIGTOP_READY,
+  BIGTOP_POTION_REWARD,
+  circusResolutionLines,
+} from '../dialog/scripts/scenes/circus';
 import { spawnHardModeBossHealer } from '../levels/fairySpawner';
 import type { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { level3 } from '../levels/level3';
@@ -255,7 +257,13 @@ export class CircusQuestSystem implements GameSystem {
   /** Per-wave-mob displacement history, read by `rescueStalledMob`. */
   private readonly stallWatch = new Map<Mob, WaveStallWatch>();
 
-  private readonly dialog: QuestDialog;
+  /** The handle Signet's own conversation last opened with, or null before any beat has opened. */
+  private conversationHandle: ConversationHandle | null = null;
+
+  /** Whether the shared conversation is currently showing one of Signet's beats, rather than someone else's. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
 
   private bannerTimer = 0;
   private bannerText = '';
@@ -279,6 +287,7 @@ export class CircusQuestSystem implements GameSystem {
     private readonly overworldMusic: OverworldMusicSystem | null = null,
     private readonly audio: AudioManager | null = null,
     initialActivePlayer: Player,
+    private readonly conversation: Conversation,
   ) {
     this.questManager = new QuestManager();
     this.questManager.register({
@@ -297,8 +306,6 @@ export class CircusQuestSystem implements GameSystem {
         coins: 100,
       },
     });
-    this.dialog = new QuestDialog(audio ?? null);
-
     if (gameMap.circusCentre && gameMap.circusRadiusTiles !== undefined) {
       this.circusCentre = gameMap.circusCentre;
       this.circusRadiusTiles = gameMap.circusRadiusTiles;
@@ -759,7 +766,7 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   get isDialogOpen(): boolean {
-    return this.dialog.isOpen;
+    return this.conversationOwned;
   }
 
   /**
@@ -809,6 +816,14 @@ export class CircusQuestSystem implements GameSystem {
    * cached frame context points at the discarded one.
    */
   restoreCheckpoint(snapshot: CircusQuestCheckpoint, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+    // A conversation cannot survive the rewind: its closures may read state
+    // (the phase, the reward it is about to hand out) that this restore is
+    // about to change out from under it.
+    if (this.conversationOwned) this.conversation.close();
+    // The rewind just closed whatever was on screen, so a phase that reaches
+    // (or is restored back to) `awaiting_resolution` needs its auto-open to
+    // fire again rather than finding the latch already spent from before.
+    this.resolutionAutoOpened = false;
     this.questManager.restoreStatuses(snapshot.questStatuses);
     this.phase = snapshot.phase;
     this.waveIndex = snapshot.waveIndex;
@@ -991,7 +1006,7 @@ export class CircusQuestSystem implements GameSystem {
     // The same state her minimap `exclamation` marker is derived from, so the
     // beacon she draws over herself and the pip on the map agree.
     this.signet.markerType =
-      this.hasPendingDialog() && !this.dialog.isOpen ? 'exclamation' : 'none';
+      this.hasPendingDialog() && !this.conversationOwned ? 'exclamation' : 'none';
   }
 
   private hasPendingDialog(): boolean {
@@ -1004,22 +1019,50 @@ export class CircusQuestSystem implements GameSystem {
     );
   }
 
+  /** Opens one of Signet's beats on the shared conversation. `onClosed` fires once the last page is read. */
+  private openSignetConversation(
+    lines: ConversationRequest['lines'],
+    onClosed: () => void,
+    reward: ConversationRequest['reward'] = null,
+  ): void {
+    this.conversationHandle = this.conversation.open({
+      lines,
+      reward,
+      questRelated: true,
+      ending: {
+        kind: 'close',
+        onClosed,
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
   private openDialogForCurrentPhase(active: Player): boolean {
     switch (this.phase) {
       case 'awaiting_intro':
-        this.dialog.open(INTRO_DIALOG, () => this.startRitualDefense());
+        this.openSignetConversation(CIRCUS_INTRO, () => this.startRitualDefense());
         return true;
       case 'awaiting_ritual_failed':
-        this.dialog.open(buildRitualFailedDialog(), () => this.startHeatherHunt(active));
+        this.openSignetConversation(CIRCUS_RITUAL_FAILED, () => this.startHeatherHunt(active));
         return true;
       case 'awaiting_heather_return':
-        this.dialog.open(HEATHER_RETURN_DIALOG, () => this.startAssault());
+        this.openSignetConversation(CIRCUS_HEATHER_RETURN, () => this.startAssault());
         return true;
       case 'bigtop_ready':
-        this.dialog.open(BIGTOP_READY_DIALOG, () => this.giveBigTopPotion(active));
+        this.openSignetConversation(
+          CIRCUS_BIGTOP_READY,
+          () => this.giveBigTopPotion(active),
+          BIGTOP_POTION_REWARD,
+        );
         return true;
       case 'awaiting_resolution':
-        this.dialog.open(buildResolutionDialog(this.progress.mongoKidnapped), () =>
+        this.openSignetConversation(circusResolutionLines(this.progress.mongoKidnapped), () =>
           this.finishQuest(active),
         );
         return true;
@@ -1052,7 +1095,7 @@ export class CircusQuestSystem implements GameSystem {
    * know it would not be reached.
    */
   wouldInteract(active: Player): boolean {
-    if (this.dialog.isOpen) return false;
+    if (this.conversationOwned) return false;
     if (!this.signet?.isAlive || !this.hasPendingDialog()) return false;
     const dist = Math.hypot(this.signet.x - active.x, this.signet.y - active.y);
     return dist <= TILE_SIZE * INTERACT_RANGE_TILES;
@@ -1066,12 +1109,14 @@ export class CircusQuestSystem implements GameSystem {
 
   /** Esc closes an open dialog without advancing the quest. Returns true if handled. */
   dismissDialog(): boolean {
-    return this.dialog.dismiss();
+    if (!this.conversationOwned) return false;
+    return this.conversation.dismiss();
   }
 
   handleClick(mx: number, my: number): boolean {
     if (this.advanceOutcomeOverlay()) return true;
-    return this.dialog.handleClick(mx, my);
+    if (!this.conversationOwned) return false;
+    return this.conversation.handleClick(mx, my);
   }
 
   // ── Phase transitions ─────────────────────────────────────────────────────
@@ -1148,7 +1193,7 @@ export class CircusQuestSystem implements GameSystem {
     // walk cycle and damage flash at double rate.
     if (this.signet) {
       this.signet.allMobs = ctx.roster.mobs;
-      this.signet.isConversing = this.dialog.isOpen;
+      this.signet.isConversing = this.conversationOwned;
     }
 
     switch (this.phase) {
@@ -1187,9 +1232,14 @@ export class CircusQuestSystem implements GameSystem {
    * Once only. Escape closes the box without finishing the quest, and reopening
    * it every frame after would be a modal the player cannot get out of; from
    * there the ordinary walk-up-and-talk still finishes it.
+   *
+   * Waits for the shared box to be free rather than stomping whatever
+   * non-quest chat is on screen: `resolutionAutoOpened` only latches once the
+   * open actually happens, so this keeps retrying every frame until then.
    */
   private autoOpenResolution(active: Player): void {
-    if (this.resolutionAutoOpened || this.dialog.isOpen) return;
+    if (this.resolutionAutoOpened || this.conversationOwned) return;
+    if (this.conversation.isOpen) return;
     this.resolutionAutoOpened = true;
     this.openDialogForCurrentPhase(active);
   }
@@ -1338,7 +1388,7 @@ export class CircusQuestSystem implements GameSystem {
 
   /** World-space rendering: the "Talk" prompt over Signet. */
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
-    if (!this.signet?.isAlive || this.dialog.isOpen) return;
+    if (!this.signet?.isAlive || this.conversationOwned) return;
     if (!this.hasPendingDialog()) return;
     const dist = Math.hypot(this.signet.x - active.x, this.signet.y - active.y);
     if (dist > TILE_SIZE * INTERACT_RANGE_TILES) return;
@@ -1349,7 +1399,6 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   renderUI(ctx: CanvasRenderingContext2D): void {
-    this.dialog.render(ctx);
     drawQuestBanner(ctx, this.bannerText, this.bannerTimer);
     drawQuestCompleteOverlay(ctx, 'THE SHOW MUST GO ON — COMPLETE', this.completeOverlayTimer);
   }

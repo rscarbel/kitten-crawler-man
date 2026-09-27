@@ -26,16 +26,28 @@ import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite, VillagerAnchorKind } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import { ratkinCastEventFrame, ratkinCastLoopFrame } from '../../sprites/ratkinCastSprite';
-import { ratkinPortrait } from '../../sprites/ratkinPortrait';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
-import { type ConversationChoice, VillagerConversation } from '../../ui/VillagerConversation';
+import type { Conversation } from '../../dialog/Conversation';
+import type { BarkLine, DialogLine, NonEmpty } from '../../dialog/line';
+import type {
+  Choice,
+  ConversationHandle,
+  ConversationRequest,
+  ConversationTopic,
+  Ending,
+} from '../../dialog/request';
+import { topicMenu } from '../../dialog/topics';
+import { SPEAKERS } from '../../dialog/speakers';
 import {
-  type Circumstance,
-  type VillagerId,
+  GARN,
+  MERRIT,
+  MIDGE,
+  PIPKIN,
   VILLAGER_IDS,
-  line,
-  villagerEntry,
-} from './ratkinDialogue';
+  WICKER,
+  type VillagerId,
+} from '../../dialog/scripts/briarHollow';
+import { VILLAGER_SCRIPTS } from '../../dialog/villagerRegistry';
 import { VillageNavigator } from './villageNavigator';
 import { Villager, facingFor } from './Villager';
 import {
@@ -48,23 +60,15 @@ import {
   openingLine,
 } from './villagerCircumstances';
 import {
-  ASK_QUESTION_LABEL,
-  ASK_QUESTION_TOPIC_KEY,
   BACK_LABEL,
-  BACK_TOPIC_KEY,
   BUILT_IN_TOPICS,
-  type ConversationController,
-  type ConversationTopic,
   GOODBYE_LABEL,
   type TopicProvider,
+  type VillagerConversationFlow,
 } from './villagerTopics';
 import { CIVILIAN_CAST_IDS, type CivilianCastId, VILLAGER_ROUTINES } from './villagerRoutines';
-import {
-  SHELTERING_LINE,
-  UNNAMED_VILLAGER_DESCRIPTIONS,
-  UNNAMED_VILLAGER_LINES,
-  isUnnamedVillager,
-} from './unnamedVillagerLines';
+import { SHELTERING_LINE, isUnnamedVillager } from '../../dialog/scripts/briarHollow/unnamed';
+import { UNNAMED_VILLAGERS } from '../../dialog/villagerRegistry';
 
 const UPDATES_PER_SECOND = 60;
 const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
@@ -177,6 +181,8 @@ export interface VillagerSystemDeps {
   readonly state: BriarHollowState;
   readonly bus: EventBus | null;
   readonly audio: AudioManager | null;
+  /** The one conversation panel the whole game shares — never this system's own. */
+  readonly conversation: Conversation;
   /** The party's resources, tools and skills, read fresh for every conversation. */
   readonly party: () => VillagerPartyState;
   /** Defaults to `Math.random`; the gates pass a seeded stream. */
@@ -208,8 +214,6 @@ export interface ConversationSpeaker {
 interface ConversationSession {
   readonly speaker: ConversationSpeaker;
   readonly talker: VillagerCrawler;
-  readonly controller: ConversationController;
-  readonly afterClose: Array<() => void>;
 }
 
 function tileDistance(a: VillagerCrawler, b: VillagerCrawler): number {
@@ -239,7 +243,8 @@ function asVillagerId(id: CivilianCastId): VillagerId | null {
 
 export class VillagerSystem {
   readonly villagers: readonly Villager[];
-  readonly conversation: VillagerConversation;
+  /** The shared game-wide conversation panel — see {@link VillagerSystemDeps.conversation}. */
+  readonly conversation: Conversation;
   private readonly village: VillageNavigator;
   private readonly quarry: VillageNavigator;
   private readonly random: () => number;
@@ -253,12 +258,17 @@ export class VillagerSystem {
    * navigation, not a thing to say, and every submenu needs it every time.
    */
   private consumedTopicKeys = new Set<string>();
-  /** Bumped by every `showRootTopics`/`showSubmenu`, so a picked row's wrapper can tell whether its own `run` already moved the conversation on, or whether it must repaint the screen it is still standing on. */
-  private menuGeneration = 0;
-  /** Bumped by every `say`, so a picked row's wrapper can tell whether its `run` answered with lines of its own. */
-  private pagesShown = 0;
-  private currentTopicsSource: (() => readonly ConversationTopic[]) | null = null;
-  private currentMenuIsSubmenu = false;
+  /** Whether the choice row currently on screen is a submenu (its exit choice is "Back", to the root) rather than the root itself (whose exit choice is "Goodbye"). */
+  private inSubmenu = false;
+  /** The handle the conversation's currently open request returned — chains every later beat of this same conversation. `null` before the first line has been shown. */
+  private handle: ConversationHandle | null = null;
+  /** The `DialogLine`s last shown, reused when a beat swaps the choice row over the page already on screen rather than turning to a new one. */
+  private lastLines: NonEmpty<DialogLine> | null = null;
+  /** The `Ending` last put on screen, reused when a beat says a line without moving the choice row it left showing. */
+  private lastEnding: Ending | null = null;
+  private currentQuestRelated = false;
+  /** Callbacks queued by `VillagerConversationFlow.closeAfter`/`onEventualClose`, run once this conversation actually closes — however many more screens it shows first. */
+  private pendingAfterClose: Array<() => void> = [];
   private _lastOpening: OpeningLine | null = null;
   private lastPhase: VillageQuestPhase;
   private lastCatPosition: VillagerCrawler | null = null;
@@ -280,7 +290,7 @@ export class VillagerSystem {
     this.random = deps.random ?? Math.random;
     this.village = new VillageNavigator(deps.gameMap, deps.site.interior);
     this.quarry = new VillageNavigator(deps.gameMap, deps.site.quarry.rect);
-    this.conversation = new VillagerConversation(deps.audio);
+    this.conversation = deps.conversation;
     this.lastPhase = deps.state.quest.phase;
     // Computed before `populate()` so a working villager's first pose (Oren's
     // included) is already faced correctly, not corrected a tick later.
@@ -390,14 +400,14 @@ export class VillagerSystem {
       const named = asVillagerId(id);
       const description =
         named !== null
-          ? villagerEntry(named).backstory
+          ? VILLAGER_SCRIPTS[named].backstory
           : isUnnamedVillager(id)
-            ? UNNAMED_VILLAGER_DESCRIPTIONS[id]
+            ? UNNAMED_VILLAGERS[id].description
             : UNNAMED_VILLAGER_FALLBACK_DESCRIPTION;
       const villager = new Villager(
         id,
         routine,
-        named === null ? null : villagerEntry(named).name,
+        named === null ? null : SPEAKERS[named].name,
         description,
         post,
         shelter,
@@ -447,13 +457,13 @@ export class VillagerSystem {
     const merrit = this.villagerById('merrit');
     if (merrit === undefined) return;
     if (Math.hypot(merrit.tile.x - tileX, merrit.tile.y - tileY) > COW_PET_NOTICE_TILES) return;
-    this.barkLine(merrit, 'cow_petted_nearby');
+    this.barkLine(merrit, MERRIT.cowPettedNearby);
   }
 
   noteStewRefused(eater: VillagerCrawler): void {
     const pipkin = this.villagerById('pipkin');
     if (pipkin === undefined || tileDistance(pipkin, eater) > STEW_NOTICE_TILES) return;
-    this.barkLine(pipkin, 'stew_cooldown_active');
+    this.barkLine(pipkin, PIPKIN.stewCooldownActive);
   }
 
   /** A rock deposit crumbled at tile (`tileX`, `tileY`). */
@@ -462,7 +472,7 @@ export class VillagerSystem {
     const garn = this.villagerById('garn');
     if (garn === undefined) return;
     if (Math.hypot(garn.tile.x - tileX, garn.tile.y - tileY) > DEPOSIT_NOTICE_RADIUS_TILES) return;
-    this.barkLine(garn, 'deposit_depleted');
+    this.barkLine(garn, GARN.depositDepleted);
   }
 
   // ── Barks ──────────────────────────────────────────────────────────────
@@ -481,25 +491,21 @@ export class VillagerSystem {
   }
 
   /** A named villager's verbatim line as a bubble over their head, respecting their cooldown. */
-  private barkLine(villager: Villager, circumstance: Circumstance, force = false): boolean {
-    const named = asVillagerId(villager.id);
-    if (named === null) return false;
-    const text = line(named, circumstance);
-    if (text === undefined) return false;
-    return this.sayBark(villager, text, force);
+  private barkLine(villager: Villager, line: BarkLine, force = false): boolean {
+    return this.sayBark(villager, line.paragraphs[0], force);
   }
 
   /**
-   * Has a named villager call out a line over their head, the way the siege
+   * Has a named villager call out `line` over their head, the way the siege
    * and the militia bark. Returns whether it was said: not while they are in
-   * a conversation, not while their bark is cooling down, and never a line
-   * they do not have. `force` skips the cooldown, for a line answering
-   * something the player just did — a shopkeeper finishing the job they
-   * were paid for — which must never be swallowed by an earlier remark.
+   * a conversation, and not while their bark is cooling down. `force` skips
+   * the cooldown, for a line answering something the player just did — a
+   * shopkeeper finishing the job they were paid for — which must never be
+   * swallowed by an earlier remark.
    */
-  bark(id: VillagerId, circumstance: Circumstance, force = false): boolean {
+  bark(id: VillagerId, line: BarkLine, force = false): boolean {
     const villager = this.villagers.find((candidate) => candidate.id === id);
-    return villager === undefined ? false : this.barkLine(villager, circumstance, force);
+    return villager === undefined ? false : this.barkLine(villager, line, force);
   }
 
   /** The civilian cast member standing in for `id`, or null when there is none on this map. */
@@ -512,7 +518,7 @@ export class VillagerSystem {
     const text =
       villager.state === 'sheltering'
         ? SHELTERING_LINE
-        : this.pick(UNNAMED_VILLAGER_LINES[villager.id]);
+        : this.pick(UNNAMED_VILLAGERS[villager.id].lines).paragraphs[0];
     this.sayBark(villager, text, force);
   }
 
@@ -686,8 +692,11 @@ export class VillagerSystem {
   openConversation(speaker: ConversationSpeaker, talker: VillagerCrawler): void {
     if (this.session !== null) this.closeConversation();
     this.consumedTopicKeys = new Set();
-    this.currentTopicsSource = null;
-    this.currentMenuIsSubmenu = false;
+    this.inSubmenu = false;
+    this.handle = null;
+    this.lastLines = null;
+    this.lastEnding = null;
+    this.pendingAfterClose = [];
     const id = speaker.id;
     const ctx = this.contextFor(id, speaker, speaker.soldierStance);
     const opening = openingLine(id, ctx, this.questLines);
@@ -697,165 +706,186 @@ export class VillagerSystem {
     if (opening.onceFlag !== undefined && !state.onceFlags.includes(opening.onceFlag)) {
       state.onceFlags.push(opening.onceFlag);
     }
-    if (opening.pages.includes('stone_upgrade_available')) {
+    if (id === 'wicker' && opening.pages.includes(WICKER.stoneUpgradeAvailable)) {
       this.memory.lastStoneUpgradeHintAt = this.memory.clockSeconds;
     }
     this.memory.stoneAtLastTalk[id] = ctx.party.stone;
 
-    const afterClose: Array<() => void> = [];
-    const controller: ConversationController = {
-      villager: id,
-      say: (...circumstances) => this.sayInConversation(id, circumstances),
-      showTopics: (topics) => this.showSubmenu(topics),
-      showRootTopics: () => this.showRootTopics(),
-      close: () => this.closeConversation(),
-      endAfterPages: (run) => this.conversation.endAfterPages(run),
-      afterClose: (run) => afterClose.push(run),
-    };
-    this.session = { speaker, talker, controller, afterClose };
+    this.session = { speaker, talker };
     speaker.beginTalk(talker);
-    this.conversation.open(villagerEntry(id).name, ratkinPortrait(id));
-    this.showRootTopics();
-    this.sayInConversation(id, opening.pages, opening.questRelated === true);
-    opening.onShown?.(controller);
+    const onEventualClose =
+      opening.after.kind === 'close' ? opening.after.onClosed : opening.after.onEventualClose;
+    if (onEventualClose !== null) this.runOnEventualClose(onEventualClose);
+
+    const questRelated = opening.questRelated === true;
+    const ending: Ending =
+      opening.after.kind === 'close'
+        ? { kind: 'close', onClosed: () => this.closeConversation() }
+        : { kind: 'choices', choices: this.rootChoices() };
+    this.handle = this.conversation.open(this.requestFor(opening.pages, ending, questRelated));
   }
 
-  private sayInConversation(
-    id: VillagerId,
-    circumstances: readonly Circumstance[],
-    questRelated = false,
-  ): boolean {
-    const texts: string[] = [];
-    for (const circumstance of circumstances) {
-      const text = line(id, circumstance);
-      if (text === undefined) return false;
-      texts.push(text);
-    }
-    this.conversation.showPages(texts, questRelated);
-    this.pagesShown++;
-    return true;
+  /** Builds a `ConversationRequest` for the villager currently in conversation: `lines` plus the anchor, dismiss and `haltsWorld` every beat of a villager talk shares. */
+  private requestFor(
+    lines: NonEmpty<DialogLine>,
+    ending: Ending,
+    questRelated: boolean,
+  ): ConversationRequest {
+    const session = this.session;
+    if (session === null) throw new Error('VillagerSystem: no conversation is open');
+    this.lastLines = lines;
+    this.lastEnding = ending;
+    this.currentQuestRelated = questRelated;
+    const speaker = session.speaker;
+    return {
+      lines,
+      reward: null,
+      questRelated,
+      ending,
+      dismiss: { kind: 'allowed', onDismissed: () => this.closeConversation() },
+      haltsWorld: false,
+      anchor: {
+        position: () => ({ x: speaker.x, y: speaker.y }),
+        radius: CONVERSATION_WALK_AWAY_TILES,
+      },
+      // The number keys choose, and they are the hotbar's too.
+      locksKeyboard: true,
+    };
+  }
+
+  /** The line(s) currently on screen — for a beat that swaps the choice row without turning to a new page. */
+  private currentLines(): NonEmpty<DialogLine> {
+    const lines = this.lastLines;
+    if (lines === null) throw new Error('VillagerSystem: no line is on screen');
+    return lines;
+  }
+
+  /** The `Ending` currently in force — for a beat that says a line without disturbing whatever choice row was already up. */
+  private currentEnding(): Ending {
+    const ending = this.lastEnding;
+    if (ending === null) throw new Error('VillagerSystem: no ending is on screen');
+    return ending;
+  }
+
+  private runOnEventualClose(fn: () => void): void {
+    this.pendingAfterClose.push(fn);
   }
 
   /** Every provider's rows for the villager in conversation, in provider order. */
   rootTopicsFor(id: VillagerId, ctx: VillagerContext): ConversationTopic[] {
-    return this.topicProviders.flatMap((provider) => provider.topics(id, ctx));
+    const flow = this.flow();
+    return this.topicProviders.flatMap((provider) => provider.topics(id, ctx, flow));
   }
 
-  /**
-   * Turns topics into choices, dropping any non-repeatable one already
-   * picked this conversation. Picking one marks it consumed (repeatable
-   * rows never are), then — unless its own `run` already moved the
-   * conversation elsewhere (a fresh `menuGeneration`) — repaints whichever
-   * screen is still showing, so a service menu loses the row just used
-   * without losing the rest of what it offers.
-   */
-  private toChoices(topics: readonly ConversationTopic[]): ConversationChoice[] {
+  /** The villager's own topics, freshly rebuilt, as a choice row — the conversation's root menu. */
+  private rootChoices(): NonEmpty<Choice> {
     const session = this.session;
-    if (session === null) return [];
-    return topics
-      .filter((topic) => topic.repeatable === true || !this.consumedTopicKeys.has(topic.key))
-      .map((topic) => ({
-        label: topic.label,
-        questRelated: topic.questRelated === true,
-        run: () => {
-          if (topic.repeatable !== true) this.consumedTopicKeys.add(topic.key);
-          const generationBeforeRun = this.menuGeneration;
-          const pagesBeforeRun = this.pagesShown;
-          topic.run(session.controller);
-          const menuUnchanged = this.menuGeneration === generationBeforeRun;
-          if (this.session === null || !menuUnchanged) return;
-          this.renderCurrentMenu();
-          // A topic that answers and moves on to nothing else has said its
-          // piece: reading its last page ends the talk, so whatever it queued
-          // for after the conversation (a reward card, an explainer) follows
-          // straight on instead of the menu coming back up in its way.
-          const answered = this.pagesShown !== pagesBeforeRun;
-          if (answered) this.conversation.endAfterPages(() => this.closeConversation());
-        },
-      }));
-  }
-
-  private showRootTopics(): void {
-    const session = this.session;
-    if (session === null) return;
-    this.menuGeneration++;
+    if (session === null) throw new Error('VillagerSystem: no conversation is open');
+    this.inSubmenu = false;
     const { id, soldierStance } = session.speaker;
-    this.currentTopicsSource = () =>
-      this.withQuestionsGrouped(
-        this.rootTopicsFor(id, this.contextFor(id, session.speaker, soldierStance)),
-      );
-    this.currentMenuIsSubmenu = false;
-    this.renderCurrentMenu();
-  }
-
-  /**
-   * Pulls every `isQuestion` row out of a villager's own top-level rows and
-   * files them under one "I have a question" row instead — the actions a
-   * conversation is actually for (buy, teach, accept) stay on the surface,
-   * and lore or how-it-works small talk is a click away rather than crowding
-   * the same row of buttons. Only the root menu is grouped this way: a
-   * topic's own submenu (Tikka's build kinds, Fenna's boards or rope) is
-   * already a short, deliberate list and is left as its author built it.
-   */
-  private withQuestionsGrouped(topics: readonly ConversationTopic[]): readonly ConversationTopic[] {
-    const questions = topics.filter((topic) => topic.isQuestion === true);
-    if (questions.length === 0) return topics;
-    const actions = topics.filter((topic) => topic.isQuestion !== true);
-    const askQuestion: ConversationTopic = {
-      key: ASK_QUESTION_TOPIC_KEY,
-      label: ASK_QUESTION_LABEL,
-      // A navigation hub, not a thing said once: it must keep coming back
-      // after "Back" so every question can be reached more than once.
-      repeatable: true,
-      run: (ctl) => ctl.showTopics(questions),
+    const ctx = this.contextFor(id, session.speaker, soldierStance);
+    const topics = this.rootTopicsFor(id, ctx);
+    const goodbye: Choice = {
+      label: GOODBYE_LABEL,
+      tone: 'exit',
+      run: (convo) =>
+        convo.play(
+          this.requestFor(
+            this.currentLines(),
+            { kind: 'close', onClosed: () => this.closeConversation() },
+            false,
+          ),
+        ),
     };
-    return [...actions, askQuestion];
-  }
-
-  private showSubmenu(topics: readonly ConversationTopic[]): void {
-    if (this.session === null) return;
-    this.menuGeneration++;
-    this.currentTopicsSource = () => topics;
-    this.currentMenuIsSubmenu = true;
-    this.renderCurrentMenu();
-  }
-
-  /** Repaints the currently open screen (root or submenu) from its source topics, with consumed rows dropped. */
-  private renderCurrentMenu(): void {
-    if (this.session === null || this.currentTopicsSource === null) return;
-    const topics = this.currentTopicsSource();
-    if (!this.currentMenuIsSubmenu) {
-      const goodbye: ConversationChoice = {
-        label: GOODBYE_LABEL,
-        isExit: true,
-        run: () => this.closeConversation(),
-      };
-      this.conversation.setChoices([...this.toChoices(topics), goodbye]);
-      return;
-    }
-    const back: ConversationTopic = {
-      key: BACK_TOPIC_KEY,
-      label: BACK_LABEL,
-      run: () => this.showRootTopics(),
-      repeatable: true,
-    };
-    const choices = this.toChoices([...topics, back]);
-    const last = choices.length - 1;
-    this.conversation.setChoices(
-      choices.map((choice, index) => (index === last ? { ...choice, isExit: true } : choice)),
+    return topicMenu(topics, this.consumedTopicKeys, goodbye, (choices) =>
+      this.requestFor(this.currentLines(), { kind: 'choices', choices }, false),
     );
   }
 
+  /** `topics` as a choice row with a "Back" to the root appended — a submenu a topic opened. */
+  private submenuChoices(topics: readonly ConversationTopic[]): NonEmpty<Choice> {
+    this.inSubmenu = true;
+    const back: Choice = {
+      label: BACK_LABEL,
+      tone: 'exit',
+      run: (convo) =>
+        convo.play(
+          this.requestFor(
+            this.currentLines(),
+            { kind: 'choices', choices: this.rootChoices() },
+            false,
+          ),
+        ),
+    };
+    return topicMenu(topics, this.consumedTopicKeys, back, (choices) =>
+      this.requestFor(this.currentLines(), { kind: 'choices', choices }, false),
+    );
+  }
+
+  /** The flow every topic and opening builds its next beat through — see {@link VillagerConversationFlow}. */
+  private flow(): VillagerConversationFlow {
+    return {
+      answer: (lines, questRelated = false) =>
+        this.requestFor(
+          lines,
+          { kind: 'close', onClosed: () => this.closeConversation() },
+          questRelated,
+        ),
+      answerWithTopics: (lines, topics, questRelated = false) =>
+        this.requestFor(
+          lines,
+          { kind: 'choices', choices: this.submenuChoices(topics) },
+          questRelated,
+        ),
+      answerAndReturnToRoot: (lines, questRelated = false) =>
+        this.requestFor(lines, { kind: 'choices', choices: this.rootChoices() }, questRelated),
+      sayKeepingMenu: (lines, questRelated = false) =>
+        this.requestFor(lines, this.currentEnding(), questRelated),
+      returnToRoot: () =>
+        this.requestFor(
+          this.currentLines(),
+          { kind: 'choices', choices: this.rootChoices() },
+          false,
+        ),
+      openTopics: (topics) =>
+        this.requestFor(
+          this.currentLines(),
+          { kind: 'choices', choices: this.submenuChoices(topics) },
+          this.currentQuestRelated,
+        ),
+      closeNow: () =>
+        this.requestFor(
+          this.currentLines(),
+          { kind: 'close', onClosed: () => this.closeConversation() },
+          this.currentQuestRelated,
+        ),
+      closeAfter: (lines, onClosed, questRelated = false) => {
+        this.runOnEventualClose(onClosed);
+        return this.requestFor(
+          lines,
+          { kind: 'close', onClosed: () => this.closeConversation() },
+          questRelated,
+        );
+      },
+      onEventualClose: (fn) => this.runOnEventualClose(fn),
+    };
+  }
+
   /**
-   * Escape's own hook: from an open question submenu it backs out to the
-   * root topics the way "Back" does, and only closes the conversation
-   * outright from the root itself. Returns whether there was a conversation
-   * open to act on.
+   * Escape's own hook: from an open submenu it backs out to the root topics
+   * the way "Back" does, and only closes the conversation outright from the
+   * root itself. Returns whether there was a conversation open to act on.
    */
   escapeConversation(): boolean {
     if (this.session === null) return false;
-    if (this.currentMenuIsSubmenu && this.conversation.isShowingChoices) {
-      this.showRootTopics();
+    if (this.inSubmenu && this.conversation.isShowingChoices) {
+      this.handle?.play(
+        this.requestFor(
+          this.currentLines(),
+          { kind: 'choices', choices: this.rootChoices() },
+          false,
+        ),
+      );
       return true;
     }
     this.closeConversation();
@@ -867,11 +897,16 @@ export class VillagerSystem {
     if (session === null) return;
     this.session = null;
     this.conversation.close();
+    this.handle = null;
+    this.lastLines = null;
+    this.lastEnding = null;
+    const pending = this.pendingAfterClose;
+    this.pendingAfterClose = [];
     // Run before `endTalk`: a topic that hands off to a shop (`shopTopic`)
     // opens it from here, so `endTalk`'s busy check sees it already open
     // rather than deciding a tick too early that nothing is keeping the
     // villager at their post.
-    for (const run of session.afterClose) run();
+    for (const run of pending) run();
     session.speaker.endTalk();
   }
 
@@ -1135,7 +1170,7 @@ export class VillagerSystem {
       }
       if (to === 'imminent') {
         const midge = this.villagerById('midge');
-        if (midge !== undefined) this.barkLine(midge, 'attack_imminent', true);
+        if (midge !== undefined) this.barkLine(midge, MIDGE.attackImminent, true);
       }
     } else if (wasSiege && !isSiege) {
       for (const villager of this.villagers) {
@@ -1274,14 +1309,9 @@ export class VillagerSystem {
     for (const villager of this.villagers) this.updateVillager(villager, frame);
     this.updateOrenHammer(frame);
     this.lastCatPosition = { x: frame.cat.x, y: frame.cat.y };
-
-    const session = this.session;
-    if (session !== null) {
-      const walkedOff =
-        tileDistance(session.talker, session.speaker) > CONVERSATION_WALK_AWAY_TILES;
-      if (walkedOff) this.closeConversation();
-    }
-    this.conversation.update();
+    // The scene ticks the shared `Conversation` once per frame with the
+    // active player's position — this system only opens beats on it and
+    // reacts to how it ends.
     this.refreshMarkers();
   }
 

@@ -10,6 +10,8 @@ import {
   ROSEMARIE_COIN_TOSS_RELEASE_PROGRESS,
 } from '../sprites/rosemarieTiming';
 import { TimedSpeech, drawTimedSpeechBubble, type TimedBubbleStyle } from '../sprites/speechBubble';
+import { pickLine } from '../dialog/line';
+import { DANCER_BARKS } from '../dialog/scripts/rosemarie';
 
 const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
@@ -48,14 +50,6 @@ const TILE_CENTRE = 0.5;
 
 /** Not every coin gets a complaint; the ones that do read as the room's running joke. */
 const DANCER_BARK_CHANCE = 0.55;
-const DANCER_BARKS: readonly string[] = [
-  'Not the eye, Rosemarie!',
-  'OW! That one had an edge on it!',
-  "Rosemarie, I've only got the one good eye left!",
-  'Tip the stage, not my face!',
-  "She's winding up again!",
-  'Every. Single. Night.',
-];
 /** Club-light pink, so a dancer's yelp never reads as a hireling's bark. */
 const DANCER_SPEECH_STYLE: TimedBubbleStyle = { border: '#ff2d78', text: '#ffe0ee' };
 
@@ -167,9 +161,9 @@ export class RosemarieDeskIdle {
     if (coin.elapsed < coin.frames) return;
     this.coin = null;
     if (this.random() >= DANCER_BARK_CHANCE) return;
-    const line = DANCER_BARKS[Math.floor(this.random() * DANCER_BARKS.length)];
+    const line = pickLine(DANCER_BARKS, this.random() * DANCER_BARKS.length);
     this.barkingDancer = coin.dancerIndex;
-    this.bark.say(line);
+    this.bark.say(line.paragraphs[0]);
   }
 
   /** Draws her at the desk; the club sorts her on her own tile like the rest of the staff. */

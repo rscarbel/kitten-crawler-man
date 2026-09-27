@@ -13,6 +13,7 @@ import {
 } from '../../src/creatures/grotesqueSpiderTimeline.js';
 import type { SpiderLabDressing } from '../../src/systems/bossRooms/SpiderLabDressing.js';
 import { SpiderQuestSystem } from '../../src/systems/SpiderQuestSystem.js';
+import { Conversation } from '../../src/dialog/Conversation.js';
 import {
   DEFAULT_MIN_OPEN_FLOOR_SHARE,
   DOOR_SIDES,
@@ -141,9 +142,14 @@ export const spiderRoom: BossRoomHarness = {
     return lab === null ? null : locateRectRoom(gameMap, lab.bounds, lab.centre);
   },
   build: (env) => {
-    const quest = new SpiderQuestSystem(env.gameMap, env.bus, (mob: Mob) => {
-      env.frame.roster.add(mob);
-    });
+    const quest = new SpiderQuestSystem(
+      env.gameMap,
+      env.bus,
+      (mob: Mob) => {
+        env.frame.roster.add(mob);
+      },
+      new Conversation(null),
+    );
     const lab = quest.labDressing;
     if (lab === null) throw new Error('the spider quest built no lab dressing');
     return dressingUnderTest(lab, env, {

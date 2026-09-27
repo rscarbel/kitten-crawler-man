@@ -32,10 +32,12 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt, interactionPromptTop } from '../ui/InteractionPrompt';
 import { randomFromArray, frameTime } from '../utils';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
-import { DialogBox } from '../ui/DialogBox';
-import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawRadialGlow, type GlowStop } from '../sprites/radialGlow';
+import type { Conversation } from '../dialog/Conversation';
+import type { DialogLine, NonEmpty } from '../dialog/line';
+import type { ConversationHandle, ConversationRequest, PendingLine } from '../dialog/request';
+import { MORDECAI_SPEAKER_REF } from '../dialog/scripts/mordecai';
 
 /** Identity of the safe room a player is standing in. */
 export interface SafeRoomInfo {
@@ -110,32 +112,17 @@ function propTilesOfType(
 export class SafeRoomSystem implements GameSystem {
   private readonly entries: SafeRoomEntry[];
 
-  private _mordecaiDialogOpen = false;
-  private _awaitingResponse = false;
-  /** Pages of a scripted Mordecai dialog, or null while the AI path is in use. */
-  private _pages: ReadonlyArray<string> | null = null;
-  private _pageIndex = 0;
+  /** The handle the open Mordecai conversation was returned, if any — `conversation.isActive` on it is what `_mordecaiOwned` reads. */
+  private _mordecaiHandle: ConversationHandle | null = null;
   /**
    * The Mordecai the open dialog belongs to, so walking away is measured against
    * the one being spoken to rather than the nearest one anywhere on the floor.
    *
-   * Latched on the first update after the dialog opens rather than by the
-   * `open*` calls: those are reached from a Space handler that knows the text
-   * but not the speaker, and on that frame the player is by definition still
-   * standing in talk range of him.
+   * Resolved synchronously by every `open*` call from the position it is
+   * handed, since that call is reached from a Space handler that already
+   * knows where the player is standing.
    */
   private _speakingEntry: SafeRoomEntry | null = null;
-  /**
-   * Bumped by every `open*` call so a late AI answer can tell whether the
-   * conversation it was asked for is still the one on screen.
-   *
-   * A dialog that ends itself when the player walks off makes "walk away, walk
-   * back, talk again" the ordinary case, so an earlier request can easily land
-   * after a later conversation has opened. Guarding on the open *flag* cannot
-   * tell those apart: it would unblock advance on a box still showing '...' and
-   * paint the stale answer over the new one.
-   */
-  private _conversationId = 0;
   /**
    * Whether the player has been genuinely inside a safe room at any point during
    * the open conversation.
@@ -149,7 +136,6 @@ export class SafeRoomSystem implements GameSystem {
    */
   private _hasBeenInSafeRoom = false;
   private markerSource: MordecaiMarkerSource | null = null;
-  private readonly _dialogBox: DialogBox | null;
 
   // Magic number constants
   /**
@@ -202,13 +188,9 @@ export class SafeRoomSystem implements GameSystem {
     private readonly gameMap: GameMap,
     _startTileX: number,
     _startTileY: number,
+    private readonly conversation: Conversation,
     private readonly levelId = 'level1',
-    audio?: AudioManager | null,
   ) {
-    this._dialogBox =
-      audio !== null && audio !== undefined
-        ? new DialogBox(audio, { speakerName: 'Mordecai', revealMode: 'sentence' })
-        : null;
     this.entries = [];
 
     // Warmed as the room is built rather than on his first draw: he is standing
@@ -285,103 +267,109 @@ export class SafeRoomSystem implements GameSystem {
     this.markerSource = source;
   }
 
-  get mordecaiDialogOpen(): boolean {
-    return this._mordecaiDialogOpen;
+  /** Whether the shared conversation currently open belongs to this system's Mordecai, rather than to whatever else can open it. */
+  private get _mordecaiOwned(): boolean {
+    return this._mordecaiHandle !== null && this.conversation.isActive(this._mordecaiHandle);
   }
 
-  set mordecaiDialogOpen(v: boolean) {
-    this._mordecaiDialogOpen = v;
-    if (!v) {
-      this._awaitingResponse = false;
-      this._pages = null;
-      this._speakingEntry = null;
-      this._hasBeenInSafeRoom = false;
-      this._dialogBox?.hide();
+  get mordecaiDialogOpen(): boolean {
+    return this._mordecaiOwned;
+  }
+
+  /** Ends this system's Mordecai conversation outright, with no side effect. Esc and a forced switch both use this. */
+  closeMordecaiDialog(): void {
+    if (!this._mordecaiOwned) return;
+    this.conversation.close();
+    this.forgetMordecaiConversation();
+  }
+
+  private forgetMordecaiConversation(): void {
+    this._mordecaiHandle = null;
+    this._speakingEntry = null;
+    this._hasBeenInSafeRoom = false;
+  }
+
+  /** The entry `active` is standing in talk range of, or null if none. */
+  private findSpeakingEntry(active: { x: number; y: number }): SafeRoomEntry | null {
+    return this.entries.find((e) => SafeRoomSystem.isNearThisMordecai(e, active)) ?? null;
+  }
+
+  private mordecaiRequest(
+    lines: NonEmpty<DialogLine | PendingLine>,
+    entry: SafeRoomEntry,
+  ): ConversationRequest {
+    return {
+      lines,
+      reward: null,
+      questRelated: false,
+      ending: { kind: 'close', onClosed: () => this.forgetMordecaiConversation() },
+      dismiss: { kind: 'allowed', onDismissed: () => this.forgetMordecaiConversation() },
+      haltsWorld: false,
+      anchor: {
+        position: () => entry.wanderer.state,
+        radius: SafeRoomSystem.MORDECAI_WALK_AWAY_DISTANCE,
+      },
+      // A dialog the player pages through, over a floor that keeps running.
+      locksKeyboard: false,
+    };
+  }
+
+  private beginMordecaiConversation(entry: SafeRoomEntry): void {
+    this._speakingEntry = entry;
+    this._hasBeenInSafeRoom = false;
+  }
+
+  /**
+   * Talking to the same Mordecai again while his conversation is already the
+   * one on screen chains onto it with `play` rather than calling `open`
+   * again: `Conversation.open` dismisses whatever request it supersedes, and
+   * that would run this very system's own `onDismissed` — clearing
+   * `_speakingEntry` — a moment after `beginMordecaiConversation` just set it
+   * for the turn that is about to show.
+   */
+  private openOrContinueMordecai(request: ConversationRequest): void {
+    if (this._mordecaiOwned && this._mordecaiHandle !== null) {
+      this._mordecaiHandle.play(request);
+      return;
     }
+    this._mordecaiHandle = this.conversation.open(request);
   }
 
   /** Open the dialog and populate it with the async AI response. */
-  openMordecaiDialog(responsePromise: Promise<string>): void {
-    const conversationId = this.beginConversation();
-    this._awaitingResponse = true;
-    this._dialogBox?.show('...');
-    void responsePromise.then((text) => {
-      if (this._conversationId !== conversationId) return;
-      this._awaitingResponse = false;
-      if (this._mordecaiDialogOpen) {
-        this._dialogBox?.show(text);
-      }
-    });
-  }
-
-  /** Opens a fresh conversation and returns the id that identifies it. */
-  private beginConversation(): number {
-    this._mordecaiDialogOpen = true;
-    this._awaitingResponse = false;
-    this._pages = null;
-    this._speakingEntry = null;
-    this._hasBeenInSafeRoom = false;
-    this._conversationId++;
-    return this._conversationId;
+  openMordecaiDialog(active: { x: number; y: number }, responsePromise: Promise<string>): void {
+    const entry = this.findSpeakingEntry(active);
+    if (entry === null) return;
+    this.beginMordecaiConversation(entry);
+    this.openOrContinueMordecai(
+      this.mordecaiRequest([{ speaker: MORDECAI_SPEAKER_REF, text: responsePromise }], entry),
+    );
   }
 
   /**
-   * Open the dialog on a multi-page script Mordecai already knows — the floor
-   * advice, which needs no server and so has nothing to wait for.
-   *
-   * Separate from `openMordecaiDialog` rather than a `Promise<string[]>` version
-   * of it: a resolved promise would still take a frame to land, so the box would
-   * flash `'...'` before text that was available all along.
+   * Open the dialog on a line Mordecai already knows — the floor advice or the
+   * post-boss debrief, which needs no server and so has nothing to wait for.
    */
-  openMordecaiPages(pages: ReadonlyArray<string>): void {
-    if (pages.length === 0) return;
-    this.beginConversation();
-    this._pages = pages;
-    this._pageIndex = 0;
-    this.showCurrentPage();
-  }
-
-  private showCurrentPage(): void {
-    const pages = this._pages;
-    if (pages === null) return;
-    this._dialogBox?.show(pages[this._pageIndex], {
-      pageIndicator: { current: this._pageIndex + 1, total: pages.length },
-    });
-  }
-
-  /**
-   * Skip the typing animation if in progress, turn to the next page if there is
-   * one, or close the dialog. Call from Space / click handlers.
-   * While the AI response is still loading, Space does nothing.
-   */
-  advanceMordecaiDialog(): void {
-    if (!this._mordecaiDialogOpen) return;
-    if (this._awaitingResponse) return;
-    if (this._dialogBox !== null && !this._dialogBox.isFullyRevealed()) {
-      this._dialogBox.skipToEnd();
-      return;
-    }
-    const pages = this._pages;
-    if (pages !== null && this._pageIndex < pages.length - 1) {
-      this._pageIndex++;
-      this.showCurrentPage();
-      return;
-    }
-    this.mordecaiDialogOpen = false;
-  }
-
-  /** Advance the dialog animation without requiring a full SystemContext. */
-  tickDialog(active: { x: number; y: number }): void {
-    this._dialogBox?.update();
-    this.closeMordecaiDialogIfWalkedAway(active);
+  openMordecaiLine(active: { x: number; y: number }, line: DialogLine): void {
+    const entry = this.findSpeakingEntry(active);
+    if (entry === null) return;
+    this.beginMordecaiConversation(entry);
+    this.openOrContinueMordecai(this.mordecaiRequest([line], entry));
   }
 
   update(ctx: SystemContext): void {
-    this._dialogBox?.update();
-    this.closeMordecaiDialogIfWalkedAway(ctx.active);
+    this.tickMordecaiWalkAway(ctx.active);
     this.evictMobs(ctx.roster.mobs, ctx.roster.grid);
     this.updateWander();
     this.refreshMarkers();
+  }
+
+  /**
+   * The Mordecai-conversation half of `update()`, callable on its own by a
+   * scene (the building interior) that drives this system's wander and
+   * dialog but not its mob eviction or quest markers.
+   */
+  tickMordecaiWalkAway(active: { x: number; y: number }): void {
+    this.closeMordecaiDialogIfLeftRoom(active);
   }
 
   /** Once per update, not per draw: the answer walks both crawlers' bags. */
@@ -401,29 +389,21 @@ export class SafeRoomSystem implements GameSystem {
   }
 
   /**
-   * End the conversation once the player has left it — walked out of the safe
-   * room, or far enough away from the speaker inside a large one. Nothing else
-   * closes a floating dialog the player is allowed to walk out of.
+   * Ends the conversation the instant the player leaves the safe room, having
+   * genuinely been inside it — the stricter of the dialog's two walk-away
+   * rules. The shared conversation's own anchor radius covers the gentler
+   * one, drifting too far from the speaker inside a large room, since that is
+   * a plain distance check any conversation can make; leaving the room
+   * outright is a boundary only this system knows.
    */
-  private closeMordecaiDialogIfWalkedAway(active: { x: number; y: number }): void {
-    if (!this._mordecaiDialogOpen) return;
-
-    this._speakingEntry ??=
-      this.entries.find((e) => SafeRoomSystem.isNearThisMordecai(e, active)) ?? null;
-
+  private closeMordecaiDialogIfLeftRoom(active: { x: number; y: number }): void {
+    if (!this._mordecaiOwned) return;
     if (this.isEntityInSafeRoom(active)) {
       this._hasBeenInSafeRoom = true;
-    } else if (this._hasBeenInSafeRoom) {
-      this.mordecaiDialogOpen = false;
       return;
     }
-
-    const speaker = this._speakingEntry;
-    if (speaker === null) return;
-    const { x, y } = speaker.wanderer.state;
-    const walkAwayRange = TILE_SIZE * SafeRoomSystem.MORDECAI_WALK_AWAY_DISTANCE;
-    if (Math.hypot(active.x - x, active.y - y) > walkAwayRange) {
-      this.mordecaiDialogOpen = false;
+    if (this._hasBeenInSafeRoom) {
+      this.closeMordecaiDialog();
     }
   }
 
@@ -437,7 +417,7 @@ export class SafeRoomSystem implements GameSystem {
       // `hold` *instead of* `update`, not as well as it — stepping the wanderer
       // in the same frame runs the hold's own pause straight back down to zero,
       // which leaves him reading as walking and re-picking a target every frame.
-      if (this._mordecaiDialogOpen) entry.wanderer.hold();
+      if (this._mordecaiOwned) entry.wanderer.hold();
       else entry.wanderer.update();
     }
   }
@@ -485,7 +465,7 @@ export class SafeRoomSystem implements GameSystem {
    * with no conversation, or before the speaker has been picked out.
    */
   get speakingMordecaiPosition(): { x: number; y: number } | null {
-    if (!this._mordecaiDialogOpen) return null;
+    if (!this._mordecaiOwned) return null;
     return this._speakingEntry?.wanderer.state ?? null;
   }
 
@@ -508,7 +488,7 @@ export class SafeRoomSystem implements GameSystem {
     return (
       this.isEntityInSafeRoom(active) &&
       SafeRoomSystem.isNearThisMordecai(entry, active) &&
-      !this._mordecaiDialogOpen
+      !this._mordecaiOwned
     );
   }
 
@@ -626,12 +606,12 @@ export class SafeRoomSystem implements GameSystem {
     this.sortedFigures.length = 0;
     for (const e of this.entries) {
       const wander = e.wanderer.state;
-      const markerColor = this._mordecaiDialogOpen ? undefined : questMarkerColorFor(e.marker);
+      const markerColor = this._mordecaiOwned ? undefined : questMarkerColorFor(e.marker);
       // Unlike the bubble, the marker shows at any distance to pull the player over.
       const showBubble =
         markerColor === undefined &&
         SafeRoomSystem.isNearThisMordecai(e, active) &&
-        !this._mordecaiDialogOpen;
+        !this._mordecaiOwned;
       const markerGlyph = e.marker === 'question' ? '?' : '!';
       const promptShown = this.showsTalkPrompt(e, active);
       this.sortedFigures.push({
@@ -749,22 +729,5 @@ export class SafeRoomSystem implements GameSystem {
       const cy = lantern.y * TILE_SIZE + TILE_SIZE / 2 - camY;
       drawRadialGlow(ctx, cx, cy, radius, stops);
     }
-  }
-
-  /**
-   * Whether a pointer at these screen coordinates is on the open dialog box.
-   *
-   * His conversation floats over a room that keeps running and that the player
-   * has to be able to walk out of, so only presses that land on the box itself
-   * belong to it — on a phone, where walking is tap-to-move, an advance that
-   * answered to any tap left the player unable to leave.
-   */
-  mordecaiDialogContains(screenX: number, screenY: number): boolean {
-    if (!this._mordecaiDialogOpen) return false;
-    return this._dialogBox?.contains(screenX, screenY) === true;
-  }
-
-  renderMordecaiDialog(ctx: CanvasRenderingContext2D): void {
-    this._dialogBox?.render(ctx);
   }
 }

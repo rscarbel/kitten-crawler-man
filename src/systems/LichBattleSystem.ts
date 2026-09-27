@@ -26,7 +26,7 @@ import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { DamageSource, Player } from '../Player';
 import type { SystemContext } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
-import type { DialogPage } from '../ui/QuestDialog';
+import type { BarkLine } from '../dialog/line';
 import { handsConeCovers, TheLich } from '../creatures/TheLich';
 import { prewarmLichDazed } from '../sprites/lichSprite';
 import { drawDangerCircle, drawDangerTile } from '../sprites/dangerTelegraph';
@@ -35,7 +35,11 @@ import { drawFireWave, WAVE_MIN_LOOP_FRAMES } from '../sprites/fireWaveSprite';
 import { drawLichOrb } from '../sprites/lichOrbSprite';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import { viewportWidth } from '../core/Viewport';
-import { LICH_FIREWALL_BARK, LICH_RECKONING_BARK, LICH_TANTRUM_BARK } from './murderQuestDialogs';
+import {
+  LICH_FIREWALL_BARK,
+  LICH_RECKONING_BARK,
+  LICH_TANTRUM_BARK,
+} from '../dialog/scripts/scenes/lich';
 import {
   columnBurns,
   canHoldGap,
@@ -303,7 +307,7 @@ export interface CompanionDirector {
 /** What the fight asks of the encounter that owns it. */
 export interface LichBattleHooks {
   /** Opens a one-page bark. The world is held while it is up. */
-  openBark(pages: ReadonlyArray<DialogPage>, onClosed: () => void): void;
+  openBark(line: BarkLine, onClosed: () => void): void;
   /** Raises the phase card. */
   showBanner(title: string, subtitle: string): void;
 }

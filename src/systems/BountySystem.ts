@@ -39,15 +39,12 @@ import type { ArrowAvoidRect, ArrowCandidate } from '../ui/WorldArrow';
 import { ARROW_PRIORITY, drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
-import { QuestDialog } from '../ui/QuestDialog';
+import type { Conversation } from '../dialog/Conversation';
+import type { ConversationHandle, ConversationRequest } from '../dialog/request';
 import { prewarmShadySprite } from '../sprites/shadySprite';
 import { Shady, type ShadyMarker } from '../creatures/Shady';
-import {
-  buildBountyActiveDialog,
-  buildBountyOfferDialog,
-  buildBountyPayoutDialog,
-  SHADY_PROXIMITY_BUBBLE,
-} from './shadyDialogs';
+import { SHADY_BOUNTY } from '../dialog/scripts/scenes/shadyBounty';
+import { SHADY_LINES } from '../dialog/scripts/shady';
 import { findBountyDef, type BountyDef } from './bountyDefs';
 import { EncounterCommitment } from './bountyCommit';
 import { BOUNTY_MAX_BLOW_HP_SHARE } from '../creatures/mobLevelScaling';
@@ -256,7 +253,6 @@ export class BountySystem implements GameSystem {
 
   /** The quest-giver himself, once the scene has found him a tile beside the board. */
   private shady: Shady | null = null;
-  private readonly dialog: QuestDialog;
 
   /**
    * Where the arrow points once the mark is dead — Shady's tile. Set by the
@@ -269,12 +265,12 @@ export class BountySystem implements GameSystem {
     private readonly bus: EventBus,
     private readonly progress: BountyProgress,
     private readonly addMob: (mob: Mob) => void,
+    private readonly conversation: Conversation,
     private readonly audio: AudioManager | null = null,
     /** Fired with the payout and the recipient's world position, for a fly-to-HUD effect. */
     private readonly onPayout:
       ((coins: number, worldX: number, worldY: number) => void) | null = null,
   ) {
-    this.dialog = new QuestDialog(audio);
     this.unsubscribeMobKilled = this.bus.on('mobKilled', (e) => this.onMobKilled(e.mob));
     // The encounter's mobs died with the previous scene, but the record says a
     // bounty is out. Re-staged on the first update, when the players' levels
@@ -331,7 +327,7 @@ export class BountySystem implements GameSystem {
     const shady = this.shady;
     if (shady === null) return;
     shady.markerType = SHADY_MARKER_BY_PHASE[this.progress.phase];
-    const talking = this.dialog.isOpen;
+    const talking = this.conversationOwned;
     // Cancelled rather than merely overridden: the tic is frozen while a dialog
     // is open (nothing advances it), so a scratch left running would resume from
     // wherever it stopped the moment the conversation ends.
@@ -363,21 +359,50 @@ export class BountySystem implements GameSystem {
     this.setCollectPoint(tileCentrePx(tile.x), tileCentrePx(tile.y));
   }
 
+  /** The handle Shady's own conversation last opened with, or null before any beat has opened. */
+  private conversationHandle: ConversationHandle | null = null;
+
+  /** Whether the shared conversation is currently showing one of Shady's bounty beats, rather than someone else's. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
+
   get isDialogOpen(): boolean {
-    return this.dialog.isOpen;
+    return this.conversationOwned;
   }
 
   /** Esc closes an open dialog without issuing or paying anything. */
   dismissDialog(): boolean {
-    return this.dialog.dismiss();
+    if (!this.conversationOwned) return false;
+    return this.conversation.dismiss();
   }
 
   handleClick(mx: number, my: number): boolean {
-    return this.dialog.handleClick(mx, my);
+    if (!this.conversationOwned) return false;
+    return this.conversation.handleClick(mx, my);
   }
 
-  renderDialog(ctx: CanvasRenderingContext2D): void {
-    this.dialog.render(ctx);
+  private openBountyConversation(
+    lines: ConversationRequest['lines'],
+    questRelated: boolean,
+    onClosed: () => void,
+  ): void {
+    this.conversationHandle = this.conversation.open({
+      lines,
+      reward: null,
+      questRelated,
+      ending: {
+        kind: 'close',
+        onClosed,
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
   }
 
   /**
@@ -385,28 +410,31 @@ export class BountySystem implements GameSystem {
    * Shady's three conversations his current phase calls for.
    *
    * Nothing is committed here: `issueBounty` and `collectBounty` hang off the
-   * dialog's completion callback, so backing out with Esc on any page leaves
-   * the board exactly as it was.
+   * conversation's `ending`, so backing out with Esc on any page leaves the
+   * board exactly as it was.
    */
   tryInteract(active: HumanPlayer | CatPlayer, human: HumanPlayer, cat: CatPlayer): boolean {
-    if (this.dialog.isOpen) return false;
+    if (this.conversation.isOpen) return false;
     if (!this.isWithinShadyReach(active)) return false;
     const shady = this.shady;
     if (shady === null) return false;
 
     if (this.progress.phase === 'active') {
-      this.dialog.open(
-        buildBountyActiveDialog(this.progress.currentName ?? 'the mark'),
+      this.openBountyConversation(
+        [SHADY_BOUNTY.active({ name: this.progress.currentName ?? 'the mark' })],
+        false,
         () => undefined,
       );
       return true;
     }
     if (this.progress.phase === 'kill_pending') {
-      this.dialog.open(
-        buildBountyPayoutDialog(
-          this.progress.currentName ?? 'It',
-          this.progress.pendingPayoutCoins,
-        ),
+      const name = this.progress.currentName ?? 'It';
+      this.openBountyConversation(
+        [
+          SHADY_BOUNTY.payoutIntro({ name }),
+          SHADY_BOUNTY.payoutCoins({ name, coins: this.progress.pendingPayoutCoins }),
+        ],
+        true,
         () => this.collectBounty(active),
       );
       return true;
@@ -419,16 +447,58 @@ export class BountySystem implements GameSystem {
     // spent when the last page is pressed through, so an abandoned conversation
     // does not burn a name out of the pool.
     const name = peekNextBountyName(this.progress, def.id);
-    this.dialog.open(buildBountyOfferDialog(name, def.typeLabel, settings.difficulty), () =>
-      this.issueBounty(human, cat),
-    );
+    this.openOfferConversation(name, def.typeLabel, human, cat);
     return true;
+  }
+
+  /** The offer's own last beat ends in a confirm choice rather than a plain close, so it is opened separately from {@link openBountyConversation}. */
+  private openOfferConversation(
+    name: string,
+    typeLabel: string,
+    human: HumanPlayer,
+    cat: CatPlayer,
+  ): void {
+    this.conversationHandle = this.conversation.open({
+      lines: [
+        SHADY_BOUNTY.offerIntro,
+        SHADY_BOUNTY.offerMark({ name, typeLabel }),
+        SHADY_BOUNTY.offerPitch({ difficulty: settings.difficulty }),
+      ],
+      reward: null,
+      questRelated: true,
+      ending: {
+        kind: 'confirm',
+        keyboardDefault: 'accept',
+        accept: {
+          label: 'Take the job',
+          tone: 'quest',
+          run: (convo) => {
+            convo.close();
+            this.issueBounty(human, cat);
+          },
+        },
+        decline: {
+          label: 'Walk away',
+          tone: 'exit',
+          run: (convo) => {
+            convo.close();
+          },
+        },
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
   }
 
   /** Floats the Space prompt over Shady when he is in reach. */
   renderPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): boolean {
     const shady = this.shady;
-    if (shady === null || this.dialog.isOpen) return false;
+    if (shady === null || this.conversation.isOpen) return false;
     if (!this.isWithinShadyReach(active)) return false;
     drawInteractionPrompt(ctx, shady.x - camX, shady.y - camY, TILE_SIZE, 'Talk');
     return true;
@@ -448,14 +518,14 @@ export class BountySystem implements GameSystem {
     const shady = this.shady;
     if (shady?.isAlive !== true) return;
     shady.renderMarker(ctx, camX, camY, TILE_SIZE);
-    if (this.dialog.isOpen) return;
+    if (this.conversationOwned) return;
     if (!this.isWithinShadyBubbleRange(active)) return;
     drawSpeechBubbleWithText(
       ctx,
       shady.x - camX + TILE_SIZE * TILE_CENTER_OFFSET,
       shady.y - camY - TILE_SIZE * SHADY_BUBBLE_LIFT_TILES,
       TILE_SIZE,
-      SHADY_PROXIMITY_BUBBLE,
+      SHADY_LINES.proximityBubble.paragraphs[0],
     );
   }
 
@@ -606,6 +676,9 @@ export class BountySystem implements GameSystem {
    * is on their way to collect payment for.
    */
   restoreCheckpoint(snapshot: BountyCheckpoint): void {
+    // A conversation cannot survive the rewind: an offer's accept would go on
+    // to issue a bounty against a mark this restore is about to replace.
+    if (this.conversationOwned) this.conversation.close();
     const markWasStillAtLarge = snapshot.boss !== null || snapshot.respawnPending;
     this.boss = null;
     this.encounter = [];

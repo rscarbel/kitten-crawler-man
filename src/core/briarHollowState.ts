@@ -21,8 +21,7 @@ import {
   type ConstructionUnlockId,
   type VillageUnlocks,
 } from './villageUnlocks';
-import type { VillagerId } from '../systems/briarHollow/ratkinDialogue';
-import { VILLAGER_IDS } from '../systems/briarHollow/ratkinDialogue';
+import { VILLAGER_IDS, type VillagerId } from '../dialog/scripts/briarHollow';
 import type { RatkinCastId } from '../sprites/art/ratkin/cast';
 import { HOLLOW_BELL_MAX_HP } from '../systems/briarHollow/hollowBell';
 import { PALISADE_SEGMENT_SCHEME_VERSION } from '../map/overworld/briarHollowSite';
@@ -282,9 +281,9 @@ export interface HarvestNodeState {
 }
 
 /**
- * Every villager listed explicitly, like `VILLAGER_TABLE` in `ratkinDialogue.ts`,
- * so that a new villager id fails this function's typecheck until it is added
- * here too, rather than silently reading as never-talked-to.
+ * Every villager listed explicitly, like `VILLAGER_SCRIPTS`, so that a new
+ * villager id fails this function's typecheck until it is added here too,
+ * rather than silently reading as never-talked-to.
  */
 function emptyTalkCounts(): Record<VillagerId, number> {
   return {

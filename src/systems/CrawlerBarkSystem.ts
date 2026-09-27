@@ -20,18 +20,6 @@ import {
   type TimedBubbleStyle,
 } from '../sprites/speechBubble';
 
-/** Carl's reaction to Donut going down, on the W0-1 `crawlerKnockedOut` event. */
-export const DONUT_KNOCKOUT_BARK = 'God dammit, Donut!';
-
-/**
- * What a crawler says after landing several hits on a shield fairy's ward
- * with nothing to show for it — `Player.noteWardBlockedHit`'s threshold.
- */
-export const WARD_EXPLAINER_BARK_LINES: readonly string[] = [
-  "I think these guys surrounded by blue can't be damaged.",
-  'I need to kill the shield fairy first.',
-];
-
 interface CrawlerBarkState {
   readonly speech: TimedSpeech;
   queue: string[];

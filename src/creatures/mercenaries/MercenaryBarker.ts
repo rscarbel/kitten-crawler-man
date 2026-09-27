@@ -2,10 +2,12 @@ import {
   BARK_COOLDOWN_FRAMES,
   BARK_MIN_GAP_FRAMES,
   GAP_EXEMPT_TRIGGERS,
+  linesFor,
   type MercenaryBarkTrigger,
   type MercenaryGrunt,
   type MercenaryVoice,
 } from './mercenaryVoices';
+import type { BarkLine, NonEmpty } from '../../dialog/line';
 
 /** What one bark comes out as: words, a stage direction, a noise, or a direction with a noise. */
 export interface MercenaryUtterance {
@@ -60,10 +62,10 @@ export class MercenaryBarker {
    */
   bark(trigger: MercenaryBarkTrigger): MercenaryUtterance | null {
     if (!this.canBark(trigger)) return null;
-    const spoken = this.voice.lines[trigger];
-    const narrated = this.voice.actions?.[trigger];
-    const pool = spoken !== undefined && spoken.length > 0 ? spoken : narrated;
-    const text = pool === undefined || pool.length === 0 ? null : this.pickLine(trigger, pool);
+    const spoken = linesFor(this.voice.lines, trigger);
+    const narrated = linesFor(this.voice.actions, trigger);
+    const pool = spoken ?? narrated;
+    const text = pool === undefined ? null : this.pickLine(trigger, pool);
     const italic = text !== null && pool === narrated;
     const grunt = this.voice.grunts?.[trigger] ?? null;
 
@@ -73,18 +75,20 @@ export class MercenaryBarker {
   }
 
   private hasAnything(trigger: MercenaryBarkTrigger): boolean {
-    const spokenCount = this.voice.lines[trigger]?.length ?? 0;
-    const narratedCount = this.voice.actions?.[trigger]?.length ?? 0;
     const grunt = this.voice.grunts?.[trigger];
-    return spokenCount > 0 || narratedCount > 0 || grunt !== undefined;
+    return (
+      linesFor(this.voice.lines, trigger) !== undefined ||
+      linesFor(this.voice.actions, trigger) !== undefined ||
+      grunt !== undefined
+    );
   }
 
-  private pickLine(trigger: MercenaryBarkTrigger, pool: readonly string[]): string {
+  private pickLine(trigger: MercenaryBarkTrigger, pool: NonEmpty<BarkLine>): string {
     const previous = this.lastLineByTrigger.get(trigger);
-    const fresh = pool.length > 1 ? pool.filter((line) => line !== previous) : pool;
+    const fresh = pool.length > 1 ? pool.filter((line) => line.paragraphs[0] !== previous) : pool;
     const index = Math.min(fresh.length - 1, Math.floor(this.random() * fresh.length));
     const line = fresh[index];
-    this.lastLineByTrigger.set(trigger, line);
-    return line;
+    this.lastLineByTrigger.set(trigger, line.paragraphs[0]);
+    return line.paragraphs[0];
   }
 }

@@ -31,6 +31,7 @@ import {
   takeNextBountyName,
 } from '../src/core/BountyProgress';
 import { BOUNTY_DEFS } from '../src/systems/bountyDefs';
+import { Conversation } from '../src/dialog/Conversation';
 import { createMob } from '../src/levels/spawner';
 import {
   BountySystem,
@@ -426,7 +427,13 @@ console.log('\nDriving the full issue → kill → collect loop…');
   const bus = new EventBus();
   const spawned: Mob[] = [];
   const loopProgress = createBountyProgress();
-  const system = new BountySystem(map, bus, loopProgress, (mob) => spawned.push(mob), null);
+  const system = new BountySystem(
+    map,
+    bus,
+    loopProgress,
+    (mob) => spawned.push(mob),
+    new Conversation(null),
+  );
 
   check(system.phase === 'available', 'starts available');
   check(system.currentName === null, 'names nothing before a bounty is issued');
@@ -507,7 +514,13 @@ console.log('\nRebuilding the scene mid-bounty…');
   const progress = createBountyProgress();
 
   const before: Mob[] = [];
-  const first = new BountySystem(map, new EventBus(), progress, (mob) => before.push(mob), null);
+  const first = new BountySystem(
+    map,
+    new EventBus(),
+    progress,
+    (mob) => before.push(mob),
+    new Conversation(null),
+  );
   first.issueBounty(human, cat);
   const nameBefore = first.currentName;
   const siteBefore = progress.currentSiteIndex;
@@ -516,7 +529,13 @@ console.log('\nRebuilding the scene mid-bounty…');
   // A second system over the same record is exactly what a door produces: the
   // old scene's mobs are gone, the record is not.
   const after: Mob[] = [];
-  const second = new BountySystem(map, new EventBus(), progress, (mob) => after.push(mob), null);
+  const second = new BountySystem(
+    map,
+    new EventBus(),
+    progress,
+    (mob) => after.push(mob),
+    new Conversation(null),
+  );
   check(second.phase === 'active', 'the bounty is still active after the rebuild');
   check(second.currentName === nameBefore, `the mark keeps its name (${nameBefore ?? '—'})`);
   check(progress.currentSiteIndex === siteBefore, 'the mark keeps its site');
@@ -551,7 +570,13 @@ console.log('\nKilling the mark, then rebuilding the scene before collecting…'
   const bus = new EventBus();
 
   const spawned: Mob[] = [];
-  const first = new BountySystem(map, bus, progress, (mob) => spawned.push(mob), null);
+  const first = new BountySystem(
+    map,
+    bus,
+    progress,
+    (mob) => spawned.push(mob),
+    new Conversation(null),
+  );
   first.issueBounty(human, cat);
   const boss = spawned.find((mob) => mob.isBoss) ?? null;
   check(boss !== null, 'a mark is staged before the kill');
@@ -566,7 +591,13 @@ console.log('\nKilling the mark, then rebuilding the scene before collecting…'
 
   // A building entry/exit is exactly this: the old system and its mobs are
   // gone, but `progress` — passed by reference — is not.
-  const second = new BountySystem(map, new EventBus(), progress, () => undefined, null);
+  const second = new BountySystem(
+    map,
+    new EventBus(),
+    progress,
+    () => undefined,
+    new Conversation(null),
+  );
   check(second.phase === 'kill_pending', 'the rebuilt system still reads kill_pending');
   const coinsBefore = human.coins;
   const paid = second.collectBounty(human);

@@ -38,6 +38,7 @@ import type { SystemContext } from '../src/systems/GameSystem';
 import { EventBus } from '../src/core/EventBus';
 import { makeSepsis } from '../src/core/StatusEffect';
 import { BIG_TOP_SEALED_MESSAGE, createCircusQuestProgress } from '../src/core/CircusQuestProgress';
+import { Conversation } from '../src/dialog/Conversation';
 import {
   BELL_HOLD_FRAMES,
   BIG_TOP_MAZE_ROWS,
@@ -1344,6 +1345,7 @@ function buildMazeHarness(): {
     },
     progress,
     null,
+    new Conversation(null),
   );
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);

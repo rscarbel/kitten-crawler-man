@@ -57,6 +57,7 @@ import { mulberry32 } from '../src/sprites/person/rng';
 import { checkCircusJourney } from './verifyHirelingLoss/circusJourney';
 import { checkDeathNotice } from './verifyHirelingLoss/deathNotice';
 import { checkCatchUpAttention } from './verifyHirelingLoss/catchUpAttention';
+import { Conversation } from '../src/dialog/Conversation';
 
 /** Overworlds built per rule: enough layouts that one lucky circus placement cannot pass the gate. */
 const SEED_COUNT = 5;
@@ -148,6 +149,7 @@ function stageAssault(worldSeed: number): CircusStage | null {
     null,
     null,
     human,
+    new Conversation(null),
   );
   return { map, roster, human, quest, centre, radiusTiles };
 }

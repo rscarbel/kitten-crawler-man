@@ -25,6 +25,8 @@
  *   this.scrollOffset = Math.min(this.scrollOffset, scrollMax);
  */
 
+import { computeLineSpans } from '../dialog/paginate';
+
 const DEFAULT_FONT_SIZE = 12;
 const DEFAULT_OUTLINE_WIDTH = 3;
 const DEFAULT_GLOW_BLUR = 12;
@@ -212,31 +214,46 @@ export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: 
   return computeWrappedLines(ctx, text, maxWidth);
 }
 
+/**
+ * Greedily fills words into lines no wider than `maxWidth`, honoring explicit
+ * `\n` paragraph breaks, using `measure` to size a candidate line. Takes a
+ * measure function rather than a canvas context so pagination logic can
+ * share this exact wrapping rule without a live `ctx`.
+ */
+export function wrapWithMeasure(
+  text: string,
+  maxWidth: number,
+  measure: (s: string) => number,
+): string[] {
+  const spans = computeLineSpans(text, maxWidth, measure);
+  const lines = spans.map((span) => text.slice(span.offset, span.offset + span.length));
+  return lines.length > 0 ? lines : [''];
+}
+
 function computeWrappedLines(
   ctx: CanvasRenderingContext2D,
   text: string,
   maxWidth: number,
 ): string[] {
-  const result: string[] = [];
-  for (const para of text.split('\n')) {
-    if (para === '') {
-      result.push('');
-      continue;
-    }
-    const words = para.split(' ');
-    let current = '';
-    for (const word of words) {
-      const candidate = current ? `${current} ${word}` : word;
-      if (ctx.measureText(candidate).width > maxWidth && current !== '') {
-        result.push(current);
-        current = word;
-      } else {
-        current = candidate;
-      }
-    }
-    if (current !== '') result.push(current);
-  }
-  return result.length > 0 ? result : [''];
+  return wrapWithMeasure(text, maxWidth, (s) => ctx.measureText(s).width);
+}
+
+/**
+ * Word-wraps `text` to `maxWidth` under an explicit `font`, rather than
+ * whatever font happens to already be set on `ctx`. Restores the context's
+ * prior font before returning.
+ */
+export function wrapLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  font: string,
+): string[] {
+  const previousFont = ctx.font;
+  ctx.font = font;
+  const lines = computeWrappedLines(ctx, text, maxWidth);
+  ctx.font = previousFont;
+  return lines;
 }
 
 function resolveLines(

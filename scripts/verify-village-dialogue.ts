@@ -1,29 +1,33 @@
 #!/usr/bin/env tsx
 /**
- * Checks the transcribed villager dialogue table against its source.
+ * Checks Briar Hollow's dialogue ladder: every opening rung is reachable,
+ * every built-in topic can be run without error, every village bark fires
+ * for real, and a one-shot line is spoken exactly once no matter how many
+ * times its villager is talked to.
  *
- * The table in `src/systems/briarHollow/ratkinDialogue.ts` was generated once
- * from a JSON block quoted in the appendix. While that appendix still exists,
- * this gate re-parses the JSON block and asserts the table matches it
- * character for character: every villager, every circumstance, no extras, no
- * missing entries. Once the appendix is gone, the comparison is meaningless
- * (there is nothing left to transcribe against), so the gate skips it and
- * falls back to checks that must hold regardless of any source document: ids
- * are unique, and no line is ever empty.
+ * Whether every line a villager's script holds is ever referenced is
+ * `verify:dialog-lines`'s job, not this gate's: a script property is a
+ * compile-time reference, not a runtime lookup this file could fail to
+ * reach.
  *
  * Run: npx tsx scripts/verify-village-dialogue.ts
  */
 
-import { readFileSync, existsSync } from 'node:fs';
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import {
+  BRAMBLEWICK,
+  GARN,
+  MERRIT,
+  MIDGE,
+  PIPKIN,
+  TIKKA,
   VILLAGER_IDS,
-  line,
-  villagerEntry,
-  type Circumstance,
+  WICKER,
   type VillagerId,
-} from '../src/systems/briarHollow/ratkinDialogue';
+} from '../src/dialog/scripts/briarHollow';
+import type { DialogLine } from '../src/dialog/line';
 import {
+  KEEP_TALKING,
   type OpeningRule,
   type QuestLineProvider,
   type SoldierStance,
@@ -32,25 +36,18 @@ import {
   openingLine,
   onceFlagFor,
 } from '../src/systems/briarHollow/villagerCircumstances';
-import {
-  BUILT_IN_TOPICS,
-  type ConversationController,
-  type ConversationTopic,
-} from '../src/systems/briarHollow/villagerTopics';
-import { PENDING_FLOW_LINES, VILLAGER_FLOW_LINES } from '../src/systems/briarHollow/villagerFlows';
+import { BUILT_IN_TOPICS } from '../src/systems/briarHollow/villagerTopics';
 import {
   COW_PET_NOTICE_TILES,
   VillagerSystem,
   type ConversationSpeaker,
 } from '../src/systems/briarHollow/VillagerSystem';
+import { Conversation } from '../src/dialog/Conversation';
+import { recordingHandle, testConversationFlow, type Runnable } from './dialogFlowTestHelpers';
 import { createBriarHollowState, type VillageQuestState } from '../src/core/briarHollowState';
 import type { VillageQuestPhase } from '../src/core/villageQuestPhase';
 import { GameMap } from '../src/map/GameMap';
 import { TILE_SIZE } from '../src/core/constants';
-
-const APPENDIX_PATH = 'docs/briar-hollow-plan/appendix-b-source-data.md';
-
-const NAMED_VILLAGER_COUNT = 17;
 
 let failures = 0;
 
@@ -58,181 +55,6 @@ function check(ok: boolean, label: string): void {
   console.log(`${ok ? '  ok  ' : ' FAIL '} ${label}`);
   if (!ok) failures++;
 }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-interface SourceDialogueOption {
-  readonly circumstance: string;
-  readonly text: string;
-}
-
-interface SourceVillager {
-  readonly name: string;
-  readonly role: string;
-  readonly backstory: string;
-  readonly dialogueOptions: readonly SourceDialogueOption[];
-}
-
-function parseDialogueOption(value: unknown): SourceDialogueOption | undefined {
-  if (!isRecord(value)) return undefined;
-  const { circumstance, text } = value;
-  if (typeof circumstance !== 'string' || typeof text !== 'string') return undefined;
-  return { circumstance, text };
-}
-
-function parseVillager(value: unknown): SourceVillager | undefined {
-  if (!isRecord(value)) return undefined;
-  const { name, role, backstory, dialogue_options: dialogueOptionsRaw } = value;
-  if (typeof name !== 'string' || typeof role !== 'string' || typeof backstory !== 'string') {
-    return undefined;
-  }
-  if (!Array.isArray(dialogueOptionsRaw)) return undefined;
-  const dialogueOptions: SourceDialogueOption[] = [];
-  for (const item of dialogueOptionsRaw) {
-    const option = parseDialogueOption(item);
-    if (!option) return undefined;
-    dialogueOptions.push(option);
-  }
-  return { name, role, backstory, dialogueOptions };
-}
-
-function parseVillagers(value: unknown): SourceVillager[] {
-  if (!Array.isArray(value)) {
-    throw new Error('the appendix villager block did not parse as a JSON array');
-  }
-  const villagers: SourceVillager[] = [];
-  for (const item of value) {
-    const villager = parseVillager(item);
-    if (!villager) {
-      throw new Error(
-        `an appendix villager entry did not match the expected shape: ${JSON.stringify(item)}`,
-      );
-    }
-    villagers.push(villager);
-  }
-  return villagers;
-}
-
-function extractVillagersJsonBlock(markdown: string): string {
-  const sectionStart = markdown.indexOf('## Villagers');
-  if (sectionStart === -1) {
-    throw new Error('the appendix has no "## Villagers" section');
-  }
-  const fenceStart = markdown.indexOf('```json', sectionStart);
-  if (fenceStart === -1) {
-    throw new Error('the appendix "## Villagers" section has no ```json fence');
-  }
-  const jsonStart = markdown.indexOf('\n', fenceStart) + 1;
-  const fenceEnd = markdown.indexOf('```', jsonStart);
-  if (fenceEnd === -1) {
-    throw new Error('the appendix villager JSON block is never closed');
-  }
-  return markdown.slice(jsonStart, fenceEnd);
-}
-
-const NAME_TO_ID: ReadonlyMap<string, VillagerId> = new Map([
-  ['Mayor Bramblewick', 'bramblewick'],
-  ['Merrit Roottail', 'merrit'],
-  ['Pipkin Paws', 'pipkin'],
-  ['Doctor Sella Morrowtail', 'sella'],
-  ['Vetch Nibnose', 'vetch'],
-  ['Oren Ironwhisker', 'oren'],
-  ['Tikka Geargrinder', 'tikka'],
-  ['Fenna Splintertail', 'fenna'],
-  ['Garn Picknose', 'garn'],
-  ['Sedge Quickclaw', 'sedge'],
-  ['Hobb Greycloak', 'hobb'],
-  ['Marta Redwhisker', 'marta'],
-  ['Pru Bristleback', 'pru'],
-  ['Nella Softstep', 'nella'],
-  ['Cricket Mudwhisk', 'cricket'],
-  ['Wicker Longtooth', 'wicker'],
-  ['Midge Candleear', 'midge'],
-]);
-
-function verifyAgainstAppendix(): void {
-  const markdown = readFileSync(APPENDIX_PATH, 'utf8');
-  const jsonBlock = extractVillagersJsonBlock(markdown);
-  const parsed: unknown = JSON.parse(jsonBlock);
-  const sourceVillagers = parseVillagers(parsed);
-
-  check(
-    sourceVillagers.length === VILLAGER_IDS.length,
-    `appendix has ${sourceVillagers.length} villagers, table has ${VILLAGER_IDS.length}`,
-  );
-
-  const seenIds = new Set<VillagerId>();
-  for (const source of sourceVillagers) {
-    const id = NAME_TO_ID.get(source.name);
-    check(id !== undefined, `"${source.name}" maps to a known villager id`);
-    if (id === undefined) continue;
-    seenIds.add(id);
-
-    const entry = villagerEntry(id);
-    check(entry.name === source.name, `${id}: name matches ("${entry.name}" vs "${source.name}")`);
-    check(entry.role === source.role, `${id}: role matches`);
-    check(entry.backstory === source.backstory, `${id}: backstory matches character for character`);
-
-    const tableCircumstances = new Set(entry.dialogueOptions.map((option) => option.circumstance));
-    const sourceCircumstances = new Set(
-      source.dialogueOptions.map((option) => option.circumstance),
-    );
-    check(
-      tableCircumstances.size === sourceCircumstances.size,
-      `${id}: has exactly the appendix's ${sourceCircumstances.size} circumstances (table has ${tableCircumstances.size})`,
-    );
-
-    for (const sourceOption of source.dialogueOptions) {
-      const tableOption = entry.dialogueOptions.find(
-        (option) => option.circumstance === sourceOption.circumstance,
-      );
-      check(tableOption !== undefined, `${id}: has a line for "${sourceOption.circumstance}"`);
-      if (tableOption === undefined) continue;
-      check(
-        tableOption.text === sourceOption.text,
-        `${id}: "${sourceOption.circumstance}" matches character for character`,
-      );
-    }
-
-    for (const tableOption of entry.dialogueOptions) {
-      const inSource = sourceCircumstances.has(tableOption.circumstance);
-      check(
-        inSource,
-        `${id}: table has no extra circumstance "${tableOption.circumstance}" beyond the appendix`,
-      );
-    }
-  }
-
-  for (const id of VILLAGER_IDS) {
-    check(seenIds.has(id), `table's "${id}" exists in the appendix`);
-  }
-}
-
-function verifyStructuralInvariants(): void {
-  check(
-    VILLAGER_IDS.length === NAMED_VILLAGER_COUNT,
-    `there are ${NAMED_VILLAGER_COUNT} villager ids (found ${VILLAGER_IDS.length})`,
-  );
-  check(new Set(VILLAGER_IDS).size === VILLAGER_IDS.length, 'villager ids are unique');
-
-  for (const id of VILLAGER_IDS) {
-    const entry = villagerEntry(id);
-    check(entry.dialogueOptions.length > 0, `${id}: has at least one line`);
-    for (const option of entry.dialogueOptions) {
-      check(option.text.length > 0, `${id}: "${option.circumstance}" is a non-empty string`);
-      check(option.circumstance.length > 0, `${id}: has no empty circumstance name`);
-    }
-  }
-}
-
-// ── Who can say what ─────────────────────────────────────────────────────────
-//
-// Every line in the table must be sayable: by the opening resolver, by a
-// built-in topic, by one of the village's own barks, or by a flow registered
-// in `VILLAGER_FLOW_LINES`. A line none of them produces is one the player
-// can never hear.
 
 const PHASES: readonly VillageQuestPhase[] = [
   'unmet',
@@ -334,20 +156,22 @@ function representativeContexts(
     { ...base, party: partyState({ axeTier: 0, pickaxeTier: 0 }) },
     { ...base, breachExists: true },
   ];
+  const milestoneFlagSlugs: Readonly<Record<number, string>> = {
+    5: 'spikes_unlocked',
+    10: 'level_10_construction',
+    15: 'level_15_construction',
+  };
   for (const level of MILESTONE_LEVELS) {
     const spentBelow = MILESTONE_LEVELS.filter((earlier) => earlier > 0 && earlier < level);
-    const milestoneFlag: Record<number, Circumstance> = {
-      5: 'spikes_unlocked',
-      10: 'level_10_construction',
-      15: 'level_15_construction',
-    };
     contexts.push({
       ...base,
       party: partyState({
         constructionLevels: { human: level, cat: 0 },
         constructionLearned: true,
       }),
-      onceFlags: spentBelow.map((earlier) => onceFlagFor('tikka', milestoneFlag[earlier])),
+      onceFlags: spentBelow.map((earlier) =>
+        onceFlagFor('tikka', milestoneFlagSlugs[earlier] ?? ''),
+      ),
     });
   }
   if (SOLDIER_IDS.has(villager)) {
@@ -366,42 +190,20 @@ function representativeContexts(
 }
 
 /** A stand-in questline that has a line for the Mayor, so the quest rung is exercised. */
-const STAND_IN_QUEST_LINES: QuestLineProvider = {
-  lineFor: (villager) => (villager === 'bramblewick' ? { pages: ['quest_offer'] } : null),
-};
-
-function keyOf(villager: VillagerId, circumstance: Circumstance): string {
-  return `${villager}:${circumstance}`;
+function standInQuestLines(mayorLine: DialogLine): QuestLineProvider {
+  return {
+    lineFor: (villager) =>
+      villager === 'bramblewick' ? { pages: [mayorLine], after: KEEP_TALKING } : null,
+  };
 }
 
-/** Runs every built-in topic, submenus included, recording what each says. */
-function exerciseTopics(
-  villager: VillagerId,
-  ctx: VillagerContext,
-  said: Set<string>,
-  refusals: string[],
-): void {
-  const pending: ConversationTopic[] = [...BUILT_IN_TOPICS.topics(villager, ctx)];
-  const controller: ConversationController = {
-    villager,
-    say: (...circumstances) => {
-      for (const circumstance of circumstances) {
-        if (line(villager, circumstance) === undefined) {
-          refusals.push(keyOf(villager, circumstance));
-          return false;
-        }
-      }
-      for (const circumstance of circumstances) said.add(keyOf(villager, circumstance));
-      return true;
-    },
-    showTopics: (topics) => pending.push(...topics),
-    showRootTopics: () => undefined,
-    close: () => undefined,
-    endAfterPages: () => undefined,
-    afterClose: () => undefined,
-  };
-  // A submenu pushes its rows behind the one being run; for-of reaches them too.
-  for (const topic of pending) topic.run(controller);
+/** Runs every built-in topic, submenus included, to catch a topic whose `run` throws. */
+function exerciseTopics(villager: VillagerId, ctx: VillagerContext): void {
+  const flow = testConversationFlow();
+  const pending: Runnable[] = [...BUILT_IN_TOPICS.topics(villager, ctx, flow)];
+  const handle = recordingHandle(pending);
+  // A submenu queues its rows behind the one being run; for-of reaches them too.
+  for (const topic of pending) topic.run(handle);
 }
 
 /** A cast-free villager system on one generated map, for driving the village's own barks. */
@@ -420,6 +222,7 @@ function villageOnAMap(state = createBriarHollowState()): VillagerSystem | null 
     state,
     bus: null,
     audio: null,
+    conversation: new Conversation(null),
     party: () => STONE_RICH_BUILDER,
     random: () => 0,
   });
@@ -433,29 +236,27 @@ const STONE_RICH_BUILDER = partyState({
   constructionLearned: true,
 });
 
-/** Triggers each village bark for real and records the line that went up. */
-function exerciseBarks(said: Set<string>): void {
+/** Triggers each village bark for real and checks the line that went up is the one asked for. */
+function exerciseBarks(): void {
   const state = createBriarHollowState();
   const system = villageOnAMap(state);
   check(system !== null, 'a generated map has a village to bark in');
   if (system === null) return;
   const byId = (id: string) => system.villagers.find((villager) => villager.id === id);
-  const heard = (id: VillagerId, circumstance: Circumstance): void => {
+  const heard = (id: VillagerId, line: DialogLine, label: string): void => {
     const villager = byId(id);
-    const text = line(id, circumstance);
-    const spoke = villager !== undefined && text !== undefined && villager.bark.current === text;
-    check(spoke, `${id} barks "${circumstance}"`);
-    if (spoke) said.add(keyOf(id, circumstance));
+    const spoke = villager !== undefined && villager.bark.current === line.paragraphs[0];
+    check(spoke, `${id} barks "${label}"`);
   };
   const merrit = byId('merrit');
   if (merrit !== undefined) system.noteCowPetted(merrit.x, merrit.y);
-  heard('merrit', 'cow_petted_nearby');
+  heard('merrit', MERRIT.cowPettedNearby, 'cow petted nearby');
   const pipkin = byId('pipkin');
   if (pipkin !== undefined) system.noteStewRefused({ x: pipkin.x, y: pipkin.y });
-  heard('pipkin', 'stew_cooldown_active');
+  heard('pipkin', PIPKIN.stewCooldownActive, 'stew cooldown active');
   const garn = byId('garn');
   if (garn !== undefined) system.noteDepositDepleted(garn.tile.x, garn.tile.y);
-  heard('garn', 'deposit_depleted');
+  heard('garn', GARN.depositDepleted, 'deposit depleted');
   const far = { x: 0, y: 0 };
   // Out of earshot: a cow petted far from Merrit never makes her bark twice.
   if (merrit !== undefined) {
@@ -467,57 +268,27 @@ function exerciseBarks(said: Set<string>): void {
   system.update(party);
   state.quest.phase = 'imminent';
   system.update(party);
-  heard('midge', 'attack_imminent');
+  heard('midge', MIDGE.attackImminent, 'attack imminent');
 }
 
 function verifyResolverCoverage(): void {
-  console.log('\nEvery line can be heard');
-  const said = new Set<string>();
+  console.log('\nEvery opening rung is reachable');
   const rules = new Set<OpeningRule>();
-  const refusals: string[] = [];
-  let undefinedOpenings = 0;
-  let textMismatches = 0;
 
   for (const villager of VILLAGER_IDS) {
     for (const phase of PHASES) {
       for (const talkCount of TALK_COUNTS) {
         for (const ctx of representativeContexts(villager, phase, talkCount)) {
-          for (const questLines of [null, STAND_IN_QUEST_LINES]) {
+          for (const questLines of [null, standInQuestLines(BRAMBLEWICK.questOffer)]) {
             const opening = openingLine(villager, ctx, questLines);
             rules.add(opening.rule);
-            for (const circumstance of opening.pages) {
-              const text = line(villager, circumstance);
-              if (text === undefined) {
-                undefinedOpenings++;
-                continue;
-              }
-              const verbatim = villagerEntry(villager).dialogueOptions.find(
-                (option) => option.circumstance === circumstance,
-              )?.text;
-              if (verbatim !== text) textMismatches++;
-              // The stand-in questline only proves the rung is reachable; the
-              // lines it says belong to the real questline, still pending.
-              if (questLines === null) said.add(keyOf(villager, circumstance));
-            }
           }
-          exerciseTopics(villager, ctx, said, refusals);
+          exerciseTopics(villager, ctx);
         }
       }
     }
   }
 
-  check(
-    undefinedOpenings === 0,
-    `no opening resolves to a line the villager lacks (${undefinedOpenings})`,
-  );
-  check(
-    textMismatches === 0,
-    `every opening's text is the verbatim table's (${textMismatches} differ)`,
-  );
-  check(
-    refusals.length === 0,
-    `every built-in topic has its lines (${refusals.join(', ') || 'none missing'})`,
-  );
   const everyRule: readonly OpeningRule[] = [
     'siege',
     'one_shot',
@@ -532,57 +303,7 @@ function verifyResolverCoverage(): void {
   ];
   for (const rule of everyRule) check(rules.has(rule), `the "${rule}" rung is reachable`);
 
-  exerciseBarks(said);
-
-  const flows = new Set<string>();
-  const pending = new Set<string>();
-  const register = (
-    lists: Readonly<
-      Record<string, readonly { villager: VillagerId; circumstance: Circumstance }[]>
-    >,
-    into: Set<string>,
-  ): void => {
-    for (const [owner, lines] of Object.entries(lists)) {
-      for (const flow of lines) {
-        const exists = line(flow.villager, flow.circumstance) !== undefined;
-        check(exists, `${owner} flow "${keyOf(flow.villager, flow.circumstance)}" is a real line`);
-        into.add(keyOf(flow.villager, flow.circumstance));
-      }
-    }
-  };
-  register(VILLAGER_FLOW_LINES, flows);
-  register(PENDING_FLOW_LINES, pending);
-  const both = [...pending].filter((key) => flows.has(key));
-  check(both.length === 0, `no flow line is both wired and pending (${both.join(', ') || 'none'})`);
-
-  const unheard: string[] = [];
-  const stillPending: string[] = [];
-  // Pending lines are checked before anything that produces them: a soldier
-  // opens with a command line when he has no line for his orders, but the
-  // command itself is still the militia's to wire, and must stay listed.
-  const openingButPending: string[] = [];
-  for (const villager of VILLAGER_IDS) {
-    for (const option of villagerEntry(villager).dialogueOptions) {
-      const key = keyOf(villager, option.circumstance);
-      if (pending.has(key)) {
-        if (said.has(key)) openingButPending.push(key);
-        else stillPending.push(key);
-        continue;
-      }
-      if (!said.has(key) && !flows.has(key)) unheard.push(key);
-    }
-  }
-  check(
-    unheard.length === 0,
-    `every line is produced, wired or pending (unclaimed: ${unheard.join(', ') || 'none'})`,
-  );
-  // Reported, not failed: these belong to systems that do not speak them yet.
-  console.log(
-    `  ..   ${stillPending.length} flow line(s) still pending: ${stillPending.join(', ') || 'none'}`,
-  );
-  console.log(
-    `  ..   ${openingButPending.length} pending flow line(s) also heard as an opening: ${openingButPending.join(', ') || 'none'}`,
-  );
+  exerciseBarks();
 }
 
 /** A villager standing still at the origin, for opening conversations headlessly. */
@@ -617,30 +338,35 @@ function verifyOneShotsFireOnce(): void {
   }
   const talker = { x: 0, y: 0 };
   const expectations: ReadonlyArray<{
-    villager: VillagerId;
-    circumstances: readonly Circumstance[];
+    readonly villager: VillagerId;
+    readonly flagSlugs: readonly string[];
+    readonly lines: readonly DialogLine[];
   }> = [
-    { villager: 'wicker', circumstances: ['wooden_wall_built'] },
+    { villager: 'wicker', flagSlugs: ['wooden_wall_built'], lines: [WICKER.woodenWallBuilt] },
     {
       villager: 'tikka',
-      circumstances: ['spikes_unlocked', 'level_10_construction', 'level_15_construction'],
+      flagSlugs: ['spikes_unlocked', 'level_10_construction', 'level_15_construction'],
+      lines: [TIKKA.spikesUnlocked, TIKKA.level10Construction, TIKKA.level15Construction],
     },
   ];
-  for (const { villager, circumstances } of expectations) {
-    const spoken = new Map<Circumstance, number>();
+  for (const { villager, flagSlugs, lines } of expectations) {
+    const spoken = new Map<DialogLine, number>();
     for (let talk = 0; talk < REPEAT_TALKS; talk++) {
       system.openConversation(standInSpeaker(villager), talker);
       for (const page of system.lastOpening?.pages ?? [])
         spoken.set(page, (spoken.get(page) ?? 0) + 1);
       system.closeConversation();
     }
-    for (const circumstance of circumstances) {
-      const times = spoken.get(circumstance) ?? 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const flagSlug = flagSlugs[i];
+      if (line === undefined || flagSlug === undefined) continue;
+      const times = spoken.get(line) ?? 0;
       check(
         times === 1,
-        `${villager} says "${circumstance}" exactly once in ${REPEAT_TALKS} talks (${times})`,
+        `${villager} says its "${flagSlug}" one-shot exactly once in ${REPEAT_TALKS} talks (${times})`,
       );
-      const flag = onceFlagFor(villager, circumstance);
+      const flag = onceFlagFor(villager, flagSlug);
       const recorded = state.onceFlags.filter((entry) => entry === flag).length;
       check(recorded === 1, `and records "${flag}" exactly once (${recorded})`);
     }
@@ -649,15 +375,8 @@ function verifyOneShotsFireOnce(): void {
 
 installCanvasGlobals();
 
-verifyStructuralInvariants();
 verifyResolverCoverage();
 verifyOneShotsFireOnce();
-
-if (existsSync(APPENDIX_PATH)) {
-  verifyAgainstAppendix();
-} else {
-  console.log('appendix-b-source-data.md is gone; skipping the transcription comparison.');
-}
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED.\n`);

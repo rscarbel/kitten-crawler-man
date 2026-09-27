@@ -3,6 +3,8 @@ import type { LootDrop } from './Mob';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
+import { pickLine } from '../dialog/line';
+import { JUICER_LINES } from '../dialog/scripts/juicer';
 import { drawDangerCircle } from '../sprites/dangerTelegraph';
 import {
   drawJuicerSprite,
@@ -202,24 +204,6 @@ interface RollingPlate {
   vy: number;
   age: number;
 }
-
-const TAUNT_PHRASES = [
-  'Bro',
-  'I need a spot, bro',
-  "Excuses don't lose calories",
-  'What are you doing, bro?',
-  'Release the beast',
-  'Come at me, bro',
-  'Stop it, bro',
-];
-
-/** What he says once his boombox is smashed. */
-const NO_MUSIC_TAUNT_PHRASES = [
-  "I CAN'T HEAR MY PUMP-UP MUSIC, BRO",
-  "Who touches a man's playlist?",
-  'That was my PR mix, bro',
-  'Now I have to count my own reps',
-];
 
 export type JuicerState =
   | 'idle'
@@ -535,9 +519,9 @@ export class Juicer extends Mob {
         this.tauntIndex = 0;
       }
       if (this.tauntTimer >= TAUNT_INTERVAL || this.currentTaunt === null || musicChanged) {
-        const phrases = this.musicPlaying ? TAUNT_PHRASES : NO_MUSIC_TAUNT_PHRASES;
-        this.currentTaunt = phrases[this.tauntIndex % phrases.length];
-        this.tauntIndex = (this.tauntIndex + 1) % phrases.length;
+        const pool = this.musicPlaying ? JUICER_LINES.taunts : JUICER_LINES.noMusicTaunts;
+        this.currentTaunt = pickLine(pool, this.tauntIndex).paragraphs[0];
+        this.tauntIndex++;
         this.tauntTimer = 0;
       }
     } else {

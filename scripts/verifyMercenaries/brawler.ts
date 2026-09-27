@@ -359,7 +359,7 @@ function terrorBout(make: (tileX: number, tileY: number) => Mob, level: number):
 }
 
 function isSpecialLine(line: string): boolean {
-  return (MAXX_VOICE.lines.special ?? []).includes(line);
+  return (MAXX_VOICE.lines.special ?? []).some((special) => special.paragraphs[0] === line);
 }
 
 /** The crush started, finished the victim in one blow bigger than a jab, and he said his line. */
@@ -651,9 +651,10 @@ function checkReckless(report: BrawlerGateReporter): void {
       // this measures how he fights while still down there.
       harness.merc.survival.potionCooldownFrames = FIGHT_FRAMES;
     });
-  const lowHpLines = MAXX_VOICE.lines.low_hp ?? [];
+  const lowHpLines = MAXX_VOICE.lines.lowHp ?? [];
   const saysLowHp = (record: FightRecord | null): boolean =>
-    record?.spoken.some((line) => lowHpLines.includes(line)) === true;
+    record?.spoken.some((line) => lowHpLines.some((lowHp) => lowHp.paragraphs[0] === line)) ===
+    true;
   const hurt = hurtFight(LOW_HP_FRACTION);
   const dealt = hurt?.blows.reduce((sum, blow) => sum + blow.damage, 0) ?? 0;
   report.check(

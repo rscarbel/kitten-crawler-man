@@ -21,7 +21,8 @@ import { GOBLIN_DYNAMITE_PRICE } from '../../ShopSystem';
 import { SOLD_OUT_LABEL } from '../../market/vendorMenu';
 import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
 import type { TopicProvider } from '../villagerTopics';
-import { villagerEntry } from '../ratkinDialogue';
+import { SPEAKERS } from '../../../dialog/speakers';
+import { VETCH } from '../../../dialog/scripts/briarHollow';
 import { LOW_SUPPLIES_THRESHOLD } from '../villagerCircumstances';
 import { HAMBURGER_PRICE } from './cookhouse';
 import {
@@ -117,8 +118,8 @@ export function buildTradingPostMenu(state: BriarHollowState): PricedMenu {
   });
   return {
     title: TRADING_POST_TITLE,
-    bark: sellerLine(MERCHANT, 'shop_open'),
-    byline: villagerEntry(MERCHANT).name,
+    bark: sellerLine(VETCH.shopOpen),
+    byline: SPEAKERS.vetch.name ?? undefined,
     options,
   };
 }
@@ -160,9 +161,9 @@ export function tradingPostTopics(
   announce: (message: string) => void,
 ): TopicProvider {
   return {
-    topics(villager, ctx) {
+    topics(villager, ctx, flow) {
       if (villager !== MERCHANT || !shopTrades(ctx.quest.phase)) return [];
-      return [shopTopic('browse', 'Browse', counter, () => tradingPostShop(state, announce))];
+      return [shopTopic('browse', 'Browse', counter, () => tradingPostShop(state, announce), flow)];
     },
   };
 }

@@ -29,18 +29,23 @@ import { canAffordCoins, spendPartyCoins } from '../core/partyCoins';
 import type { GrantedReward } from '../core/GrantedReward';
 import type { AnchorQuestProgress } from '../core/AnchorQuestProgress';
 import { ANCHOR_SHARD_IDS, ITEM_DEF, QUEST_SLOT_IDX, type ItemId } from '../core/ItemDefs';
-import { QuestDialog, type DialogPage } from '../ui/QuestDialog';
+import type { Conversation } from '../dialog/Conversation';
+import type { DialogLine, NonEmpty } from '../dialog/line';
+import type { ConversationHandle, DialogReward } from '../dialog/request';
 import { drawItemIcon } from '../ui/InventoryPanel';
 import { drawQuestCompleteOverlay, QUEST_COMPLETE_OVERLAY_FRAMES } from '../ui/QuestBanners';
 import type { VendorLineGate } from './market/vendorDefs';
 import { HILDA_COTTAGE_NAME, SKY_TEMPLE_NAME } from './AnchorInteriorSystem';
 import {
   buildAnchorReward,
-  buildAssemblyDialog,
-  buildCannotAffordDialog,
-  buildOfferDialog,
-  buildProgressDialog,
-} from './anchorQuestDialogs';
+  VOSS_ASSEMBLY_DONE,
+  VOSS_ASSEMBLY_OFFER,
+  VOSS_CANNOT_AFFORD,
+  VOSS_OFFER_HISTORY,
+  VOSS_OFFER_INTRO,
+  VOSS_OFFER_PITCH,
+  VOSS_PROGRESS,
+} from '../dialog/scripts/scenes/anchor';
 
 const ANCHOR_QUEST_ID = 'anchor_shards';
 const ANCHOR_QUEST_NAME = 'The Anchor is Broken';
@@ -76,19 +81,11 @@ const SHARD_STEP_NAMES: Record<(typeof ANCHOR_SHARD_IDS)[number], string> = {
   anchor_shard_temple: "The Temple's Shard",
 };
 
-/** Which conversation is on screen, so its completion knows what it agreed to. */
-type AnchorDialogKind = 'offer' | 'progress' | 'assembly' | 'cannot_afford';
-
 export class AnchorQuestSystem implements GameSystem, TrackerSource {
   private readonly questManager: QuestManager;
 
-  private readonly dialog: QuestDialog;
-  private dialogKind: AnchorDialogKind | null = null;
-  /**
-   * Who opened the conversation. Assembly charges and is thanked through this
-   * crawler; the stone itself goes to both.
-   */
-  private dialogOpener: Player | null = null;
+  /** The handle Voss's beat opened with, so `conversationOwned` can ask the shared box whether it is still the one showing rather than tracking its own copy of that answer. */
+  private conversationHandle: ConversationHandle | null = null;
   private completeOverlayTimer = 0;
 
   /** Fired whenever the assembly reward actually hands a crawler an item — for a fly-to-bag effect. */
@@ -116,6 +113,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
      */
     private readonly doorTileOf: (buildingName: string) => TrackerTarget | null,
     private readonly toast: (message: string) => void,
+    private readonly conversation: Conversation,
     private readonly audio: AudioManager | null = null,
   ) {
     this.questManager = new QuestManager();
@@ -135,7 +133,6 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
       this.questManager.startQuest(ANCHOR_QUEST_ID);
       this.questManager.completeQuest(ANCHOR_QUEST_ID);
     }
-    this.dialog = new QuestDialog(audio);
   }
 
   // ── Party-wide questions ──────────────────────────────────────────────────
@@ -205,8 +202,13 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
 
   // ── The conversation at the fortune teller ────────────────────────────────
 
+  /** Whether the shared conversation is currently showing one of Voss's beats, rather than someone else's. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
+
   get isDialogOpen(): boolean {
-    return this.dialog.isOpen;
+    return this.conversationOwned;
   }
 
   /**
@@ -230,11 +232,33 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
    * gets when this returns false.
    */
   tryOpenDialog(active: Player): boolean {
-    if (this.dialog.isOpen) return false;
-    const pages = this.pagesFor(active);
-    if (pages === null) return false;
-    this.dialogOpener = active;
-    this.dialog.open(pages, () => this.onDialogComplete());
+    if (this.conversationOwned) return false;
+    if (this.status === 'available') {
+      this.openOfferConversation();
+      return true;
+    }
+    if (this.status !== 'active') return false;
+    if (this.shardsHeld < SHARDS_REQUIRED) {
+      this.openDismissibleConversation(
+        [
+          VOSS_PROGRESS({
+            shardsHeld: this.shardsHeld,
+            shardsRequired: SHARDS_REQUIRED,
+            outstanding: this.outstandingShards.map((id) => SHARD_REMINDERS[id]),
+          }),
+        ],
+        () => undefined,
+      );
+      return true;
+    }
+    if (!canAffordCoins(active, this.companionOf(active), ANCHOR_ASSEMBLY_FEE_COINS)) {
+      this.openDismissibleConversation(
+        [VOSS_CANNOT_AFFORD({ feeCoins: ANCHOR_ASSEMBLY_FEE_COINS })],
+        () => undefined,
+      );
+      return true;
+    }
+    this.openAssemblyConversation(active);
     return true;
   }
 
@@ -244,40 +268,113 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     return companion ?? active;
   }
 
-  /** What Voss says right now, or null when she has nothing left but the cards. */
-  private pagesFor(active: Player): DialogPage[] | null {
-    const reward = buildAnchorReward(ANCHOR_QUEST_XP);
-    if (this.status === 'available') {
-      this.dialogKind = 'offer';
-      return buildOfferDialog(reward);
-    }
-    if (this.status !== 'active') return null;
-    if (this.shardsHeld < SHARDS_REQUIRED) {
-      this.dialogKind = 'progress';
-      return buildProgressDialog(
-        this.shardsHeld,
-        SHARDS_REQUIRED,
-        this.outstandingShards.map((id) => SHARD_REMINDERS[id]),
-      );
-    }
-    if (!canAffordCoins(active, this.companionOf(active), ANCHOR_ASSEMBLY_FEE_COINS)) {
-      this.dialogKind = 'cannot_afford';
-      return buildCannotAffordDialog(ANCHOR_ASSEMBLY_FEE_COINS);
-    }
-    this.dialogKind = 'assembly';
-    return buildAssemblyDialog(ANCHOR_ASSEMBLY_FEE_COINS, reward);
+  /** Opens a beat on the shared conversation. Esc closes it without agreeing to anything. */
+  private openDismissibleConversation(
+    lines: NonEmpty<DialogLine>,
+    onClosed: () => void,
+    reward: DialogReward | null = null,
+  ): void {
+    this.conversationHandle = this.conversation.open({
+      lines,
+      reward,
+      questRelated: reward !== null,
+      ending: {
+        kind: 'close',
+        onClosed,
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
   }
 
-  private onDialogComplete(): void {
-    const kind = this.dialogKind;
-    const opener = this.dialogOpener;
-    this.dialogKind = null;
-    this.dialogOpener = null;
-    if (kind === 'offer') {
-      this.acceptQuest();
-      return;
-    }
-    if (kind === 'assembly' && opener !== null) this.assemble(opener);
+  private openOfferConversation(): void {
+    const reward = buildAnchorReward(ANCHOR_QUEST_XP);
+    this.conversationHandle = this.conversation.open({
+      lines: [VOSS_OFFER_INTRO, VOSS_OFFER_HISTORY, VOSS_OFFER_PITCH],
+      reward,
+      questRelated: true,
+      ending: {
+        kind: 'confirm',
+        keyboardDefault: 'accept',
+        accept: {
+          label: 'Find the shards',
+          tone: 'quest',
+          run: (convo) => {
+            convo.close();
+            this.acceptQuest();
+          },
+        },
+        decline: {
+          label: 'Not today',
+          tone: 'exit',
+          run: (convo) => {
+            convo.close();
+          },
+        },
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
+  private openAssemblyConversation(payer: Player): void {
+    const reward = buildAnchorReward(ANCHOR_QUEST_XP);
+    this.conversationHandle = this.conversation.open({
+      lines: [VOSS_ASSEMBLY_OFFER({ feeCoins: ANCHOR_ASSEMBLY_FEE_COINS })],
+      reward,
+      questRelated: true,
+      ending: {
+        kind: 'confirm',
+        keyboardDefault: 'accept',
+        accept: {
+          label: `Pay ${ANCHOR_ASSEMBLY_FEE_COINS}c`,
+          tone: 'quest',
+          run: (convo) =>
+            convo.play({
+              lines: [VOSS_ASSEMBLY_DONE],
+              reward: null,
+              questRelated: true,
+              ending: {
+                kind: 'close',
+                onClosed: () => {
+                  this.assemble(payer);
+                },
+              },
+              dismiss: {
+                kind: 'allowed',
+                onDismissed: () => undefined,
+              },
+              haltsWorld: true,
+              anchor: null,
+              locksKeyboard: true,
+            }),
+        },
+        decline: {
+          label: 'Keep the coins',
+          tone: 'exit',
+          run: (convo) => {
+            convo.close();
+          },
+        },
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
   }
 
   private acceptQuest(): void {
@@ -287,20 +384,16 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     this.bus.emit('questStarted', { questId: ANCHOR_QUEST_ID });
   }
 
-  /**
-   * Esc. Declining an offer leaves the quest `available` and Voss keeps it.
-   *
-   * A refused conversation leaves `dialogKind` behind, which is harmless: only
-   * the dialog's own completion callback reads it, and `tryOpenDialog` rewrites
-   * it before any dialog can be completed.
-   */
+  /** Esc. Declining an offer leaves the quest `available` and Voss keeps it. */
   dismissDialog(): boolean {
-    return this.dialog.dismiss();
+    if (!this.conversationOwned) return false;
+    return this.conversation.dismiss();
   }
 
   handleClick(mx: number, my: number): boolean {
     if (this.advanceOutcomeOverlay()) return true;
-    return this.dialog.handleClick(mx, my);
+    if (!this.conversationOwned) return false;
+    return this.conversation.handleClick(mx, my);
   }
 
   // ── The assembly ──────────────────────────────────────────────────────────
@@ -495,6 +588,5 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     if (this.completeOverlayTimer > 0) {
       drawQuestCompleteOverlay(ctx, `${ANCHOR_QUEST_NAME} — COMPLETE`, this.completeOverlayTimer);
     }
-    this.dialog.render(ctx);
   }
 }

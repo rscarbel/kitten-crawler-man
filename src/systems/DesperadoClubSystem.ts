@@ -17,7 +17,10 @@ import {
 } from '../core/clubLayout';
 import { CLUB_PROPS, propSortY } from '../core/clubProps';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { QuestDialog } from '../ui/QuestDialog';
+import type { Conversation } from '../dialog/Conversation';
+import type { ConversationHandle } from '../dialog/request';
+import type { DialogLine, NonEmpty } from '../dialog/line';
+import { CLARABELLE } from '../dialog/scripts/scenes/clarabelle';
 import {
   CLUB_ANIM_FRAMES_PER_SECOND,
   drawClubNpc,
@@ -93,41 +96,12 @@ const DANCE_LIGHT_ALPHA_SWING = 0.22;
 const DANCE_LIGHT_CENTER_FRACTION = 0.5;
 const DANCE_LIGHT_RADIUS_FRACTION = 0.62;
 
-/** Clarabelle's welcome + house rules, shown once and granting the Desperado Pass on dismiss. */
-const GREETING_LINES: ReadonlyArray<string> = [
-  "A lizard-faced Crocodilian in a bouncer's jacket leans across the doorway, chewing. She does not look up.",
-  '"Yeah, yeah. Welcome to the Desperado Club. I\'m Clarabelle. I do the door."',
-  '"Two house rules. I counted. No fighting inside — the club is neutral ground, always."',
-  '"And spend money. That one\'s more of a feeling. It\'s my favourite one."',
-  "\"First membership's free. Don't look at me, I didn't make it free. Take the Pass.\"",
-];
-
-const GREETING_TITLE = '🔪  The Desperado Club  🔪';
-
-/** Clarabelle reading a Desperado Pass tattoo off a crawler who earned it from the Juicer. */
-const TATTOO_GREETING_LINES: ReadonlyArray<string> = [
-  'A lizard-faced Crocodilian holds out a palm for the cover charge — then squints at the ink on your skin.',
-  '"Huh. That\'s a Desperado Pass. Tattooed on. So I can\'t sell you one. Great."',
-  '"Two house rules: no fighting inside — the club is neutral ground, always. And spend money. Lots."',
-];
-
-const CLARABELLE_WELCOME = '"You again. Pass is good. Rules ain\'t changed. Go spend something."';
-
-/** Clarabelle is immune to charm, and the cat is the crawler who leads with it. */
-const CLARABELLE_CAT_LINE =
-  '"And don\'t bother batting your eyes, furball. Charisma don\'t work on me."';
-
 /**
  * She stands facing the south door, so the crawlers walking in see her face
  * rather than her profile.
  */
 const CLARABELLE_FACING_X = 0;
 const CLARABELLE_FACING_Y = 1;
-
-/** Clarabelle's lines for whoever is at the door: the cat gets told her eyelashes won't work. */
-function clarabelleLines(lines: ReadonlyArray<string>, crawler: Player): ReadonlyArray<string> {
-  return crawler instanceof CatPlayer ? [...lines, CLARABELLE_CAT_LINE] : lines;
-}
 
 /** An escort Cretin taking up its flank `offsetX` behind the crawler it shadows. */
 function escortFollower(variant: CretinVariant, offsetX: number, active: Player): EscortFollower {
@@ -263,7 +237,8 @@ function promptLabel(station: ClubStation): string {
  * doesn't carry. `BuildingInteriorScene` owns and drives it directly.
  */
 export class DesperadoClubSystem {
-  private readonly dialog: QuestDialog;
+  /** The handle Clarabelle's open conversation was returned, if any. */
+  private conversationHandle: ConversationHandle | null = null;
   private animTime = 0;
 
   private readonly barShop: ShopSystem;
@@ -297,6 +272,7 @@ export class DesperadoClubSystem {
     map: GameMap,
     private readonly membership: ClubMembership,
     roster: MercenaryRoster,
+    private readonly conversation: Conversation,
     private readonly audio: AudioManager | null,
     hasPassTattoo: boolean,
     arrivingCrawler: Player,
@@ -304,7 +280,6 @@ export class DesperadoClubSystem {
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
   ) {
-    this.dialog = new QuestDialog(audio);
     this.crowd = new ClubCrowdSystem(map);
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG);
     this.marketShop = createClubMarketShop(marketStock);
@@ -337,6 +312,11 @@ export class DesperadoClubSystem {
     return this.casino.coinsWageredThisVisit;
   }
 
+  /** Whether the shared conversation is currently showing one of Clarabelle's lines, rather than someone else's. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
+
   /** The bar/market shop whose buy panel is currently open, if any. */
   private activeShop(): ShopSystem | null {
     if (this.barShop.shopOpen) return this.barShop;
@@ -357,7 +337,7 @@ export class DesperadoClubSystem {
     if (this.casino.open) return 'casino';
     if (this.guild.open) return 'club-guild';
     if (this.vip.open) return 'club-vip';
-    if (this.dialog.isOpen) return 'quest-dialog';
+    if (this.conversationOwned) return 'quest-dialog';
     return null;
   }
 
@@ -368,7 +348,7 @@ export class DesperadoClubSystem {
 
   get modalOpen(): boolean {
     return (
-      this.dialog.isOpen ||
+      this.conversationOwned ||
       this.activeShop() !== null ||
       this.casino.open ||
       this.guild.open ||
@@ -449,44 +429,52 @@ export class DesperadoClubSystem {
     return this.crowdObstacles;
   }
 
-  /** Grants the Desperado Pass once the greeting dialog is taken to its final page. */
-  private openGreeting(crawler: Player): void {
-    this.dialog.open(
-      [
-        {
-          title: GREETING_TITLE,
-          lines: clarabelleLines(GREETING_LINES, crawler),
-          button: 'Take the Pass',
-        },
-      ],
-      () => {
-        if (this.membership.hasDesperadoPass) return;
-        this.membership.hasDesperadoPass = true;
-        this.unlockAchievement('desperado_member');
-        this.audio?.play('achievement_awarded');
+  /**
+   * Opens a Clarabelle beat on the shared conversation. `onClosed` fires once
+   * the last page is read through to its own advance — never from Esc or a
+   * walk-away, which close the box via `onDismissed` instead and grant
+   * nothing. None of her beats hold a stake the way the blackjack table does,
+   * so every one of them can be walked away from.
+   */
+  private openConversation(lines: NonEmpty<DialogLine>, onClosed: () => void): void {
+    this.conversationHandle = this.conversation.open({
+      lines,
+      reward: null,
+      questRelated: false,
+      ending: {
+        kind: 'close',
+        onClosed,
       },
-    );
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => undefined,
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
+  /** Grants the Desperado Pass once the greeting is taken to its final page. */
+  private openGreeting(crawler: Player): void {
+    this.openConversation(CLARABELLE.greeting(crawler instanceof CatPlayer), () => {
+      if (this.membership.hasDesperadoPass) return;
+      this.membership.hasDesperadoPass = true;
+      this.unlockAchievement('desperado_member');
+      this.audio?.play('achievement_awarded');
+    });
   }
 
   /** Clarabelle waving through a crawler wearing the Juicer's ink. */
   private openTattooGreeting(crawler: Player): void {
-    this.dialog.open(
-      [
-        {
-          title: GREETING_TITLE,
-          lines: clarabelleLines(TATTOO_GREETING_LINES, crawler),
-          button: 'Enter the Club',
-        },
-      ],
-      () => {
-        this.unlockAchievement('desperado_member');
-        this.audio?.play('achievement_awarded');
-      },
-    );
+    this.openConversation(CLARABELLE.tattooGreeting(crawler instanceof CatPlayer), () => {
+      this.unlockAchievement('desperado_member');
+      this.audio?.play('achievement_awarded');
+    });
   }
 
-  private openFlavor(title: string, lines: ReadonlyArray<string>): void {
-    this.dialog.open([{ title, lines, button: 'Continue' }], () => undefined);
+  private openWelcomeBack(crawler: Player): void {
+    this.openConversation(CLARABELLE.welcomeBack(crawler instanceof CatPlayer), () => undefined);
   }
 
   /** Close the open shop panel, or advance the open sub-panel/dialog. */
@@ -511,7 +499,7 @@ export class DesperadoClubSystem {
       this.vip.close();
       return;
     }
-    this.dialog.advance();
+    if (this.conversationOwned) this.conversation.advance();
   }
 
   private isNear(tile: { x: number; y: number }, player: Player): boolean {
@@ -535,15 +523,15 @@ export class DesperadoClubSystem {
    * station in range can still fall through to whoever else is standing there.
    */
   handleInteract(player: Player, companion: Player): boolean {
-    if (this.dialog.isOpen) {
-      this.dialog.advance();
+    if (this.conversationOwned) {
+      this.conversation.advance();
       return true;
     }
     const station = this.nearestStation(player);
     if (!station) return false;
     if (station.id === 'clarabelle') {
       if (this.membership.hasDesperadoPass) {
-        this.openFlavor(station.label, clarabelleLines([CLARABELLE_WELCOME], player));
+        this.openWelcomeBack(player);
       } else {
         this.openGreeting(player);
       }
@@ -589,21 +577,44 @@ export class DesperadoClubSystem {
       this.vip.handleClick(mx, my, active, companion);
       return true;
     }
-    if (!this.dialog.isOpen) return false;
-    this.dialog.handleClick(mx, my);
+    if (!this.conversationOwned) return false;
+    this.conversation.handleClick(mx, my);
     return true;
   }
 
+  /**
+   * Escape. Deliberately not `dismissModal`, whose tail advances an open
+   * conversation the way Space does: Escape backs out of it instead, through
+   * `Conversation.dismiss()`, which grants nothing for a beat still mid-read.
+   */
   closeModals(player: Player): void {
-    this.dismissModal(player);
+    const shop = this.activeShop();
+    if (shop) {
+      shop.shopOpen = false;
+      return;
+    }
+    if (this.casino.open) {
+      if (this.casino.rulesOpen) this.casino.dismissRules();
+      else this.casino.close(player);
+      return;
+    }
+    if (this.guild.open) {
+      this.guild.close();
+      return;
+    }
+    if (this.vip.open) {
+      this.vip.close();
+      return;
+    }
+    if (this.conversationOwned) this.conversation.dismiss();
   }
 
   /**
    * Shut every sub-panel outright, for the scene being torn down under an open
-   * modal. Deliberately *not* `dismissModal`, which is a one-level Esc: with the
-   * rules overlay up it would close only the overlay and leave the blackjack
-   * table holding the player's stake, and with the greeting up it would fall
-   * through to `dialog.advance()` and award the Desperado Pass nobody accepted.
+   * modal. Deliberately *not* `dismissModal` or `closeModals`, which both
+   * return after closing the first thing they find open: a teardown has to
+   * close every sub-panel at once regardless of which happens to sit on top,
+   * and the rules overlay is one level under the blackjack table it sits on.
    */
   closeAll(player: Player): void {
     const shop = this.activeShop();
@@ -740,7 +751,7 @@ export class DesperadoClubSystem {
       render: (ctx, camX, camY, tileSize) =>
         drawCrocodilianSprite(ctx, tile.x * TILE_SIZE - camX, tile.y * TILE_SIZE - camY, tileSize, {
           variant: 'clarabelle',
-          row: this.dialog.isOpen ? 'talk' : 'idle',
+          row: this.conversationOwned ? 'talk' : 'idle',
           facingX: CLARABELLE_FACING_X,
           facingY: CLARABELLE_FACING_Y,
           elapsedSeconds: this.animTime / CLUB_ANIM_FRAMES_PER_SECOND,
@@ -870,9 +881,7 @@ export class DesperadoClubSystem {
 
     if (this.vip.open) {
       this.vip.renderPanel(ctx, active, companion);
-      return;
     }
-
-    this.dialog.render(ctx);
+    // Clarabelle's own lines draw through the scene's shared conversation panel.
   }
 }

@@ -27,17 +27,17 @@ import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { asGameContext } from './nodeGameContext';
 import { createCanvas } from 'canvas';
 import { setViewportSize } from '../src/core/Viewport';
-import {
-  type ConversationChoice,
-  VILLAGER_CHOICE_LABEL_SIZE,
-  VillagerConversation,
-} from '../src/ui/VillagerConversation';
+import { Conversation, CONVERSATION_CHOICE_LABEL_SIZE } from '../src/dialog/Conversation';
+import { speakerLines } from '../src/dialog/line';
+import { OREN } from '../src/dialog/scripts/briarHollow';
+import type { Choice, ConversationRequest } from '../src/dialog/request';
 import { buttonLabelFits } from '../src/ui/Button';
 import {
   ASK_QUESTION_LABEL,
   BACK_LABEL,
   BUILT_IN_TOPICS,
   GOODBYE_LABEL,
+  type VillagerConversationFlow,
 } from '../src/systems/briarHollow/villagerTopics';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { createBriarHollowState } from '../src/core/briarHollowState';
@@ -50,6 +50,7 @@ import {
   SERVICE_AT_POST_TILES,
   VillagerSystem,
   type VillagerCrawler,
+  type VillagerFrame,
 } from '../src/systems/briarHollow/VillagerSystem';
 import type { Villager } from '../src/systems/briarHollow/Villager';
 import type { VillagerPartyState } from '../src/systems/briarHollow/villagerCircumstances';
@@ -82,6 +83,42 @@ const SHORT_PHONE_HEIGHT = 320;
 const MANY_CHOICES = 8;
 /** The cat walks a few frames behind Carl. */
 const CAT_TRAIL_FRAMES = 20;
+
+/**
+ * One gameplay update, the way the real scene drives it: `VillagerSystem`
+ * doesn't tick the shared `Conversation` — only the scene does, once per
+ * frame, with the active player's position.
+ */
+function tick(system: VillagerSystem, frame: VillagerFrame): void {
+  system.update(frame);
+  system.conversation.update(frame.active);
+}
+
+/**
+ * A flow that never actually plays a beat — for a check that only reads a
+ * built-in topic's `label`/`key`, never its `run`.
+ */
+const INERT_REQUEST: ConversationRequest = {
+  lines: [speakerLines('oren').line('unused')],
+  reward: null,
+  questRelated: false,
+  ending: { kind: 'close', onClosed: () => undefined },
+  dismiss: { kind: 'blocked' },
+  haltsWorld: false,
+  anchor: null,
+  locksKeyboard: true,
+};
+const INERT_FLOW: VillagerConversationFlow = {
+  answer: () => INERT_REQUEST,
+  answerWithTopics: () => INERT_REQUEST,
+  answerAndReturnToRoot: () => INERT_REQUEST,
+  sayKeepingMenu: () => INERT_REQUEST,
+  returnToRoot: () => INERT_REQUEST,
+  openTopics: () => INERT_REQUEST,
+  closeNow: () => INERT_REQUEST,
+  closeAfter: () => INERT_REQUEST,
+  onEventualClose: () => undefined,
+};
 
 let failures = 0;
 function check(ok: boolean, label: string): void {
@@ -237,6 +274,7 @@ function simulate(seed: number): void {
     state,
     bus: null,
     audio: null,
+    conversation: new Conversation(null),
     party: () => FIXED_PARTY,
     random,
   });
@@ -281,7 +319,7 @@ function simulate(seed: number): void {
     if (frame === SIEGE_START_FRAME) state.quest.phase = 'imminent';
     if (frame === SIEGE_START_FRAME + SIEGE_LENGTH_FRAMES) state.quest.phase = 'victory';
     party.step();
-    system.update({ human: party.human, cat: party.cat, active: party.human });
+    tick(system, { human: party.human, cat: party.cat, active: party.human });
 
     const inSiege = state.quest.phase === 'imminent';
     for (const villager of system.villagers) {
@@ -383,6 +421,11 @@ function simulate(seed: number): void {
 function verifyConversation(): void {
   console.log('\nconversation');
   installCanvasGlobals();
+  // A dialog box lays itself out against the live viewport, so — as in the
+  // running game, where the canvas is always sized before any scene ticks —
+  // this must be set before the first line is shown, not only when a check
+  // later on cares about screen bounds.
+  setViewportSize(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
   const map = new GameMap({
     mapSize: MAP_SIZE,
     mapType: 'overworld',
@@ -401,6 +444,7 @@ function verifyConversation(): void {
     state,
     bus: null,
     audio: null,
+    conversation: new Conversation(null),
     party: () => ({ ...FIXED_PARTY, axeTier: 0, pickaxeTier: 0 }),
     random: mulberry32(1),
   });
@@ -418,10 +462,10 @@ function verifyConversation(): void {
   check(system.tryTalk(talker), 'Space beside Oren opens a conversation');
   check(system.isConversationOpen && oren.state === 'talking', 'and he stops to talk');
   check(state.talkCounts.oren === 1, 'the talk is counted in the village state');
-  check(system.lastOpening?.pages[0] === 'first_meeting', 'he opens with his first meeting');
+  check(system.lastOpening?.pages[0] === OREN.firstMeeting, 'he opens with his first meeting');
   check(system.talkSpeakerFor(talker)?.x === oren.x, 'Carl is told who he is facing');
   system.conversation.advance();
-  system.update(frame);
+  tick(system, frame);
   check(system.conversation.isShowingChoices, 'the choices come up once the line is read');
   check(
     system.conversation.choiceLabels.length === 2,
@@ -432,7 +476,7 @@ function verifyConversation(): void {
   check(system.conversation.handleKeyDown('1'), 'a number key picks a question');
   check(!system.conversation.isShowingChoices, 'and the answer is shown');
   system.conversation.advance();
-  system.update(frame);
+  tick(system, frame);
   system.conversation.advance();
   check(!system.isConversationOpen, 'the conversation ends after the answer');
   check(oren.state !== 'talking', 'and Oren goes back to his day');
@@ -452,7 +496,7 @@ function verifyConversation(): void {
       guard++
     ) {
       system.conversation.advance();
-      system.update(frame);
+      tick(system, frame);
     }
   };
   for (let round = 0; round < 3; round++) {
@@ -486,7 +530,7 @@ function verifyConversation(): void {
   const home = { x: talker.x, y: talker.y };
   talker.x = far.x;
   talker.y = far.y;
-  system.update(frame);
+  tick(system, frame);
   check(!system.isConversationOpen, 'walking away ends the conversation');
   check(oren.state !== 'talking', 'and Oren goes back to his day');
 
@@ -495,7 +539,7 @@ function verifyConversation(): void {
   check(system.tryTalk(talker), 'a second talk opens again');
   check(system.lastOpening?.rule === 'fallback', 'on a rotating line rather than the greeting');
   system.conversation.advance();
-  system.update(frame);
+  tick(system, frame);
   // A choice row only accepts Space to leave once it has actually been drawn
   // — the same tick that reveals it must not also be the tick that leaves it.
   const goodbyeScratch = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
@@ -504,18 +548,32 @@ function verifyConversation(): void {
   check(!system.isConversationOpen, 'Space on the choice row says goodbye');
 
   // A short phone: every choice row must still be on screen to be tapped.
-  setViewportSize(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
-  const panel = new VillagerConversation(null);
-  panel.open('Tikka Geargrinder', undefined);
-  panel.setChoices(
+  const openWithChoices = (speaker: 'tikka' | 'oren', choices: readonly Choice[]): Conversation => {
+    const [first, ...rest] = choices;
+    if (first === undefined) throw new Error('openWithChoices: choices must not be empty');
+    const panel = new Conversation(null);
+    panel.open({
+      lines: [speakerLines(speaker).line('A line.')],
+      reward: null,
+      questRelated: false,
+      ending: { kind: 'choices', choices: [first, ...rest] },
+      dismiss: { kind: 'blocked' },
+      haltsWorld: false,
+      anchor: null,
+      locksKeyboard: true,
+    });
+    panel.advance();
+    panel.update(null);
+    return panel;
+  };
+  const panel = openWithChoices(
+    'tikka',
     Array.from({ length: MANY_CHOICES }, (_, index) => ({
       label: `Topic ${index + 1}`,
+      tone: 'normal' as const,
       run: () => undefined,
     })),
   );
-  panel.showPages(['A line.']);
-  panel.advance();
-  panel.update();
   const screen = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
   panel.render(asGameContext(screen.getContext('2d')));
   const rects = panel.choiceBounds;
@@ -534,18 +592,13 @@ function verifyConversation(): void {
   // Oren's real choices on the same phone: every label must fit its button,
   // at the root (his actions plus "I have a question") and in the question
   // submenu it opens (his built-in lore, every row of it, plus "Back").
-  const checkPhoneFit = (level: string, choices: readonly ConversationChoice[]): void => {
-    const panel = new VillagerConversation(null);
-    panel.open('Oren Ironwhisker', undefined);
-    panel.setChoices(choices);
-    panel.showPages(['A line.']);
-    panel.advance();
-    panel.update();
+  const checkPhoneFit = (level: string, choices: readonly Choice[]): void => {
+    const panel = openWithChoices('oren', choices);
     const screen = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
     const ctx = asGameContext(screen.getContext('2d'));
     panel.render(ctx);
     const overflowing = panel.choiceBounds.filter(
-      (rect) => !buttonLabelFits(ctx, rect.label, rect.w, VILLAGER_CHOICE_LABEL_SIZE),
+      (rect) => !buttonLabelFits(ctx, rect.label, rect.w, CONVERSATION_CHOICE_LABEL_SIZE),
     );
     check(
       panel.choiceBounds.length === choices.length,
@@ -561,22 +614,25 @@ function verifyConversation(): void {
     );
   };
   checkPhoneFit('root', [
-    { label: ASK_QUESTION_LABEL, run: () => undefined },
-    { label: GOODBYE_LABEL, isExit: true, run: () => undefined },
+    { label: ASK_QUESTION_LABEL, tone: 'normal', run: () => undefined },
+    { label: GOODBYE_LABEL, tone: 'exit', run: () => undefined },
   ]);
   checkPhoneFit('question', [
-    ...BUILT_IN_TOPICS.topics('oren', system.contextFor('oren', oren, null)).map((topic) => ({
-      label: topic.label,
-      run: () => undefined,
-    })),
-    { label: BACK_LABEL, isExit: true, run: () => undefined },
+    ...BUILT_IN_TOPICS.topics('oren', system.contextFor('oren', oren, null), INERT_FLOW).map(
+      (topic) => ({
+        label: topic.label,
+        tone: 'normal' as const,
+        run: () => undefined,
+      }),
+    ),
+    { label: BACK_LABEL, tone: 'exit' as const, run: () => undefined },
   ]);
 
   const beside = { x: elder.x + TILE_SIZE, y: elder.y };
   const elderFrame = { human: beside, cat: far, active: beside };
   check(system.tryTalk(beside), 'Space beside an unnamed elder is answered');
   check(!system.isConversationOpen && elder.bark.current !== null, 'with a bubble, not the panel');
-  system.update(elderFrame);
+  tick(system, elderFrame);
 }
 
 /**

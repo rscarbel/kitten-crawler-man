@@ -13,7 +13,8 @@ import { giveInventoryItem } from '../../townServiceUtil';
 import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
 import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
 import type { TopicProvider } from '../villagerTopics';
-import { villagerEntry } from '../ratkinDialogue';
+import { SPEAKERS } from '../../../dialog/speakers';
+import { PIPKIN } from '../../../dialog/scripts/briarHollow';
 import {
   BAG_FULL_LINE,
   type ShopCounter,
@@ -47,8 +48,8 @@ export function buildCookMenu(): PricedMenu {
   }));
   return {
     title: COOKHOUSE_TITLE,
-    bark: sellerLine(COOK, 'shop_open'),
-    byline: villagerEntry(COOK).name,
+    bark: sellerLine(PIPKIN.shopOpen),
+    byline: SPEAKERS.pipkin.name ?? undefined,
     options,
   };
 }
@@ -69,11 +70,11 @@ export function cookPurchase(
     announce(BAG_FULL_LINE);
     return { ok: false, line: BAG_FULL_LINE };
   }
-  if (dish.id === 'hamburger') return { ok: true, line: sellerLine(COOK, 'buy_burger') };
+  if (dish.id === 'hamburger') return { ok: true, line: sellerLine(PIPKIN.buyBurger) };
   const stewCannotBeEatenYet = buyer.potionCooldownFrames > 0;
   return {
     ok: true,
-    line: sellerLine(COOK, stewCannotBeEatenYet ? 'stew_cooldown_active' : 'buy_stew'),
+    line: sellerLine(stewCannotBeEatenYet ? PIPKIN.stewCooldownActive : PIPKIN.buyStew),
   };
 }
 
@@ -81,7 +82,7 @@ export function cookShop(announce: (message: string) => void): ShopDefinition {
   return {
     build: buildCookMenu,
     purchase: (option, buyer) => cookPurchase(option, buyer, announce),
-    blockedLine: () => sellerLine(COOK, 'cannot_afford'),
+    blockedLine: () => sellerLine(PIPKIN.cannotAfford),
   };
 }
 
@@ -91,9 +92,9 @@ export function cookhouseTopics(
   announce: (message: string) => void,
 ): TopicProvider {
   return {
-    topics(villager, ctx) {
+    topics(villager, ctx, flow) {
       if (villager !== COOK || !shopTrades(ctx.quest.phase)) return [];
-      return [shopTopic('buy_food', 'Buy food', counter, () => cookShop(announce))];
+      return [shopTopic('buy_food', 'Buy food', counter, () => cookShop(announce), flow)];
     },
   };
 }

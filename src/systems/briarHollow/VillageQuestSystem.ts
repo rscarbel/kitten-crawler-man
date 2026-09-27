@@ -57,14 +57,16 @@ import {
   WALL_TIERS,
 } from './structureRules';
 import { CRAWLER_NAMES } from '../../core/SkillManager';
-import type { VillagerId } from './ratkinDialogue';
+import { BRAMBLEWICK, FENNA, OREN, TIKKA, type VillagerId } from '../../dialog/scripts/briarHollow';
+import type { ConversationRequest, ConversationTopic } from '../../dialog/request';
 import {
+  KEEP_TALKING,
   type OpeningPages,
   type QuestLineProvider,
   type QuestOpening,
   type VillagerContext,
 } from './villagerCircumstances';
-import type { ConversationController, ConversationTopic, TopicProvider } from './villagerTopics';
+import type { TopicProvider, VillagerConversationFlow } from './villagerTopics';
 import type { VillagerSystem } from './VillagerSystem';
 import { ASSAULT_WAVE_COUNT, type VillageAssaultSystem } from './VillageAssaultSystem';
 
@@ -197,8 +199,12 @@ export interface VillageQuestSystemDeps {
   readonly onCoinsGranted?: (coins: number, worldX: number, worldY: number) => void;
   /** A quest item reward was just granted straight into the bag (not dropped) — for a fly-to-HUD effect. */
   readonly onItemGranted?: (id: ItemId, quantity: number, worldX: number, worldY: number) => void;
-  /** Grants Oren's starter tools and the Resourcing lesson, as the questline's own opening line for him. */
-  readonly grantOrenTools: (ctl: ConversationController) => void;
+  /**
+   * Grants Oren's starter tools and the Resourcing lesson, as the questline's
+   * own opening line for him. Returns the follow-up to run once the
+   * conversation eventually closes, or `null` when the party already had them.
+   */
+  readonly grantOrenTools: () => (() => void) | null;
   /**
    * The soldier posted in the Over City's own square who can start this
    * questline before the party has ever reached the village; null when none
@@ -552,12 +558,12 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private orenLine(ctx: VillagerContext): QuestOpening | null {
     if (ctx.quest.phase !== 'need_tools') return null;
     return {
-      pages: ['grant_basic_tools'],
+      pages: [OREN.grantBasicTools],
       questRelated: true,
-      onShown: (ctl) => {
-        ctl.endAfterPages(() => ctl.close());
-        ctl.afterClose(() => this.deps.grantOrenTools(ctl));
-      },
+      // The grant runs once this page has been read, not the instant it is
+      // chosen — a player who walks away or presses Escape mid-page must
+      // still find the forge willing to grant the tools on the next talk.
+      after: { kind: 'close', onClosed: () => this.deps.grantOrenTools()?.() },
     };
   }
 
@@ -569,48 +575,53 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
         return null;
       case 'offered':
       case 'declined':
-        return { pages: ['quest_offer'] };
+        return { pages: [BRAMBLEWICK.questOffer], after: KEEP_TALKING };
       case 'need_tools':
-        return { pages: ['before_tools'] };
+        return { pages: [BRAMBLEWICK.beforeTools], after: KEEP_TALKING };
       case 'summoned_by_mayor':
         return {
-          pages: [
-            'mayor_briefing_reason',
-            'mayor_briefing_scouts',
-            'mayor_briefing_life_stone',
-            'mayor_briefing_threat',
-            'mayor_briefing_command',
-          ],
+          pages: [BRAMBLEWICK.briefing],
           questRelated: true,
-          onShown: (ctl) => {
-            ctl.endAfterPages(() => ctl.close());
-            ctl.afterClose(() => {
+          after: {
+            kind: 'close',
+            onClosed: () => {
               this.deps.state.unlocks.soldierCommands = true;
               this.setPhase('fortifying');
-            });
+            },
           },
         };
       case 'fortifying':
-        return { pages: ['fortifying_awaiting_word'] };
+        return { pages: [BRAMBLEWICK.fortifyingAwaitingWord], after: KEEP_TALKING };
       case 'repelled_failed':
         return {
-          pages: ['mayor_loss_unprepared', 'mayor_loss_facsimile'],
+          pages: [BRAMBLEWICK.repelledFailed],
           questRelated: true,
-          onShown: (ctl) => {
-            ctl.endAfterPages(() => ctl.close());
-            ctl.afterClose(() => this.setPhase('repair_bell'));
-          },
+          after: { kind: 'close', onClosed: () => this.setPhase('repair_bell') },
         };
       case 'repair_bell':
-        return { pages: ['repair_bell_reminder'] };
-      case 'victory':
+        return { pages: [BRAMBLEWICK.repairBellReminder], after: KEEP_TALKING };
+      case 'victory': {
+        const pages = this.victoryPages();
+        this.grantRewards();
+        this.setPhase('complete');
         return {
-          pages: this.victoryPages(),
+          pages,
           questRelated: true,
-          onShown: (ctl) => this.turnIn(ctl),
+          after: {
+            kind: 'root',
+            onEventualClose: () => {
+              if (!this.deps.active().isAlive) return;
+              this.deps.enqueueReward(itemReward('hamburger', BRIAR_HOLLOW_REWARD_BURGERS));
+              this.deps.enqueueReward(itemReward('hollow_stew', BRIAR_HOLLOW_REWARD_STEW));
+            },
+          },
         };
+      }
       case 'complete':
-        return { pages: ctx.talkCount % 2 === 0 ? ['quest_complete'] : ['after_victory'] };
+        return {
+          pages: [ctx.talkCount % 2 === 0 ? BRAMBLEWICK.questComplete : BRAMBLEWICK.afterVictory],
+          after: KEEP_TALKING,
+        };
       case 'gather_wood':
       case 'gather_stone':
       case 'report_tikka':
@@ -633,8 +644,8 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       siege !== null &&
       siege.segmentsBreached + siege.structuresDestroyed + siege.soldiersDowned > 0;
     return damaged
-      ? ['after_victory', 'after_village_damage', 'quest_complete']
-      : ['after_victory', 'quest_complete'];
+      ? [BRAMBLEWICK.afterVictory, BRAMBLEWICK.afterVillageDamage, BRAMBLEWICK.questComplete]
+      : [BRAMBLEWICK.afterVictory, BRAMBLEWICK.questComplete];
   }
 
   private tikkaLine(ctx: VillagerContext): QuestOpening | null {
@@ -643,33 +654,51 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       case 'offered':
       case 'declined':
         return ctx.talkCount === 0
-          ? { pages: ['first_meeting', 'quest_explanation'] }
-          : { pages: ['quest_explanation'] };
+          ? { pages: [TIKKA.firstMeeting, TIKKA.questExplanation], after: KEEP_TALKING }
+          : { pages: [TIKKA.questExplanation], after: KEEP_TALKING };
       case 'need_tools':
-        return { pages: ['tools_required'] };
+        return { pages: [TIKKA.toolsRequired], after: KEEP_TALKING };
       case 'gather_wood':
-        return { pages: ['axe_task'] };
+        return { pages: [TIKKA.axeTask], after: KEEP_TALKING };
       case 'gather_stone':
-        return { pages: ['pickaxe_task'] };
+        return { pages: [TIKKA.pickaxeTask], after: KEEP_TALKING };
       case 'report_tikka':
+        teachBoth(this.deps.human, this.deps.cat, 'construction');
         return {
-          pages: ['tikka_plans_intro', 'tikka_send_to_fenna', 'tikka_needs_boards_rope'],
+          pages: [TIKKA.reportPlans],
           questRelated: true,
-          onShown: (ctl) => this.teachConstructionAndSendToFenna(ctl),
+          after: {
+            kind: 'close',
+            onClosed: () => {
+              this.setPhase('see_fenna');
+              if (!this.deps.active().isAlive) return;
+              this.deps.enqueueReward(constructionUnlockedReward());
+            },
+          },
         };
       case 'see_fenna':
       case 'processing':
-        return { pages: ['wood_processing_task'] };
+        return { pages: [TIKKA.woodProcessingTask], after: KEEP_TALKING };
       case 'return_tikka':
+        grantConstructionUnlocks(this.deps.state.unlocks, TIKKA_PLANS_UNLOCKS);
         return {
-          pages: ['tikka_materials_received', 'tikka_plans_handoff'],
+          pages: [TIKKA.plansHandoff],
           questRelated: true,
-          onShown: (ctl) => this.handOverPlans(ctl),
+          after: {
+            kind: 'close',
+            onClosed: () => {
+              if (!this.deps.active().isAlive) return;
+              this.deps.afterRewardsDrain(() => {
+                this.awaitingPlansExplainerClose = true;
+                this.openConstructionExplainer();
+              });
+            },
+          },
         };
       case 'fortifying':
       case 'repelled_failed':
       case 'repair_bell':
-        return { pages: ['construction_skill_already_granted'] };
+        return { pages: [TIKKA.constructionSkillAlreadyGranted], after: KEEP_TALKING };
       case 'build_trebuchet':
       case 'load_trebuchet':
       case 'build_wall':
@@ -684,55 +713,19 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
 
   private fennaLine(ctx: VillagerContext): QuestOpening | null {
     if (ctx.quest.phase !== 'see_fenna') return null;
-    return {
-      pages: ['fenna_grants_access', 'fenna_explains_stations'],
-      questRelated: true,
-      onShown: (ctl) => this.grantProcessingAccess(ctl),
-    };
-  }
-
-  /**
-   * Tikka teaches both crawlers Construction as she says so and sends the
-   * party on to Fenna. The skill-unlocked card is raised once the
-   * conversation has closed — it halts the world, and a halted world closes a
-   * street conversation mid-lesson.
-   */
-  private teachConstructionAndSendToFenna(ctl: ConversationController): void {
-    teachBoth(this.deps.human, this.deps.cat, 'construction');
-    ctl.endAfterPages(() => ctl.close());
-    ctl.afterClose(() => {
-      this.setPhase('see_fenna');
-      if (!this.deps.active().isAlive) return;
-      this.deps.enqueueReward(constructionUnlockedReward());
-    });
-  }
-
-  /** Fenna opens the saw and the rope walk, then the Processing explainer once the talk has closed. */
-  private grantProcessingAccess(ctl: ConversationController): void {
     this.deps.state.unlocks.processingStations = true;
-    ctl.endAfterPages(() => ctl.close());
-    ctl.afterClose(() => {
-      this.setPhase('processing');
-      if (!this.deps.active().isAlive) return;
-      this.deps.afterRewardsDrain(() => this.deps.openProcessingExplainer());
-    });
-  }
-
-  /**
-   * Tikka's plans open every recipe Construction knows. The explainer waits
-   * for the conversation to close, and the phase waits for the explainer:
-   * `update()` moves it on to `build_trebuchet` once the explainer itself closes.
-   */
-  private handOverPlans(ctl: ConversationController): void {
-    grantConstructionUnlocks(this.deps.state.unlocks, TIKKA_PLANS_UNLOCKS);
-    ctl.endAfterPages(() => ctl.close());
-    ctl.afterClose(() => {
-      if (!this.deps.active().isAlive) return;
-      this.deps.afterRewardsDrain(() => {
-        this.awaitingPlansExplainerClose = true;
-        this.openConstructionExplainer();
-      });
-    });
+    return {
+      pages: [FENNA.grantsAccess],
+      questRelated: true,
+      after: {
+        kind: 'close',
+        onClosed: () => {
+          this.setPhase('processing');
+          if (!this.deps.active().isAlive) return;
+          this.deps.afterRewardsDrain(() => this.deps.openProcessingExplainer());
+        },
+      },
+    };
   }
 
   /** Opens the Construction explainer and records that it has been shown. */
@@ -751,45 +744,56 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
 
   // ── Topics ────────────────────────────────────────────────────────────────
 
-  topics(villager: VillagerId, ctx: VillagerContext): readonly ConversationTopic[] {
-    if (villager === 'bramblewick') return this.mayorTopics(ctx);
-    if (villager === 'tikka') return this.tikkaTopics(ctx);
+  topics(
+    villager: VillagerId,
+    ctx: VillagerContext,
+    flow: VillagerConversationFlow,
+  ): readonly ConversationTopic[] {
+    if (villager === 'bramblewick') return this.mayorTopics(ctx, flow);
+    if (villager === 'tikka') return this.tikkaTopics(ctx, flow);
     return [];
   }
 
-  private mayorTopics(ctx: VillagerContext): readonly ConversationTopic[] {
+  private mayorTopics(
+    ctx: VillagerContext,
+    flow: VillagerConversationFlow,
+  ): readonly ConversationTopic[] {
     const phase = ctx.quest.phase;
     if (phase === 'unmet') {
       return [
         {
           key: HELP_TOPIC_KEY,
           label: 'How can we help?',
-          run: (ctl) => {
+          tone: 'normal',
+          repeatable: false,
+          grouping: 'root',
+          run: (convo) => {
             this.setPhase('offered');
-            ctl.say('quest_offer');
-            ctl.showTopics(this.offerChoices());
+            convo.play(flow.answerWithTopics([BRAMBLEWICK.questOffer], this.offerChoices(flow)));
           },
         },
       ];
     }
-    if (phase === 'offered' || phase === 'declined') return this.offerChoices();
+    if (phase === 'offered' || phase === 'declined') return this.offerChoices(flow);
     if (phase === 'fortifying') {
       return [
         {
           key: MORE_TIME_TOPIC_KEY,
           label: 'I need more time',
-          run: (ctl: ConversationController) => {
-            ctl.say('mayor_more_time_granted');
-            ctl.showRootTopics();
-          },
+          tone: 'normal',
+          repeatable: false,
+          grouping: 'root',
+          run: (convo) => convo.play(flow.answer([BRAMBLEWICK.moreTimeGranted])),
         },
         {
           key: READY_FOR_ASSAULT_TOPIC_KEY,
           label: "I'm ready",
-          questRelated: true,
-          run: (ctl: ConversationController) => {
-            ctl.afterClose(() => this.deps.assault()?.begin());
-            ctl.close();
+          tone: 'quest',
+          repeatable: false,
+          grouping: 'root',
+          run: (convo) => {
+            convo.play(flow.closeNow());
+            this.deps.assault()?.begin();
           },
         },
       ];
@@ -797,35 +801,43 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     return [];
   }
 
-  private offerChoices(): readonly ConversationTopic[] {
+  private offerChoices(flow: VillagerConversationFlow): readonly ConversationTopic[] {
     return [
       {
         key: ACCEPT_TOPIC_KEY,
         label: 'Accept',
-        questRelated: true,
-        run: (ctl) => this.accept(ctl),
+        tone: 'quest',
+        repeatable: false,
+        grouping: 'root',
+        run: (convo) => convo.play(this.accept(flow)),
       },
       {
         key: DECLINE_TOPIC_KEY,
         label: 'Decline',
-        run: (ctl) => {
+        tone: 'normal',
+        repeatable: false,
+        grouping: 'root',
+        run: (convo) => {
           this.setPhase('declined');
-          ctl.say('quest_declined');
-          ctl.showRootTopics();
+          convo.play(flow.answerAndReturnToRoot([BRAMBLEWICK.questDeclined]));
         },
       },
     ];
   }
 
-  private accept(ctl: ConversationController): void {
-    if (hasAcceptedMayorRequest(this.phase)) return;
+  private accept(flow: VillagerConversationFlow): ConversationRequest {
+    // Defensive against a double Accept race; the row only ever shows while
+    // the request is still unaccepted, so nothing here should normally run.
+    if (hasAcceptedMayorRequest(this.phase)) return flow.closeNow();
     this.setPhase('need_tools');
     this.deps.bus.emit('questStarted', { questId: BRIAR_HOLLOW_QUEST_ID });
-    ctl.say('quest_accepted');
-    ctl.showRootTopics();
+    return flow.answerAndReturnToRoot([BRAMBLEWICK.questAccepted]);
   }
 
-  private tikkaTopics(ctx: VillagerContext): readonly ConversationTopic[] {
+  private tikkaTopics(
+    ctx: VillagerContext,
+    flow: VillagerConversationFlow,
+  ): readonly ConversationTopic[] {
     const phase = ctx.quest.phase;
     const teachable =
       phase === 'fortifying' ||
@@ -838,37 +850,23 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       {
         key: TEACH_AGAIN_TOPIC_KEY,
         label: 'Teach me again',
-        isQuestion: true,
-        run: (ctl) => {
+        tone: 'normal',
+        repeatable: false,
+        grouping: 'question',
+        run: (convo) => {
           // Either crawler who somehow lacks it learns it now, as both were taught together.
           teachBoth(this.deps.human, this.deps.cat, 'construction');
-          ctl.say('construction_skill_already_granted');
-          ctl.afterClose(() => {
-            if (this.deps.active().isAlive) this.openConstructionExplainer();
-          });
+          convo.play(
+            flow.closeAfter([TIKKA.constructionSkillAlreadyGranted], () => {
+              if (this.deps.active().isAlive) this.openConstructionExplainer();
+            }),
+          );
         },
       },
     ];
   }
 
   // ── The reward ────────────────────────────────────────────────────────────
-
-  /**
-   * The Mayor's thanks are spoken: everything the quest promised is handed
-   * over, here, in code — the pages only say so — and exactly once, however
-   * many times he is asked afterwards.
-   */
-  private turnIn(ctl: ConversationController): void {
-    if (this.phase !== 'victory') return;
-    this.grantRewards();
-    this.setPhase('complete');
-    ctl.showRootTopics();
-    ctl.afterClose(() => {
-      if (!this.deps.active().isAlive) return;
-      this.deps.enqueueReward(itemReward('hamburger', BRIAR_HOLLOW_REWARD_BURGERS));
-      this.deps.enqueueReward(itemReward('hollow_stew', BRIAR_HOLLOW_REWARD_STEW));
-    });
-  }
 
   /** Pays out the quest's rewards unless they have been paid already. Returns whether it paid. */
   grantRewards(): boolean {

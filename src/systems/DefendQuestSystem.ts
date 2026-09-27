@@ -37,6 +37,9 @@ import {
 import { drawText } from '../ui/TextBox';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
+import type { Conversation } from '../dialog/Conversation';
+import type { ConversationHandle } from '../dialog/request';
+import { GOBLIN_MOTHER } from '../dialog/scripts/scenes/defend';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import {
   BUILD_KNEEL_ROWS,
@@ -115,23 +118,6 @@ const NPC_DEAD_X_MARGIN_FRACTION = 0.2;
 const NPC_DEAD_X_END_FRACTION = 0.8;
 const BARRIER_HIT_FLASH_FRAMES = 12;
 const BARRIER_HIT_ALPHA_FRACTION = 0.45;
-
-// Dialog layout constants
-const DIALOG_MAX_WIDTH = 420;
-const DIALOG_HEIGHT = 200;
-const DIALOG_TITLE_X_OFFSET = 14;
-const DIALOG_TITLE_Y_OFFSET = 22;
-const DIALOG_TITLE_ASCENT = 10;
-const DIALOG_LINE_START_Y = 45;
-const DIALOG_LINE_SPACING = 16;
-const DIALOG_LINE_ASCENT = 9;
-const DIALOG_BTN_W = 100;
-const DIALOG_BTN_H = 30;
-const DIALOG_BTN_Y_FROM_BOTTOM = 45;
-const DIALOG_BTN_HALF_GAP = 10;
-const DIALOG_TITLE_SIZE = 13;
-const DIALOG_LINE_SIZE = 11;
-const DIALOG_BTN_LABEL_SIZE = 12;
 
 // Overlay layout constants
 const OVERLAY_PULSE_SPEED = 200;
@@ -418,7 +404,13 @@ export class DefendQuestSystem implements GameSystem {
   private completionXpApplied = 0;
   private completionCrawlerName = '';
 
-  private dialogButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> = [];
+  /** The handle the goblin mother's offer opened with. */
+  private conversationHandle: ConversationHandle | null = null;
+
+  /** Whether the shared conversation is currently showing the goblin mother's offer. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
 
   private tutorialPage = 0;
   private tutorialButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> =
@@ -436,6 +428,7 @@ export class DefendQuestSystem implements GameSystem {
     gameMap: GameMap,
     bus: EventBus,
     addMob: (mob: Mob) => void,
+    private readonly conversation: Conversation,
     /**
      * The level one bugaboo spawns at, rolled per body against the floor's own
      * band and the party's level.
@@ -601,6 +594,11 @@ export class DefendQuestSystem implements GameSystem {
     return this.phase === 'dialog' || this.phase === 'tutorial';
   }
 
+  /** Just the tutorial pages — the offer itself is claimed by the shared conversation's own overlay claim. */
+  get isTutorialOpen(): boolean {
+    return this.phase === 'tutorial';
+  }
+
   /**
    * The end-of-quest banner, which a press dismisses early. It rides over live
    * play rather than pausing it, so it is not part of `isDialogOpen`.
@@ -627,8 +625,8 @@ export class DefendQuestSystem implements GameSystem {
     if (!this.wouldInteract(active)) return false;
 
     if (this.phase === 'npc_waiting') {
-      this.phase = 'dialog';
       this.menuOpenSoundPending = true;
+      this.openOfferConversation();
       return true;
     }
     if (this.phase === 'complete_pending') {
@@ -636,6 +634,48 @@ export class DefendQuestSystem implements GameSystem {
       return true;
     }
     return false;
+  }
+
+  /** The goblin mother's plea, with an accept/decline pair standing in for the old Yes/No buttons. */
+  private openOfferConversation(): void {
+    this.phase = 'dialog';
+    this.conversationHandle = this.conversation.open({
+      lines: [GOBLIN_MOTHER.defendRequest],
+      reward: null,
+      questRelated: true,
+      ending: {
+        kind: 'confirm',
+        // Answering a plea for help is a choice the player has to aim at. A
+        // bare Space here would refuse the quest — or take it — depending on
+        // which button happened to be marked, so it does neither.
+        keyboardDefault: 'none',
+        accept: {
+          label: 'Yes',
+          tone: 'quest',
+          run: (convo) => {
+            convo.close();
+            this.acceptQuest();
+          },
+        },
+        decline: {
+          label: 'No',
+          tone: 'exit',
+          run: (convo) => {
+            convo.close();
+            this.phase = 'npc_waiting';
+          },
+        },
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => {
+          this.phase = 'npc_waiting';
+        },
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
   }
 
   /** Handle click on dialog menu buttons. */
@@ -665,27 +705,13 @@ export class DefendQuestSystem implements GameSystem {
       }
       return true; // consume all clicks while tutorial is open
     }
-    if (this.phase !== 'dialog') return false;
-    for (const btn of this.dialogButtons) {
-      if (pointInRect(mx, my, btn)) {
-        if (btn.action === 'accept') {
-          this.acceptQuest();
-        } else {
-          this.phase = 'npc_waiting';
-        }
-        this.dialogButtons = [];
-        return true;
-      }
-    }
     return false;
   }
 
   /** Dismiss dialog with Esc. */
   dismissDialog(): boolean {
-    if (this.phase === 'dialog') {
-      this.phase = 'npc_waiting';
-      this.dialogButtons = [];
-      return true;
+    if (this.conversationOwned) {
+      return this.conversation.dismiss();
     }
     if (this.phase === 'tutorial') {
       this.phase = 'npc_waiting';
@@ -1659,10 +1685,6 @@ export class DefendQuestSystem implements GameSystem {
       }
     }
 
-    if (this.phase === 'dialog') {
-      this.renderDialog(ctx);
-    }
-
     if (this.phase === 'tutorial') {
       this.renderTutorial(ctx);
     }
@@ -1745,87 +1767,6 @@ export class DefendQuestSystem implements GameSystem {
       color: secs <= SECS_LOW_THRESHOLD ? '#4ade80' : '#fbbf24',
       align: 'center',
     });
-  }
-
-  private renderDialog(ctx: CanvasRenderingContext2D): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-    const dw = Math.min(DIALOG_MAX_WIDTH, cw - DIALOG_CANVAS_PADDING);
-    const dh = DIALOG_HEIGHT;
-    const dx = Math.floor((cw - dw) / 2);
-    const dy = Math.floor((ch - dh) / 2);
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(8,10,20,0.95)';
-    ctx.fillRect(dx, dy, dw, dh);
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(dx, dy, dw, dh);
-    ctx.restore();
-
-    drawText(ctx, 'Goblin Mother', {
-      x: dx + DIALOG_TITLE_X_OFFSET,
-      y: dy + DIALOG_TITLE_Y_OFFSET - DIALOG_TITLE_ASCENT,
-      size: DIALOG_TITLE_SIZE,
-      bold: true,
-      color: '#fbbf24',
-    });
-
-    // The one place the deal is stated every time the quest is met — that the
-    // road on is open regardless, and that staying is what closes it for a
-    // minute. The tutorial says it too, but that is once per run, so this must
-    // stand on its own for a player meeting her a second time on floor two.
-    const dialogLines = [
-      'Please — things are coming up through the',
-      'floor grates, and my brood is in here.',
-      'The road on is open; nobody is making you',
-      'stop. But stay, and I bar the far door until',
-      'it is over, win or lose. Hold with me until',
-      'my child is back, and I will owe you for it.',
-    ];
-    for (let i = 0; i < dialogLines.length; i++) {
-      drawText(ctx, dialogLines[i], {
-        x: dx + DIALOG_TITLE_X_OFFSET,
-        y: dy + DIALOG_LINE_START_Y + i * DIALOG_LINE_SPACING - DIALOG_LINE_ASCENT,
-        size: DIALOG_LINE_SIZE,
-        color: '#e2e8f0',
-      });
-    }
-
-    this.dialogButtons = [];
-    const btnW = DIALOG_BTN_W;
-    const btnH = DIALOG_BTN_H;
-    const btnY = dy + dh - DIALOG_BTN_Y_FROM_BOTTOM;
-
-    // Deliberately no primary: answering a plea for help is a choice the player
-    // has to aim at. A bare Space here would refuse the quest — or take it —
-    // depending on which button happened to be marked, so it does neither.
-    beginMenuFocus('defend-quest');
-    const yesX = dx + dw / 2 - btnW - DIALOG_BTN_HALF_GAP;
-    drawButton(ctx, {
-      x: yesX,
-      y: btnY,
-      width: btnW,
-      height: btnH,
-      label: 'Yes',
-      ...BUTTON_PRESETS.success,
-      labelSize: DIALOG_BTN_LABEL_SIZE,
-      questRelated: true,
-    });
-    this.dialogButtons.push({ x: yesX, y: btnY, w: btnW, h: btnH, action: 'accept' });
-
-    const noX = dx + dw / 2 + DIALOG_BTN_HALF_GAP;
-    drawButton(ctx, {
-      x: noX,
-      y: btnY,
-      width: btnW,
-      height: btnH,
-      label: 'No',
-      ...BUTTON_PRESETS.danger,
-      labelSize: DIALOG_BTN_LABEL_SIZE,
-    });
-    this.dialogButtons.push({ x: noX, y: btnY, w: btnW, h: btnH, action: 'decline' });
-    endMenuFocus();
   }
 
   private renderCompleteOverlay(ctx: CanvasRenderingContext2D): void {
@@ -2203,6 +2144,12 @@ export class DefendQuestSystem implements GameSystem {
    * the next wave never mutates the checkpoint it was restored from.
    */
   restoreCheckpoint(snapshot: DefendQuestCheckpoint): void {
+    // A conversation cannot survive the rewind: it may be reading state (the
+    // active tone, the accept/decline pair) that a restore is about to change
+    // out from under it.
+    if (this.conversationOwned) {
+      this.conversation.close();
+    }
     this.questManager.restoreStatuses(snapshot.questStatuses);
     this.phase = snapshot.phase;
     this.approachTimer = snapshot.approachTimer;
@@ -2233,7 +2180,6 @@ export class DefendQuestSystem implements GameSystem {
   dispose(): void {
     this.questMobs = [];
     this.barriers = [];
-    this.dialogButtons = [];
     this.tutorialButtons = [];
   }
 }

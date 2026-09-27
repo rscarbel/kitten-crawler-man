@@ -23,16 +23,17 @@ import { CatPlayer } from '../creatures/CatPlayer';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
-import { DialogBox } from '../ui/DialogBox';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import type { Conversation } from '../dialog/Conversation';
+import type { Choice, ConversationHandle, ConversationRequest } from '../dialog/request';
+import type { DialogLine, NonEmpty } from '../dialog/line';
 import {
-  beginMenuFocus,
-  drawButton,
-  endMenuFocus,
-  suppressMenuFocus,
-  BUTTON_PRESETS,
-  playButtonSound,
-} from '../ui/Button';
+  bopcaScript,
+  BopcaLinePicker,
+  type BopcaScript,
+  type BopcaTone,
+  type BopcaTopic,
+} from '../dialog/scripts/bopca';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
 import {
@@ -52,14 +53,11 @@ import {
 } from '../sprites/bopcaSprite';
 import {
   BOPCA_CHOICE_LABELS,
-  BopcaLinePicker,
   bopcaNameForRoom,
   CHAT_TOPIC_LABELS,
   CHAT_TOPIC_ORDER,
   DISH_DEF,
   randomDishId,
-  type BopcaTone,
-  type BopcaTopic,
   type ChatTopic,
   type DishId,
 } from './bopcaDialog';
@@ -121,13 +119,6 @@ const COOK_STEAM_ALPHA = 0.5;
 /** How far up into the bench row the stove's steam rises from. */
 const COOK_STEAM_WALL_SIDE_OFFSET_TILES = 0.2;
 
-// ── Dialog choice row ─────────────────────────────────────────────────────────
-const CHOICE_BUTTON_WIDTH = 168;
-const CHOICE_BUTTON_HEIGHT = 34;
-const CHOICE_BUTTON_GAP = 10;
-/** Pixels between the dialog box's top edge and the choice row above it. */
-const CHOICE_ROW_GAP = 8;
-
 const HEAL_POPUP_RISE_TILES = 1.2;
 const HEAL_POPUP_SIZE = 13;
 const HEAL_POPUP_COLOR = '#7ae08a';
@@ -157,6 +148,8 @@ interface BopcaEntry {
   layout: SafeRoomCounterLayout;
   palette: BopcaPalette;
   name: string;
+  /** This attendant's own lines, built once from its name. */
+  script: BopcaScript;
   animFrames: number;
   activity: BopcaActivity;
   cookFramesLeft: number;
@@ -177,9 +170,6 @@ interface BopcaEntry {
   partyPresent: boolean;
 }
 
-/** Which dialog surface is showing. */
-type DialogPhase = 'closed' | 'line' | 'choices';
-
 /**
  * Every choice the row can carry, in the order it is offered.
  *
@@ -190,6 +180,15 @@ type DialogPhase = 'closed' | 'line' | 'choices';
  */
 const CHOICE_ORDER = ['takeDish', 'askForFood', 'chat', 'leave'] as const;
 type ChoiceId = (typeof CHOICE_ORDER)[number];
+
+/** `CHOICE_ORDER` always keeps `leave`, so the filtered row is never actually empty. */
+function toNonEmpty<T>(items: readonly T[]): NonEmpty<T> {
+  const [first, ...rest] = items;
+  if (first === undefined) {
+    throw new Error('BopcaSystem: expected at least one choice');
+  }
+  return [first, ...rest];
+}
 
 /** One attendant's rewindable state, keyed in the checkpoint by safe-room index. */
 interface BopcaEntryCheckpoint {
@@ -229,15 +228,16 @@ function copyEntryCheckpoint(source: BopcaEntryCheckpoint): BopcaEntryCheckpoint
 
 export class BopcaSystem implements GameSystem {
   private readonly entries: BopcaEntry[] = [];
-  /**
-   * Rebuilt per conversation, because `DialogBox` fixes its speaker name at
-   * construction and each safe room's attendant has its own name.
-   */
-  private dialogBox: DialogBox | null = null;
   private readonly picker = new BopcaLinePicker();
   private readonly healPopups: HealPopup[] = [];
 
-  private dialogPhase: DialogPhase = 'closed';
+  /** The handle the current Bopca's conversation opened with. */
+  private conversationHandle: ConversationHandle | null = null;
+
+  /** Whether the shared conversation is currently showing one of this system's Bopcas, rather than someone else's. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
   private talkingEntry: BopcaEntry | null = null;
   /**
    * The character holding the conversation, so a dish taken from the menu heals
@@ -258,21 +258,29 @@ export class BopcaSystem implements GameSystem {
   private activeTone: BopcaTone = 'toHuman';
   private chatTopicCursor = 0;
   private anyBopcaMet = false;
-  /** Screen rects of the choice buttons, refreshed every render for click routing. */
-  private choiceRects: Array<{ id: ChoiceId; x: number; y: number; w: number; h: number }> = [];
 
   constructor(
     private readonly gameMap: GameMap,
     layouts: ReadonlyArray<SafeRoomCounterLayout>,
     private readonly bus: EventBus,
+    private readonly conversation: Conversation,
     private readonly audio: AudioManager | null,
+    /**
+     * Whether the rest of the floor keeps ticking while this Bopca's
+     * conversation is open. The dungeon floor lets it run behind the
+     * counter; the building interior halts, matching each scene's own
+     * `update()`.
+     */
+    private readonly haltsWorld: boolean,
   ) {
     for (const layout of layouts) {
       const roomIndex = layout.safeRoomIndex;
+      const name = bopcaNameForRoom(roomIndex);
       this.entries.push({
         layout,
         palette: bopcaPaletteForSeed(roomIndex),
-        name: bopcaNameForRoom(roomIndex),
+        name,
+        script: bopcaScript(name),
         animFrames: roomIndex * BOPCA_IDLE_ANIM_MIN_FRAMES,
         activity: 'idleAnim',
         cookFramesLeft: 0,
@@ -293,7 +301,7 @@ export class BopcaSystem implements GameSystem {
 
   /** True while a Bopca conversation owns input. */
   get isDialogOpen(): boolean {
-    return this.dialogPhase !== 'closed';
+    return this.conversationOwned;
   }
 
   /**
@@ -341,8 +349,8 @@ export class BopcaSystem implements GameSystem {
       entry.visited = restored.visited;
     }
     // A conversation cannot survive the restore: `talkingWith` points at a player
-    // whose own state has just been rewound, and the dialog box is rebuilt per
-    // conversation anyway.
+    // whose own state has just been rewound.
+    if (this.conversationOwned) this.conversation.close();
     this.closeDialog();
   }
 
@@ -364,7 +372,6 @@ export class BopcaSystem implements GameSystem {
     active: HumanPlayer | CatPlayer,
     inactive: HumanPlayer | CatPlayer,
   ): void {
-    this.dialogBox?.update();
     this.activeTone = toneFor(active);
 
     this.lastKnownHpFraction = active.maxHp > 0 ? active.hp / active.maxHp : 1;
@@ -383,12 +390,6 @@ export class BopcaSystem implements GameSystem {
     }
 
     this.updateCookingLoop();
-
-    // The choice row appears on its own once the line has finished revealing, so
-    // a player who never presses Space still gets offered the menu.
-    if (this.dialogPhase === 'line' && this.dialogBox?.isFullyRevealed() === true) {
-      this.dialogPhase = 'choices';
-    }
 
     for (let i = this.healPopups.length - 1; i >= 0; i--) {
       this.healPopups[i].framesLeft--;
@@ -450,7 +451,10 @@ export class BopcaSystem implements GameSystem {
         entry.cookFramesLeft = 0;
         entry.activity = 'idleAnim';
       }
-      if (this.talkingEntry === entry) this.closeDialog();
+      if (this.talkingEntry === entry) {
+        if (this.conversationOwned) this.conversation.close();
+        this.closeDialog();
+      }
     }
     entry.partyPresent = present;
   }
@@ -611,10 +615,10 @@ export class BopcaSystem implements GameSystem {
     }
     const near = this.entryNear(active, BOPCA_TALK_DISTANCE_TILES);
     if (near === null) return false;
-    // `DialogBox` needs an `AudioManager` for its typing clicks, so without one
+    // The box needs an `AudioManager` for its typing clicks, so without one
     // there is nothing to draw. Refusing the press here — rather than opening a
-    // phase with no surface — keeps input un-suppressed and lets the press fall
-    // through to Mordecai or the bed.
+    // conversation with no surface — keeps input un-suppressed and lets the
+    // press fall through to Mordecai or the bed.
     if (this.audio === null) return false;
     this.openDialog(near, active);
     return true;
@@ -623,7 +627,6 @@ export class BopcaSystem implements GameSystem {
   private openDialog(entry: BopcaEntry, active: HumanPlayer | CatPlayer): void {
     this.talkingEntry = entry;
     this.talkingWith = active;
-    this.dialogBox = null;
     this.activeTone = toneFor(active);
     // Only an idle Bopca turns to face you. A busy one keeps its pose:
     // `updateCook` is the sole thing that advances the `cooking` state and
@@ -643,33 +646,47 @@ export class BopcaSystem implements GameSystem {
     entry.visited = true;
   }
 
+  /** The `DialogLine` for a topic other than `serving`, which alone needs the served dish's name. */
+  private lineFor(entry: BopcaEntry, topic: BopcaTopic, dishName: string | null): DialogLine {
+    if (topic === 'serving') {
+      return this.picker.pickServing(entry.script, this.activeTone, dishName ?? 'that');
+    }
+    return this.picker.pick(entry.script, {
+      tone: this.activeTone,
+      topic,
+      hpFraction: this.lastKnownHpFraction,
+      companionNearby: this.lastKnownCompanionNearby,
+      firstBopcaEncounter: !this.anyBopcaMet,
+      returningToThisRoom: entry.visited,
+      lastDishWentCold: entry.lastDishWentCold,
+      servesThisVisit: entry.servesThisVisit,
+    });
+  }
+
+  /** Opens (or repaints) the shared conversation on a fresh topic, with the choice row that follows it. */
   private showLine(topic: BopcaTopic, dishName: string | null): void {
     const entry = this.talkingEntry;
     if (entry === null) return;
-    if (this.dialogBox === null) {
-      // Non-null by the time any dialog can open — `tryInteract` refuses without it.
-      if (this.audio === null) return;
-      this.dialogBox = new DialogBox(this.audio, {
-        speakerName: entry.name,
-        revealMode: 'sentence',
-      });
+    const line = this.lineFor(entry, topic, dishName);
+    const request: ConversationRequest = {
+      lines: [line],
+      reward: null,
+      questRelated: false,
+      ending: { kind: 'choices', choices: this.buildChoices() },
+      dismiss: { kind: 'allowed', onDismissed: () => this.closeDialog() },
+      haltsWorld: this.haltsWorld,
+      anchor: null,
+      locksKeyboard: true,
+    };
+    // A topic already in this same conversation chains onto the box in place
+    // rather than opening fresh, so `Conversation.open`'s supersede-dismiss
+    // does not mistake this Bopca's own next line for someone else's request
+    // and run `closeDialog` out from under it.
+    if (this.conversationOwned && this.conversationHandle !== null) {
+      this.conversationHandle.play(request);
+    } else {
+      this.conversationHandle = this.conversation.open(request);
     }
-    const line = this.picker.pick(
-      {
-        tone: this.activeTone,
-        topic,
-        hpFraction: this.lastKnownHpFraction,
-        companionNearby: this.lastKnownCompanionNearby,
-        firstBopcaEncounter: !this.anyBopcaMet,
-        returningToThisRoom: entry.visited,
-        lastDishWentCold: entry.lastDishWentCold,
-        servesThisVisit: entry.servesThisVisit,
-        dishName,
-      },
-      entry.name,
-    );
-    this.dialogPhase = 'line';
-    this.dialogBox.show(line);
   }
 
   /**
@@ -681,39 +698,69 @@ export class BopcaSystem implements GameSystem {
   private lastKnownHpFraction = 1;
   private lastKnownCompanionNearby = false;
 
-  /** Space while the dialog is open: reveal, then show the choices. */
-  advanceDialog(): void {
-    if (this.dialogPhase === 'closed') return;
-    if (this.dialogBox !== null && !this.dialogBox.isFullyRevealed()) {
-      this.dialogBox.skipToEnd();
-      return;
-    }
-    // On the choice row, Space is the polite exit — the same thing Esc does.
-    this.closeDialog();
-  }
-
-  /** Number keys pick a choice; returns whether the key was consumed. */
-  handleKeyDown(key: string): boolean {
-    if (this.dialogPhase !== 'choices') return false;
-    const choices = this.currentChoices();
-    const index = Number.parseInt(key, 10) - 1;
-    if (!Number.isInteger(index) || index < 0 || index >= choices.length) return false;
-    playButtonSound(this.audio);
-    this.chooseChoice(choices[index]);
-    return true;
-  }
-
   /**
-   * The choices on offer right now. `takeDish` is there only when one is waiting,
-   * and `askForFood` only when the stove is free — a cook runs for seconds, and
-   * ordering again mid-cook silently restarted the timer the player was waiting on.
+   * The choice row on offer right now. `takeDish` is there only when one is
+   * waiting, and `askForFood` only when the stove is free — a cook runs for
+   * seconds, and ordering again mid-cook silently restarted the timer the
+   * player was waiting on.
    */
-  private currentChoices(): ReadonlyArray<ChoiceId> {
-    const hasDish = this.talkingEntry !== null && this.talkingEntry.dish !== null;
-    const isCooking = this.talkingEntry !== null && this.talkingEntry.activity === 'cooking';
-    return CHOICE_ORDER.filter(
+  private buildChoices(): NonEmpty<Choice> {
+    const entry = this.talkingEntry;
+    const hasDish = entry !== null && entry.dish !== null;
+    const isCooking = entry !== null && entry.activity === 'cooking';
+    const ids = CHOICE_ORDER.filter(
       (id) => (id !== 'takeDish' || hasDish) && (id !== 'askForFood' || !isCooking),
     );
+    return toNonEmpty(ids.map((id) => this.choiceFor(id)));
+  }
+
+  private choiceFor(id: ChoiceId): Choice {
+    switch (id) {
+      case 'takeDish':
+        return {
+          label: BOPCA_CHOICE_LABELS.takeDish,
+          tone: 'normal',
+          run: () => {
+            const entry = this.talkingEntry;
+            const eater = this.talkingWith;
+            if (entry === null || eater === null) return;
+            this.takeDish(entry, eater);
+          },
+        };
+      case 'askForFood':
+        return {
+          label: this.choiceLabel('askForFood'),
+          tone: 'normal',
+          run: () => {
+            const entry = this.talkingEntry;
+            if (entry === null) return;
+            const repeat = entry.servesThisVisit > 0;
+            this.bus.emit('bopcaOrderPlaced', { tone: this.activeTone });
+            entry.activity = 'cooking';
+            entry.cookFramesLeft = BOPCA_COOK_FRAMES;
+            this.showLine(repeat ? 'repeatOrder' : 'orderFood', null);
+          },
+        };
+      case 'chat':
+        return {
+          label: this.choiceLabel('chat'),
+          tone: 'normal',
+          run: () => {
+            const topic = this.nextChatTopic();
+            this.chatTopicCursor++;
+            this.showLine(topic, null);
+          },
+        };
+      case 'leave':
+        return {
+          label: BOPCA_CHOICE_LABELS.leave,
+          tone: 'exit',
+          run: (convo) => {
+            this.closeDialog();
+            convo.close();
+          },
+        };
+    }
   }
 
   /** The next question the chat button will ask, which is also what it is labelled. */
@@ -725,71 +772,18 @@ export class BopcaSystem implements GameSystem {
     return id === 'chat' ? CHAT_TOPIC_LABELS[this.nextChatTopic()] : BOPCA_CHOICE_LABELS[id];
   }
 
-  /** Click routing. Returns true when the click landed on the dialog surface. */
-  handleClick(mx: number, my: number): boolean {
-    if (this.dialogPhase === 'closed') return false;
-    if (this.dialogPhase === 'choices') {
-      for (const rect of this.choiceRects) {
-        const inside =
-          mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h;
-        if (inside) {
-          playButtonSound(this.audio);
-          this.chooseChoice(rect.id);
-          return true;
-        }
-      }
-    }
-    if (this.dialogBox?.contains(mx, my) === true) {
-      this.advanceDialog();
-      return true;
-    }
-    return false;
-  }
-
-  private chooseChoice(choice: ChoiceId): void {
-    const entry = this.talkingEntry;
-    if (entry === null) return;
-    switch (choice) {
-      case 'takeDish': {
-        const eater = this.talkingWith;
-        if (eater === null) return;
-        this.takeDish(entry, eater);
-        return;
-      }
-      case 'askForFood': {
-        const repeat = entry.servesThisVisit > 0;
-        this.bus.emit('bopcaOrderPlaced', { tone: this.activeTone });
-        this.showLine(repeat ? 'repeatOrder' : 'orderFood', null);
-        entry.activity = 'cooking';
-        entry.cookFramesLeft = BOPCA_COOK_FRAMES;
-        return;
-      }
-      case 'chat': {
-        const topic = this.nextChatTopic();
-        this.chatTopicCursor++;
-        this.showLine(topic, null);
-        return;
-      }
-      case 'leave':
-        this.closeDialog();
-        return;
-    }
-  }
-
   /** Esc, or walking out of the room. */
   dismissDialog(): boolean {
-    if (this.dialogPhase === 'closed') return false;
-    this.closeDialog();
-    return true;
+    if (!this.conversationOwned) return false;
+    return this.conversation.dismiss();
   }
 
   private closeDialog(): void {
     const entry = this.talkingEntry;
     if (entry !== null && entry.activity === 'talking') entry.activity = 'idleAnim';
-    this.dialogPhase = 'closed';
+    this.conversationHandle = null;
     this.talkingEntry = null;
     this.talkingWith = null;
-    this.dialogBox?.hide();
   }
 
   /**
@@ -828,20 +822,7 @@ export class BopcaSystem implements GameSystem {
 
   /** Raise a world-space bubble over `entry` carrying a line on `topic`. */
   private showBark(entry: BopcaEntry, topic: BopcaTopic, dishName: string | null): void {
-    entry.barkLine = this.picker.pick(
-      {
-        tone: this.activeTone,
-        topic,
-        hpFraction: this.lastKnownHpFraction,
-        companionNearby: this.lastKnownCompanionNearby,
-        firstBopcaEncounter: !this.anyBopcaMet,
-        returningToThisRoom: entry.visited,
-        lastDishWentCold: entry.lastDishWentCold,
-        servesThisVisit: entry.servesThisVisit,
-        dishName,
-      },
-      entry.name,
-    );
+    entry.barkLine = this.lineFor(entry, topic, dishName).paragraphs[0];
     entry.barkFramesLeft = BARK_FRAMES;
   }
 
@@ -947,7 +928,7 @@ export class BopcaSystem implements GameSystem {
       });
     }
 
-    if (this.dialogPhase !== 'closed') return;
+    if (this.conversationOwned) return;
 
     const withDish = this.entryWithTakeableDish(active);
     if (withDish !== null) {
@@ -970,58 +951,6 @@ export class BopcaSystem implements GameSystem {
         'Talk',
       );
     }
-  }
-
-  /** The dialog box and, once the line is read, the choice row. */
-  renderDialog(ctx: CanvasRenderingContext2D): void {
-    const box = this.dialogBox;
-    if (this.dialogPhase === 'closed' || box === null) return;
-    box.render(ctx);
-    this.choiceRects = [];
-    if (this.dialogPhase !== 'choices') {
-      // The line is still typing itself out: the box owns the screen but offers
-      // nothing to focus, so it declares an empty ring rather than leaving the
-      // live one to whatever drew before it.
-      suppressMenuFocus('bopca-dialog');
-      return;
-    }
-
-    // Bounded by the dialog box rather than laid out at a fixed width: a phone
-    // canvas is ~390 CSS px and three 168 px buttons come to 524, so a fixed row
-    // hung off both edges with its labels cut — on the one platform where the
-    // buttons are the only way to choose, since there are no number keys.
-    const choices = this.currentChoices();
-    const boxRect = box.rect();
-    const totalGap = (choices.length - 1) * CHOICE_BUTTON_GAP;
-    const buttonWidth = Math.min(CHOICE_BUTTON_WIDTH, (boxRect.width - totalGap) / choices.length);
-    const rowWidth = choices.length * buttonWidth + totalGap;
-    const rowY = boxRect.y - CHOICE_ROW_GAP - CHOICE_BUTTON_HEIGHT;
-    let x = boxRect.x + (boxRect.width - rowWidth) / 2;
-
-    beginMenuFocus('bopca-dialog');
-    choices.forEach((id, index) => {
-      const isLeave = id === 'leave';
-      drawButton(ctx, {
-        x,
-        y: rowY,
-        width: buttonWidth,
-        height: CHOICE_BUTTON_HEIGHT,
-        label: `${index + 1}. ${this.choiceLabel(id)}`,
-        ...(isLeave ? BUTTON_PRESETS.primary : BUTTON_PRESETS.safeRoom),
-        // Space on the choice row has always been the polite exit; the ring
-        // keeps it that way rather than ordering food with it.
-        primaryAction: isLeave,
-      });
-      this.choiceRects.push({
-        id,
-        x,
-        y: rowY,
-        w: buttonWidth,
-        h: CHOICE_BUTTON_HEIGHT,
-      });
-      x += buttonWidth + CHOICE_BUTTON_GAP;
-    });
-    endMenuFocus();
   }
 
   private renderGalleyLight(

@@ -37,7 +37,6 @@ import { isInsideSlamCone, type SlamImpact } from '../creatures/grotesqueSpiderT
 import { SpiderImpactFeedback } from './SpiderImpactFeedback';
 import { lifeMachineSacSplitFrame } from '../sprites/lifeMachineTiming';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
-import { drawQuestIcon } from '../ui/QuestIcon';
 import { KeyboardHeroSystem, type KeyboardHeroCheckpoint } from './KeyboardHeroSystem';
 import { HIT_ZONE_IMG_CENTER, MAX_PLAYABLE_GAP_MS } from './keyboardHeroGeometry';
 import {
@@ -72,6 +71,9 @@ import { spawnHardModeBossHealer } from '../levels/fairySpawner';
 import type { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { level2 } from '../levels/level2';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import type { Conversation } from '../dialog/Conversation';
+import type { ConversationHandle } from '../dialog/request';
+import { SCIENTIST } from '../dialog/scripts/scenes/spider';
 
 export const SPIDER_QUEST_ID = 'grotesque_spider';
 export const SPIDER_QUEST_COMPLETION_XP = 2000;
@@ -183,23 +185,11 @@ const LOCKED_ROOM_ALPHA_MIN = 0.55;
 const LOCKED_ROOM_ALPHA_SWING = 0.25;
 const LOCKED_ROOM_PULSE_MULTIPLIER = 0.12;
 const LOCKED_ROOM_TEXT_OFFSET_Y = 74;
-const DIALOG_WIDTH_MIN = 440;
 const DIALOG_WIDTH_PADDING = 40;
-const DIALOG_HEIGHT = 220;
-const DIALOG_TITLE_OFFSET_X = 14;
-const DIALOG_TITLE_OFFSET_Y = 22;
-const DIALOG_TITLE_OFFSET_Y_ADJUSTMENT = 10;
-const DIALOG_TEXT_OFFSET_X = 14;
-const DIALOG_TEXT_START_Y = 48;
-const DIALOG_TEXT_LINE_HEIGHT = 16;
-const DIALOG_TEXT_SIZE_ADJUSTMENT = 9;
 const DIALOG_BUTTON_WIDTH = 110;
 const DIALOG_BUTTON_HEIGHT = 30;
 const DIALOG_BUTTON_OFFSET_BOTTOM = 46;
-const DIALOG_BUTTON_SPACING = 10;
 const DIALOG_BUTTON_LABEL_SIZE = 12;
-const DIALOG_QUEST_ICON_SIZE = 16;
-const DIALOG_QUEST_ICON_TITLE_GAP = 8;
 const FAILED_DIALOG_WIDTH_MIN = 400;
 const FAILED_DIALOG_HEIGHT = 160;
 const FAILED_DIALOG_TITLE_OFFSET_Y = 26;
@@ -649,7 +639,6 @@ export class SpiderQuestSystem implements GameSystem {
   private _roomPulse = 0;
 
   // Dialog buttons
-  private dialogButtons: ButtonRect[] = [];
   private hackFailedButtons: ButtonRect[] = [];
 
   // Tutorial
@@ -699,7 +688,20 @@ export class SpiderQuestSystem implements GameSystem {
   private gameMap: GameMap;
   private bus: EventBus;
 
-  constructor(gameMap: GameMap, bus: EventBus, addMob: (mob: Mob) => void) {
+  /** The handle the scientist's offer opened with. */
+  private conversationHandle: ConversationHandle | null = null;
+
+  /** Whether the shared conversation is currently showing the scientist's offer. */
+  private get conversationOwned(): boolean {
+    return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
+
+  constructor(
+    gameMap: GameMap,
+    bus: EventBus,
+    addMob: (mob: Mob) => void,
+    private readonly conversation: Conversation,
+  ) {
     this.gameMap = gameMap;
     this.bus = bus;
     this.addMob = addMob;
@@ -777,6 +779,11 @@ export class SpiderQuestSystem implements GameSystem {
       this.phase === 'hacking_failed' ||
       this.phase === 'keyboard_hero_tutorial'
     );
+  }
+
+  /** Just the two custom modals — the offer itself is claimed by the shared conversation's own overlay claim. */
+  get isModalPhaseOpen(): boolean {
+    return this.phase === 'hacking_failed' || this.phase === 'keyboard_hero_tutorial';
   }
 
   /**
@@ -1131,10 +1138,6 @@ export class SpiderQuestSystem implements GameSystem {
   renderUI(ctx: CanvasRenderingContext2D, camX = 0, camY = 0): void {
     if (this.phase === 'inactive') return;
 
-    if (this.phase === 'scientist_dialog') {
-      this._renderDialog(ctx);
-    }
-
     if (this.phase === 'hacking') {
       this.keyboardHero.render(ctx);
     }
@@ -1162,23 +1165,6 @@ export class SpiderQuestSystem implements GameSystem {
 
   handleClick(mx: number, my: number, eventTimeStampMs?: number): boolean {
     if (this.advanceOutcomeOverlay()) return true;
-
-    if (this.phase === 'scientist_dialog') {
-      for (const btn of this.dialogButtons) {
-        if (pointInRect(mx, my, btn)) {
-          this.menuClickSoundPending = true;
-          if (btn.action === 'accept') {
-            this.phase = 'awaiting_hacking';
-            this.bus.emit('questStarted', { questId: SPIDER_QUEST_ID });
-          } else {
-            this.phase = 'scientist_waiting';
-          }
-          this.dialogButtons = [];
-          return true;
-        }
-      }
-      return true; // consume all clicks while dialog open
-    }
 
     if (this.phase === 'keyboard_hero_tutorial') {
       for (const btn of this._tutorialButtons) {
@@ -1264,9 +1250,9 @@ export class SpiderQuestSystem implements GameSystem {
     if (!this.wouldInteract(active)) return false;
 
     if (this.phase === 'scientist_waiting') {
-      this.phase = 'scientist_dialog';
       this.menuOpenSoundPending = true;
       this.explanationSoundPending = true;
+      this.openOfferConversation();
       return true;
     }
 
@@ -1281,11 +1267,53 @@ export class SpiderQuestSystem implements GameSystem {
     return false;
   }
 
+  /** The scientist's plea, with an accept/decline pair standing in for the old "I'll help" / "Not now" buttons. */
+  private openOfferConversation(): void {
+    this.phase = 'scientist_dialog';
+    this.conversationHandle = this.conversation.open({
+      lines: [SCIENTIST.labRequest],
+      reward: null,
+      questRelated: true,
+      ending: {
+        kind: 'confirm',
+        // Taking the job is the primary: the player walked up to the
+        // scientist and pressed the talk key to hear him out, so accept is
+        // the answer a bare accept key should give. Turning him down stays a
+        // deliberate act.
+        keyboardDefault: 'accept',
+        accept: {
+          label: "I'll help",
+          tone: 'quest',
+          run: (convo) => {
+            convo.close();
+            this.phase = 'awaiting_hacking';
+            this.bus.emit('questStarted', { questId: SPIDER_QUEST_ID });
+          },
+        },
+        decline: {
+          label: 'Not now',
+          tone: 'exit',
+          run: (convo) => {
+            convo.close();
+            this.phase = 'scientist_waiting';
+          },
+        },
+      },
+      dismiss: {
+        kind: 'allowed',
+        onDismissed: () => {
+          this.phase = 'scientist_waiting';
+        },
+      },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
   dismissDialog(): boolean {
-    if (this.phase === 'scientist_dialog') {
-      this.phase = 'scientist_waiting';
-      this.dialogButtons = [];
-      return true;
+    if (this.conversationOwned) {
+      return this.conversation.dismiss();
     }
     if (this.phase === 'keyboard_hero_tutorial') {
       // Escape from tutorial → retreat to awaiting_hacking
@@ -1423,6 +1451,11 @@ export class SpiderQuestSystem implements GameSystem {
    * next attempt never mutates the checkpoint it was restored from.
    */
   restoreCheckpoint(snapshot: SpiderQuestCheckpoint): void {
+    // A conversation cannot survive the rewind: the accept/decline pair may
+    // be closing over state a restore is about to change out from under it.
+    if (this.conversationOwned) {
+      this.conversation.close();
+    }
     // No save point is taken mid-fight, so the roster rewind has already dropped
     // every egg and hatchling as arriving after the checkpoint. Ending them
     // anyway keeps that true should a checkpoint ever be taken with a brood out.
@@ -1452,7 +1485,6 @@ export class SpiderQuestSystem implements GameSystem {
     this.keyboardHero.stop();
     this.lifeMachines = [];
     this.smallSpiders = [];
-    this.dialogButtons = [];
     this.hackFailedButtons = [];
     this._cutsceneGore = [];
     this._clearBrood();
@@ -2645,91 +2677,6 @@ export class SpiderQuestSystem implements GameSystem {
         align: 'center',
       });
     }
-  }
-
-  private _renderDialog(ctx: CanvasRenderingContext2D): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-    const dw = Math.min(DIALOG_WIDTH_MIN, cw - DIALOG_WIDTH_PADDING);
-    const dh = DIALOG_HEIGHT;
-    const dx = Math.floor((cw - dw) / 2);
-    const dy = Math.floor((ch - dh) / 2);
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(5,8,18,0.96)';
-    ctx.fillRect(dx, dy, dw, dh);
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(dx, dy, dw, dh);
-    ctx.restore();
-
-    const titleY = dy + DIALOG_TITLE_OFFSET_Y - DIALOG_TITLE_OFFSET_Y_ADJUSTMENT;
-    drawQuestIcon(
-      ctx,
-      dx + DIALOG_TITLE_OFFSET_X + DIALOG_QUEST_ICON_SIZE / 2,
-      titleY + DIALOG_QUEST_ICON_SIZE / 2,
-      DIALOG_QUEST_ICON_SIZE,
-    );
-    drawText(ctx, 'Scientist', {
-      x: dx + DIALOG_TITLE_OFFSET_X + DIALOG_QUEST_ICON_SIZE + DIALOG_QUEST_ICON_TITLE_GAP,
-      y: titleY,
-      size: 13,
-      bold: true,
-      color: '#fbbf24',
-    });
-
-    const lines = [
-      'Oh! A visitor. Please, I need your help —',
-      'my experiments went terribly wrong. The life',
-      'machines keep printing egg sacs and dropping',
-      'them on my floor! Get to the terminal computer',
-      'and shut them down before this gets worse!',
-    ];
-    for (let i = 0; i < lines.length; i++) {
-      drawText(ctx, lines[i], {
-        x: dx + DIALOG_TEXT_OFFSET_X,
-        y: dy + DIALOG_TEXT_START_Y + i * DIALOG_TEXT_LINE_HEIGHT - DIALOG_TEXT_SIZE_ADJUSTMENT,
-        size: 11,
-        color: '#e2e8f0',
-      });
-    }
-
-    this.dialogButtons = [];
-    const btnW = DIALOG_BUTTON_WIDTH;
-    const btnH = DIALOG_BUTTON_HEIGHT;
-    const btnY = dy + dh - DIALOG_BUTTON_OFFSET_BOTTOM;
-
-    // Taking the job is the primary: the player walked up to the scientist and
-    // pressed the talk key to hear him out, so accept is the answer a bare
-    // accept key should give. Turning him down stays a deliberate act — Escape,
-    // or stepping the ring onto it.
-    beginMenuFocus('spider-quest');
-    const helpX = dx + dw / 2 - btnW - DIALOG_BUTTON_SPACING;
-    drawButton(ctx, {
-      x: helpX,
-      y: btnY,
-      width: btnW,
-      height: btnH,
-      label: "I'll help",
-      ...BUTTON_PRESETS.success,
-      labelSize: DIALOG_BUTTON_LABEL_SIZE,
-      primaryAction: true,
-      questRelated: true,
-    });
-    this.dialogButtons.push({ x: helpX, y: btnY, w: btnW, h: btnH, action: 'accept' });
-
-    const notNowX = dx + dw / 2 + DIALOG_BUTTON_SPACING;
-    drawButton(ctx, {
-      x: notNowX,
-      y: btnY,
-      width: btnW,
-      height: btnH,
-      label: 'Not now',
-      ...BUTTON_PRESETS.danger,
-      labelSize: DIALOG_BUTTON_LABEL_SIZE,
-    });
-    this.dialogButtons.push({ x: notNowX, y: btnY, w: btnW, h: btnH, action: 'decline' });
-    endMenuFocus();
   }
 
   private _renderHackFailedDialog(ctx: CanvasRenderingContext2D): void {

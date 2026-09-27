@@ -29,9 +29,11 @@ import { PricedMenuPanel } from '../../../ui/PricedMenuPanel';
 import { QuantityPicker } from '../../../ui/QuantityPicker';
 import type { OverlayInputClaim } from '../../kits/OverlayClaims';
 import type { ProcessingStationKind } from '../processingStations';
-import type { Circumstance, VillagerId } from '../ratkinDialogue';
+import type { BarkLine, NonEmpty } from '../../../dialog/line';
+import { FENNA, SELLA, type VillagerId } from '../../../dialog/scripts/briarHollow';
+import type { ConversationHandle } from '../../../dialog/request';
+import type { VillagerConversationFlow } from '../villagerTopics';
 import type { VillagerSystem } from '../VillagerSystem';
-import type { ConversationController } from '../villagerTopics';
 import { COOK, cookhouseTopics } from './cookhouse';
 import { SMITH, forgeTopics, runOrenAutoGrant, type ForgeHost } from './forge';
 import { DOCTOR, infirmaryTopics, type InfirmaryHost } from './infirmary';
@@ -127,7 +129,7 @@ export class VillageServices {
       announce: (message) => deps.menus.announce(message),
       noteResourceActivity: deps.noteResourceActivity,
       fennaTilesFrom: (crawler) => this.fennaTilesFrom(crawler),
-      fennaNoWood: () => void deps.villagers.bark('fenna', 'no_logs', true),
+      fennaNoWood: () => void deps.villagers.bark('fenna', FENNA.noLogs, true),
       unlocked: () => deps.state.unlocks.processingStations,
     });
     const counter = { openShop: (shop: ShopDefinition): void => this.openShop(shop) };
@@ -145,11 +147,13 @@ export class VillageServices {
   /**
    * Grants Oren's starter tools and the Resourcing lesson as the questline's
    * own opening line for him — the pages are already on screen by the time
-   * this runs, so it never says them itself.
+   * this runs, so it never says them itself. Returns the follow-up (the
+   * reward cards and the explainer) to run once that conversation eventually
+   * closes, or `null` when the party already had its tools.
    */
-  grantOrenTools(ctl: ConversationController): void {
+  grantOrenTools(): (() => void) | null {
     const counter = { openShop: (shop: ShopDefinition): void => this.openShop(shop) };
-    runOrenAutoGrant(this.forgeHost(counter), ctl);
+    return runOrenAutoGrant(this.forgeHost(counter));
   }
 
   // ── Hosts the shop modules act through ─────────────────────────────────
@@ -192,21 +196,35 @@ export class VillageServices {
       bus: deps.bus,
       audio: deps.audio,
       openPicker: (options) => this.picker.open(options),
-      respond: (ctl, lines) => this.fennaResponds(ctl, lines),
+      respond: (convo, flow, lines) => this.fennaResponds(convo, flow, lines),
+      returnToRoot: (convo, flow) => this.fennaReturnToRoot(convo, flow),
       announce: (message) => deps.menus.announce(message),
       noteResourceActivity: deps.noteResourceActivity,
     };
   }
 
+  /**
+   * Answers in the conversation the picker opened over, or barks the first
+   * line over Fenna's head when the player has since walked off or closed
+   * it. Returns whether every line was shown, so the caller knows a
+   * one-shot line among them was actually read.
+   */
   private fennaResponds(
-    ctl: ConversationController,
-    lines: readonly [Circumstance, ...Circumstance[]],
-  ): void {
-    if (this.deps.villagers.isConversationOpen) {
-      ctl.say(...lines);
-      return;
+    convo: ConversationHandle,
+    flow: VillagerConversationFlow,
+    lines: NonEmpty<BarkLine>,
+  ): boolean {
+    if (!this.deps.villagers.isConversationOpen) {
+      const [first] = lines;
+      this.deps.villagers.bark('fenna', first, true);
+      return false;
     }
-    this.deps.villagers.bark('fenna', lines[0], true);
+    convo.play(flow.sayKeepingMenu(lines));
+    return true;
+  }
+
+  private fennaReturnToRoot(convo: ConversationHandle, flow: VillagerConversationFlow): void {
+    if (this.deps.villagers.isConversationOpen) convo.play(flow.returnToRoot());
   }
 
   private fennaTilesFrom(crawler: Crawler): number | null {
@@ -246,7 +264,7 @@ export class VillageServices {
     this.treatmentFramesLeft = TREATMENT_FRAMES;
     const active = this.party.active();
     this.deps.villagers.villagerFor('sella')?.faceToward(active.x, active.y);
-    this.deps.villagers.bark('sella', 'buy_healing', true);
+    this.deps.villagers.bark('sella', SELLA.buyHealing, true);
     this.deps.audio?.playRandom(VILLAGE_CUES.doctorTreatment);
   }
 
@@ -258,7 +276,8 @@ export class VillageServices {
   private tickTreatment(): void {
     if (this.treatmentFramesLeft <= 0) return;
     this.treatmentFramesLeft--;
-    if (this.treatmentFramesLeft === 0) this.deps.villagers.bark('sella', 'healing_complete', true);
+    if (this.treatmentFramesLeft === 0)
+      this.deps.villagers.bark('sella', SELLA.healingComplete, true);
   }
 
   // ── Per frame ──────────────────────────────────────────────────────────

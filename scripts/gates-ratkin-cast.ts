@@ -44,7 +44,7 @@ import {
   RATKIN_CAST_OUTFITS,
   type RatkinCastId,
 } from '../src/sprites/art/ratkin/cast.js';
-import { VILLAGER_IDS } from '../src/systems/briarHollow/ratkinDialogue.js';
+import { VILLAGER_IDS } from '../src/dialog/scripts/briarHollow/index.js';
 import {
   RATKIN_CAST_TILE_SCALE,
   castRowsFor,

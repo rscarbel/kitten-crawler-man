@@ -6,7 +6,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
-import type { CrawlerSignDirection, CrawlerSignPlacement } from '../map/crawlerSigns';
+import type { CrawlerSignPlacement } from '../map/crawlerSigns';
 import { CRAWLER_SIGN } from '../map/tileTypes';
 import type { Player } from '../Player';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -20,22 +20,6 @@ const READ_RADIUS_TILES = 1.6;
 const READ_RADIUS = TILE_SIZE * READ_RADIUS_TILES;
 
 const TILE_CENTRE_OFFSET = TILE_SIZE / 2;
-
-/**
- * Milliseconds between words of a sign's text. A sign is a few words to glance at,
- * not speech to listen to, so it reveals about four times faster than a citizen.
- */
-export const SIGN_REVEAL_INTERVAL_MS = 25;
-
-export const CRAWLER_SIGN_SPEAKER = 'Painted Sign';
-
-/** The two read pages; the arrow art and this prose both come from the one stored direction. */
-export function signPages(direction: CrawlerSignDirection): ReadonlyArray<string> {
-  return [
-    'It looks like a different crawler left a message for anyone that came after them.',
-    `It says, "Follow the hallway to the ${direction} to get to the stairwell."`,
-  ];
-}
 
 export class CrawlerSignSystem {
   constructor(

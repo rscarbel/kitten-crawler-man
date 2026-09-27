@@ -167,12 +167,8 @@ import type { Townsperson } from '../creatures/Townsperson';
 import { CONVERSATION_WALK_AWAY_TILES } from '../creatures/townInteraction';
 import { TownDecorSystem } from '../systems/TownDecorSystem';
 import { TownPropSystem } from '../systems/TownPropSystem';
-import {
-  CRAWLER_SIGN_SPEAKER,
-  CrawlerSignSystem,
-  SIGN_REVEAL_INTERVAL_MS,
-  signPages,
-} from '../systems/CrawlerSignSystem';
+import { CrawlerSignSystem } from '../systems/CrawlerSignSystem';
+import { signLine } from '../dialog/scripts/crawlerSigns';
 import type { CrawlerSignPlacement } from '../map/crawlerSigns';
 import { MarketSystem, type MarketBrowse } from '../systems/market/MarketSystem';
 import type { TownPropRenderable } from '../systems/townPropRenderable';
@@ -182,13 +178,8 @@ import {
   restoreMarketStock,
   type MarketStock,
 } from '../systems/market/MarketStock';
-import {
-  buildCitizenConversation,
-  roleDisplayName,
-  type TownDialogContext,
-} from '../systems/townDialog';
+import { buildCitizenConversation, type TownDialogContext } from '../systems/townDialog';
 import { buildTownNotices, type TownNoticeContext } from '../systems/townNotices';
-import { CitizenDialog } from '../ui/CitizenDialog';
 import { NoticeBoardPanel } from '../ui/NoticeBoardPanel';
 import { PricedMenuPanel } from '../ui/PricedMenuPanel';
 import { partyCoins } from '../core/partyCoins';
@@ -283,11 +274,8 @@ import { SMUSH_DEF } from '../abilities/smush';
 import type { GrantedReward } from '../core/GrantedReward';
 import { drawMongoIcon } from '../sprites/mongoSprite';
 import { EventBus } from '../core/EventBus';
-import {
-  CrawlerBarkSystem,
-  DONUT_KNOCKOUT_BARK,
-  WARD_EXPLAINER_BARK_LINES,
-} from '../systems/CrawlerBarkSystem';
+import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
+import { CRAWLER_BARKS, barkTexts } from '../dialog/scripts/crawlerBarks';
 import { DifficultyTelemetrySystem } from '../systems/DifficultyTelemetrySystem';
 import {
   readMovement,
@@ -459,12 +447,16 @@ import {
   type DebriefState,
   type MordecaiDebriefCheckpoint,
 } from '../systems/mordecaiDebrief';
+import { mordecaiSpokenPages } from '../dialog/scripts/mordecai';
+import type { DialogLine } from '../dialog/line';
+import type { ConversationHandle } from '../dialog/request';
 import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import type { AISceneContext } from '../ai/aiActions';
 import { GameStats, bindRunStats, type GameStatsSnapshot } from '../core/GameStats';
 import { difficultyStats } from '../core/DifficultyStats';
 import { settings } from '../core/Settings';
 import type { AudioManager } from '../audio/AudioManager';
+import { Conversation } from '../dialog/Conversation';
 import type { SoundId } from '../audio/sounds';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { rectCentre } from '../map/overworld/briarHollowSite';
@@ -1121,13 +1113,15 @@ export class DungeonScene extends GameplayScene {
    * fill their prop arrays in their constructors and never add to them.
    */
   private townPropRenderables: ReadonlyArray<TownPropRenderable> | null = null;
-  private citizenDialog: CitizenDialog | null = null;
   private crawlerSigns: CrawlerSignSystem | null = null;
-  /** Separate from `citizenDialog`, which is overworld-only and owned by the townsfolk conversation. */
-  private signDialog: CitizenDialog | null = null;
+  /** The sign currently open on the shared conversation; unfrozen once it closes. */
   private signDialogTarget: CrawlerSignPlacement | null = null;
-  /** Citizen currently frozen mid-conversation; unfrozen once `citizenDialog` closes. */
+  /** The handle the sign's conversation opened with — `conversation.isActive` on it says whether that beat, and not something that has since superseded it, is what's on screen. */
+  private signDialogHandle: ConversationHandle | null = null;
+  /** Citizen currently frozen mid-conversation; unfrozen once the shared conversation closes. */
   private citizenDialogTarget: Townsperson | null = null;
+  /** The handle the citizen's conversation opened with — see `signDialogHandle`. */
+  private citizenDialogHandle: ConversationHandle | null = null;
   /** Keeps Carl talking, turned to whoever he is in conversation with. */
   private readonly humanTalk = new HumanTalkDriver();
   private noticeBoard: NoticeBoardPanel | null = null;
@@ -1376,6 +1370,15 @@ export class DungeonScene extends GameplayScene {
   private readonly onResetGameCallback: (() => void) | null;
 
   protected readonly audio: AudioManager | null;
+  /**
+   * The one conversation panel every speaking system on this floor shares,
+   * so two conversation boxes can never be open at once. This scene is the
+   * only thing that ticks it, once per frame; it is drawn once per frame too,
+   * by `BriarHollowKit.renderDialog` on a village floor (above the village's
+   * own panels) and by this scene everywhere else. Systems only open
+   * requests on it.
+   */
+  private readonly conversation: Conversation;
   private readonly tutorial: TutorialController | null = null;
   private readonly questSwitchConfirm: ConfirmModal;
   /**
@@ -1408,6 +1411,7 @@ export class DungeonScene extends GameplayScene {
     // Both are needed before the roster below, which hands every mob it accepts
     // the spell context, and by the level spawners' audio-carrying siblings.
     this.audio = options?.audio ?? null;
+    this.conversation = new Conversation(this.audio);
     this.questSwitchConfirm = new ConfirmModal(this.audio);
     this.companionStance = options?.companionStance ?? createCompanionStanceState();
     this.godModeState = options?.godModeState ?? createGodModeState();
@@ -1683,8 +1687,8 @@ export class DungeonScene extends GameplayScene {
       this.gameMap,
       spawnTileX,
       spawnTileY,
+      this.conversation,
       this.levelDef.id,
-      this.audio,
     );
     this.safeRoom.setMarkerSource((room) => this.mordecaiMarkerFor(room));
     this.combat = new CombatKit({
@@ -1741,7 +1745,9 @@ export class DungeonScene extends GameplayScene {
       this.gameMap,
       stampSafeRoomCounters(this.gameMap),
       this.bus,
+      this.conversation,
       this.audio,
+      false,
     );
     // After the counter, because the furnishings keep clear of every tile it
     // owns and cannot know them until it is planned.
@@ -1781,6 +1787,7 @@ export class DungeonScene extends GameplayScene {
       this.gameMap,
       this.bus,
       (mob) => this.world.roster.add(mob),
+      this.conversation,
       () => {
         const band = levelDef.defendQuestWave;
         if (band === undefined) return 1;
@@ -1803,15 +1810,20 @@ export class DungeonScene extends GameplayScene {
       audio: this.audio,
       announce: (message) => this.menus.announce(message),
     });
-    this.spiderQuest = new SpiderQuestSystem(this.gameMap, this.bus, (mob) => {
-      this.world.roster.add(mob);
-      // The lab's boss arrives through this closure rather than the level's
-      // initial spawn, so it missed the one-shot filter that builds this list
-      // at construction — which is what renders its ground traps and spit and
-      // plays its slam. Without this the boss is silent and trapless until
-      // something else rebuilds the list.
-      if (mob instanceof GrotesqueSpider) this.grotesqueSpiders.push(mob);
-    });
+    this.spiderQuest = new SpiderQuestSystem(
+      this.gameMap,
+      this.bus,
+      (mob) => {
+        this.world.roster.add(mob);
+        // The lab's boss arrives through this closure rather than the level's
+        // initial spawn, so it missed the one-shot filter that builds this
+        // list at construction — which is what renders its ground traps and
+        // spit and plays its slam. Without this the boss is silent and
+        // trapless until something else rebuilds the list.
+        if (mob instanceof GrotesqueSpider) this.grotesqueSpiders.push(mob);
+      },
+      this.conversation,
+    );
     this.spiderQuest.labDressing?.setLootSink(this.destruction.loot);
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
@@ -2308,6 +2320,7 @@ export class DungeonScene extends GameplayScene {
         this.bus,
         this.bountyProgress,
         (mob) => this.world.roster.add(mob),
+        this.conversation,
         this.audio,
         (coins, worldX, worldY) => {
           const cam = this.camera();
@@ -2372,6 +2385,7 @@ export class DungeonScene extends GameplayScene {
               state: this.briarHollowState,
               menus: this.menus,
               audio: this.audio,
+              conversation: this.conversation,
               keybindings,
               groundPickups: this.destruction.groundPickups,
               dynamite: this.destruction.dynamite,
@@ -2541,22 +2555,12 @@ export class DungeonScene extends GameplayScene {
     // turns that into the intended "wrong for a frame or two", not permanent.
     void prewarmGroups(levelDef.spriteGroups).then(() => this.gameMap.invalidateAllTileArt());
     this.spiderQuest.setSongClock(() => this.audio?.getKeyboardHeroMusicTimeMs() ?? null);
-    if (this.townLife !== null && this.audio !== null) {
-      this.citizenDialog = new CitizenDialog(this.audio);
-    }
-    if (this.audio !== null) {
-      const signDialog = new CitizenDialog(this.audio, 'word', SIGN_REVEAL_INTERVAL_MS);
+    {
       const signs = new CrawlerSignSystem(
         CrawlerSignSystem.placementsFromMap(this.gameMap),
-        (sign) => {
-          this.signDialogTarget = sign;
-          signDialog.open(CRAWLER_SIGN_SPEAKER, signPages(sign.direction));
-        },
+        (sign) => this.openSignConversation(sign),
       );
-      if (!signs.isEmpty) {
-        this.signDialog = signDialog;
-        this.crawlerSigns = signs;
-      }
+      if (!signs.isEmpty) this.crawlerSigns = signs;
     }
     this.skipIntro = options?.skipIntro ?? false;
     if (this.skipIntro) this.dungeonIntro.skip();
@@ -2579,6 +2583,7 @@ export class DungeonScene extends GameplayScene {
       this.overworldMusic,
       this.audio,
       this.active(),
+      this.conversation,
     );
     this.circusQuest.onItemGranted = (id, quantity, worldX, worldY) => {
       const cam = this.camera();
@@ -2593,6 +2598,7 @@ export class DungeonScene extends GameplayScene {
       this.murderQuestProgress,
       this.overworldMusic,
       this.audio,
+      this.conversation,
     );
     // Reads the plaza's fortune tile and the tinker's counter through accessors
     // rather than holding either system: both are null on floors with no town.
@@ -2610,6 +2616,7 @@ export class DungeonScene extends GameplayScene {
           this.gameMap.buildingEntries.find((entry) => entry.name === buildingName) ?? null,
         ),
       (message) => this.menus.announce(message),
+      this.conversation,
       this.audio,
     );
     this.anchorQuest.onItemGranted = (id, quantity, worldX, worldY) => {
@@ -2628,8 +2635,8 @@ export class DungeonScene extends GameplayScene {
     if (this.townPropRenderables !== null) {
       this.townPropRenderables = [...this.townPropRenderables, this.doomsdayEscape.stairwellProp];
     }
-    if (this.tutorial !== null && this.audio !== null) {
-      this.tutorial.setAudio(this.audio);
+    if (this.tutorial !== null) {
+      this.tutorial.setConversation(this.conversation);
     }
     if (this.audio !== null) {
       aiAdapter.messages.setAudio(this.audio);
@@ -2872,7 +2879,7 @@ export class DungeonScene extends GameplayScene {
     bus.on('crawlerKnockedOut', (e) => {
       e.player.applyCockroachKnockoutRelief();
       if (e.player === this.cat && this.human.isAlive && !this.human.isKnockedOut) {
-        this.crawlerBarks.say(this.human, [DONUT_KNOCKOUT_BARK]);
+        this.crawlerBarks.say(this.human, [CRAWLER_BARKS.donutKnockedOut.paragraphs[0]]);
       }
     });
 
@@ -3263,12 +3270,12 @@ export class DungeonScene extends GameplayScene {
         e.stopImmediatePropagation();
         return;
       }
-      // The Bopca's three-way choice is picked with 1/2/3, which the hotbar also
-      // owns. Stopped rather than merely defaulted: the shared handler's
-      // suppression gate reads whether her dialog is open *after* this ran, and
-      // the choice that closes it — "leave" — would otherwise land on a hotbar
-      // slot on its way out.
-      if (this.bopca.handleKeyDown(e.key)) {
+      // A conversation's numbered choices are picked with 1/2/3, which the
+      // hotbar also owns. Stopped rather than merely defaulted: the shared
+      // handler's suppression gate reads whether it is open *after* this ran,
+      // and the choice that closes it — "leave" — would otherwise land on a
+      // hotbar slot on its way out.
+      if (this.conversation.handleKeyDown(e.key)) {
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
@@ -3345,7 +3352,7 @@ export class DungeonScene extends GameplayScene {
           return true;
         }
         if (this.safeRoom.mordecaiDialogOpen) {
-          this.safeRoom.mordecaiDialogOpen = false;
+          this.conversation.dismiss();
           return true;
         }
         if (this.bopca.dismissDialog()) return true;
@@ -3356,13 +3363,13 @@ export class DungeonScene extends GameplayScene {
         // the guard, stepping onto a shop's doorstep mid-sentence and pressing
         // Escape shuts the conversation underneath the Enter/Stay menu the
         // player is actually looking at.
-        if (this.citizenDialog?.isOpen === true && !this.gameplayHalted) {
-          this.citizenDialog.close();
+        if (this.citizenDialogTarget !== null && !this.gameplayHalted) {
+          this.conversation.dismiss();
           return true;
         }
         if (!this.gameplayHalted && this.briarHollowKit?.dismissDialog() === true) return true;
-        if (this.signDialog?.isOpen === true && !this.gameplayHalted) {
-          this.signDialog.close();
+        if (this.signDialogTarget !== null && !this.gameplayHalted) {
+          this.conversation.dismiss();
           return true;
         }
         return false;
@@ -3578,7 +3585,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     this.audio?.play('menu_change_follower');
-    this.safeRoom.mordecaiDialogOpen = false;
+    this.safeRoom.closeMordecaiDialog();
     // Capture who is currently active before the switch
     const wasHumanActive = this.human.isActive;
     this.pm.switchActive();
@@ -4206,11 +4213,11 @@ export class DungeonScene extends GameplayScene {
   private drainWardExplainerBarks(): void {
     if (this.human.pendingWardExplainerBark) {
       this.human.pendingWardExplainerBark = false;
-      this.crawlerBarks.say(this.human, WARD_EXPLAINER_BARK_LINES);
+      this.crawlerBarks.say(this.human, barkTexts(CRAWLER_BARKS.wardExplainer.carl));
     }
     if (this.cat.pendingWardExplainerBark) {
       this.cat.pendingWardExplainerBark = false;
-      this.crawlerBarks.say(this.cat, WARD_EXPLAINER_BARK_LINES);
+      this.crawlerBarks.say(this.cat, barkTexts(CRAWLER_BARKS.wardExplainer.donut));
     }
   }
 
@@ -4345,6 +4352,13 @@ export class DungeonScene extends GameplayScene {
     this.stopHazardSoundsForRespawn();
     this.combat.deathScreen.reset();
     this.gameOver = false;
+    // Whatever is on the shared box belongs to a world that is about to be
+    // rewound out from under it — a citizen or sign chat's target may no
+    // longer exist on the other side, and a quest beat's closures still
+    // reference the state this call is about to replace.
+    this.conversation.close();
+    this.releaseCitizenDialogTarget();
+    this.releaseSignDialogTarget();
     // Its pending callback grants a chest's reward against a world that is
     // about to be rewound to before the chest was opened. Cancelling by this
     // hold's own handle drops only its own queued grants, leaving any other
@@ -5322,13 +5336,13 @@ export class DungeonScene extends GameplayScene {
     if (this.market?.renderPrompt(ctx, camX, camY, active) === true) return;
     if (this.bounty?.renderPrompt(ctx, camX, camY, active) === true) return;
     this.townProps?.renderPrompt(ctx, camX, camY, active);
-    if (this.signDialog?.isOpen !== true) this.crawlerSigns?.renderPrompt(ctx, camX, camY, active);
+    if (this.signDialogTarget === null) this.crawlerSigns?.renderPrompt(ctx, camX, camY, active);
   }
 
   /** Floats a "Talk" prompt over the nearest citizen when one is in range and idle. */
   private renderCitizenPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.citizenDialog === null || this.townLife === null) return;
-    if (this.citizenDialog.isOpen) return;
+    if (this.townLife === null) return;
+    if (this.citizenDialogTarget !== null) return;
     const active = this.active();
     if (!this.shouldShowInteractionPrompts(active)) return;
     const target = this.townLife.findTalkTarget(active.x, active.y);
@@ -5388,22 +5402,63 @@ export class DungeonScene extends GameplayScene {
 
   /** Opens a conversation with the nearest street citizen, if one is in range. */
   private tryTalkToCitizen(active: Player): boolean {
-    const dialog = this.citizenDialog;
-    if (dialog === null || this.townLife === null) return false;
+    if (this.townLife === null) return false;
     const target = this.townLife.findTalkTarget(active.x, active.y);
     if (target === null) return false;
     target.faceToward(active.x, active.y);
     target.frozen = true;
     this.citizenDialogTarget = target;
-    const lines = buildCitizenConversation(
+    const line = buildCitizenConversation(
       target.role,
       target.appearance.seed,
       target.conversationCount,
       this.townDialogContext(),
     );
-    dialog.open(roleDisplayName(target.role), lines);
+    this.citizenDialogHandle = this.conversation.open({
+      lines: [line],
+      reward: null,
+      questRelated: false,
+      ending: { kind: 'close', onClosed: () => this.releaseCitizenDialogTarget() },
+      dismiss: { kind: 'allowed', onDismissed: () => this.releaseCitizenDialogTarget() },
+      haltsWorld: false,
+      anchor: {
+        position: () => ({ x: target.x, y: target.y }),
+        radius: CONVERSATION_WALK_AWAY_TILES,
+      },
+      locksKeyboard: true,
+    });
     target.conversationCount++;
     return true;
+  }
+
+  private releaseCitizenDialogTarget(): void {
+    if (this.citizenDialogTarget === null) return;
+    this.citizenDialogTarget.frozen = false;
+    this.citizenDialogTarget = null;
+    this.citizenDialogHandle = null;
+  }
+
+  /** Opens a sign's conversation on the shared box, from `CrawlerSignSystem`'s `onRead` callback. */
+  private openSignConversation(sign: CrawlerSignPlacement): void {
+    this.signDialogTarget = sign;
+    this.signDialogHandle = this.conversation.open({
+      lines: [signLine({ direction: sign.direction })],
+      reward: null,
+      questRelated: false,
+      ending: { kind: 'close', onClosed: () => this.releaseSignDialogTarget() },
+      dismiss: { kind: 'allowed', onDismissed: () => this.releaseSignDialogTarget() },
+      haltsWorld: false,
+      anchor: {
+        position: () => ({ x: sign.tile.x * TILE_SIZE, y: sign.tile.y * TILE_SIZE }),
+        radius: CONVERSATION_WALK_AWAY_TILES,
+      },
+      locksKeyboard: true,
+    });
+  }
+
+  private releaseSignDialogTarget(): void {
+    this.signDialogTarget = null;
+    this.signDialogHandle = null;
   }
 
   /** This floor's overlays, ordered by which one a press should reach first. */
@@ -5412,8 +5467,6 @@ export class DungeonScene extends GameplayScene {
     const noticeBoard = this.noticeBoard;
     const marketPanel = this.marketPanel;
     const fortuneTeller = this.fortuneTeller;
-    const citizenDialog = this.citizenDialog;
-    const signDialog = this.signDialog;
     const closeWithClick = (close: () => void): OverlaySpaceHandling => ({
       kind: 'advance',
       advance: () => {
@@ -5446,15 +5499,8 @@ export class DungeonScene extends GameplayScene {
       floatingDialog(tutorial?.showNearGoblinDialog === true, () =>
         tutorial?.dismissNearGoblinDialog(),
       ),
-      // Not world-halting: `update` has its own branch for each of these two,
-      // and it is what types the dialog out a character at a time. Halting here
-      // would make that branch unreachable and every page arrive blank.
-      floatingDialog(tutorial?.showTutorialMordecaiDialog === true, () =>
-        tutorial?.advanceTutorialMordecaiDialog(),
-      ),
-      floatingDialog(tutorial?.showMordecaiReminderDialog === true, () =>
-        tutorial?.advanceMordecaiReminderDialog(),
-      ),
+      // Tutorial Mordecai and his reminders open on the shared conversation,
+      // whose own claim at the end of this list answers Space for them.
       // No single ring to promise: the award stack is several surfaces deep, and
       // each of the notification, the loot box and the chest award declares its
       // own. Floating, so the audit does not hold it to one.
@@ -5501,14 +5547,7 @@ export class DungeonScene extends GameplayScene {
       modal(marketPanel?.isOpen === true, 'priced-menu'),
       modal(fortuneTeller?.isOpen === true, 'fortune-teller'),
       {
-        isOpen: this.bopca.isDialogOpen,
-        space: { kind: 'advance', advance: () => this.bopca.advanceDialog() },
-        locksKeyboard: true,
-        haltsWorld: false,
-        focusContext: 'bopca-dialog',
-      },
-      {
-        isOpen: this.defendQuest.isDialogOpen,
+        isOpen: this.defendQuest.isTutorialOpen,
         space: { kind: 'advance', advance: () => this.advanceDefendQuestPage() },
         locksKeyboard: true,
         haltsWorld: true,
@@ -5529,12 +5568,10 @@ export class DungeonScene extends GameplayScene {
       ),
       // The quest systems below own their own window listener for Space, so the
       // claim here only has to keep the press away from the world behind them.
-      modal(this.spiderQuest.isDialogOpen, 'spider-quest'),
-      modal(this.bounty?.isDialogOpen === true, 'quest-dialog'),
-      modal(this.circusQuest.isDialogOpen, 'quest-dialog'),
-      modal(this.murderQuest.isDialogOpen, 'quest-dialog'),
-      modal(this.anchorQuest.isDialogOpen, 'quest-dialog'),
-      floatingDialog(this.safeRoom.mordecaiDialogOpen, () => this.safeRoom.advanceMordecaiDialog()),
+      // The scientist's offer opens on the shared conversation below, so it
+      // needs no claim of its own here.
+      modal(this.spiderQuest.isModalPhaseOpen, 'spider-quest'),
+      // Mordecai's own conversation opens on the shared one below, so it needs no claim of its own here.
       modal(this.stairwell.menuOpen, 'stairwell'),
       modal(this.building?.menuOpen === true, 'building-entry'),
       this.grateSpikes.overlayClaim(),
@@ -5559,22 +5596,7 @@ export class DungeonScene extends GameplayScene {
       // conversation ends because the player walked away from it — and the one
       // every other surface here is drawn over. Ranking it above them would hand
       // Space and Escape to the box underneath whatever the player is looking at.
-      {
-        isOpen: citizenDialog?.isOpen === true,
-        space: { kind: 'advance', advance: () => citizenDialog?.advance() },
-        locksKeyboard: true,
-        haltsWorld: false,
-        // Advance-anywhere: one speaker line, no buttons to reach.
-        focusContext: null,
-      },
-      {
-        isOpen: signDialog?.isOpen === true,
-        space: { kind: 'advance', advance: () => signDialog?.advance() },
-        locksKeyboard: true,
-        haltsWorld: false,
-        focusContext: null,
-      },
-      ...(this.briarHollowKit?.conversationClaims() ?? []),
+      this.conversation.overlayClaim(),
     ];
   }
 
@@ -5651,22 +5673,6 @@ export class DungeonScene extends GameplayScene {
     return worldHalted(this.overlayClaims) || this.spiderQuest.isDungeonPaused;
   }
 
-  /**
-   * Ends a street conversation once the player has plainly walked off.
-   *
-   * The threshold is several times the ~1.1-tile radius that opens one, so that
-   * a tapped movement key reads as standing still and only a deliberate walk
-   * closes the box.
-   */
-  private dismissCitizenDialogIfWalkedAway(): void {
-    const target = this.citizenDialogTarget;
-    const dialog = this.citizenDialog;
-    if (target === null || dialog?.isOpen !== true) return;
-    const active = this.active();
-    const distance = Math.hypot(active.x - target.x, active.y - target.y);
-    if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) dialog.close();
-  }
-
   /** What the right-hand HUD column has to lay itself out around this frame. */
   private syncColumnLayoutState(): void {
     UIRenderer.setBuildSlotReserved(this.briarHollowKit?.defences?.buildButtonVisible === true);
@@ -5712,8 +5718,24 @@ export class DungeonScene extends GameplayScene {
    * for the interruption.
    */
   private yieldCitizenDialogToInterruption(): void {
-    if (this.citizenDialog?.isOpen === true && this.gameplayHalted) this.citizenDialog.close();
-    if (this.signDialog?.isOpen === true && this.gameplayHalted) this.signDialog.close();
+    if (
+      this.citizenDialogTarget !== null &&
+      this.gameplayHalted &&
+      this.citizenDialogHandle !== null &&
+      this.conversation.isActive(this.citizenDialogHandle)
+    ) {
+      this.conversation.close();
+      this.releaseCitizenDialogTarget();
+    }
+    if (
+      this.signDialogTarget !== null &&
+      this.gameplayHalted &&
+      this.signDialogHandle !== null &&
+      this.conversation.isActive(this.signDialogHandle)
+    ) {
+      this.conversation.close();
+      this.releaseSignDialogTarget();
+    }
     if (this.gameplayHalted) this.briarHollowKit?.dismissDialog();
     // Death, or anything else that halts the world over them, takes the
     // construction panels down with it: drawn over a death screen they would
@@ -5727,19 +5749,6 @@ export class DungeonScene extends GameplayScene {
     // Only on death: the shops' priced menu halts the world itself, so any
     // halt would have it closing itself the moment it opened.
     if (this.gameOver) this.briarHollowKit?.closeServicePanels();
-  }
-
-  /** Same walk-away rule as a street conversation, measured to the sign's tile. */
-  private dismissSignDialogIfWalkedAway(): void {
-    const target = this.signDialogTarget;
-    const dialog = this.signDialog;
-    if (target === null || dialog?.isOpen !== true) return;
-    const active = this.active();
-    const distance = Math.hypot(
-      active.x - target.tile.x * TILE_SIZE,
-      active.y - target.tile.y * TILE_SIZE,
-    );
-    if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) dialog.close();
   }
 
   /**
@@ -5756,9 +5765,9 @@ export class DungeonScene extends GameplayScene {
 
     if (this.speakPostBossDebrief(active)) return;
 
-    const pages = this.floorAdvice(active);
-    if (pages !== null) {
-      this.safeRoom.openMordecaiPages(pages);
+    const line = this.floorAdvice(active);
+    if (line !== null) {
+      this.safeRoom.openMordecaiLine(active, line);
       return;
     }
 
@@ -5768,6 +5777,7 @@ export class DungeonScene extends GameplayScene {
       .sort((a, b) => a.secondsAgo - b.secondsAgo)
       .slice(0, MORDECAI_CHAT_MERGED_EVENTS_LIMIT);
     this.safeRoom.openMordecaiDialog(
+      active,
       aiAdapter.chatWithMordecai({
         recentEvents: merged,
         humanLevel: this.human.level,
@@ -5786,12 +5796,12 @@ export class DungeonScene extends GameplayScene {
     if (room === null || bossType === null) return false;
     const state = this.debriefState();
     const memory = this.debriefMemoryFor(bossType, state);
-    const pages = debriefPages(bossType, memory, state);
-    if (pages === null) return false;
+    const line = mordecaiSpokenPages(debriefPages(bossType, memory, state) ?? []);
+    if (line === null) return false;
 
     const remembered = rememberDebriefSpoken(memory, state);
     this.mordecaiDebrief[bossType] = remembered;
-    this.safeRoom.openMordecaiPages(pages);
+    this.safeRoom.openMordecaiLine(active, line);
     // Boxes repeat every talk; don't pay a server round trip for a repeat.
     const worthSaving = !sameDebriefMemory(memory, remembered);
     if (
@@ -5865,7 +5875,7 @@ export class DungeonScene extends GameplayScene {
    * than from the first one on the map: a floor carries two, and pointing at the
    * same boss from both has to give two different answers.
    */
-  private floorAdvice(active: { x: number; y: number }): ReadonlyArray<string> | null {
+  private floorAdvice(active: { x: number; y: number }): DialogLine | null {
     const safeRoom = this.safeRoom.safeRoomInfoAt(active);
     if (safeRoom === null) return null;
     const bearingOrigin = safeRoom.centre;
@@ -6269,13 +6279,13 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
-    if (this.tutorial?.showTutorialMordecaiDialog === true) {
-      this.tutorial.advanceTutorialMordecaiDialog();
-      return;
-    }
-
-    if (this.tutorial?.showMordecaiReminderDialog === true) {
-      this.tutorial.advanceMordecaiReminderDialog();
+    if (
+      this.tutorial?.showTutorialMordecaiDialog === true ||
+      this.tutorial?.showMordecaiReminderDialog === true
+    ) {
+      // Any press advances Mordecai's tutorial dialog, not only one landing on
+      // his box — the tutorial forces a full read, with no way to walk off.
+      this.conversation.advance();
       return;
     }
 
@@ -6318,8 +6328,7 @@ export class DungeonScene extends GameplayScene {
     if (this.anchorQuest.handleClick(mx, my)) return;
     // Only the dialog's own box is consumed: a conversation does not halt the
     // world, so the bag can be open underneath it and its slots must stay live.
-    if (this.citizenDialog?.handleClick(mx, my) === true) return;
-    if (this.signDialog?.handleClick(mx, my) === true) return;
+    if (this.conversation.handleClick(mx, my)) return;
     if (this.briarHollowKit?.handleClick(mx, my) === true) return;
     if (this.noticeBoard?.isOpen === true) {
       this.noticeBoard.handleClick();
@@ -6365,18 +6374,6 @@ export class DungeonScene extends GameplayScene {
       if (this.achievementUI.handleLootBoxIconClick(mx, my, () => this.menus.pauseMenu.close()))
         return;
       if (this.menus.tryOpenSpendScreen(mx, my, this._hudSkillBannerRect)) return;
-    }
-
-    // His own box only: the conversation floats over a live floor, so a press
-    // anywhere else is the world's — and on a phone it is the move order the
-    // player needs to walk away from him with.
-    if (this.safeRoom.mordecaiDialogContains(mx, my)) {
-      this.safeRoom.advanceMordecaiDialog();
-      return;
-    }
-
-    if (this.bopca.handleClick(mx, my)) {
-      return;
     }
 
     if (this.levelCompleteScreen.isActive) {
@@ -6612,16 +6609,15 @@ export class DungeonScene extends GameplayScene {
 
   update(): void {
     this.yieldCitizenDialogToInterruption();
-    this.dismissCitizenDialogIfWalkedAway();
-    this.dismissSignDialogIfWalkedAway();
-    if (this.citizenDialogTarget !== null && this.citizenDialog?.isOpen !== true) {
-      this.citizenDialogTarget.frozen = false;
-      this.citizenDialogTarget = null;
+    const active = this.active();
+    // Ahead of every halting return, because a conversation that halts the world
+    // still has to keep revealing — but not under the pause menu, which freezes
+    // the voice along with everything else.
+    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
+      this.conversation.update({ x: active.x, y: active.y });
     }
     aiAdapter.update();
     this.chat.update();
-    this.citizenDialog?.update();
-    this.signDialog?.update();
     if (this._companionErrorMsg !== null) {
       this._companionErrorMsg.framesLeft--;
       if (this._companionErrorMsg.framesLeft <= 0) {
@@ -6722,7 +6718,6 @@ export class DungeonScene extends GameplayScene {
     }
     if (this.tutorial?.showTutorialMordecaiDialog === true) {
       this.silenceMovementLoops();
-      this.tutorial.tickDialog();
       return;
     }
 
@@ -7170,15 +7165,9 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    if (this.safeRoom.mordecaiDialogOpen) {
-      this.safeRoom.renderMordecaiDialog(ctx);
-    }
-
-    this.bopca.renderDialog(ctx);
-
-    this.bounty?.renderDialog(ctx);
-    this.citizenDialog?.render(ctx);
-    this.signDialog?.render(ctx);
+    // On a village floor, `BriarHollowKit.renderDialog` draws the shared
+    // conversation itself; drawing it again here would double-render it.
+    if (this.briarHollowKit === null) this.conversation.render(ctx);
     this.briarHollowKit?.renderDialog(ctx, camX, camY);
     this.grateSpikes.render(ctx, camX, camY);
     this.noticeBoard?.render(ctx);
@@ -8159,8 +8148,8 @@ export class DungeonScene extends GameplayScene {
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
         this.anchorQuest.isDialogOpen ||
-        this.citizenDialog?.isOpen === true ||
-        this.signDialog?.isOpen === true ||
+        this.citizenDialogTarget !== null ||
+        this.signDialogTarget !== null ||
         this.chat.isOpen,
     };
   }
@@ -8413,8 +8402,8 @@ export class DungeonScene extends GameplayScene {
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
         this.anchorQuest.isDialogOpen ||
-        this.citizenDialog?.isOpen === true ||
-        this.signDialog?.isOpen === true ||
+        this.citizenDialogTarget !== null ||
+        this.signDialogTarget !== null ||
         // Town modals (notice board / market stall / fortune teller) are handled
         // by the early full-screen-modal gate at the top of this loop.
         this.tutorial?.showTutorialMordecaiDialog === true ||
@@ -8620,8 +8609,8 @@ export class DungeonScene extends GameplayScene {
               // (the player is still in range), which is the close-then-reopen trap.
               const dialogWasOpen =
                 this.safeRoom.mordecaiDialogOpen ||
-                this.citizenDialog?.isOpen === true ||
-                this.signDialog?.isOpen === true ||
+                this.citizenDialogTarget !== null ||
+                this.signDialogTarget !== null ||
                 this.briarHollowKit?.isConversationOpen === true;
               // Also captured first: a menu or dialog that owned the screen had
               // this tap, and the village behind it must not open a
@@ -8706,7 +8695,7 @@ export class DungeonScene extends GameplayScene {
    */
   private humanTalkSpeaker(): Pt | null {
     const citizen = this.citizenDialogTarget;
-    if (this.citizenDialog?.isOpen === true && citizen !== null) return citizen;
+    if (citizen !== null) return citizen;
     const mordecai = this.safeRoom.speakingMordecaiPosition;
     if (mordecai !== null) return mordecai;
     if (this.defendQuest.isDialogOpen) return this.defendQuest.questNPC;

@@ -110,6 +110,22 @@ A mob is levelled once, at spawn: `applyMobLevel` multiplies its stats through t
 
 Traits (`src/creatures/tactics/`) are opt-in per creature via `Mob.tacticsEligibility` (default none) and owned by `Mob.tactics` (`MobTactics`). `block` is resolved in `Mob.takeDamageFrom` for every creature; movement traits are queried from the creature's own `updateAI` (`chooseMove` / `disengage` / `claimRiposte`), with `Goblin` as the reference. Tactics read the world through two per-frame publications from `MobUpdateLoop` — the mob grid (`setPackAlertGrid` in `packAlert.ts`) and marked hazard ground (`tactics/markedGround.ts`) — rather than holding a world reference. `verify:tactics` gates them; the rules are P6 in `docs/difficulty-fairness-rules.md`.
 
+## Dialog
+
+`src/dialog/` is where every spoken line in the game lives, and the one place any of it gets rendered from.
+
+- `line.ts` — a `DialogLine` is a value (speaker + paragraphs + advance label), built once per property by a speaker's `LineBuilder` (`speakerLines(id)` for a fixed cast member, `transientSpeaker(name, style)` for one named at runtime) and referenced by every reader — never looked up by a string key.
+- `speakers.ts` — `SPEAKERS` (fixed cast, keyed by `SpeakerId`) and `TRANSIENT_STYLES` (voice/reveal/case presets for a runtime-named speaker); `resolveSpeaker` turns either into what the box draws.
+- `roles.ts` — role interfaces (`VillagerLines`, `SoldierLines`, `ShopkeeperLines`, `MercenaryLines`, `ResidentLines`) that a script's export `satisfies`, so a missing line is a compile error where the script is written, not a runtime `undefined`.
+- `request.ts` — `ConversationRequest` (lines, a reward preview, `ending`, `dismiss`, `haltsWorld`, `anchor`) and `Ending`/`DismissPolicy`/`Choice`/`ConversationTopic`, the data a `Conversation` runs.
+- `paginate.ts` — pure, canvas-free page-breaking (paragraph → sentence → word → character), shared by `DialogBox` and unit-tested by `verify:dialog-pagination`.
+- `Conversation.ts` — the one conversation panel a scene owns; see `add-ui`.
+- `topics.ts` — turns a speaker's `ConversationTopic[]` into a choice row (`topicMenu`).
+- `villagerRegistry.ts` — `VILLAGER_SCRIPTS`/`SOLDIER_SCRIPTS`/`SHOPKEEPER_SCRIPTS`, the role-typed lookup tables generic Briar Hollow code reads a villager through.
+- `scripts/` — one file per speaker or scene (`scripts/tikka.ts`, `scripts/scenes/defend.ts`, …), each exporting the lines and pools that speaker or scene needs. `verify:dialog-lines` walks every export here and fails on a line nothing ever reads.
+
+`DungeonScene` and `BuildingInteriorScene` each own exactly one `Conversation`: constructed once, ticked once per frame with the player's position, rendered once, and its `overlayClaim()` folded into the scene's shared claim list. A system that needs to talk takes that `Conversation` through its constructor deps rather than building a second one. See `add-ui` for the API and `add-quest` for how a quest's dialog is structured.
+
 ## EventBus
 
 `src/core/EventBus.ts` — typed pub/sub keyed on the `GameEvents` interface (`mobKilled`, `bossDefeated`, `questStarted/Completed/Failed`, `achievementUnlocked`, `levelComplete`, `healingPotionUsed`, ...). `bus.on(event, cb)` returns an unsubscribe fn; `emit` is synchronous; `clear()` runs on scene teardown, so subscribers (e.g. `AudioManager.wireEvents`) must re-wire per scene. Prefer wiring sounds to events in `AudioManager.wireEvents` over sprinkling `audio.play` at emit sites.

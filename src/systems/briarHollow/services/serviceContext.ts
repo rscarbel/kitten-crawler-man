@@ -1,19 +1,21 @@
 /**
  * What every Briar Hollow shop and service shares: who the party is, which
- * phases keep the shops shut, and the one way a seller's words are looked up.
+ * phases keep the shops shut, and the one way a seller's `BarkLine` becomes
+ * the plain string the priced-menu panel draws.
  *
- * A service never types a word of a villager's dialogue. It names the
- * circumstance and `sellerLine` fetches the verbatim line, so the dialogue
- * table stays the only place any of it is written.
+ * A service never types a word of a villager's dialogue itself. It reads the
+ * villager's own script property and hands the resolved line to `sellerLine`,
+ * so the script stays the only place any of the words are written.
  */
 
 import type { ItemId } from '../../../core/ItemDefs';
 import type { VillageQuestPhase } from '../../../core/villageQuestPhase';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
-import { type Circumstance, type VillagerId, line } from '../ratkinDialogue';
+import type { BarkLine } from '../../../dialog/line';
+import type { ConversationTopic } from '../../../dialog/request';
 import { isShopClosed } from '../villagerCircumstances';
-import type { ConversationTopic } from '../villagerTopics';
+import type { VillagerConversationFlow } from '../villagerTopics';
 import type {
   PricedBlockedLine,
   PricedMenuBuilder,
@@ -49,13 +51,9 @@ export function shopTrades(phase: VillageQuestPhase): boolean {
   return !isShopClosed(phase);
 }
 
-/**
- * A villager's verbatim line for `circumstance`. Every call site names a line
- * the table has for that villager, which the service gate checks; the empty
- * fallback only keeps a missing line from ever printing "undefined".
- */
-export function sellerLine(villager: VillagerId, circumstance: Circumstance): string {
-  return line(villager, circumstance) ?? '';
+/** A villager's bark, as the priced-menu panel's plain-string header or result line wants it. */
+export function sellerLine(line: BarkLine): string {
+  return line.paragraphs[0];
 }
 
 /** The companion of `crawler`. */
@@ -98,13 +96,17 @@ export function shopTopic(
   label: string,
   counter: ShopCounter,
   shop: () => ShopDefinition,
+  flow: VillagerConversationFlow,
 ): ConversationTopic {
   return {
     key,
     label,
-    run: (ctl) => {
-      ctl.afterClose(() => counter.openShop(shop()));
-      ctl.close();
+    tone: 'normal',
+    repeatable: false,
+    grouping: 'root',
+    run: (convo) => {
+      convo.play(flow.closeNow());
+      counter.openShop(shop());
     },
   };
 }
