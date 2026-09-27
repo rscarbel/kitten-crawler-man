@@ -142,8 +142,8 @@ const HOARDER: PlaytestPreset = {
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
       { id: 'health_potion', quantity: 13 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'goblin_dynamite', quantity: 2 },
+      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
     ],
     bag: [{ id: 'scroll_of_confusing_fog', quantity: 1 }],
   },
@@ -178,8 +178,8 @@ const JUICER: PlaytestPreset = {
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
       { id: 'health_potion', quantity: 17 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'goblin_dynamite', quantity: 6 },
+      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 3 },
@@ -216,10 +216,10 @@ const LEVEL2: PlaytestPreset = {
     skillLevels: { pugilism: 2 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
-      { id: 'slingshot', quantity: 1 },
       { id: 'health_potion', quantity: 22 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'goblin_dynamite', quantity: 10 },
+      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
+      { id: 'slingshot', quantity: 1 },
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 4 },
@@ -271,10 +271,10 @@ const KRAKAREN: PlaytestPreset = {
     skillLevels: { pugilism: 2 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
-      { id: 'slingshot', quantity: 1 },
       { id: 'health_potion', quantity: 31 },
+      { id: 'goblin_dynamite', quantity: 24 },
       { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
-      { id: 'goblin_dynamite', quantity: 10 },
+      { id: 'slingshot', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'gym_treadmill', quantity: 2 },
     ],
@@ -326,10 +326,10 @@ const SPIDER: PlaytestPreset = {
     skillLevels: { pugilism: 4 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
-      { id: 'slingshot', quantity: 1 },
+      { id: 'goblin_dynamite', quantity: 14 },
       { id: 'health_potion', quantity: 34 },
       { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
-      { id: 'goblin_dynamite', quantity: 14 },
+      { id: 'slingshot', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'gym_treadmill', quantity: 2 },
     ],
@@ -381,10 +381,10 @@ const LEVEL3: PlaytestPreset = {
     skillLevels: { pugilism: 5 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
-      { id: 'slingshot', quantity: 1 },
+      { id: 'goblin_dynamite', quantity: 18 },
       { id: 'health_potion', quantity: 38 },
       { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
-      { id: 'goblin_dynamite', quantity: 18 },
+      { id: 'slingshot', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'gym_treadmill', quantity: 2 },
     ],
@@ -505,10 +505,10 @@ const GEAR: PlaytestPreset = {
     skillLevels: { pugilism: 5 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
-      { id: 'slingshot', quantity: 1 },
       { id: 'health_potion', quantity: 38 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'goblin_dynamite', quantity: 18 },
+      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
+      { id: 'slingshot', quantity: 1 },
     ],
     bag: [
       { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
@@ -582,10 +582,10 @@ const ANCHOR_STONE: PlaytestPreset = {
     ...LEVEL3.human,
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
-      { id: 'slingshot', quantity: 1 },
       { id: 'health_potion', quantity: 38 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
       { id: 'goblin_dynamite', quantity: 18 },
+      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
+      { id: 'slingshot', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'wayfinders_anchor', quantity: 1 },
     ],
