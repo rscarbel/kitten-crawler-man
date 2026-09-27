@@ -82,17 +82,17 @@ export const VOSS_CANNOT_AFFORD = voss.fn(
     `${a.feeCoins} coins. You don't seem to have enough my dear. Come back to me once you have the coin for this..`,
 );
 
-// ── Old Hilda
+// Old Hilda
 
 export const HILDA_REQUEST_INTRO = hilda.button(
-  'What do you want?',
-  'The grey stone under the chair leg. Aye, that one. It’s been holding that chair level since before your mother was old enough to be rude to anyone. You can have it. But you take it and the chair goes over, and then I’m an old woman sat on the floor, and the cards didn’t mention that part, did they.',
+  'Can I help?',
+  "Oh, hi there! I sure am glad to have visitors like you right now; I've been meaning to replace some of the furnature in here, and wouldn't you know it, some kids came in here to play hide and seek and broke everything.",
 );
 
 /** The last beat: `Ending.confirm` carries the accept/decline labels, so this line's own advance is never shown. */
 export const HILDA_REQUEST_TERMS = hilda.fn(
   (a: { readonly boardsPerRepair: number; readonly repairsRequired: number }): LineText =>
-    `Three things in this room are broken. The worktable. The chair it lost its leg arguing with. And a shelf that gave up in the spring, which I’ve been pretending I meant to happen. Put all three right and the shard’s yours. I won’t even charge you for the wood. There’s a pile of boards by the door, help yourself. Takes ${a.boardsPerRepair} to a mend and there’s ${a.repairsRequired} mends in it, so don’t come back at me short. Go stand at a broken thing. It’ll tell you what it wants.`,
+    `Oh that would be just lovely if you could help! The kids broke the worktable, the chair, and that shelf over on the side. I don't blame them for breaking any of it; they're just kids and the furnature was falling apart anyhow. I don't have very much money, but I did find this funny looking rock a few months ago. I got the sense that it was magic, but even though I've had it for a few months, it's done nothing. Probably because it's just a broken piece of whatever it used to be a part of. If you rebuild all the furnature that's broken in here, the stone is all yours! I won’t even charge you for the wood. There's a pile of boards by the door, help yourself. It takes ${a.boardsPerRepair} to bield each piece and there's ${a.repairsRequired} pieces.`,
 );
 
 /** Asked again with work outstanding. */
@@ -104,9 +104,9 @@ export const HILDA_PROGRESS = hilda.fn(
   }): LineText => {
     const tally = `${a.repairsDone} of ${a.repairsRequired} mended.`;
     const nudge = a.holdsEnoughBoards
-      ? 'You’ve got the wood on you. Go and stand at one of them.'
-      : 'And you’re carrying no wood, which is usually the trouble.';
-    return `${tally} I can count, dearie. I’m old, not blind. ${nudge}`;
+      ? "You've got the wood on you, good! Go and stand right in front of the areas where the furnature broke, and you will be able to build the furnature anew."
+      : 'It looks like you need to get a bit more wood to finish the rest of the repairs..';
+    return `${tally}, dearie.  ${nudge}`;
   },
 );
 
@@ -114,11 +114,11 @@ export const HILDA_PROGRESS = hilda.fn(
 export const HILDA_REWARD: NonEmpty<DialogLine> = [
   hilda.button(
     'Take the shard',
-    'Well. Look at that. A room. Here, take it before I get used to the quiet and change my mind. Thirty years under a chair leg and it hasn’t so much as dulled. Whatever that thing is, dearie, it isn’t a rock.',
+    "Well, look at that. This furnature looks better than the originals! You've really got some talent. Here, take it before I get used to the quiet and change my mind.  Whatever that thing is, dearie, it isn't a normal rock.",
   ),
 ];
 
-// ── Deacon Aviel ─────────────────────────────────────────────────────────────
+// Deacon Aviel
 
 export const AVIEL_REQUEST_INTRO = aviel.button(
   'So?',
