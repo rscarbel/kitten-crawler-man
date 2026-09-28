@@ -317,18 +317,19 @@ export function fromPersistedBountyCheckpoint(
 
 export interface PersistedMarketStockCheckpoint {
   readonly remaining: ReadonlyArray<readonly [string, number]>;
+  readonly held: Readonly<Record<string, number>>;
 }
 
 export function toPersistedMarketStockCheckpoint(
   cp: MarketStockCheckpoint,
 ): PersistedMarketStockCheckpoint {
-  return { remaining: [...cp.remaining] };
+  return { remaining: [...cp.remaining], held: { ...cp.held } };
 }
 
 export function fromPersistedMarketStockCheckpoint(
   persisted: PersistedMarketStockCheckpoint,
 ): MarketStockCheckpoint {
-  return { remaining: new Map(persisted.remaining) };
+  return { remaining: new Map(persisted.remaining), held: { ...persisted.held } };
 }
 
 function isNumber(value: unknown): value is number {
@@ -974,6 +975,16 @@ function parsePersistedBountyCheckpoint(value: unknown): PersistedBountyCheckpoi
   };
 }
 
+/** A `Record<string, number>` read back from untrusted JSON; a non-numeric or missing entry is simply dropped. */
+function parseNumberRecord(value: unknown): Record<string, number> {
+  if (!isRecord(value)) return {};
+  const record: Record<string, number> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (isNumber(entry)) record[key] = entry;
+  }
+  return record;
+}
+
 export function parsePersistedMarketStockCheckpoint(
   value: unknown,
 ): PersistedMarketStockCheckpoint | undefined {
@@ -982,7 +993,10 @@ export function parsePersistedMarketStockCheckpoint(
     parseStringKeyedTuple(entry, (v) => (isNumber(v) ? v : undefined)),
   );
   if (remaining === undefined) return undefined;
-  return { remaining };
+  // Absent from a save written before shops remembered what players sold
+  // them; such a save simply starts every shop's held stock at zero.
+  const held = parseNumberRecord(value.held);
+  return { remaining, held };
 }
 
 export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint | undefined {

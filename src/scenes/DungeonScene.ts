@@ -3404,6 +3404,7 @@ export class DungeonScene extends GameplayScene {
         return false;
       },
       togglePause: () => {
+        this.closeConversationForMenu();
         this.menus.pauseMenu.toggle();
         if (this.menus.pauseMenu.isOpen) {
           this.menus.closePanels();
@@ -3423,8 +3424,14 @@ export class DungeonScene extends GameplayScene {
       // No slot: the dedicated potion key means "any bottle you have", unlike a
       // hotbar key or a menu click, which each name one.
       usePotion: () => drinkAnyHealthPotion(this.hotbarHost()),
-      toggleInventory: () => this.menus.toggleInventory(),
-      toggleGear: () => this.menus.toggleGear(),
+      toggleInventory: () => {
+        this.closeConversationForMenu();
+        this.menus.toggleInventory();
+      },
+      toggleGear: () => {
+        this.closeConversationForMenu();
+        this.menus.toggleGear();
+      },
       companionFollow: () => this.triggerCompanionFollow(),
       toggleMiniMap: () => {
         this.miniMap.toggle();
@@ -3708,9 +3715,25 @@ export class DungeonScene extends GameplayScene {
     return this.tutorial === null && this.levelDef.floorNumber >= OVERWORLD_FLOOR_THREE;
   }
 
+  /**
+   * Ends whatever floating conversation is on screen before a full menu opens
+   * over it.
+   *
+   * A street or shop-floor conversation (Mordecai, a citizen, a sign) never
+   * halts the world or locks the keyboard, so the player can keep walking
+   * while it's up — but that also means nothing already stopped `i`/`g`/Esc,
+   * the HUD buttons or a mobile tap from opening a menu on top of it. Every
+   * path that opens the pause menu, the bag or the gear screen calls this
+   * first, so the two can never both be on screen.
+   */
+  private closeConversationForMenu(): void {
+    if (this.conversation.isOpen) this.conversation.dismiss();
+  }
+
   /** Pauses into the Journal — the compass button's action and the J key's. */
   private openQuestJournal(): boolean {
     if (this.gameOver) return false;
+    this.closeConversationForMenu();
     this.syncJournalContext();
     this.menus.pauseMenu.openToJournal();
     // The same housekeeping `togglePause` does, because this opens the same
@@ -5321,7 +5344,14 @@ export class DungeonScene extends GameplayScene {
   /** Opens a market stall's buy panel on the rows the market system built. */
   private openMarketStall(browse: MarketBrowse): void {
     if (this.marketPanel === null) return;
-    this.marketPanel.open(browse.buildMenu, browse.purchase, browse.onBlocked);
+    this.marketPanel.open(
+      browse.buildMenu,
+      browse.purchase,
+      browse.onBlocked,
+      undefined,
+      0,
+      browse.sell,
+    );
     this.audio?.play('menu_open');
   }
 
@@ -6292,6 +6322,21 @@ export class DungeonScene extends GameplayScene {
     // before the bag is offered the click: a field left focused by a press that
     // opened the journal or the market would go on eating that overlay's keys.
     this.menus.blurInventorySearchUnlessClicked(mx, my);
+    // First, ahead of every HUD rect and world hit-test below: a long-press
+    // context menu floats over whatever was drawn underneath it, and those
+    // rects are tested by raw coordinates rather than draw order, so a menu
+    // option sitting over the bag button or over Mordecai in the world would
+    // otherwise also fire whatever is beneath it. The menu always closes on
+    // this click, so it must always be the thing that answers it.
+    if (this.menus.inventoryPanel.interaction.contextMenu !== null) {
+      const invPlayer = this.menus.inventoryPlayer();
+      if (this.menus.inventoryPanel.handleClick(mx, my, invPlayer.inventory)) {
+        this.menus.resolvePendingInventoryActions(invPlayer, (id, quantity) =>
+          this.destruction.loot.addPlayerDrop(invPlayer.x, invPlayer.y, id, quantity, invPlayer),
+        );
+      }
+      return;
+    }
     if (this.tutorial?.showNearGoblinDialog === true) {
       this.tutorial.dismissNearGoblinDialog();
       return;
@@ -6511,6 +6556,7 @@ export class DungeonScene extends GameplayScene {
 
     const pb = UIRenderer.pauseButtonRect(this.miniMap);
     if (pointInRect(mx, my, pb)) {
+      this.closeConversationForMenu();
       this.menus.pauseMenu.toggle();
       this.menus.closePanels();
       this.input.clear();
@@ -8245,7 +8291,11 @@ export class DungeonScene extends GameplayScene {
         this.menus.mongoExplainer.isOpen ||
         this.menus.craftExplainers.isOpen ||
         this.levelCompleteScreen.isActive ||
-        this.runCompleteScreen.isActive
+        this.runCompleteScreen.isActive ||
+        // A long-press context menu answers whatever click lands anywhere on
+        // screen (even a miss, which dismisses it) rather than whatever
+        // button or world tile its option happens to be drawn over.
+        this.menus.inventoryPanel.interaction.contextMenu !== null
       ) {
         this.handleClick(x, y, e.timeStamp);
         continue;
@@ -8325,6 +8375,7 @@ export class DungeonScene extends GameplayScene {
       if (platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
         const bb = this.touch.bagBtnRect;
         if (pointInRect(x, y, bb)) {
+          this.closeConversationForMenu();
           this.menus.inventoryPanel.toggle();
           if (this.menus.inventoryPanel.isOpen) {
             this.menus.gearPanel.isOpen = false;
@@ -8634,8 +8685,19 @@ export class DungeonScene extends GameplayScene {
               // this tap, and the village behind it must not open a
               // conversation or pet a cow underneath it.
               const overlayWasFocused = this.focusedOverlay !== null;
+              // A long-press context menu always closes itself on the very
+              // click that answers it, so `handleClick` leaves no trace of it
+              // having been open — captured here or the tap that picked
+              // "Equip" would fall through into a talk or a pet on whatever
+              // stands where the menu was drawn.
+              const contextMenuWasOpen = this.menus.inventoryPanel.interaction.contextMenu !== null;
               this.handleClick(x, y, e.timeStamp);
-              if (!dialogWasOpen && !this.menus.pauseMenu.isOpen && !this.gameOver) {
+              if (
+                !dialogWasOpen &&
+                !contextMenuWasOpen &&
+                !this.menus.pauseMenu.isOpen &&
+                !this.gameOver
+              ) {
                 const cam = this.camera();
                 let villageConsumed = false;
                 if (this.briarHollowKit !== null && !overlayWasFocused) {

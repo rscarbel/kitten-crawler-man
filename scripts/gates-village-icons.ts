@@ -62,6 +62,7 @@ const KIT_ICONS: readonly IconSpec[] = KIT_ICON_ID_LIST.map((id: KitIconId) => (
 
 const REFERENCE_HEALTH_POTION: InventoryItem = {
   id: 'health_potion',
+  baseValue: 0,
   name: 'Health Potion',
   quantity: 1,
   stackable: true,
@@ -69,6 +70,7 @@ const REFERENCE_HEALTH_POTION: InventoryItem = {
 };
 const REFERENCE_GOBLIN_DYNAMITE: InventoryItem = {
   id: 'goblin_dynamite',
+  baseValue: 0,
   name: 'Goblin Dynamite',
   quantity: 1,
   stackable: true,

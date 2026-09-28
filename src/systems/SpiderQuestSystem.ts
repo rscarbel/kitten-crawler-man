@@ -15,6 +15,7 @@ import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collision
 import type { TrackerEntry } from './questTracker';
 import { clamp, pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
+import { drawFittedTitle } from '../ui/QuestBanners';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { platform } from '../core/Platform';
@@ -338,6 +339,7 @@ const OVERLAY_PULSE_SPEED = 200;
 const OVERLAY_PULSE_AMP = 0.05;
 const OVERLAY_BASE_TEXT_SIZE = 36;
 const OVERLAY_COMPLETE_TITLE_Y_OFFSET = 30;
+const OVERLAY_TITLE_GLOW_BLUR = 15;
 const OVERLAY_REWARDS_Y_OFFSET = 10;
 const OVERLAY_REWARDS_Y_ASCENT = 13;
 const OVERLAY_REWARD_1_Y_OFFSET = 35;
@@ -3238,16 +3240,14 @@ export class SpiderQuestSystem implements GameSystem {
 
     const pulse = 1 + OVERLAY_PULSE_AMP * Math.sin(performance.now() / OVERLAY_PULSE_SPEED);
     const pulsedSize = Math.floor(OVERLAY_BASE_TEXT_SIZE * pulse);
-    drawText(ctx, 'QUEST COMPLETE!', {
-      x: cw / 2,
+    drawFittedTitle(ctx, 'QUEST COMPLETE!', {
+      centerX: cw / 2,
       y: ch / 2 - OVERLAY_COMPLETE_TITLE_Y_OFFSET - Math.round(pulsedSize * TEXT_HEIGHT_FACTOR),
       size: pulsedSize,
-      bold: true,
       color: '#4ade80',
-      align: 'center',
       alpha,
       glow: '#4ade80',
-      glowBlur: 15,
+      glowBlur: OVERLAY_TITLE_GLOW_BLUR,
     });
 
     drawText(ctx, 'Rewards:', {

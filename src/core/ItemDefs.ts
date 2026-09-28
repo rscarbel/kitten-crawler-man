@@ -148,6 +148,19 @@ export interface InventoryItem {
   tool?: { kind: ToolKind; tier: ToolTier };
   /** Whether this item is eaten (as opposed to drunk) to trigger its effect. */
   edible?: boolean;
+  /**
+   * What a shop values one unit of this item at before any per-shop markup,
+   * category modifier or stock saturation is applied. See
+   * `src/systems/market/shopPricing.ts` for how a shop turns this into what it
+   * actually pays or charges.
+   */
+  baseValue: number;
+  /**
+   * When true, no shop will ever buy this item back, regardless of its pricing
+   * profile — for an item whose only value is what it does equipped or
+   * consumed (a tome that teaches an ability), not what it's worth as goods.
+   */
+  unsellable?: boolean;
 }
 
 /**
@@ -173,6 +186,7 @@ export const GAUNTLET_STUN_CHANCE = 0.02;
 export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   scroll_of_confusing_fog: {
     id: 'scroll_of_confusing_fog',
+    baseValue: 15,
     name: 'Scroll of Confusing Fog',
     stackable: true,
     canHotlist: true,
@@ -182,6 +196,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   dirty_shirley: {
     id: 'dirty_shirley',
+    baseValue: 15,
     name: 'The Dirty Shirley',
     stackable: true,
     canHotlist: true,
@@ -193,6 +208,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   health_potion: {
     id: 'health_potion',
+    baseValue: 5,
     name: 'Health Potion',
     stackable: true,
     canHotlist: true,
@@ -201,6 +217,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   speed_fizz: {
     id: 'speed_fizz',
+    baseValue: 12,
     name: 'Speed Fizz',
     stackable: true,
     canHotlist: true,
@@ -211,6 +228,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   jugg_juice: {
     id: 'jugg_juice',
+    baseValue: 22,
     name: 'Jugg Juice',
     stackable: true,
     canHotlist: true,
@@ -222,6 +240,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   cooldown_crisp: {
     id: 'cooldown_crisp',
+    baseValue: 15,
     name: 'Cooldown Crisp',
     stackable: true,
     canHotlist: true,
@@ -232,6 +251,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   stat_boost_potion: {
     id: 'stat_boost_potion',
+    baseValue: 1000,
     name: 'Stat Boost',
     stackable: true,
     canHotlist: true,
@@ -242,6 +262,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   goblin_dynamite: {
     id: 'goblin_dynamite',
+    baseValue: 10,
     name: 'Goblin Dynamite',
     stackable: true,
     canHotlist: true,
@@ -253,6 +274,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   gym_dumbbell: {
     id: 'gym_dumbbell',
+    baseValue: 8,
     name: 'Dumbbell',
     stackable: true,
     canHotlist: true,
@@ -262,6 +284,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   gym_bench_press: {
     id: 'gym_bench_press',
+    baseValue: 15,
     name: 'Bench Press',
     stackable: true,
     canHotlist: true,
@@ -271,6 +294,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   gym_treadmill: {
     id: 'gym_treadmill',
+    baseValue: 20,
     name: 'Treadmill',
     stackable: true,
     canHotlist: true,
@@ -280,6 +304,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   trollskin_shirt: {
     id: 'trollskin_shirt',
+    baseValue: 120,
     name: 'Enchanted Trollskin Shirt of Pummeling',
     stackable: false,
     canHotlist: false,
@@ -295,6 +320,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   enchanted_crown_sepsis_whore: {
     id: 'enchanted_crown_sepsis_whore',
+    baseValue: 150,
     name: 'Enchanted Crown of the Sepsis Whore',
     stackable: false,
     canHotlist: false,
@@ -314,6 +340,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   // and it is the only armour in the game a crawler can simply buy.
   issue_kettle_helm: {
     id: 'issue_kettle_helm',
+    baseValue: 40,
     name: 'Issue Kettle Helm',
     stackable: false,
     canHotlist: false,
@@ -328,6 +355,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   padded_gambeson: {
     id: 'padded_gambeson',
+    baseValue: 60,
     name: 'Padded Gambeson',
     stackable: false,
     canHotlist: false,
@@ -341,6 +369,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   riveted_bracers: {
     id: 'riveted_bracers',
+    baseValue: 55,
     name: 'Riveted Bracers',
     stackable: false,
     canHotlist: false,
@@ -354,6 +383,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   marching_boots: {
     id: 'marching_boots',
+    baseValue: 70,
     name: 'Marching Boots',
     stackable: false,
     canHotlist: false,
@@ -367,6 +397,8 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   magic_missile_tome: {
     id: 'magic_missile_tome',
+    baseValue: 100,
+    unsellable: true,
     name: 'Magic Missile',
     stackable: false,
     canHotlist: true,
@@ -379,6 +411,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   quest_wood_board: {
     id: 'quest_wood_board',
+    baseValue: 1,
     name: 'Barricade Boards',
     stackable: true,
     canHotlist: true,
@@ -391,6 +424,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   wayfinders_anchor: {
     id: 'wayfinders_anchor',
+    baseValue: 500,
     name: "Wayfinder's Anchor",
     stackable: false,
     canHotlist: true,
@@ -408,6 +442,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   // silently eat each other.
   anchor_shard_tinker: {
     id: 'anchor_shard_tinker',
+    baseValue: 20,
     name: 'Anchor Shard (Scrap)',
     stackable: false,
     canHotlist: false,
@@ -418,6 +453,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   anchor_shard_hilda: {
     id: 'anchor_shard_hilda',
+    baseValue: 20,
     name: 'Anchor Shard (Hearth)',
     stackable: false,
     canHotlist: false,
@@ -428,6 +464,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   anchor_shard_temple: {
     id: 'anchor_shard_temple',
+    baseValue: 20,
     name: 'Anchor Shard (Altar)',
     stackable: false,
     canHotlist: false,
@@ -441,6 +478,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   // hands the party both the writ and the letter at once.
   magistrates_writ: {
     id: 'magistrates_writ',
+    baseValue: 0,
     name: "Magistrate's Writ",
     stackable: false,
     canHotlist: false,
@@ -451,6 +489,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   unreadable_letter: {
     id: 'unreadable_letter',
+    baseValue: 0,
     name: 'The Unreadable Letter',
     stackable: false,
     canHotlist: false,
@@ -461,6 +500,8 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   smush_tome: {
     id: 'smush_tome',
+    baseValue: 100,
+    unsellable: true,
     name: 'Smush',
     stackable: false,
     canHotlist: true,
@@ -473,6 +514,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   explosives_handling_tome: {
     id: 'explosives_handling_tome',
+    baseValue: 100,
     name: 'Tome of Explosives Handling',
     stackable: false,
     canHotlist: false,
@@ -485,6 +527,8 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   skill_book_cockroach: {
     id: 'skill_book_cockroach',
+    baseValue: 100,
+    unsellable: true,
     name: 'Skill Book: Cockroach',
     stackable: true,
     canHotlist: true,
@@ -497,6 +541,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   skill_book_cat_reflexes: {
     id: 'skill_book_cat_reflexes',
+    baseValue: 100,
     name: 'Skill Book: Cat-like Reflexes',
     stackable: true,
     canHotlist: true,
@@ -508,6 +553,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   skill_book_pugilism: {
     id: 'skill_book_pugilism',
+    baseValue: 100,
     name: 'Skill Book: Pugilism',
     stackable: true,
     canHotlist: true,
@@ -519,6 +565,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   skill_book_iron_stomach: {
     id: 'skill_book_iron_stomach',
+    baseValue: 100,
     name: 'Skill Book: Iron Stomach',
     stackable: true,
     canHotlist: true,
@@ -530,6 +577,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   skill_book_night_vision: {
     id: 'skill_book_night_vision',
+    baseValue: 100,
     name: 'Skill Book: Night Vision',
     stackable: true,
     canHotlist: true,
@@ -541,6 +589,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   enchanted_bigboi_boxers: {
     id: 'enchanted_bigboi_boxers',
+    baseValue: 180,
     name: 'Enchanted BigBoi Boxers',
     stackable: false,
     canHotlist: true,
@@ -559,6 +608,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   doomsday_scenario: {
     id: 'doomsday_scenario',
+    baseValue: 0,
     name: "Carl's Doomsday Scenario",
     stackable: false,
     canHotlist: false,
@@ -570,6 +620,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   nightgaunt_cloak: {
     id: 'nightgaunt_cloak',
+    baseValue: 250,
     name: 'Enchanted Nightgaunt Cloak of Stoutness',
     stackable: false,
     canHotlist: false,
@@ -586,6 +637,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   slate_butterfly_talisman: {
     id: 'slate_butterfly_talisman',
+    baseValue: 200,
     name: 'Talisman of the Slate Butterfly',
     stackable: false,
     canHotlist: false,
@@ -608,6 +660,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   fae_scale_crupper: {
     id: 'fae_scale_crupper',
+    baseValue: 180,
     name: 'Enchanted Fae Scale Quadruped Crupper of the Fleet',
     stackable: false,
     canHotlist: false,
@@ -623,6 +676,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   bracelet_of_dex: {
     id: 'bracelet_of_dex',
+    baseValue: 150,
     name: 'Bracelet of +2 DEX',
     stackable: false,
     canHotlist: false,
@@ -635,6 +689,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   splatter_skunk_toe_ring: {
     id: 'splatter_skunk_toe_ring',
+    baseValue: 220,
     name: 'Enchanted Toe Ring of the Splatter Skunk',
     stackable: false,
     canHotlist: false,
@@ -651,6 +706,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   shade_gnoll_kneepads: {
     id: 'shade_gnoll_kneepads',
+    baseValue: 240,
     name: 'Enchanted Spiked Kneepads of the Shade Gnoll Riot Forces',
     stackable: false,
     canHotlist: false,
@@ -668,6 +724,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   grull_war_gauntlet: {
     id: 'grull_war_gauntlet',
+    baseValue: 260,
     name: 'Enchanted War Gauntlet of the Exalted Grull',
     stackable: false,
     canHotlist: false,
@@ -687,6 +744,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   wood: {
     id: 'wood',
+    baseValue: 1,
     name: 'Wood',
     stackable: true,
     canHotlist: false,
@@ -694,6 +752,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   stone: {
     id: 'stone',
+    baseValue: 2,
     name: 'Stone',
     stackable: true,
     canHotlist: false,
@@ -701,6 +760,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   wood_board: {
     id: 'wood_board',
+    baseValue: 4,
     name: 'Boards of Wood',
     stackable: true,
     canHotlist: false,
@@ -709,6 +769,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   rope: {
     id: 'rope',
+    baseValue: 6,
     name: 'Rope',
     stackable: true,
     canHotlist: false,
@@ -716,6 +777,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   basic_axe: {
     id: 'basic_axe',
+    baseValue: 10,
     name: toolTierDef('axe', TOOL_TIER_BASIC).name,
     description: toolTierDef('axe', TOOL_TIER_BASIC).description,
     stackable: false,
@@ -726,6 +788,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   hardened_axe: {
     id: 'hardened_axe',
+    baseValue: 25,
     name: toolTierDef('axe', TOOL_TIER_HARDENED).name,
     description: toolTierDef('axe', TOOL_TIER_HARDENED).description,
     stackable: false,
@@ -736,6 +799,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   lumberjacks_axe: {
     id: 'lumberjacks_axe',
+    baseValue: 50,
     name: toolTierDef('axe', TOOL_TIER_LONG_HAFT).name,
     description: toolTierDef('axe', TOOL_TIER_LONG_HAFT).description,
     stackable: false,
@@ -746,6 +810,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   ratkin_forge_axe: {
     id: 'ratkin_forge_axe',
+    baseValue: 90,
     name: toolTierDef('axe', TOOL_TIER_RATKIN_FORGE).name,
     description: toolTierDef('axe', TOOL_TIER_RATKIN_FORGE).description,
     stackable: false,
@@ -756,6 +821,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   deepwood_cleaver: {
     id: 'deepwood_cleaver',
+    baseValue: 140,
     name: toolTierDef('axe', TOOL_TIER_DEEPWOOD).name,
     description: toolTierDef('axe', TOOL_TIER_DEEPWOOD).description,
     stackable: false,
@@ -766,6 +832,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   graveyards_bane: {
     id: 'graveyards_bane',
+    baseValue: 220,
     name: toolTierDef('axe', TOOL_TIER_GRAVEYARD).name,
     description: toolTierDef('axe', TOOL_TIER_GRAVEYARD).description,
     stackable: false,
@@ -776,6 +843,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   basic_pickaxe: {
     id: 'basic_pickaxe',
+    baseValue: 10,
     name: toolTierDef('pickaxe', TOOL_TIER_BASIC).name,
     description: toolTierDef('pickaxe', TOOL_TIER_BASIC).description,
     stackable: false,
@@ -786,6 +854,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   hardened_pickaxe: {
     id: 'hardened_pickaxe',
+    baseValue: 25,
     name: toolTierDef('pickaxe', TOOL_TIER_HARDENED).name,
     description: toolTierDef('pickaxe', TOOL_TIER_HARDENED).description,
     stackable: false,
@@ -796,6 +865,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   quarrymans_pick: {
     id: 'quarrymans_pick',
+    baseValue: 50,
     name: toolTierDef('pickaxe', TOOL_TIER_LONG_HAFT).name,
     description: toolTierDef('pickaxe', TOOL_TIER_LONG_HAFT).description,
     stackable: false,
@@ -806,6 +876,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   ratkin_forge_pick: {
     id: 'ratkin_forge_pick',
+    baseValue: 90,
     name: toolTierDef('pickaxe', TOOL_TIER_RATKIN_FORGE).name,
     description: toolTierDef('pickaxe', TOOL_TIER_RATKIN_FORGE).description,
     stackable: false,
@@ -816,6 +887,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   stonebreaker: {
     id: 'stonebreaker',
+    baseValue: 140,
     name: toolTierDef('pickaxe', TOOL_TIER_DEEPWOOD).name,
     description: toolTierDef('pickaxe', TOOL_TIER_DEEPWOOD).description,
     stackable: false,
@@ -826,6 +898,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   worldscar_pick: {
     id: 'worldscar_pick',
+    baseValue: 220,
     name: toolTierDef('pickaxe', TOOL_TIER_GRAVEYARD).name,
     description: toolTierDef('pickaxe', TOOL_TIER_GRAVEYARD).description,
     stackable: false,
@@ -836,6 +909,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   hamburger: {
     id: 'hamburger',
+    baseValue: 3,
     name: 'Hamburger',
     stackable: true,
     canHotlist: true,
@@ -846,6 +920,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   hollow_stew: {
     id: 'hollow_stew',
+    baseValue: 5,
     name: 'Hollow Stew',
     stackable: true,
     canHotlist: true,
@@ -855,6 +930,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   trebuchet_kit: {
     id: 'trebuchet_kit',
+    baseValue: 5,
     name: 'Trebuchet Kit',
     stackable: true,
     canHotlist: false,
@@ -863,6 +939,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   snare_kit: {
     id: 'snare_kit',
+    baseValue: 5,
     name: 'Snare Kit',
     stackable: true,
     canHotlist: false,
@@ -871,6 +948,10 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
   },
   slingshot: {
     id: 'slingshot',
+    baseValue: 80,
+    // The human's only ranged weapon and no shop ever sells another — selling
+    // it away would strand them with no way to get it back.
+    unsellable: true,
     name: 'Slingshot & Rocks',
     stackable: false,
     canHotlist: true,
@@ -958,4 +1039,19 @@ export function isAnchorShardId(id: ItemId): id is AnchorShardId {
  */
 export function itemCanHotlist(id: ItemId): boolean {
   return ITEM_DEF[id].canHotlist;
+}
+
+/**
+ * Whether any shop could ever buy this item back — before a specific shop's
+ * pricing profile decides whether *it* deals in the item at all. Excludes
+ * items marked `unsellable`, quest items, and anything `canDrop: false`
+ * (tools, the Anchor and its shards, the magistrate's writ): none of those are
+ * goods a shop counter trades in.
+ */
+export function canSellItemId(id: ItemId): boolean {
+  const def = ITEM_DEF[id];
+  if (def.unsellable === true) return false;
+  if (def.isQuestItem === true) return false;
+  if (def.canDrop === false) return false;
+  return true;
 }

@@ -35,6 +35,7 @@ import {
   drawChildSprite,
 } from '../sprites/questNPCSprite';
 import { drawText } from '../ui/TextBox';
+import { drawFittedTitle } from '../ui/QuestBanners';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
 import type { Conversation } from '../dialog/Conversation';
@@ -124,6 +125,7 @@ const OVERLAY_PULSE_SPEED = 200;
 const OVERLAY_PULSE_AMP = 0.05;
 const OVERLAY_BASE_TEXT_SIZE = 36;
 const OVERLAY_COMPLETE_TITLE_Y_OFFSET = 30;
+const OVERLAY_TITLE_GLOW_BLUR = 15;
 const OVERLAY_REWARDS_Y_OFFSET = 10;
 const OVERLAY_REWARDS_Y_ASCENT = 13;
 const OVERLAY_REWARD_1_Y_OFFSET = 35;
@@ -1785,16 +1787,14 @@ export class DefendQuestSystem implements GameSystem {
 
     const pulse = 1 + OVERLAY_PULSE_AMP * Math.sin(performance.now() / OVERLAY_PULSE_SPEED);
     const pulsedSize = Math.floor(OVERLAY_BASE_TEXT_SIZE * pulse);
-    drawText(ctx, 'QUEST COMPLETE!', {
-      x: cw / 2,
+    drawFittedTitle(ctx, 'QUEST COMPLETE!', {
+      centerX: cw / 2,
       y: ch / 2 - OVERLAY_COMPLETE_TITLE_Y_OFFSET - Math.round(pulsedSize * TEXT_HEIGHT_FACTOR),
       size: pulsedSize,
-      bold: true,
       color: '#4ade80',
-      align: 'center',
       alpha,
       glow: '#4ade80',
-      glowBlur: 15,
+      glowBlur: OVERLAY_TITLE_GLOW_BLUR,
     });
 
     drawText(ctx, 'Rewards:', {
@@ -1869,16 +1869,14 @@ export class DefendQuestSystem implements GameSystem {
     ctx.lineCap = 'butt';
     ctx.restore();
 
-    drawText(ctx, 'QUEST FAILED', {
-      x: cw / 2,
+    drawFittedTitle(ctx, 'QUEST FAILED', {
+      centerX: cw / 2,
       y: ch / 2 + OVERLAY_FAIL_TITLE_Y_OFFSET - OVERLAY_FAIL_TITLE_ASCENT,
       size: OVERLAY_FAIL_TEXT_SIZE,
-      bold: true,
       color: '#ef4444',
-      align: 'center',
       alpha,
       glow: '#ef4444',
-      glowBlur: 15,
+      glowBlur: OVERLAY_TITLE_GLOW_BLUR,
     });
     drawText(ctx, 'Space or click to dismiss', {
       x: cw / 2,
@@ -2077,15 +2075,20 @@ export class DefendQuestSystem implements GameSystem {
     ];
 
     const textStartY = illY + illH + TUTORIAL_TEXT_Y_GAP;
-    for (let i = 0; i < descriptions[this.tutorialPage].length; i++) {
-      drawText(ctx, descriptions[this.tutorialPage][i], {
-        x: dx + dw / 2,
-        y: textStartY + i * TUTORIAL_TEXT_LINE_SPACING - TUTORIAL_TEXT_LINE_ASCENT,
-        size: TUTORIAL_TEXT_LINE_SIZE,
-        color: '#cbd5e1',
-        align: 'center',
-      });
-    }
+    const textWidth = dw - TUTORIAL_PAD * 2;
+    // Joined rather than drawn one authored line at a time: those lines were
+    // wrapped by hand for the desktop-width box, so on a narrower mobile box
+    // drawText's own word-wrap re-flows them to fit instead of running past
+    // the padded edge.
+    drawText(ctx, descriptions[this.tutorialPage].join(' '), {
+      x: dx + TUTORIAL_PAD,
+      y: textStartY - TUTORIAL_TEXT_LINE_ASCENT,
+      size: TUTORIAL_TEXT_LINE_SIZE,
+      color: '#cbd5e1',
+      align: 'center',
+      width: textWidth,
+      lineHeight: TUTORIAL_TEXT_LINE_SPACING,
+    });
 
     this.tutorialButtons = [];
     const btnX = dx + dw - TUTORIAL_PAD - TUTORIAL_BTN_W;

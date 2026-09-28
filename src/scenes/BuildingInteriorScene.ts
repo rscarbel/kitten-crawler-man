@@ -17,7 +17,7 @@ import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
-import { ShopSystem } from '../systems/ShopSystem';
+import { ShopSystem, GENERAL_STORE_CONFIG } from '../systems/ShopSystem';
 import { MobileHUDSystem } from '../systems/MobileHUDSystem';
 import type { MobileHUDButton } from '../systems/MobileHUDSystem';
 import { platform } from '../core/Platform';
@@ -137,7 +137,15 @@ import {
   PricedMenuPanel,
   type PricedOption,
   type PricedPurchaseHandler,
+  type SellConfig,
 } from '../ui/PricedMenuPanel';
+import {
+  ARMOURY_PRICING,
+  APOTHECARY_PRICING,
+  MERCHANT_STALL_PRICING,
+  FARMER_PRICING,
+} from '../systems/market/shopProfiles';
+import type { ShopPricingProfile } from '../systems/market/shopPricing';
 import {
   setButtonMouseState,
   setButtonAudio,
@@ -911,7 +919,16 @@ export class BuildingInteriorScene extends GameplayScene {
       this.bopca = null;
     }
 
-    this.shop = entry.type === 'store' ? new ShopSystem(this.mapW) : null;
+    // Keyed by the building's own name rather than a shared constant: two
+    // different General Stores must not pool the stock each one holds from
+    // the player's sales.
+    this.shop =
+      entry.type === 'store'
+        ? new ShopSystem(this.mapW, GENERAL_STORE_CONFIG, {
+            stock: this.marketStock,
+            vendorId: `general_store:${entry.name}`,
+          })
+        : null;
 
     this.club =
       entry.type === 'club'
@@ -2764,6 +2781,17 @@ export class BuildingInteriorScene extends GameplayScene {
     // before the bag is offered the click: a field left focused by a press that
     // opened a counter or the pause menu would go on eating that overlay's keys.
     this.menus.blurInventorySearchUnlessClicked(mx, my);
+    // First, ahead of every HUD rect and world hit-test below: a long-press
+    // context menu floats over whatever was drawn underneath it, and those
+    // rects are tested by raw coordinates rather than draw order, so a menu
+    // option sitting over the pause button or a shop counter would otherwise
+    // also fire whatever is beneath it. The menu always closes on this click,
+    // so it must always be the thing that answers it.
+    if (this.menus.inventoryPanel.interaction.contextMenu !== null) {
+      const invPlayer = this.inventoryPlayer();
+      this.menus.inventoryPanel.handleClick(mx, my, invPlayer.inventory);
+      return;
+    }
     // Ranked above the death screen, matching both the claim registry and the
     // draw order: the award stack is painted on top of it, so a press aimed at
     // an OK button there must not reach the screen underneath.
@@ -3264,6 +3292,21 @@ export class BuildingInteriorScene extends GameplayScene {
    * to. `openService` has already resolved that role from the talk target, so
    * this never has to guess which counter is in front of the player.
    */
+  /**
+   * A Sell tab for a building service that trades in actual goods, keyed off
+   * this scene's own `marketStock` — the same held-stock store the General
+   * Store and the Desperado Club's counters already use — so a sale here and
+   * a sale at the General Store never share a shelf.
+   */
+  private sellConfigFor(vendorId: string, pricing: ShopPricingProfile): SellConfig {
+    return {
+      pricing,
+      heldStock: this.marketStock.held,
+      vendorId,
+      onSold: () => this.audio?.play('purchase_success'),
+    };
+  }
+
   private openServiceMenu(
     panel: PricedMenuPanel,
     turn: number,
@@ -3314,12 +3357,23 @@ export class BuildingInteriorScene extends GameplayScene {
           );
           return;
         }
-        panel.open(() => buildArmouryMenu(turn, host), confirmed(issueArmour, never));
+        panel.open(
+          () => buildArmouryMenu(turn, host),
+          confirmed(issueArmour, never),
+          undefined,
+          undefined,
+          0,
+          this.sellConfigFor('armoury', ARMOURY_PRICING),
+        );
         return;
       case 'Herb & Remedy':
         panel.open(
           () => buildApothecaryMenu(party, this.townMemory, turn, host),
           confirmed(serveRemedy(party, this.townMemory), never),
+          undefined,
+          undefined,
+          0,
+          this.sellConfigFor('apothecary', APOTHECARY_PRICING),
         );
         return;
       case 'The Rusty Anvil':
@@ -3332,12 +3386,20 @@ export class BuildingInteriorScene extends GameplayScene {
         panel.open(
           () => buildCartwrightMenu(turn, host),
           confirmed(sellCartwrightGoods(turn), never),
+          undefined,
+          undefined,
+          0,
+          this.sellConfigFor('cartwright_workshop', MERCHANT_STALL_PRICING),
         );
         return;
       case "Miller's Farm":
         panel.open(
           () => buildMillerMenu(this.active(), turn, host),
           confirmed(serveMillerGoods(turn), never),
+          undefined,
+          undefined,
+          0,
+          this.sellConfigFor('millers_farm', FARMER_PRICING),
         );
         return;
       case "Shepherd's Cabin":

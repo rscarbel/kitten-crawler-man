@@ -34,6 +34,7 @@ import { CatPlayer } from '../creatures/CatPlayer';
 import { drawClubProp } from '../sprites/clubFurnitureSprite';
 import { drawClubDecor } from '../sprites/clubDecor';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
+import { CLUB_BAR_PRICING, CLUB_MARKET_PRICING } from './market/shopProfiles';
 import { ClubCasinoSystem } from './ClubCasinoSystem';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
 import { ClubVipLoungeSystem, type EscortPair } from './ClubVipLoungeSystem';
@@ -130,8 +131,12 @@ const SPEED_FIZZ_PRICE = 20;
 const COOLDOWN_CRISP_PRICE = 25;
 const JUGG_JUICE_PRICE = 30;
 
+/** Keys the bar's stock lines the same way the market stall/club counter keys theirs. */
+export const DESPERADO_BAR_VENDOR_ID = 'desperado_bar';
+
 const BAR_SHOP_CONFIG: ShopConfig = {
   title: 'The Bar',
+  pricing: CLUB_BAR_PRICING,
   items: [
     {
       id: 'dirty_shirley',
@@ -169,6 +174,7 @@ const SEPSIS_CROWN_PRICE = 150;
 
 export const MARKET_SHOP_CONFIG: ShopConfig = {
   title: 'The Market',
+  pricing: CLUB_MARKET_PRICING,
   items: [
     {
       id: 'stat_boost_potion',
@@ -281,7 +287,10 @@ export class DesperadoClubSystem {
     private readonly catAchievements?: AchievementManager,
   ) {
     this.crowd = new ClubCrowdSystem(map);
-    this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG);
+    this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG, {
+      stock: marketStock,
+      vendorId: DESPERADO_BAR_VENDOR_ID,
+    });
     this.marketShop = createClubMarketShop(marketStock);
     this.casino = new ClubCasinoSystem(audio, membership);
     this.casino.onWinnings = (coins, screenX, screenY) =>

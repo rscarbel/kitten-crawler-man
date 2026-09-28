@@ -24,7 +24,11 @@ import type { MarketStock } from './MarketStock';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { GameMap } from '../../map/GameMap';
 import type { Player } from '../../Player';
-import type { PricedMenuBuilder, PricedPurchaseHandler } from '../../ui/PricedMenuPanel';
+import type {
+  PricedMenuBuilder,
+  PricedPurchaseHandler,
+  SellConfig,
+} from '../../ui/PricedMenuPanel';
 import type { GameSystem } from '../GameSystem';
 import type { TownPropRenderable } from '../townPropRenderable';
 
@@ -76,6 +80,8 @@ export interface MarketBrowse {
   purchase: PricedPurchaseHandler;
   /** Sounds the refusal when the player pokes a row they can't buy. */
   onBlocked: () => void;
+  /** This stall's Sell tab. */
+  sell: SellConfig;
 }
 
 export class MarketSystem implements GameSystem {
@@ -152,6 +158,12 @@ export class MarketSystem implements GameSystem {
       buildMenu: () => buildVendorMenu(stall.def, this.stock, visits, this.isGateOpen),
       purchase: createVendorPurchase(stall.def, this.stock, this.getAudio),
       onBlocked: () => this.getAudio()?.play('error_taking_action'),
+      sell: {
+        pricing: stall.def.pricing,
+        heldStock: this.stock.held,
+        vendorId: stall.def.id,
+        onSold: () => this.getAudio()?.play('purchase_success'),
+      },
     });
     return true;
   }

@@ -200,7 +200,11 @@ export class MenusKit {
       this.rewardGrantedDialog.isShowing ||
       this.mongoExplainer.isOpen ||
       this.craftExplainers.isOpen ||
-      this.itemQuantityPicker.isOpen
+      this.itemQuantityPicker.isOpen ||
+      // A long-press context menu answers whatever click lands anywhere on
+      // screen, even one that misses it and only dismisses it — so the tap
+      // that closes it must not also reach a world interaction underneath.
+      this.inventoryPanel.interaction.contextMenu !== null
     );
   }
 
@@ -277,11 +281,19 @@ export class MenusKit {
   }
 
   /**
-   * True when an open bag or gear panel is drawn over (mx, my). HUD buttons sit
-   * beneath these panels, so a touch that lands on one must never reach them.
+   * True when an open bag or gear panel is drawn over (mx, my), or a
+   * long-press context menu is up anywhere on screen. HUD buttons sit beneath
+   * the panels, so a touch landing on one must never reach them — and a
+   * context menu answers whatever click lands on it (even one that misses it,
+   * which dismisses the menu) rather than whatever button its option happens
+   * to be drawn over, so it blocks every touch regardless of position.
    */
   panelCovers(mx: number, my: number): boolean {
-    return this.inventoryPanel.hitsPanel(mx, my) || this.gearPanel.hitsPanel(mx, my);
+    return (
+      this.inventoryPanel.hitsPanel(mx, my) ||
+      this.gearPanel.hitsPanel(mx, my) ||
+      this.inventoryPanel.interaction.contextMenu !== null
+    );
   }
 
   toggleGear(): void {

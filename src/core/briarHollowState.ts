@@ -206,6 +206,15 @@ export interface BriarHollowState {
   onceFlags: string[];
   merchantStock: Record<string, number>;
   /**
+   * Units of an item a village shop holds because the party sold it some, on
+   * top of whatever it always carries — Vetch's counter and Pipkin's kitchen
+   * both use this one record, keyed `${vendorId}:${itemId}` the same way
+   * `MarketStock.held` is, so a sale to one never touches the other's shelf.
+   * Fed straight into `ShopSystem`'s own pricing functions (`heldFor`,
+   * `addHeldStock`, `decayHeldStock`); see `src/systems/market/shopPricing.ts`.
+   */
+  merchantHeld: Record<string, number>;
+  /**
    * Every tree and rock anyone has worked, keyed by `tileKey`, so a door visit
    * never refills a half-chopped tree. Not part of {@link BriarHollowStateSnapshot}:
    * the gathering system checkpoints it itself, because putting a crumbled rock
@@ -316,6 +325,7 @@ export function createBriarHollowState(): BriarHollowState {
     talkCounts: emptyTalkCounts(),
     onceFlags: [],
     merchantStock: {},
+    merchantHeld: {},
     nodes: new Map(),
     villagers: createVillagerMemory(),
   };
@@ -348,6 +358,7 @@ export function captureBriarHollowState(state: BriarHollowState): BriarHollowSta
     talkCounts: { ...state.talkCounts },
     onceFlags: [...state.onceFlags],
     merchantStock: { ...state.merchantStock },
+    merchantHeld: { ...state.merchantHeld },
     segmentScheme: PALISADE_SEGMENT_SCHEME_VERSION,
   };
 }
@@ -368,6 +379,7 @@ export function restoreBriarHollowState(
   target.talkCounts = { ...snapshot.talkCounts };
   target.onceFlags = [...snapshot.onceFlags];
   target.merchantStock = { ...snapshot.merchantStock };
+  target.merchantHeld = { ...snapshot.merchantHeld };
 }
 
 function copyUnlocks(unlocks: VillageUnlocks): VillageUnlocks {
@@ -644,13 +656,14 @@ function parseOnceFlags(value: unknown): string[] {
   return value.filter(isString);
 }
 
-function parseMerchantStock(value: unknown): Record<string, number> {
+/** Shared by `merchantStock` and `merchantHeld` — both are plain non-negative counts keyed by string. */
+function parseNonNegativeRecord(value: unknown): Record<string, number> {
   if (!isRecord(value)) return {};
-  const stock: Record<string, number> = {};
+  const record: Record<string, number> = {};
   for (const [key, count] of Object.entries(value)) {
-    if (isNumber(count)) stock[key] = Math.max(0, count);
+    if (isNumber(count)) record[key] = Math.max(0, count);
   }
-  return stock;
+  return record;
 }
 
 /**
@@ -697,7 +710,10 @@ export function parseBriarHollowStateSnapshot(
     soldierOrders,
     talkCounts: parseTalkCounts(value.talkCounts),
     onceFlags: parseOnceFlags(value.onceFlags),
-    merchantStock: parseMerchantStock(value.merchantStock),
+    merchantStock: parseNonNegativeRecord(value.merchantStock),
+    // Absent from a save written before village shops remembered what the
+    // party sold them; such a save simply starts every shelf at zero.
+    merchantHeld: parseNonNegativeRecord(value.merchantHeld),
     segmentScheme: PALISADE_SEGMENT_SCHEME_VERSION,
   };
 }

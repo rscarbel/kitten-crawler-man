@@ -77,6 +77,17 @@ export interface MusicOptions {
   fadeInMs?: number;
 }
 
+/**
+ * Why the music/ambience bus is ramped down. Tracked as a set rather than a
+ * single boolean: backgrounding and the pause menu can each want the bus
+ * silent at overlapping times (the player can alt-tab while the pause menu is
+ * open), and a single flag has one owner — whichever of the two last touched
+ * it wins, and can resume audio the other reason still wants silent, or leave
+ * it silent forever if the reason that set the flag never clears it. The bus
+ * only comes back once every reason that asked for silence has let go.
+ */
+type MusicPauseReason = 'menu' | 'background';
+
 /** A currently-playing music track: either a decoded buffer or a streamed media element. */
 type MusicVoice =
   | { readonly kind: 'buffer'; readonly source: AudioBufferSourceNode; readonly gain: GainNode }
@@ -242,9 +253,19 @@ export class AudioManager {
     // iOS) — more reliable than visibilitychange alone on some mobile browsers.
     window.addEventListener('pagehide', this.handlePageHide);
     window.addEventListener('pageshow', this.handlePageShow);
+    // The tab can stay visible (document.hidden stays false) while the browser
+    // *window* loses OS focus — alt-tabbing to another application on desktop.
+    // Some platforms still reclaim the audio device from an unfocused window,
+    // and visibilitychange never fires to tell us, so this is watched
+    // separately rather than folded into muteForBackground/unmuteFromBackground.
+    window.addEventListener('blur', this.handleWindowBlur);
+    window.addEventListener('focus', this.handleWindowFocus);
     // Mobile browsers start AudioContext suspended and only allow resume() inside
-    // a direct user-gesture handler. Register capture-phase listeners so the very
-    // first touch/click/key unlocks audio before any scene handler runs.
+    // a direct user-gesture handler. Kept attached for the life of the manager
+    // (rather than removed after the first success): iOS can drop a running
+    // context back into 'interrupted' on its own (an incoming call, another app
+    // claiming audio, the screen locking) and resuming out of that also needs a
+    // fresh gesture, so every future touch/click/key has to be able to retry it.
     window.addEventListener('touchstart', this.handleUnlockGesture, {
       capture: true,
       passive: true,
@@ -271,9 +292,22 @@ export class AudioManager {
     this.unmuteFromBackground();
   };
 
+  private readonly handleWindowBlur = (): void => {
+    this.muteForBackground();
+  };
+
+  private readonly handleWindowFocus = (): void => {
+    this.unmuteFromBackground();
+  };
+
   private muteForBackground(): void {
     if (this.backgrounded) return;
     this.backgrounded = true;
+    // Also marks music/ambience paused "for background" specifically, so a
+    // pause-menu-open at the same moment (its own 'menu' reason) isn't
+    // silently cleared by this reason letting go later — see MusicPauseReason.
+    this.pauseMusic('background');
+    this.pauseAmbience('background');
     // Zero gain immediately — ctx.suspend() is async and some mobile browsers
     // don't honor it fast enough before the screen fully locks.
     this.masterGain.gain.value = 0;
@@ -290,28 +324,38 @@ export class AudioManager {
   private unmuteFromBackground(): void {
     if (!this.backgrounded) return;
     this.backgrounded = false;
+    this.resumeMusic('background');
+    this.resumeAmbience('background');
     this.masterGain.gain.value = this.masterVol;
-    void this.ctx.resume().then(() => {
-      if (this.ctx.state === 'running') {
-        this.onContextUnlocked();
-      }
-    });
+    this.attemptResume();
   }
 
-  // Called on the first touchstart/click/keydown. Resumes the AudioContext from
-  // inside a user-gesture handler, then flushes any sounds that were queued while
-  // the context was suspended.
+  /**
+   * Resume the AudioContext if it isn't already running, and flush whatever
+   * was waiting on it once it is. Safe to call repeatedly and from any of the
+   * several signals (a gesture, a visibility/focus change) that can observe
+   * the same "audio should be alive again" moment — `onContextUnlocked` and
+   * the browsers' own state machines are what make the repeats harmless.
+   */
+  private attemptResume(): void {
+    if (this.ctx.state === 'running' || this.ctx.state === 'closed') return;
+    void this.ctx
+      .resume()
+      .then(() => {
+        if (this.ctx.state === 'running') this.onContextUnlocked();
+      })
+      .catch(() => {
+        // iOS can refuse a resume() that isn't called from inside a gesture
+        // handler (e.g. one fired from a visibilitychange/focus listener) —
+        // the persistent gesture listener below is the fallback that catches it.
+      });
+  }
+
+  // Capture-phase touchstart/click/keydown handler, kept attached for the life
+  // of the manager: resumes the AudioContext from inside a genuine user
+  // gesture, then flushes any sounds that were queued while it was suspended.
   private readonly handleUnlockGesture = (): void => {
-    if (this.ctx.state === 'running') {
-      this.removeUnlockListeners();
-      return;
-    }
-    void this.ctx.resume().then(() => {
-      if (this.ctx.state === 'running') {
-        this.removeUnlockListeners();
-        this.onContextUnlocked();
-      }
-    });
+    this.attemptResume();
   };
 
   /** True when the AudioContext is actively processing audio. */
@@ -339,6 +383,8 @@ export class AudioManager {
   }
 
   private onContextUnlocked(): void {
+    this.restartStalledStreams();
+
     const callbacks = this.runningCallbacks.splice(0);
     for (const cb of callbacks) cb();
 
@@ -354,15 +400,35 @@ export class AudioManager {
     }
   }
 
-  /** Resume the AudioContext. Must be called from a user-gesture handler. */
-  resume(): void {
-    if (this.ctx.state === 'suspended') {
-      void this.ctx.resume().then(() => {
-        if (this.ctx.state === 'running') {
-          this.onContextUnlocked();
-        }
+  /**
+   * Streamed music and ambience play through `<audio>` elements, and some
+   * browsers pause a background tab's media elements outright rather than
+   * merely suspending the Web Audio graph they feed. Resuming the
+   * AudioContext alone leaves those elements paused forever, silent even
+   * though `ctx.state` is back to 'running' and nothing else ever calls
+   * `.play()` on them again — so every element still logically "playing" is
+   * nudged back into motion here, the one place that knows the context is
+   * genuinely alive again.
+   */
+  private restartStalledStreams(): void {
+    const voice = this.currentMusicVoice;
+    if (voice?.kind === 'stream' && voice.el.paused) {
+      void voice.el.play().catch(() => {
+        // A subsequent gesture/focus event will retry via this same path.
       });
     }
+    for (const loop of this.ambientLoops.values()) {
+      if (loop.kind === 'stream' && loop.el.paused) {
+        void loop.el.play().catch(() => {
+          // A subsequent gesture/focus event will retry via this same path.
+        });
+      }
+    }
+  }
+
+  /** Resume the AudioContext. Best called from a user-gesture handler. */
+  resume(): void {
+    this.attemptResume();
   }
 
   /**
@@ -933,29 +999,30 @@ export class AudioManager {
     this.keyboardHeroMusicSource = null;
   }
 
-  private musicPaused = false;
-  private ambiencePaused = false;
+  private readonly musicPauseReasons = new Set<MusicPauseReason>();
+  private readonly ambiencePauseReasons = new Set<MusicPauseReason>();
 
   /**
    * Fade every continuous world sound out (e.g. when the pause menu opens):
    * footsteps, wading, spider steps, machinery, the keyboard-hero track and every
    * distance-attenuated ambient bed. One-shot SFX are untouched, so menu clicks
-   * still play while the world is silent. Idempotent.
+   * still play while the world is silent. Idempotent per reason.
    *
    * The loops keep running behind a muted bus rather than being stopped: several
    * of them (machinery, the keyboard-hero track) are started by one-off events and
    * would never come back if they were torn down here.
    */
-  pauseAmbience(): void {
-    if (this.ambiencePaused) return;
-    this.ambiencePaused = true;
+  pauseAmbience(reason: MusicPauseReason = 'menu'): void {
+    const wasSilenced = this.ambiencePauseReasons.size > 0;
+    this.ambiencePauseReasons.add(reason);
+    if (wasSilenced) return;
     this.rampAmbienceBus(0);
   }
 
-  /** Fade the continuous world sounds back in when the menu closes. Idempotent. */
-  resumeAmbience(): void {
-    if (!this.ambiencePaused) return;
-    this.ambiencePaused = false;
+  /** Fade the continuous world sounds back in once every reason has cleared. Idempotent per reason. */
+  resumeAmbience(reason: MusicPauseReason = 'menu'): void {
+    this.ambiencePauseReasons.delete(reason);
+    if (this.ambiencePauseReasons.size > 0) return;
     this.rampAmbienceBus(AMBIENCE_BUS_OPEN);
   }
 
@@ -969,19 +1036,20 @@ export class AudioManager {
     );
   }
 
-  /** Fade music out quickly (e.g. when a menu opens). Idempotent. */
-  pauseMusic(): void {
-    if (this.musicPaused) return;
-    this.musicPaused = true;
+  /** Fade music out quickly (e.g. when a menu opens). Idempotent per reason. */
+  pauseMusic(reason: MusicPauseReason = 'menu'): void {
+    const wasSilenced = this.musicPauseReasons.size > 0;
+    this.musicPauseReasons.add(reason);
+    if (wasSilenced) return;
     const now = this.ctx.currentTime;
     this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
     this.musicGain.gain.linearRampToValueAtTime(0, now + MENU_MUSIC_FADE_MS / MS_PER_SECOND);
   }
 
-  /** Fade music back in (e.g. when a menu closes). Idempotent. */
-  resumeMusic(): void {
-    if (!this.musicPaused) return;
-    this.musicPaused = false;
+  /** Fade music back in once every reason that silenced it has cleared. Idempotent per reason. */
+  resumeMusic(reason: MusicPauseReason = 'menu'): void {
+    this.musicPauseReasons.delete(reason);
+    if (this.musicPauseReasons.size > 0) return;
     const now = this.ctx.currentTime;
     this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
     this.musicGain.gain.linearRampToValueAtTime(
@@ -999,9 +1067,15 @@ export class AudioManager {
     this.stopCurrentMusicSource(fadeMs);
   }
 
-  /** Stop just the active music source without touching the playlist (used when swapping tracks). */
+  /**
+   * Stop just the active music source without touching the playlist (used when
+   * swapping tracks). Deliberately leaves `musicPauseReasons` untouched: a
+   * track swap that happens while the bus is silenced (the pause menu is open,
+   * the tab is backgrounded) must not clear that silencing, or the next
+   * `resumeMusic()` for the reason that's actually still active would find
+   * nothing left to resume and never ramp the bus back up.
+   */
   private stopCurrentMusicSource(fadeMs: number): void {
-    this.musicPaused = false;
     this.pendingMusic = null;
     this._currentMusicId = null;
     const voice = this.currentMusicVoice;
@@ -1312,6 +1386,8 @@ export class AudioManager {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     window.removeEventListener('pagehide', this.handlePageHide);
     window.removeEventListener('pageshow', this.handlePageShow);
+    window.removeEventListener('blur', this.handleWindowBlur);
+    window.removeEventListener('focus', this.handleWindowFocus);
     this.removeUnlockListeners();
     this.stopWalkingLoop();
     this.stopWadingLoop();

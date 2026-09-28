@@ -479,13 +479,20 @@ export class ConstructionKit {
   }
 
   /**
-   * The build key (desktop) or a double tap (mobile) pressed over a wall the
-   * active crawler faces: raises it the same way choosing that tier's row in
-   * the Construction menu would, without opening any menu first. Returns
-   * whether it started a job.
+   * The build key (desktop) pressed over a wall the active crawler faces:
+   * raises it the same way choosing that tier's row in the Construction menu
+   * would, without opening any menu first. Returns whether it started a job.
+   *
+   * Desktop only: this is reached from `tryInteract`, which is also every
+   * mobile tap's fallback once nothing more specific claims it. If it ran
+   * there too, the first tap of a "double tap to build" gesture would raise
+   * the wall on its own, silently spending it before the second tap — the
+   * one the on-screen prompt names — ever lands, leaving `handleDoubleTap`
+   * refused with a job already running that a subsequent tap then cancels.
+   * Mobile's own double tap is the only door in for a wall build there.
    */
   tryBuildWall(): boolean {
-    if (!this.learned || this.isMenuOpen) return false;
+    if (platform.isMobile || !this.learned || this.isMenuOpen) return false;
     return this.construction.tryBuildFacedWall();
   }
 

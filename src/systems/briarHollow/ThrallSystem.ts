@@ -8,7 +8,10 @@
  * a fight can see it and it can never block a corridor. It works on the same
  * interval and the same award function as its summoner, with its summoner's
  * perks, but it never rolls luck; what it gathers goes into the summoner's
- * bag, and the summoner earns a quarter of the XP.
+ * bag, and the summoner earns a quarter of the XP. It never spends the
+ * node's own capacity either — only the summoner's own swing can fell a tree
+ * or crumble a rock — so a thrall keeps working the same node for as long as
+ * it lives, or until a crawler brings the node down under it.
  */
 
 import { TILE_SIZE } from '../../core/constants';
@@ -420,13 +423,16 @@ export class ThrallSystem {
     if (thrall.harvestTicks < interval) return;
     thrall.harvestTicks -= interval;
 
-    const yieldMultiplier = this.deps.partyTools.yieldMultiplier(thrall.tool);
-    const { amount, carry } = harvestAward(yieldMultiplier, thrall.carry, level);
-    thrall.carry = carry;
-    if (!this.deps.ledger.spend(node.tileX, node.tileY, level)) {
+    // A thrall never spends the node's capacity — only a crawler's own
+    // channel fells a tree or crumbles a rock — so this just confirms the
+    // node is still there to work rather than depleting it.
+    if (this.deps.ledger.stateAt(node.tileX, node.tileY, level) === null) {
       thrall.node = null;
       return;
     }
+    const yieldMultiplier = this.deps.partyTools.yieldMultiplier(thrall.tool);
+    const { amount, carry } = harvestAward(yieldMultiplier, thrall.carry, level);
+    thrall.carry = carry;
     grantResource(summoner, resource, amount);
     summoner.craftSkills.addXp('resourcing', thrallHarvestXp(yieldMultiplier));
     this.deps.bus?.emit('resourceHarvested', {

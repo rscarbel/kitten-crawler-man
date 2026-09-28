@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import type { ItemId } from '../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -26,8 +26,19 @@ import {
 import type { ButtonRect } from '../ui/pause/types';
 import { drawShopkeeper } from '../sprites/shopkeeperSprite';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { consumeStock, remainingFor, type MarketStock } from './market/MarketStock';
+import {
+  consumeStock,
+  remainingFor,
+  heldFor,
+  addHeldStock,
+  removeHeldStock,
+  decayHeldStock,
+  type MarketStock,
+} from './market/MarketStock';
 import { SOLD_OUT_LABEL } from './market/vendorMenu';
+import { shopBuyPrice, shopSellPrice, type ShopPricingProfile } from './market/shopPricing';
+import { GENERAL_STORE_PRICING } from './market/shopProfiles';
+import { sellableHoldings } from './market/sellableInventory';
 import { partyCoins, canAffordCoins, spendPartyCoins } from '../core/partyCoins';
 
 const WANDER_MIN_TILE_OFFSET = 3;
@@ -52,15 +63,16 @@ const PANEL_OVERLAY_ALPHA = 0.62;
 const PANEL_FILL_COLOR = '#120d04';
 const PANEL_BORDER_COLOR = '#c8a840';
 const PANEL_BORDER_WIDTH = 2;
-const BUY_AFFORDABLE_FILL = '#14400a';
-const BUY_UNAFFORDABLE_FILL = '#281818';
-const BUY_AFFORDABLE_BORDER = '#5aaa34';
-const BUY_UNAFFORDABLE_BORDER = '#3a2020';
-const BUY_AFFORDABLE_LABEL = '#c8e890';
-const BUY_UNAFFORDABLE_LABEL = '#5a4040';
+const ROW_ENABLED_FILL = '#14400a';
+const ROW_DISABLED_FILL = '#281818';
+const ROW_ENABLED_BORDER = '#5aaa34';
+const ROW_DISABLED_BORDER = '#3a2020';
+const ROW_ENABLED_LABEL = '#c8e890';
+const ROW_DISABLED_LABEL = '#5a4040';
 const PANEL_W = 400;
 const PANEL_ITEM_H = 56;
-const PANEL_HEADER_H = 72;
+/** Header now carries the Buy/Sell tab row above the divider, on top of the title and coin line. */
+const PANEL_HEADER_H = 102;
 const PANEL_FOOTER_H = 44;
 const PANEL_INNER_INSET = 5;
 const PANEL_INNER_SIZE_REDUCTION = 10;
@@ -68,11 +80,11 @@ const PANEL_TITLE_Y = 26;
 const PANEL_TITLE_BASELINE = 13;
 const PANEL_TITLE_SIZE = 16;
 const PANEL_SEPARATOR_X_MARGIN = 20;
-const PANEL_SEPARATOR_Y = 34;
-const PANEL_COINS_Y = 52;
+const PANEL_SEPARATOR_Y = 64;
+const PANEL_COINS_Y = 82;
 const PANEL_COINS_BASELINE = 10;
 const PANEL_COINS_TEXT_SIZE = 12;
-const PANEL_FIRST_ROW_Y = 66;
+const PANEL_FIRST_ROW_Y = 96;
 const PANEL_ROW_BG_INSET_X = 8;
 const PANEL_ROW_BG_INSET_W = 16;
 const PANEL_ROW_BG_INSET_H = 4;
@@ -97,6 +109,13 @@ const PANEL_CLOSE_BTN_W = 150;
 const PANEL_CLOSE_BTN_H = 34;
 const PANEL_CLOSE_BTN_Y_FROM_BOTTOM = 40;
 const PANEL_CLOSE_SIZE = 10;
+
+/** The Buy/Sell toggle sitting between the title and the divider. */
+const TAB_BUTTON_W = 84;
+const TAB_BUTTON_H = 26;
+const TAB_BUTTON_GAP = 8;
+const TAB_BUTTON_Y = 47;
+const TAB_LABEL_SIZE = 12;
 
 /**
  * Below this fit scale the shop shows fewer rows and scrolls instead of
@@ -128,17 +147,19 @@ export interface ShopItem {
   stock?: number;
 }
 
-/** Optional overrides that turn the default General Store into a bespoke vendor (bar, market, …). */
+/** A shop's catalog and how it prices what it buys back. */
 export interface ShopConfig {
   title: string;
   items: ReadonlyArray<ShopItem>;
+  pricing: ShopPricingProfile;
 }
 
 /**
  * Backs a `ShopSystem`'s limited rows with the same cross-scene counter the
  * overworld market stalls use, so a line bought out at a club counter stays
  * sold out through a checkpoint restore or a reload the same way a market
- * stall does.
+ * stall does. Also where the shop's held-stock (what the player has sold it)
+ * lives, so a sale here survives leaving and re-entering the building.
  */
 export interface ShopStockConfig {
   stock: MarketStock;
@@ -166,10 +187,31 @@ const SHOP_ITEMS: ReadonlyArray<ShopItem> = [
   },
 ];
 
+/** The town's General Store: the same everyday catalog and pricing personality in every building of this type. */
+export const GENERAL_STORE_CONFIG: ShopConfig = {
+  title: DEFAULT_SHOP_TITLE,
+  items: SHOP_ITEMS,
+  pricing: GENERAL_STORE_PRICING,
+};
+
+/** One row of the panel, whichever tab is open — the shape the shared row renderer draws. */
+interface PanelRow {
+  label: string;
+  desc: string;
+  /** Right-aligned price/status text, e.g. "5 coins" or "Sold out". */
+  priceLabel: string;
+  actionLabel: string;
+  /** Drives both the row's colour and whether its button can be pressed. */
+  enabled: boolean;
+  onAction: () => void;
+}
+
 export class ShopSystem implements GameSystem {
   shopOpen = false;
-  /** Set to true after a successful purchase; consuming scene clears it and plays the sound. */
+  /** Set to true after a successful purchase or sale; consuming scene clears it and plays the sound. */
   purchasePending = false;
+
+  private mode: 'buy' | 'sell' = 'buy';
 
   private shopkeeperTileY = 1;
   private wanderX: number;
@@ -194,11 +236,13 @@ export class ShopSystem implements GameSystem {
 
   private readonly title: string;
   private readonly items: ReadonlyArray<ShopItem>;
-  private readonly stockConfig?: ShopStockConfig;
+  private readonly pricing: ShopPricingProfile;
+  private readonly stockConfig: ShopStockConfig;
 
-  constructor(interiorWidth: number, config?: ShopConfig, stockConfig?: ShopStockConfig) {
-    this.title = config?.title ?? DEFAULT_SHOP_TITLE;
-    this.items = config?.items ?? SHOP_ITEMS;
+  constructor(interiorWidth: number, config: ShopConfig, stockConfig: ShopStockConfig) {
+    this.title = config.title;
+    this.items = config.items;
+    this.pricing = config.pricing;
     this.stockConfig = stockConfig;
     this.wanderX = Math.floor(interiorWidth / 2) * TILE_SIZE;
     this.wanderMinX = WANDER_MIN_TILE_OFFSET * TILE_SIZE;
@@ -207,8 +251,24 @@ export class ShopSystem implements GameSystem {
 
   /** Units left for a row, or `null` when the row is unlimited or this shop has no stock store. */
   private remainingStock(item: ShopItem): number | null {
-    if (this.stockConfig === undefined) return null;
     return remainingFor(this.stockConfig.stock, this.stockConfig.vendorId, item);
+  }
+
+  /** Units of `id` this shop is currently holding because the player sold it some. */
+  private heldUnits(id: ItemId): number {
+    return heldFor(this.stockConfig.stock.held, this.stockConfig.vendorId, id);
+  }
+
+  /** What this shop charges right now for one unit of `id`, honouring its own catalog price when it has one. */
+  private buyPriceOf(id: ItemId): number {
+    const catalog = this.items.find((line) => line.id === id);
+    return shopBuyPrice(id, this.pricing, this.heldUnits(id), catalog?.price);
+  }
+
+  /** What this shop pays right now for one unit of `id`. */
+  private sellPriceOf(id: ItemId): number {
+    const catalog = this.items.find((line) => line.id === id);
+    return shopSellPrice(id, this.pricing, this.heldUnits(id), catalog?.price);
   }
 
   update(): void {
@@ -226,6 +286,7 @@ export class ShopSystem implements GameSystem {
       this.wanderDir = -1;
     }
     if (this.feedbackTimer > 0) this.feedbackTimer--;
+    decayHeldStock(this.stockConfig.stock.held, this.pricing.heldStockRecoveryPerTick);
   }
 
   isNearShopkeeper(player: Player): boolean {
@@ -274,13 +335,44 @@ export class ShopSystem implements GameSystem {
     }
   }
 
+  /** The rows the panel draws right now, built fresh so a sale or purchase is reflected the instant it happens. */
+  private currentRows(active: Player, companion: Player): PanelRow[] {
+    if (this.mode === 'sell') {
+      return sellableHoldings(active).map(({ id, qty }) => {
+        const def = ITEM_DEF[id];
+        const price = this.sellPriceOf(id);
+        return {
+          label: def.name,
+          desc: `You have ${qty}`,
+          priceLabel: `${price} coins`,
+          actionLabel: 'Sell',
+          enabled: true,
+          onAction: () => this.trySell(id, active),
+        };
+      });
+    }
+    return this.items.map((item, itemIdx) => {
+      const soldOut = this.remainingStock(item) === 0;
+      const price = this.buyPriceOf(item.id);
+      const canAfford = !soldOut && canAffordCoins(active, companion, price);
+      return {
+        label: item.label,
+        desc: item.desc,
+        priceLabel: soldOut ? SOLD_OUT_LABEL : `${price} coins`,
+        actionLabel: soldOut ? SOLD_OUT_LABEL : 'Buy',
+        enabled: canAfford,
+        onAction: () => this.tryBuy(itemIdx, active, companion),
+      };
+    });
+  }
+
   /** Rows that fit on screen at a legible scale; the rest scroll. */
-  private visibleRowCount(): number {
+  private visibleRowCount(rowCount: number): number {
     const maxDesignHeight = (viewportHeight() - SHOP_VERTICAL_MARGIN * 2) / SHOP_COMFORT_SCALE;
     const rowsThatFit = Math.floor(
       (maxDesignHeight - PANEL_HEADER_H - PANEL_FOOTER_H) / PANEL_ITEM_H,
     );
-    return Math.min(this.items.length, Math.max(SHOP_MIN_VISIBLE_ROWS, rowsThatFit));
+    return Math.min(rowCount, Math.max(SHOP_MIN_VISIBLE_ROWS, rowsThatFit));
   }
 
   private scrollBy(designPx: number): void {
@@ -323,7 +415,11 @@ export class ShopSystem implements GameSystem {
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: PANEL_OVERLAY_ALPHA });
 
-    const visibleRows = this.visibleRowCount();
+    const rows = this.currentRows(active, inactive);
+    // An empty Sell tab still reserves one row's worth of height, for the
+    // "nothing to sell" message — otherwise the panel would shrink to just
+    // its header and footer with nowhere to say why the list is bare.
+    const visibleRows = this.visibleRowCount(Math.max(1, rows.length));
     const listH = visibleRows * PANEL_ITEM_H;
     const panelH = PANEL_HEADER_H + listH + PANEL_FOOTER_H;
     this.fit = fitPanel(PANEL_W, panelH);
@@ -334,7 +430,7 @@ export class ShopSystem implements GameSystem {
     const panelY = ch / 2 - panelH / 2;
     const listTop = panelY + PANEL_FIRST_ROW_Y;
     const listBottom = listTop + listH;
-    this.maxScrollY = Math.max(0, (this.items.length - visibleRows) * PANEL_ITEM_H);
+    this.maxScrollY = Math.max(0, (rows.length - visibleRows) * PANEL_ITEM_H);
     this.scrollY = Math.min(this.scrollY, this.maxScrollY);
     this.listRect = { x: panelX, y: listTop, w: PANEL_W, h: listH };
 
@@ -385,75 +481,16 @@ export class ShopSystem implements GameSystem {
     this.panelButtons = [];
     beginMenuFocus('shop');
 
+    this.renderTabs(ctx, cw, panelY);
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(panelX, listTop, PANEL_W, listH);
     ctx.clip();
-    for (let i = 0; i < this.items.length; i++) {
-      const item = this.items[i];
+    for (let i = 0; i < rows.length; i++) {
       const rowY = listTop + i * PANEL_ITEM_H - this.scrollY;
       if (rowY + PANEL_ITEM_H <= listTop || rowY >= listBottom) continue;
-      const soldOut = this.remainingStock(item) === 0;
-      const canAfford = !soldOut && canAffordCoins(active, inactive, item.price);
-
-      ctx.fillStyle =
-        i % 2 === 0
-          ? `rgba(255,245,200,${PANEL_ROW_EVEN_ALPHA})`
-          : `rgba(0,0,0,${PANEL_ROW_ALT_ALPHA})`;
-      ctx.fillRect(
-        panelX + PANEL_ROW_BG_INSET_X,
-        rowY + 2,
-        PANEL_W - PANEL_ROW_BG_INSET_W,
-        PANEL_ITEM_H - PANEL_ROW_BG_INSET_H,
-      );
-
-      drawText(ctx, item.label, {
-        x: panelX + PANEL_ITEM_X_MARGIN,
-        y: rowY + PANEL_ITEM_NAME_Y - PANEL_ITEM_NAME_BASELINE,
-        size: PANEL_ITEM_NAME_SIZE,
-        bold: true,
-        color: canAfford ? '#e8d898' : '#6a5a40',
-      });
-
-      drawText(ctx, item.desc, {
-        x: panelX + PANEL_ITEM_X_MARGIN,
-        y: rowY + PANEL_ITEM_DESC_Y - PANEL_ITEM_DESC_BASELINE,
-        size: PANEL_DESC_SIZE,
-        color: canAfford ? '#8a7a50' : '#4a3a28',
-      });
-
-      drawText(ctx, soldOut ? SOLD_OUT_LABEL : `${item.price} coins`, {
-        x: panelX + PANEL_W - PANEL_PRICE_X_FROM_RIGHT,
-        y: rowY + PANEL_ITEM_NAME_Y - PANEL_ITEM_NAME_BASELINE,
-        size: PANEL_ITEM_NAME_SIZE,
-        bold: true,
-        color: canAfford ? '#f0d040' : '#6a5820',
-        align: 'right',
-      });
-
-      const btnX = panelX + PANEL_W - PANEL_BTN_W - PANEL_BTN_X_MARGIN;
-      const btnY = rowY + (PANEL_ITEM_H - PANEL_BTN_H) / 2;
-      // A half-scrolled Buy button would be drawn clipped yet still hittable
-      // through the clip edge, so only whole buttons exist.
-      const buttonFullyVisible = btnY >= listTop && btnY + PANEL_BTN_H <= listBottom;
-      if (!buttonFullyVisible) continue;
-
-      const itemIdx = i;
-      addButton(ctx, this.panelButtons, {
-        x: btnX,
-        y: btnY,
-        width: PANEL_BTN_W,
-        height: PANEL_BTN_H,
-        label: soldOut ? SOLD_OUT_LABEL : 'Buy',
-        fill: canAfford ? BUY_AFFORDABLE_FILL : BUY_UNAFFORDABLE_FILL,
-        border: canAfford ? BUY_AFFORDABLE_BORDER : BUY_UNAFFORDABLE_BORDER,
-        borderWidth: PANEL_BTN_BORDER_W,
-        radius: 0,
-        labelSize: PANEL_BTN_TEXT_SIZE,
-        labelColor: canAfford ? BUY_AFFORDABLE_LABEL : BUY_UNAFFORDABLE_LABEL,
-        disabled: soldOut,
-        action: () => this.tryBuy(itemIdx, active, inactive),
-      });
+      this.renderRow(ctx, rows[i], panelX, rowY, i, listTop, listBottom);
     }
     ctx.restore();
 
@@ -461,10 +498,20 @@ export class ShopSystem implements GameSystem {
       x: panelX + PANEL_W - SCROLLBAR_X_FROM_RIGHT,
       trackY: listTop,
       trackH: listH,
-      contentH: this.items.length * PANEL_ITEM_H,
+      contentH: rows.length * PANEL_ITEM_H,
       scrollY: this.scrollY,
       width: SCROLLBAR_WIDTH,
     });
+
+    if (rows.length === 0) {
+      drawText(ctx, "Nothing here you're able to sell.", {
+        x: panelX + PANEL_W / 2,
+        y: listTop + PANEL_ITEM_H / 2,
+        size: PANEL_DESC_SIZE,
+        color: '#8a7a50',
+        align: 'center',
+      });
+    }
 
     addButton(ctx, this.panelButtons, {
       x: cw / 2,
@@ -485,6 +532,98 @@ export class ShopSystem implements GameSystem {
 
     endModalFit(ctx);
     resetButtonPointerSpace();
+  }
+
+  /** The Buy/Sell toggle. Registered through `addButton` so it joins the same focus ring, click list and render pass as every other row. */
+  private renderTabs(ctx: CanvasRenderingContext2D, cw: number, panelY: number): void {
+    const totalW = TAB_BUTTON_W * 2 + TAB_BUTTON_GAP;
+    const startX = cw / 2 - totalW / 2;
+    const y = panelY + TAB_BUTTON_Y;
+    (['buy', 'sell'] as const).forEach((tab, i) => {
+      const active = this.mode === tab;
+      addButton(ctx, this.panelButtons, {
+        x: startX + i * (TAB_BUTTON_W + TAB_BUTTON_GAP),
+        y,
+        width: TAB_BUTTON_W,
+        height: TAB_BUTTON_H,
+        ...(active ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+        label: tab === 'buy' ? 'Buy' : 'Sell',
+        labelSize: TAB_LABEL_SIZE,
+        radius: 0,
+        action: () => {
+          this.mode = tab;
+          this.scrollY = 0;
+        },
+      });
+    });
+  }
+
+  private renderRow(
+    ctx: CanvasRenderingContext2D,
+    row: PanelRow,
+    panelX: number,
+    rowY: number,
+    i: number,
+    listTop: number,
+    listBottom: number,
+  ): void {
+    ctx.fillStyle =
+      i % 2 === 0
+        ? `rgba(255,245,200,${PANEL_ROW_EVEN_ALPHA})`
+        : `rgba(0,0,0,${PANEL_ROW_ALT_ALPHA})`;
+    ctx.fillRect(
+      panelX + PANEL_ROW_BG_INSET_X,
+      rowY + 2,
+      PANEL_W - PANEL_ROW_BG_INSET_W,
+      PANEL_ITEM_H - PANEL_ROW_BG_INSET_H,
+    );
+
+    drawText(ctx, row.label, {
+      x: panelX + PANEL_ITEM_X_MARGIN,
+      y: rowY + PANEL_ITEM_NAME_Y - PANEL_ITEM_NAME_BASELINE,
+      size: PANEL_ITEM_NAME_SIZE,
+      bold: true,
+      color: row.enabled ? '#e8d898' : '#6a5a40',
+    });
+
+    drawText(ctx, row.desc, {
+      x: panelX + PANEL_ITEM_X_MARGIN,
+      y: rowY + PANEL_ITEM_DESC_Y - PANEL_ITEM_DESC_BASELINE,
+      size: PANEL_DESC_SIZE,
+      color: row.enabled ? '#8a7a50' : '#4a3a28',
+    });
+
+    drawText(ctx, row.priceLabel, {
+      x: panelX + PANEL_W - PANEL_PRICE_X_FROM_RIGHT,
+      y: rowY + PANEL_ITEM_NAME_Y - PANEL_ITEM_NAME_BASELINE,
+      size: PANEL_ITEM_NAME_SIZE,
+      bold: true,
+      color: row.enabled ? '#f0d040' : '#6a5820',
+      align: 'right',
+    });
+
+    const btnX = panelX + PANEL_W - PANEL_BTN_W - PANEL_BTN_X_MARGIN;
+    const btnY = rowY + (PANEL_ITEM_H - PANEL_BTN_H) / 2;
+    // A half-scrolled action button would be drawn clipped yet still hittable
+    // through the clip edge, so only whole buttons exist.
+    const buttonFullyVisible = btnY >= listTop && btnY + PANEL_BTN_H <= listBottom;
+    if (!buttonFullyVisible) return;
+
+    addButton(ctx, this.panelButtons, {
+      x: btnX,
+      y: btnY,
+      width: PANEL_BTN_W,
+      height: PANEL_BTN_H,
+      label: row.actionLabel,
+      fill: row.enabled ? ROW_ENABLED_FILL : ROW_DISABLED_FILL,
+      border: row.enabled ? ROW_ENABLED_BORDER : ROW_DISABLED_BORDER,
+      borderWidth: PANEL_BTN_BORDER_W,
+      radius: 0,
+      labelSize: PANEL_BTN_TEXT_SIZE,
+      labelColor: row.enabled ? ROW_ENABLED_LABEL : ROW_DISABLED_LABEL,
+      disabled: !row.enabled,
+      action: row.onAction,
+    });
   }
 
   handleClick(mx: number, my: number): void {
@@ -514,7 +653,8 @@ export class ShopSystem implements GameSystem {
       this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
       return;
     }
-    if (!canAffordCoins(player, companion, item.price)) {
+    const price = this.buyPriceOf(item.id);
+    if (!canAffordCoins(player, companion, price)) {
       this.feedbackMsg = 'Not enough coins!';
       this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
       return;
@@ -527,11 +667,28 @@ export class ShopSystem implements GameSystem {
       this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
       return;
     }
-    spendPartyCoins(player, companion, item.price, player);
-    if (this.stockConfig !== undefined) {
-      consumeStock(this.stockConfig.stock, this.stockConfig.vendorId, item);
+    spendPartyCoins(player, companion, price, player);
+    consumeStock(this.stockConfig.stock, this.stockConfig.vendorId, item);
+    // Buying back a unit the shop is holding because the player sold it here
+    // works the price back up toward its normal level.
+    if (this.heldUnits(item.id) > 0) {
+      removeHeldStock(this.stockConfig.stock.held, this.stockConfig.vendorId, item.id);
     }
     this.feedbackMsg = `Bought ${item.label}!`;
+    this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
+    this.purchasePending = true;
+  }
+
+  private trySell(id: ItemId, player: Player): void {
+    const price = this.sellPriceOf(id);
+    if (!player.inventory.removeOne(id)) {
+      this.feedbackMsg = "You don't have one of those!";
+      this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
+      return;
+    }
+    player.earnCoins(price);
+    addHeldStock(this.stockConfig.stock.held, this.stockConfig.vendorId, id);
+    this.feedbackMsg = `Sold ${ITEM_DEF[id].name} for ${price} coins.`;
     this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
     this.purchasePending = true;
   }

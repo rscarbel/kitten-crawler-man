@@ -374,7 +374,7 @@ function setPhase(rig: Rig, phase: VillageQuestPhase): void {
 function checkCook(rig: Rig): void {
   section('Cook');
   const { human, cat } = rig;
-  const menu = cookShop(() => undefined).build();
+  const menu = cookShop(() => undefined, rig.state).build();
   const price = (key: string): number | undefined =>
     menu.options.find((option) => option.key === key)?.price;
   check(
@@ -385,13 +385,13 @@ function checkCook(rig: Rig): void {
   check(menu.bark === sellerLine(PIPKIN.shopOpen), 'the menu opens on shop_open');
 
   human.coins = 0;
-  const broke = openShop(cookShop(() => undefined));
+  const broke = openShop(cookShop(() => undefined, rig.state));
   broke.pressBuy('hamburger', human, cat);
   check(human.inventory.countOf('hamburger') === 0 && human.coins === 0, 'no coins buys nothing');
   check(broke.currentLine === sellerLine(PIPKIN.cannotAfford), 'no coins hears cannot_afford');
 
   human.coins = PLENTY_OF_COINS;
-  const panel = openShop(cookShop(() => undefined));
+  const panel = openShop(cookShop(() => undefined, rig.state));
   panel.pressBuy('hamburger', human, cat);
   check(human.inventory.countOf('hamburger') === 1, 'a burger lands in the pack');
   check(human.coins === PLENTY_OF_COINS - EXPECTED_BURGER_PRICE, 'and costs its price');
@@ -418,7 +418,7 @@ function checkFullBagRefused(): void {
   fillPack(human);
   human.coins = PLENTY_OF_COINS;
   const announced: string[] = [];
-  const panel = openShop(cookShop((message) => announced.push(message)));
+  const panel = openShop(cookShop((message) => announced.push(message), rig.state));
   panel.pressBuy('hamburger', human, cat);
   check(human.inventory.countOf('hamburger') === 0, 'a full bag takes no burger');
   check(human.coins === PLENTY_OF_COINS, 'and the buyer is not charged for it');

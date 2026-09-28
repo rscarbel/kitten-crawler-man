@@ -19,7 +19,13 @@ import { giveInventoryItem } from '../../townServiceUtil';
 import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
 import { GOBLIN_DYNAMITE_PRICE } from '../../ShopSystem';
 import { SOLD_OUT_LABEL } from '../../market/vendorMenu';
-import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
+import { TRADING_POST_PRICING } from '../../market/shopProfiles';
+import type {
+  PricedMenu,
+  PricedOption,
+  PricedPurchaseResult,
+  SellConfig,
+} from '../../../ui/PricedMenuPanel';
 import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { VETCH } from '../../../dialog/scripts/briarHollow';
@@ -143,6 +149,10 @@ export function tradingPostPurchase(
   return { ok: true, line: `${ITEM_DEF[entry.id].name} — ${left} left.` };
 }
 
+function tradingPostSellConfig(state: BriarHollowState): SellConfig {
+  return { pricing: TRADING_POST_PRICING, heldStock: state.merchantHeld, vendorId: MERCHANT };
+}
+
 export function tradingPostShop(
   state: BriarHollowState,
   announce: (message: string) => void,
@@ -151,6 +161,7 @@ export function tradingPostShop(
     build: () => buildTradingPostMenu(state),
     purchase: (option, buyer) => tradingPostPurchase(state, option, buyer, announce),
     blockedLine: (option) => option.unavailable ?? null,
+    sell: tradingPostSellConfig(state),
   };
 }
 

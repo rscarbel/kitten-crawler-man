@@ -46,6 +46,15 @@ import { drawText, measureTextBox } from './TextBox';
 import type { Player } from '../Player';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
+import { ITEM_DEF, isItemId } from '../core/ItemDefs';
+import {
+  heldFor,
+  addHeldStock,
+  decayHeldStock,
+  type HeldStock,
+} from '../systems/market/MarketStock';
+import { shopSellPrice, type ShopPricingProfile } from '../systems/market/shopPricing';
+import { sellableHoldings } from '../systems/market/sellableInventory';
 
 export interface PricedOption {
   /** Stable identifier for the row, so a handler can act on a rebuilt menu. */
@@ -101,6 +110,22 @@ export type PricedMenuBuilder = () => PricedMenu;
  * sell on another.
  */
 export type PricedBlockedLine = (option: PricedOption, player: Player) => string | null;
+
+/**
+ * Opts a counter into the Sell tab: reuses `ShopSystem`'s own pricing engine
+ * and held-stock mechanics rather than inventing a second one for the
+ * priced-menu counters. A counter with no goods to buy back (a service —
+ * a blessing, a room, a drill session) simply never passes this to `open`,
+ * and the panel behaves exactly as it always has.
+ */
+export interface SellConfig {
+  readonly pricing: ShopPricingProfile;
+  /** This counter's own held-stock record — its `MarketStock.held`, or an equivalent kept in the counter's own state. */
+  readonly heldStock: HeldStock;
+  readonly vendorId: string;
+  /** Runs after a successful sale, for the caller to layer its own sound the way it already does for a purchase. */
+  onSold?: () => void;
+}
 
 const PANEL_WIDTH = 400;
 /** Gap kept between the panel and every screen edge. */
@@ -165,6 +190,17 @@ const FEEDBACK_FRAMES = 110;
 const FEEDBACK_FADE_FRAMES = 25;
 const PANEL_RADIUS = 8;
 const OVERLAY_ALPHA = 0.55;
+
+// The Buy/Sell toggle, shown only for a counter that opted into `SellConfig`.
+// It claims its own strip of header height so the row list below never has to
+// know whether it exists.
+const TAB_BUTTON_W = 84;
+const TAB_BUTTON_H = 26;
+const TAB_BUTTON_GAP = 8;
+const TAB_ROW_HEIGHT = 34;
+const TAB_LABEL_SIZE = 12;
+const SELL_DESC_PREFIX = 'You have ';
+const NOTHING_TO_SELL_LABEL = "Nothing here you're able to sell.";
 
 // Quest-row treatment: a gold-bordered plate behind the row, the label in the
 // same gold, and a small tag under the price. The plate is inset from the row
@@ -263,6 +299,11 @@ export class PricedMenuPanel {
   private rowsBottom = 0;
   private scrollButtons: { up: ButtonResult; down: ButtonResult } | null = null;
   private modalContains: ((px: number, py: number) => boolean) | null = null;
+  private sell: SellConfig | null = null;
+  private mode: 'buy' | 'sell' = 'buy';
+  private tabButtons: { buy: ButtonResult; sell: ButtonResult } | null = null;
+  /** Whichever list is on screen this frame — the buy catalog or the sell rows — so a click maps to the row it actually hit. */
+  private visibleOptions: ReadonlyArray<PricedOption> = [];
 
   get isOpen(): boolean {
     return this.menu !== null;
@@ -277,6 +318,8 @@ export class PricedMenuPanel {
    *   product the moment it sells (a tool's next tier), how long after a sale
    *   a further Buy is ignored — so a double-click buys once, not twice up the
    *   ladder. Omitted, every press buys.
+   * @param sell Opts this counter into a Sell tab, priced off the same engine
+   *   `ShopSystem` uses. Omit for a counter that deals only in services.
    */
   open(
     buildMenu: PricedMenuBuilder,
@@ -284,6 +327,7 @@ export class PricedMenuPanel {
     onBlocked?: () => void,
     blockedLine?: PricedBlockedLine,
     rebuyGuardFrames = 0,
+    sell?: SellConfig,
   ): void {
     this.rebuyGuardFrames = rebuyGuardFrames;
     this.rebuyGuardLeft = 0;
@@ -292,6 +336,8 @@ export class PricedMenuPanel {
     this.onPurchase = onPurchase;
     this.onBlocked = onBlocked ?? null;
     this.blockedLine = blockedLine ?? null;
+    this.sell = sell ?? null;
+    this.mode = 'buy';
     this.feedbackTimer = 0;
     this.scrollY = 0;
     // Every priced menu shares one focus context, so a selection the player left
@@ -307,8 +353,11 @@ export class PricedMenuPanel {
     this.onPurchase = null;
     this.onBlocked = null;
     this.blockedLine = null;
+    this.sell = null;
+    this.mode = 'buy';
     this.buyButtons = [];
     this.closeButton = null;
+    this.tabButtons = null;
     this.modalContains = null;
     this.scrollButtons = null;
     clearMenuFocus();
@@ -317,11 +366,40 @@ export class PricedMenuPanel {
   update(): void {
     if (this.feedbackTimer > 0) this.feedbackTimer--;
     if (this.rebuyGuardLeft > 0) this.rebuyGuardLeft--;
+    // Only while this counter's own menu is open — unlike `ShopSystem`, which
+    // decays for as long as its building is entered, a priced-menu counter
+    // holds no state of its own between visits, so there is nothing to decay
+    // until a `SellConfig` is actually on screen.
+    if (this.sell !== null)
+      decayHeldStock(this.sell.heldStock, this.sell.pricing.heldStockRecoveryPerTick);
+  }
+
+  /** The Sell tab's rows, computed live off the player's current bag — never cached, so a sale is reflected the instant it happens. */
+  private sellOptions(active: Player): PricedOption[] {
+    const sell = this.sell;
+    if (sell === null) return [];
+    return sellableHoldings(active).map(({ id, qty }) => {
+      const price = shopSellPrice(id, sell.pricing, heldFor(sell.heldStock, sell.vendorId, id));
+      return {
+        key: id,
+        label: ITEM_DEF[id].name,
+        price,
+        desc: `${SELL_DESC_PREFIX}${qty}`,
+      };
+    });
   }
 
   render(ctx: CanvasRenderingContext2D, active: Player, companion: Player): void {
     const menu = this.menu;
     if (menu === null) return;
+    const sellTabOpen = this.mode === 'sell' && this.sell !== null;
+    // A Sell tab with nothing to show still reserves one row's worth of
+    // height for the "nothing to sell" message, rather than collapsing the
+    // panel to just its header and footer.
+    const options: ReadonlyArray<PricedOption> = sellTabOpen
+      ? this.sellOptions(active)
+      : menu.options;
+    this.visibleOptions = options;
 
     drawOverlay(ctx, {
       canvasWidth: viewportWidth(),
@@ -354,9 +432,13 @@ export class PricedMenuPanel {
     // rather than the name being squeezed alongside the centred title, where a
     // long name and a long title would silently overlap.
     const headerHeight =
-      HEADER_HEIGHT + extraBarkHeight + (menu.byline === undefined ? 0 : BYLINE_LINE_HEIGHT);
-    const rowHeights = menu.options.map((option) => rowHeightFor(ctx, option, contentWidth));
-    const rowsHeight = rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0);
+      HEADER_HEIGHT +
+      extraBarkHeight +
+      (menu.byline === undefined ? 0 : BYLINE_LINE_HEIGHT) +
+      (this.sell !== null ? TAB_ROW_HEIGHT : 0);
+    const rowHeights = options.map((option) => rowHeightFor(ctx, option, contentWidth));
+    const rowsHeight =
+      options.length === 0 ? ROW_HEIGHT : rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0);
     // The scrollable content is the rows plus the dead space `ROW_TOP_INSET`
     // reserves above row zero — folded in here so a menu short enough to need
     // no scrolling still grows the panel to show that inset, rather than
@@ -419,10 +501,10 @@ export class PricedMenuPanel {
     // A buyable quest row takes the primary from Close: the errand the player
     // was sent here for is what an accept press should answer. It is also shown
     // focused from the first frame, so the key the panel is about to obey is
-    // visible before anything is pressed.
-    const questRowIndex = menu.options.findIndex((option) =>
-      this.isQuestDefault(option, active, companion),
-    );
+    // visible before anything is pressed. Sell rows are never quest rows.
+    const questRowIndex = sellTabOpen
+      ? -1
+      : menu.options.findIndex((option) => this.isQuestDefault(option, active, companion));
     const questRowIsPrimary = questRowIndex !== -1;
 
     this.buyButtons = [];
@@ -430,6 +512,10 @@ export class PricedMenuPanel {
     // `beginMenuFocus('...')` call to confirm each scene's declared
     // `focusContext: 'priced-menu'` overlay claim actually has an opener.
     beginMenuFocus('priced-menu', questRowIsPrimary);
+    this.tabButtons =
+      this.sell !== null
+        ? this.renderTabs(ctx, centerX, modal.y + headerHeight - TAB_ROW_HEIGHT)
+        : null;
     this.rowsTop = modal.y + headerHeight;
     this.rowsBottom = this.rowsTop + visibleRowsHeight;
     ctx.save();
@@ -439,14 +525,24 @@ export class PricedMenuPanel {
     // quest plate comes from `ROW_TOP_INSET` below, not from opening the clip.
     ctx.rect(modal.x, this.rowsTop, modal.width, visibleRowsHeight);
     ctx.clip();
+    if (options.length === 0) {
+      drawText(ctx, NOTHING_TO_SELL_LABEL, {
+        x: contentLeft,
+        y: this.rowsTop + ROW_HEIGHT / 2,
+        size: OPTION_DESC_SIZE,
+        color: '#8a7a50',
+        align: 'center',
+        width: contentWidth,
+      });
+    }
     // Row zero starts `ROW_TOP_INSET` below the viewport edge rather than flush
     // with it, so its button/plate — which float that far above their own
     // `rowY` — land exactly on the clip edge instead of past it.
     let rowY = this.rowsTop + ROW_TOP_INSET - this.scrollY;
-    for (let i = 0; i < menu.options.length; i++) {
+    for (let i = 0; i < options.length; i++) {
       this.renderRow(
         ctx,
-        menu.options[i],
+        options[i],
         active,
         companion,
         contentLeft,
@@ -455,6 +551,7 @@ export class PricedMenuPanel {
         contentWidth,
         i === questRowIndex,
         rowHeights[i],
+        this.mode,
       );
       rowY += rowHeights[i];
     }
@@ -526,6 +623,38 @@ export class PricedMenuPanel {
     return { up, down };
   }
 
+  /** The Buy/Sell toggle. Registered into the same focus ring as everything else, ahead of the rows so its indices stay stable regardless of row count. */
+  private renderTabs(
+    ctx: CanvasRenderingContext2D,
+    centerX: number,
+    rowCenterY: number,
+  ): { buy: ButtonResult; sell: ButtonResult } {
+    const totalW = TAB_BUTTON_W * 2 + TAB_BUTTON_GAP;
+    const startX = centerX - totalW / 2;
+    const y = rowCenterY + TAB_ROW_HEIGHT / 2;
+    const buy = drawButton(ctx, {
+      x: startX,
+      y,
+      width: TAB_BUTTON_W,
+      height: TAB_BUTTON_H,
+      alignY: 'middle',
+      ...(this.mode === 'buy' ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+      label: 'Buy',
+      labelSize: TAB_LABEL_SIZE,
+    });
+    const sell = drawButton(ctx, {
+      x: startX + TAB_BUTTON_W + TAB_BUTTON_GAP,
+      y,
+      width: TAB_BUTTON_W,
+      height: TAB_BUTTON_H,
+      alignY: 'middle',
+      ...(this.mode === 'sell' ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+      label: 'Sell',
+      labelSize: TAB_LABEL_SIZE,
+    });
+    return { buy, sell };
+  }
+
   handleWheel(deltaY: number): void {
     if (this.menu !== null) this.scrollBy(deltaY * WHEEL_SCROLL_SCALE);
   }
@@ -545,6 +674,7 @@ export class PricedMenuPanel {
     contentWidth: number,
     isPrimaryBuy: boolean,
     rowHeight: number,
+    mode: 'buy' | 'sell',
   ): void {
     const isQuestRow = option.isQuestItem === true;
     if (isQuestRow) {
@@ -579,15 +709,20 @@ export class PricedMenuPanel {
       lineHeight: OPTION_DESC_LINE_HEIGHT,
     });
 
-    const canAfford = canAffordCoins(active, companion, option.price);
     const blockedReason = option.unavailable;
     const isAvailable = blockedReason === undefined;
+    // Selling never checks the player's purse — the shop is the one paying —
+    // so a sell row is enabled whenever it's simply on the list at all.
+    const rowEnabled =
+      mode === 'sell'
+        ? isAvailable
+        : isAvailable && canAffordCoins(active, companion, option.price);
     drawText(ctx, blockedReason ?? `${option.price}c`, {
       x: right - BUY_BTN_WIDTH - PRICE_BTN_GAP,
       y: rowY + ROW_TEXT_TOP_PAD,
       size: PRICE_SIZE,
       bold: true,
-      color: isAvailable && canAfford ? '#facc15' : '#7f1d1d',
+      color: rowEnabled ? '#facc15' : '#7f1d1d',
       align: 'right',
     });
 
@@ -618,9 +753,9 @@ export class PricedMenuPanel {
         width: BUY_BTN_WIDTH,
         height: BUY_BTN_HEIGHT,
         alignX: 'right',
-        label: 'Buy',
+        label: mode === 'sell' ? 'Sell' : 'Buy',
         labelSize: BUY_LABEL_SIZE,
-        disabled: !canAfford || !isAvailable || !isReachable,
+        disabled: !rowEnabled || !isReachable,
         ...BUTTON_PRESETS.success,
         primaryAction: isPrimaryBuy,
       }),
@@ -651,6 +786,16 @@ export class PricedMenuPanel {
     const menu = this.menu;
     if (menu === null) return false;
     const { x: mx, y: my } = modalFitPoint(this.fit, canvasX, canvasY);
+    if (this.tabButtons?.buy.contains(mx, my) === true) {
+      this.mode = 'buy';
+      this.scrollY = 0;
+      return true;
+    }
+    if (this.tabButtons?.sell.contains(mx, my) === true) {
+      this.mode = 'sell';
+      this.scrollY = 0;
+      return true;
+    }
     const scrollButtons = this.scrollButtons;
     if (scrollButtons?.up.contains(mx, my) === true) {
       this.scrollBy(-ROW_HEIGHT);
@@ -665,7 +810,7 @@ export class PricedMenuPanel {
     const inRowsBand = my >= this.rowsTop && my <= this.rowsBottom;
     for (let i = 0; i < this.buyButtons.length; i++) {
       if (inRowsBand && this.buyButtons[i].contains(mx, my)) {
-        this.tryBuy(menu.options[i], active, companion);
+        this.activateRow(this.visibleOptions[i], active, companion);
         return true;
       }
     }
@@ -676,6 +821,15 @@ export class PricedMenuPanel {
     if (this.modalContains?.(mx, my) === true) return true;
     this.close();
     return true;
+  }
+
+  /** Buys or sells the row, whichever tab is open — the click and the headless `pressBuy` path share this. */
+  private activateRow(option: PricedOption, active: Player, companion: Player): void {
+    if (this.mode === 'sell') {
+      this.trySell(option, active);
+      return;
+    }
+    this.tryBuy(option, active, companion);
   }
 
   /**
@@ -724,6 +878,21 @@ export class PricedMenuPanel {
     // before the next frame draws.
     this.menu = this.buildMenu?.() ?? this.menu;
     this.showFeedback(result.line);
+  }
+
+  /** Sells one unit of `option.key` back to the counter's own `SellConfig`. No-op when the tab isn't opted in. */
+  private trySell(option: PricedOption, active: Player): void {
+    const sell = this.sell;
+    if (sell === null || !isItemId(option.key)) return;
+    const id = option.key;
+    if (!active.inventory.removeOne(id)) {
+      this.showFeedback("You don't have one of those!");
+      return;
+    }
+    active.earnCoins(option.price);
+    addHeldStock(sell.heldStock, sell.vendorId, id);
+    this.showFeedback(`Sold ${ITEM_DEF[id].name} for ${option.price} coins.`);
+    sell.onSold?.();
   }
 
   private showFeedback(msg: string): void {

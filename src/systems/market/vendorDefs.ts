@@ -11,6 +11,8 @@
 
 import type { ItemId } from '../../core/ItemDefs';
 import type { TownRole } from '../../sprites/person/PersonAppearance';
+import type { ShopPricingProfile } from './shopPricing';
+import { STREET_VENDOR_PRICING, MERCHANT_STALL_PRICING } from './shopProfiles';
 
 /** Which stall silhouette and palette `src/sprites/marketStall.ts` draws. */
 export type StallStyle = 'produce_cart' | 'tinker_bench' | 'butcher_block' | 'cloth_awning';
@@ -61,6 +63,8 @@ export interface VendorDef {
   items: ReadonlyArray<VendorStockLine>;
   /** Offset in tiles from the square centre for the stall's west tile. */
   placement: { dx: number; dy: number };
+  /** This stall's Sell tab pricing personality — see `src/systems/market/shopPricing.ts`. */
+  pricing: ShopPricingProfile;
 }
 
 /** What a health potion costs at a stall — the yardstick every other heal on the floor is priced against. */
@@ -114,6 +118,7 @@ const GREENGROCER: VendorDef = {
     },
   ],
   placement: { dx: WEST_STALL_DX, dy: STALL_ROW_DY },
+  pricing: STREET_VENDOR_PRICING,
 };
 
 /** Stable key for the tinker's stall, so a questline can point at it by name. */
@@ -158,6 +163,7 @@ const TINKER: VendorDef = {
     },
   ],
   placement: { dx: EAST_STALL_DX, dy: STALL_ROW_DY },
+  pricing: MERCHANT_STALL_PRICING,
 };
 
 /** The market's vendors, in placement order. */

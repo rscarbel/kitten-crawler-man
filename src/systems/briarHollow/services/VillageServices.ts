@@ -134,7 +134,7 @@ export class VillageServices {
     });
     const counter = { openShop: (shop: ShopDefinition): void => this.openShop(shop) };
     const announce = (message: string): void => deps.menus.announce(message);
-    deps.villagers.addTopicProvider(cookhouseTopics(counter, announce));
+    deps.villagers.addTopicProvider(cookhouseTopics(counter, announce, deps.state));
     deps.villagers.addTopicProvider(infirmaryTopics(this.party, this.infirmaryHost(counter)));
     deps.villagers.addTopicProvider(tradingPostTopics(deps.state, counter, announce));
     // "Shop" leads Oren's list ahead of the built-in "About the axe" small talk.
@@ -238,6 +238,13 @@ export class VillageServices {
   private openShop(shop: ShopDefinition): void {
     if (this.disposed) return;
     const audio = this.deps.audio;
+    // A shop module states its own pricing/stock but never touches audio —
+    // this is the one place `deps.audio` is in scope, so the sale chime is
+    // layered on here rather than threaded into every `ShopDefinition`.
+    const sell =
+      shop.sell === undefined
+        ? undefined
+        : { ...shop.sell, onSold: () => audio?.play('purchase_success') };
     this.panel.open(
       shop.build,
       (option, buyer) => {
@@ -248,6 +255,7 @@ export class VillageServices {
       () => audio?.play('error'),
       shop.blockedLine,
       shop.rebuyGuardFrames,
+      sell,
     );
     audio?.play('menu_open');
   }

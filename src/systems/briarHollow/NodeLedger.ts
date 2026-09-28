@@ -6,6 +6,11 @@
  * handed, which is `BriarHollowState.nodes`, threaded across door visits. What
  * it adds is the depletion itself — felling the tree, crumbling the rock — and
  * a checkpoint that can put a crumbled rock back.
+ *
+ * Only {@link NodeLedger.spend} depletes a node's capacity, and only a
+ * crawler's own harvest channel calls it. A thrall works the same node
+ * through {@link NodeLedger.stateAt} alone, so its swings pay the summoner
+ * without ever bringing the tree or rock down.
  */
 
 import type { GameMap } from '../../map/GameMap';

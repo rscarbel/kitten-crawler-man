@@ -20,6 +20,7 @@ import type {
   PricedBlockedLine,
   PricedMenuBuilder,
   PricedPurchaseHandler,
+  SellConfig,
 } from '../../../ui/PricedMenuPanel';
 
 export type Crawler = HumanPlayer | CatPlayer;
@@ -79,6 +80,8 @@ export interface ShopDefinition {
   readonly blockedLine?: PricedBlockedLine;
   /** See `PricedMenuPanel.open`: how long a Buy is ignored after a sale. Absent, every press buys. */
   readonly rebuyGuardFrames?: number;
+  /** Opts this counter into a Sell tab. Absent for a service with no goods to buy back. */
+  readonly sell?: SellConfig;
 }
 
 /** Where a shop topic sends the party: the priced menu, opened over the village. */

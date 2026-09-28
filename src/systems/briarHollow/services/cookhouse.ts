@@ -8,9 +8,11 @@
  */
 
 import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
+import type { BriarHollowState } from '../../../core/briarHollowState';
 import type { Player } from '../../../Player';
 import { giveInventoryItem } from '../../townServiceUtil';
 import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
+import { FARMER_PRICING } from '../../market/shopProfiles';
 import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
 import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
@@ -78,11 +80,17 @@ export function cookPurchase(
   };
 }
 
-export function cookShop(announce: (message: string) => void): ShopDefinition {
+export function cookShop(
+  announce: (message: string) => void,
+  state: BriarHollowState,
+): ShopDefinition {
   return {
     build: buildCookMenu,
     purchase: (option, buyer) => cookPurchase(option, buyer, announce),
     blockedLine: () => sellerLine(PIPKIN.cannotAfford),
+    // Pipkin feeds the whole garrison, so — the farmer's rate — he takes food
+    // back at a good price and barely notices a stack of it.
+    sell: { pricing: FARMER_PRICING, heldStock: state.merchantHeld, vendorId: COOK },
   };
 }
 
@@ -90,11 +98,12 @@ export function cookShop(announce: (message: string) => void): ShopDefinition {
 export function cookhouseTopics(
   counter: ShopCounter,
   announce: (message: string) => void,
+  state: BriarHollowState,
 ): TopicProvider {
   return {
     topics(villager, ctx, flow) {
       if (villager !== COOK || !shopTrades(ctx.quest.phase)) return [];
-      return [shopTopic('buy_food', 'Buy food', counter, () => cookShop(announce), flow)];
+      return [shopTopic('buy_food', 'Buy food', counter, () => cookShop(announce, state), flow)];
     },
   };
 }
