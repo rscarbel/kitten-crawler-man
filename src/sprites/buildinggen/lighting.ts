@@ -18,8 +18,8 @@
  * ## Ambient occlusion is a gradient, never a bar
  *
  * Every AO pass here is a multi-stop gradient. A hard-edged translucent
- * rectangle under an eave is the exact move that makes the circus tents read as
- * flat, and it is worth stating because it is also the cheapest thing to reach
+ * rectangle under an eave is the exact move that makes a wall read as flat,
+ * and it is worth stating because it is also the cheapest thing to reach
  * for.
  */
 

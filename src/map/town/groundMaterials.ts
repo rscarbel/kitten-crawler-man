@@ -29,6 +29,7 @@ import {
   HOLLOW_THRESHOLD,
   PASTURE_GRASS,
   CROP_FIELD,
+  CIRCUS_LOT,
 } from '../tileTypes';
 
 /** Sheet holding every overworld ground material, one material per row. */
@@ -70,15 +71,18 @@ const GROUND_BLEND_ORDER = {
   // A ploughed edge cuts into the meadow around it, but a track run along a
   // field's headland is trodden over the furrows' ends.
   crop_rows: 6,
-  dirt: 7,
-  gravel: 8,
-  lane: 9,
-  cobble: 10,
-  plaza: 11,
+  // The circus lot is trodden turf: it eats into the meadow at the rim, and
+  // the approach road is laid over it.
+  circus_lot: 7,
+  dirt: 8,
+  gravel: 9,
+  lane: 10,
+  cobble: 11,
+  plaza: 12,
   // Unobservable, since a hard-edged material never blends (see
   // `HARD_EDGE_MATERIALS`); highest because a floor is the most made surface
   // here, so it is the right answer should that ever change.
-  hollow_planks: 12,
+  hollow_planks: 13,
 } as const satisfies Record<GroundMaterial, number>;
 
 /**
@@ -101,6 +105,7 @@ export const GROUND_FALLBACK_COLOR = {
   hollow_planks: '#68472b',
   pasture_grass: '#74743b',
   crop_rows: '#59412c',
+  circus_lot: '#6b643e',
 } as const satisfies Record<GroundMaterial, string>;
 
 /**
@@ -135,6 +140,8 @@ const GROUND_SPILL = {
   pasture_grass: { kind: 'blades', color: '#6a6b34' },
   // Clods kicked off a furrow's end onto the headland track.
   crop_rows: { kind: 'grit', color: '#74583e' },
+  // Sawdust kicked out of the lot onto the track.
+  circus_lot: { kind: 'grit', color: '#8c7a4e' },
 } as const satisfies Record<GroundMaterial, GroundSpill | null>;
 
 /**
@@ -285,6 +292,8 @@ function groundMaterialForTileType(type: number): GroundMaterial | undefined {
       return 'pasture_grass';
     case CROP_FIELD:
       return 'crop_rows';
+    case CIRCUS_LOT:
+      return 'circus_lot';
     default:
       return undefined;
   }

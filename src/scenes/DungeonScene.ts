@@ -305,9 +305,11 @@ import {
   captureCircusQuestProgress,
   createCircusQuestProgress,
   isBigTopSealed,
+  isCircusResolvedStage,
   restoreCircusQuestProgress,
   type CircusQuestProgress,
 } from '../core/CircusQuestProgress';
+import { CircusGroundsAmbience } from '../systems/circus/CircusGroundsAmbience';
 import {
   captureMurderQuestProgress,
   createMurderQuestProgress,
@@ -1155,18 +1157,18 @@ export class DungeonScene extends GameplayScene {
   private bossRoomDressings: BossRoomDressings;
   private arenaRoom: ArenaRoomSystem;
   private barriers: BarrierSystem;
-  private defendQuest!: DefendQuestSystem;
+  private defendQuest: DefendQuestSystem;
   /** The Structure menu over a boarded grate, for a crawler who can spike it. */
   private readonly grateSpikes: GrateSpikesMenu;
   /** Whether the current world touch came down on a structure, making it a long-press rather than a walk. */
   private readonly structureHold = new StructureHold();
   /** Where the active crawler stood when the current world touch began. */
   private holdStartActivePos: { x: number; y: number } | null = null;
-  private spiderQuest!: SpiderQuestSystem;
-  private circusQuest!: CircusQuestSystem;
-  private murderQuest!: MurderMysteryQuestSystem;
-  private anchorQuest!: AnchorQuestSystem;
-  private doomsdayEscape!: DoomsdayEscapeSystem;
+  private spiderQuest: SpiderQuestSystem;
+  private circusQuest: CircusQuestSystem;
+  private murderQuest: MurderMysteryQuestSystem;
+  private anchorQuest: AnchorQuestSystem;
+  private doomsdayEscape: DoomsdayEscapeSystem;
   private overworldMusic: OverworldMusicSystem | null = null;
   private ambientSound: AmbientSoundSystem | null = null;
   /**
@@ -1207,6 +1209,12 @@ export class DungeonScene extends GameplayScene {
    * elsewhere.
    */
   private gathering: GatheringKit | null = null;
+  /**
+   * The circus grounds' live dressing: lamp flames, bunting, bulbs, the
+   * arch's marionette, balloons. Built on any map with circus grounds; null
+   * elsewhere.
+   */
+  private circusAmbience: CircusGroundsAmbience | null = null;
   /** The gathering kit's own checkpoint, taken and put back beside the village kit's. */
   private gatheringCheckpoint: GatheringCheckpoint | null = null;
   /** When the last world tap resolved, so a second one close behind it reads as the kit's double-tap gesture. */
@@ -1244,7 +1252,7 @@ export class DungeonScene extends GameplayScene {
   private levelCompleteScreen = new LevelCompleteScreen();
   private readonly runCompleteScreen = new RunCompleteScreen();
 
-  private achievementUI!: AchievementUISystem;
+  private achievementUI: AchievementUISystem;
   private humanAchievements: AchievementManager;
   private catAchievements: AchievementManager;
 
@@ -1258,7 +1266,7 @@ export class DungeonScene extends GameplayScene {
 
   private readonly abilityManager: AbilityManager;
 
-  private arena!: ArenaSystem;
+  private arena: ArenaSystem;
   private readonly treasureChests = new TreasureChestSystem();
   private readonly chestRewardDialog = new ChestRewardDialog();
   /** Coins/items flying to the HUD from wherever they were earned. Screen-space; ticks and draws every frame regardless of what else is on screen. */
@@ -1266,11 +1274,11 @@ export class DungeonScene extends GameplayScene {
   /** The chest reward dialog's own hold, if one is outstanding — set in `showChestReward`, cleared on release. */
   private chestRewardFlyHold: RewardFlyHold | null = null;
 
-  private floorEntryHumanSnap!: PlayerSnapshot;
-  private floorEntryCatSnap!: PlayerSnapshot;
-  private floorEntryHumanAchievements!: AchievementManager;
-  private floorEntryCatAchievements!: AchievementManager;
-  private floorEntryAbilityManager!: AbilityManager;
+  private floorEntryHumanSnap: PlayerSnapshot;
+  private floorEntryCatSnap: PlayerSnapshot;
+  private floorEntryHumanAchievements: AchievementManager;
+  private floorEntryCatAchievements: AchievementManager;
+  private floorEntryAbilityManager: AbilityManager;
   private readonly floorEntryGameStats: GameStatsSnapshot;
   private readonly floorEntryMercenaryRoster: MercenaryRosterCheckpoint;
 
@@ -2373,6 +2381,8 @@ export class DungeonScene extends GameplayScene {
           );
         }
       }
+      this.circusAmbience =
+        this.gameMap.circusGrounds === null ? null : new CircusGroundsAmbience();
       this.gathering = new GatheringKit({
         gameMap: this.gameMap,
         bus: this.bus,
@@ -3545,6 +3555,7 @@ export class DungeonScene extends GameplayScene {
     this.bounty?.dispose();
     this.briarHollowKit?.dispose();
     this.gathering?.dispose();
+    this.circusAmbience?.dispose();
     this.fairies.dispose();
     this.fairyFireballs.dispose();
     // Drops any standing order along with the hazard sources that were meant to
@@ -6868,6 +6879,11 @@ export class DungeonScene extends GameplayScene {
       this.townLife?.update(this.buildSystemContext());
       this.briarHollowKit?.update(this.buildSystemContext());
       this.gathering?.update(this.buildSystemContext(), this.focusedOverlay !== null);
+      this.circusAmbience?.update(
+        this.gameMap,
+        1 / FRAMES_PER_SECOND,
+        isCircusResolvedStage(this.circusQuestProgress.stage),
+      );
       this.townProps?.update();
       this.townDecor?.update();
       this.market?.update();
@@ -6937,11 +6953,12 @@ export class DungeonScene extends GameplayScene {
       mobGrid: this.world.roster.grid,
       townsfolk: this.townLife?.people,
       townProps:
-        this.briarHollowKit !== null || this.gathering !== null
+        this.briarHollowKit !== null || this.gathering !== null || this.circusAmbience !== null
           ? [
               ...(this.townPropRenderables ?? []),
               ...(this.briarHollowKit?.renderEntities() ?? []),
               ...(this.gathering?.renderEntities() ?? []),
+              ...(this.circusAmbience?.renderEntities() ?? []),
             ]
           : (this.townPropRenderables ?? undefined),
       gameOver: this.gameOver,
@@ -6972,6 +6989,7 @@ export class DungeonScene extends GameplayScene {
       destructibles: this.destruction.destructibles,
       trees: this.trees,
       water: this.water,
+      circusGrounds: this.circusAmbience,
       loot: this.destruction.loot,
       groundPickups: this.destruction.groundPickups,
       interactionPromptsAllowed: this.shouldShowInteractionPrompts(this.active()),
@@ -7017,6 +7035,7 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.renderCutsceneEffects(ctx, camX, camY);
     this.briarHollowKit?.renderAbove(ctx, camX, camY);
     this.gathering?.renderAbove(ctx, camX, camY);
+    this.circusAmbience?.renderAbove(ctx, camX, camY);
     // Over the entities: a label spawned on a large body (a boss) would
     // otherwise rise out of sight behind its own sprite.
     this.combat.floatingText.render(ctx, camX, camY);

@@ -60,10 +60,16 @@ import {
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
+  TENT_POLE,
 } from '../tileTypes';
 import { drawHollowWallTile } from './hollowWallTiles';
 import { drawHollowGateTile, drawHollowPalisadeTile } from './hollowPalisadeTiles';
 import { drawHollowPropTile } from './hollowVillageTiles';
+import { drawCircusStructureTile } from './circusStructureTiles';
+import { drawTentPoleTile } from './tentPoleTiles';
+import { drawTentPoleBaseTile } from './interiorTiles';
 import { drawRockDepositTile } from './rockDepositTiles';
 import { BOARD_CENTRE_X, SIGN_ARROW_CENTRE_Y_TILES } from '../../sprites/art/crawlerSignArt';
 import { inferFloorType } from './helpers';
@@ -75,6 +81,7 @@ import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRend
 import { drawFountainTileSlice } from '../../sprites/fountainSprite';
 import { getSpriteDefByKey, getSpriteOverlayStatesByKey } from '../../core/SpriteLoader';
 import { frameTime } from '../../utils';
+import { drawCircusDecals } from './circusDecalTiles';
 
 /** Number of broken-stone chunks drawn per RUBBLE tile. */
 const RUBBLE_CHUNK_COUNT = 4;
@@ -1200,6 +1207,9 @@ export function drawDecorationTile(
 ): boolean {
   if (baseOnly) {
     switch (type) {
+      case TENT_POLE:
+        drawTentPoleBaseTile(ctx, structure, sx, sy, ts, tx, ty);
+        return true;
       case TREE:
       // A boulder is written with `setStanding`, so like a tree it records the
       // band it was dropped on and the outdoor ground path resolves the rest.
@@ -1229,6 +1239,14 @@ export function drawDecorationTile(
         // drawn is resolved by `groundMaterialUnder` from the `groundType` the
         // tile recorded, not from the type passed here.
         drawTerrainTile(ctx, structure, FloorTypeValue.grass, sx, sy, ts, tx, ty);
+        return true;
+      // A circus structure records the lot it was pitched on the same way, and
+      // the lot's decals run on under it: a vine runner is seen coming out from
+      // beneath the Big Top's skirt, not starting at a tile edge.
+      case CIRCUS_STRUCTURE_TALL:
+      case CIRCUS_STRUCTURE_LOW:
+        drawTerrainTile(ctx, structure, FloorTypeValue.grass, sx, sy, ts, tx, ty);
+        drawCircusDecals(ctx, structure, sx, sy, ts, tx, ty);
         return true;
       case TORCH:
       case WELL:
@@ -1791,6 +1809,15 @@ export function drawDecorationTile(
     case HOLLOW_PROP_LOW:
     case HOLLOW_PROP_TALL: {
       drawHollowPropTile(ctx, structure, sx, sy, ts, tx, ty);
+      return true;
+    }
+    case CIRCUS_STRUCTURE_TALL:
+    case CIRCUS_STRUCTURE_LOW: {
+      drawCircusStructureTile(ctx, structure, sx, sy, ts, tx, ty);
+      return true;
+    }
+    case TENT_POLE: {
+      drawTentPoleTile(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }
     case ROCK_DEPOSIT: {

@@ -21,6 +21,7 @@ import {
 } from '../../map/ground/floorArtSeed';
 import { BOSS_ROOM_ASSET_GROUPS, bossRoomSheetPlans } from './bossRoomSheets';
 import { campSheetPlans } from './campSheets';
+import { circusSheetPlans } from './circusSheets';
 import { requestBuildingSheets } from '../buildinggen/runtimeBuildingSheets';
 import { clubFurnitureSheetPlans } from './clubFurnitureSheets';
 import { destructiblePropSheetPlans } from './destructiblePropSheets';
@@ -122,6 +123,12 @@ export function requestEnvironmentSheetsForGroups(
     // rather than a group of its own.
     requestPropSheets(villageSheetPlans(floorArtSubSeed(VILLAGE_SALT)), {
       variesWithFloorSeed: true,
+      onSheetPainted,
+    });
+    // Every floor-3 world has the circus. Its tents carry no floor seed: a tent
+    // is the same tent wherever it is pitched, so it survives the stairs.
+    requestPropSheets(circusSheetPlans(), {
+      variesWithFloorSeed: false,
       onSheetPainted,
     });
   }

@@ -9,9 +9,6 @@ import {
   FOUNTAIN,
   TORCH,
   WELL,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   BRAZIER,
   MAIN_TOWER,
   SPRITE_BUILDING,
@@ -39,6 +36,9 @@ import {
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
+  TENT_POLE,
 } from './tileTypes';
 import { drawTerrainTile } from './tiles/terrainTiles';
 import { drawBossRoomTile } from './tiles/bossRoomTiles';
@@ -48,6 +48,8 @@ import { drawDecorationTile, decorationAnimationFrame } from './tiles/decoration
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
 import { drawInteriorTile } from './tiles/interiorTiles';
 import { hollowPropExtentsPx } from './tiles/hollowVillageTiles';
+import { circusStructureExtentsPx } from './tiles/circusStructureTiles';
+import { tentPoleExtentsPx } from './tiles/tentPoleTiles';
 import { hollowWallExtentsPx } from './tiles/hollowWallTiles';
 import { hollowGateExtentsPx, hollowPalisadeExtentsPx } from './tiles/hollowPalisadeTiles';
 import { tileIndex } from './tileIndex';
@@ -116,9 +118,6 @@ const DECORATION_TYPES = new Set([
   FOUNTAIN,
   TORCH,
   WELL,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   BRAZIER,
   MAIN_TOWER,
   SPRITE_BUILDING,
@@ -163,6 +162,13 @@ const DECORATION_TYPES = new Set([
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  // The circus grounds' tents, pavilions and arch posts. Y-sorted so a crawler
+  // standing north of a tent is drawn behind it.
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
+  // The Big Top's tent poles. Y-sorted so the mast rising out of view passes
+  // behind a crawler south of it and in front of one north of it.
+  TENT_POLE,
 ]);
 
 /**
@@ -177,9 +183,6 @@ const CACHEABLE_OVERLAY_TYPES = new Set([
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   // Not multi-op, but drawn by rescaling a full-resolution sheet — the tower
   // overhangs hundreds of pixels — so caching skips a resample per frame.
   SPRITE_BUILDING,
@@ -187,6 +190,13 @@ const CACHEABLE_OVERLAY_TYPES = new Set([
   // Static and genuinely multi-op — a face, a stepped block, a lip, three cracks
   // and a shadow — which is exactly what this cache is for.
   CLIFF,
+  // One blit, but of a sheet painted at twice the display scale: the Big Top is
+  // twelve tiles wide, and caching skips resampling all of it every frame.
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
+  // Many gradients, collars and a vine climbing out of view: static, and
+  // costly to replay every frame.
+  TENT_POLE,
 ]);
 
 /** Tile type used where a neighbour lookup falls off the grid. */
@@ -232,15 +242,7 @@ function drawTile(
 }
 
 /** Set of roof tile types — used when computing BUILDING_WALL gable overhead. */
-const ROOF_TILE_TYPES = new Set([
-  ROOF_THATCH,
-  ROOF_SLATE,
-  ROOF_RED,
-  ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
-]);
+const ROOF_TILE_TYPES = new Set([ROOF_THATCH, ROOF_SLATE, ROOF_RED, ROOF_GREEN]);
 
 /**
  * Lazily-populated chunk cache: pre-renders CHUNK_TILES×CHUNK_TILES blocks of
@@ -569,6 +571,11 @@ export function decorationTileExtentsPx(
   if (type === HOLLOW_PROP_LOW || type === HOLLOW_PROP_TALL) {
     return hollowPropExtentsPx(structure, tx, ty);
   }
+  // Likewise a circus structure: drawn whole from one tile, the rest reaching nowhere.
+  if (type === CIRCUS_STRUCTURE_TALL || type === CIRCUS_STRUCTURE_LOW) {
+    return circusStructureExtentsPx(structure, tx, ty);
+  }
+  if (type === TENT_POLE) return tentPoleExtentsPx(structure, tx, ty, ts);
   if (type === HOLLOW_WALL) return hollowWallExtentsPx(structure, tx, ty, ts);
   if (type === HOLLOW_PALISADE) return hollowPalisadeExtentsPx(ts);
   if (type === HOLLOW_GATE) return hollowGateExtentsPx(structure, tx, ty, ts);

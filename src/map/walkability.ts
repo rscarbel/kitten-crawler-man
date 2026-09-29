@@ -10,9 +10,6 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   FOUNTAIN,
   TORCH,
   WELL,
@@ -80,6 +77,8 @@ import {
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
 } from './tileTypes';
 
 /** Tile types that cannot be walked on. Everything not listed here is walkable. */
@@ -103,9 +102,6 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   FOUNTAIN,
   TORCH,
   // A stone well is as solid as the fountain beside it: nothing needs the
@@ -199,6 +195,10 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   HOLLOW_PROP_TALL,
   HOLLOW_PALISADE,
   ROCK_DEPOSIT,
+  // The circus grounds' structures. `CIRCUS_LOT` is deliberately absent — it is
+  // the ground every circus fight is fought on.
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
 ];
 
 /**
@@ -217,6 +217,8 @@ const SIGHT_TRANSPARENT_TILE_TYPES: readonly number[] = [
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   HOLLOW_PROP_LOW,
+  // An arch post is a pole a crawler is seen past, and a wagon is waist high.
+  CIRCUS_STRUCTURE_LOW,
 ];
 
 /**

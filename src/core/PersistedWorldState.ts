@@ -1128,6 +1128,8 @@ function parseCircusQuestProgressCheckpoint(
 ): CircusQuestProgressCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
   const { stage, heatherSlain, mongoKidnapped, bigTopPotionGiven } = value;
+  // Absent from saves written before the encore existed; those runs never paid it.
+  const bigTopEncorePaid = value.bigTopEncorePaid ?? false;
   const parsedStage = stringUnion(stage, [
     'not_started',
     'ritual_defense',
@@ -1141,11 +1143,18 @@ function parseCircusQuestProgressCheckpoint(
     parsedStage === undefined ||
     !isBoolean(heatherSlain) ||
     !isBoolean(mongoKidnapped) ||
-    !isBoolean(bigTopPotionGiven)
+    !isBoolean(bigTopPotionGiven) ||
+    !isBoolean(bigTopEncorePaid)
   ) {
     return undefined;
   }
-  return { stage: parsedStage, heatherSlain, mongoKidnapped, bigTopPotionGiven };
+  return {
+    stage: parsedStage,
+    heatherSlain,
+    mongoKidnapped,
+    bigTopPotionGiven,
+    bigTopEncorePaid,
+  };
 }
 
 function parseAnchorStepState(value: unknown): AnchorQuestProgressCheckpoint['tinker'] | undefined {

@@ -698,7 +698,7 @@ export class CatPlayer extends Player {
     const sy = this.y - camY;
     const s = tileSize;
 
-    if (this.isActive) {
+    if (this.isActive && !this.paintingBodyOnly) {
       const r = CatPlayer.ACTIVE_SPHERE_RADIUS;
       const sphereCX = sx + s * CatPlayer.TILE_CENTER_OFFSET;
       const sphereCY = sy - CatPlayer.ACTIVE_SPHERE_SPRITE_TOP - CatPlayer.ACTIVE_SPHERE_GAP - r;
@@ -714,7 +714,9 @@ export class CatPlayer extends Player {
       oneShot: this.animator.current,
     });
     if (this.workingTool !== null) this.drawWorkingTool(ctx, sx, sy, s);
-    drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
+    if (!this.paintingBodyOnly) {
+      drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
+    }
 
     this.renderHealthBar(ctx, sx, sy - CatPlayer.HEALTH_BAR_RAISE);
     this.renderKnockedOutOverlay(ctx, sx, sy);

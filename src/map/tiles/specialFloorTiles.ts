@@ -21,6 +21,7 @@ import {
   HOLLOW_DECAL,
   HOLLOW_PALISADE_GAP,
   PASTURE_GRASS,
+  CIRCUS_LOT,
   CROP_FIELD,
 } from '../tileTypes';
 import { isWalkableTileType } from '../walkability';
@@ -32,6 +33,7 @@ import { drawKrakarenLabFloor } from './bossRooms/krakarenTiles';
 import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';
 import { drawHollowDecalTile } from './hollowVillageTiles';
+import { drawCircusDecals } from './circusDecalTiles';
 import { drawHollowThresholdSill, hollowThresholdPalette } from './hollowWallTiles';
 import { drawHollowPalisadeGapTile } from './hollowPalisadeTiles';
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
@@ -851,6 +853,11 @@ export function drawSpecialFloorTile(
     }
     case PASTURE_GRASS: {
       drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+    case CIRCUS_LOT: {
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawCircusDecals(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
     case CROP_FIELD: {

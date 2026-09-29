@@ -37,8 +37,8 @@ export interface CampFrame {
 const TWO_PI = Math.PI * 2;
 
 /**
- * Untanned hide and unbarked poles. Deliberately drab: the circus's tents are
- * the saturated ones, and a goblin camp that competed with them for the eye
+ * Untanned hide and unbarked poles. Deliberately drab: the circus's striped canvas is
+ * the loud colour out here, and a goblin camp that competed with them for the eye
  * would read as a second fairground.
  */
 const HIDE_SHADOW = '#4a3a2a';

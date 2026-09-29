@@ -1,7 +1,12 @@
 import { MazePropTarget } from './MazePropTarget';
 import type { Player } from '../Player';
-import type { MazeMirror, MirrorFacing, MirrorKind } from '../map/bigTopMazeLayout';
-import { drawMazeMirror } from '../sprites/bigTopMazeProps';
+import {
+  nextMirrorFacing,
+  type MazeMirror,
+  type MirrorFacing,
+  type MirrorKind,
+} from '../map/bigTopMazeLayout';
+import { drawMazeMirror } from '../sprites/art/bigTop/mirrorHallProps';
 
 const DISPLAY_NAME: Readonly<Record<MirrorKind, string>> = {
   pivot_mirror: 'Pivot Mirror',
@@ -13,7 +18,7 @@ const DESCRIPTION: Readonly<Record<MirrorKind, string>> = {
   swivel_mirror: 'A small mirror on a spring mount. It flips between two settings and sticks.',
 };
 
-/** Frames the glass rings after it is knocked round, for the art. */
+/** Frames the frame takes to swing round to its new facing after a blow, for the art. */
 const TURN_FLOURISH_FRAMES = 14;
 
 /**
@@ -51,6 +56,18 @@ export class MazeMirrorTarget extends MazePropTarget<MirrorKind> {
     return this.definition.cycle[this.facingIndex];
   }
 
+  /** The facing the next blow will turn it to. */
+  get nextFacing(): MirrorFacing {
+    return nextMirrorFacing(this.definition, this.facingIndex);
+  }
+
+  /** The facing the last blow knocked it out of; its own facing once the swing has settled. */
+  private get swingingFrom(): MirrorFacing {
+    if (this.turnFlourish <= 0) return this.facing;
+    const cycle = this.definition.cycle;
+    return cycle[(this.facingIndex - 1 + cycle.length) % cycle.length];
+  }
+
   /** Set on the frame a blow turns it, so the maze can play the clunk once. */
   turnedThisFrame = false;
 
@@ -78,9 +95,10 @@ export class MazeMirrorTarget extends MazePropTarget<MirrorKind> {
     drawMazeMirror(ctx, this.x - camX, this.y - camY, tileSize, {
       kind: this.kind,
       facing: this.facing,
+      fromFacing: this.swingingFrom,
+      turn: 1 - this.turnFlourish / TURN_FLOURISH_FRAMES,
       phase: this.phase,
       struck: this.hitFlash > 0,
-      turning: this.turnFlourish > 0,
       pulsing: this.pulsing,
     });
   }

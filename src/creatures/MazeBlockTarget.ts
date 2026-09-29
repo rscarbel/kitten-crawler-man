@@ -1,12 +1,11 @@
 import { MazePropTarget } from './MazePropTarget';
 import type { MazeBlockKind } from '../map/bigTopMazeLayout';
 import {
-  drawMazeBrace,
-  drawMazeCapstan,
-  drawMazeReleaseRing,
-  drawMazeSandbag,
+  drawGrimaldiSandbag,
+  drawStageBrace,
   type MazeDestructibleArt,
-} from '../sprites/bigTopMazeProps';
+} from '../sprites/art/bigTop/fireWalkProps';
+import { drawCageReleaseRing, drawCapstanWinch } from '../sprites/art/bigTop/menagerieProps';
 
 /**
  * How many landed blows each kind gives way to.
@@ -108,16 +107,16 @@ export class MazeBlockTarget extends MazePropTarget<MazeBlockKind> {
     const state = this.art;
     switch (this.kind) {
       case 'sandbag':
-        drawMazeSandbag(ctx, sx, sy, tileSize, state);
+        drawGrimaldiSandbag(ctx, sx, sy, tileSize, state);
         return;
       case 'brace':
-        drawMazeBrace(ctx, sx, sy, tileSize, state);
+        drawStageBrace(ctx, sx, sy, tileSize, state);
         return;
       case 'release_ring':
-        drawMazeReleaseRing(ctx, sx, sy, tileSize, state);
+        drawCageReleaseRing(ctx, sx, sy, tileSize, state);
         return;
       case 'capstan':
-        drawMazeCapstan(ctx, sx, sy, tileSize, state);
+        drawCapstanWinch(ctx, sx, sy, tileSize, state);
         return;
     }
   }

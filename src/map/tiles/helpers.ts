@@ -13,9 +13,6 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   FOUNTAIN,
   TORCH,
   WELL,
@@ -68,6 +65,8 @@ import {
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -108,9 +107,6 @@ const SHADOW_TYPES = new Set([
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   RUINED_WALL,
   TOWN_WALL,
   // A cliff face is architecture as far as the shadow strip is concerned: it is
@@ -140,9 +136,6 @@ const NON_FLOOR_TYPES = new Set<number>([
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   FOUNTAIN,
   TORCH,
   WELL,
@@ -224,6 +217,8 @@ const NON_FLOOR_TYPES = new Set<number>([
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
 ]);
 
 /**

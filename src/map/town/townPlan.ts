@@ -924,7 +924,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
  * `BuildingEntry` the rest of the game holds records only the door.
  *
  * Undefined for the two entrances that are not sprite buildings — the tower,
- * whose art is mostly transparent overhang, and the tile-built Big Top — so a
+ * whose art is mostly transparent overhang, and the Big Top, a circus structure with its own sheet — so a
  * caller sizing itself against a facade is told to fall back rather than handed
  * a rectangle that means something else.
  */

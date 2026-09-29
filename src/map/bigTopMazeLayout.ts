@@ -45,7 +45,8 @@ import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
  *
  *  Act III, the hall of mirrors:
  *  P  the human's limelight projector   Q  the cat's
- *  *  a star target set in the dividing wall
+ *  *  a star target: three set in the dividing wall, and the encore in the
+ *     human lane's outer wall
  *  <  the gate barring the human       >  the gate barring the cat
  *  [  the human's exit door            ]  the cat's
  * ```
@@ -80,7 +81,7 @@ export const BIG_TOP_MAZE_ROWS: ReadonlyArray<string> = [
   '#####................#.................#####',
   '#####................#.................#####',
   '#####................#.................#####',
-  '#####................*.................#####',
+  '####*................*.................#####',
   '#####................#.................#####',
   '####P................#.................Q####',
   '#####................#.................#####',
@@ -1243,6 +1244,30 @@ export const MAZE_STARS: ReadonlyArray<MazeStar> = [
   },
 ];
 
+/**
+ * The encore: a fourth star, in the human lane's outer wall, that opens nothing.
+ *
+ * Reached only by the hub turning the light north and the north pivot sending
+ * it back west — one quarter past the facing the twin star wants — so it asks
+ * the pivot bank for a facing the act's own solution never uses. Kept out of
+ * `MAZE_STARS` because every reader of that list counts the stars the act needs;
+ * this one is applause, and the act finishes without it.
+ */
+export const MAZE_ENCORE_STAR: MazeStar = {
+  id: 'star_encore',
+  tile: { x: 4, y: 24 },
+  litBy: ['human'],
+  opens: [],
+};
+
+/** Coins the encore pays, once per run. */
+export const MAZE_ENCORE_REWARD_COINS = 75;
+/** The floor at the encore star's foot, where its coins fall. */
+export const MAZE_ENCORE_REWARD_TILE: MazeTile = { x: 5, y: 24 };
+
+/** Everything a beam can end on: the act's stars and the encore. */
+export const MAZE_BEAM_TARGETS: ReadonlyArray<MazeStar> = [...MAZE_STARS, MAZE_ENCORE_STAR];
+
 export interface BeamStep {
   readonly tile: MazeTile;
   readonly heading: BeamDirection;
@@ -1287,7 +1312,9 @@ export function traceMazeBeam(
     x += move.x;
     y += move.y;
 
-    const star = MAZE_STARS.find((candidate) => candidate.tile.x === x && candidate.tile.y === y);
+    const star = MAZE_BEAM_TARGETS.find(
+      (candidate) => candidate.tile.x === x && candidate.tile.y === y,
+    );
     if (star !== undefined) return { steps, starId: star.id };
 
     const mirror = MAZE_MIRRORS.find(
@@ -1311,6 +1338,30 @@ export function traceMazeBeam(
     steps.push({ tile: { x, y }, heading, hot });
   }
   return { steps, starId: null };
+}
+
+/** The facing one more blow turns this mirror to, from the facing at `index` in its cycle. */
+export function nextMirrorFacing(mirror: MazeMirror, index: number): MirrorFacing {
+  return mirror.cycle[(index + 1) % mirror.cycle.length];
+}
+
+/**
+ * Where `half`'s light would go if `turned` were at `facing` and every other
+ * mirror stayed as `facingOf` has it — the path one blow away, for the turn
+ * preview. The same walk as the live beam, so the preview cannot disagree with
+ * what the blow then does.
+ */
+export function traceMazeBeamWithFacing(
+  half: MazeHalf,
+  turned: { readonly mirrorId: string; readonly facing: MirrorFacing },
+  facingOf: (mirrorId: string) => MirrorFacing | null,
+  isOpenTile: (tileX: number, tileY: number) => boolean,
+): BeamPath {
+  return traceMazeBeam(
+    half,
+    (mirrorId) => (mirrorId === turned.mirrorId ? turned.facing : facingOf(mirrorId)),
+    isOpenTile,
+  );
 }
 
 // ── Where the dressing hangs ──────────────────────────────────────────────────

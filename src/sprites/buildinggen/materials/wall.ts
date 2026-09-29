@@ -231,8 +231,8 @@ function paintDressedPlinth(
 /**
  * Multiplies a band's colour in place.
  *
- * A multiply rather than a translucent black rectangle: the rectangle is what
- * flattens the circus tents, and the foundation is the one place on a wall where
+ * A multiply rather than a translucent black rectangle: the rectangle flattens
+ * whatever it covers, and the foundation is the one place on a wall where
  * losing the stone's variation would be most obvious.
  */
 function darkenBand(plane: Plane, band: { top: number; bottom: number }, factor: number): void {

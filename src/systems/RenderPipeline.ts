@@ -42,6 +42,7 @@ import type { FairyFireballSystem } from './FairyFireballSystem';
 import type { KnightMissileSystem } from './KnightMissileSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
+import type { CircusGroundsAmbience } from './circus/CircusGroundsAmbience';
 import type { WaterAnimationSystem } from './WaterAnimationSystem';
 import type { LootSystem } from './LootSystem';
 import type { GroundPickupSystem } from './GroundPickupSystem';
@@ -227,6 +228,8 @@ export interface RenderContext {
   trees: TreeSystem | null;
   /** Null on every map but the overworld, which is the only one with rivers. */
   water: WaterAnimationSystem | null;
+  /** Null on every map but the overworld, which is the only one with a circus. */
+  circusGrounds: CircusGroundsAmbience | null;
   loot: LootSystem;
   groundPickups: GroundPickupSystem;
   /**
@@ -318,6 +321,10 @@ export class RenderPipeline {
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
     gameMap.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
+    // The Big Top's door light is additive, so it goes straight onto the lot:
+    // drawn any later it would also brighten the gore and wash out every
+    // telegraph on the forecourt.
+    rc.circusGrounds?.renderGround(ctx, camX, camY);
     gore.renderPuddles(ctx, camX, camY);
     rc.bodyPartGore.renderSettled(ctx, camX, camY);
     rc.destructibles.renderWreckage(ctx, camX, camY);

@@ -27,6 +27,12 @@ import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
+import {
+  BIG_TOP_BLOCK_CLEARED_CUES,
+  BIG_TOP_CUES,
+  BIG_TOP_EXIT_MUSIC,
+  BIG_TOP_MUSIC,
+} from './bigTop/bigTopSoundCues';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
 import type { Mob } from '../creatures/Mob';
@@ -47,31 +53,13 @@ import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawText } from '../ui/TextBox';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import {
-  drawActArchBoard,
   drawActArchPost,
-  drawBleacherDead,
   drawFlameVentColumn,
-  drawFlameVentGrille,
-  drawFlameVentTelegraph,
   drawFootlight,
   drawMazeActGate,
-  drawMazeBarricade,
-  drawMazeBeamTile,
-  drawMazeCageGate,
-  drawMazeCurtain,
-  drawMazeCurtainOpen,
-  drawMazeCurtainWindow,
   drawMazeExitDoor,
-  drawMazeGate,
-  drawMazeGrate,
-  drawMazeLimelight,
-  drawMazeRope,
-  drawMazeStar,
   drawMazeWayOpen,
-  type MazeStarArt,
   type MazeWayOpenArt,
-  drawMenagerieCage,
-  drawMirrorHallGlass,
   drawRingMatRunner,
   drawSpotlightBeam,
   drawSpotlightClear,
@@ -79,6 +67,61 @@ import {
   drawSpotlightWarm,
   drawTargetNameChip,
 } from '../sprites/bigTopMazeProps';
+import { drawIntervalRoomLamp } from '../sprites/art/bigTop/bigTopShellArt';
+import { clearBigTopPropCache } from '../sprites/art/bigTop/bigTopPropCache';
+import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  drawBeamMirrorFlare,
+  drawMazeBeamTile,
+  drawMazeLimelight,
+  drawMazeStar,
+  drawMirrorHallPane,
+  drawPaneReflection,
+  clearReflectionScratch,
+  paintReflectionSource,
+  type MazeStarArt,
+  type ReflectionSource,
+} from '../sprites/art/bigTop/mirrorHallProps';
+import {
+  BRAVO_RIG_WIDTH_TILES,
+  drawBravoRig,
+  drawTurnPreviewStarRing,
+  drawTurnPreviewTile,
+} from '../sprites/art/bigTop/encoreProps';
+import {
+  drawActEasel,
+  drawMazeCurtain,
+  drawMazeCurtainOpen,
+  drawMazeCurtainWindow,
+} from '../sprites/art/bigTop/curtainProps';
+import { drawRingBleacher, RING_BLEACHER_TIERS } from '../sprites/art/bigTop/finaleProps';
+import { backstageClutterAt } from '../sprites/art/bigTop/bigTopShellArt';
+import {
+  FIRE_WALK_WALL_KITS,
+  drawBoardedFlat,
+  drawFireBreatherGrateRun,
+  fireGrateRuns,
+  drawFireBreatherTelegraph,
+  drawFireScreenGate,
+  drawFireWalkWallKit,
+  drawHeatShimmerFlare,
+  drawPulleyGrate,
+  drawShadedRope,
+  type FireWalkWallKit,
+} from '../sprites/art/bigTop/fireWalkProps';
+import {
+  CAGE_LUNGE_DURATION_FRAMES,
+  FOLLOW_SPOT_LENS_REACH,
+  FOLLOW_SPOT_PIVOT,
+  cageOccupantFor,
+  drawBleacherSpectator,
+  drawCageGateBarrier,
+  drawFeedTrough,
+  drawFollowSpotCone,
+  drawFollowSpotLamp,
+  drawMenagerieCageFront,
+  occupantLunges,
+} from '../sprites/art/bigTop/menagerieProps';
 import {
   ACT_ONE_BANNER,
   BIGTOP_ENTRY_BANNER,
@@ -88,9 +131,18 @@ import {
   isMazeBarrierTile,
   MAZE_BELLS,
   MAZE_BLOCKS,
+  MAZE_WIDTH,
   MAZE_CORRIDORS,
+  MAZE_BEAM_TARGETS,
   MAZE_CURTAINS,
+  MAZE_ENCORE_REWARD_COINS,
+  MAZE_ENCORE_REWARD_TILE,
+  MAZE_ENCORE_STAR,
+  MAZE_FINAL_CHAMBER,
   MAZE_GRIMALDI_TILE,
+  MAZE_HEIGHT,
+  MAZE_POLE_CHAR,
+  BIG_TOP_MAZE_ROWS,
   MENAGERIE_BLEACHER_ROW,
   MENAGERIE_CAGE_ROWS,
   MENAGERIE_LANES,
@@ -105,17 +157,23 @@ import {
   MAZE_TARGET_OWNER,
   MAZE_VENTS,
   rectContains,
+  reflectBeam,
   sectionAtRow,
   traceMazeBeam,
+  traceMazeBeamWithFacing,
   ventFlameProgress,
   ventPhaseAt,
   ventTelegraphProgress,
   type MazeBlock,
   type MazeHalf,
+  type MazeRect,
   type MazeSection,
   type MazeSectionId,
+  type MazeStar,
+  type BeamDirection,
   type BeamPath,
   type MazeTile,
+  type SpotlightTrack,
   type MirrorFacing,
   type VentSchedule,
 } from '../map/bigTopMazeLayout';
@@ -130,6 +188,14 @@ import {
   BIGTOP_LAST_ACT,
 } from '../dialog/scripts/scenes/bigTop';
 import { SAWDUST_FLOOR } from '../map/tileTypes';
+import { BACKSTAGE_CLUTTER_CLEARANCE_TILES } from '../map/bigTopMazeDecor';
+import {
+  BigTopLighting,
+  layoutLightFixtures,
+  type LightFixture,
+  type LiveLights,
+  type StageCue,
+} from './bigTop/bigTopLighting';
 import { drawOverlay } from '../ui/Box';
 
 const FRAMES_PER_SECOND = 60;
@@ -278,8 +344,53 @@ const BLEACHER_STRIDE = 2;
 const CAGE_STRIDE = 3;
 /** One in this many wall tiles bounding the mirror halls carries a pane. */
 const MIRROR_GLASS_STRIDE = 3;
+/** One in this many drape faces along the fire walk carries a piece of the fire act's kit. */
+const FIRE_KIT_STRIDE = 4;
+/** A follow-spot hangs on the drape this many tiles in from its lane's end wall. */
+const FOLLOW_SPOT_INSET_TILES = 1;
+/** The seat in the bleachers whose dead spectator is still applauding. */
+const CLAPPING_SPECTATOR_COLUMN = 14;
+/** How far along its row a caged beast notices a follow-spot catching, in tiles. */
+const CAGE_LUNGE_REACH_TILES = 2;
+/** The share of each frame a follow-spot turns toward where it is wanted: a quick but visible swing. */
+const FOLLOW_SPOT_SWING_EASE = 0.14;
+/** A beam brightens over this share of its burn and dims over the same at the end. */
+const FOLLOW_SPOT_RAMP_SHARE = 0.2;
+/** The follow-spot's cone may rise this far above its lane's row, to reach the lamp's lens. */
+const FOLLOW_SPOT_CONE_HEADROOM_TILES = 0.45;
 
-type DressingKind = 'runner' | 'footlight' | 'archPost' | 'bleacher' | 'cage' | 'mirrorGlass';
+type DressingKind =
+  | 'runner'
+  | 'footlight'
+  | 'archPost'
+  | 'bleacher'
+  | 'cage'
+  | 'mirrorGlass'
+  | 'ringBleacher'
+  | 'intervalLamp'
+  | FireWalkWallKit
+  | 'followSpot'
+  | 'feedTrough';
+
+/**
+ * Which dressing hangs on a wall and which lies on the floor. Every kind is
+ * one or the other, and the maze's gate holds each to its side.
+ */
+export const WALL_HUNG_DRESSING_KINDS: ReadonlySet<DressingKind> = new Set<DressingKind>([
+  'archPost',
+  'bleacher',
+  'cage',
+  'mirrorGlass',
+  'ringBleacher',
+  'intervalLamp',
+  ...FIRE_WALK_WALL_KITS,
+  'followSpot',
+  'feedTrough',
+]);
+export const FLOOR_DRESSING_KINDS: ReadonlySet<DressingKind> = new Set<DressingKind>([
+  'runner',
+  'footlight',
+]);
 
 interface Dressing {
   readonly tile: MazeTile;
@@ -294,11 +405,87 @@ interface ActBoard {
   readonly label: string;
 }
 
-/** The dividing wall the boards are centred on, and where the first one hangs. */
-const ACT_BOARD_COLUMN = 21;
+/**
+ * The tent's dividing line, which every act board is centred on: the column
+ * each interval's peep window is cut into, between the paired rooms.
+ */
+const ACT_BOARD_COLUMN = MAZE_CURTAINS[0].windowTile.x;
+
+/** The vents' grates, as the strips they are blitted in: one per lane per row. */
+const VENT_GRATE_RUNS = fireGrateRuns(
+  MAZE_VENTS.map((vent) => ({ x: vent.tileX, y: vent.tileY })),
+  ACT_BOARD_COLUMN,
+);
 const ACT_ONE_BOARD_ROW = 86;
 
+/** A crawler shows in every hall pane within this many tiles of it, nearest first. */
+const REFLECTION_RANGE_TILES = 3;
+/** At most this many panes reflect one crawler at once: a blit each, so this caps the cost. */
+export const MAX_REFLECTING_PANES = 4;
+/** One crawler's reflection in the panes near it. */
+interface PaneReflection {
+  readonly source: ReflectionSource;
+  /** How far the crawler stands east of the pane, in tiles. */
+  readonly offsetTiles: number;
+  /** 1 standing at the pane, fading to 0 at the edge of reach. */
+  readonly strength: number;
+}
+
+/** The interval drape lifts and bunches over half a second. */
+const CURTAIN_RISE_FRAMES = 30;
+/** A latched star's burst spends itself over this many frames. */
+const STAR_BURST_FRAMES = 45;
+/** The bravo rig's bulbs come up over this many frames once the encore latches. */
+const BRAVO_LIGHT_UP_FRAMES = 40;
+/**
+ * The wall tile the bravo rig's left edge hangs on: the human hall's north
+ * wall face, clear of the gate in its north-east corner.
+ */
+const BRAVO_RIG_TILE: MazeTile = { x: 7, y: MIRROR_HALL_ROWS.y0 - 1 };
+/**
+ * How close the acting crawler must be to one of their own mirrors for the
+ * ghost of its next turn to show — the same reach as the prompt to swing at it,
+ * so the question and the answer appear together.
+ */
+const TURN_PREVIEW_RANGE_TILES = TARGET_PROMPT_RANGE_TILES;
+/** The ring's rail bulbs light once the house lights are this far up. */
+const BULBS_LIT_HOUSE_LEVEL = 0.5;
+
+const BEAM_AHEAD: Readonly<Record<BeamDirection, MazeTile>> = {
+  north: { x: 0, y: -1 },
+  south: { x: 0, y: 1 },
+  east: { x: 1, y: 0 },
+  west: { x: -1, y: 0 },
+};
+
+/** The king pole's centre line, in tiles: the middle of the run of pole glyphs in the finale. */
+function kingPoleCentreX(): number {
+  let west = MAZE_WIDTH;
+  let east = -1;
+  BIG_TOP_MAZE_ROWS.forEach((row) => {
+    Array.from(row).forEach((glyph, x) => {
+      if (glyph !== MAZE_POLE_CHAR) return;
+      west = Math.min(west, x);
+      east = Math.max(east, x);
+    });
+  });
+  return east < west ? MAZE_GRIMALDI_TILE.x + TILE_CENTRE : (west + east + 1) / 2;
+}
+
+/** The tile a beam travelling `heading` from `tile` enters next. */
+function beamStepAhead(tile: MazeTile, heading: BeamDirection): MazeTile {
+  const step = BEAM_AHEAD[heading];
+  return { x: tile.x + step.x, y: tile.y + step.y };
+}
+
 // ── Beams ─────────────────────────────────────────────────────────────────────
+
+/** The ghost of one mirror's next turn: whose light, and where it would go. */
+export interface MazeTurnPreview {
+  readonly mirrorId: string;
+  readonly half: MazeHalf;
+  readonly path: BeamPath;
+}
 
 /** What put a crawler back at the top of the act. */
 type BurnoutCause = 'fire' | 'spotlight' | 'limelight';
@@ -379,12 +566,37 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
   private readonly openedFrames = new Map<string, number>();
   private readonly openedCurtains = new Set<string>();
   private readonly latchedStars = new Set<string>();
+  /** The frame each star latched on, the encore included, for its burst. */
+  private readonly starLatchFrames = new Map<string, number>();
+  /** Coins owed for the encore, drained by the scene, which drops them at the star's foot. */
+  private readonly pendingRewards: Array<{ tile: MazeTile; coins: number }> = [];
+  /** Where the light would go after the next blow on the mirror the acting crawler stands at. */
+  private turnPreview: MazeTurnPreview | null = null;
+
+  /** The act being warmed during its interval, and the camera windows over it still to paint. */
+  private warmSectionId: MazeSectionId | null = null;
+  private warmWindows: Array<{ x: number; y: number }> = [];
+  /** The curtain whose act has been queued for warming, so each act is warmed once. */
+  private warmedCurtainId: string | null = null;
+  /** A one-pixel surface the warm pass paints onto: the bakes are the point, not the pixels. */
+  private warmSurface: CanvasSurface | null = null;
 
   /** The act the party is in. Only ever moves forward, and only through a curtain. */
   private currentSectionId: MazeSectionId = MAZE_SECTIONS[0].id;
 
   private readonly dressing: ReadonlyArray<Dressing>;
+  /** The hall's wall panes, the only dressing that reflects. */
+  private readonly hallPanes: ReadonlyArray<Dressing>;
+  private reflectionBlits = 0;
+  /** Each follow-spot's aim now, in screen radians, easing toward where its track wants it. */
+  private readonly followSpotAims = new Map<string, number>();
+  /** The wall tile each track's follow-spot hangs on. */
+  private readonly followSpotTiles: ReadonlyMap<string, MazeTile>;
+  /** The lantern cells whose catching sets each beast's cage lunging at its bars. */
+  private readonly cageLungeCells: ReadonlyMap<Dressing, ReadonlyArray<VentSchedule>>;
   private readonly actBoards: ReadonlyArray<ActBoard>;
+  /** The tent's stage lights: dark everywhere but the act on stage. */
+  readonly lighting: BigTopLighting;
 
   /**
    * The unbent spans of both limelights, computed once.
@@ -456,6 +668,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
 
   /** Cues raised by the script, drained by the scene's audio pass. */
   private readonly pendingSounds: Array<{ id: SoundId; volume?: number }> = [];
+  /** How many times each cue has played, so a cue with several takes rotates through them. */
+  private readonly cueTakesPlayed = new Map<readonly SoundId[], number>();
 
   constructor(
     private readonly map: GameMap,
@@ -468,15 +682,23 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     this.hotBeamTiles = this.computeHotSpans();
     this.hotBeamKeys = new Set(this.hotBeamTiles.map((tile) => tileKeyOf(tile.x, tile.y)));
     this.dressing = buildBigTopDressing(bigTopWallAt(this.map));
+    this.hallPanes = this.dressing.filter((piece) => piece.kind === 'mirrorGlass');
+    this.followSpotTiles = followSpotTilesOf(this.dressing);
+    this.cageLungeCells = cageLungeCellsOf(this.dressing);
     this.actBoards = buildActBoards();
+    this.lighting = new BigTopLighting([
+      ...layoutLightFixtures(),
+      ...dressingLightFixtures(this.dressing),
+    ]);
     this.spawnFurniture();
     // Deliberately no `bossFightInitiated`: the tent is not scored as a boss
     // room, and the event is what hands the soundtrack to the boss-music table.
-    this.audio?.playMusic('circus_battle', { fadeInMs: CIRCUS_BATTLE_FADE_IN_MS });
+    this.audio?.playMusic(BIG_TOP_MUSIC, { fadeInMs: CIRCUS_BATTLE_FADE_IN_MS });
   }
 
   private spawnFurniture(): void {
     const grimaldi = new GrimaldiVine(MAZE_GRIMALDI_TILE.x, MAZE_GRIMALDI_TILE.y, TILE_SIZE);
+    grimaldi.poleOffsetTiles = kingPoleCentreX() - (MAZE_GRIMALDI_TILE.x + TILE_CENTRE);
     grimaldi.setMap(this.map);
     this.addMob(grimaldi);
     this.grimaldi = grimaldi;
@@ -608,7 +830,39 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     return this.pendingSounds.splice(0, this.pendingSounds.length);
   }
 
-  private cue(id: SoundId, volume?: number): void {
+  /**
+   * Coin drops owed since the last drain. The scene drops each at its tile so
+   * the coins fall and land before they are collected; the maze only decides
+   * that they are owed, once per run.
+   */
+  drainRewards(): Array<{ tile: MazeTile; coins: number }> {
+    return this.pendingRewards.splice(0, this.pendingRewards.length);
+  }
+
+  /** The ghost of the next turn shown this frame, if the acting crawler is at one of their mirrors. */
+  get currentTurnPreview(): MazeTurnPreview | null {
+    return this.turnPreview;
+  }
+
+  /** Where `half`'s light goes right now. */
+  beamPathFor(half: MazeHalf): BeamPath | null {
+    return this.beamPaths.get(half) ?? null;
+  }
+
+  /** Whether the encore star has latched in this performance. */
+  get encoreLatched(): boolean {
+    return this.starLatchFrames.has(MAZE_ENCORE_STAR.id);
+  }
+
+  /**
+   * Raises one take of a cue. An empty cue is one whose recording has not
+   * landed and that has no stand-in, and stays silent.
+   */
+  private cue(takes: readonly SoundId[], volume?: number): void {
+    if (takes.length === 0) return;
+    const taken = this.cueTakesPlayed.get(takes) ?? 0;
+    this.cueTakesPlayed.set(takes, taken + 1);
+    const id = takes[taken % takes.length];
     this.pendingSounds.push(volume === undefined ? { id } : { id, volume });
   }
 
@@ -808,9 +1062,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     this.placeAtSpawn(ctx.cat, section.catSpawn);
     this.flashFrames = BURNOUT_FLASH_FRAMES;
     this.partyResetPending = true;
-    // [STAND-IN] The llama's fireball burst is the library's closest thing to a
-    // body going up, until a scorch-and-drop cue is sourced.
-    this.cue('llama_fireball_explosion');
+    this.cue(BIG_TOP_CUES.burnout);
     const burnoutBeat = BURNOUT_DIALOGS[cause];
     this.openConversation(
       'interlude',
@@ -868,14 +1120,21 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     // single write; only the painted art is cached, and that is what the dirty
     // mark is for.
     this.map.structure[tile.y][tile.x].type = SAWDUST_FLOOR;
-    this.map.markTileDirty(tile.x, tile.y);
+    // Every wall tile whose art can depend on this one, not just the tile: a
+    // wall's drape is chosen by which of its neighbours is floor, and backstage
+    // clutter is hidden anywhere within its clearance of floor, so a wall a
+    // couple of tiles off can lose its trunk the moment the way opens — and the
+    // chunk it sits in may not be this tile's.
+    const reach = BACKSTAGE_CLUTTER_CLEARANCE_TILES;
+    for (let dy = -reach; dy <= reach; dy++) {
+      for (let dx = -reach; dx <= reach; dx++) this.map.markTileDirty(tile.x + dx, tile.y + dy);
+    }
   }
 
   private openBarrier(block: MazeBlock): void {
     this.openTile(block.barrierTile);
     this.clearedBlocks.add(block.id);
-    if (block.kind === 'brace') this.cue('wood_breaking_1');
-    else this.cue('gate_opening');
+    this.cue(BIG_TOP_BLOCK_CLEARED_CUES[block.kind]);
     // Said out loud as well as drawn. The crawler this door was opened for is
     // the one the player is *not* holding, so the news has to survive the walk
     // back across the tent and the switch.
@@ -931,7 +1190,9 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       this.openedCurtains.add(curtain.id);
       this.openTile(curtain.humanBarrier);
       this.openTile(curtain.catBarrier);
-      this.cue('gate_opening');
+      this.cue(BIG_TOP_CUES.curtainRise);
+      this.cue(BIG_TOP_CUES.actApplause);
+      if (curtain.opens === 'mirrors') this.cue(BIG_TOP_CUES.limelightIgnite);
       this.currentSectionId = curtain.opens;
       this.showBanner(this.currentSection.banner, null);
       const card = ACT_CARDS[curtain.opens];
@@ -979,12 +1240,33 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
   private refreshBeams(): void {
     if (!this.beamsDirty) return;
     this.beamsDirty = false;
-    const facingOf = (mirrorId: string): MirrorFacing | null =>
-      this.mirrors.get(mirrorId)?.facing ?? null;
     this.beamPaths = new Map([
-      ['human', traceMazeBeam('human', facingOf, this.isOpenTile)],
-      ['cat', traceMazeBeam('cat', facingOf, this.isOpenTile)],
+      ['human', traceMazeBeam('human', this.liveFacingOf, this.isOpenTile)],
+      ['cat', traceMazeBeam('cat', this.liveFacingOf, this.isOpenTile)],
     ]);
+  }
+
+  private readonly liveFacingOf = (mirrorId: string): MirrorFacing | null =>
+    this.mirrors.get(mirrorId)?.facing ?? null;
+
+  /**
+   * The ghost of the next blow, for the acting crawler's nearest own mirror in
+   * reach. Traced with the same walk as the live beam and the facing the blow
+   * will turn the mirror to, so it shows exactly what the swing then does.
+   */
+  private computeTurnPreview(ctx: SystemContext): MazeTurnPreview | null {
+    if (!this.hazardsArmed || this.currentSectionId !== 'mirrors') return null;
+    const half = this.halfOf(ctx.active, ctx.human);
+    const mirror = this.nearestMirror(ctx.active, half);
+    if (mirror === null) return null;
+    if (!this.withinMobTiles(ctx.active, mirror, TURN_PREVIEW_RANGE_TILES)) return null;
+    const path = traceMazeBeamWithFacing(
+      half,
+      { mirrorId: mirror.mirrorId, facing: mirror.nextFacing },
+      this.liveFacingOf,
+      this.isOpenTile,
+    );
+    return { mirrorId: mirror.mirrorId, half, path };
   }
 
   private updateMirrors(): void {
@@ -992,7 +1274,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       if (!mirror.turnedThisFrame) continue;
       mirror.turnedThisFrame = false;
       this.beamsDirty = true;
-      this.cue('hammer_strike');
+      this.cue(BIG_TOP_CUES.mirrorTurn);
     }
     this.refreshBeams();
 
@@ -1001,11 +1283,35 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       const allOn = star.litBy.every((half) => this.beamPaths.get(half)?.starId === star.id);
       if (!allOn) continue;
       this.latchedStars.add(star.id);
+      this.starLatchFrames.set(star.id, this.frame);
       for (const tile of star.opens) this.openTile(tile);
-      this.cue('objective_complete');
-      this.cue('gate_opening');
+      this.cue(BIG_TOP_CUES.starLatch);
+      this.cue(BIG_TOP_CUES.starOpensWay);
       this.showBanner(WAY_OPENED_BANNER, WAY_OPENED_FOR_BOTH);
     }
+    this.updateEncore();
+  }
+
+  /**
+   * The encore latches like a star but opens nothing: it lights the bravo rig
+   * and pays out once per run. The flag lives on the quest progress, which
+   * outlives this system, because a party thrown out of the tent and sent back
+   * in builds a fresh maze with every star dark again.
+   */
+  private updateEncore(): void {
+    if (this.encoreLatched) return;
+    const allOn = MAZE_ENCORE_STAR.litBy.every(
+      (half) => this.beamPaths.get(half)?.starId === MAZE_ENCORE_STAR.id,
+    );
+    if (!allOn) return;
+    this.starLatchFrames.set(MAZE_ENCORE_STAR.id, this.frame);
+    this.cue(BIG_TOP_CUES.starLatch);
+    this.cue(BIG_TOP_CUES.actApplause);
+    const alreadyPaid = this.progress.bigTopEncorePaid;
+    this.showBanner(ENCORE_BANNER, alreadyPaid ? ENCORE_REPEAT_SUBTITLE : ENCORE_PAID_SUBTITLE);
+    if (alreadyPaid) return;
+    this.progress.bigTopEncorePaid = true;
+    this.pendingRewards.push({ tile: MAZE_ENCORE_REWARD_TILE, coins: MAZE_ENCORE_REWARD_COINS });
   }
 
   /**
@@ -1024,7 +1330,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     }
     if (this.refusalCueCooldown > 0) this.refusalCueCooldown--;
     if (!refused || this.refusalCueCooldown > 0) return;
-    this.cue('error', REFUSAL_CUE_VOLUME);
+    this.cue(BIG_TOP_CUES.refusedBlow, REFUSAL_CUE_VOLUME);
     this.refusalCueCooldown = REFUSAL_CUE_COOLDOWN_FRAMES;
   }
 
@@ -1038,7 +1344,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     for (const bell of this.bells.values()) {
       if (!bell.rangThisFrame) continue;
       bell.rangThisFrame = false;
-      this.cue('massive_metal_hit');
+      this.cue(BIG_TOP_CUES.bellRing);
+      this.cue(BIG_TOP_CUES.followSpotSwing);
     }
   }
 
@@ -1097,7 +1404,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     this.cameraLerp = 0;
     this.cameraLerpFrom = { x: ctx.active.x, y: ctx.active.y };
     this.bannerTimer = 0;
-    this.cue('grimaldi_plant_moving_3');
+    this.cue(BIG_TOP_CUES.vineStirs);
     // The crawlers are captured rather than the frame context, which is rebuilt
     // every frame and long stale by the time the box closes.
     const human = ctx.human;
@@ -1113,7 +1420,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     // of the story, and a quest that could dead-end on an empty pack is a quest
     // that eventually does.
     if (!human.inventory.removeOne(POUR_ITEM_ID)) cat.inventory.removeOne(POUR_ITEM_ID);
-    this.cue('healing_potion');
+    this.cue(BIG_TOP_CUES.cure);
     this.beat = 'approach';
     this.beatFrame = 0;
     this.approachFrom = { x: human.x, y: human.y };
@@ -1121,17 +1428,37 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
 
   // ── Frame update ──────────────────────────────────────────────────────────
 
+  /** Whether the stage lights have finished answering the act on stage. */
+  get lightsSettled(): boolean {
+    return this.lighting.settledFor(this.stageCue());
+  }
+
+  /** What the lights are asked for: the act on stage, and how far the cure has run. */
+  private stageCue(): StageCue {
+    const freed = this.beat === 'freed' || this.beat === 'done';
+    let cure = 0;
+    if (freed) cure = 1;
+    else if (this.beat === 'cure') cure = Math.min(1, this.beatFrame / CS_CURE_FRAMES);
+    return { currentAct: this.currentSectionId, cure, freed };
+  }
+
   update(ctx: SystemContext): void {
     this.lastContext = ctx;
     this.frame++;
+    // Ahead of every early return below: the house board keeps fading through
+    // an act card and through the cure, which is when it matters most.
+    this.lighting.tick(this.stageCue());
     if (this.bannerTimer > 0) this.bannerTimer--;
     if (this.flashFrames > 0) this.flashFrames--;
 
     this.updateBlocks();
     this.noteRefusedBlows();
     this.updateBells();
+    this.updateFollowSpots();
     this.updateMirrors();
     this.updateTargetPulses(ctx);
+    this.turnPreview = this.computeTurnPreview(ctx);
+    this.queueNextActWarm(ctx);
 
     if (this.beat !== null) {
       this.updateCutscene(ctx);
@@ -1219,7 +1546,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       const dx = (vent.tileX + TILE_CENTRE) * TILE_SIZE - (active.x + TILE_SIZE * TILE_CENTRE);
       const dy = (vent.tileY + TILE_CENTRE) * TILE_SIZE - (active.y + TILE_SIZE * TILE_CENTRE);
       if (Math.hypot(dx, dy) > reach) continue;
-      this.cue('llama_fireball', VENT_IGNITION_VOLUME);
+      this.cue(BIG_TOP_CUES.ventIgnition, VENT_IGNITION_VOLUME);
       this.ventCueCooldown = VENT_CUE_COOLDOWN_FRAMES;
       return;
     }
@@ -1257,8 +1584,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
         if (this.beatFrame >= CS_APPROACH_FRAMES) {
           this.beat = 'cure';
           this.beatFrame = 0;
-          this.cue('grimaldi_vine_taking_damage');
-          this.cue('reviving_tone');
+          this.cue(BIG_TOP_CUES.vineHurt);
+          this.cue(BIG_TOP_CUES.vineRevives);
         }
         break;
       }
@@ -1313,28 +1640,387 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     // would be the tent disagreeing with its own ending.
     this.hazardsArmed = false;
     this.bus.emit('objectiveComplete', { objectiveId: 'grimaldi_redeemed' });
-    this.audio?.playMusic('circus_theme', { fadeInMs: CIRCUS_THEME_FADE_IN_MS });
+    this.audio?.playMusic(BIG_TOP_EXIT_MUSIC, { fadeInMs: CIRCUS_THEME_FADE_IN_MS });
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
 
   /**
-   * The room's own furniture, drawn under the crawlers: the dressing, the
-   * grates, every barrier still shut, cold vent grilles and the warning on the
-   * ones about to fire, the warm pools of a swinging lantern, and the cold half
-   * of both limelights.
+   * Everything the tent draws under the crawlers, in the one order that keeps
+   * the hazards fair: the furniture, then the stage lights over it, then every
+   * warning and marker over the lights at full strength, whatever the local
+   * dark.
    */
   renderWorld(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    this.renderProps(ctx, camX, camY);
+    this.renderLighting(ctx, camX, camY);
+    this.renderTelegraphs(ctx, camX, camY);
+    this.warmStep(ctx);
+  }
+
+  /** Lets go of the tent's baked prop frames and reflection scratch once the party has left. */
+  dispose(): void {
+    clearBigTopPropCache();
+    clearReflectionScratch();
+    this.warmSurface = null;
+    this.warmWindows = [];
+  }
+
+  /**
+   * Queues the next act's props for baking once either crawler is in its
+   * interval room. Every prop of an act is first drawn on the frame its
+   * curtain lifts, and baking them all then is a hitch as the act opens; the
+   * interval is a quiet stretch to bake them in, and the act the party has
+   * just left no longer needs its frames kept.
+   */
+  private queueNextActWarm(ctx: SystemContext): void {
+    const next = MAZE_CURTAINS.find((curtain) => !this.openedCurtains.has(curtain.id));
+    if (next === undefined || this.warmedCurtainId === next.id) return;
+    const humanTile = tileOf(ctx.human);
+    const catTile = tileOf(ctx.cat);
+    const inInterval =
+      rectContains(next.humanRoom, humanTile.x, humanTile.y) ||
+      rectContains(next.catRoom, catTile.x, catTile.y);
+    if (!inInterval) return;
+    this.warmedCurtainId = next.id;
+    const section = MAZE_SECTIONS.find((candidate) => candidate.id === next.opens);
+    if (section === undefined) return;
+    const stepX = Math.max(TILE_SIZE, viewportWidth());
+    const stepY = Math.max(TILE_SIZE, viewportHeight());
+    const windows: Array<{ x: number; y: number }> = [];
+    const bottom = (section.rowRange.y1 + 1) * TILE_SIZE;
+    for (let y = section.rowRange.y0 * TILE_SIZE; y < bottom; y += stepY) {
+      for (let x = 0; x < MAZE_WIDTH * TILE_SIZE; x += stepX) windows.push({ x, y });
+    }
+    this.warmSectionId = section.id;
+    this.warmWindows = windows;
+  }
+
+  /**
+   * Paints one window of the act being warmed onto a scratch pixel, at the
+   * live canvas's scale so the frames baked are the ones the act will ask
+   * for. One window a frame spreads the bakes over the interval.
+   */
+  private warmStep(live: CanvasRenderingContext2D): void {
+    const view = this.warmWindows.shift();
+    const sectionId = this.warmSectionId;
+    if (view === undefined || sectionId === null) return;
+    this.warmSurface ??= allocCanvas(1, 1);
+    const scratch = surfaceContext(this.warmSurface);
+    const liveTransform = live.getTransform();
+    scratch.save();
+    try {
+      scratch.setTransform(
+        liveTransform.a,
+        liveTransform.b,
+        liveTransform.c,
+        liveTransform.d,
+        0,
+        0,
+      );
+      this.renderProps(scratch, view.x, view.y);
+      this.renderTelegraphs(scratch, view.x, view.y);
+      for (const prop of this.everyProp()) {
+        const propX = prop.x - view.x;
+        const propY = prop.y - view.y;
+        if (!isOnScreen(propX, propY, OVERHEAD_PROP_HEIGHT_TILES)) continue;
+        if (sectionAtRow(Math.floor(prop.y / TILE_SIZE)).id !== sectionId) continue;
+        prop.paintBodyAt(scratch, propX, propY, TILE_SIZE);
+      }
+    } finally {
+      scratch.restore();
+    }
+  }
+
+  /**
+   * The room's own furniture: the dressing, the act boards, every barrier
+   * still shut and the grates behind them, and both limelight housings. All
+   * of it goes under the stage lights.
+   */
+  renderProps(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.renderDressing(ctx, camX, camY);
     this.renderActBoards(ctx, camX, camY);
-    this.renderBarriers(ctx, camX, camY);
+    this.renderShutBarriers(ctx, camX, camY);
+    this.renderLimelights(ctx, camX, camY);
+  }
+
+  /** The dark over the tent, and the live light cut through it. */
+  renderLighting(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    this.lighting.renderDarkness(ctx, camX, camY);
+    this.lighting.renderLiveLights(ctx, camX, camY, this.liveLights());
+    this.renderFollowSpotCones(ctx, camX, camY);
+    this.renderReflections(ctx, camX, camY);
+  }
+
+  /**
+   * The crawlers in the hall's glass. Over the dark rather than under it: a
+   * reflection is the lit crawler thrown back, as bright as the crawler is,
+   * in a pane the tent's dark has otherwise swallowed.
+   */
+  private renderReflections(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    this.reflectionBlits = 0;
+    for (const [pane, reflections] of this.paneReflections(ctx, camX, camY)) {
+      const x = pane.tile.x * TILE_SIZE - camX;
+      const y = pane.tile.y * TILE_SIZE - camY;
+      if (!isOnScreen(x, y)) continue;
+      for (const reflection of reflections) {
+        drawPaneReflection(
+          ctx,
+          x,
+          y,
+          TILE_SIZE,
+          pane.seed,
+          this.frame,
+          reflection.source,
+          reflection.offsetTiles,
+          reflection.strength,
+        );
+        this.reflectionBlits++;
+      }
+    }
+  }
+
+  /** Where a track's follow-spot pivots, in tiles. */
+  private followSpotPivot(trackId: string): { x: number; y: number } | null {
+    const tile = this.followSpotTiles.get(trackId);
+    if (tile === undefined) return null;
+    return { x: tile.x + FOLLOW_SPOT_PIVOT.x, y: tile.y + FOLLOW_SPOT_PIVOT.y };
+  }
+
+  /**
+   * Where a follow-spot wants to point, in tiles: at its lit cells while it
+   * burns, at the cell warming while it arrives, at its bell's trough while
+   * the bell holds it, and at the middle of its run otherwise.
+   */
+  private followSpotTarget(track: SpotlightTrack): { x: number; y: number } | null {
+    if (this.trackIsHeld(track.id)) {
+      const bell = MAZE_BELLS.find((candidate) => candidate.id === track.bellId);
+      if (bell === undefined) return null;
+      return { x: bell.tile.x + 1 + TILE_CENTRE, y: bell.tile.y + TILE_CENTRE };
+    }
+    const armed = this.hazardsArmed && track.cells.some((cell) => this.isCurrentAct(cell.tileY));
+    let litX = 0;
+    let litCount = 0;
+    let warming: VentSchedule | null = null;
+    let warmest = 0;
+    if (armed) {
+      for (const cell of track.cells) {
+        const phase = ventPhaseAt(cell, this.frame);
+        if (phase === 'flame') {
+          litX += cell.tileX;
+          litCount++;
+        } else if (phase === 'telegraph') {
+          const warm = ventTelegraphProgress(cell, this.frame);
+          if (warm > warmest) {
+            warmest = warm;
+            warming = cell;
+          }
+        }
+      }
+    }
+    const row = (track.cells[0]?.tileY ?? 0) + TILE_CENTRE;
+    if (litCount > 0) return { x: litX / litCount + TILE_CENTRE, y: row };
+    if (warming !== null) return { x: warming.tileX + TILE_CENTRE, y: row };
+    if (track.cells.length === 0) return null;
+    const middle = track.cells[Math.floor(track.cells.length / 2)];
+    return { x: middle.tileX + TILE_CENTRE, y: row };
+  }
+
+  /** Turns every follow-spot a step toward where it is wanted, the short way round. */
+  private updateFollowSpots(): void {
+    for (const track of MAZE_SPOTLIGHTS) {
+      const pivot = this.followSpotPivot(track.id);
+      const target = this.followSpotTarget(track);
+      if (pivot === null || target === null) continue;
+      const wanted = Math.atan2(target.y - pivot.y, target.x - pivot.x);
+      const current = this.followSpotAims.get(track.id);
+      if (current === undefined) {
+        this.followSpotAims.set(track.id, wanted);
+        continue;
+      }
+      const turn = Math.atan2(Math.sin(wanted - current), Math.cos(wanted - current));
+      this.followSpotAims.set(track.id, current + turn * FOLLOW_SPOT_SWING_EASE);
+    }
+  }
+
+  /**
+   * Each burning follow-spot's beam through the air, from its lens to the
+   * cells it has caught, kept inside the lane it lights.
+   */
+  private renderFollowSpotCones(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (!this.hazardsArmed) return;
+    for (const track of MAZE_SPOTLIGHTS) {
+      if (this.trackIsHeld(track.id)) continue;
+      if (track.cells.length === 0) continue;
+      const first = track.cells[0];
+      if (!this.isCurrentAct(first.tileY)) continue;
+      let strength = 0;
+      for (const cell of track.cells) {
+        const burn = ventFlameProgress(cell, this.frame);
+        if (burn <= 0) continue;
+        const ramp = Math.min(burn, 1 - burn) / FOLLOW_SPOT_RAMP_SHARE;
+        strength = Math.max(strength, Math.min(1, ramp));
+      }
+      const pivot = this.followSpotPivot(track.id);
+      const target = this.followSpotTarget(track);
+      const lane = MENAGERIE_LANES.find((candidate) => candidate.half === track.half);
+      if (strength <= 0 || pivot === null || target === null || lane === undefined) continue;
+      const aim = this.followSpotAims.get(track.id) ?? 0;
+      const lensX = (pivot.x + Math.cos(aim) * FOLLOW_SPOT_LENS_REACH) * TILE_SIZE - camX;
+      const lensY = (pivot.y + Math.sin(aim) * FOLLOW_SPOT_LENS_REACH) * TILE_SIZE - camY;
+      if (!isOnScreen(lensX, lensY) && !isOnScreen(target.x * TILE_SIZE - camX, lensY)) continue;
+      drawFollowSpotCone(
+        ctx,
+        lensX,
+        lensY,
+        target.x * TILE_SIZE - camX,
+        target.y * TILE_SIZE - camY,
+        TILE_SIZE,
+        strength,
+        {
+          x: lane.x0 * TILE_SIZE - camX,
+          y: (first.tileY - FOLLOW_SPOT_CONE_HEADROOM_TILES) * TILE_SIZE - camY,
+          width: (lane.x1 - lane.x0 + 1) * TILE_SIZE,
+          height: (1 + FOLLOW_SPOT_CONE_HEADROOM_TILES) * TILE_SIZE,
+        },
+      );
+    }
+  }
+
+  /**
+   * How far through a lunge at its bars a caged beast is, 0..1, or `null`
+   * while it is still: it lunges when a lantern near it catches.
+   */
+  private cageLunge(piece: Dressing): number | null {
+    if (!this.hazardsArmed) return null;
+    const cells = this.cageLungeCells.get(piece);
+    if (cells === undefined) return null;
+    let lunge: number | null = null;
+    for (const cell of cells) {
+      if (!this.isCurrentAct(cell.tileY)) continue;
+      const track = MAZE_SPOTLIGHTS.find((candidate) => candidate.cells.includes(cell));
+      if (track === undefined || this.trackIsHeld(track.id)) continue;
+      const burnedFrames = ventFlameProgress(cell, this.frame) * cell.flameFrames;
+      if (burnedFrames <= 0 || burnedFrames >= CAGE_LUNGE_DURATION_FRAMES) continue;
+      lunge = Math.max(lunge ?? 0, burnedFrames / CAGE_LUNGE_DURATION_FRAMES);
+    }
+    return lunge;
+  }
+
+  /**
+   * Everything a player reads to stay alive or find the way, drawn over the
+   * stage lights so none of it is dimmed: the ropes from each target to its
+   * gate, every vent grille — the grille is where fire comes from, lit or
+   * not — and its warning, the lanterns' warm rings and a held row's clear
+   * marks, every opened way's green, the stars and the cold span of both
+   * beams.
+   */
+  renderTelegraphs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.renderRopes(ctx, camX, camY);
-    this.renderVents(ctx, camX, camY);
+    this.renderVentGrilles(ctx, camX, camY);
+    this.renderVentTelegraphs(ctx, camX, camY);
     this.renderSpotlightWarnings(ctx, camX, camY);
-    this.renderMirrorHall(ctx, camX, camY);
+    this.renderOpenedWays(ctx, camX, camY);
+    this.renderStarsAndColdBeams(ctx, camX, camY);
+  }
+
+  /** What is lit this frame, for the stage lights' additive pass. */
+  private liveLights(): LiveLights {
+    return {
+      ventFlames: this.litVents(),
+      spotlightBeams: this.litSpotlightCells(),
+      beamSteps: this.liveBeamSteps(),
+      stars: this.starLights(),
+      openedCurtains: this.openedCurtainTiles(),
+      grimaldi: this.grimaldi,
+    };
+  }
+
+  private *litVents(): Generator<{ tile: MazeTile; burn: number }> {
+    for (const vent of this.liveVents) {
+      const burn = ventFlameProgress(vent, this.frame);
+      if (burn > 0) yield { tile: { x: vent.tileX, y: vent.tileY }, burn };
+    }
+  }
+
+  private *litSpotlightCells(): Generator<{ tile: MazeTile; burn: number }> {
+    for (const { cell, lit } of this.liveSpotlightCells()) {
+      if (!lit) continue;
+      yield { tile: { x: cell.tileX, y: cell.tileY }, burn: ventFlameProgress(cell, this.frame) };
+    }
+  }
+
+  private *liveBeamSteps(): Generator<{ tile: MazeTile; hot: boolean }> {
+    if (!this.hazardsArmed) return;
+    for (const path of this.beamPaths.values()) {
+      for (const step of path.steps) {
+        if (!this.isCurrentAct(step.tile.y)) continue;
+        yield { tile: step.tile, hot: step.hot };
+      }
+    }
+  }
+
+  private *starLights(): Generator<{ tile: MazeTile; lit: number }> {
+    for (const star of MAZE_BEAM_TARGETS) {
+      const art = this.starArt(star);
+      const lit = art.latched ? 1 : art.litFraction;
+      if (lit > 0) yield { tile: star.tile, lit };
+    }
+  }
+
+  private *openedCurtainTiles(): Generator<MazeTile> {
+    for (const curtain of MAZE_CURTAINS) {
+      if (!this.openedCurtains.has(curtain.id)) continue;
+      yield curtain.humanBarrier;
+      yield curtain.catBarrier;
+    }
+  }
+
+  /** 1 on the frame a star latched, spent over `STAR_BURST_FRAMES`; 0 for a star not yet latched. */
+  private starBurstFor(star: MazeStar): number {
+    const latchedAt = this.starLatchFrames.get(star.id);
+    if (latchedAt === undefined) return 0;
+    return Math.max(0, 1 - (this.frame - latchedAt) / STAR_BURST_FRAMES);
+  }
+
+  /**
+   * Every place a live beam meets a mirror this frame: a flare where it is
+   * turned off the silvered face, a smoulder where it dies on a mirror's back.
+   * The mirror's own tile is never a beam step, so each is found one step past
+   * the last lit tile before it.
+   */
+  private *mirrorContacts(): Generator<{ tile: MazeTile; hot: boolean; absorbed: boolean }> {
+    if (!this.hazardsArmed) return;
+    for (const path of this.beamPaths.values()) {
+      for (const step of path.steps) {
+        if (!this.isCurrentAct(step.tile.y)) continue;
+        const ahead = beamStepAhead(step.tile, step.heading);
+        const mirror = MAZE_MIRRORS.find(
+          (candidate) => candidate.tile.x === ahead.x && candidate.tile.y === ahead.y,
+        );
+        if (mirror === undefined) continue;
+        const facing = this.mirrors.get(mirror.id)?.facing;
+        const turned = facing === undefined ? null : reflectBeam(facing, step.heading);
+        yield { tile: ahead, hot: step.hot, absorbed: turned === null };
+      }
+    }
+  }
+
+  private starArt(star: MazeStar): MazeStarArt {
+    let on = 0;
+    for (const half of star.litBy) {
+      if (this.beamPaths.get(half)?.starId === star.id) on++;
+    }
+    return {
+      phase: this.frame,
+      litFraction: on / star.litBy.length,
+      latched: this.starLatchFrames.has(star.id),
+      burst: this.starBurstFor(star),
+    };
   }
 
   private renderDressing(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const cure = this.stageCue().cure;
     for (const piece of this.dressing) {
       const x = piece.tile.x * TILE_SIZE - camX;
       const y = piece.tile.y * TILE_SIZE - camY;
@@ -1350,16 +2036,128 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
           drawActArchPost(ctx, x, y, TILE_SIZE, this.frame + piece.seed);
           break;
         case 'bleacher':
-          drawBleacherDead(ctx, x, y, TILE_SIZE, piece.seed);
+          drawBleacherSpectator(
+            ctx,
+            x,
+            y,
+            TILE_SIZE,
+            piece.seed,
+            piece.tile.x === CLAPPING_SPECTATOR_COLUMN,
+            this.frame,
+          );
           break;
         case 'cage':
-          drawMenagerieCage(ctx, x, y, TILE_SIZE, piece.seed);
+          drawMenagerieCageFront(
+            ctx,
+            x,
+            y,
+            TILE_SIZE,
+            piece.seed,
+            this.frame,
+            this.cageLunge(piece),
+          );
+          break;
+        case 'fireHoop':
+        case 'fuelCans':
+        case 'dangerPoster':
+          drawFireWalkWallKit(ctx, piece.kind, x, y, TILE_SIZE, piece.seed);
+          break;
+        case 'followSpot': {
+          if (piece.seed >= MAZE_SPOTLIGHTS.length) break;
+          const track = MAZE_SPOTLIGHTS[piece.seed];
+          const aim = this.followSpotAims.get(track.id) ?? 0;
+          drawFollowSpotLamp(ctx, x, y, TILE_SIZE, aim, !this.trackIsHeld(track.id));
+          break;
+        }
+        case 'feedTrough':
+          drawFeedTrough(ctx, x, y, TILE_SIZE);
           break;
         case 'mirrorGlass':
-          drawMirrorHallGlass(ctx, x, y, TILE_SIZE, piece.seed, this.frame);
+          drawMirrorHallPane(ctx, x, y, TILE_SIZE, piece.seed, this.frame);
+          break;
+        case 'ringBleacher': {
+          const seat = ringSeatOf(piece);
+          drawRingBleacher(ctx, x, y, TILE_SIZE, {
+            side: seat.side,
+            tier: seat.tier,
+            seed: piece.seed,
+            phase: this.frame,
+            slump: cure,
+            bulbsLit: this.lighting.houseLightsLevel >= BULBS_LIT_HOUSE_LEVEL,
+          });
+          break;
+        }
+        case 'intervalLamp':
+          drawIntervalRoomLamp(
+            ctx,
+            x,
+            y,
+            TILE_SIZE,
+            piece.owner === 'human' ? 'east' : 'west',
+            this.frame + piece.seed,
+          );
           break;
       }
     }
+  }
+
+  /**
+   * Which crawlers each hall pane reflects this frame: every crawler within
+   * reach of a pane shows in the nearest few, painted once into a scratch
+   * surface and blitted into each — so a reflection costs one paint and at
+   * most `MAX_REFLECTING_PANES` blits per crawler.
+   */
+  private paneReflections(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): ReadonlyMap<Dressing, ReadonlyArray<PaneReflection>> {
+    const reflections = new Map<Dressing, PaneReflection[]>();
+    const party = this.lastContext;
+    // Only the hall has panes, and only panes on screen are worth a crawler's
+    // body painted into a scratch surface.
+    if (party === null || this.currentSectionId !== 'mirrors') return reflections;
+    const visiblePanes = this.hallPanes.filter((pane) =>
+      isOnScreen(pane.tile.x * TILE_SIZE - camX, pane.tile.y * TILE_SIZE - camY),
+    );
+    if (visiblePanes.length === 0) return reflections;
+    const crawlers: ReadonlyArray<Player> = [party.human, party.cat];
+    crawlers.forEach((crawler, slot) => {
+      if (!crawler.isAlive) return;
+      const centreX = crawler.x / TILE_SIZE + TILE_CENTRE;
+      const centreY = crawler.y / TILE_SIZE + TILE_CENTRE;
+      const near = visiblePanes
+        .map((pane) => {
+          const dx = centreX - (pane.tile.x + TILE_CENTRE);
+          const dy = centreY - (pane.tile.y + TILE_CENTRE);
+          return { pane, dx, distance: Math.hypot(dx, dy) };
+        })
+        .filter((entry) => entry.distance <= REFLECTION_RANGE_TILES)
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, MAX_REFLECTING_PANES);
+      if (near.length === 0) return;
+      const source: ReflectionSource = paintReflectionSource(
+        ctx,
+        slot,
+        TILE_SIZE,
+        (target, x, y, size) => crawler.paintBodyAt(target, x, y, size),
+      );
+      for (const entry of near) {
+        const list = reflections.get(entry.pane) ?? [];
+        list.push({
+          source,
+          offsetTiles: entry.dx,
+          strength: 1 - entry.distance / REFLECTION_RANGE_TILES,
+        });
+        reflections.set(entry.pane, list);
+      }
+    });
+    return reflections;
+  }
+
+  /** How many reflection blits the last frame's dressing made, for the art gate. */
+  get lastReflectionBlits(): number {
+    return this.reflectionBlits;
   }
 
   /** The act names, painted on the boards over the flaps and every arch. */
@@ -1370,53 +2168,87 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       // The board spills several tiles either side of its own, so the cull has
       // to be generous horizontally or it pops out while still half on screen.
       if (!isOnScreen(x, y, OVERHEAD_PROP_HEIGHT_TILES)) continue;
-      drawActArchBoard(ctx, x, y, TILE_SIZE, board.label);
+      drawActEasel(ctx, x, y, TILE_SIZE, board.label);
     }
   }
 
-  private renderBarriers(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderShutBarriers(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const block of MAZE_BLOCKS) {
       const grateX = block.grateTile.x * TILE_SIZE - camX;
       const grateY = block.grateTile.y * TILE_SIZE - camY;
-      if (isOnScreen(grateX, grateY)) drawMazeGrate(ctx, grateX, grateY, TILE_SIZE);
+      if (isOnScreen(grateX, grateY)) drawPulleyGrate(ctx, grateX, grateY, TILE_SIZE);
+      if (this.clearedBlocks.has(block.id)) continue;
       const barrierX = block.barrierTile.x * TILE_SIZE - camX;
       const barrierY = block.barrierTile.y * TILE_SIZE - camY;
       if (!isOnScreen(barrierX, barrierY)) continue;
-      if (this.clearedBlocks.has(block.id)) {
-        drawMazeWayOpen(ctx, barrierX, barrierY, TILE_SIZE, this.wayArtFor(block.barrierTile));
-        continue;
-      }
       if (block.section === 'menagerie')
-        drawMazeCageGate(ctx, barrierX, barrierY, TILE_SIZE, this.frame);
-      else if (block.kind === 'sandbag') drawMazeGate(ctx, barrierX, barrierY, TILE_SIZE);
-      else drawMazeBarricade(ctx, barrierX, barrierY, TILE_SIZE);
+        drawCageGateBarrier(ctx, barrierX, barrierY, TILE_SIZE, this.frame);
+      else if (block.kind === 'sandbag') drawFireScreenGate(ctx, barrierX, barrierY, TILE_SIZE);
+      else drawBoardedFlat(ctx, barrierX, barrierY, TILE_SIZE);
     }
 
     for (const curtain of MAZE_CURTAINS) {
       const windowX = curtain.windowTile.x * TILE_SIZE - camX;
       const windowY = curtain.windowTile.y * TILE_SIZE - camY;
-      if (isOnScreen(windowX, windowY)) drawMazeCurtainWindow(ctx, windowX, windowY, TILE_SIZE);
-      const opened = this.openedCurtains.has(curtain.id);
+      if (isOnScreen(windowX, windowY))
+        drawMazeCurtainWindow(ctx, windowX, windowY, TILE_SIZE, this.frame);
+      if (this.openedCurtains.has(curtain.id)) continue;
       for (const tile of [curtain.humanBarrier, curtain.catBarrier]) {
         const x = tile.x * TILE_SIZE - camX;
         const y = tile.y * TILE_SIZE - camY;
-        if (!isOnScreen(x, y)) continue;
-        if (opened) drawMazeCurtainOpen(ctx, x, y, TILE_SIZE, this.wayArtFor(tile));
-        else drawMazeCurtain(ctx, x, y, TILE_SIZE, this.frame);
+        if (isOnScreen(x, y)) drawMazeCurtain(ctx, x, y, TILE_SIZE, this.frame);
       }
     }
 
     for (const star of MAZE_STARS) {
-      const latched = this.latchedStars.has(star.id);
+      if (this.latchedStars.has(star.id)) continue;
       for (const tile of star.opens) {
         const x = tile.x * TILE_SIZE - camX;
         const y = tile.y * TILE_SIZE - camY;
         if (!isOnScreen(x, y)) continue;
-        if (latched) drawMazeWayOpen(ctx, x, y, TILE_SIZE, this.wayArtFor(tile));
-        else if (star.id === 'star_twin') drawMazeExitDoor(ctx, x, y, TILE_SIZE, this.frame);
+        if (star.id === 'star_twin') drawMazeExitDoor(ctx, x, y, TILE_SIZE, this.frame);
         else drawMazeActGate(ctx, x, y, TILE_SIZE, this.frame);
       }
     }
+  }
+
+  /** Every way that has given way, in the tent's "go" green. */
+  private renderOpenedWays(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const block of MAZE_BLOCKS) {
+      if (!this.clearedBlocks.has(block.id)) continue;
+      const x = block.barrierTile.x * TILE_SIZE - camX;
+      const y = block.barrierTile.y * TILE_SIZE - camY;
+      if (isOnScreen(x, y))
+        drawMazeWayOpen(ctx, x, y, TILE_SIZE, this.wayArtFor(block.barrierTile));
+    }
+    for (const curtain of MAZE_CURTAINS) {
+      if (!this.openedCurtains.has(curtain.id)) continue;
+      for (const tile of [curtain.humanBarrier, curtain.catBarrier]) {
+        const x = tile.x * TILE_SIZE - camX;
+        const y = tile.y * TILE_SIZE - camY;
+        if (isOnScreen(x, y)) {
+          drawMazeCurtainOpen(ctx, x, y, TILE_SIZE, {
+            ...this.wayArtFor(tile),
+            rise: this.curtainRiseFor(tile),
+          });
+        }
+      }
+    }
+    for (const star of MAZE_STARS) {
+      if (!this.latchedStars.has(star.id)) continue;
+      for (const tile of star.opens) {
+        const x = tile.x * TILE_SIZE - camX;
+        const y = tile.y * TILE_SIZE - camY;
+        if (isOnScreen(x, y)) drawMazeWayOpen(ctx, x, y, TILE_SIZE, this.wayArtFor(tile));
+      }
+    }
+  }
+
+  /** How far an opened curtain's drape has lifted: 0 on the frame it opened, 1 once it has bunched up. */
+  private curtainRiseFor(tile: MazeTile): number {
+    const openedAt = this.openedFrames.get(tileKeyOf(tile.x, tile.y));
+    if (openedAt === undefined) return 1;
+    return Math.min(1, (this.frame - openedAt) / CURTAIN_RISE_FRAMES);
   }
 
   /** How an opened way should look this frame: quiet, unless it just gave way. */
@@ -1450,25 +2282,41 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
         continue;
       }
       const target = this.targets.get(block.id);
-      drawMazeRope(ctx, [from, pulley, to], {
-        pulled: this.clearedBlocks.has(block.id) ? 1 : 1 - (target?.integrityFraction ?? 1),
-        owner: MAZE_TARGET_OWNER[block.kind],
-      });
+      drawShadedRope(
+        ctx,
+        [from, pulley, to],
+        {
+          pulled: this.clearedBlocks.has(block.id) ? 1 : 1 - (target?.integrityFraction ?? 1),
+          owner: MAZE_TARGET_OWNER[block.kind],
+        },
+        TILE_SIZE,
+      );
     }
   }
 
-  private renderVents(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    for (const vent of MAZE_VENTS) {
+  /** The grilles are architecture and stay whatever act it is. */
+  private renderVentGrilles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const run of VENT_GRATE_RUNS) {
+      const x = run.x0 * TILE_SIZE - camX;
+      const y = run.tileY * TILE_SIZE - camY;
+      const lastColumn = run.columns[run.columns.length - 1] ?? run.x0;
+      const right = (lastColumn + 1) * TILE_SIZE - camX;
+      if (!isOnScreen(Math.min(right - TILE_SIZE, Math.max(x, 0)), y)) continue;
+      drawFireBreatherGrateRun(ctx, run, x, y, TILE_SIZE);
+    }
+  }
+
+  /**
+   * Only a set that is still standing warns. A struck act glowing behind the
+   * party would be the tent promising a hazard it has retired.
+   */
+  private renderVentTelegraphs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const vent of this.liveVents) {
       const x = vent.tileX * TILE_SIZE - camX;
       const y = vent.tileY * TILE_SIZE - camY;
       if (!isOnScreen(x, y)) continue;
-      // The grille is architecture and stays whatever act it is; only the
-      // warning belongs to a set that is still standing. A struck act glowing
-      // behind the party would be the tent promising a hazard it has retired.
-      drawFlameVentGrille(ctx, x, y, TILE_SIZE);
-      if (!this.hazardsArmed || !this.isCurrentAct(vent.tileY)) continue;
       const telegraph = ventTelegraphProgress(vent, this.frame);
-      if (telegraph > 0) drawFlameVentTelegraph(ctx, x, y, TILE_SIZE, telegraph);
+      if (telegraph > 0) drawFireBreatherTelegraph(ctx, x, y, TILE_SIZE, telegraph);
     }
   }
 
@@ -1499,27 +2347,27 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     }
   }
 
-  private renderMirrorHall(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderLimelights(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const projector of MAZE_PROJECTORS) {
       const x = projector.tile.x * TILE_SIZE - camX;
       const y = projector.tile.y * TILE_SIZE - camY;
       if (!isOnScreen(x, y)) continue;
       drawMazeLimelight(ctx, x, y, TILE_SIZE, projector.direction, this.frame);
     }
-    for (const star of MAZE_STARS) {
+  }
+
+  /**
+   * The stars are the hall's scoreboard — how many beams each has caught —
+   * and the cold span is the path a player is aiming, so both are read, not
+   * decor.
+   */
+  private renderStarsAndColdBeams(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    this.renderBravoRig(ctx, camX, camY);
+    for (const star of MAZE_BEAM_TARGETS) {
       const x = star.tile.x * TILE_SIZE - camX;
       const y = star.tile.y * TILE_SIZE - camY;
       if (!isOnScreen(x, y)) continue;
-      let on = 0;
-      for (const half of star.litBy) {
-        if (this.beamPaths.get(half)?.starId === star.id) on++;
-      }
-      const art: MazeStarArt = {
-        phase: this.frame,
-        litFraction: on / star.litBy.length,
-        latched: this.latchedStars.has(star.id),
-      };
-      drawMazeStar(ctx, x, y, TILE_SIZE, art);
+      drawMazeStar(ctx, x, y, TILE_SIZE, this.starArt(star));
     }
     if (!this.hazardsArmed) return;
     for (const path of this.beamPaths.values()) {
@@ -1532,9 +2380,43 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
           hot: false,
           heading: step.heading,
           phase: this.frame,
+          seed: step.tile.x * MAZE_HEIGHT + step.tile.y,
         });
       }
     }
+    this.renderTurnPreview(ctx, camX, camY);
+  }
+
+  /**
+   * The ghost of the next turn: dots along the cold light the blow would
+   * make, and a ring on the star it would land on. The hot span is left out —
+   * it never moves, so a ghost of it would only be drawn over the warning.
+   */
+  private renderTurnPreview(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const preview = this.turnPreview;
+    if (preview === null) return;
+    for (const step of preview.path.steps) {
+      if (step.hot) continue;
+      const x = step.tile.x * TILE_SIZE - camX;
+      const y = step.tile.y * TILE_SIZE - camY;
+      if (!isOnScreen(x, y)) continue;
+      drawTurnPreviewTile(ctx, x, y, TILE_SIZE, step.heading, this.frame);
+    }
+    const star = MAZE_BEAM_TARGETS.find((candidate) => candidate.id === preview.path.starId);
+    if (star === undefined) return;
+    const x = star.tile.x * TILE_SIZE - camX;
+    const y = star.tile.y * TILE_SIZE - camY;
+    if (isOnScreen(x, y)) drawTurnPreviewStarRing(ctx, x, y, TILE_SIZE, this.frame);
+  }
+
+  private renderBravoRig(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const x = BRAVO_RIG_TILE.x * TILE_SIZE - camX;
+    const y = BRAVO_RIG_TILE.y * TILE_SIZE - camY;
+    if (!isOnScreen(x, y) && !isOnScreen(x + (BRAVO_RIG_WIDTH_TILES - 1) * TILE_SIZE, y)) return;
+    const latchedAt = this.starLatchFrames.get(MAZE_ENCORE_STAR.id);
+    const lit =
+      latchedAt === undefined ? 0 : Math.min(1, (this.frame - latchedAt) / BRAVO_LIGHT_UP_FRAMES);
+    drawBravoRig(ctx, x, y, TILE_SIZE, { lit, phase: this.frame });
   }
 
   /**
@@ -1553,7 +2435,9 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       const x = vent.tileX * TILE_SIZE - camX;
       const y = vent.tileY * TILE_SIZE - camY;
       if (!isOnScreen(x, y, FLAME_COLUMN_HEIGHT_TILES)) continue;
-      drawFlameVentColumn(ctx, x, y, TILE_SIZE, burn, ventFlamePhase(vent, this.frame));
+      const flamePhase = ventFlamePhase(vent, this.frame);
+      drawHeatShimmerFlare(ctx, x, y, TILE_SIZE, burn, flamePhase);
+      drawFlameVentColumn(ctx, x, y, TILE_SIZE, burn, flamePhase);
     }
 
     for (const track of MAZE_SPOTLIGHTS) {
@@ -1579,8 +2463,20 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
           hot: true,
           heading: step.heading,
           phase: this.frame,
+          seed: step.tile.x * MAZE_HEIGHT + step.tile.y,
         });
       }
+    }
+
+    for (const contact of this.mirrorContacts()) {
+      const x = contact.tile.x * TILE_SIZE - camX;
+      const y = contact.tile.y * TILE_SIZE - camY;
+      if (!isOnScreen(x, y)) continue;
+      drawBeamMirrorFlare(ctx, x, y, TILE_SIZE, {
+        hot: contact.hot,
+        absorbed: contact.absorbed,
+        phase: this.frame,
+      });
     }
 
     this.renderNameChips(ctx, camX, camY);
@@ -1956,6 +2852,9 @@ const WAY_OPENED_BANNER = 'The way is open';
 const WAY_OPENED_FOR_CARL = 'Switch to Carl and walk through.';
 const WAY_OPENED_FOR_DONUT = 'Switch to Donut and walk through.';
 const WAY_OPENED_FOR_BOTH = 'Both lanes can go on.';
+const ENCORE_BANNER = 'Bravo!';
+const ENCORE_PAID_SUBTITLE = 'An encore. The house throws coins.';
+const ENCORE_REPEAT_SUBTITLE = 'An encore. The house has nothing left to throw.';
 
 /** How loud a vent's ignition is against the rest of the tent. */
 const VENT_IGNITION_VOLUME = 0.35;
@@ -2074,6 +2973,10 @@ export function buildBigTopDressing(
       hangOnWall({ x: barrier.x - 1, y: barrier.y }, 'archPost', owner, 0);
       hangOnWall({ x: barrier.x + 1, y: barrier.y }, 'archPost', owner, 1);
     }
+    // A lamp on each room's outer side wall, level with where its crawler waits.
+    const lampRow = curtain.windowTile.y;
+    hangOnWall({ x: curtain.humanRoom.x0 - 1, y: lampRow }, 'intervalLamp', 'human', 0);
+    hangOnWall({ x: curtain.catRoom.x1 + 1, y: lampRow }, 'intervalLamp', 'cat', 1);
   }
 
   // A doorway needs a clear tile of wall either side of it to read as a doorway.
@@ -2101,9 +3004,34 @@ export function buildBigTopDressing(
     }
   }
 
+  hangFireWalkKit(pieces, isWall);
+
+  MAZE_SPOTLIGHTS.forEach((track, index) => {
+    const lane = MENAGERIE_LANES.find((candidate) => candidate.half === track.half);
+    if (lane === undefined || track.cells.length === 0) return;
+    const row = track.cells[0].tileY;
+    const x =
+      track.half === 'human'
+        ? lane.x0 + FOLLOW_SPOT_INSET_TILES
+        : lane.x1 - FOLLOW_SPOT_INSET_TILES;
+    hangOnWall({ x, y: row - 1 }, 'followSpot', track.half, index);
+  });
+  // Every bell stands in a one-tile shaft; its trough hangs on the drape beside it.
+  MAZE_BELLS.forEach((bell, index) => {
+    hangOnWall({ x: bell.tile.x + 1, y: bell.tile.y }, 'feedTrough', 'cat', index);
+  });
+
   const dividerColumn = MAZE_STARS[0].tile.x;
+  // A star or a limelight already fills its tile of wall; a pane there would sit under it.
+  const fixedInWall = new Set(
+    [
+      ...MAZE_BEAM_TARGETS.map((star) => star.tile),
+      ...MAZE_PROJECTORS.map((projector) => projector.tile),
+    ].map((tile) => tileKeyOf(tile.x, tile.y)),
+  );
   for (const column of MIRROR_HALL_GLASS_COLUMNS) {
     for (let y = MIRROR_HALL_ROWS.y0; y <= MIRROR_HALL_ROWS.y1; y += MIRROR_GLASS_STRIDE) {
+      if (fixedInWall.has(tileKeyOf(column, y))) continue;
       hangOnWall(
         { x: column, y },
         'mirrorGlass',
@@ -2113,7 +3041,162 @@ export function buildBigTopDressing(
     }
   }
 
+  // The dead audience in the ring's stands, tier on tier up the rim either side.
+  const ring: MazeRect = MAZE_FINAL_CHAMBER;
+  for (let y = ring.y0; y <= ring.y1; y++) {
+    for (let tier = 0; tier < RING_BLEACHER_TIERS; tier++) {
+      const west = { x: ring.x0 - 1 - tier, y };
+      const east = { x: ring.x1 + 1 + tier, y };
+      for (const [seat, owner] of [
+        [west, 'human'],
+        [east, 'cat'],
+      ] as const) {
+        if (backstageClutterAt(seat.x, seat.y) !== null) continue;
+        hangOnWall(seat, 'ringBleacher', owner, seat.x * RING_SEAT_SEED_STRIDE + seat.y);
+      }
+    }
+  }
+
   return pieces;
+}
+
+/** Spreads the stands' seeds so no two seats in a column share a spectator. */
+const RING_SEAT_SEED_STRIDE = 53;
+
+/** Which stand a seat is in, and how many rows back from the ring. */
+function ringSeatOf(piece: Dressing): { side: 'west' | 'east'; tier: number } {
+  const west = piece.tile.x < MAZE_FINAL_CHAMBER.x0;
+  return {
+    side: west ? 'west' : 'east',
+    tier: west
+      ? MAZE_FINAL_CHAMBER.x0 - 1 - piece.tile.x
+      : piece.tile.x - MAZE_FINAL_CHAMBER.x1 - 1,
+  };
+}
+
+/** The wall tile each track's follow-spot hangs on, keyed by track. */
+function followSpotTilesOf(dressing: ReadonlyArray<Dressing>): ReadonlyMap<string, MazeTile> {
+  const tiles = new Map<string, MazeTile>();
+  for (const piece of dressing) {
+    if (piece.kind !== 'followSpot') continue;
+    if (piece.seed < MAZE_SPOTLIGHTS.length) tiles.set(MAZE_SPOTLIGHTS[piece.seed].id, piece.tile);
+  }
+  return tiles;
+}
+
+/**
+ * Which lantern cells set each beast's cage lunging: every cell on the row
+ * under a cage front, within reach along it, handed to the nearest cage whose
+ * occupant can still lunge.
+ */
+function cageLungeCellsOf(
+  dressing: ReadonlyArray<Dressing>,
+): ReadonlyMap<Dressing, ReadonlyArray<VentSchedule>> {
+  const beasts = dressing.filter(
+    (piece) => piece.kind === 'cage' && occupantLunges(cageOccupantFor(piece.seed)),
+  );
+  const cells = new Map<Dressing, VentSchedule[]>();
+  for (const track of MAZE_SPOTLIGHTS) {
+    for (const cell of track.cells) {
+      let nearest: Dressing | null = null;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+      for (const cage of beasts) {
+        if (cage.tile.y !== cell.tileY - 1) continue;
+        const distance = Math.abs(cage.tile.x - cell.tileX);
+        if (distance > CAGE_LUNGE_REACH_TILES || distance >= nearestDistance) continue;
+        nearest = cage;
+        nearestDistance = distance;
+      }
+      if (nearest === null) continue;
+      const list = cells.get(nearest) ?? [];
+      list.push(cell);
+      cells.set(nearest, list);
+    }
+  }
+  return cells;
+}
+
+/**
+ * The fire act's kit hung along the fire walk's drapes: every few faces a
+ * fire hoop, a poster or a pair of fuel cans. Only on a drape over the act's
+ * own floor, never beside a way that opens, and never where a piece already
+ * hangs.
+ */
+function hangFireWalkKit(
+  pieces: Dressing[],
+  isWall: (tileX: number, tileY: number) => boolean,
+): void {
+  const firewalk = MAZE_SECTIONS.find((section) => section.id === 'firewalk');
+  if (firewalk === undefined) return;
+  const taken = new Set(pieces.map((piece) => tileKeyOf(piece.tile.x, piece.tile.y)));
+  for (const block of MAZE_BLOCKS) {
+    taken.add(tileKeyOf(block.grateTile.x, block.grateTile.y));
+    for (let dx = -1; dx <= 1; dx++) {
+      taken.add(tileKeyOf(block.barrierTile.x + dx, block.barrierTile.y));
+    }
+  }
+  const inCurtainRoom = (x: number, y: number): boolean =>
+    MAZE_CURTAINS.some(
+      (curtain) => rectContains(curtain.humanRoom, x, y) || rectContains(curtain.catRoom, x, y),
+    );
+  let faces = 0;
+  let hung = 0;
+  for (let y = firewalk.rowRange.y0; y < firewalk.rowRange.y1; y++) {
+    for (let x = 0; x < MAZE_WIDTH; x++) {
+      const isDrapeFace = isWall(x, y) && !isWall(x, y + 1) && !isMazeBarrierTile(x, y + 1);
+      if (!isDrapeFace || inCurtainRoom(x, y + 1) || taken.has(tileKeyOf(x, y))) continue;
+      const turn = faces++;
+      if (turn % FIRE_KIT_STRIDE !== 0) continue;
+      const kit = FIRE_WALK_WALL_KITS[hung % FIRE_WALK_WALL_KITS.length];
+      pieces.push({
+        tile: { x, y },
+        kind: kit,
+        owner: x < ACT_BOARD_COLUMN ? 'human' : 'cat',
+        seed: hung,
+      });
+      hung++;
+    }
+  }
+}
+
+/** How far into its room an interval lamp's pool falls, from the wall it hangs on. */
+const INTERVAL_LAMP_THROW_TILES = 1.5;
+
+/**
+ * The lamps the dressing hangs, as the stage lights see them: a pool on every
+ * footlight, on each striped arch post, and thrown into each interval room
+ * from its lamp.
+ */
+function dressingLightFixtures(dressing: ReadonlyArray<Dressing>): LightFixture[] {
+  const fixtures: LightFixture[] = [];
+  for (const piece of dressing) {
+    const x = piece.tile.x + TILE_CENTRE;
+    const y = piece.tile.y + TILE_CENTRE;
+    switch (piece.kind) {
+      case 'footlight':
+      case 'archPost':
+        fixtures.push({ kind: piece.kind, x, y });
+        break;
+      case 'intervalLamp': {
+        // The human's lamp hangs on its room's west wall and lights eastward.
+        const intoRoom = piece.owner === 'human' ? 1 : -1;
+        fixtures.push({ kind: 'intervalLamp', x: x + intoRoom * INTERVAL_LAMP_THROW_TILES, y });
+        break;
+      }
+      case 'runner':
+      case 'bleacher':
+      case 'cage':
+      case 'mirrorGlass':
+      case 'ringBleacher':
+      case 'fireHoop':
+      case 'fuelCans':
+      case 'dangerPoster':
+      case 'followSpot':
+      case 'feedTrough':
+        break;
+    }
+  }
+  return fixtures;
 }
 
 /**
@@ -2132,7 +3215,7 @@ function buildActBoards(): ReadonlyArray<ActBoard> {
     const section = MAZE_SECTIONS.find((candidate) => candidate.id === curtain.opens);
     if (section === undefined) continue;
     boards.push({
-      tile: { x: ACT_BOARD_COLUMN, y: curtain.humanBarrier.y },
+      tile: { x: curtain.windowTile.x, y: curtain.humanBarrier.y },
       label: section.banner,
     });
   }

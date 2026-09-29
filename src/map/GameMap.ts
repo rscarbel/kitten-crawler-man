@@ -17,9 +17,6 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   FOUNTAIN,
   TORCH,
   WELL,
@@ -73,6 +70,8 @@ import {
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
 } from './tileTypes';
 import { isSightTransparentTileType, isWalkableTileType } from './walkability';
 import type { Rect } from './roomDoorways';
@@ -110,8 +109,12 @@ import {
 import { generateOverworld, type BuildingEntry } from './OverworldGenerator';
 import type { CampSite } from './overworld/camps';
 import type { BriarHollowSite, VillageDistrictId } from './overworld/briarHollowSite';
+import type { CircusGroundsSite } from './overworld/circusGroundsLayout';
 import { registerBriarHollowSite } from './tiles/hollowSiteRegistry';
+import { registerCircusGroundsSite } from './tiles/circusSiteRegistry';
 import { hollowPropDrawsAt } from './tiles/hollowVillageTiles';
+import { circusStructureDrawsAt } from './tiles/circusStructureTiles';
+import { tentPoleDrawsAt } from './tiles/tentPoleTiles';
 import type { BuildingKind, TownPlan } from './town/townPlan';
 import {
   NAMED_INTERIOR_LAYOUTS,
@@ -125,6 +128,7 @@ import {
 } from './town/interiors/index';
 import { stableInteriorPropId, type TownInteriorLayoutEntry } from './town/interiors/types';
 import { setTownInteriorWallMaterial } from './town/interiorWallMaterial';
+import { setBigTopDecorLayout } from './bigTopMazeDecor';
 import {
   TOWN_INTERIOR_PROPS,
   type TownInteriorPropId,
@@ -153,6 +157,8 @@ const DEFAULT_TILE_HEIGHT = 10;
 const DEFAULT_BOSS_ROOM_COUNT = 1;
 /** An entity's pixel position is its top-left corner; this offset reaches its centre. */
 const ENTITY_TILE_CENTER_OFFSET = 0.5;
+/** From a tile's top-left corner to its centre, in tiles. */
+const TILE_CENTRE_OFFSET = 0.5;
 
 // ── Interior building dimensions (width × height in tiles) ────────────────────
 export const TOWER_INTERIOR_W = 20;
@@ -363,9 +369,6 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   MAIN_TOWER,
   BARREL,
   BARREL_SIDE,
@@ -400,6 +403,11 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  // The circus grounds' tents, pavilions and arch posts.
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
+  // The Big Top's tent poles: the mast rises out of view in the Y-sorted pass.
+  TENT_POLE,
 ]);
 
 /**
@@ -675,6 +683,8 @@ export class GameMap {
   doomsdayEscapeTile: { x: number; y: number } | undefined = undefined;
   /** Radius (tiles) of the circus grounds around `circusCentre`. Undefined on non-overworld maps. */
   circusRadiusTiles: number | undefined = undefined;
+  /** What the circus grounds' layout stamped on this map, and where. Null off the overworld. */
+  circusGrounds: CircusGroundsSite | null = null;
 
   /**
    * Wilderness clearings (tile coords) where bounty encounters are staged.
@@ -899,6 +909,7 @@ export class GameMap {
     this.fountainCentre = data.fountainCentre;
     this.circusCentre = data.circusCentre;
     this.circusRadiusTiles = data.circusRadiusTiles;
+    this.circusGrounds = data.circusGrounds;
     this.bountySites = data.bountySites;
     this.camps = data.camps;
     this.briarHollow = data.briarHollow;
@@ -915,6 +926,7 @@ export class GameMap {
       }
     }
     registerBriarHollowSite(data.grid, data.briarHollow);
+    registerCircusGroundsSite(data.grid, data.circusGrounds);
     return data.grid;
   }
 
@@ -1205,7 +1217,9 @@ export class GameMap {
   ): void {
     this._placedInteriorProps = [];
     setTownInteriorWallMaterial(buildingName);
+    setBigTopDecorLayout(null);
     if (variant === 'bigtop_maze') {
+      setBigTopDecorLayout({ kind: 'maze' });
       this.generateBigTopMaze();
       return;
     }
@@ -1316,6 +1330,15 @@ export class GameMap {
       // cluster, and bleachers hugging the north/west/east walls.
       const ringCx = Math.floor(w / 2);
       const ringCy = Math.floor(h / 2) - BIGTOP_RING_NORTH_SHIFT;
+      // The curb tiles below are the tiles whose centres sit on the ring, so
+      // the painted curb is centred on the middle of the centre tile; the pole
+      // is the 2×2 whose shared corner is that tile's top-left.
+      setBigTopDecorLayout({
+        kind: 'arena',
+        ringCentre: { x: ringCx + TILE_CENTRE_OFFSET, y: ringCy + TILE_CENTRE_OFFSET },
+        ringRadius: BIGTOP_RING_RADIUS,
+        poleCentre: { x: ringCx, y: ringCy },
+      });
 
       for (let y = 1; y < h - 1; y++) {
         for (let x = 1; x < w - 1; x++) {
@@ -2533,6 +2556,15 @@ export class GameMap {
     ) {
       return null;
     }
+    // A circus structure likewise: one tile draws the whole tent.
+    if (
+      (type === CIRCUS_STRUCTURE_TALL || type === CIRCUS_STRUCTURE_LOW) &&
+      !circusStructureDrawsAt(this.structure, tx, ty)
+    ) {
+      return null;
+    }
+    // And a tent pole: its bottom-left tile draws the whole mast.
+    if (type === TENT_POLE && !tentPoleDrawsAt(this.structure, tx, ty)) return null;
 
     // The same reach the overlay cache sizes its canvases to, so a tile can
     // never be culled while part of its art is still on screen.

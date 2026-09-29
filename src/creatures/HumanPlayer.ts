@@ -1028,7 +1028,7 @@ export class HumanPlayer extends Player {
     const sy = this.y - camY;
     const s = tileSize;
 
-    if (this.isActive) {
+    if (this.isActive && !this.paintingBodyOnly) {
       const r = HumanPlayer.ACTIVE_SPHERE_RADIUS;
       const sphereCX = sx + s * HumanPlayer.SPRITE_HORIZONTAL_OFFSET;
       const sphereCY =
@@ -1051,7 +1051,7 @@ export class HumanPlayer extends Player {
       drawToolOverlay(ctx, tool.kind, tool.tier, toolPlacement, sx, sy, s);
     }
 
-    drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
+    if (!this.paintingBodyOnly) drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
 
     this.renderHealthBar(ctx, sx, sy - HumanPlayer.HEALTH_BAR_Y_OFFSET);
     this.renderKnockedOutOverlay(ctx, sx, sy);

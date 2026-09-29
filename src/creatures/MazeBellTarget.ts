@@ -1,7 +1,7 @@
 import { MazePropTarget } from './MazePropTarget';
 import type { Player } from '../Player';
 import { BELL_COOLDOWN_FRAMES, BELL_HOLD_FRAMES } from '../map/bigTopMazeLayout';
-import { drawMazeShowBell } from '../sprites/bigTopMazeProps';
+import { drawFeedingBell } from '../sprites/art/bigTop/menagerieProps';
 
 /**
  * A brass show-bell on its stand.
@@ -76,7 +76,7 @@ export class MazeBellTarget extends MazePropTarget<'show_bell'> {
     camY: number,
     tileSize: number,
   ): void {
-    drawMazeShowBell(ctx, this.x - camX, this.y - camY, tileSize, {
+    drawFeedingBell(ctx, this.x - camX, this.y - camY, tileSize, {
       phase: this.phase,
       struck: this.hitFlash > 0,
       holding: this.isHolding,

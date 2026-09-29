@@ -22,9 +22,6 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   SPRITE_BUILDING,
   TOWN_WALL,
   COBBLE_STREET,
@@ -46,6 +43,8 @@ import {
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
 } from '../tileTypes';
 import type { TileRect } from './townPlan';
 
@@ -63,14 +62,11 @@ const SOLID_TILE_TYPES: ReadonlySet<number> = new Set([
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   SPRITE_BUILDING,
   TOWN_WALL,
   FENCE,
   // The river and what stands in or above it. Water is listed so no later pass
-  // can lay a street across the channel: `paintBuildingBypassRoutes` and the
+  // can lay a street across the channel: the road painters and the
   // forest/ruin passes all test `isSolid` before they write, and a river that
   // roads ran straight through would not be a river.
   FloorTypeValue.water,
@@ -88,6 +84,9 @@ const SOLID_TILE_TYPES: ReadonlySet<number> = new Set([
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  // The circus grounds' structures: no later pass paves or plants over a tent.
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
 ]);
 
 /**
@@ -320,9 +319,9 @@ export class TileGrid {
   /**
    * True on any of the town's street materials or on an out-of-town track.
    *
-   * The bypass router asks this rather than "is this the road type", because
-   * under a street plan a route runs over any of the six surfaces above, and a
-   * lane severed by a tent is severed just the same as a track would be.
+   * Asked rather than "is this the road type" wherever a pass must keep off
+   * a route — the circus's arch posts and rim props, for one — because under a
+   * street plan a route runs over any of the six surfaces above.
    */
   isPaved(x: number, y: number): boolean {
     const type = this.typeAt(x, y);

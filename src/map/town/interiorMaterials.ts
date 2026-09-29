@@ -7,8 +7,9 @@
  * Without it a shop, a house and the tower would be floored and walled in the
  * *dungeon's* generic tile types, so they would wear whichever cellar's art
  * happens to be loaded; see the note above `INTERIOR_BOARD_FLOOR` in
- * `src/map/tileTypes.ts`. The Desperado Club and the Big Top already had floor
- * types of their own and are drawn elsewhere.
+ * `src/map/tileTypes.ts`. The Desperado Club has a floor type of its own and is
+ * drawn elsewhere; the Big Top's sawdust and its dark backstage canvas are rows
+ * of this sheet.
  *
  * This module is deliberately free of canvas code — `src/map/tiles/groundTiles.ts`
  * does the drawing.
@@ -23,6 +24,9 @@ import {
   INTERIOR_EARTH_FLOOR,
   INTERIOR_FLAG_FLOOR,
   INTERIOR_INK_FLOOR,
+  SAWDUST_FLOOR,
+  CIRCUS_RING_EDGE,
+  TENT_POLE,
 } from '../tileTypes';
 
 /** Sheet holding every town-interior material, one material per row. */
@@ -48,6 +52,8 @@ const GROUND_BLEND_ORDER = {
   interior_flag: 5,
   interior_plaster: 6,
   interior_counter: 7,
+  bigtop_sawdust: 8,
+  bigtop_backstage: 9,
 } as const satisfies Record<InteriorMaterial, number>;
 
 /**
@@ -68,6 +74,8 @@ const GROUND_FALLBACK_COLOR = {
   interior_earth: '#5f4f3e',
   interior_flag: '#7b736a',
   interior_ink: '#946f45',
+  bigtop_sawdust: '#ae965e',
+  bigtop_backstage: '#161214',
 } as const satisfies Record<InteriorMaterial, string>;
 
 /** A finished room is swept, and none of its surfaces is loose. */
@@ -80,6 +88,8 @@ const GROUND_SPILL = {
   interior_earth: null,
   interior_flag: null,
   interior_ink: null,
+  bigtop_sawdust: null,
+  bigtop_backstage: null,
 } as const satisfies Record<InteriorMaterial, GroundSpill | null>;
 
 /** Kerbs are a street feature; both sets are empty indoors. */
@@ -118,6 +128,13 @@ function interiorMaterialForTileType(type: number): InteriorMaterial | undefined
       return 'interior_flag';
     case INTERIOR_INK_FLOOR:
       return 'interior_ink';
+    // The ring curb and the king pole both stand on the ring's own sawdust:
+    // the curb is paint and the pole is planted in it, so neither has a
+    // ground of its own to blend.
+    case SAWDUST_FLOOR:
+    case CIRCUS_RING_EDGE:
+    case TENT_POLE:
+      return 'bigtop_sawdust';
     default:
       return undefined;
   }
@@ -136,6 +153,9 @@ export const TOWN_INTERIOR_GROUND: GroundPalette = {
 
 /** The plaster an `INTERIOR_WALL` tile is drawn in. */
 export const INTERIOR_WALL_MATERIAL: InteriorMaterial = 'interior_plaster';
+
+/** The dark back of the Big Top an `INTERIOR_WALL` tile is drawn in when the walls are canvas. */
+export const BIGTOP_BACKSTAGE_MATERIAL: InteriorMaterial = 'bigtop_backstage';
 
 /** The joinery an `INTERIOR_COUNTER` tile is drawn in. */
 export const INTERIOR_COUNTER_MATERIAL: InteriorMaterial = 'interior_counter';

@@ -80,9 +80,9 @@ const WAVE_AUTHORED_LEVEL = 1;
  * the grounds abuts the wilderness, where forest can leave a walkable tile
  * fenced in by trees — an enemy there is unreachable and the wave never ends.
  */
-const ARENA_SPAWN_EDGE_INSET_TILES = 1;
-/** Signet's lookout position — just inside the circus edge, opposite the town road. */
-const SIGNET_ANCHOR_INSET_TILES = 3;
+export const ARENA_SPAWN_EDGE_INSET_TILES = 1;
+/** Signet's lookout: on the centre row, this far inside the grounds' east edge. */
+export const SIGNET_ANCHOR_INSET_TILES = 3;
 /** How close the player must be to Signet to talk. */
 const INTERACT_RANGE_TILES = 2.2;
 /**
@@ -104,7 +104,8 @@ const BIGTOP_POTION_QUANTITY = 1;
  * How far a wave mob's own A* searches may reach.
  *
  * A wave hunts the player anywhere on the grounds, so the route it needs is the
- * full circus diameter plus whatever detour the five small tents force — well
+ * full circus diameter plus whatever detour the Big Top and the side-show
+ * pavilions force — well
  * past the map-wide default, at which distance `findPath` returns nothing and
  * the straight-line fallback walks the mob into the tent it meant to go round.
  * Set per instance so no other mob on floor 3 pays for it.
@@ -165,7 +166,7 @@ interface WaveStallWatch {
   repaths: number;
 }
 
-interface WaveSpawn {
+export interface WaveSpawn {
   dx: number;
   dy: number;
   make: (x: number, y: number) => Mob;
@@ -175,7 +176,7 @@ interface WaveSpawn {
  * Mold Lion waves for the ritual-defense beat, offset from Signet's lookout
  * (they come out of the circus, toward her stage).
  */
-const RITUAL_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
+export const RITUAL_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
   [
     { dx: -4, dy: -2, make: (x, y) => new MoldLion(x, y, TILE_SIZE) },
     { dx: -4, dy: 2, make: (x, y) => new MoldLion(x, y, TILE_SIZE) },
@@ -191,10 +192,12 @@ const RITUAL_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
  * The assault on the circus grounds, in the book's order: knife-throwing
  * lemurs, stilt clowns, fat clowns with the remaining mold lions, then
  * Terror the Clown. Offsets are relative to the circus centre and sit on
- * open ground between the big top (dx -6..+5, dy -4..0) and the small
- * tents (dy +4..+8) — never inside a footprint.
+ * open ground round the Big Top (dx -6..+5, dy -4..0) and its flanking
+ * pavilions, which all stand north of the door row — never inside a
+ * footprint. The fields they come up in are held open by
+ * `CIRCUS_KEEP_CLEAR_BANDS` in `circusGroundsLayout.ts`.
  */
-const ASSAULT_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
+export const ASSAULT_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
   [
     { dx: -9, dy: 1, make: (x, y) => new CircusLemur(x, y, TILE_SIZE) },
     { dx: -11, dy: 0, make: (x, y) => new CircusLemur(x, y, TILE_SIZE) },
@@ -256,6 +259,16 @@ export class CircusQuestSystem implements GameSystem {
   private waveMobs: Mob[] = [];
   /** Per-wave-mob displacement history, read by `rescueStalledMob`. */
   private readonly stallWatch = new Map<Mob, WaveStallWatch>();
+  private stallLifts = 0;
+
+  /**
+   * Wave mobs the stall rescue has had to pick up and set down since this
+   * system was built. Every lift is a mob the grounds wedged, so a headless
+   * assault reads this to hold the layout to a wedge budget.
+   */
+  get stallLiftCount(): number {
+    return this.stallLifts;
+  }
 
   /** The handle Signet's own conversation last opened with, or null before any beat has opened. */
   private conversationHandle: ConversationHandle | null = null;
@@ -718,6 +731,7 @@ export class CircusQuestSystem implements GameSystem {
     // so every swing at it afterwards passes through empty air.
     mobGrid.move(mob, preMoveX, preMoveY);
     mob.forceRepath();
+    this.stallLifts++;
   }
 
   /**

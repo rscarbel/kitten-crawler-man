@@ -1,0 +1,69 @@
+{
+  "circus_big_top": {
+    "frameWidth": 768,
+    "frameHeight": 512,
+    "tileX": 64,
+    "tileY": 448,
+    "tileScale": 64,
+    "states": {
+      "big_top": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "circus_pavilion": {
+    "frameWidth": 192,
+    "frameHeight": 320,
+    "tileX": 0,
+    "tileY": 256,
+    "tileScale": 64,
+    "states": {
+      "pavilion_mold_lion": { "row": 0, "frameCount": 1 },
+      "pavilion_feats_of_flesh": { "row": 1, "frameCount": 1 },
+      "pavilion_fortunes": { "row": 2, "frameCount": 1 }
+    }
+  },
+  "circus_arch_post": {
+    "frameWidth": 64,
+    "frameHeight": 256,
+    "tileX": 0,
+    "tileY": 192,
+    "tileScale": 64,
+    "states": {
+      "arch_post": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "circus_rim_post": {
+    "frameWidth": 64,
+    "frameHeight": 256,
+    "tileX": 0,
+    "tileY": 192,
+    "tileScale": 64,
+    "states": {
+      "flame_lamp": { "row": 0, "frameCount": 2 },
+      "high_striker": { "row": 1, "frameCount": 1 }
+    }
+  },
+  "circus_wagon": {
+    "frameWidth": 192,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "cage_wagon": { "row": 0, "frameCount": 1 },
+      "clown_caravan": { "row": 1, "frameCount": 1 },
+      "prop_wagon": { "row": 2, "frameCount": 1 }
+    }
+  },
+  "circus_booth": {
+    "frameWidth": 128,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "ticket_booth": { "row": 0, "frameCount": 1 },
+      "game_booth": { "row": 1, "frameCount": 1 },
+      "crate_stack": { "row": 2, "frameCount": 1 }
+    }
+  }
+}

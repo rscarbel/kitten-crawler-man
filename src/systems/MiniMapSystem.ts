@@ -63,6 +63,9 @@ import {
   HOLLOW_GATE,
   ROCK_DEPOSIT,
   PASTURE_GRASS,
+  CIRCUS_LOT,
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
   CROP_FIELD,
 } from '../map/tileTypes';
 import { viewportWidth } from '../core/Viewport';
@@ -882,6 +885,14 @@ export class MiniMapSystem implements GameSystem {
         return '#5c8048';
       case CROP_FIELD:
         return '#6e5636';
+      // The circus grounds. Like Briar Hollow's types, each needs an entry in
+      // the mobile HUD's table and in `TownMapScene`'s as well.
+      case CIRCUS_LOT:
+        return '#6a6240';
+      case CIRCUS_STRUCTURE_TALL:
+        return '#a0433c';
+      case CIRCUS_STRUCTURE_LOW:
+        return '#b89a6a';
       default:
         return bossRoomMinimapColor(type) ?? '#555555';
     }

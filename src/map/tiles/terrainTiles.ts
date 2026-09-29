@@ -8,9 +8,6 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   COBBLE_STREET,
   INTERIOR_BOARD_FLOOR,
   INTERIOR_COUNTER,
@@ -33,6 +30,7 @@ import { drawGroundTile, drawGroundMaterialTile } from './groundTiles';
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';
 import {
+  BIGTOP_BACKSTAGE_MATERIAL,
   INTERIOR_COUNTER_MATERIAL,
   INTERIOR_WALL_MATERIAL,
   TOWN_INTERIOR_GROUND,
@@ -41,7 +39,59 @@ import { townInteriorWallMaterial } from '../town/interiorWallMaterial';
 import {
   paintNorthInteriorWallFace,
   paintEdgeInteriorWallFace,
+  paintCanvasDrapeNorthFace,
+  paintCanvasDrapeEdgeFace,
 } from '../../sprites/art/townInterior/interiorWallFace';
+import { BACKSTAGE_CLUTTER_CLEARANCE_TILES, bigTopWallFace } from '../bigTopMazeDecor';
+import { backstageClutterAt, paintBackstageClutter } from '../../sprites/art/bigTop/bigTopShellArt';
+import { drawCircusDecals } from './circusDecalTiles';
+
+/**
+ * Whether a neighbour of an interior wall is floor. Any tile of a town interior
+ * that isn't a wall or the outer void counts, since an interior map holds
+ * nothing else at its edges.
+ */
+function isInteriorFloorNeighbor(type: number | undefined): boolean {
+  return type !== undefined && type !== INTERIOR_WALL && type !== VOID_TYPE;
+}
+
+function isDeepInMass(structure: TileContent[][], tx: number, ty: number): boolean {
+  for (let dy = -BACKSTAGE_CLUTTER_CLEARANCE_TILES; dy <= BACKSTAGE_CLUTTER_CLEARANCE_TILES; dy++) {
+    for (
+      let dx = -BACKSTAGE_CLUTTER_CLEARANCE_TILES;
+      dx <= BACKSTAGE_CLUTTER_CLEARANCE_TILES;
+      dx++
+    ) {
+      if (isInteriorFloorNeighbor(structure[ty + dy]?.[tx + dx]?.type)) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * A Big Top wall: the dark backstage canvas, with the act's drapes hung on
+ * whichever face looks onto a corridor, and now and then a dim piece of
+ * clutter deep in the mass.
+ */
+function drawBigTopWall(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  drawGroundMaterialTile(ctx, TOWN_INTERIOR_GROUND, BIGTOP_BACKSTAGE_MATERIAL, sx, sy, ts, tx, ty);
+  const face = bigTopWallFace((x, y) => isInteriorFloorNeighbor(structure[y]?.[x]?.type), tx, ty);
+  if (face !== null) {
+    if (face.side === 'north') paintCanvasDrapeNorthFace(ctx, sx, sy, ts, ts, face.style, tx);
+    else paintCanvasDrapeEdgeFace(ctx, sx, sy, ts, ts, face.style, face.side, tx);
+  } else if (isDeepInMass(structure, tx, ty)) {
+    const clutter = backstageClutterAt(tx, ty);
+    if (clutter !== null) paintBackstageClutter(ctx, sx, sy, ts, clutter);
+  }
+}
 
 /** Pixel depth of the door threshold shadow strip from the overhang above. */
 const DOOR_OVERHANG_SHADOW_DEPTH = 5;
@@ -218,16 +268,13 @@ export function drawTerrainTile(
     }
     case FloorTypeValue.road: {
       drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      // The circus's approach road runs across its lot, and the lot's decals
+      // run across the road rather than stopping at its edge.
+      drawCircusDecals(ctx, structure, sx, sy, ts, tx, ty);
       // Door threshold: roof interior immediately north + building wall on either side
       const rdN = structure[ty - 1]?.[tx]?.type;
       const isDoorTile =
-        (rdN === ROOF_THATCH ||
-          rdN === ROOF_SLATE ||
-          rdN === ROOF_RED ||
-          rdN === ROOF_GREEN ||
-          rdN === ROOF_CIRCUS_RED ||
-          rdN === ROOF_CIRCUS_BLUE ||
-          rdN === ROOF_CIRCUS_PURPLE) &&
+        (rdN === ROOF_THATCH || rdN === ROOF_SLATE || rdN === ROOF_RED || rdN === ROOF_GREEN) &&
         (structure[ty]?.[tx - 1]?.type === BUILDING_WALL ||
           structure[ty]?.[tx + 1]?.type === BUILDING_WALL);
       if (isDoorTile) {
@@ -307,22 +354,22 @@ export function drawTerrainTile(
     // difference is which palette answers, which is the whole point of these
     // having tile types of their own.
     case INTERIOR_WALL: {
+      const material = townInteriorWallMaterial();
+      if (material === 'canvas') {
+        drawBigTopWall(ctx, structure, sx, sy, ts, tx, ty);
+        break;
+      }
       drawGroundMaterialTile(ctx, TOWN_INTERIOR_GROUND, INTERIOR_WALL_MATERIAL, sx, sy, ts, tx, ty);
       // Layered over the flat ground fill above — never a replacement for
       // it, so a chunk cache that never reaches this file still shows a
-      // plausible wall. Orientation comes from which neighbour is floor:
-      // any tile in this map that isn't a wall or the outer void counts,
-      // since a town interior map holds nothing else at its edges.
-      const isFloorNeighbor = (t: number | undefined): boolean =>
-        t !== undefined && t !== INTERIOR_WALL && t !== VOID_TYPE;
-      const material = townInteriorWallMaterial();
-      if (isFloorNeighbor(structure[ty + 1]?.[tx]?.type)) {
+      // plausible wall. Orientation comes from which neighbour is floor.
+      if (isInteriorFloorNeighbor(structure[ty + 1]?.[tx]?.type)) {
         paintNorthInteriorWallFace(ctx, sx, sy, ts, ts, material, tx, ty);
-      } else if (isFloorNeighbor(structure[ty - 1]?.[tx]?.type)) {
+      } else if (isInteriorFloorNeighbor(structure[ty - 1]?.[tx]?.type)) {
         paintEdgeInteriorWallFace(ctx, sx, sy, ts, ts, material, 'south');
-      } else if (isFloorNeighbor(structure[ty]?.[tx + 1]?.type)) {
+      } else if (isInteriorFloorNeighbor(structure[ty]?.[tx + 1]?.type)) {
         paintEdgeInteriorWallFace(ctx, sx, sy, ts, ts, material, 'west');
-      } else if (isFloorNeighbor(structure[ty]?.[tx - 1]?.type)) {
+      } else if (isInteriorFloorNeighbor(structure[ty]?.[tx - 1]?.type)) {
         paintEdgeInteriorWallFace(ctx, sx, sy, ts, ts, material, 'east');
       }
       break;

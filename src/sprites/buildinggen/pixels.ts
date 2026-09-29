@@ -68,7 +68,7 @@ export function isOpaque(buffer: PixelBuffer, index: number): boolean {
  * Multiplies a pixel's colour, leaving its alpha alone.
  *
  * Shading is a multiply rather than a translucent black overlay because the
- * overlay approach is what makes the circus tents read as flat: a black
+ * overlay approach is what makes a surface read as flat: a black
  * rectangle at 20% alpha over a flat fill is still a flat fill, whereas a
  * multiply preserves whatever variation the material put there.
  */

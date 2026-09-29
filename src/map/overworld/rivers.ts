@@ -529,8 +529,8 @@ function tileDistance(a: TilePoint, b: TilePoint): number {
  * Bridges every place a road meets the river, then tops each river up to
  * `MIN_RIVER_CROSSINGS` with plank crossings at its narrowest points.
  *
- * Runs **after every road pass**, including `paintBuildingBypassRoutes` and the
- * circus's approach: `TileGrid.setPaved` will not write over water, so a road
+ * Runs **after every road pass**, including the circus's approach and the
+ * road to Briar Hollow: `TileGrid.setPaved` will not write over water, so a road
  * laid after the carve simply stops at the bank, and only a pass that runs last
  * can see all of them.
  */

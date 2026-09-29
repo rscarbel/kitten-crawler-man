@@ -38,9 +38,6 @@ import {
   INTERIOR_WALL,
   METAL_WALL,
   ARENA_CAGE,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
-  ROOF_CIRCUS_RED,
   ROOF_GREEN,
   ROOF_RED,
   ROOF_SLATE,
@@ -1286,9 +1283,6 @@ const GROUND_OCCLUDER_TYPES = new Set<number>([
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   TOWN_WALL,
   // A ledge shades the ground at its foot. It is the one wilderness solid that
   // belongs here: the boulders are rounded and carry their own contact shadow in
@@ -1299,6 +1293,9 @@ const GROUND_OCCLUDER_TYPES = new Set<number>([
   // shade the ground at their foot the way a town wall does.
   HOLLOW_WALL,
   HOLLOW_PALISADE,
+  // The circus's tents are absent for the boulders' reason: each is round and
+  // paints its own contact shadow, and a band laid along its rectangular
+  // footprint draws a dark box round the lot the tent does not cover.
 ]);
 
 /**

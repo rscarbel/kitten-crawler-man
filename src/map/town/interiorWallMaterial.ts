@@ -54,6 +54,10 @@ const WALL_MATERIAL_BY_BUILDING_NAME: ReadonlyMap<string, TownInteriorWallMateri
   // A garrison post in a timber lodge: dark boarded walls to match the
   // stained timber it is built of outside, not a townhouse's plaster.
   ['Blackwood Lodge', 'timber'],
+  // A tent has no walls, only sidewall canvas hung in the dark: striped drapes
+  // on every face that looks onto the ring or a corridor, and the black back
+  // of the tent everywhere else.
+  ['Big Top', 'canvas'],
 ]);
 
 let activeMaterial: TownInteriorWallMaterialId = DEFAULT_TOWN_INTERIOR_WALL_MATERIAL;

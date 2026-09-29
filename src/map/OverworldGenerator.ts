@@ -14,11 +14,7 @@ import {
   VERGE_GRASS,
   WELL,
   YARD_GRAVEL,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   MAIN_TOWER,
-  BUILDING_WALL,
   RUINED_WALL,
   RUBBLE,
   HIGHLAND_GRASS,
@@ -45,9 +41,7 @@ import {
   towerDoorwaySpan,
 } from './town/paintPlots';
 import {
-  approachRouteTiles,
-  connectSiteToNearestGate,
-  paintBuildingBypassRoutes,
+  widenApproach,
   paintDoorApron,
   paintGateHighways,
   paintTownSurfaces,
@@ -77,7 +71,13 @@ import { Reachability } from './overworld/reachability';
 import { hasWaterWithin, paintCamps, type CampSite } from './overworld/camps';
 import { openCliffRamps, paintCliffs } from './overworld/cliffs';
 import { worldRandom } from '../core/WorldRandom';
-import { grownRect, type KeepOut } from './overworld/keepOut';
+import { grownRect, KeepOut } from './overworld/keepOut';
+import {
+  CIRCUS_FOREST_CLEARANCE_TILES,
+  CIRCUS_RADIUS_TILES,
+  type CircusGroundsSite,
+} from './overworld/circusGroundsLayout';
+import { circusApproachCentreLine, paintCircusGrounds } from './overworld/paintCircusGrounds';
 import {
   briarHollowFlattenRects,
   briarHollowKeepOut,
@@ -125,7 +125,7 @@ export interface BuildingEntry {
    *
    * Optional alongside `sign`, and for the same two entries: the tower's door is
    * stated by the `TownPlan` rather than derived from a manifest, and the Big
-   * Top's is a two-tile gap cut into a tile-built tent.
+   * Top's is the two-tile doorway the circus layout leaves in its footprint.
    */
   doorwayWidth?: number;
   /**
@@ -175,6 +175,8 @@ export interface OverworldData {
   circusCentre: TilePoint;
   /** Radius (tiles) of the circus grounds around `circusCentre`. */
   circusRadiusTiles: number;
+  /** What the circus grounds' layout stamped on this map, and where. */
+  circusGrounds: CircusGroundsSite;
   /** Wilderness clearings where bounty encounters are staged. */
   bountySites: TilePoint[];
   /**
@@ -205,12 +207,11 @@ export interface OverworldData {
 }
 
 /** Impassable void frame around the whole map. */
-const BORDER = 5;
+export const OVERWORLD_BORDER_TILES = 5;
 
 // Circus placement
 const CIRCUS_MIN_DIST = 70;
 const CIRCUS_DIST_VARIANCE = 20;
-const CIRCUS_RADIUS = 14;
 /** Tiles of dry ground kept between the fairground's edge and any river. */
 const CIRCUS_WATER_CLEARANCE = 8;
 const CIRCUS_SITE_ATTEMPTS = 30;
@@ -262,10 +263,6 @@ const RUIN_SHELL_BREAK_CHANCE = 0.4;
 const RUIN_SHELL_INTERIOR_RUBBLE_CHANCE = 0.5;
 const RUBBLE_DENSITY = 0.05;
 
-// Torch angles (60° increments around a full circle)
-const TORCH_STEP_DEG = 60;
-const HALF_CIRCLE_DEG = 180;
-
 /**
  * Largest seed the elevation field is given. Generation is otherwise unseeded
  * `Math.random()`, so this is drawn per map like everything else — the seed
@@ -306,12 +303,12 @@ export function generateOverworld(size: number): OverworldData {
   const { x: cx, y: cy } = plan.centre;
 
   assertTownPlanIsSane(plan);
-  paintVoidBorder(grid, BORDER);
+  paintVoidBorder(grid, OVERWORLD_BORDER_TILES);
   paintTownSurfaces(grid, plan);
   // After the surfaces, so no street can be painted across the wall, and the
   // gates are then cut back through it.
   paintWallRing(grid, plan);
-  paintGateHighways(grid, plan, BORDER);
+  paintGateHighways(grid, plan, OVERWORLD_BORDER_TILES);
 
   // The wilderness's shared elevation field, and the band materials derived from
   // it. It runs here — after the town and its highways, before every wilderness
@@ -326,7 +323,7 @@ export function generateOverworld(size: number): OverworldData {
   // Briar Hollow is sited before anything natural is laid, so every later pass
   // can keep off it, and the land under it is levelled before the bands are
   // painted from the field. It is painted much later — see `paintBriarHollow`.
-  const villageCentre = pickBriarHollowSite(grid, plan, elevation, BORDER);
+  const villageCentre = pickBriarHollowSite(grid, plan, elevation, OVERWORLD_BORDER_TILES);
   const villageFlat = briarHollowFlattenRects(villageCentre);
   for (const rect of villageFlat.rects) {
     elevation.flatten({ kind: 'rect', ...rect, falloffTiles: VILLAGE_FLATTEN_FALLOFF_TILES });
@@ -343,7 +340,7 @@ export function generateOverworld(size: number): OverworldData {
   // Before the circus, the forests and the ruins, so every one of them sees the
   // channel as solid ground it has to keep off. The bridges are laid much later
   // — see `paintRiverCrossings`.
-  const rivers = carveRivers(grid, plan, elevation, BORDER, villageKeepOut);
+  const rivers = carveRivers(grid, plan, elevation, OVERWORLD_BORDER_TILES, villageKeepOut);
 
   const buildingEntries: BuildingEntry[] = [];
 
@@ -419,13 +416,18 @@ export function generateOverworld(size: number): OverworldData {
   assertTownPlotsDoNotOverlap(plan, namedPlots);
   assertNoUnusableSlivers(namedPlots);
 
-  // The circus's tents, and nothing of the town's — see `paintBuildingBypassRoutes`
-  // for why the town's own blocks must be left out of bypass routing. The tent
-  // placement pass reads this list back as it goes, to keep tents off each other.
-  const circusStructures: TileRect[] = [];
   const tracksInTownBefore = countTracksInsideTown(grid, plan);
-  const circus = paintCircus(grid, plan, circusStructures, buildingEntries, villageKeepOut);
-  paintForests(grid, plan, villageKeepOut);
+  const circus = paintCircus(grid, plan, buildingEntries, villageKeepOut);
+  // The grounds' lot is not paving, so the forest is kept off it by shape: the
+  // disc and a tile past it, so no tree stands against a rim tile.
+  const circusKeepOut = new KeepOut([
+    {
+      kind: 'disc',
+      centre: circus.centre,
+      radiusTiles: circus.radius + CIRCUS_FOREST_CLEARANCE_TILES,
+    },
+  ]);
+  paintForests(grid, plan, villageKeepOut.union(circusKeepOut));
   paintRuins(grid, plan, circus, villageKeepOut);
   // After the forests and the ruins so a camp can clear its own ground — a camp
   // is a place people have cleared — and before the spawn scatter, which
@@ -435,7 +437,7 @@ export function generateOverworld(size: number): OverworldData {
     plan,
     elevation,
     { centreX: circus.centre.x, centreY: circus.centre.y, radiusTiles: circus.radius },
-    BORDER,
+    OVERWORLD_BORDER_TILES,
     villageKeepOut,
   );
   // After the camps, so within its own footprint the village wins over anything
@@ -444,16 +446,15 @@ export function generateOverworld(size: number): OverworldData {
   // and bridged by `paintRiverCrossings` like every other road.
   const briarHollow = buildBriarHollowSite(villageCentre);
   paintBriarHollow(grid, briarHollow);
-  paveRoadToTown(grid, plan, briarHollow, BORDER);
+  paveRoadToTown(grid, plan, briarHollow, OVERWORLD_BORDER_TILES);
   const hallwaySpawnPoints = scatterRuinsSpawnPoints(grid, plan, circus, camps, briarHollow);
 
-  paintBuildingBypassRoutes(grid, circusStructures, BORDER);
   // After every road pass, and only after: `TileGrid.setPaved` refuses to write
   // over water, so a road laid since the carve stops dead at the bank, and only
   // a pass that runs last can see all of them at once.
-  paintRiverCrossings(grid, rivers, BORDER);
+  paintRiverCrossings(grid, rivers, OVERWORLD_BORDER_TILES);
 
-  // Placed after bypass routing so road stitching cannot overwrite the anchor.
+  // Placed after every pass that paves or bridges, so none of them can overwrite the anchor.
   const mainTowerAnchor: TilePoint = {
     x: cx + plan.tower.anchor.dx,
     y: cy + plan.tower.anchor.dy,
@@ -476,14 +477,20 @@ export function generateOverworld(size: number): OverworldData {
   assertYardsStandOnTheirOwnSurface(grid, plan, buildingArt);
   paintYardFences(grid, plan, buildingArt);
   plantGardens(grid, plan, buildingArt);
-  scatterGroundCover(grid, plan, BORDER, [...buildingPlots, ...yardPlots(plan)], villageKeepOut);
-  scatterWildernessGroundCover(grid, plan, BORDER, villageKeepOut);
+  scatterGroundCover(
+    grid,
+    plan,
+    OVERWORLD_BORDER_TILES,
+    [...buildingPlots, ...yardPlots(plan)],
+    villageKeepOut,
+  );
+  scatterWildernessGroundCover(grid, plan, OVERWORLD_BORDER_TILES, villageKeepOut);
   // After the ground cover, so a boulder is never scattered onto a wildflower
   // clump and never has one scattered onto it.
   scatterBoulders(grid, plan, elevation, buildingEntries, villageKeepOut);
   // Last of the natural passes: a cliff defers to everything — roads, water,
   // camps, forests, the town — so it runs once all of them are on the grid.
-  paintCliffs(grid, plan, elevation, camps, BORDER, villageKeepOut);
+  paintCliffs(grid, plan, elevation, camps, OVERWORLD_BORDER_TILES, villageKeepOut);
   // Both checks run over the *finished* grid, which is load-bearing rather than
   // tidy. The scatter pass is itself something that can put the wrong material
   // inside the walls, and `paintTownProps` is the only writer of the wells and
@@ -504,11 +511,11 @@ export function generateOverworld(size: number): OverworldData {
   assertBriarHollowIsReachable(grid, briarHollow, townSquareCentre);
   // Last of all, because a bank can be walled off by a forest or a ruin as
   // easily as by the water itself, and only the finished grid shows that.
-  bridgeMaroonedRegions(grid, townSquareCentre, BORDER);
-  openCliffRamps(grid, townSquareCentre, BORDER);
+  bridgeMaroonedRegions(grid, townSquareCentre, OVERWORLD_BORDER_TILES);
+  openCliffRamps(grid, townSquareCentre, OVERWORLD_BORDER_TILES);
   // After every deck is down: a rock is not water, so one placed earlier would
   // stop a crossing's span dead in the middle of the channel.
-  scatterRiverRocks(grid, rivers, BORDER);
+  scatterRiverRocks(grid, rivers, OVERWORLD_BORDER_TILES);
   assertBriarHollowIsIntact(grid, briarHollow);
   assertBriarHollowIsReachable(grid, briarHollow, townSquareCentre);
   // Sampled here rather than beside the ambient scatter: a site's whole job is
@@ -545,6 +552,7 @@ export function generateOverworld(size: number): OverworldData {
     fountainCentre: fountainCentre(plan),
     circusCentre: { x: circus.centre.x, y: circus.centre.y },
     circusRadiusTiles: circus.radius,
+    circusGrounds: circus.site,
     bountySites,
     rivers,
     camps,
@@ -676,6 +684,7 @@ interface TownPlot {
 interface CircusGrounds {
   readonly centre: TilePoint;
   readonly radius: number;
+  readonly site: CircusGroundsSite;
 }
 
 /**
@@ -877,7 +886,7 @@ function countTracksInsideTown(grid: TileGrid, plan: TownPlan): number {
  * something paved packed earth in here, which is an allowed type in the alleys and
  * nowhere else.
  *
- * This exists because it happened twice. `connectSiteToNearestGate` turned along
+ * This exists because it happened twice. The circus's approach road once turned along
  * the circus's own column first and paved a three-tile dirt road from the circus
  * down through the Civic Terrace, the plaza and Market Street's cobble on 10% of
  * seeds, severed at the wall so the circus finished with no road at all; and the
@@ -1179,36 +1188,6 @@ function assertNoUnusableSlivers(plots: ReadonlyArray<TownPlot>): void {
   }
 }
 
-/** Tiles of the south face a tile-built structure clears for its entrance. */
-const TILE_BUILDING_DOORWAY_WIDTH = 2;
-
-/**
- * A tile-built structure with a gable facade: north and south rows are wall,
- * the sides and interior take the roof tile, and a two-tile gap in the south
- * face is its door. Used for the circus tents, which have no sprite art.
- */
-function placeTileBuilding(
-  grid: TileGrid,
-  rect: TileRect,
-  roofTile: number,
-): { readonly doorTile: TilePoint; readonly doorwayWidth: number } {
-  for (let dy = 0; dy < rect.h; dy++) {
-    for (let dx = 0; dx < rect.w; dx++) {
-      const isGableRow = dy === 0 || dy === rect.h - 1;
-      grid.set(rect.x + dx, rect.y + dy, isGableRow ? BUILDING_WALL : roofTile);
-    }
-  }
-  const doorX = rect.x + Math.floor(rect.w / 2) - Math.floor(TILE_BUILDING_DOORWAY_WIDTH / 2);
-  const doorY = rect.y + rect.h - 1;
-  for (let dx = 0; dx < TILE_BUILDING_DOORWAY_WIDTH; dx++) {
-    grid.set(doorX + dx, doorY, FloorTypeValue.road);
-  }
-  return {
-    doorTile: { x: doorX, y: doorY },
-    doorwayWidth: TILE_BUILDING_DOORWAY_WIDTH,
-  };
-}
-
 /**
  * Where the circus pitches: 70+ tiles from the town, and clear of the rivers.
  *
@@ -1238,7 +1217,8 @@ function pickCircusCentre(grid: TileGrid, plan: TownPlan, landmarks: KeepOut): T
     };
     if (!isCircusClearOf(plan, landmarks, candidate)) continue;
     clearOfLandmarks ??= candidate;
-    if (!hasWaterWithin(grid, candidate, CIRCUS_RADIUS + CIRCUS_WATER_CLEARANCE)) return candidate;
+    if (!hasWaterWithin(grid, candidate, CIRCUS_RADIUS_TILES + CIRCUS_WATER_CLEARANCE))
+      return candidate;
   }
   return clearOfLandmarks ?? candidate;
 }
@@ -1249,119 +1229,35 @@ function pickCircusCentre(grid: TileGrid, plan: TownPlan, landmarks: KeepOut): T
  * takes — a road run through Briar Hollow would be cut in two by the palisade.
  */
 function isCircusClearOf(plan: TownPlan, landmarks: KeepOut, centre: TilePoint): boolean {
-  if (landmarks.distanceTo(centre.x, centre.y) <= CIRCUS_RADIUS + CIRCUS_LANDMARK_CLEARANCE) {
+  if (landmarks.distanceTo(centre.x, centre.y) <= CIRCUS_RADIUS_TILES + CIRCUS_LANDMARK_CLEARANCE) {
     return false;
   }
-  return !approachRouteTiles(plan, centre).some((tile) => landmarks.contains(tile.x, tile.y));
+  return !widenApproach(circusApproachCentreLine(plan, centre)).some((tile) =>
+    landmarks.contains(tile.x, tile.y),
+  );
 }
 
-/** Cluster of tents 70+ tiles from the town, well outside the safe radius. */
+/**
+ * Pitches the circus 70+ tiles from the town and stamps its authored grounds
+ * there (`paintCircusGrounds`), registering the Big Top's door as a building
+ * entry.
+ */
 function paintCircus(
   grid: TileGrid,
   plan: TownPlan,
-  circusStructures: TileRect[],
   buildingEntries: BuildingEntry[],
   landmarks: KeepOut,
 ): CircusGrounds {
-  const size = grid.size;
-
   const centre = pickCircusCentre(grid, plan, landmarks);
-
-  // Circus ground: a roughly circular paved area.
-  for (let dy = -CIRCUS_RADIUS; dy <= CIRCUS_RADIUS; dy++) {
-    for (let dx = -CIRCUS_RADIUS; dx <= CIRCUS_RADIUS; dx++) {
-      if (Math.hypot(dx, dy) > CIRCUS_RADIUS) continue;
-      const tx = centre.x + dx;
-      const ty = centre.y + dy;
-      if (tx < BORDER + 1 || tx >= size - BORDER - 1) continue;
-      if (ty < BORDER + 1 || ty >= size - BORDER - 1) continue;
-      if (grid.isSolid(tx, ty)) continue;
-      grid.set(tx, ty, FloorTypeValue.road);
-    }
-  }
-
-  const BIG_TOP_WIDTH = 12;
-  const BIG_TOP_HEIGHT = 5;
-  /** The big top sits north of the circus centre so its forecourt stays open. */
-  const BIG_TOP_NORTH_OFFSET = 2;
-  const bigTop: TileRect = {
-    x: centre.x - Math.floor(BIG_TOP_WIDTH / 2),
-    y: centre.y - Math.floor(BIG_TOP_HEIGHT / 2) - BIG_TOP_NORTH_OFFSET,
-    w: BIG_TOP_WIDTH,
-    h: BIG_TOP_HEIGHT,
-  };
-  const bigTopPlacement = placeTileBuilding(grid, bigTop, ROOF_CIRCUS_RED);
-  circusStructures.push(bigTop);
+  const { site, bigTopDoor } = paintCircusGrounds(grid, plan, centre, OVERWORLD_BORDER_TILES);
   buildingEntries.push({
-    doorTile: bigTopPlacement.doorTile,
+    doorTile: bigTopDoor.doorTile,
     name: BIG_TOP_ENTRY_NAME,
     type: BIG_TOP_ENTRY_KIND,
-    doorwayX0: bigTopPlacement.doorTile.x,
-    doorwayWidth: bigTopPlacement.doorwayWidth,
+    doorwayX0: bigTopDoor.doorTile.x,
+    doorwayWidth: bigTopDoor.doorwayWidth,
   });
-
-  /** Decorative tents — solid structures with no door, so they are not enterable. */
-  const SMALL_TENTS = [
-    { dx: -8, dy: -3, w: 6, h: 3, roof: ROOF_CIRCUS_BLUE },
-    { dx: 8, dy: -3, w: 6, h: 3, roof: ROOF_CIRCUS_PURPLE },
-    { dx: -7, dy: 5, w: 5, h: 3, roof: ROOF_CIRCUS_PURPLE },
-    { dx: 7, dy: 5, w: 5, h: 3, roof: ROOF_CIRCUS_BLUE },
-    { dx: 0, dy: 7, w: 6, h: 3, roof: ROOF_CIRCUS_RED },
-  ] as const;
-  /** Tents keep a one-tile gap from anything already standing. */
-  const TENT_CLEARANCE = 1;
-  const TENT_EDGE_MARGIN = BORDER + 2;
-
-  for (const tent of SMALL_TENTS) {
-    const tentX = centre.x + tent.dx - Math.floor(tent.w / 2);
-    const tentY = centre.y + tent.dy - Math.floor(tent.h / 2);
-    if (tentX < TENT_EDGE_MARGIN || tentX + tent.w > size - TENT_EDGE_MARGIN) continue;
-    if (tentY < TENT_EDGE_MARGIN || tentY + tent.h > size - TENT_EDGE_MARGIN) continue;
-    const overlaps = circusStructures.some(
-      (s) =>
-        tentX < s.x + s.w + TENT_CLEARANCE &&
-        tentX + tent.w + TENT_CLEARANCE > s.x &&
-        tentY < s.y + s.h + TENT_CLEARANCE &&
-        tentY + tent.h + TENT_CLEARANCE > s.y,
-    );
-    if (overlaps) continue;
-    for (let dy = 0; dy < tent.h; dy++) {
-      for (let dx = 0; dx < tent.w; dx++) {
-        const isGableRow = dy === 0 || dy === tent.h - 1;
-        grid.set(tentX + dx, tentY + dy, isGableRow ? BUILDING_WALL : tent.roof);
-      }
-    }
-    circusStructures.push({ x: tentX, y: tentY, w: tent.w, h: tent.h });
-  }
-
-  connectSiteToNearestGate(grid, plan, centre, plan.wall);
-  paintCircusTorches(grid, centre);
-
-  return { centre, radius: CIRCUS_RADIUS };
-}
-
-function paintCircusTorches(grid: TileGrid, centre: TilePoint): void {
-  const torchAngles = [
-    0,
-    TORCH_STEP_DEG,
-    TORCH_STEP_DEG * 2,
-    HALF_CIRCLE_DEG,
-    HALF_CIRCLE_DEG + TORCH_STEP_DEG,
-    HALF_CIRCLE_DEG + TORCH_STEP_DEG * 2,
-  ];
-  for (const degrees of torchAngles) {
-    const radians = (degrees * Math.PI) / HALF_CIRCLE_DEG;
-    const torchX = Math.round(centre.x + Math.cos(radians) * (CIRCUS_RADIUS - 1));
-    const torchY = Math.round(centre.y + Math.sin(radians) * (CIRCUS_RADIUS - 1));
-    const insideBorder =
-      torchX > BORDER &&
-      torchX < grid.size - BORDER &&
-      torchY > BORDER &&
-      torchY < grid.size - BORDER;
-    // `setStanding`, as every other prop is written: a torch that records the
-    // circus's packed earth does not have to have it inferred from a neighbour.
-    if (insideBorder && !grid.isSolid(torchX, torchY)) grid.setStanding(torchX, torchY, TORCH);
-  }
+  return { centre, radius: site.radiusTiles, site };
 }
 
 /**
@@ -1412,8 +1308,8 @@ function scatterBoulders(
         Math.hypot(entry.doorTile.x - tx, entry.doorTile.y - ty) <= BOULDER_DOOR_CLEARANCE_TILES,
     );
 
-  for (let ty = BORDER + 1; ty < grid.size - BORDER - 1; ty++) {
-    for (let tx = BORDER + 1; tx < grid.size - BORDER - 1; tx++) {
+  for (let ty = OVERWORLD_BORDER_TILES + 1; ty < grid.size - OVERWORLD_BORDER_TILES - 1; ty++) {
+    for (let tx = OVERWORLD_BORDER_TILES + 1; tx < grid.size - OVERWORLD_BORDER_TILES - 1; tx++) {
       if (!isOpenWildernessGround(grid.typeAt(tx, ty))) continue;
       if (Math.hypot(tx - plan.centre.x, ty - plan.centre.y) <= plan.safeRadiusTiles) continue;
       if (landmarks.contains(tx, ty)) continue;
@@ -1440,8 +1336,8 @@ function scatterBoulders(
  * they only ever replace the grass the grid was filled with.
  */
 function paintElevationBands(grid: TileGrid, elevation: ElevationField): void {
-  for (let ty = BORDER; ty < grid.size - BORDER; ty++) {
-    for (let tx = BORDER; tx < grid.size - BORDER; tx++) {
+  for (let ty = OVERWORLD_BORDER_TILES; ty < grid.size - OVERWORLD_BORDER_TILES; ty++) {
+    for (let tx = OVERWORLD_BORDER_TILES; tx < grid.size - OVERWORLD_BORDER_TILES; tx++) {
       if (grid.typeAt(tx, ty) !== FloorTypeValue.grass) continue;
       const band = elevation.bandAt(tx, ty);
       if (band === 'highland') grid.set(tx, ty, HIGHLAND_GRASS);
@@ -1468,7 +1364,13 @@ function paintForests(grid: TileGrid, plan: TownPlan, landmarks: KeepOut): void 
           continue;
         const tx = fx + dx;
         const ty = fy + dy;
-        if (tx < BORDER || tx >= size - BORDER || ty < BORDER || ty >= size - BORDER) continue;
+        if (
+          tx < OVERWORLD_BORDER_TILES ||
+          tx >= size - OVERWORLD_BORDER_TILES ||
+          ty < OVERWORLD_BORDER_TILES ||
+          ty >= size - OVERWORLD_BORDER_TILES
+        )
+          continue;
         if (grid.isSolid(tx, ty)) continue;
         if (grid.isPaved(tx, ty)) continue;
         // A landmark plants its own trees — Briar Hollow's grove is laid out
@@ -1518,10 +1420,10 @@ function paintRuins(
   const size = grid.size;
   const { x: cx, y: cy } = plan.centre;
   const isRuinsGround = (tx: number, ty: number) =>
-    tx > BORDER &&
-    tx < size - BORDER &&
-    ty > BORDER &&
-    ty < size - BORDER &&
+    tx > OVERWORLD_BORDER_TILES &&
+    tx < size - OVERWORLD_BORDER_TILES &&
+    ty > OVERWORLD_BORDER_TILES &&
+    ty < size - OVERWORLD_BORDER_TILES &&
     !landmarks.contains(tx, ty) &&
     isOpenWildernessGround(grid.typeAt(tx, ty));
 
@@ -1534,7 +1436,11 @@ function paintRuins(
       plan.safeRadiusTiles +
       shellClearance +
       worldRandom() *
-        (size / 2 - BORDER - RUINS_EDGE_MARGIN - plan.safeRadiusTiles - shellClearance);
+        (size / 2 -
+          OVERWORLD_BORDER_TILES -
+          RUINS_EDGE_MARGIN -
+          plan.safeRadiusTiles -
+          shellClearance);
     const shellCx = Math.round(cx + Math.cos(angle) * distance);
     const shellCy = Math.round(cy + Math.sin(angle) * distance);
     if (
@@ -1572,8 +1478,8 @@ function paintRuins(
   }
 
   // Loose rubble across the whole ruins band, outside any shell
-  for (let y = BORDER + 1; y < size - BORDER - 1; y++) {
-    for (let x = BORDER + 1; x < size - BORDER - 1; x++) {
+  for (let y = OVERWORLD_BORDER_TILES + 1; y < size - OVERWORLD_BORDER_TILES - 1; y++) {
+    for (let x = OVERWORLD_BORDER_TILES + 1; x < size - OVERWORLD_BORDER_TILES - 1; x++) {
       if (!isOpenWildernessGround(grid.typeAt(x, y))) continue;
       if (Math.hypot(x - cx, y - cy) <= plan.safeRadiusTiles) continue;
       if (landmarks.contains(x, y)) continue;
@@ -1600,10 +1506,17 @@ function scatterRuinsSpawnPoints(
     const angle = worldRandom() * Math.PI * 2;
     const distance =
       plan.safeRadiusTiles +
-      worldRandom() * (size / 2 - BORDER - RUINS_EDGE_MARGIN - plan.safeRadiusTiles);
+      worldRandom() *
+        (size / 2 - OVERWORLD_BORDER_TILES - RUINS_EDGE_MARGIN - plan.safeRadiusTiles);
     const tx = Math.round(cx + Math.cos(angle) * distance);
     const ty = Math.round(cy + Math.sin(angle) * distance);
-    if (tx <= BORDER || tx >= size - BORDER || ty <= BORDER || ty >= size - BORDER) continue;
+    if (
+      tx <= OVERWORLD_BORDER_TILES ||
+      tx >= size - OVERWORLD_BORDER_TILES ||
+      ty <= OVERWORLD_BORDER_TILES ||
+      ty >= size - OVERWORLD_BORDER_TILES
+    )
+      continue;
     if (
       Math.hypot(tx - circus.centre.x, ty - circus.centre.y) <
       circus.radius + RUINS_CIRCUS_BUFFER
@@ -1694,7 +1607,7 @@ function scatterBountySites(
   const size = grid.size;
   const { x: cx, y: cy } = plan.centre;
   const innerRadius = plan.safeRadiusTiles + BOUNTY_TOWN_BUFFER;
-  const outerRadius = size / 2 - BORDER - BOUNTY_EDGE_MARGIN;
+  const outerRadius = size / 2 - OVERWORLD_BORDER_TILES - BOUNTY_EDGE_MARGIN;
   const sites: TilePoint[] = [];
   const minSpacingSq = BOUNTY_SITE_MIN_SPACING_TILES * BOUNTY_SITE_MIN_SPACING_TILES;
 
@@ -1703,7 +1616,13 @@ function scatterBountySites(
     const distance = innerRadius + worldRandom() * Math.max(0, outerRadius - innerRadius);
     const tx = Math.round(cx + Math.cos(angle) * distance);
     const ty = Math.round(cy + Math.sin(angle) * distance);
-    if (tx <= BORDER || tx >= size - BORDER || ty <= BORDER || ty >= size - BORDER) continue;
+    if (
+      tx <= OVERWORLD_BORDER_TILES ||
+      tx >= size - OVERWORLD_BORDER_TILES ||
+      ty <= OVERWORLD_BORDER_TILES ||
+      ty >= size - OVERWORLD_BORDER_TILES
+    )
+      continue;
     if (
       Math.hypot(tx - circus.centre.x, ty - circus.centre.y) <
       circus.radius + BOUNTY_CIRCUS_BUFFER

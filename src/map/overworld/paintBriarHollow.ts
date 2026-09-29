@@ -412,7 +412,7 @@ class CostHeap {
 /**
  * Lays the road from the village's south road to the nearest town gate.
  *
- * Routed rather than drawn as an L — `connectSiteToNearestGate`'s shape — because
+ * Routed rather than drawn as an L — `approachCentreLine`'s shape — because
  * an L from a gate on the village's south side to a town gate west of it runs
  * its long leg straight through the palisade for about half the sites the
  * village can have. The router keeps out of the village, the quarry and the

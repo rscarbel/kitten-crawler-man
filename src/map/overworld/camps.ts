@@ -235,8 +235,8 @@ function paintGoblinCamp(grid: TileGrid, centre: TilePoint): void {
   clearDisc(grid, centre, CAMP_RADIUS_TILES, FloorTypeValue.road);
   grid.setStanding(centre.x, centre.y, CAMPFIRE);
 
-  // Tents on a ring, rejected where they would crowd another — the same
-  // clearance idiom the circus's small tents use.
+  // A tent that would crowd another is dropped rather than moved, so a camp
+  // is sometimes a tent short but never a wall of canvas round the fire.
   const placed: TilePoint[] = [centre];
   for (let tent = 0; tent < GOBLIN_TENT_COUNT; tent++) {
     const angle = (tent / GOBLIN_TENT_COUNT) * TWO_PI + worldRandom();

@@ -23,8 +23,19 @@ import {
   bigTopWallAt,
   buildBigTopDressing,
   BigTopMazeSystem,
+  FLOOR_DRESSING_KINDS,
   HAZARD_ESCAPE_RADIUS_TILES,
+  WALL_HUNG_DRESSING_KINDS,
 } from '../src/systems/BigTopMazeSystem';
+import {
+  bigTopWallFace,
+  buildBigTopFloorIndex,
+  UNDRESSED_SQUARE_TILES,
+  undressedSquares,
+  type BigTopDrapeStyle,
+  type BigTopWallFaceSide,
+} from '../src/map/bigTopMazeDecor';
+import { INTERIOR_WALL, VOID_TYPE } from '../src/map/tileTypes';
 import { MazeBlockTarget } from '../src/creatures/MazeBlockTarget';
 import { MazeBellTarget } from '../src/creatures/MazeBellTarget';
 import { MazeMirrorTarget } from '../src/creatures/MazeMirrorTarget';
@@ -39,6 +50,16 @@ import { EventBus } from '../src/core/EventBus';
 import { makeSepsis } from '../src/core/StatusEffect';
 import { BIG_TOP_SEALED_MESSAGE, createCircusQuestProgress } from '../src/core/CircusQuestProgress';
 import { Conversation } from '../src/dialog/Conversation';
+import { readFileSync } from 'node:fs';
+import { SFX_GROUPS, sfxGroupsForLevelId } from '../src/audio/sfxGroups';
+import { ALL_SOUND_IDS, STREAMING_SOUND_IDS, type SoundId } from '../src/audio/sounds';
+import {
+  BIG_TOP_AMBIENT_BED,
+  BIG_TOP_EXIT_MUSIC,
+  BIG_TOP_MUSIC,
+  bigTopCueSoundIds,
+} from '../src/systems/bigTop/bigTopSoundCues';
+import type { CircusQuestProgress } from '../src/core/CircusQuestProgress';
 import {
   BELL_HOLD_FRAMES,
   BIG_TOP_MAZE_ROWS,
@@ -49,7 +70,11 @@ import {
   MAZE_BLOCKS,
   MAZE_CAT_SPAWN_TILE,
   MAZE_CORRIDORS,
+  MAZE_BEAM_TARGETS,
   MAZE_CURTAINS,
+  MAZE_ENCORE_REWARD_COINS,
+  MAZE_ENCORE_REWARD_TILE,
+  MAZE_ENCORE_STAR,
   MAZE_EXIT_TILES,
   MAZE_GRIMALDI_TILE,
   MAZE_HEIGHT,
@@ -69,8 +94,10 @@ import {
   MAZE_VENTS,
   MAZE_WIDTH,
   SPRINT_WAVE_STEP,
+  sectionAtRow,
   traceMazeBeam,
   ventPhaseAt,
+  type BeamPath,
   type MazeCorridor,
   type MazeHalf,
   type MazeSectionId,
@@ -642,10 +669,23 @@ console.log('\nChecking no dressing is hung over ground the party walks…');
   // The game's own predicate, not a copy of it: a gate that restated the rule
   // would keep passing while the system handed the builder a broken one.
   const dressing = buildBigTopDressing(bigTopWallAt(map));
-  const wallHung: ReadonlyArray<string> = ['bleacher', 'cage', 'mirrorGlass', 'archPost'];
   const trespassing = dressing.filter(
     (piece) =>
-      wallHung.includes(piece.kind) && passable(piece.tile.x, piece.tile.y, everyBarrierOpen),
+      WALL_HUNG_DRESSING_KINDS.has(piece.kind) &&
+      passable(piece.tile.x, piece.tile.y, everyBarrierOpen),
+  );
+  const unclassified = dressing.filter(
+    (piece) => !WALL_HUNG_DRESSING_KINDS.has(piece.kind) && !FLOOR_DRESSING_KINDS.has(piece.kind),
+  );
+  check(
+    unclassified.length === 0,
+    `every piece of dressing is either wall-hung or floor dressing (${[
+      ...new Set(unclassified.map((piece) => piece.kind)),
+    ].join(', ')})`,
+  );
+  check(
+    dressing.some((piece) => piece.kind === 'intervalLamp'),
+    `and every interval room has its lamps (${dressing.filter((piece) => piece.kind === 'intervalLamp').length})`,
   );
   check(
     trespassing.length === 0,
@@ -660,6 +700,163 @@ console.log('\nChecking no dressing is hung over ground the party walks…');
   check(
     dressing.some((piece) => piece.kind === 'bleacher'),
     'and the bleachers are still seated',
+  );
+}
+
+// A wall's face is seen from the floor it looks onto, so its drapes belong to
+// that floor's act. A dividing row belongs to the act below it while its face
+// is the south edge of the room above, and a curtain room's walls face both
+// its own floor and the act beside it — reading the style off the wall's own
+// row hangs the wrong act's stripes on every one of those.
+console.log('\nChecking every drape matches the act of the floor it faces…');
+{
+  const isFaceFloor = (x: number, y: number): boolean => {
+    const type = map.structure[y]?.[x]?.type;
+    return type !== undefined && type !== INTERIOR_WALL && type !== VOID_TYPE;
+  };
+  const faceStep: Readonly<Record<BigTopWallFaceSide, readonly [number, number]>> = {
+    north: [0, 1],
+    south: [0, -1],
+    west: [1, 0],
+    east: [-1, 0],
+  };
+  const drapeOfAct: Readonly<Record<MazeSectionId, BigTopDrapeStyle>> = {
+    firewalk: 'firewalk',
+    menagerie: 'menagerie',
+    mirrors: 'mirrors',
+    finale: 'ring',
+  };
+  const inIntervalRoom = (x: number, y: number): boolean =>
+    MAZE_CURTAINS.some(
+      (curtain) =>
+        (x >= curtain.humanRoom.x0 &&
+          x <= curtain.humanRoom.x1 &&
+          y >= curtain.humanRoom.y0 &&
+          y <= curtain.humanRoom.y1) ||
+        (x >= curtain.catRoom.x0 &&
+          x <= curtain.catRoom.x1 &&
+          y >= curtain.catRoom.y0 &&
+          y <= curtain.catRoom.y1),
+    );
+  let faces = 0;
+  const mismatched: string[] = [];
+  for (let y = 0; y < MAZE_HEIGHT; y++) {
+    for (let x = 0; x < MAZE_WIDTH; x++) {
+      if (isFaceFloor(x, y)) continue;
+      const face = bigTopWallFace(isFaceFloor, x, y);
+      if (face === null) continue;
+      faces++;
+      const [dx, dy] = faceStep[face.side];
+      const floorX = x + dx;
+      const floorY = y + dy;
+      const expected = inIntervalRoom(floorX, floorY)
+        ? 'ring'
+        : drapeOfAct[sectionAtRow(floorY).id];
+      if (face.style !== expected) mismatched.push(`${x},${y} ${face.style}≠${expected}`);
+    }
+  }
+  check(faces > 0, `the tent hangs some drapes at all (${faces} faces)`);
+  check(
+    mismatched.length === 0,
+    `every drape is the act of the floor it faces (${mismatched.length} mismatched${
+      mismatched.length > 0 ? `: ${mismatched.slice(0, 6).join('; ')}` : ''
+    })`,
+  );
+}
+
+// The floor marks are baked into the ground and never exercised by play: a
+// mark on a wall tile simply never paints, so nothing but this gate would
+// notice one. The density rule says no act leaves a 4×4 of walkable floor
+// without a mark or a runner.
+console.log('\nChecking the floor marks and the dressing density…');
+{
+  const floorIndex = buildBigTopFloorIndex();
+  let marksChecked = 0;
+  const offFloor: string[] = [];
+  for (const key of floorIndex.keys()) {
+    const [x, y] = key.split(',').map(Number);
+    marksChecked++;
+    if (!map.isWalkable(x, y) || barrierByTile.has(key)) offFloor.push(key);
+  }
+  check(marksChecked > 0, `the floor index marks some tiles at all (${marksChecked})`);
+  check(
+    offFloor.length === 0,
+    `every floor mark lies on walkable ground that is not a barrier (${offFloor.join(' ')})`,
+  );
+  const everyKind = new Set([...floorIndex.values()].flat().map((feature) => feature.kind));
+  for (const kind of [
+    'scorch',
+    'sootDrag',
+    'ironPlate',
+    'strawDrift',
+    'pawTrail',
+    'whipCoil',
+    'troughSpill',
+    'practiceRing',
+    'hoop',
+    'harlequinCloth',
+    'burnLane',
+    'stanchion',
+    'ringCurb',
+    'spotMark',
+    'vineRoots',
+    'guyShadow',
+    'runner',
+    'holdMark',
+  ] as const) {
+    check(everyKind.has(kind), `the tent lays a ${kind}`);
+  }
+  // The ring's curb is paint: none of it may sit on a tile the party cannot cross.
+  const curbTiles = [...floorIndex.entries()].filter(([, features]) =>
+    features.some((feature) => feature.kind === 'ringCurb'),
+  );
+  check(
+    curbTiles.length > 0 &&
+      curbTiles.every(([key]) => {
+        const [x, y] = key.split(',').map(Number);
+        return map.isWalkable(x, y);
+      }),
+    `the ring's curb is painted on walkable tiles only (${curbTiles.length})`,
+  );
+
+  const dressing = buildBigTopDressing(bigTopWallAt(map));
+  const floorDressed = new Set(
+    dressing
+      .filter((piece) => FLOOR_DRESSING_KINDS.has(piece.kind))
+      .map((piece) => tileKey(piece.tile)),
+  );
+  // Barrier tiles are one tile of wall until opened and never part of a hall,
+  // so the rule is taken over the floor the tent starts with.
+  const isFloor = (x: number, y: number): boolean =>
+    map.isWalkable(x, y) && !barrierByTile.has(`${x},${y}`);
+  const withMarks = undressedSquares(
+    MAZE_WIDTH,
+    MAZE_HEIGHT,
+    isFloor,
+    (x, y) => floorDressed.has(`${x},${y}`) || floorIndex.has(`${x},${y}`),
+  );
+  const perAct = new Map<MazeSectionId, number>();
+  for (const square of withMarks) {
+    const act = sectionAtRow(square.y).id;
+    perAct.set(act, (perAct.get(act) ?? 0) + 1);
+  }
+  check(
+    withMarks.length === 0,
+    `no act leaves an undressed ${UNDRESSED_SQUARE_TILES}×${UNDRESSED_SQUARE_TILES} of walkable floor (${[
+      ...perAct,
+    ]
+      .map(([act, count]) => `${act}: ${count}`)
+      .join(', ')}${withMarks.length > 0 ? ` — first at ${tileKey(withMarks[0])}` : ''})`,
+  );
+  // Negative control: the same rule over the runners and footlights alone, a
+  // dressing set known to leave the halls bare, must find bare squares — the
+  // proof that the check above can go red at all.
+  const withoutMarks = undressedSquares(MAZE_WIDTH, MAZE_HEIGHT, isFloor, (x, y) =>
+    floorDressed.has(`${x},${y}`),
+  );
+  check(
+    withoutMarks.length > 0,
+    `and the same rule goes red on the runners alone (${withoutMarks.length} bare squares)`,
   );
 }
 
@@ -1326,7 +1523,7 @@ console.log("\nWalking to every one of Donut's targets…");
 // ── What a failed act costs ───────────────────────────────────────────────────
 
 /** Everything a scripted run of the maze needs to stand up an instance of it. */
-function buildMazeHarness(): {
+function buildMazeHarness(progress: CircusQuestProgress = createCircusQuestProgress()): {
   maze: BigTopMazeSystem;
   mazeMap: GameMap;
   ctx: SystemContext;
@@ -1336,7 +1533,6 @@ function buildMazeHarness(): {
 } {
   const mazeMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   mazeMap.generateInterior('house', 0, 'Big Top', false, 'bigtop_maze');
-  const progress = createCircusQuestProgress();
   progress.stage = 'bigtop_ready';
   const spawnedMobs: Mob[] = [];
   const roster = new MobRoster(mazeMap, new SpellSystem());
@@ -1952,6 +2148,386 @@ console.log('\nDriving the Big Top’s door gate…');
     standOn(bigTop.doorTile);
     check(system.menuOpen, 'stepping straight from one doorway onto another offers the new one');
   }
+}
+
+// ── The hall of mirrors' optional mechanics ───────────────────────────────────
+
+/** The tiles, headings and heat of a beam, and where it ends — two paths are equal when these are. */
+function beamSignature(path: BeamPath | null): string {
+  if (path === null) return 'none';
+  const steps = path.steps.map(
+    (step) => `${step.tile.x},${step.tile.y}:${step.heading}:${step.hot ? 'hot' : 'cold'}`,
+  );
+  return `${steps.join('|')}→${path.starId ?? 'nothing'}`;
+}
+
+/** Every arrangement of these mirrors' facings: one list of facings per arrangement, in mirror order. */
+function everyArrangement(
+  mirrors: ReadonlyArray<{ readonly cycle: ReadonlyArray<MirrorFacing> }>,
+): MirrorFacing[][] {
+  let arrangements: MirrorFacing[][] = [[]];
+  for (const mirror of mirrors) {
+    arrangements = arrangements.flatMap((partial) =>
+      mirror.cycle.map((facing) => [...partial, facing]),
+    );
+  }
+  return arrangements;
+}
+
+/** Knocks a mirror round until it faces `facing`; false if its cycle never gets there. */
+function turnMirrorTo(
+  target: MazeMirrorTarget,
+  facing: MirrorFacing,
+  cycleLength: number,
+): boolean {
+  for (let blow = 0; blow <= cycleLength; blow++) {
+    if (target.facing === facing) return true;
+    swingAt(target, 'melee', 1);
+  }
+  return target.facing === facing;
+}
+
+/** The live mirror props of a harness, by mirror id. */
+function mirrorTargetsOf(spawnedMobs: ReadonlyArray<Mob>): Map<string, MazeMirrorTarget> {
+  const targets = new Map<string, MazeMirrorTarget>();
+  for (const mob of spawnedMobs) {
+    if (mob instanceof MazeMirrorTarget) targets.set(mob.mirrorId, mob);
+  }
+  return targets;
+}
+
+/** The divider the two halls share, which every mirror is stood beside. */
+const HALL_DIVIDER_COLUMN = MAZE_STARS[0].tile.x;
+
+/** The floor tile beside a mirror, on the divider side: clear of the unbent span, and nearest that mirror. */
+function standingTileFor(mirrorTile: MazeTile): MazeTile {
+  return { x: mirrorTile.x + Math.sign(HALL_DIVIDER_COLUMN - mirrorTile.x), y: mirrorTile.y };
+}
+
+console.log('\nChecking every mirror-turn preview against the blow that follows it…');
+{
+  const { maze, mazeMap, ctx, human, cat, spawnedMobs } = buildMazeHarness();
+  openCurtains(maze, ctx, human, cat, CURTAINS_TO_THE_MIRRORS);
+  const targets = mirrorTargetsOf(spawnedMobs);
+  const mirrorsSection = required(
+    MAZE_SECTIONS.find((section) => section.id === 'mirrors'),
+    'the hall of mirrors',
+  );
+
+  let comparisons = 0;
+  let previewMismatches = 0;
+  // The negative test, run on the same blows: a preview traced with the facing
+  // the mirror already has is exactly the bug this gate exists to catch.
+  let faultMismatches = 0;
+  let wrongMirror = 0;
+  let burnedWhileStanding = 0;
+  let unreachableArrangements = 0;
+  const changesThePath = new Map<string, number>();
+  const facingsPreviewed = new Map<string, Set<MirrorFacing>>();
+
+  for (const half of ['human', 'cat'] as const) {
+    const crawler = half === 'human' ? human : cat;
+    const partner = half === 'human' ? cat : human;
+    ctx.active = crawler;
+    ctx.inactive = partner;
+    const laneMirrors = MAZE_MIRRORS.filter((mirror) => MAZE_TARGET_OWNER[mirror.kind] === half);
+    for (const arrangement of everyArrangement(laneMirrors)) {
+      for (const mirror of laneMirrors) {
+        const target = required(targets.get(mirror.id), `${mirror.id}'s prop`);
+        if (target === null) continue;
+        let arranged = true;
+        laneMirrors.forEach((laneMirror, index) => {
+          const laneTarget = targets.get(laneMirror.id);
+          if (laneTarget === undefined) {
+            arranged = false;
+            return;
+          }
+          if (!turnMirrorTo(laneTarget, arrangement[index], laneMirror.cycle.length)) {
+            arranged = false;
+          }
+        });
+        if (!arranged) {
+          unreachableArrangements++;
+          continue;
+        }
+
+        maze.partyResetPending = false;
+        placeAt(crawler, standingTileFor(mirror.tile));
+        if (mirrorsSection !== null) {
+          placeAt(partner, half === 'human' ? mirrorsSection.catSpawn : mirrorsSection.humanSpawn);
+        }
+        maze.update(ctx);
+        maze.dismissDialog();
+        const preview = maze.currentTurnPreview;
+        if (preview === null || preview.mirrorId !== mirror.id || preview.half !== half) {
+          wrongMirror++;
+          continue;
+        }
+        const before = beamSignature(maze.beamPathFor(half));
+        const facingOf = (mirrorId: string): MirrorFacing | null =>
+          targets.get(mirrorId)?.facing ?? null;
+        const faultPreview = beamSignature(
+          traceMazeBeam(half, facingOf, (x, y) => mazeMap.isWalkable(x, y)),
+        );
+        const previewed = facingsPreviewed.get(mirror.id) ?? new Set<MirrorFacing>();
+        previewed.add(target.facing);
+        facingsPreviewed.set(mirror.id, previewed);
+
+        swingAt(target, 'melee', 1);
+        maze.update(ctx);
+        maze.dismissDialog();
+        if (maze.partyResetPending) burnedWhileStanding++;
+        const after = beamSignature(maze.beamPathFor(half));
+        comparisons++;
+        if (beamSignature(preview.path) !== after) previewMismatches++;
+        if (faultPreview !== after) faultMismatches++;
+        if (after !== before)
+          changesThePath.set(mirror.id, (changesThePath.get(mirror.id) ?? 0) + 1);
+      }
+    }
+  }
+
+  check(comparisons > 0, `${comparisons} previews compared with the blow that followed`);
+  check(
+    unreachableArrangements === 0,
+    `every arrangement of each lane's mirrors can be knocked into (${unreachableArrangements} could not)`,
+  );
+  check(
+    wrongMirror === 0,
+    `standing beside each mirror previews that mirror, in its owner's light (${wrongMirror} missed)`,
+  );
+  check(burnedWhileStanding === 0, 'nobody was burned standing at a mirror to swing at it');
+  check(
+    previewMismatches === 0,
+    `every preview is the path the blow then makes (${previewMismatches} of ${comparisons} differ)`,
+  );
+  check(
+    faultMismatches > 0,
+    `a preview traced with the current facing is caught (${faultMismatches} of ${comparisons} differ)`,
+  );
+  for (const mirror of MAZE_MIRRORS) {
+    const previewed = facingsPreviewed.get(mirror.id) ?? new Set<MirrorFacing>();
+    check(
+      mirror.cycle.every((facing) => previewed.has(facing)),
+      `${mirror.id}: previewed from every facing it has (${previewed.size} of ${mirror.cycle.length})`,
+    );
+    check(
+      (changesThePath.get(mirror.id) ?? 0) > 0,
+      `${mirror.id}: some blow on it moves the light, so its preview is ever news`,
+    );
+  }
+
+  // Outside the hall, and at a mirror that is not theirs, there is nothing to preview.
+  const { maze: early, ctx: earlyCtx, human: earlyHuman } = buildMazeHarness();
+  placeAt(earlyHuman, standingTileFor(MAZE_MIRRORS[0].tile));
+  early.update(earlyCtx);
+  check(early.currentTurnPreview === null, 'no preview before the hall of mirrors is on stage');
+}
+
+console.log('\nChecking the encore…');
+{
+  check(!MAZE_STARS.includes(MAZE_ENCORE_STAR), 'the encore is not one of the stars the act needs');
+  check(MAZE_BEAM_TARGETS.includes(MAZE_ENCORE_STAR), 'but a beam can end on it');
+  check(MAZE_ENCORE_STAR.opens.length === 0, 'the encore opens nothing');
+  check(!EVERY_BARRIER.includes(MAZE_ENCORE_STAR.id), 'and no solvability proof counts on it');
+  const encoreTile = MAZE_ENCORE_STAR.tile;
+  check(
+    !map.isWalkable(encoreTile.x, encoreTile.y),
+    `the encore is set in the wall at ${tileKey(encoreTile)}`,
+  );
+  check(
+    BIG_TOP_MAZE_ROWS[encoreTile.y]?.[encoreTile.x] === '*',
+    'and its tile carries the star glyph in the layout',
+  );
+  check(
+    map.isWalkable(MAZE_ENCORE_REWARD_TILE.x, MAZE_ENCORE_REWARD_TILE.y) &&
+      Math.abs(MAZE_ENCORE_REWARD_TILE.x - encoreTile.x) +
+        Math.abs(MAZE_ENCORE_REWARD_TILE.y - encoreTile.y) ===
+        1,
+    `its coins fall on open floor at its foot, ${tileKey(MAZE_ENCORE_REWARD_TILE)}`,
+  );
+
+  // Reachable by some arrangement, and by none of the act's own solutions.
+  const humanMirrors = MAZE_MIRRORS.filter((mirror) => MAZE_TARGET_OWNER[mirror.kind] === 'human');
+  const walkable = (x: number, y: number): boolean => map.isWalkable(x, y);
+  let lighting = 0;
+  let twoBounce = 0;
+  for (const arrangement of everyArrangement(humanMirrors)) {
+    const facingOf = (mirrorId: string): MirrorFacing | null => {
+      const index = humanMirrors.findIndex((mirror) => mirror.id === mirrorId);
+      return index < 0 ? null : arrangement[index];
+    };
+    const path = traceMazeBeam('human', facingOf, walkable);
+    if (path.starId !== MAZE_ENCORE_STAR.id) continue;
+    lighting++;
+    const turns = path.steps.filter(
+      (step, index) => index > 0 && step.heading !== path.steps[index - 1].heading,
+    ).length;
+    if (turns >= 2) twoBounce++;
+  }
+  check(lighting > 0, `${lighting} arrangements of Carl's pivots land his light on the encore`);
+  check(twoBounce === lighting, `every one of them bends the light twice (${twoBounce})`);
+  const initialFacing = (mirrorId: string): MirrorFacing | null => {
+    const mirror = MAZE_MIRRORS.find((candidate) => candidate.id === mirrorId);
+    return mirror === undefined ? null : mirror.cycle[mirror.initialIndex];
+  };
+  check(
+    traceMazeBeam('human', initialFacing, walkable).starId !== MAZE_ENCORE_STAR.id,
+    'the encore is dark as the act opens',
+  );
+
+  /** Knocks the human's pivots into the arrangement that lights the encore, and runs a frame. */
+  const performEncore = (progress: CircusQuestProgress): { latched: boolean; paid: number } => {
+    const { maze, ctx, human, cat, spawnedMobs } = buildMazeHarness(progress);
+    openCurtains(maze, ctx, human, cat, CURTAINS_TO_THE_MIRRORS);
+    maze.update(ctx);
+    const darkAtCurtain = !maze.encoreLatched;
+    const targets = mirrorTargetsOf(spawnedMobs);
+    const hub = targets.get('pivot_hub');
+    const north = targets.get('pivot_north');
+    const hubMirror = MAZE_MIRRORS.find((mirror) => mirror.id === 'pivot_hub');
+    const northMirror = MAZE_MIRRORS.find((mirror) => mirror.id === 'pivot_north');
+    if (
+      hub === undefined ||
+      north === undefined ||
+      hubMirror === undefined ||
+      northMirror === undefined
+    ) {
+      check(false, "the encore's pivots are in the roster");
+      return { latched: false, paid: 0 };
+    }
+    turnMirrorTo(hub, 'NW', hubMirror.cycle.length);
+    turnMirrorTo(north, 'SW', northMirror.cycle.length);
+    let paid = 0;
+    maze.update(ctx);
+    for (const reward of maze.drainRewards()) {
+      check(
+        reward.coins === MAZE_ENCORE_REWARD_COINS &&
+          reward.tile.x === MAZE_ENCORE_REWARD_TILE.x &&
+          reward.tile.y === MAZE_ENCORE_REWARD_TILE.y,
+        `the encore pays ${MAZE_ENCORE_REWARD_COINS} coins at its foot`,
+      );
+      paid++;
+    }
+    const latched = maze.encoreLatched && darkAtCurtain;
+    // Knock it off and back on: a star that latched stays latched and does not pay twice.
+    turnMirrorTo(north, 'NE', northMirror.cycle.length);
+    maze.update(ctx);
+    turnMirrorTo(north, 'SW', northMirror.cycle.length);
+    maze.update(ctx);
+    paid += maze.drainRewards().length;
+    return { latched, paid };
+  };
+
+  const progress = createCircusQuestProgress();
+  const first = performEncore(progress);
+  const second = performEncore(progress);
+  check(first.latched && second.latched, 'the encore latches in every performance');
+  check(
+    first.paid + second.paid === 1,
+    `and pays exactly once across two performances (${first.paid} + ${second.paid})`,
+  );
+  check(progress.bigTopEncorePaid, 'the payout is remembered on the quest progress');
+  // The negative test: the same two performances without the remembered flag.
+  const forgetful = performEncore(createCircusQuestProgress());
+  const forgetfulAgain = performEncore(createCircusQuestProgress());
+  check(
+    forgetful.paid + forgetfulAgain.paid !== 1,
+    `a payout that is not remembered is caught (${forgetful.paid + forgetfulAgain.paid} paid)`,
+  );
+
+  // The act finishes without it: the three act stars, latched by real blows, and the encore dark.
+  const { maze, mazeMap, ctx, human, cat, spawnedMobs } = buildMazeHarness();
+  openCurtains(maze, ctx, human, cat, CURTAINS_TO_THE_MIRRORS);
+  const targets = mirrorTargetsOf(spawnedMobs);
+  const solution: ReadonlyArray<ReadonlyArray<readonly [string, MirrorFacing]>> = [
+    [
+      ['pivot_hub', 'SW'],
+      ['pivot_south', 'NE'],
+      ['swivel_hub', 'SE'],
+      ['swivel_south', 'NW'],
+    ],
+    [
+      ['pivot_hub', 'NW'],
+      ['pivot_north', 'SE'],
+      ['swivel_hub', 'NE'],
+      ['swivel_north', 'SW'],
+    ],
+  ];
+  for (const step of solution) {
+    for (const [mirrorId, facing] of step) {
+      const target = required(targets.get(mirrorId), `${mirrorId}'s prop`);
+      const mirror = MAZE_MIRRORS.find((candidate) => candidate.id === mirrorId);
+      if (target === null || mirror === undefined) continue;
+      check(turnMirrorTo(target, facing, mirror.cycle.length), `${mirrorId} turns to ${facing}`);
+    }
+    maze.update(ctx);
+    maze.dismissDialog();
+  }
+  for (const star of MAZE_STARS) {
+    for (const tile of star.opens) {
+      check(
+        mazeMap.isWalkable(tile.x, tile.y),
+        `${star.id}: its way ${tileKey(tile)} is open without the encore`,
+      );
+    }
+  }
+  check(!maze.encoreLatched, 'and the encore is still dark once the act is solved');
+  check(maze.drainRewards().length === 0, 'with nothing paid for it');
+}
+
+// ── Audio ─────────────────────────────────────────────────────────────────────
+
+/** The cue ids that no group loaded on floor 3 carries: every one is a cue that never sounds. */
+function unpreloadedIds(ids: ReadonlyArray<SoundId>, group: ReadonlyArray<SoundId>): SoundId[] {
+  const loaded = new Set(group);
+  return ids.filter((id) => !loaded.has(id));
+}
+
+/** Raw sound ids handed straight to the tent's cue queue or its music, bypassing the cue table. */
+function rawCueSites(source: string): number {
+  return (source.match(/this\.cue\(\s*['"`]|playMusic\(\s*['"`]/g) ?? []).length;
+}
+
+console.log('\nChecking every Big Top cue can actually be heard…');
+{
+  const cueIds = bigTopCueSoundIds();
+  check(cueIds.length > 0, `${cueIds.length} sound ids behind the Big Top's cues`);
+  const missingFromGroup = unpreloadedIds(cueIds, SFX_GROUPS.circusQuest);
+  check(
+    missingFromGroup.length === 0,
+    `every one is in the circusQuest group (${missingFromGroup.join(', ') || 'none missing'})`,
+  );
+  const missingFromFloor = unpreloadedIds(cueIds, sfxGroupsForLevelId('level3'));
+  check(missingFromFloor.length === 0, "and in floor 3's preload bundle");
+  for (const music of [BIG_TOP_MUSIC, BIG_TOP_EXIT_MUSIC]) {
+    check(STREAMING_SOUND_IDS.has(music), `${music} streams as music`);
+  }
+  check(
+    BIG_TOP_AMBIENT_BED === null || STREAMING_SOUND_IDS.has(BIG_TOP_AMBIENT_BED.soundId),
+    'the tent has no ambience bed yet, or it streams',
+  );
+  // The negative test: an id floor 3 never loads must be reported.
+  const strayId = ALL_SOUND_IDS.find((id) => !SFX_GROUPS.circusQuest.includes(id));
+  check(
+    strayId !== undefined && unpreloadedIds([strayId], SFX_GROUPS.circusQuest).length === 1,
+    `an id outside the group is caught (${strayId ?? 'none found'})`,
+  );
+
+  const systemSource = readFileSync(
+    new URL('../src/systems/BigTopMazeSystem.ts', import.meta.url),
+    'utf8',
+  );
+  const routedSites = (systemSource.match(/this\.cue\(BIG_TOP_/g) ?? []).length;
+  check(routedSites > 0, `${routedSites} cue sites in the maze go through the cue table`);
+  check(
+    rawCueSites(systemSource) === 0,
+    `no cue site names a raw sound id (${rawCueSites(systemSource)})`,
+  );
+  check(
+    rawCueSites("this.cue('hammer_strike'); this.audio?.playMusic('circus_battle');") === 2,
+    'a raw id at a cue site would be caught',
+  );
 }
 
 console.log(

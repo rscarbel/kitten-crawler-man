@@ -63,6 +63,12 @@ export interface CircusQuestProgress {
    * her, and a bottle per retelling would be a potion fountain.
    */
   bigTopPotionGiven: boolean;
+  /**
+   * Whether the Big Top's encore star has paid out. Every entry to the tent
+   * builds a fresh maze with its stars dark, so the flag lives here, where it
+   * outlasts the maze, or a re-lit encore would pay on every performance.
+   */
+  bigTopEncorePaid: boolean;
 }
 
 export function createCircusQuestProgress(): CircusQuestProgress {
@@ -71,6 +77,7 @@ export function createCircusQuestProgress(): CircusQuestProgress {
     heatherSlain: false,
     mongoKidnapped: false,
     bigTopPotionGiven: false,
+    bigTopEncorePaid: false,
   };
 }
 
@@ -79,6 +86,7 @@ export interface CircusQuestProgressCheckpoint {
   readonly heatherSlain: boolean;
   readonly mongoKidnapped: boolean;
   readonly bigTopPotionGiven: boolean;
+  readonly bigTopEncorePaid: boolean;
 }
 
 /** Snapshots questline progress so a safe-room death can rewind the stage. */
@@ -90,6 +98,7 @@ export function captureCircusQuestProgress(
     heatherSlain: progress.heatherSlain,
     mongoKidnapped: progress.mongoKidnapped,
     bigTopPotionGiven: progress.bigTopPotionGiven,
+    bigTopEncorePaid: progress.bigTopEncorePaid,
   };
 }
 
@@ -105,4 +114,5 @@ export function restoreCircusQuestProgress(
   progress.heatherSlain = snapshot.heatherSlain;
   progress.mongoKidnapped = snapshot.mongoKidnapped;
   progress.bigTopPotionGiven = snapshot.bigTopPotionGiven;
+  progress.bigTopEncorePaid = snapshot.bigTopEncorePaid;
 }

@@ -47,12 +47,6 @@ export const METAL_WALL = 24;
 export const ARENA_FLOOR = 25;
 /** Tile type for the Krakaren Clone boss room — dark wet cavern floor. */
 export const KRAKAREN_BOSS_ROOM_FLOOR = 26;
-/** Tile type for red & white striped circus tent roof — big top style, not walkable. */
-export const ROOF_CIRCUS_RED = 27;
-/** Tile type for blue & gold circus tent roof — smaller accent tents, not walkable. */
-export const ROOF_CIRCUS_BLUE = 28;
-/** Tile type for purple & yellow circus tent roof — smaller accent tents, not walkable. */
-export const ROOF_CIRCUS_PURPLE = 29;
 /** Tile type for interior stairs going up — walkable trigger tile. */
 export const STAIRS_UP = 30;
 /** Tile type for interior stairs going down — walkable trigger tile. */
@@ -626,11 +620,30 @@ export const PASTURE_GRASS = 138;
 /** Tilled crop rows — walkable ground material. */
 export const CROP_FIELD = 139;
 
+// ── Grimaldi's circus grounds ─────────────────────────────────────────────────
+
+/** The circus lot: turf trodden to mud and sawdust inside the grounds — walkable ground material. */
+export const CIRCUS_LOT = 140;
+
+/**
+ * A circus structure that blocks sight: the Big Top and the side-show
+ * pavilions. Solid and Y-sorted. Drawn whole from one tile of its footprint,
+ * keyed `circus:<prop>`; every other blocked tile of the footprint carries
+ * `circus_part:<dx>,<dy>`, the step to that drawing tile, and draws nothing.
+ */
+export const CIRCUS_STRUCTURE_TALL = 141;
+
+/**
+ * A circus structure slim or low enough to see and shoot past — an arch post,
+ * a wagon. Solid and Y-sorted, keyed the same way as `CIRCUS_STRUCTURE_TALL`.
+ */
+export const CIRCUS_STRUCTURE_LOW = 142;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 140;
+export const TILE_TYPE_COUNT = 143;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

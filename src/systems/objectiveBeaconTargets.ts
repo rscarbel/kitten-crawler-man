@@ -99,7 +99,8 @@ interface FacadeExtent {
  * manifest offsets are measured from.
  *
  * Null for an entrance with no sprite building behind it: the tower, whose frame
- * is 23 rows of mostly-transparent spire, and the tile-built Big Top.
+ * is 23 rows of mostly-transparent spire, and the Big Top, a circus structure
+ * rather than a sprite building.
  */
 function facadeExtent(entry: BuildingEntry): FacadeExtent | null {
   const spriteKey = plannedBuildingSpriteKey(entry.name);

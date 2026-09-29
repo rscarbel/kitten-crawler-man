@@ -117,7 +117,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'modern_decorations',
   ],
 
-  // Level 3's wilderness: trees, boulders, the goblin camps and Briar Hollow.
+  // Level 3's wilderness: trees, boulders, the goblin camps, Briar Hollow and the circus.
   overworld: [
     'tree_birch_a',
     'tree_birch_b',
@@ -169,6 +169,13 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'village_1x2',
     'village_2x2',
     'village_2x3',
+    // The circus grounds' tents, arch posts, flame lamps, wagons and booths.
+    'circus_big_top',
+    'circus_pavilion',
+    'circus_arch_post',
+    'circus_rim_post',
+    'circus_wagon',
+    'circus_booth',
   ],
 
   // Shared by every dungeon floor (tutorial, level 1, level 2): the generic

@@ -53,6 +53,13 @@ function textureFor(stops: ReadonlyArray<GlowStop>, coreFraction: number): Canva
   return texture;
 }
 
+const BYTES_PER_PIXEL = 4;
+
+/** Bytes held by every glow texture baked so far, for memory gates. */
+export function radialGlowTextureBytes(): number {
+  return texturesByStops.size * GLOW_TEXTURE_PX * GLOW_TEXTURE_PX * BYTES_PER_PIXEL;
+}
+
 /** A glow whose first stop starts at the exact centre. */
 const NO_FLAT_CORE = 0;
 

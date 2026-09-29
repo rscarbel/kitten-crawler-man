@@ -5,7 +5,7 @@ const MS_PER_SECOND = 1000;
 const SAMPLE_WINDOW_FRAMES = 30;
 
 /** Sections of a frame that get their own timer. */
-export const PERF_TIMERS = ['update', 'render', 'separation'] as const;
+export const PERF_TIMERS = ['update', 'render', 'separation', 'lighting'] as const;
 export type PerfTimer = (typeof PERF_TIMERS)[number];
 
 /** Per-frame counts reported alongside the timers, so the ms figures can be read. */
@@ -16,7 +16,7 @@ type TimerTotals = Record<PerfTimer, number>;
 type GaugeTotals = Record<PerfGauge, number>;
 
 function zeroTimers(): TimerTotals {
-  return { update: 0, render: 0, separation: 0 };
+  return { update: 0, render: 0, separation: 0, lighting: 0 };
 }
 
 function zeroGauges(): GaugeTotals {

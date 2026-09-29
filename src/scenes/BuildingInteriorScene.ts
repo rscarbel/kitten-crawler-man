@@ -185,6 +185,7 @@ import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
 import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
 import { SpellSystem } from '../systems/SpellSystem';
 import { MAZE_CAT_SPAWN_TILE, MAZE_HUMAN_SPAWN_TILE } from '../map/bigTopMazeLayout';
+import { BIG_TOP_AMBIENT_BED } from '../systems/bigTop/bigTopSoundCues';
 import { findPartyArrivalTiles, findNearbyWalkableTile } from '../map/findWalkableTile';
 import { GrimaldiVine } from '../creatures/GrimaldiVine';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
@@ -381,6 +382,7 @@ const TOWER_CONFRONTATION_STAGES: ReadonlyArray<MurderQuestStage> = [
 const INTERIOR_MUSIC_FADE_IN_MS = 800;
 /** The cured vine's own tile hugs the south face of the pole cluster he wraps. */
 const CURED_GRIMALDI_POLE_SOUTH_OFFSET = 1;
+const GRIMALDI_TILE_CENTRE = 0.5;
 const CURED_GRIMALDI_SEARCH_RADIUS_TILES = 4;
 
 /** A quest encounter that runs inside a building (the Big Top maze, cult hideout, tower fight). */
@@ -1207,8 +1209,10 @@ export class BuildingInteriorScene extends GameplayScene {
         });
       }
     }
-    const roomBed = INTERIOR_AMBIENT_BEDS.get(this.entry.name);
-    if (roomBed !== undefined) {
+    const roomBed =
+      INTERIOR_AMBIENT_BEDS.get(this.entry.name) ??
+      (this.entry.name === BIG_TOP_BUILDING_NAME ? BIG_TOP_AMBIENT_BED : null);
+    if (roomBed !== null) {
       emitters.push({
         soundId: roomBed.soundId,
         x: 0,
@@ -1512,6 +1516,8 @@ export class BuildingInteriorScene extends GameplayScene {
           this.conversation,
         );
         this.bigTopMaze = maze;
+        // Baked while the door is still loading, not on the fire walk's first frame.
+        maze.lighting.prewarm();
         // The maze's fire is ground the companion has to be steered out of, the
         // same as a gas cloud or a boss's puddle.
         //
@@ -1570,6 +1576,8 @@ export class BuildingInteriorScene extends GameplayScene {
     );
     if (tile === null) return;
     const grimaldi = new GrimaldiVine(tile.x, tile.y, TILE_SIZE);
+    // The ring's 2×2 pole is centred on the corner its ring centre names.
+    grimaldi.poleOffsetTiles = pole.x - (tile.x + GRIMALDI_TILE_CENTRE);
     grimaldi.setMap(this.map);
     grimaldi.cureAmount = 1;
     this.floors[GROUND_FLOOR_INDEX].world.roster.add(grimaldi);
@@ -2379,7 +2387,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // And its cues are drained here rather than left for the frame the box
       // closes: a barrier that opened on the same frame a reset notice came up
       // would otherwise be heard several seconds later, over nothing.
-      this.drainMazeAudioCues();
+      this.drainMazeQueues();
       return;
     }
     // Space reaches this conversation through the claim registry's advance
@@ -2596,18 +2604,32 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * The tent's own cues, played in the order its script raised them.
+   * The tent's own cues, played in the order its script raised them, and any
+   * coins it owes.
    *
    * Drained whether or not there is anything to play it on. A muted run — the
    * headless gate is one — still raises a cue every time a vent lights, and a
    * queue nobody empties grows for the length of the session.
    */
-  private drainMazeAudioCues(): void {
+  private drainMazeQueues(): void {
     const maze = this.bigTopMaze;
     if (maze === null) return;
     const audio = this.audio;
     for (const cue of maze.drainSounds()) {
       audio?.play(cue.id, cue.volume === undefined ? undefined : { volume: cue.volume });
+    }
+    // The encore's coins are Carl's: the pivots that aim the light are his.
+    // Dropped rather than credited, so they fall from the star and land first.
+    for (const reward of maze.drainRewards()) {
+      this.destruction.loot.addLoot(
+        reward.tile.x * TILE_SIZE,
+        reward.tile.y * TILE_SIZE,
+        { coins: reward.coins, items: [] },
+        this.human,
+        false,
+        false,
+        true,
+      );
     }
   }
 
@@ -2686,7 +2708,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // explaining why they moved.
       this.exitMenuOpen = false;
     }
-    this.drainMazeAudioCues();
+    this.drainMazeQueues();
     combat.drainMobAudioCues(this.audio);
 
     this.interiorPropDestruction?.setActivePlayer(active);

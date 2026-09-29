@@ -896,6 +896,337 @@ damaged since the party last saved in town.
 
 ---
 
+## Circus grounds
+
+Grimaldi's circus is a disc of `CIRCUS_RADIUS_TILES` (14) about 70–90 tiles from the
+map centre, sited after Briar Hollow and clear of it. The quest's waves
+(`RITUAL_WAVES`, `ASSAULT_WAVES` in `CircusQuestSystem`) name their spawns as offsets
+from the same centre the grounds are laid out from, so the grounds are authored,
+not scattered.
+
+```
+src/map/overworld/
+  circusGroundsLayout.ts  the authored template: footprints, placements, keep-clear
+                          bands, rim anchors, bunting/festoon spans, decals, the arch
+  paintCircusGrounds.ts   stamps it: lot, tents, approach road, arch, lamps, rim props
+src/map/tiles/
+  circusStructureTiles.ts draws a structure from its drawing tile
+  circusDecalTiles.ts     the lot's ground decals
+  circusSiteRegistry.ts   structure grid → site record, for painters handed only a grid
+src/sprites/sheets/circusSheets.ts   PropSheetPlans, one sheet per footprint shape
+src/sprites/art/circusArt.ts         the structure painters
+src/sprites/art/circusArchArt.ts     the arch's crossbar, sign and marionette
+src/sprites/art/circusLettering.ts   brush-painted capitals for the marquee and boards
+src/sprites/art/circusOverlayAnchors.ts  where live dressing meets baked art
+src/systems/circus/CircusGroundsAmbience.ts  everything on the grounds that moves
+```
+
+`paintCircusGrounds` decides nothing: every footprint, door, bearing and band comes
+from the layout, and it only writes them down at one centre and bends the rim round
+the one road. The result, `CircusGroundsSite`, rides out on `OverworldData.circusGrounds`
+and `GameMap.circusGrounds`, so gates, minimap and ambience read the grounds off the
+map instead of re-deriving them. **The world seed never reaches geometry.** It only
+picks paint variants: litter, how a vine wanders, which pennant is torn.
+
+### Layout
+
+- **Fixed:** the 12 × 5 Big Top stands north of the centre with its two-tile door
+  facing south on the centre row, because the interior is entered from the south. Its
+  plan is an ellipse, so the rectangle's four corner tiles stay walkable. The three
+  3 × 2 side-show pavilions stand north-west, north-east and north, behind the door
+  line, which leaves the south field open for the fat clowns and mold lions.
+- **The approach road** (`circusApproachCentreLine`) starts on the doorstep, runs out
+  along the forecourt row and on to the nearest town gate at any angle. A road that
+  must leave northward first runs along the forecourt to a flank column
+  (`CIRCUS_ROAD_FLANK_COLUMNS`) between the Big Top and a pavilion, so it always
+  delivers the party to the door. It is paved after the tents, so it stops at their
+  walls instead of running under them.
+- **Gate highways stay paved.** The lot pass skips any paved tile, so a town highway
+  crossing the disc runs on through the lot, and every later placement test refuses
+  paving.
+- **The entry arch** (`entryArchFor`) stands where the road's centre line first reaches
+  the rim: one `arch_post` either side, 2–4 tiles off the centre line on the first
+  unpaved tile. The crossbar spans 4–8 tiles across or up the screen, so it cannot be a
+  sheet frame. `CircusGroundsAmbience` paints it once per site from `circusArchArt.ts`
+  and swings the marionette live.
+- **Keep-clear bands** (`CIRCUS_KEEP_CLEAR_BANDS`): forecourt, lemur field, stilt
+  field, door plus two rows, and Signet's lookout. The road is kept clear by measuring
+  the road itself.
+- **Forest keep-out:** the generator adds a disc of radius + `CIRCUS_FOREST_CLEARANCE_TILES`
+  (3) to the `KeepOut` handed to `paintForests`, because the rim props stand half a tile
+  past the rim and a canopy climbs two tiles up the screen.
+
+### The rim rule
+
+Anything that blocks goes on the rim, where nothing fights: `CircusQuestSystem` holds
+mobs inside r13. The field the waves fight over gets decals only.
+
+- The six flame lamps sit at r13 on fixed bearings (`CIRCUS_TORCH_BEARINGS_DEG`). The
+  wagons, booths, high striker and crate stack (`CIRCUS_RIM_PROPS`) take a fixed bearing
+  or a fixed turn beside the arch (the ticket booth greets whoever comes up the road).
+- Every tile of a rim footprint lies in **r12–r14.5**. The outermost fit wins, and the
+  resolver walks `CIRCUS_RIM_BEARING_NUDGES_DEG` round the ring when a bearing is taken.
+- A rim tile must be on the map, unpaved, outside every keep-clear band, not touching
+  another structure, more than 2 tiles (Chebyshev) from an arch post and more than 3
+  from Terror's spawn behind the Big Top. `leavesRimConnected` refuses a prop that would
+  seal a pocket or cut the rim path.
+- A prop with no legal footprint on its arc is left out, never jammed in.
+
+### Tile types and registries
+
+| Type                    | Walkable | Sight     | Drawn by                                          |
+| ----------------------- | -------- | --------- | ------------------------------------------------- |
+| `CIRCUS_LOT`            | yes      | —         | chunk bake: `circus_lot` ground material + decals |
+| `CIRCUS_STRUCTURE_TALL` | no       | blocks    | Y-sorted pass: Big Top, pavilions, crate stack    |
+| `CIRCUS_STRUCTURE_LOW`  | no       | seen past | Y-sorted pass: arch posts, lamps, wagons, booths  |
+
+Structures use the Briar Hollow anchor pattern: the drawing tile, always in the
+footprint's bottom row, is keyed `circus:<structure>` and draws the whole structure;
+every other blocked tile is keyed `circus_part:<dx>,<dy>` and only blocks. Each is
+written with `setStandingSprite`, so it records the lot it stands on and the lot's
+decals run on under the tent's transparent margins. A missing registry entry renders
+bare floor and still typechecks, so both structure types are in all of these:
+
+- `NON_WALKABLE_TILE_TYPES` (`walkability.ts`); `LOW` alone in `SIGHT_TRANSPARENT_TILE_TYPES`;
+- `DECORATION_TYPES` and `CACHEABLE_OVERLAY_TYPES` (`TileRenderer.ts`), plus the extents
+  branch there; `DECORATION_OVERLAY_TYPES` and the draws-at filter (`GameMap.ts`);
+- the `baseOnly` and draw switches of `drawDecorationTile` (`decorationTiles.ts`);
+- `NON_FLOOR_TYPES` (`tiles/helpers.ts`) and `SOLID_TILE_TYPES` (`town/tileGrid.ts`);
+- the minimap colours in `MiniMapSystem.ts`, `MobileHUDSystem.ts` and `TownMapScene.ts`.
+
+They are deliberately **absent** from `GROUND_OCCLUDER_TYPES`: a tent is round and
+paints its own contact shadow, and a band along its rectangle draws a dark box on the
+lot. `CIRCUS_LOT` is absent from `NON_WALKABLE_TILE_TYPES`, since it is the ground every
+circus fight is fought on. `gates:circus-art` checks the registry membership.
+
+### The art
+
+The circus sheet family is six `PropSheetPlan`s (`circusSheets.ts`): one sheet per
+footprint envelope, one row per structure, one frame per variant. A structure's frame is
+exactly as wide as its footprint and anchored on its drawing tile, with headroom above.
+The family is registered in `environmentSheets.ts` with the level-3 wilderness group,
+**unseeded**, so a tent survives the stairs. Structure seeds hash the structure id, not
+the row, so adding a structure re-rolls nothing else.
+
+The painters are on the town vocabulary ([One art vocabulary](#one-art-vocabulary)) with
+their own ramps, `CIRCUS_RAMPS` / `getCircusRamp` in `townPalette.ts`: dried-blood and
+bone stripes, bruise, tarnished brass, slate navy, mildew and vine. A tent is modelled
+and then projected: stripe panels run from the eave to a king pole's peak and are warped
+onto their quads with `drawPlane`, so they converge instead of reading as striped
+wallpaper. Frame contract: ink stays inside the blocked columns and no lower than each
+column's lowest blocked tile, except over a doorway and for soft shadow.
+
+### Overhead dressing and decals
+
+Bunting and festoon strings (`CIRCUS_BUNTING_SPANS`, `CIRCUS_FESTOON_SPANS`, tied to
+king poles, pavilion peaks and lamps by name), pennants, balloons and the marionette are
+overhead: they block nothing and are not tiles.
+
+Decals (`circusDecalTiles.ts`) are the chalk ring, sawdust trodden out of the doors,
+wagon ruts, litter, clown shoe prints, a stain by the cage wagon, and vine runners from
+under the Big Top's skirt. Each decal is one shape in map tiles, compiled once per site.
+Every tile draws the shapes crossing it, clipped to itself, so there are no seams and no
+tile reads its neighbours. They stay low-contrast and sparse, because every telegraph is
+read against the lot.
+
+### Live ambience
+
+`CircusGroundsAmbience` draws the moving parts over the baked frames: lamp fires, strings
+stirring, guttering festoon bulbs, the marquee bulbs, the door's light, the marionette,
+balloons and the caravan's curtain. Baked rows would cost a full frame per cell. Each
+piece is a pure function of the clock and the quest stage, so a checkpoint has nothing
+to capture. Positions come from the shared anchors (`circusOverlayAnchors.ts`, the
+marquee bulbs and door mouth in `circusArt.ts`, the king poles and arch height in the
+layout), so the painted and live halves cannot drift apart.
+
+- `renderEntities()` joins the scene's Y-sorted entity pass.
+- `renderGround()` draws the **door spill**. `RenderPipeline` calls it straight after
+  `gameMap.renderCanvas`, before gore and every telegraph: the spill is additive and
+  would wash out anything beneath it.
+- `renderAbove()` draws the loose balloon over everything.
+
+**Redeemed.** Once the quest reaches a resolved stage, every surviving bulb lights, the
+door light warms, and the vine runners die back. That last change reaches the chunk
+bake: `circusSiteRegistry.ts` holds a `vinesWithered` flag beside the site, and the
+ambience flips it and calls `markTileDirty` on only the tiles the runners cross.
+
+### Gates
+
+- `npm run verify:circus-grounds` sweeps generated floors and holds several budgets:
+  - blocked tiles in the r14 disc, a ratchet baseline (`BLOCKED_TILES_BASELINE`) under a
+    fixed `BLOCKED_TILES_CEILING` of 95, which the baseline may never pass;
+  - zero blocked tiles in every keep-clear band and the road, and zero sealed rim
+    pockets;
+  - every wave spawn within one tile of where it is authored (no exceptions are
+    listed), and able to walk to the door, lookout and forecourt;
+  - rim props in the band, off the road and highways, clear of the arch, each stood on
+    at least 75% of seeds;
+  - a headless assault whose stall-rescue lifts stay under `STALL_LIFTS_BASELINE`,
+    which measures wedging.
+
+  `--fault=` forecourt-solid, blocked-count, spawn-wall, pocket, rim-prop, rim-arch,
+  cut-lookout, wedge or highway-prop must each turn it red. `--measure` prints every
+  reading.
+
+- `npm run gates:circus-art` checks the frame contract and the footprint ink, canvas
+  convergence, the texture band against the lot, the registries, the arch and marionette
+  surfaces, and a 6 MB sheet budget. Faults: wide-prop, flat-canvas, sheet-budget,
+  loose-crossbar.
+- `npm run render:circus-grounds` renders the real floor with Carl, Donut and the
+  quest's cast (`--stage=`, `--seeds=`, `--time=`, `--label=`) into `preview/`.
+- Dev: `?level=level3&spawn=circus`, `?level=level3&quest=<CircusQuestStage>`, the
+  `circus-hire` playtest preset.
+
+---
+
+## Big Top
+
+The tent's interior is a `BuildingInteriorScene` room. When the quest is `bigtop_ready`
+it is the three-act maze run by `BigTopMazeSystem` (`src/map/bigTopMazeLayout.ts`:
+fire walk, menagerie, hall of mirrors, the finale ring, and paired curtain rooms
+between acts). Otherwise it is a plain ring whose curb and king pole `GameMap` lays out.
+`GameMap.generateInterior` calls `setBigTopDecorLayout` on every entry. It is module
+state, like the wall finish, because nothing between the chunk bake and a tile painter
+knows which room is live.
+
+### Shell and floor
+
+- **Walls** use the `'canvas'` finish (`WALL_MATERIAL_BY_BUILDING_NAME`). A wall tile
+  facing no floor is the dark backstage mass, the `bigtop_backstage` material of the
+  interior ground sheet, with dim clutter at least `BACKSTAGE_CLUTTER_CLEARANCE_TILES`
+  (2) from any floor. A wall facing floor hangs a striped drape (`bigTopWallFace`).
+  **A drape takes the act of the floor it faces, never the wall's own row**, because a
+  dividing row belongs to the act below while its face is the south edge of the room
+  above. Styles are `firewalk`, `menagerie`, `mirrors` and `ring`; the curtain rooms and
+  the plain ring hang the house's `ring` drapes.
+- **Floor** is `bigtop_sawdust` (`SAWDUST_FLOOR`, `CIRCUS_RING_EDGE` and `TENT_POLE` all
+  resolve to it).
+- **Floor marks** (`bigTopMazeDecor.ts` data, `bigTopFloorArt.ts` painters) are baked
+  into the chunk per act: scorch and iron plates round the vents, straw drifts and paw
+  trails in the menagerie, the harlequin cloth and stanchions in the mirror halls, the
+  ring curb, spot mark and guy shadows in the finale, hold marks in the interval rooms.
+  Each is one feature in tile units, painted whole and clipped per tile, stacked by
+  `FLOOR_FEATURE_LAYER`. All are tonal shifts that can never pass for a telegraph.
+- **Dressing density:** no act leaves a fully walkable 4 × 4 (`UNDRESSED_SQUARE_TILES`)
+  without a mark. After the authored marks, a greedy fill drops one small scatter mark
+  of the right act into each bare square. The index is built from the authored layout
+  alone, so it does not depend on the live system existing.
+- **The king pole** is a `TENT_POLE` block drawn in the Y-sorted pass from its
+  bottom-left tile (`tentPoleTiles.ts`). A crawler north of it walks behind the mast,
+  and one south of it in front. A pole 2 × 2 or larger is the king pole and also carries
+  the trapeze. Its foot and shadow are baked into the floor, and it is in the same
+  decoration and overlay-cache registries as the circus structures.
+
+### Lighting
+
+`src/systems/bigTop/bigTopLighting.ts`: the tent is dark and the act on stage is lit.
+
+- **The mask** is painted once for the whole tent at quarter resolution
+  (`BIG_TOP_MASK_SCALE`), with a padded border so a stretched blit never samples the
+  edge. Each act has its own tint of dark (`ACT_DARK`), and every fixture cuts a soft
+  pool (`POOL_SPECS`): footlights, arch posts, interval lamps, limelights, act boards,
+  hall lamps and the ring wash. `lighting.prewarm()` bakes it while the door loads.
+- **The house board** lays a feathered translucent fill per band that is not on stage.
+  The next act comes up over `LIGHTS_UP_FRAMES` (60) when its curtain rises. The act
+  behind dims to `STRUCK_ACT_LEVEL` (0.4), and acts ahead stay dark. Once Grimaldi is
+  freed, the house lights come up over 120 frames to 30% of the mask.
+- **Live light** is additive: vent flare, lantern pools, limelight beams, lit stars,
+  spill through an opened curtain, and the follow-spot on Grimaldi. The follow-spot
+  cross-fades from sick green to warm white as the cure runs, through
+  `FOLLOW_SPOT_TINT_STEPS` (12) baked glows.
+
+**The fairness contract.** `BigTopMazeSystem.renderWorld` draws in one order:
+`renderProps` (dressing, act boards, shut barriers, limelight housings) →
+`renderLighting` (mask, live light, follow-spot cones, reflections) →
+`renderTelegraphs`. The last draws the ropes, vent grilles and their warnings, lantern
+rings and clear marks, opened ways, stars, cold beams and the mirror-turn preview.
+Everything a player reads to stay alive or find the way is drawn **above** the mask at
+full strength, and crawlers and mobs draw above all three. Never move a warning into
+`renderProps`.
+
+### Props
+
+The act props live in `src/sprites/art/bigTop/`:
+
+- one module per act (`fireWalkProps`, `menagerieProps`, `mirrorHallProps`,
+  `curtainProps`, `finaleProps`, `encoreProps`);
+- the shared hand in `bigTopPropKit.ts` and `stagePropKit.ts`;
+- the shell in `bigTopShellArt.ts`.
+
+Each is baked once per `(prop, state, frame)` into `bigTopPropCache.ts`. Frames bake at
+device resolution, snapped to a step. The cache is capped at
+`BIG_TOP_PROP_CACHE_BUDGET_BYTES` (6 MB) and evicts least-recently drawn. An animated
+prop quantises its motion to at least four frames a cycle. `BigTopMazeSystem.dispose`
+clears the cache and the reflection scratch when the party leaves. While either crawler
+stands in an interval room, `queueNextActWarm` bakes the next act's props one
+screen-sized window a frame, so the curtain does not hitch. The draws that change every
+frame (fire, opened ways, act gates, lantern warnings, name chips) stay live in
+`src/sprites/bigTopMazeProps.ts`.
+
+- **Ownership colours are load-bearing** for the two-crawler split. Donut's props are
+  stage red and bone stripes with gilt trim and a gilt hoop. Carl's are ringmaster blue
+  and brass on timber with brass strike chevrons. A player must name prop and owner from
+  colour alone at 32 px under the stage lights. The owner's pulse and hit flash are live
+  overlays over the cached frame.
+- **Reflections:** crawlers within `REFLECTION_RANGE_TILES` of a mirror-hall pane appear
+  in it. They are drawn over the dark, since a reflection is as bright as the crawler.
+- **Mirror-turn preview:** the acting crawler's nearest own mirror in reach shows
+  the beam the next blow would make, as dots and a ring on the star it would land on.
+  It is traced with the live beam's walk (`traceMazeBeamWithFacing`), and the hot span
+  is left out.
+- **The encore star** latches like a star but opens nothing. It lights the bravo rig and
+  pays coins at its foot **once per run**: `bigTopEncorePaid` lives on
+  `CircusQuestProgress` and is persisted, because a party sent back in gets a fresh
+  maze with every star dark.
+
+### Sound
+
+Every Big Top play site raises a cue from `src/systems/bigTop/bigTopSoundCues.ts`
+(`BIG_TOP_CUES`, `BIG_TOP_BLOCK_CLEARED_CUES`), never a raw id. A cue is a list of takes
+rotated by the system's cue queue. Until each recording lands, a cue either borrows a
+stand-in or is an empty list, which is silent.
+Each cue's JSDoc names the file it waits for. To swap one in:
+
+1. Register the id in `src/audio/sounds.ts`.
+2. Add it to the `circusQuest` group in `src/audio/sfxGroups.ts`. `AudioManager.play` is
+   silent on an unpreloaded buffer, and `verify:bigtop` fails on any cue id missing from
+   the group.
+3. Replace the cue's list.
+
+The ambience bed goes in `STREAMING_SOUND_IDS` and `BIG_TOP_AMBIENT_BED`, which is
+`null` until it lands.
+
+### Gates
+
+- `npm run verify:bigtop`: timing feasibility at `MAZE_TIMING_MARGIN`, bell and mirror
+  solvability, resets, the door gate, and more. On the art side it checks that no
+  dressing hangs over walkable ground, that every drape matches the act of the floor it
+  faces, that floor marks sit on walkable ground, the density rule, every mirror-turn
+  preview against the blow that follows it, the encore paying once, and that every cue
+  is audible.
+- `npm run gates:bigtop-art` measures the real tent through `bigTopInteriorHarness`:
+  - **Hazards:** every forced hazard state keeps its full-bright contrast and salience,
+    and its own pixels keep at least 0.85 of their full-bright colour (0.7 for a hazard
+    over its own pool). That is the fidelity measure.
+  - **Floor and mass:** the stage floor stays above a luminance floor, and the mass
+    stays darker and calmer than the floor.
+  - **The show:** the lights follow the show.
+  - **Budgets:** `drawImage` count, lighting memory and node pass time.
+  - **Act props:** every catalogued frame, painted at both scales on a strict canvas,
+    stays inside its box and fits the cache without evicting.
+
+  `--fault=dark-telegraph` draws the lights over the warnings and must turn every hazard
+  state red. `--fault=ink-overrun` must turn the act-prop section red. Browser cost is
+  the `lighting` row of `?perf`.
+
+- `npm run render:bigtop-interior` renders one frame per act, a curtain room and every
+  forced hazard state, at 32 and 64 px, into `preview/bigtop-interior/<label>/` with
+  `fairness.json`. `--lighting=lit|fullBright|darkTelegraph`, `--only=`, `--label=`.
+- `npm run render:bigtop` renders the prop contact sheet and smoke-runs every maze draw
+  function.
+
+---
+
 ## Dev routes
 
 Both are localhost-only, registered in `src/game.ts`.

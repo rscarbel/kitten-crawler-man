@@ -78,12 +78,29 @@ export function paintWallRing(grid: TileGrid, plan: TownPlan): void {
  * to the map's void border.
  *
  * These are what make the town look connected to somewhere, and they are also
- * what outlying sites route to: `connectSiteToNearestGate` joins the circus to a
- * gate exit rather than to the town centre, so an approach road can no longer
- * stop short of a junction it was aiming past.
+ * what outlying sites route to: the circus approach (`nearestGate`, then
+ * `paveApproach`) joins a gate exit rather than the town centre, so an approach
+ * road never stops short of a junction it was aiming past.
  */
 export function paintGateHighways(grid: TileGrid, plan: TownPlan, borderTiles: number): void {
-  const lastOpenTile = grid.size - borderTiles - 1;
+  for (const tile of gateHighwayTiles(plan, grid.size, borderTiles)) {
+    grid.setPaved(tile.x, tile.y, FloorTypeValue.road);
+  }
+}
+
+/**
+ * Every tile the gate highways are laid along on a map of `mapSize` tiles,
+ * whatever later passes build over them. A site stamped across a highway
+ * asks this rather than the grid, because by then the grid may no longer
+ * show where the road ran.
+ */
+export function gateHighwayTiles(
+  plan: TownPlan,
+  mapSize: number,
+  borderTiles: number,
+): TilePoint[] {
+  const lastOpenTile = mapSize - borderTiles - 1;
+  const tiles: TilePoint[] = [];
   for (const gate of plan.gates) {
     const { outward } = gate;
     // The road out is exactly as wide as the gate it leaves, swept outward from
@@ -95,13 +112,14 @@ export function paintGateHighways(grid: TileGrid, plan: TownPlan, borderTiles: n
         let x = gate.bounds.x + dx + outward.dx;
         let y = gate.bounds.y + dy + outward.dy;
         while (x >= borderTiles && x <= lastOpenTile && y >= borderTiles && y <= lastOpenTile) {
-          grid.setPaved(x, y, FloorTypeValue.road);
+          tiles.push({ x, y });
           x += outward.dx;
           y += outward.dy;
         }
       }
     }
   }
+  return tiles;
 }
 
 /**
@@ -126,53 +144,101 @@ export function paintDoorApron(grid: TileGrid, placement: SpritePlacement): void
 }
 
 /**
- * Links an outlying site — today only the circus — to the nearest town gate,
- * with an L-shaped road that runs out along the gate's own axis and then turns
- * into the gate.
- *
- * **The order of the two segments is the whole correctness argument, and getting
- * it the other way round drove a road through the middle of the town.** The
- * pathology was measured when the town had only three gates, so a circus north
- * of the walls routed to a *side* gate, whose exit sits beside Market Street — 9
- * rows below the town's centre line and well inside its north-south extent. The
- * north gate removes that particular case, but not the argument: the gate chosen
- * is the nearest by straight line, and a site off the town's diagonals still
- * picks one whose exit is deep inside the town's extent on the other axis.
- * Turning along the site's own column first then
- * paved 3 tiles of packed earth from the circus straight down through the Civic
- * Terrace, the plaza and Market Street's cobble, and `TOWN_WALL` being solid then
- * cut the run at the wall so the circus finished with no road at all: measured
- * over 300 seeds, 10% of maps had the slash and 13% had the circus disconnected,
- * every one of them with the circus to the north.
- *
- * Running along the gate's outward axis *first* puts the corner on the gate's own
- * standoff line — one tile outside the wall — and the perpendicular segment then
- * travels along that line, outside the town by construction. Because the gate is
- * the nearest one, the first segment is always on the town's own side of it: a
- * circus level with the walls is due east or west and takes that side's gate, and
- * a circus north or south of them runs clear of the wall's rows entirely.
+ * Paves an outlying site's road — today only the circus's — along `centreLine`
+ * at the approach's full width. The centre line is an L from
+ * `approachCentreLine`, which carries the argument for its shape.
  *
  * `keepOut` is the belt to that braces: no tile inside the town is ever paved by
  * this pass, whatever the route. A route that needed it would leave a gap rather
  * than a scar, and `assertTownInteriorIsIntact` in the generator is what notices.
  */
-export function connectSiteToNearestGate(
+export function paveApproach(
   grid: TileGrid,
-  plan: TownPlan,
-  site: TilePoint,
+  centreLine: ReadonlyArray<ApproachCentreTile>,
   keepOut: TileRect,
 ): void {
-  for (const tile of approachRouteTiles(plan, site)) paveTrack(grid, keepOut, tile.x, tile.y);
+  for (const tile of widenApproach(centreLine)) paveTrack(grid, keepOut, tile.x, tile.y);
+}
+
+/** Every tile a road along `centreLine` covers at the approach's full width. */
+export function widenApproach(centreLine: ReadonlyArray<ApproachCentreTile>): TilePoint[] {
+  const tiles: TilePoint[] = [];
+  for (const tile of centreLine) {
+    for (let offset = -APPROACH_HALF_WIDTH; offset <= APPROACH_HALF_WIDTH; offset++) {
+      tiles.push(
+        tile.alongX ? { x: tile.x, y: tile.y + offset } : { x: tile.x + offset, y: tile.y },
+      );
+    }
+  }
+  return tiles;
+}
+
+/** One tile of an approach road's centre line, and which way the road runs through it. */
+export interface ApproachCentreTile extends TilePoint {
+  /** True where the road runs east–west, so its width spreads north and south. */
+  readonly alongX: boolean;
 }
 
 /**
- * Every tile `connectSiteToNearestGate` would pave for a site, before its
- * keep-out is applied: the two legs of the L, at full width.
+ * The centre line of an outlying site's road to its nearest town gate, walked
+ * from the site out to the gate: an L that runs out along the gate's own axis
+ * first and then turns into the gate.
  *
- * Exposed so a site can be rejected *before* its road is laid — the circus is
- * kept from choosing a spot whose approach would run through Briar Hollow.
+ * **The order of the two segments is the whole correctness argument, and getting
+ * it the other way round drove a road through the middle of the town.** The
+ * gate chosen is the nearest by straight line, and a site off the town's
+ * diagonals picks one whose exit is deep inside the town's extent on the other
+ * axis. Turning along the site's own column first paved 3 tiles of packed earth
+ * from the circus straight down through the Civic Terrace, the plaza and Market
+ * Street's cobble, and `TOWN_WALL` being solid then cut the run at the wall so
+ * the circus finished with no road at all: measured over 300 seeds, 10% of maps
+ * had the slash and 13% had the circus disconnected, every one of them with the
+ * circus to the north.
+ *
+ * Running along the gate's outward axis *first* puts the corner on the gate's own
+ * standoff line — one tile outside the wall — and the perpendicular segment then
+ * travels along that line, outside the town by construction. Because the gate is
+ * the nearest one, the first segment is always on the town's own side of it: a
+ * site level with the walls is due east or west and takes that side's gate, and
+ * a site north or south of them runs clear of the wall's rows entirely. The gate is the one nearest `site`; the road starts at
+ * `start`, which is the site itself unless the site's own centre is not where
+ * a road can begin (the circus's Big Top stands on it, so its road begins on
+ * the forecourt, or round the tent's flank).
  */
-export function approachRouteTiles(plan: TownPlan, site: TilePoint): TilePoint[] {
+export function approachCentreLine(
+  plan: TownPlan,
+  site: TilePoint,
+  start: TilePoint = site,
+): ApproachCentreTile[] {
+  const gate = nearestGate(plan, site);
+  const { exit } = gate;
+  const line: ApproachCentreTile[] = [];
+  const stepX = Math.sign(exit.x - start.x);
+  const stepY = Math.sign(exit.y - start.y);
+  if (gate.outward.dx !== 0) {
+    for (let x = start.x; ; x += stepX) {
+      line.push({ x, y: start.y, alongX: true });
+      if (x === exit.x) break;
+    }
+    for (let y = start.y; ; y += stepY) {
+      line.push({ x: exit.x, y, alongX: false });
+      if (y === exit.y) break;
+    }
+  } else {
+    for (let y = start.y; ; y += stepY) {
+      line.push({ x: start.x, y, alongX: false });
+      if (y === exit.y) break;
+    }
+    for (let x = start.x; ; x += stepX) {
+      line.push({ x, y: exit.y, alongX: true });
+      if (x === exit.x) break;
+    }
+  }
+  return line;
+}
+
+/** The town gate whose exit is nearest a site: the one its approach road runs to. */
+export function nearestGate(plan: TownPlan, site: TilePoint): TownPlan['gates'][number] {
   let gate = plan.gates[0];
   let bestDistance = Infinity;
   for (const candidate of plan.gates) {
@@ -181,17 +247,7 @@ export function approachRouteTiles(plan: TownPlan, site: TilePoint): TilePoint[]
     bestDistance = distance;
     gate = candidate;
   }
-
-  const { exit } = gate;
-  const tiles: TilePoint[] = [];
-  if (gate.outward.dx !== 0) {
-    rowRange(tiles, site.y, Math.min(site.x, exit.x), Math.max(site.x, exit.x));
-    columnRange(tiles, exit.x, Math.min(site.y, exit.y), Math.max(site.y, exit.y));
-  } else {
-    columnRange(tiles, site.x, Math.min(site.y, exit.y), Math.max(site.y, exit.y));
-    rowRange(tiles, exit.y, Math.min(site.x, exit.x), Math.max(site.x, exit.x));
-  }
-  return tiles;
+  return gate;
 }
 
 /** Approach roads are paved this many tiles either side of their centre line. */
@@ -204,111 +260,4 @@ function contains(rect: TileRect, x: number, y: number): boolean {
 function paveTrack(grid: TileGrid, keepOut: TileRect, x: number, y: number): void {
   if (contains(keepOut, x, y)) return;
   grid.setPaved(x, y, FloorTypeValue.road);
-}
-
-function columnRange(tiles: TilePoint[], x: number, yFrom: number, yTo: number): void {
-  for (let y = yFrom; y <= yTo; y++) {
-    for (let dx = -APPROACH_HALF_WIDTH; dx <= APPROACH_HALF_WIDTH; dx++) {
-      tiles.push({ x: x + dx, y });
-    }
-  }
-}
-
-function rowRange(tiles: TilePoint[], y: number, xFrom: number, xTo: number): void {
-  for (let x = xFrom; x <= xTo; x++) {
-    for (let dy = -APPROACH_HALF_WIDTH; dy <= APPROACH_HALF_WIDTH; dy++) {
-      tiles.push({ x, y: y + dy });
-    }
-  }
-}
-
-/**
- * Routes a detour around any structure that bisects a road — one with paving on
- * both its north and south sides, or on both its east and west sides.
- *
- * This runs over the **circus** only, not over the town. The circus's tents are
- * scattered at generation time and its approach road is painted afterwards, so a
- * tent genuinely can cut the road in two. The town's buildings cannot: every
- * band is bounded above and below by a street by design, so every town building
- * has paving on both sides and this router would "detour" around all fifteen of
- * them — paving a column straight through the gardens and lanes the `TownPlan`
- * just laid out. Running it over the town was correct when buildings were
- * dropped on a lawn; under a street plan it is actively wrong.
- */
-export function paintBuildingBypassRoutes(
-  grid: TileGrid,
-  structures: ReadonlyArray<TileRect>,
-  borderTiles: number,
-): void {
-  const lastOpenTile = grid.size - borderTiles;
-
-  for (const building of structures) {
-    const rowTop = building.y - 1;
-    const rowBottom = building.y + building.h;
-    const colLeft = building.x - 1;
-    const colRight = building.x + building.w;
-
-    let hasRoadNorth = false;
-    let hasRoadSouth = false;
-    for (let x = colLeft; x <= colRight; x++) {
-      if (x < borderTiles || x >= lastOpenTile) continue;
-      if (rowTop >= borderTiles && grid.isPaved(x, rowTop)) hasRoadNorth = true;
-      if (rowBottom < lastOpenTile && grid.isPaved(x, rowBottom)) hasRoadSouth = true;
-    }
-    if (hasRoadNorth && hasRoadSouth) {
-      const westClear = colLeft >= borderTiles && isColumnClear(grid, colLeft, rowTop, rowBottom);
-      const eastClear = colRight < lastOpenTile && isColumnClear(grid, colRight, rowTop, rowBottom);
-      // Route on every available side, then stitch the ends back to the road.
-      if (westClear) {
-        for (let y = rowTop; y <= rowBottom; y++) grid.setPaved(colLeft, y, FloorTypeValue.road);
-        paveRow(grid, colLeft, colRight, rowTop);
-        paveRow(grid, colLeft, colRight, rowBottom);
-      }
-      if (eastClear) {
-        for (let y = rowTop; y <= rowBottom; y++) grid.setPaved(colRight, y, FloorTypeValue.road);
-        paveRow(grid, colLeft, colRight, rowTop);
-        paveRow(grid, colLeft, colRight, rowBottom);
-      }
-    }
-
-    let hasRoadWest = false;
-    let hasRoadEast = false;
-    for (let y = rowTop; y <= rowBottom; y++) {
-      if (y < borderTiles || y >= lastOpenTile) continue;
-      if (colLeft >= borderTiles && grid.isPaved(colLeft, y)) hasRoadWest = true;
-      if (colRight < lastOpenTile && grid.isPaved(colRight, y)) hasRoadEast = true;
-    }
-    if (hasRoadWest && hasRoadEast) {
-      const northClear = rowTop >= borderTiles && isRowClear(grid, rowTop, colLeft, colRight);
-      const southClear = rowBottom < lastOpenTile && isRowClear(grid, rowBottom, colLeft, colRight);
-      if (northClear) {
-        paveRow(grid, colLeft, colRight, rowTop);
-        paveColumn(grid, colLeft, rowTop, rowBottom);
-        paveColumn(grid, colRight, rowTop, rowBottom);
-      }
-      if (southClear) {
-        paveRow(grid, colLeft, colRight, rowBottom);
-        paveColumn(grid, colLeft, rowTop, rowBottom);
-        paveColumn(grid, colRight, rowTop, rowBottom);
-      }
-    }
-  }
-}
-
-function isColumnClear(grid: TileGrid, x: number, yFrom: number, yTo: number): boolean {
-  for (let y = yFrom; y <= yTo; y++) if (grid.isSolid(x, y)) return false;
-  return true;
-}
-
-function isRowClear(grid: TileGrid, y: number, xFrom: number, xTo: number): boolean {
-  for (let x = xFrom; x <= xTo; x++) if (grid.isSolid(x, y)) return false;
-  return true;
-}
-
-function paveRow(grid: TileGrid, xFrom: number, xTo: number, y: number): void {
-  for (let x = xFrom; x <= xTo; x++) grid.setPaved(x, y, FloorTypeValue.road);
-}
-
-function paveColumn(grid: TileGrid, x: number, yFrom: number, yTo: number): void {
-  for (let y = yFrom; y <= yTo; y++) grid.setPaved(x, y, FloorTypeValue.road);
 }

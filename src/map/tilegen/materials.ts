@@ -35,6 +35,7 @@ import {
   type PatchTiles,
 } from './raster';
 import { hashLattice, NoiseField } from './noise';
+import { CIRCUS_RAMPS } from '../../sprites/art/town/townPalette';
 import {
   sampleRamp,
   shade,
@@ -2798,6 +2799,265 @@ const cropRows: Material = {
   },
 };
 
+// ── the Big Top ────────────────────────────────────────────────────────────
+
+const SAWDUST_RAMP_MID_LIFT = 0.55;
+/**
+ * Raked sawdust: the circus straw ramp pulled up toward its lit end and
+ * squeezed, because the ring floor is the brightest, calmest thing in a dark
+ * tent. Every hazard in the maze is drawn over it, and a warning read against a
+ * busy floor is a warning read late.
+ */
+const BIGTOP_SAWDUST_RAMP: Ramp = {
+  shadow: CIRCUS_RAMPS.circus_straw.mid,
+  mid: mix(CIRCUS_RAMPS.circus_straw.mid, CIRCUS_RAMPS.circus_straw.light, SAWDUST_RAMP_MID_LIFT),
+  light: CIRCUS_RAMPS.circus_straw.light,
+  accent: CIRCUS_RAMPS.circus_straw.accent,
+};
+const BIGTOP_SAWDUST_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.5, contrast: 0.55 };
+const SAWDUST_TREAD_COUNT = 3;
+const SAWDUST_TREAD_MIN_RADIUS = 12;
+const SAWDUST_TREAD_MAX_RADIUS = 26;
+const SAWDUST_TREAD_ALPHA = 0.07;
+const SAWDUST_TREAD_SOFTNESS = 1;
+/**
+ * Shavings are short strokes several source pixels long rather than dots: a
+ * one-pixel speck is half a screen pixel at play size and averages into grey
+ * dirt, where a stroke still reads as a curl of wood.
+ */
+const SAWDUST_SHAVING_COUNT = 34;
+const SAWDUST_SHAVING_MIN_LENGTH = 3;
+const SAWDUST_SHAVING_LENGTH_RANGE = 4;
+const SAWDUST_SHAVING_ALPHA = 0.22;
+const SAWDUST_SHAVING_TAPER = 0.6;
+const SAWDUST_SHAVING_DARK_SHARE = 0.45;
+
+const bigtopSawdust: Material = {
+  id: 'bigtop_sawdust',
+  label: 'Big Top raked sawdust',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, BIGTOP_SAWDUST_RAMP, BIGTOP_SAWDUST_GROUND);
+    paintSpeckles(ctx, ctx.detail + 113, {
+      count: SAWDUST_TREAD_COUNT,
+      minRadius: SAWDUST_TREAD_MIN_RADIUS,
+      maxRadius: SAWDUST_TREAD_MAX_RADIUS,
+      ramp: { ...BIGTOP_SAWDUST_RAMP, mid: BIGTOP_SAWDUST_RAMP.shadow },
+      alpha: SAWDUST_TREAD_ALPHA,
+      softness: SAWDUST_TREAD_SOFTNESS,
+    });
+    const total = Math.round(SAWDUST_SHAVING_COUNT * (ctx.size / TILE_PX) ** 2);
+    const seed = ctx.detail + 127;
+    for (let i = 0; i < total; i++) {
+      const angle = hashLattice(i, 5, seed) * Math.PI * 2;
+      const length =
+        SAWDUST_SHAVING_MIN_LENGTH + hashLattice(i, 6, seed) * SAWDUST_SHAVING_LENGTH_RANGE;
+      const color =
+        hashLattice(i, 7, seed) < SAWDUST_SHAVING_DARK_SHARE
+          ? BIGTOP_SAWDUST_RAMP.shadow
+          : BIGTOP_SAWDUST_RAMP.accent;
+      wrappedStroke(
+        ctx.surface,
+        hashLattice(i, 1, seed) * ctx.size,
+        hashLattice(i, 2, seed) * ctx.size,
+        Math.cos(angle),
+        Math.sin(angle),
+        length,
+        color,
+        SAWDUST_SHAVING_ALPHA,
+        SAWDUST_SHAVING_TAPER,
+      );
+    }
+  },
+};
+
+const BACKSTAGE_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.45, contrast: 0.5 };
+/** One stripe pair per tile, so the ghost lines up with the drapes hung in front of it. */
+const BACKSTAGE_STRIPE_PERIOD_PX = TILE_PX;
+const BACKSTAGE_STRIPE_LIFT = 0.08;
+const BACKSTAGE_STRIPE_WANDER_PX = 3;
+const BACKSTAGE_STRIPE_WANDER_PERIOD_PER_TILE = 2;
+/**
+ * Slopes whose run divides the patch, so a line walked for its full period
+ * comes back onto itself and never tears at the wrap.
+ */
+const BACKSTAGE_RIGGING_SLOPES: ReadonlyArray<readonly [number, number]> = [
+  [1, 1],
+  [1, -1],
+  [1, 0.5],
+  [1, -0.5],
+];
+const BACKSTAGE_RIGGING_LINES = 3;
+const BACKSTAGE_RIGGING_ALPHA = 0.16;
+const BACKSTAGE_RIGGING_SAG_PX = 5;
+const BACKSTAGE_COIL_COUNT = 2;
+const BACKSTAGE_COIL_TURNS = 3;
+const BACKSTAGE_COIL_MIN_RADIUS = 7;
+const BACKSTAGE_COIL_RING_GAP = 2.2;
+const BACKSTAGE_COIL_ALPHA = 0.18;
+const BACKSTAGE_COIL_FLATTEN = 0.6;
+
+/**
+ * The solid mass of the tent: near-black canvas seen past the corridors, with
+ * the ghost of its stripes, rigging slung across it and a coil of rope here and
+ * there — all kept so faint that the mass reads as the dark back of the tent and
+ * never as ground anybody could step onto.
+ */
+const bigtopBackstage: Material = {
+  id: 'bigtop_backstage',
+  label: 'Big Top backstage canvas (wall mass)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    const backstage = CIRCUS_RAMPS.circus_backstage;
+    const tiles = ctx.size / TILE_PX;
+    const grainPeriod = BASE_GRAIN_PERIOD * tiles;
+    ctx.surface.fill((x, y) => {
+      const patches = ctx.noise.fbm(
+        x,
+        y,
+        ctx.structure,
+        BASE_PATCH_OCTAVES,
+        BACKSTAGE_GROUND.patchPeriod,
+      );
+      const grain = ctx.noise.fbm(x, y, ctx.detail, BASE_GRAIN_OCTAVES, grainPeriod);
+      const blended =
+        patches * BACKSTAGE_GROUND.patchWeight + grain * (1 - BACKSTAGE_GROUND.patchWeight);
+      const wander =
+        (ctx.noise.value(x, y, BACKSTAGE_STRIPE_WANDER_PERIOD_PER_TILE * tiles, ctx.structure + 3) -
+          0.5) *
+        2 *
+        BACKSTAGE_STRIPE_WANDER_PX;
+      const stripe = Math.cos(((x + wander) / BACKSTAGE_STRIPE_PERIOD_PX) * Math.PI * 2);
+      const tone =
+        (blended - 0.5) * BACKSTAGE_GROUND.contrast + 0.5 + stripe * BACKSTAGE_STRIPE_LIFT;
+      return sampleRamp(backstage, tone);
+    });
+
+    const seed = ctx.structure + 131;
+    for (let line = 0; line < BACKSTAGE_RIGGING_LINES; line++) {
+      const slope =
+        BACKSTAGE_RIGGING_SLOPES[
+          Math.floor(hashLattice(line, 1, seed) * BACKSTAGE_RIGGING_SLOPES.length)
+        ] ?? BACKSTAGE_RIGGING_SLOPES[0];
+      const [stepX, stepY] = slope;
+      const startX = hashLattice(line, 2, seed) * ctx.size;
+      const startY = hashLattice(line, 3, seed) * ctx.size;
+      const periodSteps = ctx.size / Math.min(Math.abs(stepX), Math.abs(stepY));
+      for (let step = 0; step < periodSteps; step++) {
+        const sag = Math.sin((step / periodSteps) * Math.PI * 2) * BACKSTAGE_RIGGING_SAG_PX;
+        const px = startX + stepX * step;
+        const py = startY + stepY * step + sag;
+        ctx.surface.blend(px, py, backstage.accent, BACKSTAGE_RIGGING_ALPHA);
+        ctx.surface.blend(px, py + 1, backstage.shadow, BACKSTAGE_RIGGING_ALPHA);
+      }
+    }
+
+    const coilSeed = ctx.detail + 137;
+    for (let coil = 0; coil < BACKSTAGE_COIL_COUNT; coil++) {
+      const centreX = hashLattice(coil, 1, coilSeed) * ctx.size;
+      const centreY = hashLattice(coil, 2, coilSeed) * ctx.size;
+      for (let turn = 0; turn < BACKSTAGE_COIL_TURNS; turn++) {
+        const radius = BACKSTAGE_COIL_MIN_RADIUS + turn * BACKSTAGE_COIL_RING_GAP;
+        const steps = Math.ceil(radius * Math.PI * 2);
+        for (let step = 0; step < steps; step++) {
+          const angle = (step / steps) * Math.PI * 2;
+          const litSide = Math.sin(angle) < 0 ? backstage.accent : backstage.light;
+          ctx.surface.blend(
+            centreX + Math.cos(angle) * radius,
+            centreY + Math.sin(angle) * radius * BACKSTAGE_COIL_FLATTEN,
+            litSide,
+            BACKSTAGE_COIL_ALPHA,
+          );
+        }
+      }
+    }
+  },
+};
+
+// ── the circus grounds ─────────────────────────────────────────────────────
+
+/**
+ * The circus lot: turf trodden down to packed mud and straw, sitting between
+ * the meadow's olive and the track's brown so neither the field round it nor
+ * the approach road through it merges into it. Squeezed to the narrowest
+ * range of any outdoor material: the clowns, the telegraphs and the tents
+ * all stand on it and every one of them must be louder than the ground.
+ */
+const CIRCUS_LOT_RAMP: Ramp = {
+  shadow: [84, 76, 48],
+  mid: [106, 98, 62],
+  light: [124, 114, 76],
+  accent: [146, 134, 94],
+};
+const CIRCUS_LOT_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.45, contrast: 0.7 };
+/** A third of the meadow's blades: what survives a season of feet is short and sparse. */
+const CIRCUS_LOT_BLADE_COUNT = 260;
+const CIRCUS_LOT_MUD_COUNT = 3;
+const CIRCUS_LOT_MUD_MIN_RADIUS = 7;
+const CIRCUS_LOT_MUD_MAX_RADIUS = 15;
+const CIRCUS_LOT_MUD_ALPHA = 0.3;
+/** Drifts of sawdust blown out of the tents: broad and pale, never a fleck field. */
+const CIRCUS_LOT_DRIFT_COUNT = 2;
+const CIRCUS_LOT_DRIFT_MIN_RADIUS = 6;
+const CIRCUS_LOT_DRIFT_MAX_RADIUS = 12;
+const CIRCUS_LOT_DRIFT_ALPHA = 0.16;
+const CIRCUS_LOT_SOFTNESS = 1;
+const CIRCUS_LOT_SHAVING_COUNT = 9;
+const CIRCUS_LOT_SHAVING_MIN_LENGTH = 3;
+const CIRCUS_LOT_SHAVING_LENGTH_RANGE = 3;
+const CIRCUS_LOT_SHAVING_ALPHA = 0.2;
+const CIRCUS_LOT_SHAVING_TAPER = 0.6;
+
+const circusLot: Material = {
+  id: 'circus_lot',
+  label: 'Circus lot (trampled turf, mud and sawdust)',
+  patchTiles: 2,
+  variants: 4,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, CIRCUS_LOT_RAMP, CIRCUS_LOT_GROUND);
+    paintBlades(ctx, PASTURE_GRASS_RAMP, ctx.detail, CIRCUS_LOT_BLADE_COUNT);
+    // Over the blades: trodden mud is where the turf has gone.
+    paintSpeckles(ctx, ctx.detail + 131, {
+      count: CIRCUS_LOT_MUD_COUNT,
+      minRadius: CIRCUS_LOT_MUD_MIN_RADIUS,
+      maxRadius: CIRCUS_LOT_MUD_MAX_RADIUS,
+      ramp: { ...DIRT_RAMP, mid: shade(DIRT_RAMP.mid, CIRCUS_LOT_MUD_SHADE) },
+      alpha: CIRCUS_LOT_MUD_ALPHA,
+      softness: CIRCUS_LOT_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + 137, {
+      count: CIRCUS_LOT_DRIFT_COUNT,
+      minRadius: CIRCUS_LOT_DRIFT_MIN_RADIUS,
+      maxRadius: CIRCUS_LOT_DRIFT_MAX_RADIUS,
+      ramp: CIRCUS_RAMPS.circus_straw,
+      alpha: CIRCUS_LOT_DRIFT_ALPHA,
+      softness: CIRCUS_LOT_SOFTNESS,
+    });
+    const total = Math.round(CIRCUS_LOT_SHAVING_COUNT * (ctx.size / TILE_PX) ** 2);
+    const seed = ctx.detail + 139;
+    for (let i = 0; i < total; i++) {
+      const angle = hashLattice(i, 5, seed) * Math.PI * 2;
+      const length =
+        CIRCUS_LOT_SHAVING_MIN_LENGTH + hashLattice(i, 6, seed) * CIRCUS_LOT_SHAVING_LENGTH_RANGE;
+      wrappedStroke(
+        ctx.surface,
+        hashLattice(i, 1, seed) * ctx.size,
+        hashLattice(i, 2, seed) * ctx.size,
+        Math.cos(angle),
+        Math.sin(angle),
+        length,
+        CIRCUS_RAMPS.circus_straw.light,
+        CIRCUS_LOT_SHAVING_ALPHA,
+        CIRCUS_LOT_SHAVING_TAPER,
+      );
+    }
+  },
+};
+/** Wet mud is a little darker than the dry track the same earth makes. */
+const CIRCUS_LOT_MUD_SHADE = 0.88;
+
 export const MATERIALS: ReadonlyArray<Material> = [
   grass,
   verge,
@@ -2833,6 +3093,9 @@ export const MATERIALS: ReadonlyArray<Material> = [
   hollowPlanks,
   pastureGrass,
   cropRows,
+  bigtopSawdust,
+  bigtopBackstage,
+  circusLot,
 ];
 
 export function getMaterial(id: string): Material {

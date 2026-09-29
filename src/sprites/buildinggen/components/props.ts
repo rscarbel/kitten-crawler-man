@@ -2826,7 +2826,7 @@ const AWNING_SCALLOP_COUNT = 6;
  * Painted as a projecting slab rather than a flat stripe: the front edge sits
  * lower and further out than the wall line, and the wall under it goes into
  * shadow. Without the projection an awning is a striped rectangle stuck to a
- * wall, which is the exact failure the circus tents have.
+ * wall.
  */
 function paintAwning(draw: PropDraw): void {
   const { ctx, box, body, accent, seed } = draw;

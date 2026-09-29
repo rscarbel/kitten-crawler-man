@@ -55,6 +55,9 @@ import {
   drawTableTile,
 } from '../../sprites/safeRoomDecor';
 import { drawGroundTile } from './groundTiles';
+import { TOWN_INTERIOR_GROUND } from '../town/interiorMaterials';
+import { paintBigTopFloorMarks } from '../../sprites/art/bigTop/bigTopFloorArt';
+import { paintTentPoleBase, type PoleCell } from '../../sprites/art/bigTop/bigTopShellArt';
 import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
@@ -62,6 +65,45 @@ import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey } from '../../core/SpriteRenderer';
 import { drawTowerStaircaseTile } from '../../sprites/towerStaircase';
 import { frameTime } from '../../utils';
+
+/**
+ * Where a pole tile sits in the pole it belongs to: a run of pole tiles is one
+ * pole, so the king pole's 2×2 is one mast rather than four.
+ */
+export function poleCellAt(structure: TileContent[][], tx: number, ty: number): PoleCell {
+  const isPole = (x: number, y: number): boolean => structure[y]?.[x]?.type === TENT_POLE;
+  let left = tx;
+  while (isPole(left - 1, ty)) left--;
+  let right = tx;
+  while (isPole(right + 1, ty)) right++;
+  let top = ty;
+  while (isPole(tx, top - 1)) top--;
+  let bottom = ty;
+  while (isPole(tx, bottom + 1)) bottom++;
+  return {
+    blockWidth: right - left + 1,
+    blockHeight: bottom - top + 1,
+    column: tx - left,
+    row: ty - top,
+  };
+}
+
+/**
+ * The floor under a tent pole: sawdust and the pole's contact shadow. The
+ * mast stands in the Y-sorted pass, drawn by `drawTentPoleTile`.
+ */
+export function drawTentPoleBaseTile(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  drawGroundTile(ctx, TOWN_INTERIOR_GROUND, structure, sx, sy, ts, tx, ty);
+  paintTentPoleBase(ctx, sx, sy, ts, poleCellAt(structure, tx, ty));
+}
 
 /** Dispatches one furnishing to its own art, over ground already painted. */
 function drawSafeRoomDecorProp(
@@ -580,55 +622,12 @@ export function drawInteriorTile(
       return true;
     }
 
-    // Sawdust floor — packed tan arena ground with speckled shavings
-    case SAWDUST_FLOOR: {
-      drawSawdustBase(ctx, sx, sy, ts, tx, ty);
-      return true;
-    }
-
-    // Painted circus ring border — weathered red band over the sawdust
+    // The Big Top's sawdust, with its baked floor marks. The ring's curb is
+    // one of those marks, so a curb tile is sawdust like any other.
+    case SAWDUST_FLOOR:
     case CIRCUS_RING_EDGE: {
-      drawSawdustBase(ctx, sx, sy, ts, tx, ty);
-      const bandInset = Math.floor(ts * RING_BAND_INSET_FRACTION);
-      ctx.fillStyle = '#a83430';
-      ctx.fillRect(sx, sy + bandInset, ts, ts - bandInset * 2);
-      ctx.fillStyle = '#e8e2d4';
-      ctx.fillRect(sx, sy + bandInset, ts, RING_STRIPE_HEIGHT);
-      ctx.fillRect(sx, sy + ts - bandInset - RING_STRIPE_HEIGHT, ts, RING_STRIPE_HEIGHT);
-      // Paint wear — sawdust-coloured chips scraped through the band
-      const wearHash = (tx * 41 + ty * 29) % 97;
-      ctx.fillStyle = '#c9a86a';
-      for (let i = 0; i < RING_WEAR_CHIP_COUNT; i++) {
-        const px = sx + ((wearHash * (i * 7 + 3)) % (ts - 3));
-        const py = sy + bandInset + ((wearHash * (i * 5 + 2)) % (ts - bandInset * 2 - 2));
-        ctx.fillRect(px, py, 2, 2);
-      }
-      return true;
-    }
-
-    // Central tent pole — thick timber column with rope wraps
-    case TENT_POLE: {
-      drawSawdustBase(ctx, sx, sy, ts, tx, ty);
-      const poleInset = Math.floor(ts * POLE_INSET_FRACTION);
-      ctx.fillStyle = '#4a3520';
-      ctx.fillRect(sx + poleInset, sy, ts - poleInset * 2, ts);
-      // Wood grain
-      ctx.fillStyle = '#3a2915';
-      ctx.fillRect(sx + poleInset + 2, sy, 1, ts);
-      ctx.fillRect(sx + ts - poleInset - 4, sy, 1, ts);
-      // Lit edge
-      ctx.fillStyle = 'rgba(255,255,255,0.1)';
-      ctx.fillRect(sx + poleInset, sy, 2, ts);
-      // Rope wraps
-      ctx.strokeStyle = '#a8874e';
-      ctx.lineWidth = 2;
-      for (let i = 0; i < POLE_ROPE_WRAP_COUNT; i++) {
-        const ry = sy + Math.floor(((i + 1) * ts) / (POLE_ROPE_WRAP_COUNT + 1));
-        ctx.beginPath();
-        ctx.moveTo(sx + poleInset, ry);
-        ctx.lineTo(sx + ts - poleInset, ry - 2);
-        ctx.stroke();
-      }
+      drawGroundTile(ctx, TOWN_INTERIOR_GROUND, structure, sx, sy, ts, tx, ty);
+      paintBigTopFloorMarks(ctx, sx, sy, ts, tx, ty);
       return true;
     }
 
@@ -1224,35 +1223,4 @@ const SLAB_POT = '#2a2422';
 const SLAB_PESTLE = '#7a746e';
 const SLAB_SMEAR = '#3a4a78';
 
-const RING_BAND_INSET_FRACTION = 0.25;
-const RING_STRIPE_HEIGHT = 2;
-const RING_WEAR_CHIP_COUNT = 3;
-const POLE_INSET_FRACTION = 0.28;
-const POLE_ROPE_WRAP_COUNT = 3;
 const BLEACHER_PLANK_COUNT = 4;
-const SAWDUST_SPECK_COUNT = 6;
-
-/** Packed-sawdust ground shared by the big top floor, ring, and pole tiles. */
-function drawSawdustBase(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  ts: number,
-  tx: number,
-  ty: number,
-): void {
-  ctx.fillStyle = '#b8985e';
-  ctx.fillRect(sx, sy, ts, ts);
-  const h1 = (tx * 31 + ty * 17) % 97;
-  const h2 = (tx * 53 + ty * 41) % 89;
-  // Darker trodden patch
-  ctx.fillStyle = 'rgba(138,111,66,0.35)';
-  ctx.fillRect(sx + (h1 % (ts / 2)), sy + (h2 % (ts / 2)), Math.floor(ts / 2), Math.floor(ts / 2));
-  // Shaving specks
-  for (let i = 0; i < SAWDUST_SPECK_COUNT; i++) {
-    ctx.fillStyle = i % 2 === 0 ? '#d4b87c' : '#8a6f42';
-    const px = sx + ((h1 * (i * 13 + 5)) % ts);
-    const py = sy + ((h2 * (i * 7 + 3)) % ts);
-    ctx.fillRect(px, py, 1, 1);
-  }
-}

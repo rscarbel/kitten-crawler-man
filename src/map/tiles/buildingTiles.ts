@@ -6,9 +6,6 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   METAL_WALL,
   ARENA_CAGE,
   RUINED_WALL,
@@ -47,10 +44,6 @@ const ROUGH_STONE_MORTAR_Y2_FRACTION = 0.72;
 const ROUGH_STONE_HASH_X = 7;
 const ROUGH_STONE_HASH_Y = 3;
 const ROUGH_STONE_HALF_FRACTION = 0.5;
-
-// Circus stripe
-const CIRCUS_STRIPE_MIN_WIDTH = 3;
-const CIRCUS_STRIPE_WIDTH_FRACTION = 0.25;
 
 // Ruined wall fractions
 const RUIN_HASH_X = 31;
@@ -285,8 +278,6 @@ const GREEN_RIDGE_FRACTION = 0.46;
 const GREEN_RIDGE_VALLEY_HEIGHT = 3;
 const GREEN_RIDGE_VALLEY_OFFSET = 2;
 
-// Circus tent fractions
-
 // Metal wall
 
 /**
@@ -468,9 +459,6 @@ export function drawBuildingTile(
       case ROOF_SLATE:
       case ROOF_RED:
       case ROOF_GREEN:
-      case ROOF_CIRCUS_RED:
-      case ROOF_CIRCUS_BLUE:
-      case ROOF_CIRCUS_PURPLE:
         // The ground a building stands on, for wherever its art is transparent.
         // The flat fill underneath is a backstop: a tile buried deep enough
         // inside a building for `drawGroundTile` to find no material would
@@ -496,13 +484,7 @@ export function drawBuildingTile(
     // Overworld building wall — context-aware facade rendering
     case BUILDING_WALL: {
       const isRoofTile = (t: number | undefined) =>
-        t === ROOF_THATCH ||
-        t === ROOF_SLATE ||
-        t === ROOF_RED ||
-        t === ROOF_GREEN ||
-        t === ROOF_CIRCUS_RED ||
-        t === ROOF_CIRCUS_BLUE ||
-        t === ROOF_CIRCUS_PURPLE;
+        t === ROOF_THATCH || t === ROOF_SLATE || t === ROOF_RED || t === ROOF_GREEN;
       const intN = isRoofTile(structure[ty - 1]?.[tx]?.type); // south-facing facade
       const intS = isRoofTile(structure[ty + 1]?.[tx]?.type); // north-facing wall
       if (intN) {
@@ -527,14 +509,6 @@ export function drawBuildingTile(
           wallBase = '#d4a870';
           litTop = '#e0b880';
           foundBase = '#a07050';
-        } else if (
-          roofType === ROOF_CIRCUS_RED ||
-          roofType === ROOF_CIRCUS_BLUE ||
-          roofType === ROOF_CIRCUS_PURPLE
-        ) {
-          wallBase = '#f0e8d0';
-          litTop = '#fff4e0';
-          foundBase = '#c0a878';
         }
 
         ctx.fillStyle = wallBase;
@@ -593,29 +567,6 @@ export function drawBuildingTile(
             MERCHANT_TRIM_HEIGHT,
           );
           ctx.fillRect(sx, sy + ts - MERCHANT_TRIM_Y2_OFFSET, ts, MERCHANT_TRIM_HEIGHT);
-        } else if (
-          roofType === ROOF_CIRCUS_RED ||
-          roofType === ROOF_CIRCUS_BLUE ||
-          roofType === ROOF_CIRCUS_PURPLE
-        ) {
-          // Circus tent canvas wall: alternating vertical stripes
-          const stripeColor =
-            roofType === ROOF_CIRCUS_RED
-              ? '#cc2222'
-              : roofType === ROOF_CIRCUS_BLUE
-                ? '#2244aa'
-                : '#7722aa';
-          const stripeW = Math.max(
-            CIRCUS_STRIPE_MIN_WIDTH,
-            Math.floor(ts * CIRCUS_STRIPE_WIDTH_FRACTION),
-          );
-          for (let si = 0; si < ts; si += stripeW * 2) {
-            ctx.fillStyle = stripeColor;
-            ctx.fillRect(sx + si, sy, stripeW, ts - WALL_FOUNDATION_HEIGHT);
-          }
-          // Gold trim at top
-          ctx.fillStyle = '#ffcc22';
-          ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
         } else {
           // Rough stone: irregular coursing
           ctx.fillStyle = '#7a7060';
@@ -845,21 +796,6 @@ export function drawBuildingTile(
           roofShade = '#1c3214';
           roofRidge = '#78b068';
           eaveColor = '#1e4018';
-        } else if (innerType === ROOF_CIRCUS_RED) {
-          roofLit = '#cc2222';
-          roofShade = '#661111';
-          roofRidge = '#ffdd44';
-          eaveColor = '#881818';
-        } else if (innerType === ROOF_CIRCUS_BLUE) {
-          roofLit = '#2244aa';
-          roofShade = '#112255';
-          roofRidge = '#ffcc22';
-          eaveColor = '#182878';
-        } else if (innerType === ROOF_CIRCUS_PURPLE) {
-          roofLit = '#7722aa';
-          roofShade = '#3a1155';
-          roofRidge = '#ffdd44';
-          eaveColor = '#4a1878';
         }
 
         // Scan contiguous intS tiles to find building width
@@ -1324,94 +1260,6 @@ export function drawBuildingTile(
         ctx.fillRect(sx, rgRidgeY, ts, 1);
         ctx.fillStyle = 'rgba(120,200,80,0.13)';
         ctx.fillRect(sx, sy, ts, rgRidgeY - sy); // lit top
-      }
-      break;
-    }
-
-    // Circus tent roofs — bold striped canvas
-    case ROOF_CIRCUS_RED:
-    case ROOF_CIRCUS_BLUE:
-    case ROOF_CIRCUS_PURPLE: {
-      const isCircusRed = type === ROOF_CIRCUS_RED;
-      const isCircusBlue = type === ROOF_CIRCUS_BLUE;
-      // Pick color palette based on tent type
-      const stripe1 = isCircusRed ? '#cc2222' : isCircusBlue ? '#2244aa' : '#7722aa';
-      const stripe2 = isCircusRed ? '#f8f0e0' : isCircusBlue ? '#ffcc22' : '#ffdd44';
-      const shadowStripe = isCircusRed ? '#881414' : isCircusBlue ? '#162878' : '#4a1470';
-      const ridgeColor = isCircusRed ? '#ffdd44' : isCircusBlue ? '#ffee66' : '#ffcc22';
-
-      const ctS = structure[ty + 1]?.[tx]?.type === BUILDING_WALL; // eaves row
-      const ctN = structure[ty - 1]?.[tx]?.type === BUILDING_WALL; // back slope row
-      if (ctS) {
-        // Front slope (eaves) — striped canvas
-        ctx.fillStyle = stripe2;
-        ctx.fillRect(sx, sy, ts, ts);
-        // Bold vertical stripes
-        const sw = Math.max(4, Math.floor(ts * 0.28));
-        for (let si = 0; si < ts; si += sw * 2) {
-          ctx.fillStyle = stripe1;
-          ctx.fillRect(sx + si, sy, sw, ts);
-        }
-        ctx.fillStyle = 'rgba(0,0,0,0.45)';
-        ctx.fillRect(sx, sy, ts, 5); // eave overhang shadow
-        // Scalloped eave fringe
-        ctx.fillStyle = ridgeColor;
-        for (let fx = sx; fx < sx + ts; fx += 8) {
-          ctx.beginPath();
-          ctx.arc(fx + 4, sy + ts - 2, 4, Math.PI, 0);
-          ctx.fill();
-        }
-        ctx.fillStyle = 'rgba(255,255,200,0.12)';
-        ctx.fillRect(sx, sy + 5, ts, Math.floor(ts * 0.5)); // sun-lit slope
-      } else if (ctN) {
-        // Back slope — darker
-        ctx.fillStyle = shadowStripe;
-        ctx.fillRect(sx, sy, ts, ts);
-        const sw = Math.max(4, Math.floor(ts * 0.28));
-        for (let si = sw; si < ts; si += sw * 2) {
-          ctx.fillStyle = 'rgba(0,0,0,0.18)';
-          ctx.fillRect(sx + si, sy, sw, ts);
-        }
-        ctx.fillStyle = stripe1;
-        ctx.fillRect(sx, sy, ts, 2); // ridge highlight
-      } else {
-        // Middle / ridge — striped canvas with peak
-        ctx.fillStyle = stripe2;
-        ctx.fillRect(sx, sy, ts, ts);
-        const sw = Math.max(4, Math.floor(ts * 0.28));
-        for (let si = 0; si < ts; si += sw * 2) {
-          ctx.fillStyle = stripe1;
-          ctx.fillRect(sx + si, sy, sw, ts);
-        }
-        // Ridge peak with gold trim
-        const ridgeY = sy + Math.floor(ts * 0.45);
-        ctx.fillStyle = 'rgba(0,0,0,0.25)';
-        ctx.fillRect(sx, ridgeY - 3, ts, 3);
-        ctx.fillRect(sx, ridgeY + 3, ts, 3);
-        ctx.fillStyle = ridgeColor;
-        ctx.fillRect(sx, ridgeY, ts, 3);
-        ctx.fillStyle = '#fff8cc'; // bright apex
-        ctx.fillRect(sx, ridgeY, ts, 1);
-        // Tent pole finial (flag on big tent, pennant on small)
-        if (isCircusRed && (tx * 11 + ty * 7) % 13 === 3) {
-          // Small flag on pole
-          const px = sx + Math.floor(ts * 0.5);
-          const py = sy + Math.floor(ts * 0.1);
-          ctx.fillStyle = '#4a2a0a';
-          ctx.fillRect(px - 1, py, 3, ridgeY - py); // pole
-          ctx.fillStyle = '#ffdd44';
-          ctx.fillRect(px - 1, py - 2, 5, 3); // finial ball
-          // Tiny pennant
-          ctx.fillStyle = '#cc2222';
-          ctx.beginPath();
-          ctx.moveTo(px + 2, py);
-          ctx.lineTo(px + 10, py + 3);
-          ctx.lineTo(px + 2, py + 6);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.fillStyle = 'rgba(255,255,200,0.08)';
-        ctx.fillRect(sx, sy, ts, ridgeY - sy); // lit top half
       }
       break;
     }

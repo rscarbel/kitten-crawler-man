@@ -38,43 +38,63 @@ import {
   type MirrorKind,
 } from '../src/map/bigTopMazeLayout';
 import {
-  drawActArchBoard,
   drawActArchPost,
-  drawBleacherDead,
   drawFlameVentColumn,
-  drawFlameVentGrille,
-  drawFlameVentTelegraph,
   drawFootlight,
   drawMazeActGate,
-  drawMazeBarricade,
-  drawMazeBeamTile,
-  drawMazeBrace,
-  drawMazeCageGate,
-  drawMazeCapstan,
-  drawMazeCurtain,
-  drawMazeCurtainWindow,
   drawMazeExitDoor,
-  drawMazeGate,
-  drawMazeGrate,
-  drawMazeLimelight,
-  drawMazeMirror,
-  drawMazeReleaseRing,
-  drawMazeRope,
-  drawMazeSandbag,
-  drawMazeShowBell,
-  drawMazeStar,
-  drawMazeCurtainOpen,
   drawMazeWayOpen,
-  drawMenagerieCage,
-  drawMirrorHallGlass,
   drawRingMatRunner,
   drawSpotlightBeam,
   drawSpotlightClear,
   drawSpotlightDock,
   drawSpotlightWarm,
   drawTargetNameChip,
-  type MazeDestructibleArt,
 } from '../src/sprites/bigTopMazeProps';
+import {
+  drawBeamMirrorFlare,
+  drawMazeBeamTile,
+  drawMazeLimelight,
+  drawMazeMirror,
+  drawMazeStar,
+  drawMirrorHallPane,
+} from '../src/sprites/art/bigTop/mirrorHallProps';
+import {
+  drawActEasel,
+  drawMazeCurtain,
+  drawMazeCurtainOpen,
+  drawMazeCurtainWindow,
+} from '../src/sprites/art/bigTop/curtainProps';
+import { drawRingBleacher, RING_BLEACHER_TIERS } from '../src/sprites/art/bigTop/finaleProps';
+import {
+  FIRE_WALK_WALL_KITS,
+  drawBoardedFlat,
+  drawFireBreatherGrate,
+  drawFireBreatherTelegraph,
+  drawFireScreenGate,
+  drawFireWalkWallKit,
+  drawGrimaldiSandbag,
+  drawHeatShimmerFlare,
+  drawPulleyGrate,
+  drawShadedRope,
+  drawStageBrace,
+  type MazeDestructibleArt,
+} from '../src/sprites/art/bigTop/fireWalkProps';
+import {
+  drawBleacherSpectator,
+  drawCageGateBarrier,
+  drawCageReleaseRing,
+  drawCapstanWinch,
+  drawFeedTrough,
+  drawFeedingBell,
+  drawFollowSpotLamp,
+  drawMenagerieCageFront,
+} from '../src/sprites/art/bigTop/menagerieProps';
+import { asGameContext } from './nodeGameContext.js';
+import {
+  drawTurnPreviewStarRing,
+  drawTurnPreviewTile,
+} from '../src/sprites/art/bigTop/encoreProps';
 
 /**
  * The sheet is drawn at four times the tile size so the detail is legible.
@@ -123,10 +143,10 @@ function destructibleArt(integrity: number, pulsing: boolean): MazeDestructibleA
 }
 
 const DESTRUCTIBLES = [
-  ['sandbag', drawMazeSandbag],
-  ['brace', drawMazeBrace],
-  ['ring', drawMazeReleaseRing],
-  ['capstan', drawMazeCapstan],
+  ['sandbag', drawGrimaldiSandbag],
+  ['brace', drawStageBrace],
+  ['ring', drawCageReleaseRing],
+  ['capstan', drawCapstanWinch],
 ] as const;
 
 for (const [name, paint] of DESTRUCTIBLES) {
@@ -140,7 +160,7 @@ for (const [name, paint] of DESTRUCTIBLES) {
 for (const ready of [true, false]) {
   for (const holding of [true, false]) {
     push(`bell ${ready ? 'ready' : 'spent'}${holding ? ' held' : ''}`, (ctx, x, y) => {
-      drawMazeShowBell(ctx, x, y, CELL, {
+      drawFeedingBell(ctx, x, y, CELL, {
         phase: SAMPLE_PHASE,
         struck: holding,
         holding,
@@ -158,29 +178,63 @@ for (const kind of KINDS) {
       drawMazeMirror(ctx, x, y, CELL, {
         kind,
         facing,
+        fromFacing: facing,
+        turn: 1,
         phase: SAMPLE_PHASE,
         struck: false,
-        turning: facing === 'SE',
         pulsing: facing === 'NE',
+      });
+    });
+  }
+  /** Part-way through a swing from the first facing to the second, so the arc is on the sheet. */
+  const SWING_SAMPLES = [0.25, 0.5, 0.75] as const;
+  for (const turn of SWING_SAMPLES) {
+    push(`${kind === 'pivot_mirror' ? 'pivot' : 'swivel'} swing ${turn}`, (ctx, x, y) => {
+      drawMazeMirror(ctx, x, y, CELL, {
+        kind,
+        facing: 'SE',
+        fromFacing: 'NE',
+        turn,
+        phase: SAMPLE_PHASE,
+        struck: turn === SWING_SAMPLES[0],
+        pulsing: false,
       });
     });
   }
 }
 
-push('grate', (ctx, x, y) => drawMazeGrate(ctx, x, y, CELL));
-push('gate', (ctx, x, y) => drawMazeGate(ctx, x, y, CELL));
-push('barricade', (ctx, x, y) => drawMazeBarricade(ctx, x, y, CELL));
-push('cage gate', (ctx, x, y) => drawMazeCageGate(ctx, x, y, CELL, SAMPLE_PHASE));
+push('pulley grate', (ctx, x, y) => drawPulleyGrate(ctx, x, y, CELL));
+push('fire screen', (ctx, x, y) => drawFireScreenGate(ctx, x, y, CELL));
+push('boarded flat', (ctx, x, y) => drawBoardedFlat(ctx, x, y, CELL));
+push('cage gate', (ctx, x, y) => drawCageGateBarrier(ctx, x, y, CELL, SAMPLE_PHASE));
 push('curtain', (ctx, x, y) => drawMazeCurtain(ctx, x, y, CELL, SAMPLE_PHASE));
-push('window', (ctx, x, y) => drawMazeCurtainWindow(ctx, x, y, CELL));
+push('window', (ctx, x, y) => drawMazeCurtainWindow(ctx, x, y, CELL, SAMPLE_PHASE));
 push('act gate', (ctx, x, y) => drawMazeActGate(ctx, x, y, CELL, SAMPLE_PHASE));
 push('exit door', (ctx, x, y) => drawMazeExitDoor(ctx, x, y, CELL, SAMPLE_PHASE));
 
 for (const litFraction of [0, 0.5, 1]) {
   push(`star ${litFraction}`, (ctx, x, y) => {
-    drawMazeStar(ctx, x, y, CELL, { phase: SAMPLE_PHASE, litFraction, latched: litFraction === 1 });
+    drawMazeStar(ctx, x, y, CELL, {
+      phase: SAMPLE_PHASE,
+      litFraction,
+      latched: litFraction === 1,
+      burst: 0,
+    });
   });
 }
+push('star latching', (ctx, x, y) => {
+  drawMazeStar(ctx, x, y, CELL, { phase: SAMPLE_PHASE, litFraction: 1, latched: true, burst: 0.6 });
+});
+
+for (const heading of HEADINGS) {
+  push(`turn preview ${heading}`, (ctx, x, y) => {
+    drawTurnPreviewTile(ctx, x, y, CELL, heading, SAMPLE_PHASE);
+  });
+}
+push('turn preview star', (ctx, x, y) => {
+  drawMazeStar(ctx, x, y, CELL, { phase: SAMPLE_PHASE, litFraction: 0, latched: false, burst: 0 });
+  drawTurnPreviewStarRing(ctx, x, y, CELL, SAMPLE_PHASE);
+});
 
 for (const direction of HEADINGS) {
   push(`limelight ${direction}`, (ctx, x, y) => {
@@ -190,18 +244,27 @@ for (const direction of HEADINGS) {
 for (const hot of [true, false]) {
   for (const heading of HEADINGS) {
     push(`beam ${hot ? 'hot' : 'cold'} ${heading}`, (ctx, x, y) => {
-      drawMazeBeamTile(ctx, x, y, CELL, { hot, heading, phase: SAMPLE_PHASE });
+      drawMazeBeamTile(ctx, x, y, CELL, { hot, heading, phase: SAMPLE_PHASE, seed: 0 });
+    });
+  }
+  for (const absorbed of [false, true]) {
+    push(`flare ${hot ? 'hot' : 'cold'}${absorbed ? ' absorbed' : ''}`, (ctx, x, y) => {
+      drawBeamMirrorFlare(ctx, x, y, CELL, { hot, absorbed, phase: SAMPLE_PHASE });
     });
   }
 }
 
-push('vent grille', (ctx, x, y) => drawFlameVentGrille(ctx, x, y, CELL));
+push('vent grate', (ctx, x, y) => drawFireBreatherGrate(ctx, x, y, CELL));
 for (const progress of [0.2, 0.9]) {
   push(`vent warn ${progress}`, (ctx, x, y) => {
-    drawFlameVentGrille(ctx, x, y, CELL);
-    drawFlameVentTelegraph(ctx, x, y, CELL, progress);
+    drawFireBreatherGrate(ctx, x, y, CELL);
+    drawFireBreatherTelegraph(ctx, x, y, CELL, progress);
   });
 }
+push('vent shimmer', (ctx, x, y) => {
+  drawFireBreatherGrate(ctx, x, y, CELL);
+  drawHeatShimmerFlare(ctx, x, y, CELL, 0.06, SAMPLE_PHASE);
+});
 for (const burn of [0.15, 0.5, 0.9]) {
   push(`flame ${burn}`, (ctx, x, y) => drawFlameVentColumn(ctx, x, y, CELL, burn, SAMPLE_PHASE));
 }
@@ -216,7 +279,12 @@ for (const flare of [1, 0]) {
     drawMazeWayOpen(ctx, x, y, CELL, { phase: SAMPLE_PHASE, flare }),
   );
   push(`curtain open ${flare}`, (ctx, x, y) =>
-    drawMazeCurtainOpen(ctx, x, y, CELL, { phase: SAMPLE_PHASE, flare }),
+    drawMazeCurtainOpen(ctx, x, y, CELL, { phase: SAMPLE_PHASE, flare, rise: 1 }),
+  );
+}
+for (const rise of [0.2, 0.5, 0.8]) {
+  push(`curtain rising ${rise}`, (ctx, x, y) =>
+    drawMazeCurtainOpen(ctx, x, y, CELL, { phase: SAMPLE_PHASE, flare: 1 - rise, rise }),
   );
 }
 
@@ -229,7 +297,7 @@ push('chip CARL', (ctx, x, y) => drawTargetNameChip(ctx, x, y, CELL, 'human'));
 for (const pulled of [0, 0.5, 1]) {
   for (const owner of ['human', 'cat'] as const) {
     push(`rope ${owner} ${pulled}`, (ctx, x, y) => {
-      drawMazeRope(
+      drawShadedRope(
         ctx,
         [
           { x: x + CELL * 0.1, y: y + CELL * 0.8 },
@@ -237,6 +305,7 @@ for (const pulled of [0, 0.5, 1]) {
           { x: x + CELL * 0.9, y: y + CELL * 0.7 },
         ],
         { pulled, owner },
+        CELL,
       );
     });
   }
@@ -248,11 +317,76 @@ for (const owner of ['human', 'cat'] as const) {
 push('footlight', (ctx, x, y) => drawFootlight(ctx, x, y, CELL, SAMPLE_PHASE));
 push('arch post', (ctx, x, y) => drawActArchPost(ctx, x, y, CELL, SAMPLE_PHASE));
 for (const seed of [SAMPLE_PHASE, SAMPLE_PHASE_ALT]) {
-  push(`bleacher ${seed}`, (ctx, x, y) => drawBleacherDead(ctx, x, y, CELL, seed));
-  push(`cage ${seed}`, (ctx, x, y) => drawMenagerieCage(ctx, x, y, CELL, seed));
-  push(`hall glass ${seed}`, (ctx, x, y) =>
-    drawMirrorHallGlass(ctx, x, y, CELL, seed, SAMPLE_PHASE),
+  push(`bleacher ${seed}`, (ctx, x, y) =>
+    drawBleacherSpectator(ctx, x, y, CELL, seed, false, SAMPLE_PHASE),
   );
+  push(`cage ${seed}`, (ctx, x, y) =>
+    drawMenagerieCageFront(ctx, x, y, CELL, seed, SAMPLE_PHASE, null),
+  );
+  push(`hall glass ${seed}`, (ctx, x, y) =>
+    drawMirrorHallPane(ctx, x, y, CELL, seed, SAMPLE_PHASE),
+  );
+}
+push('hall glass 7', (ctx, x, y) => drawMirrorHallPane(ctx, x, y, CELL, 7, SAMPLE_PHASE));
+for (const side of ['west', 'east'] as const) {
+  for (let tier = 0; tier < RING_BLEACHER_TIERS; tier++) {
+    push(`ring stand ${side} ${tier}`, (ctx, x, y) =>
+      drawRingBleacher(ctx, x, y, CELL, {
+        side,
+        tier,
+        seed: tier,
+        phase: SAMPLE_PHASE,
+        slump: 0,
+        bulbsLit: false,
+      }),
+    );
+  }
+}
+for (const slump of [0.5, 1]) {
+  push(`ring stand slump ${slump}`, (ctx, x, y) =>
+    drawRingBleacher(ctx, x, y, CELL, {
+      side: 'west',
+      tier: 0,
+      seed: 2,
+      phase: SAMPLE_PHASE,
+      slump,
+      bulbsLit: slump === 1,
+    }),
+  );
+}
+
+/** Cage seeds that land on each occupant, so every one is on the sheet. */
+const CAGE_SAMPLE_SEEDS = [0, 1, 2, 3, 5, 7, 11, 13];
+for (const seed of CAGE_SAMPLE_SEEDS) {
+  push(`cage seed ${seed}`, (ctx, x, y) =>
+    drawMenagerieCageFront(ctx, x, y, CELL, seed, SAMPLE_PHASE, null),
+  );
+  push(`cage lunge ${seed}`, (ctx, x, y) =>
+    drawMenagerieCageFront(ctx, x, y, CELL, seed, SAMPLE_PHASE, 0.35),
+  );
+}
+const SPECTATOR_SAMPLE_SEEDS = [6, 8, 10, 12, 16, 18];
+for (const seed of SPECTATOR_SAMPLE_SEEDS) {
+  push(`spectator ${seed}`, (ctx, x, y) =>
+    drawBleacherSpectator(ctx, x, y, CELL, seed, false, SAMPLE_PHASE),
+  );
+}
+push('spectator clapping', (ctx, x, y) =>
+  drawBleacherSpectator(ctx, x, y, CELL, 14, true, SAMPLE_PHASE),
+);
+const FOLLOW_SPOT_SAMPLE_AIMS = [0.1, 0.6, Math.PI - 0.4];
+for (const aim of FOLLOW_SPOT_SAMPLE_AIMS) {
+  for (const open of [true, false]) {
+    push(`follow-spot ${aim.toFixed(1)} ${open ? 'open' : 'shut'}`, (ctx, x, y) =>
+      drawFollowSpotLamp(ctx, x, y, CELL, aim, open),
+    );
+  }
+}
+push('feed trough', (ctx, x, y) => drawFeedTrough(ctx, x, y, CELL));
+for (const kit of FIRE_WALK_WALL_KITS) {
+  for (const seed of [0, 1]) {
+    push(`${kit} ${seed}`, (ctx, x, y) => drawFireWalkWallKit(ctx, kit, x, y, CELL, seed));
+  }
 }
 
 // The flame column paints through an offscreen buffer, which wants a document.
@@ -260,7 +394,9 @@ installCanvasGlobals();
 
 const rows = Math.ceil(cells.length / COLUMNS);
 /** The act board spans several tiles, so it gets a strip of its own above the grid. */
-const BOARD_STRIP_ROWS = 1;
+const BOARD_STRIP_ROWS = 2;
+/** The easel's lamp rises half a tile over its board, so the board sits this far down its strip. */
+const EASEL_STRIP_DROP = 0.55;
 const canvas = createCanvas(COLUMNS * CELL, (rows + BOARD_STRIP_ROWS) * CELL);
 // node-canvas implements the same drawing surface the game's painters are
 // written against, but not the DOM's `CanvasRenderingContext2D` nominal type,
@@ -269,7 +405,7 @@ const canvas = createCanvas(COLUMNS * CELL, (rows + BOARD_STRIP_ROWS) * CELL);
 // typechecked crosses the gap the same way; the ones that appear not to are
 // simply not on the opt-in list in `tsconfig.scripts.json`.
 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-const ctx = canvas.getContext('2d') as unknown as CanvasRenderingContext2D;
+const ctx = asGameContext(canvas.getContext('2d'));
 ctx.fillStyle = BACKGROUND;
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -286,9 +422,9 @@ const paintCell = (label: string, paint: Painter, x: number, y: number): void =>
 
 paintCell(
   'act board',
-  (target, x, y) => drawActArchBoard(target, x, y, CELL, 'ACT II: THE MENAGERIE'),
+  (target, x, y) => drawActEasel(target, x, y, CELL, 'ACT III: THE HALL OF MIRRORS'),
   canvas.width / 2 - CELL / 2,
-  0,
+  CELL * EASEL_STRIP_DROP,
 );
 
 cells.forEach((cell, index) => {
@@ -346,7 +482,7 @@ function smokeTestTheTent(): string[] {
   const view = createCanvas(VIEW_TILES_WIDE * TILE_SIZE, VIEW_TILES_HIGH * TILE_SIZE);
   // Same nominal-type gap as the sheet's own context above.
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-  const viewCtx = view.getContext('2d') as unknown as CanvasRenderingContext2D;
+  const viewCtx = asGameContext(view.getContext('2d'));
 
   const paintFrom = (label: string, tile: { x: number; y: number }): void => {
     human.x = tile.x * TILE_SIZE;
@@ -458,7 +594,7 @@ function checkOpenedWaysLookOpen(): string[] {
   const tile = createCanvas(TILE_SIZE, TILE_SIZE);
   // Same nominal-type gap as the sheet's own context above.
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-  const tileCtx = tile.getContext('2d') as unknown as CanvasRenderingContext2D;
+  const tileCtx = asGameContext(tile.getContext('2d'));
 
   /** The barrier tile alone, with the camera parked so it fills the canvas. */
   const paintBarrier = (at: { x: number; y: number }): TileSample => {

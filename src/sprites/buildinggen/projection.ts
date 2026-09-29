@@ -6,8 +6,7 @@
  *
  * - the **roof plane** is visible from above-front and its ridge is *narrower*
  *   than its eaves, so the roof recedes rather than lying flat against the
- *   frame (the circus tents' roofs have zero convergence, which is exactly why
- *   they read as wallpaper);
+ *   frame (a roof with zero convergence reads as wallpaper);
  * - a **side return** — a sliver of the right-hand wall, translated up and right
  *   toward the back corner, with the roof hipping over it — which states that
  *   there is a building behind the wall;

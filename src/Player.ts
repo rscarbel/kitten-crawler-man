@@ -1927,6 +1927,33 @@ export abstract class Player {
     this.drawWorldFeedback(ctx, sx, sy);
   }
 
+  /** Depth of {@link paintBodyAt} calls in progress; above zero, `drawSelf` leaves its chrome off. */
+  private bodyOnlyDepth = 0;
+
+  /**
+   * True while {@link paintBodyAt} is painting: `drawSelf` must leave off
+   * everything that is not the body — the health bar, the active-crawler
+   * marker, projectiles in flight.
+   */
+  protected get paintingBodyOnly(): boolean {
+    return this.bodyOnlyDepth > 0;
+  }
+
+  /**
+   * Paints the figure at its current frame and nothing else, with its tile's
+   * top-left at `(x, y)` — no status coat, hit flash, health bar or marker.
+   * For copies of the figure that are blitted elsewhere afterwards, such as a
+   * reflection; paint it opaque and apply any alpha to the blit.
+   */
+  paintBodyAt(ctx: CanvasRenderingContext2D, x: number, y: number, tileSize: number): void {
+    this.bodyOnlyDepth++;
+    try {
+      this.drawSelf(ctx, this.x - x, this.y - y, tileSize);
+    } finally {
+      this.bodyOnlyDepth--;
+    }
+  }
+
   /**
    * World-space status art that has to land behind the sprite: each active
    * status's registered `preOverlay`, plus Speed Fizz's afterimages (which need
@@ -2079,6 +2106,7 @@ export abstract class Player {
   }
 
   protected renderHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+    if (this.paintingBodyOnly) return;
     const barW = this.tileSize;
     const barH = HP_BAR_HEIGHT;
     const ratio = this.hp / this.maxHp;

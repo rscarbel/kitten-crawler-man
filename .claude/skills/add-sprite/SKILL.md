@@ -55,6 +55,17 @@ look at cannot be different art.
   `boss_grotesque_spider`, `boss_colosseum`) in `bossRoomSheets.ts`, and
   `requestEnvironmentSheetsForGroups` paints every declared one in a single
   loop. `npm run gates:boss-rooms` checks those sheets against the manifest.
+- A multi-tile structure (a tent, a wagon, a village prop) is drawn whole from
+  one **drawing tile** in its footprint's bottom row, so it sorts on its foot.
+  The rest of the footprint only blocks. Give it one sheet per footprint
+  envelope, one row per structure and one frame per variant, and make each frame
+  exactly as wide as the footprint so a gate can catch ink running sideways onto
+  walkable ground. Split tall (blocks sight) from low (seen past) by tile type,
+  not by sheet. Examples: `villageSheets.ts` and `circusSheets.ts` (the tile
+  side is in the "Circus grounds" section of `docs/town.md`). Anything that moves
+  (flames, strings, balloons) is a live overlay read off shared anchors
+  (`circusOverlayAnchors.ts`), not an extra sheet row. `gates:circus-art` is the
+  model gate.
 - When converting an existing PNG family, prove the port changed nothing:
   snapshot the sheets from git and run
   `npm run parity:props -- --family=<name> --ref=<dir>`. Every sheet must come

@@ -51,6 +51,12 @@ export class GrimaldiVine extends Mob {
   poisonAmount = 0;
   sagAmount = 0;
   cureAmount = 0;
+  /**
+   * How far east of his own tile's centre the pole he is wrapped round
+   * stands, in tiles. The pole is the tent's, set by the room; he is drawn
+   * on it so his mast and the pole's rise out of view as one.
+   */
+  poleOffsetTiles = 0;
 
   private phase = 0;
   private hitFlashTimer = 0;
@@ -114,7 +120,8 @@ export class GrimaldiVine extends Mob {
     camY: number,
     tileSize: number,
   ): void {
-    drawGrimaldiVineSprite(ctx, this.x - camX, this.y - camY, tileSize, this.phase, {
+    const poleShift = this.poleOffsetTiles * tileSize;
+    drawGrimaldiVineSprite(ctx, this.x - camX + poleShift, this.y - camY, tileSize, this.phase, {
       poison: this.poisonAmount,
       sag: this.sagAmount,
       cure: this.cureAmount,

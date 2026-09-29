@@ -48,6 +48,10 @@ Any wilderness pass that places something (rivers, forests, ruins, camps, cliffs
 
 Village tile types (`tileTypes.ts`): `HOLLOW_WALL` (roofless, neighbour-aware, Y-sorted), `HOLLOW_THRESHOLD`, `HOLLOW_PLANK_FLOOR`, `HOLLOW_PROP_LOW` (solid, sight-transparent) / `HOLLOW_PROP_TALL` (solid, blocks sight) — which prop is keyed by `spriteKey` (`hollow:<propId>` on the drawing tile, `hollow_part:<dx>,<dy>` on the rest of the footprint) — `HOLLOW_DECAL`, `HOLLOW_PALISADE` / `HOLLOW_PALISADE_GAP`, `HOLLOW_GATE` (walkable by type; hostiles are turned away by the `BLOCK_HOSTILE_ONLY` runtime flag, which `GameMap.isWalkableForHostile` reads), `ROCK_DEPOSIT`, `PASTURE_GRASS`, `CROP_FIELD`. Tile painters are handed the grid, not the map, so village painters read the site through `hollowSiteRegistry.ts`.
 
+### Circus grounds and the Big Top
+
+Grimaldi's grounds use the same pattern. `circusGroundsLayout.ts` is the authored template, and `paintCircusGrounds.ts` stamps it. The seed never reaches geometry, and blocking dressing only goes on the r12–14.5 rim. The site record is `gameMap.circusGrounds`, and painters reach it through `circusSiteRegistry.ts`. Tile types: `CIRCUS_LOT` (walkable ground), `CIRCUS_STRUCTURE_TALL` (blocks sight) and `CIRCUS_STRUCTURE_LOW` (seen past). Both structure types are keyed `circus:<id>` on the drawing tile and `circus_part:<dx>,<dy>` on the rest. The "Circus grounds" section of **`docs/town.md`** lists every registry a Y-sorted multi-tile solid must join; use it as the checklist for the next one. The "Big Top" section covers the maze interior's drapes, floor marks, lighting and its fairness render order. Gates: `npm run verify:circus-grounds`, `gates:circus-art`, `verify:bigtop`, `gates:bigtop-art`.
+
 ## Tiles
 
 - Constants in `src/map/tileTypes.ts`: floor types via the `FLOOR_TYPES` array; everything else a numbered constant. A map cell is `TileContent { tileId, type, spriteKey?, decorationVariant? }`.
@@ -63,5 +67,6 @@ Village tile types (`tileTypes.ts`): `HOLLOW_WALL` (roofless, neighbour-aware, Y
 1. Add a numbered constant in `tileTypes.ts`; add it to `SHADOW_TYPES`/`NON_FLOOR_TYPES` in `src/map/tiles/helpers.ts` if opaque.
 2. Add a `case` in the right `src/map/tiles/*` category renderer.
 3. If it blocks movement, add it to `NON_WALKABLE_TILE_TYPES` in `src/map/walkability.ts`; walkable tiles need no change. If it is solid but low enough to see over, also add it to `SIGHT_TRANSPARENT_TILE_TYPES`.
+4. If it is drawn in the Y-sorted pass (anything that stands up), it also needs the decoration registries in `TileRenderer.ts` and `GameMap.ts`, and the minimap colours. A missed entry renders bare floor and still typechecks. The full list is under "Tile types and registries" in the "Circus grounds" section of `docs/town.md`.
 
 Finish with the `dev-workflow` gates (typecheck, lint, format).

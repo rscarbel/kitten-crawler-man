@@ -45,9 +45,6 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
   FOUNTAIN,
   TORCH,
   WELL,
@@ -89,6 +86,9 @@ import {
   HOLLOW_GATE,
   ROCK_DEPOSIT,
   PASTURE_GRASS,
+  CIRCUS_LOT,
+  CIRCUS_STRUCTURE_TALL,
+  CIRCUS_STRUCTURE_LOW,
   CROP_FIELD,
 } from '../map/tileTypes';
 
@@ -124,9 +124,6 @@ const TILE_COLORS = new Map<number, string>([
   [ROOF_SLATE, '#7b8794'],
   [ROOF_RED, '#a4553e'],
   [ROOF_GREEN, '#4f7a56'],
-  [ROOF_CIRCUS_RED, '#c0453f'],
-  [ROOF_CIRCUS_BLUE, '#3f6fc0'],
-  [ROOF_CIRCUS_PURPLE, '#7b4fc0'],
   [FOUNTAIN, '#3fa9c0'],
   [TORCH, '#e8a33d'],
   [WELL, '#6f6250'],
@@ -172,6 +169,10 @@ const TILE_COLORS = new Map<number, string>([
   [ROCK_DEPOSIT, '#726a5e'],
   [PASTURE_GRASS, '#5c8048'],
   [CROP_FIELD, '#6e5636'],
+  // The circus grounds, in the same schematic palette.
+  [CIRCUS_LOT, '#7a7050'],
+  [CIRCUS_STRUCTURE_TALL, '#c0453f'],
+  [CIRCUS_STRUCTURE_LOW, '#d8b27a'],
 ]);
 
 /** Header band above the map viewport. */
@@ -438,8 +439,14 @@ export class TownMapScene extends Scene {
       FULL_CIRCLE_RADIANS,
     );
     ctx.stroke();
-
+    // Each circus structure's footprint rectangle, so a tent that moved or a
+    // post that landed on the road shows against the disc at a glance.
     ctx.lineWidth = FOOTPRINT_LINE_WIDTH;
+    for (const placed of this.data.circusGrounds.structures) {
+      const { rect } = placed;
+      ctx.strokeRect(rect.x * px, rect.y * px, rect.w * px, rect.h * px);
+    }
+
     for (const plot of this.plots) {
       // The tower's art is 23 tiles tall over a 2-row base, so its overhang is
       // outlined separately: the solid box is the ground it occupies (what the

@@ -496,6 +496,16 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     // otherwise light a tent full of silent fire.
     'llama_fireball',
     'llama_fireball_explosion',
+    // The rest of `BIG_TOP_CUES`, most of them also universal. Declared here so
+    // the tent's audio does not hang on another group keeping a sound it
+    // borrowed; `verify:bigtop` fails on any cue id missing from this group.
+    'error',
+    'gate_opening',
+    'hammer_strike',
+    'healing_potion',
+    'objective_complete',
+    'reviving_tone',
+    'wood_breaking_1',
     // Heather's and Terror's hard-mode healers.
     ...FAIRY_SFX_IDS,
   ],
