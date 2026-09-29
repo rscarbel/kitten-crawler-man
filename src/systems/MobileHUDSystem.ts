@@ -44,10 +44,10 @@ import {
   PASTURE_GRASS,
   CROP_FIELD,
 } from '../map/tileTypes';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth } from '../core/Viewport';
 import { bossRoomMinimapColor } from '../map/tiles/bossRoomTiles';
 
-type Rect = { x: number; y: number; w: number; h: number };
+export type Rect = { x: number; y: number; w: number; h: number };
 
 // Mobile button constants
 const MOBILE_BTN_WIDTH = 80;
@@ -60,8 +60,6 @@ const MOBILE_BTN_STACK_GAP = 6;
 const MOBILE_SMALL_BTN_WIDTH = 80;
 const MOBILE_SMALL_BTN_HEIGHT = 28;
 const MOBILE_GEAR_BAG_X_OFFSET = 88;
-const MOBILE_GEAR_BAG_Y_DEFAULT = 38;
-const MOBILE_GEAR_BAG_Y_OFFSET = 34;
 const BAG_ICON_SIZE = 12;
 const BAG_ICON_PAD = 3;
 const BAG_BADGE_RADIUS = 3.5;
@@ -119,6 +117,72 @@ const TILE_TYPE_BRICK = 8;
 const TILE_TYPE_BOSS_FLOOR = 10;
 const TILE_TYPE_GRIME_FLOOR = 11;
 const TILE_TYPE_RUBBER_FLOOR = 12;
+
+/**
+ * Where the interior minimap sits, and how far its caption reaches below it —
+ * the square plus the "Tap: expand/collapse" line, which is part of what it
+ * covers on screen.
+ */
+export function interiorMiniMapRect(viewportW: number, expanded: boolean): Rect & { size: number } {
+  const size = expanded ? MINIMAP_EXPANDED_SIZE : MINIMAP_NORMAL_SIZE;
+  const hintBottom = MINIMAP_HINT_Y_OFFSET - MINIMAP_HINT_Y_BASELINE + MINIMAP_HINT_SIZE;
+  return {
+    x: viewportW - size - MINIMAP_X_OFFSET,
+    y: MINIMAP_Y_OFFSET,
+    w: size,
+    h: size + hintBottom,
+    size,
+  };
+}
+
+/** A small button in the right-hand column (Pause, Gear, Bag) whose top is at `y`. */
+export function rightColumnButtonRect(viewportW: number, y: number): Rect {
+  return {
+    x: viewportW - MOBILE_GEAR_BAG_X_OFFSET,
+    y,
+    w: MOBILE_SMALL_BTN_WIDTH,
+    h: MOBILE_SMALL_BTN_HEIGHT,
+  };
+}
+
+/** The size of a small button in the right-hand column: Pause, Gear, Bag. */
+export const SMALL_BUTTON_SIZE = { w: MOBILE_SMALL_BTN_WIDTH, h: MOBILE_SMALL_BTN_HEIGHT } as const;
+
+/**
+ * The large bottom-row buttons: Switch at the left, then `extraCount` buttons
+ * packed in from the right, all on one row above the hotbar.
+ */
+export function bottomRowButtonRects(
+  viewportW: number,
+  viewportH: number,
+  hotbarHeight: number,
+  extraCount: number,
+): { switchButton: Rect; extras: Rect[] } {
+  const btnY =
+    viewportH -
+    hotbarHeight -
+    MOBILE_BTN_BOTTOM_MARGIN -
+    MOBILE_BTN_HEIGHT -
+    MOBILE_BTN_BOTTOM_OFFSET;
+  const switchButton = {
+    x: MOBILE_BTN_LEFT_MARGIN,
+    y: btnY,
+    w: MOBILE_BTN_WIDTH,
+    h: MOBILE_BTN_HEIGHT,
+  };
+  const extras: Rect[] = [];
+  let extraX = viewportW - MOBILE_BTN_LEFT_MARGIN - MOBILE_BTN_WIDTH;
+  for (let i = 0; i < extraCount; i++) {
+    extras.push({ x: extraX, y: btnY, w: MOBILE_BTN_WIDTH, h: MOBILE_BTN_HEIGHT });
+    extraX -= MOBILE_BTN_WIDTH + MOBILE_BTN_BOTTOM_OFFSET;
+  }
+  return { switchButton, extras };
+}
+
+/** The Summon button's place on a phone: one row above Switch and the same size. */
+export function stackedAboveRect(below: Rect): Rect {
+  return { x: below.x, y: below.y - below.h - MOBILE_BTN_STACK_GAP, w: below.w, h: below.h };
+}
 
 export interface MobileHUDButton {
   id: string;
@@ -178,8 +242,7 @@ export class MobileHUDSystem implements GameSystem {
    * which places Switch.
    */
   get summonButtonRect(): Rect {
-    const below = this._switchBtnRect;
-    return { x: below.x, y: below.y - below.h - MOBILE_BTN_STACK_GAP, w: below.w, h: below.h };
+    return stackedAboveRect(this._switchBtnRect);
   }
 
   /** The Bag button's own rect, read after `renderButtons` has placed it — a fly-to-bag target. */
@@ -188,40 +251,30 @@ export class MobileHUDSystem implements GameSystem {
   }
 
   /**
-   * Render the standard mobile buttons: Switch + Gear + Bag,
-   * plus any extra buttons passed in (e.g. Follow for DungeonScene).
+   * Render the standard mobile buttons: Switch + Gear + Bag, plus any extra
+   * buttons (e.g. Follow indoors), each where the scene's layout put it.
    *
-   * @param extraButtons - Additional large buttons rendered on the right side
-   *   (same row as Switch). Pass [] for scenes that don't need them.
-   * @param hotbarHeight - Height of the hotbar area at the bottom. Defaults to 52.
-   * @param topRightY - Y position for the small Gear/Bag buttons. If not given,
-   *   they render at y=38 (below a typical header bar).
+   * @param extraButtons - Additional large buttons, with the rect each is drawn
+   *   and hit-tested at. Pass [] for scenes that don't need them.
    */
   renderButtons(
     ctx: CanvasRenderingContext2D,
     humanActive: boolean,
-    extraButtons: MobileHUDButton[] = [],
-    hotbarHeight = MOBILE_BTN_HEIGHT,
-    topRightY?: number,
+    placement: {
+      readonly switchButton: Rect;
+      readonly gear: Rect;
+      readonly bag: Rect;
+      readonly extraButtons: ReadonlyArray<{
+        readonly button: MobileHUDButton;
+        readonly rect: Rect;
+      }>;
+    },
     hasUnseenUpgrade = false,
     bagBouncePulse = 0,
   ): void {
     if (!platform.isMobile) return;
 
-    const btnY =
-      viewportHeight() -
-      hotbarHeight -
-      MOBILE_BTN_BOTTOM_MARGIN -
-      MOBILE_BTN_HEIGHT -
-      MOBILE_BTN_BOTTOM_OFFSET;
-
-    // Switch button (bottom-left)
-    this._switchBtnRect = {
-      x: MOBILE_BTN_LEFT_MARGIN,
-      y: btnY,
-      w: MOBILE_BTN_WIDTH,
-      h: MOBILE_BTN_HEIGHT,
-    };
+    this._switchBtnRect = placement.switchButton;
     this.drawBtn(
       ctx,
       this._switchBtnRect,
@@ -230,31 +283,14 @@ export class MobileHUDSystem implements GameSystem {
       false,
     );
 
-    // Extra large buttons (bottom-right, same row as Switch)
     this._extraBtnRects.clear();
-    let extraX = viewportWidth() - MOBILE_BTN_LEFT_MARGIN - MOBILE_BTN_WIDTH;
-    for (const btn of extraButtons) {
-      const rect: Rect = { x: extraX, y: btnY, w: MOBILE_BTN_WIDTH, h: MOBILE_BTN_HEIGHT };
-      this._extraBtnRects.set(btn.id, rect);
-      this.drawBtn(ctx, rect, btn.icon, btn.label, btn.active);
-      extraX -= MOBILE_BTN_WIDTH + MOBILE_BTN_BOTTOM_OFFSET;
+    for (const { button, rect } of placement.extraButtons) {
+      this._extraBtnRects.set(button.id, rect);
+      this.drawBtn(ctx, rect, button.icon, button.label, button.active);
     }
 
-    // Gear / Bag small buttons (top-right area)
-    const gearY = topRightY ?? MOBILE_GEAR_BAG_Y_DEFAULT;
-    const rightX = viewportWidth() - MOBILE_GEAR_BAG_X_OFFSET;
-    this._gearBtnRect = {
-      x: rightX,
-      y: gearY,
-      w: MOBILE_SMALL_BTN_WIDTH,
-      h: MOBILE_SMALL_BTN_HEIGHT,
-    };
-    this._bagBtnRect = {
-      x: rightX,
-      y: gearY + MOBILE_GEAR_BAG_Y_OFFSET,
-      w: MOBILE_SMALL_BTN_WIDTH,
-      h: MOBILE_SMALL_BTN_HEIGHT,
-    };
+    this._gearBtnRect = placement.gear;
+    this._bagBtnRect = placement.bag;
     this.drawSmallBtn(ctx, this._gearBtnRect, 'Gear', this.gearPanel.isOpen);
 
     const bagBounceScale = 1 + Math.sin(bagBouncePulse * Math.PI) * BAG_BOUNCE_SCALE_AMOUNT;
@@ -306,13 +342,9 @@ export class MobileHUDSystem implements GameSystem {
     this.gearPanel.render(ctx, inventory, playerName);
   }
 
-  /**
-   * Render a pause button. Position is relative to the minimap or top-right area.
-   */
-  renderPauseButton(ctx: CanvasRenderingContext2D, topY?: number): void {
-    const y = topY ?? MOBILE_GEAR_BAG_Y_DEFAULT;
-    const rightX = viewportWidth() - MOBILE_GEAR_BAG_X_OFFSET;
-    this._pauseBtnRect = { x: rightX, y, w: MOBILE_SMALL_BTN_WIDTH, h: MOBILE_SMALL_BTN_HEIGHT };
+  /** Render the pause button where the scene's layout put it. */
+  renderPauseButton(ctx: CanvasRenderingContext2D, rect: Rect): void {
+    this._pauseBtnRect = rect;
     this.drawSmallBtn(ctx, this._pauseBtnRect, platform.pauseButtonLabel, false);
   }
 
@@ -328,10 +360,10 @@ export class MobileHUDSystem implements GameSystem {
   ): number {
     const mapW = gameMap.structure[0]?.length ?? 1;
     const mapH = gameMap.structure.length;
-    const mmSize = this._miniMapExpanded ? MINIMAP_EXPANDED_SIZE : MINIMAP_NORMAL_SIZE;
-
-    const mmX = viewportWidth() - mmSize - MINIMAP_X_OFFSET;
-    const mmY = MINIMAP_Y_OFFSET;
+    const placed = interiorMiniMapRect(viewportWidth(), this._miniMapExpanded);
+    const mmSize = placed.size;
+    const mmX = placed.x;
+    const mmY = placed.y;
     this._miniMapRect = { x: mmX, y: mmY, w: mmSize, h: mmSize };
 
     // Scale to fit the map in the square
@@ -424,6 +456,10 @@ export class MobileHUDSystem implements GameSystem {
 
   get miniMapSize(): number {
     return this._miniMapExpanded ? MINIMAP_EXPANDED_SIZE : MINIMAP_NORMAL_SIZE;
+  }
+
+  get miniMapExpanded(): boolean {
+    return this._miniMapExpanded;
   }
 
   /**

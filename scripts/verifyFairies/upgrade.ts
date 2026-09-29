@@ -345,7 +345,8 @@ function snapshotGuarantees(ledger: FairyRoomLedger): GuaranteeSnapshot[] {
 function secondGuarantees(ledger: FairyRoomLedger, before: readonly GuaranteeSnapshot[]): number {
   return ledger.rooms.filter((room, index) => {
     const snapshot = before[index];
-    return snapshot.heldShield && room.guaranteedShield !== snapshot.guarantee;
+    const guarantee = room.guaranteedShield;
+    return snapshot.heldShield && guarantee !== null && guarantee !== snapshot.guarantee;
   }).length;
 }
 
@@ -645,13 +646,31 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
     );
   }
 
+  // A room already holding the most fairies a room may hold can never gain, so
+  // a second run over only full rooms would add nothing with or without its
+  // guard. One untouched room is left a fairy short, as if its roll had come
+  // up one lower, so a re-offer has somewhere to add.
+  const thinnedRoom = untouched.find((room) => countedFairies(room) > 0);
+  const thinnedFairy = thinnedRoom?.fairies.find(
+    (fairy) => fairy.kind !== 'healer' && fairy !== thinnedRoom.guaranteedShield,
+  );
+  const thinnedRosterIndex = thinnedFairy === undefined ? -1 : built.mobs.indexOf(thinnedFairy);
+  report.precondition(
+    thinnedRoom !== undefined && thinnedFairy !== undefined && thinnedRosterIndex >= 0,
+    'some untouched past room holds a fairy to leave it short of the most a room may hold',
+  );
+  if (thinnedRoom !== undefined && thinnedFairy !== undefined && thinnedRosterIndex >= 0) {
+    thinnedRoom.fairies.splice(thinnedRoom.fairies.indexOf(thinnedFairy), 1);
+    built.mobs.splice(thinnedRosterIndex, 1);
+  }
+
   const rosterBeforeSecond = built.mobs.length;
   built.bus.emit('bossDefeated', { bossType: SWINE_BOSS_TYPE, mob: swine });
   const secondAdded = built.mobs.length - rosterBeforeSecond;
   report.check(secondAdded === 0, 'a second Swine kill adds nothing', `${secondAdded} added`);
 
-  // The guard against a second run is what stops a re-offer: forget it, and a
-  // room at two of a possible three eventually rolls its third.
+  // The guard against a second run is what stops a re-offer: forget it, and
+  // the room left short eventually rolls its missing fairy.
   let unguardedAdded = 0;
   for (let i = 0; i < REPEAT_UPGRADE_TRIES && unguardedAdded === 0; i++) {
     unguardedAdded = applyFairyRateUpgrade(

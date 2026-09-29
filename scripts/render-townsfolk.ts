@@ -34,15 +34,10 @@ import {
   walkCycleDistance,
 } from '../src/sprites/person/gait.js';
 import {
-  BAKED_FACINGS,
   CELL_BOUNDS_SAMPLE_PHASES,
   personCellGeometry,
 } from '../src/sprites/person/personCellBounds.js';
-import {
-  IDLE_PHASE_BUCKETS,
-  MAX_BAKE_SCALE,
-  WALK_PHASE_BUCKETS,
-} from '../src/sprites/person/personFrameCache.js';
+import { IDLE_FRAMES, WALK_FRAMES } from '../src/sprites/art/townCastFigure.js';
 import { buildSkeleton, FOOT_BASE_FRAC, type Facing } from '../src/sprites/person/skeleton.js';
 import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
@@ -72,8 +67,8 @@ function parseScale(): number {
 
 /** The size a citizen is actually drawn at in the world. */
 const IN_GAME_DRAW_SIZE = TILE_SIZE * HUMANOID_NPC_SCALE;
-/** Frames per row — the cache's own walk bucket count, so the sheet is what plays. */
-const CYCLE_FRAMES = WALK_PHASE_BUCKETS;
+/** Frames per row — the cast sheet's own walk frame count, so the sheet is what plays. */
+const CYCLE_FRAMES = WALK_FRAMES;
 const CELL_PAD = 6;
 const LABEL_BAND = 14;
 const ROW_GAP = 10;
@@ -491,19 +486,19 @@ function gateArmPhase(people: ReadonlyArray<PersonAppearance>): void {
   report('arm phase: each arm is furthest back as its own leg reaches forward');
 }
 
-/** The cell sampler must visit every phase the cache bakes, not merely near them. */
+/** The cell sampler must visit every phase the cast sheet bakes, not merely near them. */
 function gateSampleAlignment(): void {
-  for (const buckets of [WALK_PHASE_BUCKETS, IDLE_PHASE_BUCKETS]) {
-    if (CELL_BOUNDS_SAMPLE_PHASES % buckets === 0) continue;
+  for (const frames of [WALK_FRAMES, IDLE_FRAMES]) {
+    if (CELL_BOUNDS_SAMPLE_PHASES % frames === 0) continue;
     fail(
       `personCellBounds samples ${CELL_BOUNDS_SAMPLE_PHASES} phases, which is not a multiple of ` +
-        `the cache's ${buckets} buckets — some baked poses are never measured`,
+        `the ${frames} frames baked per row — some baked poses are never measured`,
     );
     return;
   }
   report(
     `sampling: ${CELL_BOUNDS_SAMPLE_PHASES} bound samples cover all ` +
-      `${WALK_PHASE_BUCKETS} walk and ${IDLE_PHASE_BUCKETS} idle phases`,
+      `${WALK_FRAMES} walk and ${IDLE_FRAMES} idle phases`,
   );
 }
 
@@ -553,7 +548,7 @@ function gateReach(people: ReadonlyArray<PersonAppearance>): void {
  * exactly what shipped: a child's legs moved at fourteen steps a second beside
  * an adult's four, because a child is 62 % of an adult's height and was walking
  * at an adult's pace. `gaitSpeedFactor` now takes most of that difference out of
- * the speed instead. Below one stride per bucket-count of frames the cache's
+ * the speed instead. Below one stride per `WALK_FRAMES` frames, the sheet's
  * sixteen baked poses cannot all be shown and the legs alias, so that is the
  * floor.
  */
@@ -585,10 +580,10 @@ function gateCadence(): void {
     `cadence: ${slowestSteps.toFixed(1)}–${fastestSteps.toFixed(1)} steps/s at full cohort speed ` +
       `(${worstFrames.toFixed(1)} frames per cycle at worst)`,
   );
-  if (worstFrames < WALK_PHASE_BUCKETS) {
+  if (worstFrames < WALK_FRAMES) {
     fail(
       `seed ${worstSeed} completes a stride in ${worstFrames.toFixed(1)} frames, under the ` +
-        `${WALK_PHASE_BUCKETS} baked poses — its legs will blur`,
+        `${WALK_FRAMES} baked poses — its legs will blur`,
     );
   }
 }
@@ -614,33 +609,6 @@ function reportStride(people: ReadonlyArray<PersonAppearance>): void {
   report(`reference stride reach: ${(strideReach(reference) * size).toFixed(2)} px`);
 }
 
-/** RGBA. */
-const BYTES_PER_PIXEL = 4;
-const BYTES_PER_MEGABYTE = 1024 * 1024;
-/** A full plaza crowd, which is what the byte budget has to hold. */
-const PLAZA_CROWD = 40;
-
-/**
- * What a full crowd costs the frame cache with every cell baked — the worst
- * case the byte budget is sized against.
- */
-function reportCacheFootprint(people: ReadonlyArray<PersonAppearance>): void {
-  const size = IN_GAME_DRAW_SIZE;
-  const cellsPerPerson = BAKED_FACINGS.length * (WALK_PHASE_BUCKETS + IDLE_PHASE_BUCKETS);
-  let totalArea = 0;
-  for (const appearance of people) {
-    const cell = personCellGeometry(appearance, size);
-    totalArea +=
-      Math.ceil(cell.cellWidth * MAX_BAKE_SCALE) * Math.ceil(cell.cellHeight * MAX_BAKE_SCALE);
-  }
-  const bytesPerPerson = (totalArea / people.length) * cellsPerPerson * BYTES_PER_PIXEL;
-  report(
-    `cache: ${cellsPerPerson} cells/person at ${MAX_BAKE_SCALE}x bake, ` +
-      `${(bytesPerPerson / BYTES_PER_MEGABYTE).toFixed(2)} MB/person, ` +
-      `${((bytesPerPerson * PLAZA_CROWD) / BYTES_PER_MEGABYTE).toFixed(1)} MB for ${PLAZA_CROWD}`,
-  );
-}
-
 const reports: string[] = [];
 function report(line: string): void {
   reports.push(line);
@@ -661,7 +629,6 @@ gateReach(people);
 gateStancePlant(people);
 gateCellBounds(people);
 reportStride(people);
-reportCacheFootprint(people);
 renderSheet(scale, outPath, parseFlag('only', ''));
 
 for (const line of reports) console.log(`  ${line}`);

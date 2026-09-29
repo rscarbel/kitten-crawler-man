@@ -7,7 +7,7 @@ description: Add or modify a level, map feature, or tile type in Kitten Crawler 
 
 ## Levels
 
-A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize, roomMobs, hallwayMobs`, plus optional `bossRooms`, `nextLevelId` (chaining), `hasCollapseTimer`, `hasTreasureRoomGuards`, `numStairwells`, `isOverworld`, `hasArena`, `hasSpiderLab`, `extraSpawns`, `onMobKilledSpawns`. `MobSpawnRule`: `{ type, chance, minCount, maxCount, minLevel, maxLevel, config? }` where `type` is a fixed string union — new mob keys must be added to that union and registered in `spawner.ts` (see `add-creature`).
+A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize, roomMobs, hallwayMobs`, plus optional `bossRooms`, `nextLevelId` (chaining), `arrivalLoadingScreen`, `hasCollapseTimer`, `hasTreasureRoomGuards`, `numStairwells`, `isOverworld`, `hasArena`, `hasSpiderLab`, `extraSpawns`, `onMobKilledSpawns`. `MobSpawnRule`: `{ type, chance, minCount, maxCount, minLevel, maxLevel, config? }` where `type` is a fixed string union — new mob keys must be added to that union and registered in `spawner.ts` (see `add-creature`).
 
 ### Checklist
 
@@ -15,6 +15,14 @@ A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize,
 2. Register in the map in `src/levels/index.ts` (`getLevelDef` throws on unknown ids).
 3. Chain it: set the previous level's `nextLevelId` to this id; omit `nextLevelId` on the terminal level.
 4. Level-complete flow is automatic: `StairwellSystem` shows the descend menu (hidden when `nextLevelId` is absent), and `DungeonScene`'s `onDescend` wiring saves progress, emits `levelComplete`, shows `LevelCompleteScreen`, and does `sceneManager.replace(new DungeonScene(nextDef, ...))` carrying player snapshots, achievements, and abilities forward.
+
+### Arrival loading screen
+
+A floor whose first seconds would otherwise be spent painting (facades, a crowd's figure rows, ground chunks) sets `arrivalLoadingScreen: { tips }` on its `LevelDef`; floor 3 does. `DungeonScene` decides at the end of its constructor, so every path that builds the scene is covered (stairs, new game, save load, respawn, floor restart, building exit). The screen goes up only when `floorArrivalOwesWork` says the arrival owes real work, and a walk out of a building owes it only for environment art. The work itself is `floorArrivalLoadTasks` in `src/scenes/floorArrivalLoad.ts`, run by a `LoadRunner` behind a `LoadingOverlay`. The world neither updates nor draws while it is up. `docs/asset-management.md` ("A heavy arrival goes behind a loading screen") has the rest. Gates: `npm run verify:loading-screen`, `npm run verify:town-arrival-load`, `npm run verify:town-soak`.
+
+### Where the party is set down
+
+Every arrival — a floor, a door, a stair, a building exit — places both crawlers with `findPartyArrivalTiles` (`src/map/findWalkableTile.ts`), never at a fixed offset such as `startTile.x + 1`. That tile can be a prop, a wall or a fence, and a crawler set down inside one cannot take a step.
 
 ### Spawn placement
 
@@ -27,6 +35,8 @@ A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize,
 ### The overworld town
 
 `OverworldGenerator` owns the wilderness (circus, forests, ruins, spawn scatter) but **not** the town's layout — it consumes a declarative `TownPlan` from `src/map/town/`. Before changing anything inside the walls, read **`docs/town.md`**: it covers the painter order, why the street hierarchy is a list order rather than a priority rule, the centre-relative offsets that must be re-tuned when the layout moves, and the `OverworldData`/building-name invariants that quests key off.
+
+Building interiors are data too: one layout file per building in `src/map/town/interiors/` (props from `TOWN_INTERIOR_PROPS`, anchored at the footprint's north-west tile), applied by `GameMap.generateInterior`. The "Interiors" section of `docs/town.md` has the prop contract, occupant anchoring, breakables and the density rule. Gates: `npm run gates:town-interior-props`, `verify:interiors`, `verify:interior-interactions`, `verify:interior-payout`, `verify:interior-density`.
 
 Verify layout changes at **`?townmap`** (localhost) — the town is several screens wide, so no in-game screenshot can show whether one worked.
 

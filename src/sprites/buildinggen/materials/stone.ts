@@ -12,7 +12,7 @@
 
 import type { NoiseField } from '../../../map/tilegen/noise';
 import type { Plane } from '../projection';
-import { LIGHT_DIR_X, LIGHT_DIR_Y, hueShift, rgb, rgba, sampleRamp, type Ramp } from '../ramps';
+import { hueShift, rgb, rgba, sampleRamp, type Ramp } from '../ramps';
 import { jointWander } from '../texture';
 import {
   ELEMENT_BOTTOM_SHADOW,
@@ -162,14 +162,28 @@ interface BlockRect {
   readonly height: number;
 }
 
+/**
+ * How many discrete tones a stone's face may take, above and below the
+ * ramp's own middle. A continuous jitter puts every stone at a slightly
+ * different value and reads as speckle at a glance; a small fixed palette —
+ * the way a painter actually mixes a batch of "stone grey" and reuses it —
+ * reads as sorted, individual blocks instead.
+ */
+const BLOCK_TONE_STEPS = 4;
+
+function quantizedTone(seed: number, stream: number, key: number, spread: number): number {
+  const raw = elementValue(seed, stream, key);
+  const step = Math.round(raw * (BLOCK_TONE_STEPS - 1)) / (BLOCK_TONE_STEPS - 1);
+  return 0.5 + (step - 0.5) * 2 * spread;
+}
+
 function paintBlock(options: StoneOptions, block: BlockRect): void {
   const { plane, seed, ramp } = options;
   const ctx = plane.ctx;
   if (block.width <= 1 || block.height <= 1) return;
   const key = block.courseIndex * 1009 + block.blockIndex;
 
-  const tone =
-    0.5 + (elementValue(seed, STREAM_BLOCK_TONE, key) - 0.5) * 2 * (ELEMENT_TONE_JITTER * 2.4);
+  const tone = quantizedTone(seed, STREAM_BLOCK_TONE, key, ELEMENT_TONE_JITTER);
   const hue = (elementValue(seed, STREAM_BLOCK_HUE, key) - 0.5) * 2 * ELEMENT_HUE_JITTER;
   const base = hueShift(sampleRamp(ramp, tone), hue);
 
@@ -184,16 +198,21 @@ function paintBlock(options: StoneOptions, block: BlockRect): void {
   ctx.rotate(tilt);
   ctx.translate(-block.width / 2, -block.height / 2);
 
+  // One flat fill, never a gradient or per-pixel fleck: a stone is a clean
+  // painted shape, not a rendered bump — the two edge lines below are the
+  // entire read of its volume.
   ctx.fillStyle = rgb(base);
   ctx.fillRect(0, 0, block.width, block.height);
-  paintBlockFace(options, block, tone, hue);
 
-  // Sun from above: the top of a stone catches it, the bottom loses it. One
-  // pixel each, which is all it takes to make a flat rectangle read as a solid.
-  ctx.fillStyle = rgba(sampleRamp(ramp, Math.min(1, tone + ELEMENT_TOP_LIGHT * 2)), 0.75);
+  // Sun from above and the left: a light line along the top and left edges,
+  // a shadow line along the bottom and right — one flat cel-shaded block,
+  // matching the town's own upper-left light.
+  ctx.fillStyle = rgb(sampleRamp(ramp, Math.min(1, tone + ELEMENT_TOP_LIGHT * 2)));
   ctx.fillRect(0, 0, block.width, ELEMENT_EDGE_PX);
-  ctx.fillStyle = rgba(sampleRamp(ramp, Math.max(0, tone - ELEMENT_BOTTOM_SHADOW * 2)), 0.6);
+  ctx.fillRect(0, 0, ELEMENT_EDGE_PX, block.height);
+  ctx.fillStyle = rgb(sampleRamp(ramp, Math.max(0, tone - ELEMENT_BOTTOM_SHADOW * 2)));
   ctx.fillRect(0, block.height - ELEMENT_EDGE_PX, block.width, ELEMENT_EDGE_PX);
+  ctx.fillRect(block.width - ELEMENT_EDGE_PX, 0, ELEMENT_EDGE_PX, block.height);
 
   const defect = elementValue(seed, STREAM_BLOCK_DEFECT, key);
   if (defect < CHIP_CHANCE) {
@@ -203,95 +222,6 @@ function paintBlock(options: StoneOptions, block: BlockRect): void {
   }
 
   ctx.restore();
-}
-
-/**
- * The face of one stone, lit as the rounded solid it is.
- *
- * Without this a block is a flat rectangle between two one-pixel edges, and a
- * wall of them measures almost no local contrast at all: an eight-pixel window
- * dropped anywhere inside a twenty-pixel stone sees a single colour. It is also
- * the difference between masonry and a tiled swatch — a quarried block is not
- * flat, it bulges, and the sun crossing that bulge is most of what tells a
- * viewer the wall is made of separate lumps of rock.
- *
- * The gradient runs along the town's own light direction rather than a fixed
- * diagonal, so every stone in every building agrees with the sun the roofs and
- * the ground relief were lit by.
- */
-const FACE_LIGHT_SPREAD = 0.3;
-const FACE_RIM_DARKEN = 0.1;
-const FACE_RIM_INSET_FRACTION = 0.22;
-
-function paintBlockFace(options: StoneOptions, block: BlockRect, tone: number, hue: number): void {
-  const ctx = options.plane.ctx;
-  const lightX = -LIGHT_DIR_X;
-  const lightY = -LIGHT_DIR_Y;
-  const gradient = ctx.createLinearGradient(
-    block.width / 2 - (lightX * block.width) / 2,
-    block.height / 2 - (lightY * block.height) / 2,
-    block.width / 2 + (lightX * block.width) / 2,
-    block.height / 2 + (lightY * block.height) / 2,
-  );
-  const lit = hueShift(sampleRamp(options.ramp, Math.min(1, tone + FACE_LIGHT_SPREAD)), hue);
-  const shadowed = hueShift(sampleRamp(options.ramp, Math.max(0, tone - FACE_LIGHT_SPREAD)), hue);
-  const MID_STOP = 0.5;
-  gradient.addColorStop(0, rgb(lit));
-  gradient.addColorStop(MID_STOP, rgb(hueShift(sampleRamp(options.ramp, tone), hue)));
-  gradient.addColorStop(1, rgb(shadowed));
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, block.width, block.height);
-
-  // A rounded stone loses light all the way round its rim, not only on the side
-  // away from the sun; without this the block reads as a bevelled plate.
-  const insetX = block.width * FACE_RIM_INSET_FRACTION;
-  const insetY = block.height * FACE_RIM_INSET_FRACTION;
-  ctx.fillStyle = rgba(sampleRamp(options.ramp, 0), FACE_RIM_DARKEN);
-  ctx.fillRect(0, 0, block.width, insetY);
-  ctx.fillRect(0, block.height - insetY, block.width, insetY);
-  ctx.fillRect(0, 0, insetX, block.height);
-  ctx.fillRect(block.width - insetX, 0, insetX, block.height);
-
-  paintBlockPitting(options, block, tone);
-}
-
-/**
- * Mineral grain, pits and lichen flecks across a stone's face.
- *
- * Quarried stone is not a smooth surface at any scale a player sees, and this is
- * the layer that says so. It is also the only variation on a wall that is
- * *finer* than a stone: the tone, the hue, the face gradient and the edge lights
- * all vary between blocks and leave the inside of each one smooth, so a viewer
- * reading the wall close up sees a mosaic of flat chips.
- *
- * Half the flecks are darker than the face and half lighter, because pitting
- * that only darkens reads as dirt and pitting that only lightens reads as frost.
- */
-const PIT_DENSITY_PER_SQUARE_PX = 0.028;
-const PIT_MAX_RADIUS_PX = 1.5;
-const PIT_TONE_SPREAD = 0.3;
-const PIT_ALPHA = 0.3;
-const STREAM_PIT_X = 8;
-const STREAM_PIT_Y = 9;
-const STREAM_PIT_TONE = 10;
-const STREAM_PIT_SIZE = 11;
-
-function paintBlockPitting(options: StoneOptions, block: BlockRect, tone: number): void {
-  const ctx = options.plane.ctx;
-  const count = Math.round(block.width * block.height * PIT_DENSITY_PER_SQUARE_PX);
-  const key = block.courseIndex * 1009 + block.blockIndex;
-  for (let pit = 0; pit < count; pit++) {
-    const index = key * 512 + pit;
-    const x = elementValue(options.seed, STREAM_PIT_X, index) * block.width;
-    const y = elementValue(options.seed, STREAM_PIT_Y, index) * block.height;
-    const signedTone = (elementValue(options.seed, STREAM_PIT_TONE, index) - 0.5) * 2;
-    const radius = PIT_MAX_RADIUS_PX * (0.4 + elementValue(options.seed, STREAM_PIT_SIZE, index));
-    const pitTone = Math.min(1, Math.max(0, tone + signedTone * PIT_TONE_SPREAD));
-    ctx.fillStyle = rgba(sampleRamp(options.ramp, pitTone), PIT_ALPHA);
-    ctx.beginPath();
-    ctx.ellipse(x, y, radius, radius * 0.8, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
 }
 
 /** A lost corner, painted as mortar reclaiming the block. */

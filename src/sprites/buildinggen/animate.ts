@@ -174,6 +174,9 @@ function paintEffect(
     case 'bead_curtain_sway':
       paintBeadCurtainSway(ctx, projection, effect, phase, seed);
       return;
+    case 'roof_perch':
+      paintRoofPerch(ctx, projection, effect, phase, seed);
+      return;
   }
 }
 
@@ -845,12 +848,171 @@ function paintLanternFlicker(
 
 // ── the inn's cat ──────────────────────────────────────────────────────────
 
-const CAT_BREATH_RISE_PX = 1.6;
-const CAT_EAR_HEIGHT_FRACTION = 0.34;
-const CAT_TAIL_CURL_FRACTION = 0.55;
+/**
+ * How far the flank lifts at the top of a breath, in bake pixels. One and a half
+ * bake pixels is one pixel at the 32 px display tile: enough to see, not so
+ * much that the cat reads as panting.
+ */
+const CAT_BREATH_RISE_PX = 1.5;
+/** The head rides the breath only a little; a sleeping head barely moves. */
+const CAT_HEAD_BREATH_SHARE = 0.3;
+/**
+ * The silhouette's ink, in bake pixels. Painted as a stroke twice this wide
+ * under the coat, so half of it lands outside the fill.
+ */
+const CAT_OUTLINE_PX = 1.4;
+
+/** Proportions of the effect rect: width for x, height for y, measured up from the sill. */
+const CAT_BODY_CENTRE_X = 0.55;
+const CAT_BODY_RADIUS_X = 0.34;
+const CAT_BODY_HEIGHT = 0.62;
+const CAT_HAUNCH_CENTRE_X = 0.74;
+const CAT_HAUNCH_RADIUS_X = 0.2;
+const CAT_HAUNCH_HEIGHT = 0.74;
+const CAT_HEAD_CENTRE_X = 0.22;
+const CAT_HEAD_CENTRE_Y = 0.4;
+const CAT_HEAD_RADIUS = 0.34;
+/** Ears as fractions of the head radius: where the base sits and how tall the point stands. */
+const CAT_EAR_BASE_INNER = 0.05;
+const CAT_EAR_BASE_OUTER = 0.9;
+const CAT_EAR_BASE_DROP = 0.45;
+const CAT_EAR_TIP_OFFSET = 0.6;
+const CAT_EAR_TIP_RISE = 1.55;
+const CAT_PAW_CENTRE_X = 0.24;
+const CAT_PAW_RADIUS_X = 0.1;
+const CAT_PAW_HEIGHT = 0.18;
+const CAT_TAIL_ROOT_X = 0.92;
+const CAT_TAIL_ROOT_Y = 0.3;
+const CAT_TAIL_TIP_X = 0.36;
+const CAT_TAIL_TIP_Y = 0.24;
+const CAT_TAIL_SAG_Y = 0.02;
+const CAT_TAIL_WIDTH = 0.19;
+/** The closed eye's half-width and droop, as fractions of the head radius. */
+const CAT_EYE_OFFSET_X = -0.3;
+const CAT_EYE_OFFSET_Y = 0.02;
+const CAT_EYE_HALF_WIDTH = 0.34;
+const CAT_EYE_DROOP = 0.22;
+const CAT_EYE_LINE_PX = 1.2;
+const CAT_MUZZLE_OFFSET_X = -0.55;
+const CAT_MUZZLE_OFFSET_Y = 0.45;
+const CAT_MUZZLE_RADIUS = 0.42;
+/** Tabby bars across the back, as x fractions of the body. */
+const CAT_STRIPE_XS = [0.42, 0.56, 0.7] as const;
+const CAT_STRIPE_LENGTH = 0.36;
+const CAT_STRIPE_PX = 1.6;
+const CAT_STRIPE_ALPHA = 0.75;
+/** How far a tabby bar bows off vertical, in bake pixels. */
+const CAT_STRIPE_LEAN_PX = 1;
+const CAT_BELLY_SHADE_ALPHA = 0.55;
+const CAT_BACK_LIGHT_ALPHA = 0.7;
+/** Where, top to sill, the back's light has faded out and the belly's shade begins. */
+const CAT_LIGHT_FADE_STOP = 0.45;
+const CAT_SHADE_START_STOP = 0.7;
+const CAT_SHADOW_ALPHA = 0.45;
+const CAT_SHADOW_SPREAD = 0.52;
+const CAT_SHADOW_DEPTH_PX = 2;
+/** The contact shadow is a smear along the sill, not a pool. */
+const CAT_SHADOW_FLATTEN = 0.18;
+
+/** One smooth breath per cycle, rising from and settling to zero where the loop wraps. */
+function breathEnvelope(phase: number): number {
+  return (1 - Math.cos(phase * Math.PI * 2)) / 2;
+}
+
+interface CatShape {
+  readonly left: number;
+  readonly sill: number;
+  readonly width: number;
+  readonly height: number;
+  /** 0..1 through one breath. */
+  readonly breath: number;
+}
+
+function catX(shape: CatShape, fraction: number): number {
+  return shape.left + shape.width * fraction;
+}
+
+function catY(shape: CatShape, fractionUp: number): number {
+  return shape.sill - shape.height * fractionUp;
+}
+
+/** The loaf and the haunch: the body the head is laid against. */
+function traceCatSilhouette(ctx: Ctx, shape: CatShape): void {
+  const rise = shape.breath * CAT_BREATH_RISE_PX;
+  const bodyHalfHeight = (shape.height * CAT_BODY_HEIGHT + rise) / 2;
+  ctx.moveTo(catX(shape, CAT_BODY_CENTRE_X + CAT_BODY_RADIUS_X), shape.sill - bodyHalfHeight);
+  ctx.ellipse(
+    catX(shape, CAT_BODY_CENTRE_X),
+    shape.sill - bodyHalfHeight,
+    shape.width * CAT_BODY_RADIUS_X,
+    bodyHalfHeight,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  const haunchHalfHeight = (shape.height * CAT_HAUNCH_HEIGHT + rise) / 2;
+  ctx.moveTo(catX(shape, CAT_HAUNCH_CENTRE_X + CAT_HAUNCH_RADIUS_X), shape.sill - haunchHalfHeight);
+  ctx.ellipse(
+    catX(shape, CAT_HAUNCH_CENTRE_X),
+    shape.sill - haunchHalfHeight,
+    shape.width * CAT_HAUNCH_RADIUS_X,
+    haunchHalfHeight,
+    0,
+    0,
+    Math.PI * 2,
+  );
+}
+
+/** The head and its two ears, outlined on their own so the head reads apart from the flank. */
+function traceCatHead(ctx: Ctx, shape: CatShape): void {
+  const head = catHead(shape);
+  ctx.moveTo(head.x + head.radius, head.y);
+  ctx.arc(head.x, head.y, head.radius, 0, Math.PI * 2);
+  for (const side of [-1, 1]) {
+    ctx.moveTo(
+      head.x + side * head.radius * CAT_EAR_BASE_INNER,
+      head.y - head.radius * CAT_EAR_BASE_DROP * 2,
+    );
+    ctx.lineTo(
+      head.x + side * head.radius * CAT_EAR_TIP_OFFSET,
+      head.y - head.radius * CAT_EAR_TIP_RISE,
+    );
+    ctx.lineTo(
+      head.x + side * head.radius * CAT_EAR_BASE_OUTER,
+      head.y - head.radius * CAT_EAR_BASE_DROP,
+    );
+    ctx.closePath();
+  }
+}
+
+function catHead(shape: CatShape): { x: number; y: number; radius: number } {
+  const headRise = shape.breath * CAT_BREATH_RISE_PX * CAT_HEAD_BREATH_SHARE;
+  return {
+    x: catX(shape, CAT_HEAD_CENTRE_X),
+    y: catY(shape, CAT_HEAD_CENTRE_Y) - headRise,
+    radius: shape.height * CAT_HEAD_RADIUS,
+  };
+}
+
+function traceCatTail(ctx: Ctx, shape: CatShape): void {
+  ctx.moveTo(catX(shape, CAT_TAIL_ROOT_X), catY(shape, CAT_TAIL_ROOT_Y));
+  ctx.quadraticCurveTo(
+    catX(shape, (CAT_TAIL_ROOT_X + CAT_TAIL_TIP_X) / 2),
+    catY(shape, CAT_TAIL_SAG_Y),
+    catX(shape, CAT_TAIL_TIP_X),
+    catY(shape, CAT_TAIL_TIP_Y),
+  );
+}
 
 /**
- * A cat asleep on an upstairs sill, its flank rising and falling.
+ * A ginger tabby curled asleep on an upstairs sill, in front of the lit glass,
+ * its flank rising and falling.
+ *
+ * Everything that makes a lump read as a cat at 32 px is here on purpose: two
+ * pointed ears standing clear of the glow, a tail wrapped round the front, a
+ * closed-eye line and cream paws under the chin, all inside a dark rim — the
+ * glow behind it is brighter than the coat, and without the rim the ginger
+ * melts into the amber and the silhouette is lost.
  *
  * The whole cat lives here rather than in `idle`, because the flank is most of
  * its silhouette and a still copy behind it would read as a second cat.
@@ -863,68 +1025,129 @@ function paintSleepingCat(
 ): void {
   const rect = effectRect(projection, effect);
   const ramp = getRamp(effect.ramp);
-  const breath = pulseEnvelope(phase) * CAT_BREATH_RISE_PX;
-  const baseY = rect.y + rect.height;
-  const bodyHeight = rect.height * 0.62 + breath;
-  const body = sampleRamp(ramp, 0.45);
-  const belly = sampleRamp(ramp, 0.7);
+  const ink = getRamp('ink_outline');
+  const shape: CatShape = {
+    left: rect.x,
+    sill: rect.y + rect.height,
+    width: rect.width,
+    height: rect.height,
+    breath: breathEnvelope(phase),
+  };
+  const tailWidth = rect.height * CAT_TAIL_WIDTH;
 
-  ctx.fillStyle = rgba(body, 1);
-  ctx.beginPath();
-  ctx.ellipse(
-    rect.x + rect.width * 0.52,
-    baseY - bodyHeight / 2,
-    rect.width * 0.42,
-    bodyHeight / 2,
-    0,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
-
-  // The tail curls round the near side of the body: without it a sleeping cat
-  // is an oval, and an oval on a windowsill is a loaf of bread.
-  ctx.strokeStyle = rgba(body, 1);
-  ctx.lineWidth = Math.max(1.5, rect.height * 0.11);
+  ctx.save();
+  ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(rect.x + rect.width * 0.9, baseY - bodyHeight * 0.35);
-  ctx.quadraticCurveTo(
-    rect.x + rect.width * 1.02,
-    baseY,
-    rect.x + rect.width * CAT_TAIL_CURL_FRACTION,
-    baseY - 1,
+
+  paintSoftBlob(
+    ctx,
+    catX(shape, CAT_BODY_CENTRE_X),
+    shape.sill + CAT_SHADOW_DEPTH_PX,
+    rect.width * CAT_SHADOW_SPREAD,
+    ink.shadow,
+    CAT_SHADOW_ALPHA,
+    { scaleX: 1, scaleY: CAT_SHADOW_FLATTEN },
   );
+
+  const coat = (trace: (target: Ctx) => void, stripes: boolean): void => {
+    ctx.beginPath();
+    trace(ctx);
+    ctx.strokeStyle = rgba(ink.mid, 1);
+    ctx.lineWidth = CAT_OUTLINE_PX * 2;
+    ctx.stroke();
+    ctx.fillStyle = rgba(ramp.mid, 1);
+    ctx.fill();
+    // Lit from above and shaded underneath, clipped to the coat: one flat
+    // ginger fill is a cut-out, and a curled cat is the roundest thing on the
+    // street.
+    ctx.save();
+    ctx.clip();
+    const lightBand = ctx.createLinearGradient(0, catY(shape, 1), 0, shape.sill);
+    lightBand.addColorStop(0, rgba(ramp.light, CAT_BACK_LIGHT_ALPHA));
+    lightBand.addColorStop(CAT_LIGHT_FADE_STOP, rgba(ramp.light, 0));
+    lightBand.addColorStop(CAT_SHADE_START_STOP, rgba(ramp.shadow, 0));
+    lightBand.addColorStop(1, rgba(ramp.shadow, CAT_BELLY_SHADE_ALPHA));
+    ctx.fillStyle = lightBand;
+    ctx.fillRect(rect.x - rect.width, catY(shape, 2), rect.width * 3, rect.height * 3);
+    if (stripes) paintCatStripes(ctx, shape, ramp.shadow);
+    ctx.restore();
+  };
+
+  coat((target) => traceCatSilhouette(target, shape), true);
+
+  ctx.beginPath();
+  traceCatTail(ctx, shape);
+  ctx.strokeStyle = rgba(ink.mid, 1);
+  ctx.lineWidth = tailWidth + CAT_OUTLINE_PX * 2;
+  ctx.stroke();
+  ctx.strokeStyle = rgba(ramp.mid, 1);
+  ctx.lineWidth = tailWidth;
   ctx.stroke();
 
-  const headX = rect.x + rect.width * 0.2;
-  const headY = baseY - bodyHeight * 0.55;
-  const headRadius = rect.height * 0.24;
-  ctx.fillStyle = rgba(body, 1);
+  coat((target) => traceCatHead(target, shape), false);
+
+  const head = catHead(shape);
+  ctx.save();
   ctx.beginPath();
-  ctx.arc(headX, headY, headRadius, 0, Math.PI * 2);
-  ctx.fill();
-  const earHeight = rect.height * CAT_EAR_HEIGHT_FRACTION;
-  for (const side of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(headX + side * headRadius * 0.7, headY - headRadius * 0.5);
-    ctx.lineTo(headX + side * headRadius * 0.35, headY - headRadius - earHeight * 0.5);
-    ctx.lineTo(headX + side * headRadius * 0.05, headY - headRadius * 0.75);
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.fillStyle = rgba(belly, 0.7);
+  ctx.arc(head.x, head.y, head.radius, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = rgba(ramp.accent, 1);
   ctx.beginPath();
-  ctx.ellipse(
-    rect.x + rect.width * 0.55,
-    baseY - bodyHeight * 0.25,
-    rect.width * 0.28,
-    bodyHeight * 0.2,
-    0,
+  ctx.arc(
+    head.x + head.radius * CAT_MUZZLE_OFFSET_X,
+    head.y + head.radius * CAT_MUZZLE_OFFSET_Y,
+    head.radius * CAT_MUZZLE_RADIUS,
     0,
     Math.PI * 2,
   );
   ctx.fill();
+  ctx.restore();
+
+  // Paws last, tucked under the chin in front of it: cream against the
+  // ginger is the one spot of high contrast at the head end.
+  const pawHalfHeight = (shape.height * CAT_PAW_HEIGHT) / 2;
+  ctx.beginPath();
+  ctx.ellipse(
+    catX(shape, CAT_PAW_CENTRE_X),
+    shape.sill - pawHalfHeight,
+    shape.width * CAT_PAW_RADIUS_X,
+    pawHalfHeight,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  ctx.strokeStyle = rgba(ink.mid, 1);
+  ctx.lineWidth = CAT_OUTLINE_PX * 2;
+  ctx.stroke();
+  ctx.fillStyle = rgba(ramp.accent, 1);
+  ctx.fill();
+
+  const eyeX = head.x + head.radius * CAT_EYE_OFFSET_X;
+  const eyeY = head.y + head.radius * CAT_EYE_OFFSET_Y;
+  const eyeHalf = head.radius * CAT_EYE_HALF_WIDTH;
+  ctx.strokeStyle = rgba(ink.shadow, 1);
+  ctx.lineWidth = CAT_EYE_LINE_PX;
+  ctx.beginPath();
+  ctx.moveTo(eyeX - eyeHalf, eyeY);
+  ctx.quadraticCurveTo(eyeX, eyeY + head.radius * CAT_EYE_DROOP * 2, eyeX + eyeHalf, eyeY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Tabby bars across the back, riding the breath with the flank they are painted on. */
+function paintCatStripes(ctx: Ctx, shape: CatShape, color: RGB): void {
+  ctx.strokeStyle = rgba(color, CAT_STRIPE_ALPHA);
+  ctx.lineWidth = CAT_STRIPE_PX;
+  const rise = shape.breath * CAT_BREATH_RISE_PX;
+  const length = shape.height * CAT_STRIPE_LENGTH;
+  for (const stripeX of CAT_STRIPE_XS) {
+    const x = catX(shape, stripeX);
+    const top = catY(shape, CAT_HAUNCH_HEIGHT) - rise;
+    ctx.beginPath();
+    ctx.moveTo(x - CAT_STRIPE_LEAN_PX, top);
+    ctx.quadraticCurveTo(x + CAT_STRIPE_LEAN_PX, top + length / 2, x, top + length);
+    ctx.stroke();
+  }
 }
 
 // ── the temple's finial ────────────────────────────────────────────────────
@@ -1062,4 +1285,170 @@ function paintBeadCurtainSway(
       ctx.fill();
     }
   }
+}
+
+// ── Roost ledges: a skyfowl citizen perched on the roofline ─────────────────
+
+/**
+ * The idle bird occupying a skyfowl-run building's roost ledge.
+ *
+ * Painted here rather than as a static facade decal because a baked silhouette
+ * would compete pixel-for-pixel with the citizen figure cache for the same
+ * shape once the skyfowl cast exists — this is deliberately a `life` effect,
+ * not geometry, so the roost reads as *occupied* rather than decorated. The
+ * shape is a legible painted silhouette (head, foreshortened beak, a folded
+ * wing with feather-tip notches, two digitigrade legs) rather than a stand-in
+ * for the real cast, which has its own rig and belongs to a different module.
+ */
+const PERCH_BODY_WIDTH_FRACTION = 0.5;
+const PERCH_BODY_HEIGHT_FRACTION = 0.56;
+const PERCH_HEAD_RADIUS_FRACTION = 0.22;
+const PERCH_BEAK_LENGTH_FRACTION = 0.16;
+const PERCH_LEG_HEIGHT_FRACTION = 0.22;
+const PERCH_BOB_PX = 1.4;
+const PERCH_HEAD_TURN_PX = 1.6;
+/** Feather-tip notches along the folded wing's trailing edge. */
+const PERCH_WING_NOTCHES = 4;
+const PERCH_WING_NOTCH_DEPTH_FRACTION = 0.08;
+
+/**
+ * Life effects carry no shared silhouette-outline pass of their own — that
+ * runs once, over the idle bake, and a roof-life cell is composited over it
+ * separately — so a bird painted in flat fills alone has no dark line to
+ * separate it from the roof and sky behind it and reads as a soft blob of
+ * colour. Every shape below is stroked with this same dark ink as it is
+ * filled, the same "silhouette gets a line, nothing internal does" rule the
+ * rest of the town's outline policy already follows.
+ */
+const PERCH_OUTLINE_WIDTH_PX = 1;
+
+function paintRoofPerch(
+  ctx: Ctx,
+  projection: Projection,
+  effect: LifeEffectSpec,
+  phase: number,
+  seed: number,
+): void {
+  const rect = effectRect(projection, effect);
+  const ramp = getRamp(effect.ramp);
+  // Sampled from the shadow half of the ramp: a bird on a roost ledge reads
+  // against open sky, and a dark, near-silhouette body is what separates it
+  // from the building rather than blending into whatever ramp it was handed.
+  const body = sampleRamp(ramp, 0.16);
+  const shade = sampleRamp(ramp, 0.04);
+  const accent = sampleRamp(ramp, 0.88);
+  const ink = sampleRamp(getRamp('ink_outline'), 0.2);
+  ctx.lineJoin = 'round';
+
+  // A slow settle-and-lift bob, plus an occasional head turn — enough
+  // per-frame ink to register at the 32px display tile; near-zero deltas read
+  // as a still roof.
+  const bob = pulseEnvelope(phase) * PERCH_BOB_PX;
+  const headTurn = (loopNoise(seed, 0, phase) - 0.5) * 2 * PERCH_HEAD_TURN_PX;
+
+  const legHeight = rect.height * PERCH_LEG_HEIGHT_FRACTION;
+  const footY = rect.y + rect.height - bob;
+  const bodyBottomY = footY - legHeight;
+  const bodyWidth = rect.width * PERCH_BODY_WIDTH_FRACTION;
+  const bodyHeight = rect.height * PERCH_BODY_HEIGHT_FRACTION;
+  const centreX = rect.x + rect.width / 2;
+
+  ctx.strokeStyle = rgba(ink, 0.9);
+  ctx.lineWidth = Math.max(1, rect.width * 0.05);
+  ctx.lineCap = 'round';
+  const legSpread = bodyWidth * 0.18;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(centreX + side * legSpread, bodyBottomY);
+    ctx.lineTo(centreX + side * legSpread * 1.3, footY);
+    ctx.stroke();
+  }
+
+  ctx.lineWidth = PERCH_OUTLINE_WIDTH_PX;
+  ctx.strokeStyle = rgba(ink, 0.95);
+  ctx.fillStyle = rgba(body, 1);
+  ctx.beginPath();
+  ctx.ellipse(
+    centreX,
+    bodyBottomY - bodyHeight / 2,
+    bodyWidth / 2,
+    bodyHeight / 2,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
+  ctx.stroke();
+
+  // The folded wing: a lens over the body's trailing half, with a few
+  // feather-tip notches cut into its lower edge so it doesn't read as a blob.
+  // Unoutlined — it sits entirely inside the body's own outlined silhouette,
+  // and a second line here would be the internal seam the town's outline
+  // policy reserves for nothing but a shape's outer edge.
+  ctx.fillStyle = rgba(shade, 1);
+  ctx.beginPath();
+  ctx.ellipse(
+    centreX + bodyWidth * 0.08,
+    bodyBottomY - bodyHeight * 0.42,
+    bodyWidth * 0.4,
+    bodyHeight * 0.44,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
+  const notchY = bodyBottomY - bodyHeight * 0.12;
+  const notchSpan = bodyWidth * 0.5;
+  ctx.fillStyle = rgba(body, 1);
+  for (let notch = 0; notch < PERCH_WING_NOTCHES; notch++) {
+    const t = (notch + 0.5) / PERCH_WING_NOTCHES;
+    const x = centreX - notchSpan * 0.1 + notchSpan * t;
+    ctx.beginPath();
+    ctx.moveTo(x, notchY);
+    ctx.lineTo(
+      x + notchSpan / PERCH_WING_NOTCHES / 2,
+      notchY + bodyHeight * PERCH_WING_NOTCH_DEPTH_FRACTION,
+    );
+    ctx.lineTo(x + notchSpan / PERCH_WING_NOTCHES, notchY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // A short tail wedge behind the body, so the rear silhouette isn't just the
+  // folded wing's own curve — kept small to stay inside the effect's ink
+  // budget.
+  const tailLength = bodyWidth * 0.22;
+  ctx.fillStyle = rgba(shade, 1);
+  ctx.beginPath();
+  ctx.moveTo(centreX + bodyWidth * 0.44, bodyBottomY - bodyHeight * 0.52);
+  ctx.lineTo(centreX + bodyWidth * 0.44 + tailLength, bodyBottomY - bodyHeight * 0.6);
+  ctx.lineTo(centreX + bodyWidth * 0.44, bodyBottomY - bodyHeight * 0.38);
+  ctx.closePath();
+  ctx.fill();
+
+  // Head, forward of the body and turning gently on the loop.
+  const headRadius = rect.width * PERCH_HEAD_RADIUS_FRACTION;
+  const headY = bodyBottomY - bodyHeight - headRadius * 0.4;
+  const headX = centreX - bodyWidth * 0.32 + headTurn;
+  ctx.fillStyle = rgba(body, 1);
+  ctx.beginPath();
+  ctx.arc(headX, headY, headRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // A hooked beak, not a straight spike — the down-turned tip is most of what
+  // reads as "bird of prey" rather than "duck" at this size.
+  const beakLength = rect.width * PERCH_BEAK_LENGTH_FRACTION;
+  ctx.fillStyle = rgba(accent, 1);
+  ctx.beginPath();
+  ctx.moveTo(headX - headRadius * 0.8, headY - headRadius * 0.2);
+  ctx.quadraticCurveTo(
+    headX - headRadius * 0.8 - beakLength,
+    headY - beakLength * 0.15,
+    headX - headRadius * 0.8 - beakLength * 0.85,
+    headY + beakLength * 0.35,
+  );
+  ctx.lineTo(headX - headRadius * 0.8, headY + headRadius * 0.3);
+  ctx.closePath();
+  ctx.fill();
 }

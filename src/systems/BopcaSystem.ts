@@ -81,7 +81,7 @@ const BOPCA_SERVE_POSE_FRAMES = BOPCA_SERVE_POSE_SECONDS * FRAMES_PER_SECOND;
 /** Within this range the Bopca looks up from the newsletter and tracks you. */
 const BOPCA_NOTICE_DISTANCE_TILES = 5;
 /** Within this range the `Talk` prompt appears and Space opens the dialog. */
-const BOPCA_TALK_DISTANCE_TILES = 2.6;
+export const BOPCA_TALK_DISTANCE_TILES = 2.6;
 /** Within this range the `Take` prompt appears over a waiting dish. */
 const BOPCA_DISH_TAKE_DISTANCE_TILES = 2.2;
 /** Frames a fresh dish steams for before it counts as cold. */
@@ -578,17 +578,16 @@ export class BopcaSystem implements GameSystem {
   }
 
   /**
-   * True when a `Take` or `Talk` prompt is available to the active character.
-   *
-   * Mirrors `tryInteract`'s conditions exactly, including its refusal to talk with
-   * no `AudioManager`: this is what silences `SafeRoomSystem`'s own prompt, so a
-   * prompt shown here that Space would not honour would suppress Mordecai's and
-   * then do nothing.
+   * How far `active` stands from what a press at a counter would reach — a
+   * waiting dish, or else the Bopca — in tiles, or null when neither is in
+   * reach, mirroring `tryInteract`'s own order. For choosing between the Bopca
+   * and Mordecai when both could hear a press.
    */
-  hasInteraction(active: Player): boolean {
-    if (this.entryWithTakeableDish(active) !== null) return true;
-    if (this.audio === null) return false;
-    return this.entryNear(active, BOPCA_TALK_DISTANCE_TILES) !== null;
+  interactionDistanceTiles(active: { x: number; y: number }): number | null {
+    const withDish = this.entryWithTakeableDish(active);
+    if (withDish !== null) return this.distanceToDishTiles(withDish, active);
+    const near = this.entryNear(active, BOPCA_TALK_DISTANCE_TILES);
+    return near === null ? null : this.distanceToBopcaTiles(near, active);
   }
 
   // ── Interaction ─────────────────────────────────────────────────────────────
@@ -615,11 +614,9 @@ export class BopcaSystem implements GameSystem {
     }
     const near = this.entryNear(active, BOPCA_TALK_DISTANCE_TILES);
     if (near === null) return false;
-    // The box needs an `AudioManager` for its typing clicks, so without one
-    // there is nothing to draw. Refusing the press here — rather than opening a
-    // conversation with no surface — keeps input un-suppressed and lets the
-    // press fall through to Mordecai or the bed.
-    if (this.audio === null) return false;
+    // Already talking: the press belongs to the open box, and re-greeting would
+    // throw away the choice row the player is looking at.
+    if (this.conversationOwned && this.talkingEntry === near) return false;
     this.openDialog(near, active);
     return true;
   }
@@ -675,7 +672,13 @@ export class BopcaSystem implements GameSystem {
       ending: { kind: 'choices', choices: this.buildChoices() },
       dismiss: { kind: 'allowed', onDismissed: () => this.closeDialog() },
       haltsWorld: this.haltsWorld,
-      anchor: null,
+      anchor: {
+        position: () => ({
+          x: entry.layout.bopcaHomeTile.x * TILE_SIZE,
+          y: entry.layout.bopcaHomeTile.y * TILE_SIZE,
+        }),
+        talkRangeTiles: BOPCA_TALK_DISTANCE_TILES,
+      },
       locksKeyboard: true,
     };
     // A topic already in this same conversation chains onto the box in place
@@ -907,12 +910,18 @@ export class BopcaSystem implements GameSystem {
     }
   }
 
-  /** Prompts and heal popups, drawn in screen space over the world. */
+  /**
+   * Prompts and heal popups, drawn in screen space over the world.
+   *
+   * @param otherSpeakerTakesPress Mordecai is nearer and a press would reach
+   *   him instead, so neither the `Take` nor the `Talk` prompt may promise it.
+   */
   renderUI(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
     active: HumanPlayer | CatPlayer,
+    otherSpeakerTakesPress = false,
   ): void {
     for (const popup of this.healPopups) {
       const progress = 1 - popup.framesLeft / HEAL_POPUP_FRAMES;
@@ -928,7 +937,7 @@ export class BopcaSystem implements GameSystem {
       });
     }
 
-    if (this.conversationOwned) return;
+    if (this.conversationOwned || otherSpeakerTakesPress) return;
 
     const withDish = this.entryWithTakeableDish(active);
     if (withDish !== null) {
@@ -941,7 +950,7 @@ export class BopcaSystem implements GameSystem {
       );
       return;
     }
-    const near = this.audio === null ? null : this.entryNear(active, BOPCA_TALK_DISTANCE_TILES);
+    const near = this.entryNear(active, BOPCA_TALK_DISTANCE_TILES);
     if (near !== null) {
       drawInteractionPrompt(
         ctx,

@@ -32,6 +32,17 @@
  *   beside its owner — but never out of a fight, and never one on screen that
  *   is merely far.
  *
+ *
+ * Every room:
+ * - Through every town building's door, and onto every tower storey from each
+ *   of its stairs, both crawlers, Mongo and the hire are set down on open floor
+ *   clear of every prop, with room to move, reachable from the landing; each
+ *   crawler can walk off its tile, and the follower sets off after a leader who
+ *   walks away.
+ * - The temple's vermin, the cult's hideout and the tower's stair guards stand
+ *   on reachable open floor; the vermin also in plain view, not behind a pew's
+ *   back or in a far corner.
+ *
  *   npx tsx scripts/verify-companions-indoors.ts
  */
 
@@ -39,6 +50,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TILE_SIZE } from '../src/core/constants';
+import { level3 } from '../src/levels/level3';
 import { setViewportSize } from '../src/core/Viewport';
 import { createMongoPetState, type MongoPetState } from '../src/core/MongoPetState';
 import { createMercenaryRoster, type MercenaryRoster } from '../src/core/MercenaryRoster';
@@ -54,7 +66,7 @@ import {
 } from '../src/creatures/mercenaries/hirelingCatchUp';
 import { createMob } from '../src/levels/spawner';
 import { GameMap } from '../src/map/GameMap';
-import { hasRoomToMove } from '../src/map/findWalkableTile';
+import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTile';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import type { Player } from '../src/Player';
 import {
@@ -78,6 +90,25 @@ import { MongoSystem } from '../src/systems/MongoSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { Conversation } from '../src/dialog/Conversation';
+import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
+import { TOWER_FLOOR_COUNT } from '../src/map/GameMap';
+import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout';
+import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
+import { BIG_TOP_ENTRY_NAME, BIG_TOP_ENTRY_KIND } from '../src/map/OverworldGenerator';
+import {
+  MAZE_CAT_SPAWN_TILE,
+  MAZE_HUMAN_SPAWN_TILE,
+  type MazeTile,
+} from '../src/map/bigTopMazeLayout';
+import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
+import { AnchorInteriorSystem, SKY_TEMPLE_NAME } from '../src/systems/AnchorInteriorSystem';
+import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
+import { CultHideoutSystem } from '../src/systems/CultHideoutSystem';
+import { interiorHostilesFor } from '../src/systems/interiorHostiles';
+import { createTownMemory } from '../src/core/TownMemory';
+import { applyMovement } from '../src/systems/GameLoopPhases';
+import { CompanionSystem } from '../src/systems/CompanionSystem';
+import { interiorHudLayout } from '../src/scenes/interiorHudLayout';
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 
@@ -95,6 +126,10 @@ function section(title: string): void {
 // ── Places ───────────────────────────────────────────────────────────────────
 
 const TILE_CENTER = 0.5;
+/** A portrait phone, for checking where the phone HUD stacks Summon. */
+const PHONE_LAYOUT_WIDTH = 390;
+const PHONE_LAYOUT_HEIGHT = 844;
+const PHONE_LAYOUT_HOTBAR_BAND = 64;
 const OUTDOOR_W_TILES = 48;
 const OUTDOOR_H_TILES = 20;
 const OUTDOOR_PARTY_TILE = { x: 6, y: 10 } as const;
@@ -1011,7 +1046,7 @@ function rangedDamageIndoors(id: MercenaryTemplateId, flyShots: boolean): number
       bolts.update(ctx);
     } else {
       merc.takePendingThrows();
-      merc.takePendingShots();
+      merc.takePendingHirelingShots();
     }
     if (foe.hp < hpBefore && tilesBetween(merc, foe) > FIST_REACH_TILES) {
       lostAtRange += hpBefore - foe.hp;
@@ -1037,6 +1072,542 @@ function checkHireShotsIndoors(): void {
   }
 }
 
+// ── Every room, through its own door ─────────────────────────────────────────
+
+/** Frames a crawler is walked in each direction to show it can leave its tile. */
+const WALK_PROBE_FRAMES = 30;
+/** How far a crawler has to get in one of those walks: half a tile clears its own. */
+const MIN_WALK_PX = TILE_SIZE / 2;
+/** Frames the companion crawler is given to start after a leader who walked away. */
+const FOLLOW_PROBE_FRAMES = 240;
+/** How far it has to have come by then. */
+const MIN_FOLLOW_TILES = 1;
+/**
+ * Rows and columns in from the walls that count as a room's far corner: a rat
+ * there is at the edge of the camera and behind whatever stands along the wall.
+ */
+const CORNER_BAND_TILES = 2;
+/**
+ * How much of a tile a prop's art has to cover before the body on it is hidden:
+ * the whole of a rat's sprite fits in its lower half.
+ */
+const HIDING_COVER_FRACTION = 0.5;
+
+const WALK_DIRECTIONS: ReadonlyArray<{ dx: number; dy: number; name: string }> = [
+  { dx: 0, dy: -1, name: 'north' },
+  { dx: 0, dy: 1, name: 'south' },
+  { dx: -1, dy: 0, name: 'west' },
+  { dx: 1, dy: 0, name: 'east' },
+];
+
+interface RoomArrival {
+  readonly label: string;
+  readonly buildingName: string;
+  readonly kind: BuildingKind;
+  readonly storey: number;
+  readonly map: GameMap;
+  /** The tile the party is set down on: the door, or the foot of a stair. */
+  readonly landing: { readonly x: number; readonly y: number };
+  /** Fixed marks for a room whose two crawlers come in through two doors. */
+  readonly fixedMarks?: { readonly human: MazeTile; readonly cat: MazeTile };
+}
+
+function buildRoom(name: string, kind: BuildingKind, storey: number, hasSafeRoom: boolean) {
+  const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+  map.generateInterior(kind, storey, name, hasSafeRoom);
+  // The scene stamps these after the map is built; a room checked without
+  // them is not the room anyone walks into.
+  if (hasSafeRoom) {
+    stampSafeRoomCounters(map);
+    stampSafeRoomDecor(map);
+  }
+  return map;
+}
+
+/** Where the scene's storey change sets a party down: clear of the whole stair block. */
+function footOfStair(stairs: ReadonlyArray<{ x: number; y: number }>, map: GameMap) {
+  const first = stairs[0] ?? map.startTile;
+  const bottom = stairs.reduce((lowest, tile) => Math.max(lowest, tile.y), first.y);
+  const left = stairs.reduce((leftmost, tile) => Math.min(leftmost, tile.x), first.x);
+  return { x: left, y: bottom + 1 };
+}
+
+/** Every way into every town room: each building's door, and each tower storey from both stairs. */
+function everyRoomArrival(): RoomArrival[] {
+  const plan = createTownPlan(level3.mapSize);
+  const arrivals: RoomArrival[] = [];
+  const buildings: Array<{ name: string; kind: BuildingKind; hasSafeRoom: boolean }> = [
+    ...plan.buildings.map((b) => ({
+      name: b.name,
+      kind: b.kind,
+      hasSafeRoom: b.hasSafeRoom === true,
+    })),
+    { name: plan.tower.name, kind: plan.tower.kind, hasSafeRoom: false },
+    { name: BIG_TOP_ENTRY_NAME, kind: BIG_TOP_ENTRY_KIND, hasSafeRoom: false },
+  ];
+  for (const { name, kind, hasSafeRoom } of buildings) {
+    const storeys = kind === 'tower' ? TOWER_FLOOR_COUNT : 1;
+    for (let storey = 0; storey < storeys; storey++) {
+      const map = buildRoom(name, kind, storey, hasSafeRoom);
+      const base = { buildingName: name, kind, storey, map };
+      if (storey === 0) arrivals.push({ ...base, label: `${name}, door`, landing: map.startTile });
+      if (map._interiorStairDownTiles.length > 0) {
+        arrivals.push({
+          ...base,
+          label: `${name} storey ${storey}, up from below`,
+          landing: footOfStair(map._interiorStairDownTiles, map),
+        });
+      }
+      if (map._interiorStairUpTiles.length > 0) {
+        arrivals.push({
+          ...base,
+          label: `${name} storey ${storey}, down from above`,
+          landing: footOfStair(map._interiorStairUpTiles, map),
+        });
+      }
+    }
+  }
+  const maze = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+  maze.generateInterior(BIG_TOP_ENTRY_KIND, 0, BIG_TOP_ENTRY_NAME, false, 'bigtop_maze');
+  arrivals.push({
+    label: `${BIG_TOP_ENTRY_NAME} maze, two flaps`,
+    buildingName: BIG_TOP_ENTRY_NAME,
+    kind: BIG_TOP_ENTRY_KIND,
+    storey: 0,
+    map: maze,
+    landing: MAZE_HUMAN_SPAWN_TILE,
+    fixedMarks: { human: MAZE_HUMAN_SPAWN_TILE, cat: MAZE_CAT_SPAWN_TILE },
+  });
+  return arrivals;
+}
+
+/** Sets the party down the way the interior scene does on this arrival. */
+function arriveAsTheSceneDoes(arrival: RoomArrival, party: Party): void {
+  const marks = arrival.fixedMarks;
+  if (marks !== undefined) {
+    party.human.x = marks.human.x * TILE_SIZE;
+    party.human.y = marks.human.y * TILE_SIZE;
+    party.cat.x = marks.cat.x * TILE_SIZE;
+    party.cat.y = marks.cat.y * TILE_SIZE;
+    return;
+  }
+  const { leader, follower } = findPartyArrivalTiles(arrival.map, arrival.landing);
+  const driven = party.human.isActive ? party.human : party.cat;
+  const other = driven === party.human ? party.cat : party.human;
+  driven.x = leader.x * TILE_SIZE;
+  driven.y = leader.y * TILE_SIZE;
+  other.x = follower.x * TILE_SIZE;
+  other.y = follower.y * TILE_SIZE;
+}
+
+/** Tiles a prop stands on and stops movement on. */
+function blockingPropTiles(map: GameMap): Set<string> {
+  const tiles = new Set<string>();
+  for (const tile of map.placedInteriorPropFootprintTiles()) {
+    if (tile.blocksMovement) tiles.add(`${tile.x},${tile.y}`);
+  }
+  return tiles;
+}
+
+/** Every tile a walker can reach from `from`, four-connected. */
+function reachableFrom(map: GameMap, from: { x: number; y: number }): Set<string> {
+  const reached = new Set<string>();
+  if (!map.isWalkable(from.x, from.y)) return reached;
+  const frontier = [{ x: from.x, y: from.y }];
+  reached.add(`${from.x},${from.y}`);
+  for (const tile of frontier) {
+    for (const { dx, dy } of WALK_DIRECTIONS) {
+      const x = tile.x + dx;
+      const y = tile.y + dy;
+      const key = `${x},${y}`;
+      if (reached.has(key) || !map.isWalkable(x, y)) continue;
+      reached.add(key);
+      frontier.push({ x, y });
+    }
+  }
+  return reached;
+}
+
+/**
+ * Tiles a prop's art covers enough of to hide what stands there — the rows
+ * above a tall prop's footprint, which the prop is drawn over.
+ */
+function tilesHiddenByProps(map: GameMap): Set<string> {
+  const hidden = new Set<string>();
+  for (const placed of map.placedInteriorProps) {
+    const def = TOWN_INTERIOR_PROPS[placed.propId];
+    for (let rowsUp = 1; rowsUp - HIDING_COVER_FRACTION < def.artHeightTiles; rowsUp++) {
+      for (let dx = 0; dx < def.footprint.w; dx++) {
+        hidden.add(`${placed.tile.x + dx},${placed.tile.y - rowsUp}`);
+      }
+    }
+  }
+  return hidden;
+}
+
+interface RoomFacts {
+  readonly blocked: Set<string>;
+  readonly reachable: Set<string>;
+}
+
+/** Everything wrong with a tile as somewhere to stand: open floor, clear of props, with room, reachable. */
+function standingFaults(map: GameMap, facts: RoomFacts, tile: { x: number; y: number }): string[] {
+  const key = `${tile.x},${tile.y}`;
+  return [
+    map.isWalkable(tile.x, tile.y) ? '' : 'not walkable',
+    facts.blocked.has(key) ? 'inside a prop' : '',
+    hasRoomToMove(map, tile.x, tile.y) ? '' : 'no room to move',
+    facts.reachable.has(key) ? '' : 'cut off from the way in',
+  ].filter((fault) => fault !== '');
+}
+
+function checkStandsFree(
+  map: GameMap,
+  facts: RoomFacts,
+  body: { x: number; y: number },
+  label: string,
+): boolean {
+  const tile = tileUnder(body);
+  const faults = standingFaults(map, facts, tile);
+  const detail = faults.length > 0 ? `: ${faults.join(', ')}` : '';
+  check(faults.length === 0, `${label} at (${tile.x},${tile.y})${detail}`);
+  return faults.length === 0;
+}
+
+/** The furthest walked distance, in pixels, a crawler gets in any one direction. */
+function bestWalkPx(player: Player, map: GameMap): number {
+  const startX = player.x;
+  const startY = player.y;
+  let best = 0;
+  for (const { dx, dy } of WALK_DIRECTIONS) {
+    player.x = startX;
+    player.y = startY;
+    for (let f = 0; f < WALK_PROBE_FRAMES; f++) {
+      applyMovement(player, { dx, dy, isMobile: false }, map, 'sole');
+    }
+    best = Math.max(best, Math.hypot(player.x - startX, player.y - startY));
+  }
+  player.x = startX;
+  player.y = startY;
+  player.isMoving = false;
+  return best;
+}
+
+/** The reachable tile with room to move that is furthest from `from`. */
+function furthestRoomyTile(map: GameMap, facts: RoomFacts, from: { x: number; y: number }) {
+  let best: { x: number; y: number } | null = null;
+  let bestDistance = 0;
+  for (let y = 0; y < map.structure.length; y++) {
+    for (let x = 0; x < map.structure[y].length; x++) {
+      if (!facts.reachable.has(`${x},${y}`) || !hasRoomToMove(map, x, y)) continue;
+      const distance = Math.hypot(x - from.x, y - from.y);
+      if (distance > bestDistance) {
+        bestDistance = distance;
+        best = { x, y };
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * The companion crawler, driven by the real follow system, sets off after a
+ * leader who has walked to the far side of the room.
+ */
+function followerTilesMoved(arrival: RoomArrival, party: Party, facts: RoomFacts): number {
+  const map = arrival.map;
+  const roster = makeRoster(map);
+  const companion = new CompanionSystem(map, arrival.landing.x, arrival.landing.y);
+  companion.setMap(map, party.human, party.cat);
+  const leaderStart = tileUnder(party.human);
+  const away = furthestRoomyTile(map, facts, leaderStart);
+  if (away === null) return 0;
+  party.human.x = away.x * TILE_SIZE;
+  party.human.y = away.y * TILE_SIZE;
+  const catStart = { x: party.cat.x, y: party.cat.y };
+  const ctx = contextFor(party, map, roster);
+  for (let f = 0; f < FOLLOW_PROBE_FRAMES; f++) companion.update(ctx);
+  return tilesBetween(party.cat, catStart);
+}
+
+function checkPartyInEveryRoom(arrival: RoomArrival): void {
+  const map = arrival.map;
+  const facts: RoomFacts = {
+    blocked: blockingPropTiles(map),
+    reachable: reachableFrom(map, arrival.landing),
+  };
+  const party = makeParty(map, arrival.landing);
+  arriveAsTheSceneDoes(arrival, party);
+  // The maze's two flaps open onto two sealed halves, each reachable only from its own.
+  const catFacts =
+    arrival.fixedMarks === undefined
+      ? facts
+      : { blocked: facts.blocked, reachable: reachableFrom(map, arrival.fixedMarks.cat) };
+  const humanOk = checkStandsFree(map, facts, party.human, `${arrival.label}: Carl`);
+  const catOk = checkStandsFree(map, catFacts, party.cat, `${arrival.label}: the cat`);
+
+  for (const [name, crawler] of [
+    ['Carl', party.human],
+    ['the cat', party.cat],
+  ] as const) {
+    const walked = bestWalkPx(crawler, map);
+    check(
+      walked >= MIN_WALK_PX,
+      `${arrival.label}: ${name}, driven, walks off (${walked.toFixed(0)} px)`,
+    );
+  }
+
+  if (arrival.fixedMarks === undefined && humanOk && catOk) {
+    const followed = followerTilesMoved(arrival, party, facts);
+    check(
+      followed >= MIN_FOLLOW_TILES,
+      `${arrival.label}: the cat follows Carl across the room (${followed.toFixed(1)} tiles)`,
+    );
+  }
+  arriveAsTheSceneDoes(arrival, party);
+
+  const roster = makeRoster(map);
+  const mongo = makeMongoSystem(freshPetState(), true).carryIn(party.cat, map);
+  check(mongo !== null, `${arrival.label}: Mongo walks in`);
+  if (mongo !== null) checkStandsFree(map, catFacts, mongo, `${arrival.label}: Mongo`);
+
+  const hires = new MercenarySystem(hireRoster('sledge'), null);
+  hires.update(contextFor(party, map, roster));
+  const merc = hires.activeMerc;
+  check(merc !== null, `${arrival.label}: the hire walks in`);
+  if (merc !== null) checkStandsFree(map, facts, merc, `${arrival.label}: the hire`);
+}
+
+/** Temple vermin: open, reachable floor in the nave, in plain view. */
+function checkTempleVermin(): void {
+  section('The temple’s vermin are put where the party can find them');
+  const plan = createTownPlan(level3.mapSize);
+  const temple = plan.buildings.find((building) => building.name === SKY_TEMPLE_NAME);
+  check(temple !== undefined, 'the town has its temple');
+  if (temple === undefined) return;
+  const map = buildRoom(temple.name, temple.kind, GROUND_STOREY, temple.hasSafeRoom === true);
+  const progress = createAnchorQuestProgress();
+  progress.status = 'active';
+  progress.temple = 'in_progress';
+  progress.templeVerminRemaining = TEMPLE_VERMIN_ASKED;
+  const party = makeParty(map, map.startTile);
+  const vermin: Mob[] = [];
+  AnchorInteriorSystem.forBuilding(
+    temple.name,
+    GROUND_STOREY,
+    progress,
+    map,
+    () => [party.human, party.cat],
+    (mob) => vermin.push(mob),
+    ignore,
+    new Conversation(null),
+    null,
+  );
+  check(vermin.length === TEMPLE_VERMIN_ASKED, `every rat asked for is placed (${vermin.length})`);
+  const facts: RoomFacts = {
+    blocked: blockingPropTiles(map),
+    reachable: reachableFrom(map, map.startTile),
+  };
+  const hidden = tilesHiddenByProps(map);
+  const pew = map.placedInteriorProps.find((placed) => placed.propId === 'pew');
+  check(
+    pew !== undefined && hidden.has(`${pew.tile.x},${pew.tile.y - 1}`),
+    'negative: a rat just north of a pew is caught out of view',
+  );
+  const lastColumn = (map.structure[0]?.length ?? 0) - 1;
+  const lastRow = map.structure.length - 1;
+  for (const [index, rat] of vermin.entries()) {
+    const label = `rat ${index + 1}`;
+    checkStandsFree(map, facts, rat, label);
+    const tile = tileUnder(rat);
+    check(!hidden.has(`${tile.x},${tile.y}`), `${label} is in view, not behind a pew or a shelf`);
+    const inWestOrEastBand =
+      tile.x <= CORNER_BAND_TILES || tile.x >= lastColumn - CORNER_BAND_TILES;
+    const inNorthOrSouthBand = tile.y <= CORNER_BAND_TILES || tile.y >= lastRow - CORNER_BAND_TILES;
+    check(!(inWestOrEastBand && inNorthOrSouthBand), `${label} is not in a far corner`);
+  }
+}
+
+/** Rats the temple step asks for: its full count. */
+const TEMPLE_VERMIN_ASKED = 5;
+/** A party strong enough that the quest fights are at their own levels. */
+const QUEST_FIGHT_PARTY_LEVEL = 10;
+
+/** The questline's own hostiles indoors: the cult's hideout and the tower's stair guards. */
+function checkQuestHostilesIndoors(): void {
+  section('The questline’s hostiles indoors stand on open, reachable floor');
+  for (const arrival of everyRoomArrival()) {
+    if (arrival.fixedMarks !== undefined) continue;
+    const map = arrival.map;
+    const facts: RoomFacts = {
+      blocked: blockingPropTiles(map),
+      reachable: reachableFrom(map, arrival.landing),
+    };
+    const spawned: Mob[] = [];
+    if (arrival.buildingName === CULT_HIDEOUT_NAME && arrival.storey === GROUND_STOREY) {
+      const progress = createMurderQuestProgress();
+      progress.stage = 'cult_hideout';
+      new CultHideoutSystem(
+        map,
+        new EventBus(),
+        (mob) => spawned.push(mob),
+        progress,
+        QUEST_FIGHT_PARTY_LEVEL,
+      );
+    }
+    if (arrival.kind === 'tower') {
+      const progress = createMurderQuestProgress();
+      progress.stage = 'confrontation';
+      spawned.push(
+        ...interiorHostilesFor({
+          buildingName: arrival.buildingName,
+          buildingType: arrival.kind,
+          floor: arrival.storey,
+          map,
+          memory: createTownMemory(),
+          murderQuest: progress,
+          partyLevel: QUEST_FIGHT_PARTY_LEVEL,
+        }),
+      );
+    }
+    for (const [index, mob] of spawned.entries()) {
+      checkStandsFree(map, facts, mob, `${arrival.label}: hostile ${index + 1}`);
+    }
+  }
+}
+
+/** The house the cult holds its meetings in. */
+const CULT_HIDEOUT_NAME = 'Blackwood Lodge';
+
+function checkEveryRoom(): void {
+  section('In every room, every body the party brings stands where it can move');
+  setViewportSize(HUGE_SCREEN_PX, HUGE_SCREEN_PX);
+  const arrivals = everyRoomArrival();
+  for (const arrival of arrivals) checkPartyInEveryRoom(arrival);
+
+  // The temple's door is flanked by candle stands, one of them on the tile east
+  // of the landing; a party set down blind puts its follower inside it.
+  const temple = arrivals.find((arrival) => arrival.buildingName === SKY_TEMPLE_NAME);
+  if (temple === undefined) {
+    check(false, 'negative: the temple is among the rooms walked into');
+    return;
+  }
+  const blindTile = { x: temple.landing.x + 1, y: temple.landing.y };
+  const facts: RoomFacts = {
+    blocked: blockingPropTiles(temple.map),
+    reachable: reachableFrom(temple.map, temple.landing),
+  };
+  const blindFaults = standingFaults(temple.map, facts, blindTile);
+  check(
+    blindFaults.length > 0,
+    `negative: the tile east of the temple door is caught (${blindFaults.join(', ')})`,
+  );
+  const blindCat = new CatPlayer(blindTile.x, blindTile.y, TILE_SIZE);
+  const blindWalk = bestWalkPx(blindCat, temple.map);
+  check(
+    blindWalk < MIN_WALK_PX,
+    `negative: a cat set down on it is caught unable to walk (${blindWalk.toFixed(0)} px)`,
+  );
+}
+
+// ── Outdoors: walking out of every door ──────────────────────────────────────
+
+/** Floors the doorstep check is run on: the town moves with the world seed. */
+const OUTDOOR_WORLD_SEEDS: readonly number[] = [1, 7919];
+/** The tile the scene sets a party down on when it walks out: one south of the door. */
+const DOORSTEP_OFFSET_Y = 1;
+
+/**
+ * Walking out of a building rebuilds the overworld with the party on the
+ * doorstep. The companion must land on open ground it can move on and walk to
+ * the leader from, never on a door, a wall or a fence post one tile east.
+ */
+function checkPartyOutdoors(): void {
+  section('Walking out of every door, the companion lands on open ground beside the leader');
+  for (const worldSeed of OUTDOOR_WORLD_SEEDS) {
+    const map = new GameMap({
+      mapSize: level3.mapSize,
+      mapType: 'overworld',
+      tileHeight: TILE_SIZE,
+      worldSeed,
+    });
+    const doorKeys = new Set(map.buildingEntries.map((e) => `${e.doorTile.x},${e.doorTile.y}`));
+    const problems: string[] = [];
+    let eastOfLeaderStuck = 0;
+    for (const entry of map.buildingEntries) {
+      const landing = { x: entry.doorTile.x, y: entry.doorTile.y + DOORSTEP_OFFSET_Y };
+      const { leader, follower } = findPartyArrivalTiles(map, landing);
+      const where = `seed ${worldSeed}, ${entry.name}`;
+      const followerKey = `${follower.x},${follower.y}`;
+      const cat = new CatPlayer(follower.x, follower.y, TILE_SIZE);
+      if (follower.x === leader.x && follower.y === leader.y) {
+        problems.push(`${where}: the companion is stacked on the leader`);
+      } else if (!map.isWalkable(follower.x, follower.y)) {
+        problems.push(`${where}: the companion lands on blocked ground at ${followerKey}`);
+      } else if (doorKeys.has(followerKey)) {
+        problems.push(`${where}: the companion lands on a door at ${followerKey}`);
+      } else if (!hasRoomToMove(map, follower.x, follower.y)) {
+        problems.push(`${where}: the companion lands in a pocket at ${followerKey}`);
+      } else if (!reachableFrom(map, leader).has(followerKey)) {
+        problems.push(`${where}: the companion at ${followerKey} cannot walk to the leader`);
+      } else if (bestWalkPx(cat, map) < MIN_WALK_PX) {
+        problems.push(`${where}: the companion at ${followerKey} cannot take a step`);
+      }
+      const eastX = leader.x + 1;
+      const eastIsStuck = !map.isWalkable(eastX, leader.y) || !hasRoomToMove(map, eastX, leader.y);
+      if (eastIsStuck) eastOfLeaderStuck++;
+    }
+    check(map.buildingEntries.length > 0, `seed ${worldSeed}: the town has doors to walk out of`);
+    check(
+      problems.length === 0,
+      `seed ${worldSeed}: ${map.buildingEntries.length} doorsteps, every companion free to move` +
+        (problems.length === 0 ? '' : ` — ${problems.join('; ')}`),
+    );
+    console.log(
+      `        (${eastOfLeaderStuck} doorstep(s) where the tile east of the leader is blocked or cramped)`,
+    );
+
+    // The doorsteps happen to be open to the east, so a landing that is not is
+    // sought out: a fixed one-tile-east placement would put the companion
+    // inside whatever stands there.
+    const walled = firstLandingWalledToTheEast(map);
+    check(walled !== null, `seed ${worldSeed}: a landing with an obstacle east of it is found`);
+    if (walled === null) continue;
+    const { follower } = findPartyArrivalTiles(map, walled);
+    const eastCat = new CatPlayer(walled.x + 1, walled.y, TILE_SIZE);
+    check(
+      bestWalkPx(eastCat, map) < MIN_WALK_PX,
+      `negative: a companion one tile east of (${walled.x},${walled.y}) is stuck there`,
+    );
+    const followerCat = new CatPlayer(follower.x, follower.y, TILE_SIZE);
+    check(
+      map.isWalkable(follower.x, follower.y) && bestWalkPx(followerCat, map) >= MIN_WALK_PX,
+      `the arrival search puts it at (${follower.x},${follower.y}), where it can walk`,
+    );
+  }
+}
+
+/**
+ * A tile with room to move whose east neighbour is blocked, and blocked by
+ * something a crawler set down inside cannot walk out of — scanning out from
+ * the map's centre row.
+ */
+function firstLandingWalledToTheEast(map: GameMap): { x: number; y: number } | null {
+  const rows = map.structure.length;
+  const middleRow = Math.floor(rows / 2);
+  for (let offset = 0; offset < rows; offset++) {
+    const y = offset % 2 === 0 ? middleRow + offset / 2 : middleRow - (offset + 1) / 2;
+    const columns = map.structure[y]?.length ?? 0;
+    for (let x = 0; x + 1 < columns; x++) {
+      if (map.isWalkable(x + 1, y) || !hasRoomToMove(map, x, y)) continue;
+      const probe = new CatPlayer(x + 1, y, TILE_SIZE);
+      if (bestWalkPx(probe, map) >= MIN_WALK_PX) continue;
+      return { x, y };
+    }
+  }
+  return null;
+}
+
 // ── The scenes call these in the right order ─────────────────────────────────
 
 const SCENES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'scenes');
@@ -1045,6 +1616,8 @@ const DUNGEON_SCENE_PATH = resolve(SCENES_DIR, 'DungeonScene.ts');
 const INPUT_HANDLER_PATH = resolve(SCENES_DIR, '..', 'systems', 'GameplayInputHandler.ts');
 const MERC_SYSTEM_PATH = resolve(SCENES_DIR, '..', 'systems', 'MercenarySystem.ts');
 const QUILL_PATH = resolve(SCENES_DIR, '..', 'systems', 'QuillConfrontationSystem.ts');
+const OCCUPANT_SYSTEM_PATH = resolve(SCENES_DIR, '..', 'systems', 'InteriorOccupantSystem.ts');
+const PLAYER_MANAGER_PATH = resolve(SCENES_DIR, '..', 'core', 'PlayerManager.ts');
 
 /** The source of one method, from its signature to the closing brace at method depth. */
 function methodBody(source: string, signature: string): string | null {
@@ -1071,6 +1644,23 @@ function inOrder(text: string | null, first: string, second: string): boolean {
 }
 
 function checkSceneWiring(): void {
+  section('Outdoors, every arrival sets the party down through the arrival search');
+  const dungeonSource = readFileSync(DUNGEON_SCENE_PATH, 'utf8');
+  check(
+    dungeonSource.includes('this.pm.setPartyDown(findPartyArrivalTiles(this.gameMap, spawn));'),
+    'arriving on a floor, or walking out of a building, uses it',
+  );
+  check(
+    methodBody(dungeonSource, 'private placePartyAtTile(')?.includes('findPartyArrivalTiles(') ===
+      true,
+    'a warp or a checkpoint respawn uses it',
+  );
+  const playerManager = readFileSync(PLAYER_MANAGER_PATH, 'utf8');
+  check(
+    !playerManager.includes('setPositions('),
+    'the party manager has no unchecked one-tile-east placement',
+  );
+
   section('The interior calls the companions where the dungeon does');
   const interior = readFileSync(INTERIOR_SCENE_PATH, 'utf8');
   const combat = methodBody(interior, 'private updateCombat(): void {');
@@ -1097,7 +1687,34 @@ function checkSceneWiring(): void {
     interior.includes('mongoSummon: () => this.toggleMongoSummon()'),
     'the Summon key is bound',
   );
+  const constructorBody = methodBody(interior, '  constructor(');
+  check(
+    inOrder(
+      constructorBody,
+      'stampSafeRoomDecor(this.map);',
+      'this.setPartyDown(this.map.startTile);',
+    ),
+    'the party is set down after the safe room’s fittings are stamped',
+  );
+  check(
+    inOrder(constructorBody, 'this.setPartyDown(this.map.startTile);', 'this.carryMongoIn();'),
+    'and before Mongo lands beside the cat',
+  );
+  const setDown = methodBody(interior, 'private setPartyDown(');
+  check(
+    setDown?.includes('findPartyArrivalTiles(this.map, landing)') === true,
+    'the party is set down on tiles the arrival search picked',
+  );
+  const occupants = readFileSync(OCCUPANT_SYSTEM_PATH, 'utf8');
+  check(
+    methodBody(occupants, 'private reservedTiles(')?.includes('findPartyArrivalTiles(') === true,
+    'occupants keep off the tiles the party is set down on',
+  );
   const changeFloor = methodBody(interior, 'private changeFloor(newFloor: number): void {');
+  check(
+    inOrder(changeFloor, 'this.setPartyDown(', 'this.companion.setMap('),
+    'a storey change sets the party down through the arrival search',
+  );
   check(
     inOrder(changeFloor, 'this.companion.setMap(', 'carryCompanions('),
     'a storey change carries the companions after the party is placed',
@@ -1156,13 +1773,28 @@ function checkSceneWiring(): void {
       `the hire’s Talk prompt is drawn after ${surface.slice('this.'.length, -1)}, and so yields to it`,
     );
   }
-  check(
-    inOrder(render, 'this.mobileHUD.renderButtons(', 'this.renderSummonButton(ctx)'),
-    'the Summon button is placed after the Switch button it stacks on',
-  );
   const summonButton = methodBody(interior, 'private renderSummonButton(');
   check(
-    summonButton?.includes('this.mobileHUD.summonButtonRect') === true,
+    summonButton?.includes('layout.summon') === true,
+    'the Summon button is drawn where the interior HUD layout puts it',
+  );
+  const phoneLayout = interiorHudLayout({
+    viewportWidth: PHONE_LAYOUT_WIDTH,
+    viewportHeight: PHONE_LAYOUT_HEIGHT,
+    mobile: true,
+    hudCollapsed: true,
+    miniMapExpanded: false,
+    hotbarBandHeight: PHONE_LAYOUT_HOTBAR_BAND,
+    followButton: true,
+    summonButton: true,
+  });
+  const stackedSummon = phoneLayout.summon;
+  const phoneSwitch = phoneLayout.switchButton;
+  check(
+    stackedSummon !== null &&
+      phoneSwitch !== null &&
+      stackedSummon.x === phoneSwitch.x &&
+      stackedSummon.y + stackedSummon.h < phoneSwitch.y,
     'on a phone the Summon button takes the stacked slot, clear of Switch',
   );
   const input = readFileSync(INPUT_HANDLER_PATH, 'utf8');
@@ -1246,6 +1878,10 @@ checkCatchUp();
 checkHeldMobsAreOffLimits();
 checkHireShotsIndoors();
 checkQuillHealerHeld();
+checkEveryRoom();
+checkTempleVermin();
+checkQuestHostilesIndoors();
+checkPartyOutdoors();
 checkSceneWiring();
 
 if (failures > 0) {

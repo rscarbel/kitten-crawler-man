@@ -5,9 +5,9 @@ resident memory scales with what a floor can actually show rather than with the 
 size of the game. Four pieces make that work, and each imposes an obligation on anyone
 adding a creature, a sheet or a sound.
 
-Creatures no longer take part in any of it. Every character, creature and
+Creatures take no part in any of it. Every character, creature and
 creature-owned effect is painted by TypeScript at runtime and cached as bitmap cells —
-and so, now, is every piece of environment art: the ground tilesets, the town's
+and so is every piece of environment art: the ground tilesets, the town's
 furniture and signage, the wilderness, the props and the building facades. What is
 still fetched is a short list of icons, splash images, room dressing and two authored
 buildings. See "Creatures are painted, not loaded", "The ground is painted too", "So
@@ -87,8 +87,9 @@ Four decisions carry that, and each is load-bearing:
 - **Cells are shared across instances.** Mobs animate on discrete frame indices, so
   eight tusklings blit the same eight cells; a pack costs what one of it costs. A figure
   whose appearance varies per instance cannot key on `(state, frame)` alone — where the
-  variation is a closed set, each variant takes its own `FigureId` (the sky fowl's eight
-  clothing palettes are the case).
+  variation is a closed set, each variant takes its own `FigureId`. The town's whole
+  cast is the case: every citizen wears one of a closed set of human or skyfowl looks,
+  and a seed only picks which.
 - **A refusal paints rather than blanks.** The painter is present at runtime, so a cell
   the byte ceiling or the per-frame millisecond budget will not admit is drawn straight
   into the frame. Full means slower, never invisible. The fallback composes through an
@@ -108,6 +109,40 @@ a boss intro, an attack telegraph — not when the mob first renders. Two things
 where that hook goes: the lead must exceed
 `rows x frames x bake_ms / PREWARM_BAKE_BUDGET_MS`, and it must sit inside the cache's
 idle-release window or the warming is thrown away before it is used.
+
+**A speculative prewarm only takes free room.** A request made by something about to
+draw the row (`prewarmFigureState(..., urgent = true)`, and a pinned row that went
+missing) may evict any row not drawn this frame, as a render-path bake may. Every other
+request is a guess, and may only evict a row idle as long as the sweep's own
+`IDLE_FRAMES_BEFORE_RELEASE`: otherwise a queue drained while nothing is drawn — behind a
+loading screen, after a scene rebuild — reads every row as unused and evicts the party's
+own, which the first frames of play then re-bake on the render path.
+
+**A crowd is pinned, not swept.** The global ceiling, `CACHE_BUDGET_MEGABYTES` (180), is
+sized for a town plaza. The crowd's own working set is about 122 MB, and on top of it sits
+the player's own per-figure ceiling (56 MB), so a town visit never leaves Carl's new gear
+nowhere to bake. The ten-second idle window is a false signal for a strolling crowd:
+a look worn by one or two citizens can go that long between draws of its rarer facing.
+So the town pins each citizen's `idle` and `walk` rows (`pinCitizenFigure`) and warms
+`talk` only when a citizen is frozen into a conversation (`prewarmAndPinCitizenTalk`).
+
+- A pinned row is exempt from the idle sweep and from eviction.
+- A sweep that meets a pinned row must `continue` past it, not stop, or the older
+  unpinned rows behind it are never released.
+- `TownLifeSystem.dispose` unpins on every path that rebuilds the town scene.
+- A pinned row that has gone missing is re-queued urgently the next time it is drawn.
+
+**A row nothing has room for is abandoned for a while.** After
+`PREWARM_CAPACITY_RETRIES` refusals the queue gives the row up and refuses it for
+`IDLE_FRAMES_BEFORE_RELEASE`. That is the window in which the rows crowding it out are
+released if nothing draws them. Taken back at once, the row would reach the front of the
+queue every frame, be refused there every frame, and spend the allowance the rows behind
+it are waiting on. It is still drawn meanwhile, painted directly.
+
+**A citizen draws approximately; a fight draws exactly.** `drawFigureCachedApprox` never
+bakes on the render path. It borrows the nearest baked frame of the same row, then any
+warm row of the figure, and it asks for the missing row urgently. Citizens draw this way;
+combat rows never do.
 
 A companion that follows the party is warmed on arrival, not per floor. The Meat Shields
 hirelings are all painted (the `companion:mercenary` requirement declares no sheets), and
@@ -131,9 +166,9 @@ must not call back into the cache. `scripts/gates-<x>.ts` holds its art gates an
 
 The generated ground tilesets — `ground_overworld`, `ground_dungeon`,
 `ground_floor1`, `ground_floor2`, `ground_interior` and the shared corner masks
-`ground_masks` — no longer ship as PNGs. Their manifest entries stay, because a
+`ground_masks` — do not ship as PNGs. They still have manifest entries, because a
 row's `frameCount`, `patchTiles` and label are what every draw site and every
-material union is written against; what they no longer carry is a `path`, and a
+material union is written against; what they do not carry is a `path`, and a
 manifest entry with no path means "painted at runtime". `SpriteLoader` refuses to
 fetch one and waits for `registerPaintedSprite` instead.
 
@@ -271,6 +306,36 @@ loader has always understood — took the town's facades from 116 MB resident to
 `frameOrigin` reads one, so neither can be fooled by the layout.
 
 `overworld_main_tower` stays an authored PNG: it is not a generated facade.
+
+## A heavy arrival goes behind a loading screen
+
+The paced queues above are right for a floor already being played, and wrong
+for its first seconds: on the town they mean buildings arriving one at a time,
+a crowd drawn as stand-in poses while its rows bake, and a screenful of ground
+chunks baked on the first frame. A floor whose `LevelDef` sets
+`arrivalLoadingScreen` (floor 3 does) covers that instead.
+`src/scenes/floorArrivalLoad.ts` builds the work as `LoadTask`s — the queued
+environment sheets, the figure prewarm queue, the fetched sprite groups, then
+the ground chunks and decoration overlay entries for the view the first frame
+draws — and `DungeonScene` runs them behind a `LoadingOverlay`
+(`src/ui/LoadingScreen.ts`) driven by a `LoadRunner` (`src/core/LoadRunner.ts`)
+a few milliseconds a frame. The world neither updates nor draws while it is
+up; the render-quality probe and the figure cache's idle sweep are both held
+for its duration, since its frames are neither play nor a sign that anything
+went unused.
+
+The decision is made on every construction of the scene, not at the call sites
+that build it, and only when the arrival owes real work
+(`floorArrivalOwesWork`): a walk out of a building goes straight to play unless
+environment art is still owed. The town's crowd is rolled from the world seed, so the
+rebuilt scene's crowd is the same people with the same rows, still pinned; what else its
+figure queue owes is the respawned wild mobs' speculative rows, which the paced queue
+takes over the next seconds. `npm run verify:town-soak` walks through twenty doors on
+the real scenes and holds that: no loading screen on an exit, and frame cost, pins,
+prewarm backlog, cache bytes, listeners and reachable scenes flat across the trips. `npm run verify:town-arrival-load`
+holds the result — zero render-path bakes, stand-ins, direct paints, chunk
+bakes and environment steps from the first frame of play — and
+`npm run verify:loading-screen` holds the runner's pacing.
 
 ## What the conversion cost and bought
 

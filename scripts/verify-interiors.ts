@@ -24,6 +24,7 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 import { createTownPlan } from '../src/map/town/townPlan';
 import type { BuildingKind } from '../src/map/town/townPlan';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
+import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
 import { TILE_SIZE } from '../src/core/constants';
 import { VOID_TYPE } from '../src/map/tileTypes';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer';
@@ -76,9 +77,23 @@ import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles';
 import type { Mob } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { Conversation } from '../src/dialog/Conversation';
+import { setViewportSize } from '../src/core/Viewport';
+import { ShopSystem, GENERAL_STORE_CONFIG } from '../src/systems/ShopSystem';
+import { createMarketStock } from '../src/systems/market/MarketStock';
 
-/** Any size that produces the full plan; nothing here reads the wilderness. */
-const PLAN_SIZE = 220;
+// The confrontation's office scene paginates its dialog against the live
+// viewport; without a size set, DialogBox measures against a zero-width box
+// and splits every line into one page per word.
+const HARNESS_VIEWPORT_WIDTH = 1280;
+const HARNESS_VIEWPORT_HEIGHT = 720;
+setViewportSize(HARNESS_VIEWPORT_WIDTH, HARNESS_VIEWPORT_HEIGHT);
+
+/**
+ * Matches `level3`'s own `mapSize`: overworld generation always sites Briar
+ * Hollow, and the village only fits the map's east side at that size or
+ * larger, so a smaller fixture throws before the plan is ever built.
+ */
+const PLAN_SIZE = 280;
 
 /**
  * Kinds that run their own scripted interior rather than the ambient
@@ -125,6 +140,13 @@ const ALPHA_OFFSET = 3;
  * antialiased pixel at a sprite's edge.
  */
 const MIN_TILE_COVERAGE = 0.99;
+
+/**
+ * How many rows in from each door column must be open floor: the row the
+ * player steps onto, and the one they take next. Every walk-in door is cut in
+ * a south wall, so "in" is always north.
+ */
+const DOORWAY_CLEAR_DEPTH_TILES = 2;
 
 /** The magistrate's office, and the only storey the Quill confrontation spawns on. */
 const TOWER_CONFRONTATION_FLOOR = TOWER_FLOOR_COUNT - 1;
@@ -314,6 +336,42 @@ for (const [name, roster] of BUILDING_OCCUPANTS) {
   }
 }
 
+console.log('\nGeneral Store counter');
+// `ShopSystem` draws no figure of its own — Keeper Brenna Kestrel is
+// a counter-anchored occupant, the counter's one owner, and `ShopSystem` only
+// reads her position. A second occupant anchored on `counter` would put two
+// figures on the same furniture with no way to tell which one the "Shop"
+// prompt belongs to.
+{
+  const generalStoreRoster = BUILDING_OCCUPANTS.get('General Store') ?? [];
+  const counterSpecs = generalStoreRoster.filter((occupant) => occupant.anchor === 'counter');
+  check(counterSpecs.length === 1, 'exactly one General Store occupant anchors on the counter');
+  check(
+    counterSpecs[0]?.residentId === 'keeper_brenna_kestrel',
+    'the counter occupant is Keeper Brenna Kestrel',
+  );
+
+  const map = buildInterior('General Store', 'store', TOWER_GROUND_FLOOR);
+  const occupants = InteriorOccupantSystem.forBuilding(map, 'store', 'General Store');
+  const kestrel = occupants?.people.find((person) => person.residentId === 'keeper_brenna_kestrel');
+  check(kestrel !== undefined, 'the General Store roster actually places Kestrel in the room');
+
+  const mapWidth = map.structure[0]?.length ?? 0;
+  const shop = new ShopSystem(mapWidth, GENERAL_STORE_CONFIG, {
+    stock: createMarketStock(),
+    vendorId: 'general_store:verify-interiors',
+  });
+  shop.setKeeper(kestrel ?? null);
+  if (kestrel !== undefined) {
+    const atCounter = new HumanPlayer(
+      Math.round(kestrel.x / TILE_SIZE),
+      Math.round(kestrel.y / TILE_SIZE),
+      TILE_SIZE,
+    );
+    check(shop.isNearShopkeeper(atCounter), 'the shop still opens from where Kestrel is stood');
+  }
+}
+
 console.log('\nRegistry keys name real buildings');
 // Walked from the registry side as well as the building side. Asking each
 // building what it offers can only ever find services and readables that are
@@ -451,6 +509,54 @@ for (const [name, kind] of [...buildings, ...WALK_INS_OUTSIDE_THE_PLAN]) {
     const stranded = unreachableWalkableTiles(map);
     const where = kind === 'tower' ? `"${name}" floor ${floor}` : `"${name}"`;
     check(stranded.length === 0, `${where} reaches every walkable tile — ${stranded.join(' ')}`);
+  }
+}
+
+console.log('\nEvery door opens onto clear floor');
+// Reachability alone passes a room whose doorway is half-plugged: the second
+// door column still lets the player in, so nothing is stranded, yet a prop
+// parked just inside one column snags the player on every entry and exit. The
+// walk-in spawn sits between the two columns, so this is also the first
+// collision anyone meets in the room. Checked for every storey with a door,
+// against both the live movement test and the authored prop footprints, so a
+// prop whose blocking flag failed to land is still caught. A tower's upper
+// storeys are reached by stairs and have no door, so there is nothing to check
+// there; every ground floor must have one, or the check would pass on nothing.
+for (const [name, kind] of [...buildings, ...WALK_INS_OUTSIDE_THE_PLAN]) {
+  for (let floor = 0; floor < floorCount(kind); floor++) {
+    const map = buildInterior(name, kind, floor);
+    const where = kind === 'tower' ? `"${name}" floor ${floor}` : `"${name}"`;
+    const exitCount = map._interiorExitTiles.length;
+    const isGroundFloor = floor === 0;
+    if (isGroundFloor) {
+      check(exitCount > 0, `${where} has a door to check (${exitCount} exit tile(s))`);
+    }
+    if (exitCount === 0) continue;
+    const blockingFootprint = new Set(
+      map
+        .placedInteriorPropFootprintTiles()
+        .filter((tile) => tile.blocksMovement)
+        .map((tile) => tileKey(tile.x, tile.y)),
+    );
+    const plugged: string[] = [];
+    for (const exit of map._interiorExitTiles) {
+      for (let depth = 1; depth <= DOORWAY_CLEAR_DEPTH_TILES; depth++) {
+        const x = exit.x;
+        const y = exit.y - depth;
+        const key = tileKey(x, y);
+        if (!map.isWalkable(x, y) || blockingFootprint.has(key)) {
+          const propHere = map.placedInteriorProps.find((placed) => {
+            const footprint = TOWN_INTERIOR_PROPS[placed.propId].footprint;
+            const coversX = x >= placed.tile.x && x < placed.tile.x + footprint.w;
+            const coversY = y >= placed.tile.y && y < placed.tile.y + footprint.h;
+            return coversX && coversY;
+          });
+          const blocker = propHere?.propId ?? `tile type ${map.structure[y][x].type}`;
+          plugged.push(`${key} (${blocker})`);
+        }
+      }
+    }
+    check(plugged.length === 0, `${where} has clear floor inside its door — ${plugged.join(' ')}`);
   }
 }
 

@@ -37,6 +37,7 @@ import { pointInRect } from '../utils';
 import { drawBox, drawDivider, BOX_PRESETS } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
 import { drawSatchelIcon } from './icons/satchelIcon';
+import { paintIsolated } from './isolatedPaint';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Layout constants
@@ -63,6 +64,7 @@ const SEARCH_FIELD_BOTTOM_PAD = 6;
 const HEADER_H = SEARCH_FIELD_Y + SEARCH_FIELD_H + SEARCH_FIELD_BOTTOM_PAD;
 
 const HOTBAR_SLOT_SIZE = 52;
+const MIN_HOTBAR_SLOT_SIZE = 1;
 const HOTBAR_GAP = 4;
 const HOTBAR_BOTTOM_MARGIN = 12;
 /** Clearance either side of the hotbar before its slots shrink to fit a narrow screen. */
@@ -1463,12 +1465,26 @@ export class InventoryPanel {
 
 /** Screen space the hotbar's slots take, from which every hotbar rect is derived. */
 function hotbarLayout(): { x: number; y: number; w: number; h: number; slotSize: number } {
-  const available = viewportWidth() - HOTBAR_SIDE_MARGIN * 2 - HOTBAR_GAP * (HOTBAR_COUNT - 1);
-  const s = Math.min(HOTBAR_SLOT_SIZE, Math.floor(available / HOTBAR_COUNT));
+  return hotbarLayoutFor(viewportWidth(), viewportHeight());
+}
+
+/** {@link hotbarLayout} for a `screenW` × `screenH` window. */
+function hotbarLayoutFor(
+  screenW: number,
+  screenH: number,
+): { x: number; y: number; w: number; h: number; slotSize: number } {
+  const available = screenW - HOTBAR_SIDE_MARGIN * 2 - HOTBAR_GAP * (HOTBAR_COUNT - 1);
+  // Clamped below as well as above: a browser reports a window 0 px wide while
+  // it is minimised or still being created, and a negative slot would size
+  // every icon in it negative.
+  const s = Math.max(
+    MIN_HOTBAR_SLOT_SIZE,
+    Math.min(HOTBAR_SLOT_SIZE, Math.floor(available / HOTBAR_COUNT)),
+  );
   const w = HOTBAR_COUNT * (s + HOTBAR_GAP) - HOTBAR_GAP;
   return {
-    x: Math.floor((viewportWidth() - w) / 2),
-    y: viewportHeight() - s - HOTBAR_BOTTOM_MARGIN,
+    x: Math.floor((screenW - w) / 2),
+    y: screenH - s - HOTBAR_BOTTOM_MARGIN,
     w,
     h: s,
     slotSize: s,
@@ -1480,7 +1496,15 @@ function hotbarLayout(): { x: number; y: number; w: number; h: number; slotSize:
  * chrome has to keep clear of.
  */
 export function hotbarStripRect(): { x: number; y: number; w: number; h: number } {
-  const hb = hotbarLayout();
+  return hotbarStripRectFor(viewportWidth(), viewportHeight());
+}
+
+/** {@link hotbarStripRect} for a `screenW` × `screenH` window, for layout that is pure in its inputs. */
+export function hotbarStripRectFor(
+  screenW: number,
+  screenH: number,
+): { x: number; y: number; w: number; h: number } {
+  const hb = hotbarLayoutFor(screenW, screenH);
   return {
     x: hb.x - HOTBAR_STRIP_PAD,
     y: hb.y - HOTBAR_STRIP_PAD,
@@ -1506,8 +1530,14 @@ export function drawItemIcon(
   size: number,
   alpha = 1,
 ): void {
-  drawItemArt(ctx, item, x, y, size, alpha);
-  drawQuantityBadge(ctx, item, x, y, size, alpha);
+  // Every painter below scales its radii off `size`, and the canvas throws on
+  // a negative radius, so a square with no area has nothing to draw.
+  const drawable = size > 0 && Number.isFinite(size) && Number.isFinite(x) && Number.isFinite(y);
+  if (!drawable) return;
+  paintIsolated(ctx, `item icon "${item.id}"`, () => {
+    drawItemArt(ctx, item, x, y, size, alpha);
+    drawQuantityBadge(ctx, item, x, y, size, alpha);
+  });
 }
 
 /**

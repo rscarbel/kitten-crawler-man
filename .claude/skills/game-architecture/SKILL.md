@@ -47,6 +47,21 @@ Kit fields stay concrete types: `update` signatures are not uniform, so a `GameS
 
 `EmoteEffectSystem` (`src/systems/EmoteEffectSystem.ts`) draws floating emotes (a petted cow's hearts) and is built to take other emote kinds.
 
+### The town
+
+The floor-3 town's systems, and where each rule lives. The durable description is `docs/town.md`.
+
+- **Street:** `TownLifeSystem` runs the crowd, rolled from the world seed and pinned in the figure cache. `TownPropSystem` places the plaza fixtures, `TownDecorSystem` the yard and doorstep dressing, and `MarketSystem` the stalls. All three refuse `doorwayKeepClearTiles` (`src/systems/doorwayKeepClear.ts`), because a connectivity check cannot see a door being sealed. Citizens dispatch by species through `src/creatures/citizenFigure.ts`.
+- **Interiors:** layouts are data in `src/map/town/interiors/`, with props from `TOWN_INTERIOR_PROPS`.
+  - `InteriorOccupantSystem` seats the room's people.
+  - `InteriorPropInteractionSystem` runs examine, search and use; `InteriorReadableSystem` runs paged documents.
+  - `TownInteriorPropDestructionSystem` breaks placed props, and `InteriorBreakReactionBarks` voices the reactions.
+  - `townInteriorPropFigures.ts` splits walkable ground props from Y-sorted ones.
+  - `src/scenes/interiorCamera.ts` and `interiorHudLayout.ts` frame the room clear of the HUD.
+- **Memory:** `TownMemory` (`src/core/TownMemory.ts`) is threaded by reference through both scenes, like `BriarHollowState`: resident talks, cleared rooms and camps, and props that have paid out. `RENAMED_BUILDINGS` migrates old building names in saves.
+- **Talk:** `src/dialog/walkAway.ts` is the one walk-away rule. `src/systems/safeRoomSpeaker.ts` decides whether a press in the safe room is for the Bopca or Mordecai.
+- **Arrival:** `findPartyArrivalTiles` (`src/map/findWalkableTile.ts`) sets the party down on every arrival. `src/scenes/floorArrivalLoad.ts` builds the loading screen's tasks, run by `LoadRunner` (`src/core/LoadRunner.ts`).
+
 ### Boss-room dressing
 
 Each boss room's props, slow ground, hazards and interactables belong to a dressing in `src/systems/bossRooms/`, separate from the boss and from the fight owner (`BossRoomSystem`, `SpiderQuestSystem`, `ArenaSystem`): `HoarderRoomSystem`, `JuicerRoomSystem` (in `src/systems/`), `KrakarenRoomSystem`, `SpiderLabDressing` (owned by `SpiderQuestSystem.labDressing`) and `ColosseumDressingSystem`.
@@ -71,8 +86,7 @@ none at all — centralising the state would mean rewriting all five.
   `src/systems/questTracker.ts`, gathered by `DungeonScene.collectTrackerEntries()`.
 
 Both are rebuilt from the system's own phase machine every frame and stored
-nowhere, so neither can go stale. `TownGuideSystem` is a `TrackerSource` with no
-quest behind it at all — it points at the town's own furniture. See `add-quest`.
+nowhere, so neither can go stale. See `add-quest`.
 
 ## Entity hierarchy
 
@@ -121,6 +135,7 @@ Traits (`src/creatures/tactics/`) are opt-in per creature via `Mob.tacticsEligib
 - `paginate.ts` — pure, canvas-free page-breaking (paragraph → sentence → word → character), shared by `DialogBox` and unit-tested by `verify:dialog-pagination`.
 - `Conversation.ts` — the one conversation panel a scene owns; see `add-ui`.
 - `topics.ts` — turns a speaker's `ConversationTopic[]` into a choice row (`topicMenu`).
+- `walkAway.ts` — the one rule for when a walk-off surface closes: its talk range plus `WALK_AWAY_MARGIN_TILES`.
 - `villagerRegistry.ts` — `VILLAGER_SCRIPTS`/`SOLDIER_SCRIPTS`/`SHOPKEEPER_SCRIPTS`, the role-typed lookup tables generic Briar Hollow code reads a villager through.
 - `scripts/` — one file per speaker or scene (`scripts/tikka.ts`, `scripts/scenes/defend.ts`, …), each exporting the lines and pools that speaker or scene needs. `verify:dialog-lines` walks every export here and fails on a line nothing ever reads.
 

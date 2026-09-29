@@ -55,6 +55,18 @@ export interface TownMemory {
    * back from the party.
    */
   clearedCamps: Set<string>;
+  /**
+   * Placed interior props (breakables and searched containers) that have
+   * already paid out their first-time loot, keyed by `interiorPropPayoutKey`
+   * (a room key plus the prop's own layout-stable id).
+   *
+   * A room's furniture is rebuilt standing on every entry — nothing records
+   * *whether* a prop is currently broken — but the loot itself must not be:
+   * without this, leaving and re-entering a room re-stocks every barrel,
+   * exactly the way a cleared room would re-stock its hostiles without
+   * `clearedRooms`.
+   */
+  paidOutInteriorProps: Set<string>;
 }
 
 /** How many poultices Fen has made up, and does not remake while you wait. */
@@ -66,12 +78,52 @@ export function createTownMemory(): TownMemory {
     poulticesLeft: APOTHECARY_BATCH_SIZE,
     clearedRooms: new Set(),
     clearedCamps: new Set(),
+    paidOutInteriorProps: new Set(),
   };
 }
 
+const ROOM_KEY_SEPARATOR = '#';
+
 /** The key a room is remembered under. A tower's storeys are separate rooms. */
 export function roomKey(buildingName: string, floor: number): string {
-  return `${buildingName}#${floor}`;
+  return `${buildingName}${ROOM_KEY_SEPARATOR}${floor}`;
+}
+
+/**
+ * Buildings that have been renamed, from the name an older save may hold to
+ * the name the town uses now.
+ *
+ * Room and prop records are keyed by building name, so without this a save
+ * taken before a rename would forget every room the player cleared or searched
+ * there — re-stocking its loot. Entries are never removed: a save can sit
+ * unloaded for any length of time.
+ */
+export const RENAMED_BUILDINGS: ReadonlyMap<string, string> = new Map([
+  ["Shepherd's Cabin", 'Plumbline Farm'],
+]);
+
+/**
+ * `key` (a {@link roomKey} or {@link interiorPropPayoutKey}) with its building
+ * name brought up to date. A building name never contains the separator, so
+ * everything before the first one is the name.
+ */
+export function migrateRoomKey(key: string): string {
+  const separatorAt = key.indexOf(ROOM_KEY_SEPARATOR);
+  if (separatorAt < 0) return key;
+  const buildingName = key.slice(0, separatorAt);
+  const currentName = RENAMED_BUILDINGS.get(buildingName);
+  if (currentName === undefined) return key;
+  return `${currentName}${key.slice(separatorAt)}`;
+}
+
+/**
+ * The key a placed interior prop's first-time payout is remembered under —
+ * a room key plus the prop's own id, which is stable across the room's
+ * regeneration (derived from its layout entry, never from scan order or a
+ * counter).
+ */
+export function interiorPropPayoutKey(buildingName: string, floor: number, propId: string): string {
+  return `${roomKey(buildingName, floor)}${ROOM_KEY_SEPARATOR}${propId}`;
 }
 
 /** How many conversations this resident has already had with the player. */
@@ -128,6 +180,7 @@ export interface TownMemoryCheckpoint {
   poulticesLeft: number;
   clearedRooms: ReadonlyArray<string>;
   clearedCamps: ReadonlyArray<string>;
+  paidOutInteriorProps: ReadonlyArray<string>;
 }
 
 /**
@@ -141,6 +194,7 @@ export function captureTownMemory(memory: TownMemory): TownMemoryCheckpoint {
     poulticesLeft: memory.poulticesLeft,
     clearedRooms: [...memory.clearedRooms],
     clearedCamps: [...memory.clearedCamps],
+    paidOutInteriorProps: [...memory.paidOutInteriorProps],
   };
 }
 
@@ -153,4 +207,5 @@ export function restoreTownMemory(memory: TownMemory, snapshot: TownMemoryCheckp
   memory.poulticesLeft = snapshot.poulticesLeft;
   memory.clearedRooms = new Set(snapshot.clearedRooms);
   memory.clearedCamps = new Set(snapshot.clearedCamps);
+  memory.paidOutInteriorProps = new Set(snapshot.paidOutInteriorProps);
 }

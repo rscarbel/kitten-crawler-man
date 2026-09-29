@@ -14,12 +14,13 @@
  */
 
 import { isTownInDanger, type TownDialogContext } from './townDialog';
-import { DANGER_LINES } from '../dialog/scripts/townsfolk';
+import { dangerBark } from '../dialog/scripts/townsfolk';
 import { residentLinesFor } from '../dialog/scripts/residents';
 import { rotateLine } from './townServiceUtil';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import { transientSpeaker } from '../dialog/line';
 import type { DialogLine, Paragraphs } from '../dialog/line';
+import type { TownSpecies } from './townSpecies';
 
 export type ResidentId =
   | 'old_hilda'
@@ -36,7 +37,8 @@ export type ResidentId =
   | 'corporal_pell'
   | 'quartermaster_dann'
   | 'tattooist_nim'
-  | 'stock_clerk_wick';
+  | 'stock_clerk_wick'
+  | 'keeper_brenna_kestrel';
 
 export interface ResidentDef {
   readonly id: ResidentId;
@@ -44,46 +46,118 @@ export interface ResidentDef {
   readonly name: string;
   /** Appearance and voice base; also the fallback when the town is in danger. */
   readonly role: TownRole;
+  readonly species: TownSpecies;
   /** The building this resident anchors, keyed by `entry.name` exactly. */
   readonly home: string;
 }
 
 const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
-  { id: 'old_hilda', name: 'Old Hilda', role: 'priest', home: "Old Hilda's Cottage" },
+  {
+    id: 'old_hilda',
+    name: 'Old Hilda',
+    role: 'priest',
+    species: 'human',
+    home: "Old Hilda's Cottage",
+  },
   {
     id: 'brann_cartwright',
     name: 'Brann Cartwright',
     role: 'laborer',
+    species: 'skyfowl',
     home: "Cartwright's Workshop",
   },
-  { id: 'wendell', name: 'Wendell', role: 'farmer', home: "Shepherd's Cabin" },
-  { id: 'marta_miller', name: 'Marta Miller', role: 'farmer', home: "Miller's Farm" },
-  { id: 'apothecary_fen', name: 'Apothecary Fen', role: 'merchant', home: 'Herb & Remedy' },
-  { id: 'deacon_aviel', name: 'Deacon Aviel', role: 'priest', home: 'Temple of the Sky' },
-  { id: 'smith_varga', name: 'Smith Varga', role: 'smith', home: 'The Rusty Anvil' },
+  { id: 'wendell', name: 'Wendell', role: 'farmer', species: 'human', home: 'Plumbline Farm' },
+  {
+    id: 'marta_miller',
+    name: 'Marta Miller',
+    role: 'farmer',
+    species: 'human',
+    home: "Miller's Farm",
+  },
+  {
+    id: 'apothecary_fen',
+    name: 'Apothecary Fen',
+    role: 'merchant',
+    species: 'human',
+    home: 'Herb & Remedy',
+  },
+  {
+    id: 'deacon_aviel',
+    name: 'Deacon Aviel',
+    role: 'priest',
+    species: 'skyfowl',
+    home: 'Temple of the Sky',
+  },
+  {
+    id: 'smith_varga',
+    name: 'Smith Varga',
+    role: 'smith',
+    species: 'skyfowl',
+    home: 'The Rusty Anvil',
+  },
   {
     id: 'innkeep_ossie',
     name: 'Innkeep Ossie',
     role: 'innkeeper',
+    species: 'skyfowl',
     home: 'The Sleeping Cat Inn',
   },
-  { id: 'innkeep_brend', name: 'Innkeep Brend', role: 'innkeeper', home: 'The Horned Flagon' },
+  {
+    id: 'innkeep_brend',
+    name: 'Innkeep Brend',
+    role: 'innkeeper',
+    species: 'skyfowl',
+    home: 'The Horned Flagon',
+  },
   {
     id: 'innkeep_marlow',
     name: 'Innkeep Marlow',
     role: 'innkeeper',
+    species: 'human',
     home: 'The Sunken Stump Pub',
   },
-  { id: 'sgt_kessler', name: 'Sgt. Kessler', role: 'guard', home: 'Blackwood Lodge' },
-  { id: 'corporal_pell', name: 'Corporal Pell', role: 'guard', home: 'The Barracks' },
+  {
+    id: 'sgt_kessler',
+    name: 'Sgt. Kessler',
+    role: 'guard',
+    species: 'skyfowl',
+    home: 'Blackwood Lodge',
+  },
+  {
+    id: 'corporal_pell',
+    name: 'Corporal Pell',
+    role: 'guard',
+    species: 'skyfowl',
+    home: 'The Barracks',
+  },
   {
     id: 'quartermaster_dann',
     name: 'Quartermaster Dann',
     role: 'merchant',
+    species: 'skyfowl',
     home: 'The Barracks',
   },
-  { id: 'stock_clerk_wick', name: 'Wick', role: 'commoner', home: 'General Store' },
-  { id: 'tattooist_nim', name: 'Nim', role: 'merchant', home: 'The Quiet Needle' },
+  {
+    id: 'stock_clerk_wick',
+    name: 'Wick',
+    role: 'commoner',
+    species: 'human',
+    home: 'General Store',
+  },
+  {
+    id: 'tattooist_nim',
+    name: 'Nim',
+    role: 'merchant',
+    species: 'skyfowl',
+    home: 'The Quiet Needle',
+  },
+  {
+    id: 'keeper_brenna_kestrel',
+    name: 'Keeper Brenna Kestrel',
+    role: 'merchant',
+    species: 'skyfowl',
+    home: 'General Store',
+  },
 ];
 
 const RESIDENTS_BY_ID = new Map<ResidentId, ResidentDef>(RESIDENT_DEFS.map((def) => [def.id, def]));
@@ -98,6 +172,11 @@ export function residentById(id: ResidentId): ResidentDef {
 /** Every authored resident, for registries and validation sweeps. */
 export function allResidents(): ReadonlyArray<ResidentDef> {
   return RESIDENT_DEFS;
+}
+
+/** A named resident's species, for danger-line pool selection and for their figure. */
+export function residentSpecies(def: ResidentDef): TownSpecies {
+  return def.species;
 }
 
 /**
@@ -134,7 +213,7 @@ export function buildResidentConversation(
   ctx: TownDialogContext,
 ): DialogLine {
   const speak = transientSpeaker(def.name, 'townsfolk');
-  if (isTownInDanger(ctx)) return speak.line(DANGER_LINES[def.role]);
+  if (isTownInDanger(ctx)) return speak.line(dangerBark(residentSpecies(def), def.role));
 
   const lines = residentLinesFor(def.id);
   const reactivePool = lines.reactive?.(ctx) ?? null;

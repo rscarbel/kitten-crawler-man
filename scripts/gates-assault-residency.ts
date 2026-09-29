@@ -851,8 +851,12 @@ function main(): void {
   runStages('A1 stages', NECROMANCER_FIGURE, necromancerStages(), () => warmDirectly(necroArrival));
   const bullArrival = bullRows(GRAVE_BULL_ARRIVAL_ROWS);
   for (const facing of BULL_FACINGS) {
+    // He walks in a facing before he charges in it, and the row he is walking
+    // in is baked on the frames he is seen in it, as the render asks for it:
+    // work the attack stage's lead was never meant to carry.
+    const walkingThisWay = row(GRAVE_BULL_FIGURE, graveBullStateName('walk', facing));
     runStages('A1 stages', GRAVE_BULL_FIGURE, graveBullStages(facing), () =>
-      warmDirectly(bullArrival),
+      warmDirectly([...bullArrival, walkingThisWay]),
     );
   }
   countdownGate();

@@ -21,11 +21,15 @@ import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle } from '../dialog/request';
 import type { DialogLine, NonEmpty } from '../dialog/line';
 import { CLARABELLE } from '../dialog/scripts/scenes/clarabelle';
+import { CLUB_ANIM_FRAMES_PER_SECOND, drawClubNpc } from '../sprites/clubNpcSprite';
+import { drawClubCastFigure, type ClubFigureRef } from '../sprites/clubCastFigure';
 import {
-  CLUB_ANIM_FRAMES_PER_SECOND,
-  drawClubNpc,
-  type ClubNpcVariant,
-} from '../sprites/clubNpcSprite';
+  CLUB_BARTENDER,
+  clubDancerAt,
+  type ClubDancer,
+  CLUB_MARKET_VENDOR,
+  CLUB_VIP_HOST,
+} from '../sprites/clubCastRoster';
 import { drawCasinoDealer } from '../sprites/casinoDealerSprite';
 import { drawCrocodilianSprite, prewarmClarabelle } from '../sprites/crocodilianSprite';
 import { drawCretinSprite, prewarmCretin, type CretinVariant } from '../sprites/cretinSprite';
@@ -211,14 +215,13 @@ export function createClubMarketShop(marketStock: MarketStock): ShopSystem {
   });
 }
 
-/** Which shared club-NPC sprite each station uses; the casino and the door have their own renderers. */
-const STATION_VARIANT: Record<
-  Exclude<ClubStationId, 'casino' | 'clarabelle' | 'mercenary'>,
-  ClubNpcVariant
+/** Which cast figure each station's staff draws as; the casino and the door have their own renderers. */
+const STATION_FIGURE: Readonly<
+  Record<Exclude<ClubStationId, 'casino' | 'clarabelle' | 'mercenary'>, ClubFigureRef>
 > = {
-  bar: 'bartender',
-  market: 'merchant',
-  vip: 'vip',
+  bar: CLUB_BARTENDER,
+  market: CLUB_MARKET_VENDOR,
+  vip: CLUB_VIP_HOST,
 };
 
 /** Proximity-prompt verb for a station: "Talk" to Clarabelle, "Shop" at the vendors, "Play" at the casino, else the room name. */
@@ -675,10 +678,8 @@ export class DesperadoClubSystem {
         drawClubProp(ctx, prop, camX, camY),
     }));
 
-    CLUB_DANCER_TILES.forEach((dancer, i) => {
-      figures.push(this.npcFigure(dancer, 'dancer', 0, i % 2 === 0 ? 1 : -1, i + 1));
-    });
-    figures.push(this.npcFigure(CLUB_DJ_TILE, 'dj', 0));
+    CLUB_DANCER_TILES.forEach((tile, i) => figures.push(this.dancerFigure(tile, clubDancerAt(i))));
+    figures.push(this.djFigure(CLUB_DJ_TILE));
     for (const station of CLUB_STATIONS) {
       if (station.id === 'casino') {
         figures.push(this.dealerFigure(station.tile));
@@ -697,22 +698,70 @@ export class DesperadoClubSystem {
         });
         continue;
       }
-      figures.push(this.npcFigure(station.tile, STATION_VARIANT[station.id], station.tile.x));
+      figures.push(
+        this.castFigure(station.tile, STATION_FIGURE[station.id], 'idle', 1, station.tile.x),
+      );
     }
     return figures;
   }
 
   /**
-   * A figure standing still on `tile`. `phaseOffset` staggers the idle animation
-   * so a room of NPCs doesn't breathe in lockstep.
+   * A figure standing still on `tile`, drawn from the skyfowl or human closed
+   * cast. `seed` staggers the animation loop so a room of NPCs doesn't breathe
+   * in lockstep.
    */
-  private npcFigure(
+  private castFigure(
     tile: { x: number; y: number },
-    variant: ClubNpcVariant,
-    phaseOffset: number,
-    facingX = 1,
-    seed = 0,
+    ref: ClubFigureRef,
+    action: 'idle',
+    facingX: number,
+    seed: number,
   ): InteriorFigure {
+    return {
+      y: tile.y * TILE_SIZE,
+      render: (ctx, camX, camY, tileSize) =>
+        drawClubCastFigure(
+          ctx,
+          ref,
+          tile.x * TILE_SIZE - camX,
+          tile.y * TILE_SIZE - camY,
+          tileSize,
+          {
+            action,
+            walkPhase: 0,
+            facingX,
+            facingY: 1,
+            loopOffsetSeconds: seed / CLUB_ANIM_FRAMES_PER_SECOND,
+          },
+        ),
+    };
+  }
+
+  /** A dancer on the floor, facing the room, dancing its own routine on its own count. */
+  private dancerFigure(tile: { x: number; y: number }, dancer: ClubDancer): InteriorFigure {
+    return {
+      y: tile.y * TILE_SIZE,
+      render: (ctx, camX, camY, tileSize) =>
+        drawClubCastFigure(
+          ctx,
+          dancer.ref,
+          tile.x * TILE_SIZE - camX,
+          tile.y * TILE_SIZE - camY,
+          tileSize,
+          {
+            action: 'dance',
+            walkPhase: 0,
+            facingX: 0,
+            facingY: 1,
+            loopOffsetSeconds: dancer.loopOffsetSeconds,
+            danceStyle: dancer.style,
+          },
+        ),
+    };
+  }
+
+  /** Doctor Bones, at his decks. Not part of the closed-set casts — his own fixed painter. */
+  private djFigure(tile: { x: number; y: number }): InteriorFigure {
     return {
       y: tile.y * TILE_SIZE,
       render: (ctx, camX, camY, tileSize) =>
@@ -721,10 +770,7 @@ export class DesperadoClubSystem {
           tile.x * TILE_SIZE - camX,
           tile.y * TILE_SIZE - camY,
           tileSize,
-          variant,
-          this.animTime + phaseOffset,
-          facingX,
-          seed,
+          this.animTime,
         ),
     };
   }

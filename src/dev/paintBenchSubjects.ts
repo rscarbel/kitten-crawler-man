@@ -25,7 +25,7 @@ import { BALL_OF_SWINE_FIGURE } from '../sprites/art/ballOfSwineFigure';
 import { RAT_KIN_FIGURE } from '../sprites/art/ratKinFigure';
 import { ratkinCastFigure } from '../sprites/art/ratkinCastFigure';
 import { SHADY_FIGURE } from '../sprites/art/shadyFigure';
-import { SKY_FOWL_FIGURES } from '../sprites/art/skyFowlFigure';
+import { skyfowlCastFigure } from '../sprites/art/skyfowlCastFigure';
 import {
   EVIL_CLOWN_FIGURE,
   FAT_CLOWN_FIGURE,
@@ -121,7 +121,7 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: ratkinCastFigure('bramblewick'), state: 'idle' },
   { def: ratkinCastFigure('hobb'), state: 'strike_side' },
   { def: SHADY_FIGURE, state: 'idle' },
-  { def: SKY_FOWL_FIGURES[0], state: 'walk' },
+  { def: skyfowlCastFigure('tough_hawkbrown_standard'), state: 'walk' },
   { def: MONGO_FIGURES.adult, state: 'walk_side' },
   { def: HOARDER_FIGURE, state: 'idle' },
   { def: HOARDER_BILE_ARC_FIGURE, state: 'arc' },

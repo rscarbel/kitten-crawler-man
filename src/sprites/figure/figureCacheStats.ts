@@ -22,6 +22,14 @@ export interface FigureCacheStats {
   prewarmBakes: number;
   /** Cells a miss could not bake, painted straight into the target instead. */
   directDraws: number;
+  /**
+   * Cells a caller preferring an approximation over a bake drew as a stand-in
+   * — the nearest already-baked frame of the same row, or any already-baked
+   * row of the same figure — instead of paying to bake the exact one.
+   */
+  approxDraws: number;
+  /** Milliseconds actually spent baking cells this frame, prewarm and lazy combined. */
+  bakeMs: number;
   /** Animation rows dropped this frame to make room for another. */
   evictions: number;
   /** Animation rows dropped this frame simply for going long enough undrawn. */
@@ -40,6 +48,8 @@ const ZEROED: FigureCacheStats = {
   bakes: 0,
   prewarmBakes: 0,
   directDraws: 0,
+  approxDraws: 0,
+  bakeMs: 0,
   evictions: 0,
   releases: 0,
   figures: 0,
@@ -66,6 +76,8 @@ function resetPerFrameCounts(): void {
   live.bakes = 0;
   live.prewarmBakes = 0;
   live.directDraws = 0;
+  live.approxDraws = 0;
+  live.bakeMs = 0;
   live.evictions = 0;
   live.releases = 0;
 }
@@ -97,6 +109,14 @@ export function recordFigureCachePrewarmBake(): void {
 
 export function recordFigureCacheDirectDraw(): void {
   if (recording) live.directDraws++;
+}
+
+export function recordFigureCacheApproxDraw(): void {
+  if (recording) live.approxDraws++;
+}
+
+export function recordFigureCacheBakeMs(elapsedMs: number): void {
+  if (recording) live.bakeMs += elapsedMs;
 }
 
 export function recordFigureCacheEviction(): void {

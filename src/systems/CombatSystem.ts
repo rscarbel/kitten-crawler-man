@@ -22,6 +22,7 @@ import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
 import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { Missile } from '../sprites/catSprite';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
+import type { TownInteriorPropDestructionSystem } from './TownInteriorPropDestructionSystem';
 import type { TreeSystem } from './TreeSystem';
 import {
   POWERFUL_STRIKE_CHANCE_PER_LEVEL,
@@ -176,6 +177,8 @@ export interface CombatContext {
   spells: SpellSystem;
   /** Absent in scenes without smashable props (the overworld, building interiors). */
   destructibles?: DestructiblePropSystem;
+  /** A building interior's placed-prop breakables (barrels, crates, jars…) — absent everywhere else. */
+  interiorProps?: TownInteriorPropDestructionSystem;
   /** Absent everywhere but the overworld, which is the only map that grows trees. */
   trees?: TreeSystem;
   /** Built structures a crawler's swing can reach — in practice, a village fence it flattens. */
@@ -283,6 +286,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     // anything, props included.
     if (!human.zeroDamage) {
       humanHit = (ctx.destructibles?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
+      humanHit = (ctx.interiorProps?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
       humanHit = (ctx.trees?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
       humanHit = (ctx.structures?.tryMeleeHit(human, range) ?? false) || humanHit;
     }
@@ -331,6 +335,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     }
     if (!cat.zeroDamage) {
       catHit = (ctx.destructibles?.tryMeleeHit(cat, range, damage) ?? false) || catHit;
+      catHit = (ctx.interiorProps?.tryMeleeHit(cat, range, damage) ?? false) || catHit;
       catHit = (ctx.trees?.tryMeleeHit(cat, range, damage) ?? false) || catHit;
       catHit = (ctx.structures?.tryMeleeHit(cat, range) ?? false) || catHit;
     }
@@ -422,6 +427,9 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       if (ctx.destructibles?.smashAllInRadius(human, outerRadius) ?? false) {
         smushConnected = true;
       }
+      if (ctx.interiorProps?.smashAllInRadius(human, outerRadius) ?? false) {
+        smushConnected = true;
+      }
       if (ctx.trees?.smashAllInRadius(human, outerRadius) ?? false) {
         smushConnected = true;
       }
@@ -456,6 +464,20 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       if (
         !cat.zeroDamage &&
         (ctx.destructibles?.tryProjectileHit(missile.x, missile.y, hitRadius, damage, cat) ?? false)
+      ) {
+        ctx.hitLanded = true;
+        ctx.bus.emit('missileImpact', {});
+        missile.hit = true;
+        missile.state = 'exploding';
+        ctx.missileFx?.spawn(missile.x, missile.y, missileExplosionVariant(missile));
+        continue;
+      }
+
+      // Interior props take the same detonate-on-impact check as dungeon
+      // destructibles; the two never coexist on one map, same as trees below.
+      if (
+        !cat.zeroDamage &&
+        (ctx.interiorProps?.tryProjectileHit(missile.x, missile.y, hitRadius, damage) ?? false)
       ) {
         ctx.hitLanded = true;
         ctx.bus.emit('missileImpact', {});
@@ -566,6 +588,17 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       if (
         !human.zeroDamage &&
         (ctx.destructibles?.tryProjectileHit(rock.x, rock.y, rockHitRadius, damage, human) ?? false)
+      ) {
+        ctx.hitLanded = true;
+        ctx.bus.emit('slingshotImpact', {});
+        rock.hit = true;
+        rock.state = 'done';
+        continue;
+      }
+
+      if (
+        !human.zeroDamage &&
+        (ctx.interiorProps?.tryProjectileHit(rock.x, rock.y, rockHitRadius, damage) ?? false)
       ) {
         ctx.hitLanded = true;
         ctx.bus.emit('slingshotImpact', {});

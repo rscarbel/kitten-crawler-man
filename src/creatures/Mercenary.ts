@@ -261,7 +261,7 @@ export class Mercenary extends Mob {
   }
 
   /** Hands over every bolt and wave loosed since the last call; `HirelingBoltSystem` drains it. */
-  takePendingShots(): readonly HirelingShot[] {
+  takePendingHirelingShots(): readonly HirelingShot[] {
     if (this.pendingShots.length === 0) return NO_SHOTS;
     const shots = this.pendingShots;
     this.pendingShots = [];

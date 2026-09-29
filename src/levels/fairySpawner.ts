@@ -190,7 +190,9 @@ export interface FairyLedgerRoom {
   readonly pastSafeRoomOf: ReadonlySet<string>;
   /**
    * The shield fairy placed only because nothing the room rolled was one. Not
-   * counted against a rate upgrade's roll, which it sits outside of.
+   * counted against a rate upgrade's roll, which it sits outside of — until
+   * that roll comes up a shield, when it becomes the rolled shield and this
+   * clears.
    */
   guaranteedShield: Fairy | null;
 }
@@ -452,7 +454,15 @@ export function applyFairyRateUpgrade(
       ).length;
       const missing = Math.min(wanted, MAX_FAIRIES_PER_ROOM) - existing;
       for (let i = 0; i < missing; i++) {
-        const fairy = placeRoomFairy(pickRegularKind(rng), room, map, ledger);
+        const kind = pickRegularKind(rng);
+        // The guaranteed shield exists only for a group that rolled none, so a
+        // shield the top-up rolls is that shield, joining the count, rather
+        // than a second one flying beside it.
+        if (kind === 'shield' && room.guaranteedShield?.isAlive === true) {
+          room.guaranteedShield = null;
+          continue;
+        }
+        const fairy = placeRoomFairy(kind, room, map, ledger);
         if (fairy === null) continue;
         added.push(fairy);
         residents.push(fairy);

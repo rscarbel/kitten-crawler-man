@@ -31,7 +31,6 @@ import { RECRUITER } from '../../dialog/scripts/briarHollow/recruiter';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import type { Player } from '../../Player';
 import type { TownPropRenderable } from '../townPropRenderable';
-import { CONVERSATION_WALK_AWAY_TILES } from '../../creatures/townInteraction';
 import { VILLAGER_HEAD_CLEARANCE_TILES } from './Villager';
 import { BRIAR_HOLLOW_QUEST_ID, type VillageQuestSystem } from './VillageQuestSystem';
 
@@ -191,8 +190,12 @@ export class RecruiterSystem {
       dismiss: { kind: 'allowed', onDismissed: () => undefined },
       haltsWorld: false,
       anchor: {
-        position: () => ({ x: npc.x, y: npc.y }),
-        radius: CONVERSATION_WALK_AWAY_TILES,
+        // His centre, as `inRange` measures to it.
+        position: () => ({
+          x: npc.x + TILE_SIZE * TILE_CENTRE,
+          y: npc.y + TILE_SIZE * TILE_CENTRE,
+        }),
+        talkRangeTiles: INTERACT_RANGE_TILES,
       },
       // A street conversation, like the village's own: it ends because the
       // player walked away or clicked through, not because anything paused.

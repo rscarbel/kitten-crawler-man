@@ -27,7 +27,7 @@
 import { hashLattice } from '../../../map/tilegen/noise';
 import type { NoiseField } from '../../../map/tilegen/noise';
 import type { Plane } from '../projection';
-import type { RoofSpec, WallSpec } from '../spec';
+import type { PlinthSpec, RoofSpec, WallSpec } from '../spec';
 
 /** Plane-space vertical range a pass is confined to. */
 export interface Band {
@@ -47,6 +47,8 @@ export interface WallPaintOptions {
   readonly quoins: boolean;
   /** Height of the taller, darker base course. Zero for an upper story. */
   readonly foundationPx: number;
+  /** A dressed plinth in place of the rubble base course — see `FacadeSpec.plinth`. */
+  readonly plinth?: PlinthSpec;
 }
 
 export interface RoofPaintOptions {
@@ -66,13 +68,16 @@ export interface RoofPaintOptions {
 /**
  * Per-element value jitter, in ramp-`t` units.
  *
- * Applied to every stone, plank, tile and thatch bundle. Tuned against the
- * measured local contrast of the art this kit replaces rather than by eye: the
- * painterly originals carry far more value variation inside an eight-pixel
- * window than a first pass at "subtle" jitter produces, and a facade that is
- * subtle at bake scale is flat at the 32px display tile.
+ * Applied to every stone, plank, tile and thatch bundle. Originally tuned
+ * against the measured local contrast of the art this kit replaces, which
+ * chased the shipped art's own busyness rather than the ground every facade
+ * actually stands on — every sampled building came out 30-75% busier than its
+ * own ground tile. Pulled back so a wall still reads as coursed and shaded
+ * (this is the single largest contributor to that contrast, well above the
+ * global weathering passes in `paint.ts`) without erasing the per-element
+ * shading the coursing depends on to read as masonry rather than a flat fill.
  */
-export const ELEMENT_TONE_JITTER = 0.26;
+export const ELEMENT_TONE_JITTER = 0.19;
 
 /** Per-element hue rotation, in degrees. Enough to break a monotone, not to read as colour. */
 export const ELEMENT_HUE_JITTER = 3;

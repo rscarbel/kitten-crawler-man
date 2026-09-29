@@ -26,15 +26,38 @@ import type { TownRole } from '../sprites/person/PersonAppearance';
 import { pickLine, transientSpeaker } from '../dialog/line';
 import type { DialogLine } from '../dialog/line';
 import {
-  AMBIENT_LINES,
-  DANGER_LINES,
+  ambientPool,
+  dangerBark,
   GOSSIP_LINES,
   REPUTATION_GREETINGS,
   roleDisplayName,
   type ReputationTier,
 } from '../dialog/scripts/townsfolk';
+import { DEFAULT_TOWN_SPECIES, type TownSpecies } from './townSpecies';
 
 export { roleDisplayName };
+
+/**
+ * Anything with a role and an optional species field — `Townsperson` and
+ * resident targets satisfy this structurally without `townDialog.ts`
+ * importing `Townsperson`, which would close an import cycle back through
+ * `townResidents.ts`'s `isTownInDanger` import of this module. `role` is
+ * required (rather than the type being all-optional) so TypeScript doesn't
+ * treat it as a weak type with no properties in common with `Townsperson`.
+ */
+export interface SpeciesBearer {
+  readonly role: TownRole;
+  readonly species?: TownSpecies;
+}
+
+/**
+ * A street or interior citizen's species, for dialog-pool selection. Falls
+ * back to the default for a `SpeciesBearer` that doesn't carry a real
+ * species — this is the one place that fallback lives.
+ */
+export function citizenSpecies(citizen: SpeciesBearer): TownSpecies {
+  return citizen.species ?? DEFAULT_TOWN_SPECIES;
+}
 
 /** A read-only snapshot of the quest flags that colour citizen chatter. */
 export interface TownDialogContext {
@@ -55,8 +78,8 @@ function roleSpeaker(role: TownRole) {
  * What this role shouts while the town is under threat. Named residents borrow
  * it too: an alarm is no time for a personal anecdote.
  */
-export function dangerLine(role: TownRole): DialogLine {
-  return roleSpeaker(role).line(DANGER_LINES[role]);
+export function dangerLine(role: TownRole, species: TownSpecies): DialogLine {
+  return roleSpeaker(role).line(dangerBark(species, role));
 }
 
 /**
@@ -172,7 +195,8 @@ const REACTIVE_LEAD_MODULUS = 2;
  * paragraphs are the reactive lead (if any) followed by the ambient line,
  * each its own page.
  *
- * @param role   The citizen's role — selects the ambient/danger voice.
+ * @param role    The citizen's role — selects the ambient/danger voice.
+ * @param species The citizen's species — selects which of that role's pools to draw from.
  * @param seed   The citizen's appearance seed — decorrelates which line each
  *               individual opens on, so two guards don't say the same thing.
  * @param turn   How many times the player has already talked to this citizen —
@@ -181,16 +205,17 @@ const REACTIVE_LEAD_MODULUS = 2;
  */
 export function buildCitizenConversation(
   role: TownRole,
+  species: TownSpecies,
   seed: number,
   turn: number,
   ctx: TownDialogContext,
 ): DialogLine {
   const speak = roleSpeaker(role);
   if (isTownInDanger(ctx)) {
-    return speak.line(DANGER_LINES[role]);
+    return speak.line(dangerBark(species, role));
   }
 
-  const ambient = pickLine(AMBIENT_LINES[role], seed + turn);
+  const ambient = pickLine(ambientPool(species, role), seed + turn);
   const lead = reactiveLead(ctx, seed, turn);
   if (lead !== null && (seed + turn) % REACTIVE_LEAD_MODULUS === 0) {
     return speak.line([lead, ambient]);

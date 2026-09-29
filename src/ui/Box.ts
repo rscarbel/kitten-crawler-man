@@ -41,6 +41,13 @@ const DEFAULT_SHADOW_OFFSET_Y = 4;
 const DEFAULT_OVERLAY_ALPHA = 0.6;
 const DEFAULT_SCROLLBAR_WIDTH = 6;
 const DEFAULT_SCROLLBAR_MIN_THUMB_HEIGHT = 20;
+const DEFAULT_PROGRESS_GLOW_BLUR = 12;
+const DEFAULT_SHIMMER_COLOR = 'rgba(255,255,255,0.35)';
+/** Width of the travelling highlight, as a share of the whole bar. */
+const SHIMMER_WIDTH_FRACTION = 0.18;
+const TRANSPARENT = 'rgba(255,255,255,0)';
+/** The highlight is brightest at its middle and fades to nothing at both edges. */
+const SHIMMER_PEAK_STOP = 0.5;
 
 export type Padding = number | { top?: number; right?: number; bottom?: number; left?: number };
 
@@ -150,6 +157,23 @@ export interface ProgressBarOptions {
   radius?: number;
   /** Opacity 0–1. Default: 1 */
   alpha?: number;
+  /**
+   * A lighter band over the top half of the filled portion, so a tall bar reads
+   * as a lit, rounded tube rather than a flat stripe. Omit for a flat fill.
+   */
+  sheen?: string;
+  /** Soft glow around the filled portion, in this colour. Omit for none. */
+  glow?: string;
+  /** Glow blur radius in px. Default: 12 */
+  glowBlur?: number;
+  /**
+   * Where a travelling highlight sits along the filled portion, `0`–`1`.
+   * Advance it with time to show a bar that is still working even while its
+   * value holds still. Omit for no highlight.
+   */
+  shimmerPhase?: number;
+  /** Colour at the centre of the travelling highlight. Default: 'rgba(255,255,255,0.35)' */
+  shimmerColor?: string;
 }
 
 export interface DividerOptions {
@@ -225,6 +249,16 @@ export const BOX_PRESETS = {
     borderWidth: 1,
     radius: 6,
   },
+  /**
+   * The room-name plate inside a building: the translucent HUD strip, a
+   * shade darker so small type over a busy floor stays legible.
+   */
+  roomNameplate: {
+    fill: 'rgba(0,0,0,0.6)',
+    border: 'rgba(148,163,184,0.35)',
+    borderWidth: 1,
+    radius: 6,
+  },
   /** Boss encounter deep purple. */
   boss: {
     fill: 'rgba(30,10,50,0.95)',
@@ -232,6 +266,19 @@ export const BOX_PRESETS = {
     borderWidth: 2,
     glow: '#a855f7',
     glowBlur: 24,
+  },
+  /**
+   * The loading screen's card — near-opaque slate with a thin gold rim and a
+   * warm glow, so it reads as the game's own system panel rather than a
+   * browser placeholder.
+   */
+  loading: {
+    fill: 'rgba(12,18,34,0.94)',
+    border: 'rgba(250,204,21,0.55)',
+    borderWidth: 1.5,
+    radius: 12,
+    glow: 'rgba(250,204,21,0.22)',
+    glowBlur: 36,
   },
   /** Save-in-progress banner — opaque enough to read over any scene behind it. */
   saveIndicator: {
@@ -290,6 +337,18 @@ export const PROGRESS_PRESETS = {
     border: '#78350f',
     borderWidth: 1,
     radius: 2,
+  },
+  /** A loading screen's bar — the game's gold on a sunken slate track, lit from above. */
+  loading: {
+    fill: '#eab308',
+    background: 'rgba(2,6,16,0.85)',
+    border: 'rgba(250,204,21,0.45)',
+    borderWidth: 1,
+    radius: 6,
+    sheen: 'rgba(254,240,138,0.35)',
+    glow: 'rgba(250,204,21,0.55)',
+    glowBlur: 14,
+    shimmerColor: 'rgba(255,255,255,0.45)',
   },
   /** A structure's own health in its menu. */
   structureHp: { fill: '#65a30d', background: 'rgba(0,0,0,0.55)', radius: 2 },
@@ -562,9 +621,15 @@ export function drawProgressBar(ctx: CanvasRenderingContext2D, opts: ProgressBar
     borderWidth = 1,
     radius = 2,
     alpha = 1,
+    sheen,
+    glow,
+    glowBlur = DEFAULT_PROGRESS_GLOW_BLUR,
+    shimmerPhase,
+    shimmerColor = DEFAULT_SHIMMER_COLOR,
   } = opts;
 
   const clamped = Math.max(0, Math.min(1, value));
+  const filledWidth = clamped * width;
 
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -575,13 +640,42 @@ export function drawProgressBar(ctx: CanvasRenderingContext2D, opts: ProgressBar
 
   // Filled portion — clip to the outer shape so rounded corners stay intact
   if (clamped > 0) {
+    if (glow !== undefined) {
+      // Outside the clip below, or the clip would cut the glow off at the track.
+      ctx.save();
+      ctx.shadowColor = glow;
+      ctx.shadowBlur = glowBlur;
+      ctx.fillStyle = fill;
+      fillRoundRect(ctx, x, y, filledWidth, height, Math.min(radius, filledWidth / 2));
+      ctx.restore();
+    }
     ctx.save();
     if (radius > 0) {
       roundRectPath(ctx, x, y, width, height, radius);
       ctx.clip();
     }
     ctx.fillStyle = fill;
-    ctx.fillRect(x, y, clamped * width, height);
+    ctx.fillRect(x, y, filledWidth, height);
+    if (sheen !== undefined) {
+      ctx.fillStyle = sheen;
+      ctx.fillRect(x, y, filledWidth, height / 2);
+    }
+    if (shimmerPhase !== undefined) {
+      const bandWidth = width * SHIMMER_WIDTH_FRACTION;
+      const wrappedPhase = shimmerPhase - Math.floor(shimmerPhase);
+      // Travels from fully off the left of the fill to fully off its right, so
+      // it enters and leaves rather than popping in at an edge.
+      const bandCentre = x - bandWidth + wrappedPhase * (filledWidth + bandWidth * 2);
+      const band = ctx.createLinearGradient(bandCentre - bandWidth, 0, bandCentre + bandWidth, 0);
+      band.addColorStop(0, TRANSPARENT);
+      band.addColorStop(SHIMMER_PEAK_STOP, shimmerColor);
+      band.addColorStop(1, TRANSPARENT);
+      ctx.beginPath();
+      ctx.rect(x, y, filledWidth, height);
+      ctx.clip();
+      ctx.fillStyle = band;
+      ctx.fillRect(bandCentre - bandWidth, y, bandWidth * 2, height);
+    }
     ctx.restore();
   }
 

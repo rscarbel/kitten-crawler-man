@@ -2,10 +2,24 @@ import { Mob } from './Mob';
 import type { PlayerDamageType } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
-import { drawSkyFowlSprite, randomSkyFowlPaletteIndex } from '../sprites/skyFowlSprite';
+import { drawSkyfowlCastSprite } from '../sprites/skyfowlCastSprite';
+import {
+  RUN_FRAMES,
+  WALK_FRAMES,
+  skyfowlRunCyclePx,
+  skyfowlWalkCyclePx,
+} from '../sprites/art/skyfowlCastFigure';
+import { gaitCyclesForDistance } from '../sprites/gaitCadence';
+import { SKYFOWL_TOUGH_LOOKS, type SkyfowlLookId } from '../sprites/art/skyfowl/cast';
 import type { LootDrop } from './Mob';
 import { randomInt } from '../utils';
 import type { TacticsTrait } from './tactics/tacticsTraits';
+
+/** Picks which of the four street-tough looks this fowl wears for its lifetime. */
+function randomSkyfowlToughLookId(): SkyfowlLookId {
+  const look = SKYFOWL_TOUGH_LOOKS[Math.floor(Math.random() * SKYFOWL_TOUGH_LOOKS.length)];
+  return look.id;
+}
 
 /** The blows the player lands by hand, as opposed to anything fired or thrown. */
 const HAND_SWUNG_DAMAGE_TYPES: ReadonlySet<PlayerDamageType | null> =
@@ -39,6 +53,44 @@ const FOLLOW_STOP_FRACTION = 0.7;
 /** Fraction of peck range within which the peck attack is attempted. */
 const PECK_ENGAGE_FRACTION = 1.2;
 const FOWL_TACTICS: readonly TacticsTrait[] = ['flank', 'regroup'];
+/**
+ * Ground covered per tick, in tiles, above which the legs change from a walk
+ * to a run, and below which they change back — two thresholds, so a speed
+ * hovering at one does not flicker between the rows. The walk's own stride
+ * holds the feet still up to about a thirtieth of a tile a tick, where its
+ * one-frame-a-tick cadence cap binds; the angry sprint covers more than that,
+ * which the walk could only play by skating.
+ */
+const RUN_ENTER_TILES_PER_TICK = 0.025;
+const RUN_EXIT_TILES_PER_TICK = 0.019;
+/**
+ * Less ground than this in a tick is standing still: a fowl grinding into a
+ * wall reports it is walking but goes nowhere, and must not tread air.
+ */
+const STILL_TILES_PER_TICK = 0.002;
+/**
+ * Ticks the legs keep walking after the fowl last moved, so a collision slide
+ * that loses one tick's motion does not snap the row to idle and back.
+ */
+const MOTION_HOLD_TICKS = 4;
+
+/**
+ * The speeds a fowl actually travels at, in world pixels a tick at base
+ * stats: wandering, pulled back toward its spawn, and chasing. The foot-lock
+ * gate holds the walk and run rows to exactly these.
+ */
+export const SKYFOWL_MOB_TRAVEL_SPEEDS: readonly { readonly pxPerTick: number }[] = [
+  { pxPerTick: FOWL_SPEED_NEUTRAL * WANDER_SPEED_FRACTION },
+  { pxPerTick: FOWL_SPEED_NEUTRAL * WANDER_PULLBACK_FRACTION },
+  { pxPerTick: FOWL_SPEED_AGGRO },
+];
+
+/** Whether legs covering `tilesPerTick` run, from a standing start. */
+export function skyfowlMobRunsAt(tilesPerTick: number): boolean {
+  return tilesPerTick > RUN_ENTER_TILES_PER_TICK;
+}
+
+const TWO_PI = Math.PI * 2;
 
 export class SkyFowl extends Mob {
   readonly xpValue = 8;
@@ -49,11 +101,12 @@ export class SkyFowl extends Mob {
   override readonly audioTag = 'skyfowl';
 
   /**
-   * Which of the town's eight clothing palettes this fowl wears, chosen at
-   * construction and kept for its lifetime. Each palette is painted by its own
-   * cached figure, so this is what picks the art as well as the colours.
+   * Which of the four street-tough looks this fowl wears, chosen at
+   * construction and kept for its lifetime — bruised-plum, unkempt plumage
+   * and a hunched stance, the colour family and posture no citizen wears, so
+   * a player can never mistake a fightable fowl for a friendly one.
    */
-  readonly paletteIndex: number;
+  readonly toughLookId: SkyfowlLookId;
 
   private isAggressive = false;
 
@@ -80,10 +133,19 @@ export class SkyFowl extends Mob {
   }
   private peckCooldown = 0;
   private peckAnimTimer = 0;
+  /** Where the legs last measured the fowl from, so the gait turns by ground actually covered. */
+  private gaitSampleX: number;
+  private gaitSampleY: number;
+  /** Position through the walk or run cycle, 0–1. */
+  private gaitPhase = 0;
+  private gaitRunning = false;
+  private gaitMotionTicks = 0;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, FOWL_HP, FOWL_SPEED_NEUTRAL);
-    this.paletteIndex = randomSkyFowlPaletteIndex();
+    this.toughLookId = randomSkyfowlToughLookId();
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
   }
 
   override resetToSpawn(): void {
@@ -92,6 +154,33 @@ export class SkyFowl extends Mob {
     this.setBaseSpeed(FOWL_SPEED_NEUTRAL);
     this.peckCooldown = 0;
     this.peckAnimTimer = 0;
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    this.gaitPhase = 0;
+    this.gaitRunning = false;
+    this.gaitMotionTicks = 0;
+  }
+
+  /**
+   * Turns the legs by the ground the fowl actually covered since the last
+   * tick — measured from position, so collision slides, separation shoves and
+   * a grind into a wall all count for what they really moved, not for what
+   * the AI asked for. Walk or run is chosen by that same measured speed.
+   */
+  private syncGaitToDistanceCovered(): void {
+    const coveredPx = Math.hypot(this.x - this.gaitSampleX, this.y - this.gaitSampleY);
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    const tilesPerTick = coveredPx / this.tileSize;
+    if (tilesPerTick > STILL_TILES_PER_TICK) this.gaitMotionTicks = MOTION_HOLD_TICKS;
+    else if (this.gaitMotionTicks > 0) this.gaitMotionTicks--;
+    if (this.gaitRunning) this.gaitRunning = tilesPerTick > RUN_EXIT_TILES_PER_TICK;
+    else this.gaitRunning = tilesPerTick > RUN_ENTER_TILES_PER_TICK;
+    const cyclePx = this.gaitRunning
+      ? skyfowlRunCyclePx(this.toughLookId, this.tileSize)
+      : skyfowlWalkCyclePx(this.toughLookId, this.tileSize);
+    const rowFrames = this.gaitRunning ? RUN_FRAMES : WALK_FRAMES;
+    this.gaitPhase = (this.gaitPhase + gaitCyclesForDistance(coveredPx, cyclePx, rowFrames)) % 1;
   }
 
   /**
@@ -165,6 +254,7 @@ export class SkyFowl extends Mob {
         this.wanderDy = ny * this.speed * WANDER_PULLBACK_FRACTION;
       }
       if (this.wanderDx !== 0) this.facingX = this.wanderDx > 0 ? 1 : -1;
+      if (this.wanderDy !== 0) this.facingY = this.wanderDy > 0 ? 1 : -1;
       this.moveWithCollision(this.wanderDx, this.wanderDy);
       this.isMoving = true;
     } else {
@@ -174,6 +264,8 @@ export class SkyFowl extends Mob {
 
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
+
+    this.syncGaitToDistanceCovered();
 
     if (this.peckCooldown > 0) this.peckCooldown--;
     if (this.peckAnimTimer > 0) this.peckAnimTimer--;
@@ -254,19 +346,18 @@ export class SkyFowl extends Mob {
 
     const peckAmt =
       this.peckAnimTimer > 0 ? Math.sin((1 - this.peckAnimTimer / PECK_ANIM_FRAMES) * Math.PI) : 0;
+    const travelling = this.gaitMotionTicks > 0;
+    const gait = this.gaitRunning ? 'run' : 'walk';
+    const action =
+      peckAmt > 0 ? 'strike' : travelling ? gait : this.isAggressive ? 'aggro' : 'idle';
 
-    drawSkyFowlSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      this.isAggressive,
-      this.facingX,
-      this.paletteIndex,
-      peckAmt,
-    );
+    drawSkyfowlCastSprite(ctx, this.toughLookId, sx, sy, tileSize, {
+      action,
+      walkPhase: this.gaitPhase * TWO_PI,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      progress: peckAmt,
+    });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();

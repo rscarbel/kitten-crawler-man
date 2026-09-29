@@ -15,6 +15,7 @@
 import type { Plane } from '../projection';
 import { getRamp } from '../ramps';
 import type { WallPaintOptions } from './kit';
+import type { PlinthSpec } from '../spec';
 import { paintStone } from './stone';
 import { paintPlaster } from './plaster';
 import { paintPlankWall, paintTimberFrame } from './timber';
@@ -108,31 +109,30 @@ function paintWallBody(options: WallPaintOptions): void {
     case 'plaster':
       paintPlaster({
         plane,
-        noise,
         seed,
         band,
         ramp: getRamp(wall.ramp),
         trimRamp: getRamp(wall.trimRamp),
         painted: 0,
         scale,
+        upkeep: wall.upkeep,
       });
       return;
     case 'painted_plaster':
       paintPlaster({
         plane,
-        noise,
         seed,
         band,
         ramp: getRamp(wall.ramp),
         trimRamp: getRamp(wall.trimRamp),
         painted: PAINTED_COAT_STRENGTH,
         scale,
+        upkeep: wall.upkeep,
       });
       return;
     case 'timber_frame':
       paintTimberFrame({
         plane,
-        noise,
         seed,
         band,
         beamRamp: getRamp(wall.ramp),
@@ -140,6 +140,7 @@ function paintWallBody(options: WallPaintOptions): void {
         scale,
         braces: true,
         sillBeam: true,
+        upkeep: wall.upkeep,
       });
       return;
     case 'plank':
@@ -168,7 +169,11 @@ const PAINTED_COAT_STRENGTH = 0.82;
  * building.
  */
 function paintFoundation(options: WallPaintOptions, band: { top: number; bottom: number }): void {
-  const { plane, noise, seed, scale, wall } = options;
+  const { plane, noise, seed, scale, wall, plinth } = options;
+  if (plinth !== undefined) {
+    paintDressedPlinth(options, plinth, band);
+    return;
+  }
   const foundationRamp = getRamp(wall.material === 'dressed_stone' ? wall.ramp : 'fieldstone');
   paintStone({
     plane,
@@ -186,6 +191,42 @@ function paintFoundation(options: WallPaintOptions, band: { top: number; bottom:
 }
 
 const FOUNDATION_SEED_OFFSET = 7717;
+
+/**
+ * A squared plinth is still the footing, so it still reads a shade darker than
+ * the wall it carries — but only a shade: a dressed course darkened like rubble
+ * turns back into rubble at display size.
+ */
+const PLINTH_SHADE = 0.95;
+/** Blocks run longer and courses taller than the dressed-stone wall material's. */
+const PLINTH_COURSE_FACTOR = 1.2;
+const PLINTH_BLOCK_FACTOR = 1.15;
+/** Exported so the palette gate can declare it for any building that has a plinth. */
+export const PLINTH_JOINT_RAMP = 'mortar';
+
+/** Squared, close-jointed blocks with an even face — a mason's footing, not a heap of fieldstone. */
+function paintDressedPlinth(
+  options: WallPaintOptions,
+  plinth: PlinthSpec,
+  band: { top: number; bottom: number },
+): void {
+  const { plane, noise, seed, scale } = options;
+  paintStone({
+    plane,
+    noise,
+    seed: seed + FOUNDATION_SEED_OFFSET,
+    band,
+    ramp: getRamp(plinth.ramp),
+    // Dark joints: squared blocks the same pale tone as their neighbours only
+    // read as separate stones where the joint between them is drawn dark.
+    jointRamp: getRamp(PLINTH_JOINT_RAMP),
+    coursePx: DRESSED_STONE_COURSE_TILES * PLINTH_COURSE_FACTOR * scale,
+    blockPx: DRESSED_STONE_BLOCK_TILES * PLINTH_BLOCK_FACTOR * scale,
+    dressed: DRESSED_STONE_DRESSED,
+    quoins: plinth.quoins,
+  });
+  darkenBand(plane, band, PLINTH_SHADE);
+}
 
 /**
  * Multiplies a band's colour in place.

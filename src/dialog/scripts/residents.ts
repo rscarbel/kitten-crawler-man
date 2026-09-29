@@ -44,9 +44,9 @@ export const RESIDENT_LINES = {
       'Mind the jars by the door, dearie. Two of them are still alive.',
       'Sit if you like. The stool only bites people who lie to me.',
       'You smell of the ruins. Wash it off before it decides to stay.',
-      'I have no roof-tax and no god. Suits me and it suits the neighbours.',
-      'Everyone wants a charm. Nobody wants to hear what it costs.',
-      'Old woman, small house, long memory. That is the whole of me.',
+      'I have no roof-tax and no god of my own, though I do send Deacon Aviel a jar for the poor box now and then. Suits me and it suits the neighbours..',
+      'Everyone wants a charm. Nobody wants to hear what it costs, and I do mean the coin, dearie, not anything spookier.',
+      'Voss will read your cards for a fee and dress it up with candles. I will just tell you plain, same as I always have..',
     ],
     lore: [
       [
@@ -119,7 +119,7 @@ export const RESIDENT_LINES = {
       [
         'I had an apprentice. Teodo. Good hands, no patience — the usual.',
         'He went out past the west gate on a dare. Boys do. Most of them come back with a story and a scraped elbow.',
-        'The guards found his belt. Just the belt, hung neat on a fencepost, which is the part that keeps me up.',
+        'The guards found his belt. Just the belt, hung neat on a fencepost, which is the part that keeps me up. Worst molt-year I have had, and I have had a few.',
         'So when I tell you the ruins are not a place to prove anything — I am not being careful. I am being specific.',
       ],
       [
@@ -214,7 +214,7 @@ export const RESIDENT_LINES = {
     lore: [
       [
         'You will hear the Barracks say they feed this town. They do not. I do.',
-        'Sixteen sacks a week at a price the magistrate set in a year when there were roads.',
+        'Sixteen sacks a week to Quartermaster Dann, at a price the magistrate set in a year when there were roads.',
         'I do not argue. A walled town that goes hungry stops being a walled town very fast — it just becomes a wall.',
         'But do not let anyone tell you the garrison is what keeps us. It is grain. It is always grain.',
       ],
@@ -255,6 +255,7 @@ export const RESIDENT_LINES = {
       'No, I will not tell you what is in it. You would only worry.',
       'A potion is a promise with a shelf life. Read the date.',
       'I sell cures. Prevention is free and nobody takes it.',
+      'Kestrel prices her tonics to spite me and I price mine to spite her back. The customers get the better end of it.',
     ],
     lore: [
       [
@@ -298,57 +299,59 @@ export const RESIDENT_LINES = {
   },
   deacon_aviel: {
     ambient: [
-      'The dome is new. The faith is not. Try not to confuse them.',
-      'Kneel or do not. It is a roof either way.',
-      'We take donations, not tithes. There is a difference and it is mostly dignity.',
-      'You may look up in here. Most people forget they are allowed.',
-      'I have buried more of this town than I have blessed. I am working on the ratio.',
+      'The dome is new. The faith beneath it is not — mind thou dost not confuse the two.',
+      'Kneel or stand as thou wilt. It is a roof regardless.',
+      'We ask for what thou canst spare, not what thou dost owe. The difference is mostly dignity.',
+      'Thou mayest look up in here. Most forget that they are permitted to.',
+      'I have buried more of this parish than I have blessed this year. I am working to improve the count.',
+      'Madame Voss charges for her comfort and I give mine away. We are, I am told, in the same trade.',
     ],
     lore: [
       [
-        'You will hear it said in the square: the skyfowl are not birds, they are watchers.',
-        'People repeat it like a pleasantry. It is not a pleasantry. It is the whole of the doctrine and it is a warning.',
-        'A watcher is not a guardian. A watcher observes, and records, and does not intervene, and is not sorry.',
-        'We built them a dome anyway. That is what faith is, mostly — building for someone who is only taking notes.',
+        'I did not choose the dome. The dome chose rather poorly, some seasons, and here we still are.',
+        'My mother roosted two streets from here and never once came inside. She thought the ceiling too low for a sermon.',
+        'She was likely right. I have raised it twice in memory and it is, by my own estimation, still too low.',
+        'Thirty years under it now. One grows used to a ceiling, the way one grows used to anything that will not move.',
       ],
       [
-        'There are elves in the low streets who have got it badly wrong.',
-        'They have decided a watcher must be an angel, and that an angel must want something, and that they are the ones to give it.',
-        'I have preached against it three seasons running. It only made them meet somewhere I am not.',
-        'Doctrine you cannot correct becomes a cult. I have seen the shape of it before.',
+        'Thou wilt hear it said in the square: the skyfowl are not birds, they are watchers. I wish the phrase were only ornament, but it is doctrine, and doctrine has teeth.',
+        'A watcher does not guard. A watcher observes and sets it down, and does not step in, and does not apologise for the not stepping in.',
+        'I built this dome for one regardless, the same as every deacon before me — a room for someone who will only ever take notes on it.',
       ],
       [
-        'Magistrate Featherfall has not come to the dome in six weeks.',
-        'He came every seventh day for thirty years. He is skyfowl; it is not devotion, it is habit, and their habits do not break.',
-        'I sent word twice. I received back a very polite note in a hand that is not his.',
-        'I am a deacon. I am not permitted to say what I think that means. But you are not a deacon.',
+        'Magistrate Featherfall has not come to the dome in six weeks. Thirty years he came every seventh day; it was habit, not devotion, and a skyfowl’s habits do not simply lapse.',
+        'I sent word twice. What returned was courteous, and was not in his hand.',
+        'I am a deacon. I am not at liberty to say what I make of that. Thou art not a deacon.',
       ],
     ],
     reactive: (ctx) => {
       if (ctx.doomsday === 'complete') {
         return [
-          'The watchers watched. You acted. I will be some time working out what to preach about that.',
-          'The dome held. Half the town was under it. Whatever you did up there, it reached down here.',
+          'The watchers watched, as is their nature, and thou didst act, which is not. I shall be some while composing a sermon around that.',
+          'The dome held, and half this parish sheltered beneath it. Whatever passed at the tower, it reached down to us.',
         ];
       }
+      // The cult-hideout reveal must be checked before the general murder-resolved
+      // line: once the case closes, murderResolved(ctx) is also true, and ranked
+      // below it this branch would never be reached again.
       if (
         !murderResolved(ctx) &&
         (ctx.murder === 'cult_hideout' || ctx.murder === 'confrontation' || ctx.quillNamed)
       ) {
         return [
-          'So it was the elves after all, and worse than I feared. I warned the wrong people, in the wrong tone, for three years.',
-          'When you find whoever taught them that a watcher wants blood — that is the one to end. The rest are just parishioners.',
+          'So it was the elves after all, and graver than I feared. Three years I preached against it, to the wrong ears, in the wrong tone.',
+          'Find whoever taught them a watcher hungers for blood, and end that one. The rest are but parishioners who believed their teacher.',
         ];
       }
       if (murderResolved(ctx)) {
         return [
-          'The dome is full again on the seventh day. Fear fills pews, but so does relief, and relief pays better.',
+          'The dome fills again on the seventh day. Fear brings a congregation same as relief does, but relief gives more generously.',
         ];
       }
       if (murderOpen(ctx)) {
         return [
-          'They were taken from the low streets, all of them. The town notices a death by the temple and forgets one by the alley.',
-          'Sit with me a moment before you go back out. No sermon. I would just rather you did not go straight there.',
+          'Every one of them was taken from the low streets. This town marks a death near the temple and forgets one in an alley by morning.',
+          'Sit a moment before thou goest back out. No sermon — I would simply rather thou didst not walk straight into it.',
         ];
       }
       return null;
@@ -361,6 +364,7 @@ export const RESIDENT_LINES = {
       'Fifty years and the forge still tells me when I am rushing.',
       'A weapon is a tool that has to be right the first time. That is the entire difference.',
       'If it broke, it was going to. I can usually tell you when.',
+      'Every handle I cut is wide enough for a talon grip as well as a fist. Groundfolk hands manage on the same shape.',
     ],
     lore: [
       [
@@ -371,15 +375,15 @@ export const RESIDENT_LINES = {
       ],
       [
         'Look at the anvil face. See the dish worn into it, deep as a thumb?',
-        'That is not mine. That is three smiths of wear, and the first of them worked outside the wall, in a street that is rubble now.',
+        'Three smiths wore that dish into the face before me, and the first of them worked outside the wall, in a street that is rubble now.',
         'They carried it in on a sledge during the bad year. Left the house, left the tools, brought the anvil.',
         'When you next wonder what this town is — it is the people who chose the anvil.',
       ],
       [
-        'The garrison sends me their steel back bent and I send it out straight and neither of us discusses where it got bent.',
+        'Corporal Pell sends me his garrison steel back bent and I send it out straight and neither of us discusses where it got bent.',
         'But I read it. Every dent is a direction. A notch high on the left edge means something tall and quick came down at them.',
         'I have been reading a lot of high notches this season. That is a thing worth knowing before you go past the gate.',
-        'Take that however you like. I am a smith. I only report the metal.',
+        'I do not go past the gate myself and I do not guess at what put the notch there. I hammer it flat and hand it back.',
       ],
     ],
     reactive: (ctx) => {
@@ -403,51 +407,56 @@ export const RESIDENT_LINES = {
   },
   innkeep_ossie: {
     ambient: [
-      'Beds upstairs, stew downstairs, and nothing hostile past that door. The floor decided that, not me.',
-      'You look like a person who has not eaten sitting down in a while.',
-      'We are the quiet house. The Stump is that way and good luck to you.',
+      'Beds are upstairs and the stew is down here, and nobody has died crossing between them yet.',
+      'Sit and eat something. You look like you slept in a hedge, and I mean that kindly.',
+      'The Stump is the loud house. We are the quiet one. Ask around if you do not believe me.',
       'Everything on the board heals something. Even the bread. Especially the bread.',
-      'Travellers pay in coin. Story is a discount, though.',
+      'Pay in coin if you have it. Pay in a good story and I will knock a little off.',
+      'Corporal Pell sends me half his recruits before they have signed anything. Says a bed here is cheaper than a coffin.',
+      "Wendell's farm used to keep this kitchen in milk. Now I buy it in from further out and it is never quite as good.",
+      'I could roost in the rafters if I wanted the quiet. I sleep behind the bar instead, closer to the till.',
     ],
     lore: [
       [
-        'You are wondering about the sign. Everyone gets around to the sign.',
-        'There was a cat. Came in off the ruins road about nine years back, sat on that stool, and would not be moved.',
-        'Now — I am going to say this plainly and you may do what you like with it. That cat talked.',
-        'Talked its way out of the ruins, talked its way into my kitchen, and talked me out of a very good ham. Then it left. I painted the sign the next morning.',
+        'You keep looking at the sign. Everybody does, eventually.',
+        'A cat walked in off the ruins road nine years back, sat right there on that stool, and would not be moved.',
+        'I will say this plainly and you can believe it or not as you please: that cat talked. Argued me out of a very good ham, then left before dawn.',
+        'Painted the sign the next morning. Seemed rude not to.',
       ],
       [
-        'People come in off the stair and they tell me things while the stew cools. That is the trade, really. The stew is a pretext.',
-        'A woman last month swore the second floor has a shopping arcade in it. An actual arcade, with a fountain.',
-        'A fellow the week before said there is a floor made of a single room, and the room is a mouth.',
-        'I write them in the ledger. Half are drink. But I have never yet had one turn out to be entirely invented.',
+        'Folk talk while the stew cools. I gave up trying to stop them years ago.',
+        'One woman swore the second floor holds a shopping arcade, fountain and all.',
+        'A fellow the week before had a floor that is one room, and the room is a mouth. I wrote that one down twice.',
+        'Half of it is the ale talking. I have yet to catch one turning out to be fully invented, though.',
       ],
       [
-        'You will have noticed nothing has tried to come through that door since you sat down. That is not the door. That is the floor deciding.',
-        'The System put its mark on my taproom and the mark holds. Nothing hostile crosses it. Not the changed, not the krasue, not whatever you carried up the stair on your boot.',
-        'I was not asked and I was not warned. One morning this was a public house and by the evening it was the safe room, and the garrison up the road was just a garrison with cold men in it.',
-        'So sleep. Actually sleep. It is the only promise anybody on this floor has kept, and I have watched crawlers refuse to believe it and go and sit out in the rain instead.',
+        'Nothing unfriendly has come through that door since you sat down, and it is not because I am handy with a ladle.',
+        'The floor put its mark on this taproom the same as it marks anything it decides matters. I was not asked and nobody explained it — one evening this was a public house, the next it was the safe room.',
+        'I still check the latch every night regardless. A habit can outlast the reason for it and I keep this one anyway.',
+        'Ask the other guest if you want proof. Mordecai took a room and never once checked out, and he will vouch for how quiet it stays.',
       ],
     ],
     reactive: (ctx) => {
       if (murderOpen(ctx)) {
         return [
-          'I am not letting rooms after dark this week. Not to anyone. Say what you like about the coin.',
+          'No rooms after dark until this is done. Not to anyone, whatever you offer me for one.',
         ];
       }
       // Doomsday first. Its stage is armed on the same frame the murders close,
       // so ranked below them its line could never be reached.
       if (ctx.doomsday === 'complete') {
-        return ['The Sleeping Cat is still standing. So is everything else. Stew is free today.'];
+        return [
+          'Still standing, the inn and everything past it. Stew is free today, and I mean all of it.',
+        ];
       }
       if (murderResolved(ctx)) {
         return [
-          'Full house tonight, first time in a month. You did that. Sit down and I will make sure you never see a bill in here.',
+          'First full house in a month, and that is down to you. Sit. You will not see a bill in this place again.',
         ];
       }
       if (circusResolved(ctx)) {
         return [
-          'Two of the circus folk took a room. They slept nineteen hours and asked whether the war was over. I said near enough.',
+          'Two of the circus folk are upstairs. Slept round the clock and woke asking if the fighting was over. Told them near enough.',
         ];
       }
       return null;
@@ -460,6 +469,8 @@ export const RESIDENT_LINES = {
       'That is the guild corner. They will not thank you for sitting in it.',
       'Boots off the bench, please. It is older than your family line.',
       'I hear a great deal in here and repeat about a third of it.',
+      'Ossie runs the quiet house down the way. I run the respectable one. We do not compete, we specialise.',
+      'Groundfolk drink slower and tip better than my own kind ever do. I have never worked out why.',
     ],
     lore: [
       [
@@ -471,7 +482,7 @@ export const RESIDENT_LINES = {
       [
         'There is a crawler guild recruiting through here. Brynhild’s Daughters — Hekla’s lot.',
         'They are not subtle. Hekla came in, looked at the room, and named a figure at a stranger inside a minute.',
-        'She has her eye on the ones with a following. Anybody the little floating eyes crowd around.',
+        'She has her eye on the ones with a following. Anybody a crowd gathers to watch.',
         'Which is to say: if a very tall woman buys you a mead, she is not buying you a mead.',
       ],
       [
@@ -523,6 +534,7 @@ export const RESIDENT_LINES = {
       'Nobody in here is anybody. That is why they come.',
       'I have thrown out better than you and worse than you in the same hour.',
       'Do not go out the back way unless you know the back way.',
+      "Sgt. Kessler's post is two streets over and he has never once walked my alley. I have decided not to wonder why.",
     ],
     lore: [
       [
@@ -573,6 +585,7 @@ export const RESIDENT_LINES = {
       'Lodge is garrison ground. Be useful or be brief.',
       'Two of us, one alley, no relief. You do the arithmetic.',
       'I do not want your name. I want to know which way you came in.',
+      'The high watch filed my report as resolved. Nobody the high watch sent has ever once walked down here to check.',
       'Watch rotation is eleven hours. Ask me again about morale.',
       'If you hear a whistle from this alley, go the other way and send someone.',
     ],
@@ -586,7 +599,7 @@ export const RESIDENT_LINES = {
       [
         'We have had four postings here in six years and I am the only one on his second.',
         'The others transferred out. All requested it. All wrote the same phrase in the request: "unsuitable for continued duty".',
-        'That is not a phrase soldiers use. That is a phrase someone gives soldiers to use.',
+        'No soldier reaches for that phrase on his own. Somebody hands it to him and he learns to say it back.',
         'I stopped filing requests and started keeping a log instead. The log is not on the wall.',
       ],
       [
@@ -600,7 +613,7 @@ export const RESIDENT_LINES = {
       if (ctx.murder === 'cult_hideout') {
         return [
           'You are going into the cellar. Good. Take the left branch — the right one floods and they know it.',
-          'Whatever is written on those walls, read it before you burn it. That is the whole of my request.',
+          'Whatever is written on those walls, read it before you burn it. I am asking you once and I will not ask twice.',
         ];
       }
       if (murderResolved(ctx)) {
@@ -627,24 +640,25 @@ export const RESIDENT_LINES = {
       'The quartermaster is behind his counter. He will not be hurried and he will not be haggled.',
       'Spears racked at the wall, always. A man fumbling for his weapon is already dead.',
       'I have been down. I am not going back down. I can still make you better at it.',
+      "Half the new recruits come off roost duty and cannot hold a stance. Flying does not teach a man's feet anything.",
     ],
     lore: [
       [
         'I ran the second floor. Whole thing, gate to gate, with eleven others.',
         'Four came up. Then two of those went back for reasons I have stopped asking about.',
-        'The garrison took me on because I could describe a stairwell accurately. That is the whole of my qualification.',
+        'The garrison took me on because I could describe a stairwell accurately, in order, without shaking. That got me this rank.',
         'Now I stand on sand and shout at people who are going to die anyway. It is not nothing. Four came up.',
       ],
       [
         'Do not sleep here. I have had three crawlers try it and I have thrown out three crawlers.',
         'This is a barracks. Thick walls, men with spears, a bolt on the door. Every bit of that is an opinion, and an opinion can be argued with by something big enough.',
-        'You want a room that cannot be argued with, it is the Sleeping Cat Inn, down the way. Ask for Ossie. Nothing hostile crosses that threshold and the floor itself says so.',
+        'You want a room that cannot be argued with, it is the Sleeping Cat Inn, down the way. Ask for Ossie. Whatever ward the floor put on that taproom, it has held for longer than my watch rotation has.',
         'Sleep there. Train here. I am not confusing the two and neither are you.',
       ],
       [
         'Watch the timer, crawler. Everyone forgets the timer because the town has a market and a pub and it feels like a place.',
         'Twenty days, they say. It was twenty days on the last floor too, and then it was eight.',
-        'They cut it when the audience gets bored. That is not a rumour, it is a schedule.',
+        'They cut it when the audience gets bored, and somebody up there keeps a schedule for exactly that.',
         'Do the thing you are putting off. Whatever it is. Do it this week.',
       ],
     ],
@@ -675,13 +689,14 @@ export const RESIDENT_LINES = {
       'Padded, boiled, riveted. That is the order of the price and it is also the order of the use.',
       'A crawler who argues the cost of a helm has generally still got a head to argue with.',
       'Try it on here. A strap you cannot find in the dark is a strap you do not own.',
+      'I owe no nest-debt to anyone on this counter. Coin only, and the count comes out even every night.',
     ],
     lore: [
       [
         'Every piece on that rack was worn by somebody who came up the stair and did not go back down it.',
         'I do not scrub the inside. Scrubbing takes the shape out, and the shape is half of what you are paying me for.',
         'A gambeson that has already been hit sits better than one that has not. Any of them out on the sand will tell you the same.',
-        'That is not superstition, it is compression. I have the dates written in the book and the book does not flatter anybody.',
+        'Call it compression, not superstition. I have the dates written in the book and the book does not flatter anybody.',
       ],
       [
         'Sixteen sacks a week from the mill at a rate set in the ninth year, and eleven reviews deferred. That is the garrison, on paper.',
@@ -694,7 +709,7 @@ export const RESIDENT_LINES = {
   },
   stock_clerk_wick: {
     ambient: [
-      'Shopkeep is at the counter. I am the one who knows where anything is.',
+      'Kestrel is at the counter. I am the one who knows where anything is.',
       'Rope, lamp oil, chalk, a pot. That is the list. It is always the list.',
       'You want the good potions, go to the herbalist. I will not pretend otherwise.',
       'Everything on that top shelf is for people who have already made a mistake.',
@@ -724,7 +739,7 @@ export const RESIDENT_LINES = {
       if (murderOpen(ctx)) {
         return [
           'Ask me about the candles. Everyone asks the guard things. Nobody asks the person who sold the candles.',
-          'Whoever bought out my lamps six weeks ago did it in old coin and would not sign the book. Make of that what you like.',
+          'Whoever bought out my lamps six weeks ago did it in old coin and would not sign the book. I have written both facts down twice, in case the first copy is not enough for someone to act on it.',
         ];
       }
       if (ctx.doomsday === 'complete') {
@@ -738,6 +753,59 @@ export const RESIDENT_LINES = {
       return null;
     },
   },
+  keeper_brenna_kestrel: {
+    ambient: [
+      'Coin first, story after. I have heard every story and they all end at the price.',
+      'Ask Wick where a thing sits on the shelf. Ask me what it costs and why.',
+      'Every jar in here gets counted twice a week — once by me, once by the till, and they had better agree.',
+      'You lot never look up. I could hang the sale sign from the eaves and you would still ask me where it is.',
+      'Ask the herbalist about her tinctures if you like. Ask me about mine and I will tell you which keeps longer.',
+      'A shop with an empty shelf is a shop somebody has stopped trusting. Mine are never empty for long.',
+    ],
+    lore: [
+      [
+        'This shop was my mother’s before it was mine. She ran it with a ledger in one hand and a temper in the other.',
+        'I flew supply runs before that. Three years hauling crates between roosts that never once thanked me for landing on time.',
+        'When she died I grounded myself and took the counter instead. Turns out a till adds the same whether you are standing at it or flying to it.',
+        'I have not regretted the trade. I regret the breakage column some months. Not the shop.',
+      ],
+      [
+        'The apothecary sells half of what I sell, at a price she sets to spite me, I am fairly sure.',
+        'A tincture is a tincture whether it comes off her counter or my shelf. Mine keeps longer. I have tested this, and I do not say so out loud because it sounds petty. It is petty.',
+        'Wick thinks I should simply match her price. Wick has never had to explain a loss to the trader who fronts my stock.',
+        'I will not be undercut in my own store. Call it arithmetic — I gave up pretending it was pride years ago.',
+      ],
+      [
+        'My clerk writes off more stock as breakage than a store this size ought to manage.',
+        'I have counted his numbers against the shelf twice now. Short both times, and nothing broken that I can find.',
+        'He is not stealing. I would know — I have caught two who were, in nine years, and neither did it that quietly.',
+        'Whatever it is, it had better stop before the ledger notices what I already have.',
+      ],
+    ],
+    reactive: (ctx) => {
+      if (ctx.doomsday === 'complete') {
+        return [
+          'Sold clean out within the hour that night. Wick gave half of it away before I could tell him to stop. I am choosing to call that good instincts.',
+        ];
+      }
+      if (murderResolved(ctx)) {
+        return [
+          'Trade is back to normal hours. Whatever kept people indoors, it is off my books now.',
+        ];
+      }
+      if (murderOpen(ctx)) {
+        return [
+          'People are buying locks and lamp oil like the wall itself is coming down. I am not complaining about the till, only the reason for it.',
+        ];
+      }
+      if (circusUnderway(ctx)) {
+        return [
+          'Half the town is stocking up before the circus like it is a siege. The other half is buying nothing and staying home. I stock for both.',
+        ];
+      }
+      return null;
+    },
+  },
   tattooist_nim: {
     ambient: [
       'Sit. Do not watch the needle, watch the wall. Everyone thinks they are the exception.',
@@ -745,6 +813,7 @@ export const RESIDENT_LINES = {
       'No, I cannot do a portrait. The ink gets ideas about faces.',
       'It will itch for a day and then it will start paying attention.',
       'The chair is comfortable. That is deliberate and it is the only kindness in here.',
+      'No ink anywhere near the flight feathers. Ask the wrong artist for that and you fly crooked for a year.',
     ],
     lore: [
       [
@@ -763,7 +832,7 @@ export const RESIDENT_LINES = {
         'The Syndicate loves this shop. Loves it. There are three of those little eyes in here right now.',
         'A crawler getting inked is good television — pain, a decision, and a shape the audience can recognise later.',
         'They put my chair on a highlight reel. My chair. I have never been paid and I have never been asked.',
-        'So I have started doing very slow, very boring linework whenever the eyes get close. Small revenge. It is what I have.',
+        'So I have started doing very slow, very boring linework whenever the eyes get close. Bore an audience enough and they wander off to film someone else.',
       ],
     ],
     reactive: (ctx) => {

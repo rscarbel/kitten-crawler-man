@@ -35,7 +35,7 @@ import { MissQuill } from '../creatures/MissQuill';
 import { Remex } from '../creatures/Remex';
 import { CityElfCultist } from '../creatures/CityElfCultist';
 import { TheLich } from '../creatures/TheLich';
-import { drawSkyFowlCorpse } from '../sprites/skyFowlSprite';
+import { drawSkyFowlCorpse } from '../sprites/featherfallCorpseSprite';
 import { drawSoulBurst, prewarmLichFightEffects } from '../sprites/skeletonEffectsSprite';
 import { drawRadialGlow } from '../sprites/radialGlow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -429,10 +429,14 @@ export class QuillConfrontationSystem implements GameSystem {
    * by releasing a boss fight into a held room, the reveal ends by putting the
    * Lich in it, and the victory scene ends by arming the containment clock. A
    * dismissal at any of those strands the encounter halfway through a beat that
-   * has no other exit — so those are opened with `dismiss: blocked` and Escape
-   * has nothing to do there.
+   * has no other exit — so those are opened with `dismiss: blocked`, and this
+   * must decline before ever asking the shared box, rather than trust its
+   * return value: `Conversation.dismiss()` reports a blocked request as
+   * "handled" too, which is correct for swallowing the keypress but wrong for
+   * telling the caller whether the room actually opened up.
    */
   dismissDialog(): boolean {
+    if (this.phase !== 'quill_fight') return false;
     if (!this.conversationOwned) return false;
     return this.conversation.dismiss();
   }

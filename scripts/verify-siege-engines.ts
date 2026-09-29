@@ -1158,7 +1158,7 @@ section('Converted allies');
     noteBlowLanded(_victim: Mob): void {
       // Nothing to learn from a hit in a harness.
     }
-    takePendingShots(): readonly HirelingShot[] {
+    takePendingHirelingShots(): readonly HirelingShot[] {
       const drained = [...shots];
       shots.length = 0;
       return drained;

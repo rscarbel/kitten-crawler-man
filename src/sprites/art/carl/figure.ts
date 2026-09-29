@@ -152,15 +152,43 @@ interface LayerBounds {
   readonly pxPerUnit: number;
 }
 
+/** Paints one attachment in figure space, from the skeleton the body was solved to. */
+export type CarlAttachmentPainter = (
+  ctx: Ctx,
+  skeleton: Skeleton,
+  view: ViewSpec,
+  pose: CarlPose,
+) => void;
+
 /**
- * Options for composing the figure. Only a gate passes any: the shipped
- * figure is always composed with the defaults.
+ * Anatomy and clothing a figure built on this rig grows past it — wings, a
+ * tail, horns, trousers. They are painted inside the composition rather than
+ * over the finished figure, so they share its silhouette outline, its rim and
+ * the cast shadows between slabs; laid on afterwards they read as stickers.
+ * Every hook is optional, and a pose composed without any is Carl unchanged.
+ */
+export interface CarlAttachments {
+  /** Painted first, in the rearmost slab, under every limb. */
+  readonly behind?: CarlAttachmentPainter;
+  /** Painted over the legs and the shorts, under the garment's hem. */
+  readonly overLegs?: CarlAttachmentPainter;
+  /** Painted in a slab of its own over the torso and head, under the arms in front of him. */
+  readonly over?: CarlAttachmentPainter;
+  /** The extreme points the attachments' ink reaches, so the composing surface is sized round them. */
+  readonly reach: (skeleton: Skeleton, view: ViewSpec, pose: CarlPose) => readonly Pt[];
+}
+
+/**
+ * Options for composing the figure. Carl himself is always composed with the
+ * defaults; the gates change the margin and the outline, and a figure built
+ * on his rig passes its attachments.
  */
 export interface CarlComposeOptions {
   /** Replaces {@link LAYER_MARGIN}, in figure units. */
   readonly layerMargin?: number;
   /** False leaves the silhouette outline off, so a gate can tell its ink from the parts'. */
   readonly silhouetteOutline?: boolean;
+  readonly attachments?: CarlAttachments;
 }
 
 function fraction(value: number): number {
@@ -641,7 +669,34 @@ interface FigureSlabs {
   readonly kneeSlab: number | null;
 }
 
-function figureSlabs(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): FigureSlabs {
+function figureSlabs(
+  skeleton: Skeleton,
+  view: ViewSpec,
+  pose: CarlPose,
+  attachments: CarlAttachments | undefined,
+): FigureSlabs {
+  const slabs = bodySlabs(skeleton, view, pose, attachments);
+  const behind = attachments?.behind;
+  const over = attachments?.over;
+  if (behind === undefined && over === undefined) return slabs;
+  // The rearmost slab is widened rather than preceded, and the over slab
+  // appended, so the slab indices the table below hands out stay true.
+  const [rearmost, ...rest] = slabs.body;
+  const withBehind: SlabPainter = (ctx) => {
+    behind?.(ctx, skeleton, view, pose);
+    rearmost(ctx);
+  };
+  const overSlabs: SlabPainter[] =
+    over === undefined ? [] : [(ctx) => over(ctx, skeleton, view, pose)];
+  return { ...slabs, body: [withBehind, ...rest, ...overSlabs] };
+}
+
+function bodySlabs(
+  skeleton: Skeleton,
+  view: ViewSpec,
+  pose: CarlPose,
+  attachments: CarlAttachments | undefined,
+): FigureSlabs {
   // Edge-on the figure's left arm is the far one, genuinely behind the torso,
   // and takes the body's shade. Head-on both arms hang in front of the jacket
   // unless the pose puts one behind him, and neither is shaded — the same rule
@@ -724,7 +779,7 @@ function figureSlabs(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): Figure
           leg('left', 'whole')(ctx);
         },
         leg('right', 'whole'),
-        ...torsoSlabs(skeleton, view, pose),
+        ...torsoSlabs(skeleton, view, pose, attachments),
       ],
       frontArms,
       nearLegSlab: PROFILE_NEAR_LEG_SLAB,
@@ -820,7 +875,7 @@ function figureSlabs(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): Figure
         leg(l.side, l.depth.knee >= KNEE_FORWARD_DEPTH ? 'thigh' : 'whole')(ctx);
       }
     },
-    ...torsoSlabs(skeleton, view, pose),
+    ...torsoSlabs(skeleton, view, pose, attachments),
     ...cloakOver,
     ...kneeForwardSlab,
   ];
@@ -833,9 +888,14 @@ function figureSlabs(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): Figure
 }
 
 /** The boxers' slab, then the neck, jacket and head in one. */
-function torsoSlabs(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): SlabPainter[] {
+function torsoSlabs(
+  skeleton: Skeleton,
+  view: ViewSpec,
+  pose: CarlPose,
+  attachments: CarlAttachments | undefined,
+): SlabPainter[] {
   return [
-    (ctx) =>
+    (ctx) => {
       drawShorts(
         ctx,
         skeleton.hip,
@@ -844,7 +904,9 @@ function torsoSlabs(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): SlabPai
         view,
         { left: skeleton.leftLeg, right: skeleton.rightLeg },
         { left: pose.leftBoxerFlutter, right: pose.rightBoxerFlutter },
-      ),
+      );
+      attachments?.overLegs?.(ctx, skeleton, view, pose);
+    },
     // The head shares the jacket's slab: it paints its own shadow under the
     // jaw, which is the only place it overlaps anything. A torso pitched far
     // enough away from the camera carries the head down behind the top of his
@@ -1048,13 +1110,17 @@ function drawFigure(
   const bounds = layerBounds(ctx, [
     { points: bodyReach, margin: options.layerMargin ?? LAYER_MARGIN },
     { points: gearReach(skeleton, pose, view), margin: options.layerMargin ?? GEAR_INK_MARGIN },
+    {
+      points: options.attachments?.reach(skeleton, view, pose) ?? [],
+      margin: options.layerMargin ?? GEAR_INK_MARGIN,
+    },
   ]);
   const offsets = layerOffsets(bounds);
   const body = makeLayer(bounds);
   const part = makeLayer(bounds);
   const scratch = makeLayer(bounds);
 
-  const slabs = figureSlabs(skeleton, view, pose);
+  const slabs = figureSlabs(skeleton, view, pose, options.attachments);
   slabs.body.forEach((paintSlab, index) => {
     if (index === 0) {
       inFigureSpace(body, bounds, paintSlab);

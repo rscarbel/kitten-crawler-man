@@ -1,6 +1,6 @@
 ---
 name: bipedal-figure
-description: Draw or redraw a believable two-legged character (human, goblin, clown, humanoid boss/NPC) as procedurally painted sprite art in Kitten Crawler Man — the rig/pose/view contract, the painter/figure/gate/harness pipeline, the image-review loop, and the anatomy traps that only show up in a picture. Use whenever a bipedal character needs new art, a new animation row, or a believability fix. The four-file painter pipeline it describes is the same for any creature; only the anatomy half is biped-specific. NOT for runtime-seeded townsfolk (use add-person), for ground and floor materials (use add-ground-tile), or for props and environment art, which are painted from sheet plans in src/sprites/sheets/ (use add-sprite).
+description: Draw or redraw a believable two-legged character (human, goblin, clown, humanoid boss/NPC) as procedurally painted sprite art in Kitten Crawler Man — the rig/pose/view contract, the painter/figure/gate/harness pipeline, the image-review loop, and the anatomy traps that only show up in a picture. Use whenever a bipedal character needs new art, a new animation row, or a believability fix. The four-file painter pipeline it describes is the same for any creature; only the anatomy half is biped-specific. NOT for choosing or wiring the town's citizen looks (use add-person), for ground and floor materials (use add-ground-tile), or for props and environment art, which are painted from sheet plans in src/sprites/sheets/ (use add-sprite).
 ---
 
 # Bipedal Figure Art
@@ -32,7 +32,8 @@ figure; read it once before your first conversion or new figure.
 > `goblinArt.ts` or `clownArt.ts`.
 
 **Routing.** Bipedal enemies/NPCs/bosses → here, then `add-creature` for the
-gameplay class. Seeded runtime townsfolk → `add-person`. Non-bipeds → the same
+gameplay class. The town's citizen cast (species, look picking, pins) → `add-person`;
+painting a new adult look on Carl's rig still follows this skill. Non-bipeds → the same
 four-file shape applies, but their anatomy traps are not in this skill.
 
 ## The four-file pipeline
@@ -90,6 +91,40 @@ Wire `"render:<x>": "tsx scripts/render-<x>.ts"` in `package.json`. There is no
 - `npm run gates:figure-cache` — the cache's own behaviour, including a
   cached-versus-direct pixel comparison.
 - `npm run review:index` — builds `preview/index.html` from every review image.
+
+### Figures built on Carl's rig
+
+Because Carl's movement is the only convincing movement in the game, other humanoids are
+built **on his rig** rather than on a rig of their own. They pose with his choreography
+(`human/idles.ts`, `human/locomotion.ts`, `human/actionsMisc.ts`) and paint with
+`drawCarlFront` / `drawCarlSide` / `drawCarlBack`. The town's adult citizens
+(`townCastFigure.ts`), the human named residents and Mordecai's Incubus
+(`incubusFigure.ts`) are built this way.
+
+- **Dressing him differently is live module state.** Skin, hair, garment, torso cut and
+  expression are swapped with `setCarlSkinHairRamp`, `setCarlGarmentRamp`,
+  `setCarlTorsoCut` and `setCarlExpression` before the draw, and reset in `finally`
+  after it. A painter that throws without the reset poisons Carl's own next cell. A
+  constant computed at import time from Carl's palette never sees the swap. Prove a swap
+  is clean by byte-diffing Carl's cells before and after it.
+- **Anatomy past the rig is an attachment.** `CarlAttachments` (`carl/figure.ts`), passed
+  as `CarlComposeOptions.attachments`, has three optional painters:
+  - `behind`: the rearmost slab, under every limb (wings, a tail).
+  - `overLegs`: over the legs, under the garment's hem (trousers, boots).
+  - `over`: its own slab over torso and head, under the near arm (horns, a sash).
+
+  Each is called with the solved skeleton, view and pose, so it follows the body. `reach`
+  returns the extreme points of their ink, so the composing surface is sized round them.
+  Attachments are composed _inside_ the figure, so they share its silhouette outline, rim
+  and slab shadows; painted over the finished figure they read as stickers. With none, a
+  pose is Carl unchanged.
+
+- **The worked example** is the Incubus: `incubusArt.ts` holds the horns, folded wings,
+  forked tail, shirt, sash, trousers and boots as attachments in figure units, shaded
+  with Carl's `shadeForm`. `incubusFigure.ts` holds the rows. `npm run
+render:mordecai-incubus` runs its gates and renders him beside Carl and the residents.
+  Silhouette carries the read at 32 px: horns as two points over the head, wings as two
+  peaks over the shoulders, the tail as the curl beside the legs.
 
 ## The painter contract
 

@@ -439,7 +439,7 @@ export function gateTextureRichness(
  * ## What actually binds this number
  *
  * Not the temple, whose roof clears its facade by 30%. Old Hilda's Cottage does,
- * at 1.10, with the Shepherd's Cabin and the Miller's Farm just behind — all
+ * at 1.10, with Plumbline Farm and the Miller's Farm just behind — all
  * three are pale walls under mid-value roofs, which is the pairing this gate is
  * hardest on. So 1.06 sits close to what the current art allows rather than at
  * some perceptual threshold, and a lighting change to any of those three turns
@@ -593,7 +593,7 @@ const LIFE_INK_ALPHA_FLOOR = 12;
  * perfectly.
  *
  * Set against the quietest overlay in the town, which is Cartwright's chimney
- * smoke at about 0.14% of its frame (Old Hilda's, the Shepherd's and the
+ * smoke at about 0.14% of its frame (Old Hilda's, Plumbline Farm and the
  * Miller's follow between 0.2% and 0.45%). At under a third of that it passes
  * every real building comfortably, while failing an overlay that has lost most
  * of its ink rather than only one that has lost all of it. The bake prints the

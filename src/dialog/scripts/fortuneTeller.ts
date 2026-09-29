@@ -26,16 +26,30 @@ interface ReactiveFortune {
 }
 
 export const VOSS_GENERAL_FORTUNES: NonEmpty<BarkLine> = [
-  voss.bark('A coin spent today returns threefold in a fortnight. Or so the cards say.'),
-  voss.bark('Great danger walks beside great reward. You court both, I think.'),
-  voss.bark('The crossed blades, reversed. An old rival will offer an unlikely hand.'),
-  voss.bark('I see a long road, a warm hearth at its end, and mud in between.'),
-  voss.bark('Beware the third door you open. Or was it the second? The mists are thick today.'),
-  voss.bark('A creature of many legs guards something you will want. Tread lightly.'),
-  voss.bark('You will laugh before nightfall. At what, even the cards decline to say.'),
-  voss.bark('Fortune favors the bold, and occasionally the merely lucky. Which are you?'),
-  voss.bark('The moon shows me coins. Yours, leaving your purse. Toward me, perhaps.'),
-  voss.bark('A small kindness you forget will be remembered by one you never meet again.'),
+  voss.bark(
+    'A coin spent today returns threefold in a fortnight, or so the cards insist, my dear.',
+  ),
+  voss.bark('Great danger walks beside great reward, child, and you keep company with both.'),
+  voss.bark('The crossed blades, reversed! An old rival will offer you an unlikely hand.'),
+  voss.bark(
+    'I see a long road, dear one, a warm hearth waiting at its end, and no small amount of mud between here and there.',
+  ),
+  voss.bark(
+    'Beware the third door you open. Or was it the second? The mists are thick with me today.',
+  ),
+  voss.bark(
+    'A creature of many legs guards something you will want badly. Tread lightly, my dear, and mind your feet.',
+  ),
+  voss.bark('You will laugh before nightfall, dear. At what, even the cards decline to say.'),
+  voss.bark(
+    'Fortune favours the bold, and now and then the merely lucky. Which are you, I wonder?',
+  ),
+  voss.bark(
+    'The moon shows me coins, child. Yours, leaving your purse. Toward me, perhaps, if the moon has any say in the matter.',
+  ),
+  voss.bark(
+    'A small kindness you forget will be remembered by someone you never meet again, dear — the cards are quite insistent on that point.',
+  ),
 ];
 
 export const VOSS_REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
@@ -43,10 +57,10 @@ export const VOSS_REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
     when: (ctx) => ctx.doomsday === 'containment' || ctx.doomsday === 'escape',
     lines: [
       voss.bark(
-        'The tower burns in my vision. Its heart beats far too fast. Still it, or we are all cinders.',
+        'The tower burns in my vision, dear, and its heart beats far too fast. Still it, or we are all cinders together.',
       ),
       voss.bark(
-        'No cards tonight. Only the smell of smoke and the ticking of a clock. RUN, if you have any sense.',
+        'No cards tonight — only the smell of smoke and the ticking of some terrible clock. Run, child, if you have any sense left in you.',
       ),
     ],
   },
@@ -54,10 +68,10 @@ export const VOSS_REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
     when: (ctx) => ctx.murder === 'night_attack' || ctx.murder === 'cult_hideout',
     lines: [
       voss.bark(
-        'A friendly face hides a hungry blade. Trust slowly, if you would keep your throat.',
+        'A friendly face hides a hungry blade tonight, dear. Trust slowly, if you would keep your throat.',
       ),
       voss.bark(
-        'Blood on the cobbles, and more to come. The killer is nearer than the town believes.',
+        'Blood on the cobbles, and more of it coming. The killer is nearer than this town believes.',
       ),
     ],
   },
@@ -69,7 +83,9 @@ export const VOSS_REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
     // `confrontation` is a stage where she is dead.
     when: (ctx) => ctx.murder === 'confrontation',
     lines: [
-      voss.bark('The knife has a name at last. Cut the thread before it wraps the whole town.'),
+      voss.bark(
+        'The knife has a name at last, dear. Cut the thread before it wraps the whole town round its fist.',
+      ),
     ],
   },
   {
@@ -80,15 +96,19 @@ export const VOSS_REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
       ctx.circus === 'bigtop_ready',
     lines: [
       voss.bark(
-        'A caged bird sings beneath the striped canvas. Free it, and a daughter’s grief with it.',
+        'A caged bird sings beneath the striped canvas, dear, and a daughter’s grief sings right alongside her. Free them both.',
       ),
-      voss.bark('The ringmaster smiles with too many teeth. His grip will not loosen on its own.'),
+      voss.bark(
+        'The ringmaster smiles with far too many teeth. His grip will not loosen on its own, dear, I promise you that.',
+      ),
     ],
   },
   {
     when: (ctx) => ctx.doomsday === 'complete',
     lines: [
-      voss.bark('I see a hero where a stranger once stood. The cards have never been so bright.'),
+      voss.bark(
+        'I see a hero where a stranger once stood. The cards have never once shown me anything so bright, child.',
+      ),
     ],
   },
   {
@@ -96,7 +116,9 @@ export const VOSS_REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
       isCircusResolvedStage(ctx.circus) &&
       (ctx.murder === 'complete' || ctx.murder === 'lich_slain'),
     lines: [
-      voss.bark('Two shadows lifted, and your hand behind both. Fortune knows your face now.'),
+      voss.bark(
+        'Two shadows lifted, dear, and your hand behind both of them. Fortune knows your face now, and will not soon forget it.',
+      ),
     ],
   },
 ];
@@ -129,31 +151,35 @@ export function drawFortune(ctx: TownDialogContext): string {
 
 export const HILDA_GENERAL_READINGS: NonEmpty<BarkLine> = [
   hilda.bark(
-    'Sit. Hands on the table. ...You are going to be fine, which is more than I usually get to say.',
+    'Sit, dearie, hands on the table.. You are going to be fine, which is more than I usually get to say.',
   ),
   hilda.bark(
-    'There is a door you have not opened because it looked like a wall. It is not a wall.',
+    'There is a door you have not opened because it looked like a wall, and it is not a wall, dearie, whatever it looks like.',
   ),
   hilda.bark(
-    'Something you are carrying was made by someone who is dead now. Most things are. This one minds.',
+    'Something you are carrying was made by somebody who is dead now. Most things are, I suppose. This one minds, though.',
   ),
   hilda.bark(
-    'You will be offered a bargain by someone who is smiling. Take it. Just read it twice.',
+    'You will be offered a bargain by someone who is smiling. Take it, dearie, only read it twice first.',
   ),
   hilda.bark(
-    'The ruins remember the street plan even where the streets are gone. Walk the old lines and you will not get lost.',
+    'The ruins remember the street plan even where the streets themselves are long gone. Walk the old lines and you will not get lost.',
   ),
   hilda.bark(
-    'You have killed something this week that had a name. Nothing to be done about it now.',
+    'You have killed something this week that had a name, I think. Nothing to be done about that now, dearie.',
   ),
   hilda.bark(
-    'Water first, then whatever you were going to do. You are no good to anyone dried out.',
+    'Water first, then whatever it was you were about to do. You are no good to anyone dried out.',
   ),
   hilda.bark(
-    'I see the number three, and I have no idea what it means, and I am not going to invent something.',
+    'I see the number three, and I have not the faintest idea what it means, and I am not going to invent something just to fill the silence.',
   ),
-  hilda.bark('Someone in this town is lying to you kindly. Let them. It costs you nothing yet.'),
-  hilda.bark('Old bones tell weather, not futures. Rain by evening. That is my honest reading.'),
+  hilda.bark(
+    'Someone in this town is lying to you kindly, dearie. Let them. It costs you nothing yet.',
+  ),
+  hilda.bark(
+    'Old bones tell weather, not futures. Rain by evening. That is my honest reading and I will not dress it up as more..',
+  ),
 ];
 
 export const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
@@ -161,17 +187,19 @@ export const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
     when: (ctx) => ctx.doomsday === 'containment' || ctx.doomsday === 'escape',
     lines: [
       hilda.bark(
-        'The humming has stopped. Forty years it hummed. Whatever you are going to do, do it running.',
+        'The humming has stopped, dearie. Forty years it hummed and now it has not. Whatever you are going to do, do it running.',
       ),
-      hilda.bark('No reading. Get out of my kitchen and get up that tower.'),
+      hilda.bark('No reading tonight. Get out of my kitchen and get up that tower.'),
     ],
   },
   {
     when: (ctx) => ctx.doomsday === 'complete',
     lines: [
-      hilda.bark('It hums again. Quieter. Whatever you put back in that box, it is sleeping.'),
       hilda.bark(
-        'I have nothing to warn you about for the first time in forty years. I do not know what to do with my hands.',
+        'It hums again, quieter now. Whatever you put back in that box, dearie, it is sleeping.',
+      ),
+      hilda.bark(
+        'First time in forty years I have nothing to warn you about, and I do not rightly know what to do with my hands.',
       ),
     ],
   },
@@ -179,10 +207,10 @@ export const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
     when: (ctx) => ctx.murder === 'confrontation',
     lines: [
       hilda.bark(
-        'She has a name now, and a name is a handle. Take hold of it before she puts it down.',
+        'She has a name now, dearie, and a name is a handle. Take hold of it before she sets it back down.',
       ),
       hilda.bark(
-        'The one doing the killing is not the one who wants the killing done. Do not stop at the knife.',
+        'The one doing the killing is not the one who wants it done. Do not stop at the knife.',
       ),
     ],
   },
@@ -193,10 +221,10 @@ export const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
       ctx.murder === 'investigation',
     lines: [
       hilda.bark(
-        'Heads without bodies. That is not a beast, that is a recipe, and somebody is following it.',
+        'No beast leaves heads without bodies, dearie. That takes a recipe, and somebody down there is following it proper.',
       ),
       hilda.bark(
-        'Look at the low streets, not the plaza. The plaza never had anything worth taking.',
+        'Look to the low streets, not the plaza, dearie. The plaza never had anything worth taking.',
       ),
     ],
   },
@@ -208,10 +236,10 @@ export const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
       ctx.circus === 'bigtop_ready',
     lines: [
       hilda.bark(
-        'The vine under that tent is not keeping them alive. It is keeping them from finishing dying.',
+        'That vine under the tent holds them just this side of dead, dearie, and no further. Do not you go calling it healing.',
       ),
       hilda.bark(
-        'You will want to swing at it. Do not. What is under that bark was somebody once, and still answers to it.',
+        'You will want to swing at it. Do not, dearie. What is under that bark was somebody once, and it still answers to its name.',
       ),
     ],
   },
@@ -219,7 +247,7 @@ export const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
     when: (ctx) => isCircusResolvedStage(ctx.circus),
     lines: [
       hilda.bark(
-        'The lights are out over the Big Top. I had forgotten what that side of the sky looked like.',
+        'The lights are out over the Big Top, dearie. I had quite forgotten what that side of the sky looked like.',
       ),
     ],
   },

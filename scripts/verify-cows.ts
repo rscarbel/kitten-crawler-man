@@ -23,20 +23,17 @@
  *    `resolveKills`: every cow in the blast dies, each leaves 2–3 burgers
  *    (both counts seen across seeds), and none is counted as a kill.
  * 4. Pet routing: with the cat's missile slotted (or Carl's sling wielded) and
- *    no hostile near, the scene's Space chain pets the cow and fires nothing;
- *    with a hostile in range the pet is refused and the attack fires. The
- *    chain's order is read from `DungeonScene.triggerSpaceAction` and
- *    `BriarHollowKit.tryInteract`, so moving the pet after the attack fails.
+ *    no hostile near, the village link and then the attack pet the cow and
+ *    fire nothing; with a hostile in range the pet is refused and the attack
+ *    fires. That the real scene asks the village before it swings, on every
+ *    path a press takes, is `verify-cows-scene.ts`, run after this.
  *
- * Negative tests: `--scene-source=<path>` reads the Space chain from a copy of
- * `DungeonScene.ts` instead (one with the village link moved after
- * `triggerPlayerAttack` must fail), and adding `'melee'` to
- * `Cow.takesPlayerDamage` must fail the damage section.
+ * Negative test: adding `'melee'` to `Cow.takesPlayerDamage` must fail the
+ * damage section.
  *
- * Run: npm run verify:cows [-- --seeds=N]
+ * Run: npm run verify:cows, or `tsx scripts/verify-cows.ts --seeds=N` for this half alone
  */
 
-import { readFileSync } from 'node:fs';
 import { GameMap } from '../src/map/GameMap';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
@@ -1003,31 +1000,8 @@ function respawnSection(): void {
   check(checked > 0, `respawn was exercised (${checked} worlds)`);
 }
 
-/** The body of a method, from its signature to the start of the next member at the same indent. */
-function methodBody(source: string, signature: string): string | null {
-  const start = source.indexOf(signature);
-  if (start < 0) return null;
-  const end = source.indexOf('\n  }\n', start);
-  return end < 0 ? null : source.slice(start, end);
-}
-
 function routingSection(): void {
   console.log('\nThe interact key pets a cow and never fires at it');
-  const sceneSource = readFileSync(
-    argValue('scene-source') ?? 'src/scenes/DungeonScene.ts',
-    'utf8',
-  );
-  const kitSource = readFileSync('src/systems/briarHollow/BriarHollowKit.ts', 'utf8');
-  const chain = methodBody(sceneSource, 'private triggerSpaceAction(');
-  check(chain !== null, 'found the Space chain in DungeonScene');
-  const villageAt = chain?.indexOf('this.briarHollowKit?.tryInteract(active)') ?? -1;
-  const attackAt = chain?.indexOf('triggerPlayerAttack(') ?? -1;
-  check(villageAt >= 0 && attackAt >= 0, 'both the village link and the attack are in it');
-  check(villageAt >= 0 && villageAt < attackAt, 'the village is asked before the attack fires');
-  const kitChain = methodBody(kitSource, '  tryInteract(active');
-  const petAt = kitChain?.indexOf('tryPet(active)') ?? -1;
-  check(kitChain !== null && petAt >= 0, "the kit's interact asks the herd to pet");
-
   const map = new GameMap({
     mapSize: MAP_SIZE,
     mapType: 'overworld',
@@ -1067,7 +1041,7 @@ function routingSection(): void {
   const { human, cat } = pm;
   /**
    * The scene's Space chain as it applies in the paddock: the village link,
-   * then the attack. Its order is the one checked in the scene source above.
+   * then the attack. `verify-cows-scene.ts` holds the real scene to that order.
    */
   const pressSpace = (): void => {
     if (kit.tryInteract(pm.active())) return;

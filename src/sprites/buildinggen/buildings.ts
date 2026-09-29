@@ -34,7 +34,7 @@ import type { BuildingSpec } from './spec';
  * Garrison Row would have shown the same tonal blocking on their walls.
  */
 const SEED_BLACKWOOD = 730101;
-const SEED_SHEPHERD = 730211;
+const SEED_PLUMBLINE_FARM = 730211;
 const SEED_BARRACKS = 730337;
 const SEED_CARTWRIGHT = 730459;
 const SEED_TEMPLE = 730571;
@@ -48,6 +48,11 @@ const SEED_STUMP = 731417;
 const SEED_QUIET_NEEDLE = 731533;
 const SEED_DESPERADO = 731659;
 const SEED_MILL = 731777;
+
+/** The inn's loop length, set by the cat's breath. */
+const INN_LIFE_FRAMES = 26;
+/** Cycles per loop for the inn's hearth and smoke: about one a second. */
+const INN_QUICK_EFFECT_CYCLES = 3;
 
 /**
  * The Sleeping Cat Inn — the flagship, and the pilot the rest were measured
@@ -99,7 +104,7 @@ const SLEEPING_CAT_INN: BuildingSpec = {
     ramp: 'thatch_gold',
     ridgeRamp: 'ridge_thatch',
     depthTiles: 1.9,
-    overhangTiles: 0.3,
+    overhangTiles: 0.4,
     ridgeSagTiles: 0.06,
     mossy: false,
     disrepair: 0.12,
@@ -147,11 +152,13 @@ const SLEEPING_CAT_INN: BuildingSpec = {
       shutters: false,
       flowerBox: false,
     },
+    // Wide enough to frame the cat asleep on its sill, with lit glass behind
+    // her ears: the inn is named for her, and she is its sign.
     {
-      col: 4.6,
+      col: 4.4,
       baseAboveGroundTiles: 1.85,
-      widthTiles: 0.9,
-      heightTiles: 0.7,
+      widthTiles: 1.2,
+      heightTiles: 0.78,
       style: 'mullioned',
       lit: true,
       shutters: false,
@@ -189,15 +196,19 @@ const SLEEPING_CAT_INN: BuildingSpec = {
     },
   ],
   life: {
-    frames: 8,
+    // Long because of the cat: a sleeping cat breathes about once every three
+    // seconds, and one breath cannot be slower than the loop that holds it. At
+    // the shared 8 fps clock 26 frames is 3.25 s, and the hearth and the smoke
+    // take three cycles of it so they keep their own quicker tempo.
+    frames: INN_LIFE_FRAMES,
     effects: [
       {
         kind: 'sleeping_cat',
-        col: 4.7,
+        col: 4.5,
         baseAboveGroundTiles: 1.85,
-        widthTiles: 0.8,
-        heightTiles: 0.42,
-        ramp: 'oak_beam',
+        widthTiles: 1.0,
+        heightTiles: 0.5,
+        ramp: 'cat_ginger',
         cycles: 1,
         phase: 0,
       },
@@ -208,7 +219,7 @@ const SLEEPING_CAT_INN: BuildingSpec = {
         widthTiles: 0.85,
         heightTiles: 0.75,
         ramp: 'hearth_glow',
-        cycles: 1,
+        cycles: INN_QUICK_EFFECT_CYCLES,
         phase: 0.35,
       },
       {
@@ -218,7 +229,7 @@ const SLEEPING_CAT_INN: BuildingSpec = {
         widthTiles: 0.5,
         heightTiles: 1.5,
         ramp: 'smoke',
-        cycles: 1,
+        cycles: INN_QUICK_EFFECT_CYCLES,
         phase: 0,
       },
     ],
@@ -332,6 +343,16 @@ const BLACKWOOD_LODGE: BuildingSpec = {
     frames: 9,
     effects: [
       {
+        kind: 'roof_perch',
+        col: 5.4,
+        baseAboveGroundTiles: 2.45,
+        widthTiles: 0.8,
+        heightTiles: 0.9,
+        ramp: 'sky_icon',
+        cycles: 1,
+        phase: 0.15,
+      },
+      {
         kind: 'window_breathe',
         col: 1.0,
         baseAboveGroundTiles: 1.15,
@@ -345,35 +366,52 @@ const BLACKWOOD_LODGE: BuildingSpec = {
   },
 };
 
-/** Shepherd's Cabin — the humblest thing on Garrison Row. */
-const SHEPHERDS_CABIN: BuildingSpec = {
-  key: 'shepherds_cabin',
-  file: 'shepherds_cabin.png',
-  title: "Shepherd's Cabin",
+/**
+ * Plumbline Farm — a small house on Garrison Row built by a man who builds
+ * for a living, whatever its name says: squared timbers over fresh limewash on
+ * a dressed plinth, and a porch he plainly added himself.
+ */
+const PLUMBLINE_FARM: BuildingSpec = {
+  key: 'plumbline_farm',
+  file: 'plumbline_farm.png',
+  title: 'Plumbline Farm',
   replaces: 'village_house_1',
   tilesWide: 7,
   tilesHigh: 6,
-  seed: SEED_SHEPHERD,
+  seed: SEED_PLUMBLINE_FARM,
   stories: 1,
   sideReturnTiles: 0.5,
   facade: {
     ground: {
-      material: 'plaster',
-      ramp: 'plaster_cream',
-      trimRamp: 'fieldstone',
-      grime: 0.24,
-      moss: 0.22,
+      // Squared timber framing over a fresh limewash infill — precise
+      // joints, not a flat painted wall, so the one house in town a builder
+      // actually built reads as carpentry from across the street the same
+      // way the General Store's half-timbering does.
+      material: 'timber_frame',
+      ramp: 'oak_beam',
+      trimRamp: 'plaster_cream',
+      // A builder's own house is kept immaculate, not merely tidy — almost
+      // no grime or moss at all.
+      grime: 0.05,
+      moss: 0.02,
+      // Limewashed fresh every spring: no wash patches, cracks or spalls.
+      upkeep: 1,
     },
     groundStoryTiles: 2.0,
-    foundationTiles: 0.55,
-    quoins: false,
+    foundationTiles: 0.75,
+    // Corner blocks in a larger, squared bond: the one thing this cabin's
+    // owner would never leave rough.
+    quoins: true,
+    // A squared, close-jointed plinth with quoined corners where every other
+    // cottage on the row stands on rubble.
+    plinth: { ramp: 'pale_ashlar', quoins: true },
     leanTiles: 0,
     sinkTiles: 0,
     bands: [
       {
-        baseAboveGroundTiles: 0.55,
+        baseAboveGroundTiles: 1.55,
         heightTiles: 0.14,
-        ramp: 'fieldstone',
+        ramp: 'oak_beam',
         projecting: true,
       },
     ],
@@ -386,9 +424,11 @@ const SHEPHERDS_CABIN: BuildingSpec = {
     depthTiles: 2.1,
     overhangTiles: 0.32,
     ridgeSagTiles: 0.1,
-    mossy: true,
-    disrepair: 0.24,
-    chimneys: [{ col: 4.6, widthTiles: 0.45, heightTiles: 0.62, ramp: 'fieldstone', smokes: true }],
+    mossy: false,
+    disrepair: 0.06,
+    chimneys: [
+      { col: 4.6, widthTiles: 0.45, heightTiles: 0.62, ramp: 'pale_ashlar', smokes: true },
+    ],
     dormers: [],
   },
   door: {
@@ -397,13 +437,15 @@ const SHEPHERDS_CABIN: BuildingSpec = {
     paintedWidthTiles: 1.05,
     style: 'plank',
     arch: 'flat_lintel',
-    ramp: 'weathered_plank',
+    // Sound oak, not weathered scrap — a builder hangs a well-fitted door on
+    // his own house even where the walls are humble.
+    ramp: 'oak_beam',
     hardware: true,
-    stepTiles: 0.14,
+    stepTiles: 0.18,
   },
   windows: [
     {
-      col: 1.1,
+      col: 0.95,
       baseAboveGroundTiles: 1.25,
       widthTiles: 0.75,
       heightTiles: 0.62,
@@ -411,47 +453,80 @@ const SHEPHERDS_CABIN: BuildingSpec = {
       lit: true,
       shutters: true,
       shutterRamp: 'shutter_green',
-      flowerBox: false,
+      flowerBox: true,
     },
+    // Unshuttered, so the tools can hang beside it under the eave.
     {
-      col: 4.9,
+      col: 5.05,
       baseAboveGroundTiles: 1.25,
-      widthTiles: 0.75,
+      widthTiles: 0.7,
       heightTiles: 0.62,
-      style: 'shuttered',
+      style: 'mullioned',
       lit: false,
-      shutters: true,
-      shutterRamp: 'shutter_green',
-      flowerBox: false,
+      shutters: false,
+      flowerBox: true,
     },
   ],
   props: [
     {
       kind: 'firewood',
-      col: 5.4,
+      col: 5.45,
       baseAboveGroundTiles: 0,
-      widthTiles: 1.1,
-      heightTiles: 0.8,
+      widthTiles: 1.05,
+      heightTiles: 0.75,
       ramp: 'oak_beam',
       accentRamp: 'weathered_plank',
     },
+    // Feed bought in for cows he doesn't have yet.
     {
-      kind: 'wool_bale',
-      col: 0.3,
+      kind: 'grain_sack',
+      col: 0.2,
       baseAboveGroundTiles: 0,
-      widthTiles: 0.9,
-      heightTiles: 0.7,
+      widthTiles: 0.62,
+      heightTiles: 0.62,
       ramp: 'plaster_cream',
       accentRamp: 'weathered_plank',
     },
+    // The porch he built himself: squared posts, a pitched roof with clean
+    // bargeboards, a railing and a bench, around a door centred between them.
     {
-      kind: 'crook',
-      col: 2.3,
+      kind: 'porch',
+      col: 2.1,
       baseAboveGroundTiles: 0,
-      widthTiles: 0.3,
-      heightTiles: 1.6,
-      ramp: 'weathered_plank',
+      widthTiles: 2.8,
+      heightTiles: 2.3,
+      ramp: 'oak_beam',
+      accentRamp: 'shake_brown',
+    },
+    // A milk churn by the door — clean and empty, like the ones inside
+    // waiting for a cow that isn't there yet.
+    {
+      kind: 'milk_churn',
+      col: 1.55,
+      baseAboveGroundTiles: 0,
+      widthTiles: 0.42,
+      heightTiles: 0.7,
+      ramp: 'slate_grey',
       accentRamp: 'iron_black',
+    },
+    // A builder's tools hung in order under the eave, over the woodpile.
+    {
+      kind: 'builder_tools',
+      col: 5.82,
+      baseAboveGroundTiles: 1.0,
+      widthTiles: 0.62,
+      heightTiles: 0.85,
+      ramp: 'slate_grey',
+      accentRamp: 'sawn_pine',
+    },
+    {
+      kind: 'weathervane',
+      col: 3.5,
+      baseAboveGroundTiles: 4.4,
+      widthTiles: 0.5,
+      heightTiles: 0.45,
+      ramp: 'iron_black',
+      accentRamp: 'brass_gold',
     },
   ],
   life: {
@@ -466,6 +541,16 @@ const SHEPHERDS_CABIN: BuildingSpec = {
         ramp: 'smoke',
         cycles: 1,
         phase: 0,
+      },
+      {
+        kind: 'weathervane_swing',
+        col: 3.5,
+        baseAboveGroundTiles: 4.55,
+        widthTiles: 0.5,
+        heightTiles: 0.35,
+        ramp: 'iron_black',
+        cycles: 1,
+        phase: 0.4,
       },
     ],
   },
@@ -525,7 +610,7 @@ const BARRACKS: BuildingSpec = {
     ramp: 'slate_blue',
     ridgeRamp: 'ridge_dark',
     depthTiles: 1.7,
-    overhangTiles: 0.26,
+    overhangTiles: 0.36,
     ridgeSagTiles: 0,
     mossy: false,
     disrepair: 0.05,
@@ -609,6 +694,16 @@ const BARRACKS: BuildingSpec = {
   life: {
     frames: 8,
     effects: [
+      {
+        kind: 'roof_perch',
+        col: 6.4,
+        baseAboveGroundTiles: 2.85,
+        widthTiles: 0.8,
+        heightTiles: 0.9,
+        ramp: 'sky_icon',
+        cycles: 1,
+        phase: 0.3,
+      },
       {
         kind: 'banner_sway',
         col: 5.5,
@@ -743,6 +838,16 @@ const CARTWRIGHTS_WORKSHOP: BuildingSpec = {
     frames: 6,
     effects: [
       {
+        kind: 'roof_perch',
+        col: 6.4,
+        baseAboveGroundTiles: 2.85,
+        widthTiles: 0.8,
+        heightTiles: 0.9,
+        ramp: 'sky_icon',
+        cycles: 1,
+        phase: 0.5,
+      },
+      {
         kind: 'chimney_smoke',
         col: 6.4,
         baseAboveGroundTiles: 6.0,
@@ -829,10 +934,14 @@ const TEMPLE: BuildingSpec = {
     // other; at the depth an ordinary pitched roof wants, the dome comes out a
     // saucer.
     depthTiles: 3.2,
-    overhangTiles: 0.2,
+    overhangTiles: 0.3,
     ridgeSagTiles: 0,
     mossy: false,
-    disrepair: 0,
+    // The dome is the majority of this building's painted area, so it is the
+    // one surface whose own texture decides whether the whole sheet clears
+    // the ground it stands on. A hint of weathering keeps the dome from being
+    // the one flat plane holding the average down.
+    disrepair: 0.14,
     chimneys: [],
     dormers: [],
   },
@@ -901,6 +1010,16 @@ const TEMPLE: BuildingSpec = {
   life: {
     frames: 6,
     effects: [
+      {
+        kind: 'roof_perch',
+        col: 6.4,
+        baseAboveGroundTiles: 3.45,
+        widthTiles: 0.8,
+        heightTiles: 0.9,
+        ramp: 'sky_icon',
+        cycles: 1,
+        phase: 0.65,
+      },
       {
         kind: 'brazier_flame',
         col: 1.97,
@@ -1104,7 +1223,9 @@ const GENERAL_STORE: BuildingSpec = {
     ramp: 'clay_terracotta',
     ridgeRamp: 'ridge_clay',
     depthTiles: 1.5,
-    overhangTiles: 0.26,
+    // Widened from the shipped 0.26: a skyfowl-run shop's eave reads as a
+    // roost ledge from across the plaza, before any figure is on screen.
+    overhangTiles: 0.4,
     ridgeSagTiles: 0,
     mossy: false,
     disrepair: 0.08,
@@ -1173,6 +1294,16 @@ const GENERAL_STORE: BuildingSpec = {
       ramp: 'hay_straw',
       accentRamp: 'weathered_plank',
     },
+    {
+      kind: 'letter_board',
+      col: 2.3,
+      baseAboveGroundTiles: 1.75,
+      widthTiles: 1.6,
+      heightTiles: 0.3,
+      ramp: 'oak_beam',
+      accentRamp: 'plaster_cream',
+      label: 'GENERAL STORE',
+    },
   ],
   life: {
     frames: 6,
@@ -1186,6 +1317,16 @@ const GENERAL_STORE: BuildingSpec = {
         ramp: 'awning_stripe',
         cycles: 1,
         phase: 0,
+      },
+      {
+        kind: 'roof_perch',
+        col: 6.6,
+        baseAboveGroundTiles: 2.35,
+        widthTiles: 0.8,
+        heightTiles: 0.9,
+        ramp: 'sky_icon',
+        cycles: 1,
+        phase: 0.4,
       },
     ],
   },
@@ -1237,7 +1378,7 @@ const HORNED_FLAGON: BuildingSpec = {
     ramp: 'clay_red',
     ridgeRamp: 'ridge_clay',
     depthTiles: 1.5,
-    overhangTiles: 0.28,
+    overhangTiles: 0.38,
     ridgeSagTiles: 0.04,
     mossy: false,
     disrepair: 0.12,
@@ -1401,6 +1542,16 @@ const HORNED_FLAGON: BuildingSpec = {
     frames: 24,
     effects: [
       {
+        kind: 'roof_perch',
+        col: 6.4,
+        baseAboveGroundTiles: 2.95,
+        widthTiles: 0.8,
+        heightTiles: 0.9,
+        ramp: 'sky_icon',
+        cycles: 1,
+        phase: 0.8,
+      },
+      {
         kind: 'window_crowd',
         col: 1.0,
         baseAboveGroundTiles: 0.6,
@@ -1459,7 +1610,7 @@ const HILDAS_COTTAGE: BuildingSpec = {
       moss: 0.3,
     },
     groundStoryTiles: 2.1,
-    foundationTiles: 0.5,
+    foundationTiles: 0.95,
     quoins: false,
     leanTiles: 0.1,
     sinkTiles: 0,
@@ -1599,7 +1750,7 @@ const BLACKSMITH: BuildingSpec = {
     ramp: 'slate_grey',
     ridgeRamp: 'ridge_dark',
     depthTiles: 1.4,
-    overhangTiles: 0.3,
+    overhangTiles: 0.4,
     ridgeSagTiles: 0.04,
     mossy: false,
     disrepair: 0.16,
@@ -1666,10 +1817,30 @@ const BLACKSMITH: BuildingSpec = {
       ramp: 'iron_black',
       accentRamp: 'oak_beam',
     },
+    {
+      kind: 'letter_board',
+      col: 2.6,
+      baseAboveGroundTiles: 1.72,
+      widthTiles: 1.3,
+      heightTiles: 0.24,
+      ramp: 'iron_black',
+      accentRamp: 'fire',
+      label: 'RUSTY ANVIL',
+    },
   ],
   life: {
     frames: 8,
     effects: [
+      {
+        kind: 'roof_perch',
+        col: 6.4,
+        baseAboveGroundTiles: 2.25,
+        widthTiles: 0.8,
+        heightTiles: 0.9,
+        ramp: 'sky_icon',
+        cycles: 1,
+        phase: 0.1,
+      },
       {
         kind: 'forge_pulse',
         col: 1.25,
@@ -1890,7 +2061,7 @@ const QUIET_NEEDLE: BuildingSpec = {
     ramp: 'clay_terracotta',
     ridgeRamp: 'ridge_clay',
     depthTiles: 1.5,
-    overhangTiles: 0.26,
+    overhangTiles: 0.36,
     ridgeSagTiles: 0,
     mossy: false,
     disrepair: 0.1,
@@ -2021,6 +2192,16 @@ const QUIET_NEEDLE: BuildingSpec = {
   life: {
     frames: 8,
     effects: [
+      {
+        kind: 'roof_perch',
+        col: 6.4,
+        baseAboveGroundTiles: 2.45,
+        widthTiles: 0.55,
+        heightTiles: 0.6,
+        ramp: 'sky_icon',
+        cycles: 1,
+        phase: 0.55,
+      },
       {
         kind: 'bead_curtain_sway',
         col: 2.05,
@@ -2420,7 +2601,7 @@ const MILLERS_FARM: BuildingSpec = {
 export const BUILDING_SPECS: ReadonlyArray<BuildingSpec> = [
   SLEEPING_CAT_INN,
   BLACKWOOD_LODGE,
-  SHEPHERDS_CABIN,
+  PLUMBLINE_FARM,
   BARRACKS,
   CARTWRIGHTS_WORKSHOP,
   TEMPLE,

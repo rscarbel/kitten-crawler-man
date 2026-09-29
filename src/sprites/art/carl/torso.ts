@@ -56,7 +56,40 @@ interface TorsoFrame {
 }
 
 /** The jacket ends just below the waist; a moto jacket is cut short. */
-const HEM_DROP = 0.055;
+const HEM_DROP_DEFAULT = 0.055;
+/**
+ * How far past the waist the garment's hem drops, and whether it carries the
+ * jacket's own hardware (the zip and the sewn waistband) — swappable so a
+ * closed-set cast look's garment cut (a shirt, a tunic, a dress, a robe) is
+ * Carl's own torso redrawn to a different length rather than a second shape
+ * laid over his jacket. `let`, matching `SKIN`/`HAIR`/`LEATHER` in
+ * `palette.ts`; defaults to Carl's own jacket exactly.
+ */
+let HEM_DROP = HEM_DROP_DEFAULT;
+const HAS_HARDWARE_DEFAULT = true;
+let HAS_HARDWARE = HAS_HARDWARE_DEFAULT;
+/** How far the hem flares past the waist — swappable so a skirt/dress cut can flare well past a shirt's own near-straight hem. */
+const HEM_FLARE_DEFAULT = 1.03;
+let HEM_FLARE = HEM_FLARE_DEFAULT;
+
+/** Sets the garment cut every subsequent torso paint call reads. */
+export function setCarlTorsoCut(
+  hemDrop: number,
+  hasHardware: boolean,
+  hemFlare = HEM_FLARE_DEFAULT,
+): void {
+  HEM_DROP = hemDrop;
+  HAS_HARDWARE = hasHardware;
+  HEM_FLARE = hemFlare;
+}
+
+/** Restores Carl's own jacket cut — call after every non-Carl bake. */
+export function resetCarlTorsoCut(): void {
+  HEM_DROP = HEM_DROP_DEFAULT;
+  HAS_HARDWARE = HAS_HARDWARE_DEFAULT;
+  HEM_FLARE = HEM_FLARE_DEFAULT;
+}
+
 const NO_LAG: Pt = { x: 0, y: 0 };
 /**
  * A quadratic curve only reaches halfway to its control point, so a curve
@@ -120,8 +153,7 @@ const ARMPIT_Y = 0.2;
 const LAT_HOLD_Y = 0.3;
 /** Leather stands off the body by this much. */
 const JACKET_OFFSET = 0.015;
-/** The hem flares a hair past the waist, and further when a move kicks it out. */
-const HEM_FLARE = 1.03;
+/** The hem kicks further out from its own `HEM_FLARE` when a move kicks it. */
 const HEM_KICK = 0.3;
 /** A moto hem is cut nearly straight; it only sags a little at the centre. */
 const HEM_SAG = 0.012;
@@ -205,7 +237,7 @@ const PROFILE = {
 
 function traceProfile(ctx: Ctx, frame: TorsoFrame, pose: CarlPose): void {
   const { at } = frame;
-  const kick = 1 + pose.jacketFlare * HEM_KICK;
+  const kick = HEM_FLARE * (1 + pose.jacketFlare * HEM_KICK);
   const p = (q: Pt): Pt => at(q.x, q.y);
   const hemBack = frame.hem(PROFILE.hemBack.x * kick);
   const hemFront = frame.hem(PROFILE.hemFront.x * kick);
@@ -562,6 +594,7 @@ function paintFront(
     if (raised(s)) paintUnderarmFold(ctx, frame, s);
     paintWaistFolds(ctx, frame, waistHalf, s);
   }
+  if (!HAS_HARDWARE) return;
   const zipTop = at(0, -NECK_BASE_RISE + NECKLINE_DIP);
   const zipBottom = frame.hem(0, HEM_SAG);
   strokeZip(
@@ -713,6 +746,7 @@ function paintProfile(ctx: Ctx, frame: TorsoFrame, nearArm: BoneChain): void {
   foldAlong(ctx, p(PROFILE_LUMBAR_FOLD_FROM), null, p(PROFILE_LUMBAR_FOLD_TO));
   paintArmShadowOnFlank(ctx, nearArm);
 
+  if (!HAS_HARDWARE) return;
   const inset = (q: Pt): Pt => at(q.x - PROFILE_ZIP_INSET, q.y);
   const zipTop = inset(PROFILE.neckFront);
   const clavicle = inset(PROFILE.clavicle);
@@ -899,6 +933,7 @@ export function drawJacket(ctx: Ctx, skeleton: Skeleton, pose: CarlPose, view: V
     else if (view.showsBack) {
       paintBack(ctx, frame, waistHalf, chestHalf, shoulderHalf, raisedArms(skeleton, frame));
     } else paintFront(ctx, frame, waistHalf, chestHalf, raisedArms(skeleton, frame));
+    if (!HAS_HARDWARE) return;
     if (view.profile) paintWaistband(ctx, frame, PROFILE.hemBack.x, PROFILE.hemFront.x);
     else paintWaistband(ctx, frame, -waistHalf * HEM_FLARE, waistHalf * HEM_FLARE);
   });

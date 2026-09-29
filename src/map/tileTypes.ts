@@ -701,7 +701,7 @@ export const FloorTypeValue = {
  * Declared beside the tile it decorates rather than in the renderer that draws
  * it, so the dependency runs from the renderer to the data and not back.
  */
-export type FenceStyle = 'post_and_rail' | 'picket' | 'wattle';
+export type FenceStyle = 'post_and_rail' | 'picket' | 'wattle' | 'garrison';
 
 export type TileContent = {
   tileId: string;

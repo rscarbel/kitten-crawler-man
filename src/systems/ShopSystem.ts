@@ -24,7 +24,7 @@ import {
   resetButtonPointerSpace,
 } from '../ui/Button';
 import type { ButtonRect } from '../ui/pause/types';
-import { drawShopkeeper } from '../sprites/shopkeeperSprite';
+import type { Townsperson } from '../creatures/Townsperson';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import {
   consumeStock,
@@ -41,11 +41,6 @@ import { GENERAL_STORE_PRICING } from './market/shopProfiles';
 import { sellableHoldings } from './market/sellableInventory';
 import { partyCoins, canAffordCoins, spendPartyCoins } from '../core/partyCoins';
 
-const WANDER_MIN_TILE_OFFSET = 3;
-const WANDER_MAX_TILE_INSET = 4;
-const WANDER_DIR_CHANGE_INTERVAL = 200;
-const WANDER_DIR_FLIP_CHANCE = 0.5;
-const WANDER_SPEED = 0.4;
 const SHOPKEEPER_HALF_TILE = 0.5;
 const SHOPKEEPER_INTERACT_RANGE = 3.5;
 
@@ -213,12 +208,18 @@ export class ShopSystem implements GameSystem {
 
   private mode: 'buy' | 'sell' = 'buy';
 
-  private shopkeeperTileY = 1;
-  private wanderX: number;
-  private wanderDir = 1;
-  private wanderTime = 0;
-  private wanderMinX: number;
-  private wanderMaxX: number;
+  /**
+   * Keeper Brenna Kestrel's own occupant, the counter's sole owner — this
+   * system only reads her position for the interaction prompt and range
+   * check; `InteriorOccupantSystem` renders her, the same as any other
+   * stationed resident. Set once the scene has built its occupant roster
+   * (construction order puts this system together before that roster
+   * exists), so it starts `null` and falls back to a fixed spot behind the
+   * counter until then.
+   */
+  private keeper: Pick<Townsperson, 'x' | 'y'> | null = null;
+  private readonly fallbackKeeperX: number;
+  private readonly fallbackKeeperTileY = 1;
 
   private feedbackMsg = '';
   private feedbackTimer = 0;
@@ -244,9 +245,20 @@ export class ShopSystem implements GameSystem {
     this.items = config.items;
     this.pricing = config.pricing;
     this.stockConfig = stockConfig;
-    this.wanderX = Math.floor(interiorWidth / 2) * TILE_SIZE;
-    this.wanderMinX = WANDER_MIN_TILE_OFFSET * TILE_SIZE;
-    this.wanderMaxX = (interiorWidth - WANDER_MAX_TILE_INSET) * TILE_SIZE;
+    this.fallbackKeeperX = Math.floor(interiorWidth / 2) * TILE_SIZE;
+  }
+
+  /** Points this system at Kestrel's own occupant, once the scene has built its roster. */
+  setKeeper(keeper: Pick<Townsperson, 'x' | 'y'> | null): void {
+    this.keeper = keeper;
+  }
+
+  private keeperX(): number {
+    return this.keeper?.x ?? this.fallbackKeeperX;
+  }
+
+  private keeperY(): number {
+    return this.keeper?.y ?? this.fallbackKeeperTileY * TILE_SIZE;
   }
 
   /** Units left for a row, or `null` when the row is unlimited or this shop has no stock store. */
@@ -272,26 +284,13 @@ export class ShopSystem implements GameSystem {
   }
 
   update(): void {
-    this.wanderTime++;
-    if (this.wanderTime % WANDER_DIR_CHANGE_INTERVAL === 0) {
-      this.wanderDir = Math.random() < WANDER_DIR_FLIP_CHANCE ? -1 : 1;
-    }
-    this.wanderX += this.wanderDir * WANDER_SPEED;
-    if (this.wanderX < this.wanderMinX) {
-      this.wanderX = this.wanderMinX;
-      this.wanderDir = 1;
-    }
-    if (this.wanderX > this.wanderMaxX) {
-      this.wanderX = this.wanderMaxX;
-      this.wanderDir = -1;
-    }
     if (this.feedbackTimer > 0) this.feedbackTimer--;
     decayHeldStock(this.stockConfig.stock.held, this.pricing.heldStockRecoveryPerTick);
   }
 
   isNearShopkeeper(player: Player): boolean {
-    const skPx = this.wanderX + TILE_SIZE * SHOPKEEPER_HALF_TILE;
-    const skPy = this.shopkeeperTileY * TILE_SIZE + TILE_SIZE * SHOPKEEPER_HALF_TILE;
+    const skPx = this.keeperX() + TILE_SIZE * SHOPKEEPER_HALF_TILE;
+    const skPy = this.keeperY() + TILE_SIZE * SHOPKEEPER_HALF_TILE;
     return (
       Math.hypot(
         player.x + TILE_SIZE * SHOPKEEPER_HALF_TILE - skPx,
@@ -301,15 +300,17 @@ export class ShopSystem implements GameSystem {
     );
   }
 
+  /**
+   * Kestrel is drawn by `InteriorOccupantSystem`'s own Y-sorted pass, the
+   * same as any other stationed resident — this only places the "Shop"
+   * prompt at her own position, so it never floats away from her.
+   */
   renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
+    if (this.shopOpen || !this.isNearShopkeeper(active)) return;
     const ts = TILE_SIZE;
-    const sx = this.wanderX - camX;
-    const sy = this.shopkeeperTileY * ts - camY;
-    drawShopkeeper(ctx, sx, sy, ts, this.wanderTime, this.wanderDir);
-
-    if (!this.shopOpen && this.isNearShopkeeper(active)) {
-      drawInteractionPrompt(ctx, sx, sy, ts, 'Shop');
-    }
+    const sx = this.keeperX() - camX;
+    const sy = this.keeperY() - camY;
+    drawInteractionPrompt(ctx, sx, sy, ts, 'Shop');
   }
 
   renderUI(ctx: CanvasRenderingContext2D, _active: Player): void {

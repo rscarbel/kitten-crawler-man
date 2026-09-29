@@ -41,6 +41,7 @@ import {
   laundryLineSpanTiles,
 } from './townDecorPlan';
 import { tileKey } from './tileKey';
+import { doorwayKeepClearTiles } from './doorwayKeepClear';
 import type { GameMap } from '../map/GameMap';
 import {
   SHOP_SIGN_EMBLEMS,
@@ -102,7 +103,12 @@ const LAMP_FLICKER_PHASE_STRIDE_RAD = GOLDEN_ANGLE_RAD;
  */
 type ClutterAnchor =
   | { readonly at: 'yard'; readonly name: string; readonly offset: TownOffset }
-  | { readonly at: 'door'; readonly name: string; readonly offset: TownOffset };
+  | { readonly at: 'door'; readonly name: string; readonly offset: TownOffset }
+  // `surface` reaches a `PlannedSurface` (the drill yards, the crop rows) rather
+  // than a `PlannedYard` — the working ground a trade actually stands on, which
+  // for the Barracks is gravel the generator plans as a surface, not a fenced
+  // `yard` entry.
+  | { readonly at: 'surface'; readonly name: string; readonly offset: TownOffset };
 
 interface ClutterPlacement {
   readonly kind: TownClutterKind;
@@ -151,6 +157,7 @@ const CLUTTER_PLACEMENTS: ReadonlyArray<ClutterPlacement> = [
     anchor: { at: 'door', name: 'The Horned Flagon', offset: { dx: 4, dy: 1 } },
   },
   { kind: 'planter', anchor: { at: 'door', name: 'Temple of the Sky', offset: { dx: 3, dy: 1 } } },
+  { kind: 'birdbath', anchor: { at: 'door', name: 'Temple of the Sky', offset: { dx: 5, dy: 1 } } },
   {
     kind: 'barrel_stack',
     anchor: { at: 'door', name: 'The Desperado Club', offset: { dx: 4, dy: 1 } },
@@ -215,10 +222,298 @@ const CLUTTER_PLACEMENTS: ReadonlyArray<ClutterPlacement> = [
   },
   { kind: 'hay_bale', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 1, dy: 1 } } },
   { kind: 'planter', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 5, dy: 4 } } },
+  // Wendell's own pasture gear — a trough and a rack, not the loose garden
+  // clutter above. Kept along the green's edges, clear of the yard's own
+  // centre for the cow Wendell's pasture is being kept ready for.
+  {
+    kind: 'water_trough',
+    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 1, dy: 5 } },
+  },
+  { kind: 'hay_rack', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 4, dy: 2 } } },
+
+  // Building-line dressing: something at most every frontage, so facades sit
+  // in a lived-in street rather than on bare ground.
+  { kind: 'tool_rack', anchor: { at: 'door', name: 'The Barracks', offset: { dx: -3, dy: 1 } } },
+  { kind: 'crate_stack', anchor: { at: 'door', name: 'The Barracks', offset: { dx: 4, dy: 1 } } },
+  {
+    kind: 'wagon_wheel',
+    anchor: { at: 'door', name: "Cartwright's Workshop", offset: { dx: -3, dy: 1 } },
+  },
+  {
+    kind: 'sacks',
+    anchor: { at: 'door', name: "Cartwright's Workshop", offset: { dx: 4, dy: 1 } },
+  },
+  {
+    kind: 'planter',
+    anchor: { at: 'door', name: 'The Sunken Stump Pub', offset: { dx: -3, dy: 1 } },
+  },
+  {
+    kind: 'crate_stack',
+    anchor: { at: 'door', name: 'The Sunken Stump Pub', offset: { dx: 4, dy: 1 } },
+  },
+  { kind: 'planter', anchor: { at: 'door', name: 'The Quiet Needle', offset: { dx: -3, dy: 1 } } },
+
+  // Trade-themed yard dressing: the empty back strips and gardens each read as
+  // the trade behind them rather than as bare kept grass.
+  {
+    kind: 'herb_rack',
+    anchor: { at: 'yard', name: 'Herb & Remedy back strip', offset: { dx: 2, dy: 0 } },
+  },
+  {
+    kind: 'vegetable_row',
+    anchor: { at: 'yard', name: 'Herb & Remedy side strip', offset: { dx: 0, dy: 2 } },
+  },
+  {
+    kind: 'herb_rack',
+    anchor: { at: 'yard', name: "Old Hilda's side strip", offset: { dx: 0, dy: 2 } },
+  },
+  {
+    kind: 'vegetable_row',
+    anchor: { at: 'yard', name: "Miller's kitchen garden", offset: { dx: 3, dy: 1 } },
+  },
+  {
+    kind: 'timber_stack',
+    anchor: { at: 'yard', name: 'Market Row east workyard', offset: { dx: 3, dy: 1 } },
+  },
+  {
+    kind: 'garden_bench',
+    anchor: { at: 'yard', name: 'Horned Flagon back strip', offset: { dx: 3, dy: 0 } },
+  },
+  {
+    kind: 'street_tree',
+    anchor: { at: 'yard', name: 'Sunken Stump back garden', offset: { dx: 6, dy: 1 } },
+  },
+  {
+    kind: 'garden_bench',
+    anchor: { at: 'yard', name: "The Quiet Needle's back garden", offset: { dx: 6, dy: 2 } },
+  },
+  {
+    kind: 'street_tree',
+    anchor: { at: 'yard', name: 'General Store back strip', offset: { dx: 3, dy: 0 } },
+  },
+  {
+    kind: 'street_tree',
+    anchor: { at: 'yard', name: 'Sleeping Cat back strip', offset: { dx: 3, dy: 0 } },
+  },
+  {
+    kind: 'street_tree',
+    anchor: { at: 'yard', name: 'Garrison back strip', offset: { dx: 5, dy: 0 } },
+  },
+  {
+    kind: 'drill_pell',
+    anchor: { at: 'surface', name: 'Barracks drill yard (west)', offset: { dx: 1, dy: 2 } },
+  },
+  {
+    kind: 'drill_pell',
+    anchor: { at: 'surface', name: 'Barracks drill yard (east)', offset: { dx: 1, dy: 2 } },
+  },
+
+  // Wendell's pasture: crafted, not rustic — squared timber, a milking stool and
+  // pail at the gate, a feed bin, all clear of the yard's own centre for a cow.
+  {
+    kind: 'timber_stack',
+    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 2, dy: 5 } },
+  },
+  {
+    kind: 'feed_bin',
+    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 3, dy: 1 } },
+  },
+  {
+    kind: 'milking_stool',
+    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 1, dy: 3 } },
+  },
+
+  // Whole-lot compositions, not one or two pieces of clutter lost in a grass
+  // rectangle. Every yard below gets enough pieces, spread across
+  // its own footprint, to read as a place someone works or tends rather than
+  // as kept lawn with an ornament on it.
+
+  // Miller's kitchen garden: a working vegetable plot, not a single row. The
+  // yard is only three rows deep and fenced on every side, so `dy: 1` is the
+  // one row clear of the perimeter posts on every column.
+  {
+    kind: 'vegetable_row',
+    anchor: { at: 'yard', name: "Miller's kitchen garden", offset: { dx: 2, dy: 1 } },
+  },
+  {
+    kind: 'vegetable_row',
+    anchor: { at: 'yard', name: "Miller's kitchen garden", offset: { dx: 6, dy: 2 } },
+  },
+  {
+    kind: 'grain_bin',
+    anchor: { at: 'yard', name: "Miller's kitchen garden", offset: { dx: 3, dy: 2 } },
+  },
+
+  // Market Row east workyard: the carting yard fuller still — a place things
+  // are stacked and fetched, not a gravel rectangle with a wheel on it.
+  {
+    kind: 'tool_rack',
+    anchor: { at: 'yard', name: 'Market Row east workyard', offset: { dx: 1, dy: 4 } },
+  },
+  {
+    kind: 'crate_stack',
+    anchor: { at: 'yard', name: 'Market Row east workyard', offset: { dx: 7, dy: 2 } },
+  },
+  {
+    kind: 'hedge_row',
+    anchor: { at: 'yard', name: 'Market Row east workyard', offset: { dx: 1, dy: 0 } },
+  },
+  {
+    kind: 'hedge_row',
+    anchor: { at: 'yard', name: 'Market Row east workyard', offset: { dx: 4, dy: 0 } },
+  },
+
+  // The Quiet Needle's courtyard: paved (see the `courtyard` `YardKind`), with
+  // a planter ring, a second bench and a tree — a bench and a pump alone read
+  // as a back garden, not a courtyard.
+  {
+    kind: 'planter',
+    // Beside the tree on the open paving north of the parlour. The yard's
+    // bounds take in the parlour itself, so an offset into its footprint drifts
+    // to the nearest walkable tile — which, from inside the facade, is the door.
+    anchor: { at: 'yard', name: "The Quiet Needle's back garden", offset: { dx: 4, dy: 3 } },
+  },
+  {
+    kind: 'planter',
+    anchor: { at: 'yard', name: "The Quiet Needle's back garden", offset: { dx: 9, dy: 2 } },
+  },
+  {
+    kind: 'street_tree',
+    anchor: { at: 'yard', name: "The Quiet Needle's back garden", offset: { dx: 5, dy: 5 } },
+  },
+  {
+    kind: 'garden_bench',
+    anchor: { at: 'yard', name: "The Quiet Needle's back garden", offset: { dx: 9, dy: 8 } },
+  },
+
+  // The Sunken Stump's beer garden: more barrels and benches to sit them at.
+  {
+    kind: 'garden_bench',
+    anchor: { at: 'yard', name: 'Sunken Stump back garden', offset: { dx: 2, dy: 3 } },
+  },
+  {
+    kind: 'barrel_stack',
+    anchor: { at: 'yard', name: 'Sunken Stump back garden', offset: { dx: 5, dy: 3 } },
+  },
+  {
+    kind: 'street_tree',
+    anchor: { at: 'yard', name: 'Sunken Stump back garden', offset: { dx: 3, dy: 1 } },
+  },
+
+  // Barracks drill yards: a weapon rack and a second pell each, plus a crate
+  // of practice gear, so the ground reads as drilled rather than swept.
+  {
+    kind: 'weapon_rack',
+    anchor: { at: 'surface', name: 'Barracks drill yard (west)', offset: { dx: 1, dy: 4 } },
+  },
+  {
+    kind: 'drill_pell',
+    anchor: { at: 'surface', name: 'Barracks drill yard (west)', offset: { dx: 3, dy: 3 } },
+  },
+  {
+    kind: 'weapon_rack',
+    anchor: { at: 'surface', name: 'Barracks drill yard (east)', offset: { dx: 1, dy: 4 } },
+  },
+  {
+    kind: 'drill_pell',
+    anchor: { at: 'surface', name: 'Barracks drill yard (east)', offset: { dx: 3, dy: 3 } },
+  },
+
+  // Back strips: a second and third piece along each, and a hedge to frame the
+  // ones that are otherwise just a name on an empty row of grass.
+  {
+    kind: 'vegetable_row',
+    anchor: { at: 'yard', name: 'Herb & Remedy back strip', offset: { dx: 5, dy: 0 } },
+  },
+  {
+    kind: 'hedge_row',
+    anchor: { at: 'yard', name: "Old Hilda's side strip", offset: { dx: 0, dy: 4 } },
+  },
+  {
+    kind: 'hedge_row',
+    anchor: { at: 'yard', name: 'General Store back strip', offset: { dx: 5, dy: 0 } },
+  },
+  {
+    kind: 'hedge_row',
+    anchor: { at: 'yard', name: 'Sleeping Cat back strip', offset: { dx: 5, dy: 0 } },
+  },
+  {
+    kind: 'hedge_row',
+    anchor: { at: 'yard', name: 'Horned Flagon back strip', offset: { dx: 5, dy: 0 } },
+  },
+  {
+    kind: 'street_tree',
+    anchor: { at: 'yard', name: 'Garrison back strip', offset: { dx: 9, dy: 0 } },
+  },
+  {
+    kind: 'coal_pile',
+    anchor: { at: 'yard', name: 'Rusty Anvil back strip', offset: { dx: 2, dy: 0 } },
+  },
+  {
+    kind: 'tool_rack',
+    anchor: { at: 'yard', name: 'Rusty Anvil back strip', offset: { dx: 5, dy: 0 } },
+  },
+
+  // Wendell's pasture, finished: a tidy string-line plot beside the vegetable
+  // beds his farm-in-waiting does not have yet, and a hedge along the back
+  // lane fence so the green reads as tended right up to its edges. Still clear
+  // of the yard's own centre for the cow Wendell's pasture is being kept ready for.
+  {
+    kind: 'vegetable_row',
+    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 2, dy: 2 } },
+  },
+  {
+    kind: 'vegetable_row',
+    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 2, dy: 4 } },
+  },
 ];
 
 /** How far a piece of clutter may drift from its stated tile to find a free one. */
 const CLUTTER_SEARCH_RADIUS = 2;
+
+/**
+ * A custom-frame building-line fixture — a post, a perch or a shelter, each
+ * with its own sheet rather than a shared clutter envelope. Placed the same
+ * connectivity-checked way as clutter, but rendered by `FixtureProp` rather
+ * than `ClutterProp`.
+ */
+type FixtureKind = 'awning_post' | 'skyfowl_perch' | 'field_shelter';
+
+const FIXTURE_SHEET_KEY: Record<FixtureKind, string> = {
+  awning_post: 'town_awning_post',
+  skyfowl_perch: 'town_skyfowl_perch',
+  field_shelter: 'town_field_shelter',
+};
+
+interface FixturePlacement {
+  readonly kind: FixtureKind;
+  readonly anchor: ClutterAnchor;
+}
+
+/**
+ * Awning posts at the town's two busiest frontages and the club's door, and a
+ * skyfowl perch at the temple — furniture a bird chooses to use, never baked
+ * into the facade, so a fixture can be repositioned or removed without a
+ * repaint.
+ */
+const FIXTURE_PLACEMENTS: ReadonlyArray<FixturePlacement> = [
+  { kind: 'awning_post', anchor: { at: 'door', name: 'General Store', offset: { dx: -4, dy: 1 } } },
+  {
+    kind: 'awning_post',
+    anchor: { at: 'door', name: 'The Horned Flagon', offset: { dx: -4, dy: 1 } },
+  },
+  {
+    kind: 'awning_post',
+    anchor: { at: 'door', name: 'The Desperado Club', offset: { dx: -4, dy: 1 } },
+  },
+  {
+    kind: 'skyfowl_perch',
+    anchor: { at: 'door', name: 'Temple of the Sky', offset: { dx: -4, dy: 1 } },
+  },
+];
+
+/** Wendell's pasture shelter — one fixture, placed directly rather than through the generic list, since it is the only one anchored to a yard corner rather than a door. */
+const FIELD_SHELTER_OFFSET: TownOffset = { dx: 5, dy: 1 };
 
 /**
  * A gateway is anchored **on** the wall, at the opening's west or north jamb.
@@ -256,6 +551,8 @@ export class TownDecorSystem implements GameSystem {
   /** See `reachableInterior`. Null until the first placement needs it. */
   private reachableCache: number | null = null;
   private frame = 0;
+  /** See `doorwayKeepClearTiles`: the connectivity check cannot see a sealed door. */
+  private readonly doorwayKeepClear: ReadonlySet<string>;
 
   /**
    * @param claimedElsewhere tiles the market stalls and `TownPropSystem`'s props
@@ -267,9 +564,12 @@ export class TownDecorSystem implements GameSystem {
     private readonly gameMap: GameMap,
     private readonly claimedElsewhere: ReadonlySet<string> = new Set(),
   ) {
+    this.doorwayKeepClear = doorwayKeepClearTiles(gameMap.buildingEntries);
     this.placeShopSigns();
     this.placeStreetLamps();
     this.placeClutter();
+    this.placeFixtures();
+    this.placeFieldShelter();
     this.placeLaundryLines();
     this.placeSignposts();
     this.placeGateArches();
@@ -367,11 +667,55 @@ export class TownDecorSystem implements GameSystem {
     }
   }
 
+  /**
+   * The custom-frame fixtures: awning posts and the temple's perch. Same
+   * connectivity-checked placement as clutter, kept separate because each
+   * fixture is its own sheet rather than a row of `town_clutter`.
+   */
+  private placeFixtures(): void {
+    const plan = this.gameMap.townPlan;
+    if (plan === undefined) return;
+    for (const placement of FIXTURE_PLACEMENTS) {
+      const preferred = this.resolveClutterAnchor(plan, placement.anchor);
+      if (preferred === null) continue;
+      const tile = this.findFreeTile(plan, preferred);
+      if (tile === null) continue;
+      this.reserve(tile);
+      this.renderables.push(new FixtureProp(tile, FIXTURE_SHEET_KEY[placement.kind]));
+    }
+  }
+
+  /**
+   * Wendell's pasture shelter, in the Garrison Green's own corner. Sized for a
+   * cow that is not there yet — the offset is chosen clear of the yard's
+   * other pasture dressing and its own centre, leaving the yard's centre
+   * walkable.
+   */
+  private placeFieldShelter(): void {
+    const plan = this.gameMap.townPlan;
+    if (plan === undefined) return;
+    const yard = plan.yards.find((y) => y.name === 'Garrison Green');
+    if (yard === undefined) return;
+    const preferred = {
+      x: yard.bounds.x + FIELD_SHELTER_OFFSET.dx,
+      y: yard.bounds.y + FIELD_SHELTER_OFFSET.dy,
+    };
+    const tile = this.findFreeTile(plan, preferred);
+    if (tile === null) return;
+    this.reserve(tile);
+    this.renderables.push(new FixtureProp(tile, FIXTURE_SHEET_KEY.field_shelter));
+  }
+
   private resolveClutterAnchor(plan: TownPlan, anchor: ClutterAnchor): TileXY | null {
     if (anchor.at === 'door') {
       const entry = this.gameMap.buildingEntries.find((e) => e.name === anchor.name);
       if (entry === undefined) return null;
       return { x: entry.doorTile.x + anchor.offset.dx, y: entry.doorTile.y + anchor.offset.dy };
+    }
+    if (anchor.at === 'surface') {
+      const surface = plan.surfaces.find((s) => s.name === anchor.name);
+      if (surface === undefined) return null;
+      return { x: surface.bounds.x + anchor.offset.dx, y: surface.bounds.y + anchor.offset.dy };
     }
     const yard = plan.yards.find((y) => y.name === anchor.name);
     if (yard === undefined) return null;
@@ -507,6 +851,7 @@ export class TownDecorSystem implements GameSystem {
   private canStandOn(tile: TileXY): boolean {
     const key = tileKey(tile.x, tile.y);
     if (this.occupied.has(key) || this.claimedElsewhere.has(key)) return false;
+    if (this.doorwayKeepClear.has(key)) return false;
     // `IgnoringPermanent` for the reason `TownPropSystem.findFreeTile` gives: the
     // overworld map instance outlives a trip into a building, so a prop's own
     // block would make re-placement pick a different tile every trip.
@@ -734,6 +1079,38 @@ class ClutterProp implements TownPropRenderable {
       CLUTTER_SHEET_KEY,
       'idle',
       TOWN_CLUTTER_KINDS.indexOf(this.kind),
+      this.tile.x * tileSize - camX,
+      this.tile.y * tileSize - camY,
+      tileSize,
+    );
+  }
+}
+
+/**
+ * A custom-frame fixture — an awning post, a perch, the field shelter —
+ * standing on and blocking its own tile. Single state, single frame: none of
+ * these three animate.
+ */
+class FixtureProp implements TownPropRenderable {
+  constructor(
+    private readonly tile: TileXY,
+    private readonly sheetKey: string,
+  ) {}
+
+  get x(): number {
+    return this.tile.x * TILE_SIZE;
+  }
+
+  get y(): number {
+    return this.tile.y * TILE_SIZE;
+  }
+
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    drawTownSheetFrame(
+      ctx,
+      this.sheetKey,
+      'idle',
+      0,
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
       tileSize,

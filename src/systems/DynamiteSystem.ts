@@ -1,5 +1,6 @@
 import type { GameMap } from '../map/GameMap';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
+import type { TownInteriorPropDestructionSystem } from './TownInteriorPropDestructionSystem';
 import { EXPLOSION_IGNITE_RING_TILES, type TreeSystem } from './TreeSystem';
 import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
@@ -337,6 +338,14 @@ export class DynamiteSystem implements GameSystem {
 
   private _trajectoryCache: Array<{ x: number; y: number }> | null = null;
   private _trajCacheKey = '';
+
+  /**
+   * Set by the owning scene once a town interior's prop-destruction system
+   * exists, which happens after this class is constructed (it is built off
+   * `DestructionKit`'s loot system, and the interior prop system is built off
+   * that same kit). Left null everywhere else, including on any dungeon floor.
+   */
+  interiorProps: TownInteriorPropDestructionSystem | null = null;
 
   constructor(
     private readonly gameMap: GameMap,
@@ -721,6 +730,7 @@ export class DynamiteSystem implements GameSystem {
     // dynamite reads as a bug, however much health it had left. The same goes
     // for a tree, tough as one otherwise is.
     this.destructibles?.destroyInRadius(cx, cy, radius, human);
+    this.interiorProps?.destroyInRadius(cx, cy, radius);
     const trees = this.trees();
     trees?.destroyInRadius(cx, cy, radius, human);
     // Ignition second, and deliberately: the ring reaches back over the blast

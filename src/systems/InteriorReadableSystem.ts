@@ -24,6 +24,8 @@ import {
 } from '../map/tileTypes';
 import { readablesFor, type Readable, type ReadableAnchor } from './townReadables';
 import { anchorCursorForBuilding } from './interiorPlacement';
+import { TOWN_INTERIOR_PROPS } from '../sprites/art/townInterior/townInteriorProps';
+import type { AnchorKind } from './InteriorOccupantSystem';
 
 /** The furniture tile types each anchor kind can sit on, in preference order. */
 const ANCHOR_TILE_TYPES: ReadonlyArray<{ kind: ReadableAnchor; types: ReadonlyArray<number> }> = [
@@ -150,7 +152,19 @@ export class InteriorReadableSystem {
   }
 }
 
-/** Group every interior furniture tile by the anchor kind it can host. */
+/** A prop's anchor kind, narrowed to the ones a readable can actually sit on — never a hearth, forge or seat. */
+function isReadableAnchor(kind: AnchorKind): kind is ReadableAnchor {
+  return kind === 'shelf' || kind === 'table' || kind === 'crate' || kind === 'board';
+}
+
+/**
+ * Group every interior furniture tile by the anchor kind it can host.
+ *
+ * Two sources, exactly as `InteriorOccupantSystem.scanInteriorFurniture`
+ * merges them: legacy tile types (`ANCHOR_TILE_TYPES`) and placed town
+ * interior props, filtered to the anchor kinds a readable can actually sit
+ * on.
+ */
 function scanFurniture(map: GameMap): Map<ReadableAnchor, TileXY[]> {
   const groups = new Map<ReadableAnchor, TileXY[]>();
   const structure = map.structure;
@@ -164,6 +178,15 @@ function scanFurniture(map: GameMap): Map<ReadableAnchor, TileXY[]> {
         list.push({ x, y });
         groups.set(kind, list);
       }
+    }
+  }
+  for (const placed of map.placedInteriorProps) {
+    const propDef = TOWN_INTERIOR_PROPS[placed.propId];
+    for (const kind of propDef.anchors) {
+      if (!isReadableAnchor(kind)) continue;
+      const list = groups.get(kind) ?? [];
+      list.push({ x: placed.tile.x, y: placed.tile.y });
+      groups.set(kind, list);
     }
   }
   return groups;

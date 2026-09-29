@@ -79,7 +79,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'horned_flagon',
     'millers_farm',
     'overworld_main_tower',
-    'shepherds_cabin',
+    'plumbline_farm',
     'quiet_needle',
     'sleeping_cat_inn',
     'sunken_stump',
@@ -105,9 +105,12 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'market_stall_front',
     'shop_sign',
     'street_lamp',
+    'town_awning_post',
     'town_bench',
     'town_clutter',
+    'town_field_shelter',
     'town_notice_board',
+    'town_skyfowl_perch',
     'over_city_fortune_teller',
     'over_city_signpost',
     'ground_overworld',
@@ -291,7 +294,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   necromancer: [],
   raised_ratkin: [],
   grave_bull: [],
-  /** Painted by `skyFowlSprite.ts`, one figure per clothing palette. */
+  /** Painted by `skyfowlCastSprite.ts`, one figure per street-tough look. */
   sky_fowl: [],
   /** Briar Hollow's herd, painted by `cowSprite.ts`, one figure per coat and age. */
   cow: [],

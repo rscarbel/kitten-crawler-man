@@ -58,6 +58,14 @@ export interface WallSpec {
   readonly grime: number;
   /** Moss at ground contact and in shadowed creases, 0..1. */
   readonly moss: number;
+  /**
+   * How well the wall is kept, 0..1; absent means 0. A kept wall has been
+   * limewashed fresh: its plaster's wash patches, cracks and spalls, and the
+   * broad weather patches laid over the whole plane, all fade by this much.
+   * Grime and moss stay their own knobs — a clean coat and a mossy footing
+   * are separate facts about a house.
+   */
+  readonly upkeep?: number;
 }
 
 export interface RoofSpec {
@@ -169,8 +177,6 @@ export type PropKind =
   | 'crate'
   | 'sack'
   | 'firewood'
-  | 'wool_bale'
-  | 'crook'
   | 'cart_wheel'
   | 'sawhorse'
   | 'plank_stack'
@@ -195,7 +201,10 @@ export type PropKind =
   | 'bead_curtain'
   | 'boarded_window'
   | 'lean_to'
-  | 'forge_mouth';
+  | 'forge_mouth'
+  | 'porch'
+  | 'milk_churn'
+  | 'builder_tools';
 
 export interface PropSpec {
   readonly kind: PropKind;
@@ -250,7 +259,8 @@ export type LifeEffectKind =
   | 'finial_glint'
   | 'weathervane_swing'
   | 'suit_lantern_sequence'
-  | 'bead_curtain_sway';
+  | 'bead_curtain_sway'
+  | 'roof_perch';
 
 export interface LifeEffectSpec {
   readonly kind: LifeEffectKind;
@@ -283,16 +293,17 @@ export interface LifeEffectSpec {
 
 export interface LifeSpec {
   /**
-   * 6–15. Varied across the town so the buildings do not pulse in lockstep on
-   * the single shared 8 fps clock, and capped at 15 by the 16-frame radix
-   * `decorationAnimationFrame` folds overlay indices with — at 16 two distinct
-   * frame combinations fold to the same cache key and one building would draw
-   * another's frame.
+   * 6–31. Varied across the town so the buildings do not pulse in lockstep on
+   * the single shared 8 fps clock, and capped one below
+   * `OVERLAY_FRAME_KEY_STRIDE`, the radix `decorationAnimationFrame` folds
+   * overlay indices with — at the radix two distinct frame combinations fold
+   * to the same cache key and one building would draw another's frame.
    *
    * Every frame is a whole frame of decoded sheet, so this is the most
    * expensive number in a spec. Spend it only where the loop's *length* is
    * doing something a shorter loop cannot: the pub's walkers need a pause
-   * between passes, and a pause cannot outlast the loop it repeats in.
+   * between passes, and a pause cannot outlast the loop it repeats in; the
+   * inn's cat breathes once every three seconds, and a breath cannot either.
    */
   readonly frames: number;
   readonly effects: ReadonlyArray<LifeEffectSpec>;
@@ -356,6 +367,18 @@ export interface FacadeSpec {
    */
   readonly pilasters: number;
   readonly pilasterRamp?: RampId;
+  /**
+   * A dressed-stone plinth in place of the default rubble base course: squared
+   * blocks in the named ramp, lighter than a rubble footing, optionally with
+   * quoins at its corners. Absent means the rubble course every building
+   * stands on.
+   */
+  readonly plinth?: PlinthSpec;
+}
+
+export interface PlinthSpec {
+  readonly ramp: RampId;
+  readonly quoins: boolean;
 }
 
 export interface BuildingSpec {

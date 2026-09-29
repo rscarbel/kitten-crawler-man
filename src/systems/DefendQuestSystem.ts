@@ -647,10 +647,9 @@ export class DefendQuestSystem implements GameSystem {
       questRelated: true,
       ending: {
         kind: 'confirm',
-        // Answering a plea for help is a choice the player has to aim at. A
-        // bare Space here would refuse the quest — or take it — depending on
-        // which button happened to be marked, so it does neither.
-        keyboardDefault: 'none',
+        // The floor cannot be passed without this fight, so a player reading
+        // through with Space is agreeing to it; "No" is always one Escape away.
+        keyboardDefault: 'accept',
         accept: {
           label: 'Yes',
           tone: 'quest',

@@ -34,6 +34,7 @@ import {
 import { drawTownSheetFrame } from '../sprites/townSheetProp';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { tileKey } from './tileKey';
+import { doorwayKeepClearTiles } from './doorwayKeepClear';
 import type { GameMap } from '../map/GameMap';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
@@ -53,11 +54,10 @@ const DRINK_COOLDOWN_FRAMES = 90;
 const REST_HEAL_FRACTION = 0.25;
 const REST_COOLDOWN_FRAMES = 360;
 
-// Preferred board placement: the plaza's north-west quadrant. It used to be due
-// south of centre on the rationale that "the tower fills the north" — the tower
-// now stands in the north wall and the terrace approach runs down the centre
-// line, so the open quarters are the corners, and due south is the arrival
-// sightline from the south gate. Searched outward for the first free tile clear
+// Preferred board placement: the plaza's north-west quadrant. The tower stands
+// in the north wall and the terrace approach runs down the centre line, so the
+// open quarters are the corners, and due south is the arrival sightline from
+// the south gate. Searched outward for the first free tile clear
 // of building/sprite footprints.
 const BOARD_OFFSET: TileOffset = { dx: -4, dy: -4 };
 const PROP_SEARCH_RADIUS = 4;
@@ -117,6 +117,8 @@ export class TownPropSystem implements GameSystem {
   private fortuneTellerProp: FortuneTellerProp | null = null;
   private healCooldown = 0;
   private readonly occupied = new Set<string>();
+  /** See `doorwayKeepClearTiles`. */
+  private readonly doorwayKeepClear: ReadonlySet<string>;
 
   constructor(
     private readonly gameMap: GameMap,
@@ -132,6 +134,7 @@ export class TownPropSystem implements GameSystem {
      */
     private readonly claimedElsewhere: ReadonlySet<string> = new Set(),
   ) {
+    this.doorwayKeepClear = doorwayKeepClearTiles(gameMap.buildingEntries);
     this.placeBoard();
     this.placeFortuneTeller();
     this.gatherWaterSpots();
@@ -382,6 +385,7 @@ export class TownPropSystem implements GameSystem {
           const ty = preferred.y + dy;
           const key = tileKey(tx, ty);
           if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;
+          if (this.doorwayKeepClear.has(key)) continue;
           if (this.gameMap.isWalkableIgnoringPermanent(tx, ty)) return { x: tx, y: ty };
         }
       }

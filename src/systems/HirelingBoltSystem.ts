@@ -70,13 +70,18 @@ export type HirelingShot =
 /**
  * Anything with shots to hand over. Structural, like `GolemRockThrower`, so the
  * system never has to name the hireling class it drains.
+ *
+ * The method name is the whole of the check, so it must be one no other mob
+ * carries: archers and skeleton casters have a `takePendingShots` of their own
+ * with a different shot shape, and draining theirs here would both steal their
+ * arrows and read a wave off a shot that has none.
  */
 export interface HirelingShotSource {
-  takePendingShots(): readonly HirelingShot[];
+  takePendingHirelingShots(): readonly HirelingShot[];
 }
 
 function isShotSource(mob: Mob): mob is Mob & HirelingShotSource {
-  return 'takePendingShots' in mob && typeof mob.takePendingShots === 'function';
+  return 'takePendingHirelingShots' in mob && typeof mob.takePendingHirelingShots === 'function';
 }
 
 const CENTER_OFFSET = 0.5;
@@ -200,7 +205,7 @@ export class HirelingBoltSystem implements GameSystem {
   private collectShots(mobs: readonly Mob[]): void {
     for (const mob of mobs) {
       if (!isShotSource(mob)) continue;
-      for (const shot of mob.takePendingShots()) {
+      for (const shot of mob.takePendingHirelingShots()) {
         if (shot.kind === 'bolt') this.launchBolt(shot.bolt);
         else this.launchWave(shot.wave);
       }

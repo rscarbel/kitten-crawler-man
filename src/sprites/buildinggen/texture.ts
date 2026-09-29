@@ -17,17 +17,10 @@
  */
 
 import { NoiseField } from '../../map/tilegen/noise';
+import { elementValue } from './materials/kit';
 import type { Plane } from './projection';
-import {
-  isOpaque,
-  multiplyPixel,
-  offsetPixel,
-  pixelIndex,
-  readPixels,
-  tintPixel,
-  writePixels,
-} from './pixels';
-import type { RGB } from './ramps';
+import { isOpaque, multiplyPixel, pixelIndex, readPixels, writePixels } from './pixels';
+import { rgba, type RGB } from './ramps';
 
 /**
  * `NoiseField` wraps on a torus at its construction size. A facade never tiles
@@ -39,100 +32,98 @@ export function planeNoise(plane: Plane): NoiseField {
   return new NoiseField(Math.max(plane.width, plane.height));
 }
 
-export interface GrainOptions {
-  readonly seed: number;
-  /** Peak fractional change in value, e.g. 0.06 for ±6%. */
-  readonly amplitude: number;
-  /** Lattice cells across the noise field's wrap size. Higher is finer. */
-  readonly period: number;
-  readonly octaves: number;
-  /**
-   * How far the sampling coordinates are squashed along each axis before the
-   * field is read, which stretches the grain's features along the other one.
-   *
-   * Isotropic grain at the strength a painterly surface needs reads as film
-   * noise; the same amount of variation stretched along the material's own
-   * direction — down a thatch strand, along a trowel stroke, down a wall the
-   * rain runs off — reads as brushwork instead. Both default to 1.
-   */
-  readonly stretchX?: number;
-  readonly stretchY?: number;
-  /**
-   * Peak change in absolute luminance, applied alongside the multiply.
-   *
-   * A multiply alone cannot texture a dark material: ±30% of a stained-timber
-   * wall whose mid value is 40 is ±12, and the wall stays a flat near-black
-   * smudge at the display tile while a cream plaster wall beside it reads as
-   * richly worked. The additive term is the pigment in the brush rather than the
-   * light on the surface, and it is what gives every material the same amount of
-   * *visible* variation whatever value it is painted at.
-   */
-  readonly additive?: number;
+/**
+ * A single irregular blob outline, shared by every patch-shaped weathering
+ * pass below: an N-gon whose vertices wander off a circle, keyed on the
+ * patch's own index so two properties of one patch never share a number.
+ */
+function tracePatchBlob(
+  ctx: Plane['ctx'],
+  seed: number,
+  vertexStream: number,
+  patchIndex: number,
+  centreX: number,
+  centreY: number,
+  radius: number,
+): void {
+  const VERTICES = 7;
+  const VERTEX_RADIUS_JITTER = 0.35;
+  const VERTEX_KEY_STRIDE = 11;
+  ctx.beginPath();
+  for (let vertex = 0; vertex < VERTICES; vertex++) {
+    const angle = (vertex / VERTICES) * Math.PI * 2;
+    const key = patchIndex * VERTEX_KEY_STRIDE + vertex;
+    const stretch = 1 + (elementValue(seed, vertexStream, key) - 0.5) * 2 * VERTEX_RADIUS_JITTER;
+    const x = centreX + Math.cos(angle) * radius * stretch;
+    const y = centreY + Math.sin(angle) * radius * stretch;
+    if (vertex === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
 }
+
+export interface WeatherPatchOptions {
+  readonly seed: number;
+  /** Pixels per tile, so a patch is sized architecturally rather than per-pixel. */
+  readonly scale: number;
+  /** Peak alpha a patch is stained at, 0..1. */
+  readonly amplitude: number;
+}
+
+/** Roughly one patch per this many tiles of plane area — few and broad, not a field. */
+const WEATHER_PATCH_AREA_PER_TILE = 2.6;
+const WEATHER_PATCH_RADIUS_TILES = 0.55;
+const WEATHER_PATCH_RADIUS_JITTER = 0.4;
+/** A dark rain-stain reads much more than a bleached patch of the same alpha. */
+const WEATHER_PATCH_LIGHT_ALPHA_FACTOR = 0.55;
+const STREAM_PATCH_X = 41;
+const STREAM_PATCH_Y = 42;
+const STREAM_PATCH_RADIUS = 43;
+const STREAM_PATCH_SIGN = 44;
+const STREAM_PATCH_ALPHA = 45;
+const STREAM_PATCH_VERTEX = 46;
 
 /**
- * Per-pixel value grain over the whole plane.
+ * A handful of broad, soft-edged stains of lifted or dropped value, standing
+ * in for decades of uneven weather.
  *
- * Runs as a multiply so it modulates whatever the material laid down rather than
- * washing it toward a single colour, which is what an alpha-blended noise
- * overlay would do.
+ * Each one is a drawn shape rather than a sampled noise field, per pixel
+ * value — it reads as a mark laid on the wall (a rain streak's shadow, a
+ * sun-bleached patch) instead of a texture woven into it, and it crosses
+ * whatever course or plank boundary it lands on, which is what actually
+ * makes it read as weather rather than as part of the material.
  */
-export function applyGrain(plane: Plane, noise: NoiseField, options: GrainOptions): void {
-  const buffer = readPixels(plane.ctx, plane.width, plane.height);
-  const HALF = 0.5;
-  for (let y = 0; y < plane.height; y++) {
-    for (let x = 0; x < plane.width; x++) {
-      const index = pixelIndex(buffer, x, y);
-      if (!isOpaque(buffer, index)) continue;
-      const value = noise.fbm(
-        x * (options.stretchX ?? 1),
-        y * (options.stretchY ?? 1),
-        options.seed,
-        options.octaves,
-        options.period,
-      );
-      const signed = (value - HALF) * 2;
-      multiplyPixel(buffer, index, 1 + signed * options.amplitude);
-      const additive = options.additive ?? 0;
-      if (additive !== 0) offsetPixel(buffer, index, signed * additive);
-    }
-  }
-  writePixels(plane.ctx, buffer);
-}
+export function applyWeatherPatches(plane: Plane, options: WeatherPatchOptions): void {
+  const ctx = plane.ctx;
+  const planeTiles = (plane.width * plane.height) / (options.scale * options.scale);
+  const count = Math.max(1, Math.round(planeTiles / WEATHER_PATCH_AREA_PER_TILE));
+  const baseRadius = WEATHER_PATCH_RADIUS_TILES * options.scale;
 
-export interface TonalWashOptions {
-  readonly seed: number;
-  /** Peak fractional change in value across the whole plane. */
-  readonly amplitude: number;
-  /** Cells across the plane — low, so the sweep is broad rather than blotchy. */
-  readonly period: number;
-  /** How far the noise coordinates are dragged before sampling, in pixels. */
-  readonly warp: number;
-}
-
-/**
- * Broad light-to-dark drift across the wall, the layer that reads as "this wall
- * has been rained on for forty years".
- *
- * Domain-warped so the drift's own boundaries are not smooth ellipses; smooth
- * ellipses at low frequency are the single most recognisable signature of
- * procedural art.
- */
-export function applyTonalWash(plane: Plane, noise: NoiseField, options: TonalWashOptions): void {
-  const buffer = readPixels(plane.ctx, plane.width, plane.height);
-  const WARP_PERIOD = 3;
-  const WASH_OCTAVES = 2;
-  const HALF = 0.5;
-  for (let y = 0; y < plane.height; y++) {
-    for (let x = 0; x < plane.width; x++) {
-      const index = pixelIndex(buffer, x, y);
-      if (!isOpaque(buffer, index)) continue;
-      const warped = noise.warp(x, y, options.seed, options.warp, WARP_PERIOD);
-      const value = noise.fbm(warped.x, warped.y, options.seed, WASH_OCTAVES, options.period);
-      multiplyPixel(buffer, index, 1 + (value - HALF) * 2 * options.amplitude);
-    }
+  ctx.save();
+  // Only darkens or lightens pixels the material already painted, never the
+  // transparent margin a sheared plane can carry outside the building itself.
+  ctx.globalCompositeOperation = 'source-atop';
+  for (let patch = 0; patch < count; patch++) {
+    const centreX = elementValue(options.seed, STREAM_PATCH_X, patch) * plane.width;
+    const centreY = elementValue(options.seed, STREAM_PATCH_Y, patch) * plane.height;
+    const radius =
+      baseRadius *
+      (1 +
+        (elementValue(options.seed, STREAM_PATCH_RADIUS, patch) - 0.5) *
+          2 *
+          WEATHER_PATCH_RADIUS_JITTER);
+    const darker = elementValue(options.seed, STREAM_PATCH_SIGN, patch) < 0.5;
+    const alphaFactor = darker ? 1 : WEATHER_PATCH_LIGHT_ALPHA_FACTOR;
+    const alpha =
+      options.amplitude *
+      alphaFactor *
+      (0.6 + elementValue(options.seed, STREAM_PATCH_ALPHA, patch) * 0.4);
+    const color: RGB = darker ? [0, 0, 0] : [255, 255, 255];
+    ctx.fillStyle = rgba(color, alpha);
+    tracePatchBlob(ctx, options.seed, STREAM_PATCH_VERTEX, patch, centreX, centreY, radius);
+    ctx.fill();
   }
-  writePixels(plane.ctx, buffer);
+  ctx.restore();
 }
 
 export interface StreakOptions {
@@ -187,43 +178,71 @@ export function applyStreaks(plane: Plane, noise: NoiseField, options: StreakOpt
   writePixels(plane.ctx, buffer);
 }
 
-export interface MossOptions {
+export interface MossPatchOptions {
   readonly seed: number;
+  /** Pixels per tile, so a clump is sized architecturally rather than per-pixel. */
+  readonly scale: number;
   readonly color: RGB;
-  /** Peak tint toward `color`, 0..1. */
+  /** Peak tint toward `color`, 0..1 — also gates how many clumps take root. */
   readonly strength: number;
   /** Fraction of the plane's height, measured from the bottom, moss may reach. */
   readonly reach: number;
-  /** Cells across the plane. Low values grow one big mat; high values speckle. */
-  readonly period: number;
 }
 
+/** Nominal spacing between candidate moss clumps, in tiles. */
+const MOSS_CLUMP_SPACING_TILES = 0.85;
+const MOSS_CLUMP_RADIUS_TILES = 0.4;
+const MOSS_CLUMP_RADIUS_JITTER = 0.5;
+const MOSS_CLUMP_ALPHA = 0.55;
+const STREAM_MOSS_X = 51;
+const STREAM_MOSS_Y = 52;
+const STREAM_MOSS_RADIUS = 53;
+const STREAM_MOSS_ALPHA = 54;
+const STREAM_MOSS_VERTEX = 55;
+const STREAM_MOSS_PRESENT = 56;
+
 /**
- * Moss and algae, densest at ground contact and thinning upward.
+ * Moss clumps, densest at ground contact and thinning upward.
  *
- * Painted as a tint rather than a fill so the stone's own value variation still
- * shows through the growth — moss on a wall is a stain in the surface, not a
- * layer on top of it.
+ * Drawn as individual blobs rather than a thresholded noise field, so each
+ * clump reads as a growth sitting on the wall — the same kind of shape a
+ * lichen patch or a damp stain actually is — instead of a mottled texture.
+ * `strength` both tints each clump and gates how many of the candidate spots
+ * along the wall take root at all, so a lightly mossy wall gets a few small
+ * clumps rather than one faint wash over the whole surface.
  */
-export function applyMoss(plane: Plane, noise: NoiseField, options: MossOptions): void {
-  const buffer = readPixels(plane.ctx, plane.width, plane.height);
-  const MOSS_OCTAVES = 3;
-  const MOSS_THRESHOLD = 0.5;
+export function applyMossPatches(plane: Plane, options: MossPatchOptions): void {
+  if (options.strength <= 0) return;
+  const ctx = plane.ctx;
   const reachPx = Math.max(1, options.reach * plane.height);
-  for (let y = 0; y < plane.height; y++) {
-    const heightAboveBase = plane.height - y;
-    if (heightAboveBase > reachPx) continue;
+  const spacing = MOSS_CLUMP_SPACING_TILES * options.scale;
+  const candidateCount = Math.max(1, Math.round(plane.width / spacing));
+  const radius = MOSS_CLUMP_RADIUS_TILES * options.scale;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  for (let clump = 0; clump < candidateCount; clump++) {
+    if (elementValue(options.seed, STREAM_MOSS_PRESENT, clump) > options.strength) continue;
+    const centreX = (clump + elementValue(options.seed, STREAM_MOSS_X, clump)) * spacing;
+    const heightAboveBase = elementValue(options.seed, STREAM_MOSS_Y, clump) * reachPx;
+    const centreY = plane.height - heightAboveBase;
     const verticalFade = 1 - heightAboveBase / reachPx;
-    for (let x = 0; x < plane.width; x++) {
-      const index = pixelIndex(buffer, x, y);
-      if (!isOpaque(buffer, index)) continue;
-      const value = noise.fbm(x, y, options.seed, MOSS_OCTAVES, options.period);
-      if (value < MOSS_THRESHOLD) continue;
-      const density = (value - MOSS_THRESHOLD) / (1 - MOSS_THRESHOLD);
-      tintPixel(buffer, index, options.color, options.strength * density * verticalFade);
-    }
+    const clumpRadius =
+      radius *
+      (1 +
+        (elementValue(options.seed, STREAM_MOSS_RADIUS, clump) - 0.5) *
+          2 *
+          MOSS_CLUMP_RADIUS_JITTER);
+    const alpha =
+      MOSS_CLUMP_ALPHA *
+      options.strength *
+      verticalFade *
+      (0.6 + elementValue(options.seed, STREAM_MOSS_ALPHA, clump) * 0.4);
+    ctx.fillStyle = rgba(options.color, alpha);
+    tracePatchBlob(ctx, options.seed, STREAM_MOSS_VERTEX, clump, centreX, centreY, clumpRadius);
+    ctx.fill();
   }
-  writePixels(plane.ctx, buffer);
+  ctx.restore();
 }
 
 /**

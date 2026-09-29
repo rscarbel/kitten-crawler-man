@@ -33,12 +33,17 @@ import {
 import { tileCoordKey } from '../map/tileIndex';
 
 import { Townsperson } from '../creatures/Townsperson';
-import { findNearestTownsperson } from '../creatures/townInteraction';
+import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/townInteraction';
 import type { WanderParams } from '../creatures/townWander';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { SpatialGrid } from '../core/SpatialGrid';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { allResidents, residentSpecies } from './townResidents';
+import type { TownSpecies } from './townSpecies';
+import { pinCitizenFigure } from '../creatures/citizenFigure';
+import { boostPrewarmBudget, unpinAllFigureStates } from '../sprites/figure/figureFrameCache';
+import { mulberry32, rangeInt, subSeed, type Rng } from '../sprites/person/rng';
 
 /** The made surfaces of the town, which citizens treat as public space. */
 const STREET_TILE_TYPES: ReadonlySet<number> = new Set([
@@ -52,13 +57,15 @@ const STREET_TILE_TYPES: ReadonlySet<number> = new Set([
 // Spread appearance seeds far apart so neighbors don't share a look.
 const SEED_STRIDE = 101;
 const SEED_BASE = 1301;
+/** Forks the crowd's cast stream off the world seed, apart from every other seeded stream. */
+const CAST_SEED_SALT = 0x7057;
 
 // The town's safe radius (40 tiles) reaches past the wall into the gate roads.
 // Two nested zones carve that into the areas worth populating: the plaza (the
 // flagstone slab and the lanes feeding it) and the district (every named
 // building's plot, out to the farthest of them).
 //
-// Both are sized against the compacted town, not the old sprawl. The plaza slab
+// Both are sized against the town inside its walls. The plaza slab
 // is 17 x 16, so its corners sit at (±8, -8) and (±8, +7) from its centre —
 // hypot(8, 8) = 11.31 tiles, and `withinRadius` is a strict circular test, so 11
 // would leave all four corners outside the crowd's own plaza. The farthest door —
@@ -75,7 +82,7 @@ const DISTRICT_RADIUS_TILES = 36;
 // Buildings now stand shoulder to shoulder, so this cannot be large. Measured
 // against the real grid it is small enough: **no pair of doors in the town shares
 // a single frontage tile.** The closest pair is Blackwood Lodge's door and
-// Shepherd's Cabin's, 7 tiles apart, whose radius-4 circles do overlap on two
+// Plumbline Farm's, 7 tiles apart, whose radius-4 circles do overlap on two
 // tiles — but both of those sit under the buildings' own facade rows and are not
 // walkable, so `gatherFrontageTiles` discards them. A wider bubble would start
 // merging frontages along the whole of Garrison Row.
@@ -89,12 +96,40 @@ const STREET_NEAR_DOOR_TILES = 10;
 
 const PLAZA_POPULATION = 18;
 const TRAVELER_POPULATION = 12;
+
+/**
+ * Per-frame prewarm budget for the town's own arrival window, in place of the
+ * cache's ordinary steady-state ceiling — see `boostPrewarmBudget`. Still a
+ * frame budget, not a block: every frame keeps rendering at up to this much
+ * baking rather than the thread pausing until the crowd is warm. Sized to
+ * clear the crowd's own closed set (measured ~2.3 s of total baking, headless)
+ * within {@link ARRIVAL_BOOST_FRAMES} without spending enough of a 60 Hz
+ * frame to be its own hitch.
+ */
+const ARRIVAL_BOOST_BUDGET_MS = 10;
+/** Frames the boosted budget above stays in effect — five seconds at 60 Hz. */
+const ARRIVAL_BOOST_FRAMES = 300;
 const LOITERERS_PER_BUILDING_MIN = 1;
 const LOITERERS_PER_BUILDING_MAX = 2;
 
-// A citizen within this range of the player shows a Talk prompt / is talkable.
-const TALK_RADIUS_TILES = 1.1;
-const TALK_RADIUS = TILE_SIZE * TALK_RADIUS_TILES;
+// The town's species ratio, as the probability a spawned citizen in each
+// cohort comes up skyfowl rather than human. The plaza is where the town's own
+// two-thirds-skyfowl centre of gravity should read most strongly; travelers are
+// drawn as much from outside the wall as from it, so they stay closer to even;
+// fixture anchors (well, fountain) split the same two-thirds-one-third way.
+/** Denominator for the town's "about two thirds skyfowl" ratio. */
+const SKYFOWL_MAJORITY_OF_THREE = 3;
+const PLAZA_SKYFOWL_SHARE = 2 / SKYFOWL_MAJORITY_OF_THREE;
+const TRAVELER_SKYFOWL_SHARE = 1 / 2;
+const ANCHOR_SKYFOWL_SHARE = 2 / SKYFOWL_MAJORITY_OF_THREE;
+// A skyfowl-run door's loiterers skew further skyfowl than the plaza itself;
+// a human-run door skews the other way by the same margin. A building with no
+// named resident (the Desperado Club) has no ownership to skew by, so its
+// loiterers fall back to the plaza's own ratio.
+const FRONTAGE_SKYFOWL_RUN_SHARE = 0.75;
+const FRONTAGE_HUMAN_RUN_SHARE = 0.25;
+
+const TALK_RADIUS = TILE_SIZE * CITIZEN_TALK_RADIUS_TILES;
 
 const PLAZA_SPEED_MIN = 0.35;
 const PLAZA_SPEED_MAX = 0.9;
@@ -139,11 +174,19 @@ const DOORSTEP_ANCHORS_PER_BUILDING = 1;
  * by lookup rather than by index, so a building the `TownPlan` drops simply
  * loses its anchor instead of giving the next building in the list a bouncer.
  */
-const DOORSTEP_ANCHOR_ROLES: ReadonlyArray<readonly [string, TownRole]> = [
-  ['The Rusty Anvil', 'smith'],
-  ['The Desperado Club', 'guard'],
-  ['The Sleeping Cat Inn', 'innkeeper'],
-  ['Temple of the Sky', 'priest'],
+/**
+ * Every doorstep anchor's species follows the resident who owns that door —
+ * three of the four land skyfowl. The Desperado Club's bouncer is
+ * not tied to any named resident or to the club's own canon-fixed cast (that
+ * cast is `DesperadoClubSystem`'s, not this generic street citizen); fixed
+ * human here as a plain, arbitrary tie-break rather than rolled, since the
+ * club's door staff sit outside the town's species ratio.
+ */
+const DOORSTEP_ANCHOR_ROLES: ReadonlyArray<readonly [string, TownRole, TownSpecies]> = [
+  ['The Rusty Anvil', 'smith', 'skyfowl'],
+  ['The Desperado Club', 'guard', 'human'],
+  ['The Sleeping Cat Inn', 'innkeeper', 'skyfowl'],
+  ['Temple of the Sky', 'priest', 'skyfowl'],
 ];
 // Anchored citizens barely move and mostly stand: the slowest speeds and the
 // longest pauses of any cohort.
@@ -249,7 +292,23 @@ export class TownLifeSystem implements GameSystem {
   private readonly plazaRadius: number;
   private readonly districtRadius: number;
   private readonly plazaWander: WanderParams;
+  /** A building's dominant resident species, keyed by `entry.name` — see `frontageSkyfowlShare`. */
+  private readonly residentSpeciesByHome: ReadonlyMap<string, TownSpecies>;
   private seedCount = 0;
+  /**
+   * Draws everything that decides who is in the crowd — each citizen's role and
+   * species and how many loiter at each door — from the map's world seed.
+   *
+   * Every walk out of a building rebuilds this system around the same map, and
+   * a look is chosen by role, species and place in the roll, so the same map
+   * must produce the same cast. A different cast on each exit would bring a
+   * different set of looks into a figure cache still holding the last crowd's
+   * pinned rows: a loading screen owed, the cache at its ceiling, and the
+   * player's own figure and every unpinned citizen evicted and re-baked on the
+   * render path. The same town is the same people, whose rows are still warm
+   * and still pinned. Where they stand and how fast they walk stay unseeded.
+   */
+  private readonly castRng: Rng;
   /**
    * Spatial index over the crowd. The separation pass and the talk-target
    * lookup both only care about citizens within a tile or two, and the town
@@ -261,6 +320,7 @@ export class TownLifeSystem implements GameSystem {
   private frameCounter = 0;
 
   constructor(private readonly gameMap: GameMap) {
+    this.castRng = mulberry32(subSeed(gameMap.worldSeed, CAST_SEED_SALT));
     // Read from the map, not recomputed as `gridSize / 2`, which is only ever
     // right because the plaza happens to be centred on the map — and kept as a
     // point rather than one number, which quietly assumed it sits on the diagonal.
@@ -271,6 +331,12 @@ export class TownLifeSystem implements GameSystem {
     this.districtRadius = Math.min(safeRadius, DISTRICT_RADIUS_TILES);
     this.doorTiles = new Set(
       gameMap.buildingEntries.map((entry) => tileCoordKey(entry.doorTile.x, entry.doorTile.y)),
+    );
+    // General Store has two residents of different species (a mixed-ownership
+    // room by design); later entries win the map, which is an accepted
+    // simplification rather than a deliberate pick of one over the other.
+    this.residentSpeciesByHome = new Map(
+      allResidents().map((def) => [def.home, residentSpecies(def)]),
     );
     this.districtDoors = gameMap.buildingEntries
       .map((entry) => entry.doorTile)
@@ -295,6 +361,29 @@ export class TownLifeSystem implements GameSystem {
     this.spawnFrontageLoiterers();
     this.spawnTravelers();
     this.spawnActivityAnchors();
+
+    // Every citizen above already queued its own look's rows on construction
+    // (`Townsperson`'s constructor calls `prewarmCitizenFigure`). Raising the
+    // queue's own per-frame budget for the arrival window spreads the crowd's
+    // closed set across several seconds of frames that still render, rather
+    // than baking it all before the first one — the citizen sprite wrapper's
+    // own approximate draw path covers whatever hasn't finished yet with an
+    // already-baked stand-in instead of a render-path bake.
+    boostPrewarmBudget(ARRIVAL_BOOST_BUDGET_MS, ARRIVAL_BOOST_FRAMES);
+    // Pinned immediately, not once baked: a pin on a row that hasn't landed
+    // yet does nothing until something bakes it, so there is no ordering
+    // requirement here — see `pinFigureState`.
+    for (const person of this.townsfolk) pinCitizenFigure(person.figure);
+  }
+
+  /**
+   * Gives back the working set this system pinned, for the scene that owns it
+   * to call when the town is left. Without this a pin outlives the system
+   * that made it, holding memory a later floor's own figures have no claim on
+   * evicting — pins are exempt from the idle sweep by design.
+   */
+  dispose(): void {
+    unpinAllFigureStates();
   }
 
   /** The current crowd, for the scene's Y-sorted entity render pass. */
@@ -436,8 +525,17 @@ export class TownLifeSystem implements GameSystem {
         PLAZA_SPEED_MIN,
         PLAZA_SPEED_MAX,
         this.plazaWander,
+        rollSpecies(PLAZA_SKYFOWL_SHARE, this.castRng),
       );
     }
+  }
+
+  /** The skyfowl share a building's own frontage should roll at, per its owning resident's species. */
+  private frontageSkyfowlShare(buildingName: string): number {
+    const owner = this.residentSpeciesByHome.get(buildingName);
+    if (owner === 'skyfowl') return FRONTAGE_SKYFOWL_RUN_SHARE;
+    if (owner === 'human') return FRONTAGE_HUMAN_RUN_SHARE;
+    return PLAZA_SKYFOWL_SHARE;
   }
 
   /** Give every building in the district someone loitering on its doorstep. */
@@ -445,6 +543,9 @@ export class TownLifeSystem implements GameSystem {
     for (const door of this.districtDoors) {
       const frontage = this.gatherFrontageTiles(door);
       if (frontage.length === 0) continue;
+      const buildingName = this.buildingNameAtDoor(door);
+      const skyfowlShare =
+        buildingName !== undefined ? this.frontageSkyfowlShare(buildingName) : PLAZA_SKYFOWL_SHARE;
       const wander: WanderParams = {
         pickTarget: () => randomTilePoint(frontage),
         arriveDist: ARRIVE_DIST,
@@ -452,7 +553,7 @@ export class TownLifeSystem implements GameSystem {
         pauseMax: FRONTAGE_PAUSE_MAX,
         isWalkable: (x, y) => this.isWalkableSpot(x, y) && near(x, y, door),
       };
-      const count = randomIntInclusive(LOITERERS_PER_BUILDING_MIN, LOITERERS_PER_BUILDING_MAX);
+      const count = rangeInt(this.castRng, LOITERERS_PER_BUILDING_MIN, LOITERERS_PER_BUILDING_MAX);
       for (let i = 0; i < count; i++) {
         this.addCitizen(
           randomTile(frontage),
@@ -460,9 +561,17 @@ export class TownLifeSystem implements GameSystem {
           FRONTAGE_SPEED_MIN,
           FRONTAGE_SPEED_MAX,
           wander,
+          rollSpecies(skyfowlShare, this.castRng),
         );
       }
     }
+  }
+
+  /** The `buildingEntries` name whose door tile is `door`, or `undefined` for a door not in the list. */
+  private buildingNameAtDoor(door: TileXY): string | undefined {
+    return this.gameMap.buildingEntries.find(
+      (entry) => entry.doorTile.x === door.x && entry.doorTile.y === door.y,
+    )?.name;
   }
 
   /**
@@ -486,7 +595,14 @@ export class TownLifeSystem implements GameSystem {
         pauseMax: TRAVELER_PAUSE_MAX,
         isWalkable: (x, y) => this.isWalkableWithin(x, y, this.districtRadius),
       };
-      this.addCitizen(start, TRAVELER_ROLES, TRAVELER_SPEED_MIN, TRAVELER_SPEED_MAX, wander);
+      this.addCitizen(
+        start,
+        TRAVELER_ROLES,
+        TRAVELER_SPEED_MIN,
+        TRAVELER_SPEED_MAX,
+        wander,
+        rollSpecies(TRAVELER_SKYFOWL_SHARE, this.castRng),
+      );
     }
   }
 
@@ -507,13 +623,21 @@ export class TownLifeSystem implements GameSystem {
    */
   private spawnActivityAnchors(): void {
     for (const well of this.gameMap.tilesOfType(WELL)) {
-      this.addAnchoredCitizen(well, 'commoner', WELL_DRAWERS_PER_WELL, ANCHOR_RADIUS_TILES);
+      this.addAnchoredCitizen(well, 'commoner', WELL_DRAWERS_PER_WELL, ANCHOR_RADIUS_TILES, () =>
+        rollSpecies(ANCHOR_SKYFOWL_SHARE, this.castRng),
+      );
     }
     const fountain = this.gameMap.fountainCentre;
     if (fountain !== undefined) {
-      this.addAnchoredCitizen(fountain, 'child', FOUNTAIN_CHILDREN, FOUNTAIN_ANCHOR_RADIUS_TILES);
+      this.addAnchoredCitizen(
+        fountain,
+        'child',
+        FOUNTAIN_CHILDREN,
+        FOUNTAIN_ANCHOR_RADIUS_TILES,
+        () => rollSpecies(ANCHOR_SKYFOWL_SHARE, this.castRng),
+      );
     }
-    for (const [buildingName, role] of DOORSTEP_ANCHOR_ROLES) {
+    for (const [buildingName, role, species] of DOORSTEP_ANCHOR_ROLES) {
       const entry = this.gameMap.buildingEntries.find((e) => e.name === buildingName);
       if (entry === undefined) continue;
       this.addAnchoredCitizen(
@@ -521,6 +645,7 @@ export class TownLifeSystem implements GameSystem {
         role,
         DOORSTEP_ANCHORS_PER_BUILDING,
         ANCHOR_RADIUS_TILES,
+        () => species,
       );
     }
   }
@@ -537,6 +662,7 @@ export class TownLifeSystem implements GameSystem {
     role: TownRole,
     count: number,
     radiusTiles: number,
+    pickSpecies: () => TownSpecies,
   ): void {
     const radius = TILE_SIZE * radiusTiles;
     const spots = this.gatherAnchorTiles(fixture, radiusTiles);
@@ -558,6 +684,7 @@ export class TownLifeSystem implements GameSystem {
         ANCHOR_SPEED_MIN,
         ANCHOR_SPEED_MAX,
         wander,
+        pickSpecies(),
       );
     }
   }
@@ -582,11 +709,13 @@ export class TownLifeSystem implements GameSystem {
     speedMin: number,
     speedMax: number,
     wander: WanderParams,
+    species: TownSpecies,
   ): void {
     const person = new Townsperson({
       x: tile.x * TILE_SIZE,
       y: tile.y * TILE_SIZE,
-      role: pickRole(roles),
+      role: pickRole(roles, this.castRng),
+      species,
       seed: SEED_BASE + this.seedCount * SEED_STRIDE,
       speed: speedMin + Math.random() * (speedMax - speedMin),
       wander,
@@ -662,7 +791,7 @@ export class TownLifeSystem implements GameSystem {
       this.neighborQuery.clear();
       const neighbors = this.grid.queryCircle(a.x, a.y, SEPARATION_DIST, this.neighborQuery);
       for (const b of neighbors) {
-        // Each pair is pushed apart once, as in the old i < j double loop.
+        // Each pair is pushed apart once: only from the side with the lower id.
         if (b.id <= a.id) continue;
         const dx = b.x - a.x;
         const dy = b.y - a.y;
@@ -722,15 +851,16 @@ function randomTilePoint(tiles: ReadonlyArray<TileXY>): { x: number; y: number }
   return tilePoint(randomTile(tiles));
 }
 
-function randomIntInclusive(min: number, max: number): number {
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
-
-function pickRole(table: RoleTable): TownRole {
-  let roll = Math.random() * table.total;
+function pickRole(table: RoleTable, rng: Rng): TownRole {
+  let roll = rng() * table.total;
   for (const rw of table.weights) {
     roll -= rw.weight;
     if (roll < 0) return rw.role;
   }
   return 'commoner';
+}
+
+/** Species is a job-independent roll, at the given probability of skyfowl. */
+function rollSpecies(skyfowlShare: number, rng: Rng): TownSpecies {
+  return rng() < skyfowlShare ? 'skyfowl' : 'human';
 }

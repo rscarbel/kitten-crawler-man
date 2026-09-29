@@ -571,8 +571,8 @@ section('7. Summoned by the Mayor, and the countdown');
 
   talk('bramblewick');
   check(
-    conversation.choiceLabels[0] === 'I need more time',
-    '"I need more time" is the first row, so Space picks it',
+    conversation.keyboardDefaultLabel === 'I need more time',
+    `Space picks "I need more time", never "I'm ready" (picks ${conversation.keyboardDefaultLabel})`,
   );
   check(
     same(choose('I need more time'), expected(BRAMBLEWICK.moreTimeGranted)),
@@ -723,8 +723,14 @@ section('9. The retry and the turn-in');
   stepFrames(NECRO_WAVE_RUN_SECONDS * UPDATES_PER_SECOND);
   const necro = assault.activeNecromancer;
   check(necro !== null, 'he is in the field');
+  // A bounty mark's escort is never enlisted, but it is one of the siege's
+  // dead all the same and must crumble with the rest.
   const living = rig.world.roster.mobs.filter(
-    (mob) => mob.isAlive && mob.isHostile && mob.siegeCapable !== null && mob !== necro,
+    (mob) =>
+      mob.isAlive &&
+      mob.isHostile &&
+      (mob.siegeCapable !== null || mob.raisedForSiege) &&
+      mob !== necro,
   );
   check(living.length > 0, `the rest of his wave is still standing (${living.length})`);
   const killed = new Set<Mob>();

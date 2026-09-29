@@ -17,7 +17,9 @@
  * tile west of it.
  */
 
-import { WOOD_DARK } from './townPalette';
+import { WOOD, WOOD_DARK } from './townPalette';
+import { rgb } from './art/town/townArt';
+import { getTownRamp } from './art/town/townPalette';
 import type { ShopSignEmblem } from '../map/town/townPlan';
 import { GOLDEN_ANGLE_RAD } from '../utils';
 
@@ -104,9 +106,13 @@ export function signWestShiftTiles(doorTileX: number, doorwayX0: number): number
   return Math.max(0, doorTileX - doorwayX0);
 }
 
-const BRACKET_IRON = '#3a3630';
-const BRACKET_IRON_LIGHT = '#585149';
-const BOARD_FACE = '#8d6a3f';
+// Bracket and board are the town's own hardware and timber vocabulary
+// (`iron_black`/`oc_timber`, `src/sprites/art/town/townPalette.ts`) — always
+// darkened iron, never a whole-wall material; ash oak, not the village's walnut.
+const OC_IRON = getTownRamp('iron_black');
+const BRACKET_IRON = rgb(OC_IRON.mid);
+const BRACKET_IRON_LIGHT = rgb(OC_IRON.light);
+const BOARD_FACE = WOOD;
 const BOARD_SHADE = 'rgba(0,0,0,0.22)';
 
 /** Emblem colours, shared so sixteen small devices read as one signwriter's work. */
@@ -174,28 +180,69 @@ const drawMoon: EmblemPainter = (ctx, box) => {
   ctx.restore();
 };
 
-const FLEECE_LOBES: ReadonlyArray<readonly [number, number, number]> = [
-  [-0.5, -0.1, 0.5],
-  [0.1, -0.34, 0.52],
-  [0.55, 0.06, 0.44],
-  [-0.06, 0.34, 0.5],
-];
-const FLEECE_FACE_DX = -0.78;
-const FLEECE_FACE_DY = 0.2;
-const FLEECE_FACE_RADIUS = 0.3;
+/**
+ * A plumb bob on its line — the device the farm is named for. A bob is one bold
+ * brass mass, wide at the shoulder and drawn to a point, so it keeps its shape
+ * at the emblem's size where a set square or a pail would thin to line work.
+ * The line hangs from a short iron bar so the board reads as "hung true".
+ */
+const PLUMB_BAR_Y = -0.92;
+const PLUMB_BAR_HALF_WIDTH = 0.42;
+const PLUMB_BAR_HEIGHT_PX = 3;
+const PLUMB_LINE_WIDTH_PX = 2;
+const PLUMB_CAP_Y = -0.42;
+const PLUMB_CAP_HALF_WIDTH = 0.24;
+const PLUMB_SHOULDER_Y = -0.02;
+const PLUMB_SHOULDER_HALF_WIDTH = 0.66;
+const PLUMB_TIP_Y = 0.98;
+/** The lit west face of the bob, as a fraction of its shoulder width. */
+const PLUMB_SHINE_FRACTION = 0.45;
+/** Where the shine's lower edge stops, as a fraction of the shine's own reach. */
+const PLUMB_SHINE_BASE_FRACTION = 0.5;
 
-const drawFleece: EmblemPainter = (ctx, box) => {
-  ctx.fillStyle = CREAM;
-  for (const [dx, dy, r] of FLEECE_LOBES) {
-    fillCircle(ctx, box.cx + box.rx * dx, box.cy + box.ry * dy, box.ry * r);
-  }
+const drawPlumbBob: EmblemPainter = (ctx, box) => {
   ctx.fillStyle = IRON_DARK;
-  fillCircle(
-    ctx,
-    box.cx + box.rx * FLEECE_FACE_DX,
-    box.cy + box.ry * FLEECE_FACE_DY,
-    box.ry * FLEECE_FACE_RADIUS,
+  ctx.fillRect(
+    box.cx - box.rx * PLUMB_BAR_HALF_WIDTH,
+    box.cy + box.ry * PLUMB_BAR_Y,
+    box.rx * PLUMB_BAR_HALF_WIDTH * 2,
+    PLUMB_BAR_HEIGHT_PX,
   );
+  strokeRound(ctx, PLUMB_LINE_WIDTH_PX, CREAM);
+  ctx.beginPath();
+  ctx.moveTo(box.cx, box.cy + box.ry * PLUMB_BAR_Y);
+  ctx.lineTo(box.cx, box.cy + box.ry * PLUMB_CAP_Y);
+  ctx.stroke();
+
+  const capY = box.cy + box.ry * PLUMB_CAP_Y;
+  const shoulderY = box.cy + box.ry * PLUMB_SHOULDER_Y;
+  const tipY = box.cy + box.ry * PLUMB_TIP_Y;
+  const shoulderHalf = box.rx * PLUMB_SHOULDER_HALF_WIDTH;
+  const capHalf = box.rx * PLUMB_CAP_HALF_WIDTH;
+  ctx.fillStyle = GOLD_DARK;
+  ctx.beginPath();
+  ctx.moveTo(box.cx - capHalf, capY);
+  ctx.lineTo(box.cx + capHalf, capY);
+  ctx.lineTo(box.cx + shoulderHalf, shoulderY);
+  ctx.lineTo(box.cx, tipY);
+  ctx.lineTo(box.cx - shoulderHalf, shoulderY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = GOLD;
+  ctx.beginPath();
+  ctx.moveTo(box.cx - capHalf, capY);
+  ctx.lineTo(box.cx, capY);
+  ctx.lineTo(box.cx, tipY);
+  ctx.lineTo(box.cx - shoulderHalf, shoulderY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = CREAM;
+  ctx.beginPath();
+  ctx.moveTo(box.cx - capHalf * PLUMB_SHINE_FRACTION, capY);
+  ctx.lineTo(box.cx - shoulderHalf * PLUMB_SHINE_FRACTION, shoulderY);
+  ctx.lineTo(box.cx - shoulderHalf * PLUMB_SHINE_FRACTION * PLUMB_SHINE_BASE_FRACTION, shoulderY);
+  ctx.closePath();
+  ctx.fill();
 };
 
 const SHIELD_TOP = -0.95;
@@ -807,7 +854,7 @@ const drawNeedle: EmblemPainter = (ctx, box) => {
  */
 const EMBLEM_PAINTERS: Record<ShopSignEmblem, EmblemPainter> = {
   moon: drawMoon,
-  fleece: drawFleece,
+  plumb_bob: drawPlumbBob,
   shield: drawShield,
   wheel: drawWheel,
   sun: drawSun,
@@ -835,9 +882,9 @@ export const SIGN_SWAY_STEPS = 4;
 /**
  * Which of the `SIGN_SWAY_STEPS` angles the sign hangs at on `frame`.
  *
- * The angle itself is no longer needed at runtime — the sheet carries one baked
- * row per step, so the game picks a row and the offline generator, which is the
- * only caller that still has to *draw* a swing, gets the angle from
+ * The angle itself is not needed at runtime — the sheet carries one baked row
+ * per step, so the game picks a row and the offline generator, which is the
+ * only caller that has to *draw* a swing, gets the angle from
  * `shopSignSwayForStep`. Splitting the two keeps the quantization in one place:
  * a step the game asks for and a step the generator baked have to mean the same
  * angle, or every sign in town hangs slightly wrong.

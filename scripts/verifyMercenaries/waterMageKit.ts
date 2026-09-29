@@ -794,7 +794,7 @@ function injectedShotsSpare(safeRoom: SafeTest, kinds: readonly HirelingShot['ki
     });
   }
   let handed = false;
-  Object.defineProperty(h.merc, 'takePendingShots', {
+  Object.defineProperty(h.merc, 'takePendingHirelingShots', {
     value: (): readonly HirelingShot[] => {
       if (handed) return [];
       handed = true;

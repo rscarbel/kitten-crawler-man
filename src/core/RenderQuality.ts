@@ -21,7 +21,6 @@ import {
   type QualityPreset,
 } from './Settings';
 import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
-import { flushPersonFrameCache } from '../sprites/person/personFrameCache';
 
 const MS_PER_SECOND = 1000;
 
@@ -114,6 +113,13 @@ class RenderQualityController {
   private safetyNetIntervals: number[] = [];
 
   /**
+   * Whether a loading screen owns the frames. Its frames are slow on purpose —
+   * each spends its whole budget on the work it is covering — so neither the
+   * probe nor the safety net may read them as the cost of playing.
+   */
+  private loadingCover = false;
+
+  /**
    * Wires the controller to the canvas owner and applies the stored preset.
    * `auto` starts optimistic — beginning low and upgrading later would make the
    * player's first impression the soft one.
@@ -189,11 +195,37 @@ class RenderQualityController {
     this.probeIntervals = [];
   }
 
+  /**
+   * Marks the frames from now until {@link endLoadingCover} as a loading
+   * screen's. A probe in warm-up or sampling starts over once the cover lifts,
+   * and a safety-net window is discarded, so only frames of play are measured.
+   */
+  beginLoadingCover(): void {
+    this.loadingCover = true;
+    this.resetSafetyNetWindow();
+    if (this.probeState === 'warmup' || this.probeState === 'sampling') {
+      this.probeState = 'warmup';
+      this.warmupFramesLeft = PROBE_WARMUP_FRAMES;
+      this.probeIntervals = [];
+    }
+  }
+
+  /** Whether a loading screen's cover is in force — see {@link beginLoadingCover}. */
+  get isLoadingCovered(): boolean {
+    return this.loadingCover;
+  }
+
+  /** Ends {@link beginLoadingCover}; the next frame of play is measured normally. */
+  endLoadingCover(): void {
+    this.loadingCover = false;
+  }
+
   /** Called once per rendered frame with the rAF timestamp. */
   recordFrame(now: number): void {
     const previous = this.lastFrameTime;
     this.lastFrameTime = now;
     if (previous === null) return;
+    if (this.loadingCover) return;
     const interval = now - previous;
 
     this.advanceProbe(now, interval);
@@ -292,9 +324,8 @@ class RenderQualityController {
     if (manager === null) return;
     if (manager.renderScale === scale) return;
     manager.setRenderScale(scale);
-    // Baked cells are density-specific; keeping them would leave every citizen
-    // resampled for the rest of the session.
-    flushPersonFrameCache();
+    // Baked cells are density-specific; keeping them would leave every cached
+    // figure resampled for the rest of the session.
     flushFigureFrameCache();
   }
 }

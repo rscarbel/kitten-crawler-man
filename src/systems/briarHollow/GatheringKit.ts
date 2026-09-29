@@ -37,7 +37,7 @@ import { HarvestEffects } from './HarvestEffects';
 import { HarvestSystem } from './HarvestSystem';
 import { NodeLedger, type NodeLedgerCheckpoint } from './NodeLedger';
 import { NodeRegrowth, type StandingBody } from './NodeRegrowth';
-import { ResourceHud, resourceHudFootprintWidth } from './ResourceHud';
+import { RESOURCE_HUD_HEIGHT, ResourceHud, resourceHudFootprintWidth } from './ResourceHud';
 import { ThrallSystem } from './ThrallSystem';
 import { thrallCooldownSecondsLeft } from '../../core/thrallCooldowns';
 
@@ -264,7 +264,7 @@ export class GatheringKit {
   ): void {
     const frame = this.hudFrame(active);
     const width = resourceHudFootprintWidth(frame.thrallSecondsLeft !== null);
-    this.hud.render(ctx, topCentreStripSlot(miniMap, hudRect, width), frame);
+    this.hud.render(ctx, topCentreStripSlot(miniMap, hudRect, width, RESOURCE_HUD_HEIGHT), frame);
   }
 
   private hudFrame(active: Crawler): {

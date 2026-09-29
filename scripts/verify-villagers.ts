@@ -540,12 +540,19 @@ function verifyConversation(): void {
   check(system.lastOpening?.rule === 'fallback', 'on a rotating line rather than the greeting');
   system.conversation.advance();
   tick(system, frame);
-  // A choice row only accepts Space to leave once it has actually been drawn
-  // — the same tick that reveals it must not also be the tick that leaves it.
+  // A choice row only answers Space once it has actually been drawn — the
+  // same tick that reveals it must not also be the tick that picks from it.
   const goodbyeScratch = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
   system.conversation.render(asGameContext(goodbyeScratch.getContext('2d')));
+  const rootDefault = system.conversation.keyboardDefaultLabel;
+  check(
+    rootDefault !== null && rootDefault !== GOODBYE_LABEL,
+    `Space on the choice row goes on rather than saying goodbye (default: ${rootDefault})`,
+  );
   system.conversation.advance();
-  check(!system.isConversationOpen, 'Space on the choice row says goodbye');
+  check(system.isConversationOpen, 'and the conversation stays open');
+  system.conversation.dismiss();
+  check(!system.isConversationOpen, 'Escape is what says goodbye');
 
   // A short phone: every choice row must still be on screen to be tapped.
   const openWithChoices = (speaker: 'tikka' | 'oren', choices: readonly Choice[]): Conversation => {

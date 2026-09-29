@@ -56,7 +56,8 @@ import {
   trebuchetFootprint,
 } from './DefenseStructures';
 import { VillageGate, type GateFriendly } from './VillageGate';
-import { TrebuchetSystem } from './TrebuchetSystem';
+import { distanceToFootprintPx, TrebuchetSystem } from './TrebuchetSystem';
+import { walkAwayRangeTiles } from '../../dialog/walkAway';
 import { SnareSystem } from './SnareSystem';
 import { ConvertedAllyController } from './ConvertedAllyController';
 import { resolveSiegeLevel } from './siegeLevel';
@@ -86,8 +87,8 @@ type Crawler = HumanPlayer | CatPlayer;
 
 /** How close a crawler must be to a construction to work on it. */
 export const STRUCTURE_REACH_TILES = 1.6;
-/** The Structure menu closes when its crawler walks this far from the structure. */
-const STRUCTURE_MENU_WALK_AWAY_TILES = 3;
+/** The Structure menu closes when its crawler walks this far from the structure's nearest tile edge. */
+const STRUCTURE_MENU_WALK_AWAY_TILES = walkAwayRangeTiles(STRUCTURE_REACH_TILES);
 /** "Nothing to work on here." is said at most this often, so a held key does not spam it. */
 const NOTHING_NOTE_COOLDOWN_SECONDS = 3;
 /**
@@ -407,14 +408,12 @@ export class ConstructionKit {
     const centreX = active.x + TILE_SIZE / 2;
     const centreY = active.y + TILE_SIZE / 2;
     const limit = STRUCTURE_MENU_WALK_AWAY_TILES * TILE_SIZE;
+    // Measured to each tile's edge, as `nearestInReach` measures the reach that opened the menu.
     return this.defense
       .footprintOf(target)
       .every(
         (tile) =>
-          Math.hypot(
-            (tile.x + TILE_CENTRE) * TILE_SIZE - centreX,
-            (tile.y + TILE_CENTRE) * TILE_SIZE - centreY,
-          ) > limit,
+          distanceToFootprintPx(centreX, centreY, { x: tile.x, y: tile.y, w: 1, h: 1 }) > limit,
       );
   }
 

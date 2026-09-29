@@ -275,6 +275,21 @@ const WATTLE_SEGMENT_PX = 6;
 const WATTLE_STAKE_WIDTH_PX = 2;
 const WATTLE_STAKE_STEP_PX = 12;
 
+/**
+ * Wendell's own picket, one yard's worth: a builder's fence rather than a
+ * farmer's. Squared posts (wider than the town's plain round ones) in a
+ * darker, better-seasoned oak, each capped with a lighter pale — a joinery
+ * detail no other yard's fence carries.
+ */
+const GARRISON_POST_COLOR = '#4a3a26';
+const GARRISON_POST_SHADE_COLOR = '#332818';
+const GARRISON_POST_CAP_COLOR = '#8a6f48';
+const GARRISON_RAIL_COLOR = '#5e4a30';
+const GARRISON_RAIL_HIGHLIGHT_COLOR = '#7a6244';
+const GARRISON_POST_WIDTH_PX = 6;
+const GARRISON_PALE_COLOR = '#6f5a3a';
+const GARRISON_PALE_SHADE_COLOR = '#4a3a26';
+
 interface FenceStyleSpec {
   /** Fractions of a tile at which horizontal timbers run. */
   readonly railFractions: ReadonlyArray<number>;
@@ -285,6 +300,13 @@ interface FenceStyleSpec {
   readonly postShadeColor: string;
   /** Drawn between the posts after the rails, for the styles that have infill. */
   readonly infill: 'none' | 'pales' | 'weave';
+  /** Overrides `FENCE_POST_WIDTH_PX` for a style whose posts are built heavier. */
+  readonly postWidthPx?: number;
+  /** A lighter pale drawn across the post's own top, reading as a fitted cap rather than a stake driven into the ground. */
+  readonly postCapColor?: string;
+  /** Overrides the picket infill's pale colours; defaults to `PICKET_PALE_COLOR`/`PICKET_PALE_SHADE_COLOR`. */
+  readonly paleColor?: string;
+  readonly paleShadeColor?: string;
 }
 
 const FENCE_STYLE_SPECS: Record<FenceStyle, FenceStyleSpec> = {
@@ -315,6 +337,19 @@ const FENCE_STYLE_SPECS: Record<FenceStyle, FenceStyleSpec> = {
     postShadeColor: WATTLE_WEAVE_DARK_COLOR,
     infill: 'weave',
   },
+  garrison: {
+    railFractions: FENCE_RAIL_FRACTIONS,
+    railThicknessPx: FENCE_RAIL_THICKNESS_PX,
+    railColor: GARRISON_RAIL_COLOR,
+    railHighlightColor: GARRISON_RAIL_HIGHLIGHT_COLOR,
+    postColor: GARRISON_POST_COLOR,
+    postShadeColor: GARRISON_POST_SHADE_COLOR,
+    infill: 'pales',
+    postWidthPx: GARRISON_POST_WIDTH_PX,
+    postCapColor: GARRISON_POST_CAP_COLOR,
+    paleColor: GARRISON_PALE_COLOR,
+    paleShadeColor: GARRISON_PALE_SHADE_COLOR,
+  },
 };
 
 /**
@@ -334,6 +369,8 @@ const FENCE_SHADOW_COLOR = 'rgba(0,0,0,0.22)';
 const FENCE_SHADOW_HEIGHT_PX = 3;
 /** Lit edge on a rail or post: one pixel, at any tile size. */
 const FENCE_HIGHLIGHT_PX = 1;
+/** Height of a style's own post cap, when it has one. */
+const FENCE_POST_CAP_HEIGHT_PX = 2;
 
 /**
  * What a fence rail may run into: another fence, or something whose art fills its
@@ -487,20 +524,22 @@ function drawFence(
     ctx.fillRect(railX, northEdge, FENCE_HIGHLIGHT_PX, southEdge - northEdge);
   }
 
-  const postX = centreX - Math.floor(FENCE_POST_WIDTH_PX / 2);
+  const postWidthPx = style.postWidthPx ?? FENCE_POST_WIDTH_PX;
+  const postX = centreX - Math.floor(postWidthPx / 2);
   // An end-on run shows the post's cap, not its full height. A corner counts as
   // side-on: it has an east-west rail to carry, so it needs the upright.
-  const top = runsEastWest || !runsNorthSouth ? postTop : centreY - FENCE_POST_WIDTH_PX;
-  const bottom = runsEastWest || !runsNorthSouth ? postBottom : centreY + FENCE_POST_WIDTH_PX;
+  const top = runsEastWest || !runsNorthSouth ? postTop : centreY - postWidthPx;
+  const bottom = runsEastWest || !runsNorthSouth ? postBottom : centreY + postWidthPx;
   ctx.fillStyle = style.postColor;
-  ctx.fillRect(postX, top, FENCE_POST_WIDTH_PX, bottom - top);
+  ctx.fillRect(postX, top, postWidthPx, bottom - top);
   ctx.fillStyle = style.postShadeColor;
-  ctx.fillRect(
-    postX + FENCE_POST_WIDTH_PX - FENCE_HIGHLIGHT_PX,
-    top,
-    FENCE_HIGHLIGHT_PX,
-    bottom - top,
-  );
+  ctx.fillRect(postX + postWidthPx - FENCE_HIGHLIGHT_PX, top, FENCE_HIGHLIGHT_PX, bottom - top);
+  // A fitted cap on the post's own top — the joinery detail that reads as
+  // "someone finished this" rather than a stake driven into the ground.
+  if (style.postCapColor !== undefined) {
+    ctx.fillStyle = style.postCapColor;
+    ctx.fillRect(postX - 1, top, postWidthPx + 2, FENCE_POST_CAP_HEIGHT_PX);
+  }
 }
 
 /**
@@ -525,6 +564,8 @@ function drawFenceInfill(
     const paleTop = sy + Math.round(ts * PICKET_PALE_TOP_FRACTION);
     const paleBottom = sy + Math.round(ts * PICKET_PALE_BOTTOM_FRACTION);
     const step = PICKET_PALE_WIDTH_PX + PICKET_PALE_GAP_PX;
+    const paleColor = style.paleColor ?? PICKET_PALE_COLOR;
+    const paleShadeColor = style.paleShadeColor ?? PICKET_PALE_SHADE_COLOR;
     // Phased off `sx` so pales line up across a tile joint instead of restarting
     // at every tile edge. `sx` is chunk-local on the baked path, not the world
     // column, so the run of pales does restart at a 16-tile chunk seam —
@@ -534,9 +575,9 @@ function drawFenceInfill(
       const left = Math.max(x, westEdge);
       const width = Math.min(x + PICKET_PALE_WIDTH_PX, eastEdge) - left;
       if (width <= 0) continue;
-      ctx.fillStyle = PICKET_PALE_COLOR;
+      ctx.fillStyle = paleColor;
       ctx.fillRect(left, paleTop, width, paleBottom - paleTop);
-      ctx.fillStyle = PICKET_PALE_SHADE_COLOR;
+      ctx.fillStyle = paleShadeColor;
       ctx.fillRect(left, paleTop, width, PICKET_TIP_HEIGHT_PX);
     }
     return;
@@ -574,14 +615,12 @@ function drawFenceInfill(
  * A planted bed: two soft furrows of turned soil with leafy clumps growing along
  * them, and now and then a full crop head.
  *
- * **Foliage first, rows second.** The first version drew three hard full-width
- * soil bars per tile with 2 x 5 px shoots standing on them, and two review rounds
- * independently reported the same thing: at 1x a garden of them reads as lines of
- * text, not as planting. The diagnosis is that the ruled dark lines carried the
- * silhouette and the green did not — twelve tick marks a tile is a lot of marks
- * and none of them is big enough to be a plant.
+ * **Foliage first, rows second.** Hard full-width soil bars with thin shoots
+ * read at 1x as lines of text, not planting: ruled dark lines carry the
+ * silhouette and the green does not, and a dozen tick marks a tile are each too
+ * small to be a plant.
  *
- * So the marks are now clumps rather than ticks: fewer, wider than they are tall,
+ * So the marks are clumps rather than ticks: fewer, wider than they are tall,
  * two tones, and drawn *over* the furrow so the green wins. The furrows survive,
  * at two per tile instead of three and at about half the contrast, because they
  * are what makes a run of planted tiles read as one bed rather than as scattered

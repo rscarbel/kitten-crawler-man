@@ -137,8 +137,12 @@ const ADJACENT_OFFSETS: ReadonlyArray<readonly [number, number]> = [
 /** The order the maze forces its eight cross-character blocks into. */
 const BLOCK_ORDER = ['H1', 'C1', 'H2', 'C2', 'M1', 'M2', 'M3', 'M4'] as const;
 
-/** Big enough to generate a town with its full set of buildings. */
-const TOWN_MAP_SIZE = 220;
+/**
+ * Matches `level3`'s own `mapSize`. Overworld generation always sites Briar
+ * Hollow, and the village only fits the map's east side at that size or
+ * larger.
+ */
+const TOWN_MAP_SIZE = 280;
 /** Frames the door gate is held on one tile, to prove it does not repeat itself. */
 const DOOR_DWELL_FRAMES = 30;
 /** How far south of a doorway counts as standing clear of it. */

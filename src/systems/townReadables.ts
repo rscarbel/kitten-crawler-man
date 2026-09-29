@@ -99,18 +99,18 @@ const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map
     ],
   ],
   [
-    "Shepherd's Cabin",
+    'Plumbline Farm',
     [
       {
-        id: 'shepherd_tally',
-        title: 'The Tally Board',
-        where: 'chalk on slate, by the door',
+        id: 'wendell_milk_rounds',
+        title: 'Milk Rounds',
+        where: 'a slate, propped where he eats',
         anchor: 'table',
         body: [
-          'A slate ruled into columns, one per week. Each column holds a number, written and rubbed out and written again.',
-          'Forty-three. Forty-three. Forty-three. Forty-three. Forty-one.',
-          'Forty-one, and then forty-one for eleven columns after it, in a hand that presses harder each week.',
-          'At the bottom, under the ruling: "GATE WAS SHUT. GATE WAS SHUT. GATE WAS SHUT."',
+          'A slate ruled into a grid with a straightedge: the houses he delivered to down one side, the days of the week across the top.',
+          'The Sleeping Cat, four churns a morning. The Horned Flagon, three. The Sunken Stump, one, "and the empty to be returned this time."',
+          'Every figure has been struck through with a single level line, each the same length as the last.',
+          'Underneath, in the same careful hand: "Rounds suspended until further notice." The last three words have since been wiped away, and nothing written in their place.',
         ],
       },
     ],

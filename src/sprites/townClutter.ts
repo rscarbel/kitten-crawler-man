@@ -17,14 +17,23 @@
  */
 
 import { WOOD, WOOD_DARK, WOOD_LIGHT } from './townPalette';
+import { rgb } from './art/town/townArt';
+import { getTownRamp } from './art/town/townPalette';
 
 const TWO_PI = Math.PI * 2;
 
-/** Shared materials. */
-const IRON = '#4a4640';
-const IRON_LIGHT = '#6d675e';
-const STONE = '#8b8578';
-const STONE_DARK = '#5f5b52';
+/**
+ * Shared materials, from the town's own `iron_black`/`oc_stone` ramps
+ * (`src/sprites/art/town/townPalette.ts`) — cool and always darkened for
+ * iron, quarried ashlar for stone, so a hitching post's hardware and an
+ * anvil block match the buildings behind them.
+ */
+const OC_IRON = getTownRamp('iron_black');
+const OC_STONE = getTownRamp('oc_stone');
+const IRON = rgb(OC_IRON.mid);
+const IRON_LIGHT = rgb(OC_IRON.light);
+const STONE = rgb(OC_STONE.mid);
+const STONE_DARK = rgb(OC_STONE.shadow);
 const WATER = '#4a7f96';
 const WATER_LIGHT = '#7fb0c4';
 const STRAW = '#c9a94e';
@@ -34,9 +43,14 @@ const SACKCLOTH_DARK = '#8a7a55';
 const COAL = '#2a2723';
 const COAL_LIGHT = '#46413a';
 const LEAF = '#6f8f45';
+const LEAF_DARK = '#4d6930';
 const BLOSSOM = '#d2687f';
 const LINEN = '#dcd6c4';
 const ROPE = '#a08a5e';
+const SOIL = '#5a4632';
+const SOIL_DARK = '#3f3123';
+const VEG_ROOT = '#c9762f';
+const VEG_LEAF_LIGHT = '#8ab35c';
 
 /** The soft contact shadow every piece of clutter sits in. */
 const SHADOW_COLOR = 'rgba(0,0,0,0.24)';
@@ -75,6 +89,19 @@ export const TOWN_CLUTTER_KINDS = [
   'tool_rack',
   'garden_pump',
   'planter',
+  'hay_rack',
+  'vegetable_row',
+  'herb_rack',
+  'timber_stack',
+  'feed_bin',
+  'milking_stool',
+  'drill_pell',
+  'garden_bench',
+  'street_tree',
+  'birdbath',
+  'hedge_row',
+  'weapon_rack',
+  'grain_bin',
 ] as const;
 
 export type TownClutterKind = (typeof TOWN_CLUTTER_KINDS)[number];
@@ -663,6 +690,475 @@ const drawPlanter: ClutterPainter = (ctx, sx, sy, ts) => {
   ctx.fillRect(left, sy + ts * PLANTER_TOP, ts * PLANTER_WIDTH, PLANTER_RIM_PX);
 };
 
+const RACK_POST_TOP = 0.2;
+const RACK_POST_BOTTOM = 0.9;
+const RACK_POST_WIDTH_PX = 3;
+const RACK_POST_INSET = 0.1;
+const RACK_RAIL_FRACTIONS = [0.34, 0.56] as const;
+const RACK_RAIL_HEIGHT_PX = 2;
+/** How far the loose straw tufts poke above the top rail. */
+const RACK_TUFT_TOP = 0.14;
+const RACK_TUFT_COUNT = 5;
+
+/**
+ * A hay rack: two posts, two crossbars, and loose straw resting in the frame —
+ * fodder kept up off the ground, rather than a loose bale dropped on it.
+ */
+const drawHayRack: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const left = sx + ts * RACK_POST_INSET;
+  const right = sx + ts * (1 - RACK_POST_INSET);
+  const top = sy + ts * RACK_POST_TOP;
+  const bottom = sy + ts * RACK_POST_BOTTOM;
+  ctx.fillStyle = WOOD_DARK;
+  ctx.fillRect(left, top, RACK_POST_WIDTH_PX, bottom - top);
+  ctx.fillRect(right - RACK_POST_WIDTH_PX, top, RACK_POST_WIDTH_PX, bottom - top);
+  ctx.fillStyle = WOOD;
+  for (const fraction of RACK_RAIL_FRACTIONS) {
+    const railY = sy + ts * fraction;
+    ctx.fillRect(left, railY, right - left, RACK_RAIL_HEIGHT_PX);
+  }
+  ctx.fillStyle = STRAW;
+  for (let tuft = 0; tuft < RACK_TUFT_COUNT; tuft++) {
+    const tx = left + ((right - left) * (tuft + 0.5)) / RACK_TUFT_COUNT;
+    const tuftTop = sy + ts * (RACK_TUFT_TOP + (tuft % 2) * 0.03);
+    const tuftBottom = sy + ts * RACK_RAIL_FRACTIONS[1];
+    ctx.fillStyle = tuft % 2 === 0 ? STRAW : STRAW_DARK;
+    ctx.fillRect(tx - 1, tuftTop, 2, tuftBottom - tuftTop);
+  }
+};
+
+/**
+ * A kitchen-garden bed: soil rows behind a dressed-stone kerb, each row staked
+ * with a plant marker. The kerb is what keeps this reading as a tended plot
+ * inside a stone-and-plaster town rather than a bare patch of dirt — the same
+ * edging a planter box gives its own foliage.
+ */
+const ROW_BED_LEFT = 0.06;
+const ROW_BED_TOP = 0.5;
+const ROW_BED_WIDTH = 0.88;
+const ROW_BED_HEIGHT = 0.34;
+const ROW_KERB_PX = 3;
+const ROW_COUNT = 3;
+const ROW_STAKE_HEIGHT_PX = 5;
+
+const drawVegetableRow: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const left = sx + ts * ROW_BED_LEFT;
+  const top = sy + ts * ROW_BED_TOP;
+  const width = ts * ROW_BED_WIDTH;
+  const height = ts * ROW_BED_HEIGHT;
+  ctx.fillStyle = STONE_DARK;
+  ctx.fillRect(left - ROW_KERB_PX, top - ROW_KERB_PX, width + ROW_KERB_PX * 2, ROW_KERB_PX);
+  ctx.fillStyle = STONE;
+  ctx.fillRect(left - ROW_KERB_PX, top - ROW_KERB_PX, ROW_KERB_PX, height + ROW_KERB_PX * 2);
+  ctx.fillRect(left + width, top - ROW_KERB_PX, ROW_KERB_PX, height + ROW_KERB_PX * 2);
+  ctx.fillStyle = SOIL;
+  ctx.fillRect(left, top, width, height);
+  for (let row = 0; row < ROW_COUNT; row++) {
+    const rowY = top + (height * (row + 0.5)) / ROW_COUNT;
+    ctx.fillStyle = SOIL_DARK;
+    ctx.fillRect(left, rowY, width, 1);
+    const leafColor = row % 2 === 0 ? LEAF : VEG_LEAF_LIGHT;
+    for (let plant = 0; plant < 3; plant++) {
+      const plantX = left + (width * (plant + 0.5)) / 3;
+      ctx.fillStyle = leafColor;
+      fillCircle(ctx, plantX, rowY - 1, 2.2);
+      ctx.fillStyle = VEG_ROOT;
+      ctx.fillRect(plantX - 0.5, rowY, 1, 1.5);
+    }
+  }
+  ctx.strokeStyle = WOOD_DARK;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(left + 2, top);
+  ctx.lineTo(left + 2, top - ROW_STAKE_HEIGHT_PX);
+  ctx.stroke();
+};
+
+/** A wall-mounted rack of drying herb bundles over a small mortar shelf. */
+const HERB_RACK_LEFT = 0.14;
+const HERB_RACK_TOP = 0.16;
+const HERB_RACK_WIDTH = 0.72;
+const HERB_SHELF_HEIGHT_PX = 3;
+const HERB_BUNDLES = 4;
+const HERB_BUNDLE_DROP = 0.32;
+const HERB_BUNDLE_COLORS = [LEAF, LEAF_DARK, VEG_LEAF_LIGHT, LEAF] as const;
+
+const drawHerbRack: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const left = sx + ts * HERB_RACK_LEFT;
+  const width = ts * HERB_RACK_WIDTH;
+  const shelfY = sy + ts * HERB_RACK_TOP;
+  ctx.fillStyle = WOOD_DARK;
+  ctx.fillRect(left, shelfY, width, HERB_SHELF_HEIGHT_PX);
+  ctx.fillStyle = IRON;
+  ctx.fillRect(left - 1, shelfY - 1, 2, ts * 0.1);
+  ctx.fillRect(left + width - 1, shelfY - 1, 2, ts * 0.1);
+  for (let bundle = 0; bundle < HERB_BUNDLES; bundle++) {
+    const bx = left + (width * (bundle + 0.5)) / HERB_BUNDLES;
+    const topY = shelfY + HERB_SHELF_HEIGHT_PX;
+    const bottomY = topY + ts * HERB_BUNDLE_DROP;
+    ctx.strokeStyle = ROPE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bx, topY);
+    ctx.lineTo(bx, bottomY - 2);
+    ctx.stroke();
+    ctx.fillStyle = HERB_BUNDLE_COLORS[bundle % HERB_BUNDLE_COLORS.length];
+    ctx.beginPath();
+    ctx.moveTo(bx, bottomY - 2);
+    ctx.lineTo(bx - 3, bottomY + 4);
+    ctx.lineTo(bx + 3, bottomY + 4);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // A mortar on the ground below breaks the rack's own symmetry, so it reads as
+  // apothecary stock rather than a gateway.
+  const mortarCx = left + width * 0.5;
+  const mortarY = sy + ts * 0.86;
+  ctx.fillStyle = STONE;
+  ctx.beginPath();
+  ctx.ellipse(mortarCx, mortarY, ts * 0.1, ts * 0.05, 0, 0, TWO_PI);
+  ctx.fill();
+  ctx.fillStyle = STONE_DARK;
+  ctx.beginPath();
+  ctx.ellipse(mortarCx, mortarY - 1, ts * 0.07, ts * 0.03, 0, 0, TWO_PI);
+  ctx.fill();
+};
+
+/** Squared, stacked timber with a sawhorse — a builder's neat stock, not a woodpile. */
+const STACK_LEFT = 0.08;
+const STACK_TOP = 0.56;
+const STACK_WIDTH = 0.5;
+const STACK_BEAM_HEIGHT_PX = 4;
+const STACK_BEAMS = 3;
+const HORSE_LEFT = 0.62;
+const HORSE_TOP_Y = 0.58;
+const HORSE_LEG_SPAN = 0.16;
+const HORSE_LEG_HEIGHT = 0.28;
+
+const drawTimberStack: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const left = sx + ts * STACK_LEFT;
+  const width = ts * STACK_WIDTH;
+  let beamY = sy + ts * STACK_TOP;
+  for (let beam = 0; beam < STACK_BEAMS; beam++) {
+    beamY -= STACK_BEAM_HEIGHT_PX;
+    ctx.fillStyle = beam % 2 === 0 ? WOOD : WOOD_LIGHT;
+    ctx.fillRect(left, beamY, width, STACK_BEAM_HEIGHT_PX - 1);
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(left, beamY, width, 1);
+    ctx.fillRect(left + width - 3, beamY, 3, STACK_BEAM_HEIGHT_PX - 1);
+  }
+  const hx = sx + ts * HORSE_LEFT;
+  const hy = sy + ts * HORSE_TOP_Y;
+  ctx.strokeStyle = WOOD_DARK;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy);
+  ctx.lineTo(hx + ts * (STACK_WIDTH - 0.06), hy - ts * 0.04);
+  ctx.stroke();
+  for (const along of [0.15, 0.5, 0.85]) {
+    const legX = hx + ts * (STACK_WIDTH - 0.06) * along;
+    ctx.beginPath();
+    ctx.moveTo(legX - ts * HORSE_LEG_SPAN * 0.5, hy - ts * 0.02 + ts * HORSE_LEG_HEIGHT);
+    ctx.lineTo(legX, hy);
+    ctx.lineTo(legX + ts * HORSE_LEG_SPAN * 0.5, hy - ts * 0.02 + ts * HORSE_LEG_HEIGHT);
+    ctx.stroke();
+  }
+};
+
+/** A stone-plinthed, iron-banded feed bin with a hinged plank lid. */
+const BIN_LEFT = 0.2;
+const BIN_TOP = 0.44;
+const BIN_WIDTH = 0.6;
+const BIN_HEIGHT = 0.42;
+const BIN_BAND_FRACTIONS = [0.3, 0.7] as const;
+
+const drawFeedBin: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const left = sx + ts * BIN_LEFT;
+  const top = sy + ts * BIN_TOP;
+  const width = ts * BIN_WIDTH;
+  const height = ts * BIN_HEIGHT;
+  ctx.fillStyle = STONE_DARK;
+  ctx.fillRect(left - 2, top + height, width + 4, 3);
+  ctx.fillStyle = WOOD;
+  ctx.fillRect(left, top, width, height);
+  ctx.fillStyle = WOOD_DARK;
+  for (const fraction of BIN_BAND_FRACTIONS) {
+    ctx.fillRect(left, top + height * fraction, width, 2);
+  }
+  ctx.fillStyle = WOOD_LIGHT;
+  ctx.fillRect(left, top - 3, width, 3);
+  ctx.fillStyle = IRON;
+  ctx.fillRect(left + width * 0.42, top - 3, 3, 3);
+};
+
+/** A three-legged stool and an iron-banded pail — Wendell's dairy tools, neatly kept. */
+const STOOL_SEAT_Y = 0.6;
+const STOOL_SEAT_HALF = 0.16;
+const STOOL_LEG_SPREAD = 0.14;
+const STOOL_LEG_DROP = 0.24;
+const PAIL_LEFT = 0.56;
+const PAIL_TOP = 0.5;
+const PAIL_WIDTH = 0.3;
+const PAIL_HEIGHT = 0.3;
+
+const drawMilkingStool: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const cx = sx + ts * 0.28;
+  const seatY = sy + ts * STOOL_SEAT_Y;
+  ctx.fillStyle = WOOD;
+  ctx.fillRect(cx - ts * STOOL_SEAT_HALF, seatY, ts * STOOL_SEAT_HALF * 2, 3);
+  ctx.strokeStyle = WOOD_DARK;
+  ctx.lineWidth = 2;
+  for (const dir of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + dir * ts * STOOL_LEG_SPREAD, seatY + ts * STOOL_LEG_DROP);
+    ctx.lineTo(cx + dir * ts * STOOL_LEG_SPREAD * 0.3, seatY + 2);
+    ctx.stroke();
+  }
+  const pailLeft = sx + ts * PAIL_LEFT;
+  const pailTop = sy + ts * PAIL_TOP;
+  const pailWidth = ts * PAIL_WIDTH;
+  const pailHeight = ts * PAIL_HEIGHT;
+  ctx.fillStyle = IRON_LIGHT;
+  ctx.beginPath();
+  ctx.moveTo(pailLeft, pailTop);
+  ctx.lineTo(pailLeft + pailWidth, pailTop);
+  ctx.lineTo(pailLeft + pailWidth - 2, pailTop + pailHeight);
+  ctx.lineTo(pailLeft + 2, pailTop + pailHeight);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = IRON;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(pailLeft + pailWidth / 2, pailTop - 1, pailWidth / 2 - 1, Math.PI, TWO_PI);
+  ctx.stroke();
+};
+
+/** A drill-yard pell: a padded post on an iron collar, ringed with practice bands. */
+const PELL_TOP = 0.16;
+const PELL_BOTTOM = 0.9;
+const PELL_WIDTH_PX = 6;
+const PELL_COLLAR_FRACTIONS = [0.3, 0.5, 0.7] as const;
+
+const drawDrillPell: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const cx = sx + ts / 2;
+  const top = sy + ts * PELL_TOP;
+  const bottom = sy + ts * PELL_BOTTOM;
+  ctx.fillStyle = STONE_DARK;
+  ctx.beginPath();
+  ctx.ellipse(cx, bottom, ts * 0.16, ts * 0.05, 0, 0, TWO_PI);
+  ctx.fill();
+  ctx.fillStyle = WOOD;
+  ctx.fillRect(cx - PELL_WIDTH_PX / 2, top, PELL_WIDTH_PX, bottom - top);
+  ctx.fillStyle = WOOD_DARK;
+  ctx.fillRect(cx - PELL_WIDTH_PX / 2, top, 1, bottom - top);
+  for (const fraction of PELL_COLLAR_FRACTIONS) {
+    ctx.fillStyle = IRON;
+    ctx.fillRect(cx - PELL_WIDTH_PX / 2 - 1, sy + ts * fraction, PELL_WIDTH_PX + 2, 2);
+  }
+};
+
+/** A stone-slab bench on iron legs — the town's own civic seating, in a smaller yard size. */
+const BENCH_LEFT = 0.06;
+const BENCH_TOP = 0.62;
+const BENCH_WIDTH = 0.88;
+const BENCH_SEAT_HEIGHT_PX = 4;
+const BENCH_LEG_INSET = 0.1;
+const BENCH_LEG_HEIGHT_PX = 6;
+
+const drawGardenBench: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const left = sx + ts * BENCH_LEFT;
+  const width = ts * BENCH_WIDTH;
+  const seatY = sy + ts * BENCH_TOP;
+  ctx.fillStyle = IRON;
+  ctx.fillRect(left + ts * BENCH_LEG_INSET, seatY + BENCH_SEAT_HEIGHT_PX, 2, BENCH_LEG_HEIGHT_PX);
+  ctx.fillRect(
+    left + width - ts * BENCH_LEG_INSET - 2,
+    seatY + BENCH_SEAT_HEIGHT_PX,
+    2,
+    BENCH_LEG_HEIGHT_PX,
+  );
+  ctx.fillStyle = STONE;
+  ctx.fillRect(left, seatY, width, BENCH_SEAT_HEIGHT_PX);
+  ctx.fillStyle = STONE_DARK;
+  ctx.fillRect(left, seatY + BENCH_SEAT_HEIGHT_PX - 1, width, 1);
+};
+
+/** A small tree in a dressed-stone planter box — urban street greenery. */
+const TREE_BOX_LEFT = 0.28;
+const TREE_BOX_TOP = 0.72;
+const TREE_BOX_WIDTH = 0.44;
+const TREE_BOX_HEIGHT = 0.2;
+const TREE_TRUNK_WIDTH_PX = 3;
+const TREE_CANOPY_LOBES: ReadonlyArray<readonly [number, number, number]> = [
+  [0.32, 0.38, 0.2],
+  [0.5, 0.27, 0.22],
+  [0.68, 0.4, 0.19],
+];
+
+const drawStreetTree: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const boxLeft = sx + ts * TREE_BOX_LEFT;
+  const boxTop = sy + ts * TREE_BOX_TOP;
+  const boxWidth = ts * TREE_BOX_WIDTH;
+  const boxHeight = ts * TREE_BOX_HEIGHT;
+  ctx.fillStyle = STONE_DARK;
+  ctx.fillRect(boxLeft, boxTop, boxWidth, boxHeight);
+  ctx.fillStyle = STONE;
+  ctx.fillRect(boxLeft, boxTop, boxWidth, 2);
+  ctx.fillStyle = WOOD_DARK;
+  ctx.fillRect(
+    sx + ts / 2 - TREE_TRUNK_WIDTH_PX / 2,
+    boxTop - ts * 0.14,
+    TREE_TRUNK_WIDTH_PX,
+    ts * 0.14,
+  );
+  for (const [cx, cy, radius] of TREE_CANOPY_LOBES) {
+    ctx.fillStyle = LEAF_DARK;
+    fillCircle(ctx, sx + ts * cx, sy + ts * cy, ts * radius);
+  }
+  for (const [cx, cy, radius] of TREE_CANOPY_LOBES) {
+    ctx.fillStyle = LEAF;
+    fillCircle(
+      ctx,
+      sx + ts * (cx - radius * 0.25),
+      sy + ts * (cy - radius * 0.25),
+      ts * radius * 0.65,
+    );
+  }
+};
+
+/** A dressed-stone birdbath: a fluted pedestal and a shallow basin. */
+const BATH_PEDESTAL_TOP = 0.56;
+const BATH_PEDESTAL_BOTTOM = 0.9;
+const BATH_PEDESTAL_WIDTH_PX = 5;
+const BATH_BASIN_CY = 0.5;
+const BATH_BASIN_RX = 0.3;
+const BATH_BASIN_RY = 0.1;
+
+const drawBirdbath: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const cx = sx + ts / 2;
+  ctx.fillStyle = STONE_DARK;
+  ctx.fillRect(
+    cx - BATH_PEDESTAL_WIDTH_PX / 2,
+    sy + ts * BATH_PEDESTAL_TOP,
+    BATH_PEDESTAL_WIDTH_PX,
+    ts * (BATH_PEDESTAL_BOTTOM - BATH_PEDESTAL_TOP),
+  );
+  ctx.fillStyle = STONE;
+  const basinCy = sy + ts * BATH_BASIN_CY;
+  ctx.beginPath();
+  ctx.ellipse(cx, basinCy, ts * BATH_BASIN_RX, ts * BATH_BASIN_RY, 0, 0, TWO_PI);
+  ctx.fill();
+  ctx.fillStyle = WATER;
+  ctx.beginPath();
+  ctx.ellipse(cx, basinCy, ts * BATH_BASIN_RX * 0.72, ts * BATH_BASIN_RY * 0.6, 0, 0, TWO_PI);
+  ctx.fill();
+  ctx.fillStyle = WATER_LIGHT;
+  fillCircle(ctx, cx - ts * BATH_BASIN_RX * 0.2, basinCy - 1, 1.2);
+};
+
+/** A low clipped hedge, framing a yard or a street edge without a full fence. */
+const HEDGE_CY = 0.76;
+const HEDGE_RX = 0.48;
+const HEDGE_RY = 0.13;
+const HEDGE_LOBES: ReadonlyArray<readonly [number, number]> = [
+  [0.14, 0.13],
+  [0.34, 0.16],
+  [0.54, 0.14],
+  [0.74, 0.16],
+  [0.9, 0.12],
+];
+
+const drawHedgeRow: ClutterPainter = (ctx, sx, sy, ts) => {
+  const cy = sy + ts * HEDGE_CY;
+  ctx.fillStyle = LEAF_DARK;
+  ctx.beginPath();
+  ctx.ellipse(sx + ts / 2, cy, ts * HEDGE_RX, ts * HEDGE_RY, 0, 0, TWO_PI);
+  ctx.fill();
+  for (const [cx, radius] of HEDGE_LOBES) {
+    ctx.fillStyle = LEAF;
+    fillCircle(ctx, sx + ts * cx, cy - ts * radius * 0.3, ts * radius);
+  }
+};
+
+/** A weapon rack: practice spears and a wooden sword racked for a drill yard. */
+const WRACK_LEFT = 0.14;
+const WRACK_TOP = 0.16;
+const WRACK_WIDTH = 0.72;
+const WRACK_HEIGHT = 0.7;
+const WRACK_FRAME_PX = 3;
+const WRACK_WEAPON_X = [0.22, 0.5, 0.78] as const;
+
+const drawWeaponRack: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const left = sx + ts * WRACK_LEFT;
+  const top = sy + ts * WRACK_TOP;
+  const width = ts * WRACK_WIDTH;
+  const height = ts * WRACK_HEIGHT;
+  ctx.fillStyle = WOOD_DARK;
+  ctx.fillRect(left, top, width, WRACK_FRAME_PX);
+  ctx.fillRect(left, top + height - WRACK_FRAME_PX, width, WRACK_FRAME_PX);
+  for (const along of WRACK_WEAPON_X) {
+    const x = left + width * along;
+    ctx.strokeStyle = WOOD;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, top + height - WRACK_FRAME_PX);
+    ctx.lineTo(x, top + 2);
+    ctx.stroke();
+    ctx.fillStyle = IRON_LIGHT;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x - 3, top + 6);
+    ctx.lineTo(x + 3, top + 6);
+    ctx.closePath();
+    ctx.fill();
+  }
+};
+
+/** A grain bin: a broad stave-built cylinder with a conical cap, for a mill yard. */
+const GBIN_LEFT = 0.14;
+const GBIN_TOP = 0.36;
+const GBIN_WIDTH = 0.72;
+const GBIN_HEIGHT = 0.5;
+const GBIN_CAP_RISE = 0.18;
+const GBIN_STAVE_COUNT = 5;
+
+const drawGrainBin: ClutterPainter = (ctx, sx, sy, ts) => {
+  shadow(ctx, sx, sy, ts);
+  const left = sx + ts * GBIN_LEFT;
+  const top = sy + ts * GBIN_TOP;
+  const width = ts * GBIN_WIDTH;
+  const height = ts * GBIN_HEIGHT;
+  ctx.fillStyle = WOOD;
+  ctx.fillRect(left, top, width, height);
+  ctx.fillStyle = WOOD_DARK;
+  for (let stave = 1; stave < GBIN_STAVE_COUNT; stave++) {
+    const x = left + (width * stave) / GBIN_STAVE_COUNT;
+    ctx.fillRect(x, top, 1, height);
+  }
+  ctx.fillStyle = IRON;
+  ctx.fillRect(left, top + height * 0.66, width, 2);
+  ctx.fillStyle = WOOD_DARK;
+  ctx.beginPath();
+  ctx.moveTo(left - 2, top);
+  ctx.lineTo(sx + ts / 2, top - ts * GBIN_CAP_RISE);
+  ctx.lineTo(left + width + 2, top);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = WOOD_LIGHT;
+  ctx.fillRect(left, top, width, 1);
+};
+
 /**
  * Every piece, keyed by the union. A `Record` rather than a switch, so a kind
  * added without art fails to compile.
@@ -683,6 +1179,19 @@ const CLUTTER_PAINTERS: Record<TownClutterKind, ClutterPainter> = {
   tool_rack: drawToolRack,
   garden_pump: drawGardenPump,
   planter: drawPlanter,
+  hay_rack: drawHayRack,
+  vegetable_row: drawVegetableRow,
+  herb_rack: drawHerbRack,
+  timber_stack: drawTimberStack,
+  feed_bin: drawFeedBin,
+  milking_stool: drawMilkingStool,
+  drill_pell: drawDrillPell,
+  garden_bench: drawGardenBench,
+  street_tree: drawStreetTree,
+  birdbath: drawBirdbath,
+  hedge_row: drawHedgeRow,
+  weapon_rack: drawWeaponRack,
+  grain_bin: drawGrainBin,
 };
 
 /** Draws one piece of clutter standing on the tile whose top-left is (sx, sy). */

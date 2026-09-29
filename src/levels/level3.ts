@@ -146,6 +146,19 @@ export const level3: LevelDef = {
   id: 'level3',
   name: 'The Overworld',
   floorNumber: 3,
+  // The town is the heaviest arrival in the game: fifteen painted facades, its
+  // street furniture and a crowd of several dozen, all of which would otherwise
+  // fill in while the player is already walking.
+  arrivalLoadingScreen: {
+    tips: [
+      'Townsfolk have lives of their own. Walk up to one and strike up a conversation.',
+      'Some shopkeepers buy as well as sell. Look for the Sell tab at the counter.',
+      'The Meat Shields take contracts at the Desperado Club, if you can stomach the company.',
+      'The Sleeping Cat Inn keeps a safe room. Mordecai is waiting inside.',
+      'Crates and barrels are worth smashing. There are often coins inside.',
+      'Check the notice board in the town square for what the town needs doing.',
+    ],
+  },
   music: 'bg_level_1',
   mapSize: 280,
   recommendedLevelOverride: FLOOR3_RECOMMENDED_LEVEL,

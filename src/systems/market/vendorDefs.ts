@@ -11,6 +11,7 @@
 
 import type { ItemId } from '../../core/ItemDefs';
 import type { TownRole } from '../../sprites/person/PersonAppearance';
+import type { TownSpecies } from '../townSpecies';
 import type { ShopPricingProfile } from './shopPricing';
 import { STREET_VENDOR_PRICING, MERCHANT_STALL_PRICING } from './shopProfiles';
 
@@ -54,6 +55,7 @@ export interface VendorDef {
   /** Stall name, e.g. "Greengrocer's Cart". Shown as the panel title. */
   stallName: string;
   role: TownRole;
+  species: TownSpecies;
   /** Seed for `generatePersonAppearance`; fixed so a vendor looks the same every visit. */
   appearanceSeed: number;
   style: StallStyle;
@@ -95,6 +97,7 @@ const GREENGROCER: VendorDef = {
   vendorName: 'Bess Ottoline',
   stallName: "Greengrocer's Cart",
   role: 'farmer',
+  species: 'skyfowl',
   appearanceSeed: GREENGROCER_SEED,
   style: 'produce_cart',
   motif: 'produce',
@@ -102,6 +105,7 @@ const GREENGROCER: VendorDef = {
     'Fresh off the fields — a nibble for the road?',
     'Picked this morning, and I do mean this morning.',
     'Back again? Good. The turnips remember you.',
+    'Orlo over there sells the shine, I sell the substance. We do fine off each other.',
   ],
   items: [
     {
@@ -129,6 +133,7 @@ const TINKER: VendorDef = {
   vendorName: 'Orlo Pemberwick',
   stallName: "Tinker's Stall",
   role: 'merchant',
+  species: 'human',
   appearanceSeed: TINKER_SEED,
   style: 'tinker_bench',
   motif: 'bottles',
@@ -136,6 +141,7 @@ const TINKER: VendorDef = {
     'Potions, fizz, and odds for the brave.',
     'Everything corked, nothing cursed. Mostly.',
     'You keep buying, I keep brewing. Fair trade.',
+    'Bess sells you breakfast, I sell you the rest of the trip. Between us you’re covered.',
   ],
   // The shard leads the counter while its gate is open: the panel draws rows in
   // this order and hands its accept key to the first buyable quest row, so a

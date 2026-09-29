@@ -15,7 +15,6 @@ import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import type { BriarHollowState, VillagerMemory } from '../../core/briarHollowState';
 import type { VillageQuestPhase } from '../../core/villageQuestPhase';
-import { CONVERSATION_WALK_AWAY_TILES } from '../../creatures/townInteraction';
 import {
   pickByTalkPriority,
   TALK_TIER_AMBIENT,
@@ -621,9 +620,12 @@ export class VillagerSystem {
 
   /** The Space chain's entry: talk to the nearest villager in range. Returns whether a press was taken. */
   tryTalk(talker: VillagerCrawler): boolean {
-    if (this.session !== null) return false;
     const target = this.talkTarget(talker);
     if (target === null) return false;
+    // A press that reaches here with a conversation already open was handed on
+    // by `Conversation.handOff` because the crawler has turned to someone else;
+    // the one already talking keeps their own box.
+    if (this.session?.speaker.id === target.id) return false;
     this.talkTo(target, talker);
     return true;
   }
@@ -746,7 +748,7 @@ export class VillagerSystem {
       haltsWorld: false,
       anchor: {
         position: () => ({ x: speaker.x, y: speaker.y }),
-        radius: CONVERSATION_WALK_AWAY_TILES,
+        talkRangeTiles: VILLAGER_TALK_RANGE_TILES,
       },
       // The number keys choose, and they are the hotbar's too.
       locksKeyboard: true,

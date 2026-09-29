@@ -79,6 +79,21 @@ const MAX_CACHED_CHUNKS = 60;
 /** Sentinel chunk key meaning "no candidate found". Real keys are non-negative. */
 const NO_CHUNK = -1;
 
+/** Chunks baked since the module loaded, for gates that must see none baked on a given frame. */
+let chunkBakesTotal = 0;
+
+/** Every chunk bake so far; a gate measures a window as a difference. */
+export function tileChunkBakeCount(): number {
+  return chunkBakesTotal;
+}
+
+/**
+ * Weight the newest measurement carries in the chunk bake cost estimate. Low for
+ * the same reason as the other paced caches: one bake beside a collection must
+ * not set the next frame's pacing.
+ */
+const CHUNK_BAKE_COST_SMOOTHING = 0.25;
+
 interface CachedChunk {
   canvas: CanvasSurface;
   /** Frame this chunk was last drawn from — drives LRU eviction. */
@@ -287,7 +302,62 @@ export class TileChunkCache {
 
     const cached: CachedChunk = { canvas, lastUsedFrame: this.frameCounter };
     this.chunks.set(this.chunkKey(cx, cy), cached);
+    chunkBakesTotal += 1;
     return cached;
+  }
+
+  /** Measured cost of one chunk bake, or null before the first. */
+  private chunkBakeEstimateMs: number | null = null;
+
+  /**
+   * Bakes the cold chunks a view at this camera would show, for up to
+   * `budgetMs`, and returns the fraction of them now warm.
+   *
+   * For a loading screen covering a floor's arrival: without it, the first
+   * frame of play bakes every visible chunk at once, since `renderVisible` lifts
+   * its per-frame cap on a map's first frame. A chunk starts only if its
+   * measured cost fits what is left, except the first when `mustProgress` says
+   * nothing else has run this frame.
+   */
+  bakeView(
+    cameraX: number,
+    cameraY: number,
+    viewW: number,
+    viewH: number,
+    budgetMs: number,
+    mustProgress: boolean,
+  ): number {
+    const chunkPx = CHUNK_TILES * this.ts;
+    const cx0 = Math.max(0, Math.floor(cameraX / chunkPx));
+    const cy0 = Math.max(0, Math.floor(cameraY / chunkPx));
+    const cx1 = Math.min(this.chunksX - 1, Math.floor((cameraX + viewW) / chunkPx));
+    const cy1 = Math.min(this.chunksY - 1, Math.floor((cameraY + viewH) / chunkPx));
+    const inView = Math.max(0, cx1 - cx0 + 1) * Math.max(0, cy1 - cy0 + 1);
+    if (inView === 0) return 1;
+    let spentMs = 0;
+    let startedAny = false;
+    let warm = 0;
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        if (this.chunks.has(this.chunkKey(cx, cy))) {
+          warm++;
+          continue;
+        }
+        const owedFirstChunk = mustProgress && !startedAny;
+        const estimate = this.chunkBakeEstimateMs;
+        const fits = estimate !== null && spentMs + estimate <= budgetMs;
+        if (!owedFirstChunk && !fits) continue;
+        startedAny = true;
+        const startedAt = performance.now();
+        this.bakeChunk(cx, cy);
+        const elapsed = performance.now() - startedAt;
+        spentMs += elapsed;
+        this.chunkBakeEstimateMs =
+          estimate === null ? elapsed : estimate + (elapsed - estimate) * CHUNK_BAKE_COST_SMOOTHING;
+        warm++;
+      }
+    }
+    return warm / inView;
   }
 
   /**
@@ -549,6 +619,16 @@ export class OverlayTileCache {
     this.gridWidth = structure[0]?.length ?? structure.length;
   }
 
+  /**
+   * Whether this tile has an entry for its type. At any animation frame: an
+   * entry at another frame is redrawn into the canvas it already has, which is
+   * the cheap part — the allocation and the first render are what a warm-up
+   * saves, and an animated tile would otherwise never count as warm.
+   */
+  has(type: number, tx: number, ty: number): boolean {
+    return this.cache.get(tileIndex(tx, ty, this.gridWidth))?.type === type;
+  }
+
   /** Returns the pre-rendered entry for this tile at its current animation frame. */
   get(type: number, tx: number, ty: number, animationFrame: number): OverlayCacheEntry {
     const key = tileIndex(tx, ty, this.gridWidth);
@@ -632,6 +712,90 @@ export function drawDecorationTileFull(
   drawTile(ctx, structure, type, sx, sy, ts, tx, ty, false);
 }
 
+/** The tile rectangle a decoration pass over this view must scan, overhang included. */
+function decorationScanBounds(
+  structure: TileContent[][],
+  ts: number,
+  cameraX: number,
+  cameraY: number,
+  viewW: number,
+  viewH: number,
+): { startX: number; startY: number; endX: number; endY: number } {
+  const rows = structure.length;
+  const cols = structure[0]?.length ?? rows;
+  // Widen the scan by the worst-case sprite overhang so decorations whose
+  // anchor tile is just off-screen don't pop out of existence at the edges.
+  const extents = getMapSpriteExtentsPx();
+  return {
+    startX: Math.max(0, Math.floor(cameraX / ts) - Math.ceil(extents.right / ts)),
+    startY: Math.max(0, Math.floor(cameraY / ts) - Math.ceil(extents.down / ts)),
+    endX: Math.min(cols - 1, Math.ceil((cameraX + viewW) / ts) + Math.ceil(extents.left / ts)),
+    endY: Math.min(rows - 1, Math.ceil((cameraY + viewH) / ts) + Math.ceil(extents.up / ts)),
+  };
+}
+
+/** Measured cost of rendering one overlay entry, shared by every cache; null before the first. */
+let overlayEntryEstimateMs: number | null = null;
+
+/**
+ * Renders the overlay entries a view at this camera would draw, for up to
+ * `budgetMs`, and returns the fraction of them now warm.
+ *
+ * For a loading screen covering a floor's arrival: each decoration's entry is
+ * otherwise rendered on the first frame that draws it, and a town's first
+ * screenful is dozens of them — tens of milliseconds on the first frame of play.
+ * An entry starts only if its measured cost fits what is left, except the first
+ * when `mustProgress` says nothing else has run this frame.
+ */
+export function bakeDecorationsForView(
+  structure: TileContent[][],
+  ts: number,
+  cameraX: number,
+  cameraY: number,
+  viewW: number,
+  viewH: number,
+  overlayCache: OverlayTileCache,
+  budgetMs: number,
+  mustProgress: boolean,
+): number {
+  const { startX, startY, endX, endY } = decorationScanBounds(
+    structure,
+    ts,
+    cameraX,
+    cameraY,
+    viewW,
+    viewH,
+  );
+  let inView = 0;
+  let warm = 0;
+  let spentMs = 0;
+  let startedAny = false;
+  for (let y = startY; y <= endY; y++) {
+    for (let x = startX; x <= endX; x++) {
+      const type = structure[y][x].type;
+      if (!DECORATION_TYPES.has(type) || !CACHEABLE_OVERLAY_TYPES.has(type)) continue;
+      inView++;
+      if (overlayCache.has(type, x, y)) {
+        warm++;
+        continue;
+      }
+      const owedFirstEntry = mustProgress && !startedAny;
+      const estimate = overlayEntryEstimateMs;
+      const fits = estimate !== null && spentMs + estimate <= budgetMs;
+      if (!owedFirstEntry && !fits) continue;
+      startedAny = true;
+      const startedAt = performance.now();
+      overlayCache.get(type, x, y, decorationAnimationFrame(structure, type, x, y));
+      const elapsed = performance.now() - startedAt;
+      spentMs += elapsed;
+      overlayEntryEstimateMs =
+        estimate === null ? elapsed : estimate + (elapsed - estimate) * CHUNK_BAKE_COST_SMOOTHING;
+      warm++;
+    }
+  }
+  return inView === 0 ? 1 : warm / inView;
+}
+
 /**
  * Non-Y-sorted decoration overlay pass.  Prefer the Y-sorted path
  * (drawDecorationAt per visible tile via RenderPipeline) for correct depth ordering.
@@ -646,16 +810,15 @@ export function renderDecorationsOverlay(
   viewH: number,
   overlayCache?: OverlayTileCache,
 ): void {
-  const rows = structure.length;
-  const cols = structure[0]?.length ?? rows;
   const ts = tileHeight;
-  // Widen the scan by the worst-case sprite overhang so decorations whose
-  // anchor tile is just off-screen don't pop out of existence at the edges.
-  const extents = getMapSpriteExtentsPx();
-  const startX = Math.max(0, Math.floor(cameraX / ts) - Math.ceil(extents.right / ts));
-  const startY = Math.max(0, Math.floor(cameraY / ts) - Math.ceil(extents.down / ts));
-  const endX = Math.min(cols - 1, Math.ceil((cameraX + viewW) / ts) + Math.ceil(extents.left / ts));
-  const endY = Math.min(rows - 1, Math.ceil((cameraY + viewH) / ts) + Math.ceil(extents.up / ts));
+  const { startX, startY, endX, endY } = decorationScanBounds(
+    structure,
+    ts,
+    cameraX,
+    cameraY,
+    viewW,
+    viewH,
+  );
 
   for (let y = startY; y <= endY; y++) {
     for (let x = startX; x <= endX; x++) {

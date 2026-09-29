@@ -21,7 +21,7 @@ import {
   type MercenaryRosterCheckpoint,
 } from './MercenaryRoster';
 import type { MongoPetStateCheckpoint } from './MongoPetState';
-import type { TownMemoryCheckpoint } from './TownMemory';
+import { migrateRoomKey, type TownMemoryCheckpoint } from './TownMemory';
 import type { JournalProgressCheckpoint } from './JournalProgress';
 import { TACTICS_TRAITS, type TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import type { MarketStockCheckpoint } from '../systems/market/MarketStock';
@@ -1005,6 +1005,10 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
   // Absent from a save written before camps were remembered; such a save
   // simply remembers none, rather than losing the whole world state over it.
   const clearedCamps = value.clearedCamps ?? [];
+  // Absent from a save written before interior props remembered their
+  // payouts; such a save simply starts every prop unpaid, which is how that
+  // save already played.
+  const paidOutInteriorProps = value.paidOutInteriorProps ?? [];
   const residentIds = allResidents().map((resident) => resident.id);
   const parsedTalks = parseArray(residentTalks, (entry) =>
     parseStringKeyedTuple(entry, (v) => (isNumber(v) ? v : undefined)),
@@ -1013,7 +1017,8 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
     parsedTalks === undefined ||
     !isNumber(poulticesLeft) ||
     !isStringArray(clearedRooms) ||
-    !isStringArray(clearedCamps)
+    !isStringArray(clearedCamps) ||
+    !isStringArray(paidOutInteriorProps)
   ) {
     return undefined;
   }
@@ -1023,13 +1028,18 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
     if (residentId === undefined) continue;
     validTalks.push([residentId, count]);
   }
-  return { residentTalks: validTalks, poulticesLeft, clearedRooms, clearedCamps };
+  return {
+    residentTalks: validTalks,
+    poulticesLeft,
+    clearedRooms: clearedRooms.map(migrateRoomKey),
+    clearedCamps,
+    paidOutInteriorProps: paidOutInteriorProps.map(migrateRoomKey),
+  };
 }
 
 function parseJournalProgressCheckpoint(value: unknown): JournalProgressCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { visitedGuideStops, pinnedTrackerId, pinSource } = value;
-  if (!isStringArray(visitedGuideStops)) return undefined;
+  const { pinnedTrackerId, pinSource } = value;
   if (pinnedTrackerId !== null && !isString(pinnedTrackerId)) return undefined;
   // Absent on a save written before the quest-vs-bounty arrow arbitration
   // existed. Treated as an auto-pin rather than a player one, so an old save's
@@ -1041,7 +1051,7 @@ function parseJournalProgressCheckpoint(value: unknown): JournalProgressCheckpoi
       : pinnedTrackerId === null
         ? null
         : 'auto';
-  return { visitedGuideStops, pinnedTrackerId, pinSource: resolvedPinSource };
+  return { pinnedTrackerId, pinSource: resolvedPinSource };
 }
 
 function parseCard(

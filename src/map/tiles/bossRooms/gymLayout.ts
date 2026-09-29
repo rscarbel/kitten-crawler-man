@@ -189,6 +189,55 @@ function clearOfKit(preferred: number, kit: readonly Entry[]): number {
 /** Tiles of floor, in depth, a bench keeps from its wall's kit. */
 const BENCH_KIT_CLEARANCE = 1;
 
+/** A treadmill's belt tiles at `along`, the wall end first; null where it would leave the room. */
+function beltEnds(
+  along: number,
+  side: DoorSide,
+  bounds: TileRect,
+  farDepth: number,
+): readonly [TilePoint, TilePoint] | null {
+  const ends = rotateTemplate(
+    [
+      { along, depth: farDepth },
+      { along, depth: farDepth - 1 },
+    ],
+    side,
+    bounds,
+  );
+  if (ends.length < BELT_TILES) return null;
+  return [ends[0], ends[1]];
+}
+
+/**
+ * Where the treadmills stand along the mirror wall, nearest the right-hand
+ * corner first. The row keeps its pitch and steps over any spot a doorway's
+ * approach lane covers rather than losing the treadmill: a lane is at least
+ * three tiles wide, so at a two-tile pitch it can cover two spots at once, and
+ * a secondary doorway can open anywhere in the mirror wall.
+ */
+function treadmillRowAlongs(
+  side: DoorSide,
+  bounds: TileRect,
+  alongMin: number,
+  alongMax: number,
+  farDepth: number,
+  keepClear: ReadonlySet<string>,
+): number[] {
+  const alongs: number[] = [];
+  const firstAlong = alongMax - TREADMILL_CORNER_GAP_TILES;
+  for (
+    let along = firstAlong;
+    along > alongMin && alongs.length < TREADMILL_COUNT;
+    along -= TREADMILL_PITCH_TILES
+  ) {
+    const ends = beltEnds(along, side, bounds, farDepth);
+    if (ends === null) continue;
+    if (ends.some((tile) => keepClear.has(key(tile)))) continue;
+    alongs.push(along);
+  }
+  return alongs;
+}
+
 /** The side a doorway's room is keyed to: the widest doorway's. */
 function primarySide(doorways: readonly BossRoomDoorway[]): DoorSide {
   return doorways.length === 0 ? 'south' : doorways[0].side;
@@ -270,12 +319,10 @@ export function planGymLayout(
     break;
   }
 
-  const firstTreadmillAlong = alongMax - TREADMILL_CORNER_GAP_TILES;
-  const treadmillAlongs: number[] = [];
-  for (let index = 0; index < TREADMILL_COUNT; index++) {
-    treadmillAlongs.push(firstTreadmillAlong - index * TREADMILL_PITCH_TILES);
-  }
-  const lastTreadmillAlong = firstTreadmillAlong - (TREADMILL_COUNT - 1) * TREADMILL_PITCH_TILES;
+  const treadmillAlongs = treadmillRowAlongs(side, bounds, alongMin, alongMax, farDepth, keepClear);
+  const lastTreadmillAlong =
+    treadmillAlongs[treadmillAlongs.length - 1] ??
+    alongMax - TREADMILL_CORNER_GAP_TILES - (TREADMILL_COUNT - 1) * TREADMILL_PITCH_TILES;
   for (let along = alongMin + 1; along < lastTreadmillAlong - TURF_TREADMILL_GAP_TILES; along++) {
     for (let row = 0; row < TURF_DEPTH_TILES; row++) {
       template.push({ kind: 'turf', along, depth: farDepth - row });
@@ -290,17 +337,9 @@ export function planGymLayout(
 
   const treadmills: GymTreadmill[] = [];
   for (const along of treadmillAlongs) {
-    const ends = rotateTemplate(
-      [
-        { along, depth: farDepth },
-        { along, depth: farDepth - 1 },
-      ],
-      side,
-      bounds,
-    );
-    if (ends.length < BELT_TILES) continue;
+    const ends = beltEnds(along, side, bounds, farDepth);
+    if (ends === null) continue;
     const [wallEnd, roomEnd] = ends;
-    if (keepClear.has(key(wallEnd)) || keepClear.has(key(roomEnd))) continue;
     treadmills.push({
       belt: [
         { x: wallEnd.x, y: wallEnd.y },

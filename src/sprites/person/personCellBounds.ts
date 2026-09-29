@@ -58,6 +58,7 @@ import {
 import { poseForMotion } from './gait';
 import type { PersonAppearance } from './PersonAppearance';
 import { buildSkeleton, type Facing, type Limb, type Skeleton } from './skeleton';
+import { WALK_FRAMES, IDLE_FRAMES } from '../art/townCastFrameCounts';
 
 /** The cell a person is baked into, as fractions of draw size. */
 interface PersonCellBounds {
@@ -70,16 +71,32 @@ interface PersonCellBounds {
 }
 
 /**
- * Points of the cycle sampled per facing.
+ * The smallest sample count that lands on every baked walk and idle frame.
  *
- * Must stay a whole multiple of the cache's walk bucket count, so that every
- * pose the cache actually bakes is one of the poses the box was measured at —
- * a box measured only *near* the baked phases is relying on the safety margin
- * to cover the difference. `scripts/render-townsfolk.ts` gates the relationship.
- * Beyond that the extra density is free: a keyed gait's extremes fall on its key
- * times, which line up with no particular sample.
+ * `CELL_BOUNDS_SAMPLE_PHASES` must stay a whole multiple of both, so that
+ * every pose the cache actually bakes is one of the poses the box was
+ * measured at — a box measured only *near* the baked phases is relying on
+ * the safety margin to cover the difference. Deriving it from the frame
+ * counts themselves, rather than restating a number that happens to work
+ * today, means a future change to either frame count can't silently
+ * desync the two.
  */
-export const CELL_BOUNDS_SAMPLE_PHASES = 32;
+function leastCommonMultiple(a: number, b: number): number {
+  function greatestCommonDivisor(x: number, y: number): number {
+    return y === 0 ? x : greatestCommonDivisor(y, x % y);
+  }
+  return (a / greatestCommonDivisor(a, b)) * b;
+}
+
+/**
+ * Points of the cycle sampled per facing. A multiple of the frame-aligned
+ * least common multiple, so the extra density reads a keyed gait's extremes
+ * even though those extremes fall on their own key times rather than on any
+ * particular sample. `scripts/render-townsfolk.ts` gates the alignment.
+ */
+const SAMPLE_DENSITY_MULTIPLIER = 2;
+export const CELL_BOUNDS_SAMPLE_PHASES =
+  leastCommonMultiple(WALK_FRAMES, IDLE_FRAMES) * SAMPLE_DENSITY_MULTIPLIER;
 
 /**
  * The facings a person is drawn in from scratch. `left` is a mirror of `right`,

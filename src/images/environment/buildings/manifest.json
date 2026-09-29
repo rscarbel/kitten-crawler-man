@@ -224,7 +224,7 @@
       "life": {
         "row": 0,
         "colOffset": 1,
-        "frameCount": 8
+        "frameCount": 26
       }
     }
   },
@@ -266,7 +266,7 @@
       }
     }
   },
-  "shepherds_cabin": {
+  "plumbline_farm": {
     "frameWidth": 336,
     "frameHeight": 288,
     "tileX": 0,

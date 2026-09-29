@@ -175,6 +175,22 @@ const ROCK_SPOTS_NEEDED = 6;
 /** Generous waits, in seconds, for things that should land well inside them. */
 const AWARD_WAIT_SECONDS = 2;
 const GLIDE_WAIT_SECONDS = 10;
+/** Summon sites tried for a glide that has to pass over something solid. */
+const GLIDE_ATTEMPTS = 20;
+/** How far thralls look for work from where they were summoned, in tiles. */
+const EXPECTED_THRALL_SEARCH_RADIUS_TILES = 12;
+/** Extra tiles worked out past the search radius, so rounding at its rim cannot leave a stray tree. */
+const GLIDE_EXHAUST_MARGIN_TILES = 2;
+/** The farthest a target tree is looked for from the thrall, in tiles: well inside the search radius. */
+const GLIDE_TARGET_REACH_TILES = 8;
+/** Where a thrall stands to work: this far from its node's centre, toward where it came from. */
+const WORK_STAND_OFF_TILES = 0.8;
+/** Points sampled per tile along a candidate route when looking for something solid on it. */
+const ROUTE_SAMPLES_PER_TILE = 8;
+/** Slack on the work stand's distance from its node, in tiles. */
+const STAND_TOLERANCE_TILES = 0.1;
+/** How far a glide step may turn from its leg's heading before the leg counts as bent. */
+const GLIDE_HEADING_TOLERANCE = 1e-6;
 /** Decimal places rates and shares are printed to. */
 const RATE_DIGITS = 4;
 const SHARE_DIGITS = 3;
@@ -419,6 +435,125 @@ function makeRig(luckSeed = 1): Rig {
   });
   const roster = new MobRoster(gameMap, new SpellSystem());
   return { human, cat, tools, nodes, ledger, harvest, thralls, trees, roster, announcements };
+}
+
+interface GlidePoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * Splits a thrall's per-tick positions into legs: the runs of ticks it moved,
+ * each leg with the point it set off from.
+ */
+function glideLegs(path: ReadonlyArray<GlidePoint>): GlidePoint[][] {
+  const legs: GlidePoint[][] = [];
+  let leg: GlidePoint[] = [];
+  for (let i = 1; i < path.length; i++) {
+    const from = path[i - 1];
+    const to = path[i];
+    const moved = from.x !== to.x || from.y !== to.y;
+    if (!moved) {
+      if (leg.length > 0) legs.push(leg);
+      leg = [];
+      continue;
+    }
+    if (leg.length === 0) leg.push(from);
+    leg.push(to);
+  }
+  if (leg.length > 0) legs.push(leg);
+  return legs;
+}
+
+interface TileRef {
+  readonly tileX: number;
+  readonly tileY: number;
+}
+
+/** Ticks the rig's thralls until the first stands still, and returns where; null if it never does. */
+function tickUntilStill(rig: Rig): { x: number; y: number; node: TileRef | null } | null {
+  let previous = rig.thralls.snapshot[0];
+  for (let tick = 0; tick < TICKS_PER_SECOND * GLIDE_WAIT_SECONDS; tick++) {
+    rig.thralls.update();
+    const view = rig.thralls.snapshot[0];
+    if (view.x === previous.x && view.y === previous.y) return view;
+    previous = view;
+  }
+  return null;
+}
+
+/** Whether a thrall's centre at `point` is over a non-walkable tile that is neither end of its route. */
+function isSolidInTheWay(point: GlidePoint, from: TileRef, to: TileRef): boolean {
+  const tileX = Math.floor(point.x / TILE_SIZE + TILE_CENTRE);
+  const tileY = Math.floor(point.y / TILE_SIZE + TILE_CENTRE);
+  const isEnd =
+    (tileX === from.tileX && tileY === from.tileY) || (tileX === to.tileX && tileY === to.tileY);
+  return !isEnd && !gameMap.isWalkable(tileX, tileY);
+}
+
+/**
+ * The nearest tree within the target reach of a thrall standing at `at`
+ * (tile top-left, px) whose straight route to its work stand passes over
+ * something solid, and which lies in the thrall's search radius from home.
+ */
+function treeBehindSomethingSolid(
+  at: GlidePoint,
+  from: TileRef,
+  homeX: number,
+  homeY: number,
+): TileRef | null {
+  const centreX = at.x + TILE_SIZE * TILE_CENTRE;
+  const centreY = at.y + TILE_SIZE * TILE_CENTRE;
+  const atTileX = Math.floor(centreX / TILE_SIZE);
+  const atTileY = Math.floor(centreY / TILE_SIZE);
+  let best: TileRef | null = null;
+  let bestDistance = Infinity;
+  for (let dy = -GLIDE_TARGET_REACH_TILES; dy <= GLIDE_TARGET_REACH_TILES; dy++) {
+    for (let dx = -GLIDE_TARGET_REACH_TILES; dx <= GLIDE_TARGET_REACH_TILES; dx++) {
+      const tile = { tileX: atTileX + dx, tileY: atTileY + dy };
+      if (tile.tileX === from.tileX && tile.tileY === from.tileY) continue;
+      if (harvestKindAt(gameMap, tile.tileX, tile.tileY) !== 'wood') continue;
+      const nodeX = (tile.tileX + TILE_CENTRE) * TILE_SIZE;
+      const nodeY = (tile.tileY + TILE_CENTRE) * TILE_SIZE;
+      const fromHome = Math.hypot(nodeX - homeX, nodeY - homeY);
+      if (fromHome > GLIDE_TARGET_REACH_TILES * TILE_SIZE) continue;
+      const distance = Math.hypot(centreX - nodeX, centreY - nodeY);
+      if (distance >= bestDistance || distance === 0) continue;
+      const standX = nodeX + ((centreX - nodeX) / distance) * WORK_STAND_OFF_TILES * TILE_SIZE;
+      const standY = nodeY + ((centreY - nodeY) / distance) * WORK_STAND_OFF_TILES * TILE_SIZE;
+      const samples = Math.ceil((distance / TILE_SIZE) * ROUTE_SAMPLES_PER_TILE);
+      let blocked = false;
+      for (let i = 1; i < samples && !blocked; i++) {
+        const t = i / samples;
+        const point = {
+          x: centreX + (standX - centreX) * t - TILE_SIZE * TILE_CENTRE,
+          y: centreY + (standY - centreY) * t - TILE_SIZE * TILE_CENTRE,
+        };
+        blocked = isSolidInTheWay(point, from, tile);
+      }
+      if (!blocked) continue;
+      best = tile;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+/** Whether every step of a leg heads the same way as its first. */
+function isStraight(leg: ReadonlyArray<GlidePoint>): boolean {
+  if (leg.length < 2) return true;
+  const headingX = leg[1].x - leg[0].x;
+  const headingY = leg[1].y - leg[0].y;
+  const headingLength = Math.hypot(headingX, headingY);
+  for (let i = 2; i < leg.length; i++) {
+    const stepX = leg[i].x - leg[i - 1].x;
+    const stepY = leg[i].y - leg[i - 1].y;
+    const stepLength = Math.hypot(stepX, stepY);
+    const sine = (headingX * stepY - headingY * stepX) / (headingLength * stepLength);
+    const forward = headingX * stepX + headingY * stepY > 0;
+    if (Math.abs(sine) > GLIDE_HEADING_TOLERANCE || !forward) return false;
+  }
+  return true;
 }
 
 function teach(crawler: HumanPlayer | CatPlayer, level: number): void {
@@ -1055,40 +1190,69 @@ section('Thralls: a quarter of the XP, to the summoner alone');
 section('Thralls glide straight, through whatever is in the way');
 {
   resetThrallCooldownsForTests();
-  let proven = false;
-  let measured = 0;
-  for (let attempt = 0; attempt < TREE_SPOTS.length && !proven; attempt++) {
-    const rig = makeRig();
-    teach(rig.human, SUMMON_LEVEL);
-    const spot = TREE_SPOTS[attempt];
-    stand(rig.human, spot);
+  const rig = makeRig();
+  teach(rig.human, SUMMON_LEVEL);
+  // Summon sites until one has a tree whose straight route from the thrall's
+  // first stand passes over something solid; the map is seeded, so the same
+  // site is chosen every run.
+  let setup: { first: GlidePoint; firstNode: TileRef; target: TileRef } | null = null;
+  for (let attempt = 0; attempt < GLIDE_ATTEMPTS && setup === null; attempt++) {
+    resetThrallCooldownsForTests();
+    rig.thralls.dismissAll();
+    stand(rig.human, takeTree());
     if (rig.thralls.trySummon(rig.human, 'axe') !== 'summoned') continue;
-    const start = rig.thralls.snapshot[0];
-    const path: Array<{ x: number; y: number }> = [{ x: start.x, y: start.y }];
-    for (let tick = 0; tick < TICKS_PER_SECOND * GLIDE_WAIT_SECONDS; tick++) {
-      rig.thralls.update();
-      const view = rig.thralls.snapshot[0];
-      path.push({ x: view.x, y: view.y });
-      // Deplete its node the moment it arrives, so it has to cross to another.
-      const node = view.node;
-      if (node !== null && path.length === TICKS_PER_SECOND) {
-        const state = rig.ledger.stateAt(node.tileX, node.tileY, UNPERKED_LEVEL);
-        for (let i = 0; i < (state?.remaining ?? 0); i++)
-          rig.ledger.spend(node.tileX, node.tileY, UNPERKED_LEVEL);
+    const arrival = tickUntilStill(rig);
+    if (arrival === null || arrival.node === null) continue;
+    const homeX = rig.human.x + TILE_SIZE * TILE_CENTRE;
+    const homeY = rig.human.y + TILE_SIZE * TILE_CENTRE;
+    const target = treeBehindSomethingSolid(arrival, arrival.node, homeX, homeY);
+    if (target === null) continue;
+    setup = { first: arrival, firstNode: arrival.node, target };
+  }
+  check(setup !== null, 'found a tree with something solid between it and a working thrall');
+  if (setup !== null) {
+    const { first, firstNode, target } = setup;
+    // Every other tree in reach is worked out, so the one left is where it must go.
+    const exhaustRadius = EXPECTED_THRALL_SEARCH_RADIUS_TILES + GLIDE_EXHAUST_MARGIN_TILES;
+    const homeTileX = Math.floor(rig.human.x / TILE_SIZE + TILE_CENTRE);
+    const homeTileY = Math.floor(rig.human.y / TILE_SIZE + TILE_CENTRE);
+    for (let dy = -exhaustRadius; dy <= exhaustRadius; dy++) {
+      for (let dx = -exhaustRadius; dx <= exhaustRadius; dx++) {
+        const tileX = homeTileX + dx;
+        const tileY = homeTileY + dy;
+        if (tileX === target.tileX && tileY === target.tileY) continue;
+        const state = rig.ledger.stateAt(tileX, tileY, UNPERKED_LEVEL);
+        if (state !== null && state.kind === 'wood') state.remaining = 0;
       }
     }
-    measured++;
-    const crossedSolid = path.some(
-      (point) =>
-        !gameMap.isWalkable(
-          Math.floor((point.x + TILE_SIZE * TILE_CENTRE) / TILE_SIZE),
-          Math.floor((point.y + TILE_SIZE * TILE_CENTRE) / TILE_SIZE),
-        ),
+    const path: GlidePoint[] = [first];
+    let reachedTarget = false;
+    for (let tick = 0; tick < TICKS_PER_SECOND * GLIDE_WAIT_SECONDS && !reachedTarget; tick++) {
+      rig.thralls.update();
+      const view = rig.thralls.snapshot[0];
+      const previous = path[path.length - 1];
+      path.push({ x: view.x, y: view.y });
+      const still = view.x === previous.x && view.y === previous.y;
+      const workingTarget = view.node?.tileX === target.tileX && view.node.tileY === target.tileY;
+      const besideTarget =
+        Math.hypot(
+          view.x / TILE_SIZE + TILE_CENTRE - (target.tileX + TILE_CENTRE),
+          view.y / TILE_SIZE + TILE_CENTRE - (target.tileY + TILE_CENTRE),
+        ) <=
+        WORK_STAND_OFF_TILES + STAND_TOLERANCE_TILES;
+      reachedTarget = still && workingTarget && besideTarget;
+    }
+    check(reachedTarget, 'with its tree worked out it goes to stand at the next one in reach');
+    const legs = glideLegs(path);
+    check(legs.length === 1, `it gets there in one leg, with no stop on the way (${legs.length})`);
+    check(legs.every(isStraight), 'and that leg is one straight line');
+    const crossed = legs.some((leg) =>
+      leg.some((point) => isSolidInTheWay(point, firstNode, target)),
     );
-    if (crossedSolid) proven = true;
+    check(crossed, 'a thrall crossed a solid tile on its way to work');
   }
-  check(measured > 0, `ran ${measured} glides`);
-  check(proven, 'a thrall crossed a solid tile on its way to work');
+  rig.thralls.dismissAll();
+  resetThrallCooldownsForTests();
 }
 
 // ── Concurrent harvesting: two crawlers, one channel each ──────────────────

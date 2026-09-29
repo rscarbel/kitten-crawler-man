@@ -46,7 +46,7 @@
     "states": {
       "idle": {
         "row": 0,
-        "frameCount": 15
+        "frameCount": 28
       }
     }
   },
@@ -213,6 +213,45 @@
     "frameHeight": 64,
     "tileX": 16,
     "tileY": 16,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "town_awning_post": {
+    "frameWidth": 64,
+    "frameHeight": 90,
+    "tileX": 16,
+    "tileY": 42,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "town_skyfowl_perch": {
+    "frameWidth": 64,
+    "frameHeight": 100,
+    "tileX": 16,
+    "tileY": 52,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "town_field_shelter": {
+    "frameWidth": 64,
+    "frameHeight": 106,
+    "tileX": 16,
+    "tileY": 58,
     "tileScale": 32,
     "states": {
       "idle": {

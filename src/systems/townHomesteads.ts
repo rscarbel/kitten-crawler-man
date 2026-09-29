@@ -1,6 +1,6 @@
 /**
- * The three working houses of the town: the wheelwright, the mill and the
- * shepherd's cabin.
+ * The three working houses of the town: the wheelwright, the mill and
+ * Wendell's farm.
  *
  * None of them is a shop in the way the plaza is a shop. Each sells the one
  * thing the people who live there actually have — Brann has explosives because
@@ -154,7 +154,7 @@ export function serveMillerGoods(turn: number): PricedPurchaseHandler {
   };
 }
 
-// -- Shepherd's Cabin -------------------------------------------------------
+// -- Plumbline Farm ---------------------------------------------------------
 
 const HAYLOFT_PRICE = 10;
 /** A loft is not an inn: it mends most of you, and it will not touch what ails you. */
@@ -162,19 +162,19 @@ const HAYLOFT_HEAL_FRACTION = 0.6;
 
 const HAYLOFT_KEY = 'hayloft';
 
-const SHEPHERD_BARKS: ReadonlyArray<string> = [
-  'Loft is dry and the dog does not bite. That is the whole of the offer.',
+const HAYLOFT_BARKS: ReadonlyArray<string> = [
+  'The loft is dry and the ladder is sound. I built both, so I can vouch for them personally.',
   'You can sleep here. I would not sleep out there and I have a wall.',
-  'Ten coins and you can lie down. I will wake you if the dog does.',
+  'Ten coins and you may lie down. It was built to hold a winter of hay, and at present it has nothing better to do.',
 ];
 
-const SHEPHERD_LINES: ReadonlyArray<string> = [
+const HAYLOFT_LINES: ReadonlyArray<string> = [
   'Straw in your hair. Leave it, it suits you.',
-  'Dog sat on you for an hour. He does that with people he approves of.',
-  'You slept through the counting. Forty-one, still.',
+  'Not a sound from the loft for an hour. I shall take that as a compliment to the joists.',
+  'You slept through the milking hour. So, as it happens, did I; there was nothing to milk.',
 ];
 
-export function buildShepherdMenu(
+export function buildPlumblineFarmMenu(
   party: ReadonlyArray<Player>,
   turn: number,
   host: ResidentHost | null,
@@ -188,14 +188,14 @@ export function buildShepherdMenu(
   if (party.every((member) => member.hp >= member.maxHp)) loft.unavailable = 'Unhurt';
 
   return {
-    title: "Shepherd's Cabin",
-    bark: host?.line ?? rotateLine(SHEPHERD_BARKS, turn),
+    title: 'Plumbline Farm',
+    bark: host?.line ?? rotateLine(HAYLOFT_BARKS, turn),
     byline: host?.name,
     options: [loft],
   };
 }
 
-export function serveShepherdRest(
+export function servePlumblineFarmRest(
   party: ReadonlyArray<Player>,
   turn: number,
 ): PricedPurchaseHandler {
@@ -209,6 +209,6 @@ export function serveShepherdRest(
       const healed = member.hp + Math.round(member.maxHp * HAYLOFT_HEAL_FRACTION);
       member.hp = Math.min(member.maxHp, healed);
     }
-    return { ok: true, line: rotateLine(SHEPHERD_LINES, turn) };
+    return { ok: true, line: rotateLine(HAYLOFT_LINES, turn) };
   };
 }

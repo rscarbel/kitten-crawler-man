@@ -15,12 +15,11 @@ import {
 } from './talkPriority';
 
 /**
- * How far from the person the player must get before an open conversation
- * closes itself. Several times the ~1.1-tile radius that opens one, so that a
- * tapped movement key never ends a conversation the player meant to keep
- * reading — only walking off does.
+ * How close, in tiles, the player must stand to a citizen to talk to them —
+ * on the streets and indoors alike. Also the range an open conversation with
+ * one is measured against when the player walks off.
  */
-export const CONVERSATION_WALK_AWAY_TILES = 3.5;
+export const CITIZEN_TALK_RADIUS_TILES = 1.1;
 
 /** A citizen a questline has business with always outranks one that doesn't; a named resident with their own dialog outranks an anonymous one. */
 function talkTierOf(person: Townsperson) {

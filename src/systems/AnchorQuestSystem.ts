@@ -335,7 +335,9 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
       questRelated: true,
       ending: {
         kind: 'confirm',
-        keyboardDefault: 'accept',
+        // Paying spends coin and consumes all three shards, so a player
+        // reading through with Space is not taken as agreeing to it.
+        keyboardDefault: 'none',
         accept: {
           label: `Pay ${ANCHOR_ASSEMBLY_FEE_COINS}c`,
           tone: 'quest',

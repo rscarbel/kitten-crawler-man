@@ -3,7 +3,13 @@ import type { AudioManager } from '../audio/AudioManager';
 import { drawPowerUpIcon } from './canvasUtils';
 import { drawText, wrapLines } from './TextBox';
 import { drawOverlay, drawBox } from './Box';
-import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
+import {
+  beginMenuFocus,
+  drawButton,
+  endMenuFocus,
+  suppressMenuFocus,
+  BUTTON_PRESETS,
+} from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const DIALOG_MAX_WIDTH = 320;
@@ -201,37 +207,42 @@ export class RewardGrantedDialog {
       align: 'center',
     });
 
-    if (this.phase === 'done') {
-      const descY = nameY + DIALOG_DESC_Y_OFFSET;
-      drawText(ctx, current.description, {
-        x: bx + DIALOG_DESC_X_INSET,
-        y: descY - DIALOG_DESC_Y_ADJUST,
-        size: DIALOG_DESC_SIZE,
-        color: '#c4b5fd',
-        align: 'center',
-        width: boxW - DIALOG_DESC_WIDTH_MARGIN,
-        lineHeight: DIALOG_DESC_LINE_HEIGHT,
-      });
-
-      const btnW = OK_BUTTON_WIDTH;
-      const btnH = OK_BUTTON_HEIGHT;
-      const btnX = bx + boxW / 2 - btnW / 2;
-      const btnY = by + boxH - OK_BUTTON_Y_OFFSET;
-      this.okBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
-
-      // Only once the reveal has finished: before that there is nothing to
-      // accept, and the press should keep falling through to whatever wanted it.
-      beginMenuFocus('reward-granted');
-      drawButton(ctx, {
-        x: btnX,
-        y: btnY,
-        width: btnW,
-        height: btnH,
-        label: 'OK',
-        ...BUTTON_PRESETS.award,
-        primaryAction: true,
-      });
-      endMenuFocus();
+    if (this.phase !== 'done') {
+      // The claim promises this ring for the whole time the card is up, so the
+      // reveal declares it empty rather than not at all: a key already held
+      // when the card appeared is snapshotted against this id and stays inert
+      // until lifted, instead of landing on OK the moment it appears.
+      suppressMenuFocus('reward-granted');
+      return;
     }
+
+    const descY = nameY + DIALOG_DESC_Y_OFFSET;
+    drawText(ctx, current.description, {
+      x: bx + DIALOG_DESC_X_INSET,
+      y: descY - DIALOG_DESC_Y_ADJUST,
+      size: DIALOG_DESC_SIZE,
+      color: '#c4b5fd',
+      align: 'center',
+      width: boxW - DIALOG_DESC_WIDTH_MARGIN,
+      lineHeight: DIALOG_DESC_LINE_HEIGHT,
+    });
+
+    const btnW = OK_BUTTON_WIDTH;
+    const btnH = OK_BUTTON_HEIGHT;
+    const btnX = bx + boxW / 2 - btnW / 2;
+    const btnY = by + boxH - OK_BUTTON_Y_OFFSET;
+    this.okBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
+
+    beginMenuFocus('reward-granted');
+    drawButton(ctx, {
+      x: btnX,
+      y: btnY,
+      width: btnW,
+      height: btnH,
+      label: 'OK',
+      ...BUTTON_PRESETS.award,
+      primaryAction: true,
+    });
+    endMenuFocus();
   }
 }

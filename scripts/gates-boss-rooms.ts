@@ -18,7 +18,8 @@
  *    ground a crawler could stand on.
  * 2. **Sheets.** Each room's painted sheets agree with the manifest, paint
  *    inside their cells, and fit the room's memory budget.
- * 3. **Removed images.** No source file names an image key the rooms dropped.
+ * 3. **Removed images.** No image key the rooms dropped is still declared in a
+ *    manifest, shipped as a PNG, or looked up by a sprite or image call.
  * 4. **Floors.** For every seed, each room on the floor keeps a clear approach
  *    from every doorway, a clear disc around the boss's spawn, every open tile
  *    reachable from the doorway, and its minimum share of open floor. Every
@@ -37,6 +38,7 @@ import { join } from 'node:path';
 import { createCanvas } from 'canvas';
 
 import { TILE_SIZE } from '../src/core/constants.js';
+import { getManifestKeys } from '../src/core/SpriteLoader.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import {
@@ -391,25 +393,61 @@ for (const harness of harnesses) {
 
 const removedKeys =
   fault === 'removed-key' ? [...REMOVED_IMAGE_KEYS, LIVE_IMAGE_KEY] : REMOVED_IMAGE_KEYS;
-const SOURCE_EXTENSIONS = ['.ts', '.json'];
+const IMAGE_EXTENSION = '.png';
 
-function sourceFiles(dir: string): string[] {
+function filesUnder(dir: string, extension: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const path = join(dir, entry);
-    if (statSync(path).isDirectory()) return sourceFiles(path);
-    return SOURCE_EXTENSIONS.some((ext) => path.endsWith(ext)) ? [path] : [];
+    if (statSync(path).isDirectory()) return filesUnder(path, extension);
+    return path.endsWith(extension) ? [path] : [];
   });
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * A call to a sprite or image function that passes `key` as a string literal,
+ * after any number of plain leading arguments (`ctx`, …). Typed draw sites take
+ * a `SpriteKey`, which the typecheck already holds to the manifest; this finds
+ * the string-keyed lookups it cannot see. A key merely spelled the same in
+ * another namespace — a dialog speaker id, a quest id — is not an image
+ * reference and is not matched.
+ */
+function imageCallPattern(key: string): RegExp {
+  const literal = `['"]${escapeRegExp(key)}['"]`;
+  return new RegExp(`\\w*(?:[Ss]prite|[Ii]mage)\\w*\\s*\\(\\s*(?:[\\w.]+\\s*,\\s*)*${literal}`);
+}
+
 if (removedKeys.length > 0) {
-  const files = sourceFiles('src').map((path) => ({ path, text: readFileSync(path, 'utf8') }));
+  const manifestKeys = new Set<string>(getManifestKeys());
+  const codeFiles = filesUnder('src', '.ts').map((path) => ({
+    path,
+    text: readFileSync(path, 'utf8'),
+  }));
+  const jsonFiles = filesUnder('src', '.json').map((path) => ({
+    path,
+    text: readFileSync(path, 'utf8'),
+  }));
+  const imageFiles = filesUnder('src', IMAGE_EXTENSION);
   for (const key of removedKeys) {
-    const quoted = [`'${key}'`, `"${key}"`];
-    const namedIn = files.filter((file) => quoted.some((q) => file.text.includes(q)));
+    const scope = `removed image ${key}`;
+    check(!manifestKeys.has(key), scope, 'still declared in the sprite manifest');
+    const declaredIn = jsonFiles.filter((file) => file.text.includes(`"${key}":`));
     check(
-      namedIn.length === 0,
-      `removed image ${key}`,
-      `still named in ${namedIn.map((file) => file.path).join(', ')}`,
+      declaredIn.length === 0,
+      scope,
+      `still declared in ${declaredIn.map((file) => file.path).join(', ')}`,
+    );
+    const shippedAs = imageFiles.filter((path) => path.endsWith(`/${key}${IMAGE_EXTENSION}`));
+    check(shippedAs.length === 0, scope, `image still shipped at ${shippedAs.join(', ')}`);
+    const pattern = imageCallPattern(key);
+    const drawnIn = codeFiles.filter((file) => pattern.test(file.text));
+    check(
+      drawnIn.length === 0,
+      scope,
+      `still looked up in ${drawnIn.map((file) => file.path).join(', ')}`,
     );
   }
 }

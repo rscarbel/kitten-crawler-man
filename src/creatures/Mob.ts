@@ -575,12 +575,13 @@ export abstract class Mob extends Player {
 
   /**
    * Whether every route into this mob's health is refusing damage right now:
-   * its own {@link isDamageImmune}, or a {@link reviveInPlace} rise. Public so
+   * its own {@link isDamageImmune}, a {@link reviveInPlace} rise, or
+   * {@link awaitingRelease}. Public so
    * a caster outside the class can skip a target a ward or heal would be wasted
    * on.
    */
   get refusesDamage(): boolean {
-    return this.isDamageImmune || this.reviveRiseFramesLeft > 0;
+    return this.isDamageImmune || this.reviveRiseFramesLeft > 0 || this.awaitingRelease;
   }
 
   /**
@@ -865,6 +866,23 @@ export abstract class Mob extends Player {
    * siege. The mob loop asks it before `updateAI`. Null outside the assault.
    */
   siegeDirective: SiegeDirective | null = null;
+
+  /**
+   * Set on a body a siege-enlisted summoner called up — a Skeleton Lord mark's
+   * escort. It fights beside its summoner rather than marching on the bell, so
+   * it is never enlisted itself, but it is still one of the siege's dead: a
+   * victory crumbles it with the rest rather than leaving it loose in the
+   * village.
+   */
+  raisedForSiege = false;
+
+  /**
+   * Set on a body that has lost its fight and only waits to be taken out of
+   * the world with nothing paid — an undead crumbling after the siege is won.
+   * It refuses every blow, so a boulder already in the air or a soldier's
+   * swing cannot turn that crumble into a paid kill.
+   */
+  awaitingRelease = false;
 
   /**
    * How hard this creature's blows land on a structure, as a multiple of the

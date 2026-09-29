@@ -45,6 +45,15 @@ import {
   laundryLineFrameForStep,
 } from '../townClutter';
 import { drawBench, drawNoticeBoard } from '../townFixtures';
+import {
+  AWNING_POST_UP_TILES,
+  FIELD_SHELTER_SIDE_TILES,
+  FIELD_SHELTER_UP_TILES,
+  SKYFOWL_PERCH_UP_TILES,
+  drawAwningPost,
+  drawFieldShelter,
+  drawSkyfowlPerch,
+} from '../townDressing';
 import { drawBunting, drawGateArch, type GateArchAxis } from '../townWayfinding';
 import {
   BUNTING_SPANS,
@@ -483,6 +492,72 @@ function benchSheet(): PropSheetPlan {
   };
 }
 
+function awningPostSheet(): PropSheetPlan {
+  return {
+    key: 'town_awning_post',
+    file: 'awning_post.png',
+    tileScale: TOWNSCAPE_TILE_SCALE,
+    tileX: px(FIXTURE_MARGIN_TILES),
+    tileY: px(AWNING_POST_UP_TILES),
+    frameWidth: px(FIXTURE_MARGIN_TILES * 2 + ANCHOR_TILE),
+    frameHeight: px(AWNING_POST_UP_TILES + ANCHOR_TILE + FIXTURE_MARGIN_TILES),
+    rows: [
+      {
+        state: 'idle',
+        frames: [
+          (ctx, ox, oy) => {
+            drawAwningPost(ctx, ox, oy, TOWNSCAPE_TILE_SCALE);
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function skyfowlPerchSheet(): PropSheetPlan {
+  return {
+    key: 'town_skyfowl_perch',
+    file: 'skyfowl_perch.png',
+    tileScale: TOWNSCAPE_TILE_SCALE,
+    tileX: px(FIXTURE_MARGIN_TILES),
+    tileY: px(SKYFOWL_PERCH_UP_TILES),
+    frameWidth: px(FIXTURE_MARGIN_TILES * 2 + ANCHOR_TILE),
+    frameHeight: px(SKYFOWL_PERCH_UP_TILES + ANCHOR_TILE + FIXTURE_MARGIN_TILES),
+    rows: [
+      {
+        state: 'idle',
+        frames: [
+          (ctx, ox, oy) => {
+            drawSkyfowlPerch(ctx, ox, oy, TOWNSCAPE_TILE_SCALE);
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function fieldShelterSheet(): PropSheetPlan {
+  return {
+    key: 'town_field_shelter',
+    file: 'field_shelter.png',
+    tileScale: TOWNSCAPE_TILE_SCALE,
+    tileX: px(FIELD_SHELTER_SIDE_TILES),
+    tileY: px(FIELD_SHELTER_UP_TILES),
+    frameWidth: px(FIELD_SHELTER_SIDE_TILES * 2 + ANCHOR_TILE),
+    frameHeight: px(FIELD_SHELTER_UP_TILES + ANCHOR_TILE + FIXTURE_MARGIN_TILES),
+    rows: [
+      {
+        state: 'idle',
+        frames: [
+          (ctx, ox, oy) => {
+            drawFieldShelter(ctx, ox, oy, TOWNSCAPE_TILE_SCALE);
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** Every reusable street-furniture sheet the town paints. */
 export function townscapeSheetPlans(): PropSheetPlan[] {
   return [
@@ -495,5 +570,8 @@ export function townscapeSheetPlans(): PropSheetPlan[] {
     ...marketStallSheets(),
     noticeBoardSheet(),
     benchSheet(),
+    awningPostSheet(),
+    skyfowlPerchSheet(),
+    fieldShelterSheet(),
   ];
 }

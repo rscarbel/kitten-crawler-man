@@ -105,8 +105,6 @@ const PROP_MOUNTING: Readonly<Record<PropKind, PropMounting>> = {
   crate: 'ground',
   sack: 'ground',
   firewood: 'ground',
-  wool_bale: 'ground',
-  crook: 'ground',
   cart_wheel: 'ground',
   sawhorse: 'ground',
   plank_stack: 'ground',
@@ -132,6 +130,9 @@ const PROP_MOUNTING: Readonly<Record<PropKind, PropMounting>> = {
   boarded_window: 'wall_open',
   lean_to: 'wall_open',
   forge_mouth: 'wall',
+  porch: 'wall_open',
+  milk_churn: 'ground',
+  builder_tools: 'wall_open',
 };
 
 /** A prop's footprint in frame space. `row` names its base, not its top. */
@@ -199,10 +200,6 @@ export function paintProp(
       return paintSack(draw);
     case 'firewood':
       return paintFirewood(draw);
-    case 'wool_bale':
-      return paintWoolBale(draw);
-    case 'crook':
-      return paintCrook(draw);
     case 'cart_wheel':
       return paintCartWheel(draw);
     case 'sawhorse':
@@ -253,6 +250,12 @@ export function paintProp(
       return paintLeanTo(draw);
     case 'forge_mouth':
       return paintForgeMouth(draw);
+    case 'porch':
+      return paintPorch(draw);
+    case 'milk_churn':
+      return paintMilkChurn(draw);
+    case 'builder_tools':
+      return paintBuilderTools(draw);
   }
 
   return assertEveryKindPainted(prop.kind);
@@ -1104,150 +1107,7 @@ function paintLogEnd(
   );
 }
 
-const BALE_CORNER_FRACTION = 0.14;
-const BALE_CORD_COUNT = 2;
-const BALE_TUFT_COUNT = 16;
-const BALE_TOP_RISE_FRACTION = 0.16;
-
-/**
- * A bound fleece: a soft-cornered block, corded, with wool escaping every edge.
- *
- * The block needs both a top face and a broken outline or it is a white slab.
- * The top face gives it depth, and the tufts breaking the rim are the only thing
- * that says the material is wool rather than plaster.
- */
-function paintWoolBale(draw: PropDraw): void {
-  const { ctx, box, body, accent, seed } = draw;
-  const BALE_INDEX = 0;
-  const corner = Math.min(box.width, box.height) * BALE_CORNER_FRACTION;
-  const topRise = box.height * BALE_TOP_RISE_FRACTION;
-
-  // The top face is painted first so the front face's own lit edge overlaps it,
-  // which is what puts the two planes at an angle to each other.
-  ctx.fillStyle = rgb(elementColor(body, TONE_HIGHLIGHT, seed, BALE_INDEX + 5));
-  ctx.beginPath();
-  ctx.moveTo(box.left + corner, box.top);
-  ctx.lineTo(box.left + corner + topRise, box.top - topRise);
-  ctx.lineTo(box.right - corner + topRise, box.top - topRise);
-  ctx.lineTo(box.right - corner, box.top);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = rgb(elementColor(body, TONE_BODY, seed, BALE_INDEX));
-  tracePillowPath(ctx, box, corner);
-  ctx.fill();
-
-  ctx.save();
-  tracePillowPath(ctx, box, corner);
-  ctx.clip();
-  const LIT_FACE_FRACTION = 0.3;
-  const SHADOW_FACE_FRACTION = 0.28;
-  ctx.fillStyle = rgb(elementColor(body, TONE_LIT, seed, BALE_INDEX + 1));
-  ctx.fillRect(box.left, box.top, box.width, box.height * LIT_FACE_FRACTION);
-  ctx.fillStyle = rgba(elementColor(body, TONE_SHADOW, seed, BALE_INDEX + 2), BLOCK_SHADOW_ALPHA);
-  ctx.fillRect(
-    box.right - box.width * SHADOW_FACE_FRACTION,
-    box.top,
-    box.width * SHADOW_FACE_FRACTION,
-    box.height,
-  );
-  ctx.restore();
-
-  for (let cord = 0; cord < BALE_CORD_COUNT; cord++) {
-    const x = box.left + box.width * ((cord + 1) / (BALE_CORD_COUNT + 1));
-    strokeLine(
-      ctx,
-      x + topRise,
-      box.top - topRise,
-      x,
-      box.baseY,
-      elementColor(accent, TONE_SHADOW, seed, cord + BALE_TUFT_COUNT),
-      Math.max(2, box.width * 0.05),
-    );
-  }
-
-  paintFleeceTufts(draw, corner, topRise);
-}
-
-/** The wool bursting past the cords and over every edge of the bale. */
-function paintFleeceTufts(draw: PropDraw, corner: number, topRise: number): void {
-  const { ctx, box, body, seed } = draw;
-  const TUFT_RADIUS_FRACTION = 0.075;
-  const radius = Math.min(box.width, box.height) * TUFT_RADIUS_FRACTION;
-  for (let tuft = 0; tuft < BALE_TUFT_COUNT; tuft++) {
-    const along = (tuft + 0.5) / BALE_TUFT_COUNT;
-    const onTop = tuft % 3 !== 0;
-    const side = tuft % 6 === 0 ? box.left : box.right;
-    // Side tufts take their height from the noise rather than from `along`,
-    // which walked them evenly down the edge as a row of beads.
-    const down = elementValue(seed, STREAM_WOBBLE, tuft);
-    const x = onTop
-      ? box.left + corner + topRise + (box.width - corner * 2) * along
-      : side + wanderAt(draw, side, box.top + box.height * down);
-    const y = onTop
-      ? box.top - topRise + wanderAt(draw, x, box.top)
-      : box.top + box.height * (0.15 + down * 0.75);
-    const size = radius * (0.7 + elementValue(seed, STREAM_VARIANT, tuft) * 0.6);
-    fillEllipse(
-      ctx,
-      x,
-      y,
-      size,
-      size * 0.8,
-      elementColor(body, tuft % 2 === 0 ? TONE_HIGHLIGHT : TONE_LIT, seed, tuft),
-    );
-  }
-}
-
-function tracePillowPath(ctx: Ctx, box: PropBox, corner: number): void {
-  ctx.beginPath();
-  ctx.moveTo(box.left + corner, box.top);
-  ctx.lineTo(box.right - corner, box.top);
-  ctx.quadraticCurveTo(box.right, box.top, box.right, box.top + corner);
-  ctx.lineTo(box.right, box.baseY - corner);
-  ctx.quadraticCurveTo(box.right, box.baseY, box.right - corner, box.baseY);
-  ctx.lineTo(box.left + corner, box.baseY);
-  ctx.quadraticCurveTo(box.left, box.baseY, box.left, box.baseY - corner);
-  ctx.lineTo(box.left, box.top + corner);
-  ctx.quadraticCurveTo(box.left, box.top, box.left + corner, box.top);
-  ctx.closePath();
-}
-
 const LEAN_ANGLE_RADIANS = 0.22;
-const CROOK_HOOK_RADIUS_FRACTION = 0.16;
-const CROOK_THICKNESS_FRACTION = 0.09;
-
-/** A shepherd's staff propped against the wall, hook up. */
-function paintCrook(draw: PropDraw): void {
-  const { ctx, box, body, seed } = draw;
-  const CROOK_INDEX = 0;
-  const thickness = Math.max(2, box.width * CROOK_THICKNESS_FRACTION);
-  const headX = box.centreX + box.height * Math.sin(LEAN_ANGLE_RADIANS);
-  const hookRadius = box.height * CROOK_HOOK_RADIUS_FRACTION;
-
-  paintShaft(
-    ctx,
-    box.centreX,
-    box.baseY,
-    headX,
-    box.top + hookRadius,
-    thickness,
-    body,
-    seed,
-    CROOK_INDEX,
-  );
-
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = rgb(elementColor(body, TONE_BODY, seed, CROOK_INDEX + 1));
-  ctx.lineWidth = thickness;
-  ctx.beginPath();
-  const HOOK_START_ANGLE = Math.PI * 0.5;
-  const HOOK_END_ANGLE = Math.PI * 1.9;
-  ctx.arc(headX - hookRadius, box.top + hookRadius, hookRadius, HOOK_START_ANGLE, HOOK_END_ANGLE);
-  ctx.stroke();
-  ctx.restore();
-}
 
 const WHEEL_LEAN_SQUASH = 0.82;
 const WHEEL_SPOKE_COUNT = 8;
@@ -3899,4 +3759,508 @@ function paintLetter(
     ctx.stroke();
   }
   ctx.restore();
+}
+
+// ── a builder's own porch, churn and tools ─────────────────────────────────
+
+/** How much of the porch's height the gable takes, from apex down to the tie beam. */
+const PORCH_GABLE_FRACTION = 0.3;
+/** The opening kept clear between the posts for the door, as a fraction of the porch's width. */
+const PORCH_DOORWAY_FRACTION = 0.42;
+const PORCH_POST_WIDTH_FRACTION = 0.075;
+/** How far the roof's verges run past the posts on each side. */
+const PORCH_VERGE_OVERHANG_FRACTION = 0.06;
+const PORCH_ROOF_THICKNESS_FRACTION = 0.07;
+const PORCH_BARGEBOARD_FRACTION = 0.035;
+const PORCH_TIE_BEAM_FRACTION = 0.045;
+const PORCH_GABLE_BOARDS = 9;
+const PORCH_RAIL_HEIGHT_FRACTION = 0.4;
+const PORCH_BALUSTERS = 4;
+const PORCH_BENCH_SEAT_FRACTION = 0.2;
+const PORCH_BRACKET_FRACTION = 0.14;
+
+/**
+ * A small gabled porch over the door: two squared posts carrying a tie beam,
+ * a boarded gable under a pitched roof with clean bargeboards, a finial at the
+ * apex and knee braces into the posts. The door is assumed centred between the
+ * posts and its opening is left clear; a railing closes the bay to the left of
+ * it and a bench stands in the bay to the right.
+ *
+ * `ramp` is the joinery, `accentRamp` the roof covering. Everything is square
+ * and true on purpose — this is the one porch in town built by a man who
+ * builds for a living, so none of it wanders the way the shed roofs do.
+ */
+function paintPorch(draw: PropDraw): void {
+  const { ctx, box, body, accent, seed } = draw;
+  const gableHeight = box.height * PORCH_GABLE_FRACTION;
+  const apexY = box.top;
+  const eaveY = box.top + gableHeight;
+  const overhang = box.width * PORCH_VERGE_OVERHANG_FRACTION;
+  const postWidth = Math.max(3, box.width * PORCH_POST_WIDTH_FRACTION);
+  const roofThickness = Math.max(3, box.height * PORCH_ROOF_THICKNESS_FRACTION);
+  const bargeWidth = Math.max(2, box.height * PORCH_BARGEBOARD_FRACTION);
+  const tieHeight = Math.max(3, box.height * PORCH_TIE_BEAM_FRACTION);
+  const leftPostX = box.left + overhang;
+  const rightPostX = box.right - overhang - postWidth;
+  const doorwayHalf = (box.width * PORCH_DOORWAY_FRACTION) / 2;
+  const doorwayLeft = box.centreX - doorwayHalf;
+  const doorwayRight = box.centreX + doorwayHalf;
+
+  const traceGable = (target: Ctx): void => {
+    target.beginPath();
+    target.moveTo(box.left, eaveY + roofThickness);
+    target.lineTo(box.centreX, apexY);
+    target.lineTo(box.right, eaveY + roofThickness);
+    target.closePath();
+    target.fill();
+    target.fillRect(leftPostX, eaveY, postWidth, box.baseY - eaveY);
+    target.fillRect(rightPostX, eaveY, postWidth, box.baseY - eaveY);
+  };
+  paintCastShadow(draw, traceGable);
+
+  // Boarded gable face, set back behind the bargeboards.
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(leftPostX, eaveY + tieHeight * 0.5);
+  ctx.lineTo(box.centreX, apexY + roofThickness);
+  ctx.lineTo(rightPostX + postWidth, eaveY + tieHeight * 0.5);
+  ctx.closePath();
+  ctx.clip();
+  const boardWidth = (rightPostX + postWidth - leftPostX) / PORCH_GABLE_BOARDS;
+  for (let board = 0; board < PORCH_GABLE_BOARDS; board++) {
+    const x = leftPostX + board * boardWidth;
+    ctx.fillStyle = rgb(
+      elementColor(body, board % 2 === 0 ? TONE_BODY : TONE_LIT - 0.1, seed, 40 + board),
+    );
+    ctx.fillRect(x, apexY, boardWidth, gableHeight + tieHeight);
+    ctx.fillStyle = rgba(elementColor(body, TONE_DEEP, seed, 60 + board), 0.55);
+    ctx.fillRect(x + boardWidth - 1, apexY, 1, gableHeight + tieHeight);
+  }
+  ctx.restore();
+
+  // Two squared posts, lit down their left faces, on stone pads.
+  const padHeight = Math.max(2, box.height * 0.035);
+  for (const [index, postX] of [leftPostX, rightPostX].entries()) {
+    paintLitBlock(
+      ctx,
+      { x: postX, y: eaveY, width: postWidth, height: box.baseY - eaveY - padHeight },
+      body,
+      TONE_BODY,
+      seed,
+      index,
+    );
+    paintLitBlock(
+      ctx,
+      {
+        x: postX - postWidth * 0.2,
+        y: box.baseY - padHeight,
+        width: postWidth * 1.4,
+        height: padHeight,
+      },
+      getRamp('step_stone'),
+      TONE_LIT,
+      seed,
+      index + 4,
+    );
+  }
+
+  // Knee braces from each post up into the tie beam.
+  const bracket = box.height * PORCH_BRACKET_FRACTION;
+  const braceThickness = Math.max(2, postWidth * 0.55);
+  strokeLine(
+    ctx,
+    leftPostX + postWidth,
+    eaveY + tieHeight + bracket,
+    leftPostX + postWidth + bracket,
+    eaveY + tieHeight,
+    elementColor(body, TONE_SHADOW, seed, 8),
+    braceThickness,
+  );
+  strokeLine(
+    ctx,
+    rightPostX,
+    eaveY + tieHeight + bracket,
+    rightPostX - bracket,
+    eaveY + tieHeight,
+    elementColor(body, TONE_SHADOW, seed, 9),
+    braceThickness,
+  );
+
+  // Tie beam across the posts.
+  paintLitBlock(
+    ctx,
+    {
+      x: leftPostX - postWidth * 0.3,
+      y: eaveY,
+      width: rightPostX + postWidth * 1.3 - leftPostX,
+      height: tieHeight,
+    },
+    body,
+    TONE_BODY + 0.06,
+    seed,
+    10,
+  );
+
+  // The roof covering: a thick band along each slope, the bargeboard under it.
+  for (const side of [-1, 1]) {
+    const outerX = side < 0 ? box.left : box.right;
+    ctx.fillStyle = rgb(
+      elementColor(accent, side < 0 ? TONE_LIT : TONE_SHADOW + 0.1, seed, 20 + side),
+    );
+    ctx.beginPath();
+    ctx.moveTo(box.centreX, apexY - roofThickness * 0.4);
+    ctx.lineTo(outerX, eaveY - roofThickness * 0.2);
+    ctx.lineTo(outerX, eaveY + roofThickness * 0.8);
+    ctx.lineTo(box.centreX, apexY + roofThickness * 0.6);
+    ctx.closePath();
+    ctx.fill();
+    strokeLine(
+      ctx,
+      box.centreX,
+      apexY + roofThickness * 0.6 + bargeWidth * 0.5,
+      outerX - side * overhang * 0.3,
+      eaveY + roofThickness * 0.8 + bargeWidth * 0.5,
+      elementColor(body, side < 0 ? TONE_LIT : TONE_BODY, seed, 24 + side),
+      bargeWidth,
+    );
+  }
+  paintEdgeLight(
+    ctx,
+    { x: box.left, y: eaveY - roofThickness * 0.2 },
+    { x: box.centreX, y: apexY - roofThickness * 0.4 },
+    elementColor(accent, TONE_HIGHLIGHT, seed, 30),
+    2,
+    BLOCK_LIT_ALPHA,
+  );
+
+  // Turned finial at the apex.
+  const finialHeight = Math.max(3, box.height * 0.06);
+  paintLitBlock(
+    ctx,
+    {
+      x: box.centreX - postWidth * 0.3,
+      y: apexY - roofThickness * 0.4 - finialHeight,
+      width: postWidth * 0.6,
+      height: finialHeight,
+    },
+    body,
+    TONE_LIT,
+    seed,
+    31,
+  );
+
+  // Railing in the left bay: top rail, bottom rail, square balusters.
+  const railTop = box.baseY - box.height * PORCH_RAIL_HEIGHT_FRACTION;
+  const railThickness = Math.max(2, tieHeight * 0.7);
+  const bayLeft = leftPostX + postWidth;
+  const bayRight = doorwayLeft;
+  if (bayRight - bayLeft > postWidth) {
+    const balusterWidth = Math.max(2, postWidth * 0.4);
+    for (let baluster = 0; baluster < PORCH_BALUSTERS; baluster++) {
+      const x =
+        bayLeft + ((baluster + 0.5) / PORCH_BALUSTERS) * (bayRight - bayLeft) - balusterWidth / 2;
+      paintLitBlock(
+        ctx,
+        { x, y: railTop, width: balusterWidth, height: box.baseY - padHeight - railTop },
+        body,
+        TONE_BODY,
+        seed,
+        50 + baluster,
+      );
+    }
+    for (const y of [railTop, box.baseY - padHeight - railThickness * 1.6]) {
+      paintLitBlock(
+        ctx,
+        { x: bayLeft, y, width: bayRight - bayLeft, height: railThickness },
+        body,
+        TONE_LIT - 0.08,
+        seed,
+        56,
+      );
+    }
+  }
+
+  // Bench in the right bay: a thick seat on two squared legs, a back rail above.
+  const benchLeft = doorwayRight + postWidth * 0.2;
+  const benchRight = rightPostX - postWidth * 0.1;
+  if (benchRight - benchLeft > postWidth) {
+    const seatY = box.baseY - box.height * PORCH_BENCH_SEAT_FRACTION;
+    const seatThickness = Math.max(2, tieHeight * 0.8);
+    const legWidth = Math.max(2, postWidth * 0.45);
+    for (const [index, legX] of [
+      benchLeft + legWidth * 0.4,
+      benchRight - legWidth * 1.4,
+    ].entries()) {
+      paintLitBlock(
+        ctx,
+        { x: legX, y: seatY, width: legWidth, height: box.baseY - seatY },
+        body,
+        TONE_SHADOW,
+        seed,
+        70 + index,
+      );
+    }
+    paintLitBlock(
+      ctx,
+      {
+        x: benchLeft,
+        y: seatY - seatThickness,
+        width: benchRight - benchLeft,
+        height: seatThickness,
+      },
+      body,
+      TONE_LIT,
+      seed,
+      72,
+    );
+    const backRailY = seatY - seatThickness - box.height * 0.1;
+    for (const [index, uprightX] of [
+      benchLeft + legWidth * 0.4,
+      benchRight - legWidth * 1.4,
+    ].entries()) {
+      paintLitBlock(
+        ctx,
+        { x: uprightX, y: backRailY, width: legWidth, height: seatY - seatThickness - backRailY },
+        body,
+        TONE_BODY,
+        seed,
+        74 + index,
+      );
+    }
+    paintLitBlock(
+      ctx,
+      {
+        x: benchLeft,
+        y: backRailY,
+        width: benchRight - benchLeft,
+        height: seatThickness * 0.8,
+      },
+      body,
+      TONE_BODY,
+      seed,
+      73,
+    );
+  }
+}
+
+/**
+ * A dairy churn: a tall tapered body, a shoulder into a narrow neck, a
+ * mushroom lid and two side grips. Distinct from a cask by being taller than
+ * wide, straight-sided and metal — the read that says "milk", not "ale".
+ */
+function paintMilkChurn(draw: PropDraw): void {
+  const { ctx, box, body, accent, seed } = draw;
+  const shoulderY = box.top + box.height * 0.34;
+  const neckTop = box.top + box.height * 0.14;
+  const baseHalf = box.width * 0.44;
+  const shoulderHalf = box.width * 0.4;
+  const neckHalf = box.width * 0.2;
+
+  const gradient = ctx.createLinearGradient(box.centreX - baseHalf, 0, box.centreX + baseHalf, 0);
+  gradient.addColorStop(0, rgb(elementColor(body, TONE_LIT, seed, 0)));
+  gradient.addColorStop(0.3, rgb(elementColor(body, TONE_HIGHLIGHT, seed, 1)));
+  gradient.addColorStop(1, rgb(elementColor(body, TONE_SHADOW, seed, 2)));
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.moveTo(box.centreX - baseHalf, box.baseY);
+  ctx.lineTo(box.centreX - shoulderHalf, shoulderY);
+  ctx.quadraticCurveTo(
+    box.centreX - shoulderHalf,
+    neckTop + (shoulderY - neckTop) * 0.4,
+    box.centreX - neckHalf,
+    neckTop + (shoulderY - neckTop) * 0.35,
+  );
+  ctx.lineTo(box.centreX - neckHalf, neckTop);
+  ctx.lineTo(box.centreX + neckHalf, neckTop);
+  ctx.lineTo(box.centreX + neckHalf, neckTop + (shoulderY - neckTop) * 0.35);
+  ctx.quadraticCurveTo(
+    box.centreX + shoulderHalf,
+    neckTop + (shoulderY - neckTop) * 0.4,
+    box.centreX + shoulderHalf,
+    shoulderY,
+  );
+  ctx.lineTo(box.centreX + baseHalf, box.baseY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Rolled bands at the foot and the shoulder.
+  for (const [index, y] of [
+    box.baseY - box.height * 0.08,
+    shoulderY + box.height * 0.04,
+  ].entries()) {
+    const half = baseHalf - ((box.baseY - y) / (box.baseY - shoulderY)) * (baseHalf - shoulderHalf);
+    ctx.fillStyle = rgb(elementColor(accent, TONE_LIT, seed, 10 + index));
+    ctx.fillRect(box.centreX - half, y, half * 2, Math.max(1.5, box.height * 0.045));
+  }
+
+  // Mushroom lid and its knob.
+  const lidHalf = neckHalf * 1.35;
+  const lidHeight = Math.max(2, box.height * 0.07);
+  paintLitBlock(
+    ctx,
+    { x: box.centreX - lidHalf, y: neckTop - lidHeight, width: lidHalf * 2, height: lidHeight },
+    body,
+    TONE_LIT,
+    seed,
+    20,
+  );
+  fillEllipse(
+    ctx,
+    box.centreX,
+    neckTop - lidHeight,
+    neckHalf * 0.45,
+    lidHeight * 0.55,
+    elementColor(body, TONE_HIGHLIGHT, seed, 21),
+  );
+
+  // Side grips at the shoulder.
+  for (const side of [-1, 1]) {
+    strokeLine(
+      ctx,
+      box.centreX + side * shoulderHalf * 0.8,
+      shoulderY - box.height * 0.06,
+      box.centreX + side * (shoulderHalf + box.width * 0.1),
+      shoulderY + box.height * 0.02,
+      elementColor(accent, TONE_BODY, seed, 30 + side),
+      Math.max(1.5, box.width * 0.07),
+    );
+  }
+}
+
+/**
+ * A builder's tools hung in order from a pegged board: a hand saw, a try
+ * square, a mallet and a spirit level, each on its own peg and evenly spaced
+ * — the tidy opposite of a smith's crowded rack.
+ */
+function paintBuilderTools(draw: PropDraw): void {
+  const { ctx, box, body, accent, seed } = draw;
+  const boardHeight = Math.max(3, box.height * 0.14);
+  const hangTop = box.top + boardHeight;
+  const hangLength = box.height - boardHeight;
+  const slot = box.width / 4;
+  const steel = body;
+  const wood = accent;
+
+  paintCastShadow(draw, (shadowCtx) => {
+    shadowCtx.fillRect(box.left, box.top, box.width, boardHeight);
+    shadowCtx.fillRect(box.left + slot * 0.15, hangTop, slot * 0.7, hangLength * 0.85);
+    shadowCtx.fillRect(box.left + slot * 1.2, hangTop, slot * 0.6, hangLength * 0.7);
+    shadowCtx.fillRect(box.left + slot * 2.25, hangTop, slot * 0.5, hangLength * 0.75);
+    shadowCtx.fillRect(box.left + slot * 3.35, hangTop, slot * 0.3, hangLength * 0.95);
+  });
+
+  paintLitBlock(
+    ctx,
+    { x: box.left, y: box.top, width: box.width, height: boardHeight },
+    wood,
+    TONE_BODY,
+    seed,
+    0,
+  );
+  for (let peg = 0; peg < 4; peg++) {
+    fillEllipse(
+      ctx,
+      box.left + slot * (peg + 0.5),
+      box.top + boardHeight * 0.5,
+      Math.max(1, boardHeight * 0.22),
+      Math.max(1, boardHeight * 0.22),
+      elementColor(wood, TONE_DEEP, seed, 1 + peg),
+    );
+  }
+
+  // Hand saw: a tapering blade under a closed wooden handle, teeth down the edge.
+  const sawX = box.left + slot * 0.5;
+  const sawTop = hangTop;
+  const sawHandle = hangLength * 0.22;
+  paintLitBlock(
+    ctx,
+    { x: sawX - slot * 0.28, y: sawTop, width: slot * 0.56, height: sawHandle },
+    wood,
+    TONE_LIT,
+    seed,
+    10,
+  );
+  ctx.fillStyle = rgb(elementColor(steel, TONE_LIT, seed, 11));
+  ctx.beginPath();
+  ctx.moveTo(sawX - slot * 0.26, sawTop + sawHandle);
+  ctx.lineTo(sawX + slot * 0.3, sawTop + sawHandle);
+  ctx.lineTo(sawX + slot * 0.12, sawTop + hangLength * 0.85);
+  ctx.lineTo(sawX - slot * 0.12, sawTop + hangLength * 0.85);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = rgb(elementColor(steel, TONE_SHADOW, seed, 12));
+  ctx.fillRect(sawX + slot * 0.12, sawTop + sawHandle, Math.max(1, slot * 0.07), hangLength * 0.62);
+
+  // Try square: a steel blade set in a wooden stock, an L hung by its corner.
+  const squareX = box.left + slot * 1.5;
+  const stockLength = hangLength * 0.45;
+  const bladeLength = slot * 0.6;
+  const stockWidth = Math.max(2, slot * 0.16);
+  paintLitBlock(
+    ctx,
+    { x: squareX - slot * 0.3, y: hangTop, width: stockWidth, height: stockLength },
+    wood,
+    TONE_LIT,
+    seed,
+    20,
+  );
+  paintLitBlock(
+    ctx,
+    {
+      x: squareX - slot * 0.3,
+      y: hangTop + stockLength - stockWidth * 0.8,
+      width: bladeLength,
+      height: Math.max(2, stockWidth * 0.7),
+    },
+    steel,
+    TONE_HIGHLIGHT,
+    seed,
+    21,
+  );
+
+  // Mallet: a squared beech head on a short handle, hung head down.
+  const malletX = box.left + slot * 2.5;
+  const handleLength = hangLength * 0.42;
+  const handleWidth = Math.max(2, slot * 0.14);
+  paintLitBlock(
+    ctx,
+    { x: malletX - handleWidth / 2, y: hangTop, width: handleWidth, height: handleLength },
+    wood,
+    TONE_BODY,
+    seed,
+    30,
+  );
+  paintLitBlock(
+    ctx,
+    {
+      x: malletX - slot * 0.26,
+      y: hangTop + handleLength,
+      width: slot * 0.52,
+      height: hangLength * 0.3,
+    },
+    wood,
+    TONE_LIT,
+    seed,
+    31,
+  );
+
+  // Spirit level: a long straight stock hung on end, a bright vial set in it.
+  const levelX = box.left + slot * 3.5;
+  const levelWidth = Math.max(3, slot * 0.24);
+  paintLitBlock(
+    ctx,
+    { x: levelX - levelWidth / 2, y: hangTop, width: levelWidth, height: hangLength * 0.92 },
+    wood,
+    TONE_LIT,
+    seed,
+    40,
+  );
+  fillEllipse(
+    ctx,
+    levelX,
+    hangTop + hangLength * 0.46,
+    levelWidth * 0.28,
+    hangLength * 0.07,
+    elementColor(steel, TONE_HIGHLIGHT, seed, 41),
+  );
 }

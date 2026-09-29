@@ -12,7 +12,8 @@ import type { SceneManager } from '../core/Scene';
 import { Scene } from '../core/Scene';
 import type { InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
-import { clamp, frameTime, pointInRect } from '../utils';
+import { frameTime, pointInRect } from '../utils';
+import { followCamera, type ScreenRect, type WorldRect } from './interiorCamera';
 import { drunkCameraOffset } from '../core/DrunkEffect';
 import type { GameMap } from '../map/GameMap';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -108,26 +109,66 @@ export abstract class GameplayScene extends Scene {
     return { x: player.x, y: player.y };
   }
 
+  /**
+   * Height of the band at the top of the screen that on-screen chrome covers,
+   * which {@link computeCamera} keeps the map's top edge below. The top-edge
+   * sibling of {@link viewportBottomInset}.
+   */
+  protected viewportTopInset(): number {
+    return 0;
+  }
+
+  /**
+   * The world rect {@link computeCamera} keeps reachable: every edge of it can
+   * be brought on screen, and none is pulled further in. The map's tile grid
+   * unless a scene frames something larger.
+   */
+  protected cameraWorldBounds(map: GameMap): WorldRect {
+    const mapPxW = (map.structure[0]?.length ?? map.structure.length) * TILE_SIZE;
+    const mapPxH = map.structure.length * TILE_SIZE;
+    return { left: 0, top: 0, right: mapPxW, bottom: mapPxH };
+  }
+
+  /**
+   * The part of the view {@link computeCamera} frames the world's edges
+   * against — the whole view unless a scene's chrome permanently covers some
+   * of it.
+   */
+  protected cameraClearView(_map: GameMap, view: ScreenRect, _bounds: WorldRect): ScreenRect {
+    return view;
+  }
+
+  /**
+   * The furthest the camera's focus can travel on this map, when a scene
+   * knows it — lets {@link computeCamera} reach every edge on a screen too
+   * small for a centred focus to get there. Null: centre the focus throughout.
+   */
+  protected cameraFocusRange(_map: GameMap): WorldRect | null {
+    return null;
+  }
+
   protected computeCamera(map: GameMap): { x: number; y: number } {
     const player = this.active();
     const focus = this.cameraFocus();
-    const mapPxW = (map.structure[0]?.length ?? map.structure.length) * TILE_SIZE;
-    const mapPxH = map.structure.length * TILE_SIZE;
-    const viewportH = viewportHeight() - this.viewportBottomInset();
-    const cx = focus.x + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - viewportWidth() / 2;
-    const cy = focus.y + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - viewportH / 2;
+    const focusCentreOffset = TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER;
+    const bounds = this.cameraWorldBounds(map);
+    const view = {
+      left: 0,
+      top: this.viewportTopInset(),
+      right: viewportWidth(),
+      bottom: viewportHeight() - this.viewportBottomInset(),
+    };
+    const camera = followCamera(
+      { x: focus.x + focusCentreOffset, y: focus.y + focusCentreOffset },
+      bounds,
+      view,
+      this.cameraClearView(map, view, bounds),
+      this.cameraFocusRange(map),
+    );
     // Applied after the clamp so the sway still reads in a room smaller than the
     // viewport, where the camera is pinned and every clamped offset would vanish.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
-    return {
-      x:
-        (mapPxW <= viewportWidth()
-          ? (mapPxW - viewportWidth()) / 2
-          : clamp(cx, 0, mapPxW - viewportWidth())) + sway.x,
-      y:
-        (mapPxH <= viewportH ? (mapPxH - viewportH) / 2 : clamp(cy, 0, mapPxH - viewportH)) +
-        sway.y,
-    };
+    return { x: camera.x + sway.x, y: camera.y + sway.y };
   }
 
   /** Subscribes the save banner to the scene's own bus — call once per scene setup. */
@@ -164,18 +205,17 @@ export abstract class GameplayScene extends Scene {
         pendingAmount: this.rewardFly.pendingCoinAmount(),
         pulse: this.rewardFly.coinCounterPulse(),
       },
+      this.hudToggleClearOfX(),
     );
     this._hudToggleRect = hud.toggleRect;
     this._hudRect = hud.hudRect;
     if (platform.isMobile) {
-      // Skill badge position can be overridden by subclasses that stack boss UI below
-      // the HUD bar. Default: place it immediately below the HUD panel.
       this._hudSkillBannerRect = renderMobileSkillBadge(
         ctx,
         this.human,
         this.cat,
         this.notifPulse,
-        hud.hudPanelBottom + HUD_SKILL_BADGE_GAP,
+        this.mobileSkillBadgeTop(hud.hudPanelBottom),
         this.skillPointReminderActive,
         this.skillPointsSuppressed,
       );
@@ -183,6 +223,23 @@ export abstract class GameplayScene extends Scene {
       this._hudSkillBannerRect = hud.notifRect;
     }
     this.saveIndicator.render(ctx);
+  }
+
+  /**
+   * The minimap's left edge, which the HUD panel's collapse toggle steps
+   * aside for (see `hudToggleRect`). A scene with no minimap over the panel
+   * leaves the toggle in its corner.
+   */
+  protected hudToggleClearOfX(): number {
+    return Infinity;
+  }
+
+  /**
+   * Where a phone's skill-point badge starts: just under the HUD panel, unless
+   * a scene stacks something of its own there first.
+   */
+  protected mobileSkillBadgeTop(hudPanelBottom: number): number {
+    return hudPanelBottom + HUD_SKILL_BADGE_GAP;
   }
 
   protected handleHudToggleTap(x: number, y: number): boolean {

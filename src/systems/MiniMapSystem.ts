@@ -237,6 +237,17 @@ export class MiniMapSystem implements GameSystem {
     return this._expanded;
   }
 
+  /** The square the minimap is drawn in, and the tap target that toggles it. */
+  get screenRect(): { x: number; y: number; w: number; h: number } {
+    const mmSize = this._expanded ? this.EXPANDED_SIZE : this.NORMAL_SIZE;
+    return {
+      x: viewportWidth() - mmSize - MINIMAP_MARGIN,
+      y: MINIMAP_MARGIN,
+      w: mmSize,
+      h: mmSize,
+    };
+  }
+
   toggle(): void {
     this._expanded = !this._expanded;
     this._scrollTX = 0;
@@ -445,8 +456,9 @@ export class MiniMapSystem implements GameSystem {
     const tilesInView = Math.floor(mmSize / pxPerTile);
     const halfTiles = Math.floor(tilesInView / 2);
 
-    const mmX = viewportWidth() - mmSize - MINIMAP_MARGIN;
-    const mmY = MINIMAP_MARGIN;
+    const placed = this.screenRect;
+    const mmX = placed.x;
+    const mmY = placed.y;
 
     const playerTX = Math.floor((active.x + HALF_TILE) / TILE_SIZE);
     const playerTY = Math.floor((active.y + HALF_TILE) / TILE_SIZE);

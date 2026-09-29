@@ -1,6 +1,6 @@
 /**
- * Runtime-painted environment art: the sheets the game used to ship as PNGs and
- * now paints for itself, one floor at a time, from that floor's art seed.
+ * Runtime-painted environment art: the sheets the game paints for itself rather
+ * than shipping as PNGs, one floor at a time, from that floor's art seed.
  *
  * A sheet is requested as a *plan* — its geometry plus an ordered list of steps
  * that each paint one piece into it — and the cache drains those steps a few
@@ -144,6 +144,8 @@ const costByClass = new Map<string, number>();
 
 let msPaintedThisFrame = 0;
 let paintDebtMs = 0;
+/** Every step ever painted, so a loading screen can measure progress as a difference. */
+let stepsPaintedTotal = 0;
 
 /**
  * Density the sheets are painted at. The generated tiles are authored at 64px
@@ -266,20 +268,20 @@ function recordPaintCost(costClass: string, elapsedMs: number): void {
 }
 
 /**
- * Whether a step may start with `spentMs` of the allowance already gone.
+ * Whether a step may start with `spentMs` of a `budgetMs` allowance already
+ * gone, once the frame's owed first step has run.
  *
- * The first step of a frame always runs: a step whose estimate exceeds the whole
- * allowance would otherwise be refused on every frame there will ever be, and
- * the queue would never drain. A class nothing has been painted of yet has no
- * estimate to test, which costs one unavoidable overspend per class rather than
- * one per frame.
+ * The first step of a frame always runs (the callers see to that): a step whose
+ * estimate exceeds the whole allowance would otherwise be refused on every frame
+ * there will ever be, and the queue would never drain. A class nothing has been
+ * painted of yet has no estimate to test, which costs one unavoidable overspend
+ * per class rather than one per frame.
  */
-function fitsPaintAllowance(costClass: string, spentMs: number): boolean {
-  if (spentMs <= 0) return true;
-  if (spentMs >= ENVIRONMENT_PAINT_BUDGET_MS) return false;
+function fitsPaintAllowance(costClass: string, spentMs: number, budgetMs: number): boolean {
+  if (spentMs >= budgetMs) return false;
   const estimate = estimatedPaintMs(costClass);
   if (estimate === null) return true;
-  return spentMs + estimate <= ENVIRONMENT_PAINT_BUDGET_MS;
+  return spentMs + estimate <= budgetMs;
 }
 
 /** Steps that must land before a plan's sheet may be drawn. */
@@ -334,8 +336,15 @@ function dequeue(key: string): void {
   if (queued >= 0) queue.splice(queued, 1);
 }
 
-function drainQueue(): void {
-  while (queue.length > 0 && msPaintedThisFrame < ENVIRONMENT_PAINT_BUDGET_MS) {
+/**
+ * Paints queued steps until the next one would not fit `budgetMs`, and returns
+ * the milliseconds spent. With `mustProgress`, the first step runs whatever it
+ * is expected to cost.
+ */
+function drainQueue(budgetMs: number, mustProgress: boolean): number {
+  let spentMs = 0;
+  let startedAny = false;
+  while (queue.length > 0) {
     const key = queue[0];
     const sheet = pending.get(key);
     if (sheet === undefined) {
@@ -343,7 +352,9 @@ function drainQueue(): void {
       continue;
     }
     const step = sheet.plan.steps[sheet.nextStep];
-    if (!fitsPaintAllowance(step.costClass, msPaintedThisFrame)) return;
+    const owedFirstStep = mustProgress && !startedAny;
+    if (!owedFirstStep && !fitsPaintAllowance(step.costClass, spentMs, budgetMs)) return spentMs;
+    startedAny = true;
     const startedAt = performance.now();
     let painted = false;
     try {
@@ -366,9 +377,13 @@ function drainQueue(): void {
       abandon(key, sheet, error);
     } finally {
       const elapsed = performance.now() - startedAt;
+      spentMs += elapsed;
       msPaintedThisFrame += elapsed;
       recordPaintCost(step.costClass, elapsed);
-      if (painted) sheet.nextStep += 1;
+      if (painted) {
+        sheet.nextStep += 1;
+        stepsPaintedTotal += 1;
+      }
     }
     if (!painted) continue;
     if (!sheet.published && sheet.nextStep >= readyStepsOf(sheet.plan)) publish(sheet);
@@ -380,6 +395,7 @@ function drainQueue(): void {
       sheet.plan.onSettled?.();
     }
   }
+  return spentMs;
 }
 
 /**
@@ -393,12 +409,31 @@ export function beginEnvironmentArtFrame(): void {
     return;
   }
   try {
-    drainQueue();
+    drainQueue(ENVIRONMENT_PAINT_BUDGET_MS, true);
   } finally {
     // However the frame ended, what it ran over by is owed back — a painter
     // that threw has still spent the time.
     paintDebtMs += Math.max(0, msPaintedThisFrame - ENVIRONMENT_PAINT_BUDGET_MS);
   }
+}
+
+/**
+ * Paints owed steps for up to `budgetMs`, on top of the frame's own paced share.
+ *
+ * For a caller that owns the whole frame — a loading screen with nothing of the
+ * world on screen behind it — and so can afford to drain faster than a floor
+ * that is already being played. Honours `budgetMs` as a ceiling rather than a
+ * mean: a step is started only if its class's measured cost fits what is left,
+ * except the first when `mustProgress` says nothing else has run this frame.
+ * Books no debt, since the caller is the one pacing itself.
+ */
+export function paintEnvironmentArtFor(budgetMs: number, mustProgress: boolean): void {
+  drainQueue(budgetMs, mustProgress);
+}
+
+/** Steps painted since the module loaded; a caller measures progress as a difference. */
+export function environmentPaintedStepCount(): number {
+  return stepsPaintedTotal;
 }
 
 /**
@@ -424,6 +459,7 @@ export function paintEnvironmentArtNow(): void {
       } finally {
         sheet.ctx.restore();
       }
+      stepsPaintedTotal += 1;
     }
     sheet.nextStep = sheet.plan.steps.length;
     dequeue(key);

@@ -32,15 +32,15 @@ import { crumbleRock, regrowTree, restoreRock, tileAt, unplantTree } from './har
 export const DEPOSIT_REGROW_SECONDS = 300;
 /**
  * The grove's whole regrowth, sapling and grow-in, runs at this multiple of
- * its old pace, so a felled tree comes back roughly 50% sooner without
- * touching the quarry's much longer deposit timer.
+ * its base pace, so the lumber yard turns over faster without touching the
+ * quarry's much longer deposit timer.
  */
 const GROVE_REGROW_SPEEDUP = 1.5;
-/** A felled grove tree's old, pre-speedup wait before it puts up a sapling. */
+/** A felled grove tree's base wait before it puts up a sapling, before the speedup. */
 const BASE_GROVE_REGROW_SECONDS = 120;
 /** A felled grove tree puts up a sapling after this long… */
 export const GROVE_REGROW_SECONDS = BASE_GROVE_REGROW_SECONDS / GROVE_REGROW_SPEEDUP;
-/** The old, pre-speedup wait from sapling to a full tree. */
+/** The base wait from sapling to a full tree, before the speedup. */
 const BASE_SAPLING_GROW_SECONDS = 30;
 /** …and the sapling is a full tree this long after that. */
 export const SAPLING_GROW_SECONDS = BASE_SAPLING_GROW_SECONDS / GROVE_REGROW_SPEEDUP;
@@ -57,7 +57,7 @@ export const REGROW_RETRY_TICKS = REGROW_RETRY_SECONDS * TICKS_PER_SECOND;
 const GROW_IN_TICKS = 30;
 /** How big a sapling is drawn, as a share of the grown tree. */
 const SAPLING_SCALE = 0.36;
-/** How much a sapling fills out over its minute before the pop. */
+/** How much a sapling fills out over its growth before the pop. */
 const SAPLING_SCALE_GAIN = 0.12;
 /** Strength of the grow-in's overshoot (the standard ease-out-back constant). */
 const GROW_IN_OVERSHOOT = 1.70158;

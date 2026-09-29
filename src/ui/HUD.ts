@@ -209,16 +209,96 @@ export function expandedHudPanelRect(): HudRect {
   return { x: PANEL_START_X, y: PANEL_START_Y, w: width, h: PANEL_HEIGHT };
 }
 
+/** Clear space kept between the collapse toggle and the minimap it steps aside for. */
+const TOGGLE_MINIMAP_CLEARANCE = 6;
+
+function rectsOverlap(a: HudRect, b: HudRect): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
 /**
- * Draws the top-left HUD panel: active-character label, control hints,
- * HP/XP bars for both characters, and the skill-point notification banner.
+ * The HUD panel's collapse/expand toggle, which the player taps — the same
+ * rect {@link drawHUD} draws it at. Null where the platform has no toggle.
  *
- * Returns `toggleRect` (mobile collapse/expand button, else hidden) and
- * `notifRect` (skill-point banner or collapsed badge when visible, else hidden).
- *
- * @param pulseRef - Mutable object holding the oscillation counter for the
- *   notification pulse. Pass `{ value: 0 }` from the scene and keep it stable.
+ * It sits at the panel's top-right corner unless that corner reaches
+ * `clearOfX` — the minimap's left edge — as it does on a phone in portrait,
+ * where the minimap is drawn over the panel's right-hand end. It then steps
+ * left along the panel's top edge, or, where that would put it on an HP bar,
+ * drops just under the panel.
  */
+export function hudToggleRect(
+  collapsed: boolean,
+  collapsible = platform.showHudCollapseToggle,
+  clearOfX = Infinity,
+): HudRect | null {
+  if (!collapsible) return null;
+  const corner: HudRect = collapsed
+    ? {
+        x: COLLAPSED_X + COLLAPSED_TOGGLE_X_OFFSET,
+        y: COLLAPSED_Y,
+        w: TOGGLE_BTN_W,
+        h: COLLAPSED_BAR_H,
+      }
+    : { x: TOGGLE_BTN_X, y: TOGGLE_BTN_Y, w: TOGGLE_BTN_W, h: TOGGLE_BTN_H };
+  const rightLimit = clearOfX - TOGGLE_MINIMAP_CLEARANCE;
+  if (corner.x + corner.w <= rightLimit) return corner;
+  const stepped: HudRect = { ...corner, x: Math.max(PANEL_START_X, rightLimit - corner.w) };
+  const hpBars = hudHpBarRects(collapsed, collapsible);
+  const steppedIsClear = !hpBars.some((bar) => rectsOverlap(stepped, bar));
+  if (steppedIsClear) return stepped;
+  const panel = hudPanelArea(collapsed, collapsible);
+  return { ...stepped, y: panel.y + panel.h + TOGGLE_MINIMAP_CLEARANCE };
+}
+
+/**
+ * What on the HUD panel no other chrome may cover: the collapse toggle, where
+ * there is one, and both HP bars.
+ */
+export function hudKeepouts(
+  collapsed: boolean,
+  collapsible = platform.showHudCollapseToggle,
+  clearOfX = Infinity,
+): HudRect[] {
+  const toggle = hudToggleRect(collapsed, collapsible, clearOfX);
+  return [...(toggle === null ? [] : [toggle]), ...hudHpBarRects(collapsed, collapsible)];
+}
+
+/**
+ * Room kept to the right of an expanded HP bar for its "hp/max" readout,
+ * wide enough for three-digit values at the readout's text size.
+ */
+const HP_READOUT_MAX_W = 44;
+
+/**
+ * Where the two crawlers' health is shown — the active crawler's first — as
+ * {@link drawHUD} draws it: each HP bar, with its numeric readout when the
+ * panel is expanded. Chrome laid out over the panel must never cover these.
+ */
+export function hudHpBarRects(
+  collapsed: boolean,
+  collapsible = platform.showHudCollapseToggle,
+): readonly [HudRect, HudRect] {
+  if (collapsible && collapsed) {
+    const bar = (offsetX: number): HudRect => ({
+      x: COLLAPSED_X + offsetX,
+      y: COLLAPSED_Y + COLLAPSED_HP_Y,
+      w: COLLAPSED_HP_WIDTH,
+      h: COLLAPSED_HP_HEIGHT,
+    });
+    return [bar(COLLAPSED_HP_X), bar(COLLAPSED_CAT_HP_X)];
+  }
+  const barX = CONTROL_HINT_X + PLAYER_BLOCK_BAR_X_OFFSET;
+  const readoutRight = PLAYER_BLOCK_BAR_W + PLAYER_BLOCK_HP_TEXT_X_OFFSET + HP_READOUT_MAX_W;
+  const readoutTop = PLAYER_BLOCK_BAR_H - PLAYER_BLOCK_TEXT_Y_OFFSET;
+  const block = (barY: number): HudRect => ({
+    x: barX,
+    y: barY + Math.min(0, readoutTop),
+    w: readoutRight,
+    h: Math.max(PLAYER_BLOCK_BAR_H, readoutTop + PLAYER_BLOCK_TEXT_SIZE) - Math.min(0, readoutTop),
+  });
+  return [block(ACTIVE_PLAYER_Y), block(INACTIVE_PLAYER_Y)];
+}
+
 /**
  * Where a flying coin sprite should land. The collapsed bar has no permanent
  * coin readout, but it always has this spot — {@link drawHUDCollapsed} paints
@@ -234,6 +314,18 @@ export function hudCoinCounterScreenPos(collapsed: boolean): { x: number; y: num
   return { x: CONTROL_HINT_X + COIN_ICON_CENTER_OFFSET, y: COINS_Y + COIN_ICON_CENTER_OFFSET };
 }
 
+/**
+ * Draws the top-left HUD panel: active-character label, control hints,
+ * HP/XP bars for both characters, and the skill-point notification banner.
+ *
+ * Returns `toggleRect` (mobile collapse/expand button, else hidden) and
+ * `notifRect` (skill-point banner or collapsed badge when visible, else hidden).
+ *
+ * @param pulseRef - Mutable object holding the oscillation counter for the
+ *   notification pulse. Pass `{ value: 0 }` from the scene and keep it stable.
+ * @param toggleClearOfX - The minimap's left edge, which the collapse toggle
+ *   steps aside for (see {@link hudToggleRect}).
+ */
 export function drawHUD(
   ctx: CanvasRenderingContext2D,
   human: HumanPlayer,
@@ -243,9 +335,10 @@ export function drawHUD(
   reminderActive = false,
   skillPointsHidden = false,
   coinFly: { pendingAmount: number; pulse: number } = { pendingAmount: 0, pulse: 0 },
+  toggleClearOfX = Infinity,
 ): HudResult {
   if (platform.showHudCollapseToggle && collapsed) {
-    return drawHUDCollapsed(ctx, human, cat, pulseRef, coinFly);
+    return drawHUDCollapsed(ctx, human, cat, pulseRef, coinFly, toggleClearOfX);
   }
 
   const activeLabel = human.isActive ? 'Human' : 'Cat';
@@ -331,8 +424,7 @@ export function drawHUD(
   const hudRect: HudRect = { x: PANEL_START_X, y: panelTopY, w: PANEL_WIDTH, h: panelHeight };
 
   if (platform.showHudCollapseToggle) {
-    // Collapse toggle — small "▲" button at top-right of panel
-    const toggleRect = { x: TOGGLE_BTN_X, y: TOGGLE_BTN_Y, w: TOGGLE_BTN_W, h: TOGGLE_BTN_H };
+    const toggleRect = hudToggleRect(false, true, toggleClearOfX) ?? HIDDEN_RECT;
     drawBox(ctx, {
       x: toggleRect.x,
       y: toggleRect.y,
@@ -354,6 +446,35 @@ export function drawHUD(
   return { toggleRect: HIDDEN_RECT, notifRect, hudPanelBottom, hudRect };
 }
 
+/**
+ * The screen area the party HUD panel covers — the same rect {@link drawHUD}
+ * reports as `hudRect`, grown to take in the collapse toggle, which overhangs
+ * the full panel's right edge. For layout that must stay clear of the panel
+ * without drawing it first.
+ *
+ * @param collapsed Whether the compact bar is showing; only honoured where
+ *   the panel is collapsible, as in {@link drawHUD}.
+ * @param collapsible Whether the platform offers the collapse toggle — this
+ *   platform's answer unless a layout check asks about another.
+ */
+export function hudPanelArea(
+  collapsed: boolean,
+  collapsible = platform.showHudCollapseToggle,
+): HudRect {
+  if (collapsible && collapsed) {
+    return {
+      x: COLLAPSED_X,
+      y: COLLAPSED_Y,
+      w: COLLAPSED_BAR_W + TOGGLE_BTN_W,
+      h: COLLAPSED_BAR_H,
+    };
+  }
+  const panelRight = PANEL_START_X + PANEL_WIDTH;
+  const toggleRight = TOGGLE_BTN_X + TOGGLE_BTN_W;
+  const right = collapsible ? Math.max(panelRight, toggleRight) : panelRight;
+  return { x: PANEL_START_X, y: PANEL_START_Y, w: right - PANEL_START_X, h: PANEL_HEIGHT };
+}
+
 /** Compact single-row HUD for mobile collapsed state. Does not render the skill badge. */
 function drawHUDCollapsed(
   ctx: CanvasRenderingContext2D,
@@ -361,6 +482,7 @@ function drawHUDCollapsed(
   cat: CatPlayer,
   _pulseRef: { value: number },
   coinFly: { pendingAmount: number; pulse: number },
+  toggleClearOfX: number,
 ): HudResult {
   const BAR_W = COLLAPSED_BAR_W;
   const BAR_H = COLLAPSED_BAR_H;
@@ -434,8 +556,7 @@ function drawHUDCollapsed(
     });
   }
 
-  // Expand toggle
-  const toggleRect = { x: x + COLLAPSED_TOGGLE_X_OFFSET, y, w: TOGGLE_BTN_W, h: BAR_H };
+  const toggleRect = hudToggleRect(true, true, toggleClearOfX) ?? HIDDEN_RECT;
   drawBox(ctx, {
     x: toggleRect.x,
     y: toggleRect.y,
@@ -498,6 +619,18 @@ function drawHUDCollapsed(
 }
 
 /**
+ * Where the phone's skill-point badge sits at rest when its top is `topY` —
+ * narrowed so it never reaches the minimap column.
+ */
+export function mobileSkillBadgeRect(topY: number, viewportW: number): HudRect {
+  const badgeMaxW = Math.min(
+    BADGE_MAX_W,
+    viewportW - BADGE_MINIMAP_MARGIN - BADGE_MINIMAP_WIDTH - BADGE_MINIMAP_GAP,
+  );
+  return { x: BADGE_X, y: topY, w: badgeMaxW, h: BADGE_H };
+}
+
+/**
  * Renders the mobile skill-points badge at the given `topY`.
  * Call this after any boss/arena UI so the badge stacks below them.
  * Returns the badge rect for hit-testing, or HIDDEN_RECT if no unspent points.
@@ -517,12 +650,7 @@ export function renderMobileSkillBadge(
   pulseRef.value = (pulseRef.value + BADGE_PULSE_INCREMENT) % (Math.PI * 2);
   const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(pulseRef.value);
 
-  // Cap width so the badge doesn't overlap the minimap
-  const badgeMaxW = Math.min(
-    BADGE_MAX_W,
-    viewportWidth() - BADGE_MINIMAP_MARGIN - BADGE_MINIMAP_WIDTH - BADGE_MINIMAP_GAP,
-  );
-  const badgeRect: HudRect = { x: BADGE_X, y: topY, w: badgeMaxW, h: BADGE_H };
+  const badgeRect = mobileSkillBadgeRect(topY, viewportWidth());
 
   // Same grow/glow/flash treatment as the desktop notification, except the
   // mobile badge lands on the viewport's center rather than shifting only as

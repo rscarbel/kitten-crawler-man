@@ -8,17 +8,24 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import {
-  generatePersonAppearance,
-  type PersonAppearance,
-  type TownRole,
-} from '../sprites/person/PersonAppearance';
-import { drawPersonCached } from '../sprites/person/personFrameCache';
-import { gaitSpeedFactor, IDLE_CYCLES_PER_FRAME, walkCycleDistance } from '../sprites/person/gait';
-import { HUMANOID_NPC_SCALE, scaleHumanoidBox } from '../sprites/humanoidScale';
+import type { TownRole } from '../sprites/person/PersonAppearance';
+import { IDLE_CYCLES_PER_FRAME } from '../sprites/person/gait';
+import { scaleHumanoidBox } from '../sprites/humanoidScale';
+import { gaitCyclesForDistance } from '../sprites/gaitCadence';
 import type { Facing } from '../sprites/person/skeleton';
 import { stepWander, type WanderParams, type WanderState, type WanderStep } from './townWander';
 import type { ResidentId } from '../systems/townResidents';
+import type { TownSpecies } from '../systems/townSpecies';
+import {
+  citizenDialogSeed,
+  citizenWalkCyclePx,
+  citizenWalkFrames,
+  drawCitizenSprite,
+  pickCitizenFigure,
+  prewarmCitizenFigure,
+  type CitizenFigure,
+} from './citizenFigure';
+import { residentFigure } from './residentFigures';
 import type { NPCMarkerType } from './QuestNPC';
 import {
   drawQuestMarker,
@@ -34,7 +41,6 @@ import { drawQuestBeacon } from '../sprites/questBeacon';
  * this, so the stride length derived here is the one actually drawn.
  */
 const PERSON_DRAW_SIZE = TILE_SIZE;
-const SCALED_DRAW_SIZE = PERSON_DRAW_SIZE * HUMANOID_NPC_SCALE;
 /** Minimum movement (px) on an axis before it can flip facing — kills jitter. */
 const FACING_DEADZONE = 0.05;
 /**
@@ -49,6 +55,15 @@ const FACING_DEADZONE = 0.05;
 const FACING_TURN_MARGIN = 1.35;
 const FACING_DWELL_FRAMES = 10;
 
+/** `phase` is a 0–1 cycle fraction; the sprite wrapper's walk phase is radians. */
+const TWO_PI = Math.PI * 2;
+/**
+ * Spreads each citizen's clock-driven loops (idle, talk) apart by its own id,
+ * so a crowd doesn't breathe or gesture in lockstep. Not a multiple of any
+ * loop's own period, so ids never re-collide into pairs sharing a phase.
+ */
+const LOOP_OFFSET_SECONDS_PER_ID = 0.37;
+
 /**
  * Scratch for `stepWander`'s output. Safe to share: it is written and consumed
  * entirely within one synchronous `update()` call.
@@ -62,6 +77,7 @@ export interface TownspersonOptions {
   x: number;
   y: number;
   role: TownRole;
+  species: TownSpecies;
   /** Appearance seed; also seeds the role bias. */
   seed: number;
   /** World-pixels advanced per frame while walking. */
@@ -81,9 +97,12 @@ export class Townsperson implements WanderState {
   /** Stable identity, so a pairwise crowd pass can visit each pair exactly once. */
   readonly id = nextTownspersonId++;
   readonly role: TownRole;
+  readonly species: TownSpecies;
   /** Set when this citizen is a named resident; drives their dialog and speaker label. */
   readonly residentId: ResidentId | null;
-  readonly appearance: PersonAppearance;
+  readonly figure: CitizenFigure;
+  /** A stable, look-scoped seed for dialog line rotation — see `citizenDialogSeed`. */
+  readonly dialogSeed: number;
 
   x: number;
   y: number;
@@ -101,14 +120,15 @@ export class Townsperson implements WanderState {
    * World pixels this citizen covers per full stride — what converts distance
    * travelled into cycle position.
    *
-   * It falls out of the person's leg length and gait *and the size they are
+   * It falls out of the figure's leg length and gait *and the size they are
    * drawn at*, so it is re-derived whenever the caller draws them at a new size.
    * Pinning it to the tile size would leave the cadence assuming one stride
    * while the figure drew another, and the foot would start sliding again with
    * nothing to say so.
    */
   private cycleDistance: number;
-  private cycleDistanceDrawSize = SCALED_DRAW_SIZE;
+  private cycleDistanceDrawSize = PERSON_DRAW_SIZE;
+  private readonly walkFrames: number;
   /** How many times the player has talked to this citizen — rotates their dialog. */
   conversationCount = 0;
   /** True while this citizen is mid-conversation — holds them in place facing the player. */
@@ -130,16 +150,24 @@ export class Townsperson implements WanderState {
     this.targetX = opts.x;
     this.targetY = opts.y;
     this.role = opts.role;
+    this.species = opts.species;
     this.residentId = opts.residentId ?? null;
     this.pause = opts.initialPause ?? 0;
     this.wander = opts.wander;
     if (opts.initialFacing !== undefined) this.facing = opts.initialFacing;
-    this.appearance = generatePersonAppearance(opts.seed, opts.role);
-    // The cohort picks a speed for the role; the body picks how much of it that
-    // body can plausibly carry. A citizen with a short stride walking at a long
-    // strider's pace has to windmill their legs to cover the ground.
-    this.speed = opts.speed * gaitSpeedFactor(this.appearance);
-    this.cycleDistance = walkCycleDistance(this.appearance, SCALED_DRAW_SIZE);
+    this.figure =
+      this.residentId !== null
+        ? residentFigure(this.residentId)
+        : pickCitizenFigure(opts.seed, opts.role, opts.species);
+    this.dialogSeed = citizenDialogSeed(this.figure);
+    // Every citizen shares its look's cells with every other wearer of that
+    // look, so queuing this look's rows here costs nothing extra once the
+    // crowd's small closed set is warm — and keeps the cost off whichever
+    // citizen happens to draw the first frame anyone wears it in.
+    prewarmCitizenFigure(this.figure);
+    this.speed = opts.speed;
+    this.cycleDistance = citizenWalkCyclePx(this.figure, PERSON_DRAW_SIZE);
+    this.walkFrames = citizenWalkFrames(this.figure);
   }
 
   /** Advances one frame of wander, facing, and animation. */
@@ -152,7 +180,7 @@ export class Townsperson implements WanderState {
     // speeds span five to one, and one clock for all of them had the slow ones
     // skating and the fast ones mincing.
     const advance = this.moving
-      ? sharedWanderStep.distance / this.cycleDistance
+      ? gaitCyclesForDistance(sharedWanderStep.distance, this.cycleDistance, this.walkFrames)
       : IDLE_CYCLES_PER_FRAME;
     // Wrapped rather than left to grow: an unbounded phase degrades `Math.sin`
     // and the bucket modulo over a long session.
@@ -163,6 +191,20 @@ export class Townsperson implements WanderState {
   /** Turn to face a world point — used to look at the player when spoken to. */
   faceToward(px: number, py: number): void {
     this.turnTo(px - this.x, py - this.y);
+  }
+
+  /**
+   * This citizen's `facing` as the `-1`/`0`/`1` pair the sprite wrapper and
+   * the figure cache key on, rather than the `Facing` string itself — for a
+   * caller warming a specific row (a `talk` cell for the facing a
+   * conversation is about to freeze this citizen into) ahead of `render()`
+   * asking for it.
+   */
+  facingXY(): { x: number; y: number } {
+    return {
+      x: this.facing === 'left' ? -1 : this.facing === 'right' ? 1 : 0,
+      y: this.facing === 'up' ? -1 : this.facing === 'down' ? 1 : 0,
+    };
   }
 
   /** Facing from a heading, with hysteresis so a near-diagonal does not strobe. */
@@ -193,9 +235,9 @@ export class Townsperson implements WanderState {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const drawSize = tileSize > 0 ? tileSize : PERSON_DRAW_SIZE;
     const box = scaleHumanoidBox(this.x - camX, this.y - camY, drawSize);
-    if (box.s !== this.cycleDistanceDrawSize) {
-      this.cycleDistanceDrawSize = box.s;
-      this.cycleDistance = walkCycleDistance(this.appearance, box.s);
+    if (drawSize !== this.cycleDistanceDrawSize) {
+      this.cycleDistanceDrawSize = drawSize;
+      this.cycleDistance = citizenWalkCyclePx(this.figure, drawSize);
     }
     // Beacon first, so the column stands behind the figure rather than across
     // it. Both it and the glyph below branch on `markerType` and nothing else,
@@ -206,16 +248,14 @@ export class Townsperson implements WanderState {
       drawQuestBeacon(ctx, box.sx, box.sy, box.s, camX, camY, performance.now(), markerColor);
     }
 
-    drawPersonCached(
-      ctx,
-      box.sx,
-      box.sy,
-      box.s,
-      this.appearance,
-      this.phase,
-      this.facing,
-      this.moving,
-    );
+    const facing = this.facingXY();
+    drawCitizenSprite(ctx, this.figure, this.x - camX, this.y - camY, drawSize, {
+      action: this.frozen ? 'talk' : this.moving ? 'walk' : 'idle',
+      walkPhase: this.phase * TWO_PI,
+      facingX: facing.x,
+      facingY: facing.y,
+      loopOffsetSeconds: this.id * LOOP_OFFSET_SECONDS_PER_ID,
+    });
 
     if (this.markerType === 'exclamation') {
       drawQuestMarker(ctx, box.sx, box.sy, box.s, '!', QUEST_MARKER_GOLD);

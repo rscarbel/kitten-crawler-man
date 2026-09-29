@@ -30,7 +30,7 @@ const BUILDING_MANIFEST: Readonly<Record<string, SpriteManifestEntry | undefined
   buildingManifest;
 
 /** The size every overworld is generated at, matching floor 3's level def. */
-const MAP_SIZE = 220;
+const MAP_SIZE = 280;
 /**
  * How many unseeded maps the layout checks are run over.
  *

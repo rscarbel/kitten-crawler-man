@@ -10,7 +10,7 @@
  * in one sweep would make the fence's continuity depend on a dice roll.
  */
 
-import { GARDEN_PLANTING, VERGE_GRASS, YARD_GRAVEL } from '../tileTypes';
+import { GARDEN_PLANTING, PLAZA_STONE, VERGE_GRASS, YARD_GRAVEL } from '../tileTypes';
 import type { TileGrid } from './tileGrid';
 import type { PlannedYard, TileRect, TownPlan, YardKind } from './townPlan';
 import { worldRandom } from '../../core/WorldRandom';
@@ -19,6 +19,10 @@ import { worldRandom } from '../../core/WorldRandom';
 const YARD_SURFACE: Record<YardKind, number> = {
   garden: VERGE_GRASS,
   workyard: YARD_GRAVEL,
+  // A paved yard reuses the plaza's own stone rather than a new material — the
+  // same setts a courtyard just off the town's main square would plausibly be
+  // laid in.
+  courtyard: PLAZA_STONE,
 };
 
 function contains(rect: TileRect, x: number, y: number): boolean {

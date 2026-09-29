@@ -3,7 +3,7 @@
  * that measures pixels.
  *
  * The shipped game paints these facades for itself — there is no PNG and no
- * generated manifest any more — so everything here exists for the offline
+ * generated manifest — so everything here exists for the offline
  * harnesses: the review baker writes the picture a reviewer looks at, and
  * `render-buildings.ts` draws contact sheets. Both compose the sheet the same
  * way the runtime does, and neither writes into `src/images/`.
@@ -20,6 +20,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { asNodeCanvas } from '../nodeGameContext.js';
 import { paintBuilding } from '../../src/sprites/buildinggen/paint.js';
+import { PLINTH_JOINT_RAMP } from '../../src/sprites/buildinggen/materials/wall.js';
 import { paintLifeFrame } from '../../src/sprites/buildinggen/animate.js';
 import { project } from '../../src/sprites/buildinggen/projection.js';
 import {
@@ -334,6 +335,10 @@ export function declaredRamps(spec: BuildingSpec): ReadonlySet<string> {
   if (spec.facade.upper !== undefined) addWall(spec.facade.upper);
   for (const band of spec.facade.bands) ramps.add(band.ramp);
   if (spec.facade.pilasterRamp !== undefined) ramps.add(spec.facade.pilasterRamp);
+  if (spec.facade.plinth !== undefined) {
+    ramps.add(spec.facade.plinth.ramp);
+    ramps.add(PLINTH_JOINT_RAMP);
+  }
   ramps.add('fieldstone');
   ramps.add(spec.roof.ramp);
   ramps.add(spec.roof.ridgeRamp);

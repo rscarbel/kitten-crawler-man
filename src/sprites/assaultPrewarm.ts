@@ -5,7 +5,7 @@
  *
  * None of them is seen anywhere else, so none is warm when a wave is
  * announced, and the cache they share is also holding the crawlers — Carl's
- * fight alone keeps nearly 40 MB of its 96 MB drawn every frame. So
+ * fight alone keeps nearly 40 MB of the cache's own ceiling drawn every frame. So
  * {@link AssaultWavePrewarm}:
  *
  * - **Warms a small set.** Only the rows a wave arrives playing, in the views

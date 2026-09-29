@@ -105,9 +105,9 @@ const NEIGHBOUR_OFFSETS = [
  *
  * Runs the ring search twice: once demanding somewhere the occupant can move
  * (see {@link hasRoomToMove}), then again accepting any walkable tile at all.
- * The second pass exists so this can only ever return a *better* tile than it
- * used to, never nothing — a spawn suppressed because the map is tight is a
- * missing boss, which is worse than a cramped one.
+ * The second pass exists so a tight map yields a cramped tile rather than
+ * nothing — a spawn suppressed because the map is tight is a missing boss,
+ * which is worse than a cramped one.
  *
  * `isAcceptable` narrows the search further for callers that own a region as
  * well as a point — an arena encounter must not nudge a blocked spawn out past
@@ -151,4 +151,112 @@ function searchRings(
     }
   }
   return null;
+}
+
+/** How far from its landing an arriving party may be set down. */
+const ARRIVAL_SEARCH_RADIUS_TILES = 4;
+
+/**
+ * How far from the leader, on either axis, the follower's walk to them is
+ * traced. A whole building interior fits inside it from any tile, so indoors
+ * the walk is never cut short; outdoors it keeps the trace to the
+ * neighbourhood rather than flooding a whole floor.
+ */
+const FOLLOWER_WALK_BOUND_TILES = 16;
+
+/** Where the two crawlers stand on arriving somewhere. */
+export interface PartyArrivalTiles {
+  /** The crawler being driven: the landing itself wherever it is open. */
+  readonly leader: { x: number; y: number };
+  /** The other crawler, beside the leader and able to walk to them. */
+  readonly follower: { x: number; y: number };
+}
+
+/**
+ * Where an arriving party is set down — walking into a room through its door
+ * or off a stair, walking out of a building, or arriving on a floor: the
+ * leader on the landing, the follower on the open tile nearest the one east
+ * of it.
+ *
+ * Neither is taken on trust. A room's furniture is authored around its door,
+ * and a candle stand or a pew one tile east of the landing is floor to the
+ * layout but a prop to the player; outdoors the tile east of a doorstep can be
+ * a wall, a tree or a fence. A crawler set down inside one cannot take a
+ * single step, because each step is tested against the tile under the
+ * crawler's centre after it, and for the first half-tile in every direction
+ * that tile is still the obstacle.
+ *
+ * Both searches keep {@link findNearbyWalkableTile}'s two passes — room to move
+ * first, bare floor second — and keep off stairwells, which would re-open the
+ * climb the party just finished, and off building doors, which would walk the
+ * party straight back in. The follower must also be able to walk to the
+ * leader, or the nearest open tile could be the far side of a counter or a
+ * wall.
+ */
+export function findPartyArrivalTiles(
+  map: GameMap,
+  landing: { readonly x: number; readonly y: number },
+): PartyArrivalTiles {
+  const doorKeys = new Set(
+    map.buildingEntries.map((entry) => tileKeyIn(map, entry.doorTile.x, entry.doorTile.y)),
+  );
+  const isArrivalGround = (x: number, y: number): boolean =>
+    !map.isStairwellTile(x, y) && !doorKeys.has(tileKeyIn(map, x, y));
+  const leader =
+    findNearbyWalkableTile(
+      map,
+      landing.x,
+      landing.y,
+      ARRIVAL_SEARCH_RADIUS_TILES,
+      isArrivalGround,
+    ) ?? landing;
+  const withLeader = walkableRegionNear(map, leader, FOLLOWER_WALK_BOUND_TILES);
+  const besideLeader = (x: number, y: number): boolean =>
+    (x !== leader.x || y !== leader.y) &&
+    isArrivalGround(x, y) &&
+    withLeader.has(tileKeyIn(map, x, y));
+  const follower =
+    findNearbyWalkableTile(
+      map,
+      leader.x + 1,
+      leader.y,
+      ARRIVAL_SEARCH_RADIUS_TILES,
+      besideLeader,
+    ) ?? leader;
+  return { leader: { x: leader.x, y: leader.y }, follower };
+}
+
+function tileKeyIn(map: GameMap, x: number, y: number): number {
+  const columns = map.structure[0]?.length ?? map.structure.length;
+  return y * columns + x;
+}
+
+/**
+ * Every tile four-connected to `from` over walkable ground without straying
+ * more than `boundTiles` from it on either axis.
+ */
+function walkableRegionNear(
+  map: GameMap,
+  from: { x: number; y: number },
+  boundTiles: number,
+): Set<number> {
+  const region = new Set<number>();
+  if (!map.isWalkable(from.x, from.y)) return region;
+  const withinBound = (x: number, y: number): boolean =>
+    Math.abs(x - from.x) <= boundTiles && Math.abs(y - from.y) <= boundTiles;
+  region.add(tileKeyIn(map, from.x, from.y));
+  const queue: Array<{ x: number; y: number }> = [{ x: from.x, y: from.y }];
+  // The iterator re-reads `length`, so tiles pushed below are visited by this loop.
+  for (const tile of queue) {
+    for (const [dx, dy] of NEIGHBOUR_OFFSETS) {
+      const x = tile.x + dx;
+      const y = tile.y + dy;
+      if (!withinBound(x, y) || !map.isWalkable(x, y)) continue;
+      const key = tileKeyIn(map, x, y);
+      if (region.has(key)) continue;
+      region.add(key);
+      queue.push({ x, y });
+    }
+  }
+  return region;
 }

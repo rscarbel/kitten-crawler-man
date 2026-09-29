@@ -38,7 +38,7 @@ The third floor is **the Over City** — the first floor of the "Volcano" storyl
 
 ## The Finale — the Soul Crystal / "Carl's Doomsday Scenario"
 
-- Quill's true plan: a spell powered by harvested souls (channelled through Remex, transformed into a living capacitor) designed to **kill every non-skyfowl inhabitant** of the city.
+- Quill's true plan: a spell powered by harvested souls (channelled through Remex, transformed into a living capacitor) designed to **kill every non-skyfowl inhabitant** of the city. The game's town is therefore majority skyfowl with a visible human minority, so the spell has someone to kill (see "Who lives here" in [town.md](town.md)).
 - The team assaults the magistrate's office with explosives and kills Quill, but the town's **soul crystal destabilizes** — minutes from a city-levelling explosion.
 - Carl contains the exploding crystal inside an **enchanted glass display box** and pulls it into his inventory, where it becomes the item **"Carl's Doomsday Scenario"** — a city-levelling bomb he carries for the rest of the series.
 - A secondary explosion (Remex's body) starts a ~20-minute countdown. They flee for the stairwell, **Katia** detonates pre-planted bombs, and they evacuate dozens of crawlers and thousands of NPCs down to floor 4.

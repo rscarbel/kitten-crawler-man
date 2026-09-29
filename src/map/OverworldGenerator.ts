@@ -610,7 +610,7 @@ function asPercent(fraction: number): string {
  *   measured at two to eleven per map, and true even with no rivers carved at
  *   all — so throwing would reject maps for a defect the rivers did not
  *   cause. Dropping them changes nothing a player can observe except that a
- *   ghoul neither of you could ever have reached is no longer spawned.
+ *   ghoul neither of you could ever have reached is not spawned.
  */
 function assertWildernessIsReachable(
   grid: TileGrid,
@@ -1145,7 +1145,7 @@ const CARDINAL_OFFSETS: ReadonlyArray<readonly [number, number]> = [
  * it looks exactly like the lane it is not.
  *
  * Zero is admitted because that is the party line itself — two facades meeting,
- * which is what Blackwood Lodge and Shepherd's Cabin do today.
+ * which is what Blackwood Lodge and Plumbline Farm do.
  */
 const PARTY_LINE_MAX_GAP = 1;
 const YARD_MIN_GAP = 3;

@@ -18,6 +18,7 @@ import { STALL_WIDTH_TILES, stallRippleStep, stallVariantIndex } from '../../spr
 import { drawTownSheetFrame } from '../../sprites/townSheetProp';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import { tileKey } from '../tileKey';
+import { doorwayKeepClearTiles } from '../doorwayKeepClear';
 import { buildVendorMenu, createVendorPurchase, type VendorGateCheck } from './vendorMenu';
 import { MARKET_VENDORS, type VendorDef } from './vendorDefs';
 import type { MarketStock } from './MarketStock';
@@ -88,6 +89,8 @@ export class MarketSystem implements GameSystem {
   private readonly stalls: MarketStall[] = [];
   private readonly renderables: TownPropRenderable[] = [];
   private readonly reserved = new Set<string>();
+  /** See `doorwayKeepClearTiles`. */
+  private readonly doorwayKeepClear: ReadonlySet<string>;
 
   constructor(
     private readonly gameMap: GameMap,
@@ -104,6 +107,7 @@ export class MarketSystem implements GameSystem {
      */
     private readonly isGateOpen: VendorGateCheck,
   ) {
+    this.doorwayKeepClear = doorwayKeepClearTiles(gameMap.buildingEntries);
     this.placeStalls();
   }
 
@@ -259,7 +263,8 @@ export class MarketSystem implements GameSystem {
   }
 
   private isTileFree(tile: TileXY): boolean {
-    if (this.reserved.has(tileKey(tile.x, tile.y))) return false;
+    const key = tileKey(tile.x, tile.y);
+    if (this.reserved.has(key) || this.doorwayKeepClear.has(key)) return false;
     return this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y);
   }
 
@@ -277,6 +282,7 @@ export class MarketSystem implements GameSystem {
       x: standX,
       y: standY,
       role: def.role,
+      species: def.species,
       seed: def.appearanceSeed,
       speed: VENDOR_SPEED,
       wander,

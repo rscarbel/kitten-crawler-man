@@ -193,7 +193,15 @@ function slopeTone(plane: Plane, y: number): number {
   return SLOPE_TONE_LIFT * (1 - downhill * 2);
 }
 
-/** Per-element colour: ramp value plus its own tone and hue jitter. */
+/**
+ * How many discrete tones a tile or slate may take, above and below its
+ * course's own centre. A small fixed palette — the way a roofer's batch of
+ * tiles actually varies — reads as individually laid pieces; a continuous
+ * jitter reads as speckle across the whole slope.
+ */
+const TILE_TONE_STEPS = 4;
+
+/** Per-element colour: ramp value quantized to a small palette, plus its own hue jitter. */
 function elementColor(
   ramp: Ramp,
   seed: number,
@@ -201,7 +209,9 @@ function elementColor(
   toneCentre: number,
   toneJitter: number,
 ): RGB {
-  const tone = toneCentre + (elementValue(seed, STREAM_TILE_TONE, key) - 0.5) * 2 * toneJitter;
+  const raw = elementValue(seed, STREAM_TILE_TONE, key);
+  const step = Math.round(raw * (TILE_TONE_STEPS - 1)) / (TILE_TONE_STEPS - 1);
+  const tone = toneCentre + (step - 0.5) * 2 * toneJitter;
   const hue = (elementValue(seed, STREAM_TILE_HUE, key) - 0.5) * 2 * ELEMENT_HUE_JITTER;
   return hueShift(sampleRamp(ramp, clamp01(tone)), hue);
 }
@@ -276,10 +286,16 @@ const THATCH_SCALLOP_DEPTH_JITTER = 0.6;
 const THATCH_DISREPAIR_RAGGEDNESS = 1.4;
 
 /** Near-vertical straws inside a course. */
-const THATCH_STRAND_SPACING_PX = 1.4;
-const THATCH_STRAND_TONE_JITTER = 0.42;
+/**
+ * Wide enough that each strand reads as one comb line in a bundle rather than
+ * a fur of scratches — a thatch roof combed at in-game scale is a handful of
+ * bold lines per bundle, not one per pixel column.
+ */
+const THATCH_STRAND_SPACING_PX = 4;
+const THATCH_STRAND_TONE_STEPS = 3;
+const THATCH_STRAND_TONE_JITTER = 0.2;
 const THATCH_STRAND_DRIFT_PX = 1.5;
-const THATCH_STRAND_ALPHA = 0.9;
+const THATCH_STRAND_ALPHA = 0.55;
 
 /** The shadow under a bundle's lip is the deepest occlusion on a thatched roof. */
 const THATCH_LIP_AO_TILES = 0.1;
@@ -452,7 +468,9 @@ function paintThatchStrands(
     const value = elementValue(seed, STREAM_STRAND, key);
     const x = (strand + value) * THATCH_STRAND_SPACING_PX;
     const drift = (value - 0.5) * 2 * THATCH_STRAND_DRIFT_PX;
-    const tone = courseTone + (value - 0.5) * 2 * THATCH_STRAND_TONE_JITTER;
+    const step =
+      Math.round(value * (THATCH_STRAND_TONE_STEPS - 1)) / (THATCH_STRAND_TONE_STEPS - 1);
+    const tone = courseTone + (step - 0.5) * 2 * THATCH_STRAND_TONE_JITTER;
     ctx.strokeStyle = rgba(sampleRamp(ramp, clamp01(tone)), THATCH_STRAND_ALPHA);
     ctx.beginPath();
     ctx.moveTo(x, top);
@@ -616,15 +634,18 @@ function paintTileCourse(
       const centreX = x + width / 2;
       const top = courseTopAt(options, course, centreX);
       const tone = 0.5 + slopeTone(plane, course.top);
+      // A narrow spread: four sorted batches of tile still read as
+      // individually laid, while a wide swing paints every course as a loud
+      // checkerboard rather than a coursed roof.
       const color = hueShift(
-        elementColor(ramp, seed, key, tone, ELEMENT_TONE_JITTER * 2),
+        elementColor(ramp, seed, key, tone, ELEMENT_TONE_JITTER * 0.5),
         style.hueBias,
       );
       // The three defect classes have to be disjoint intervals over `defect`.
-      // The split test used to read `defect < missing + slip + splitRate`, which
-      // *contains* the slip interval — so with `splitRate: 0` (slate and clay
-      // tile) it collapsed to exactly the slip condition, and every slipped tile
-      // on those roofs also opened a riven-timber crack down its face.
+      // A split test of `defect < missing + slip + splitRate` would *contain*
+      // the slip interval — so with `splitRate: 0` (slate and clay tile) it
+      // collapses to exactly the slip condition, and every slipped tile on
+      // those roofs also opens a riven-timber crack down its face.
       const slipped = defect < missingChance + slipChance;
       const splitFloor = missingChance + slipChance;
       const split = defect >= splitFloor && defect < splitFloor + splitChance;
@@ -957,12 +978,19 @@ const DOME_LIMB_T = 0.02;
  */
 const DOME_FALLOFF_REACH = 1.15;
 
-/** Meridians, and how much darker their shadowed side runs. */
-const DOME_RIB_COUNT = 11;
-const DOME_RIB_ALPHA = 0.5;
-const DOME_RIB_LIGHT_ALPHA = 0.34;
-const DOME_RIB_WIDTH_PX = 1.5;
-const DOME_RIB_LIGHT_OFFSET_PX = 1;
+/**
+ * Meridians, and how much darker their shadowed side runs.
+ *
+ * The dome is the majority of the temple's own painted area, so its ribs are
+ * effectively the whole building's local-contrast budget — the calmer global
+ * weathering passes leave a dome with too little of its own working to clear
+ * the texture-richness floor across the seed alphabet without this.
+ */
+const DOME_RIB_COUNT = 29;
+const DOME_RIB_ALPHA = 1;
+const DOME_RIB_LIGHT_ALPHA = 0.85;
+const DOME_RIB_WIDTH_PX = 1.75;
+const DOME_RIB_LIGHT_OFFSET_PX = 1.25;
 
 /** The finial: a ball on a spike, standing on the apex. */
 const DOME_FINIAL_HEIGHT_TILES = 0.34;

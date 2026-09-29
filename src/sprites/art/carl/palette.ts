@@ -61,8 +61,18 @@ export const OUTLINE = '#1b120c';
 export const SILHOUETTE_OUTLINE = '#24141c';
 export const SILHOUETTE_OUTLINE_ALPHA = 0.82;
 
-/** Light skin, warm in the light, rose-cool in the shadow. */
-export const SKIN: Ramp = {
+/**
+ * Light skin, warm in the light, rose-cool in the shadow — Carl's own, and
+ * every other figure's default. `SKIN`/`HAIR` are exported `let` bindings
+ * rather than `const` so a closed-set cast can swap them for the one figure
+ * it is baking (`setCarlSkinHairRamp`/`resetCarlSkinHairRamp`); every other
+ * module that imports them (`head.ts`, `limbs.ts`, `feet.ts`) reads the live
+ * binding at paint time, so nothing there has to change to see the swap. A
+ * derived constant computed once at import time from either binding would not
+ * see a later swap — `SCLERA`, `MOUTH_LINE`, `PROFILE_EAR_BOWL` and
+ * `HAIR_TONE` in `head.ts` are written as functions for exactly that reason.
+ */
+export const SKIN_DEFAULT: Ramp = {
   deep: '#5c2d35',
   shadow: '#8b4a42',
   dark: '#b0654e',
@@ -71,14 +81,20 @@ export const SKIN: Ramp = {
   light: '#f0cba3',
   rim: '#fae9c6',
 };
+export let SKIN: Ramp = SKIN_DEFAULT;
 
 /**
  * Worn brown moto leather: glossy, so it carries a specular step. A saddle
  * brown leaning red, with lights that warm toward orange rather than yellow:
  * lit toward yellow the same values read as olive-gold, and gloss on gold is
  * brass armour, not a jacket.
+ *
+ * `let`, not `const`, for the same reason `SKIN`/`HAIR` are: a closed-set cast
+ * look recolours Carl's whole torso and sleeve into its own garment
+ * (`setCarlGarmentRamp`) rather than drawing a second shape over his jacket,
+ * so the jacket itself becomes the garment instead of showing past its edges.
  */
-export const LEATHER: GlossRamp = {
+export const LEATHER_DEFAULT: GlossRamp = {
   deep: '#1c1016',
   shadow: '#2c1619',
   dark: '#3d1d1b',
@@ -88,6 +104,7 @@ export const LEATHER: GlossRamp = {
   rim: '#a8694a',
   specular: '#c09a86',
 };
+export let LEATHER: GlossRamp = LEATHER_DEFAULT;
 
 /** Matte cotton boxers: white gone blue-grey in the shade, cream in the light. */
 export const COTTON: Ramp = {
@@ -100,8 +117,8 @@ export const COTTON: Ramp = {
   rim: '#fcfaf3',
 };
 
-/** Short brown hair. */
-export const HAIR: Ramp = {
+/** Short brown hair — Carl's own, and every other figure's default. */
+export const HAIR_DEFAULT: Ramp = {
   deep: '#2a1316',
   shadow: '#421e1a',
   dark: '#5c2e1f',
@@ -110,6 +127,72 @@ export const HAIR: Ramp = {
   light: '#b97d38',
   rim: '#d8ae5a',
 };
+export let HAIR: Ramp = HAIR_DEFAULT;
+
+/**
+ * Swaps the skin and hair ramp every subsequent paint call reads, until
+ * {@link resetCarlSkinHairRamp} restores Carl's own. Confined to this pair:
+ * every other material (`LEATHER`, `COTTON`) stays Carl's own regardless, so
+ * a look built from this never touches his jacket or boxers.
+ */
+export function setCarlSkinHairRamp(skin: Ramp, hair: Ramp): void {
+  SKIN = skin;
+  HAIR = hair;
+}
+
+/** Restores Carl's own skin and hair ramp — call after every non-Carl bake. */
+export function resetCarlSkinHairRamp(): void {
+  SKIN = SKIN_DEFAULT;
+  HAIR = HAIR_DEFAULT;
+}
+
+/**
+ * Swaps the ramp every subsequent jacket/sleeve paint call reads, so a
+ * closed-set cast look's garment is Carl's own torso and sleeve repainted in
+ * its own material rather than a second shape drawn over his jacket. Confined
+ * to this one ramp: `COTTON` (his boxers) is untouched, since a townsfolk
+ * look's legwear is drawn as its own layer over his bare legs instead.
+ */
+export function setCarlGarmentRamp(garment: GlossRamp): void {
+  LEATHER = garment;
+}
+
+/** Restores Carl's own jacket leather — call after every non-Carl bake. */
+export function resetCarlGarmentRamp(): void {
+  LEATHER = LEATHER_DEFAULT;
+}
+
+/**
+ * Derives a Carl-shaped 7-stop {@link Ramp} from one base colour — the same
+ * hue-shift-toward-shadow/toward-light relationship `SKIN_DEFAULT` and
+ * `HAIR_DEFAULT` already have — for building a cast look's skin, hair or
+ * garment ramp from a single authored colour.
+ */
+export function deriveRamp(base: string): Ramp {
+  return {
+    deep: mix(base, RAMP_SHADOW_TOWARD, RAMP_SHADOW_MIX[0]),
+    shadow: mix(base, RAMP_SHADOW_TOWARD, RAMP_SHADOW_MIX[1]),
+    dark: mix(base, RAMP_SHADOW_TOWARD, RAMP_SHADOW_MIX[2]),
+    mid: mix(base, RAMP_SHADOW_TOWARD, RAMP_SHADOW_MIX[3]),
+    base,
+    light: mix(base, RAMP_LIGHT_TOWARD, RAMP_LIGHT_MIX[0]),
+    rim: mix(base, RAMP_LIGHT_TOWARD, RAMP_LIGHT_MIX[1]),
+  };
+}
+
+/** Derives a Carl-shaped {@link GlossRamp} from one base colour, with a modest specular step for cloth rather than leather's hard sheen. */
+export function deriveGlossRamp(
+  base: string,
+  specularLightMix: number = RAMP_LIGHT_MIX[1],
+): GlossRamp {
+  return { ...deriveRamp(base), specular: mix(base, RAMP_LIGHT_TOWARD, specularLightMix) };
+}
+
+/** How far a ramp's `base` mixes toward black/a cool shadow and white/a warm highlight, deriving the rest of a 7-stop `Ramp` from one colour. */
+const RAMP_SHADOW_MIX = [0.72, 0.52, 0.3, 0.14] as const;
+const RAMP_LIGHT_MIX = [0.34, 0.62] as const;
+const RAMP_SHADOW_TOWARD = '#1c1016';
+const RAMP_LIGHT_TOWARD = '#fdf3e0';
 
 /**
  * A ramp pushed back into the body's shade by `amount` (0–1), for a limb that

@@ -3,6 +3,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
+import { findPartyArrivalTiles } from '../map/findWalkableTile';
 import { makeBurn, makePoison, makeSepsis } from '../core/StatusEffect';
 import { createMob } from '../levels/spawner';
 import { TILE_SIZE } from '../core/constants';
@@ -153,13 +154,11 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
       const map = ctx.getGameMap();
       const dest = nearestWalkableTile(map, tileX, tileY);
       if (!dest) break;
-      player.x = dest.x * TILE_SIZE;
-      player.y = dest.y * TILE_SIZE;
-      const companionDest = nearestWalkableTile(map, dest.x + 1, dest.y);
-      if (companionDest) {
-        companion.x = companionDest.x * TILE_SIZE;
-        companion.y = companionDest.y * TILE_SIZE;
-      }
+      const { leader, follower } = findPartyArrivalTiles(map, dest);
+      player.x = leader.x * TILE_SIZE;
+      player.y = leader.y * TILE_SIZE;
+      companion.x = follower.x * TILE_SIZE;
+      companion.y = follower.y * TILE_SIZE;
       break;
     }
 

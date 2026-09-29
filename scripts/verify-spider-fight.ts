@@ -50,6 +50,7 @@ import {
   SPIT_SPEED_PX,
   LAY_COOLDOWN_FRAMES,
   MAX_LIVE_EGGS_AND_HATCHLINGS,
+  EGG_CLUTCH_SIZE,
   SPIT_HIT_RADIUS_FRACTION,
   TRAP_HIT_RADIUS_FRACTION,
   type SpitPuddle,
@@ -3839,6 +3840,8 @@ function eggNeverBlocks(): void {
 }
 
 const BROOD_RUN_SEEDS = 3;
+/** The HP phase `PHASE_THREE_START_FRACTION` puts her in, whose clutch the brood run lays. */
+const BROOD_RUN_HP_PHASE = 3 as const;
 const BROOD_RUN_FRAMES = 14400;
 /**
  * Crawlers let a hatchling live this long before swatting it: long enough for
@@ -3879,11 +3882,17 @@ function broodCapAndCooldown(): void {
     peak <= MAX_LIVE_EGGS_AND_HATCHLINGS && lays > 0,
     `peak ${peak} over ${lays} lays`,
   );
+  // A lay only lands exactly on the cap when the brood is exactly one clutch
+  // short of it, so "peak reached the cap" is an accident of arithmetic. The
+  // cap has done its work once the brood stood where one more clutch would
+  // have breached it — the lay it refused there is the pressure being tested.
+  const finalClutch = EGG_CLUTCH_SIZE[BROOD_RUN_HP_PHASE];
+  const capRefusedALay = peak + finalClutch > MAX_LIVE_EGGS_AND_HATCHLINGS;
   record(
     '9',
     'the brood run pressed against the cap (not vacuous)',
-    peak >= MAX_LIVE_EGGS_AND_HATCHLINGS,
-    `peak ${peak}`,
+    capRefusedALay,
+    `peak ${peak}, and a clutch of ${finalClutch} on top of it would make ${peak + finalClutch}`,
   );
   record(
     '9',
@@ -4769,9 +4778,9 @@ function gatePerfectRun(): void {
 
 /**
  * The fight measured in labs the generator really builds, one per doorway side,
- * with the room's own furniture, webbing and dressing in play, against numbers
- * recorded in the room as it stood before any of that furniture existed: a
- * room may make her harder to fight, never easier. The synthetic lab the other
+ * with the room's own furniture, webbing and dressing in play, against the
+ * same room stripped back to floor: a room may make her harder to fight,
+ * never easier. The synthetic lab the other
  * gates use has none of the room in it, so it cannot see a bench that pins her
  * or a shelf that hides a crawler.
  */
@@ -4788,47 +4797,6 @@ interface RealLabMetrics {
   readonly campedAreaHits: number;
 }
 
-/**
- * The generated lab before its furniture: only the life machines and the
- * terminal stood in it. Time-to-kill, attack rate and stall time were measured
- * by this gate on those rooms, same seeds, same reader, before the furniture
- * existed. The tank's hit rate and the web camper's area blows are measured on
- * the same labs with their furniture and webbing stripped back to floor
- * (`--bare-lab`), over
- * `TANK_FIGHT_SEEDS` runs: over two runs it swung by a third either way on
- * nothing but the seed, which no ten-percent gate can be held to.
- */
-const REAL_LAB_BASELINE: Readonly<Record<DoorSide, RealLabMetrics>> = {
-  south: {
-    ttkSeconds: 236.0,
-    attacksPerMinute: 17.0,
-    hitsOnParty: 5.5,
-    stalledSeconds: 0.1,
-    campedAreaHits: 25.0,
-  },
-  north: {
-    ttkSeconds: 225.2,
-    attacksPerMinute: 17.1,
-    hitsOnParty: 6.4,
-    stalledSeconds: 0.1,
-    campedAreaHits: 25.0,
-  },
-  east: {
-    ttkSeconds: 233.6,
-    attacksPerMinute: 17.2,
-    hitsOnParty: 6.3,
-    stalledSeconds: 0.1,
-    campedAreaHits: 25.0,
-  },
-  west: {
-    ttkSeconds: 233.1,
-    attacksPerMinute: 17.1,
-    hitsOnParty: 5.5,
-    stalledSeconds: 0.1,
-    campedAreaHits: 25.5,
-  },
-};
-
 /** How far toward "easier" any metric may move from its baseline. */
 const EASIER_TOLERANCE_FRACTION = 0.1;
 /** Stall seconds are near zero, so they get an absolute allowance too. */
@@ -4841,11 +4809,6 @@ const REAL_LAB_FIGHT_SEEDS = 2;
  * over more seeds than the punisher before its rate means anything.
  */
 const TANK_FIGHT_SEEDS = 8;
-/**
- * `--bare-lab` measures the generated labs with their furniture and webbing
- * stripped back to floor: the room the baselines describe, for re-deriving them.
- */
-const measureBareLab = process.argv.includes('--bare-lab');
 /** How far inside the doorway the party stands when the fight opens. */
 const PARTY_ENTRY_DEPTH_TILES = 3;
 const REAL_LAB_DOOR_SIDES: readonly DoorSide[] = ['south', 'north', 'east', 'west'];
@@ -4878,20 +4841,35 @@ function nearestOpenTile(map: GameMap, from: Vec, taken: readonly Vec[]): Vec {
   throw new Error(`no open tile within ${SEARCH_RADIUS_TILES} of (${from.x}, ${from.y})`);
 }
 
-/** The first generated floor-2 lab whose doorway is on `side`, as a fight site. */
-function generatedLabSite(side: DoorSide): LabSite | null {
+/** One generated lab as the fight sees it, and the same lab stripped back to floor. */
+interface GeneratedLabPair {
+  readonly furnished: LabSite;
+  readonly bare: LabSite;
+}
+
+/**
+ * The first generated floor-2 lab whose doorway is on `side`, as a fight site,
+ * paired with the same room with its benches, shelves and webbing stripped
+ * back to floor.
+ *
+ * The bare room is the baseline, measured in the same run rather than
+ * recorded: which seed first yields a door on a side moves whenever the floor
+ * generator changes, and a recorded number then describes a room this gate no
+ * longer fights in. The mid-fight party starts are placed once, on the
+ * furnished room, so the only difference between the two is the room itself.
+ */
+function generatedLabPair(side: DoorSide): GeneratedLabPair | null {
   for (let seed = REAL_LAB_FIRST_SEED; seed < REAL_LAB_FIRST_SEED + REAL_LAB_SEED_SEARCH; seed++) {
     const { gameMap } = generateFloor(2, seed);
     const room = gameMap.spiderLabRoom;
     if (room === null) continue;
     const doorway = firstOf(findBossRoomDoorways(gameMap.structure, room.bounds));
     if (doorway?.side !== side) continue;
-    const template = cloneGrid(gameMap.structure);
-    if (measureBareLab) {
-      for (const tile of [...room.benchTiles, ...room.shelfTiles, ...room.webTiles]) {
-        const content = template[tile.y][tile.x];
-        content.type = content.groundType ?? SPIDER_LAB_FLOOR;
-      }
+    const furnishedTemplate = cloneGrid(gameMap.structure);
+    const bareTemplate = cloneGrid(furnishedTemplate);
+    for (const tile of [...room.benchTiles, ...room.shelfTiles, ...room.webTiles]) {
+      const content = bareTemplate[tile.y][tile.x];
+      content.type = content.groundType ?? SPIDER_LAB_FLOOR;
     }
     const inward = INWARD_STEP[side];
     const entry = {
@@ -4901,13 +4879,16 @@ function generatedLabSite(side: DoorSide): LabSite | null {
     const beside = { x: entry.x + Math.abs(inward.y), y: entry.y + Math.abs(inward.x) };
     // The quest blocks its furniture as it is built, so the party's footing is
     // judged on a map the quest has already furnished.
-    const probe = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: cloneGrid(template) });
+    const probe = new GameMap({
+      tileHeight: TILE_SIZE,
+      prebuiltStructure: cloneGrid(furnishedTemplate),
+    });
     probe.spiderLabRoom = room;
     new SpiderQuestSystem(probe, new EventBus(), () => undefined, new Conversation(null)).dispose();
     const humanStart = nearestOpenTile(probe, entry, []);
     const catStart = nearestOpenTile(probe, beside, [humanStart]);
-    return {
-      name: `generated lab (seed ${seed}, door ${side})`,
+    const siteFrom = (template: TileGrid, name: string): LabSite => ({
+      name,
       bounds: room.bounds,
       centre: room.centre,
       buildMap: () => {
@@ -4919,6 +4900,11 @@ function generatedLabSite(side: DoorSide): LabSite | null {
       humanStart,
       catStart,
       webTiles: room.webTiles,
+    });
+    const name = `generated lab (seed ${seed}, door ${side})`;
+    return {
+      furnished: siteFrom(furnishedTemplate, name),
+      bare: siteFrom(bareTemplate, `${name}, bare`),
     };
   }
   return null;
@@ -4974,16 +4960,17 @@ function measureRealLab(site: LabSite): RealLabMetrics {
 
 function gateGeneratedLab(): void {
   for (const side of REAL_LAB_DOOR_SIDES) {
-    const site = generatedLabSite(side);
+    const pair = generatedLabPair(side);
     record(
       '12',
       `a generated lab with its door on the ${side}`,
-      site !== null,
-      site?.name ?? 'none found',
+      pair !== null,
+      pair?.furnished.name ?? 'none found',
     );
-    if (site === null) continue;
+    if (pair === null) continue;
+    const site = pair.furnished;
     const now = measureRealLab(site);
-    const base = REAL_LAB_BASELINE[side];
+    const base = measureRealLab(pair.bare);
     const describe = (m: RealLabMetrics): string =>
       `ttk ${fmt(m.ttkSeconds)} s, ${fmt(m.attacksPerMinute)} attacks/min, ` +
       `${fmt(m.hitsOnParty)} hits/min on a tank, ${fmt(m.stalledSeconds)} s stalled, ` +

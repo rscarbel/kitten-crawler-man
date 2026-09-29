@@ -52,7 +52,9 @@ import { figureBakeDensity, type FigureDef, figureFrameCount, type FigureId } fr
 import {
   BYTES_PER_MEGABYTE,
   beginFigureCacheStatsFrame,
+  recordFigureCacheApproxDraw,
   recordFigureCacheBake,
+  recordFigureCacheBakeMs,
   recordFigureCacheDirectDraw,
   recordFigureCacheEviction,
   recordFigureCacheHit,
@@ -74,13 +76,22 @@ const FULL_BAKE_SCALE = 1;
  * Ceiling on the pixel data the cache holds across every figure, the scratch
  * surfaces included.
  *
- * Four times the per-figure ceiling below: one boss with every row it declares
- * warm at once, alongside three packs' worth of walk and attack rows. It stays
- * an order of magnitude under what it replaces — the full sheet set decodes to
- * roughly 807 MB and level 3 alone holds about 370 MB resident — so the trade
- * the cache exists to make holds even with the cache completely full.
+ * Sized to hold a town plaza's own crowd, not just a fight: a crowd of forty
+ * strangers drawn from a few dozen looks needs its idle and walk rows warm in
+ * every facing at once (a citizen a player is looking at may be facing any of
+ * three ways), and the whole crowd's own pinned working set — every look a
+ * population this size statistically touches, held resident for as long as
+ * the town scene stays open rather than released and re-baked — measures a
+ * consistent ~122 MB across world seeds. A pinned row is exempt from active
+ * eviction (see `pinFigureState`), so that 122 MB is not headroom the rest of
+ * the cache can borrow under pressure: on top of it sits the active player's
+ * own per-figure ceiling (56 MB, `HUMAN_FIGURE_BUDGET_MEGABYTES` in
+ * `humanFigure.ts`) so a town visit never leaves Carl's own new gear or
+ * actions with nowhere to bake. It stays well under what it replaces — the
+ * full sheet set decodes to roughly 807 MB and level 3 alone holds about
+ * 370 MB resident.
  */
-const CACHE_BUDGET_MEGABYTES = 96;
+export const CACHE_BUDGET_MEGABYTES = 180;
 export const CACHE_BYTE_BUDGET = CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
 
 /**
@@ -130,8 +141,16 @@ const BYTES_PER_PIXEL = 4;
  * disappear into one frame's slack, which means a cheap figure warms a whole
  * row in two or three frames while an expensive one lands a cell per frame and
  * paints directly in the meantime.
+ *
+ * Sized against a town crowd's own closed set, not just one creature: a
+ * plaza's worth of citizen looks needing their idle and walk rows warm in
+ * every facing is several hundred cells, and a budget too small to clear that
+ * queue in a human-scale warm-up window just means every citizen keeps
+ * cold-baking whatever pose it currently needs, forever, on the render path
+ * this budget exists to keep off. Four milliseconds still disappears into a
+ * frame at 60 Hz.
  */
-export const FRAME_BAKE_BUDGET_MS = 2;
+export const FRAME_BAKE_BUDGET_MS = 4;
 
 /**
  * The share of that budget prewarming may take. Prewarm runs at the frame
@@ -147,7 +166,7 @@ export const FRAME_BAKE_BUDGET_MS = 2;
  * Exported so the gate that holds prewarming to this average states the claim
  * against the number itself rather than against a copy of it.
  */
-export const PREWARM_BAKE_BUDGET_MS = 1;
+export const PREWARM_BAKE_BUDGET_MS = 3;
 
 /**
  * Weight the newest measurement carries in a figure's per-cell bake estimate.
@@ -195,6 +214,78 @@ export const PREWARM_CAPACITY_RETRIES = 4;
  * that can only ever go stale.
  */
 export const IDLE_FRAMES_BEFORE_RELEASE = 600;
+
+/**
+ * How long a row must have gone undrawn before a bake on the render path may
+ * evict it: only the rows drawn on this very frame are the working set it
+ * protects, because that bake is for something on screen now.
+ */
+const RENDER_EVICTION_MIN_IDLE_FRAMES = 1;
+
+/**
+ * How long a row must have gone undrawn before a prewarm may evict it.
+ *
+ * The prewarm queue runs at the top of a frame, before anything has drawn, so
+ * the working set it must protect is what the previous frame drew: a row drawn
+ * then is one frame idle, and is in use.
+ */
+const PREWARM_IN_USE_FRAMES = 2;
+
+/**
+ * How long a row must have gone undrawn before a speculative prewarm — a row
+ * warmed ahead of a use that may never come — may evict it to make room in the
+ * whole cache: as long as the idle sweep waits before releasing it anyway. A
+ * speculative bake therefore only ever takes free room in the cache, or room
+ * the sweep was about to free.
+ *
+ * Otherwise a full cache turns a queue of speculative rows into a treadmill.
+ * A town keeps the cache at its global ceiling, and every walk out of a
+ * building rebuilds the town scene, whose wild mobs and party queue their rows
+ * again; each would evict whatever was warmed but not drawn lately, to be
+ * queued and baked again in turn.
+ *
+ * A figure at its own ceiling is another matter: it can only make room from
+ * its own rows, and a boss whose staged sets together exceed that ceiling is
+ * built to trade the set it has finished with for the one it is about to play.
+ * So against its own ceiling a speculative prewarm may take its figure's rows
+ * once they are out of use, {@link PREWARM_IN_USE_FRAMES}.
+ */
+const SPECULATIVE_EVICTION_MIN_IDLE_FRAMES = IDLE_FRAMES_BEFORE_RELEASE;
+
+/**
+ * How long a row must have gone undrawn before a bake may evict it: to fit the
+ * baking figure's own ceiling, and to fit the whole cache's.
+ */
+interface EvictionPolicy {
+  readonly figureCeilingMinIdleFrames: number;
+  readonly globalCeilingMinIdleFrames: number;
+}
+
+const RENDER_EVICTION: EvictionPolicy = {
+  figureCeilingMinIdleFrames: RENDER_EVICTION_MIN_IDLE_FRAMES,
+  globalCeilingMinIdleFrames: RENDER_EVICTION_MIN_IDLE_FRAMES,
+};
+
+/** For a row about to be drawn, which may take any row out of use. */
+const URGENT_PREWARM_EVICTION: EvictionPolicy = {
+  figureCeilingMinIdleFrames: PREWARM_IN_USE_FRAMES,
+  globalCeilingMinIdleFrames: PREWARM_IN_USE_FRAMES,
+};
+
+const SPECULATIVE_PREWARM_EVICTION: EvictionPolicy = {
+  figureCeilingMinIdleFrames: PREWARM_IN_USE_FRAMES,
+  globalCeilingMinIdleFrames: SPECULATIVE_EVICTION_MIN_IDLE_FRAMES,
+};
+
+/**
+ * While the idle sweep is held nothing is drawn, so every row reads as out of
+ * use and none of them is: behind a loading screen a speculative prewarm takes
+ * free room only.
+ */
+const HELD_SPECULATIVE_PREWARM_EVICTION: EvictionPolicy = {
+  figureCeilingMinIdleFrames: Number.POSITIVE_INFINITY,
+  globalCeilingMinIdleFrames: Number.POSITIVE_INFINITY,
+};
 
 /**
  * How much larger than the cell it must hold a reused scratch surface may be.
@@ -260,6 +351,11 @@ interface PrewarmRequest {
   frames: number;
   /** Frames this request has been refused for want of room. */
   capacityRefusals: number;
+  /**
+   * Asked for by something about to draw the row, rather than warmed ahead of
+   * a use that may never come — see {@link SPECULATIVE_EVICTION_MIN_IDLE_FRAMES}.
+   */
+  urgent: boolean;
 }
 
 /** Figure/state pairs asked for ahead of their first draw, in request order. */
@@ -314,7 +410,58 @@ let scratchDepth = 0;
 let scratchBytes = 0;
 
 const missedStates = new Set<string>();
-const abandonedPrewarms = new Set<string>();
+/** Abandoned rows already warned about, so the console hears of each once. */
+const warnedAbandonedPrewarms = new Set<string>();
+
+/** When a row was given up on, and whether what was given up was urgent. */
+interface AbandonedPrewarm {
+  readonly frame: number;
+  readonly urgent: boolean;
+}
+
+/**
+ * Rows the prewarm queue gave up on, by `${figureId}|${state}`.
+ *
+ * A row nothing has room for is still drawn — each draw paints it directly and
+ * asks for it again, urgently. Taken back every time, it would reach the
+ * front of the queue with a fresh retry count every frame, be refused there
+ * every frame, and keep costing the allowance the rows behind it are waiting
+ * on. Refused instead for {@link IDLE_FRAMES_BEFORE_RELEASE}, the window in
+ * which the rows crowding it out are themselves released if nothing draws them
+ * — the transient pressure that refused it has had its chance to clear.
+ *
+ * A speculative give-up bars only further speculation. It was refused under
+ * {@link SPECULATIVE_PREWARM_EVICTION}, which may take free room alone, so it
+ * says nothing about whether the row fits once it is on screen and allowed to
+ * displace rows out of use; barring the draw's urgent request on its strength
+ * would leave a row that has just come on screen unwarmed for the whole window.
+ */
+const abandonedPrewarms = new Map<string, AbandonedPrewarm>();
+
+/**
+ * Speculative requests let go of for want of free room, since the module
+ * loaded — see {@link figurePrewarmGiveUps}.
+ */
+let speculativePrewarmYields = 0;
+/** Requests let go of that a draw was waiting on, or that no cache could ever hold. */
+let drawnPrewarmAbandons = 0;
+
+/**
+ * Rows the idle sweep must never release, by `${figureId}|${state}`.
+ *
+ * For a cast that stays on screen for as long as a scene does — a town's
+ * strolling crowd — where the idle sweep's ten-second window is a false
+ * signal: a look worn by only one or two of the crowd can go that long
+ * between draws of its rarer facing and still be squarely part of the
+ * working set, not a row that fell out of use. Pinning is metadata over
+ * rows the cache already holds; it grants no admission of its own, so a
+ * pin on a row nothing has baked yet does nothing until something bakes it.
+ */
+const pinnedRows = new Set<string>();
+
+function pinKey(figureId: FigureId, state: string): string {
+  return `${figureId}|${state}`;
+}
 
 function bakeScaleNow(): number {
   return shouldDownscaleForLowEndDevice() ? LOW_END_BAKE_SCALE : FULL_BAKE_SCALE;
@@ -337,8 +484,38 @@ export function beginFigureFrame(): void {
   frameCounter++;
   msBakedThisFrame = 0;
   beginFigureCacheStatsFrame();
-  releaseIdleRows();
+  if (!idleSweepHeld) releaseIdleRows();
   runPrewarmQueue();
+}
+
+/**
+ * Whether the idle sweep is suspended — see {@link holdFigureIdleSweep}.
+ */
+let idleSweepHeld = false;
+
+/**
+ * Suspends the idle sweep until {@link releaseFigureIdleSweep}.
+ *
+ * For a loading screen, which draws no figure at all: the sweep reads "not
+ * drawn for ten seconds" as "no longer wanted", and behind a long enough load
+ * that would throw away the very rows the load was warming before a single one
+ * of them reached the screen.
+ */
+export function holdFigureIdleSweep(): void {
+  idleSweepHeld = true;
+}
+
+/**
+ * Resumes the idle sweep, counting every held row as drawn now, so the rows a
+ * loading screen warmed get the full idle window from the first frame of play
+ * rather than from when they were baked.
+ */
+export function releaseFigureIdleSweep(): void {
+  if (!idleSweepHeld) return;
+  idleSweepHeld = false;
+  for (const entry of entries.values()) {
+    for (const row of entry.rows.values()) row.lastFrame = frameCounter;
+  }
 }
 
 /**
@@ -350,6 +527,12 @@ export function beginFigureFrame(): void {
 function releaseIdleRows(): void {
   for (const [id, entry] of entries) {
     for (const [state, row] of entry.rows) {
+      // A pinned row keeps its place in the least-recently-touched order
+      // (pinning does not touch it), so it can sit ahead of rows that are
+      // genuinely due for release. Skipped rather than treated as the
+      // youngest row, or the scan below would stop at it and leave every
+      // older, unpinned row beside it unswept.
+      if (pinnedRows.has(pinKey(id, state))) continue;
       if (frameCounter - row.lastFrame <= IDLE_FRAMES_BEFORE_RELEASE) break;
       dropRow(entry, state, row);
       recordFigureCacheRelease();
@@ -383,15 +566,27 @@ function dropRowIfEmpty(entry: FigureEntry, state: string, row: FigureRow): void
 }
 
 /**
- * Reclaims rows of one figure that nobody drew this frame, coldest first, until
- * `hasRoom` is satisfied. Rows drawn this frame are the working set; dropping
- * one of them is what turns an over-budget cache into a treadmill that rebuilds
- * everything every frame.
+ * Reclaims rows of one figure undrawn for at least `minIdleFrames`, coldest
+ * first, until `hasRoom` is satisfied. Rows drawn more recently are the working
+ * set; dropping one of them is what turns an over-budget cache into a treadmill
+ * that rebuilds everything every frame.
  */
-function evictStaleRowsOf(id: FigureId, entry: FigureEntry, hasRoom: () => boolean): void {
+function evictStaleRowsOf(
+  id: FigureId,
+  entry: FigureEntry,
+  hasRoom: () => boolean,
+  minIdleFrames: number,
+): void {
   for (const [state, row] of entry.rows) {
     if (hasRoom()) return;
-    if (row.lastFrame === frameCounter) continue;
+    if (frameCounter - row.lastFrame < minIdleFrames) continue;
+    // A pin is a promise the row stays resident for as long as whatever
+    // pinned it says so — a town scene's own crowd, kept warm for the scene's
+    // whole life rather than released and re-baked. Active eviction breaking
+    // that promise under byte pressure is exactly the bug pinning exists to
+    // prevent, so a pinned row is skipped here the same way `releaseIdleRows`
+    // skips it, never dropped as the cache's last resort for room.
+    if (pinnedRows.has(pinKey(id, state))) continue;
     dropRow(entry, state, row);
     recordFigureCacheEviction();
   }
@@ -406,18 +601,18 @@ function evictStaleRowsOf(id: FigureId, entry: FigureEntry, hasRoom: () => boole
  * unrelated creature's warm rows, reports the loss as cache pressure, and then
  * refuses the bake anyway.
  */
-function evictStaleForGlobalBytes(bytes: number): void {
+function evictStaleForGlobalBytes(bytes: number, minIdleFrames: number): void {
   if (admitsGlobally(bytes)) return;
   for (const [id, entry] of entries) {
-    evictStaleRowsOf(id, entry, () => admitsGlobally(bytes));
+    evictStaleRowsOf(id, entry, () => admitsGlobally(bytes), minIdleFrames);
     if (admitsGlobally(bytes)) break;
   }
   publishOccupancy();
 }
 
-function evictStaleForFigureBytes(entry: FigureEntry, bytes: number): void {
+function evictStaleForFigureBytes(entry: FigureEntry, bytes: number, minIdleFrames: number): void {
   if (admitsForFigure(entry, bytes)) return;
-  evictStaleRowsOf(entry.def.id, entry, () => admitsForFigure(entry, bytes));
+  evictStaleRowsOf(entry.def.id, entry, () => admitsForFigure(entry, bytes), minIdleFrames);
   publishOccupancy();
 }
 
@@ -466,6 +661,12 @@ function rowFor(entry: FigureEntry, state: string): FigureRow {
 
 function cellBytes(entry: FigureEntry): number {
   return entry.cellPixelWidth * entry.cellPixelHeight * BYTES_PER_PIXEL;
+}
+
+/** Whether a cell of this figure fits its own ceiling and the whole cache's, both empty. */
+function cellCanEverFit(entry: FigureEntry): boolean {
+  const bytes = cellBytes(entry);
+  return bytes <= figureByteBudgetFor(entry.def) && bytes <= CACHE_BYTE_BUDGET;
 }
 
 function admitsGlobally(bytes: number): boolean {
@@ -617,17 +818,18 @@ function bakeCell(
   row: FigureRow,
   state: string,
   frame: number,
+  eviction: EvictionPolicy,
 ): CanvasSurface | null {
   const bytes = cellBytes(entry);
   // No eviction can free room for a cell that does not fit an empty cache, and
   // sweeping for one only destroys rows that were serving somebody.
-  if (bytes > figureByteBudgetFor(entry.def) || bytes > CACHE_BYTE_BUDGET) return null;
+  if (!cellCanEverFit(entry)) return null;
   if (!admitsForFigure(entry, bytes)) {
-    evictStaleForFigureBytes(entry, bytes);
+    evictStaleForFigureBytes(entry, bytes, eviction.figureCeilingMinIdleFrames);
     if (!admitsForFigure(entry, bytes)) return null;
   }
   if (!admitsGlobally(bytes)) {
-    evictStaleForGlobalBytes(bytes);
+    evictStaleForGlobalBytes(bytes, eviction.globalCeilingMinIdleFrames);
     if (!admitsGlobally(bytes)) return null;
   }
 
@@ -664,6 +866,7 @@ function bakeCell(
   cachedBytes += bytes;
   const elapsedMs = performance.now() - startedAt;
   recordBakeCost(entry, elapsedMs);
+  recordFigureCacheBakeMs(elapsedMs);
   // Assigned rather than accumulated: a painter that composed another figure
   // has already charged its nested bakes to this frame, and the elapsed time
   // measured here contains them.
@@ -683,22 +886,46 @@ function bakeCell(
  *
  * `frameLimit` warms only the row's first frames — a blow's wind-up up to the
  * frame it lands on, say, where the rest can bake while the first frames play.
+ *
+ * `urgent` puts the request at the front of the queue instead of the back —
+ * for a row about to be drawn this frame or the next, not merely warmed
+ * ahead of an eventual use, where waiting behind whatever speculative
+ * backlog already queued (a player's own figure warming rows for a fight
+ * that has not started, say) would mean the thing on screen right now stays
+ * an approximation for however long that backlog takes to drain.
  */
-export function prewarmFigureState(def: FigureDef, state: string, frameLimit?: number): void {
+export function prewarmFigureState(
+  def: FigureDef,
+  state: string,
+  frameLimit?: number,
+  urgent = false,
+): void {
   const declared = figureFrameCount(def, state);
   if (declared === 0) {
     warnMissingState(def, state);
     return;
   }
+  if (isPrewarmAbandoned(def.id, state, urgent)) return;
   const frames = Math.min(declared, frameLimit ?? declared);
-  const queued = prewarmQueue.find(
+  const queuedIndex = prewarmQueue.findIndex(
     (pending) => pending.def.id === def.id && pending.state === state,
   );
-  if (queued !== undefined) {
+  if (queuedIndex !== -1) {
+    const queued = prewarmQueue[queuedIndex];
     queued.frames = Math.max(queued.frames, frames);
+    // Already-queued work moves to the front the same way newly-queued work
+    // does — a row already waiting behind a large speculative backlog is
+    // exactly the row `urgent` exists to rescue.
+    if (urgent) queued.urgent = true;
+    if (urgent && queuedIndex > 0) {
+      prewarmQueue.splice(queuedIndex, 1);
+      prewarmQueue.unshift(queued);
+    }
     return;
   }
-  prewarmQueue.push({ def, state, frames, capacityRefusals: 0 });
+  const request: PrewarmRequest = { def, state, frames, capacityRefusals: 0, urgent };
+  if (urgent) prewarmQueue.unshift(request);
+  else prewarmQueue.push(request);
 }
 
 /**
@@ -761,6 +988,59 @@ export function markFigureStateDrawn(def: FigureDef, state: string): void {
   rowFor(entryFor(def), state);
 }
 
+/**
+ * Exempts one row from the idle sweep until {@link unpinFigureState} undoes it.
+ *
+ * A pin outlives the row it names: pinning ahead of a bake that has not
+ * landed yet is fine (the sweep has nothing to release either way), and a
+ * released or evicted row can be re-baked and is still exempt once it lands
+ * again, without pinning it a second time.
+ */
+export function pinFigureState(def: FigureDef, state: string): void {
+  pinnedRows.add(pinKey(def.id, state));
+}
+
+/** How many rows are pinned right now, for a harness watching the pin set stay bounded. */
+export function pinnedFigureRowCount(): number {
+  return pinnedRows.size;
+}
+
+/**
+ * What the pin set holds right now: how many pinned rows have at least one
+ * cell baked, and their bytes. A pin set whose bytes approach the whole
+ * budget leaves nothing for any unpinned figure to bake into.
+ */
+export function pinnedFigureFootprint(): { bakedRows: number; bytes: number } {
+  let bakedRows = 0;
+  let bytes = 0;
+  for (const [id, entry] of entries) {
+    for (const [state, row] of entry.rows) {
+      if (!pinnedRows.has(pinKey(id, state)) || row.cells.size === 0) continue;
+      bakedRows++;
+      bytes += row.bytes;
+    }
+  }
+  return { bakedRows, bytes };
+}
+
+/** Whether {@link holdFigureIdleSweep} is in force. */
+export function isFigureIdleSweepHeld(): boolean {
+  return idleSweepHeld;
+}
+
+/** Undoes {@link pinFigureState}. A row that was never pinned is left alone. */
+export function unpinFigureState(def: FigureDef, state: string): void {
+  pinnedRows.delete(pinKey(def.id, state));
+}
+
+/**
+ * Releases every pin at once, for a scene giving up the working set it
+ * pinned rather than naming each row it pinned one at a time.
+ */
+export function unpinAllFigureStates(): void {
+  pinnedRows.clear();
+}
+
 /** Bytes still to bake for the first `frames` frames of a row, at the scale the cache bakes at now. */
 function unbakedBytes(def: FigureDef, state: string, frames: number): number {
   const scale = bakeScaleNow();
@@ -806,46 +1086,177 @@ export function figureRowFitsWithoutEviction(def: FigureDef, state: string): boo
   return admitsGlobally(queuedBytes + neededBytes) && fitsFigure;
 }
 
+/**
+ * Frames remaining of an elevated prewarm budget, and the budget itself —
+ * see {@link boostPrewarmBudget}. Zero frames remaining means the ordinary
+ * {@link PREWARM_BAKE_BUDGET_MS} applies.
+ */
+let boostedPrewarmBudgetMs = 0;
+let boostedPrewarmFramesRemaining = 0;
+
+function effectivePrewarmBudgetMs(): number {
+  return boostedPrewarmFramesRemaining > 0 ? boostedPrewarmBudgetMs : PREWARM_BAKE_BUDGET_MS;
+}
+
+/**
+ * Raises the prewarm queue's per-frame budget for a bounded number of frames,
+ * still paced one frame at a time rather than run to completion.
+ *
+ * For a scene arriving with a closed set larger than the ordinary budget can
+ * clear before a player notices — a town's whole crowd, say — behind
+ * whatever transition already exists (a level-arrival fade, a loading
+ * screen) rather than blocking the thread outright: every frame still
+ * renders, at up to `ms` of baking instead of {@link PREWARM_BAKE_BUDGET_MS},
+ * so the cost is spread and bounded rather than paid as one freeze. A second
+ * call while frames remain from the first extends rather than stacks, taking
+ * the larger of the two budgets and the later of the two expiries.
+ */
+export function boostPrewarmBudget(ms: number, frames: number): void {
+  boostedPrewarmBudgetMs = Math.max(boostedPrewarmBudgetMs, ms);
+  boostedPrewarmFramesRemaining = Math.max(boostedPrewarmFramesRemaining, frames);
+}
+
 function runPrewarmQueue(): void {
+  const budgetMs = effectivePrewarmBudgetMs();
+  if (boostedPrewarmFramesRemaining > 0) boostedPrewarmFramesRemaining--;
   if (prewarmDebtMs > 0) {
-    prewarmDebtMs = Math.max(0, prewarmDebtMs - PREWARM_BAKE_BUDGET_MS);
+    prewarmDebtMs = Math.max(0, prewarmDebtMs - budgetMs);
     return;
   }
   try {
-    drainPrewarmQueue();
+    drainPrewarmQueue(budgetMs);
   } finally {
     // Whatever this frame's prewarming ran over by is owed back, however it
     // ended — a painter that threw has still spent the time.
-    prewarmDebtMs += Math.max(0, msBakedThisFrame - PREWARM_BAKE_BUDGET_MS);
-  }
-}
-
-function drainPrewarmQueue(): void {
-  while (prewarmQueue.length > 0 && msBakedThisFrame < PREWARM_BAKE_BUDGET_MS) {
-    const pending = prewarmQueue[0];
-    const entry = entryFor(pending.def);
-    if (!fitsBakeAllowance(entry, msBakedThisFrame, PREWARM_BAKE_BUDGET_MS)) return;
-    const row = rowFor(entry, pending.state);
-    let baked = false;
-    for (let frame = 0; frame < pending.frames; frame++) {
-      if (row.cells.has(frame)) continue;
-      if (!fitsBakeAllowance(entry, msBakedThisFrame, PREWARM_BAKE_BUDGET_MS)) return;
-      if (bakeCell(entry, row, pending.state, frame) === null) {
-        dropRowIfEmpty(entry, pending.state, row);
-        deferRefusedPrewarm(pending);
-        return;
-      }
-      recordFigureCachePrewarmBake();
-      baked = true;
-      if (msBakedThisFrame >= PREWARM_BAKE_BUDGET_MS) return;
-    }
-    if (!baked) prewarmQueue.shift();
+    prewarmDebtMs += Math.max(0, msBakedThisFrame - budgetMs);
   }
 }
 
 /**
+ * Bakes from the front of the queue until the allowance is spent.
+ *
+ * A row refused for want of room goes to the back and the drain carries on
+ * with the next one: whatever refused that row says nothing about a smaller
+ * figure behind it. The drain stops once it comes back round to a row it has
+ * already had refused this frame, since everything still queued then has been.
+ */
+function drainPrewarmQueue(budgetMs: number): void {
+  const refusedThisFrame = new Set<PrewarmRequest>();
+  while (prewarmQueue.length > 0 && msBakedThisFrame < budgetMs) {
+    const pending = prewarmQueue[0];
+    if (refusedThisFrame.has(pending)) return;
+    const entry = entryFor(pending.def);
+    if (!fitsBakeAllowance(entry, msBakedThisFrame, budgetMs)) return;
+    const row = rowFor(entry, pending.state);
+    let baked = false;
+    let refused = false;
+    for (let frame = 0; frame < pending.frames; frame++) {
+      if (row.cells.has(frame)) continue;
+      if (!fitsBakeAllowance(entry, msBakedThisFrame, budgetMs)) return;
+      if (bakeCell(entry, row, pending.state, frame, prewarmEviction(pending)) === null) {
+        dropRowIfEmpty(entry, pending.state, row);
+        deferRefusedPrewarm(pending);
+        refusedThisFrame.add(pending);
+        refused = true;
+        break;
+      }
+      recordFigureCachePrewarmBake();
+      baked = true;
+      if (msBakedThisFrame >= budgetMs) return;
+    }
+    if (!baked && !refused) prewarmQueue.shift();
+  }
+}
+
+/**
+ * Bakes queued prewarm rows for up to `budgetMs`, on top of the frame's own
+ * paced prewarm share.
+ *
+ * For a caller that owns the whole frame — a loading screen, with no figure on
+ * screen that could be waiting on a bake — and so can drain the queue at the
+ * rate it chooses rather than trickle it. Honours `budgetMs` as a ceiling rather
+ * than a mean: a cell starts only if the figure's measured cost fits what is
+ * left, except the first when `mustProgress` says nothing else has run this
+ * frame. Books no debt, since the caller is the one pacing itself.
+ */
+export function bakeFigurePrewarmFor(budgetMs: number, mustProgress: boolean): void {
+  const spentBefore = msBakedThisFrame;
+  const spentMs = (): number => msBakedThisFrame - spentBefore;
+  // Stricter than `fitsBakeAllowance`: a figure with no estimate yet is let
+  // through only as the frame's owed first unit, never on top of other work,
+  // because its first cell is the one bake whose cost nobody can predict.
+  const fitsCeiling = (entry: FigureEntry): boolean => {
+    const estimate = estimatedBakeMs(entry);
+    return estimate !== null && spentMs() + estimate <= budgetMs;
+  };
+  let startedAny = false;
+  // A refused row goes to the back of the queue; meeting it again at the front
+  // means every row still queued has been refused this call.
+  const refusedThisCall = new Set<PrewarmRequest>();
+  while (prewarmQueue.length > 0) {
+    const pending = prewarmQueue[0];
+    if (refusedThisCall.has(pending)) return;
+    const entry = entryFor(pending.def);
+    const row = rowFor(entry, pending.state);
+    let refused = false;
+    for (let frame = 0; frame < pending.frames; frame++) {
+      if (row.cells.has(frame)) continue;
+      const owedFirstCell = mustProgress && !startedAny;
+      if (!owedFirstCell && !fitsCeiling(entry)) {
+        dropRowIfEmpty(entry, pending.state, row);
+        return;
+      }
+      startedAny = true;
+      if (bakeCell(entry, row, pending.state, frame, prewarmEviction(pending)) === null) {
+        dropRowIfEmpty(entry, pending.state, row);
+        deferRefusedPrewarm(pending);
+        refusedThisCall.add(pending);
+        refused = true;
+        break;
+      }
+      recordFigureCachePrewarmBake();
+    }
+    if (!refused) prewarmQueue.shift();
+  }
+}
+
+/**
+ * Cells the prewarm queue still owes, and what they are expected to cost.
+ *
+ * A figure no cell has been baked of yet has no estimate, and is costed at
+ * `unmeasuredCellMs` — the caller's guess, since the honest answer is "one bake
+ * will tell". For deciding whether a wait is worth a loading screen, not for
+ * pacing.
+ */
+export function figurePrewarmOwed(unmeasuredCellMs: number): { cells: number; ms: number } {
+  const scale = bakeScaleNow();
+  let cells = 0;
+  let ms = 0;
+  for (const pending of prewarmQueue) {
+    const entry = entries.get(pending.def.id);
+    const heldCells = entry?.bakeScale === scale ? entry.rows.get(pending.state)?.cells : undefined;
+    let missing = 0;
+    for (let frame = 0; frame < pending.frames; frame++) {
+      if (heldCells?.has(frame) !== true) missing++;
+    }
+    const estimate = bakeCostByFigure.get(pending.def.id);
+    const perCellMs = estimate?.bakeScale === scale ? estimate.msPerCell : unmeasuredCellMs;
+    cells += missing;
+    ms += missing * perCellMs;
+  }
+  return { cells, ms };
+}
+
+function prewarmEviction(pending: PrewarmRequest): EvictionPolicy {
+  if (pending.urgent) return URGENT_PREWARM_EVICTION;
+  return idleSweepHeld ? HELD_SPECULATIVE_PREWARM_EVICTION : SPECULATIVE_PREWARM_EVICTION;
+}
+
+/**
  * Puts a request the cache had no room for back at the end of the queue, so the
- * frames it went unwarmed cost it its place rather than its existence.
+ * frames it went unwarmed cost it its place rather than its existence. Past
+ * {@link PREWARM_CAPACITY_RETRIES} it is abandoned instead — see
+ * {@link abandonedPrewarms}.
  */
 function deferRefusedPrewarm(pending: PrewarmRequest): void {
   prewarmQueue.shift();
@@ -854,7 +1265,45 @@ function deferRefusedPrewarm(pending: PrewarmRequest): void {
     prewarmQueue.push(pending);
     return;
   }
-  warnPrewarmAbandoned(pending);
+  abandonedPrewarms.set(pinKey(pending.def.id, pending.state), {
+    frame: frameCounter,
+    urgent: pending.urgent,
+  });
+  // A speculative row yielding to a cache that is full of rows in use is the
+  // eviction policy working as intended: a town arrival or a building exit
+  // queues rows for every wild mob on the map, and most of them are never on
+  // screen. What is worth a warning is a row something is drawing, or one
+  // that no amount of room could ever admit — a figure declared too big for
+  // its own budget.
+  if (pending.urgent || !cellCanEverFit(entryFor(pending.def))) {
+    drawnPrewarmAbandons++;
+    warnPrewarmAbandoned(pending);
+    return;
+  }
+  speculativePrewarmYields++;
+}
+
+/**
+ * Prewarm requests given up on since the module loaded: speculative ones that
+ * yielded to a full cache, which is the eviction policy doing its job, and
+ * ones that were for a row on screen or that could never fit, which are the
+ * ones worth a warning. Cumulative, for a harness to take the difference
+ * across whatever it is measuring.
+ */
+export function figurePrewarmGiveUps(): { speculativeYields: number; drawnAbandons: number } {
+  return { speculativeYields: speculativePrewarmYields, drawnAbandons: drawnPrewarmAbandons };
+}
+
+/** Whether the row was abandoned recently enough that this request for it is refused. */
+function isPrewarmAbandoned(figureId: FigureId, state: string, urgent: boolean): boolean {
+  const key = pinKey(figureId, state);
+  const abandoned = abandonedPrewarms.get(key);
+  if (abandoned === undefined) return false;
+  const withinWindow = frameCounter - abandoned.frame < IDLE_FRAMES_BEFORE_RELEASE;
+  const urgentAfterSpeculation = urgent && !abandoned.urgent;
+  if (withinWindow && !urgentAfterSpeculation) return true;
+  abandonedPrewarms.delete(key);
+  return false;
 }
 
 /**
@@ -878,6 +1327,8 @@ export function releaseFigure(def: FigureDef): void {
   for (let i = prewarmQueue.length - 1; i >= 0; i--) {
     if (prewarmQueue[i].def.id === def.id) prewarmQueue.splice(i, 1);
   }
+  // Freeing this figure's rows is exactly the room an abandoned row was refused for.
+  abandonedPrewarms.clear();
   if (entries.size === 0) releaseScratchSurfaces();
   publishOccupancy();
 }
@@ -901,10 +1352,11 @@ function warnMissingState(def: FigureDef, state: string): void {
 
 function warnPrewarmAbandoned(pending: PrewarmRequest): void {
   const signature = `${pending.def.id}:${pending.state}`;
-  if (abandonedPrewarms.has(signature)) return;
-  abandonedPrewarms.add(signature);
+  if (warnedAbandonedPrewarms.has(signature)) return;
+  warnedAbandonedPrewarms.add(signature);
+  const reason = pending.urgent ? 'while it was on screen' : 'which no empty cache could hold';
   console.warn(
-    `[figureFrameCache] gave up prewarming "${pending.def.id}" state "${pending.state}" ` +
+    `[figureFrameCache] gave up prewarming "${pending.def.id}" state "${pending.state}" ${reason}, ` +
       `after ${PREWARM_CAPACITY_RETRIES} frames with no room for it`,
   );
 }
@@ -970,6 +1422,12 @@ function directPaint(
   scale: number,
 ): void {
   recordFigureCacheDirectDraw();
+  // A direct paint is the one path that pays a painter's full price every
+  // frame it recurs, and nothing else asks for a row that is only ever missed
+  // here: the frame's bake budget went to the prewarm queue, say, before the
+  // render reached it. Asked for urgently, it is baked at the front of the
+  // next frame's queue instead of being painted again, and again.
+  prewarmFigureState(def, state, undefined, true);
   const width = Math.max(1, Math.ceil(def.frameWidth * scale));
   const height = Math.max(1, Math.ceil(def.frameHeight * scale));
   const surface = acquireScratch(width, height);
@@ -1008,13 +1466,93 @@ function cellFor(def: FigureDef, state: string, frame: number, scale: number): P
     dropRowIfEmpty(entry, state, row);
     return null;
   }
-  const baked = bakeCell(entry, row, state, frame);
+  const baked = bakeCell(entry, row, state, frame, RENDER_EVICTION);
   if (baked === null) {
     dropRowIfEmpty(entry, state, row);
     return null;
   }
   recordFigureCacheBake();
   return placed(entry, baked, scale);
+}
+
+/** The already-baked cell of a row closest to the frame actually wanted. */
+function nearestBakedCell(row: FigureRow, wantedFrame: number): CanvasSurface | null {
+  let best: CanvasSurface | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const [cellFrame, surface] of row.cells) {
+    const distance = Math.abs(cellFrame - wantedFrame);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = surface;
+    }
+  }
+  return best;
+}
+
+/** Any already-baked cell of the figure, for a row that has nothing of its own yet. */
+function anyBakedCell(entry: FigureEntry): CanvasSurface | null {
+  for (const row of entry.rows.values()) {
+    const cell = nearestBakedCell(row, 0);
+    if (cell !== null) return cell;
+  }
+  return null;
+}
+
+/**
+ * Re-queues a pinned row that has nothing to show at all — the safety net for
+ * a pin whose row went missing some way {@link evictStaleRowsOf}'s own pin
+ * check does not cover (a bake-scale change drops every row of a figure
+ * outright, `entryFor`'s own rebuild path, regardless of what was pinned).
+ * Without this a citizen whose pinned row vanished would fall to a
+ * `directPaint` every single frame forever rather than getting baked back and
+ * pinned again within the next few; harmless to call repeatedly while the row
+ * is still missing, since `prewarmFigureState` already dedupes against its
+ * own queue.
+ */
+function requeuePinnedRowIfMissing(def: FigureDef, state: string): void {
+  // Urgent: whatever is missing is being asked for on the render path this
+  // very frame, not warmed ahead of an eventual need.
+  if (pinnedRows.has(pinKey(def.id, state))) prewarmFigureState(def, state, undefined, true);
+}
+
+/**
+ * The exact cell when it is warm, or a stand-in already-baked cell when it is
+ * not — the nearest frame of the same row, or failing that any warm row of
+ * the same figure. Never bakes: a caller that reaches this function has
+ * already decided a slightly-wrong pose this frame costs less than a bake on
+ * the render path, so the only two outcomes are a cell (exact or borrowed)
+ * or `null` when the figure has nothing baked at all yet.
+ */
+function approxCellFor(
+  def: FigureDef,
+  state: string,
+  frame: number,
+  scale: number,
+): PlacedCell | null {
+  const entry = entries.get(def.id);
+  if (entry?.bakeScale !== bakeScaleNow()) {
+    recordFigureCacheMiss();
+    requeuePinnedRowIfMissing(def, state);
+    return null;
+  }
+  const row = entry.rows.get(state);
+  const exact = row?.cells.get(frame);
+  if (exact !== undefined) {
+    recordFigureCacheHit();
+    return placed(entry, exact, scale);
+  }
+  recordFigureCacheMiss();
+  const standIn = (row !== undefined ? nearestBakedCell(row, frame) : null) ?? anyBakedCell(entry);
+  if (standIn === null) {
+    requeuePinnedRowIfMissing(def, state);
+    return null;
+  }
+  recordFigureCacheApproxDraw();
+  // The stand-in covers this frame; the exact row is now wanted on screen, not
+  // on speculation, so it is asked for as such — a speculative request for it
+  // may be waiting behind a full cache that only an urgent one can make room in.
+  prewarmFigureState(def, state, undefined, true);
+  return placed(entry, standIn, scale);
 }
 
 /**
@@ -1060,6 +1598,45 @@ export function drawFigureCached(
   const clamped = clampFrame(def, state, frame);
   const scale = tileSize / def.tileScale;
   const cell = cellFor(def, state, clamped, scale);
+  withFigurePlacement(ctx, def, x, y, tileSize, scale, opts, (destX, destY) => {
+    if (cell === null) {
+      directPaint(ctx, def, state, clamped, destX, destY, scale);
+      return;
+    }
+    ctx.drawImage(cell.surface, destX, destY, cell.destWidth, cell.destHeight);
+  });
+}
+
+/**
+ * {@link drawFigureCached}'s contract, but never bakes on the render path: a
+ * miss draws the nearest already-baked frame of the same row, or any
+ * already-baked row of the same figure, instead of paying for the exact one.
+ *
+ * For a crowd of many near-identical figures sharing one prewarm queue,
+ * where the exact frame not being warm yet is a beat of the wrong pose for
+ * one figure in a crowd — invisible at a glance, and gone once the row this
+ * frame actually wanted finishes warming on the paced queue — rather than a
+ * bake the render path pays for on the spot. Only a figure with nothing
+ * baked at all yet falls back to a direct paint, the one case a stand-in
+ * cannot help with.
+ */
+export function drawFigureCachedApprox(
+  ctx: CanvasRenderingContext2D,
+  def: FigureDef,
+  state: string,
+  frame: number,
+  x: number,
+  y: number,
+  tileSize: number,
+  opts: DrawSpriteOpts = {},
+): void {
+  if (figureFrameCount(def, state) === 0) {
+    warnMissingState(def, state);
+    return;
+  }
+  const clamped = clampFrame(def, state, frame);
+  const scale = tileSize / def.tileScale;
+  const cell = approxCellFor(def, state, clamped, scale);
   withFigurePlacement(ctx, def, x, y, tileSize, scale, opts, (destX, destY) => {
     if (cell === null) {
       directPaint(ctx, def, state, clamped, destX, destY, scale);
@@ -1215,11 +1792,23 @@ function measureFigureInk(def: FigureDef, state: string, frame: number): FrameIn
 export function flushFigureFrameCache(): void {
   entries.clear();
   prewarmQueue.length = 0;
+  abandonedPrewarms.clear();
+  // A pin naming a row that no longer exists is dead weight, not a leak on
+  // its own, but nothing keeps it meaningful once every cell it could have
+  // named is gone.
+  pinnedRows.clear();
   // The queue it was owed against is gone, so the next floor's first prewarm
   // must not open paused. What a painter costs survives, though: the estimates
   // are a property of the painter rather than of any cell, and re-learning them
   // is exactly the over-budget bake they exist to prevent.
   prewarmDebtMs = 0;
+  // A boost is a promise about the arrival that queued it; a flush means that
+  // arrival's own queue is gone too, so the promise has nothing left to keep.
+  boostedPrewarmBudgetMs = 0;
+  boostedPrewarmFramesRemaining = 0;
+  // Held for a loading screen whose scene is being left along with everything
+  // it warmed; nothing is left for the hold to protect.
+  idleSweepHeld = false;
   inkBoundsByFrame.clear();
   cachedBytes = 0;
   cachedRows = 0;

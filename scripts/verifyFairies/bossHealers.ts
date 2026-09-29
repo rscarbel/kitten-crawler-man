@@ -35,6 +35,7 @@ import { createDoomsdayProgress } from '../../src/core/DoomsdayProgress';
 import { withWorldSeed } from '../../src/core/WorldRandom';
 import { GameMap, TOWER_FLOOR_COUNT } from '../../src/map/GameMap';
 import { ARENA_INTERIOR_RADIUS_TILES } from '../../src/map/arenaGeometry';
+import { roomDoorways } from '../../src/map/roomDoorways';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import type { Mob } from '../../src/creatures/Mob';
@@ -1163,7 +1164,10 @@ interface TilePoint {
 /** How a healer fared with its boss dead and a crawler chasing it through the real mob loop. */
 interface HealerChase {
   readonly name: string;
-  /** Whether the boss fell, the healer lived through the chase, and the crawler closed in on it. */
+  /**
+   * Whether the boss fell, the healer lived through the chase, and the chase
+   * pressed it: the crawler closed in on it, or it took flight from the crawler.
+   */
   readonly staged: boolean;
   readonly bossDead: boolean;
   readonly healerAlive: boolean;
@@ -1287,9 +1291,13 @@ function chaseHealer(scene: {
     if (healer.fleeingTo !== null) framesFleeing++;
     closestPx = Math.min(closestPx, Math.hypot(healer.x - party.human.x, healer.y - party.human.y));
   }
+  // A healer free to run that makes for another room at once is never caught
+  // up with by a crawler held under its pace; its flight is the pressure told.
+  const crawlerClosedIn = closestPx <= CHASE_CLOSE_TILES * TILE_SIZE;
+  const pressed = crawlerClosedIn || framesFleeing > 0;
   return {
     name: scene.name,
-    staged: scene.bossFell && healer.isAlive && closestPx <= CHASE_CLOSE_TILES * TILE_SIZE,
+    staged: scene.bossFell && healer.isAlive && pressed,
     bossDead: scene.bossFell,
     healerAlive: healer.isAlive,
     closestTiles: closestPx / TILE_SIZE,
@@ -1301,7 +1309,8 @@ function chaseHealer(scene: {
 /**
  * Every boss room of a hard floor in turn: the party walks in, the boss is
  * killed, and a crawler chases the boss's healer — or, per `variant`, a
- * stand-in for one of the defects under test — round the room.
+ * stand-in for one of the defects under test — from the room's centre, the
+ * healer starting just inside its door.
  */
 function bossRoomChases(
   def: LevelDef,
@@ -1327,14 +1336,18 @@ function bossRoomChases(
       if (state === undefined || boss === null || bound === undefined) {
         return unstagedChase(rule.type);
       }
+      const { bounds } = state;
+      const centre = {
+        x: bounds.x + Math.floor(bounds.w / 2),
+        y: bounds.y + Math.floor(bounds.h / 2),
+      };
+      const doorways = roomDoorways(floor.map.structure, bounds);
+      const doorway = doorways.length > 0 ? doorways[0] : undefined;
+      if (doorway === undefined) return unstagedChase(rule.type);
+      moveToDoorside(bound, { centre, doorTile: doorway.tile }, roster);
       const healer = swapForHealerVariant(bound, floor.map, roster, variant);
       if (healer === null) return unstagedChase(rule.type);
-      const { bounds } = state;
-      const party = partyAt(
-        bounds.x + Math.floor(bounds.w / 2),
-        bounds.y + Math.floor(bounds.h / 2),
-        partyLevel,
-      );
+      const party = partyAt(centre.x, centre.y, partyLevel);
       const ctx = contextFor(party, roster, floor.map, bossRoom);
       bossRoom.update(ctx);
       boss.takeDamageFrom(OVERKILL_DAMAGE, party.human);
@@ -1359,10 +1372,13 @@ function bossRoomChases(
 }
 
 /**
- * Puts `healer` just inside the arena door, with the crawler chasing from the
- * ring's centre behind it: the one spot in the ring from which a room of the
- * floor lies within a fleeing fairy's reach, so a healer free to run has
- * somewhere to run to and a straight line out to it.
+ * Puts `healer` just inside a boss room's or the arena's door, with the
+ * crawler chasing from the centre behind it. A fairy never runs back through
+ * the party, so a healer staged with the crawler between it and the only door
+ * stays put whether or not anything holds it; from the doorside a healer free
+ * to run has somewhere to run to and a line out to it that clears the party.
+ * In the arena it is also the one spot from which a room of the floor lies
+ * within a fleeing fairy's reach.
  */
 function moveToDoorside(
   healer: HealingFairy,

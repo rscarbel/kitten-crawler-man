@@ -20,7 +20,7 @@ import { Juicer } from '../creatures/Juicer';
 import { Troglodyte } from '../creatures/Troglodyte';
 import { Tuskling } from '../creatures/Tuskling';
 import { prewarmTuskling } from '../sprites/tusklingSprite';
-import { prewarmSkyFowl } from '../sprites/skyFowlSprite';
+import { prewarmSkyfowlCastMember } from '../sprites/skyfowlCastSprite';
 import { COW_COATS, type CowCoatId, prewarmCow } from '../sprites/cowSprite';
 import { prewarmLlama } from '../sprites/llamaSprite';
 import { prewarmBrindleGrub } from '../sprites/brindleGrubSprite';
@@ -555,9 +555,9 @@ function prewarmSpawnedCow(mob: Mob): void {
   if (mob instanceof Cow) prewarmCow(mob.coat, mob.age);
 }
 
-/** Warms the palette this particular town bird turned out to be wearing. */
+/** Warms the street-tough look this particular fightable bird turned out to be wearing. */
 function prewarmSpawnedSkyFowl(mob: Mob): void {
-  if (mob instanceof SkyFowl) prewarmSkyFowl(mob.paletteIndex);
+  if (mob instanceof SkyFowl) prewarmSkyfowlCastMember(mob.toughLookId);
 }
 
 /**

@@ -19,13 +19,21 @@ import {
 import { figureStates, type FigureDef } from '../src/sprites/figure/figureDef.js';
 import {
   beginFigureFrame,
+  boostPrewarmBudget,
   drawFigureCached,
+  drawFigureCachedApprox,
   figureByteBudgetFor,
   figurePrewarmDepth,
+  figurePrewarmGiveUps,
   figurePrewarmRequests,
   figureResidentBytes,
   flushFigureFrameCache,
+  markFigureStateDrawn,
+  pinFigureState,
   prewarmFigureState,
+  unpinFigureState,
+  CACHE_BUDGET_MEGABYTES,
+  CACHE_BYTE_BUDGET,
   FIGURE_BYTE_BUDGET,
   IDLE_FRAMES_BEFORE_RELEASE,
   PREWARM_BAKE_BUDGET_MS,
@@ -155,6 +163,26 @@ function makeFigure(
       }
     },
   };
+}
+
+/**
+ * Runs `body` and returns the give-up warnings it printed, without letting
+ * them reach the console.
+ */
+function giveUpWarningsDuring(body: () => void): string[] {
+  const warnings: string[] = [];
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    const message = args.map(String).join(' ');
+    if (message.includes('gave up prewarming')) warnings.push(message);
+    else warn(...args);
+  };
+  try {
+    body();
+  } finally {
+    console.warn = warn;
+  }
+  return warnings;
 }
 
 function reset(): void {
@@ -722,16 +750,140 @@ console.log('figure frame cache gates');
   const oversized = Math.ceil(Math.sqrt(FIGURE_BYTE_BUDGET / BYTES_PER_PIXEL)) + 1;
   const figure = makeFigure('prewarm_refused', 0, oversized, 1);
   prewarmFigureState(figure, 'walk');
-  beginFigureFrame();
-  const afterFirstRefusal = figurePrewarmDepth();
-  const rowsHeld = getFigureCacheStats().rows;
-  for (let attempt = 1; attempt < PREWARM_CAPACITY_RETRIES; attempt++) beginFigureFrame();
+  const giveUpsBefore = figurePrewarmGiveUps();
+  let afterFirstRefusal = 0;
+  let rowsHeld = 0;
+  const warnings = giveUpWarningsDuring(() => {
+    beginFigureFrame();
+    afterFirstRefusal = figurePrewarmDepth();
+    rowsHeld = getFigureCacheStats().rows;
+    for (let attempt = 1; attempt < PREWARM_CAPACITY_RETRIES; attempt++) beginFigureFrame();
+  });
   check(
     'a prewarm refused for capacity is retried, then abandoned',
     afterFirstRefusal === 1 && rowsHeld === 0 && figurePrewarmDepth() === 0,
     `after one refusal the queue held ${afterFirstRefusal} request(s) and the cache ` +
       `${rowsHeld} empty row(s); after ${PREWARM_CAPACITY_RETRIES} it held ` +
       `${figurePrewarmDepth()}`,
+  );
+  const drawnAbandons = figurePrewarmGiveUps().drawnAbandons - giveUpsBefore.drawnAbandons;
+  check(
+    'a speculative row no empty cache could hold is warned about when given up',
+    drawnAbandons === 1 && warnings.length === 1,
+    `giving up a row larger than its figure's whole ceiling counted ${drawnAbandons} ` +
+      `abandon(s) and printed ${warnings.length} warning(s)`,
+  );
+}
+
+/** A per-figure ceiling no cell of a {@link CELL_SIZE} figure can fit under. */
+const STARVING_BUDGET_MEGABYTES = 0.01;
+/** Frames the starving figure is drawn for: comfortably past its retry limit. */
+const STARVE_TEST_FRAMES = 50;
+/** The frame the bystander's row is asked for, once the starving row is already queued. */
+const STARVE_BYSTANDER_REQUEST_FRAME = 3;
+
+// A row the cache can never admit, drawn every frame, re-asks for itself
+// urgently from every direct paint. It must not hold the front of the queue
+// against a row behind it that fits, and once abandoned it stays abandoned
+// until the pressure that refused it has had time to clear.
+{
+  reset();
+  const starving: FigureDef = {
+    ...makeFigure('starving', 0, CELL_SIZE, 1),
+    budgetMegabytes: STARVING_BUDGET_MEGABYTES,
+  };
+  const bystander = makeFigure('starve_bystander', 0, BYSTANDER_CELL_SIZE, 1);
+  for (let frame = 0; frame < STARVE_TEST_FRAMES; frame++) {
+    beginFigureFrame();
+    if (frame === STARVE_BYSTANDER_REQUEST_FRAME) prewarmFigureState(bystander, 'walk');
+    drawFigureCached(ctx, starving, 'walk', 0, 0, 0, TILE_SIZE);
+  }
+  check(
+    'a row refused at the front of the queue does not starve the rows behind it',
+    figureResidentBytes(bystander) > 0,
+    `after ${STARVE_TEST_FRAMES} frames with the unadmittable row on screen the bystander ` +
+      `holds ${figureResidentBytes(bystander)} bytes`,
+  );
+  check(
+    'an abandoned row is not re-queued by the draws that keep missing it',
+    figurePrewarmRequests(starving) === 0,
+    `the unadmittable row still has ${figurePrewarmRequests(starving)} request(s) queued`,
+  );
+
+  for (let i = 0; i < IDLE_FRAMES_BEFORE_RELEASE; i++) beginFigureFrame();
+  drawFigureCached(ctx, starving, 'walk', 0, 0, 0, TILE_SIZE);
+  check(
+    'an abandoned row may be asked for again once the idle window has passed',
+    figurePrewarmRequests(starving) === 1,
+    `${IDLE_FRAMES_BEFORE_RELEASE} frames later a draw queued ` +
+      `${figurePrewarmRequests(starving)} request(s) for it`,
+  );
+}
+
+// A speculative request that finds the whole cache in use yields quietly: that
+// is the eviction policy keeping speculation off rows something is drawing,
+// and a town arrival does it for every wild mob on the map. The give-up must
+// not then bar the row once it comes on screen, and a row given up on while
+// it is on screen is the one that warns.
+{
+  reset();
+  const bytesPerBigCell = BIG_CELL_SIZE * BIG_CELL_SIZE * BYTES_PER_PIXEL;
+  const cellsToFillCache = Math.ceil(CACHE_BYTE_BUDGET / bytesPerBigCell) + 1;
+  const hog: FigureDef = {
+    ...makeFigure('yield-hog', 0, BIG_CELL_SIZE, cellsToFillCache),
+    budgetMegabytes: CACHE_BUDGET_MEGABYTES * 2,
+  };
+  const bystander = makeFigure('yield-bystander', 0, BYSTANDER_CELL_SIZE, 1);
+  const keepHogOnScreen = (frames: number): void => {
+    for (let frame = 0; frame < frames; frame++) {
+      beginFigureFrame();
+      markFigureStateDrawn(hog, 'walk');
+    }
+  };
+  // The hog's own last cells overflow the cache on purpose, and their draws
+  // ask for them urgently; that request is given up on before anything here
+  // is measured, so the counts below are the bystander's alone.
+  giveUpWarningsDuring(() => {
+    for (let frame = 0; frame < cellsToFillCache; frame++) {
+      beginFigureFrame();
+      drawFigureCached(ctx, hog, 'walk', frame, 0, 0, TILE_SIZE);
+    }
+    keepHogOnScreen(PREWARM_CAPACITY_RETRIES);
+  });
+
+  const beforeYield = figurePrewarmGiveUps();
+  const yieldWarnings = giveUpWarningsDuring(() => {
+    prewarmFigureState(bystander, 'walk');
+    keepHogOnScreen(PREWARM_CAPACITY_RETRIES);
+  });
+  const afterYield = figurePrewarmGiveUps();
+  const yields = afterYield.speculativeYields - beforeYield.speculativeYields;
+  const yieldAbandons = afterYield.drawnAbandons - beforeYield.drawnAbandons;
+  check(
+    'a speculative row that yields to a cache in use is let go of without a warning',
+    yields === 1 &&
+      yieldAbandons === 0 &&
+      yieldWarnings.length === 0 &&
+      figurePrewarmRequests(bystander) === 0,
+    `${yields} yield(s), ${yieldAbandons} drawn abandon(s), ${yieldWarnings.length} ` +
+      `warning(s), ${figurePrewarmRequests(bystander)} request(s) still queued`,
+  );
+
+  const drawnWarnings = giveUpWarningsDuring(() => {
+    drawFigureCached(ctx, bystander, 'walk', 0, 0, 0, TILE_SIZE);
+    const requestedOnceDrawn = figurePrewarmRequests(bystander);
+    check(
+      'a row that yielded speculatively is still warmed once it is drawn',
+      requestedOnceDrawn === 1,
+      `drawing it queued ${requestedOnceDrawn} request(s) for it`,
+    );
+    keepHogOnScreen(PREWARM_CAPACITY_RETRIES);
+  });
+  const drawnAbandons = figurePrewarmGiveUps().drawnAbandons - afterYield.drawnAbandons;
+  check(
+    'a row given up on while it is on screen is warned about',
+    drawnAbandons === 1 && drawnWarnings.length === 1,
+    `${drawnAbandons} drawn abandon(s) and ${drawnWarnings.length} warning(s)`,
   );
 }
 
@@ -799,6 +951,62 @@ console.log('figure frame cache gates');
     figureByteBudgetFor(overriddenFigure) === overrideBudgetMegabytes * BYTES_PER_MEGABYTE,
     `reported ${figureByteBudgetFor(overriddenFigure) / BYTES_PER_MEGABYTE} MB for a figure ` +
       `declaring a ${overrideBudgetMegabytes} MB override`,
+  );
+}
+
+/** Frames a speculative prewarm is pumped for: well past its capacity retries. */
+const SPECULATIVE_PUMP_FRAMES = 40;
+/** Frames a finished row goes undrawn before the next set is warmed over it. */
+const FINISHED_ROW_IDLE_FRAMES = 3;
+
+// A speculative prewarm at its own figure's ceiling trades the figure's own
+// rows out of use for the set it is about to play — a boss's staged sets are
+// built on that — but never a row it is drawing.
+{
+  const stagedBudgetMegabytes = 6;
+  const stagedCellSize = 512;
+  const stagedFramesPerRow = 4;
+  const staged: FigureDef = {
+    ...makeFigure('staged_sets', 0, stagedCellSize, stagedFramesPerRow),
+    budgetMegabytes: stagedBudgetMegabytes,
+  };
+  const coldCellsOf = (state: string): number => {
+    beginFigureFrame();
+    const before = getFigureCacheStats().misses;
+    for (let frame = 0; frame < stagedFramesPerRow; frame++) {
+      drawFigureCached(ctx, staged, state, frame, 0, 0, TILE_SIZE);
+    }
+    return getFigureCacheStats().misses - before;
+  };
+
+  reset();
+  coldCellsOf('walk');
+  for (let i = 0; i < FINISHED_ROW_IDLE_FRAMES; i++) beginFigureFrame();
+  prewarmFigureState(staged, 'attack');
+  for (let i = 0; i < SPECULATIVE_PUMP_FRAMES; i++) beginFigureFrame();
+  const coldAttack = coldCellsOf('attack');
+  check(
+    "a speculative prewarm at its figure's ceiling takes that figure's rows out of use",
+    coldAttack === 0,
+    `with walk undrawn for ${FINISHED_ROW_IDLE_FRAMES} frames, ${coldAttack} of the ` +
+      `${stagedFramesPerRow} attack cells warmed over it still draw cold`,
+  );
+
+  reset();
+  coldCellsOf('walk');
+  prewarmFigureState(staged, 'attack');
+  let evictions = 0;
+  for (let i = 0; i < SPECULATIVE_PUMP_FRAMES; i++) {
+    beginFigureFrame();
+    evictions += getFigureCacheStats().evictions;
+    drawFigureCached(ctx, staged, 'walk', i % stagedFramesPerRow, 0, 0, TILE_SIZE);
+  }
+  const coldWalk = coldCellsOf('walk');
+  check(
+    'a speculative prewarm never evicts a row its figure is drawing',
+    evictions === 0 && coldWalk === 0,
+    `drawing walk every frame while attack was warmed caused ${evictions} eviction(s) and ` +
+      `left ${coldWalk} walk cell(s) cold`,
   );
 }
 
@@ -979,6 +1187,177 @@ const TRANSIT_TILE = 3;
       `${dropped.join(', ') || 'no step'} and is drawing ${activeHumanFigure().id}`,
   );
   setHumanAppearance(DEFAULT_HUMAN_APPEARANCE);
+}
+
+// A pinned row is exempt from active eviction under *global* byte pressure —
+// `evictStaleRowsOf` makes the same pin check `releaseIdleRows` makes, and
+// `evictStaleRowsOf` is what `evictStaleForGlobalBytes` calls when an unrelated
+// figure (stood in here for Carl baking new rows in town) needs more room than
+// the cache has free. `figureResidentBytes` is unambiguous for the pinned
+// figure here because it is only ever asked to bake this one row.
+{
+  reset();
+  const pinnedFigure = makeFigure('pin-guard', 0, BIG_CELL_SIZE, 1);
+  beginFigureFrame();
+  drawFigureCached(ctx, pinnedFigure, 'walk', 0, 0, 0, TILE_SIZE);
+  const walkBytes = figureResidentBytes(pinnedFigure);
+  pinFigureState(pinnedFigure, 'walk');
+
+  // A second figure with its own ceiling raised well past the global budget,
+  // so it is global pressure — not this figure's own — that forces the
+  // eviction attempt, the same shape as Carl baking new rows in a plaza
+  // nearly full of pinned citizens.
+  const bytesPerBigCell = BIG_CELL_SIZE * BIG_CELL_SIZE * BYTES_PER_PIXEL;
+  const cellsPastGlobalCeiling =
+    Math.ceil((CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE - walkBytes) / bytesPerBigCell) + 2;
+  const hogOwnCeilingMegabytes = CACHE_BUDGET_MEGABYTES * 2;
+  const hog: FigureDef = {
+    ...makeFigure('global-hog', 0, BIG_CELL_SIZE, cellsPastGlobalCeiling),
+    budgetMegabytes: hogOwnCeilingMegabytes, // never the limiting ceiling itself
+  };
+  for (let frame = 0; frame < cellsPastGlobalCeiling; frame++) {
+    beginFigureFrame();
+    drawFigureCached(ctx, hog, 'walk', frame, 0, 0, TILE_SIZE);
+  }
+  const pressured = getFigureCacheStats();
+  check(
+    'a pinned row survives active eviction under global byte pressure',
+    pressured.evictions === 0 &&
+      pressured.directDraws >= 1 &&
+      figureResidentBytes(pinnedFigure) === walkBytes,
+    `filling a second figure past the ${CACHE_BUDGET_MEGABYTES} MB global ceiling produced ` +
+      `${pressured.evictions} eviction(s) and ${pressured.directDraws} direct draw(s); the ` +
+      `pinned figure holds ${figureResidentBytes(pinnedFigure)} of its own ${walkBytes} bytes`,
+  );
+
+  // Separately: the idle sweep, which passes a pinned row over, still has to
+  // release it once the row gives its pin back.
+  for (let i = 0; i < RELEASE_FRAME_AFTER_WINDOW + IDLE_POLL_SLACK_FRAMES; i++) beginFigureFrame();
+  const stillPinned = figureResidentBytes(pinnedFigure) === walkBytes;
+  unpinFigureState(pinnedFigure, 'walk');
+  beginFigureFrame();
+  const afterUnpin = figureResidentBytes(pinnedFigure);
+  check(
+    'unpinning a row returns it to the idle sweep',
+    stillPinned && afterUnpin === 0,
+    `walk was still resident (${walkBytes} bytes) after the release window while pinned; ` +
+      `one frame after unpinning the figure holds ${afterUnpin} bytes`,
+  );
+}
+
+// `drawFigureCachedApprox` never bakes: a stand-in cell when one exists, a
+// direct paint only when the figure has nothing baked at all.
+{
+  reset();
+  const figure = makeFigure('approx-fig', CHEAP_PAINT_MS);
+
+  // Nothing baked yet for this figure at all: no stand-in exists, so this is
+  // the one case that still falls back to a direct paint.
+  drawFigureCachedApprox(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
+  const cold = getFigureCacheStats();
+  check(
+    'an approximate draw with nothing baked yet falls back to a direct paint',
+    cold.directDraws === 1 && cold.bakes === 0 && cold.approxDraws === 0,
+    `${cold.directDraws} direct draw(s), ${cold.bakes} bake(s), ${cold.approxDraws} approximate ` +
+      `draw(s) for a figure with nothing resident`,
+  );
+
+  // A direct paint pays the painter's full price, so it asks for its row to be
+  // baked at the front of the next frame's queue rather than paying it again.
+  check(
+    'a direct paint queues its row for prewarm',
+    figurePrewarmRequests(figure) === 1,
+    `after one direct paint, ${figurePrewarmRequests(figure)} prewarm request(s) are queued`,
+  );
+  // Dropped again, so the next frames bake nothing but what this check places.
+  releaseFigure(figure);
+
+  // One real cell exists now (baked the ordinary way, never through the
+  // approximate path, which must never itself bake).
+  beginFigureFrame();
+  drawFigureCached(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
+  beginFigureFrame();
+  drawFigureCachedApprox(ctx, figure, 'walk', FRAMES_PER_STATE - 1, 0, 0, TILE_SIZE);
+  const nearest = getFigureCacheStats();
+  check(
+    'an approximate draw borrows the nearest baked frame of the same row, never baking',
+    nearest.approxDraws === 1 && nearest.bakes === 0 && nearest.prewarmBakes === 0,
+    `asking for a frame the row has not baked produced ${nearest.approxDraws} approximate ` +
+      `draw(s) and ${nearest.bakes + nearest.prewarmBakes} bake(s)`,
+  );
+
+  // A different, entirely unbaked row of the same figure borrows *any*
+  // already-baked row rather than baking or direct-painting.
+  beginFigureFrame();
+  drawFigureCachedApprox(ctx, figure, 'attack', 0, 0, 0, TILE_SIZE);
+  const otherRow = getFigureCacheStats();
+  check(
+    'an approximate draw borrows any warm row of the figure when its own has nothing',
+    otherRow.approxDraws === 1 && otherRow.bakes === 0 && otherRow.directDraws === 0,
+    `asking for an unbaked 'attack' row on a figure that only has 'walk' warm produced ` +
+      `${otherRow.approxDraws} approximate draw(s), ${otherRow.bakes} bake(s), ` +
+      `${otherRow.directDraws} direct draw(s)`,
+  );
+}
+
+// The safety net: a pinned row with nothing to show gets re-queued for
+// prewarm rather than paying a direct paint every frame forever.
+{
+  reset();
+  const figure = makeFigure('pin-missing', CHEAP_PAINT_MS);
+  pinFigureState(figure, 'walk');
+  check(
+    'a pin alone queues no prewarm — it grants no admission of its own',
+    figurePrewarmRequests(figure) === 0,
+    `pinning before anything is baked or queued left ${figurePrewarmRequests(figure)} ` +
+      'prewarm request(s) queued',
+  );
+  drawFigureCachedApprox(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
+  check(
+    'drawing a pinned row that has nothing baked queues it for prewarm',
+    figurePrewarmRequests(figure) === 1,
+    `after one approximate draw of the missing pinned row, ${figurePrewarmRequests(figure)} ` +
+      'prewarm request(s) are queued',
+  );
+}
+
+/** Frames a boosted-budget figure declares — comfortably more than the boost can bake in one frame. */
+const BOOST_TEST_FRAMES = 12;
+/** How many boosted frames `boostPrewarmBudget` is asked to grant. */
+const BOOST_TEST_FRAME_COUNT = 1;
+/** A cell costs this many times the ordinary prewarm budget, so one alone nearly exhausts it. */
+const BOOST_TEST_PAINT_BUDGET_RATIO = 1.5;
+/** The boosted budget offered, as a multiple of one cell's own cost. */
+const BOOST_TEST_BUDGET_CELL_MULTIPLE = 3;
+
+// `boostPrewarmBudget` raises the prewarm queue's own per-frame ceiling for a
+// bounded number of frames, then the ordinary budget applies again.
+{
+  reset();
+  // Costs more than the ordinary budget alone would admit more than one of,
+  // so the boosted frame's extra cells are the boost's own doing.
+  const paintMs = PREWARM_BAKE_BUDGET_MS * BOOST_TEST_PAINT_BUDGET_RATIO;
+  const figure = makeFigure('boost-fig', paintMs, CELL_SIZE, BOOST_TEST_FRAMES);
+  prewarmFigureState(figure, 'walk');
+
+  boostPrewarmBudget(paintMs * BOOST_TEST_BUDGET_CELL_MULTIPLE, BOOST_TEST_FRAME_COUNT);
+  beginFigureFrame();
+  const boosted = getFigureCacheStats();
+
+  beginFigureFrame();
+  const afterBoost = getFigureCacheStats();
+
+  check(
+    "boostPrewarmBudget raises one frame's prewarm ceiling above the ordinary budget",
+    boosted.prewarmBakes >= 2,
+    `the boosted frame baked ${boosted.prewarmBakes} cell(s) at ~${paintMs.toFixed(2)} ms each`,
+  );
+  check(
+    'the boosted budget expires after the frames requested',
+    afterBoost.prewarmBakes < boosted.prewarmBakes,
+    `the frame after the boost expired baked ${afterBoost.prewarmBakes} cell(s), the boosted ` +
+      `frame baked ${boosted.prewarmBakes}`,
+  );
 }
 
 if (failures > 0) {

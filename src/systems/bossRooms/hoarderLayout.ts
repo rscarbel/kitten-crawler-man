@@ -13,9 +13,10 @@
  * room's edge is a coastline rather than a wall; four island clusters a third
  * of the way in, far enough apart that she can circle them; teetering towers
  * beside the islands and the band; garbage bags in the open pockets; and her
- * mattress in the far third. Everything is dropped where it would crowd a
- * doorway's approach, the boss's spawn or the mattress, and any floor the
- * junk would wall off is filled in, so every open tile stays reachable.
+ * mattress in the far third. A bag that would crowd a doorway's approach, the
+ * boss's spawn or the mattress steps aside to the nearest free tile; anything
+ * else is dropped there, and any floor the junk would wall off is filled in,
+ * so every open tile stays reachable.
  */
 
 import type { GameMap } from '../../map/GameMap';
@@ -312,10 +313,14 @@ export function planHoarderLayout(grid: GameMap['structure'], bounds: TileRect):
   const isRoomFloor = (tile: TilePoint): boolean => grid[tile.y]?.[tile.x]?.type === HOARDER_FLOOR;
   const taken = new Set<string>();
   const placements: HoardPlacement[] = [];
-  for (const placed of rotateTemplate(hoarderTemplate(spans), doorSide, bounds)) {
-    const key = tileKey(placed);
-    if (keepClear.has(key) || taken.has(key) || !isRoomFloor(placed)) continue;
-    taken.add(key);
+  const isFree = (tile: TilePoint): boolean => {
+    const key = tileKey(tile);
+    return !keepClear.has(key) && !taken.has(key) && isRoomFloor(tile);
+  };
+  for (const planned of rotateTemplate(hoarderTemplate(spans), doorSide, bounds)) {
+    const placed = planned.kind === 'bag' ? nudgeBag(planned, isFree) : planned;
+    if (placed === null || !isFree(placed)) continue;
+    taken.add(tileKey(placed));
     placements.push(placed);
   }
 
@@ -337,6 +342,33 @@ export function planHoarderLayout(grid: GameMap['structure'], bounds: TileRect):
     nest,
     orbit: orbitAround(spans, doorSide, bounds, taken),
   };
+}
+
+/** The furthest a bag is moved off its spot when a doorway's approach or other junk covers it. */
+const BAG_NUDGE_MAX_TILES = 2;
+
+/**
+ * A bag on its own spot, or on the nearest free tile within
+ * {@link BAG_NUDGE_MAX_TILES} of it; null when there is none. Unlike a heap or
+ * a tower, a bag is not cover the fight is shaped around, only something she
+ * bursts for roaches — so where a second doorway's approach lane runs over a
+ * bag's spot it moves aside rather than leave the room short of bags.
+ */
+function nudgeBag(
+  bag: HoardPlacement,
+  isFree: (tile: TilePoint) => boolean,
+): HoardPlacement | null {
+  if (isFree(bag)) return bag;
+  for (let ring = 1; ring <= BAG_NUDGE_MAX_TILES; ring++) {
+    for (let dy = -ring; dy <= ring; dy++) {
+      for (let dx = -ring; dx <= ring; dx++) {
+        const onRing = Math.max(Math.abs(dx), Math.abs(dy)) === ring;
+        const moved = { ...bag, x: bag.x + dx, y: bag.y + dy };
+        if (onRing && isFree(moved)) return moved;
+      }
+    }
+  }
+  return null;
 }
 
 /**

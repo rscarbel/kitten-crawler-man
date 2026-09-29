@@ -2,9 +2,11 @@ import { TILE_SIZE } from '../../core/constants';
 import { drawSpriteKey } from '../../core/SpriteRenderer';
 import { scaleHumanoidBox } from '../../sprites/humanoidScale';
 import { IDLE_CYCLES_PER_FRAME, walkCycleDistance } from '../../sprites/person/gait';
-import { labScientistAppearance } from '../../sprites/person/labScientist';
-import { drawPersonCached } from '../../sprites/person/personFrameCache';
+import { labScientistAppearance, labScientistLook } from '../../sprites/person/labScientist';
+import { drawTownCastSprite } from '../../sprites/townCastSprite';
 import type { Facing } from '../../sprites/person/skeleton';
+
+const TWO_PI = Math.PI * 2;
 
 /**
  * How the lab's scientist is drawn: a procedural person in a lab coat, walked
@@ -49,16 +51,18 @@ export class LabScientistFigure {
     camX: number,
     camY: number,
   ): void {
-    const box = scaleHumanoidBox(feetX - TILE_SIZE / 2 - camX, feetY - TILE_SIZE - camY, TILE_SIZE);
-    drawPersonCached(
+    drawTownCastSprite(
       ctx,
-      box.sx,
-      box.sy,
-      box.s,
-      labScientistAppearance(),
-      this.phase,
-      this.facing,
-      this.moving,
+      labScientistLook(),
+      feetX - TILE_SIZE / 2 - camX,
+      feetY - TILE_SIZE - camY,
+      TILE_SIZE,
+      {
+        action: this.moving ? 'walk' : 'idle',
+        walkPhase: this.phase * TWO_PI,
+        facingX: this.facing === 'left' ? -1 : this.facing === 'right' ? 1 : 0,
+        facingY: this.facing === 'up' ? -1 : this.facing === 'down' ? 1 : 0,
+      },
     );
   }
 

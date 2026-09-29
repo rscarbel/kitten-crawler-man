@@ -118,7 +118,7 @@ export interface PlannedGate {
  */
 export const SHOP_SIGN_EMBLEMS = [
   'moon',
-  'fleece',
+  'plumb_bob',
   'shield',
   'wheel',
   'sun',
@@ -210,7 +210,7 @@ export interface PlannedTower {
  * *over*, so a garden accidentally laid on gravel would draw verge tufts on a
  * gravel row and be eroded by the surrounding gravel through the corner masks.
  */
-export type YardKind = 'garden' | 'workyard';
+export type YardKind = 'garden' | 'workyard' | 'courtyard';
 
 /**
  * An enclosed or planted piece of block interior: a back garden, a drying green,
@@ -609,6 +609,20 @@ const PLANNED_SURFACES: ReadonlyArray<PlannedSurface> = [
     bounds: span(EAST_LANE_EAST + 1, LOW_QUARTER_TOP, INTERIOR_EAST, FARM_YARD_BOTTOM),
     tileType: VERGE_GRASS,
   },
+  /**
+   * The Quiet Needle's own paved yard, stated here rather than left to the
+   * default verge fill for the same reason the two gravel yards above are:
+   * `assertYardsStandOnTheirOwnSurface` checks the painted grid against the
+   * `courtyard` `PlannedYard`'s own declared surface, which is `PLAZA_STONE`.
+   */
+  {
+    name: "The Quiet Needle's courtyard paving",
+    // `BACK_GARDEN_TOP` is declared further down, alongside the yard this
+    // paves — inlined here as `LOW_QUARTER_TOP + 1` (its own definition) so
+    // this entry does not have to sit below every other working yard above.
+    bounds: span(INNER_WEST_PLOT, LOW_QUARTER_TOP + 1, KINGS_ROAD_WEST - 1, LOW_QUARTER_BOTTOM),
+    tileType: PLAZA_STONE,
+  },
 
   // Alleys — packed earth, the lowest rung of the street hierarchy.
   {
@@ -771,10 +785,10 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     west: GARRISON_SECOND_COTTAGE,
     frontRow: GARRISON_BOTTOM,
     plotTop: GARRISON_TOP,
-    spriteKey: 'shepherds_cabin',
-    name: "Shepherd's Cabin",
+    spriteKey: 'plumbline_farm',
+    name: 'Plumbline Farm',
     kind: 'house',
-    sign: 'fleece',
+    sign: 'plumb_bob',
   },
   {
     west: BARRACKS_PLOT_WEST,
@@ -921,7 +935,7 @@ export function plannedBuildingSpriteKey(name: string): string | undefined {
 // ── Yards, gardens and planted strips ────────────────────────────────────────
 
 /**
- * The Garrison band's own green, between Shepherd's Cabin and the civic terrace.
+ * The Garrison band's own green, between Plumbline Farm and the civic terrace.
  * It is the largest piece of block interior in the town — seven tiles square —
  * and the one place a fenced enclosure reads at a glance from a main street.
  */
@@ -929,7 +943,7 @@ const GARRISON_GREEN_WEST = -13;
 const GARRISON_GREEN_EAST = TERRACE_WEST - 1;
 /**
  * The green starts one row below the band's top, because the row above it is the
- * only way in or out of the strip behind Blackwood Lodge and Shepherd's Cabin.
+ * only way in or out of the strip behind Blackwood Lodge and Plumbline Farm.
  *
  * That strip is a single row wide, pinned between the north wall and the two
  * cottages' back walls, and its one lateral exit is east past the green. A green
@@ -977,7 +991,9 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Garrison Green',
     bounds: span(GARRISON_GREEN_WEST, GARRISON_GREEN_TOP, GARRISON_GREEN_EAST, GARRISON_BOTTOM),
     kind: 'garden',
-    fence: 'picket',
+    // Wendell's own fence — a builder's joinery, not a farmer's stakes. See
+    // the `garrison` `FenceStyle` in `decorationTiles.ts`.
+    fence: 'garrison',
     fenced: true,
     // Onto the Upper Lane, which is the only side of it that is not a building,
     // the terrace or the wall.
@@ -1015,7 +1031,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
   {
     name: "The Quiet Needle's back garden",
     bounds: span(INNER_WEST_PLOT, BACK_GARDEN_TOP, KINGS_ROAD_WEST - 1, LOW_QUARTER_BOTTOM),
-    kind: 'garden',
+    kind: 'courtyard',
     fence: 'picket',
     fenced: true,
     gates: [

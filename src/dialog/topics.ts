@@ -28,6 +28,7 @@ function toChoice(topic: ConversationTopic, spent: Set<string>): Choice {
   return {
     label: topic.label,
     tone: topic.tone,
+    keyboard: topic.keyboard,
     run: (convo: ConversationHandle) => {
       if (!topic.repeatable) spent.add(topic.key);
       topic.run(convo);

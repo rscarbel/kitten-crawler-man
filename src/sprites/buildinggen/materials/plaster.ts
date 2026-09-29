@@ -3,29 +3,26 @@
  *
  * Plaster has no elements — no courses, no blocks, nothing whose edges give the
  * eye something to hold — so everything that stops it reading as a flat fill has
- * to come out of the noise field. Three layers do that work and they operate at
- * genuinely different sizes: a broad tonal blocking that says one end of the
- * wall has been rained on harder than the other, a fine grain that says the
- * surface is granular, and patches where the wash has worn thin to a different
- * tone. The patches are sampled through a domain warp, because a low-frequency
- * threshold sampled straight gives smooth ellipses and a wall covered in smooth
- * ellipses is the most recognisable procedural artefact there is.
+ * to be drawn on deliberately. A plaster wall reads clean in the way this town
+ * wants when it is treated like a smooth painted surface with a handful of
+ * legible marks on it — a few broad patches where the wash sits a shade
+ * different, a scatter of hairline cracks and small spalls — rather than as a
+ * field of per-pixel grain. Every layer here is a drawn shape at a known
+ * position, never a sampled noise field: the patches are irregular polygons,
+ * not a thresholded texture, so the wall stays a flat, readable plane with
+ * marks on it instead of a granular surface.
  *
  * Paint changes all of that in one direction: a painted coat *evens a wall out*.
- * So `painted` mixes the surface toward the trim ramp while scaling the mottling
- * down, and pays back a little variation as faint brush-direction streaking —
- * which is the only variation a freshly painted wall actually has.
+ * So `painted` mixes the surface toward the trim ramp and quiets the patchwork
+ * down — a freshly painted wall has almost no variation left to show.
  */
 
-import type { NoiseField } from '../../../map/tilegen/noise';
-import { ALPHA, BLUE, GREEN, RED, pixelIndex, readPixels, writePixels } from '../pixels';
 import type { Plane, Point } from '../projection';
-import { LIGHT_DIR_X, LIGHT_DIR_Y, mix, rgba, sampleRamp, type Ramp } from '../ramps';
+import { LIGHT_DIR_X, LIGHT_DIR_Y, mix, rgb, rgba, sampleRamp, type Ramp } from '../ramps';
 import { elementValue, type Band } from './kit';
 
 export interface PlasterOptions {
   readonly plane: Plane;
-  readonly noise: NoiseField;
   readonly seed: number;
   readonly band: Band;
   readonly ramp: Ramp;
@@ -34,45 +31,38 @@ export interface PlasterOptions {
   readonly painted: number;
   /** Pixels per tile, for measures that are architectural rather than textural. */
   readonly scale: number;
+  /** 0..1: how far a fresh limewash has hidden the patches, cracks and spalls. Absent means 0. */
+  readonly upkeep?: number;
+}
+
+/** What survives of the wall's marks under its owner's upkeep. */
+function wearRemaining(options: PlasterOptions): number {
+  return 1 - Math.min(1, Math.max(0, options.upkeep ?? 0));
 }
 
 /** Ramp position most of the surface sits at, before any of the layers move it. */
 const BASE_TONE = 0.58;
 
-/** The midpoint every noise sample is centred on before being scaled. */
+/** The midpoint every jitter sample is centred on before being scaled. */
 const NOISE_MIDPOINT = 0.5;
 
 /**
- * The two octave scales. `BROAD` blocks the wall into large soft regions;
- * `GRAIN` is the per-pixel tooth of the lime itself. Running only one of them
- * gives either a smooth gradient or television static — the surface reads as
- * plaster only when both are present at very different periods.
+ * A handful of broad patches where the wash sits a shade lighter or darker —
+ * the "this end caught more rain" read a flat wall needs, drawn as a few
+ * soft-edged irregular shapes rather than sampled per pixel. Sized in tiles
+ * of surface area so a wide wall gets proportionally more of them, not
+ * bigger ones.
  */
-const BROAD_PERIOD_CELLS = 3;
-const BROAD_OCTAVES = 2;
-const BROAD_TONE_SWING = 0.2;
-const GRAIN_PERIOD_CELLS = 48;
-const GRAIN_OCTAVES = 3;
-const GRAIN_TONE_SWING = 0.075;
+const PATCH_AREA_PER_TILE = 2.2;
+const PATCH_RADIUS_TILES = 0.65;
+const PATCH_RADIUS_JITTER = 0.45;
+const PATCH_TONE_SWING = 0.12;
+const PATCH_VERTICES = 7;
+const PATCH_VERTEX_JITTER = 0.4;
+const PATCH_VERTEX_KEY_STRIDE = 11;
 
-/** How much of the mottling a full painted coat suppresses. */
-const MOTTLE_DAMPING_AT_FULL_PAINT = 0.62;
-
-/** Thinned-wash patches: a warped threshold, so their edges are not ellipses. */
-const PATCH_PERIOD_CELLS = 5;
-const PATCH_OCTAVES = 2;
-const PATCH_WARP_PX = 11;
-const PATCH_WARP_PERIOD_CELLS = 4;
-const PATCH_THRESHOLD = 0.54;
-const PATCH_TONE_LIFT = 0.15;
-
-/**
- * Brush streaking. The x coordinate is squashed before sampling, which stretches
- * every feature along the stroke direction without needing a second noise field.
- */
-const BRUSH_ALONG_SQUASH = 0.11;
-const BRUSH_PERIOD_CELLS = 26;
-const BRUSH_STREAK_SWING = 0.05;
+/** How much of the patchwork a full painted coat suppresses. */
+const MOTTLE_DAMPING_AT_FULL_PAINT = 0.75;
 
 /** Hairline cracks, counted per tile of surface area. */
 const CRACKS_PER_TILE_AREA = 0.34;
@@ -101,17 +91,7 @@ const SPALL_LIP_TONE = 0.92;
 const SPALL_LIP_ALPHA = 0.45;
 const SPALL_LIP_OFFSET_PX = 1.2;
 
-/** Opaque alpha, for the pixels the surface pass claims. */
-const PIXEL_OPAQUE = 255;
-
-/** Noise seed offsets, so no two layers sample the same field. */
-const BROAD_NOISE_SEED = 0;
-const GRAIN_NOISE_SEED = 313;
-const PATCH_NOISE_SEED = 691;
-const PATCH_WARP_SEED = 1187;
-const BRUSH_NOISE_SEED = 1699;
-
-/** Element streams, so two properties of one crack never share a number. */
+/** Element streams, so two properties of one feature never share a number. */
 const STREAM_CRACK_X = 11;
 const STREAM_CRACK_Y = 12;
 const STREAM_CRACK_LENGTH = 13;
@@ -121,6 +101,11 @@ const STREAM_SPALL_X = 16;
 const STREAM_SPALL_Y = 17;
 const STREAM_SPALL_RADIUS = 18;
 const STREAM_SPALL_VERTEX = 19;
+const STREAM_PATCH_X = 20;
+const STREAM_PATCH_Y = 21;
+const STREAM_PATCH_RADIUS = 22;
+const STREAM_PATCH_SIGN = 23;
+const STREAM_PATCH_VERTEX = 24;
 
 export function paintPlaster(options: PlasterOptions): void {
   const { plane, band } = options;
@@ -141,62 +126,75 @@ export function paintPlaster(options: PlasterOptions): void {
 }
 
 /**
- * The three noise layers, written straight into the pixel buffer.
+ * A flat wash, plus a handful of drawn patches where it sits a shade off.
  *
- * A buffer write ignores the canvas clip, so the row range is what confines this
- * pass to the band — and the rows outside it are read and written back
- * unchanged, which leaves an upper story's plaster alone when the ground story
- * paints.
+ * The base fill is one colour — a plaster wall is a smooth painted plane, and
+ * flat is correct for it in a way it never is for masonry — and the patches
+ * are the only thing that varies it, each one an irregular polygon at its own
+ * tone rather than a sampled field. `firstRow`/`lastRow` confine the fill to
+ * the band; the patch pass runs under the caller's own clip.
  */
 function paintSurface(options: PlasterOptions, firstRow: number, lastRow: number): void {
-  const { plane, noise, seed, ramp, trimRamp, painted } = options;
-  const buffer = readPixels(plane.ctx, plane.width, plane.height);
-  const mottleScale = 1 - painted * MOTTLE_DAMPING_AT_FULL_PAINT;
+  const { plane, ramp, trimRamp, painted } = options;
+  const ctx = plane.ctx;
+  const bandHeight = lastRow - firstRow;
+  const baseColor = mix(sampleRamp(ramp, BASE_TONE), sampleRamp(trimRamp, BASE_TONE), painted);
+  ctx.fillStyle = rgb(baseColor);
+  ctx.fillRect(0, firstRow, plane.width, bandHeight);
 
-  for (let y = firstRow; y < lastRow; y++) {
-    for (let x = 0; x < plane.width; x++) {
-      const broad = noise.fbm(x, y, seed + BROAD_NOISE_SEED, BROAD_OCTAVES, BROAD_PERIOD_CELLS);
-      const grain = noise.fbm(x, y, seed + GRAIN_NOISE_SEED, GRAIN_OCTAVES, GRAIN_PERIOD_CELLS);
-      const broadTone = (broad - NOISE_MIDPOINT) * 2 * BROAD_TONE_SWING * mottleScale;
-      const grainTone = (grain - NOISE_MIDPOINT) * 2 * GRAIN_TONE_SWING * mottleScale;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, firstRow, plane.width, bandHeight);
+  ctx.clip();
+  paintWashPatches(options, firstRow, bandHeight);
+  ctx.restore();
+}
 
-      const warped = noise.warp(
-        x,
-        y,
-        seed + PATCH_WARP_SEED,
-        PATCH_WARP_PX,
-        PATCH_WARP_PERIOD_CELLS,
-      );
-      const patch = noise.fbm(
-        warped.x,
-        warped.y,
-        seed + PATCH_NOISE_SEED,
-        PATCH_OCTAVES,
-        PATCH_PERIOD_CELLS,
-      );
-      const thinned =
-        patch <= PATCH_THRESHOLD ? 0 : (patch - PATCH_THRESHOLD) / (1 - PATCH_THRESHOLD);
+/**
+ * The broad, soft-shade patches that keep a plaster wall from reading as a
+ * single flat swatch: a full painted coat suppresses most of them, since an
+ * even coat of paint is exactly what a plaster wall does not have once it is
+ * covered.
+ */
+function paintWashPatches(options: PlasterOptions, firstRow: number, bandHeight: number): void {
+  const { plane, seed, ramp, trimRamp, painted } = options;
+  const ctx = plane.ctx;
+  const strength = (1 - painted * MOTTLE_DAMPING_AT_FULL_PAINT) * wearRemaining(options);
+  if (strength <= 0) return;
 
-      const brush = noise.value(
-        x * BRUSH_ALONG_SQUASH,
-        y,
-        BRUSH_PERIOD_CELLS,
-        seed + BRUSH_NOISE_SEED,
-      );
-      const brushTone = (brush - NOISE_MIDPOINT) * 2 * BRUSH_STREAK_SWING * painted;
+  const bandTiles = (plane.width * bandHeight) / (options.scale * options.scale);
+  const count = Math.max(1, Math.round(bandTiles / PATCH_AREA_PER_TILE));
+  const baseRadius = PATCH_RADIUS_TILES * options.scale;
 
-      const tone = BASE_TONE + broadTone + grainTone + thinned * PATCH_TONE_LIFT + brushTone;
-      const color = mix(sampleRamp(ramp, tone), sampleRamp(trimRamp, tone), painted);
+  for (let patch = 0; patch < count; patch++) {
+    const centreX = elementValue(seed, STREAM_PATCH_X, patch) * plane.width;
+    const centreY = firstRow + elementValue(seed, STREAM_PATCH_Y, patch) * bandHeight;
+    const radius =
+      baseRadius *
+      (1 +
+        (elementValue(seed, STREAM_PATCH_RADIUS, patch) - NOISE_MIDPOINT) *
+          2 *
+          PATCH_RADIUS_JITTER);
+    const lighter = elementValue(seed, STREAM_PATCH_SIGN, patch) < 0.5;
+    const tone = BASE_TONE + (lighter ? PATCH_TONE_SWING : -PATCH_TONE_SWING) * strength;
+    const color = mix(sampleRamp(ramp, tone), sampleRamp(trimRamp, tone), painted);
 
-      const index = pixelIndex(buffer, x, y);
-      buffer.data[index + RED] = color[0];
-      buffer.data[index + GREEN] = color[1];
-      buffer.data[index + BLUE] = color[2];
-      buffer.data[index + ALPHA] = PIXEL_OPAQUE;
+    ctx.beginPath();
+    for (let vertex = 0; vertex < PATCH_VERTICES; vertex++) {
+      const angle = (vertex / PATCH_VERTICES) * Math.PI * 2;
+      const key = patch * PATCH_VERTEX_KEY_STRIDE + vertex;
+      const stretch =
+        1 +
+        (elementValue(seed, STREAM_PATCH_VERTEX, key) - NOISE_MIDPOINT) * 2 * PATCH_VERTEX_JITTER;
+      const x = centreX + Math.cos(angle) * radius * stretch;
+      const y = centreY + Math.sin(angle) * radius * stretch;
+      if (vertex === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     }
+    ctx.closePath();
+    ctx.fillStyle = rgb(color);
+    ctx.fill();
   }
-
-  writePixels(plane.ctx, buffer);
 }
 
 function bandTileArea(options: PlasterOptions): number {
@@ -215,7 +213,7 @@ function bandTileArea(options: PlasterOptions): number {
 function paintCracks(options: PlasterOptions): void {
   const { plane, seed, band, ramp, scale } = options;
   const ctx = plane.ctx;
-  const count = Math.round(bandTileArea(options) * CRACKS_PER_TILE_AREA);
+  const count = Math.round(bandTileArea(options) * CRACKS_PER_TILE_AREA * wearRemaining(options));
   const lipOffset = Math.sign(LIGHT_DIR_X) * CRACK_LIP_PX;
 
   ctx.lineWidth = HAIRLINE_WIDTH_PX;
@@ -281,7 +279,7 @@ function strokePath(
 function paintSpalls(options: PlasterOptions): void {
   const { plane, seed, band, ramp, scale } = options;
   const ctx = plane.ctx;
-  const count = Math.round(bandTileArea(options) * SPALLS_PER_TILE_AREA);
+  const count = Math.round(bandTileArea(options) * SPALLS_PER_TILE_AREA * wearRemaining(options));
   // A spall is a shallow bowl, so the wall of it that faces the sun is the one
   // on the far side: the lit lip goes away from the light, not toward it. Offset
   // it the other way and the same two polygons read as a blister.

@@ -151,7 +151,6 @@ export type TownRole =
   | 'noble'
   | 'beggar'
   | 'laborer'
-  | 'skyfowl'
   | 'commoner';
 
 const HEIGHT_MIN = 0.86;
@@ -310,7 +309,6 @@ const NOBLE_ACCENTS = ['#e0c060', '#e0d0c0'] as const;
 const MERCHANT_TOP_COLORS = ['#8e44ad', '#c0447a', '#16a085', '#d68910'] as const;
 const DRAB_TOP_COLORS = ['#5a5a5a', '#4a4a4a', '#6a5a4a', '#3a3a3a'] as const;
 const DRAB_BOTTOM_COLORS = ['#3a3a3a', '#2a2a2e', '#4a3a2a'] as const;
-const SKYFOWL_TOP_COLORS = ['#2c6ba0', '#27824f', '#c0392b', '#d68910', '#8e44ad'] as const;
 
 const CHILD_HEIGHT_FACTOR = 0.62;
 const CHILD_BUILD = 0.15;
@@ -386,7 +384,6 @@ const ROLE_BIASES: Partial<Record<TownRole, RoleBias>> = {
     gait: 'shuffle',
   },
   laborer: { topColors: DRAB_TOP_COLORS, buildFloor: LABORER_BUILD_FLOOR, gait: 'trudge' },
-  skyfowl: { topColors: SKYFOWL_TOP_COLORS },
 };
 
 /**

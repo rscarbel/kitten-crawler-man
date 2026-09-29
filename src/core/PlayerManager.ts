@@ -3,6 +3,7 @@ import { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import { TILE_SIZE } from './constants';
 import type { XpDiminishingTier } from '../levels/xpDiminishing';
+import type { PartyArrivalTiles } from '../map/findWalkableTile';
 
 /**
  * The player party (Human + Cat): a single handle systems can accept instead
@@ -61,12 +62,18 @@ export class PlayerManager {
     return safeRoom.isEntityInSafeRoom(this.human) || safeRoom.isEntityInSafeRoom(this.cat);
   }
 
-  /** Set spawn positions (pixel coordinates). */
-  setPositions(sx: number, sy: number): void {
-    this.human.x = sx * TILE_SIZE;
-    this.human.y = sy * TILE_SIZE;
-    this.cat.x = (sx + 1) * TILE_SIZE;
-    this.cat.y = sy * TILE_SIZE;
+  /**
+   * Stands the driven crawler on `arrival.leader` and the other on
+   * `arrival.follower` — tiles from `findPartyArrivalTiles`, which checks
+   * both, rather than a fixed offset that can land inside a wall or a prop.
+   */
+  setPartyDown(arrival: PartyArrivalTiles): void {
+    const driven = this.human.isActive ? this.human : this.cat;
+    const other = driven === this.human ? this.cat : this.human;
+    driven.x = arrival.leader.x * TILE_SIZE;
+    driven.y = arrival.leader.y * TILE_SIZE;
+    other.x = arrival.follower.x * TILE_SIZE;
+    other.y = arrival.follower.y * TILE_SIZE;
   }
 
   /** Tick both players' timers (level-up flash, walk frame, status effects). */

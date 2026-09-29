@@ -26,6 +26,7 @@ import type { HumanPlayer } from '../src/creatures/HumanPlayer';
 import type { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Player } from '../src/Player';
 import { GameMap } from '../src/map/GameMap';
+import { level3 } from '../src/levels/level3';
 import type { BriarHollowSite } from '../src/map/overworld/briarHollowSite';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster, type SceneWorld } from '../src/systems/kits/SceneWorld';
@@ -38,7 +39,8 @@ import { GroundPickupSystem } from '../src/systems/GroundPickupSystem';
 import { DynamiteSystem } from '../src/systems/DynamiteSystem';
 import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
 
-export const SIEGE_MAP_SIZE = 280;
+/** Briar Hollow stands on floor 3's overworld, so its map is that floor's size. */
+export const SIEGE_MAP_SIZE = level3.mapSize;
 export const UPDATES_PER_SECOND = 60;
 
 const maps = new Map<number, GameMap>();

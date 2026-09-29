@@ -44,8 +44,13 @@ import { TILE_SIZE } from '../src/core/constants';
 import { AbilityManager } from '../src/core/AbilityManager';
 import { EventBus } from '../src/core/EventBus';
 import { PlayerManager } from '../src/core/PlayerManager';
-import { GameMap } from '../src/map/GameMap';
-import { BARREL, CRATE } from '../src/map/tileTypes';
+import { GameMap, type PlacedTownInteriorProp } from '../src/map/GameMap';
+import {
+  TOWN_INTERIOR_PROPS,
+  type TownInteriorDestructibleKind,
+} from '../src/sprites/art/townInterior/townInteriorProps';
+import { TownInteriorPropDestructionSystem } from '../src/systems/TownInteriorPropDestructionSystem';
+import { InMemoryInteriorPayoutRecord } from '../src/systems/InteriorPropInteractionSystem';
 import { Mob, type ShellContext } from '../src/creatures/Mob';
 import { alertPackAround } from '../src/creatures/packAlert';
 import { createMob } from '../src/levels/spawner';
@@ -266,17 +271,26 @@ function findFloorPairEastward(map: GameMap): TilePos | null {
   return null;
 }
 
-/** Every tile the generator laid a barrel or a crate on. */
-function findSmashableTiles(map: GameMap): TilePos[] {
-  const found: TilePos[] = [];
-  for (let y = 0; y < map.structure.length; y++) {
-    const row = map.structure[y];
-    for (let x = 0; x < row.length; x++) {
-      const tileType = row[x].type;
-      if (tileType === BARREL || tileType === CRATE) found.push({ x, y });
-    }
-  }
-  return found;
+/** The wooden storage props a shop is expected to stand along its walls, and that a swing splits. */
+const SMASHABLE_STORAGE_KINDS: ReadonlySet<TownInteriorDestructibleKind> = new Set([
+  'barrel',
+  'crate',
+]);
+
+/**
+ * Every placed barrel or crate a swing can reach from the tile west of it.
+ *
+ * Only one-tile props qualify, so "the prop broke" and "the tile it stood on
+ * opened up" are the same observation.
+ */
+function findSmashableStorage(map: GameMap): PlacedTownInteriorProp[] {
+  return map.placedInteriorProps.filter((placed) => {
+    const def = TOWN_INTERIOR_PROPS[placed.propId];
+    const kind = def.destructible?.kind;
+    if (kind === undefined || !SMASHABLE_STORAGE_KINDS.has(kind)) return false;
+    const isSingleTile = def.footprint.w === 1 && def.footprint.h === 1;
+    return isSingleTile && map.isWalkable(placed.tile.x - 1, placed.tile.y);
+  });
 }
 
 /**
@@ -519,22 +533,28 @@ console.log('\nFloor loot survives the door');
 console.log('\nDestructibles exist indoors and break');
 {
   const map = makeInterior();
-  const smashable = findSmashableTiles(map);
+  const smashable = findSmashableStorage(map);
   check(
     smashable.length > 0,
-    `the generated store lays down barrels or crates (${smashable.length})`,
+    `the generated store stands barrels or crates a swing can reach (${smashable.length})`,
   );
   const target = smashable[0];
   if (target !== undefined) {
     const stage = makeStage(map, PARKED_TILE, PARKED_TILE);
     const combat = makeCombatKit(stage);
     const destruction = new DestructionKit(stage.world, OVERWORLD_FLOOR_NUMBER);
-    const extras = { destructibles: destruction.destructibles } as const;
+    const interiorProps = new TownInteriorPropDestructionSystem(
+      map,
+      destruction.loot,
+      new InMemoryInteriorPayoutRecord(),
+    );
+    interiorProps.setActivePlayer(stage.pm.human);
+    const extras = { destructibles: destruction.destructibles, interiorProps } as const;
 
-    standWestFacing(stage, target.x * TILE_SIZE + HALF_TILE, target.y * TILE_SIZE + HALF_TILE);
+    const { x: targetX, y: targetY } = target.tile;
+    standWestFacing(stage, targetX * TILE_SIZE + HALF_TILE, targetY * TILE_SIZE + HALF_TILE);
+    check(!map.isWalkable(targetX, targetY), 'the standing prop blocks its tile');
 
-    const targetTile = map.structure[target.y][target.x];
-    const originalType = targetTile.type;
     let swingsThatConnected = 0;
     stage.bus.on('humanMeleeSwing', (event) => {
       if (event.hit) swingsThatConnected++;
@@ -542,7 +562,7 @@ console.log('\nDestructibles exist indoors and break');
 
     const { human } = stage.pm;
     let frames = 0;
-    while (targetTile.type === originalType && frames < MAX_FIGHT_FRAMES) {
+    while (!interiorProps.broken.has(target.id) && frames < MAX_FIGHT_FRAMES) {
       if (human.attackTimer === 0) human.triggerAttack();
       combat.updatePlayerAttacks();
       combat.resolvePlayerAttacks(extras);
@@ -550,19 +570,18 @@ console.log('\nDestructibles exist indoors and break');
     }
 
     check(swingsThatConnected > 0, 'a swing through the kit connects with the prop');
-    check(targetTile.type !== originalType, `enough hits open the tile up (${frames} frames)`);
+    check(interiorProps.broken.has(target.id), `enough hits break it (${frames} frames)`);
+    check(map.isWalkable(targetX, targetY), 'and the tile it stood on opens up');
 
     // The count, not merely "some": one barrel is one cue, and the scene plays
-    // a single sample however many props gave way — a prop double-counted here
-    // is a smash that sounds like a blast.
-    const smashes = destruction.destructibles.drainSmashes();
-    check(smashes.wood === 1, `the break is reported as one splitting-wood cue (${smashes.wood})`);
-    // Drained, not merely read: a counter that reports without resetting replays
-    // the same cue every frame for the rest of the floor.
-    check(
-      destruction.destructibles.drainSmashes().wood === 0,
-      'and the count is drained by reading it',
-    );
+    // a cue per break reported — a prop double-counted here is a smash that
+    // sounds like a blast.
+    const breaks = interiorProps.drainBreaks();
+    const brokeOnlyTarget = breaks.length === 1 && breaks[0].placed.id === target.id;
+    check(brokeOnlyTarget, `the break is reported once, for that prop (${breaks.length})`);
+    // Drained, not merely read: a list that reports without clearing replays
+    // the same cue every frame for the rest of the visit.
+    check(interiorProps.drainBreaks().length === 0, 'and the report is drained by reading it');
   }
 }
 

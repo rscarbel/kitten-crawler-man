@@ -33,7 +33,11 @@ import {
 } from '../levels/spawner';
 import { activeDifficultyProfile, applySpawnDifficulty } from '../core/difficultyProfiles';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
-import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
+import {
+  flushFigureFrameCache,
+  holdFigureIdleSweep,
+  releaseFigureIdleSweep,
+} from '../sprites/figure/figureFrameCache';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
 import { getLevelDef } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
@@ -60,7 +64,6 @@ import {
   restoreJournalProgress,
   type JournalProgress,
 } from '../core/JournalProgress';
-import { TownGuideSystem } from '../systems/TownGuideSystem';
 import {
   ARROW_PRIORITY,
   drawArrowAbovePlayer,
@@ -91,7 +94,7 @@ import { getSkillDef, CRAWLER_NAMES, type CrawlerKind } from '../core/SkillManag
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
-import { drawHUD, renderMobileSkillBadge, hudCoinCounterScreenPos } from '../ui/HUD';
+import { drawHUD, renderMobileSkillBadge, hudCoinCounterScreenPos, hudKeepouts } from '../ui/HUD';
 import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
@@ -127,6 +130,7 @@ import {
   hostileWithinRadius,
   shouldShowInteractionPrompts,
 } from '../systems/interactionPromptGate';
+import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeRoomSpeaker';
 import { ALL_BREAKABLE_PROPS, NO_BREAKABLE_PROPS } from '../systems/DestructiblePropSystem';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit, type ChatCommand } from '../systems/kits/ChatKit';
@@ -164,10 +168,11 @@ import { BuildingSystem, type BuildingEntry } from '../systems/BuildingSystem';
 import { interiorSellsSomething } from '../systems/townServices';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import type { Townsperson } from '../creatures/Townsperson';
-import { CONVERSATION_WALK_AWAY_TILES } from '../creatures/townInteraction';
+import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
+import { prewarmAndPinCitizenTalk } from '../creatures/citizenFigure';
 import { TownDecorSystem } from '../systems/TownDecorSystem';
 import { TownPropSystem } from '../systems/TownPropSystem';
-import { CrawlerSignSystem } from '../systems/CrawlerSignSystem';
+import { CRAWLER_SIGN_READ_RADIUS_TILES, CrawlerSignSystem } from '../systems/CrawlerSignSystem';
 import { signLine } from '../dialog/scripts/crawlerSigns';
 import type { CrawlerSignPlacement } from '../map/crawlerSigns';
 import { MarketSystem, type MarketBrowse } from '../systems/market/MarketSystem';
@@ -178,7 +183,11 @@ import {
   restoreMarketStock,
   type MarketStock,
 } from '../systems/market/MarketStock';
-import { buildCitizenConversation, type TownDialogContext } from '../systems/townDialog';
+import {
+  buildCitizenConversation,
+  citizenSpecies,
+  type TownDialogContext,
+} from '../systems/townDialog';
 import { buildTownNotices, type TownNoticeContext } from '../systems/townNotices';
 import { NoticeBoardPanel } from '../ui/NoticeBoardPanel';
 import { PricedMenuPanel } from '../ui/PricedMenuPanel';
@@ -319,7 +328,11 @@ import {
 } from '../core/BountyProgress';
 import { BountySystem, BOUNTY_TRACKER_ID } from '../systems/BountySystem';
 import { findBountyDef } from '../systems/bountyDefs';
-import { findNearbyWalkableTile, hasRoomToMove } from '../map/findWalkableTile';
+import {
+  findNearbyWalkableTile,
+  findPartyArrivalTiles,
+  hasRoomToMove,
+} from '../map/findWalkableTile';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
@@ -469,6 +482,8 @@ import {
 } from '../systems/KnockoutRevive';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { renderQuality } from '../core/RenderQuality';
+import { LoadingOverlay } from '../ui/LoadingScreen';
+import { floorArrivalLoadTasks, floorArrivalOwesWork } from './floorArrivalLoad';
 import {
   setButtonMouseState,
   setButtonAudio,
@@ -571,7 +586,7 @@ export interface DungeonSceneOptions {
   murderQuestProgress?: MurderQuestProgress;
   /** Wayfinder's Anchor questline state, threaded by reference across building/scene transitions. */
   anchorQuestProgress?: AnchorQuestProgress;
-  /** Journal state that must survive a door: guide visits and the pinned objective. */
+  /** Journal state that must survive a door: the pinned objective. */
   journalProgress?: JournalProgress;
   /** Tactics-trait System notices already shown this run, threaded like `journalProgress`. */
   tacticsNoticesSeen?: Set<TacticsTrait>;
@@ -679,8 +694,6 @@ const BOUNTY_WARP_SEARCH_TILES = 20;
 const RECALL_WARP_STANDOFF_TILES = 0;
 /** Widest ring the Wayfinder's Anchor will search for somewhere to set the party down. */
 const RECALL_WARP_SEARCH_TILES = 24;
-/** How far from the human the companion may be nudged when a warp lands. */
-const WARP_COMPANION_SEARCH_TILES = 6;
 /** Distance-attenuated ambience tuning for the overworld town. */
 const FOUNTAIN_AMBIENT_RADIUS_TILES = 10;
 const FOUNTAIN_AMBIENT_VOLUME = 0.5;
@@ -691,7 +704,7 @@ const FORGE_AMBIENT_VOLUME = 0.45;
  * past the door but dies out well before the square's crowd bed takes over.
  */
 const DESPERADO_CLUB_EXTERIOR_AMBIENT_RADIUS_TILES = 10;
-const DESPERADO_CLUB_EXTERIOR_AMBIENT_VOLUME = 0.55;
+const DESPERADO_CLUB_EXTERIOR_AMBIENT_VOLUME = 1;
 /**
  * The plaza's murmur is a wide, quiet bed rather than a wall of crowd noise —
  * wide enough to carry a little way up every lane off the 17 x 16 slab, which is
@@ -863,7 +876,6 @@ const BIG_BRAWLER_GUARD_RADIUS = BIG_BRAWLER_GUARD_RADIUS_TILES * TILE_SIZE;
 const TROGLODYTE_SPAWN_KEY = 'troglodyte';
 
 // UI positioning and sizing
-const MINIMAP_MARGIN = 8;
 const MOBILE_UI_SPACING = 4;
 
 // UI button positioning (Mongo/Gear/Bag etc)
@@ -1106,10 +1118,14 @@ export class DungeonScene extends GameplayScene {
   private readonly recall: RecallSystem;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
+  /**
+   * The loading screen covering this floor's arrival, while it is up or fading
+   * out; null once gone, or when the arrival owed too little to cover.
+   */
+  private arrivalLoading: LoadingOverlay | null = null;
   private townProps: TownPropSystem | null = null;
   /** Shady's bounty loop. Overworld only — null on every other floor. */
   private bounty: BountySystem | null = null;
-  private townGuide: TownGuideSystem | null = null;
   /** Screen rect of the Journal's compass button, or null on floors without one. */
   private journalButtonRect: UIRenderer.Rect | null = null;
   /** The HUD's Build button, while it shows. */
@@ -1268,7 +1284,7 @@ export class DungeonScene extends GameplayScene {
   private levelTimerFrames = 0;
   /**
    * The tutorial has no `LevelDef` collapse timer of its own — it isn't built
-   * from one — so it keeps the hour every timed floor used to run on, named
+   * from one — so it runs on a flat hour, named
    * here rather than repeating the literal. Also the fallback clamp for a
    * timed `LevelDef` that omits `collapseTimeLimitFrames`.
    */
@@ -1533,7 +1549,7 @@ export class DungeonScene extends GameplayScene {
 
       if (options?.humanSnap) restorePlayer(this.human, options.humanSnap);
       if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
-      this.pm.setPositions(spawnTileX, spawnTileY);
+      this.pm.setPartyDown(findPartyArrivalTiles(this.gameMap, spawn));
 
       // A companion who went down out here stays exactly where they fell while
       // the player is off inside a building, rather than being dragged to the door.
@@ -2079,6 +2095,9 @@ export class DungeonScene extends GameplayScene {
           // Dismiss Mongo and any hired merc before floor transition
           this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
           this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+          // Gives back this floor's own pinned crowd explicitly, rather than
+          // leaning only on the cache-wide flush below to clear it.
+          this.townLife?.dispose();
           // This is the one genuine floor change among DungeonScene's four
           // `sceneManager.replace` sites, so it's the only one that runs the
           // sprite eviction pass — building enter/exit rebuild the scene around
@@ -2198,6 +2217,12 @@ export class DungeonScene extends GameplayScene {
                 // the overworld does on its first frame; the start tile at least
                 // keeps a defeat off the doorstep.
                 const exitTile = defeated ? this.gameMap.startTile : returnTile;
+                // A building-exit rebuild is still the same floor, so the crowd
+                // the new scene's own `TownLifeSystem` pins moments from now is
+                // the same working set — cheap to give back and re-pin, and the
+                // only way every leave-town path stays covered without special
+                // cases for which ones happen to be "the same floor."
+                this.townLife?.dispose();
                 this.sceneManager.replace(
                   new DungeonScene(levelDef, this.input, this.sceneManager, {
                     spawnAt: exitTile,
@@ -2348,11 +2373,6 @@ export class DungeonScene extends GameplayScene {
           );
         }
       }
-      this.townGuide = new TownGuideSystem(
-        this.gameMap,
-        this.townProps.boardTile,
-        this.journalProgress,
-      );
       this.gathering = new GatheringKit({
         gameMap: this.gameMap,
         bus: this.bus,
@@ -2549,7 +2569,8 @@ export class DungeonScene extends GameplayScene {
     // for this floor's declared sprite groups.
     // `prewarmGroups` also forces each sheet's GPU texture upload during this
     // floor's fade-in rather than on whichever frame first draws it.
-    // Still fire-and-forget: this must not block scene construction/rendering.
+    // Never awaited here: this must not block scene construction/rendering. A
+    // floor with an arrival loading screen waits for it there instead.
     // Bounty/quest-system-introduced creatures aren't covered here — those
     // stay on the lazy load-on-miss path (`SpriteLoader.getSpriteDef`
     // schedules a load the first time a sprite is requested and fails safe
@@ -2561,7 +2582,9 @@ export class DungeonScene extends GameplayScene {
     // before this floor's sheets finish loading, locking in the fallback
     // colors/art forever. Re-baking once the whole group is confirmed loaded
     // turns that into the intended "wrong for a frame or two", not permanent.
-    void prewarmGroups(levelDef.spriteGroups).then(() => this.gameMap.invalidateAllTileArt());
+    const spriteGroupsReady = prewarmGroups(levelDef.spriteGroups).then(() =>
+      this.gameMap.invalidateAllTileArt(),
+    );
     this.spiderQuest.setSongClock(() => this.audio?.getKeyboardHeroMusicTimeMs() ?? null);
     {
       const signs = new CrawlerSignSystem(
@@ -2719,6 +2742,29 @@ export class DungeonScene extends GameplayScene {
     this.wireEventBus();
     this.checkFloorEntryAchievements();
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
+
+    // Last, so every system that queues art or figures on construction — the
+    // crowd, the residents, the party — has queued it before the loader
+    // measures what is owed. Checked on every construction rather than at the
+    // call sites that build this scene, because there are several and a floor
+    // is arrived on through all of them: stairs, a save, a restart, a door.
+    const loadingScreen = levelDef.arrivalLoadingScreen;
+    const returningFromBuilding = options?.existingMap !== undefined;
+    if (loadingScreen !== undefined && floorArrivalOwesWork(returningFromBuilding)) {
+      this.arrivalLoading = new LoadingOverlay({
+        kicker: `Floor ${levelDef.floorNumber}`,
+        title: levelDef.name,
+        tips: loadingScreen.tips,
+        tasks: floorArrivalLoadTasks({
+          gameMap: this.gameMap,
+          camera: () => this.camera(),
+          viewport: () => ({ width: viewportWidth(), height: viewportHeight() }),
+          spriteGroupsReady,
+        }),
+      });
+      renderQuality.beginLoadingCover();
+      holdFigureIdleSweep();
+    }
   }
 
   /**
@@ -3318,8 +3364,13 @@ export class DungeonScene extends GameplayScene {
       // The two end-of-floor screens count as over for Escape: each owns the
       // screen until its own button is pressed, and a pause menu opened behind
       // one would take the keyboard from it.
+      // The loading screen counts too: a pause menu opened under it would be
+      // waiting, unseen, over a floor the player has not been shown yet.
       isGameOver: () =>
-        this.gameOver || this.levelCompleteScreen.isActive || this.runCompleteScreen.isActive,
+        this.gameOver ||
+        this.levelCompleteScreen.isActive ||
+        this.runCompleteScreen.isActive ||
+        this.arrivalLoading?.isOpen === true,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
       dismissDialog: () => {
         if (this.menus.mongoExplainer.isOpen && !this.menus.isAwardStackShowing) {
@@ -3418,7 +3469,8 @@ export class DungeonScene extends GameplayScene {
       // reach them. Consuming here is also what keeps the press off the world:
       // whatever owns the screen eats Space even when it has nothing to do with
       // it, so a click-only menu can never leak the press to an NPC behind it.
-      advanceDialog: () => advanceFocusedOverlay(this.overlayClaims) !== 'ignored',
+      advanceDialog: () =>
+        this.handOffConversationPress() || advanceFocusedOverlay(this.overlayClaims) !== 'ignored',
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
       // No slot: the dedicated potion key means "any bottle you have", unlike a
@@ -3458,6 +3510,12 @@ export class DungeonScene extends GameplayScene {
   }
 
   onExit(): void {
+    // A scene left while still loading must not leave the probe blindfolded,
+    // nor the figure cache unable to let anything go.
+    if (this.arrivalLoading?.isOpen === true) {
+      renderQuality.endLoadingCover();
+      releaseFigureIdleSweep();
+    }
     // Every floor is a fresh `DungeonScene`, which would already start this
     // fresh too — reset defensively anyway, so a hold left outstanding by a
     // dialog that never got its close callback can never surface as a
@@ -3838,10 +3896,10 @@ export class DungeonScene extends GameplayScene {
    * included, before the player has ever spoken to her.
    *
    * Independent of the pin on purpose: nothing here implies a quest is under
-   * way, only that one could be started. `resolvePinnedEntry` no longer falls
-   * back to picking one of these for the player — that read as the floor
-   * starting with a quest already active — so this is the only thing that
-   * still points at a quest giver before their quest is accepted.
+   * way, only that one could be started. `resolvePinnedEntry` never falls
+   * back to picking one of these for the player — that would read as the
+   * floor starting with a quest already active — so this is the only thing
+   * that points at a quest giver before their quest is accepted.
    */
   private renderAvailableQuestBeacons(
     ctx: CanvasRenderingContext2D,
@@ -4161,18 +4219,14 @@ export class DungeonScene extends GameplayScene {
    * none of them can drift apart on where a party ends up.
    */
   private placePartyAtTile(landing: { x: number; y: number }): void {
-    this.human.x = landing.x * TILE_SIZE;
-    this.human.y = landing.y * TILE_SIZE;
-    const companionTile = findNearbyWalkableTile(
-      this.gameMap,
-      landing.x + 1,
-      landing.y,
-      WARP_COMPANION_SEARCH_TILES,
-    );
-    // Stacked on the human rather than nowhere: the companion is dragged along
-    // by every shipped warp, and CompanionSystem gives up past its path budget.
-    this.cat.x = (companionTile?.x ?? landing.x) * TILE_SIZE;
-    this.cat.y = (companionTile?.y ?? landing.y) * TILE_SIZE;
+    // With nowhere beside the human the search stacks the companion on the
+    // human rather than leaving it behind: the companion is dragged along by
+    // every shipped warp, and CompanionSystem gives up past its path budget.
+    const { leader, follower } = findPartyArrivalTiles(this.gameMap, landing);
+    this.human.x = leader.x * TILE_SIZE;
+    this.human.y = leader.y * TILE_SIZE;
+    this.cat.x = follower.x * TILE_SIZE;
+    this.cat.y = follower.y * TILE_SIZE;
   }
 
   /**
@@ -4374,6 +4428,9 @@ export class DungeonScene extends GameplayScene {
       },
       progress,
     );
+    // The save's own floor may not be this one, so the crowd this scene
+    // pinned (if any) has no guaranteed successor to inherit it.
+    this.townLife?.dispose();
     this.sceneManager.replace(new DungeonScene(levelDef, this.input, this.sceneManager, options));
   }
 
@@ -4897,6 +4954,10 @@ export class DungeonScene extends GameplayScene {
    * just finished is exactly the one they may want to walk around in again.
    */
   private returnToMainMenu(): void {
+    // Leaves the town for the title screen, not just this scene — whatever
+    // this floor pinned has no claim on the memory once the player is back
+    // at the menu, continuing or not.
+    this.townLife?.dispose();
     this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     const baseOptions: DungeonSceneOptions = {
       audio: this.audio ?? undefined,
@@ -5214,6 +5275,10 @@ export class DungeonScene extends GameplayScene {
     this.gameStats.restore(this.floorEntryGameStats);
     this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     restoreMercenaryRoster(this.mercenaryRoster, this.floorEntryMercenaryRoster);
+    // A fresh-seed restart of the same floor identity — the new scene's own
+    // `TownLifeSystem` (if this is a town) pins its own crowd moments from
+    // now, so there is nothing gained by leaving the old one pinned meanwhile.
+    this.townLife?.dispose();
     this.sceneManager.replace(
       new DungeonScene(this.levelDef, this.input, this.sceneManager, {
         humanSnap: this.floorEntryHumanSnap,
@@ -5242,9 +5307,8 @@ export class DungeonScene extends GameplayScene {
         circusQuestProgress: this.circusQuestProgress,
         murderQuestProgress: this.murderQuestProgress,
         anchorQuestProgress: this.anchorQuestProgress,
-        // Carried through a death restart with the questlines it belongs to: the
-        // Town Guide is a record of where the player has been, and dying does not
-        // un-visit the shop.
+        // Carried through a death restart with the questlines it belongs to, so
+        // the objective the player pinned is still pinned when they get up.
         journalProgress: this.journalProgress,
         bountyProgress: this.bountyProgress,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
@@ -5452,13 +5516,15 @@ export class DungeonScene extends GameplayScene {
   private tryTalkToCitizen(active: Player): boolean {
     if (this.townLife === null) return false;
     const target = this.townLife.findTalkTarget(active.x, active.y);
-    if (target === null) return false;
+    if (target === null || target === this.citizenDialogTarget) return false;
     target.faceToward(active.x, active.y);
     target.frozen = true;
-    this.citizenDialogTarget = target;
+    const facing = target.facingXY();
+    prewarmAndPinCitizenTalk(target.figure, facing.x, facing.y);
     const line = buildCitizenConversation(
       target.role,
-      target.appearance.seed,
+      citizenSpecies(target),
+      target.dialogSeed,
       target.conversationCount,
       this.townDialogContext(),
     );
@@ -5471,10 +5537,14 @@ export class DungeonScene extends GameplayScene {
       haltsWorld: false,
       anchor: {
         position: () => ({ x: target.x, y: target.y }),
-        radius: CONVERSATION_WALK_AWAY_TILES,
+        talkRangeTiles: CITIZEN_TALK_RADIUS_TILES,
       },
       locksKeyboard: true,
     });
+    // Only once `open` has run: a citizen this press was handed on from is
+    // released by that call, through `releaseCitizenDialogTarget`, and must
+    // still be the one it finds there.
+    this.citizenDialogTarget = target;
     target.conversationCount++;
     return true;
   }
@@ -5488,7 +5558,6 @@ export class DungeonScene extends GameplayScene {
 
   /** Opens a sign's conversation on the shared box, from `CrawlerSignSystem`'s `onRead` callback. */
   private openSignConversation(sign: CrawlerSignPlacement): void {
-    this.signDialogTarget = sign;
     this.signDialogHandle = this.conversation.open({
       lines: [signLine({ direction: sign.direction })],
       reward: null,
@@ -5498,10 +5567,12 @@ export class DungeonScene extends GameplayScene {
       haltsWorld: false,
       anchor: {
         position: () => ({ x: sign.tile.x * TILE_SIZE, y: sign.tile.y * TILE_SIZE }),
-        radius: CONVERSATION_WALK_AWAY_TILES,
+        talkRangeTiles: CRAWLER_SIGN_READ_RADIUS_TILES,
       },
       locksKeyboard: true,
     });
+    // After `open`, for the same reason as the citizen's target.
+    this.signDialogTarget = sign;
   }
 
   private releaseSignDialogTarget(): void {
@@ -5542,6 +5613,9 @@ export class DungeonScene extends GameplayScene {
       focusContext: null,
     });
     return [
+      // First: while the floor is still loading nothing else can be on screen,
+      // and nothing the keyboard does may reach a world that is not drawn yet.
+      ...(this.arrivalLoading === null ? [] : [this.arrivalLoading.overlayClaim()]),
       modal(this.chestRewardDialog.isOpen, 'chest-reward'),
       this.questSwitchConfirm.overlayClaim(),
       floatingDialog(tutorial?.showNearGoblinDialog === true, () =>
@@ -5995,11 +6069,6 @@ export class DungeonScene extends GameplayScene {
           asOptional(this.ballOfSwineObjective('ball_of_swine_distant')),
         ];
       case OVERWORLD_FLOOR_THREE:
-        // The floor's three questlines, and deliberately not the Town Guide's
-        // stops: Mordecai's advice is quest-shaped — a page of prose and a
-        // bearing about something worth doing — and "there is a shop" is a
-        // signpost, not a story. The Journal carries those; he does not.
-        //
         // The Anchor's offer leads the list: accepting it is what makes every
         // later trip on this floor shorter, so he raises it before the other
         // three errands rather than after them.
@@ -6159,92 +6228,11 @@ export class DungeonScene extends GameplayScene {
 
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) {
-      // Beside the Mordecai check rather than above it: each fixture owns its
-      // own corner of the room, so only one of the two can ever be in range.
-      if (this.bopca.tryInteract(active)) {
-        return;
-      }
-      if (this.safeRoom.isNearMordecai(active)) {
-        this.talkToMordecai(active);
-      }
+      // Nothing in a safe room is a swing, whether or not a speaker answered.
+      this.trySafeRoomPress(active);
       return;
     }
-    // If an enemy is within attack range, prefer attacking over interacting
-    if (hostileWithinAttackRange(active, this.world.roster.grid)) {
-      // fall through to attack logic below
-    } else {
-      // Chest interaction
-      if (this.treasureChests.tryInteract(active)) {
-        return;
-      }
-      if (this.defendQuest.tryInteract(active)) {
-        return;
-      }
-      if (this.spiderQuest.tryInteract(active)) {
-        return;
-      }
-      if (this.circusQuest.tryInteract(active)) {
-        return;
-      }
-      if (this.murderQuest.tryInteract(active)) {
-        return;
-      }
-      if (this.bossRoomDressings.tryInteract(active)) {
-        return;
-      }
-      if (this.destruction.groundPickups.tryPickupNear(active)) {
-        return;
-      }
-      if (this.arenaRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
-        this.audio?.play('picking_up_ground_object');
-        return;
-      }
-      if (this.market?.tryInteract(active) === true) {
-        return;
-      }
-      // Before the board he stands beside: with both in reach, a press should
-      // reach the man, not the noticeboard behind him.
-      if (this.bounty?.tryInteract(active, this.human, this.cat) === true) {
-        return;
-      }
-      if (this.townProps?.tryInteract(active) === true) {
-        return;
-      }
-      if (this.crawlerSigns?.tryInteract(active) === true) {
-        return;
-      }
-      if (this.briarHollowKit?.tryInteract(active) === true) {
-        return;
-      }
-      if (this.tryTalkToCitizen(active)) {
-        return;
-      }
-      // After citizen talk: a townsperson in range is who a press is meant for,
-      // and a tree beside them is scenery until nobody is there to answer.
-      if (this.gathering?.tryStartHarvest(active) === true) {
-        return;
-      }
-      if (
-        this.mongoSystem.tryPet(
-          active,
-          this.gameMap,
-          this.world.roster.mobs,
-          this.world.roster.grid,
-          this.levelDef.isOverworld === true,
-        )
-      ) {
-        this.audio?.play('happy_hearts');
-        const isGrownUp =
-          (this.mongoSystem.mongo?.growthLevel ?? 0) >= MONGO_ADULT_SQUAWK_MIN_LEVEL;
-        this.audio?.playRandom(isGrownUp ? MONGO_ADULT_HAPPY_SQUAWKS : MONGO_BABY_HAPPY_SQUAWKS);
-        return;
-      }
-      // Last in the chain: the hireling stands at the party's shoulder all
-      // floor, so anything else within reach is what a press is meant for.
-      if (this.mercenarySystem.tryTalk(active, this.world.roster.mobs)) {
-        return;
-      }
-    }
+    if (this.tryInteractWithWorld(active)) return;
     if (this.tutorial !== null && !this.tutorial.canAttack) return;
 
     // On mobile tap: aim toward tap position before snapping to nearest mob
@@ -6261,6 +6249,142 @@ export class DungeonScene extends GameplayScene {
       }
     }
     triggerPlayerAttack(this.human, this.cat, this.world.roster.grid, this.gameMap, this.audio);
+  }
+
+  /**
+   * An interact press or world tap made while a conversation the player can
+   * walk away from is up, offered to the world first — see
+   * `Conversation.handOff`. Only while that conversation is the one overlay
+   * open: any menu over it owns the press outright.
+   */
+  private handOffConversationPress(): boolean {
+    if (!this.conversation.isOpen) return false;
+    const openOverlays = this.overlayClaims.filter((claim) => claim.isOpen);
+    if (openOverlays.length !== 1) return false;
+    const active = this.active();
+    const inSafeRoom = this.safeRoom.isEntityInSafeRoom(active);
+    const pressIsForSomeoneElse =
+      inSafeRoom && safeRoomPressLeavesSpeaker(this.bopca, this.safeRoom, active);
+    return this.conversation.handOff(active, pressIsForSomeoneElse, () =>
+      inSafeRoom ? this.trySafeRoomPress(active) : this.tryHandOffToWorld(active),
+    );
+  }
+
+  /**
+   * The world's half of a hand-off: only what the player walks up to. Mongo
+   * and the hireling follow at the party's shoulder, and a tree is beside
+   * half the street, so any of them would take a press made while reading a
+   * street box from wherever the player happened to drift — dismissing the
+   * box mid-read for a pet or a bark the player never asked for.
+   */
+  private tryHandOffToWorld(active: HumanPlayer | CatPlayer): boolean {
+    if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
+    return this.tryWalkedUpToInteraction(active);
+  }
+
+  /** The safe room's half of the interact chain: whichever of the Bopca and Mordecai is nearer. Returns whether either took the press. */
+  private trySafeRoomPress(active: HumanPlayer | CatPlayer): boolean {
+    const speaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, active);
+    if (speaker === 'bopca') return this.bopca.tryInteract(active);
+    if (speaker === 'mordecai') {
+      this.talkToMordecai(active);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Everything outside a safe room an interact press can reach, in priority
+   * order, short of a swing. Returns whether anything took it. Nothing does
+   * while a hostile is inside the attack range: the press is a swing then.
+   */
+  private tryInteractWithWorld(active: HumanPlayer | CatPlayer): boolean {
+    if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
+    return this.tryWalkedUpToInteraction(active) || this.tryInteractWithSurroundings(active);
+  }
+
+  /**
+   * The part of the interact chain the player reaches by walking up to it:
+   * chests, quest givers, pickups, stalls, signs, villagers and citizens.
+   * Returns whether anything took the press.
+   */
+  private tryWalkedUpToInteraction(active: HumanPlayer | CatPlayer): boolean {
+    if (this.treasureChests.tryInteract(active)) {
+      return true;
+    }
+    if (this.defendQuest.tryInteract(active)) {
+      return true;
+    }
+    if (this.spiderQuest.tryInteract(active)) {
+      return true;
+    }
+    if (this.circusQuest.tryInteract(active)) {
+      return true;
+    }
+    if (this.murderQuest.tryInteract(active)) {
+      return true;
+    }
+    if (this.bossRoomDressings.tryInteract(active)) {
+      return true;
+    }
+    if (this.destruction.groundPickups.tryPickupNear(active)) {
+      return true;
+    }
+    if (this.arenaRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
+      this.audio?.play('picking_up_ground_object');
+      return true;
+    }
+    if (this.market?.tryInteract(active) === true) {
+      return true;
+    }
+    // Before the board he stands beside: with both in reach, a press should
+    // reach the man, not the noticeboard behind him.
+    if (this.bounty?.tryInteract(active, this.human, this.cat) === true) {
+      return true;
+    }
+    if (this.townProps?.tryInteract(active) === true) {
+      return true;
+    }
+    if (this.crawlerSigns?.tryInteract(active) === true) {
+      return true;
+    }
+    if (this.briarHollowKit?.tryInteract(active) === true) {
+      return true;
+    }
+    return this.tryTalkToCitizen(active);
+  }
+
+  /**
+   * The tail of the interact chain: what is within reach almost everywhere —
+   * the trees, Mongo, the hireling — and so only answers a press nothing the
+   * player walked up to wanted. Returns whether anything took it.
+   */
+  private tryInteractWithSurroundings(active: HumanPlayer | CatPlayer): boolean {
+    // After citizen talk: a townsperson in range is who a press is meant for,
+    // and a tree beside them is scenery until nobody is there to answer.
+    if (this.gathering?.tryStartHarvest(active) === true) {
+      return true;
+    }
+    if (
+      this.mongoSystem.tryPet(
+        active,
+        this.gameMap,
+        this.world.roster.mobs,
+        this.world.roster.grid,
+        this.levelDef.isOverworld === true,
+      )
+    ) {
+      this.audio?.play('happy_hearts');
+      const isGrownUp = (this.mongoSystem.mongo?.growthLevel ?? 0) >= MONGO_ADULT_SQUAWK_MIN_LEVEL;
+      this.audio?.playRandom(isGrownUp ? MONGO_ADULT_HAPPY_SQUAWKS : MONGO_BABY_HAPPY_SQUAWKS);
+      return true;
+    }
+    // Last in the chain: the hireling stands at the party's shoulder all
+    // floor, so anything else within reach is what a press is meant for.
+    if (this.mercenarySystem.tryTalk(active, this.world.roster.mobs)) {
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -6317,6 +6441,8 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleClick(mx: number, my: number, eventTimeStampMs: number): void {
+    // Nothing under the loading screen has been drawn yet, so nothing can be aimed at.
+    if (this.arrivalLoading?.isOpen === true) return;
     notifyButtonClick(mx, my);
     // Before the routing chain below, because most of its branches return long
     // before the bag is offered the click: a field left focused by a press that
@@ -6672,6 +6798,11 @@ export class DungeonScene extends GameplayScene {
   }
 
   update(): void {
+    // Ahead of everything, the town's streets included: the arrival's own work
+    // is being done under this screen, and a world ticked behind it would be
+    // played by nobody — a crowd walking off from where it was warmed, a save
+    // taken of a floor the player has not seen.
+    if (this.arrivalLoading?.isOpen === true) return;
     this.yieldCitizenDialogToInterruption();
     const active = this.active();
     // Ahead of every halting return, because a conversation that halts the world
@@ -6740,9 +6871,6 @@ export class DungeonScene extends GameplayScene {
       this.townProps?.update();
       this.townDecor?.update();
       this.market?.update();
-      // Latches its stops here rather than in `updateGameplay`, so walking past
-      // the shop while a citizen is mid-sentence still counts as having found it.
-      this.townGuide?.update(this.buildSystemContext());
     }
 
     // Above the gameplay-halted early return below: his talk pose is only ever
@@ -6789,6 +6917,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
+    if (this.renderArrivalLoading(ctx)) return;
     setButtonAudio(this.audio);
     setButtonMouseState(this._mouseX, this._mouseY, this._mouseDown);
     // Any overlay at all, not only the world-halting ones: a street conversation
@@ -6944,10 +7073,14 @@ export class DungeonScene extends GameplayScene {
         pendingAmount: this.rewardFly.pendingCoinAmount(),
         pulse: this.rewardFly.coinCounterPulse(),
       },
+      this.miniMap.screenRect.x,
     );
     this._hudToggleRect = hudResult.toggleRect;
     this._hudRect = hudResult.hudRect;
     UIRenderer.setHudPanelRect(this._hudRect);
+    UIRenderer.setHudPanelKeepouts(
+      hudKeepouts(this._hudCollapsed, platform.showHudCollapseToggle, this.miniMap.screenRect.x),
+    );
     this.saveIndicator.render(ctx);
     if (!platform.isMobile) {
       this._hudSkillBannerRect = hudResult.notifRect;
@@ -7014,19 +7147,18 @@ export class DungeonScene extends GameplayScene {
         this.briarHollowKit?.minimapProcessingStations ?? [],
         this.collectVendorMinimapPositions(),
       );
-      const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-      this.touch.miniMapRect = {
-        x: viewportWidth() - mmSz - MINIMAP_MARGIN,
-        y: MINIMAP_MARGIN,
-        w: mmSz,
-        h: mmSz,
-      };
+      this.touch.miniMapRect = this.miniMap.screenRect;
     } else {
       this.touch.miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
     }
 
     if (this.levelDef.hasCollapseTimer === true && !this.gameOver && this.tutorial === null) {
-      UIRenderer.renderLevelTimer(ctx, this.miniMap, this.levelTimerFrames);
+      UIRenderer.renderLevelTimer(
+        ctx,
+        this.miniMap,
+        this.levelTimerFrames,
+        this.isLevelTimerPaused(),
+      );
     }
 
     let mobileQuestTopY: number | undefined;
@@ -7208,14 +7340,9 @@ export class DungeonScene extends GameplayScene {
       this.menus.gearPanel.isOpen ||
       this.followerMenu.isOpen;
     if (!this.gameOver && !anyMenuOpen) {
-      this.safeRoom.renderUI(
-        ctx,
-        camX,
-        camY,
-        this.active(),
-        this.bopca.hasInteraction(this.active()),
-      );
-      this.bopca.renderUI(ctx, camX, camY, this.active());
+      const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
+      this.safeRoom.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'bopca');
+      this.bopca.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'mordecai');
       const pickupPromptShown = this.renderGroundPickupPrompt(ctx, camX, camY);
       if (!pickupPromptShown) this.renderCitizenPrompt(ctx, camX, camY);
       this.bounty?.renderShadyOverlay(ctx, camX, camY, this.active());
@@ -7415,6 +7542,35 @@ export class DungeonScene extends GameplayScene {
     // player never touched a button for.
     if (keyboardSuppressed(this.overlayClaims)) this.menus.blurInventorySearch();
     auditOverlayFocus(this.overlayClaims, menuFocusContextId());
+    // Over everything, HUD included: the loading screen fades out over the
+    // finished frame rather than cutting to it.
+    this.renderArrivalFade(ctx);
+  }
+
+  /**
+   * Draws the arrival's loading screen instead of the world while it is open,
+   * which is also what ticks its work. Returns whether it took the frame.
+   */
+  private renderArrivalLoading(ctx: CanvasRenderingContext2D): boolean {
+    const loading = this.arrivalLoading;
+    if (loading?.isOpen !== true) return false;
+    const stillLoading = loading.renderFrame(ctx, viewportWidth(), viewportHeight());
+    if (stillLoading) return true;
+    // Finished on this frame: the world is drawn from here on, and its frame
+    // times are the ones the render-quality probe should judge.
+    renderQuality.endLoadingCover();
+    releaseFigureIdleSweep();
+    return false;
+  }
+
+  private renderArrivalFade(ctx: CanvasRenderingContext2D): void {
+    const loading = this.arrivalLoading;
+    if (loading === null || loading.isOpen) return;
+    if (!loading.isVisible) {
+      this.arrivalLoading = null;
+      return;
+    }
+    loading.renderFrame(ctx, viewportWidth(), viewportHeight());
   }
 
   /**
@@ -7464,8 +7620,8 @@ export class DungeonScene extends GameplayScene {
     );
     // The pinned objective gets a marker of its own on top of whatever its own
     // system already contributes. That is not redundant: a quest can be pinned
-    // while its system's marker rules say nothing (a bounty being collected,
-    // a Town Guide pointer), and the pin is the player's own answer to "where
+    // while its system's marker rules say nothing (a bounty being collected),
+    // and the pin is the player's own answer to "where
     // am I going", which should outrank the quest's.
     if (pinned?.target !== undefined) {
       markers.push({ x: pinned.target.x, y: pinned.target.y, type: 'exclamation' });
@@ -7485,7 +7641,6 @@ export class DungeonScene extends GameplayScene {
         this.murderQuest,
         this.anchorQuest,
         this.bounty,
-        this.townGuide,
         this.doomsdayEscape,
         this.briarHollowKit,
       ]),
@@ -7961,7 +8116,11 @@ export class DungeonScene extends GameplayScene {
       ]);
     }
 
-    if (this.levelDef.hasCollapseTimer === true && this.levelTimerFrames > 0) {
+    if (
+      this.levelDef.hasCollapseTimer === true &&
+      this.levelTimerFrames > 0 &&
+      !this.isLevelTimerPaused()
+    ) {
       const framesBefore = this.levelTimerFrames;
       this.levelTimerFrames--;
       this.playLevelTimerCue(UIRenderer.levelTimerCue(framesBefore, this.levelTimerFrames));
@@ -8014,6 +8173,21 @@ export class DungeonScene extends GameplayScene {
         respawnModeFor(respawnRouteFor(this.lastSave)),
       );
     }
+  }
+
+  /**
+   * A safe room is a refuge from the floor's collapse as well as from its
+   * mobs: standing in one to cook, craft or sort a bag must not cost the run
+   * its clock. Keyed on the controlled character only, so parking the other
+   * one inside while the active one explores does not stop the countdown.
+   */
+  private isLevelTimerPaused(): boolean {
+    return this.safeRoom.isEntityInSafeRoom(this.active());
+  }
+
+  /** Frames left on this floor's collapse timer; 0 on floors without one. */
+  get levelTimerRemainingFrames(): number {
+    return this.levelTimerFrames;
   }
 
   private playLevelTimerCue(cue: UIRenderer.LevelTimerCue | null): void {
@@ -8271,6 +8445,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleTouchStart(e: TouchEvent, rect: DOMRect): void {
+    if (this.arrivalLoading?.isOpen === true) return;
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
@@ -8462,17 +8637,16 @@ export class DungeonScene extends GameplayScene {
         this.stairwell.menuOpen ||
         this.gameOver ||
         this.menus.pauseMenu.isOpen ||
-        // Mordecai's dialog is deliberately absent: it is a floating claim the
-        // player is meant to walk out of, and walking is tap-to-move, so routing
-        // its touches straight to `handleClick` left a phone player unable to
-        // end the conversation at all. A tap on his box still advances it there.
-        this.bopca.isDialogOpen ||
+        // Mordecai's, the Bopca's, a citizen's and a sign's boxes are
+        // deliberately absent: each is a floating claim the player is meant to
+        // walk out of, and walking is tap-to-move, so routing their touches
+        // straight to `handleClick` leaves a phone player unable to end the
+        // conversation at all. A tap on the box still advances it — the release
+        // reaches `handleClick` — and a tap off it hands the press on.
         this.spiderQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
         this.anchorQuest.isDialogOpen ||
-        this.citizenDialogTarget !== null ||
-        this.signDialogTarget !== null ||
         // Town modals (notice board / market stall / fortune teller) are handled
         // by the early full-screen-modal gate at the top of this loop.
         this.tutorial?.showTutorialMordecaiDialog === true ||
@@ -8533,6 +8707,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleTouchMove(e: TouchEvent, rect: DOMRect): void {
+    if (this.arrivalLoading?.isOpen === true) return;
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
@@ -8571,6 +8746,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleTouchEnd(e: TouchEvent, rect: DOMRect): void {
+    if (this.arrivalLoading?.isOpen === true) return;
     // Any lifted finger ends a held picker step; a picker's own buttons never
     // start a move or a drag, so there is nothing else to match it to.
     this.briarHollowKit?.handlePointerUp();
@@ -8678,6 +8854,7 @@ export class DungeonScene extends GameplayScene {
               // (the player is still in range), which is the close-then-reopen trap.
               const dialogWasOpen =
                 this.safeRoom.mordecaiDialogOpen ||
+                this.bopca.isDialogOpen ||
                 this.citizenDialogTarget !== null ||
                 this.signDialogTarget !== null ||
                 this.briarHollowKit?.isConversationOpen === true;
@@ -8691,8 +8868,15 @@ export class DungeonScene extends GameplayScene {
               // "Equip" would fall through into a talk or a pet on whatever
               // stands where the menu was drawn.
               const contextMenuWasOpen = this.menus.inventoryPanel.interaction.contextMenu !== null;
+              // Off the box, a tap is the touch form of the interact press, and
+              // may be for whoever the crawler has walked up to since.
+              const tapMissedConversation =
+                this.conversation.isOpen && !this.conversation.hitsSurface(x, y);
               this.handleClick(x, y, e.timeStamp);
+              const handedOff =
+                tapMissedConversation && !contextMenuWasOpen && this.handOffConversationPress();
               if (
+                !handedOff &&
                 !dialogWasOpen &&
                 !contextMenuWasOpen &&
                 !this.menus.pauseMenu.isOpen &&

@@ -50,12 +50,27 @@ function ramp(shadow: RGB, mid: RGB, light: RGB, accent: RGB): Ramp {
  * mean value of its predecessor, which is also what keeps the town reading as
  * one place lit by one sun.
  */
+/**
+ * A handful of ramps are deliberately the same colour under two names — a
+ * building-facing name (`dome_blue`, `banner_red`, `banner_blue`) and the
+ * material vocabulary's own name for the same family (`sky_icon`,
+ * `awning_stripe`, `cloth_sky`). Built once and aliased below, so a recolour
+ * of one can never silently miss the other.
+ */
+const SKY_ICON_RAMP_VALUE = ramp([34, 58, 66], [62, 98, 112], [124, 160, 172], [184, 208, 214]);
+const CLOTH_EMBER_RAMP_VALUE = ramp([90, 46, 36], [150, 84, 62], [200, 142, 104], [224, 178, 142]);
+const CLOTH_SKY_RAMP_VALUE = ramp([34, 50, 68], [62, 90, 120], [110, 142, 172], [162, 186, 208]);
+
 const BUILDING_RAMPS: Readonly<Record<string, Ramp | undefined>> = {
   // ── masonry ──────────────────────────────────────────────────────────────
   /** Warm grey coursed rubble: the cottages' fieldstone bases. */
   fieldstone: ramp([58, 55, 50], [104, 99, 90], [150, 145, 133], [176, 172, 160]),
-  /** Cooler, harder garrison stone. */
-  garrison_stone: ramp([72, 78, 86], [126, 134, 144], [180, 190, 202], [206, 214, 226]),
+  /**
+   * Cooler, harder garrison stone — the town's default dressed masonry, about
+   * 10-12° bluer and lighter than the cobble street it stands on, so quarried
+   * stone always reads a step cooler than the trodden ground underfoot.
+   */
+  garrison_stone: ramp([72, 80, 88], [126, 134, 144], [180, 190, 202], [206, 214, 226]),
   /** Pale ashlar, the temple's dressed blocks — desaturated and bright. */
   pale_ashlar: ramp([96, 92, 84], [150, 145, 133], [198, 193, 180], [222, 218, 206]),
   /** The Desperado's dark dressed stone. */
@@ -68,8 +83,13 @@ const BUILDING_RAMPS: Readonly<Record<string, Ramp | undefined>> = {
   dark_mortar: ramp([12, 11, 12], [26, 24, 26], [44, 42, 44], [62, 60, 62]),
 
   // ── plaster and paint ────────────────────────────────────────────────────
-  /** Cream lime plaster, the default infill between timbers. */
-  plaster_cream: ramp([118, 109, 93], [166, 157, 137], [204, 196, 178], [222, 216, 200]),
+  /**
+   * Cream lime plaster, the default infill between timbers — tuned to
+   * `oc_plaster`: about 7% lighter and a few degrees cooler than the plaza's
+   * own flagstone `mid`, so a wall always sits one step lighter than the
+   * ground it is built on, never level with it or darker.
+   */
+  plaster_cream: ramp([110, 102, 86], [167, 154, 128], [203, 192, 164], [226, 216, 190]),
   /** Older, greyer, damper plaster for the poorer buildings. */
   plaster_grey: ramp([74, 72, 68], [110, 107, 101], [142, 139, 132], [162, 158, 151]),
   /** The Quiet Needle's saturated shopfront — the most colourful wall in town. */
@@ -78,8 +98,12 @@ const BUILDING_RAMPS: Readonly<Record<string, Ramp | undefined>> = {
   apothecary_sage: ramp([92, 106, 88], [136, 152, 128], [178, 192, 168], [200, 212, 190]),
 
   // ── timber ───────────────────────────────────────────────────────────────
-  /** Sun-bleached structural oak. */
-  oak_beam: ramp([56, 42, 28], [96, 74, 48], [138, 110, 74], [166, 138, 98]),
+  /**
+   * Structural oak, tuned to `oc_timber` — the village's own oiled walnut
+   * desaturated about 20% and lifted a value stop: a cousin of the village's
+   * wood, never the same board.
+   */
+  oak_beam: ramp([54, 45, 36], [108, 90, 70], [156, 138, 108], [192, 172, 136]),
   /** Blackwood's stained, near-black timber. */
   stained_timber: ramp([40, 34, 36], [74, 62, 64], [114, 100, 100], [146, 132, 130]),
   /** Rougher, greyer weathered planking. */
@@ -92,18 +116,36 @@ const BUILDING_RAMPS: Readonly<Record<string, Ramp | undefined>> = {
   thatch_gold: ramp([84, 62, 30], [148, 116, 58], [204, 172, 100], [230, 204, 140]),
   /** Older, greyer, damper thatch. */
   thatch_weathered: ramp([64, 56, 36], [112, 102, 68], [160, 150, 108], [186, 178, 140]),
-  /** The barracks' recognisable blue slate. */
-  slate_blue: ramp([36, 56, 86], [64, 98, 146], [104, 146, 200], [142, 182, 226]),
-  /** Neutral grey slate for the civic buildings. */
-  slate_grey: ramp([48, 51, 58], [86, 91, 101], [128, 135, 148], [158, 166, 180]),
-  /** The Horned Flagon's red clay tile. */
-  clay_red: ramp([100, 46, 30], [168, 82, 48], [220, 132, 86], [242, 172, 128]),
-  /** Weathered terracotta for the farm. */
-  clay_terracotta: ramp([98, 52, 32], [156, 90, 52], [206, 136, 86], [230, 172, 124]),
+  /**
+   * The barracks' slate — unified with `slate_grey` per `oc_slate` rather than
+   * kept as its own saturated cartoon blue, so the roofline that used to
+   * clash with every other roof in town now sits in the same cooled-grey
+   * family as the rest of the skyline.
+   */
+  slate_blue: ramp([54, 59, 66], [98, 107, 120], [150, 160, 172], [196, 204, 214]),
+  /** Neutral grey slate for the civic buildings, tuned to `oc_slate`. */
+  slate_grey: ramp([54, 59, 66], [98, 107, 120], [150, 160, 172], [196, 204, 214]),
+  /**
+   * The Horned Flagon's clay tile — a touch more saturated than
+   * `clay_terracotta`, both desaturated ~15% toward `oc_clay` so a warm roof
+   * does not fight the cooled walls under it.
+   */
+  clay_red: ramp([94, 58, 44], [156, 100, 76], [202, 150, 114], [226, 186, 154]),
+  /** Weathered terracotta for the farm, tuned to `oc_clay`. */
+  clay_terracotta: ramp([90, 54, 42], [150, 96, 74], [198, 144, 110], [224, 182, 152]),
   /** Split wood shakes. */
   shake_brown: ramp([78, 62, 45], [134, 109, 79], [190, 161, 118], [218, 192, 152]),
-  /** The temple's blue half-dome. */
-  dome_blue: ramp([32, 60, 106], [58, 104, 172], [98, 152, 214], [140, 188, 234]),
+  /**
+   * The temple's half-dome, tuned to `oc_sky_icon` — a muted, desaturated
+   * cousin of the shipped saturated blue, reserved for skyfowl religious and
+   * civic iconography so it reads as chosen device rather than paint.
+   */
+  dome_blue: SKY_ICON_RAMP_VALUE,
+  /**
+   * Skyfowl sky/feather iconography — relief devices, sign devices, roost
+   * finials and perched-bird silhouettes. Never a whole-wall fill.
+   */
+  sky_icon: SKY_ICON_RAMP_VALUE,
   /** Ridge caps and half-round tiles sit a shade darker than the field. */
   ridge_dark: ramp([34, 30, 26], [58, 52, 44], [86, 78, 66], [108, 100, 86]),
   ridge_clay: ramp([64, 28, 18], [108, 50, 28], [152, 82, 50], [180, 112, 76]),
@@ -126,9 +168,19 @@ const BUILDING_RAMPS: Readonly<Record<string, Ramp | undefined>> = {
   witch_smoke: ramp([40, 58, 42], [78, 108, 78], [122, 156, 118], [162, 192, 156]),
 
   // ── cloth, greenery and paint accents ────────────────────────────────────
-  banner_red: ramp([84, 22, 22], [142, 44, 40], [190, 82, 74], [216, 126, 116]),
-  banner_blue: ramp([26, 42, 78], [48, 76, 130], [82, 118, 178], [124, 156, 206]),
-  awning_stripe: ramp([94, 44, 34], [156, 78, 58], [206, 124, 96], [230, 164, 138]),
+  /**
+   * Warm textile accent (awning stripes, guild colours), tuned to
+   * `oc_cloth_ember` — desaturated ~20% from the shipped saturated banner red
+   * so market dressing reads as dyed fabric against plaster rather than a
+   * carnival.
+   */
+  banner_red: CLOTH_EMBER_RAMP_VALUE,
+  /** Cool textile accent, tuned to `oc_cloth_sky`. */
+  banner_blue: CLOTH_SKY_RAMP_VALUE,
+  /** Awning cloth, tuned to `oc_cloth_ember` — the companion warm stripe. */
+  awning_stripe: CLOTH_EMBER_RAMP_VALUE,
+  /** Cool awning/banner cloth, tuned to `oc_cloth_sky`. */
+  cloth_sky: CLOTH_SKY_RAMP_VALUE,
   leaf_green: ramp([44, 66, 32], [78, 110, 52], [116, 152, 78], [148, 182, 104]),
   dried_herb: ramp([76, 74, 44], [118, 116, 70], [158, 156, 104], [184, 182, 134]),
   hay_straw: ramp([104, 84, 40], [162, 138, 76], [208, 188, 122], [230, 214, 160]),
@@ -136,6 +188,12 @@ const BUILDING_RAMPS: Readonly<Record<string, Ramp | undefined>> = {
   shutter_red: ramp([72, 28, 24], [118, 50, 42], [162, 84, 72], [190, 120, 106]),
   door_green: ramp([28, 52, 36], [52, 88, 60], [84, 126, 92], [116, 156, 122]),
   flower_pink: ramp([124, 40, 68], [190, 76, 110], [232, 130, 158], [250, 178, 198]),
+  /**
+   * The inn's sleeping cat: a ginger tabby. Ginger rather than the timber brown
+   * it lies on, because a cat the colour of its sill is a lump on the sill; the
+   * accent stop is the cream of its muzzle, chest and paws.
+   */
+  cat_ginger: ramp([96, 46, 18], [184, 98, 40], [232, 150, 76], [250, 226, 190]),
 
   // ── ground and outline ───────────────────────────────────────────────────
   /** The dark warm near-black every silhouette is stroked with. */

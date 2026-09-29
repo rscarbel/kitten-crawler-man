@@ -180,6 +180,10 @@ function occupiedTiles(
     }
   }
 
+  // A town room's own furniture keeps its tile type as floor, so without this
+  // a lantern or a larder would stamp itself on top of a counter or a shelf.
+  for (const tile of map.placedInteriorPropFootprintTiles()) occupied.add(tileKey(tile.x, tile.y));
+
   const lastX = bounds.x + bounds.w - 1;
   const lastY = bounds.y + bounds.h - 1;
   for (let y = bounds.y; y <= lastY; y++) {
@@ -238,11 +242,16 @@ class DecorPlacer {
     private readonly structure: TileContent[][],
     private readonly doorwayTiles: ReadonlyArray<{ x: number; y: number }>,
     counterRunTiles: ReadonlyArray<{ x: number; y: number }>,
+    furnitureTiles: ReadonlyArray<{ x: number; y: number }>,
   ) {
     // The counter run blocks the flood from the start. Taken from the counter's
     // plan rather than left to `isDecorSurface`, so the answer is the same
     // whether or not the run has been stamped yet — see `occupiedTiles`.
     for (const tile of counterRunTiles) this.blocked.add(tileKey(tile.x, tile.y));
+    // A town room's solid furniture reads as floor by tile type; left out, the
+    // flood walks straight through a bar counter and a lantern beside it seals
+    // the floor behind with nothing reporting it.
+    for (const tile of furnitureTiles) this.blocked.add(tileKey(tile.x, tile.y));
     // A room can already have unreachable corners before any furniture arrives —
     // the galley strip is sealed by design. Those are recorded up front so the
     // test measures what the furniture strands rather than what it inherited.
@@ -413,6 +422,7 @@ export function planSafeRoomDecor(map: GameMap): ReadonlyArray<SafeRoomDecorPlan
       map.structure,
       doorwayTiles,
       counterRunTiles,
+      map.placedInteriorPropFootprintTiles().filter((tile) => tile.blocksMovement),
     );
     const wallRow = wallRowCandidates(bounds);
 

@@ -90,15 +90,14 @@ const VIEWPORTS: ReadonlyArray<readonly [number, number]> = isMobile
       [640, 340],
     ];
 
-/** Layout constants the column is measured against, as `DungeonUIRenderer` lays them out. */
+/**
+ * Layout constants the column is measured against, as `DungeonUIRenderer` and
+ * the desktop `InventoryPanel` lay them out. A phone's Bag has a rect function
+ * of its own and is read from it.
+ */
 const PAUSE_TO_BAG_STEP = 34;
-const MOBILE_FOLLOWER_H = 52;
-const MOBILE_FOLLOWER_W = 80;
 const RIGHT_COL_MARGIN = 8;
 const MINIMAP_Y = 8;
-const BELOW_MAP_GAP = 20;
-const TIMER_H = 42;
-const MOBILE_BUTTON_GAP = 6;
 /**
  * The one viewport with no room at all between the HUD panel and the minimap:
  * a column piece may land on a corner of the panel there, the one surface that
@@ -136,15 +135,10 @@ for (const [width, height] of VIEWPORTS) {
         const fixed: Record<string, Rect> = {
           hotbar: hotbarStripRect(),
           pause,
-          bag: { x: pause.x, y: pause.y + PAUSE_TO_BAG_STEP, w: pause.w, h: pause.h },
-          follower: isMobile
-            ? {
-                x: width - MOBILE_FOLLOWER_W - RIGHT_COL_MARGIN,
-                y: MINIMAP_Y + mmSize + BELOW_MAP_GAP + TIMER_H + MOBILE_BUTTON_GAP,
-                w: MOBILE_FOLLOWER_W,
-                h: MOBILE_FOLLOWER_H,
-              }
-            : UI.followerButtonRect(),
+          bag: isMobile
+            ? UI.mobileBagButtonRect(miniMap)
+            : { x: pause.x, y: pause.y + PAUSE_TO_BAG_STEP, w: pause.w, h: pause.h },
+          follower: isMobile ? UI.mobileFollowerButtonRect(miniMap) : UI.followerButtonRect(),
         };
         if (hasTimer) fixed.timer = UI.levelTimerRect(miniMap);
         const hudPanel = expandedHudPanelRect();
@@ -160,7 +154,12 @@ for (const [width, height] of VIEWPORTS) {
         // column, and must also clear the resource strip and the minimap.
         const siegeSlot = siegeHudSlot(miniMap, hudPanel);
         const siegePanel = siegeHudPanelRect(siegeSlot);
-        const strip = UI.topCentreStripSlot(miniMap, hudPanel, RESOURCE_HUD_WIDTH);
+        const strip = UI.topCentreStripSlot(
+          miniMap,
+          hudPanel,
+          RESOURCE_HUD_WIDTH,
+          RESOURCE_HUD_HEIGHT,
+        );
         const siegeFixed: Record<string, Rect> = {
           ...fixed,
           ...column,

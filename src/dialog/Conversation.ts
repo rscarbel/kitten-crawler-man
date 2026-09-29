@@ -12,7 +12,9 @@
  *
  * Controls: number keys pick a choice or a two-button confirm, a click or
  * tap on the box turns the page, Space skips the typing, turns the page, or
- * — on the choice row — is the row's own exit choice, if it has one.
+ * — on a choice or confirm row — takes the row's default, which is the
+ * accepting option and never a way out (see `defaultChoiceIndex`). Escape is
+ * the only key that leaves.
  */
 
 import type { AudioManager } from '../audio/AudioManager';
@@ -27,6 +29,7 @@ import {
   drawButton,
   endMenuFocus,
   playButtonSound,
+  suppressMenuFocus,
 } from '../ui/Button';
 import { countDisplayPages, DialogBox } from '../ui/DialogBox';
 import type { OverlayInputClaim } from '../systems/kits/OverlayClaims';
@@ -35,17 +38,30 @@ import { resolveSpeaker } from './speakers';
 import type {
   Choice,
   ConfirmKeyboardDefault,
+  ConversationAnchor,
   ConversationHandle,
   ConversationRequest,
   DialogReward,
   Ending,
   PendingLine,
 } from './request';
+import { walkAwayRangeTiles } from './walkAway';
 
 type Beat = DialogLine | PendingLine;
 
 function isPendingLine(beat: Beat): beat is PendingLine {
   return !('paragraphs' in beat);
+}
+
+/** How far the player stands from the speaker `anchor` names, in tiles, measured between their positions as the talk checks measure it. */
+function speakerDistanceTiles(
+  anchor: ConversationAnchor,
+  playerPosition: { readonly x: number; readonly y: number },
+): number {
+  const speakerPosition = anchor.position();
+  const dx = playerPosition.x - speakerPosition.x;
+  const dy = playerPosition.y - speakerPosition.y;
+  return Math.hypot(dx, dy) / TILE_SIZE;
 }
 
 /** A single-page "…" line, shown while a `PendingLine`'s text is still in flight. */
@@ -99,6 +115,38 @@ const REWARD_HEADING_TEXT = 'REWARD';
 /** The keyboard/controller focus ring `Conversation` shares with every load-bearing quest scene it replaces. */
 const FOCUS_CONTEXT = 'quest-dialog';
 
+/**
+ * Declared while a world-halting conversation is on a page being read, so the
+ * ring changes identity between the page and the row it opens onto — which is
+ * what lets the scene's key handler tell a Space struck at the row from one
+ * still held down from the page before it.
+ */
+const PAGE_FOCUS_CONTEXT = `${FOCUS_CONTEXT}-page`;
+
+/**
+ * The index a bare Space picks on a `choices` row, or null when it picks nothing.
+ *
+ * A choice that names itself the default wins. Otherwise the first quest
+ * choice, then the first ordinary one — the option that carries the
+ * conversation forward. A way out (`tone: 'exit'`) is picked only when the row
+ * holds nothing else, since then there is nothing for it to decline.
+ * A choice marked `keyboard: 'never'` is never picked.
+ */
+export function defaultChoiceIndex(choices: readonly Choice[]): number | null {
+  const pickable = (choice: Choice): boolean => choice.keyboard !== 'never';
+  const firstWhere = (matches: (choice: Choice) => boolean): number | null => {
+    const index = choices.findIndex((choice) => pickable(choice) && matches(choice));
+    return index === -1 ? null : index;
+  };
+  const rowIsOnlyWaysOut = choices.every((choice) => choice.tone === 'exit');
+  return (
+    firstWhere((choice) => choice.keyboard === 'default') ??
+    firstWhere((choice) => choice.tone === 'quest') ??
+    firstWhere((choice) => choice.tone === 'normal') ??
+    (rowIsOnlyWaysOut ? firstWhere(() => true) : null)
+  );
+}
+
 export interface ChoiceRect {
   readonly index: number;
   readonly x: number;
@@ -139,6 +187,13 @@ export class Conversation {
   /** The text a `PendingLine` resolved to, once its promise settles — `null` while still waiting, and while the active line isn't a `PendingLine` at all. */
   private pendingResolvedText: string | null = null;
   private choiceRowRendered = false;
+  /**
+   * Bumped every time a choice or confirm row comes up, so each row declares
+   * a focus ring of its own: a player who tabbed off the default on one row
+   * starts the next on its default again, and a key held across the change
+   * is recognised as predating the row.
+   */
+  private choiceRowSerial = 0;
   private choiceRects: ChoiceRect[] = [];
   private footerButtonRect: FooterButtonRect | null = null;
   /**
@@ -170,6 +225,13 @@ export class Conversation {
   /** The labels of the choices on offer, in their numbered order — empty while nothing is up to choose from. */
   get choiceLabels(): readonly string[] {
     return this.currentChoiceRow().map((choice) => choice.label);
+  }
+
+  /** The label a bare Space would pick on the row now up, or null when Space picks nothing there. */
+  get keyboardDefaultLabel(): string | null {
+    const index = this.keyboardDefaultIndex();
+    if (index === null) return null;
+    return this.currentChoiceRow()[index]?.label ?? null;
   }
 
   /**
@@ -302,9 +364,11 @@ export class Conversation {
         return;
       }
       case 'choices':
+        this.choiceRowSerial++;
         this.ending = { kind: 'choices', choices: ending.choices };
         return;
       case 'confirm':
+        this.choiceRowSerial++;
         this.ending = {
           kind: 'confirm',
           decline: ending.decline,
@@ -356,17 +420,67 @@ export class Conversation {
     if (request.dismiss.kind !== 'allowed') return;
     const anchor = request.anchor;
     if (anchor === null || playerPosition === null) return;
-    const speakerPosition = anchor.position();
-    const tileDistance =
-      Math.hypot(playerPosition.x - speakerPosition.x, playerPosition.y - speakerPosition.y) /
-      TILE_SIZE;
-    if (tileDistance <= anchor.radius) return;
+    if (speakerDistanceTiles(anchor, playerPosition) <= walkAwayRangeTiles(anchor.talkRangeTiles)) {
+      return;
+    }
     const onDismissed = request.dismiss.onDismissed;
     this.doClose();
     onDismissed();
   }
 
-  /** Space, or a tap on the box: skip the typing, turn the page, activate a custom-advance button, or leave the choice/confirm row by its exit choice. */
+  /**
+   * Offers an interact press to the world instead of to this box, once the
+   * player has stepped out of the speaker's talk range — or, with
+   * `pressIsForSomeoneElse`, when the scene knows the press is aimed at a
+   * different speaker whose range overlaps this one's.
+   *
+   * Between leaving the talk range and reaching the walk-away range the box
+   * is still up to be read, but the player could no longer open it from where
+   * they stand, so a press there is meant for whoever they have walked up to.
+   * Handing it on is what lets the player turn from one speaker straight to
+   * the next without the stale box taking the key.
+   *
+   * `interact` is the scene's own interaction chain; it returns whether
+   * anything took the press. When it opened a new conversation, `open()` has
+   * already dismissed this one; when it took the press some other way — a
+   * shop panel, a pickup — this one is dismissed here, exactly as walking the
+   * rest of the way off would have. When nothing took it, the box keeps the
+   * press as usual and nothing changes.
+   *
+   * Only an `allowed`, anchored request is ever handed off: a `blocked` one is
+   * a scene the player is being held for.
+   *
+   * @returns whether the world took the press.
+   */
+  handOff(
+    playerPosition: { readonly x: number; readonly y: number },
+    pressIsForSomeoneElse: boolean,
+    interact: () => boolean,
+  ): boolean {
+    const request = this.request;
+    if (request?.dismiss.kind !== 'allowed') return false;
+    const anchor = request.anchor;
+    if (anchor === null) return false;
+    const outOfTalkRange = speakerDistanceTiles(anchor, playerPosition) > anchor.talkRangeTiles;
+    if (!outOfTalkRange && !pressIsForSomeoneElse) return false;
+    const generationBefore = this.generation;
+    if (!interact()) return false;
+    const stillShowingThisSpeaker = this.generation === generationBefore && this.request !== null;
+    if (stillShowingThisSpeaker) this.dismiss();
+    return true;
+  }
+
+  /** Whether a click or tap at this point would land on the box, its choice row or its footer button. */
+  hitsSurface(mx: number, my: number): boolean {
+    if (this.request === null) return false;
+    const inside = (rect: { x: number; y: number; w: number; h: number }): boolean =>
+      mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h;
+    if (this.choiceRects.some(inside)) return true;
+    if (this.footerButtonRect !== null && inside(this.footerButtonRect)) return true;
+    return this.box.contains(mx, my);
+  }
+
+  /** Space, or a tap on the box: skip the typing, turn the page, activate a custom-advance button, or take the choice/confirm row's default. */
   advance(): void {
     const request = this.request;
     if (request === null) return;
@@ -375,16 +489,14 @@ export class Conversation {
       this.box.skipToEnd();
       return;
     }
-    if (this.ending.kind === 'choices') {
+    if (this.ending.kind === 'choices' || this.ending.kind === 'confirm') {
+      // A row the player has not yet been shown cannot have been answered:
+      // the press that finished the last page must not also pick from the
+      // row that page opens onto.
       if (!this.choiceRowRendered) return;
-      const exit = this.ending.choices.find((choice) => choice.tone === 'exit');
-      if (exit !== undefined) this.runChoice(exit);
-      return;
-    }
-    if (this.ending.kind === 'confirm') {
-      if (!this.choiceRowRendered) return;
-      if (this.ending.keyboardDefault === 'accept') this.runChoice(this.ending.accept);
-      else if (this.ending.keyboardDefault === 'decline') this.runChoice(this.ending.decline);
+      const index = this.keyboardDefaultIndex();
+      const picked = index === null ? undefined : this.currentChoiceRow()[index];
+      if (picked !== undefined) this.runChoice(picked);
       return;
     }
     if (!this.box.isLastPageOfLine()) {
@@ -474,16 +586,17 @@ export class Conversation {
   }
 
   /**
-   * On a confirm row (`currentChoiceRow()` orders it `[decline, accept]`),
-   * which button — if any — is drawn as the one a bare Space would pick.
+   * Which entry of `currentChoiceRow()` a bare Space picks, or null for none.
+   * A confirm row is ordered `[decline, accept]` and only ever defaults to
+   * its accept side.
    */
-  private isConfirmPrimaryIndex(index: number): boolean {
-    if (this.ending.kind !== 'confirm') return false;
-    const confirmDeclineIndex = 0;
-    const confirmAcceptIndex = 1;
-    if (this.ending.keyboardDefault === 'decline') return index === confirmDeclineIndex;
-    if (this.ending.keyboardDefault === 'accept') return index === confirmAcceptIndex;
-    return false;
+  private keyboardDefaultIndex(): number | null {
+    if (this.ending.kind === 'choices') return defaultChoiceIndex(this.ending.choices);
+    if (this.ending.kind === 'confirm') {
+      const confirmAcceptIndex = 1;
+      return this.ending.keyboardDefault === 'accept' ? confirmAcceptIndex : null;
+    }
+    return null;
   }
 
   /** The active line and every line still to come, for the "n / N" indicator across the whole request. */
@@ -514,6 +627,7 @@ export class Conversation {
       this.renderChoiceRow(ctx, boxRect, request.haltsWorld);
       return;
     }
+    if (request.haltsWorld) suppressMenuFocus(PAGE_FOCUS_CONTEXT);
 
     const isLastLine = this.lineIndex === request.lines.length - 1;
     const onLastPage =
@@ -541,7 +655,10 @@ export class Conversation {
       });
     }
 
-    if (this.ending.kind !== 'none') return;
+    if (this.ending.kind !== 'none') {
+      this.renderRowFooterHint(ctx, request, boxRect, footerY);
+      return;
+    }
     if (this.isLineStillPending(request, this.lineIndex)) return;
 
     const line = request.lines[this.lineIndex];
@@ -559,6 +676,29 @@ export class Conversation {
           : 'Continue'
         : 'Continue';
     drawText(ctx, `[Space / Click] ${label}`, {
+      x: boxRect.x + boxRect.width - FOOTER_PAD_X,
+      y: footerY,
+      size: FOOTER_HINT_SIZE,
+      color: FOOTER_HINT_COLOR,
+      align: 'right',
+    });
+  }
+
+  /**
+   * Names what Space will pick on a row with no focus ring to show it — a
+   * street conversation, whose arrow keys still walk. A world-halting row
+   * draws its default as the focused button instead.
+   */
+  private renderRowFooterHint(
+    ctx: CanvasRenderingContext2D,
+    request: ConversationRequest,
+    boxRect: { x: number; y: number; width: number; height: number },
+    footerY: number,
+  ): void {
+    if (request.haltsWorld) return;
+    const label = this.keyboardDefaultLabel;
+    if (label === null) return;
+    drawText(ctx, `[Space] ${label}`, {
       x: boxRect.x + boxRect.width - FOOTER_PAD_X,
       y: footerY,
       size: FOOTER_HINT_SIZE,
@@ -602,7 +742,11 @@ export class Conversation {
     haltsWorld: boolean,
   ): void {
     const choices = this.currentChoiceRow();
-    if (haltsWorld) beginMenuFocus(FOCUS_CONTEXT);
+    const defaultIndex = this.keyboardDefaultIndex();
+    const focusPrimaryByDefault = true;
+    if (haltsWorld) {
+      beginMenuFocus(`${FOCUS_CONTEXT}-row-${this.choiceRowSerial}`, focusPrimaryByDefault);
+    }
 
     const fitsInRow = Math.floor(
       (boxRect.width + CHOICE_BUTTON_GAP) / (MIN_CHOICE_BUTTON_WIDTH + CHOICE_BUTTON_GAP),
@@ -644,10 +788,7 @@ export class Conversation {
         label,
         ...(choice.tone === 'exit' ? BUTTON_PRESETS.primary : BUTTON_PRESETS.villagerTopic),
         labelSize: CONVERSATION_CHOICE_LABEL_SIZE,
-        primaryAction:
-          this.ending.kind === 'confirm'
-            ? this.isConfirmPrimaryIndex(index)
-            : choice.tone === 'exit',
+        primaryAction: index === defaultIndex,
         questRelated: choice.tone === 'quest',
       });
       this.choiceRects.push({ index, x, y, w: buttonWidth, h: CHOICE_BUTTON_HEIGHT, label });

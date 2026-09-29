@@ -16,8 +16,8 @@ import { drawInteractionPrompt } from '../ui/InteractionPrompt';
  * wider sign base would leave the player standing further from that tile than
  * from the sign's edge.
  */
-const READ_RADIUS_TILES = 1.6;
-const READ_RADIUS = TILE_SIZE * READ_RADIUS_TILES;
+export const CRAWLER_SIGN_READ_RADIUS_TILES = 1.6;
+const READ_RADIUS = TILE_SIZE * CRAWLER_SIGN_READ_RADIUS_TILES;
 
 const TILE_CENTRE_OFFSET = TILE_SIZE / 2;
 

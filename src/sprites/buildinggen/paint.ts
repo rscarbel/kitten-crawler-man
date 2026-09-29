@@ -35,7 +35,7 @@ import {
   paintStructuralLine,
   shadePlane,
 } from './lighting';
-import { applyGrain, applyMoss, applyStreaks, applyTonalWash, planeNoise } from './texture';
+import { applyMossPatches, applyStreaks, applyWeatherPatches, planeNoise } from './texture';
 import { paintWall } from './materials/wall';
 import { bandEdges, paintFacadeBand, paintPilasters } from './materials/facadeTrim';
 import { paintRoof } from './materials/roof';
@@ -44,7 +44,7 @@ import { paintDoor } from './components/door';
 import { paintWindow } from './components/window';
 import { paintProp } from './components/props';
 import { getRamp, sampleRamp } from './ramps';
-import { frameHeightPx, frameWidthPx, type BuildingSpec } from './spec';
+import { BUILDING_TILE_SCALE, frameHeightPx, frameWidthPx, type BuildingSpec } from './spec';
 
 /** The game's own 2D context — the offline bakers bridge node-canvas to it. */
 type Ctx = CanvasRenderingContext2D;
@@ -62,13 +62,19 @@ const SEED_BAND_STRIDE = 149;
 const SEED_PILASTER_OFFSET = 1279;
 const SEED_WASH = 857;
 
-/** How deep the eaves shadow falls onto the wall, in tiles, and how dark it starts. */
+/**
+ * How deep the eaves shadow falls onto the wall, in tiles, and how dark it
+ * starts. A whole roof occludes far more sky than a crate does, so both the
+ * eaves and the ground contact run stronger than a village prop's own contact
+ * shadow (`CONTACT_SHADOW_ALPHA 0.38` in `villageArt.ts`) — plaster is
+ * lighter than fieldstone and needs more contrast to read the contact at all.
+ */
 const EAVES_AO_REACH_TILES = 0.5;
-const EAVES_AO_DEPTH = 0.35;
+const EAVES_AO_DEPTH = 0.5;
 
 /** The band of shadow where the building meets the ground. */
-const GROUND_AO_REACH_TILES = 0.3;
-const GROUND_AO_DEPTH = 0.3;
+const GROUND_AO_REACH_TILES = 0.35;
+const GROUND_AO_DEPTH = 0.55;
 
 /** The crease where the front wall meets the side return, painted on the return. */
 const CREASE_AO_REACH_TILES = 0.25;
@@ -88,60 +94,40 @@ const INTERIOR_INK_STRENGTH = 0.16;
 const INTERIOR_INK_FULL_GRADIENT = 90;
 const INTERIOR_INK_THRESHOLD = 92;
 
-/** Silhouette ink. */
-const OUTLINE_WIDTH_PX = 2;
+/**
+ * Silhouette ink.
+ *
+ * Width is one screen pixel at the game's 32px/tile display, converted to this
+ * kit's own bake scale by that ratio — never authored as a flat bake-pixel
+ * count, so a future change to `BUILDING_TILE_SCALE` cannot silently thicken
+ * or thin the line the way a hardcoded constant would.
+ */
+const DISPLAY_TILE_PX = 32;
+const OUTLINE_WIDTH_SCREEN_PX = 1;
+const OUTLINE_WIDTH_PX = (BUILDING_TILE_SCALE / DISPLAY_TILE_PX) * OUTLINE_WIDTH_SCREEN_PX;
 const OUTLINE_ALPHA = 0.85;
 const OUTLINE_JITTER_PX = 0.5;
 
 /**
- * Texture amplitudes.
+ * Weathering amplitudes.
  *
- * Two scales, and the split matters: the coarse layer reads as weathering at
- * arm's length and washes out entirely once the sheet is drawn down to the 32px
- * display tile, and the fine layer is what survives that downsample. Each
- * carries an additive term as well as a multiplicative one, because a multiply
- * scales its own variation down with the surface's value and would leave every
- * dark building in town flat.
- *
- * They were tuned against the measured local contrast of the art being replaced,
- * then pulled back when the picture showed what the number could not: past about
- * here the grain starts competing with the masonry instead of sitting on it.
+ * Every pass here is a handful of drawn shapes — patches, streaks, moss
+ * clumps — rather than a noise field, so "amplitude" means how strongly each
+ * shape is stained, not how loud a texture runs. Tuned against the ground the
+ * facades stand on: every sampled facade measured 30-75% busier than its own
+ * ground tile (`measureTextureRichness`) under the noise-field version this
+ * replaced, which read as a loud building over a calm street. A few legible
+ * marks read as weather without competing with the masonry underneath them.
  */
-const GRAIN_AMPLITUDE = 0.14;
-const GRAIN_PERIOD = 26;
-const GRAIN_OCTAVES = 3;
-const COARSE_GRAIN_ADDITIVE = 6;
-const FINE_GRAIN_AMPLITUDE = 0.16;
-/**
- * Absolute luminance the fine grain adds on top of the multiply.
- *
- * Sized so a near-black wall carries as much visible working as a cream one; a
- * purely proportional pass leaves the dark half of the town flat.
- */
-const FINE_GRAIN_ADDITIVE = 9;
-const FINE_GRAIN_PERIOD = 190;
-const FINE_GRAIN_OCTAVES = 1;
-const WASH_AMPLITUDE = 0.16;
-const WASH_PERIOD = 3;
-const WASH_WARP_PX = 14;
+const WEATHER_PATCH_AMPLITUDE = 0.16;
 const STREAK_LENGTH_TILES = 1.3;
 /** Grime reads as rain on a facade long before it reads as dirt; keep it under. */
 const STREAK_STRENGTH_FACTOR = 0.55;
 const STREAK_DENSITY = 0.013;
 const MOSS_REACH = 0.32;
-/**
- * How far the fine grain is squashed along the axis it should NOT vary on.
- *
- * A wall's fine texture runs vertically — that is the way water leaves it — and
- * a roof's runs downhill along the strands and tile channels. Both are `+y` in
- * their own plane's coordinates, so one constant serves both.
- */
-const WALL_GRAIN_STRETCH_Y = 0.8;
-const ROOF_GRAIN_STRETCH_Y = 0.4;
 
 /** A roof's disrepair drives its staining, but a roof streaks far less than a wall. */
 const ROOF_GRIME_FACTOR = 0.45;
-const MOSS_PERIOD = 9;
 
 export interface PaintedBuilding {
   readonly canvas: CanvasSurface;
@@ -319,6 +305,7 @@ function facadePlanePaint(
         band: { top: upper === undefined ? 0 : storySplitPlaneY, bottom: plane.height },
         quoins: spec.facade.quoins,
         foundationPx: spec.facade.foundationTiles * scale,
+        plinth: spec.facade.plinth,
       }),
   });
   stages.push({ label: 'facade trim', run: () => paintFacadeTrim(plane, projection, spec) });
@@ -326,7 +313,7 @@ function facadePlanePaint(
     ...weatherPlaneStages(plane, noise, seed + weatherSeed, scale, {
       grime: spec.facade.ground.grime,
       moss: spec.facade.ground.moss,
-      grainStretchY: WALL_GRAIN_STRETCH_Y,
+      upkeep: spec.facade.ground.upkeep ?? 0,
     }),
   );
   stages.push({
@@ -416,12 +403,13 @@ function sidePlanePaint(
             band: { top: 0, bottom: plane.height },
             quoins: false,
             foundationPx: spec.facade.foundationTiles * projection.scale,
+            plinth: spec.facade.plinth,
           }),
       },
       ...weatherPlaneStages(plane, noise, seed + weatherSeed, projection.scale, {
         grime: spec.facade.ground.grime,
         moss: spec.facade.ground.moss,
-        grainStretchY: WALL_GRAIN_STRETCH_Y,
+        upkeep: spec.facade.ground.upkeep ?? 0,
       }),
       {
         label: 'side shade',
@@ -463,7 +451,9 @@ function roofPlanePaint(
       ...weatherPlaneStages(plane, noise, seed + weatherSeed, projection.scale, {
         grime: spec.roof.disrepair * ROOF_GRIME_FACTOR,
         moss: 0,
-        grainStretchY: ROOF_GRAIN_STRETCH_Y,
+        // A house its owner keeps is kept all over: the roof's weather patches
+        // fade with the walls' rather than having a knob of their own.
+        upkeep: spec.facade.ground.upkeep ?? 0,
       }),
       {
         label: `${face} shade`,
@@ -482,25 +472,18 @@ function roofPlanePaint(
 interface WeatherOptions {
   readonly grime: number;
   readonly moss: number;
-  /**
-   * How far the fine grain's features are stretched vertically.
-   *
-   * A roof wants them long: they read as the strands and channels running
-   * downhill, which is the direction its material is actually laid in. A wall
-   * wants them much shorter — at the roof's setting a whole street of facades
-   * came out looking rained on, because a vertical streak on a wall reads as
-   * water and there is only so much water a town can have run down it.
-   */
-  readonly grainStretchY: number;
+  /** See `WallSpec.upkeep`: fades the broad weather patches, not the grime or the moss. */
+  readonly upkeep: number;
 }
 
 /**
  * The weathering passes, one stage each.
  *
- * Split because they are the expensive half of a plane and each is a separate
- * full-buffer read and write — so they are also the natural places to suspend a
- * paint between frames. Their order is fixed by `weatherPlane`'s contract and
- * this list is that order.
+ * Each pass is a small number of drawn shapes (patches, streaks, moss
+ * clumps), so this is where a facade's floor-seeded weather lives and nowhere
+ * else — a wall's courses, a roof's tiles and a window's glazing never touch
+ * this seed. Their order is fixed by `weatherPlane`'s contract and this list
+ * is that order.
  */
 function weatherPlaneStages(
   plane: Plane,
@@ -510,11 +493,9 @@ function weatherPlaneStages(
   options: WeatherOptions,
 ): BuildingPaintStage[] {
   const stages: BuildingPaintStage[] = [
-    { label: 'tonal wash', run: () => applyTonalWashPass(plane, noise, seed) },
-    { label: 'coarse grain', run: () => applyCoarseGrainPass(plane, noise, seed) },
     {
-      label: 'fine grain',
-      run: () => applyFineGrainPass(plane, noise, seed, options.grainStretchY),
+      label: 'weather patches',
+      run: () => applyWeatherPatchesPass(plane, seed, scale, 1 - options.upkeep),
     },
   ];
   if (options.grime > 0) {
@@ -524,47 +505,28 @@ function weatherPlaneStages(
     });
   }
   if (options.moss > 0) {
-    stages.push({ label: 'moss', run: () => applyMossPass(plane, noise, seed, options.moss) });
+    stages.push({
+      label: 'moss',
+      run: () => applyMossPass(plane, seed, scale, options.moss),
+    });
   }
   return stages;
 }
 
-function applyTonalWashPass(plane: Plane, noise: NoiseField, seed: number): void {
-  applyTonalWash(plane, noise, {
-    // Offset off the material's own seed. The wash exists to vary across element
-    // boundaries; drawn from the same stream as the elements it crosses, it was
-    // correlated with exactly the thing it is meant to be independent of.
+function applyWeatherPatchesPass(
+  plane: Plane,
+  seed: number,
+  scale: number,
+  wearRemaining: number,
+): void {
+  applyWeatherPatches(plane, {
+    // Offset off the material's own seed. The patches exist to vary across
+    // element boundaries; drawn from the same stream as the elements they
+    // cross, they were correlated with exactly the thing they are meant to be
+    // independent of.
     seed: seed + SEED_WASH,
-    amplitude: WASH_AMPLITUDE,
-    period: WASH_PERIOD,
-    warp: WASH_WARP_PX,
-  });
-}
-
-function applyCoarseGrainPass(plane: Plane, noise: NoiseField, seed: number): void {
-  applyGrain(plane, noise, {
-    seed: seed + SEED_TEXTURE * 2,
-    amplitude: GRAIN_AMPLITUDE,
-    period: GRAIN_PERIOD,
-    octaves: GRAIN_OCTAVES,
-    additive: COARSE_GRAIN_ADDITIVE,
-  });
-}
-
-/**
- * A second, much finer pass. One octave range cannot carry both "this wall is
- * weathered" and "this wall has a surface": the coarse layer reads at arm's
- * length and washes out entirely at the 32px display tile, and the fine layer
- * is what survives the downsample.
- */
-function applyFineGrainPass(plane: Plane, noise: NoiseField, seed: number, stretchY: number): void {
-  applyGrain(plane, noise, {
-    seed: seed + SEED_TEXTURE * 5,
-    amplitude: FINE_GRAIN_AMPLITUDE,
-    period: FINE_GRAIN_PERIOD,
-    octaves: FINE_GRAIN_OCTAVES,
-    stretchY,
-    additive: FINE_GRAIN_ADDITIVE,
+    scale,
+    amplitude: WEATHER_PATCH_AMPLITUDE * wearRemaining,
   });
 }
 
@@ -584,13 +546,13 @@ function applyGrimePass(
   });
 }
 
-function applyMossPass(plane: Plane, noise: NoiseField, seed: number, moss: number): void {
-  applyMoss(plane, noise, {
+function applyMossPass(plane: Plane, seed: number, scale: number, moss: number): void {
+  applyMossPatches(plane, {
     seed: seed + SEED_TEXTURE * 4,
+    scale,
     color: sampleRamp(getRamp('leaf_green'), 0.4),
     strength: moss,
     reach: MOSS_REACH,
-    period: MOSS_PERIOD,
   });
 }
 

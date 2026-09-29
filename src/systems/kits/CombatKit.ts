@@ -41,6 +41,7 @@ import type { SafeRoomSystem } from '../SafeRoomSystem';
 import { SmushEffectSystem } from '../SmushEffectSystem';
 import type { SpellSystem } from '../SpellSystem';
 import type { DestructiblePropSystem } from '../DestructiblePropSystem';
+import type { TownInteriorPropDestructionSystem } from '../TownInteriorPropDestructionSystem';
 import type { TreeSystem } from '../TreeSystem';
 import type { SceneWorld } from './SceneWorld';
 
@@ -75,6 +76,8 @@ export interface CombatResolutionExtras {
    * set of breakable kinds rather than going without.
    */
   readonly destructibles?: DestructiblePropSystem;
+  /** A building interior's placed-prop breakables — absent everywhere else. */
+  readonly interiorProps?: TownInteriorPropDestructionSystem;
   /** Absent everywhere but the overworld, which is the only map that grows trees. */
   readonly trees?: TreeSystem;
   /** Absent everywhere but a map with a village palisade. */
@@ -199,6 +202,7 @@ export class CombatKit {
     const ctx = this.combatCtx;
     ctx.mobGrid = this.world.roster.grid;
     ctx.destructibles = extras.destructibles;
+    ctx.interiorProps = extras.interiorProps;
     ctx.trees = extras.trees;
     ctx.structures = extras.structures;
     resolvePlayerAttacks(ctx);

@@ -749,8 +749,8 @@ const LEVEL_DEFS: readonly LevelDef[] = [tutorialLevel, level1, level2, level3];
 const ARENA_ORIGIN_PREFIX = 'arena:';
 /** What `DefendQuestSystem` fields in every wave. */
 const DEFEND_WAVE_TYPE = 'bugaboo';
-/** Big enough to host every bounty site the generator places. */
-const BOUNTY_MAP_SIZE = 220;
+/** Level 3's own size: every bounty site and Briar Hollow are sited on it, and only fit on the real map. */
+const BOUNTY_MAP_SIZE = level3.mapSize;
 /** Levels a bounty encounter is built at to discover its members; defs may size the escort by level. */
 const BOUNTY_DISCOVERY_LEVELS = [1, MAX_MOB_LEVEL];
 

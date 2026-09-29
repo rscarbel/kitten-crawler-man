@@ -57,7 +57,7 @@ const INTERIOR_SERVICES: ReadonlyMap<string, ReadonlyArray<InteriorService>> = n
   ['The Rusty Anvil', [{ role: 'smith', surface: 'menu', verb: 'Sharpen' }]],
   ["Cartwright's Workshop", [{ role: 'laborer', surface: 'menu', verb: 'Buy' }]],
   ["Miller's Farm", [{ role: 'farmer', surface: 'menu', verb: 'Eat' }]],
-  ["Shepherd's Cabin", [{ role: 'farmer', surface: 'menu', verb: 'Rest' }]],
+  ['Plumbline Farm', [{ role: 'farmer', surface: 'menu', verb: 'Rest' }]],
   ["Old Hilda's Cottage", [{ role: 'priest', surface: 'reading', verb: 'Reading' }]],
 ] satisfies ReadonlyArray<[string, ReadonlyArray<InteriorService>]>);
 

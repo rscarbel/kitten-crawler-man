@@ -11,11 +11,11 @@
  * ## The sheet is one row, not two
  *
  * A building's `idle` is a single frame and its `life` row is up to twenty-four,
- * and the sheet used to be two rows of the wider of those — so most of it was
- * transparent padding that still cost four bytes a pixel. Laying the idle frame
- * in column zero and starting the life row at column one puts the same frames on
- * half the canvas: the town's facades went from 116 MB resident to 62 MB for a
- * manifest `colOffset` the loader has always understood.
+ * and two rows of the wider of those would be mostly transparent padding that
+ * still costs four bytes a pixel. Laying the idle frame in column zero and
+ * starting the life row at column one puts the same frames on half the canvas —
+ * the town's facades take 62 MB resident rather than 116 MB — for a manifest
+ * `colOffset` the loader already understands.
  */
 
 import {
@@ -87,8 +87,8 @@ export const BUILDING_KEYS = [
   'hildas_cottage',
   'horned_flagon',
   'millers_farm',
+  'plumbline_farm',
   'quiet_needle',
-  'shepherds_cabin',
   'sleeping_cat_inn',
   'sunken_stump',
   'temple',
@@ -222,13 +222,31 @@ export interface BuildingPaintOrder {
   readonly onSheetPainted?: () => void;
 }
 
+/**
+ * Facades a running chain has still to queue, behind the one it is painting.
+ *
+ * The environment art cache only knows about the facade in flight, so without
+ * this a loading screen would see the queue run dry between buildings and call
+ * the town finished fourteen facades early.
+ */
+let facadesNotYetQueued = 0;
+/** The floor art seed the count above belongs to; a chain for another floor owes nothing. */
+let facadeChainSeed: number | null = null;
+
+/** Facades still to be queued by the chain {@link requestBuildingSheets} started. */
+export function buildingSheetsNotYetQueued(): number {
+  return facadeChainSeed === floorArtSeed() ? facadesNotYetQueued : 0;
+}
+
 export function requestBuildingSheets(seedTerm: number, options: BuildingPaintOrder = {}): void {
   // Captured, so a chain outliving its floor stops instead of queueing the next
   // facade under a seed the floor it belongs to no longer has.
   const paintingFor = floorArtSeed();
   const order = paintOrder(options.plan, options.nearestTo);
+  facadeChainSeed = paintingFor;
   const queueFrom = (position: number): void => {
     if (position >= order.length || floorArtSeed() !== paintingFor) return;
+    facadesNotYetQueued = order.length - position - 1;
     const index = order[position];
     const spec = BUILDING_SPECS[index];
     const key = buildingKey(spec);

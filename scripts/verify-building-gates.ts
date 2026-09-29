@@ -252,8 +252,10 @@ expectGateFails('a hue nothing in the spec declares', 'palette', (baked) => {
 /**
  * An overlay that has lost all but a fraction of its ink.
  *
- * Thinned by keeping one pixel in sixty-four, which lands the fullest cell around
- * 0.03% — under the floor, and firmly above zero. Two other mutations were tried
+ * Thinned by keeping one pixel in a hundred and twenty-eight, which lands the
+ * fullest cell around 0.03% — under the floor, and firmly above zero. The stride
+ * follows the inn's fullest cell: a denser overlay needs a sparser sample to
+ * land in the same place. Two other mutations were tried
  * and are worth recording as traps: keeping the leftmost columns cleared *all*
  * the ink on this building, because its animation is nowhere near them; and
  * scaling the row's alpha does not work either, since the ink is bimodal (an
@@ -262,7 +264,7 @@ expectGateFails('a hue nothing in the spec declares', 'palette', (baked) => {
  * blank row while claiming to test a faint one — which is what the floor already
  * catches, and not what it is for.
  */
-const INK_THINNING_STRIDE = 64;
+const INK_THINNING_STRIDE = 128;
 
 expectGateFails(
   'an overlay that has lost all but a trace of its ink',

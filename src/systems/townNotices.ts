@@ -210,14 +210,15 @@ function bountyNotice(state: BountyNoticeState | null): Notice {
 }
 
 /**
- * The shepherd's standing plea. Deliberately not a quest hook — there is nothing
- * to hand in — but it is the board's one posting that points at a *building*
- * rather than at the wilds, which is what it is for: the interiors are content
- * now, and the board is where a player looks to find out what this town has.
+ * Wendell's standing offer of his hayloft. Deliberately not a quest hook —
+ * there is nothing to hand in — but it is the board's one posting that points
+ * at a *building* rather than at the wilds, which is what it is for: the board
+ * is where a player looks to find out what this town has, and the loft's rest
+ * is only ever found by walking into his house.
  */
-const SHEPHERD_NOTICE: Notice = {
-  title: 'Strays Beyond the Wall',
-  body: "Two head lost from the Shepherd's Cabin, north of the Barracks. The shepherd does not expect them back and asks only for word of where they went. He keeps a dry loft and will not see a crawler turned out of it.",
+const PLUMBLINE_FARM_NOTICE: Notice = {
+  title: 'A Dry Loft, Plumbline Farm',
+  body: "Plumbline Farm, north of the Barracks, keeps a hayloft that is sound, dry, and at present rather emptier than it was built to be. A crawler in want of an hour's rest may have one there for a modest charge, and will not be turned out of it. Enquire at the house.",
   tone: 'available',
 };
 
@@ -231,7 +232,7 @@ export function buildTownNotices(ctx: TownNoticeContext): Notice[] {
     if (notice !== null) notices.push(notice);
   }
   notices.push(bountyNotice(ctx.bounty));
-  notices.push(SHEPHERD_NOTICE);
+  notices.push(PLUMBLINE_FARM_NOTICE);
   notices.sort((a, b) => TONE_PRIORITY[a.tone] - TONE_PRIORITY[b.tone]);
   return notices;
 }

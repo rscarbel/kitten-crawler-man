@@ -19,7 +19,15 @@
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { InteriorFigure } from '../core/InteriorFigure';
-import { drawClubNpc } from '../sprites/clubNpcSprite';
+import {
+  clubFigureWalkCyclePx,
+  clubFigureWalkFrames,
+  drawClubCastFigure,
+  type ClubFigureRef,
+} from '../sprites/clubCastFigure';
+import { gaitCyclesForDistance } from '../sprites/gaitCadence';
+import { CLUB_PATRON_REFS } from '../sprites/clubCastRoster';
+import { CLUB_ANIM_FRAMES_PER_SECOND } from '../sprites/clubNpcSprite';
 import { stepWander, type WanderParams, type WanderStep } from '../creatures/townWander';
 import {
   CLUB_INTERIOR_W,
@@ -74,17 +82,31 @@ interface Patron {
   speed: number;
   seed: number;
   facingX: number;
+  /** +1 faces the camera (down), −1 away (up); holds its last heading while paused. */
+  facingY: number;
   pause: number;
   /** Sprite height as a multiple of the tile, fixed per patron. */
   heightScale: number;
+  /** Which cast figure this patron draws as, fixed for its lifetime. */
+  ref: ClubFigureRef;
+  /** Walk-cycle position, 0–1, advanced by the ground the patron actually covers. */
+  walkCycle: number;
+  /** Ticks the legs keep walking since the patron last moved; zero is standing. */
+  motionTicks: number;
 }
+
+/**
+ * Ticks the legs keep walking after a patron last moved, so a tick lost to a
+ * blocked step or a shove does not snap the row to idle and back.
+ */
+const PATRON_MOTION_HOLD_TICKS = 4;
+const TWO_PI = Math.PI * 2;
 
 export class ClubCrowdSystem {
   private patrons: Patron[] | null = null;
   private patronTiles: ReadonlyArray<{ x: number; y: number }> | null = null;
   /** One entry per patron, in step with `patrons`; the update loop refreshes each `y`. */
   private readonly figures: InteriorFigure[] = [];
-  private animTime = 0;
 
   /** Reused output for `stepWander`, so the patron loop allocates nothing. */
   private readonly wanderStep: WanderStep = { dx: 0, dy: 0, moving: false, distance: 0 };
@@ -103,15 +125,34 @@ export class ClubCrowdSystem {
    * inside this frame — the station staff, the DJ, the dancers, and the crawlers.
    */
   update(staticBodies: ReadonlyArray<CrowdBody>): void {
-    this.animTime++;
     this.ensurePatrons();
     const patrons = this.patrons;
     if (patrons === null) return;
 
     for (const p of patrons) {
       stepWander(p, this.wanderParams, this.wanderStep);
-      if (this.wanderStep.moving && Math.abs(this.wanderStep.dx) > PATRON_FACING_DEADZONE) {
-        p.facingX = this.wanderStep.dx < 0 ? -1 : 1;
+      if (this.wanderStep.moving) {
+        if (Math.abs(this.wanderStep.dx) >= Math.abs(this.wanderStep.dy)) {
+          if (Math.abs(this.wanderStep.dx) > PATRON_FACING_DEADZONE) {
+            p.facingX = this.wanderStep.dx < 0 ? -1 : 1;
+            p.facingY = 0;
+          }
+        } else {
+          p.facingY = this.wanderStep.dy < 0 ? -1 : 1;
+          p.facingX = 0;
+        }
+        // Paced by ground covered at the size the patron is drawn, so the
+        // planted foot holds still whatever speed or height the patron has.
+        const cyclePx = clubFigureWalkCyclePx(p.ref, TILE_SIZE * p.heightScale);
+        const turn = gaitCyclesForDistance(
+          this.wanderStep.distance,
+          cyclePx,
+          clubFigureWalkFrames(p.ref),
+        );
+        p.walkCycle = (p.walkCycle + turn) % 1;
+        p.motionTicks = PATRON_MOTION_HOLD_TICKS;
+      } else if (p.motionTicks > 0) {
+        p.motionTicks--;
       }
     }
 
@@ -199,22 +240,13 @@ export class ClubCrowdSystem {
     const size = tileSize * p.heightScale;
     // Keep the feet on the tile's ground line while the figure's height varies.
     const footAlign = tileSize - size;
-    drawClubNpc(
-      ctx,
-      p.x - camX + footAlign / 2,
-      p.y - camY + footAlign,
-      size,
-      'patron',
-      this.animTime,
-      p.facingX,
-      p.seed,
-      { walking: this.isWalking(p) },
-    );
-  }
-
-  private isWalking(p: Patron): boolean {
-    if (p.pause > 0) return false;
-    return Math.hypot(p.targetX - p.x, p.targetY - p.y) > PATRON_ARRIVE_DIST;
+    drawClubCastFigure(ctx, p.ref, p.x - camX + footAlign / 2, p.y - camY + footAlign, size, {
+      action: p.motionTicks > 0 ? 'walk' : 'idle',
+      walkPhase: p.walkCycle * TWO_PI,
+      facingX: p.facingX,
+      facingY: p.facingY,
+      loopOffsetSeconds: p.seed / CLUB_ANIM_FRAMES_PER_SECOND,
+    });
   }
 
   /** True when a patron may stand with its body centre over this world-pixel spot. */
@@ -265,8 +297,12 @@ export class ClubCrowdSystem {
           speed: PATRON_SPEED_MIN + Math.random() * (PATRON_SPEED_MAX - PATRON_SPEED_MIN),
           seed: i * PATRON_SEED_STRIDE + PATRON_SEED_OFFSET,
           facingX: 1,
+          facingY: 0,
           pause: Math.floor(Math.random() * PATRON_PAUSE_MAX),
           heightScale: PATRON_HEIGHT_MIN + Math.random() * (PATRON_HEIGHT_MAX - PATRON_HEIGHT_MIN),
+          ref: CLUB_PATRON_REFS[i % CLUB_PATRON_REFS.length],
+          walkCycle: 0,
+          motionTicks: 0,
         };
         patrons.push(patron);
         this.figures.push({

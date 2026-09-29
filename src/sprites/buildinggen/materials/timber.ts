@@ -37,7 +37,6 @@ import { paintPlaster } from './plaster';
 
 export interface TimberFrameOptions {
   readonly plane: Plane;
-  readonly noise: NoiseField;
   readonly seed: number;
   readonly band: Band;
   readonly beamRamp: Ramp;
@@ -47,6 +46,8 @@ export interface TimberFrameOptions {
   readonly braces: boolean;
   /** A horizontal sill beam across the band's bottom. */
   readonly sillBeam: boolean;
+  /** Passed to the infill plaster — see `WallSpec.upkeep`. */
+  readonly upkeep?: number;
 }
 
 export interface PlankWallOptions {
@@ -101,9 +102,9 @@ const BEAM_SHADOW_TONE = 0.04;
 const BEAM_SHADOW_ALPHA = 0.34;
 
 /** Along-grain streaks: 1px lines of a darker ramp value running the beam's length. */
-const GRAIN_STREAKS_PER_TILE = 3.4;
+const GRAIN_STREAKS_PER_TILE = 1.3;
 const GRAIN_STREAK_TONE_DROP = 0.3;
-const GRAIN_STREAK_ALPHA = 0.6;
+const GRAIN_STREAK_ALPHA = 0.4;
 const GRAIN_STREAK_MIN_LENGTH = 0.25;
 const GRAIN_STREAK_LENGTH_SPREAD = 0.6;
 
@@ -133,17 +134,17 @@ const INFILL_SEED_OFFSET = 5171;
 const INFILL_PAINTED = 0.18;
 
 export function paintTimberFrame(options: TimberFrameOptions): void {
-  const { plane, noise, seed, band, scale } = options;
+  const { plane, seed, band, scale } = options;
 
   paintPlaster({
     plane,
-    noise,
     seed: seed + INFILL_SEED_OFFSET,
     band,
     ramp: options.infillRamp,
     trimRamp: options.infillRamp,
     painted: INFILL_PAINTED,
     scale,
+    upkeep: options.upkeep,
   });
 
   const ctx = plane.ctx;
@@ -384,9 +385,9 @@ const PLANK_EDGE_WANDER_PERIOD = 11;
 const PLANK_EDGE_STEP_PX = 3;
 
 /** Per-plank streaking, in streaks per tile of plank length. */
-const PLANK_GRAIN_PER_TILE = 2.6;
+const PLANK_GRAIN_PER_TILE = 1.2;
 const PLANK_GRAIN_TONE_DROP = 0.2;
-const PLANK_GRAIN_ALPHA = 0.42;
+const PLANK_GRAIN_ALPHA = 0.3;
 const PLANK_GRAIN_MIN_LENGTH = 0.2;
 const PLANK_GRAIN_LENGTH_SPREAD = 0.55;
 

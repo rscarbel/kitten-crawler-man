@@ -12,6 +12,8 @@
  */
 
 import { PARCHMENT, WOOD, WOOD_DARK, WOOD_LIGHT } from './townPalette';
+import { rgb } from './art/town/townArt';
+import { getTownRamp } from './art/town/townPalette';
 
 const TWO_PI = Math.PI * 2;
 
@@ -22,10 +24,15 @@ const TWO_PI = Math.PI * 2;
  */
 const GATEWAY_JAMBS: ReadonlyArray<number> = [0, 1];
 
-const IRON = '#3a3630';
-const STONE = '#7d7669';
-const STONE_DARK = '#544f46';
-const STONE_LIGHT = '#98907f';
+// `iron_black`/`oc_stone` (`src/sprites/art/town/townPalette.ts`) — the gate's
+// ironwork and coursed jambs are the same cool, always-darkened iron and
+// quarried ashlar every other building in town is dressed with.
+const OC_IRON = getTownRamp('iron_black');
+const OC_STONE = getTownRamp('oc_stone');
+const IRON = rgb(OC_IRON.mid);
+const STONE = rgb(OC_STONE.mid);
+const STONE_DARK = rgb(OC_STONE.shadow);
+const STONE_LIGHT = rgb(OC_STONE.light);
 
 // ── Signpost ─────────────────────────────────────────────────────────────────
 

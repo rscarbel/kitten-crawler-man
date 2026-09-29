@@ -41,7 +41,7 @@ import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { REPAIR_ROWS } from '../sprites/art/humanFigure';
 import { viewForFacing } from '../sprites/humanSprite';
-import { distinctSpawnTiles } from './interiorHostiles';
+import { distinctSpawnTiles, inPlainViewOnTheWayIn } from './interiorHostiles';
 import { ShrineVermin } from '../creatures/ShrineVermin';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { Conversation } from '../dialog/Conversation';
@@ -93,9 +93,13 @@ const WOOD_PILE_OFFSET_FROM_DOOR = { dx: 3, dy: -1 };
 const WOOD_PILE_SEARCH_RADIUS_TILES = 4;
 
 const TEMPLE_VERMIN_COUNT = 5;
-/** How far off the aisle a vermin starts, in tiles — into the pews, not on the rug. */
+/**
+ * How far off the aisle a vermin is first tried, in tiles: out toward the pews
+ * rather than on the rug, so the rats are spread across the nave. The search
+ * then settles each on the nearest tile in plain view.
+ */
 const VERMIN_AISLE_OFFSET_TILES = 2;
-/** How far a vermin spawn may be nudged to find open floor between the pews. */
+/** How far a vermin spawn may be nudged to find open floor in plain view. */
 const VERMIN_SEARCH_RADIUS_TILES = 3;
 
 /**
@@ -324,7 +328,8 @@ export class AnchorInteriorSystem {
   private spawnVermin(count: number): void {
     if (count <= 0) return;
     const wanted = this.naveSpawnAnchors(count);
-    for (const tile of distinctSpawnTiles(this.map, wanted, VERMIN_SEARCH_RADIUS_TILES)) {
+    const huntable = inPlainViewOnTheWayIn(this.map);
+    for (const tile of distinctSpawnTiles(this.map, wanted, VERMIN_SEARCH_RADIUS_TILES, huntable)) {
       const rat = new ShrineVermin(tile.x, tile.y, TILE_SIZE);
       applySpawnDifficulty(rat);
       this.vermin.push(rat);

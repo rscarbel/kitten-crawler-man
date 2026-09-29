@@ -22,6 +22,7 @@
  * Run: npx tsx scripts/verify-mongo.ts
  */
 
+import { level3 } from '../src/levels/level3';
 import { GameMap } from '../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
@@ -60,7 +61,8 @@ import { setPackAlertGrid } from '../src/creatures/packAlert';
 import { SafeRoomSystem } from '../src/systems/SafeRoomSystem';
 import { Conversation } from '../src/dialog/Conversation';
 
-const MAP_SIZE = 220;
+/** Level 3's own size: Briar Hollow is always sited, and only fits on the real map. */
+const MAP_SIZE = level3.mapSize;
 
 /**
  * The cat-distance a summoned Mongo may never exceed, in tiles.
@@ -1048,8 +1050,8 @@ console.log('\nfighting on while wounded');
       'and the hostile is actually losing HP to him — a stale held target with no attacks landing would not move it',
     );
 
-    // Fit to be sent in is "alive", nothing more: the summon floor no longer
-    // scales off a retreat threshold that does not exist.
+    // Fit to be sent in is "alive", nothing more: the summon floor does not
+    // scale off any retreat threshold.
     h.system.dismiss(h.roster.mobs, h.roster.grid);
     h.petState.hp = 1;
     check(

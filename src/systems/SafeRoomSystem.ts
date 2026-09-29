@@ -13,10 +13,10 @@ import type { Mob } from '../creatures/Mob';
 import {
   drawMordecaiForLevel,
   mordecaiHeadTop,
+  mordecaiTilesPerWalkCycle,
   mordecaiOverheadLift,
   prewarmMordecaiForLevel,
 } from '../sprites/mordecaiSprite';
-import { RAT_KIN_TILES_PER_WALK_CYCLE } from '../sprites/ratKinSprite';
 import { MordecaiWanderer } from './mordecaiWander';
 import { drawSafeRoomBed, restedPulse } from '../sprites/safeRoomBed';
 import { drawStoveSteam } from '../sprites/safeRoomDecor';
@@ -138,28 +138,9 @@ export class SafeRoomSystem implements GameSystem {
   private markerSource: MordecaiMarkerSource | null = null;
 
   // Magic number constants
-  /**
-   * Pixels of floor one full walk cycle of his art covers. The choreography's
-   * stance foot is planted, so the cycle has to advance with the distance he
-   * travels or he skates along his own path.
-   */
-  private static readonly WANDER_PIXELS_PER_WALK_CYCLE = RAT_KIN_TILES_PER_WALK_CYCLE * TILE_SIZE;
   private static readonly TILE_CENTER = 0.5;
-  private static readonly MORDECAI_NEAR_DISTANCE = 2.5;
-  /**
-   * How far from the Mordecai he is talking to the player may get before the
-   * conversation ends itself. His dialog is a floating claim — the player is
-   * free to walk while it is open — so without this the box outlives the
-   * conversation.
-   *
-   * Derived from the radius that opens a conversation rather than borrowed from
-   * the townsfolk one: a crawler who starts talking at the edge of his 2.5-tile
-   * hearing needs room to shift about while reading, and the townsfolk number
-   * only feels generous next to their much tighter 1.1-tile approach.
-   */
-  private static readonly MORDECAI_WALK_AWAY_MULTIPLE = 2.4;
-  private static readonly MORDECAI_WALK_AWAY_DISTANCE =
-    SafeRoomSystem.MORDECAI_NEAR_DISTANCE * SafeRoomSystem.MORDECAI_WALK_AWAY_MULTIPLE;
+  /** Tiles from where he stands within which a press talks to him. */
+  static readonly MORDECAI_NEAR_DISTANCE = 2.5;
   private static readonly BED_NEAR_DISTANCE = 1.8;
   private static readonly MARKER_GAP_PX = 3;
   /** Reach and strength of one standing lantern's pool of light. */
@@ -176,8 +157,7 @@ export class SafeRoomSystem implements GameSystem {
   private static readonly HUD_BANNER_ALPHA = 0.85;
 
   /**
-   * Free-running frame counter. Drives the bed's rested pulse and the two
-   * procedural Mordecai variants, which animate straight off elapsed frames.
+   * Free-running frame counter. Drives the bed's rested pulse.
    */
   private wanderTime = 0;
 
@@ -225,7 +205,9 @@ export class SafeRoomSystem implements GameSystem {
           wanderer: new MordecaiWanderer(
             sr.bounds,
             mordecai,
-            SafeRoomSystem.WANDER_PIXELS_PER_WALK_CYCLE,
+            // The walk's stance foot is planted, so the cycle has to advance
+            // with the distance he travels or he skates along his own path.
+            mordecaiTilesPerWalkCycle(levelId) * TILE_SIZE,
             canStand,
           ),
           bedTileX: bed.x,
@@ -307,7 +289,7 @@ export class SafeRoomSystem implements GameSystem {
       haltsWorld: false,
       anchor: {
         position: () => entry.wanderer.state,
-        radius: SafeRoomSystem.MORDECAI_WALK_AWAY_DISTANCE,
+        talkRangeTiles: SafeRoomSystem.MORDECAI_NEAR_DISTANCE,
       },
       // A dialog the player pages through, over a floor that keeps running.
       locksKeyboard: false,
@@ -390,11 +372,10 @@ export class SafeRoomSystem implements GameSystem {
 
   /**
    * Ends the conversation the instant the player leaves the safe room, having
-   * genuinely been inside it — the stricter of the dialog's two walk-away
-   * rules. The shared conversation's own anchor radius covers the gentler
-   * one, drifting too far from the speaker inside a large room, since that is
-   * a plain distance check any conversation can make; leaving the room
-   * outright is a boundary only this system knows.
+   * genuinely been inside it. The shared conversation's anchor covers walking
+   * away from him inside the room, since that is a plain distance check any
+   * conversation can make; leaving the room outright is a boundary only this
+   * system knows, and can come first when he stands by the door.
    */
   private closeMordecaiDialogIfLeftRoom(active: { x: number; y: number }): void {
     if (!this._mordecaiOwned) return;
@@ -471,6 +452,22 @@ export class SafeRoomSystem implements GameSystem {
 
   isNearMordecai(entity: { x: number; y: number }): boolean {
     return this.entries.some((e) => SafeRoomSystem.isNearThisMordecai(e, entity));
+  }
+
+  /**
+   * How far `entity` stands from the nearest Mordecai it is in talk range of,
+   * in tiles, or null when it is in range of none — for choosing between him
+   * and the Bopca when both could hear a press.
+   */
+  mordecaiTalkDistanceTiles(entity: { x: number; y: number }): number | null {
+    let nearest: number | null = null;
+    for (const entry of this.entries) {
+      if (!SafeRoomSystem.isNearThisMordecai(entry, entity)) continue;
+      const { x, y } = entry.wanderer.state;
+      const tiles = Math.hypot(entity.x - x, entity.y - y) / TILE_SIZE;
+      if (nearest === null || tiles < nearest) nearest = tiles;
+    }
+    return nearest;
   }
 
   /** Talk range is measured from where he is standing, not from his home tile. */
@@ -625,9 +622,9 @@ export class SafeRoomSystem implements GameSystem {
             msy,
             ts,
             {
-              walkTime: this.wanderTime,
               walkPhase: wander.walkPhase,
               isWalking: wander.isWalking,
+              isTalking: this._mordecaiOwned && this._speakingEntry === e,
               facingX: wander.facingX,
               facingY: wander.facingY,
               lastHorizontalFacing: wander.lastHorizontalFacing,

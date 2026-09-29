@@ -16,7 +16,7 @@
  *     pronate, so a palm-down hand is anatomically impossible)
  *   - a **stiff** tail that sways as one rod from its base and never whips
  *
- * The colour brief is fixed: a steel/royal blue body with broken navy dorsal
+ * The colouring is fixed: a steel/royal blue body with broken navy dorsal
  * bars, a pale blue-cream underside, and pink display feathers in exactly three
  * places — head crest, forearms, tail fan. Those three pink zones are an
  * invariant the bake gates police in every frame of every row.

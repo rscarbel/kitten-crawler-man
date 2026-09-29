@@ -850,7 +850,9 @@ const IRIS_R = EYE_RX * 0.7;
  * almond at this size reads as a pair of goggles.
  */
 const SCLERA_SHADE = 0.62;
-const SCLERA = mix(EYE_WHITE, SKIN.mid, SCLERA_SHADE);
+function sclera(): string {
+  return mix(EYE_WHITE, SKIN.mid, SCLERA_SHADE);
+}
 /**
  * The iris under the brow's shadow, deepened so that head-on, where the eye
  * is about one screen pixel, it lands as a dark point in the skin — still
@@ -925,7 +927,7 @@ function drawEye(ctx: Ctx, eye: EyeSpec): void {
   if (openness > EYE_SHUT_THRESHOLD) {
     if (eye.sclera) {
       traceEyeOpening(ctx, eye, top, bottom);
-      ctx.fillStyle = SCLERA;
+      ctx.fillStyle = sclera();
       ctx.fill();
     }
     withClip(
@@ -985,24 +987,27 @@ function drawBrow(
   const inner = pt(cx - outward * halfLength, cy + innerDrop);
   const outer = pt(cx + outward * halfLength, cy - innerDrop * BROW_OUTER_LIFT);
   const thick = BROW_THICK * shape.thickness;
-  fillCapsule(ctx, inner, outer, thick * 0.5, thick * shape.tail, shape.colour);
+  fillCapsule(ctx, inner, outer, thick * 0.5, thick * shape.tail, HAIR.deep);
 }
 
-/** How a brow is drawn in one view, against {@link BROW_THICK} and {@link BROW_LENGTH}. */
-interface BrowShape {
+/**
+ * How a brow is drawn in one view, against {@link BROW_THICK} and
+ * {@link BROW_LENGTH}. Colour is not part of the shape: `drawBrow` reads
+ * `HAIR.deep` live at paint time, the same way every other hair-toned mark
+ * does, so a brow always follows a look's own hair-ramp swap.
+ */
+export interface BrowShape {
   readonly thickness: number;
   readonly length: number;
   /** The tail's width against the inner head's. */
   readonly tail: number;
-  readonly colour: string;
 }
 
 /** Edge-on only one brow shows, and it has to carry the whole scowl alone. */
-const PROFILE_BROW: BrowShape = {
+export const PROFILE_BROW_DEFAULT: BrowShape = {
   thickness: 1,
   length: 1,
   tail: BROW_TAIL_SHARE,
-  colour: HAIR.deep,
 };
 /**
  * Head-on the brow sits this much higher than edge-on, so a row of skin
@@ -1017,12 +1022,58 @@ const FACING_BROW_RAISE = HEAD_RY * 0.07;
  * lighter brow averages into the skin at the tile and the scowl goes with it;
  * the angle carries the scowl.
  */
-const FACING_BROW: BrowShape = {
+export const FACING_BROW_DEFAULT: BrowShape = {
   thickness: 0.85,
   length: 0.72,
   tail: 0.3,
-  colour: HAIR.deep,
 };
+
+/**
+ * A thinner, shorter brow for a feminine face — the same taper Carl's own
+ * brow has, scaled down rather than reshaped, so it reads as a softer version
+ * of the same feature rather than a different one.
+ */
+export const FEMININE_PROFILE_BROW: BrowShape = { thickness: 0.62, length: 0.85, tail: 0.4 };
+export const FEMININE_FACING_BROW: BrowShape = { thickness: 0.55, length: 0.6, tail: 0.38 };
+
+/**
+ * The brow shape and the anger the pose's own `brow` value is scaled by, and
+ * the mouth's own width multiplier — swappable so a closed-set cast look can
+ * give a townsfolk figure a calmer, or a feminine, expression without
+ * touching Carl's own combat poses. `let`, matching `SKIN`/`HAIR` in
+ * `palette.ts`; defaults to Carl's own values exactly.
+ */
+let PROFILE_BROW = PROFILE_BROW_DEFAULT;
+let FACING_BROW = FACING_BROW_DEFAULT;
+const ANGER_SCALE_DEFAULT = 1;
+let ANGER_SCALE = ANGER_SCALE_DEFAULT;
+const LIP_FULLNESS_DEFAULT = 1;
+let LIP_FULLNESS = LIP_FULLNESS_DEFAULT;
+
+export interface CarlExpression {
+  /** Multiplies every pose's own `brow` (0–1 anger) value; Carl's own poses are unscaled at 1. */
+  readonly angerScale: number;
+  readonly profileBrow: BrowShape;
+  readonly facingBrow: BrowShape;
+  /** Multiplies the mouth's own drawn width, for a fuller feminine lip. */
+  readonly lipFullness: number;
+}
+
+/** Sets the expression every subsequent head paint call reads. */
+export function setCarlExpression(expression: CarlExpression): void {
+  ANGER_SCALE = expression.angerScale;
+  PROFILE_BROW = expression.profileBrow;
+  FACING_BROW = expression.facingBrow;
+  LIP_FULLNESS = expression.lipFullness;
+}
+
+/** Restores Carl's own expression — call after every non-Carl bake. */
+export function resetCarlExpression(): void {
+  ANGER_SCALE = ANGER_SCALE_DEFAULT;
+  PROFILE_BROW = PROFILE_BROW_DEFAULT;
+  FACING_BROW = FACING_BROW_DEFAULT;
+  LIP_FULLNESS = LIP_FULLNESS_DEFAULT;
+}
 
 /** A short, hard mouth line: the width of the nose's wings and a little more, never a grin. */
 /**
@@ -1048,7 +1099,9 @@ const MOUTH_LINE_ALPHA = 0.85;
  * rose one is a mouth.
  */
 const MOUTH_LINE_INTERIOR_SHARE = 0.5;
-const MOUTH_LINE = mix(SKIN.deep, MOUTH_INNER, MOUTH_LINE_INTERIOR_SHARE);
+function mouthLine(): string {
+  return mix(SKIN.deep, MOUTH_INNER, MOUTH_LINE_INTERIOR_SHARE);
+}
 /** The lower lip catches the key just under the mouth line; that lit edge is what makes the line a mouth. */
 const LOWER_LIP_ROWS_DOWN = 1;
 const LOWER_LIP_ALPHA = 0.55;
@@ -1092,7 +1145,7 @@ function drawMouth(
   ctx.save();
   const onRow = snapToPixelRow(ctx, centre, cy);
   ctx.translate(onRow.x - centre, onRow.y - cy);
-  ctx.strokeStyle = rgba(MOUTH_LINE, MOUTH_LINE_ALPHA);
+  ctx.strokeStyle = rgba(mouthLine(), MOUTH_LINE_ALPHA);
   ctx.lineWidth = Math.max(MOUTH_LINE_WIDTH * (1 + open), onePixel(ctx));
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -1199,10 +1252,12 @@ const EAR_FRONT_TO = deg(60);
  * rose half-tone the whole ear is one soft pink patch the size of a cheek, and
  * it reads as blusher rather than as an ear.
  */
-const PROFILE_EAR_BOWL = SKIN.dark;
+function profileEarBowl(): string {
+  return SKIN.dark;
+}
 
 function drawProfileEar(ctx: Ctx, cx: number, cy: number, rx: number, ry: number): void {
-  drawEar(ctx, cx, cy, rx, ry, SKIN.base, PROFILE_EAR_BOWL);
+  drawEar(ctx, cx, cy, rx, ry, SKIN.base, profileEarBowl());
   ctx.save();
   ctx.translate(cx, cy);
   ctx.lineCap = 'round';
@@ -1223,17 +1278,21 @@ function drawProfileEar(ctx: Ctx, cx: number, cy: number, rx: number, ry: number
 
 /**
  * The hair's ramp, a step down the brown: laid in at the ramp's own base it
- * reads as ginger under the key, and his hair is plain brown.
+ * reads as ginger under the key, and his hair is plain brown. A function
+ * rather than a constant so a swapped `HAIR` ramp (`setCarlSkinHairRamp`) is
+ * read fresh on every call instead of the one `HAIR` held at import time.
  */
-const HAIR_TONE: Ramp = {
-  deep: HAIR.deep,
-  shadow: HAIR.deep,
-  dark: HAIR.shadow,
-  mid: HAIR.dark,
-  base: HAIR.mid,
-  light: HAIR.base,
-  rim: HAIR.light,
-};
+function hairTone(): Ramp {
+  return {
+    deep: HAIR.deep,
+    shadow: HAIR.deep,
+    dark: HAIR.shadow,
+    mid: HAIR.dark,
+    base: HAIR.mid,
+    light: HAIR.base,
+    rim: HAIR.light,
+  };
+}
 
 /** Many small tufts, not a few tall spikes. */
 const HAIR_TUFTS = 8;
@@ -1480,10 +1539,10 @@ function drawHair(ctx: Ctx, profile: boolean, flow: number, fromBehind: boolean,
   };
 
   traceHair();
-  ctx.fillStyle = HAIR_TONE.base;
+  ctx.fillStyle = hairTone().base;
   ctx.fill();
   withClip(ctx, traceHair, () => {
-    shadeClipped(ctx, HEAD_AXIS, HAIR_TONE, {
+    shadeClipped(ctx, HEAD_AXIS, hairTone(), {
       halfWidth: half,
       terminator: HAIR_TERMINATOR,
       softness: HAIR_SOFTNESS,
@@ -1589,7 +1648,7 @@ function drawHairClumps(ctx: Ctx, side: HairSide, half: number, flow: number, ti
       }
     }
   };
-  crease(ctx, trace, HAIR_CLUMP_WIDTH, HAIR_TONE, HAIR_CLUMP_OPACITY);
+  crease(ctx, trace, HAIR_CLUMP_WIDTH, hairTone(), HAIR_CLUMP_OPACITY);
 }
 
 /**
@@ -1607,7 +1666,7 @@ function drawSideburn(ctx: Ctx, half: number): void {
   ctx.quadraticCurveTo(front, tip, (front + back) / 2, tip);
   ctx.quadraticCurveTo(back, tip, back, top);
   ctx.closePath();
-  ctx.fillStyle = HAIR_TONE.dark;
+  ctx.fillStyle = hairTone().dark;
   ctx.fill();
 }
 
@@ -1803,8 +1862,8 @@ function paintHead(ctx: Ctx, pose: CarlPose, view: ViewSpec, lift: number): void
     paintJawUnderside(ctx, lift);
   });
 
-  const anger = pose.brow;
-  const mouthWidth = pose.mouthWidth ?? 1;
+  const anger = pose.brow * ANGER_SCALE;
+  const mouthWidth = (pose.mouthWidth ?? 1) * LIP_FULLNESS;
   if (profile) {
     const eyeX = HEAD_DEPTH * PROFILE_EYE_X;
     drawEye(ctx, {

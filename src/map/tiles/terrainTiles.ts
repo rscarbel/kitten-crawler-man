@@ -37,6 +37,11 @@ import {
   INTERIOR_WALL_MATERIAL,
   TOWN_INTERIOR_GROUND,
 } from '../town/interiorMaterials';
+import { townInteriorWallMaterial } from '../town/interiorWallMaterial';
+import {
+  paintNorthInteriorWallFace,
+  paintEdgeInteriorWallFace,
+} from '../../sprites/art/townInterior/interiorWallFace';
 
 /** Pixel depth of the door threshold shadow strip from the overhang above. */
 const DOOR_OVERHANG_SHADOW_DEPTH = 5;
@@ -303,6 +308,23 @@ export function drawTerrainTile(
     // having tile types of their own.
     case INTERIOR_WALL: {
       drawGroundMaterialTile(ctx, TOWN_INTERIOR_GROUND, INTERIOR_WALL_MATERIAL, sx, sy, ts, tx, ty);
+      // Layered over the flat ground fill above — never a replacement for
+      // it, so a chunk cache that never reaches this file still shows a
+      // plausible wall. Orientation comes from which neighbour is floor:
+      // any tile in this map that isn't a wall or the outer void counts,
+      // since a town interior map holds nothing else at its edges.
+      const isFloorNeighbor = (t: number | undefined): boolean =>
+        t !== undefined && t !== INTERIOR_WALL && t !== VOID_TYPE;
+      const material = townInteriorWallMaterial();
+      if (isFloorNeighbor(structure[ty + 1]?.[tx]?.type)) {
+        paintNorthInteriorWallFace(ctx, sx, sy, ts, ts, material, tx, ty);
+      } else if (isFloorNeighbor(structure[ty - 1]?.[tx]?.type)) {
+        paintEdgeInteriorWallFace(ctx, sx, sy, ts, ts, material, 'south');
+      } else if (isFloorNeighbor(structure[ty]?.[tx + 1]?.type)) {
+        paintEdgeInteriorWallFace(ctx, sx, sy, ts, ts, material, 'west');
+      } else if (isFloorNeighbor(structure[ty]?.[tx - 1]?.type)) {
+        paintEdgeInteriorWallFace(ctx, sx, sy, ts, ts, material, 'east');
+      }
       break;
     }
     case INTERIOR_COUNTER: {

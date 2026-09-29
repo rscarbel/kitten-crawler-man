@@ -15,7 +15,6 @@ import {
 import { activeSearchField, endSearchCapture } from '../ui/SearchField';
 import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
 import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
-import { beginPersonFrame } from '../sprites/person/personFrameCache';
 import { perfMonitor } from './PerfMonitor';
 import { renderQuality } from './RenderQuality';
 import {
@@ -554,13 +553,12 @@ export class SceneManager {
     }
     if (this.accumulator >= this.FIXED_DT) this.accumulator = 0;
 
-    // Here rather than inside a render pipeline or a scene: the procedural-people
-    // frame cache spreads its bakes over frames and reclaims only entries nobody
-    // drew, so it needs a frame boundary — and a scene that draws citizens
+    // Here rather than inside a render pipeline or a scene: the figure frame
+    // cache spreads its bakes over frames and reclaims only entries nobody drew,
+    // so it needs a frame boundary — and a scene that draws a cached figure
     // without going through whichever pipeline owned the call would silently
     // freeze that clock, turning the cache off. This is the one call site every
     // scene passes through.
-    beginPersonFrame();
     beginFigureFrame();
     beginEnvironmentArtFrame();
     const renderStartedAt = perfMonitor.begin();

@@ -1,19 +1,26 @@
-import { drawRatKinSprite, prewarmRatKinSprite } from './ratKinSprite';
-import { drawIncubusSprite } from './incubusSprite';
+import {
+  drawRatKinSprite,
+  prewarmRatKinSprite,
+  RAT_KIN_TILES_PER_WALK_CYCLE,
+} from './ratKinSprite';
+import {
+  drawIncubusSprite,
+  INCUBUS_TILES_PER_WALK_CYCLE,
+  incubusHeadClearanceTiles,
+  prewarmIncubusSprite,
+} from './incubusSprite';
 import { bugabooHeadClearanceTiles, drawBugabooSprite } from './bugabooSprite';
 
 /**
  * How much room above the tile origin the tile-anchored overhead UI already
  * reserves for itself. The "…" bubble and the Space prompt both hang off the
- * NPC's tile, and half a tile is enough to clear the Rat Kin and the Incubus,
- * who are both roughly tile-tall.
+ * NPC's tile, and half a tile is enough to clear the Rat Kin, who is roughly
+ * tile-tall.
  */
 const TILE_ANCHORED_UI_CLEARANCE_TILES = 0.5;
 
 /** Everything the Mordecai variants need to animate, whichever one is drawn. */
 export interface MordecaiSpriteState {
-  /** Free-running frame counter. The Incubus is procedural and animates off it. */
-  readonly walkTime: number;
   /**
    * Walk-cycle angle in radians, advanced by the ground he has actually covered
    * rather than by elapsed frames. The Rat Kin and the Bugaboo are frame-indexed
@@ -21,16 +28,16 @@ export interface MordecaiSpriteState {
    */
   readonly walkPhase: number;
   readonly isWalking: boolean;
+  /** True while the player is in conversation with him; only the Incubus has a talking row. */
+  readonly isTalking: boolean;
   /** +1 faces right, −1 faces left, 0 while walking along the vertical axis. */
   readonly facingX: number;
   /** +1 faces toward the camera, −1 away, 0 neither. */
   readonly facingY: number;
   /**
-   * The last left/right he committed to, never 0. The Incubus has no art for the
-   * vertical axis — it mirrors on `facingX < 0` and nothing else, so a zero
-   * would snap it round every vertical step. The Rat Kin and the Bugaboo have
-   * their own head-on and away rows and take `facingX`/`facingY` directly; this
-   * is only what decides which way their profile rows are mirrored.
+   * The last left/right he committed to, never 0. Every form has its own
+   * head-on and away rows and takes `facingX`/`facingY` directly; this is only
+   * what decides which way a profile row is mirrored when he stands still.
    */
   readonly lastHorizontalFacing: number;
   /** Offset into the idle loops, so safe rooms do not idle in unison. */
@@ -40,11 +47,16 @@ export interface MordecaiSpriteState {
 /**
  * Extra pixels that overhead UI must rise by to clear the Mordecai variant this
  * level draws, beyond the clearance a tile-anchored bubble or prompt already
- * assumes. Zero for the Rat Kin and the Incubus; the Bugaboo stands nearly a
- * tile taller than either, so his head overlaps anything anchored on the tile.
+ * assumes. Zero for the Rat Kin; the Bugaboo and the Incubus both stand taller
+ * than a tile, so their heads overlap anything anchored on the tile.
  */
 export function mordecaiOverheadLift(levelId: string, tileSize: number): number {
-  const headClearanceTiles = levelId === 'level2' ? bugabooHeadClearanceTiles() : 0;
+  const headClearanceTiles =
+    levelId === 'level2'
+      ? bugabooHeadClearanceTiles()
+      : levelId === 'level3'
+        ? incubusHeadClearanceTiles()
+        : 0;
   const excessTiles = headClearanceTiles - TILE_ANCHORED_UI_CLEARANCE_TILES;
   return Math.max(0, excessTiles * tileSize);
 }
@@ -59,19 +71,31 @@ export function mordecaiHeadTop(levelId: string, sy: number, tileSize: number): 
  * moment his room is built rather than on his first frame.
  *
  * Branches on the same level IDs {@link drawMordecaiForLevel} does, so a level
- * cannot be warmed for a shape it never draws. The Incubus and the Bugaboo are
- * not painted through the figure cache here, so only the Rat Kin has anything
- * to warm.
+ * cannot be warmed for a shape it never draws. The Bugaboo is not painted
+ * through the figure cache here, so it has nothing to warm.
  */
 export function prewarmMordecaiForLevel(levelId: string): void {
-  if (levelId === 'level3' || levelId === 'level2') return;
+  if (levelId === 'level2') return;
+  if (levelId === 'level3') {
+    prewarmIncubusSprite();
+    return;
+  }
   prewarmRatKinSprite();
 }
 
 /**
+ * Ground one cycle of this level's Mordecai walk covers, in tiles, so the
+ * wander can pace it by distance and the planted foot holds still. The
+ * Bugaboo's walk was tuned against the Rat Kin's pacing and shares it.
+ */
+export function mordecaiTilesPerWalkCycle(levelId: string): number {
+  return levelId === 'level3' ? INCUBUS_TILES_PER_WALK_CYCLE : RAT_KIN_TILES_PER_WALK_CYCLE;
+}
+
+/**
  * Dispatcher: picks the correct Mordecai variant sprite for the given level ID.
- * Level 3 (overworld) gets the demon tuxedo variant; level 2 gets the Bugaboo;
- * others use the Rat Kin.
+ * Level 3 (the Over City) gets the Incubus; level 2 gets the Bugaboo; others
+ * use the Rat Kin.
  */
 export function drawMordecaiForLevel(
   ctx: CanvasRenderingContext2D,
@@ -81,10 +105,16 @@ export function drawMordecaiForLevel(
   state: MordecaiSpriteState,
   levelId: string,
 ) {
-  const { walkTime, walkPhase, isWalking, facingY, lastHorizontalFacing, idleOffsetSeconds } =
-    state;
+  const { walkPhase, isWalking, facingY, lastHorizontalFacing, idleOffsetSeconds } = state;
   if (levelId === 'level3') {
-    drawIncubusSprite(ctx, sx, sy, s, walkTime, isWalking, lastHorizontalFacing);
+    drawIncubusSprite(ctx, sx, sy, s, {
+      walkPhase,
+      isWalking,
+      isTalking: state.isTalking,
+      facingX: state.facingX === 0 && facingY === 0 ? lastHorizontalFacing : state.facingX,
+      facingY,
+      idleOffsetSeconds,
+    });
   } else if (levelId === 'level2') {
     // Never a swipe, a breach or an emergence: this one is a shopkeeper wearing
     // the shape, and the only rows he has any business in are stance and walk.

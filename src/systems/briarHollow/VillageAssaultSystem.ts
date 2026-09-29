@@ -1587,16 +1587,18 @@ export class VillageAssaultSystem {
 
   /**
    * Levels, stages and enlists one assault body, and joins it to the scene.
-   * `levelled` is false for a body the caller has levelled and scaled itself.
+   * `maxHpShare` fields a weaker (or tougher) copy of the creature; it is
+   * applied after levelling, which would otherwise level the scaled figure.
    */
   private enlist(
     mob: Mob,
     lane: AssaultLane,
     wave: number,
-    options: { readonly levelled?: boolean; readonly structureScale?: number } = {},
+    options: { readonly maxHpShare?: number; readonly structureScale?: number } = {},
   ): void {
     const world = this.ensureFlow();
-    if (options.levelled !== true) mob.applyMobLevel(this.deps.waveLevel());
+    mob.applyMobLevel(this.deps.waveLevel());
+    if (options.maxHpShare !== undefined) mob.scaleMaxHp(options.maxHpShare);
     applySpawnDifficulty(mob, this.deps.difficulty());
     const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
     enlistInSiege(
@@ -1634,10 +1636,8 @@ export class VillageAssaultSystem {
     const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
     const healthShare = (spec?.necromancerHealthShare ?? 1) * tuning.necromancerHealthScale;
     const necro = new Necromancer(tile.x, tile.y, TILE_SIZE);
-    necro.applyMobLevel(this.deps.waveLevel());
-    necro.scaleMaxHp(healthShare);
     necro.cannotBeKilled = wave < ASSAULT_WAVE_COUNT - 1;
-    this.enlist(necro, lane, wave, { levelled: true });
+    this.enlist(necro, lane, wave, { maxHpShare: healthShare });
     this.necromancer = necro;
     this.necromancerOut = true;
     // His name card once, when he first comes; after that he is expected.
@@ -1654,14 +1654,12 @@ export class VillageAssaultSystem {
   ): void {
     const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
     const mark = createBountyMark(kind, tile.x, tile.y, this.deps.gameMap);
-    mark.applyMobLevel(this.deps.waveLevel());
-    mark.scaleMaxHp(tuning.bountyHealthShare);
     mark.outgoingDamageScale = tuning.bountyDamageScale;
     mark.blowCapShareOfTargetHp = BOUNTY_MAX_BLOW_HP_SHARE;
     mark.isBoss = true;
     mark.immuneToConfusion = true;
     this.enlist(mark, lane, wave, {
-      levelled: true,
+      maxHpShare: tuning.bountyHealthShare,
       structureScale: BOUNTY_MARK_STRUCTURE_SCALE,
     });
     this.bountyMark = mark;
@@ -1740,12 +1738,17 @@ export class VillageAssaultSystem {
     this.lullFrames = 0;
     this.sideBanner = null;
     this.releaseFairies();
-    const living = this.livingSiegeMobs();
+    const living = this.deps.roster.mobs.filter(
+      (mob) => mob.isAlive && mob.isHostile && (mob.siegeCapable !== null || mob.raisedForSiege),
+    );
     for (const mob of living) {
-      // Beaten: it stands where it is until it falls, and fights no more.
+      // Beaten: it stands where it is until it falls, and fights no more —
+      // nor is fought, so nothing it is still in reach of can be paid for it.
       mob.abandonStructureStrike();
       mob.siegeDirective = HOLD_STILL;
       mob.currentTarget = null;
+      mob.awaitingRelease = true;
+      mob.offLimitsToAllies = true;
       this.crumbles.push({
         mob,
         framesLeft: Math.floor(this.random() * CRUMBLE_STAGGER_FRAMES),

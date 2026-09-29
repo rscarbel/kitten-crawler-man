@@ -23,8 +23,10 @@ import {
   journalButtonRect,
   levelTimerRect,
   pauseButtonRect,
+  phoneHudButtonRects,
   topCentreStripSlot,
 } from '../DungeonUIRenderer';
+import { platform } from '../../core/Platform';
 import { hotbarStripRect } from '../../ui/InventoryPanel';
 import { RESOURCE_HUD_HEIGHT, RESOURCE_HUD_WIDTH } from './ResourceHud';
 
@@ -101,8 +103,12 @@ function grown(rect: Rect, by: number): Rect {
   return { x: rect.x - by, y: rect.y - by, w: rect.w + by * 2, h: rect.h + by * 2 };
 }
 
-/** The buttons hung down the right-hand column, and the Follower button. */
+/**
+ * The buttons hung down the right-hand column, and the Follower button — on a
+ * phone, every button of its HUD.
+ */
 function columnPieces(miniMap: MiniMapSystem): Rect[] {
+  if (platform.isMobile) return phoneHudButtonRects(miniMap);
   return [
     pauseButtonRect(miniMap),
     levelTimerRect(miniMap),
@@ -117,7 +123,7 @@ function columnPieces(miniMap: MiniMapSystem): Rect[] {
 function obstacles(miniMap: MiniMapSystem, hudRect: Rect, withStrip = true): Rect[] {
   const width = viewportWidth();
   const mapSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
-  const strip = topCentreStripSlot(miniMap, hudRect, RESOURCE_HUD_WIDTH);
+  const strip = topCentreStripSlot(miniMap, hudRect, RESOURCE_HUD_WIDTH, RESOURCE_HUD_HEIGHT);
   const minimap: Rect = {
     x: width - RIGHT_COL_MARGIN - mapSize,
     y: MINIMAP_TOP,

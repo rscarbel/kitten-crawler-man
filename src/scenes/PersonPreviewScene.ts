@@ -24,6 +24,7 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { addButton, BUTTON_PRESETS, notifyButtonClick, setButtonMouseState } from '../ui/Button';
 import { drawText } from '../ui/TextBox';
 import { Townsperson } from '../creatures/Townsperson';
+import { TOWN_SPECIES } from '../systems/townSpecies';
 import {
   generatePersonAppearance,
   type PersonAppearance,
@@ -33,9 +34,9 @@ import { drawPerson } from '../sprites/person/drawPerson';
 import { walkCycleDistance } from '../sprites/person/gait';
 import {
   BYTES_PER_MEGABYTE,
-  getPersonCacheStats,
-  setPersonCacheStatsRecording,
-} from '../sprites/person/personCacheStats';
+  getFigureCacheStats,
+  setFigureCacheStatsRecording,
+} from '../sprites/figure/figureCacheStats';
 import { HUMANOID_NPC_SCALE } from '../sprites/humanoidScale';
 import type { Facing } from '../sprites/person/skeleton';
 
@@ -142,11 +143,11 @@ export class PersonPreviewScene extends Scene {
   private readonly buttons: ButtonHitRect[] = [];
 
   onEnter(): void {
-    setPersonCacheStatsRecording(true);
+    setFigureCacheStatsRecording(true);
   }
 
   onExit(): void {
-    setPersonCacheStatsRecording(false);
+    setFigureCacheStatsRecording(false);
   }
 
   handleClick(mx: number, my: number): void {
@@ -274,6 +275,7 @@ export class PersonPreviewScene extends Scene {
           x: start.x,
           y: start.y,
           role: ARCHETYPE_ROLES[i % ARCHETYPE_ROLES.length],
+          species: TOWN_SPECIES[i % TOWN_SPECIES.length],
           seed: CROWD_SEED_BASE + i * CROWD_SEED_STRIDE,
           speed: CROWD_SPEED_MIN + Math.random() * (CROWD_SPEED_MAX - CROWD_SPEED_MIN),
           wander: {
@@ -307,7 +309,7 @@ export class PersonPreviewScene extends Scene {
   }
 
   private renderCrowdReadout(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const stats = getPersonCacheStats();
+    const stats = getFigureCacheStats();
     const lookups = stats.hits + stats.misses;
     const hitRate = lookups === 0 ? 0 : (stats.hits / lookups) * PERCENT;
     const megabytes = stats.bytes / BYTES_PER_MEGABYTE;
@@ -316,9 +318,9 @@ export class PersonPreviewScene extends Scene {
       `${this.crowd.length} citizens at ${drawSize.toFixed(1)} px, dpr ${window.devicePixelRatio}`,
       `draw submit ${this.drawMsAverage.toFixed(MS_DECIMALS)} ms/frame (GPU raster not counted)`,
       `hits ${stats.hits} / misses ${stats.misses} (${hitRate.toFixed(0)}% hit)`,
-      `bakes ${stats.bakes}, direct draws ${stats.directDraws}`,
+      `bakes ${stats.bakes}, prewarm bakes ${stats.prewarmBakes}, direct draws ${stats.directDraws}`,
       `evictions ${stats.evictions}, idle releases ${stats.releases}`,
-      `${stats.people} people cached, ${megabytes.toFixed(1)} MB`,
+      `${stats.figures} figures cached, ${stats.rows} rows, ${megabytes.toFixed(1)} MB`,
     ];
     lines.forEach((line, i) => {
       drawText(ctx, line, {

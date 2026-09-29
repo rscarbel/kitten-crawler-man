@@ -14,7 +14,14 @@
 import type { PersonAppearance } from './PersonAppearance';
 import { shade, tint } from './color';
 import { poseForMotion } from './gait';
-import { buildSkeleton, type Facing, type Limb, type Point, type Skeleton } from './skeleton';
+import {
+  buildSkeleton,
+  type Facing,
+  type Limb,
+  type Point,
+  type Pose,
+  type Skeleton,
+} from './skeleton';
 
 const TWO_PI = Math.PI * 2;
 
@@ -868,18 +875,19 @@ function drawHead(dc: DrawContext, skel: Skeleton): void {
 }
 
 /**
- * Draws a full person at (sx, sy) sized `size` px, facing `facing`, at
- * animation `phase`. Set `moving` true to play the walk cycle, false to idle.
+ * Draws a full person at (sx, sy) sized `size` px, facing `facing`, already
+ * posed. `drawPerson` derives the pose from a walk/idle clock; a gesture (a
+ * talk loop, a work loop) that idle's clock alone cannot express poses the
+ * skeleton itself and calls this directly instead.
  */
-export function drawPerson(
+export function drawPersonWithPose(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
   size: number,
   appearance: PersonAppearance,
-  phase: number,
+  pose: Pose,
   facing: Facing,
-  moving: boolean,
 ): void {
   ctx.save();
   const cx = sx + size / 2;
@@ -890,7 +898,6 @@ export function drawPerson(
   }
   const drawFacing: Facing = facing === 'left' ? 'right' : facing;
 
-  const pose = poseForMotion(appearance, drawFacing, phase, moving);
   const skel = buildSkeleton(appearance, pose, drawFacing, cx, sy, size);
   const dc: DrawContext = { ctx, app: appearance, s: size, facing: drawFacing };
 
@@ -904,4 +911,23 @@ export function drawPerson(
   drawHead(dc, skel);
 
   ctx.restore();
+}
+
+/**
+ * Draws a full person at (sx, sy) sized `size` px, facing `facing`, at
+ * animation `phase`. Set `moving` true to play the walk cycle, false to idle.
+ */
+export function drawPerson(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  size: number,
+  appearance: PersonAppearance,
+  phase: number,
+  facing: Facing,
+  moving: boolean,
+): void {
+  const drawFacing: Facing = facing === 'left' ? 'right' : facing;
+  const pose = poseForMotion(appearance, drawFacing, phase, moving);
+  drawPersonWithPose(ctx, sx, sy, size, appearance, pose, facing);
 }

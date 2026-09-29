@@ -31,16 +31,75 @@ tile's world-pixel column so the battlement runs continuous across tile boundari
 
 ### Districts
 
-| District          | Where          | Buildings                                                                                                                 |
-| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                                            |
-| **Garrison Row**  | north band     | The Barracks (the garrison), Cartwright's Workshop, Shepherd's Cabin, Blackwood Lodge (dead-end alley — the cult hideout) |
-| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                                           |
-| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, The Sleeping Cat Inn (the town's safe room)                              |
-| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                                                                   |
-| **Low Quarter**   | south band     | The Desperado Club, The Quiet Needle, The Sunken Stump Pub — plus the service alley the murder mystery needs              |
-| **South Green**   | inside SE wall | Miller's Farm                                                                                                             |
-| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                                   |
+| District          | Where          | Buildings                                                                                                                                |
+| ----------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                                                           |
+| **Garrison Row**  | north band     | The Barracks (the garrison), Cartwright's Workshop, Plumbline Farm (Wendell's home), Blackwood Lodge (dead-end alley — the cult hideout) |
+| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                                                          |
+| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, The Sleeping Cat Inn (the town's safe room)                                             |
+| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                                                                                  |
+| **Low Quarter**   | south band     | The Desperado Club, The Quiet Needle, The Sunken Stump Pub — plus the service alley the murder mystery needs                             |
+| **South Green**   | inside SE wall | Miller's Farm                                                                                                                            |
+| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                                                  |
+
+---
+
+## Who lives here
+
+The town is a skyfowl city with a human minority. That ratio carries the story: Quill's
+doomsday spell is built to kill every non-skyfowl inhabitant, which only means something
+if there are visibly some.
+
+**Species is not a job.** `TownSpecies` (`src/systems/townSpecies.ts`, `'human' |
+'skyfowl'`) is its own axis, carried by `ResidentDef.species`, `OccupantSpec.species` and
+every `Townsperson`. `TownRole` is only ever a job. Services are keyed by role
+(`interiorServiceForRole`), so a resident can change species without touching the counter
+they run, and a species in the role union would sell or bark as a job.
+
+**The named cast** is `RESIDENT_DEFS` in `src/systems/townResidents.ts`: sixteen residents,
+ten skyfowl and six human. The humans are Wendell (Plumbline Farm), Old Hilda, Marta
+Miller, Apothecary Fen, Innkeep Marlow and Wick, the General Store's clerk. Keeper Brenna
+Kestrel runs the General Store: she is the counter occupant `ShopSystem.setKeeper` points
+the shop at. The club's cast (Clarabelle, Rosemarie, Mordecai and the rest) is fixed by
+the books and sits outside the ratio.
+
+**The crowd.** `TownLifeSystem` rolls each street cohort's species at its own share:
+`PLAZA_SKYFOWL_SHARE` and `ANCHOR_SKYFOWL_SHARE` two thirds, `TRAVELER_SKYFOWL_SHARE` one
+half (the roads bring outsiders in). A door's loiterers lean toward its resident's species
+(`frontageSkyfowlShare`), and each doorstep anchor's species is fixed with its post
+(`DOORSTEP_ANCHOR_ROLES`). Interior occupants state theirs per spec. A named occupant
+always takes the species of its `ResidentDef`.
+
+**The same town is the same people.** Roles, species and loiterer counts come from
+`mulberry32(subSeed(worldSeed, CAST_SEED_SALT))`; only positions and speeds stay random.
+Every door rebuilds the town scene, and a crowd re-rolled on each exit asked the figure
+cache for a new set of looks while the last crowd's rows still filled it. Walking in and
+out of buildings then slowed the game to a crawl. `npm run verify:town-soak` walks twenty
+doors to hold that flat.
+
+**Figures come from a closed set of looks.** A cached cell is keyed on figure, state and
+frame, so a per-instance colour would serve the first citizen's look to everyone. A seed
+only _picks_ a look. `pickCitizenFigure` (`src/creatures/citizenFigure.ts`) is the one
+place species chooses a cast:
+
+- **Humans:** `src/sprites/person/townCastLooks.ts` and `src/sprites/art/townCastFigure.ts`.
+  Adults are painted on Carl's rig in his gear plus a role accessory. The two child looks
+  use the person skeleton, because Carl's rig is one adult's proportions.
+- **Skyfowl:** `src/sprites/art/skyfowl/` and `skyfowlCastFigure.ts`.
+- **Named residents:** each wears a fixed look from `src/creatures/residentFigures.ts`,
+  which throws on a resident with no entry.
+
+The twelve fightable `SkyFowl` mobs (`extraSpawns` in `level3.ts`) are combat creatures,
+not citizens. They wear the four street-tough looks: rust and plum leathers and a hunched
+posture that no citizen wears, so a player never mistakes a citizen for a target. A
+citizen is never a `Mob`, and `npm run verify:citizens-not-targetable` fails any
+target-picking system that mentions `Townsperson`.
+
+**Wendell and Plumbline Farm.** Wendell is a builder turned farmer whose cows all died.
+His cabin and the Garrison Green beside it, which is his pasture, are set up for a quest
+of his that is not written yet: a pasture ready for cows, with no cow in it and its
+centre left walkable. Nothing in the room or the yard may show, hand over or read his
+blueprints; that quest owns them. Its dialog, beats and logic are the user's to write.
 
 ---
 
@@ -105,7 +164,7 @@ buildings each own one sprite key, one spec, and one `life` animation overlay
 composited over `idle` by the `SPRITE_BUILDING` path at 8 fps. The tower
 (`overworld_main_tower`) is the exception: it is still authored art and still ships
 as a file. `npm run gen:buildings` bakes review copies of the same art into
-`preview/`; nothing offline writes into `src/images/` any more.
+`preview/`; nothing offline writes into `src/images/`.
 
 A facade is the most expensive picture the game makes, so it is painted in stages
 across frames rather than in one step, and the town's facades are painted outward
@@ -117,8 +176,8 @@ Three things about the pipeline are load-bearing for the town rather than for th
 - **Footprints are frozen.** A building's tile size is _derived_ —
   `ceil(frameWidth / tileScale)` — and this document's plot positions assume the current
   numbers. `scripts/buildinggen/fixtures/footprints.json` records them, the gates hold
-  every building to that record, and the fixture is no longer regenerable now that
-  the art it measured has been replaced.
+  every building to that record, and the fixture cannot be regenerated: the art
+  it measured is not what the game paints.
 - **The doorway comes out of the art.** The manifest's `blockedRegions` leave a gap at
   the door, and `SpriteLoader` recovers the walkable opening from that gap. A mismatch
   there is not a wrong-looking building — it is a game that throws at module load, so
@@ -127,6 +186,84 @@ Three things about the pipeline are load-bearing for the town rather than for th
   weathering and lighting jitter only; the projection, the footprint, the doorway and
   every component's position come from the spec's tile counts and are the same at every
   seed. That is what keeps a floor's collision and its art agreeing.
+
+### One art vocabulary
+
+Facades, street props and interior furniture paint through one shared vocabulary,
+`src/sprites/art/town/`, the town's counterpart of Briar Hollow's `villageArt.ts`:
+
+- `townPalette.ts` holds the ramps (`TOWN_RAMPS`, `getTownRamp`).
+- `townMaterials.ts` holds the material painters (plaster wash, timber framing, stone
+  and roof courses, iron straps, awning cloth, glazing).
+- `townArt.ts` holds the frame contract (footprint bottom-left, ink inside the
+  footprint's width and bottom edge), the outline and the contact shadow.
+
+The town is the village's other half: lighter and cooler plaster, timber and dressed
+stone, iron hardware rather than brass. Whatever the village is built from, the town is
+not. What the town shares with the village is the finish: clean shapes, flat-ish planes
+with a clear lit and shaded side, and almost no high-frequency noise.
+
+- **Scale.** Facades bake at `BUILDING_TILE_SCALE` 48. Props, interior furniture and
+  figures bake at `TOWN_TILE_SCALE` 64. Moving facades to 64 would nearly double the
+  facade group's residency. The painters are scale-independent, so the two read as one.
+- **Light** is upper-left for the whole game (`LIGHT_DIR_X/Y` in `buildinggen/ramps.ts`),
+  with the plane-shade ladder in `buildinggen/lighting.ts`.
+- **Outline.** One pass round the silhouette only, never along an internal seam, one
+  screen pixel wide (`bakeScale / 32` bake pixels), in warm near-black ink, never pure
+  black. `paintInteriorInk`'s threshold stays at 92 or above. Below that it inks the
+  surface grain.
+- **Facade materials are cel-shaded.**
+  - Stone blocks are flat fills in `BLOCK_TONE_STEPS` tones with a one-pixel lit and shaded
+    edge.
+  - Roof tiles are quantized to `TILE_TONE_STEPS`.
+  - Plaster is a flat base with a few polygon wash patches.
+  - Weathering is a handful of drawn shapes: `applyWeatherPatches`, `applyMossPatches` and
+    `applyStreaks` in `texture.ts`. These three passes are the only ones the floor's art
+    seed reaches.
+  - No per-pixel noise pass may come back: that is what read as blurry and speckled.
+- **Crispness comes from the painters, not the sampler.** Every sprite is drawn down from
+  a 48 or 64 px bake to a 32 px tile. Nearest-neighbour sampling there drops pixels
+  unevenly and shimmers in motion, so `imageSmoothingEnabled` stays at the default on the
+  sprite path. node-canvas previews at a fractional scale do not show this either way.
+- **Detail below 1.5 screen pixels is noise.** Merge it into one tonal band per element
+  rather than drawing it at full density. Judge every picture at 32 px per tile.
+- **Texture richness.** `gates:town-art` holds each material to between 50% and 115% of
+  the plaza's local contrast. `verify:buildings` holds each facade above its own floor
+  (`TEXTURE_RICHNESS_FLOOR_FRACTION`). Fix a failing margin with real contrast on the
+  largest surface, never by relaxing the constant.
+- **Where a new cue goes.** Anything that changes a building's footprint, collision or
+  silhouette is facade geometry. Anything a citizen could stand on, sit on or move is a
+  Y-sorted prop. Anything that moves by itself is a `life` overlay (`roof_perch`,
+  `weathervane_swing`). A life cell gets no shared silhouette pass, so it carries its own
+  outline. Nothing is painted in two of these at once.
+
+After any painter or ramp change, run `npm run gen:floor-art-seeds`, then
+`npm run verify:floor-sweep -- --only=facades`, then `npm run verify:buildings`. A sweep
+against the old seed alphabet is a false green. `npm run render:buildings -- --compare`
+prints each building's richness against its floor. `npm run render:town-art` renders the
+material board. `npm run parity:buildings` compares against the hand-painted sprites the
+kit replaced, so it is expected to differ.
+
+### Street dressing
+
+The plaza fixtures come from `TownPropSystem`, the market stalls from `MarketSystem`, and
+the yard, lot and doorstep dressing from `TownDecorSystem` (`CLUTTER_PLACEMENTS`,
+`FIXTURE_PLACEMENTS`). Placements are read from `TownPlan` data, so they draw nothing
+from the world RNG.
+
+- **`TOWN_CLUTTER_KINDS` is append-only.** A kind's position in the list is its frame in
+  the `town_clutter` sheet.
+- **A placement that would cut the town apart is dropped silently.** Every placement goes
+  through `findFreeTile` and `leavesTownConnected`. Check the render after adding one.
+- **Doors are kept clear by rule, not by connectivity.** A door tile is a dead end, so a
+  prop standing on it strands no _other_ tile, and the connectivity check passes while
+  the building can no longer be entered. `doorwayKeepClearTiles`
+  (`src/systems/doorwayKeepClear.ts`) is every doorway tile plus every tile one cardinal
+  step from it. `TownPropSystem`, `TownDecorSystem` and `MarketSystem` all refuse those
+  tiles. `npm run verify:town-doors` builds the systems in `DungeonScene`'s order and
+  walks into every door from the start tile.
+- **A yard's `kind` paints no ground.** A lot also needs a `PLANNED_SURFACES` entry in
+  `townPlan.ts`.
 
 ---
 
@@ -206,11 +343,6 @@ that, and each answers a different half of "I don't know what to do":
 - **Quest beacons** (`src/sprites/questBeacon.ts`) — a column of light over anyone
   wearing a `!`/`?`, drawn by the creature before its own body paint so it Y-sorts with
   the figure. Gated on the exact state that drives the glyph, so the two cannot disagree.
-- **The Town Guide** (`src/systems/TownGuideSystem.ts`) — Journal rows pointing at the
-  town's own furniture (notice board, General Store, the safe room) until the player has
-  stood near each. Deliberately none of the quest givers and not the circus: all four
-  already have rows from their own systems, and two rows sending the player to one place
-  under two different names is worse guidance than one.
 
 `npm run verify:town` is the gate for the door and gate geometry these rely on.
 
@@ -219,8 +351,18 @@ that, and each answers a different half of "I don't know what to do":
 ## Interiors
 
 A door on the street opens a `BuildingInteriorScene` over a room built by
-`GameMap.generateInterior(kind, floor, name, hasSafeRoom)`. Four things about that room
-are worth knowing before changing one.
+`GameMap.generateInterior(kind, floor, name, hasSafeRoom)`. The room is regenerated on
+every entry, so it keeps no state of its own; anything a room must remember lives in
+`TownMemory` (see [Remembered between visits](#remembered-between-visits)). A room's
+contents are data: one layout file per building in `src/map/town/interiors/`, listed in
+`NAMED_INTERIOR_LAYOUTS` (`index.ts`), each a pure function of the shell's size that
+returns layout entries. `generateInterior` holds no per-building logic.
+
+Only the Desperado Club's rooms and stations are fixed by the source material. Every other
+room's shell and layout may change freely, as long as its function holds: quest beats,
+services, the safe room, the murder mystery's alley and cellar, the cult hideout, and the
+gates below. A room's layout follows from what the building is, and every room should
+look occupied. Four things about the shell are worth knowing before changing one.
 
 **The shell is per building, not per kind.** `INTERIOR_BY_NAME` in `GameMap.ts` states
 each building's width, height and floor material, and `INTERIOR_BY_KIND` is only the
@@ -257,7 +399,176 @@ hint that decides which piece of their anchor group they take; without one they 
 in raw scan order, which is row-major from the north-west and put every shopkeeper in town
 in the same corner.
 
-`npm run verify:interiors` is the gate for all of it.
+`npm run verify:interiors` is the gate for all of it, including that every door opens onto
+clear floor two tiles deep.
+
+### Furniture is placed props
+
+A layout entry is either a `'tile'` (walls, doorway gaps, floor overrides, and the few
+bespoke fixtures with no painted prop) or a `'prop'`: an instance from
+`TOWN_INTERIOR_PROPS` (`src/sprites/art/townInterior/townInteriorProps.ts`). Room-specific
+painters live in `src/sprites/art/townInterior/rooms/`, one file per building plus a shared
+`tavernKit.ts`. A prop is multi-tile furniture, the model the Desperado Club's
+`clubProps.ts` established:
+
+- **A prop entry's `(x, y)` is the footprint's north-west tile.** The footprint runs east
+  across its width and south across its height. Blocking, drawing and sorting all read it
+  that way. (The painter-local `TownPropFrame` is anchored bottom-left; that is a different
+  contract.)
+- **Collision is the footprint.** Every footprint tile of a standing prop is blocked. Its
+  art rises into the rows behind without blocking them, and it sorts at its southmost row
+  (`townInteriorPropSortY`).
+- **Ink stays inside the footprint's width.** `withFootprintClip` silently shears anything
+  past it, so pull fringes and overhangs inward. `npm run gates:town-interior-props` checks
+  every prop and variant, and that block, draw and sort agree on the anchor.
+- **Walkable props are a ground layer.** A `walkable: true` def (rugs, the forge floor, the
+  temple dais, a trapdoor) is drawn by `drawTownInteriorGroundProps` after the floor and
+  under every figure. Only standing props join the Y-sort, through
+  `townInteriorPropFigures`. Use the sized rugs (`rug_runner*`, `rug_small`, `rug_medium`,
+  `rug_large`, `rug_ring`), never a row of 1×1 `rug`s.
+- **Wall finish is per building.** `WALL_MATERIAL_BY_BUILDING_NAME`
+  (`src/map/town/interiorWallMaterial.ts`) picks plaster, stone or timber.
+  `interiorWallFace.ts` paints the face.
+- **Some systems still scan raw tile types.** `ANCHOR_TILE_TYPES`, Old Hilda's repairable
+  wreck (`TABLE`, `CHAIR`, `BOOKSHELF`) and the temple's nave spawns (`RUG` tiles) read
+  tile types. A `'prop'` entry never writes one, so converting those tiles to props
+  empties those scans without an error.
+- **A packed row seals a pocket.** A solid run of furniture across a row, plus one more
+  blocker inside that span, strands the floor behind it. That never shows in a render;
+  only the reachability check in `verify:interiors` catches it.
+- **Safe-room decor stamps around props.** `stampSafeRoomDecor` (`safeRoomDecorLayout.ts`)
+  reads `placedInteriorPropFootprintTiles()`. Anything that reads "is this floor free"
+  must do the same, because the grid under a prop is still floor.
+
+**Occupants anchor to furniture.** `scanInteriorFurniture` merges the tile scan with each
+placed prop's `anchors`. A prop contributes **one** anchor tile per instance, its
+north-west tile, so replacing two 1×1 tables with one 2×1 table drops an occupant. The
+`post` hint orders the group, and `findStandTile` picks the first walkable tile round the
+anchor. A layout steers where someone stands by blocking the tiles it doesn't want them
+on. An occupant whose group matches nothing is dropped silently; `verify:interiors` names
+the room and anchor for each roster entry. `InteriorReadableSystem` has its own scan, which
+must stay in step.
+
+**Every room is lived in.** `npm run verify:interior-density` fails a room with a square of
+undressed floor bigger than `MAX_EMPTY_SQUARE_TILES` (4×4). A walkable prop counts as
+dressed, and a one-tile ring round the entrance is exempt. It bounds a square, so a long
+empty strip still passes.
+
+### Examine, search, use, break
+
+A prop def may carry an `interaction` (`{ kind: 'examine' | 'search' | 'use', id }`) and a
+`destructible` spec.
+
+- **Interactions** run in `InteriorPropInteractionSystem`, through the scene's one
+  `Conversation`. Their text is in `src/dialog/scripts/interiorObjects.ts` (`EXAMINE_LINES`,
+  `SEARCH_TABLES`, `USE_LINES`), each typed `satisfies Record<id, …>` so a missing line is
+  a compile error. A search pays out the first time only. Paged documents (ledgers,
+  letters, price boards) stay in `InteriorReadableSystem`.
+- **Breaking** is `TownInteriorPropDestructionSystem`. It is separate from the tile-keyed
+  `DestructiblePropSystem` and wired through melee and stomp (`CombatKit`), projectiles
+  and dynamite.
+  - A multi-tile prop is one HP pool. It breaks whole: one cue, one loot pile at the
+    footprint's centre, and every footprint tile opened.
+  - **Broken debris never blocks.**
+  - Beds, bunks, cabinets and wall racks are deliberately unbreakable.
+  - An occupant reacts with a timed bark (`InteriorBreakReactionBarks`), never a
+    conversation.
+- **Loot.** A layout entry's `dropsLoot` overrides the def's `dropsLootByDefault`. Shop
+  merchandise is `dropsLoot: false`, so breaking stock is never a way to steal it. Loot
+  always drops, lands and then flies to the HUD.
+
+### Remembered between visits
+
+`TownMemory` (`src/core/TownMemory.ts`) is threaded by reference through `DungeonScene`
+and `BuildingInteriorScene`. It holds resident talk counts, Fen's poultice batch,
+`clearedRooms`, `clearedCamps` and `paidOutInteriorProps`.
+
+- **A prop pays out once, ever.** `paidOutInteriorProps` is keyed by
+  `interiorPropPayoutKey`: the room key plus the prop's stable id, which defaults to
+  `propId@x,y` and never comes from scan order.
+- **The payout is marked before the roll.** An empty roll or a merchandise break still
+  spends it, so re-entering and re-breaking pays nothing. Broken _state_ is not saved: the
+  room stands again on the next visit.
+- **A rewind can pay again.** A checkpoint restore rewinds the record with the rest of the
+  world, so a death can pay a prop out a second time.
+- **The gate.** `npm run verify:interior-payout` reads the first destructible in each
+  layout. Keep a coin-carrying, non-merchandise breakable first in each file.
+
+### Camera and HUD indoors
+
+A room is framed by `src/scenes/interiorCamera.ts` through `GameplayScene`'s camera hooks
+(`cameraWorldBounds`, `cameraClearView`, `cameraFocusRange`). Every building interior uses
+it, as do the tower storeys, the club and the Big Top.
+
+- **Bounds are visual, not the grid.** Prop art rising above row 0 is measured from the
+  baked frame (`townInteriorPropArtRiseTiles`) and grown by `INTERIOR_CAMERA_MARGIN_PX`.
+- **The HUD is an occluder.** `interiorHudLayout` (`src/scenes/interiorHudLayout.ts`)
+  places every piece of indoor chrome: the HUD panel, the room-name plate, the minimap
+  column, and the phone's buttons. `interiorHudOccluders` feeds `hudClearView`, which
+  pushes the view off each occluder that could cover reachable floor, keeping at least
+  four tiles clear. Otherwise a rat or the cat stands under the Bag button on a phone.
+- **The name plate** (`drawInteriorNameplate`) sits between the HUD panel and the minimap
+  when there is room, and under the panel when there is not.
+
+`npm run verify:interior-camera` checks every reachable floor tile, with the party on it,
+at desktop and phone sizes with each HUD variant. `npm run render:interior-hud` renders
+review shots.
+
+### Arriving
+
+Wherever the party is set down (through a door, off a stair, out of a building, onto a
+floor), `findPartyArrivalTiles` (`src/map/findWalkableTile.ts`) chooses both tiles. The
+tile east of a landing is often a candle stand, a pew or a fence, and a crawler set down
+inside a prop cannot take a step. The search wants room to move, stays off stairwells and
+doors, and requires the follower to be able to walk to the leader.
+`npm run verify:companions-indoors` enters every room through the real path.
+
+A floor whose art is still owed is covered by the loading screen (`arrivalLoadingScreen`
+on the `LevelDef`). A walk out of a building shows it only when environment art is still
+owed. See `docs/asset-management.md`.
+
+---
+
+## Talking to people
+
+Every conversation goes through the scene's one `Conversation` (`src/dialog/`).
+
+**Space goes on; Escape is the way out.** Space takes a row's default:
+
+- a confirm row's accept side;
+- on a choices row, `defaultChoiceIndex`: a `Choice` marked `keyboard: 'default'`, else
+  the first quest choice, else the first normal one;
+- an exit choice only when it is all the row holds.
+
+A choice that spends, wagers or commits irreversibly is marked `keyboard: 'never'`. A
+confirm row like that sets `keyboardDefault: 'none'`, so a player holding Space to read
+through is never taken as agreeing. Voss's paid shard assembly and Briar Hollow's "I'm
+ready" are the examples. `npm run verify:dialog-accept` walks every row with Space alone.
+
+**Walking away ends a conversation at one rule** (`src/dialog/walkAway.ts`). A surface
+opened from within `talkRangeTiles` closes at `walkAwayRangeTiles`, that range plus one
+tile. The margin is the hysteresis: shuffling while reading never closes it, and a step
+that really leaves does. Between the two ranges the box stays up to be read, but an
+interact press is handed to whoever the player has walked up to (`Conversation.handOff`),
+so turning from one speaker to the next never lets a stale box take the key. In the safe
+room the Bopca and Mordecai's ranges overlap. `safeRoomSpeakerFor`
+(`src/systems/safeRoomSpeaker.ts`) gives a press to the nearer of the two.
+`npm run verify:walk-away` holds the rule.
+
+**Voice.** People talk about their own lives, and the world reaches the player through
+them. A person gives at most one fact about the wider world per conversation, and only
+one they would plausibly know. Residents mention each other. Skyfowl call anyone who does
+not fly "groundfolk". Avoid these:
+
+- the aphorism-then-reversal ("It is not X. It is Y.");
+- summing-up closers ("That is the whole of me.");
+- stock fantasy barks ("Move along", "Finest wares this side of…");
+- more than two or three people in town noticing the floating cameras;
+- a townsperson narrating a game mechanic in the game's own terms.
+
+Clue lines, safe-room guidance and service explanations are load-bearing. Reword them,
+never drop them. Two passages are written by hand by the user and are never reworded:
+Wendell's `RESIDENT_LINES` entries and all of `src/dialog/scripts/scenes/anchor.ts`.
 
 ---
 
@@ -276,6 +587,14 @@ building gates measure against is keyed by `replaces`, not by the sprite key.
 A misspelled key is invisible from both directions: the building reports no service and
 the service names no building, so nothing throws and nothing logs. `verify:interiors`
 walks both sides for exactly that reason.
+
+**A rename needs a save migration.** `clearedRooms` and `paidOutInteriorProps` are keyed
+by building name, so a save from before a rename would forget every room cleared or
+searched there. `RENAMED_BUILDINGS` in `TownMemory.ts` maps each old name to the current
+one, and `migrateRoomKey` rewrites both sets when a save is parsed. Entries are never
+removed, because a save can sit unloaded for any length of time. Wendell's home was
+"Shepherd's Cabin" and is now **Plumbline Farm** (facade `plumbline_farm`).
+`verify:town-save` covers the migration.
 
 **Safe-room-ness is `hasSafeRoom` on the planned building**, not a `BuildingKind`.
 `BuildingKind` is `'house' | 'tower' | 'store' | 'club'` — there is no `restaurant`
@@ -595,6 +914,18 @@ Both are localhost-only, registered in `src/game.ts`.
 `?townmap` draws one flat colour per tile type and cannot see props at all — those are
 created by systems in `DungeonScene`, not by the generator — so a schematic can look
 correct while the pixels are wrong.
+
+Review harnesses for the town's art, each writing into `preview/`:
+
+- `npm run render:town-interiors -- --only=<name> --probes` renders every room, with Carl
+  standing at a counter, a table and the door for scale.
+- `npm run render:buildings -- --only=<id>` renders the facades.
+- `npm run render:residents`, `render:human-cast` and `render:skyfowl-cast` render the
+  cast.
+- `npm run render:cast-motion` renders gait and dance; its gates are
+  `npm run gates:cast-motion`.
+- `npm run verify:plaza-perf` measures the plaza crowd's cache behaviour. It is headless
+  and wall-clock sensitive, so run it on an idle machine.
 
 `townMetrics.ts` computes the numbers without a canvas, so
 `generateOverworld` + `collectBuildingPlots` + `measureTown` run headlessly under

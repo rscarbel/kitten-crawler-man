@@ -29,6 +29,8 @@ import { drawCompassIcon } from '../ui/icons/compassIcon';
 import { drawConstructionIcon } from '../ui/icons/constructionIcon';
 import { keybindings } from '../core/Keybindings';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { bottomRowButtonRects, stackedAboveRect } from './MobileHUDSystem';
+import { bestSpot, insetRect, packStack, type PackOptions, type PackSize } from '../ui/hudPacking';
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
@@ -77,11 +79,9 @@ const TEN_MINUTE_WARNING_SECONDS = TEN_MINUTES * SECONDS_PER_MINUTE;
 const FIVE_MINUTE_WARNING_SECONDS = FIVE_MINUTES * SECONDS_PER_MINUTE;
 /** ≤1 min: the box is dropped for a full-screen pulsing countdown. */
 const ONE_MINUTE_CRITICAL_SECONDS = ONE_MINUTE * SECONDS_PER_MINUTE;
-/** The 5-minute tier's scale — also what {@link levelTimerRect} reserves, since it is the largest box ever drawn. */
+/** The 5-minute tier's scale — also what {@link levelTimerRect} reserves on desktop, since it is the largest box ever drawn. */
 const TIMER_DOUBLE_SCALE = 2;
 const TIMER_WARNING_SCALE = 1.5;
-/** Fixed layout headroom on mobile — the timer's largest tier, so its neighbors never shift or overlap it as it scales. */
-const TIMER_RESERVED_H = TIMER_H * TIMER_DOUBLE_SCALE;
 const URGENT_OPACITY = 0.85;
 const URGENT_WAVE_PERIOD = 160;
 const URGENT_WAVE_AMP = 0.12;
@@ -98,6 +98,13 @@ const CRITICAL_COUNTDOWN_BASE_SIZE = 40;
 /** How far the countdown's size swings around its base size, once per second. */
 const CRITICAL_COUNTDOWN_PULSE_AMPLITUDE = 0.18;
 const CRITICAL_COUNTDOWN_GLOW_BLUR = 18;
+/**
+ * A held clock reads cool and still: the label says why, and blue takes over
+ * from the warning reds so a paused final minute does not look like a live one.
+ */
+const TIMER_PAUSED_LABEL = 'TIMER PAUSED';
+const TIMER_PAUSED_ACCENT = '#7dd3fc';
+const TIMER_PAUSED_FILL = `rgba(8,30,48,${NORMAL_OPACITY})`;
 
 // Level up flash
 const LEVEL_UP_FLASH_DURATION = 120;
@@ -204,16 +211,23 @@ function rightColBtnW(): number {
   return platform.isMobile ? MOBILE_BTN_W : DESKTOP_BTN_W;
 }
 
+/**
+ * Where a phone's Follower button stands, as the phone's right-hand cluster
+ * places it (see {@link phoneClusterLayout}). Exported so every layout that
+ * keeps clear of it, and its gate, measure the button that is drawn.
+ */
+export function mobileFollowerButtonRect(miniMap: MiniMapSystem): Rect {
+  return phoneClusterLayout(miniMap).follower;
+}
+
 /** Compute the pause button rectangle based on minimap size. */
 export function pauseButtonRect(miniMap: MiniMapSystem): Rect {
+  if (platform.isMobile) return phoneClusterLayout(miniMap).pause;
   const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
   const w = rightColBtnW();
-  const followerOffset = platform.isMobile
-    ? TIMER_RESERVED_H + MOBILE_BUTTON_GAP + MOBILE_BTN_H + MOBILE_BUTTON_GAP
-    : 0;
   return {
     x: viewportWidth() - RIGHT_COL_MARGIN - w,
-    y: MINIMAP_Y + mmSize + BELOW_MAP_GAP + followerOffset,
+    y: MINIMAP_Y + mmSize + BELOW_MAP_GAP,
     w,
     h: PAUSE_BTN_H,
   };
@@ -302,26 +316,32 @@ function vignetteGradient(
 /**
  * Where the level's collapse timer stands, on floors that have one.
  *
- * Always the footprint of the largest box the timer ever draws (the 5-minute
- * tier's {@link TIMER_DOUBLE_SCALE}), anchored to the same corner the timer
- * grows from, so every consumer that keeps other HUD elements clear of it —
- * the column layout, the siege HUD — reserves enough room no matter which
- * tier is actually on screen this frame.
+ * On desktop, always the footprint of the largest box the timer ever draws
+ * (the 5-minute tier's {@link TIMER_DOUBLE_SCALE}), anchored to the same
+ * corner the timer grows from, so every consumer that keeps other HUD
+ * elements clear of it — the column layout, the siege HUD — reserves enough
+ * room no matter which tier is actually on screen this frame. A phone's timer
+ * never grows (see {@link timerTierScale}), so its footprint is the box it
+ * draws, wherever the phone's cluster found room for it.
  */
 export function levelTimerRect(miniMap: MiniMapSystem): Rect {
+  if (platform.isMobile) return phoneClusterLayout(miniMap).timer;
   const w = TIMER_W * TIMER_DOUBLE_SCALE;
   const h = TIMER_H * TIMER_DOUBLE_SCALE;
-  if (platform.isMobile) {
-    const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
-    return {
-      x: viewportWidth() - RIGHT_COL_MARGIN - w,
-      y: MINIMAP_Y + mmSize + BELOW_MAP_GAP,
-      w,
-      h,
-    };
-  }
   const pauseBtn = pauseButtonRect(miniMap);
   return { x: pauseBtn.x - TIMER_PAUSE_GAP - w, y: pauseBtn.y, w, h };
+}
+
+/**
+ * How large the timer box is drawn for the time left. A phone keeps it at its
+ * base size and lets the colour and the pulse carry the urgency: in landscape
+ * a box grown to double size would take the room of three buttons, which a
+ * phone's short screen does not have to spare.
+ */
+function timerTierScale(fiveMinuteTier: boolean, tenMinuteTier: boolean): number {
+  if (platform.isMobile) return 1;
+  if (fiveMinuteTier) return TIMER_DOUBLE_SCALE;
+  return tenMinuteTier ? TIMER_WARNING_SCALE : 1;
 }
 
 /**
@@ -333,19 +353,33 @@ function renderCriticalCountdown(
   ctx: CanvasRenderingContext2D,
   display: string,
   timerFrames: number,
+  paused: boolean,
 ): void {
   const secondPhase = (timerFrames % FRAMES_PER_SECOND) / FRAMES_PER_SECOND;
-  const pulse = 1 + CRITICAL_COUNTDOWN_PULSE_AMPLITUDE * Math.sin(secondPhase * Math.PI);
+  const pulse = paused
+    ? 1
+    : 1 + CRITICAL_COUNTDOWN_PULSE_AMPLITUDE * Math.sin(secondPhase * Math.PI);
+  const color = paused ? TIMER_PAUSED_ACCENT : '#ef4444';
+  const countdownSize = Math.round(CRITICAL_COUNTDOWN_BASE_SIZE * pulse);
   drawText(ctx, display, {
     x: viewportWidth() / 2,
     y: CRITICAL_COUNTDOWN_TOP_Y,
-    size: Math.round(CRITICAL_COUNTDOWN_BASE_SIZE * pulse),
+    size: countdownSize,
     bold: true,
-    color: '#ef4444',
+    color,
     align: 'center',
-    glow: '#ef4444',
+    glow: color,
     glowBlur: CRITICAL_COUNTDOWN_GLOW_BLUR,
   });
+  if (paused) {
+    drawText(ctx, TIMER_PAUSED_LABEL, {
+      x: viewportWidth() / 2,
+      y: CRITICAL_COUNTDOWN_TOP_Y + countdownSize,
+      size: TIMER_LABEL_SIZE,
+      color: TIMER_PAUSED_ACCENT,
+      align: 'center',
+    });
+  }
 }
 
 export type LevelTimerCue = 'ten_minute_warning' | 'five_minute_warning' | 'final_minute_heartbeat';
@@ -377,6 +411,7 @@ export function renderLevelTimer(
   ctx: CanvasRenderingContext2D,
   miniMap: MiniMapSystem,
   timerFrames: number,
+  paused = false,
 ): void {
   const totalSec = secondsShown(timerFrames);
   const min = Math.floor(totalSec / SECONDS_PER_MINUTE);
@@ -384,13 +419,13 @@ export function renderLevelTimer(
   const display = `${min}:${sec.toString().padStart(2, '0')}`;
 
   if (totalSec <= ONE_MINUTE_CRITICAL_SECONDS) {
-    renderCriticalCountdown(ctx, display, timerFrames);
+    renderCriticalCountdown(ctx, display, timerFrames, paused);
     return;
   }
 
   const fiveMinuteTier = totalSec <= FIVE_MINUTE_WARNING_SECONDS;
   const tenMinuteTier = totalSec <= TEN_MINUTE_WARNING_SECONDS;
-  const scale = fiveMinuteTier ? TIMER_DOUBLE_SCALE : tenMinuteTier ? TIMER_WARNING_SCALE : 1;
+  const scale = timerTierScale(fiveMinuteTier, tenMinuteTier);
 
   // Anchored to the reserved footprint's fixed corner — the timer grows away
   // from the pause button and the minimap, never toward them.
@@ -403,27 +438,29 @@ export function renderLevelTimer(
   const urgentAlpha = fiveMinuteTier
     ? URGENT_OPACITY + Math.sin(Date.now() / URGENT_WAVE_PERIOD) * URGENT_WAVE_AMP
     : NON_URGENT_ALPHA;
-  const fill = tenMinuteTier
+  const runningFill = tenMinuteTier
     ? `rgba(100,0,0,${fiveMinuteTier ? urgentAlpha : WARNING_OPACITY})`
     : `rgba(0,0,0,${NORMAL_OPACITY})`;
+  const runningBorder = tenMinuteTier ? '#ef4444' : '#475569';
+  const runningDigits = fiveMinuteTier ? '#f87171' : '#e2e8f0';
 
   drawBox(ctx, {
     x,
     y,
     width: w,
     height: h,
-    fill,
-    border: tenMinuteTier ? '#ef4444' : '#475569',
+    fill: paused ? TIMER_PAUSED_FILL : runningFill,
+    border: paused ? TIMER_PAUSED_ACCENT : runningBorder,
     borderWidth: TIMER_BORDER_WIDTH,
   });
 
   const labelTopPad = TIMER_LABEL_TOP_PAD * scale;
   const displayTopOffset = TIMER_DISPLAY_TOP_OFFSET * scale;
-  drawText(ctx, 'TIME REMAINING', {
+  drawText(ctx, paused ? TIMER_PAUSED_LABEL : 'TIME REMAINING', {
     x: x + w / 2,
     y: y + labelTopPad,
     size: TIMER_LABEL_SIZE * scale,
-    color: '#94a3b8',
+    color: paused ? TIMER_PAUSED_ACCENT : '#94a3b8',
     align: 'center',
   });
   drawText(ctx, display, {
@@ -431,7 +468,7 @@ export function renderLevelTimer(
     y: y + displayTopOffset,
     size: TIMER_DISPLAY_SIZE * scale,
     bold: true,
-    color: fiveMinuteTier ? '#f87171' : '#e2e8f0',
+    color: paused ? TIMER_PAUSED_ACCENT : runningDigits,
     align: 'center',
   });
 }
@@ -700,29 +737,35 @@ export interface MobileButtonState {
   bagBouncePulse?: number;
 }
 
+/** A phone's Switch button, bottom left above the hotbar. */
+export function mobileSwitchButtonRect(): Rect {
+  return bottomRowButtonRects(viewportWidth(), viewportHeight(), SLOT_HEIGHT, 0).switchButton;
+}
+
+/** A phone's Summon button, stacked on Switch, wherever Mongo can be summoned. */
+export function mobileSummonButtonRect(): Rect {
+  return stackedAboveRect(mobileSwitchButtonRect());
+}
+
+/** A phone's Bag button: under Pause, or wherever the phone's cluster found room for both. */
+export function mobileBagButtonRect(miniMap: MiniMapSystem): Rect {
+  return phoneClusterLayout(miniMap).bag;
+}
+
 export function renderMobileButtons(
   ctx: CanvasRenderingContext2D,
   touch: MobileTouchState,
   state: MobileButtonState,
 ): void {
-  const btnY =
-    viewportHeight() - SLOT_HEIGHT - BOTTOM_MARGIN - MOBILE_BTN_H - MOBILE_BTN_BOTTOM_OFFSET;
-
-  touch.switchBtnRect = { x: MOBILE_BTN_MARGIN, y: btnY, w: MOBILE_BTN_W, h: MOBILE_BTN_H };
-
-  const mmSize = state.miniMap.isExpanded ? state.miniMap.EXPANDED_SIZE : state.miniMap.NORMAL_SIZE;
-  const rightX = viewportWidth() - MOBILE_BTN_W - RIGHT_COL_MARGIN;
-  const followerY = MINIMAP_Y + mmSize + BELOW_MAP_GAP + TIMER_RESERVED_H + MOBILE_BUTTON_GAP;
-  const followerRect: Rect = { x: rightX, y: followerY, w: MOBILE_BTN_W, h: MOBILE_BTN_H };
-  const pauseY = followerY + MOBILE_BTN_H + MOBILE_BUTTON_GAP;
-  const bagY = pauseY + PAUSE_BTN_H + MOBILE_BUTTON_GAP;
+  touch.switchBtnRect = mobileSwitchButtonRect();
+  const followerRect = mobileFollowerButtonRect(state.miniMap);
   touch.gearBtnRect = {
     x: MOBILE_INVALID_X,
     y: MOBILE_GEAR_BTN_RECT_Y,
     w: MOBILE_GEAR_BTN_RECT_W,
     h: MOBILE_GEAR_BTN_RECT_H,
   };
-  touch.bagBtnRect = { x: rightX, y: bagY, w: MOBILE_BTN_W, h: PAUSE_BTN_H };
+  touch.bagBtnRect = mobileBagButtonRect(state.miniMap);
 
   const drawBtn = (r: Rect, icon: string, label: string, active: boolean) => {
     drawButton(ctx, {
@@ -802,13 +845,13 @@ export function renderMobileButtons(
   ctx.restore();
 
   if (state.mongoSystem.canShow && state.cat.isActive) {
-    const summonY = btnY - MOBILE_BTN_H - MOBILE_BUTTON_GAP;
+    const summon = mobileSummonButtonRect();
     touch.summonBtnRect = state.mongoSystem.renderSummonButton(
       ctx,
-      MOBILE_BTN_MARGIN,
-      summonY,
-      MOBILE_BTN_W,
-      MOBILE_BTN_H,
+      summon.x,
+      summon.y,
+      summon.w,
+      summon.h,
       state.cat.isActive,
     );
   } else {
@@ -918,6 +961,14 @@ export function setHudPanelRect(rect: Rect | null): void {
   hudPanelRect = rect;
 }
 
+/** What on the HUD panel no button may ever cover: its collapse toggle and the HP bars. */
+let hudPanelKeepouts: readonly Rect[] = [];
+
+/** Called by the scene with `hudKeepouts` once the HUD panel has been drawn. */
+export function setHudPanelKeepouts(rects: readonly Rect[]): void {
+  hudPanelKeepouts = rects;
+}
+
 /** The unopened-loot-box banner, while it shows. */
 let lootBoxBannerRect: Rect | null = null;
 
@@ -931,7 +982,120 @@ export function resetColumnLayoutState(): void {
   buildSlotReserved = false;
   levelTimerShown = false;
   hudPanelRect = null;
+  hudPanelKeepouts = [];
   lootBoxBannerRect = null;
+}
+
+/**
+ * The phone's right-hand cluster: the level timer, the Follower button, Pause
+ * and Bag, then the Build button, the achievement chip and the Journal.
+ */
+interface PhoneClusterLayout extends ColumnLayout {
+  readonly timer: Rect;
+  readonly follower: Rect;
+  readonly pause: Rect;
+  readonly bag: Rect;
+}
+
+/** A slot that is not on screen, for a cluster piece this floor does not show. */
+const OFFSCREEN_SLOT: Rect = { x: MOBILE_INVALID_X, y: 0, w: 0, h: 0 };
+/**
+ * The height the minimap's caption takes under it. With the cluster's gap
+ * round it, the first piece under the minimap starts `BELOW_MAP_GAP` below.
+ */
+const MINIMAP_CAPTION_H = BELOW_MAP_GAP - MOBILE_BUTTON_GAP;
+/**
+ * What a pixel of sideways drift from the column under the minimap costs, in
+ * pixels of drop down it. Large enough that a portrait phone keeps the whole
+ * cluster in one column; a landscape one moves pieces beside the minimap or
+ * across only once the column runs into the hotbar.
+ */
+const COLUMN_SHIFT_COST = 4;
+
+/** The minimap and the caption drawn under it. */
+function miniMapWithCaption(miniMap: MiniMapSystem): Rect {
+  const map = miniMap.screenRect;
+  return { x: map.x, y: map.y, w: map.w, h: map.h + MINIMAP_CAPTION_H };
+}
+
+let phoneClusterMemo: { readonly key: string; readonly layout: PhoneClusterLayout } | null = null;
+
+/**
+ * The phone's right-hand cluster, placed into whatever room the screen has.
+ *
+ * Under the minimap in one column, as long as the column fits; on a short
+ * screen — a phone in landscape — a piece that no longer fits moves into the
+ * next column to the left, or up beside the minimap, wherever
+ * {@link COLUMN_SHIFT_COST} finds the nearest clear room. Pause and Bag go as
+ * a pair where they can. Every piece keeps clear of the minimap and its
+ * caption, the hotbar, the Switch and Summon buttons, the HUD panel's
+ * collapse toggle and HP bars and, while there is room elsewhere, the rest of
+ * the HUD panel.
+ *
+ * Only what stays put for a whole floor moves the cluster: the timer, the
+ * Summon slot and the Follower button are held whether or not they show this
+ * frame, so a button never jumps from under the player's finger. The loot-box
+ * banner moves only the pieces after Pause and Bag, as it always has.
+ */
+function phoneClusterLayout(miniMap: MiniMapSystem): PhoneClusterLayout {
+  const width = viewportWidth();
+  const height = viewportHeight();
+  const map = miniMap.screenRect;
+  const key = JSON.stringify([
+    width,
+    height,
+    map,
+    hudPanelRect,
+    hudPanelKeepouts,
+    levelTimerShown,
+    buildSlotReserved,
+    lootBoxBannerRect,
+  ]);
+  if (phoneClusterMemo !== null && phoneClusterMemo.key === key) return phoneClusterMemo.layout;
+
+  const anchorRight = width - RIGHT_COL_MARGIN;
+  const anchorTop = map.y + map.h + BELOW_MAP_GAP;
+  const blocked: Rect[] = [
+    miniMapWithCaption(miniMap),
+    insetRect(hotbarStripRect(), MOBILE_BUTTON_GAP),
+    mobileSwitchButtonRect(),
+    mobileSummonButtonRect(),
+    ...hudPanelKeepouts,
+  ];
+  const options: PackOptions = {
+    bounds: {
+      x: RIGHT_COL_MARGIN,
+      y: MINIMAP_Y,
+      w: width - RIGHT_COL_MARGIN * 2,
+      h: height - MINIMAP_Y - RIGHT_COL_MARGIN,
+    },
+    blocked,
+    avoid: hudPanelRect === null ? [] : [hudPanelRect],
+    gap: MOBILE_BUTTON_GAP,
+    cost: (rect) => (anchorRight - (rect.x + rect.w)) * COLUMN_SHIFT_COST + rect.y,
+    seedXs: [],
+    seedYs: [anchorTop],
+  };
+  const placed: Rect[] = [];
+  const place = (stack: readonly PackSize[]): Rect[] => {
+    const rects = packStack(stack, placed, options);
+    placed.push(...rects);
+    return rects;
+  };
+  const one = (size: PackSize): Rect => place([size])[0] ?? OFFSCREEN_SLOT;
+
+  const timer = levelTimerShown ? one({ w: TIMER_W, h: TIMER_H }) : OFFSCREEN_SLOT;
+  const follower = one({ w: MOBILE_BTN_W, h: MOBILE_BTN_H });
+  const smallButton: PackSize = { w: MOBILE_BTN_W, h: PAUSE_BTN_H };
+  const [pause = OFFSCREEN_SLOT, bag = OFFSCREEN_SLOT] = place([smallButton, smallButton]);
+  if (lootBoxBannerRect !== null) blocked.push(lootBoxBannerRect);
+  const build = buildSlotReserved ? one(smallButton) : OFFSCREEN_SLOT;
+  const chip = one({ w: MOBILE_BTN_W, h: CHIP_HEIGHT });
+  const journal = one({ w: JOURNAL_BTN_SIZE, h: JOURNAL_BTN_SIZE });
+
+  const layout: PhoneClusterLayout = { timer, follower, pause, bag, build, chip, journal };
+  phoneClusterMemo = { key, layout };
+  return layout;
 }
 
 interface ColumnLayout {
@@ -944,21 +1108,19 @@ function rectsOverlap(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
-/** How many extra columns the right-hand column may spill into on a very short window. */
-const MAX_OVERFLOW_COLUMNS = 4;
-
 /**
  * The right-hand column under Pause and Bag, laid out once for everything
  * that hangs in it: the Build button (where it is reserved), the achievement
- * chip's slot and the Journal.
+ * chip's slot and the Journal. A phone's comes from its cluster
+ * ({@link phoneClusterLayout}); what follows is the desktop column.
  *
  * Each takes the next slot down the column while that slot is clear of the
  * rest of the HUD — the hotbar strip, Pause, the Bag row, the minimap, the
  * Follower button, the level timer, the loot-box banner and the HUD panel —
  * and of the bottom of the screen. Once one piece has had to leave the column,
  * the pieces after it leave too. A piece that leaves goes to the first slot
- * that is clear, searching up to {@link MAX_OVERFLOW_COLUMNS} columns to the
- * left, each from the Bag's row down and then upward:
+ * that is clear, searching column by column to the left as far as the
+ * screen's edge, each from the Bag's row down and then upward:
  *
  * 1. first a slot clear of everything, the HUD panel included;
  * 2. failing that, a slot clear of everything but the HUD panel;
@@ -966,6 +1128,7 @@ const MAX_OVERFLOW_COLUMNS = 4;
  *    small for any of the above.
  */
 function columnLayout(miniMap: MiniMapSystem): ColumnLayout {
+  if (platform.isMobile) return phoneClusterLayout(miniMap);
   const pause = pauseButtonRect(miniMap);
   const width = rightColBtnW();
   const slotStep = PAUSE_BTN_H + MOBILE_BUTTON_GAP;
@@ -976,17 +1139,7 @@ function columnLayout(miniMap: MiniMapSystem): ColumnLayout {
     pause,
     { x: viewportWidth() - RIGHT_COL_MARGIN - mmSize, y: MINIMAP_Y, w: mmSize, h: mmSize },
   ];
-  if (platform.isMobile) {
-    // On a phone the Follower button stands above Pause in the column itself.
-    occupied.push({
-      x: pause.x,
-      y: MINIMAP_Y + mmSize + BELOW_MAP_GAP + TIMER_RESERVED_H + MOBILE_BUTTON_GAP,
-      w: MOBILE_BTN_W,
-      h: MOBILE_BTN_H,
-    });
-  } else {
-    occupied.push(followerButtonRect());
-  }
+  occupied.push(followerButtonRect());
   if (levelTimerShown) occupied.push(levelTimerRect(miniMap));
   if (lootBoxBannerRect !== null) occupied.push(lootBoxBannerRect);
   const bagRow = pause.y + BAG_SLOTS_BELOW_PAUSE * slotStep;
@@ -1014,8 +1167,8 @@ function columnLayout(miniMap: MiniMapSystem): ColumnLayout {
     // Clear of the HUD panel if the screen allows it; on the very smallest a
     // corner of the panel is the only room left that is not another button.
     for (const avoidHudPanel of [true, false]) {
-      for (let column = 1; column <= MAX_OVERFLOW_COLUMNS; column++) {
-        const right = pause.x - (column - 1) * (width + MOBILE_BUTTON_GAP) - MOBILE_BUTTON_GAP;
+      const columnStep = width + MOBILE_BUTTON_GAP;
+      for (let right = pause.x - MOBILE_BUTTON_GAP; right >= w; right -= columnStep) {
         for (const y of overflowRows) {
           const rect = { x: right - w, y, w, h };
           if (isClear(rect, avoidHudPanel)) return take(rect);
@@ -1073,13 +1226,13 @@ const JOURNAL_BADGE_SIZE = 11;
  * - Desktop: the pause button, the Bag slot, the Build slot where it is
  *   reserved, then the achievement chip's slot; the Follower button stands
  *   below the column.
- * - Mobile: the Follower and Pause buttons are both up in the column and the Bag
- *   (and Build) buttons sit under them.
+ * - Mobile: last in the phone's cluster, after the timer, the Follower button,
+ *   Pause and Bag, Build and the chip, wherever that cluster finds it room.
  *
- * On a window too short to hold the whole column — a phone in landscape, an
- * expanded minimap on a small desktop — it goes to a clear slot beside the
- * column instead, following `columnLayout`'s fallback order; only on a screen
- * with no clear slot at all can it land on other chrome.
+ * On a window too short to hold the whole column — an expanded minimap on a
+ * small desktop — it goes to a clear slot beside the column instead, following
+ * `columnLayout`'s fallback order; only on a screen with no clear slot at all
+ * can it land on other chrome.
  */
 export function journalButtonRect(miniMap: MiniMapSystem): Rect {
   return columnLayout(miniMap).journal;
@@ -1205,18 +1358,101 @@ export interface StripSlot {
 }
 
 /**
+ * Every piece of a phone's HUD that other chrome must keep off, bar the
+ * minimap: the cluster's buttons and timer, Switch and Summon, the hotbar, and
+ * the HUD panel's collapse toggle and HP bars. Empty on desktop.
+ */
+export function phoneHudButtonRects(miniMap: MiniMapSystem): Rect[] {
+  if (!platform.isMobile) return [];
+  const cluster = phoneClusterLayout(miniMap);
+  const clusterPieces = [
+    cluster.timer,
+    cluster.follower,
+    cluster.pause,
+    cluster.bag,
+    cluster.build,
+    cluster.chip,
+    cluster.journal,
+  ].filter((rect) => rect.w > 0);
+  return [
+    ...clusterPieces,
+    mobileSwitchButtonRect(),
+    mobileSummonButtonRect(),
+    hotbarStripRect(),
+    ...hudPanelKeepouts,
+  ];
+}
+
+/** Steps a phone's strip down through while searching for room, largest first. */
+const PHONE_STRIP_SCALE_STEP = 0.05;
+
+/**
+ * Where a phone's strip goes when its usual slot lands on a button: the clear
+ * spot nearest the top of the screen's middle, at the largest readable scale,
+ * off the HUD panel too where the screen has room for that — and over the
+ * panel's text, never its toggle or HP bars, where it has not. Null when the
+ * screen has no such spot.
+ */
+function phoneStripRefuge(
+  miniMap: MiniMapSystem,
+  hudRect: Rect,
+  width: number,
+  height: number,
+): StripSlot | null {
+  const screenW = viewportWidth();
+  const buttons = [...phoneHudButtonRects(miniMap), miniMapWithCaption(miniMap)];
+  const bounds: Rect = {
+    x: RIGHT_COL_MARGIN,
+    y: TOP_STRIP_Y,
+    w: screenW - RIGHT_COL_MARGIN * 2,
+    h: viewportHeight() - TOP_STRIP_Y - RIGHT_COL_MARGIN,
+  };
+  for (const obstacles of [[...buttons, hudRect], buttons]) {
+    for (
+      let scale = 1;
+      scale >= TOP_STRIP_MIN_SCALE - Number.EPSILON;
+      scale -= PHONE_STRIP_SCALE_STEP
+    ) {
+      const spot = bestSpot({ w: width * scale, h: height * scale }, obstacles, {
+        bounds,
+        blocked: [],
+        avoid: [],
+        gap: MOBILE_BUTTON_GAP,
+        cost: (rect) => Math.hypot(rect.x + rect.w / 2 - screenW / 2, rect.y - TOP_STRIP_Y),
+        seedXs: [screenW / 2 - (width * scale) / 2],
+        seedYs: [],
+      });
+      if (spot !== null) return { x: spot.x, y: spot.y, scale };
+    }
+  }
+  return null;
+}
+
+/**
  * The slot for a `width` × `height` strip centred at the top of the screen,
  * between the top-left HUD panel (`hudRect`, however it is laid out — full,
  * collapsed or mobile) and the minimap. Narrower than that gap it is scaled
  * down to fit; too narrow to scale readably — a phone in portrait — it moves
- * under the HUD panel on the left instead, which is the one place in the top
- * band nothing else claims.
+ * under the HUD panel on the left instead. On a phone, where either place can
+ * land on a button, it goes instead to the clear spot nearest the top of the
+ * screen's middle, scaled down as far as it must be.
  */
 export function topCentreStripSlot(
   miniMap: MiniMapSystem,
   hudRect: Rect,
   width: number,
+  height: number,
 ): StripSlot {
+  const slot = stripSlotBesideHud(miniMap, hudRect, width);
+  if (!platform.isMobile) return slot;
+  const buttons = [...phoneHudButtonRects(miniMap), miniMapWithCaption(miniMap)];
+  const drawn = { x: slot.x, y: slot.y, w: width * slot.scale, h: height * slot.scale };
+  if (!buttons.some((button) => rectsOverlap(drawn, button))) return slot;
+  return phoneStripRefuge(miniMap, hudRect, width, height) ?? slot;
+}
+
+/** {@link topCentreStripSlot} before a phone's buttons are taken into account. */
+function stripSlotBesideHud(miniMap: MiniMapSystem, hudRect: Rect, width: number): StripSlot {
   const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
   const leftBound = hudRect.x + hudRect.w + TOP_STRIP_SIDE_GAP;
   const rightBound = viewportWidth() - RIGHT_COL_MARGIN - mmSize - TOP_STRIP_SIDE_GAP;

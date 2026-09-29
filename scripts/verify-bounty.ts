@@ -18,6 +18,7 @@
  *
  * Run: npx tsx scripts/verify-bounty.ts
  */
+import { level3 } from '../src/levels/level3';
 import { generateOverworld } from '../src/map/OverworldGenerator';
 import { GameMap, MOB_MAX_PATH_DISTANCE_TILES } from '../src/map/GameMap';
 import { StiltClown, STILT_CLOWN_AGGRO_RANGE_TILES } from '../src/creatures/StiltClown';
@@ -50,7 +51,8 @@ import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { Mob } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
 
-const MAP_SIZE = 220;
+/** Level 3's own size: Briar Hollow is always sited, and only fits on the real map. */
+const MAP_SIZE = level3.mapSize;
 const MAPS_TO_GENERATE = 5;
 const MIN_ACCEPTABLE_SITES = 3;
 const CYCLES_TO_WALK = 6;
@@ -554,12 +556,11 @@ console.log('\nRebuilding the scene mid-bounty…');
   second.dispose();
 }
 
-// The regression this closes: `pendingPayoutCoins` used to live only on the
-// system instance, which a building entry/exit destroys and rebuilds. A mark
-// killed just before stepping through a door paid 0 coins once the player
-// reached Shady, because the fresh system had never seen the kill. Stamping
-// the payout onto `BountyProgress` — the record that actually survives a
-// door — is what this proves.
+// A building entry/exit destroys and rebuilds the bounty system, so a payout
+// held only on the system instance would be lost: a mark killed just before
+// stepping through a door would pay 0 coins once the player reached Shady,
+// because the fresh system never saw the kill. The payout lives on
+// `BountyProgress` — the record that survives a door — and this proves it.
 console.log('\nKilling the mark, then rebuilding the scene before collecting…');
 {
   const map = new GameMap({ mapSize: MAP_SIZE, mapType: 'overworld' });

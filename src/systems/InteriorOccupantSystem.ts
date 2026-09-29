@@ -21,8 +21,9 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
+import { findPartyArrivalTiles } from '../map/findWalkableTile';
 import { Townsperson } from '../creatures/Townsperson';
-import { findNearestTownsperson } from '../creatures/townInteraction';
+import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/townInteraction';
 import type { WanderParams } from '../creatures/townWander';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import type { Facing } from '../sprites/person/skeleton';
@@ -42,9 +43,11 @@ import {
 } from '../map/tileTypes';
 import type { BuildingEntry } from './BuildingSystem';
 import type { GameSystem } from './GameSystem';
-import type { ResidentId } from './townResidents';
+import { residentById, residentSpecies, type ResidentId } from './townResidents';
+import { DEFAULT_TOWN_SPECIES, type TownSpecies } from './townSpecies';
 import { safeRoomAnchorTiles } from './SafeRoomSystem';
 import { anchorCursorForBuilding } from './interiorPlacement';
+import { TOWN_INTERIOR_PROPS } from '../sprites/art/townInterior/townInteriorProps';
 
 /** Which furniture a role stations beside; resolved to concrete tiles by scanning the room. */
 export type AnchorKind =
@@ -59,6 +62,14 @@ export type OccupantPost = 'north' | 'south' | 'east' | 'west' | 'centre' | 'doo
 
 export interface OccupantSpec {
   role: TownRole;
+  /**
+   * Unnamed occupants carry their own species here — see `townResidents.ts`'s
+   * cast table for what each room's roster is meant to be. Ignored (and not
+   * needed) when `residentId` is set: a named resident's species comes from
+   * their own `ResidentDef` instead, so it can never drift from theirs.
+   * Defaults to `DEFAULT_TOWN_SPECIES` when omitted.
+   */
+  species?: TownSpecies;
   activity: InteriorActivity;
   anchor: AnchorKind;
   /**
@@ -81,12 +92,11 @@ export interface OccupantSpec {
  * The furniture tile types each anchor kind matches. Ordered as a list so the
  * furniture scan can iterate kinds without an unsound `Object.keys` cast.
  *
- * `counter` used to be `FloorTypeValue.wall`, because a shop counter and a
- * tavern bar were written as wall tiles to make them solid. They have their own
- * type now, and the day that changed this list silently stopped matching
- * anything: `forBuilding` drops an occupant whose anchor group is empty without
- * a warning, so the innkeepers in all three taverns and the herbalist's merchant
- * simply stopped appearing behind their bars.
+ * A shop counter and a tavern bar are their own tile type, not walls, and the
+ * `counter` entry must name that type. A list that matches nothing fails
+ * silently: `forBuilding` drops an occupant whose anchor group is empty without
+ * a warning, so the innkeepers in all three taverns and the herbalist's
+ * merchant simply do not appear behind their bars.
  *
  * Exported so `scripts/verify-interiors.ts` can ask a generated room whether it
  * actually holds the furniture its roster anchors on, which is the only way that
@@ -161,8 +171,8 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'east',
         residentId: 'smith_varga',
       },
-      { role: 'laborer', activity: 'idle', anchor: 'crate' },
-      { role: 'guard', activity: 'idle', anchor: 'table' },
+      { role: 'laborer', activity: 'idle', anchor: 'crate', species: 'skyfowl' },
+      { role: 'guard', activity: 'idle', anchor: 'table', species: 'skyfowl' },
     ],
     // The town's safe room, so the taproom is where the whole roster lives.
     // Every post here points south for one reason: the guest rooms upstairs are
@@ -176,11 +186,23 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'back',
         residentId: 'innkeep_ossie',
       },
-      { role: 'drunk', activity: 'sit_at_table', anchor: 'table', post: 'south' },
-      { role: 'commoner', activity: 'sit_at_table', anchor: 'table', post: 'south' },
-      { role: 'commoner', activity: 'sit_at_table', anchor: 'table', post: 'west' },
-      { role: 'child', activity: 'sweep', anchor: 'crate', post: 'south' },
-      { role: 'noble', activity: 'idle', anchor: 'counter', post: 'door' },
+      { role: 'drunk', activity: 'sit_at_table', anchor: 'table', post: 'south', species: 'human' },
+      {
+        role: 'commoner',
+        activity: 'sit_at_table',
+        anchor: 'table',
+        post: 'south',
+        species: 'skyfowl',
+      },
+      {
+        role: 'commoner',
+        activity: 'sit_at_table',
+        anchor: 'table',
+        post: 'west',
+        species: 'human',
+      },
+      { role: 'child', activity: 'sweep', anchor: 'crate', post: 'south', species: 'skyfowl' },
+      { role: 'noble', activity: 'idle', anchor: 'counter', post: 'door', species: 'skyfowl' },
     ],
     // The mead hall: a full house down both sides of the feast table.
     'The Horned Flagon': [
@@ -191,14 +213,14 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'back',
         residentId: 'innkeep_brend',
       },
-      { role: 'laborer', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'laborer', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'commoner', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'commoner', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'noble', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'beggar', activity: 'wander', anchor: 'table' },
+      { role: 'laborer', activity: 'sit_at_table', anchor: 'table', species: 'human' },
+      { role: 'laborer', activity: 'sit_at_table', anchor: 'table', species: 'human' },
+      { role: 'drunk', activity: 'sit_at_table', anchor: 'table', species: 'skyfowl' },
+      { role: 'drunk', activity: 'sit_at_table', anchor: 'table', species: 'skyfowl' },
+      { role: 'commoner', activity: 'sit_at_table', anchor: 'table', species: 'skyfowl' },
+      { role: 'commoner', activity: 'sit_at_table', anchor: 'table', species: 'human' },
+      { role: 'noble', activity: 'sit_at_table', anchor: 'table', species: 'skyfowl' },
+      { role: 'beggar', activity: 'wander', anchor: 'table', species: 'human' },
     ],
     // The dive: rowdier and drunker than the mead hall, packed into a smaller room.
     'The Sunken Stump Pub': [
@@ -209,13 +231,13 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'back',
         residentId: 'innkeep_marlow',
       },
-      { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'laborer', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'commoner', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'noble', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'beggar', activity: 'wander', anchor: 'table' },
+      { role: 'drunk', activity: 'sit_at_table', anchor: 'table', species: 'human' },
+      { role: 'drunk', activity: 'sit_at_table', anchor: 'table', species: 'human' },
+      { role: 'drunk', activity: 'sit_at_table', anchor: 'table', species: 'human' },
+      { role: 'laborer', activity: 'sit_at_table', anchor: 'table', species: 'human' },
+      { role: 'commoner', activity: 'sit_at_table', anchor: 'table', species: 'skyfowl' },
+      { role: 'noble', activity: 'sit_at_table', anchor: 'table', species: 'skyfowl' },
+      { role: 'beggar', activity: 'wander', anchor: 'table', species: 'human' },
     ],
     // The child is Corvin, who wants to be a crawler and whose mother hates it.
     "Miller's Farm": [
@@ -226,8 +248,8 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'centre',
         residentId: 'marta_miller',
       },
-      { role: 'commoner', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'child', activity: 'wander', anchor: 'table' },
+      { role: 'commoner', activity: 'sit_at_table', anchor: 'table', species: 'human' },
+      { role: 'child', activity: 'wander', anchor: 'table', species: 'human' },
     ],
     // A customer waiting at the counter, so the apothecary reads as a shop with trade.
     'Herb & Remedy': [
@@ -238,12 +260,12 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'back',
         residentId: 'apothecary_fen',
       },
-      { role: 'priest', activity: 'browse_shelf', anchor: 'shelf' },
-      { role: 'commoner', activity: 'idle', anchor: 'counter' },
+      { role: 'priest', activity: 'browse_shelf', anchor: 'shelf', species: 'skyfowl' },
+      { role: 'commoner', activity: 'idle', anchor: 'counter', species: 'skyfowl' },
     ],
-    "Shepherd's Cabin": [
+    'Plumbline Farm': [
       { role: 'farmer', activity: 'idle', anchor: 'hearth', post: 'centre', residentId: 'wendell' },
-      { role: 'child', activity: 'sweep', anchor: 'table' },
+      { role: 'child', activity: 'sweep', anchor: 'table', species: 'human' },
     ],
     // Only Brann is a laborer here, and that is load-bearing: the workshop's
     // service is keyed on the laborer role, so a second one would sell Brann's
@@ -256,12 +278,14 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'north',
         residentId: 'brann_cartwright',
       },
-      { role: 'commoner', activity: 'idle', anchor: 'crate' },
-      { role: 'commoner', activity: 'browse_shelf', anchor: 'crate' },
+      { role: 'commoner', activity: 'idle', anchor: 'crate', species: 'skyfowl' },
+      { role: 'commoner', activity: 'browse_shelf', anchor: 'crate', species: 'skyfowl' },
     ],
-    // The shopkeeper at the counter belongs to `ShopSystem` and is not a
-    // Townsperson, so this roster is the rest of the room. Nothing here anchors
-    // to the counter, which is where that shopkeeper stands.
+    // Kestrel is this room's only counter occupant — `ShopSystem` draws no
+    // figure of its own; it reads her position off the `Townsperson`
+    // this spec places (`BuildingInteriorScene` wires it through with
+    // `ShopSystem.setKeeper`) for its "Shop" prompt and interact range, so she
+    // is rendered exactly once, by this system's own Y-sorted pass.
     'General Store': [
       {
         role: 'commoner',
@@ -270,8 +294,14 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'back',
         residentId: 'stock_clerk_wick',
       },
-      { role: 'commoner', activity: 'browse_shelf', anchor: 'shelf' },
-      { role: 'laborer', activity: 'idle', anchor: 'crate' },
+      { role: 'commoner', activity: 'browse_shelf', anchor: 'shelf', species: 'skyfowl' },
+      { role: 'laborer', activity: 'idle', anchor: 'crate', species: 'human' },
+      {
+        role: 'merchant',
+        activity: 'tend_counter',
+        anchor: 'counter',
+        residentId: 'keeper_brenna_kestrel',
+      },
     ],
     // Somebody is always waiting on a charm, which is how a cottage with one
     // occupant reads as a practice rather than as a spare room.
@@ -283,7 +313,7 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'back',
         residentId: 'old_hilda',
       },
-      { role: 'commoner', activity: 'idle', anchor: 'hearth' },
+      { role: 'commoner', activity: 'idle', anchor: 'hearth', species: 'skyfowl' },
     ],
     // The priest stands at the altar (the room's only TABLE) so the blessing is
     // offered where the player naturally walks up the aisle.
@@ -295,8 +325,8 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'north',
         residentId: 'deacon_aviel',
       },
-      { role: 'commoner', activity: 'browse_shelf', anchor: 'shelf' },
-      { role: 'commoner', activity: 'idle', anchor: 'forge' },
+      { role: 'commoner', activity: 'browse_shelf', anchor: 'shelf', species: 'human' },
+      { role: 'commoner', activity: 'idle', anchor: 'forge', species: 'human' },
     ],
     // The inking shop. Nim is posted north so she takes the alcove bench behind
     // its own wall rather than the waiting-room furniture — the work is private,
@@ -314,8 +344,8 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'north',
         residentId: 'tattooist_nim',
       },
-      { role: 'commoner', activity: 'idle', anchor: 'table', post: 'south' },
-      { role: 'drunk', activity: 'idle', anchor: 'table', post: 'south' },
+      { role: 'commoner', activity: 'idle', anchor: 'table', post: 'south', species: 'human' },
+      { role: 'drunk', activity: 'idle', anchor: 'table', post: 'south', species: 'skyfowl' },
     ],
     // The garrison. Two counters, so two named staff: Dann west behind the
     // armoury run, Pell east on the sand where the dummies are.
@@ -345,10 +375,28 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'east',
         residentId: 'corporal_pell',
       },
-      { role: 'commoner', activity: 'wander', anchor: 'dummy', post: 'east' },
-      { role: 'drunk', activity: 'sit_at_table', anchor: 'table', post: 'south' },
-      { role: 'laborer', activity: 'idle', anchor: 'crate', post: 'west' },
-      { role: 'commoner', activity: 'idle', anchor: 'board', post: 'south' },
+      {
+        role: 'commoner',
+        activity: 'wander',
+        anchor: 'dummy',
+        post: 'east',
+        species: 'human',
+      },
+      {
+        role: 'drunk',
+        activity: 'sit_at_table',
+        anchor: 'table',
+        post: 'south',
+        species: 'human',
+      },
+      { role: 'laborer', activity: 'idle', anchor: 'crate', post: 'west', species: 'human' },
+      {
+        role: 'commoner',
+        activity: 'idle',
+        anchor: 'board',
+        post: 'south',
+        species: 'skyfowl',
+      },
     ],
     'Blackwood Lodge': [
       {
@@ -358,7 +406,7 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
         post: 'centre',
         residentId: 'sgt_kessler',
       },
-      { role: 'guard', activity: 'wander', anchor: 'crate' },
+      { role: 'guard', activity: 'wander', anchor: 'crate', species: 'human' },
     ],
   }),
 );
@@ -368,9 +416,7 @@ const TYPE_OCCUPANTS: Partial<Record<BuildingEntry['type'], ReadonlyArray<Occupa
   store: [{ role: 'commoner', activity: 'browse_shelf', anchor: 'shelf' }],
 };
 
-// An occupant within this range of the player shows a Talk prompt / is talkable.
-const TALK_RADIUS_TILES = 1.1;
-const TALK_RADIUS = TILE_SIZE * TALK_RADIUS_TILES;
+const TALK_RADIUS = TILE_SIZE * CITIZEN_TALK_RADIUS_TILES;
 
 const OCCUPANT_SEED_BASE = 5209;
 const OCCUPANT_SEED_STRIDE = 71;
@@ -386,12 +432,21 @@ const STAND_SEARCH_RADIUS_TILES = 2;
 const WANDER_SAMPLE_ATTEMPTS = 6;
 // Half a tile: from a figure's top-left draw origin to the point under its feet.
 const CENTER_OFFSET = TILE_SIZE / 2;
-// The cat companion spawns one tile east of the human's startTile (PlayerManager.setPositions).
-const CAT_SPAWN_TILE_OFFSET_X = 1;
 
 interface TileXY {
   x: number;
   y: number;
+}
+
+function addAnchorTile(
+  groups: Map<AnchorKind, TileXY[]>,
+  kind: AnchorKind,
+  x: number,
+  y: number,
+): void {
+  const list = groups.get(kind) ?? [];
+  list.push({ x, y });
+  groups.set(kind, list);
 }
 
 /**
@@ -401,6 +456,14 @@ interface TileXY {
  * inside of can never hold furniture. Exported so `verify-interiors.ts` can
  * scan with these exact bounds rather than its own: a check that swept a wider
  * area than the placer would pass on furniture the placer can never see.
+ *
+ * Two sources feed the same groups: legacy tile types (`ANCHOR_TILE_TYPES`,
+ * still how the bespoke garrison/apothecary/tattoo fixtures and a few
+ * unconverted furniture pieces anchor) and placed town interior props
+ * (`GameMap.placedInteriorProps`, each prop declaring its own anchor kinds).
+ * A room may mix both freely — the smithy's counter is a prop, its map table
+ * is still a legacy tile type, and an occupant anchored on `'table'` finds
+ * either.
  */
 export function scanInteriorFurniture(map: GameMap): Map<AnchorKind, TileXY[]> {
   const groups = new Map<AnchorKind, TileXY[]>();
@@ -411,11 +474,13 @@ export function scanInteriorFurniture(map: GameMap): Map<AnchorKind, TileXY[]> {
       const type = row[x].type;
       for (const { kind, types } of ANCHOR_TILE_TYPES) {
         if (!types.includes(type)) continue;
-        const list = groups.get(kind) ?? [];
-        list.push({ x, y });
-        groups.set(kind, list);
+        addAnchorTile(groups, kind, x, y);
       }
     }
+  }
+  for (const placed of map.placedInteriorProps) {
+    const propDef = TOWN_INTERIOR_PROPS[placed.propId];
+    for (const kind of propDef.anchors) addAnchorTile(groups, kind, placed.tile.x, placed.tile.y);
   }
   return groups;
 }
@@ -458,7 +523,8 @@ export class InteriorOccupantSystem implements GameSystem {
       if (placement === null) return;
       usedStands.add(tileKey(placement.stand.x, placement.stand.y));
       this.claimedFurniture.add(tileKey(placement.furniture.x, placement.furniture.y));
-      this.occupants.push(this.makeOccupant(spec, placement, index));
+      const occupant = this.makeOccupant(spec, placement, index);
+      this.occupants.push(occupant);
     });
   }
 
@@ -505,10 +571,11 @@ export class InteriorOccupantSystem implements GameSystem {
     const reserved = new Set<string>();
     for (const doorway of this.doorwayTiles()) reserved.add(tileKey(doorway.x, doorway.y));
     for (const exit of this.map._interiorExitTiles) reserved.add(tileKey(exit.x, exit.y));
-    // The human spawns on startTile and the cat one tile east — see PlayerManager.setPositions.
-    const start = this.map.startTile;
-    reserved.add(tileKey(start.x, start.y));
-    reserved.add(tileKey(start.x + CAT_SPAWN_TILE_OFFSET_X, start.y));
+    // Asked of the same helper the scene sets the party down with, so an
+    // occupant never takes the tile a crawler is about to be put on.
+    const arrival = findPartyArrivalTiles(this.map, this.map.startTile);
+    reserved.add(tileKey(arrival.leader.x, arrival.leader.y));
+    reserved.add(tileKey(arrival.follower.x, arrival.follower.y));
     // Mordecai and the sleeping bed own their tiles in a safe-room interior.
     for (const anchor of safeRoomAnchorTiles(this.map)) reserved.add(tileKey(anchor.x, anchor.y));
     return reserved;
@@ -679,10 +746,15 @@ export class InteriorOccupantSystem implements GameSystem {
   ): Townsperson {
     const behavior = ACTIVITY_BEHAVIOR[spec.activity];
     const wander = this.buildWander(placement.stand, behavior);
+    const species =
+      spec.residentId !== undefined
+        ? residentSpecies(residentById(spec.residentId))
+        : (spec.species ?? DEFAULT_TOWN_SPECIES);
     return new Townsperson({
       x: placement.stand.x * TILE_SIZE,
       y: placement.stand.y * TILE_SIZE,
       role: spec.role,
+      species,
       seed: OCCUPANT_SEED_BASE + index * OCCUPANT_SEED_STRIDE,
       speed: OCCUPANT_SPEED,
       wander,

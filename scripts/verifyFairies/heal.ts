@@ -32,6 +32,7 @@ import { Goblin } from '../../src/creatures/Goblin';
 import { TheHoarder } from '../../src/creatures/TheHoarder';
 import { KrakarenClone } from '../../src/creatures/KrakarenClone';
 import { TheLich } from '../../src/creatures/TheLich';
+import { BallOfSwine } from '../../src/creatures/BallOfSwine';
 import { LichBattleSystem, type LichBattleHooks } from '../../src/systems/LichBattleSystem';
 import { applyFairyHeal } from '../../src/creatures/fairies/fairyHeal';
 import {
@@ -461,11 +462,13 @@ const SILENT_LICH_HOOKS: LichBattleHooks = {
 /**
  * A phased boss by spawn key beside the healer. The Lich's phase line is
  * reported by the battle that choreographs it, and a Lich with no battle
- * attached has none, so it gets one.
+ * attached has none, so it gets one. The Ball of Swine is a prop that refuses
+ * every heal until its arena starts the fight, so it is put into its fight.
  */
 function addPhasedBoss(s: ReturnType<typeof healStage>, key: string): Mob {
   const boss = s.add(key, HEALER_TILE + NEIGHBOR_OFFSET_TILES, HEALER_TILE);
   if (boss instanceof TheLich) new LichBattleSystem(s.map, boss, null, null, SILENT_LICH_HOOKS);
+  if (boss instanceof BallOfSwine) boss.fightStarted = true;
   return boss;
 }
 

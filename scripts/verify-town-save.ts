@@ -48,6 +48,13 @@ import {
 import { WORLD_GENERATOR_VERSION } from '../src/core/SavedWorld.js';
 import { sceneSetupFromSave } from '../src/scenes/resumeFromSave.js';
 import type { DungeonSceneOptions } from '../src/scenes/DungeonScene.js';
+import { parseTownMemoryCheckpoint } from '../src/core/PersistedWorldState.js';
+import {
+  createTownMemory,
+  interiorPropPayoutKey,
+  restoreTownMemory,
+  roomKey,
+} from '../src/core/TownMemory.js';
 
 const SEEDS: ReadonlyArray<number> = [1, 123456789, 987654321, 424242, 7];
 
@@ -397,12 +404,79 @@ function checkArrivalSaves(): void {
   );
 }
 
+/** A building's name as a save written before it was renamed holds it. */
+const PRE_RENAME_BUILDING_NAME = "Shepherd's Cabin";
+/** The name the same building goes by now, which the town plan must still use. */
+const RENAMED_BUILDING_NAME = 'Plumbline Farm';
+const RENAMED_ROOM_FLOOR = 0;
+const RENAMED_ROOM_PROP_ID = 'churn_2';
+/** A room that was never renamed, which must come through a load untouched. */
+const UNRENAMED_BUILDING_NAME = 'Blackwood Lodge';
+
+/**
+ * A save keys its remembered rooms and prop payouts by building name, so a
+ * renamed building would forget the player cleared or searched it unless the
+ * load maps the old name onto the new one.
+ */
+function checkRenamedBuildingMemory(): void {
+  const oldRoom = roomKey(PRE_RENAME_BUILDING_NAME, RENAMED_ROOM_FLOOR);
+  const oldProp = interiorPropPayoutKey(
+    PRE_RENAME_BUILDING_NAME,
+    RENAMED_ROOM_FLOOR,
+    RENAMED_ROOM_PROP_ID,
+  );
+  const untouchedRoom = roomKey(UNRENAMED_BUILDING_NAME, RENAMED_ROOM_FLOOR);
+  const parsed = parseTownMemoryCheckpoint({
+    residentTalks: [],
+    poulticesLeft: 0,
+    clearedRooms: [oldRoom, untouchedRoom],
+    clearedCamps: [],
+    paidOutInteriorProps: [oldProp],
+  });
+  if (parsed === undefined) {
+    check(false, 'a town memory naming a renamed building does not parse');
+    return;
+  }
+  const memory = createTownMemory();
+  restoreTownMemory(memory, parsed);
+  check(
+    memory.clearedRooms.has(roomKey(RENAMED_BUILDING_NAME, RENAMED_ROOM_FLOOR)),
+    `a room cleared as ${PRE_RENAME_BUILDING_NAME} is not remembered as ${RENAMED_BUILDING_NAME}`,
+  );
+  check(
+    !memory.clearedRooms.has(oldRoom),
+    `a room cleared as ${PRE_RENAME_BUILDING_NAME} is still remembered under its old name`,
+  );
+  check(
+    memory.clearedRooms.has(untouchedRoom),
+    `${UNRENAMED_BUILDING_NAME}'s cleared room did not survive the load`,
+  );
+  check(
+    memory.paidOutInteriorProps.has(
+      interiorPropPayoutKey(RENAMED_BUILDING_NAME, RENAMED_ROOM_FLOOR, RENAMED_ROOM_PROP_ID),
+    ),
+    `a prop paid out in ${PRE_RENAME_BUILDING_NAME} is not remembered in ${RENAMED_BUILDING_NAME}`,
+  );
+
+  const map = buildMap(level3, RESPAWN_CHECK_SEED);
+  const names = map.buildingEntries.map((entry) => entry.name);
+  check(
+    names.includes(RENAMED_BUILDING_NAME),
+    `the town has no ${RENAMED_BUILDING_NAME} for an old save's record to land on`,
+  );
+  check(
+    !names.includes(PRE_RENAME_BUILDING_NAME),
+    `the town still has a building named ${PRE_RENAME_BUILDING_NAME}`,
+  );
+}
+
 for (const seed of SEEDS) {
   checkOverworld(seed);
   checkDungeon(seed);
 }
 checkRespawnRoutes();
 checkArrivalSaves();
+checkRenamedBuildingMemory();
 
 console.log(`${checks - failures}/${checks} checks passed`);
 if (failures > 0) process.exit(1);

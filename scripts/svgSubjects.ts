@@ -24,7 +24,6 @@ const WALK_FRAME = 1.2;
 /** Mid-swing of a telegraphed attack, where the pose is most legible. */
 const ATTACK_MIDPOINT = 0.5;
 const FACING_RIGHT = 1;
-const FACING_LEFT = -1;
 const FACING_TOWARD_CAMERA = 1;
 const FACING_AWAY = -1;
 /** An arbitrary but fixed seed, so a re-export of a seeded character is identical. */
@@ -462,21 +461,23 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
+    // Painted on Carl's rig, so the same raster exception as Carl applies.
     name: 'incubus',
-    views: async () => {
-      const { drawIncubusSprite } = await import('../src/sprites/incubusSprite.js');
-      return [
-        { name: 'idle', paint: ({ dom, unit }) => drawIncubusSprite(dom, 0, 0, unit) },
-        {
-          name: 'walk',
-          paint: ({ dom, unit }) => drawIncubusSprite(dom, 0, 0, unit, WALK_FRAME, true),
-        },
-        {
-          name: 'facing-left',
-          paint: ({ dom, unit }) =>
-            drawIncubusSprite(dom, 0, 0, unit, STILL_FRAME, false, FACING_LEFT),
-        },
-      ];
+    views: async (frame) => {
+      const { INCUBUS_FIGURE, INCUBUS_ROLES, INCUBUS_VIEWS, incubusStateName } =
+        await import('../src/sprites/art/incubusFigure.js');
+      return INCUBUS_ROLES.flatMap((role) =>
+        INCUBUS_VIEWS.map((view): SvgView => {
+          const state = incubusStateName(role, view);
+          return {
+            name: state,
+            paint: ({ dom, unit }) =>
+              inUnitSpace(dom, unit / INCUBUS_FIGURE.tileScale, (ctx) =>
+                INCUBUS_FIGURE.paintFrame(ctx, state, frame),
+              ),
+          };
+        }),
+      );
     },
   },
   {

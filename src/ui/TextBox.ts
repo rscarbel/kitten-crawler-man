@@ -206,6 +206,28 @@ function styledFontString(size: number, bold: boolean, italic: boolean, font: st
 }
 
 /**
+ * Width in px of `text` drawn on one line with these font options — what
+ * {@link drawText} would paint for it without a `width`. For fitting a label to
+ * a slot before drawing it.
+ */
+export function measureTextWidth(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  opts: Pick<TextOptions, 'size' | 'bold' | 'italic' | 'font'>,
+): number {
+  ctx.save();
+  ctx.font = styledFontString(
+    opts.size ?? DEFAULT_FONT_SIZE,
+    opts.bold ?? false,
+    opts.italic ?? false,
+    opts.font ?? 'monospace',
+  );
+  const width = ctx.measureText(text).width;
+  ctx.restore();
+  return width;
+}
+
+/**
  * Word-wrap `text` to `maxWidth` under the ctx's current font, honoring explicit
  * `\n` breaks. Set the font before calling. Useful for measuring how tall a block
  * of text will be (line count) so a container can be sized before it's drawn.

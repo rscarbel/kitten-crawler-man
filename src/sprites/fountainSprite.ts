@@ -11,6 +11,8 @@
  * `canvas` devDependency.
  */
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { rgb } from './art/town/townArt';
+import { getTownRamp } from './art/town/townPalette';
 
 const TAU = Math.PI * 2;
 
@@ -33,15 +35,17 @@ const FOUNTAIN_LOOP_SECONDS = 1.6;
 const AUTHORING_SCALE = 2;
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
-// Warm limestone sampled to sit beside the plaza cobbles and the well sprite;
-// the town square contains no cold grey, so neither does the fountain.
-const STONE_HIGHLIGHT = '#e3d8bd';
-const STONE_LIGHT = '#cdbfa0';
-const STONE_MID = '#a8987c';
-const STONE_COPING_SHADE = '#8a7c66';
-const STONE_SHADE = '#6f6350';
-const STONE_DEEP = '#4b4136';
-const STONE_WET = '#7a6d55';
+// Cool dressed ashlar (`oc_stone`, `src/sprites/art/town/townPalette.ts`) — the
+// same quarried masonry the temple and the town's civic buildings stand on, so
+// the fountain reads as one of their fixtures rather than a warm garden prop.
+const OC_STONE = getTownRamp('oc_stone');
+const STONE_HIGHLIGHT = rgb(OC_STONE.accent);
+const STONE_LIGHT = rgb(OC_STONE.light);
+const STONE_MID = rgb(OC_STONE.mid);
+const STONE_COPING_SHADE = '#636b74';
+const STONE_SHADE = rgb(OC_STONE.shadow);
+const STONE_DEEP = '#363c42';
+const STONE_WET = '#5a626c';
 const MOSS_LIGHT = '#5c6b34';
 const MOSS_DARK = '#465228';
 const WATER_DEEP = '#1f4a63';

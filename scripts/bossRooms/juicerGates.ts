@@ -20,7 +20,6 @@ const MIN_RACK_SEPARATION_TILES = 12;
 /** The middle of the room no tall piece may stand in, as a share of each side. */
 const MIDDLE_SHARE = 0.6;
 const TREADMILL_COUNT = 3;
-const MIN_TREADMILLS = 2;
 /** Two squat racks and two cable stacks. */
 const TALL_PIECES = 4;
 /** The spawn rule the troglodyte guards come from, and the boss-room index it names. */
@@ -127,12 +126,10 @@ export function juicerRoomGates(context: RoomGateContext): void {
   }
 
   const treadmills = gym.treadmillLayouts;
-  // A doorway's approach lane can take one treadmill's spot; the row may lose
-  // one to it and no more.
-  if (treadmills.length < MIN_TREADMILLS) {
-    report.fail(`${treadmills.length} treadmills placed (${MIN_TREADMILLS} at least)`);
-  } else if (treadmills.length < TREADMILL_COUNT) {
-    report.note(`${treadmills.length} treadmills placed (${TREADMILL_COUNT} wanted)`);
+  // The row steps over a doorway's approach lane rather than losing a
+  // treadmill to it, so every floor gets the full row.
+  if (treadmills.length !== TREADMILL_COUNT) {
+    report.fail(`${treadmills.length} treadmills placed (${TREADMILL_COUNT} wanted)`);
   }
   for (const treadmill of treadmills) {
     const [wallEnd, roomEnd] = treadmill.belt;

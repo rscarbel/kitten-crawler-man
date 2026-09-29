@@ -2161,7 +2161,7 @@ function humanStateFrames(): Record<string, number> {
  * painted once per phase of the stride they can begin at, five versions a row
  * in profile, which is what takes it past the fleet's 24 MB default twice
  * over. Fifty-six megabytes leaves a handful of cells over that — the slack
- * for a row still warm from the last view — and still leaves the cache's 96 MB global
+ * for a row still warm from the last view — and still leaves the cache's global
  * ceiling, which this does not change, room for the rest of the floor's
  * figures. `scripts/gates-human.ts` measures the working set against it.
  */

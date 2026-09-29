@@ -9,6 +9,9 @@
  * everything else in the scene, and a prop draws after the ground is baked.
  */
 
+import { rgb } from './art/town/townArt';
+import { getTownRamp } from './art/town/townPalette';
+
 const TWO_PI = Math.PI * 2;
 
 /** Geometry as fractions of a tile, from the anchor tile's top-left. */
@@ -63,8 +66,12 @@ const GROUND_POOL_FLATTEN = 0.45;
 const FLICKER_PERIOD_FRAMES = 47;
 const FLICKER_AMPLITUDE = 0.14;
 
-const IRON = '#2f2b26';
-const IRON_LIGHT = '#4d4740';
+// The town's `iron_black` ramp (`src/sprites/art/town/townPalette.ts`) — cool
+// and always darkened, so the lamp's ironwork matches every other hinge and
+// bracket in town rather than a warm blacksmith's iron of its own.
+const OC_IRON = getTownRamp('iron_black');
+const IRON = rgb(OC_IRON.mid);
+const IRON_LIGHT = rgb(OC_IRON.light);
 const GLASS = 'rgba(255, 226, 160, 0.35)';
 const FLAME_CORE = '#fff0c0';
 const FLAME_EDGE = '#f0a63c';

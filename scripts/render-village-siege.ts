@@ -194,7 +194,7 @@ shots.forEach((shot, index) => {
     // slot the game itself would give it on this window.
     const hudRect = expandedHudPanelRect();
     setHudPanelRect(hudRect);
-    const strip = topCentreStripSlot(miniMap, hudRect, RESOURCE_HUD_WIDTH);
+    const strip = topCentreStripSlot(miniMap, hudRect, RESOURCE_HUD_WIDTH, RESOURCE_HUD_HEIGHT);
     const mapSize = miniMap.NORMAL_SIZE;
     const slot = siegeHudSlot(miniMap, hudRect);
     const outlines = [

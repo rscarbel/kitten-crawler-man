@@ -46,7 +46,10 @@ import {
   fairyRowSpec,
   fairyRowsOf,
 } from '../src/sprites/art/fairyTiming.js';
-import { figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
+import {
+  CACHE_BUDGET_MEGABYTES as GLOBAL_CACHE_MEGABYTES,
+  figureByteBudgetFor,
+} from '../src/sprites/figure/figureFrameCache.js';
 import { fairyCrownBelowTileTopTiles, fairySpriteStatesOf } from '../src/sprites/fairySprite.js';
 import { HP_BAR_HEIGHT, HP_BAR_Y_OFFSET } from '../src/Player.js';
 
@@ -72,9 +75,7 @@ const TILE_CENTRE_SHARE = 0.5;
  * the creature.
  */
 const SOLID_ALPHA = 190;
-/** The cache's global ceiling, which every painted figure in the game shares. */
-const GLOBAL_CACHE_MEGABYTES = 96;
-/** One fairy's share of that ceiling with all five kinds on one floor. */
+/** One fairy's share of the cache's global ceiling with all five kinds on one floor. */
 const MAX_SHARE_OF_GLOBAL_CACHE = 0.25;
 
 const failures: string[] = [];

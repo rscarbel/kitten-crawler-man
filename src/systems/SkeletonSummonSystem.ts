@@ -220,7 +220,8 @@ export class SkeletonSummonSystem implements GameSystem {
         if (living >= cap) continue;
         const tile = this.findSpawnTile(request.originX, request.originY, taken);
         if (tile === null) continue;
-        this.raise(request.kind, tile.x, tile.y, stagingFor(summoner));
+        const risen = this.raise(request.kind, tile.x, tile.y, stagingFor(summoner));
+        risen.raisedForSiege = summoner.siegeCapable !== null;
         living++;
       }
       summoner.escortAtCap = living >= cap;
@@ -249,6 +250,7 @@ export class SkeletonSummonSystem implements GameSystem {
       const tile = this.findSpawnTile(request.originX, request.originY, taken);
       if (tile === null) continue;
       const risen = this.raise(request.kind, tile.x, tile.y, stagingFor(fairy));
+      risen.raisedForSiege = fairy.siegeCapable !== null;
       this.raisedBy.set(risen, fairy);
       living[request.kind]++;
     }

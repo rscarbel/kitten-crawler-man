@@ -6,9 +6,10 @@
  * regrowth never trapping a body, the checkpoint rewind, the resource HUD's
  * work-yard zones, and the processing-machine lookup.
  *
- * Timings are written out here from the original request's numbers — 300 s
- * for a deposit, 240 s to a sapling and 60 s more to a tree, a 10 s retry —
- * not imported from the module under test.
+ * Timings are written out here as the design's numbers — 300 s for a
+ * deposit, 80 s to a sapling and 20 s more to a tree, a 10 s retry — not
+ * imported from the module under test, so a retune has to be made in both
+ * places on purpose.
  *
  * Run: npx tsx scripts/verify-village-nodes.ts
  */
@@ -66,14 +67,14 @@ function section(name: string): void {
   console.log(`\n${name}`);
 }
 
-// ── The request's own numbers ─────────────────────────────────────────────
+// ── The design's numbers ─────────────────────────────────────────────
 
 const TICKS_PER_SECOND = 60;
 /** A Resourcing level below every capacity perk. */
 const UNPERKED_LEVEL = 1;
 const EXPECTED_DEPOSIT_REGROW_TICKS = 300 * TICKS_PER_SECOND;
-const EXPECTED_GROVE_SAPLING_TICKS = 240 * TICKS_PER_SECOND;
-const EXPECTED_SAPLING_TO_TREE_TICKS = 60 * TICKS_PER_SECOND;
+const EXPECTED_GROVE_SAPLING_TICKS = 80 * TICKS_PER_SECOND;
+const EXPECTED_SAPLING_TO_TREE_TICKS = 20 * TICKS_PER_SECOND;
 const EXPECTED_RETRY_TICKS = 10 * TICKS_PER_SECOND;
 /** Slack for the tick a depletion is noticed on and the tree's half-second grow-in. */
 const SCHEDULING_SLACK_TICKS = 2;
@@ -343,7 +344,7 @@ section('Quarry regrowth never traps a body, and retries every 10 s');
   rig.nodes.clear();
 }
 
-section('Grove regrowth: stump, a sapling at 240 s, a tree 60 s after');
+section('Grove regrowth: stump, a sapling at 80 s, a tree 20 s after');
 {
   const rig = makeRig();
   const grove = site.lumberYard.groveTiles[0];

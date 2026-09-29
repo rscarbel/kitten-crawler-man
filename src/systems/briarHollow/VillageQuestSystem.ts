@@ -789,6 +789,9 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
           key: READY_FOR_ASSAULT_TOPIC_KEY,
           label: "I'm ready",
           tone: 'quest',
+          // Starts the assault on the spot with no way to call it off, so the
+          // player aims at it; Space falls to asking for more time.
+          keyboard: 'never',
           repeatable: false,
           grouping: 'root',
           run: (convo) => {
