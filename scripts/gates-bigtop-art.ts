@@ -78,6 +78,7 @@ import {
   hazardFocus,
   placeAt,
   renderTentFrame,
+  solveHall,
   stepUntil,
   tick,
   viewCentredOn,
@@ -115,6 +116,7 @@ import {
 import { fireWalkPropCatalogue } from '../src/sprites/art/bigTop/fireWalkProps.js';
 import { menageriePropCatalogue } from '../src/sprites/art/bigTop/menagerieProps.js';
 import { mirrorHallPropCatalogue } from '../src/sprites/art/bigTop/mirrorHallProps.js';
+import { mirrorPuzzlePropCatalogue } from '../src/sprites/art/bigTop/mirrorPuzzleProps.js';
 import { finalePropCatalogue } from '../src/sprites/art/bigTop/finaleProps.js';
 import { curtainPropCatalogue } from '../src/sprites/art/bigTop/curtainProps.js';
 import { MAX_REFLECTING_PANES } from '../src/systems/BigTopMazeSystem.js';
@@ -676,6 +678,11 @@ console.log('\nChecking the budgets…');
 
 /** Device pixels per tile the props are baked at in play: the game's scale, and its sharp preset. */
 const PROP_BAKE_SCALES = [TILE_SIZE, TILE_SIZE * 2] as const;
+/** Long enough for the solved marquee to spell BRAVO and run its chase round more than once. */
+const SOLVED_HALL_FRAMES = 80;
+/** A frame is drawn every this many ticks: finer than any animated prop's shortest frame. */
+const SOLVED_HALL_SAMPLE_STRIDE = 2;
+
 /** Alpha above which a pixel on a frame's outermost ring counts as ink that hit the cell's edge. */
 const EDGE_INK_ALPHA = 24;
 const RGBA_CHANNELS = 4;
@@ -717,6 +724,7 @@ console.log('\nChecking the act props…');
     ...fireWalkPropCatalogue(),
     ...menageriePropCatalogue(),
     ...mirrorHallPropCatalogue(),
+    ...mirrorPuzzlePropCatalogue(),
     ...finalePropCatalogue(),
     ...curtainPropCatalogue(MAZE_SECTIONS.map((section) => section.banner)),
     ...(fault === 'ink-overrun' ? [overrun] : []),
@@ -803,6 +811,21 @@ console.log('\nChecking the act props…');
           : hazardFocus(shot.state);
       if (shot.state !== null) forceHazard(tent, shot.state);
       renderTentFrame(tent, viewCentredOn(focus), { scale, withParty: false });
+    }
+  }
+  // A solved hall is the act's heaviest moment: every star blazing, the
+  // marquees spelling and chasing, the glass turned to the answer. It runs
+  // over enough frames for every animated prop to show each frame it has.
+  for (const scale of [1, 2]) {
+    const tent = buildTent(ART_SEED);
+    enterAct(tent, 'mirrors');
+    solveHall(tent);
+    const view = viewCentredOn(hazardFocus('beam-cold'));
+    for (let frame = 0; frame < SOLVED_HALL_FRAMES; frame++) {
+      tick(tent);
+      if (frame % SOLVED_HALL_SAMPLE_STRIDE === 0) {
+        renderTentFrame(tent, view, { scale, withParty: false });
+      }
     }
   }
   const residentMegabytes = bigTopPropCacheBytes() / BYTES_PER_MEGABYTE;

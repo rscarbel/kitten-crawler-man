@@ -6,7 +6,11 @@ import {
   type MirrorFacing,
   type MirrorKind,
 } from '../map/bigTopMazeLayout';
-import { drawMazeMirror } from '../sprites/art/bigTop/mirrorHallProps';
+import {
+  drawMazeMirror,
+  drawSwivelMirrorWithGhost,
+  type MazeMirrorArt,
+} from '../sprites/art/bigTop/mirrorHallProps';
 
 const DISPLAY_NAME: Readonly<Record<MirrorKind, string>> = {
   pivot_mirror: 'Pivot Mirror',
@@ -56,6 +60,21 @@ export class MazeMirrorTarget extends MazePropTarget<MirrorKind> {
     return this.definition.cycle[this.facingIndex];
   }
 
+  /** Where in its own cycle it stands: the index the hall's light walk reads. */
+  get cycleIndex(): number {
+    return this.facingIndex;
+  }
+
+  /** How many facings a blow steps it through before it comes back round. */
+  get cycleLength(): number {
+    return this.definition.cycle.length;
+  }
+
+  /** The tile it stands on. */
+  get tile(): MazeMirror['tile'] {
+    return this.definition.tile;
+  }
+
   /** The facing the next blow will turn it to. */
   get nextFacing(): MirrorFacing {
     return nextMirrorFacing(this.definition, this.facingIndex);
@@ -92,7 +111,7 @@ export class MazeMirrorTarget extends MazePropTarget<MirrorKind> {
     camY: number,
     tileSize: number,
   ): void {
-    drawMazeMirror(ctx, this.x - camX, this.y - camY, tileSize, {
+    const art: MazeMirrorArt = {
       kind: this.kind,
       facing: this.facing,
       fromFacing: this.swingingFrom,
@@ -100,6 +119,13 @@ export class MazeMirrorTarget extends MazePropTarget<MirrorKind> {
       phase: this.phase,
       struck: this.hitFlash > 0,
       pulsing: this.pulsing,
-    });
+    };
+    const x = this.x - camX;
+    const y = this.y - camY;
+    // A swivel's two settings differ per mirror, so its frame shows the one it
+    // is not in as well; a pivot has all four and needs no reminder.
+    if (this.kind === 'swivel_mirror')
+      drawSwivelMirrorWithGhost(ctx, x, y, tileSize, art, this.nextFacing);
+    else drawMazeMirror(ctx, x, y, tileSize, art);
   }
 }

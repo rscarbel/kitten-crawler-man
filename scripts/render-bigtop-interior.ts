@@ -31,6 +31,7 @@ import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { TILE_SIZE } from '../src/core/constants.js';
+import type { Difficulty } from '../src/core/difficultyProfiles.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { MAZE_CURTAINS, type MazeSectionId, type MazeTile } from '../src/map/bigTopMazeLayout.js';
 import {
@@ -44,6 +45,7 @@ import {
   placeAt,
   renderTentFrame,
   safeTilesNear,
+  solveHall,
   viewCentredOn,
   wholeTentView,
   type ForcedHazard,
@@ -78,6 +80,7 @@ const ART_SEED = FLOOR_ART_SEEDS[0] ?? 0;
 /** 32 and 64 px per tile: the game's own scale, and a zoom for judging detail. */
 const RENDER_SCALES = [1, 2] as const;
 const MEASURE_SCALE = 1;
+const HEX_RADIX = 16;
 const DIGITS = 3;
 /** Column widths for the console table. */
 const STATE_COLUMN = 16;
@@ -177,7 +180,11 @@ const hazardShots: Shot[] = HAZARD_SHOT_GROUPS.map(({ id, states }) => {
 const shots = [...ACT_SHOTS, curtainShot, reflectionShot, ...hazardShots].filter((shot) =>
   shot.id.includes(only),
 );
-if (shots.length === 0) throw new Error(`--only=${only} matched no shot`);
+/** The prefix of every dealt-hall shot. */
+const HALL_SHOT_ID = 'hall-world';
+if (shots.length === 0 && !HALL_SHOT_ID.includes(only)) {
+  throw new Error(`--only=${only} matched no shot`);
+}
 
 const contrastReports: HazardContrastReport[] = [];
 const problems: string[] = [];
@@ -213,6 +220,46 @@ for (const shot of shots) {
       canvas.toBuffer('image/png'),
     );
     console.log(outPath);
+  }
+}
+
+/**
+ * Worlds whose dealt halls are drawn too, each before and after it is solved,
+ * across every tier: the board is generated, so one world's picture proves
+ * nothing about the next one's.
+ */
+const HALL_WORLDS: ReadonlyArray<{ readonly worldSeed: number; readonly difficulty: Difficulty }> =
+  [
+    { worldSeed: 0x5eed_b16, difficulty: 'normal' },
+    { worldSeed: 0x0c1a_55e5, difficulty: 'normal' },
+    { worldSeed: 0x7a11_e0d0, difficulty: 'easy' },
+    { worldSeed: 0x00b1_6b0f, difficulty: 'hard' },
+    { worldSeed: 0x3f00_d1e5, difficulty: 'hard' },
+  ];
+/** The middle of the hall with its teaching strip, which one frame shows whole. */
+const HALL_FOCUS: MazeTile = { x: 21, y: 27 };
+if (HALL_SHOT_ID.includes(only)) {
+  for (const { worldSeed, difficulty } of HALL_WORLDS) {
+    const tent = buildTent(ART_SEED, { worldSeed, difficulty });
+    enterAct(tent, 'mirrors');
+    const name = `${HALL_SHOT_ID}-${worldSeed.toString(HEX_RADIX)}-${difficulty}`;
+    for (const state of ['unsolved', 'solved'] as const) {
+      if (state === 'solved') solveHall(tent);
+      placeAt(tent.human, tent.section.humanSpawn);
+      placeAt(tent.cat, tent.section.catSpawn);
+      for (const scale of RENDER_SCALES) {
+        const canvas = renderTentFrame(tent, viewCentredOn(HALL_FOCUS), {
+          scale,
+          withParty: true,
+          lighting,
+        });
+        const outPath = writePreviewPng(
+          `${outDir}/${name}-${state}-${scale * TILE_SIZE}px.png`,
+          canvas.toBuffer('image/png'),
+        );
+        console.log(outPath);
+      }
+    }
   }
 }
 

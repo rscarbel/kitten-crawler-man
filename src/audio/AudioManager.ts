@@ -303,6 +303,7 @@ export class AudioManager {
   private muteForBackground(): void {
     if (this.backgrounded) return;
     this.backgrounded = true;
+    this.pendingOnUnlock.length = 0;
     // Also marks music/ambience paused "for background" specifically, so a
     // pause-menu-open at the same moment (its own 'menu' reason) isn't
     // silently cleared by this reason letting go later — see MusicPauseReason.
@@ -529,8 +530,16 @@ export class AudioManager {
   play(id: SoundId, opts: PlayOptions = {}): void {
     const buffer = this.buffers.get(id);
     if (!buffer) return;
+    // A one-shot belongs to the moment it was cued. The world keeps ticking
+    // while the window is blurred, so queueing here would bank every moo and
+    // footstep and fire them all at once on return.
+    if (this.backgrounded) return;
     if (this.ctx.state !== 'running') {
-      this.pendingOnUnlock.push({ id, opts });
+      // One take per sound, whatever its volume: everything queued here fires on
+      // the same frame the first gesture unlocks audio, and a second copy of a
+      // sound on that frame is only the first one louder.
+      const alreadyQueued = this.pendingOnUnlock.some((pending) => pending.id === id);
+      if (!alreadyQueued) this.pendingOnUnlock.push({ id, opts });
       return;
     }
 

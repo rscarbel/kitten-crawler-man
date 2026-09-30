@@ -2291,7 +2291,11 @@ export class DungeonScene extends GameplayScene {
               this.catAchievements,
               this.audio ?? undefined,
               this.abilityManager,
-              { progress: this.circusQuestProgress, overworldCentre: this.gameMap.circusCentre },
+              {
+                progress: this.circusQuestProgress,
+                overworldCentre: this.gameMap.circusCentre,
+                worldSeed: this.gameMap.worldSeed,
+              },
               this.murderQuestProgress,
               this.doomsdayQuestProgress,
               this.clubMembership,

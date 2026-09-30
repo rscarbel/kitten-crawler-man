@@ -46,9 +46,15 @@ export const BIGTOP_ACT_TWO_CARD: NonEmpty<DialogLine> = [
 ];
 
 export const BIGTOP_ACT_THREE_CARD: NonEmpty<DialogLine> = [
-  narrator.button(
+  narrator.line(
+    "The hall of mirrors. Every star must shine at the same time. Blue stars want Carl's light, red stars want Donut's, and a star split down the middle wants both at once. Light the whole board together and the way opens, and stays open. The gold star is an encore, for anyone showing off.",
+  ),
+  carl.line(
+    "There's a marquee over the exits with a bulb for every star. If a bulb goes dark, a star went dark with it.",
+  ),
+  donut.button(
     'Onward',
-    'The hall of mirrors. These can be turned and maybe if you shine the lights correctly, you can open the way forward.',
+    'WHEN EVERY BULB ON THAT MARQUEE IS LIT, CARL, THAT IS OUR CUE. I HAVE ALWAYS KNOWN MY CUES.',
   ),
 ];
 

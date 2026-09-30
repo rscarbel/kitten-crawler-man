@@ -47,7 +47,15 @@ import { despawnMob, type Mob } from '../../src/creatures/Mob';
 import { Signet } from '../../src/creatures/Signet';
 import { createMob } from '../../src/levels/spawner';
 import { level3 } from '../../src/levels/level3';
-import { MAZE_CAT_SPAWN_TILE, MAZE_HUMAN_SPAWN_TILE } from '../../src/map/bigTopMazeLayout';
+import {
+  MAZE_CAT_SPAWN_TILE,
+  MAZE_HUMAN_SPAWN_TILE,
+  planBigTopMaze,
+} from '../../src/map/bigTopMazeLayout';
+
+/** Any floor-3 world will do: the journey walks the flaps, whatever board the hall is dealt. */
+const BIG_TOP_WORLD_SEED = 0x5eed_b16;
+const BIG_TOP_DIFFICULTY = 'normal';
 import { GameMap } from '../../src/map/GameMap';
 import type { Player } from '../../src/Player';
 import { CircusQuestSystem } from '../../src/systems/CircusQuestSystem';
@@ -318,7 +326,10 @@ function makeDecoy(place: Place, tile: { x: number; y: number }): Decoy {
 
 function bigTopMaze(): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('house', 0, BIG_TOP_BUILDING_NAME, false, 'bigtop_maze');
+  map.generateInterior('house', 0, BIG_TOP_BUILDING_NAME, false, {
+    kind: 'bigtop_maze',
+    plan: planBigTopMaze(BIG_TOP_WORLD_SEED, BIG_TOP_DIFFICULTY),
+  });
   return map;
 }
 

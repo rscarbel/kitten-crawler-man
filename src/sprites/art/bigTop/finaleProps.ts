@@ -15,6 +15,7 @@ import type { RGB } from '../town/townPalette';
 import { mix, shade } from '../town/townPalette';
 import {
   drawBigTopProp,
+  gridAlignedBox,
   type BigTopPropBox,
   type BigTopPropCatalogueEntry,
 } from './bigTopPropCache';
@@ -144,6 +145,8 @@ const RAIL_WEST_EDGE_X = 0.1;
 const RAIL_WIDTH = 0.05;
 const BULBS_PER_SEAT = 2;
 const BULB_RADIUS = 0.045;
+/** Each bulb sits at the middle of its share of the rail. */
+const BULB_SLOT_MIDDLE = 0.5;
 
 type Hat = 'bowler' | 'bonnet' | 'bare';
 const HATS: ReadonlyArray<Hat> = ['bowler', 'bonnet', 'bare'];
@@ -305,8 +308,22 @@ interface SeatLook {
   readonly slumpLevel: number;
 }
 
-/** A seat's balloon string and a raised row's heads rise above the seat's own tile. */
-const SEAT_BOX: BigTopPropBox = { left: 0, top: -0.75, width: 1, height: 1.75 };
+/**
+ * A seat's frame, in tiles from its tile's top-left: the bench, riser and
+ * rail fill the tile; above it rises only as far as the spectator does — a
+ * row back stands higher up the rake, and only the child with the balloon
+ * reaches far above its head. Fitting each look's frame to its own figure
+ * keeps the stands' many sway frames small enough to stay resident together.
+ */
+const SPECTATOR_BOX_TOP = -0.125;
+const BALLOON_BOX_TOP = -0.4375;
+
+function seatBox(tier: number, variant: number): BigTopPropBox {
+  const hasBalloon = variant === SPECTATOR_VARIANTS - 1;
+  const top = (hasBalloon ? BALLOON_BOX_TOP : SPECTATOR_BOX_TOP) - TIER_RISE * clampedTier(tier);
+  // On the bake grid, so the frame blits one to one and nothing in it is resampled.
+  return gridAlignedBox({ left: 0, top, width: 1, height: 1 - top });
+}
 
 function seatEntry(look: SeatLook, swayFrame: number): BigTopPropCatalogueEntry {
   // The riser drops on the ring side and the bench runs down into the next
@@ -318,9 +335,11 @@ function seatEntry(look: SeatLook, swayFrame: number): BigTopPropCatalogueEntry 
       state: `${look.side}-${look.tier}-${look.variant}-${look.bulbsLit ? 'lit' : 'dark'}-${look.slumpLevel}`,
       frame: swayFrame,
     },
-    box: SEAT_BOX,
-    painter: (target, originX, originY, px) =>
-      paintBleacherSeat(target, originX, originY, px, look, swayFrame),
+    box: seatBox(look.tier, look.variant),
+    painter: (target, originX, originY, px) => {
+      paintSeatBase(target, originX, originY, px, look.side, look.tier, look.bulbsLit);
+      paintSeatSpectator(target, originX, originY, px, look, swayFrame);
+    },
     openEdges: ['bottom', riserSide],
   };
 }
@@ -345,25 +364,36 @@ export function finalePropCatalogue(): ReadonlyArray<BigTopPropCatalogueEntry> {
   return entries;
 }
 
-function paintBleacherSeat(
+function seatFacing(side: StandSide): number {
+  return side === 'west' ? 1 : -1;
+}
+
+function clampedTier(tier: number): number {
+  return Math.max(0, Math.min(RING_BLEACHER_TIERS - 1, tier));
+}
+
+function tierDimming(tier: number): number {
+  return 1 - TIER_DIMMING * clampedTier(tier);
+}
+
+/** The bench runs along the tile on the side away from the ring. */
+function benchCentreX(originX: number, size: number, side: StandSide): number {
+  return originX + size / 2 - seatFacing(side) * size * BENCH_SET_BACK;
+}
+
+function paintSeatBase(
   ctx: Ctx,
   originX: number,
   originY: number,
   size: number,
-  art: SeatLook,
-  swayFrame: number,
+  side: StandSide,
+  tier: number,
+  bulbsLit: boolean,
 ): void {
-  const variant = art.variant;
-  const slumpLevel = art.slumpLevel;
-  const tier = Math.max(0, Math.min(RING_BLEACHER_TIERS - 1, art.tier));
-  const dim = 1 - TIER_DIMMING * tier;
-  const facing = art.side === 'west' ? 1 : -1;
-  const lift = TIER_RISE * tier * size;
-  const top = originY - lift;
-  // The bench runs along the tile on the side away from the ring; the riser
-  // drops at the ring side, down to the next row forward.
-  const benchCentre = originX + size / 2 - facing * size * BENCH_SET_BACK;
-  const benchLeft = benchCentre - (BENCH_WIDTH * size) / 2;
+  const dim = tierDimming(tier);
+  const facing = seatFacing(side);
+  // The riser drops at the ring side, down to the next row forward.
+  const benchLeft = benchCentreX(originX, size, side) - (BENCH_WIDTH * size) / 2;
   const plank = ctx.createLinearGradient(benchLeft, 0, benchLeft + BENCH_WIDTH * size, 0);
   plank.addColorStop(0, rgba(shade(ROT_TIMBER.mid, dim), 1));
   plank.addColorStop(1, rgba(shade(ROT_TIMBER.shadow, dim), 1));
@@ -381,31 +411,48 @@ function paintBleacherSeat(
   ctx.fillStyle = rgba(shade(BACKSTAGE.shadow, dim), 1);
   ctx.fillRect(riserX, originY, RISER_WIDTH * size, size);
 
-  const swayCycle = (swayFrame / SWAY_FRAMES) * FULL_TURN;
-  const slump = slumpLevel / SLUMP_LEVELS;
-  const pose: SeatPose = {
-    facing,
-    lean: slumpLevel === 0 ? Math.sin(swayCycle) : 0,
-    slump,
-  };
-  paintSpectator(ctx, benchCentre, top, size, variant, pose, dim);
-
-  if (tier === 0) {
-    const railX =
-      facing > 0 ? originX + size * RAIL_EAST_EDGE_X : originX + size * RAIL_WEST_EDGE_X;
-    ctx.fillStyle = rgba(shade(BRASS.shadow, dim), 1);
-    ctx.fillRect(railX - (RAIL_WIDTH * size) / 2, originY, RAIL_WIDTH * size, size);
-    for (let bulb = 0; bulb < BULBS_PER_SEAT; bulb++) {
-      const bulbY = originY + ((bulb + 0.5) / BULBS_PER_SEAT) * size;
-      ctx.fillStyle = art.bulbsLit ? rgba(LIMELIGHT.accent, 1) : rgba(IRON.shadow, 1);
-      ctx.beginPath();
-      ctx.arc(railX, bulbY, BULB_RADIUS * size, 0, FULL_TURN);
-      ctx.fill();
-      ctx.lineWidth = outlineWidth(size);
-      ctx.strokeStyle = rgba(BRASS.mid, 1);
-      ctx.stroke();
-    }
+  if (clampedTier(tier) !== 0) return;
+  // The rail runs down the ring side, clear of the spectator, who never
+  // leans that far, so it can be painted before them.
+  const railX = facing > 0 ? originX + size * RAIL_EAST_EDGE_X : originX + size * RAIL_WEST_EDGE_X;
+  ctx.fillStyle = rgba(shade(BRASS.shadow, dim), 1);
+  ctx.fillRect(railX - (RAIL_WIDTH * size) / 2, originY, RAIL_WIDTH * size, size);
+  for (let bulb = 0; bulb < BULBS_PER_SEAT; bulb++) {
+    const bulbY = originY + ((bulb + BULB_SLOT_MIDDLE) / BULBS_PER_SEAT) * size;
+    ctx.fillStyle = bulbsLit ? rgba(LIMELIGHT.accent, 1) : rgba(IRON.shadow, 1);
+    ctx.beginPath();
+    ctx.arc(railX, bulbY, BULB_RADIUS * size, 0, FULL_TURN);
+    ctx.fill();
+    ctx.lineWidth = outlineWidth(size);
+    ctx.strokeStyle = rgba(BRASS.mid, 1);
+    ctx.stroke();
   }
+}
+
+function paintSeatSpectator(
+  ctx: Ctx,
+  originX: number,
+  originY: number,
+  size: number,
+  art: SeatLook,
+  swayFrame: number,
+): void {
+  const lift = TIER_RISE * clampedTier(art.tier) * size;
+  const swayCycle = (swayFrame / SWAY_FRAMES) * FULL_TURN;
+  const pose: SeatPose = {
+    facing: seatFacing(art.side),
+    lean: art.slumpLevel === 0 ? Math.sin(swayCycle) : 0,
+    slump: art.slumpLevel / SLUMP_LEVELS,
+  };
+  paintSpectator(
+    ctx,
+    benchCentreX(originX, size, art.side),
+    originY - lift,
+    size,
+    art.variant,
+    pose,
+    tierDimming(art.tier),
+  );
 }
 
 const BULB_GLOW_RADIUS = 0.45;

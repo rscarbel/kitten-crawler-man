@@ -39,6 +39,14 @@ export const BIG_TOP_CUES = {
   mirrorTurn: ['hammer_strike'],
   /** A beam latching a star. Waits on `star_target_lit`. */
   starLatch: ['objective_complete'],
+  /** A hall star blazing up as the right light reaches it. Waits on `star_light_up`. */
+  starLights: [],
+  /** A hall star going dark as its light is taken away. Waits on `star_dim`. */
+  starDims: [],
+  /** A star sputtering under the wrong crawler's light. Waits on `star_wrong_fizzle`. */
+  starWrongFizzle: [],
+  /** The marquee chasing and spelling BRAVO as the whole board lights. Waits on `marquee_chase`. */
+  marqueeChase: [],
   /** The way a latched star opens giving way. */
   starOpensWay: ['gate_opening'],
   /** A blow aimed at the other crawler's prop, refused. */

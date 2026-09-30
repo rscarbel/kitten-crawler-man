@@ -17,6 +17,7 @@ import {
   EVERY_EDGE,
   ONE_TILE_BOX,
   drawBigTopProp,
+  drawBigTopPropSlice,
   type BigTopPropBox,
   type BigTopPropCatalogueEntry,
 } from './bigTopPropCache';
@@ -314,7 +315,7 @@ export function drawFireBreatherGrate(ctx: Ctx, x: number, y: number, size: numb
   );
 }
 
-/** A row of fire-breather grates side by side, as one baked strip. */
+/** A row of fire-breather grates side by side, drawn from one baked strip. */
 export interface FireGrateRun {
   /** The row the run lies in. */
   readonly tileY: number;
@@ -326,9 +327,9 @@ export interface FireGrateRun {
 
 /**
  * Groups grates into runs along their rows: one strip per row per side of
- * the dividing column. A fire lane holds a dozen grates, and one blit for a
- * run instead of one per grate is what keeps the fire walk inside its
- * draw-call budget.
+ * the dividing column. A fire lane holds a dozen grates, and one blit per
+ * unbroken stretch of a run instead of one per grate is what keeps the fire
+ * walk inside its draw-call budget.
  */
 export function fireGrateRuns(
   tiles: ReadonlyArray<{ readonly x: number; readonly y: number }>,
@@ -352,18 +353,22 @@ export function fireGrateRuns(
   return runs;
 }
 
-function grateRunPainter(run: FireGrateRun) {
-  return (ctx: Ctx, ox: number, oy: number, s: number): void => {
-    for (const column of run.columns) paintFireGrate(ctx, ox + (column - run.x0) * s, oy, s);
-  };
+/**
+ * Every grate is the same picture, so one baked strip of them stands in for
+ * every run: each unbroken stretch of a run is one slice of the strip. A
+ * frame baked per run would hold the same grate dozens of times over.
+ */
+const GRATE_STRIP_TILES = 8;
+const GRATE_STRIP_BOX: BigTopPropBox = { left: 0, top: 0, width: GRATE_STRIP_TILES, height: 1 };
+const GRATE_STRIP_KEY = { prop: 'fireGrateStrip', state: 'cold', frame: 0 } as const;
+
+function paintGrateStrip(ctx: Ctx, ox: number, oy: number, s: number): void {
+  for (let column = 0; column < GRATE_STRIP_TILES; column++) {
+    paintFireGrate(ctx, ox + column * s, oy, s);
+  }
 }
 
-function grateRunBox(run: FireGrateRun): BigTopPropBox {
-  const last = run.columns[run.columns.length - 1] ?? run.x0;
-  return { left: 0, top: 0, width: last - run.x0 + 1, height: 1 };
-}
-
-/** A run of cold fire-breather grates, drawn with one blit; `(x, y)` is the strip's left tile. */
+/** A run of cold fire-breather grates: one blit per unbroken stretch of it; `(x, y)` is the run's left tile. */
 export function drawFireBreatherGrateRun(
   ctx: Ctx,
   run: FireGrateRun,
@@ -375,15 +380,26 @@ export function drawFireBreatherGrateRun(
   // baking the flame's stamps here spends that cost on a frame with nothing at
   // stake rather than on the frame a vent first lights under somebody.
   flameStamps();
-  drawBigTopProp(
-    ctx,
-    { prop: 'fireGrateRun', state: `${run.tileY}|${run.columns.join(',')}`, frame: 0 },
-    grateRunBox(run),
-    grateRunPainter(run),
-    x,
-    y,
-    size,
-  );
+  let stretchStart = 0;
+  while (stretchStart < run.columns.length) {
+    const first = run.columns[stretchStart] ?? run.x0;
+    let length = 1;
+    while (length < GRATE_STRIP_TILES && run.columns[stretchStart + length] === first + length) {
+      length++;
+    }
+    drawBigTopPropSlice(
+      ctx,
+      GRATE_STRIP_KEY,
+      GRATE_STRIP_BOX,
+      paintGrateStrip,
+      0,
+      length,
+      x + (first - run.x0) * size,
+      y,
+      size,
+    );
+    stretchStart += length;
+  }
 }
 
 /**
@@ -1971,12 +1987,7 @@ export function fireWalkPropCatalogue(): ReadonlyArray<BigTopPropCatalogueEntry>
       painter: kindlePainter(level),
     });
   }
-  const run: FireGrateRun = { tileY: 0, x0: 0, columns: [0, 1, 3] };
-  entries.push({
-    key: { prop: 'fireGrateRun', state: 'sample', frame: 0 },
-    box: grateRunBox(run),
-    painter: grateRunPainter(run),
-  });
+  entries.push({ key: GRATE_STRIP_KEY, box: GRATE_STRIP_BOX, painter: paintGrateStrip });
   // The counterweight's rope runs off the top of its tile, up into the rigging.
   const ropeEdge: ReadonlyArray<'top'> = ['top'];
   for (const facing of ['west', 'east'] as const) {

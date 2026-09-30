@@ -47,6 +47,22 @@ export interface BigTopPropBox {
   readonly height: number;
 }
 
+/**
+ * Tiles are baked at multiples of this many pixels, so a frame box whose
+ * edges land on this fraction of a tile is always a whole number of pixels
+ * and blits one to one; any other box is resampled, softening its art.
+ */
+const BOX_GRID_PER_TILE = 16;
+
+/** The smallest box on the bake grid that holds `box`. */
+export function gridAlignedBox(box: BigTopPropBox): BigTopPropBox {
+  const left = Math.floor(box.left * BOX_GRID_PER_TILE) / BOX_GRID_PER_TILE;
+  const top = Math.floor(box.top * BOX_GRID_PER_TILE) / BOX_GRID_PER_TILE;
+  const right = Math.ceil((box.left + box.width) * BOX_GRID_PER_TILE) / BOX_GRID_PER_TILE;
+  const bottom = Math.ceil((box.top + box.height) * BOX_GRID_PER_TILE) / BOX_GRID_PER_TILE;
+  return { left, top, width: right - left, height: bottom - top };
+}
+
 /** A one-tile frame with nothing hanging over. */
 export const ONE_TILE_BOX: BigTopPropBox = { left: 0, top: 0, width: 1, height: 1 };
 
@@ -90,7 +106,12 @@ interface CachedFrame {
 
 const BYTES_PER_PIXEL = 4;
 const BYTES_PER_MEGABYTE = 1024 * 1024;
-/** The whole cache's ceiling; a fire-walk screen's props at 64 px a tile fit in a fraction of it. */
+/**
+ * The whole cache's ceiling; a fire-walk screen's props at 64 px a tile fit in
+ * a fraction of it. Sized so every act's frames, the hall's generated glass,
+ * stars, marquees and light included, stay resident at both scales at once
+ * with some headroom: an eviction mid-act is a re-bake hitch on screen.
+ */
 const CACHE_BUDGET_MEGABYTES = 6;
 export const BIG_TOP_PROP_CACHE_BUDGET_BYTES = CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
 /** Bake resolutions are multiples of this many device pixels per tile. */
@@ -197,6 +218,44 @@ export function drawBigTopProp(
     sx + box.left * size,
     sy + box.top * size,
     box.width * size,
+    box.height * size,
+  );
+}
+
+/**
+ * Draws a run of whole tiles cut from one prop frame, full height: `tiles`
+ * tiles of it, starting `fromTile` tiles right of the frame's own tile, with
+ * that first tile's top-left at `(sx, sy)`. A run reaching past either side
+ * of the frame is cut at the frame's edge. One frame of a repeating strip — a row of
+ * identical props — can then stand in for every run of it, one `drawImage`
+ * per unbroken stretch, instead of a frame baked per run.
+ */
+export function drawBigTopPropSlice(
+  ctx: Ctx,
+  key: BigTopPropKey,
+  box: BigTopPropBox,
+  painter: BigTopPropPainter,
+  fromTile: number,
+  tiles: number,
+  sx: number,
+  sy: number,
+  size: number,
+): void {
+  const firstTile = Math.max(fromTile, box.left);
+  const endTile = Math.min(fromTile + tiles, box.left + box.width);
+  if (endTile <= firstTile) return;
+  const frame = cachedFrame(key, box, painter, bakeResolution(ctx, size));
+  const px = frame.pxPerTile;
+  const drawnTiles = endTile - firstTile;
+  ctx.drawImage(
+    frame.surface,
+    (firstTile - box.left) * px,
+    0,
+    drawnTiles * px,
+    frame.surface.height,
+    sx + (firstTile - fromTile) * size,
+    sy + box.top * size,
+    drawnTiles * size,
     box.height * size,
   );
 }

@@ -17,6 +17,26 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import {
+  boardCellAt,
+  boardTileToTent,
+  CELL_FLOOR,
+  laneOfColumn,
+  MIRROR_BOARD_DIVIDER_X,
+  MIRROR_BOARD_ENTRIES,
+  MIRROR_BOARD_EXITS,
+  MIRROR_BOARD_HEIGHT,
+  MIRROR_BOARD_TENT_ORIGIN,
+  MIRROR_BOARD_WIDTH,
+  PIVOT_CYCLE,
+  type BoardMirrorKind,
+  type BoardStar,
+  type BoardTile,
+  type MirrorBoard,
+  type MirrorBoardDifficulty,
+  type OpticFacing,
+} from './bigTop/mirrorBoard';
+import { generateBoardNow, type GeneratedMirrorBoard } from './bigTop/mirrorBoardGenerator';
 
 /**
  * The maze floor, one string per row, south end last.
@@ -44,12 +64,22 @@ import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
  *  alcove pockets a crawler ducks into to let a lantern sweep past.
  *
  *  Act III, the hall of mirrors:
- *  P  the human's limelight projector   Q  the cat's
- *  *  a star target: three set in the dividing wall, and the encore in the
- *     human lane's outer wall
+ *  P  the human's light: a limelight, or the teaching strip's footlight lamp
+ *  Q  the cat's light, likewise
+ *  *  a star set in a wall
+ *  {  the doorway from the human's teaching strip into the hall   }  the cat's
  *  <  the gate barring the human       >  the gate barring the cat
  *  [  the human's exit door            ]  the cat's
+ *
+ *  Written in per world by {@link planBigTopMaze}, never in this table:
+ *  |  a window in the dividing wall     o  a pillar
  * ```
+ *
+ * The hall's own twelve rows are left bare here, walls and floor only: its
+ * board is generated per world and difficulty and written over them by
+ * {@link planBigTopMaze}, which is the only table the game builds the tent
+ * from. The teaching strip below the hall is authored, and its lamps and stars
+ * are drawn in.
  *
  * Gates, barricades, curtains and doors stand as wall until cleared. The
  * lettered tiles stay wall forever — a broken counterweight is a hole in a
@@ -81,20 +111,20 @@ export const BIG_TOP_MAZE_ROWS: ReadonlyArray<string> = [
   '#####................#.................#####',
   '#####................#.................#####',
   '#####................#.................#####',
-  '####*................*.................#####',
   '#####................#.................#####',
+  '#####................#.................#####',
+  '#####................#.................#####',
+  '#####................#.................#####',
+  '#####................#.................#####',
+  '#####................#.................#####',
+  '#####................#.................#####',
+  '#####................#.................#####',
+  '##################{#####}###################',
   '####P................#.................Q####',
   '#####................#.................#####',
-  '#####................*.................#####',
+  '####*................#.................*####',
   '#####................#.................#####',
-  '#####................#.................#####',
-  '#####................#.................#####',
-  '#####................*.................#####',
-  '#####................#.................#####',
-  '#####................#.................#####',
-  '#####................#.................#####',
-  '#####................#.................#####',
-  '##################K#####L###################',
+  '#########*########K#####L#########*#########',
   '#################....#....##################',
   '#################....W....##################',
   '#################....#....##################',
@@ -156,6 +186,17 @@ export const MAZE_FLOOR_CHAR = '.';
 export const MAZE_POLE_CHAR = '^';
 export const MAZE_HUMAN_SPAWN_CHAR = 'H';
 export const MAZE_CAT_SPAWN_CHAR = 'C';
+export const MAZE_HUMAN_LIGHT_CHAR = 'P';
+export const MAZE_CAT_LIGHT_CHAR = 'Q';
+export const MAZE_STAR_CHAR = '*';
+export const MAZE_WINDOW_CHAR = '|';
+/**
+ * A pillar in the hall of mirrors: one tile of the hall's draped wall standing
+ * free, which stops light and crawlers alike. Wall rather than a tent mast,
+ * because a mast rises nine tiles into the roof and would be drawn over the
+ * exits and the marquee above the hall.
+ */
+export const MAZE_PILLAR_CHAR = 'o';
 
 /**
  * Every character the layout is allowed to contain.
@@ -163,7 +204,7 @@ export const MAZE_CAT_SPAWN_CHAR = 'C';
  * Read by the gate rather than by the game: an unlisted glyph is silently a
  * wall, so a typo in the table would seal a lane with no other symptom.
  */
-export const MAZE_LEGEND_CHARS = '#.^HC1234abcdKLW5678efgh<>[]*PQ';
+export const MAZE_LEGEND_CHARS = '#.^HC1234abcdKLW5678efgh<>[]*PQ{}|o';
 
 export interface MazeTile {
   readonly x: number;
@@ -199,7 +240,7 @@ export type MazeSectionId = 'firewalk' | 'menagerie' | 'mirrors' | 'finale';
  *
  * `humanSpawn` / `catSpawn` are the marks the house hauls a failed crawler back
  * to. Failing anywhere in an act costs that act, never the whole run: every
- * curtain, cage gate and lit star already earned stays earned, because a reset
+ * curtain, cage gate and solved board already earned stays earned, because a reset
  * that re-locked them would demand a partner who is also back at the start and
  * would never converge.
  */
@@ -1076,7 +1117,9 @@ export function isMazeBarrierTile(tileX: number, tileY: number): boolean {
   ) {
     return true;
   }
-  return MAZE_STARS.some((star) => star.opens.some((tile) => tile.x === tileX && tile.y === tileY));
+  const isTile = (tile: MazeTile): boolean => tile.x === tileX && tile.y === tileY;
+  if (MAZE_HALL_EXITS.some((exit) => isTile(exit.tile))) return true;
+  return MAZE_HALVES.some((half) => isTile(MAZE_TEACHING_DOORWAYS[half]));
 }
 
 // ── Act III: the hall of mirrors ──────────────────────────────────────────────
@@ -1085,53 +1128,19 @@ export type BeamDirection = 'north' | 'south' | 'east' | 'west';
 
 /**
  * Which way a mirror's reflective diagonal faces, named for the two edges of
- * its tile the glass connects.
- *
- * A beam that arrives at one of those two edges leaves by the other. A beam
- * that arrives at either of the other two edges hits the mirror's back and
- * stops there — which is what makes a facing a real choice rather than a
- * cosmetic one, and what lets a single mirror both steer the light and hold it.
+ * its tile the glass connects: the board's own `OpticFacing`.
  */
-export type MirrorFacing = 'NE' | 'SE' | 'SW' | 'NW';
+export type MirrorFacing = OpticFacing;
 
-const MIRROR_ARMS: Readonly<Record<MirrorFacing, ReadonlyArray<BeamDirection>>> = {
-  NE: ['north', 'east'],
-  SE: ['south', 'east'],
-  SW: ['south', 'west'],
-  NW: ['north', 'west'],
-};
+export type MirrorKind = BoardMirrorKind;
 
-const OPPOSITE: Readonly<Record<BeamDirection, BeamDirection>> = {
-  north: 'south',
-  south: 'north',
-  east: 'west',
-  west: 'east',
-};
-
-const BEAM_STEP: Readonly<Record<BeamDirection, MazeTile>> = {
-  north: { x: 0, y: -1 },
-  south: { x: 0, y: 1 },
-  east: { x: 1, y: 0 },
-  west: { x: -1, y: 0 },
-};
-
-/** Where a beam travelling `heading` leaves this mirror, or null if it is absorbed. */
-export function reflectBeam(facing: MirrorFacing, heading: BeamDirection): BeamDirection | null {
-  const arms = MIRROR_ARMS[facing];
-  const entry = OPPOSITE[heading];
-  if (!arms.includes(entry)) return null;
-  return arms[0] === entry ? arms[1] : arms[0];
-}
-
-export type MirrorKind = 'pivot_mirror' | 'swivel_mirror';
+export const MAZE_HALVES: ReadonlyArray<MazeHalf> = ['human', 'cat'];
 
 /**
- * One steerable mirror.
+ * One steerable mirror, in tent tiles.
  *
  * Carl's pivots are heavy standing glass that turns a quarter at a time through
  * all four facings; Donut's swivels are spring-mounted and snap between two.
- * The cycle is authored rather than computed so a swivel's pair can be the two
- * facings that matter on its own leg of the beam.
  */
 export interface MazeMirror {
   readonly id: string;
@@ -1141,227 +1150,246 @@ export interface MazeMirror {
   readonly initialIndex: number;
 }
 
-export const MAZE_MIRRORS: ReadonlyArray<MazeMirror> = [
-  {
-    id: 'pivot_hub',
-    kind: 'pivot_mirror',
-    tile: { x: 17, y: 26 },
-    cycle: ['NE', 'SE', 'SW', 'NW'],
-    initialIndex: 0,
-  },
-  {
-    id: 'pivot_north',
-    kind: 'pivot_mirror',
-    tile: { x: 17, y: 24 },
-    cycle: ['NE', 'SE', 'SW', 'NW'],
-    initialIndex: 0,
-  },
-  {
-    id: 'pivot_south',
-    kind: 'pivot_mirror',
-    tile: { x: 17, y: 28 },
-    cycle: ['NE', 'SE', 'SW', 'NW'],
-    initialIndex: 3,
-  },
-  {
-    id: 'swivel_hub',
-    kind: 'swivel_mirror',
-    tile: { x: 25, y: 26 },
-    cycle: ['NE', 'SE'],
-    initialIndex: 0,
-  },
-  {
-    id: 'swivel_north',
-    kind: 'swivel_mirror',
-    tile: { x: 25, y: 24 },
-    cycle: ['SW', 'NW'],
-    initialIndex: 1,
-  },
-  {
-    id: 'swivel_south',
-    kind: 'swivel_mirror',
-    tile: { x: 25, y: 32 },
-    cycle: ['NW', 'SW'],
-    initialIndex: 1,
-  },
-];
-
-/**
- * A limelight, bolted into the wall of its lane.
- *
- * The span between the lens and the first mirror on its ray is still fire, and
- * it is the one hazard in the hall. Everything past that first bounce is cold
- * light. That is not a concession — it is what makes the hall fair: the burning
- * geometry never moves, however the players aim the rest of the beam.
- */
-export interface MazeProjector {
-  readonly id: string;
-  readonly half: MazeHalf;
-  readonly tile: MazeTile;
-  readonly direction: BeamDirection;
-}
-
-export const MAZE_PROJECTORS: ReadonlyArray<MazeProjector> = [
-  { id: 'limelight_human', half: 'human', tile: { x: 4, y: 26 }, direction: 'east' },
-  { id: 'limelight_cat', half: 'cat', tile: { x: 39, y: 26 }, direction: 'west' },
-];
-
-/**
- * A star target set in the dividing wall, and the barriers it latches open.
- *
- * `litBy` names every lane whose beam has to be on it at once. One lane for the
- * two cross-character stars; both for the twin, which is the act's crescendo and
- * the only thing in the tent that asks the two beams to agree.
- */
-export interface MazeStar {
-  readonly id: string;
-  readonly tile: MazeTile;
-  readonly litBy: ReadonlyArray<MazeHalf>;
-  readonly opens: ReadonlyArray<MazeTile>;
-}
-
-export const MAZE_STARS: ReadonlyArray<MazeStar> = [
-  {
-    id: 'star_cat_gate',
-    tile: { x: 21, y: 28 },
-    litBy: ['human'],
-    opens: [{ x: 28, y: 19 }],
-  },
-  {
-    id: 'star_human_gate',
-    tile: { x: 21, y: 32 },
-    litBy: ['cat'],
-    opens: [{ x: 15, y: 19 }],
-  },
-  {
-    id: 'star_twin',
-    tile: { x: 21, y: 24 },
-    litBy: ['human', 'cat'],
-    opens: [
-      { x: 15, y: 17 },
-      { x: 28, y: 17 },
-    ],
-  },
-];
-
-/**
- * The encore: a fourth star, in the human lane's outer wall, that opens nothing.
- *
- * Reached only by the hub turning the light north and the north pivot sending
- * it back west — one quarter past the facing the twin star wants — so it asks
- * the pivot bank for a facing the act's own solution never uses. Kept out of
- * `MAZE_STARS` because every reader of that list counts the stars the act needs;
- * this one is applause, and the act finishes without it.
- */
-export const MAZE_ENCORE_STAR: MazeStar = {
-  id: 'star_encore',
-  tile: { x: 4, y: 24 },
-  litBy: ['human'],
-  opens: [],
-};
-
-/** Coins the encore pays, once per run. */
-export const MAZE_ENCORE_REWARD_COINS = 75;
-/** The floor at the encore star's foot, where its coins fall. */
-export const MAZE_ENCORE_REWARD_TILE: MazeTile = { x: 5, y: 24 };
-
-/** Everything a beam can end on: the act's stars and the encore. */
-export const MAZE_BEAM_TARGETS: ReadonlyArray<MazeStar> = [...MAZE_STARS, MAZE_ENCORE_STAR];
-
-export interface BeamStep {
-  readonly tile: MazeTile;
-  readonly heading: BeamDirection;
-  /** True while the beam has not yet met a mirror: still fire rather than light. */
-  readonly hot: boolean;
-}
-
-export interface BeamPath {
-  readonly steps: ReadonlyArray<BeamStep>;
-  /** The star the beam ends on, if it ends on one. */
-  readonly starId: string | null;
-}
-
-/**
- * Walks a limelight from its lens until something stops it.
- *
- * `facingOf` and `isOpenTile` are parameters rather than lookups so the same
- * walk answers both the live question — where is the light now — and the gate's
- * question, which is whether *any* arrangement of these mirrors lands it on a
- * given star. A mirror that returns `null` is treated as opaque, which is how
- * the unbent span is measured.
- */
-export function traceMazeBeam(
-  half: MazeHalf,
-  facingOf: (mirrorId: string) => MirrorFacing | null,
-  isOpenTile: (tileX: number, tileY: number) => boolean,
-): BeamPath {
-  const projector = MAZE_PROJECTORS.find((candidate) => candidate.half === half);
-  if (projector === undefined) return { steps: [], starId: null };
-
-  const steps: BeamStep[] = [];
-  let heading = projector.direction;
-  let x = projector.tile.x;
-  let y = projector.tile.y;
-  let hot = true;
-
-  // The grid bounds the walk on every side; the budget is only a backstop
-  // against a mirror arrangement that could loop the light forever.
-  const maxSteps = MAZE_WIDTH * MAZE_HEIGHT;
-  for (let step = 0; step < maxSteps; step++) {
-    const move = BEAM_STEP[heading];
-    x += move.x;
-    y += move.y;
-
-    const star = MAZE_BEAM_TARGETS.find(
-      (candidate) => candidate.tile.x === x && candidate.tile.y === y,
-    );
-    if (star !== undefined) return { steps, starId: star.id };
-
-    const mirror = MAZE_MIRRORS.find(
-      (candidate) => candidate.tile.x === x && candidate.tile.y === y,
-    );
-    if (mirror !== undefined) {
-      const facing = facingOf(mirror.id);
-      // Deliberately no step for the mirror's own tile. The unbent span is
-      // measured with every facing opaque, which returns before this line — so
-      // pushing one here would paint fire on a tile the hazard set does not
-      // contain, and the glass is drawn there anyway.
-      if (facing === null) return { steps, starId: null };
-      const next = reflectBeam(facing, heading);
-      if (next === null) return { steps, starId: null };
-      heading = next;
-      hot = false;
-      continue;
-    }
-
-    if (!isOpenTile(x, y)) return { steps, starId: null };
-    steps.push({ tile: { x, y }, heading, hot });
-  }
-  return { steps, starId: null };
-}
-
 /** The facing one more blow turns this mirror to, from the facing at `index` in its cycle. */
 export function nextMirrorFacing(mirror: MazeMirror, index: number): MirrorFacing {
   return mirror.cycle[(index + 1) % mirror.cycle.length];
 }
 
+/** The hall's twelve floor rows, which its generated board fills. */
+export const MIRROR_BOARD_ROWS: MazeRect = {
+  x0: MIRROR_BOARD_TENT_ORIGIN.x,
+  y0: MIRROR_BOARD_TENT_ORIGIN.y + 1,
+  x1: MIRROR_BOARD_TENT_ORIGIN.x + MIRROR_BOARD_WIDTH - 1,
+  y1: MIRROR_BOARD_TENT_ORIGIN.y + MIRROR_BOARD_HEIGHT - 2,
+};
+
 /**
- * Where `half`'s light would go if `turned` were at `facing` and every other
- * mirror stayed as `facingOf` has it — the path one blow away, for the turn
- * preview. The same walk as the live beam, so the preview cannot disagree with
- * what the blow then does.
+ * The barriers the solved board opens: each lane's gate on the hall's top wall
+ * and the door above it into the interval. Solving is the whole board's, so it
+ * opens all four at once.
  */
-export function traceMazeBeamWithFacing(
-  half: MazeHalf,
-  turned: { readonly mirrorId: string; readonly facing: MirrorFacing },
-  facingOf: (mirrorId: string) => MirrorFacing | null,
-  isOpenTile: (tileX: number, tileY: number) => boolean,
-): BeamPath {
-  return traceMazeBeam(
-    half,
-    (mirrorId) => (mirrorId === turned.mirrorId ? turned.facing : facingOf(mirrorId)),
-    isOpenTile,
-  );
+export interface MazeHallExit {
+  readonly tile: MazeTile;
+  readonly half: MazeHalf;
+  readonly kind: 'gate' | 'door';
+}
+
+function hallExitsFor(half: MazeHalf): MazeHallExit[] {
+  const gate = boardTileToTent({
+    x: MIRROR_BOARD_EXITS[half].x,
+    y: MIRROR_BOARD_EXITS[half].y - 1,
+  });
+  return [
+    { tile: gate, half, kind: 'gate' },
+    { tile: { x: gate.x, y: gate.y - HALL_DOOR_ABOVE_GATE_TILES }, half, kind: 'door' },
+  ];
+}
+
+/** The door into the interval sits this many rows above the lane's gate, past one tile of passage. */
+const HALL_DOOR_ABOVE_GATE_TILES = 2;
+
+export const MAZE_HALL_EXITS: ReadonlyArray<MazeHallExit> = MAZE_HALVES.flatMap(hallExitsFor);
+
+/**
+ * The doorway each lane's teaching strip opens into the hall: the wall tile
+ * under the hall's entry, straight up from the curtain the lane arrived by.
+ */
+export const MAZE_TEACHING_DOORWAYS: Readonly<Record<MazeHalf, MazeTile>> = {
+  human: boardTileToTent({
+    x: MIRROR_BOARD_ENTRIES.human.x,
+    y: MIRROR_BOARD_ENTRIES.human.y + 1,
+  }),
+  cat: boardTileToTent({ x: MIRROR_BOARD_ENTRIES.cat.x, y: MIRROR_BOARD_ENTRIES.cat.y + 1 }),
+};
+
+/** How many floor rows the teaching strip has. */
+const TEACHING_STRIP_FLOOR_ROWS = 4;
+
+/** The teaching strip's floor rows, between the hall's bottom wall and the menagerie's curtain. */
+export const TEACHING_STRIP_ROWS: MazeRect = {
+  x0: MIRROR_BOARD_TENT_ORIGIN.x,
+  y0: MAZE_TEACHING_DOORWAYS.human.y + 1,
+  x1: MIRROR_BOARD_TENT_ORIGIN.x + MIRROR_BOARD_WIDTH - 1,
+  y1: MAZE_TEACHING_DOORWAYS.human.y + TEACHING_STRIP_FLOOR_ROWS,
+};
+
+/** The tent tile the teaching strip's board `(0, 0)` sits on: the hall's bottom wall, at its west end. */
+export const TEACHING_STRIP_TENT_ORIGIN: MazeTile = {
+  x: MIRROR_BOARD_TENT_ORIGIN.x,
+  y: MAZE_TEACHING_DOORWAYS.human.y,
+};
+
+/** The tent tile a teaching-strip board tile stands on. */
+export function teachingTileToTent(tile: BoardTile): MazeTile {
+  return { x: tile.x + TEACHING_STRIP_TENT_ORIGIN.x, y: tile.y + TEACHING_STRIP_TENT_ORIGIN.y };
+}
+
+/**
+ * The teaching strip: one tiny board per lane, under the same rule as the hall.
+ *
+ * Each lane's footlight lamp throws its light at one of the crawler's own
+ * mirrors, which turns it down onto a splitter, and the splitter sends it both
+ * on to a star in the curtain wall and aside to a star in the lane's outer
+ * wall. One blow on the mirror lights both stars; another puts them out. That
+ * is the whole of the hall's grammar — turning glass lights a star, turning it
+ * away darkens it, and one light can reach two stars — taught in the only room
+ * where nothing burns. Lighting both of a lane's stars at once opens that
+ * lane's doorway into the hall.
+ *
+ * Authored rather than generated because its only job is to teach, and it is a
+ * `MirrorBoard` rather than its own data so the one light walk the hall uses
+ * decides it too. Its lamps are harmless: nothing a player can learn here is
+ * worth being sent back for.
+ */
+export const TEACHING_STRIP_BOARD: MirrorBoard = {
+  width: MIRROR_BOARD_WIDTH,
+  height: TEACHING_STRIP_FLOOR_ROWS + 2,
+  dividerX: MIRROR_BOARD_DIVIDER_X,
+  entries: { human: { x: 14, y: 4 }, cat: { x: 20, y: 4 } },
+  exits: { human: { x: 14, y: 1 }, cat: { x: 20, y: 1 } },
+  limelights: [
+    { colour: 'blue', lane: 'human', tile: { x: 0, y: 1 }, heading: 'east' },
+    { colour: 'red', lane: 'cat', tile: { x: 35, y: 1 }, heading: 'west' },
+  ],
+  mirrors: [
+    {
+      id: 'teach_pivot',
+      kind: 'pivot_mirror',
+      owner: 'human',
+      tile: { x: 5, y: 1 },
+      cycle: PIVOT_CYCLE,
+      // Its back to the lamp: the first blow is the one that lights both stars.
+      initialIndex: 1,
+      solutionIndex: 2,
+    },
+    {
+      id: 'teach_swivel',
+      kind: 'swivel_mirror',
+      owner: 'cat',
+      tile: { x: 30, y: 1 },
+      cycle: ['NE', 'SE'],
+      // Throwing the light into the hall's wall, where it plainly ends on nothing.
+      initialIndex: 0,
+      solutionIndex: 1,
+    },
+  ],
+  splitters: [
+    { tile: { x: 5, y: 3 }, diagonal: 'slash' },
+    { tile: { x: 30, y: 3 }, diagonal: 'backslash' },
+  ],
+  windows: [],
+  stars: [
+    { id: 'teach_blue_side', kind: 'blue', tile: { x: 0, y: 3 } },
+    { id: 'teach_blue_curtain', kind: 'blue', tile: { x: 5, y: 5 } },
+    { id: 'teach_red_side', kind: 'red', tile: { x: 35, y: 3 } },
+    { id: 'teach_red_curtain', kind: 'red', tile: { x: 30, y: 5 } },
+  ],
+  pillars: [],
+};
+
+/** The lane a teaching-strip star belongs to: the side of the divider it is on. */
+export function teachingStarLane(star: BoardStar): MazeHalf {
+  return laneOfColumn(TEACHING_STRIP_BOARD, star.tile.x);
+}
+
+/** Coins the encore pays, once per run. */
+export const MAZE_ENCORE_REWARD_COINS = 75;
+
+/**
+ * The floor at a wall star's foot, in tent tiles: where the encore's coins
+ * fall. The generator keeps every piece off an encore star's neighbours, so
+ * the one floor tile beside it is always open.
+ */
+export function starFootTile(board: MirrorBoard, star: BoardStar): MazeTile {
+  const steps: ReadonlyArray<BoardTile> = [
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+  ];
+  for (const step of steps) {
+    const foot = { x: star.tile.x + step.x, y: star.tile.y + step.y };
+    if (boardCellAt(board, foot) === CELL_FLOOR) return boardTileToTent(foot);
+  }
+  return boardTileToTent(star.tile);
+}
+
+// ── The hall as dealt to one world ────────────────────────────────────────────
+
+/**
+ * The tent for one world and one difficulty: the board its hall is dealt, and
+ * the floor plan with that board written in.
+ *
+ * Planned once, before the interior map exists, because everything built from
+ * the plan — the tiles, the floor marks, the chunk bake, the stage lights'
+ * pools — is built once from whatever it says.
+ */
+export interface BigTopMazePlan {
+  readonly worldSeed: number;
+  readonly difficulty: MirrorBoardDifficulty;
+  readonly board: MirrorBoard;
+  /** Whether the board came from the generator or is the tier's committed fallback. */
+  readonly source: GeneratedMirrorBoard['source'];
+  /** {@link BIG_TOP_MAZE_ROWS} with the board's walls, lights, stars, windows and pillars written in. */
+  readonly rows: ReadonlyArray<string>;
+}
+
+/**
+ * Deals the hall for a world and a difficulty and writes it into the floor
+ * plan.
+ *
+ * Generated in full, here, rather than sliced across the first two acts: the
+ * interior's tiles, its floor marks and its lighting are all built from the
+ * board before the party takes a step, and an attempt costs about a
+ * millisecond, so the handful a board takes is spent inside the door's own
+ * loading fade. The result depends on the attempt count alone, so every device
+ * deals the same board.
+ */
+export function planBigTopMaze(
+  worldSeed: number,
+  difficulty: MirrorBoardDifficulty,
+): BigTopMazePlan {
+  const generated = generateBoardNow(worldSeed, difficulty);
+  return {
+    worldSeed,
+    difficulty,
+    board: generated.board,
+    source: generated.source,
+    rows: writeBoardIntoRows(generated.board),
+  };
+}
+
+/** The floor plan with one board written into the hall's rows. */
+export function writeBoardIntoRows(board: MirrorBoard): ReadonlyArray<string> {
+  const rows = BIG_TOP_MAZE_ROWS.map((row) => Array.from(row));
+  const put = (tile: BoardTile, glyph: string): void => {
+    const { x, y } = boardTileToTent(tile);
+    if (y < 0 || y >= rows.length) return;
+    const row = rows[y];
+    if (x < 0 || x >= row.length) return;
+    row[x] = glyph;
+  };
+  for (const light of board.limelights) {
+    put(light.tile, light.lane === 'human' ? MAZE_HUMAN_LIGHT_CHAR : MAZE_CAT_LIGHT_CHAR);
+  }
+  for (const star of board.stars) put(star.tile, MAZE_STAR_CHAR);
+  for (const window of board.windows) put(window, MAZE_WINDOW_CHAR);
+  for (const pillar of board.pillars) put(pillar, MAZE_PILLAR_CHAR);
+  return rows.map((row) => row.join(''));
+}
+
+/** A board's mirrors in tent tiles, which is how the tent stands them up. */
+export function tentMirrorsOf(
+  board: MirrorBoard,
+  toTent: (tile: BoardTile) => MazeTile,
+): MazeMirror[] {
+  return board.mirrors.map((mirror) => ({
+    id: mirror.id,
+    kind: mirror.kind,
+    tile: toTent(mirror.tile),
+    cycle: mirror.cycle,
+    initialIndex: mirror.initialIndex,
+  }));
 }
 
 // ── Where the dressing hangs ──────────────────────────────────────────────────
@@ -1385,7 +1413,7 @@ export const MENAGERIE_LANES: ReadonlyArray<{
 export const MENAGERIE_CAGE_ROWS: ReadonlyArray<number> = [51, 54, 57];
 export const MENAGERIE_BLEACHER_ROW = 43;
 
-/** The hall of mirrors, and the wall columns its panes are set into. */
+/** The hall of mirrors with its teaching strip, and the wall columns its panes are set into. */
 export const MIRROR_HALL_ROWS: { readonly y0: number; readonly y1: number } = { y0: 20, y1: 36 };
 export const MIRROR_HALL_GLASS_COLUMNS: ReadonlyArray<number> = [4, 21, 39];
 

@@ -36,7 +36,6 @@ import {
   HALF_TURN,
   IRON,
   LIMELIGHT,
-  NAVY,
   QUARTER_TURN,
   ROT_TIMBER,
   inkCurrentPath,
@@ -70,17 +69,6 @@ export interface MazeMirrorArt {
   readonly phase: number;
   readonly struck: boolean;
   readonly pulsing: boolean;
-}
-
-/** How one star target in the dividing wall currently looks. */
-export interface MazeStarArt {
-  readonly phase: number;
-  /** How many of the beams this star needs are on it right now, 0..1. */
-  readonly litFraction: number;
-  /** True once the star has latched its barriers open. */
-  readonly latched: boolean;
-  /** 1 on the frame it latched, falling to 0 as the burst spends itself. */
-  readonly burst: number;
 }
 
 // ── The cheval mirrors ──────────────────────────────────────────────────────
@@ -121,7 +109,12 @@ function angleStep(angle: number): number {
   return ((step % MIRROR_ANGLE_STEPS) + MIRROR_ANGLE_STEPS) % MIRROR_ANGLE_STEPS;
 }
 
-const MIRROR_BOX: BigTopPropBox = { left: -0.3, top: -1.5, width: 1.6, height: 2.75 };
+/**
+ * The glass at its tallest, the gleam it throws and the contact shadow, at
+ * every heading, with a margin — on the bake grid, so the sixteen headings
+ * blit one to one and stay small enough to sit resident together.
+ */
+const MIRROR_BOX: BigTopPropBox = { left: -0.0625, top: -1.125, width: 1.125, height: 2.1875 };
 
 /** Half the glass's width along the floor, in tiles. */
 const PANEL_HALF_WIDTH = 0.4;
@@ -182,12 +175,14 @@ const SHEEN_BANDS: ReadonlyArray<{ at: number; width: number; alpha: number }> =
 ];
 /** Each sheen band slants left by this share of the glass's width from top to bottom. */
 const SHEEN_SLANT = 0.5;
-const BACK_STRIPES = 6;
+const BACK_PLANKS = 4;
+/** Darker than the rot-timber ramp's shadow: boarding turned away from the stage light. */
+const BACK_TIMBER: RGB = [30, 24, 20];
 const BACK_SHADE_ALPHA = 0.38;
 /** The back's shade at its top, as a share of its shade at the floor. */
 const BACK_SHADE_TOP_SHARE = 0.5;
-/** The back's stripes run this many arch-rises past the glass's straight sides, so the clip always has cloth to show. */
-const BACK_STRIPE_ARCH_REACH = 3;
+/** The back's plank seams run this many arch-rises past the glass's straight sides, so the clip always has boarding to show. */
+const BACK_SEAM_ARCH_REACH = 3;
 /** The barber-pole twist up a swivel mirror's post, as shares of the post's width. */
 const BARBER_STRIPE_WIDTH = 0.6;
 const BARBER_STRIPE_PITCH = 2.2;
@@ -303,46 +298,44 @@ function paintSilverFace(ctx: Ctx, panel: PanelGeometry, size: number): void {
   }
 }
 
+/**
+ * The back of either kind of mirror is dark timber boarding, never anything
+ * that could pass for glass: light that lands on it stops, and the player has
+ * to be able to see that before the beam proves it. Ownership survives on the
+ * bracing — Carl's is iron, Donut's a red-painted batten.
+ */
 function paintDullBack(ctx: Ctx, panel: PanelGeometry, size: number, kind: MirrorKind): void {
   ctx.save();
   try {
     tracePanel(ctx, panel);
     ctx.clip();
-    if (kind === 'swivel_mirror') {
-      // Red and white canvas stretched over the back, the stripes running up the glass.
-      for (let stripe = 0; stripe < BACK_STRIPES; stripe++) {
-        const from = stripe / BACK_STRIPES;
-        const to = (stripe + 1) / BACK_STRIPES;
-        const at = (t: number): Vec2 => ({
-          x: panel.bottomLeft.x + (panel.bottomRight.x - panel.bottomLeft.x) * t,
-          y: panel.bottomLeft.y + (panel.bottomRight.y - panel.bottomLeft.y) * t,
-        });
-        const a = at(from);
-        const b = at(to);
-        const reach = PANEL_HEIGHT * size + PANEL_ARCH_RISE * size * BACK_STRIPE_ARCH_REACH;
-        ctx.fillStyle = rgba(stripe % 2 === 0 ? BLOOD.mid : BONE.mid, 1);
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.lineTo(b.x, b.y - reach);
-        ctx.lineTo(a.x, a.y - reach);
-        ctx.closePath();
-        ctx.fill();
-      }
-    } else {
-      ctx.fillStyle = rgba(NAVY.mid, 1);
-      tracePanel(ctx, panel);
-      ctx.fill();
-      // A timber cross-brace: the back of a mirror is joinery, not glass.
-      ctx.strokeStyle = rgba(ROT_TIMBER.mid, 1);
-      ctx.lineWidth = BRACE_WIDTH * size;
+    ctx.fillStyle = rgba(BACK_TIMBER, 1);
+    tracePanel(ctx, panel);
+    ctx.fill();
+    const reach = PANEL_HEIGHT * size + PANEL_ARCH_RISE * size * BACK_SEAM_ARCH_REACH;
+    const alongBottom = (t: number): Vec2 => ({
+      x: panel.bottomLeft.x + (panel.bottomRight.x - panel.bottomLeft.x) * t,
+      y: panel.bottomLeft.y + (panel.bottomRight.y - panel.bottomLeft.y) * t,
+    });
+    ctx.strokeStyle = rgba(BACKSTAGE.mid, 1);
+    ctx.lineWidth = outlineWidth(size);
+    for (let seam = 1; seam < BACK_PLANKS; seam++) {
+      const foot = alongBottom(seam / BACK_PLANKS);
       ctx.beginPath();
-      ctx.moveTo(panel.bottomLeft.x, panel.bottomLeft.y);
-      ctx.lineTo(panel.topRight.x, panel.topRight.y);
-      ctx.moveTo(panel.bottomRight.x, panel.bottomRight.y);
-      ctx.lineTo(panel.topLeft.x, panel.topLeft.y);
+      ctx.moveTo(foot.x, foot.y);
+      ctx.lineTo(foot.x, foot.y - reach);
       ctx.stroke();
     }
+    ctx.strokeStyle = rgba(kind === 'swivel_mirror' ? BLOOD.mid : IRON.light, 1);
+    ctx.lineWidth = BRACE_WIDTH * size;
+    ctx.beginPath();
+    ctx.moveTo(panel.bottomLeft.x, panel.bottomLeft.y);
+    ctx.lineTo(panel.topRight.x, panel.topRight.y);
+    if (kind === 'pivot_mirror') {
+      ctx.moveTo(panel.bottomRight.x, panel.bottomRight.y);
+      ctx.lineTo(panel.topLeft.x, panel.topLeft.y);
+    }
+    ctx.stroke();
     // Matte and turned away from the stage light: darker toward the floor.
     const top = panel.archPeak.y;
     const bottom = Math.max(panel.bottomLeft.y, panel.bottomRight.y);
@@ -624,6 +617,162 @@ export function drawMazeMirror(
   }
   if (art.struck)
     paintImpact(ctx, centreX, centreY - size * PANEL_HEIGHT * IMPACT_HEIGHT_SHARE, size);
+}
+
+// ── A swivel's other setting ────────────────────────────────────────────────
+
+/** How far out from the mount's centre the facing wedges sit on the floor, in tiles. */
+const FACING_WEDGE_REACH = 0.36;
+/** The floor is seen at a slant: a wedge's distance down-screen is squashed to this share. */
+const FACING_WEDGE_FLOOR_SQUASH = 0.55;
+const FACING_WEDGE_LENGTH = 0.2;
+const FACING_WEDGE_HALF_WIDTH = 0.13;
+/** The other setting's wedge is hollow: a light line this many outlines thick on a dark one twice that. */
+const GHOST_WEDGE_LINE_OUTLINES = 2;
+const GHOST_OUTLINE_ALPHA = 0.9;
+const GHOST_GLASS_ALPHA = 0.22;
+/** Dash and gap of the ghost's outline, as shares of the tile. */
+const GHOST_DASH = 0.07;
+const GHOST_GAP = 0.05;
+/**
+ * Two facings are back to back when their faces point opposite ways: the
+ * cosine of the angle between them is within this of -1. Their glass lies on
+ * one line, so a ghost of the other would sit exactly on the real one.
+ */
+const BACK_TO_BACK_TOLERANCE = 0.08;
+const GHOST_GLASS_STYLE = rgba(SILVER_LIGHT, GHOST_GLASS_ALPHA);
+const GHOST_DARK_STYLE = rgba(BACKSTAGE.shadow, GHOST_OUTLINE_ALPHA);
+const GHOST_LIGHT_STYLE = rgba(BONE.accent, GHOST_OUTLINE_ALPHA);
+const CURRENT_WEDGE_STYLE = rgba(GILT_GLINT, 1);
+/** The marks' own frame, on the bake grid: the ghost glass rises as high as a mirror's, the wedges reach to the tile's edges. */
+const SWIVEL_GHOST_BOX: BigTopPropBox = { left: -0.0625, top: -1, width: 1.125, height: 1.9375 };
+
+function traceFacingWedge(
+  ctx: Ctx,
+  centreX: number,
+  centreY: number,
+  size: number,
+  angle: number,
+): void {
+  const dirX = Math.cos(angle);
+  const dirY = Math.sin(angle) * FACING_WEDGE_FLOOR_SQUASH;
+  const length = Math.hypot(dirX, dirY);
+  const unitX = dirX / length;
+  const unitY = dirY / length;
+  const baseX = centreX + dirX * FACING_WEDGE_REACH * size;
+  const baseY = centreY + dirY * FACING_WEDGE_REACH * size;
+  const halfWidth = FACING_WEDGE_HALF_WIDTH * size;
+  ctx.beginPath();
+  ctx.moveTo(
+    baseX + unitX * FACING_WEDGE_LENGTH * size,
+    baseY + unitY * FACING_WEDGE_LENGTH * size,
+  );
+  ctx.lineTo(baseX - unitY * halfWidth, baseY + unitX * halfWidth);
+  ctx.lineTo(baseX + unitY * halfWidth, baseY - unitX * halfWidth);
+  ctx.closePath();
+}
+
+/**
+ * A swivel only ever snaps between two facings, and which two differs per
+ * mirror, so both are marked round it: a solid gilt wedge where the glass
+ * faces now, a hollow one where the next blow will turn it. When the two
+ * facings are not back to back, the other setting's glass also stands as a
+ * translucent dashed ghost. It is drawn over the mirror, so neither the
+ * glass nor the turntable can hide a mark.
+ */
+function paintSwivelGhost(
+  ctx: Ctx,
+  originX: number,
+  originY: number,
+  size: number,
+  current: MirrorFacing,
+  other: MirrorFacing,
+): void {
+  const centreX = originX + size / 2;
+  const centreY = originY + size / 2;
+  const currentAngle = FACE_ANGLE[current];
+  const otherAngle = FACE_ANGLE[other];
+  const backToBack = Math.abs(Math.cos(currentAngle - otherAngle) + 1) < BACK_TO_BACK_TOLERANCE;
+  const line = outlineWidth(size) * GHOST_WEDGE_LINE_OUTLINES;
+  ctx.save();
+  try {
+    ctx.lineJoin = 'round';
+    if (!backToBack) {
+      const ghost = panelGeometry(centreX, centreY, size, otherAngle);
+      tracePanel(ctx, ghost);
+      ctx.fillStyle = GHOST_GLASS_STYLE;
+      ctx.fill();
+      ctx.setLineDash([GHOST_DASH * size, GHOST_GAP * size]);
+      ctx.lineWidth = line * 2;
+      ctx.strokeStyle = GHOST_DARK_STYLE;
+      ctx.stroke();
+      ctx.lineWidth = line;
+      ctx.strokeStyle = GHOST_LIGHT_STYLE;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    traceFacingWedge(ctx, centreX, centreY, size, otherAngle);
+    ctx.lineWidth = line * 2;
+    ctx.strokeStyle = GHOST_DARK_STYLE;
+    ctx.stroke();
+    ctx.lineWidth = line;
+    ctx.strokeStyle = GHOST_LIGHT_STYLE;
+    ctx.stroke();
+    traceFacingWedge(ctx, centreX, centreY, size, currentAngle);
+    ctx.fillStyle = CURRENT_WEDGE_STYLE;
+    ctx.fill();
+    ctx.lineWidth = line;
+    ctx.strokeStyle = GHOST_DARK_STYLE;
+    ctx.stroke();
+  } finally {
+    ctx.restore();
+  }
+}
+
+const swivelGhostEntries = new Map<string, BigTopPropCatalogueEntry>();
+
+function swivelGhostEntry(current: MirrorFacing, other: MirrorFacing): BigTopPropCatalogueEntry {
+  const state = `${current}-${other}`;
+  const known = swivelGhostEntries.get(state);
+  if (known !== undefined) return known;
+  const entry: BigTopPropCatalogueEntry = {
+    key: { prop: 'swivelGhost', state, frame: 0 },
+    box: SWIVEL_GHOST_BOX,
+    painter: (target, originX, originY, px) =>
+      paintSwivelGhost(target, originX, originY, px, current, other),
+  };
+  swivelGhostEntries.set(state, entry);
+  return entry;
+}
+
+/**
+ * The marks of a swivel's two settings, baked per pair of facings. Draw it
+ * after `drawMazeMirror` on the same tile.
+ */
+export function drawSwivelFacingGhost(
+  ctx: Ctx,
+  x: number,
+  y: number,
+  size: number,
+  current: MirrorFacing,
+  other: MirrorFacing,
+): void {
+  if (current === other) return;
+  const entry = swivelGhostEntry(current, other);
+  drawBigTopProp(ctx, entry.key, entry.box, entry.painter, x, y, size);
+}
+
+/** A swivel mirror with both its settings shown: the glass, then the marks of both facings over it. */
+export function drawSwivelMirrorWithGhost(
+  ctx: Ctx,
+  x: number,
+  y: number,
+  size: number,
+  art: MazeMirrorArt,
+  otherFacing: MirrorFacing,
+): void {
+  drawMazeMirror(ctx, x, y, size, art);
+  drawSwivelFacingGhost(ctx, x, y, size, art.facing, otherFacing);
 }
 
 // ── The panes in the hall's walls, and what they reflect ────────────────────
@@ -1525,264 +1674,17 @@ export function drawBeamMirrorFlare(
   }
 }
 
-// ── Star targets ────────────────────────────────────────────────────────────
-
-const STAR_POINTS = 5;
-const STAR_OUTER = 0.36;
-const STAR_INNER = 0.155;
-const STAR_PLATE_RADIUS = 0.41;
-const SEQUIN_RADIUS = 0.028;
-const SEQUIN_SPACING = 0.07;
-const GLITTER_FRAMES = 6;
-const GLITTER_PERIOD_FRAMES = 30;
-const LATCHED_FRAMES = 4;
-const LATCHED_PERIOD_FRAMES = 60;
-/** Share of the sequins catching the light at any instant while beams are on the star. */
-const GLITTER_SHARE_HALF = 0.25;
-const GLITTER_SHARE_FULL = 0.5;
-/** Share of a latched star's sequins flashing at any instant, and the hash salt that picks them apart from the glitter. */
-const LATCHED_SPARKLE_SHARE = 0.2;
-const LATCHED_SPARKLE_SALT = 7;
-const STAR_SHADOW_ALPHA = 0.6;
-const STAR_SHADOW_OFFSET_X = 0.04;
-const STAR_SHADOW_OFFSET_Y = 0.05;
-const STAR_RIM_WIDTH = 0.05;
-/** The plate's outline sits just outside its brass rim, in tiles. */
-const STAR_OUTLINE_OUTSET = 0.025;
-const LATCHED_GOLD: RGB = [255, 204, 80];
-const SPARKLE_WHITE: RGB = [255, 255, 250];
-/** Sequins stay at least this big in pixels, or they vanish on a small bake. */
-const SEQUIN_MIN_RADIUS_PX = 0.6;
-const LATCHED_SEQUIN_ALPHA = 0.75;
-/** An unlit sequin's alpha: a base plus a share that grows toward the stage light, never below a floor. */
-const SEQUIN_BASE_ALPHA = 0.25;
-const SEQUIN_LIGHT_GAIN = 0.2;
-const SEQUIN_MIN_ALPHA = 0.1;
-/** A sparkle's cross, in sequin radii: each arm's half length and length, and its half thickness and thickness. */
-const SPARKLE_HALF_LENGTH = 2;
-const SPARKLE_LENGTH = 4;
-const SPARKLE_HALF_THICKNESS = 0.3;
-const SPARKLE_THICKNESS = 0.6;
-
-type StarState = 'dark' | 'half' | 'full' | 'latched';
-
-function starState(art: MazeStarArt): StarState {
-  if (art.latched) return 'latched';
-  if (art.litFraction >= 1) return 'full';
-  if (art.litFraction > 0) return 'half';
-  return 'dark';
-}
-
-function traceStar(ctx: Ctx, centreX: number, centreY: number, size: number): void {
-  ctx.beginPath();
-  for (let point = 0; point < STAR_POINTS * 2; point++) {
-    const radius = size * (point % 2 === 0 ? STAR_OUTER : STAR_INNER);
-    // Started at the top so the star reads upright rather than as a cog.
-    const angle = -QUARTER_TURN + (FULL_TURN / (STAR_POINTS * 2)) * point;
-    const px = centreX + Math.cos(angle) * radius;
-    const py = centreY + Math.sin(angle) * radius;
-    if (point === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-}
-
-function sequinPositions(centreX: number, centreY: number, size: number): Vec2[] {
-  const spacing = SEQUIN_SPACING * size;
-  const reach = STAR_OUTER * size;
-  const positions: Vec2[] = [];
-  for (let row = -reach; row <= reach; row += spacing) {
-    const shift = Math.round(row / spacing) % 2 === 0 ? 0 : spacing / 2;
-    for (let column = -reach; column <= reach; column += spacing) {
-      positions.push({ x: centreX + column + shift, y: centreY + row });
-    }
-  }
-  return positions;
-}
-
-function paintStar(
-  ctx: Ctx,
-  originX: number,
-  originY: number,
-  size: number,
-  state: StarState,
-  frame: number,
-): void {
-  const centreX = originX + size / 2;
-  const centreY = originY + size / 2;
-  const plate = STAR_PLATE_RADIUS * size;
-  ctx.fillStyle = rgba(BACKSTAGE.shadow, STAR_SHADOW_ALPHA);
-  ctx.beginPath();
-  ctx.arc(
-    centreX + size * STAR_SHADOW_OFFSET_X,
-    centreY + size * STAR_SHADOW_OFFSET_Y,
-    plate,
-    0,
-    FULL_TURN,
-  );
-  ctx.fill();
-  const velvet = ctx.createRadialGradient(
-    centreX - plate / DOME_HIGHLIGHT_DIVISOR,
-    centreY - plate / DOME_HIGHLIGHT_DIVISOR,
-    0,
-    centreX,
-    centreY,
-    plate,
-  );
-  velvet.addColorStop(0, rgba(BRUISE.mid, 1));
-  velvet.addColorStop(1, rgba(BRUISE.shadow, 1));
-  ctx.fillStyle = velvet;
-  ctx.beginPath();
-  ctx.arc(centreX, centreY, plate, 0, FULL_TURN);
-  ctx.fill();
-  ctx.strokeStyle = rgba(BRASS.mid, 1);
-  ctx.lineWidth = Math.max(1, size * STAR_RIM_WIDTH);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(centreX, centreY, plate + size * STAR_OUTLINE_OUTSET, 0, FULL_TURN);
-  inkCurrentPath(ctx, size);
-
-  const lit = state === 'latched';
-  const body = ctx.createLinearGradient(
-    centreX - plate,
-    centreY - plate,
-    centreX + plate,
-    centreY + plate,
-  );
-  if (lit) {
-    body.addColorStop(0, rgba(GILT_GLINT, 1));
-    body.addColorStop(0.5, rgba(LATCHED_GOLD, 1));
-    body.addColorStop(1, rgba(BRASS.mid, 1));
-  } else {
-    body.addColorStop(0, rgba(BRASS.light, 1));
-    body.addColorStop(1, rgba(BRASS.shadow, 1));
-  }
-  ctx.fillStyle = body;
-  traceStar(ctx, centreX, centreY, size);
-  ctx.fill();
-
-  ctx.save();
-  try {
-    traceStar(ctx, centreX, centreY, size);
-    ctx.clip();
-    const sequin = Math.max(SEQUIN_MIN_RADIUS_PX, SEQUIN_RADIUS * size);
-    const glitterShare =
-      state === 'full' ? GLITTER_SHARE_FULL : state === 'half' ? GLITTER_SHARE_HALF : 0;
-    sequinPositions(centreX, centreY, size).forEach((at, index) => {
-      // Lit from upper left: sequins up that side catch more of the stage light.
-      const toLight = (centreX - at.x + (centreY - at.y)) / (STAR_OUTER * size * 2);
-      const base = lit ? LATCHED_SEQUIN_ALPHA : SEQUIN_BASE_ALPHA + SEQUIN_LIGHT_GAIN * toLight;
-      ctx.fillStyle = rgba(
-        lit ? GILT_GLINT : BRASS.accent,
-        Math.max(SEQUIN_MIN_ALPHA, Math.min(1, base)),
-      );
-      ctx.beginPath();
-      ctx.arc(at.x, at.y, sequin, 0, FULL_TURN);
-      ctx.fill();
-      const sparkle = hashUnit(index, frame + 1) < glitterShare;
-      if (
-        sparkle ||
-        (lit && hashUnit(index, frame + LATCHED_SPARKLE_SALT) < LATCHED_SPARKLE_SHARE)
-      ) {
-        ctx.fillStyle = rgba(SPARKLE_WHITE, 1);
-        ctx.fillRect(
-          at.x - sequin * SPARKLE_HALF_LENGTH,
-          at.y - sequin * SPARKLE_HALF_THICKNESS,
-          sequin * SPARKLE_LENGTH,
-          sequin * SPARKLE_THICKNESS,
-        );
-        ctx.fillRect(
-          at.x - sequin * SPARKLE_HALF_THICKNESS,
-          at.y - sequin * SPARKLE_HALF_LENGTH,
-          sequin * SPARKLE_THICKNESS,
-          sequin * SPARKLE_LENGTH,
-        );
-      }
-    });
-  } finally {
-    ctx.restore();
-  }
-  traceStar(ctx, centreX, centreY, size);
-  inkCurrentPath(ctx, size);
-}
-
-function starEntry(state: StarState, frame: number): BigTopPropCatalogueEntry {
-  return {
-    key: { prop: 'sequinStar', state, frame },
-    box: ONE_TILE_BOX,
-    painter: (target, originX, originY, px) =>
-      paintStar(target, originX, originY, px, state, frame),
-  };
-}
-
-const STAR_GLOW_STOPS: ReadonlyArray<GlowStop> = [
-  { offset: 0, color: 'rgba(255,230,140,0.7)' },
-  { offset: 0.4, color: 'rgba(255,200,90,0.3)' },
-  { offset: 1, color: 'rgba(255,190,80,0)' },
-];
-const STAR_GLOW_RADIUS = 0.9;
-const BURST_RING_REACH = 1.8;
-const BURST_RAYS = 10;
-const BURST_RAY_LENGTH = 0.6;
-const BURST_RING_WIDTH = 0.08;
-/** The burst's rays start this share of the ring's travel out, trailing behind it. */
-const BURST_RAY_START_SHARE = 0.5;
-/** A star under only some of its beams still glows at least this brightly. */
-const STAR_GLOW_MIN_ALPHA = 0.35;
-
-/** A sequinned star target in the dividing wall: dull until struck, glittering under a beam, gold once latched, with a burst as it latches. */
-export function drawMazeStar(ctx: Ctx, x: number, y: number, size: number, art: MazeStarArt): void {
-  const state = starState(art);
-  const frame =
-    state === 'half' || state === 'full'
-      ? loopFrame(art.phase, GLITTER_PERIOD_FRAMES, GLITTER_FRAMES)
-      : state === 'latched'
-        ? loopFrame(art.phase, LATCHED_PERIOD_FRAMES, LATCHED_FRAMES)
-        : 0;
-  const centreX = x + size / 2;
-  const centreY = y + size / 2;
-  if (state !== 'dark') {
-    ctx.save();
-    try {
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = state === 'latched' ? 1 : Math.max(STAR_GLOW_MIN_ALPHA, art.litFraction);
-      drawRadialGlow(ctx, centreX, centreY, STAR_GLOW_RADIUS * size, STAR_GLOW_STOPS);
-    } finally {
-      ctx.restore();
-    }
-  }
-  const entry = starEntry(state, frame);
-  drawBigTopProp(ctx, entry.key, entry.box, entry.painter, x, y, size);
-  if (art.burst <= 0) return;
-  const spent = 1 - Math.min(1, art.burst);
-  ctx.save();
-  try {
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = rgba(GILT_GLINT, art.burst);
-    ctx.lineWidth = Math.max(1, size * BURST_RING_WIDTH * art.burst);
-    ctx.beginPath();
-    ctx.arc(centreX, centreY, size * (STAR_PLATE_RADIUS + spent * BURST_RING_REACH), 0, FULL_TURN);
-    ctx.stroke();
-    ctx.lineCap = 'round';
-    for (let ray = 0; ray < BURST_RAYS; ray++) {
-      const angle = (FULL_TURN / BURST_RAYS) * ray + spent;
-      const inner = size * (STAR_PLATE_RADIUS + spent * BURST_RING_REACH * BURST_RAY_START_SHARE);
-      const outer = inner + size * BURST_RAY_LENGTH * art.burst;
-      ctx.beginPath();
-      ctx.moveTo(centreX + Math.cos(angle) * inner, centreY + Math.sin(angle) * inner);
-      ctx.lineTo(centreX + Math.cos(angle) * outer, centreY + Math.sin(angle) * outer);
-      ctx.stroke();
-    }
-  } finally {
-    ctx.restore();
-  }
-}
-
 /** Every picture the hall of mirrors asks the prop cache for, for the art gate. */
 export function mirrorHallPropCatalogue(): ReadonlyArray<BigTopPropCatalogueEntry> {
   const entries: BigTopPropCatalogueEntry[] = [];
   for (const kind of ['pivot_mirror', 'swivel_mirror'] as const) {
     for (let step = 0; step < MIRROR_ANGLE_STEPS; step++) entries.push(mirrorEntry(kind, step));
+  }
+  const facings: ReadonlyArray<MirrorFacing> = ['NE', 'SE', 'SW', 'NW'];
+  for (const current of facings) {
+    for (const other of facings) {
+      if (other !== current) entries.push(swivelGhostEntry(current, other));
+    }
   }
   for (const shape of PANE_SHAPES) entries.push(paneEntry(shape));
   for (const direction of ['north', 'south', 'east', 'west'] as const) {
@@ -1793,10 +1695,5 @@ export function mirrorHallPropCatalogue(): ReadonlyArray<BigTopPropCatalogueEntr
   for (const hot of [true, false]) {
     for (const vertical of [true, false]) entries.push(beamEntry(hot, vertical));
   }
-  entries.push(starEntry('dark', 0));
-  for (const state of ['half', 'full'] as const) {
-    for (let frame = 0; frame < GLITTER_FRAMES; frame++) entries.push(starEntry(state, frame));
-  }
-  for (let frame = 0; frame < LATCHED_FRAMES; frame++) entries.push(starEntry('latched', frame));
   return entries;
 }

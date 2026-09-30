@@ -2,11 +2,67 @@ import type { AudioManager } from '../../audio/AudioManager';
 import { type ButtonRect, type PauseTab } from './types';
 import { addButton, beginMenuFocus, endMenuFocus, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
-import { drawBox, drawScrollbar, BOX_PRESETS } from '../Box';
+import { drawBox, drawScrollbar, BOX_PRESETS, type BoxOptions } from '../Box';
 import { platform } from '../../core/Platform';
 import { settings, type QualityPreset } from '../../core/Settings';
 import { renderQuality } from '../../core/RenderQuality';
 import { DIFFICULTY_LABELS, type Difficulty } from '../../core/difficultyProfiles';
+import { activeDifficultyChangeGuard } from '../../core/difficultyChangeGuard';
+
+/** The slice of the audio manager this tab reads and writes: the three volume preferences. */
+export type SettingsTabAudio = Pick<
+  AudioManager,
+  | 'masterVolume'
+  | 'musicVolume'
+  | 'sfxVolume'
+  | 'setMasterVolumePreference'
+  | 'setMusicVolumePreference'
+  | 'setSfxVolumePreference'
+>;
+
+/**
+ * A difficulty the player picked while a guard was active, waiting on the
+ * restart confirmation. Held here rather than on the pause menu so the prompt
+ * and the button that raised it share one owner.
+ */
+let pendingDifficulty: Difficulty | null = null;
+
+/** Drop transient screen state — called when the pause menu leaves this tab or closes. */
+export function resetSettingsTab(): void {
+  pendingDifficulty = null;
+}
+
+/**
+ * The difficulty buttons' click. A running guard means the change would restart
+ * something, so the pick waits for the player to confirm; otherwise it applies
+ * at once. Picking the tier already in play never needs a restart.
+ */
+function requestDifficulty(difficulty: Difficulty): void {
+  const guarded = activeDifficultyChangeGuard() !== null;
+  if (guarded && difficulty !== settings.difficulty) {
+    pendingDifficulty = difficulty;
+    return;
+  }
+  settings.setDifficulty(difficulty);
+}
+
+function cancelPendingDifficulty(): void {
+  pendingDifficulty = null;
+}
+
+function confirmPendingDifficulty(): void {
+  const next = pendingDifficulty;
+  pendingDifficulty = null;
+  if (next === null) return;
+  const guard = activeDifficultyChangeGuard();
+  // The guard can have been released while the prompt was up; with nothing left
+  // to restart, the change is an ordinary one.
+  if (guard === null) {
+    settings.setDifficulty(next);
+    return;
+  }
+  guard.restartWithDifficulty(next);
+}
 
 /** The on-screen span of the scrolling list, in canvas pixels. */
 interface ScrollBand {
@@ -137,7 +193,15 @@ const CONFIRM_BTN_Y_OFFSET = 116;
 const CONFIRM_BTN_H = 38;
 const CONFIRM_BTN_SIDE_MARGIN = 12;
 const CONFIRM_BTN_GAP = 8;
-const CONFIRM_OVERLAY_ALPHA = 0.65;
+const CONFIRM_OVERLAY_FILL = 'rgba(0,0,0,0.65)';
+const CONFIRM_DIALOG_RADIUS = 6;
+
+const DIFFICULTY_CONFIRM_TITLE = 'Restart the Big Top?';
+const DIFFICULTY_CONFIRM_BODY =
+  'Changing the difficulty changes the hall of mirrors. The show will start over from Act I.';
+/** Taller than the reset prompt: its body wraps to three lines on a phone-width pause box. */
+const DIFFICULTY_CONFIRM_DIALOG_H = 190;
+const DIFFICULTY_CONFIRM_BTN_Y_OFFSET = 136;
 
 function renderVolumeSlider(
   ctx: CanvasRenderingContext2D,
@@ -270,7 +334,7 @@ function renderDifficultyChoice(
       label: DIFFICULTY_LABELS[difficulty],
       ...(isSelected ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
       action: () => {
-        settings.setDifficulty(difficulty);
+        requestDifficulty(difficulty);
       },
     });
   });
@@ -315,6 +379,76 @@ function renderMongoAutoSummonToggle(
   });
 }
 
+/** Where a confirm dialog's two side-by-side buttons sit. */
+interface ConfirmButtonRow {
+  y: number;
+  width: number;
+  leftX: number;
+  rightX: number;
+}
+
+/**
+ * Dims the pause box and draws a confirm dialog's panel, title and body,
+ * returning the button row for the caller to fill.
+ */
+function drawConfirmPanel(
+  ctx: CanvasRenderingContext2D,
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number,
+  content: {
+    title: string;
+    titleColor: string;
+    body: string;
+    dialogHeight: number;
+    buttonYOffset: number;
+    box: Pick<BoxOptions, 'fill' | 'border' | 'borderWidth'>;
+  },
+): ConfirmButtonRow {
+  drawBox(ctx, { x: bx, y: by, width: bw, height: bh, fill: CONFIRM_OVERLAY_FILL });
+
+  const dialogW = bw - CONFIRM_DIALOG_H_MARGIN * 2;
+  const dialogX = bx + CONFIRM_DIALOG_H_MARGIN;
+  const dialogY = by + Math.floor((bh - content.dialogHeight) / 2);
+
+  drawBox(ctx, {
+    x: dialogX,
+    y: dialogY,
+    width: dialogW,
+    height: content.dialogHeight,
+    ...content.box,
+    radius: CONFIRM_DIALOG_RADIUS,
+  });
+
+  drawText(ctx, content.title, {
+    x: dialogX + dialogW / 2,
+    y: dialogY + CONFIRM_TITLE_Y_OFFSET,
+    size: CONFIRM_TITLE_SIZE,
+    bold: true,
+    color: content.titleColor,
+    align: 'center',
+  });
+
+  drawText(ctx, content.body, {
+    x: dialogX + CONFIRM_BTN_SIDE_MARGIN,
+    y: dialogY + CONFIRM_BODY_Y_OFFSET,
+    size: CONFIRM_BODY_SIZE,
+    color: '#e2e8f0',
+    align: 'center',
+    width: dialogW - CONFIRM_BTN_SIDE_MARGIN * 2,
+  });
+
+  const width = Math.floor((dialogW - CONFIRM_BTN_SIDE_MARGIN * 2 - CONFIRM_BTN_GAP) / 2);
+  const leftX = dialogX + CONFIRM_BTN_SIDE_MARGIN;
+  return {
+    y: dialogY + content.buttonYOffset,
+    width,
+    leftX,
+    rightX: leftX + width + CONFIRM_BTN_GAP,
+  };
+}
+
 function renderResetConfirmDialog(
   ctx: CanvasRenderingContext2D,
   buttons: ButtonRect[],
@@ -325,53 +459,20 @@ function renderResetConfirmDialog(
   onCancel: () => void,
   onConfirm: (() => void) | null,
 ): void {
-  ctx.save();
-  ctx.globalAlpha = CONFIRM_OVERLAY_ALPHA;
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(bx, by, bw, bh);
-  ctx.restore();
-
-  const dialogW = bw - CONFIRM_DIALOG_H_MARGIN * 2;
-  const dialogX = bx + CONFIRM_DIALOG_H_MARGIN;
-  const dialogY = by + Math.floor((bh - CONFIRM_DIALOG_H) / 2);
-
-  drawBox(ctx, {
-    x: dialogX,
-    y: dialogY,
-    width: dialogW,
-    height: CONFIRM_DIALOG_H,
-    ...BOX_PRESETS.danger,
-    radius: 6,
+  const row = drawConfirmPanel(ctx, bx, by, bw, bh, {
+    title: 'Reset Game?',
+    titleColor: '#fca5a5',
+    body: 'All your progress will be erased. Are you sure?',
+    dialogHeight: CONFIRM_DIALOG_H,
+    buttonYOffset: CONFIRM_BTN_Y_OFFSET,
+    box: BOX_PRESETS.danger,
   });
-
-  drawText(ctx, 'Reset Game?', {
-    x: dialogX + dialogW / 2,
-    y: dialogY + CONFIRM_TITLE_Y_OFFSET,
-    size: CONFIRM_TITLE_SIZE,
-    bold: true,
-    color: '#fca5a5',
-    align: 'center',
-  });
-
-  drawText(ctx, 'All your progress will be erased. Are you sure?', {
-    x: dialogX + CONFIRM_BTN_SIDE_MARGIN,
-    y: dialogY + CONFIRM_BODY_Y_OFFSET,
-    size: CONFIRM_BODY_SIZE,
-    color: '#e2e8f0',
-    align: 'center',
-    width: dialogW - CONFIRM_BTN_SIDE_MARGIN * 2,
-  });
-
-  const btnY = dialogY + CONFIRM_BTN_Y_OFFSET;
-  const btnW = Math.floor((dialogW - CONFIRM_BTN_SIDE_MARGIN * 2 - CONFIRM_BTN_GAP) / 2);
-  const yesBtnX = dialogX + CONFIRM_BTN_SIDE_MARGIN;
-  const cancelBtnX = yesBtnX + btnW + CONFIRM_BTN_GAP;
 
   if (onConfirm !== null) {
     addButton(ctx, buttons, {
-      x: yesBtnX,
-      y: btnY,
-      width: btnW,
+      x: row.leftX,
+      y: row.y,
+      width: row.width,
       height: CONFIRM_BTN_H,
       label: 'Yes, Reset',
       ...BUTTON_PRESETS.danger,
@@ -380,14 +481,57 @@ function renderResetConfirmDialog(
   }
 
   addButton(ctx, buttons, {
-    x: cancelBtnX,
-    y: btnY,
-    width: btnW,
+    x: row.rightX,
+    y: row.y,
+    width: row.width,
     height: CONFIRM_BTN_H,
     label: 'Cancel',
     ...BUTTON_PRESETS.primary,
     primaryAction: true,
     action: onCancel,
+  });
+}
+
+/**
+ * Asks before a guarded difficulty change restarts the run. Keep playing is the
+ * primary action, so a stray Enter or gamepad press leaves the run alone.
+ */
+function renderDifficultyConfirmDialog(
+  ctx: CanvasRenderingContext2D,
+  buttons: ButtonRect[],
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number,
+): void {
+  const row = drawConfirmPanel(ctx, bx, by, bw, bh, {
+    title: DIFFICULTY_CONFIRM_TITLE,
+    titleColor: '#fde68a',
+    body: DIFFICULTY_CONFIRM_BODY,
+    dialogHeight: DIFFICULTY_CONFIRM_DIALOG_H,
+    buttonYOffset: DIFFICULTY_CONFIRM_BTN_Y_OFFSET,
+    box: BOX_PRESETS.modal,
+  });
+
+  addButton(ctx, buttons, {
+    x: row.leftX,
+    y: row.y,
+    width: row.width,
+    height: CONFIRM_BTN_H,
+    label: 'Keep playing',
+    ...BUTTON_PRESETS.primary,
+    primaryAction: true,
+    action: cancelPendingDifficulty,
+  });
+
+  addButton(ctx, buttons, {
+    x: row.rightX,
+    y: row.y,
+    width: row.width,
+    height: CONFIRM_BTN_H,
+    label: 'Change and restart',
+    ...BUTTON_PRESETS.danger,
+    action: confirmPendingDifficulty,
   });
 }
 
@@ -398,7 +542,7 @@ export function renderSettingsTab(
   by: number,
   bw: number,
   bh: number,
-  audio: AudioManager,
+  audio: SettingsTabAudio,
   setTab: (tab: PauseTab) => void,
   onOpenChat: (() => void) | null,
   showResetConfirm: boolean,
@@ -588,6 +732,13 @@ export function renderSettingsTab(
     // buttons, so nothing behind the dim can be reached by pointer or keyboard.
     beginMenuFocus('pause-reset-confirm');
     renderResetConfirmDialog(ctx, buttons, bx, by, bw, bh, onCancelReset, onConfirmReset);
+    endMenuFocus();
+  } else if (pendingDifficulty !== null) {
+    buttons.length = 0;
+    // Its own ring for the same reason as the reset prompt: only the two answers
+    // may be reachable while the question is up.
+    beginMenuFocus('pause-difficulty-confirm');
+    renderDifficultyConfirmDialog(ctx, buttons, bx, by, bw, bh);
     endMenuFocus();
   }
 

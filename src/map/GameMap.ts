@@ -1,12 +1,13 @@
 import {
-  BIG_TOP_MAZE_ROWS,
   MAZE_CAT_SPAWN_CHAR,
   MAZE_EXIT_TILES,
   MAZE_FLOOR_CHAR,
   MAZE_HUMAN_SPAWN_CHAR,
   MAZE_HUMAN_SPAWN_TILE,
+  MAZE_PILLAR_CHAR,
   MAZE_POLE_CHAR,
   MAZE_WALL_CHAR,
+  type BigTopMazePlan,
 } from './bigTopMazeLayout';
 import {
   type TileContent,
@@ -179,7 +180,13 @@ const HOUSE_INTERIOR_H = 14;
  * Only the Big Top has more than one, and only for the length of the circus
  * questline's final act — every other room is `'default'` forever.
  */
-export type InteriorVariant = 'default' | 'bigtop_maze';
+export type InteriorVariant =
+  | 'default'
+  | {
+      readonly kind: 'bigtop_maze';
+      /** The tent as dealt to this world and difficulty: its board written into the floor plan. */
+      readonly plan: BigTopMazePlan;
+    };
 
 /** The tile the maze layout's legend character stands for. */
 function mazeTileTypeFor(legend: string): number {
@@ -188,15 +195,17 @@ function mazeTileTypeFor(legend: string): number {
       return INTERIOR_WALL;
     case MAZE_POLE_CHAR:
       return TENT_POLE;
+    case MAZE_PILLAR_CHAR:
+      return INTERIOR_WALL;
     case MAZE_FLOOR_CHAR:
     case MAZE_HUMAN_SPAWN_CHAR:
     case MAZE_CAT_SPAWN_CHAR:
       return SAWDUST_FLOOR;
     default:
       // Gates, barricades, curtains, exit doors, the grates the counterweights
-      // hang behind, the limelight projectors and the stars set in the dividing
-      // wall. All of them start as wall; only a gate, a curtain or a door ever
-      // stops being one, and `BigTopMazeSystem` is what opens it.
+      // hang behind, the hall's lights, its stars and the windows in its
+      // dividing wall. All of them start as wall; only a gate, a curtain or a
+      // door ever stops being one, and `BigTopMazeSystem` is what opens it.
       return INTERIOR_WALL;
   }
 }
@@ -1218,9 +1227,8 @@ export class GameMap {
     this._placedInteriorProps = [];
     setTownInteriorWallMaterial(buildingName);
     setBigTopDecorLayout(null);
-    if (variant === 'bigtop_maze') {
-      setBigTopDecorLayout({ kind: 'maze' });
-      this.generateBigTopMaze();
+    if (variant !== 'default') {
+      this.generateBigTopMaze(variant.plan);
       return;
     }
     const isTower = buildingType === 'tower';
@@ -1621,9 +1629,13 @@ export class GameMap {
    * Built from the layout table rather than by the ring-arena branch above
    * because the vent choreography is timed against exact corridor lengths — a
    * layout that drifted by a tile would quietly make one of them unsurvivable.
+   *
+   * Public so a tent restarted on another difficulty can be rebuilt on the same
+   * map, which every system in the room already holds.
    */
-  private generateBigTopMaze(): void {
-    const grid: TileContent[][] = BIG_TOP_MAZE_ROWS.map((row, y) =>
+  generateBigTopMaze(plan: BigTopMazePlan): void {
+    setBigTopDecorLayout({ kind: 'maze', plan });
+    const grid: TileContent[][] = plan.rows.map((row, y) =>
       Array.from({ length: row.length }, (_unused, x) => ({
         tileId: `${x}#${y}`,
         type: mazeTileTypeFor(row[x]),

@@ -14,6 +14,7 @@
  *
  * Run: npx tsx scripts/verify-bigtop-maze.ts
  */
+import type { Difficulty } from '../src/core/difficultyProfiles';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { GameMap } from '../src/map/GameMap';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
@@ -25,6 +26,7 @@ import {
   BigTopMazeSystem,
   FLOOR_DRESSING_KINDS,
   HAZARD_ESCAPE_RADIUS_TILES,
+  TURN_PREVIEW_RANGE_TILES,
   WALL_HUNG_DRESSING_KINDS,
 } from '../src/systems/BigTopMazeSystem';
 import {
@@ -70,41 +72,98 @@ import {
   MAZE_BLOCKS,
   MAZE_CAT_SPAWN_TILE,
   MAZE_CORRIDORS,
-  MAZE_BEAM_TARGETS,
   MAZE_CURTAINS,
   MAZE_ENCORE_REWARD_COINS,
-  MAZE_ENCORE_REWARD_TILE,
-  MAZE_ENCORE_STAR,
   MAZE_EXIT_TILES,
   MAZE_GRIMALDI_TILE,
   MAZE_HEIGHT,
   MAZE_HUMAN_SPAWN_TILE,
   MAZE_LEGEND_CHARS,
+  MAZE_HALL_EXITS,
+  MAZE_HALVES,
   MAZE_MENAGERIE_POCKETS,
-  MAZE_MIRRORS,
-  MAZE_PROJECTORS,
+  MIRROR_BOARD_ROWS,
   MAZE_SECTIONS,
   MAZE_SPOTLIGHT_CELLS,
   MAZE_SPOTLIGHT_CROSSINGS,
   MAZE_SPOTLIGHTS,
-  MAZE_STARS,
   MAZE_TARGET_KINDS,
   MAZE_TARGET_OWNER,
+  MAZE_TEACHING_DOORWAYS,
   MAZE_TIMING_MARGIN,
   MAZE_VENTS,
   MAZE_WIDTH,
+  planBigTopMaze,
   SPRINT_WAVE_STEP,
   sectionAtRow,
-  traceMazeBeam,
+  starFootTile,
+  TEACHING_STRIP_BOARD,
+  TEACHING_STRIP_ROWS,
+  teachingStarLane,
+  teachingTileToTent,
+  tentMirrorsOf,
   ventPhaseAt,
-  type BeamPath,
+  type BigTopMazePlan,
   type MazeCorridor,
   type MazeHalf,
+  type MazeMirror,
+  type MazeRect,
   type MazeSectionId,
   type MazeTile,
-  type MirrorFacing,
   type VentSchedule,
 } from '../src/map/bigTopMazeLayout';
+import {
+  boardHotSpan,
+  boardTileToTent,
+  constructedSolution,
+  MIRROR_BOARD_DIFFICULTIES,
+  serializeMirrorBoard,
+  solveBoard,
+  traceBoard,
+  type BoardStarState,
+  type BoardTrace,
+  type MirrorBoard,
+} from '../src/map/bigTop/mirrorBoard';
+import {
+  hallMarqueePlacement,
+  marqueeCovers,
+  marqueeStarOrder,
+  teachingMarqueePlacement,
+} from '../src/systems/bigTop/hallMarquees';
+import { MirrorHall, type HallBoardId, type SettlingBoard } from '../src/systems/bigTop/MirrorHall';
+import { restartBigTopTent } from '../src/systems/bigTop/bigTopTent';
+import { activeDifficultyChangeGuard } from '../src/core/difficultyChangeGuard';
+import { settings } from '../src/core/Settings';
+import { runMirrorBoardChecks, SWEEP_ATTEMPTS } from './bigTopMirrorBoardChecks';
+
+/** Faults a run can inject; each must turn its own check red. */
+const FAULTS = ['latch-stars', 'unguarded-difficulty'] as const;
+type MazeFault = (typeof FAULTS)[number];
+const FAULT_FLAG = '--fault=';
+const faultArg = process.argv.find((arg) => arg.startsWith(FAULT_FLAG))?.slice(FAULT_FLAG.length);
+const fault: MazeFault | null = FAULTS.find((candidate) => candidate === faultArg) ?? null;
+if (faultArg !== undefined && fault === null) {
+  console.error(`unknown fault "${faultArg}"; known: ${FAULTS.join(', ')}`);
+  process.exit(2);
+}
+
+/** A fixed floor-3 world seed, so the hall deals the same board every run. */
+const TEST_WORLD_SEED = 0x5eed_b16;
+/** The tier the maze is built under here; the default a new game starts on. */
+const TEST_DIFFICULTY: Difficulty = 'normal';
+/** Worlds dealt on every tier to prove no marquee is hung over a star. */
+const MARQUEE_SWEEP_WORLDS = 60;
+/** The tier the difficulty prompt's check restarts the tent on. */
+const RESTART_DIFFICULTY: Difficulty = 'hard';
+/** The tent dealt for that world and tier, the way the scene deals it at the door. */
+const TEST_PLAN: BigTopMazePlan = planBigTopMaze(TEST_WORLD_SEED, TEST_DIFFICULTY);
+/** The hall's mirrors and the teaching strip's, in tent tiles. */
+const HALL_MIRRORS: ReadonlyArray<MazeMirror> = tentMirrorsOf(TEST_PLAN.board, boardTileToTent);
+const TEACHING_MIRRORS: ReadonlyArray<MazeMirror> = tentMirrorsOf(
+  TEACHING_STRIP_BOARD,
+  teachingTileToTent,
+);
+const EVERY_MIRROR: ReadonlyArray<MazeMirror> = [...HALL_MIRRORS, ...TEACHING_MIRRORS];
 
 /**
  * The telegraph floor the game's fairness rules put under any hazard the player
@@ -250,7 +309,7 @@ console.log('\nChecking the act bands…');
 }
 
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-map.generateInterior('house', 0, 'Big Top', false, 'bigtop_maze');
+map.generateInterior('house', 0, 'Big Top', false, { kind: 'bigtop_maze', plan: TEST_PLAN });
 
 console.log('\nChecking the generated map…');
 {
@@ -277,18 +336,51 @@ console.log('\nChecking the generated map…');
       isInFinalChamber(MAZE_GRIMALDI_TILE.x, MAZE_GRIMALDI_TILE.y),
     `Grimaldi's tile ${tileKey(MAZE_GRIMALDI_TILE)} is open ground in the centre ring`,
   );
-  for (const projector of MAZE_PROJECTORS) {
-    check(
-      !map.isWalkable(projector.tile.x, projector.tile.y),
-      `${projector.id} is bolted into the wall at ${tileKey(projector.tile)}`,
-    );
-  }
-  for (const star of MAZE_STARS) {
-    check(
-      !map.isWalkable(star.tile.x, star.tile.y),
-      `${star.id} is set in the dividing wall at ${tileKey(star.tile)}`,
-    );
-  }
+  const board = TEST_PLAN.board;
+  const inWall: ReadonlyArray<{ tile: MazeTile; what: string }> = [
+    ...board.limelights.map((light) => ({
+      tile: boardTileToTent(light.tile),
+      what: `the ${light.colour} limelight`,
+    })),
+    ...board.stars.map((star) => ({ tile: boardTileToTent(star.tile), what: star.id })),
+    ...board.windows.map((window) => ({ tile: boardTileToTent(window), what: 'a window' })),
+    ...board.pillars.map((pillar) => ({ tile: boardTileToTent(pillar), what: 'a pillar' })),
+    ...TEACHING_STRIP_BOARD.limelights.map((light) => ({
+      tile: teachingTileToTent(light.tile),
+      what: `the ${light.colour} footlight lamp`,
+    })),
+    ...TEACHING_STRIP_BOARD.stars.map((star) => ({
+      tile: teachingTileToTent(star.tile),
+      what: star.id,
+    })),
+  ];
+  const walkedOn = inWall.filter((piece) => map.isWalkable(piece.tile.x, piece.tile.y));
+  check(
+    inWall.length > 0 && walkedOn.length === 0,
+    `every light, star, window and pillar the board and the teaching strip set is solid (${
+      walkedOn.map((piece) => `${piece.what} at ${tileKey(piece.tile)}`).join(', ') ||
+      `${inWall.length} pieces`
+    })`,
+  );
+  const standsOnFloor = [
+    ...EVERY_MIRROR.map((mirror) => mirror.tile),
+    ...board.splitters.map((splitter) => boardTileToTent(splitter.tile)),
+    ...TEACHING_STRIP_BOARD.splitters.map((splitter) => teachingTileToTent(splitter.tile)),
+  ].filter((tile) => !map.isWalkable(tile.x, tile.y));
+  check(
+    standsOnFloor.length === 0,
+    `every piece of glass stands on the floor plan's floor (${standsOnFloor.map(tileKey).join(' ') || 'all'})`,
+  );
+  check(
+    TEST_PLAN.rows.length === BIG_TOP_MAZE_ROWS.length &&
+      TEST_PLAN.rows.every((row, y) => row.length === BIG_TOP_MAZE_ROWS[y]?.length),
+    'the dealt floor plan keeps the tent the same size',
+  );
+  const legend = new Set(MAZE_LEGEND_CHARS.split(''));
+  check(
+    TEST_PLAN.rows.every((row) => [...row].every((glyph) => legend.has(glyph))),
+    'every glyph the board writes in is in the legend',
+  );
 }
 
 // ── Telegraphs ────────────────────────────────────────────────────────────────
@@ -317,16 +409,10 @@ console.log('\nChecking every telegraph…');
 
 // ── Hazard placement ──────────────────────────────────────────────────────────
 
-/** The unbent span of both limelights, which is the only part of a beam that burns. */
-const HOT_BEAM_TILES = new Set<string>();
-for (const half of ['human', 'cat'] as const) {
-  const path = traceMazeBeam(
-    half,
-    () => null,
-    (x, y) => map.isWalkable(x, y),
-  );
-  for (const step of path.steps) if (step.hot) HOT_BEAM_TILES.add(tileKey(step.tile));
-}
+/** Each limelight's span from lens to first optic, which is the only light that burns. */
+const HOT_BEAM_TILES = new Set<string>(
+  boardHotSpan(TEST_PLAN.board).map((step) => tileKey(boardTileToTent(step.tile))),
+);
 
 console.log('\nChecking where hazards are allowed to be…');
 {
@@ -352,7 +438,7 @@ console.log('\nChecking where hazards are allowed to be…');
   }
   for (const bell of MAZE_BELLS) forbid(bell.tile, `${bell.id}'s stand`);
   for (const pocket of MAZE_MENAGERIE_POCKETS) forbid(pocket, 'a menagerie alcove');
-  for (const mirror of MAZE_MIRRORS) forbid(mirror.tile, `${mirror.id}'s mount`);
+  for (const mirror of EVERY_MIRROR) forbid(mirror.tile, `${mirror.id}'s mount`);
   for (const curtain of MAZE_CURTAINS) {
     for (const room of [curtain.humanRoom, curtain.catRoom]) {
       for (let y = room.y0; y <= room.y1; y++) {
@@ -629,14 +715,19 @@ for (const curtain of MAZE_CURTAINS) {
   barrierByTile.set(tileKey(curtain.humanBarrier), curtain.id);
   barrierByTile.set(tileKey(curtain.catBarrier), curtain.id);
 }
-for (const star of MAZE_STARS) {
-  for (const tile of star.opens) barrierByTile.set(tileKey(tile), star.id);
+/** The four exits the solved board opens together, as one barrier. */
+const HALL_BOARD_BARRIER = 'hall_board';
+const teachingBarrierOf = (half: MazeHalf): string => `teaching_${half}`;
+for (const exit of MAZE_HALL_EXITS) barrierByTile.set(tileKey(exit.tile), HALL_BOARD_BARRIER);
+for (const half of MAZE_HALVES) {
+  barrierByTile.set(tileKey(MAZE_TEACHING_DOORWAYS[half]), teachingBarrierOf(half));
 }
 
 const EVERY_BARRIER: ReadonlyArray<string> = [
   ...MAZE_BLOCKS.map((block) => block.id),
   ...MAZE_CURTAINS.map((curtain) => curtain.id),
-  ...MAZE_STARS.map((star) => star.id),
+  ...MAZE_HALVES.map(teachingBarrierOf),
+  HALL_BOARD_BARRIER,
 ];
 
 // The art an opened way wears is authored for a doorway you walk north through:
@@ -668,7 +759,7 @@ console.log('\nChecking no dressing is hung over ground the party walks…');
   const everyBarrierOpen = new Set(EVERY_BARRIER);
   // The game's own predicate, not a copy of it: a gate that restated the rule
   // would keep passing while the system handed the builder a broken one.
-  const dressing = buildBigTopDressing(bigTopWallAt(map));
+  const dressing = buildBigTopDressing(bigTopWallAt(map), TEST_PLAN.board);
   const trespassing = dressing.filter(
     (piece) =>
       WALL_HUNG_DRESSING_KINDS.has(piece.kind) &&
@@ -700,6 +791,24 @@ console.log('\nChecking no dressing is hung over ground the party walks…');
   check(
     dressing.some((piece) => piece.kind === 'bleacher'),
     'and the bleachers are still seated',
+  );
+  // A light's housing stands a tile tall on its tripod; a wall pane on the tile
+  // it rises into would be drawn under it.
+  const lightTiles = [
+    ...TEST_PLAN.board.limelights.map((light) => boardTileToTent(light.tile)),
+    ...TEACHING_STRIP_BOARD.limelights.map((light) => teachingTileToTent(light.tile)),
+  ];
+  const coveredPanes = dressing.filter(
+    (piece) =>
+      piece.kind === 'mirrorGlass' &&
+      lightTiles.some(
+        (light) =>
+          piece.tile.x === light.x && (piece.tile.y === light.y || piece.tile.y === light.y - 1),
+      ),
+  );
+  check(
+    coveredPanes.length === 0,
+    `no wall pane hangs where a light's housing stands (${coveredPanes.map((piece) => tileKey(piece.tile)).join(' ') || 'none'})`,
   );
 }
 
@@ -770,7 +879,7 @@ console.log('\nChecking every drape matches the act of the floor it faces…');
 // without a mark or a runner.
 console.log('\nChecking the floor marks and the dressing density…');
 {
-  const floorIndex = buildBigTopFloorIndex();
+  const floorIndex = buildBigTopFloorIndex(TEST_PLAN);
   let marksChecked = 0;
   const offFloor: string[] = [];
   for (const key of floorIndex.keys()) {
@@ -819,7 +928,7 @@ console.log('\nChecking the floor marks and the dressing density…');
     `the ring's curb is painted on walkable tiles only (${curbTiles.length})`,
   );
 
-  const dressing = buildBigTopDressing(bigTopWallAt(map));
+  const dressing = buildBigTopDressing(bigTopWallAt(map), TEST_PLAN.board);
   const floorDressed = new Set(
     dressing
       .filter((piece) => FLOOR_DRESSING_KINDS.has(piece.kind))
@@ -1141,7 +1250,7 @@ console.log('\nChecking every prop answers to everything its crawler can swing�
     }
   }
 
-  for (const mirror of MAZE_MIRRORS) {
+  for (const mirror of EVERY_MIRROR) {
     const owner = MAZE_TARGET_OWNER[mirror.kind];
     const target = new MazeMirrorTarget(TILE_SIZE, mirror);
     for (const damageType of ATTACK_KEY_DAMAGE_TYPES[owner]) {
@@ -1231,7 +1340,7 @@ console.log('\nChecking a prop cannot be killed out from under the puzzle…');
     new MazeBlockTarget(0, 0, TILE_SIZE, 'brace', 'east'),
     new MazeBlockTarget(0, 0, TILE_SIZE, 'capstan', 'east'),
     new MazeBellTarget(0, 0, TILE_SIZE, MAZE_BELLS[0].id),
-    new MazeMirrorTarget(TILE_SIZE, MAZE_MIRRORS[0]),
+    new MazeMirrorTarget(TILE_SIZE, EVERY_MIRROR[0]),
   ];
   for (const probe of probes) {
     // The other half of the same invariant, and the easier one to break by
@@ -1259,67 +1368,106 @@ console.log('\nChecking a prop cannot be killed out from under the puzzle…');
 
 // ── The hall of mirrors ───────────────────────────────────────────────────────
 
-console.log('\nSolving the hall of mirrors by search…');
+console.log('\nChecking the boards the hall is dealt…');
 {
-  const mirrors = MAZE_MIRRORS;
-  const states: MirrorFacing[][] = [[]];
-  for (const mirror of mirrors) {
-    const grown: MirrorFacing[][] = [];
-    for (const state of states) {
-      for (const facing of mirror.cycle) grown.push([...state, facing]);
-    }
-    states.length = 0;
-    states.push(...grown);
-  }
-  check(states.length > 0, `${states.length} reachable mirror arrangements`);
+  // The generator's own gate, run whole: every tier's sweep and fallback, the
+  // tiers' order, determinism and the board's frame in the tent.
+  const boardFailures = runMirrorBoardChecks({ fault: null, attemptsPerTier: SWEEP_ATTEMPTS });
+  for (const failure of boardFailures) console.log(`  (${failure})`);
+  check(boardFailures.length === 0, `the board-level checks pass (${boardFailures.length} failed)`);
 
-  const facingOfState = (state: ReadonlyArray<MirrorFacing>) => (mirrorId: string) => {
-    const index = mirrors.findIndex((mirror) => mirror.id === mirrorId);
-    return index < 0 ? null : state[index];
-  };
-
-  const hotSpansSeen = new Set<string>();
-  const litBy = new Map<string, Set<MazeHalf>>();
-  let twinArrangements = 0;
-  for (const state of states) {
-    const facingOf = facingOfState(state);
-    const hot: string[] = [];
-    const hits = new Map<MazeHalf, string | null>();
-    for (const half of ['human', 'cat'] as const) {
-      const path = traceMazeBeam(half, facingOf, (x, y) => map.isWalkable(x, y));
-      for (const step of path.steps) if (step.hot) hot.push(tileKey(step.tile));
-      hits.set(half, path.starId);
-      if (path.starId !== null) {
-        const halves = litBy.get(path.starId) ?? new Set<MazeHalf>();
-        halves.add(half);
-        litBy.set(path.starId, halves);
-      }
-    }
-    hotSpansSeen.add([...hot].sort().join('|'));
-    if (hits.get('human') === 'star_twin' && hits.get('cat') === 'star_twin') twinArrangements++;
-  }
-
-  // The rule the whole hall rests on: however the players aim the light, the
-  // burning ground never moves.
+  const again = planBigTopMaze(TEST_WORLD_SEED, TEST_DIFFICULTY);
   check(
-    hotSpansSeen.size === 1,
-    `the unbent spans are the same in all ${states.length} arrangements (${hotSpansSeen.size} distinct)`,
+    serializeMirrorBoard(again.board) === serializeMirrorBoard(TEST_PLAN.board) &&
+      again.rows.join('\n') === TEST_PLAN.rows.join('\n'),
+    'the same world and difficulty deal the same tent, board and floor plan alike',
+  );
+  const other = planBigTopMaze(TEST_WORLD_SEED, RESTART_DIFFICULTY);
+  check(
+    serializeMirrorBoard(other.board) !== serializeMirrorBoard(TEST_PLAN.board),
+    `and ${RESTART_DIFFICULTY} deals that world another board`,
+  );
+  const solved = solveBoard(TEST_PLAN.board);
+  check(solved.solvable, `the dealt ${TEST_DIFFICULTY} board is solvable (${TEST_PLAN.source})`);
+  check(
+    !traceBoard(
+      TEST_PLAN.board,
+      TEST_PLAN.board.mirrors.map((m) => m.initialIndex),
+    ).solved,
+    'and does not start solved',
   );
 
-  for (const star of MAZE_STARS) {
-    const halves = litBy.get(star.id) ?? new Set<MazeHalf>();
-    for (const half of star.litBy) {
-      check(halves.has(half), `${star.id}: some arrangement puts the ${half}'s beam on it`);
+  // A marquee on the hall's wall beside a teaching doorway steps aside for any
+  // star the board sets there; the check is across many worlds on every tier,
+  // because only a dealt board can put a star in its way.
+  let marqueesPlaced = 0;
+  const covered: string[] = [];
+  for (let world = 0; world < MARQUEE_SWEEP_WORLDS; world++) {
+    for (const difficulty of MIRROR_BOARD_DIFFICULTIES) {
+      const plan = planBigTopMaze(TEST_WORLD_SEED + world, difficulty);
+      const starTiles = plan.board.stars.map((star) => boardTileToTent(star.tile));
+      const placements = [
+        hallMarqueePlacement(plan.board),
+        ...MAZE_HALVES.map((half) => teachingMarqueePlacement(plan.board, half)),
+      ];
+      for (const placement of placements) {
+        marqueesPlaced++;
+        const under = starTiles.filter((tile) => marqueeCovers(placement, tile));
+        if (under.length > 0)
+          covered.push(`${difficulty} world +${world}: ${under.map(tileKey).join(' ')}`);
+      }
     }
   }
-  check(twinArrangements > 0, `${twinArrangements} arrangements land both beams on the twin star`);
+  check(
+    marqueesPlaced > 0 && covered.length === 0,
+    `no marquee hangs over a star in ${marqueesPlaced} placements (${covered.slice(0, 3).join('; ') || 'none covered'})`,
+  );
 
-  // Every star has to be worth something, and the twin has to be the last word.
-  for (const star of MAZE_STARS) {
-    check(star.opens.length > 0, `${star.id}: opens something`);
-    for (const tile of star.opens) {
-      check(!map.isWalkable(tile.x, tile.y), `${star.id}: ${tileKey(tile)} starts shut`);
+  // The teaching strip is authored rather than dealt, so it is proven here:
+  // it starts dark, one blow on each lane's mirror lights both of that lane's
+  // stars at once, and one more puts them out again.
+  const strip = TEACHING_STRIP_BOARD;
+  const start = strip.mirrors.map((mirror) => mirror.initialIndex);
+  const startTrace = traceBoard(strip, start);
+  check(
+    startTrace.stars.every((star) => star.status !== 'lit'),
+    'the teaching strip starts with every star dark',
+  );
+  for (const half of MAZE_HALVES) {
+    const index = strip.mirrors.findIndex((mirror) => mirror.owner === half);
+    const mirror = strip.mirrors[index];
+    if (index < 0 || mirror === undefined) {
+      check(false, `the ${half}'s teaching strip has a mirror`);
+      continue;
     }
+    const oneBlow = start.map((cycleIndex, at) =>
+      at === index ? (cycleIndex + 1) % mirror.cycle.length : cycleIndex,
+    );
+    const twoBlows = start.map((cycleIndex, at) =>
+      at === index ? (cycleIndex + 2) % mirror.cycle.length : cycleIndex,
+    );
+    const laneStars = (trace: BoardTrace): string[] =>
+      trace.stars
+        .filter((state) =>
+          strip.stars.some((star) => star.id === state.starId && teachingStarLane(star) === half),
+        )
+        .map((state) => state.status);
+    const lit = laneStars(traceBoard(strip, oneBlow));
+    check(
+      lit.length === 2 && lit.every((status) => status === 'lit'),
+      `the ${half}'s first blow on ${mirror.id} lights both of their teaching stars (${lit.join(', ')})`,
+    );
+    const dark = laneStars(traceBoard(strip, twoBlows));
+    check(
+      dark.every((status) => status !== 'lit'),
+      `and the next blow puts them both out (${dark.join(', ')})`,
+    );
+    check(
+      strip.splitters.some(
+        (splitter) => (splitter.tile.x < strip.dividerX ? 'human' : 'cat') === half,
+      ),
+      `the ${half}'s one light reaches its two stars through a splitter`,
+    );
   }
 }
 
@@ -1416,32 +1564,51 @@ console.log('\nSolving the maze in order…');
   solveBlocksOf('menagerie');
   openCurtain('curtain_mirrors');
 
-  // The hall of mirrors is solved with light rather than with a swing, so its
-  // barriers are the stars'. Each crawler has to be able to walk to their own
-  // mirrors first.
-  for (const mirror of MAZE_MIRRORS) {
+  // The hall of mirrors is solved with light rather than with a swing. Each
+  // crawler learns it on their own teaching strip first, whose doorway into
+  // the hall opens only when that lane's two stars light; then both work the
+  // hall's board, whose solve opens every exit at once.
+  const reachesGlass = (mirror: MazeMirror, reach: ReadonlySet<string>): boolean =>
+    reach.has(tileKey(mirror.tile));
+  for (const mirror of TEACHING_MIRRORS) {
     const owner = MAZE_TARGET_OWNER[mirror.kind];
-    const reach = reachableFrom(spawnFor('mirrors', owner), opened);
+    const other = owner === 'human' ? 'cat' : 'human';
     check(
-      reach.has(tileKey(mirror.tile)),
+      reachesGlass(mirror, reachableFrom(spawnFor('mirrors', owner), opened)),
       `${mirror.id}: the ${owner} can walk up to it and swing`,
     );
-    const otherReach = reachableFrom(
-      spawnFor('mirrors', owner === 'human' ? 'cat' : 'human'),
-      opened,
+    check(
+      !reachesGlass(mirror, reachableFrom(spawnFor('mirrors', other), opened)),
+      `${mirror.id}: the other lane cannot reach it`,
     );
-    check(!otherReach.has(tileKey(mirror.tile)), `${mirror.id}: the other lane cannot reach it`);
   }
-  for (const star of MAZE_STARS) {
-    for (const half of ['human', 'cat'] as const) {
-      const reach = reachableFrom(spawnFor('mirrors', half), opened);
-      check(
-        !reach.has(chamber),
-        `before ${star.id}: the ${half} is still short of the centre ring`,
-      );
-    }
-    opened.add(star.id);
+  for (const half of MAZE_HALVES) {
+    const entry = boardTileToTent(TEST_PLAN.board.entries[half]);
+    check(
+      !reachableFrom(spawnFor('mirrors', half), opened).has(tileKey(entry)),
+      `the ${half} cannot step into the hall before their teaching stars light`,
+    );
+    opened.add(teachingBarrierOf(half));
   }
+  for (const mirror of HALL_MIRRORS) {
+    const owner = MAZE_TARGET_OWNER[mirror.kind];
+    const other = owner === 'human' ? 'cat' : 'human';
+    check(
+      reachesGlass(mirror, reachableFrom(spawnFor('mirrors', owner), opened)),
+      `${mirror.id}: the ${owner} can walk up to it and swing`,
+    );
+    check(
+      !reachesGlass(mirror, reachableFrom(spawnFor('mirrors', other), opened)),
+      `${mirror.id}: the other lane cannot reach it`,
+    );
+  }
+  for (const half of MAZE_HALVES) {
+    check(
+      !reachableFrom(spawnFor('mirrors', half), opened).has(chamber),
+      `before the board is solved the ${half} is still short of the centre ring`,
+    );
+  }
+  opened.add(HALL_BOARD_BARRIER);
   openCurtain('curtain_finale');
 
   for (const half of ['human', 'cat'] as const) {
@@ -1469,12 +1636,16 @@ console.log('\nSolving the maze in order…');
       );
     }
   }
-  for (const star of MAZE_STARS) {
-    const withoutOne = new Set(EVERY_BARRIER.filter((other) => other !== star.id));
-    const shutOut = (['human', 'cat'] as const).filter(
+  for (const barrier of [...MAZE_HALVES.map(teachingBarrierOf), HALL_BOARD_BARRIER]) {
+    const withoutOne = new Set(EVERY_BARRIER.filter((other) => other !== barrier));
+    const shutOut = MAZE_HALVES.filter(
       (half) => !reachableFrom(spawnFor('mirrors', half), withoutOne).has(chamber),
     );
-    check(shutOut.length > 0, `${star.id} is load-bearing (${shutOut.join(', ') || 'nobody'})`);
+    const expected = barrier === HALL_BOARD_BARRIER ? MAZE_HALVES.length : 1;
+    check(
+      shutOut.length === expected,
+      `${barrier} is load-bearing (${shutOut.join(', ') || 'nobody'} shut out without it)`,
+    );
   }
 }
 
@@ -1493,7 +1664,7 @@ console.log("\nWalking to every one of Donut's targets…");
     tile: bell.tile,
     section: 'menagerie',
   }));
-  const mirrorTargets: ReadonlyArray<CatTarget> = MAZE_MIRRORS.filter(
+  const mirrorTargets: ReadonlyArray<CatTarget> = EVERY_MIRROR.filter(
     (mirror) => MAZE_TARGET_OWNER[mirror.kind] === 'cat',
   ).map((mirror) => ({ id: mirror.id, tile: mirror.tile, section: 'mirrors' }));
   const catTargets: ReadonlyArray<CatTarget> = [
@@ -1522,6 +1693,9 @@ console.log("\nWalking to every one of Donut's targets…");
 
 // ── What a failed act costs ───────────────────────────────────────────────────
 
+/** Every maze a harness stood up, so a check that needs the tent gone can take them all down. */
+const standingMazes: BigTopMazeSystem[] = [];
+
 /** Everything a scripted run of the maze needs to stand up an instance of it. */
 function buildMazeHarness(progress: CircusQuestProgress = createCircusQuestProgress()): {
   maze: BigTopMazeSystem;
@@ -1532,7 +1706,7 @@ function buildMazeHarness(progress: CircusQuestProgress = createCircusQuestProgr
   spawnedMobs: Mob[];
 } {
   const mazeMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  mazeMap.generateInterior('house', 0, 'Big Top', false, 'bigtop_maze');
+  mazeMap.generateInterior('house', 0, 'Big Top', false, { kind: 'bigtop_maze', plan: TEST_PLAN });
   progress.stage = 'bigtop_ready';
   const spawnedMobs: Mob[] = [];
   const roster = new MobRoster(mazeMap, new SpellSystem());
@@ -1546,7 +1720,10 @@ function buildMazeHarness(progress: CircusQuestProgress = createCircusQuestProgr
     progress,
     null,
     new Conversation(null),
+    TEST_PLAN,
+    () => undefined,
   );
+  standingMazes.push(maze);
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
   const ctx: SystemContext = {
@@ -1894,8 +2071,14 @@ console.log('\nWalking into the centre ring and reaching the last conversation�
     'and nothing in the ring steers a parked crawler off their own mark',
   );
 
+  const heldBeforeThePour = activeDifficultyChangeGuard();
   const poured = maze.tryInteract(ctx);
   check(poured, 'with both of them at the pole, Carl can start the last conversation');
+  // A restart from here would throw away a finished show and pour a second potion.
+  check(
+    heldBeforeThePour !== null && activeDifficultyChangeGuard() === null,
+    'and from the last conversation on, a difficulty change no longer restarts the tent',
+  );
   check(maze.playerLocked, 'and the script takes both crawlers');
   check(maze.isDialogOpen, 'with the cure dialog up');
   check(!maze.dismissDialog(), 'which Escape may not close');
@@ -1917,7 +2100,7 @@ console.log('\nChecking a spent prop never becomes a wall…');
   const propTiles = new Set([
     ...MAZE_BLOCKS.map((block) => tileKey(block.propTile)),
     ...MAZE_BELLS.map((bell) => tileKey(bell.tile)),
-    ...MAZE_MIRRORS.map((mirror) => tileKey(mirror.tile)),
+    ...EVERY_MIRROR.map((mirror) => tileKey(mirror.tile)),
   ]);
   const chamber = tileKey(MAZE_GRIMALDI_TILE);
 
@@ -1977,7 +2160,7 @@ console.log('\nChecking a spent prop never becomes a wall…');
     const target = new MazeBellTarget(bell.tile.x, bell.tile.y, TILE_SIZE, bell.id);
     check(!target.displacesPlayers, `${bell.id}: its stand never shoves a crawler`);
   }
-  for (const mirror of MAZE_MIRRORS) {
+  for (const mirror of EVERY_MIRROR) {
     const target = new MazeMirrorTarget(TILE_SIZE, mirror);
     check(!target.displacesPlayers, `${mirror.id}: the glass never shoves a crawler`);
   }
@@ -2150,330 +2333,833 @@ console.log('\nDriving the Big Top’s door gate…');
   }
 }
 
-// ── The hall of mirrors' optional mechanics ───────────────────────────────────
+// ── The hall of mirrors, live ─────────────────────────────────────────────────
 
-/** The tiles, headings and heat of a beam, and where it ends — two paths are equal when these are. */
-function beamSignature(path: BeamPath | null): string {
-  if (path === null) return 'none';
-  const steps = path.steps.map(
-    (step) => `${step.tile.x},${step.tile.y}:${step.heading}:${step.hot ? 'hot' : 'cold'}`,
-  );
-  return `${steps.join('|')}→${path.starId ?? 'nothing'}`;
+/**
+ * The weapon each crawler's blow on their own glass lands as: Carl's fist and
+ * Donut's missile, through the prop's own hit path.
+ */
+const BLOW_DAMAGE_TYPE: Readonly<Record<MazeHalf, PlayerDamageType>> = {
+  human: 'melee',
+  cat: 'missile',
+};
+
+/** Blows past the solve, on every mirror, that must never shut an exit again. */
+const BLOWS_AFTER_THE_SOLVE_PER_MIRROR = 2;
+
+/** One real blow on a mirror, then a frame of the tent. */
+function blowOn(maze: BigTopMazeSystem, ctx: SystemContext, target: MazeMirrorTarget): void {
+  swingAt(target, BLOW_DAMAGE_TYPE[MAZE_TARGET_OWNER[target.kind]], 1);
+  maze.update(ctx);
+  maze.dismissDialog();
 }
 
-/** Every arrangement of these mirrors' facings: one list of facings per arrangement, in mirror order. */
-function everyArrangement(
-  mirrors: ReadonlyArray<{ readonly cycle: ReadonlyArray<MirrorFacing> }>,
-): MirrorFacing[][] {
-  let arrangements: MirrorFacing[][] = [[]];
-  for (const mirror of mirrors) {
-    arrangements = arrangements.flatMap((partial) =>
-      mirror.cycle.map((facing) => [...partial, facing]),
+/** The blows that take each mirror of a board from where it stands to `indices`. */
+function blowsTo(
+  targets: ReadonlyArray<MazeMirrorTarget>,
+  indices: ReadonlyArray<number>,
+  cycleLengths: ReadonlyArray<number>,
+): MazeMirrorTarget[] {
+  return targets.flatMap((target, index) => {
+    const length = cycleLengths[index] ?? 1;
+    const wanted = indices[index] ?? target.cycleIndex;
+    const distance = (((wanted - target.cycleIndex) % length) + length) % length;
+    return Array.from({ length: distance }, () => target);
+  });
+}
+
+/** Whether every bulb of a marquee shows exactly its own star's light. */
+function bulbsTrackStars(maze: BigTopMazeSystem): boolean {
+  const states = maze.hall.starsOf('hall');
+  const bulbs = maze.hall.hallMarqueeBulbs();
+  return marqueeStarOrder(maze.board.stars).every((star, index) => {
+    const state = states.find((candidate) => candidate.starId === star.id);
+    const bulb = bulbs[index];
+    if (state === undefined || bulb === undefined) return false;
+    // A twin with one light on it shows that half of its bulb, and only then.
+    const expectedHalf = state.status === 'half' ? (state.blue ? 'blue' : 'red') : undefined;
+    return bulb.lit === (state.status === 'lit') && bulb.half === expectedHalf;
+  });
+}
+
+/** A trace's every lit tile and heading, colour by colour, and every star's state. */
+function traceSignature(trace: BoardTrace): string {
+  const steps = trace.steps.map(
+    (step) =>
+      `${step.tile.x},${step.tile.y}:${step.heading}:${step.colour}:${step.hot ? 'h' : 'c'}`,
+  );
+  const stars = trace.stars.map((star) => `${star.starId}=${star.status}`);
+  return `${steps.join('|')}#${stars.join('|')}`;
+}
+
+const exitsOpen = (mazeMap: GameMap): boolean =>
+  MAZE_HALL_EXITS.every((exit) => mazeMap.isWalkable(exit.tile.x, exit.tile.y));
+
+/** A harness walked into the hall, its teaching doorways opened by real blows. */
+function buildHallHarness(progress?: CircusQuestProgress): ReturnType<typeof buildMazeHarness> {
+  const harness = buildMazeHarness(progress);
+  const { maze, ctx, human, cat } = harness;
+  openCurtains(maze, ctx, human, cat, CURTAINS_TO_THE_MIRRORS);
+  const teaching = maze.hall.mirrorsOf('teaching');
+  const solution = TEACHING_STRIP_BOARD.mirrors.map((mirror) => mirror.solutionIndex);
+  const lengths = TEACHING_STRIP_BOARD.mirrors.map((mirror) => mirror.cycle.length);
+  for (const target of blowsTo(teaching, solution, lengths)) blowOn(maze, ctx, target);
+  return harness;
+}
+
+if (fault === 'latch-stars') {
+  // A star that keeps whatever light it has ever had: the rule the hall must not have.
+  const latching = (board: SettlingBoard): ReadonlyArray<BoardStarState> =>
+    board.trace.stars.map((state) => {
+      const before = board.stars.find((candidate) => candidate.starId === state.starId);
+      return before?.status === 'lit' ? before : state;
+    });
+  Reflect.set(MirrorHall.prototype, 'settleStars', latching);
+  check(
+    Reflect.get(MirrorHall.prototype, 'settleStars') === latching,
+    'fault applied: every star latches the light it once had',
+  );
+}
+if (fault === 'unguarded-difficulty') {
+  const unguarded = (): void => undefined;
+  Reflect.set(BigTopMazeSystem.prototype, 'holdDifficulty', unguarded);
+  check(
+    Reflect.get(BigTopMazeSystem.prototype, 'holdDifficulty') === unguarded,
+    'fault applied: the maze never registers its difficulty guard',
+  );
+}
+
+console.log('\nLighting the teaching strip through real blows…');
+{
+  const { maze, mazeMap, ctx, human, cat } = buildMazeHarness();
+  openCurtains(maze, ctx, human, cat, CURTAINS_TO_THE_MIRRORS);
+  for (const half of MAZE_HALVES) {
+    const doorway = MAZE_TEACHING_DOORWAYS[half];
+    check(
+      !mazeMap.isWalkable(doorway.x, doorway.y),
+      `the ${half}'s doorway into the hall starts shut`,
     );
   }
-  return arrangements;
-}
-
-/** Knocks a mirror round until it faces `facing`; false if its cycle never gets there. */
-function turnMirrorTo(
-  target: MazeMirrorTarget,
-  facing: MirrorFacing,
-  cycleLength: number,
-): boolean {
-  for (let blow = 0; blow <= cycleLength; blow++) {
-    if (target.facing === facing) return true;
-    swingAt(target, 'melee', 1);
+  const teaching = maze.hall.mirrorsOf('teaching');
+  for (const target of teaching) {
+    const half = MAZE_TARGET_OWNER[target.kind];
+    const doorway = MAZE_TEACHING_DOORWAYS[half];
+    const index = teaching.indexOf(target);
+    const solution = TEACHING_STRIP_BOARD.mirrors[index]?.solutionIndex ?? 0;
+    let blows = 0;
+    while (target.cycleIndex !== solution && blows < target.cycleLength) {
+      check(
+        !mazeMap.isWalkable(doorway.x, doorway.y),
+        `the ${half}'s doorway is still shut before its stars are lit`,
+      );
+      blowOn(maze, ctx, target);
+      blows++;
+    }
+    const bulbs = maze.hall.teachingMarqueeBulbs(half);
+    check(
+      bulbs.length === 2 && bulbs.every((bulb) => bulb.lit),
+      `${target.mirrorId}: after ${blows} blow(s) both of the ${half}'s bulbs are lit`,
+    );
+    check(
+      mazeMap.isWalkable(doorway.x, doorway.y),
+      `lighting both of the ${half}'s stars opens their doorway into the hall`,
+    );
+    blowOn(maze, ctx, target);
+    check(
+      maze.hall.teachingMarqueeBulbs(half).every((bulb) => !bulb.lit),
+      `and one more blow puts both of the ${half}'s stars and bulbs out again`,
+    );
+    check(
+      mazeMap.isWalkable(doorway.x, doorway.y),
+      'while the doorway stays open: the strip is done once, like any board',
+    );
   }
-  return target.facing === facing;
 }
 
-/** The live mirror props of a harness, by mirror id. */
-function mirrorTargetsOf(spawnedMobs: ReadonlyArray<Mob>): Map<string, MazeMirrorTarget> {
-  const targets = new Map<string, MazeMirrorTarget>();
-  for (const mob of spawnedMobs) {
-    if (mob instanceof MazeMirrorTarget) targets.set(mob.mirrorId, mob);
-  }
-  return targets;
-}
-
-/** The divider the two halls share, which every mirror is stood beside. */
-const HALL_DIVIDER_COLUMN = MAZE_STARS[0].tile.x;
-
-/** The floor tile beside a mirror, on the divider side: clear of the unbent span, and nearest that mirror. */
-function standingTileFor(mirrorTile: MazeTile): MazeTile {
-  return { x: mirrorTile.x + Math.sign(HALL_DIVIDER_COLUMN - mirrorTile.x), y: mirrorTile.y };
-}
-
-console.log('\nChecking every mirror-turn preview against the blow that follows it…');
+console.log('\nSolving the dealt board through the real hit path…');
 {
-  const { maze, mazeMap, ctx, human, cat, spawnedMobs } = buildMazeHarness();
-  openCurtains(maze, ctx, human, cat, CURTAINS_TO_THE_MIRRORS);
-  const targets = mirrorTargetsOf(spawnedMobs);
-  const mirrorsSection = required(
-    MAZE_SECTIONS.find((section) => section.id === 'mirrors'),
-    'the hall of mirrors',
+  const { maze, mazeMap, ctx } = buildHallHarness();
+  const board = maze.board;
+  const solve = solveBoard(board);
+  const solution = solve.solution;
+  check(
+    solution !== null,
+    `the ${TEST_DIFFICULTY} board has a solution to drive (${solve.fewestBlows ?? '-'} blows)`,
   );
+  const targets = maze.hall.mirrorsOf('hall');
+  check(
+    targets.length === board.mirrors.length &&
+      targets.every((target, index) => target.mirrorId === board.mirrors[index]?.id),
+    `every one of the board's ${board.mirrors.length} mirrors stands in the roster, in board order`,
+  );
+  if (solution !== null) {
+    const blows = blowsTo(
+      targets,
+      solution,
+      board.mirrors.map((mirror) => mirror.cycle.length),
+    );
+    check(
+      blows.length === solve.fewestBlows,
+      `the blows driven are the solver's fewest (${blows.length})`,
+    );
+    let bulbsWrong = 0;
+    let solvedEarly = 0;
+    let exitsEarly = 0;
+    blows.forEach((target, index) => {
+      blowOn(maze, ctx, target);
+      if (!bulbsTrackStars(maze)) bulbsWrong++;
+      const last = index === blows.length - 1;
+      if (!last && maze.hall.solved) solvedEarly++;
+      if (!last && exitsOpen(mazeMap)) exitsEarly++;
+    });
+    check(
+      bulbsWrong === 0,
+      `the marquee's bulbs track the stars after every blow (${bulbsWrong} off)`,
+    );
+    check(solvedEarly === 0 && exitsEarly === 0, 'the board does not solve before the final blow');
+    check(maze.hall.solved, 'and solves on the final blow');
+    check(exitsOpen(mazeMap), 'every one of the four exits opens');
+    let shut = 0;
+    let unlatched = 0;
+    for (let round = 0; round < BLOWS_AFTER_THE_SOLVE_PER_MIRROR; round++) {
+      for (const target of targets) {
+        blowOn(maze, ctx, target);
+        if (!exitsOpen(mazeMap)) shut++;
+        if (!maze.hall.solved) unlatched++;
+        if (!bulbsTrackStars(maze)) bulbsWrong++;
+      }
+    }
+    check(
+      shut === 0 && unlatched === 0,
+      `no blow after the solve closes an exit (${shut} closed, ${unlatched} unlatched)`,
+    );
+    check(bulbsWrong === 0, 'and the bulbs keep tracking the stars after the solve');
 
-  let comparisons = 0;
-  let previewMismatches = 0;
-  // The negative test, run on the same blows: a preview traced with the facing
-  // the mirror already has is exactly the bug this gate exists to catch.
-  let faultMismatches = 0;
-  let wrongMirror = 0;
-  let burnedWhileStanding = 0;
-  let unreachableArrangements = 0;
-  const changesThePath = new Map<string, number>();
-  const facingsPreviewed = new Map<string, Set<MirrorFacing>>();
+    // A burned crawler costs the act its walk, never its glass: the mirrors
+    // stay where they were turned and the solved board stays solved.
+    const facings = targets.map((target) => target.cycleIndex);
+    const hotKey = [...HOT_BEAM_TILES][0];
+    const mirrorsSection = MAZE_SECTIONS.find((section) => section.id === 'mirrors');
+    if (hotKey === undefined || mirrorsSection === undefined) {
+      check(false, 'the hall has a hot span and marks to reset to');
+    } else {
+      const [x, y] = hotKey.split(',').map(Number);
+      const caught = framesUntilCaught(
+        maze,
+        ctx,
+        ctx.human,
+        ctx.cat,
+        { x, y },
+        mirrorsSection.catSpawn,
+      );
+      maze.dismissDialog();
+      check(caught >= 0, 'a crawler on the hot span after the solve is still sent back');
+      check(
+        targets.every((target, index) => target.cycleIndex === facings[index]),
+        'and the act reset leaves every mirror where it was turned',
+      );
+      check(
+        maze.hall.solved && exitsOpen(mazeMap),
+        'with the board still solved and its exits open',
+      );
+    }
+  }
+}
 
-  for (const half of ['human', 'cat'] as const) {
+console.log('\nHolding the light, not latching it…');
+{
+  // Every star in the hall shows only the light on it now. Solve the board,
+  // then turn each answer mirror one further: the stars that lose their light
+  // must go dark at once, and their bulbs with them.
+  const { maze, ctx } = buildHallHarness();
+  const board = maze.board;
+  const solution = constructedSolution(board);
+  const targets = maze.hall.mirrorsOf('hall');
+  for (const target of blowsTo(
+    targets,
+    solution,
+    board.mirrors.map((mirror) => mirror.cycle.length),
+  )) {
+    blowOn(maze, ctx, target);
+  }
+  check(maze.hall.solved, 'the constructed answer solves the board through real blows');
+  let darkened = 0;
+  let heldLit = 0;
+  for (const target of targets) {
+    const litBefore = maze.hall
+      .starsOf('hall')
+      .filter((state) => state.status === 'lit')
+      .map((state) => state.starId);
+    blowOn(maze, ctx, target);
+    const expected = traceBoard(
+      board,
+      targets.map((mirror) => mirror.cycleIndex),
+    ).stars;
+    for (const starId of litBefore) {
+      const lightOnIt = expected.find((state) => state.starId === starId)?.status === 'lit';
+      if (lightOnIt) continue;
+      const shown = maze.hall.starsOf('hall').find((state) => state.starId === starId);
+      const bulbIndex = marqueeStarOrder(board.stars).findIndex((star) => star.id === starId);
+      const bulb = maze.hall.hallMarqueeBulbs()[bulbIndex];
+      if (shown?.status === 'lit' || bulb?.lit === true) heldLit++;
+      else darkened++;
+    }
+    // Back onto the answer, so the next mirror is tested from a lit board.
+    const length = board.mirrors[targets.indexOf(target)]?.cycle.length ?? 1;
+    for (let blow = 1; blow < length; blow++) blowOn(maze, ctx, target);
+  }
+  check(darkened > 0, `turning an answer mirror away darkens its stars (${darkened} went dark)`);
+  check(heldLit === 0, `and no star or bulb holds a light that has left it (${heldLit} held on)`);
+}
+
+console.log('\nWalking the hall on the live map…');
+{
+  const { maze, mazeMap, ctx, human, cat } = buildHallHarness();
+  const hot = new Set(HOT_BEAM_TILES);
+  const walkFrom = (start: MazeTile): Set<string> => {
+    const seen = new Set<string>([tileKey(start)]);
+    const queue: MazeTile[] = [start];
+    for (const tile of queue) {
+      for (const [dx, dy] of NEIGHBOURS.slice(0, 4)) {
+        const next = { x: tile.x + dx, y: tile.y + dy };
+        const key = tileKey(next);
+        if (seen.has(key) || hot.has(key) || !mazeMap.isWalkable(next.x, next.y)) continue;
+        seen.add(key);
+        queue.push(next);
+      }
+    }
+    return seen;
+  };
+  const standBeside = (mirror: MazeMirrorTarget, reach: ReadonlySet<string>): boolean =>
+    [
+      { x: mirror.tile.x + 1, y: mirror.tile.y },
+      { x: mirror.tile.x - 1, y: mirror.tile.y },
+      { x: mirror.tile.x, y: mirror.tile.y + 1 },
+      { x: mirror.tile.x, y: mirror.tile.y - 1 },
+    ].some((tile) => reach.has(tileKey(tile)));
+  const glassBlocked = [...maze.hall.mirrorsOf('hall'), ...maze.hall.mirrorsOf('teaching')].filter(
+    (mirror) => mazeMap.isWalkable(mirror.tile.x, mirror.tile.y),
+  );
+  check(glassBlocked.length === 0, 'no crawler can walk into a mirror: the glass is solid');
+  const mirrorsSection = MAZE_SECTIONS.find((section) => section.id === 'mirrors');
+  for (const half of MAZE_HALVES) {
+    const spawn = half === 'human' ? mirrorsSection?.humanSpawn : mirrorsSection?.catSpawn;
+    if (spawn === undefined) {
+      check(false, 'the hall of mirrors has marks');
+      continue;
+    }
+    const reach = walkFrom(spawn);
+    const own = [...maze.hall.mirrorsOf('hall'), ...maze.hall.mirrorsOf('teaching')].filter(
+      (mirror) => MAZE_TARGET_OWNER[mirror.kind] === half,
+    );
+    const stranded = own.filter((mirror) => !standBeside(mirror, reach));
+    check(
+      own.length > 0 && stranded.length === 0,
+      `the ${half} walks up to every one of their ${own.length} mirrors with the hot span solid (${
+        stranded.map((mirror) => mirror.mirrorId).join(', ') || 'none stranded'
+      })`,
+    );
+    const theirs = boardTileToTent(maze.board.exits[half]);
+    check(reach.has(tileKey(theirs)), `and to the foot of their exit gate at ${tileKey(theirs)}`);
+  }
+
+  const board = maze.board;
+  const solution = constructedSolution(board);
+  const targets = maze.hall.mirrorsOf('hall');
+  for (const target of blowsTo(
+    targets,
+    solution,
+    board.mirrors.map((mirror) => mirror.cycle.length),
+  )) {
+    blowOn(maze, ctx, target);
+  }
+  const finale = MAZE_CURTAINS.find((curtain) => curtain.opens === 'finale');
+  if (finale === undefined) {
+    check(false, 'the finale has a curtain');
+  } else {
+    placeAt(human, { x: finale.humanRoom.x0, y: finale.humanRoom.y0 });
+    placeAt(cat, { x: finale.catRoom.x0, y: finale.catRoom.y0 });
+    maze.update(ctx);
+    maze.dismissDialog();
+    for (const half of MAZE_HALVES) {
+      const spawn = half === 'human' ? mirrorsSection?.humanSpawn : mirrorsSection?.catSpawn;
+      if (spawn === undefined) continue;
+      check(
+        walkFrom(spawn).has(tileKey(MAZE_GRIMALDI_TILE)),
+        `after the solve the ${half} walks from the hall to the centre ring`,
+      );
+    }
+  }
+}
+
+console.log('\nChecking a mirror is only ever asked about from its own room…');
+{
+  // The hall and the teaching strip are two rooms a wall apart, and a mirror
+  // on the far side of that wall can be nearer than one beside the crawler.
+  // From every floor tile of each room, the mirror previewed (and prompted)
+  // must be the nearest of that crawler's own mirrors in the same room.
+  const { maze, mazeMap, ctx, human, cat } = buildHallHarness();
+  const mirrorsSection = MAZE_SECTIONS.find((section) => section.id === 'mirrors');
+  const rooms: ReadonlyArray<{ boardId: HallBoardId; rows: MazeRect }> = [
+    { boardId: 'hall', rows: MIRROR_BOARD_ROWS },
+    { boardId: 'teaching', rows: TEACHING_STRIP_ROWS },
+  ];
+  let standings = 0;
+  let wrong = 0;
+  let throughTheWall = 0;
+  const reachPx = TURN_PREVIEW_RANGE_TILES * TILE_SIZE;
+  for (const half of MAZE_HALVES) {
     const crawler = half === 'human' ? human : cat;
     const partner = half === 'human' ? cat : human;
     ctx.active = crawler;
     ctx.inactive = partner;
-    const laneMirrors = MAZE_MIRRORS.filter((mirror) => MAZE_TARGET_OWNER[mirror.kind] === half);
-    for (const arrangement of everyArrangement(laneMirrors)) {
-      for (const mirror of laneMirrors) {
-        const target = required(targets.get(mirror.id), `${mirror.id}'s prop`);
-        if (target === null) continue;
-        let arranged = true;
-        laneMirrors.forEach((laneMirror, index) => {
-          const laneTarget = targets.get(laneMirror.id);
-          if (laneTarget === undefined) {
-            arranged = false;
-            return;
+    for (const room of rooms) {
+      const own = maze.hall
+        .mirrorsOf(room.boardId)
+        .filter((mirror) => MAZE_TARGET_OWNER[mirror.kind] === half);
+      const others = rooms
+        .filter((other) => other.boardId !== room.boardId)
+        .flatMap((other) => maze.hall.mirrorsOf(other.boardId))
+        .filter((mirror) => MAZE_TARGET_OWNER[mirror.kind] === half);
+      for (let y = room.rows.y0; y <= room.rows.y1; y++) {
+        for (let x = room.rows.x0; x <= room.rows.x1; x++) {
+          if (!mazeMap.isWalkable(x, y) || HOT_BEAM_TILES.has(`${x},${y}`)) continue;
+          const px = x * TILE_SIZE;
+          const py = y * TILE_SIZE;
+          const distance = (mirror: MazeMirrorTarget): number =>
+            Math.hypot(mirror.x - px, mirror.y - py);
+          const ranked = [...own].sort((a, b) => distance(a) - distance(b));
+          const nearest = ranked[0];
+          const second = ranked[1];
+          // A tie between two of the room's own mirrors has no one right answer.
+          if (
+            second !== undefined &&
+            nearest !== undefined &&
+            distance(second) === distance(nearest)
+          ) {
+            continue;
           }
-          if (!turnMirrorTo(laneTarget, arrangement[index], laneMirror.cycle.length)) {
-            arranged = false;
+          const expected =
+            nearest !== undefined && distance(nearest) <= reachPx ? nearest.mirrorId : null;
+          if (
+            nearest !== undefined &&
+            others.some((other) => distance(other) < distance(nearest))
+          ) {
+            throughTheWall++;
           }
-        });
-        if (!arranged) {
-          unreachableArrangements++;
-          continue;
+          maze.partyResetPending = false;
+          placeAt(crawler, { x, y });
+          if (mirrorsSection !== undefined) {
+            placeAt(
+              partner,
+              half === 'human' ? mirrorsSection.catSpawn : mirrorsSection.humanSpawn,
+            );
+          }
+          maze.update(ctx);
+          maze.dismissDialog();
+          standings++;
+          if ((maze.currentTurnPreview?.mirrorId ?? null) !== expected) wrong++;
         }
-
-        maze.partyResetPending = false;
-        placeAt(crawler, standingTileFor(mirror.tile));
-        if (mirrorsSection !== null) {
-          placeAt(partner, half === 'human' ? mirrorsSection.catSpawn : mirrorsSection.humanSpawn);
-        }
-        maze.update(ctx);
-        maze.dismissDialog();
-        const preview = maze.currentTurnPreview;
-        if (preview === null || preview.mirrorId !== mirror.id || preview.half !== half) {
-          wrongMirror++;
-          continue;
-        }
-        const before = beamSignature(maze.beamPathFor(half));
-        const facingOf = (mirrorId: string): MirrorFacing | null =>
-          targets.get(mirrorId)?.facing ?? null;
-        const faultPreview = beamSignature(
-          traceMazeBeam(half, facingOf, (x, y) => mazeMap.isWalkable(x, y)),
-        );
-        const previewed = facingsPreviewed.get(mirror.id) ?? new Set<MirrorFacing>();
-        previewed.add(target.facing);
-        facingsPreviewed.set(mirror.id, previewed);
-
-        swingAt(target, 'melee', 1);
-        maze.update(ctx);
-        maze.dismissDialog();
-        if (maze.partyResetPending) burnedWhileStanding++;
-        const after = beamSignature(maze.beamPathFor(half));
-        comparisons++;
-        if (beamSignature(preview.path) !== after) previewMismatches++;
-        if (faultPreview !== after) faultMismatches++;
-        if (after !== before)
-          changesThePath.set(mirror.id, (changesThePath.get(mirror.id) ?? 0) + 1);
       }
+    }
+  }
+  check(standings > 0, `${standings} places to stand in the hall and the teaching strip tried`);
+  check(
+    throughTheWall > 0,
+    `some of them have another room's mirror nearer through the wall (${throughTheWall}), so the rule is tested`,
+  );
+  check(
+    wrong === 0,
+    `from every one, the mirror asked about is the nearest in the crawler's own room (${wrong} wrong)`,
+  );
+}
+
+console.log('\nChecking every turn preview against the blow that follows it…');
+{
+  const { maze, mazeMap, ctx, human, cat } = buildHallHarness();
+  const mirrorsSection = MAZE_SECTIONS.find((section) => section.id === 'mirrors');
+  let comparisons = 0;
+  let mismatches = 0;
+  let wrongMirror = 0;
+  let noStandingTile = 0;
+  let burned = 0;
+  let splitterBranches = 0;
+  // The negative test, on the same blows: a preview that is only the light as
+  // it stands is exactly the bug the preview exists to rule out.
+  let staleWouldPass = 0;
+  const facingsPreviewed = new Map<string, Set<number>>();
+
+  const everyTarget: ReadonlyArray<{ target: MazeMirrorTarget; boardId: HallBoardId }> = [
+    ...maze.hall.mirrorsOf('teaching').map((target) => ({ target, boardId: 'teaching' as const })),
+    ...maze.hall.mirrorsOf('hall').map((target) => ({ target, boardId: 'hall' as const })),
+  ];
+  const splittersOf = (boardId: HallBoardId): MirrorBoard['splitters'] =>
+    boardId === 'hall' ? maze.board.splitters : TEACHING_STRIP_BOARD.splitters;
+  const branchesAtSplitter = (trace: BoardTrace, boardId: HallBoardId): boolean =>
+    splittersOf(boardId).some((splitter) =>
+      trace.steps.some((step) => {
+        const from = {
+          x: step.tile.x - (step.heading === 'east' ? 1 : step.heading === 'west' ? -1 : 0),
+          y: step.tile.y - (step.heading === 'south' ? 1 : step.heading === 'north' ? -1 : 0),
+        };
+        if (from.x !== splitter.tile.x || from.y !== splitter.tile.y) return false;
+        return trace.steps.some(
+          (other) =>
+            other.colour === step.colour &&
+            other.heading !== step.heading &&
+            Math.abs(other.tile.x - splitter.tile.x) + Math.abs(other.tile.y - splitter.tile.y) ===
+              1,
+        );
+      }),
+    );
+
+  for (const { target, boardId } of everyTarget) {
+    const half = MAZE_TARGET_OWNER[target.kind];
+    const crawler = half === 'human' ? human : cat;
+    const partner = half === 'human' ? cat : human;
+    ctx.active = crawler;
+    ctx.inactive = partner;
+    // Only the crawler's own mirrors in the same room compete: glass beyond the
+    // wall is nearer from some tiles, and must never be the one asked about.
+    const others = everyTarget
+      .filter(
+        (entry) =>
+          entry.target !== target &&
+          entry.boardId === boardId &&
+          MAZE_TARGET_OWNER[entry.target.kind] === half,
+      )
+      .map((entry) => entry.target);
+    const distance = (tile: MazeTile, other: MazeMirrorTarget): number =>
+      Math.hypot(tile.x - other.tile.x, tile.y - other.tile.y);
+    const standing = [
+      { x: target.tile.x + 1, y: target.tile.y },
+      { x: target.tile.x - 1, y: target.tile.y },
+      { x: target.tile.x, y: target.tile.y + 1 },
+      { x: target.tile.x, y: target.tile.y - 1 },
+    ].find(
+      (tile) =>
+        mazeMap.isWalkable(tile.x, tile.y) &&
+        !HOT_BEAM_TILES.has(tileKey(tile)) &&
+        others.every((other) => distance(tile, other) > 1),
+    );
+    if (standing === undefined) {
+      noStandingTile++;
+      continue;
+    }
+    for (let blow = 0; blow < target.cycleLength; blow++) {
+      maze.partyResetPending = false;
+      placeAt(crawler, standing);
+      if (mirrorsSection !== undefined) {
+        placeAt(partner, half === 'human' ? mirrorsSection.catSpawn : mirrorsSection.humanSpawn);
+      }
+      maze.update(ctx);
+      maze.dismissDialog();
+      const preview = maze.currentTurnPreview;
+      if (preview?.mirrorId !== target.mirrorId || preview.half !== half) {
+        wrongMirror++;
+        blowOn(maze, ctx, target);
+        continue;
+      }
+      const previewed = facingsPreviewed.get(target.mirrorId) ?? new Set<number>();
+      previewed.add(target.cycleIndex);
+      facingsPreviewed.set(target.mirrorId, previewed);
+      const stale = traceSignature(maze.hall.traceOf(boardId));
+      blowOn(maze, ctx, target);
+      if (maze.partyResetPending) burned++;
+      const after = traceSignature(maze.hall.traceOf(boardId));
+      comparisons++;
+      if (traceSignature(preview.trace) !== after) mismatches++;
+      if (stale === after) staleWouldPass++;
+      if (branchesAtSplitter(preview.trace, boardId)) splitterBranches++;
     }
   }
 
   check(comparisons > 0, `${comparisons} previews compared with the blow that followed`);
   check(
-    unreachableArrangements === 0,
-    `every arrangement of each lane's mirrors can be knocked into (${unreachableArrangements} could not)`,
+    noStandingTile === 0,
+    `every mirror has a tile to stand at beside it (${noStandingTile} have none)`,
   );
   check(
     wrongMirror === 0,
-    `standing beside each mirror previews that mirror, in its owner's light (${wrongMirror} missed)`,
+    `standing beside each mirror previews that mirror, for its owner (${wrongMirror} missed)`,
   );
-  check(burnedWhileStanding === 0, 'nobody was burned standing at a mirror to swing at it');
+  check(burned === 0, 'nobody was burned standing at a mirror to swing at it');
   check(
-    previewMismatches === 0,
-    `every preview is the path the blow then makes (${previewMismatches} of ${comparisons} differ)`,
+    mismatches === 0,
+    `every preview is the light the blow then makes, both colours and every branch (${mismatches} of ${comparisons} differ)`,
   );
   check(
-    faultMismatches > 0,
-    `a preview traced with the current facing is caught (${faultMismatches} of ${comparisons} differ)`,
+    splitterBranches > 0,
+    `the previews compared include light split at a splitter (${splitterBranches})`,
   );
-  for (const mirror of MAZE_MIRRORS) {
-    const previewed = facingsPreviewed.get(mirror.id) ?? new Set<MirrorFacing>();
+  check(
+    staleWouldPass < comparisons,
+    `a preview of the light as it stands would be caught (${comparisons - staleWouldPass} of ${comparisons} blows move it)`,
+  );
+  for (const { target } of everyTarget) {
+    const previewed = facingsPreviewed.get(target.mirrorId)?.size ?? 0;
     check(
-      mirror.cycle.every((facing) => previewed.has(facing)),
-      `${mirror.id}: previewed from every facing it has (${previewed.size} of ${mirror.cycle.length})`,
-    );
-    check(
-      (changesThePath.get(mirror.id) ?? 0) > 0,
-      `${mirror.id}: some blow on it moves the light, so its preview is ever news`,
+      previewed === target.cycleLength,
+      `${target.mirrorId}: previewed from every facing it has (${previewed} of ${target.cycleLength})`,
     );
   }
 
-  // Outside the hall, and at a mirror that is not theirs, there is nothing to preview.
+  // Outside the hall there is nothing to preview.
   const { maze: early, ctx: earlyCtx, human: earlyHuman } = buildMazeHarness();
-  placeAt(earlyHuman, standingTileFor(MAZE_MIRRORS[0].tile));
+  const first = early.hall.mirrorsOf('teaching')[0];
+  if (first !== undefined) placeAt(earlyHuman, { x: first.tile.x + 1, y: first.tile.y });
   early.update(earlyCtx);
   check(early.currentTurnPreview === null, 'no preview before the hall of mirrors is on stage');
 }
 
 console.log('\nChecking the encore…');
 {
-  check(!MAZE_STARS.includes(MAZE_ENCORE_STAR), 'the encore is not one of the stars the act needs');
-  check(MAZE_BEAM_TARGETS.includes(MAZE_ENCORE_STAR), 'but a beam can end on it');
-  check(MAZE_ENCORE_STAR.opens.length === 0, 'the encore opens nothing');
-  check(!EVERY_BARRIER.includes(MAZE_ENCORE_STAR.id), 'and no solvability proof counts on it');
-  const encoreTile = MAZE_ENCORE_STAR.tile;
-  check(
-    !map.isWalkable(encoreTile.x, encoreTile.y),
-    `the encore is set in the wall at ${tileKey(encoreTile)}`,
-  );
-  check(
-    BIG_TOP_MAZE_ROWS[encoreTile.y]?.[encoreTile.x] === '*',
-    'and its tile carries the star glyph in the layout',
-  );
-  check(
-    map.isWalkable(MAZE_ENCORE_REWARD_TILE.x, MAZE_ENCORE_REWARD_TILE.y) &&
-      Math.abs(MAZE_ENCORE_REWARD_TILE.x - encoreTile.x) +
-        Math.abs(MAZE_ENCORE_REWARD_TILE.y - encoreTile.y) ===
-        1,
-    `its coins fall on open floor at its foot, ${tileKey(MAZE_ENCORE_REWARD_TILE)}`,
-  );
+  const board = TEST_PLAN.board;
+  const encore = board.stars.find((star) => star.kind === 'encore');
+  check(encore !== undefined, 'the dealt board has an encore');
+  if (encore !== undefined) {
+    const encoreTile = boardTileToTent(encore.tile);
+    check(
+      !map.isWalkable(encoreTile.x, encoreTile.y) &&
+        TEST_PLAN.rows[encoreTile.y]?.[encoreTile.x] === '*',
+      `the encore is set in the wall at ${tileKey(encoreTile)}, star glyph and all`,
+    );
+    const foot = starFootTile(board, encore);
+    check(
+      map.isWalkable(foot.x, foot.y) &&
+        Math.abs(foot.x - encoreTile.x) + Math.abs(foot.y - encoreTile.y) === 1,
+      `its coins fall on open floor at its foot, ${tileKey(foot)}`,
+    );
+    const lighting = solveBoard(board, { goalStarIds: [encore.id] });
+    const constructed = traceBoard(board, constructedSolution(board));
+    check(lighting.solvable, 'some arrangement lights the encore');
+    check(
+      constructed.solved &&
+        constructed.stars.some((state) => state.starId === encore.id && state.status !== 'lit'),
+      'and the constructed answer solves the act with the encore dark',
+    );
 
-  // Reachable by some arrangement, and by none of the act's own solutions.
-  const humanMirrors = MAZE_MIRRORS.filter((mirror) => MAZE_TARGET_OWNER[mirror.kind] === 'human');
-  const walkable = (x: number, y: number): boolean => map.isWalkable(x, y);
-  let lighting = 0;
-  let twoBounce = 0;
-  for (const arrangement of everyArrangement(humanMirrors)) {
-    const facingOf = (mirrorId: string): MirrorFacing | null => {
-      const index = humanMirrors.findIndex((mirror) => mirror.id === mirrorId);
-      return index < 0 ? null : arrangement[index];
+    /** Drives the hall into the arrangement that lights the encore, and back off and on. */
+    const performEncore = (progress: CircusQuestProgress): { shone: boolean; paid: number } => {
+      const { maze, ctx } = buildHallHarness(progress);
+      const darkAtCurtain = !maze.encoreShone;
+      const targets = maze.hall.mirrorsOf('hall');
+      const lengths = board.mirrors.map((mirror) => mirror.cycle.length);
+      const arrangement = lighting.solution ?? constructedSolution(board);
+      for (const target of blowsTo(targets, arrangement, lengths)) blowOn(maze, ctx, target);
+      let paid = 0;
+      for (const reward of maze.drainRewards()) {
+        check(
+          reward.coins === MAZE_ENCORE_REWARD_COINS &&
+            reward.tile.x === foot.x &&
+            reward.tile.y === foot.y,
+          `the encore pays ${MAZE_ENCORE_REWARD_COINS} coins at its foot`,
+        );
+        paid++;
+      }
+      const shone = maze.encoreShone && darkAtCurtain;
+      // Off and back on again: it pays once per run, however often it is lit.
+      for (const target of targets) {
+        const length = lengths[targets.indexOf(target)] ?? 1;
+        for (let blow = 0; blow < length; blow++) blowOn(maze, ctx, target);
+      }
+      paid += maze.drainRewards().length;
+      return { shone, paid };
     };
-    const path = traceMazeBeam('human', facingOf, walkable);
-    if (path.starId !== MAZE_ENCORE_STAR.id) continue;
-    lighting++;
-    const turns = path.steps.filter(
-      (step, index) => index > 0 && step.heading !== path.steps[index - 1].heading,
-    ).length;
-    if (turns >= 2) twoBounce++;
-  }
-  check(lighting > 0, `${lighting} arrangements of Carl's pivots land his light on the encore`);
-  check(twoBounce === lighting, `every one of them bends the light twice (${twoBounce})`);
-  const initialFacing = (mirrorId: string): MirrorFacing | null => {
-    const mirror = MAZE_MIRRORS.find((candidate) => candidate.id === mirrorId);
-    return mirror === undefined ? null : mirror.cycle[mirror.initialIndex];
-  };
-  check(
-    traceMazeBeam('human', initialFacing, walkable).starId !== MAZE_ENCORE_STAR.id,
-    'the encore is dark as the act opens',
-  );
+    const progress = createCircusQuestProgress();
+    const first = performEncore(progress);
+    const second = performEncore(progress);
+    check(first.shone && second.shone, 'the encore can be lit in every performance');
+    check(
+      first.paid + second.paid === 1,
+      `and pays exactly once across two performances (${first.paid} + ${second.paid})`,
+    );
+    check(progress.bigTopEncorePaid, 'the payout is remembered on the quest progress');
+    const forgetful = performEncore(createCircusQuestProgress());
+    const forgetfulAgain = performEncore(createCircusQuestProgress());
+    check(
+      forgetful.paid + forgetfulAgain.paid !== 1,
+      `a payout that is not remembered is caught (${forgetful.paid + forgetfulAgain.paid} paid)`,
+    );
 
-  /** Knocks the human's pivots into the arrangement that lights the encore, and runs a frame. */
-  const performEncore = (progress: CircusQuestProgress): { latched: boolean; paid: number } => {
-    const { maze, ctx, human, cat, spawnedMobs } = buildMazeHarness(progress);
-    openCurtains(maze, ctx, human, cat, CURTAINS_TO_THE_MIRRORS);
-    maze.update(ctx);
-    const darkAtCurtain = !maze.encoreLatched;
-    const targets = mirrorTargetsOf(spawnedMobs);
-    const hub = targets.get('pivot_hub');
-    const north = targets.get('pivot_north');
-    const hubMirror = MAZE_MIRRORS.find((mirror) => mirror.id === 'pivot_hub');
-    const northMirror = MAZE_MIRRORS.find((mirror) => mirror.id === 'pivot_north');
-    if (
-      hub === undefined ||
-      north === undefined ||
-      hubMirror === undefined ||
-      northMirror === undefined
-    ) {
-      check(false, "the encore's pivots are in the roster");
-      return { latched: false, paid: 0 };
+    // The act finishes without it.
+    const { maze, mazeMap, ctx } = buildHallHarness();
+    const targets = maze.hall.mirrorsOf('hall');
+    for (const target of blowsTo(
+      targets,
+      constructedSolution(board),
+      board.mirrors.map((mirror) => mirror.cycle.length),
+    )) {
+      blowOn(maze, ctx, target);
     }
-    turnMirrorTo(hub, 'NW', hubMirror.cycle.length);
-    turnMirrorTo(north, 'SW', northMirror.cycle.length);
-    let paid = 0;
-    maze.update(ctx);
-    for (const reward of maze.drainRewards()) {
-      check(
-        reward.coins === MAZE_ENCORE_REWARD_COINS &&
-          reward.tile.x === MAZE_ENCORE_REWARD_TILE.x &&
-          reward.tile.y === MAZE_ENCORE_REWARD_TILE.y,
-        `the encore pays ${MAZE_ENCORE_REWARD_COINS} coins at its foot`,
-      );
-      paid++;
-    }
-    const latched = maze.encoreLatched && darkAtCurtain;
-    // Knock it off and back on: a star that latched stays latched and does not pay twice.
-    turnMirrorTo(north, 'NE', northMirror.cycle.length);
-    maze.update(ctx);
-    turnMirrorTo(north, 'SW', northMirror.cycle.length);
-    maze.update(ctx);
-    paid += maze.drainRewards().length;
-    return { latched, paid };
-  };
+    check(exitsOpen(mazeMap), 'the exits open without the encore');
+    check(
+      maze.hall
+        .starsOf('hall')
+        .some((state) => state.starId === encore.id && state.status !== 'lit'),
+      'and the encore is dark on the arrangement that solved the act',
+    );
+  }
+}
+
+console.log('\nChanging the difficulty while the show is on…');
+{
+  settings.setDifficulty(TEST_DIFFICULTY);
+  for (const standing of standingMazes.splice(0)) standing.dispose();
+  check(activeDifficultyChangeGuard() === null, 'with no maze standing, nothing holds a change');
 
   const progress = createCircusQuestProgress();
-  const first = performEncore(progress);
-  const second = performEncore(progress);
-  check(first.latched && second.latched, 'the encore latches in every performance');
-  check(
-    first.paid + second.paid === 1,
-    `and pays exactly once across two performances (${first.paid} + ${second.paid})`,
-  );
-  check(progress.bigTopEncorePaid, 'the payout is remembered on the quest progress');
-  // The negative test: the same two performances without the remembered flag.
-  const forgetful = performEncore(createCircusQuestProgress());
-  const forgetfulAgain = performEncore(createCircusQuestProgress());
-  check(
-    forgetful.paid + forgetfulAgain.paid !== 1,
-    `a payout that is not remembered is caught (${forgetful.paid + forgetfulAgain.paid} paid)`,
-  );
-
-  // The act finishes without it: the three act stars, latched by real blows, and the encore dark.
-  const { maze, mazeMap, ctx, human, cat, spawnedMobs } = buildMazeHarness();
-  openCurtains(maze, ctx, human, cat, CURTAINS_TO_THE_MIRRORS);
-  const targets = mirrorTargetsOf(spawnedMobs);
-  const solution: ReadonlyArray<ReadonlyArray<readonly [string, MirrorFacing]>> = [
-    [
-      ['pivot_hub', 'SW'],
-      ['pivot_south', 'NE'],
-      ['swivel_hub', 'SE'],
-      ['swivel_south', 'NW'],
-    ],
-    [
-      ['pivot_hub', 'NW'],
-      ['pivot_north', 'SE'],
-      ['swivel_hub', 'NE'],
-      ['swivel_north', 'SW'],
-    ],
+  progress.stage = 'bigtop_ready';
+  const mazeMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+  mazeMap.generateInterior('house', 0, 'Big Top', false, { kind: 'bigtop_maze', plan: TEST_PLAN });
+  const roster = new MobRoster(mazeMap, new SpellSystem());
+  const bus = new EventBus();
+  const conversation = new Conversation(null);
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  const cat = new CatPlayer(0, 0, TILE_SIZE);
+  const ctx: SystemContext = {
+    human,
+    cat,
+    active: human,
+    inactive: cat,
+    activeIsMoving: false,
+    roster,
+    gameMap: mazeMap,
+  };
+  // Stood up the way the scene stands the tent up, restarted through the
+  // same shared restart the scene calls.
+  const stage: { maze: BigTopMazeSystem | null; restarts: number } = { maze: null, restarts: 0 };
+  const raise = (plan: BigTopMazePlan): BigTopMazeSystem =>
+    new BigTopMazeSystem(
+      mazeMap,
+      bus,
+      (mob) => roster.add(mob),
+      progress,
+      null,
+      conversation,
+      plan,
+      (next) => {
+        const old = stage.maze;
+        if (old === null) return;
+        stage.maze = restartBigTopTent(
+          old,
+          { map: mazeMap, roster, conversation, human, cat, worldSeed: TEST_WORLD_SEED, raise },
+          next,
+        );
+        stage.restarts++;
+      },
+    );
+  const first = raise(TEST_PLAN);
+  stage.maze = first;
+  openCurtains(first, ctx, human, cat, CURTAINS_TO_THE_MIRRORS);
+  const oldGlass = [
+    ...first.hall.mirrorsOf('hall').map((mirror) => mirror.tile),
+    ...TEST_PLAN.board.splitters.map((splitter) => boardTileToTent(splitter.tile)),
   ];
-  for (const step of solution) {
-    for (const [mirrorId, facing] of step) {
-      const target = required(targets.get(mirrorId), `${mirrorId}'s prop`);
-      const mirror = MAZE_MIRRORS.find((candidate) => candidate.id === mirrorId);
-      if (target === null || mirror === undefined) continue;
-      check(turnMirrorTo(target, facing, mirror.cycle.length), `${mirrorId} turns to ${facing}`);
-    }
-    maze.update(ctx);
-    maze.dismissDialog();
+  // Burned on the hot span, so the burn notice is up when the change lands.
+  const hotKey = [...HOT_BEAM_TILES][0];
+  const hallMarks = MAZE_SECTIONS.find((section) => section.id === 'mirrors');
+  if (hotKey !== undefined && hallMarks !== undefined) {
+    const [x, y] = hotKey.split(',').map(Number);
+    framesUntilCaught(first, ctx, human, cat, { x, y }, hallMarks.catSpawn);
   }
-  for (const star of MAZE_STARS) {
-    for (const tile of star.opens) {
-      check(
-        mazeMap.isWalkable(tile.x, tile.y),
-        `${star.id}: its way ${tileKey(tile)} is open without the encore`,
-      );
-    }
+  check(conversation.isOpen, 'a notice is up in the tent as the change is confirmed');
+
+  const guard = activeDifficultyChangeGuard();
+  check(guard !== null, 'with the maze running, a difficulty change is held behind the prompt');
+  check(first.currentAct === 'mirrors', 'the show has reached the hall before the change');
+  guard?.restartWithDifficulty(RESTART_DIFFICULTY);
+  const restarted = stage.maze;
+  check(
+    settings.difficulty === RESTART_DIFFICULTY,
+    `confirming sets the difficulty to ${RESTART_DIFFICULTY}`,
+  );
+  check(stage.restarts === 1 && restarted !== first, 'and restarts the tent');
+  if (restarted !== null && restarted !== first) {
+    const expected = planBigTopMaze(TEST_WORLD_SEED, RESTART_DIFFICULTY);
+    check(
+      serializeMirrorBoard(restarted.board) === serializeMirrorBoard(expected.board),
+      `the restarted hall is the ${RESTART_DIFFICULTY} board for this world`,
+    );
+    check(restarted.currentAct === 'firewalk', 'and the show starts again at Act I');
+    check(!conversation.isOpen, "the old show's notice is closed");
+    const atFlap = (entity: { x: number; y: number }, tile: MazeTile): boolean =>
+      entity.x === tile.x * TILE_SIZE && entity.y === tile.y * TILE_SIZE;
+    check(
+      atFlap(human, MAZE_HUMAN_SPAWN_TILE) && atFlap(cat, MAZE_CAT_SPAWN_TILE),
+      'and the party is back at the two flaps',
+    );
+    const staleProps = roster.mobs.filter((mob) => first.ownedMobs().includes(mob));
+    check(
+      staleProps.length === 0,
+      `the old tent's props are gone from the room (${staleProps.length} left)`,
+    );
+    check(
+      restarted.hall.mirrorsOf('hall').every((mirror) => roster.mobs.includes(mirror)),
+      "and the new board's mirrors stand in it",
+    );
+    const newGlass = new Set(
+      [
+        ...restarted.hall.mirrorsOf('hall').map((mirror) => mirror.tile),
+        ...expected.board.splitters.map((splitter) => boardTileToTent(splitter.tile)),
+      ].map(tileKey),
+    );
+    const strandedBlocks = oldGlass.filter(
+      (tile) =>
+        !newGlass.has(tileKey(tile)) &&
+        !mazeMap.isWalkable(tile.x, tile.y) &&
+        expected.rows[tile.y]?.[tile.x] === '.',
+    );
+    check(
+      strandedBlocks.length === 0,
+      `the old board's glass no longer blocks the floor (${strandedBlocks.length})`,
+    );
+    const wrongTiles = expected.board.stars.filter((star) => {
+      const tile = boardTileToTent(star.tile);
+      return mazeMap.structure[tile.y]?.[tile.x]?.type !== INTERIOR_WALL;
+    });
+    check(wrongTiles.length === 0, 'the room is rebuilt from the new plan');
+    const curtainsShut = MAZE_CURTAINS.every(
+      (curtain) => !mazeMap.isWalkable(curtain.humanBarrier.x, curtain.humanBarrier.y),
+    );
+    check(curtainsShut, 'every curtain is shut again');
+    check(
+      activeDifficultyChangeGuard() !== null && activeDifficultyChangeGuard() !== guard,
+      'and the restarted maze holds the next change itself',
+    );
+    restarted.dispose();
   }
-  check(!maze.encoreLatched, 'and the encore is still dark once the act is solved');
-  check(maze.drainRewards().length === 0, 'with nothing paid for it');
+  check(
+    activeDifficultyChangeGuard() === null,
+    'once the tent is taken down, a change applies at once',
+  );
+  settings.setDifficulty(TEST_DIFFICULTY);
+
+  // Around the shared restart the scene settles what only it owns: its menu,
+  // the keys held through it, and the companions and exit prompt it keeps.
+  const sceneSource = readFileSync(
+    new URL('../src/scenes/BuildingInteriorScene.ts', import.meta.url),
+    'utf8',
+  );
+  const restartBody = sceneSource.slice(
+    sceneSource.indexOf('private restartBigTopMaze('),
+    sceneSource.indexOf('private placeCuredGrimaldi('),
+  );
+  const order = [
+    'this.pauseMenu.close()',
+    'this.input.clear()',
+    'restartBigTopTent(',
+    'this.parkBothInTheMaze()',
+    'carryCompanions(',
+    'this.exitMenuOpen = false',
+  ];
+  const positions = order.map((fragment) => restartBody.indexOf(fragment));
+  check(
+    positions.every(
+      (position, index) => position >= 0 && (index === 0 || position > (positions[index - 1] ?? 0)),
+    ),
+    "the scene's restart closes its menu and clears the keys, runs the shared restart, then re-parks the party, brings the companions and drops the exit prompt",
+  );
 }
 
 // ── Audio ─────────────────────────────────────────────────────────────────────

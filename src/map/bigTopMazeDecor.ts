@@ -29,22 +29,22 @@ import {
   MAZE_HEIGHT,
   MAZE_HUMAN_SPAWN_CHAR,
   MAZE_POLE_CHAR,
-  MAZE_PROJECTORS,
   MAZE_SECTIONS,
   MAZE_VENTS,
   MAZE_WIDTH,
   MENAGERIE_BLEACHER_ROW,
   MENAGERIE_CAGE_ROWS,
   MENAGERIE_LANES,
+  MIRROR_BOARD_ROWS,
   MIRROR_HALL_GLASS_COLUMNS,
-  MIRROR_HALL_ROWS,
   rectContains,
   sectionAtRow,
-  traceMazeBeam,
+  type BigTopMazePlan,
   type MazeRect,
   type MazeSectionId,
   type MazeTile,
 } from './bigTopMazeLayout';
+import { boardHotSpan, boardTileToTent } from './bigTop/mirrorBoard';
 
 // ── Which room is live ──────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ export interface TilePoint {
  * the rest of the time, whose curb and king pole `GameMap` lays out itself.
  */
 export type BigTopDecorLayout =
-  | { readonly kind: 'maze' }
+  | { readonly kind: 'maze'; readonly plan: BigTopMazePlan }
   | {
       readonly kind: 'arena';
       readonly ringCentre: TilePoint;
@@ -74,6 +74,8 @@ let mazeIndex: ReadonlyMap<string, ReadonlyArray<FloorFeature>> | null = null;
 /** Which Big Top room the tile painters are drawing, or null anywhere else. */
 export function setBigTopDecorLayout(layout: BigTopDecorLayout | null): void {
   activeLayout = layout;
+  // The hall's marks follow its board, and a new tent may have been dealt another.
+  mazeIndex = null;
 }
 
 // ── Drapes ──────────────────────────────────────────────────────────────────
@@ -575,9 +577,13 @@ function isMazeFloorChar(char: string | undefined): boolean {
   return char === MAZE_FLOOR_CHAR || char === MAZE_HUMAN_SPAWN_CHAR || char === MAZE_CAT_SPAWN_CHAR;
 }
 
-/** Floor in the authored layout: the tiles a mark may be painted on. Barriers start as wall. */
-export function isMazeLayoutFloor(tileX: number, tileY: number): boolean {
-  return isMazeFloorChar(BIG_TOP_MAZE_ROWS[tileY]?.[tileX]);
+/** Floor in a floor plan: the tiles a mark may be painted on. Barriers start as wall. */
+export function isMazeLayoutFloor(
+  rows: ReadonlyArray<string>,
+  tileX: number,
+  tileY: number,
+): boolean {
+  return isMazeFloorChar(rows[tileY]?.[tileX]);
 }
 
 /** The king pole's centre: the shared corner of its four tiles. */
@@ -676,7 +682,9 @@ function fireWalkFeatures(): FloorFeature[] {
   for (let y = firewalkRows.y0; y <= firewalkRows.y1; y++) {
     if (sectionAtRow(y).id !== FIREWALK) continue;
     for (let x = 0; x < MAZE_WIDTH; x++) {
-      if (isMazeLayoutFloor(x, y) && clearOfVents(x, y)) plateCandidates.push({ x, y });
+      if (isMazeLayoutFloor(BIG_TOP_MAZE_ROWS, x, y) && clearOfVents(x, y)) {
+        plateCandidates.push({ x, y });
+      }
     }
   }
   plateCandidates.sort(
@@ -790,12 +798,13 @@ function menagerieFeatures(): FloorFeature[] {
 const CLOTH_MARGIN_TILES = 1;
 const STANCHION_SPACING_TILES = 3;
 
-function mirrorHallFeatures(): FloorFeature[] {
+function mirrorHallFeatures(plan: BigTopMazePlan): FloorFeature[] {
   const features: FloorFeature[] = [];
   const [westWall, dividerX, eastWall] = MIRROR_HALL_GLASS_COLUMNS;
+  const { y0, y1 } = MIRROR_BOARD_ROWS;
   const halls: ReadonlyArray<MazeRect> = [
-    { x0: westWall + 1, y0: MIRROR_HALL_ROWS.y0, x1: dividerX - 1, y1: MIRROR_HALL_ROWS.y1 },
-    { x0: dividerX + 1, y0: MIRROR_HALL_ROWS.y0, x1: eastWall - 1, y1: MIRROR_HALL_ROWS.y1 },
+    { x0: westWall + 1, y0, x1: dividerX - 1, y1 },
+    { x0: dividerX + 1, y0, x1: eastWall - 1, y1 },
   ];
   for (const hall of halls) {
     const cloth: MazeRect = {
@@ -819,16 +828,12 @@ function mirrorHallFeatures(): FloorFeature[] {
       features.push({ kind: 'stanchion', centre: post, ropeTo: posts[index + 1] ?? null });
     });
   }
-  // The span of each limelight's beam that burns whatever the mirrors do: the
-  // unbent ray, traced with every mirror opaque.
-  for (const projector of MAZE_PROJECTORS) {
-    const path = traceMazeBeam(projector.half, () => null, isMazeLayoutFloor);
-    const hot = path.steps.filter((step) => step.hot).map((step) => step.tile);
-    const rows = new Set(hot.map((tile) => tile.y));
-    for (const row of rows) {
-      const xs = hot.filter((tile) => tile.y === row).map((tile) => tile.x);
-      features.push({ kind: 'burnLane', x0: Math.min(...xs), x1: Math.max(...xs), row });
-    }
+  // The span of each limelight's light that burns whatever the mirrors do.
+  const hot = boardHotSpan(plan.board).map((step) => boardTileToTent(step.tile));
+  const rows = new Set(hot.map((tile) => tile.y));
+  for (const row of rows) {
+    const xs = hot.filter((tile) => tile.y === row).map((tile) => tile.x);
+    features.push({ kind: 'burnLane', x0: Math.min(...xs), x1: Math.max(...xs), row });
   }
   return features;
 }
@@ -934,11 +939,12 @@ export function undressedSquares(
  * lays live, so the index is the same whether or not the system has been built
  * by the time the first chunk bakes — and the marks alone keep the density rule.
  */
-function buildMazeFeatures(): FloorFeature[] {
+function buildMazeFeatures(plan: BigTopMazePlan): FloorFeature[] {
+  const isFloor = (x: number, y: number): boolean => isMazeLayoutFloor(plan.rows, x, y);
   const features: FloorFeature[] = [
     ...fireWalkFeatures(),
     ...menagerieFeatures(),
-    ...mirrorHallFeatures(),
+    ...mirrorHallFeatures(plan),
     ...finaleFeatures(),
     ...curtainRoomFeatures(),
   ];
@@ -947,7 +953,7 @@ function buildMazeFeatures(): FloorFeature[] {
     const bounds = featureBounds(feature);
     for (let y = Math.floor(bounds.y0); y < Math.ceil(bounds.y1); y++) {
       for (let x = Math.floor(bounds.x0); x < Math.ceil(bounds.x1); x++) {
-        if (isMazeLayoutFloor(x, y) && featureCovers(feature, x, y)) coveredTiles.add(`${x},${y}`);
+        if (isFloor(x, y) && featureCovers(feature, x, y)) coveredTiles.add(`${x},${y}`);
       }
     }
   };
@@ -958,7 +964,7 @@ function buildMazeFeatures(): FloorFeature[] {
   // hashed tile inside it, until none is left. Each mark dresses every square
   // that holds its tile, so the loop converges in far fewer marks than squares.
   for (;;) {
-    const bare = undressedSquares(MAZE_WIDTH, MAZE_HEIGHT, isMazeLayoutFloor, isDressed);
+    const bare = undressedSquares(MAZE_WIDTH, MAZE_HEIGHT, isFloor, isDressed);
     if (bare.length === 0) break;
     const square = bare[0];
     const pick = Math.floor(
@@ -983,16 +989,18 @@ function buildMazeFeatures(): FloorFeature[] {
 /**
  * Every baked mark of the maze, listed per floor tile it paints on.
  *
- * Built from the authored layout alone — never from a live map — so the tile
+ * Built from the floor plan alone — never from a live map — so the tile
  * painter can answer during any bake without a map in hand.
  */
-export function buildBigTopFloorIndex(): ReadonlyMap<string, ReadonlyArray<FloorFeature>> {
+export function buildBigTopFloorIndex(
+  plan: BigTopMazePlan,
+): ReadonlyMap<string, ReadonlyArray<FloorFeature>> {
   const index = new Map<string, FloorFeature[]>();
-  for (const feature of buildMazeFeatures()) {
+  for (const feature of buildMazeFeatures(plan)) {
     const bounds = featureBounds(feature);
     for (let y = Math.floor(bounds.y0); y < Math.ceil(bounds.y1); y++) {
       for (let x = Math.floor(bounds.x0); x < Math.ceil(bounds.x1); x++) {
-        if (!isMazeLayoutFloor(x, y) || !featureCovers(feature, x, y)) continue;
+        if (!isMazeLayoutFloor(plan.rows, x, y) || !featureCovers(feature, x, y)) continue;
         const key = `${x},${y}`;
         const list = index.get(key) ?? [];
         list.push(feature);
@@ -1033,6 +1041,6 @@ export function bigTopFloorFeaturesAt(tileX: number, tileY: number): ReadonlyArr
       .filter((feature) => featureCovers(feature, tileX, tileY))
       .sort((a, b) => FLOOR_FEATURE_LAYER[a.kind] - FLOOR_FEATURE_LAYER[b.kind]);
   }
-  mazeIndex ??= buildBigTopFloorIndex();
+  mazeIndex ??= buildBigTopFloorIndex(activeLayout.plan);
   return mazeIndex.get(`${tileX},${tileY}`) ?? NO_FEATURES;
 }

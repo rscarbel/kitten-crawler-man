@@ -11,6 +11,7 @@
  * to re-implement the scene's draw order.
  */
 
+import type { Difficulty } from '../src/core/difficultyProfiles.js';
 import { createCanvas, type Canvas } from 'canvas';
 
 import { TILE_SIZE } from '../src/core/constants.js';
@@ -20,7 +21,6 @@ import { createCircusQuestProgress } from '../src/core/CircusQuestProgress.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { MazeBellTarget } from '../src/creatures/MazeBellTarget.js';
-import { MazeMirrorTarget } from '../src/creatures/MazeMirrorTarget.js';
 import type { Mob } from '../src/creatures/Mob.js';
 import { Conversation } from '../src/dialog/Conversation.js';
 import { GameMap } from '../src/map/GameMap.js';
@@ -32,19 +32,23 @@ import {
   MAZE_SPOTLIGHT_CELLS,
   MAZE_VENTS,
   MAZE_WIDTH,
+  planBigTopMaze,
   sectionAtRow,
-  traceMazeBeam,
+  TEACHING_STRIP_BOARD,
+  teachingTileToTent,
   ventFlameProgress,
   ventPhaseAt,
   ventTelegraphProgress,
   type MazeSection,
   type MazeSectionId,
   type MazeTile,
-  type MirrorFacing,
   type VentPhase,
   type VentSchedule,
 } from '../src/map/bigTopMazeLayout.js';
+import { boardTileToTent, constructedSolution } from '../src/map/bigTop/mirrorBoard.js';
+import type { MazeMirrorTarget } from '../src/creatures/MazeMirrorTarget.js';
 import { BigTopMazeSystem } from '../src/systems/BigTopMazeSystem.js';
+import { restartBigTopTent } from '../src/systems/bigTop/bigTopTent.js';
 import type { SystemContext } from '../src/systems/GameSystem.js';
 import { SpellSystem } from '../src/systems/SpellSystem.js';
 import { MobRoster } from '../src/systems/kits/SceneWorld.js';
@@ -52,12 +56,16 @@ import { asGameContext } from './nodeGameContext.js';
 
 /** A standing tent, plus the frame counter the maze keeps privately. */
 export interface TentHarness {
-  readonly maze: BigTopMazeSystem;
+  /** The maze standing now: replaced when a confirmed difficulty change restarts the tent. */
+  maze: BigTopMazeSystem;
   readonly map: GameMap;
   readonly frameCtx: SystemContext;
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
   readonly spawned: Mob[];
+  readonly roster: MobRoster;
+  /** How many times a confirmed difficulty change has restarted the tent. */
+  restarts: number;
   /**
    * How many times `maze.update` has run, which is the maze's own hazard clock:
    * `update` increments it unconditionally on entry, so counting calls here
@@ -67,24 +75,37 @@ export interface TentHarness {
   section: MazeSection;
 }
 
-export function buildTent(artSeed: number): TentHarness {
+/** A fixed floor-3 world seed, so the hall deals the same board every run. */
+export const TEST_WORLD_SEED = 0x5eed_b16;
+/** The tier the maze is built under here; the default a new game starts on. */
+export const TEST_DIFFICULTY: Difficulty = 'normal';
+
+export interface TentOptions {
+  readonly worldSeed?: number;
+  readonly difficulty?: Difficulty;
+}
+
+/**
+ * A tent dealt for one world and difficulty, built the way the scene builds
+ * it: the plan first, the room from the plan, then the maze on the room. A
+ * confirmed difficulty change restarts it through the same teardown the scene
+ * uses, and puts the party back on the fire walk's marks.
+ */
+export function buildTent(artSeed: number, options: TentOptions = {}): TentHarness {
+  const worldSeed = options.worldSeed ?? TEST_WORLD_SEED;
+  const plan = planBigTopMaze(worldSeed, options.difficulty ?? TEST_DIFFICULTY);
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [], artSeed });
-  map.generateInterior('house', 0, 'Big Top', false, 'bigtop_maze');
+  map.generateInterior('house', 0, 'Big Top', false, { kind: 'bigtop_maze', plan });
   const progress = createCircusQuestProgress();
   progress.stage = 'bigtop_ready';
   const roster = new MobRoster(map, new SpellSystem());
   const spawned: Mob[] = [];
-  const maze = new BigTopMazeSystem(
-    map,
-    new EventBus(),
-    (mob: Mob) => {
-      spawned.push(mob);
-      roster.add(mob);
-    },
-    progress,
-    null,
-    new Conversation(null),
-  );
+  const bus = new EventBus();
+  const conversation = new Conversation(null);
+  const addMob = (mob: Mob): void => {
+    spawned.push(mob);
+    roster.add(mob);
+  };
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
   const frameCtx: SystemContext = {
@@ -96,7 +117,30 @@ export function buildTent(artSeed: number): TentHarness {
     roster,
     gameMap: map,
   };
-  return { maze, map, frameCtx, human, cat, spawned, frame: 0, section: MAZE_SECTIONS[0] };
+  const raise = (tentPlan: typeof plan): BigTopMazeSystem =>
+    new BigTopMazeSystem(map, bus, addMob, progress, null, conversation, tentPlan, (next) => {
+      tent.maze = restartBigTopTent(
+        tent.maze,
+        { map, roster, conversation, human, cat, worldSeed, raise },
+        next,
+      );
+      tent.frame = 0;
+      tent.section = MAZE_SECTIONS[0];
+      tent.restarts++;
+    });
+  const tent: TentHarness = {
+    maze: raise(plan),
+    map,
+    frameCtx,
+    human,
+    cat,
+    spawned,
+    roster,
+    restarts: 0,
+    frame: 0,
+    section: MAZE_SECTIONS[0],
+  };
+  return tent;
 }
 
 /** A list's entry, or undefined past its end — the index check the compiler does not make. */
@@ -134,6 +178,41 @@ export function enterAct(tent: TentHarness, act: MazeSectionId): void {
   // The act's lights come up over a second after its curtain rises; a frame
   // taken before they finish shows the house board mid-fade.
   stepUntil(tent, () => tent.maze.lightsSettled);
+}
+
+/** Enough to turn any mirror one step, as a player's blow does. */
+const MIRROR_BLOW_DAMAGE = 1000;
+/** Frames a mirror needs between blows before it will answer another. */
+const MIRROR_BLOW_SETTLE_FRAMES = 16;
+
+/**
+ * Turns mirrors to the given cycle indices the way players do, one blow at a
+ * time through each prop's own hit path, with a tick of the tent after each.
+ */
+function blowMirrorsTo(
+  tent: TentHarness,
+  targets: ReadonlyArray<MazeMirrorTarget>,
+  indices: ReadonlyArray<number>,
+): void {
+  targets.forEach((target, index) => {
+    const wanted = indices[index] ?? target.cycleIndex;
+    for (let blow = 0; blow < target.cycleLength && target.cycleIndex !== wanted; blow++) {
+      target.takeDamageFrom(MIRROR_BLOW_DAMAGE, null, 'melee');
+      for (let frame = 0; frame < MIRROR_BLOW_SETTLE_FRAMES; frame++) target.updateAI([]);
+      tick(tent);
+    }
+  });
+}
+
+/** Lights both teaching lanes, then turns the hall's glass to the answer the board was built around. */
+export function solveHall(tent: TentHarness): void {
+  blowMirrorsTo(
+    tent,
+    tent.maze.hall.mirrorsOf('teaching'),
+    TEACHING_STRIP_BOARD.mirrors.map((mirror) => mirror.solutionIndex),
+  );
+  blowMirrorsTo(tent, tent.maze.hall.mirrorsOf('hall'), constructedSolution(tent.maze.board));
+  if (!tent.maze.hall.solved) throw new Error('the constructed answer did not solve the hall');
 }
 
 /**
@@ -230,22 +309,18 @@ function ringBell(tent: TentHarness, bellId: string): MazeTile[] {
   return held.flatMap((track) => track.cells.map(tileOfCell));
 }
 
-/** Both limelights' paths as the tent is set now, split into burning and cold spans. */
+/**
+ * The hall's light as the tent is set now, split into the burning span and
+ * the cold light past it; the teaching strip's harmless light is cold.
+ */
 export function beamTiles(tent: TentHarness): { hot: MazeTile[]; cold: MazeTile[] } {
-  const facingOf = (mirrorId: string): MirrorFacing | null => {
-    const mirror = tent.spawned.find(
-      (mob): mob is MazeMirrorTarget =>
-        mob instanceof MazeMirrorTarget && mob.mirrorId === mirrorId,
-    );
-    return mirror?.facing ?? null;
-  };
-  const isOpen = (x: number, y: number): boolean => tent.map.isWalkable(x, y);
   const hot: MazeTile[] = [];
   const cold: MazeTile[] = [];
-  for (const half of ['human', 'cat'] as const) {
-    for (const step of traceMazeBeam(half, facingOf, isOpen).steps) {
-      (step.hot ? hot : cold).push(step.tile);
-    }
+  for (const step of tent.maze.hall.traceOf('hall').steps) {
+    (step.hot ? hot : cold).push(boardTileToTent(step.tile));
+  }
+  for (const step of tent.maze.hall.traceOf('teaching').steps) {
+    cold.push(teachingTileToTent(step.tile));
   }
   return { hot, cold };
 }
@@ -341,7 +416,7 @@ export function hazardFocus(state: HazardState): MazeTile {
   }
 }
 
-/** The middle of the limelight row, where both beams and all three stars are in frame. */
+/** The middle of the hall, where its board and its teaching strip are in frame together. */
 const MIRROR_HALL_FOCUS: MazeTile = { x: 21, y: 26 };
 
 // ── Drawing ──────────────────────────────────────────────────────────────────
@@ -485,6 +560,11 @@ export function renderTentFrame(
   const figures: Array<{ y: number; render: () => void }> = mobs
     .filter((mob) => mob.belongsInMobGrid)
     .map((mob) => ({ y: mob.y, render: () => mob.render(ctx, camX, camY, TILE_SIZE) }));
+  if (options.withMobs !== false) {
+    for (const figure of tent.maze.sortedFigures()) {
+      figures.push({ y: figure.y, render: () => figure.render(ctx, camX, camY, TILE_SIZE) });
+    }
+  }
   if (options.withParty) {
     for (const crawler of [tent.human, tent.cat]) {
       figures.push({ y: crawler.y, render: () => crawler.render(ctx, camX, camY, TILE_SIZE) });

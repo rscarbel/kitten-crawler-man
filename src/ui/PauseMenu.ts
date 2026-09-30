@@ -47,7 +47,12 @@ import {
   hasAnyCraftSkill,
 } from './pause/CraftsTab';
 import type { CraftSkillId } from '../core/CraftSkills';
-import { renderSettingsTab, SETTINGS_SCROLL_TOP_Y, SETTINGS_FOOTER_H } from './pause/SettingsTab';
+import {
+  renderSettingsTab,
+  resetSettingsTab,
+  SETTINGS_SCROLL_TOP_Y,
+  SETTINGS_FOOTER_H,
+} from './pause/SettingsTab';
 import {
   renderControlsTab,
   resetControlsTab,
@@ -197,6 +202,7 @@ export class PauseMenu {
     this._showResetConfirm = false;
     this._showBindingsRestoreConfirm = false;
     resetControlsTab();
+    resetSettingsTab();
     // Before anything else: the Equipment tab's search field holds the keyboard
     // through the capture-phase listener, and a menu that has left the screen
     // must not still be eating the keys the world is waiting for.
@@ -550,7 +556,10 @@ export class PauseMenu {
       // back: the search field's capture outlives the panel that drew it, so
       // nothing else would release it.
       if (t !== 'equipment') this.equipment.reset();
-      if (t !== 'settings') this._showResetConfirm = false;
+      if (t !== 'settings') {
+        this._showResetConfirm = false;
+        resetSettingsTab();
+      }
       if (t !== 'controls') {
         this.controlsScrollY = 0;
         this._showBindingsRestoreConfirm = false;

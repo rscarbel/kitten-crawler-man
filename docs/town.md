@@ -1085,7 +1085,11 @@ The tent's interior is a `BuildingInteriorScene` room. When the quest is `bigtop
 it is the three-act maze run by `BigTopMazeSystem` (`src/map/bigTopMazeLayout.ts`:
 fire walk, menagerie, hall of mirrors, the finale ring, and paired curtain rooms
 between acts). Otherwise it is a plain ring whose curb and king pole `GameMap` lays out.
-`GameMap.generateInterior` calls `setBigTopDecorLayout` on every entry. It is module
+The maze is built from a `BigTopMazePlan` (`planBigTopMaze(worldSeed, difficulty)`),
+which deals the hall of mirrors its board and writes it into `BIG_TOP_MAZE_ROWS`
+before `GameMap.generateBigTopMaze` lays the tiles. Everything else built from the
+plan — tiles, floor marks, chunk bake, the lighting mask — is built once from what it
+says. `GameMap.generateInterior` calls `setBigTopDecorLayout` on every entry. It is module
 state, like the wall finish, because nothing between the chunk bake and a tile painter
 knows which room is live.
 
@@ -1117,6 +1121,213 @@ knows which room is live.
   the trapeze. Its foot and shadow are baked into the floor, and it is in the same
   decoration and overlay-cache registries as the circus structures.
 
+### Act III: the hall of mirrors
+
+Act III is a light puzzle. The pure model lives in `src/map/bigTop/`:
+`mirrorBoard.ts` holds the board type, the light walk, the solver, the simulated players,
+the acceptance contract and the tiers. `mirrorBoardGenerator.ts` builds boards and
+`mirrorBoardFallback.ts` holds one committed board per tier. At runtime,
+`src/systems/bigTop/MirrorHall.ts` watches the light, and `BigTopMazeSystem` stands the
+mirrors up, opens the barriers and plays the cues.
+
+**The one rule: light every star at once.** A star shows only the light on it right
+now. Take the light away and it goes dark. When every required star is lit at the same
+moment, the board is solved: `MirrorHall.refresh` latches `solved` for **the whole
+board, never a single star**, and all four `MAZE_HALL_EXITS` open (each lane's gate `<`
+`>` on the hall's top wall and its door `[` `]` two rows above). The mirrors stay
+turnable, and the exits stay open whatever is turned afterwards. A burned crawler's act
+reset moves the party back to the act's marks but leaves every mirror where it was
+turned, and a solved board stays solved. The rule sits in one seam,
+`MirrorHall.settleStars`, which the gate swaps out to prove it (`--fault=latch-stars`).
+The act card (`BIGTOP_ACT_THREE_CARD`) states the rule and the colours, and there is no
+hint system.
+
+#### The frame
+
+The board is 36 × 14 tiles (`MIRROR_BOARD_WIDTH`, `MIRROR_BOARD_HEIGHT`) with board
+`(0, 0)` on tent tile `MIRROR_BOARD_TENT_ORIGIN` (4, 19), so `boardTileToTent` is one
+addition. Its top row is the wall the exit gates are cut into, its twelve floor rows are
+`MIRROR_BOARD_ROWS` (tent rows 20–31), and its bottom row is the wall holding each lane's
+doorway from the teaching strip (`MAZE_TEACHING_DOORWAYS`). The teaching strip's four
+floor rows (`TEACHING_STRIP_ROWS`, tent rows 33–36) sit below that, and
+`MIRROR_HALL_ROWS` spans both. `MIRROR_BOARD_DIVIDER_X` is the dividing wall: Carl's lane
+is west, Donut's east. Each lane walks in at `MIRROR_BOARD_ENTRIES` and leaves by
+`MIRROR_BOARD_EXITS`.
+
+`BIG_TOP_MAZE_ROWS` leaves the hall's floor rows bare. `writeBoardIntoRows` writes each
+board's limelights (`P` `Q`), stars (`*`), windows (`|`) and pillars (`o`) in, and
+`tentMirrorsOf` stands the mirrors up as `MazeMirrorTarget` props.
+
+#### The pieces
+
+- **Limelights.** One per lane in the lane's outer wall, on a row the generator picks.
+  Carl's throws **blue** east, Donut's throws **red** west. The span from the lens to
+  the first optic is the **hot span**, the hall's only hazard: it burns, and it never
+  moves. `boardHotSpan` walks it with every mirror's facing unknown, so no turn can
+  change it. `hotSpanProblems` holds it fair. The first optic on each ray is a mirror
+  within `FIRST_MIRROR_MAX_TILES` (5) of the lens, the fire stays in its own lane, and it
+  never covers an entry or exit tile. The reachable row walks every lane with the hot
+  span solid.
+- **Pivot mirror** (Carl's). One-sided glass that turns a quarter per blow through all
+  four facings (`PIVOT_CYCLE`). Light that hits its back stops.
+- **Swivel mirror** (Donut's). One-sided glass that snaps between **two** facings, which
+  vary per mirror. The art shows the current facing as glass and the other as a ghost
+  mark (`drawSwivelMirrorWithGhost`). A mirror's owner is always the lane its tile is
+  in.
+- **Splitter.** A fixed half-silvered diagonal (`slash` or `backslash`). Light carries
+  straight on **and** reflects, from either side. It is the only way one light reaches
+  two stars.
+- **Window.** A glass tile in the divider. Light passes and crawlers do not.
+- **Stars**, set in wall tiles. **Blue** wants Carl's light and **red** wants Donut's.
+  The **twin** sits in the divider, is hit from both faces, and wants both lights at
+  once. The **encore** is gold and wants either light. A star reads `dark`, `lit`,
+  `half` (a twin with one light) or `fizzle` (a coloured star with only the wrong light,
+  drawn grey with sparks, so wrong light is never silently eaten). Every coloured star
+  sits in the **other** crawler's lane, so each light crosses the divider by a window
+  and is turned by the other crawler's glass. No star sits on
+  `WALL_TILES_ABOVE_TEACHING_GLASS`, where the teaching glass's frames would hide it.
+- **The encore** is optional and opens nothing. The generator puts it where some
+  arrangement lights it but the constructed solution does not. It can be lit any time,
+  including after the solve. It pays `MAZE_ENCORE_REWARD_COINS` (75) at its foot
+  (`starFootTile`) **once per run**. `bigTopEncorePaid` lives on `CircusQuestProgress`
+  and is persisted, because a party sent back in gets a fresh tent with every star dark.
+- **Pillars** block light and movement. They are decoys.
+
+Glass is furniture: every mirror and splitter tile is `blockTilePermanently`, because
+the board was proven reachable with every pane solid. Splitters draw in the scene's
+Y-sorted pass (`MirrorHall.sortedFigures`). While the hall is on stage, each lane's
+teaching mirror pulses until its doorway opens, and then the hall's glass pulses until
+the board is solved.
+
+#### The teaching strip
+
+`TEACHING_STRIP_BOARD` is an authored `MirrorBoard` under the same rule, so the one walk
+decides it too. In each lane, a footlight lamp throws light at the crawler's own mirror,
+which turns it onto a splitter. The splitter sends it on to a star in the curtain wall
+and aside to a star in the lane's outer wall. One blow lights both stars, and another
+puts them out. Lighting both of a lane's stars at once opens that lane's doorway into
+the hall. That opening is latched per lane. The lamps are harmless: the strip has no
+hot span.
+
+#### The marquee
+
+`hallMarquees.ts` places the marquees for both the maze, which draws them, and the
+lighting, which pools under them. The hall's marquee (`hallMarqueePlacement`) hangs on
+the wall one row above the gates, centred on the divider. It has one star-shaped bulb
+per star in `marqueeStarOrder` (required stars first, the encore last). Each bulb is lit
+**exactly while its star is lit**, and shows half for a twin with one light. When the
+board solves, the rim chases and the board spells BRAVO for `BRAVO_SHOW_FRAMES`; the
+bulbs then come back under a rim that keeps chasing while the board stays solved, so an
+encore lit after the solve still shows on its bulb. Each teaching lane has a
+two-bulb marquee beside its doorway (`teachingMarqueePlacement`), on whichever side is
+clear of the hall's stars.
+
+#### One trace
+
+`traceBoard` is **the only function that decides where light goes**. The live beams,
+the stars, the bulbs, the hot span (`boardHotSpan`), the turn preview
+(`traceBoardAfterBlow`), the solver, the simulated players and the gate all call it. A
+second walk would let the preview disagree with the blow. The light changes only when a
+mirror turns, so `MirrorHall.refresh` re-walks both boards then and the frame only reads
+the result. The hall's light is on only while its act is on stage and the tent is still
+performing (`hallLightOn`). Before and after that, the stars read dark.
+
+**Turn preview.** The acting crawler's nearest own mirror in reach shows its whole
+board's light one blow on. Only the light the blow would **add** is dotted: light that
+stays is already drawn solid, and the hot span is left out. A ring marks each star the
+blow would newly light. Splitter branches are included. The preview answers "what does
+this mirror do", never "where should the light go".
+
+#### Board generation
+
+`planBigTopMaze` deals the board when the tent is built, inside the door's loading fade.
+Everything built from the plan needs the board first, and an attempt costs about a
+millisecond. `generateBoardNow` runs the generation to completion. A sliced
+`createBoardGeneration` also exists, doing half an attempt per `step()`.
+
+- **Seed.** `mirrorBoardSeed(worldSeed, difficulty)`: floor 3's `GameMap.worldSeed`
+  (passed into `BuildingInteriorScene`) mixed with the active difficulty. Each attempt
+  has its own sub-seed (`attemptSeed`). Every draw comes from the generator's own
+  xorshift stream (`seededStream`), never from `Math.random` or the world's stream. The
+  same world on the same difficulty always deals the same board, including its scrambled
+  start. A new world or another difficulty deals another board.
+- **Constructive.** Random placement never yields a solvable board, so
+  `buildBoardAttempt` builds each board backwards from its answer. It picks the geometry
+  (lens rows, twin row, window rows spaced by `WINDOW_SPACING_MIN`, wall stars) and
+  routes each light to its stars one straight run at a time, with at most the tier's
+  `maxTurnsPerLeg` mirrors per leg. A light with two stars is routed to the twin, then
+  split. New mirrors never sit on committed light. It then gives each pivot its four
+  facings and each swivel its answer plus one other, and adds the tier's decoys and
+  pillars. It places the encore, then scrambles every answer mirror off its answer. The
+  route search has a hard node cap (`ROUTE_NODE_BUDGET`).
+- **Acceptance contract.** `assessBoard` checks `CONTRACT_ROWS` in order. The generator
+  stops at the first failure, and the gate assesses in full:
+
+  | Row                    | Rule                                                                                                                                           |
+  | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `legible`              | no glass orthogonally touching glass, a star or a lens; no glass boxed into a lane corner; no star on a tile reserved above the teaching glass |
+  | `fairHotSpan`          | `hotSpanProblems` is empty                                                                                                                     |
+  | `notPreSolved`         | no star lit in the starting arrangement                                                                                                        |
+  | `reachable`            | each crawler walks from entry to exit and to a floor tile beside every own mirror, with glass, pillars and the hot span solid                  |
+  | `solvable`             | the solver finds an arrangement lighting every required star, within `SOLVER_NODE_BUDGET`                                                      |
+  | `longEnough`           | fewest blows ≥ the tier's `minBlows`                                                                                                           |
+  | `nearUnique`           | solving arrangements ÷ all arrangements ≤ the tier's `solvingShareMax`                                                                         |
+  | `windowsLoadBearing`   | removing any one window makes the board unsolvable                                                                                             |
+  | `splittersLoadBearing` | removing any one splitter makes the board unsolvable                                                                                           |
+  | `encore`               | some arrangement lights the encore, and the constructed solution solves the board without lighting it                                          |
+  | `needsThought`         | the "tune each mirror" player wins at most the tier's `tuneWinsAllowed` of `TUNE_PLAYER_RUNS` (20) seeded runs                                 |
+
+  An exhausted solver search fails every row that leans on it rather than read as an
+  answer. The solver is exact: every mirror cycles independently, so every arrangement
+  is reachable, and fewest blows is the sum of each mirror's cyclic distance to its
+  answer.
+
+- **Fallback.** After `GENERATION_ATTEMPTS_MAX` (60) rejected attempts, the hall takes
+  its tier's `MIRROR_BOARD_FALLBACKS` board. These were produced by the generator from
+  `MIRROR_BOARD_FALLBACK_WORLD_SEED` and frozen as data. The cut-off counts attempts,
+  never time, so a slow device deals the same board as a fast one.
+
+#### Difficulty tiers
+
+`MIRROR_BOARD_TIERS`, keyed by `MirrorBoardDifficulty` (the same union as `Difficulty`,
+proved in the gate):
+
+|                               | **Kitten** (`easy`) | **Crawler** (`normal`) | **Nightmare** (`hard`) |
+| ----------------------------- | ------------------- | ---------------------- | ---------------------- |
+| Required stars                | blue + red          | twin + blue            | twin + blue + red      |
+| Splitters (follow from stars) | 0                   | 1 (blue)               | 2 (one per light)      |
+| Windows (follow from stars)   | 2                   | 1                      | 2                      |
+| `maxTurnsPerLeg`              | 3                   | 2                      | 3                      |
+| `decoyMirrorsPerLane`         | 0                   | 1                      | 2                      |
+| `pillars`                     | 0                   | 2                      | 3                      |
+| `minBlows`                    | 4                   | 6                      | 10                     |
+| `solvingShareMax`             | 0.02                | 0.005                  | 0.002                  |
+| `tuneWinsAllowed` (of 20)     | 10                  | 0                      | 0                      |
+
+Every tier also has the encore. A light needs a splitter for each second star, and a
+window for each coloured star in the other lane.
+
+#### Changing difficulty mid-show
+
+The board's tier is fixed for the life of a `BigTopMazeSystem`: it holds its `plan`
+and never reads the live difficulty. `src/core/difficultyChangeGuard.ts` holds one guard
+at a time (`registerDifficultyChangeGuard` returns a handle, and
+`clearDifficultyChangeGuard` with a stale handle is a no-op). `BigTopMazeSystem`
+registers the guard last in its constructor (`holdDifficulty`). It releases the guard in
+`dispose`, and when the last conversation with Grimaldi begins, because a restart then
+would throw the finale away.
+
+The Settings tab reads `activeDifficultyChangeGuard()` at click time, never when the tab
+is built. While a guard is active, picking a different tier opens **Restart the
+Big Top?** ("Keep playing", the primary action, or "Change and restart") instead of
+applying it. Confirming hands the tier to the guard, which calls `settings.setDifficulty`
+and restarts through `restartBigTopTent` (`src/systems/bigTop/bigTopTent.ts`). That
+function deals the new plan, closes any open notice, disposes the old maze and its mobs,
+rebuilds the map in place with `generateBigTopMaze`, raises a new maze and puts the party
+back at the flaps in Act I. If the guard was released while the prompt was up, the pick
+applies as an ordinary change. `settings.setDifficultyForSession` (dev presets) bypasses
+the guard.
+
 ### Lighting
 
 `src/systems/bigTop/bigTopLighting.ts`: the tent is dark and the act on stage is lit.
@@ -1125,23 +1336,28 @@ knows which room is live.
   (`BIG_TOP_MASK_SCALE`), with a padded border so a stretched blit never samples the
   edge. Each act has its own tint of dark (`ACT_DARK`), and every fixture cuts a soft
   pool (`POOL_SPECS`): footlights, arch posts, interval lamps, limelights, act boards,
-  hall lamps and the ring wash. `lighting.prewarm()` bakes it while the door loads.
+  hall lamps, marquees and the ring wash. The limelights and marquees move with the
+  dealt board, so `layoutLightFixtures(plan)` bakes from the plan, never from the fixed
+  floor plan. `lighting.prewarm()` bakes it while the door loads.
 - **The house board** lays a feathered translucent fill per band that is not on stage.
   The next act comes up over `LIGHTS_UP_FRAMES` (60) when its curtain rises. The act
   behind dims to `STRUCK_ACT_LEVEL` (0.4), and acts ahead stay dark. Once Grimaldi is
   freed, the house lights come up over 120 frames to 30% of the mask.
-- **Live light** is additive: vent flare, lantern pools, limelight beams, lit stars,
+- **Live light** is additive: vent flare, lantern pools, the hall's light, lit stars,
   spill through an opened curtain, and the follow-spot on Grimaldi. The follow-spot
   cross-fades from sick green to warm white as the cure runs, through
   `FOLLOW_SPOT_TINT_STEPS` (12) baked glows.
 
 **The fairness contract.** `BigTopMazeSystem.renderWorld` draws in one order:
-`renderProps` (dressing, act boards, shut barriers, limelight housings) →
-`renderLighting` (mask, live light, follow-spot cones, reflections) →
-`renderTelegraphs`. The last draws the ropes, vent grilles and their warnings, lantern
-rings and clear marks, opened ways, stars, cold beams and the mirror-turn preview.
-Everything a player reads to stay alive or find the way is drawn **above** the mask at
-full strength, and crawlers and mobs draw above all three. Never move a warning into
+`renderProps` (dressing, act boards, shut barriers, and the hall's limelight housings,
+teaching lamps and windows via `MirrorHall.renderPieces`) → `renderLighting` (mask,
+live light, follow-spot cones, reflections) → `renderTelegraphs`. The last draws the
+ropes, vent grilles and their warnings, lantern rings and clear marks, opened ways, and
+the hall's readouts (`MirrorHall.renderReadouts`: stars, marquees, coloured light and
+the turn preview). The hot span's fire and the flares where light meets glass
+(`MirrorHall.renderEffects`) draw over the crawlers, since a crawler stands in the span,
+not behind it. Everything a player reads to stay alive or find the way is drawn
+**above** the mask at full strength. Never move a warning or a hall readout into
 `renderProps`.
 
 ### Props
@@ -1149,7 +1365,10 @@ full strength, and crawlers and mobs draw above all three. Never move a warning 
 The act props live in `src/sprites/art/bigTop/`:
 
 - one module per act (`fireWalkProps`, `menagerieProps`, `mirrorHallProps`,
-  `curtainProps`, `finaleProps`, `encoreProps`);
+  `curtainProps`, `finaleProps`);
+- the hall's puzzle pieces in `mirrorPuzzleProps` (splitters, windows, stars, the
+  marquee, the coloured light and the teaching lamps) and its turn preview in
+  `turnPreviewProps`;
 - the shared hand in `bigTopPropKit.ts` and `stagePropKit.ts`;
 - the shell in `bigTopShellArt.ts`.
 
@@ -1161,23 +1380,22 @@ clears the cache and the reflection scratch when the party leaves. While either 
 stands in an interval room, `queueNextActWarm` bakes the next act's props one
 screen-sized window a frame, so the curtain does not hitch. The draws that change every
 frame (fire, opened ways, act gates, lantern warnings, name chips) stay live in
-`src/sprites/bigTopMazeProps.ts`.
+`src/sprites/bigTopMazeProps.ts`. The hall's moving parts are drawn live over their
+baked frames: a red beam's marching dashes, a blue beam's glints, a star's sparks, the
+marquee chase and the turn preview's dots.
 
 - **Ownership colours are load-bearing** for the two-crawler split. Donut's props are
   stage red and bone stripes with gilt trim and a gilt hoop. Carl's are ringmaster blue
   and brass on timber with brass strike chevrons. A player must name prop and owner from
   colour alone at 32 px under the stage lights. The owner's pulse and hit flash are live
   overlays over the cached frame.
+- **Every hall colour has a shape twin**, so the puzzle reads in greyscale. Blue light
+  is a solid band with a gilt spine and red light is dashes. Where both cross a tile,
+  each is drawn whole. The blue star carries brass chevrons, the red star bone stripes,
+  the twin is split down the middle, and the encore is spotted gold. Splitter branches
+  draw at full strength.
 - **Reflections:** crawlers within `REFLECTION_RANGE_TILES` of a mirror-hall pane appear
   in it. They are drawn over the dark, since a reflection is as bright as the crawler.
-- **Mirror-turn preview:** the acting crawler's nearest own mirror in reach shows
-  the beam the next blow would make, as dots and a ring on the star it would land on.
-  It is traced with the live beam's walk (`traceMazeBeamWithFacing`), and the hot span
-  is left out.
-- **The encore star** latches like a star but opens nothing. It lights the bravo rig and
-  pays coins at its foot **once per run**: `bigTopEncorePaid` lives on
-  `CircusQuestProgress` and is persisted, because a party sent back in gets a fresh
-  maze with every star dark.
 
 ### Sound
 
@@ -1193,27 +1411,74 @@ Each cue's JSDoc names the file it waits for. To swap one in:
    the group.
 3. Replace the cue's list.
 
+The hall raises `mirrorTurn` per blow, and each settle of the light raises at most one
+of each: `starLights`, `starWrongFizzle` (which takes precedence over `starDims`), and
+on a solve `starLatch`, `marqueeChase` and `starOpensWay` (`BigTopMazeSystem.answerHall`).
+`starLights`, `starDims`, `starWrongFizzle` and `marqueeChase` are silent until their
+recordings land.
+
 The ambience bed goes in `STREAMING_SOUND_IDS` and `BIG_TOP_AMBIENT_BED`, which is
 `null` until it lands.
 
 ### Gates
 
-- `npm run verify:bigtop`: timing feasibility at `MAZE_TIMING_MARGIN`, bell and mirror
-  solvability, resets, the door gate, and more. On the art side it checks that no
-  dressing hangs over walkable ground, that every drape matches the act of the floor it
-  faces, that floor marks sit on walkable ground, the density rule, every mirror-turn
-  preview against the blow that follows it, the encore paying once, and that every cue
-  is audible.
+Each negative test (`--fault=`) must turn its own check red, and every fault asserts
+that it was actually applied, so a fault that silently misses cannot pass as green.
+
+- `npm run verify:mirror-board`: the board-level checks (`scripts/bigTopMirrorBoardChecks.ts`),
+  pure and fast. They cover the board's frame in the tent, the light walk against brute
+  force, every fallback against its tier's full contract, and a 500-attempt sweep per
+  tier (`SWEEP_ATTEMPTS`, `--attempts=` to change it). A tier fails below a 10% pass
+  rate (`SWEEP_PASS_RATE_MIN`). The tiers must stay ordered: Kitten boards have no twin
+  and no splitter, every Crawler and Nightmare board has both, and Nightmare's median
+  fewest blows and median touched glass are above Crawler's. Determinism is checked too:
+  the same world and difficulty give the same board byte for byte, and two difficulties
+  give different ones. Faults:
+  - `drop-solution-mirror` turns `solvable` red;
+  - `current-hall` (a hall of three independently latched stars, each judged on its own)
+    turns `needsThought` and `nearUnique` red;
+  - `decorative-window` turns `windowsLoadBearing` red;
+  - `hot-span-blocks-glass` turns `reachable` red;
+  - `misplaced-limelight` turns `fairHotSpan` red;
+  - `star-over-teaching-glass` turns `legible` red;
+  - `kitten-twin` turns the tier ordering red.
+- `npm run verify:bigtop`: timing feasibility at `MAZE_TIMING_MARGIN`, bell solvability,
+  resets, the door gate, and more. It runs the board-level checks too. On the live hall
+  it:
+  - lights the teaching strip through real blows;
+  - solves the dealt board through the real hit path (`MazeMirrorTarget`), asserting it
+    solves on the final blow and not before, that all four exits open, that later blows
+    never shut one, that the bulbs track the stars, and that an act reset after the
+    solve keeps every mirror and the latch;
+  - holds rather than latches (`--fault=latch-stars`);
+  - walks the hall on the live `GameMap`, where barriers are runtime block flags;
+  - checks every turn preview against the blow that follows it;
+  - checks the encore pays once and is not needed for the exits;
+  - checks that a difficulty change mid-show is held behind the prompt and restarts
+    the tent at Act I on the new board (`--fault=unguarded-difficulty`).
+
+  On the art side it checks that no dressing hangs over walkable ground, that every
+  drape matches the act of the floor it faces, that floor marks sit on walkable ground,
+  the density rule, and that every cue is audible.
+
+- `npm run verify:difficulty-guard` drives the real pause menu's Settings tab. It checks
+  that an unguarded pick applies at once, that a guarded pick raises the prompt, that
+  Keep playing and closing the menu both cancel, that Change and restart hands the tier
+  to the guard, and that `setDifficultyForSession` is not held. Its fault is
+  `--fault=unguarded-difficulty`.
 - `npm run gates:bigtop-art` measures the real tent through `bigTopInteriorHarness`:
-  - **Hazards:** every forced hazard state keeps its full-bright contrast and salience,
-    and its own pixels keep at least 0.85 of their full-bright colour (0.7 for a hazard
-    over its own pool). That is the fidelity measure.
+  - **Hazards:** every forced hazard state (including the hall's `beam-hot`) keeps its
+    full-bright contrast and salience, and its own pixels keep at least 0.85 of their
+    full-bright colour (0.7 for a hazard over its own pool). That is the fidelity
+    measure.
   - **Floor and mass:** the stage floor stays above a luminance floor, and the mass
     stays darker and calmer than the floor.
   - **The show:** the lights follow the show.
   - **Budgets:** `drawImage` count, lighting memory and node pass time.
-  - **Act props:** every catalogued frame, painted at both scales on a strict canvas,
-    stays inside its box and fits the cache without evicting.
+  - **Act props:** every catalogued frame (the hall's catalogues included), painted at
+    both scales on a strict canvas, stays inside its box. The frames the acts draw,
+    including a solved hall's marquee through its chase, fit the cache without
+    evicting.
 
   `--fault=dark-telegraph` draws the lights over the warnings and must turn every hazard
   state red. `--fault=ink-overrun` must turn the act-prop section red. Browser cost is
@@ -1221,9 +1486,13 @@ The ambience bed goes in `STREAMING_SOUND_IDS` and `BIG_TOP_AMBIENT_BED`, which 
 
 - `npm run render:bigtop-interior` renders one frame per act, a curtain room and every
   forced hazard state, at 32 and 64 px, into `preview/bigtop-interior/<label>/` with
-  `fairness.json`. `--lighting=lit|fullBright|darkTelegraph`, `--only=`, `--label=`.
+  `fairness.json`. It also renders the dealt hall for five worlds across the tiers,
+  unsolved and solved. `--lighting=lit|fullBright|darkTelegraph`, `--only=`,
+  `--label=`.
 - `npm run render:bigtop` renders the prop contact sheet and smoke-runs every maze draw
-  function.
+  function. It also writes a puzzle-piece sheet in colour and in greyscale
+  (`bigtop-mirror-puzzle-*.png`), where the shape twin of every colour cue is checked
+  by eye.
 
 ---
 

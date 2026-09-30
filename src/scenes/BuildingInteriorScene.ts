@@ -184,7 +184,12 @@ import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
 import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
 import { SpellSystem } from '../systems/SpellSystem';
-import { MAZE_CAT_SPAWN_TILE, MAZE_HUMAN_SPAWN_TILE } from '../map/bigTopMazeLayout';
+import {
+  MAZE_CAT_SPAWN_TILE,
+  MAZE_HUMAN_SPAWN_TILE,
+  planBigTopMaze,
+  type BigTopMazePlan,
+} from '../map/bigTopMazeLayout';
 import { BIG_TOP_AMBIENT_BED } from '../systems/bigTop/bigTopSoundCues';
 import { findPartyArrivalTiles, findNearbyWalkableTile } from '../map/findWalkableTile';
 import { GrimaldiVine } from '../creatures/GrimaldiVine';
@@ -218,6 +223,9 @@ import { RewardFlySystem } from '../systems/RewardFlySystem';
 import { playRewardLandingCues } from '../systems/rewardFlyAudio';
 import type { PendingLoot } from '../systems/LootSystem';
 import { BigTopMazeSystem } from '../systems/BigTopMazeSystem';
+import { restartBigTopTent } from '../systems/bigTop/bigTopTent';
+import type { GroundHazardSource } from '../systems/GroundHazardSource';
+import type { Difficulty } from '../core/difficultyProfiles';
 import { CultHideoutSystem } from '../systems/CultHideoutSystem';
 import { QuillConfrontationSystem } from '../systems/QuillConfrontationSystem';
 import { SoulCrystalSystem } from '../systems/SoulCrystalSystem';
@@ -467,6 +475,11 @@ export interface BuildingInteriorCircusContext {
    * player came through is the only position that exists in both spaces.
    */
   readonly overworldCentre: { x: number; y: number } | undefined;
+  /**
+   * The overworld's `GameMap.worldSeed`. The interior's own map is seeded
+   * apart from it, and the tent's hall of mirrors deals one board per world.
+   */
+  readonly worldSeed: number;
 }
 
 /** Every enterable building stands on the level-3 overworld. */
@@ -482,10 +495,14 @@ const OVERWORLD_FLOOR_NUMBER = 3;
  */
 function interiorVariantFor(
   buildingName: string,
-  circusProgress: CircusQuestProgress | undefined,
+  circus: BuildingInteriorCircusContext | undefined,
 ): InteriorVariant {
-  const isMaze = buildingName === BIG_TOP_BUILDING_NAME && circusProgress?.stage === 'bigtop_ready';
-  return isMaze ? 'bigtop_maze' : 'default';
+  const isMaze =
+    buildingName === BIG_TOP_BUILDING_NAME && circus?.progress.stage === 'bigtop_ready';
+  if (!isMaze) return 'default';
+  // Dealt before the room exists: the hall's tiles, its floor marks and its
+  // stage lights are all built from the board, once.
+  return { kind: 'bigtop_maze', plan: planBigTopMaze(circus.worldSeed, settings.difficulty) };
 }
 
 export class BuildingInteriorScene extends GameplayScene {
@@ -627,6 +644,14 @@ export class BuildingInteriorScene extends GameplayScene {
    * render pass all ask it questions no other encounter answers.
    */
   private bigTopMaze: BigTopMazeSystem | null = null;
+  /**
+   * The maze's hazards as the companion and the mob tactics see them, through
+   * whichever tent is standing: registered once, because a restarted tent is a
+   * new system and neither list can be told to forget the old one.
+   */
+  private readonly bigTopHazards: GroundHazardSource = {
+    getHazardEscapeVector: (x, y) => this.bigTopMaze?.getHazardEscapeVector(x, y) ?? null,
+  };
   /** Storeys still holding hostiles that were not put there by a quest encounter. */
   private readonly hostileRoomFloors = new Set<number>();
   // Ambient occupants (null in encounter interiors, towers, the club, and unpopulated buildings)
@@ -830,7 +855,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Read once and reused below: the room's shape and where the two crawlers are
     // put down have to be the same decision, or the maze gets built and then
     // entered through the ring's single door.
-    const variant = interiorVariantFor(entry.name, this.circus?.progress);
+    const variant = interiorVariantFor(entry.name, this.circus);
 
     // prebuiltStructure skips dungeon generation entirely (mapSize 0 would
     // crash the generator); generateInterior() builds the real room next.
@@ -903,7 +928,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.pm.setPartyDown(findPartyArrivalTiles(this.map, this.map.startTile));
     // The maze is two people walking two sealed halves, so they come in through
     // two flaps rather than side by side at one door.
-    if (variant === 'bigtop_maze') {
+    if (variant !== 'default') {
       this.human.x = MAZE_HUMAN_SPAWN_TILE.x * TILE_SIZE;
       this.human.y = MAZE_HUMAN_SPAWN_TILE.y * TILE_SIZE;
       this.cat.x = MAZE_CAT_SPAWN_TILE.x * TILE_SIZE;
@@ -944,7 +969,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // After the safe room's fittings are stamped: the arrival has to keep clear
     // of them just as it keeps clear of the room's own furniture. The maze's
     // two flaps are fixed marks on two sealed halves and are left as set.
-    if (variant !== 'bigtop_maze') {
+    if (variant === 'default') {
       this.setPartyDown(this.map.startTile);
       this.companion.setMap(this.map, this.human, this.cat);
     }
@@ -1089,7 +1114,7 @@ export class BuildingInteriorScene extends GameplayScene {
     });
     bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
     this.wireCombatGore();
-    this.initEntryEncounter(this.circus?.progress);
+    this.initEntryEncounter(this.circus, variant === 'default' ? null : variant.plan);
     this.populateHostileRooms();
 
     // Before the occupants are placed, because breaking Hilda's shelf takes it
@@ -1504,37 +1529,24 @@ export class BuildingInteriorScene extends GameplayScene {
    * Big Top's trap maze and the Blackwood Lodge cult hideout. The tower's Quill
    * confrontation is created later, on reaching the top floor.
    */
-  private initEntryEncounter(circusProgress: CircusQuestProgress | undefined): void {
-    if (this.entry.name === BIG_TOP_BUILDING_NAME && circusProgress?.stage === 'bigtop_ready') {
-      this.startEncounter(GROUND_FLOOR_INDEX, (bus, addMob) => {
-        const maze = new BigTopMazeSystem(
-          this.map,
-          bus,
-          addMob,
-          circusProgress,
-          this.audio,
-          this.conversation,
-        );
-        this.bigTopMaze = maze;
-        // Baked while the door is still loading, not on the fire walk's first frame.
-        maze.lighting.prewarm();
-        // The maze's fire is ground the companion has to be steered out of, the
-        // same as a gas cloud or a boss's puddle.
-        //
-        // Registered once, which is only safe because the Big Top is a single
-        // storey: a storey change clears the companion's hazard list, and an
-        // encounter in a building with stairs has to re-register from its own
-        // update the way the tower's Lich fight does.
-        this.companion.registerHazardSource(maze);
-        this.combat.mobLoop.registerHazardSource(maze);
-        // Both parked, not just whoever is standing in for the companion right
-        // now: each crawler walks their own half, and the moment the player uses
-        // the switch key — which is the whole mechanic — the other stance would
-        // still be on follow and would march that crawler into a corridor nobody
-        // is steering them through.
-        this.companion.anchorBoth(this.human, this.cat);
-        return maze;
-      });
+  private initEntryEncounter(
+    circus: BuildingInteriorCircusContext | undefined,
+    /** The tent as dealt at the door, when this room is the maze. */
+    plan: BigTopMazePlan | null,
+  ): void {
+    const circusProgress = circus?.progress;
+    if (plan !== null && circusProgress !== undefined) {
+      this.raiseBigTopMaze(circusProgress, plan);
+      this.parkBothInTheMaze();
+      // The maze's fire is ground the companion has to be steered out of, the
+      // same as a gas cloud or a boss's puddle.
+      //
+      // Registered once, which is only safe because the Big Top is a single
+      // storey: a storey change clears the companion's hazard list, and an
+      // encounter in a building with stairs has to re-register from its own
+      // update the way the tower's Lich fight does.
+      this.companion.registerHazardSource(this.bigTopHazards);
+      this.combat.mobLoop.registerHazardSource(this.bigTopHazards);
       return;
     }
 
@@ -1555,6 +1567,71 @@ export class BuildingInteriorScene extends GameplayScene {
           new CultHideoutSystem(this.map, bus, addMob, murderProgress, this.partyLevel),
       );
     }
+  }
+
+  /** Stands the maze up on the map already built from `plan`. */
+  private raiseBigTopMaze(progress: CircusQuestProgress, plan: BigTopMazePlan): BigTopMazeSystem {
+    const { world } = this.floors[GROUND_FLOOR_INDEX];
+    const maze = new BigTopMazeSystem(
+      this.map,
+      this.bus,
+      (mob) => world.roster.add(mob),
+      progress,
+      this.audio,
+      this.conversation,
+      plan,
+      (next) => this.restartBigTopMaze(progress, next),
+    );
+    this.startEncounter(GROUND_FLOOR_INDEX, () => maze);
+    this.bigTopMaze = maze;
+    // Baked while the door is still loading, not on the fire walk's first frame.
+    maze.lighting.prewarm();
+    return maze;
+  }
+
+  /**
+   * Both crawlers parked, not just whoever is standing in for the companion
+   * right now: each walks their own half, and the moment the player uses the
+   * switch key — which is the whole mechanic — the other stance would still be
+   * on follow and would march that crawler into a corridor nobody is steering
+   * them through.
+   */
+  private parkBothInTheMaze(): void {
+    this.companion.anchorBoth(this.human, this.cat);
+  }
+
+  /**
+   * The show starts over on another difficulty: the player confirmed a change
+   * the maze was holding. The shared restart deals the new board, rebuilds the
+   * room on the same map and puts the party at the flaps; around it the scene
+   * closes its menu and settles what only it owns.
+   */
+  private restartBigTopMaze(progress: CircusQuestProgress, next: Difficulty): void {
+    const old = this.bigTopMaze;
+    const worldSeed = this.circus?.worldSeed;
+    if (old === null || worldSeed === undefined) return;
+    this.pauseMenu.close();
+    // The same as closing it with Escape: a key still held from the menu must
+    // not walk a crawler off the flap the moment the show starts again.
+    this.input.clear();
+    this.bigTopMaze = null;
+    this.encounter = null;
+    restartBigTopTent(
+      old,
+      {
+        map: this.map,
+        roster: this.world.roster,
+        conversation: this.conversation,
+        human: this.human,
+        cat: this.cat,
+        worldSeed,
+        raise: (plan) => this.raiseBigTopMaze(progress, plan),
+      },
+      next,
+    );
+    this.parkBothInTheMaze();
+    carryCompanions(this.carriedCompanions(), this.world.roster, this.world.roster, this.map);
+    this.exitMenuOpen = false;
   }
 
   /**
@@ -3961,6 +4038,7 @@ export class BuildingInteriorScene extends GameplayScene {
       ...(this.club?.sortedRenderables() ?? []),
       ...townInteriorPropFigures(this.map, this.interiorPropDestruction?.broken),
       ...destruction.groundPickups.renderEntities(),
+      ...(this.bigTopMaze?.sortedFigures() ?? []),
     ]);
     combat.renderEffects(ctx, camX, camY, this.cat);
     // Over the creatures, so a shot never disappears behind the one it passes.

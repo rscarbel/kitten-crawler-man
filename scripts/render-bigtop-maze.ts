@@ -10,6 +10,7 @@
  *
  * Run: npx tsx scripts/render-bigtop-maze.ts
  */
+import type { Difficulty } from '../src/core/difficultyProfiles';
 import { createCanvas } from 'canvas';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
@@ -30,9 +31,9 @@ import { MazeBlockTarget } from '../src/creatures/MazeBlockTarget';
 import {
   MAZE_BLOCKS,
   MAZE_CURTAINS,
-  MAZE_MIRRORS,
   MAZE_SECTIONS,
   MAZE_TARGET_OWNER,
+  planBigTopMaze,
   type BeamDirection,
   type MirrorFacing,
   type MirrorKind,
@@ -56,9 +57,24 @@ import {
   drawMazeBeamTile,
   drawMazeLimelight,
   drawMazeMirror,
-  drawMazeStar,
   drawMirrorHallPane,
+  drawSwivelMirrorWithGhost,
 } from '../src/sprites/art/bigTop/mirrorHallProps';
+import {
+  drawFootlightLamp,
+  drawLightBeamTile,
+  drawMazeSplitter,
+  drawMazeWallWindow,
+  drawPuzzleStar,
+  drawStarMarquee,
+  starMarqueeWidthTiles,
+  type LightBeamRun,
+  type PuzzleStarKind,
+  type PuzzleStarState,
+  type StarMarqueeArt,
+  type StarMarqueeBulb,
+} from '../src/sprites/art/bigTop/mirrorPuzzleProps';
+import { drawText } from '../src/ui/TextBox';
 import {
   drawActEasel,
   drawMazeCurtain,
@@ -94,7 +110,14 @@ import { asGameContext } from './nodeGameContext.js';
 import {
   drawTurnPreviewStarRing,
   drawTurnPreviewTile,
-} from '../src/sprites/art/bigTop/encoreProps';
+} from '../src/sprites/art/bigTop/turnPreviewProps';
+
+/** A fixed floor-3 world seed, so the hall deals the same board every run. */
+const TEST_WORLD_SEED = 0x5eed_b16;
+/** The tier the maze is built under here; the default a new game starts on. */
+const TEST_DIFFICULTY: Difficulty = 'normal';
+/** The tent dealt for that world and tier, the way the scene deals it at the door. */
+const TEST_PLAN = planBigTopMaze(TEST_WORLD_SEED, TEST_DIFFICULTY);
 
 /**
  * The sheet is drawn at four times the tile size so the detail is legible.
@@ -212,27 +235,13 @@ push('window', (ctx, x, y) => drawMazeCurtainWindow(ctx, x, y, CELL, SAMPLE_PHAS
 push('act gate', (ctx, x, y) => drawMazeActGate(ctx, x, y, CELL, SAMPLE_PHASE));
 push('exit door', (ctx, x, y) => drawMazeExitDoor(ctx, x, y, CELL, SAMPLE_PHASE));
 
-for (const litFraction of [0, 0.5, 1]) {
-  push(`star ${litFraction}`, (ctx, x, y) => {
-    drawMazeStar(ctx, x, y, CELL, {
-      phase: SAMPLE_PHASE,
-      litFraction,
-      latched: litFraction === 1,
-      burst: 0,
-    });
-  });
-}
-push('star latching', (ctx, x, y) => {
-  drawMazeStar(ctx, x, y, CELL, { phase: SAMPLE_PHASE, litFraction: 1, latched: true, burst: 0.6 });
-});
-
 for (const heading of HEADINGS) {
   push(`turn preview ${heading}`, (ctx, x, y) => {
     drawTurnPreviewTile(ctx, x, y, CELL, heading, SAMPLE_PHASE);
   });
 }
 push('turn preview star', (ctx, x, y) => {
-  drawMazeStar(ctx, x, y, CELL, { phase: SAMPLE_PHASE, litFraction: 0, latched: false, burst: 0 });
+  drawPuzzleStar(ctx, x, y, CELL, { kind: 'blue', state: 'dark', phase: SAMPLE_PHASE });
   drawTurnPreviewStarRing(ctx, x, y, CELL, SAMPLE_PHASE);
 });
 
@@ -435,6 +444,574 @@ cells.forEach((cell, index) => {
   paintCell(cell.label, cell.paint, x, y);
 });
 
+// ── The hall's puzzle pieces ──────────────────────────────────────────────────
+
+/**
+ * The light puzzle's pieces on a sheet of their own, each on the ground it
+ * stands on in the hall — floor pieces on sawdust, wall pieces on the dark
+ * divider — with a small board at the end that puts them together. It is
+ * written twice: in colour, and in greyscale, because every colour cue in the
+ * hall has to have a shape or pattern twin and the grey sheet is where that is
+ * checked by eye.
+ */
+const PUZZLE_OUT_FILE = `${OUT_DIR}/bigtop-mirror-puzzle-${SCALE}x.png`;
+const PUZZLE_GREY_OUT_FILE = `${OUT_DIR}/bigtop-mirror-puzzle-${SCALE}x-grey.png`;
+const PUZZLE_COLUMNS = 20;
+/** Room above every cell for props that stand taller than their tile: a cheval mirror rises a tile and a half. */
+const PUZZLE_HEADROOM_TILES = 1.5;
+const PUZZLE_LABEL_HEIGHT = 14;
+const PUZZLE_LABEL_SIZE = 10;
+/** Labels sit this far in from their cell's left edge and below its bottom edge, in pixels. */
+const PUZZLE_LABEL_INSET_PX = 2;
+/** Below this the labels are wider than the cells they name and only smear across the art. */
+const MIN_LABELLED_SCALE = 2;
+const PUZZLE_ROW_GAP = 6;
+const HALL_FLOOR = '#8c7650';
+const HALL_FLOOR_ALT = '#7d6946';
+const HALL_WALL = '#1c1519';
+const LABEL_COLOR = '#e8dcc0';
+/** Frames into a solve at which the marquee is sampled: first letter, mid-spell, spelt, chasing. */
+const MARQUEE_SOLVE_SAMPLES = [0, 25, 45, 80] as const;
+/** Long after the solve: the board has gone back to its bulbs, and the encore was lit since. */
+const MARQUEE_SETTLED_FRAMES = 150;
+/** Luminance weights for the greyscale check (Rec. 601). */
+const LUMA_RED = 0.299;
+const LUMA_GREEN = 0.587;
+const LUMA_BLUE = 0.114;
+const RGBA_STRIDE = 4;
+
+type Ground = 'floor' | 'wall';
+
+interface PuzzleCell {
+  readonly label: string;
+  readonly ground: Ground;
+  /** How many cells wide it is; a marquee spans several. */
+  readonly span: number;
+  readonly paint: Painter;
+}
+
+const PUZZLE_STAR_KINDS: ReadonlyArray<PuzzleStarKind> = ['blue', 'red', 'twin', 'encore'];
+const PUZZLE_ROWS: PuzzleCell[][] = [];
+
+const floorCell = (label: string, paint: Painter): PuzzleCell => ({
+  label,
+  ground: 'floor',
+  span: 1,
+  paint,
+});
+const wallCell = (label: string, paint: Painter, span = 1): PuzzleCell => ({
+  label,
+  ground: 'wall',
+  span,
+  paint,
+});
+
+PUZZLE_ROWS.push([
+  floorCell('splitter /', (c, x, y) => drawMazeSplitter(c, x, y, CELL, 'slash', SAMPLE_PHASE)),
+  floorCell('splitter \\', (c, x, y) => drawMazeSplitter(c, x, y, CELL, 'backslash', SAMPLE_PHASE)),
+  wallCell('window', (c, x, y) => drawMazeWallWindow(c, x, y, CELL, SAMPLE_PHASE)),
+  wallCell('hall pane', (c, x, y) => drawMirrorHallPane(c, x, y, CELL, SAMPLE_PHASE, SAMPLE_PHASE)),
+  ...(['blue', 'red'] as const).flatMap((colour) =>
+    HEADINGS.map((direction) =>
+      floorCell(`lamp ${colour} ${direction}`, (c, x, y) =>
+        drawFootlightLamp(c, x, y, CELL, direction, colour, SAMPLE_PHASE),
+      ),
+    ),
+  ),
+]);
+
+PUZZLE_ROWS.push(
+  PUZZLE_STAR_KINDS.flatMap((kind) => {
+    const states: ReadonlyArray<PuzzleStarState> =
+      kind === 'twin'
+        ? ['dark', 'half_blue', 'half_red', 'lit', 'wrong']
+        : ['dark', 'lit', 'wrong'];
+    return states.map((state) =>
+      wallCell(`${kind} ${state}`, (c, x, y) =>
+        drawPuzzleStar(c, x, y, CELL, {
+          kind,
+          state,
+          phase: SAMPLE_PHASE,
+          wrongLight: kind === 'blue' ? 'red' : 'blue',
+        }),
+      ),
+    );
+  }),
+);
+
+/** A wrong-colour sputter over consecutive frames, so the spark is seen to move. */
+const SPUTTER_FRAMES = [0, 2, 4, 6, 8, 10] as const;
+PUZZLE_ROWS.push([
+  ...SPUTTER_FRAMES.map((offset) =>
+    wallCell(`sputter +${offset}`, (c, x, y) =>
+      drawPuzzleStar(c, x, y, CELL, {
+        kind: 'blue',
+        state: 'wrong',
+        phase: SAMPLE_PHASE + offset,
+        wrongLight: 'red',
+      }),
+    ),
+  ),
+]);
+PUZZLE_ROWS.push([
+  ...(
+    [
+      ['NE', 'SE'],
+      ['NE', 'SW'],
+      ['SE', 'SW'],
+      ['SW', 'NW'],
+      ['NW', 'NE'],
+    ] as const
+  ).map(([facing, other]) =>
+    floorCell(`swivel ${facing}/${other}`, (c, x, y) =>
+      drawSwivelMirrorWithGhost(
+        c,
+        x,
+        y,
+        CELL,
+        {
+          kind: 'swivel_mirror',
+          facing,
+          fromFacing: facing,
+          turn: 1,
+          phase: SAMPLE_PHASE,
+          struck: false,
+          pulsing: false,
+        },
+        other,
+      ),
+    ),
+  ),
+  ...KINDS.map((kind) =>
+    floorCell(`${kind === 'pivot_mirror' ? 'pivot' : 'swivel'} back`, (c, x, y) =>
+      drawMazeMirror(c, x, y, CELL, {
+        kind,
+        facing: 'NW',
+        fromFacing: 'NW',
+        turn: 1,
+        phase: SAMPLE_PHASE,
+        struck: false,
+        pulsing: false,
+      }),
+    ),
+  ),
+]);
+
+const beamCell = (label: string, runs: ReadonlyArray<LightBeamRun>): PuzzleCell =>
+  floorCell(label, (c, x, y) => drawLightBeamTile(c, x, y, CELL, runs, SAMPLE_PHASE));
+PUZZLE_ROWS.push([
+  beamCell('blue east', [{ colour: 'blue', heading: 'east', span: 'through' }]),
+  beamCell('blue east', [{ colour: 'blue', heading: 'east', span: 'through' }]),
+  beamCell('red east', [{ colour: 'red', heading: 'east', span: 'through' }]),
+  beamCell('red east', [{ colour: 'red', heading: 'east', span: 'through' }]),
+  beamCell('blue north', [{ colour: 'blue', heading: 'north', span: 'through' }]),
+  beamCell('red south', [{ colour: 'red', heading: 'south', span: 'through' }]),
+  beamCell('both east', [
+    { colour: 'blue', heading: 'east', span: 'through' },
+    { colour: 'red', heading: 'west', span: 'through' },
+  ]),
+  beamCell('both east', [
+    { colour: 'blue', heading: 'east', span: 'through' },
+    { colour: 'red', heading: 'west', span: 'through' },
+  ]),
+  beamCell('crossing', [
+    { colour: 'blue', heading: 'east', span: 'through' },
+    { colour: 'red', heading: 'north', span: 'through' },
+  ]),
+  beamCell('crossing', [
+    { colour: 'red', heading: 'east', span: 'through' },
+    { colour: 'blue', heading: 'south', span: 'through' },
+  ]),
+  floorCell('split blue', (c, x, y) => {
+    drawMazeSplitter(c, x, y, CELL, 'slash', SAMPLE_PHASE);
+    drawLightBeamTile(
+      c,
+      x,
+      y,
+      CELL,
+      [
+        { colour: 'blue', heading: 'east', span: 'entering', stopAt: 'splitter_slash' },
+        { colour: 'blue', heading: 'east', span: 'leaving', stopAt: 'splitter_slash' },
+        { colour: 'blue', heading: 'north', span: 'leaving', stopAt: 'splitter_slash' },
+      ],
+      SAMPLE_PHASE,
+    );
+  }),
+  floorCell('split red', (c, x, y) => {
+    drawMazeSplitter(c, x, y, CELL, 'backslash', SAMPLE_PHASE);
+    drawLightBeamTile(
+      c,
+      x,
+      y,
+      CELL,
+      [
+        { colour: 'red', heading: 'west', span: 'entering', stopAt: 'splitter_backslash' },
+        { colour: 'red', heading: 'west', span: 'leaving', stopAt: 'splitter_backslash' },
+        { colour: 'red', heading: 'north', span: 'leaving', stopAt: 'splitter_backslash' },
+      ],
+      SAMPLE_PHASE,
+    );
+  }),
+]);
+
+/** Each piece drawn in the game's order — prop, then the light over it — so a run is seen to stop at the piece's face. */
+const stopCell = (
+  label: string,
+  prop: Painter,
+  runs: ReadonlyArray<LightBeamRun>,
+  ground: Ground = 'floor',
+): PuzzleCell => ({
+  label,
+  ground,
+  span: 1,
+  paint: (c, x, y) => {
+    prop(c, x, y);
+    drawLightBeamTile(c, x, y, CELL, runs, SAMPLE_PHASE);
+  },
+});
+const settledMirror =
+  (kind: MirrorKind, facing: MirrorFacing): Painter =>
+  (c, x, y) =>
+    drawMazeMirror(c, x, y, CELL, {
+      kind,
+      facing,
+      fromFacing: facing,
+      turn: 1,
+      phase: SAMPLE_PHASE,
+      struck: false,
+      pulsing: false,
+    });
+PUZZLE_ROWS.push([
+  ...HEADINGS.map((direction) =>
+    stopCell(
+      `lamp ${direction} beam`,
+      (c, x, y) => drawFootlightLamp(c, x, y, CELL, direction, 'blue', SAMPLE_PHASE),
+      [{ colour: 'blue', heading: direction, span: 'leaving', stopAt: 'lamp' }],
+    ),
+  ),
+  stopCell(
+    'star from south',
+    (c, x, y) => drawPuzzleStar(c, x, y, CELL, { kind: 'blue', state: 'lit', phase: SAMPLE_PHASE }),
+    [{ colour: 'blue', heading: 'north', span: 'entering', stopAt: 'star' }],
+    'wall',
+  ),
+  stopCell(
+    'star from east',
+    (c, x, y) => drawPuzzleStar(c, x, y, CELL, { kind: 'red', state: 'lit', phase: SAMPLE_PHASE }),
+    [{ colour: 'red', heading: 'west', span: 'entering', stopAt: 'star' }],
+    'wall',
+  ),
+  stopCell('mirror turn', settledMirror('pivot_mirror', 'SW'), [
+    { colour: 'blue', heading: 'east', span: 'entering', stopAt: 'mirror' },
+    { colour: 'blue', heading: 'south', span: 'leaving', stopAt: 'mirror' },
+  ]),
+  stopCell('mirror from N', settledMirror('pivot_mirror', 'NE'), [
+    { colour: 'red', heading: 'south', span: 'entering', stopAt: 'mirror' },
+    { colour: 'red', heading: 'east', span: 'leaving', stopAt: 'mirror' },
+  ]),
+  stopCell('back stops it', settledMirror('swivel_mirror', 'NW'), [
+    { colour: 'red', heading: 'west', span: 'entering', stopAt: 'mirror' },
+  ]),
+]);
+
+const marqueeCell = (label: string, art: StarMarqueeArt): PuzzleCell =>
+  wallCell(
+    label,
+    (c, x, y) => drawStarMarquee(c, x, y, CELL, art),
+    Math.ceil(starMarqueeWidthTiles(art.bulbs.length)),
+  );
+const bulbs = (
+  kinds: ReadonlyArray<PuzzleStarKind>,
+  lit: ReadonlyArray<boolean>,
+): StarMarqueeBulb[] => kinds.map((kind, index) => ({ kind, lit: lit[index] ?? false }));
+const twinWithHalf = (half: 'blue' | 'red'): StarMarqueeBulb => ({
+  kind: 'twin',
+  lit: false,
+  half,
+});
+PUZZLE_ROWS.push([
+  marqueeCell('strip off', {
+    bulbs: bulbs(['blue', 'blue'], [false, false]),
+    framesSinceSolved: null,
+    phase: SAMPLE_PHASE,
+  }),
+  marqueeCell('strip 1 of 2', {
+    bulbs: bulbs(['blue', 'blue'], [true, false]),
+    framesSinceSolved: null,
+    phase: SAMPLE_PHASE,
+  }),
+  marqueeCell('kitten', {
+    bulbs: bulbs(['blue', 'red', 'encore'], [false, true, false]),
+    framesSinceSolved: null,
+    phase: SAMPLE_PHASE,
+  }),
+  marqueeCell('nightmare', {
+    bulbs: bulbs(['twin', 'blue', 'red', 'encore'], [true, false, true, false]),
+    framesSinceSolved: null,
+    phase: SAMPLE_PHASE,
+  }),
+  marqueeCell('twin halves', {
+    bulbs: [twinWithHalf('blue'), twinWithHalf('red'), ...bulbs(['twin'], [false])],
+    framesSinceSolved: null,
+    phase: SAMPLE_PHASE,
+  }),
+]);
+PUZZLE_ROWS.push([
+  marqueeCell('all lit', {
+    bulbs: bulbs(['twin', 'blue', 'red', 'encore'], [true, true, true, true]),
+    framesSinceSolved: null,
+    phase: SAMPLE_PHASE,
+  }),
+  ...MARQUEE_SOLVE_SAMPLES.map((frames) =>
+    marqueeCell(`bravo +${frames}`, {
+      bulbs: bulbs(['twin', 'blue', 'red'], [true, true, true]),
+      framesSinceSolved: frames,
+      phase: SAMPLE_PHASE + frames,
+    }),
+  ),
+  marqueeCell('solved, encore lit later', {
+    bulbs: bulbs(['twin', 'blue', 'red', 'encore'], [true, true, true, true]),
+    framesSinceSolved: MARQUEE_SETTLED_FRAMES,
+    phase: SAMPLE_PHASE + MARQUEE_SETTLED_FRAMES,
+  }),
+]);
+
+/**
+ * A little board, lit: Carl's lamp throws blue into a splitter, which sends
+ * one branch on to the twin star and one up to the blue star. Donut's lamp
+ * throws red into a splitter of its own: one branch on to the twin's other
+ * half, one up into a pivot that turns it back across the divider through a
+ * window, where it sputters on a blue star. A swivel shows both its settings.
+ */
+const DEMO_WIDTH = 8;
+const DEMO_HEIGHT = 5;
+
+interface DemoTile {
+  readonly column: number;
+  readonly row: number;
+}
+
+/** Where each piece of the demo board stands, in tiles from its top-left. */
+const DEMO_TILES = {
+  outerWallWest: { column: 0, row: 0 },
+  divider: { column: 4, row: 0 },
+  blueLamp: { column: 1, row: 3 },
+  splitter: { column: 2, row: 3 },
+  redSplitter: { column: 5, row: 3 },
+  twinStar: { column: 4, row: 3 },
+  blueStar: { column: 2, row: 0 },
+  redLamp: { column: 6, row: 3 },
+  window: { column: 4, row: 1 },
+  sputteringStar: { column: 0, row: 1 },
+  redStar: { column: 6, row: 0 },
+  swivel: { column: 6, row: 2 },
+  pivot: { column: 5, row: 1 },
+  /** The marquee hangs over the wall row, a tile above the board. */
+  marquee: { column: 3, row: -1 },
+} satisfies Record<string, DemoTile>;
+
+/** Every tile the two lights cross on the demo board, and how. */
+const DEMO_BEAMS: ReadonlyArray<DemoTile & { readonly runs: ReadonlyArray<LightBeamRun> }> = [
+  {
+    column: 1,
+    row: 3,
+    runs: [{ colour: 'blue', heading: 'east', span: 'leaving', stopAt: 'lamp' }],
+  },
+  {
+    column: 2,
+    row: 3,
+    runs: [
+      { colour: 'blue', heading: 'east', span: 'entering', stopAt: 'splitter_slash' },
+      { colour: 'blue', heading: 'east', span: 'leaving', stopAt: 'splitter_slash' },
+      { colour: 'blue', heading: 'north', span: 'leaving', stopAt: 'splitter_slash' },
+    ],
+  },
+  { column: 3, row: 3, runs: [{ colour: 'blue', heading: 'east', span: 'through' }] },
+  {
+    column: 4,
+    row: 3,
+    runs: [
+      { colour: 'blue', heading: 'east', span: 'entering', stopAt: 'star' },
+      { colour: 'red', heading: 'west', span: 'entering', stopAt: 'star' },
+    ],
+  },
+  { column: 2, row: 2, runs: [{ colour: 'blue', heading: 'north', span: 'through' }] },
+  {
+    column: 2,
+    row: 1,
+    runs: [
+      { colour: 'blue', heading: 'north', span: 'through' },
+      { colour: 'red', heading: 'west', span: 'through' },
+    ],
+  },
+  {
+    column: 2,
+    row: 0,
+    runs: [{ colour: 'blue', heading: 'north', span: 'entering', stopAt: 'star' }],
+  },
+  {
+    column: 6,
+    row: 3,
+    runs: [{ colour: 'red', heading: 'west', span: 'leaving', stopAt: 'lamp' }],
+  },
+  {
+    column: 5,
+    row: 3,
+    runs: [
+      { colour: 'red', heading: 'west', span: 'entering', stopAt: 'splitter_backslash' },
+      { colour: 'red', heading: 'west', span: 'leaving', stopAt: 'splitter_backslash' },
+      { colour: 'red', heading: 'north', span: 'leaving', stopAt: 'splitter_backslash' },
+    ],
+  },
+  { column: 5, row: 2, runs: [{ colour: 'red', heading: 'north', span: 'through' }] },
+  {
+    column: 5,
+    row: 1,
+    runs: [
+      { colour: 'red', heading: 'north', span: 'entering', stopAt: 'mirror' },
+      { colour: 'red', heading: 'west', span: 'leaving', stopAt: 'mirror' },
+    ],
+  },
+  { column: 3, row: 1, runs: [{ colour: 'red', heading: 'west', span: 'through' }] },
+  { column: 1, row: 1, runs: [{ colour: 'red', heading: 'west', span: 'through' }] },
+  {
+    column: 0,
+    row: 1,
+    runs: [{ colour: 'red', heading: 'west', span: 'entering', stopAt: 'star' }],
+  },
+  { column: 4, row: 1, runs: [{ colour: 'red', heading: 'west', span: 'through' }] },
+];
+
+function paintDemoBoard(c: CanvasRenderingContext2D, left: number, top: number): void {
+  const at = (tile: DemoTile): { x: number; y: number } => ({
+    x: left + tile.column * CELL,
+    y: top + tile.row * CELL,
+  });
+  const wallColumns = new Set([
+    DEMO_TILES.outerWallWest.column,
+    DEMO_TILES.divider.column,
+    DEMO_WIDTH - 1,
+  ]);
+  for (let row = 0; row < DEMO_HEIGHT; row++) {
+    for (let column = 0; column < DEMO_WIDTH; column++) {
+      const spot = at({ column, row });
+      const wall = row === 0 || wallColumns.has(column);
+      c.fillStyle = wall ? HALL_WALL : (row + column) % 2 === 0 ? HALL_FLOOR : HALL_FLOOR_ALT;
+      c.fillRect(spot.x, spot.y, CELL, CELL);
+    }
+  }
+  // The game's order: the pieces the light lies over, then the stars, the
+  // marquee and the light itself; the mirrors are entities, drawn after all of it.
+  const window = at(DEMO_TILES.window);
+  drawMazeWallWindow(c, window.x, window.y, CELL, SAMPLE_PHASE);
+  const blueLamp = at(DEMO_TILES.blueLamp);
+  drawFootlightLamp(c, blueLamp.x, blueLamp.y, CELL, 'east', 'blue', SAMPLE_PHASE);
+  const redLamp = at(DEMO_TILES.redLamp);
+  drawFootlightLamp(c, redLamp.x, redLamp.y, CELL, 'west', 'red', SAMPLE_PHASE);
+  const splitter = at(DEMO_TILES.splitter);
+  drawMazeSplitter(c, splitter.x, splitter.y, CELL, 'slash', SAMPLE_PHASE);
+  const redSplitter = at(DEMO_TILES.redSplitter);
+  drawMazeSplitter(c, redSplitter.x, redSplitter.y, CELL, 'backslash', SAMPLE_PHASE);
+  const twin = at(DEMO_TILES.twinStar);
+  drawPuzzleStar(c, twin.x, twin.y, CELL, { kind: 'twin', state: 'lit', phase: SAMPLE_PHASE });
+  const blueStar = at(DEMO_TILES.blueStar);
+  drawPuzzleStar(c, blueStar.x, blueStar.y, CELL, {
+    kind: 'blue',
+    state: 'lit',
+    phase: SAMPLE_PHASE,
+  });
+  const sputtering = at(DEMO_TILES.sputteringStar);
+  drawPuzzleStar(c, sputtering.x, sputtering.y, CELL, {
+    kind: 'blue',
+    state: 'wrong',
+    phase: SAMPLE_PHASE,
+    wrongLight: 'red',
+  });
+  const redStar = at(DEMO_TILES.redStar);
+  drawPuzzleStar(c, redStar.x, redStar.y, CELL, {
+    kind: 'red',
+    state: 'dark',
+    phase: SAMPLE_PHASE,
+  });
+  const marquee = at(DEMO_TILES.marquee);
+  drawStarMarquee(c, marquee.x, marquee.y, CELL, {
+    bulbs: bulbs(['twin', 'blue', 'red'], [true, true, false]),
+    framesSinceSolved: null,
+    phase: SAMPLE_PHASE,
+  });
+  for (const beam of DEMO_BEAMS) {
+    const spot = at(beam);
+    drawLightBeamTile(c, spot.x, spot.y, CELL, beam.runs, SAMPLE_PHASE);
+  }
+  const pivot = at(DEMO_TILES.pivot);
+  settledMirror('pivot_mirror', 'SW')(c, pivot.x, pivot.y);
+  const swivel = at(DEMO_TILES.swivel);
+  drawSwivelMirrorWithGhost(
+    c,
+    swivel.x,
+    swivel.y,
+    CELL,
+    {
+      kind: 'swivel_mirror',
+      facing: 'SW',
+      fromFacing: 'SW',
+      turn: 1,
+      phase: SAMPLE_PHASE,
+      struck: false,
+      pulsing: false,
+    },
+    'NW',
+  );
+}
+
+function paintPuzzleSheet(): { colour: Buffer; grey: Buffer } {
+  const rowHeight = CELL * (1 + PUZZLE_HEADROOM_TILES) + PUZZLE_LABEL_HEIGHT + PUZZLE_ROW_GAP;
+  const demoTop = PUZZLE_ROWS.length * rowHeight + CELL;
+  const sheet = createCanvas(PUZZLE_COLUMNS * CELL, demoTop + (DEMO_HEIGHT + 1) * CELL);
+  const sheetCtx = asGameContext(sheet.getContext('2d'));
+  sheetCtx.fillStyle = BACKGROUND;
+  sheetCtx.fillRect(0, 0, sheet.width, sheet.height);
+  PUZZLE_ROWS.forEach((row, rowIndex) => {
+    let column = 0;
+    const rowTop = rowIndex * rowHeight;
+    const y = rowTop + CELL * PUZZLE_HEADROOM_TILES;
+    for (const cell of row) {
+      const x = column * CELL;
+      sheetCtx.fillStyle = cell.ground === 'wall' ? HALL_WALL : HALL_FLOOR;
+      sheetCtx.fillRect(x, y, cell.span * CELL, CELL);
+      if (SCALE >= MIN_LABELLED_SCALE)
+        drawText(sheetCtx, cell.label, {
+          x: x + PUZZLE_LABEL_INSET_PX,
+          y: y + CELL + PUZZLE_LABEL_INSET_PX,
+          size: PUZZLE_LABEL_SIZE,
+          color: LABEL_COLOR,
+        });
+      paintCell(`puzzle ${cell.label}`, (_target, px, py) => cell.paint(sheetCtx, px, py), x, y);
+      column += cell.span;
+    }
+  });
+  paintCell(
+    'puzzle demo board',
+    (_target, px, py) => paintDemoBoard(sheetCtx, px, py),
+    CELL,
+    demoTop,
+  );
+  const colour = sheet.toBuffer('image/png');
+  const pixels = sheetCtx.getImageData(0, 0, sheet.width, sheet.height);
+  for (let index = 0; index < pixels.data.length; index += RGBA_STRIDE) {
+    const luma =
+      (pixels.data[index] ?? 0) * LUMA_RED +
+      (pixels.data[index + 1] ?? 0) * LUMA_GREEN +
+      (pixels.data[index + 2] ?? 0) * LUMA_BLUE;
+    pixels.data[index] = luma;
+    pixels.data[index + 1] = luma;
+    pixels.data[index + 2] = luma;
+  }
+  sheetCtx.putImageData(pixels, 0, 0);
+  return { colour, grey: sheet.toBuffer('image/png') };
+}
+const puzzleSheet = paintPuzzleSheet();
+
 // ── The tent itself ───────────────────────────────────────────────────────────
 
 /**
@@ -450,7 +1027,7 @@ const VIEW_TILES_HIGH = 16;
 function smokeTestTheTent(): string[] {
   const problems: string[] = [];
   const mazeMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  mazeMap.generateInterior('house', 0, 'Big Top', false, 'bigtop_maze');
+  mazeMap.generateInterior('house', 0, 'Big Top', false, { kind: 'bigtop_maze', plan: TEST_PLAN });
   const progress = createCircusQuestProgress();
   progress.stage = 'bigtop_ready';
   const roster = new MobRoster(mazeMap, new SpellSystem());
@@ -465,6 +1042,8 @@ function smokeTestTheTent(): string[] {
     progress,
     null,
     new Conversation(null),
+    TEST_PLAN,
+    () => undefined,
   );
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
@@ -562,7 +1141,7 @@ function sampleTile(ctx: CanvasRenderingContext2D): TileSample {
 function checkOpenedWaysLookOpen(): string[] {
   const problems: string[] = [];
   const mazeMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  mazeMap.generateInterior('house', 0, 'Big Top', false, 'bigtop_maze');
+  mazeMap.generateInterior('house', 0, 'Big Top', false, { kind: 'bigtop_maze', plan: TEST_PLAN });
   const progress = createCircusQuestProgress();
   progress.stage = 'bigtop_ready';
   const roster = new MobRoster(mazeMap, new SpellSystem());
@@ -577,6 +1156,8 @@ function checkOpenedWaysLookOpen(): string[] {
     progress,
     null,
     new Conversation(null),
+    TEST_PLAN,
+    () => undefined,
   );
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
@@ -694,9 +1275,14 @@ for (const problem of checkOpenedWaysLookOpen()) failures.push(problem);
 
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(OUT_FILE, canvas.toBuffer('image/png'));
+writeFileSync(PUZZLE_OUT_FILE, puzzleSheet.colour);
+writeFileSync(PUZZLE_GREY_OUT_FILE, puzzleSheet.grey);
 
 console.log(`Painted ${painted} prop states to ${OUT_FILE}`);
-console.log(`Mirrors in the layout: ${MAZE_MIRRORS.length}`);
+console.log(`Hall puzzle pieces: ${PUZZLE_OUT_FILE} and ${PUZZLE_GREY_OUT_FILE}`);
+console.log(
+  `Mirrors on the ${TEST_DIFFICULTY} board dealt to world ${TEST_WORLD_SEED}: ${TEST_PLAN.board.mirrors.length}`,
+);
 console.log(
   `Drove the tent through ${MAZE_SECTIONS.length} acts and ${MAZE_CURTAINS.length} intervals ` +
     `(${tentProblems.length} render problem(s))`,

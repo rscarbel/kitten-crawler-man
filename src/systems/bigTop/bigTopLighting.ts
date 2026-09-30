@@ -5,14 +5,19 @@ import { viewportHeight, viewportWidth } from '../../core/Viewport';
 import {
   MAZE_CURTAINS,
   MAZE_FINAL_CHAMBER,
+  MAZE_HALVES,
   MAZE_HEIGHT,
-  MAZE_PROJECTORS,
   MAZE_SECTIONS,
   MAZE_WIDTH,
+  TEACHING_STRIP_BOARD,
+  teachingTileToTent,
+  type BigTopMazePlan,
   type MazeSectionId,
   type MazeTile,
 } from '../../map/bigTopMazeLayout';
+import { boardTileToTent } from '../../map/bigTop/mirrorBoard';
 import { buildBigTopFloorIndex } from '../../map/bigTopMazeDecor';
+import { hallMarqueePlacement, marqueeCentre, teachingMarqueePlacement } from './hallMarquees';
 import { drawRadialGlow, type GlowStop } from '../../sprites/radialGlow';
 
 /**
@@ -77,7 +82,14 @@ const ACT_DARK: Readonly<Record<MazeSectionId, ActDark>> = {
 
 /** Every kind of lamp whose pool is baked into the dark. */
 export type LightFixtureKind =
-  'footlight' | 'archPost' | 'intervalLamp' | 'limelight' | 'actBoard' | 'hallLamp' | 'ringWash';
+  | 'footlight'
+  | 'archPost'
+  | 'intervalLamp'
+  | 'limelight'
+  | 'actBoard'
+  | 'hallLamp'
+  | 'ringWash'
+  | 'marquee';
 
 interface PoolSpec {
   readonly radiusTiles: number;
@@ -93,6 +105,7 @@ const POOL_SPECS: Readonly<Record<LightFixtureKind, PoolSpec>> = {
   actBoard: { radiusTiles: 2, strength: 0.75 },
   hallLamp: { radiusTiles: 6, strength: 0.7 },
   ringWash: { radiusTiles: 8, strength: 0.7 },
+  marquee: { radiusTiles: 2.2, strength: 0.8 },
 };
 /** How much of a pool's radius is lit at close to full strength before it fades. */
 const POOL_CORE = 0.35;
@@ -112,17 +125,31 @@ function tileCentre(tile: MazeTile): { x: number; y: number } {
 }
 
 /**
- * The lamps the layout itself fixes: a limelight housing on each projector,
- * a lamp over every act board, a work light over each open hall — the
+ * The lamps the floor plan fixes: a limelight housing on each of the hall's
+ * lights and a lamp at each teaching footlight, a pool under every marquee, a
+ * lamp over every act board, a work light over each open hall — the
  * menagerie's practice rings and the mirror halls' floor cloths, which is
  * where a hall's middle is — and the wash over the ring. The maze adds the
  * ones its dressing places (footlights, arch posts, the interval lamps).
+ *
+ * The hall's lights and marquees move with its board, which is why the mask
+ * is baked from the plan rather than the fixed floor plan.
  */
-export function layoutLightFixtures(): LightFixture[] {
-  const fixtures: LightFixture[] = MAZE_PROJECTORS.map((projector) => ({
+export function layoutLightFixtures(plan: BigTopMazePlan): LightFixture[] {
+  const fixtures: LightFixture[] = plan.board.limelights.map((light) => ({
     kind: 'limelight' as const,
-    ...tileCentre(projector.tile),
+    ...tileCentre(boardTileToTent(light.tile)),
   }));
+  for (const lamp of TEACHING_STRIP_BOARD.limelights) {
+    fixtures.push({ kind: 'footlight', ...tileCentre(teachingTileToTent(lamp.tile)) });
+  }
+  fixtures.push({ kind: 'marquee', ...marqueeCentre(hallMarqueePlacement(plan.board)) });
+  for (const half of MAZE_HALVES) {
+    fixtures.push({
+      kind: 'marquee',
+      ...marqueeCentre(teachingMarqueePlacement(plan.board, half)),
+    });
+  }
   for (const curtain of MAZE_CURTAINS) {
     // The board hangs on the dividing wall, which is the column the curtain
     // pair's window pierces.
@@ -132,7 +159,7 @@ export function layoutLightFixtures(): LightFixture[] {
     });
   }
   const hallMarks = new Set(
-    [...buildBigTopFloorIndex().values()]
+    [...buildBigTopFloorIndex(plan).values()]
       .flat()
       .filter((feature) => feature.kind === 'practiceRing' || feature.kind === 'harlequinCloth'),
   );

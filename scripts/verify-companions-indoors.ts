@@ -99,7 +99,12 @@ import {
   MAZE_CAT_SPAWN_TILE,
   MAZE_HUMAN_SPAWN_TILE,
   type MazeTile,
+  planBigTopMaze,
 } from '../src/map/bigTopMazeLayout';
+
+/** Any floor-3 world will do: the arrival marks are the two flaps, whatever board the hall is dealt. */
+const BIG_TOP_WORLD_SEED = 0x5eed_b16;
+const BIG_TOP_DIFFICULTY = 'normal';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
 import { AnchorInteriorSystem, SKY_TEMPLE_NAME } from '../src/systems/AnchorInteriorSystem';
 import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
@@ -1168,7 +1173,10 @@ function everyRoomArrival(): RoomArrival[] {
     }
   }
   const maze = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  maze.generateInterior(BIG_TOP_ENTRY_KIND, 0, BIG_TOP_ENTRY_NAME, false, 'bigtop_maze');
+  maze.generateInterior(BIG_TOP_ENTRY_KIND, 0, BIG_TOP_ENTRY_NAME, false, {
+    kind: 'bigtop_maze',
+    plan: planBigTopMaze(BIG_TOP_WORLD_SEED, BIG_TOP_DIFFICULTY),
+  });
   arrivals.push({
     label: `${BIG_TOP_ENTRY_NAME} maze, two flaps`,
     buildingName: BIG_TOP_ENTRY_NAME,
