@@ -11,7 +11,8 @@
  */
 
 import { drawSpriteKey } from '../../core/SpriteRenderer';
-import { positionHash, propSpriteState, type TileContent } from '../tileTypes';
+import { positionHash, type TileContent } from '../tileTypes';
+import { rockDamageState } from '../rockDamage';
 
 const OUTCROP_SPRITE_KEYS = ['rock_deposit_a', 'rock_deposit_b', 'rock_deposit_c'] as const;
 
@@ -40,8 +41,8 @@ export function rockDepositSpriteKey(
 }
 
 /**
- * A deposit past half its capacity is marked damaged on its tile by the node
- * ledger, and shows its worked-over look.
+ * A worked deposit carries its damage stage on its tile, written by the node
+ * ledger, and is drawn from that stage's row.
  */
 export function drawRockDepositTile(
   ctx: CanvasRenderingContext2D,
@@ -53,6 +54,6 @@ export function drawRockDepositTile(
   ty: number,
 ): void {
   const tile = structure[ty][tx];
-  const state = propSpriteState(tile.damageStage) === 'damaged' ? 'worked' : 'idle';
-  drawSpriteKey(ctx, rockDepositSpriteKey(tile, tx, ty), state, 0, sx, sy, ts);
+  const damage = rockDamageState(tile.damageStage);
+  drawSpriteKey(ctx, rockDepositSpriteKey(tile, tx, ty), damage, 0, sx, sy, ts);
 }

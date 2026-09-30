@@ -198,6 +198,16 @@ export function menuFocusContextId(): string | null {
 }
 
 /**
+ * The ring entry the keyboard (or {@link focusMenuButton}) has put focus on in
+ * `contextId`, or null when nothing there has been focused yet — the caller
+ * then falls back to its own default. For a menu that draws its own selected
+ * look and has to know which entry that is before drawing any of them.
+ */
+export function menuFocusIndex(contextId: string): number | null {
+  return _focusedContextId === contextId ? _focusIndex : null;
+}
+
+/**
  * Drop focus without touching the ring — used when a menu closes from something
  * other than a context change, so re-opening it starts unfocused.
  */
@@ -551,6 +561,15 @@ export interface ButtonOptions {
   focusable?: boolean;
 
   /**
+   * The caller shows selection itself — typically by swapping between a
+   * selected and an unselected preset — so the automatic hover brighten and
+   * the gold focus ring are both skipped. Without this a row whose keyboard
+   * focus and mouse hover sit on different buttons shows two competing
+   * "selected" looks. Press darkening still applies. Default: false.
+   */
+  selectionDrawnByCaller?: boolean;
+
+  /**
    * Marks the menu's safe default — the button an accept keypress activates
    * when nothing is focused. Resume, Close, Continue and Cancel are primaries;
    * anything destructive or wagering never is.
@@ -620,13 +639,33 @@ export const BUTTON_PRESETS = {
   },
   /** Safe-room / entry prompt — green tint. */
   safeRoom: { fill: 'rgba(20,83,45,0.9)', border: '#4ade80', borderWidth: 1.5, radius: 4 },
-  /** A topic under a Briar Hollow villager's conversation — the dialog box's own candlelit brass. */
-  villagerTopic: {
-    fill: 'rgba(38,28,14,0.94)',
-    border: '#c8a860',
-    borderWidth: 1.5,
+  /**
+   * A conversation choice that is not selected. Deliberately quiet — a faint
+   * border and dim, regular-weight text — so nothing about it can be mistaken
+   * for the selected choice beside it.
+   */
+  dialogChoice: {
+    fill: 'rgba(22,17,10,0.86)',
+    border: 'rgba(140,122,90,0.4)',
+    borderWidth: 1,
     radius: 4,
-    labelColor: '#f0e4c4',
+    labelColor: '#a79a80',
+    labelBold: false,
+  },
+  /**
+   * The selected conversation choice: a solid lit-gold bar with dark text, so
+   * which option Space or Enter will take reads at a glance against the
+   * subdued `dialogChoice` rows around it.
+   */
+  dialogChoiceSelected: {
+    fill: '#f0c24a',
+    border: '#fff4c2',
+    borderWidth: 2,
+    radius: 4,
+    labelColor: '#1c1407',
+    labelBold: true,
+    glow: '#facc15' as const,
+    glowBlur: 12,
   },
   /**
    * The Continue on a Briar Hollow quest-complete screen: the villager topic's
@@ -715,6 +754,18 @@ export const BUTTON_PRESETS = {
     border: '#1e293b',
     borderWidth: 1,
     radius: 3,
+  },
+  /**
+   * A Construction menu row that can never be built where the party is. Sunk
+   * and colourless so it reads as unavailable, but still a button: choosing
+   * it is how the player hears why, and the error cue says it was refused.
+   */
+  constructionRowRefused: {
+    fill: 'rgba(15,23,42,0.45)',
+    border: '#273449',
+    borderWidth: 1,
+    radius: 3,
+    sound: 'error' as const,
   },
   /** The pinned Journal row — the one the world arrow is following. */
   trackerRowPinned: {
@@ -875,6 +926,7 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     focusable = true,
     primaryAction = false,
     questRelated = false,
+    selectionDrawnByCaller = false,
     label,
   } = opts;
 
@@ -931,7 +983,7 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     shadowOffset,
   });
 
-  if ((hovered || focused) && !pressed) {
+  if ((hovered || focused) && !pressed && !selectionDrawnByCaller) {
     drawBox(ctx, {
       x,
       y,
@@ -949,7 +1001,7 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
 
   // Outside the button rather than on its border, so a preset that is already
   // gold-bordered still shows a visible ring rather than merging with it.
-  if (focused) {
+  if (focused && !selectionDrawnByCaller) {
     drawBox(ctx, {
       x: x + FOCUS_RING_INSET,
       y: y + FOCUS_RING_INSET,

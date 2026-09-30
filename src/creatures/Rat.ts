@@ -3,6 +3,7 @@ import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { TacticsTrait } from './tactics/tacticsTraits';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import {
   RAT_BITE_FRAMES,
   RAT_BITE_IMPACT_PROGRESS,
@@ -34,6 +35,9 @@ const FIRST_BITE_WINDUP_FRAMES = 10;
 const RAT_TACTICS: readonly TacticsTrait[] = ['flank'];
 
 export class Rat extends Mob {
+  /** The row the last body paint drew, for whatever a subclass hangs over the art. */
+  protected drawnRow: DrawnFigureRow | undefined;
+
   /** Knee-high to a man, so a crawler kicks or stomps it rather than punching. */
   override get lowProfile(): boolean {
     return true;
@@ -236,7 +240,7 @@ export class Rat extends Mob {
     const biteProgress =
       this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / RAT_BITE_FRAMES : null;
 
-    drawRatSprite(ctx, sx, sy, tileSize, {
+    this.drawnRow = drawRatSprite(ctx, sx, sy, tileSize, {
       walkFrame: this.walkFrame,
       isMoving: this.isMoving,
       facingX: this.facingX,

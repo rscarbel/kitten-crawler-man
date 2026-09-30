@@ -20,7 +20,6 @@ import {
   BREAK_REACTION_LINES_LIGHT,
 } from '../dialog/scripts/interiorObjects';
 import type { TownInteriorDestructibleKind } from '../sprites/art/townInterior/townInteriorProps';
-import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import { TimedSpeech, drawTimedSpeechBubble, type TimedBubbleStyle } from '../sprites/speechBubble';
 import { footprintCentrePx, type InteriorPropBreak } from './TownInteriorPropDestructionSystem';
 
@@ -123,8 +122,8 @@ export class InteriorBreakReactionBarks {
   ): void {
     const speaker = this.speaker;
     if (speaker === null || !occupants.includes(speaker)) return;
-    const box = scaleHumanoidBox(speaker.x - camX, speaker.y - camY, TILE_SIZE);
     const anchorX = speaker.x - camX + TILE_SIZE * TILE_CENTRE_FRACTION;
-    drawTimedSpeechBubble(ctx, this.speech, anchorX, box.sy - HEAD_GAP_PX, OCCUPANT_REACTION_STYLE);
+    const bubbleBottom = speaker.overheadTop(ctx, speaker.y - camY) - HEAD_GAP_PX;
+    drawTimedSpeechBubble(ctx, this.speech, anchorX, bubbleBottom, OCCUPANT_REACTION_STYLE);
   }
 }

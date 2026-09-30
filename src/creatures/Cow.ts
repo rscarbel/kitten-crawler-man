@@ -41,6 +41,7 @@ import { COW_VIEWS_BY_ACTION, cowFigure, cowStateName } from '../sprites/art/cow
 import {
   IDLE_FRAMES_BEFORE_RELEASE,
   figureCacheFrame,
+  figureRowInkTop,
   prewarmFigureState,
 } from '../sprites/figure/figureFrameCache';
 import {
@@ -58,18 +59,12 @@ import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { drawQuestBeacon } from '../sprites/questBeacon';
 import {
   drawQuestMarker,
-  questMarkerAnchorAbove,
   questMarkerColorFor,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
 
 const UPDATES_PER_SECOND = 60;
 const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
-/**
- * How far above the tile's top a worn quest glyph's lowest point sits, in
- * tiles: over the head and clear of a health bar drawn just above the tile.
- */
-const QUEST_MARKER_CLEARANCE_TILES = 0.9;
 const TWO_PI = Math.PI * 2;
 const TILE_CENTRE = 0.5;
 
@@ -483,7 +478,7 @@ export class Cow extends Mob {
    * accident. Aimed missiles never pick it either, because the aim snap skips
    * anything not hostile; one that flies into it anyway still lands.
    */
-  override takesPlayerDamage(damageType: PlayerDamageType | null): boolean {
+  protected override admitsPlayerDamage(damageType: PlayerDamageType | null): boolean {
     return damageType === 'explosion' || damageType === 'smush' || damageType === 'missile';
   }
 
@@ -1622,7 +1617,7 @@ export class Cow extends Mob {
       drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
     }
     const { action, progress } = this.spriteAction();
-    drawCowSprite(ctx, sx, sy, tileSize, {
+    const drawnRow = drawCowSprite(ctx, sx, sy, tileSize, {
       coat: this.coat,
       age: this.age,
       action,
@@ -1635,9 +1630,9 @@ export class Cow extends Mob {
     if (!this.healthBarDrawnElsewhere) this.renderMobHealthBar(ctx, sx, sy);
     if (markerColor !== undefined) {
       const glyph = this.questMarker === 'question' ? '?' : '!';
-      const markerBottom = sy - QUEST_MARKER_CLEARANCE_TILES * tileSize;
-      const markerY = questMarkerAnchorAbove(markerBottom, tileSize);
-      drawQuestMarker(ctx, sx, markerY, tileSize, glyph, markerColor);
+      const artTop = figureRowInkTop(drawnRow, sy, tileSize);
+      const clearOf = this.overheadClearTop(artTop, sy);
+      drawQuestMarker(ctx, sx, clearOf, tileSize, glyph, markerColor);
     }
   }
 }

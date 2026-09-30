@@ -9,7 +9,7 @@ import {
 import { COW_AGES, COW_COATS, type CowAge, type CowCoatId, cowFigureId } from './art/cowLooks';
 import { COW_GORE_STATES } from './art/cowGore';
 import type { CowView } from './art/cowArt';
-import { figureFrameCount } from './figure/figureDef';
+import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { COW_GRAZE_FPS, COW_IDLE_FPS } from './cowTiming';
 
@@ -98,7 +98,8 @@ export const COW_DRAWN_STATES: ReadonlyArray<string> = COW_ACTIONS.flatMap((acti
 ).filter((state, index, all) => all.indexOf(state) === index);
 
 /**
- * Draw one cow or calf, standing on the tile whose top-left is (sx, sy).
+ * Draw one cow or calf, standing on the tile whose top-left is (sx, sy), and
+ * return the row drawn.
  *
  * Only the profile is mirrored: flipping a head-on view would swap which ear
  * flicks and which forefoot steps every time the animal turned round.
@@ -109,7 +110,7 @@ export function drawCowSprite(
   sy: number,
   tileSize: number,
   state: CowSpriteState,
-): void {
+): DrawnFigureRow {
   const { coat, age, action, facingX = 1, facingY = 0, gaitPhase = 0, progress = 0 } = state;
   const figure = cowFigure(coat, age);
   const view = drawnView(action, viewFor(facingX, facingY));
@@ -123,6 +124,7 @@ export function drawCowSprite(
   else if (action === 'graze') frame = timeFrameIndex(clock, COW_GRAZE_FPS, frames);
   else if (action !== 'lie') frame = progressFrameIndex(progress, frames);
   drawFigureCached(ctx, figure, key, frame, sx, sy, tileSize, { flipX, alpha: state.alpha });
+  return drawnFigureRow(figure, key);
 }
 
 /**

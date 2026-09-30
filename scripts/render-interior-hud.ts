@@ -256,6 +256,8 @@ for (const roomName of roomNames) {
       hotbarBandHeight: h - hotbarTop,
       followButton: true,
       summonButton: true,
+      buildButton: true,
+      journalButton: true,
     });
     const occluders = interiorHudOccluders(layout);
     const bounds = interiorCameraBounds(map);

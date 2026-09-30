@@ -1,4 +1,5 @@
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { drawLightBeam, lightBeamBounds, type LightBeamPlacement } from '../sprites/lightBeam';
 
 /**
  * A standing column of light over the tracked objective's tile.
@@ -8,43 +9,23 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
  * a bearing is useless because the thing is already on screen among a dozen
  * others that look like it.
  *
- * Only for places: this is painted over the whole world, so it must never mark a
- * character. A character draws `drawQuestBeacon` from its own render, behind its
- * body, and its tracker target is built with `characterTarget`.
+ * Only for places. A character draws `drawQuestBeacon` from its own render,
+ * behind its body, and its tracker target is built with `characterTarget`.
+ *
+ * Drawn before the Y-sorted world, so the marked place — and anyone walking
+ * past it — stands in front of its own light. A building hides the beam up to
+ * its roofline, so a facade target's beam is sized to rise well clear of the
+ * ridge, and its pool and edge glow still show round the building's sides.
  */
 
 /** The beam's default height for a one-tile target. */
-const BEAM_HEIGHT_TILES = 2.6;
-const BEAM_WIDTH_TILES = 0.55;
-/** The beam flares out slightly toward the ground, so it reads as light, not a post. */
-const BEAM_BASE_WIDTH_MULTIPLIER = 1.5;
-const BEAM_CORE_WIDTH_FRACTION = 0.34;
-
-const POOL_RADIUS_TILES = 0.62;
-const POOL_FLATTEN = 0.4;
+const BEAM_HEIGHT_TILES = 3.2;
 /**
- * The pool sits directly on top of whatever is being marked, so it is the one
- * layer that can wash out the target. It stays well under the beam's own alpha.
+ * The narrowest lit width, in tiles. A one-tile target's beam is still wider
+ * than a figure's, since a place marker is read from further away.
  */
-const POOL_ALPHA = 0.12;
-
-const PULSE_PERIOD_MS = 1600;
-const PULSE_MIN_ALPHA = 0.16;
-const PULSE_MAX_ALPHA = 0.3;
-/** A slow rise and fall, not a strobe: the beam is a landmark, not an alarm. */
-const PULSE_HALF_RANGE = (PULSE_MAX_ALPHA - PULSE_MIN_ALPHA) / 2;
-const PULSE_MID_ALPHA = PULSE_MIN_ALPHA + PULSE_HALF_RANGE;
-const FULL_TURN_RADIANS = Math.PI * 2;
-
-/** Where the beam's own alpha ramp hands off from solid core to fade-out. */
-const BEAM_FADE_MIDPOINT = 0.45;
-const BEAM_MID_ALPHA_FRACTION = 0.35;
-const CORE_ALPHA_FRACTION = 0.45;
-
-const OPAQUE = 1;
-const TRANSPARENT = 0;
-const HALF = 0.5;
-
+const MIN_COVER_WIDTH_TILES = 0.9;
+const BEAM_STRENGTH = 0.95;
 /**
  * Culling margin, in tiles, around the viewport.
  *
@@ -81,19 +62,53 @@ export interface ObjectiveBeaconFootprint {
 
 const DEFAULT_WIDTH_TILES = 1;
 const DEFAULT_BACKSET_TILES = 0;
+const HALF = 0.5;
+
+function placementFor(
+  screenX: number,
+  screenY: number,
+  tileSize: number,
+  color: string,
+  nowMs: number,
+  footprint: ObjectiveBeaconFootprint,
+): LightBeamPlacement {
+  const spanTiles = footprint.widthTiles ?? DEFAULT_WIDTH_TILES;
+  const backsetTiles = footprint.backsetTiles ?? DEFAULT_BACKSET_TILES;
+  return {
+    centreX: screenX + tileSize * spanTiles * HALF,
+    groundY: screenY + tileSize - tileSize * backsetTiles,
+    coverWidth: tileSize * Math.max(MIN_COVER_WIDTH_TILES, spanTiles),
+    height: tileSize * (footprint.heightTiles ?? BEAM_HEIGHT_TILES),
+    color,
+    strength: BEAM_STRENGTH,
+    timeMs: nowMs,
+  };
+}
+
+function isOffScreen(placement: LightBeamPlacement, tileSize: number): boolean {
+  const bounds = lightBeamBounds(placement);
+  const margin = tileSize * OFFSCREEN_MARGIN_TILES;
+  return (
+    bounds.right < -margin ||
+    bounds.left > viewportWidth() + margin ||
+    bounds.bottom < -margin ||
+    bounds.top > viewportHeight() + margin
+  );
+}
 
 /**
- * Draws a pulsing vertical beam of light rising from a tile.
+ * The beam: ground pool, shaft and rising motes. Draw it before the Y-sorted
+ * world, so the marked place and anyone near it stand in front of it.
  *
- * Skips itself entirely when the tile's beam falls outside the viewport, so the
- * caller only has to convert world coordinates to screen ones.
+ * Skips itself entirely when the beam falls outside the viewport, so the caller
+ * only has to convert world coordinates to screen ones.
  *
  * @param ctx       Canvas context, in screen space
  * @param screenX   Screen-x of the anchor tile's left edge
  * @param screenY   Screen-y of the anchor tile's top edge
  * @param tileSize  Tile size in pixels, which the beam scales itself against
  * @param color     Beam colour, as `#rrggbb` — pass the same one the quest arrow uses
- * @param nowMs     Monotonic clock driving the pulse
+ * @param nowMs     Monotonic clock driving the shimmer
  * @param footprint What the beam is covering; omit for a one-tile target
  */
 export function drawObjectiveBeacon(
@@ -105,76 +120,9 @@ export function drawObjectiveBeacon(
   nowMs: number,
   footprint: ObjectiveBeaconFootprint = {},
 ): void {
-  const spanTiles = footprint.widthTiles ?? DEFAULT_WIDTH_TILES;
-  const backsetTiles = footprint.backsetTiles ?? DEFAULT_BACKSET_TILES;
-
-  const centreX = screenX + tileSize * spanTiles * HALF;
-  const groundY = screenY + tileSize - tileSize * backsetTiles;
-  const beamHeight = tileSize * (footprint.heightTiles ?? BEAM_HEIGHT_TILES);
-  const poolRadius = tileSize * POOL_RADIUS_TILES * spanTiles;
-  const beamHalfWidth = tileSize * BEAM_WIDTH_TILES * spanTiles * HALF;
-  const baseHalfWidth = beamHalfWidth * BEAM_BASE_WIDTH_MULTIPLIER;
-
-  const isOffScreen =
-    centreX + baseHalfWidth < -tileSize * OFFSCREEN_MARGIN_TILES ||
-    centreX - baseHalfWidth > viewportWidth() + tileSize * OFFSCREEN_MARGIN_TILES ||
-    groundY < -tileSize * OFFSCREEN_MARGIN_TILES ||
-    groundY - beamHeight > viewportHeight() + tileSize * OFFSCREEN_MARGIN_TILES;
-  if (isOffScreen) return;
-
-  const pulse =
-    PULSE_MID_ALPHA + Math.sin((nowMs / PULSE_PERIOD_MS) * FULL_TURN_RADIANS) * PULSE_HALF_RANGE;
-
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-
-  const pool = ctx.createRadialGradient(centreX, groundY, 0, centreX, groundY, poolRadius);
-  pool.addColorStop(TRANSPARENT, withAlpha(color, pulse * POOL_ALPHA));
-  pool.addColorStop(OPAQUE, withAlpha(color, TRANSPARENT));
-  ctx.save();
-  ctx.translate(centreX, groundY);
-  ctx.scale(OPAQUE, POOL_FLATTEN);
-  ctx.translate(-centreX, -groundY);
-  ctx.fillStyle = pool;
-  ctx.beginPath();
-  ctx.arc(centreX, groundY, poolRadius, 0, FULL_TURN_RADIANS);
-  ctx.fill();
-  ctx.restore();
-
-  const beam = ctx.createLinearGradient(centreX, groundY, centreX, groundY - beamHeight);
-  beam.addColorStop(TRANSPARENT, withAlpha(color, pulse));
-  beam.addColorStop(BEAM_FADE_MIDPOINT, withAlpha(color, pulse * BEAM_MID_ALPHA_FRACTION));
-  beam.addColorStop(OPAQUE, withAlpha(color, TRANSPARENT));
-  ctx.fillStyle = beam;
-  fillTaperedColumn(ctx, centreX, groundY, beamHeight, baseHalfWidth, beamHalfWidth);
-
-  const coreHalfWidth = beamHalfWidth * BEAM_CORE_WIDTH_FRACTION;
-  const core = ctx.createLinearGradient(centreX, groundY, centreX, groundY - beamHeight);
-  core.addColorStop(TRANSPARENT, withAlpha(color, pulse * CORE_ALPHA_FRACTION));
-  core.addColorStop(OPAQUE, withAlpha(color, TRANSPARENT));
-  ctx.fillStyle = core;
-  fillTaperedColumn(ctx, centreX, groundY, beamHeight, coreHalfWidth, coreHalfWidth * HALF);
-
-  ctx.restore();
-}
-
-/** A quad narrowing from `baseHalfWidth` at the ground to `topHalfWidth` at the top. */
-function fillTaperedColumn(
-  ctx: CanvasRenderingContext2D,
-  centreX: number,
-  groundY: number,
-  height: number,
-  baseHalfWidth: number,
-  topHalfWidth: number,
-): void {
-  const topY = groundY - height;
-  ctx.beginPath();
-  ctx.moveTo(centreX - baseHalfWidth, groundY);
-  ctx.lineTo(centreX + baseHalfWidth, groundY);
-  ctx.lineTo(centreX + topHalfWidth, topY);
-  ctx.lineTo(centreX - topHalfWidth, topY);
-  ctx.closePath();
-  ctx.fill();
+  const placement = placementFor(screenX, screenY, tileSize, color, nowMs, footprint);
+  if (isOffScreen(placement, tileSize)) return;
+  drawLightBeam(ctx, placement);
 }
 
 const HEX_RADIX = 16;

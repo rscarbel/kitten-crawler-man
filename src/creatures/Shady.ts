@@ -1,18 +1,14 @@
 import { Mob } from './Mob';
 import type { Player } from './../Player';
 import type { LootDrop } from './Mob';
-import {
-  drawShadySprite,
-  SCRATCH_DURATION_FRAMES,
-  SHADY_HEAD_ABOVE_TILE_TILES,
-} from '../sprites/shadySprite';
+import { drawShadySprite, SCRATCH_DURATION_FRAMES } from '../sprites/shadySprite';
 import {
   drawQuestMarker,
   questMarkerColorFor,
-  QUEST_MARKER_GOLD,
-  QUEST_MARKER_GREEN,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
+import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import { drawQuestBeacon } from '../sprites/questBeacon';
 import { randomInt } from '../utils';
 
@@ -50,6 +46,11 @@ export class Shady extends Mob {
   markerType: ShadyMarker = 'none';
   /** Set by the scene while his dialog is open, so he leans in while he talks. */
   isTalking = false;
+  /**
+   * The row his last body paint drew. The marker is drawn in a later pass, and
+   * hangs over whatever he was actually standing in, scratch and lean-in alike.
+   */
+  private drawnRow: DrawnFigureRow | undefined;
 
   private scratchFramesLeft = 0;
   private framesUntilScratch = randomInt(SCRATCH_GAP_MIN_FRAMES, SCRATCH_GAP_MAX_FRAMES);
@@ -121,7 +122,7 @@ export class Shady extends Mob {
     // his hand under his own hood for its entire duration, and the lean-in pose
     // would never appear on the ~11% of presses that land inside a scratch.
     const scratching = this.scratchFramesLeft > 0 && !this.isTalking;
-    drawShadySprite(ctx, box.sx, box.sy, box.s, {
+    this.drawnRow = drawShadySprite(ctx, box.sx, box.sy, box.s, {
       activity: this.isTalking ? 'talk' : scratching ? 'scratch' : 'idle',
       // Counts down, so the progress it stands for runs the other way.
       scratchProgress: 1 - this.scratchFramesLeft / SCRATCH_DURATION_FRAMES,
@@ -135,14 +136,13 @@ export class Shady extends Mob {
    * where a market stall drawn after him would cover it.
    */
   renderMarker(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    if (!this.isAlive || this.markerType === 'none') return;
+    const markerColor = questMarkerColorFor(this.markerType);
+    if (!this.isAlive || markerColor === undefined) return;
     const box = this.spriteBox(camX, camY, tileSize);
-    const markerY = box.sy - tileSize * SHADY_HEAD_ABOVE_TILE_TILES;
-    if (this.markerType === 'exclamation') {
-      drawQuestMarker(ctx, box.sx, markerY, box.s, '!', QUEST_MARKER_GOLD);
-      return;
-    }
-    drawQuestMarker(ctx, box.sx, markerY, box.s, '?', QUEST_MARKER_GREEN);
+    const artTop =
+      this.drawnRow === undefined ? box.sy : figureRowInkTop(this.drawnRow, box.sy, box.s);
+    const glyph = this.markerType === 'question' ? '?' : '!';
+    drawQuestMarker(ctx, box.sx, artTop, box.s, glyph, markerColor);
   }
 
   /**

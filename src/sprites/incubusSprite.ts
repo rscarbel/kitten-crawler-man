@@ -7,7 +7,7 @@
 import { walkFrameIndex } from '../core/SpriteRenderer';
 import { TILE_SIZE } from '../core/constants';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
-import { figureFrameCount } from './figure/figureDef';
+import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import {
   INCUBUS_FIGURE,
   INCUBUS_HEIGHT_SCALE,
@@ -105,7 +105,8 @@ function frameFor(role: IncubusRole, state: IncubusSpriteState, frames: number):
 }
 
 /**
- * Draw the Incubus standing on the tile whose top-left is `(sx, sy)`. Only the
+ * Draw the Incubus standing on the tile whose top-left is `(sx, sy)`, returning
+ * the row drawn, or `undefined` when he paints nothing for that pose. Only the
  * profile is mirrored: the head-on rows keep his sash knot and tail on their
  * own side when he turns round.
  */
@@ -115,14 +116,15 @@ export function drawIncubusSprite(
   sy: number,
   tileSize: number,
   state: IncubusSpriteState,
-): void {
+): DrawnFigureRow | undefined {
   const view = viewFor(state.facingX, state.facingY);
   const role = roleOf(state);
   const key = incubusStateName(role, view);
   const frames = figureFrameCount(INCUBUS_FIGURE, key);
-  if (frames === 0) return;
+  if (frames === 0) return undefined;
   const flipX = view === 'side' && state.facingX < 0;
   drawFigureCached(ctx, INCUBUS_FIGURE, key, frameFor(role, state, frames), sx, sy, tileSize, {
     flipX,
   });
+  return drawnFigureRow(INCUBUS_FIGURE, key);
 }

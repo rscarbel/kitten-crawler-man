@@ -29,6 +29,13 @@ import {
   tileAt,
 } from './harvestNodes';
 
+/**
+ * Work is fractional, so a node spent in whole steps of 0.85 can land a
+ * rounding hair above zero; anything at or below this counts as spent rather
+ * than earning one extra award.
+ */
+const DEPLETED_REMAINDER = 1e-9;
+
 /** What depleting a node tells whoever listens for its sound. */
 export interface NodeDepletion {
   readonly kind: HarvestKind;
@@ -121,14 +128,15 @@ export class NodeLedger {
   }
 
   /**
-   * Spends one harvest of the node's capacity, depleting it on the last.
-   * Returns false when there was nothing there to spend.
+   * Spends `work` of the node's capacity — `harvestNodeWork` for a crawler's
+   * award, or 0 when a lucky swing spares it — depleting it once nothing is
+   * left. Returns false when there was nothing there to spend.
    */
-  spend(tileX: number, tileY: number, harvesterLevel: number): boolean {
+  spend(tileX: number, tileY: number, harvesterLevel: number, work: number): boolean {
     const state = this.stateAt(tileX, tileY, harvesterLevel);
     if (state === null) return false;
-    state.remaining -= 1;
-    if (state.remaining <= 0) this.deplete(state, tileX, tileY);
+    state.remaining -= work;
+    if (state.remaining <= DEPLETED_REMAINDER) this.deplete(state, tileX, tileY);
     else syncWornLook(this.deps.gameMap, state);
     return true;
   }

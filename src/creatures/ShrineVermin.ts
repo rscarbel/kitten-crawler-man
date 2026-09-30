@@ -18,6 +18,7 @@ import { MOB_SLOWED_SPEED_FRACTION } from './Mob';
 import { Rat } from './Rat';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { drawQuestMarker, QUEST_MARKER_GOLD } from '../sprites/questNPCSprite';
+import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 
 /**
  * How close a crawler has to be before the vermin bolts, in tiles.
@@ -78,13 +79,6 @@ export class ShrineVermin extends Rat {
   }
 
   /**
-   * Flight, in place of the inherited chase.
-   *
-   * `updateAI` rather than `update` because that is the hook the mob loop calls;
-   * overriding it wholesale is also what keeps the base rat's bite from ever
-   * being armed, since nothing here sets a bite timer.
-   */
-  /**
    * The overhead `!` every quest giver wears, on a quest *target* instead.
    *
    * A vermin has no marker state machine to read: being alive is the whole of
@@ -92,9 +86,7 @@ export class ShrineVermin extends Rat {
    * the glyph is unconditional rather than branched on a `markerType`.
    *
    * Drawn after the inherited sprite, as every other marker in the game is, and
-   * against the plain tile box the rat is drawn in — `drawQuestMarker` measures
-   * its font size and its lift above the box in units of the size handed to it,
-   * so an enlarged box would float an oversized glyph off the rat's head.
+   * sized from the plain tile box the rat is drawn in.
    */
   protected override drawSelf(
     ctx: CanvasRenderingContext2D,
@@ -104,9 +96,19 @@ export class ShrineVermin extends Rat {
   ): void {
     super.drawSelf(ctx, camX, camY, tileSize);
     if (!this.isAlive) return;
-    drawQuestMarker(ctx, this.x - camX, this.y - camY, tileSize, '!', QUEST_MARKER_GOLD);
+    const sy = this.y - camY;
+    const artTop = this.drawnRow === undefined ? sy : figureRowInkTop(this.drawnRow, sy, tileSize);
+    const clearOf = this.overheadClearTop(artTop, sy);
+    drawQuestMarker(ctx, this.x - camX, clearOf, tileSize, '!', QUEST_MARKER_GOLD);
   }
 
+  /**
+   * Flight, in place of the inherited chase.
+   *
+   * `updateAI` rather than `update` because that is the hook the mob loop calls;
+   * overriding it wholesale is also what keeps the base rat's bite from ever
+   * being armed, since nothing here sets a bite timer.
+   */
   override updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

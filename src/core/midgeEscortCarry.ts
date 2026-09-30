@@ -11,6 +11,8 @@
  * this record (or with it empty) puts her anyway.
  */
 
+import type { TilePoint } from '../map/town/townPlan';
+
 /** Where Midge stood when the party went through a door, and how much health she had. */
 export interface CarriedMidge {
   readonly x: number;
@@ -23,8 +25,14 @@ export interface MidgeEscortCarry {
   midge: CarriedMidge | null;
   /** How many of the road's ambush waves have been sprung on this attempt at the escort. */
   wavesSprung: number;
+  /**
+   * Where the escort's road was planned afresh from, after the party led her
+   * out by another gate or off the road; null while it is the road as planned
+   * from Merrit's gate. The scene on the far side of a door plans the same road.
+   */
+  routeFrom: TilePoint | null;
 }
 
 export function createMidgeEscortCarry(): MidgeEscortCarry {
-  return { midge: null, wavesSprung: 0 };
+  return { midge: null, wavesSprung: 0, routeFrom: null };
 }

@@ -895,16 +895,15 @@ export function buildButtonRect(miniMap: MiniMapSystem): Rect {
 }
 
 /**
- * The Build button: the Construction menu's HUD entry. `pulseSeconds` counts
- * down the attention pulse it gets the first time it appears.
+ * The Build button at `r`: the Construction menu's HUD entry. `pulseSeconds`
+ * counts down the attention pulse it gets the first time it appears.
  */
 export function drawBuildButton(
   ctx: CanvasRenderingContext2D,
-  miniMap: MiniMapSystem,
+  r: Rect,
   menuOpen: boolean,
   pulseSeconds: number,
 ): Rect {
-  const r = buildButtonRect(miniMap);
   const pulsing = pulseSeconds > 0 && Math.sin(pulseSeconds * Math.PI * 2 * BUILD_PULSE_HZ) > 0;
   drawButton(ctx, {
     x: r.x,
@@ -1104,6 +1103,24 @@ interface ColumnLayout {
   readonly journal: Rect;
 }
 
+/**
+ * The sizes of the pieces this module hangs under Pause: the Build button,
+ * the achievement chip and the Journal. Exported so the interior HUD, which
+ * lays out its own column, draws the same buttons at the same sizes.
+ */
+export function columnPieceSizes(mobile: boolean): {
+  readonly build: PackSize;
+  readonly chip: PackSize;
+  readonly journal: PackSize;
+} {
+  const width = mobile ? MOBILE_BTN_W : DESKTOP_BTN_W;
+  return {
+    build: { w: width, h: PAUSE_BTN_H },
+    chip: { w: width, h: CHIP_HEIGHT },
+    journal: { w: JOURNAL_BTN_SIZE, h: JOURNAL_BTN_SIZE },
+  };
+}
+
 function rectsOverlap(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
@@ -1239,7 +1256,7 @@ export function journalButtonRect(miniMap: MiniMapSystem): Rect {
 }
 
 /**
- * The Journal button, with a badge count when quests are outstanding.
+ * The Journal button at `r`, with a badge count when quests are outstanding.
  *
  * `outstanding` only changes the frame's colour, never its size: a button that
  * grew when a quest was accepted would move the thing under the player's finger
@@ -1247,10 +1264,9 @@ export function journalButtonRect(miniMap: MiniMapSystem): Rect {
  */
 export function drawJournalButton(
   ctx: CanvasRenderingContext2D,
-  miniMap: MiniMapSystem,
+  r: Rect,
   outstanding: number,
 ): Rect {
-  const r = journalButtonRect(miniMap);
   drawButton(ctx, {
     x: r.x,
     y: r.y,

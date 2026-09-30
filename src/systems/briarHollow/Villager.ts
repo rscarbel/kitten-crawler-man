@@ -24,14 +24,18 @@ import {
   TimedSpeech,
   drawSpeechBubble,
   drawTimedSpeechBubble,
+  speechBubbleOriginAbove,
   type TimedBubbleStyle,
 } from '../../sprites/speechBubble';
 import {
   drawQuestMarker,
-  questMarkerAnchorAbove,
   questMarkerColorFor,
+  questMarkerTopY,
+  type QuestMarkerGlyph,
 } from '../../sprites/questNPCSprite';
+import type { DrawnFigureRow } from '../../sprites/figure/figureDef';
 import { drawQuestBeacon } from '../../sprites/questBeacon';
+import { figureRowInkTop } from '../../sprites/figure/figureFrameCache';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { CivilianCastId, VillagerRoutine } from './villagerRoutines';
 
@@ -143,6 +147,8 @@ export class Villager implements TownPropRenderable {
   private readonly tilesPerWalkCycle: number;
   private readonly hasWorkRow: boolean;
   private ellipsisPulse = 0;
+  /** The row the last body paint drew, which the later bark pass stacks its bubble over. */
+  private drawnRow: DrawnFigureRow | undefined;
   private sparks: SparkParticle[] = [];
 
   constructor(
@@ -347,6 +353,28 @@ export class Villager implements TownPropRenderable {
     return sy - VILLAGER_HEAD_CLEARANCE_TILES * tileSize;
   }
 
+  /** The glyph over this villager's head, or null while they wear none. */
+  private get markerGlyph(): QuestMarkerGlyph | null {
+    if (this.state === 'talking' || questMarkerColorFor(this.marker) === undefined) return null;
+    return this.marker === 'question' ? '?' : '!';
+  }
+
+  /** The measured top of the row last drawn, or the fixed clearance before the first draw. */
+  private artTop(sy: number, tileSize: number): number {
+    if (this.drawnRow === undefined) return this.headTop(sy, tileSize);
+    return figureRowInkTop(this.drawnRow, sy, tileSize);
+  }
+
+  /**
+   * The line a bubble over this villager must sit above: their quest marker's
+   * top at the height of its bounce while they wear one, else their art's.
+   */
+  private overheadTop(ctx: CanvasRenderingContext2D, sy: number, tileSize: number): number {
+    const artTop = this.artTop(sy, tileSize);
+    const glyph = this.markerGlyph;
+    return glyph === null ? artTop : questMarkerTopY(ctx, artTop, tileSize, glyph);
+  }
+
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -356,7 +384,7 @@ export class Villager implements TownPropRenderable {
     if (markerColor !== undefined) {
       drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
     }
-    drawRatkinCastSprite(ctx, this.id, sx, sy, tileSize, {
+    this.drawnRow = drawRatkinCastSprite(ctx, this.id, sx, sy, tileSize, {
       action: this.action,
       walkPhase: this.walkPhase,
       facingX: this.facingX,
@@ -364,11 +392,9 @@ export class Villager implements TownPropRenderable {
       loopOffsetSeconds: this.loopOffsetSeconds,
     });
 
-    const headTop = this.headTop(sy, tileSize);
-    if (markerColor !== undefined) {
-      const glyph = this.marker === 'question' ? '?' : '!';
-      const markerY = questMarkerAnchorAbove(headTop - OVERHEAD_GAP_PX, tileSize);
-      drawQuestMarker(ctx, sx, markerY, tileSize, glyph, markerColor);
+    const glyph = this.markerGlyph;
+    if (markerColor !== undefined && glyph !== null) {
+      drawQuestMarker(ctx, sx, this.artTop(sy, tileSize), tileSize, glyph, markerColor);
     }
 
     this.renderSparks(ctx, camX, camY);
@@ -384,17 +410,19 @@ export class Villager implements TownPropRenderable {
   renderBark(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
-    const headTop = this.headTop(sy, tileSize);
+    if (this.bark.current === null && !this.hushed) return;
+    const bubbleBottom = this.overheadTop(ctx, sy, tileSize) - OVERHEAD_GAP_PX;
     if (this.bark.current !== null) {
       drawTimedSpeechBubble(
         ctx,
         this.bark,
         sx + tileSize * TILE_CENTRE,
-        headTop - OVERHEAD_GAP_PX,
+        bubbleBottom,
         VILLAGER_BUBBLE_STYLE,
       );
-    } else if (this.hushed) {
-      drawSpeechBubble(ctx, sx, sy, tileSize, this.ellipsisPulse);
+    } else {
+      const bubbleSy = speechBubbleOriginAbove(bubbleBottom, tileSize);
+      drawSpeechBubble(ctx, sx, bubbleSy, tileSize, this.ellipsisPulse);
     }
   }
 }

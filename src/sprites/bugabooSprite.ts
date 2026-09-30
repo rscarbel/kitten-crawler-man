@@ -1,6 +1,6 @@
 import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
 import { BUGABOO_FIGURE, SWIPE_FRAMES, SWIPE_IMPACT_FRAME } from './art/bugabooFigure';
-import { figureFrameCount } from './figure/figureDef';
+import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 
 /** Which of the three drawn viewpoints a facing resolves to. */
@@ -107,7 +107,8 @@ export interface BugabooSpriteState {
 }
 
 /**
- * Draw a Bugaboo: idle, walk, claw swipe, and the two floor-breach rows.
+ * Draw a Bugaboo — idle, walk, claw swipe, and the two floor-breach rows —
+ * returning the row drawn.
  *
  * Priority runs emerge → breach → swipe → walk → idle, so a creature committed
  * to climbing out of the floor always wins over whatever it was doing.
@@ -122,7 +123,7 @@ export function drawBugabooSprite(
   sy: number,
   tileSize: number,
   state: BugabooSpriteState = {},
-): void {
+): DrawnFigureRow {
   const {
     walkFrame = 0,
     isMoving = false,
@@ -149,7 +150,7 @@ export function drawBugabooSprite(
       sy,
       tileSize,
     );
-    return;
+    return drawnFigureRow(BUGABOO_FIGURE, 'emerge');
   }
 
   if (breaching) {
@@ -162,7 +163,7 @@ export function drawBugabooSprite(
       sy,
       tileSize,
     );
-    return;
+    return drawnFigureRow(BUGABOO_FIGURE, 'breach');
   }
 
   const view = viewFor(facingX, facingY);
@@ -180,7 +181,7 @@ export function drawBugabooSprite(
       tileSize,
       { flipX },
     );
-    return;
+    return drawnFigureRow(BUGABOO_FIGURE, key);
   }
 
   if (isMoving) {
@@ -195,7 +196,7 @@ export function drawBugabooSprite(
       tileSize,
       { flipX },
     );
-    return;
+    return drawnFigureRow(BUGABOO_FIGURE, key);
   }
 
   const key = stateFor('idle', view);
@@ -211,6 +212,7 @@ export function drawBugabooSprite(
       flipX,
     },
   );
+  return drawnFigureRow(BUGABOO_FIGURE, key);
 }
 
 /** Every base pose the creature can play in one of the three views. */

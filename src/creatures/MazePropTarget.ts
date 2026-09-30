@@ -176,7 +176,7 @@ export abstract class MazePropTarget<K extends MazeTargetKind = MazeTargetKind> 
   /** Whether this prop still answers a blow at all. */
   protected abstract get acceptsBlows(): boolean;
 
-  override takesPlayerDamage(damageType: PlayerDamageType | null): boolean {
+  protected override admitsPlayerDamage(damageType: PlayerDamageType | null): boolean {
     if (!this.acceptsBlows || this.blowLockout > 0 || damageType === null) return false;
     return MAZE_TARGET_DAMAGE_TYPES[this.kind].includes(damageType);
   }

@@ -30,10 +30,12 @@ import type { NPCMarkerType } from './QuestNPC';
 import {
   drawQuestMarker,
   questMarkerColorFor,
-  QUEST_MARKER_GOLD,
-  QUEST_MARKER_GREEN,
+  questMarkerTopY,
+  type QuestMarkerGlyph,
 } from '../sprites/questNPCSprite';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { drawQuestBeacon } from '../sprites/questBeacon';
+import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 
 /**
  * Draw size of a citizen in pixels before the humanoid scale-up — full-tile
@@ -128,6 +130,8 @@ export class Townsperson implements WanderState {
    */
   private cycleDistance: number;
   private cycleDistanceDrawSize = PERSON_DRAW_SIZE;
+  /** The row the last render drew, which bubbles drawn in later passes stack over. */
+  private drawnRow: DrawnFigureRow | undefined;
   private readonly walkFrames: number;
   /** How many times the player has talked to this citizen — rotates their dialog. */
   conversationCount = 0;
@@ -249,7 +253,7 @@ export class Townsperson implements WanderState {
     }
 
     const facing = this.facingXY();
-    drawCitizenSprite(ctx, this.figure, this.x - camX, this.y - camY, drawSize, {
+    this.drawnRow = drawCitizenSprite(ctx, this.figure, this.x - camX, this.y - camY, drawSize, {
       action: this.frozen ? 'talk' : this.moving ? 'walk' : 'idle',
       walkPhase: this.phase * TWO_PI,
       facingX: facing.x,
@@ -257,10 +261,36 @@ export class Townsperson implements WanderState {
       loopOffsetSeconds: this.id * LOOP_OFFSET_SECONDS_PER_ID,
     });
 
-    if (this.markerType === 'exclamation') {
-      drawQuestMarker(ctx, box.sx, box.sy, box.s, '!', QUEST_MARKER_GOLD);
-    } else if (this.markerType === 'question') {
-      drawQuestMarker(ctx, box.sx, box.sy, box.s, '?', QUEST_MARKER_GREEN);
+    const glyph = this.markerGlyph;
+    if (markerColor !== undefined && glyph !== null) {
+      const artTop = this.artTop(this.y - camY);
+      drawQuestMarker(ctx, box.sx, artTop, box.s, glyph, markerColor);
     }
+  }
+
+  /** The glyph over this citizen's head, or null while they wear none. */
+  private get markerGlyph(): QuestMarkerGlyph | null {
+    if (questMarkerColorFor(this.markerType) === undefined) return null;
+    return this.markerType === 'question' ? '?' : '!';
+  }
+
+  /** The measured top of the row last drawn, or the humanoid box's top before the first draw. */
+  private artTop(sy: number): number {
+    const drawSize = this.cycleDistanceDrawSize;
+    if (this.drawnRow === undefined) return scaleHumanoidBox(this.x, sy, drawSize).sy;
+    return figureRowInkTop(this.drawnRow, sy, drawSize);
+  }
+
+  /**
+   * The screen y a bubble or label hung over this citizen must stay above, for
+   * a citizen whose tile top is at screen `sy`: their quest marker's top at the
+   * height of its bounce while they wear one, else their art's.
+   */
+  overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
+    const artTop = this.artTop(sy);
+    const glyph = this.markerGlyph;
+    if (glyph === null) return artTop;
+    const markerSize = scaleHumanoidBox(this.x, sy, this.cycleDistanceDrawSize).s;
+    return questMarkerTopY(ctx, artTop, markerSize, glyph);
   }
 }

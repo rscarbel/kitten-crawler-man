@@ -17,9 +17,10 @@ import {
   type Rect,
 } from '../systems/MobileHUDSystem';
 import { SUMMON_BUTTON_HEIGHT, SUMMON_BUTTON_WIDTH } from '../systems/MongoSystem';
+import { columnPieceSizes } from '../systems/DungeonUIRenderer';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
 import { hudHpBarRects, hudPanelArea, hudToggleRect } from '../ui/HUD';
-import { insetRect, packStack } from '../ui/hudPacking';
+import { insetRect, packStack, type PackOptions, type PackSize } from '../ui/hudPacking';
 import { hotbarStripRectFor } from '../ui/InventoryPanel';
 import { drawText, measureTextWidth } from '../ui/TextBox';
 import type { ScreenRect } from './interiorCamera';
@@ -28,8 +29,10 @@ import type { ScreenRect } from './interiorCamera';
 const MINIMAP_TO_PAUSE_GAP = 20;
 /** Clear space between the phone's Pause, Gear and Bag buttons, and round them. */
 const PHONE_BUTTON_GAP = 6;
-/** Keeps the phone's right-hand buttons off the screen's edges. */
+/** Keeps the right-hand buttons off the screen's edges. */
 const PHONE_SCREEN_MARGIN = 8;
+/** Clear space kept round the Build button, the achievement chip and the Journal. */
+const COLUMN_PIECE_GAP = 6;
 /**
  * What a pixel of sideways drift from the column under the minimap costs, in
  * pixels of drop down it: large enough that a portrait phone keeps Pause, Gear
@@ -110,6 +113,10 @@ export interface InteriorHudLayoutInput {
   readonly followButton: boolean;
   /** Whether Mongo's Summon button is showing. */
   readonly summonButton: boolean;
+  /** Whether the Build button is offered: once the party can open the Construction menu. */
+  readonly buildButton: boolean;
+  /** Whether the Journal's compass button is offered: on a floor with a Quest Journal. */
+  readonly journalButton: boolean;
 }
 
 export interface InteriorHudLayout {
@@ -131,6 +138,63 @@ export interface InteriorHudLayout {
   readonly nameplateUnderHud: boolean;
   /** Top of a phone's skill-point badge: under the HUD panel, or under the plate when it is there. */
   readonly skillBadgeTop: number;
+  readonly build: Rect | null;
+  /**
+   * The achievement chip's slot, reserved whether or not anything is unread,
+   * so no other piece ever moves when an achievement is earned.
+   */
+  readonly achievementChip: Rect;
+  readonly journal: Rect | null;
+}
+
+/**
+ * The Build button, the Journal and the achievement chip, placed as the
+ * overworld places its column: down under Pause while there is room, and
+ * wherever there is clear space once there is not — clear of every other
+ * piece of chrome, and of the HUD panel while there is room elsewhere.
+ *
+ * The chip goes last because it is not an occluder: on a landscape phone the
+ * last piece is the one left with the worst spot, and a chip that only shows
+ * until it is read is the piece that can best afford it.
+ */
+function columnPieces(
+  input: InteriorHudLayoutInput,
+  hud: Rect,
+  pause: Rect,
+  chrome: readonly Rect[],
+): { build: Rect | null; achievementChip: Rect; journal: Rect | null } {
+  const { viewportWidth: width, viewportHeight: height } = input;
+  const sizes = columnPieceSizes(input.mobile);
+  const anchorRight = pause.x + pause.w;
+  const options: PackOptions = {
+    bounds: {
+      x: PHONE_SCREEN_MARGIN,
+      y: PHONE_SCREEN_MARGIN,
+      w: width - PHONE_SCREEN_MARGIN * 2,
+      h: height - PHONE_SCREEN_MARGIN * 2,
+    },
+    blocked: [
+      ...chrome,
+      insetRect(hotbarStripRectFor(width, height), COLUMN_PIECE_GAP),
+      ...hudHpBarRects(input.hudCollapsed, input.mobile),
+    ],
+    avoid: [hud],
+    gap: COLUMN_PIECE_GAP,
+    cost: (rect) => Math.abs(anchorRight - (rect.x + rect.w)) * COLUMN_SHIFT_COST + rect.y,
+    seedXs: [anchorRight],
+    seedYs: [pause.y + pause.h + COLUMN_PIECE_GAP],
+  };
+  const placed: Rect[] = [];
+  const one = (size: PackSize): Rect => {
+    // One rect per member, always: a screen with no clear room still gets a spot.
+    const [spot] = packStack([size], placed, options);
+    placed.push(spot);
+    return spot;
+  };
+  const build = input.buildButton ? one(sizes.build) : null;
+  const journal = input.journalButton ? one(sizes.journal) : null;
+  const achievementChip = one(sizes.chip);
+  return { build, achievementChip, journal };
 }
 
 /**
@@ -322,19 +386,35 @@ export function interiorHudLayout(input: InteriorHudLayoutInput): InteriorHudLay
       ? plateUnderHud.y + plateUnderHud.h + SKILL_BADGE_GAP
       : hudAndToggle.y + hudAndToggle.h + SKILL_BADGE_GAP;
 
+  const gear = phoneButtons?.gear ?? null;
+  const bag = phoneButtons?.bag ?? null;
+  const chrome = [
+    { ...miniMap, h: miniMap.h + MINIMAP_TO_PAUSE_GAP - COLUMN_PIECE_GAP },
+    pause,
+    gear,
+    bag,
+    switchButton,
+    follow,
+    summon,
+    hudToggle,
+    nameplate.rect,
+  ].flatMap((rect) => (rect === null ? [] : [rect]));
+  const pieces = columnPieces(input, hud, pause, chrome);
+
   return {
     hud,
     hudToggle,
     miniMap,
     pause,
-    gear: phoneButtons?.gear ?? null,
-    bag: phoneButtons?.bag ?? null,
+    gear,
+    bag,
     switchButton,
     follow,
     summon,
     nameplate: nameplate.rect,
     nameplateUnderHud: nameplate.underHud,
     skillBadgeTop,
+    ...pieces,
   };
 }
 
@@ -356,7 +436,9 @@ function toScreenRect(rect: Rect): ScreenRect {
 /**
  * Every rect of the layout that hides the room under it — what the interior
  * camera frames the room clear of. The hotbar band is not here: the camera
- * already takes it off the bottom of the view.
+ * already takes it off the bottom of the view. Nor is the achievement chip,
+ * which only shows until the player reads what it announces; reframing the
+ * room around it would shift the view each time one was earned.
  */
 export function interiorHudOccluders(layout: InteriorHudLayout): ScreenRect[] {
   const rects = [
@@ -370,6 +452,8 @@ export function interiorHudOccluders(layout: InteriorHudLayout): ScreenRect[] {
     layout.switchButton,
     layout.follow,
     layout.summon,
+    layout.build,
+    layout.journal,
   ];
   const drawn: ScreenRect[] = [];
   for (const rect of rects) if (rect !== null) drawn.push(toScreenRect(rect));

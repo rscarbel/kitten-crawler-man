@@ -117,8 +117,8 @@ export class MenusKit {
   readonly craftExplainers = new CraftExplainers();
   /**
    * The Construction menu. Held here rather than by the village because both
-   * scenes open it — indoors it comes up read-only — and whichever scene is
-   * live supplies what it lists.
+   * scenes open it — indoors the outdoor-only kinds are refused — and
+   * whichever scene is live supplies what it lists.
    */
   readonly constructionMenu: ConstructionMenu;
   /**
@@ -168,7 +168,7 @@ export class MenusKit {
     this.craftExplainers.register('resourcing', new ResourcingExplainer(audio));
     this.craftExplainers.register('construction', new ConstructionExplainer(audio));
     this.craftExplainers.register('processing', new ProcessingExplainer(audio));
-    this.constructionMenu = new ConstructionMenu(audio);
+    this.constructionMenu = new ConstructionMenu(audio, (message) => this.announce(message));
     this.pauseMenu.onHowCraftWorks = (id) => void this.craftExplainers.open(id);
     this.pauseMenu.onHowProcessingWorks = () => void this.craftExplainers.open('processing');
     this.pauseMenu.audio = audio;

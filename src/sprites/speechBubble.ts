@@ -74,6 +74,15 @@ function bubblePath(
 }
 
 /**
+ * The `sy` to hand {@link drawSpeechBubble} so the tip of its tail lands on
+ * `bottomY` — for stacking the bubble over a head or a marker whose top is
+ * known, rather than at the fixed height a one-tile NPC wants.
+ */
+export function speechBubbleOriginAbove(bottomY: number, s: number): number {
+  return bottomY - s * (DOTS_BUBBLE_TOP + DOTS_BUBBLE_HEIGHT + DOTS_TAIL_DROP);
+}
+
+/**
  * The wordless "…" bubble that appears over an NPC the player can talk to.
  *
  * @param sx Screen-x of the NPC's tile origin.

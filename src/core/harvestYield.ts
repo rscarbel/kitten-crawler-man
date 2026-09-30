@@ -44,13 +44,28 @@ export function resourceForHarvestKind(kind: HarvestKind): ResourceId {
 }
 
 /**
- * Seconds between awards on a node of `kind` for a harvester at `level`,
- * carrying a tool with `toolSpeedBonus`.
+ * The share of the base harvest interval one award takes for a harvester at
+ * `level` carrying a tool with `toolSpeedBonus` — and, by the same token, the
+ * share of a node's capacity that award spends.
+ *
+ * Both readers go through this one function so speed and node health cannot
+ * drift apart: a node's capacity is counted in base-speed harvests, so a
+ * faster harvester lands more awards on it but spends less of it per award,
+ * and a tree or rock lasts the same wall-clock time at every tool tier and
+ * Resourcing level.
  *
  * The tool's speed bonus stacks additively with Resourcing's own speed steps
  * rather than multiplying with them: `resourcingSpeedFactor` is already
  * `1 - skillBonus`, so subtracting the tool's bonus from it gives
  * `1 - skillBonus - toolBonus` directly.
+ */
+export function harvestTimeFactor(level: number, toolSpeedBonus: number): number {
+  return resourcingSpeedFactor(level) - toolSpeedBonus;
+}
+
+/**
+ * Seconds between awards on a node of `kind` for a harvester at `level`,
+ * carrying a tool with `toolSpeedBonus`.
  */
 export function harvestIntervalSeconds(
   kind: HarvestKind,
@@ -58,7 +73,16 @@ export function harvestIntervalSeconds(
   toolSpeedBonus: number,
 ): number {
   const base = kind === 'wood' ? WOOD_HARVEST_INTERVAL_SECONDS : STONE_HARVEST_INTERVAL_SECONDS;
-  return base * (resourcingSpeedFactor(level) - toolSpeedBonus);
+  return base * harvestTimeFactor(level, toolSpeedBonus);
+}
+
+/**
+ * How much of a node's capacity one crawler award spends. See
+ * {@link harvestTimeFactor}: it is exactly that factor, so the node's
+ * wall-clock life is independent of harvest speed.
+ */
+export function harvestNodeWork(level: number, toolSpeedBonus: number): number {
+  return harvestTimeFactor(level, toolSpeedBonus);
 }
 
 /**

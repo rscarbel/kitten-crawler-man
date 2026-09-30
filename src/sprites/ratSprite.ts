@@ -1,6 +1,7 @@
 import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
 import { BITE_FRAMES, GORE_STATES, IDLE_FRAMES, RAT_FIGURE, WALK_FRAMES } from './art/ratFigure';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { type DrawnFigureRow, drawnFigureRow } from './figure/figureDef';
 
 /** Every pose row the figure paints. The gore pieces are states of their own. */
 export type RatState =
@@ -93,7 +94,7 @@ function stateFor(base: RatBase, view: RatView): RatState {
 }
 
 /**
- * Draw the rat.
+ * Draw the rat, returning the row drawn.
  *
  * Priority runs bite → walk → idle, so a bite always wins over the scurry it
  * interrupts.
@@ -104,7 +105,7 @@ export function drawRatSprite(
   sy: number,
   s: number,
   state: RatSpriteState = {},
-): void {
+): DrawnFigureRow {
   const { walkFrame = 0, isMoving = false, facingX = 1, facingY = 0, biteProgress = null } = state;
   const view = viewFor(facingX, facingY);
   // Only the profile art is mirrored: flipping the head-on views would put the
@@ -123,7 +124,7 @@ export function drawRatSprite(
       s,
       { flipX },
     );
-    return;
+    return drawnFigureRow(RAT_FIGURE, key);
   }
 
   if (isMoving) {
@@ -131,7 +132,7 @@ export function drawRatSprite(
     drawFigureCached(ctx, RAT_FIGURE, key, walkFrameIndex(walkFrame, FRAME_COUNT[key]), sx, sy, s, {
       flipX,
     });
-    return;
+    return drawnFigureRow(RAT_FIGURE, key);
   }
 
   const key = stateFor('idle', view);
@@ -146,6 +147,7 @@ export function drawRatSprite(
     s,
     { flipX },
   );
+  return drawnFigureRow(RAT_FIGURE, key);
 }
 
 const RAT_BASES: ReadonlyArray<RatBase> = ['walk', 'idle', 'bite'];

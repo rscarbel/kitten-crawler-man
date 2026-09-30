@@ -12,6 +12,7 @@
 import { TILE_SIZE } from '../../src/core/constants';
 import { createBriarHollowState } from '../../src/core/briarHollowState';
 import type { BlueprintsQuestPhase } from '../../src/core/blueprintsQuestPhase';
+import type { MidgeEscortCarry } from '../../src/core/midgeEscortCarry';
 import { Rat } from '../../src/creatures/Rat';
 import { FENCE } from '../../src/map/tileTypes';
 import type { TilePoint } from '../../src/map/town/townPlan';
@@ -50,14 +51,25 @@ const TILE_CENTRE = 0.5;
 const BUILT_SECTION = 2;
 const HALF_THE_CHANNEL_FRAMES = Math.floor((FENCE_SECTION_WORK_SECONDS * UPDATES_PER_SECOND) / 2);
 
-/** A fresh village kit, with the blueprints quest standing at `phase`. */
-export function blueprintsRig(phase: BlueprintsQuestPhase): {
+/**
+ * A fresh village kit, with the blueprints quest standing at `phase`, and
+ * Midge's escort as a door carried it when `midgeEscortCarry` is given.
+ */
+export function blueprintsRig(
+  phase: BlueprintsQuestPhase,
+  midgeEscortCarry?: MidgeEscortCarry,
+): {
   readonly rig: SiegeRig;
   readonly blueprints: BlueprintsQuestSystem;
 } {
   const state = createBriarHollowState();
   state.blueprints.phase = phase;
-  const rig = buildSiegeRig({ seed: BLUEPRINTS_RIG_SEED, state, assaultLevel: RIG_ASSAULT_LEVEL });
+  const rig = buildSiegeRig({
+    seed: BLUEPRINTS_RIG_SEED,
+    state,
+    assaultLevel: RIG_ASSAULT_LEVEL,
+    midgeEscortCarry,
+  });
   const blueprints = rig.kit.blueprints;
   if (blueprints === null) throw new Error('the village kit built no blueprints quest');
   // What is under test is the quest, not the party's survival.

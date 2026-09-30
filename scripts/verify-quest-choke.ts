@@ -27,11 +27,12 @@ import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
 import { level2 } from '../src/levels/level2.js';
 import type { LevelDef } from '../src/levels/types.js';
-import { QUEST_EXIT_DOOR_CLOSED, QUEST_EXIT_DOOR_OPEN } from '../src/map/tileTypes.js';
+import { BASE_DEFEND_QUEST_INTENSITY } from '../src/levels/defendQuestIntensity.js';
+import { FLOOR_GRATE, QUEST_EXIT_DOOR_CLOSED, QUEST_EXIT_DOOR_OPEN } from '../src/map/tileTypes.js';
 import { tileIndex } from '../src/map/tileIndex.js';
 
-/** Bugaboo grates every nursery carries — two walls, two apiece. */
-const EXPECTED_GRATE_COUNT = 4;
+/** Grates closer than this (Chebyshev tiles) would have their barriers' boards overlap. */
+const MIN_GRATE_SEPARATION_TILES = 2;
 
 /**
  * Maps built per floor.
@@ -179,14 +180,34 @@ function verifyFloor(levelDef: LevelDef): void {
     // The count is a generator constant, so a build that quietly stopped cutting
     // grates would otherwise sail past the reachability loop below with nothing
     // to check.
+    const expectedGrates = (levelDef.defendQuestIntensity ?? BASE_DEFEND_QUEST_INTENSITY)
+      .grateCount;
     check(
-      room.grateTiles.length === EXPECTED_GRATE_COUNT,
-      `the quest room has ${room.grateTiles.length} grates, expected ${EXPECTED_GRATE_COUNT}`,
+      room.grateTiles.length === expectedGrates,
+      `the quest room has ${room.grateTiles.length} grates, expected ${expectedGrates}`,
     );
+    const crowded = room.grateTiles.some((grate, index) =>
+      room.grateTiles
+        .slice(index + 1)
+        .some(
+          (other) =>
+            Math.max(Math.abs(other.x - grate.x), Math.abs(other.y - grate.y)) <
+            MIN_GRATE_SEPARATION_TILES,
+        ),
+    );
+    check(!crowded, 'two of the quest room’s grates touch, so their barriers would overlap');
     for (const grate of room.grateTiles) {
       check(
         openReach.has(tileIndex(grate.x, grate.y, size)),
         `grate (${grate.x},${grate.y}) is not reachable from inside the room`,
+      );
+      check(
+        rectContains(room.bounds, grate),
+        `grate (${grate.x},${grate.y}) lies outside the quest room`,
+      );
+      check(
+        gameMap.structure[grate.y][grate.x].type === FLOOR_GRATE,
+        `grate (${grate.x},${grate.y}) was never cut into the floor`,
       );
     }
     check(

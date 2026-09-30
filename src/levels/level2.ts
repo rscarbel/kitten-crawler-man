@@ -1,4 +1,5 @@
 import type { FairyRoomRate, LevelDef } from './types';
+import { FLOOR_TWO_DEFEND_QUEST_INTENSITY } from './defendQuestIntensity';
 
 const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
@@ -218,6 +219,7 @@ export const level2: LevelDef = {
   hasArena: true,
   hasSpiderLab: true,
   defendQuestWave: { minLevel: BUGABOO_MIN_LEVEL, maxLevel: BUGABOO_MAX_LEVEL },
+  defendQuestIntensity: FLOOR_TWO_DEFEND_QUEST_INTENSITY,
   fairies: {
     roomRatesByRegion: [PRE_KRAKAREN_FAIRY_RATE, POST_KRAKAREN_FAIRY_RATE],
     roomHealerChance: LEVEL2_ROOM_HEALER_CHANCE,

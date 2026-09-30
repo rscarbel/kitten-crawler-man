@@ -1,6 +1,6 @@
 import { timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
-import { figureFrameCount } from './figure/figureDef';
+import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import { RAT_KIN_FIGURE } from './art/ratKinFigure';
 
 /** The six rows he paints: a walk and an idle in each of three views. */
@@ -106,7 +106,7 @@ function stateFor(base: 'walk' | 'idle', view: RatKinView): RatKinState {
 }
 
 /**
- * Draw the Rat Kin.
+ * Draw the Rat Kin, returning the row drawn.
  *
  * Only the profile art is mirrored: flipping a head-on view would swap the side
  * his satchel hangs on every time he turned around.
@@ -117,7 +117,7 @@ export function drawRatKinSprite(
   sy: number,
   s: number,
   state: RatKinSpriteState,
-): void {
+): DrawnFigureRow {
   const view = viewFor(state.facingX, state.facingY);
   const flipX = view === 'side' && state.facingX < 0;
 
@@ -125,11 +125,12 @@ export function drawRatKinSprite(
     const key = stateFor('walk', view);
     const frame = walkFrameIndex(state.walkPhase, FRAME_COUNT[key]);
     drawFigureCached(ctx, RAT_KIN_FIGURE, key, frame, sx, sy, s, { flipX });
-    return;
+    return drawnFigureRow(RAT_KIN_FIGURE, key);
   }
 
   const key = stateFor('idle', view);
   const nowSeconds = performance.now() / MS_PER_SECOND + (state.idleOffsetSeconds ?? 0);
   const frame = timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]);
   drawFigureCached(ctx, RAT_KIN_FIGURE, key, frame, sx, sy, s, { flipX });
+  return drawnFigureRow(RAT_KIN_FIGURE, key);
 }

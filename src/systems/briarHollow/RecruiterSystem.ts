@@ -19,9 +19,9 @@ import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import type { TilePoint } from '../../map/town/townPlan';
 import { drawQuestBeacon } from '../../sprites/questBeacon';
 import { drawRatkinCastSprite } from '../../sprites/ratkinCastSprite';
+import { figureRowInkTop } from '../../sprites/figure/figureFrameCache';
 import {
   drawQuestMarker,
-  questMarkerAnchorAbove,
   questMarkerColorFor,
   type QuestMarkerState,
 } from '../../sprites/questNPCSprite';
@@ -44,11 +44,10 @@ const INTERACT_RANGE_TILES = 2;
 const INTERACT_RANGE_PX = TILE_SIZE * INTERACT_RANGE_TILES;
 /** How far from the square's centre a free tile may be found. */
 const SPAWN_SEARCH_TILES = 6;
-const OVERHEAD_GAP_PX = 2;
 const TILE_CENTRE = 0.5;
 
 /** The recruiter's own drawn body — stationary, facing the square he stands in. */
-class RecruiterNPC implements TownPropRenderable {
+export class RecruiterNPC implements TownPropRenderable {
   x: number;
   y: number;
   marker: QuestMarkerState = 'exclamation';
@@ -65,16 +64,18 @@ class RecruiterNPC implements TownPropRenderable {
     if (markerColor !== undefined) {
       drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
     }
-    drawRatkinCastSprite(ctx, RECRUITER_SPRITE_ID, sx, sy, tileSize, {
+    const drawnRow = drawRatkinCastSprite(ctx, RECRUITER_SPRITE_ID, sx, sy, tileSize, {
       action: 'idle',
       walkPhase: 0,
       facingX: 0,
       facingY: 1,
     });
     if (markerColor === undefined) return;
-    const headTop = sy - VILLAGER_HEAD_CLEARANCE_TILES * tileSize;
-    const markerY = questMarkerAnchorAbove(headTop - OVERHEAD_GAP_PX, tileSize);
-    drawQuestMarker(ctx, sx, markerY, tileSize, '!', markerColor);
+    const artTop =
+      drawnRow === undefined
+        ? sy - VILLAGER_HEAD_CLEARANCE_TILES * tileSize
+        : figureRowInkTop(drawnRow, sy, tileSize);
+    drawQuestMarker(ctx, sx, artTop, tileSize, '!', markerColor);
   }
 }
 

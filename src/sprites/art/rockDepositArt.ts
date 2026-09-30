@@ -1,19 +1,14 @@
 /**
- * Drawing engine for the quarry's minable stone: `ROCK_DEPOSIT` tiles.
+ * Drawing engine for the quarry's dressed stone: the `ROCK_DEPOSIT` tiles
+ * planted on its ruined wall stubs. The quarry's natural outcrops are painted
+ * by `mineableRockArt.ts`.
  *
- * Two looks, both one blocked tile wide:
- *
- * - **Outcrops** — layered bedrock breaking the surface. Where a boulder is a
- *   rounded mass, an outcrop is a stack of flat strata, each stepped back from
- *   the one below it, with a lit ledge along every step. That stepped profile is
- *   what reads as "workable": there is an edge to put a pick to.
- * - **Dressed blocks** — the ruined structures' squared stone, two or three
- *   courses of ashlar in running bond with a broken top course, so the quarry's
- *   old walls read as walls that can be mined.
- *
- * Each has a **worked** state for a deposit past half its capacity: the same
- * stone (the same seed draws the same geometry) with more pick-scars, bites
- * knocked out of its edges showing pale fresh fracture, and spall at its foot.
+ * A stub is the ruined structures' squared stone, two or three courses of
+ * ashlar in running bond with a broken top course, so the quarry's old walls
+ * read as walls that can be mined. Its **worked** state is the same stone (the
+ * same seed draws the same geometry) with its top course gone, more
+ * pick-scars, bites knocked out of its edges showing pale fresh fracture, and
+ * spall at its foot.
  *
  * Every mark lives inside the body: the body is painted first, chips are cut
  * out of it with `destination-out`, surface marks go on with `source-atop` so
@@ -23,8 +18,7 @@
  * centre: only the anchor tile blocks, so ink beside it would be ground a
  * crawler could stand on while drawn behind the stone.
  *
- * Palettes are the boulders' own (`rockPalette`), so a granite deposit and a
- * granite boulder are the same granite. Light comes from the upper left.
+ * Light comes from the upper left.
  */
 
 import { mulberry32, range, rangeInt, subSeed, type Rng } from '../person/rng';
@@ -42,10 +36,7 @@ import {
 
 type Ctx = CanvasRenderingContext2D;
 
-export type DepositForm = 'outcrop' | 'dressed';
-
 export interface DepositSpec {
-  readonly form: DepositForm;
   readonly lithology: Lithology;
   /** The worked-over look of a deposit past half its capacity. */
   readonly worked: boolean;
@@ -57,47 +48,7 @@ const HALF = 0.5;
 /** How far above the tile's bottom edge the stone's foot sits, so the contact shadow has room below it. */
 const BASE_LIFT_TILES = 0.14;
 
-// ── Outcrop geometry ──────────────────────────────────────────────────────────
-
-const OUTCROP_LAYERS_MIN = 2;
-const OUTCROP_LAYERS_MAX = 3;
-/** Height of every face together, bottom stratum to the crown. Low and broad: a ledge, not a mound. */
-const OUTCROP_HEIGHT_TILES_MIN = 0.62;
-const OUTCROP_HEIGHT_TILES_RANGE = 0.16;
-/** Depth of the lit ledge on top of each stratum, as seen from the three-quarter camera. */
-const TREAD_DEPTH_TILES_MIN = 0.1;
-const TREAD_DEPTH_TILES_RANGE = 0.05;
-/**
- * How far each stratum steps in from the one below. One side is the scarp,
- * nearly sheer; the other is the dip slope, stepping back hard — even steps
- * both sides read as a ziggurat rather than as bedrock.
- */
-const SCARP_STEP_TILES_MAX = 0.025;
-const DIP_STEP_TILES_MIN = 0.06;
-const DIP_STEP_TILES_RANGE = 0.08;
-/** Strata are tilted: the front edge climbs toward the scarp by up to this per tile of width. */
-const DIP_SLOPE_MIN = 0.08;
-const DIP_SLOPE_RANGE = 0.14;
-/** No stratum narrower than this, so the crown never becomes a spike. */
-const MIN_LAYER_HALF_WIDTH_TILES = 0.17;
-/** The bottom stratum may stop short of the full width budget by up to this. */
-const BASE_INSET_TILES_MAX = 0.04;
-/** Share of a stratum's height it keeps against its neighbours, so no stratum is a sliver. */
-const LAYER_THICKNESS_WEIGHT_MIN = 0.7;
-const LAYER_THICKNESS_WEIGHT_RANGE = 0.6;
-/**
- * How far into the ledge below a stratum's foot is buried, as a share of that
- * ledge's depth. The lower stratum is drawn over it, so this only decides how
- * much of the ledge shows; it never leaves a gap.
- */
-const UPPER_FOOT_DEPTH_MIN = 0.3;
-/** How far a stratum's front edge wanders up and down along its length. */
-const EDGE_JITTER_TILES = 0.04;
-const EDGE_SEGMENTS = 5;
-/** A face's ends lean in a little toward its top, so the strata read as broken rock, not bricks. */
-const END_LEAN_TILES = 0.045;
-
-// ── Outcrop shading ───────────────────────────────────────────────────────────
+// ── Block shading ─────────────────────────────────────────────────────────────
 
 const FACE_TOP_SHADE = 0.06;
 const FACE_BOTTOM_SHADE = -0.2;
@@ -112,38 +63,13 @@ const TREAD_BACK_SHADE = -0.08;
 const ARRIS_WIDTH_TILES = 0.03;
 const KEYLINE_WIDTH_TILES = 0.06;
 const ARRIS_ALPHA = 0.6;
-/** The dark crease where a stratum rises out of the ledge in front of it. */
-const CREASE_DEPTH_TILES = 0.03;
-const CREASE_ALPHA = 0.45;
-/** Each stratum a shade lighter than the one below, as the crown catches more sky. */
-const LAYER_LIFT_SHADE = 0.035;
 
 // ── Surface marks ─────────────────────────────────────────────────────────────
 
-const JOINTS_PER_LAYER_MAX = 3;
-const JOINT_WIDTH_TILES = 0.018;
-const JOINT_ALPHA = 0.55;
 const SPECKLE_PER_TILE = 70;
 const SPECKLE_RADIUS_TILES = 0.013;
 const SPECKLE_ALPHA = 0.28;
 
-/** A faint mineral seam running through the strata, a colour the lithology would actually carry. */
-const VEIN_COLOURS: Readonly<Record<Lithology, string>> = {
-  granite: '#ece6d4',
-  sandstone: '#a8522c',
-  basalt: '#c8d1c3',
-  limestone: '#f4efe0',
-};
-const VEIN_WIDTH_TILES = 0.022;
-const VEIN_ALPHA = 0.32;
-const VEIN_SEGMENTS = 5;
-const VEIN_WANDER_TILES = 0.05;
-const VEIN_GLINTS = 2;
-const VEIN_GLINT_RADIUS_TILES = 0.016;
-const VEIN_GLINT_ALPHA = 0.9;
-
-/** Pale gouges left by a pick: a lit scratch over a dark lip. */
-const SCARS_FRESH = 2;
 const SCARS_WORKED = 7;
 const SCAR_LENGTH_TILES_MIN = 0.05;
 const SCAR_LENGTH_TILES_RANGE = 0.04;
@@ -245,15 +171,12 @@ const CONTACT_SHADOW_MID_ALPHA = 0.2;
 
 /** Fixed stream salts, so adding a stream never re-rolls another. */
 const SALT_GEOMETRY = 1;
-const SALT_JOINTS = 2;
 const SALT_SPECKLE = 3;
-const SALT_VEIN = 4;
 const SALT_SCARS = 5;
 const SALT_CHIPS = 6;
 const SALT_SPALL = 7;
 const SALT_MOSS = 8;
 const SALT_TOOLING = 9;
-const SALT_WORKED_SCARS = 10;
 
 interface Point {
   readonly x: number;
@@ -293,16 +216,6 @@ function bodyFor(frame: RockFrame): Body {
     ts,
     frame,
   };
-}
-
-function jaggedEdge(left: number, right: number, y: number, jitter: number, rng: Rng): Point[] {
-  const points: Point[] = [];
-  for (let i = 0; i <= EDGE_SEGMENTS; i++) {
-    const x = left + ((right - left) * i) / EDGE_SEGMENTS;
-    const endpoint = i === 0 || i === EDGE_SEGMENTS;
-    points.push({ x, y: endpoint ? y : y + range(rng, -jitter, jitter) });
-  }
-  return points;
 }
 
 // ── Painting a slab ───────────────────────────────────────────────────────────
@@ -383,141 +296,7 @@ function paintSlab(ctx: Ctx, slab: Slab, palette: Palette, ts: number, lean: num
   ctx.globalAlpha = 1;
 }
 
-/** Darkens the back of a ledge where the stratum above rises out of it. */
-function paintCrease(ctx: Ctx, below: Slab, above: Slab, palette: Palette, ts: number): void {
-  ctx.fillStyle = shadeAlpha(palette.shadow, 0, CREASE_ALPHA);
-  ctx.fillRect(above.left, below.topBack, above.right - above.left, ts * CREASE_DEPTH_TILES);
-}
-
-// ── Outcrops ──────────────────────────────────────────────────────────────────
-
-/** Which way the beds tilt: they climb toward the scarp end. */
-interface Dip {
-  readonly slope: number;
-  readonly scarpOnLeft: boolean;
-}
-
-interface Strata {
-  readonly slabs: readonly Slab[];
-  readonly dip: Dip;
-}
-
-/**
- * The strata, built level; `withDip` tilts them. The bottom stratum runs
- * deeper than the ground line by as much as the tilt lifts it, so after the
- * tilt the bed still meets the ground everywhere and the ground cut in
- * `drawOutcrop` leaves bedrock emerging from the soil, not a slab propped on it.
- */
-function buildStrata(body: Body, rng: Rng): Strata {
-  const { ts, centreX, baseY } = body;
-  const dip: Dip = {
-    slope: DIP_SLOPE_MIN + rng() * DIP_SLOPE_RANGE,
-    scarpOnLeft: rng() < HALF,
-  };
-  const count = rangeInt(rng, OUTCROP_LAYERS_MIN, OUTCROP_LAYERS_MAX);
-  const totalHeight = ts * (OUTCROP_HEIGHT_TILES_MIN + rng() * OUTCROP_HEIGHT_TILES_RANGE);
-  const weights = Array.from(
-    { length: count },
-    () => LAYER_THICKNESS_WEIGHT_MIN + rng() * LAYER_THICKNESS_WEIGHT_RANGE,
-  );
-  const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
-
-  const minHalf = ts * MIN_LAYER_HALF_WIDTH_TILES;
-  let left = centreX - body.halfWidth + rng() * ts * BASE_INSET_TILES_MAX;
-  let right = centreX + body.halfWidth - rng() * ts * BASE_INSET_TILES_MAX;
-  const buried = dip.slope * body.halfWidth * 2;
-  let faceBottom = baseY + buried;
-  const slabs: Slab[] = [];
-  weights.forEach((weight, index) => {
-    const tread = ts * (TREAD_DEPTH_TILES_MIN + rng() * TREAD_DEPTH_TILES_RANGE);
-    const faceHeight = (totalHeight * weight) / weightSum - tread + (index === 0 ? buried : 0);
-    const faceTop = faceBottom - Math.max(faceHeight, tread);
-    const topBack = faceTop - tread;
-    slabs.push({
-      left,
-      right,
-      faceBottom,
-      faceTop,
-      topBack,
-      frontEdge: jaggedEdge(left, right, faceTop, ts * EDGE_JITTER_TILES, rng),
-      shade: index * LAYER_LIFT_SHADE,
-    });
-    // The next stratum rises from the back of this one's ledge.
-    faceBottom = topBack + tread * range(rng, UPPER_FOOT_DEPTH_MIN, 1);
-    const scarpStep = ts * rng() * SCARP_STEP_TILES_MAX;
-    const dipStep = ts * (DIP_STEP_TILES_MIN + rng() * DIP_STEP_TILES_RANGE);
-    left = Math.min(left + (dip.scarpOnLeft ? scarpStep : dipStep), centreX - minHalf);
-    right = Math.max(right - (dip.scarpOnLeft ? dipStep : scarpStep), centreX + minHalf);
-  });
-  return { slabs, dip };
-}
-
-/**
- * Paints under a vertical shear that lifts the beds toward the scarp. A
- * vertical shear moves nothing sideways, so the body stays inside its tile.
- */
-function withDip(ctx: Ctx, body: Body, dip: Dip, paint: () => void): void {
-  const lowEndX = dip.scarpOnLeft ? body.centreX + body.halfWidth : body.centreX - body.halfWidth;
-  const rise = dip.scarpOnLeft ? dip.slope : -dip.slope;
-  ctx.save();
-  try {
-    ctx.transform(1, rise, 0, 1, 0, -rise * lowEndX);
-    paint();
-  } finally {
-    ctx.restore();
-  }
-}
-
-/** Removes everything below the ground line: the bed runs on under the soil. */
-function cutAtGround(ctx: Ctx, body: Body): void {
-  ctx.save();
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.fillStyle = '#000';
-  const width = body.halfWidth * 2 + body.ts;
-  ctx.fillRect(body.centreX - width / 2, body.baseY, width, body.frame.bottomY - body.baseY);
-  ctx.restore();
-}
-
-/** Back to front: the upper strata stand behind the lower ones' ledges. */
-function paintStrata(ctx: Ctx, strata: readonly Slab[], palette: Palette, ts: number): void {
-  const lean = ts * END_LEAN_TILES;
-  for (let i = strata.length - 1; i >= 0; i--) {
-    paintSlab(ctx, strata[i], palette, ts, lean);
-    const hasStratumAbove = i + 1 < strata.length;
-    if (hasStratumAbove) paintCrease(ctx, strata[i], strata[i + 1], palette, ts);
-  }
-}
-
-function paintJoints(
-  ctx: Ctx,
-  strata: readonly Slab[],
-  palette: Palette,
-  ts: number,
-  rng: Rng,
-): void {
-  ctx.strokeStyle = palette.crack;
-  ctx.lineWidth = ts * JOINT_WIDTH_TILES;
-  ctx.globalAlpha = JOINT_ALPHA;
-  ctx.lineCap = 'round';
-  for (const slab of strata) {
-    const joints = rangeInt(rng, 0, JOINTS_PER_LAYER_MAX);
-    for (let i = 0; i < joints; i++) {
-      const x = range(
-        rng,
-        slab.left + ts * SCAR_LENGTH_TILES_MIN,
-        slab.right - ts * SCAR_LENGTH_TILES_MIN,
-      );
-      const drift = range(rng, -ts * EDGE_JITTER_TILES, ts * EDGE_JITTER_TILES);
-      ctx.beginPath();
-      ctx.moveTo(x, slab.faceTop);
-      ctx.lineTo(x + drift, slab.faceBottom);
-      ctx.stroke();
-    }
-  }
-  ctx.globalAlpha = 1;
-}
-
-// ── Marks shared by both forms ────────────────────────────────────────────────
+// ── Painting the marks ────────────────────────────────────────────────────────
 
 interface Extent {
   readonly left: number;
@@ -541,45 +320,6 @@ function paintSpeckle(ctx: Ctx, extent: Extent, palette: Palette, ts: number, rn
       0,
       TWO_PI,
     );
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-}
-
-/** A thin seam wandering diagonally through the stone, with a couple of glints along it. */
-function paintVein(ctx: Ctx, extent: Extent, lithology: Lithology, ts: number, rng: Rng): void {
-  const colour = VEIN_COLOURS[lithology];
-  const fromLeft = rng() < HALF;
-  const startX = fromLeft ? extent.left : extent.right;
-  const endX = fromLeft ? extent.right : extent.left;
-  const startY = range(rng, extent.top, (extent.top + extent.bottom) / 2);
-  const endY = range(rng, (extent.top + extent.bottom) / 2, extent.bottom);
-  const points: Point[] = [];
-  for (let i = 0; i <= VEIN_SEGMENTS; i++) {
-    const along = i / VEIN_SEGMENTS;
-    const wander = i === 0 || i === VEIN_SEGMENTS ? 0 : range(rng, -1, 1) * ts * VEIN_WANDER_TILES;
-    points.push({
-      x: startX + (endX - startX) * along,
-      y: startY + (endY - startY) * along + wander,
-    });
-  }
-  ctx.strokeStyle = colour;
-  ctx.globalAlpha = VEIN_ALPHA;
-  ctx.lineWidth = ts * VEIN_WIDTH_TILES;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  points.forEach((point, index) => {
-    if (index === 0) ctx.moveTo(point.x, point.y);
-    else ctx.lineTo(point.x, point.y);
-  });
-  ctx.stroke();
-  ctx.fillStyle = colour;
-  ctx.globalAlpha = VEIN_GLINT_ALPHA;
-  for (let i = 0; i < VEIN_GLINTS; i++) {
-    const at = points[rangeInt(rng, 1, VEIN_SEGMENTS - 1)];
-    ctx.beginPath();
-    ctx.arc(at.x, at.y, ts * VEIN_GLINT_RADIUS_TILES, 0, TWO_PI);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -775,32 +515,6 @@ function onTheStone(ctx: Ctx, paint: () => void): void {
   }
 }
 
-function drawOutcrop(ctx: Ctx, spec: DepositSpec, seed: number, body: Body): void {
-  const palette = rockPalette(spec.lithology);
-  const { ts } = body;
-  const { slabs, dip } = buildStrata(body, mulberry32(subSeed(seed, SALT_GEOMETRY)));
-  const extent = extentOf(slabs);
-  withDip(ctx, body, dip, () => {
-    paintStrata(ctx, slabs, palette, ts);
-    onTheStone(ctx, () => {
-      paintJoints(ctx, slabs, palette, ts, mulberry32(subSeed(seed, SALT_JOINTS)));
-      paintSpeckle(ctx, extent, palette, ts, mulberry32(subSeed(seed, SALT_SPECKLE)));
-      paintVein(ctx, extent, spec.lithology, ts, mulberry32(subSeed(seed, SALT_VEIN)));
-      paintScars(ctx, extent, palette, ts, SCARS_FRESH, mulberry32(subSeed(seed, SALT_SCARS)));
-      if (spec.worked) {
-        const extra = SCARS_WORKED - SCARS_FRESH;
-        paintScars(ctx, extent, palette, ts, extra, mulberry32(subSeed(seed, SALT_WORKED_SCARS)));
-      }
-    });
-    if (spec.worked) {
-      chipEdges(ctx, cornersOf(slabs), palette, ts, mulberry32(subSeed(seed, SALT_CHIPS)));
-    }
-  });
-  cutAtGround(ctx, body);
-  if (spec.worked) paintSpall(ctx, body, palette, mulberry32(subSeed(seed, SALT_SPALL)));
-  paintContactShadow(ctx, body);
-}
-
 // ── Dressed blocks ────────────────────────────────────────────────────────────
 
 /**
@@ -934,8 +648,7 @@ export function drawRockDeposit(ctx: Ctx, spec: DepositSpec, seed: number, frame
   const body = bodyFor(frame);
   ctx.save();
   try {
-    if (spec.form === 'outcrop') drawOutcrop(ctx, spec, seed, body);
-    else drawDressed(ctx, spec, seed, body);
+    drawDressed(ctx, spec, seed, body);
   } finally {
     ctx.restore();
   }

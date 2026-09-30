@@ -28,6 +28,8 @@ export interface FrameInkBounds {
   readonly centerY: number;
   /** Distance from that centre to the furthest opaque pixel. */
   readonly radius: number;
+  /** The highest row holding any ink, measured from the cell's top edge. */
+  readonly top: number;
 }
 
 /**
@@ -60,6 +62,7 @@ function measureInkBounds(
     centerX: frameWidth / 2,
     centerY: frameHeight / 2,
     radius: Math.hypot(frameWidth, frameHeight) / 2,
+    top: 0,
   };
 
   const surface = allocCanvas(frameWidth, frameHeight);
@@ -114,7 +117,7 @@ function measureInkBounds(
     }
   }
 
-  return { centerX, centerY, radius: Math.sqrt(radiusSq) };
+  return { centerX, centerY, radius: Math.sqrt(radiusSq), top: minY };
 }
 
 /**

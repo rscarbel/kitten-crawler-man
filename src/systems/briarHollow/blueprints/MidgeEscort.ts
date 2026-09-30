@@ -221,6 +221,7 @@ export class MidgeEscort {
       return;
     }
     cow.beginLead(MIDGE_LEAD_BAND, this.ctx.active(), { ignoresBreak: true });
+    cow.wardedFromParty = true;
     this.stage = {
       kind: 'called',
       cow,
@@ -395,6 +396,7 @@ export class MidgeEscort {
     // Beaten on the road she runs home rather than dying: whatever brings
     // her down stops a point short, and `tickLed` reads that as the scare.
     cow.cannotBeKilled = true;
+    cow.wardedFromParty = true;
     cow.healthBarDrawnElsewhere = true;
     cow.name = MIDGE_COW_NAME;
     this.lastHp = cow.hp;
@@ -515,6 +517,7 @@ export class MidgeEscort {
     if (pen === null) return;
     cow.restoreHerdHp();
     cow.cannotBeKilled = false;
+    cow.wardedFromParty = false;
     if (!cow.settleInto(pen)) this.setDownInside(cow, pen);
     this.stage = NO_STAGE;
     this.wendells.adopt(cow);

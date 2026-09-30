@@ -331,9 +331,13 @@ export interface HarvestNodeState {
   kind: 'wood' | 'stone';
   tileX: number;
   tileY: number;
-  /** Harvests the node held when first worked. */
+  /**
+   * Base-speed harvests the node held when first worked. A faster harvester
+   * spends a fraction of one per award (`harvestNodeWork`), so this measures
+   * the node's life in time, not in awards.
+   */
   capacity: number;
-  /** Harvests left; 0 once felled or crumbled. */
+  /** Base-speed harvests left, possibly fractional; 0 once felled or crumbled. */
   remaining: number;
   /** The node's tile type when first worked, which a rewind stands a crumbled rock back up as. */
   tileType: number;

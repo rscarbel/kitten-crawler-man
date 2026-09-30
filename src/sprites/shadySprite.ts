@@ -1,7 +1,7 @@
 import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { SHADY_FIGURE } from './art/shadyFigure';
-import { figureFrameCount } from './figure/figureDef';
+import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 
 /** The three rows he paints. He has one facing and never turns. */
 export type ShadyState = 'idle' | 'scratch' | 'talk';
@@ -40,17 +40,6 @@ export function prewarmShadySprite(): void {
   for (const state of SHADY_PREWARMED_STATES) prewarmFigureState(SHADY_FIGURE, state);
 }
 
-/**
- * How far his hood's crown stands above the top of his own tile, in tiles.
- *
- * He is about 1.4 tiles of art anchored with the soles near the tile's floor,
- * so everything hung off the tile origin — the quest marker most of all — lands
- * somewhere around his chest unless it is lifted by this. It clears his painted
- * crown with a deliberate gap above it rather than sitting on it, and
- * `scripts/gates-shady.ts` re-measures the crown against it on every render.
- */
-export const SHADY_HEAD_ABOVE_TILE_TILES = 0.78;
-
 /** Loop speed for the fidget, which is driven by the clock rather than a timer. */
 const IDLE_FPS = 9;
 /**
@@ -76,7 +65,7 @@ export interface ShadySpriteState {
 }
 
 /**
- * Draw Shady.
+ * Draw Shady, returning the row drawn.
  *
  * Never mirrored: he has one baked facing and stands at a fixed spot, and the
  * flip would put his belt pouch on the wrong hip.
@@ -87,11 +76,11 @@ export function drawShadySprite(
   sy: number,
   s: number,
   state: ShadySpriteState,
-): void {
+): DrawnFigureRow {
   if (state.activity === 'scratch') {
     const frame = progressFrameIndex(state.scratchProgress, FRAME_COUNT.scratch);
     drawFigureCached(ctx, SHADY_FIGURE, 'scratch', frame, sx, sy, s);
-    return;
+    return drawnFigureRow(SHADY_FIGURE, 'scratch');
   }
   const key: ShadyState = state.activity === 'talk' ? 'talk' : 'idle';
   const nowSeconds = performance.now() / MS_PER_SECOND + state.loopOffsetSeconds;
@@ -104,4 +93,5 @@ export function drawShadySprite(
     sy,
     s,
   );
+  return drawnFigureRow(SHADY_FIGURE, key);
 }

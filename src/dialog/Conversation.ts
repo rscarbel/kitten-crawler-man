@@ -28,7 +28,10 @@ import {
   beginMenuFocus,
   drawButton,
   endMenuFocus,
+  focusMenuButton,
+  menuFocusIndex,
   playButtonSound,
+  pointerOverRect,
   suppressMenuFocus,
 } from '../ui/Button';
 import { countDisplayPages, DialogBox } from '../ui/DialogBox';
@@ -84,6 +87,8 @@ const CHOICE_ROW_GAP = 8;
 const MAX_CHOICES_PER_ROW = 3;
 const CHOICES_MIN_TOP = 8;
 const MAX_NUMBERED_CHOICES = 9;
+/** Leads the selected choice's label, so selection survives a screenshot in greyscale or a colour-blind eye. */
+const SELECTED_CHOICE_MARKER = '▶ ';
 
 const FOOTER_PAD_X = 14;
 const FOOTER_Y_FROM_BOTTOM = 18;
@@ -195,6 +200,18 @@ export class Conversation {
    */
   private choiceRowSerial = 0;
   private choiceRects: ChoiceRect[] = [];
+  private drawnSelectedIndex: number | null = null;
+  /**
+   * Which row was last drawn, and the choice the pointer was over then (null
+   * for none). Hover moves keyboard focus only when the pointer moves onto a
+   * choice of a row already on screen. A cursor that merely happens to lie
+   * where a new row draws a button has not aimed at it — on a row whose
+   * Space does nothing, like a fee, taking focus there would let Space pay —
+   * and a cursor left resting on one option must not drag focus back after an
+   * arrow key moves it.
+   */
+  private lastPointerOverRow: { readonly rowSerial: number; readonly index: number | null } | null =
+    null;
   private footerButtonRect: FooterButtonRect | null = null;
   /**
    * The handle returned by the `open()` that is currently on screen — unique
@@ -220,6 +237,11 @@ export class Conversation {
   /** Where the choice or confirm row was last drawn — for checking every button landed on screen and its label fits it. */
   get choiceBounds(): ReadonlyArray<ChoiceRect> {
     return this.choiceRects;
+  }
+
+  /** Which choice the last frame drew as selected — the one wearing the marker — or null when none was. */
+  get selectedChoiceIndex(): number | null {
+    return this.drawnSelectedIndex;
   }
 
   /** The labels of the choices on offer, in their numbered order — empty while nothing is up to choose from. */
@@ -617,6 +639,7 @@ export class Conversation {
     if (request === null) return;
     this.box.render(ctx);
     this.choiceRects = [];
+    this.drawnSelectedIndex = null;
     this.footerButtonRect = null;
 
     const boxRect = this.box.rect();
@@ -744,9 +767,8 @@ export class Conversation {
     const choices = this.currentChoiceRow();
     const defaultIndex = this.keyboardDefaultIndex();
     const focusPrimaryByDefault = true;
-    if (haltsWorld) {
-      beginMenuFocus(`${FOCUS_CONTEXT}-row-${this.choiceRowSerial}`, focusPrimaryByDefault);
-    }
+    const rowFocusContext = `${FOCUS_CONTEXT}-row-${this.choiceRowSerial}`;
+    if (haltsWorld) beginMenuFocus(rowFocusContext, focusPrimaryByDefault);
 
     const fitsInRow = Math.floor(
       (boxRect.width + CHOICE_BUTTON_GAP) / (MIN_CHOICE_BUTTON_WIDTH + CHOICE_BUTTON_GAP),
@@ -770,7 +792,7 @@ export class Conversation {
       boxRect.y - CHOICE_ROW_GAP - CHOICE_BUTTON_HEIGHT - (rowCount - 1) * rowPitch;
     const firstRowY = Math.max(CHOICES_MIN_TOP, stackedFromBox);
 
-    choices.forEach((choice, index) => {
+    const placements = choices.map((choice, index) => {
       const row = Math.floor(index / perRow);
       const column = index % perRow;
       const inThisRow = Math.min(perRow, choices.length - row * perRow);
@@ -778,21 +800,55 @@ export class Conversation {
       const x =
         boxRect.x + (boxRect.width - rowWidth) / 2 + column * (buttonWidth + CHOICE_BUTTON_GAP);
       const y = firstRowY + row * rowPitch;
+      return { choice, index, x, y };
+    });
+
+    const hovered = placements.find((placement) =>
+      pointerOverRect(placement.x, placement.y, buttonWidth, CHOICE_BUTTON_HEIGHT),
+    );
+    const hoveredIndex = hovered?.index ?? null;
+    const lastPointer = this.lastPointerOverRow;
+    const rowWasAlreadyOnScreen = lastPointer?.rowSerial === this.choiceRowSerial;
+    const pointerMovedOntoChoice =
+      rowWasAlreadyOnScreen && hoveredIndex !== null && lastPointer.index !== hoveredIndex;
+    this.lastPointerOverRow = { rowSerial: this.choiceRowSerial, index: hoveredIndex };
+
+    // The selected look always marks what Space will take. On a world-halting
+    // row that is the focus ring's entry, so the pointer moves focus rather
+    // than drawing a hover look of its own. A row without a ring always takes
+    // its fixed default on Space, so that stays marked; the option under the
+    // pointer only gets the ordinary hover brighten, since a click still
+    // takes it.
+    let selectedIndex: number | null;
+    if (haltsWorld) {
+      if (pointerMovedOntoChoice) focusMenuButton(rowFocusContext, hoveredIndex);
+      const focusedIndex = menuFocusIndex(rowFocusContext);
+      const focusIsOnThisRow = focusedIndex !== null && focusedIndex < choices.length;
+      selectedIndex = focusIsOnThisRow ? focusedIndex : defaultIndex;
+    } else {
+      selectedIndex = defaultIndex;
+    }
+
+    this.drawnSelectedIndex = selectedIndex;
+    for (const { choice, index, x, y } of placements) {
       const numbered = index < MAX_NUMBERED_CHOICES;
-      const label = numbered ? `${index + 1}. ${choice.label}` : choice.label;
+      const numberedLabel = numbered ? `${index + 1}. ${choice.label}` : choice.label;
+      const isSelected = index === selectedIndex;
+      const label = isSelected ? `${SELECTED_CHOICE_MARKER}${numberedLabel}` : numberedLabel;
       drawButton(ctx, {
         x,
         y,
         width: buttonWidth,
         height: CHOICE_BUTTON_HEIGHT,
         label,
-        ...(choice.tone === 'exit' ? BUTTON_PRESETS.primary : BUTTON_PRESETS.villagerTopic),
+        ...(isSelected ? BUTTON_PRESETS.dialogChoiceSelected : BUTTON_PRESETS.dialogChoice),
         labelSize: CONVERSATION_CHOICE_LABEL_SIZE,
         primaryAction: index === defaultIndex,
         questRelated: choice.tone === 'quest',
+        selectionDrawnByCaller: haltsWorld || isSelected,
       });
       this.choiceRects.push({ index, x, y, w: buttonWidth, h: CHOICE_BUTTON_HEIGHT, label });
-    });
+    }
 
     if (haltsWorld) endMenuFocus();
   }

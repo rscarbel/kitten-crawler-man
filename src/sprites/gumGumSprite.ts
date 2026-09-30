@@ -28,6 +28,10 @@ const GG_ARM_LENGTH = 0.16;
 /** Big street-elf ears. */
 const GG_EAR_LENGTH = 0.14;
 const GG_EAR_HALF_HEIGHT = 0.035;
+/** How many ear half-heights the tip rises above the ear's root. */
+const GG_EAR_TIP_RISE = 3;
+/** She is painted about the centre of her box. */
+const GG_BOX_CENTRE = 0.5;
 
 /** Nervous eyes. */
 const GG_EYE_R = 0.025;
@@ -52,6 +56,17 @@ const CORPSE_ARM_LENGTH = 0.18;
 
 const POOL_COLOR = 'rgba(120, 16, 20, 0.75)';
 const POOL_EDGE_COLOR = 'rgba(70, 8, 10, 0.85)';
+
+/**
+ * The screen y of the highest point she paints — her crown or her ear tips,
+ * whichever stands taller — when drawn in a box whose top is `sy` and size `s`.
+ * Nothing in her idle moves vertically, so one answer holds for every frame.
+ */
+export function gumGumArtTop(sy: number, s: number): number {
+  const earTipY = GG_HEAD_Y - GG_EAR_HALF_HEIGHT * GG_EAR_TIP_RISE;
+  const crownY = GG_HEAD_Y - GG_HEAD_R;
+  return sy + s * (GG_BOX_CENTRE + Math.min(earTipY, crownY));
+}
 
 /**
  * Draw GumGum — a small, hunched street elf clutching a patched coat, ears
@@ -134,7 +149,10 @@ export function drawGumGumSprite(
     const earRootX = headX + side * GG_HEAD_R * s * 0.85;
     ctx.beginPath();
     ctx.moveTo(earRootX, headY - GG_EAR_HALF_HEIGHT * s);
-    ctx.lineTo(earRootX + side * GG_EAR_LENGTH * s, headY - GG_EAR_HALF_HEIGHT * s * 3);
+    ctx.lineTo(
+      earRootX + side * GG_EAR_LENGTH * s,
+      headY - GG_EAR_HALF_HEIGHT * s * GG_EAR_TIP_RISE,
+    );
     ctx.lineTo(earRootX, headY + GG_EAR_HALF_HEIGHT * s);
     ctx.closePath();
     ctx.fill();

@@ -9,6 +9,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
+        "frameCount": 1
       }
     },
     "tileTypeId": 87
@@ -23,6 +35,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
+        "frameCount": 1
       }
     }
   },
@@ -35,6 +59,18 @@
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }
@@ -49,6 +85,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
+        "frameCount": 1
       }
     }
   },
@@ -61,6 +109,18 @@
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }
@@ -75,6 +135,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
+        "frameCount": 1
       }
     }
   },
@@ -87,6 +159,18 @@
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }
@@ -101,6 +185,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
+        "frameCount": 1
       }
     }
   },
@@ -113,6 +209,18 @@
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     },
@@ -128,6 +236,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
+        "frameCount": 1
       }
     }
   },
@@ -140,6 +260,18 @@
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }
@@ -154,6 +286,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
+        "frameCount": 1
       }
     }
   },
@@ -166,6 +310,18 @@
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }
@@ -180,6 +336,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
+        "frameCount": 1
       }
     }
   },
@@ -193,6 +361,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
+        "frameCount": 1
       }
     }
   },
@@ -205,6 +385,18 @@
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "chipped": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }
@@ -220,8 +412,16 @@
         "row": 0,
         "frameCount": 1
       },
-      "worked": {
+      "chipped": {
         "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     },
@@ -238,8 +438,16 @@
         "row": 0,
         "frameCount": 1
       },
-      "worked": {
+      "chipped": {
         "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }
@@ -255,8 +463,16 @@
         "row": 0,
         "frameCount": 1
       },
-      "worked": {
+      "chipped": {
         "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }
@@ -272,8 +488,16 @@
         "row": 0,
         "frameCount": 1
       },
-      "worked": {
+      "chipped": {
         "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }
@@ -289,8 +513,16 @@
         "row": 0,
         "frameCount": 1
       },
-      "worked": {
+      "chipped": {
         "row": 1,
+        "frameCount": 1
+      },
+      "broken": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "remnant": {
+        "row": 3,
         "frameCount": 1
       }
     }

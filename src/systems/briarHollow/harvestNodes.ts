@@ -14,7 +14,6 @@ import {
   BOULDER_LARGE,
   BOULDER_SMALL,
   PEBBLE_SCATTER,
-  PROP_DAMAGE_STAGE_CRACKED,
   ROCK_DEPOSIT,
   RUBBLE,
   TREE,
@@ -23,6 +22,7 @@ import {
   type TileContent,
 } from '../../map/tileTypes';
 import { inferFloorType } from '../../map/tiles/helpers';
+import { ROCK_DAMAGE_STAGE_INTACT, rockDamageStageFor } from '../../map/rockDamage';
 import type { HarvestKind } from '../../core/craftPerks';
 import type { HarvestNodeState } from '../../core/briarHollowState';
 
@@ -106,20 +106,21 @@ export function createNodeState(
   };
 }
 
-/** Below this share of its capacity a deposit shows its worked-over look. */
-export const WORKED_CAPACITY_FRACTION = 0.5;
-
 /**
- * Brings a deposit's look in line with how much it has left: worked over once
- * it is below half, intact otherwise. Only deposits have a worked look; the
- * stage rides on the tile because the tile renderer reads nothing else.
+ * Brings a rock's look in line with how much it has left: intact, chipped,
+ * broken, then a remnant (`rockDamageStageFor`). The stage rides on the tile
+ * because the tile renderer reads nothing else. Trees show their wear through
+ * `TreeSystem`, not here.
  */
 export function syncWornLook(gameMap: GameMap, state: HarvestNodeState): void {
   const tile = tileAt(gameMap, state.tileX, state.tileY);
-  if (tile?.type !== ROCK_DEPOSIT) return;
-  const worn = state.remaining > 0 && state.remaining < state.capacity * WORKED_CAPACITY_FRACTION;
-  if (worn) tile.damageStage = PROP_DAMAGE_STAGE_CRACKED;
-  else delete tile.damageStage;
+  if (tile === null || !STONE_NODE_TYPES.has(tile.type)) return;
+  const stage =
+    state.remaining > 0
+      ? rockDamageStageFor(state.remaining, state.capacity)
+      : ROCK_DAMAGE_STAGE_INTACT;
+  if (stage === ROCK_DAMAGE_STAGE_INTACT) delete tile.damageStage;
+  else tile.damageStage = stage;
 }
 
 /** The ground a rock leaves behind: a deposit breaks into rubble, a boulder into loose stones. */
@@ -165,6 +166,7 @@ export function crumbleRock(
   if (tile === null || !STONE_NODE_TYPES.has(tile.type)) return;
   tile.groundType ??= inferFloorType(gameMap.structure, tileX, tileY);
   tile.type = remainsOf(tile.type);
+  delete tile.damageStage;
   markNeighbourhoodDirty(gameMap, tileX, tileY);
   onTileChanged(tileX, tileY);
 }

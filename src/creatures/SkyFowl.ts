@@ -128,8 +128,8 @@ export class SkyFowl extends Mob {
    * hand-swung blows stay blocked, so that swinging at something else while a
    * bird is underfoot never starts it by accident.
    */
-  override takesPlayerDamage(damageType: PlayerDamageType | null): boolean {
-    return super.takesPlayerDamage(damageType) || !HAND_SWUNG_DAMAGE_TYPES.has(damageType);
+  protected override admitsPlayerDamage(damageType: PlayerDamageType | null): boolean {
+    return super.admitsPlayerDamage(damageType) || !HAND_SWUNG_DAMAGE_TYPES.has(damageType);
   }
   private peckCooldown = 0;
   private peckAnimTimer = 0;

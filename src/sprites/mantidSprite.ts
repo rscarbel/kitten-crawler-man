@@ -1,6 +1,11 @@
 import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
 import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
-import { figureFrameCount, type FigureDef } from './figure/figureDef';
+import {
+  figureFrameCount,
+  type FigureDef,
+  type DrawnFigureRow,
+  drawnFigureRow,
+} from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { MANTID_FIGURE, MANTIS_FIGURE, type MantidVariantId } from './art/mantidFigure';
 
@@ -242,7 +247,7 @@ export const MANTID_BODY_PART_KEY = 'mantid';
 export const MANTIS_BODY_PART_KEY = 'mantis';
 
 /**
- * Draws a mantis of either build.
+ * Draws a mantis of either build, returning the row drawn.
  *
  * Priority runs rage → flurry → slash → walk → idle, so the invincible second
  * always wins: it is the player's only warning, and a pose it can lose to is a
@@ -255,7 +260,7 @@ export function drawMantidSprite(
   sy: number,
   s: number,
   state: MantidSpriteState = {},
-): void {
+): DrawnFigureRow {
   const {
     walkFrame = 0,
     isMoving = false,
@@ -283,7 +288,7 @@ export function drawMantidSprite(
       s,
       { flipX: false },
     );
-    return;
+    return drawnFigureRow(figure, 'rage_pause');
   }
 
   if (isFlurrying) {
@@ -298,7 +303,7 @@ export function drawMantidSprite(
       s,
       { flipX },
     );
-    return;
+    return drawnFigureRow(figure, key);
   }
 
   if (slashProgress !== null) {
@@ -313,7 +318,7 @@ export function drawMantidSprite(
       s,
       { flipX },
     );
-    return;
+    return drawnFigureRow(figure, key);
   }
 
   if (isMoving) {
@@ -328,7 +333,7 @@ export function drawMantidSprite(
       s,
       { flipX },
     );
-    return;
+    return drawnFigureRow(figure, key);
   }
 
   const key = stateFor('idle', view);
@@ -342,4 +347,5 @@ export function drawMantidSprite(
     s,
     { flipX },
   );
+  return drawnFigureRow(figure, key);
 }

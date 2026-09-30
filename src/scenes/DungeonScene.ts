@@ -941,6 +941,8 @@ const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 const TREE_FALL_SOUNDS = ['tree_fall_1', 'tree_fall_2', 'tree_fall_3', 'tree_fall_4'] as const;
+/** A nursery barrier giving way — the smash, not the per-blow crack the scene cycles separately. */
+const BARRIER_BREAK_SOUNDS = ['wood_smashing_1', 'wood_smashing_2'] as const;
 const MONGO_ADULT_SQUAWK_MIN_LEVEL = 5;
 const MONGO_ADULT_HAPPY_SQUAWKS = [
   'happy_adult_mongo_squawk_1',
@@ -1833,6 +1835,7 @@ export class DungeonScene extends GameplayScene {
         );
       },
       levelDef.levelledCurve,
+      levelDef.defendQuestIntensity,
     );
     // The column's layout state is module-level and outlives a scene; a new
     // one starts from nothing until its first frame says otherwise.
@@ -2311,6 +2314,12 @@ export class DungeonScene extends GameplayScene {
               companionArrival,
               this.partyCrafts,
               this.briarHollowState,
+              // Asked live rather than snapshotted: progress threaded by
+              // reference (the anchor shards, the murders) moves indoors, and
+              // the Journal should say so while the party is still inside.
+              this.hasQuestJournal
+                ? { entries: () => this.collectTrackerEntries(), progress: this.journalProgress }
+                : undefined,
             ),
           );
         },
@@ -3887,50 +3896,39 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * A standing column of light on the pinned objective's own tile.
+   * The column of light over every objective place on screen: the pinned
+   * objective's own tile, and every quest still on offer, unaccepted — Madame
+   * Voss's table included, before the player has ever spoken to her.
    *
-   * The counterpart to the arrow below, and deliberately the opposite trade: the
-   * arrow gives a bearing from anywhere and goes quiet up close, where a
-   * direction is no longer the question. This is only ever drawn when the tile
-   * is on screen, and answers the question that replaces it — which of the
-   * things now in front of the player is the one.
-   */
-  private renderPinnedObjectiveBeacon(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-  ): void {
-    const target = this.pinnedObjectiveTile;
-    if (target === null || target.wearsOwnMarker === true) return;
-    drawObjectiveBeacon(
-      ctx,
-      target.x * TILE_SIZE - camX,
-      target.y * TILE_SIZE - camY,
-      TILE_SIZE,
-      PINNED_ARROW_COLOR,
-      performance.now(),
-      target,
-    );
-  }
-
-  /**
-   * A beacon over every quest still on offer, unaccepted — Madame Voss's table
-   * included, before the player has ever spoken to her.
+   * The pinned beam is the counterpart to the world arrow, and deliberately the
+   * opposite trade: the arrow gives a bearing from anywhere and goes quiet up
+   * close, where a direction is no longer the question. The beam is only ever
+   * drawn when the tile is on screen, and answers the question that replaces
+   * it — which of the things now in front of the player is the one.
    *
-   * Independent of the pin on purpose: nothing here implies a quest is under
-   * way, only that one could be started. `resolvePinnedEntry` never falls
-   * back to picking one of these for the player — that would read as the
-   * floor starting with a quest already active — so this is the only thing
-   * that points at a quest giver before their quest is accepted.
+   * The available beams are independent of the pin on purpose: nothing about
+   * them implies a quest is under way, only that one could be started.
+   * `resolvePinnedEntry` never falls back to picking one of these for the
+   * player — that would read as the floor starting with a quest already active
+   * — so this is the only thing that points at a quest giver before their quest
+   * is accepted.
+   *
+   * Drawn before the Y-sorted pass, so the marked building or prop — and anyone
+   * walking past it — stands in front of its own light. That reads the tracker
+   * list a frame before this frame's rebuild, which no one can see.
    */
-  private renderAvailableQuestBeacons(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-  ): void {
+  private renderObjectiveBeacons(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.gameOver || this.menus.pauseMenu.isOpen) return;
     const now = performance.now();
+    const pinned = this.pinnedObjectiveTile;
+    // A pinned quest that is still only on offer is also in the available list;
+    // drawing it twice would stack two additive beams at double brightness.
+    let pinnedAlreadyLit = false;
     for (const target of availableTargets(this._trackerEntries)) {
       if (target.wearsOwnMarker === true) continue;
+      if (pinned !== null && pinned.x === target.x && pinned.y === target.y) {
+        pinnedAlreadyLit = true;
+      }
       drawObjectiveBeacon(
         ctx,
         target.x * TILE_SIZE - camX,
@@ -3941,6 +3939,16 @@ export class DungeonScene extends GameplayScene {
         target,
       );
     }
+    if (pinned === null || pinned.wearsOwnMarker === true || pinnedAlreadyLit) return;
+    drawObjectiveBeacon(
+      ctx,
+      pinned.x * TILE_SIZE - camX,
+      pinned.y * TILE_SIZE - camY,
+      TILE_SIZE,
+      PINNED_ARROW_COLOR,
+      now,
+      pinned,
+    );
   }
 
   /**
@@ -6665,11 +6673,21 @@ export class DungeonScene extends GameplayScene {
     // With the rest of the HUD chrome, and crucially *above* the world hit-tests
     // below: those compare screen coordinates against loot drops and chests, so
     // anything drawn behind the button would otherwise take a click aimed at it.
-    if (this.journalButtonRect !== null && pointInRect(mx, my, this.journalButtonRect)) {
+    // Not where the bag or gear panel is drawn over them: both paint on top.
+    const hudButtonsUncovered = !this.menus.panelCovers(mx, my);
+    if (
+      hudButtonsUncovered &&
+      this.journalButtonRect !== null &&
+      pointInRect(mx, my, this.journalButtonRect)
+    ) {
       this.openQuestJournal();
       return;
     }
-    if (this.buildButtonRect !== null && pointInRect(mx, my, this.buildButtonRect)) {
+    if (
+      hudButtonsUncovered &&
+      this.buildButtonRect !== null &&
+      pointInRect(mx, my, this.buildButtonRect)
+    ) {
       this.briarHollowKit?.openConstruction();
       return;
     }
@@ -7013,6 +7031,9 @@ export class DungeonScene extends GameplayScene {
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
+    // Straight after the floor, ahead of every quest system's own props, so a
+    // clue scene or a grate stands in front of the light marking it.
+    this.renderObjectiveBeacons(ctx, camX, camY);
     this.briarHollowKit?.renderGround(ctx, camX, camY);
     this.gathering?.renderGround(ctx, camX, camY);
     this.bopca.renderObjects(ctx, camX, camY, this.active(), this.inactive());
@@ -7044,6 +7065,7 @@ export class DungeonScene extends GameplayScene {
       spider.renderSpitProjectile(ctx, camX, camY, TILE_SIZE);
     }
     this.spiderQuest.renderCutsceneEffects(ctx, camX, camY);
+    this.defendQuest.renderAbove(ctx, camX, camY, this.active());
     this.briarHollowKit?.renderAbove(ctx, camX, camY);
     this.gathering?.renderAbove(ctx, camX, camY);
     this.circusAmbience?.renderAbove(ctx, camX, camY);
@@ -7138,8 +7160,6 @@ export class DungeonScene extends GameplayScene {
         ? this.miniMap.EXPANDED_SIZE
         : this.miniMap.NORMAL_SIZE;
       renderKnockedOutUI(ctx, this.inactive(), mmSize);
-      this.renderAvailableQuestBeacons(ctx, camX, camY);
-      this.renderPinnedObjectiveBeacon(ctx, camX, camY);
       this.recall.render(ctx, camX, camY);
 
       // Only one of these may be on screen at once — a downed companion always
@@ -7234,7 +7254,7 @@ export class DungeonScene extends GameplayScene {
     if (showAchievUI) {
       this.achievementUI.drawAchievementIcon(
         ctx,
-        this.miniMap,
+        UIRenderer.achievementChipRect(this.miniMap),
         this.gameOver,
         this.menus.pauseMenu.isOpen,
       );
@@ -7275,7 +7295,11 @@ export class DungeonScene extends GameplayScene {
         const outstanding = this._trackerEntries.filter((entry) =>
           isOutstanding(entry.status),
         ).length;
-        this.journalButtonRect = UIRenderer.drawJournalButton(ctx, this.miniMap, outstanding);
+        this.journalButtonRect = UIRenderer.drawJournalButton(
+          ctx,
+          UIRenderer.journalButtonRect(this.miniMap),
+          outstanding,
+        );
       } else {
         this.journalButtonRect = null;
       }
@@ -7284,7 +7308,7 @@ export class DungeonScene extends GameplayScene {
         defences?.buildButtonVisible === true
           ? UIRenderer.drawBuildButton(
               ctx,
-              this.miniMap,
+              UIRenderer.buildButtonRect(this.miniMap),
               defences.constructionMenuOpen,
               defences.buildButtonPulseSeconds,
             )
@@ -7866,6 +7890,14 @@ export class DungeonScene extends GameplayScene {
     if (this.defendQuest.woodPickupSoundPending) {
       this.defendQuest.woodPickupSoundPending = false;
       this.audio?.play('picking_up_ground_object');
+    }
+    if (this.defendQuest.noWoodSoundPending) {
+      this.defendQuest.noWoodSoundPending = false;
+      this.audio?.play('error_taking_action');
+    }
+    if (this.defendQuest.barrierBrokenSoundPending) {
+      this.defendQuest.barrierBrokenSoundPending = false;
+      this.audio?.playRandom(BARRIER_BREAK_SOUNDS);
     }
     this.circusQuest.update(ctx);
     this.murderQuest.update(ctx);

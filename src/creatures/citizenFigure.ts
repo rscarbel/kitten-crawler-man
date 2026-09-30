@@ -8,6 +8,7 @@
  * and cadence logic stay species-agnostic, same as before this axis existed).
  */
 
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { mulberry32, pick, subSeed } from '../sprites/person/rng';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import { pickTownCastLook, type TownCastLook } from '../sprites/person/townCastLooks';
@@ -200,7 +201,7 @@ export function prewarmAndPinCitizenTalk(
   prewarmAndPinTownCastTalk(figure.look, facingX, facingY);
 }
 
-/** Draws one citizen through whichever cast its figure belongs to. */
+/** Draws one citizen through whichever cast its figure belongs to, returning the row drawn. */
 export function drawCitizenSprite(
   ctx: CanvasRenderingContext2D,
   figure: CitizenFigure,
@@ -208,11 +209,10 @@ export function drawCitizenSprite(
   sy: number,
   tileSize: number,
   state: CitizenSpriteState,
-): void {
+): DrawnFigureRow | undefined {
   if (figure.species === 'skyfowl') {
-    drawSkyfowlCastSprite(ctx, figure.look.id, sx, sy, tileSize, state);
-    return;
+    return drawSkyfowlCastSprite(ctx, figure.look.id, sx, sy, tileSize, state);
   }
   const humanState: TownCastSpriteState = state;
-  drawTownCastSprite(ctx, figure.look, sx, sy, tileSize, humanState, true);
+  return drawTownCastSprite(ctx, figure.look, sx, sy, tileSize, humanState, true);
 }

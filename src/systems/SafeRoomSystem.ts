@@ -18,12 +18,12 @@ import {
   prewarmMordecaiForLevel,
 } from '../sprites/mordecaiSprite';
 import { MordecaiWanderer } from './mordecaiWander';
+import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import { drawSafeRoomBed, restedPulse } from '../sprites/safeRoomBed';
 import { drawStoveSteam } from '../sprites/safeRoomDecor';
 import { drawSpeechBubble } from '../sprites/speechBubble';
 import {
   drawQuestMarker,
-  questMarkerAnchorAbove,
   questMarkerColorFor,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
@@ -137,12 +137,10 @@ export class SafeRoomSystem implements GameSystem {
   private _hasBeenInSafeRoom = false;
   private markerSource: MordecaiMarkerSource | null = null;
 
-  // Magic number constants
   private static readonly TILE_CENTER = 0.5;
   /** Tiles from where he stands within which a press talks to him. */
   static readonly MORDECAI_NEAR_DISTANCE = 2.5;
   private static readonly BED_NEAR_DISTANCE = 1.8;
-  private static readonly MARKER_GAP_PX = 3;
   /** Reach and strength of one standing lantern's pool of light. */
   private static readonly LANTERN_LIGHT_RADIUS_TILES = 3.2;
   private static readonly LANTERN_LIGHT_ALPHA = 0.16;
@@ -616,7 +614,7 @@ export class SafeRoomSystem implements GameSystem {
         render: (ctx, camX, camY, ts) => {
           const msx = wander.x - camX;
           const msy = wander.y - camY;
-          drawMordecaiForLevel(
+          const drawnRow = drawMordecaiForLevel(
             ctx,
             msx,
             msy,
@@ -634,12 +632,14 @@ export class SafeRoomSystem implements GameSystem {
           );
           const overheadY = msy - mordecaiOverheadLift(this.levelId, ts);
           if (markerColor !== undefined) {
-            const headTop = mordecaiHeadTop(this.levelId, msy, ts);
+            const headTop =
+              drawnRow === undefined
+                ? mordecaiHeadTop(this.levelId, msy, ts)
+                : figureRowInkTop(drawnRow, msy, ts);
             const clearOf = promptShown
               ? Math.min(headTop, interactionPromptTop(overheadY))
               : headTop;
-            const markerY = questMarkerAnchorAbove(clearOf - SafeRoomSystem.MARKER_GAP_PX, ts);
-            drawQuestMarker(ctx, msx, markerY, ts, markerGlyph, markerColor);
+            drawQuestMarker(ctx, msx, clearOf, ts, markerGlyph, markerColor);
           } else if (showBubble) {
             drawSpeechBubble(ctx, msx, overheadY, ts, speechBubblePulse);
           }

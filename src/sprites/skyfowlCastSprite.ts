@@ -15,7 +15,7 @@ import {
   pinFigureState,
   prewarmFigureState,
 } from './figure/figureFrameCache';
-import { figureFrameCount } from './figure/figureDef';
+import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import type { SkyfowlView } from './art/skyfowl/rig';
 import {
   castRow,
@@ -113,7 +113,11 @@ export function skyfowlCastEventFrame(
   return castRow(id, skyfowlCastStateFor(action, facingX, facingY))?.events?.[event];
 }
 
-/** Draws one skyfowl cast member. Only the side view is ever mirrored. */
+/**
+ * Draws one skyfowl cast member, and returns the row drawn, or `undefined`
+ * when the look paints nothing for that action. Only the side view is ever
+ * mirrored.
+ */
 export function drawSkyfowlCastSprite(
   ctx: CanvasRenderingContext2D,
   id: SkyfowlLookId,
@@ -121,12 +125,12 @@ export function drawSkyfowlCastSprite(
   sy: number,
   tileSize: number,
   state: SkyfowlCastSpriteState,
-): void {
+): DrawnFigureRow | undefined {
   const figure = skyfowlCastFigure(id);
   const view = viewFor(state.action, state.facingX, state.facingY);
   const key = skyfowlCastStateFor(state.action, state.facingX, state.facingY, state.danceStyle);
   const frames = figureFrameCount(figure, key);
-  if (frames === 0) return;
+  if (frames === 0) return undefined;
   const flipX = view === 'side' && state.facingX < 0;
 
   const nowSeconds = performance.now() / MS_PER_SECOND;
@@ -143,9 +147,10 @@ export function drawSkyfowlCastSprite(
   }
   if (COMBAT_ONLY_ACTIONS.has(state.action)) {
     drawFigureCached(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
-    return;
+  } else {
+    drawFigureCachedApprox(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
   }
-  drawFigureCachedApprox(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
+  return drawnFigureRow(figure, key);
 }
 
 /**

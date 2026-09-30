@@ -5,6 +5,7 @@ import type { XpDiminishingTier } from './xpDiminishing';
 import type { AssetGroup } from '../core/assetGroups';
 import type { LevelledCurve } from '../creatures/mobLevelScaling';
 import type { Difficulty } from '../core/difficultyProfiles';
+import type { DefendQuestIntensity } from './defendQuestIntensity';
 
 /**
  * One entry of a camp's roster: a mob type, a count and a level range.
@@ -473,6 +474,11 @@ export interface LevelDef {
    * the encounter is optional side content.
    */
   defendQuestWave?: DefendQuestWaveDef;
+  /**
+   * How many grates the nursery carries and how hard its wave presses. Absent
+   * means `BASE_DEFEND_QUEST_INTENSITY`.
+   */
+  defendQuestIntensity?: DefendQuestIntensity;
   /** Whether mobs on this floor may roll the rare Slingshot world drop. */
   slingshotDrops?: boolean;
   /** Position-relative spawn rules evaluated at level construction time. */

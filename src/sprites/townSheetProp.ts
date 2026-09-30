@@ -15,7 +15,7 @@
  */
 
 import { getSpriteDefByKey } from '../core/SpriteLoader';
-import { drawSprite } from '../core/SpriteRenderer';
+import { drawSprite, spriteStateInkTop } from '../core/SpriteRenderer';
 
 export function drawTownSheetFrame(
   ctx: CanvasRenderingContext2D,
@@ -31,4 +31,21 @@ export function drawTownSheetFrame(
   const stateDef = def.states.get(state);
   if (stateDef === undefined) return;
   drawSprite(ctx, def, stateDef, frame, sx, sy, tileSize);
+}
+
+/**
+ * The screen y of the highest pixel a town sheet state paints, for a prop whose
+ * tile's top-left is at screen y `sy`; `undefined` while the sheet is not
+ * loaded, when nothing is drawn to measure.
+ */
+export function townSheetStateInkTop(
+  key: string,
+  state: string,
+  sy: number,
+  tileSize: number,
+): number | undefined {
+  const def = getSpriteDefByKey(key);
+  const stateDef = def?.states.get(state);
+  if (def === undefined || stateDef === undefined) return undefined;
+  return spriteStateInkTop(def, stateDef, sy, tileSize);
 }

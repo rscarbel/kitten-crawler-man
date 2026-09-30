@@ -95,6 +95,7 @@ import {
   type RoomWall,
 } from './roomDoorways';
 import { worldRandom } from '../core/WorldRandom';
+import { BASE_NURSERY_GRATE_COUNT } from '../levels/defendQuestIntensity';
 
 /**
  * What a generated room is *for*. Carried on the room itself rather than
@@ -437,12 +438,20 @@ const LOOP_ATTEMPT_FACTOR = 10;
 const EXTRA_LOOP_MIN_DIST = 14;
 const EXTRA_LOOP_MAX_DIST = 40;
 
-/** How far inside a quest-room wall its two grates sit. */
+/** How far inside a quest-room wall its grates sit. */
 const QUEST_GRATE_WALL_INSET = 2;
-/** How far each of a wall's two grates sits from the room's midline, along the wall. */
+/** How far a wall's outermost grates sit from the room's midline, along the wall; the rest are spaced evenly between. */
 const QUEST_GRATE_SPREAD = 3;
-/** Grates the quest room carries, split evenly between two of its walls. */
+/** Walls the quest room's grates are split evenly between. */
 const QUEST_GRATE_WALLS = 2;
+/**
+ * Grates kept at least this many tiles along the wall from any doorway in it,
+ * so none sits in the mouth of a corridor where the arriving party would walk
+ * straight onto a breach.
+ */
+const QUEST_GRATE_DOORWAY_CLEARANCE = 2;
+/** Grates never sit closer than this (Chebyshev tiles) to one another. */
+const QUEST_GRATE_MIN_SEPARATION = 2;
 
 /** Quest room distance cap from the last gateway boss room, in progression mode. */
 const QUEST_ROOM_MAX_DIST_FROM_EXIT = 90;
@@ -996,40 +1005,89 @@ function labScientistTile(entrance: { wall: RoomWall; tile: Point }, bounds: Rec
 }
 
 /**
- * Where the quest room's four bugaboo grates go.
+ * Where the quest room's bugaboo grates go.
  *
- * The room is a pass-through with a doorway on two or more walls, so the old
- * fixed east/west columns could put a grate in the mouth of one. Walls with no
- * doorway are preferred, and the grates sit a fixed inset inside the wall and
- * spread either side of the room's midline, so nothing lands where a corridor
- * arrives and the goblin mother at the centre always has a clear approach.
+ * The room is a pass-through with a doorway on two or more walls, so fixed
+ * columns could put a grate in the mouth of one. Walls with no doorway are
+ * preferred, each takes an even share of the grates spread along it a fixed
+ * inset inside the wall, and a spot too close to a doorway in that same wall,
+ * or touching a grate already placed, is passed over for the next wall — so nothing lands where a corridor arrives
+ * and the goblin mother at the centre always has a clear approach. Only a room
+ * with doorways on every wall falls back to the passed-over spots.
  */
-function questGrateTiles(bounds: Rect, doorways: ReadonlyArray<RoomDoorway>): Point[] {
+function questGrateTiles(
+  bounds: Rect,
+  doorways: ReadonlyArray<RoomDoorway>,
+  grateCount: number,
+): Point[] {
   const doorwayWalls = new Set(doorways.map((doorway) => doorway.wall));
   const walls = ROOM_WALL_OUTWARD.map((side) => side.wall);
   const ranked = [
     ...walls.filter((wall) => !doorwayWalls.has(wall)),
     ...walls.filter((wall) => doorwayWalls.has(wall)),
-  ].slice(0, QUEST_GRATE_WALLS);
+  ];
+  const perWall = Math.ceil(grateCount / QUEST_GRATE_WALLS);
+  const offsets = evenlySpacedOffsets(perWall, QUEST_GRATE_SPREAD);
 
   const centreX = Math.floor(bounds.x + bounds.w / 2);
   const centreY = Math.floor(bounds.y + bounds.h / 2);
   const lastX = bounds.x + bounds.w - 1;
   const lastY = bounds.y + bounds.h - 1;
+  const alongWall = (wall: RoomWall, tile: Point): number =>
+    wall === 'north' || wall === 'south' ? tile.x : tile.y;
+  const tooCloseToDoorway = (wall: RoomWall, tile: Point): boolean =>
+    doorways.some(
+      (doorway) =>
+        doorway.wall === wall &&
+        doorway.tiles.some(
+          (doorTile) =>
+            Math.abs(alongWall(wall, doorTile) - alongWall(wall, tile)) <
+            QUEST_GRATE_DOORWAY_CLEARANCE,
+        ),
+    );
 
   const tiles: Point[] = [];
+  const passedOver: Point[] = [];
+  // Two walls that meet at a corner would otherwise put their end grates
+  // diagonally touching, and one barrier's boards would overhang the other.
+  const touchesChosenGrate = (tile: Point): boolean =>
+    tiles.some(
+      (chosen) =>
+        Math.max(Math.abs(chosen.x - tile.x), Math.abs(chosen.y - tile.y)) <
+        QUEST_GRATE_MIN_SEPARATION,
+    );
   for (const wall of ranked) {
-    for (const offset of [-QUEST_GRATE_SPREAD, QUEST_GRATE_SPREAD]) {
-      if (wall === 'north')
-        tiles.push({ x: centreX + offset, y: bounds.y + QUEST_GRATE_WALL_INSET });
-      else if (wall === 'south')
-        tiles.push({ x: centreX + offset, y: lastY - QUEST_GRATE_WALL_INSET });
-      else if (wall === 'west')
-        tiles.push({ x: bounds.x + QUEST_GRATE_WALL_INSET, y: centreY + offset });
-      else tiles.push({ x: lastX - QUEST_GRATE_WALL_INSET, y: centreY + offset });
+    let takenOnWall = 0;
+    for (const offset of offsets) {
+      if (tiles.length >= grateCount || takenOnWall >= perWall) break;
+      const tile =
+        wall === 'north'
+          ? { x: centreX + offset, y: bounds.y + QUEST_GRATE_WALL_INSET }
+          : wall === 'south'
+            ? { x: centreX + offset, y: lastY - QUEST_GRATE_WALL_INSET }
+            : wall === 'west'
+              ? { x: bounds.x + QUEST_GRATE_WALL_INSET, y: centreY + offset }
+              : { x: lastX - QUEST_GRATE_WALL_INSET, y: centreY + offset };
+      if (tooCloseToDoorway(wall, tile) || touchesChosenGrate(tile)) {
+        passedOver.push(tile);
+        continue;
+      }
+      tiles.push(tile);
+      takenOnWall++;
     }
   }
+  for (const tile of passedOver) {
+    if (tiles.length >= grateCount) break;
+    tiles.push(tile);
+  }
   return tiles;
+}
+
+/** `count` whole offsets spread evenly from `-spread` to `spread`; a lone one sits on the midline. */
+function evenlySpacedOffsets(count: number, spread: number): number[] {
+  if (count <= 1) return [0];
+  const step = (spread * 2) / (count - 1);
+  return Array.from({ length: count }, (_, index) => Math.round(-spread + step * index));
 }
 
 // ── Main generator ────────────────────────────────────────────────────────────
@@ -1044,6 +1102,8 @@ export interface DungeonLevelOptions {
   hasSpiderLab?: boolean;
   /** When present, forced-progression mode replaces free room placement. */
   progression?: ProgressionDef;
+  /** Grates cut into the defense quest's room. Defaults to the base nursery's four. */
+  questGrateCount?: number;
 }
 
 export interface GenerateDungeonOptions extends DungeonLevelOptions {
@@ -1331,6 +1391,7 @@ function buildDungeon(
     bossTypes = [],
     hasSpiderLab = false,
     progression,
+    questGrateCount = BASE_NURSERY_GRATE_COUNT,
   } = options;
   const BORDER = 5;
 
@@ -2656,7 +2717,7 @@ function buildDungeon(
             .filter((doorway) => doorway !== entranceDoorway)
             .flatMap((doorway) => doorway.tiles);
 
-    const grateTiles = questGrateTiles(bounds, doorways);
+    const grateTiles = questGrateTiles(bounds, doorways, questGrateCount);
     for (const g of grateTiles) {
       if (g.y >= 0 && g.y < size && g.x >= 0 && g.x < size) {
         grid[g.y][g.x].type = FLOOR_GRATE;

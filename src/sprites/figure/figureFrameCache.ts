@@ -44,11 +44,22 @@
  * which also gives it the cell's hard crop for free.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  allocReadableCanvas,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { shouldDownscaleForLowEndDevice } from '../../core/SpriteLoader';
 import type { DrawSpriteOpts } from '../../core/SpriteRenderer';
 import { EMPTY_ALPHA_CUTOFF, type FrameInkBounds } from '../../core/spriteFrames';
-import { figureBakeDensity, type FigureDef, figureFrameCount, type FigureId } from './figureDef';
+import {
+  figureBakeDensity,
+  type FigureDef,
+  figureFrameCount,
+  type FigureId,
+  type DrawnFigureRow,
+} from './figureDef';
 import {
   BYTES_PER_MEGABYTE,
   beginFigureCacheStatsFrame,
@@ -1124,6 +1135,9 @@ function runPrewarmQueue(): void {
     return;
   }
   try {
+    // Ahead of the bakes: a queued row is an overhead marker waiting on screen
+    // now, where a prewarm is a pose that may be wanted later.
+    measureQueuedRowInk(budgetMs);
     drainPrewarmQueue(budgetMs);
   } finally {
     // Whatever this frame's prewarming ran over by is owed back, however it
@@ -1718,18 +1732,107 @@ export function figureInkRadiusPx(
   return figureInkBounds(def, state, frame).radius * (tileSize / def.tileScale);
 }
 
+const rowInkTopByRow = new Map<DrawnFigureRow, number>();
+
+/** A row whose frames are being measured a few at a time, and what they have shown so far. */
+interface PendingRowInk {
+  readonly row: DrawnFigureRow;
+  nextFrame: number;
+  topCellPx: number;
+}
+
+const rowInkQueue: PendingRowInk[] = [];
+const queuedRowInk = new Set<DrawnFigureRow>();
+
+/**
+ * The screen y of the highest pixel a row ever paints, across every one of its
+ * frames, for a figure whose tile's top-left is at screen y `sy`.
+ *
+ * Every frame rather than the one on screen, so anything hung over the art —
+ * a quest marker above all — stays put while an idle loop bobs or flicks an
+ * ear underneath it, instead of riding the bob.
+ *
+ * Never measures on the caller's frame: painting every frame of a row to read
+ * it back costs tens of milliseconds. A row not yet measured is queued onto
+ * the prewarm budget, and until it lands the answer is the top of the
+ * figure's cell. No painted pixel can stand above that, so the stand-in only
+ * ever errs high. Another row of the same figure is no stand-in: a head toss
+ * or a raised arm stands taller than the idle it would be borrowed from.
+ */
+export function figureRowInkTop(row: DrawnFigureRow, sy: number, tileSize: number): number {
+  const scale = tileSize / row.def.tileScale;
+  const measured = rowInkTopByRow.get(row);
+  if (measured !== undefined) return sy - (row.def.tileY - measured) * scale;
+  if (!queuedRowInk.has(row)) {
+    queuedRowInk.add(row);
+    rowInkQueue.push({ row, nextFrame: 0, topCellPx: row.def.frameHeight });
+  }
+  return sy - row.def.tileY * scale;
+}
+
+/** Rows {@link figureRowInkTop} has queued and not yet finished measuring. */
+export function figureRowInkPending(): number {
+  return rowInkQueue.length;
+}
+
+/**
+ * Measures queued rows one frame at a time until this frame's prewarm spend
+ * reaches `budgetMs`. The time is booked against the same spend the bakes
+ * are, so an overrun is owed back out of later frames like any other.
+ */
+function measureQueuedRowInk(budgetMs: number): void {
+  while (rowInkQueue.length > 0 && msBakedThisFrame < budgetMs) {
+    const pending = rowInkQueue[0];
+    const { def, state } = pending.row;
+    const startedAt = performance.now();
+    const bounds = figureInkBounds(def, state, pending.nextFrame);
+    msBakedThisFrame += performance.now() - startedAt;
+    pending.topCellPx = Math.min(pending.topCellPx, bounds.top);
+    pending.nextFrame++;
+    if (pending.nextFrame < figureFrameCount(def, state)) continue;
+    rowInkQueue.shift();
+    queuedRowInk.delete(pending.row);
+    rowInkTopByRow.set(pending.row, pending.topCellPx);
+  }
+}
+
+/**
+ * The one surface every ink measurement paints into and reads back. Kept
+ * rather than allocated per frame measured, and declared read-heavy so the
+ * readback is not a GPU round trip each time.
+ */
+let inkScratch: CanvasSurface | null = null;
+
+function inkScratchFitting(width: number, height: number): CanvasSurface {
+  if (inkScratch !== null && inkScratch.width >= width && inkScratch.height >= height) {
+    return inkScratch;
+  }
+  const grownWidth = Math.max(width, inkScratch?.width ?? 0);
+  const grownHeight = Math.max(height, inkScratch?.height ?? 0);
+  inkScratch = allocReadableCanvas(grownWidth, grownHeight);
+  return inkScratch;
+}
+
 function measureFigureInk(def: FigureDef, state: string, frame: number): FrameInkBounds {
   const wholeCell: FrameInkBounds = {
     centerX: def.frameWidth / 2,
     centerY: def.frameHeight / 2,
     radius: Math.hypot(def.frameWidth, def.frameHeight) / 2,
+    top: 0,
   };
 
-  const surface = allocCanvas(Math.ceil(def.frameWidth), Math.ceil(def.frameHeight));
-  const ctx = surfaceContext(surface);
-  const width = surface.width;
-  const height = surface.height;
-  paintInto(ctx, def, state, frame, 1);
+  const width = Math.ceil(def.frameWidth);
+  const height = Math.ceil(def.frameHeight);
+  const ctx = surfaceContext(inkScratchFitting(width, height));
+  ctx.clearRect(0, 0, width, height);
+  try {
+    paintInto(ctx, def, state, frame, 1);
+  } catch (error) {
+    // A painter that threw past its own save leaves the context's state stack
+    // unbalanced; the surface is dropped rather than handed to the next frame.
+    inkScratch = null;
+    throw error;
+  }
 
   let pixels: Uint8ClampedArray;
   try {
@@ -1776,7 +1879,7 @@ function measureFigureInk(def: FigureDef, state: string, frame: number): FrameIn
       if (distSq > radiusSq) radiusSq = distSq;
     }
   }
-  return { centerX, centerY, radius: Math.sqrt(radiusSq) };
+  return { centerX, centerY, radius: Math.sqrt(radiusSq), top: minY };
 }
 
 /**
@@ -1785,9 +1888,7 @@ function measureFigureInk(def: FigureDef, state: string, frame: number): FrameIn
  * Called when the render quality changes — cells are density-specific — and at
  * a floor change, where the sheet path evicts its sheets for the same reason:
  * whatever the next floor still needs is rebuilt lazily and nothing else is
- * paid for. The measured ink bounds go too: they are a property of the painter
- * rather than of the bake, so they are dropped for their memory and remeasured
- * on demand.
+ * paid for.
  */
 export function flushFigureFrameCache(): void {
   entries.clear();
@@ -1809,7 +1910,11 @@ export function flushFigureFrameCache(): void {
   // Held for a loading screen whose scene is being left along with everything
   // it warmed; nothing is left for the hold to protect.
   idleSweepHeld = false;
-  inkBoundsByFrame.clear();
+  // The measured ink stays: a few numbers per frame, a property of the painter
+  // rather than of the bake, and remeasuring them is the cost they exist to
+  // save. Rows still queued are dropped with the floor that asked for them.
+  rowInkQueue.length = 0;
+  queuedRowInk.clear();
   cachedBytes = 0;
   cachedRows = 0;
   releaseScratchSurfaces();

@@ -82,6 +82,7 @@ import { stepMomentSections } from './borrowed-blueprints/stepMoments';
 import { evictionSections } from './borrowed-blueprints/evictions';
 import { agreementSections } from './borrowed-blueprints/agreement';
 import { escortRouteSections } from './borrowed-blueprints/escortRoute';
+import { verifyMidgeFriendlyFire } from './borrowed-blueprints/midgeFriendlyFire';
 
 installCanvasGlobals();
 
@@ -477,9 +478,15 @@ const SECTIONS: ReadonlyArray<{ readonly name: string; readonly run: () => void 
   ...evictionSections(check),
   ...agreementSections(check),
   ...escortRouteSections(check),
+  { name: 'No friendly fire on Midge', run: () => verifyMidgeFriendlyFire(check) },
 ];
 
+/** `--only=<text>` runs just the sections whose name contains it. */
+const onlyArg = process.argv.find((arg) => arg.startsWith('--only='));
+const onlyName = onlyArg === undefined ? null : onlyArg.slice('--only='.length);
+
 for (const section of SECTIONS) {
+  if (onlyName !== null && !section.name.includes(onlyName)) continue;
   console.log(`\n${section.name}`);
   section.run();
 }

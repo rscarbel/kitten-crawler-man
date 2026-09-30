@@ -398,6 +398,7 @@ export class LivestockSystem {
     midge.endLead();
     midge.restoreHerdHp();
     midge.cannotBeKilled = false;
+    midge.wardedFromParty = false;
     midge.healthBarDrawnElsewhere = false;
     midge.pen = this.pen;
     midge.name = MIDGE_COW_NAME;

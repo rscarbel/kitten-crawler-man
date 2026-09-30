@@ -1,13 +1,11 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
-import { drawGumGumSprite } from '../sprites/gumGumSprite';
+import { drawGumGumSprite, gumGumArtTop } from '../sprites/gumGumSprite';
 import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import {
   drawQuestMarker,
   questMarkerColorFor,
-  QUEST_MARKER_GOLD,
-  QUEST_MARKER_GREEN,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
 import { drawQuestBeacon } from '../sprites/questBeacon';
@@ -86,18 +84,13 @@ export class GumGum extends Mob {
       );
     }
     drawGumGumSprite(ctx, box.sx, box.sy, box.s, this.walkFrame, this.isMoving, this.facingX);
-    // `drawQuestMarker` sizes the glyph and its lift off screen as a fraction
-    // of whatever box it is given, so her enlarged sprite box bloated the
-    // glyph itself — the same mistake her beacon call above was fixed to
-    // avoid. But her plain tile position is not her head either: her sprite
-    // grows upward from a fixed feet line, so `box.sy` (not `this.y`) is
-    // where her actual head starts. `scaleHumanoidBox` keeps every box
-    // horizontally centred on the same point regardless of scale, so passing
-    // plain `this.x` alongside a plain `tileSize` still centres correctly.
-    if (this.markerType === 'exclamation') {
-      drawQuestMarker(ctx, this.x - camX, box.sy, tileSize, '!', QUEST_MARKER_GOLD);
-    } else if (this.markerType === 'question') {
-      drawQuestMarker(ctx, this.x - camX, box.sy, tileSize, '?', QUEST_MARKER_GREEN);
+    // Sized from her plain tile rather than her enlarged box, which would
+    // bloat the glyph the way it would the beacon's fade radius above. Both
+    // boxes share a horizontal centre, so the plain tile still centres it.
+    if (markerColor !== undefined) {
+      const glyph = this.markerType === 'question' ? '?' : '!';
+      const artTop = gumGumArtTop(box.sy, box.s);
+      drawQuestMarker(ctx, this.x - camX, artTop, tileSize, glyph, markerColor);
     }
   }
 

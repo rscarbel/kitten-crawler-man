@@ -11,7 +11,7 @@
 
 import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
-import { figureFrameCount } from './figure/figureDef';
+import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import type { RatKinView } from './art/ratKinArt';
 import { RATKIN_BUILDS } from './art/ratkin/outfit';
 import {
@@ -173,7 +173,8 @@ export function ratkinCastLoopFrame(
 }
 
 /**
- * Draws one cast member. Only the profile is mirrored: flipping a head-on
+ * Draws one cast member, returning the row drawn or `undefined` when the
+ * member paints nothing for that action. Only the profile is mirrored: flipping a head-on
  * view would swap the side a satchel or a sash is worn on every time they
  * turned round.
  */
@@ -184,12 +185,12 @@ export function drawRatkinCastSprite(
   sy: number,
   tileSize: number,
   state: RatkinCastSpriteState,
-): void {
+): DrawnFigureRow | undefined {
   const figure = ratkinCastFigure(id);
   const view = viewFor(state.action, state.facingX, state.facingY);
   const key = castStateName(state.action, view);
   const frames = figureFrameCount(figure, key);
-  if (frames === 0) return;
+  if (frames === 0) return undefined;
   const flipX = view === 'side' && state.facingX < 0;
 
   let frame: number;
@@ -201,6 +202,7 @@ export function drawRatkinCastSprite(
     frame = loopFrameIndex(frames, state.loopOffsetSeconds ?? 0, performance.now() / MS_PER_SECOND);
   }
   drawFigureCached(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
+  return drawnFigureRow(figure, key);
 }
 
 /**

@@ -4,12 +4,11 @@ import {
   drawQuestNPCSprite,
   drawQuestMarker,
   questMarkerColorFor,
-  questMarkerAnchorAbove,
-  QUEST_MARKER_GOLD,
-  QUEST_MARKER_GREEN,
+  questNPCHelpBubbleTop,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
 import { drawQuestBeacon } from '../sprites/questBeacon';
+import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 
 const NPC_MAX_HP = 40;
 /** Initial health potion count to remove (NPC has no use for potions). */
@@ -26,7 +25,7 @@ const HURT_FLASH_PROGRESS = 0.45;
 export type NPCMarkerType = QuestMarkerState;
 
 /**
- * A non-combatant quest NPC (goblin mother in pink dress).
+ * A non-combatant quest NPC: the goblin mother, carrying her baby.
  * Extends Player so Bugaboos can target her via updateAI(targets).
  * She does NOT move and does NOT attack.
  */
@@ -65,16 +64,16 @@ export class QuestNPC extends Player {
       drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
     }
 
-    drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX, this.hurtTimer);
+    const drawnRow = drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX, this.hurtTimer);
 
     const hpBarVisible = this.hp < this.maxHp;
-    // The marker anchors above the bar's top edge when it's showing, so the two never overlap.
-    const markerSy = hpBarVisible ? questMarkerAnchorAbove(sy - HP_BAR_Y_OFFSET, tileSize) : sy;
-
-    if (this.markerType === 'exclamation') {
-      drawQuestMarker(ctx, sx, markerSy, tileSize, '!', QUEST_MARKER_GOLD);
-    } else if (this.markerType === 'question') {
-      drawQuestMarker(ctx, sx, markerSy, tileSize, '?', QUEST_MARKER_GREEN);
+    const glyph = this.markerType === 'question' ? '?' : '!';
+    if (markerColor !== undefined) {
+      const artTop = figureRowInkTop(drawnRow, sy, tileSize);
+      const barTop = hpBarVisible ? sy - HP_BAR_Y_OFFSET : artTop;
+      const bubbleTop = this.hurtTimer > 0 ? questNPCHelpBubbleTop(sy, tileSize) : artTop;
+      const clearOf = Math.min(artTop, barTop, bubbleTop);
+      drawQuestMarker(ctx, sx, clearOf, tileSize, glyph, markerColor);
     }
 
     if (hpBarVisible) {

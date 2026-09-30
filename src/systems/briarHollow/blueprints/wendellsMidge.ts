@@ -104,6 +104,7 @@ export class WendellsMidge {
     cow.name = MIDGE_COW_NAME;
     cow.restoreHerdHp();
     cow.cannotBeKilled = false;
+    cow.wardedFromParty = false;
     cow.healthBarDrawnElsewhere = false;
     const home = this.home ?? cow.tile;
     this.respawner?.setHome(cow, home);

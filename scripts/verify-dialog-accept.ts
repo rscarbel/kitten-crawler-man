@@ -110,8 +110,15 @@ interface PressTally {
   overlay: number;
 }
 
-function frame(conversation: Conversation): void {
-  setButtonMouseState(POINTER_OFF_CANVAS, POINTER_OFF_CANVAS);
+interface Pointer {
+  readonly x: number;
+  readonly y: number;
+}
+
+const POINTER_AWAY: Pointer = { x: POINTER_OFF_CANVAS, y: POINTER_OFF_CANVAS };
+
+function frame(conversation: Conversation, pointer: Pointer = POINTER_AWAY): void {
+  setButtonMouseState(pointer.x, pointer.y);
   conversation.update(null);
   conversation.render(ctx);
 }
@@ -128,11 +135,15 @@ function pressSpace(conversation: Conversation, click: ClickRouter, tally: Press
   advanceFocusedOverlay([conversation.overlayClaim()]);
 }
 
-/** Presses Space, and nothing else, until the conversation closes. */
-function spaceUntilClosed(conversation: Conversation, click: ClickRouter): PressTally {
+/** Presses Space, and nothing else, until the conversation closes — the pointer never moving from `pointer`. */
+function spaceUntilClosed(
+  conversation: Conversation,
+  click: ClickRouter,
+  pointer: Pointer = POINTER_AWAY,
+): PressTally {
   const tally: PressTally = { ring: 0, overlay: 0 };
   for (let press = 0; press < PRESS_GUARD && conversation.isOpen; press++) {
-    for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(conversation);
+    for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(conversation, pointer);
     pressSpace(conversation, click, tally);
   }
   return tally;
@@ -253,6 +264,58 @@ function verifyVossAssembly(): void {
   check(
     progress.status === 'completed',
     `a click on it makes the stone (status: ${progress.status})`,
+  );
+}
+
+/**
+ * A cursor left lying where "Pay" will appear is not a player aiming at it:
+ * the fee row must still come up with nothing focused, so Space pays nothing.
+ * Only a pointer that moves onto a choice may take focus.
+ */
+function verifyRestingPointerDoesNotPay(): void {
+  section('Madame Voss: a cursor resting where "Pay" appears does not make Space pay');
+  const setUp = () => {
+    const conversation = new Conversation(null);
+    const progress = activeProgress();
+    progress.tinker = 'done';
+    progress.hilda = 'done';
+    progress.temple = 'done';
+    const party = makeParty();
+    party.human.inventory.addItem('anchor_shard_tinker', 1);
+    party.human.inventory.addItem('anchor_shard_hilda', 1);
+    party.human.inventory.addItem('anchor_shard_temple', 1);
+    party.human.coins = PLENTY_OF_COINS;
+    const voss = makeVoss(progress, party, conversation);
+    const click: ClickRouter = (mx, my) => voss.handleClick(mx, my);
+    return { conversation, progress, party, voss, click };
+  };
+
+  const scout = setUp();
+  scout.voss.tryOpenDialog(scout.party.human);
+  spaceUntilClosed(scout.conversation, scout.click);
+  frame(scout.conversation);
+  const pay = scout.conversation.choiceBounds.find((rect) =>
+    rect.label.includes(VOSS_PAY_LABEL_PREFIX),
+  );
+  check(pay !== undefined, 'the "Pay" button has a place on screen to rest on');
+  if (pay === undefined) return;
+  const restingOnPay: Pointer = { x: pay.x + pay.w / 2, y: pay.y + pay.h / 2 };
+
+  const run = setUp();
+  check(run.voss.tryOpenDialog(run.party.human), 'the assembly opens under the resting cursor');
+  const tally = spaceUntilClosed(run.conversation, run.click, restingOnPay);
+  check(
+    run.conversation.isOpen && run.conversation.isShowingChoices,
+    'Space alone leaves the fee row standing',
+  );
+  check(
+    run.progress.status === 'active' && run.party.human.coins === PLENTY_OF_COINS,
+    `and nothing is paid (status: ${run.progress.status}, coins: ${run.party.human.coins})`,
+  );
+  check(tally.ring > 0, `the row's presses went through its focus ring (${tally.ring})`);
+  check(
+    run.conversation.selectedChoiceIndex === null,
+    `and no choice is drawn selected (selected: ${run.conversation.selectedChoiceIndex})`,
   );
 }
 
@@ -449,6 +512,56 @@ function verifyTopicMenu(): void {
     asked.join() === 'The missing cow',
     `Space picked the quest topic (asked: ${asked.join() || 'nothing'})`,
   );
+}
+
+/**
+ * On a row that leaves the world running there is no focus ring: Space always
+ * takes the row's default, so that is the choice drawn selected even while
+ * the pointer hovers another one.
+ */
+function verifyStreetRowMarksSpaceDefault(): void {
+  section('A street row marks what Space picks, wherever the pointer hovers');
+  const conversation = new Conversation(null);
+  let picked: string | null = null;
+  const recording = (label: string, tone: Choice['tone']): Choice => ({
+    label,
+    tone,
+    run: (convo) => {
+      picked = label;
+      convo.close();
+    },
+  });
+  const askLabel = 'Ask about the well';
+  const goodbyeLabel = 'Goodbye';
+  conversation.open(
+    rowRequest([recording(askLabel, 'normal'), recording(goodbyeLabel, 'exit')], false),
+  );
+  for (let press = 0; press < PRESS_GUARD; press++) {
+    for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(conversation);
+    // Checked after the frames, not before the press: the row can come up
+    // during a frame, and a press then would already answer it.
+    if (conversation.isShowingChoices) break;
+    advanceFocusedOverlay([conversation.overlayClaim()]);
+  }
+  frame(conversation);
+  const goodbye = conversation.choiceBounds.find((rect) => rect.label.includes(goodbyeLabel));
+  check(goodbye !== undefined, 'the Goodbye button is on screen');
+  if (goodbye === undefined) return;
+  const onGoodbye: Pointer = { x: goodbye.x + goodbye.w / 2, y: goodbye.y + goodbye.h / 2 };
+  for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(conversation, onGoodbye);
+
+  const askIndex = 0;
+  const marked = conversation.choiceBounds.filter((rect) => rect.label.startsWith('▶'));
+  check(
+    conversation.selectedChoiceIndex === askIndex,
+    `with the pointer on Goodbye, "${askLabel}" is still drawn selected (selected: ${conversation.selectedChoiceIndex})`,
+  );
+  check(
+    marked.length === 1 && marked[0]?.index === askIndex,
+    `and it alone wears the marker (marked: ${marked.map((rect) => rect.label).join(', ') || 'none'})`,
+  );
+  advanceFocusedOverlay([conversation.overlayClaim()]);
+  check(picked === askLabel, `and Space picks it (picked: ${picked ?? 'nothing'})`);
 }
 
 // ── A held key does not answer a row it predates ─────────────────────────────
@@ -693,10 +806,12 @@ function verifyRewardCardDeclaresItsRing(): void {
 verifyRewardCardDeclaresItsRing();
 verifyVossOffer();
 verifyVossAssembly();
+verifyRestingPointerDoesNotPay();
 verifyHilda();
 verifyAviel();
 verifyDefaultResolution();
 verifyTopicMenu();
+verifyStreetRowMarksSpaceDefault();
 verifyHeldKeyDoesNotConfirm();
 verifyInteriorSource();
 verifyConfirmDefaults();

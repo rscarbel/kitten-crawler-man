@@ -233,6 +233,37 @@ export function measureTextWidth(
   return width;
 }
 
+/** Where a line's glyph ink starts and ends, in pixels below {@link drawText}'s `y`. */
+export interface TextInkExtent {
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/**
+ * Where the ink of `text`'s glyphs actually sits, for one unpadded line with
+ * these font options drawn by {@link drawText} at `y`. The em box a font size
+ * names is not the ink: a `!` starts below the em's top and stops at the
+ * baseline, well short of its bottom, and anything that must clear the glyph
+ * itself needs this rather than the size.
+ */
+export function measureTextInkExtent(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  opts: Pick<TextOptions, 'size' | 'bold' | 'italic' | 'font'>,
+): TextInkExtent {
+  ctx.save();
+  ctx.font = styledFontString(
+    opts.size ?? DEFAULT_FONT_SIZE,
+    opts.bold ?? false,
+    opts.italic ?? false,
+    opts.font ?? 'monospace',
+  );
+  ctx.textBaseline = 'top';
+  const metrics = ctx.measureText(text);
+  ctx.restore();
+  return { top: -metrics.actualBoundingBoxAscent, bottom: metrics.actualBoundingBoxDescent };
+}
+
 /**
  * Word-wrap `text` to `maxWidth` under the ctx's current font, honoring explicit
  * `\n` breaks. Set the font before calling. Useful for measuring how tall a block

@@ -11,7 +11,9 @@
  * at the next waypoint never points through anything the party cannot cross.
  *
  * Planned once per map and remembered with it: the road never moves, and a
- * door visit rebuilds the quest but hands back the same `GameMap`.
+ * door visit rebuilds the quest but hands back the same `GameMap`. When the
+ * party leads Midge out by another gate, or well off the road, the rest of the
+ * walk is planned afresh from where she stands ({@link EscortReplanner}).
  */
 
 import { TILE_SIZE } from '../../../core/constants';
@@ -20,7 +22,8 @@ import type { GameMap } from '../../../map/GameMap';
 import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import { HOLLOW_GATE } from '../../../map/tileTypes';
 import { isPavedTileType } from '../../../map/town/tileGrid';
-import type { TilePoint } from '../../../map/town/townPlan';
+import { findNearbyWalkableTile } from '../../../map/findWalkableTile';
+import type { TilePoint, TileRect } from '../../../map/town/townPlan';
 import { doorwaySpan } from '../../BuildingSystem';
 import { tileCoordKey } from '../../../map/tileIndex';
 import { garrisonGreen } from './garrisonGreen';
@@ -143,12 +146,14 @@ function hasOffRoadNeighbour(gameMap: GameMap, x: number, y: number): boolean {
 
 /**
  * The cheapest walk from `start` to any of `goals` over tiles Midge can step
- * on, roads cheap and open ground dear; null when none of them can be reached.
+ * on, roads cheap and open ground dear, never onto a tile `isBarred` refuses;
+ * null when none of them can be reached.
  */
 export function planEscortWalk(
   gameMap: GameMap,
   start: TilePoint,
   goals: readonly TilePoint[],
+  isBarred: (x: number, y: number) => boolean = () => false,
 ): TilePoint[] | null {
   const size = gameMap.gridSize;
   const doorways = doorwayKeys(gameMap);
@@ -156,7 +161,7 @@ export function planEscortWalk(
   if (goalKeys.size === 0 || !isEscortStep(gameMap, start.x, start.y, doorways)) return null;
 
   const stepCost = (x: number, y: number): number | null => {
-    if (!isEscortStep(gameMap, x, y, doorways)) return null;
+    if (!isEscortStep(gameMap, x, y, doorways) || isBarred(x, y)) return null;
     const onRoad = isEscortRoadTile(gameMap, x, y);
     const base = gameMap.isWadeable(x, y)
       ? WADE_STEP_COST
@@ -303,6 +308,125 @@ function planEscortRoute(gameMap: GameMap, site: BriarHollowSite): EscortRoute |
   return { tiles: walk, waypoints: escortWaypoints(gameMap, walk) };
 }
 
+// ── Planning afresh ────────────────────────────────────────────────────────
+
+/** Which side of the walls a tile lies: inside the palisade, inside the town wall, or neither. */
+export type EscortRegion = 'village' | 'town' | 'open';
+
+/**
+ * How far round a spot that Midge cannot start a walk from (a doorway, a
+ * stairwell, the tile rounding of a body mid-step) the replanner looks for
+ * one she can, in tiles.
+ */
+const REPLAN_START_SEARCH_TILES = 3;
+
+/** Plans the rest of Midge's walk from wherever the escort has taken her. */
+export interface EscortReplanner {
+  /** Which side of the walls `tile` lies on, for telling one gate from another. */
+  regionOf(tile: TilePoint): EscortRegion;
+  /**
+   * A road to Garrison Green starting at `from`, or at the nearest tile
+   * round it Midge can start from; null where none can be planned. Planned
+   * from outside Briar Hollow, it never goes back inside the palisade: a
+   * party that has led her out by one gate is not sent back through the
+   * village to leave by another.
+   */
+  planFrom(from: TilePoint): EscortRoute | null;
+}
+
+function isInRect(rect: TileRect, x: number, y: number): boolean {
+  return x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
+}
+
+const palisadeInteriors = new WeakMap<BriarHollowSite, ReadonlySet<number>>();
+
+/**
+ * Whether tile (x, y) lies inside Briar Hollow's palisade. Not the interior
+ * rectangle: the ring's corners are chamfered, so the rectangle's corners are
+ * open ground outside the wall, which a road skirting the palisade crosses.
+ * Flooded once per site from inside the south gate, stopped by the ring and
+ * its gates.
+ */
+export function isInsidePalisade(site: BriarHollowSite, x: number, y: number): boolean {
+  let inside = palisadeInteriors.get(site);
+  if (inside === undefined) {
+    inside = floodPalisadeInterior(site);
+    palisadeInteriors.set(site, inside);
+  }
+  return inside.has(tileCoordKey(x, y));
+}
+
+function floodPalisadeInterior(site: BriarHollowSite): ReadonlySet<number> {
+  const bounds = site.palisadeBounds;
+  const wall = new Set<number>();
+  for (const tile of site.palisadePath) wall.add(tileCoordKey(tile.x, tile.y));
+  for (const gate of site.gates) {
+    for (const tile of gate.tiles) wall.add(tileCoordKey(tile.x, tile.y));
+  }
+  const inside = new Set<number>();
+  const start = site.gate.inside;
+  const queue: TilePoint[] = [start];
+  inside.add(tileCoordKey(start.x, start.y));
+  // Tiles pushed while iterating are visited too: this is the flood's queue.
+  for (const tile of queue) {
+    for (const [dx, dy] of ROUTE_STEPS) {
+      const x = tile.x + dx;
+      const y = tile.y + dy;
+      const key = tileCoordKey(x, y);
+      if (!isInRect(bounds, x, y) || wall.has(key) || inside.has(key)) continue;
+      inside.add(key);
+      queue.push({ x, y });
+    }
+  }
+  return inside;
+}
+
+/** The replanner for `gameMap`'s escort; null on a map with no Garrison Green. */
+export function escortReplannerFor(
+  gameMap: GameMap,
+  site: BriarHollowSite,
+): EscortReplanner | null {
+  const green = garrisonGreen(gameMap);
+  if (green === null) return null;
+  const town = gameMap.townPlan?.interior ?? null;
+  const regionOf = (tile: TilePoint): EscortRegion => {
+    if (isInsidePalisade(site, tile.x, tile.y)) return 'village';
+    if (town !== null && isInRect(town, tile.x, tile.y)) return 'town';
+    return 'open';
+  };
+  const planFrom = (from: TilePoint): EscortRoute | null => {
+    const doorways = doorwayKeys(gameMap);
+    const canStart = (x: number, y: number): boolean => isEscortStep(gameMap, x, y, doorways);
+    const start = canStart(from.x, from.y)
+      ? from
+      : findNearbyWalkableTile(gameMap, from.x, from.y, REPLAN_START_SEARCH_TILES, canStart);
+    if (start === null) return null;
+    const leftTheVillage = regionOf(start) !== 'village';
+    const isBarred = (x: number, y: number): boolean =>
+      leftTheVillage && isInsidePalisade(site, x, y);
+    const walk = planEscortWalk(gameMap, start, green.gateTiles, isBarred);
+    if (walk === null || walk.length < 2) return null;
+    return { tiles: walk, waypoints: escortWaypoints(gameMap, walk) };
+  };
+  return { regionOf, planFrom };
+}
+
+/**
+ * The tiles where `route` passes from one side of a wall to the other: the
+ * first tile of each new region along it. Where the escort crosses a wall
+ * near none of these, it has used a gate the road does not.
+ */
+function wallCrossings(route: EscortRoute, replanner: EscortReplanner): TilePoint[] {
+  const crossings: TilePoint[] = [];
+  let region: EscortRegion | null = null;
+  for (const tile of route.tiles) {
+    const here = replanner.regionOf(tile);
+    if (region !== null && here !== region) crossings.push(tile);
+    region = here;
+  }
+  return crossings;
+}
+
 // ── Progress along it ──────────────────────────────────────────────────────
 
 /** Further than this off the road, in tiles, Midge is placed afresh on the route rather than moved along it. */
@@ -317,6 +441,20 @@ const BACKTRACK_TOLERANCE_STEPS = 12;
  * ahead of Midge: about as far as she follows before she stops and waits.
  */
 const LEADER_LEAD_STEPS = 20;
+/**
+ * Further than this off the road, in tiles, Midge's walk is planned afresh
+ * from where she stands. Well past {@link OFF_ROUTE_TILES}, so a shuffle round
+ * an ambush beside the road never throws the road away.
+ */
+const REPLAN_OFF_ROUTE_TILES = 8;
+/**
+ * A wall crossing counts as the road's own when it is this close to one of
+ * the road's crossings, in tiles: a gate's width, so crossing at its edge
+ * rather than its middle is still the same gate.
+ */
+const SAME_GATE_TILES = 4;
+/** Updates before a replan that found no road is tried again. */
+const REPLAN_RETRY_UPDATES = 60;
 /** A waypoint counts as reached once the party is this close to it, in tiles. */
 export const ESCORT_WAYPOINT_ARRIVAL_TILES = 3;
 /** How many waypoints past the current one the guide shows faintly. */
@@ -340,7 +478,14 @@ interface NearestOnRoute {
  * Which waypoint the escort is heading for. Moves forward as Midge and the
  * party get along the road and never back for a step or two of jostling;
  * when Midge is carried well back (scared home, or led back on purpose) or
- * led well off the road, it is picked afresh from where she now stands.
+ * led off the road, it is picked afresh from where she now stands.
+ *
+ * Given a replanner, the road itself follows the party: led out through a
+ * wall at a gate the road does not use, or further than
+ * {@link REPLAN_OFF_ROUTE_TILES} off it anywhere, the rest of the walk is
+ * planned afresh from where Midge stands, so the next waypoint is always
+ * ahead of her on a walk she can take. {@link restart} returns to the road
+ * as planned from Merrit's gate.
  */
 export class EscortRouteProgress {
   /** The furthest route tile Midge has been counted at. */
@@ -348,8 +493,82 @@ export class EscortRouteProgress {
   /** The furthest route tile the party has been counted at, never far past Midge. */
   private leaderIndex = 0;
   private waypointIndex = 0;
+  private current: EscortRoute;
+  private crossings: readonly TilePoint[];
+  /** The side of the walls Midge stood on last update; null until she has been seen. */
+  private lastRegion: EscortRegion | null = null;
+  private replanRetryUpdatesLeft = 0;
+  private replannedFromTile: TilePoint | null = null;
 
-  constructor(readonly route: EscortRoute) {}
+  constructor(
+    private readonly planned: EscortRoute,
+    private readonly replanner: EscortReplanner | null = null,
+  ) {
+    this.current = planned;
+    this.crossings = replanner === null ? [] : wallCrossings(planned, replanner);
+  }
+
+  /** The road the escort is following now: as planned, or as planned afresh. */
+  get route(): EscortRoute {
+    return this.current;
+  }
+
+  /** Where the road in use was planned afresh from; null while it is the road as planned. */
+  get replannedFrom(): TilePoint | null {
+    return this.replannedFromTile;
+  }
+
+  /** Back to the road as planned from Merrit's gate, with nothing walked of it. */
+  restart(): void {
+    this.adopt(this.planned, null);
+    this.lastRegion = null;
+    this.replanRetryUpdatesLeft = 0;
+  }
+
+  /**
+   * Plans the rest of the walk afresh from `from`, and follows that road from
+   * its start. Returns whether a road could be planned; the road in use is
+   * kept when none can.
+   */
+  replanFrom(from: TilePoint): boolean {
+    const route = this.replanner?.planFrom(from) ?? null;
+    if (route === null) return false;
+    this.adopt(route, route.tiles[0]);
+    return true;
+  }
+
+  private adopt(route: EscortRoute, replannedFrom: TilePoint | null): void {
+    this.current = route;
+    this.replannedFromTile = replannedFrom;
+    this.crossings = this.replanner === null ? [] : wallCrossings(route, this.replanner);
+    this.midgeIndex = 0;
+    this.leaderIndex = 0;
+    this.waypointIndex = 0;
+  }
+
+  /**
+   * Plans afresh when Midge has come through a wall at a gate the road does
+   * not use, or strayed well off it. A replan that finds no road waits
+   * {@link REPLAN_RETRY_UPDATES} before the stray is tried again; a gate
+   * crossing is tried at once, since it happens on one update only.
+   */
+  private replanIfStrayed(midge: TilePoint): void {
+    const replanner = this.replanner;
+    if (replanner === null) return;
+    if (this.replanRetryUpdatesLeft > 0) this.replanRetryUpdatesLeft--;
+    const region = replanner.regionOf(midge);
+    const crossedAWall = this.lastRegion !== null && region !== this.lastRegion;
+    this.lastRegion = region;
+    const byAnotherGate =
+      crossedAWall &&
+      !this.crossings.some(
+        (crossing) => Math.hypot(crossing.x - midge.x, crossing.y - midge.y) <= SAME_GATE_TILES,
+      );
+    const strayed =
+      this.replanRetryUpdatesLeft === 0 && this.nearest(midge).tiles > REPLAN_OFF_ROUTE_TILES;
+    if (!byAnotherGate && !strayed) return;
+    if (!this.replanFrom(midge)) this.replanRetryUpdatesLeft = REPLAN_RETRY_UPDATES;
+  }
 
   /** The route tile the escort has got to. */
   get progressIndex(): number {
@@ -368,6 +587,7 @@ export class EscortRouteProgress {
 
   /** Once per update: `midge` her tile, or null while she is not out; `leader` the steered crawler's. */
   update(midge: TilePoint | null, leader: TilePoint): void {
+    if (midge !== null) this.replanIfStrayed(midge);
     const anchor = this.nearest(midge ?? leader);
     const drifted = this.midgeIndex - anchor.index;
     if (

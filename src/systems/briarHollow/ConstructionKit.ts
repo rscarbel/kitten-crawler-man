@@ -431,7 +431,7 @@ export class ConstructionKit {
       return;
     }
     this.closeStructureMenu();
-    menu.openWith(this.menuSource, false);
+    menu.openWith(this.menuSource);
   }
 
   /** The Structure menu key. Returns whether a menu opened. */

@@ -128,7 +128,7 @@ export class SpiderEgg extends Mob {
    * abilities. A status tick carries no damage type and is refused here, but
    * it still reaches the egg's HP through `takeDamage`.
    */
-  override takesPlayerDamage(damageType: PlayerDamageType | null): boolean {
+  protected override admitsPlayerDamage(damageType: PlayerDamageType | null): boolean {
     return damageType !== null;
   }
 

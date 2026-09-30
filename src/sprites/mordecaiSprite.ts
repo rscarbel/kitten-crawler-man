@@ -10,6 +10,7 @@ import {
   prewarmIncubusSprite,
 } from './incubusSprite';
 import { bugabooHeadClearanceTiles, drawBugabooSprite } from './bugabooSprite';
+import type { DrawnFigureRow } from './figure/figureDef';
 
 /**
  * How much room above the tile origin the tile-anchored overhead UI already
@@ -93,9 +94,9 @@ export function mordecaiTilesPerWalkCycle(levelId: string): number {
 }
 
 /**
- * Dispatcher: picks the correct Mordecai variant sprite for the given level ID.
- * Level 3 (the Over City) gets the Incubus; level 2 gets the Bugaboo; others
- * use the Rat Kin.
+ * Dispatcher: picks the correct Mordecai variant sprite for the given level ID,
+ * and returns the row it drew. Level 3 (the Over City) gets the Incubus; level
+ * 2 gets the Bugaboo; others use the Rat Kin.
  */
 export function drawMordecaiForLevel(
   ctx: CanvasRenderingContext2D,
@@ -104,10 +105,10 @@ export function drawMordecaiForLevel(
   s: number,
   state: MordecaiSpriteState,
   levelId: string,
-) {
+): DrawnFigureRow | undefined {
   const { walkPhase, isWalking, facingY, lastHorizontalFacing, idleOffsetSeconds } = state;
   if (levelId === 'level3') {
-    drawIncubusSprite(ctx, sx, sy, s, {
+    return drawIncubusSprite(ctx, sx, sy, s, {
       walkPhase,
       isWalking,
       isTalking: state.isTalking,
@@ -115,10 +116,11 @@ export function drawMordecaiForLevel(
       facingY,
       idleOffsetSeconds,
     });
-  } else if (levelId === 'level2') {
+  }
+  if (levelId === 'level2') {
     // Never a swipe, a breach or an emergence: this one is a shopkeeper wearing
     // the shape, and the only rows he has any business in are stance and walk.
-    drawBugabooSprite(ctx, sx, sy, s, {
+    return drawBugabooSprite(ctx, sx, sy, s, {
       walkFrame: walkPhase,
       isMoving: isWalking,
       // The raw axis, not the substituted one: his wander commits to a single
@@ -130,7 +132,6 @@ export function drawMordecaiForLevel(
       facingY,
       loopOffsetSeconds: idleOffsetSeconds,
     });
-  } else {
-    drawRatKinSprite(ctx, sx, sy, s, state);
   }
+  return drawRatKinSprite(ctx, sx, sy, s, state);
 }

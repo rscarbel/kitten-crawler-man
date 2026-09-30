@@ -11,10 +11,19 @@
  *   still through a step or two of jostling, goes back when Midge is sent
  *   home, and is picked afresh when she is led well off the road;
  * - in a live rig the guidance, the Journal pin and the minimap pip all name
- *   the waypoint, and leading Midge down the road moves it on.
+ *   the waypoint, and leading Midge down the road moves it on;
+ * - led out of Briar Hollow through a gate the road does not use, the road is
+ *   planned afresh from that gate, never back through the village, a door
+ *   carries the new road and a rewind drops it, and Midge can be delivered
+ *   along it.
  */
 
-import { TILE_SIZE } from '../../src/core/constants';
+import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants';
+import { createMidgeEscortCarry } from '../../src/core/midgeEscortCarry';
+import { blueprintsPhaseAtLeast } from '../../src/core/blueprintsQuestPhase';
+import type { BriarHollowGate, BriarHollowSite } from '../../src/map/overworld/briarHollowSite';
+import { ESCORT_WAVE_COUNT } from '../../src/systems/briarHollow/EscortAmbushSystem';
+import type { SiegeRig } from '../villageSiegeHarness';
 import { GameMap } from '../../src/map/GameMap';
 import { findNearbyWalkableTile } from '../../src/map/findWalkableTile';
 import type { TilePoint } from '../../src/map/town/townPlan';
@@ -25,11 +34,16 @@ import {
   escortRouteFor,
   isEscortRoadTile,
   isEscortStep,
+  isInsidePalisade,
   isStraightWalk,
   merritGateTile,
   type EscortRoute,
 } from '../../src/systems/briarHollow/blueprints/escortRoute';
-import { garrisonGreen } from '../../src/systems/briarHollow/blueprints/garrisonGreen';
+import {
+  garrisonGreen,
+  type GarrisonGreen,
+} from '../../src/systems/briarHollow/blueprints/garrisonGreen';
+import type { BlueprintsQuestSystem } from '../../src/systems/briarHollow/BlueprintsQuestSystem';
 import { BLUEPRINTS_QUEST_ID } from '../../src/systems/briarHollow/blueprints/blueprintsProgress';
 import { standAt } from '../villageSiegeHarness';
 import { blueprintsRig } from './fence';
@@ -350,6 +364,321 @@ function verifyLiveGuidance(check: Check): void {
   rig.dispose();
 }
 
+// ── Out an unexpected gate ─────────────────────────────────────────────────
+
+/** Briar Hollow has a gate in each of its four walls; the road uses one. */
+const UNUSED_GATE_COUNT = 3;
+/** How far past the unexpected gate's outer apron the party walks before the road is read. */
+const PAST_THE_GATE_TILES = 6;
+/** The rerouted trail must start within this many tiles of Midge, or of the gate she came out by. */
+const TRAIL_START_NEAR_TILES = 3;
+/** The party walks on only while Midge is this close behind, so she is never left. */
+const WALK_ON_WITHIN_TILES = 3.5;
+/** Updates the party gives Midge to catch up and cross the gate after it has. */
+const CROSSING_SETTLE_UPDATES = 240;
+/** Garrison Green's cart gate is in its south fence: this many tiles north of it is inside. */
+const GREEN_INSIDE_TILES = 2;
+/** A walk to the green that has not delivered her in this many updates has failed. */
+const DELIVERY_UPDATE_BUDGET = 60 * 420;
+
+function liveTileOf(body: { readonly x: number; readonly y: number }): TilePoint {
+  return { x: Math.floor(body.x / TILE_SIZE + 0.5), y: Math.floor(body.y / TILE_SIZE + 0.5) };
+}
+
+/** The gate the planned road leaves Briar Hollow by. */
+function plannedGate(site: BriarHollowSite, route: EscortRoute): BriarHollowGate | null {
+  return (
+    site.gates.find((gate) =>
+      gate.tiles.some((gateTile) => route.tiles.some((tile) => sameTile(tile, gateTile))),
+    ) ?? null
+  );
+}
+
+/** A four-connected walk from `from` to `to` over the tiles `allowed` admits, shortest first; null if none. */
+function walkWithin(
+  map: GameMap,
+  from: TilePoint,
+  to: TilePoint,
+  allowed: (tile: TilePoint) => boolean,
+): TilePoint[] | null {
+  const size = map.gridSize;
+  const cameFrom = new Int32Array(size * size).fill(-1);
+  const startKey = from.y * size + from.x;
+  const goalKey = to.y * size + to.x;
+  cameFrom[startKey] = startKey;
+  const queue = [startKey];
+  for (let head = 0; head < queue.length; head++) {
+    const key = queue[head];
+    if (key === goalKey) break;
+    const x = key % size;
+    const y = Math.floor(key / size);
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const next = { x: x + dx, y: y + dy };
+      if (next.x < 0 || next.y < 0 || next.x >= size || next.y >= size) continue;
+      const nextKey = next.y * size + next.x;
+      if (cameFrom[nextKey] !== -1 || !isEscortStep(map, next.x, next.y) || !allowed(next)) {
+        continue;
+      }
+      cameFrom[nextKey] = key;
+      queue.push(nextKey);
+    }
+  }
+  if (cameFrom[goalKey] === -1) return null;
+  const walk: TilePoint[] = [];
+  for (let key = goalKey; key !== startKey; key = cameFrom[key]) {
+    walk.push({ x: key % size, y: Math.floor(key / size) });
+  }
+  walk.push(from);
+  return walk.reverse();
+}
+
+/**
+ * Walks the human (the cat at his heels) down `walk`, one tile at a time,
+ * pausing whenever Midge has fallen behind. Stops early once `done` holds;
+ * returns whether it did, or whether the walk was finished when `done` is null.
+ */
+function leadDown(
+  rig: SiegeRig,
+  midge: () => { readonly x: number; readonly y: number } | null,
+  walk: readonly TilePoint[],
+  budget: number,
+  done: (() => boolean) | null,
+): boolean {
+  let index = 0;
+  for (let update = 0; update < budget; update++) {
+    if (done?.() === true) return true;
+    if (index >= walk.length) return done === null;
+    const cow = midge();
+    const near =
+      cow !== null &&
+      Math.hypot(cow.x - rig.human.x, cow.y - rig.human.y) / TILE_SIZE <= WALK_ON_WITHIN_TILES;
+    if (near) {
+      const target = walk[index];
+      const targetX = target.x * TILE_SIZE;
+      const targetY = target.y * TILE_SIZE;
+      const dx = targetX - rig.human.x;
+      const dy = targetY - rig.human.y;
+      const distance = Math.hypot(dx, dy);
+      const stride = Math.min(distance, PLAYER_SPEED);
+      if (distance > 0) {
+        rig.human.x += (dx / distance) * stride;
+        rig.human.y += (dy / distance) * stride;
+      }
+      if (stride === distance) index++;
+    }
+    rig.cat.x = rig.human.x;
+    rig.cat.y = rig.human.y;
+    rig.step();
+  }
+  return done?.() === true;
+}
+
+/**
+ * Walks the human down whatever trail the guide shows, a tile at a time and
+ * never faster than Midge follows, then into Garrison Green past its gate:
+ * whether she was delivered within {@link DELIVERY_UPDATE_BUDGET}, and
+ * whether she ever set foot on a tile `offLimits` refuses on the way.
+ */
+function leadAlongTheGuide(
+  rig: SiegeRig,
+  blueprints: BlueprintsQuestSystem,
+  green: GarrisonGreen | null,
+  offLimits: (tile: TilePoint) => boolean,
+): { readonly delivered: boolean; readonly trespassed: boolean } {
+  let trespassed = false;
+  if (green === null) return { delivered: false, trespassed };
+  const gate = green.gateTiles[0];
+  const inside = { x: gate.x, y: gate.y - GREEN_INSIDE_TILES };
+  for (let update = 0; update < DELIVERY_UPDATE_BUDGET; update++) {
+    if (blueprintsPhaseAtLeast(blueprints.phase, 'midge_delivered')) {
+      return { delivered: true, trespassed };
+    }
+    const guidance = blueprints.guidance();
+    const here = liveTileOf(rig.human);
+    let target: TilePoint = sameTile(here, gate) ? inside : gate;
+    if (guidance?.kind === 'escort_waypoint' && guidance.trail.length > 0) {
+      const trail = guidance.trail;
+      let nearest = 0;
+      trail.forEach((tile, index) => {
+        const best = trail[nearest];
+        if (
+          Math.hypot(tile.x - here.x, tile.y - here.y) <
+          Math.hypot(best.x - here.x, best.y - here.y)
+        ) {
+          nearest = index;
+        }
+      });
+      target = trail[Math.min(trail.length - 1, nearest + 1)];
+    }
+    const cow = blueprints.escort.midge;
+    if (cow !== null && offLimits(liveTileOf(cow))) trespassed = true;
+    const near =
+      cow !== null &&
+      Math.hypot(cow.x - rig.human.x, cow.y - rig.human.y) / TILE_SIZE <= WALK_ON_WITHIN_TILES;
+    if (near) {
+      const dx = target.x * TILE_SIZE - rig.human.x;
+      const dy = target.y * TILE_SIZE - rig.human.y;
+      const distance = Math.hypot(dx, dy);
+      const stride = Math.min(distance, PLAYER_SPEED);
+      if (distance > 0) {
+        rig.human.x += (dx / distance) * stride;
+        rig.human.y += (dy / distance) * stride;
+      }
+    }
+    rig.cat.x = rig.human.x;
+    rig.cat.y = rig.human.y;
+    rig.step();
+  }
+  return { delivered: blueprintsPhaseAtLeast(blueprints.phase, 'midge_delivered'), trespassed };
+}
+
+/**
+ * Leads Midge out of Briar Hollow through a gate the road does not use: the
+ * guide's trail is planned afresh from where she has come out, keeps out of
+ * the village, is walkable for her step by step, survives a door and not a
+ * rewind, and leads her all the way to Garrison Green.
+ */
+function verifyRerouteFromUnexpectedGate(check: Check, unusedGateIndex: number): void {
+  const carry = createMidgeEscortCarry();
+  // The road's ambushes are held elsewhere; here they would only scare her home mid-walk.
+  carry.wavesSprung = ESCORT_WAVE_COUNT;
+  const { rig, blueprints } = blueprintsRig('escort_midge', carry);
+  const { map, site } = rig;
+  const route = escortRouteFor(map, site);
+  const start = merritGateTile(site);
+  const used = route === null ? null : plannedGate(site, route);
+  const other = site.gates.filter((gate) => gate !== used)[unusedGateIndex] ?? null;
+  if (route === null || start === null || used === null || other === null) {
+    check(false, 'the rig map has a road out of one gate, and another gate to leave by');
+    rig.dispose();
+    return;
+  }
+  const inVillage = (tile: TilePoint): boolean => isInsidePalisade(site, tile.x, tile.y);
+  const gateMiddle = other.tiles[Math.floor(other.tiles.length / 2)];
+  const outward = {
+    x: Math.sign(other.outside.x - gateMiddle.x),
+    y: Math.sign(other.outside.y - gateMiddle.y),
+  };
+  const beyond: TilePoint[] = [];
+  for (let step = 1; step <= PAST_THE_GATE_TILES; step++) {
+    const tile = {
+      x: other.outside.x + outward.x * step,
+      y: other.outside.y + outward.y * step,
+    };
+    if (!isEscortStep(map, tile.x, tile.y)) break;
+    beyond.push(tile);
+  }
+  const toGate = walkWithin(map, start, other.inside, inVillage);
+  if (toGate === null) {
+    check(false, `the ${other.facing} gate can be walked to inside the village`);
+    rig.dispose();
+    return;
+  }
+  const out = [...toGate, gateMiddle, other.outside, ...beyond];
+
+  standAt(rig.human, start.x, start.y);
+  standAt(rig.cat, start.x, start.y);
+  for (let update = 0; update < LIVE_PICKUP_UPDATES; update++) rig.step();
+  const midge = (): { readonly x: number; readonly y: number } | null => blueprints.escort.midge;
+  leadDown(rig, midge, out, DELIVERY_UPDATE_BUDGET, null);
+  for (let update = 0; update < CROSSING_SETTLE_UPDATES; update++) rig.step();
+
+  const cow = blueprints.escort.midge;
+  const guidance = blueprints.guidance();
+  const midgeTile = cow === null ? null : liveTileOf(cow);
+  check(
+    midgeTile !== null && !inVillage(midgeTile),
+    `Midge follows the party out of the ${other.facing} gate (the road uses the ${used.facing})`,
+  );
+  if (guidance?.kind !== 'escort_waypoint' || midgeTile === null) {
+    check(
+      false,
+      `out of the ${other.facing} gate the guide names a waypoint (${guidance?.kind ?? 'nothing'})`,
+    );
+    rig.dispose();
+    return;
+  }
+  // Walked straight out past the apron, she may stand a few tiles off a road
+  // that turns along the wall; the road then starts at the gate itself.
+  const startsFromHerOrHerGate = (tile: TilePoint | undefined): boolean =>
+    tile !== undefined &&
+    (Math.hypot(tile.x - midgeTile.x, tile.y - midgeTile.y) <= TRAIL_START_NEAR_TILES ||
+      other.tiles.some(
+        (gateTile) =>
+          Math.hypot(tile.x - gateTile.x, tile.y - gateTile.y) <= TRAIL_START_NEAR_TILES,
+      ));
+  const trail = guidance.trail;
+  const trailStart = trail[0];
+  check(
+    startsFromHerOrHerGate(trailStart),
+    `the trail is planned afresh from where she stands or the gate she used (trail starts at ` +
+      `(${trailStart?.x ?? '-'},${trailStart?.y ?? '-'}), Midge at (${midgeTile.x},${midgeTile.y}))`,
+  );
+  check(
+    trail.every((tile) => !inVillage(tile)) && !inVillage(guidance.at),
+    'the new trail and its waypoint never lead back into the village',
+  );
+  const brokenStep = trail.findIndex(
+    (tile, index) =>
+      !isEscortStep(map, tile.x, tile.y) || (index > 0 && !isFourAdjacent(trail[index - 1], tile)),
+  );
+  check(
+    brokenStep < 0,
+    `the new trail is a walk Midge can take, step by step (breaks at ${brokenStep})`,
+  );
+  const green = garrisonGreen(map);
+  const greenGate = green?.gateTiles[0] ?? null;
+  const tilesToGreen = (tile: TilePoint): number =>
+    greenGate === null ? 0 : Math.hypot(tile.x - greenGate.x, tile.y - greenGate.y);
+  check(
+    isStraightWalk(map, midgeTile, guidance.at) ||
+      tilesToGreen(guidance.at) < tilesToGreen(midgeTile),
+    'the waypoint in hand is ahead of her, not behind',
+  );
+
+  check(carry.midge !== null, 'a door visit here would carry Midge, led, on the new road');
+  // A copy, so the rewind below cannot reach the record the walk goes on with.
+  const behindTheDoor = blueprintsRig('escort_midge', { ...carry });
+  behindTheDoor.rig.human.x = rig.human.x;
+  behindTheDoor.rig.human.y = rig.human.y;
+  behindTheDoor.rig.cat.x = rig.human.x;
+  behindTheDoor.rig.cat.y = rig.human.y;
+  behindTheDoor.rig.step();
+  const afterDoor = behindTheDoor.blueprints.guidance();
+  const afterDoorStart = afterDoor?.kind === 'escort_waypoint' ? afterDoor.trail[0] : undefined;
+  check(
+    afterDoor?.kind === 'escort_waypoint' &&
+      afterDoorStart !== undefined &&
+      afterDoor.trail.every((tile) => !inVillage(tile)) &&
+      startsFromHerOrHerGate(afterDoorStart),
+    'after a door the rebuilt quest still guides along the new road',
+  );
+  behindTheDoor.blueprints.onRewind();
+  standAt(behindTheDoor.rig.human, start.x, start.y);
+  standAt(behindTheDoor.rig.cat, start.x, start.y);
+  for (let update = 0; update < LIVE_PICKUP_UPDATES; update++) behindTheDoor.rig.step();
+  const afterRewind = behindTheDoor.blueprints.guidance();
+  check(
+    afterRewind?.kind === 'escort_waypoint' &&
+      route.waypoints.some((waypoint) => sameTile(waypoint.tile, afterRewind.at)),
+    `after a rewind to Merrit's gate the guide is back on the road out of the ${used.facing} gate`,
+  );
+  behindTheDoor.rig.dispose();
+
+  const { delivered, trespassed } = leadAlongTheGuide(rig, blueprints, green, inVillage);
+  check(
+    delivered && !trespassed,
+    `led along the new road, Midge is delivered to Garrison Green without going back ` +
+      `through the village (${blueprints.phase}${trespassed ? ', back through the village' : ''})`,
+  );
+  rig.dispose();
+}
+
 export function escortRouteSections(
   check: Check,
 ): ReadonlyArray<{ readonly name: string; readonly run: () => void }> {
@@ -366,5 +695,9 @@ export function escortRouteSections(
       name: "Midge's road: the guide, the pin and the pip agree",
       run: () => verifyLiveGuidance(check),
     },
+    ...Array.from({ length: UNUSED_GATE_COUNT }, (_, index) => ({
+      name: `Midge's road: out unexpected gate ${index + 1} of ${UNUSED_GATE_COUNT}, planned afresh from it`,
+      run: () => verifyRerouteFromUnexpectedGate(check, index),
+    })),
   ];
 }

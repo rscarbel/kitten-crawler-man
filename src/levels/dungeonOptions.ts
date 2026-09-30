@@ -1,5 +1,6 @@
 import type { DungeonLevelOptions } from '../map/DungeonGenerator';
 import type { LevelDef } from './types';
+import { BASE_DEFEND_QUEST_INTENSITY } from './defendQuestIntensity';
 
 /** Boss rooms carved when a level declares none. */
 const DEFAULT_BOSS_ROOM_COUNT = 1;
@@ -20,5 +21,6 @@ export function dungeonOptionsForLevel(levelDef: LevelDef): DungeonLevelOptions 
     bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
     hasSpiderLab: levelDef.hasSpiderLab ?? false,
     progression: levelDef.progression,
+    questGrateCount: (levelDef.defendQuestIntensity ?? BASE_DEFEND_QUEST_INTENSITY).grateCount,
   };
 }

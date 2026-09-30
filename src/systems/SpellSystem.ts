@@ -631,6 +631,7 @@ export class SpellSystem implements GameSystem {
         const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - fog.x;
         const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - fog.y;
         if (dx * dx + dy * dy > rSq) continue;
+        if (mob.wardedFromParty) continue;
         if (mob.immuneToConfusion) {
           // Only enemies are worth a "sees you through the fog" notice. The
           // cat's own pet is immune too, and toasting the player that their

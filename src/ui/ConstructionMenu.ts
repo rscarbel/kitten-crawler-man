@@ -13,6 +13,11 @@
  * on a phone) asks the owner to draw its placement ghost in the world, which
  * is how "build in front of you" stays predictable.
  *
+ * A row whose kind cannot be built where the party is (indoors, for the
+ * outdoor-only kinds) is drawn disabled but stays in the focus ring, so
+ * choosing it by pointer, key or tap raises the row's refusal as a notice
+ * rather than doing nothing.
+ *
  * Not world-halting: it is opened mid-siege, and the crawler it builds for
  * has to stay live under it. It does lock the keyboard, so number keys and
  * the rest of the hotbar cannot act behind it.
@@ -126,6 +131,9 @@ const RESOURCE_NUMBER_INSET = 2;
 const COST_ICON_RAISE = 1;
 const ROW_NAME_COLOR = '#f1f5f9';
 const ROW_NAME_DISABLED_COLOR = STATUS_BLOCKED_COLOR;
+/** How far a refused row's icon is faded, on top of being drained of colour. */
+const REFUSED_ICON_ALPHA = 0.45;
+const REFUSED_ICON_FILTER = 'grayscale(1)';
 
 /**
  * A row has to be at least this tall on screen for a thumb, whatever the
@@ -160,6 +168,8 @@ interface RowHit {
   readonly option: BuildOption;
   /** Whether a click here should choose the row — true both when it would start a job and when it is only room-blocked. */
   readonly clickable: boolean;
+  /** Shown instead of choosing the row, for a kind that can never be built here. */
+  readonly refusal: string | null;
   readonly x: number;
   readonly y: number;
   readonly w: number;
@@ -168,7 +178,6 @@ interface RowHit {
 
 export class ConstructionMenu {
   private open = false;
-  private readOnly = false;
   private fit: ModalFit = { scale: 1, pivotX: 0, pivotY: 0 };
   private modalContains: ((px: number, py: number) => boolean) | null = null;
   private buttons: Array<{ x: number; y: number; w: number; h: number; action?: () => void }> = [];
@@ -178,20 +187,22 @@ export class ConstructionMenu {
   private tappedPreview: BuildOption | null = null;
   private source: ConstructionMenuSource | null = null;
 
-  constructor(private readonly audio: AudioManager | null) {}
+  /**
+   * @param notify Shows a one-line notice, for a refused row's reason; the
+   *   owner routes it to the scene's toasts.
+   */
+  constructor(
+    private readonly audio: AudioManager | null,
+    private readonly notify: (message: string) => void,
+  ) {}
 
   get isOpen(): boolean {
     return this.open;
   }
 
-  get isReadOnly(): boolean {
-    return this.readOnly;
-  }
-
-  /** Opens the menu over `source`. Read-only shows every row disabled, for indoors. */
-  openWith(source: ConstructionMenuSource, readOnly: boolean): void {
+  /** Opens the menu over `source`, which decides every row's state, indoors or out. */
+  openWith(source: ConstructionMenuSource): void {
     this.source = source;
-    this.readOnly = readOnly;
     this.open = true;
     this.tappedPreview = null;
     clearMenuFocus();
@@ -314,9 +325,10 @@ export class ConstructionMenu {
     const rowsPerColumn = Math.ceil(rows.length / COMPACT_COLUMNS);
     const columnWidth = (innerWidth - COMPACT_COLUMN_GAP * (COMPACT_COLUMNS - 1)) / COMPACT_COLUMNS;
     rows.forEach((row, index) => {
-      const enabled = row.enabled && !this.readOnly;
+      const enabled = row.enabled;
+      const refused = row.refusal !== null;
       // A row blocked only by room stays pressable: choosing it shows where the build was tried and why not.
-      const clickable = (row.enabled || row.roomBlocked) && !this.readOnly;
+      const clickable = row.enabled || row.roomBlocked;
       const column = layout.compact ? Math.floor(index / rowsPerColumn) : 0;
       const rowInColumn = layout.compact ? index % rowsPerColumn : index;
       const rowHeight = layout.compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
@@ -330,19 +342,21 @@ export class ConstructionMenu {
         width: rowWidth,
         height: rowHeight,
         label: '',
-        disabled: !clickable,
-        ...BUTTON_PRESETS.trackerRow,
-        action: () => this.choose(row.option),
+        disabled: !clickable && !refused,
+        ...(refused ? BUTTON_PRESETS.constructionRowRefused : BUTTON_PRESETS.trackerRow),
+        action: () => this.activate(row.option, clickable, row.refusal),
       });
       this.rowHits.push({
         option: row.option,
         clickable,
+        refusal: row.refusal,
         x: rowX,
         y: rowY,
         w: rowWidth,
         h: rowHeight,
       });
-      if (result.focused || pointerOverRect(rowX, rowY, rowWidth, rowHeight)) preview = row.option;
+      const pointedAt = result.focused || pointerOverRect(rowX, rowY, rowWidth, rowHeight);
+      if (pointedAt && !refused) preview = row.option;
       if (layout.compact)
         this.renderCompactRow(ctx, row, rowX, rowY, rowWidth, enabled, partyCount);
       else this.renderRow(ctx, row, rowX, rowY, rowWidth, enabled, partyCount);
@@ -369,7 +383,7 @@ export class ConstructionMenu {
 
     endModalFit(ctx);
     resetButtonPointerSpace();
-    source.setPreview(this.readOnly ? null : preview);
+    source.setPreview(preview);
   }
 
   private renderResources(
@@ -418,7 +432,7 @@ export class ConstructionMenu {
   ): void {
     const iconX = x + ROW_ICON_PAD;
     const iconY = y + (ROW_HEIGHT - ROW_ICON) / 2;
-    this.renderRowIcon(ctx, row.option, iconX, iconY);
+    this.renderRowIcon(ctx, row, iconX, iconY);
     const textX = x + ROW_TEXT_X;
     drawText(ctx, row.label, {
       x: textX,
@@ -445,8 +459,7 @@ export class ConstructionMenu {
     } else {
       this.renderCost(ctx, row, textX, costY, partyCount);
     }
-    const status = this.readOnly ? 'Build outdoors' : row.status;
-    drawText(ctx, status, {
+    drawText(ctx, row.status, {
       x: textX,
       y: y + ROW_STATUS_Y,
       size: DETAIL_SIZE,
@@ -469,7 +482,7 @@ export class ConstructionMenu {
   ): void {
     this.renderRowIcon(
       ctx,
-      row.option,
+      row,
       x + COMPACT_ICON_PAD,
       y + (COMPACT_ROW_HEIGHT - COMPACT_ICON) / 2,
       COMPACT_ICON,
@@ -497,7 +510,7 @@ export class ConstructionMenu {
     } else if (enabled) {
       this.renderCost(ctx, row, textX, detailY, partyCount);
     } else {
-      drawText(ctx, this.readOnly ? 'Build outdoors' : row.status, {
+      drawText(ctx, row.status, {
         x: textX,
         y: detailY,
         size: COMPACT_DETAIL_SIZE,
@@ -518,11 +531,20 @@ export class ConstructionMenu {
     partyCount: (id: ResourceId) => number,
   ): void {
     let cursor = x;
+    // A refused row's price is information, not a shortfall to fix, so it is
+    // not coloured as affordable or short.
+    const refused = row.refusal !== null;
     const discounted = !sameCost(row.baseCost, row.cost);
     if (discounted)
       cursor = this.renderCostItems(ctx, row.baseCost, cursor, y, () => STRUCK_COLOR, true);
     if (isEmptyCost(row.cost)) {
-      drawText(ctx, 'Free', { x: cursor, y, ...TEXT_PRESETS.success, size: DETAIL_SIZE });
+      drawText(ctx, 'Free', {
+        x: cursor,
+        y,
+        ...TEXT_PRESETS.success,
+        size: DETAIL_SIZE,
+        ...(refused ? { color: ROW_NAME_DISABLED_COLOR } : {}),
+      });
       return;
     }
     this.renderCostItems(
@@ -530,7 +552,12 @@ export class ConstructionMenu {
       row.cost,
       cursor,
       y,
-      (id, amount) => (partyCount(id) >= amount ? COST_OK_COLOR : COST_SHORT_COLOR),
+      (id, amount) =>
+        refused
+          ? ROW_NAME_DISABLED_COLOR
+          : partyCount(id) >= amount
+            ? COST_OK_COLOR
+            : COST_SHORT_COLOR,
       false,
     );
   }
@@ -563,12 +590,30 @@ export class ConstructionMenu {
     return cursor;
   }
 
+  /** A refused row's icon is washed out, so the row reads as unavailable before its status is read. */
   private renderRowIcon(
+    ctx: CanvasRenderingContext2D,
+    row: OptionStatus,
+    x: number,
+    y: number,
+    size: number = ROW_ICON,
+  ): void {
+    const greyed = row.refusal !== null;
+    ctx.save();
+    if (greyed) {
+      ctx.globalAlpha *= REFUSED_ICON_ALPHA;
+      ctx.filter = REFUSED_ICON_FILTER;
+    }
+    this.paintRowIcon(ctx, row.option, x, y, size);
+    ctx.restore();
+  }
+
+  private paintRowIcon(
     ctx: CanvasRenderingContext2D,
     option: BuildOption,
     x: number,
     y: number,
-    size: number = ROW_ICON,
+    size: number,
   ): void {
     if (option === 'trebuchet') {
       drawKitIcon(ctx, 'trebuchet_kit', x, y, size);
@@ -596,9 +641,17 @@ export class ConstructionMenu {
     ctx.restore();
   }
 
+  /** A row pressed, by pointer or through the focus ring's synthesized click. */
+  private activate(option: BuildOption, clickable: boolean, refusal: string | null): void {
+    if (refusal !== null) this.notify(refusal);
+    else if (clickable) this.choose(option);
+    // A disabled row still shows where it would go and why it cannot.
+    else this.tappedPreview = option;
+  }
+
   private choose(option: BuildOption): void {
     const source = this.source;
-    if (source === null || this.readOnly) return;
+    if (source === null) return;
     playButtonSound(this.audio);
     this.close();
     source.start(option);
@@ -619,9 +672,7 @@ export class ConstructionMenu {
     for (const hit of this.rowHits) {
       const inside = mx >= hit.x && mx <= hit.x + hit.w && my >= hit.y && my <= hit.y + hit.h;
       if (!inside) continue;
-      if (hit.clickable) this.choose(hit.option);
-      // A disabled row still shows where it would go and why it cannot.
-      else this.tappedPreview = hit.option;
+      this.activate(hit.option, hit.clickable, hit.refusal);
       return true;
     }
     if (this.modalContains?.(mx, my) === true) return true;

@@ -28,15 +28,14 @@ const STALL_BASE_BELOW_NORTH_EDGE_TILES = 1 - STALL_BACKSET_TILES;
 /**
  * How far the beam has to overshoot the canopy ridge to be seen above it.
  *
- * The beam's alpha ramp is a fraction of its own length — full strength at the
- * base, roughly a third of that at 45% of the height, nothing at the top — so
- * clearance has to be read as a share of the total beam, not as tiles. At 3
- * tiles over a 2.5-tile rise the ridge lands at 45% of the beam, which is where
- * the ramp still has a third of its colour, and a little over two tiles of
- * visible light stand above the canopy. The previous 1.7 put the ridge at 60%
- * of the beam, leaving barely a tile of it in the air.
+ * The beam's strength is a function of the share of its own length climbed —
+ * near full for the first tenth, about half at the midpoint, nothing at the
+ * top — so clearance has to be read as a share of the total beam, not as tiles.
+ * At 3.5 tiles over a 2.5-tile rise the ridge lands a little over 40% of the
+ * way up, where the shaft is still bright, and three tiles of light stand
+ * above the canopy.
  */
-const STALL_RIDGE_CLEARANCE_TILES = 3;
+const STALL_RIDGE_CLEARANCE_TILES = 3.5;
 
 const STALL_BEAM_HEIGHT_TILES =
   STALL_CANOPY_HEIGHT_TILES + STALL_BASE_BELOW_NORTH_EDGE_TILES + STALL_RIDGE_CLEARANCE_TILES;
@@ -73,13 +72,14 @@ const DOORWAY_BEAM_HEIGHT_TILES = 6.4;
  * to its own length: a constant clearance leaves the same tiles of light above a
  * cottage and above the Desperado Club, but on the taller beam those tiles sit
  * far further along the ramp and have almost no colour left. Holding the
- * roofline near two thirds of the beam keeps a comparable band of visible light
- * over every building.
+ * roofline a little past halfway up the beam — where the shaft still has close
+ * to half its strength — keeps a comparable band of visible light over every
+ * building.
  */
-const FACADE_ROOF_CLEARANCE_FRACTION = 0.45;
+const FACADE_ROOF_CLEARANCE_FRACTION = 0.8;
 
 /** Below which a short facade's proportional clearance is too little to notice. */
-const FACADE_MIN_ROOF_CLEARANCE_TILES = 2.4;
+const FACADE_MIN_ROOF_CLEARANCE_TILES = 3.2;
 
 /** The west column, width and roof height of a building drawn from a sprite. */
 interface FacadeExtent {

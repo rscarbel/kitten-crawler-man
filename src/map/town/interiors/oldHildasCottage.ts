@@ -10,9 +10,11 @@
  * stays a clear path from the door to the fire.
  *
  * The hearth is a real hearth prop because the cottage's second occupant —
- * the customer waiting on a charm — is anchored to a hearth, and the dresser
- * carries the `shelf` anchor Hilda herself browses: an anchor group that
- * matches nothing drops its occupant with no error at all.
+ * the customer waiting on a charm — is anchored to a hearth: an anchor group
+ * that matches nothing drops its occupant with no error at all. Hilda herself
+ * is anchored to nothing; she roams whatever floor the furniture leaves open,
+ * starting from the open tile nearest the room's centre, so that clear path
+ * through the middle is also where the player finds her.
  *
  * Her actual worktable, chair and "shelf over on the side" — the three
  * pieces her anchor-quest text has the kids break — are placed here as the

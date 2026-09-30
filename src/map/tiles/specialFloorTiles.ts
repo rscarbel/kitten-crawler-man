@@ -29,6 +29,7 @@ import { drawWallShadow } from './helpers';
 import { drawColosseumTile } from './bossRooms/colosseumTiles';
 import { drawSpiderLabFloor } from './bossRooms/labFloorPainter';
 import { drawGroundTile } from './groundTiles';
+import { drawNurseryGrateTile } from './nurseryGrateTile';
 import { drawKrakarenLabFloor } from './bossRooms/krakarenTiles';
 import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';
@@ -38,18 +39,6 @@ import { drawHollowThresholdSill, hollowThresholdPalette } from './hollowWallTil
 import { drawHollowPalisadeGapTile } from './hollowPalisadeTiles';
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { drawCropRowOverlay } from './cropRowTiles';
-
-const GRATE_BASE_FILL_FRACTION = 0.06;
-const GRATE_GAP_DIVISIONS = 6;
-const GRATE_HORIZONTAL_INSET_FRACTION = 0.1;
-const GRATE_HORIZONTAL_WIDTH_FRACTION = 0.8;
-const GRATE_FRAME_OUTER_FRACTION = 0.08;
-const GRATE_FRAME_THICKNESS_FRACTION = 0.04;
-const GRATE_FRAME_HEIGHT_FRACTION = 0.84;
-const GRATE_VOID_INSET_FRACTION = 0.14;
-const GRATE_VOID_SIZE_FRACTION = 0.72;
-const GRATE_RIM_OUTER_FRACTION = 0.08;
-const GRATE_RIM_SIZE_FRACTION = 0.84;
 
 const CLUB_SUNBURST_TILE_STRIDE = 6;
 const CLUB_SUNBURST_RAY_COUNT = 8;
@@ -74,7 +63,7 @@ const DRILL_SAND_HASH_MOD = 89;
 // Both states paint the doorway itself rather than an object standing in it: the
 // timber overruns the tile edges on the doorway's own axis, so a three-tile
 // doorway reads as one continuous run of boards and not as three stamps of the
-// same crate. Nothing here uses the grey of `FLOOR_GRATE` — four of those sit in
+// same crate. Nothing here uses the iron of `FLOOR_GRATE` — the grates sit in
 // this very room, and the two must never read as relatives.
 
 /** The unlit passage behind the boards; the gaps between planks read as depth against it. */
@@ -678,54 +667,10 @@ export function drawSpecialFloorTile(
       break;
     }
 
-    // Floor Grate — dark metal grate over dungeon floor
+    // The goblin nursery's grates, over the room's own floor.
     case FLOOR_GRATE: {
-      // Base floor (same as concrete)
-      ctx.fillStyle = '#505050';
-      ctx.fillRect(sx, sy, ts, ts);
-      // Grate bars — horizontal slits
-      ctx.fillStyle = '#2a2a2a';
-      const barH = Math.max(2, ts * GRATE_BASE_FILL_FRACTION);
-      const gap = ts / GRATE_GAP_DIVISIONS;
-      for (let i = 1; i < GRATE_GAP_DIVISIONS; i++) {
-        ctx.fillRect(
-          sx + ts * GRATE_HORIZONTAL_INSET_FRACTION,
-          sy + gap * i - barH / 2,
-          ts * GRATE_HORIZONTAL_WIDTH_FRACTION,
-          barH,
-        );
-      }
-      // Vertical frame bars
-      ctx.fillStyle = '#3a3a3a';
-      ctx.fillRect(
-        sx + ts * GRATE_FRAME_OUTER_FRACTION,
-        sy + ts * GRATE_FRAME_OUTER_FRACTION,
-        ts * GRATE_FRAME_THICKNESS_FRACTION,
-        ts * GRATE_FRAME_HEIGHT_FRACTION,
-      );
-      ctx.fillRect(
-        sx + ts * (1 - GRATE_FRAME_OUTER_FRACTION - GRATE_FRAME_THICKNESS_FRACTION),
-        sy + ts * GRATE_FRAME_OUTER_FRACTION,
-        ts * GRATE_FRAME_THICKNESS_FRACTION,
-        ts * GRATE_FRAME_HEIGHT_FRACTION,
-      );
-      // Dark centre void below grate
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(
-        sx + ts * GRATE_VOID_INSET_FRACTION,
-        sy + ts * GRATE_VOID_INSET_FRACTION,
-        ts * GRATE_VOID_SIZE_FRACTION,
-        ts * GRATE_VOID_SIZE_FRACTION,
-      );
-      // Metallic rim highlight
-      ctx.strokeStyle = '#6a6a6a';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(
-        sx + ts * GRATE_RIM_OUTER_FRACTION,
-        sy + ts * GRATE_RIM_OUTER_FRACTION,
-        ts * GRATE_RIM_SIZE_FRACTION,
-        ts * GRATE_RIM_SIZE_FRACTION,
-      );
+      drawGroundTile(ctx, dungeonFloorTheme().ground, structure, sx, sy, ts, tx, ty);
+      drawNurseryGrateTile(ctx, sx, sy, ts, tx, ty);
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }

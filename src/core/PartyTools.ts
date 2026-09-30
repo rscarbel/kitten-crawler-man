@@ -1,7 +1,14 @@
 import { isRecord } from './guards';
 import type { ItemId } from './ItemDefs';
 import type { Inventory } from './Inventory';
-import { MAX_TOOL_TIER, TOOL_TIER_BASIC, TOOL_TIERS, isToolTier, toolTierDef } from './toolTiers';
+import {
+  MAX_TOOL_TIER,
+  TOOL_TIER_BASIC,
+  TOOL_TIERS,
+  isToolTier,
+  toolNodeSpareChance,
+  toolTierDef,
+} from './toolTiers';
 import type { ToolKind, ToolTier } from './toolTiers';
 
 /** Axe and pickaxe tier, shared by both crawlers. `null` means never granted. */
@@ -127,6 +134,11 @@ export class PartyTools {
   /** The multiplier a harvest tick's yield gets from the party's current tool of this kind. */
   yieldMultiplier(kind: ToolKind): number {
     return toolTierDef(kind, this.tierOf(kind)).yieldMultiplier;
+  }
+
+  /** Chance (0–1) a harvest with the party's current tool of this kind spends none of the node. */
+  nodeSpareChance(kind: ToolKind): number {
+    return toolNodeSpareChance(kind, this.tierOf(kind));
   }
 
   /** The item id currently carried for this tool kind. */

@@ -78,6 +78,10 @@ const TILE_CENTRE = 0.5;
 const NO_CAPACITY_BONUS = 0;
 /** A Resourcing level below every capacity perk. */
 const UNPERKED_LEVEL = 1;
+/** What one harvest at base speed spends of a node: a whole unit of its capacity. */
+const BASE_HARVEST_WORK = 1;
+/** Keeps the rig's spare stream off the luck (+0) and capacity (+1) seeds. */
+const SPARE_SEED_OFFSET = 2;
 
 // ── The request's own numbers ─────────────────────────────────────────────
 
@@ -417,6 +421,7 @@ function makeRig(luckSeed = 1): Rig {
     audio: null,
     announce: (message) => announcements.push(message),
     luckRng: mulberry32(luckSeed),
+    spareRng: mulberry32(luckSeed + SPARE_SEED_OFFSET),
     noteActivity: () => undefined,
     onTreeStruck: () => undefined,
   });
@@ -782,7 +787,8 @@ section('Depletion rewrites the tiles');
   const state = rig.ledger.stateAt(tree.tileX, tree.tileY, UNPERKED_LEVEL);
   check(state !== null, 'a standing tree is a node');
   const capacity = state?.capacity ?? 0;
-  for (let i = 0; i < capacity; i++) rig.ledger.spend(tree.tileX, tree.tileY, UNPERKED_LEVEL);
+  for (let i = 0; i < capacity; i++)
+    rig.ledger.spend(tree.tileX, tree.tileY, UNPERKED_LEVEL, BASE_HARVEST_WORK);
   const ctx = contextFor(rig, rig.human);
   const FELLING_SETTLE_TICKS = 120;
   for (let i = 0; i < FELLING_SETTLE_TICKS; i++) rig.trees.update(ctx);
@@ -796,13 +802,13 @@ section('Depletion rewrites the tiles');
   const rockCapacity = rockState?.capacity ?? 0;
   const rockType = gameMap.structure[rock.tileY][rock.tileX].type;
   for (let i = 0; i < rockCapacity - 1; i++)
-    rig.ledger.spend(rock.tileX, rock.tileY, UNPERKED_LEVEL);
+    rig.ledger.spend(rock.tileX, rock.tileY, UNPERKED_LEVEL, BASE_HARVEST_WORK);
   check(
     gameMap.structure[rock.tileY][rock.tileX].type === rockType,
     'a rock one harvest from empty still stands',
   );
   const checkpoint = rig.ledger.captureCheckpoint();
-  rig.ledger.spend(rock.tileX, rock.tileY, UNPERKED_LEVEL);
+  rig.ledger.spend(rock.tileX, rock.tileY, UNPERKED_LEVEL, BASE_HARVEST_WORK);
   check(
     harvestKindAt(gameMap, rock.tileX, rock.tileY) === null &&
       gameMap.isWalkable(rock.tileX, rock.tileY),
@@ -814,6 +820,149 @@ section('Depletion rewrites the tiles');
       rig.ledger.stateAt(rock.tileX, rock.tileY, UNPERKED_LEVEL)?.remaining === 1,
     'a checkpoint rewound to before the crumble stands the rock back up, one harvest left',
   );
+}
+
+// ── Node life ──────────────────────────────────────────────────────────────
+
+/**
+ * "Every speed upgrade proportionally increases a node's health": whatever
+ * the Resourcing level and tool tier, a node lasts the same wall-clock time.
+ * Each pair here is (Resourcing level, pickaxe tier); the pickaxe carries no
+ * spare chance, so its node life is speed alone.
+ */
+const NODE_LIFE_CASES: ReadonlyArray<readonly [number, ToolTier]> = [
+  [1, 0],
+  [4, 0],
+  [13, 0],
+  [1, 3],
+  [9, 2],
+  [13, 5],
+];
+/** A small, fixed rock capacity so a slow harvester empties it well inside the bag. */
+const NODE_LIFE_CAPACITY = 6;
+/** Stops a node-life run that never depletes: generously past even the slowest case's life. */
+const NODE_LIFE_TICK_LIMIT_MULTIPLE = 3;
+
+section('Node life: speed upgrades never shorten a node’s wall-clock life');
+{
+  const baseIntervalTicks = EXPECTED_STONE_BASE_SECONDS * TICKS_PER_SECOND;
+  const expectedLifeTicks = NODE_LIFE_CAPACITY * baseIntervalTicks;
+  for (const [level, tier] of NODE_LIFE_CASES) {
+    const rig = makeRig();
+    rig.tools.pickaxeTier = tier;
+    teach(rig.human, level);
+    const rock = takeRock();
+    stand(rig.human, rock);
+    const checkpoint = rig.ledger.captureCheckpoint();
+    const state = rig.ledger.stateAt(rock.tileX, rock.tileY, level);
+    if (state === null) {
+      check(false, `L${level} pickaxe tier ${tier}: the rock is a node`);
+      continue;
+    }
+    state.capacity = NODE_LIFE_CAPACITY;
+    state.remaining = NODE_LIFE_CAPACITY;
+    rig.harvest.tryStart(rig.human);
+    const ctx = contextFor(rig, rig.human);
+    const tickLimit = expectedLifeTicks * NODE_LIFE_TICK_LIMIT_MULTIPLE;
+    let lifeTicks = 0;
+    while (rig.harvest.isHarvesting(rig.human) && lifeTicks < tickLimit) {
+      rig.harvest.update(ctx, false);
+      lifeTicks++;
+    }
+    const depleted = harvestKindAt(gameMap, rock.tileX, rock.tileY) === null;
+    const speedFactor =
+      (EXPECTED_SPEED.get(level) ?? 1) - (EXPECTED_TOOL_SPEED_BONUS.get(tier) ?? 0);
+    const awardIntervalTicks = baseIntervalTicks * speedFactor;
+    const awards = woodHeld(rig.human, 'stone');
+    check(
+      depleted && Math.abs(lifeTicks - expectedLifeTicks) <= awardIntervalTicks + 1,
+      `L${level} pickaxe tier ${tier} (${speedFactor.toFixed(SHARE_DIGITS)}× interval): ${NODE_LIFE_CAPACITY}-harvest rock lasts ${lifeTicks} ticks, ${awards} stone gathered (base ${expectedLifeTicks})`,
+    );
+    rig.ledger.restoreCheckpoint(checkpoint);
+  }
+}
+
+/**
+ * "Each axe level adds a 5% chance a harvest spends none of the node",
+ * written out flat: the starter axe spares nothing.
+ */
+const EXPECTED_AXE_SPARE_CHANCE: ReadonlyMap<ToolTier, number> = new Map([
+  [0, 0],
+  [1, 0.05],
+  [2, 0.1],
+  [3, 0.15],
+  [4, 0.2],
+  [5, 0.25],
+]);
+/** Awards measured per tier: about three standard deviations inside the tolerance at 25%. */
+const SPARE_TRIAL_AWARDS = 3000;
+const SPARE_RATE_TOLERANCE = 0.025;
+/** A capacity no trial run can empty, so every award in it is measured. */
+const SPARE_TRIAL_CAPACITY = 1_000_000;
+/** Seeds the spare trials apart from every other rig. */
+const SPARE_TRIAL_SEED = 31;
+const SPARE_PERCENT_DIGITS = 1;
+
+section('Spare: a higher-tier axe sometimes takes its award without spending the tree');
+{
+  for (const tier of TOOL_TIERS.axe.keys()) {
+    if (!isToolTier(tier)) continue;
+    const partyTools = new PartyTools({ axeTier: tier, pickaxeTier: tier });
+    const expected = EXPECTED_AXE_SPARE_CHANCE.get(tier) ?? 0;
+    check(
+      Math.abs(partyTools.nodeSpareChance('axe') - expected) < EPSILON &&
+        partyTools.nodeSpareChance('pickaxe') === 0,
+      `${TOOL_TIERS.axe[tier].name}: ${expected * PERCENT_MULTIPLIER}% spare chance; the same-tier pickaxe spares nothing`,
+    );
+  }
+
+  const measuredTiers: readonly ToolTier[] = [0, 1, MAX_TOOL_TIER];
+  for (const tier of measuredTiers) {
+    const rig = makeRig(SPARE_TRIAL_SEED + tier);
+    rig.tools.axeTier = tier;
+    teach(rig.human, UNPERKED_LEVEL);
+    const tree = takeTree();
+    stand(rig.human, tree);
+    const state = rig.ledger.stateAt(tree.tileX, tree.tileY, UNPERKED_LEVEL);
+    if (state === null) {
+      check(false, `axe tier ${tier}: the tree is a node`);
+      continue;
+    }
+    state.capacity = SPARE_TRIAL_CAPACITY;
+    state.remaining = SPARE_TRIAL_CAPACITY;
+    rig.harvest.tryStart(rig.human);
+    const interval = harvestIntervalTicks(
+      'wood',
+      UNPERKED_LEVEL,
+      EXPECTED_TOOL_SPEED_BONUS.get(tier) ?? 0,
+    );
+    const expectedWork = 1 - (EXPECTED_TOOL_SPEED_BONUS.get(tier) ?? 0);
+    let spared = 0;
+    let spentOther = 0;
+    let measured = 0;
+    for (let i = 0; i < SPARE_TRIAL_AWARDS; i++) {
+      const before = state.remaining;
+      const award = nextAward(rig, rig.human, 'wood', Math.ceil(interval) + 1);
+      if (award === null) break;
+      measured++;
+      rig.human.inventory.removeItems('wood', award.amount);
+      // Every award trains Resourcing; held at one level so the expected spend stays fixed.
+      teach(rig.human, UNPERKED_LEVEL);
+      const spent = before - state.remaining;
+      if (spent === 0) spared++;
+      else if (Math.abs(spent - expectedWork) > EPSILON) spentOther++;
+    }
+    const expected = EXPECTED_AXE_SPARE_CHANCE.get(tier) ?? 0;
+    const rate = measured === 0 ? 0 : spared / measured;
+    check(
+      measured === SPARE_TRIAL_AWARDS &&
+        spentOther === 0 &&
+        Math.abs(rate - expected) <= SPARE_RATE_TOLERANCE &&
+        (expected > 0 || spared === 0),
+      `axe tier ${tier}: ${spared}/${measured} awards spared the tree (${(rate * PERCENT_MULTIPLIER).toFixed(SPARE_PERCENT_DIGITS)}%, expected ${expected * PERCENT_MULTIPLIER}%); every other award spent ${expectedWork.toFixed(SHARE_DIGITS)}`,
+    );
+    rig.harvest.stop(rig.human);
+  }
 }
 
 // ── Luck ───────────────────────────────────────────────────────────────────
@@ -1026,7 +1175,8 @@ section('Channel: a modal pauses it rather than ending it');
   // Spent directly on the ledger, not through the channel: a thrall on the
   // same node keeps ticking through a modal that halts the crawlers, so the
   // node can still run out from under a paused channel.
-  for (let i = 0; i < rockCapacity; i++) rig.ledger.spend(rock.tileX, rock.tileY, UNPERKED_LEVEL);
+  for (let i = 0; i < rockCapacity; i++)
+    rig.ledger.spend(rock.tileX, rock.tileY, UNPERKED_LEVEL, BASE_HARVEST_WORK);
   rig.harvest.update(ctx, true);
   check(
     !rig.harvest.isHarvesting(rig.human),

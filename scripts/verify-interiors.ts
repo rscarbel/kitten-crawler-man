@@ -24,6 +24,7 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 import { createTownPlan } from '../src/map/town/townPlan';
 import type { BuildingKind } from '../src/map/town/townPlan';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
+import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTile';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
 import { TILE_SIZE } from '../src/core/constants';
 import { VOID_TYPE } from '../src/map/tileTypes';
@@ -38,6 +39,7 @@ import {
   ANCHOR_TILE_TYPES,
   BUILDING_OCCUPANTS,
   InteriorOccupantSystem,
+  occupantAnchor,
   scanInteriorFurniture,
 } from '../src/systems/InteriorOccupantSystem';
 import type { AnchorKind } from '../src/systems/InteriorOccupantSystem';
@@ -162,8 +164,39 @@ const TOWER_CONFRONTATION_FLOOR = TOWER_FLOOR_COUNT - 1;
  * than the encounter's own guards can drift while they idle.
  */
 const ARRIVAL_SAFETY_MARGIN_TILES = 2;
+const FRAMES_PER_SECOND = 60;
 /** How long the party is left standing on the landing, doing nothing at all. */
-const ARRIVAL_VIGIL_FRAMES = 60 * 20;
+const ARRIVAL_VIGIL_SECONDS = 20;
+const ARRIVAL_VIGIL_FRAMES = ARRIVAL_VIGIL_SECONDS * FRAMES_PER_SECOND;
+
+/** Where Old Hilda lives — the town's roaming resident. */
+const HILDA_HOME = "Old Hilda's Cottage";
+/**
+ * How far from the room's centre (Chebyshev tiles) she may be set down. Not
+ * zero: the cottage's centre is furniture, and she starts in the widest open
+ * floor nearest it, which is the hall the door opens into.
+ */
+const ROAMER_START_TOLERANCE_TILES = 3;
+/** Long enough for several strolls: each pause is at most six seconds. */
+const ROAMER_WANDER_SECONDS = 120;
+const ROAMER_WANDER_FRAMES = ROAMER_WANDER_SECONDS * FRAMES_PER_SECOND;
+/** Distinct tiles she must stand on over the wander — more than a shuffle on the spot. */
+const ROAMER_MIN_TILES_VISITED = 4;
+/** How far from her start she must get at some point, in tiles. */
+const ROAMER_MIN_REACH_TILES = 2;
+/** Tiles around each exit she must never stand on. */
+const ROAMER_EXIT_KEEP_OFF_TILES = 1;
+/** How long to wait for her to be caught mid-stride before the hold is tested. */
+const ROAMER_STRIDE_WAIT_SECONDS = 60;
+const ROAMER_STRIDE_WAIT_FRAMES = ROAMER_STRIDE_WAIT_SECONDS * FRAMES_PER_SECOND;
+/** How long the player stands beside her. */
+const ROAMER_HOLD_TEST_SECONDS = 10;
+const ROAMER_HOLD_TEST_FRAMES = ROAMER_HOLD_TEST_SECONDS * FRAMES_PER_SECOND;
+/** Sub-pixel slack on "did not move" — she is expected to stop dead. */
+const ROAMER_HOLD_SLACK_PX = 0.01;
+/** How long after the player walks off she has to get moving again. */
+const ROAMER_RESUME_SECONDS = 30;
+const ROAMER_RESUME_FRAMES = ROAMER_RESUME_SECONDS * FRAMES_PER_SECOND;
 
 /** The floor-3 world seed the camp checks regenerate, standing in for a save. */
 const CAMP_WORLD_SEED = 424242;
@@ -344,7 +377,9 @@ console.log('\nGeneral Store counter');
 // prompt belongs to.
 {
   const generalStoreRoster = BUILDING_OCCUPANTS.get('General Store') ?? [];
-  const counterSpecs = generalStoreRoster.filter((occupant) => occupant.anchor === 'counter');
+  const counterSpecs = generalStoreRoster.filter(
+    (occupant) => occupantAnchor(occupant) === 'counter',
+  );
   check(counterSpecs.length === 1, 'exactly one General Store occupant anchors on the counter');
   check(
     counterSpecs[0]?.residentId === 'keeper_brenna_kestrel',
@@ -449,6 +484,121 @@ for (const name of readableKeys) {
     system?.placedCount === readablesFor(name).length,
     `"${name}" seats every readable it is authored`,
   );
+}
+
+console.log("\nOld Hilda roams her cottage's open floor");
+// Stationed occupants are placed and tested above; a roamer's whole placement
+// is runtime movement, which none of those checks can see. She must start
+// where the player walking in will find her, never stroll onto furniture, a
+// doorstep or a pocket the player cannot reach, and stand still for a player
+// beside her — otherwise walking up to her ends with her strolling out of reach.
+{
+  const kind = buildings.get(HILDA_HOME);
+  check(kind !== undefined, `"${HILDA_HOME}" is a real building`);
+  if (kind !== undefined) {
+    const map = buildInterior(HILDA_HOME, kind, TOWER_GROUND_FLOOR);
+    let focus: { x: number; y: number } | null = null;
+    const occupants = InteriorOccupantSystem.forBuilding(map, kind, HILDA_HOME, () => focus);
+    const hilda = occupants?.people.find((person) => person.residentId === 'old_hilda');
+    check(hilda !== undefined, 'Old Hilda is placed in her cottage');
+
+    // An independent flood fill, rather than the system's own, so a mistake in
+    // its reachability cannot also approve itself.
+    const arrival = findPartyArrivalTiles(map, map.startTile).leader;
+    const reachable = new Set<string>([`${arrival.x},${arrival.y}`]);
+    const frontier = [arrival];
+    for (const tile of frontier) {
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const next = { x: tile.x + dx, y: tile.y + dy };
+        const key = `${next.x},${next.y}`;
+        if (reachable.has(key) || !map.isWalkable(next.x, next.y)) continue;
+        reachable.add(key);
+        frontier.push(next);
+      }
+    }
+    const tileUnder = (person: { x: number; y: number }): { x: number; y: number } => ({
+      x: Math.floor((person.x + TILE_SIZE / 2) / TILE_SIZE),
+      y: Math.floor((person.y + TILE_SIZE / 2) / TILE_SIZE),
+    });
+    const besideExit = (tile: { x: number; y: number }): boolean =>
+      map._interiorExitTiles.some(
+        (exit) =>
+          Math.max(Math.abs(exit.x - tile.x), Math.abs(exit.y - tile.y)) <=
+          ROAMER_EXIT_KEEP_OFF_TILES,
+      );
+    const onOpenFloor = (tile: { x: number; y: number }): boolean =>
+      map.isWalkable(tile.x, tile.y) && reachable.has(`${tile.x},${tile.y}`) && !besideExit(tile);
+
+    if (occupants !== null && hilda !== undefined) {
+      const start = tileUnder(hilda);
+      const centreX = Math.floor((1 + (map.structure[0]?.length ?? 0) - 2) / 2);
+      const centreY = Math.floor((1 + map.structure.length - 2) / 2);
+      const fromCentre = Math.max(Math.abs(start.x - centreX), Math.abs(start.y - centreY));
+      check(
+        fromCentre <= ROAMER_START_TOLERANCE_TILES,
+        `she starts within ${ROAMER_START_TOLERANCE_TILES} tiles of the room's centre (${fromCentre})`,
+      );
+      check(onOpenFloor(start), 'she starts on open floor the player can reach, off the doorstep');
+      check(hasRoomToMove(map, start.x, start.y), 'she starts somewhere with room to move');
+
+      const visited = new Set<string>();
+      let offFloorFrames = 0;
+      let farthestPx = 0;
+      const startX = hilda.x;
+      const startY = hilda.y;
+      for (let frame = 0; frame < ROAMER_WANDER_FRAMES; frame++) {
+        occupants.update();
+        const tile = tileUnder(hilda);
+        visited.add(`${tile.x},${tile.y}`);
+        if (!onOpenFloor(tile)) offFloorFrames++;
+        farthestPx = Math.max(farthestPx, Math.hypot(hilda.x - startX, hilda.y - startY));
+      }
+      check(
+        offFloorFrames === 0,
+        `she never leaves reachable open floor (${offFloorFrames} frames off it)`,
+      );
+      check(
+        visited.size >= ROAMER_MIN_TILES_VISITED,
+        `she wanders the room rather than shuffling in place (${visited.size} tiles)`,
+      );
+      check(
+        farthestPx >= ROAMER_MIN_REACH_TILES * TILE_SIZE,
+        `she gets at least ${ROAMER_MIN_REACH_TILES} tiles from where she started`,
+      );
+
+      // Caught mid-stride, so her stopping is the hold's doing and not a pause
+      // she happened to be in anyway.
+      let strideWait = 0;
+      while (!hilda.moving && strideWait < ROAMER_STRIDE_WAIT_FRAMES) {
+        occupants.update();
+        strideWait++;
+      }
+      check(hilda.moving, 'she is caught mid-stride before the player steps up');
+      focus = { x: hilda.x + TILE_SIZE, y: hilda.y };
+      const heldX = hilda.x;
+      const heldY = hilda.y;
+      let driftPx = 0;
+      for (let frame = 0; frame < ROAMER_HOLD_TEST_FRAMES; frame++) {
+        occupants.update();
+        driftPx = Math.max(driftPx, Math.hypot(hilda.x - heldX, hilda.y - heldY));
+      }
+      check(driftPx <= ROAMER_HOLD_SLACK_PX, `she stands still beside the player (${driftPx}px)`);
+      check(hilda.facing === 'right', 'and turns to face them');
+
+      focus = null;
+      let resumed = false;
+      for (let frame = 0; frame < ROAMER_RESUME_FRAMES && !resumed; frame++) {
+        occupants.update();
+        resumed = Math.hypot(hilda.x - heldX, hilda.y - heldY) > ROAMER_HOLD_SLACK_PX;
+      }
+      check(resumed, 'she strolls on once the player walks off');
+    }
+  }
 }
 
 console.log('\nNo interior tile renders as a hole');
@@ -574,6 +724,7 @@ console.log('\nCounter door avoidance');
   // centring with no door logic at all would put a run across the middle of
   // that span, which is exactly where this column sits.
   const DOOR_COLUMN_AT_NAIVE_CENTRE = 5;
+  const WIDER_SPAN_WIDTH = 5;
   const span = widestFreeSpan(ADVERSARIAL_BOUNDS, new Set([DOOR_COLUMN_AT_NAIVE_CENTRE]));
   const spanCoversDoorColumn =
     DOOR_COLUMN_AT_NAIVE_CENTRE >= span.x0 && DOOR_COLUMN_AT_NAIVE_CENTRE < span.x0 + span.width;
@@ -582,7 +733,10 @@ console.log('\nCounter door avoidance');
   // Also pins the "widest", not merely "some", free span: splitting the usable
   // range at column 5 leaves a 4-wide span to its west and a 5-wide span to
   // its east, and the mechanism is supposed to prefer the larger one.
-  check(span.width === 5, 'widestFreeSpan picks the wider of the two spans the block leaves');
+  check(
+    span.width === WIDER_SPAN_WIDTH,
+    'widestFreeSpan picks the wider of the two spans the block leaves',
+  );
 }
 
 console.log('\nThe safe room');
@@ -676,7 +830,12 @@ for (const [name, roster] of BUILDING_OCCUPANTS) {
   for (const [anchorKind, tiles] of scanInteriorFurniture(map)) {
     furnitureByKind.set(anchorKind, tiles.length);
   }
-  const anchorsWanted = new Set(roster.map((occupant) => occupant.anchor));
+  const anchorsWanted = new Set(
+    roster.flatMap((occupant) => {
+      const anchor = occupantAnchor(occupant);
+      return anchor === null ? [] : [anchor];
+    }),
+  );
   for (const anchor of anchorsWanted) {
     check(
       (furnitureByKind.get(anchor) ?? 0) > 0,
@@ -697,7 +856,7 @@ console.log('\nEvery anchor kind is used by somebody');
 // fell out of every roster would leave both sides of the pairing unmeasured.
 for (const { kind: anchorKind } of ANCHOR_TILE_TYPES) {
   const rostered = [...BUILDING_OCCUPANTS.values()].some((roster) =>
-    roster.some((occupant) => occupant.anchor === anchorKind),
+    roster.some((occupant) => occupantAnchor(occupant) === anchorKind),
   );
   check(rostered, `some building's roster anchors an occupant to ${anchorKind} furniture`);
 }
@@ -749,8 +908,8 @@ const MAX_GUARD_LEASH_TILES = 2;
 console.log('\nThe tower confrontation opens on safe ground');
 {
   const map = buildInterior(towerName, plan.tower.kind, TOWER_CONFRONTATION_FLOOR);
+  check(map._interiorStairDownTiles.length > 0, 'the office has the stair the party climbs in on');
   const stair = map._interiorStairDownTiles[0];
-  check(stair !== undefined, 'the office has the stair the party climbs in on');
 
   // Mirrors how `BuildingInteriorScene` places an ascending party: both crawlers
   // side by side, one row below the stair they arrived on.
@@ -809,12 +968,11 @@ console.log('\nThe tower confrontation opens on safe ground');
   // RNG, which caught a removed leash on barely half its runs.
   const guards = spawned.filter((mob) => mob.displayName === CITY_ELF_CULTIST_NAME);
   for (const guard of guards) {
-    // Present *and* on the guard's own tile: an unset home point is `undefined`
-    // rather than null, so a bare null check passes for a guard that was never
-    // posted at all.
+    // Present *and* on the guard's own tile: a guard that was never posted has
+    // no home point at all, and must fail here rather than pass unmeasured.
     const home = guard.homePoint;
     check(
-      home !== undefined && home !== null && home.x === guard.x && home.y === guard.y,
+      home?.x === guard.x && home.y === guard.y,
       'each guard is posted to a home point on the tile the encounter put it on',
     );
     const leash = guard.leashRadiusTiles;
@@ -881,8 +1039,8 @@ console.log('\nThe tower confrontation opens on safe ground');
 console.log('\nThe office scene holds the room until it is read');
 {
   const map = buildInterior(towerName, plan.tower.kind, TOWER_CONFRONTATION_FLOOR);
+  check(map._interiorStairDownTiles.length > 0, 'the office has the stair the party climbs in on');
   const stair = map._interiorStairDownTiles[0];
-  check(stair !== undefined, 'the office has the stair the party climbs in on');
 
   const arrivalRow = stair.y + 1;
   const human = new HumanPlayer(stair.x, arrivalRow, TILE_SIZE);

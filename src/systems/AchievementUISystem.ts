@@ -11,11 +11,10 @@ import { AchievementNotification } from '../ui/AchievementNotification';
 import { LootBoxOpener } from '../ui/LootBoxOpener';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { MiniMapSystem } from './MiniMapSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import { isItemId } from '../core/ItemDefs';
 import { drawText } from '../ui/TextBox';
-import { achievementChipRect } from './DungeonUIRenderer';
+import type { Rect } from './MobileHUDSystem';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { ITEM_DEF } from '../core/ItemDefs';
 import type { RewardFlySystem } from './RewardFlySystem';
@@ -308,10 +307,13 @@ export class AchievementUISystem {
     }
   }
 
-  /** Draw the achievement icon button. */
+  /**
+   * Draw the achievement icon button: the "NEW" chip at `chipRect`, which the
+   * scene places in its own HUD column, or the safe room's banner.
+   */
   drawAchievementIcon(
     ctx: CanvasRenderingContext2D,
-    miniMap: MiniMapSystem,
+    chipRect: Rect,
     gameOver: boolean,
     pauseOpen: boolean,
   ): void {
@@ -404,7 +406,7 @@ export class AchievementUISystem {
       const ICON_Y_OFFSET = 4;
       const ICON_Y_ADJUST = 9;
 
-      const r = achievementChipRect(miniMap);
+      const r = chipRect;
       this._achievIconRect = r;
 
       const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(Date.now() / PULSE_PERIOD);

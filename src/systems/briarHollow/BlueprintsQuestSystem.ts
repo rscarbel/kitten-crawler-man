@@ -80,7 +80,7 @@ import { BlueprintsCompletionScreen } from './blueprints/BlueprintsCompletionScr
 import { GrainHarvest } from './blueprints/GrainHarvest';
 import { MerritBlueprintsLines } from './blueprints/MerritBlueprintsLines';
 import { MidgeEscort } from './blueprints/MidgeEscort';
-import { EscortRouteProgress, escortRouteFor } from './blueprints/escortRoute';
+import { EscortRouteProgress, escortReplannerFor, escortRouteFor } from './blueprints/escortRoute';
 import { FENCE_SECTION_COST, PastureFenceWork } from './blueprints/PastureFenceWork';
 import { stationUpgradeCost, StationUpgrades } from './blueprints/StationUpgrades';
 import type { ProcessingStationKind } from './processingStations';
@@ -262,9 +262,7 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     this.fence.update();
     this.harvest.update();
     this.escort.update();
-    if (this.phase === 'escort_midge') {
-      this.escortRouteProgress()?.update(this.escort.midgeTile(), this.activeTile());
-    }
+    this.updateEscortRoute();
     this.stations.update();
     this.moments.update();
     this.completion.update();
@@ -376,13 +374,40 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
       : { kind: 'escort_waypoint', ...waypoint, yard };
   }
 
-  /** Progress along Midge's road; null on a map where the road to Garrison Green cannot be planned. */
+  /**
+   * Progress along Midge's road; null on a map where the road to Garrison
+   * Green cannot be planned. Built on the road a door carried in, when the
+   * party had already led her off the road as planned.
+   */
   private escortRouteProgress(): EscortRouteProgress | null {
     if (this.escortRoute === undefined) {
-      const route = escortRouteFor(this.ctx.gameMap, this.ctx.site);
-      this.escortRoute = route === null ? null : new EscortRouteProgress(route);
+      const { gameMap, site, midgeCarry } = this.ctx;
+      const route = escortRouteFor(gameMap, site);
+      const progress =
+        route === null ? null : new EscortRouteProgress(route, escortReplannerFor(gameMap, site));
+      const carriedFrom = midgeCarry.routeFrom;
+      if (progress !== null && carriedFrom !== null) progress.replanFrom(carriedFrom);
+      this.escortRoute = progress;
     }
     return this.escortRoute;
+  }
+
+  /**
+   * Moves the escort along its road, and writes where the road was planned
+   * from for a door to carry. Midge standing at Merrit's gate — loaded,
+   * rewound or scared home — puts the road back as planned from there.
+   */
+  private updateEscortRoute(): void {
+    const carry = this.ctx.midgeCarry;
+    if (this.phase !== 'escort_midge') {
+      carry.routeFrom = null;
+      return;
+    }
+    const progress = this.escortRouteProgress();
+    if (progress === null) return;
+    if (this.escort.isWaitingAtGate) progress.restart();
+    progress.update(this.escort.midgeTile(), this.activeTile());
+    carry.routeFrom = progress.replannedFrom;
   }
 
   private stationGuidance(): QuestGuidance | null {
@@ -596,6 +621,8 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     this.fence.onRewind();
     this.harvest.onRewind();
     this.escort.onRewind();
+    this.escortRoute?.restart();
+    this.ctx.midgeCarry.routeFrom = null;
     this.stations.onRewind();
     this.moments.onRewind();
     this.completion.close();

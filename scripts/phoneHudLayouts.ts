@@ -165,6 +165,9 @@ export function interiorPhoneHudStates(width: number, height: number): PhoneHudS
             hotbarBandHeight: height - hotbar.y,
             followButton,
             summonButton,
+            // Always offered here: the worst case for crowding is every piece on screen.
+            buildButton: true,
+            journalButton: true,
           });
           const pieces: HudPiece[] = [
             { name: 'minimap', kind: 'minimap', rect: layout.miniMap },
@@ -179,6 +182,9 @@ export function interiorPhoneHudStates(width: number, height: number): PhoneHudS
             ['summon', 'button', layout.summon],
             ['hudToggle', 'button', layout.hudToggle],
             ['nameplate', 'surface', layout.nameplate],
+            ['build', 'button', layout.build],
+            ['achievementChip', 'button', layout.achievementChip],
+            ['journal', 'button', layout.journal],
           ];
           for (const [name, kind, rect] of optional) {
             if (rect !== null) pieces.push({ name, kind, rect });

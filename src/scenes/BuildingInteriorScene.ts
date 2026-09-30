@@ -21,7 +21,8 @@ import { BopcaSystem } from '../systems/BopcaSystem';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { ShopSystem, GENERAL_STORE_CONFIG } from '../systems/ShopSystem';
-import { MobileHUDSystem } from '../systems/MobileHUDSystem';
+import { MobileHUDSystem, type Rect } from '../systems/MobileHUDSystem';
+import { constructionUnlocked } from '../core/villageUnlocks';
 import { platform } from '../core/Platform';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
@@ -41,6 +42,9 @@ import { GameplayScene } from './GameplayScene';
 import { hudCoinCounterScreenPos } from '../ui/HUD';
 import { pointInRect } from '../utils';
 import { AchievementManager } from '../core/AchievementManager';
+import { AchievementUISystem } from '../systems/AchievementUISystem';
+import type { JournalProgress } from '../core/JournalProgress';
+import { isOutstanding, type TrackerEntry } from '../systems/questTracker';
 import { GameStats, bindRunStats } from '../core/GameStats';
 import { MENU_TAP_DURATION_MS, MENU_TAP_MAX_DISTANCE, type PauseMenu } from '../ui/PauseMenu';
 import type { Player } from '../Player';
@@ -346,6 +350,11 @@ const PULSE_SWING = 0.3;
  * Interiors are lit end to end, so only the viewport edge can hide him.
  */
 const INTERIOR_SIGHT_RADIUS_PX = Number.POSITIVE_INFINITY;
+/**
+ * The Build button's first-sighting pulse belongs to the village, which
+ * starts it the first time the button appears outdoors; indoors it never pulses.
+ */
+const NO_BUILD_BUTTON_PULSE = 0;
 const EXIT_HINT_PULSE_PERIOD_MS = 500;
 const EXIT_ARROW_Y_OFFSET = 15;
 const EXIT_MENU_TITLE_Y = 22;
@@ -467,6 +476,20 @@ interface InteriorFloor {
 }
 
 /**
+ * The overworld's Quest Journal, handed through the door.
+ *
+ * Every quest source it lists is an overworld system that stays behind, so
+ * the lines are asked of the overworld rather than rebuilt here; a pin set
+ * indoors lands in the same `progress` the overworld follows once the party
+ * walks back out.
+ */
+export interface InteriorJournalSource {
+  /** This frame's lines, rebuilt from the overworld's quest systems on each call. */
+  readonly entries: () => readonly TrackerEntry[];
+  readonly progress: JournalProgress;
+}
+
+/**
  * Everything an interior needs to know about the circus questline, in one
  * parameter.
  *
@@ -555,6 +578,14 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly tacticsNotices: TacticsNoticeSystem;
   /** Bag, gear, pause menu, award stack, toasts and the hotbar's one routine. */
   private readonly menus: MenusKit;
+  /** The unread-achievement chip, its notifications and the loot-box opener, as outdoors. */
+  private readonly achievementUI: AchievementUISystem;
+  /** The overworld's Quest Journal, read through the door; null on a floor with none. */
+  private readonly overworldJournal: InteriorJournalSource | null;
+  /** Where this frame's HUD drew the Build button, or null when it is not offered. */
+  private buildButtonRect: Rect | null = null;
+  /** Where this frame's HUD drew the Journal button, or null when it is not offered. */
+  private journalButtonRect: Rect | null = null;
 
   protected get pauseMenu(): PauseMenu {
     return this.menus.pauseMenu;
@@ -827,8 +858,10 @@ export class BuildingInteriorScene extends GameplayScene {
     companionArrival: InteriorCompanionArrival = NO_INTERIOR_COMPANIONS,
     partyCrafts?: PartyCraftsState,
     briarHollowState?: BriarHollowState,
+    overworldJournal?: InteriorJournalSource,
   ) {
     super(input, sceneManager);
+    this.overworldJournal = overworldJournal ?? null;
     this.audio = audio ?? null;
     this.conversation = new Conversation(this.audio);
     // Additive and cheap on repeat entry: preloading the same interior's SFX
@@ -1115,6 +1148,25 @@ export class BuildingInteriorScene extends GameplayScene {
       this.menus.announce(HOTBAR_REFUSAL_MESSAGE);
     };
     this.mobileHUD = new MobileHUDSystem(this.menus.inventoryPanel, this.menus.gearPanel);
+    this.achievementUI = new AchievementUISystem(
+      this.humanAchievements,
+      this.catAchievements,
+      this.human,
+      this.cat,
+      this.rewardFly,
+      this.audio,
+    );
+    // Boss-style so the pile never fades: an achievement pays out once, and a
+    // reward that expired on the floor could not be earned a second time.
+    this.achievementUI.onRewardOverflow = (player, id, quantity) => {
+      this.destruction.loot.addLoot(
+        player.x + TILE_SIZE * TILE_CENTER_RATIO,
+        player.y + TILE_SIZE * TILE_CENTER_RATIO,
+        { coins: 0, items: [{ id, quantity }] },
+        player,
+        true,
+      );
+    };
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.hotbarToast);
     this.tacticsNotices = new TacticsNoticeSystem(tacticsNoticesSeen ?? new Set<TacticsTrait>());
     this.chat = new ChatKit({
@@ -1181,7 +1233,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // confrontation can start after entry, so towers are excluded outright.
     this.occupants =
       this.encounter === null
-        ? InteriorOccupantSystem.forBuilding(this.map, entry.type, entry.name)
+        ? InteriorOccupantSystem.forBuilding(this.map, entry.type, entry.name, () => this.active())
         : null;
     // Kestrel is a counter-anchored occupant, not a figure `ShopSystem` owns
     // itself; it only needs her position for the "Shop" prompt and interact
@@ -1362,6 +1414,16 @@ export class BuildingInteriorScene extends GameplayScene {
       focusContext,
     });
     return [
+      // Floating, as outdoors: the notification and the loot-box reveal each
+      // declare their own ring, and the room keeps running under them. Drawn
+      // over every other award, so ranked above them all.
+      {
+        isOpen: this.achievementUI.isBlocking,
+        space: { kind: 'advance', advance: () => void this.achievementUI.handleSpaceBar() },
+        locksKeyboard: false,
+        haltsWorld: false,
+        focusContext: null,
+      },
       // The award stack outranks the death screen because it draws over it — a
       // level-up earned by the blow that killed you is still on top and still
       // has to be dismissible.
@@ -2005,7 +2067,9 @@ export class BuildingInteriorScene extends GameplayScene {
       // but it is the same key doing the same thing: spending boards on a
       // broken thing you are standing at.
       buildAction: () => this.triggerAnchorRepair(),
-      // No `toggleQuestTracker`: the journal belongs to systems the overworld owns.
+      toggleQuestTracker: () => {
+        if (this.openQuestJournal()) this.audio?.play('menu_open');
+      },
       mongoSummon: () => this.toggleMongoSummon(),
       openChat: () => this.openChat(),
       hotbarActivation: (idx) => activateHotbarSlot(this.hotbarHost(), idx),
@@ -2016,7 +2080,7 @@ export class BuildingInteriorScene extends GameplayScene {
       interactReleased: () => {
         this.interactArmed = true;
       },
-      onConstruction: () => this.openConstructionReadOnly(),
+      onConstruction: () => this.toggleConstructionMenu(),
       // Structures and trebuchets are an outdoor fixture of the Briar Hollow
       // palisade; there is nothing indoors for either key to reach yet.
       onStructureMenu: () => this.noVillageStructuresIndoors(),
@@ -2030,20 +2094,85 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Opens the Construction menu read-only: indoors nothing can be built, but
-   * the rows still show what is on offer and what it costs, each disabled with
-   * "Build outdoors".
+   * Opens the Construction menu as outdoors, over the indoor rows: each kind
+   * lists what it costs, and any kind that cannot be built under a roof is
+   * refused when chosen.
    */
-  private openConstructionReadOnly(): void {
+  private toggleConstructionMenu(): void {
     const menu = this.menus.constructionMenu;
     if (menu.isOpen) {
       menu.close();
       return;
     }
-    const active = this.human.isActive ? this.human : this.cat;
-    if (!active.craftSkills.isLearned('construction')) return;
-    if (this.briarHollowState.unlocks.construction.length === 0) return;
-    menu.openWith(indoorsConstructionSource(this.human, this.cat), true);
+    const active = this.active();
+    if (!active.craftSkills.isLearned('construction')) {
+      this.menus.announce('You have not learned Construction yet.');
+      return;
+    }
+    if (this.briarHollowState.unlocks.construction.length === 0) {
+      this.menus.announce("You don't have any construction plans yet.");
+      return;
+    }
+    menu.openWith(
+      indoorsConstructionSource(this.human, this.cat, () => this.briarHollowState.unlocks),
+    );
+  }
+
+  /** Whether the HUD offers the Build button: under the same rule as outdoors. */
+  private get buildButtonOffered(): boolean {
+    return constructionUnlocked([this.human, this.cat], this.briarHollowState.unlocks);
+  }
+
+  /**
+   * Hands the pause menu the overworld's journal, or null to hide its row.
+   * Distances are measured from the building's door: the entries' targets
+   * are overworld tiles, and the door is where the party rejoins them.
+   */
+  private syncJournalContext(): void {
+    const journal = this.overworldJournal;
+    if (journal === null) {
+      this.pauseMenu.journalContext = null;
+      return;
+    }
+    this.pauseMenu.journalContext = {
+      playerTileX: this.entry.doorTile.x,
+      playerTileY: this.entry.doorTile.y,
+      entries: journal.entries(),
+      progress: journal.progress,
+    };
+  }
+
+  /** Pauses into the Journal — the compass button's action and the J key's. */
+  private openQuestJournal(): boolean {
+    if (this.overworldJournal === null || this.gameOver) return false;
+    if (this.conversation.isOpen) this.conversation.dismiss();
+    this.syncJournalContext();
+    this.pauseMenu.openToJournal();
+    this.menus.closePanels();
+    return true;
+  }
+
+  /**
+   * The Build button, the achievement chip, the loot-box banner and the
+   * Journal. Returns whether the press was theirs.
+   */
+  private tryPressColumnPieces(mx: number, my: number): boolean {
+    if (this.gameOver || this.pauseMenu.isOpen) return false;
+    if (this.achievementUI.handleAchievIconClick(mx, my)) return true;
+    if (this.achievementUI.handleLootBoxIconClick(mx, my, () => this.pauseMenu.close())) {
+      return true;
+    }
+    const build = this.buildButtonRect;
+    if (build !== null && pointInRect(mx, my, build)) {
+      this.toggleConstructionMenu();
+      return true;
+    }
+    const journal = this.journalButtonRect;
+    if (journal !== null && pointInRect(mx, my, journal)) {
+      this.openQuestJournal();
+      return true;
+    }
+    return false;
   }
 
   /** The collaborators a hotbar press reaches, resolved against the live floor. */
@@ -2356,6 +2485,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // party is still drawn on top of the screen announcing it, and a dialog that
     // is not ticked sits frozen at its first frame with its accept button inert.
     this.menus.update();
+    this.achievementUI.tick();
     playRewardLandingCues(this.audio, this.rewardFly.update());
 
     // The death screen accepts through its own focus ring, which reaches
@@ -3000,6 +3130,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Ranked above the death screen, matching both the claim registry and the
     // draw order: the award stack is painted on top of it, so a press aimed at
     // an OK button there must not reach the screen underneath.
+    if (this.achievementUI.handleClick(mx, my)) return;
     if (this.menus.levelUpDialog.handleClick(mx, my)) return;
     if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
     if (this.menus.mongoExplainer.handleClick(mx, my)) return;
@@ -3086,6 +3217,9 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (!this.menus.panelCovers(mx, my) && this.tryPressSummonButton(mx, my)) return;
+    // Below every panel branch above, which is where they are drawn: a shop's
+    // Buy column can sit over the Build button on a phone.
+    if (!this.menus.panelCovers(mx, my) && this.tryPressColumnPieces(mx, my)) return;
 
     const invPlayer = this.inventoryPlayer();
     const active = this.active();
@@ -3951,6 +4085,8 @@ export class BuildingInteriorScene extends GameplayScene {
       hotbarBandHeight: this.mobileHUD.inventoryPanel.hotbarBandHeight(),
       followButton: !this.followDisabled,
       summonButton: this.mongoSystem.canShow && this.cat.isActive,
+      buildButton: this.buildButtonOffered,
+      journalButton: this.overworldJournal !== null,
     };
   }
 
@@ -4176,6 +4312,10 @@ export class BuildingInteriorScene extends GameplayScene {
       );
     }
 
+    // Every frame, not only when the Journal is opened from its button: Escape
+    // reaches the same pause menu, whose Game tab offers the Journal row from
+    // this, and an open Journal has to keep following the quests it lists.
+    this.syncJournalContext();
     this.summonButtonRect = null;
     if (!this.exitMenuOpen && !this.pauseMenu.isOpen) {
       this.mobileHUD.renderInteriorMiniMap(ctx, this.map, this.active(), this.inactive());
@@ -4235,6 +4375,10 @@ export class BuildingInteriorScene extends GameplayScene {
       }
       // After the mobile buttons, whose Switch it is stacked on.
       this.summonButtonRect = this.renderSummonButton(ctx, hudLayout);
+      this.renderColumnPieces(ctx, hudLayout);
+    } else {
+      this.buildButtonRect = null;
+      this.journalButtonRect = null;
     }
 
     const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
@@ -4273,7 +4417,12 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.exitMenuOpen) this.renderExitMenu(ctx);
 
     this.destruction.dynamite.renderChargeBar(ctx, viewportWidth(), viewportHeight());
-    this.menus.hotbarToast.render(ctx, this.mobileHUD.inventoryPanel.hotbarBandHeight());
+    // With the Construction menu up, its refusals are drawn over the panel
+    // below instead: a refusal hidden behind the row that raised it says nothing.
+    const toastOverConstructionMenu = this.menus.constructionMenu.isOpen;
+    if (!toastOverConstructionMenu) {
+      this.menus.hotbarToast.render(ctx, this.mobileHUD.inventoryPanel.hotbarBandHeight());
+    }
 
     if (platform.showEntityTooltip && !this.gameOver && !this.pauseMenu.isOpen) {
       UIRenderer.renderEntityTooltip(
@@ -4321,8 +4470,12 @@ export class BuildingInteriorScene extends GameplayScene {
       { name: menuCrawler === this.human ? 'Carl' : 'Donut', skills: menuCrawler.craftSkills },
       (id) => partyCount(this.human, this.cat, id),
     );
+    if (toastOverConstructionMenu) {
+      this.menus.hotbarToast.render(ctx, this.mobileHUD.inventoryPanel.hotbarBandHeight());
+    }
     if (this.gameOver) this.combat.deathScreen.render(ctx);
     this.menus.renderOverlays(ctx);
+    this.achievementUI.renderOverlays(ctx);
 
     // Flies over every dialog above, same as DungeonScene: it's reporting a
     // grant that already happened, not asking for input.
@@ -4347,6 +4500,37 @@ export class BuildingInteriorScene extends GameplayScene {
     // player never touched a button for.
     if (keyboardSuppressed(this.overlayClaims)) this.menus.blurInventorySearch();
     auditOverlayFocus(this.overlayClaims, menuFocusContextId());
+  }
+
+  /**
+   * The Build button, the achievement chip (or the safe room's banners) and
+   * the Journal, where the layout placed them.
+   */
+  private renderColumnPieces(ctx: CanvasRenderingContext2D, layout: InteriorHudLayout): void {
+    this.achievementUI.drawAchievementIcon(
+      ctx,
+      layout.achievementChip,
+      this.gameOver,
+      this.pauseMenu.isOpen,
+    );
+    this.achievementUI.drawLootBoxIcon(ctx, this.gameOver, this.pauseMenu.isOpen);
+    this.buildButtonRect =
+      layout.build === null
+        ? null
+        : UIRenderer.drawBuildButton(
+            ctx,
+            layout.build,
+            this.menus.constructionMenu.isOpen,
+            NO_BUILD_BUTTON_PULSE,
+          );
+    const journal = layout.journal;
+    if (journal === null) {
+      this.journalButtonRect = null;
+      return;
+    }
+    const entries = this.pauseMenu.journalContext?.entries ?? [];
+    const outstanding = entries.filter((entry) => isOutstanding(entry.status)).length;
+    this.journalButtonRect = UIRenderer.drawJournalButton(ctx, journal, outstanding);
   }
 
   private renderExitHint(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -4523,6 +4707,15 @@ export class BuildingInteriorScene extends GameplayScene {
         continue;
       }
 
+      // Neither halts the world, but both own every tap on screen while they
+      // are up: the menu closes on a tap outside it, and the award overlays
+      // take any tap as their continue. Left to the world, a tap on a row
+      // would walk the crawler instead of choosing it.
+      if (this.menus.constructionMenu.isOpen || this.achievementUI.isBlocking) {
+        this.handleClick(x, y);
+        continue;
+      }
+
       // The bag's Drop/Trade "how many?" prompt: not world-halting (it can open
       // mid-shop, same as everywhere else it's used), so it falls outside the
       // block above. Routed through `handleMouseDown` rather than straight to
@@ -4554,6 +4747,7 @@ export class BuildingInteriorScene extends GameplayScene {
       }
 
       if (!coveredByPanel && this.tryPressSummonButton(x, y)) continue;
+      if (!coveredByPanel && this.tryPressColumnPieces(x, y)) continue;
 
       // Mobile button hit-test (Switch, Gear, Bag, Pause, Minimap, Follow)
       if (platform.isMobile && !coveredByPanel) {

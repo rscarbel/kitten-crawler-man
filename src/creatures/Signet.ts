@@ -21,8 +21,6 @@ import {
 import { normalize, randomInt } from '../utils';
 import {
   drawQuestMarker,
-  QUEST_MARKER_GOLD,
-  QUEST_MARKER_GREEN,
   questMarkerColorFor,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
@@ -503,13 +501,12 @@ export class Signet extends Mob {
 
     drawEliteMarker(ctx, sx, sy, tileSize);
 
-    // Anchored to the same cleared line her other overlays use: at tile anchor
-    // the glyph would sit inside her head, and a step above that it would sit
-    // inside the elite mark.
-    if (this.markerType === 'exclamation') {
-      drawQuestMarker(ctx, sx, overlayY, tileSize, '!', QUEST_MARKER_GOLD);
-    } else if (this.markerType === 'question') {
-      drawQuestMarker(ctx, sx, overlayY, tileSize, '?', QUEST_MARKER_GREEN);
+    // `overlayY` is the top of her elite mark at the height of its bob, which
+    // stands over her horns: the highest thing she paints.
+    if (markerColor !== undefined) {
+      const glyph = this.markerType === 'question' ? '?' : '!';
+      const clearOf = this.overheadClearTop(overlayY, overlayY);
+      drawQuestMarker(ctx, sx, clearOf, tileSize, glyph, markerColor);
     }
 
     this.renderMobHealthBar(ctx, sx, overlayY);

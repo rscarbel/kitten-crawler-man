@@ -43,7 +43,7 @@ import { thrallCooldownSecondsLeft } from '../../core/thrallCooldowns';
 
 type Crawler = HumanPlayer | CatPlayer;
 
-/** The seed range the luck stream is drawn from. */
+/** The seed range the luck and spare streams are drawn from. */
 const LUCK_SEED_SPACE = 0x100000000;
 
 /** The thin ring over a node being worked, showing how much it has left. */
@@ -148,6 +148,7 @@ export class GatheringKit {
       audio: deps.audio,
       announce: deps.announce,
       luckRng: mulberry32(Math.floor(Math.random() * LUCK_SEED_SPACE)),
+      spareRng: mulberry32(Math.floor(Math.random() * LUCK_SEED_SPACE)),
       noteActivity,
       onTreeStruck,
     });

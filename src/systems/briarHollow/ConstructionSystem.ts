@@ -196,6 +196,12 @@ export interface OptionStatus {
    * keeps the row pressable so choosing it shows where it would have gone.
    */
   readonly roomBlocked: boolean;
+  /**
+   * Why this kind can never be built where the party is, or null. A refused
+   * row is drawn disabled but stays pressable, so choosing it — by pointer,
+   * key or tap — says why instead of doing nothing.
+   */
+  readonly refusal: string | null;
 }
 
 /** A "no room" attempt's silhouette, fading out in the world where the build was tried. */
@@ -241,7 +247,7 @@ export interface ConstructionSystemDeps {
   readonly noteResourceActivity: () => void;
   /** Every body a trebuchet may have to push clear, crawlers included. */
   readonly bodies: () => ReadonlyArray<PushableBody>;
-  /** Whether this scene is indoors, where nothing can be built. */
+  /** Whether this scene is indoors, where only kinds flagged `buildableIndoors` can be built. */
   readonly indoors: boolean;
   /** Which construction plans the party currently holds. Read live: a quest can grant one mid-scene. */
   readonly unlocks: () => VillageUnlocks;
@@ -255,13 +261,36 @@ interface Hammering {
   readonly repair: boolean;
 }
 
-const OPTION_LABELS: Readonly<Record<BuildOption, string>> = {
-  wood: 'Wooden Wall',
-  stone: 'Stone Wall',
-  fortified: 'Fortified Stone Wall',
-  trebuchet: 'Trebuchet',
-  snare: 'Snare Trap',
+/** What a Construction menu row is, wherever the party happens to be standing. */
+export interface BuildOptionDef {
+  readonly label: string;
+  /**
+   * Whether it can go up inside a building. Every menu surface reads this
+   * rather than naming kinds: a row whose kind is outdoor-only is listed
+   * indoors but refused, and a kind that sets it is offered as usual.
+   */
+  readonly buildableIndoors: boolean;
+}
+
+/**
+ * Every buildable kind. The walls are raised on the palisade ring and the
+ * trebuchet and snare need open ground and sky, so none of them fits under a
+ * roof.
+ */
+export const BUILD_OPTION_DEFS: Readonly<Record<BuildOption, BuildOptionDef>> = {
+  wood: { label: 'Wooden Wall', buildableIndoors: false },
+  stone: { label: 'Stone Wall', buildableIndoors: false },
+  fortified: { label: 'Fortified Stone Wall', buildableIndoors: false },
+  trebuchet: { label: 'Trebuchet', buildableIndoors: false },
+  snare: { label: 'Snare Trap', buildableIndoors: false },
 };
+
+/** The notice a refused row gives when it is chosen indoors. */
+export const INDOORS_BUILD_REFUSAL = 'Cannot build this while inside';
+/** The status line of a row refused indoors. */
+const INDOORS_BUILD_STATUS = 'Build outdoors';
+/** The status line of an indoor-buildable row in a room nothing can build in. */
+const INDOORS_NO_BUILDER_STATUS = 'Nothing to build with here';
 
 const WALL_OPTION_TIER: Readonly<Record<'wood' | 'stone' | 'fortified', PalisadeTier>> = {
   wood: 'wood',
@@ -538,7 +567,7 @@ export class ConstructionSystem {
 
   optionStatus(option: BuildOption, crawler: Crawler = this.active()): OptionStatus {
     const level = this.levelOf(crawler);
-    const label = OPTION_LABELS[option];
+    const label = BUILD_OPTION_DEFS[option].label;
     if (!this.isOptionUnlocked(option)) {
       return {
         option,
@@ -552,6 +581,7 @@ export class ConstructionSystem {
         kits: 0,
         usesKit: false,
         roomBlocked: false,
+        refusal: null,
       };
     }
     const busy = this._job !== null;
@@ -567,8 +597,9 @@ export class ConstructionSystem {
       let status = 'Ready — builds in front of you';
       let enabled = true;
       let roomBlocked = false;
-      if (this.deps.indoors) {
-        status = 'Build outdoors';
+      const refusal = this.indoorsRefusal(option);
+      if (refusal !== null) {
+        status = INDOORS_BUILD_STATUS;
         enabled = false;
       } else if (busy) {
         status = 'Already building';
@@ -593,6 +624,7 @@ export class ConstructionSystem {
         kits,
         usesKit,
         roomBlocked,
+        refusal,
       };
     }
     const tier = WALL_OPTION_TIER[option];
@@ -610,8 +642,10 @@ export class ConstructionSystem {
       kits: 0,
       usesKit: false,
       roomBlocked: false,
+      refusal: null,
     };
-    if (this.deps.indoors) return { ...base, enabled: false, status: 'Build outdoors' };
+    const refusal = this.indoorsRefusal(option);
+    if (refusal !== null) return { ...base, enabled: false, status: INDOORS_BUILD_STATUS, refusal };
     const segment = this.facedSegment(crawler);
     if (segment === null) return { ...base, enabled: false, status: WALL_OPTION_NEEDS[option] };
     const current = this.deps.defense.segmentTier(segment);
@@ -650,9 +684,14 @@ export class ConstructionSystem {
     return { ...base, enabled: true, status: 'Ready' };
   }
 
+  /** Why `option` cannot be built in this scene, or null when where it stands is no bar. */
+  private indoorsRefusal(option: BuildOption): string | null {
+    return indoorsRefusalFor(option, this.deps.indoors);
+  }
+
   /** The ghost a hovered or focused row draws in the world. */
   previewFor(option: BuildOption, crawler: Crawler = this.active()): PlacementPreview | null {
-    if (this.deps.indoors) return null;
+    if (this.indoorsRefusal(option) !== null) return null;
     if (option === 'trebuchet' || option === 'snare') {
       const { footprint, valid } = this.plannedFootprint(crawler, option);
       return { tiles: footprintTiles(footprint), valid, segmentId: null };
@@ -734,7 +773,7 @@ export class ConstructionSystem {
       seconds: kind === 'trebuchet' ? TREBUCHET_BUILD_SECONDS : SNARE_BUILD_SECONDS,
       cost: status.cost,
       fromKit: status.usesKit,
-      label: `+${OPTION_LABELS[kind]}`,
+      label: `+${BUILD_OPTION_DEFS[kind].label}`,
     });
   }
 
@@ -1504,30 +1543,42 @@ function repairBaseSeconds(defense: DefenseStructures, ref: StructureRef): numbe
   }
 }
 
+/** Why `option` cannot be built here, or null: only an outdoor-only kind, and only indoors. */
+function indoorsRefusalFor(option: BuildOption, indoors: boolean): string | null {
+  return indoors && !BUILD_OPTION_DEFS[option].buildableIndoors ? INDOORS_BUILD_REFUSAL : null;
+}
+
 /**
- * The Construction menu's rows indoors, where nothing can be built: every row
- * priced and timed for the active crawler, as outdoors, and every one
- * disabled with "Build outdoors" — the menu still teaches what is on offer.
+ * The Construction menu's rows indoors, where no `ConstructionSystem` runs:
+ * the rows the menu would list outdoors away from the wall — every unlocked
+ * kind that is not a wall tier, since there is never a wall to face — priced
+ * and timed for the active crawler. A kind that cannot be built indoors is
+ * refused with a notice. Nothing places structures indoors yet, so a kind
+ * flagged `buildableIndoors` is listed but stays disabled until something
+ * here can build it.
  */
 export function indoorsConstructionSource(
   human: HumanPlayer,
   cat: CatPlayer,
+  unlocks: () => VillageUnlocks,
 ): ConstructionMenuSource {
   const rows = (): OptionStatus[] => {
     const active = human.isActive ? human : cat;
     const skills = active.craftSkills;
     const level = skills.isLearned('construction') ? skills.getLevel('construction') : 0;
-    // Indoors there is never a wall to face, so the wall rows never apply —
-    // only the trebuchet and the snare are worth listing, both disabled the
-    // same "Build outdoors" way.
-    return BUILD_OPTIONS.filter((option) => !isWallOption(option)).map((option) => {
+    const listed = BUILD_OPTIONS.filter(
+      (option) =>
+        !isWallOption(option) && hasConstructionUnlock(unlocks(), BUILD_OPTION_UNLOCK[option]),
+    );
+    return listed.map((option) => {
       const { cost: baseCost, seconds: baseSeconds } = optionBase(option);
       const cost = discountedCost(baseCost, level);
+      const refusal = indoorsRefusalFor(option, true);
       return {
         option,
-        label: OPTION_LABELS[option],
+        label: BUILD_OPTION_DEFS[option].label,
         enabled: false,
-        status: 'Build outdoors',
+        status: refusal === null ? INDOORS_NO_BUILDER_STATUS : INDOORS_BUILD_STATUS,
         cost,
         baseCost,
         affordable: canAfford(human, cat, cost),
@@ -1535,6 +1586,7 @@ export function indoorsConstructionSource(
         kits: 0,
         usesKit: false,
         roomBlocked: false,
+        refusal,
       };
     });
   };

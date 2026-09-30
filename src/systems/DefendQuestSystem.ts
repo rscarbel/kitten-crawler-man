@@ -28,16 +28,30 @@ import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { QuestManager } from '../core/QuestManager';
 import type { QuestStatus } from '../core/QuestManager';
 import { secondsLabel, type TrackerEntry } from './questTracker';
+import { drawQuestNPCSprite, drawChildSprite } from '../sprites/questNPCSprite';
 import {
-  drawQuestNPCSprite,
-  drawWoodPileSprite,
-  drawWoodBarrierSprite,
-  drawChildSprite,
-} from '../sprites/questNPCSprite';
-import { drawText } from '../ui/TextBox';
+  barrierDamageStage,
+  drawGrateLurkers,
+  drawNurseryBarrier,
+  drawNurseryTorch,
+  drawNurseryTorchLight,
+  drawNurseryWoodPile,
+  WOOD_PILE_TOP_RISE_TILES,
+} from '../sprites/nurserySprites';
+import { BARRIER_DAMAGE_STAGES, BARRIER_PLANK_COUNT } from '../sprites/art/nurseryArt';
+import { drawText, measureTextWidth, TEXT_PRESETS } from '../ui/TextBox';
 import { drawFittedTitle } from '../ui/QuestBanners';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
-import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
+import { drawAreaHighlightFrame, drawAreaHighlightGround } from '../ui/AreaHighlight';
+import type { AreaHighlightMood, AreaHighlightRect } from '../ui/AreaHighlight';
+import { BOX_PRESETS, PROGRESS_PRESETS, drawBox, drawProgressBar } from '../ui/Box';
+import { drawResourceIcon } from '../ui/icons/resourceIcons';
+import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
+import { NurseryEffects } from './nurseryEffects';
+import {
+  BASE_DEFEND_QUEST_INTENSITY,
+  type DefendQuestIntensity,
+} from '../levels/defendQuestIntensity';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle } from '../dialog/request';
 import { GOBLIN_MOTHER } from '../dialog/scripts/scenes/defend';
@@ -72,14 +86,12 @@ const BUILD_FRAMES = BUILD_SECONDS * FRAMES_PER_SECOND;
  */
 const CAT_BUILD_TIME_MULTIPLIER = 3;
 const BARRIER_MAX_HP = 36;
-/** Distinct from the quest-marker green (`#4ade80`), so the two beacons never read as the same objective. */
-const GRATE_NEEDS_WORK_BEACON_COLOR = '#fb923c';
-const GRATE_NEEDS_WORK_OUTLINE_PULSE_PERIOD_MS = 900;
-const GRATE_NEEDS_WORK_OUTLINE_MIN_ALPHA = 0.35;
-const GRATE_NEEDS_WORK_OUTLINE_MAX_ALPHA = 0.85;
-const GRATE_NEEDS_WORK_OUTLINE_LINE_WIDTH = 3;
-const SPAWN_INTERVAL_MIN = 180; // 3 seconds
-const SPAWN_INTERVAL_MAX = 300; // 5 seconds
+/** The quest guide's gold — the same colour the Borrowed Blueprints marks its fence and harvest spots in. */
+const GUIDE_COLOR = '#facc15';
+const SPAWN_INTERVAL_MIN_SECONDS = 3;
+const SPAWN_INTERVAL_MAX_SECONDS = 5;
+const SPAWN_INTERVAL_MIN = SPAWN_INTERVAL_MIN_SECONDS * FRAMES_PER_SECOND;
+const SPAWN_INTERVAL_MAX = SPAWN_INTERVAL_MAX_SECONDS * FRAMES_PER_SECOND;
 const ENTRANCE_SPAWN_CHANCE = 0.15;
 const INTERACT_RANGE_TILES = 2.5;
 const INTERACT_RANGE_PX = TILE_SIZE * INTERACT_RANGE_TILES;
@@ -93,13 +105,17 @@ const AUDIENCE_ABSENCE_GRACE_FRAMES = AUDIENCE_ABSENCE_GRACE_SECONDS * FRAMES_PE
 
 // Rendering / UI constants
 const FIRST_WAVE_DELAY_FRAMES = FIRST_WAVE_DELAY_SECONDS * FRAMES_PER_SECOND;
-const CHILD_REUNION_WALK_FRAMES = 180; // 3 seconds for child walk-to-mother animation
+const CHILD_REUNION_WALK_FRAMES = 180;
+/** Ground the toddler covers in one full stride; short, because he is. */
+const CHILD_STRIDE_TILES = 0.6;
+const CHILD_STRIDE_PX = TILE_SIZE * CHILD_STRIDE_TILES;
+/** `drawChildSprite` reads the stride phase in radians, one stride per turn. */
+const FULL_STRIDE_RADIANS = Math.PI * 2;
 const XP_FLOAT_FRAMES = 180;
 const QUEST_COMPLETE_DISPLAY_FRAMES = 420; // 7 seconds
 const QUEST_FAILED_DISPLAY_FRAMES = 420; // 7 seconds
 const OVERLAY_FADE_FRAMES = 90;
 const TEXT_HEIGHT_FACTOR = 0.8;
-const SECS_LOW_THRESHOLD = 30;
 const PICKUP_PROXIMITY_FRACTION = 1.2;
 /**
  * The hammer's cadence for a build nobody is drawn hammering — the cat's, or
@@ -107,13 +123,7 @@ const PICKUP_PROXIMITY_FRACTION = 1.2;
  * is struck on the frames the hammer lands instead.
  */
 const HAMMER_SOUND_INTERVAL = 30;
-const BUILD_PROGRESS_RADIUS_FRACTION = 0.6;
-const BUILD_PROGRESS_TRACK_ALPHA = 0.5;
-const BUILD_PROGRESS_ARC_ALPHA = 0.9;
 const TILE_CENTER_OFFSET = 0.5;
-const BUILD_PROGRESS_LINE_WIDTH = 3;
-const BUILD_PROGRESS_LABEL_OFFSET = 12;
-const BUILD_PROGRESS_LABEL_ASCENT = 7;
 const NPC_DEAD_X_LINE_WIDTH = 4;
 const NPC_DEAD_X_MARGIN_FRACTION = 0.2;
 const NPC_DEAD_X_END_FRACTION = 0.8;
@@ -158,19 +168,6 @@ const XP_FLOAT_SIZE = 28;
 const MOBILE_QUEST_BOX_X = 8;
 const MOBILE_QUEST_BOX_GAP = 8;
 const MOBILE_QUEST_MINIMAP_W = 176; // normal minimap (160) + margin (8) + gap (8)
-const MOBILE_QUEST_PAD_V = 6;
-const MOBILE_QUEST_PAD_H = 6;
-const MOBILE_QUEST_TITLE_SIZE = 10;
-const MOBILE_QUEST_VALUE_SIZE = 16;
-const MOBILE_QUEST_TITLE_H = 14;
-const MOBILE_QUEST_GAP = 4;
-const MOBILE_QUEST_VALUE_H = 22;
-const MOBILE_QUEST_BOX_H =
-  MOBILE_QUEST_PAD_V +
-  MOBILE_QUEST_TITLE_H +
-  MOBILE_QUEST_GAP +
-  MOBILE_QUEST_VALUE_H +
-  MOBILE_QUEST_PAD_V;
 
 // Tutorial layout constants
 const TUTORIAL_MAX_WIDTH = 500;
@@ -217,7 +214,8 @@ const T1_BUILD_LABEL_ASCENT = 9;
 const T1_BUILD_LABEL_SIZE = 11;
 
 // Tutorial page 2 sprite offsets
-const T2_BARRIER_DAMAGE = 0.18;
+/** The tutorial's clawed-at barrier: well chewed, not yet broken through. */
+const T2_BARRIER_DAMAGE_STAGE = BARRIER_DAMAGE_STAGES - 2;
 const T2_ARROW_BOTTOM_FACTOR = 1.05;
 const T2_ARROW_MID_FACTOR = 0.65;
 const T2_ARROWHEAD_OUTER_Y = 0.72;
@@ -229,26 +227,106 @@ const T2_ARROW_NOTCH_OFFSET = 6;
 const T2_DASH_LENGTH = 3;
 const T2_DASH_GAP = 3;
 
-const APPROACH_TITLE = 'ENEMIES APPROACHING';
+const APPROACH_TITLE = 'BUGABOOS INCOMING';
 /** Shown while the segment is called off — the timer is frozen and there is nothing to count. */
 const HELD_TITLE = 'SEGMENT ON HOLD';
 const HELD_VALUE = 'GO BACK IN';
+const DEFENSE_TITLE = 'HOLD THE NURSERY';
+const MOTHER_LABEL = 'Mother';
 
-// Countdown UI layout
-const COUNTDOWN_TITLE_Y = 50;
-const COUNTDOWN_TITLE_ASCENT = 14;
-const COUNTDOWN_TITLE_SIZE = 18;
-const COUNTDOWN_NUMBER_Y = 80;
-const COUNTDOWN_NUMBER_ASCENT = 22;
-const COUNTDOWN_NUMBER_SIZE = 28;
+const HALF = 0.5;
+const SECONDS_PER_MINUTE = 60;
 
-// Defense timer UI layout
-const DEFENSE_LABEL_Y = 38;
-const DEFENSE_LABEL_ASCENT = 11;
-const DEFENSE_LABEL_SIZE = 14;
-const DEFENSE_TIMER_Y = 65;
-const DEFENSE_TIMER_ASCENT = 19;
-const DEFENSE_TIMER_SIZE = 24;
+/** A crawler within this many tiles (Manhattan) of a grate can build or repair it. */
+const BUILD_REACH_TILES = 2;
+/**
+ * Added to a damaged barrier's distance when picking which grate a press is
+ * for, so an open grate in reach is boarded before a scratched one is patched.
+ */
+const REPAIR_REACH_PENALTY = 3;
+/** A hostile within this many tiles (Chebyshev) of a tapped grate makes a boardless tap an attack. */
+const HOSTILE_AT_GRATE_TILES = 1;
+const NO_WOOD_FLASH_FRAMES = 90;
+const NO_WOOD_FLASH_BLINK_FRAMES = 10;
+/** How often grit is shaken up between the boards of a grate being clawed from below. */
+const SCRABBLE_DUST_INTERVAL_FRAMES = 14;
+
+/** The warm flash a blow throws off the boards; additive, so it reads as sparks off the wood rather than a red box. */
+const BARRIER_HIT_FLASH_COLOR = '#ff9a4a';
+const BARRIER_CRITICAL_FRACTION = 0.35;
+const BARRIER_CRITICAL_COLOR = '#ef4444';
+
+/** Where along the north wall the nursery's torches hang, as fractions of its length. */
+const TORCH_WEST_FRACTION = 0.18;
+const TORCH_MIDDLE_FRACTION = 0.5;
+const TORCH_EAST_FRACTION = 0.82;
+const TORCH_WALL_FRACTIONS = [TORCH_WEST_FRACTION, TORCH_MIDDLE_FRACTION, TORCH_EAST_FRACTION];
+/** Spreads the torches' flicker so no two burn in step. */
+const TORCH_SEED_STRIDE = 1.7;
+
+const WOOD_LABEL_SIZE = 11;
+const WOOD_LABEL_STYLE = { size: WOOD_LABEL_SIZE, bold: true, color: '#fbbf24' } as const;
+const WOOD_LABEL_GAP_PX = 2;
+/** Lifts the pile's arrow clear of its label. */
+const WOOD_ARROW_LIFT_PX = 24;
+/** How far above the y it is given `drawBouncingArrowAboveEntity` stands its arrow. */
+const WORLD_ARROW_RISE_TILES = 1.5;
+
+const BADGE_HEIGHT_PX = 24;
+const BADGE_PAD_X_PX = 6;
+const BADGE_GAP_PX = 6;
+const BADGE_ICON_PX = 12;
+const BADGE_ICON_GAP_PX = 2;
+const BADGE_TEXT_TOP_PX = 3;
+const BADGE_RADIUS_PX = 5;
+const BADGE_LIFT_PX = 6;
+const BADGE_BOB_PERIOD_MS = 420;
+const BADGE_BOB_PX = 1.5;
+const BADGE_ICON_SHORT_ALPHA = 0.45;
+const BADGE_BAR_PX = 3;
+const BADGE_BAR_INSET_PX = 3;
+
+const BUILD_BAR_WIDTH_PX = 28;
+const BUILD_BAR_HEIGHT_PX = 4;
+const BUILD_BAR_LIFT_PX = 6;
+const BUILD_LABEL_HEIGHT_PX = 13;
+
+const STATUS_PANEL_WIDTH_PX = 280;
+const STATUS_PANEL_MARGIN_PX = 12;
+const STATUS_PANEL_TOP_PX = 10;
+const STATUS_PAD_PX = 8;
+const STATUS_RADIUS_PX = 8;
+const STATUS_ROW_PX = 18;
+const STATUS_ROW_COMPACT_PX = 14;
+const STATUS_ROWS_COUNTDOWN = 4;
+const STATUS_ROWS_DEFENDING = 5;
+const STATUS_TITLE_SIZE = 14;
+const STATUS_TITLE_COMPACT_SIZE = 11;
+const STATUS_DETAIL_SIZE = 11;
+const STATUS_DETAIL_COMPACT_SIZE = 9;
+const STATUS_BAR_HEIGHT_PX = 6;
+const STATUS_INLINE_GAP_PX = 6;
+const STATUS_PIP_PX = 11;
+const STATUS_PIP_COMPACT_PX = 9;
+const STATUS_PIP_GAP_PX = 4;
+const STATUS_PIP_RADIUS_PX = 2;
+const STATUS_DEFENDING_BORDER = '#ef4444';
+const PIP_OPEN = { fill: 'rgba(0,0,0,0.5)', border: '#facc15', borderWidth: 1 } as const;
+const PIP_BOARDED = { fill: '#a8753d', border: '#e0b67a', borderWidth: 1 } as const;
+const PIP_DAMAGED = { fill: '#8a5c2e', border: '#fb923c', borderWidth: 1 } as const;
+const PIP_FAILING = { fill: '#7f1d1d', border: '#ef4444', borderWidth: 1 } as const;
+
+/** The pixel centre of a grate tile. */
+function tileCentre(tile: { x: number; y: number }): { x: number; y: number } {
+  return { x: (tile.x + HALF) * TILE_SIZE, y: (tile.y + HALF) * TILE_SIZE };
+}
+
+/** `m:ss`. */
+function clockLabel(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
+  const seconds = totalSeconds % SECONDS_PER_MINUTE;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
 let tutorialSeen = false;
 const TUTORIAL_PAGES = 3;
@@ -386,10 +464,29 @@ export class DefendQuestSystem implements GameSystem {
   woodBreakSoundPending = false;
   /** Set when a crawler lifts boards off the wood pile; drained by the scene. */
   woodPickupSoundPending = false;
+  /** Set when a crawler tries to build or repair with too few boards; drained by the scene. */
+  noWoodSoundPending = false;
+  /** Set when a grate's boards give way entirely; drained by the scene. */
+  barrierBrokenSoundPending = false;
   /** Set when a dialog box opens; DungeonScene clears it and plays menu_open. */
   menuOpenSoundPending = false;
   // Spawned Bugaboos (tracked separately for quest-end cleanup)
   private questMobs: Bugaboo[] = [];
+
+  /**
+   * A crawler tried to build or repair without the boards for it, so the wood
+   * pile keeps its arrow even over a room with every grate boarded — until
+   * someone fetches wood or the wave ends. Guidance only, so outside the
+   * checkpoint.
+   */
+  private woodReminder = false;
+  /** The grate whose badge is flashing "need wood", and for how many more frames. */
+  private noWoodFlash: { grateIdx: number; frames: number } | null = null;
+  private readonly effects = new NurseryEffects();
+  /** Frames since the system was built, for the room's ambient cadences. */
+  private ambientFrame = 0;
+  /** The nursery's wall torches, found once from the finished map. */
+  private torchTiles: ReadonlyArray<{ x: number; y: number }> | null = null;
 
   private childVisible = false;
   private childAnimTimer = 0;
@@ -421,6 +518,8 @@ export class DefendQuestSystem implements GameSystem {
   private addMob: (mob: Mob) => void;
   /** The crawlers, as of the last update: who a spiked grate's thorns are credited to. */
   private party: { human: HumanPlayer; cat: CatPlayer } | null = null;
+  /** The scene's mobs, as of the last update: what a tap on a grate might be aimed at instead. */
+  private roster: SystemContext['roster'] | null = null;
   private bus: EventBus;
   private gameMap: GameMap;
   private resolveWaveLevel: () => number;
@@ -442,6 +541,7 @@ export class DefendQuestSystem implements GameSystem {
     resolveWaveLevel: () => number,
     /** The floor's `levelledCurve`, which the wave is levelled on. */
     waveCurve: LevelledCurve | undefined,
+    private readonly intensity: DefendQuestIntensity = BASE_DEFEND_QUEST_INTENSITY,
   ) {
     this.gameMap = gameMap;
     this.bus = bus;
@@ -540,8 +640,8 @@ export class DefendQuestSystem implements GameSystem {
           {
             ...base,
             status: 'active',
-            objective: `Barricade the doors — the swarm arrives in ${secondsLabel(this.approachTimer)}`,
-            hint: 'Grab wood from the pile and build across the openings.',
+            objective: `Board up the grates — the swarm arrives in ${secondsLabel(this.approachTimer)}`,
+            hint: 'Grab wood from the pile and build a barrier over every grate.',
           },
         ];
       case 'defending':
@@ -638,7 +738,7 @@ export class DefendQuestSystem implements GameSystem {
     return false;
   }
 
-  /** The goblin mother's plea, with an accept/decline pair standing in for the old Yes/No buttons. */
+  /** The goblin mother's plea, offered as a confirm so Space accepts and Escape declines. */
   private openOfferConversation(): void {
     this.phase = 'dialog';
     this.conversationHandle = this.conversation.open({
@@ -746,81 +846,88 @@ export class DefendQuestSystem implements GameSystem {
     return false;
   }
 
+  private barrierOn(grateIdx: number): WoodBarrier | undefined {
+    return this.barriers.find((barrier) => barrier.grateIdx === grateIdx);
+  }
+
   /** True when a grate has no barrier yet, or its barrier is below full HP. */
   private grateNeedsWork(grateIdx: number): boolean {
-    const existing = this.barriers.find((b) => b.grateIdx === grateIdx);
+    const existing = this.barrierOn(grateIdx);
     return !existing || existing.hp < existing.maxHp;
   }
 
-  /** A pulsing outline around a grate tile that still needs a barrier built or repaired. */
-  private renderGrateNeedsWorkHighlight(
-    ctx: CanvasRenderingContext2D,
-    sx: number,
-    sy: number,
-    nowMs: number,
-  ): void {
-    const pulseSpan = GRATE_NEEDS_WORK_OUTLINE_MAX_ALPHA - GRATE_NEEDS_WORK_OUTLINE_MIN_ALPHA;
-    const pulse =
-      GRATE_NEEDS_WORK_OUTLINE_MIN_ALPHA +
-      (pulseSpan / 2) *
-        (1 + Math.sin((nowMs / GRATE_NEEDS_WORK_OUTLINE_PULSE_PERIOD_MS) * Math.PI * 2));
-    ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.strokeStyle = GRATE_NEEDS_WORK_BEACON_COLOR;
-    ctx.lineWidth = GRATE_NEEDS_WORK_OUTLINE_LINE_WIDTH;
-    ctx.strokeRect(sx, sy, TILE_SIZE, TILE_SIZE);
-    ctx.restore();
+  /** The grate in `builder`'s reach that most needs boards, preferring an open one over a repair. */
+  private grateInReach(builder: { x: number; y: number }): number | null {
+    if (!this.roomData) return null;
+    const ptx = pixelToTile(builder.x);
+    const pty = pixelToTile(builder.y);
+    let best: number | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    this.roomData.grateTiles.forEach((grate, grateIdx) => {
+      const distance = Math.abs(ptx - grate.x) + Math.abs(pty - grate.y);
+      if (distance > BUILD_REACH_TILES || !this.grateNeedsWork(grateIdx)) return;
+      const score = distance + (this.barrierOn(grateIdx) === undefined ? 0 : REPAIR_REACH_PENALTY);
+      if (score >= bestScore) return;
+      best = grateIdx;
+      bestScore = score;
+    });
+    return best;
   }
 
-  /** Try to build or repair a wood barrier. The cat can, at {@link CAT_BUILD_TIME_MULTIPLIER} the cost. */
+  /** Whether a crawler holds enough boards for one build or repair. */
+  private hasBoardsForBuild(crawler: Player | undefined): boolean {
+    return (crawler?.inventory.countOf('quest_wood_board') ?? 0) >= BOARDS_PER_BUILD;
+  }
+
+  /**
+   * A build or repair asked for with too few boards: the wood pile gets its
+   * arrow back until someone fetches wood, and the grate's badge flashes.
+   */
+  private refuseForWood(grateIdx: number): void {
+    this.woodReminder = true;
+    this.noWoodFlash = { grateIdx, frames: NO_WOOD_FLASH_FRAMES };
+    this.noWoodSoundPending = true;
+  }
+
+  /**
+   * Try to build or repair a wood barrier. The cat can, at
+   * {@link CAT_BUILD_TIME_MULTIPLIER} the time.
+   *
+   * Claims the press whenever a grate in reach needs work, even without the
+   * boards for it — the refusal is itself the answer to the press, and the
+   * same key would otherwise summon Mongo out of the player's hands.
+   */
   tryBuildBarrier(builder: HumanPlayer | CatPlayer): boolean {
     if (this.phase !== 'defending' && this.phase !== 'countdown') return false;
     if (this.pendingBuild) return false;
     if (!this.roomData) return false;
 
-    const boardCount = builder.inventory.countOf('quest_wood_board');
-    if (boardCount < BOARDS_PER_BUILD) return false;
+    const grateIdx = this.grateInReach(builder);
+    if (grateIdx === null) return false;
+    return this.beginBuildAt(builder, grateIdx);
+  }
 
-    const isCat = builder instanceof CatPlayer;
-    const builderId: BarrierBuilderId = isCat ? 'cat' : 'human';
-    const totalFrames = isCat ? BUILD_FRAMES * CAT_BUILD_TIME_MULTIPLIER : BUILD_FRAMES;
-
-    const ptx = pixelToTile(builder.x);
-    const pty = pixelToTile(builder.y);
-
-    // Check if standing on or adjacent to a grate tile
-    for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
-      const g = this.roomData.grateTiles[gi];
-      const dist = Math.abs(ptx - g.x) + Math.abs(pty - g.y);
-      if (dist > 2) continue;
-
-      const existing = this.barriers.find((b) => b.grateIdx === gi);
-      if (existing) {
-        if (existing.hp < existing.maxHp) {
-          this.pendingBuild = {
-            framesLeft: totalFrames,
-            totalFrames,
-            grateIdx: gi,
-            isRepair: true,
-            builder: builderId,
-          };
-          if (!(builder instanceof CatPlayer)) this.startHammering(builder, g);
-          return true;
-        }
-        continue; // Already at full HP
-      }
-
-      this.pendingBuild = {
-        framesLeft: totalFrames,
-        totalFrames,
-        grateIdx: gi,
-        isRepair: false,
-        builder: builderId,
-      };
-      if (!(builder instanceof CatPlayer)) this.startHammering(builder, g);
+  /** Starts boarding or repairing `grateIdx`, or refuses for want of boards; either way the press is claimed. */
+  private beginBuildAt(builder: HumanPlayer | CatPlayer, grateIdx: number): boolean {
+    if (!this.roomData) return false;
+    if (!this.hasBoardsForBuild(builder)) {
+      this.refuseForWood(grateIdx);
       return true;
     }
-    return false;
+
+    const isCat = builder instanceof CatPlayer;
+    const totalFrames = isCat ? BUILD_FRAMES * CAT_BUILD_TIME_MULTIPLIER : BUILD_FRAMES;
+    this.pendingBuild = {
+      framesLeft: totalFrames,
+      totalFrames,
+      grateIdx,
+      isRepair: this.barrierOn(grateIdx) !== undefined,
+      builder: isCat ? 'cat' : 'human',
+    };
+    if (!(builder instanceof CatPlayer)) {
+      this.startHammering(builder, this.roomData.grateTiles[grateIdx]);
+    }
+    return true;
   }
 
   /**
@@ -860,6 +967,7 @@ export class DefendQuestSystem implements GameSystem {
         frame,
         run: (): void => {
           this.hammerSoundPending = true;
+          this.throwSawdustAtBuild();
         },
       })),
       onEnd: () => {
@@ -882,9 +990,13 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   /**
-   * On mobile: returns true and triggers build/repair if the screen-space tap lands on a
-   * grate tile, the player is close enough, and has enough boards. Returns false so the
-   * caller can fall through to the normal attack.
+   * On mobile: returns true when a tap lands on a grate the builder can reach
+   * that needs boards — building or repairing it, or, short of boards, sending
+   * them back to the wood pile. Returns false so the caller can fall through to
+   * the normal attack, which is also what a boardless tap does when something
+   * hostile is on or beside that grate: on a phone the same tap is the attack,
+   * and a player swinging at a bugaboo coming up through the floor must not be
+   * told to fetch wood instead.
    */
   tryMobileTapOnGrate(
     screenX: number,
@@ -896,27 +1008,33 @@ export class DefendQuestSystem implements GameSystem {
     if (this.phase !== 'defending' && this.phase !== 'countdown') return false;
     if (this.pendingBuild) return false;
     if (!this.roomData) return false;
-    if (builder.inventory.countOf('quest_wood_board') < BOARDS_PER_BUILD) return false;
 
     const tapTileX = Math.floor((screenX + camX) / TILE_SIZE);
     const tapTileY = Math.floor((screenY + camY) / TILE_SIZE);
-
+    const tapped = this.roomData.grateTiles.findIndex(
+      (grate) => grate.x === tapTileX && grate.y === tapTileY,
+    );
+    if (tapped === -1) return false;
     const ptx = pixelToTile(builder.x);
     const pty = pixelToTile(builder.y);
+    const grate = this.roomData.grateTiles[tapped];
+    if (Math.abs(ptx - grate.x) + Math.abs(pty - grate.y) > BUILD_REACH_TILES) return false;
+    if (!this.grateNeedsWork(tapped)) return false;
+    if (!this.hasBoardsForBuild(builder) && this.hostileAtGrate(grate)) return false;
+    return this.beginBuildAt(builder, tapped);
+  }
 
-    for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
-      const g = this.roomData.grateTiles[gi];
-      if (g.x !== tapTileX || g.y !== tapTileY) continue;
-
-      const dist = Math.abs(ptx - g.x) + Math.abs(pty - g.y);
-      if (dist > 2) return false;
-
-      const existing = this.barriers.find((b) => b.grateIdx === gi);
-      if (existing && existing.hp >= existing.maxHp) return false;
-
-      return this.tryBuildBarrier(builder);
-    }
-    return false;
+  /** Whether a living hostile stands on or beside `grate`, or is clawing up through it. */
+  private hostileAtGrate(grate: { x: number; y: number }): boolean {
+    const mobs = this.roster?.mobs ?? [];
+    return mobs.some((mob) => {
+      if (!mob.isAlive || !mob.isHostile) return false;
+      if (mob instanceof Bugaboo && mob.assignedGrate === grate) return true;
+      const tileX = pixelToTile(mob.x);
+      const tileY = pixelToTile(mob.y);
+      const reach = Math.max(Math.abs(tileX - grate.x), Math.abs(tileY - grate.y));
+      return reach <= HOSTILE_AT_GRATE_TILES;
+    });
   }
 
   /**
@@ -953,8 +1071,10 @@ export class DefendQuestSystem implements GameSystem {
 
   /**
    * Check if a barrier exists at a grate position. damage=0 just checks
-   * existence. A spiked barrier's spikes take the blow first, and `attacker`
-   * — the bugaboo clawing at it — takes the same blow back.
+   * existence. A blow is scaled by the floor's barrier-damage multiplier. A
+   * spiked barrier's spikes take the blow first, and `attacker` — the bugaboo
+   * clawing at it — takes its own unscaled blow back: the thorns hurt as much
+   * as the claw that met them, whichever floor it is.
    */
   damageBarrier(
     grate: { x: number; y: number },
@@ -963,38 +1083,61 @@ export class DefendQuestSystem implements GameSystem {
   ): boolean {
     const barrier = this.barriers.find((b) => b.tileX === grate.x && b.tileY === grate.y);
     if (!barrier) return false;
-    if (damage > 0) {
-      const spikes = barrier.spikesHp ?? 0;
-      if (spikes > 0) {
-        const credited = barrier.spikesBy === 'cat' ? this.party?.cat : this.party?.human;
-        if (attacker?.isAlive === true) {
-          attacker.takeCreditedDamage(damage, credited ?? null, 'melee', null);
-        }
-        const absorbed = Math.min(spikes, damage);
-        const remaining = spikes - absorbed;
-        if (remaining > 0) {
-          barrier.spikesHp = remaining;
-        } else {
-          delete barrier.spikesHp;
-          delete barrier.spikesBy;
-        }
-        barrier.hitFlash = BARRIER_HIT_FLASH_FRAMES;
-        damage -= absorbed;
-        if (damage <= 0) return true;
+    if (damage <= 0) return true;
+
+    let remainingBlow = damage * this.intensity.barrierDamageMultiplier;
+    const centre = tileCentre(grate);
+    const spikes = barrier.spikesHp ?? 0;
+    if (spikes > 0) {
+      const credited = barrier.spikesBy === 'cat' ? this.party?.cat : this.party?.human;
+      if (attacker?.isAlive === true) {
+        attacker.takeCreditedDamage(damage, credited ?? null, 'melee', null);
       }
-      barrier.hp -= damage;
+      const absorbed = Math.min(spikes, remainingBlow);
+      const spikesLeft = spikes - absorbed;
+      if (spikesLeft > 0) {
+        barrier.spikesHp = spikesLeft;
+      } else {
+        delete barrier.spikesHp;
+        delete barrier.spikesBy;
+      }
       barrier.hitFlash = BARRIER_HIT_FLASH_FRAMES;
-      this.woodBreakSoundPending = true;
-      if (barrier.hp <= 0) {
-        this.barriers = this.barriers.filter((b) => b !== barrier);
+      remainingBlow -= absorbed;
+      if (remainingBlow <= 0) {
+        this.effects.barrierHit(barrier.grateIdx, centre, TILE_SIZE, false);
+        return true;
       }
+    }
+    barrier.hp -= remainingBlow;
+    barrier.hitFlash = BARRIER_HIT_FLASH_FRAMES;
+    this.woodBreakSoundPending = true;
+    if (barrier.hp <= 0) {
+      this.barriers = this.barriers.filter((b) => b !== barrier);
+      // A repair whose boards give way under the hammer carries on as boarding
+      // the now-open grate: the crawler is still kneeling there, and the time
+      // and boards buy a whole new barrier rather than vanishing.
+      if (this.pendingBuild?.grateIdx === barrier.grateIdx) this.pendingBuild.isRepair = false;
+      this.effects.barrierBroken(barrier.grateIdx, centre, TILE_SIZE);
+      this.barrierBrokenSoundPending = true;
+    } else {
+      this.effects.barrierHit(barrier.grateIdx, centre, TILE_SIZE, true);
     }
     return true;
   }
 
   update(ctx: SystemContext): void {
     this.party = { human: ctx.human, cat: ctx.cat };
+    this.roster = ctx.roster;
     this.syncQuestExitDoor();
+    this.ambientFrame++;
+    this.effects.update();
+    if (this.noWoodFlash !== null) {
+      this.noWoodFlash.frames--;
+      if (this.noWoodFlash.frames <= 0) this.noWoodFlash = null;
+    }
+    // The reminder answers "where do I get boards for this wave", so it goes
+    // with the wave.
+    if (this.phase !== 'countdown' && this.phase !== 'defending') this.woodReminder = false;
 
     // Overlay timers tick even after quest ends
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
@@ -1049,6 +1192,7 @@ export class DefendQuestSystem implements GameSystem {
       const elapsed = this.pendingBuild.totalFrames - this.pendingBuild.framesLeft;
       if (this.hammering === null && elapsed % HAMMER_SOUND_INTERVAL === 0) {
         this.hammerSoundPending = true;
+        this.throwSawdustAtBuild();
       }
       this.pendingBuild.framesLeft--;
       if (this.pendingBuild.framesLeft <= 0) {
@@ -1058,6 +1202,26 @@ export class DefendQuestSystem implements GameSystem {
 
     for (const b of this.barriers) {
       if (b.hitFlash > 0) b.hitFlash--;
+    }
+
+    if (this.phase === 'defending' && this.ambientFrame % SCRABBLE_DUST_INTERVAL_FRAMES === 0) {
+      this.shakeGritFromBreaches();
+    }
+  }
+
+  /** Sawdust and a chip or two off the grate being worked on, on each hammer blow. */
+  private throwSawdustAtBuild(): void {
+    if (!this.pendingBuild || !this.roomData) return;
+    const grate = this.roomData.grateTiles[this.pendingBuild.grateIdx];
+    this.effects.hammerStrike(tileCentre(grate), TILE_SIZE);
+  }
+
+  /** Grit sifting up between the boards of every grate a bugaboo is clawing at from below. */
+  private shakeGritFromBreaches(): void {
+    for (const mob of this.questMobs) {
+      const grate = mob.assignedGrate;
+      if (!mob.isBreakingIn || grate === null) continue;
+      this.effects.scrabble(tileCentre(grate), TILE_SIZE);
     }
   }
 
@@ -1223,7 +1387,10 @@ export class DefendQuestSystem implements GameSystem {
     this.spawnTimer--;
     if (this.spawnTimer <= 0) {
       this.spawnWave();
-      this.spawnTimer = randomInt(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_MAX - 1);
+      this.spawnTimer = randomInt(
+        Math.round(SPAWN_INTERVAL_MIN / this.intensity.spawnRateMultiplier),
+        Math.round(SPAWN_INTERVAL_MAX / this.intensity.spawnRateMultiplier) - 1,
+      );
       // The next wave is now committed to, three to five seconds out. Warming a
       // row that is already warm is nearly free, so this fires every wave
       // rather than tracking which rows the last one left behind.
@@ -1255,13 +1422,17 @@ export class DefendQuestSystem implements GameSystem {
         if (dist < TILE_SIZE * PICKUP_PROXIMITY_FRACTION) {
           p.inventory.addItem('quest_wood_board', WOOD_PER_PICKUP);
           this.woodPickupSoundPending = true;
+          this.woodReminder = false;
           this.woodPileAvailable = false;
           this.woodRespawnTimer = WOOD_RESPAWN_FRAMES;
           return true;
         }
         return false;
       };
-      if (!checkPickup(ctx.human)) checkPickup(ctx.cat);
+      // Only the crawler the player is driving: the arrow, the badges and the
+      // build key all read that crawler's boards, so a companion trailing
+      // past the pile must not pocket the stock and restock it out of reach.
+      checkPickup(ctx.active);
     }
   }
 
@@ -1361,15 +1532,20 @@ export class DefendQuestSystem implements GameSystem {
   private updateChildAnimation(): void {
     if (this.childAnimTimer <= 0 || !this.roomData) return;
     this.childAnimTimer--;
-    this.childWalkFrame += 0.14;
+    const previousX = this.childX;
+    const previousY = this.childY;
 
-    // Lerp child toward NPC
     const rd = this.roomData;
     const t = 1 - this.childAnimTimer / CHILD_REUNION_WALK_FRAMES;
     this.childX =
       rd.entranceTile.x * TILE_SIZE + (this.childTargetX - rd.entranceTile.x * TILE_SIZE) * t;
     this.childY =
       rd.entranceTile.y * TILE_SIZE + (this.childTargetY - rd.entranceTile.y * TILE_SIZE) * t;
+
+    // Stride phase follows ground covered, so his feet plant rather than slide
+    // however long the walk from the doorway turns out to be.
+    const covered = Math.hypot(this.childX - previousX, this.childY - previousY);
+    this.childWalkFrame += (covered / CHILD_STRIDE_PX) * FULL_STRIDE_RADIANS;
   }
 
   private triggerQuestComplete(active: Player): void {
@@ -1421,7 +1597,7 @@ export class DefendQuestSystem implements GameSystem {
 
   private finishBuild(ctx: SystemContext): void {
     if (!this.pendingBuild || !this.roomData) return;
-    const { grateIdx, isRepair, builder } = this.pendingBuild;
+    const { grateIdx, builder } = this.pendingBuild;
     this.pendingBuild = null;
     this.endHammering();
 
@@ -1431,11 +1607,12 @@ export class DefendQuestSystem implements GameSystem {
 
     buildingCrawler.inventory.removeItems('quest_wood_board', BOARDS_PER_BUILD);
 
-    if (isRepair) {
-      const barrier = this.barriers.find((b) => b.grateIdx === grateIdx);
-      if (barrier) barrier.hp = barrier.maxHp;
+    const grate = this.roomData.grateTiles[grateIdx];
+    this.effects.buildFinished(tileCentre(grate), TILE_SIZE);
+    const existing = this.barrierOn(grateIdx);
+    if (existing !== undefined) {
+      existing.hp = existing.maxHp;
     } else {
-      const grate = this.roomData.grateTiles[grateIdx];
       this.barriers.push({
         tileX: grate.x,
         tileY: grate.y,
@@ -1449,6 +1626,70 @@ export class DefendQuestSystem implements GameSystem {
     }
   }
 
+  /** Whether the wave's building half is live: boards can be fetched, laid and repaired. */
+  private get isBuildPhase(): boolean {
+    return this.phase === 'countdown' || this.phase === 'defending';
+  }
+
+  /** Grates with nothing on them yet — not even boards going down right now. */
+  private isGrateOpen(grateIdx: number): boolean {
+    if (this.barrierOn(grateIdx) !== undefined) return false;
+    return !(this.pendingBuild?.grateIdx === grateIdx && !this.pendingBuild.isRepair);
+  }
+
+  /**
+   * Whether the wood pile gets its bouncing arrow: only while the wave's
+   * building half is live, the pile has boards, and the active crawler has
+   * too few for a build — and then only while a grate is still open or a
+   * build was just refused for want of boards.
+   */
+  private woodArrowShowing(activeCrawler: Player | undefined): boolean {
+    if (!this.isBuildPhase || !this.woodPileAvailable || !this.roomData) return false;
+    if (this.hasBoardsForBuild(activeCrawler)) return false;
+    const anyGrateOpen = this.roomData.grateTiles.some((_, grateIdx) => this.isGrateOpen(grateIdx));
+    return anyGrateOpen || this.woodReminder;
+  }
+
+  private highlightMood(activeCrawler: Player | undefined): AreaHighlightMood {
+    return this.hasBoardsForBuild(activeCrawler) ? 'ready' : 'pending';
+  }
+
+  private grateScreenRect(
+    grate: { x: number; y: number },
+    camX: number,
+    camY: number,
+  ): AreaHighlightRect {
+    return {
+      x: grate.x * TILE_SIZE - camX,
+      y: grate.y * TILE_SIZE - camY,
+      width: TILE_SIZE,
+      height: TILE_SIZE,
+    };
+  }
+
+  /**
+   * The nursery's wall torches: evenly along the north wall's face, on wall
+   * tiles only, so none hangs in a doorway.
+   */
+  private nurseryTorchTiles(): ReadonlyArray<{ x: number; y: number }> {
+    if (this.torchTiles !== null) return this.torchTiles;
+    const room = this.roomData;
+    if (room === null) return [];
+    const wallY = room.bounds.y - 1;
+    const tiles: Array<{ x: number; y: number }> = [];
+    for (const fraction of TORCH_WALL_FRACTIONS) {
+      const x = room.bounds.x + Math.round((room.bounds.w - 1) * fraction);
+      if (this.gameMap.isWalkable(x, wallY)) continue;
+      tiles.push({ x, y: wallY });
+    }
+    this.torchTiles = tiles;
+    return tiles;
+  }
+
+  /**
+   * The room itself — torchlight, what stirs under the open grates, the wood
+   * pile, the boards — and the goblin mother. Drawn under every body.
+   */
   renderObjects(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -1457,43 +1698,29 @@ export class DefendQuestSystem implements GameSystem {
     activeCrawler?: HumanPlayer | CatPlayer,
   ): void {
     if (this.phase === 'inactive') return;
+    const nowMs = performance.now();
 
     if (this.roomData) {
-      const anyGrateNeedsWork = this.roomData.grateTiles.some((_, gi) => this.grateNeedsWork(gi));
-      const hasEnoughWood =
-        (activeCrawler?.inventory.countOf('quest_wood_board') ?? 0) >= BOARDS_PER_BUILD;
+      this.renderRoomAmbience(ctx, camX, camY, nowMs);
 
-      if (this.woodPileAvailable) {
-        const wpx = this.roomData.woodPileTile.x * TILE_SIZE - camX;
-        const wpy = this.roomData.woodPileTile.y * TILE_SIZE - camY;
-        drawWoodPileSprite(ctx, wpx, wpy, TILE_SIZE, anyGrateNeedsWork && !hasEnoughWood);
+      const pileX = this.roomData.woodPileTile.x * TILE_SIZE - camX;
+      const pileY = this.roomData.woodPileTile.y * TILE_SIZE - camY;
+      const pileStocked = this.isBuildPhase ? this.woodPileAvailable : true;
+      drawNurseryWoodPile(ctx, pileX, pileY, TILE_SIZE, pileStocked);
+
+      if (this.isBuildPhase) {
+        const mood = this.highlightMood(activeCrawler);
+        this.roomData.grateTiles.forEach((grate, grateIdx) => {
+          if (!this.isGrateOpen(grateIdx)) return;
+          drawAreaHighlightGround(ctx, this.grateScreenRect(grate, camX, camY), {
+            color: GUIDE_COLOR,
+            nowMs,
+            mood,
+          });
+        });
       }
 
-      if (anyGrateNeedsWork && hasEnoughWood) {
-        const nowMs = performance.now();
-        for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
-          if (!this.grateNeedsWork(gi)) continue;
-          const g = this.roomData.grateTiles[gi];
-          const gx = g.x * TILE_SIZE - camX;
-          const gy = g.y * TILE_SIZE - camY;
-          this.renderGrateNeedsWorkHighlight(ctx, gx, gy, nowMs);
-          drawObjectiveBeacon(ctx, gx, gy, TILE_SIZE, GRATE_NEEDS_WORK_BEACON_COLOR, nowMs);
-        }
-      }
-    }
-
-    for (const b of this.barriers) {
-      const bx = b.worldX - camX;
-      const by = b.worldY - camY;
-      drawWoodBarrierSprite(ctx, bx, by, TILE_SIZE, b.hp / b.maxHp);
-      if ((b.spikesHp ?? 0) > 0) drawBarrierSpikes(ctx, bx, by, TILE_SIZE);
-      if (b.hitFlash > 0) {
-        ctx.save();
-        ctx.globalAlpha = (b.hitFlash / BARRIER_HIT_FLASH_FRAMES) * BARRIER_HIT_ALPHA_FRACTION;
-        ctx.fillStyle = '#ef4444';
-        ctx.fillRect(bx, by, TILE_SIZE, TILE_SIZE);
-        ctx.restore();
-      }
+      this.renderBarriers(ctx, camX, camY);
     }
 
     if (this.npc?.isAlive) {
@@ -1535,154 +1762,336 @@ export class DefendQuestSystem implements GameSystem {
       ctx.restore();
     }
 
-    // Child: walking to mother, then standing beside her permanently
     if (this.childVisible && (this.phase === 'complete_pending' || this.phase === 'complete')) {
       const cx = this.childX - camX;
       const cy = this.childY - camY;
       const isWalking = this.childAnimTimer > 0;
-      // While walking, face toward target; once arrived, face toward mother (left, since child is to her right)
+      // Once arrived he stands at his mother's right, so he faces left.
       const facingX = isWalking ? (this.childTargetX > this.childX ? 1 : -1) : -1;
       drawChildSprite(ctx, cx, cy, TILE_SIZE, this.childWalkFrame, isWalking, facingX);
     }
 
-    if (this.pendingBuild) {
-      this.renderBuildProgress(ctx, camX, camY);
-    }
-
-    if (
-      activeCrawler &&
-      activeCrawler.isActive &&
-      !this.pendingBuild &&
-      (this.phase === 'countdown' || this.phase === 'defending') &&
-      this.roomData &&
-      activeCrawler.inventory.countOf('quest_wood_board') >= BOARDS_PER_BUILD
-    ) {
-      const ptx = pixelToTile(activeCrawler.x);
-      const pty = pixelToTile(activeCrawler.y);
-      for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
-        const g = this.roomData.grateTiles[gi];
-        const dist = Math.abs(ptx - g.x) + Math.abs(pty - g.y);
-        if (dist > 2) continue;
-        const existing = this.barriers.find((b) => b.grateIdx === gi);
-        if (existing && existing.hp >= existing.maxHp) continue;
-        const label = platform.isMobile
-          ? existing
-            ? 'Tap to repair'
-            : 'Tap to construct'
-          : existing
-            ? 'Repair'
-            : 'Build Barrier';
+    if (activeCrawler?.isActive === true && !this.pendingBuild && this.isBuildPhase) {
+      const grateIdx = this.grateInReach(activeCrawler);
+      if (grateIdx !== null && this.roomData) {
+        const grate = this.roomData.grateTiles[grateIdx];
+        const isRepair = this.barrierOn(grateIdx) !== undefined;
+        const hasBoards = this.hasBoardsForBuild(activeCrawler);
+        const label = !hasBoards
+          ? 'Need wood'
+          : platform.isMobile
+            ? isRepair
+              ? 'Tap to repair'
+              : 'Tap to construct'
+            : isRepair
+              ? 'Repair'
+              : 'Build Barrier';
         const keyOverride = platform.isMobile ? undefined : 'R';
-        const gx = g.x * TILE_SIZE - camX;
-        const gy = g.y * TILE_SIZE - camY;
-        drawInteractionPrompt(ctx, gx, gy, TILE_SIZE, label, keyOverride);
-        break;
+        drawInteractionPrompt(
+          ctx,
+          grate.x * TILE_SIZE - camX,
+          grate.y * TILE_SIZE - camY,
+          TILE_SIZE,
+          label,
+          keyOverride,
+        );
       }
     }
+  }
+
+  /** Torch sconces on the north wall and the warm pools of light they throw across the floor. */
+  private renderRoomAmbience(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    nowMs: number,
+  ): void {
+    if (!this.roomData) return;
+    const torches = this.nurseryTorchTiles();
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    torches.forEach((tile, index) => {
+      drawNurseryTorchLight(
+        ctx,
+        tile.x * TILE_SIZE - camX,
+        tile.y * TILE_SIZE - camY,
+        TILE_SIZE,
+        nowMs,
+        index * TORCH_SEED_STRIDE,
+      );
+    });
+    ctx.restore();
+    torches.forEach((tile, index) => {
+      drawNurseryTorch(
+        ctx,
+        tile.x * TILE_SIZE - camX,
+        tile.y * TILE_SIZE - camY,
+        TILE_SIZE,
+        nowMs,
+        index * TORCH_SEED_STRIDE,
+      );
+    });
+
+    // Something is always down there; once the wave is on, it is in a hurry.
+    const urgency = this.phase === 'defending' ? 1 : this.phase === 'countdown' ? HALF : 0;
+    const showLurkers = !RESOLVED_PHASES.has(this.phase);
+    if (!showLurkers) return;
+    this.roomData.grateTiles.forEach((grate, grateIdx) => {
+      if (this.barrierOn(grateIdx) !== undefined) return;
+      drawGrateLurkers(
+        ctx,
+        grate.x * TILE_SIZE - camX,
+        grate.y * TILE_SIZE - camY,
+        TILE_SIZE,
+        nowMs,
+        grateIdx,
+        urgency,
+      );
+    });
+  }
+
+  /** Every barrier at its damage stage, shuddering from its last blow, plus the one going up now. */
+  private renderBarriers(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (!this.roomData) return;
+    const building = this.pendingBuild;
+    const progress = building === null ? 0 : 1 - building.framesLeft / building.totalFrames;
+
+    for (const b of this.barriers) {
+      const shake = this.effects.shakeOffset(b.grateIdx);
+      const bx = b.worldX - camX + shake.x;
+      const by = b.worldY - camY + shake.y;
+      const repairing = building?.isRepair === true && building.grateIdx === b.grateIdx;
+      const shownFraction = repairing
+        ? b.hp / b.maxHp + (1 - b.hp / b.maxHp) * progress
+        : b.hp / b.maxHp;
+      drawNurseryBarrier(ctx, bx, by, TILE_SIZE, {
+        variant: b.grateIdx,
+        damageStage: barrierDamageStage(shownFraction),
+        planksLaid: BARRIER_PLANK_COUNT,
+      });
+      if ((b.spikesHp ?? 0) > 0) drawBarrierSpikes(ctx, bx, by, TILE_SIZE);
+      if (b.hitFlash > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = (b.hitFlash / BARRIER_HIT_FLASH_FRAMES) * BARRIER_HIT_ALPHA_FRACTION;
+        ctx.fillStyle = BARRIER_HIT_FLASH_COLOR;
+        ctx.fillRect(bx, by, TILE_SIZE, TILE_SIZE);
+        ctx.restore();
+      }
+    }
+
+    if (building !== null && !building.isRepair) {
+      const grate = this.roomData.grateTiles[building.grateIdx];
+      // At least one board is down the moment work starts, and the last one
+      // lands with the battens as the build completes.
+      const planksLaid = Math.min(
+        BARRIER_PLANK_COUNT - 1,
+        1 + Math.floor(progress * (BARRIER_PLANK_COUNT - 1)),
+      );
+      drawNurseryBarrier(ctx, grate.x * TILE_SIZE - camX, grate.y * TILE_SIZE - camY, TILE_SIZE, {
+        variant: building.grateIdx,
+        damageStage: 0,
+        planksLaid,
+      });
+    }
+  }
+
+  /**
+   * Everything that has to read over the bodies in the room: the corner
+   * brackets on open grates, particles, the wood pile's label and arrow, the
+   * repair badges over damaged barriers and the build progress bar. Called
+   * by the scene after the Y-sorted entity pass.
+   */
+  renderAbove(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    activeCrawler?: HumanPlayer | CatPlayer,
+  ): void {
+    if (this.phase === 'inactive' || !this.roomData) return;
+    const nowMs = performance.now();
+
+    if (this.isBuildPhase) {
+      const mood = this.highlightMood(activeCrawler);
+      this.roomData.grateTiles.forEach((grate, grateIdx) => {
+        if (!this.isGrateOpen(grateIdx)) return;
+        drawAreaHighlightFrame(ctx, this.grateScreenRect(grate, camX, camY), {
+          color: GUIDE_COLOR,
+          nowMs,
+          mood,
+        });
+      });
+    }
+
+    this.effects.render(ctx, camX, camY);
+
+    if (this.isBuildPhase) {
+      this.renderWoodPileLabel(ctx, camX, camY, activeCrawler);
+      for (const barrier of this.barriers) {
+        if (barrier.hp >= barrier.maxHp) continue;
+        if (this.pendingBuild?.grateIdx === barrier.grateIdx) continue;
+        this.renderRepairBadge(ctx, camX, camY, barrier, activeCrawler, nowMs);
+      }
+    }
+
+    if (this.pendingBuild) this.renderBuildProgress(ctx, camX, camY);
+  }
+
+  private renderWoodPileLabel(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    activeCrawler: Player | undefined,
+  ): void {
+    if (!this.roomData) return;
+    const tile = this.roomData.woodPileTile;
+    const worldX = tile.x * TILE_SIZE;
+    const labelWorldY = (tile.y - WOOD_PILE_TOP_RISE_TILES) * TILE_SIZE - WOOD_LABEL_GAP_PX;
+    const centreX = worldX + TILE_SIZE * HALF - camX;
+    const restockSeconds = Math.ceil(this.woodRespawnTimer / FRAMES_PER_SECOND);
+    const label = this.woodPileAvailable ? 'WOOD' : `WOOD · ${restockSeconds}s`;
+    drawText(ctx, label, {
+      ...(this.woodPileAvailable ? WOOD_LABEL_STYLE : TEXT_PRESETS.muted),
+      x: centreX,
+      y: labelWorldY - camY - WOOD_LABEL_SIZE,
+      align: 'center',
+      outline: true,
+    });
+    if (this.woodArrowShowing(activeCrawler)) {
+      // The arrow helper stands its arrow a fixed rise above the y it is
+      // given; handing it the label's top plus that rise sets it just clear
+      // of the label instead of a tile and a half over it.
+      const labelTopWorldY = labelWorldY - WOOD_LABEL_SIZE;
+      drawBouncingArrowAboveEntity(
+        ctx,
+        worldX,
+        labelTopWorldY + TILE_SIZE * WORLD_ARROW_RISE_TILES - WOOD_ARROW_LIFT_PX,
+        camX,
+        camY,
+        GUIDE_COLOR,
+      );
+    }
+  }
+
+  /**
+   * "Repair" with the boards it costs, over a damaged barrier, readable from
+   * across the room. Gold and bright while the active crawler holds the boards;
+   * dimmed with the cost in red while they do not; flashing red for a moment
+   * after a repair was refused for want of them.
+   */
+  private renderRepairBadge(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    barrier: WoodBarrier,
+    activeCrawler: Player | undefined,
+    nowMs: number,
+  ): void {
+    const affordable = this.hasBoardsForBuild(activeCrawler);
+    const refused =
+      this.noWoodFlash !== null &&
+      this.noWoodFlash.grateIdx === barrier.grateIdx &&
+      Math.floor(this.noWoodFlash.frames / NO_WOOD_FLASH_BLINK_FRAMES) % 2 === 0;
+    const title = refused ? 'Need wood!' : 'Repair';
+    const titleStyle = refused
+      ? TEXT_PRESETS.requirementShort
+      : affordable
+        ? TEXT_PRESETS.ready
+        : TEXT_PRESETS.label;
+    const costText = `${BOARDS_PER_BUILD}`;
+    const costStyle = affordable ? TEXT_PRESETS.requirementMet : TEXT_PRESETS.requirementShort;
+    const titleWidth = measureTextWidth(ctx, title, titleStyle);
+    const costWidth = measureTextWidth(ctx, costText, costStyle);
+    const rowWidth = titleWidth + BADGE_GAP_PX + BADGE_ICON_PX + BADGE_ICON_GAP_PX + costWidth;
+    const width = rowWidth + BADGE_PAD_X_PX * 2;
+    const height = BADGE_HEIGHT_PX;
+    const bob = Math.sin(nowMs / BADGE_BOB_PERIOD_MS) * BADGE_BOB_PX;
+    const centreX = barrier.worldX + TILE_SIZE * HALF - camX;
+    const top = barrier.worldY - camY - BADGE_LIFT_PX - height + bob;
+
+    drawBox(ctx, {
+      x: centreX,
+      y: top,
+      width,
+      height,
+      alignX: 'center',
+      ...(refused
+        ? BOX_PRESETS.danger
+        : affordable
+          ? BOX_PRESETS.worldCaptionReady
+          : BOX_PRESETS.worldCaptionPending),
+      radius: BADGE_RADIUS_PX,
+    });
+    let x = centreX - rowWidth * HALF;
+    const textY = top + BADGE_TEXT_TOP_PX;
+    drawText(ctx, title, { ...titleStyle, x, y: textY });
+    x += titleWidth + BADGE_GAP_PX;
+    ctx.save();
+    ctx.globalAlpha = affordable ? 1 : BADGE_ICON_SHORT_ALPHA;
+    drawResourceIcon(
+      ctx,
+      'wood_board',
+      x,
+      top + (height - BADGE_ICON_PX) * HALF - BADGE_BAR_PX * HALF,
+      BADGE_ICON_PX,
+    );
+    ctx.restore();
+    x += BADGE_ICON_PX + BADGE_ICON_GAP_PX;
+    drawText(ctx, costText, { ...costStyle, x, y: textY });
+
+    drawProgressBar(ctx, {
+      x: centreX - width * HALF + BADGE_BAR_INSET_PX,
+      y: top + height - BADGE_BAR_PX - BADGE_BAR_INSET_PX,
+      width: width - BADGE_BAR_INSET_PX * 2,
+      height: BADGE_BAR_PX,
+      value: barrier.hp / barrier.maxHp,
+      ...PROGRESS_PRESETS.structureHp,
+      fill:
+        barrier.hp / barrier.maxHp < BARRIER_CRITICAL_FRACTION
+          ? BARRIER_CRITICAL_COLOR
+          : PROGRESS_PRESETS.structureHp.fill,
+    });
   }
 
   private renderBuildProgress(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!this.pendingBuild || !this.roomData) return;
     const grate = this.roomData.grateTiles[this.pendingBuild.grateIdx];
-    const sx = grate.x * TILE_SIZE - camX + TILE_SIZE * TILE_CENTER_OFFSET;
-    const sy = grate.y * TILE_SIZE - camY + TILE_SIZE * TILE_CENTER_OFFSET;
-
+    const centreX = grate.x * TILE_SIZE - camX + TILE_SIZE * HALF;
+    const top = grate.y * TILE_SIZE - camY - BUILD_BAR_LIFT_PX;
     const ratio = 1 - this.pendingBuild.framesLeft / this.pendingBuild.totalFrames;
-    const radius = TILE_SIZE * BUILD_PROGRESS_RADIUS_FRACTION;
-    const startAngle = -Math.PI / 2;
-    const endAngle = startAngle + Math.PI * 2 * ratio;
-
-    ctx.save();
-    ctx.globalAlpha = BUILD_PROGRESS_TRACK_ALPHA;
-    ctx.strokeStyle = '#4b5563';
-    ctx.lineWidth = BUILD_PROGRESS_LINE_WIDTH;
-    ctx.beginPath();
-    ctx.arc(sx, sy, radius, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.globalAlpha = BUILD_PROGRESS_ARC_ALPHA;
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = BUILD_PROGRESS_LINE_WIDTH;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(sx, sy, radius, startAngle, endAngle);
-    ctx.stroke();
-    ctx.lineCap = 'butt';
-
-    ctx.restore();
-
-    const label = this.pendingBuild.isRepair ? 'REPAIRING...' : 'BUILDING...';
-    drawText(ctx, label, {
-      x: sx,
-      y: sy + radius + BUILD_PROGRESS_LABEL_OFFSET - BUILD_PROGRESS_LABEL_ASCENT,
-      size: 9,
-      bold: true,
-      color: '#fbbf24',
+    drawText(ctx, this.pendingBuild.isRepair ? 'Repairing…' : 'Building…', {
+      ...TEXT_PRESETS.ready,
+      x: centreX,
+      y: top - BUILD_LABEL_HEIGHT_PX,
       align: 'center',
-      outline: true,
+    });
+    drawProgressBar(ctx, {
+      x: centreX - BUILD_BAR_WIDTH_PX * HALF,
+      y: top,
+      width: BUILD_BAR_WIDTH_PX,
+      height: BUILD_BAR_HEIGHT_PX,
+      value: ratio,
+      ...PROGRESS_PRESETS.build,
     });
   }
 
   renderUI(ctx: CanvasRenderingContext2D, mobileTopY?: number): void {
     if (this.phase === 'inactive') return;
 
-    const cw = viewportWidth();
-
-    if (this.phase === 'countdown') {
+    if (this.phase === 'countdown' || this.phase === 'defending') {
       if (platform.isMobile && mobileTopY !== undefined) {
-        this.renderMobileCountdown(ctx, mobileTopY);
+        const boxWidth =
+          viewportWidth() - MOBILE_QUEST_MINIMAP_W - MOBILE_QUEST_BOX_X - MOBILE_QUEST_BOX_GAP;
+        this.renderStatusPanel(ctx, MOBILE_QUEST_BOX_X, mobileTopY, boxWidth, true);
       } else {
-        const secs = Math.ceil(this.approachTimer / FRAMES_PER_SECOND);
-        drawText(ctx, this.encounterAborted ? HELD_TITLE : APPROACH_TITLE, {
-          x: cw / 2,
-          y: COUNTDOWN_TITLE_Y - COUNTDOWN_TITLE_ASCENT,
-          size: COUNTDOWN_TITLE_SIZE,
-          bold: true,
-          color: '#fbbf24',
-          align: 'center',
-          shadow: 'rgba(0,0,0,0.9)',
-          shadowBlurPx: 4,
-          shadowOffset: { x: 0, y: 0 },
-        });
-        if (!this.encounterAborted) {
-          drawText(ctx, `${secs}`, {
-            x: cw / 2,
-            y: COUNTDOWN_NUMBER_Y - COUNTDOWN_NUMBER_ASCENT,
-            size: COUNTDOWN_NUMBER_SIZE,
-            bold: true,
-            color: '#ef4444',
-            align: 'center',
-          });
-        }
-      }
-    }
-
-    if (this.phase === 'defending') {
-      if (platform.isMobile && mobileTopY !== undefined) {
-        this.renderMobileDefenseTimer(ctx, mobileTopY);
-      } else {
-        const secs = Math.ceil(this.defenseTimer / FRAMES_PER_SECOND);
-        const mins = Math.floor(secs / DEFENSE_SECONDS);
-        const s = secs % DEFENSE_SECONDS;
-        drawText(ctx, 'Child arrives in:', {
-          x: cw / 2,
-          y: DEFENSE_LABEL_Y - DEFENSE_LABEL_ASCENT,
-          size: DEFENSE_LABEL_SIZE,
-          bold: true,
-          color: '#e2e8f0',
-          align: 'center',
-          shadow: 'rgba(0,0,0,0.9)',
-          shadowBlurPx: 4,
-          shadowOffset: { x: 0, y: 0 },
-        });
-        drawText(ctx, `${mins}:${s.toString().padStart(2, '0')}`, {
-          x: cw / 2,
-          y: DEFENSE_TIMER_Y - DEFENSE_TIMER_ASCENT,
-          size: DEFENSE_TIMER_SIZE,
-          bold: true,
-          color: secs <= SECS_LOW_THRESHOLD ? '#4ade80' : '#fbbf24',
-          align: 'center',
-        });
+        const width = Math.min(STATUS_PANEL_WIDTH_PX, viewportWidth() - STATUS_PANEL_MARGIN_PX * 2);
+        this.renderStatusPanel(
+          ctx,
+          (viewportWidth() - width) * HALF,
+          STATUS_PANEL_TOP_PX,
+          width,
+          false,
+        );
       }
     }
 
@@ -1703,71 +2112,142 @@ export class DefendQuestSystem implements GameSystem {
     }
   }
 
-  private renderMobileCountdown(ctx: CanvasRenderingContext2D, topY: number): void {
-    const secs = Math.ceil(this.approachTimer / FRAMES_PER_SECOND);
-    const boxX = MOBILE_QUEST_BOX_X;
-    const boxW = viewportWidth() - MOBILE_QUEST_MINIMAP_W - boxX - MOBILE_QUEST_BOX_GAP;
-    const centerX = boxX + MOBILE_QUEST_PAD_H + (boxW - MOBILE_QUEST_PAD_H * 2) / 2;
+  /**
+   * The wave's status: what to do, how long is left as a draining bar, and a
+   * pip per grate showing which are boarded — with the mother's health once
+   * the bugaboos are in. `compact` is the phone layout beside the minimap.
+   */
+  private renderStatusPanel(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    compact: boolean,
+  ): void {
+    const defending = this.phase === 'defending';
+    const held = this.phase === 'countdown' && this.encounterAborted;
+    const title = held ? HELD_TITLE : defending ? DEFENSE_TITLE : APPROACH_TITLE;
+    const seconds = Math.ceil(
+      (defending ? this.defenseTimer : this.approachTimer) / FRAMES_PER_SECOND,
+    );
+    const detail = held
+      ? HELD_VALUE
+      : defending
+        ? `Her child is back in ${clockLabel(seconds)}`
+        : `Bugaboos in ${seconds}s — board up the grates`;
+    const timeFraction = held
+      ? 1
+      : defending
+        ? this.defenseTimer / DEFENSE_TIMER_FRAMES
+        : this.approachTimer / APPROACH_TIMER_FRAMES;
+    const rows = defending ? STATUS_ROWS_DEFENDING : STATUS_ROWS_COUNTDOWN;
+    const rowHeight = compact ? STATUS_ROW_COMPACT_PX : STATUS_ROW_PX;
+    const height = STATUS_PAD_PX * 2 + rows * rowHeight;
 
-    ctx.save();
-    ctx.fillStyle = 'rgba(8,10,20,0.85)';
-    ctx.fillRect(boxX, topY, boxW, MOBILE_QUEST_BOX_H);
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(boxX, topY, boxW, MOBILE_QUEST_BOX_H);
-    ctx.restore();
+    const panel = drawBox(ctx, {
+      x,
+      y,
+      width,
+      height,
+      ...BOX_PRESETS.panel,
+      border: defending ? STATUS_DEFENDING_BORDER : GUIDE_COLOR,
+      radius: STATUS_RADIUS_PX,
+      padding: STATUS_PAD_PX,
+    });
+    const inner = panel.inner;
+    const centreX = inner.x + inner.width * HALF;
+    let rowTop = inner.y;
 
-    drawText(ctx, this.encounterAborted ? HELD_TITLE : APPROACH_TITLE, {
-      x: centerX,
-      y: topY + MOBILE_QUEST_PAD_V,
-      size: MOBILE_QUEST_TITLE_SIZE,
-      bold: true,
-      color: '#fbbf24',
+    drawText(ctx, title, {
+      ...(defending ? TEXT_PRESETS.danger : TEXT_PRESETS.ready),
+      size: compact ? STATUS_TITLE_COMPACT_SIZE : STATUS_TITLE_SIZE,
+      x: centreX,
+      y: rowTop,
       align: 'center',
     });
-    drawText(ctx, this.encounterAborted ? HELD_VALUE : `${secs}`, {
-      x: centerX,
-      y: topY + MOBILE_QUEST_PAD_V + MOBILE_QUEST_TITLE_H + MOBILE_QUEST_GAP,
-      size: MOBILE_QUEST_VALUE_SIZE,
-      bold: true,
-      color: '#ef4444',
+    rowTop += rowHeight;
+    drawText(ctx, detail, {
+      ...TEXT_PRESETS.label,
+      size: compact ? STATUS_DETAIL_COMPACT_SIZE : STATUS_DETAIL_SIZE,
+      x: centreX,
+      y: rowTop,
       align: 'center',
     });
+    rowTop += rowHeight;
+    drawProgressBar(ctx, {
+      x: inner.x,
+      y: rowTop + (rowHeight - STATUS_BAR_HEIGHT_PX) * HALF,
+      width: inner.width,
+      height: STATUS_BAR_HEIGHT_PX,
+      value: timeFraction,
+      ...(defending ? PROGRESS_PRESETS.stamina : PROGRESS_PRESETS.build),
+    });
+    rowTop += rowHeight;
+    this.renderGratePips(ctx, inner.x, rowTop, inner.width, rowHeight, compact);
+
+    if (defending && this.npc) {
+      rowTop += rowHeight;
+      const labelWidth = measureTextWidth(ctx, MOTHER_LABEL, TEXT_PRESETS.hint);
+      drawText(ctx, MOTHER_LABEL, {
+        ...TEXT_PRESETS.hint,
+        x: inner.x,
+        y: rowTop + (rowHeight - TEXT_PRESETS.hint.size) * HALF,
+      });
+      drawProgressBar(ctx, {
+        x: inner.x + labelWidth + STATUS_INLINE_GAP_PX,
+        y: rowTop + (rowHeight - STATUS_BAR_HEIGHT_PX) * HALF,
+        width: inner.width - labelWidth - STATUS_INLINE_GAP_PX,
+        height: STATUS_BAR_HEIGHT_PX,
+        value: this.npc.hp / this.npc.maxHp,
+        ...PROGRESS_PRESETS.hp,
+      });
+    }
   }
 
-  private renderMobileDefenseTimer(ctx: CanvasRenderingContext2D, topY: number): void {
-    const secs = Math.ceil(this.defenseTimer / FRAMES_PER_SECOND);
-    const mins = Math.floor(secs / DEFENSE_SECONDS);
-    const s = secs % DEFENSE_SECONDS;
-    const timerStr = `${mins}:${s.toString().padStart(2, '0')}`;
-    const boxX = MOBILE_QUEST_BOX_X;
-    const boxW = viewportWidth() - MOBILE_QUEST_MINIMAP_W - boxX - MOBILE_QUEST_BOX_GAP;
-    const centerX = boxX + MOBILE_QUEST_PAD_H + (boxW - MOBILE_QUEST_PAD_H * 2) / 2;
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(8,10,20,0.85)';
-    ctx.fillRect(boxX, topY, boxW, MOBILE_QUEST_BOX_H);
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(boxX, topY, boxW, MOBILE_QUEST_BOX_H);
-    ctx.restore();
-
-    drawText(ctx, 'Child arrives in:', {
-      x: centerX,
-      y: topY + MOBILE_QUEST_PAD_V,
-      size: MOBILE_QUEST_TITLE_SIZE,
-      bold: true,
-      color: '#e2e8f0',
-      align: 'center',
+  /** "Grates" and one pip per grate: open, boarded, or boarded and failing. */
+  private renderGratePips(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    top: number,
+    width: number,
+    rowHeight: number,
+    compact: boolean,
+  ): void {
+    if (!this.roomData) return;
+    const count = this.roomData.grateTiles.length;
+    const boarded = this.barriers.length;
+    const label = `Grates ${boarded}/${count}`;
+    const labelStyle = boarded === count ? TEXT_PRESETS.requirementMet : TEXT_PRESETS.label;
+    drawText(ctx, label, {
+      ...labelStyle,
+      x,
+      y: top + (rowHeight - labelStyle.size) * HALF,
     });
-    drawText(ctx, timerStr, {
-      x: centerX,
-      y: topY + MOBILE_QUEST_PAD_V + MOBILE_QUEST_TITLE_H + MOBILE_QUEST_GAP,
-      size: MOBILE_QUEST_VALUE_SIZE,
-      bold: true,
-      color: secs <= SECS_LOW_THRESHOLD ? '#4ade80' : '#fbbf24',
-      align: 'center',
-    });
+    const pip = compact ? STATUS_PIP_COMPACT_PX : STATUS_PIP_PX;
+    const pipsWidth = count * pip + (count - 1) * STATUS_PIP_GAP_PX;
+    let pipX = x + width - pipsWidth;
+    const pipY = top + (rowHeight - pip) * HALF;
+    for (let grateIdx = 0; grateIdx < count; grateIdx++) {
+      const barrier = this.barrierOn(grateIdx);
+      const hpFraction = barrier === undefined ? 0 : barrier.hp / barrier.maxHp;
+      const style =
+        barrier === undefined
+          ? PIP_OPEN
+          : hpFraction < BARRIER_CRITICAL_FRACTION
+            ? PIP_FAILING
+            : hpFraction < 1
+              ? PIP_DAMAGED
+              : PIP_BOARDED;
+      drawBox(ctx, {
+        x: pipX,
+        y: pipY,
+        width: pip,
+        height: pip,
+        radius: STATUS_PIP_RADIUS_PX,
+        ...style,
+      });
+      pipX += pip + STATUS_PIP_GAP_PX;
+    }
   }
 
   private renderCompleteOverlay(ctx: CanvasRenderingContext2D): void {
@@ -1990,11 +2470,12 @@ export class DefendQuestSystem implements GameSystem {
       });
     } else if (this.tutorialPage === 1) {
       const hw = illW / 2;
-      drawWoodPileSprite(
+      drawNurseryWoodPile(
         ctx,
         illX + hw * T1_PANEL_CENTER_FRACTION - s * TILE_CENTER_OFFSET,
         icy - s * TILE_CENTER_OFFSET,
         s,
+        true,
       );
       const arrowSize = Math.floor(s * T1_ARROW_SIZE_FACTOR);
       drawText(ctx, '→', {
@@ -2005,12 +2486,12 @@ export class DefendQuestSystem implements GameSystem {
         color: '#fbbf24',
         align: 'center',
       });
-      drawWoodBarrierSprite(
+      drawNurseryBarrier(
         ctx,
         illX + hw + hw * T1_PANEL_CENTER_FRACTION - s * TILE_CENTER_OFFSET,
         icy - s * TILE_CENTER_OFFSET,
         s,
-        1.0,
+        { variant: 0, damageStage: 0, planksLaid: BARRIER_PLANK_COUNT },
       );
       drawText(ctx, '[R] to build', {
         x: illX + hw + hw * T1_PANEL_CENTER_FRACTION,
@@ -2022,13 +2503,11 @@ export class DefendQuestSystem implements GameSystem {
         outline: true,
       });
     } else {
-      drawWoodBarrierSprite(
-        ctx,
-        icx - s * TILE_CENTER_OFFSET,
-        icy - s * TILE_CENTER_OFFSET,
-        s,
-        T2_BARRIER_DAMAGE,
-      );
+      drawNurseryBarrier(ctx, icx - s * TILE_CENTER_OFFSET, icy - s * TILE_CENTER_OFFSET, s, {
+        variant: 0,
+        damageStage: T2_BARRIER_DAMAGE_STAGE,
+        planksLaid: BARRIER_PLANK_COUNT,
+      });
       ctx.save();
       ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = 2;
@@ -2063,12 +2542,12 @@ export class DefendQuestSystem implements GameSystem {
       ],
       [
         'Walk over the WOOD PILE to collect boards.',
-        'Stand near a floor grate, then press [R]',
-        'to build a barrier. Each barrier costs 4 boards.',
+        'Stand by a glowing grate, then press [R]',
+        'to board it up. Each barrier costs 4 boards.',
       ],
       [
         'Bugaboos crawl up from grates to attack!',
-        'Barriers block them — repair when damaged.',
+        'Barriers hold them — repair any that are clawed.',
         'Survive the full timer to complete the quest.',
       ],
     ];
@@ -2153,6 +2632,9 @@ export class DefendQuestSystem implements GameSystem {
       this.conversation.close();
     }
     this.questManager.restoreStatuses(snapshot.questStatuses);
+    this.woodReminder = false;
+    this.noWoodFlash = null;
+    this.effects.clear();
     this.phase = snapshot.phase;
     this.approachTimer = snapshot.approachTimer;
     this.defenseTimer = snapshot.defenseTimer;
@@ -2182,6 +2664,7 @@ export class DefendQuestSystem implements GameSystem {
   dispose(): void {
     this.questMobs = [];
     this.barriers = [];
+    this.effects.clear();
     this.tutorialButtons = [];
   }
 }

@@ -1797,6 +1797,8 @@ function checkSceneWiring(): void {
     hotbarBandHeight: PHONE_LAYOUT_HOTBAR_BAND,
     followButton: true,
     summonButton: true,
+    buildButton: true,
+    journalButton: true,
   });
   const stackedSummon = phoneLayout.summon;
   const phoneSwitch = phoneLayout.switchButton;

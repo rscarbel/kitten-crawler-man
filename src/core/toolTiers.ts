@@ -38,6 +38,24 @@ const TOOL_TIER_4_YIELD_MULTIPLIER = 2;
 /** Tier 5's yield multiplier: the top rung quadruples it. */
 const TOOL_TIER_5_YIELD_MULTIPLIER = 4;
 
+/**
+ * Chance an axe harvest leaves the tree's capacity untouched, per tier above
+ * the free starter axe: additive, so the Hardened Axe spares 5% of its
+ * harvests and Graveyard's Bane 25%.
+ */
+const AXE_SPARE_CHANCE_PER_TIER = 0.05;
+
+/**
+ * Chance (0–1) one harvest with a `kind` tool at `tier` takes its award
+ * without spending any of the node's capacity. Only axes carry the perk; the
+ * starter tier is 0 and every upgrade adds {@link AXE_SPARE_CHANCE_PER_TIER}.
+ */
+export function toolNodeSpareChance(kind: ToolKind, tier: ToolTier): number {
+  if (kind !== 'axe') return 0;
+  const tiersAboveStarter = tier - TOOL_TIER_BASIC;
+  return AXE_SPARE_CHANCE_PER_TIER * tiersAboveStarter;
+}
+
 /** One rung of a tool kind's upgrade ladder. */
 export interface ToolTierDef {
   readonly id: ItemId;

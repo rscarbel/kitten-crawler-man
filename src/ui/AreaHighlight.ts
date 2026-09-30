@@ -12,9 +12,9 @@ import { viewportHeight, viewportWidth } from '../core/Viewport';
  *
  * - {@link drawAreaHighlightGround}, under every body: a wash that is clear in
  *   the middle and brightens toward the edges, a glowing rounded outline with
- *   two sparks running round it, and motes rising off the ground. The middle
- *   stays clear so the marked thing — wheat, a machine, a rock — is never
- *   washed out.
+ *   two sparks running round it, and motes rising off the ground. All of it is
+ *   drawn before the marked thing — wheat, a machine, a rock — so that thing
+ *   stands in front of its own light and is never washed out.
  * - {@link drawAreaHighlightFrame}, over every body: four corner brackets, so a
  *   tall sprite that hides the ground outline is still visibly framed.
  *
@@ -22,6 +22,10 @@ import { viewportHeight, viewportWidth } from '../core/Viewport';
  * A `pending` highlight is the same shape in a quieter voice — a marching
  * dashed outline and thin brackets, no sparks or motes — for a target the
  * player cannot act on yet, so "ready" reads at a glance as the brighter one.
+ *
+ * Never paired with a light beam: the outline already says "here", and a beam
+ * stacked on a wide area lights the ground under it into a glare. Beams are
+ * for targets with no outline — a quest NPC, a doorway.
  */
 
 /** A rectangle in screen pixels. */
@@ -176,8 +180,8 @@ function cornerRadius(rect: AreaHighlightRect): number {
 }
 
 /**
- * The ground half: edge wash, outline, sparks and motes. Draw it under every
- * body, before the Y-sorted pass, so the thing it marks stands in front of it.
+ * The ground half: edge wash, outline, sparks and motes. Draw it under every body, before the Y-sorted pass, so the
+ * thing it marks stands in front of it.
  */
 export function drawAreaHighlightGround(
   ctx: CanvasRenderingContext2D,

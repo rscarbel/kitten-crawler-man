@@ -104,3 +104,33 @@ export function figureBakeDensity(def: FigureDef): number {
 export function figureFrameCount(def: FigureDef, state: string): number {
   return def.states.get(state)?.frames ?? 0;
 }
+
+/**
+ * One row of one figure: what a sprite wrapper actually drew, handed back so
+ * its caller can ask about that row's art (how tall it stands, say) without
+ * re-deriving the state name the wrapper picked from facing and action.
+ */
+export interface DrawnFigureRow {
+  readonly def: FigureDef;
+  readonly state: string;
+}
+
+const rowsByFigure = new WeakMap<FigureDef, Map<string, DrawnFigureRow>>();
+
+/**
+ * The shared {@link DrawnFigureRow} for a figure's state. Interned because sprite
+ * wrappers return one on every draw of every creature, and a fresh object per
+ * draw would be garbage made at the frame rate times the crowd.
+ */
+export function drawnFigureRow(def: FigureDef, state: string): DrawnFigureRow {
+  let byState = rowsByFigure.get(def);
+  if (byState === undefined) {
+    byState = new Map<string, DrawnFigureRow>();
+    rowsByFigure.set(def, byState);
+  }
+  const existing = byState.get(state);
+  if (existing !== undefined) return existing;
+  const row: DrawnFigureRow = { def, state };
+  byState.set(state, row);
+  return row;
+}

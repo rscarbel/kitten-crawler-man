@@ -30,11 +30,7 @@ import {
   type RowSpec,
 } from '../src/sprites/art/shadyFigure.js';
 import { buildSkeleton, cowlWindow, type ShadyPose } from '../src/sprites/art/shadyArt.js';
-import {
-  SHADY_DRAWN_STATES,
-  SHADY_HEAD_ABOVE_TILE_TILES,
-  SHADY_PREWARMED_STATES,
-} from '../src/sprites/shadySprite.js';
+import { SHADY_DRAWN_STATES, SHADY_PREWARMED_STATES } from '../src/sprites/shadySprite.js';
 
 const CHANNELS = 4;
 const ALPHA_OFFSET = 3;
@@ -637,55 +633,6 @@ function gateRuntimeStateNames(): void {
     fail('G8', failure);
 }
 
-// ── G9: the frozen marker clearance ──────────────────────────────────────────
-
-/**
- * How far above his painted crown the quest marker may float before it stops
- * reading as belonging to him.
- *
- * The clearance the creature freezes is deliberately more than the crown itself
- * — a marker resting on his hood touches it — so the gate brackets it rather
- * than matching it: never below the crown, never adrift above it.
- */
-const MARKER_GAP_LIMIT_TILES = 0.4;
-
-/** G9 — the frozen marker clearance still clears the painted hood. */
-function gateMarkerClearance(): void {
-  let framesMeasured = 0;
-  let highestCrownTiles = 0;
-  for (const row of SHADY_ROWS) {
-    for (let frame = 0; frame < row.frameCount; frame++) {
-      const extent = inkExtentOf(row.name, frame);
-      if (extent.pixels === 0) continue;
-      framesMeasured++;
-      highestCrownTiles = Math.max(
-        highestCrownTiles,
-        (SHADY_FIGURE.tileY - extent.top) / TILE_SCALE,
-      );
-    }
-  }
-  failUnlessMeasured('G9', framesMeasured, 'frames with ink to measure a crown from');
-  if (framesMeasured === 0) return;
-  console.log(
-    `  G9 marker clearance: crown reaches ${highestCrownTiles.toFixed(3)} tiles above the ` +
-      `tile, marker sits at ${SHADY_HEAD_ABOVE_TILE_TILES}`,
-  );
-  if (SHADY_HEAD_ABOVE_TILE_TILES < highestCrownTiles) {
-    fail(
-      'G9',
-      `the marker sits ${SHADY_HEAD_ABOVE_TILE_TILES} tiles above the tile while his art ` +
-        `reaches ${highestCrownTiles.toFixed(3)} — it is painted across him`,
-    );
-  }
-  if (SHADY_HEAD_ABOVE_TILE_TILES > highestCrownTiles + MARKER_GAP_LIMIT_TILES) {
-    fail(
-      'G9',
-      `the marker floats ${(SHADY_HEAD_ABOVE_TILE_TILES - highestCrownTiles).toFixed(3)} tiles ` +
-        `clear of his crown, past a limit of ${MARKER_GAP_LIMIT_TILES}`,
-    );
-  }
-}
-
 /** Runs every gate and returns one message per failure. */
 export function shadyGateFailures(): string[] {
   failures.length = 0;
@@ -697,6 +644,5 @@ export function shadyGateFailures(): string[] {
   gateAnchor();
   gateWarmRowSize();
   gateRuntimeStateNames();
-  gateMarkerClearance();
   return [...failures];
 }

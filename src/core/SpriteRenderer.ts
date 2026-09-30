@@ -28,6 +28,24 @@ export interface DrawSpriteOpts {
 }
 
 /**
+ * The screen y of the highest pixel a sheet state paints across all of its
+ * frames, for a sprite whose tile's top-left is at screen y `sy` — the sheet
+ * counterpart of `figureRowInkTop`, for hanging something over baked art.
+ */
+export function spriteStateInkTop(
+  def: SpriteDef,
+  stateDef: SpriteStateDef,
+  sy: number,
+  tileSize: number,
+): number {
+  let topSheetPx = def.frameHeight;
+  for (let frame = 0; frame < stateDef.frameCount; frame++) {
+    topSheetPx = Math.min(topSheetPx, getFrameInkBounds(def, stateDef, frame).top);
+  }
+  return sy - (def.tileY - topSheetPx) * (tileSize / def.tileScale);
+}
+
+/**
  * Draw a single frame from a sprite sheet.
  *
  * For creatures/tiles: x, y is the tile top-left in screen coordinates.

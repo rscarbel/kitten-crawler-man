@@ -43,6 +43,7 @@ import type { ToolKind, ToolTier } from '../../core/toolTiers';
 import {
   harvestAward,
   harvestIntervalTicks,
+  harvestNodeWork,
   harvestXp,
   resourceForHarvestKind,
   rollHarvestLuck,
@@ -105,6 +106,11 @@ export interface HarvestSystemDeps {
   readonly announce: (message: string) => void;
   /** The luck stream: seeded, and separate from every other roll, so a luck gate replays exactly. */
   readonly luckRng: () => number;
+  /**
+   * The spare stream: seeded, and separate from the luck stream, so adding or
+   * removing the axe's spare roll never shifts which draw a luck roll sees.
+   */
+  readonly spareRng: () => number;
   /** Told on every award, build or strike that should keep the resource HUD up. */
   readonly noteActivity: () => void;
   /** Flashes a tree the axe has just bitten. */
@@ -331,7 +337,9 @@ export class HarvestSystem {
     const { amount, carry } = harvestAward(yieldMultiplier, carries[channel.kind], level);
     carries[channel.kind] = carry;
 
-    const spent = this.deps.ledger.spend(channel.tileX, channel.tileY, level);
+    const toolSpeedBonus = this.deps.partyTools.toolSpeedBonus(toolKind);
+    const work = this.nodeWorkFor(toolKind, level, toolSpeedBonus);
+    const spent = this.deps.ledger.spend(channel.tileX, channel.tileY, level, work);
     if (!spent) {
       this.end(channel, 'depleted');
       return;
@@ -351,6 +359,17 @@ export class HarvestSystem {
     if (harvestKindAt(this.deps.gameMap, channel.tileX, channel.tileY) !== channel.kind) {
       this.end(channel, 'depleted');
     }
+  }
+
+  /**
+   * What one award spends of its node: the speed-scaled share, or nothing
+   * when the tool's spare roll lands. The roll is drawn on every award, even
+   * at a zero chance, so a tool upgrade never shifts which draw a later
+   * award sees.
+   */
+  private nodeWorkFor(toolKind: ToolKind, level: number, toolSpeedBonus: number): number {
+    const spared = this.deps.spareRng() < this.deps.partyTools.nodeSpareChance(toolKind);
+    return spared ? 0 : harvestNodeWork(level, toolSpeedBonus);
   }
 
   private rollLuck(harvester: Crawler, kind: HarvestKind, level: number): void {

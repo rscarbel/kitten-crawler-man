@@ -51,6 +51,14 @@ export type PlayerDamageType = 'melee' | 'missile' | 'shell' | 'smush' | 'explos
  */
 const EXPLOSION_DAMAGE_TYPE = 'explosion' satisfies PlayerDamageType;
 
+/**
+ * Whether `body` fights on the party's side: a crawler, or any mob that is not
+ * hostile — the pet, a hireling, a turned thrall, a village soldier.
+ */
+function isPartySide(body: Player): boolean {
+  return !(body instanceof Mob) || !body.isHostile;
+}
+
 /** The share of a dynamite blast any boss takes; see `Mob.blastDamageScale`. */
 export const BOSS_BLAST_DAMAGE_SCALE = 0.25;
 
@@ -732,6 +740,16 @@ export abstract class Mob extends Player {
    * killed, and whatever staged the fight decides what becomes of it.
    */
   cannotBeKilled = false;
+
+  /**
+   * A charge the party is keeping safe — Midge on the escort. Nothing on the
+   * party's side may harm it by any route: no weapon the crawlers swing,
+   * throw, cast or light, no companion's blow, no status they lay, no siege
+   * shrapnel. Only hostiles can. Honoured by {@link takesPlayerDamage}, which
+   * every party attack site asks before it touches a mob, and again at each
+   * door into this mob's health so a route that forgets to ask still cannot.
+   */
+  wardedFromParty = false;
 
   /** `source` with this mob's blow cap and outgoing damage scale on it. */
   stampHarmLimits(source: MobDamageSource): MobDamageSource {
@@ -1554,7 +1572,41 @@ export abstract class Mob extends Player {
    * is the whole character of the item.
    */
   takesPlayerDamage(damageType: PlayerDamageType | null): boolean {
+    return !this.wardedFromParty && this.admitsPlayerDamage(damageType);
+  }
+
+  /**
+   * This creature's own answer to {@link takesPlayerDamage}, which subclasses
+   * override; the public gate adds the party ward on top, so no override can
+   * leave a warded charge open to the party.
+   */
+  protected admitsPlayerDamage(damageType: PlayerDamageType | null): boolean {
     return this.isHostile || damageType === EXPLOSION_DAMAGE_TYPE;
+  }
+
+  /**
+   * Whether harm from `dealer` is refused by the party ward. Harm nobody is
+   * named for is let through: the party's own weapons always name a crawler
+   * or the companion that struck.
+   */
+  private wardRefuses(dealer: Player | null): boolean {
+    return this.wardedFromParty && dealer !== null && isPartySide(dealer);
+  }
+
+  /** Whether a {@link takeDamage} source is harm the party dealt. */
+  private wardRefusesSource(source: DamageSource | undefined): boolean {
+    if (!this.wardedFromParty || source === undefined) return false;
+    switch (source.kind) {
+      case 'dynamite':
+      case 'siege':
+        return true;
+      case 'status':
+        return source.applier !== null && isPartySide(source.applier);
+      case 'mob':
+      case 'environmental':
+      case 'doomsday':
+        return false;
+    }
   }
 
   /**
@@ -1897,6 +1949,9 @@ export abstract class Mob extends Player {
         y: this.y + this.tileSize * MOB_TILE_CENTER,
       },
     });
+    // A plain `mob` source names no attacker, so an ally's swing at a warded
+    // charge is stopped here, where the attacker is still known.
+    if (target instanceof Mob && target.wardRefuses(this)) return false;
     const connected =
       this.isConverted && target instanceof Mob
         ? this.strikeAsAlly(target, damage)
@@ -2669,6 +2724,7 @@ export abstract class Mob extends Player {
    */
   override applyStatus(effect: StatusEffect): void {
     if (this.refusesDamage) return;
+    if (this.wardRefuses(effect.applier)) return;
     super.applyStatus(effect);
   }
 
@@ -2744,6 +2800,7 @@ export abstract class Mob extends Player {
     // working, not friendly fire.
     const isCrawlerAttack = attacker !== null && !(attacker instanceof Mob);
     if (isCrawlerAttack && !this.takesPlayerDamage(damageType)) return;
+    if (this.wardRefuses(attacker)) return;
     if (attacker !== null && striker !== null) {
       if (this.tryGuardBlow(amount, attacker, striker, damageType)) return;
     }
@@ -3097,6 +3154,7 @@ export abstract class Mob extends Player {
       this.onDamageBlocked();
       return false;
     }
+    if (this.wardRefusesSource(source)) return false;
     const prev = this.hp;
     const connected = super.takeDamage(this.scaleIncomingDamage(amount), source);
     if (!connected) return false;
@@ -3353,6 +3411,16 @@ export abstract class Mob extends Player {
     ctx.fillStyle = 'rgba(239, 68, 68, 1)';
     ctx.fillText('!', sx + tileSize / 2, sy - AGGRO_INDICATOR_Y_OFFSET);
     ctx.restore();
+  }
+
+  /**
+   * The line anything hung over this mob must clear: `artTopY`, or the top of
+   * the health bar {@link renderMobHealthBar} draws at `barSy` while that bar is
+   * showing and stands higher.
+   */
+  protected overheadClearTop(artTopY: number, barSy: number): number {
+    if (this.healthBarTimer <= 0) return artTopY;
+    return Math.min(artTopY, barSy - HP_BAR_Y_OFFSET);
   }
 
   /**

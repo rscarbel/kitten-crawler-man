@@ -8,6 +8,7 @@ import {
   prewarmMantidCombat,
 } from '../sprites/mantidSprite';
 import { drawQuestMarker, QUEST_MARKER_GOLD } from '../sprites/questNPCSprite';
+import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import { maybeDropSkillBook } from './skillBookDrop';
 import { drawText } from '../ui/TextBox';
 import { randomInt } from '../utils';
@@ -562,7 +563,7 @@ export class Mantid extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    drawMantidSprite(ctx, 'mantid', sx, sy, tileSize, {
+    const drawnRow = drawMantidSprite(ctx, 'mantid', sx, sy, tileSize, {
       walkFrame: this.walkFrame,
       isMoving: this.isMoving,
       facingX: this.facingX,
@@ -581,7 +582,8 @@ export class Mantid extends Mob {
       this.renderAggroIndicator(ctx, sx, overheadY, tileSize);
     }
     if (this.state === 'rage_pause') {
-      drawQuestMarker(ctx, sx, overheadY, tileSize, '!', QUEST_MARKER_GOLD);
+      const clearOf = this.overheadClearTop(figureRowInkTop(drawnRow, sy, tileSize), overheadY);
+      drawQuestMarker(ctx, sx, clearOf, tileSize, '!', QUEST_MARKER_GOLD);
     }
     this.renderImmuneLabels(ctx, sx, overheadY, tileSize);
 

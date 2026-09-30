@@ -25,14 +25,7 @@ import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level3 } from '../src/levels/level3';
 import type { BriarHollowSite } from '../src/map/overworld/briarHollowSite';
 import { rectCentre } from '../src/map/overworld/briarHollowSite';
-import {
-  BOULDER_LARGE,
-  BOULDER_SMALL,
-  PROP_DAMAGE_STAGE_CRACKED,
-  ROCK_DEPOSIT,
-  RUBBLE,
-  TREE,
-} from '../src/map/tileTypes';
+import { BOULDER_LARGE, BOULDER_SMALL, ROCK_DEPOSIT, RUBBLE, TREE } from '../src/map/tileTypes';
 import { DRESSED_STONE_SPRITE_KEYS, rockDepositSpriteKey } from '../src/map/tiles/rockDepositTiles';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { LootSystem } from '../src/systems/LootSystem';
@@ -72,23 +65,63 @@ function section(name: string): void {
 const TICKS_PER_SECOND = 60;
 /** A Resourcing level below every capacity perk. */
 const UNPERKED_LEVEL = 1;
-const EXPECTED_DEPOSIT_REGROW_TICKS = 300 * TICKS_PER_SECOND;
-const EXPECTED_GROVE_SAPLING_TICKS = 80 * TICKS_PER_SECOND;
-const EXPECTED_SAPLING_TO_TREE_TICKS = 20 * TICKS_PER_SECOND;
-const EXPECTED_RETRY_TICKS = 10 * TICKS_PER_SECOND;
+/** What one harvest at base speed spends of a node: a whole unit of its capacity. */
+const BASE_HARVEST_WORK = 1;
+const DEPOSIT_REGROW_SECONDS = 300;
+const GROVE_SAPLING_SECONDS = 80;
+const SAPLING_TO_TREE_SECONDS = 20;
+const RETRY_SECONDS = 10;
+const EXPECTED_DEPOSIT_REGROW_TICKS = DEPOSIT_REGROW_SECONDS * TICKS_PER_SECOND;
+const EXPECTED_GROVE_SAPLING_TICKS = GROVE_SAPLING_SECONDS * TICKS_PER_SECOND;
+const EXPECTED_SAPLING_TO_TREE_TICKS = SAPLING_TO_TREE_SECONDS * TICKS_PER_SECOND;
+const EXPECTED_RETRY_TICKS = RETRY_SECONDS * TICKS_PER_SECOND;
 /** Slack for the tick a depletion is noticed on and the tree's half-second grow-in. */
 const SCHEDULING_SLACK_TICKS = 2;
 const GROW_IN_SLACK_TICKS = TICKS_PER_SECOND;
 /** Longer than anything in the village takes, for "never regrows". */
-const NEVER_TICKS = 400 * TICKS_PER_SECOND;
+const NEVER_SECONDS = 400;
+const NEVER_TICKS = NEVER_SECONDS * TICKS_PER_SECOND;
 /** Enough felling-animation ticks for any tree to finish coming down. */
-const FELLING_TICKS_LIMIT = 10 * TICKS_PER_SECOND;
-const WORKED_FRACTION = 0.5;
+const FELLING_SECONDS_LIMIT = 10;
+const FELLING_TICKS_LIMIT = FELLING_SECONDS_LIMIT * TICKS_PER_SECOND;
+/** More harvests than any node holds, so a runaway spend loop still ends. */
+const SPEND_GUARD = 1000;
+/**
+ * Which quarry deposit and grove tile each section works. Every section takes
+ * its own tile so one section's leftover state cannot leak into the next.
+ */
+const DEPOSIT_UNDER_TREBUCHET = 2;
+const DEPOSIT_UNDER_SNARE = 3;
+const GROVE_TILE_FOR_REWIND = 3;
+/** Retries a construction must outlast before a gate can say it never regrows. */
+const RETRIES_UNDER_CONSTRUCTION = 3;
+/**
+ * The rock damage stages, in the order a mined rock passes through them. The
+ * thresholds between them are balance and are not checked here — only that a
+ * rock wears one way and shows every stage on its way out.
+ */
+const STAGE_INTACT = 0;
+const STAGE_CHIPPED = 1;
+const STAGE_BROKEN = 2;
+const STAGE_REMNANT = 3;
+const ALL_STAGES = [STAGE_INTACT, STAGE_CHIPPED, STAGE_BROKEN, STAGE_REMNANT] as const;
 const PROCESSING_REACH_TILES = 1.5;
 /** How far either side of the reach the two probes stand. */
 const REACH_PROBE_TILES = 0.1;
 const FAR_TILES = 6;
-const SITE_SEEDS = [424242, 7, 90210, 31337, 2024];
+/** World seeds whose villages the site checks sweep: arbitrary, spread so the site generator lands differently each time. */
+const SITE_SEED_BASELINE = 424242;
+const SITE_SEED_SMALL = 7;
+const SITE_SEED_POSTCODE = 90210;
+const SITE_SEED_LEET = 31337;
+const SITE_SEED_YEAR = 2024;
+const SITE_SEEDS = [
+  SITE_SEED_BASELINE,
+  SITE_SEED_SMALL,
+  SITE_SEED_POSTCODE,
+  SITE_SEED_LEET,
+  SITE_SEED_YEAR,
+];
 const TILE_CENTRE = 0.5;
 
 // ── Maps ──────────────────────────────────────────────────────────────────
@@ -140,8 +173,9 @@ for (const seed of SITE_SEEDS) {
   );
 }
 
-section('Art: every deposit sheet has an intact and a worked row, and ships with floor 3');
+section('Art: every deposit sheet has a row per damage stage, and ships with floor 3');
 {
+  const stageRows = ['idle', 'chipped', 'broken', 'remnant'] as const;
   const keys = [
     'rock_deposit_a',
     'rock_deposit_b',
@@ -151,7 +185,10 @@ section('Art: every deposit sheet has an intact and a worked row, and ships with
   ] as const;
   for (const key of keys) {
     const states = getManifestEntry(key).states;
-    check('idle' in states && 'worked' in states, `${key} has idle and worked states`);
+    check(
+      stageRows.every((row) => row in states),
+      `${key} has idle, chipped, broken and remnant states`,
+    );
     check(
       ASSET_GROUPS.overworld.some((entry) => entry === key),
       `${key} is in the overworld asset group`,
@@ -239,10 +276,22 @@ function typeAt(tile: { x: number; y: number }): number {
   return gameMap.structure[tile.y][tile.x].type;
 }
 
+/** The first harvestable tile of one of `types`, scanning the map in reading order. */
+function firstTileOf(types: ReadonlySet<number>): { x: number; y: number } | null {
+  for (let y = 0; y < gameMap.structure.length; y++) {
+    for (let x = 0; x < gameMap.structure[y].length; x++) {
+      if (types.has(gameMap.structure[y][x].type) && harvestKindAt(gameMap, x, y) !== null) {
+        return { x, y };
+      }
+    }
+  }
+  return null;
+}
+
 function spendOut(rig: Rig, tile: { x: number; y: number }): void {
   let guard = 0;
-  while (rig.ledger.stateAt(tile.x, tile.y, UNPERKED_LEVEL) !== null && guard++ < 1000) {
-    rig.ledger.spend(tile.x, tile.y, UNPERKED_LEVEL);
+  while (rig.ledger.stateAt(tile.x, tile.y, UNPERKED_LEVEL) !== null && guard++ < SPEND_GUARD) {
+    rig.ledger.spend(tile.x, tile.y, UNPERKED_LEVEL, BASE_HARVEST_WORK);
   }
 }
 
@@ -254,24 +303,58 @@ function standOn(body: { x: number; y: number }, tile: { x: number; y: number })
 const deposit = site.quarry.depositTiles[0];
 const stub = site.quarry.stubTiles[0];
 
-section('Worked look: a deposit past half its capacity shows it');
+function stageOnTile(tile: { x: number; y: number }): number {
+  return gameMap.structure[tile.y][tile.x].damageStage ?? STAGE_INTACT;
+}
+
+interface WearRecord {
+  readonly neverHealed: boolean;
+  readonly stagesSeen: ReadonlySet<number>;
+  readonly harvests: number;
+}
+
+/**
+ * Mines a rock down to its last harvest, reading its damage stage after
+ * every swing. Leaves it one swing short of crumbling, at its remnant.
+ */
+function wearDown(rig: Rig, tile: { x: number; y: number }): WearRecord | null {
+  const state = rig.ledger.stateAt(tile.x, tile.y, UNPERKED_LEVEL);
+  if (state === null) return null;
+  let previous = stageOnTile(tile);
+  let neverHealed = true;
+  const stagesSeen = new Set<number>([previous]);
+  while (state.remaining > 1) {
+    rig.ledger.spend(tile.x, tile.y, UNPERKED_LEVEL, BASE_HARVEST_WORK);
+    const stage = stageOnTile(tile);
+    if (stage < previous) neverHealed = false;
+    stagesSeen.add(stage);
+    previous = stage;
+  }
+  return { neverHealed, stagesSeen, harvests: state.capacity };
+}
+
+function checkWear(label: string, wear: WearRecord): void {
+  check(
+    wear.neverHealed,
+    `${label}: never looks less damaged after a swing (${wear.harvests} harvests)`,
+  );
+  check(
+    ALL_STAGES.every((stage) => wear.stagesSeen.has(stage)),
+    `${label}: mined out, passes through intact, chipped, broken and remnant`,
+  );
+}
+
+section('Worked look: a deposit wears through every damage stage as it is mined');
 {
   const rig = makeRig();
-  const state = rig.ledger.stateAt(deposit.x, deposit.y, UNPERKED_LEVEL);
-  if (state === null) {
+  const wear = wearDown(rig, deposit);
+  if (wear === null) {
     check(false, 'the deposit is a node');
   } else {
-    let lookAlwaysRight = true;
-    while (state.remaining > 1) {
-      rig.ledger.spend(deposit.x, deposit.y, UNPERKED_LEVEL);
-      const worn =
-        gameMap.structure[deposit.y][deposit.x].damageStage === PROP_DAMAGE_STAGE_CRACKED;
-      const shouldBe = state.remaining < state.capacity * WORKED_FRACTION;
-      if (worn !== shouldBe) lookAlwaysRight = false;
-    }
-    check(lookAlwaysRight, `worked look tracks "below half" over all ${state.capacity} harvests`);
+    checkWear('deposit', wear);
+    const stageAtCheckpoint = stageOnTile(deposit);
     const checkpoint = rig.ledger.captureCheckpoint();
-    rig.ledger.spend(deposit.x, deposit.y, UNPERKED_LEVEL);
+    rig.ledger.spend(deposit.x, deposit.y, UNPERKED_LEVEL, BASE_HARVEST_WORK);
     tick(rig, EXPECTED_DEPOSIT_REGROW_TICKS + SCHEDULING_SLACK_TICKS);
     check(
       typeAt(deposit) === ROCK_DEPOSIT &&
@@ -281,11 +364,42 @@ section('Worked look: a deposit past half its capacity shows it');
     rig.ledger.restoreCheckpoint(checkpoint);
     rig.regrowth.reconcileAfterRestore();
     check(
-      gameMap.structure[deposit.y][deposit.x].damageStage === PROP_DAMAGE_STAGE_CRACKED,
+      stageAtCheckpoint !== STAGE_INTACT && stageOnTile(deposit) === stageAtCheckpoint,
       'a rewind puts the worked look back with the rewound capacity',
     );
     rig.nodes.clear();
     delete gameMap.structure[deposit.y][deposit.x].damageStage;
+  }
+}
+
+section('Worked look: a boulder wears through every damage stage too');
+{
+  const rig = makeRig();
+  const boulder = firstTileOf(new Set([BOULDER_SMALL, BOULDER_LARGE]));
+  const wear = boulder === null ? null : wearDown(rig, boulder);
+  if (boulder === null || wear === null) {
+    check(false, 'found a boulder that is a node');
+  } else {
+    checkWear('boulder', wear);
+    const boulderType = typeAt(boulder);
+    const stageAtCheckpoint = stageOnTile(boulder);
+    const checkpoint = rig.ledger.captureCheckpoint();
+    rig.ledger.spend(boulder.x, boulder.y, UNPERKED_LEVEL, BASE_HARVEST_WORK);
+    check(
+      typeAt(boulder) !== boulderType &&
+        gameMap.structure[boulder.y][boulder.x].damageStage === undefined,
+      'a crumbled boulder carries no damage stage onto its loose stones',
+    );
+    rig.ledger.restoreCheckpoint(checkpoint);
+    rig.regrowth.reconcileAfterRestore();
+    check(
+      typeAt(boulder) === boulderType &&
+        stageAtCheckpoint !== STAGE_INTACT &&
+        stageOnTile(boulder) === stageAtCheckpoint,
+      'a rewind stands the boulder back up at the damage stage it had',
+    );
+    rig.nodes.clear();
+    delete gameMap.structure[boulder.y][boulder.x].damageStage;
   }
 }
 
@@ -403,14 +517,14 @@ section('Grove regrowth: a tree felled some other way comes back too');
 section('Nothing regrows through a construction built on its rubble or stump');
 {
   const rig = makeRig();
-  const underTrebuchet = site.quarry.depositTiles[2];
-  const underSnare = site.quarry.depositTiles[3];
+  const underTrebuchet = site.quarry.depositTiles[DEPOSIT_UNDER_TREBUCHET];
+  const underSnare = site.quarry.depositTiles[DEPOSIT_UNDER_SNARE];
   spendOut(rig, underTrebuchet);
   spendOut(rig, underSnare);
   // A trebuchet blocks its footprint through the block mask; a snare only has a record.
   gameMap.blockStructureTile(underTrebuchet.x, underTrebuchet.y);
   rig.claimed.add(tileKey(underSnare.x, underSnare.y));
-  tick(rig, EXPECTED_DEPOSIT_REGROW_TICKS + EXPECTED_RETRY_TICKS * 3);
+  tick(rig, EXPECTED_DEPOSIT_REGROW_TICKS + EXPECTED_RETRY_TICKS * RETRIES_UNDER_CONSTRUCTION);
   check(typeAt(underTrebuchet) === RUBBLE, 'a deposit under a trebuchet never regrows');
   check(typeAt(underSnare) === RUBBLE, 'a deposit under a snare never regrows');
   gameMap.unblockStructureTile(underTrebuchet.x, underTrebuchet.y);
@@ -453,7 +567,7 @@ section('Grove regrowth waits for a body standing on the sapling');
 section('Grove checkpoint: a tree regrown after the checkpoint is taken away by the rewind');
 {
   const rig = makeRig();
-  const grove = site.lumberYard.groveTiles[3];
+  const grove = site.lumberYard.groveTiles[GROVE_TILE_FOR_REWIND];
   const key = tileKey(grove.x, grove.y);
   spendOut(rig, grove);
   ticksUntil(rig, FELLING_TICKS_LIMIT, () => typeAt(grove) !== TREE);

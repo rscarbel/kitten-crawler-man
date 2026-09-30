@@ -925,8 +925,8 @@ export function breach(phase: number): BugabooPose {
   pose.submerged = BREACH_DEPTH - heave * BREACH_HEAVE;
   // No hole is painted on this row. It only ever plays over a *barricaded*
   // grate — the creature is only "breaching" while boards are still in its way
-  // — and `drawWoodBarrierSprite` already paints the void under those boards.
-  // Painting a second one here blacks out the planks it is coming through.
+  // — and the grate's own shaft already shows dark between those boards.
+  // Painting a hole here would black out the planks it is coming through.
   pose.breach = false;
 
   // The arm sweeps a full circle once per loop, which is what "reaching around"

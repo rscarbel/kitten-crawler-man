@@ -5,7 +5,8 @@
  * empty diorama. Owned by `BuildingInteriorScene` and the interior analog of
  * `TownLifeSystem`: instead of free-roaming a plaza, each occupant is anchored to
  * a piece of the hand-crafted furniture and only shuffles within a small radius
- * of it.
+ * of it. The exception is a roamer (`roam_room`), who belongs to the whole room
+ * rather than to one piece of it and strolls its open floor.
  *
  * Anchors are *derived* from the generated interior, not hard-coded: the system
  * scans the finished grid for furniture (forge braziers, hearths, tables,
@@ -21,7 +22,8 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
-import { findPartyArrivalTiles } from '../map/findWalkableTile';
+import { findPartyArrivalTiles, hasRoomToMove } from '../map/findWalkableTile';
+import { SOUTHWARD_PROBE_DROP } from '../map/collisionAnchors';
 import { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/townInteraction';
 import type { WanderParams } from '../creatures/townWander';
@@ -53,14 +55,14 @@ import { TOWN_INTERIOR_PROPS } from '../sprites/art/townInterior/townInteriorPro
 export type AnchorKind =
   'forge' | 'hearth' | 'table' | 'shelf' | 'counter' | 'crate' | 'dummy' | 'board' | 'bench';
 
-/** What an occupant is doing — drives how far they roam and how long they linger. */
-type InteriorActivity =
+/** What a stationed occupant is doing — drives how far they drift from their post and how long they linger. */
+type StationedActivity =
   'work_forge' | 'tend_counter' | 'sit_at_table' | 'browse_shelf' | 'sweep' | 'wander' | 'idle';
 
 /** Where in the room this occupant belongs, when the room's furniture alone does not say. */
 export type OccupantPost = 'north' | 'south' | 'east' | 'west' | 'centre' | 'door' | 'back';
 
-export interface OccupantSpec {
+interface OccupantIdentity {
   role: TownRole;
   /**
    * Unnamed occupants carry their own species here — see `townResidents.ts`'s
@@ -70,7 +72,18 @@ export interface OccupantSpec {
    * Defaults to `DEFAULT_TOWN_SPECIES` when omitted.
    */
   species?: TownSpecies;
-  activity: InteriorActivity;
+  /**
+   * Names this occupant as a specific resident (see `townResidents.ts`). A
+   * stationed spec carrying one is placed against any furniture in the room
+   * rather than only its preferred anchor: an unnamed extra can be dropped
+   * without anyone noticing, but a missing bookshelf must not delete a resident.
+   */
+  residentId?: ResidentId;
+}
+
+/** An occupant posted beside one piece of furniture, drifting only a little way from it. */
+export interface StationedOccupantSpec extends OccupantIdentity {
+  activity: StationedActivity;
   anchor: AnchorKind;
   /**
    * Biases which piece of the anchor group this occupant takes. Without it the
@@ -79,13 +92,24 @@ export interface OccupantSpec {
    * and the whole town's shopkeepers stood in the same corner.
    */
   post?: OccupantPost;
-  /**
-   * Names this occupant as a specific resident (see `townResidents.ts`). A spec
-   * carrying one is placed against any furniture in the room rather than only
-   * its preferred anchor: an unnamed extra can be dropped without anyone
-   * noticing, but a missing bookshelf must not delete Old Hilda.
-   */
-  residentId?: ResidentId;
+}
+
+/**
+ * An occupant who belongs to no one piece of furniture and potters about the
+ * whole of the room's open floor instead. Starts on the open tile nearest the
+ * room's centre, and stands still whenever the player comes within
+ * {@link ROAMER_HOLD_RADIUS_TILES}, so walking up to them always ends with them
+ * in reach rather than strolling off mid-approach.
+ */
+export interface RoamingOccupantSpec extends OccupantIdentity {
+  activity: 'roam_room';
+}
+
+export type OccupantSpec = StationedOccupantSpec | RoamingOccupantSpec;
+
+/** The furniture a spec is stationed at, or null for an occupant who roams the room. */
+export function occupantAnchor(spec: OccupantSpec): AnchorKind | null {
+  return spec.activity === 'roam_room' ? null : spec.anchor;
 }
 
 /**
@@ -132,7 +156,7 @@ const PAUSE_STATIONED_MAX = 360;
 const PAUSE_ROAMING_MIN = 30;
 const PAUSE_ROAMING_MAX = 150;
 
-const ACTIVITY_BEHAVIOR: Record<InteriorActivity, ActivityBehavior> = {
+const ACTIVITY_BEHAVIOR: Record<StationedActivity, ActivityBehavior> = {
   work_forge: { radiusTiles: 0.6, pauseMin: PAUSE_STATIONED_MIN, pauseMax: PAUSE_STATIONED_MAX },
   tend_counter: { radiusTiles: 0.5, pauseMin: PAUSE_STATIONED_MIN, pauseMax: PAUSE_STATIONED_MAX },
   sit_at_table: { radiusTiles: 0.4, pauseMin: PAUSE_STATIONED_MIN, pauseMax: PAUSE_STATIONED_MAX },
@@ -305,14 +329,15 @@ export const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
     ],
     // Somebody is always waiting on a charm, which is how a cottage with one
     // occupant reads as a practice rather than as a spare room.
+    //
+    // Hilda roams rather than keeping a post: every piece of furniture she could
+    // be stationed at is heaped against a wall, and posted at any of them she
+    // stood tucked into a corner behind the worktable where the player had to
+    // hunt for a way up to her. Her readings, her repair errand and her lore all
+    // start by talking to her, so she has to be the easiest thing in the room to
+    // reach.
     "Old Hilda's Cottage": [
-      {
-        role: 'priest',
-        activity: 'browse_shelf',
-        anchor: 'shelf',
-        post: 'back',
-        residentId: 'old_hilda',
-      },
+      { role: 'priest', activity: 'roam_room', residentId: 'old_hilda' },
       { role: 'commoner', activity: 'idle', anchor: 'hearth', species: 'skyfowl' },
     ],
     // The priest stands at the altar (the room's only TABLE) so the blessing is
@@ -418,6 +443,35 @@ const TYPE_OCCUPANTS: Partial<Record<BuildingEntry['type'], ReadonlyArray<Occupa
 
 const TALK_RADIUS = TILE_SIZE * CITIZEN_TALK_RADIUS_TILES;
 
+/**
+ * A roaming occupant stands still while the player is this close. Wider than
+ * the talk radius on purpose: at exactly the talk radius a roamer walking away
+ * would stop just as they slipped out of reach, and the player would have to
+ * chase the last step.
+ */
+export const ROAMER_HOLD_RADIUS_TILES = 2;
+const ROAMER_HOLD_RADIUS = TILE_SIZE * ROAMER_HOLD_RADIUS_TILES;
+/** Roamers linger between strolls about as long as a browsing shopper does. */
+const ROAMER_PAUSE_MIN = PAUSE_ROAMING_MIN;
+const ROAMER_PAUSE_MAX = PAUSE_STATIONED_MAX;
+/**
+ * Tiles around every exit tile a roamer keeps off. The exit is where the player
+ * walks in and where they leave, and a figure standing on the threshold reads as
+ * blocking the door even though nobody collides with townsfolk.
+ */
+const ROAMER_EXIT_CLEARANCE_TILES = 1;
+/** Random destinations tried per stroll before a roamer settles for staying put. */
+const ROAMER_TARGET_ATTEMPTS = 12;
+/**
+ * Spacing of the points a stroll's straight line is tested at, in world pixels.
+ * Fine enough that a diagonal cannot slip between two blocked tiles' corners
+ * between samples — the step itself would then refuse the move and cost the
+ * roamer a pause facing a wall.
+ */
+const ROAMER_LINE_SAMPLE_PX = 2;
+/** Frames a roamer holds still per update while the player is within reach. */
+const ROAMER_HOLD_FRAMES = 1;
+
 const OCCUPANT_SEED_BASE = 5209;
 const OCCUPANT_SEED_STRIDE = 71;
 const OCCUPANT_SPEED = 0.4;
@@ -485,8 +539,21 @@ export function scanInteriorFurniture(map: GameMap): Map<AnchorKind, TileXY[]> {
   return groups;
 }
 
+/**
+ * Where the room's roamers should hold still for — the crawler the player is
+ * steering — or null when nobody is there to hold still for.
+ */
+export type RoamerFocus = () => { readonly x: number; readonly y: number } | null;
+
+/** The open floor a roamer may stand on, as a list to sample and a set to test. */
+interface RoamFloor {
+  readonly tiles: ReadonlyArray<TileXY>;
+  readonly keys: ReadonlySet<string>;
+}
+
 export class InteriorOccupantSystem implements GameSystem {
   private readonly occupants: Townsperson[] = [];
+  private readonly roamers: Townsperson[] = [];
   /** Furniture tiles an occupant is stationed at, keyed `x,y`. */
   private readonly claimedFurniture = new Set<string>();
 
@@ -495,16 +562,20 @@ export class InteriorOccupantSystem implements GameSystem {
    * building takes no ambient occupants (towers, the club, the Big Top, or any
    * type with no authored roster). The scene calls this only when no live quest
    * encounter owns the interior.
+   *
+   * @param focus - read every update; roaming occupants stand still while it is
+   *   within {@link ROAMER_HOLD_RADIUS_TILES} of them.
    */
   static forBuilding(
     map: GameMap,
     type: BuildingEntry['type'],
     name: string,
+    focus: RoamerFocus = () => null,
   ): InteriorOccupantSystem | null {
     if (type === 'tower' || type === 'club' || name === 'Big Top') return null;
     const specs = BUILDING_OCCUPANTS.get(name) ?? TYPE_OCCUPANTS[type];
     if (specs === undefined || specs.length === 0) return null;
-    const system = new InteriorOccupantSystem(map, specs, name);
+    const system = new InteriorOccupantSystem(map, specs, name, focus);
     return system.occupants.length > 0 ? system : null;
   }
 
@@ -512,20 +583,41 @@ export class InteriorOccupantSystem implements GameSystem {
     private readonly map: GameMap,
     specs: ReadonlyArray<OccupantSpec>,
     private readonly buildingName: string,
+    private readonly focus: RoamerFocus,
   ) {
     const furniture = this.scanFurniture();
     const groupCursors = new Map<AnchorKind, number>();
     const usedStands = new Set<string>();
     const reserved = this.reservedTiles();
+    const placedBySpec: Array<Townsperson | null> = specs.map(() => null);
 
     specs.forEach((spec, index) => {
+      if (spec.activity === 'roam_room') return;
       const placement = this.placeSpec(spec, furniture, groupCursors, usedStands, reserved);
       if (placement === null) return;
       usedStands.add(tileKey(placement.stand.x, placement.stand.y));
       this.claimedFurniture.add(tileKey(placement.furniture.x, placement.furniture.y));
-      const occupant = this.makeOccupant(spec, placement, index);
-      this.occupants.push(occupant);
+      placedBySpec[index] = this.makeStationedOccupant(spec, placement, index);
     });
+
+    // Only once every stationed occupant has its stand, so the floor the
+    // roamers are given already leaves those stands out.
+    const openFloor = this.openRoamableTiles(reserved, usedStands);
+    specs.forEach((spec, index) => {
+      if (spec.activity !== 'roam_room') return;
+      const floor = largestStretch(openFloor, usedStands);
+      if (floor === null) return;
+      const start = this.roamStartTile(floor, usedStands);
+      if (start === null) return;
+      usedStands.add(tileKey(start.x, start.y));
+      const roamer = this.makeRoamer(spec, start, floor, index);
+      this.roamers.push(roamer);
+      placedBySpec[index] = roamer;
+    });
+
+    for (const occupant of placedBySpec) {
+      if (occupant !== null) this.occupants.push(occupant);
+    }
   }
 
   /**
@@ -551,6 +643,18 @@ export class InteriorOccupantSystem implements GameSystem {
   }
 
   update(): void {
+    const focus = this.focus();
+    if (focus !== null) {
+      for (const roamer of this.roamers) {
+        if (roamer.frozen) continue;
+        const distance = Math.hypot(roamer.x - focus.x, roamer.y - focus.y);
+        if (distance > ROAMER_HOLD_RADIUS) continue;
+        // A pause rather than a freeze, so the idle loop keeps breathing and
+        // the stroll resumes from wherever it was once the player moves off.
+        roamer.pause = Math.max(roamer.pause, ROAMER_HOLD_FRAMES);
+        roamer.faceToward(focus.x, focus.y);
+      }
+    }
     for (const occupant of this.occupants) occupant.update();
   }
 
@@ -604,7 +708,7 @@ export class InteriorOccupantSystem implements GameSystem {
    * one piece of furniture a resident prefers must still contain that resident.
    */
   private placeSpec(
-    spec: OccupantSpec,
+    spec: StationedOccupantSpec,
     furniture: ReadonlyMap<AnchorKind, TileXY[]>,
     cursors: Map<AnchorKind, number>,
     usedStands: Set<string>,
@@ -690,8 +794,7 @@ export class InteriorOccupantSystem implements GameSystem {
     const structure = this.map.structure;
     const south = structure.length - 2;
     const east = (structure[0]?.length ?? 0) - 2;
-    const midX = Math.floor((1 + east) / 2);
-    const midY = Math.floor((1 + south) / 2);
+    const { x: midX, y: midY } = this.roomCentre();
     const start = this.map.startTile;
     const { target, farthest } = ((): { target: TileXY; farthest: boolean } => {
       switch (post) {
@@ -739,29 +842,188 @@ export class InteriorOccupantSystem implements GameSystem {
     return null;
   }
 
-  private makeOccupant(
-    spec: OccupantSpec,
+  private makeStationedOccupant(
+    spec: StationedOccupantSpec,
     placement: { stand: TileXY; facing: Facing },
     index: number,
   ): Townsperson {
     const behavior = ACTIVITY_BEHAVIOR[spec.activity];
-    const wander = this.buildWander(placement.stand, behavior);
-    const species =
-      spec.residentId !== undefined
-        ? residentSpecies(residentById(spec.residentId))
-        : (spec.species ?? DEFAULT_TOWN_SPECIES);
     return new Townsperson({
       x: placement.stand.x * TILE_SIZE,
       y: placement.stand.y * TILE_SIZE,
       role: spec.role,
-      species,
+      species: occupantSpecies(spec),
       seed: OCCUPANT_SEED_BASE + index * OCCUPANT_SEED_STRIDE,
       speed: OCCUPANT_SPEED,
-      wander,
+      wander: this.buildWander(placement.stand, behavior),
       initialFacing: placement.facing,
       initialPause: Math.floor(Math.random() * MAX_INITIAL_PAUSE),
       residentId: spec.residentId,
     });
+  }
+
+  private makeRoamer(
+    spec: RoamingOccupantSpec,
+    start: TileXY,
+    floor: RoamFloor,
+    index: number,
+  ): Townsperson {
+    const startX = start.x * TILE_SIZE;
+    const startY = start.y * TILE_SIZE;
+    // Filled in once the figure exists: a stroll is aimed from wherever the
+    // roamer is standing now, which the wander params are built before.
+    let roamer: Townsperson | null = null;
+    const wander: WanderParams = {
+      pickTarget: () => this.pickRoamTarget(floor, roamer?.x ?? startX, roamer?.y ?? startY),
+      arriveDist: ARRIVE_DIST,
+      pauseMin: ROAMER_PAUSE_MIN,
+      pauseMax: ROAMER_PAUSE_MAX,
+      isWalkable: (x, y) => this.isRoamFloor(floor, x, y),
+    };
+    roamer = new Townsperson({
+      x: startX,
+      y: startY,
+      role: spec.role,
+      species: occupantSpecies(spec),
+      seed: OCCUPANT_SEED_BASE + index * OCCUPANT_SEED_STRIDE,
+      speed: OCCUPANT_SPEED,
+      wander,
+      initialFacing: 'down',
+      initialPause: Math.floor(Math.random() * MAX_INITIAL_PAUSE),
+      residentId: spec.residentId,
+    });
+    return roamer;
+  }
+
+  /**
+   * Every tile a roamer may stand on: walkable floor the party can reach from
+   * where it is set down, less the tiles occupants are already kept off, the
+   * stationed occupants' stands and the doorstep around each exit — and only
+   * where the floor is at least two tiles wide.
+   *
+   * The width rule is what keeps a roamer in the room's open middle. A cluttered
+   * room's leftover floor is mostly one-tile slots between furniture and the
+   * wall, and a roamer who strolls up one of those is back in the corner the
+   * player has to thread their way into to talk to them.
+   */
+  private openRoamableTiles(
+    reserved: ReadonlySet<string>,
+    usedStands: ReadonlySet<string>,
+  ): Map<string, TileXY> {
+    const reachable = this.floorReachableByParty();
+    const reachableKeys = new Set(reachable.map((tile) => tileKey(tile.x, tile.y)));
+    const exits = this.map._interiorExitTiles;
+    const besideExit = (tile: TileXY): boolean =>
+      exits.some(
+        (exit) =>
+          Math.max(Math.abs(exit.x - tile.x), Math.abs(exit.y - tile.y)) <=
+          ROAMER_EXIT_CLEARANCE_TILES,
+      );
+    const open = new Map<string, TileXY>();
+    for (const tile of reachable) {
+      const key = tileKey(tile.x, tile.y);
+      if (reserved.has(key) || usedStands.has(key) || besideExit(tile)) continue;
+      if (!inTwoByTwoOfFloor(tile, reachableKeys)) continue;
+      open.set(key, tile);
+    }
+    return open;
+  }
+
+  /**
+   * Four-connected flood fill over walkable tiles from where the party is set
+   * down, so a roamer never wanders into a pocket the player cannot walk to.
+   */
+  private floorReachableByParty(): TileXY[] {
+    const origin = findPartyArrivalTiles(this.map, this.map.startTile).leader;
+    if (!this.map.isWalkable(origin.x, origin.y)) return [];
+    const seen = new Set<string>([tileKey(origin.x, origin.y)]);
+    const reached: TileXY[] = [origin];
+    // The iterator re-reads `length`, so tiles pushed below are visited by this
+    // same loop — that is the flood fill.
+    for (const tile of reached) {
+      for (const [dx, dy] of CARDINAL_STEPS) {
+        const x = tile.x + dx;
+        const y = tile.y + dy;
+        const key = tileKey(x, y);
+        if (seen.has(key) || !this.map.isWalkable(x, y)) continue;
+        seen.add(key);
+        reached.push({ x, y });
+      }
+    }
+    return reached;
+  }
+
+  /** The roam-floor tile nearest the room's centre that has room to move from. */
+  private roamStartTile(floor: RoamFloor, taken: ReadonlySet<string>): TileXY | null {
+    const centre = this.roomCentre();
+    let best: TileXY | null = null;
+    let bestDistance = Infinity;
+    for (const tile of floor.tiles) {
+      if (taken.has(tileKey(tile.x, tile.y))) continue;
+      if (!hasRoomToMove(this.map, tile.x, tile.y)) continue;
+      const distance = (tile.x - centre.x) ** 2 + (tile.y - centre.y) ** 2;
+      if (distance >= bestDistance) continue;
+      best = tile;
+      bestDistance = distance;
+    }
+    return best;
+  }
+
+  /**
+   * A random roam-floor tile the roamer can walk to in a straight line from
+   * where they stand, or where they stand when none of the draws had one.
+   */
+  private pickRoamTarget(floor: RoamFloor, fromX: number, fromY: number): { x: number; y: number } {
+    if (floor.tiles.length === 0) return { x: fromX, y: fromY };
+    for (let attempt = 0; attempt < ROAMER_TARGET_ATTEMPTS; attempt++) {
+      const tile = floor.tiles[Math.floor(Math.random() * floor.tiles.length)];
+      const toX = tile.x * TILE_SIZE;
+      const toY = tile.y * TILE_SIZE;
+      if (this.hasClearStroll(floor, fromX, fromY, toX, toY)) return { x: toX, y: toY };
+    }
+    return { x: fromX, y: fromY };
+  }
+
+  /**
+   * Whether every point of the straight walk stays on roam floor — tested at
+   * the centre, and also at the soles when the walk heads south, because the
+   * wander step tests the soles then and would otherwise refuse a stroll this
+   * had approved.
+   */
+  private hasClearStroll(
+    floor: RoamFloor,
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+  ): boolean {
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const samples = Math.ceil(Math.hypot(dx, dy) / ROAMER_LINE_SAMPLE_PX);
+    const headsSouth = dy > 0;
+    const soleDrop = TILE_SIZE * SOUTHWARD_PROBE_DROP;
+    for (let i = 1; i <= samples; i++) {
+      const t = i / samples;
+      const x = fromX + dx * t;
+      const y = fromY + dy * t;
+      if (!this.isRoamFloor(floor, x, y)) return false;
+      if (headsSouth && !this.isRoamFloor(floor, x, y + soleDrop)) return false;
+    }
+    return true;
+  }
+
+  private isRoamFloor(floor: RoamFloor, worldX: number, worldY: number): boolean {
+    const tx = Math.floor((worldX + CENTER_OFFSET) / TILE_SIZE);
+    const ty = Math.floor((worldY + CENTER_OFFSET) / TILE_SIZE);
+    return floor.keys.has(tileKey(tx, ty)) && this.map.isWalkable(tx, ty);
+  }
+
+  /** The middle of the room's interior, inside its border walls. */
+  private roomCentre(): TileXY {
+    const structure = this.map.structure;
+    const south = structure.length - 2;
+    const east = (structure[0]?.length ?? 0) - 2;
+    return { x: Math.floor((1 + east) / 2), y: Math.floor((1 + south) / 2) };
   }
 
   /** A wander confined to a small radius of the stand tile, so the occupant holds its post. */
@@ -799,6 +1061,79 @@ export class InteriorOccupantSystem implements GameSystem {
     const ty = Math.floor((worldY + CENTER_OFFSET) / TILE_SIZE);
     return this.map.isWalkable(tx, ty);
   }
+}
+
+const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/** The four 2x2 squares containing a tile, as offsets of each square's north-west corner. */
+const SQUARE_CORNERS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0],
+  [-1, 0],
+  [0, -1],
+  [-1, -1],
+];
+
+/** Whether some 2x2 square containing `tile` is floor throughout. */
+function inTwoByTwoOfFloor(tile: TileXY, floorKeys: ReadonlySet<string>): boolean {
+  return SQUARE_CORNERS.some(([cornerDx, cornerDy]) => {
+    const left = tile.x + cornerDx;
+    const top = tile.y + cornerDy;
+    return (
+      floorKeys.has(tileKey(left, top)) &&
+      floorKeys.has(tileKey(left + 1, top)) &&
+      floorKeys.has(tileKey(left, top + 1)) &&
+      floorKeys.has(tileKey(left + 1, top + 1))
+    );
+  });
+}
+
+/**
+ * The biggest four-connected stretch of `openFloor` with a tile not yet taken,
+ * or null when there is none.
+ *
+ * Biggest rather than nearest the room's centre: in a cluttered room the
+ * geometric centre is usually furniture, and the open tile nearest it can sit
+ * in a nook by the hearth that the door reaches only by a winding one-tile
+ * path. The largest open stretch is the room's actual middle — where the
+ * player walks in and looks first. A roamer must also be able to walk to every
+ * tile it may be sent to, which one connected stretch guarantees.
+ */
+function largestStretch(
+  openFloor: ReadonlyMap<string, TileXY>,
+  taken: ReadonlySet<string>,
+): RoamFloor | null {
+  const assigned = new Set<string>();
+  let largest: RoamFloor | null = null;
+  for (const [seedKey, seed] of openFloor) {
+    if (assigned.has(seedKey)) continue;
+    const keys = new Set<string>([seedKey]);
+    const tiles: TileXY[] = [seed];
+    for (const tile of tiles) {
+      for (const [dx, dy] of CARDINAL_STEPS) {
+        const key = tileKey(tile.x + dx, tile.y + dy);
+        const next = openFloor.get(key);
+        if (next === undefined || keys.has(key)) continue;
+        keys.add(key);
+        tiles.push(next);
+      }
+    }
+    for (const key of keys) assigned.add(key);
+    const hasFreeTile = tiles.some((tile) => !taken.has(tileKey(tile.x, tile.y)));
+    if (!hasFreeTile) continue;
+    if (largest === null || tiles.length > largest.tiles.length) largest = { tiles, keys };
+  }
+  return largest;
+}
+
+function occupantSpecies(spec: OccupantSpec): TownSpecies {
+  return spec.residentId !== undefined
+    ? residentSpecies(residentById(spec.residentId))
+    : (spec.species ?? DEFAULT_TOWN_SPECIES);
 }
 
 function tileKey(tx: number, ty: number): string {

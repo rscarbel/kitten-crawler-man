@@ -27,11 +27,9 @@ import { drawQuestBeacon } from '../sprites/questBeacon';
 import {
   drawQuestMarker,
   questMarkerColorFor,
-  QUEST_MARKER_GOLD,
-  QUEST_MARKER_GREEN,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
-import { drawTownSheetFrame } from '../sprites/townSheetProp';
+import { drawTownSheetFrame, townSheetStateInkTop } from '../sprites/townSheetProp';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { tileKey } from './tileKey';
 import { doorwayKeepClearTiles } from './doorwayKeepClear';
@@ -484,7 +482,7 @@ class BenchProp implements TownPropRenderable {
   }
 }
 
-class FortuneTellerProp implements TownPropRenderable {
+export class FortuneTellerProp implements TownPropRenderable {
   /** What Voss has for the player — written each frame by `AnchorQuestSystem` via `setFortuneTellerMarker`. */
   markerState: QuestMarkerState = 'none';
 
@@ -519,10 +517,11 @@ class FortuneTellerProp implements TownPropRenderable {
       tileSize,
     );
 
-    if (this.markerState === 'exclamation') {
-      drawQuestMarker(ctx, sx, sy, tileSize, '!', QUEST_MARKER_GOLD);
-    } else if (this.markerState === 'question') {
-      drawQuestMarker(ctx, sx, sy, tileSize, '?', QUEST_MARKER_GREEN);
+    if (markerColor !== undefined) {
+      const glyph = this.markerState === 'question' ? '?' : '!';
+      const artTop =
+        townSheetStateInkTop(FORTUNE_TELLER_SHEET_KEY, FIXTURE_STATE, sy, tileSize) ?? sy;
+      drawQuestMarker(ctx, sx, artTop, tileSize, glyph, markerColor);
     }
   }
 }

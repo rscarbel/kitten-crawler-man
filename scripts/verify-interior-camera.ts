@@ -313,6 +313,8 @@ function layoutFor(variant: HudVariant, viewport: Viewport): InteriorHudLayout {
     hotbarBandHeight: viewport.h - hotbarStripRect().y,
     followButton: true,
     summonButton: true,
+    buildButton: true,
+    journalButton: true,
   });
 }
 

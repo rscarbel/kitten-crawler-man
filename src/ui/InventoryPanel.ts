@@ -29,7 +29,6 @@ import {
   drawBenchPressInventoryIcon,
   drawTreadmillInventoryIcon,
 } from '../sprites/gymEquipmentSprite';
-import { drawWoodPileSprite } from '../sprites/questNPCSprite';
 import { InventoryInteraction, CONTEXT_MENU_ITEM_HEIGHT } from './InventoryInteraction';
 import { SearchField } from './SearchField';
 import { drawCooldownOverlay } from './CooldownOverlay';
@@ -1908,7 +1907,7 @@ function drawItemArt(
   }
 
   if (item.id === 'quest_wood_board') {
-    drawWoodPileSprite(ctx, x, y, size, false);
+    drawResourceIcon(ctx, 'wood_board', x, y, size);
   }
 
   if (item.id === 'doomsday_scenario') {

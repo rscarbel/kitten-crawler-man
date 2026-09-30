@@ -12,7 +12,7 @@ import {
   pinFigureState,
   prewarmFigureState,
 } from './figure/figureFrameCache';
-import { figureFrameCount } from './figure/figureDef';
+import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import {
   ALL_TOWN_CAST_VIEWS,
   townCastOutfitFigure,
@@ -85,7 +85,8 @@ export function townCastStateFor(
 }
 
 /**
- * Draws one citizen. Only the side view is ever mirrored.
+ * Draws one citizen, and returns the row drawn, or `undefined` when the look
+ * paints nothing for that action. Only the side view is ever mirrored.
  *
  * `approx` opts into the crowd's own tolerance for a stand-in pose instead of
  * a render-path bake — right for the many near-identical strangers a street
@@ -102,12 +103,12 @@ export function drawTownCastSprite(
   tileSize: number,
   state: TownCastSpriteState,
   approx = false,
-): void {
+): DrawnFigureRow | undefined {
   const figure = townCastOutfitFigure(look);
   const view = viewFor(state.action, look, state.facingX, state.facingY);
   const key = townCastStateFor(state.action, look, state.facingX, state.facingY, state.danceStyle);
   const frames = figureFrameCount(figure, key);
-  if (frames === 0) return;
+  if (frames === 0) return undefined;
   const flipX = view === 'side' && state.facingX < 0;
 
   const nowSeconds = performance.now() / MS_PER_SECOND;
@@ -118,11 +119,9 @@ export function drawTownCastSprite(
     frame = timeFrameIndex(nowSeconds + loopOffset, DANCE_FPS, frames);
   } else frame = loopFrameIndex(frames, loopOffset, nowSeconds);
 
-  if (approx) {
-    drawFigureCachedApprox(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
-    return;
-  }
-  drawFigureCached(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
+  if (approx) drawFigureCachedApprox(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
+  else drawFigureCached(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
+  return drawnFigureRow(figure, key);
 }
 
 /**

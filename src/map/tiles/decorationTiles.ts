@@ -71,6 +71,7 @@ import { drawCircusStructureTile } from './circusStructureTiles';
 import { drawTentPoleTile } from './tentPoleTiles';
 import { drawTentPoleBaseTile } from './interiorTiles';
 import { drawRockDepositTile } from './rockDepositTiles';
+import { rockDamageState } from '../rockDamage';
 import { tileHash01 } from './hollowTileHash';
 import { BOARD_CENTRE_X, SIGN_ARROW_CENTRE_Y_TILES } from '../../sprites/art/crawlerSignArt';
 import { inferFloorType } from './helpers';
@@ -2471,7 +2472,8 @@ export function drawDecorationTile(
     // tile's space. (`TREE` is drawn the same way, for the same reason.)
     case BOULDER_SMALL:
     case BOULDER_LARGE: {
-      drawSpriteKey(ctx, boulderSpriteKey(type, tx, ty), 'idle', 0, sx, sy, ts);
+      const damage = rockDamageState(structure[ty][tx].damageStage);
+      drawSpriteKey(ctx, boulderSpriteKey(type, tx, ty), damage, 0, sx, sy, ts);
       return true;
     }
 
