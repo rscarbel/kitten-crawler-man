@@ -29,7 +29,6 @@ import {
   GRAIN_REGROW_SECONDS,
   GrainHarvest,
   SCYTHE_SWING_SECONDS,
-  SWING_VERDICT_LINGER_SECONDS,
   gradeScythePress,
   type ScytheGrade,
 } from '../../src/systems/briarHollow/blueprints/GrainHarvest';
@@ -58,7 +57,6 @@ const HALT_AT_SHARE = 0.3;
 const EARLY_PRESS_SHARE = 0.3;
 /** A press in the outer band, clear of the inner one. */
 const GOOD_PRESS_SHARE = 0.6;
-const LINGER_TICKS = Math.round(SWING_VERDICT_LINGER_SECONDS * UPDATES_PER_SECOND);
 
 interface HarvestRig {
   readonly state: BriarHollowState;
@@ -436,13 +434,13 @@ export function verifySwingVerdicts(check: Check): void {
     'an unpressed swing has no verdict while it runs',
   );
   tick(unpressed, 1);
-  const ranOut = unpressed.harvest.swingBarView();
   check(
-    !unpressed.harvest.isSwinging &&
-      ranOut?.verdict === 'miss' &&
-      ranOut.pressShare === null &&
-      verdictCues(unpressed).join() === 'scytheMiss',
-    `a swing that runs out unpressed is judged a miss, with scytheMiss (${ranOut?.verdict ?? 'no bar'})`,
+    !unpressed.harvest.isSwinging && verdictCues(unpressed).join() === 'scytheMiss',
+    `a swing that runs out unpressed is judged a miss, with scytheMiss (${verdictCues(unpressed).join() || 'no cue'})`,
+  );
+  check(
+    unpressed.harvest.swingBarView() === null,
+    'the bar comes down the tick the needle reaches its end',
   );
   const grainTexts = unpressed.human.pendingFloatingText.filter((request) =>
     request.text.includes('Grain'),
@@ -458,19 +456,7 @@ export function verifySwingVerdicts(check: Check): void {
     faced !== null && unpressed.harvest.cutsAt(faced.x, faced.y) === 1,
     'a missed swing still cuts the stand',
   );
-  check(
-    unpressed.harvest.swingBarView()?.verdictGrain === GRAIN_PER_MISS,
-    `the bar credits a miss with its ${GRAIN_PER_MISS} grain beside "Miss!"`,
-  );
-  tick(unpressed, LINGER_TICKS - 1);
-  check(
-    unpressed.harvest.swingBarView()?.verdict === 'miss',
-    `the verdict lingers on the bar for ${SWING_VERDICT_LINGER_SECONDS} s after the swing`,
-  );
-  tick(unpressed, 1);
-  check(unpressed.harvest.swingBarView() === null, 'then the bar comes down');
 
-  // The linger never holds up the next swing: a new swing replaces the old verdict.
   const next = swingingRig();
   if (next === null) return;
   const firstStart = next.clock.nowMs;
@@ -482,7 +468,7 @@ export function verifySwingVerdicts(check: Check): void {
   const fresh = next.harvest.swingBarView();
   check(
     restarted && next.harvest.isSwinging && fresh?.verdict === null && fresh.pressShare === null,
-    'a new swing starts during the linger and clears the old verdict off the bar',
+    'a new swing right after one lands starts with a clean bar',
   );
 
   const walkedOff = swingingRig();
@@ -501,8 +487,8 @@ export function verifySwingVerdicts(check: Check): void {
 
 /**
  * A hit already judged has been announced, with its sound, so breaking the
- * swing off after it — the natural step away — lands what was announced and
- * keeps the verdict up. A miss was never celebrated, and a swing that has
+ * swing off after it — the natural step away — lands what was announced, once.
+ * A miss was never celebrated, and a swing that has
  * lost the scythe can pay nothing, so both are dropped.
  */
 function verifyJudgedSwingBrokenOff(check: Check): void {
@@ -529,8 +515,8 @@ function verifyJudgedSwingBrokenOff(check: Check): void {
     'press perfect, then move: the faced stand takes its cut',
   );
   check(
-    walked.harvest.swingBarView()?.verdict === 'perfect' && verdictCues(walked).length === 1,
-    `press perfect, then move: the verdict stays up on the bar, sounded once (${walked.harvest.swingBarView()?.verdict ?? 'no bar'})`,
+    walked.harvest.swingBarView() === null && verdictCues(walked).length === 1,
+    `press perfect, then move: the bar comes down with the swing, its verdict sounded once`,
   );
   tick(walked, SWING_TICKS);
   check(
@@ -547,8 +533,7 @@ function verifyJudgedSwingBrokenOff(check: Check): void {
   struck.human.hp -= 1;
   tick(struck, 1);
   check(
-    struck.state.blueprints.grain === GRAIN_PER_GOOD &&
-      struck.harvest.swingBarView()?.verdict === 'good',
+    struck.state.blueprints.grain === GRAIN_PER_GOOD && !struck.harvest.isSwinging,
     `press good, then take a hit: the swing lands its ${GRAIN_PER_GOOD} grain (landed ${struck.state.blueprints.grain})`,
   );
 

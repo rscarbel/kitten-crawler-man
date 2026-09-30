@@ -38,8 +38,6 @@ export interface ScytheSwingBarView {
   readonly perfectWindow: ScytheWindow;
   /** What makes the timed press on this device, for the instruction: "Space", "Tap". */
   readonly pressLabel: string;
-  /** Opacity of the whole bar, for the fade at the end of its linger. */
-  readonly alpha: number;
 }
 
 // ── Layout ─────────────────────────────────────────────────────────────────
@@ -327,7 +325,7 @@ export function drawScytheSwingBar(
   layout: ScytheSwingBarLayout,
   view: ScytheSwingBarView,
 ): void {
-  if (layout.panel.w <= 0 || view.alpha <= 0) return;
+  if (layout.panel.w <= 0) return;
   const dx = shakeOffset(view);
   const panel = shifted(layout.panel, dx);
   const track = shifted(layout.track, dx);
@@ -335,7 +333,6 @@ export function drawScytheSwingBar(
   const glow = style === null ? 0 : fadeOver(view.verdictAgeSeconds, PANEL_GLOW_SECONDS);
 
   ctx.save();
-  ctx.globalAlpha = view.alpha;
   drawBox(ctx, {
     x: panel.x,
     y: panel.y,
@@ -345,7 +342,6 @@ export function drawScytheSwingBar(
     border: style?.color ?? PANEL_BORDER,
     borderWidth: PANEL_BORDER_WIDTH,
     radius: PANEL_RADIUS_PX,
-    alpha: view.alpha,
     ...(style !== null && glow > 0
       ? { glow: style.color, glowBlur: PANEL_GLOW_BLUR_PEAK * glow }
       : {}),
@@ -377,7 +373,6 @@ function drawHeader(
       color: INSTRUCTION_COLOR,
       align: 'center',
       outline: true,
-      alpha: view.alpha,
     });
     return;
   }
@@ -405,7 +400,6 @@ function drawHeader(
     outline: true,
     glow: style.color,
     glowBlur: VERDICT_GLOW_BLUR,
-    alpha: view.alpha,
   });
   if (detail === '') return;
   drawText(ctx, detail, {
@@ -415,7 +409,7 @@ function drawHeader(
     bold: true,
     color: INSTRUCTION_COLOR,
     outline: true,
-    alpha: view.alpha * detailAlpha,
+    alpha: detailAlpha,
   });
 }
 
@@ -429,7 +423,6 @@ function drawTrack(ctx: CanvasRenderingContext2D, track: Rect, view: ScytheSwing
     border: TRACK_BORDER,
     borderWidth: 1,
     radius: TRACK_RADIUS_PX,
-    alpha: view.alpha,
   });
   const needleX = trackX(track, view.progress);
   if (needleX > track.x) {
@@ -440,11 +433,10 @@ function drawTrack(ctx: CanvasRenderingContext2D, track: Rect, view: ScytheSwing
       height: track.h,
       fill: ELAPSED_FILL,
       radius: TRACK_RADIUS_PX,
-      alpha: view.alpha,
     });
   }
-  drawBandFill(ctx, track, view.goodWindow, GOOD_BAND_FILL, GOOD_BAND_EDGE, view.alpha);
-  drawBandFill(ctx, track, view.perfectWindow, PERFECT_BAND_FILL, PERFECT_BAND_EDGE, view.alpha);
+  drawBandFill(ctx, track, view.goodWindow, GOOD_BAND_FILL, GOOD_BAND_EDGE);
+  drawBandFill(ctx, track, view.perfectWindow, PERFECT_BAND_FILL, PERFECT_BAND_EDGE);
   drawVerdictFlash(ctx, track, view);
 }
 
@@ -455,8 +447,8 @@ function drawBandLabels(
   view: ScytheSwingBarView,
 ): void {
   const earlyGoodSpan = { start: view.goodWindow.start, end: view.perfectWindow.start };
-  drawBandLabel(ctx, track, earlyGoodSpan, 'GOOD', view.alpha);
-  drawBandLabel(ctx, track, view.perfectWindow, 'PERFECT', view.alpha);
+  drawBandLabel(ctx, track, earlyGoodSpan, 'GOOD');
+  drawBandLabel(ctx, track, view.perfectWindow, 'PERFECT');
 }
 
 /** The white flash over a hit's band, or the red one over the whole track on a miss. */
@@ -475,7 +467,7 @@ function drawVerdictFlash(
       height: track.h,
       fill: MISS_FLASH_COLOR,
       radius: TRACK_RADIUS_PX,
-      alpha: MISS_FLASH_PEAK_ALPHA * flash * view.alpha,
+      alpha: MISS_FLASH_PEAK_ALPHA * flash,
     });
     return;
   }
@@ -486,7 +478,7 @@ function drawVerdictFlash(
     width: (hitBand.end - hitBand.start) * track.w,
     height: track.h,
     fill: '#ffffff',
-    alpha: HIT_FLASH_PEAK_ALPHA * flash * view.alpha,
+    alpha: HIT_FLASH_PEAK_ALPHA * flash,
     glow: VERDICT_STYLES[view.verdict].color,
     glowBlur: PANEL_GLOW_BLUR_PEAK * flash,
   });
@@ -498,7 +490,6 @@ function drawBandFill(
   band: ScytheWindow,
   fill: string,
   edge: string,
-  alpha: number,
 ): void {
   drawBox(ctx, {
     x: trackX(track, band.start),
@@ -508,7 +499,6 @@ function drawBandFill(
     fill,
     border: edge,
     borderWidth: BAND_EDGE_WIDTH_PX,
-    alpha,
   });
 }
 
@@ -518,7 +508,6 @@ function drawBandLabel(
   track: Rect,
   span: ScytheWindow,
   label: string,
-  alpha: number,
 ): void {
   const spanLeft = trackX(track, span.start);
   const spanWidth = (span.end - span.start) * track.w;
@@ -533,7 +522,6 @@ function drawBandLabel(
     align: 'center',
     outline: BAND_LABEL_OUTLINE,
     outlineWidth: BAND_LABEL_OUTLINE_WIDTH_PX,
-    alpha,
   });
 }
 
@@ -572,7 +560,6 @@ function drawPressMark(ctx: CanvasRenderingContext2D, track: Rect, view: ScytheS
     fill: style.color,
     border: NEEDLE_OUTLINE,
     borderWidth: 1,
-    alpha: view.alpha,
   });
   if (view.verdict !== 'miss') return;
   const cy = track.y + track.h * HALF;
@@ -631,7 +618,7 @@ export function drawScytheVerdictEdgeGlow(
   const life = fadeOver(view.verdictAgeSeconds, EDGE_GLOW_SECONDS);
   if (life <= 0) return;
   const peak = view.verdict === 'miss' ? MISS_EDGE_GLOW_PEAK_ALPHA : EDGE_GLOW_PEAK_ALPHA;
-  const alpha = peak * life * view.alpha;
+  const alpha = peak * life;
   const { rgb } = VERDICT_STYLES[view.verdict];
   // Fixed-point, because node-canvas drops an rgba() whose alpha is written with an exponent.
   const solid = `rgba(${rgb},${alpha.toFixed(ALPHA_DECIMALS)})`;

@@ -85,10 +85,12 @@ export const VILLAGER_ROUTINES: Readonly<Record<CivilianCastId, VillagerRoutine>
     'hall_shelter',
     ELDER_SPEED,
   ),
+  // Every stroll is a farm anchor, so she never leaves her land — which is
+  // why the wells, out in the square, are not among them.
   merrit: routine(
     'crop_fields',
     WORKER_POST_SHARE,
-    ['kitchen_garden', 'pasture_fence', 'farmhouse', 'well'],
+    ['kitchen_garden', 'pasture_fence', 'farmhouse', 'barn'],
     'farmhouse',
     ADULT_SPEED,
   ),

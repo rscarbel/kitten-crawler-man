@@ -19,9 +19,9 @@
  * verdict on the screen-wide timing bar (`ScytheSwingBar`), and a swing that
  * runs out with no press is judged a miss. Every swing lands its grain when
  * it ends — a hit its full share, a miss a single stalk's worth — and the
- * stand in front of the crawler takes one cut. The bar stays up for
- * {@link SWING_VERDICT_LINGER_SECONDS} after the swing so the verdict is
- * seen, unless the next swing starts first.
+ * stand in front of the crawler takes one cut. The bar comes down the moment
+ * the needle reaches its end, together with Carl's swing row, so nothing
+ * stands idle between the swing finishing and the next one starting.
  *
  * A swing the swinger breaks off — walking, attacking, being struck, a
  * hostile closing in — is dropped with nothing, unless its press was already
@@ -85,13 +85,6 @@ export const GRAIN_CUTS_TO_STUBBLE = 3;
 export const HARVEST_REACH_TILES = 1.3;
 /** How near the pegs the active crawler must stand to take the scythe down, in tiles. */
 export const SCYTHE_TAKE_REACH_TILES = 1.5;
-/**
- * How long the timing bar stays up with its verdict after the swing ends:
- * long enough to read "Miss!" on a swing that ran out, short enough to be
- * gone before the player looks for the next stand.
- */
-export const SWING_VERDICT_LINGER_SECONDS = 0.7;
-
 /** How a swing's second press was judged. */
 export type ScytheGrade = 'perfect' | 'good' | 'miss';
 
@@ -140,11 +133,6 @@ const GRAIN_STAND_LAYOUTS = 4;
 const GRAIN_LAYOUT_SALT = 0x5c47;
 /** The stands are cached at twice the tile, so a HiDPI canvas keeps the stalks crisp. */
 const GRAIN_STAND_SUPERSAMPLE = 2;
-
-const SWING_VERDICT_LINGER_TICKS = Math.round(SWING_VERDICT_LINGER_SECONDS * UPDATES_PER_SECOND);
-/** The bar fades out over the last this-long of its linger. */
-const SWING_BAR_FADE_SECONDS = 0.2;
-const SWING_BAR_FADE_TICKS = Math.round(SWING_BAR_FADE_SECONDS * UPDATES_PER_SECOND);
 
 /** Where the harvest keeps a stand's cuts. Absent: an uncut stand. */
 interface StandCuts {
@@ -247,8 +235,6 @@ function tileKey(tileX: number, tileY: number): string {
 export class GrainHarvest {
   private readonly stands = new Map<string, StandCuts>();
   private swing: Swing | null = null;
-  /** The swing just landed, while its verdict lingers on the bar; null once it has gone. */
-  private landed: { readonly swing: Swing; readonly atTick: number } | null = null;
   /** Update ticks run while the world was live: the regrowth clock. */
   private tick = 0;
   /** When the current halt began, on the input events' clock; null while the world runs. */
@@ -313,7 +299,6 @@ export class GrainHarvest {
     this.tick++;
     this.regrow();
     this.advanceSwing();
-    this.expireLanded();
   }
 
   /** Moves a live swing's start past the halt just ended, so the halt counts as no swing time. */
@@ -485,7 +470,6 @@ export class GrainHarvest {
       animating: false,
     };
     this.swing = swing;
-    this.landed = null;
     swinger.setWorkingTool({ kind: 'scythe', tier: SCYTHE_LOOK_TIER });
     if (swinger instanceof HumanPlayer) this.playSwingRow(swing, swinger);
     this.ctx.cue('scytheSwing');
@@ -588,7 +572,6 @@ export class GrainHarvest {
   private land(swing: Swing): void {
     this.endSwing(swing);
     if (swing.verdict === null) this.judge(swing, 'miss');
-    this.landed = { swing, atTick: this.tick };
     const amount = grainForGrade(swing.verdict ?? 'miss');
     this.ctx.state.blueprints.grain += amount;
     this.cut(swing.tile);
@@ -605,26 +588,10 @@ export class GrainHarvest {
     }
   }
 
-  private expireLanded(): void {
-    const landed = this.landed;
-    if (landed !== null && this.tick - landed.atTick >= SWING_VERDICT_LINGER_TICKS) {
-      this.landed = null;
-    }
-  }
-
-  /**
-   * What the timing bar shows right now: the live swing, or the one just
-   * landed while its verdict lingers. Null when neither is up.
-   */
+  /** What the timing bar shows right now: the live swing, or null when none is under way. */
   swingBarView(): ScytheSwingBarView | null {
-    const live = this.swing;
-    const landed = this.landed;
-    const swing = live ?? landed?.swing ?? null;
+    const swing = this.swing;
     if (swing === null) return null;
-    const ticksLeft =
-      live !== null || landed === null
-        ? SWING_VERDICT_LINGER_TICKS
-        : SWING_VERDICT_LINGER_TICKS - (this.tick - landed.atTick);
     return {
       progress: Math.min(1, swing.ticks / SCYTHE_SWING_TICKS),
       pressShare: swing.pressShare,
@@ -635,7 +602,6 @@ export class GrainHarvest {
       goodWindow: SCYTHE_GOOD_WINDOW,
       perfectWindow: SCYTHE_PERFECT_WINDOW,
       pressLabel: platform.isMobile ? 'Tap' : keybindings.labelFor('attack'),
-      alpha: Math.min(1, ticksLeft / SWING_BAR_FADE_TICKS),
     };
   }
 
@@ -727,13 +693,11 @@ export class GrainHarvest {
   /** A death rewind on the same scene: drop any swing in progress, and its bar. */
   onRewind(): void {
     if (this.swing !== null) this.endSwing(this.swing);
-    this.landed = null;
   }
 
   /** The scene is being torn down. */
   dispose(): void {
     if (this.swing !== null) this.endSwing(this.swing);
-    this.landed = null;
   }
 }
 
