@@ -19,6 +19,7 @@ import {
   CLUTTER_SPOTS,
   COOKHOUSE_TABLES,
   CROP_FIELDS,
+  GRAIN_FIELD,
   DISTRICTS,
   doorwayTiles,
   EAST_GATE_Y0,
@@ -208,6 +209,8 @@ export interface BriarHollowSite {
   };
   readonly pasture: { readonly rect: TileRect; readonly fenceGates: readonly TilePoint[] };
   readonly cropFields: readonly TileRect[];
+  /** The one field that is always grain and whose stalks can be cut; also in `cropFields`. */
+  readonly grainField: TileRect;
   readonly lumberYard: {
     readonly rect: TileRect;
     readonly groveTiles: readonly TilePoint[];
@@ -813,7 +816,12 @@ function pick<T>(options: readonly T[]): T {
 
 /** Draws the village's dressing from the world seed. */
 function drawDressing(): BriarHollowDressing {
-  const cropKinds = CROP_FIELDS.map(() => pick(CROP_KINDS));
+  // Every field still draws its seeded pick, so the grain field being fixed
+  // leaves the rest of the stream — laundry, clutter, colours — as it was.
+  const cropKinds = CROP_FIELDS.map((field): CropKind => {
+    const seeded = pick(CROP_KINDS);
+    return field === GRAIN_FIELD ? 'grain' : seeded;
+  });
   const laundryHome = pick(LAUNDRY_HOMES);
   const clutter = CLUTTER_SPOTS.map(() => pick(CLUTTER_PROPS));
   const householdColours = new Map<VillageBuildingId, HouseholdColour>();
@@ -961,6 +969,7 @@ export function buildBriarHollowSite(centre: TilePoint): BriarHollowSite {
       fenceGates: PASTURE_FENCE_GATES.map((gate) => shiftPoint(origin, gate)),
     },
     cropFields: CROP_FIELDS.map((field) => shiftRect(origin, field)),
+    grainField: shiftRect(origin, GRAIN_FIELD),
     lumberYard: {
       rect: shiftRect(origin, LUMBER_YARD),
       groveTiles: GROVE_TREES.map((tree) => shiftPoint(origin, tree)),

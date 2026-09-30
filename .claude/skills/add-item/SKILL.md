@@ -29,6 +29,6 @@ Master registry: `src/core/ItemDefs.ts`. Items are ids in the `ItemId` union wit
 
 ## Storage mechanics (usually no changes needed)
 
-`Inventory` (`src/core/Inventory.ts`) is a facade over `ItemBag` (32 slots), `Hotbar` (8 slots), and equipment. `addItem` routes quest items to the reserved quest slot, otherwise stacks hotbar → bag → first empty. `stackable` and `canHotlist` in the item def drive stacking and hotbar placement.
+`Inventory` (`src/core/Inventory.ts`) is a facade over `ItemBag` (32 slots), `Hotbar` (8 slots), and equipment. `addItem` routes quest items to the reserved quest slot through `replaceQuestSlot`, otherwise stacks hotbar → bag → first empty. The quest slot holds one quest item: granting a different one **evicts** what was there, and the running scene reports it as `questItemEvicted { itemId, crawler }` (`src/systems/questItemEvictions.ts`). A new quest item therefore needs a recovery path, the way Merrit's scythe goes back on its pegs and the blueprints back in Wendell's plan chest the moment no crawler holds them; read held items off the inventories rather than mirroring them in quest state. A quest retiring its item calls `clearQuestItem(id)`, which empties the slot only if it holds that item. `stackable` and `canHotlist` in the item def drive stacking and hotbar placement.
 
 Finish with the `dev-workflow` gates (typecheck, lint, format).

@@ -159,6 +159,10 @@
       "pick_rack": {
         "row": 13,
         "frameCount": 1
+      },
+      "scythe_pegs": {
+        "row": 14,
+        "frameCount": 2
       }
     }
   },
@@ -211,6 +215,10 @@
       },
       "broken_cart": {
         "row": 10,
+        "frameCount": 1
+      },
+      "rope_walk_upgraded": {
+        "row": 11,
         "frameCount": 1
       }
     }
@@ -309,6 +317,10 @@
     "states": {
       "sawmill_machine": {
         "row": 0,
+        "frameCount": 1
+      },
+      "sawmill_machine_upgraded": {
+        "row": 1,
         "frameCount": 1
       }
     }

@@ -11,7 +11,7 @@ import { getSkillDef, type CrawlerKind } from './SkillManager';
  *   of the world keeps it out of a partner's pack.
  * - `isQuestItem` items live in the single reserved quest hotbar slot, keyed
  *   by id: handing one to a partner who already holds a *different* quest
- *   item would silently overwrite theirs (`Inventory.addToQuestSlot`), and
+ *   item would evict theirs (`Inventory.replaceQuestSlot`), and
  *   the item is tied to whoever is running the quest regardless.
  * - `wearer` restricts armour to one crawler's gear slots.
  * - `skillId` restricts a skill book to whichever crawler `eligibleFor` names.

@@ -279,7 +279,7 @@ function verifyResolverCoverage(): void {
     for (const phase of PHASES) {
       for (const talkCount of TALK_COUNTS) {
         for (const ctx of representativeContexts(villager, phase, talkCount)) {
-          for (const questLines of [null, standInQuestLines(BRAMBLEWICK.questOffer)]) {
+          for (const questLines of [[], [standInQuestLines(BRAMBLEWICK.questOffer)]]) {
             const opening = openingLine(villager, ctx, questLines);
             rules.add(opening.rule);
           }

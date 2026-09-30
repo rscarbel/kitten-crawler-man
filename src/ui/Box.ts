@@ -239,6 +239,23 @@ export const BOX_PRESETS = {
   /** Danger / warning red. */
   danger: { fill: 'rgba(127,29,29,0.9)', border: '#ef4444', borderWidth: 1.5 },
   /**
+   * A world-space caption over a job the party can do right now: the quest
+   * guide's gold, so "ready" reads from across the screen.
+   */
+  worldCaptionReady: {
+    fill: 'rgba(12,10,4,0.78)',
+    border: '#facc15',
+    borderWidth: 1.5,
+    radius: 5,
+  },
+  /** The same caption over a job still waiting on materials: a quieter border, so the ready one stands out beside it. */
+  worldCaptionPending: {
+    fill: 'rgba(8,10,16,0.72)',
+    border: 'rgba(251,146,60,0.7)',
+    borderWidth: 1,
+    radius: 5,
+  },
+  /**
    * A see-through HUD strip laid over the world — the resource counters —
    * in the same dark family as the top-left HUD panel, but light enough that
    * the ground under it still reads.
@@ -367,7 +384,8 @@ function resolvePadding(p: Padding | undefined): {
   return { top: p.top ?? 0, right: p.right ?? 0, bottom: p.bottom ?? 0, left: p.left ?? 0 };
 }
 
-function roundRectPath(
+/** Traces (but does not fill or stroke) a rounded rectangle, the radius clamped to half the shorter side. */
+export function roundRectPath(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,

@@ -25,6 +25,13 @@ import { VILLAGER_IDS, type VillagerId } from '../dialog/scripts/briarHollow';
 import type { RatkinCastId } from '../sprites/art/ratkin/cast';
 import { HOLLOW_BELL_MAX_HP } from '../systems/briarHollow/hollowBell';
 import { PALISADE_SEGMENT_SCHEME_VERSION } from '../map/overworld/briarHollowSite';
+import { PASTURE_FENCE_SECTION_COUNT } from '../map/overworld/briarHollowLayout';
+import {
+  BLUEPRINTS_QUEST_PHASE_ORDER,
+  BLUEPRINTS_STATION_IDS,
+  type BlueprintsQuestPhase,
+  type BlueprintsStationId,
+} from './blueprintsQuestPhase';
 
 // ── Quest state ──────────────────────────────────────────────────────────
 
@@ -101,6 +108,55 @@ function persistableQuest(quest: VillageQuestState): VillageQuestState {
     assaultWaveIndex: null,
     bellHp: HOLLOW_BELL_MAX_HP,
     lastSiege,
+  };
+}
+
+// ── The Borrowed Blueprints ──────────────────────────────────────────────
+
+/** Which of Fenna's two stations stand upgraded from Tikka's blueprints. */
+export type BlueprintsStationsUpgraded = Record<BlueprintsStationId, boolean>;
+
+/**
+ * "The Borrowed Blueprints", Fenna's side quest. Held items (Merrit's scythe,
+ * the blueprints) are deliberately absent: they are read off both crawlers'
+ * inventories whenever they matter, so an item lost from the quest slot can
+ * never leave this record claiming it is still held. Midge's position is
+ * absent too, because a load or a rewind always stands her back at Merrit's
+ * pasture gate.
+ */
+export interface BlueprintsQuestState {
+  phase: BlueprintsQuestPhase;
+  /** One flag per pasture fence section, in the ring order the sections are cut in. */
+  fenceSectionsBuilt: boolean[];
+  /** Grain harvested toward Merrit's hundred; an overshoot is kept. */
+  grain: number;
+  stationsUpgraded: BlueprintsStationsUpgraded;
+  /**
+   * Whether the party has read the quest-complete screen through to Continue.
+   * Durable so a door visit, a reload or a rewind never raises it a second
+   * time; false after completion only until that screen is dismissed.
+   */
+  completionScreenSeen: boolean;
+}
+
+export function createBlueprintsQuestState(): BlueprintsQuestState {
+  return {
+    phase: 'unoffered',
+    fenceSectionsBuilt: new Array<boolean>(PASTURE_FENCE_SECTION_COUNT).fill(false),
+    grain: 0,
+    stationsUpgraded: { saw: false, ropeWalk: false },
+    completionScreenSeen: false,
+  };
+}
+
+/** A deep copy: the save and the checkpoint must never share arrays with the live record. */
+function copyBlueprintsQuestState(quest: BlueprintsQuestState): BlueprintsQuestState {
+  return {
+    phase: quest.phase,
+    fenceSectionsBuilt: [...quest.fenceSectionsBuilt],
+    grain: quest.grain,
+    stationsUpgraded: { ...quest.stationsUpgraded },
+    completionScreenSeen: quest.completionScreenSeen,
   };
 }
 
@@ -198,6 +254,8 @@ function copySoldierOrder(order: SoldierOrderRecord): SoldierOrderRecord {
 
 export interface BriarHollowState {
   quest: VillageQuestState;
+  /** Fenna's side quest, "The Borrowed Blueprints". */
+  blueprints: BlueprintsQuestState;
   unlocks: VillageUnlocks;
   structures: StructureRecord[];
   soldierOrders: SoldierOrderRecord[];
@@ -319,6 +377,7 @@ function emptyTalkCounts(): Record<VillagerId, number> {
 export function createBriarHollowState(): BriarHollowState {
   return {
     quest: createVillageQuestState(),
+    blueprints: createBlueprintsQuestState(),
     unlocks: createVillageUnlocks(),
     structures: [],
     soldierOrders: [],
@@ -352,6 +411,7 @@ export type BriarHollowStateSnapshot = Omit<BriarHollowState, 'nodes' | 'village
 export function captureBriarHollowState(state: BriarHollowState): BriarHollowStateSnapshot {
   return {
     quest: persistableQuest(state.quest),
+    blueprints: copyBlueprintsQuestState(state.blueprints),
     unlocks: copyUnlocks(state.unlocks),
     structures: state.structures.map((structure) => ({ ...structure })),
     soldierOrders: state.soldierOrders.map(copySoldierOrder),
@@ -373,6 +433,7 @@ export function restoreBriarHollowState(
   snapshot: BriarHollowStateSnapshot,
 ): void {
   target.quest = persistableQuest(snapshot.quest);
+  target.blueprints = copyBlueprintsQuestState(snapshot.blueprints);
   target.unlocks = copyUnlocks(snapshot.unlocks);
   target.structures = snapshot.structures.map((structure) => ({ ...structure }));
   target.soldierOrders = snapshot.soldierOrders.map(copySoldierOrder);
@@ -474,6 +535,36 @@ function parseVillageQuestState(value: unknown): VillageQuestState {
       ? value.bellTowerBroken
       : defaults.bellTowerBroken,
   };
+}
+
+/**
+ * Reads the side quest back, defaulting every missing or malformed field — a
+ * save written before the quest existed has no `blueprints` at all and reads
+ * as a quest never offered. A fence array of the wrong length (a save written
+ * under a different cut of the ring) keeps only the sections both cuts share.
+ */
+function parseBlueprintsQuestState(value: unknown): BlueprintsQuestState {
+  const defaults = createBlueprintsQuestState();
+  if (!isRecord(value)) return defaults;
+  const phase = stringUnion(value.phase, BLUEPRINTS_QUEST_PHASE_ORDER) ?? defaults.phase;
+  const savedSections = Array.isArray(value.fenceSectionsBuilt) ? value.fenceSectionsBuilt : [];
+  const fenceSectionsBuilt = defaults.fenceSectionsBuilt.map((unbuilt, index) => {
+    const saved: unknown = savedSections[index];
+    return isBoolean(saved) ? saved : unbuilt;
+  });
+  const grain = isNumber(value.grain) ? Math.max(0, Math.floor(value.grain)) : defaults.grain;
+  const savedStations = isRecord(value.stationsUpgraded) ? value.stationsUpgraded : {};
+  const stationsUpgraded = { ...defaults.stationsUpgraded };
+  for (const station of BLUEPRINTS_STATION_IDS) {
+    const saved = savedStations[station];
+    if (isBoolean(saved)) stationsUpgraded[station] = saved;
+  }
+  // A save that finished the quest before the screen existed has no flag; its
+  // party is long past the moment, so it reads as already seen.
+  const completionScreenSeen = isBoolean(value.completionScreenSeen)
+    ? value.completionScreenSeen
+    : phase === 'complete';
+  return { phase, fenceSectionsBuilt, grain, stationsUpgraded, completionScreenSeen };
 }
 
 function isConstructionUnlockId(value: unknown): value is ConstructionUnlockId {
@@ -705,6 +796,7 @@ export function parseBriarHollowStateSnapshot(
   const quest = parseVillageQuestState(value.quest);
   return {
     quest,
+    blueprints: parseBlueprintsQuestState(value.blueprints),
     unlocks: parseVillageUnlocks(value.unlocks, quest.phase),
     structures,
     soldierOrders,

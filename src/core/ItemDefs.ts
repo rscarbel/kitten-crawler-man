@@ -36,6 +36,8 @@ export type ItemId =
   | 'smush_tome'
   | 'explosives_handling_tome'
   | 'doomsday_scenario'
+  | 'quest_scythe'
+  | 'quest_blueprints'
   | 'skill_book_cockroach'
   | 'skill_book_cat_reflexes'
   | 'skill_book_pugilism'
@@ -617,6 +619,30 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     description:
       'A soul crystal on the verge of levelling a city, sealed inside an enchanted glass ' +
       'display case and stuffed into your inventory. Not a weapon. Not yet, anyway.',
+  },
+  quest_scythe: {
+    id: 'quest_scythe',
+    baseValue: 0,
+    name: "Merrit's Scythe",
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    isQuestItem: true,
+    description:
+      "Merrit's scythe, borrowed off the barn wall. Swing it through the grain field south of " +
+      'the scarecrow, and press again as the blade comes through for a bigger sheaf.',
+  },
+  quest_blueprints: {
+    id: 'quest_blueprints',
+    baseValue: 0,
+    name: "Tikka's Blueprints",
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    isQuestItem: true,
+    description:
+      "Tikka's drawings for a proper saw bench and a geared rope walk, borrowed back from Wendell. " +
+      "Take them to Fenna's saw and rope walk to build the upgrades.",
   },
   nightgaunt_cloak: {
     id: 'nightgaunt_cloak',

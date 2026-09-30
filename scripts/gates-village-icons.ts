@@ -31,6 +31,11 @@ import {
 import { drawToolIcon, TOOL_ICON_ID_LIST, type ToolIconId } from '../src/ui/icons/toolIcons.js';
 import { drawFoodIcon, FOOD_ICON_ID_LIST, type FoodIconId } from '../src/ui/icons/foodIcons.js';
 import { drawKitIcon, KIT_ICON_ID_LIST, type KitIconId } from '../src/ui/icons/kitIcons.js';
+import {
+  BLUEPRINTS_QUEST_ICON_ID_LIST,
+  drawBlueprintsQuestIcon,
+  type BlueprintsQuestIconId,
+} from '../src/ui/icons/blueprintsQuestIcons.js';
 import { drawItemIcon } from '../src/ui/InventoryPanel.js';
 import type { InventoryItem } from '../src/core/ItemDefs.js';
 
@@ -59,6 +64,12 @@ const KIT_ICONS: readonly IconSpec[] = KIT_ICON_ID_LIST.map((id: KitIconId) => (
   label: `kit:${id}`,
   draw: (ctx, x, y, size) => drawKitIcon(ctx, id, x, y, size),
 }));
+const BLUEPRINTS_QUEST_ICONS: readonly IconSpec[] = BLUEPRINTS_QUEST_ICON_ID_LIST.map(
+  (id: BlueprintsQuestIconId) => ({
+    label: `quest:${id}`,
+    draw: (ctx, x, y, size) => drawBlueprintsQuestIcon(ctx, id, x, y, size),
+  }),
+);
 
 const REFERENCE_HEALTH_POTION: InventoryItem = {
   id: 'health_potion',
@@ -94,6 +105,7 @@ const NEW_ICONS: readonly IconSpec[] = [
   ...TOOL_ICONS,
   ...FOOD_ICONS,
   ...KIT_ICONS,
+  ...BLUEPRINTS_QUEST_ICONS,
 ];
 const ALL_ICONS: readonly IconSpec[] = [...REFERENCE_ICONS, ...NEW_ICONS];
 

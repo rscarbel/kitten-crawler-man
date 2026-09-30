@@ -5,6 +5,7 @@ import {
   FENCE,
   FOUNTAIN,
   GARDEN_PLANTING,
+  PASTURE_GRASS,
   FloorTypeValue,
   LANE_STREET,
   PLAZA_STONE,
@@ -54,6 +55,7 @@ import {
 } from './town/paintGround';
 import {
   assertYardsStandOnTheirOwnSurface,
+  paintPastureYards,
   paintYardFences,
   plantGardens,
   yardPlots,
@@ -474,6 +476,7 @@ export function generateOverworld(size: number): OverworldData {
   // passed `yardPlots(plan)` rather than by running later. That last one is a
   // suppression argument, not an ordering guarantee, so it is the one to check
   // if a yard ever grows a weed.
+  paintPastureYards(grid, plan, buildingArt);
   assertYardsStandOnTheirOwnSurface(grid, plan, buildingArt);
   paintYardFences(grid, plan, buildingArt);
   plantGardens(grid, plan, buildingArt);
@@ -863,6 +866,7 @@ const TOWN_INTERIOR_TILE_TYPES: ReadonlySet<number> = new Set<number>([
   FOUNTAIN,
   FENCE,
   GARDEN_PLANTING,
+  PASTURE_GRASS,
 ]);
 
 /** How many packed-earth track tiles stand inside the wall, worn patches included. */

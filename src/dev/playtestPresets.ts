@@ -9,6 +9,7 @@ import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
 import type { CircusQuestStage } from '../core/CircusQuestProgress';
 import type { PartyToolsState } from '../core/PartyTools';
 import type { PalisadeTier } from '../map/tileTypes';
+import type { BlueprintsQuestPhase } from '../core/blueprintsQuestPhase';
 import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/toolTiers';
 
 /**
@@ -66,6 +67,21 @@ export interface PlaytestLoadout {
   readonly hotbar: readonly PlaytestStack[];
   /** Bag contents from slot 0 up. */
   readonly bag: readonly PlaytestStack[];
+  /** The reserved quest slot's item, placed directly as a quest grant would. */
+  readonly questSlot?: PlaytestStack;
+}
+
+/**
+ * "The Borrowed Blueprints" already at a step, for the side quest's presets:
+ * "Briar Hollow's Plea" is complete (so the offer stands and nothing of the
+ * Plea's competes for Fenna or Merrit), every construction plan is held, and
+ * the side quest's own record is set to these values.
+ */
+export interface PlaytestBlueprintsSetup {
+  readonly phase: BlueprintsQuestPhase;
+  /** Whether Merrit's pasture fence stands rebuilt all round, or not a section of it. */
+  readonly fence: 'unbuilt' | 'built';
+  readonly grain: number;
 }
 
 export interface PlaytestPreset {
@@ -124,6 +140,8 @@ export interface PlaytestPreset {
    * where the level and stockpile already stand in for having done the quest.
    */
   readonly briarHollowUnlockAll?: boolean;
+  /** Fenna's side quest already at a step; see {@link PlaytestBlueprintsSetup}. */
+  readonly briarHollowBlueprints?: PlaytestBlueprintsSetup;
 }
 
 const HOARDER: PlaytestPreset = {
@@ -854,6 +872,68 @@ const BRIAR_HOLLOW_ASSAULT: PlaytestPreset = {
   cat: { ...BRIAR_HOLLOW_VILLAGE.cat, constructionLevel: ASSAULT_PRESET_CONSTRUCTION },
 };
 
+/** Both crawlers' Construction in the blueprints presets: learned, so the offer is open. */
+const BLUEPRINTS_PRESET_CONSTRUCTION = 1;
+
+/**
+ * Briar Hollow with the Plea won, both crawlers taught Construction and the
+ * kit's stockpile, and Fenna's offer of "The Borrowed Blueprints" standing.
+ */
+const BLUEPRINTS_OFFER: PlaytestPreset = {
+  ...BRIAR_HOLLOW_VILLAGE,
+  id: 'blueprints-offer',
+  description: "Briar Hollow, the Plea won, Fenna's blueprints offer standing",
+  human: { ...BRIAR_HOLLOW_VILLAGE.human, constructionLevel: BLUEPRINTS_PRESET_CONSTRUCTION },
+  cat: { ...BRIAR_HOLLOW_VILLAGE.cat, constructionLevel: BLUEPRINTS_PRESET_CONSTRUCTION },
+  briarHollowBlueprints: { phase: 'unoffered', fence: 'unbuilt', grain: 0 },
+};
+
+/** Merrit's fence to rebuild, no section done yet, with the boards for all of it. */
+const BLUEPRINTS_FENCE: PlaytestPreset = {
+  ...BLUEPRINTS_OFFER,
+  id: 'blueprints-fence',
+  description: "Borrowed Blueprints: rebuild Merrit's fence, boards in hand",
+  briarHollowBlueprints: { phase: 'build_fence', fence: 'unbuilt', grain: 0 },
+};
+
+/** The fence done and the grain to harvest, with Merrit's scythe already in Carl's hands. */
+const BLUEPRINTS_HARVEST: PlaytestPreset = {
+  ...BLUEPRINTS_OFFER,
+  id: 'blueprints-harvest',
+  description: "Borrowed Blueprints: harvest Merrit's grain, scythe in hand",
+  human: { ...BLUEPRINTS_OFFER.human, questSlot: { id: 'quest_scythe', quantity: 1 } },
+  briarHollowBlueprints: {
+    phase: 'harvest_grain',
+    fence: 'built',
+    grain: 0,
+  },
+};
+
+/** The grain in and Midge waiting at Merrit's gate to be led to Wendell's. */
+const BLUEPRINTS_ESCORT: PlaytestPreset = {
+  ...BLUEPRINTS_OFFER,
+  id: 'blueprints-escort',
+  description: "Borrowed Blueprints: lead Midge from Merrit's gate to Wendell's pasture",
+  briarHollowBlueprints: {
+    phase: 'escort_midge',
+    fence: 'built',
+    grain: 0,
+  },
+};
+
+/** The blueprints in Carl's hands and the materials for both upgrades. */
+const BLUEPRINTS_STATIONS: PlaytestPreset = {
+  ...BLUEPRINTS_OFFER,
+  id: 'blueprints-stations',
+  description: 'Borrowed Blueprints: upgrade the saw and the rope walk, blueprints in hand',
+  human: { ...BLUEPRINTS_OFFER.human, questSlot: { id: 'quest_blueprints', quantity: 1 } },
+  briarHollowBlueprints: {
+    phase: 'build_stations',
+    fence: 'built',
+    grain: 0,
+  },
+};
+
 /** Carl's Resourcing in the thralls preset: the level the summon unlocks at. */
 const THRALL_PRESET_HUMAN_RESOURCING = 10;
 /** Donut's: the top level, which summons three at once. */
@@ -911,6 +991,11 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   BRIAR_HOLLOW_BUILDERS,
   BRIAR_HOLLOW_SIEGE,
   BRIAR_HOLLOW_ASSAULT,
+  BLUEPRINTS_OFFER,
+  BLUEPRINTS_FENCE,
+  BLUEPRINTS_HARVEST,
+  BLUEPRINTS_ESCORT,
+  BLUEPRINTS_STATIONS,
   RESOURCING_THRALLS,
 ];
 

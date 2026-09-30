@@ -628,6 +628,23 @@ export const BUTTON_PRESETS = {
     radius: 4,
     labelColor: '#f0e4c4',
   },
+  /**
+   * The Continue on a Briar Hollow quest-complete screen: the villager topic's
+   * candlelit brass, lit gold, so the one way out of a celebration reads as
+   * the village's own and still stands out as the thing to press.
+   */
+  villageCelebration: {
+    fill: '#3a2708',
+    // Darker than the label: hover and focus glow in the border colour through
+    // the button's own face, and a bright gold there washes the label out.
+    border: '#b07d22',
+    borderWidth: 2,
+    radius: 6,
+    labelColor: '#fef3c7',
+    labelSize: 16,
+    glow: '#fbbf24' as const,
+    glowBlur: 14,
+  },
   /** Desktop HUD toggle button — inactive state. */
   toggle: { fill: 'rgba(0,0,0,0.55)', border: '#475569', borderWidth: 1, radius: 2, labelSize: 12 },
   /** Desktop HUD toggle button — open/active state. */

@@ -49,7 +49,12 @@ import {
 } from '../questTracker';
 import type { GroundPickupSystem } from '../GroundPickupSystem';
 import type { DefenseStructures } from './DefenseStructures';
-import type { QuestGuidance, StationGuidance, TileRect } from './questGuidance';
+import {
+  shortfallGuidance,
+  type QuestGuidance,
+  type StationGuidance,
+  type TileRect,
+} from './questGuidance';
 import {
   BELL_TOWER_REPAIR_COST,
   TREBUCHET_BUILD_COST,
@@ -69,6 +74,7 @@ import {
 import type { TopicProvider, VillagerConversationFlow } from './villagerTopics';
 import type { VillagerSystem } from './VillagerSystem';
 import { ASSAULT_WAVE_COUNT, type VillageAssaultSystem } from './VillageAssaultSystem';
+import { BOARDS_PER_WOOD } from './services/woodProcessing';
 
 export const BRIAR_HOLLOW_QUEST_ID = 'briar_hollow_plea';
 export const BRIAR_HOLLOW_QUEST_NAME = "Briar Hollow's Plea";
@@ -93,8 +99,6 @@ export const STONE_TARGET = 10;
 export const PROCESSING_BOARDS_TARGET = 20;
 /** Rope Tikka needs alongside the boards. */
 export const PROCESSING_ROPE_TARGET = 5;
-/** One wood becomes this many boards at the saw. */
-const WOOD_TO_BOARDS_YIELD = 2;
 
 const HELP_TOPIC_KEY = 'quest_how_can_we_help';
 const ACCEPT_TOPIC_KEY = 'quest_accept';
@@ -260,7 +264,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     };
     this.questManager.register(def);
     this.syncQuestManager();
-    deps.villagers.setQuestLineProvider(this);
+    deps.villagers.addQuestLineProvider(this);
     deps.villagers.addTopicProvider(this);
     const { bus } = deps;
     this.unsubscribers.push(
@@ -429,26 +433,8 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
 
   // ── Guidance: what the guide should highlight in the world ───────────────
 
-  /** A resource shortfall while trying to build or repair something: process what wood is held, or chop for more. */
   private shortfallGuidance(cost: ResourceCost): QuestGuidance {
-    const stoneNeeded = Math.max(0, (cost.stone ?? 0) - this.stoneHeld());
-    if (stoneNeeded > 0) {
-      return { kind: 'mine', progress: { have: this.stoneHeld(), target: cost.stone ?? 0 } };
-    }
-    const boards = this.boardsHeld();
-    const rope = this.ropeHeld();
-    const boardsNeeded = Math.max(0, (cost.wood_board ?? 0) - boards);
-    const ropeNeeded = Math.max(0, (cost.rope ?? 0) - rope);
-    const woodNeeded = Math.ceil(boardsNeeded / WOOD_TO_BOARDS_YIELD) + ropeNeeded;
-    if (woodNeeded > 0 && this.woodHeld() === 0) {
-      return { kind: 'chop', progress: { have: 0, target: woodNeeded } };
-    }
-    const stations: StationGuidance[] = [];
-    if (boardsNeeded > 0)
-      stations.push({ station: 'saw', progress: { have: boards, target: cost.wood_board ?? 0 } });
-    if (ropeNeeded > 0)
-      stations.push({ station: 'rope_walk', progress: { have: rope, target: cost.rope ?? 0 } });
-    return { kind: 'process', stations };
+    return shortfallGuidance(this.deps.human, this.deps.cat, cost);
   }
 
   private processingGuidance(): QuestGuidance {
@@ -456,7 +442,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     const rope = this.ropeHeld();
     const boardsNeeded = Math.max(0, PROCESSING_BOARDS_TARGET - boards);
     const ropeNeeded = Math.max(0, PROCESSING_ROPE_TARGET - rope);
-    const woodNeeded = Math.ceil(boardsNeeded / WOOD_TO_BOARDS_YIELD) + ropeNeeded;
+    const woodNeeded = Math.ceil(boardsNeeded / BOARDS_PER_WOOD) + ropeNeeded;
     if (woodNeeded > 0 && this.woodHeld() === 0) {
       return { kind: 'chop', progress: { have: 0, target: woodNeeded } };
     }
@@ -1208,7 +1194,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     this.confirm.close();
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
-    this.deps.villagers.setQuestLineProvider(null);
+    this.deps.villagers.removeQuestLineProvider(this);
   }
 }
 

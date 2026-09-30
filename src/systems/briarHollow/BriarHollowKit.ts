@@ -77,11 +77,15 @@ import { siegeHudSlot } from './siegeHudLayout';
 import { VillageAssaultSystem, type SiegeMusicClaim } from './VillageAssaultSystem';
 import { VillageQuestSystem } from './VillageQuestSystem';
 import { VillageQuestGuide } from './VillageQuestGuide';
+import { BlueprintsQuestSystem } from './BlueprintsQuestSystem';
 import { RecruiterSystem } from './RecruiterSystem';
 import type { Conversation } from '../../dialog/Conversation';
 import type { ConversationHandle } from '../../dialog/request';
 import { transientSpeaker } from '../../dialog/line';
 import { BRAMBLEWICK } from '../../dialog/scripts/briarHollow';
+import { blueprintsPhaseAtLeast } from '../../core/blueprintsQuestPhase';
+import { createMidgeEscortCarry, type MidgeEscortCarry } from '../../core/midgeEscortCarry';
+import type { BlueprintsCue } from './blueprints/blueprintsSoundCues';
 
 /** The live `Keybindings` singleton's own type, which the class itself does not export. */
 type KeybindingsHost = typeof keybindings;
@@ -153,6 +157,14 @@ export interface BriarHollowKitDeps {
   readonly onCoinsGranted?: (coins: number, worldX: number, worldY: number) => void;
   /** A quest item reward was just granted straight into the bag (not dropped) — for a fly-to-HUD effect. */
   readonly onItemGranted?: (id: ItemId, quantity: number, worldX: number, worldY: number) => void;
+  /**
+   * Midge's escort across a door: threaded by reference from the scene
+   * rebuilt on the way out of a building. Absent means a fresh scene, where
+   * she starts at Merrit's gate.
+   */
+  readonly midgeEscortCarry?: MidgeEscortCarry;
+  /** Told of every cue the side quest raises; a headless gate's ear, absent in the game. */
+  readonly onBlueprintsCue?: (cue: BlueprintsCue) => void;
 }
 
 export class BriarHollowKit {
@@ -214,6 +226,11 @@ export class BriarHollowKit {
   /** "Briar Hollow's Plea", the questline; null on a map with no village. */
   readonly quest: VillageQuestSystem | null;
   /**
+   * "The Borrowed Blueprints", Fenna's side quest; null on a map with no
+   * village. Built after the Plea so the Plea's villager lines outrank it.
+   */
+  readonly blueprints: BlueprintsQuestSystem | null;
+  /**
    * The questline's in-world "how": the highlighted tree, rock, station, wall
    * segment or trebuchet a step means, and the arrow and caption over it.
    * Null on a map with no village.
@@ -258,6 +275,9 @@ export class BriarHollowKit {
             groundPickups: deps.groundPickups,
             questPhase: () => deps.state.quest.phase,
             blastThreats: () => this.blastThreats(),
+            midgeHasLeft: () => blueprintsPhaseAtLeast(deps.state.blueprints.phase, 'escort_midge'),
+            // Lazy: the side quest that walks Midge off is built after the herd.
+            strayCows: () => this.blueprints?.escort.strayCows ?? [],
           });
     this.defences =
       site === null
@@ -301,6 +321,8 @@ export class BriarHollowKit {
             isInteractKey: (key) => deps.keybindings.actionFor(key) === 'attack',
             noteResourceActivity: deps.noteResourceActivity,
             worldHalted: () => deps.worldHalted?.() === true,
+            // Read at call time: the blueprints quest is built after the services.
+            stationsUpgrading: () => this.blueprints?.stations.isUpgrading === true,
           });
     this.soldiers =
       site === null || villagers === null
@@ -363,6 +385,39 @@ export class BriarHollowKit {
             // Lazy: the recruiter is built after the questline it reads from.
             recruiter: () => this.recruiter?.post ?? null,
           });
+    this.blueprints =
+      site === null || villagers === null
+        ? null
+        : new BlueprintsQuestSystem({
+            state: deps.state,
+            gameMap: sceneWorld.gameMap,
+            site,
+            bus: sceneWorld.bus,
+            audio: deps.audio,
+            roster: sceneWorld.roster,
+            human: deps.human,
+            cat: deps.cat,
+            active: () => (deps.human.isActive ? deps.human : deps.cat),
+            villagers,
+            conversation: deps.conversation,
+            announce: (message) => deps.menus.announce(message),
+            callout: (text, x, y) => this.defences?.trebuchets.callouts.add(text, x, y, 'label'),
+            onTileChanged: deps.onTileChanged,
+            noteResourceActivity: deps.noteResourceActivity,
+            worldHalted: () => deps.worldHalted?.() === true,
+            pleaPhase: () => deps.state.quest.phase,
+            livestock: this.livestock,
+            music: () => deps.music?.() ?? null,
+            escortLevel: deps.assaultLevel,
+            midgeCarry: deps.midgeEscortCarry ?? createMidgeEscortCarry(),
+            onCue: deps.onBlueprintsCue,
+            // Lazy: the guide is built after this quest. It only shows this
+            // quest's guidance while the Plea has none of its own.
+            guideTarget: () =>
+              (this.quest?.guidance() ?? null) === null
+                ? (this.questGuide?.target() ?? null)
+                : null,
+          });
     this.questGuide =
       site === null || villagers === null || defense === null
         ? null
@@ -374,11 +429,17 @@ export class BriarHollowKit {
             human: deps.human,
             cat: deps.cat,
             onTileChanged: deps.onTileChanged,
-            // Lazy: read fresh every tick, since the quest is rebuilt with the kit.
-            guidance: () => this.quest?.guidance() ?? null,
+            // Lazy: read fresh every tick, since the quests are rebuilt with the
+            // kit. The Plea's own step comes first; the side quest's shows only
+            // while the Plea has nothing for the party's hands.
+            guidance: () => this.quest?.guidance() ?? this.blueprints?.guidance() ?? null,
             isDefaultTrebuchetPromptShowing: (at) =>
               this.defences?.isTrebuchetPromptShowing(at) ?? false,
             isDefaultWallPromptShowing: () => this.defences?.isWallPromptShowing() ?? false,
+            questMarksStation: (kind) => this.blueprints?.marksStation(kind) ?? false,
+            questStationCaptionTopWorldY: (kind) =>
+              this.blueprints?.stationCaptionTopWorldY(kind) ?? null,
+            showingSideQuestGuidance: () => (this.quest?.guidance() ?? null) === null,
           });
     this.recruiter =
       site === null || this.quest === null
@@ -498,6 +559,7 @@ export class BriarHollowKit {
     this.soldiers?.update({ human: ctx.human, cat: ctx.cat, active: ctx.active });
     this.recruiter?.update();
     this.quest?.update();
+    this.blueprints?.update();
     this.questGuide?.update();
     this.drainQuestLineQueue();
     this.services?.sawmill.setQuestForcedKinds(this.questGuide?.activeProcessStationKinds() ?? []);
@@ -531,6 +593,7 @@ export class BriarHollowKit {
   private drainQuestLineQueue(): void {
     if (this.deps.conversation.isOpen) return;
     if (this.isConversationOpen || this.isMenuOpen) return;
+    if (this.blueprints?.completion.isOpen === true) return;
     if (this.quest?.isConfirmOpen === true) return;
     if (this.recruiter?.isDialogOpen === true) return;
     const next = this.pendingQuestLines.shift();
@@ -589,7 +652,8 @@ export class BriarHollowKit {
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.defences?.renderGround(ctx, camX, camY);
     this.services?.renderGround(ctx, camX, camY);
-    this.questGuide?.renderGround(ctx, camX, camY);
+    this.blueprints?.renderGround(ctx, camX, camY);
+    if (this.blueprints?.busyWithWork !== true) this.questGuide?.renderGround(ctx, camX, camY);
     renderNecromancerTelegraphs(ctx, camX, camY, this.world.roster.mobs);
   }
 
@@ -621,12 +685,14 @@ export class BriarHollowKit {
     this.livestock?.renderAbove(ctx, camX, camY);
     this.defences?.renderAbove(ctx, camX, camY);
     this.services?.renderAbove(ctx, camX, camY);
+    this.blueprints?.renderAbove(ctx, camX, camY);
     this.assault?.renderAbove(ctx, camX, camY);
     this.soldiers?.renderAbove(ctx, camX, camY);
     // A downed crawler's arrow is the only arrow the game allows on screen, so
     // the quest guide's arrows and captions stand down until they are revived.
     const crawlerDown = this.deps.human.isKnockedOut || this.deps.cat.isKnockedOut;
-    if (!crawlerDown) this.questGuide?.renderAbove(ctx, camX, camY);
+    const busyWithWork = this.blueprints?.busyWithWork === true;
+    if (!crawlerDown && !busyWithWork) this.questGuide?.renderAbove(ctx, camX, camY);
   }
 
   /**
@@ -640,10 +706,12 @@ export class BriarHollowKit {
   /**
    * Screen-space chrome, drawn after the HUD panel: the siege's banner, bell
    * and boss bars, in the top band under the resource strip's row so the two
-   * never overlap.
+   * never overlap; and the escort's markers for ambushers still out of sight.
    */
   renderHud(ctx: CanvasRenderingContext2D, miniMap: MiniMapSystem, hudRect: Rect): void {
     this.assault?.renderHud(ctx, siegeHudSlot(miniMap, hudRect));
+    this.blueprints?.renderHud(ctx, miniMap, hudRect);
+    this.blueprints?.escort.renderHud(ctx);
     this.questGuide?.renderConstructionHint(ctx, miniMap);
   }
 
@@ -672,6 +740,8 @@ export class BriarHollowKit {
     // A prop, stall or sign prompt already up means an earlier link of the
     // Space chain takes the press.
     if (interactionPromptsDrawnThisFrame() > 0) return false;
+    // Same order as `tryInteract`: the side quest's fence and harvest first.
+    if (this.blueprints?.renderPrompt(ctx, camX, camY, active) === true) return true;
     // A wall in reach and in front of the crawler is the most specific target
     // there is: nothing else stands where it stands.
     if (this.defences?.renderWallBuildPrompt(ctx, camX, camY, active) === true) return true;
@@ -695,6 +765,10 @@ export class BriarHollowKit {
    */
   tryInteract(active: HumanPlayer | CatPlayer): boolean {
     if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
+    // A fence section of Merrit's in reach, or the scythe and the grain: each
+    // only takes the press in its own step and only when something is in
+    // reach, so outside those it falls straight through.
+    if (this.blueprints?.tryInteract(active) === true) return true;
     // A wall the crawler is squarely facing is the most specific thing a press
     // can mean, and never overlaps a villager or a fixture.
     if (this.defences?.tryBuildWall() === true) return true;
@@ -744,6 +818,15 @@ export class BriarHollowKit {
   }
 
   /**
+   * Midge while she is being led to Wendell's, for the same list of bodies
+   * hostiles may pick. Not an allied defender — she never fights back — but
+   * the escort is only an escort if the road's ambushers can go for her.
+   */
+  pushEscortTargets(out: Player[]): void {
+    this.blueprints?.pushEscortTargets(out);
+  }
+
+  /**
    * Whether a press from `active` would be taken by the village — a cow to pet
    * or a villager to talk to. The predicate `tryInteract` is built on, for any
    * later link of the Space chain that draws a prompt of its own and must stay
@@ -751,6 +834,8 @@ export class BriarHollowKit {
    */
   wouldInteract(active: HumanPlayer | CatPlayer): boolean {
     if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
+    if (this.blueprints?.harvest.wouldInteract(active) === true) return true;
+    if ((this.blueprints?.fence.sectionInReach(active) ?? null) !== null) return true;
     if (this.livestock?.wouldPet(active) === true) return true;
     if (this.services?.wouldInteract(active) === true) return true;
     if (this.recruiter?.wouldInteract(active) === true) return true;
@@ -783,6 +868,14 @@ export class BriarHollowKit {
    * nothing to mend, deposits as much stone as fits into the nearest trebuchet.
    */
   repairOrLoad(): void {
+    // A station the blueprints can upgrade, in reach, takes the key first.
+    const active = this.deps.human.isActive ? this.deps.human : this.deps.cat;
+    if (this.blueprints?.tryUpgradeStation(active) === true) {
+      // A cut under way at the machine being rebuilt would run on inside the
+      // rebuild; nothing is spent until a cut finishes, so dropping it is free.
+      if (this.blueprints.stations.isUpgrading) this.services?.sawmill.cancel();
+      return;
+    }
     this.defences?.repairOrLoad();
   }
 
@@ -816,6 +909,13 @@ export class BriarHollowKit {
     camY: number,
     active: HumanPlayer | CatPlayer,
   ): boolean {
+    if (this.blueprints?.handleDoubleTap(screenX + camX, screenY + camY, active) === true) {
+      // The double tap's first tap already landed on the machine as a single
+      // tap and started a cut there; nothing is spent until a cut finishes,
+      // so dropping it leaves the upgrade as the gesture's only effect.
+      this.services?.sawmill.cancel();
+      return true;
+    }
     if (this.defences?.handleDoubleTap(screenX, screenY, camX, camY) === true) return true;
     // A second quick tap on a cow is still a tap on a cow.
     return this.tapCow(screenX + camX, screenY + camY, active);
@@ -873,7 +973,9 @@ export class BriarHollowKit {
   /**
    * A single world tap's mobile equivalent of `tryInteract`: a tap on a
    * villager's body, while they are in talking range, talks to that villager
-   * rather than to whoever happens to be nearest. Returns whether it was consumed.
+   * rather than to whoever happens to be nearest. `eventTimeStampMs` is when
+   * the finger came down, which a live scythe swing grades its timed press
+   * by. Returns whether it was consumed.
    */
   handleTap(
     screenX: number,
@@ -881,15 +983,34 @@ export class BriarHollowKit {
     camX: number,
     camY: number,
     active: HumanPlayer | CatPlayer,
+    eventTimeStampMs = performance.now(),
   ): boolean {
     const villagers = this.villagers;
     if (villagers === null || villagers.isConversationOpen) return false;
-    // The cow comes first: it decides for itself whether a hostile would take the tap.
-    if (this.tapCow(screenX + camX, screenY + camY, active)) return true;
-    if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
-    if (this.services?.handleTap(screenX + camX, screenY + camY, active) === true) return true;
-    if (this.handleRecruiterTap(screenX + camX, screenY + camY, active)) return true;
-    const tappedSoldier = this.soldiers?.soldierAtPoint(screenX + camX, screenY + camY) ?? null;
+    const worldX = screenX + camX;
+    const worldY = screenY + camY;
+    // A live scythe swing wants every tap: that tap is its timed press, and
+    // grading it starts nothing, so a hostile in reach does not stop it.
+    if (this.claimsWorldTaps) {
+      return this.blueprints?.handleTap(worldX, worldY, active, eventTimeStampMs) === true;
+    }
+    // With a hostile in reach a tap is an attack, as Space is: it must not
+    // start a fence channel or a swing that leaves the crawler standing still.
+    const hostileNear = hostileWithinAttackRange(active, this.world.roster.grid);
+    // A fence section is a smaller target than a cow standing behind it, so
+    // the side quest asks first.
+    if (
+      !hostileNear &&
+      this.blueprints?.handleTap(worldX, worldY, active, eventTimeStampMs) === true
+    ) {
+      return true;
+    }
+    // The cow comes before the hostile check: it decides for itself whether a hostile would take the tap.
+    if (this.tapCow(worldX, worldY, active)) return true;
+    if (hostileNear) return false;
+    if (this.services?.handleTap(worldX, worldY, active) === true) return true;
+    if (this.handleRecruiterTap(worldX, worldY, active)) return true;
+    const tappedSoldier = this.soldiers?.soldierAtPoint(worldX, worldY) ?? null;
     if (tappedSoldier !== null) {
       const soldierTiles =
         Math.hypot(tappedSoldier.x - active.x, tappedSoldier.y - active.y) / TILE_SIZE;
@@ -897,7 +1018,7 @@ export class BriarHollowKit {
       this.soldiers?.talkTo(tappedSoldier, active);
       return true;
     }
-    const tapped = villagers.villagerAtPoint(screenX + camX, screenY + camY);
+    const tapped = villagers.villagerAtPoint(worldX, worldY);
     if (tapped === null) return false;
     const tilesAway = Math.hypot(tapped.x - active.x, tapped.y - active.y) / TILE_SIZE;
     if (tilesAway > VILLAGER_TALK_RANGE_TILES) return false;
@@ -920,6 +1041,11 @@ export class BriarHollowKit {
     return this.recruiter.tryInteract(active);
   }
 
+  /** Whether a live scythe swing wants every world tap as its timed press. */
+  get claimsWorldTaps(): boolean {
+    return this.blueprints?.harvest.claimsWorldTaps === true;
+  }
+
   /** Whether a villager conversation is on screen. */
   get isConversationOpen(): boolean {
     return this.villagers?.isConversationOpen === true;
@@ -930,8 +1056,14 @@ export class BriarHollowKit {
     return this.defences?.isMenuOpen === true || this.services?.isMenuOpen === true;
   }
 
-  /** Number keys pick a conversation choice; the construction menus take their own keys. Returns whether the key was taken. */
-  handleKeyDown(key: string, repeat = false): boolean {
+  /**
+   * Number keys pick a conversation choice; the construction menus take their
+   * own keys; a live scythe swing takes the attack key as its timed press,
+   * graded at `eventTimeStampMs` (the keydown's own `timeStamp`). Returns
+   * whether the key was taken.
+   */
+  handleKeyDown(key: string, repeat = false, eventTimeStampMs = performance.now()): boolean {
+    if (this.blueprints?.handleKeyDown(key, repeat, eventTimeStampMs) === true) return true;
     if (this.quest?.handleKeyDown(key) === true) return true;
     if (this.defences?.handleKeyDown(key, repeat) === true) return true;
     if (this.services?.handleKeyDown(key) === true) return true;
@@ -940,6 +1072,7 @@ export class BriarHollowKit {
 
   /** A click or tap on a village panel. Returns whether it landed on one. */
   handleClick(mx: number, my: number): boolean {
+    if (this.blueprints?.handleClick(mx, my) === true) return true;
     if (this.quest?.handleClick(mx, my) === true) return true;
     if (this.defences?.handleClick(mx, my) === true) return true;
     if (this.services?.handleClick(mx, my) === true) return true;
@@ -960,8 +1093,9 @@ export class BriarHollowKit {
     this.services?.picker.handlePointerUp();
   }
 
-  /** Whether the village's own dismantle confirm is what has halted the world. */
+  /** Whether one of the village's own modals (a confirm, a narrated line, the blueprints' quest-complete screen) is what has halted the world. */
   get haltsWorldItself(): boolean {
+    if (this.blueprints?.completion.isOpen === true) return true;
     if (this.quest?.isConfirmOpen === true) return true;
     if (this.isQuestLineShowing()) return true;
     return this.defences?.haltsWorldItself === true;
@@ -1011,9 +1145,12 @@ export class BriarHollowKit {
     this.services?.renderDialog(ctx);
     // The "We're ready" confirm sits over everything else the village draws.
     this.quest?.renderDialog(ctx);
-    // Topmost: a villager conversation or a narrated line takes the frame
-    // over every other village panel.
+    // A villager conversation or a narrated line takes the frame over every
+    // other village panel.
     this.deps.conversation.render(ctx);
+    // Topmost: nothing else in the village opens while the quest-complete
+    // screen is up, and it waits for anything that was.
+    this.blueprints?.renderDialog(ctx);
   }
 
   /**
@@ -1027,15 +1164,16 @@ export class BriarHollowKit {
     // and an open claim would hold the Space chain and the attack for the
     // whole countdown.
     return [
+      ...(this.blueprints === null ? [] : [this.blueprints.overlayClaim()]),
       ...(this.quest === null ? [] : [this.quest.overlayClaim()]),
       ...(this.defences?.overlayClaims() ?? []),
       ...(this.services?.overlayClaims() ?? []),
     ];
   }
 
-  /** Minimap pips for anything the village quest wants pointed at. */
+  /** Minimap pips for anything the village's questlines want pointed at. */
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
-    return this.quest?.questMarkers ?? [];
+    return [...(this.quest?.questMarkers ?? []), ...(this.blueprints?.questMarkers ?? [])];
   }
 
   /** The sawmill's machines, in tile coordinates with their output, for the minimap. */
@@ -1052,9 +1190,9 @@ export class BriarHollowKit {
     return this.services?.minimapVendorPositions() ?? [];
   }
 
-  /** Quest Journal rows for the village's own questline. */
+  /** Quest Journal rows for the village's questlines: the Plea, then Fenna's side quest. */
   trackerEntries(): ReadonlyArray<TrackerEntry> {
-    return this.quest?.trackerEntries() ?? [];
+    return [...(this.quest?.trackerEntries() ?? []), ...(this.blueprints?.trackerEntries() ?? [])];
   }
 
   /**
@@ -1070,6 +1208,10 @@ export class BriarHollowKit {
     this.defences?.onRewind();
     this.services?.onRewind();
     this.soldiers?.onRewind();
+    // Before the side quest: a rewind to before Midge left hands her back to
+    // the herd, and the escort then finds her gone.
+    this.livestock?.onRewind();
+    this.blueprints?.onRewind();
     this.quest?.closeConfirm();
     if (this.isQuestLineShowing()) {
       this.deps.conversation.close();
@@ -1105,6 +1247,7 @@ export class BriarHollowKit {
     this.defences?.dispose();
     this.soldiers?.dispose();
     this.quest?.dispose();
+    this.blueprints?.dispose();
     this.assault?.dispose();
     if (this.defences !== null) this.deps.dynamite.onStructureBlast = null;
   }

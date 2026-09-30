@@ -186,6 +186,7 @@
     "verify:village-dialogue": "tsx scripts/verify-village-dialogue.ts",
     "verify:dialog-pagination": "tsx scripts/verify-dialog-pagination.ts",
     "verify:dialog-lines": "tsx scripts/verify-dialog-lines.ts",
+    "verify:borrowed-blueprints": "tsx scripts/verify-borrowed-blueprints.ts",
     "verify:conversation-ownership": "tsx scripts/verify-conversation-ownership.ts",
     "verify:walk-away": "tsx scripts/verify-walk-away.ts && tsx scripts/verify-walk-away-scene.ts",
     "verify:dialog-accept": "tsx scripts/verify-dialog-accept.ts",
@@ -213,6 +214,7 @@
     "gates:village-icons": "tsx scripts/gates-village-icons.ts",
     "verify:food": "tsx scripts/verify-food.ts",
     "verify:cows": "tsx scripts/verify-cows.ts && tsx scripts/verify-cows-scene.ts",
+    "verify:midge-escort": "tsx scripts/verify-midge-escort.ts",
     "gates:burger-art": "tsx scripts/gates-burger-art.ts",
     "wave:figure": "tsx scripts/wave-test-figure.ts"
   },

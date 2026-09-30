@@ -1,6 +1,7 @@
 import { ITEM_DEF } from './ItemDefs';
 import type { ToolOwner } from './PartyTools';
 import { RESOURCE_IDS, type ResourceId } from './resourceIds';
+import type { Requirement } from '../ui/RequirementRow';
 
 /** A resource price list; an absent or zero line costs nothing. */
 export type ResourceCost = Partial<Record<ResourceId, number>>;
@@ -69,4 +70,31 @@ export function formatCost(cost: ResourceCost): string {
     lines.push(`${amount} ${ITEM_DEF[id].name}`);
   }
   return lines.join(', ');
+}
+
+/** The short name a resource goes by on a one-line checklist, where "Boards of Wood" will not fit. */
+const RESOURCE_SHORT_NAME: Readonly<Record<ResourceId, string>> = {
+  wood: 'Wood',
+  stone: 'Stone',
+  wood_board: 'Boards',
+  rope: 'Rope',
+};
+
+/** Each line of `cost` against the party's combined stock, for a checklist beside the thing it pays for. */
+export function costRequirements(
+  human: ToolOwner,
+  cat: ToolOwner,
+  cost: ResourceCost,
+): Requirement[] {
+  const requirements: Requirement[] = [];
+  for (const id of RESOURCE_IDS) {
+    const amount = cost[id];
+    if (amount === undefined || amount <= 0) continue;
+    requirements.push({
+      label: RESOURCE_SHORT_NAME[id],
+      have: partyCount(human, cat, id),
+      need: amount,
+    });
+  }
+  return requirements;
 }

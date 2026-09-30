@@ -54,9 +54,22 @@ import { type CowView, cowPollPoint, restCowPose } from '../sprites/art/cowArt';
 import { cowLookOf } from '../sprites/art/cowLooks';
 import { CowPen } from '../systems/briarHollow/cowPen';
 import type { TilePoint } from '../map/town/townPlan';
+import { findNearbyWalkableTile } from '../map/findWalkableTile';
+import { drawQuestBeacon } from '../sprites/questBeacon';
+import {
+  drawQuestMarker,
+  questMarkerAnchorAbove,
+  questMarkerColorFor,
+  type QuestMarkerState,
+} from '../sprites/questNPCSprite';
 
 const UPDATES_PER_SECOND = 60;
 const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
+/**
+ * How far above the tile's top a worn quest glyph's lowest point sits, in
+ * tiles: over the head and clear of a health bar drawn just above the tile.
+ */
+const QUEST_MARKER_CLEARANCE_TILES = 0.9;
 const TWO_PI = Math.PI * 2;
 const TILE_CENTRE = 0.5;
 
@@ -186,6 +199,20 @@ const ESCAPE_STEPS: ReadonlyArray<TilePoint> = [
 /** Tiles of distance an off-pen neighbour counts as worse than an on-pen one, when stepping out of a wall. */
 const ESCAPE_OFF_PEN_PENALTY = 100;
 
+/**
+ * Stall checks in a row a led animal's path search may fail before it gives
+ * the search up and walks for open ground toward its leader instead. The
+ * first stalls only throw the cached route away: most are a crowd in a
+ * gateway that clears by itself.
+ */
+const LED_STALLS_BEFORE_DETOUR = 3;
+/** How far toward the leader a detour aims before looking for open ground round that point. */
+const LED_DETOUR_REACH_TILES = 2;
+/** How far round that point open ground is searched for. */
+const LED_DETOUR_SEARCH_TILES = 3;
+/** A detour walks this long at most before the path search is given another go. */
+const LED_DETOUR_MAX_SECONDS = 2;
+
 /** Offsets each animal's chewing clock, so a herd does not chew in step. */
 const CLOCK_STAGGER_SECONDS = 60;
 
@@ -207,9 +234,50 @@ export const FIGURE_CACHE_ROW_WARMER: CowRowWarmer = {
   frame: figureCacheFrame,
 };
 
-/** What an animal is doing. */
+/** What an animal is doing. `led` is walking after whoever leads it, off any pen. */
 export type CowMode =
-  'idle' | 'graze' | 'walk' | 'happy' | 'flinch' | 'trot' | 'lie_down' | 'lie' | 'stand_up';
+  'idle' | 'graze' | 'walk' | 'happy' | 'flinch' | 'trot' | 'lie_down' | 'lie' | 'stand_up' | 'led';
+
+/** Whoever an animal is led by: anything with a tile-sized body at (`x`, `y`). */
+export interface CowLeader {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * How a led animal keeps with its leader: a latched band it walks to close,
+ * a distance past which it gives up and waits to be fetched, and its pace.
+ */
+export interface CowLeadBand {
+  /** Sets off after the leader past this many tiles. */
+  readonly followStartTiles: number;
+  /** Stops again inside this many tiles. */
+  readonly followStopTiles: number;
+  /** Past this many tiles it stops, faces the leader and waits. */
+  readonly breakTiles: number;
+  /** A waiting animal walks on again once the leader is back inside this many tiles. */
+  readonly resumeTiles: number;
+  /** Walking pace while led, in pixels per update before levelling. */
+  readonly speed: number;
+  /** How far one path search reaches, in the search's own measure. */
+  readonly pathBudgetTiles: number;
+}
+
+/** A led animal's standing: who leads it, and where it is in the band. */
+interface LeadState {
+  readonly band: CowLeadBand;
+  leader: CowLeader | null;
+  /** Called rather than led: it walks all the way to its leader, however far, and never gives up. */
+  readonly ignoresBreak: boolean;
+  following: boolean;
+  /** Past the break distance: standing and waiting to be fetched. */
+  waiting: boolean;
+  /** One-second stall checks in a row that gained no ground while following. */
+  stalls: number;
+  /** A tile walked straight to after the path search has stalled for long, and how long it may take. */
+  detour: TilePoint | null;
+  detourUpdatesLeft: number;
+}
 
 /** Which cue a cow has queued for the mob-audio drain. */
 export type CowVoice = 'ambient' | 'calf' | 'angry' | 'happy';
@@ -252,6 +320,16 @@ export class Cow extends Mob {
   sheltering = false;
   /** Set when something audible happens; `playMobAudioCues` plays it and clears it. */
   voicePending: CowVoice | null = null;
+  /**
+   * Whether whoever owns this animal draws its health bar itself, so the
+   * bar every mob flashes when struck is not drawn twice over it.
+   */
+  healthBarDrawnElsewhere = false;
+  /**
+   * The quest glyph and beacon the animal wears, for the one a quest needs the
+   * party to go to (Midge); `'none'` for the rest of the herd.
+   */
+  questMarker: QuestMarkerState = 'none';
 
   private readonly random: () => number;
   private modeValue: CowMode = 'idle';
@@ -280,6 +358,19 @@ export class Cow extends Mob {
   private threatWarmedAt = -Infinity;
   /** The cache frame each row was last asked for, keyed by state name. */
   private readonly rowWarmedAt = new Map<string, number>();
+  /** Set while the animal is led or called; null while it keeps its own routine. */
+  private lead: LeadState | null = null;
+  /** The animal's own name, for the few the village has named; null for the rest of the herd. */
+  private nameValue: string | null = null;
+  /** The generic label a nameless animal is shown under. */
+  private readonly kindLabel: string;
+  /**
+   * Where a checkpoint rewind stands it, when that is no longer the tile it
+   * was spawned on — an animal that has moved to a new pen for good.
+   */
+  private homeOverride: TilePoint | null = null;
+  /** Max HP before a scripted fight hardened it, so the fight's end can hand it back. */
+  private herdMaxHp: number | null = null;
 
   constructor(
     tileX: number,
@@ -302,7 +393,8 @@ export class Cow extends Mob {
     this.random = random;
     this.bodyPartKey = cowBodyPartKey(coat, age);
     this.mass = isCalf ? CALF_MASS : COW_MASS;
-    this.displayName = isCalf ? 'Calf' : 'Cow';
+    this.kindLabel = isCalf ? 'Calf' : 'Cow';
+    this.displayName = this.kindLabel;
     this.description = isCalf
       ? 'A Briar Hollow calf. Never far from its mother.'
       : 'One of Briar Hollow’s dairy cows. Friendly, if you scratch behind the ears.';
@@ -321,6 +413,20 @@ export class Cow extends Mob {
     return this.age === 'calf';
   }
 
+  /**
+   * The animal's own name, or null for an unnamed one. Setting it names the
+   * animal wherever it is shown (`displayName`); clearing it goes back to
+   * "Cow" or "Calf".
+   */
+  get name(): string | null {
+    return this.nameValue;
+  }
+
+  set name(value: string | null) {
+    this.nameValue = value;
+    this.displayName = value ?? this.kindLabel;
+  }
+
   get mode(): CowMode {
     return this.modeValue;
   }
@@ -332,10 +438,37 @@ export class Cow extends Mob {
 
   /** Whether the current mode intends to cover ground — what a stall is measured against. */
   get isTryingToWalk(): boolean {
+    if (this.modeValue === 'led') return this.lead?.following === true;
     return (
       (this.modeValue === 'walk' || this.modeValue === 'trot') &&
       this.routeIndex < this.route.length
     );
+  }
+
+  /** Whether someone is leading the animal right now: led or called, with a leader set. */
+  get isLed(): boolean {
+    const lead = this.lead;
+    return lead !== null && lead.leader !== null;
+  }
+
+  /** Whether a led animal has fallen past its break distance and stands waiting to be fetched. */
+  get isWaitingForLeader(): boolean {
+    return this.lead?.waiting === true;
+  }
+
+  /** Whether a led animal is walking to close the band this update. */
+  get isFollowingLeader(): boolean {
+    return this.lead?.following === true;
+  }
+
+  /**
+   * A led animal thinks wherever it is. It trails the party, often by more
+   * than the activation radius when the party runs ahead, and the hostiles
+   * going for it are ticked by their own exemption — a body frozen mid-fight
+   * while its attackers still swing would be a free kill nobody watched.
+   */
+  override get exemptFromAiActivationRadius(): boolean {
+    return this.isLed;
   }
 
   override get isHostile(): boolean {
@@ -400,6 +533,13 @@ export class Cow extends Mob {
 
   override resetToSpawn(): void {
     super.resetToSpawn();
+    const home = this.homeOverride;
+    if (home !== null) {
+      this.x = home.x * TILE_SIZE;
+      this.y = home.y * TILE_SIZE;
+    }
+    // Whoever led it re-leads it after a rewind, from wherever it puts it.
+    this.lead = null;
     this.enterMode('idle', randomBetween(this.random, IDLE_MIN_SECONDS, IDLE_MAX_SECONDS));
     this.clearRoute();
     this.panicUpdatesLeft = 0;
@@ -475,9 +615,18 @@ export class Cow extends Mob {
     return true;
   }
 
-  /** A blast landed at world pixel (`x`, `y`): flinch, then run away from it. */
+  /**
+   * A blast landed at world pixel (`x`, `y`): flinch, then run away from it.
+   * A led animal only flinches where it stands: running from the bang and
+   * walking after its leader would take turns on the same ground.
+   */
   startle(x: number, y: number): void {
     if (!this.isAlive) return;
+    if (this.lead !== null) {
+      this.voicePending = 'angry';
+      this.flinchInPlace();
+      return;
+    }
     // A bang nobody saw coming gets its flinch asked for now; one that was
     // warned of already has it. The trot is queued now either way, a flinch
     // ahead of the run it draws.
@@ -497,6 +646,122 @@ export class Cow extends Mob {
   moo(): void {
     if (this.isAlive && this.voicePending === null)
       this.voicePending = this.isCalf ? 'calf' : 'ambient';
+  }
+
+  // ── Being led ──────────────────────────────────────────────────────────────
+
+  /**
+   * Takes the animal off its pen and puts it on a lead: from now it walks
+   * after `leader` in `band` instead of keeping its routine. A null leader
+   * holds it where it stands, grazing, until one is given. `ignoresBreak`
+   * is a call rather than a lead: it walks all the way to the leader however
+   * far off, and never stops to wait.
+   */
+  beginLead(
+    band: CowLeadBand,
+    leader: CowLeader | null,
+    options: { readonly ignoresBreak: boolean },
+  ): void {
+    this.pen = null;
+    this.clearRoute();
+    this.forceRepath();
+    this.panicUpdatesLeft = 0;
+    this.fleeFrom = null;
+    this.pathDistanceBudgetTiles = band.pathBudgetTiles;
+    this.lead = {
+      band,
+      leader,
+      ignoresBreak: options.ignoresBreak,
+      following: false,
+      waiting: false,
+      stalls: 0,
+      detour: null,
+      detourUpdatesLeft: 0,
+    };
+    if (this.modeValue !== 'flinch') this.enterMode('led', 0);
+  }
+
+  /** Hands the lead to `leader` — the crawler the player is steering now — or holds the animal with null. */
+  setLeader(leader: CowLeader | null): void {
+    const lead = this.lead;
+    if (lead === null || lead.leader === leader) return;
+    lead.leader = leader;
+    if (leader === null) {
+      lead.following = false;
+      lead.waiting = false;
+    }
+  }
+
+  /** Takes the lead off: the animal stands idle and goes back to whatever pen it is given. */
+  endLead(): void {
+    if (this.lead === null) return;
+    this.lead = null;
+    this.forceRepath();
+    this.enterMode('idle', randomBetween(this.random, IDLE_MIN_SECONDS, IDLE_MAX_SECONDS));
+  }
+
+  /**
+   * A blow or a bang: the flinch row, where it stands, and then back to
+   * whatever it was doing. Never a run — for a led animal a run and the lead
+   * would take turns on the same ground.
+   */
+  flinchInPlace(): void {
+    // A second blow mid-flinch lets the row play on rather than restarting it.
+    if (!this.isAlive || this.modeValue === 'flinch') return;
+    this.warmAction('flinch', this.facingX, this.facingY);
+    this.clearRoute();
+    this.enterMode('flinch', FLINCH_SECONDS);
+  }
+
+  /**
+   * Walks a pen-less animal into `pen` — a led animal delivered to its new
+   * yard — and leaves it there on its routine. Returns false when the pen has
+   * no ground it can reach, leaving it where it is.
+   */
+  settleInto(pen: CowPen): boolean {
+    this.lead = null;
+    this.pen = pen;
+    this.forceRepath();
+    const open = pen.pastureTiles.filter((tile) => pen.isPassable(tile.x, tile.y));
+    if (open.length === 0) return false;
+    const here = this.tile;
+    let nearest = open[0];
+    let nearestDistance = Infinity;
+    for (const tile of open) {
+      const distance = Math.hypot(tile.x - here.x, tile.y - here.y);
+      if (distance < nearestDistance) {
+        nearest = tile;
+        nearestDistance = distance;
+      }
+    }
+    return this.walkTo(nearest, 'amble');
+  }
+
+  /**
+   * Makes `tile` where a checkpoint rewind stands the animal from now on,
+   * rather than where it was spawned; null goes back to the spawn tile.
+   */
+  setHomeTile(tile: TilePoint | null): void {
+    this.homeOverride = tile;
+  }
+
+  /**
+   * Raises the animal's health to `maxHp` for a scripted fight — an escort —
+   * and fills it. {@link restoreHerdHp} hands the herd's own bar back.
+   */
+  hardenTo(maxHp: number): void {
+    this.herdMaxHp ??= this.maxHp;
+    this.setFixedMaxHp(maxHp);
+    this.hp = this.maxHp;
+  }
+
+  /** Undoes {@link hardenTo}: the herd's own max HP, full. */
+  restoreHerdHp(): void {
+    const herdMaxHp = this.herdMaxHp;
+    if (herdMaxHp === null) return;
+    this.herdMaxHp = null;
+    this.setFixedMaxHp(herdMaxHp);
+    this.hp = this.maxHp;
   }
 
   /**
@@ -677,7 +942,12 @@ export class Cow extends Mob {
         this.stepWalk();
         return;
       case 'flinch':
-        if (this.modeUpdatesLeft === 0) this.beginPanicRun();
+        if (this.modeUpdatesLeft > 0) return;
+        if (this.lead !== null) this.enterMode('led', 0);
+        else this.beginPanicRun();
+        return;
+      case 'led':
+        this.stepLed();
         return;
       case 'happy':
         if (this.modeUpdatesLeft === 0) this.afterHappy();
@@ -717,6 +987,95 @@ export class Cow extends Mob {
         if (this.modeUpdatesLeft === 0) this.decideNext();
         return;
     }
+  }
+
+  /**
+   * One update on the lead: close the band when the leader has drawn ahead of
+   * it, stand once inside it, and past the break distance stop and wait,
+   * facing the leader, until they come back for it. The band is latched both
+   * ways — it sets off only past the start distance and stops only inside
+   * the stop distance — so a leader standing on the edge of either never
+   * makes it shuffle.
+   */
+  private stepLed(): void {
+    const lead = this.lead;
+    const leader = lead?.leader ?? null;
+    if (lead === null || leader === null) {
+      this.isMoving = false;
+      return;
+    }
+    const band = lead.band;
+    const tiles = this.tilesFrom(leader);
+    if (!lead.ignoresBreak) {
+      if (lead.waiting && tiles <= band.resumeTiles) lead.waiting = false;
+      else if (!lead.waiting && tiles > band.breakTiles) {
+        lead.waiting = true;
+        lead.following = false;
+        lead.detour = null;
+        this.forceRepath();
+      }
+    }
+    if (lead.waiting) {
+      this.faceToward(leader);
+      this.isMoving = false;
+      return;
+    }
+    if (tiles > band.followStartTiles) lead.following = true;
+    else if (tiles <= band.followStopTiles) lead.following = false;
+    if (!lead.following) {
+      lead.detour = null;
+      this.isMoving = false;
+      return;
+    }
+    const speed = (this.speed * band.speed) / COW_WALK_SPEED;
+    if (lead.detour !== null && lead.detourUpdatesLeft > 0) {
+      lead.detourUpdatesLeft--;
+      const detourX = lead.detour.x * TILE_SIZE;
+      const detourY = lead.detour.y * TILE_SIZE;
+      this.followTargetCollide(detourX, detourY, speed, 0);
+      if (Math.hypot(detourX - this.x, detourY - this.y) <= WAYPOINT_ARRIVE_PX) {
+        lead.detour = null;
+      }
+      return;
+    }
+    lead.detour = null;
+    this.followTargetAStar(leader.x, leader.y, speed, band.followStopTiles * TILE_SIZE);
+  }
+
+  /**
+   * A led animal that has got nowhere in a second. The cached route is
+   * thrown away every time, which is usually enough — something stood in a
+   * gateway — and after several in a row it walks straight for the open
+   * ground nearest a point a little way toward its leader, then searches again
+   * from there.
+   */
+  private onLedStall(): void {
+    const lead = this.lead;
+    const leader = lead?.leader ?? null;
+    if (lead === null || leader === null) return;
+    this.forceRepath();
+    lead.stalls++;
+    if (lead.stalls < LED_STALLS_BEFORE_DETOUR) return;
+    lead.stalls = 0;
+    const map = this.map;
+    if (map === null) return;
+    const here = this.tile;
+    const dx = leader.x - this.x;
+    const dy = leader.y - this.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) return;
+    const aimX = Math.round(here.x + (dx / distance) * LED_DETOUR_REACH_TILES);
+    const aimY = Math.round(here.y + (dy / distance) * LED_DETOUR_REACH_TILES);
+    const open = findNearbyWalkableTile(
+      map,
+      aimX,
+      aimY,
+      LED_DETOUR_SEARCH_TILES,
+      (x, y) => x !== here.x || y !== here.y,
+    );
+    if (open === null) return;
+    lead.detour = open;
+    lead.detourUpdatesLeft = secondsToUpdates(LED_DETOUR_MAX_SECONDS);
   }
 
   /** Whether standing still is no longer allowed: shelter called, or a calf too far from its mother. */
@@ -819,6 +1178,11 @@ export class Cow extends Mob {
   }
 
   private afterHappy(): void {
+    // Petted on the lead: back to walking after whoever leads it.
+    if (this.lead !== null) {
+      this.enterMode('led', 0);
+      return;
+    }
     // A calf's zoomies end in a trot back to its mother.
     const mother = this.liveMother();
     if (this.isCalf && mother !== null && this.tilesFrom(mother) > CALF_REJOIN_TILES) {
@@ -1114,7 +1478,15 @@ export class Cow extends Mob {
     if (this.stalledUpdates < secondsToUpdates(STUCK_GIVE_UP_SECONDS)) return;
     this.stalledUpdates = 0;
     const gainedPx = Math.hypot(this.x - this.stallCheckFromX, this.y - this.stallCheckFromY);
-    if (gainedPx >= STALL_MIN_GAIN_TILES * TILE_SIZE) return;
+    const lead = this.lead;
+    if (gainedPx >= STALL_MIN_GAIN_TILES * TILE_SIZE) {
+      if (lead !== null) lead.stalls = 0;
+      return;
+    }
+    if (this.modeValue === 'led') {
+      this.onLedStall();
+      return;
+    }
     const panicking = this.walkPurpose === 'panic';
     this.clearRoute();
     if (panicking) {
@@ -1198,6 +1570,10 @@ export class Cow extends Mob {
         return { action: 'lie', progress: 0 };
       case 'idle':
         return { action: 'idle', progress: 0 };
+      // Held with nobody leading it, it grazes where it stands.
+      case 'led':
+        if (this.movedThisUpdate) return { action: 'walk', progress: 0 };
+        return { action: this.lead?.leader === null ? 'graze' : 'idle', progress: 0 };
     }
   }
 
@@ -1240,6 +1616,11 @@ export class Cow extends Mob {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
+    const markerColor = questMarkerColorFor(this.questMarker);
+    // Beacon first, so the column stands behind the animal rather than across it.
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+    }
     const { action, progress } = this.spriteAction();
     drawCowSprite(ctx, sx, sy, tileSize, {
       coat: this.coat,
@@ -1251,6 +1632,12 @@ export class Cow extends Mob {
       progress,
       clockSeconds: this.clockSeconds,
     });
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (!this.healthBarDrawnElsewhere) this.renderMobHealthBar(ctx, sx, sy);
+    if (markerColor !== undefined) {
+      const glyph = this.questMarker === 'question' ? '?' : '!';
+      const markerBottom = sy - QUEST_MARKER_CLEARANCE_TILES * tileSize;
+      const markerY = questMarkerAnchorAbove(markerBottom, tileSize);
+      drawQuestMarker(ctx, sx, markerY, tileSize, glyph, markerColor);
+    }
   }
 }

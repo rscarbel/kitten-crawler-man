@@ -10,7 +10,13 @@
  * in one sweep would make the fence's continuity depend on a dice roll.
  */
 
-import { GARDEN_PLANTING, PLAZA_STONE, VERGE_GRASS, YARD_GRAVEL } from '../tileTypes';
+import {
+  GARDEN_PLANTING,
+  PASTURE_GRASS,
+  PLAZA_STONE,
+  VERGE_GRASS,
+  YARD_GRAVEL,
+} from '../tileTypes';
 import type { TileGrid } from './tileGrid';
 import type { PlannedYard, TileRect, TownPlan, YardKind } from './townPlan';
 import { worldRandom } from '../../core/WorldRandom';
@@ -23,6 +29,9 @@ const YARD_SURFACE: Record<YardKind, number> = {
   // same setts a courtyard just off the town's main square would plausibly be
   // laid in.
   courtyard: PLAZA_STONE,
+  // Briar Hollow's own grazing turf, so a town paddock and the village's reads
+  // as the same kind of ground.
+  pasture: PASTURE_GRASS,
 };
 
 function contains(rect: TileRect, x: number, y: number): boolean {
@@ -95,6 +104,34 @@ export function assertYardsStandOnTheirOwnSurface(
           `Town yard '${yard.name}' is a ${yard.kind} but stands on tile type ${type} at ` +
             `${x},${y} — it needs ${expected}`,
         );
+      }
+    }
+  }
+}
+
+/**
+ * Lays grazing turf over every pasture yard.
+ *
+ * The town's surface passes only know verge, gravel and setts, so a pasture
+ * starts life as verge like any garden and is turned here, before the surface
+ * check that holds it to {@link YARD_SURFACE}. Only verge is turned: a tile
+ * under building art or already claimed by a street keeps what it is, and the
+ * check then reports the street rather than this pass hiding it.
+ */
+export function paintPastureYards(
+  grid: TileGrid,
+  plan: TownPlan,
+  buildingArt: ReadonlyArray<TileRect>,
+): void {
+  for (const yard of plan.yards) {
+    if (yard.kind !== 'pasture') continue;
+    for (let dy = 0; dy < yard.bounds.h; dy++) {
+      for (let dx = 0; dx < yard.bounds.w; dx++) {
+        const x = yard.bounds.x + dx;
+        const y = yard.bounds.y + dy;
+        if (containedByAny(buildingArt, x, y)) continue;
+        if (grid.typeAt(x, y) !== VERGE_GRASS) continue;
+        grid.set(x, y, PASTURE_GRASS);
       }
     }
   }

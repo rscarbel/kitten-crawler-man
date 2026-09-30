@@ -56,7 +56,9 @@ import {
   type SoldierStance,
   type VillagerContext,
   type VillagerPartyState,
+  firstQuestMarker,
   openingLine,
+  type OpeningAfter,
 } from './villagerCircumstances';
 import {
   BACK_LABEL,
@@ -236,6 +238,21 @@ function sameTile(a: TilePoint, b: TilePoint): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
+/**
+ * What to run once a conversation that opened this way finally ends. A
+ * confirm row runs nothing of its own: each side's `run` says what happens.
+ */
+function eventualCloseOf(after: OpeningAfter): (() => void) | null {
+  switch (after.kind) {
+    case 'close':
+      return after.onClosed;
+    case 'root':
+      return after.onEventualClose;
+    case 'confirm':
+      return null;
+  }
+}
+
 function asVillagerId(id: CivilianCastId): VillagerId | null {
   return VILLAGER_IDS.find((villagerId) => villagerId === id) ?? null;
 }
@@ -248,7 +265,8 @@ export class VillagerSystem {
   private readonly quarry: VillageNavigator;
   private readonly random: () => number;
   private readonly topicProviders: TopicProvider[] = [BUILT_IN_TOPICS];
-  private questLines: QuestLineProvider | null = null;
+  /** Every questline's say in openings and markers, highest priority first. */
+  private readonly questLines: QuestLineProvider[] = [];
   private session: ConversationSession | null = null;
   /**
    * Rows already picked this conversation, so they do not come back — a
@@ -534,8 +552,20 @@ export class VillagerSystem {
     else this.topicProviders.push(provider);
   }
 
-  setQuestLineProvider(provider: QuestLineProvider | null): void {
-    this.questLines = provider;
+  /**
+   * Adds a questline's openings and markers, ranked after every provider
+   * already added: the first provider with an opening (or a marker other
+   * than `'none'`) for a villager is the one that speaks. The village's main
+   * questline registers first, so a side quest never talks over it.
+   */
+  addQuestLineProvider(provider: QuestLineProvider): void {
+    if (!this.questLines.includes(provider)) this.questLines.push(provider);
+  }
+
+  /** Takes a questline's provider back out, for a system being disposed. */
+  removeQuestLineProvider(provider: QuestLineProvider): void {
+    const index = this.questLines.indexOf(provider);
+    if (index !== -1) this.questLines.splice(index, 1);
   }
 
   // ── Context ────────────────────────────────────────────────────────────
@@ -715,16 +745,38 @@ export class VillagerSystem {
 
     this.session = { speaker, talker };
     speaker.beginTalk(talker);
-    const onEventualClose =
-      opening.after.kind === 'close' ? opening.after.onClosed : opening.after.onEventualClose;
+    const onEventualClose = eventualCloseOf(opening.after);
     if (onEventualClose !== null) this.runOnEventualClose(onEventualClose);
 
     const questRelated = opening.questRelated === true;
-    const ending: Ending =
-      opening.after.kind === 'close'
-        ? { kind: 'close', onClosed: () => this.closeConversation() }
-        : { kind: 'choices', choices: this.rootChoices() };
-    this.handle = this.conversation.open(this.requestFor(opening.pages, ending, questRelated));
+    this.handle = this.conversation.open(
+      this.requestFor(opening.pages, this.openingEnding(opening.after), questRelated),
+    );
+  }
+
+  /** The conversation `Ending` an opening's `after` asks for. */
+  private openingEnding(after: OpeningAfter): Ending {
+    switch (after.kind) {
+      case 'close':
+        return { kind: 'close', onClosed: () => this.closeConversation() };
+      case 'root':
+        return { kind: 'choices', choices: this.rootChoices() };
+      case 'confirm':
+        return {
+          kind: 'confirm',
+          keyboardDefault: 'accept',
+          accept: {
+            label: after.accept.label,
+            tone: 'quest',
+            run: (convo) => convo.play(after.accept.run(this.flow())),
+          },
+          decline: {
+            label: after.decline.label,
+            tone: 'exit',
+            run: (convo) => convo.play(after.decline.run(this.flow())),
+          },
+        };
+    }
   }
 
   /** Builds a `ConversationRequest` for the villager currently in conversation: `lines` plus the anchor, dismiss and `haltsWorld` every beat of a villager talk shares. */
@@ -1318,13 +1370,12 @@ export class VillagerSystem {
   }
 
   private refreshMarkers(): void {
-    const questLines = this.questLines;
     for (const villager of this.villagers) {
       const named = asVillagerId(villager.id);
       villager.marker =
-        named === null || questLines?.markerFor === undefined
+        named === null || this.questLines.length === 0
           ? 'none'
-          : questLines.markerFor(named, this.contextFor(named, villager, null));
+          : firstQuestMarker(named, this.contextFor(named, villager, null), this.questLines);
     }
   }
 

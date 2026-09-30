@@ -323,6 +323,20 @@ export const EXAMINE_LINES = {
   ),
 } satisfies Record<TownInteriorExamineId, BarkLine>;
 
+/**
+ * Plumbline Farm's dairy corner once a cow lives in Wendell's pasture again.
+ * The `EXAMINE_LINES` entries these replace describe a room kept ready for a
+ * cow that never came, which stops being true the day Midge arrives.
+ */
+export const DAIRY_LIVE_EXAMINE_LINES = {
+  milk_churn: narrator.bark(
+    "One churn stands open on the morning's milk, a straining cloth thrown over the next. The butter churn's dasher is down in cream, and the stand is still wet.",
+  ),
+  dairy_wall: narrator.bark(
+    'Through the window, the pasture and its good fence, the grass along the near rail cropped short. The pails below hang upturned to dry.',
+  ),
+} satisfies Partial<Record<TownInteriorExamineId, BarkLine>>;
+
 export interface SearchLoot {
   readonly coinsMin: number;
   readonly coinsMax: number;

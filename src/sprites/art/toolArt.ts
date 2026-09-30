@@ -1,6 +1,7 @@
 /**
  * The axe and the pick a crawler works a resource node with, painted in the
- * rig units Carl is authored in, for every tier's look.
+ * rig units Carl is authored in, for every tier's look — and Merrit's scythe,
+ * swung through the grain on the same rows.
  *
  * Painted in one canonical frame: the butt fist's grip at the origin, the
  * haft running along +X to the head, and the side of the head that leads a
@@ -13,7 +14,12 @@
  * (and tier 2's longer haft), never by detail inside the head.
  */
 
-import { type ToolKind, type ToolTier, TOOL_TIER_LOOKS } from '../../core/toolTiers';
+import {
+  type ToolKind,
+  type ToolTier,
+  type WorkingToolKind,
+  TOOL_TIER_LOOKS,
+} from '../../core/toolTiers';
 import { mix, rgba } from './carlArt';
 
 type Ctx = CanvasRenderingContext2D;
@@ -226,6 +232,141 @@ function tracePickHead(ctx: Ctx, eyeX: number, s: number): void {
     bar,
   );
   ctx.closePath();
+}
+
+// ── The scythe ───────────────────────────────────────────────────────────────
+
+/**
+ * Merrit's scythe: a snath far longer than any haft, and a long curved blade
+ * leaving its end on the leading side and sweeping back toward the fists. The
+ * length and the crescent are all that say "scythe" at the tile, so both are
+ * drawn big and the snath's grips are the only detail.
+ */
+const SCYTHE_SNATH_LENGTH = 1.3;
+/** The snath's gentle bow toward the trailing side, at its middle. */
+const SCYTHE_SNATH_BOW = 0.06;
+/** The nib, the second hand grip, standing off the snath toward the trailing side. */
+const SCYTHE_NIB_AT = 0.45;
+const SCYTHE_NIB_LENGTH = 0.14;
+const SCYTHE_NIB_HALF = 0.022;
+/** The blade's back, from just past the heel out to the tip, bellying ahead of the snath's end. */
+const SCYTHE_SPINE_START = { x: 0.03, y: -0.02 } as const;
+const SCYTHE_SPINE_CONTROL = { x: 0.1, y: 0.42 } as const;
+/** The tip, as offsets from the heel: out on the leading side and swept back toward the fists. */
+const SCYTHE_TIP = { x: -0.26, y: 0.66 } as const;
+/** The cutting edge, the blade's hollow side, from the tip back to the heel. */
+const SCYTHE_EDGE_CONTROL = { x: -0.06, y: 0.36 } as const;
+const SCYTHE_EDGE_END = { x: -0.05, y: 0.04 } as const;
+/** The honed band along the edge, stroked inside the blade. */
+const SCYTHE_EDGE_BAND_WIDTH = 0.035;
+/** The scythe borrows the basic tools' palette: plain ash and plain steel. */
+const SCYTHE_LOOK_TIER: ToolTier = 0;
+
+function traceScytheSnath(ctx: Ctx): void {
+  const butt = -TOOL_KNOB_LENGTH;
+  const bowY = -SCYTHE_SNATH_BOW;
+  ctx.beginPath();
+  ctx.moveTo(butt, -HAFT_HALF);
+  ctx.quadraticCurveTo(SCYTHE_SNATH_LENGTH / 2, bowY - HAFT_HALF, SCYTHE_SNATH_LENGTH, -HAFT_HALF);
+  ctx.lineTo(SCYTHE_SNATH_LENGTH, HAFT_HALF);
+  ctx.quadraticCurveTo(SCYTHE_SNATH_LENGTH / 2, bowY + HAFT_HALF, butt, HAFT_HALF);
+  ctx.closePath();
+  ctx.moveTo(butt + KNOB_HALF, 0);
+  ctx.arc(butt, 0, KNOB_HALF, 0, FULL_TURN);
+}
+
+/** How much of a quadratic Bézier's control point shows at parameter `t`: its bow at that point. */
+function quadraticControlWeight(t: number): number {
+  return 2 * t * (1 - t);
+}
+
+function traceScytheNib(ctx: Ctx): void {
+  const nibX = SCYTHE_NIB_AT * SCYTHE_SNATH_LENGTH;
+  const bowAtNib = -SCYTHE_SNATH_BOW * quadraticControlWeight(SCYTHE_NIB_AT);
+  ctx.beginPath();
+  ctx.rect(
+    nibX - SCYTHE_NIB_HALF,
+    bowAtNib - SCYTHE_NIB_LENGTH,
+    SCYTHE_NIB_HALF + SCYTHE_NIB_HALF,
+    SCYTHE_NIB_LENGTH,
+  );
+}
+
+function traceScytheBlade(ctx: Ctx): void {
+  const heel = SCYTHE_SNATH_LENGTH;
+  ctx.beginPath();
+  ctx.moveTo(heel + SCYTHE_SPINE_START.x, SCYTHE_SPINE_START.y);
+  ctx.quadraticCurveTo(
+    heel + SCYTHE_SPINE_CONTROL.x,
+    SCYTHE_SPINE_CONTROL.y,
+    heel + SCYTHE_TIP.x,
+    SCYTHE_TIP.y,
+  );
+  ctx.quadraticCurveTo(
+    heel + SCYTHE_EDGE_CONTROL.x,
+    SCYTHE_EDGE_CONTROL.y,
+    heel + SCYTHE_EDGE_END.x,
+    SCYTHE_EDGE_END.y,
+  );
+  ctx.closePath();
+}
+
+function traceScytheEdge(ctx: Ctx): void {
+  const heel = SCYTHE_SNATH_LENGTH;
+  ctx.beginPath();
+  ctx.moveTo(heel + SCYTHE_TIP.x, SCYTHE_TIP.y);
+  ctx.quadraticCurveTo(
+    heel + SCYTHE_EDGE_CONTROL.x,
+    SCYTHE_EDGE_CONTROL.y,
+    heel + SCYTHE_EDGE_END.x,
+    SCYTHE_EDGE_END.y,
+  );
+}
+
+function paintScythe(ctx: Ctx): void {
+  const look = TOOL_TIER_LOOKS[SCYTHE_LOOK_TIER];
+  ctx.save();
+  traceScytheNib(ctx);
+  strokeAndFill(ctx, look.hafColor);
+  traceScytheSnath(ctx);
+  strokeAndFill(ctx, look.hafColor);
+  traceScytheBlade(ctx);
+  strokeAndFill(ctx, look.headColor);
+  ctx.save();
+  traceScytheBlade(ctx);
+  ctx.clip();
+  traceScytheEdge(ctx);
+  ctx.strokeStyle = look.edgeColor;
+  ctx.lineWidth = SCYTHE_EDGE_BAND_WIDTH;
+  ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+}
+
+/** Where a working tool's ink reaches, in rig units from the butt grip: along the haft and across it. */
+export interface WorkingToolExtent {
+  readonly back: number;
+  readonly ahead: number;
+  readonly halfBreadth: number;
+}
+
+/** {@link toolReachAlongHaft} and {@link toolHalfBreadth} for any working tool, the scythe included. */
+export function workingToolExtent(kind: WorkingToolKind, tier: ToolTier): WorkingToolExtent {
+  if (kind !== 'scythe') return { ...toolReachAlongHaft(tier), halfBreadth: toolHalfBreadth(tier) };
+  return {
+    back: TOOL_KNOB_LENGTH + KNOB_HALF + OUTLINE_WIDTH,
+    ahead: SCYTHE_SNATH_LENGTH + SCYTHE_SPINE_CONTROL.x + OUTLINE_WIDTH,
+    halfBreadth: SCYTHE_TIP.y + OUTLINE_WIDTH,
+  };
+}
+
+/**
+ * Paints any working tool in rig units into `ctx`'s current frame, the same
+ * frame {@link paintTool} uses; the scythe ignores `tier`.
+ */
+export function paintWorkingTool(ctx: Ctx, kind: WorkingToolKind, tier: ToolTier): void {
+  if (kind === 'scythe') paintScythe(ctx);
+  else paintTool(ctx, kind, tier);
 }
 
 /**

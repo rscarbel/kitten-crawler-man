@@ -52,6 +52,7 @@ import { DOOMSDAY_COUNTDOWN_MS, createDoomsdayProgress } from '../core/DoomsdayP
 import { settings } from '../core/Settings';
 import { getMercenaryTemplate } from '../core/mercenaryTemplates';
 import { buildPlaytestBoot, resolvePlaytestSpawn } from './playtestBoot';
+import { blueprintsPlaytestState } from './blueprintsPlaytest';
 
 /**
  * Dev-only entry points, reachable by query parameter.
@@ -402,6 +403,8 @@ export function devBootScene(
         }
         options.prepareBriarHollow = (kit, gameMap) =>
           fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
+      } else if (preset.briarHollowBlueprints !== undefined) {
+        options.briarHollowState = blueprintsPlaytestState(preset.briarHollowBlueprints);
       } else if (preset.briarHollowUnlockAll === true) {
         options.prepareBriarHollow = (kit) => unlockEverythingForPlaytest(kit.state.unlocks);
       }

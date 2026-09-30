@@ -1348,6 +1348,8 @@ export class AudioManager {
     });
 
     bus.on('questCompleted', (e) => {
+      // `borrowed_blueprints` is absent on purpose: its fanfare plays when its
+      // quest-complete screen goes up, as one of the quest's own cues.
       if (
         e.questId === 'defend_goblin_mother' ||
         e.questId === 'grotesque_spider' ||

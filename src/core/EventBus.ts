@@ -25,6 +25,8 @@ import type { PalisadeTier } from '../map/tileTypes';
 import type { ResourceId } from './resourceIds';
 import type { HarvestKind } from './craftPerks';
 import type { VillageQuestPhase } from './villageQuestPhase';
+import type { BlueprintsQuestPhase } from './blueprintsQuestPhase';
+import type { ItemId } from './ItemDefs';
 import type { ToolKind, ToolTier } from './toolTiers';
 import type { ProcessingStationKind } from '../systems/briarHollow/processingStations';
 
@@ -95,6 +97,14 @@ export interface GameEvents {
   questCompleted: { questId: string; difficulty?: 'easy' | 'medium' | 'hard' };
 
   questFailed: { questId: string };
+
+  /**
+   * A quest item was pushed out of a crawler's quest slot by a different one
+   * (`Inventory.replaceQuestSlot`) and is no longer held. The quest that owns
+   * `itemId` listens, and puts the item back somewhere the player can fetch
+   * it from if losing it would otherwise strand the quest.
+   */
+  questItemEvicted: { itemId: ItemId; crawler: CrawlerKind };
 
   /** A player first attacks a mob after being out of combat. */
   combatStarted: { attacker: 'Human' | 'Cat'; mobType: string };
@@ -244,6 +254,9 @@ export interface GameEvents {
 
   /** The Briar Hollow defense quest moved to a new phase. */
   villageQuestPhaseChanged: { phase: VillageQuestPhase };
+
+  /** "The Borrowed Blueprints", Fenna's side quest, moved to a new phase. */
+  blueprintsQuestPhaseChanged: { phase: BlueprintsQuestPhase };
 
   /** The bell tower, broken by a lost siege, was rebuilt. */
   bellTowerRepaired: Record<string, never>;

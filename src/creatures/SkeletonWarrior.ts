@@ -127,8 +127,13 @@ export class SkeletonWarrior extends RisingSkeleton {
       return;
     }
 
-    const nearest = this.acquireTarget(targets, this.aggroRangePx, (target) =>
-      siegeCanEngage(this, target),
+    // Like the ghouls, breaks off from anyone sheltering in the town's safe zone.
+    const nearest = this.acquireTarget(
+      targets,
+      this.aggroRangePx,
+      (target) =>
+        siegeCanEngage(this, target) &&
+        (this.ignoresTownSafeZone || this.map?.isInTownSafeZone(target.x, target.y) !== true),
     );
     this.currentTarget = nearest;
     if (this.tactics.claimRiposte()) {

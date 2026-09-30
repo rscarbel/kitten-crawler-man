@@ -522,24 +522,28 @@ function verifyHeldKeyDoesNotConfirm(): void {
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * Every branch the interior scene takes on the Anchor conversation being open:
- * a one-line `return`, or a braced body up to its first closing brace.
+ * Every branch the interior scene takes on a resident questline's
+ * conversation (the Anchor's, the blueprints') being open: a one-line
+ * `return`, or a braced body up to its first closing brace.
  */
 const ANCHOR_UPDATE_BRANCH =
-  /if \(this\.anchorInterior\?\.isDialogOpen === true\) (?:return;|\{[\s\S]*?\n\s*\})/g;
+  /if \(this\.residentQuestDialogOpen\(\)\) (?:return;|\{[\s\S]*?\n\s*\})/g;
 
 function verifyInteriorSource(): void {
   section('Interior: Space is not polled into a close; Escape reaches the conversation');
   const source = readFileSync(join(REPO_ROOT, 'src/scenes/BuildingInteriorScene.ts'), 'utf8');
   const branches = [...source.matchAll(ANCHOR_UPDATE_BRANCH)].map((match) => match[0]);
-  check(branches.length > 0, `the Anchor conversation's branches are found (${branches.length})`);
+  check(
+    branches.length > 0,
+    `the resident questlines' conversation branches are found (${branches.length})`,
+  );
   const polledClose = branches.filter(
     (branch) => branch.includes('consumeModalClose') || branch.includes('dismissDialog'),
   );
   check(polledClose.length === 0, 'none of them closes the conversation off the held Space key');
   check(
-    source.includes('this.anchorInterior?.dismissDialog() === true'),
-    "Escape's dismiss chain includes the Anchor conversation",
+    source.includes('if (this.dismissResidentQuestDialog()) return true;'),
+    "Escape's dismiss chain includes the resident questlines' conversations",
   );
 }
 

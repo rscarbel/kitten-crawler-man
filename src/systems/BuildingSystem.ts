@@ -40,6 +40,21 @@ export interface BuildingEntryGate {
 }
 
 /**
+ * The refusal every doorway gives while the crawler the player is not
+ * driving lies knocked out, or null while they are up.
+ *
+ * A body cannot be carried through a door, and a partner left bleeding out
+ * on the step while the other shops inside is a run lost to a menu. So no
+ * building opens until they are helped up, whichever building it is.
+ */
+export function downedPartnerEntryRefusal(
+  partner: { readonly isKnockedOut: boolean },
+  partnerName: string,
+): string | null {
+  return partner.isKnockedOut ? `${partnerName} is down. Help them up before going inside.` : null;
+}
+
+/**
  * The span of tiles an entrance opens on, as `[x0, x0 + width)` at `doorTile.y`.
  *
  * Both fields are read together and both default together: an entry carrying a

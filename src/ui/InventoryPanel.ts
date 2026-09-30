@@ -7,6 +7,7 @@ import { drawResourceIcon, isResourceIconId } from './icons/resourceIcons';
 import { drawToolIcon, isToolIconId } from './icons/toolIcons';
 import { drawFoodIcon, isFoodIconId } from './icons/foodIcons';
 import { drawKitIcon, isKitIconId } from './icons/kitIcons';
+import { drawBlueprintsQuestIcon, isBlueprintsQuestIconId } from './icons/blueprintsQuestIcons';
 import {
   drawMagistratesWritIcon,
   drawUnreadableLetterIcon,
@@ -1616,6 +1617,12 @@ function drawItemArt(
 
   if (isKitIconId(item.id)) {
     drawKitIcon(ctx, item.id, x, y, size);
+    ctx.restore();
+    return;
+  }
+
+  if (isBlueprintsQuestIconId(item.id)) {
+    drawBlueprintsQuestIcon(ctx, item.id, x, y, size);
     ctx.restore();
     return;
   }

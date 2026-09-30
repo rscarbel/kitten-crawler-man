@@ -68,4 +68,33 @@ export const FENNA = {
     "Tikka says you need to use my saw and rope walk, huh? I don't usually let strangers anywhere near my equipment, but seein' as how we're all tryin' to stay alive, I reckon I can make an exception.",
     "Just put your raw wood in either one. The saw'll turn it into boards, and the rope walk'll make rope. Go on, give it a try.",
   ]),
+
+  // "The Borrowed Blueprints": Fenna's own side quest to upgrade her stations.
+
+  /** The offer, which ends on the accept/decline row. */
+  blueprintsOffer: say.line([
+    "Have you seen what Tikka's been dreaming up? Trebuchets! Walls that bite back! I can't keep up with that one.",
+    "It reminds me. Last year Tikka had an idea for upgrading the work stations here. A proper saw bench, and a rope walk that doesn't need three of us on the crank.",
+    'Would you help me upgrade the saw and the rope walk?',
+  ]),
+
+  /**
+   * Accepted. `townWhereabouts` finishes "He lives at Plumbline Farm, in …":
+   * the skyfowl town and which way it lies from the village.
+   */
+  blueprintsAccepted: say.fn((a: { readonly townWhereabouts: string }) => [
+    `Wonderful! Only, I don't have the plans anymore. I gave the blueprints to Wendell. He lives at Plumbline Farm, in ${a.townWhereabouts}.`,
+    "Wendell's done construction work. I haven't the faintest idea how to raise a building, so it made sense at the time.",
+    'Could you go ask him if he still has them, and whether I can borrow them back?',
+  ]),
+
+  blueprintsDeclined: say.line(
+    "No harm done. The saw isn't going anywhere. Come find me if you change your mind.",
+  ),
+
+  /** Her opening at every step while the quest is under way. */
+  blueprintsInProgress: say.line('Any luck with those blueprints?'),
+
+  /** Shouted the moment the second station is upgraded. */
+  blueprintsComplete: say.bark("Would you look at that! Tikka's going to be green with envy."),
 } as const;

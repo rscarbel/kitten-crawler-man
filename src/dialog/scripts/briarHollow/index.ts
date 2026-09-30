@@ -12,7 +12,7 @@ import { FENNA } from './fenna';
 import { GARN } from './garn';
 import { HOBB } from './hobb';
 import { MARTA } from './marta';
-import { MERRIT } from './merrit';
+import { MERRIT, MERRIT_BLUEPRINTS_REPLIES } from './merrit';
 import { MIDGE } from './midge';
 import { NELLA } from './nella';
 import { OREN } from './oren';
@@ -71,6 +71,7 @@ export {
   HOBB,
   MARTA,
   MERRIT,
+  MERRIT_BLUEPRINTS_REPLIES,
   MIDGE,
   NELLA,
   OREN,

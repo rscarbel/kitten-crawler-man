@@ -55,7 +55,6 @@ import {
   type AssaultLaneId,
   type BriarHollowSite,
 } from '../../map/overworld/briarHollowSite';
-import { findNearbyWalkableTile, hasRoomToMove } from '../../map/findWalkableTile';
 import type { Mob } from '../../creatures/Mob';
 import type { Player } from '../../Player';
 import { RaisedRatkin } from '../../creatures/RaisedRatkin';
@@ -97,7 +96,6 @@ import { drawCrumble } from '../../sprites/art/siegeEffectsArt';
 import { BOX_PRESETS, PROGRESS_PRESETS, drawBox, drawProgressBar } from '../../ui/Box';
 import { TEXT_PRESETS, drawText } from '../../ui/TextBox';
 import { viewportHeight, viewportWidth } from '../../core/Viewport';
-import { isWorldPointInView, visibleWorldView } from '../../core/visibleWorldView';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { OverworldMusicSystem } from '../OverworldMusicSystem';
 
@@ -116,6 +114,7 @@ import {
 import { HOLLOW_BELL_MAX_HP } from './hollowBell';
 import { UPDATES_PER_SECOND } from './structureRules';
 import { ASSAULT_BOUNTY_KINDS, createBountyMark, type AssaultBountyKind } from './siegeBountyMarks';
+import { placeAmong, spawnDue, type OffscreenSpawnRules } from './offscreenSpawns';
 
 // ── The siege's pacing ──────────────────────────────────────────────────────
 
@@ -229,12 +228,8 @@ export const SPAWN_MIN_CRAWLER_TILES = 8;
  */
 const SPAWN_DEFER_SECONDS = 3;
 const SPAWN_DEFER_FRAMES = SPAWN_DEFER_SECONDS * UPDATES_PER_SECOND;
-/** From a tile's corner to its centre, in tiles. */
-const TILE_CENTRE_OFFSET = 0.5;
 /** Candidate tiles tried for a spawn out of sight before settling for the furthest. */
 const SPAWN_ATTEMPTS = 6;
-/** Tiles of scatter each side of the lane's own spawn tile. */
-const SPAWN_JITTER_SPAN = SPAWN_SCATTER_TILES * 2 + 1;
 /**
  * An enlisted mob takes a defender as its fight, instead of marching, when one
  * this close is on its own side of the wall.
@@ -536,7 +531,8 @@ function isUndeadKind(kind: AssaultSpawnKind): kind is AssaultUndeadKind {
   return UNDEAD_ORDER.some((undead) => undead === kind);
 }
 
-function createUndead(kind: AssaultUndeadKind, tileX: number, tileY: number): Mob {
+/** One of the necromancer's dead, of `kind`, standing on tile (`tileX`, `tileY`), not yet levelled. */
+export function createUndead(kind: AssaultUndeadKind, tileX: number, tileY: number): Mob {
   switch (kind) {
     case 'raised_ratkin':
       return new RaisedRatkin(tileX, tileY, TILE_SIZE);
@@ -883,7 +879,10 @@ export class VillageAssaultSystem {
   /** The bounty mark of the current or an earlier wave, while one still stands. */
   private bountyMark: Mob | null = null;
   /** How long the spawn at the head of the queue has waited for a place. */
-  private headSpawnWaitFrames = 0;
+  /** How long the body at the head of the queue has waited for somewhere to come up. */
+  private readonly headSpawnWait = { frames: 0 };
+  /** Where the dead may come up, round a lane's spawn tile. */
+  private readonly spawnRules: OffscreenSpawnRules;
   /** The "Attack coming from…" banner across the middle of the screen, while it shows. */
   private sideBanner: { text: string; framesLeft: number } | null = null;
   private abandonFrames = 0;
@@ -919,6 +918,19 @@ export class VillageAssaultSystem {
 
   constructor(private readonly deps: VillageAssaultSystemDeps) {
     this.random = deps.random ?? Math.random;
+    this.spawnRules = {
+      gameMap: deps.gameMap,
+      crawlers: deps.crawlers,
+      random: this.random,
+      scatterTiles: SPAWN_SCATTER_TILES,
+      searchTiles: SPAWN_SEARCH_TILES,
+      attempts: SPAWN_ATTEMPTS,
+      minCrawlerTiles: SPAWN_MIN_CRAWLER_TILES,
+      unseenTiles: SPAWN_UNSEEN_TILES,
+      offscreenMarginTiles: SPAWN_OFFSCREEN_MARGIN_TILES,
+      deferFrames: SPAWN_DEFER_FRAMES,
+      accepts: (x, y) => this.hasWayIn(x, y),
+    };
     this.campaign = campaignFor(deps.state, this.random);
     this.prewarm = deps.prewarm ?? new AssaultWavePrewarm();
     this.march = new MarchDirective(deps.site);
@@ -1094,7 +1106,7 @@ export class VillageAssaultSystem {
     this.necromancer = null;
     this.necromancerOut = false;
     this.bountyMark = null;
-    this.headSpawnWaitFrames = 0;
+    this.headSpawnWait.frames = 0;
     this.sideBanner = null;
     this.abandonFrames = 0;
     this.breachCalled = false;
@@ -1445,20 +1457,13 @@ export class VillageAssaultSystem {
   }
 
   private spawnDue(): void {
-    while (this.pending.length > 0) {
-      const next = this.pending[0];
-      if (next.dueFrame > this.waveFrames) return;
-      if (livingAssaultSpawns(this.deps.roster.mobs) >= ASSAULT_LIVE_CAP) return;
-      const place = this.placeFor(this.lanesFor(next.lane), this.headSpawnWaitFrames);
-      if (place === null) {
-        // Held at the head of the queue, not dropped: it still belongs to its wave.
-        this.headSpawnWaitFrames++;
-        return;
-      }
-      this.pending.shift();
-      this.headSpawnWaitFrames = 0;
-      this.spawn(next.kind, place.lane, place.tile, next.wave, next.rosterIndex);
-    }
+    spawnDue(this.pending, this.headSpawnWait, {
+      isDue: (next) => next.dueFrame <= this.waveFrames,
+      isHeldBack: () => livingAssaultSpawns(this.deps.roster.mobs) >= ASSAULT_LIVE_CAP,
+      place: (next, waitedFrames) => this.placeFor(this.lanesFor(next.lane), waitedFrames),
+      spawn: (next, place) =>
+        this.spawn(next.kind, place.lane, place.tile, next.wave, next.rosterIndex),
+    });
   }
 
   /** Puts out every leader of the wave that has somewhere to appear; the rest wait. */
@@ -1496,66 +1501,17 @@ export class VillageAssaultSystem {
 
   /**
    * Where a spawn comes up: near one of `lanes`' spawn tiles (its own lane
-   * first, then the wave's others), on open ground a hostile may stand on and
-   * never within {@link SPAWN_MIN_CRAWLER_TILES} of a crawler. Off screen
-   * where one can be found — the dead come up the lane, they do not appear in
-   * view; off screen is the camera the scene last drew with
-   * (`isWorldPointInView`), or with none published, far enough from both
-   * crawlers. Once it has waited {@link SPAWN_DEFER_FRAMES} for that, the
-   * furthest clear spot in view will do. Null: nowhere yet, so it waits.
+   * first, then the wave's others), on open ground a hostile may stand on
+   * with a way in to the bell, and never within {@link SPAWN_MIN_CRAWLER_TILES}
+   * of a crawler — off screen where one can be found, since the dead come up
+   * the lane rather than appearing in view. Null: nowhere yet, so it waits.
    */
   private placeFor(
     lanes: readonly AssaultLane[],
     waitedFrames: number,
   ): { lane: AssaultLane; tile: { x: number; y: number } } | null {
-    let furthest: { lane: AssaultLane; tile: { x: number; y: number }; away: number } | null = null;
-    for (const lane of lanes) {
-      const candidate = this.laneCandidate(lane);
-      if (candidate === null) continue;
-      if (candidate.unseen) return { lane, tile: candidate.tile };
-      if (furthest === null || candidate.away > furthest.away) {
-        furthest = { lane, tile: candidate.tile, away: candidate.away };
-      }
-    }
-    const waitedLongEnough = waitedFrames >= SPAWN_DEFER_FRAMES;
-    return waitedLongEnough && furthest !== null
-      ? { lane: furthest.lane, tile: furthest.tile }
-      : null;
-  }
-
-  /** The best spot round one lane's spawn tile: the first off screen, else the furthest clear of the party. */
-  private laneCandidate(
-    lane: AssaultLane,
-  ): { tile: { x: number; y: number }; unseen: boolean; away: number } | null {
-    const { gameMap } = this.deps;
-    const crawlers = this.deps.crawlers();
-    const nearestCrawlerTiles = (tile: { x: number; y: number }): number =>
-      Math.min(
-        ...crawlers.map((crawler) =>
-          Math.hypot(tile.x - crawler.x / TILE_SIZE, tile.y - crawler.y / TILE_SIZE),
-        ),
-      );
-    let furthest: { tile: { x: number; y: number }; unseen: boolean; away: number } | null = null;
-    for (let attempt = 0; attempt < SPAWN_ATTEMPTS; attempt++) {
-      const jitterX = Math.floor(this.random() * SPAWN_JITTER_SPAN) - SPAWN_SCATTER_TILES;
-      const jitterY = Math.floor(this.random() * SPAWN_JITTER_SPAN) - SPAWN_SCATTER_TILES;
-      const tile = findNearbyWalkableTile(
-        gameMap,
-        lane.spawn.x + jitterX,
-        lane.spawn.y + jitterY,
-        SPAWN_SEARCH_TILES,
-        // Room to move, not just walkable: a gap between trunks is walkable
-        // ground a body comes up in and never leaves.
-        (x, y) =>
-          gameMap.isWalkableForHostile(x, y) && hasRoomToMove(gameMap, x, y) && this.hasWayIn(x, y),
-      );
-      if (tile === null) continue;
-      const away = nearestCrawlerTiles(tile);
-      if (away < SPAWN_MIN_CRAWLER_TILES) continue;
-      if (this.isUnseen(tile, away)) return { tile, unseen: true, away };
-      if (furthest === null || away > furthest.away) furthest = { tile, unseen: false, away };
-    }
-    return furthest;
+    const place = placeAmong(this.spawnRules, lanes, (lane) => lane.spawn, waitedFrames);
+    return place === null ? null : { lane: place.anchor, tile: place.tile };
   }
 
   /**
@@ -1575,14 +1531,6 @@ export class VillageAssaultSystem {
   private hasWayIn(tileX: number, tileY: number): boolean {
     const flow = this.flow;
     return flow === null || Number.isFinite(flow.costAt({ x: tileX, y: tileY }));
-  }
-
-  private isUnseen(tile: { x: number; y: number }, tilesFromParty: number): boolean {
-    if (visibleWorldView() === null) return tilesFromParty > SPAWN_UNSEEN_TILES;
-    const outsideByPx = -SPAWN_OFFSCREEN_MARGIN_TILES * TILE_SIZE;
-    const centreX = (tile.x + TILE_CENTRE_OFFSET) * TILE_SIZE;
-    const centreY = (tile.y + TILE_CENTRE_OFFSET) * TILE_SIZE;
-    return !isWorldPointInView(centreX, centreY, outsideByPx);
   }
 
   /**

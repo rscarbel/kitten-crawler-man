@@ -25,6 +25,10 @@ import {
 import { drawSprite } from '../../core/SpriteRenderer';
 import { isVillageStandingProp, type VillageStandingPropId } from '../../sprites/art/villageArt';
 import { villagePropSheetKey } from '../../sprites/sheets/villageSheets';
+import {
+  SCYTHE_PEGS_EMPTY_VARIANT,
+  SCYTHE_PEGS_HUNG_VARIANT,
+} from '../../sprites/art/villageIndoorArt';
 import { tileHash } from './hollowTileHash';
 import { briarHollowSiteFor } from './hollowSiteRegistry';
 import type { VillageBuildingDef } from '../overworld/briarHollowSite';
@@ -136,8 +140,9 @@ const PROP_VARIANT_SALT = 0x51a7;
 
 /**
  * Which variant a prop shows. Most are fixed by position; a bed wears its
- * household's quilt, and a table is laid for a meal where people eat — in the
- * cookhouse and out in the open — and bare in a workroom or a guardhouse.
+ * household's quilt, a table is laid for a meal where people eat — in the
+ * cookhouse and out in the open — and bare in a workroom or a guardhouse, and
+ * Merrit's scythe pegs stand empty while a crawler carries the scythe.
  */
 function variantFor(
   structure: TileContent[][],
@@ -145,6 +150,10 @@ function variantFor(
   variants: number,
 ): number {
   const { prop, anchorX, anchorY } = placement;
+  if (prop === 'scythe_pegs') {
+    const taken = structure[anchorY]?.[anchorX]?.scytheTaken === true;
+    return taken ? SCYTHE_PEGS_EMPTY_VARIANT : SCYTHE_PEGS_HUNG_VARIANT;
+  }
   if (prop === 'bed') return QUILT_VARIANT[householdColourAt(structure, anchorX, anchorY)];
   if (prop === 'table') {
     const building = buildingAt(structure, anchorX, anchorY);
@@ -170,11 +179,28 @@ const QUILT_VARIANT: Readonly<Record<ClothColour, number>> = {
  * `hollow:` sprite key never change — but its anchor tile's own
  * `bellTowerBroken` flag (set by `DefenseStructures.syncMap` from the quest's
  * `bellTowerBroken`) swaps in the snapped look while the village rebuilds it.
+ * The saw and the rope walk work the same way through `stationUpgraded`.
  */
 function renderedPropId(structure: TileContent[][], placement: DrawnProp): VillageStandingPropId {
-  if (placement.prop !== 'bell_tower') return placement.prop;
   const anchor = structure[placement.anchorY][placement.anchorX];
-  return anchor.bellTowerBroken === true ? 'bell_tower_broken' : 'bell_tower';
+  if (placement.prop === 'bell_tower') {
+    return anchor.bellTowerBroken === true ? 'bell_tower_broken' : 'bell_tower';
+  }
+  return stationLook(placement.prop, anchor.stationUpgraded === true);
+}
+
+/** The look each processing machine takes once rebuilt to Tikka's design. */
+const UPGRADED_STATION_LOOK: Partial<Record<VillageStandingPropId, VillageStandingPropId>> = {
+  sawmill_machine: 'sawmill_machine_upgraded',
+  rope_walk: 'rope_walk_upgraded',
+};
+
+/**
+ * The prop a station stamped as `prop` draws as: its upgraded look when
+ * `upgraded` and it has one, else itself. Every other prop is unchanged.
+ */
+export function stationLook(prop: VillageStandingPropId, upgraded: boolean): VillageStandingPropId {
+  return upgraded ? (UPGRADED_STATION_LOOK[prop] ?? prop) : prop;
 }
 
 /** Draws a `HOLLOW_PROP_LOW` / `HOLLOW_PROP_TALL` tile: the whole prop from its bottom-left tile, nothing elsewhere. */

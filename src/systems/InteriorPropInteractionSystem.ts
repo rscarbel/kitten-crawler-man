@@ -20,6 +20,7 @@ import type { GameMap, PlacedTownInteriorProp } from '../map/GameMap';
 import { interiorPropPayoutKey, type TownMemory } from '../core/TownMemory';
 import {
   TOWN_INTERIOR_PROPS,
+  type TownInteriorExamineId,
   type TownInteriorInteraction,
 } from '../sprites/art/townInterior/townInteriorProps';
 import { randomInt } from '../utils';
@@ -105,6 +106,13 @@ const INTERACT_PROMPT_LABEL: Record<TownInteriorInteraction['kind'], string> = {
 export class InteriorPropInteractionSystem {
   private readonly placed: PlacedInteraction[] = [];
 
+  /**
+   * The room's own word on an examine, ahead of `EXAMINE_LINES`: null leaves
+   * the usual line. For a room a quest changes while it stands, where the
+   * usual line describes the room as it was before.
+   */
+  examineOverride: ((id: TownInteriorExamineId) => BarkLine | null) | null = null;
+
   /** `null` when the room placed nothing with an interaction — what `BuildingInteriorScene` builds against. */
   static forBuilding(
     map: GameMap,
@@ -169,7 +177,9 @@ export class InteriorPropInteractionSystem {
     hasKeeperNearby: boolean,
   ): void {
     if (target.interaction.kind === 'examine') {
-      this.openBark(conversation, target, EXAMINE_LINES[target.interaction.id]);
+      const examineId = target.interaction.id;
+      const line = this.examineOverride?.(examineId) ?? EXAMINE_LINES[examineId];
+      this.openBark(conversation, target, line);
       return;
     }
     if (target.interaction.kind === 'use') {

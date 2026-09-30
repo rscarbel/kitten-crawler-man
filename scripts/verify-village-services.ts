@@ -244,6 +244,7 @@ function buildRig(
     isInteractKey: (key) => key === ' ',
     noteResourceActivity: () => undefined,
     worldHalted: () => false,
+    stationsUpgrading: () => false,
   });
   const rig: Rig = {
     map,

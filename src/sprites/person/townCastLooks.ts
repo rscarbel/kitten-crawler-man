@@ -30,6 +30,26 @@ import {
   type CarlExpression,
 } from '../art/carl/head';
 import type { AccessorySpec, HairStyleKind } from '../art/human/townAccessories';
+import type { CarlAttachments } from '../art/carl/figure';
+import type { CarlPose, CarlView } from '../art/carl/rig';
+import {
+  WENDELL_ATTACHMENTS,
+  WENDELL_TROUSER_COLOR,
+  wendellBootMud,
+  wendellPosture,
+} from '../art/human/wendellAttachments';
+
+/**
+ * A named resident's own clothes and bearing beyond what a shared accessory
+ * can say: garments painted inside the figure's composition so they follow
+ * the pose, a posture applied to every row's pose, and marks laid over the
+ * finished shoes.
+ */
+export interface TownCastLookDetails {
+  readonly attachments: CarlAttachments;
+  readonly posture: (pose: CarlPose, view: CarlView) => CarlPose;
+  readonly overShoes: (ctx: CanvasRenderingContext2D, view: CarlView, pose: CarlPose) => void;
+}
 
 export type TownCastBuild = 'child' | 'slight' | 'standard' | 'heavy';
 
@@ -91,6 +111,7 @@ export interface TownCastLookCarl extends TownCastLookCommon {
   /** Covers Carl's own bare legs — his canon look, not the rig's — with a role-appropriate trouser colour. Unused when `legwear` is `'none'`. */
   readonly pantsColor: string;
   readonly expression: CarlExpression;
+  readonly details?: TownCastLookDetails;
 }
 
 export type TownCastLook = TownCastLookPerson | TownCastLookCarl;
@@ -285,8 +306,12 @@ const GARMENT_LEGWEAR: Readonly<Record<GarmentCut, 'trousers' | 'none'>> = {
 
 /** Four skin tones beyond Carl's own default, so five in total. */
 const SKIN_TONE_BASES = ['#f0c9a0', '#c78a5a', '#8a5a34', '#5a3a22'] as const;
-/** Four hair colours beyond Carl's own default brown, so five in total. */
-const HAIR_COLOR_BASES = ['#1a1512', '#8a6a3a', '#c9a850', '#6a2a20'] as const;
+/**
+ * Carl's own default brown plus these. The last is a salt-and-pepper
+ * grey-brown, the one middle-aged head in the set.
+ */
+const HAIR_COLOR_BASES = ['#1a1512', '#8a6a3a', '#c9a850', '#6a2a20', '#8c857a'] as const;
+const GREYING_HAIR = HAIR_COLOR_BASES.length;
 
 const SKIN_RAMPS: readonly Ramp[] = [
   {
@@ -328,6 +353,7 @@ interface AdultSpec {
   readonly accessory: AccessorySpec;
   /** A softer, unscowled expression, a thinner brow and fuller lips, and a narrower build — never Carl's own face. */
   readonly feminine: boolean;
+  readonly details?: TownCastLookDetails;
 }
 
 const ADULT_SPECS: readonly AdultSpec[] = [
@@ -522,6 +548,7 @@ function adultLook(spec: AdultSpec, index: number): TownCastLookCarl {
     pantsColor: spec.pantsColor,
     accessory: spec.accessory,
     expression: spec.feminine ? FEMININE_EXPRESSION : MASCULINE_EXPRESSION,
+    details: spec.details,
   };
 }
 
@@ -536,21 +563,28 @@ const ADULT_LOOKS: readonly TownCastLookCarl[] = ADULT_SPECS.map(adultLook);
 
 const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
   {
-    // A builder first: sturdy work clothes kept neater than a labourer's,
-    // and a folding rule at the belt rather than any farming tool.
+    // Trained as an architect, earned his living as a builder: a waistcoat
+    // over rolled linen shirtsleeves, spectacles, a pencil behind his ear and
+    // the folding rule at his belt, and mud on his boots from the pasture he
+    // keeps ready. Lean, greying and a little stooped from the drafting table.
     id: 'resident_wendell',
-    build: 'standard',
+    build: 'slight',
     roles: [],
     hasWork: false,
     cloak: false,
-    pantsColor: '#3a3226',
+    pantsColor: WENDELL_TROUSER_COLOR,
     skin: 1,
-    hair: 1,
+    hair: GREYING_HAIR,
     hairStyle: 'short',
-    garmentColor: '#5a5238',
-    cut: 'tunic',
+    garmentColor: '#cfc3a4',
+    cut: 'shirt',
     feminine: false,
-    accessory: { kind: 'builderRule', color: '#8a6a3c', accentColor: '#c9a24a' },
+    accessory: { kind: 'builderRule', color: '#8a6a3c' },
+    details: {
+      attachments: WENDELL_ATTACHMENTS,
+      posture: wendellPosture,
+      overShoes: wendellBootMud,
+    },
   },
   {
     id: 'resident_old_hilda',

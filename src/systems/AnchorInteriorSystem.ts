@@ -80,7 +80,7 @@ const BOARDS_PER_PICKUP = BOARDS_PER_REPAIR * 2;
  * is the same reason the defend quest's pile respawns; six seconds is that
  * quest's cadence and there is no reason for Hilda's to differ.
  */
-const WOOD_PILE_RESPAWN_SECONDS = 6;
+export const WOOD_PILE_RESPAWN_SECONDS = 6;
 const FRAMES_PER_SECOND = 60;
 const WOOD_PILE_RESPAWN_FRAMES = WOOD_PILE_RESPAWN_SECONDS * FRAMES_PER_SECOND;
 /** How close a crawler must walk to the pile to pick it up, in tiles. */
@@ -389,25 +389,31 @@ export class AnchorInteriorSystem {
     const pileX = tile.x * TILE_SIZE;
     const pileY = tile.y * TILE_SIZE;
     const reach = TILE_SIZE * WOOD_PILE_PICKUP_TILES;
-    for (const crawler of this.crawlers()) {
-      if (!crawler.isAlive) continue;
-      if (Math.hypot(crawler.x - pileX, crawler.y - pileY) >= reach) continue;
-      // `Inventory.addItem` routes every quest item into the one reserved quest
-      // slot and overwrites whatever id is already sitting there with no check —
-      // a crawler mid-`doomsday_scenario` who walks over this pile must not lose
-      // it. Left for the other crawler, or the pile itself, to try instead.
-      if (this.questSlotBlocksBoards(crawler)) continue;
-      crawler.inventory.addItem('quest_wood_board', BOARDS_PER_PICKUP);
-      this.onItemGranted?.('quest_wood_board', BOARDS_PER_PICKUP, crawler.x, crawler.y);
-      this.woodPileAvailable = false;
-      this.woodPileRespawnTimer = WOOD_PILE_RESPAWN_FRAMES;
-      this.audio?.play('picking_up_ground_object');
-      return;
-    }
+    const inReach = this.crawlers().filter(
+      (crawler) => crawler.isAlive && Math.hypot(crawler.x - pileX, crawler.y - pileY) < reach,
+    );
+    // The boards evict whatever other quest item holds the reserved slot, as
+    // every quest item does — the evicted quest recovers from the eviction
+    // event (the blueprints go back to Wendell). Only when both crawlers stand
+    // at the pile together does the one with nothing to lose take the wood.
+    const takerWithNothingToLose = inReach.find((crawler) => !this.boardsWouldEvict(crawler));
+    const firstInReach = inReach.length > 0 ? inReach[0] : undefined;
+    const taker = takerWithNothingToLose ?? firstInReach;
+    if (taker === undefined) return;
+    taker.inventory.addItem('quest_wood_board', BOARDS_PER_PICKUP);
+    this.onItemGranted?.('quest_wood_board', BOARDS_PER_PICKUP, taker.x, taker.y);
+    this.woodPileAvailable = false;
+    this.woodPileRespawnTimer = WOOD_PILE_RESPAWN_FRAMES;
+    this.audio?.play('picking_up_ground_object');
   }
 
-  /** Whether this crawler's reserved quest slot holds a different quest item already. */
-  private questSlotBlocksBoards(crawler: Player): boolean {
+  /** The tile the wood pile stands on while it has boards to take; null while it restocks, or once the room is whole. */
+  get stockedWoodPileTile(): { readonly x: number; readonly y: number } | null {
+    return this.woodPileAvailable ? this.woodPileTile : null;
+  }
+
+  /** Whether taking boards would evict a different quest item from this crawler's reserved slot. */
+  private boardsWouldEvict(crawler: Player): boolean {
     const slot = crawler.inventory.actionBar.slots[QUEST_SLOT_IDX];
     return slot !== null && slot.id !== 'quest_wood_board';
   }

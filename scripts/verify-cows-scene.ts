@@ -57,6 +57,17 @@ const SETTLE_FRAMES = 30;
 /** How far beside a cow the crawler stands to press: well inside petting reach. */
 const BESIDE_COW_TILES = 1;
 /**
+ * The sides of a cow the crawler may stand on, in the order tried. Penned cows
+ * graze a tile or two apart, so on some sides a neighbour is as near as the
+ * cow itself and a press would pet the neighbour instead.
+ */
+const SIDES_OF_A_COW: readonly Point[] = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+];
+/**
  * The street box's speaker stands this far from the crawler, with a talk range
  * of `STREET_BOX_TALK_RANGE_TILES`: out of talk range, inside walk-away, so
  * the press may be handed to the world.
@@ -221,22 +232,56 @@ async function verifyPaddockPresses(): Promise<void> {
     catAttack();
   };
 
-  // Every case gets a cow of its own, so no pet cooldown can hide a pet.
-  const cows = livestock.herd.filter((cow) => cow.isAlive && !cow.isCalf);
-  const casesNeedingACow = 4;
-  check(cows.length >= casesNeedingACow, `the herd has a cow per case (${cows.length})`);
-  if (cows.length < casesNeedingACow) return;
-  const [plainCow, hostileCow, handOffCow, tapCow] = cows;
-
   const active = scene.pm.active();
   const inactive = scene.pm.inactive();
-  const standBeside = (cow: Point): Point => {
-    const at = { x: cow.x + BESIDE_COW_TILES * TILE_SIZE, y: cow.y };
+  const standAt = (at: Point): void => {
     active.x = at.x;
     active.y = at.y;
     inactive.x = at.x;
     inactive.y = at.y;
-    return at;
+  };
+  type HerdCow = (typeof livestock.herd)[number];
+  /**
+   * A spot beside `cow` from which a press reaches that cow and no other. A
+   * press pets the nearest cow in reach, so from a spot where a neighbour is as
+   * near, a case would pet the neighbour — one an earlier case may already have
+   * petted, whose cooldown then swallows the pet.
+   */
+  const spotReachingOnly = (cow: HerdCow): Point | null => {
+    for (const side of SIDES_OF_A_COW) {
+      const at = {
+        x: cow.x + side.x * BESIDE_COW_TILES * TILE_SIZE,
+        y: cow.y + side.y * BESIDE_COW_TILES * TILE_SIZE,
+      };
+      standAt(at);
+      if (livestock.petTarget(active) === cow) return at;
+    }
+    return null;
+  };
+
+  // Every case gets a cow of its own, pressed from a spot that reaches only
+  // that cow, so no pet cooldown can hide a pet.
+  const cows = livestock.herd.flatMap((cow) => {
+    if (!cow.isAlive || cow.isCalf) return [];
+    const spot = spotReachingOnly(cow);
+    return spot === null ? [] : [{ cow, spot }];
+  });
+  const casesNeedingACow = 4;
+  check(
+    cows.length >= casesNeedingACow,
+    `the herd has a cow per case, each with a spot reaching it alone (${cows.length})`,
+  );
+  const [plainCase, hostileCase, handOffCase, tapCase] = cows;
+  if (
+    plainCase === undefined ||
+    hostileCase === undefined ||
+    handOffCase === undefined ||
+    tapCase === undefined
+  )
+    return;
+  const standBeside = (herdCase: { spot: Point }): Point => {
+    standAt(herdCase.spot);
+    return herdCase.spot;
   };
   const setDownHostile = (): { hp: number } => {
     const goblin = createMob(
@@ -255,7 +300,7 @@ async function verifyPaddockPresses(): Promise<void> {
   const counts = (): string => `${pets} pets, ${swings} swings`;
 
   // The plain press.
-  standBeside(plainCow);
+  standBeside(plainCase);
   check(livestock.wouldPet(active), 'the crawler stands in reach of a cow');
   pets = 0;
   swings = 0;
@@ -265,7 +310,7 @@ async function verifyPaddockPresses(): Promise<void> {
     `Space beside a cow pets it and swings at nothing (${counts()})`,
   );
 
-  standBeside(hostileCow);
+  standBeside(hostileCase);
   const hostile = setDownHostile();
   pets = 0;
   swings = 0;
@@ -274,7 +319,7 @@ async function verifyPaddockPresses(): Promise<void> {
   clearHostile(hostile);
 
   // The walk-away hand-off.
-  const handOffAt = standBeside(handOffCow);
+  const handOffAt = standBeside(handOffCase);
   const speaker = { x: handOffAt.x + STREET_BOX_SPEAKER_TILES * TILE_SIZE, y: handOffAt.y };
   check(
     STREET_BOX_SPEAKER_TILES > STREET_BOX_TALK_RANGE_TILES &&
@@ -303,11 +348,11 @@ async function verifyPaddockPresses(): Promise<void> {
   clearHostile(handOffHostile);
 
   // The touch form of the press.
-  standBeside(tapCow);
+  standBeside(tapCase);
   const camera = sceneCamera(scene);
   const onCow = {
-    x: tapCow.x + TILE_SIZE * HALF - camera.x,
-    y: tapCow.y + TILE_SIZE * HALF - camera.y,
+    x: tapCase.cow.x + TILE_SIZE * HALF - camera.x,
+    y: tapCase.cow.y + TILE_SIZE * HALF - camera.y,
   };
   pets = 0;
   swings = 0;

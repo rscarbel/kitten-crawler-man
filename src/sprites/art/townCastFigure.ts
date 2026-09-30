@@ -23,7 +23,12 @@ import { outlinePx, paintTownCastFrame } from '../person/townCastPaint';
 import { TOWN_CAST_LOOKS, type TownCastLook } from '../person/townCastLooks';
 import { HUMANOID_NPC_SCALE } from '../humanoidScale';
 import { type FigureDef, figureStates } from '../figure/figureDef';
-import { drawCarlBack, drawCarlFront, drawCarlSide } from '../art/carl/figure';
+import {
+  type CarlComposeOptions,
+  drawCarlBack,
+  drawCarlFront,
+  drawCarlSide,
+} from '../art/carl/figure';
 import type { CarlPose, CarlView } from '../art/carl/rig';
 import { idleBack, idleFront, idleSide } from '../art/human/idles';
 import { walkFacing, walkSide } from '../art/human/locomotion';
@@ -250,7 +255,10 @@ const DANCE_FACING_VIEW: Readonly<Record<DanceFacing, TownCastView>> = {
   left: 'side',
 };
 const CARL_DRAW_BY_VIEW: Readonly<
-  Record<CarlView, (ctx: CanvasRenderingContext2D, pose: CarlPose) => void>
+  Record<
+    CarlView,
+    (ctx: CanvasRenderingContext2D, pose: CarlPose, options: CarlComposeOptions) => void
+  >
 > = {
   front: drawCarlFront,
   side: drawCarlSide,
@@ -340,7 +348,8 @@ function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
       const view = facing === undefined ? row.view : DANCE_FACING_VIEW[facing];
       const carlView = VIEW_TO_CARL_VIEW[view];
       const mirror = facing === 'left' ? -1 : 1;
-      const pose: CarlPose = { ...row.poseAt(frame), gear: look.gear };
+      const rowPose: CarlPose = { ...row.poseAt(frame), gear: look.gear };
+      const pose = look.details?.posture(rowPose, carlView) ?? rowPose;
       // Reset in `finally`: a painter that throws mid-bake must not leave the
       // next figure baked — Carl or another look — in this look's skin, hair,
       // garment, torso cut or expression (the "a throwing painter poisons
@@ -353,9 +362,10 @@ function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
         ctx.save();
         ctx.translate(cell.originX, cell.originY);
         ctx.scale(unitScaleX * mirror, unitScaleY);
-        CARL_DRAW_BY_VIEW[carlView](ctx, pose);
+        CARL_DRAW_BY_VIEW[carlView](ctx, pose, { attachments: look.details?.attachments });
         if (look.legwear === 'trousers') drawTrousers(ctx, carlView, pose, look.pantsColor);
         drawShoes(ctx, carlView, pose, look.pantsColor);
+        look.details?.overShoes(ctx, carlView, pose);
         drawHairStyleOverlay(
           ctx,
           carlView,

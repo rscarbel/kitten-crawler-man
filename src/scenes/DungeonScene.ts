@@ -1,4 +1,5 @@
 import { displayHp } from '../core/crawlerFormulas';
+import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
 import { awardXp } from '../core/awardXp';
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
@@ -164,7 +165,11 @@ import {
   RecallSystem,
   type RecallSceneRebuildState,
 } from '../systems/RecallSystem';
-import { BuildingSystem, type BuildingEntry } from '../systems/BuildingSystem';
+import {
+  BuildingSystem,
+  downedPartnerEntryRefusal,
+  type BuildingEntry,
+} from '../systems/BuildingSystem';
 import { interiorSellsSomething } from '../systems/townServices';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import type { Townsperson } from '../creatures/Townsperson';
@@ -284,6 +289,7 @@ import type { GrantedReward } from '../core/GrantedReward';
 import { drawMongoIcon } from '../sprites/mongoSprite';
 import { EventBus } from '../core/EventBus';
 import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
+import { barkWhenBlueprintsItemEvicted } from '../systems/briarHollow/blueprints/blueprintsEvictionBark';
 import { CRAWLER_BARKS, barkTexts } from '../dialog/scripts/crawlerBarks';
 import { DifficultyTelemetrySystem } from '../systems/DifficultyTelemetrySystem';
 import {
@@ -328,6 +334,7 @@ import {
   restoreBountyProgress,
   type BountyProgress,
 } from '../core/BountyProgress';
+import { createMidgeEscortCarry, type MidgeEscortCarry } from '../core/midgeEscortCarry';
 import { BountySystem, BOUNTY_TRACKER_ID } from '../systems/BountySystem';
 import { findBountyDef } from '../systems/bountyDefs';
 import {
@@ -509,11 +516,6 @@ export interface DungeonSceneOptions {
   humanSnap?: PlayerSnapshot;
   /** Preserved cat player state from a previous scene. */
   catSnap?: PlayerSnapshot;
-  /**
-   * Pixel position to drop a knocked-out companion back at, instead of the party
-   * spawn point — used when returning from a building the player entered alone.
-   */
-  knockedOutCompanionAt?: { x: number; y: number };
   /** Existing map to reuse instead of generating a new one (e.g. returning from building). */
   existingMap?: GameMap;
   /** Regenerates the floor a save was written on. Unused when `existingMap` is given. */
@@ -594,6 +596,12 @@ export interface DungeonSceneOptions {
   tacticsNoticesSeen?: Set<TacticsTrait>;
   /** Bounty-board state, threaded by reference across building/scene transitions. */
   bountyProgress?: BountyProgress;
+  /**
+   * Midge's escort across a door: where she stood and how hurt she was, so
+   * the overworld rebuilt on the way out finds her still led. Threaded by
+   * reference like `bountyProgress`, and deliberately never saved.
+   */
+  midgeEscortCarry?: MidgeEscortCarry;
   /** Doomsday-finale state (soul crystal containment + escape), threaded by reference across building/scene transitions. */
   doomsdayQuestProgress?: DoomsdayProgress;
   /** Desperado Club membership, threaded by reference across building/scene transitions. */
@@ -1185,6 +1193,7 @@ export class DungeonScene extends GameplayScene {
   private readonly anchorQuestProgress: AnchorQuestProgress;
   private readonly journalProgress: JournalProgress;
   private readonly bountyProgress: BountyProgress;
+  private readonly midgeEscortCarry: MidgeEscortCarry;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
   private readonly townMemory: TownMemory;
@@ -1247,6 +1256,8 @@ export class DungeonScene extends GameplayScene {
   private readonly mercenarySystem: MercenarySystem;
   private renderPipeline = new RenderPipeline();
   private bus = new EventBus();
+  /** Stops forwarding the crawlers' quest-slot evictions onto this scene's bus; set while the scene is running. */
+  private stopForwardingQuestItemEvictions: (() => void) | null = null;
   private readonly crawlerBarks = new CrawlerBarkSystem();
 
   private levelCompleteScreen = new LevelCompleteScreen();
@@ -1559,15 +1570,6 @@ export class DungeonScene extends GameplayScene {
       if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
       this.pm.setPartyDown(findPartyArrivalTiles(this.gameMap, spawn));
 
-      // A companion who went down out here stays exactly where they fell while
-      // the player is off inside a building, rather than being dragged to the door.
-      const downedAt = options?.knockedOutCompanionAt;
-      const companion = this.pm.inactive();
-      if (downedAt !== undefined && companion.isKnockedOut) {
-        companion.x = downedAt.x;
-        companion.y = downedAt.y;
-      }
-
       this.floorEntryHumanSnap =
         options?.floorEntryHumanSnap ?? revivedSnapshot(snapPlayer(this.human));
       this.floorEntryCatSnap = options?.floorEntryCatSnap ?? revivedSnapshot(snapPlayer(this.cat));
@@ -1864,6 +1866,7 @@ export class DungeonScene extends GameplayScene {
     this.tacticsNoticesSeen = options?.tacticsNoticesSeen ?? new Set<TacticsTrait>();
     this.tacticsNotices = new TacticsNoticeSystem(this.tacticsNoticesSeen);
     this.bountyProgress = options?.bountyProgress ?? createBountyProgress();
+    this.midgeEscortCarry = options?.midgeEscortCarry ?? createMidgeEscortCarry();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
     this.townMemory = options?.townMemory ?? createTownMemory();
@@ -2199,11 +2202,6 @@ export class DungeonScene extends GameplayScene {
           this.musicPersistsAcrossExit = true;
           const humanSnap = snapPlayer(this.human);
           const catSnap = snapPlayer(this.cat);
-          // Where a downed companion is left lying while the player is indoors.
-          const downedCompanion = this.inactive();
-          const downedCompanionAt = downedCompanion.isKnockedOut
-            ? { x: downedCompanion.x, y: downedCompanion.y }
-            : undefined;
           this.sceneManager.replace(
             new BuildingInteriorScene(
               entry,
@@ -2236,7 +2234,6 @@ export class DungeonScene extends GameplayScene {
                     spawnAt: exitTile,
                     humanSnap: hSnap,
                     catSnap: cSnap,
-                    knockedOutCompanionAt: downedCompanionAt,
                     // Entering a building is a detour, not a new floor — the floor
                     // restart has to stay pinned to where this floor began.
                     floorEntryHumanSnap: this.floorEntryHumanSnap,
@@ -2272,6 +2269,7 @@ export class DungeonScene extends GameplayScene {
                     anchorQuestProgress: this.anchorQuestProgress,
                     journalProgress: this.journalProgress,
                     bountyProgress: this.bountyProgress,
+                    midgeEscortCarry: this.midgeEscortCarry,
                     doomsdayQuestProgress: this.doomsdayQuestProgress,
                     clubMembership: this.clubMembership,
                     townMemory: this.townMemory,
@@ -2463,6 +2461,7 @@ export class DungeonScene extends GameplayScene {
                   partyLevelOf(this.human.level, this.cat.level),
                   activeDifficultyProfile(),
                 ),
+              midgeEscortCarry: this.midgeEscortCarry,
             })
           : null;
       // Regrowth must never stand a rock or a tree back up under a trebuchet or a snare.
@@ -2950,6 +2949,7 @@ export class DungeonScene extends GameplayScene {
         this.crawlerBarks.say(this.human, [CRAWLER_BARKS.donutKnockedOut.paragraphs[0]]);
       }
     });
+    barkWhenBlueprintsItemEvicted(bus, { human: this.human, cat: this.cat }, this.crawlerBarks);
 
     // ── mobKilled: corpse marker, achievements, loot, grub spawns ──
     bus.on('mobKilled', (e) => {
@@ -3260,8 +3260,8 @@ export class DungeonScene extends GameplayScene {
           this.flyQuestCoins(def.rewards.coins);
         }
         this.humanAchievements.grantBox('Silver', 'Adventurer', 'quest_defend_npc');
-        this.human.inventory.clearQuestSlot();
-        this.cat.inventory.clearQuestSlot();
+        this.human.inventory.clearQuestItem('quest_wood_board');
+        this.cat.inventory.clearQuestItem('quest_wood_board');
       }
       if (e.questId === 'grotesque_spider') {
         const humanXpApplied = awardXp(this.human, SPIDER_QUEST_COMPLETION_XP, this.bus);
@@ -3290,8 +3290,8 @@ export class DungeonScene extends GameplayScene {
 
     bus.on('questFailed', (e) => {
       if (e.questId === 'defend_goblin_mother') {
-        this.human.inventory.clearQuestSlot();
-        this.cat.inventory.clearQuestSlot();
+        this.human.inventory.clearQuestItem('quest_wood_board');
+        this.cat.inventory.clearQuestItem('quest_wood_board');
       }
     });
 
@@ -3301,6 +3301,11 @@ export class DungeonScene extends GameplayScene {
 
   onEnter(): void {
     bindRunStats(this.gameStats);
+    this.stopForwardingQuestItemEvictions?.();
+    this.stopForwardingQuestItemEvictions = forwardQuestItemEvictions(this.bus, {
+      human: this.human,
+      cat: this.cat,
+    });
     // Level entry is the one stretch of real rendering the player cannot act
     // during, which is what makes it usable cover for the quality probe.
     renderQuality.requestProbe();
@@ -3354,7 +3359,7 @@ export class DungeonScene extends GameplayScene {
         return;
       }
       // A villager's numbered choices, stopped for the same reason as the Bopca's.
-      if (this.briarHollowKit?.handleKeyDown(e.key, e.repeat) === true) {
+      if (this.briarHollowKit?.handleKeyDown(e.key, e.repeat, e.timeStamp) === true) {
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
@@ -3524,6 +3529,8 @@ export class DungeonScene extends GameplayScene {
   }
 
   onExit(): void {
+    this.stopForwardingQuestItemEvictions?.();
+    this.stopForwardingQuestItemEvictions = null;
     // A scene left while still loading must not leave the probe blindfolded,
     // nor the figure cache unable to let anything go.
     if (this.arrivalLoading?.isOpen === true) {
@@ -7599,11 +7606,16 @@ export class DungeonScene extends GameplayScene {
   /**
    * The refusal a doorway answers with, or null when it opens normally.
    *
-   * The only door in town a quest holds shut. `BuildingSystem` asks rather than
+   * Every door refuses while the partner is down. Beyond that, the Big Top is
+   * the only door in town a quest holds shut. `BuildingSystem` asks rather than
    * decides, so the tent's reason for being closed stays with the questline that
    * closes it.
    */
   private sealedBuildingMessage(entry: BuildingEntry): string | null {
+    const partner = this.inactive();
+    const partnerName = partner === this.human ? CRAWLER_NAMES.human : CRAWLER_NAMES.cat;
+    const partnerDown = downedPartnerEntryRefusal(partner, partnerName);
+    if (partnerDown !== null) return partnerDown;
     if (entry.name !== BIG_TOP_BUILDING_NAME) return null;
     return isBigTopSealed(this.circusQuestProgress.stage) ? BIG_TOP_SEALED_MESSAGE : null;
   }
@@ -7687,6 +7699,7 @@ export class DungeonScene extends GameplayScene {
     if (mongo && !mongo.recalling && !mongo.collapsing) targets.push(mongo);
     if (this.mercenarySystem.activeMerc) targets.push(this.mercenarySystem.activeMerc);
     this.briarHollowKit?.pushAlliedDefenders(targets);
+    this.briarHollowKit?.pushEscortTargets(targets);
     const npc = this.defendQuest.questNPC;
     if (npc?.isAlive) targets.push(npc);
 
@@ -8721,6 +8734,7 @@ export class DungeonScene extends GameplayScene {
         this.touch.moveTouchId = touch.identifier;
         this.touch.moveTarget = { x, y };
         this.touch.tapStart = { x, y, time: Date.now() };
+        this.touch.tapStartEventMs = e.timeStamp;
         this.structureHold.begin(this.fingerOnWorkableStructure(x, y), x, y);
         const starter = this.active();
         this.holdStartActivePos = { x: starter.x, y: starter.y };
@@ -8913,9 +8927,19 @@ export class DungeonScene extends GameplayScene {
                     this.briarHollowLastWorldTapAt !== null &&
                     now - this.briarHollowLastWorldTapAt < BRIAR_HOLLOW_DOUBLE_TAP_WINDOW_MS;
                   this.briarHollowLastWorldTapAt = now;
-                  villageConsumed = isDoubleTap
-                    ? this.briarHollowKit.handleDoubleTap(x, y, cam.x, cam.y, this.active())
-                    : this.briarHollowKit.handleTap(x, y, cam.x, cam.y, this.active());
+                  // A live scythe swing takes every tap as its timed press,
+                  // however soon after the tap that started it.
+                  villageConsumed =
+                    isDoubleTap && !this.briarHollowKit.claimsWorldTaps
+                      ? this.briarHollowKit.handleDoubleTap(x, y, cam.x, cam.y, this.active())
+                      : this.briarHollowKit.handleTap(
+                          x,
+                          y,
+                          cam.x,
+                          cam.y,
+                          this.active(),
+                          this.touch.tapStartEventMs ?? e.timeStamp,
+                        );
                 }
                 // A tap a menu took is spent: the world behind it must not also swing at it.
                 if (!villageConsumed && !overlayWasFocused) {

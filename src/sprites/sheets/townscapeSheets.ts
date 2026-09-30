@@ -47,11 +47,17 @@ import {
 import { drawBench, drawNoticeBoard } from '../townFixtures';
 import {
   AWNING_POST_UP_TILES,
-  FIELD_SHELTER_SIDE_TILES,
-  FIELD_SHELTER_UP_TILES,
+  MILKING_SHED_SIDE_TILES,
+  MILKING_SHED_UP_TILES,
+  MILKING_SHED_WIDTH_TILES,
+  PASTURE_GATE_EAST_TILES,
+  PASTURE_GATE_UP_TILES,
+  PASTURE_GATE_WEST_TILES,
+  PASTURE_GATE_WIDTH_TILES,
   SKYFOWL_PERCH_UP_TILES,
   drawAwningPost,
-  drawFieldShelter,
+  drawMilkingShed,
+  drawPastureGate,
   drawSkyfowlPerch,
 } from '../townDressing';
 import { drawBunting, drawGateArch, type GateArchAxis } from '../townWayfinding';
@@ -536,21 +542,43 @@ function skyfowlPerchSheet(): PropSheetPlan {
   };
 }
 
-function fieldShelterSheet(): PropSheetPlan {
+function milkingShedSheet(): PropSheetPlan {
   return {
-    key: 'town_field_shelter',
-    file: 'field_shelter.png',
+    key: 'town_milking_shed',
+    file: 'milking_shed.png',
     tileScale: TOWNSCAPE_TILE_SCALE,
-    tileX: px(FIELD_SHELTER_SIDE_TILES),
-    tileY: px(FIELD_SHELTER_UP_TILES),
-    frameWidth: px(FIELD_SHELTER_SIDE_TILES * 2 + ANCHOR_TILE),
-    frameHeight: px(FIELD_SHELTER_UP_TILES + ANCHOR_TILE + FIXTURE_MARGIN_TILES),
+    tileX: px(MILKING_SHED_SIDE_TILES),
+    tileY: px(MILKING_SHED_UP_TILES),
+    frameWidth: px(MILKING_SHED_SIDE_TILES * 2 + MILKING_SHED_WIDTH_TILES),
+    frameHeight: px(MILKING_SHED_UP_TILES + ANCHOR_TILE + FIXTURE_MARGIN_TILES),
     rows: [
       {
         state: 'idle',
         frames: [
           (ctx, ox, oy) => {
-            drawFieldShelter(ctx, ox, oy, TOWNSCAPE_TILE_SCALE);
+            drawMilkingShed(ctx, ox, oy, TOWNSCAPE_TILE_SCALE);
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function pastureGateSheet(): PropSheetPlan {
+  return {
+    key: 'town_pasture_gate',
+    file: 'pasture_gate.png',
+    tileScale: TOWNSCAPE_TILE_SCALE,
+    tileX: px(PASTURE_GATE_WEST_TILES),
+    tileY: px(PASTURE_GATE_UP_TILES),
+    frameWidth: px(PASTURE_GATE_WEST_TILES + PASTURE_GATE_WIDTH_TILES + PASTURE_GATE_EAST_TILES),
+    frameHeight: px(PASTURE_GATE_UP_TILES + ANCHOR_TILE + FIXTURE_MARGIN_TILES),
+    rows: [
+      {
+        state: 'idle',
+        frames: [
+          (ctx, ox, oy) => {
+            drawPastureGate(ctx, ox, oy, TOWNSCAPE_TILE_SCALE);
           },
         ],
       },
@@ -572,6 +600,7 @@ export function townscapeSheetPlans(): PropSheetPlan[] {
     benchSheet(),
     awningPostSheet(),
     skyfowlPerchSheet(),
-    fieldShelterSheet(),
+    milkingShedSheet(),
+    pastureGateSheet(),
   ];
 }

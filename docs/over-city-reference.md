@@ -115,9 +115,11 @@ unharmable, it waits up to 15 seconds — paused while a crawler stands over it 
 either crawler to revive it, the same range and channel time a knocked-out crawler is
 revived by. A revive brings it back at a sliver of its health. Leaving the scene, a
 building or a tower storey while a hire is down ends its contract for good; a body cannot
-be carried through a door. A hire and Mongo alike follow the party indoors — into every
-shop, the club, safe rooms and every tower storey, and back out — with health carried
-across on the roster.
+be carried through a door. The same holds for the crawlers: no building's door opens while
+the one not being driven is knocked out. Every door refuses with "{Name} is down. Help them
+up before going inside." until they are revived, and opens the moment they stand. A hire
+and Mongo alike follow the party indoors — into every shop, the club, safe rooms and every
+tower storey, and back out — with health carried across on the roster.
 
 ## Supporting cast met on this floor
 

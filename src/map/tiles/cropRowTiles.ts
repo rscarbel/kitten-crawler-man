@@ -219,7 +219,70 @@ const PLANT_PAINTERS: Record<
   roots: drawRootTop,
 };
 
-/** Draws the crop standing on one `CROP_FIELD` tile, over its already-drawn furrows. */
+/** How much of a grain tile's stand is still uncut, from untouched to cut to the ground. */
+export type GrainStage = 'full' | 'thinned' | 'sparse' | 'stubble';
+
+/**
+ * The share of a tile's stalks each stage leaves standing. A stalk's own hash
+ * decides when it falls, so every stalk still standing when sparse was also
+ * standing when thinned: cutting only ever takes stalks away.
+ */
+const GRAIN_STANDING_SHARE: Record<GrainStage, number> = {
+  full: 1,
+  thinned: 2 / 3,
+  sparse: 1 / 3,
+  stubble: 0,
+};
+const GRAIN_CUT_ORDER_SALT = 0xc40d;
+/** A cut stalk's stub, as a share of the tile: a short pale stroke with no head. */
+const GRAIN_STUB_HEIGHT_SHARE = 0.05;
+const GRAIN_STUB_COLOR = '#b89c5c';
+
+function drawGrainStub(ctx: CanvasRenderingContext2D, slot: PlantSlot, ts: number): void {
+  const height = ts * GRAIN_STUB_HEIGHT_SHARE * slot.scale;
+  ctx.lineWidth = Math.max(1, ts * GRAIN_STALK_WIDTH_SHARE);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = GRAIN_STUB_COLOR;
+  ctx.beginPath();
+  ctx.moveTo(slot.x, slot.y);
+  ctx.lineTo(slot.x, slot.y - height);
+  ctx.stroke();
+}
+
+/**
+ * Draws one grain tile's stand at `stage` into a `ts`-pixel square at
+ * (`sx`, `sy`): the stalks still standing, and a stub for each one cut.
+ * `seedX` / `seedY` pick the stand's layout the way a tile's position does
+ * in the chunk bake, so a small set of seeds gives a field of varied tiles.
+ */
+export function drawGrainStand(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  seedX: number,
+  seedY: number,
+  stage: GrainStage,
+): void {
+  const standing = GRAIN_STANDING_SHARE[stage];
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(sx, sy, ts, ts);
+  ctx.clip();
+  plantSlots(sx, sy, ts, seedX, seedY, GRAIN_STALKS_PER_ROW).forEach((slot, index) => {
+    const fallsAt = tileHash01(seedX, seedY, GRAIN_CUT_ORDER_SALT + index);
+    if (fallsAt < standing) drawGrain(ctx, slot, ts);
+    else drawGrainStub(ctx, slot, ts);
+  });
+  ctx.restore();
+}
+
+/**
+ * Draws the crop standing on one `CROP_FIELD` tile, over its already-drawn
+ * furrows. The harvestable grain field is left bare here: its stalks are cut
+ * and regrow while the player watches, so `GrainHarvest` draws them every
+ * frame instead of baking them into a chunk that would need re-baking per cut.
+ */
 export function drawCropRowOverlay(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -229,6 +292,8 @@ export function drawCropRowOverlay(
   tx: number,
   ty: number,
 ): void {
+  const grainField = briarHollowSiteFor(structure)?.grainField;
+  if (grainField !== undefined && rectContains(grainField, tx, ty)) return;
   const kind = cropKindAt(structure, tx, ty);
   const paintPlant = PLANT_PAINTERS[kind];
   ctx.save();

@@ -112,6 +112,11 @@ const PAVED_TILE_TYPES: ReadonlySet<number> = new Set([
   BRIDGE,
 ]);
 
+/** Whether `type` is one of the surfaces a route runs over; see {@link TileGrid.isPaved}. */
+export function isPavedTileType(type: number): boolean {
+  return PAVED_TILE_TYPES.has(type);
+}
+
 export class TileGrid {
   readonly cells: TileContent[][];
 
@@ -325,6 +330,6 @@ export class TileGrid {
    */
   isPaved(x: number, y: number): boolean {
     const type = this.typeAt(x, y);
-    return type !== undefined && PAVED_TILE_TYPES.has(type);
+    return type !== undefined && isPavedTileType(type);
   }
 }

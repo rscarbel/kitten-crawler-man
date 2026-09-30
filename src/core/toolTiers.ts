@@ -170,9 +170,18 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
   ],
 };
 
-/** A tool as it is drawn in someone's hands while they work: which kind, at which tier. */
+/**
+ * Anything a crawler can be drawn working with: a harvesting tool, or Merrit's
+ * scythe, which is a quest item with no tiers and no forge ladder.
+ */
+export type WorkingToolKind = ToolKind | 'scythe';
+
+/**
+ * A tool as it is drawn in someone's hands while they work: which kind, at
+ * which tier. The scythe has one look, so its tier is ignored.
+ */
 export interface WorkingTool {
-  readonly kind: ToolKind;
+  readonly kind: WorkingToolKind;
   readonly tier: ToolTier;
 }
 

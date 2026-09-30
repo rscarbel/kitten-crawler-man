@@ -106,6 +106,7 @@ export const VILLAGE_SHEETS: ReadonlyArray<VillageSheetSpec> = [
       'lamp_shelf',
       'hoe_rack',
       'pick_rack',
+      'scythe_pegs',
     ],
   },
   {
@@ -125,6 +126,7 @@ export const VILLAGE_SHEETS: ReadonlyArray<VillageSheetSpec> = [
       'loom',
       'half_built_cart',
       'broken_cart',
+      'rope_walk_upgraded',
     ],
   },
   {
@@ -144,7 +146,13 @@ export const VILLAGE_SHEETS: ReadonlyArray<VillageSheetSpec> = [
     headroomTiles: 3,
     props: ['bell_tower', 'forge_hearth', 'bell_tower_broken'],
   },
-  { key: 'village_2x3', w: 2, h: 3, headroomTiles: 2, props: ['sawmill_machine'] },
+  {
+    key: 'village_2x3',
+    w: 2,
+    h: 3,
+    headroomTiles: 2,
+    props: ['sawmill_machine', 'sawmill_machine_upgraded'],
+  },
 ];
 
 /**

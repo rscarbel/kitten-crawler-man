@@ -8,7 +8,7 @@
 import { drawText, TEXT_PRESETS } from '../../ui/TextBox';
 
 /** How long a callout stays up, in updates. */
-const CALLOUT_FRAMES = 90;
+export const CALLOUT_FRAMES = 90;
 /** How far it drifts upward over its life, in pixels. */
 const CALLOUT_RISE_PX = 22;
 /** The last share of its life over which it fades out. */

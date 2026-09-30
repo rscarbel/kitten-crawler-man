@@ -38,6 +38,8 @@ import { SkeletonProjectileSystem } from '../src/systems/SkeletonProjectileSyste
 import { GroundPickupSystem } from '../src/systems/GroundPickupSystem';
 import { DynamiteSystem } from '../src/systems/DynamiteSystem';
 import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
+import type { MidgeEscortCarry } from '../src/core/midgeEscortCarry';
+import type { BlueprintsCue } from '../src/systems/briarHollow/blueprints/blueprintsSoundCues';
 
 /** Briar Hollow stands on floor 3's overworld, so its map is that floor's size. */
 export const SIEGE_MAP_SIZE = level3.mapSize;
@@ -103,6 +105,10 @@ export interface SiegeRigOptions {
   readonly assaultLevel: number | (() => number);
   /** The zone music the siege takes the track over from; none by default. */
   readonly music?: () => SiegeMusicClaim | null;
+  /** Midge's escort as a door carried it; a fresh record by default. */
+  readonly midgeEscortCarry?: MidgeEscortCarry;
+  /** Told of every cue "The Borrowed Blueprints" raises. */
+  readonly onBlueprintsCue?: (cue: BlueprintsCue) => void;
 }
 
 export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
@@ -157,6 +163,8 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
       return typeof level === 'number' ? level : level();
     },
     music: options.music,
+    midgeEscortCarry: options.midgeEscortCarry,
+    onBlueprintsCue: options.onBlueprintsCue,
     bossIntro: () => {
       if (rigRef.rig !== null) rigRef.rig.bossIntros++;
     },
@@ -170,6 +178,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
   const context = (): SystemContext => {
     targets.length = 0;
     kit.pushAlliedDefenders(targets);
+    kit.pushEscortTargets(targets);
     return {
       human: pm.human,
       cat: pm.cat,

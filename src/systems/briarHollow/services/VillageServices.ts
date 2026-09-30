@@ -15,6 +15,7 @@
  */
 
 import type { AudioManager } from '../../../audio/AudioManager';
+import type { SoundId } from '../../../audio/sounds';
 import { VILLAGE_CUES } from '../../../audio/villageSoundCues';
 import { TILE_SIZE } from '../../../core/constants';
 import type { EventBus } from '../../../core/EventBus';
@@ -38,7 +39,9 @@ import { COOK, cookhouseTopics } from './cookhouse';
 import { SMITH, forgeTopics, runOrenAutoGrant, type ForgeHost } from './forge';
 import { DOCTOR, infirmaryTopics, type InfirmaryHost } from './infirmary';
 import { lumberForemanTopics, type LumberForemanHost } from './lumberForeman';
-import { SawmillService } from './sawmill';
+import { PLAIN_SAWING_LOOP, SawmillService } from './sawmill';
+import { cueSoundOr } from '../blueprints/blueprintsSoundCues';
+import { blueprintsStationFor } from '../blueprints/StationUpgrades';
 import {
   otherCrawler,
   type Crawler,
@@ -83,6 +86,8 @@ export interface VillageServicesDeps {
   readonly noteResourceActivity: () => void;
   /** Whether the world is stopped under a menu; the treatment and the saw wait while it is. */
   readonly worldHalted: () => boolean;
+  /** Whether one of the sawmill's machines is being rebuilt from Tikka's blueprints right now. */
+  readonly stationsUpgrading: () => boolean;
 }
 
 const UPDATES_PER_SECOND = 60;
@@ -96,7 +101,6 @@ const SAWING_VOLUME = 0.7;
 const IDLE_SAWING_VOLUME = 0.18;
 /** How far from the saw her working can still be heard, fading to nothing at the edge. */
 const IDLE_SAWING_RANGE_TILES = 10;
-const SAWING_LOOP = 'loopable_sawing';
 const UPGRADE_SOUND = 'tool_upgrade';
 
 /** The claim the priced menu has always had wherever it is shown; its buttons are ringed under this id. */
@@ -131,6 +135,9 @@ export class VillageServices {
       fennaTilesFrom: (crawler) => this.fennaTilesFrom(crawler),
       fennaNoWood: () => void deps.villagers.bark('fenna', FENNA.noLogs, true),
       unlocked: () => deps.state.unlocks.processingStations,
+      isUpgraded: (station) =>
+        deps.state.blueprints.stationsUpgraded[blueprintsStationFor(station.kind)],
+      rebuilding: deps.stationsUpgrading,
     });
     const counter = { openShop: (shop: ShopDefinition): void => this.openShop(shop) };
     const announce = (message: string): void => deps.menus.announce(message);
@@ -301,17 +308,34 @@ export class VillageServices {
     this.updateSawSound(halted);
   }
 
-  /** One loop, two uses: loud while a cut runs at the machine, faint while Fenna works the saw. */
+  /**
+   * One loop, two uses: loud while a cut runs at the machine, faint while Fenna
+   * works the saw. A cut at the upgraded bench sounds as the upgraded loop;
+   * whichever loop is not the wanted one is stopped, so a cut that ends or is
+   * cancelled never leaves its loop running.
+   */
   private updateSawSound(halted: boolean): void {
     const audio = this.deps.audio;
     if (audio === null) return;
     const volume = halted ? 0 : this.sawVolume();
+    const wanted = this.sawmill.sawingLoop ?? PLAIN_SAWING_LOOP;
     if (volume <= 0) {
-      audio.stopAmbientLoop(SAWING_LOOP);
+      this.stopSawLoops();
       return;
     }
-    if (audio.isAmbientLoopRunning(SAWING_LOOP)) audio.setAmbientLoopVolume(SAWING_LOOP, volume);
-    else audio.startAmbientLoop(SAWING_LOOP, volume);
+    for (const loop of this.sawLoops()) {
+      if (loop !== wanted) audio.stopAmbientLoop(loop);
+    }
+    if (audio.isAmbientLoopRunning(wanted)) audio.setAmbientLoopVolume(wanted, volume);
+    else audio.startAmbientLoop(wanted, volume);
+  }
+
+  private sawLoops(): SoundId[] {
+    return [PLAIN_SAWING_LOOP, cueSoundOr('upgradedSawLoop', PLAIN_SAWING_LOOP)];
+  }
+
+  private stopSawLoops(): void {
+    for (const loop of this.sawLoops()) this.deps.audio?.stopAmbientLoop(loop);
   }
 
   private sawVolume(): number {
@@ -521,7 +545,7 @@ export class VillageServices {
 
   /** Stops the saw's loop for a hard stop the village is not ticked through; it resumes on the next tick. */
   silenceLoops(): void {
-    this.deps.audio?.stopAmbientLoop(SAWING_LOOP);
+    this.stopSawLoops();
   }
 
   /** A death rewind: nothing mid-cut or mid-treatment survives the respawn, and no menu stays up. */
@@ -536,6 +560,6 @@ export class VillageServices {
     this.disposed = true;
     this.removeKeyListeners();
     this.onRewind();
-    this.deps.audio?.stopAmbientLoop(SAWING_LOOP);
+    this.stopSawLoops();
   }
 }

@@ -657,6 +657,23 @@ export class GameMap {
     return this._placedInteriorProps;
   }
   /**
+   * Repaints one placed prop as another of its variants, for a room whose
+   * furniture follows a story while the room is open — a drawer that empties
+   * when something is handed over. The prop keeps its tile, footprint and id.
+   * The list is replaced rather than edited in place, so a cache keyed on it
+   * sees the change. Returns whether anything changed.
+   */
+  setPlacedInteriorPropVariant(id: string, variant: number): boolean {
+    const index = this._placedInteriorProps.findIndex((placed) => placed.id === id);
+    if (index < 0) return false;
+    const current = this._placedInteriorProps[index];
+    if (current.variant === variant) return false;
+    const next = [...this._placedInteriorProps];
+    next[index] = { ...current, variant };
+    this._placedInteriorProps = next;
+    return true;
+  }
+  /**
    * Every tile an authored interior prop's footprint covers, with whether the
    * prop stops movement there. A prop leaves the tile's type as floor and
    * blocks it with a permanent flag instead, so a planner that reads tile

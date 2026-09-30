@@ -38,7 +38,7 @@ import { GameMap } from '../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
-import { ALL_STATS, type DamageSource } from '../src/Player';
+import { ALL_STATS, POTION_HEAL_FRACTION, type DamageSource } from '../src/Player';
 import { Mob, REVIVE_IN_PLACE_RISE_FRAMES } from '../src/creatures/Mob';
 import { BrindleGrub } from '../src/creatures/BrindleGrub';
 import { GoblinArcher } from '../src/creatures/GoblinArcher';
@@ -69,6 +69,17 @@ import {
 import { level1, level2, level3, tutorialLevel } from '../src/levels';
 import type { LevelDef, MobLevelRange, MobSpawnRule } from '../src/levels/types';
 import { BOUNTY_DEFS, type BountyDef } from '../src/systems/bountyDefs';
+import {
+  ESCORT_AMBUSH_KINDS,
+  ESCORT_KIND_CAPS,
+  ESCORT_WAVE_COUNT,
+  ESCORT_WAVE_MAX_BODIES,
+  ESCORT_WAVE_MIN_BODIES,
+  type EscortAmbushKind,
+  fieldAsLesserDead,
+} from '../src/systems/briarHollow/EscortAmbushSystem';
+import { createUndead } from '../src/systems/briarHollow/VillageAssaultSystem';
+import { resolveVillageAssaultLevel } from '../src/systems/briarHollow/villageAssaultLevel';
 import {
   bountyBossLevel,
   bountyMinionLevel,
@@ -4377,6 +4388,133 @@ section('bounty encounters whole, against a crawler standing her ground (balance
         );
       }
     }
+  }
+}
+
+// ── Midge's escort: the road's ambushes ────────────────────────────────────
+
+/** Level rolls taken per party level, keeping the highest: an ambush priced at the worst its band can roll. */
+const ESCORT_LEVEL_ROLLS = 64;
+const ESCORT_LEVEL_SEED = 4231;
+
+/**
+ * A wave is priced a third at a time. Its bodies are all fixated on the cow,
+ * so a third of them go on past the party to her — her peril, which
+ * `verify:midge-escort` sizes on the real road — and the party meets the
+ * other two thirds a third at a time, strung out by their stagger and their
+ * different paces; three to a crawler is the fight the wave is sized for. The
+ * whole wave on the real road is tuned by playtest.
+ */
+const ESCORT_WAVE_THIRDS = 3;
+/** Thirds of a wave the party fights: every third but the one the cow draws. */
+const ESCORT_THIRDS_ON_THE_PARTY = ESCORT_WAVE_THIRDS - 1;
+const ESCORT_THIRD_MIN_BODIES = Math.ceil(ESCORT_WAVE_MIN_BODIES / ESCORT_WAVE_THIRDS);
+const ESCORT_THIRD_MAX_BODIES = Math.ceil(ESCORT_WAVE_MAX_BODIES / ESCORT_WAVE_THIRDS);
+/** A kind's cap in one third of a wave: its share of the wave's cap, rounded up. */
+function escortThirdCap(kind: EscortAmbushKind): number {
+  const waveCap = ESCORT_KIND_CAPS[kind] ?? Infinity;
+  return Math.ceil(waveCap / ESCORT_WAVE_THIRDS);
+}
+
+/** Every third of a wave the escort's rules allow: each size, every mix of kinds within the caps. */
+function escortWaveMixes(): EscortAmbushKind[][] {
+  const mixes: EscortAmbushKind[][] = [];
+  const extend = (mix: EscortAmbushKind[], from: number, size: number): void => {
+    if (mix.length === size) {
+      mixes.push(mix);
+      return;
+    }
+    for (let index = from; index < ESCORT_AMBUSH_KINDS.length; index++) {
+      const kind = ESCORT_AMBUSH_KINDS[index];
+      const taken = mix.filter((already) => already === kind).length;
+      if (taken >= escortThirdCap(kind)) continue;
+      extend([...mix, kind], index, size);
+    }
+  };
+  for (let size = ESCORT_THIRD_MIN_BODIES; size <= ESCORT_THIRD_MAX_BODIES; size++)
+    extend([], 0, size);
+  return mixes;
+}
+
+section(
+  `Midge's escort ambushes: every third of a wave the rules allow leaves the reference party (${ROOM_FIGHT_BUILD}) at least ${asPercent(ROOM_FIGHT_HP_REMAINING_MIN)} on normal; the off-stat party finishes ${ESCORT_WAVE_COUNT} of the worst waves on easy`,
+);
+{
+  const easy = DIFFICULTY_PROFILES.easy;
+  const window = fightWindow(level3);
+  const creatures = new Map<EscortAmbushKind, Creature>(
+    ESCORT_AMBUSH_KINDS.map((kind) => [
+      kind,
+      {
+        key: `escort ${kind}`,
+        // Scaled before the harness levels it rather than after, as the road
+        // does: levelled health is linear in the base, so it comes out the same.
+        make: (tileX: number, tileY: number) => {
+          const mob = createUndead(kind, tileX, tileY);
+          fieldAsLesserDead(mob);
+          return mob;
+        },
+        isBoss: false,
+      },
+    ]),
+  );
+  const worstLevel = (partyLevel: number, profile: DifficultyProfile): number => {
+    seedRandom(ESCORT_LEVEL_SEED + partyLevel);
+    let worst = 1;
+    for (let roll = 0; roll < ESCORT_LEVEL_ROLLS; roll++) {
+      worst = Math.max(worst, resolveVillageAssaultLevel(level3, partyLevel, profile));
+    }
+    return worst;
+  };
+  const mixes = escortWaveMixes();
+  check(mixes.length > 0, `the escort's rules allow ${mixes.length} mixes of a third of a wave`);
+  /** The costliest third: its share of the pooled bar lost and its bodies, or null if any cannot be priced. */
+  const costliest = (
+    partyLevel: number,
+    build: ReferenceBuild,
+    profile: DifficultyProfile,
+  ): { share: number; mix: readonly EscortAmbushKind[] } | null => {
+    const level = worstLevel(partyLevel, profile);
+    let worst: { share: number; mix: readonly EscortAmbushKind[] } | null = null;
+    for (const mix of mixes) {
+      const bodies: RoomBody[] = [];
+      for (const kind of mix) {
+        const creature = creatures.get(kind);
+        if (creature === undefined) return null;
+        bodies.push({ creature, level });
+      }
+      const fight = partyFight(bodies, partyLevel, build, profile);
+      if (fight === null) return null;
+      if (worst === null || fight.hpShare > worst.share) worst = { share: fight.hpShare, mix };
+    }
+    return worst;
+  };
+  for (const partyLevel of [window.first, window.last]) {
+    const label = `level3 escort (party ${partyLevel})`;
+    const normal = costliest(partyLevel, ROOM_FIGHT_BUILD, NORMAL);
+    const offStat = costliest(partyLevel, 'off-stat', easy);
+    if (normal === null || offStat === null) {
+      check(false, `${label}: every ambusher kind can be priced`);
+      continue;
+    }
+    const left = Math.max(0, 1 - normal.share);
+    check(
+      left >= ROOM_FIGHT_HP_REMAINING_MIN - EPSILON,
+      `${label}: the costliest third of a wave (${normal.mix.join(', ')}) leaves ${asPercent(left)} on normal`,
+    );
+    // The waves are separate fights with a breather between them, and a
+    // party on the road drinks in it: one potion each, which heals the pooled
+    // bar by the same share one potion heals either crawler. Within a wave
+    // the party fights its thirds back to back, with no potion between.
+    let barLeft = 1;
+    for (let wave = 0; wave < ESCORT_WAVE_COUNT; wave++) {
+      if (wave > 0) barLeft = Math.min(1, barLeft + POTION_HEAL_FRACTION);
+      barLeft -= offStat.share * ESCORT_THIRDS_ON_THE_PARTY;
+    }
+    check(
+      barLeft > EPSILON,
+      `${label}: the off-stat party on easy finishes ${ESCORT_WAVE_COUNT} waves of ${ESCORT_THIRDS_ON_THE_PARTY} of its costliest third (${offStat.mix.join(', ')}, ${asPercent(offStat.share)} each), a potion each between waves (${asPercent(Math.max(0, barLeft))} left)`,
+    );
   }
 }
 

@@ -71,6 +71,7 @@ import { drawCircusStructureTile } from './circusStructureTiles';
 import { drawTentPoleTile } from './tentPoleTiles';
 import { drawTentPoleBaseTile } from './interiorTiles';
 import { drawRockDepositTile } from './rockDepositTiles';
+import { tileHash01 } from './hollowTileHash';
 import { BOARD_CENTRE_X, SIGN_ARROW_CENTRE_Y_TILES } from '../../sprites/art/crawlerSignArt';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
@@ -297,6 +298,24 @@ const GARRISON_POST_WIDTH_PX = 6;
 const GARRISON_PALE_COLOR = '#6f5a3a';
 const GARRISON_PALE_SHADE_COLOR = '#4a3a26';
 
+/**
+ * A fence left to rot for years and never rebuilt: rails bleached silver-grey
+ * and posts gone near-black, where the post-and-rail it is replaced with is
+ * warm brown throughout. The two differ in hue and in value, so a run that is
+ * half rebuilt reads as old and new at a glance, before any of the damage
+ * drawn on the old one resolves.
+ */
+const RICKETY_POST_COLOR = '#48443b';
+const RICKETY_POST_SHADE_COLOR = '#282520';
+const RICKETY_RAIL_COLOR = '#8e8b7e';
+const RICKETY_RAIL_HIGHLIGHT_COLOR = '#b4b1a2';
+/** A bleached rail's weathered underside, which keeps it reading as round timber rather than a pale stroke. */
+const RICKETY_RAIL_UNDERSIDE_COLOR = '#5b584d';
+const RICKETY_ROT_COLOR = '#5a5244';
+const RICKETY_MOSS_COLOR = '#687a2e';
+const RICKETY_WEED_COLOR = '#4a5c1f';
+const RICKETY_WEED_LIGHT_COLOR = '#8a9d3c';
+
 interface FenceStyleSpec {
   /** Fractions of a tile at which horizontal timbers run. */
   readonly railFractions: ReadonlyArray<number>;
@@ -356,6 +375,17 @@ const FENCE_STYLE_SPECS: Record<FenceStyle, FenceStyleSpec> = {
     postCapColor: GARRISON_POST_CAP_COLOR,
     paleColor: GARRISON_PALE_COLOR,
     paleShadeColor: GARRISON_PALE_SHADE_COLOR,
+  },
+  // Drawn by `drawRicketyFence`, which reads its rails and colours from here
+  // but bends every one of them.
+  rickety: {
+    railFractions: FENCE_RAIL_FRACTIONS,
+    railThicknessPx: FENCE_RAIL_THICKNESS_PX,
+    railColor: RICKETY_RAIL_COLOR,
+    railHighlightColor: RICKETY_RAIL_HIGHLIGHT_COLOR,
+    postColor: RICKETY_POST_COLOR,
+    postShadeColor: RICKETY_POST_SHADE_COLOR,
+    infill: 'none',
   },
 };
 
@@ -453,6 +483,10 @@ function drawFence(
   tx: number,
   ty: number,
 ): void {
+  if (structure[ty]?.[tx]?.fenceStyle === 'rickety') {
+    drawRicketyFence(ctx, structure, sx, sy, ts, tx, ty);
+    return;
+  }
   const style = fenceStyleAt(structure, tx, ty);
   const hasWest = anchorsRailAt(structure, tx - 1, ty);
   const hasEast = anchorsRailAt(structure, tx + 1, ty);
@@ -470,44 +504,7 @@ function drawFence(
   const postTop = sy + Math.round(ts * FENCE_POST_TOP_FRACTION);
   const postBottom = sy + Math.round(ts * FENCE_POST_BOTTOM_FRACTION);
   const southEdge = hasSouth ? sy + ts : centreY;
-  // The shadow's band, unlike the rail's, has to reach down to the east-west bar
-  // on a corner, or the two leave an 8 px nick where the run turns. They are
-  // drawn as one path, so the overlap costs nothing.
-  const shadowSouthEdge = hasSouth ? sy + ts : runsEastWest ? postBottom : centreY;
-
-  // One path, two rectangles: filled twice, the shared corner composites to 0.39
-  // alpha against 0.22 either side and reads as a smudge. Nonzero winding fills
-  // the union exactly once.
-  ctx.fillStyle = FENCE_SHADOW_COLOR;
-  ctx.beginPath();
-  if (runsEastWest) {
-    ctx.rect(
-      westEdge,
-      postBottom - FENCE_SHADOW_HEIGHT_PX,
-      eastEdge - westEdge,
-      FENCE_SHADOW_HEIGHT_PX,
-    );
-  }
-  if (!runsEastWest && !runsNorthSouth) {
-    // A gate cheek stands on its own and still casts a shadow. It had one before
-    // the rails became directional, and losing it made the two cheeks in the town
-    // read as floating.
-    ctx.rect(
-      centreX - FENCE_POST_WIDTH_PX,
-      postBottom - FENCE_SHADOW_HEIGHT_PX,
-      FENCE_POST_WIDTH_PX * 2,
-      FENCE_SHADOW_HEIGHT_PX,
-    );
-  }
-  if (runsNorthSouth) {
-    ctx.rect(
-      centreX - FENCE_POST_WIDTH_PX,
-      northEdge,
-      FENCE_POST_WIDTH_PX * 2,
-      shadowSouthEdge - northEdge,
-    );
-  }
-  ctx.fill();
+  drawFenceShadow(ctx, sx, sy, ts, { hasWest, hasEast, hasNorth, hasSouth });
 
   if (runsEastWest) {
     for (const railFraction of style.railFractions) {
@@ -546,6 +543,930 @@ function drawFence(
   if (style.postCapColor !== undefined) {
     ctx.fillStyle = style.postCapColor;
     ctx.fillRect(postX - 1, top, postWidthPx + 2, FENCE_POST_CAP_HEIGHT_PX);
+  }
+}
+
+interface FenceNeighbours {
+  readonly hasWest: boolean;
+  readonly hasEast: boolean;
+  readonly hasNorth: boolean;
+  readonly hasSouth: boolean;
+}
+
+/** The ground shadow a fence tile casts on its own tile, shared by every style. */
+function drawFenceShadow(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  { hasWest, hasEast, hasNorth, hasSouth }: FenceNeighbours,
+): void {
+  const runsEastWest = hasWest || hasEast;
+  const runsNorthSouth = hasNorth || hasSouth;
+  const centreX = sx + Math.round(ts / 2);
+  const centreY = sy + Math.round(ts / 2);
+  const westEdge = hasWest ? sx : centreX;
+  const eastEdge = hasEast ? sx + ts : centreX;
+  const northEdge = hasNorth ? sy : centreY;
+  const postBottom = sy + Math.round(ts * FENCE_POST_BOTTOM_FRACTION);
+  // The shadow's band, unlike the rail's, has to reach down to the east-west bar
+  // on a corner, or the two leave an 8 px nick where the run turns. They are
+  // drawn as one path, so the overlap costs nothing.
+  const shadowSouthEdge = hasSouth ? sy + ts : runsEastWest ? postBottom : centreY;
+
+  // One path, two rectangles: filled twice, the shared corner composites to 0.39
+  // alpha against 0.22 either side and reads as a smudge. Nonzero winding fills
+  // the union exactly once.
+  ctx.fillStyle = FENCE_SHADOW_COLOR;
+  ctx.beginPath();
+  if (runsEastWest) {
+    ctx.rect(
+      westEdge,
+      postBottom - FENCE_SHADOW_HEIGHT_PX,
+      eastEdge - westEdge,
+      FENCE_SHADOW_HEIGHT_PX,
+    );
+  }
+  if (!runsEastWest && !runsNorthSouth) {
+    // A gate cheek stands on its own and still needs a shadow, or it reads as
+    // floating.
+    ctx.rect(
+      centreX - FENCE_POST_WIDTH_PX,
+      postBottom - FENCE_SHADOW_HEIGHT_PX,
+      FENCE_POST_WIDTH_PX * 2,
+      FENCE_SHADOW_HEIGHT_PX,
+    );
+  }
+  if (runsNorthSouth) {
+    ctx.rect(
+      centreX - FENCE_POST_WIDTH_PX,
+      northEdge,
+      FENCE_POST_WIDTH_PX * 2,
+      shadowSouthEdge - northEdge,
+    );
+  }
+  ctx.fill();
+}
+
+// ── Rickety fence ────────────────────────────────────────────────────────────
+
+/** Salts for the rickety fence's per-tile and per-joint choices, so each varies independently. */
+const RICKETY_SALT = {
+  lean: 0x51c1,
+  height: 0x51c2,
+  propped: 0x51c3,
+  twine: 0x51c4,
+  sag: 0x51c5,
+  damage: 0x51c6,
+  wireSlack: 0x51c7,
+  split: 0x51c8,
+  wireSnapped: 0x51c9,
+  topSag: 0x51ca,
+  stump: 0x51cb,
+  fallenEnd: 0x51cc,
+  rotPhase: 0x51cd,
+  plankTilt: 0x51ce,
+  weeds: 0x51cf,
+} as const;
+
+/** How far a post's top may lean off its foot, as a fraction of the tile, either way. */
+const RICKETY_MAX_LEAN_FRACTION = 0.1;
+/** Extra lean on a post that has settled onto a stone. */
+const RICKETY_PROPPED_LEAN_FRACTION = 0.12;
+/**
+ * How much shorter than a sound post a rickety one may stand, as a fraction of
+ * the tile. Small enough that every whole post still reaches the top rail.
+ */
+const RICKETY_HEIGHT_SPREAD_FRACTION = 0.1;
+const RICKETY_POST_WIDTH_PX = 4;
+/**
+ * A post snapped off above the lower rail: its broken top stands this far down
+ * the tile, so the lower rail still has something to hang from and the top
+ * rail does not.
+ */
+const RICKETY_STUMP_TOP_FRACTION = 0.5;
+const RICKETY_STUMP_SHARE = 0.18;
+/** The split top: one shoulder of the post stands this much lower than the other. */
+const RICKETY_SPLIT_DROP_PX = 3;
+/** The crack down a split post's face, as a share of the post's height. */
+const RICKETY_CRACK_SHARE = 0.4;
+/** Share of posts propped on a stone, share carrying a twine patch, share of posts split. */
+const RICKETY_PROPPED_SHARE = 0.14;
+const RICKETY_TWINE_SHARE = 0.3;
+const RICKETY_SPLIT_SHARE = 0.55;
+/**
+ * How far the lower rail sags at the middle of a span between two rickety
+ * posts, as a fraction of the tile — between a floor and the floor plus a
+ * spread, chosen per joint.
+ */
+const RICKETY_SAG_MIN_FRACTION = 0.03;
+const RICKETY_SAG_SPREAD_FRACTION = 0.12;
+/**
+ * The top rail sags less than the lower one — it is the rail that gets leaned
+ * on and re-nailed — up to this fraction of the tile at mid-span.
+ */
+const RICKETY_TOP_SAG_SPREAD_FRACTION = 0.05;
+/**
+ * What has happened to a side-on span between two rickety posts, as shares of
+ * the joints: both rails gone, the top rail fallen from one post, the lower
+ * rail snapped in two. The rest merely sag. Most spans are damaged on purpose —
+ * a run with only the odd break reads as an old fence, not a broken one.
+ */
+const RICKETY_GAP_SHARE = 0.2;
+const RICKETY_TOP_FALLEN_SHARE = 0.25;
+const RICKETY_LOW_SNAPPED_SHARE = 0.25;
+/** Which post a fallen top rail let go of, when no stump decides it. */
+const RICKETY_FALLEN_AT_SECOND_SHARE = 0.5;
+/** Share of end-on joints whose rail is gone, leaving only wire and a plank on the ground. */
+const RICKETY_END_ON_GAP_SHARE = 0.35;
+/** A snapped rail end reaches this share of the way to mid-span and hangs this far. */
+const RICKETY_BROKEN_REACH_SHARE = 0.7;
+const RICKETY_BROKEN_DROP_FRACTION = 0.2;
+/**
+ * Where a fallen rail or plank lies on the grass, as a fraction down the tile:
+ * just below the posts' feet and still inside the tile, so none of it is drawn
+ * over ground the player can stand on.
+ */
+const RICKETY_GROUND_FRACTION = 0.88;
+/** A fallen plank lies askew by up to this much, end to end, either way. */
+const RICKETY_PLANK_TILT_PX = 2;
+/** A dropped rail end rests this far clear of the post it fell from. */
+const RICKETY_FALLEN_CLEARANCE_PX = 1;
+/** An end-on plank on the ground crosses its joint at this slant, in px either side of it. */
+const RICKETY_END_ON_PLANK_HALF_WIDTH_PX = 4;
+const RICKETY_END_ON_PLANK_HALF_HEIGHT_PX = 7;
+/** A snapped end is a raw, paler break with a splinter standing proud of it. */
+const RICKETY_SPLINTER_PX = 2;
+/**
+ * The two wire strands, as fractions down the tile: between and below the
+ * rails, where they still mark the line through a span whose rails are gone.
+ */
+const RICKETY_WIRE_FRACTIONS = [0.46, 0.74] as const;
+/** Slack in a wire strand at mid-span: a floor plus a spread, per joint. */
+const RICKETY_WIRE_SLACK_MIN_FRACTION = 0.02;
+const RICKETY_WIRE_SLACK_SPREAD_FRACTION = 0.05;
+/** Share of wire strands that have snapped at a joint, leaving a gap in that strand. */
+const RICKETY_WIRE_SNAPPED_SHARE = 0.3;
+/** Old galvanised wire gone dull: dark enough to read against the grass as strands. */
+const RICKETY_WIRE_COLOR = '#3f3e3a';
+const RICKETY_WIRE_PX = 1;
+/** Turns of wire twisted round the post where each strand is fixed. */
+const RICKETY_WIRE_TWIST_TURNS = 2;
+const RICKETY_WIRE_TWIST_STEP_PX = 2;
+/** Twine lashed round a post-and-rail joint: a few pale turns crossing it. */
+const RICKETY_TWINE_COLOR = '#d2bb82';
+const RICKETY_TWINE_TURNS = 3;
+const RICKETY_TWINE_STEP_PX = 2;
+const RICKETY_TWINE_HALF_WIDTH_PX = 4;
+const RICKETY_TWINE_SLANT_PX = 2;
+/** The stone a settled post is propped on. */
+const RICKETY_STONE_COLOR = '#7d837a';
+const RICKETY_STONE_LIGHT_COLOR = '#a4a99e';
+const RICKETY_STONE_DARK_COLOR = '#4d524b';
+const RICKETY_STONE_RX_PX = 5;
+const RICKETY_STONE_RY_PX = 3;
+/** The stone's shaded underside shows this far below it; its lit crown is offset the same way up. */
+const RICKETY_STONE_SHADE_DROP_PX = 1;
+const RICKETY_STONE_LIT_SHARE = 0.5;
+/** The end-on run's timber kinks off its line at the post by up to this, either way. */
+const RICKETY_END_ON_WOBBLE_PX = 2;
+/** An end-on run's wire strand runs this far east of its rail. */
+const RICKETY_END_ON_WIRE_OFFSET_PX = 3;
+/** Seen end-on, a strand's slack is foreshortened to a sideways bow of this share of it. */
+const RICKETY_END_ON_BOW_SHARE = 0.5;
+/**
+ * Rot along a rail, drawn as a dash pattern down its length so both tiles of a
+ * span, drawing the same path, put every blotch in the same place. Dash, gap,
+ * dash, gap: two blotches of different lengths at uneven spacing, so the rot
+ * does not read as a stripe.
+ */
+const RICKETY_ROT_PATTERN_PX = [2, 7, 4, 15] as const;
+const RICKETY_ROT_PERIOD_PX = RICKETY_ROT_PATTERN_PX.reduce((sum, length) => sum + length, 0);
+const RICKETY_ROT_WIDTH_PX = 2;
+/** Moss along a rail's upper face, sparser and longer than the rot. */
+const RICKETY_MOSS_DASH_PX = 4;
+const RICKETY_MOSS_GAP_PX = 9;
+/** Moss climbing a post from the grass. */
+const RICKETY_POST_MOSS_HEIGHT_PX = 4;
+/** Long grass left uncut round a post: each blade's offset from the foot and height, in px. */
+const RICKETY_WEED_BLADES = [
+  { offsetPx: -3, heightPx: 5 },
+  { offsetPx: -1, heightPx: 7 },
+  { offsetPx: 2, heightPx: 6 },
+  { offsetPx: 4, heightPx: 4 },
+] as const;
+const RICKETY_WEED_LEAN_PX = 2;
+const RICKETY_WEED_SHARE = 0.65;
+
+/** One rickety tile's upright post, in screen pixels. */
+interface RicketyPost {
+  /** The post's foot, where it meets the ground. */
+  readonly footX: number;
+  readonly top: number;
+  readonly bottom: number;
+  /** How far the post's top stands off its foot, in px, east positive. */
+  readonly leanPx: number;
+  readonly propped: boolean;
+  readonly split: boolean;
+  readonly stump: boolean;
+}
+
+function isRicketyFenceAt(structure: TileContent[][], tx: number, ty: number): boolean {
+  return structure[ty]?.[tx]?.type === FENCE && structure[ty]?.[tx]?.fenceStyle === 'rickety';
+}
+
+/** A signed value in [-1, 1) from a tile hash. */
+function signedHash(tx: number, ty: number, salt: number): number {
+  return tileHash01(tx, ty, salt) * 2 - 1;
+}
+
+/**
+ * The upright post of the rickety tile at (`tx`, `ty`), whose top-left corner
+ * is drawn at (`sx`, `sy`). A function of position only, so the tile beside it
+ * can work out exactly where this post stands and hang a span off it.
+ */
+function ricketyPost(tx: number, ty: number, sx: number, sy: number, ts: number): RicketyPost {
+  const propped = tileHash01(tx, ty, RICKETY_SALT.propped) < RICKETY_PROPPED_SHARE;
+  const stump = tileHash01(tx, ty, RICKETY_SALT.stump) < RICKETY_STUMP_SHARE;
+  const leanFraction =
+    signedHash(tx, ty, RICKETY_SALT.lean) * RICKETY_MAX_LEAN_FRACTION +
+    (propped ? RICKETY_PROPPED_LEAN_FRACTION : 0);
+  const wholeTopFraction =
+    FENCE_POST_TOP_FRACTION +
+    tileHash01(tx, ty, RICKETY_SALT.height) * RICKETY_HEIGHT_SPREAD_FRACTION;
+  const stoneTop = sy + Math.round(ts * FENCE_POST_BOTTOM_FRACTION) - RICKETY_STONE_RY_PX * 2;
+  return {
+    footX: sx + Math.round(ts / 2),
+    top: sy + Math.round(ts * (stump ? RICKETY_STUMP_TOP_FRACTION : wholeTopFraction)),
+    bottom: propped
+      ? stoneTop + RICKETY_STONE_RY_PX
+      : sy + Math.round(ts * FENCE_POST_BOTTOM_FRACTION),
+    leanPx: Math.round(ts * leanFraction),
+    propped,
+    split: tileHash01(tx, ty, RICKETY_SALT.split) < RICKETY_SPLIT_SHARE,
+    stump,
+  };
+}
+
+/** Where a post's centreline crosses height `y`, allowing for its lean. */
+function ricketyPostXAt(post: RicketyPost, y: number): number {
+  const postHeight = Math.max(1, post.bottom - post.top);
+  return post.footX + (post.leanPx * (post.bottom - y)) / postHeight;
+}
+
+type RicketyDamage = 'sagging' | 'low_snapped' | 'top_fallen' | 'gap';
+
+/**
+ * One span between two rickety tiles, and everything both sides must agree on.
+ *
+ * Every choice is keyed on the **joint** — hashed from the west (or north)
+ * tile of the pair and an axis salt — and on the two posts, which are a
+ * function of position. Each tile draws the whole span, clipped to itself, so
+ * the half one tile draws meets the half its neighbour draws exactly, however
+ * crooked the timber between them.
+ */
+interface RicketyJoint {
+  readonly damage: RicketyDamage;
+  /** For `top_fallen`: the top rail has let go of the second (east or south) post rather than the first. */
+  readonly fallenAtSecond: boolean;
+  /** How far each rail hangs below its line at mid-span, in px. */
+  readonly topSagPx: number;
+  readonly sagPx: number;
+  /** Each wire strand's slack at mid-span, in px, or null where that strand has snapped. */
+  readonly wireSlackPx: ReadonlyArray<number | null>;
+  /** How far a plank on the ground lies askew, in px, signed. */
+  readonly plankTiltPx: number;
+  /** Where along the rails the rot pattern starts, so no two spans are blotched alike. */
+  readonly rotPhasePx: number;
+}
+
+/** Keeps an east-west joint's hashes apart from a north-south joint's at the same tile. */
+const RICKETY_EAST_WEST_AXIS = 0;
+const RICKETY_NORTH_SOUTH_AXIS = 0x100;
+
+/**
+ * What has happened to a side-on span. A stump cannot hold a top rail, so a
+ * span onto one has always lost it — dropped at the stump's end, or entirely
+ * when both posts are stumps.
+ */
+function sideOnDamage(
+  first: RicketyPost,
+  second: RicketyPost,
+  roll: number,
+): Pick<RicketyJoint, 'damage'> & { readonly fallenAtSecond: boolean | null } {
+  if (first.stump && second.stump) return { damage: 'gap', fallenAtSecond: false };
+  if (first.stump || second.stump) return { damage: 'top_fallen', fallenAtSecond: second.stump };
+  if (roll < RICKETY_GAP_SHARE) return { damage: 'gap', fallenAtSecond: false };
+  const topFallenCeiling = RICKETY_GAP_SHARE + RICKETY_TOP_FALLEN_SHARE;
+  if (roll < topFallenCeiling) return { damage: 'top_fallen', fallenAtSecond: null };
+  if (roll < topFallenCeiling + RICKETY_LOW_SNAPPED_SHARE) {
+    return { damage: 'low_snapped', fallenAtSecond: false };
+  }
+  return { damage: 'sagging', fallenAtSecond: false };
+}
+
+/**
+ * The joint between two adjacent tiles, or null where either side is not
+ * rickety — a rebuilt section, or the thing a run ends against — and the
+ * joint is sound: the rail meets it at the standard height and no wire crosses.
+ *
+ * `first`/`second` are the posts either side; an end-on joint passes null,
+ * because its posts are caps and it only has two outcomes.
+ */
+function ricketyJoint(
+  structure: TileContent[][],
+  firstTx: number,
+  firstTy: number,
+  secondTx: number,
+  secondTy: number,
+  axisSalt: number,
+  ts: number,
+  posts: { readonly first: RicketyPost; readonly second: RicketyPost } | null,
+): RicketyJoint | null {
+  const bothRickety =
+    isRicketyFenceAt(structure, firstTx, firstTy) &&
+    isRicketyFenceAt(structure, secondTx, secondTy);
+  if (!bothRickety) return null;
+  const hash = (salt: number): number => tileHash01(firstTx, firstTy, salt + axisSalt);
+  const roll = hash(RICKETY_SALT.damage);
+  let damage: RicketyDamage;
+  let fallenAtSecond = hash(RICKETY_SALT.fallenEnd) < RICKETY_FALLEN_AT_SECOND_SHARE;
+  if (posts === null) {
+    damage = roll < RICKETY_END_ON_GAP_SHARE ? 'gap' : 'sagging';
+  } else {
+    const outcome = sideOnDamage(posts.first, posts.second, roll);
+    damage = outcome.damage;
+    fallenAtSecond = outcome.fallenAtSecond ?? fallenAtSecond;
+  }
+  const wireSlackPx = RICKETY_WIRE_FRACTIONS.map((_fraction, strand) => {
+    // A span with no rails left keeps its first strand, or the run would
+    // simply stop there and read as a gateway.
+    const mustHold = damage === 'gap' && strand === 0;
+    const snapped =
+      !mustHold && hash(RICKETY_SALT.wireSnapped + strand) < RICKETY_WIRE_SNAPPED_SHARE;
+    if (snapped) return null;
+    const slackShare = hash(RICKETY_SALT.wireSlack + strand);
+    return ts * (RICKETY_WIRE_SLACK_MIN_FRACTION + slackShare * RICKETY_WIRE_SLACK_SPREAD_FRACTION);
+  });
+  return {
+    damage,
+    fallenAtSecond,
+    topSagPx: Math.round(ts * hash(RICKETY_SALT.topSag) * RICKETY_TOP_SAG_SPREAD_FRACTION),
+    sagPx: Math.round(
+      ts * (RICKETY_SAG_MIN_FRACTION + hash(RICKETY_SALT.sag) * RICKETY_SAG_SPREAD_FRACTION),
+    ),
+    wireSlackPx,
+    plankTiltPx: Math.round(
+      signedHash(firstTx, firstTy, RICKETY_SALT.plankTilt + axisSalt) * RICKETY_PLANK_TILT_PX,
+    ),
+    rotPhasePx: hash(RICKETY_SALT.rotPhase) * RICKETY_ROT_PERIOD_PX,
+  };
+}
+
+/**
+ * A timber stroked along a path: its weathered underside, its body, a lit top
+ * edge, then rot and moss laid along it as dash patterns. `trace` draws the
+ * path lifted by `liftPx`.
+ */
+function strokeRicketyTimber(
+  ctx: CanvasRenderingContext2D,
+  rotPhasePx: number,
+  trace: (liftPx: number) => void,
+): void {
+  const halfBody = (FENCE_RAIL_THICKNESS_PX - FENCE_HIGHLIGHT_PX) / 2;
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = RICKETY_RAIL_COLOR;
+  ctx.lineWidth = FENCE_RAIL_THICKNESS_PX;
+  ctx.beginPath();
+  trace(0);
+  ctx.stroke();
+  ctx.strokeStyle = RICKETY_RAIL_UNDERSIDE_COLOR;
+  ctx.lineWidth = FENCE_HIGHLIGHT_PX;
+  ctx.beginPath();
+  trace(halfBody);
+  ctx.stroke();
+  ctx.strokeStyle = RICKETY_RAIL_HIGHLIGHT_COLOR;
+  ctx.beginPath();
+  trace(-halfBody);
+  ctx.stroke();
+
+  ctx.lineDashOffset = rotPhasePx;
+  ctx.setLineDash([...RICKETY_ROT_PATTERN_PX]);
+  ctx.strokeStyle = RICKETY_ROT_COLOR;
+  ctx.lineWidth = RICKETY_ROT_WIDTH_PX;
+  ctx.beginPath();
+  trace(FENCE_HIGHLIGHT_PX / 2);
+  ctx.stroke();
+  ctx.setLineDash([RICKETY_MOSS_DASH_PX, RICKETY_MOSS_GAP_PX]);
+  ctx.strokeStyle = RICKETY_MOSS_COLOR;
+  ctx.lineWidth = FENCE_HIGHLIGHT_PX;
+  ctx.beginPath();
+  trace(-halfBody);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+}
+
+/** The raw end of a snapped timber: a pale break with a splinter standing proud of it, pointing `dirX`. */
+function drawRicketySplinter(
+  ctx: CanvasRenderingContext2D,
+  endX: number,
+  endY: number,
+  dirX: number,
+): void {
+  ctx.strokeStyle = RICKETY_RAIL_HIGHLIGHT_COLOR;
+  ctx.lineWidth = FENCE_HIGHLIGHT_PX;
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.moveTo(endX, endY - FENCE_HIGHLIGHT_PX);
+  ctx.lineTo(endX + dirX * RICKETY_SPLINTER_PX, endY - FENCE_HIGHLIGHT_PX * 2);
+  ctx.moveTo(endX, endY + FENCE_HIGHLIGHT_PX);
+  ctx.lineTo(endX + (dirX * RICKETY_SPLINTER_PX) / 2, endY + FENCE_HIGHLIGHT_PX);
+  ctx.stroke();
+}
+
+/** A sagging timber between two points, lowest `sagPx` below them at mid-span. */
+function traceSaggingSpan(
+  ctx: CanvasRenderingContext2D,
+  fromX: number,
+  toX: number,
+  y: number,
+  sagPx: number,
+  liftPx: number,
+): void {
+  // A quadratic's midpoint sits halfway to its control point.
+  const controlDrop = sagPx * 2;
+  ctx.moveTo(fromX, y + liftPx);
+  ctx.quadraticCurveTo((fromX + toX) / 2, y + controlDrop + liftPx, toX, y + liftPx);
+}
+
+function strokeWireSpan(
+  ctx: CanvasRenderingContext2D,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  controlX: number,
+  controlY: number,
+): void {
+  ctx.lineCap = 'round';
+  ctx.lineWidth = RICKETY_WIRE_PX;
+  ctx.strokeStyle = RICKETY_WIRE_COLOR;
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.quadraticCurveTo(controlX, controlY, toX, toY);
+  ctx.stroke();
+}
+
+/** Where a wire strand is fixed to a post: at its height, or on a stump's broken top. */
+function wireFixY(post: RicketyPost, wireY: number): number {
+  return Math.max(wireY, post.top + FENCE_HIGHLIGHT_PX);
+}
+
+/**
+ * The whole side-on span between two rickety posts, `first` to the west. The
+ * caller clips to its own tile, and the neighbour draws the same span clipped
+ * to its tile, so between them the span is drawn once.
+ */
+function drawRicketySideOnSpan(
+  ctx: CanvasRenderingContext2D,
+  first: RicketyPost,
+  second: RicketyPost,
+  joint: RicketyJoint,
+  sy: number,
+  ts: number,
+): void {
+  const [topRailFraction, lowRailFraction] = FENCE_RAIL_FRACTIONS;
+  const topRailY = sy + Math.round(ts * topRailFraction);
+  const lowRailY = sy + Math.round(ts * lowRailFraction);
+  const groundY = sy + Math.round(ts * RICKETY_GROUND_FRACTION);
+  const postClearance = RICKETY_POST_WIDTH_PX / 2 + RICKETY_FALLEN_CLEARANCE_PX;
+
+  if (joint.damage === 'gap') {
+    const fromX = first.footX + postClearance;
+    const toX = second.footX - postClearance;
+    strokeRicketyTimber(ctx, joint.rotPhasePx, (liftPx) => {
+      ctx.moveTo(fromX, groundY - joint.plankTiltPx + liftPx);
+      ctx.lineTo(toX, groundY + joint.plankTiltPx + liftPx);
+    });
+  }
+
+  RICKETY_WIRE_FRACTIONS.forEach((fraction, strand) => {
+    const slackPx = joint.wireSlackPx[strand];
+    if (slackPx === null) return;
+    const wireY = sy + Math.round(ts * fraction);
+    const fromY = wireFixY(first, wireY);
+    const toY = wireFixY(second, wireY);
+    const fromX = ricketyPostXAt(first, fromY);
+    const toX = ricketyPostXAt(second, toY);
+    strokeWireSpan(ctx, fromX, fromY, toX, toY, (fromX + toX) / 2, (fromY + toY) / 2 + slackPx * 2);
+  });
+
+  if (joint.damage === 'low_snapped') {
+    for (const [post, towards] of [
+      [first, second],
+      [second, first],
+    ] as const) {
+      const postX = ricketyPostXAt(post, lowRailY);
+      const midX = (postX + ricketyPostXAt(towards, lowRailY)) / 2;
+      const endX = postX + (midX - postX) * RICKETY_BROKEN_REACH_SHARE;
+      const endY = lowRailY + Math.round(ts * RICKETY_BROKEN_DROP_FRACTION);
+      strokeRicketyTimber(ctx, joint.rotPhasePx, (liftPx) => {
+        ctx.moveTo(postX, lowRailY + liftPx);
+        ctx.lineTo(endX, endY + liftPx);
+      });
+      drawRicketySplinter(ctx, endX, endY, Math.sign(midX - postX));
+    }
+  } else if (joint.damage !== 'gap') {
+    const fromX = ricketyPostXAt(first, lowRailY);
+    const toX = ricketyPostXAt(second, lowRailY);
+    strokeRicketyTimber(ctx, joint.rotPhasePx, (liftPx) =>
+      traceSaggingSpan(ctx, fromX, toX, lowRailY, joint.sagPx, liftPx),
+    );
+  }
+
+  if (joint.damage === 'top_fallen') {
+    const held = joint.fallenAtSecond ? first : second;
+    const dropped = joint.fallenAtSecond ? second : first;
+    const heldX = ricketyPostXAt(held, topRailY);
+    const towardsHeld = Math.sign(held.footX - dropped.footX);
+    const restX = dropped.footX + towardsHeld * postClearance;
+    strokeRicketyTimber(ctx, joint.rotPhasePx, (liftPx) => {
+      ctx.moveTo(heldX, topRailY + liftPx);
+      ctx.lineTo(restX, groundY + liftPx);
+    });
+  } else if (joint.damage === 'sagging' || joint.damage === 'low_snapped') {
+    const fromX = ricketyPostXAt(first, topRailY);
+    const toX = ricketyPostXAt(second, topRailY);
+    strokeRicketyTimber(ctx, joint.rotPhasePx, (liftPx) =>
+      traceSaggingSpan(ctx, fromX, toX, topRailY, joint.topSagPx, liftPx),
+    );
+  }
+}
+
+/**
+ * Half a span from a rickety post to a sound joint — a rebuilt section, or the
+ * wall a run ends against — at the standard rail heights, since that is where
+ * the sound side's rails arrive. A stump holds its half of the top rail on its
+ * broken top.
+ */
+function drawRicketySoundHalf(
+  ctx: CanvasRenderingContext2D,
+  post: RicketyPost,
+  edgeX: number,
+  sy: number,
+  ts: number,
+): void {
+  for (const railFraction of FENCE_RAIL_FRACTIONS) {
+    const railY = sy + Math.round(ts * railFraction);
+    const fixY = Math.max(railY, post.top + FENCE_HIGHLIGHT_PX);
+    const postX = ricketyPostXAt(post, fixY);
+    strokeRicketyTimber(ctx, 0, (liftPx) => {
+      ctx.moveTo(postX, fixY + liftPx);
+      ctx.lineTo(edgeX, railY + liftPx);
+    });
+  }
+}
+
+/** The upright post itself: leaning, split or snapped off, mossed at the foot, in long grass. */
+function drawRicketyUpright(
+  ctx: CanvasRenderingContext2D,
+  post: RicketyPost,
+  tx: number,
+  ty: number,
+): void {
+  const halfWidth = RICKETY_POST_WIDTH_PX / 2;
+  const topX = post.footX + post.leanPx;
+  const splitDrop = post.split ? RICKETY_SPLIT_DROP_PX : 0;
+  ctx.fillStyle = RICKETY_POST_COLOR;
+  ctx.beginPath();
+  ctx.moveTo(post.footX - halfWidth, post.bottom);
+  ctx.lineTo(post.footX + halfWidth, post.bottom);
+  ctx.lineTo(topX + halfWidth, post.top + splitDrop);
+  ctx.lineTo(topX - halfWidth, post.top);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = RICKETY_MOSS_COLOR;
+  ctx.fillRect(
+    post.footX - halfWidth,
+    post.bottom - RICKETY_POST_MOSS_HEIGHT_PX,
+    RICKETY_POST_WIDTH_PX - FENCE_HIGHLIGHT_PX,
+    RICKETY_POST_MOSS_HEIGHT_PX,
+  );
+
+  ctx.strokeStyle = RICKETY_POST_SHADE_COLOR;
+  ctx.lineWidth = FENCE_HIGHLIGHT_PX;
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.moveTo(post.footX + halfWidth - FENCE_HIGHLIGHT_PX / 2, post.bottom);
+  ctx.lineTo(topX + halfWidth - FENCE_HIGHLIGHT_PX / 2, post.top + splitDrop);
+  ctx.stroke();
+  if (post.split && !post.stump) {
+    const crackBottom = post.top + (post.bottom - post.top) * RICKETY_CRACK_SHARE;
+    ctx.beginPath();
+    ctx.moveTo(ricketyPostXAt(post, post.top), post.top);
+    ctx.lineTo(ricketyPostXAt(post, crackBottom), crackBottom);
+    ctx.stroke();
+  }
+  if (post.stump) {
+    // The break is fresh wood against the grey: the one pale mark on a stump,
+    // and what says "snapped" rather than "short".
+    ctx.strokeStyle = RICKETY_RAIL_HIGHLIGHT_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(topX - halfWidth, post.top + FENCE_HIGHLIGHT_PX);
+    ctx.lineTo(topX - FENCE_HIGHLIGHT_PX, post.top - FENCE_HIGHLIGHT_PX);
+    ctx.lineTo(topX, post.top + splitDrop);
+    ctx.lineTo(topX + halfWidth, post.top + splitDrop - FENCE_HIGHLIGHT_PX);
+    ctx.stroke();
+  }
+
+  if (tileHash01(tx, ty, RICKETY_SALT.weeds) >= RICKETY_WEED_SHARE) return;
+  RICKETY_WEED_BLADES.forEach(({ offsetPx, heightPx }, blade) => {
+    const leanPx = Math.round(
+      signedHash(tx, ty, RICKETY_SALT.weeds + blade) * RICKETY_WEED_LEAN_PX,
+    );
+    const bladeX = post.footX + offsetPx;
+    ctx.strokeStyle = blade % 2 === 0 ? RICKETY_WEED_COLOR : RICKETY_WEED_LIGHT_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(bladeX, post.bottom);
+    ctx.lineTo(bladeX + leanPx, post.bottom - heightPx);
+    ctx.stroke();
+  });
+}
+
+/**
+ * A rickety fence tile: the pasture's old fence, before anyone rebuilds it.
+ *
+ * It follows every rule `drawFence` does — a post at the centre, timber only
+ * towards neighbours that anchor a rail, nothing past the tile's own edge — so
+ * it joins every other style the same way, and a run that is part rebuilt
+ * stays one line. What it adds is age and damage, all of it seeded by position:
+ *
+ * - the timber is bleached grey and near-black where the rebuilt fence is warm
+ *   brown, blotched with rot and moss, with long grass round the posts;
+ * - posts lean off their feet, stand at different heights, some split at the
+ *   top and some snapped off short;
+ * - most spans are broken: rails sag, the lower one snaps and hangs in two
+ *   ends, the top one drops from a post and lies slantwise to the ground, or
+ *   both are gone and a plank lies in the grass;
+ * - slack wire twisted round the posts droops across every span, so a span
+ *   with its rails gone still reads as a boundary;
+ * - some posts carry a twine patch, and a few have settled onto a stone.
+ *
+ * A span belongs to both tiles either side of it, and each draws the whole of
+ * it clipped to itself; nothing here depends on any tile further away than a
+ * neighbour, so re-baking a restyled tile's eight neighbours is enough.
+ */
+function drawRicketyFence(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const neighbours: FenceNeighbours = {
+    hasWest: anchorsRailAt(structure, tx - 1, ty),
+    hasEast: anchorsRailAt(structure, tx + 1, ty),
+    hasNorth: anchorsRailAt(structure, tx, ty - 1),
+    hasSouth: anchorsRailAt(structure, tx, ty + 1),
+  };
+  drawFenceShadow(ctx, sx, sy, ts, neighbours);
+  ctx.save();
+  try {
+    ctx.beginPath();
+    ctx.rect(sx, sy, ts, ts);
+    ctx.clip();
+    drawRicketyFenceClipped(ctx, structure, sx, sy, ts, tx, ty, neighbours);
+  } finally {
+    ctx.restore();
+  }
+}
+
+function drawRicketyFenceClipped(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+  { hasWest, hasEast, hasNorth, hasSouth }: FenceNeighbours,
+): void {
+  const runsEastWest = hasWest || hasEast;
+  const runsNorthSouth = hasNorth || hasSouth;
+  const centreX = sx + Math.round(ts / 2);
+  const centreY = sy + Math.round(ts / 2);
+  // A side-on post stands its full height; an end-on run shows only a cap, as
+  // `drawFence` explains, and a cap has too little height to lean or snap.
+  const upright = runsEastWest || !runsNorthSouth;
+  const post = ricketyPost(tx, ty, sx, sy, ts);
+
+  let anyWire = false;
+  if (runsEastWest) {
+    const westPost = ricketyPost(tx - 1, ty, sx - ts, sy, ts);
+    const eastPost = ricketyPost(tx + 1, ty, sx + ts, sy, ts);
+    const sides = [
+      {
+        present: hasWest,
+        edgeX: sx,
+        first: westPost,
+        second: post,
+        joint: ricketyJoint(structure, tx - 1, ty, tx, ty, RICKETY_EAST_WEST_AXIS, ts, {
+          first: westPost,
+          second: post,
+        }),
+      },
+      {
+        present: hasEast,
+        edgeX: sx + ts,
+        first: post,
+        second: eastPost,
+        joint: ricketyJoint(structure, tx, ty, tx + 1, ty, RICKETY_EAST_WEST_AXIS, ts, {
+          first: post,
+          second: eastPost,
+        }),
+      },
+    ];
+    for (const side of sides) {
+      if (!side.present) continue;
+      if (side.joint === null) {
+        drawRicketySoundHalf(ctx, post, side.edgeX, sy, ts);
+        continue;
+      }
+      anyWire = true;
+      drawRicketySideOnSpan(ctx, side.first, side.second, side.joint, sy, ts);
+    }
+  }
+
+  if (runsNorthSouth) {
+    // The centre of the rail rectangle every other style draws end-on, so a
+    // rebuilt neighbour's rail meets this one at the joint.
+    const railX = centreX - Math.floor(FENCE_RAIL_THICKNESS_PX / 2) + FENCE_RAIL_THICKNESS_PX / 2;
+    const wobblePx = Math.round(signedHash(tx, ty, RICKETY_SALT.lean) * RICKETY_END_ON_WOBBLE_PX);
+    const northJoint = ricketyJoint(
+      structure,
+      tx,
+      ty - 1,
+      tx,
+      ty,
+      RICKETY_NORTH_SOUTH_AXIS,
+      ts,
+      null,
+    );
+    const southJoint = ricketyJoint(
+      structure,
+      tx,
+      ty,
+      tx,
+      ty + 1,
+      RICKETY_NORTH_SOUTH_AXIS,
+      ts,
+      null,
+    );
+    const halves = [
+      { present: hasNorth, joint: northJoint, edgeY: sy },
+      { present: hasSouth, joint: southJoint, edgeY: sy + ts },
+    ];
+    for (const { present, joint, edgeY } of halves) {
+      if (!present) continue;
+      if (joint?.damage === 'gap') {
+        const slantX =
+          joint.plankTiltPx >= 0
+            ? RICKETY_END_ON_PLANK_HALF_WIDTH_PX
+            : -RICKETY_END_ON_PLANK_HALF_WIDTH_PX;
+        strokeRicketyTimber(ctx, joint.rotPhasePx, (liftPx) => {
+          ctx.moveTo(railX - slantX, edgeY - RICKETY_END_ON_PLANK_HALF_HEIGHT_PX + liftPx);
+          ctx.lineTo(railX + slantX, edgeY + RICKETY_END_ON_PLANK_HALF_HEIGHT_PX + liftPx);
+        });
+      } else {
+        const rotPhasePx = joint?.rotPhasePx ?? 0;
+        ctx.lineCap = 'butt';
+        ctx.strokeStyle = RICKETY_RAIL_COLOR;
+        ctx.lineWidth = FENCE_RAIL_THICKNESS_PX;
+        ctx.beginPath();
+        ctx.moveTo(railX, edgeY);
+        ctx.lineTo(railX + wobblePx, centreY);
+        ctx.stroke();
+        const shadeOffset = (FENCE_RAIL_THICKNESS_PX - FENCE_HIGHLIGHT_PX) / 2;
+        ctx.lineWidth = FENCE_HIGHLIGHT_PX;
+        ctx.strokeStyle = RICKETY_RAIL_HIGHLIGHT_COLOR;
+        ctx.beginPath();
+        ctx.moveTo(railX - shadeOffset, edgeY);
+        ctx.lineTo(railX + wobblePx - shadeOffset, centreY);
+        ctx.stroke();
+        ctx.strokeStyle = RICKETY_RAIL_UNDERSIDE_COLOR;
+        ctx.beginPath();
+        ctx.moveTo(railX + shadeOffset, edgeY);
+        ctx.lineTo(railX + wobblePx + shadeOffset, centreY);
+        ctx.stroke();
+        ctx.lineDashOffset = rotPhasePx;
+        ctx.setLineDash([...RICKETY_ROT_PATTERN_PX]);
+        ctx.strokeStyle = RICKETY_ROT_COLOR;
+        ctx.lineWidth = RICKETY_ROT_WIDTH_PX;
+        ctx.beginPath();
+        ctx.moveTo(railX, edgeY);
+        ctx.lineTo(railX + wobblePx, centreY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineDashOffset = 0;
+      }
+      const slackPx = joint?.wireSlackPx[0];
+      if (slackPx === undefined || slackPx === null) continue;
+      const wireX = railX + RICKETY_END_ON_WIRE_OFFSET_PX;
+      const bowX = wireX + slackPx * RICKETY_END_ON_BOW_SHARE;
+      strokeWireSpan(ctx, wireX, centreY, bowX, edgeY, bowX, (centreY + edgeY) / 2);
+    }
+  }
+
+  if (post.propped && upright) {
+    const stoneY = post.bottom;
+    ctx.fillStyle = RICKETY_STONE_DARK_COLOR;
+    ctx.beginPath();
+    ctx.ellipse(
+      centreX,
+      stoneY + RICKETY_STONE_SHADE_DROP_PX,
+      RICKETY_STONE_RX_PX,
+      RICKETY_STONE_RY_PX,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.fillStyle = RICKETY_STONE_COLOR;
+    ctx.beginPath();
+    ctx.ellipse(centreX, stoneY, RICKETY_STONE_RX_PX, RICKETY_STONE_RY_PX, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = RICKETY_STONE_LIGHT_COLOR;
+    ctx.beginPath();
+    ctx.ellipse(
+      centreX - RICKETY_STONE_SHADE_DROP_PX,
+      stoneY - RICKETY_STONE_SHADE_DROP_PX,
+      RICKETY_STONE_RX_PX * RICKETY_STONE_LIT_SHARE,
+      RICKETY_STONE_RY_PX * RICKETY_STONE_LIT_SHARE,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+
+  const halfWidth = RICKETY_POST_WIDTH_PX / 2;
+  if (upright) {
+    drawRicketyUpright(ctx, post, tx, ty);
+  } else {
+    ctx.fillStyle = RICKETY_POST_COLOR;
+    ctx.fillRect(
+      centreX - halfWidth,
+      centreY - RICKETY_POST_WIDTH_PX,
+      RICKETY_POST_WIDTH_PX,
+      RICKETY_POST_WIDTH_PX * 2,
+    );
+    ctx.fillStyle = RICKETY_MOSS_COLOR;
+    ctx.fillRect(
+      centreX - halfWidth,
+      centreY - RICKETY_POST_WIDTH_PX,
+      RICKETY_POST_WIDTH_PX,
+      FENCE_HIGHLIGHT_PX,
+    );
+  }
+
+  // Wire is twisted round the post, not stapled to it: a couple of turns
+  // across the post's face wherever a strand is fixed.
+  if (anyWire) {
+    ctx.strokeStyle = RICKETY_WIRE_COLOR;
+    ctx.lineWidth = RICKETY_WIRE_PX;
+    for (const fraction of RICKETY_WIRE_FRACTIONS) {
+      const wireY = wireFixY(post, sy + Math.round(ts * fraction));
+      const postX = ricketyPostXAt(post, wireY);
+      for (let turn = 0; turn < RICKETY_WIRE_TWIST_TURNS; turn++) {
+        const turnY = wireY + turn * RICKETY_WIRE_TWIST_STEP_PX;
+        ctx.beginPath();
+        ctx.moveTo(postX - halfWidth, turnY + FENCE_HIGHLIGHT_PX);
+        ctx.lineTo(postX + halfWidth, turnY - FENCE_HIGHLIGHT_PX);
+        ctx.stroke();
+      }
+    }
+  }
+
+  const twined = tileHash01(tx, ty, RICKETY_SALT.twine) < RICKETY_TWINE_SHARE;
+  if (twined && !post.stump) {
+    const lashY = upright
+      ? sy + Math.round(ts * FENCE_RAIL_FRACTIONS[0])
+      : centreY - RICKETY_TWINE_STEP_PX;
+    const lashX = upright ? ricketyPostXAt(post, lashY) : centreX;
+    ctx.strokeStyle = RICKETY_TWINE_COLOR;
+    ctx.lineWidth = FENCE_HIGHLIGHT_PX;
+    const middleTurn = (RICKETY_TWINE_TURNS - 1) / 2;
+    for (let turn = 0; turn < RICKETY_TWINE_TURNS; turn++) {
+      const turnY = lashY + (turn - middleTurn) * RICKETY_TWINE_STEP_PX;
+      ctx.beginPath();
+      ctx.moveTo(lashX - RICKETY_TWINE_HALF_WIDTH_PX, turnY + RICKETY_TWINE_SLANT_PX);
+      ctx.lineTo(lashX + RICKETY_TWINE_HALF_WIDTH_PX, turnY - RICKETY_TWINE_SLANT_PX);
+      ctx.stroke();
+    }
   }
 }
 

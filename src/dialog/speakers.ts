@@ -229,6 +229,16 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
+  // "The Borrowed Blueprints": the Plumbline Farm resident who holds Fenna's plans.
+  wendell: {
+    name: 'Wendell',
+    portrait: null,
+    voice: { kind: 'typing' },
+    reveal: 'sentence',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+
   shady: {
     name: 'Shady',
     portrait: null,

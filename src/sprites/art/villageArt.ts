@@ -793,6 +793,8 @@ export const OUTDOOR_PROPS = [
   'bucket',
   'sawmill_machine',
   'rope_walk',
+  'sawmill_machine_upgraded',
+  'rope_walk_upgraded',
 ] as const satisfies readonly VillageStandingPropId[];
 
 export type OutdoorPropId = (typeof OUTDOOR_PROPS)[number];

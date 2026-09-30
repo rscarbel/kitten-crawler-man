@@ -12,6 +12,9 @@ import {
 import type { InventoryItem, ItemId } from './ItemDefs';
 import type { CrawlerKind } from './SkillManager';
 
+/** Told of the stack {@link Inventory.replaceQuestSlot} evicted from the quest slot. */
+export type QuestItemEvictionListener = (evicted: InventoryItem) => void;
+
 export class Inventory {
   readonly bag: ItemBag;
   readonly actionBar: Hotbar;
@@ -24,6 +27,8 @@ export class Inventory {
    * doesn't, so the badge can't be lost to a swap.
    */
   readonly unseenUpgrades = new Set<ItemId>();
+
+  private questItemEvictionListener: QuestItemEvictionListener | null = null;
 
   constructor(ownerKind: CrawlerKind | null = null) {
     this.bag = new ItemBag(SLOT_COUNT);
@@ -66,18 +71,42 @@ export class Inventory {
     return this.bag.slots.includes(null);
   }
 
-  /** Place a quest item directly into the reserved quest slot. */
+  /** Place a quest item directly into the reserved quest slot, evicting whatever else held it. */
   private addToQuestSlot(id: ItemId, quantity: number): void {
-    const slot = this.actionBar.slots[QUEST_SLOT_IDX];
-    if (slot?.id === id) {
-      this.actionBar.slots[QUEST_SLOT_IDX] = { ...slot, quantity: slot.quantity + quantity };
-    } else {
-      const def = ITEM_DEF[id];
+    this.replaceQuestSlot({ ...ITEM_DEF[id], quantity });
+  }
+
+  /**
+   * Puts `item` in the reserved quest slot. The same item already there is
+   * topped up instead; a different one is evicted — gone from this crawler —
+   * and reported to the eviction listener, so the quest that owned it can put
+   * it somewhere the player can get it back from.
+   *
+   * @returns the evicted stack, or null when nothing was displaced.
+   */
+  replaceQuestSlot(item: InventoryItem): InventoryItem | null {
+    const current = this.actionBar.slots[QUEST_SLOT_IDX] ?? null;
+    if (current?.id === item.id) {
       this.actionBar.slots[QUEST_SLOT_IDX] = {
-        ...def,
-        quantity,
+        ...current,
+        quantity: current.quantity + item.quantity,
       };
+      return null;
     }
+    this.actionBar.slots[QUEST_SLOT_IDX] = { ...item };
+    if (current === null) return null;
+    this.questItemEvictionListener?.(current);
+    return current;
+  }
+
+  /**
+   * Who hears that {@link replaceQuestSlot} pushed an item out. Inventories
+   * outlive scenes, and each scene has its own event bus, so the scene that
+   * is running sets this on entry (forwarding to its bus as
+   * `questItemEvicted`) and clears it on exit.
+   */
+  setQuestItemEvictionListener(listener: QuestItemEvictionListener | null): void {
+    this.questItemEvictionListener = listener;
   }
 
   /**
@@ -118,7 +147,7 @@ export class Inventory {
         const item = slots[i];
         if (!item || !ITEM_DEF[item.id].stackable) continue;
         // Quest items are stackable but live in the reserved slot that
-        // addToQuestSlot owns; folding them by position could empty it.
+        // replaceQuestSlot owns; folding them by position could empty it.
         if (ITEM_DEF[item.id].isQuestItem) continue;
 
         const home = firstHome.get(item.id);
@@ -157,9 +186,14 @@ export class Inventory {
     return true;
   }
 
-  /** Clear the reserved quest slot (call when quest ends). */
-  clearQuestSlot(): void {
-    this.actionBar.slots[QUEST_SLOT_IDX] = null;
+  /**
+   * Empties the reserved quest slot if it holds `id`. A quest ending retires
+   * only its own item: whatever else a crawler carries there belongs to a
+   * quest that is still running.
+   */
+  clearQuestItem(id: ItemId): void {
+    if (this.actionBar.slots[QUEST_SLOT_IDX]?.id === id)
+      this.actionBar.slots[QUEST_SLOT_IDX] = null;
   }
 
   /**

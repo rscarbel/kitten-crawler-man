@@ -6,6 +6,7 @@
  */
 
 import { phaseAtLeast, type VillageQuestPhase } from './villageQuestPhase';
+import type { CraftSkillId } from './CraftSkills';
 
 /** Construction recipes a quest can open up, one at a time. */
 export type ConstructionUnlockId =
@@ -50,6 +51,26 @@ export function unlocksImpliedByPhase(phase: VillageQuestPhase): VillageUnlocks 
 
 export function hasConstructionUnlock(unlocks: VillageUnlocks, id: ConstructionUnlockId): boolean {
   return unlocks.construction.includes(id);
+}
+
+/** Anything that can say whether it has learned a craft skill: either crawler. */
+export interface CraftLearner {
+  readonly craftSkills: { isLearned(skill: CraftSkillId): boolean };
+}
+
+/**
+ * Whether Construction is open to the party: either crawler has learned the
+ * skill and Tikka's plans (the trebuchet among them) have been handed over.
+ * The HUD's Build button and Fenna's offer of "The Borrowed Blueprints" both
+ * read this one rule, so the button can never show without the offer or the
+ * other way round.
+ */
+export function constructionUnlocked(
+  crawlers: readonly CraftLearner[],
+  unlocks: VillageUnlocks,
+): boolean {
+  const learnedByEither = crawlers.some((crawler) => crawler.craftSkills.isLearned('construction'));
+  return learnedByEither && hasConstructionUnlock(unlocks, 'trebuchet');
 }
 
 /** Grants each of `ids` not already held. */

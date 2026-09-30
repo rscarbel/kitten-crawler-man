@@ -114,6 +114,8 @@ import { createTownMemory } from '../src/core/TownMemory';
 import { applyMovement } from '../src/systems/GameLoopPhases';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { interiorHudLayout } from '../src/scenes/interiorHudLayout';
+import { BuildingSystem, downedPartnerEntryRefusal } from '../src/systems/BuildingSystem';
+import { CRAWLER_NAMES } from '../src/core/SkillManager';
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 
@@ -1872,6 +1874,97 @@ function checkSceneWiring(): void {
   );
 }
 
+// ── No door while the partner is down ────────────────────────────────────────
+
+/** Frames spent standing on a mat, to show a refusal is not repeated while standing still. */
+const DOOR_DWELL_FRAMES = 30;
+/** Far enough south of a door to be off every doorway's mat. */
+const OFF_THE_MAT_TILES = 3;
+
+/**
+ * No building opens while the crawler the player is not driving lies knocked
+ * out: the door refuses by name, and opens again the moment they are helped
+ * up, without the player having to step off the mat. Driven through a real
+ * `BuildingSystem` on a generated town, with the gate the overworld installs.
+ */
+function checkDownedPartnerKeepsEveryDoorShut(): void {
+  section('No door opens while the partner is down');
+  const expected = `${CRAWLER_NAMES.cat} is down. Help them up before going inside.`;
+  const partner = { isKnockedOut: true };
+  check(
+    downedPartnerEntryRefusal(partner, CRAWLER_NAMES.cat) === expected,
+    `the refusal names the downed crawler ("${expected}")`,
+  );
+  check(
+    downedPartnerEntryRefusal({ isKnockedOut: false }, CRAWLER_NAMES.cat) === null,
+    'a standing partner opens every door',
+  );
+
+  const [worldSeed] = OUTDOOR_WORLD_SEEDS;
+  const map = new GameMap({
+    mapSize: level3.mapSize,
+    mapType: 'overworld',
+    tileHeight: TILE_SIZE,
+    worldSeed,
+  });
+  const refusals: string[] = [];
+  let entered = 0;
+  const doors = new BuildingSystem(
+    map,
+    () => {
+      entered++;
+    },
+    {
+      blockedMessage: () => downedPartnerEntryRefusal(partner, CRAWLER_NAMES.cat),
+      onRefused: (message) => refusals.push(message),
+    },
+  );
+  const standOn = (tile: { readonly x: number; readonly y: number }): void => {
+    doors.detect({ x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE });
+  };
+
+  let openedWhileDown = 0;
+  for (const entry of map.buildingEntries) {
+    standOn({ x: entry.doorTile.x, y: entry.doorTile.y + OFF_THE_MAT_TILES });
+    standOn(entry.doorTile);
+    if (doors.menuOpen) openedWhileDown++;
+  }
+  check(map.buildingEntries.length > 0, `the town has doors (${map.buildingEntries.length})`);
+  check(
+    openedWhileDown === 0,
+    `no door offers its menu while the partner is down (${openedWhileDown})`,
+  );
+  check(
+    refusals.length === map.buildingEntries.length && refusals.every((m) => m === expected),
+    `every door refuses, by name (${refusals.length} of ${map.buildingEntries.length})`,
+  );
+
+  const [door] = map.buildingEntries;
+  if (door === undefined) return;
+  standOn({ x: door.doorTile.x, y: door.doorTile.y + OFF_THE_MAT_TILES });
+  standOn(door.doorTile);
+  const refusalsBeforeDwell = refusals.length;
+  for (let frame = 0; frame < DOOR_DWELL_FRAMES; frame++) standOn(door.doorTile);
+  check(refusals.length === refusalsBeforeDwell, 'standing on the mat does not repeat the refusal');
+  partner.isKnockedOut = false;
+  standOn(door.doorTile);
+  check(doors.menuOpen, 'helping them up on the mat opens the door without a step');
+  check(entered === 0, 'nothing was entered by walking about');
+
+  section('The overworld installs the rule on every door, and nothing is left lying outside');
+  const dungeon = readFileSync(DUNGEON_SCENE_PATH, 'utf8');
+  const gate = methodBody(dungeon, 'private sealedBuildingMessage(entry: BuildingEntry)');
+  check(
+    inOrder(gate, 'downedPartnerEntryRefusal(', 'BIG_TOP_BUILDING_NAME'),
+    'the door gate asks about the partner before any single building',
+  );
+  const interior = readFileSync(INTERIOR_SCENE_PATH, 'utf8');
+  check(
+    !dungeon.includes('knockedOutCompanionAt') && !interior.includes('companionLeftBehind'),
+    'no scene keeps a companion lying outside while the party is indoors',
+  );
+}
+
 // ── Run ──────────────────────────────────────────────────────────────────────
 
 checkMongoThroughTheDoor();
@@ -1891,6 +1984,7 @@ checkTempleVermin();
 checkQuestHostilesIndoors();
 checkPartyOutdoors();
 checkSceneWiring();
+checkDownedPartnerKeepsEveryDoorShut();
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED.\n`);

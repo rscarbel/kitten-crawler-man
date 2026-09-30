@@ -152,7 +152,13 @@ export class SkeletonArcher extends RisingSkeleton {
     if (this.tickRise()) return;
     if (this.shotCooldown > 0) this.shotCooldown--;
 
-    const nearest = this.acquireTarget(targets, this.aggroRangePx);
+    // Like the ghouls, never draws on anyone sheltering in the town's safe zone.
+    const nearest = this.acquireTarget(
+      targets,
+      this.aggroRangePx,
+      (target) =>
+        this.ignoresTownSafeZone || this.map?.isInTownSafeZone(target.x, target.y) !== true,
+    );
     this.currentTarget = nearest;
 
     // The draw runs to completion whatever happens to the target — it is the
@@ -186,7 +192,8 @@ export class SkeletonArcher extends RisingSkeleton {
     const hasLineOfSight = this.map
       ? this.map.hasLineOfSight(bow.x, bow.y, targetCx, targetCy)
       : true;
-    if (hasLineOfSight) {
+    // A body it is fixated on is tracked by more than sight, as `Mob.updateLastKnown` does.
+    if (hasLineOfSight || nearest === this.fixatedTarget) {
       this.lastKnownTargetX = nearest.x;
       this.lastKnownTargetY = nearest.y;
     }

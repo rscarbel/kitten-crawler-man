@@ -209,8 +209,10 @@ export interface PlannedTower {
  * rather than trusting it, because planting reports the material it is painted
  * *over*, so a garden accidentally laid on gravel would draw verge tufts on a
  * gravel row and be eroded by the surrounding gravel through the corner masks.
+ * A `pasture` is grazing turf and takes no planting either: beds and rows in a
+ * field kept for cattle would say kitchen garden, not paddock.
  */
-export type YardKind = 'garden' | 'workyard' | 'courtyard';
+export type YardKind = 'garden' | 'workyard' | 'courtyard' | 'pasture';
 
 /**
  * An enclosed or planted piece of block interior: a back garden, a drying green,
@@ -253,10 +255,9 @@ export interface PlannedYard {
 /**
  * A named quarter of the town, and where its name is written on the minimap.
  *
- * Only a name and a label anchor, because that is all anything asks for. An
- * earlier draft of this plan carried a `district` on every building and a
- * `TownDistrict` union, and a later review removed both: their docs claimed
- * the minimap read them, and nothing did. They come back here with their
+ * Only a name and a label anchor, because that is all anything asks for.
+ * Buildings carry no district: nothing reads one, and a field with no reader
+ * lets its docs claim a consumer that does not exist. One is added with its
  * consumer, and no wider than it needs.
  *
  * The anchors are spread by hand rather than computed as band centres. Three of
@@ -935,9 +936,14 @@ export function plannedBuildingSpriteKey(name: string): string | undefined {
 // ── Yards, gardens and planted strips ────────────────────────────────────────
 
 /**
- * The Garrison band's own green, between Plumbline Farm and the civic terrace.
- * It is the largest piece of block interior in the town — seven tiles square —
- * and the one place a fenced enclosure reads at a glance from a main street.
+ * The Garrison band's own green, between Plumbline Farm and the civic terrace:
+ * Wendell's pasture. It is the largest piece of block interior in the town and
+ * the one place a fenced enclosure reads at a glance from a main street.
+ *
+ * It is his side yard rather than a back yard. Nothing fits behind the Garrison
+ * cottages but the one-row back lane (see `GARRISON_GREEN_TOP`), so the green
+ * stands against the farm's east wall instead, and that wall is its west side:
+ * the fence painter leaves a side a facade already closes unfenced.
  */
 const GARRISON_GREEN_WEST = -13;
 const GARRISON_GREEN_EAST = TERRACE_WEST - 1;
@@ -990,13 +996,13 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
   {
     name: 'Garrison Green',
     bounds: span(GARRISON_GREEN_WEST, GARRISON_GREEN_TOP, GARRISON_GREEN_EAST, GARRISON_BOTTOM),
-    kind: 'garden',
+    kind: 'pasture',
     // Wendell's own fence — a builder's joinery, not a farmer's stakes. See
     // the `garrison` `FenceStyle` in `decorationTiles.ts`.
     fence: 'garrison',
     fenced: true,
-    // Onto the Upper Lane, which is the only side of it that is not a building,
-    // the terrace or the wall.
+    // The cart gate, onto the Upper Lane: the only side of it that is not a
+    // building, the terrace or the wall.
     gates: [
       span(
         GARRISON_GREEN_WEST + GATE_INSET_TILES,

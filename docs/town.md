@@ -95,11 +95,60 @@ posture that no citizen wears, so a player never mistakes a citizen for a target
 citizen is never a `Mob`, and `npm run verify:citizens-not-targetable` fails any
 target-picking system that mentions `Townsperson`.
 
-**Wendell and Plumbline Farm.** Wendell is a builder turned farmer whose cows all died.
-His cabin and the Garrison Green beside it, which is his pasture, are set up for a quest
-of his that is not written yet: a pasture ready for cows, with no cow in it and its
-centre left walkable. Nothing in the room or the yard may show, hand over or read his
-blueprints; that quest owns them. Its dialog, beats and logic are the user's to write.
+### Wendell, Plumbline Farm and Garrison Green
+
+Wendell trained as an architect, never found work as one, spent years building houses,
+and then tried farming; every cow he owned died. He keeps Fenna's blueprints, and
+Briar Hollow's side quest "The Borrowed Blueprints" runs through his house and his
+pasture (see [The Borrowed Blueprints](#the-borrowed-blueprints)).
+
+**His look** is `resident_wendell` in `src/sprites/person/townCastLooks.ts`, on Carl's rig:
+a lean, greying human with a slight stoop from the drafting table (`wendellPosture`), a
+brown waistcoat over rolled linen shirtsleeves, spectacles and a carpenter's pencil
+behind his ear (`WENDELL_ATTACHMENTS`, `src/sprites/art/human/wendellAttachments.ts`),
+the `builderRule` at his belt and mud on his boots. The spectacles and pencil are painted
+inside the figure from the solved skeleton rather than laid over the finished figure,
+because an overlay at fixed figure-space points leaves them hanging beside a head that
+bobs or turns.
+
+**The room tells three lives** (`buildPlumblineFarmLayout`,
+`src/map/town/interiors/plumblineFarm.ts`; painters in
+`src/sprites/art/townInterior/rooms/plumblineFarm.ts`):
+
+- **The architect:** the drafting table under the window with a real drawing pinned to
+  it, the framed elevation of a hall nobody built, the T-square and set square on pegs,
+  the plan chest and a bin of rolled drawings.
+- **The builder:** the tool wall with every tool over its painted outline, a door on
+  trestles as a bench, the timber stack and offcut box, and shelves built as a flight of
+  stairs.
+- **The failed farmer:** the dairy wall with a slate of cows' names struck through,
+  scoured churns, stacked empty pails, full feed sacks, and a cowbell on the peg post by
+  the door.
+
+The drafting table, plan chest and roll bin carry no `interaction` and must never gain
+one: the drawings are Wendell's to talk about, not the room's. His anchor is the hearth,
+and the two door columns stay clear from the door to the hearth rug.
+
+**The quest swaps props, not layouts.** Four placed props have stable ids
+(`PLUMBLINE_FARM_SWAPPED_PROP_IDS`) and change variant with the quest
+(`plumblineFarmPropVariants`): the plan chest shows the blueprints while they are in
+Wendell's keeping, and from `midge_delivered` on the churn stand is in use, the cowbell
+is gone from its nail (Midge wears it) and the boot tray by the door gains a milk pail.
+`PlumblineFarmRoomSync` (`src/systems/briarHollow/blueprints/plumblineFarmRoom.ts`)
+re-derives that every frame the room is open, because the hand-over happens mid-visit and
+an eviction can send the blueprints home at any time, and touches the props only when
+the derived state changes. `plumblineFarmExamineLine` gives the churn and the dairy wall
+their live lines once a cow is back.
+
+**Garrison Green** is his pasture: the fenced `pasture` yard in `PLANNED_YARDS`
+(`townPlan.ts`), standing against the farm's east wall (nothing fits behind the Garrison
+cottages but the one-row back lane), fenced in his over-built `garrison` style, with a
+two-tile cart gate onto the Upper Lane. `TownDecorSystem` dresses it for a herd he does
+not have: the milking shed in the north-east corner, a feed bin, hay racks and a bale
+along the north fence, two troughs down the east fence, full sacks against his wall, and
+a gate fixture over the cart gate that blocks nothing. `PASTURE_KEEP_CLEAR` keeps the middle of
+the green and the tiles inside the gate open, so a cow can be walked in and has ground
+to stand on. From `midge_delivered` on, Midge lives there for good (`WendellsMidge`).
 
 ---
 
@@ -854,18 +903,389 @@ Construction-menu row repairs it too. The repair key (`quickLoad`, X by default)
 nearest hurt structure in reach, walls and trebuchets alike, and only Quick Loads a
 trebuchet when nothing needs mending.
 
+### The Borrowed Blueprints
+
+Fenna's side quest. She wants the saw and the rope walk upgraded to Tikka's design, but
+she lent the blueprints to Wendell at Plumbline Farm in the Over City. Wendell will lend
+them back for a dairy cow. Merrit parts with one, Midge, once the party has rebuilt her
+pasture fence and brought in a hundred grain. The party walks Midge across the wilds to
+Wendell's pasture while the road's dead go for her, brings the blueprints home, and
+builds the two upgraded stations. The stations are the whole reward.
+
+`BlueprintsQuestSystem` (`src/systems/briarHollow/BlueprintsQuestSystem.ts`) is built by
+`BriarHollowKit` after the Plea's system. It owns the phase, guidance, journal row,
+minimap pips and villager seams (journal id `borrowed_blueprints`). Each hands-on part is
+a class in `src/systems/briarHollow/blueprints/` that the system and the kit route input
+and render passes to: `FennaBlueprintsLines`, `MerritBlueprintsLines`,
+`PastureFenceWork`, `GrainHarvest`, `MidgeEscort` and `StationUpgrades`. Wendell lives
+indoors, where the kit does not run, so his side is `WendellBlueprintsHook`, one of
+`BuildingInteriorScene`'s resident quest hooks. Phase moves go through
+`moveBlueprintsPhase` (`blueprintsProgress.ts`) in both scenes, which emits
+`blueprintsQuestPhaseChanged`, `questStarted` on acceptance (so the journal pins it) and
+`questCompleted` at the end. Its lines are in `blueprintsDialog.ts`, `fenna.ts` and
+`merrit.ts` under `src/dialog/scripts/briarHollow/`, and `src/dialog/scripts/wendellBlueprints.ts`.
+
+**The steps** (`BlueprintsQuestPhase`, `src/core/blueprintsQuestPhase.ts`):
+
+| Phase             | Entered when                                      | Guided to                                                                                                                   |
+| ----------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `unoffered`       | default                                           | — Fenna shows `!` once `constructionUnlocked`                                                                               |
+| `declined`        | "Not right now" on Fenna's offer                  | — an "About those work stations" topic on Fenna re-offers; no pip                                                           |
+| `ask_wendell`     | "We'll help"                                      | Plumbline Farm's door, then Wendell (`?`)                                                                                   |
+| `ask_merrit`      | Wendell's first-visit conversation read through   | Merrit (`?`)                                                                                                                |
+| `build_fence`     | Merrit's ask read through                         | the nearest unbuilt fence section, or the shortfall                                                                         |
+| `report_fence`    | the tenth section built                           | Merrit (`?`), after a "Fence rebuilt!" banner                                                                               |
+| `harvest_grain`   | Merrit's fence report read through                | the scythe on the barn wall if nobody holds it, else the grain field                                                        |
+| `deliver_grain`   | grain reaches 100                                 | Merrit (`?`), after a "Harvest complete!" banner; Midge (`!`) once Merrit calls her                                         |
+| `escort_midge`    | Merrit's "There she is" conversation read through | the next waypoint on Midge's road, then Garrison Green; Midge (`!`) at the start and while out of lead range or at the gate |
+| `midge_delivered` | Midge is led into Garrison Green                  | Plumbline Farm and Wendell (`?`)                                                                                            |
+| `build_stations`  | Wendell's hand-over read through                  | the nearest station still to upgrade, or the shortfall; Wendell if nobody holds them                                        |
+| `complete`        | the second station upgraded                       | —                                                                                                                           |
+
+The steps the world finishes (last fence section, hundredth grain, second station) are
+polled in `BlueprintsQuestSystem.update`. The rest move on Fenna's answer or once a
+conversation's last page is read, so a beat left early plays again next time.
+
+**Between the steps** (`BlueprintsStepMoments`, told of every move through
+`BlueprintsQuestSystem.setPhase`). The last fence section and the hundredth grain each put
+up a banner under the quest counter's slot for `STEP_BANNER_SECONDS` — "Fence rebuilt!" /
+"Tell Merrit the fence is finished", "Harvest complete!" / "Bring the grain to Merrit" —
+and emit `objectiveComplete` (`blueprints_fence_rebuilt`, `blueprints_grain_harvested`),
+which plays `objective_complete`. The escort opens with "Midge is yours to lead". A kit
+rebuilt mid-step shows no banner for a step it did not see finish. Midge wears a `!` and a
+beacon (`Cow.questMarker`, drawn by her own render) while she answers Merrit's call, for
+the escort's first `MIDGE_INTRO_SECONDS` captioned "Lead Midge to Wendell's pasture", and
+whenever she is out of lead range or waiting at the gate, captioned "Midge is waiting for
+you". While she answers the call the journal points at her instead of Merrit.
+
+**Who does what.**
+
+- **Fenna** (`FennaBlueprintsLines`) makes the offer as a `confirm` opening while the
+  phase is `unoffered` and Construction is open: `constructionUnlocked`
+  (`villageUnlocks.ts`), the same rule the Build button reads, so the `!` and the button
+  can never disagree. The Plea registers its quest-line provider first, so wherever the
+  Plea still needs Fenna its opening and marker win. Her line naming where Wendell lives
+  computes the town's bearing from the village (`skyfowlTownWhereabouts`, falling back to
+  "the skyfowl town past the road"). While the quest is under way she opens with "Any
+  luck with those blueprints?", and at the end she barks the completion line.
+- **Wendell** (`WendellBlueprintsHook`) plays the first visit at `ask_wendell` and the
+  hand-over at `midge_delivered`, ahead of his usual resident flow. Between them he says
+  his waiting line once per visit and is then his usual self, because his bed must stay
+  reachable. In `build_stations` with neither crawler holding the blueprints, talking to
+  him hands them back. Both hand-overs go into the steered crawler's quest slot. Every
+  beat waits while the other crawler lies knocked out in the room: he falls back to his
+  usual lines and the step stays put.
+- **Merrit** (`MerritBlueprintsLines`) has an opening for each of her steps and a `?` in
+  `ask_merrit`, `report_fence` and `deliver_grain`. Her ask reads whether the Plea is won.
+  Handing in the grain spends the counter, takes the scythe back to its pegs, raises the
+  whistle cue and barks "HERE MIDGE! COME HERE GIRL!" with `force`. When Midge reaches
+  the party she opens "There she is" herself: an auto-opener that waits for the shared box
+  to be free, owns its beat through the handle, and cannot be dismissed. Between the
+  hand-in and that conversation closing she has no line and no marker, so the grain
+  cannot be handed in twice.
+
+**The fence.** `pastureFenceSections(site)` (beside the layout in `briarHollowLayout.ts`)
+walks Merrit's pasture ring clockwise from the tile after the gate and cuts it into
+`PASTURE_FENCE_SECTION_COUNT` (10) contiguous runs whose lengths differ by at most one.
+It is deterministic and unseeded, and a run's index is what
+`blueprints.fenceSectionsBuilt` saves, so changing the cut changes which sections a save
+has built. The ring is painted as the `'rickety'` `FenceStyle` (`drawRicketyFence`,
+`decorationTiles.ts`); `PastureFenceWork` restyles each built section to
+`post_and_rail`, and every step from `report_fence` on counts them all built. A restyled
+tile dirties its eight neighbours as well, because rails join toward them. In
+`build_fence` only, the unbuilt section with a tile within `FENCE_REACH_TILES` glows;
+Space, or a single tap on it, starts a `FENCE_SECTION_WORK_SECONDS` hammering channel
+that moving cancels. The `FENCE_SECTION_COST` (two boards) is counted again and spent when
+the channel ends; short, the party hears "Not enough materials." and guidance switches to
+`shortfallGuidance`. In the Space chain the fence comes first, ahead of the wall build.
+
+**The scythe and the grain.** `scythe_pegs` hangs on the barn's north wall and shows the
+scythe whenever no crawler holds `quest_scythe` (`TileContent.scytheTaken`). In
+`harvest_grain`, Space or a tap in reach puts it in the active crawler's quest slot.
+`GRAIN_FIELD`, the field south of the scarecrow (`briarHollowLayout.ts`), is always grain;
+its stands are left out of the chunk bake and drawn each frame from a cached four-stage
+set (`full`, `thinned`, `sparse`, `stubble`). A press next to a stand (the faced one first)
+starts a `SCYTHE_SWING_SECONDS` (1.5 s) swing, drawn on Carl's chop row paced to the swing
+with the scythe as his working tool; Donut swipes as the grain falls. The swing shows a
+screen-wide timing bar in the HUD pass (`ScytheSwingBar`): a needle crossing a track with
+the good and perfect bands marked, laid out below the crawler and pushed in sideways or
+up off the HUD panel, minimap, hotbar and a phone's buttons (compact under 520 px tall).
+The one timed second press is the attack key (Space) or, on a phone, any tap while the
+swing claims world taps:
+
+| Second press lands in                            | Grain                |
+| ------------------------------------------------ | -------------------- |
+| `SCYTHE_PERFECT_WINDOW` (0.66–0.74 of the swing) | `GRAIN_PER_PERFECT`  |
+| `SCYTHE_GOOD_WINDOW` (0.55–0.85)                 | `GRAIN_PER_GOOD`     |
+| nowhere, too early or too late, or never         | `GRAIN_PER_MISS` (1) |
+
+The press is judged the moment it is made: "PERFECT!" or "Clean cut!" with the hit band
+flashing white, rays out of the press mark and the screen edges glowing, or "Miss!" with
+the track flashing red, the bar shaking and a cross at the press mark. A swing that runs
+out unpressed is judged a miss as it lands. A miss still lands like any swing — its one
+grain, a `+1 Grain` float, the gather sound and a cut on the stand — and the bar shows a
+dimmed "+1 grain" beside the red "Miss!". Each verdict raises its cue once
+(`scytheTimingPerfect`, `scytheTimingGood`, `scytheMiss`), and the bar stays up with it for
+`SWING_VERDICT_LINGER_SECONDS` (0.7 s) after the swing unless the next swing starts first.
+Only the first second press counts; repeats and later presses are swallowed so they
+reach neither the grade nor the attack. The press is graded by the input event's own
+`e.timeStamp` (a tap by its touchstart), never the handler's clock, and time spent with
+the world halted is added to the swing's start. The grain lands when the swing ends, with a
+`+N Grain` float, and the stand takes a cut. Moving, attacking, being struck or a hostile in
+attack range ends an unjudged or missed swing with nothing, but lands a swing whose press
+was already judged a hit at once, its verdict lingering as usual. Going down, losing the
+scythe or the step moving on drops the swing whatever its verdict. Three cuts leave stubble, which
+regrows over `GRAIN_REGROW_SECONDS` (30 s), passing back through `sparse` and `thinned`
+in its last third. Cuts live in `GrainHarvest` only, so a reload regrows the field. Grain
+is quest progress (`blueprints.grain`), never a party resource; overshoot past 100 is
+kept, and the counter shows "N/100 grain".
+
+**Midge.** `LivestockSystem` names two of Merrit's adults by slot, not by seed: Midge is
+the last dairy cow with no calf (`MIDGE_SLOT`), and Bramblewick is the first other
+holstein, for Merrit's joke. Neither is the soldier Midge Candleear, who is a villager.
+Merrit's call releases Midge from the herd (`releaseMidge`), and an ordinary cow of her
+coat comes out of the barn in her place, so the herd is never one short. She walks to the
+party and is snapped beside them if that takes longer than `MIDGE_CALL_TIMEOUT_SECONDS`.
+
+- **Led.** She follows whichever crawler is being steered, in a latched band
+  (`MIDGE_LEAD_BAND`: sets off past `MIDGE_FOLLOW_START_TILES`, stops inside
+  `MIDGE_FOLLOW_STOP_TILES`), at `MIDGE_LED_SPEED`, on A* with a widened path budget. Left
+  past `MIDGE_LEAD_BREAK_TILES` she stops, faces the party and lows every
+  `MIDGE_LONELY_MOO_SECONDS` until they are back inside `MIDGE_LEAD_RESUME_TILES`. She
+  never flees while led; a blow makes her flinch where she stands. Her cowbell cue ticks
+  while she walks.
+- **Targetable.** While led on the escort she is pushed into the scene's target list
+  (`BriarHollowKit.pushEscortTargets`), never as a defend target, which every hostile
+  refuses. She is hardened to `MIDGE_ESCORT_HP`, tuned by playtest, and wears a small
+  health bar.
+- **The road.** The guidance never points straight at Garrison Green, which would aim
+  the arrow across forest, ruins and the town wall. `escortRoute.ts`
+  (`src/systems/briarHollow/blueprints/`) plans one walk per map, remembered with the
+  `GameMap`: A* from Merrit's gate (`merritGateTile`) to any tile of the green's cart
+  gate, over the tiles Midge's own steps accept (`isWalkable`, no stairwell, never a
+  building doorway, which would carry the party indoors), four-connected, with a road
+  step (any paved surface, a bridge deck or the village gate) far cheaper than open
+  ground, river water dearer still, and a small toll beside a blocked tile so it keeps
+  to the middle of the road. It is cut into waypoints: from each, the furthest tile on
+  that is at most `ESCORT_WAYPOINT_MAX_SPACING_TILES` away, stays within a tile and a
+  half of the straight line, and has a `hasWalkableLine` to it — so every bend gets a
+  waypoint and the arrow never points through anything. The last waypoint is the gate.
+  `EscortRouteProgress` (owned by `BlueprintsQuestSystem`, ticked every update in
+  `escort_midge`) counts how far along the route Midge and the party have got: forward
+  freely, back only when Midge is carried well back (a scare home) or led well off the
+  road, where it is picked afresh from her tile; a waypoint within
+  `ESCORT_WAYPOINT_ARRIVAL_TILES` of the steered crawler is reached. The guidance is
+  `escort_waypoint` — the tracker arrow and minimap pip point at the waypoint, and
+  `VillageQuestGuide` draws its highlight, a bouncing arrow and "Lead Midge along the
+  road", a dotted trail along the road on through the next waypoint
+  (`escortRouteMarkers.ts`), the next two waypoints and the pasture in the quieter
+  pending voice. Past the gate it is `pasture`, as it is on a map with no route; left
+  behind, Midge is pointed at (`lead_midge`) as before.
+- **The ambushes.** `EscortAmbushSystem` springs `ESCORT_WAVE_COUNT` (3) waves at
+  `ESCORT_WAVE_PROGRESS`. Progress is walked: a breadth-first field of every open tile's
+  steps to the inside of the town wall, running from the village gate nearest the town
+  (0) to `WAVE_SANCTUARY_CLEARANCE_TILES` short of the wall (1), so the first wave springs
+  as she clears the palisade, two more come on the road, and none springs so near the
+  wall that it could not reach her before she is through it. A wave springs only while
+  the road is clear of ambushers still in the fight — from any wave, or from an attempt a
+  scare cut short — and only once it has been clear for `ESCORT_WAVE_MIN_GAP_SECONDS`, a
+  breather. An ambusher is out of the fight, and holds nothing back, when it is further
+  than the let-go distance from everyone (past the furthest a body can come up), or has
+  come no nearer for a few seconds while still out of a bow's reach (stuck behind
+  something); one a snare turns stops being the road's at once. Each wave is
+  `ESCORT_WAVE_MIN_BODIES`–`ESCORT_WAVE_MAX_BODIES` (9) bodies — three to each crawler and
+  three for the cow — drawn from `ESCORT_AMBUSH_KINDS` within `ESCORT_KIND_CAPS` (three
+  ruins ghouls at most), levelled like the siege and fielded as lesser dead at
+  `ESCORT_BODY_HEALTH_SHARE` of their kind's health (`fieldAsLesserDead`); both that and
+  `MIDGE_ESCORT_HP` are tuned by playtest. `verify:difficulty-curve` prices a wave a third
+  at a time, the thirds that reach the party back to back. They come up one after
+  another behind Midge, on one bearing per wave swung up to forty degrees off straight
+  behind her, each at the first spot along it the party cannot see, so just past the
+  screen's edge whichever way the road runs (`offscreenSpawns.ts`, the siege's rules);
+  a body that finds nowhere out of sight there widens its search round her over
+  `SPAWN_WIDEN_SECONDS`, so a wave is never held to a side the palisade or a lake fills.
+  Never inside the palisade or the town wall, and never once the escort is over. The
+  first body of each wave announces its side ("Ambush! The dead come for Midge from the
+  east!"), and while any ambusher still in the fight is off screen a red chevron at the
+  screen's edge points at it (`renderIncoming`, drawn over the fog from the kit's HUD
+  pass). They `forceAggro` and fixate on Midge while she is led (`Mob.fixatedTarget`):
+  they track her by more than sight, and turn on a crawler only one that steps right in
+  their way. **The road's sanctuary is the town wall, not the safe zone:** the safe zone's
+  forty-tile circle reaches out past the wall to within twenty-odd tiles of the palisade,
+  so while Midge and the whole party are outside the wall the ambushers
+  `ignoresTownSafeZone`, and the moment any of them is through it they keep the safe zone
+  again and break off. One out of the fight, or left on the road after the delivery, is
+  let go once nobody can see it. Each wave plays the ambush sting, and
+  `defense_quest_music` takes over from the zone music while any ambusher lives on the
+  escort, handed back the moment she is delivered. `verify:midge-escort` walks the road
+  with a party that leads her on at a wide window without stopping for what it cannot
+  see, and holds that every wave comes up near her on ground that walks to her, comes on
+  screen, and reaches her or the party within `WAVE_ARRIVAL_SECONDS_MAX`.
+- **The Plea's siege.** While Briar Hollow is under siege (`isVillageUnderSiege`) the
+  escort holds: Midge stands where she is, off the lead and out of every hostile's
+  target list, and no wave springs or comes up until the siege is over. A wave that was
+  still coming up keeps its bodies and finishes after the siege.
+- **Scared home.** She cannot be killed on the road (`cannotBeKilled`). Beaten down —
+  under `MIDGE_BEATEN_BELOW_HP`, since a blow stopped a point short is scaled again by
+  the difficulty and can shave her last point in ever smaller fractions — she
+  plays no death, drops nothing and runs no respawn: she is at once back at Merrit's
+  pasture gate, full health, off the lead; ambushers targeting her lose her; all three
+  waves re-arm; and a narrator box says "Midge got scared and ran back home". The phase
+  stays `escort_midge`, and she is led again when the party comes within
+  `MIDGE_FOLLOW_START_TILES`. The tracker says "Midge is waiting at Merrit's gate."
+- **Delivered.** With the steered crawler inside Garrison Green and Midge within
+  `MIDGE_LEAD_BREAK_TILES`, the phase moves to `midge_delivered` at once, her settled
+  moo plays, and she is Wendell's: she walks in through the cart gate by herself into a
+  pen built from the yard (`CowPen.forYard`), and is set down inside if the walk takes
+  too long. A door visit mid-walk finds her already there.
+- **Doors and rewinds.** Every door rebuilds the overworld and throws its roster away, so
+  `MidgeEscortCarry` (`src/core/midgeEscortCarry.ts`), handed by reference from scene to
+  scene like `BountyProgress`, carries her position and health while she is led on the
+  escort, and the count of waves already sprung. The next scene raises her there, still
+  led. It is never saved or checkpointed: after a load or a death rewind in
+  `escort_midge` she stands at Merrit's gate, whole and waiting, with every wave armed.
+- **At Wendell's.** From `midge_delivered` on, `WendellsMidge` raises her in Garrison
+  Green on every scene built after she arrived. She has the herd's routine inside her own
+  pen and the herd's respawn (`LivestockRespawner`, `RESPAWN_SECONDS`, the same
+  `clearRespawnTile` check), always in her pasture and never in Briar Hollow. She lows in
+  one voice, `cow_ambient_moo_1`, on her own `WENDELL_COW_MOO_MIN_SECONDS` to
+  `WENDELL_COW_MOO_MAX_SECONDS` timer, and only with a crawler in earshot. A rewind
+  stands her back in her pasture (`Cow.setHomeTile`), never in Merrit's paddock, and a
+  herd raised before the quest said she had gone gives up her name
+  (`retireMidgeName`), so there is only ever one Midge.
+
+**The stations.** In `build_stations`, while either crawler holds `quest_blueprints`, the
+active crawler within `PROCESSING_REACH_TILES` of a machine not yet upgraded can upgrade
+it. On desktop X (`quickLoad`) asks `StationUpgrades.tryUpgrade` first and only falls
+through to `repairOrLoad` when no station applies. On a phone a double tap on the machine
+asks first, ahead of `ConstructionKit.handleDoubleTap`; `tryUpgrade` refuses on mobile so
+no single gesture starts an upgrade the prompt never offered. Starting an upgrade drops
+any sawmill cut under way there, which has spent nothing yet. The costs are fixed and
+ignore the Construction discount, so the number the player was told stays true:
+
+| Station   | Constant                 | Cost                         |
+| --------- | ------------------------ | ---------------------------- |
+| Saw       | `SAW_UPGRADE_COST`       | 30 boards, 15 rope, 20 stone |
+| Rope walk | `ROPE_WALK_UPGRADE_COST` | 12 boards, 20 rope, 10 stone |
+
+Short, the party hears "Not enough materials." and guidance switches to the shortfall.
+Otherwise a `STATION_UPGRADE_SECONDS` (4 s) channel runs, cancelled by moving; at its end
+the cost is spent, `stationsUpgraded` set, the machine's art swapped through
+`TileContent.stationUpgraded` (the placed prop id never changes), a callout floats — and
+while it does, the machine's own prompt stays off it for a crawler still standing in reach
+of that machine, while anywhere else the prompt slot is everyone else's as usual — and
+the worker earns `STATION_UPGRADE_CONSTRUCTION_XP`. An upgraded station works
+`UPGRADED_WOOD_PER_PRESS` (4) wood per press in the same `MANUAL_PROCESS_SECONDS`, or
+whatever wood the party has if less (`SawmillService.woodPerPress`); manual-processing XP
+stays per wood, and the lumber foreman's bulk service is unaffected. When the second
+station finishes, Fenna barks, the blueprints are taken off whoever holds them, and the
+quest completes.
+
+**The quest-complete screen** (`BlueprintsCompletionScreen`, owned by
+`BlueprintsQuestSystem`). Once the quest stands `complete`, the last upgrade's callout has
+played out, no conversation is open, nothing else halts the world and the Plea's siege is
+not on, a centred modal goes up over a dimmed village: "QUEST COMPLETE", the quest's
+name, a line from Fenna, and a "Permanent upgrades" pair of cards — the upgraded saw and
+rope walk, each with its intake and output per press against a plain station's, and a
+footnote giving the press time and the multiplier. Every figure is worded from
+`UPGRADED_WOOD_PER_PRESS`, `PLAIN_WOOD_PER_PRESS`, `BOARDS_PER_WOOD`, `ROPE_PER_WOOD` and
+`MANUAL_PROCESS_SECONDS` (`blueprintsStationRewards`), so the screen cannot drift from the
+sawmill. It plays the quest's `questComplete` cue (`quest_complete`, universal group) as it
+goes up; that is why `AudioManager`'s `questCompleted` listener leaves this quest out. It
+halts the world: its claim leads `BriarHollowKit.overlayClaims`, its click leads
+`handleClick`, it draws last in `renderDialog`, and `haltsWorldItself` counts it, so the
+scene's halt sweep leaves it up; narrated quest lines wait behind it. Continue (focus ring
+primary: Space / Enter, tap, click) or a fresh Escape dismisses it; a press before the
+reveal settles finishes the reveal instead. Dismissal sets
+`blueprints.completionScreenSeen`, so a door visit, a reload or a rewind never raises it
+again; a completion whose screen was never dismissed raises it again on the next kit. A
+save from before the flag existed reads as seen when the quest was already complete.
+
+Every station still to upgrade stays marked for the whole of `build_stations` while the
+blueprints are held — including while guidance has sent the party off to chop, mine or
+process for a shortfall (`StationUpgrades.renderGround` / `renderAbove`). Each gets an
+area highlight over its footprint with corner brackets round its whole art, gold and
+solid when the party can pay for it, orange and dashed while short, and a caption panel
+over it whenever it is on screen: "Upgrade saw" over one line per material
+(`RequirementRow`), green with a tick once held and red while short, the title and border
+turning gold when every line is met. In reach of a machine the party can pay for, the
+caption adds "Press X to upgrade" and `StationUpgrades.renderPrompt` claims the prompt
+slot without drawing; short, it leaves the slot to the sawmill's own process prompt. The
+village guide draws no highlight, arrow or caption of its own over a machine the quest is
+marking (`VillageQuestGuideDeps.questMarksStation`). The fence prompt's cost line is the
+same requirement row.
+
+**Highlights.** `VillageQuestGuide` marks what a step points at with
+`drawAreaHighlightGround` / `drawAreaHighlightFrame` (`src/ui/AreaHighlight.ts`), sized to
+the thing's whole footprint: the grain field, the pasture, a fence run's bounding box, a
+station, the trebuchet, the bell tower, and a single tree (one and a half tiles, centred)
+or rock. The ground half — an edge wash clear in the middle, a glowing rounded outline
+with two sparks lapping it, rising motes — is drawn under every body; the frame half,
+corner brackets, over every body, so a tall sprite still reads as marked. A zone for a new
+trebuchet is the same highlight in green, `pending`. Because the guide marks the field and
+the pasture itself, their tracker targets are `wearsOwnMarker`, and the scene's objective
+beam does not stand on them.
+
+**The quest slot.** The scythe and the blueprints are quest items, and neither is
+recorded in `BlueprintsQuestState`: every reader looks at both crawlers' inventories
+(`holderOf`, `isHeld`), so a lost item cannot desync the quest. Every quest item goes
+through `Inventory.replaceQuestSlot`, which evicts a different quest item already in the
+slot and reports it; the running scene forwards that onto its bus as `questItemEvicted`
+(`forwardQuestItemEvictions`). Carrying one quest's item therefore costs another's, by
+design, and each quest recovers from the derived state:
+
+- If the scythe is evicted, the pegs show it again and guidance points back to the barn
+  wall. If the blueprints are evicted in `build_stations`, they are back in Wendell's plan
+  chest and guidance points to him. Fence sections, grain and upgraded stations are all
+  in state, so nothing is lost. The crawler whose slot it was barks "We left the scythe
+  behind." or "We left the blueprints behind." (their partner, if they are knocked out),
+  through `barkWhenBlueprintsItemEvicted`. Swapping one of this quest's items for the
+  other, and the quest taking its own items away, stay quiet.
+- The Anchor's wood pile (Hilda's cottage) gives its boards to whichever crawler walks
+  onto it, evicting any other quest item in their slot — the blueprints go back to
+  Wendell exactly as above. Only when both crawlers are in reach on the same frame does
+  the one whose slot is empty or already holds boards take them. The boards respawn
+  after `WOOD_PILE_RESPAWN_SECONDS`.
+- `Inventory.clearQuestItem(id)` retires only its own item, so a quest ending never
+  empties a slot another quest is using.
+
+**The siege.** While the Plea is `imminent` or in `assault` this quest stands down:
+Fenna's offer and topic are withdrawn, Merrit and Fenna have no quest lines (so the
+grain hand-in waits and Merrit will not call Midge out while the herd shelters),
+guidance is null, the counter is hidden, and every open journal row reads "Briar Hollow
+is under attack." (`BLUEPRINTS_SIEGE_HINT`).
+
+**Downed partners and doors.** No building anywhere opens while the crawler not being
+driven is knocked out: `downedPartnerEntryRefusal` (`BuildingSystem.ts`) refuses with
+"{Name} is down. Help them up before going inside." through
+`DungeonScene.sealedBuildingMessage`. A crawler can still go down indoors
+(`companionDownIndoors`), which is why Wendell's beats check for it themselves.
+
+**The HUD.** `QuestCounterHud` draws "N/10 fence sections" in `build_fence` and "N/100
+grain" in `harvest_grain`, under the resource strip's slot, stepping aside to the nearest
+clear spot where that lands on phone buttons, the minimap, the HUD panel or the hotbar.
+
+**Sound.** Every play site raises a cue from `BLUEPRINTS_CUES`
+(`blueprintsSoundCues.ts`), never a raw id; each cue's JSDoc names the recording it
+waits for, and until it lands the cue borrows the nearest existing sound or is an empty
+list and stays silent. Every id a cue names must be preloaded in the `briarHollow` or
+`universal` SFX group, which `verify:borrowed-blueprints` checks.
+
 ### Persistence
 
 Village state is split by who owns it:
 
-| What                                                                | Where                                                                  | Scope         |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------- |
-| Quest phase, structures, soldier orders, merchant stock, once-flags | `BriarHollowState` → `PersistedWorldState` / `WorldCheckpoint`         | per floor     |
-| Tool tiers, explainers seen                                         | `PartyCraftsState` → `GameProgress.crafts` / `LevelCheckpoint`         | party         |
-| Resourcing and Construction levels and XP                           | `Player.craftSkills` → `PlayerSnapshot`                                | per crawler   |
-| Harvest-node capacity and regrowth                                  | threaded `BriarHollowState`, checkpointed by `GatheringKit`, not saved | page lifetime |
-| Villager memory                                                     | threaded `BriarHollowState`, neither checkpointed nor saved            | page lifetime |
-| Session harvest tallies, thrall cooldowns                           | module state                                                           | page lifetime |
+| What                                                                | Where                                                                     | Scope         |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------- |
+| Quest phase, structures, soldier orders, merchant stock, once-flags | `BriarHollowState` → `PersistedWorldState` / `WorldCheckpoint`            | per floor     |
+| Tool tiers, explainers seen                                         | `PartyCraftsState` → `GameProgress.crafts` / `LevelCheckpoint`            | party         |
+| Resourcing and Construction levels and XP                           | `Player.craftSkills` → `PlayerSnapshot`                                   | per crawler   |
+| Harvest-node capacity and regrowth                                  | threaded `BriarHollowState`, checkpointed by `GatheringKit`, not saved    | page lifetime |
+| Villager memory                                                     | threaded `BriarHollowState`, neither checkpointed nor saved               | page lifetime |
+| The Borrowed Blueprints: phase, fence sections, grain, stations     | `BriarHollowState.blueprints` → `PersistedWorldState` / `WorldCheckpoint` | per floor     |
+| Midge's place and health mid-escort, ambush waves sprung            | `MidgeEscortCarry`, handed scene to scene, never saved or checkpointed    | door visits   |
+| Grain stands cut                                                    | `GrainHarvest`, not saved                                                 | scene         |
+| Session harvest tallies, thrall cooldowns                           | module state                                                              | page lifetime |
 
 `BriarHollowState` is threaded by reference through `DungeonScene` and
 `BuildingInteriorScene`, like `TownMemory`, because both scenes are rebuilt on every
@@ -893,6 +1313,32 @@ damaged since the party last saved in town.
   questline at `fortifying`, the whole ring at a tier and loaded trebuchets inside it:
   `npm run playtest -- briar-hollow-assault --walls=fence|wood|stone|fortified
 --trebuchets=N` (walls also take 1–4).
+- `?playtest=blueprints-offer`, `blueprints-fence`, `blueprints-harvest`,
+  `blueprints-escort` and `blueprints-stations` place the party at each step of The
+  Borrowed Blueprints with what that step needs: the Plea won and Construction learned;
+  the boards for the fence; the scythe in hand; Midge waiting at Merrit's gate; the
+  blueprints in hand with the materials for both upgrades. The village state is seeded
+  before the scene is built (`blueprintsPlaytestState`), so the herd is raised knowing
+  whether Midge has left it.
+- `npm run verify:borrowed-blueprints` is the quest's headless gate: the phase order and
+  every transition, persistence (an old save with no `blueprints` included), provider
+  order, quest-slot eviction and recovery with its barks, markers and journal rows,
+  Merrit's and Wendell's beats (hand-over and hand-back included), the fence (only in
+  `build_fence`, taps, cancel, refusal), grain grading and regrowth, the X precedence,
+  station costs, refusals and four wood a press, that every cue's ids are preloaded, and
+  Midge's road: on forty generated maps it runs from Merrit's gate to the green's gate,
+  every step walkable for her and out of doorways, at least 85% road, every waypoint a
+  straight walk from the last; a scripted walk moves the waypoint only forward, holds it
+  through a jostle, takes it home with a scared Midge and re-picks it off the road; and
+  in a live rig the guidance, pin and pip name the same waypoint. Its sections live in
+  `scripts/borrowed-blueprints/`.
+- `npm run verify:midge-escort` stages the escort on real floor-3 maps through the siege
+  harness: Merrit's call, the follow band without oscillation, stand-and-moo past the
+  break distance,
+  waves only outside the safe zone and off screen, a door keeping her place, a rewind and
+  a scare putting her at the gate, her life at Wendell's, and a seeded many-stream sim in which a sensible
+  defence delivers her in most runs **and** she is hurt in most runs, so the gate tests
+  danger as well as survival. Her escort health is tuned against it.
 
 ---
 

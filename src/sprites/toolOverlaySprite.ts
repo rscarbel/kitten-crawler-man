@@ -1,6 +1,6 @@
 /**
- * The axe or pick in Carl's fists while he works a resource node, and the
- * same tool in any other worker's hands.
+ * The axe or pick in Carl's fists while he works a resource node, Merrit's
+ * scythe while he cuts grain, and the same tool in any other worker's hands.
  *
  * It cannot be a held prop painted inside his figure: a cell is shared by
  * every tier of tool, and the tier is what the player upgrades and expects to
@@ -12,7 +12,7 @@
  */
 
 import { allocCanvas, type CanvasSurface, surfaceContext } from '../core/canvasSurface';
-import { type ToolKind, type ToolTier } from '../core/toolTiers';
+import { type ToolTier, type WorkingToolKind } from '../core/toolTiers';
 import { type Pt } from './art/carlArt';
 import type { BodySide } from './art/carl/rig';
 import { HUMAN_CELL_PX_PER_UNIT, HUMAN_SCALE } from './art/human/figureScale';
@@ -26,7 +26,7 @@ import {
   type HumanRowName,
   MINE_ROWS,
 } from './art/humanFigure';
-import { paintTool, toolHalfBreadth, toolReachAlongHaft } from './art/toolArt';
+import { paintWorkingTool, workingToolExtent } from './art/toolArt';
 import type { HumanRowSelection } from './humanSprite';
 
 /** Where the tool goes on one drawn cell. */
@@ -159,21 +159,20 @@ interface ToolSurface {
 const surfaceByLook = new Map<string, ToolSurface>();
 
 /** One tier of one tool, painted once and reused for every frame and every worker. */
-function toolSurface(kind: ToolKind, tier: ToolTier): ToolSurface {
+function toolSurface(kind: WorkingToolKind, tier: ToolTier): ToolSurface {
   const cacheKey = `${kind}:${tier}`;
   const known = surfaceByLook.get(cacheKey);
   if (known !== undefined) return known;
-  const along = toolReachAlongHaft(tier);
-  const breadth = toolHalfBreadth(tier);
-  const width = Math.ceil((along.back + along.ahead) * SURFACE_UNITS_TO_PX);
-  const height = Math.ceil(2 * breadth * SURFACE_UNITS_TO_PX);
+  const extent = workingToolExtent(kind, tier);
+  const width = Math.ceil((extent.back + extent.ahead) * SURFACE_UNITS_TO_PX);
+  const height = Math.ceil(2 * extent.halfBreadth * SURFACE_UNITS_TO_PX);
   const surface = allocCanvas(width, height);
   const ctx = surfaceContext(surface);
-  const originX = along.back * SURFACE_UNITS_TO_PX;
+  const originX = extent.back * SURFACE_UNITS_TO_PX;
   const originY = height / 2;
   ctx.translate(originX, originY);
   ctx.scale(SURFACE_UNITS_TO_PX, SURFACE_UNITS_TO_PX);
-  paintTool(ctx, kind, tier);
+  paintWorkingTool(ctx, kind, tier);
   const found = { surface, originX, originY };
   surfaceByLook.set(cacheKey, found);
   return found;
@@ -188,7 +187,7 @@ function toolSurface(kind: ToolKind, tier: ToolTier): ToolSurface {
  */
 export function drawToolAt(
   ctx: CanvasRenderingContext2D,
-  kind: ToolKind,
+  kind: WorkingToolKind,
   tier: ToolTier,
   gripX: number,
   gripY: number,
@@ -213,7 +212,7 @@ export function drawToolAt(
  */
 export function drawToolOverlay(
   ctx: CanvasRenderingContext2D,
-  kind: ToolKind,
+  kind: WorkingToolKind,
   tier: ToolTier,
   placement: ToolOverlayPlacement,
   sx: number,

@@ -29,6 +29,8 @@ import type { SoldierOrder, VillageQuestState } from '../../core/briarHollowStat
 import type { VillageQuestPhase } from '../../core/villageQuestPhase';
 import type { VillageUnlocks } from '../../core/villageUnlocks';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
+import type { ConversationRequest } from '../../dialog/request';
+import type { VillagerConversationFlow } from './villagerTopics';
 
 /** Seconds after an event during which a villager still brings it up. */
 export const RECENT_EVENT_SECONDS = 30;
@@ -147,18 +149,38 @@ export type OpeningRule =
 export type OpeningPages = NonEmpty<DialogLine>;
 
 /**
+ * One side of an opening's accept/decline row. `run` is called when the
+ * player picks this side, makes whatever the choice means happen, and returns
+ * what the villager says next through the conversation's own flow — so an
+ * accept can answer and close, or answer and bring the topics back up.
+ */
+export interface OpeningConfirmSide {
+  readonly label: string;
+  readonly run: (flow: VillagerConversationFlow) => ConversationRequest;
+}
+
+/**
  * What happens once an opening's pages have been read.
- *   'root'  → the villager's own topics come up, freshly rebuilt.
- *             `onEventualClose` runs whenever a later "Goodbye", walk-away or
- *             Escape eventually ends the conversation; `null` when nothing does.
- *   'close' → the conversation ends right there, with no menu after.
- *             `onClosed` runs at that moment.
+ *   'root'    → the villager's own topics come up, freshly rebuilt.
+ *               `onEventualClose` runs whenever a later "Goodbye", walk-away or
+ *               Escape eventually ends the conversation; `null` when nothing does.
+ *   'close'   → the conversation ends right there, with no menu after.
+ *               `onClosed` runs at that moment.
+ *   'confirm' → an accept/decline pair comes up in place of the topics — a
+ *               quest offered straight out of the opening. Space takes the
+ *               accept side; walking away or Escape declines nothing and
+ *               leaves the offer standing for the next talk.
  * Required on every opening, so a rung that needs a side effect once the
  * conversation is done cannot forget to say when.
  */
 export type OpeningAfter =
   | { readonly kind: 'root'; readonly onEventualClose: (() => void) | null }
-  | { readonly kind: 'close'; readonly onClosed: () => void };
+  | { readonly kind: 'close'; readonly onClosed: () => void }
+  | {
+      readonly kind: 'confirm';
+      readonly accept: OpeningConfirmSide;
+      readonly decline: OpeningConfirmSide;
+    };
 
 /** An opening that says its pages and lets the villager's own topics come back up, with nothing to run once the talk eventually ends. */
 export const KEEP_TALKING: OpeningAfter = { kind: 'root', onEventualClose: null };
@@ -174,9 +196,12 @@ export interface OpeningLine {
 }
 
 /**
- * The questline's say in who opens with what. Consulted after the siege lines
+ * A questline's say in who opens with what. Consulted after the siege lines
  * and the one-shots, before everything else; returning null leaves the
- * villager to the rest of the ladder. Any effect the questline does the
+ * villager to the next provider and then the rest of the ladder. Several
+ * questlines each register one, in priority order (see
+ * `VillagerSystem.addQuestLineProvider`): the first opening that is not null
+ * wins, and so does the first marker that is not `'none'`. Any effect the questline does the
  * instant this opening is chosen — teaching a skill, handing over an item —
  * is the provider's own statement, run before it returns the opening, not a
  * closure carried on the returned value.
@@ -194,6 +219,37 @@ export interface QuestOpening {
   /** These pages belong to the quest being run; the conversation box wears the quest icon. */
   readonly questRelated?: boolean;
   readonly after: OpeningAfter;
+}
+
+/**
+ * The first provider's opening for `villager` that is not null, walking the
+ * providers in priority order. Stops at the winner, so a provider whose
+ * `lineFor` does something as it chooses (teaching a skill, handing over an
+ * item) only ever does it when its opening is the one spoken.
+ */
+export function firstQuestOpening(
+  villager: VillagerId,
+  ctx: VillagerContext,
+  providers: readonly QuestLineProvider[],
+): QuestOpening | null {
+  for (const provider of providers) {
+    const opening = provider.lineFor(villager, ctx);
+    if (opening !== null) return opening;
+  }
+  return null;
+}
+
+/** The first provider's marker for `villager` that is not `'none'`, or `'none'` when none has one. */
+export function firstQuestMarker(
+  villager: VillagerId,
+  ctx: VillagerContext,
+  providers: readonly QuestLineProvider[],
+): NPCMarkerType {
+  for (const provider of providers) {
+    const marker = provider.markerFor?.(villager, ctx) ?? 'none';
+    if (marker !== 'none') return marker;
+  }
+  return 'none';
 }
 
 /** The flag a one-shot line is recorded under once spoken. */
@@ -313,7 +369,7 @@ export function fallbackPool(villager: VillagerId): OpeningPages {
  *
  * 1. the siege — the alarm, or the breach for the two who watch the wall;
  * 2. a one-shot the party has earned and not yet heard;
- * 3. the questline's own line, when it has one for this villager;
+ * 3. a questline's own line, the first provider in priority order that has one;
  * 4. relief after the victory;
  * 5. something that just happened nearby;
  * 6. a first meeting;
@@ -326,7 +382,7 @@ export function fallbackPool(villager: VillagerId): OpeningPages {
 export function openingLine(
   villager: VillagerId,
   ctx: VillagerContext,
-  questLines: QuestLineProvider | null = null,
+  questLines: readonly QuestLineProvider[] = [],
 ): OpeningLine {
   const siege = siegeLine(villager, ctx);
   if (siege !== null) return single(siege, 'siege');
@@ -341,7 +397,7 @@ export function openingLine(
     };
   }
 
-  const quest = questLines?.lineFor(villager, ctx) ?? null;
+  const quest = firstQuestOpening(villager, ctx, questLines);
   if (quest !== null) {
     return {
       pages: quest.pages,

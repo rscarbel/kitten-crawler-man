@@ -325,6 +325,51 @@ function drawShoe(ctx: Ctx, foot: { x: number; y: number }, color: string): void
   ctx.stroke();
 }
 
+/** Wet pasture mud: darker and warmer than any trouser colour, so it reads on dark boots too. */
+const MUD_COLOR = '#6a5236';
+const MUD_ALPHA = 0.9;
+/** Mud cakes the lower half of the boot and the toe, never the whole shoe. */
+const MUD_HALF_WIDTH_SHARE = 0.85;
+const MUD_HALF_HEIGHT_SHARE = 0.55;
+const MUD_DROP_SHARE = 0.45;
+/** Splashes flicked up the trouser cuff above each boot. */
+const MUD_SPLASH_RADIUS = 0.014;
+const MUD_SPLASHES: readonly { dx: number; rise: number }[] = [
+  { dx: -0.05, rise: 0.07 },
+  { dx: 0.035, rise: 0.1 },
+  { dx: 0.06, rise: 0.055 },
+];
+
+/** Cakes both of `pose`'s boots in mud, over shoes {@link drawShoes} has already painted. */
+export function drawShoeMud(ctx: Ctx, pose: CarlPose): void {
+  ctx.fillStyle = rgba(MUD_COLOR, MUD_ALPHA);
+  for (const foot of [pose.leftFoot, pose.rightFoot]) {
+    const cy = foot.y - SHOE_RISE + SHOE_HALF_LENGTH * MUD_DROP_SHARE;
+    ctx.beginPath();
+    ctx.ellipse(
+      foot.x,
+      cy,
+      SHOE_HALF_WIDTH * MUD_HALF_WIDTH_SHARE,
+      SHOE_HALF_LENGTH * MUD_HALF_HEIGHT_SHARE,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    for (const splash of MUD_SPLASHES) {
+      ctx.beginPath();
+      ctx.arc(
+        foot.x + splash.dx,
+        foot.y - SHOE_RISE - splash.rise,
+        MUD_SPLASH_RADIUS,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
+  }
+}
+
 /** Draws a flat shoe over each of `pose`'s own feet — the far one a shade darker, matching every other worn accessory here. */
 export function drawShoes(ctx: Ctx, _view: CarlView, pose: CarlPose, color: string): void {
   drawShoe(ctx, pose.leftFoot, shaded(color));
@@ -633,12 +678,6 @@ const RULE_SEGMENT_HEIGHT = 0.05;
 const RULE_LINE_WIDTH = 0.014;
 const RULE_FRONT_X_FRAC = 0.6;
 const RULE_PROFILE_X = 0.04;
-/** The pencil tucked at the collar reads best set in from the rule's own x position. */
-const PENCIL_X_FRAC = 0.3;
-const PENCIL_START_Y_DROP = 0.08;
-const PENCIL_END_Y_DROP = 0.2;
-const PENCIL_START_X_FRAC = 0.1;
-
 /** Wendell's folding rule at the belt — a builder's tool, not a farmer's. */
 function drawBuilderRule(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
   const x = view === 'side' ? RULE_PROFILE_X : SHOULDER_HALF * RULE_FRONT_X_FRAC;
@@ -651,13 +690,6 @@ function drawBuilderRule(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
   ctx.lineTo(x, topY + RULE_SEGMENT_HEIGHT);
   ctx.lineTo(x - RULE_ZIGZAG_WIDTH, topY + RULE_SEGMENT_HEIGHT * 2);
   ctx.lineTo(x, topY + RULE_SEGMENT_HEIGHT * 3);
-  ctx.stroke();
-  // A carpenter's pencil, tucked at the collar in place of a head slot.
-  ctx.strokeStyle = spec.accentColor ?? PENCIL_COLOR;
-  ctx.lineWidth = PROP_STROKE_WIDTH;
-  ctx.beginPath();
-  ctx.moveTo(-x * PENCIL_X_FRAC, SHOULDER_Y + PENCIL_START_Y_DROP);
-  ctx.lineTo(-x * PENCIL_START_X_FRAC, SHOULDER_Y + PENCIL_END_Y_DROP);
   ctx.stroke();
 }
 

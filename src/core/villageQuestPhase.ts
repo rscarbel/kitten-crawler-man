@@ -85,3 +85,14 @@ const PHASES_BEFORE_MAYOR_ACCEPTED: ReadonlySet<VillageQuestPhase> = new Set([
 export function hasAcceptedMayorRequest(phase: VillageQuestPhase): boolean {
   return !PHASES_BEFORE_MAYOR_ACCEPTED.has(phase);
 }
+
+/** The two phases with the enemy at, or through, the gate. */
+const SIEGE_PHASES: ReadonlySet<VillageQuestPhase> = new Set(['imminent', 'assault']);
+
+/**
+ * Whether Briar Hollow is under siege right now: the countdown or the waves.
+ * Every other questline in the village stands down while it is.
+ */
+export function isVillageUnderSiege(phase: VillageQuestPhase): boolean {
+  return SIEGE_PHASES.has(phase);
+}

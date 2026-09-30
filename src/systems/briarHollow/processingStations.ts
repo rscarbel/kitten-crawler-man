@@ -13,15 +13,22 @@ import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import { villagePropArtTopTilesAboveFootprint } from '../../sprites/sheets/villageSheets';
 import type { VillageStandingPropId } from '../../sprites/art/villageArt';
 import type { TileRect } from '../../map/town/townPlan';
+import { stationLook } from '../../map/tiles/hollowVillageTiles';
 
 export type ProcessingStationKind = 'boards' | 'rope';
 
 /** How close a crawler's centre must be to a machine's footprint to work it, in tiles. */
 export const PROCESSING_REACH_TILES = 1.5;
 
+/**
+ * A machine rebuilt to Tikka's design is the same station doing the same job,
+ * so both looks of each machine map to one kind.
+ */
 const STATION_PROPS: ReadonlyArray<{ prop: VillageStandingPropId; kind: ProcessingStationKind }> = [
   { prop: 'sawmill_machine', kind: 'boards' },
+  { prop: 'sawmill_machine_upgraded', kind: 'boards' },
   { prop: 'rope_walk', kind: 'rope' },
+  { prop: 'rope_walk_upgraded', kind: 'rope' },
 ];
 
 export interface ProcessingStation {
@@ -37,10 +44,16 @@ export interface ProcessingStation {
  * anchored "above this machine" should clear this row, not the footprint's.
  * Measured on first ask rather than at lookup, because measuring paints the
  * prop and headless callers of `processingStationsOf` have no canvas.
+ * `upgraded` measures the machine's rebuilt look, whose ink reaches a different height.
  */
-export function stationArtTopTileY(station: ProcessingStation): number {
-  return station.footprint.y - villagePropArtTopTilesAboveFootprint(station.prop);
+export function stationArtTopTileY(station: ProcessingStation, upgraded = false): number {
+  return (
+    station.footprint.y - villagePropArtTopTilesAboveFootprint(stationLook(station.prop, upgraded))
+  );
 }
+
+/** Wood a plain machine works per press. */
+export const PLAIN_WOOD_PER_PRESS = 1;
 
 /** Every processing machine the village stands up; empty with no village. */
 export function processingStationsOf(site: BriarHollowSite | null): ProcessingStation[] {

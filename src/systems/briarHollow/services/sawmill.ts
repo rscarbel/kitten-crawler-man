@@ -3,7 +3,9 @@
  * boards, the rope walk makes rope. Each machine does one job, so walking up
  * to one is already the choice of output.
  *
- * One press works one wood, over {@link MANUAL_PROCESS_SECONDS}. Holding the
+ * One press works one wood, over {@link MANUAL_PROCESS_SECONDS}; a machine
+ * rebuilt to Tikka's design works {@link UPGRADED_WOOD_PER_PRESS} in the same
+ * time, or whatever the party has left if that is less. Holding the
  * interact key carries straight on to the next wood when one finishes, and a
  * long-press on a machine does the same on a touch screen; either stops when
  * the key is let go, a tap lands, the wood runs out, or the crawler moves.
@@ -12,6 +14,7 @@
  */
 
 import type { AudioManager } from '../../../audio/AudioManager';
+import type { SoundId } from '../../../audio/sounds';
 import { TILE_SIZE } from '../../../core/constants';
 import type { EventBus } from '../../../core/EventBus';
 import { ITEM_DEF } from '../../../core/ItemDefs';
@@ -21,7 +24,10 @@ import { viewForFacing } from '../../../sprites/humanSprite';
 import { drawProgressBar, PROGRESS_PRESETS } from '../../../ui/Box';
 import { drawInteractionPrompt, interactionPromptsSuppressed } from '../../../ui/InteractionPrompt';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../../../ui/icons/stationGlyphs';
+import { cueSoundOr } from '../blueprints/blueprintsSoundCues';
+import { UPGRADED_WOOD_PER_PRESS } from '../blueprints/StationUpgrades';
 import {
+  PLAIN_WOOD_PER_PRESS,
   PROCESSING_REACH_TILES,
   type ProcessingStation,
   type ProcessingStationKind,
@@ -39,6 +45,10 @@ import {
   processWood,
   processableWood,
 } from './woodProcessing';
+
+/** The saw bench's cutting loop, heard for a cut and for Fenna working the saw. */
+export const PLAIN_SAWING_LOOP = 'loopable_sawing' satisfies SoundId;
+const PLAIN_ROPE_SOUND = 'rope_tightening' satisfies SoundId;
 
 const UPDATES_PER_SECOND = 60;
 const MANUAL_PROCESS_FRAMES = Math.round(MANUAL_PROCESS_SECONDS * UPDATES_PER_SECOND);
@@ -133,7 +143,7 @@ export interface SawmillDeps {
   readonly party: ServiceParty;
   readonly site: BriarHollowSite;
   readonly bus: EventBus | null;
-  readonly audio: AudioManager | null;
+  readonly audio: Pick<AudioManager, 'play'> | null;
   /** The sawmill's working switch: its blade spins while set. */
   readonly sawmill: { working: boolean };
   readonly announce: (message: string) => void;
@@ -144,6 +154,14 @@ export interface SawmillDeps {
   readonly fennaNoWood: () => void;
   /** Whether Fenna has let the crawlers use the machines yet. */
   readonly unlocked: () => boolean;
+  /** Whether `station` has been rebuilt to Tikka's design, which works more wood per press. */
+  readonly isUpgraded: (station: ProcessingStation) => boolean;
+  /**
+   * Whether a machine is being rebuilt right now. The rebuild is its own
+   * channel on the same crawler at the same machines, so while it runs no
+   * cut starts and no prompt or glow offers one.
+   */
+  readonly rebuilding: () => boolean;
 }
 
 interface ManualJob {
@@ -151,7 +169,15 @@ interface ManualJob {
   readonly worker: Crawler;
   readonly startX: number;
   readonly startY: number;
+  /**
+   * Wood this cut works, fixed when it starts: a machine upgraded mid-run
+   * only works more on the next cut, which is the first the player sees on
+   * the new machine.
+   */
+  woodPerPress: number;
   framesLeft: number;
+  /** Whether Carl's working pose is this cut's, so ending the cut only ever stops its own. */
+  posing: boolean;
 }
 
 function bodyCentre(crawler: Crawler): { x: number; y: number } {
@@ -222,9 +248,27 @@ export class SawmillService {
     return this.job !== null;
   }
 
+  /** How much wood one press at `station` works when the party has plenty. */
+  woodPerPress(station: ProcessingStation): number {
+    return this.deps.isUpgraded(station) ? UPGRADED_WOOD_PER_PRESS : PLAIN_WOOD_PER_PRESS;
+  }
+
   /** Whether the saw itself is cutting — the one machine that is heard while it runs. */
   get isSawing(): boolean {
     return this.job?.station.kind === 'boards';
+  }
+
+  /**
+   * The loop the current cut sounds as, or null when the saw is not cutting.
+   * An upgraded bench sounds as its own cue, so it never plays as the plain
+   * one.
+   */
+  get sawingLoop(): SoundId | null {
+    const job = this.job;
+    if (job?.station.kind !== 'boards') return null;
+    return this.deps.isUpgraded(job.station)
+      ? cueSoundOr('upgradedSawLoop', PLAIN_SAWING_LOOP)
+      : PLAIN_SAWING_LOOP;
   }
 
   /** The interact key went down (`true`) or up (`false`). Only a held key carries a run on. */
@@ -249,6 +293,7 @@ export class SawmillService {
       this.keepGoing = false;
       return 'busy';
     }
+    if (this.deps.rebuilding()) return 'busy';
     const outcome = this.refusal(worker, station);
     if (outcome !== null) return outcome;
     this.keepGoing = keepGoing;
@@ -272,19 +317,29 @@ export class SawmillService {
     return null;
   }
 
+  private ropeSound(station: ProcessingStation): SoundId {
+    return this.deps.isUpgraded(station)
+      ? cueSoundOr('upgradedRopeWalkLoop', PLAIN_ROPE_SOUND)
+      : PLAIN_ROPE_SOUND;
+  }
+
   private start(worker: Crawler, station: ProcessingStation): void {
-    this.job = {
+    const job: ManualJob = {
       station,
       worker,
       startX: worker.x,
       startY: worker.y,
+      woodPerPress: this.woodPerPress(station),
       framesLeft: MANUAL_PROCESS_FRAMES,
+      posing: false,
     };
+    this.job = job;
     if (station.kind === 'boards') this.deps.sawmill.working = true;
-    this.startWorkingPose(worker, station);
+    this.startWorkingPose(job);
   }
 
-  private startWorkingPose(worker: Crawler, station: ProcessingStation): void {
+  private startWorkingPose(job: ManualJob): void {
+    const { worker, station } = job;
     if (worker !== this.deps.party.human) return;
     const from = bodyCentre(worker);
     const to = footprintCentre(station);
@@ -293,10 +348,13 @@ export class SawmillService {
     const distance = Math.hypot(dx, dy);
     const faceX = distance > 0 ? dx / distance : worker.facingX;
     const faceY = distance > 0 ? dy / distance : worker.facingY;
-    this.deps.party.human.playAction(BUILD_ROWS[viewForFacing(faceX, faceY)], {
+    job.posing = this.deps.party.human.playAction(BUILD_ROWS[viewForFacing(faceX, faceY)], {
       faceX,
       faceY,
       loop: true,
+      onEnd: () => {
+        job.posing = false;
+      },
     });
   }
 
@@ -311,7 +369,7 @@ export class SawmillService {
 
   private stopEffects(job: ManualJob): void {
     this.deps.sawmill.working = false;
-    if (job.worker === this.deps.party.human) this.deps.party.human.stopAction();
+    if (job.posing) this.deps.party.human.stopAction();
   }
 
   /** One fixed step. `halted`: the world is stopped under a menu, and the cut waits with it. */
@@ -329,7 +387,9 @@ export class SawmillService {
   }
 
   private finish(job: ManualJob): void {
-    const result = processWood(this.deps.party, job.worker, job.station.kind, 1);
+    const available = processableWood(this.deps.party, job.worker, job.station.kind);
+    const wood = Math.min(job.woodPerPress, available);
+    const result = processWood(this.deps.party, job.worker, job.station.kind, wood);
     this.deps.noteResourceActivity();
     if (result === null) {
       this.job = null;
@@ -338,7 +398,7 @@ export class SawmillService {
       return;
     }
     grantManualProcessingXp(job.worker, result.woodSpent);
-    if (job.station.kind === 'rope') this.deps.audio?.play('rope_tightening');
+    if (job.station.kind === 'rope') this.deps.audio?.play(this.ropeSound(job.station));
     result.recipient.queueFloatingText(
       `+${result.produced} ${ITEM_DEF[outputItem(job.station.kind)].name}`,
       'buff',
@@ -355,6 +415,7 @@ export class SawmillService {
       processableWood(this.deps.party, job.worker, job.station.kind) >= 1;
     if (carryOn) {
       job.framesLeft = MANUAL_PROCESS_FRAMES;
+      job.woodPerPress = this.woodPerPress(job.station);
       return;
     }
     this.job = null;
@@ -362,7 +423,7 @@ export class SawmillService {
     this.stopEffects(job);
   }
 
-  /** The machine's SPACE prompt, while the active crawler can work it. Returns whether one was drawn. */
+  /** The machine's SPACE prompt, while the active crawler can work it. Returns whether the prompt slot is taken. */
   renderPrompt(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -372,6 +433,9 @@ export class SawmillService {
     if (this.job !== null) return false;
     const station = this.stationFor(active);
     if (station === null) return false;
+    // The rebuild's own bar is the machine's prompt while it runs; claiming
+    // the slot keeps a prompt further down the chain from naming the press.
+    if (this.deps.rebuilding()) return true;
     const { x, y, w } = station.footprint;
     drawInteractionPrompt(
       ctx,
@@ -391,7 +455,7 @@ export class SawmillService {
    * whoever is standing on it.
    */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Crawler): void {
-    if (this.job !== null) return;
+    if (this.job !== null || this.deps.rebuilding()) return;
     const station = this.stationFor(active);
     if (station === null) return;
     const { x, y, w, h } = station.footprint;
@@ -465,7 +529,11 @@ export class SawmillService {
     const alpha = fade * (hasWood ? 1 : FAR_ICON_NO_WOOD_ALPHA);
     const bob = Math.sin(performance.now() / FAR_ICON_BOB_PERIOD_MS) * FAR_ICON_BOB_AMPLITUDE;
     const sx = centre.x - camX;
-    const sy = stationArtTopTileY(station) * TILE_SIZE - camY - FAR_ICON_LIFT + bob;
+    const sy =
+      stationArtTopTileY(station, this.deps.isUpgraded(station)) * TILE_SIZE -
+      camY -
+      FAR_ICON_LIFT +
+      bob;
 
     ctx.save();
     ctx.globalAlpha = alpha;

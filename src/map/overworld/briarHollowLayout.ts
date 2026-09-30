@@ -249,6 +249,13 @@ export const VILLAGE_PROPS = {
   gear_crate: { kind: 'low', w: 1, h: 1 },
   sawmill_machine: { kind: 'tall', w: 2, h: 3 },
   rope_walk: { kind: 'low', w: 2, h: 1 },
+  /**
+   * Never stamped by the layout: a machine is rebuilt to Tikka's design in
+   * place, so these share their plain originals' footprints exactly and only
+   * the look — and what a press yields — changes.
+   */
+  sawmill_machine_upgraded: { kind: 'tall', w: 2, h: 3 },
+  rope_walk_upgraded: { kind: 'low', w: 2, h: 1 },
   log_pile: { kind: 'low', w: 2, h: 1 },
   board_stack: { kind: 'low', w: 1, h: 1 },
   stone_pile: { kind: 'low', w: 1, h: 1 },
@@ -275,6 +282,8 @@ export const VILLAGE_PROPS = {
   seed_sacks: { kind: 'low', w: 1, h: 1 },
   hoe_rack: { kind: 'tall', w: 1, h: 1 },
   pick_rack: { kind: 'tall', w: 1, h: 1 },
+  /** Merrit's scythe on the barn's north wall; the pegs stand empty while a crawler carries it. */
+  scythe_pegs: { kind: 'tall', w: 1, h: 1 },
   sawdust: { kind: 'decal', w: 1, h: 1 },
   straw: { kind: 'decal', w: 1, h: 1 },
   soot: { kind: 'decal', w: 1, h: 1 },
@@ -608,6 +617,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
       { prop: 'hay_bale', x: 1, y: 1 },
       { prop: 'hay_bale', x: 2, y: 1 },
       { prop: 'hay_bale', x: 1, y: 2 },
+      { prop: 'scythe_pegs', x: 5, y: 1 },
       { prop: 'water_trough', x: 3, y: 5 },
       { prop: 'feed_bin', x: 1, y: 5 },
     ],
@@ -758,10 +768,72 @@ export const SQUARE_BENCHES: ReadonlyArray<TilePoint> = [
 export const PASTURE: TileRect = { x: 48, y: 9, w: 13, h: 10 };
 /** The gap in the pasture fence, facing the barn's open side. */
 export const PASTURE_FENCE_GATES: ReadonlyArray<TilePoint> = [{ x: 48, y: 12 }];
-export const CROP_FIELDS: ReadonlyArray<TileRect> = [
-  { x: 53, y: 21, w: 8, h: 3 },
-  { x: 53, y: 26, w: 8, h: 3 },
-];
+/**
+ * How many contiguous runs the pasture fence ring is cut into for Merrit's
+ * rebuild. Each run is rebuilt as one piece, and the quest state keeps one
+ * built flag per run, so changing this count invalidates saved progress.
+ */
+export const PASTURE_FENCE_SECTION_COUNT = 10;
+
+/** The part of a placed site the fence sections are cut from: the pasture's rect and gate gaps, in world tiles. */
+export interface PastureFenceRing {
+  readonly pasture: { readonly rect: TileRect; readonly fenceGates: readonly TilePoint[] };
+}
+
+/**
+ * The perimeter of `rect`, clockwise on screen (y grows downward) from its
+ * top-left corner: along the top, down the right, back along the bottom and
+ * up the left.
+ */
+function clockwisePerimeter(rect: TileRect): TilePoint[] {
+  const right = rect.x + rect.w - 1;
+  const bottom = rect.y + rect.h - 1;
+  const ring: TilePoint[] = [];
+  for (let x = rect.x; x <= right; x++) ring.push({ x, y: rect.y });
+  for (let y = rect.y + 1; y <= bottom; y++) ring.push({ x: right, y });
+  for (let x = right - 1; x >= rect.x; x--) ring.push({ x, y: bottom });
+  for (let y = bottom - 1; y > rect.y; y--) ring.push({ x: rect.x, y });
+  return ring;
+}
+
+/**
+ * Merrit's pasture fence cut into {@link PASTURE_FENCE_SECTION_COUNT}
+ * contiguous runs, walking the ring clockwise from the tile after the gate.
+ * Run lengths differ by at most one, with the longer runs first.
+ *
+ * Deterministic and unseeded: the quest saves one built flag per run index,
+ * so the same map must always cut the same runs.
+ */
+export function pastureFenceSections(site: PastureFenceRing): TilePoint[][] {
+  const { rect, fenceGates } = site.pasture;
+  const isGate = (tile: TilePoint) =>
+    fenceGates.some((gate) => gate.x === tile.x && gate.y === tile.y);
+  const ring = clockwisePerimeter(rect);
+  const firstGate = ring.findIndex(isGate);
+  const startAfterGate = firstGate < 0 ? 0 : firstGate + 1;
+  const fence = [...ring.slice(startAfterGate), ...ring.slice(0, startAfterGate)].filter(
+    (tile) => !isGate(tile),
+  );
+  const shortestRun = Math.floor(fence.length / PASTURE_FENCE_SECTION_COUNT);
+  const longerRuns = fence.length % PASTURE_FENCE_SECTION_COUNT;
+  const sections: TilePoint[][] = [];
+  let next = 0;
+  for (let index = 0; index < PASTURE_FENCE_SECTION_COUNT; index++) {
+    const length = shortestRun + (index < longerRuns ? 1 : 0);
+    sections.push(fence.slice(next, next + length));
+    next += length;
+  }
+  return sections;
+}
+/** The northern field, where the scarecrow stands; its crop is the world seed's pick. */
+export const SCARECROW_FIELD: TileRect = { x: 53, y: 21, w: 8, h: 3 };
+/**
+ * The southern field: always grain, and the only field whose stalks can be
+ * cut, because Merrit's hundred grain is harvested from it.
+ */
+export const GRAIN_FIELD: TileRect = { x: 53, y: 26, w: 8, h: 3 };
+/** Every field, for the passes that paint or dress all of them alike. */
+export const CROP_FIELDS: ReadonlyArray<TileRect> = [SCARECROW_FIELD, GRAIN_FIELD];
 /** The farmhouse's kitchen garden; the column in line with its door stays a path. */
 export const KITCHEN_GARDEN: TileRect = { x: 29, y: 15, w: 7, h: 3 };
 export const KITCHEN_GARDEN_PATH_X = 32;

@@ -27,6 +27,7 @@ import type { CrawlerKind } from '../../core/SkillManager';
 import type { ResourceCost } from '../../core/partyResources';
 import { canAfford, formatCost, partyCount } from '../../core/partyResources';
 import { partyCoins } from '../../core/partyCoins';
+import { constructionUnlocked } from '../../core/villageUnlocks';
 import { RESOURCE_IDS } from '../../core/resourceIds';
 import { ITEM_DEF } from '../../core/ItemDefs';
 import { TILE_SIZE } from '../../core/constants';
@@ -306,13 +307,9 @@ export class ConstructionKit {
     return this.deps.state.unlocks.construction.length > 0;
   }
 
-  /** Whether the HUD's Build button shows: once either crawler has learned Construction and holds a plan. */
+  /** Whether the HUD's Build button shows: once Construction is unlocked for the party. */
   get buildButtonVisible(): boolean {
-    return (
-      (this.deps.human.craftSkills.isLearned('construction') ||
-        this.deps.cat.craftSkills.isLearned('construction')) &&
-      this.hasAnyConstructionUnlock
-    );
+    return constructionUnlocked([this.deps.human, this.deps.cat], this.deps.state.unlocks);
   }
 
   /** Seconds left on the Build button's first-sighting pulse. */

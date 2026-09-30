@@ -1,7 +1,7 @@
 import { TILE_SIZE } from '../core/constants';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
-import { ITEM_DEF } from '../core/ItemDefs';
+import { ITEM_DEF, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import { ALL_STATS, type Player } from '../Player';
 import { AbilityManager, isAbilityId, type AbilityId } from '../core/AbilityManager';
 import { isSkillId, type SkillId, type SkillState } from '../core/SkillManager';
@@ -63,6 +63,10 @@ function applyLoadout(player: Player, loadout: PlaytestLoadout): void {
   loadout.bag.forEach((stack, slotIdx) => {
     player.inventory.bag.slots[slotIdx] = { ...ITEM_DEF[stack.id], quantity: stack.quantity };
   });
+  if (loadout.questSlot !== undefined) {
+    const { id, quantity } = loadout.questSlot;
+    player.inventory.actionBar.slots[QUEST_SLOT_IDX] = { ...ITEM_DEF[id], quantity };
+  }
   for (const stack of [...loadout.hotbar, ...loadout.bag]) {
     if (stack.equipped === true) player.inventory.equipment.equipById(stack.id);
   }

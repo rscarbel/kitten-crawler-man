@@ -4910,6 +4910,122 @@ function paintToolPegs(p: Pen): void {
   rackTrayFront(p);
 }
 
+// ── Scythe pegs ───────────────────────────────────────────────────────────────
+
+/** The pegs' row variants, in the order they are painted. */
+export const SCYTHE_PEGS_HUNG_VARIANT = 0;
+export const SCYTHE_PEGS_EMPTY_VARIANT = 1;
+const SCYTHE_PEGS_VARIANTS = 2;
+
+/**
+ * Merrit's scythe hung blade-up on the barn wall: a long snath running up the
+ * board, the blade curling off its top toward the left. The snath's length is
+ * what says scythe at the tile, so it runs nearly the full height of the board.
+ */
+const SCYTHE_PEGS = {
+  postTop: 2.75,
+  boardBottom: 0.7,
+  boardTop: 2.62,
+  pegRadius: 0.035,
+  pegWidthShare: 1.4,
+  upperPeg: [0.45, 2.26],
+  lowerPeg: [0.66, 1.0],
+  snathFoot: [0.66, 0.66],
+  snathTop: [0.54, 2.46],
+  snathWidth: 0.055,
+  /** The nib, the hand grip standing off the snath partway up. */
+  nibFoot: [0.61, 1.56],
+  nibTip: [0.76, 1.64],
+  nibWidth: 0.045,
+  /** The blade, from its heel at the snath's top over its back to the tip. */
+  bladeHeelTop: [0.56, 2.52],
+  bladeBackControl: [0.32, 2.74],
+  bladeTip: [0.13, 2.34],
+  bladeEdgeControl: [0.34, 2.5],
+  bladeHeelBottom: [0.5, 2.4],
+  /** The honed edge, a bright line along the blade's underside. */
+  edgeWidth: 0.02,
+  /** Where the board has stayed pale behind a scythe that hangs there most of the year. */
+  ghostAlpha: 0.45,
+  ghostWidth: 0.07,
+} as const;
+
+function traceScytheBlade(p: Pen): void {
+  const { ctx } = p;
+  const { bladeHeelTop, bladeBackControl, bladeTip, bladeEdgeControl, bladeHeelBottom } =
+    SCYTHE_PEGS;
+  ctx.beginPath();
+  ctx.moveTo(p.x(bladeHeelTop[0]), p.y(bladeHeelTop[1]));
+  ctx.quadraticCurveTo(
+    p.x(bladeBackControl[0]),
+    p.y(bladeBackControl[1]),
+    p.x(bladeTip[0]),
+    p.y(bladeTip[1]),
+  );
+  ctx.quadraticCurveTo(
+    p.x(bladeEdgeControl[0]),
+    p.y(bladeEdgeControl[1]),
+    p.x(bladeHeelBottom[0]),
+    p.y(bladeHeelBottom[1]),
+  );
+  ctx.closePath();
+}
+
+function scythePeg(p: Pen, [cx, cUp]: Point): void {
+  fillEllipse(
+    p,
+    cx,
+    cUp,
+    SCYTHE_PEGS.pegRadius * SCYTHE_PEGS.pegWidthShare,
+    SCYTHE_PEGS.pegRadius,
+    WOOD.highlight,
+    p.detail,
+  );
+}
+
+function paintHungScythe(p: Pen): void {
+  const pegs = SCYTHE_PEGS;
+  inkedRod(p, [pegs.snathFoot, pegs.snathTop], pegs.snathWidth, WOOD.light);
+  inkedRod(p, [pegs.nibFoot, pegs.nibTip], pegs.nibWidth, WOOD.highlight);
+  traceScytheBlade(p);
+  p.ctx.fillStyle = IRON.body;
+  p.ctx.fill();
+  inkOutline(p.ctx, p.outline);
+  const { bladeTip, bladeEdgeControl, bladeHeelBottom } = pegs;
+  p.ctx.beginPath();
+  p.ctx.moveTo(p.x(bladeTip[0]), p.y(bladeTip[1]));
+  p.ctx.quadraticCurveTo(
+    p.x(bladeEdgeControl[0]),
+    p.y(bladeEdgeControl[1]),
+    p.x(bladeHeelBottom[0]),
+    p.y(bladeHeelBottom[1]),
+  );
+  p.ctx.strokeStyle = IRON.glint;
+  p.ctx.lineWidth = p.s(pegs.edgeWidth);
+  p.ctx.stroke();
+}
+
+/** The scythe's shape left pale on the board, for the pegs standing empty. */
+function paintScytheGhost(p: Pen): void {
+  const pegs = SCYTHE_PEGS;
+  withAlpha(p, pegs.ghostAlpha, () => {
+    strokePath(p, [pegs.snathFoot, pegs.snathTop], pegs.ghostWidth, WOOD.mid);
+    traceScytheBlade(p);
+    p.ctx.fillStyle = WOOD.mid;
+    p.ctx.fill();
+  });
+}
+
+function paintScythePegs(p: Pen, variant: number): void {
+  rackFrame(p, SCYTHE_PEGS.postTop, { up0: SCYTHE_PEGS.boardBottom, up1: SCYTHE_PEGS.boardTop });
+  const empty = variant === SCYTHE_PEGS_EMPTY_VARIANT;
+  if (empty) paintScytheGhost(p);
+  scythePeg(p, SCYTHE_PEGS.upperPeg);
+  scythePeg(p, SCYTHE_PEGS.lowerPeg);
+  if (!empty) paintHungScythe(p);
+  rackTrayFront(p);
+}
+
 // ── Lamp shelf ────────────────────────────────────────────────────────────────
 
 const LAMP = {
@@ -5894,4 +6010,5 @@ export const INDOOR_PROP_ART: Record<IndoorPropId, VillagePropArt> = {
   seed_sacks: { variants: 1, paint: painter(paintSeedSacks) },
   hoe_rack: { variants: 1, paint: painter(paintHoeRack) },
   pick_rack: { variants: 1, paint: painter(paintPickRack) },
+  scythe_pegs: { variants: SCYTHE_PEGS_VARIANTS, paint: painter(paintScythePegs) },
 };

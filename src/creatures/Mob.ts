@@ -360,6 +360,9 @@ const LEASH_SETTLE_FRACTION = 0.5;
 /** How far ahead a resident paths on each leg of its walk home, in tiles. */
 const LEASH_RETURN_HOP_TILES = 10;
 
+/** A mob with a fixated target turns on anything else that comes within this many tiles of it. */
+const FIXATED_TARGET_YIELD_TILES = 1;
+
 export abstract class Mob extends Player {
   protected speed: number;
   abstract readonly xpValue: number;
@@ -1276,6 +1279,15 @@ export abstract class Mob extends Player {
 
   /** When true (set by DungeonScene for locked boss rooms), ignores aggro range. */
   forceAggro = false;
+
+  /**
+   * A body this mob goes for ahead of nearer ones — the road's ambushers
+   * after Midge — whenever it is among the candidates `acquireTarget` would
+   * accept, unless another candidate stands within
+   * {@link FIXATED_TARGET_YIELD_TILES} of this mob: whoever steps in front
+   * is fought instead. Null, the default, leaves the nearest-target rule alone.
+   */
+  fixatedTarget: Player | null = null;
 
   /**
    * True while a scripted encounter has put this mob in the room but has not
@@ -2246,6 +2258,7 @@ export abstract class Mob extends Player {
       nearestDist = dist;
       nearest = target;
     }
+    nearest = this.fixateOver(nearest, nearestDist, targets, accept, aggroRangePx);
     // The frame a fight starts is the only frame worth shouting on: a mob that
     // was already engaged has an `engagedTarget`, so the search below runs a
     // handful of times per fight rather than once per mob per frame.
@@ -2260,6 +2273,29 @@ export abstract class Mob extends Player {
       alertPackAround(this, this.packAlertRadiusTiles * this.tileSize, nearest);
     }
     return nearest;
+  }
+
+  /**
+   * {@link fixatedTarget} in place of `nearest` (at `nearestDist` pixels),
+   * when it is a candidate this mob could pick at all and nothing stands
+   * close enough to it to be in the way.
+   */
+  private fixateOver(
+    nearest: Player | null,
+    nearestDist: number,
+    targets: readonly Player[],
+    accept: ((target: Player) => boolean) | undefined,
+    aggroRangePx: number,
+  ): Player | null {
+    const preferred = this.fixatedTarget;
+    if (preferred === null || preferred === nearest || !preferred.isAlive) return nearest;
+    if (preferred.isDefendTarget === true || !targets.includes(preferred)) return nearest;
+    if (accept !== undefined && !accept(preferred)) return nearest;
+    const inTheWay = nearest !== null && nearestDist <= FIXATED_TARGET_YIELD_TILES * this.tileSize;
+    if (inTheWay) return nearest;
+    const reachPx = aggroRangePx * AGGRO_PERSIST_MULTIPLIER;
+    const inReach = Math.hypot(preferred.x - this.x, preferred.y - this.y) < reachPx;
+    return this.forceAggro || inReach ? preferred : nearest;
   }
 
   /**
@@ -2334,7 +2370,10 @@ export abstract class Mob extends Player {
    * is clear. Call each frame while a target is being chased.
    */
   protected updateLastKnown(target: Player) {
-    if (this.hasLOS(target)) {
+    // A body this mob is fixated on is followed by more than sight — the
+    // road's dead can hear Midge's bell — so a wall between them never
+    // leaves it waiting where it last saw her.
+    if (target === this.fixatedTarget || this.hasLOS(target)) {
       this.lastKnownTargetX = target.x;
       this.lastKnownTargetY = target.y;
     }

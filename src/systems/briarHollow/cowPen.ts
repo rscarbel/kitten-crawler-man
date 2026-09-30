@@ -103,9 +103,11 @@ export class CowPen {
     barn: VillageBuildingDef | null,
   ) {
     const paddock = tilesOf(insetByOne(pasture));
+    // With no barn to lead to, the gate gaps themselves are the only way in,
+    // and pen ground so a body walking in through one is not refused its step.
     const lanes =
       barn === null
-        ? []
+        ? [...gates]
         : gates.flatMap((gate) => {
             const lane = laneToBarn(pasture, gate, barn);
             return lane.length === 0 ? [] : [gate, ...lane];
@@ -131,6 +133,15 @@ export class CowPen {
   static forSite(gameMap: GameMap, site: BriarHollowSite): CowPen {
     const barn = site.buildings.find((building) => building.id === 'barn') ?? null;
     return new CowPen(gameMap, site.pasture.rect, site.pasture.fenceGates, barn);
+  }
+
+  /**
+   * A fenced yard with no barn — Wendell's pasture in the Over City: the
+   * ground inside its fence, and the gate tiles in the fence line that lead
+   * into it. `rect` is the yard's outer rectangle, fence included.
+   */
+  static forYard(gameMap: GameMap, rect: TileRect, gates: readonly TilePoint[]): CowPen {
+    return new CowPen(gameMap, rect, gates, null);
   }
 
   private indexOf(tileX: number, tileY: number): number {

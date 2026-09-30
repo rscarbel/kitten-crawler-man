@@ -30,6 +30,12 @@ export class MobileTouchState {
   moveTarget: { x: number; y: number } | null = null;
   /** Tap start info (used to distinguish taps from drags). */
   tapStart: { x: number; y: number; time: number } | null = null;
+  /**
+   * The touchstart's own `timeStamp` for the movement finger: when the
+   * finger came down, which a timed press is graded by. The tap only fires
+   * on release, a variable time later.
+   */
+  tapStartEventMs: number | null = null;
 
   /** Touch identifier for inventory drag interactions. */
   inventoryDragTouchId: number | null = null;

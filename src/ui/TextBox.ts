@@ -170,6 +170,12 @@ export const TEXT_PRESETS = {
   cat: { size: 12, color: '#fb923c' },
   /** Purple ability / legendary text. */
   ability: { size: 11, color: '#c084fc' },
+  /** A requirement the party already meets — "Rope 15/15 ✓". */
+  requirementMet: { size: 10, bold: true, color: '#4ade80', outline: true },
+  /** A requirement the party is still short of — "Boards 12/30". */
+  requirementShort: { size: 10, bold: true, color: '#fca5a5', outline: true },
+  /** A job the party can do right now — "Ready to upgrade". */
+  ready: { size: 11, bold: true, color: '#facc15', outline: true },
   /** Tiny in-world rank mark — a hint beside a health bar, not HUD text. */
   tacticsMark: { size: 7, bold: true, color: '#facc15', outline: true },
 } satisfies Record<string, Partial<Omit<TextOptions, 'x' | 'y'>>>;

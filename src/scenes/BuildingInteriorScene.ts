@@ -1,4 +1,7 @@
 import { MONGO_EXPLAINER_FOCUS_ID } from '../ui/MongoExplainer';
+import { firstResidentMarker, type ResidentQuestHook } from '../systems/residentQuestHooks';
+import { WendellBlueprintsHook } from '../systems/briarHollow/blueprints/WendellBlueprintsHook';
+import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
 import { displayHp } from '../core/crawlerFormulas';
 import type { XpDiminishingTier } from '../levels/xpDiminishing';
 import { type SceneManager } from '../core/Scene';
@@ -64,6 +67,7 @@ import { addButton, beginMenuFocus, endMenuFocus, menuFocusContextId } from '../
 import type { ButtonRect } from '../ui/pause/types';
 import { EventBus } from '../core/EventBus';
 import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
+import { barkWhenBlueprintsItemEvicted } from '../systems/briarHollow/blueprints/blueprintsEvictionBark';
 import { CRAWLER_BARKS, barkTexts } from '../dialog/scripts/crawlerBarks';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
@@ -122,6 +126,7 @@ import {
   residentHost,
   type ResidentDef,
   type ResidentHost,
+  type ResidentId,
 } from '../systems/townResidents';
 import { residentLinesFor } from '../dialog/scripts/residents';
 import { buildApothecaryMenu, serveRemedy } from '../systems/townApothecary';
@@ -170,6 +175,11 @@ import {
 } from '../core/TownMemory';
 import { createPartyCraftsState, type PartyCraftsState } from '../core/partyCrafts';
 import { createBriarHollowState, type BriarHollowState } from '../core/briarHollowState';
+import {
+  plumblineFarmExamineLine,
+  PlumblineFarmRoomSync,
+} from '../systems/briarHollow/blueprints/plumblineFarmRoom';
+import { PLUMBLINE_FARM_NAME } from '../systems/briarHollow/blueprints/blueprintsProgress';
 import { partyCount } from '../core/partyResources';
 import { indoorsConstructionSource } from '../systems/briarHollow/ConstructionSystem';
 import { FortuneTellerPanel, HEDGE_WITCH } from '../ui/FortuneTellerPanel';
@@ -539,6 +549,8 @@ export class BuildingInteriorScene extends GameplayScene {
    * a hand-played sound at each emit site — the place a cue is chosen.
    */
   private readonly bus = new EventBus();
+  /** Stops forwarding the crawlers' quest-slot evictions onto this scene's bus; set while the scene is running. */
+  private stopForwardingQuestItemEvictions: (() => void) | null = null;
   private readonly systemNotices: SystemNoticeSystem;
   private readonly tacticsNotices: TacticsNoticeSystem;
   /** Bag, gear, pause menu, award stack, toasts and the hotbar's one routine. */
@@ -688,6 +700,15 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly anchorQuestProgress: AnchorQuestProgress;
   /** The anchor questline's business in this room; null in every other room. */
   private readonly anchorInterior: AnchorInteriorSystem | null;
+  /**
+   * Every questline with business with this room's residents, in priority
+   * order: the Anchor's first, then "The Borrowed Blueprints". Talking to a
+   * resident, their glyph, and the quest's open conversation all walk this
+   * list, so a questline indoors is one more entry rather than a special case.
+   */
+  private readonly residentQuestHooks: readonly ResidentQuestHook[];
+  /** Plumbline Farm's quest-driven props; null in every other building. */
+  private readonly plumblineFarmRoom: PlumblineFarmRoomSync | null;
   /** The one conversation panel every speaking system in this room shares. */
   private readonly conversation: Conversation;
   /** Occupant the open conversation belongs to; used to notice the player walking off. */
@@ -923,6 +944,9 @@ export class BuildingInteriorScene extends GameplayScene {
 
     restorePlayer(this.human, humanSnap);
     restorePlayer(this.cat, catSnap);
+    this.plumblineFarmRoom =
+      entry.name === PLUMBLINE_FARM_NAME ? new PlumblineFarmRoomSync(this.map) : null;
+    this.syncPlumblineFarmRoom();
     // Restoring a snapshot leaves positions alone, so the party is stood at
     // the door here; it is set down again once the room's fittings exist.
     this.pm.setPartyDown(findPartyArrivalTiles(this.map, this.map.startTile));
@@ -1132,14 +1156,26 @@ export class BuildingInteriorScene extends GameplayScene {
       this.conversation,
       this.audio,
     );
-    if (this.anchorInterior !== null) {
-      this.anchorInterior.onItemGranted = (id, quantity, worldX, worldY) => {
-        const cam = this.computeCamera(ground.gameMap);
-        for (let i = 0; i < quantity; i++) {
-          this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
-        }
-      };
-    }
+    const flyGrantedItem = (id: ItemId, quantity: number, worldX: number, worldY: number): void => {
+      const cam = this.computeCamera(ground.gameMap);
+      for (let i = 0; i < quantity; i++) {
+        this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
+      }
+    };
+    if (this.anchorInterior !== null) this.anchorInterior.onItemGranted = flyGrantedItem;
+    const wendellHook = WendellBlueprintsHook.forBuilding(entry.name, GROUND_FLOOR_INDEX, {
+      state: this.briarHollowState,
+      bus: this.bus,
+      audio: this.audio,
+      conversation: this.conversation,
+      human: this.human,
+      cat: this.cat,
+      toast: (message) => this.menus.hotbarToast.show(message),
+      onItemGranted: flyGrantedItem,
+    });
+    this.residentQuestHooks = [this.anchorInterior, wendellHook].flatMap((hook) =>
+      hook === null ? [] : [hook],
+    );
 
     // Ambient occupants only where no live encounter owns the room; the tower's
     // confrontation can start after entry, so towers are excluded outright.
@@ -1180,6 +1216,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.encounter === null
         ? InteriorPropInteractionSystem.forBuilding(this.map, interiorPayoutRecord)
         : null;
+    if (this.propInteractions !== null && entry.name === PLUMBLINE_FARM_NAME) {
+      this.propInteractions.examineOverride = (id) =>
+        plumblineFarmExamineLine(id, this.briarHollowState.blueprints.phase);
+    }
     this.interiorPropDestruction =
       this.encounter === null && TownInteriorPropDestructionSystem.hasAnyDestructible(this.map)
         ? new TownInteriorPropDestructionSystem(
@@ -1448,6 +1488,11 @@ export class BuildingInteriorScene extends GameplayScene {
         this.crawlerBarks.say(this.human, [CRAWLER_BARKS.donutKnockedOut.paragraphs[0]]);
       }
     });
+    barkWhenBlueprintsItemEvicted(
+      this.bus,
+      { human: this.human, cat: this.cat },
+      this.crawlerBarks,
+    );
     this.bus.on('mobKilled', (e) => {
       this.gameStats.recordMobKilled(e);
       // A kill the party earned speeds his recovery, indoors as outdoors.
@@ -1796,6 +1841,11 @@ export class BuildingInteriorScene extends GameplayScene {
 
   onEnter(): void {
     bindRunStats(this.gameStats);
+    this.stopForwardingQuestItemEvictions?.();
+    this.stopForwardingQuestItemEvictions = forwardQuestItemEvictions(this.bus, {
+      human: this.human,
+      cat: this.cat,
+    });
     // Override the overworld's persisted music with the room's own; the
     // overworld's zone music (OverworldMusicSystem) restores itself on exit.
     const musicTracks = this.interiorMusicTracks();
@@ -1853,7 +1903,7 @@ export class BuildingInteriorScene extends GameplayScene {
         if (this.bopca?.dismissDialog() === true) return true;
         if (this.bigTopMaze?.dismissDialog() === true) return true;
         if (this.towerConfrontation?.dismissDialog() === true) return true;
-        if (this.anchorInterior?.dismissDialog() === true) return true;
+        if (this.dismissResidentQuestDialog()) return true;
         if (this.safeRoom?.mordecaiDialogOpen === true) {
           this.conversation.dismiss();
           return true;
@@ -2022,6 +2072,8 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onExit(): void {
+    this.stopForwardingQuestItemEvictions?.();
+    this.stopForwardingQuestItemEvictions = null;
     // See the matching note in DungeonScene.onExit: defensive, since a fresh
     // scene already starts with a fresh RewardFlySystem.
     this.rewardFly.reset();
@@ -2109,19 +2161,12 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * True while the companion lies knocked out somewhere in this building — as
-   * opposed to having gone down outside before the party came in, which is the
-   * case `companionLeftBehind` describes.
+   * True while the companion lies knocked out in this building. Always in this
+   * building: no door opens while either crawler is down, so a knocked-out
+   * companion can only have gone down in here.
    */
-  private companionDownIndoors = false;
-
-  /**
-   * True when the companion went down outside and was left lying there. They are
-   * not in this building at all: they don't follow, don't render, and can't be
-   * switched to — only walking back out reaches them.
-   */
-  private get companionLeftBehind(): boolean {
-    return this.inactive().isKnockedOut && !this.companionDownIndoors;
+  private get companionDownIndoors(): boolean {
+    return this.inactive().isKnockedOut;
   }
 
   /**
@@ -2229,11 +2274,6 @@ export class BuildingInteriorScene extends GameplayScene {
     return true;
   }
 
-  /** The companion as a render-list fragment — empty when they were left outside. */
-  private presentCompanion(): ReturnType<BuildingInteriorScene['inactive']>[] {
-    return this.companionLeftBehind ? [] : [this.inactive()];
-  }
-
   /**
    * True while a scripted beat is driving both crawlers' bodies.
    *
@@ -2247,7 +2287,7 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.bigTopMaze?.playerLocked === true || this.towerConfrontation?.playerLocked === true;
   }
 
-  /** Hands control to the companion, unless they're lying knocked out — outside or in here. */
+  /** Hands control to the companion, unless they're lying knocked out. */
   private trySwitchActive(): void {
     // Guarded here rather than only at the keyboard poll, because the mobile HUD
     // reaches this by a different road: a script that is driving both bodies
@@ -2283,30 +2323,13 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Keeps the left-behind companion's revive deadline running while the player is
-   * indoors. Returns true once it has expired, which the overworld turns into a
-   * game over as soon as the scene hands control back.
-   */
-  private tickCompanionLeftBehind(): boolean {
-    if (!this.companionLeftBehind) return false;
-    const companion = this.inactive();
-    companion.isMoving = false;
-    companion.knockedOutFrames++;
-    return companion.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES;
-  }
-
-  /**
    * The same downed-teammate flow the overworld runs, for a companion who drops
    * inside the building: knocked out where they fell, revived by standing over
    * them, and a bleed-out ending the run — never a death handed straight out
    * the front door, which would teleport the player outside mid-visit.
    */
   private updateCompanionKnockout(): void {
-    if (this.companionLeftBehind) return;
     const inactive = this.inactive();
-    // Latched before the state machine flips `isKnockedOut`, so
-    // `companionLeftBehind` never mistakes this body for one lying outside.
-    if (!inactive.isAlive && !inactive.isKnockedOut) this.companionDownIndoors = true;
     updateKnockoutState({
       active: this.active(),
       inactive,
@@ -2314,10 +2337,7 @@ export class BuildingInteriorScene extends GameplayScene {
       audio: this.audio,
       bus: this.bus,
     });
-    if (!inactive.isKnockedOut) {
-      this.companionDownIndoors = false;
-      return;
-    }
+    if (!inactive.isKnockedOut) return;
     if (inactive.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) this.raiseDeathScreen();
   }
 
@@ -2381,20 +2401,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // stale count behind to swallow an unrelated key press later.
     if (this.modalGraceFrames > 0) this.modalGraceFrames--;
 
-    const reviveDeadlineExpired = this.tickCompanionLeftBehind();
-
     // Caught here as well as at the end of `updateCombat`, because a death can
     // arrive from something the frame stops before reaching it — the doomsday
     // countdown ticks above every modal's early return.
     if (!this.active().isAlive) {
       this.raiseDeathScreen();
-      return;
-    }
-    // A companion who bled out on the doorstep while the party was indoors is
-    // the overworld's defeat to declare: hand it out and let the scene behind
-    // turn it into a game over.
-    if (reviveDeadlineExpired) {
-      this.doExit();
       return;
     }
 
@@ -2471,7 +2482,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // chain on the key event, and Escape through `dismissDialog`. Polling the
     // held key here as well would turn the press that turns a page into one
     // that also closes the box.
-    if (this.anchorInterior?.isDialogOpen === true) return;
+    if (this.residentQuestDialogOpen()) return;
     if (this.servicePanel?.isOpen === true) {
       this.servicePanel.update();
       if (this.consumeModalClose()) this.servicePanel.close();
@@ -2637,10 +2648,11 @@ export class BuildingInteriorScene extends GameplayScene {
     this.safeRoom?.updateWander();
     this.bopca?.tick(this.human, this.cat, player, this.inactive());
     this.shop?.update();
-    this.club?.update(this.active(), this.presentCompanion()[0] ?? null);
+    this.club?.update(this.active(), this.inactive());
     this.occupants?.update();
-    this.applyAnchorQuestMarkers();
-    this.anchorInterior?.update();
+    this.syncPlumblineFarmRoom();
+    this.applyResidentQuestMarkers();
+    for (const hook of this.residentQuestHooks) hook.update();
     this.ambientSound?.updateListener(player.x, player.y);
     if (this.shop?.purchasePending) {
       this.shop.purchasePending = false;
@@ -3052,8 +3064,9 @@ export class BuildingInteriorScene extends GameplayScene {
       this.towerConfrontation.handleClick(mx, my);
       return;
     }
-    if (this.anchorInterior?.isDialogOpen === true) {
-      this.anchorInterior.handleClick(mx, my);
+    const questHook = this.openResidentQuestHook();
+    if (questHook !== null) {
+      questHook.handleClick(mx, my);
       return;
     }
     if (this.servicePanel?.isOpen === true) {
@@ -3280,20 +3293,48 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Hangs the anchor questline's glyph over Hilda or Deacon Aviel.
+   * Hangs each questline's glyph over the residents it has business with —
+   * Hilda or Deacon Aviel for the Anchor, Wendell for the blueprints — the
+   * first hook in priority order with an opinion winning.
    *
-   * The questline answers `null` for everybody it has no business with, so this
-   * can never wipe a marker some other system put on a citizen — a marker is
-   * only ever written by whoever claims that citizen.
+   * A hook answers `null` for everybody it has no business with, so this can
+   * never wipe a marker some other system put on a citizen — a marker is only
+   * ever written by whoever claims that citizen.
    */
-  private applyAnchorQuestMarkers(): void {
-    const quest = this.anchorInterior;
-    if (quest === null || this.occupants === null) return;
+  private applyResidentQuestMarkers(): void {
+    if (this.residentQuestHooks.length === 0 || this.occupants === null) return;
     for (const person of this.occupants.people) {
       if (person.residentId === null) continue;
-      const marker = quest.markerFor(person.residentId);
+      const marker = firstResidentMarker(this.residentQuestHooks, person.residentId);
       if (marker !== null) person.markerType = marker;
     }
+  }
+
+  private syncPlumblineFarmRoom(): void {
+    this.plumblineFarmRoom?.sync(this.briarHollowState.blueprints.phase, [this.human, this.cat]);
+  }
+
+  /** The resident quest hook whose conversation is on screen, or null when none is. */
+  private openResidentQuestHook(): ResidentQuestHook | null {
+    return this.residentQuestHooks.find((hook) => hook.isDialogOpen) ?? null;
+  }
+
+  /** Whether any resident questline's conversation is on screen. */
+  private residentQuestDialogOpen(): boolean {
+    return this.openResidentQuestHook() !== null;
+  }
+
+  /** Escape on a resident questline's conversation. Returns whether there was one. */
+  private dismissResidentQuestDialog(): boolean {
+    return this.openResidentQuestHook()?.dismissDialog() === true;
+  }
+
+  /**
+   * Each resident questline's first refusal on talking to `residentId`, in
+   * priority order. Returns whether one opened a beat and took the press.
+   */
+  private tryResidentQuestDialog(residentId: ResidentId, talker: Player): boolean {
+    return this.residentQuestHooks.some((hook) => hook.tryOpenDialog(residentId, talker));
   }
 
   /** The `R` press indoors: Old Hilda's repairs, and nothing else so far. */
@@ -3358,12 +3399,12 @@ export class BuildingInteriorScene extends GameplayScene {
     const sellsHere = service !== undefined;
     const turn = this.turnFor(target);
 
-    // The anchor questline outranks even a resident's own untold lore — Hilda
-    // and Aviel are otherwise still finishing their first-meeting flavor lines
-    // (`hasUntoldLore`) for several visits after the quest goes active, and a
-    // player who has just been asked to fetch boards or clear rats should not
-    // have to sit through small talk to hear the thing they actually came for.
-    if (resident !== null && this.anchorInterior?.tryOpenDialog(resident.id, player) === true) {
+    // A resident questline outranks even a resident's own untold lore — Hilda,
+    // Aviel and Wendell are otherwise still finishing their first-meeting
+    // flavor lines (`hasUntoldLore`) for several visits, and a player who has
+    // just been asked to fetch boards, clear rats or borrow blueprints should
+    // not have to sit through small talk to hear the thing they came for.
+    if (resident !== null && this.tryResidentQuestDialog(resident.id, player)) {
       this.noteTalk(target, inDanger);
       return true;
     }
@@ -3485,13 +3526,10 @@ export class BuildingInteriorScene extends GameplayScene {
   private openService(turn: number, resident: ResidentDef | null, role: TownRole): void {
     const service = interiorServiceForRole(this.entry.name, role);
     if (service === undefined) return;
-    // The anchor questline gets the counter first, exactly as it gets Madame
-    // Voss's Consult prompt first out on the plaza: while it has something to
-    // say, Hilda reads no cards and Aviel sells no blessings.
-    if (
-      resident !== null &&
-      this.anchorInterior?.tryOpenDialog(resident.id, this.active()) === true
-    ) {
+    // A resident questline gets the counter first, exactly as the Anchor gets
+    // Madame Voss's Consult prompt first out on the plaza: while it has
+    // something to say, Hilda reads no cards and Aviel sells no blessings.
+    if (resident !== null && this.tryResidentQuestDialog(resident.id, this.active())) {
       this.beginModalGrace();
       return;
     }
@@ -4031,7 +4069,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // The same test the dungeon's render pass uses: a corpse that still draws
       // keeps its place in the sort until it expires.
       ...this.world.roster.mobs.filter((mob) => mob.belongsInMobGrid),
-      ...this.presentCompanion(),
+      this.inactive(),
       this.active(),
       ...(this.occupants?.people ?? []),
       ...safeRoomFigures,
@@ -4067,12 +4105,7 @@ export class BuildingInteriorScene extends GameplayScene {
     UIRenderer.renderLevelUpFlash(ctx, camX, camY, this.pm);
     UIRenderer.renderStatBoostFlash(ctx, camX, camY, this.pm);
     this.chat.renderBubble(ctx, camX, camY);
-    // Mongo's lines are the cat's, said over her head — so not while she lies
-    // outside the door.
-    const catIsInside = this.cat.isActive || !this.companionLeftBehind;
-    if (catIsInside) {
-      this.mongoSystem.renderSpeechBubble(ctx, this.cat.x - camX, this.cat.y - camY);
-    }
+    this.mongoSystem.renderSpeechBubble(ctx, this.cat.x - camX, this.cat.y - camY);
     this.mercenarySystem.renderSpeech(ctx, camX, camY);
     this.crawlerBarks.render(ctx, camX, camY, this.human, this.cat);
     this.breakReactions.render(ctx, camX, camY, this.occupants?.people ?? []);

@@ -247,11 +247,24 @@
       }
     }
   },
-  "town_field_shelter": {
-    "frameWidth": 64,
-    "frameHeight": 106,
-    "tileX": 16,
-    "tileY": 58,
+  "town_milking_shed": {
+    "frameWidth": 80,
+    "frameHeight": 87,
+    "tileX": 8,
+    "tileY": 39,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "town_pasture_gate": {
+    "frameWidth": 208,
+    "frameHeight": 80,
+    "tileX": 72,
+    "tileY": 32,
     "tileScale": 32,
     "states": {
       "idle": {

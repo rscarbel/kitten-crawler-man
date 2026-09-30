@@ -1,6 +1,7 @@
 /**
- * The in-world "how" for "Briar Hollow's Plea": once `VillageQuestSystem`
- * decides a step needs a hand's-on action rather than a conversation, this
+ * The in-world "how" for Briar Hollow's questlines: once `VillageQuestSystem`
+ * or `BlueprintsQuestSystem` decides a step needs a hands-on action rather
+ * than a conversation, this
  * picks the exact tree, rock, station, wall segment or trebuchet the step
  * means and draws the highlight, the tool icon, the down-arrow and the
  * caption over it.
@@ -27,7 +28,13 @@ import type { BriarHollowSite, PalisadeSegmentDef } from '../../map/overworld/br
 import type { TilePoint } from '../../map/town/townPlan';
 import { ROCK_DEPOSIT } from '../../map/tileTypes';
 import { drawItemIcon } from '../../ui/InventoryPanel';
-import { BEAM_HEIGHT_TILES, drawObjectiveBeacon } from '../../ui/ObjectiveBeacon';
+import {
+  drawAreaHighlightFrame,
+  drawAreaHighlightGround,
+  type AreaHighlightOptions,
+  type AreaHighlightRect,
+} from '../../ui/AreaHighlight';
+import { drawRequirementRow, type Requirement } from '../../ui/RequirementRow';
 import { drawBouncingArrowAboveEntity } from '../../ui/WorldArrow';
 import { drawText, TEXT_PRESETS, type TextOptions } from '../../ui/TextBox';
 import { buildButtonRect } from '../DungeonUIRenderer';
@@ -40,17 +47,21 @@ import { harvestKindAt, regrowTree, restoreRock } from './harvestNodes';
 import { HOLLOW_BELL_FOOTPRINT_TILES } from './hollowBell';
 import {
   processingStationsOf,
+  stationArtTopTileY,
   type ProcessingStation,
   type ProcessingStationKind,
 } from './processingStations';
-import type {
-  GuidanceProgress,
-  ProcessingStationId,
-  QuestGuidance,
-  StationGuidance,
-  TileRect as GuidanceZone,
+import {
+  pointedGuidanceTarget,
+  type GuidanceProgress,
+  type PointedGuidance,
+  type ProcessingStationId,
+  type QuestGuidance,
+  type StationGuidance,
+  type TileRect as GuidanceZone,
 } from './questGuidance';
 import { TREBUCHET_HEIGHT_TILES, TREBUCHET_WIDTH_TILES } from './structureRules';
+import { drawEscortTrail } from './blueprints/escortRouteMarkers';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -84,6 +95,28 @@ export interface VillageQuestGuideDeps {
   readonly isDefaultTrebuchetPromptShowing: (at: TilePoint) => boolean;
   /** The wall's own build/repair prompt, by the same rule, for the fence step. */
   readonly isDefaultWallPromptShowing: () => boolean;
+  /**
+   * Whether another questline marks the machine making `kind` itself, with
+   * its own highlight and caption — the Blueprints quest's stations still to
+   * upgrade. This guide then draws no highlight of its own there. Its arrow
+   * and "process" caption still show while the guidance is the Plea's, whose
+   * need that other caption does not list; see
+   * {@link showingSideQuestGuidance}.
+   */
+  readonly questMarksStation: (kind: ProcessingStationKind) => boolean;
+  /**
+   * The top edge, in world pixels, of that other questline's caption over
+   * the machine making `kind`, or null while none stands there: this guide's
+   * arrow and caption stack above it rather than over it.
+   */
+  readonly questStationCaptionTopWorldY: (kind: ProcessingStationKind) => number | null;
+  /**
+   * Whether `guidance()` is currently the Blueprints quest's rather than the
+   * Plea's. A "process" shortfall of the Blueprints quest's own is already
+   * the checklist on its station caption, so this guide says nothing more at
+   * a station that quest marks.
+   */
+  readonly showingSideQuestGuidance: () => boolean;
 }
 
 /** How close the active crawler must stand to a chosen tree or rock to count as working it. */
@@ -106,11 +139,16 @@ const KEEP_COLLECTING_THRESHOLD = 2;
 /** The chosen tree's highlight is drawn oversized so it reads at a glance among the rest of the grove; the rock keeps the default one-tile size. */
 const TREE_HIGHLIGHT_SCALE = 1.5;
 
-/** The trebuchet's highlight stands taller than the default beam, so it reads over the engine's own frame. */
-const TREBUCHET_HIGHLIGHT_HEIGHT_SCALE = 1.5;
-
 /** Matches the gold `WorldArrow`/`ObjectiveBeacon` colour everywhere else in the game points at something. */
 const GUIDE_COLOR = '#facc15';
+
+/** A `drawAreaHighlight*` call's look, without its clock. */
+type HighlightStyle = Pick<AreaHighlightOptions, 'color' | 'mood'>;
+const GUIDE_HIGHLIGHT_STYLE: HighlightStyle = { color: GUIDE_COLOR, mood: 'ready' };
+/** The waypoints past the one in hand on Midge's road, and the pasture at its end: there, but not yet. */
+const ESCORT_AHEAD_HIGHLIGHT_STYLE: HighlightStyle = { color: GUIDE_COLOR, mood: 'pending' };
+/** The waypoint in hand is framed wider than its one tile, so it reads as a place on a wide road. */
+const ESCORT_WAYPOINT_HIGHLIGHT_TILES = 2;
 
 const ICON_LIFT_TILES = 2.4;
 const ICON_SIZE_TILES = 0.8;
@@ -127,11 +165,11 @@ const CAPTION_LINE_GAP_PX = 13;
 /** Roughly half the label preset's line height, so a one-line zone caption sits centred rather than hanging below the zone's middle. */
 const ZONE_LABEL_VERTICAL_OFFSET_PX = 6;
 
-/** A very light wash — the zones are suggestions, not something that should read as blocked ground. */
-const BUILD_ZONE_WASH_COLOR = 'rgba(74, 222, 128, 0.12)';
-
-/** The wood-processing count needs to read as clearly as its title line, which the grey `hint` preset does not. */
-const PROCESS_COUNT_PRESET: CaptionStyle = { size: TEXT_PRESETS.hint.size, color: '#ffffff' };
+/**
+ * Green, and drawn `pending` — a dashed outline — because the zones are
+ * suggestions for where to build, not a thing already there to act on.
+ */
+const BUILD_ZONE_COLOR = '#4ade80';
 
 const HUD_ARROW_BOUNCE_FREQUENCY = 0.005;
 const HUD_ARROW_BOUNCE_AMPLITUDE_PX = 4;
@@ -143,6 +181,12 @@ const HUD_CAPTION_GAP_PX = 4;
 const STATION_ID_TO_KIND: Readonly<Record<ProcessingStationId, ProcessingStationKind>> = {
   saw: 'boards',
   rope_walk: 'rope',
+};
+
+/** What each station makes, as its count is labelled under the caption. */
+const STATION_OUTPUT_LABEL: Readonly<Record<ProcessingStationId, string>> = {
+  saw: 'Boards',
+  rope_walk: 'Rope',
 };
 
 const STATION_CAPTION_TITLE: Readonly<Record<ProcessingStationId, string>> = {
@@ -170,7 +214,13 @@ type GuideCache =
   | { readonly kind: 'build_trebuchet'; readonly zones: readonly GuidanceZone[] }
   | { readonly kind: 'load_trebuchet'; readonly at: TilePoint }
   | { readonly kind: 'upgrade_wall'; readonly tile: TilePoint | null }
-  | { readonly kind: 'repair_bell' };
+  | { readonly kind: 'repair_bell' }
+  | { readonly kind: 'pointed'; readonly guidance: PointedGuidance };
+
+const POINTED_STATION_CAPTION: Readonly<Record<ProcessingStationId, string>> = {
+  saw: 'Upgrade the saw',
+  rope_walk: 'Upgrade the rope walk',
+};
 
 export class VillageQuestGuide {
   private readonly centreGroveTile: TilePoint | null;
@@ -219,6 +269,15 @@ export class VillageQuestGuide {
         return { kind: 'upgrade_wall', tile: this.pickFenceTile() };
       case 'repair_bell':
         return { kind: 'repair_bell' };
+      case 'fence_section':
+      case 'scythe':
+      case 'grain_field':
+      case 'lead_midge':
+      case 'escort_waypoint':
+      case 'pasture':
+      case 'station_upgrade':
+      case 'town_building':
+        return { kind: 'pointed', guidance };
     }
   }
 
@@ -375,44 +434,55 @@ export class VillageQuestGuide {
   // ── Rendering ────────────────────────────────────────────────────────────
 
   /**
-   * The build-trebuchet zones' green wash and the processing stations'
-   * footprint beacons, under every body — the same "behind, not over" order a
-   * quest NPC draws its own column in.
+   * The ground half of every highlight — the edge wash, outline, sparks and
+   * motes of `drawAreaHighlightGround` — under every body, the same "behind,
+   * not over" order a quest NPC draws its own column in, so the tree, rock or
+   * machine being marked stands in front of its own light.
    */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const guidance = this.deps.guidance();
-    if (guidance?.kind === 'build_trebuchet') {
-      ctx.save();
-      ctx.fillStyle = BUILD_ZONE_WASH_COLOR;
-      for (const zone of guidance.zones) {
-        ctx.fillRect(
-          zone.x * TILE_SIZE - camX,
-          zone.y * TILE_SIZE - camY,
-          zone.width * TILE_SIZE,
-          zone.height * TILE_SIZE,
-        );
+    const cache = this.cache;
+    if (cache === null) return;
+    switch (cache.kind) {
+      case 'chop':
+      case 'mine': {
+        const area = this.harvestHighlightArea(cache);
+        if (area !== null) this.renderGroundHighlight(ctx, camX, camY, area);
+        return;
       }
-      ctx.restore();
-    }
-    if (this.cache?.kind === 'process') {
-      for (const entry of this.cache.stations) {
-        this.renderFootprintBeacon(ctx, camX, camY, entry.station.footprint);
+      case 'process':
+        for (const entry of this.unmarkedStations(cache.stations)) {
+          this.renderGroundHighlight(ctx, camX, camY, entry.station.footprint);
+        }
+        return;
+      case 'build_trebuchet':
+        for (const zone of cache.zones) {
+          this.renderGroundHighlight(ctx, camX, camY, zoneToFootprint(zone), {
+            color: BUILD_ZONE_COLOR,
+            mood: 'pending',
+          });
+        }
+        return;
+      case 'load_trebuchet':
+        this.renderGroundHighlight(ctx, camX, camY, trebuchetFootprint(cache.at));
+        return;
+      case 'upgrade_wall':
+        if (cache.tile !== null) this.renderGroundHighlight(ctx, camX, camY, tileArea(cache.tile));
+        return;
+      case 'repair_bell':
+        this.renderGroundHighlight(ctx, camX, camY, this.bellFootprint());
+        return;
+      case 'pointed': {
+        if (cache.guidance.kind === 'escort_waypoint') {
+          this.renderEscortRouteGround(ctx, camX, camY, cache.guidance);
+        }
+        const area = this.pointedHighlightArea(cache.guidance);
+        if (area !== null) this.renderGroundHighlight(ctx, camX, camY, area);
+        return;
       }
-    }
-    if (
-      (this.cache?.kind === 'chop' || this.cache?.kind === 'mine') &&
-      this.cache.insideYard &&
-      this.cache.tile !== null
-    ) {
-      const scale = this.cache.kind === 'chop' ? TREE_HIGHLIGHT_SCALE : 1;
-      this.renderPointBeacon(ctx, camX, camY, this.cache.tile, {
-        widthTiles: scale,
-        heightTiles: BEAM_HEIGHT_TILES * scale,
-      });
     }
   }
 
-  /** Every beacon, arrow, icon and caption, drawn over every body. */
+  /** The frame half of every highlight, then every arrow, icon and caption, drawn over every body. */
   renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const cache = this.cache;
     if (cache === null) return;
@@ -444,18 +514,135 @@ export class VillageQuestGuide {
         this.renderBell(ctx, camX, camY);
         break;
       case 'build_trebuchet':
-        // The zone wash is drawn under every body in `renderGround`; the HUD
-        // arrow over the Construction button is drawn from `renderConstructionHint`.
+        // The HUD arrow over the Construction button is drawn from `renderConstructionHint`.
         this.renderTrebuchetZoneLabels(ctx, camX, camY, cache.zones);
         break;
+      case 'pointed':
+        this.renderPointedGuide(ctx, camX, camY, cache.guidance);
+        break;
     }
+  }
+
+  /**
+   * The tile area a place a questline pointed at directly is highlighted
+   * over: the whole field, the whole pasture, the fence run's full length.
+   * Midge and a town door get none: she wears her own marker, and the scene's
+   * objective beacon stands on the doorway. A station the quest marks itself
+   * gets none either.
+   */
+  private pointedHighlightArea(guidance: PointedGuidance): Footprint | null {
+    switch (guidance.kind) {
+      case 'fence_section':
+        return tilesBoundingArea(guidance.tiles);
+      case 'scythe':
+        return tileArea(guidance.at);
+      case 'grain_field':
+        return zoneToFootprint(guidance.field);
+      case 'pasture':
+        return zoneToFootprint(guidance.yard);
+      case 'station_upgrade':
+        return this.stationMarkedByQuest(guidance.station)
+          ? null
+          : zoneToFootprint(guidance.footprint);
+      case 'escort_waypoint':
+        return centredArea(guidance.at, ESCORT_WAYPOINT_HIGHLIGHT_TILES);
+      case 'lead_midge':
+      case 'town_building':
+        return null;
+    }
+  }
+
+  /** The frame, arrow and caption over a place a questline pointed at directly. */
+  private renderPointedGuide(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    guidance: PointedGuidance,
+  ): void {
+    const area = this.pointedHighlightArea(guidance);
+    if (area !== null) this.renderFrameHighlight(ctx, camX, camY, area);
+    switch (guidance.kind) {
+      case 'fence_section': {
+        const target = pointedGuidanceTarget(guidance);
+        if (target === null) return;
+        const progress = `${guidance.progress.have}/${guidance.progress.target} sections`;
+        this.renderPointArrowAndCaption(ctx, camX, camY, target, null, [
+          'Rebuild this fence section',
+          progress,
+        ]);
+        return;
+      }
+      case 'scythe':
+        this.renderPointArrowAndCaption(ctx, camX, camY, guidance.at, null, [
+          "Take Merrit's scythe",
+        ]);
+        return;
+      case 'grain_field': {
+        const progress = `${guidance.progress.have}/${guidance.progress.target} grain`;
+        this.renderFootprintArrowAndCaption(ctx, camX, camY, zoneToFootprint(guidance.field), [
+          'Harvest grain',
+          progress,
+        ]);
+        return;
+      }
+      case 'pasture':
+        this.renderFootprintArrowAndCaption(ctx, camX, camY, zoneToFootprint(guidance.yard), [
+          "Lead Midge into Wendell's pasture",
+        ]);
+        return;
+      case 'station_upgrade': {
+        // The quest's own frame and caption over the machine already say
+        // "Upgrade", with its checklist; an arrow here would land on that caption.
+        if (this.stationMarkedByQuest(guidance.station)) return;
+        const footprint = zoneToFootprint(guidance.footprint);
+        this.renderFootprintArrowAndCaption(ctx, camX, camY, footprint, [
+          POINTED_STATION_CAPTION[guidance.station],
+        ]);
+        return;
+      }
+      case 'escort_waypoint':
+        this.renderPointArrowAndCaption(ctx, camX, camY, guidance.at, null, [
+          guidance.ahead.length === 0
+            ? "Lead Midge into Wendell's pasture"
+            : 'Lead Midge along the road',
+        ]);
+        return;
+      case 'lead_midge':
+      case 'town_building':
+        return;
+    }
+  }
+
+  /**
+   * Under the waypoint in hand: the dotted road leading to it and on past it,
+   * the next waypoints in the quieter pending voice, and the pasture itself,
+   * so the destination is framed as soon as it comes into view.
+   */
+  private renderEscortRouteGround(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    guidance: Extract<PointedGuidance, { readonly kind: 'escort_waypoint' }>,
+  ): void {
+    drawEscortTrail(ctx, guidance.trail, camX, camY, performance.now());
+    for (const tile of guidance.ahead) {
+      this.renderGroundHighlight(ctx, camX, camY, tileArea(tile), ESCORT_AHEAD_HIGHLIGHT_STYLE);
+    }
+    this.renderGroundHighlight(
+      ctx,
+      camX,
+      camY,
+      zoneToFootprint(guidance.yard),
+      ESCORT_AHEAD_HIGHLIGHT_STYLE,
+    );
   }
 
   /**
    * "Build trebuchet here", centred in each zone. This guidance's own
    * `target()` marks itself `wearsOwnMarker` so the pinned objective beacon
    * never stands in the zone too — a whole patch of buildable ground has no
-   * single tile for that beacon to stand on, so the label takes its place.
+   * single tile for that beacon to stand on, so the dashed outline and this
+   * label take its place.
    */
   private renderTrebuchetZoneLabels(
     ctx: CanvasRenderingContext2D,
@@ -475,6 +662,17 @@ export class VillageQuestGuide {
     }
   }
 
+  /**
+   * The chosen tree or rock's highlight: the tree's drawn oversized, so it
+   * reads at a glance among the rest of the grove, and centred on its tile.
+   */
+  private harvestHighlightArea(cache: HarvestGuideCache): Footprint | null {
+    if (!cache.insideYard || cache.tile === null) return null;
+    return cache.kind === 'chop'
+      ? centredArea(cache.tile, TREE_HIGHLIGHT_SCALE)
+      : tileArea(cache.tile);
+  }
+
   private renderHarvestGuide(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -484,7 +682,11 @@ export class VillageQuestGuide {
     collectVerb: string,
     countedNoun: string,
   ): void {
-    if (!cache.insideYard || cache.tile === null) return;
+    const area = this.harvestHighlightArea(cache);
+    if (area === null || cache.tile === null) return;
+    // The frame stays at the tree's foot rather than rising round its canopy,
+    // where the arrow bouncing over the tree would land on its top brackets.
+    this.renderFrameHighlight(ctx, camX, camY, area);
     if (cache.showCounter) {
       const countLine = `${cache.progress.have}/${cache.progress.target} ${countedNoun}`;
       const keepCollecting = cache.progress.have >= KEEP_COLLECTING_THRESHOLD;
@@ -500,11 +702,16 @@ export class VillageQuestGuide {
   }
 
   /**
-   * The arrow and caption over a station, from `renderAbove`. The footprint
-   * beacon itself is drawn earlier, from `renderGround`, so the machine's own
-   * sprite — drawn in the Y-sorted pass between the two — sits in front of the
-   * light rather than under a wash of it, the same order an NPC's own quest
-   * column keeps with its body.
+   * The frame, arrow and caption over a station, from `renderAbove`. The
+   * ground half of its highlight is drawn earlier, from `renderGround`, so
+   * the machine's own sprite — drawn in the Y-sorted pass between the two —
+   * sits in front of the light rather than under a wash of it. The count
+   * under the title turns green with a tick once the party holds enough.
+   *
+   * A station the Blueprints quest is marking itself keeps that quest's
+   * highlight alone. When the shortfall is that quest's own, its caption
+   * already lists it and this guide says nothing there; when it is the
+   * Plea's, the arrow and caption stack above that quest's caption.
    */
   private renderStation(
     ctx: CanvasRenderingContext2D,
@@ -512,21 +719,37 @@ export class VillageQuestGuide {
     camY: number,
     entry: MatchedStation,
   ): void {
+    const markedByQuest = this.stationMarkedByQuest(entry.id);
+    if (markedByQuest && this.deps.showingSideQuestGuidance()) return;
     const footprint = entry.station.footprint;
-    const title = STATION_CAPTION_TITLE[entry.id];
-    const progressLine = `${entry.progress.have}/${entry.progress.target}`;
-    this.renderFootprintArrowAndCaption(
-      ctx,
-      camX,
-      camY,
-      footprint,
-      [title, progressLine],
-      PROCESS_COUNT_PRESET,
-    );
+    if (!markedByQuest) {
+      this.renderFrameHighlight(
+        ctx,
+        camX,
+        camY,
+        footprint,
+        this.stationFrameRiseTiles(entry.station),
+      );
+    }
+    const pointedAt = this.stationGuideAnchor(entry.id, footprint);
+    this.renderFootprintArrow(ctx, camX, camY, pointedAt);
+    const { centreScreenX, topY } = footprintCaptionAnchor(pointedAt, camX, camY);
+    drawText(ctx, STATION_CAPTION_TITLE[entry.id], {
+      x: centreScreenX,
+      y: topY,
+      align: 'center',
+      ...TEXT_PRESETS.label,
+    });
+    const requirement: Requirement = {
+      label: STATION_OUTPUT_LABEL[entry.id],
+      have: entry.progress.have,
+      need: entry.progress.target,
+    };
+    drawRequirementRow(ctx, [requirement], centreScreenX, topY + CAPTION_LINE_GAP_PX);
   }
 
   /**
-   * The beacon always marks the trebuchet, but the arrow and "load with
+   * The highlight always marks the trebuchet, but the arrow and "load with
    * stone" caption stand down once `ConstructionKit`'s own prompt is on
    * screen for it — the two would otherwise say the same thing on top of
    * each other.
@@ -537,13 +760,8 @@ export class VillageQuestGuide {
     camY: number,
     at: TilePoint,
   ): void {
-    const footprint: Footprint = {
-      x: at.x,
-      y: at.y,
-      w: TREBUCHET_WIDTH_TILES,
-      h: TREBUCHET_HEIGHT_TILES,
-    };
-    this.renderFootprintBeacon(ctx, camX, camY, footprint, TREBUCHET_HIGHLIGHT_HEIGHT_SCALE);
+    const footprint = trebuchetFootprint(at);
+    this.renderFrameHighlight(ctx, camX, camY, footprint);
     if (this.deps.isDefaultTrebuchetPromptShowing(at)) return;
     const line = platform.isMobile
       ? 'Double tap to load with stone'
@@ -552,7 +770,7 @@ export class VillageQuestGuide {
   }
 
   /**
-   * The beacon always marks the faced fence, but the arrow and upgrade
+   * The highlight always marks the faced fence, but the arrow and upgrade
    * caption stand down once `ConstructionKit`'s own wall prompt is on screen
    * for it, the same way the trebuchet's load caption yields to its prompt.
    */
@@ -562,7 +780,7 @@ export class VillageQuestGuide {
     camY: number,
     tile: TilePoint,
   ): void {
-    this.renderPointBeacon(ctx, camX, camY, tile);
+    this.renderFrameHighlight(ctx, camX, camY, tileArea(tile));
     if (this.deps.isDefaultWallPromptShowing()) return;
     const line = platform.isMobile
       ? 'Double tap to upgrade'
@@ -573,40 +791,88 @@ export class VillageQuestGuide {
     ]);
   }
 
-  private renderBell(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private bellFootprint(): Footprint {
     const bell = this.deps.site.square.bellTile;
-    const footprint: Footprint = {
+    return {
       x: bell.x,
       y: bell.y,
       w: HOLLOW_BELL_FOOTPRINT_TILES,
       h: HOLLOW_BELL_FOOTPRINT_TILES,
     };
-    this.renderFootprintGuide(ctx, camX, camY, footprint, ['Repair the bell tower']);
+  }
+
+  private renderBell(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const footprint = this.bellFootprint();
+    this.renderFrameHighlight(ctx, camX, camY, footprint);
+    this.renderFootprintArrowAndCaption(ctx, camX, camY, footprint, ['Repair the bell tower']);
+  }
+
+  /** Whether the Blueprints quest is marking the machine `id` names itself, with its own highlight. */
+  private stationMarkedByQuest(id: ProcessingStationId): boolean {
+    return this.deps.questMarksStation(STATION_ID_TO_KIND[id]);
   }
 
   /**
-   * The beacon column alone, over `tile`. Drawn on its own so a caller can put
-   * it in the ground pass, under whatever stands on that tile — the chosen
-   * tree or rock, and the crawler working it.
-   *
-   * The beam widens east from its anchor tile, so a caller asking for one
-   * wider than one tile has its anchor pulled back by half the extra width —
-   * otherwise the highlight drifts off the tile it is meant to centre on.
+   * What the arrow and caption over the station `id` stand on: its footprint,
+   * or — while another questline's caption stands over the machine — that
+   * caption's top edge, so they stack clear above it.
    */
-  private renderPointBeacon(
+  private stationGuideAnchor(id: ProcessingStationId, footprint: Footprint): Footprint {
+    const otherCaptionTop = this.deps.questStationCaptionTopWorldY(STATION_ID_TO_KIND[id]);
+    if (otherCaptionTop === null) return footprint;
+    return { ...footprint, y: otherCaptionTop / TILE_SIZE };
+  }
+
+  /** How far a station's art stands above its footprint, in its current look, for the frame to hold all of it. */
+  private stationFrameRiseTiles(station: ProcessingStation): number {
+    const { x, y } = station.footprint;
+    const upgraded = this.deps.gameMap.structure[y]?.[x]?.stationUpgraded === true;
+    return y - stationArtTopTileY(station, upgraded);
+  }
+
+  private unmarkedStations(stations: readonly MatchedStation[]): MatchedStation[] {
+    return stations.filter((entry) => !this.stationMarkedByQuest(entry.id));
+  }
+
+  /** The ground half of `area`'s highlight; see `drawAreaHighlightGround`. */
+  private renderGroundHighlight(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
-    tile: TilePoint,
-    footprint?: { readonly widthTiles: number; readonly heightTiles: number },
+    area: Footprint,
+    style: HighlightStyle = GUIDE_HIGHLIGHT_STYLE,
   ): void {
-    const widthTiles = footprint?.widthTiles ?? 1;
-    const sx = (tile.x - (widthTiles - 1) / 2) * TILE_SIZE - camX;
-    const sy = tile.y * TILE_SIZE - camY;
-    drawObjectiveBeacon(ctx, sx, sy, TILE_SIZE, GUIDE_COLOR, performance.now(), footprint);
+    drawAreaHighlightGround(ctx, areaToScreen(area, camX, camY), {
+      ...style,
+      nowMs: performance.now(),
+    });
   }
 
-  /** The bouncing arrow, optional tool icon and caption over `tile`, without the beacon column. */
+  /**
+   * The frame half of `area`'s highlight, over every body, stretched
+   * `riseTiles` up past the area's top so a tree's canopy or a machine's
+   * whole art sits inside the brackets rather than only its footing.
+   */
+  private renderFrameHighlight(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    area: Footprint,
+    riseTiles = 0,
+  ): void {
+    const raised: Footprint = {
+      x: area.x,
+      y: area.y - riseTiles,
+      w: area.w,
+      h: area.h + riseTiles,
+    };
+    drawAreaHighlightFrame(ctx, areaToScreen(raised, camX, camY), {
+      ...GUIDE_HIGHLIGHT_STYLE,
+      nowMs: performance.now(),
+    });
+  }
+
+  /** The bouncing arrow, optional tool icon and caption over `tile`, without the highlight. */
   private renderPointArrowAndCaption(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -642,38 +908,20 @@ export class VillageQuestGuide {
     this.renderCaption(ctx, centreX, sy - captionLift * TILE_SIZE, lines, firstLinePreset);
   }
 
-  /** A beacon and arrow sized to a whole footprint (a building, a trebuchet, the bell tower), and a caption above it. */
-  private renderFootprintGuide(
+  private renderFootprintArrow(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
     footprint: Footprint,
-    lines: readonly string[],
-    heightScale = 1,
   ): void {
-    this.renderFootprintBeacon(ctx, camX, camY, footprint, heightScale);
-    this.renderFootprintArrowAndCaption(ctx, camX, camY, footprint, lines);
-  }
-
-  /**
-   * The footprint's own beacon column, sized like a building or a market
-   * cart's. Drawn on its own so a caller can put it in the ground pass, under
-   * whatever sprite stands on that footprint.
-   */
-  private renderFootprintBeacon(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    footprint: Footprint,
-    heightScale = 1,
-  ): void {
-    const bottomRowY = footprint.y + footprint.h - 1;
-    const sx = footprint.x * TILE_SIZE - camX;
-    const sy = bottomRowY * TILE_SIZE - camY;
-    drawObjectiveBeacon(ctx, sx, sy, TILE_SIZE, GUIDE_COLOR, performance.now(), {
-      widthTiles: footprint.w,
-      heightTiles: BEAM_HEIGHT_TILES * heightScale,
-    });
+    drawBouncingArrowAboveEntity(
+      ctx,
+      footprintArrowWorldX(footprint),
+      footprint.y * TILE_SIZE,
+      camX,
+      camY,
+      GUIDE_COLOR,
+    );
   }
 
   private renderFootprintArrowAndCaption(
@@ -684,17 +932,8 @@ export class VillageQuestGuide {
     lines: readonly string[],
     restLinePreset: CaptionStyle = TEXT_PRESETS.hint,
   ): void {
-    const centreWorldX = (footprint.x + footprint.w / 2) * TILE_SIZE - TILE_SIZE / 2;
-    drawBouncingArrowAboveEntity(
-      ctx,
-      centreWorldX,
-      footprint.y * TILE_SIZE,
-      camX,
-      camY,
-      GUIDE_COLOR,
-    );
-    const centreScreenX = centreWorldX - camX + TILE_SIZE * TILE_CENTRE;
-    const topY = footprint.y * TILE_SIZE - camY - FOOTPRINT_CAPTION_LIFT_TILES * TILE_SIZE;
+    this.renderFootprintArrow(ctx, camX, camY, footprint);
+    const { centreScreenX, topY } = footprintCaptionAnchor(footprint, camX, camY);
     this.renderCaption(ctx, centreScreenX, topY, lines, TEXT_PRESETS.label, restLinePreset);
   }
 
@@ -790,6 +1029,8 @@ export class VillageQuestGuide {
           h: HOLLOW_BELL_FOOTPRINT_TILES,
         });
       }
+      case 'pointed':
+        return pointedGuidanceTarget(cache.guidance);
     }
   }
 
@@ -831,7 +1072,7 @@ export class VillageQuestGuide {
    * A footprint this guide highlights itself, beneath the thing standing on
    * it. The scene's own beacon is painted after every world entity, so letting
    * it stand here too would wash out the very tree, rock or machine the
-   * guide's beacon was drawn behind.
+   * guide's highlight was drawn behind.
    */
   private selfMarkedFootprintTarget(footprint: Footprint): TrackerTarget {
     return { ...this.footprintTarget(footprint), wearsOwnMarker: true };
@@ -892,6 +1133,60 @@ function footprintCentre(footprint: Footprint): TilePoint {
 
 function zoneToFootprint(zone: GuidanceZone): Footprint {
   return { x: zone.x, y: zone.y, w: zone.width, h: zone.height };
+}
+
+function tileArea(tile: TilePoint): Footprint {
+  return { x: tile.x, y: tile.y, w: 1, h: 1 };
+}
+
+/** A square `sizeTiles` across, centred on `tile`. */
+function centredArea(tile: TilePoint, sizeTiles: number): Footprint {
+  const inset = (sizeTiles - 1) / 2;
+  return { x: tile.x - inset, y: tile.y - inset, w: sizeTiles, h: sizeTiles };
+}
+
+/** The smallest tile rectangle holding every tile in `tiles`; null for none. */
+function tilesBoundingArea(tiles: readonly TilePoint[]): Footprint | null {
+  if (tiles.length === 0) return null;
+  const xs = tiles.map((tile) => tile.x);
+  const ys = tiles.map((tile) => tile.y);
+  const left = Math.min(...xs);
+  const top = Math.min(...ys);
+  return { x: left, y: top, w: Math.max(...xs) - left + 1, h: Math.max(...ys) - top + 1 };
+}
+
+function trebuchetFootprint(at: TilePoint): Footprint {
+  return { x: at.x, y: at.y, w: TREBUCHET_WIDTH_TILES, h: TREBUCHET_HEIGHT_TILES };
+}
+
+function areaToScreen(area: Footprint, camX: number, camY: number): AreaHighlightRect {
+  return {
+    x: area.x * TILE_SIZE - camX,
+    y: area.y * TILE_SIZE - camY,
+    width: area.w * TILE_SIZE,
+    height: area.h * TILE_SIZE,
+  };
+}
+
+/**
+ * The world-x `drawBouncingArrowAboveEntity` wants for an arrow centred over
+ * `footprint`: it centres on a one-tile entity, so it is handed the tile-left
+ * edge half a tile short of the footprint's middle.
+ */
+function footprintArrowWorldX(footprint: Footprint): number {
+  return (footprint.x + footprint.w / 2) * TILE_SIZE - TILE_SIZE * TILE_CENTRE;
+}
+
+/** Where a caption over `footprint` is centred, and its first line's top, in screen pixels. */
+function footprintCaptionAnchor(
+  footprint: Footprint,
+  camX: number,
+  camY: number,
+): { readonly centreScreenX: number; readonly topY: number } {
+  return {
+    centreScreenX: (footprint.x + footprint.w / 2) * TILE_SIZE - camX,
+    topY: footprint.y * TILE_SIZE - camY - FOOTPRINT_CAPTION_LIFT_TILES * TILE_SIZE,
+  };
 }
 
 /** The tile in `tiles` nearest a fractional point, or null when the list is empty. */

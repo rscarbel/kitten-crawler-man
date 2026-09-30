@@ -316,6 +316,12 @@ export class ConstructionSystem {
   private _job: ConstructionJob | null = null;
   private jobFrameCount = 0;
   private hammering: Hammering | null = null;
+  /**
+   * Whether the repair loop playing is this system's. The same recording is
+   * the hammering bed for other village work (a station upgrade), so the
+   * idle frames here must not silence a loop somebody else started.
+   */
+  private ownsRepairLoop = false;
   private readonly pushes: PendingPush[] = [];
   private noRoomAttempt: {
     readonly footprint: PlannedFootprint;
@@ -1023,8 +1029,13 @@ export class ConstructionSystem {
     const audio = this.deps.audio;
     if (audio === null) return;
     const repairing = this._job?.action === 'repair';
-    if (repairing) audio.startAmbientLoop(REPAIR_LOOP_SOUND, REPAIR_LOOP_VOLUME);
-    else audio.stopAmbientLoop(REPAIR_LOOP_SOUND);
+    if (repairing) {
+      audio.startAmbientLoop(REPAIR_LOOP_SOUND, REPAIR_LOOP_VOLUME);
+      this.ownsRepairLoop = true;
+    } else if (this.ownsRepairLoop) {
+      audio.stopAmbientLoop(REPAIR_LOOP_SOUND);
+      this.ownsRepairLoop = false;
+    }
   }
 
   private advanceJob(): void {

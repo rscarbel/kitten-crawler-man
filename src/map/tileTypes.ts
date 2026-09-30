@@ -714,7 +714,7 @@ export const FloorTypeValue = {
  * Declared beside the tile it decorates rather than in the renderer that draws
  * it, so the dependency runs from the renderer to the data and not back.
  */
-export type FenceStyle = 'post_and_rail' | 'picket' | 'wattle' | 'garrison';
+export type FenceStyle = 'post_and_rail' | 'picket' | 'wattle' | 'garrison' | 'rickety';
 
 export type TileContent = {
   tileId: string;
@@ -833,6 +833,23 @@ export type TileContent = {
    * the same way it reapplies every wall's tier.
    */
   bellTowerBroken?: boolean;
+  /**
+   * Set on a sawmill machine's or rope walk's anchor tile once the station
+   * has been rebuilt to Tikka's design, so the prop renderer draws the
+   * upgraded look. A flag rather than a new prop id so the footprint, the
+   * `hollow:` sprite key and every lookup of the plain prop stay unchanged;
+   * `StationUpgrades` reapplies it from `blueprints.stationsUpgraded` because
+   * the anchor tile is rebuilt fresh with the map.
+   */
+  stationUpgraded?: boolean;
+  /**
+   * Set on the `scythe_pegs` anchor tile while a crawler carries Merrit's
+   * scythe, so the prop renderer draws the pegs empty. On the tile for the
+   * same reason as `bellTowerBroken`: the renderer is pure, and the anchor
+   * tile is rebuilt with the map, so `GrainHarvest` reapplies it from the
+   * crawlers' inventories.
+   */
+  scytheTaken?: boolean;
 };
 
 /** Which way a bridge deck runs. */

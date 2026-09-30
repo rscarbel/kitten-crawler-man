@@ -383,10 +383,13 @@ export class VillageAmbience {
         bellFoot === null
           ? null
           : { pivot: anchorPoint(bellFoot, BELL_PIVOT), sortTileY: bellFoot.sortTileY },
-      sawmills: ofKind('sawmill_machine').map((placement) => {
-        const foot = footOf(placement);
-        return { blade: anchorPoint(foot, SAWMILL_BLADE), sortTileY: foot.sortTileY };
-      }),
+      // Tikka's rebuild keeps the blade on the same anchor, so both looks spin the same way.
+      sawmills: [...ofKind('sawmill_machine'), ...ofKind('sawmill_machine_upgraded')].map(
+        (placement) => {
+          const foot = footOf(placement);
+          return { blade: anchorPoint(foot, SAWMILL_BLADE), sortTileY: foot.sortTileY };
+        },
+      ),
       hearths,
       lamps: [...lamps, ...doorLanterns],
       toolRacks: ofKind('tool_rack').map((placement) => ({ foot: footOf(placement) })),

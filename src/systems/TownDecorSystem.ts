@@ -220,16 +220,24 @@ const CLUTTER_PLACEMENTS: ReadonlyArray<ClutterPlacement> = [
     kind: 'crate_stack',
     anchor: { at: 'yard', name: 'Sunken Stump back garden', offset: { dx: 4, dy: 2 } },
   },
-  { kind: 'hay_bale', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 1, dy: 1 } } },
-  { kind: 'planter', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 5, dy: 4 } } },
-  // Wendell's own pasture gear — a trough and a rack, not the loose garden
-  // clutter above. Kept along the green's edges, clear of the yard's own
-  // centre for the cow Wendell's pasture is being kept ready for.
+  // Wendell's pasture, provisioned for a herd he does not have: a feed bin,
+  // two hay racks and a bale along the north fence beside the milking shed,
+  // two troughs down the east fence, and full feed sacks against his own wall.
+  // Everything stands on the pasture's edge, so the middle of the green and the
+  // cart gate's inner tiles stay open ground for a cow (`PASTURE_KEEP_CLEAR`).
+  { kind: 'feed_bin', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 0, dy: 1 } } },
+  { kind: 'hay_rack', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 1, dy: 1 } } },
+  { kind: 'hay_rack', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 2, dy: 1 } } },
+  { kind: 'hay_bale', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 3, dy: 1 } } },
   {
     kind: 'water_trough',
-    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 1, dy: 5 } },
+    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 5, dy: 3 } },
   },
-  { kind: 'hay_rack', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 4, dy: 2 } } },
+  {
+    kind: 'water_trough',
+    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 5, dy: 4 } },
+  },
+  { kind: 'sacks', anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 0, dy: 3 } } },
 
   // Building-line dressing: something at most every frontage, so facades sit
   // in a lived-in street rather than on bare ground.
@@ -306,21 +314,6 @@ const CLUTTER_PLACEMENTS: ReadonlyArray<ClutterPlacement> = [
   {
     kind: 'drill_pell',
     anchor: { at: 'surface', name: 'Barracks drill yard (east)', offset: { dx: 1, dy: 2 } },
-  },
-
-  // Wendell's pasture: crafted, not rustic — squared timber, a milking stool and
-  // pail at the gate, a feed bin, all clear of the yard's own centre for a cow.
-  {
-    kind: 'timber_stack',
-    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 2, dy: 5 } },
-  },
-  {
-    kind: 'feed_bin',
-    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 3, dy: 1 } },
-  },
-  {
-    kind: 'milking_stool',
-    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 1, dy: 3 } },
   },
 
   // Whole-lot compositions, not one or two pieces of clutter lost in a grass
@@ -453,36 +446,24 @@ const CLUTTER_PLACEMENTS: ReadonlyArray<ClutterPlacement> = [
     kind: 'tool_rack',
     anchor: { at: 'yard', name: 'Rusty Anvil back strip', offset: { dx: 5, dy: 0 } },
   },
-
-  // Wendell's pasture, finished: a tidy string-line plot beside the vegetable
-  // beds his farm-in-waiting does not have yet, and a hedge along the back
-  // lane fence so the green reads as tended right up to its edges. Still clear
-  // of the yard's own centre for the cow Wendell's pasture is being kept ready for.
-  {
-    kind: 'vegetable_row',
-    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 2, dy: 2 } },
-  },
-  {
-    kind: 'vegetable_row',
-    anchor: { at: 'yard', name: 'Garrison Green', offset: { dx: 2, dy: 4 } },
-  },
 ];
 
 /** How far a piece of clutter may drift from its stated tile to find a free one. */
 const CLUTTER_SEARCH_RADIUS = 2;
 
 /**
- * A custom-frame building-line fixture — a post, a perch or a shelter, each
- * with its own sheet rather than a shared clutter envelope. Placed the same
- * connectivity-checked way as clutter, but rendered by `FixtureProp` rather
- * than `ClutterProp`.
+ * A custom-frame building-line fixture — a post, a perch, the milking shed or
+ * the pasture gate, each with its own sheet rather than a shared clutter
+ * envelope. The door-anchored ones are placed the same connectivity-checked way
+ * as clutter; all are rendered by `FixtureProp` rather than `ClutterProp`.
  */
-type FixtureKind = 'awning_post' | 'skyfowl_perch' | 'field_shelter';
+type FixtureKind = 'awning_post' | 'skyfowl_perch' | 'milking_shed' | 'pasture_gate';
 
 const FIXTURE_SHEET_KEY: Record<FixtureKind, string> = {
   awning_post: 'town_awning_post',
   skyfowl_perch: 'town_skyfowl_perch',
-  field_shelter: 'town_field_shelter',
+  milking_shed: 'town_milking_shed',
+  pasture_gate: 'town_pasture_gate',
 };
 
 interface FixturePlacement {
@@ -512,8 +493,44 @@ const FIXTURE_PLACEMENTS: ReadonlyArray<FixturePlacement> = [
   },
 ];
 
-/** Wendell's pasture shelter — one fixture, placed directly rather than through the generic list, since it is the only one anchored to a yard corner rather than a door. */
-const FIELD_SHELTER_OFFSET: TownOffset = { dx: 5, dy: 1 };
+/** Wendell's pasture, the one yard dressed with fixtures of its own rather than clutter alone. */
+const PASTURE_YARD_NAME = 'Garrison Green';
+/**
+ * The milking shed's western front tile, in the pasture's north-east inner
+ * corner. The shed's roof climbs back over the north fence; its two front
+ * tiles are both blocked, so nobody stands under its art.
+ */
+const MILKING_SHED_OFFSET: TownOffset = { dx: 4, dy: 1 };
+const MILKING_SHED_FOOTPRINT_TILES = 2;
+/**
+ * Pasture tiles no dressing may take, as offsets from the yard's corner: the
+ * open middle of the green, and the two tiles just inside the cart gate, so a
+ * cow can be walked in through the gate and has ground to stand on.
+ */
+const PASTURE_KEEP_CLEAR: ReadonlyArray<TownOffset> = [
+  { dx: 1, dy: 2 },
+  { dx: 2, dy: 2 },
+  { dx: 3, dy: 2 },
+  { dx: 4, dy: 2 },
+  { dx: 1, dy: 3 },
+  { dx: 2, dy: 3 },
+  { dx: 3, dy: 3 },
+  { dx: 4, dy: 3 },
+  { dx: 1, dy: 4 },
+  { dx: 2, dy: 4 },
+  { dx: 3, dy: 4 },
+  { dx: 4, dy: 4 },
+];
+
+function pastureKeepClearTiles(plan: TownPlan | undefined): ReadonlySet<string> {
+  const yard = plan?.yards.find((y) => y.name === PASTURE_YARD_NAME);
+  if (yard === undefined) return new Set();
+  return new Set(
+    PASTURE_KEEP_CLEAR.map((offset) =>
+      tileKey(yard.bounds.x + offset.dx, yard.bounds.y + offset.dy),
+    ),
+  );
+}
 
 /**
  * A gateway is anchored **on** the wall, at the opening's west or north jamb.
@@ -553,6 +570,7 @@ export class TownDecorSystem implements GameSystem {
   private frame = 0;
   /** See `doorwayKeepClearTiles`: the connectivity check cannot see a sealed door. */
   private readonly doorwayKeepClear: ReadonlySet<string>;
+  private readonly pastureKeepClear: ReadonlySet<string>;
 
   /**
    * @param claimedElsewhere tiles the market stalls and `TownPropSystem`'s props
@@ -565,11 +583,15 @@ export class TownDecorSystem implements GameSystem {
     private readonly claimedElsewhere: ReadonlySet<string> = new Set(),
   ) {
     this.doorwayKeepClear = doorwayKeepClearTiles(gameMap.buildingEntries);
+    this.pastureKeepClear = pastureKeepClearTiles(gameMap.townPlan);
     this.placeShopSigns();
     this.placeStreetLamps();
+    // The shed goes in before the clutter, so a drifting trough or rack can
+    // never take the tiles it was drawn for.
+    this.placeMilkingShed();
     this.placeClutter();
     this.placeFixtures();
-    this.placeFieldShelter();
+    this.placePastureGate();
     this.placeLaundryLines();
     this.placeSignposts();
     this.placeGateArches();
@@ -686,24 +708,45 @@ export class TownDecorSystem implements GameSystem {
   }
 
   /**
-   * Wendell's pasture shelter, in the Garrison Green's own corner. Sized for a
-   * cow that is not there yet — the offset is chosen clear of the yard's
-   * other pasture dressing and its own centre, leaving the yard's centre
-   * walkable.
+   * Wendell's milking shed, two tiles wide in the pasture's north-east inner
+   * corner. Both front tiles must be free and blocking both must leave the
+   * town connected, or the shed is left out rather than half-placed.
    */
-  private placeFieldShelter(): void {
+  private placeMilkingShed(): void {
     const plan = this.gameMap.townPlan;
     if (plan === undefined) return;
-    const yard = plan.yards.find((y) => y.name === 'Garrison Green');
+    const yard = plan.yards.find((y) => y.name === PASTURE_YARD_NAME);
     if (yard === undefined) return;
-    const preferred = {
-      x: yard.bounds.x + FIELD_SHELTER_OFFSET.dx,
-      y: yard.bounds.y + FIELD_SHELTER_OFFSET.dy,
+    const anchor = {
+      x: yard.bounds.x + MILKING_SHED_OFFSET.dx,
+      y: yard.bounds.y + MILKING_SHED_OFFSET.dy,
     };
-    const tile = this.findFreeTile(plan, preferred);
-    if (tile === null) return;
-    this.reserve(tile);
-    this.renderables.push(new FixtureProp(tile, FIXTURE_SHEET_KEY.field_shelter));
+    const tiles = Array.from({ length: MILKING_SHED_FOOTPRINT_TILES }, (_, dx) => ({
+      x: anchor.x + dx,
+      y: anchor.y,
+    }));
+    // Both tiles are judged blocked together before either is reserved: two
+    // tiles that each pass alone can still seal a pocket between them, and a
+    // tile reserved before its partner fails would be an invisible wall.
+    if (!tiles.every((tile) => this.canStandOn(tile))) return;
+    if (!this.leavesTownConnected(plan, ...tiles)) return;
+    for (const tile of tiles) this.reserve(tile);
+    this.renderables.push(new FixtureProp(anchor, FIXTURE_SHEET_KEY.milking_shed));
+  }
+
+  /**
+   * The pasture's cart gate. It blocks nothing — its posts stand on the fence
+   * tiles either side of the opening and its leaves lie folded over them — so it
+   * skips the connectivity check the way the laundry lines do.
+   */
+  private placePastureGate(): void {
+    const plan = this.gameMap.townPlan;
+    if (plan === undefined) return;
+    const gate = plan.yards.find((y) => y.name === PASTURE_YARD_NAME)?.gates[0];
+    if (gate === undefined) return;
+    this.renderables.push(
+      new FixtureProp({ x: gate.x, y: gate.y }, FIXTURE_SHEET_KEY.pasture_gate),
+    );
   }
 
   private resolveClutterAnchor(plan: TownPlan, anchor: ClutterAnchor): TileXY | null {
@@ -852,6 +895,7 @@ export class TownDecorSystem implements GameSystem {
     const key = tileKey(tile.x, tile.y);
     if (this.occupied.has(key) || this.claimedElsewhere.has(key)) return false;
     if (this.doorwayKeepClear.has(key)) return false;
+    if (this.pastureKeepClear.has(key)) return false;
     // `IgnoringPermanent` for the reason `TownPropSystem.findFreeTile` gives: the
     // overworld map instance outlives a trip into a building, so a prop's own
     // block would make re-placement pick a different tile every trip.
@@ -873,11 +917,11 @@ export class TownDecorSystem implements GameSystem {
    * the town to another must not require walking out of a gate and round the
    * outside.
    */
-  private leavesTownConnected(plan: TownPlan, candidate: TileXY): boolean {
-    const reachableWithout = this.countReachableInterior(plan, candidate);
-    // The candidate itself is the one tile that stops being reachable. Anything
-    // more than that is a piece of town this prop would have sealed off.
-    return reachableWithout === this.reachableInterior(plan) - 1;
+  private leavesTownConnected(plan: TownPlan, ...candidates: ReadonlyArray<TileXY>): boolean {
+    const reachableWithout = this.countReachableInterior(plan, candidates);
+    // The candidates themselves are the only tiles that stop being reachable.
+    // Anything more than that is a piece of town this prop would have sealed off.
+    return reachableWithout === this.reachableInterior(plan) - candidates.length;
   }
 
   /**
@@ -890,13 +934,13 @@ export class TownDecorSystem implements GameSystem {
    * nothing: it only changes when a tile is reserved.
    */
   private reachableInterior(plan: TownPlan): number {
-    this.reachableCache ??= this.countReachableInterior(plan, null);
+    this.reachableCache ??= this.countReachableInterior(plan, []);
     return this.reachableCache;
   }
 
   /**
    * Tiles the plaza can reach, treating as blocked: the map's own solids, every
-   * tile any town system has claimed, and optionally one candidate.
+   * tile any town system has claimed, and any candidates.
    *
    * **`isWalkableIgnoringPermanent`, not `isWalkable`** — the same choice, and the
    * same reason, as `canStandOn`. `GameMap` outlives a trip into a building
@@ -913,7 +957,7 @@ export class TownDecorSystem implements GameSystem {
    * every trip, which is what the `IgnoringPermanent` comment on `canStandOn`
    * always promised and only half delivered.
    */
-  private countReachableInterior(plan: TownPlan, blocked: TileXY | null): number {
+  private countReachableInterior(plan: TownPlan, blocked: ReadonlyArray<TileXY>): number {
     const { interior } = plan;
     const centre = this.gameMap.townSquareCentre;
     if (centre === undefined) return 0;
@@ -932,7 +976,7 @@ export class TownDecorSystem implements GameSystem {
         const ny = tile.y + dy;
         if (nx < interior.x || ny < interior.y) continue;
         if (nx >= interior.x + interior.w || ny >= interior.y + interior.h) continue;
-        if (blocked !== null && nx === blocked.x && ny === blocked.y) continue;
+        if (blocked.some((b) => b.x === nx && b.y === ny)) continue;
         const key = tileKey(nx, ny);
         if (seen.has(key)) continue;
         if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;

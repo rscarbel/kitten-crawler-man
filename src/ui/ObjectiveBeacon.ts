@@ -13,8 +13,8 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
  * body, and its tracker target is built with `characterTarget`.
  */
 
-/** The beam's default height for a one-tile target — exported so a caller scaling a footprint's beam can scale off the same baseline. */
-export const BEAM_HEIGHT_TILES = 2.6;
+/** The beam's default height for a one-tile target. */
+const BEAM_HEIGHT_TILES = 2.6;
 const BEAM_WIDTH_TILES = 0.55;
 /** The beam flares out slightly toward the ground, so it reads as light, not a post. */
 const BEAM_BASE_WIDTH_MULTIPLIER = 1.5;
@@ -186,7 +186,8 @@ const HEX_CHANNEL_LENGTH = 2;
 /** node-canvas and Chrome both drop an `rgba()` whose alpha is in exponent form. */
 const MIN_RENDERABLE_ALPHA = 0.001;
 
-function withAlpha(hexColor: string, alpha: number): string {
+/** `#rrggbb` as an `rgba()` string, with an alpha too small to render clamped to zero. */
+export function withAlpha(hexColor: string, alpha: number): string {
   const clamped = alpha < MIN_RENDERABLE_ALPHA ? 0 : alpha;
   const red = Number.parseInt(
     hexColor.slice(HEX_RED_START, HEX_RED_START + HEX_CHANNEL_LENGTH),

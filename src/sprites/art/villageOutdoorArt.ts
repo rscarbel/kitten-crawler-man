@@ -4726,6 +4726,844 @@ function paintRopeWalk(ctx: Ctx, g: Grid): void {
   for (const [coilX, coilGround] of r.coils) paintRopeCoil(ctx, g, coilX, coilGround);
 }
 
+// ── Tikka's machines ─────────────────────────────────────────────────────────
+//
+// The sawmill and the rope walk rebuilt to Tikka's blueprints. Same footprints
+// as the plain machines they replace, so the swap never moves a blocked tile;
+// what changes is the read — brass gearing, riveted iron fittings and squared,
+// seasoned timber where the originals are barked logs and rawhide.
+
+/** A tinkerer's cog seen face-on: brass teeth, a darker recess, spoke windows on the big ones. */
+const COG = {
+  toothDepthShare: 0.2,
+  /** Each tooth is four path steps: two out at the tip, two in at the root. */
+  stepsPerTooth: 4,
+  tipSteps: 2,
+  recessShare: 0.66,
+  hubShare: 0.28,
+  axleShare: 0.4,
+  windows: 4,
+  windowRadiusShare: 0.46,
+  windowSizeShare: 0.17,
+  /** Gradient centre offset toward the upper-left light, as a share of the radius. */
+  litOffset: 0.4,
+  litCore: 0.12,
+} as const;
+
+/** Radii at or above this carry spoke windows; a pinion is too small to show them. */
+const COG_WINDOW_MIN_RADIUS_TILES = 0.2;
+
+function cog(
+  ctx: Ctx,
+  g: Grid,
+  cx: number,
+  up: number,
+  radius: number,
+  teeth: number,
+  phase = 0,
+): void {
+  const px = g.x(cx);
+  const py = g.y(up);
+  const r = g.s(radius);
+  const inner = r * (1 - COG.toothDepthShare);
+  const steps = teeth * COG.stepsPerTooth;
+  ctx.beginPath();
+  for (let step = 0; step <= steps; step++) {
+    const angle = phase + (step / steps) * TWO_PI;
+    const reach = step % COG.stepsPerTooth < COG.tipSteps ? r : inner;
+    const x = px + Math.cos(angle) * reach;
+    const y = py + Math.sin(angle) * reach;
+    if (step === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  const face = ctx.createRadialGradient(
+    px - r * COG.litOffset,
+    py - r * COG.litOffset,
+    r * COG.litCore,
+    px,
+    py,
+    r,
+  );
+  face.addColorStop(0, BRASS.glint);
+  face.addColorStop(1, BRASS.body);
+  fillInked(ctx, g, face);
+  ctx.beginPath();
+  ctx.arc(px, py, inner * COG.recessShare, 0, TWO_PI);
+  ctx.strokeStyle = BRASS.dark;
+  ctx.lineWidth = Math.max(1, g.ink * FINE_LINE_SHARE);
+  ctx.stroke();
+  if (radius >= COG_WINDOW_MIN_RADIUS_TILES) {
+    for (let window = 0; window < COG.windows; window++) {
+      const angle = phase + ((window + 1 / 2) / COG.windows) * TWO_PI;
+      ctx.beginPath();
+      ctx.arc(
+        px + Math.cos(angle) * inner * COG.windowRadiusShare,
+        py + Math.sin(angle) * inner * COG.windowRadiusShare,
+        r * COG.windowSizeShare,
+        0,
+        TWO_PI,
+      );
+      ctx.fillStyle = HOLLOW_SHADE;
+      ctx.fill();
+    }
+  }
+  ctx.beginPath();
+  ctx.arc(px, py, r * COG.hubShare, 0, TWO_PI);
+  fillInked(ctx, g, BRASS.light);
+  ctx.beginPath();
+  ctx.arc(px, py, r * COG.hubShare * COG.axleShare, 0, TWO_PI);
+  ctx.fillStyle = IRON.dark;
+  ctx.fill();
+}
+
+/** A rivet or bolt head: a dot with a lit pip, too small to carry an outline. */
+const RIVET_RADIUS_TILES = 0.022;
+function rivet(ctx: Ctx, g: Grid, x: number, up: number, color: string = IRON.dark): void {
+  ctx.beginPath();
+  ctx.arc(g.x(x), g.y(up), Math.max(1, g.s(RIVET_RADIUS_TILES)), 0, TWO_PI);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+/** A flat iron strap across a timber face, riveted at each end. */
+function ironStrap(
+  ctx: Ctx,
+  g: Grid,
+  x0: number,
+  u0: number,
+  x1: number,
+  u1: number,
+  width: number,
+): void {
+  strut(ctx, g, x0, u0, x1, u1, width, IRON_TONE);
+  rivet(ctx, g, x0, u0, IRON.glint);
+  rivet(ctx, g, x1, u1, IRON.glint);
+}
+
+/**
+ * Tikka's bench saw: the plain sawmill's layout — drive frame at the back,
+ * bench and carriage in front, blade centred on `SAWMILL_BLADE` so the live
+ * spin lands on it — rebuilt in her hand. The barked log frame becomes
+ * squared, iron-bracketed timber; the bare flywheel becomes a brass-rimmed
+ * one geared through a pinion to a big crank gear, so the treadle and the
+ * crank can both drive it; the blade gets a riveted brass guard; the log
+ * carriage runs on wheels over a toothed rack fed by a handwheel; and a
+ * drawer under the slot catches the sawdust that the plain mill throws on the
+ * floor.
+ *
+ * The guard sits wholly outside `SAWMILL_BLADE_RADIUS_TILES`, because the
+ * working blur is a full disc of that radius drawn over the baked frame, and a
+ * guard inside it would be blurred along with the blade.
+ */
+const TIKKA_SAW = {
+  shadowUp: 1.5,
+  shadowRx: 0.98,
+  shadowRy: 1.42,
+  bench: { x0: 0.06, x1: 1.94, front: 0.3, depth: 1.3, height: 0.5 },
+  benchBoard: 0.13,
+  legInset: 0.1,
+  legWidth: 0.13,
+  shoeHeight: 0.06,
+  shoeOverhang: 0.02,
+  straps: [0.34, 1.66],
+  strapWidth: 0.05,
+  cornerCap: 0.09,
+  bladeDepth: 1.0,
+  slotOverhang: 0.04,
+  slotHalfWidth: 0.025,
+  drawer: { x0: 0.78, x1: 1.22, up0: 0.36, up1: 0.66, pull: 0.035 },
+  guard: {
+    inner: 0.46,
+    outer: 0.54,
+    /** Canvas angles, so π..2π is the upper half. */
+    from: Math.PI * 1.02,
+    to: Math.PI * 1.98,
+    rivets: 5,
+    stayTo: [1.0, 2.62],
+    stayWidth: 0.04,
+  },
+  arbor: { depthBehindSlot: 0.52, top: 2.56, width: 0.13, collarHalf: 0.11, collarHeight: 0.1 },
+  frame: {
+    ground: 2.4,
+    postX: [0.26, 1.74],
+    postTop: 3.66,
+    postWidth: 0.12,
+    braceFootX: [0.14, 1.86],
+    braceFootDrop: 0.1,
+    braceTopDrop: 0.3,
+    braceWidth: 0.07,
+    beamUp: 3.6,
+    beamWidth: 0.09,
+    bracketReach: 0.14,
+    bracketWidth: 0.05,
+  },
+  /** Tikka's maker's plate on the beam, riveted at a third of its width in from each end. */
+  plate: { x: 1, up: 3.6, halfW: 0.13, halfH: 0.05, rivetShare: 2 / 3 },
+  /** A brass ring gear round a spoked wooden wheel, which fills this share of its radius. */
+  flywheel: { x: 0.58, up: 3.1, radius: 0.36, teeth: 26, spokedShare: 0.66 },
+  pinion: { x: 1.0, up: 2.98, radius: 0.12, teeth: 9, phase: 0.2 },
+  crankGear: { x: 1.4, up: 3.1, radius: 0.3, teeth: 20, phase: 0.1 },
+  crank: { toX: 1.6, toUp: 3.38, armWidth: 0.045, gripLength: 0.14, gripWidth: 0.06 },
+  crankPin: [0.74, 2.9],
+  crankPinWidth: 0.045,
+  pinRadius: 0.035,
+  rodWidth: 0.05,
+  treadle: {
+    hinge: { x0: 0.34, x1: 0.5, front: 2.34, depth: 0.12, height: 0.06, board: 0.06 },
+    from: [0.42, 2.44],
+    to: [1.3, 2.52],
+    width: 0.13,
+    plate: { x: 1.16, up: 2.51, rx: 0.1, ry: 0.035 },
+  },
+  beltHalfGap: 0.05,
+  beltTaper: 0.6,
+  beltWidth: 0.035,
+  rails: { ups: [1.56, 1.9], inset: 0.04, width: 0.045, ties: 6 },
+  rack: { up: 1.52, x0: 0.1, x1: 0.56, toothStep: 0.05, toothHeight: 0.035 },
+  carriage: { x0: 0.1, x1: 0.62, drop: 0.04, height: 0.07, board: 0.08, wheelRadius: 0.05 },
+  log: { x0: 0.12, x1: 0.96, up: 1.74, radius: 0.19 },
+  dogs: { x: [0.22, 0.5], below: 0.02, riseShare: 0.5, lean: 0.03, width: 0.035 },
+  handwheel: { x: 0.2, up: 0.6, radius: 0.12, shaftTo: 0.84 },
+  stack: { x0: 1.48, x1: 1.9, front: 1.3, depth: 0.3, board: 0.05, boards: 4, stagger: 0.03 },
+  stackBand: { x: 1.69, width: 0.04 },
+  lever: { footX: 1.78, footUp: 0.9, topX: 1.86, topUp: 1.36, width: 0.05, knob: 0.05 },
+  lantern: { hookX: 0.16, hookUp: 3.5, size: 0.3, bracketLift: 0.02, bracketReach: 0.03 },
+  sawdust: [
+    [1.0, 0.24, 0.16, 0.04],
+    [1.22, 1.02, 0.1, 0.03],
+  ],
+} as const;
+
+function paintSawmillUpgraded(ctx: Ctx, g: Grid, _variant: number, rng: Rng): void {
+  const s = TIKKA_SAW;
+  shadow(ctx, g, 1, s.shadowUp, s.shadowRx, s.shadowRy);
+  paintTikkaDrive(ctx, g, rng);
+
+  const bladeX = SAWMILL_BLADE.x;
+  const pinion = s.pinion;
+  for (const offset of [-s.beltHalfGap, s.beltHalfGap]) {
+    strut(
+      ctx,
+      g,
+      pinion.x + offset,
+      pinion.up,
+      bladeX + offset * s.beltTaper,
+      SAWMILL_BLADE.up,
+      s.beltWidth,
+      BELT_TONE,
+    );
+  }
+
+  paintTikkaBench(ctx, g, rng);
+  paintTikkaCarriage(ctx, g, rng);
+
+  const slotUp = s.bladeDepth + s.bench.height;
+  const bladeR = SAWMILL_BLADE_RADIUS_TILES;
+  rectT(
+    ctx,
+    g,
+    bladeX - bladeR - s.slotOverhang,
+    slotUp - s.slotHalfWidth,
+    bladeX + bladeR + s.slotOverhang,
+    slotUp + s.slotHalfWidth,
+  );
+  ctx.fillStyle = HOLLOW_SHADE;
+  ctx.fill();
+  paintSawBlade(ctx, g, bladeX, SAWMILL_BLADE.up, bladeR);
+  paintBladeGuard(ctx, g);
+
+  for (const [driftX, driftUp, rx, ry] of s.sawdust) {
+    ellipseT(ctx, g, driftX, driftUp, rx, ry);
+    ctx.fillStyle = SAWDUST.body;
+    ctx.fill();
+    litSpot(ctx, g, driftX, driftUp, rx, ry, SAWDUST.light, SHEEN.medium);
+  }
+
+  const stack = s.stack;
+  for (let board = 0; board < stack.boards; board++) {
+    const shift = board % 2 === 0 ? 0 : stack.stagger;
+    plankBox(
+      ctx,
+      g,
+      {
+        x0: stack.x0 + shift,
+        x1: stack.x1 - stack.stagger + shift,
+        front: stack.front + board * stack.board,
+        depth: stack.depth,
+        height: stack.board,
+      },
+      forkRng(rng),
+      stack.depth / 2,
+      WOOD.highlight,
+      WOOD.light,
+    );
+  }
+  const stackTop = stack.front + stack.boards * stack.board + stack.depth;
+  strut(ctx, g, s.stackBand.x, stack.front, s.stackBand.x, stackTop, s.stackBand.width, IRON_TONE);
+
+  const lever = s.lever;
+  strut(ctx, g, lever.footX, lever.footUp, lever.topX, lever.topUp, lever.width, IRON_TONE);
+  ellipseT(ctx, g, lever.topX, lever.topUp, lever.knob, lever.knob);
+  fillInked(ctx, g, BRASS.light);
+
+  const lantern = s.lantern;
+  lanternAt(ctx, g, lantern.hookX, lantern.hookUp, lantern.size);
+  strut(
+    ctx,
+    g,
+    s.frame.postX[0],
+    lantern.hookUp + lantern.bracketLift,
+    lantern.hookX + lantern.bracketReach,
+    lantern.hookUp + lantern.bracketLift,
+    s.rodWidth,
+    IRON_TONE,
+  );
+}
+
+/**
+ * The squared frame behind the bench and its gear train: the treadle's pitman
+ * rod turns the brass-rimmed flywheel, which meshes with a pinion carrying the
+ * belt pulley, which meshes in turn with a big crank gear a second hand can
+ * work — the flywheel stores the stroke, the pinion steps the speed up.
+ */
+function paintTikkaDrive(ctx: Ctx, g: Grid, rng: Rng): void {
+  const s = TIKKA_SAW;
+  const f = s.frame;
+  const [westPost, eastPost] = f.postX;
+  const [westFoot, eastFoot] = f.braceFootX;
+  strut(
+    ctx,
+    g,
+    westFoot,
+    f.ground - f.braceFootDrop,
+    westPost,
+    f.postTop - f.braceTopDrop,
+    f.braceWidth,
+    DARK_WOOD_TONE,
+  );
+  strut(
+    ctx,
+    g,
+    eastFoot,
+    f.ground - f.braceFootDrop,
+    eastPost,
+    f.postTop - f.braceTopDrop,
+    f.braceWidth,
+    DARK_WOOD_TONE,
+  );
+  for (const postX of f.postX) {
+    strut(ctx, g, postX, f.ground, postX, f.postTop, f.postWidth, DARK_WOOD_TONE);
+  }
+  strut(ctx, g, westPost, f.beamUp, eastPost, f.beamUp, f.beamWidth, DARK_WOOD_TONE);
+  // Iron knee brackets where the beam meets each post: the frame is bolted, not pegged.
+  for (const [postX, inward] of [
+    [westPost, 1],
+    [eastPost, -1],
+  ] as const) {
+    strut(
+      ctx,
+      g,
+      postX,
+      f.beamUp - f.bracketReach,
+      postX + inward * f.bracketReach,
+      f.beamUp,
+      f.bracketWidth,
+      IRON_TONE,
+    );
+    rivet(ctx, g, postX, f.beamUp, BRASS.light);
+  }
+  const plate = s.plate;
+  rectT(
+    ctx,
+    g,
+    plate.x - plate.halfW,
+    plate.up - plate.halfH,
+    plate.x + plate.halfW,
+    plate.up + plate.halfH,
+  );
+  fillInked(ctx, g, BRASS.light);
+  rivet(ctx, g, plate.x - plate.halfW * plate.rivetShare, plate.up, BRASS.dark);
+  rivet(ctx, g, plate.x + plate.halfW * plate.rivetShare, plate.up, BRASS.dark);
+
+  const treadle = s.treadle;
+  plankBox(ctx, g, treadle.hinge, forkRng(rng), treadle.hinge.board, WOOD.mid, WOOD.dark);
+  const [fromX, fromUp] = treadle.from;
+  const [toX, toUp] = treadle.to;
+  strut(ctx, g, fromX, fromUp, toX, toUp, treadle.width, TREADLE_TONE);
+  const footPlate = treadle.plate;
+  ellipseT(ctx, g, footPlate.x, footPlate.up, footPlate.rx, footPlate.ry);
+  fillInked(ctx, g, IRON.light);
+
+  const wheel = s.flywheel;
+  cog(ctx, g, wheel.x, wheel.up, wheel.radius, wheel.teeth);
+  paintWheel(ctx, g, wheel.x, wheel.up, wheel.radius * wheel.spokedShare, [], WOOD_TONE);
+  const pinion = s.pinion;
+  cog(ctx, g, pinion.x, pinion.up, pinion.radius, pinion.teeth, pinion.phase);
+  const crankGear = s.crankGear;
+  cog(ctx, g, crankGear.x, crankGear.up, crankGear.radius, crankGear.teeth, crankGear.phase);
+  const crank = s.crank;
+  strut(ctx, g, crankGear.x, crankGear.up, crank.toX, crank.toUp, crank.armWidth, IRON_TONE);
+  strut(
+    ctx,
+    g,
+    crank.toX,
+    crank.toUp,
+    crank.toX,
+    crank.toUp + crank.gripLength,
+    crank.gripWidth,
+    WOOD_TONE,
+  );
+
+  const [pinX, pinUp] = s.crankPin;
+  strut(ctx, g, wheel.x, wheel.up, pinX, pinUp, s.crankPinWidth, IRON_TONE);
+  strut(ctx, g, pinX, pinUp, toX, toUp, s.rodWidth, IRON_TONE);
+  ellipseT(ctx, g, pinX, pinUp, s.pinRadius, s.pinRadius);
+  fillInked(ctx, g, BRASS.light);
+}
+
+function paintTikkaBench(ctx: Ctx, g: Grid, rng: Rng): void {
+  const s = TIKKA_SAW;
+  const bench = s.bench;
+  const topUp = bench.front + bench.height;
+  const legXs = [bench.x0 + s.legInset, bench.x1 - s.legInset] as const;
+  for (const legX of legXs) {
+    strut(
+      ctx,
+      g,
+      legX,
+      bench.front + bench.depth,
+      legX,
+      bench.front + bench.depth + bench.height,
+      s.legWidth,
+      DARK_WOOD_TONE,
+    );
+  }
+  plankBox(ctx, g, bench, forkRng(rng), s.benchBoard, WOOD.mid, WOOD.body);
+  for (const legX of legXs) {
+    rectT(
+      ctx,
+      g,
+      legX - s.legWidth / 2 - s.shoeOverhang,
+      bench.front,
+      legX + s.legWidth / 2 + s.shoeOverhang,
+      bench.front + s.shoeHeight,
+    );
+    fillInked(ctx, g, IRON.body);
+  }
+  for (const strapX of s.straps) {
+    ironStrap(ctx, g, strapX, bench.front + s.shoeHeight, strapX, topUp, s.strapWidth);
+  }
+  // Brass caps on the bench's two front corners, where a log would otherwise split the edge.
+  for (const [cornerX, inward] of [
+    [bench.x0, 1],
+    [bench.x1, -1],
+  ] as const) {
+    polygon(ctx, [
+      [g.x(cornerX), g.y(topUp)],
+      [g.x(cornerX + inward * s.cornerCap), g.y(topUp)],
+      [g.x(cornerX), g.y(topUp - s.cornerCap)],
+    ]);
+    fillInked(ctx, g, BRASS.light);
+  }
+  const drawer = s.drawer;
+  rectT(ctx, g, drawer.x0, drawer.up0, drawer.x1, drawer.up1);
+  fillInked(ctx, g, WOOD.light);
+  const pullUp = (drawer.up0 + drawer.up1) / 2;
+  strut(
+    ctx,
+    g,
+    drawer.x0 + drawer.pull * 2,
+    pullUp,
+    drawer.x1 - drawer.pull * 2,
+    pullUp,
+    drawer.pull,
+    BRASS_TONE,
+  );
+  const handwheel = s.handwheel;
+  strut(ctx, g, handwheel.x, handwheel.up, handwheel.x, handwheel.shaftTo, s.strapWidth, IRON_TONE);
+  paintWheel(ctx, g, handwheel.x, handwheel.up, handwheel.radius, [1, 3, 5, 7], BRASS_TONE);
+
+  const arbor = s.arbor;
+  const bladeX = SAWMILL_BLADE.x;
+  const slotUp = s.bladeDepth + bench.height;
+  strut(ctx, g, bladeX, slotUp + arbor.depthBehindSlot, bladeX, arbor.top, arbor.width, IRON_TONE);
+  rectT(
+    ctx,
+    g,
+    bladeX - arbor.collarHalf,
+    arbor.top - arbor.collarHeight,
+    bladeX + arbor.collarHalf,
+    arbor.top,
+  );
+  fillInked(ctx, g, BRASS.body);
+}
+
+/** Iron rails tied across the bench, a toothed rack beside the near one, and the wheeled carriage. */
+function paintTikkaCarriage(ctx: Ctx, g: Grid, rng: Rng): void {
+  const s = TIKKA_SAW;
+  const rails = s.rails;
+  const railX0 = s.bench.x0 + rails.inset;
+  const railX1 = s.bench.x1 - rails.inset;
+  const [nearRail, farRail] = rails.ups;
+  for (let tie = 0; tie < rails.ties; tie++) {
+    const tieX = railX0 + ((tie + 1 / 2) / rails.ties) * (railX1 - railX0);
+    strut(ctx, g, tieX, nearRail, tieX, farRail, rails.width, DARK_WOOD_TONE);
+  }
+  for (const railUp of rails.ups) {
+    strut(ctx, g, railX0, railUp, railX1, railUp, rails.width, IRON_TONE);
+  }
+  const rack = s.rack;
+  ctx.strokeStyle = BRASS.light;
+  ctx.lineWidth = Math.max(1, g.ink * FINE_LINE_SHARE);
+  const rackTeeth = Math.floor((rack.x1 - rack.x0) / rack.toothStep);
+  for (let tooth = 0; tooth <= rackTeeth; tooth++) {
+    const toothX = rack.x0 + tooth * rack.toothStep;
+    ctx.beginPath();
+    ctx.moveTo(g.x(toothX), g.y(rack.up));
+    ctx.lineTo(g.x(toothX), g.y(rack.up - rack.toothHeight));
+    ctx.stroke();
+  }
+  const carriage = s.carriage;
+  const carriageFront = nearRail - carriage.drop;
+  plankBox(
+    ctx,
+    g,
+    {
+      x0: carriage.x0,
+      x1: carriage.x1,
+      front: carriageFront,
+      depth: farRail - nearRail,
+      height: carriage.height,
+    },
+    forkRng(rng),
+    carriage.board,
+    WOOD.light,
+    WOOD.dark,
+  );
+  for (const wheelX of [carriage.x0 + carriage.wheelRadius, carriage.x1 - carriage.wheelRadius]) {
+    ellipseT(ctx, g, wheelX, carriageFront, carriage.wheelRadius, carriage.wheelRadius);
+    fillInked(ctx, g, BRASS.body);
+    rivet(ctx, g, wheelX, carriageFront);
+  }
+  const log = s.log;
+  drawLogSide(ctx, g, log.x0, log.up, log.x1 - log.x0, log.radius, forkRng(rng));
+  const dogs = s.dogs;
+  for (const dogX of dogs.x) {
+    strut(
+      ctx,
+      g,
+      dogX,
+      log.up - log.radius - dogs.below,
+      dogX + dogs.lean,
+      log.up + log.radius * dogs.riseShare,
+      dogs.width,
+      IRON_TONE,
+    );
+  }
+}
+
+/** A riveted brass hood over the blade's upper half, stayed back to the arbor column. */
+function paintBladeGuard(ctx: Ctx, g: Grid): void {
+  const guard = TIKKA_SAW.guard;
+  const px = g.x(SAWMILL_BLADE.x);
+  const py = g.y(SAWMILL_BLADE.up);
+  const [stayX, stayUp] = guard.stayTo;
+  const midAngle = (guard.from + guard.to) / 2;
+  const hoodMid = (guard.inner + guard.outer) / 2;
+  strut(
+    ctx,
+    g,
+    SAWMILL_BLADE.x + Math.cos(midAngle) * hoodMid,
+    SAWMILL_BLADE.up - Math.sin(midAngle) * hoodMid,
+    stayX,
+    stayUp,
+    guard.stayWidth,
+    IRON_TONE,
+  );
+  ctx.beginPath();
+  ctx.arc(px, py, g.s(guard.outer), guard.from, guard.to);
+  ctx.arc(px, py, g.s(guard.inner), guard.to, guard.from, true);
+  ctx.closePath();
+  const hood = ctx.createLinearGradient(0, g.y(SAWMILL_BLADE.up + guard.outer), 0, py);
+  hood.addColorStop(0, BRASS.light);
+  hood.addColorStop(1, BRASS.dark);
+  fillInked(ctx, g, hood);
+  for (let index = 0; index < guard.rivets; index++) {
+    const angle = guard.from + ((index + 1 / 2) / guard.rivets) * (guard.to - guard.from);
+    ctx.beginPath();
+    ctx.arc(
+      px + Math.cos(angle) * g.s(hoodMid),
+      py + Math.sin(angle) * g.s(hoodMid),
+      Math.max(1, g.s(RIVET_RADIUS_TILES)),
+      0,
+      TWO_PI,
+    );
+    ctx.fillStyle = BRASS.dark;
+    ctx.fill();
+  }
+}
+
+/**
+ * Tikka's rope walk. At the west a squared, bolted frame carries a brass drive
+ * gear on a crank, meshed with three pinions round it, so one turn of the
+ * handle spins all three hooks together — the plain walk turns its hooks off
+ * one wheel's rim. The strands run into a brass-banded laying top riding its
+ * own little trestle, and the laid rope winds onto a ratchet windlass on a
+ * heavy tensioning post, ballasted with stone on a sled so a hard pull cannot
+ * drag it.
+ */
+const TIKKA_ROPE_WALK = {
+  shadowUp: 0.4,
+  shadowRx: 0.96,
+  shadowRy: 0.2,
+  postFoot: 0.34,
+  head: {
+    postX: [0.07, 0.5],
+    top: 1.3,
+    postWidth: 0.08,
+    beamUps: [0.44, 1.28],
+    beamWidth: 0.07,
+    braceFootX: 0.62,
+    braceTopUp: 0.98,
+    braceWidth: 0.06,
+  },
+  drive: { x: 0.28, up: 0.86, radius: 0.19, teeth: 14, phase: 0.1 },
+  /** Pinions round the drive gear, as angles in canvas radians, all meshed at the same distance. */
+  pinionAngles: [-Math.PI / 2, 0, Math.PI / 2],
+  pinionRadius: 0.085,
+  pinionTeeth: 8,
+  hookReach: 0.13,
+  hookCurl: 0.03,
+  hookWidth: 0.03,
+  handle: { x: 0.08, up: 1.16, gripLength: 0.13, armWidth: 0.04, gripWidth: 0.05 },
+  strandWidth: 0.05,
+  /** Where the strands gather into the laying top, as a share of their spread. */
+  gatherShare: 0.3,
+  layTop: {
+    x: 1.22,
+    rx: 0.1,
+    mouth: 0.16,
+    tip: 0.07,
+    bands: [-0.04, 0.04],
+    bandWidth: 0.025,
+    trestleFeet: [1.12, 1.32],
+    trestleWidth: 0.05,
+  },
+  grooves: [-0.05, 0.05],
+  grooveSpread: 1.6,
+  grooveTip: 0.6,
+  ropeUp: 0.86,
+  ropeWidth: 0.08,
+  twists: 5,
+  twistInset: 0.05,
+  twistSlant: 0.04,
+  twistHalfHeight: 0.03,
+  tail: {
+    postX: 1.82,
+    top: 1.24,
+    postWidth: 0.13,
+    capHeight: 0.05,
+    sled: { x0: 1.6, x1: 1.94, front: 0.26, depth: 0.14, height: 0.06, board: 0.07 },
+    braceFootX: 1.64,
+    braceTopUp: 0.96,
+    braceWidth: 0.07,
+    ratchet: { up: 0.86, radius: 0.1, teeth: 10 },
+    pawlFrom: [1.9, 1.0],
+    pawlWidth: 0.03,
+    /** Where the pawl's tip bears on the ratchet, as a share of its radius east of the axle. */
+    pawlTipShare: 0.5,
+    stones: [
+      [1.7, 0.37, 0.07, 0.05],
+      [1.88, 0.36, 0.04, 0.035],
+    ],
+  },
+  coil: [0.92, 0.22],
+} as const;
+
+function paintRopeWalkUpgraded(ctx: Ctx, g: Grid, _variant: number, rng: Rng): void {
+  const r = TIKKA_ROPE_WALK;
+  shadow(ctx, g, 1, r.shadowUp, r.shadowRx, r.shadowRy);
+  paintTikkaTensionPost(ctx, g, rng);
+
+  const head = r.head;
+  const [westPost, eastPost] = head.postX;
+  strut(
+    ctx,
+    g,
+    head.braceFootX,
+    r.postFoot,
+    eastPost,
+    head.braceTopUp,
+    head.braceWidth,
+    DARK_WOOD_TONE,
+  );
+  for (const postX of head.postX) {
+    strut(ctx, g, postX, r.postFoot, postX, head.top, head.postWidth, DARK_WOOD_TONE);
+  }
+  for (const beamUp of head.beamUps) {
+    strut(ctx, g, westPost, beamUp, eastPost, beamUp, head.beamWidth, DARK_WOOD_TONE);
+    rivet(ctx, g, westPost, beamUp, BRASS.light);
+    rivet(ctx, g, eastPost, beamUp, BRASS.light);
+  }
+
+  const drive = r.drive;
+  const pinionDistance = drive.radius + r.pinionRadius * (1 - COG.toothDepthShare);
+  const hooks = r.pinionAngles.map((angle): Point => {
+    const x = drive.x + Math.cos(angle) * pinionDistance;
+    const up = drive.up - Math.sin(angle) * pinionDistance;
+    return [x, up];
+  });
+  const lay = r.layTop;
+  hooks.forEach(([hookX, hookUp], index) => {
+    const gatherUp = r.ropeUp + (hookUp - r.ropeUp) * r.gatherShare;
+    cord(
+      ctx,
+      g,
+      [
+        [hookX + r.hookReach, hookUp],
+        [lay.x - lay.rx, gatherUp],
+      ],
+      r.strandWidth,
+      HEMP_TONES[index] ?? ROPE.body,
+    );
+  });
+
+  const ropeEndX = r.tail.postX - r.tail.ratchet.radius;
+  cord(
+    ctx,
+    g,
+    [
+      [lay.x, r.ropeUp],
+      [ropeEndX, r.ropeUp],
+    ],
+    r.ropeWidth,
+    ROPE.body,
+  );
+  ctx.strokeStyle = ROPE.dark;
+  ctx.lineWidth = Math.max(1, g.ink * FINE_LINE_SHARE);
+  const twistSpan = ropeEndX - lay.x - r.twistInset * 2;
+  for (let twist = 0; twist < r.twists; twist++) {
+    const twistX = lay.x + r.twistInset + (twist / r.twists) * twistSpan;
+    ctx.beginPath();
+    ctx.moveTo(g.x(twistX), g.y(r.ropeUp + r.twistHalfHeight));
+    ctx.lineTo(g.x(twistX + r.twistSlant), g.y(r.ropeUp - r.twistHalfHeight));
+    ctx.stroke();
+  }
+
+  const [trestleWest, trestleEast] = lay.trestleFeet;
+  strut(ctx, g, trestleWest, r.postFoot, lay.x, r.ropeUp, lay.trestleWidth, DARK_WOOD_TONE);
+  strut(ctx, g, trestleEast, r.postFoot, lay.x, r.ropeUp, lay.trestleWidth, DARK_WOOD_TONE);
+  const mouthX = lay.x - lay.rx;
+  const tipX = lay.x + lay.rx;
+  polygon(ctx, [
+    [g.x(mouthX), g.y(r.ropeUp + lay.mouth)],
+    [g.x(tipX), g.y(r.ropeUp + lay.tip)],
+    [g.x(tipX), g.y(r.ropeUp - lay.tip)],
+    [g.x(mouthX), g.y(r.ropeUp - lay.mouth)],
+  ]);
+  fillInked(ctx, g, roundShade(ctx, g, mouthX, tipX, WOOD_TONE));
+  ctx.strokeStyle = WOOD.deep;
+  ctx.lineWidth = Math.max(1, g.ink * FINE_LINE_SHARE);
+  for (const groove of r.grooves) {
+    ctx.beginPath();
+    ctx.moveTo(g.x(mouthX), g.y(r.ropeUp + groove * r.grooveSpread));
+    ctx.lineTo(g.x(tipX), g.y(r.ropeUp + groove * r.grooveTip));
+    ctx.stroke();
+  }
+  for (const bandOffset of lay.bands) {
+    const bandX = lay.x + bandOffset;
+    const along = (bandX - mouthX) / (tipX - mouthX);
+    const halfHeight = lay.mouth + (lay.tip - lay.mouth) * along;
+    strut(
+      ctx,
+      g,
+      bandX,
+      r.ropeUp - halfHeight,
+      bandX,
+      r.ropeUp + halfHeight,
+      lay.bandWidth,
+      BRASS_TONE,
+    );
+  }
+
+  cog(ctx, g, drive.x, drive.up, drive.radius, drive.teeth, drive.phase);
+  hooks.forEach(([hookX, hookUp], index) => {
+    cog(ctx, g, hookX, hookUp, r.pinionRadius, r.pinionTeeth, index);
+    strut(ctx, g, hookX, hookUp, hookX + r.hookReach, hookUp, r.hookWidth, IRON_TONE);
+    strut(
+      ctx,
+      g,
+      hookX + r.hookReach,
+      hookUp,
+      hookX + r.hookReach,
+      hookUp + r.hookCurl,
+      r.hookWidth,
+      IRON_TONE,
+    );
+  });
+  const handle = r.handle;
+  strut(ctx, g, drive.x, drive.up, handle.x, handle.up, handle.armWidth, IRON_TONE);
+  strut(
+    ctx,
+    g,
+    handle.x,
+    handle.up,
+    handle.x,
+    handle.up + handle.gripLength,
+    handle.gripWidth,
+    WOOD_TONE,
+  );
+  const [coilX, coilGround] = r.coil;
+  paintRopeCoil(ctx, g, coilX, coilGround);
+}
+
+/** The heavy post the laid rope winds onto: a ratchet windlass, its pawl, and a ballasted sled. */
+function paintTikkaTensionPost(ctx: Ctx, g: Grid, rng: Rng): void {
+  const r = TIKKA_ROPE_WALK;
+  const tail = r.tail;
+  plankBox(ctx, g, tail.sled, forkRng(rng), tail.sled.board, WOOD.mid, WOOD.dark);
+  strut(
+    ctx,
+    g,
+    tail.braceFootX,
+    r.postFoot,
+    tail.postX,
+    tail.braceTopUp,
+    tail.braceWidth,
+    DARK_WOOD_TONE,
+  );
+  strut(ctx, g, tail.postX, r.postFoot, tail.postX, tail.top, tail.postWidth, DARK_WOOD_TONE);
+  rectT(
+    ctx,
+    g,
+    tail.postX - tail.postWidth / 2,
+    tail.top - tail.capHeight,
+    tail.postX + tail.postWidth / 2,
+    tail.top,
+  );
+  fillInked(ctx, g, IRON.body);
+  for (const [stoneX, stoneUp, rx, ry] of tail.stones) {
+    ellipseT(ctx, g, stoneX, stoneUp, rx, ry);
+    fillInked(ctx, g, STONE.body);
+    litSpot(ctx, g, stoneX, stoneUp, rx, ry, STONE.highlight, SHEEN.medium);
+  }
+  const ratchet = tail.ratchet;
+  cog(ctx, g, tail.postX, ratchet.up, ratchet.radius, ratchet.teeth);
+  const [pawlX, pawlUp] = tail.pawlFrom;
+  strut(
+    ctx,
+    g,
+    pawlX,
+    pawlUp,
+    tail.postX + ratchet.radius * tail.pawlTipShare,
+    ratchet.up + ratchet.radius,
+    tail.pawlWidth,
+    IRON_TONE,
+  );
+  rivet(ctx, g, pawlX, pawlUp, BRASS.light);
+}
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export const OUTDOOR_PROP_ART: Record<OutdoorPropId, VillagePropArt> = {
@@ -4752,4 +5590,6 @@ export const OUTDOOR_PROP_ART: Record<OutdoorPropId, VillagePropArt> = {
   bucket: { variants: 1, paint: painter(paintBucketProp) },
   sawmill_machine: { variants: 1, paint: painter(paintSawmill) },
   rope_walk: { variants: 1, paint: painter(paintRopeWalk) },
+  sawmill_machine_upgraded: { variants: 1, paint: painter(paintSawmillUpgraded) },
+  rope_walk_upgraded: { variants: 1, paint: painter(paintRopeWalkUpgraded) },
 };

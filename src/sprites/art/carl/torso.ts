@@ -35,7 +35,7 @@ type Ctx = CanvasRenderingContext2D;
  * figure's right head-on and toward the chest in profile. Built along the
  * spine so a lean tips the whole jacket, collar and folds with it.
  */
-interface TorsoFrame {
+export interface TorsoFrame {
   readonly at: (x: number, y: number) => Pt;
   /** The spine's direction, shoulders to hips, as an angle. */
   readonly angle: number;
@@ -97,7 +97,7 @@ const NO_LAG: Pt = { x: 0, y: 0 };
  */
 const QUAD_CONTROL_REACH = 2;
 
-function torsoFrame(skeleton: Skeleton, pose: CarlPose): TorsoFrame {
+export function torsoFrame(skeleton: Skeleton, pose: CarlPose): TorsoFrame {
   const origin = skeleton.shoulderCentre;
   const toWaist = { x: skeleton.waist.x - origin.x, y: skeleton.waist.y - origin.y };
   const drawnWaistY = Math.hypot(toWaist.x, toWaist.y);
@@ -906,6 +906,21 @@ function drawCollar(ctx: Ctx, frame: TorsoFrame, view: ViewSpec, wearsShirt: boo
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────
+/**
+ * Traces the garment's own torso outline — the path the jacket is filled
+ * with — so a garment worn over it (a waistcoat) can clip to exactly the body
+ * it sits on rather than approximating the silhouette a second time.
+ */
+export function traceGarmentTorso(
+  ctx: Ctx,
+  skeleton: Skeleton,
+  pose: CarlPose,
+  view: ViewSpec,
+): void {
+  const frame = torsoFrame(skeleton, pose);
+  if (view.profile) traceProfile(ctx, frame, pose);
+  else traceFacing(ctx, frame, skeleton, pose, view);
+}
 
 export function drawJacket(ctx: Ctx, skeleton: Skeleton, pose: CarlPose, view: ViewSpec): void {
   const frame = torsoFrame(skeleton, pose);

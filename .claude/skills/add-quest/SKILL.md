@@ -22,6 +22,40 @@ Quests are built from three pieces: a `QuestDef` in `QuestManager`, a `QuestNPC`
 - Gate map-specific quests on the map feature existing (e.g. SpiderQuest checks `gameMap.spiderLabRoom !== null`).
 - Rewards: grant XP/items on completion via the players' XP methods and `inventory.addItem`; achievement-linked quests call `achievements.tryUnlock(...)` in the scene's quest-completion handling.
 
+## Questlines that talk through someone else's NPCs
+
+Two worked examples stand a quest on people another system owns, instead of on a `QuestNPC`:
+
+- **Briar Hollow's villagers.** A questline implements `QuestLineProvider`
+  (`src/systems/briarHollow/villagerCircumstances.ts`: `lineFor`, `markerFor`) and registers with
+  `VillagerSystem.addQuestLineProvider()`, optionally `addTopicProvider()` for extra rows, and
+  `removeQuestLineProvider()` on dispose. Providers are an ordered list: the first with an opening
+  (or a marker other than `'none'`) for a villager speaks, so registration order is priority. The
+  Plea (`VillageQuestSystem`) registers first and "The Borrowed Blueprints"
+  (`BlueprintsQuestSystem`) second, so a side quest never talks over the main questline. Never add
+  a special case for one questline to `VillagerSystem` or `openingLine`.
+- **Town residents indoors.** `BuildingInteriorScene` holds an ordered list of `ResidentQuestHook`s
+  (`src/systems/residentQuestHooks.ts`): the Anchor's (`AnchorInteriorSystem`) first, then
+  `WendellBlueprintsHook`. Each gets first refusal on talking to a resident (`tryOpenDialog`) and
+  a say in the glyph over their head (`markerFor`, folded by `firstResidentMarker` in
+  `applyResidentQuestMarkers`). A new indoor questline is one more entry in that list. A quest
+  whose state lives in the village is threaded into the interior by reference (the way
+  `BriarHollowState` is) and moves its phase through the same helper as the overworld, so the
+  same events fire on both sides of the door.
+
+## Quest items
+
+`isQuestItem` items share one reserved quest slot per crawler (see `add-item`). Granting one
+evicts whatever other quest item was there, reported as `questItemEvicted`. So:
+
+- read whether an item is held off both crawlers' inventories every time, never a flag in the
+  quest's state, and let guidance send the player back for it;
+- give it a place to be got back from once nobody holds it (a prop that shows it again, a pile
+  that respawns, an NPC who hands it back);
+- retire it with `clearQuestItem(id)` or `removeItems`, which touch only your own item.
+
+`docs/town.md` (The Borrowed Blueprints) describes one quest built end to end on these rules.
+
 ## Telling the player where to go
 
 Three separate surfaces answer "where is this quest", and a quest system feeds all

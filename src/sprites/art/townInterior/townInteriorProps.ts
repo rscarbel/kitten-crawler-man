@@ -107,6 +107,11 @@ import {
   paintTimberStack,
   paintSupperTable,
   paintToolChest,
+  paintPailStack,
+  paintDoorPegPost,
+  paintBootTray,
+  paintOffcutBox,
+  paintStairShelf,
 } from './rooms/plumblineFarm';
 import {
   paintDartboard,
@@ -2297,6 +2302,11 @@ const PROP_ART_HEIGHT_TILES: Record<string, number> = {
   milking_stool: 0.1,
   feed_stack: 0.2,
   made_cot: 0.45,
+  pail_stack: 0.1,
+  door_peg_post: 0.75,
+  boot_tray: 0.1,
+  offcut_box: 0.1,
+  stair_shelf: 0.6,
   timber_stack: 0.2,
   supper_table: 0.3,
   tool_chest: 0.2,
@@ -4059,7 +4069,7 @@ export const TOWN_INTERIOR_PROPS = {
   // an interaction and never break: the drawings on and in them belong to his
   // own story, not to the room, so nothing here may read, take or scatter them.
   drafting_table: def('drafting_table', { w: 3, h: 1 }, false, [], 'wall', 1, paintDraftingStation),
-  plan_chest: def('plan_chest', { w: 2, h: 1 }, false, [], 'free', 1, paintPlanChest),
+  plan_chest: def('plan_chest', { w: 2, h: 1 }, false, [], 'free', 2, paintPlanChest),
   roll_bin: def('roll_bin', ONE_BY_ONE, false, [], 'free', 1, paintRollBin),
   tool_wall: def('tool_wall', { w: 3, h: 1 }, false, [], 'wall', 1, paintToolWall, {
     interaction: { kind: 'examine', id: 'tool_wall' },
@@ -4090,7 +4100,7 @@ export const TOWN_INTERIOR_PROPS = {
   dairy_wall: def('dairy_wall', { w: 3, h: 1 }, false, [], 'wall', 1, paintDairyWall, {
     interaction: { kind: 'examine', id: 'dairy_wall' },
   }),
-  churn_stand: def('churn_stand', { w: 2, h: 1 }, false, [], 'free', 1, paintChurnStand, {
+  churn_stand: def('churn_stand', { w: 2, h: 1 }, false, [], 'free', 2, paintChurnStand, {
     interaction: { kind: 'examine', id: 'milk_churn' },
   }),
   milking_stool: def('milking_stool', ONE_BY_ONE, false, [], 'free', 1, paintMilkingStool, {
@@ -4101,6 +4111,11 @@ export const TOWN_INTERIOR_PROPS = {
     interaction: { kind: 'examine', id: 'feed_sacks' },
   }),
   made_cot: def('made_cot', { w: 2, h: 1 }, false, [], 'free', 1, paintMadeCot),
+  pail_stack: def('pail_stack', ONE_BY_ONE, false, [], 'free', 1, paintPailStack),
+  door_peg_post: def('door_peg_post', ONE_BY_ONE, false, [], 'free', 2, paintDoorPegPost),
+  boot_tray: def('boot_tray', ONE_BY_ONE, false, [], 'free', 2, paintBootTray),
+  offcut_box: def('offcut_box', ONE_BY_ONE, false, [], 'free', 1, paintOffcutBox),
+  stair_shelf: def('stair_shelf', { w: 2, h: 1 }, false, [], 'free', 1, paintStairShelf),
   timber_stack: def('timber_stack', { w: 3, h: 1 }, false, [], 'free', 1, paintTimberStack),
   tool_chest: def('tool_chest', { w: 2, h: 1 }, false, [], 'free', 1, paintToolChest, {
     interaction: { kind: 'search', id: 'chest' },

@@ -244,7 +244,11 @@ function paintProps(grid: TileGrid, site: BriarHollowSite): void {
   for (const placement of site.props) stampProp(grid, placement);
 }
 
-/** The pasture's post-and-rail fence, with its gate left open toward the barn. */
+/**
+ * The pasture's fence, with its gate left open toward the barn. It is
+ * painted rickety: Merrit's rebuild restyles each section to post-and-rail at
+ * runtime from the quest's saved flags, so the map itself never records it.
+ */
 function paintPastureFence(grid: TileGrid, site: BriarHollowSite): void {
   const { rect, fenceGates } = site.pasture;
   const isGate = (x: number, y: number) => fenceGates.some((gate) => gate.x === x && gate.y === y);
@@ -252,7 +256,7 @@ function paintPastureFence(grid: TileGrid, site: BriarHollowSite): void {
     const onPerimeter =
       x === rect.x || y === rect.y || x === rect.x + rect.w - 1 || y === rect.y + rect.h - 1;
     if (!onPerimeter || isGate(x, y)) return;
-    grid.setFence(x, y, 'post_and_rail');
+    grid.setFence(x, y, 'rickety');
   });
 }
 
