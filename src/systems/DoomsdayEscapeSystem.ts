@@ -4,7 +4,9 @@
  * The escape stairwell by the tower door is on the map from the moment the
  * countdown starts, so the player always knows where the way out is. It is
  * sealed until the soul crystal is contained; after that, reaching it before
- * the deadline ends the run. Letting the deadline pass — while escaping or, if
+ * the deadline ends the run. It stays for good once the party has escaped: a
+ * player who chose to keep exploring can walk back down it, and end the run
+ * again, whenever they like. Letting the deadline pass — while escaping or, if
  * the player left the tower without containing the crystal, while containing —
  * kills both players via a dedicated death cause.
  *
@@ -32,6 +34,7 @@ import { drawSpriteKey } from '../core/SpriteRenderer';
 import { viewportWidth } from '../core/Viewport';
 import type { TownPropRenderable } from './townPropRenderable';
 import type { TrackerEntry, TrackerSource, TrackerTarget } from './questTracker';
+import { towerApproachBeaconTarget } from './objectiveBeaconTargets';
 
 /** How close the player must be to the escape tile to take the stairs. */
 const REACH_RANGE_TILES = 1.2;
@@ -99,6 +102,14 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
   private countdownSeen = false;
   /** Latched while the party stands on the sealed stairs, so the refusal toasts once per visit. */
   private standingOnSealedStairs = false;
+  /**
+   * Whether the party has been off the stairs since this scene set them down.
+   *
+   * After the escape, going back down the stairs ends the run again, but only
+   * as a fresh step onto them: the party is standing on the stairs when they
+   * choose to keep exploring, and a save taken there reloads them onto it.
+   */
+  private steppedOffStairs = false;
 
   /** The stairwell as a Y-sorted fixture, for the scene to hand the render pipeline. */
   readonly stairwellProp: TownPropRenderable;
@@ -127,11 +138,13 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
 
   restoreCheckpoint(snapshot: DoomsdayEscapeCheckpoint): void {
     this.floorEscapedPending = snapshot.floorEscapedPending;
+    // The respawn may set the party down on the stairs they saved beside.
+    this.steppedOffStairs = false;
   }
 
-  /** The stairwell's tile while the countdown is running, for the minimap; null otherwise. */
+  /** The stairwell's tile whenever it stands on the map, for the minimap; null otherwise. */
   get escapeMarkerTile(): { x: number; y: number } | null {
-    if (!isDoomsdayCountdownLive(this.progress)) return null;
+    if (!isEscapeStairwellStanding(this.progress)) return null;
     return this.gameMap.doomsdayEscapeTile ?? null;
   }
 
@@ -154,7 +167,7 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
       ? null
       : this.progress.stage === 'containment'
         ? STAIRWELL_SEALED_TOAST
-        : this.progress.stage === 'escape'
+        : this.progress.stage === 'escape' || this.progress.stage === 'complete'
           ? this.escapeRefusal()
           : null;
 
@@ -162,8 +175,18 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
       this.progress.stage = 'complete';
       this.progress.deadlineAt = null;
       this.floorEscapedPending = true;
+      this.steppedOffStairs = false;
       return;
     }
+
+    const returnsDownStairs =
+      onStairs && this.progress.stage === 'complete' && this.steppedOffStairs && refusal === null;
+    if (returnsDownStairs) {
+      this.floorEscapedPending = true;
+      this.steppedOffStairs = false;
+      return;
+    }
+    if (!onStairs) this.steppedOffStairs = true;
 
     const sealed = refusal !== null;
     if (refusal !== null && !this.standingOnSealedStairs) this.showToast(refusal);
@@ -178,10 +201,7 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
         return [];
       case 'containment': {
         const towerDoor = this.gameMap.buildingEntries.find((entry) => entry.type === 'tower');
-        const target: TrackerTarget | undefined =
-          towerDoor === undefined
-            ? undefined
-            : { x: towerDoor.doorTile.x, y: towerDoor.doorTile.y };
+        const target = towerApproachBeaconTarget(towerDoor ?? null) ?? undefined;
         return [this.trackerEntry('active', DOOMSDAY_CONTAIN_OBJECTIVE, target)];
       }
       case 'escape': {
@@ -215,8 +235,8 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
       y: ((escapeTile?.y ?? 0) - STAIRWELL_SORT_LIFT_TILES) * TILE_SIZE,
       cullMarginTiles: STAIRWELL_SCALE + STAIRWELL_SORT_LIFT_TILES,
       render(ctx, camX, camY) {
-        if (escapeTile === undefined || !isDoomsdayCountdownLive(progress)) return;
-        renderStairwell(ctx, escapeTile, camX, camY, progress.stage === 'escape');
+        if (escapeTile === undefined || !isEscapeStairwellStanding(progress)) return;
+        renderStairwell(ctx, escapeTile, camX, camY, progress.stage !== 'containment');
       },
     };
   }
@@ -251,6 +271,14 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
 }
 
 /**
+ * Whether the escape stairwell is on the map: from the moment the countdown
+ * starts, and permanently once the party has escaped down it.
+ */
+function isEscapeStairwellStanding(progress: DoomsdayProgress): boolean {
+  return isDoomsdayCountdownLive(progress) || progress.stage === 'complete';
+}
+
+/**
  * The stairwell and its rim: a red pulse while it is sealed, a green glow once
  * the crystal is contained and it leads out.
  */
@@ -268,7 +296,7 @@ function renderStairwell(
     STAIRWELL_PULSE_CENTER +
     Math.sin(Date.now() / STAIRWELL_PULSE_SPEED) * STAIRWELL_PULSE_AMPLITUDE;
 
-  drawSpriteKey(ctx, 'stairwell', 'idle', 0, sx, sy, size);
+  drawSpriteKey(ctx, 'stairwell', 'street', 0, sx, sy, size);
   ctx.save();
   if (open) {
     ctx.strokeStyle = `rgba(74, 222, 128, ${pulse})`;

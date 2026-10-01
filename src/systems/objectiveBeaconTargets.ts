@@ -81,6 +81,13 @@ const FACADE_ROOF_CLEARANCE_FRACTION = 0.8;
 /** Below which a short facade's proportional clearance is too little to notice. */
 const FACADE_MIN_ROOF_CLEARANCE_TILES = 3.2;
 
+/**
+ * How far south of its door the tower's beam stands. The tower's steps spill
+ * into the row below the door, so the beam's pool is stood one row further out,
+ * wholly on the open street in front of them.
+ */
+const TOWER_APPROACH_ROWS_SOUTH_OF_DOOR = 2;
+
 /** The west column, width and roof height of a building drawn from a sprite. */
 interface FacadeExtent {
   readonly westColumn: number;
@@ -169,5 +176,26 @@ export function doorwayBeaconTarget(entry: BuildingEntry | null): TrackerTarget 
     widthTiles: facade.widthTiles,
     backsetTiles: DOORWAY_BACKSET_TILES,
     heightTiles: ridgeRise + roofClearance,
+  };
+}
+
+/**
+ * The street directly in front of the tower door, rather than the door itself.
+ *
+ * The tower is the one entrance whose building dwarfs anything a beam can be
+ * sized to: twenty-odd rows of spire over a two-tile door. A column stood in
+ * the doorway reads as part of the facade — a lit window, a banner — and is
+ * half hidden by the art it is rooted in. Stood on the first open row south of
+ * the door and drawn in front of the tower, it reads as a place to stand.
+ */
+export function towerApproachBeaconTarget(entry: BuildingEntry | null): TrackerTarget | null {
+  if (entry === null) return null;
+  const span = doorwaySpan(entry);
+  return {
+    x: span.x0,
+    y: entry.doorTile.y + TOWER_APPROACH_ROWS_SOUTH_OF_DOOR,
+    widthTiles: span.width,
+    backsetTiles: DOORWAY_BACKSET_TILES,
+    standsInFront: true,
   };
 }

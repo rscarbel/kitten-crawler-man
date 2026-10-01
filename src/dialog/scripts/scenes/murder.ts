@@ -1,6 +1,6 @@
 /**
  * "The Krasue Murders" — the Over City's town murder mystery. GumGum is a
- * street elf who saw a taking; Mordecai's warning arrives as a voice in the
+ * kindly orc who saw a taking; Mordecai's warning arrives as a voice in the
  * crawlers' ears; the clue text carries the deduction chain that points first
  * at the magistrate, then at his secretary, and finally at the thing that has
  * been signing his letters.

@@ -21,11 +21,16 @@
 import { createCanvas } from 'canvas';
 
 import { loadGameSpritesInNode } from './nodeCanvasGlobals';
+import { asGameContext } from './nodeGameContext';
 import { createTownPlan } from '../src/map/town/townPlan';
 import type { BuildingKind } from '../src/map/town/townPlan';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTile';
-import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
+import {
+  TOWN_INTERIOR_PROPS,
+  townInteriorPropArtRiseTiles,
+} from '../src/sprites/art/townInterior/townInteriorProps';
+import { drawSkyFowlCorpse } from '../src/sprites/featherfallCorpseSprite';
 import { TILE_SIZE } from '../src/core/constants';
 import { VOID_TYPE } from '../src/map/tileTypes';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer';
@@ -149,6 +154,10 @@ const MIN_TILE_COVERAGE = 0.99;
  * a south wall, so "in" is always north.
  */
 const DOORWAY_CLEAR_DEPTH_TILES = 2;
+/** Alpha below which a body pixel is anti-aliasing fringe rather than the body. */
+const BODY_INK_ALPHA_MIN = 24;
+/** Open floor kept round the magistrate's body, so nothing crowds the scene. */
+const BODY_CLEARANCE_TILES = 0.5;
 
 /** The magistrate's office, and the only storey the Quill confrontation spawns on. */
 const TOWER_CONFRONTATION_FLOOR = TOWER_FLOOR_COUNT - 1;
@@ -1279,6 +1288,77 @@ console.log('\nA cleared camp stays cleared');
       'a floor restart repopulates every camp, even one regenerated on a remembered site',
     );
   }
+}
+
+console.log("\nNo furniture stands over the magistrate's body");
+// The body is drawn by the confrontation, before the room's sorted furniture,
+// so a prop whose footprint or art reaches over it is drawn on top of him. The
+// body is measured from the ink it actually paints rather than from its tile,
+// because it brings its own desk and chair and spreads well past one tile.
+{
+  const map = buildInterior(towerName, plan.tower.kind, TOWER_CONFRONTATION_FLOOR);
+  const progress = createMurderQuestProgress();
+  progress.stage = 'complete';
+  const confrontation = new QuillConfrontationSystem(
+    map,
+    new EventBus(),
+    () => undefined,
+    progress,
+    null,
+    createDoomsdayProgress(),
+    1,
+    undefined,
+    new Conversation(null),
+  );
+  const body = confrontation.bodyTile;
+  const widthPx = map.structure[0].length * TILE_SIZE;
+  const heightPx = map.structure.length * TILE_SIZE;
+  const canvas = createCanvas(widthPx, heightPx);
+  const bodyCtx = canvas.getContext('2d');
+  drawSkyFowlCorpse(asGameContext(bodyCtx), body.x * TILE_SIZE, body.y * TILE_SIZE, TILE_SIZE);
+  const pixels = bodyCtx.getImageData(0, 0, widthPx, heightPx).data;
+  let inkLeft = widthPx;
+  let inkRight = 0;
+  let inkTop = heightPx;
+  let inkBottom = 0;
+  for (let y = 0; y < heightPx; y++) {
+    for (let x = 0; x < widthPx; x++) {
+      if (pixels[(y * widthPx + x) * RGBA_STRIDE + ALPHA_OFFSET] < BODY_INK_ALPHA_MIN) continue;
+      inkLeft = Math.min(inkLeft, x);
+      inkRight = Math.max(inkRight, x + 1);
+      inkTop = Math.min(inkTop, y);
+      inkBottom = Math.max(inkBottom, y + 1);
+    }
+  }
+  check(inkRight > inkLeft, "the magistrate's body paints something to measure");
+  const bodyBox = {
+    left: inkLeft / TILE_SIZE - BODY_CLEARANCE_TILES,
+    right: inkRight / TILE_SIZE + BODY_CLEARANCE_TILES,
+    top: inkTop / TILE_SIZE - BODY_CLEARANCE_TILES,
+    bottom: inkBottom / TILE_SIZE + BODY_CLEARANCE_TILES,
+  };
+  const overBody: string[] = [];
+  for (const placed of map.placedInteriorProps) {
+    const propDef = TOWN_INTERIOR_PROPS[placed.propId];
+    // A rug or a floor stain is ground: it is drawn under the body, never over it.
+    if (propDef.walkable) continue;
+    const propBox = {
+      left: placed.tile.x,
+      right: placed.tile.x + propDef.footprint.w,
+      top: placed.tile.y - townInteriorPropArtRiseTiles(placed.propId, placed.variant),
+      bottom: placed.tile.y + propDef.footprint.h,
+    };
+    const overlaps =
+      propBox.left < bodyBox.right &&
+      propBox.right > bodyBox.left &&
+      propBox.top < bodyBox.bottom &&
+      propBox.bottom > bodyBox.top;
+    if (overlaps) overBody.push(`${placed.propId}@${placed.tile.x},${placed.tile.y}`);
+  }
+  check(
+    overBody.length === 0,
+    `no prop's footprint or art comes within ${BODY_CLEARANCE_TILES} tiles of the body at ${body.x},${body.y} — ${overBody.join(' ')}`,
+  );
 }
 
 if (failures > 0) {

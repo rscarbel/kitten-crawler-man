@@ -4260,6 +4260,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // furniture, and a crawler standing at one must not be drawn beneath it.
     this.anchorInterior?.renderObjects(ctx, camX, camY, this.active());
     this.activeEncounter?.renderWorld?.(ctx, camX, camY, this.active());
+    // Independent of `combat` — the crystal must still be visible/containable
+    // if the player returns to this floor after the encounter was torn down.
+    const isOnCrystalFloor =
+      this.entry.type === 'tower' && this.currentFloor === TOWER_CONFRONTATION_FLOOR;
+    this.soulCrystal.renderGround(ctx, camX, camY, isOnCrystalFloor);
     this.renderSortedEntities(ctx, camX, camY, [
       // The same test the dungeon's render pass uses: a corpse that still draws
       // keeps its place in the sort until it expires.
@@ -4305,10 +4310,6 @@ export class BuildingInteriorScene extends GameplayScene {
     this.crawlerBarks.render(ctx, camX, camY, this.human, this.cat);
     this.breakReactions.render(ctx, camX, camY, this.occupants?.people ?? []);
 
-    // Independent of `combat` — the crystal must still be visible/containable
-    // if the player returns to this floor after the encounter was torn down.
-    const isOnCrystalFloor =
-      this.entry.type === 'tower' && this.currentFloor === TOWER_CONFRONTATION_FLOOR;
     this.soulCrystal.render(ctx, camX, camY, this.active(), isOnCrystalFloor);
 
     if (this.shop) {

@@ -1056,6 +1056,8 @@ function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDro
 
 /** How far off screen, in tiles, an objective beacon's beam can still reach into view. */
 const BEACON_VIEW_REACH_TILES = 6;
+/** Cull margin for a front-standing beam of default height, whose art rises past its anchor tile. */
+const FRONT_BEAM_CULL_MARGIN_TILES = 4;
 
 /** Picks a potion type for a chest using the relative rarity weights. */
 function rollChestPotion(): ItemId {
@@ -3991,17 +3993,9 @@ export class DungeonScene extends GameplayScene {
    * list a frame before this frame's rebuild, which no one can see.
    */
   private renderObjectiveBeacons(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.gameOver || this.menus.pauseMenu.isOpen) return;
     const now = performance.now();
-    const pinned = this.pinnedObjectiveTile;
-    // A pinned quest that is still only on offer is also in the available list;
-    // drawing it twice would stack two additive beams at double brightness.
-    let pinnedAlreadyLit = false;
-    for (const target of availableTargets(this._trackerEntries)) {
-      if (target.wearsOwnMarker === true) continue;
-      if (pinned !== null && pinned.x === target.x && pinned.y === target.y) {
-        pinnedAlreadyLit = true;
-      }
+    for (const target of this.objectiveBeamTargets()) {
+      if (target.standsInFront === true) continue;
       drawObjectiveBeacon(
         ctx,
         target.x * TILE_SIZE - camX,
@@ -4012,16 +4006,59 @@ export class DungeonScene extends GameplayScene {
         target,
       );
     }
-    if (pinned === null || pinned.wearsOwnMarker === true || pinnedAlreadyLit) return;
-    drawObjectiveBeacon(
-      ctx,
-      pinned.x * TILE_SIZE - camX,
-      pinned.y * TILE_SIZE - camY,
-      TILE_SIZE,
-      PINNED_ARROW_COLOR,
-      now,
-      pinned,
-    );
+  }
+
+  /**
+   * Every place that gets a beam this frame, each once.
+   *
+   * A pinned quest that is still only on offer is also in the available list;
+   * drawing it twice would stack two additive beams at double brightness.
+   */
+  private objectiveBeamTargets(): ReadonlyArray<TrackerTarget> {
+    if (this.gameOver || this.menus.pauseMenu.isOpen) return [];
+    const pinned = this.pinnedObjectiveTile;
+    const beams: TrackerTarget[] = [];
+    let pinnedAlreadyLit = false;
+    for (const target of availableTargets(this._trackerEntries)) {
+      if (target.wearsOwnMarker === true) continue;
+      if (pinned !== null && pinned.x === target.x && pinned.y === target.y) {
+        pinnedAlreadyLit = true;
+      }
+      beams.push(target);
+    }
+    if (pinned !== null && pinned.wearsOwnMarker !== true && !pinnedAlreadyLit) {
+      beams.push(pinned);
+    }
+    return beams;
+  }
+
+  /**
+   * The beams that stand in the street in front of a building, as Y-sorted
+   * fixtures: sorted on their own ground line, the building north of them draws
+   * first and the crawler walking south of them draws over them.
+   */
+  private frontObjectiveBeams(): TownPropRenderable[] {
+    const renderables: TownPropRenderable[] = [];
+    for (const target of this.objectiveBeamTargets()) {
+      if (target.standsInFront !== true) continue;
+      renderables.push({
+        x: target.x * TILE_SIZE,
+        y: target.y * TILE_SIZE,
+        cullMarginTiles: target.heightTiles ?? FRONT_BEAM_CULL_MARGIN_TILES,
+        render(ctx, camX, camY, tileSize) {
+          drawObjectiveBeacon(
+            ctx,
+            target.x * tileSize - camX,
+            target.y * tileSize - camY,
+            tileSize,
+            PINNED_ARROW_COLOR,
+            performance.now(),
+            target,
+          );
+        },
+      });
+    }
+    return renderables;
   }
 
   /**
@@ -5023,7 +5060,8 @@ export class DungeonScene extends GameplayScene {
           achievements: countPartyAchievements(this.humanAchievements, this.catAchievements),
         }),
       handlers: {
-        // The stage is already 'complete', which is what leaves the stairwell inert.
+        // Nothing to undo: the stairwell stays where it is, and stepping back
+        // onto it after walking away ends the run again.
         onKeepExploring: () => undefined,
         onMainMenu: () => this.returnToMainMenu(),
       },
@@ -7237,6 +7275,7 @@ export class DungeonScene extends GameplayScene {
     // the citizen they are already talking to is the loudest of these.
     setInteractionPromptsSuppressed(this.focusedOverlay !== null || this.gameOver);
     const { x: camX, y: camY } = this.camera();
+    const frontBeams = this.frontObjectiveBeams();
 
     const rc: RenderContext = {
       camX,
@@ -7249,9 +7288,13 @@ export class DungeonScene extends GameplayScene {
       mobGrid: this.world.roster.grid,
       townsfolk: this.townLife?.people,
       townProps:
-        this.briarHollowKit !== null || this.gathering !== null || this.circusAmbience !== null
+        this.briarHollowKit !== null ||
+        this.gathering !== null ||
+        this.circusAmbience !== null ||
+        frontBeams.length > 0
           ? [
               ...(this.townPropRenderables ?? []),
+              ...frontBeams,
               ...(this.briarHollowKit?.renderEntities() ?? []),
               ...(this.gathering?.renderEntities() ?? []),
               ...(this.circusAmbience?.renderEntities() ?? []),

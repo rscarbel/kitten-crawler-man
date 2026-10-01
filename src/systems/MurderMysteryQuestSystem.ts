@@ -40,7 +40,7 @@ import { drawWellClueProp, drawHomeClueProp, drawRoostClueProp } from '../sprite
 import { drawRadialGlow } from '../sprites/radialGlow';
 import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import { doorwaySpan, type BuildingEntry } from './BuildingSystem';
-import { doorwayBeaconTarget } from './objectiveBeaconTargets';
+import { doorwayBeaconTarget, towerApproachBeaconTarget } from './objectiveBeaconTargets';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
@@ -759,11 +759,11 @@ export class MurderMysteryQuestSystem implements GameSystem {
         }
         break;
       case 'confrontation':
-      case 'lich_confrontation':
-        if (this.towerDoorTile) {
-          markers.push({ x: this.towerDoorTile.x, y: this.towerDoorTile.y, type: 'exclamation' });
-        }
+      case 'lich_confrontation': {
+        const approach = towerApproachBeaconTarget(this.towerEntry);
+        if (approach !== null) markers.push({ x: approach.x, y: approach.y, type: 'exclamation' });
         break;
+      }
       case 'awaiting_rewards':
       case 'complete':
         break;
@@ -791,7 +791,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
             ...base,
             status: 'available',
             objective: 'Hear GumGum out',
-            hint: 'The jittery street elf outside the Desperado Club.',
+            hint: 'The worried orc in the apron outside the Desperado Club.',
             target: this.gumgumTile === null ? undefined : characterTarget(this.gumgumTile),
           },
         ];
@@ -852,7 +852,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
             status: 'active',
             objective: 'Take it to the tower',
             hint: 'Miss Quill’s “capacitor” waits at the top of the magistrate’s tower. So does whatever signs Featherfall’s letters.',
-            target: doorwayBeaconTarget(this.towerEntry) ?? undefined,
+            target: towerApproachBeaconTarget(this.towerEntry) ?? undefined,
           },
         ];
       case 'lich_confrontation':
@@ -862,7 +862,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
             status: 'active',
             objective: 'Destroy the Lich',
             hint: 'Whatever has been signing Featherfall’s letters is still in his office.',
-            target: doorwayBeaconTarget(this.towerEntry) ?? undefined,
+            target: towerApproachBeaconTarget(this.towerEntry) ?? undefined,
           },
         ];
       case 'awaiting_rewards':

@@ -54,6 +54,7 @@ const { destructiblePropSheetPlans } =
 const { floorTwoPropVariantSheetPlans } =
   await import('../src/sprites/sheets/propVariantSheets.js');
 const { remainsSheetPlans } = await import('../src/sprites/sheets/remainsSheets.js');
+const { stairwellSheetPlans } = await import('../src/sprites/sheets/stairwellSheets.js');
 const { clubFurnitureSheetPlans } = await import('../src/sprites/sheets/clubFurnitureSheets.js');
 const { allBossRoomSheetPlans } = await import('../src/sprites/sheets/bossRoomSheets.js');
 const { getLevelDef } = await import('../src/levels/index.js');
@@ -179,6 +180,7 @@ const PROP_FAMILIES = [
   ...destructiblePropSheetPlans(0),
   ...floorTwoPropVariantSheetPlans(),
   ...remainsSheetPlans(),
+  ...stairwellSheetPlans(),
   ...clubFurnitureSheetPlans(0),
   ...allBossRoomSheetPlans(0),
 ];

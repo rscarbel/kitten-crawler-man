@@ -272,6 +272,18 @@ import {
   paintBriefingTable,
   paintSparringRing,
 } from './rooms/barracks';
+import {
+  paintRecordsCabinet,
+  paintPigeonholeWall,
+  paintScrivenerDesk,
+  paintMagistrateDesk,
+  paintArchiveBoxes,
+  paintWritBoard,
+  paintCoilBench,
+  paintConduitCoil,
+  paintPetitionCounter,
+  paintTowerHearth,
+} from './rooms/townCenterTower';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -406,7 +418,15 @@ export type TownInteriorExamineId =
   | 'flagon_back_bar'
   | 'flagon_trophy'
   | 'chalk_tally'
-  | 'dice_table';
+  | 'dice_table'
+  | 'records_cabinet'
+  | 'pigeonhole_wall'
+  | 'scrivener_desk'
+  | 'magistrate_desk'
+  | 'writ_board'
+  | 'coil_bench'
+  | 'conduit_coil'
+  | 'petition_counter';
 export type TownInteriorSearchId = 'chest' | 'coat_hook' | 'drawer_unit' | 'open_crate';
 export type TownInteriorUseId =
   | 'shop_bell'
@@ -2447,6 +2467,16 @@ const PROP_ART_HEIGHT_TILES: Record<string, number> = {
   stock_stack: 0.7,
   sack_pile: 0.5,
   crock_stack: 0.4,
+  records_cabinet: 1.45,
+  pigeonhole_wall: 1.75,
+  scrivener_desk: 1.0,
+  magistrate_desk: 1.3,
+  archive_boxes: 1.0,
+  writ_board: 1.6,
+  coil_bench: 1.25,
+  conduit_coil: 2.1,
+  petition_counter: 1.1,
+  tower_hearth: 1.0,
 };
 
 function frameHeightFor(id: string): number {
@@ -4512,6 +4542,75 @@ export const TOWN_INTERIOR_PROPS = {
     },
   ),
   sparring_ring: def('sparring_ring', { w: 9, h: 4 }, true, [], 'free', 1, paintSparringRing),
+  records_cabinet: def('records_cabinet', ONE_BY_ONE, false, [], 'wall', 2, paintRecordsCabinet, {
+    destructible: DESTRUCTIBLE_SHELF,
+    interaction: { kind: 'examine', id: 'records_cabinet' },
+  }),
+  pigeonhole_wall: def(
+    'pigeonhole_wall',
+    { w: 3, h: 1 },
+    false,
+    [],
+    'wall',
+    1,
+    paintPigeonholeWall,
+    { interaction: { kind: 'examine', id: 'pigeonhole_wall' } },
+  ),
+  scrivener_desk: def(
+    'scrivener_desk',
+    { w: 2, h: 1 },
+    false,
+    ['table'],
+    'free',
+    2,
+    paintScrivenerDesk,
+    {
+      destructible: DESTRUCTIBLE_TABLE,
+      interaction: { kind: 'examine', id: 'scrivener_desk' },
+    },
+  ),
+  magistrate_desk: def(
+    'magistrate_desk',
+    { w: 4, h: 1 },
+    false,
+    ['table'],
+    'free',
+    1,
+    paintMagistrateDesk,
+    { interaction: { kind: 'examine', id: 'magistrate_desk' } },
+  ),
+  archive_boxes: def('archive_boxes', ONE_BY_ONE, false, ['crate'], 'free', 2, paintArchiveBoxes, {
+    destructible: DESTRUCTIBLE_CRATE,
+  }),
+  writ_board: def('writ_board', { w: 2, h: 1 }, false, ['board'], 'wall', 1, paintWritBoard, {
+    interaction: { kind: 'examine', id: 'writ_board' },
+  }),
+  coil_bench: def('coil_bench', { w: 3, h: 1 }, false, [], 'free', 1, paintCoilBench, {
+    interaction: { kind: 'examine', id: 'coil_bench' },
+  }),
+  conduit_coil: def('conduit_coil', ONE_BY_ONE, false, [], 'free', 1, paintConduitCoil, {
+    interaction: { kind: 'examine', id: 'conduit_coil' },
+  }),
+  tower_hearth: def(
+    'tower_hearth',
+    { w: 4, h: 2 },
+    false,
+    ['hearth'],
+    'wall',
+    1,
+    paintTowerHearth,
+    { interaction: { kind: 'use', id: 'hearth' } },
+  ),
+  petition_counter: def(
+    'petition_counter',
+    { w: 5, h: 1 },
+    false,
+    ['counter'],
+    'free',
+    1,
+    paintPetitionCounter,
+    { interaction: { kind: 'examine', id: 'petition_counter' } },
+  ),
 } as const satisfies Record<string, TownInteriorPropDef>;
 
 export type TownInteriorPropId = keyof typeof TOWN_INTERIOR_PROPS;

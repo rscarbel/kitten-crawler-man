@@ -58,6 +58,9 @@ const WALL_MATERIAL_BY_BUILDING_NAME: ReadonlyMap<string, TownInteriorWallMateri
   // on every face that looks onto the ring or a corridor, and the black back
   // of the tent everywhere else.
   ['Big Top', 'canvas'],
+  // The tower is dressed stone outside to the top of its spire, and the
+  // magistrate's seat is not a building anyone plastered over.
+  ['Town Center Tower', 'stone'],
 ]);
 
 let activeMaterial: TownInteriorWallMaterialId = DEFAULT_TOWN_INTERIOR_WALL_MATERIAL;

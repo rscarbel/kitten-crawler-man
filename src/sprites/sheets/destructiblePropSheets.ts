@@ -13,8 +13,8 @@
  * two burning props animate their first two rows instead, because a torch that
  * stopped flickering once it was struck would read as a bug rather than damage.
  *
- * `fountain`, `stairwell` and `treasure_chests` share the props' manifest but
- * not this plan: they are still baked PNGs and keep their `path`.
+ * `fountain` and `treasure_chests` share the props' manifest but not this
+ * plan: they are still baked PNGs and keep their `path`.
  */
 
 import {

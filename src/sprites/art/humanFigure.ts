@@ -246,10 +246,9 @@ import {
   GUARD_FRAMES,
   GUARD_TICKS_PER_FRAME,
   IDLE_FRAMES,
-  IDLE_BLINK_FRAME,
   IDLE_FRAME_TICKS,
-  heldFrameStart,
-  heldLength,
+  idleBlinkLid,
+  idleBreathPhase,
   SMUSH_FRAMES,
   SMUSH_IMPACT_FRAME,
   RUN_FRAMES,
@@ -662,20 +661,6 @@ function cyclePhase(frame: number, frameCount: number): number {
   return frame / frameCount;
 }
 
-/**
- * How far round the breath an idle frame is, from the tick it is first drawn
- * on: its frames are not held alike, and a breath sampled by frame index would
- * lurch across the short blink frame.
- */
-function idlePhase(frame: number): number {
-  return heldFrameStart(IDLE_FRAME_TICKS, frame) / heldLength(IDLE_FRAME_TICKS);
-}
-
-/** The idle's eye: shut on its blink frame, open on every other. */
-function idleLid(frame: number): number {
-  return frame % IDLE_FRAMES === IDLE_BLINK_FRAME ? 1 : 0;
-}
-
 function shotProgress(frame: number, frameCount: number): number {
   return frame / (frameCount - 1);
 }
@@ -918,7 +903,7 @@ export const HUMAN_ROW_TABLE = {
     locomotion: 'planted',
     role: 'idle',
     frameTicks: IDLE_FRAME_TICKS,
-    pose: (f) => idleFront(idlePhase(f), idleLid(f)),
+    pose: (f) => idleFront(idleBreathPhase(f), idleBlinkLid(f)),
   },
   idle_side: {
     frameCount: IDLE_FRAMES,
@@ -929,7 +914,7 @@ export const HUMAN_ROW_TABLE = {
     locomotion: 'planted',
     role: 'idle',
     frameTicks: IDLE_FRAME_TICKS,
-    pose: (f) => idleSide(idlePhase(f), idleLid(f)),
+    pose: (f) => idleSide(idleBreathPhase(f), idleBlinkLid(f)),
   },
   idle_away: {
     frameCount: IDLE_FRAMES,
@@ -940,7 +925,7 @@ export const HUMAN_ROW_TABLE = {
     locomotion: 'planted',
     role: 'idle',
     frameTicks: IDLE_FRAME_TICKS,
-    pose: (f) => idleBack(idlePhase(f), idleLid(f)),
+    pose: (f) => idleBack(idleBreathPhase(f), idleBlinkLid(f)),
   },
   walk: {
     frameCount: WALK_FRAMES,

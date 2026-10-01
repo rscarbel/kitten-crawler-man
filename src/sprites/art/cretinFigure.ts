@@ -216,33 +216,31 @@ export function walkPose(phase: number): CretinPose {
 
 // ── Idle ─────────────────────────────────────────────────────────────────────
 
-const IDLE_SWAY = 0.018;
 /** How far the shoulders lift on each breath, tiles: a pixel at the game's tile. */
 const IDLE_RISE = 0.032;
-const IDLE_HEAD_TURN = 0.18;
+const IDLE_ARM_FLARE = deg(2.5);
 
+/**
+ * The chest fills a quarter of a breath before the shoulders lift with it,
+ * so no two frames either side of the breath's turn paint the same picture.
+ */
+const IDLE_FILL_LEAD = Math.PI / 2;
+
+/**
+ * Standing still: the breath swells his chest, flares his arms and lifts his
+ * shoulders, and nothing moves sideways. A sway, a tilt or a head turning to
+ * and fro once a breath reads as a figure dancing on the spot.
+ */
 function idlePose(phase: number, frame: number): CretinPose {
   const angle = phase * TWO_PI;
-  const breath = 0.5 - 0.5 * Math.cos(angle);
+  const lift = 0.5 - 0.5 * Math.cos(angle);
+  const fill = 0.5 - 0.5 * Math.cos(angle + IDLE_FILL_LEAD);
   return {
     ...restPose(),
-    breathe: breath,
-    rise: IDLE_RISE * breath,
-    sway: IDLE_SWAY * Math.sin(angle),
-    tilt: deg(0.8) * Math.sin(angle),
-    headTurn: IDLE_HEAD_TURN * Math.sin(angle),
-    headPitch: deg(-2) * breath,
-    armR: {
-      ...REST_ARM,
-      flare: REST_ARM.flare + deg(2.5) * breath,
-      swing: deg(1.5) * Math.sin(angle),
-    },
-    armL: {
-      ...REST_ARM,
-      flare: REST_ARM.flare + deg(2.5) * breath,
-      swing: -deg(1.5) * Math.sin(angle),
-    },
-    boaLag: 0.01 * Math.sin(angle),
+    breathe: fill,
+    rise: IDLE_RISE * lift,
+    armR: { ...REST_ARM, flare: REST_ARM.flare + IDLE_ARM_FLARE * fill },
+    armL: { ...REST_ARM, flare: REST_ARM.flare + IDLE_ARM_FLARE * fill },
     blink: frame === CRETIN_IDLE_BLINK_FRAME ? 1 : 0,
     time: phase,
   };

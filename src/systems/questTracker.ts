@@ -54,6 +54,12 @@ export interface TrackerTarget extends ObjectiveBeaconFootprint {
    * that is plain to see from a distance, like an army on the march.
    */
   readonly hidesArrowOnScreen?: boolean;
+  /**
+   * The beam is drawn in the Y-sorted pass at its own ground line instead of
+   * before it, so a building north of it can never cover it. For a beam stood
+   * in the street in front of a building rather than on the building itself.
+   */
+  readonly standsInFront?: boolean;
 }
 
 /** A tile target for a character, which the scene will not stand the overlay beacon on. */

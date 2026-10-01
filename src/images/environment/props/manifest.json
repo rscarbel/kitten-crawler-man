@@ -221,15 +221,22 @@
     }
   },
   "stairwell": {
-    "path": "environment/props/stairwell.png",
-    "frameWidth": 75,
-    "frameHeight": 75,
+    "frameWidth": 128,
+    "frameHeight": 128,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 75,
+    "tileScale": 128,
     "states": {
-      "idle": {
+      "cellars": {
         "row": 0,
+        "frameCount": 1
+      },
+      "service_level": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "street": {
+        "row": 2,
         "frameCount": 1
       }
     }

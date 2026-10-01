@@ -31,17 +31,10 @@ import {
   setCarlSkinHairRamp,
 } from './carl/palette';
 import { resetCarlTorsoCut, setCarlTorsoCut } from './carl/torso';
-import { idleBack, idleFront, idleSide } from './human/idles';
+import { idleBack, idleExhale, idleFront, idleSide } from './human/idles';
 import { walkFacing, walkSide } from './human/locomotion';
 import { talkBack, talkFront, talkSide, TALK_FRAMES } from './human/actionsMisc';
-import {
-  heldFrameStart,
-  heldLength,
-  IDLE_BLINK_FRAME,
-  IDLE_FRAME_TICKS,
-  IDLE_FRAMES,
-  WALK_FRAMES,
-} from './human/timing';
+import { IDLE_FRAMES, idleBlinkLid, idleBreathPhase, WALK_FRAMES } from './human/timing';
 import { HUMAN_CELL_PX_PER_UNIT } from './human/figureScale';
 import {
   INCUBUS_HAIR,
@@ -125,7 +118,7 @@ const HALF_TILE = INCUBUS_TILE_SCALE / 2;
  * that coarsely strobes instead of moving.
  */
 const IDLE_TAIL_SWAY = 0.6;
-const IDLE_WING_LIFT = 0.8;
+const IDLE_WING_LIFT = 0.5;
 /**
  * Walking, the tail swings once per stride against the hips, and the wings
  * bounce twice — once per footfall — as the shoulders ride up over each leg.
@@ -146,7 +139,7 @@ function breathOf(phase: number): number {
 function idleMotion(phase: number): IncubusMotion {
   return {
     tailSway: Math.sin(phase * TWO_PI) * IDLE_TAIL_SWAY,
-    wingLift: (1 - breathOf(phase)) * IDLE_WING_LIFT,
+    wingLift: (1 - idleExhale(phase)) * IDLE_WING_LIFT,
   };
 }
 
@@ -165,15 +158,6 @@ function talkMotion(phase: number): IncubusMotion {
 }
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
-
-/** How far round the breath an idle frame is, from the tick it is first drawn: the blink frame is held short. */
-function idlePhase(frame: number): number {
-  return heldFrameStart(IDLE_FRAME_TICKS, frame) / heldLength(IDLE_FRAME_TICKS);
-}
-
-function idleLid(frame: number): number {
-  return frame === IDLE_BLINK_FRAME ? 1 : 0;
-}
 
 interface IncubusRow {
   readonly frames: number;
@@ -201,8 +185,8 @@ function rowFor(role: IncubusRole, view: IncubusView): IncubusRow {
   if (role === 'idle') {
     return {
       frames: IDLE_FRAMES,
-      pose: (frame) => IDLE_POSE[view](idlePhase(frame), idleLid(frame)),
-      motion: (frame) => idleMotion(idlePhase(frame)),
+      pose: (frame) => IDLE_POSE[view](idleBreathPhase(frame), idleBlinkLid(frame)),
+      motion: (frame) => idleMotion(idleBreathPhase(frame)),
     };
   }
   if (role === 'walk') {

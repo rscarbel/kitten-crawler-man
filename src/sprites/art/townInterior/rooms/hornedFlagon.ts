@@ -305,6 +305,22 @@ export function paintFlagonHearth(
   _variant: number,
   rng: Rng,
 ): void {
+  paintGrandHearth(ctx, frame, rng, (crestX, crestY, crestTs) =>
+    paintHornedTrophy(ctx, crestX, crestY, crestTs),
+  );
+}
+
+/**
+ * The great fireplace with whatever its house hangs on the chimney breast:
+ * `paintCrest` is handed the breast's centre and the scale a crest is drawn
+ * at there.
+ */
+export function paintGrandHearth(
+  ctx: Ctx,
+  frame: TownPropFrame,
+  rng: Rng,
+  paintCrest: (centreX: number, centreY: number, tileScale: number) => void,
+): void {
   withFootprintClip(ctx, frame, () => {
     const box = footprintBox(frame);
     const ts = frame.tileScale;
@@ -336,7 +352,7 @@ export function paintFlagonHearth(
     );
     rectPath(ctx, breastLeft, breastTop, breastRight - breastLeft, lintelY - breastTop);
     inkOutline(ctx, ts);
-    paintHornedTrophy(ctx, box.centreX, breastTop + ts * 0.42, ts * HORNED_TROPHY_SCALE);
+    paintCrest(box.centreX, breastTop + ts * 0.42, ts * HORNED_TROPHY_SCALE);
 
     // Jambs and the opening.
     const jambW = ts * 0.42;

@@ -6,6 +6,7 @@
  */
 
 import { walkFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { evenIdleFrameAtSeconds } from './art/human/timing';
 import {
   drawFigureCached,
   drawFigureCachedApprox,
@@ -30,8 +31,14 @@ export type TownCastAction = 'idle' | 'walk' | 'talk' | 'work' | 'dance';
 const LOOP_FPS = 8;
 const MS_PER_SECOND = 1000;
 
-function loopFrameIndex(frames: number, loopOffsetSeconds: number, nowSeconds: number): number {
-  return timeFrameIndex(nowSeconds + loopOffsetSeconds, LOOP_FPS, frames);
+/**
+ * The frame a clock-driven row of `role` shows `seconds` into its loop. The
+ * idle plays once per standing breath rather than at the gesture rate, at
+ * which its four frames would come round twice a second and read as bobbing.
+ */
+export function townCastLoopFrame(role: TownCastRowRole, frames: number, seconds: number): number {
+  if (role === 'idle') return evenIdleFrameAtSeconds(seconds, frames);
+  return timeFrameIndex(seconds, LOOP_FPS, frames);
 }
 
 /** +1 faces right, −1 left, 0 along the vertical axis; +1 faces the camera, −1 away. */
@@ -75,13 +82,14 @@ export function townCastStateFor(
   danceStyle: DanceStyle = DEFAULT_DANCE_STYLE,
 ): string {
   if (action === 'dance' && look.hasDance === true) return danceStateName(danceStyle);
-  const role: TownCastRowRole =
-    action === 'work' && !look.hasWork
-      ? 'idle'
-      : action === 'dance' && look.hasDance !== true
-        ? 'idle'
-        : action;
-  return townCastStateName(role, viewFor(action, look, facingX, facingY));
+  return townCastStateName(rowRoleFor(action, look), viewFor(action, look, facingX, facingY));
+}
+
+/** The row an action plays: a look with no art for it stands in its idle. */
+function rowRoleFor(action: TownCastAction, look: TownCastLook): TownCastRowRole {
+  if (action === 'work' && !look.hasWork) return 'idle';
+  if (action === 'dance' && look.hasDance !== true) return 'idle';
+  return action;
 }
 
 /**
@@ -117,7 +125,7 @@ export function drawTownCastSprite(
   if (state.action === 'walk') frame = walkFrameIndex(state.walkPhase, frames);
   else if (key === danceStateName(state.danceStyle ?? DEFAULT_DANCE_STYLE)) {
     frame = timeFrameIndex(nowSeconds + loopOffset, DANCE_FPS, frames);
-  } else frame = loopFrameIndex(frames, loopOffset, nowSeconds);
+  } else frame = townCastLoopFrame(rowRoleFor(state.action, look), frames, nowSeconds + loopOffset);
 
   if (approx) drawFigureCachedApprox(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
   else drawFigureCached(ctx, figure, key, frame, sx, sy, tileSize, { flipX });

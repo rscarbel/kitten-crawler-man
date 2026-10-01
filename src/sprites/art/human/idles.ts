@@ -68,42 +68,40 @@ function throughHold(t: number, beats: Beats): number {
 // ── Base idle ────────────────────────────────────────────────────────────────
 
 /**
- * Standing is meant to read as *alive*, not as swaying. Every idle term sits
- * near the threshold of visibility at a 32px tile.
+ * Standing is meant to read as *alive*, not as moving. A figure at rest keeps
+ * its hips, head and hands where they are; the breath is the only motion, and
+ * it is vertical. A weight shift, a head turning to and fro or hands drifting
+ * once a breath all oscillate sideways, and at the tile a loop that does that
+ * reads as dancing on the spot.
  *
  * The breath never lifts the hips above standing height. His leg is within a
  * hair of full reach at rest, and a pelvis raised on the inhale asks the IK for
  * more leg than he has — it clamps and the knees lock. So frame 0, the seam
  * every other standing row starts from, is the top of the breath, and the
- * exhale is carried by the knees softening and the whole upper body settling
- * about a pixel at the tile.
+ * exhale is carried by the knees softening and the upper body settling.
  */
 const STANDING_KNEE_SOFTEN = 0.01;
 /**
  * Head-on a knee has no direction to break into on screen, so the settle can
- * be the full pixel; edge-on the same drop pushes the knees forward twice as
- * far as it lowers the chest, and reads as a bounce, so the profile settles
- * half as much.
+ * be larger; edge-on the same drop pushes the knees forward twice as far as it
+ * lowers the chest, and reads as a bounce, so the profile settles less.
  */
-const BREATH_SETTLE_FACING = 0.045;
-const BREATH_SETTLE_PROFILE = 0.016;
-const BREATH_SHOULDER_LEAN = deg(0.5);
+const BREATH_SETTLE_FACING = 0.02;
+const BREATH_SETTLE_PROFILE = 0.008;
 /**
- * How far the rib cage and shoulders sink onto the waist on the exhale: a
- * pixel and a half at the 32 px tile on top of the pixel the whole body settles head-on,
- * so the shoulders travel over two while the feet stay put. Edge-on the body
- * settles less (see above), so the chest carries more of the breath there. It
- * is zero at the top of the breath because frame 0 is the seam every other
- * standing row starts from.
+ * How far the rib cage and shoulders sink onto the waist on the exhale. With
+ * the settle above the crown travels about a pixel at the 32 px tile while the
+ * feet stay put. Edge-on the body settles less, so the chest carries more of
+ * the breath there.
  */
-const BREATH_CHEST_SINK_FACING = 0.05;
-const BREATH_CHEST_SINK_PROFILE = 0.065;
+const BREATH_CHEST_SINK_FACING = 0.02;
+const BREATH_CHEST_SINK_PROFILE = 0.03;
 /**
- * The weight rolls from one foot to the other once per breath. Hips over the
- * loaded foot, and the shoulders counter it by leaning the other way.
+ * The share of a breath spent breathing out. A resting exhale is slower than
+ * the inhale, and an uneven breath also keeps the frames either side of the
+ * bottom of it from painting the same picture twice.
  */
-const WEIGHT_SHIFT = 0.03;
-const WEIGHT_SHIFT_COUNTER_LEAN = deg(1.5);
+const EXHALE_SHARE = 0.6;
 /**
  * The right fist tightens once, late in the exhale — the gesture his gauntlet
  * answers to, kept small enough to read as a habit rather than as a threat.
@@ -113,10 +111,13 @@ const FIST_FLEX_END = 0.95;
 const FIST_FLEX = 0.6;
 const RELAXED_FIST = 0.2;
 
-const IDLE_HAND_DRIFT = 0.07;
-const IDLE_HEAD_TURN = 0.1;
+/**
+ * Standing, his shoulders sit a hair off plumb. It is held, never animated:
+ * the fidgets and every hand-off out of the idle are cut against frame 0 with
+ * it in place, and the ceiling fidget's continuity sits close to its limit.
+ */
+const STANDING_SHOULDER_LEAN = deg(-0.25);
 const IDLE_HAIR_DRIFT = 0.04;
-const IDLE_HEAD_COUNTER_TILT = deg(3);
 const IDLE_BROW = 0.55;
 /** How far he keeps his face toward the camera while standing in profile. */
 const SIDE_HEAD_TURN = 0.2;
@@ -139,24 +140,21 @@ const SIDE_FAR_HAND_BEHIND = SIDE_HAND_BEHIND;
 /** Edge-on the elbow breaks backward; forward it swings the forearm across his crotch. */
 const SIDE_ELBOW_FLARE = -0.35;
 
-/** The breath as a 0..1 exhale, 0 at the top of it on frame 0. */
-function exhaleAt(phase: number): number {
-  return (1 - Math.cos(phase * TWO_PI)) / 2;
+const HALF = 0.5;
+
+/** The standing breath as a 0..1 exhale, 0 at the top of it on frame 0 and 1 at the bottom. */
+export function idleExhale(phase: number): number {
+  const wrapped = phase - Math.floor(phase);
+  if (wrapped < EXHALE_SHARE) return easeInOut(wrapped / EXHALE_SHARE);
+  return 1 - easeInOut((wrapped - EXHALE_SHARE) / (1 - EXHALE_SHARE));
 }
 
 function idleBase(phase: number, lid: number, settle: number, chestSink: number): CarlPose {
-  const exhale = exhaleAt(phase);
+  const exhale = idleExhale(phase);
   const pose = restingPose();
   pose.bob = STANDING_KNEE_SOFTEN + settle * exhale;
   pose.chestRise = -chestSink * exhale;
-  // Centred on frame 0, the seam every fidget starts from, so a fidget leaves
-  // from square stance rather than from one hip.
-  const weight = Math.sin(phase * TWO_PI);
-  pose.sway = weight * WEIGHT_SHIFT;
-  pose.lean = BREATH_SHOULDER_LEAN * (exhale - HALF) - weight * WEIGHT_SHIFT_COUNTER_LEAN;
-  // The head rights itself against the hips: it tips toward the loaded side
-  // less than the shoulders do, so it rocks over them rather than riding them.
-  pose.headTilt = weight * IDLE_HEAD_COUNTER_TILT;
+  pose.lean = STANDING_SHOULDER_LEAN;
   pose.blink = lid;
   pose.brow = IDLE_BROW;
   pose.hairFlow = (exhale - HALF) * IDLE_HAIR_DRIFT;
@@ -164,17 +162,13 @@ function idleBase(phase: number, lid: number, settle: number, chestSink: number)
   return pose;
 }
 
-const HALF = 0.5;
-
 /** `lid` is the eye, 0 open to 1 shut; the row blinks on a frame of its own. */
 export function idleFront(phase: number, lid = 0): CarlPose {
   const pose = idleBase(phase, lid, BREATH_SETTLE_FACING, BREATH_CHEST_SINK_FACING);
-  const drift = Math.sin(phase * TWO_PI);
-  pose.headTurn = drift * IDLE_HEAD_TURN;
   // The same joint angles the head-on walk swings around, so stepping off from
   // standing cannot change the shape of his arms — only how much they move.
-  pose.rightArmAngles = facingArmAngles(RIGHT_ARM, drift * IDLE_HAND_DRIFT, 0, 0);
-  pose.leftArmAngles = facingArmAngles(LEFT_ARM, drift * IDLE_HAND_DRIFT, 0, 0);
+  pose.rightArmAngles = facingArmAngles(RIGHT_ARM, 0, 0, 0);
+  pose.leftArmAngles = facingArmAngles(LEFT_ARM, 0, 0, 0);
   pose.leftFoot = pt(-IDLE_FOOT_SPREAD, 0);
   pose.rightFoot = pt(IDLE_FOOT_SPREAD, 0);
   // Straight columns, matching the head-on walk, so standing up out of a step
@@ -186,7 +180,6 @@ export function idleFront(phase: number, lid = 0): CarlPose {
 
 export function idleSide(phase: number, lid = 0): CarlPose {
   const pose = idleBase(phase, lid, BREATH_SETTLE_PROFILE, BREATH_CHEST_SINK_PROFILE);
-  const drift = Math.sin(phase * TWO_PI);
   // Edge-on the arms hang against the hip, and the fingertips have to stop at
   // or above the boxer hem: a bare hand below it, on the centreline, reads
   // obscenely at tile size. The hang is the near-full reach the front view
@@ -197,14 +190,13 @@ export function idleSide(phase: number, lid = 0): CarlPose {
   pose.rightHand = pt(-SIDE_HAND_BEHIND, handY);
   pose.leftFoot = pt(-IDLE_SIDE_FOOT_LEAD, 0);
   pose.rightFoot = pt(IDLE_SIDE_FOOT_LEAD, 0);
-  pose.headTurn = SIDE_HEAD_TURN + drift * IDLE_HEAD_TURN;
+  pose.headTurn = SIDE_HEAD_TURN;
   pose.elbowFlare = SIDE_ELBOW_FLARE;
   return pose;
 }
 
 export function idleBack(phase: number, lid = 0): CarlPose {
   const pose = idleFront(phase, lid);
-  pose.headTurn = -pose.headTurn;
   // Seen from behind his arms hang on the far side of him, the same as they do
   // in the walk he steps into from here.
   pose.leftArmBehind = true;
@@ -986,6 +978,8 @@ const GLANCE_SHOULDER_DROP = deg(4);
 /** The arms follow the shoulders round: the swing of a walking arm at about full stride. */
 const GLANCE_ARM_SWING = 0.6;
 const GLANCE_LEAN = deg(3);
+/** Looking back over his shoulder he puts his weight on the foot he turns from. */
+const GLANCE_WEIGHT_SHIFT = 0.03;
 
 export function fidgetGlance(t: number): CarlPose {
   const pose = seamFront(t);
@@ -996,7 +990,7 @@ export function fidgetGlance(t: number): CarlPose {
     -(GLANCE_SHOULDER_DROP + GLANCE_SEARCH_TILT * throughHold(t, GLANCE_HEAD_BEATS)) * head;
   pose.twist = GLANCE_TWIST * shoulders;
   pose.brow = lerp(pose.brow, GLANCE_BROW, head);
-  pose.sway -= shoulders * WEIGHT_SHIFT;
+  pose.sway -= shoulders * GLANCE_WEIGHT_SHIFT;
   pose.lean -= shoulders * GLANCE_LEAN;
   const swing = shoulders * GLANCE_ARM_SWING;
   pose.rightArmAngles = facingArmAngles(RIGHT_ARM, -swing, 0, 0);

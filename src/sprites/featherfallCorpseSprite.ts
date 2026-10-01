@@ -3,7 +3,7 @@
  * chair behind his own desk, sash and seal still on, letters still stacked in
  * front of him waiting for a signature somebody else has been providing.
  *
- * A pure draw function like GumGum's corpse rather than a `Mob` or a baked
+ * A pure draw function rather than a `Mob` or a baked
  * palette canvas — nothing here is per-instance. Self-contained rather than
  * reading the live skyfowl cast's palette: his own colours are a fixed,
  * one-off quote of the town's blue-and-gold civic livery, not a citizen's

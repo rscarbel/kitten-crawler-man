@@ -70,13 +70,33 @@ const ARM_BELLY_SWELL = 0.8;
  * forearm. Pushed up only just past the elbow: the forearm is where arm muscle
  * reads at game size, and it is bare.
  */
-const CUFF_ALONG_FOREARM = 0.07;
+const CUFF_ALONG_FOREARM_DEFAULT = 0.07;
+let CUFF_ALONG_FOREARM = CUFF_ALONG_FOREARM_DEFAULT;
 /**
  * The shoved-up leather gathers into a roll wider than the arm it sits on;
  * that bunched ring is the whole visual difference between a sleeve pushed up
  * and a short sleeve.
  */
-const BUNCH_BULK = 2.4;
+const BUNCH_BULK_DEFAULT = 2.4;
+let BUNCH_BULK = BUNCH_BULK_DEFAULT;
+
+/**
+ * Sets how far down the forearm the sleeve reaches and how far its cuff stands
+ * off the arm, for every subsequent sleeve paint — swappable so a figure on
+ * this rig in a long-sleeved garment (a robe's wide sleeve to the wrist) is
+ * Carl's own sleeve redrawn longer rather than a second shape laid over his
+ * arm. `let`, matching `setCarlTorsoCut` in `torso.ts`.
+ */
+export function setCarlSleeveCut(cuffAlongForearm: number, cuffBulk: number): void {
+  CUFF_ALONG_FOREARM = cuffAlongForearm;
+  BUNCH_BULK = cuffBulk;
+}
+
+/** Restores Carl's own shoved-up sleeve — call after every non-Carl bake that changed it. */
+export function resetCarlSleeveCut(): void {
+  CUFF_ALONG_FOREARM = CUFF_ALONG_FOREARM_DEFAULT;
+  BUNCH_BULK = BUNCH_BULK_DEFAULT;
+}
 /**
  * The concertina fold across the gathered roll, as a share of its length. One
  * fold: the roll is two or three pixels long at the tile, so a second one

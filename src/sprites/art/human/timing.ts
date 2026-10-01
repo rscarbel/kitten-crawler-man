@@ -63,6 +63,49 @@ export function heldFrameAt(holds: readonly number[], ticks: number): number {
   return holds.length - 1;
 }
 
+/** Ticks one whole standing breath takes. */
+export const IDLE_BREATH_TICKS = heldLength(IDLE_FRAME_TICKS);
+
+/** How far into its current breath a free-running clock `seconds` in is, in ticks. */
+function ticksIntoBreath(seconds: number): number {
+  const ticks = seconds * TICKS_PER_SECOND;
+  return ((ticks % IDLE_BREATH_TICKS) + IDLE_BREATH_TICKS) % IDLE_BREATH_TICKS;
+}
+
+/**
+ * The idle frame a free-running clock `seconds` in is showing, for a figure
+ * whose idle plays off the wall clock rather than through `HumanAnimator`.
+ * The frames are not all held alike: the blink is short.
+ */
+export function idleFrameAtSeconds(seconds: number): number {
+  const intoBreath = ticksIntoBreath(seconds);
+  return heldFrameAt(IDLE_FRAME_TICKS, intoBreath);
+}
+
+/**
+ * How far round the breath an idle frame is, from the tick it is first drawn
+ * on. Its frames are not held alike, and a breath sampled by frame index
+ * would lurch across the short blink frame.
+ */
+export function idleBreathPhase(frame: number): number {
+  return heldFrameStart(IDLE_FRAME_TICKS, frame) / IDLE_BREATH_TICKS;
+}
+
+/**
+ * The frame an idle of `frames` evenly held frames shows `seconds` into a
+ * free-running clock, for a figure whose idle has no short blink frame: the
+ * whole row plays once per standing breath, however many frames it has.
+ */
+export function evenIdleFrameAtSeconds(seconds: number, frames: number): number {
+  const intoBreath = ticksIntoBreath(seconds);
+  return Math.min(frames - 1, Math.floor((intoBreath / IDLE_BREATH_TICKS) * frames));
+}
+
+/** The idle's eye: shut on its blink frame, open on every other. */
+export function idleBlinkLid(frame: number): number {
+  return frame % IDLE_FRAMES === IDLE_BLINK_FRAME ? 1 : 0;
+}
+
 /**
  * The combat-ready bounce: a boxer on the balls of his feet rises and settles
  * about one and a half times a second. Six frames keeps the bounce above the

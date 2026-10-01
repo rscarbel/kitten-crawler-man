@@ -321,6 +321,30 @@ export const EXAMINE_LINES = {
   dynamite_crate: narrator.bark(
     'A crate of goblin dynamite, lid off, kept on the keeper’s side of the counter. The warning on the side has been painted over twice to make it bigger.',
   ),
+  records_cabinet: narrator.bark(
+    "Deeds, licences, tithe rolls, each drawer labelled in the same tight clerk's hand. The newest labels are all in it. So is the drawer marked Featherfall — Correspondence, which is locked.",
+  ),
+  pigeonhole_wall: narrator.bark(
+    'Every writ the town has issued in a generation, rolled or tied in red tape and pushed into its cubby. The cubbies nearest the stair have been emptied and refilled this month.',
+  ),
+  scrivener_desk: narrator.bark(
+    "A clerk's copy, half made, beside the original it is copied from. The copy is better written. It also says something slightly different.",
+  ),
+  magistrate_desk: narrator.bark(
+    "Magistrate Featherfall's desk. The seal is out and every writ in the tray is signed and sealed — in a hand that is very nearly his.",
+  ),
+  writ_board: narrator.bark(
+    'Proclamations from the magistrate: curfews, a tithe on lamp oil, a reward for a missing alley-sweeper. Every one is sealed in red. None of them is in a skyfowl hand.',
+  ),
+  coil_bench: narrator.bark(
+    'Glass jars wrapped in foil, each holding a little violet light that should not stay lit on its own. It does anyway. The wire on the spool is still warm.',
+  ),
+  petition_counter: narrator.bark(
+    'The petition book, open, its quill on a chain. Grievances, permits, a lost goose. Every petition for the last month has been answered in the same week, by the same clerk.',
+  ),
+  conduit_coil: narrator.bark(
+    'A copper-wound column with a glass bulb on top, humming just under hearing. The light inside leans toward you when you lean toward it.',
+  ),
 } satisfies Record<TownInteriorExamineId, BarkLine>;
 
 /**

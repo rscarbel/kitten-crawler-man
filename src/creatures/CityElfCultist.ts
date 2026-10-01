@@ -1,6 +1,11 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
-import { drawCityElfCultistSprite } from '../sprites/cityElfCultistSprite';
+import {
+  CITY_ELF_CULTIST_TILES_PER_WALK_CYCLE,
+  drawCityElfCultistSprite,
+  prewarmCityElfCultist,
+} from '../sprites/cityElfCultistSprite';
+import { WALK_FRAMES } from '../sprites/art/human/timing';
 import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import type { KiteAim } from './tactics/tacticalFrame';
@@ -40,6 +45,21 @@ const CENTER_OFFSET = 0.5;
 const FOLLOW_STOP_RANGE_TILES = 1.5;
 const FOLLOW_CLOSE_RANGE_RATIO = 0.85;
 const CULTIST_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
+const TWO_PI = Math.PI * 2;
+/**
+ * The walk is advanced by the ground the cultist actually covers, so its
+ * planted feet stay put on the floor. Capped at one sprite frame per tick:
+ * past that the row is undersampled and a separation shove strobes the legs.
+ */
+const MAX_GAIT_RADIANS_PER_FRAME = TWO_PI / WALK_FRAMES;
+/**
+ * Spread of the per-cultist offset into the breathing loop, in seconds, so a
+ * lodge full of them does not rise and fall in unison. Seeded from the spawn
+ * tile, so the same cultist always breathes on the same beat.
+ */
+const IDLE_OFFSET_SPAN_SECONDS = 4;
+const IDLE_OFFSET_TILE_X_STEP = 0.37;
+const IDLE_OFFSET_TILE_Y_STEP = 0.71;
 
 /**
  * A city elf cultist — one of Miss Quill's hooded faithful, who believe the
@@ -63,9 +83,32 @@ export class CityElfCultist extends Mob {
   private isAggro = false;
   private retreatFrames = 0;
   private retreatCooldown = 0;
+  private gaitSampleX: number;
+  private gaitSampleY: number;
+  private readonly idleOffsetSeconds: number;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, CULTIST_HP, CULTIST_SPEED);
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    const seed = tileX * IDLE_OFFSET_TILE_X_STEP + tileY * IDLE_OFFSET_TILE_Y_STEP;
+    this.idleOffsetSeconds = (seed % 1) * IDLE_OFFSET_SPAN_SECONDS;
+    // Every cultist is stood up by an encounter (the lodge, a tower guard
+    // post, the confrontation) well before the party reaches it, so this is
+    // the moment its fight is scheduled.
+    prewarmCityElfCultist();
+  }
+
+  /**
+   * Measured over the previous frame so it also picks up the ground lost to
+   * collision slides and separation pushes, not just the intended step.
+   */
+  private syncGaitToDistanceCovered(): void {
+    const coveredPx = Math.hypot(this.x - this.gaitSampleX, this.y - this.gaitSampleY);
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    const radiansPerPixel = TWO_PI / (CITY_ELF_CULTIST_TILES_PER_WALK_CYCLE * this.tileSize);
+    this.walkFrameSpeed = Math.min(coveredPx * radiansPerPixel, MAX_GAIT_RADIANS_PER_FRAME);
   }
 
   /**
@@ -96,10 +139,13 @@ export class CityElfCultist extends Mob {
     this.isAggro = false;
     this.retreatFrames = 0;
     this.retreatCooldown = 0;
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
   }
 
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
+    this.syncGaitToDistanceCovered();
 
     if (this.castCooldown > 0) this.castCooldown--;
     if (this.castAnimTimer > 0) this.castAnimTimer--;
@@ -162,7 +208,7 @@ export class CityElfCultist extends Mob {
       this.walkTacticalStep(tacticalMove, nearest);
       // Faced at the quarry, not along the walk, for the same reason the
       // backpedal is: a cultist falling back is still casting.
-      this.facingX = targetCX >= handX ? 1 : -1;
+      this.faceToward(nearest);
       // A fall-back is a backpedal's worth of retreat: its cooldown runs from
       // the end of this one, or a kite that ends still crowded would chain
       // straight into a backpedal — faster than a kite may go, and half as
@@ -192,10 +238,11 @@ export class CityElfCultist extends Mob {
       );
     } else {
       this.isMoving = false;
-      this.facingX = targetCX >= handX ? 1 : -1;
+      this.faceToward(nearest);
     }
 
     if (hasLOS && nearestDist <= castRangePx && this.castCooldown === 0) {
+      this.faceToward(nearest);
       this.bolts.push(fireSoulBolt(handX, handY, targetCX, targetCY));
       this.castCooldown = CITY_ELF_CULTIST_CAST_COOLDOWN_FRAMES;
       this.castAnimTimer = CAST_ANIM_FRAMES;
@@ -217,7 +264,7 @@ export class CityElfCultist extends Mob {
     if (distance === 0) return;
     this.moveWithCollision((dx / distance) * this.speed, (dy / distance) * this.speed);
     this.isMoving = true;
-    this.facingX = target.x >= this.x ? 1 : -1;
+    this.faceToward(target);
   }
 
   protected override drawSelf(
@@ -249,6 +296,8 @@ export class CityElfCultist extends Mob {
         this.isMoving,
         castAnim,
         this.facingX,
+        this.facingY,
+        this.idleOffsetSeconds,
       );
     });
 

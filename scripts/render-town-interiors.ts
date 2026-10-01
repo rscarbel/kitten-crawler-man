@@ -23,10 +23,10 @@
  * over the people standing on it — shows up in the picture rather than
  * staying a number.
  *
- * Excluded on purpose: the tower (multi-floor, no `InteriorOccupantSystem`
- * roster of its own) and the Big Top (a quest-encounter interior whose
- * default variant is an empty ring — neither is in scope for the interior
- * repaint this harness supports).
+ * The tower is drawn one image per storey (`<slug>-floor-<n>.png`); it has no
+ * `InteriorOccupantSystem` roster, so its storeys show the furniture alone.
+ * Excluded on purpose: the Big Top, a quest-encounter interior whose default
+ * variant is an empty ring.
  */
 
 import { createCanvas, type Canvas } from 'canvas';
@@ -56,7 +56,7 @@ globals.document = {
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { loadSprites } = await import('../src/core/SpriteLoader.js');
-const { GameMap } = await import('../src/map/GameMap.js');
+const { GameMap, TOWER_FLOOR_COUNT } = await import('../src/map/GameMap.js');
 const { createTownPlan } = await import('../src/map/town/townPlan.js');
 const { stampSafeRoomCounters } = await import('../src/map/safeRoomCounterLayout.js');
 const { stampSafeRoomDecor } = await import('../src/map/safeRoomDecorLayout.js');
@@ -76,7 +76,7 @@ const WARM_FRAMES = 60;
 const DEFAULT_SCALE = 2;
 const DEFAULT_OUT_DIR = `${PREVIEW_DIR}/town-interiors`;
 /** Buildings this harness does not cover; see the file doc for why. */
-const EXCLUDED_BUILDING_NAMES: ReadonlySet<string> = new Set(['Big Top', 'Town Center Tower']);
+const EXCLUDED_BUILDING_NAMES: ReadonlySet<string> = new Set(['Big Top']);
 
 /** Length of the `--` prefix and `=` separator around a flag's name. */
 const FLAG_PREFIX_LENGTH = 3;
@@ -105,7 +105,7 @@ paintEnvironmentArtInNode(artSeed);
 installCanvasGlobals();
 
 const plan = createTownPlan(TOWN_PLAN_SIZE);
-const rooms = plan.buildings.filter(
+const rooms = [...plan.buildings, plan.tower].filter(
   (building) =>
     !EXCLUDED_BUILDING_NAMES.has(building.name) && building.name.toLowerCase().includes(only),
 );
@@ -125,11 +125,18 @@ function slug(name: string): string {
 
 /** One screen pixel of headroom above a probe's own foot tile, so he reads as standing beside the furniture rather than merged into it. */
 const PROBE_SOUTH_OFFSET_TILES = 1;
+/** A probe stands on the middle of its tile, not its west edge. */
+const PROBE_FOOT_CENTRE_TILES = 0.5;
 
-for (const building of rooms) {
+const storeys = rooms.flatMap((building) => {
+  const floorCount = building.kind === 'tower' ? TOWER_FLOOR_COUNT : 1;
+  return Array.from({ length: floorCount }, (_, floor) => ({ building, floor, floorCount }));
+});
+
+for (const { building, floor, floorCount } of storeys) {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [], artSeed });
-  const hasSafeRoom = building.hasSafeRoom === true;
-  map.generateInterior(building.kind, 0, building.name, hasSafeRoom, 'default');
+  const hasSafeRoom = 'hasSafeRoom' in building && building.hasSafeRoom === true;
+  map.generateInterior(building.kind, floor, building.name, hasSafeRoom, 'default');
   if (hasSafeRoom) {
     stampSafeRoomCounters(map);
     stampSafeRoomDecor(map);
@@ -154,7 +161,7 @@ for (const building of rooms) {
   map.renderDecorationsOverlay(gameCtx, 0, 0, viewW, viewH);
 
   function drawCarlProbe(tileX: number, tileY: number): void {
-    const footX = (tileX + 0.5) * TILE_SIZE;
+    const footX = (tileX + PROBE_FOOT_CENTRE_TILES) * TILE_SIZE;
     const footY = (tileY + 1) * TILE_SIZE;
     ctx.save();
     ctx.translate(footX, footY);
@@ -181,7 +188,8 @@ for (const building of rooms) {
     const doorTile = { x: map.startTile.x, y: map.startTile.y };
     // Standing on a rug's top row is where a rug sorted with the figures
     // would paint over him, so it is the probe that proves the ground layer.
-    const rug = townInteriorGroundProps(map)[0];
+    const groundProps = townInteriorGroundProps(map);
+    const rug = groundProps.length > 0 ? groundProps[0] : undefined;
     const rugTopRowTile =
       rug === undefined ? undefined : { x: rug.tile.x, y: rug.tile.y - PROBE_SOUTH_OFFSET_TILES };
     const probeTiles = [counterTile, tableTile, doorTile, rugTopRowTile].filter(
@@ -199,7 +207,9 @@ for (const building of rooms) {
   for (const figure of [...figures].sort((a, b) => a.y - b.y)) figure.render();
 
   const outPath = writePreviewPng(
-    `${outDir}/${slug(building.name)}.png`,
+    floorCount > 1
+      ? `${outDir}/${slug(building.name)}-floor-${floor}.png`
+      : `${outDir}/${slug(building.name)}.png`,
     canvas.toBuffer('image/png'),
   );
   console.log(`${outPath}: ${mapW}x${mapH} tiles, ${occupants?.people.length ?? 0} occupant(s)`);

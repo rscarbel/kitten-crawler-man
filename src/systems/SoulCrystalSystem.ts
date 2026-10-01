@@ -24,6 +24,9 @@ import {
   triggerDoomsdayExplosionIfExpired,
 } from '../core/DoomsdayProgress';
 import { drawText } from '../ui/TextBox';
+import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
+import { drawSoulCrystalProp, SOUL_CRYSTAL_TOP_TILES } from '../sprites/soulCrystalArt';
+import { frameTime } from '../utils';
 import { viewportWidth } from '../core/Viewport';
 import {
   ARROW_PRIORITY,
@@ -37,12 +40,10 @@ const CONTAIN_RANGE_TILES = 2.5;
 /** The "Contain the crystal!" prompt shows out to twice the auto-contain range. */
 const CRYSTAL_PROMPT_RANGE_TILES = CONTAIN_RANGE_TILES * 2;
 
-// Crystal prop rendering
-const CRYSTAL_GLOW_RADIUS_RATIO = 0.4;
-const CRYSTAL_GLOW_ALPHA_BASE = 0.4;
-const CRYSTAL_GLOW_ALPHA_PULSE = 0.25;
-const CRYSTAL_GLOW_PULSE_MS = 350;
-const CRYSTAL_PROMPT_Y_OFFSET = -18;
+/** Where the crystal's floor point sits within its tile, so it hovers over the beacon's pool of light. */
+const CRYSTAL_GROUND_IN_TILE = 0.8;
+/** Gap between the top of the crystal and its prompt, in pixels. */
+const CRYSTAL_PROMPT_GAP_PX = 6;
 const CRYSTAL_PROMPT_SIZE = 12;
 
 const COUNTDOWN_Y = 60;
@@ -95,7 +96,42 @@ export class SoulCrystalSystem {
     triggerDoomsdayExplosionIfExpired(progress, human, cat);
   }
 
-  /** World-space rendering: the crystal's glow and containment prompt. Only meaningful on the crystal's own floor. */
+  /** The crystal tile on this floor, while there is still a loose crystal to draw. */
+  private looseCrystal(isOnCrystalFloor: boolean): { x: number; y: number } | null {
+    if (!isOnCrystalFloor || this.progress.stage !== 'containment') return null;
+    return this.progress.crystalTile;
+  }
+
+  /**
+   * Ground-layer rendering: the quest beacon standing over the crystal and the
+   * crystal itself. Drawn before the Y-sorted pass, with the room's other
+   * ground paint, so the crawlers stand in front of its light.
+   *
+   * The beacon is the same column every other quest target wears, so the one
+   * object the countdown is about reads as "go here" the moment it is on screen.
+   * It goes with the crystal: once contained, nothing is left to light.
+   */
+  renderGround(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    isOnCrystalFloor: boolean,
+  ): void {
+    const crystalTile = this.looseCrystal(isOnCrystalFloor);
+    if (crystalTile === null) return;
+    const screenX = crystalTile.x - camX;
+    const screenY = crystalTile.y - camY;
+    drawObjectiveBeacon(ctx, screenX, screenY, TILE_SIZE, GUIDE_ARROW_COLOR, performance.now());
+    drawSoulCrystalProp(
+      ctx,
+      screenX + TILE_SIZE / 2,
+      screenY + TILE_SIZE * CRYSTAL_GROUND_IN_TILE,
+      TILE_SIZE,
+      frameTime,
+    );
+  }
+
+  /** Overlay rendering: the containment prompt, over the figures. Only meaningful on the crystal's own floor. */
   render(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -103,28 +139,17 @@ export class SoulCrystalSystem {
     active: { x: number; y: number },
     isOnCrystalFloor: boolean,
   ): void {
-    if (!isOnCrystalFloor || this.progress.stage !== 'containment' || !this.progress.crystalTile) {
-      return;
-    }
-    const crystalTile = this.progress.crystalTile;
+    const crystalTile = this.looseCrystal(isOnCrystalFloor);
+    if (crystalTile === null) return;
 
     const sx = crystalTile.x - camX + TILE_SIZE / 2;
-    const sy = crystalTile.y - camY + TILE_SIZE / 2;
-    const pulse =
-      CRYSTAL_GLOW_ALPHA_BASE +
-      Math.sin(Date.now() / CRYSTAL_GLOW_PULSE_MS) * CRYSTAL_GLOW_ALPHA_PULSE;
-    ctx.save();
-    ctx.fillStyle = `rgba(168, 85, 247, ${Math.max(0, pulse)})`;
-    ctx.beginPath();
-    ctx.arc(sx, sy, TILE_SIZE * CRYSTAL_GLOW_RADIUS_RATIO, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
+    const crystalTopY =
+      crystalTile.y - camY + TILE_SIZE * (CRYSTAL_GROUND_IN_TILE - SOUL_CRYSTAL_TOP_TILES);
     const dist = Math.hypot(active.x - crystalTile.x, active.y - crystalTile.y);
     if (dist <= TILE_SIZE * CRYSTAL_PROMPT_RANGE_TILES) {
       drawText(ctx, 'Contain the crystal!', {
         x: sx,
-        y: sy + CRYSTAL_PROMPT_Y_OFFSET,
+        y: crystalTopY - CRYSTAL_PROMPT_GAP_PX,
         size: CRYSTAL_PROMPT_SIZE,
         bold: true,
         color: '#e9d5ff',

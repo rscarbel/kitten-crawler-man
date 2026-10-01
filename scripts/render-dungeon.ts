@@ -45,6 +45,8 @@
  *   longest straight corridor run, the corridor junction with the most arms, or
  *   the first doorway of that room, each with padding around it.
  * - `--safe-room`, `--quest-room`, `--spider-lab` frame those rooms.
+ * - `--stairwell` frames the floor's first stairwell and draws it as the game
+ *   does, its pulsing outline and arrow included.
  * - `--sign=hallway|room` frames the first wayfinding sign of that kind (a map
  *   may have none of the kind; try another seed).
  * - `--quest-exit=barred|smashed` puts the nursery's onward doorway in that state
@@ -107,6 +109,7 @@ import { DungeonLifeSystem } from '../src/systems/dungeon/DungeonLifeSystem.js';
 import { floorSurfaceOf } from '../src/map/dungeon/floorSurface.js';
 import { buildColosseumDressing } from '../src/systems/bossRooms/BossRoomDressings.js';
 import { UINT32_SPAN } from '../src/core/WorldRandom.js';
+import { StairwellSystem } from '../src/systems/StairwellSystem.js';
 
 const DEFAULT_LEVEL = 1;
 const DEFAULT_VIEW_TILES_W = 56;
@@ -254,6 +257,11 @@ if (questExitState !== undefined) {
   gameMap.setQuestExitDoorState(questExitState);
 }
 const roomBounds = gameMap.roomBounds;
+const stairwellRequested = flag('stairwell');
+const framedStairwell = stairwellRequested ? gameMap.stairwellTiles[0] : undefined;
+if (stairwellRequested && framedStairwell === undefined) {
+  throw new Error('this floor has no stairwell');
+}
 
 function rectContains(rect: Rect, tile: Point): boolean {
   return (
@@ -449,6 +457,7 @@ function focusedView(focus: Point): Rect {
 }
 
 const focus =
+  framedStairwell ??
   questExitTile ??
   framedSign ??
   safeRoom?.centre ??
@@ -693,6 +702,14 @@ if (propsRequested || smashRequested) {
   // prop on the same foot line: the fixture is on the wall the prop stands at.
   const sorted = [...wallFixtureDraws(), ...decorationDraws()].sort((a, b) => a.sortY - b.sortY);
   for (const entry of sorted) entry.draw(ctx);
+}
+if (stairwellRequested) {
+  new StairwellSystem(
+    gameMap,
+    levelDef,
+    () => undefined,
+    () => 1,
+  ).renderStairwells(ctx, camX, camY);
 }
 life?.renderAir(ctx, camX, camY, viewW, viewH);
 

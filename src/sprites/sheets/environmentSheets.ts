@@ -33,6 +33,7 @@ import { floorTwoPropVariantSheetPlans } from './propVariantSheets';
 import { remainsSheetPlans } from './remainsSheets';
 import { rockSheetPlans } from './rockSheets';
 import { serviceFurnitureSheetPlans } from './serviceFurnitureSheets';
+import { stairwellSheetPlans } from './stairwellSheets';
 import { TREE_READY_ROWS, treeSheetPlans } from './treeSheets';
 import { townscapeSheetPlans } from './townscapeSheets';
 import { villageSheetPlans } from './villageSheets';
@@ -82,6 +83,12 @@ export function requestEnvironmentSheetsForGroups(
     });
     requestPropSheets(dungeonSignSheetPlans(), {
       // The lettering is the same on every floor, so a repaint per floor buys nothing.
+      variesWithFloorSeed: false,
+      onSheetPainted,
+    });
+    requestPropSheets(stairwellSheetPlans(), {
+      // Each place's stairwell is its own row, picked at the draw site, so the
+      // sheet is the same whichever floor painted it.
       variesWithFloorSeed: false,
       onSheetPainted,
     });

@@ -19,7 +19,7 @@ import {
   incubusStateName,
 } from './art/incubusFigure';
 import { WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
-import { heldFrameAt, heldLength, IDLE_FRAME_TICKS, TICKS_PER_SECOND } from './art/human/timing';
+import { idleFrameAtSeconds, TICKS_PER_SECOND } from './art/human/timing';
 import { TALK_TICKS_PER_FRAME } from './art/human/actionsMisc';
 
 /**
@@ -98,10 +98,10 @@ function roleOf(state: IncubusSpriteState): IncubusRole {
 
 function frameFor(role: IncubusRole, state: IncubusSpriteState, frames: number): number {
   if (role === 'walk') return walkFrameIndex(state.walkPhase, frames);
-  const ticks = (performance.now() / MS_PER_SECOND + state.idleOffsetSeconds) * TICKS_PER_SECOND;
-  if (role === 'talk') return Math.floor(ticks / TALK_TICKS_PER_FRAME) % frames;
-  // The idle's frames are not all held alike: the blink is short.
-  return heldFrameAt(IDLE_FRAME_TICKS, ticks % heldLength(IDLE_FRAME_TICKS));
+  const seconds = performance.now() / MS_PER_SECOND + state.idleOffsetSeconds;
+  if (role === 'talk')
+    return Math.floor((seconds * TICKS_PER_SECOND) / TALK_TICKS_PER_FRAME) % frames;
+  return idleFrameAtSeconds(seconds);
 }
 
 /**

@@ -416,30 +416,16 @@ export const SUBJECTS: readonly SvgSubject[] = [
   },
   {
     name: 'circus-lemur',
-    views: async () => {
-      const { drawCircusLemurSprite } = await import('../src/sprites/circusLemurSprite.js');
-      return [
-        { name: 'idle', paint: ({ dom, unit }) => drawCircusLemurSprite(dom, 0, 0, unit) },
-        {
-          name: 'walk',
-          paint: ({ dom, unit }) => drawCircusLemurSprite(dom, 0, 0, unit, WALK_FRAME, true),
-        },
-        {
-          name: 'throw',
-          paint: ({ dom, unit }) =>
-            drawCircusLemurSprite(
-              dom,
-              0,
-              0,
-              unit,
-              STILL_FRAME,
-              false,
-              0,
-              FACING_RIGHT,
-              ATTACK_MIDPOINT,
-            ),
-        },
-      ];
+    views: async (frame) => {
+      const { CIRCUS_LEMUR_FIGURE, LEMUR_ROWS } =
+        await import('../src/sprites/art/circusLemurFigure.js');
+      return LEMUR_ROWS.map((row): SvgView => ({
+        name: row.name,
+        paint: ({ dom, unit }) =>
+          inUnitSpace(dom, unit / CIRCUS_LEMUR_FIGURE.tileScale, (ctx) =>
+            CIRCUS_LEMUR_FIGURE.paintFrame(ctx, row.name, frame % row.frameCount),
+          ),
+      }));
     },
   },
   {
@@ -525,21 +511,23 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
+    // Painted on Carl's rig, so the same raster exception as Carl applies.
     name: 'city-elf-cultist',
-    views: async () => {
-      const { drawCityElfCultistSprite } = await import('../src/sprites/cityElfCultistSprite.js');
-      return [
-        { name: 'idle', paint: ({ dom, unit }) => drawCityElfCultistSprite(dom, 0, 0, unit) },
-        {
-          name: 'walk',
-          paint: ({ dom, unit }) => drawCityElfCultistSprite(dom, 0, 0, unit, WALK_FRAME, true),
-        },
-        {
-          name: 'cast',
-          paint: ({ dom, unit }) =>
-            drawCityElfCultistSprite(dom, 0, 0, unit, STILL_FRAME, false, ATTACK_MIDPOINT),
-        },
-      ];
+    views: async (frame) => {
+      const { CITY_ELF_CULTIST_FIGURE, CULTIST_ROLES, CULTIST_VIEWS, cultistStateName } =
+        await import('../src/sprites/art/cityElfCultistFigure.js');
+      return CULTIST_ROLES.flatMap((role) =>
+        CULTIST_VIEWS.map((view): SvgView => {
+          const state = cultistStateName(role, view);
+          return {
+            name: state,
+            paint: ({ dom, unit }) =>
+              inUnitSpace(dom, unit / CITY_ELF_CULTIST_FIGURE.tileScale, (ctx) =>
+                CITY_ELF_CULTIST_FIGURE.paintFrame(ctx, state, frame),
+              ),
+          };
+        }),
+      );
     },
   },
   {

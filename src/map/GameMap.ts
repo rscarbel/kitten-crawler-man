@@ -138,6 +138,10 @@ import {
   BARRACKS_INTERIOR_H,
 } from './town/interiors/index';
 import { stableInteriorPropId, type TownInteriorLayoutEntry } from './town/interiors/types';
+import {
+  buildTownCenterTowerLayout,
+  type TowerStairOrigins,
+} from './town/interiors/townCenterTower';
 import { setTownInteriorWallMaterial } from './town/interiorWallMaterial';
 import { setBigTopDecorLayout } from './bigTopMazeDecor';
 import {
@@ -1533,171 +1537,21 @@ export class GameMap {
 
       const hasUp = towerFloor < TOWER_TOP_FLOOR;
       const hasDown = towerFloor > 0;
+      const stairs: TowerStairOrigins = {
+        up: hasUp ? { x: upX, y: stairRow } : null,
+        down: hasDown ? { x: dnX, y: stairRow } : null,
+        span: TOWER_STAIR_SPAN,
+      };
 
-      if (hasUp) this._interiorStairUpTiles = fillStairBlock(upX, stairRow, STAIRS_UP);
-      if (hasDown) this._interiorStairDownTiles = fillStairBlock(dnX, stairRow, STAIRS_DOWN);
+      // Before the stairs, so each stair block records the storey's own floor
+      // material as the floor it stands on.
+      this.applyTownInteriorLayout(grid, buildTownCenterTowerLayout(towerFloor, w, h, stairs));
 
-      // ── Tower floor furniture (20×16, carpet) ──
-      // Both stair blocks occupy rows TOWER_STAIR_ROW and the one below it; the
-      // furniture on every floor is placed clear of those two rows at the stair
-      // columns, so nothing here overwrites a staircase.
-      // TOWER_ENTRANCE_ROW_INSET: h - this value = second-to-last interior row (barrel/entrance row)
-      const TOWER_ENTRANCE_ROW_INSET = 3;
-      const towerFireplaceCol1 = 9;
-      const towerFireplaceCol2 = 10;
-      const towerShelfStartRow = 3;
-      if (towerFloor === 0) {
-        // Ground floor: reception hall — large rug, tables, bookshelves, fireplace
-        const groundFloorRugStartRow = 6;
-        const groundFloorRugEndRow = 9;
-        const groundFloorRugStartCol = 7;
-        const groundFloorRugEndCol = 13;
-        const groundFloorShelfEndRow = 7;
-        const groundFloorReceptionRow = 7;
-        const groundFloorChairRow = 8;
-        const groundFloorReceptionTableCol1 = 4;
-        const groundFloorReceptionTableCol2 = 5;
-        const groundFloorReceptionTableCol3 = 6;
-        const groundFloorEastBarrelRow = 4;
-        // Fireplace centered on north wall
-        grid[1][towerFireplaceCol1].type = FIREPLACE;
-        grid[1][towerFireplaceCol2].type = FIREPLACE;
-        // Large rug in center
-        for (let ry = groundFloorRugStartRow; ry <= groundFloorRugEndRow; ry++) {
-          for (let rx = groundFloorRugStartCol; rx <= groundFloorRugEndCol; rx++)
-            grid[ry][rx].type = RUG;
-        }
-        for (let ry = towerShelfStartRow; ry <= groundFloorShelfEndRow; ry++)
-          placeProp(grid[ry][1], BOOKSHELF);
-        // Reception table with chairs
-        grid[groundFloorReceptionRow][groundFloorReceptionTableCol1].type = TABLE;
-        grid[groundFloorReceptionRow][groundFloorReceptionTableCol2].type = TABLE;
-        grid[groundFloorReceptionRow][groundFloorReceptionTableCol3].type = TABLE;
-        grid[groundFloorChairRow][groundFloorReceptionTableCol1].type = CHAIR;
-        grid[groundFloorChairRow][groundFloorReceptionTableCol3].type = CHAIR;
-        grid[groundFloorReceptionRow - 1][groundFloorReceptionTableCol2].type = CHAIR;
-        // Barrels near entrance
-        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][1], BARREL);
-        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][2], BARREL);
-        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][w - 2], BARREL);
-        // Torch-style decoration on east wall (use barrel as substitute)
-        placeProp(grid[groundFloorEastBarrelRow][w - 2], BARREL);
-      } else if (towerFloor === 1) {
-        // 2nd floor: library — lots of bookshelves + reading tables
-        const libraryShelfEndRow = 9;
-        const libraryIslandRow = 4;
-        const libraryIsland1StartCol = 7;
-        const libraryIsland1EndCol = 9;
-        const libraryIsland2StartCol = 11;
-        const libraryIsland2EndCol = 13;
-        const libraryReadingRow = 7;
-        const libraryChairRow = 8;
-        const libraryWestTableCol1 = 5;
-        const libraryWestTableCol2 = 6;
-        const libraryEastTableCol1 = 11;
-        const libraryEastTableCol2 = 12;
-        const libraryRugStartCol = 7;
-        const libraryRugEndCol = 10;
-        for (let ry = towerShelfStartRow; ry <= libraryShelfEndRow; ry++)
-          placeProp(grid[ry][1], BOOKSHELF);
-        for (let ry = towerShelfStartRow; ry <= libraryShelfEndRow; ry++)
-          placeProp(grid[ry][w - 2], BOOKSHELF);
-        for (let rx = libraryIsland1StartCol; rx <= libraryIsland1EndCol; rx++)
-          placeProp(grid[libraryIslandRow][rx], BOOKSHELF);
-        for (let rx = libraryIsland2StartCol; rx <= libraryIsland2EndCol; rx++)
-          placeProp(grid[libraryIslandRow][rx], BOOKSHELF);
-        // Reading tables
-        grid[libraryReadingRow][libraryWestTableCol1].type = TABLE;
-        grid[libraryReadingRow][libraryWestTableCol2].type = TABLE;
-        grid[libraryChairRow][libraryWestTableCol1].type = CHAIR;
-        grid[libraryChairRow][libraryWestTableCol2].type = CHAIR;
-        grid[libraryReadingRow][libraryEastTableCol1].type = TABLE;
-        grid[libraryReadingRow][libraryEastTableCol2].type = TABLE;
-        grid[libraryChairRow][libraryEastTableCol1].type = CHAIR;
-        grid[libraryChairRow][libraryEastTableCol2].type = CHAIR;
-        // Rug between tables
-        for (let rx = libraryRugStartCol; rx <= libraryRugEndCol; rx++) {
-          grid[libraryReadingRow][rx].type = RUG;
-          grid[libraryChairRow][rx].type = RUG;
-        }
-      } else if (towerFloor === 2) {
-        // 3rd floor: living quarters — beds, tables, personal items
-        const quartersNorthBedRow1 = 3;
-        const quartersNorthBedRow2 = 4;
-        const quartersSouthBedRow1 = 7;
-        const quartersSouthBedRow2 = 8;
-        const quartersShelfRow1 = 5;
-        const quartersShelfRow2 = 6;
-        const quartersEastTableRow = 6;
-        const quartersEastTableCol1 = w - TOWER_STAIR_UP_X_OFFSET;
-        const quartersEastTableCol2 = w - TOWER_STAIR_UP_X_OFFSET + 1;
-        const quartersEastTableCol3 = w - TOWER_STAIR_UP_X_OFFSET + 2;
-        const quartersBarrelRow1 = 10;
-        const quartersBarrelRow2 = 11;
-        const quartersRugStartCol = 3;
-        const quartersRugEndCol = 4;
-        // Two beds along west wall
-        grid[quartersNorthBedRow1][1].type = BED;
-        grid[quartersNorthBedRow1][2].type = BED;
-        grid[quartersNorthBedRow2][1].type = BED;
-        grid[quartersNorthBedRow2][2].type = BED;
-        grid[quartersSouthBedRow1][1].type = BED;
-        grid[quartersSouthBedRow1][2].type = BED;
-        grid[quartersSouthBedRow2][1].type = BED;
-        grid[quartersSouthBedRow2][2].type = BED;
-        placeProp(grid[quartersShelfRow1][1], BOOKSHELF);
-        placeProp(grid[quartersShelfRow2][1], BOOKSHELF);
-        // Table and chairs on east side
-        grid[quartersEastTableRow][quartersEastTableCol1].type = TABLE;
-        grid[quartersEastTableRow][quartersEastTableCol2].type = TABLE;
-        grid[quartersEastTableRow][quartersEastTableCol3].type = TABLE;
-        grid[quartersEastTableRow + 1][quartersEastTableCol1].type = CHAIR;
-        grid[quartersEastTableRow + 1][quartersEastTableCol3].type = CHAIR;
-        // Barrel storage
-        placeProp(grid[quartersBarrelRow1][w - 2], BARREL);
-        placeProp(grid[quartersBarrelRow2][w - 2], BARREL);
-        // Rug by beds
-        for (let rx = quartersRugStartCol; rx <= quartersRugEndCol; rx++) {
-          grid[quartersNorthBedRow2][rx].type = RUG;
-          grid[quartersShelfRow1][rx].type = RUG;
-          grid[quartersShelfRow2][rx].type = RUG;
-          grid[quartersSouthBedRow1][rx].type = RUG;
-        }
-        // Fireplace on north wall
-        grid[1][towerFireplaceCol1].type = FIREPLACE;
-        grid[1][towerFireplaceCol2].type = FIREPLACE;
-      } else {
-        // Top floor: study/throne room — desk, bookshelves, large rug
-        const studyShelfEndRow = 8;
-        const studyDeskRow = towerShelfStartRow;
-        const studyDeskStartCol = 8;
-        const studyDeskEndCol = 11;
-        const studyDeskCentreCol = Math.floor((studyDeskStartCol + studyDeskEndCol) / 2);
-        const studyChairRow = towerShelfStartRow + 1;
-        const studyRugStartRow = 5;
-        const studyRugEndRow = 10;
-        const studyRugStartCol = 5;
-        const studyRugEndCol = 14;
-        const studyFireplaceCol1 = 6;
-        const studyFireplaceCol2 = 7;
-        for (let ry = towerShelfStartRow; ry <= studyShelfEndRow; ry++)
-          placeProp(grid[ry][1], BOOKSHELF);
-        for (let ry = towerShelfStartRow; ry <= studyShelfEndRow; ry++)
-          placeProp(grid[ry][w - 2], BOOKSHELF);
-        // Grand desk at north end
-        for (let dx = studyDeskStartCol; dx <= studyDeskEndCol; dx++)
-          grid[studyDeskRow][dx].type = TABLE;
-        grid[studyChairRow][studyDeskCentreCol].type = CHAIR;
-        // Large rug in center
-        for (let ry = studyRugStartRow; ry <= studyRugEndRow; ry++) {
-          for (let rx = studyRugStartCol; rx <= studyRugEndCol; rx++) grid[ry][rx].type = RUG;
-        }
-        // Fireplace on north wall
-        grid[1][studyFireplaceCol1].type = FIREPLACE;
-        grid[1][studyFireplaceCol2].type = FIREPLACE;
-        // Barrel in corners
-        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][1], BARREL);
-        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][w - 2], BARREL);
+      if (stairs.up !== null) {
+        this._interiorStairUpTiles = fillStairBlock(stairs.up.x, stairs.up.y, STAIRS_UP);
+      }
+      if (stairs.down !== null) {
+        this._interiorStairDownTiles = fillStairBlock(stairs.down.x, stairs.down.y, STAIRS_DOWN);
       }
     }
 

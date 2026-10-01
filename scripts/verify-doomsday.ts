@@ -4,14 +4,19 @@
  * Lich, the escape stairwell by the tower door, and the run-complete screen.
  *
  * - The stairwell is drawn from the moment the countdown starts — while the
- *   crystal is still loose as well as after — and not before or after the
- *   finale. It sorts after the tower above it, and it is on the minimap and in
- *   the Journal for both stages, pointing at the tower and then at the stairs.
+ *   crystal is still loose as well as after — and for good once the party has
+ *   escaped, but never before the finale. It sorts after the tower above it,
+ *   and it is on the minimap whenever it is drawn and in the Journal for both
+ *   live stages, pointing at the street in front of the tower and then at the
+ *   stairs.
  * - Stepping on it before the crystal is contained refuses, once per visit,
  *   and changes nothing.
  * - Reaching it after containment ends the run: the save is written before the
  *   run-complete screen goes up, the saved stage is 'complete', and a scene
- *   rebuilt from that save does not end the run a second time.
+ *   rebuilt from that save does not end the run a second time on its own.
+ * - After the party keeps exploring, the stairs stay open: standing on them
+ *   does nothing, and walking off and back on ends the run again — after a
+ *   reload, and after a death's respawn, alike.
  * - The stage and the time left on the clock survive a save and a reload a day
  *   later, and a death that respawns from an older save cannot buy back time.
  * - The expired countdown keeps trying until it catches the party — a revive
@@ -67,7 +72,11 @@ const VIEW_H = 600;
 const HALF_VIEW_TILES_X = VIEW_W / TILE_SIZE / 2;
 const HALF_VIEW_TILES_Y = VIEW_H / TILE_SIZE / 2;
 const SAVED_REMAINING_MS = 123_456;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const HOURS_PER_DAY = 24;
+const MINUTES_PER_HOUR = 60;
+const SECONDS_PER_MINUTE = 60;
+const MS_PER_SECOND = 1000;
+const MS_PER_DAY = HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
 const LONG_AGO_MS = 1_000;
 const RETRY_FRAMES = 5;
 const INVULNERABLE_FRAMES = 1_000;
@@ -179,6 +188,15 @@ function standAway(h: Harness): void {
   h.ctx.active.y = (escapeTile?.y ?? 0) * TILE_SIZE;
 }
 
+/**
+ * Whether the system has told the scene the run is over. Read through a call so
+ * a check made after the harness clears the latch reads the system's answer to
+ * the next update, not the value the harness just wrote.
+ */
+function escapeAnnounced(h: Harness): boolean {
+  return h.system.floorEscapedPending;
+}
+
 /** Strokes the stairwell prop draws with the camera centred on it. */
 function strokesDrawn(h: Harness): number {
   const canvas = createCanvas(VIEW_W, VIEW_H);
@@ -195,16 +213,19 @@ function strokesDrawn(h: Harness): number {
   return strokes;
 }
 
-section('The stairwell is on show for the whole countdown, and only then');
+section('The stairwell is on show from the countdown on, and never before it');
 {
   const h = makeHarness();
   for (const stage of DOOMSDAY_STAGES) {
     arm(h.progress, stage);
-    const live = stage === 'containment' || stage === 'escape';
+    const standing = stage !== 'inactive';
     const drawn = strokesDrawn(h) > 0;
-    check(drawn === live, `in '${stage}' the stairwell is ${live ? 'drawn' : 'not drawn'}`);
+    check(drawn === standing, `in '${stage}' the stairwell is ${standing ? 'drawn' : 'not drawn'}`);
     const marked = h.system.escapeMarkerTile !== null;
-    check(marked === live, `in '${stage}' the minimap ${live ? 'marks' : 'does not mark'} it`);
+    check(
+      marked === standing,
+      `in '${stage}' the minimap ${standing ? 'marks' : 'does not mark'} it`,
+    );
   }
   const prop = h.system.stairwellProp;
   check(
@@ -219,16 +240,17 @@ section('The stairwell is on show for the whole countdown, and only then');
   arm(h.progress, 'containment');
   const [contain] = h.system.trackerEntries();
   check(
-    contain?.id === DOOMSDAY_TRACKER_ID &&
+    contain.id === DOOMSDAY_TRACKER_ID &&
       contain.status === 'active' &&
       contain.target?.x === towerDoor.doorTile.x &&
-      contain.target.y === towerDoor.doorTile.y,
-    'while containing, the Journal points at the tower door',
+      contain.target.y > towerDoor.doorTile.y &&
+      contain.target.standsInFront === true,
+    'while containing, the Journal points at the street in front of the tower door',
   );
   arm(h.progress, 'escape');
   const [escape] = h.system.trackerEntries();
   check(
-    escape?.id === DOOMSDAY_TRACKER_ID &&
+    escape.id === DOOMSDAY_TRACKER_ID &&
       escape.target?.x === escapeTile.x &&
       escape.target.y === escapeTile.y,
     'once contained, it points at the stairwell',
@@ -357,8 +379,67 @@ section('Reaching the stairs after containment ends the run, saved first');
       !after.system.floorEscapedPending && after.progress.stage === 'complete',
       'a scene rebuilt from that save does not end the run again',
     );
-    check(strokesDrawn(after) === 0, 'and the stairwell is gone from it');
+    check(strokesDrawn(after) > 0, 'and the stairwell is still there');
+    standAway(after);
+    after.system.update(after.ctx);
+    standOnStairs(after);
+    after.system.update(after.ctx);
+    check(
+      after.system.floorEscapedPending && after.progress.stage === 'complete',
+      'walking off and back onto it ends the run again',
+    );
   }
+}
+
+section('After keeping exploring, the stairs stay and can be taken again');
+{
+  const h = makeHarness();
+  arm(h.progress, 'escape');
+  standOnStairs(h);
+  h.system.update(h.ctx);
+  check(escapeAnnounced(h), 'the escape ends the run');
+  h.system.floorEscapedPending = false;
+
+  for (let frame = 0; frame < RETRY_FRAMES; frame++) h.system.update(h.ctx);
+  check(
+    !escapeAnnounced(h),
+    'keeping exploring while still standing on the stairs does not end it again',
+  );
+  check(strokesDrawn(h) > 0, 'the stairwell is still drawn');
+
+  standAway(h);
+  h.system.update(h.ctx);
+  check(!escapeAnnounced(h), 'walking away from it does nothing');
+  standOnStairs(h);
+  h.system.update(h.ctx);
+  check(
+    escapeAnnounced(h) && h.progress.stage === 'complete',
+    'coming back down the stairs ends the run again',
+  );
+  h.system.floorEscapedPending = false;
+
+  standAway(h);
+  h.system.update(h.ctx);
+  h.pm.cat.isKnockedOut = true;
+  standOnStairs(h);
+  h.system.update(h.ctx);
+  check(!escapeAnnounced(h), 'not with a partner knocked out');
+  check(
+    h.toasts[h.toasts.length - 1] === STAIRWELL_KNOCKED_OUT_TOAST,
+    'and the player is told why',
+  );
+  h.pm.cat.isKnockedOut = false;
+  standAway(h);
+  h.system.update(h.ctx);
+
+  const checkpoint = h.system.captureCheckpoint();
+  h.system.restoreCheckpoint(checkpoint);
+  standOnStairs(h);
+  h.system.update(h.ctx);
+  check(
+    !escapeAnnounced(h),
+    'a respawn that sets the party down on the stairs does not end the run',
+  );
 }
 
 section('The stage and the time left survive a save and a reload');

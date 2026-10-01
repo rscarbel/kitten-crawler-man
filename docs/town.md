@@ -448,6 +448,19 @@ hint that decides which piece of their anchor group they take; without one they 
 in raw scan order, which is row-major from the north-west and put every shopkeeper in town
 in the same corner.
 
+**The tower is laid out per storey.** `buildTownCenterTowerLayout`
+(`src/map/town/interiors/townCenterTower.ts`) takes the storey and the stairs' origins, and
+`generateInterior` applies it before laying the stairs, so each stair block records its
+storey's own floor material. Every storey keeps its stair landings and the lane between
+them clear. The top storey is the Lich's arena: the only blocking pieces its layout places are the side
+walls' filing and the hearth, and the open floor north of the room's middle is where the
+Lich anchors its firewalls — a prop there leaves a wave nobody can pass. That floor is
+also where `QuillConfrontationSystem` seats the magistrate's body at its own desk, drawn
+before the room's furniture, so no prop may stand over it; `verify:interiors` measures the
+body's ink against every prop's footprint and art. The confrontation makes his desk's
+tiles solid itself (`MAGISTRATE_DESK_OFFSETS`), and that shape is what the firewalls are
+tuned against: `npm run verify:lich` fights across exactly that floor.
+
 `npm run verify:interiors` is the gate for all of it, including that every door opens onto
 clear floor two tiles deep.
 
@@ -659,6 +672,9 @@ carries the flag, and `verify:interiors` asserts that.
 
 - The tower base stays adjacent to the plaza (magistrate's office, tower stairs).
 - `doomsdayEscapeTile` stays just south of the tower door and out of `stairwellTiles`.
+  The stairwell drawn there stands from the countdown's start and stays for good once the
+  party has escaped down it: a player who keeps exploring can walk back down it, which
+  ends the run again, but only on a fresh step onto it (`npm run verify:doomsday`).
 - The circus stays 70–90 tiles from centre, outside the safe radius, with a ruins buffer.
   Its road routes to the nearest **gate**, not the town centre — a gate exit is a tile
   the gate's own highway paves, so the joint cannot miss.

@@ -1,9 +1,14 @@
 import { FACING_FLIP_DEADZONE_TILE_RATIO, Mob } from './Mob';
 import type { Player } from '../Player';
-import { drawCircusLemurSprite, drawThrownKnife } from '../sprites/circusLemurSprite';
+import {
+  drawCircusLemurSprite,
+  drawThrownKnife,
+  prewarmCircusLemur,
+} from '../sprites/circusLemurSprite';
 import { normalize } from '../utils';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { retreatBehindHelper } from './tactics/retreat';
+import { LEMUR_WALK_FRAMES } from '../sprites/art/circusLemurFigure';
 
 interface ThrownKnife {
   x: number;
@@ -46,6 +51,15 @@ export const CIRCUS_LEMUR_THROW_STANDOFF_TILES = 3.5;
 const COIN_DROP_MAX = 1;
 const CENTER_OFFSET = 0.5;
 const LEMUR_TACTICS: readonly TacticsTrait[] = ['flank', 'kite', 'regroup'];
+/**
+ * Game ticks each walk frame is held for. The lemur covers ground far faster
+ * than its short stride could honestly step, so the cadence is set by how fast
+ * the eye can follow the row rather than by distance: one frame a tick or
+ * quicker skips poses and the legs strobe, and the player's slower shared
+ * cadence makes a sprinting lemur look like it is wading.
+ */
+const TICKS_PER_WALK_FRAME = 2;
+const LEMUR_WALK_FRAME_SPEED = (Math.PI * 2) / (LEMUR_WALK_FRAMES * TICKS_PER_WALK_FRAME);
 
 /**
  * A Former Circus Lemur — one of Grimaldi's mutated sideshow performers.
@@ -65,6 +79,8 @@ export class CircusLemur extends Mob {
     return true;
   }
 
+  protected override walkFrameSpeed = LEMUR_WALK_FRAME_SPEED;
+
   private knives: ThrownKnife[] = [];
 
   override clearAirborneAttacks(): void {
@@ -78,6 +94,7 @@ export class CircusLemur extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, LEMUR_HP, LEMUR_SPEED);
+    prewarmCircusLemur();
   }
 
   protected override get levelledSpeedCap(): number {

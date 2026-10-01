@@ -1,7 +1,7 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
-import { drawGumGumSprite, gumGumArtTop } from '../sprites/gumGumSprite';
+import { drawGumGumSprite, GUMGUM_DRAW_SCALE, prewarmGumGumSprite } from '../sprites/gumGumSprite';
 import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import {
   drawQuestMarker,
@@ -14,13 +14,7 @@ const GUMGUM_HP = 30;
 const GUMGUM_SPEED = 0;
 
 /**
- * A step above the shared humanoid NPC scale: GumGum is a quest hook, and at
- * crowd size the figure got lost in the street traffic outside the club.
- */
-const GUMGUM_SCALE = 1.8;
-
-/**
- * GumGum — the jittery street elf whose plea opens "The Krasue Murders".
+ * GumGum — the kindly orc whose plea opens "The Krasue Murders".
  * A stationary, non-combatant hook NPC: MurderMysteryQuestSystem owns her
  * dialog and removes her once the hook is heard (her corpse prop takes over
  * from there). Non-hostile, so player attacks pass through her.
@@ -30,7 +24,8 @@ export class GumGum extends Mob {
   protected coinDropMin = 0;
   protected coinDropMax = 0;
   displayName = 'GumGum';
-  description = 'A nervous street elf clutching her coat, watching the crowd for something.';
+  description =
+    'A stout, kindly orc in a patched coat and apron, watching the crowd for something.';
 
   /**
    * Whether she has something to say, set by `MurderMysteryQuestSystem` each
@@ -42,6 +37,7 @@ export class GumGum extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, GUMGUM_HP, GUMGUM_SPEED);
+    prewarmGumGumSprite();
   }
 
   /** GumGum is a bystander — never hostile, never targetable by player attacks. */
@@ -69,7 +65,7 @@ export class GumGum extends Mob {
     const markerColor = questMarkerColorFor(this.markerType);
     if (markerColor !== undefined) {
       // Her own tile, not her enlarged sprite box: `tileSize` is the unit the
-      // beacon measures its near-fade in, so handing it the 1.8× box scales that
+      // beacon measures its near-fade in, so handing it the enlarged box scales that
       // radius too and blanks the column over the last four tiles — precisely
       // the approach where the player is looking for her.
       drawQuestBeacon(
@@ -83,18 +79,19 @@ export class GumGum extends Mob {
         markerColor,
       );
     }
-    drawGumGumSprite(ctx, box.sx, box.sy, box.s, this.walkFrame, this.isMoving, this.facingX);
+    const artTop = this.paintSpriteMeasuringTop(ctx, box.sy, () => {
+      drawGumGumSprite(ctx, box.sx, box.sy, box.s, this.walkFrame, this.isMoving, this.facingX);
+    });
     // Sized from her plain tile rather than her enlarged box, which would
     // bloat the glyph the way it would the beacon's fade radius above. Both
     // boxes share a horizontal centre, so the plain tile still centres it.
     if (markerColor !== undefined) {
       const glyph = this.markerType === 'question' ? '?' : '!';
-      const artTop = gumGumArtTop(box.sy, box.s);
       drawQuestMarker(ctx, this.x - camX, artTop, tileSize, glyph, markerColor);
     }
   }
 
   private spriteBox(camX: number, camY: number, tileSize: number) {
-    return scaleHumanoidBox(this.x - camX, this.y - camY, tileSize, GUMGUM_SCALE);
+    return scaleHumanoidBox(this.x - camX, this.y - camY, tileSize, GUMGUM_DRAW_SCALE);
   }
 }

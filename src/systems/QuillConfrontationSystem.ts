@@ -104,6 +104,21 @@ const LICH_LEVEL = 3;
 
 /** The magistrate's desk stands against the north wall, opposite the fight. */
 const CORPSE_OFFSET = { dx: 0, dy: -4 };
+/**
+ * The tiles the magistrate's desk and chair hold, relative to his body: the
+ * row behind him and the tile at his right hand. The office's furniture leaves
+ * them open so nothing is drawn over him, and they are made solid here instead.
+ * They are not decoration: the Lich's firewalls are tuned against exactly this
+ * shape (`npm run verify:lich`), and opening or reshaping it parks the party in
+ * the fire.
+ */
+const MAGISTRATE_DESK_OFFSETS: ReadonlyArray<{ readonly dx: number; readonly dy: number }> = [
+  { dx: -2, dy: -1 },
+  { dx: -1, dy: -1 },
+  { dx: 0, dy: -1 },
+  { dx: 1, dy: -1 },
+  { dx: -1, dy: 0 },
+];
 /** The Lich steps out of the wall beside the desk, not out of the corpse. */
 const LICH_OFFSET = { dx: 2, dy: -3 };
 
@@ -274,6 +289,10 @@ export class QuillConfrontationSystem implements GameSystem {
       y: centreY + LICH_OFFSET.dy,
     };
 
+    for (const offset of MAGISTRATE_DESK_OFFSETS) {
+      this.map.blockTilePermanently(this.corpseTile.x + offset.dx, this.corpseTile.y + offset.dy);
+    }
+
     // A countdown already running with nowhere recorded for the crystal would be
     // a containment nobody can make: stand it where the Lich rises, as the
     // victory scene does when Quill's position was lost.
@@ -328,6 +347,11 @@ export class QuillConfrontationSystem implements GameSystem {
     return this.lich !== null
       ? 'The magistrate’s office kept its appointment.'
       : 'Miss Quill filed your souls under K.';
+  }
+
+  /** The tile the magistrate's body is drawn on, for a gate that keeps the room's furniture off him. */
+  get bodyTile(): { readonly x: number; readonly y: number } {
+    return this.corpseTile;
   }
 
   private findSpawnTile(tileX: number, tileY: number): { x: number; y: number } | null {

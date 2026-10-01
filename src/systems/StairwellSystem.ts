@@ -12,6 +12,7 @@ import { drawModal, drawOverlay, BOX_PRESETS } from '../ui/Box';
 import { addButton, beginMenuFocus, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import type { ButtonRect } from '../ui/pause/types';
 import { drawSpriteKey } from '../core/SpriteRenderer';
+import { dungeonFloorTheme } from '../map/dungeon/floorTheme';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { clamp } from '../utils';
 
@@ -858,7 +859,7 @@ export class StairwellSystem implements GameSystem {
       )
         continue;
 
-      drawSpriteKey(ctx, 'stairwell', 'idle', 0, sx, sy, bw);
+      drawSpriteKey(ctx, 'stairwell', dungeonFloorTheme().id, 0, sx, sy, bw);
 
       ctx.strokeStyle = `rgba(168, 85, 247, ${pulse})`;
       ctx.lineWidth = STAIRWELL_BORDER_WIDTH;

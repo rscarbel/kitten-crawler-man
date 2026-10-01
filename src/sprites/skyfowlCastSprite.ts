@@ -9,6 +9,7 @@
  */
 
 import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { evenIdleFrameAtSeconds } from './art/human/timing';
 import {
   drawFigureCached,
   drawFigureCachedApprox,
@@ -51,8 +52,18 @@ const COMBAT_ONLY_ACTIONS: ReadonlySet<SkyfowlCastAction> = new Set([
 const LOOP_FPS = 8;
 const MS_PER_SECOND = 1000;
 
-function loopFrameIndex(frames: number, loopOffsetSeconds: number, nowSeconds: number): number {
-  return timeFrameIndex(nowSeconds + loopOffsetSeconds, LOOP_FPS, frames);
+/**
+ * The frame a clock-driven row of `action` shows `seconds` into its loop. The
+ * idle plays once per standing breath, the same breath the human cast beside
+ * them takes, rather than at the gesture rate.
+ */
+export function skyfowlCastLoopFrame(
+  action: SkyfowlCastAction,
+  frames: number,
+  seconds: number,
+): number {
+  if (action === 'idle') return evenIdleFrameAtSeconds(seconds, frames);
+  return timeFrameIndex(seconds, LOOP_FPS, frames);
 }
 
 function facingView(facingX: number, facingY: number): SkyfowlView {
@@ -143,7 +154,7 @@ export function drawSkyfowlCastSprite(
   } else if (state.action === 'dance') {
     frame = timeFrameIndex(nowSeconds + loopOffset, DANCE_FPS, frames);
   } else {
-    frame = loopFrameIndex(frames, loopOffset, nowSeconds);
+    frame = skyfowlCastLoopFrame(state.action, frames, nowSeconds + loopOffset);
   }
   if (COMBAT_ONLY_ACTIONS.has(state.action)) {
     drawFigureCached(ctx, figure, key, frame, sx, sy, tileSize, { flipX });
