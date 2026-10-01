@@ -300,6 +300,7 @@ export type TownInteriorDestructibleKind =
   | 'crate'
   | 'shelf'
   | 'brazier'
+  | 'candelabrum'
   | 'sack'
   | 'crockery'
   | 'jars'
@@ -2501,6 +2502,10 @@ const BREAK_CUES_GLASS: readonly [SoundId, ...SoundId[]] = [
   'glass_break_3',
   'glass_break_4',
 ];
+const BREAK_CUES_CANDLE_STAND: readonly [SoundId, ...SoundId[]] = [
+  'candle_stand_topple_1',
+  'candle_stand_topple_2',
+];
 const BREAK_CUES_SACK: readonly [SoundId, ...SoundId[]] = [
   'garbage_bag_burst_1',
   'garbage_bag_burst_2',
@@ -2537,6 +2542,11 @@ const DESTRUCTIBLE_BRAZIER: TownInteriorDestructibleSpec = {
   coinsMin: 1,
   coinsMax: 2,
   dropsLootByDefault: true,
+};
+const DESTRUCTIBLE_CANDELABRUM: TownInteriorDestructibleSpec = {
+  ...DESTRUCTIBLE_BRAZIER,
+  kind: 'candelabrum',
+  breakCues: BREAK_CUES_CANDLE_STAND,
 };
 const DESTRUCTIBLE_SACK: TownInteriorDestructibleSpec = {
   kind: 'sack',
@@ -3675,7 +3685,7 @@ export const TOWN_INTERIOR_PROPS = {
     'free',
     2,
     paintTempleCandelabrum,
-    { destructible: DESTRUCTIBLE_BRAZIER },
+    { destructible: DESTRUCTIBLE_CANDELABRUM },
   ),
   perch_stand: def('perch_stand', ONE_BY_ONE, false, [], 'free', 2, paintPerchStand, {
     interaction: { kind: 'examine', id: 'perch_stand' },

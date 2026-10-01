@@ -51,6 +51,7 @@ export function labScientistLook(): TownCastLook {
     roles: [],
     hasWork: false,
     strideFraction: PERSON_PAINTER_STRIDE_FRACTION,
+    feminine: false,
     dialogSeed: SCIENTIST_SEED,
     appearance: labScientistAppearance(),
   };

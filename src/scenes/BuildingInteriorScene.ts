@@ -3608,13 +3608,14 @@ export class BuildingInteriorScene extends GameplayScene {
 
     const line =
       resident !== null
-        ? buildResidentConversation(resident, turn, ctx)
+        ? buildResidentConversation(resident, turn, ctx, target.speechStyle)
         : buildCitizenConversation(
             target.role,
             citizenSpecies(target),
             target.dialogSeed,
             turn,
             ctx,
+            target.speechStyle,
           );
     // Frozen in place for the same reason street citizens are: the conversation
     // ends when the *player* walks off, which only holds if the other party

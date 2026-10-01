@@ -25,6 +25,7 @@ import type { DoomsdayStage } from '../core/DoomsdayProgress';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import { pickLine, transientSpeaker } from '../dialog/line';
 import type { DialogLine } from '../dialog/line';
+import type { CitizenSpeechStyle } from '../dialog/speakers';
 import {
   ambientPool,
   dangerBark,
@@ -70,16 +71,20 @@ export interface TownDialogContext {
   quillNamed: boolean;
 }
 
-function roleSpeaker(role: TownRole) {
-  return transientSpeaker(roleDisplayName(role), 'townsfolk');
+function roleSpeaker(role: TownRole, speechStyle: CitizenSpeechStyle) {
+  return transientSpeaker(roleDisplayName(role), speechStyle);
 }
 
 /**
  * What this role shouts while the town is under threat. Named residents borrow
  * it too: an alarm is no time for a personal anecdote.
  */
-export function dangerLine(role: TownRole, species: TownSpecies): DialogLine {
-  return roleSpeaker(role).line(dangerBark(species, role));
+export function dangerLine(
+  role: TownRole,
+  species: TownSpecies,
+  speechStyle: CitizenSpeechStyle,
+): DialogLine {
+  return roleSpeaker(role, speechStyle).line(dangerBark(species, role));
 }
 
 /**
@@ -202,6 +207,7 @@ const REACTIVE_LEAD_MODULUS = 2;
  * @param turn   How many times the player has already talked to this citizen —
  *               rotates the pools so the next talk differs from the last.
  * @param ctx    Live quest snapshot driving the reactive layer.
+ * @param speechStyle The voice the citizen speaks in.
  */
 export function buildCitizenConversation(
   role: TownRole,
@@ -209,8 +215,9 @@ export function buildCitizenConversation(
   seed: number,
   turn: number,
   ctx: TownDialogContext,
+  speechStyle: CitizenSpeechStyle,
 ): DialogLine {
-  const speak = roleSpeaker(role);
+  const speak = roleSpeaker(role, speechStyle);
   if (isTownInDanger(ctx)) {
     return speak.line(dangerBark(species, role));
   }

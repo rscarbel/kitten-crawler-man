@@ -34,6 +34,7 @@ export function clubDancerLook(): TownCastLookCarl {
     hasWork: false,
     hasDance: true,
     strideFraction: ADULT_STRIDE_FRACTION,
+    feminine: true,
     dialogSeed: 0x4c1b,
     buildWidthScale: 0.78,
     gear: { trollskinShirt: true, cloak: false },

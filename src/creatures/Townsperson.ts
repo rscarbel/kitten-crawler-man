@@ -21,6 +21,7 @@ import {
   citizenWalkCyclePx,
   citizenWalkFrames,
   drawCitizenSprite,
+  citizenSpeechStyle,
   pickCitizenFigure,
   prewarmCitizenFigure,
   type CitizenFigure,
@@ -35,6 +36,7 @@ import {
 } from '../sprites/questNPCSprite';
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { drawQuestBeacon } from '../sprites/questBeacon';
+import type { CitizenSpeechStyle } from '../dialog/speakers';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 
 /**
@@ -103,6 +105,8 @@ export class Townsperson implements WanderState {
   /** Set when this citizen is a named resident; drives their dialog and speaker label. */
   readonly residentId: ResidentId | null;
   readonly figure: CitizenFigure;
+  /** The voice this citizen's dialog lines are spoken in. */
+  readonly speechStyle: CitizenSpeechStyle;
   /** A stable, look-scoped seed for dialog line rotation — see `citizenDialogSeed`. */
   readonly dialogSeed: number;
 
@@ -164,6 +168,7 @@ export class Townsperson implements WanderState {
         ? residentFigure(this.residentId)
         : pickCitizenFigure(opts.seed, opts.role, opts.species);
     this.dialogSeed = citizenDialogSeed(this.figure);
+    this.speechStyle = citizenSpeechStyle(this.figure);
     // Every citizen shares its look's cells with every other wearer of that
     // look, so queuing this look's rows here costs nothing extra once the
     // crowd's small closed set is warm — and keeps the cost off whichever

@@ -44,6 +44,28 @@ const RATKIN_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
   'ratkin_chatter_6',
 ];
 
+/** A skyfowl citizen's voice when a conversation opens: throaty chatter, never the hostile fowl's squawk. */
+const SKYFOWL_CITIZEN_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
+  'skyfowl_chatter_1',
+  'skyfowl_chatter_2',
+];
+
+/** Wordless murmurs, so no line of dialog is ever contradicted by the audio. */
+const HUMAN_MASCULINE_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
+  'townsfolk_hm_male_1',
+  'townsfolk_hm_male_2',
+  'townsfolk_hm_male_3',
+  'townsfolk_hm_male_4',
+  'townsfolk_hm_male_5',
+];
+
+const HUMAN_FEMININE_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
+  'townsfolk_hm_female_1',
+  'townsfolk_hm_female_2',
+  'townsfolk_hm_female_3',
+  'townsfolk_hm_female_4',
+];
+
 /** A source a portrait can be painted from. Ratkin faces are the only source today; add a case here, never a raw string key, when another is needed. */
 export type PortraitKey = { readonly source: 'ratkin'; readonly id: RatkinCastId };
 
@@ -387,6 +409,27 @@ export const TRANSIENT_STYLES = {
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
+  /** An Over City human whose look is masculine. */
+  townsfolkMasculine: {
+    voice: { kind: 'clips', sounds: HUMAN_MASCULINE_VOICE_SOUNDS },
+    reveal: 'word',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+  /** An Over City human whose look is feminine. */
+  townsfolkFeminine: {
+    voice: { kind: 'clips', sounds: HUMAN_FEMININE_VOICE_SOUNDS },
+    reveal: 'word',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+  /** An Over City skyfowl. */
+  townsfolkSkyfowl: {
+    voice: { kind: 'clips', sounds: SKYFOWL_CITIZEN_VOICE_SOUNDS },
+    reveal: 'word',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
   /** A crawler sign or notice — read, not spoken. */
   sign: {
     voice: { kind: 'typing' },
@@ -434,6 +477,12 @@ export const TRANSIENT_STYLES = {
 } as const satisfies Record<string, TransientStyleDef>;
 
 export type TransientStyleId = keyof typeof TRANSIENT_STYLES;
+
+/** The styles an Over City citizen speaks in; `townsfolk` itself stays the typed-click voice for Briar Hollow's ratkin. */
+export type CitizenSpeechStyle = Extract<
+  TransientStyleId,
+  'townsfolkMasculine' | 'townsfolkFeminine' | 'townsfolkSkyfowl'
+>;
 
 /**
  * Who a `DialogLine` is attributed to: a fixed cast member, resolved by id

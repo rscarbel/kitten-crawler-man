@@ -5650,6 +5650,7 @@ export class DungeonScene extends GameplayScene {
       target.dialogSeed,
       target.conversationCount,
       this.townDialogContext(),
+      target.speechStyle,
     );
     this.citizenDialogHandle = this.conversation.open({
       lines: [line],

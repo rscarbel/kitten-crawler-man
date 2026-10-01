@@ -64,6 +64,8 @@ interface TownCastLookCommon {
   readonly hasDance?: boolean;
   /** World px a full walk cycle covers, as a fraction of the draw size. */
   readonly strideFraction: number;
+  /** Which of the two human voices speaks for this look; matches the face and build it is painted with. */
+  readonly feminine: boolean;
   /**
    * A stable, look-scoped seed for anything that wants deterministic variety
    * without touching the citizen's own spawn seed (dialog line rotation,
@@ -140,6 +142,7 @@ interface ChildSpec {
   readonly topColor: string;
   readonly bottom: PersonAppearance['outfit']['bottom'];
   readonly bottomColor: string;
+  readonly feminine: boolean;
 }
 
 const CHILD_SPECS: readonly ChildSpec[] = [
@@ -152,6 +155,7 @@ const CHILD_SPECS: readonly ChildSpec[] = [
     topColor: '#d68910',
     bottom: 'shorts',
     bottomColor: '#3a4a5a',
+    feminine: false,
   },
   {
     id: 'child_commoner_b',
@@ -162,6 +166,7 @@ const CHILD_SPECS: readonly ChildSpec[] = [
     topColor: '#c0447a',
     bottom: 'skirt',
     bottomColor: '#5a2a3a',
+    feminine: true,
   },
 ];
 
@@ -212,6 +217,7 @@ const CHILD_LOOKS: readonly TownCastLookPerson[] = CHILD_SPECS.map((spec, index)
   roles: ['child'],
   hasWork: false,
   strideFraction: PERSON_PAINTER_STRIDE_FRACTION,
+  feminine: spec.feminine,
   dialogSeed: index,
   appearance: childAppearance(spec, index),
 }));
@@ -534,6 +540,7 @@ function adultLook(spec: AdultSpec, index: number): TownCastLookCarl {
     roles: spec.roles,
     hasWork: spec.hasWork,
     strideFraction: ADULT_STRIDE_FRACTION,
+    feminine: spec.feminine,
     dialogSeed: CHILD_SPECS.length + index,
     buildWidthScale: widthScale,
     gear,

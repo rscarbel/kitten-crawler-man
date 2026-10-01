@@ -107,8 +107,8 @@ export const DUNGEON_CUES = {
   wineCaskBurst: ['wood_smashing_1'],
   /** A bottle rack coming down. Waits on `bottle_shelf_crash`; glass stands in. */
   bottleShelfCrash: ['glass_break_1', 'glass_break_2', 'glass_break_3'],
-  /** A candle cluster knocked over. Waits on `candle_stand_topple`; the bag burst stands in. */
-  candleStandTopple: ['garbage_bag_burst_1', 'garbage_bag_burst_2'],
+  /** A candle cluster knocked over. Final: `candle_stand_topple_1..2`. */
+  candleStandTopple: ['candle_stand_topple_1', 'candle_stand_topple_2'],
   /** A rubble heap knocked down. Waits on `rubble_collapse`; `rock_breaking_1..2` stand in. */
   rubbleCollapse: ['rock_breaking_1', 'rock_breaking_2'],
   /** A bone pile or slumped skeleton smashed. Waits on `bones_clatter_1..3`; `wood_breaking_1` stands in. */

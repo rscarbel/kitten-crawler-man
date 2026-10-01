@@ -19,6 +19,7 @@ import { residentLinesFor } from '../dialog/scripts/residents';
 import { rotateLine } from './townServiceUtil';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import { transientSpeaker } from '../dialog/line';
+import type { CitizenSpeechStyle } from '../dialog/speakers';
 import type { DialogLine, Paragraphs } from '../dialog/line';
 import type { TownSpecies } from './townSpecies';
 
@@ -206,13 +207,15 @@ export function residentHost(def: ResidentDef | null, turn: number): ResidentHos
  * @param def  The resident speaking.
  * @param turn How many times the player has already talked to them.
  * @param ctx  Live quest snapshot driving the reactive layer.
+ * @param speechStyle The voice the resident speaks in.
  */
 export function buildResidentConversation(
   def: ResidentDef,
   turn: number,
   ctx: TownDialogContext,
+  speechStyle: CitizenSpeechStyle,
 ): DialogLine {
-  const speak = transientSpeaker(def.name, 'townsfolk');
+  const speak = transientSpeaker(def.name, speechStyle);
   if (isTownInDanger(ctx)) return speak.line(dangerBark(residentSpecies(def), def.role));
 
   const lines = residentLinesFor(def.id);

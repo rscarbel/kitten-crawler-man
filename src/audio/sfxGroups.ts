@@ -87,6 +87,30 @@ const DUNGEON_CUE_SFX_IDS: readonly SoundId[] = [
   'tech_machinery_running',
   'miasma_hiss',
   'llama_fireball',
+  'candle_stand_topple_1',
+  'candle_stand_topple_2',
+];
+
+/**
+ * Over City citizens' voices, spoken through the dialog box when a
+ * conversation opens (the `townsfolk*` styles in `src/dialog/speakers.ts`).
+ * Streets and every building interior share the floor-3 bundle that carries them.
+ */
+const TOWN_VOICE_SFX_IDS: readonly SoundId[] = [
+  'skyfowl_chatter_1',
+  'skyfowl_chatter_2',
+  'skyfowl_greeting_1',
+  'skyfowl_greeting_2',
+  'skyfowl_laugh_1',
+  'townsfolk_hm_male_1',
+  'townsfolk_hm_male_2',
+  'townsfolk_hm_male_3',
+  'townsfolk_hm_male_4',
+  'townsfolk_hm_male_5',
+  'townsfolk_hm_female_1',
+  'townsfolk_hm_female_2',
+  'townsfolk_hm_female_3',
+  'townsfolk_hm_female_4',
 ];
 
 /**
@@ -316,6 +340,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   level3: [
     'skyfowl_1',
     'skyfowl_2',
+    ...TOWN_VOICE_SFX_IDS,
+    'candle_stand_topple_1',
+    'candle_stand_topple_2',
     'krasue_attack',
     'sword_attack_1',
     'rumble',

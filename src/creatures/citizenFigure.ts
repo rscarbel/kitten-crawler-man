@@ -30,6 +30,7 @@ import {
   prewarmTownCastLook,
 } from '../sprites/townCastSprite';
 import type { TownSpecies } from '../systems/townSpecies';
+import type { CitizenSpeechStyle } from '../dialog/speakers';
 import {
   WALK_FRAMES as SKYFOWL_WALK_FRAMES,
   skyfowlWalkCyclePx,
@@ -148,6 +149,12 @@ function fnv1a(text: string): number {
  */
 export function citizenDialogSeed(figure: CitizenFigure): number {
   return figure.species === 'skyfowl' ? fnv1a(figure.look.id) : figure.look.dialogSeed;
+}
+
+/** The dialog style a citizen speaks in: their species' voice, and for a human the one their look is painted for. */
+export function citizenSpeechStyle(figure: CitizenFigure): CitizenSpeechStyle {
+  if (figure.species === 'skyfowl') return 'townsfolkSkyfowl';
+  return figure.look.feminine ? 'townsfolkFeminine' : 'townsfolkMasculine';
 }
 
 /**
